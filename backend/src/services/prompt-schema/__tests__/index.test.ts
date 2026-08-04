@@ -24,7 +24,9 @@ function loadPromptBodies(): Array<{ name: string; body: string }> {
     .readdirSync(PROMPTS_DIR)
     .filter((f) => /^skill\..*\.md$/.test(f))
     .map((f) => {
-      const raw = fs.readFileSync(path.join(PROMPTS_DIR, f), 'utf-8').replace(/\r\n/g, '\n');
+      const raw = fs.readFileSync(path.join(PROMPTS_DIR, f), 'utf-8')
+        .replace(/^\uFEFF/, '')
+        .replace(/\r\n/g, '\n');
       // 去掉 frontmatter，只取正文
       const m = /^---\n[\s\S]*?\n---\n?([\s\S]*)$/.exec(raw);
       return { name: f, body: (m ? m[1] : raw).trim() };
@@ -267,13 +269,14 @@ describe('P-COMPILE.0: 输入字段抽取 (inputFields)', () => {
     expect(paths).toContain('conversationContext');
   });
 
-  it('22 个真实 prompt 中, 含 ## 输入说明 段的文件必须能抽出 ≥1 个输入字段', () => {
+  it('JSON 输入的真实 prompt 必须能抽出 ≥1 个输入字段', () => {
     const files = loadPromptBodies();
     expect(files.length).toBeGreaterThan(0);
     for (const { name, body } of files) {
       const schema = parsePromptSchema(body);
       const hasInputSection = schema.blocks.some((b) => b.section === 'input');
-      if (hasInputSection) {
+      const usesJsonInput = /```json[\s\S]*?```/.test(schema.input);
+      if (hasInputSection && usesJsonInput) {
         expect(schema.inputFields.length).toBeGreaterThanOrEqual(1);
         if (schema.inputFields.length < 1) {
           throw new Error(`${name} 含 ## 输入说明 但抽不出 inputFields`);

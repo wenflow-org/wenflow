@@ -1,0 +1,22 @@
+services:
+  backup:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    volumes:
+      - wenflow_data:/app/data:ro
+      - ${WENFLOW_BACKUP_HOST_DIR:?Set WENFLOW_BACKUP_HOST_DIR}:/app/backups
+    env_file:
+      - backend/.env
+    environment:
+      - DATABASE_URL=file:/app/data/dev.db
+      - SYSTEM_DATABASE_URL=file:/app/data/system.db
+      - WENFLOW_BACKUP_DIR=/app/backups
+      - NODE_ENV=production
+    entrypoint: ["node", "dist/operations/database-backup.cli.js", "create", "--confirm-quiesced"]
+    restart: "no"
+
+volumes:
+  wenflow_data:
+    external: true
+    name: ${COMPOSE_PROJECT_NAME:-wenflow}_wenflow_data

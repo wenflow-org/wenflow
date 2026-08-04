@@ -13,7 +13,7 @@ import { SkillRegistry } from './registries/skill-registry';
 import { SignalRegistry } from './registries/signal-registry';
 import { StrategyRegistry } from './registries/strategy-registry';
 import { getAPIGateway } from './api-gateway';
-import { runWithContext } from './api-gateway/context';
+import { getRequestContext, runWithContext } from './api-gateway/context';
 import { logger } from '../utils/logger';
 import {
   AgentInput,
@@ -25,6 +25,9 @@ import {
 } from '../agents/protocol';
 import { LearningEvent } from './event-bus';
 import { normalizeAgentOutput } from '../agents/output-normalizer';
+import { executeSkillHandler } from '../skills/executor';
+import { agentPluginRegistry } from '../agents/plugin-registry';
+import { mcpGateway } from '../core/mcp/McpGateway';
 
 // Gateway 配置
 export interface GatewayConfig {
@@ -211,6 +214,7 @@ export class EduClawGateway {
       
       const rawOutput = await Promise.race([
         runWithContext({
+          ...getRequestContext(),
           userId: request.context.userId,
           agentId: request.agentId,
           action: 'execute',
@@ -297,32 +301,25 @@ export class EduClawGateway {
   /**
    * 执行 Skill
    */
-  async executeSkill(skillName: string, input: any): Promise<any> {
-    const startTime = Date.now();
+  async executeSkill(skillName: string, input: any, options?: import('../skills/protocol').SkillExecutionOptions): Promise<any> {
     const registration = this.skillRegistry.get(skillName);
 
     if (!registration) {
       throw new Error(`Skill ${skillName} not found`);
     }
 
+    if (!registration.handler) {
+      throw new Error('Skill has no handler');
+    }
+
     try {
-      if (!registration.handler) {
-        throw new Error('Skill has no handler');
-      }
-
-      const output = await registration.handler(input);
-      const duration = Date.now() - startTime;
-
-      await this.skillRegistry.updateStats(skillName, true, duration);
-
-      return {
-        success: true,
-        output,
-        duration
-      };
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      await this.skillRegistry.updateStats(skillName, false, duration);
+      const result = options
+        ? await executeSkillHandler(registration.definition, input, registration.handler, options)
+        : await executeSkillHandler(registration.definition, input, registration.handler);
+      this.skillRegistry.recordExecution(skillName, true, result.duration);
+      return result;
+    } catch (error: any) {
+      this.skillRegistry.recordExecution(skillName, false, error?.skillDurationMs || 0);
       throw error;
     }
   }
@@ -432,6 +429,8 @@ export class EduClawGateway {
    * 关闭 Gateway
    */
   async close(): Promise<void> {
+    await agentPluginRegistry.clear();
+    mcpGateway.destroy();
     await this.eventBus.close();
   }
 }

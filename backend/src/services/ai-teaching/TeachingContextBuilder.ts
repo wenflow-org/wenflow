@@ -1,8 +1,10 @@
 import prisma from '../../config/database';
 import learningStateService from '../learning/learning-state.service';
-import { learnerModelAgent } from '../../agents/learner-model-agent';
+import { learnerSnapshotService } from '../learner/LearnerSnapshotService';
 import { teachingStrategyConfig } from '../../config/pedagogy.config';
 import type { TeachingKnowledgePointState, TeachingSessionRecord } from './TeachingSessionRepository';
+import { learnerProjectionService } from '../learner/LearnerProjectionService';
+import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
 
 export interface TeachingScenarioContext {
   userId: string;
@@ -72,6 +74,7 @@ export interface TeachingScenarioContext {
     lf: number;
     lsb: number;
   } | null;
+  learnerProjection: TeachingLearnerProjection;
   pathContext: {
     pathTitle?: string;
     pathSummary?: string | null;
@@ -81,6 +84,15 @@ export interface TeachingScenarioContext {
     sessionId: string;
     messages: TeachingSessionRecord['messages'];
     knowledgePoints: TeachingSessionRecord['knowledgeState'];
+  } | null;
+  /** 学习者在 goal 阶段自然流露的交付形式偏好（learning_signal），供开场/教学兑现承诺 */
+  learningSignal: string | null;
+  /** 同一路径上最近一节已完结课程的摘要，供跨节承接（"老师记得我"） */
+  lastLessonRecap: {
+    sourceTopic: string | null;
+    topicSummary: string | null;
+    retrievalCue: string | null;
+    unresolvedPoints: string[];
   } | null;
 }
 
@@ -227,8 +239,51 @@ function buildTaskKnowledgeSeeds(_params: {
   return [];
 }
 
-function buildTeachingStrategyGuidance(taskProfile: TeachingScenarioContext['taskProfile']) {
-  const knowledgeType = taskProfile.knowledgeType;
+/**
+ * 拉取同一路径上最近一节已完结课程的摘要（跨节承接数据源）。
+ * 只取轻量字段，任何异常都静默降级为 null，不影响开课主流程。
+ */
+async function fetchLastLessonRecap(
+  userId: string,
+  learningPathId: string,
+  currentTaskId: string
+): Promise<TeachingScenarioContext['lastLessonRecap']> {
+  try {
+    const lastEnded = await prisma.teaching_sessions.findFirst({
+      where: {
+        userId,
+        learningPathId,
+        taskId: { not: currentTaskId },
+        status: 'completed',
+        wrapup: { not: null },
+      },
+      orderBy: { endTime: 'desc' },
+      select: { topic: true, wrapup: true },
+    });
+    const wrapup = lastEnded ? parseJsonSafe(lastEnded.wrapup as any) : null;
+    if (!wrapup) return null;
+
+    const actionPlan = Array.isArray(wrapup.actionPlan)
+      ? wrapup.actionPlan.filter((item: any) => typeof item === 'string' && item.trim())
+      : [];
+    const knowledgeItems = Array.isArray(wrapup.knowledgeItems) ? wrapup.knowledgeItems : [];
+    const unresolvedPoints = knowledgeItems
+      .filter((item: any) => item && typeof item.name === 'string' && item.name.trim() && item.status !== 'mastered')
+      .map((item: any) => String(item.name).trim())
+      .slice(0, 3);
+
+    return {
+      sourceTopic: typeof lastEnded?.topic === 'string' && lastEnded.topic.trim() ? lastEnded.topic.trim() : null,
+      topicSummary: typeof wrapup.topicSummary === 'string' && wrapup.topicSummary.trim() ? wrapup.topicSummary.trim() : null,
+      retrievalCue: actionPlan[0] || null,
+      unresolvedPoints,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildTeachingStrategyGuidance(taskProfile: TeachingScenarioContext['taskProfile']) {  const knowledgeType = taskProfile.knowledgeType;
   const cognitiveLevel = taskProfile.cognitiveLevel;
   const objectiveFocus = taskProfile.learningObjectives.slice(0, 4);
   const coreConcept = taskProfile.coreConcept;
@@ -297,14 +352,14 @@ export async function buildTeachingScenarioContext(
     ? learningStateService.coerceMetrics(previousSession.teachingState)
     : null;
   const learningState = runtimeLearningState || await learningStateService.getCurrentState(userId);
-  const learnerResult = await learnerModelAgent.getSnapshot({
+  const learnerSnapshot = await learnerSnapshotService.getSnapshot({
     userId,
     learningPathId: path.id,
     milestoneId: task.milestoneId,
     taskId: task.id,
     mode: 'teaching',
   });
-  const learnerSnapshot = learnerResult.snapshot;
+  const learnerProjection = learnerProjectionService.toTeachingProjection(learnerSnapshot);
   const resolvedConcept = resolveTaskConceptFromPath(task, path);
   const persistedLearningObjectives = parseLearningObjectives((task as any).learningObjectives);
   const taskKnowledgeSeeds = buildTaskKnowledgeSeeds({ task, resolvedConcept });
@@ -319,6 +374,11 @@ export async function buildTeachingScenarioContext(
   const canStartLearning = previousSession?.status === 'active'
     ? true
     : path.status === 'active';
+  const learningSignalRaw = (learnerSnapshot.profile as any)?.narratives?.learningSignal;
+  const learningSignal = typeof learningSignalRaw === 'string' && learningSignalRaw.trim()
+    ? learningSignalRaw.trim()
+    : null;
+  const lastLessonRecap = await fetchLastLessonRecap(userId, path.id, task.id);
   const milestone = task.milestones;
   const taskProfile = {
     knowledgeType: (task as any).knowledgeType || null,
@@ -386,6 +446,7 @@ export async function buildTeachingScenarioContext(
       lf: learningState.lf,
       lsb: learningState.lsb,
     } : null,
+    learnerProjection,
     pathContext: {
       pathTitle: path.title || path.name,
       pathSummary: parsePathSummary(path.aiPromptTemplate),
@@ -396,5 +457,7 @@ export async function buildTeachingScenarioContext(
       messages: previousSession.messages,
         knowledgePoints: previousSession.knowledgeState,
       } : null,
+    learningSignal,
+    lastLessonRecap,
   };
 }

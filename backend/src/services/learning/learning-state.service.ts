@@ -57,6 +57,7 @@ export interface SessionScoreInput {
 }
 
 interface LearningStateMetricPersistOptions {
+  sourceKey?: string | null;
   version?: string;
   committed?: boolean;
   source?: string;
@@ -71,12 +72,42 @@ export interface DisplayMetricCommitInput {
   ktl: number;
   lf: number;
   lsb: number;
+  expectedRevision: number;
+  sourceKey?: string;
   timestamp?: Date;
   source?: string;
   pathId?: string | null;
   taskId?: string | null;
   sessionId?: string | null;
   primaryMetric?: 'lss' | 'lsb';
+}
+
+export interface PreparedLearningStateMetricCommit {
+  userId: string;
+  expectedRevision: number;
+  sourceKey: string;
+  metrics: LearningStateMetrics;
+  data: Record<string, any>;
+}
+
+export class LearningStateRevisionConflictError extends Error {
+  constructor() {
+    super('学习状态已变化，请重试');
+    this.name = 'LearningStateRevisionConflictError';
+  }
+}
+
+export interface LearningStateSessionTimelineEntry {
+  teachingSessionId: string;
+  taskId: string | null;
+  pathId: string | null;
+  status: string;
+  metrics: LearningStateMetrics | null;
+  calculatedAt: Date;
+  source: 'committed-metric' | 'teaching-wrapup' | 'missing';
+  summarySource: string | null;
+  evaluationSource: string | null;
+  degraded: boolean;
 }
 
 interface LearningStateCommittedSnapshot {
@@ -149,6 +180,16 @@ export class LearningStateService {
     return Math.max(-10, Math.min(10, numeric));
   }
 
+  private displayTenScaleToInternal(value: number | null | undefined): number {
+    const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+    return Math.max(0, Math.min(100, numeric)) / 10;
+  }
+
+  private displayBalanceScaleToInternal(value: number | null | undefined): number {
+    const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+    return Math.max(-100, Math.min(100, numeric)) / 10;
+  }
+
   private parseMetricMetadata(raw: string | null | undefined): Record<string, any> | null {
     if (!raw) return null;
     try {
@@ -159,15 +200,26 @@ export class LearningStateService {
     }
   }
 
-  private buildCommittedMetricWhere(userId: string, since?: Date) {
+  private buildCommittedMetricWhere(
+    userId: string,
+    since?: Date,
+    excludedSourceKey?: string,
+    asOf?: Date
+  ) {
     return {
       userId,
       metricType: 'learning_state',
+      ...(excludedSourceKey ? { sourceKey: { not: excludedSourceKey } } : {}),
       AND: [
         { metadata: { contains: `"version":"${this.committedMetricVersion}"` } },
         { metadata: { contains: '"committed":true' } },
       ],
-      ...(since ? { calculatedAt: { gte: since } } : {}),
+      ...(since || asOf ? {
+        calculatedAt: {
+          ...(since ? { gte: since } : {}),
+          ...(asOf ? { lte: asOf } : {}),
+        }
+      } : {}),
     };
   }
 
@@ -280,9 +332,14 @@ export class LearningStateService {
     }
   }
 
-  private async listCommittedSnapshots(userId: string, since?: Date): Promise<LearningStateCommittedSnapshot[]> {
+  private async listCommittedSnapshots(
+    userId: string,
+    since?: Date,
+    excludedSourceKey?: string,
+    asOf?: Date
+  ): Promise<LearningStateCommittedSnapshot[]> {
     const committedRows = await prisma.learning_metrics.findMany({
-      where: this.buildCommittedMetricWhere(userId, since),
+      where: this.buildCommittedMetricWhere(userId, since, excludedSourceKey, asOf),
       orderBy: { calculatedAt: 'asc' },
       select: {
         lss: true,
@@ -306,12 +363,18 @@ export class LearningStateService {
       status: 'completed',
       wrapup: { not: null },
     };
+    if (excludedSourceKey?.startsWith('session-wrapup:')) {
+      sessionWhere.id = { not: excludedSourceKey.slice('session-wrapup:'.length) };
+    }
 
     if (since) {
       sessionWhere.OR = [
         { endTime: { gte: since } },
         { startTime: { gte: since } },
       ];
+    }
+    if (asOf) {
+      sessionWhere.endTime = { lte: asOf };
     }
 
     const sessions = await prisma.teaching_sessions.findMany({
@@ -326,7 +389,8 @@ export class LearningStateService {
 
     return sessions
       .map((session) => this.wrapupSessionToSnapshot(session))
-      .filter((row): row is LearningStateCommittedSnapshot => Boolean(row));
+      .filter((row): row is LearningStateCommittedSnapshot => Boolean(row))
+      .filter((row) => !asOf || row.calculatedAt <= asOf);
   }
 
   async getLatestCommittedStateAt(userId: string): Promise<Date | null> {
@@ -505,6 +569,55 @@ export class LearningStateService {
     return this.restoreMetrics(latestSnapshot.metrics);
   }
 
+  async getCommittedMetricBySourceKey(
+    userId: string,
+    sourceKey: string
+  ): Promise<LearningStateMetrics | null> {
+    const record = await prisma.learning_metrics.findFirst({
+      where: {
+        ...this.buildCommittedMetricWhere(userId),
+        sourceKey
+      },
+      select: {
+        lss: true,
+        ktl: true,
+        lf: true,
+        lsb: true,
+        calculatedAt: true
+      }
+    });
+    const snapshot = record ? this.metricRecordToSnapshot(record) : null;
+    return snapshot ? this.restoreMetrics(snapshot.metrics) : null;
+  }
+
+  async getCurrentStateSnapshot(
+    userId: string,
+    options: { sourceKey?: string; asOf?: Date } = {}
+  ): Promise<{
+    revision: number;
+    metrics: LearningStateMetrics | null;
+  }> {
+    const user = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { learningStateRevision: true }
+    });
+    if (!user) throw new Error('用户不存在');
+
+    const snapshots = await this.listCommittedSnapshots(
+      userId,
+      undefined,
+      options.sourceKey,
+      options.asOf
+    );
+    const latestSnapshot = snapshots[snapshots.length - 1] || null;
+    return {
+      revision: user.learningStateRevision,
+      metrics: latestSnapshot
+        ? this.restoreMetrics(latestSnapshot.metrics, options.asOf || new Date())
+        : null
+    };
+  }
+
   /**
    * 计算并更新学习状态
    */
@@ -522,7 +635,7 @@ export class LearningStateService {
     // 5. 保存到数据库
     await this.saveMetrics(userId, metrics, inputs);
 
-    logger.info(`[LearningState] 用户 ${userId}: LSS=${metrics.lss.toFixed(2)}, KTL=${metrics.ktl.toFixed(2)}, LF=${metrics.lf.toFixed(2)}, LSB=${metrics.lsb.toFixed(2)}`);
+    logger.debug(`[LearningState] 用户 ${userId}: LSS=${metrics.lss.toFixed(2)}, KTL=${metrics.ktl.toFixed(2)}, LF=${metrics.lf.toFixed(2)}, LSB=${metrics.lsb.toFixed(2)}`);
 
     return metrics;
   }
@@ -540,6 +653,34 @@ export class LearningStateService {
     userId: string,
     input: SessionScoreInput
   ): Promise<LearningStateMetrics> {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const prepared = await this.prepareSessionScoreCommit(userId, input);
+      try {
+        await this.commitPreparedMetric(prepared);
+        return prepared.metrics;
+      } catch (error) {
+        if (!(error instanceof LearningStateRevisionConflictError) || attempt === 4) throw error;
+      }
+    }
+
+    throw new LearningStateRevisionConflictError();
+  }
+
+  async prepareSessionScoreCommit(
+    userId: string,
+    input: SessionScoreInput
+  ): Promise<PreparedLearningStateMetricCommit> {
+    if (!input.sessionId) {
+      throw new Error('会话学习状态提交缺少 sessionId');
+    }
+
+    const sourceKey = `session-wrapup:${input.sessionId}`;
+    const user = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { learningStateRevision: true }
+    });
+    if (!user) throw new Error('用户不存在');
+
     const normalizedLss = Math.min(10, Math.max(0, input.sessionLss));
     const normalizedSessionKtl = Math.min(10, Math.max(0, input.sessionKtl ?? input.sessionLss));
     const normalizedSessionLf = Math.min(10, Math.max(0, input.sessionLf ?? input.sessionLss));
@@ -552,14 +693,16 @@ export class LearningStateService {
     const confidenceAdjustedKtl = normalizedSessionKtl * (0.6 + confidence * 0.4);
     const confidenceAdjustedLf = normalizedSessionLf * (0.6 + confidence * 0.4);
 
-    const previousMetrics = await this.getPreviousMetrics(userId);
+    const previousSnapshots = await this.listCommittedSnapshots(userId, undefined, sourceKey);
+    const previousSnapshot = previousSnapshots[previousSnapshots.length - 1] || null;
+    const previousMetrics = previousSnapshot ? this.restoreMetrics(previousSnapshot.metrics) : null;
     const metrics = this.projectState(previousMetrics, {
       lss: confidenceAdjustedLss,
       ktlInput: confidenceAdjustedKtl,
       lfInput: confidenceAdjustedLf,
     });
 
-    await this.saveMetrics(userId, metrics, {
+    const inputs: LSSInputs = {
       difficulty: Math.max(1, Math.min(10, confidenceAdjustedLss)),
       cognitiveLoad: Math.max(1, Math.min(10, confidenceAdjustedLss)),
       efficiency: confidence,
@@ -567,7 +710,9 @@ export class LearningStateService {
       expectedTime: 15,
       completionRate: 1,
       taskType: 'practice',
-    }, {
+    };
+    const options: LearningStateMetricPersistOptions = {
+      sourceKey,
       version: this.committedMetricVersion,
       committed: true,
       source: 'session-wrapup',
@@ -575,13 +720,20 @@ export class LearningStateService {
       taskId: input.taskId,
       sessionId: input.sessionId,
       primaryMetric: 'lsb',
-    });
+    };
+    const data = await this.buildMetricCreateData(userId, metrics, inputs, options);
 
     logger.info(
       `[LearningState] 会话评分更新: user=${userId}, sessionLss=${normalizedLss.toFixed(2)}, sessionKtl=${normalizedSessionKtl.toFixed(2)}, sessionLf=${normalizedSessionLf.toFixed(2)}, confidence=${confidence.toFixed(2)}, adjustedLss=${confidenceAdjustedLss.toFixed(2)}, adjustedKtl=${confidenceAdjustedKtl.toFixed(2)}, adjustedLf=${confidenceAdjustedLf.toFixed(2)}, LSB=${metrics.lsb.toFixed(2)}`
     );
 
-    return metrics;
+    return {
+      userId,
+      expectedRevision: user.learningStateRevision,
+      sourceKey,
+      metrics,
+      data,
+    };
   }
 
   async commitDisplayMetrics(
@@ -589,14 +741,13 @@ export class LearningStateService {
     input: DisplayMetricCommitInput
   ): Promise<LearningStateMetrics> {
     const metrics: LearningStateMetrics = {
-      lss: this.normalizeTenScale(input.lss),
-      ktl: this.normalizeTenScale(input.ktl),
-      lf: this.normalizeTenScale(input.lf),
-      lsb: this.normalizeBalanceScale(input.lsb),
+      lss: this.displayTenScaleToInternal(input.lss),
+      ktl: this.displayTenScaleToInternal(input.ktl),
+      lf: this.displayTenScaleToInternal(input.lf),
+      lsb: this.displayBalanceScaleToInternal(input.lsb),
       timestamp: input.timestamp || new Date(),
     };
-
-    await this.saveMetrics(userId, metrics, {
+    const inputs: LSSInputs = {
       difficulty: Math.max(1, Math.min(10, metrics.lss)),
       cognitiveLoad: Math.max(1, Math.min(10, metrics.lss)),
       efficiency: 1,
@@ -604,7 +755,10 @@ export class LearningStateService {
       expectedTime: 0,
       completionRate: 1,
       taskType: 'practice',
-    }, {
+    };
+    const sourceKey = input.sourceKey || `metric:${Date.now()}:${Math.random().toString(36).substring(2, 9)}`;
+    const options: LearningStateMetricPersistOptions = {
+      sourceKey,
       version: this.committedMetricVersion,
       committed: true,
       source: input.source || 'display-metric-commit',
@@ -612,9 +766,47 @@ export class LearningStateService {
       taskId: input.taskId,
       sessionId: input.sessionId,
       primaryMetric: input.primaryMetric || 'lsb',
+    };
+    await this.commitPreparedMetric({
+      userId,
+      expectedRevision: input.expectedRevision,
+      sourceKey,
+      metrics,
+      data: await this.buildMetricCreateData(userId, metrics, inputs, options)
     });
 
     return metrics;
+  }
+
+  async commitDerivedDisplayMetrics(
+    userId: string,
+    derive: (
+      previousMetrics: LearningStateMetrics | null
+    ) => Promise<Omit<DisplayMetricCommitInput, 'expectedRevision'>> | Omit<DisplayMetricCommitInput, 'expectedRevision'>,
+    options: { sourceKey?: string; reuseExisting?: boolean; asOf?: Date } = {}
+  ): Promise<LearningStateMetrics> {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      if (options.sourceKey && options.reuseExisting) {
+        const existing = await this.getCommittedMetricBySourceKey(userId, options.sourceKey);
+        if (existing) return existing;
+      }
+      const snapshot = await this.getCurrentStateSnapshot(userId, {
+        sourceKey: options.sourceKey,
+        asOf: options.asOf
+      });
+      const input = await derive(snapshot.metrics);
+      try {
+        return await this.commitDisplayMetrics(userId, {
+          ...input,
+          sourceKey: options.sourceKey || input.sourceKey,
+          expectedRevision: snapshot.revision
+        });
+      } catch (error) {
+        if (!(error instanceof LearningStateRevisionConflictError) || attempt === 4) throw error;
+      }
+    }
+
+    throw new LearningStateRevisionConflictError();
   }
 
   /**
@@ -626,6 +818,16 @@ export class LearningStateService {
     inputs: LSSInputs,
     options: LearningStateMetricPersistOptions = {}
   ): Promise<void> {
+    const data = await this.buildMetricCreateData(userId, metrics, inputs, options);
+    await prisma.learning_metrics.create({ data: data as any });
+  }
+
+  private async buildMetricCreateData(
+    userId: string,
+    metrics: LearningStateMetrics,
+    _inputs: LSSInputs,
+    options: LearningStateMetricPersistOptions = {}
+  ): Promise<Record<string, any>> {
     // 获取现有的 lssHistory
     const existingRecord = await prisma.learning_metrics.findFirst({
       where: { userId },
@@ -664,26 +866,46 @@ export class LearningStateService {
         })
       : null;
 
-    await prisma.learning_metrics.create({
-      data: {
-        id: `lm_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-        userId,
-        pathId: options.pathId || null,
-        taskId: options.taskId || null,
-        metricType: 'learning_state',
-        value: options.primaryMetric === 'lsb' ? metrics.lsb : metrics.lss,
-        lss: metrics.lss,
-        ktl: metrics.ktl,
-        lf: metrics.lf,
-        lsb: metrics.lsb,
-        lssCurrent: metrics.lss,
-        ktlCurrent: metrics.ktl,
-        lfCurrent: metrics.lf,
-        lsbCurrent: metrics.lsb,
-        lssHistory: JSON.stringify(lssHistory),
-        metadata,
-        calculatedAt: metrics.timestamp,
-      },
+    return {
+      id: `lm_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      sourceKey: options.sourceKey || null,
+      userId,
+      pathId: options.pathId || null,
+      taskId: options.taskId || null,
+      metricType: 'learning_state',
+      value: options.primaryMetric === 'lsb' ? metrics.lsb : metrics.lss,
+      lss: metrics.lss,
+      ktl: metrics.ktl,
+      lf: metrics.lf,
+      lsb: metrics.lsb,
+      lssCurrent: metrics.lss,
+      ktlCurrent: metrics.ktl,
+      lfCurrent: metrics.lf,
+      lsbCurrent: metrics.lsb,
+      lssHistory: JSON.stringify(lssHistory),
+      metadata,
+      calculatedAt: metrics.timestamp,
+    };
+  }
+
+  private async commitPreparedMetric(prepared: PreparedLearningStateMetricCommit): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      const claimed = await tx.users.updateMany({
+        where: {
+          id: prepared.userId,
+          learningStateRevision: prepared.expectedRevision,
+        },
+        data: {
+          learningStateRevision: { increment: 1 },
+        }
+      });
+      if (claimed.count !== 1) {
+        throw new LearningStateRevisionConflictError();
+      }
+      if (prepared.data.sourceKey) {
+        await tx.learning_metrics.deleteMany({ where: { sourceKey: prepared.data.sourceKey } });
+      }
+      await tx.learning_metrics.create({ data: prepared.data as any });
     });
   }
 
@@ -704,6 +926,95 @@ export class LearningStateService {
       ...snapshot.metrics,
       timestamp: snapshot.calculatedAt,
     }));
+  }
+
+  async getSessionStateTimeline(
+    userId: string,
+    sessionIds: string[]
+  ): Promise<LearningStateSessionTimelineEntry[]> {
+    const requestedIds = Array.from(new Set(
+      sessionIds.map((sessionId) => String(sessionId || '').trim()).filter(Boolean)
+    )).slice(0, 120);
+    if (!requestedIds.length) return [];
+
+    const sessions = await prisma.teaching_sessions.findMany({
+      where: {
+        userId,
+        id: { in: requestedIds },
+      },
+      orderBy: { startTime: 'asc' },
+      select: {
+        id: true,
+        taskId: true,
+        learningPathId: true,
+        status: true,
+        wrapup: true,
+        startTime: true,
+        endTime: true,
+      },
+    });
+    if (!sessions.length) return [];
+
+    const ownedSessionIds = new Set(sessions.map((session) => session.id));
+    const committedRows = await prisma.learning_metrics.findMany({
+      where: {
+        ...this.buildCommittedMetricWhere(userId),
+        OR: sessions.map((session) => ({
+          metadata: { contains: `"sessionId":"${session.id}"` },
+        })),
+      },
+      orderBy: { calculatedAt: 'asc' },
+      select: {
+        pathId: true,
+        taskId: true,
+        metadata: true,
+        lss: true,
+        ktl: true,
+        lf: true,
+        lsb: true,
+        calculatedAt: true,
+      },
+    });
+
+    const committedBySession = new Map<string, typeof committedRows[number]>();
+    for (const row of committedRows) {
+      const sessionId = this.parseMetricMetadata(row.metadata)?.sessionId;
+      if (typeof sessionId === 'string' && ownedSessionIds.has(sessionId)) {
+        committedBySession.set(sessionId, row);
+      }
+    }
+
+    return sessions.map((session) => {
+      const committedRow = committedBySession.get(session.id) || null;
+      const committedSnapshot = committedRow ? this.metricRecordToSnapshot(committedRow) : null;
+      const wrapupSnapshot = committedSnapshot ? null : this.wrapupSessionToSnapshot(session);
+      const snapshot = committedSnapshot || wrapupSnapshot;
+      const wrapup = this.parseMetricMetadata(session.wrapup);
+      const summarySource = typeof wrapup?.summarySource === 'string'
+        ? wrapup.summarySource
+        : typeof wrapup?.sources?.summary === 'string' ? wrapup.sources.summary : null;
+      const evaluationSource = typeof wrapup?.evaluationSource === 'string'
+        ? wrapup.evaluationSource
+        : typeof wrapup?.sources?.evaluation === 'string' ? wrapup.sources.evaluation : null;
+      const source = committedSnapshot
+        ? 'committed-metric' as const
+        : wrapupSnapshot ? 'teaching-wrapup' as const : 'missing' as const;
+
+      return {
+        teachingSessionId: session.id,
+        taskId: committedRow?.taskId || session.taskId || null,
+        pathId: committedRow?.pathId || session.learningPathId || null,
+        status: session.status,
+        metrics: snapshot?.metrics || null,
+        calculatedAt: snapshot?.calculatedAt || session.endTime || session.startTime,
+        source,
+        summarySource,
+        evaluationSource,
+        degraded: evaluationSource
+          ? evaluationSource !== 'model'
+          : source === 'missing' && session.status !== 'active',
+      };
+    });
   }
 
   async getTrends(userId: string, days: number = 7): Promise<LearningStateMetrics[]> {

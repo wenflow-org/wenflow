@@ -160,7 +160,7 @@ export interface SimulationContext {
 
 export interface SimulationLogEntry {
   timestamp: string;
-  phase: 'virtual-reply' | 'goal-response' | 'stage-transition' | 'learning-reply' | 'learning-response' | 'learning-start' | 'error';
+  phase: 'virtual-reply' | 'goal-response' | 'stage-transition' | 'path-review' | 'path-replan' | 'learning-reply' | 'learning-response' | 'learning-start' | 'error';
   durationMs?: number;
   details: {
     input?: any;

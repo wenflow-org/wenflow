@@ -129,46 +129,37 @@ class LearningStateService {
     inputs: LSSInputs
   ): Promise<LearningStateMetrics> {
     try {
-      // 1. 计算当前LSS
       const currentLSS = this.calculateLSS(inputs);
-
-      // 2. 获取历史指标
-      const previousMetrics = await this.getPreviousMetrics(userId);
-
-      // 3. 计算KTL和LF (如果是第一次，直接使用LSS)
-      const previousKTL = previousMetrics?.ktl ?? currentLSS;
-      const previousLF = previousMetrics?.lf ?? currentLSS;
-
-      const currentKTL = this.calculateKTL(previousKTL, currentLSS);
-      const currentLF = this.calculateLF(previousLF, currentLSS);
-
-      // 4. 计算LSB
-      const currentLSB = currentKTL - currentLF;
-
+      const committedMetrics = await learningStateService.commitDerivedDisplayMetrics(userId, previousMetrics => {
+        const previousDisplayMetrics = previousMetrics
+          ? learningStateService.toDisplayMetrics(previousMetrics)
+          : null;
+        const previousKTL = previousDisplayMetrics?.ktl ?? currentLSS;
+        const previousLF = previousDisplayMetrics?.lf ?? currentLSS;
+        const currentKTL = this.calculateKTL(previousKTL, currentLSS);
+        const currentLF = this.calculateLF(previousLF, currentLSS);
+        return {
+          lss: currentLSS,
+          ktl: currentKTL,
+          lf: currentLF,
+          lsb: currentKTL - currentLF,
+          timestamp: new Date(),
+          source: 'state-calculate',
+          primaryMetric: 'lsb',
+        };
+      });
+      const displayMetrics = learningStateService.toDisplayMetrics(committedMetrics);
       const metrics: LearningStateMetrics = {
-        lss: currentLSS,
-        ktl: currentKTL,
-        lf: currentLF,
-        lsb: currentLSB,
-        updatedAt: new Date().toISOString(),
+        ...displayMetrics,
+        updatedAt: committedMetrics.timestamp.toISOString(),
       };
 
-      await learningStateService.commitDisplayMetrics(userId, {
+      logger.info('学习状态指标计算完成:', {
+        userId,
         lss: metrics.lss,
         ktl: metrics.ktl,
         lf: metrics.lf,
         lsb: metrics.lsb,
-        timestamp: new Date(metrics.updatedAt),
-        source: 'state-calculate',
-        primaryMetric: 'lsb',
-      });
-
-      logger.info('学习状态指标计算完成:', {
-        userId,
-        lss: currentLSS,
-        ktl: currentKTL,
-        lf: currentLF,
-        lsb: currentLSB,
       });
 
       return metrics;

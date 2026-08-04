@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import systemPrisma from '../../config/system-database';
+import { logger } from '../../utils/logger';
 
 const router = Router();
 
@@ -131,7 +132,7 @@ async function recordChange(payload: {
     });
   } catch (err) {
     // 审计写失败不影响主流程
-    console.warn('[field-routings] audit write failed', err);
+    logger.warn('[field-routings] audit write failed', { error: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -165,14 +166,14 @@ router.get('/stages', async (_req: Request, res: Response) => {
           status: 'active',
         },
         {
-          id: 'execution',
-          displayName: 'Execution 阶段',
+          id: 'learning',
+          displayName: '学习阶段',
           description: '授课执行：Teaching Turn → Peer/Checkpoint → Wrapup',
           status: 'active',
         },
         {
-          id: 'learner',
-          displayName: 'Learner 阶段',
+          id: 'profile',
+          displayName: '画像阶段',
           description: '学习者画像增强与背景知识沉淀（编排器内部）',
           status: 'active',
         },
@@ -277,10 +278,12 @@ router.get('/flow/:stage', async (req: Request, res: Response) => {
     goal: 'goal-agent',
     requirement: 'goal-agent',
     path: 'path-agent',
-    execution: 'teaching-agent',
-    teaching: 'teaching-agent',
-    learner: 'learner-agent',
-    learn: 'teaching-agent'
+    learning: 'learning-agent',
+    execution: 'learning-agent',
+    teaching: 'learning-agent',
+    learn: 'learning-agent',
+    profile: 'profile-agent',
+    learner: 'profile-agent'
   };
 
   const [fields, contracts] = await Promise.all([
@@ -342,9 +345,9 @@ router.get('/flow/:stage', async (req: Request, res: Response) => {
     const handoff = parseHandoff(r.handoff);
 
     if (handoff.length === 0) {
-      // 没有 handoff 但 accumulate=true → 流向 learner-agent
+      // 没有 handoff 但 accumulate=true → 流向 profile-agent
       if (r.accumulate) {
-        const target = 'learner-agent';
+        const target = 'profile-agent';
         addNode(target);
         const key = `${sourceCanonical}__${target}`;
         if (!edgeAgg.has(key)) {

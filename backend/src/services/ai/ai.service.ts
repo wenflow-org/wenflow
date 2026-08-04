@@ -1,8 +1,7 @@
-﻿// AI 服务 - 多模型支持
+// AI 服务 - 多模型支持
 import { logger } from '../../utils/logger';
-import { buildTutoringPrompt, determineZPDLevel, determineTutoringStrategy } from './zpd-strategy';
-import { StudentStateAssessment } from './state-assessment.service';
-import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
+import { executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
+import type { RetryBudget } from '../../gateway/api-gateway/retry-budget';
 
 // AI 配置 - 主模型
 const AI_MODEL = process.env.AI_MODEL;
@@ -132,17 +131,6 @@ export const SYSTEM_PROMPTS = {
     }
   ]
 }`,
-
-  TUTORING: `你是一个耐心的问流 AI 学习导师。你的任务是帮助学生理解和解决学习问题。
-
-你的风格应该：
-1. 简单易懂，避免过于技术化的术语
-2. 循序渐进，逐步引导学生思考
-3. 鼓励为主，指出错误的同时给予积极反馈
-4. 提供多个解释角度如果可能
-5. 给出具体的例子帮助理解
-
-如果不知道答案，诚实承认，并建议学生查看其他资源。`,
 
   TASK_GENERATION: `你是一个注重实战的 AI 教学设计师。你的目标是设计以解决问题为导向的学习任务。
 
@@ -320,44 +308,72 @@ class AIService {
     timeout?: number; // 自定义超时（毫秒）
     // 日志记录相关参数
     agentId?: string;
+    skillId?: string;
     userId?: string;
     action?: string;
     allowReasoningFallback?: boolean;
     sanitizeUserVisible?: boolean;
+    retryBudget?: RetryBudget;
   }) {
     const startTime = Date.now();
     let result: any = null;
     let error: any = null;
 
     try {
-      logger.info('AI 请求发送', { 
+      logger.debug('AI 请求发送', {
         messageCount: messages.length,
         agentId: options?.agentId,
         userId: options?.userId,
         action: options?.action,
-        messagesPreview: JSON.stringify(messages).substring(0, 500)
+        messagesPreview: JSON.stringify(messages).substring(0, 200)
       });
 
-      const gateway = getAPIGateway();
-      const caller: CallerInfo = {
-        agentId: options?.agentId,
-        userId: options?.userId,
-        action: options?.action,
-      };
-      
-      const response = await gateway.execute(
-        {
-          messages,
-          model: options?.model,
-          temperature: options?.temperature,
-          max_tokens: options?.maxTokens
+      const systemPrompt = messages.find((message) => message.role === 'system')?.content || '';
+      const conversation = messages.filter((message) => message.role !== 'system');
+      const lastUserMessage = [...conversation].reverse().find((message) => message.role === 'user')?.content
+        || conversation.at(-1)?.content
+        || '';
+      const history = conversation.slice(0, -1).map((message) => ({
+        role: message.role as 'user' | 'assistant',
+        content: message.content,
+      }));
+      const promptResult = await executeSkillWithResult(auxSkillDefinitionMap['generic-chat'], {
+        systemPrompt,
+        message: lastUserMessage,
+        model: options?.model,
+        temperature: options?.temperature,
+        maxTokens: options?.maxTokens,
+        __prompt: {
+          userId: options?.userId,
+          requestPath: '/services/ai/chat',
+          retryBudget: options?.retryBudget,
+          assistantMessages: history,
+          callerAgentId: options?.agentId,
+          callerAction: options?.action,
         },
-        caller,
-        { requestPath: '/services/ai/chat' }
-      );
+      });
+      if (!promptResult.success || promptResult.output === undefined) {
+        throw Object.assign(new Error(promptResult.error?.message || 'GENERIC_CHAT_FAILED'), {
+          code: promptResult.error?.code || 'GENERIC_CHAT_FAILED',
+        });
+      }
+      const response = {
+        id: promptResult.debug.finalLlmRequestId || promptResult.debug.promptCallId,
+        model: promptResult.debug.model || options?.model || '',
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: promptResult.output },
+          finish_reason: 'stop',
+        }],
+        usage: promptResult.debug.tokenUsage
+          ? {
+              prompt_tokens: promptResult.debug.tokenUsage.prompt,
+              completion_tokens: promptResult.debug.tokenUsage.completion,
+              total_tokens: promptResult.debug.tokenUsage.total,
+            }
+          : undefined,
+      } as any;
 
-
-      logger.info('AI 响应原始数据', { response: JSON.stringify(response, null, 2).substring(0, 1000) });
 
       let reply = '';
       let reasoning = '';
@@ -434,12 +450,7 @@ class AIService {
       error = e;
       logger.error('AI 请求失败:', e);
 
-      // 检查网络错误
-      if (e.code === 'ECONNREFUSED') {
-        throw new Error('AI 服务连接失败，请检查服务是否启动');
-      }
-
-      throw new Error(`AI 服务错误：${e.message}`);
+      throw e;
     }
   }
 
@@ -647,7 +658,8 @@ ${userInfo.length > 0 ? userInfo.join('\n') : '- 未提供'}
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage }
       ], { 
-        agentId: 'skill:path-planning',
+        agentId: 'path-agent',
+        skillId: 'path-planning',
         userId: userId,
         action: 'analyzeLearningGoal'
       });
@@ -675,143 +687,6 @@ ${userInfo.length > 0 ? userInfo.join('\n') : '- 未提供'}
         error: error.message,
         rawAdvice: response?.content || ''
       };
-    }
-  }
-
-  // AI 辅导 - 学习问题问答（集成学生状态评估）
-  async tutoring(
-    question: string,
-    context?: {
-      currentTask?: string;
-      learningLevel?: string;
-      previousContext?: string;
-      userId?: string;
-      sessionId?: string;  // 学习会话 ID（用于获取状态）
-      studentState?: StudentStateAssessment;  // 学生当前状态（可选，如果提供则直接使用）
-    }
-  ) {
-    const studentState = context?.studentState;
-
-    // 根据学生状态生成辅导策略
-    let strategyPrompt = '';
-    if (studentState) {
-      const { aiStateAssessmentService } = await import('./state-assessment.service');
-      strategyPrompt = aiStateAssessmentService.generateInterventionStrategy(studentState);
-      
-      // 记录使用的干预策略
-      logger.info('AI Tutor 使用干预策略', {
-        userId: context?.userId,
-        sessionId: context?.sessionId,
-        cognitive: studentState.cognitive,
-        stress: studentState.stress,
-        engagement: studentState.engagement,
-        anomaly: studentState.anomaly,
-        intervention: studentState.intervention
-      });
-    }
-
-    const contextInfo = context ? `
-  当前任务：${context.currentTask || '未指定'}
-  学习水平：${context.learningLevel || '未知'}
-  之前的内容：${context.previousContext || '无'}
-  ${studentState ? `
-  【当前学生状态】
-  - 认知深度：${(studentState.cognitive * 100).toFixed(0)}%
-  - 压力程度：${(studentState.stress * 100).toFixed(0)}%
-  - 投入程度：${(studentState.engagement * 100).toFixed(0)}%
-  - 是否异常：${studentState.anomaly ? '是' : '否'}
-  ${studentState.intervention ? `\n【干预策略】\n${studentState.intervention}` : ''}
-  ` : ''}
-  ` : '';
-
-    try {
-      const response = await this.chat([
-        { role: 'system', content: strategyPrompt || SYSTEM_PROMPTS.TUTORING },
-        {
-          role: 'user',
-          content: `问题：${question}
-  ${contextInfo}`
-        }
-      ], {
-        agentId: 'ai-tutor',
-        userId: context?.userId,
-        action: 'tutoring'
-      });
-
-      return {
-        success: true,
-        answer: response.content,
-        tokensUsed: response.usage,
-        studentState  // 返回使用的状态
-      };
-    } catch (error: any) {
-      logger.error('AI 辅导失败:', error);
-      throw new Error(error.message);
-    }
-  }
-
-  /**
-   * ZPD 分层 AI 辅导
-   * 根据用户水平动态调整辅导策略
-   * 统一通过 TutorAgent 调用
-   */
-  async zpdTutoring(params: {
-    question: string;
-    taskDescription: string;
-    userXP: number;
-    completedTasks: number;
-    taskContext?: {
-      taskType?: string;
-      weekNumber?: number;
-      subject?: string;
-    };
-    userId?: string; // 用于 Agent 日志记录
-  }) {
-    try {
-      // 1. 确定用户的 ZPD 等级
-      const zpdLevel = determineZPDLevel(params.userXP, params.completedTasks);
-
-      // 2. 根据 ZPD 等级确定辅导策略
-      const strategy = determineTutoringStrategy({
-        level: zpdLevel,
-        xp: params.userXP,
-        completedTasks: params.completedTasks
-      });
-
-      // 3. 构建基于策略的提示词
-      const systemPrompt = buildTutoringPrompt(
-        params.taskDescription,
-        params.question,
-        strategy,
-        params.taskContext
-      );
-
-      // 4. 调用 AI（通过 TutorAgent 调用）
-      const response = await this.chat([
-        { role: 'system', content: systemPrompt }
-      ], {
-        agentId: 'teaching-agent',
-        userId: params.userId,
-        action: 'zpdTutoring'
-      });
-
-      logger.info('ZPD 辅导请求', {
-        userXP: params.userXP,
-        completedTasks: params.completedTasks,
-        zpdLevel,
-        hintLevel: strategy.hintLevel
-      });
-
-      return {
-        success: true,
-        answer: response.content,
-        tokensUsed: response.usage,
-        zpdLevel,
-        hintLevel: strategy.hintLevel
-      };
-    } catch (error: any) {
-      logger.error('ZPD 辅导失败:', error);
-      throw new Error(error.message);
     }
   }
 
@@ -928,69 +803,26 @@ ${context ? `上下文：
       completedTasks: number;
     }[];
   }) {
-    const systemPrompt = SYSTEM_PROMPTS.COURSE_DESIGN;
-
-    const userMessage = `【周次信息】
-第 ${params.weekNumber} 周：${params.weekTitle}
-描述：${params.weekDescription}
-
-【整体学习目标】
-${params.overallGoal}
-
-【用户背景】
-- 技能水平：${params.userProfile.skillLevel || '未知'}
-- 每天可用时间：${params.userProfile.timePerDay || '未知'}
-- 学习风格：${params.userProfile.learningStyle || '未知'}
-
-${params.previousWeeks && params.previousWeeks.length > 0 ? `【已完成的周次】
-${params.previousWeeks.map(w => `Week ${w.weekNumber}: ${w.title} (${w.completedTasks}个任务完成)`).join('\n')}` : ''}
-
-请为本周设计 3-5 个学习任务。`;
-
-    const startTime = Date.now();
-    
     try {
       logger.info('课程设计请求', { 
         weekNumber: params.weekNumber,
         model: COURSE_DESIGN_MODEL
       });
 
-      const gateway = getAPIGateway();
-      const response = await gateway.execute(
-        {
-          model: COURSE_DESIGN_MODEL,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage }
-          ],
-          temperature: 0.7,
-          max_tokens: 4000
-        },
-        {
-          agentId: 'course-design',
+      const response = await executeSkillWithResult(auxSkillDefinitionMap['course-design'], {
+        ...params,
+        model: COURSE_DESIGN_MODEL,
+        __prompt: {
           userId: params.userId,
-          action: 'designWeekCourses'
+          requestPath: '/services/ai/design-week-courses',
+          callerAgentId: 'course-design',
+          callerAction: 'designWeekCourses',
         },
-        {
-          userId: params.userId,
-          requestPath: '/services/ai/design-week-courses'
-        }
-      );
-
-      // 检查响应是否有效
-      if (!response.choices || response.choices.length === 0) {
-        throw new Error('AI 返回空响应，请重试');
+      });
+      if (!response.success || !response.output) {
+        throw new Error(response.error?.message || 'COURSE_DESIGN_FAILED');
       }
-
-      const reply = response.choices[0]?.message?.content || '';
-
-      // 尝试解析 JSON
-      const jsonMatch = reply.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('AI 返回格式错误');
-      }
-
-      const result = JSON.parse(jsonMatch[0]);
+      const result = response.output;
 
       return {
         success: true,

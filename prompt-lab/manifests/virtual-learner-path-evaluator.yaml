@@ -1,0 +1,48 @@
+version: prompt-lab-manifest/v1
+skillId: virtual-learner-path-evaluator
+agentId: skill:virtual-learner-path-evaluator
+name: default-virtual-learner-path-evaluator
+archetype: extractor
+description: 虚拟学习者 Path 评估器
+acceptableAgentIds:
+  - skill:virtual-learner-path-evaluator
+publish:
+  enabled: true
+  exportTargets:
+    - platform-prompts
+runtimeDefaults:
+  tier: chat
+  temperature: 0.5
+  maxTokens: 1200
+  model: null
+  thinkingMode: default
+  reasoningEffort: default
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: extraction
+  interactionMode: snapshot
+  input:
+    transport: json
+    schemaSource: skill-definition
+  output:
+    media: json
+    schemaSource: runtime-validator
+    envelope: adapter
+  context:
+    envelope: context-envelope/v1
+    delivery: sidecar
+    modelExposure: projected
+  failurePolicy: deterministic-fallback
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: simulation-refresh
+  businessState: { domain: virtual-learner, phases: [simulation-step-completed], defaultPhase: simulation-step-completed, terminalPhases: [simulation-step-completed], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: simulation-refresh, stateOwner: orchestrator }
+  outputEnvelope: adapter
+ownership:
+  tier: production
+  visibility: internal
+tags:
+  - virtual-learner
+  - extractor

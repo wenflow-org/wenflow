@@ -1,18 +1,18 @@
 ﻿<template>
-  <CapabilityShell title="我的学习活动" description="按时间线回看 AI 真正为你做了什么——每次回答、规划、纠错和模型调用。如需排查问题，可打开「显示底层调用」查看完整调用链。">
+  <CapabilityShell title="调用日志">
     <template #actions>
       <div class="actions">
-        <button type="button" class="btn btn--ghost btn--sm" @click="exportLogs('json')">
+        <button type="button" class="btn btn--ghost btn--sm" :disabled="exporting" @click="exportLogs('json')">
           <el-icon><Download /></el-icon>
-          导出 JSON
+          {{ exportingFormat === 'json' ? '导出中...' : '导出 JSON' }}
         </button>
-        <button type="button" class="btn btn--ghost btn--sm" @click="exportLogs('csv')">
+        <button type="button" class="btn btn--ghost btn--sm" :disabled="exporting" @click="exportLogs('csv')">
           <el-icon><Download /></el-icon>
-          导出 CSV
+          {{ exportingFormat === 'csv' ? '导出中...' : '导出 CSV' }}
         </button>
         <button type="button" class="btn btn--primary btn--sm" @click="copyDiagnosticsSummary">
           <el-icon><DocumentCopy /></el-icon>
-          复制诊断摘要
+          复制排查信息
         </button>
       </div>
     </template>
@@ -24,7 +24,8 @@
         <el-form-item label="Agent">
           <el-select v-model="filters.agentId" placeholder="全部" clearable>
             <el-option label="Path Agent" value="skill:path-planning" />
-            <el-option label="AI Teaching Agent" value="ai-teaching-agent" />
+            <el-option label="AI Teaching Agent" value="learning-agent" />
+            <el-option label="AI Teaching Agent (legacy)" value="ai-teaching-agent" />
             <el-option label="Learner State Hub" value="learner-model-agent" />
           </el-select>
         </el-form-item>
@@ -64,125 +65,85 @@
           />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="loadLogs">查询</el-button>
+          <el-button type="primary" :loading="loading" @click="queryLogs">查询</el-button>
           <el-button @click="resetFilters">重置</el-button>
         </el-form-item>
       </el-form>
     </div>
 
-    <el-alert
-      title="报错反馈建议"
-      description="遇到异常时，先点详情确认输入/错误信息，再使用“复制诊断摘要”或单条日志里的“复制反馈包”发给开发者。"
-      type="info"
-      show-icon
-      class="feedback-alert"
-    />
-
-    <!-- 统计信息 -->
-    <div class="stats">
-      <el-row :gutter="20">
-        <el-col :span="6">
-          <el-card shadow="hover">
-            <div class="stat-item">
-              <div class="label">总调用次数</div>
-              <div class="value">{{ pagination.total }}</div>
-            </div>
-          </el-card>
-        </el-col>
-        <el-col :span="6">
-          <el-card shadow="hover">
-            <div class="stat-item">
-              <div class="label">成功率</div>
-              <div class="value">{{ successRate }}%</div>
-            </div>
-          </el-card>
-        </el-col>
-        <el-col :span="6">
-          <el-card shadow="hover">
-            <div class="stat-item">
-              <div class="label">平均耗时</div>
-              <div class="value">{{ avgDuration }}ms</div>
-            </div>
-          </el-card>
-        </el-col>
-        <el-col :span="6">
-          <el-card shadow="hover">
-            <div class="stat-item">
-              <div class="label">总 Token</div>
-              <div class="value">{{ totalTokens }}</div>
-            </div>
-          </el-card>
-        </el-col>
-      </el-row>
+    <div v-if="!loadError" class="stats">
+      <div class="stat-card">
+        <span>总调用</span>
+        <strong>{{ pagination.total }}</strong>
+      </div>
+      <div class="stat-card">
+        <span>成功率</span>
+        <strong>{{ successRate }}%</strong>
+      </div>
+      <div class="stat-card">
+        <span>平均耗时</span>
+        <strong>{{ avgDuration }}ms</strong>
+      </div>
+      <div class="stat-card">
+        <span>Token</span>
+        <strong>{{ totalTokens }}</strong>
+      </div>
     </div>
 
     <!-- 日志列表 -->
     <div class="logs-list">
-      <div class="logs-table-panel">
-        <div class="logs-table-panel__header">
-          <div>
-            <h3>详细日志</h3>
-            <p>展示完整日志记录。默认隐藏平台底层调用，避免和业务 Agent 记录混淆。</p>
-          </div>
-        </div>
+      <el-result v-if="loadError" icon="error" title="日志加载失败" :sub-title="loadError">
+        <template #extra>
+          <el-button type="primary" @click="loadLogs">重新加载</el-button>
+        </template>
+      </el-result>
 
+      <template v-else>
+      <div class="logs-table-panel">
         <div class="logs-table-panel__scroller">
       <el-table :data="displayLogs" v-loading="loading" style="width: 100%">
-        <el-table-column prop="agentId" label="Agent" width="150">
+        <el-table-column prop="agentId" label="Agent" min-width="130" show-overflow-tooltip>
           <template #default="{ row }">
-            <span>{{ formatAgentId(row.agentId) }}</span>
+            {{ formatAgentId(row.agentId) }}
           </template>
         </el-table-column>
-        <el-table-column label="记录来源" width="120">
+        <el-table-column label="来源" width="80">
           <template #default="{ row }">
             <el-tag :type="getLogSourceType(row)" size="small" effect="plain">
               {{ getLogSourceLabel(row) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="能力类型" width="120">
+        <el-table-column label="能力" width="88">
           <template #default="{ row }">
-            <el-tag size="small" effect="plain">{{ getCapabilityTypeLabel(row.agentId) }}</el-tag>
+            {{ getCapabilityTypeLabel(row.agentId) }}
           </template>
         </el-table-column>
-        <el-table-column prop="success" label="状态" width="100">
+        <el-table-column prop="success" label="状态" width="70">
           <template #default="{ row }">
-            <el-tag :type="row.success ? 'success' : 'danger'">
+            <el-tag :type="row.success ? 'success' : 'danger'" size="small">
               {{ row.success ? '成功' : '失败' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="durationMs" label="耗时 (ms)" width="100" />
-        <el-table-column prop="tokensUsed" label="Token" width="80" />
-        <el-table-column label="模型来源" width="160">
+        <el-table-column prop="durationMs" label="耗时" width="70" />
+        <el-table-column prop="tokensUsed" label="Token" width="70" />
+        <el-table-column label="模型" min-width="100" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-tag :type="getModelSourceInfo(row).usesUserProvider ? 'success' : 'info'" size="small">
-              {{ getModelSourceInfo(row).label }}
-            </el-tag>
+            {{ getModelSourceInfo(row).label }}
           </template>
         </el-table-column>
-        <el-table-column label="Provider" width="180" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ getModelSourceInfo(row).providerName }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="error" label="错误信息" show-overflow-tooltip />
-        <el-table-column prop="calledAt" label="时间" width="180">
+        <el-table-column prop="error" label="错误" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="calledAt" label="时间" width="140">
           <template #default="{ row }">
             {{ formatDate(row.calledAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
             <div class="table-actions">
-              <el-button class="table-action-btn table-action-btn--detail" text bg @click="viewDetail(row)">
-                <el-icon><View /></el-icon>
-                查看详情
-              </el-button>
-              <el-button class="table-action-btn table-action-btn--copy" text bg @click="copyLogFeedback(row)">
-                <el-icon><CopyDocument /></el-icon>
-                复制反馈包
-              </el-button>
+              <el-button link type="primary" @click="viewDetail(row)">详情</el-button>
+              <el-button link type="primary" @click="copyLogFeedback(row)">复制</el-button>
             </div>
           </template>
         </el-table-column>
@@ -202,23 +163,16 @@
           @current-change="loadLogs"
         />
       </div>
+      </template>
     </div>
 
     <!-- 详情对话框 -->
     <el-dialog
       v-model="detailVisible"
       title="日志详情与诊断"
-      width="880px"
+      width="min(880px, calc(100vw - 32px))"
       :fullscreen="isMobileDetail"
     >
-      <el-alert
-        title="先看状态、错误信息、模型来源；确认后可一键复制反馈包给开发者"
-        type="info"
-        show-icon
-        :closable="false"
-        class="detail-alert"
-      />
-
       <div v-loading="detailLoading" v-if="currentLog" class="detail-panel">
         <el-alert
           v-if="detailError"
@@ -277,7 +231,7 @@
         <el-button class="dialog-btn dialog-btn--close" @click="detailVisible = false">关闭</el-button>
         <el-button class="dialog-btn dialog-btn--copy" :disabled="!currentLog" @click="copyLogFeedback(currentLog)">
           <el-icon><CopyDocument /></el-icon>
-          复制反馈包
+          复制
         </el-button>
       </template>
     </el-dialog>
@@ -287,20 +241,53 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
-import { CopyDocument, DocumentCopy, Download, View } from '@element-plus/icons-vue';
+import { CopyDocument, DocumentCopy, Download } from '@element-plus/icons-vue';
 import { toast } from '../../utils/toast';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import { getAgentLogDetail, getAgentLogs, exportAgentLogs } from '@/api/userCustom';
 import dayjs from 'dayjs';
 
+interface AgentLogItem {
+  id: string;
+  agentId?: string;
+  success?: boolean;
+  durationMs?: number;
+  tokensUsed?: number;
+  error?: string | null;
+  errorCode?: string | null;
+  calledAt?: string;
+  traceId?: string | null;
+  sourceEntry?: string | null;
+  callerAgent?: string | null;
+  logSource?: string;
+  input?: unknown;
+  output?: unknown;
+  metadata?: unknown;
+}
+
+interface AgentLogQueryParams {
+  page?: number;
+  limit?: number;
+  agentId?: string;
+  capabilityType?: string;
+  success?: boolean;
+  includeSystem?: boolean;
+  startDate?: string;
+  endDate?: string;
+  format?: 'json' | 'csv';
+}
+
 const loading = ref(false);
-const logs = ref<any[]>([]);
+const logs = ref<AgentLogItem[]>([]);
 const detailVisible = ref(false);
-const currentLog = ref<any>(null);
+const currentLog = ref<AgentLogItem | null>(null);
 const isMobileDetail = ref(false);
 const detailLoading = ref(false);
 const detailError = ref('');
 const detailSections = ref<string[]>(['basic', 'context']);
+const loadError = ref('');
+const exportingFormat = ref<'' | 'json' | 'csv'>('');
+const exporting = computed(() => exportingFormat.value !== '');
 
 const filters = reactive({
   agentId: '',
@@ -359,26 +346,38 @@ const syncDetailViewport = () => {
 
 const loadLogs = async () => {
   loading.value = true;
+  loadError.value = '';
   try {
-    const params: any = {
+    const params: AgentLogQueryParams = {
       page: pagination.page,
       limit: pagination.limit
     };
     
     if (filters.agentId) params.agentId = filters.agentId;
-    if (filters.success !== undefined) params.success = filters.success;
+    if (filters.capabilityType) params.capabilityType = filters.capabilityType;
+    // el-select clearable 清空时会置为 ''，仅布尔值才下发筛选
+    if (typeof filters.success === 'boolean') params.success = filters.success;
     params.includeSystem = filters.includeSystem;
     if (filters.startDate) params.startDate = filters.startDate;
     if (filters.endDate) params.endDate = filters.endDate;
 
     const res = await getAgentLogs(params);
-    logs.value = res.data.logs;
-    pagination.total = res.data.pagination.total;
-  } catch (error) {
+    logs.value = res.data?.logs || [];
+    pagination.total = res.data?.pagination?.total || 0;
+  } catch (error: any) {
+    logs.value = [];
+    pagination.total = 0;
+    loadError.value = error?.response?.data?.error?.message || '无法读取调用日志，请稍后重试。';
+    toast.error('日志加载失败');
     console.error('加载日志失败:', error);
   } finally {
     loading.value = false;
   }
+};
+
+const queryLogs = () => {
+  pagination.page = 1;
+  loadLogs();
 };
 
 const onDateRangeChange = (dates: [Date, Date] | null) => {
@@ -403,7 +402,7 @@ const resetFilters = () => {
   loadLogs();
 };
 
-const viewDetail = async (log: any) => {
+const viewDetail = async (log: AgentLogItem) => {
   currentLog.value = log;
   detailError.value = '';
   detailVisible.value = true;
@@ -428,18 +427,28 @@ const viewDetail = async (log: any) => {
 };
 
 const exportLogs = async (format: 'json' | 'csv') => {
+  if (exporting.value) return;
+  exportingFormat.value = format;
   try {
-    const params: any = { format };
+    const params: AgentLogQueryParams = { format };
+    if (filters.agentId) params.agentId = filters.agentId;
+    if (filters.capabilityType) params.capabilityType = filters.capabilityType;
+    if (typeof filters.success === 'boolean') params.success = filters.success;
+    params.includeSystem = filters.includeSystem;
     if (filters.startDate) params.startDate = filters.startDate;
     if (filters.endDate) params.endDate = filters.endDate;
 
     const data = await exportAgentLogs(params);
     const blob = format === 'csv'
-      ? data
-      : new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      ? (data as Blob)
+      : new Blob([JSON.stringify((data as { data?: unknown })?.data ?? data, null, 2)], { type: 'application/json' });
     downloadBlob(blob, `agent-logs-${dayjs().format('YYYYMMDD')}.${format}`);
+    toast.success('日志导出完成');
   } catch (error) {
+    toast.error('日志导出失败');
     console.error('导出失败:', error);
+  } finally {
+    exportingFormat.value = '';
   }
 };
 
@@ -466,7 +475,7 @@ const copyDiagnosticsSummary = async () => {
   await copyText(JSON.stringify(payload, null, 2), '诊断摘要已复制');
 };
 
-const copyLogFeedback = async (log: any) => {
+const copyLogFeedback = async (log: AgentLogItem | null) => {
   if (!log) return;
 
   const payload = buildFeedbackPayload(log);
@@ -474,7 +483,7 @@ const copyLogFeedback = async (log: any) => {
   await copyText(JSON.stringify(payload, null, 2), '反馈包已复制，可直接发给开发同学');
 };
 
-const buildFeedbackPayload = (log: any) => {
+const buildFeedbackPayload = (log: AgentLogItem) => {
   const metadata = parseMetadata(log?.metadata);
   return {
     copiedAt: new Date().toISOString(),
@@ -510,11 +519,11 @@ const buildFeedbackPayload = (log: any) => {
   };
 };
 
-const formatDate = (date: string) => {
+const formatDate = (date?: string) => {
   return dayjs(date).format('YYYY-MM-DD HH:mm:ss');
 };
 
-const formatAgentId = (logOrAgentId: any) => {
+const formatAgentId = (logOrAgentId: string | AgentLogItem | null | undefined) => {
   const agentId = typeof logOrAgentId === 'string' ? logOrAgentId : logOrAgentId?.agentId;
   const metadata = typeof logOrAgentId === 'string' ? {} : parseMetadata(logOrAgentId?.metadata);
 
@@ -531,6 +540,7 @@ const formatAgentId = (logOrAgentId: any) => {
     'skill:path-planning': '学习路径规划',
     'skill:goal-conversation': '目标对话',
     'ai-teaching-agent': 'AI 授课',
+    'learning-agent': 'AI 授课',
     'ai-tutor': 'AI 辅导',
     'learner-model-agent': '学习者模型',
     'course-design': '课程设计',
@@ -540,7 +550,7 @@ const formatAgentId = (logOrAgentId: any) => {
   return agentNames[agentId] || agentId;
 };
 
-const getLogSourceLabel = (log: any) => {
+const getLogSourceLabel = (log: AgentLogItem) => {
   if (log.logSource === 'business') {
     return '业务层';
   }
@@ -564,25 +574,26 @@ const getLogSourceLabel = (log: any) => {
   return '业务层';
 };
 
-const getLogSourceType = (log: any) => {
+const getLogSourceType = (log: AgentLogItem) => {
   return getLogSourceLabel(log) === '平台底层' ? 'info' : 'success';
 };
 
-const getCapabilityType = (agentId: string) => {
+const getCapabilityType = (agentId?: string) => {
   const mapping: Record<string, string> = {
     'skill:goal-conversation': 'goal',
     'skill:path-planning': 'path',
-    'ai-teaching-agent': 'teaching',
+    'ai-teaching-agent': 'learning',
+    'learning-agent': 'learning',
     'ai-tutor': 'tutoring',
     'learner-model-agent': 'profile',
     'unknown': 'system',
     'system-call': 'system'
   };
 
-  return mapping[agentId] || 'system';
+  return mapping[agentId ?? ''] || 'system';
 };
 
-const getCapabilityTypeLabel = (agentId: string) => {
+const getCapabilityTypeLabel = (agentId?: string) => {
   const labels: Record<string, string> = {
     goal: '需求收集',
     path: '路径规划',
@@ -596,7 +607,7 @@ const getCapabilityTypeLabel = (agentId: string) => {
   return labels[getCapabilityType(agentId)] || '系统调用';
 };
 
-const formatJson = (json: any) => {
+const formatJson = (json: unknown) => {
   if (!json) return '';
   try {
     return JSON.stringify(typeof json === 'string' ? JSON.parse(json) : json, null, 2);
@@ -605,7 +616,7 @@ const formatJson = (json: any) => {
   }
 };
 
-const formatTextBlock = (value: any) => {
+const formatTextBlock = (value: unknown) => {
   if (!value) {
     return '暂无';
   }
@@ -630,7 +641,7 @@ const formatTextBlock = (value: any) => {
   }
 };
 
-const parseMetadata = (metadata: any) => {
+const parseMetadata = (metadata: unknown): Record<string, unknown> => {
   if (!metadata) return {};
   if (typeof metadata === 'string') {
     try {
@@ -639,10 +650,10 @@ const parseMetadata = (metadata: any) => {
       return {};
     }
   }
-  return metadata;
+  return metadata as Record<string, unknown>;
 };
 
-const getModelSourceInfo = (log: any) => {
+const getModelSourceInfo = (log: AgentLogItem | null) => {
   const metadata = parseMetadata(log?.metadata);
   const usesUserProvider = !!metadata.usesUserProvider;
 
@@ -655,7 +666,7 @@ const getModelSourceInfo = (log: any) => {
   };
 };
 
-const toDiagnosticLog = (log: any) => ({
+const toDiagnosticLog = (log: AgentLogItem) => ({
   id: log.id,
   agentId: log.agentId,
   agentLabel: formatAgentId(log.agentId),
@@ -694,6 +705,12 @@ const copyText = async (text: string, successMessage: string) => {
   --brand-soft: #e8f4fb;
   --accent-ink: #0f766e;
   --accent-soft: #e8f7f5;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  display: grid;
+  gap: 16px;
 
   .actions {
     display: flex;
@@ -703,51 +720,74 @@ const copyText = async (text: string, successMessage: string) => {
   }
 
   .filters {
-    margin-bottom: 20px;
-    padding: 18px 20px 2px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 24px;
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(20px);
-    box-shadow: var(--shadow-md);
+    margin: 0;
+    padding: 14px 16px 4px;
+    border: 1px solid var(--line, #e3e9f4);
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
+    min-width: 0;
   }
 
-  .feedback-alert {
-    margin-bottom: 20px;
+  :deep(.filters .el-form) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    align-items: center;
   }
 
-  :deep(.feedback-alert .el-alert__title) {
-    color: #184a69;
-    font-weight: 700;
+  :deep(.filters .el-form-item) {
+    margin-bottom: 10px;
+    margin-right: 0;
+  }
+
+  :deep(.filters .el-select) {
+    width: 140px;
+  }
+
+  :deep(.filters .el-date-editor) {
+    width: 260px;
   }
 
   .stats {
-    margin-bottom: 20px;
+    margin: 0;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
 
-      .stat-item {
-        text-align: center;
+  .stat-card {
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid var(--line, #e3e9f4);
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
+    display: grid;
+    gap: 6px;
 
-        .label {
-          font-size: 14px;
-          color: var(--text-secondary);
-          margin-bottom: 8px;
-        }
-
-        .value {
-          font-size: 24px;
-          font-weight: bold;
-          color: var(--text-primary);
-        }
-      }
+    span {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted, #5b6577);
     }
 
+    strong {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--ink, #172033);
+      line-height: 1.2;
+    }
+  }
+
   .logs-list {
-    padding: 20px;
-    border: 1px solid rgba(52, 120, 246, 0.08);
-    border-radius: 24px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(248, 250, 255, 0.72));
-    backdrop-filter: blur(20px);
-    box-shadow: 0 18px 34px rgba(31, 87, 204, 0.07);
+    padding: 16px;
+    border: 1px solid var(--line, #e3e9f4);
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
+    min-width: 0;
+    overflow: hidden;
 
     .log-card-grid {
       display: grid;
@@ -770,14 +810,6 @@ const copyText = async (text: string, successMessage: string) => {
         font-size: 13px;
         color: var(--text-secondary);
       }
-    }
-
-    :deep(.stats .el-card) {
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 250, 255, 0.78));
-      border: 1px solid rgba(52, 120, 246, 0.08);
-      backdrop-filter: blur(20px);
-      border-radius: 20px;
-      box-shadow: 0 16px 30px rgba(31, 87, 204, 0.07);
     }
 
     .log-card {
@@ -878,54 +910,33 @@ const copyText = async (text: string, successMessage: string) => {
 
     .logs-table-panel {
       min-width: 0;
-
-      &__header {
-        margin-bottom: 16px;
-
-        h3 {
-          margin: 0 0 8px;
-          font-size: 18px;
-          color: var(--el-text-color-primary);
-        }
-
-        p {
-          margin: 0;
-          color: var(--el-text-color-secondary);
-          line-height: 1.6;
-          max-width: 680px;
-        }
-      }
+      width: 100%;
 
       &__scroller {
+        width: 100%;
+        max-width: 100%;
         overflow-x: auto;
       }
 
       :deep(.el-table) {
-        min-width: 1120px;
+        width: 100% !important;
+      }
+
+      :deep(.el-table__header),
+      :deep(.el-table__body) {
+        width: 100% !important;
       }
 
       .table-actions {
         display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 4px;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 2px;
       }
 
-      .table-action-btn {
-        border-radius: 8px;
-        font-weight: 600;
-        width: 100%;
-        justify-content: flex-start;
-      }
-
-      .table-action-btn--detail {
-        color: var(--brand-ink);
-        --el-fill-color-light: var(--brand-soft);
-      }
-
-      .table-action-btn--copy {
-        color: var(--accent-ink);
-        --el-fill-color-light: var(--accent-soft);
+      .table-actions :deep(.el-button) {
+        margin-left: 0;
+        padding: 0 4px;
       }
     }
 
@@ -979,14 +990,7 @@ const copyText = async (text: string, successMessage: string) => {
     }
 
     .stats {
-      :deep(.el-row) {
-        row-gap: 12px;
-      }
-
-      :deep(.el-col) {
-        max-width: 100%;
-        flex: 0 0 100%;
-      }
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     :deep(.filters .el-form) {

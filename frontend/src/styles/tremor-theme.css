@@ -48,6 +48,14 @@
   --tremor-spacing: var(--spacing-4);
   --tremor-spacing-md: var(--spacing-6);
   --tremor-spacing-lg: var(--spacing-8);
+
+  /* el-avatar 默认浅灰底(#c0c4cc)配白字仅 1.75:1，统一加深为品牌蓝保证可读 */
+  --el-avatar-bg-color: #1f57cc;
+}
+
+/* EP 在元素级定义了 --el-avatar-bg-color，需用更高优先级覆盖 */
+#app .el-avatar {
+  --el-avatar-bg-color: #1f57cc;
 }
 
 /* ========================================
@@ -792,6 +800,25 @@ body {
 [data-theme="dark"] .el-avatar {
   background: var(--bg-muted) !important;
   color: var(--text-primary) !important;
+}
+
+/* el-alert 浅色变体文字对比度修复：EP 默认 #f56c6c / #e6a23c / #67c23a 在浅底上均不足 4.5:1 */
+.el-alert--error.is-light .el-alert__title,
+.el-alert--error.is-light .el-alert__description {
+  color: #b91c1c;
+}
+
+.el-alert--warning.is-light .el-alert__title {
+  color: #92400e;
+}
+
+.el-alert--warning.is-light .el-alert__description {
+  color: #b45309;
+}
+
+.el-alert--success.is-light .el-alert__title,
+.el-alert--success.is-light .el-alert__description {
+  color: #15803d;
 }
 
 [data-theme="dark"] .el-alert {

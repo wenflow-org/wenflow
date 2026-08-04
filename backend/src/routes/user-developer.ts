@@ -155,7 +155,7 @@ router.get('/quickstart', async (req, res) => {
     'curl -X POST "http://localhost:3001/api/goal-conversation/start" \\',
     '  -H "Authorization: Bearer <YOUR_JWT_TOKEN>" \\',
     '  -H "Content-Type: application/json" \\',
-    '  -d "{\"goal\":\"我想做一个可复用的问流 AI 学习助手\"}"',
+    `  -d '{"goal":"我想做一个可复用的问流 AI 学习助手"}'`,
     '```',
     '',
     '> 当前版本说明：SDK、Webhook、Plugin Marketplace 处于规划中；Agent 由平台托管发布，用户侧仅支持选择与启停。'
@@ -226,16 +226,28 @@ router.post('/access-grants', async (req: any, res) => {
       });
     }
 
-    const grant = await prisma.projection_access_grants.create({
-      data: {
-        userId,
-        scope: normalizeProjectionScope(req.body?.scope),
-        scopeDefinition: serializeScopeDefinition(req.body?.scopeDefinition),
-        purpose: typeof req.body?.purpose === 'string' && req.body.purpose.trim()
-          ? req.body.purpose.trim()
-          : null,
-        expiresAt
-      }
+    const now = new Date();
+    const grant = await prisma.$transaction(async (tx) => {
+      await tx.projection_access_grants.updateMany({
+        where: {
+          userId,
+          revokedAt: null,
+          expiresAt: { gt: now }
+        },
+        data: { revokedAt: now }
+      });
+
+      return tx.projection_access_grants.create({
+        data: {
+          userId,
+          scope: normalizeProjectionScope(req.body?.scope),
+          scopeDefinition: serializeScopeDefinition(req.body?.scopeDefinition),
+          purpose: typeof req.body?.purpose === 'string' && req.body.purpose.trim()
+            ? req.body.purpose.trim()
+            : null,
+          expiresAt
+        }
+      });
     });
 
     res.status(201).json({
@@ -273,12 +285,19 @@ router.post('/access-grants/:grantId/revoke', async (req: any, res) => {
       });
     }
 
+    const now = new Date();
+    await prisma.projection_access_grants.updateMany({
+      where: {
+        userId,
+        revokedAt: null,
+        expiresAt: { gt: now }
+      },
+      data: { revokedAt: now }
+    });
+
     const grant = existing.revokedAt
       ? existing
-      : await prisma.projection_access_grants.update({
-          where: { id: grantId },
-          data: { revokedAt: new Date() }
-        });
+      : { ...existing, revokedAt: now, updatedAt: now };
 
     res.json({
       success: true,

@@ -20,6 +20,22 @@ import {
 } from '../../services/agentConfig.service';
 import pathCoordinator from '../../coordinators/path.coordinator';
 import { logger } from '../../utils/logger';
+import {
+  getPlatformReliabilitySettings,
+  getReliabilityHardLimits,
+  updatePlatformReliabilitySettings
+} from '../../services/reliability-settings.service';
+import {
+  getPlatformCapabilityProbeEnabled,
+  getPlatformCapabilityProbeInterval,
+  DEFAULT_CAPABILITY_PROBE_ENABLED,
+  DEFAULT_CAPABILITY_PROBE_INTERVAL_MS,
+  MIN_CAPABILITY_PROBE_INTERVAL_MS,
+  MAX_CAPABILITY_PROBE_INTERVAL_MS,
+  updatePlatformCapabilityProbeEnabled,
+  updatePlatformCapabilityProbeInterval
+} from '../../services/capability-probe-settings.service';
+import { aiCapabilityHealthService } from '../../services/ai-capability-health.service';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -30,7 +46,7 @@ const MONITORED_AGENT_ORDER = [
   'RequirementCollection',
   'PathPlanning',
   'LearnerOrchestration',
-  'Teaching',
+  'Learning',
   'TeachingOrchestration',
   'LearningCompanion',
   'SessionWrapup'
@@ -44,6 +60,22 @@ const AGENT_ID_TO_NAME = Object.entries(AGENT_NAME_TO_IDS).reduce((acc, [name, i
 }, {} as Record<string, string>);
 
 const AGENT_RELATIONS = getAgentRelations();
+
+/**
+ * 生产统计用户过滤：排除虚拟学习者与测试/审计账号（合成流量），避免污染真实指标。
+ * 测试账号按命名模式识别（e2e_/audit_probe_/ui_check/motion_review/@test.local/virtual_）。
+ */
+const REAL_USER_WHERE = {
+  isVirtualLearner: false,
+  NOT: [
+    { email: { startsWith: 'virtual_' } },
+    { email: { endsWith: '@test.local' } },
+    { email: { startsWith: 'e2e_' } },
+    { email: { startsWith: 'audit_probe_' } },
+    { email: { startsWith: 'ui_check' } },
+    { email: { startsWith: 'motion_review' } },
+  ],
+};
 
 const inferRuntimeRole = (agentId: string, type?: string | null) => {
   const typeText = String(type || '').toLowerCase();
@@ -205,7 +237,7 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
       'ai-service'
     ]);
 
-    const [registrations, modelConfigs, logGroups, catalog, agentCallOutputSamples, arenaOutputSamples] = await Promise.all([
+    const [registrations, modelConfigs, logGroups, catalog, agentCallOutputSamples] = await Promise.all([
       systemPrisma.agent_registrations.findMany({
         orderBy: { id: 'asc' },
         select: {
@@ -233,17 +265,10 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
         orderBy: { calledAt: 'desc' },
         take: 500,
         select: { output: true }
-      }),
-      prisma.arena_agent_logs.findMany({
-        where: { output: { not: null } },
-        orderBy: { createdAt: 'desc' },
-        take: 500,
-        select: { output: true }
       })
     ]);
 
     const agentCallContractCounts = summarizeOutputContracts(agentCallOutputSamples);
-    const arenaContractCounts = summarizeOutputContracts(arenaOutputSamples);
 
     const registrationIds = registrations.map(item => item.id);
     const modelConfigIds = modelConfigs.map(item => item.agentId);
@@ -300,7 +325,6 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
           calledAgentTotal: calledAgentIds.length,
           catalogTotal: catalogIds.length,
           outputContractSampleSize: agentCallContractCounts.sampleSize,
-          arenaOutputContractSampleSize: arenaContractCounts.sampleSize,
           driftCount:
             missingRegistrations.length +
             unknownRegistrations.length +
@@ -309,8 +333,7 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
             catalogOnly.length
         },
         outputContracts: {
-          agentCallLogs: agentCallContractCounts,
-          arenaAgentLogs: arenaContractCounts
+          agentCallLogs: agentCallContractCounts
         },
         drift: {
           missingRegistrations,
@@ -367,7 +390,13 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       'request timeout',
       'socket hang up'
     ];
-
+    const businessExecutionWhere = {
+      OR: [
+        { executionLayer: null },
+        { executionLayer: { not: 'api-gateway' } }
+      ]
+    };
+    // 生产统计排除虚拟学习者与测试/审计账号：见模块级 REAL_USER_WHERE
     const isTimeoutLog = (log: { errorCode: string | null; error: string | null }) => {
       const errorCode = String(log.errorCode || '').toLowerCase();
       const errorMessage = String(log.error || '').toLowerCase();
@@ -382,10 +411,12 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       newUsersToday,
       activeUsersToday,
       totalPaths,
+      failedPaths,
       activePaths,
       totalTasks,
       completedTasks,
       totalConversations,
+      completedConversations,
       activeConversations,
       totalAgentLogs,
       platformStats,
@@ -394,14 +425,21 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       agentTimeoutToday,
       activeAgents24h,
       recentAgentLogs24h,
-      wrapupLogs
+      wrapupLogs,
+      usageTokens7d,
+      usageCalls7d,
+      usageModels7d,
+      usageFailures7d
     ] = await Promise.all([
-      // 总用户数
-      prisma.users.count(),
+      // 总用户数（不含虚拟学习者）
+      prisma.users.count({
+        where: REAL_USER_WHERE,
+      }),
       
-      // 今日新增用户
+      // 今日新增用户（不含虚拟学习者）
       prisma.users.count({
         where: {
+          ...REAL_USER_WHERE,
           createdAt: {
             gte: today,
             lt: tomorrow,
@@ -409,9 +447,10 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         },
       }),
       
-      // 今日活跃用户（有学习会话）
+      // 今日活跃用户（有学习会话，不含虚拟学习者）
       prisma.teaching_sessions.findMany({
         where: {
+          users: REAL_USER_WHERE,
           startTime: {
             gte: today,
             lt: tomorrow,
@@ -421,12 +460,20 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         select: { userId: true },
       }),
       
-      // 总学习路径数
-      prisma.learning_paths.count(),
+      // 总学习路径数（不含虚拟学习者/测试账号）
+      prisma.learning_paths.count({
+        where: { users: REAL_USER_WHERE },
+      }),
+
+      // 生成失败的学习路径数（断点归因用，不含虚拟学习者/测试账号）
+      prisma.learning_paths.count({
+        where: { users: REAL_USER_WHERE, status: 'failed' },
+      }),
       
-      // 活跃学习路径（有未完成的任务）
+      // 活跃学习路径（有未完成的任务，不含虚拟学习者）
       prisma.learning_paths.findMany({
         where: {
+          users: REAL_USER_WHERE,
           milestones: {
             some: {
               subtasks: {
@@ -442,22 +489,33 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         select: { id: true },
       }),
       
-      // 总任务数
-      prisma.subtasks.count(),
+      // 总任务数（不含虚拟学习者）
+      prisma.subtasks.count({
+        where: { users: REAL_USER_WHERE },
+      }),
       
-      // 已完成任务数
+      // 已完成任务数（不含虚拟学习者）
       prisma.subtasks.count({
         where: {
+          users: REAL_USER_WHERE,
           status: 'completed',
         },
       }),
       
-      // 总对话数
-      prisma.goal_conversations.count(),
+      // 总对话数（不含虚拟学习者/测试账号）
+      prisma.goal_conversations.count({
+        where: { users: REAL_USER_WHERE },
+      }),
+
+      // 完成澄清的对话数（漏斗"目标"口径，不含虚拟学习者/测试账号）
+      prisma.goal_conversations.count({
+        where: { users: REAL_USER_WHERE, status: 'completed' },
+      }),
       
-      // 活跃对话
+      // 活跃对话（不含虚拟学习者）
       prisma.goal_conversations.count({
         where: {
+          users: REAL_USER_WHERE,
           status: 'active',
         },
       }),
@@ -465,6 +523,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       // Agent 调用统计 (使用 agentCallLog 表)
       prisma.agent_call_logs.groupBy({
         by: ['success'],
+        where: businessExecutionWhere,
         _count: true,
       }),
       
@@ -477,6 +536,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       // 今日 Agent 调用数
       prisma.agent_call_logs.count({
         where: {
+          ...businessExecutionWhere,
           calledAt: {
             gte: today,
             lt: tomorrow,
@@ -487,6 +547,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       // 今日 Agent 成功调用
       prisma.agent_call_logs.count({
         where: {
+          ...businessExecutionWhere,
           calledAt: {
             gte: today,
             lt: tomorrow,
@@ -498,18 +559,20 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       // 今日超时调用（按 error/errorCode 关键字识别）
       prisma.agent_call_logs.count({
         where: {
-          calledAt: {
-            gte: today,
-            lt: tomorrow,
-          },
-          success: false,
-          OR: [
-            { errorCode: { contains: 'TIMEOUT' } },
-            { error: { contains: 'timeout' } },
-            { error: { contains: 'timed out' } },
-            { error: { contains: 'etimedout' } },
-            { error: { contains: 'deadline exceeded' } },
-            { error: { contains: 'request timeout' } }
+          AND: [
+            businessExecutionWhere,
+            {
+              calledAt: { gte: today, lt: tomorrow },
+              success: false,
+              OR: [
+                { errorCode: { contains: 'TIMEOUT' } },
+                { error: { contains: 'timeout' } },
+                { error: { contains: 'timed out' } },
+                { error: { contains: 'etimedout' } },
+                { error: { contains: 'deadline exceeded' } },
+                { error: { contains: 'request timeout' } }
+              ]
+            }
           ]
         }
       }),
@@ -518,6 +581,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       prisma.agent_call_logs.groupBy({
         by: ['agentId'],
         where: {
+          ...businessExecutionWhere,
           calledAt: { gte: new Date(Date.now() - 24 * 3600000) }
         }
       }),
@@ -525,6 +589,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       // 最近 24h 调用趋势
       prisma.agent_call_logs.findMany({
         where: {
+          ...businessExecutionWhere,
           calledAt: { gte: last24HoursStart }
         },
         select: {
@@ -540,6 +605,42 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         orderBy: { calledAt: 'desc' },
         take: 200,
         select: { output: true }
+      }),
+
+      // 近 7 天 LLM 用量聚合（token 总量，来自执行尝试表）
+      prisma.llm_execution_attempts.aggregate({
+        where: { startedAt: { gte: new Date(Date.now() - 7 * 86400000) } },
+        _sum: { totalTokens: true },
+        _count: true,
+      }),
+
+      // 近 7 天调用与失败数
+      prisma.agent_call_logs.groupBy({
+        by: ['success'],
+        where: {
+          ...businessExecutionWhere,
+          calledAt: { gte: new Date(Date.now() - 7 * 86400000) }
+        },
+        _count: true,
+      }),
+
+      // 近 7 天模型用量分布（按解析后的模型名）
+      prisma.llm_execution_attempts.groupBy({
+        by: ['resolvedModel'],
+        where: { startedAt: { gte: new Date(Date.now() - 7 * 86400000) } },
+        _sum: { totalTokens: true },
+        _count: true,
+      }),
+
+      // 近 7 天失败归因（errorCategory 分布）
+      prisma.llm_execution_attempts.groupBy({
+        by: ['errorCategory'],
+        where: {
+          startedAt: { gte: new Date(Date.now() - 7 * 86400000) },
+          errorCategory: { not: null },
+          success: false,
+        },
+        _count: true,
       })
     ]);
 
@@ -630,6 +731,32 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       };
     });
 
+    /* 近 7 天 LLM 用量与失败归因 */
+    const sum7d = (usageTokens7d as { _sum?: { totalTokens?: number | null } })._sum || {};
+    const calls7dTotal = usageCalls7d.reduce((acc, g) => acc + g._count, 0);
+    const calls7dFailed = usageCalls7d.find(g => g.success === false)?._count || 0;
+    const models7d = (usageModels7d || [])
+      .filter(g => g.resolvedModel && g.resolvedModel !== 'null')
+      .map(g => ({
+        model: String(g.resolvedModel),
+        calls: g._count,
+        tokens: g._sum.totalTokens || 0,
+      }))
+      .sort((a, b) => b.tokens - a.tokens)
+      .slice(0, 5);
+    const failures7d = (usageFailures7d || [])
+      .filter(g => g.errorCategory)
+      .map(g => ({ category: String(g.errorCategory), count: g._count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+    const usage = {
+      calls7d: calls7dTotal,
+      failed7d: calls7dFailed,
+      totalTokens7d: Number(sum7d.totalTokens || 0),
+      models7d,
+      failures7d,
+    };
+
     res.json({
       success: true,
       data: {
@@ -641,6 +768,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         },
         learning: {
           totalPaths,
+          failedPaths,
           activePaths: activePathsCount,
           totalTasks,
           completedTasks,
@@ -648,6 +776,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         },
         conversations: {
           total: totalConversations,
+          completed: completedConversations,
           active: activeConversations,
         },
         agents: {
@@ -661,6 +790,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
           last24h: hourlyTrend,
           wrapup: wrapupSourceStats,
         },
+        usage,
         platformStats,
       },
     });
@@ -820,7 +950,7 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
       });
     }
 
-    const [callSamples, arenaSamples] = await Promise.all([
+    const [callSamples] = await Promise.all([
       prisma.agent_call_logs.findMany({
         where: { agentId: canonicalAgentId },
         orderBy: { calledAt: 'desc' },
@@ -831,20 +961,6 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
           output: true,
           success: true,
           calledAt: true,
-          durationMs: true,
-          error: true
-        }
-      }),
-      prisma.arena_agent_logs.findMany({
-        where: { agentName: canonicalAgentId },
-        orderBy: { createdAt: 'desc' },
-        take: 3,
-        select: {
-          id: true,
-          input: true,
-          output: true,
-          status: true,
-          createdAt: true,
           durationMs: true,
           error: true
         }
@@ -880,25 +996,24 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
                   { agentId: 'path-agent', action: 'generate path', condition: 'when goal converges' },
                   { agentId: 'skill:virtual-learner-path-evaluator', action: 'accept/modify/reject path', condition: 'when path is available' },
                   { agentId: 'skill:virtual-learner-learn-turn-simulator', action: 'learn learner turn', condition: 'learning turns' },
-                  { agentId: 'teaching-agent', action: 'teaching orchestration', condition: 'learning turns' },
+                  { agentId: 'learning-agent', action: 'teaching orchestration', condition: 'learning turns' },
                 ]
               }
-            : canonicalAgentId === 'learner-agent'
+            : canonicalAgentId === 'profile-agent'
               ? {
                   description: '学习者状态主编排：接收 Goal/lesson 相关事件，串联 learner profile 更新、知识背景沉淀与 snapshot refresh。',
                   steps: [
                     { agentId: 'skill:learner-model', action: 'apply learner profile update', condition: 'when learning or goal understanding changes' },
                     { agentId: 'skill:goal-profile-inference', action: 'enrich goal narrative/profile', condition: 'when goal understanding changes' },
                     { agentId: 'skill:learning-pattern-distiller', action: 'distill learning patterns', condition: 'when learning traces are aggregated' },
-                    { agentId: 'skill:session-knowledge-distiller', action: 'distill lesson knowledge background', condition: 'when lesson ends' },
-                    { agentId: 'skill:dialogue-concept-extractor', action: 'extract recurring concepts/confusions', condition: 'when lesson ends' },
+                    { agentId: 'skill:lesson-knowledge-enricher', action: 'enrich lesson knowledge and concepts', condition: 'when lesson ends' },
                   ]
                 }
             : undefined,
           promptManagement: {
-            mode: canonicalAgentId === 'teaching-agent'
+            mode: canonicalAgentId === 'learning-agent'
               ? 'agent-no-direct-prompt'
-              : canonicalAgentId === 'learner-agent'
+              : canonicalAgentId === 'profile-agent'
               ? 'agent-no-direct-prompt'
               : canonicalAgentId === 'goal-agent'
                 ? 'agent-no-direct-prompt'
@@ -907,9 +1022,9 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
                   : canonicalAgentId === 'simulation-agent'
                     ? 'agent-no-direct-prompt'
                     : 'agent-prompt',
-            note: canonicalAgentId === 'teaching-agent'
-              ? '该 Agent 是编排器，不直接持有 System Prompt，教学主输出由 skill:teaching-turn / skill:peer-reinforcement / skill:session-wrapup 等下辖 Skill 提供。'
-              : canonicalAgentId === 'learner-agent'
+            note: canonicalAgentId === 'learning-agent'
+              ? '该 Agent 是编排器，不直接持有 System Prompt，教学主输出由 skill:learning-turn / skill:peer-reinforcement / skill:session-wrapup 等下辖 Skill 提供。'
+              : canonicalAgentId === 'profile-agent'
                 ? '该 Agent 是编排器，不直接持有 System Prompt，学习者画像增强与知识沉淀由 skill:learner-model 与下辖 Skill 链共同提供。'
                 : canonicalAgentId === 'goal-agent'
                   ? '该 Agent 是编排器，不直接持有 System Prompt，目标对话由 skill:goal-conversation 等下辖 Skill 提供。'
@@ -932,15 +1047,6 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
             id: item.id,
             calledAt: item.calledAt,
             success: item.success,
-            durationMs: item.durationMs,
-            error: item.error,
-            input: parseOutputPayload(item.input),
-            output: parseOutputPayload(item.output)
-          })),
-          arenaAgentLogs: arenaSamples.map((item) => ({
-            id: item.id,
-            calledAt: item.createdAt,
-            success: item.status === 'success',
             durationMs: item.durationMs,
             error: item.error,
             input: parseOutputPayload(item.input),
@@ -1047,29 +1153,52 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
       });
     }
 
-    const range = String(req.query.range || '7d');
-    const sinceMs = range === '24h' ? 24 * 3600 * 1000
-      : range === '30d' ? 30 * 24 * 3600 * 1000
-      : 7 * 24 * 3600 * 1000;
-    const since = new Date(Date.now() - sinceMs);
+    const range = String(req.query.range || 'all');
+    const statsRange = range === '24h' || range === '7d' || range === '30d' || range === 'all'
+      ? range
+      : 'all';
 
     const { listTopLevelAgents, listAgentManifest, getCanonicalAgentId } = await import('../../services/agent-manifest.service');
+    const {
+      getUnifiedSkillStats,
+      resolveEffectiveSkillRuntimeConfig,
+    } = await import('../../services/skill-runtime-contract.service');
     const topAgents = listTopLevelAgents();
     const allManifest = listAgentManifest();
     const manifestMap = new Map(allManifest.map(m => [m.id, m]));
 
-    // 拉取窗口内的调用统计
-    const callGroups = await prisma.agent_call_logs.groupBy({
-      by: ['agentId'],
-      where: { calledAt: { gte: since } },
-      _count: { _all: true },
-      _avg: { durationMs: true }
-    });
-    const successGroups = await prisma.agent_call_logs.groupBy({
-      by: ['agentId', 'success'],
-      where: { calledAt: { gte: since } },
-      _count: { _all: true }
-    });
+    const skillIds: string[] = [];
+    for (const agent of topAgents) {
+      for (const memberId of agent.agentMembers || []) {
+        const canonical = getCanonicalAgentId(memberId);
+        if (canonical.startsWith('skill:')) {
+          skillIds.push(canonical.replace(/^skill:/, ''));
+        }
+      }
+    }
+
+    // Skill 统计与列表/抽屉统一；Agent 节点仍用 agent_call_logs（编排层）
+    const sinceMs = statsRange === '24h' ? 24 * 3600 * 1000
+      : statsRange === '30d' ? 30 * 24 * 3600 * 1000
+        : statsRange === '7d' ? 7 * 24 * 3600 * 1000
+          : null;
+    const since = sinceMs ? new Date(Date.now() - sinceMs) : null;
+    const agentCallWhere = since ? { calledAt: { gte: since } } : {};
+
+    const [skillStatsMap, callGroups, successGroups] = await Promise.all([
+      getUnifiedSkillStats(skillIds, statsRange as any),
+      prisma.agent_call_logs.groupBy({
+        by: ['agentId'],
+        where: agentCallWhere,
+        _count: { _all: true },
+        _avg: { durationMs: true }
+      }),
+      prisma.agent_call_logs.groupBy({
+        by: ['agentId', 'success'],
+        where: agentCallWhere,
+        _count: { _all: true }
+      }),
+    ]);
 
     const callMap = new Map<string, { total: number; avgDuration: number }>();
     for (const g of callGroups) {
@@ -1082,19 +1211,20 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
       successMap.set(g.agentId, cur);
     }
 
-    const getStats = (id: string) => {
+    const getAgentStats = (id: string) => {
       const c = callMap.get(id);
       const s = successMap.get(id) || { success: 0, failed: 0 };
       const total = c?.total ?? 0;
       const successRate = total > 0 ? Number(((s.success / total) * 100).toFixed(1)) : null;
-      return { totalCalls: total, successRate, avgDuration: c?.avgDuration ?? 0, failed: s.failed };
+      return { totalCalls: total, successRate, avgDuration: c?.avgDuration ?? 0, failed: s.failed, source: 'agent_call_logs', range: statsRange };
     };
 
     const nodes: any[] = [];
     const edges: any[] = [];
+    const effectiveConfigCache = new Map<string, any>();
 
     for (const agent of topAgents) {
-      const agentStats = getStats(agent.id);
+      const agentStats = getAgentStats(agent.id);
 
       nodes.push({
         id: agent.id,
@@ -1111,7 +1241,37 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
         const skill = manifestMap.get(canonical);
         if (!skill) continue;
 
-        const skillStats = getStats(canonical);
+        const shortId = canonical.replace(/^skill:/, '');
+        const unified = skillStatsMap.get(shortId);
+        const skillStats = {
+          totalCalls: unified?.callCount || 0,
+          successRate: unified?.successRate ?? null,
+          avgDuration: unified?.avgDurationMs || 0,
+          failed: unified?.failureCount || 0,
+          source: unified?.source || 'none',
+          range: statsRange,
+        };
+
+        let modelConfig: Record<string, unknown> | null = skill.defaultModelConfig
+          ? { ...skill.defaultModelConfig, source: 'manifest-default' }
+          : null;
+        try {
+          let effective = effectiveConfigCache.get(shortId);
+          if (!effective) {
+            effective = await resolveEffectiveSkillRuntimeConfig(shortId);
+            effectiveConfigCache.set(shortId, effective);
+          }
+          modelConfig = {
+            model: effective.llmRequest.model,
+            temperature: effective.llmRequest.temperature,
+            maxTokens: effective.llmRequest.maxTokens,
+            source: effective.llmRequest.source,
+            routeSource: effective.route.source,
+          };
+        } catch {
+          // keep manifest default as last resort
+        }
+
         nodes.push({
           id: skill.id,
           type: 'skill',
@@ -1121,7 +1281,7 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
           parentAgentId: agent.id,
           ioContractVersion: skill.ioContractVersion,
           noPromptFile: !!skill.noPromptFile,
-          modelConfig: skill.defaultModelConfig || null,
+          modelConfig,
           stats: skillStats
         });
 
@@ -1423,7 +1583,7 @@ router.get('/agents/status', async (req: Request, res: Response) => {
         { name: 'RequirementCollection', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'PathPlanning', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'LearnerOrchestration', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
-        { name: 'Teaching', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
+        { name: 'Learning', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'TeachingOrchestration', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'LearningCompanion', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'SessionWrapup', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
@@ -1774,16 +1934,27 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       agentId: string;
       callerAgent: string | null;
       metadata: string | null;
+      executionLayer?: string | null;
+      actorType?: string | null;
+      actorId?: string | null;
+      providerId?: string | null;
+      providerType?: string | null;
+      routeSource?: string | null;
+      model?: string | null;
+      statusCode?: number | null;
+      attemptCount?: number | null;
+      maxAttempts?: number | null;
+      finishReason?: string | null;
     }) => {
       const parsed = parseLogMetadata(log.metadata);
-      const providerId = typeof parsed.providerId === 'string' ? parsed.providerId : null;
-      const metadataActorType = typeof parsed.actorType === 'string' ? parsed.actorType : null;
-      const metadataActorId = typeof parsed.actorId === 'string' ? parsed.actorId : null;
+      const providerId = log.providerId || (typeof parsed.providerId === 'string' ? parsed.providerId : null);
+      const metadataActorType = log.actorType || (typeof parsed.actorType === 'string' ? parsed.actorType : null);
+      const metadataActorId = log.actorId || (typeof parsed.actorId === 'string' ? parsed.actorId : null);
       const skillId = typeof parsed.skillId === 'string' ? parsed.skillId : null;
       const agentId = typeof parsed.agentId === 'string' ? parsed.agentId : null;
-      const layer = typeof parsed.executionLayer === 'string'
+      const layer = log.executionLayer || (typeof parsed.executionLayer === 'string'
         ? parsed.executionLayer
-        : (typeof parsed.layer === 'string' ? parsed.layer : null);
+        : (typeof parsed.layer === 'string' ? parsed.layer : null));
 
       const providerActorType = providerId?.startsWith('skill:')
         ? 'skill'
@@ -1823,13 +1994,16 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         invokerId,
         invokerType,
         providerId,
-        providerType: typeof parsed.providerType === 'string' ? parsed.providerType : null,
-        routeSource: typeof parsed.routeSource === 'string' ? parsed.routeSource : null,
-        statusCode: typeof parsed.statusCode === 'number' ? parsed.statusCode : null,
-        attempts: typeof parsed.attempts === 'number' ? parsed.attempts : null,
-        maxRetries: typeof parsed.maxRetries === 'number' ? parsed.maxRetries : null,
+        providerType: log.providerType || (typeof parsed.providerType === 'string' ? parsed.providerType : null),
+        routeSource: log.routeSource || (typeof parsed.routeSource === 'string' ? parsed.routeSource : null),
+        model: log.model || (typeof parsed.model === 'string' ? parsed.model : null),
+        statusCode: log.statusCode ?? (typeof parsed.statusCode === 'number' ? parsed.statusCode : null),
+        attempts: log.attemptCount ?? (typeof parsed.attempts === 'number' ? parsed.attempts : null),
+        maxAttempts: log.maxAttempts ?? (typeof parsed.maxAttempts === 'number'
+          ? parsed.maxAttempts
+          : (typeof parsed.maxRetries === 'number' ? parsed.maxRetries + 1 : null)),
         messageCount: typeof parsed.messageCount === 'number' ? parsed.messageCount : null,
-        finishReason: typeof parsed.finishReason === 'string' ? parsed.finishReason : null,
+        finishReason: log.finishReason || (typeof parsed.finishReason === 'string' ? parsed.finishReason : null),
       };
     };
 
@@ -1885,7 +2059,9 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       const identity = inferExecutionIdentity(log);
       return {
         id: log.id,
-        agentName: AGENT_ID_TO_NAME[log.agentId] || log.agentId,
+        agentName: identity.executionLayer === 'api-gateway'
+          ? `API 网关 · ${identity.actorId}`
+          : (AGENT_ID_TO_NAME[log.agentId] || log.agentId),
         agentId: log.agentId,
         sourceEntry: log.sourceEntry || 'platform',
         callerAgent: log.callerAgent,
@@ -1894,6 +2070,7 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         input: log.input,
         output: log.output,
         error: log.error,
+        errorCode: log.errorCode,
         traceId: log.traceId,
         sessionId: extractSessionIdFromMetadata(log.metadata),
         durationMs: log.durationMs,
@@ -1907,9 +2084,11 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         providerId: identity.providerId,
         providerType: identity.providerType,
         routeSource: identity.routeSource,
+        model: identity.model,
         statusCode: identity.statusCode,
         attempts: identity.attempts,
-        maxRetries: identity.maxRetries,
+        maxAttempts: identity.maxAttempts,
+        recoveredByRetry: Boolean(log.success && (identity.attempts || 0) > 1),
         messageCount: identity.messageCount,
         finishReason: identity.finishReason,
         phase: phaseInfo.phase,
@@ -1947,6 +2126,238 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         status: 500,
       },
     });
+  }
+});
+
+router.get('/settings/reliability', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+    const settings = await getPlatformReliabilitySettings();
+    res.json({ success: true, data: { settings, hardLimits: getReliabilityHardLimits() } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error.message || '获取 AI 可靠性设置失败' } });
+  }
+});
+
+router.put('/settings/reliability', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+    const input = req.body || {};
+    const integerFields = [
+      'maxUpstreamAttempts',
+      'maxTransportRetries',
+      'maxLogicalRetries',
+      'defaultRequestTimeoutMs',
+      'retryBaseDelayMs',
+      'maxRetryAfterMs'
+    ];
+    for (const field of integerFields) {
+      if (!Number.isInteger(input[field])) {
+        return res.status(400).json({ success: false, error: { message: `${field} 必须是整数` } });
+      }
+    }
+    if (typeof input.jitterEnabled !== 'boolean') {
+      return res.status(400).json({ success: false, error: { message: 'jitterEnabled 必须是布尔值' } });
+    }
+    const limits = getReliabilityHardLimits();
+    const ranges: Record<string, [number, number]> = {
+      maxUpstreamAttempts: [1, limits.maxUpstreamAttempts],
+      maxTransportRetries: [0, limits.maxTransportRetries],
+      maxLogicalRetries: [0, limits.maxLogicalRetries],
+      defaultRequestTimeoutMs: [limits.minRequestTimeoutMs, limits.maxRequestTimeoutMs],
+      retryBaseDelayMs: [limits.minRetryBaseDelayMs, limits.maxRetryBaseDelayMs],
+      maxRetryAfterMs: [0, limits.maxRetryAfterMs]
+    };
+    for (const [field, [min, max]] of Object.entries(ranges)) {
+      if (input[field] < min || input[field] > max) {
+        return res.status(400).json({
+          success: false,
+          error: { message: `${field} 必须在 ${min} 到 ${max} 之间` }
+        });
+      }
+    }
+    const settings = await updatePlatformReliabilitySettings(input);
+    res.json({ success: true, data: { settings, hardLimits: getReliabilityHardLimits() } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error.message || '更新 AI 可靠性设置失败' } });
+  }
+});
+
+router.get('/settings/capability-probe', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+    const [enabled, intervalMs] = await Promise.all([
+      getPlatformCapabilityProbeEnabled(),
+      getPlatformCapabilityProbeInterval()
+    ]);
+    res.json({
+      success: true,
+      data: {
+        enabled,
+        intervalMs,
+        defaultEnabled: DEFAULT_CAPABILITY_PROBE_ENABLED,
+        defaultIntervalMs: DEFAULT_CAPABILITY_PROBE_INTERVAL_MS,
+        minIntervalMs: MIN_CAPABILITY_PROBE_INTERVAL_MS,
+        maxIntervalMs: MAX_CAPABILITY_PROBE_INTERVAL_MS,
+        timerActive: aiCapabilityHealthService.isEnabled()
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error.message || '获取 AI 能力探测设置失败' } });
+  }
+});
+
+router.put('/settings/capability-probe', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+    const { enabled, intervalMs } = req.body || {};
+    if (enabled !== undefined && typeof enabled !== 'boolean') {
+      return res.status(400).json({ success: false, error: { message: 'enabled 必须是布尔值' } });
+    }
+    if (intervalMs !== undefined) {
+      const n = Number(intervalMs);
+      if (!Number.isFinite(n) || !Number.isInteger(n)
+        || n < MIN_CAPABILITY_PROBE_INTERVAL_MS || n > MAX_CAPABILITY_PROBE_INTERVAL_MS) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: `intervalMs 必须是 ${MIN_CAPABILITY_PROBE_INTERVAL_MS}～${MAX_CAPABILITY_PROBE_INTERVAL_MS} 之间的整数毫秒`
+          }
+        });
+      }
+    }
+    if (enabled === undefined && intervalMs === undefined) {
+      return res.status(400).json({ success: false, error: { message: '请至少提供 enabled 或 intervalMs' } });
+    }
+
+    let nextEnabled = await getPlatformCapabilityProbeEnabled();
+    let nextInterval = await getPlatformCapabilityProbeInterval();
+    if (typeof enabled === 'boolean') {
+      nextEnabled = await updatePlatformCapabilityProbeEnabled(enabled);
+    }
+    if (intervalMs !== undefined) {
+      nextInterval = await updatePlatformCapabilityProbeInterval(intervalMs);
+      await aiCapabilityHealthService.setIntervalMs(nextInterval);
+    }
+    if (typeof enabled === 'boolean') {
+      await aiCapabilityHealthService.setEnabled(nextEnabled);
+    }
+
+    const intervalSec = Math.round(nextInterval / 1000);
+    res.json({
+      success: true,
+      data: {
+        enabled: nextEnabled,
+        intervalMs: nextInterval,
+        defaultEnabled: DEFAULT_CAPABILITY_PROBE_ENABLED,
+        defaultIntervalMs: DEFAULT_CAPABILITY_PROBE_INTERVAL_MS,
+        minIntervalMs: MIN_CAPABILITY_PROBE_INTERVAL_MS,
+        maxIntervalMs: MAX_CAPABILITY_PROBE_INTERVAL_MS,
+        timerActive: aiCapabilityHealthService.isEnabled()
+      },
+      message: nextEnabled
+        ? `AI 能力探测已开启，将每 ${intervalSec} 秒自动向模型服务发送探活请求`
+        : 'AI 能力探测已关闭，将停止周期性 LLM 探活请求'
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error.message || '更新 AI 能力探测设置失败' } });
+  }
+});
+
+/**
+ * 获取单条执行日志及 Provider Attempt 时间线
+ * GET /api/admin/agents/logs/:id
+ */
+router.get('/agents/logs/:id', async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    const log = await prisma.agent_call_logs.findUnique({ where: { id } });
+    if (!log) {
+      return res.status(404).json({ success: false, error: { message: '执行日志不存在', status: 404 } });
+    }
+
+    const attempts = await prisma.llm_execution_attempts.findMany({
+      where: log.executionLayer === 'api-gateway'
+        ? { llmRequestId: id }
+        : {
+            OR: [
+              { parentExecutionId: id },
+              { rootExecutionId: id }
+            ]
+          },
+      orderBy: [{ startedAt: 'asc' }, { transportAttemptNo: 'asc' }],
+      take: 200
+    });
+    const logMetadata = parseLogMetadata(log.metadata);
+    const attemptTelemetryComplete = logMetadata.attemptTelemetryComplete !== false;
+
+    res.json({
+      success: true,
+      data: {
+        log: {
+          ...log,
+          dataCompleteness: attempts.length > 0
+            ? 'full'
+            : log.executionLayer === 'api-gateway' && log.attemptCount === 0
+              ? 'preflight'
+              : log.executionLayer === 'api-gateway' && !attemptTelemetryComplete
+                ? 'telemetry_failed'
+                : log.executionLayer === 'skill'
+                  ? 'none'
+              : 'legacy'
+        },
+        attempts: attempts.map((attempt) => ({
+          id: attempt.id,
+          llmRequestId: attempt.llmRequestId,
+          promptCallId: attempt.promptCallId,
+          promptAttemptNo: attempt.promptAttemptNo,
+          transportAttemptNo: attempt.transportAttemptNo,
+          maxAttempts: attempt.maxAttempts,
+          providerId: attempt.providerId,
+          providerType: attempt.providerType,
+          routeSource: attempt.routeSource,
+          requestedModel: attempt.requestedModel,
+          resolvedModel: attempt.resolvedModel,
+          responseModel: attempt.responseModel,
+          endpointHost: attempt.endpointHost,
+          success: attempt.success,
+          retryable: attempt.retryable,
+          willRetry: attempt.willRetry,
+          statusCode: attempt.statusCode,
+          errorCategory: attempt.errorCategory,
+          errorCode: attempt.errorCode,
+          errorMessage: attempt.errorMessage,
+          startedAt: attempt.startedAt,
+          completedAt: attempt.completedAt,
+          durationMs: attempt.durationMs,
+          backoffMs: attempt.backoffMs,
+          retryAfterMs: attempt.retryAfterMs,
+          configuredTimeoutMs: attempt.configuredTimeoutMs,
+          effectiveTimeoutMs: attempt.effectiveTimeoutMs,
+          promptTokens: attempt.promptTokens,
+          completionTokens: attempt.completionTokens,
+          totalTokens: attempt.totalTokens,
+          finishReason: attempt.finishReason,
+          completionId: attempt.completionId,
+          providerRequestId: attempt.providerRequestId
+        }))
+      }
+    });
+  } catch (error) {
+    logger.error('[admin-platform] 获取执行日志详情失败', { error });
+    res.status(500).json({ success: false, error: { message: '获取执行日志详情失败', status: 500 } });
   }
 });
 
@@ -2172,11 +2583,17 @@ router.get('/stats', async (req: Request, res: Response) => {
 router.get('/activity', async (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 50;
+    // excludeTest=1 时过滤虚拟学习者与测试/审计账号（合成流量）
+    const excludeTest = String(req.query.excludeTest || '') === '1';
+    const ACTIVITY_USER_WHERE = excludeTest
+      ? REAL_USER_WHERE
+      : { isVirtualLearner: false };
 
     // 最近的学习会话
     const recentSessions = await prisma.teaching_sessions.findMany({
       take: limit,
       orderBy: { startTime: 'desc' },
+      where: { users: ACTIVITY_USER_WHERE },
       include: {
         users: {
           select: { id: true, email: true, name: true }
@@ -2193,10 +2610,11 @@ router.get('/activity', async (req: Request, res: Response) => {
       : [];
     const sessionTaskMap = new Map(sessionTasks.map((task) => [task.id, task]));
 
-    // 最近注册的用户
+    // 最近注册的用户（excludeTest 时排除虚拟学习者/测试账号）
     const recentUsers = await prisma.users.findMany({
       take: 20,
       orderBy: { createdAt: 'desc' },
+      where: excludeTest ? REAL_USER_WHERE : undefined,
       select: {
         id: true,
         email: true,
@@ -2205,10 +2623,13 @@ router.get('/activity', async (req: Request, res: Response) => {
       }
     });
 
-    // 最近完成的任务
+    // 最近完成的任务（excludeTest 时排除虚拟学习者/测试账号）
     const completedTasks = await prisma.subtasks.findMany({
       take: 20,
-      where: { status: 'completed' },
+      where: {
+        status: 'completed',
+        users: ACTIVITY_USER_WHERE,
+      },
       orderBy: { completedAt: 'desc' },
       include: {
         users: {
@@ -2331,11 +2752,16 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
     const userId = (req.query.userId as string) || undefined;
     const status = (req.query.status as string) || undefined;
     const onlyWithAdvisory = String(req.query.onlyWithAdvisory || '') === 'true';
+    const onlyMissingWrapup = String(req.query.onlyMissingWrapup || '') === 'true';
 
     const where: any = {
       ...(userId ? { userId } : {}),
       ...(status ? { status } : {}),
       ...(onlyWithAdvisory ? { advisory: { not: null } } : {}),
+      // wrapup 为 JSON 文本列：缺失 = 无记录或内容中不含 topicSummary
+      ...(onlyMissingWrapup
+        ? { OR: [{ wrapup: null }, { NOT: { wrapup: { contains: 'topicSummary' } } }] }
+        : {}),
     };
 
     const [total, sessions] = await Promise.all([

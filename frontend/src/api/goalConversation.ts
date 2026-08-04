@@ -1,4 +1,54 @@
-import api from '@/utils/api';
+import api, { AI_REQUEST_TIMEOUT } from '@/utils/api';
+import { streamSsePost } from '@/utils/sse';
+
+export interface GoalUnderstanding {
+  surface_goal?: string;
+  real_problem?: string;
+  motivation?: string;
+  urgency?: string;
+  background?: {
+    current_level?: string;
+    expected_time?: string;
+    available_time?: string;
+    constraints?: string[];
+    strengths?: string[];
+  };
+  pain_points?: string;
+  current_baseline?: {
+    level?: string;
+    evidence?: string;
+  };
+  available_resources?: {
+    time_budget?: string;
+    time_horizon?: string;
+    time_per_session?: string;
+  };
+  success_criteria?: {
+    observable_result?: string;
+    acceptance_check?: string;
+    time_window?: string;
+  };
+  constraints_and_boundaries?: string[];
+}
+
+/** 统一运行契约 envelope（与后端 RuntimeEnvelope 对齐） */
+export interface GoalRuntimeEnvelope {
+  artifact?: unknown;
+  businessState?: {
+    domain?: string;
+    phase?: string;
+    status?: string;
+    confidence?: number;
+    isTerminal?: boolean;
+    nextAction?: string | null;
+    reason?: string | null;
+  };
+  contextUpdate?: {
+    mode?: string;
+    stateOwner?: string;
+    nextState?: unknown | null;
+  };
+}
 
 export interface GoalConversationEnvelope {
   userVisible: string;
@@ -15,16 +65,18 @@ export interface GoalConversationEnvelope {
     };
     ext: {
       goalConversation: {
-        understanding: Record<string, any>;
+        understanding: GoalUnderstanding;
         nextQuestions?: string[];
         quickReplies?: Array<{ text: string; icon?: string }>;
-        structuredData?: any;
-        confirmedProposal?: any;
-        confidenceScores?: any;
-        collected?: Record<string, any>;
+        structuredData?: Record<string, unknown> | null;
+        confirmedProposal?: Record<string, unknown> | null;
+        confidenceScores?: Record<string, unknown> | null;
+        collected?: Record<string, unknown>;
       };
     };
   };
+  /** 后端透传；存在时 stage/confidence 可优先取 businessState */
+  runtimeEnvelope?: GoalRuntimeEnvelope | null;
   renderHints: {
     quickReplies?: Array<{ text: string; icon?: string }>;
   };
@@ -32,7 +84,7 @@ export interface GoalConversationEnvelope {
   meta: {
     source: string;
     timestamp: string;
-    debug?: Record<string, any>;
+    debug?: Record<string, unknown>;
     messages?: Array<{
       role: 'user' | 'ai';
       content: string;
@@ -60,7 +112,7 @@ export async function startGoalConversation(
   const response = await api.post('/goal-conversation/start', {
     input: { text },
     contextMode: options.contextMode || 'recent'
-  }) as GoalConversationApiResponse;
+  }, { timeout: AI_REQUEST_TIMEOUT }) as GoalConversationApiResponse;
 
   return response.data;
 }
@@ -74,7 +126,7 @@ export async function replyGoalConversation(
     input: { text },
     contextMode: options.contextMode || 'recent',
     confirmProposal: options.confirmProposal === true
-  }) as GoalConversationApiResponse;
+  }, { timeout: AI_REQUEST_TIMEOUT }) as GoalConversationApiResponse;
 
   return response.data;
 }
@@ -89,9 +141,115 @@ export async function regenerateGoalConversation(conversationId: string, adjustm
   const response = await api.post(`/goal-conversation/${conversationId}/regenerate`, {
     input: { text: adjustments || '' },
     adjustments
-  }) as GoalConversationApiResponse;
+  }, { timeout: AI_REQUEST_TIMEOUT }) as GoalConversationApiResponse;
 
   return response.data;
+}
+
+/**
+ * SSE 流式 Goal 请求（start/reply/regenerate 共用）。
+ * goal skill 为 JSON 输出：不产生 delta，final 事件携带完整 envelope。
+ * 失败时 reject，错误对象携带来源标记（transport=true 可安全回退非流式；
+ * serverError=true 为服务端业务失败；422 恢复信封在 error.data）。
+ */
+export type GoalStreamAction = 'start' | 'reply' | 'regenerate';
+
+async function streamGoalRequest(
+  action: GoalStreamAction,
+  conversationId: string | null,
+  payload: { text?: string; contextMode?: GoalConversationContextMode; confirmProposal?: boolean; adjustments?: string },
+  signal?: AbortSignal
+): Promise<GoalConversationEnvelope> {
+  const url = action === 'start'
+    ? '/goal-conversation/start'
+    : `/goal-conversation/${conversationId}/${action === 'reply' ? 'reply' : 'regenerate'}`;
+  const body: Record<string, unknown> = {};
+  if (payload.text !== undefined) {
+    body.input = { text: payload.text };
+    body.contextMode = payload.contextMode || 'recent';
+  }
+  if (payload.confirmProposal === true) body.confirmProposal = true;
+  if (payload.adjustments !== undefined) body.adjustments = payload.adjustments;
+
+  return new Promise<GoalConversationEnvelope>((resolve, reject) => {
+    let envelope: GoalConversationEnvelope | null = null;
+    let receivedAnything = false;
+    let serverError: { code?: string; status?: number; message: string; data?: unknown } | null = null;
+    let settled = false;
+    const settleReject = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+    streamSsePost(url, body, {
+      signal,
+      onEvent: (event, data) => {
+        if (event === 'final') {
+          receivedAnything = true;
+          envelope = data?.data || data || null;
+        } else if (event === 'error') {
+          receivedAnything = true;
+          serverError = {
+            code: data?.code,
+            status: data?.status,
+            message: data?.message || '处理失败',
+            data: data?.data
+          };
+        }
+      }
+    }).then(
+      () => {
+        if (settled) return;
+        settled = true;
+        if (envelope) resolve(envelope);
+        else if (serverError) {
+          reject(Object.assign(new Error(serverError.message), {
+            code: serverError.code,
+            status: serverError.status,
+            recoveryEnvelope: serverError.data,
+            serverError: true
+          }));
+        } else {
+          reject(new Error('未收到最终结果'));
+        }
+      },
+      (error) => {
+        const e = error as { partialStream?: boolean; transport?: boolean };
+        if (receivedAnything) e.partialStream = true;
+        else e.transport = true;
+        settleReject(error);
+      }
+    );
+  });
+}
+
+export async function streamStartGoalConversation(
+  text: string,
+  options: GoalConversationRequestOptions = {},
+  signal?: AbortSignal
+): Promise<GoalConversationEnvelope> {
+  return streamGoalRequest('start', null, { text, contextMode: options.contextMode }, signal);
+}
+
+export async function streamReplyGoalConversation(
+  conversationId: string,
+  text: string,
+  options: GoalConversationRequestOptions = {},
+  signal?: AbortSignal
+): Promise<GoalConversationEnvelope> {
+  return streamGoalRequest('reply', conversationId, {
+    text,
+    contextMode: options.contextMode,
+    confirmProposal: options.confirmProposal
+  }, signal);
+}
+
+export async function streamRegenerateGoalConversation(
+  conversationId: string,
+  adjustments?: string,
+  signal?: AbortSignal
+): Promise<GoalConversationEnvelope> {
+  return streamGoalRequest('regenerate', conversationId, { adjustments }, signal);
 }
 
 export async function deleteGoalConversation(conversationId: string): Promise<void> {

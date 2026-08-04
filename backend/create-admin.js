@@ -2,7 +2,7 @@
  * 创建管理员账号脚本
  * 用法：node create-admin.js
  * 
- * 从环境变量读取配置，如果未设置则使用默认值
+ * 从环境变量读取配置，密码必须显式提供
  */
 
 require('dotenv').config();
@@ -12,12 +12,19 @@ const bcrypt = require('bcrypt');
 const prisma = new PrismaClient();
 
 async function createAdmin() {
-  // 从环境变量读取配置，提供默认值
+  // 从环境变量读取配置
   const email = process.env.INIT_ADMIN_EMAIL || 'admin@wenflow.local';
-  const password = process.env.INIT_ADMIN_PASSWORD || 'admin123';
+  const password = (process.env.INIT_ADMIN_PASSWORD || '').trim();
   const name = process.env.INIT_ADMIN_NAME || 'admin';
 
   try {
+    if (password.length < 12 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
+      throw new Error('INIT_ADMIN_PASSWORD 必须显式设置，且至少 12 位并包含大小写字母和数字');
+    }
+    if (/^(admin123|password|yourstrongpassword123)$/i.test(password)) {
+      throw new Error('INIT_ADMIN_PASSWORD 不能使用默认或示例密码');
+    }
+
     // 检查是否已存在管理员
     const existingAdmin = await prisma.users.findFirst({
       where: { 
@@ -48,7 +55,7 @@ async function createAdmin() {
         isAdmin: true,
         role: 'admin',
         xp: 0,
-        currentLevel: 1,
+        currentLevel: 'beginner',
       }
     });
 
@@ -56,13 +63,10 @@ async function createAdmin() {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('👤 用户名：', name);
     console.log('📧 邮箱：', email);
-    console.log('🔑 密码：', password);
+    console.log('🔑 密码：已通过环境变量设置，不在终端显示');
     console.log('🆔 ID:', admin.id);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('\n⚠️  管理员登录仅限本地访问（localhost/127.0.0.1）');
-    console.log('   如需远程登录，请在 .env 中设置: ADMIN_LOCALHOST_ONLY=false');
-    console.log('\n💡 密码已在上方显示，请妥善保管后按任意键继续...');
-    console.log('   （此密码仅在创建时显示一次）');
+    console.log('\n访问范围由 ADMIN_ACCESS_MODE 或 Admin“连接与安全”页面控制');
     console.log('\n访问管理平台：http://localhost:5173/admin/login');
     
   } catch (error) {

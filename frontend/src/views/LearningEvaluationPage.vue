@@ -1,21 +1,22 @@
 <template>
-  <div class="evaluation-page">
+  <div class="evaluation-page v2-page">
     <div class="evaluation-shell" ref="reportRef">
       <header class="evaluation-head">
         <div>
-          <p class="evaluation-kicker">任务评估</p>
+          <p class="evaluation-kicker">学习反馈</p>
           <h1>当前任务学习反馈</h1>
+          <AiContentNote class="evaluation-head__ai-note" />
         </div>
         <div class="evaluation-head__actions">
           <el-button :loading="exportingImage" @click="exportImage">导出图片</el-button>
-          <el-button @click="exportPdf">导出 PDF</el-button>
-          <el-button @click="goBackToPath">返回学习路径</el-button>
+          <el-button @click="exportPdf">打印或另存为 PDF</el-button>
+          <el-button type="primary" @click="goBackToPath">返回学习路径</el-button>
         </div>
       </header>
 
       <section v-if="loading" class="evaluation-loading">
         <el-icon class="spin"><Loading /></el-icon>
-          <p>正在生成当前任务评估，请稍候...</p>
+          <p>正在整理本次学习反馈，请稍候…</p>
       </section>
 
       <section v-else-if="error" class="evaluation-error">
@@ -27,6 +28,13 @@
       </section>
 
       <template v-else-if="sessionDetail">
+        <section v-if="evaluationDegraded" class="evaluation-degraded" role="status">
+          <strong v-if="!sessionDetail?.wrapup">本次会话未正常结束，未生成课堂总结</strong>
+          <strong v-else-if="isTimeoutFallback">本次会话未正常结束，已为你保留基础学习记录</strong>
+          <strong v-else>课堂总结已生成，详细表现分析暂不可用</strong>
+          <p>不影响你保存进度、完成任务或查看本次对话。</p>
+        </section>
+
         <CompletionCard
           :topic="sessionDetail.topic"
           :mastered-count="knowledgePoints.filter(kp => kp.status === 'mastered').length"
@@ -35,20 +43,28 @@
           :message-count="mainDialogueMessages.length"
           :wrapup="wrapup"
           :advisory="sessionDetail.advisory || null"
+          :busy="completeTaskBusy"
           @action="handleAction"
           @advisory-action="handleAdvisoryAction"
+        />
+
+        <SessionFeedbackPanel
+          v-if="canSubmitSessionFeedback"
+          :session-id="sessionId"
+          :task-id="taskId"
+          @difficulty-change="subjectiveDifficulty = $event"
         />
 
         <section class="evaluation-transcript-card">
           <div class="evaluation-transcript-card__head">
             <div>
-              <p class="evaluation-transcript-card__kicker">已完成课堂回看</p>
+              <p class="evaluation-transcript-card__kicker">本次学习</p>
               <h2>当堂对话</h2>
             </div>
-            <span class="evaluation-transcript-card__meta">{{ mainDialogueMessages.length }} 条主对话</span>
+            <span class="evaluation-transcript-card__meta">{{ mainDialogueMessages.length }} 条消息</span>
           </div>
 
-          <p class="evaluation-transcript-card__hint">这里只展示本次已完成课堂的主对话内容，不包含进行中课堂的恢复状态。</p>
+          <p class="evaluation-transcript-card__hint">回看本次学习中的对话内容。</p>
 
           <div v-if="mainDialogueMessages.length" class="evaluation-transcript-list">
             <article
@@ -81,12 +97,16 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Loading } from '@element-plus/icons-vue';
 import { ElMessageBox } from 'element-plus';
-import html2canvas from 'html2canvas-pro';
+// html2canvas 体积大，仅导出图片时动态加载
 import CompletionCard from '@/components/CompletionCard.vue';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
+import SessionFeedbackPanel from '@/components/learning/SessionFeedbackPanel.vue';
+import AiContentNote from '@/components/AiContentNote.vue';
+import '@/views/v2/v2.css';
 import { aiTeachingAPI, type SessionDetail, type WrapupArtifact } from '@/api/aiTeaching';
 import { toast } from '@/utils/toast';
 import api from '@/utils/api';
+import { isProjectionMode } from '@/utils/projection';
 
 const route = useRoute();
 const router = useRouter();
@@ -94,26 +114,9 @@ const router = useRouter();
 const taskId = computed(() => route.params.taskId as string);
 const sessionId = computed(() => route.params.sessionId as string);
 
-const isTestMode = computed(() => route.meta.isTestMode === true);
-const isAdminRoute = computed(() => route.path.startsWith('/admin/'));
-const learningPathDetailBasePath = computed(() => {
-  if (isTestMode.value) {
-    return isAdminRoute.value ? '/admin/test/learning-path' : '/learning-path';
-  }
-  return '/learning-path';
-});
-const learningPathsPath = computed(() => {
-  if (isTestMode.value) {
-    return isAdminRoute.value ? '/admin/test/learning-paths' : '/learning-paths';
-  }
-  return '/learning-paths';
-});
-const learnBasePath = computed(() => {
-  if (isTestMode.value) {
-    return isAdminRoute.value ? '/admin/test/learn' : '/learn';
-  }
-  return '/learn';
-});
+const learningPathDetailBasePath = computed(() => '/learning-path');
+const learningPathsPath = computed(() => '/learning-paths');
+const learnBasePath = computed(() => '/learn');
 
 const loading = ref(true);
 const error = ref('');
@@ -121,23 +124,31 @@ const sessionDetail = ref<SessionDetail | null>(null);
 const pollTimer = ref<number | null>(null);
 const reportRef = ref<HTMLElement | null>(null);
 const exportingImage = ref(false);
+const completeTaskBusy = ref(false);
+const subjectiveDifficulty = ref<number | undefined>(undefined);
+const POLL_INTERVAL_MS = 2000;
+const POLL_TIMEOUT_MS = 60000;
+let pollStartedAt = 0;
+let pollHiddenAt = 0;
+let pollingActive = false;
+let componentUnmounted = false;
 
 const wrapup = computed<WrapupArtifact>(() => {
   return sessionDetail.value?.wrapup || {
     status: 'summary-only',
     sources: { summary: 'fallback', evaluation: 'failed' },
     summary: {
-      topicSummary: '本次课程已结束，评估尚在生成。',
-      knowledgeSummary: '知识点状态稍后更新。',
-      practiceAdvice: '请稍后刷新查看完整建议。',
-      learningEvaluation: '评估尚未完成。',
+      topicSummary: '本次会话未正常结束，没有生成学习总结。',
+      knowledgeSummary: '未生成知识点评估。',
+      practiceAdvice: '完成一次完整的课堂学习后，这里会给出下一步建议。',
+      learningEvaluation: '未生成学习评价。',
       knowledgeItems: [],
       keyTakeaways: [],
       actionPlan: [],
-      evaluationHighlights: { strengths: [], improvements: [] },
+      evaluationHighlights: null,
       metricInterpretation: {
-        session: '正在计算本节课堂表现。',
-        longTerm: '长期状态将在评估完成后更新。'
+        session: '未生成本节课堂表现。',
+        longTerm: '未生成长期状态评估。'
       },
       summaryVersion: 'v2'
     },
@@ -162,11 +173,33 @@ const wrapup = computed<WrapupArtifact>(() => {
 });
 
 const knowledgePoints = computed(() => sessionDetail.value?.knowledgePoints || []);
-const mainDialogueMessages = computed(() => (sessionDetail.value?.messages || []).filter((message) => message.role === 'user' || message.role === 'assistant'));
-const durationSeconds = computed(() => {
-  const minutes = sessionDetail.value?.wrapup?.duration ?? sessionDetail.value?.duration ?? 0;
-  return typeof minutes === 'number' ? Math.max(0, Math.round(minutes * 60)) : 0;
+const evaluationDegraded = computed(() => {
+  const currentWrapup = sessionDetail.value?.wrapup;
+  if (!currentWrapup) return true;
+  return currentWrapup?.evaluationSource === 'failed'
+    || currentWrapup?.sources?.evaluation === 'failed';
 });
+const isTimeoutFallback = computed(() => sessionDetail.value?.wrapup?.sources?.summary === 'timeout-fallback');
+const canSubmitSessionFeedback = computed(() => !isProjectionMode());
+const mainDialogueMessages = computed(() => (sessionDetail.value?.messages || []).filter((message) => message.role === 'user' || message.role === 'assistant'));
+
+/* 会话活跃时长（分钟）：wrapup 缺省时用消息时间戳估算，间隔 > 30 分钟视为暂停 */
+const activeDurationMinutes = computed(() => {
+  const minutes = sessionDetail.value?.wrapup?.duration ?? sessionDetail.value?.duration;
+  if (typeof minutes === 'number' && minutes > 0) return minutes;
+  const times = mainDialogueMessages.value
+    .map((m) => (m.timestamp ? new Date(m.timestamp).getTime() : NaN))
+    .filter((t) => Number.isFinite(t))
+    .sort((a, b) => a - b);
+  if (times.length < 2) return 0;
+  let active = 0;
+  for (let i = 1; i < times.length; i++) {
+    active += Math.min((times[i] - times[i - 1]) / 60000, 30);
+  }
+  return Math.max(0, Math.round(active));
+});
+
+const durationSeconds = computed(() => Math.max(0, Math.round(activeDurationMinutes.value * 60)));
 
 const getMessageRoleLabel = (role: string) => (role === 'assistant' ? 'AI 导师' : '你');
 
@@ -183,9 +216,10 @@ const formatMessageTime = (value: string) => {
 
 const stopPolling = () => {
   if (pollTimer.value) {
-    clearInterval(pollTimer.value);
+    clearTimeout(pollTimer.value);
     pollTimer.value = null;
   }
+  pollingActive = false;
 };
 
 const shouldContinuePolling = (detail: SessionDetail | null) => {
@@ -195,11 +229,73 @@ const shouldContinuePolling = (detail: SessionDetail | null) => {
   return false;
 };
 
-const fetchEvaluation = async () => {
-  loading.value = true;
-  error.value = '';
+const schedulePoll = (delay = POLL_INTERVAL_MS) => {
+  if (!pollingActive || componentUnmounted || document.hidden || pollTimer.value) return;
+  pollTimer.value = window.setTimeout(() => {
+    pollTimer.value = null;
+    void pollEvaluation();
+  }, delay);
+};
+
+const pollEvaluation = async () => {
+  if (!pollingActive || componentUnmounted || document.hidden) return;
+  if (Date.now() - pollStartedAt >= POLL_TIMEOUT_MS) {
+    stopPolling();
+    error.value = '评估生成超时，请稍后重试。';
+    return;
+  }
+
   try {
     const detail = await aiTeachingAPI.getSessionDetail(sessionId.value);
+    if (componentUnmounted || !pollingActive) return;
+    if (!detail) throw new Error('未找到该会话评估结果');
+    sessionDetail.value = detail;
+    if (shouldContinuePolling(detail)) {
+      schedulePoll();
+    } else {
+      stopPolling();
+    }
+  } catch (err: any) {
+    if (componentUnmounted) return;
+    // 网络类错误跳过本轮继续轮询（会话可能仍在后台结算），仅超时才终止
+    const status = (err as any)?.status;
+    if (status === 404 || status === 500 || status === 401) {
+      stopPolling();
+      error.value = err?.message || '加载评估失败';
+      return;
+    }
+    schedulePoll();
+  }
+};
+
+const handleVisibilityChange = () => {
+  if (document.hidden) {
+    if (pollingActive) {
+      pollHiddenAt = Date.now();
+      if (pollTimer.value) {
+        clearTimeout(pollTimer.value);
+        pollTimer.value = null;
+      }
+    }
+    return;
+  }
+
+  if (pollingActive) {
+    if (pollHiddenAt) pollStartedAt += Date.now() - pollHiddenAt;
+    pollHiddenAt = 0;
+    schedulePoll(0);
+  }
+};
+
+const fetchEvaluation = async () => {
+  stopPolling();
+  loading.value = true;
+  error.value = '';
+  pollStartedAt = Date.now();
+  pollHiddenAt = 0;
+  try {
+    const detail = await aiTeachingAPI.getSessionDetail(sessionId.value);
+    if (componentUnmounted) return;
     sessionDetail.value = detail;
     if (!detail) {
       error.value = '未找到该会话评估结果';
@@ -207,15 +303,9 @@ const fetchEvaluation = async () => {
     }
 
     if (shouldContinuePolling(detail)) {
-      if (!pollTimer.value) {
-        pollTimer.value = window.setInterval(async () => {
-          const nextDetail = await aiTeachingAPI.getSessionDetail(sessionId.value);
-          sessionDetail.value = nextDetail;
-          if (!shouldContinuePolling(nextDetail)) {
-            stopPolling();
-          }
-        }, 2000);
-      }
+      pollingActive = true;
+      if (document.hidden) pollHiddenAt = Date.now();
+      schedulePoll();
     } else {
       stopPolling();
     }
@@ -244,12 +334,26 @@ const handleAction = async (action: 'end' | 'continue-task' | 'complete-task') =
   }
 
   if (action === 'complete-task') {
+    if (completeTaskBusy.value) return;
+    completeTaskBusy.value = true;
     try {
-      await api.post(`/learning/tasks/${taskId.value}/complete`, { actualMinutes: Math.ceil(durationSeconds.value / 60) });
+      const result = await aiTeachingAPI.finalizeSessionReliably(sessionId.value, {
+        action: 'complete_task',
+        revision: sessionDetail.value?.revision || 0,
+        actualMinutes: Math.ceil(durationSeconds.value / 60),
+        subjectiveDifficulty: subjectiveDifficulty.value
+      });
+      if (sessionDetail.value) sessionDetail.value.revision = result.revision;
       toast.success('已将本任务标记为完成');
       goBackToPath(true);
     } catch (err: any) {
+      const recoveredRevision = err?.finalization?.revision;
+      if (sessionDetail.value && Number.isInteger(recoveredRevision)) {
+        sessionDetail.value.revision = recoveredRevision;
+      }
       toast.error(err?.message || '标记任务完成失败');
+    } finally {
+      completeTaskBusy.value = false;
     }
     return;
   }
@@ -258,7 +362,31 @@ const handleAction = async (action: 'end' | 'continue-task' | 'complete-task') =
 };
 
 const handleAdvisoryAction = async (action: string) => {
-  if (!sessionDetail.value?.advisory?.shouldSuggest) return;
+  const detail = sessionDetail.value;
+  const advisory = detail?.advisory;
+  if (!detail || !advisory?.shouldSuggest) return;
+
+  if (action === 'keep') {
+    toast.success('已保留当前学习计划');
+    return;
+  }
+  if (action === 'later') {
+    toast.info('已保留建议，你可以稍后再决定');
+    return;
+  }
+  if (action === 'preview') {
+    await ElMessageBox.alert(advisory.ui.body || advisory.rationale, advisory.ui.title || '调整建议', {
+      confirmButtonText: '知道了'
+    });
+    return;
+  }
+
+  const resolvedAction = action === 'confirm' ? advisory.recommendation : action;
+  if (!['reinforce', 'slow_down', 'resequence', 'accelerate'].includes(resolvedAction)) {
+    toast.warning('当前建议不需要调整学习路径');
+    return;
+  }
+
   const learningPathId = route.query.pathId as string;
   if (!learningPathId) {
     toast.warning('当前会话缺少学习路径信息，暂无法调整下一阶段');
@@ -272,40 +400,59 @@ const handleAdvisoryAction = async (action: string) => {
       type: 'warning'
     });
 
-    await api.post(`/learning/paths/${learningPathId}/replan`, {
+    const reasonMap: Record<string, string> = {
+      reinforce: '根据课后建议，为下一阶段补强关键薄弱点',
+      resequence: '根据课后建议，调整下一阶段顺序以降低理解风险',
+      accelerate: '根据课后建议，压缩下一阶段以加快推进',
+      slow_down: '根据课后建议，放慢下一阶段节奏'
+    };
+    const res = await api.post(`/learning/paths/${learningPathId}/replan`, {
       triggerSource: 'ai-teaching',
-      mode: 'new_version',
-      reason: '根据课后建议调整下一阶段',
+      mode: 'overwrite',
+      reason: reasonMap[resolvedAction],
+      // 用户已在本弹窗二次确认：跳过 awaiting-confirmation，直接执行重设计
+      requireConfirmation: false,
       evidence: {
-        advisoryAction: action,
-        advisory: sessionDetail.value.advisory,
-        wrapup: sessionDetail.value.wrapup,
+        advisoryAction: resolvedAction,
+        advisory,
+        wrapup: detail.wrapup,
         taskId: taskId.value,
-        taskTitle: sessionDetail.value.topic
+        taskTitle: detail.topic
       }
     });
-    toast.success('已调整当前路径的后续阶段');
+    const replanRes = (res as any)?.data || res;
+    if (replanRes?.status === 'awaiting-confirmation' || replanRes?.enabled === false) {
+      toast.warning('调整方案已生成，需在路径页确认后生效');
+    } else {
+      toast.success('已调整当前路径的后续阶段');
+    }
   } catch (err: any) {
     if (err !== 'cancel') toast.error(err?.message || '调整下一阶段失败');
   }
 };
 
 const formatTime = (seconds: number) => {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  const totalMins = Math.round(seconds / 60);
+  if (totalMins < 1) return '不足 1 分钟';
+  if (totalMins < 60) return `${totalMins} 分钟`;
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  return mins ? `${hours} 小时 ${mins} 分` : `${hours} 小时`;
 };
 
 const getExportFilename = () => {
   const topic = sessionDetail.value?.topic || '学习评估';
   const date = new Date().toISOString().slice(0, 10);
-  return `${topic}-${date}`;
+  // 过滤文件名非法字符，避免下载失败
+  const safeTopic = topic.replace(/[\\/:*?"<>|]/g, '_');
+  return `${safeTopic}-${date}`;
 };
 
 const exportImage = async () => {
   if (!reportRef.value || exportingImage.value) return;
   exportingImage.value = true;
   try {
+    const { default: html2canvas } = await import('html2canvas-pro');
     const canvas = await html2canvas(reportRef.value, {
       scale: 2,
       useCORS: true,
@@ -328,8 +475,15 @@ const exportPdf = () => {
   window.print();
 };
 
-onMounted(fetchEvaluation);
-onUnmounted(stopPolling);
+onMounted(() => {
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  void fetchEvaluation();
+});
+onUnmounted(() => {
+  componentUnmounted = true;
+  stopPolling();
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+});
 </script>
 
 <style scoped>
@@ -340,10 +494,51 @@ onUnmounted(stopPolling);
 }
 
 .evaluation-shell {
-  width: min(1200px, calc(100% - 64px));
+  width: calc(100% - 64px);
+  max-width: 1080px;
   margin: 0 auto;
   display: grid;
   gap: 20px;
+}
+
+/* 入场编排：数据就绪后各块依次上浮出现 */
+@media (prefers-reduced-motion: no-preference) {
+  .evaluation-head,
+  .evaluation-degraded,
+  .evaluation-shell .completion-card,
+  .evaluation-shell .session-feedback,
+  .evaluation-transcript-card {
+    animation: eval-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .evaluation-degraded { animation-delay: 0.06s; }
+  .evaluation-shell .completion-card { animation-delay: 0.1s; }
+  .evaluation-shell .session-feedback { animation-delay: 0.2s; }
+  .evaluation-transcript-card { animation-delay: 0.28s; }
+}
+@keyframes eval-rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.evaluation-degraded {
+  padding: 14px 18px;
+  border: 1px solid var(--color-warning-border, rgba(244, 170, 70, 0.24));
+  border-left: 4px solid var(--color-warning, #f4aa46);
+  border-radius: 12px;
+  background: var(--color-warning-bg, rgba(244, 170, 70, 0.08));
+  color: var(--text-primary, #172033);
+}
+
+.evaluation-degraded strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.evaluation-degraded p {
+  margin: 0;
+  color: var(--text-secondary, #607086);
+  font-size: 13px;
 }
 
 .evaluation-head {
@@ -375,10 +570,13 @@ onUnmounted(stopPolling);
 .evaluation-kicker {
   margin: 0 0 6px;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--accent-deep, #1f57cc);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--blue-deep, #1f57cc);
+}
+
+.evaluation-head__ai-note {
+  margin-top: 6px;
 }
 
 .evaluation-head h1 {

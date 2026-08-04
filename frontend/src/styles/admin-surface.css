@@ -45,19 +45,19 @@
   /* ----- 文字 ----- */
   --admin-text-primary: #1a2a44;
   --admin-text-secondary: #5b6577;
-  --admin-text-muted: #94a3b8;
+  --admin-text-muted: #64748b;
   --admin-text-brand: #3478f6;
 
   /* ----- 状态色 ----- */
-  --admin-color-success: #16a34a;
+  --admin-color-success: #15803d;
   --admin-color-success-bg: #ecfdf5;
   --admin-color-error: #dc2626;
   --admin-color-error-bg: #fef2f2;
-  --admin-color-warning: #d97706;
+  --admin-color-warning: #b45309;
   --admin-color-warning-bg: #fffbeb;
   --admin-color-info: #3478f6;
   --admin-color-info-bg: #eff6ff;
-  --admin-color-neutral: #64748b;
+  --admin-color-neutral: #55627a; /* neutral-bg(#f0f2f5) 上需 ≥4.5:1 */
   --admin-color-neutral-bg: #f0f2f5;
 
   /* ----- 间距系统（8px 基准倍数） ----- */
@@ -93,6 +93,17 @@
 
   /* ----- 字体 ----- */
   --admin-font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+
+  /* ----- 字号阶（全局唯一来源，禁止使用阶外数值） ----- */
+  --admin-text-micro: 11px;      /* 大写微观标签（须配 letter-spacing） */
+  --admin-text-caption: 12px;    /* 表格次要信息 / 时间戳 / 辅助说明 */
+  --admin-text-body-sm: 13px;    /* 表格正文 / 描述文本 */
+  --admin-text-body: 14px;       /* 默认正文 / 表单 */
+  --admin-text-title-sm: 16px;   /* 卡片标题 */
+  --admin-text-title: 18px;      /* 区块标题 */
+  --admin-text-title-lg: 20px;   /* 页面级区块标题 */
+  --admin-text-headline: 24px;   /* 页内大标题 / 大数字 */
+  --admin-text-display: 28px;    /* 页标题 */
 
   /* ----- 过渡 ----- */
   --admin-transition-fast: 0.15s ease;
@@ -141,8 +152,14 @@
 
   --admin-text-primary: #e6edf6;
   --admin-text-secondary: #94a3b8;
-  --admin-text-muted: #64748b;
+  --admin-text-muted: #8ba3b5;
   --admin-text-brand: #5a94f8;
+
+  /* 暗色下状态文字色需要提亮（浅色的 success/warning 在深色底上对比度不足） */
+  --admin-color-success: #4ade80;
+  --admin-color-error: #f87171;
+  --admin-color-warning: #fbbf24;
+  --admin-color-neutral: #94a3b8;
 
   --admin-color-success-bg: rgba(22, 163, 74, 0.12);
   --admin-color-error-bg: rgba(220, 38, 38, 0.12);
@@ -160,8 +177,10 @@
 .admin-page {
   display: grid;
   gap: var(--admin-gap-page);
-  padding: var(--admin-padding-page);
-  background: var(--admin-bg-page);
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
   min-height: 100%;
   max-width: 1600px;
   margin: 0 auto;
@@ -192,7 +211,7 @@
   border-radius: var(--admin-radius-pill);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--admin-text-caption);
   transition: all 0.15s;
 }
 
@@ -213,13 +232,13 @@
 }
 
 .admin-stat-pill__label {
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   color: var(--admin-text-secondary);
   font-weight: 600;
 }
 
 .admin-stat-pill__value {
-  font-size: 12px;
+  font-size: var(--admin-text-caption);
   color: var(--admin-text-primary);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -247,7 +266,7 @@
   gap: 5px;
   padding: 2px 8px;
   border-radius: var(--admin-radius-chip);
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -280,7 +299,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11.5px;
+  font-size: var(--admin-text-caption);
 }
 
 .admin-meta-chip__key {
@@ -288,14 +307,14 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-weight: 700;
-  font-size: 10px;
+  font-size: var(--admin-text-micro);
 }
 
 .admin-meta-chip__value {
   color: var(--admin-text-secondary);
   font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
   font-weight: 600;
-  font-size: 11.5px;
+  font-size: var(--admin-text-caption);
 }
 
 .admin-meta-chip--warn {
@@ -304,7 +323,7 @@
   background: var(--admin-color-warning-bg);
   color: #b45309;
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
 }
 
 /* ==========================================
@@ -313,7 +332,7 @@
 .admin-src-badge {
   display: inline-block;
   padding: 2px 7px;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 600;
   border-radius: var(--admin-radius-chip);
   background: var(--admin-color-neutral-bg);
@@ -369,7 +388,7 @@
 .admin-table-surface .el-table th.el-table__cell {
   background: var(--admin-bg-surface-alt);
   font-weight: 700;
-  font-size: 12px;
+  font-size: var(--admin-text-caption);
   color: var(--admin-text-muted);
   letter-spacing: 0.3px;
 }
@@ -388,13 +407,13 @@
 .admin-native-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--admin-text-body-sm);
 }
 
 .admin-native-table thead th {
   text-align: left;
   padding: 10px 14px;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 700;
   color: var(--admin-text-muted);
   letter-spacing: 0.5px;
@@ -484,21 +503,21 @@
 }
 
 .admin-drawer-head__time {
-  font-size: 12px;
+  font-size: var(--admin-text-caption);
   color: var(--admin-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
 .admin-drawer-head__title {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--admin-text-title-sm);
   font-weight: 700;
   color: var(--admin-text-primary);
 }
 
 .admin-drawer-head__sub {
   font-family: 'JetBrains Mono', Consolas, monospace;
-  font-size: 12px;
+  font-size: var(--admin-text-caption);
   color: var(--admin-text-secondary);
   background: var(--admin-bg-muted);
   padding: 2px 8px;
@@ -525,7 +544,7 @@
 }
 
 .admin-drawer-section__title {
-  font-size: 13px;
+  font-size: var(--admin-text-body-sm);
   font-weight: 700;
   color: var(--admin-text-primary);
   letter-spacing: 0.3px;
@@ -536,12 +555,12 @@
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 6px 16px;
-  font-size: 13px;
+  font-size: var(--admin-text-body-sm);
 }
 
 .admin-kv-grid dt {
   color: var(--admin-text-muted);
-  font-size: 12px;
+  font-size: var(--admin-text-caption);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -557,7 +576,7 @@
 
 .admin-kv-grid dd code {
   font-family: 'JetBrains Mono', Consolas, monospace;
-  font-size: 11.5px;
+  font-size: var(--admin-text-caption);
   background: var(--admin-bg-muted);
   padding: 1px 5px;
   border-radius: 3px;
@@ -582,14 +601,14 @@
 }
 
 .admin-summary-card__label {
-  font-size: 12px;
+  font-size: var(--admin-text-caption);
   color: var(--admin-text-muted);
   font-weight: 600;
   margin-bottom: 4px;
 }
 
 .admin-summary-card__value {
-  font-size: 1.75rem;
+  font-size: var(--admin-text-display);
   font-weight: 800;
   color: var(--admin-text-primary);
   line-height: 1;
@@ -646,7 +665,7 @@
 }
 
 .admin-section-head__eyebrow {
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -655,7 +674,7 @@
 
 .admin-section-head__title {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--admin-text-title-sm);
   font-weight: 700;
   color: var(--admin-text-primary);
 }
@@ -663,7 +682,7 @@
 .admin-section-head__desc {
   margin: 0;
   max-width: 760px;
-  font-size: 13px;
+  font-size: var(--admin-text-body-sm);
   line-height: 1.65;
   color: var(--admin-text-secondary);
 }
@@ -700,14 +719,14 @@
 }
 
 .admin-filter-field__label {
-  font-size: 12px;
+  font-size: var(--admin-text-caption);
   font-weight: 600;
   color: var(--admin-text-secondary);
 }
 
 .admin-section-note {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--admin-text-caption);
   color: var(--admin-text-muted);
 }
 
@@ -723,7 +742,7 @@
 }
 
 .admin-pagination__info {
-  font-size: 12px;
+  font-size: var(--admin-text-caption);
   color: var(--admin-text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -733,102 +752,102 @@
    ========================================== */
 
 /* --- dialog --- */
-.admin-page :deep(.el-dialog) {
+body.admin-route .el-dialog {
   border-radius: var(--admin-radius-lg);
   border: var(--admin-border);
   background: var(--admin-bg-surface);
   box-shadow: var(--admin-shadow-md);
 }
 
-.admin-page :deep(.el-dialog__header) {
+body.admin-route .el-dialog__header {
   padding: 16px 20px 14px;
   border-bottom: var(--admin-border);
   margin-right: 0;
 }
 
-.admin-page :deep(.el-dialog__title) {
-  font-size: 15px;
+body.admin-route .el-dialog__title {
+  font-size: var(--admin-text-title-sm);
   font-weight: 700;
   color: var(--admin-text-primary);
 }
 
-.admin-page :deep(.el-dialog__body) {
+body.admin-route .el-dialog__body {
   padding: 16px 20px;
 }
 
-.admin-page :deep(.el-dialog__footer) {
+body.admin-route .el-dialog__footer {
   padding: 12px 20px 16px;
   border-top: var(--admin-border-subtle);
 }
 
 /* --- drawer --- */
-.admin-page :deep(.el-drawer__header) {
+body.admin-route .el-drawer__header {
   padding: 16px 20px 14px;
   border-bottom: var(--admin-border);
   margin-bottom: 0;
 }
 
-.admin-page :deep(.el-drawer__body) {
+body.admin-route .el-drawer__body {
   padding: 16px 20px;
   background: var(--admin-bg-surface);
 }
 
-.admin-page :deep(.el-drawer__title) {
-  font-size: 15px;
+body.admin-route .el-drawer__title {
+  font-size: var(--admin-text-title-sm);
   font-weight: 700;
   color: var(--admin-text-primary);
 }
 
 /* --- form 基线 --- */
-.admin-page :deep(.el-form-item__label) {
+.admin-page .el-form-item__label {
   font-weight: 600;
   color: var(--admin-text-primary);
-  font-size: 13px;
+  font-size: var(--admin-text-body-sm);
 }
 
-.admin-page :deep(.el-input__wrapper),
-.admin-page :deep(.el-textarea__inner) {
+.admin-page .el-input__wrapper,
+.admin-page .el-textarea__inner {
   border-radius: var(--admin-radius-sm);
 }
 
-.admin-page :deep(.el-select .el-input__wrapper) {
+.admin-page .el-select .el-input__wrapper {
   border-radius: var(--admin-radius-sm);
 }
 
 /* --- 按钮基线 --- */
-.admin-page :deep(.el-button) {
+.admin-page .el-button {
   border-radius: var(--admin-radius-sm);
   font-weight: 600;
 }
 
-.admin-page :deep(.el-button--primary) {
+.admin-page .el-button--primary {
   --el-button-bg-color: var(--admin-text-brand);
   --el-button-border-color: var(--admin-text-brand);
 }
 
 /* --- 表格基线 --- */
-.admin-page :deep(.el-table) {
+.admin-page .el-table {
   --el-table-border-color: var(--admin-border-color);
   border-radius: var(--admin-radius-md);
 }
 
-.admin-page :deep(.el-table th.el-table__cell) {
+.admin-page .el-table th.el-table__cell {
   background: var(--admin-bg-surface-alt);
   font-weight: 700;
-  font-size: 12px;
+  font-size: var(--admin-text-caption);
   color: var(--admin-text-muted);
 }
 
 /* --- tag 基线 --- */
-.admin-page :deep(.el-tag) {
+.admin-page .el-tag {
   border-radius: var(--admin-radius-xs);
   font-weight: 600;
 }
 
 /* --- tabs 基线 --- */
-.admin-page :deep(.el-tabs__item) {
+.admin-page .el-tabs__item {
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--admin-text-body);
 }
 
 /* ==========================================
@@ -836,7 +855,7 @@
    ========================================== */
 @media (max-width: 768px) {
   .admin-page {
-    padding: 12px 14px 24px;
+    padding: 0;
   }
 
   .admin-toolbar {

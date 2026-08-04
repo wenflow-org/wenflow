@@ -1,6 +1,5 @@
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
-import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
-import { AgentConfigService } from '../../services/agentConfig.service';
+import { callPrompt } from '../../composers/prompt-composer';
 
 export const learningPatternDistillerDefinition: SkillDefinition = {
   name: 'learning-pattern-distiller',
@@ -55,8 +54,6 @@ export const LEARNING_PATTERN_DISTILLER_PROMPT = `你是学习模式蒸馏器。
 3. 不要夸大，把结论写成稳健推断。
 4. 重点回答：这个人怎么学更轻松、怎么教更有效。`;
 
-const promptConfigService = new AgentConfigService();
-
 function safeText(value: any): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -90,43 +87,47 @@ function buildFallback(input: LearningPatternDistillerInput): LearningPatternDis
 export async function learningPatternDistiller(input: LearningPatternDistillerInput): Promise<SkillExecutionResult<LearningPatternDistillerOutput>> {
   const startTime = Date.now();
   try {
-    const gateway = getAPIGateway();
-    const caller: CallerInfo = { skillId: 'learning-pattern-distiller' };
-    const promptConfig = await promptConfigService.getActivePrompt('skill:learning-pattern-distiller');
-    if (!promptConfig?.systemPrompt?.trim()) {
-      throw new Error('SKILL_PROMPT_MISSING: learning-pattern-distiller');
+    const result = await callPrompt<LearningPatternDistillerInput, LearningPatternDistillerOutput>({
+      agentId: 'skill:learning-pattern-distiller',
+      defaultSystemPrompt: '',
+      requireActivePrompt: true,
+      caller: { skillId: 'learning-pattern-distiller' },
+            buildUserPayload: (payload) => payload,
+      normalizeOutput: (parsed, payload) => {
+        const fallback = buildFallback(payload);
+        const obj = parsed && typeof parsed === 'object' ? parsed : {};
+        return {
+          contentReceptionPattern: safeText(obj.contentReceptionPattern) || fallback.contentReceptionPattern,
+          practicePreferenceNote: safeText(obj.practicePreferenceNote) || fallback.practicePreferenceNote,
+          frictionPatternNote: safeText(obj.frictionPatternNote) || fallback.frictionPatternNote,
+          effectiveTeachingPattern: safeText(obj.effectiveTeachingPattern) || fallback.effectiveTeachingPattern,
+          supportStyleNote: safeText(obj.supportStyleNote) || fallback.supportStyleNote,
+          taskGranularityNote: safeText(obj.taskGranularityNote) || fallback.taskGranularityNote,
+        };
+      },
+      validateParsedOutput: (parsed) =>
+        parsed && typeof parsed === 'object'
+          ? { valid: true }
+          : { valid: false, failureReason: 'LEARNING_PATTERN_OUTPUT_NOT_OBJECT' },
+    }, input);
+
+    if (!result.success || !result.output) {
+      throw new Error(result.error?.message || 'LEARNING_PATTERN_DISTILLER_FAILED');
     }
-    const messages: ChatMessage[] = [
-      { role: 'system', content: promptConfig.systemPrompt },
-      { role: 'user', content: JSON.stringify(input, null, 2) }
-    ];
-    const response = await gateway.execute({ messages }, caller, {
-      temperature: promptConfig.temperature,
-      maxTokens: promptConfig.maxTokens,
-      model: promptConfig.model,
-    });
-    const content = response.choices[0]?.message?.content || '';
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
-    const fallback = buildFallback(input);
+
     return {
       success: true,
-      output: {
-        contentReceptionPattern: safeText(parsed.contentReceptionPattern) || fallback.contentReceptionPattern,
-        practicePreferenceNote: safeText(parsed.practicePreferenceNote) || fallback.practicePreferenceNote,
-        frictionPatternNote: safeText(parsed.frictionPatternNote) || fallback.frictionPatternNote,
-        effectiveTeachingPattern: safeText(parsed.effectiveTeachingPattern) || fallback.effectiveTeachingPattern,
-        supportStyleNote: safeText(parsed.supportStyleNote) || fallback.supportStyleNote,
-        taskGranularityNote: safeText(parsed.taskGranularityNote) || fallback.taskGranularityNote
-      },
-      duration: Date.now() - startTime
+      output: result.output,
+      duration: Date.now() - startTime,
+      quality: 'model',
     };
   } catch {
     return {
       success: true,
       output: buildFallback(input),
       duration: Date.now() - startTime,
-      cached: true
+      cached: true,
+      quality: 'fallback',
     };
   }
 }

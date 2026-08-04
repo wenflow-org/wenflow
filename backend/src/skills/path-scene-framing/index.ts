@@ -1,10 +1,11 @@
-﻿import {
+import {
   SkillDefinition,
   SkillExecutionResult,
 } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
 import { AgentConfigService } from '../../services/agentConfig.service';
 import { callPrompt } from '../../composers/prompt-composer';
+import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { paceSignalRangeConfig, timeHorizonPaceMapping, tightBudgetConfig, operationalStagePatterns } from '../../config/pedagogy.config';
 
 export const PATH_SCENE_FRAMING_MAX_TOKENS = 32000;
@@ -37,14 +38,7 @@ export const PATH_SCENE_FRAMING_PROMPT = `你是一个学习路径输入清洗�
 6. confirmedProposal.keyStages 只保留高层阶段提示，不要原样回声任务步骤句。
 6.1 如果上游 keyStages 更像执行步骤、检查清单、动作链、梳理/提炼/整合式操作语句，不要把它们继续放在 keyStages，留空数组即可。
 6.2 keyStages 是给 path 提供阶段方向提示，不是给隐藏概念层提供命名素材。
-6.3 你还需要根据 timeHorizon、timeBudget、timeBudgetCadence、timePerSession、confirmedProposal.keyStages 的信息，为下游 skill:path-planning 与 stage-designer 推算一份 planningHints。planningHints 是节奏建议，不是新增事实。
-6.4 planningHints 的推算目标是：让不同时间窗口下的阶段数、概念数、每阶段任务数更匹配，而不是所有路径都写死成同一个节奏。
-6.5 planningHints.paceSignal 只能是 compact|standard|extended：
-- compact：通常对应 半天 / 1天 / 2天 这类短时窗口
-- standard：通常对应 3-7天 / 1-2周 这类中等窗口
-- extended：通常对应 1个月+ / 未明确 / 更长周期
-6.6 planningHints.milestoneRange、conceptRange、subtasksPerStageRange、subtaskMinutesRange 都是建议范围，不是用户显式提供的事实；请根据输入给出合理范围。
-6.7 timeBudget / timeBudgetCadence 表示用户平时能投入多少学习预算；timeHorizon / deadlineText 表示整体时间窗口或完成窗口。不要把投入预算误写成 timeHorizon，也不要把 timeHorizon 误写成 timeBudget。
+6.3 保留 timeHorizon、timeBudget、timeBudgetCadence、timePerSession 与 confirmedProposal.keyStages 等已提供的事实字段。timeBudget / timeBudgetCadence 表示用户平时能投入多少学习预算；timeHorizon / deadlineText 表示整体时间窗口或完成窗口。不要把投入预算误写成 timeHorizon，也不要把 timeHorizon 误写成 timeBudget。
 7. 只输出 1 个 JSON 对象，不要输出 markdown，不要输出解释。
 
 请输出：
@@ -86,14 +80,6 @@ export const PATH_SCENE_FRAMING_PROMPT = `你是一个学习路径输入清洗�
       "firstDeliverable": null,
       "keyStages": [],
       "outOfScope": []
-    },
-    "planningHints": {
-      "paceSignal": "standard",
-      "milestoneRange": [3, 5],
-      "conceptRange": [2, 4],
-      "subtasksPerStageRange": [3, 5],
-      "subtaskMinutesRange": [30, 90],
-      "maxWeeks": 8
     }
   }
 }`;
@@ -161,16 +147,6 @@ function isOperationalStageLike(value: string | null): boolean {
 type PlanningPaceSignal = 'compact' | 'standard' | 'extended';
 
 type TimeBudgetCadence = 'per_day' | 'per_week' | 'per_session' | 'flexible' | 'unclear';
-
-function clampRange(value: any, fallback: [number, number], minFloor = 1): [number, number] {
-  if (!Array.isArray(value) || value.length !== 2) return fallback;
-  const first = Number(value[0]);
-  const second = Number(value[1]);
-  if (!Number.isFinite(first) || !Number.isFinite(second)) return fallback;
-  const start = Math.max(minFloor, Math.round(first));
-  const end = Math.max(start, Math.round(second));
-  return [start, end];
-}
 
 function normalizeCadence(value: any): TimeBudgetCadence | null {
   return value === 'per_day'
@@ -253,7 +229,7 @@ function derivePlanningHints(
   };
 }
 
-function normalizeSceneFramingOutput(output: any, payload?: PathSceneFramingInput) {
+export function normalizeSceneFramingOutput(output: any, payload?: PathSceneFramingInput) {
   if (!output || typeof output !== 'object') return output;
 
   const seedNormalizedInput = payload?.normalizedInput && typeof payload.normalizedInput === 'object'
@@ -288,9 +264,6 @@ function normalizeSceneFramingOutput(output: any, payload?: PathSceneFramingInpu
   const timeBudgetCadence = normalizeCadence(resources.timeBudgetCadence);
   const timePerSession = normalizeString(resources.timePerSession);
   const timeHorizon = normalizeString(resources.timeHorizon);
-  const rawPlanningHints = normalizedInput.planningHints && typeof normalizedInput.planningHints === 'object'
-    ? normalizedInput.planningHints
-    : null;
   const derivedPlanningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages);
 
   return {
@@ -336,18 +309,22 @@ function normalizeSceneFramingOutput(output: any, payload?: PathSceneFramingInpu
             outOfScope: normalizeStringArray(confirmedProposal?.outOfScope),
           }
         : null,
-      planningHints: {
-        paceSignal: rawPlanningHints?.paceSignal === 'compact' || rawPlanningHints?.paceSignal === 'standard' || rawPlanningHints?.paceSignal === 'extended'
-          ? rawPlanningHints.paceSignal
-          : derivedPlanningHints.paceSignal,
-        milestoneRange: clampRange(rawPlanningHints?.milestoneRange, derivedPlanningHints.milestoneRange),
-        conceptRange: clampRange(rawPlanningHints?.conceptRange, derivedPlanningHints.conceptRange),
-        subtasksPerStageRange: clampRange(rawPlanningHints?.subtasksPerStageRange, derivedPlanningHints.subtasksPerStageRange),
-        subtaskMinutesRange: clampRange(rawPlanningHints?.subtaskMinutesRange, derivedPlanningHints.subtaskMinutesRange, 15),
-        maxWeeks: Number.isFinite(Number(rawPlanningHints?.maxWeeks)) ? Math.max(1, Math.round(Number(rawPlanningHints.maxWeeks))) : derivedPlanningHints.maxWeeks,
-      },
+      // Preserve the legacy shape for downstream consumers; values are server-owned policy.
+      planningHints: derivedPlanningHints,
     },
   };
+}
+
+export function validatePathSceneFramingOutput(parsed: any) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { valid: false as const, failureReason: 'PATH_SCENE_FRAMING_OUTPUT_NOT_OBJECT' };
+  }
+
+  if (!parsed.normalizedInput || typeof parsed.normalizedInput !== 'object' || Array.isArray(parsed.normalizedInput)) {
+    return { valid: false as const, failureReason: 'PATH_SCENE_FRAMING_NORMALIZED_INPUT_MISSING' };
+  }
+
+  return { valid: true as const };
 }
 
 export async function pathSceneFraming(
@@ -359,11 +336,7 @@ export async function pathSceneFraming(
       defaultSystemPrompt: PATH_SCENE_FRAMING_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'path-scene-framing' },
-      modelDefaults: {
-        maxTokens: PATH_SCENE_FRAMING_MAX_TOKENS,
-        temperature: PATH_SCENE_FRAMING_TEMPERATURE,
-      },
-      buildUserPayload: (payload) => ({
+            buildUserPayload: (payload) => ({
         goal: payload.goal,
         currentLevel: payload.currentLevel,
         timePerDay: payload.timePerDay,
@@ -373,6 +346,20 @@ export async function pathSceneFraming(
         metadata: payload.metadata || {},
       }),
       normalizeOutput: (parsed, payload) => normalizeSceneFramingOutput(parsed, payload),
+      validateParsedOutput: (parsed) => validatePathSceneFramingOutput(parsed),
+      mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
+        contract: runtimeContract,
+        artifact: output,
+        phase: 'input-framed',
+        status: 'succeeded',
+        isTerminal: true,
+        nextAction: null,
+        nextState: null,
+      }),
+      retryStrategy: {
+        maxAttempts: 2,
+        onValidationFail: ({ failureReason }) => `请只输出一个路径输入清洗 JSON 对象，必须包含 normalizedInput 对象。上次失败原因：${failureReason}`,
+      },
     }, input);
 
     if (!result.success || !result.output) {
@@ -383,6 +370,7 @@ export async function pathSceneFraming(
       success: true,
       output: {
         ...result.output,
+        runtimeEnvelope: result.runtimeEnvelope,
         _debug: {
           rawModelOutput: result.debug.rawModelOutput,
           extractedJson: result.debug.extractedJson,

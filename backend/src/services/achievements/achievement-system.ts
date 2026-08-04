@@ -276,6 +276,11 @@ export class AchievementSystem {
         total = requirement.value as number;
         break;
 
+      case 'path_completion':
+        current = stats.completedPaths || 0;
+        total = requirement.value as number;
+        break;
+
       case 'ktl_level':
         current = stats.ktl || 0;
         total = requirement.value as number;

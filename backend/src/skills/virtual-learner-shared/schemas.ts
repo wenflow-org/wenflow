@@ -115,18 +115,26 @@ export const DEFAULT_FRICTION_BUDGET: FrictionBudget = 'normal';
 export interface FrictionGuidance {
   /** 0-1 浮点数, 这一轮触发对抗行为的目标概率 */
   triggerProbability: number;
-  /** 对 LLM 的自然语言指令片段, 用于注入 prompt */
+  /** 对 LLM 的自然语言指令片段, 用于注入 prompt (legacy 触发语义) */
   promptHint: string;
+  /** 本轮被采样为「触发」时注入的指导文本 */
+  triggerGuidance: string;
+  /** 本轮被采样为「不触发」时注入的指导文本（保持合作） */
+  calmGuidance: string;
 }
 
 const FRICTION_TABLE: Record<FrictionBudget, FrictionGuidance> = {
   none: {
     triggerProbability: 0,
-    promptHint: '【friction=none】这一轮保持完全合作，按对方的方向走，不要表达额外顾虑、不要偏题、不要质疑。'
+    promptHint: '【friction=none】这一轮保持完全合作，按对方的方向走，不要表达额外顾虑、不要偏题、不要质疑。',
+    triggerGuidance: '【friction=none】这一轮保持完全合作，按对方的方向走，不要表达额外顾虑、不要偏题、不要质疑。',
+    calmGuidance: '【friction=none】这一轮保持完全合作，按对方的方向走，不要表达额外顾虑、不要偏题、不要质疑。'
   },
   low: {
     triggerProbability: 0.15,
-    promptHint: '【friction=low】这一轮基本合作。仅当老师的建议明显与你的 emotionalTriggers / failurePatterns 触碰时，才委婉提出一个具体顾虑。不要主动偏题。'
+    promptHint: '【friction=low】这一轮基本合作。仅当老师的建议明显与你的 emotionalTriggers / failurePatterns 触碰时，才委婉提出一个具体顾虑。不要主动偏题。',
+    triggerGuidance: '【friction=low·触发轮】这一轮委婉提出一个具体顾虑：仅当老师的建议触碰你的 emotionalTriggers / failurePatterns 时，用一句话表达保留意见；不要主动偏题，不要连续对抗。',
+    calmGuidance: '【friction=low·平稳轮】这一轮保持合作，按对方方向走，不要提出额外顾虑、不要偏题、不要质疑。'
   },
   normal: {
     triggerProbability: 0.3,
@@ -137,7 +145,16 @@ const FRICTION_TABLE: Record<FrictionBudget, FrictionGuidance> = {
       '\n  - 沿着 emotionalTriggers 表达一点情绪 (担心、防御、退缩)' +
       '\n  - 借 helpSeekingPattern 的方式追问一个具体细节而不是接受抽象建议' +
       '\n  - 偶尔短暂偏题, 联系到你 background 的一个真实场景' +
-      '\n如果完全没触碰这些, 这一轮就保持正常合作。'
+      '\n如果完全没触碰这些, 这一轮就保持正常合作。',
+    triggerGuidance:
+      '【friction=normal·触发轮】这一轮从以下行为中任选一种（自然嵌入回复，不要喊"我有顾虑"，同一轮最多一种）：' +
+      '\n  - 触发你的 adversarialPattern (例如对方建议过理想化时，提"时间不够"或"现实条件不允许")' +
+      '\n  - 触发你的 failurePatterns 中某一项 (例如"我之前试过类似方法但没坚持下来")' +
+      '\n  - 沿着 emotionalTriggers 表达一点情绪 (担心、防御、退缩)' +
+      '\n  - 借 helpSeekingPattern 的方式追问一个具体细节而不是接受抽象建议' +
+      '\n  - 偶尔短暂偏题, 联系到你 background 的一个真实场景',
+    calmGuidance:
+      '【friction=normal·平稳轮】这一轮保持自然合作：正面回应对方，不表达对抗、不翻旧账、不偏题。'
   },
   high: {
     triggerProbability: 0.55,
@@ -148,7 +165,16 @@ const FRICTION_TABLE: Record<FrictionBudget, FrictionGuidance> = {
       '\n  - emotionalTriggers 被触碰时明显情绪化, 但仍然保持自己的语言风格' +
       '\n  - 反复追问同一个细节直到对方给出具体例子' +
       '\n  - 偏题去讲你 background 里的一段真实经历' +
-      '\n请仍然只输出学习者自然会说的一句话, 不要标注"我现在很对抗"。'
+      '\n请仍然只输出学习者自然会说的一句话, 不要标注"我现在很对抗"。',
+    triggerGuidance:
+      '【friction=high·触发轮】你最近处境压力较大，本轮允许触发以下 1-2 种（仍然只输出学习者自然会说的一句话，不要标注"我现在很对抗"）：' +
+      '\n  - 强烈表达 adversarialPattern (例: 对方说要练习, 你直接说"现在没时间")' +
+      '\n  - 翻起一次 failurePatterns (例: "我两年前学这个就是这样失败的")' +
+      '\n  - emotionalTriggers 被触碰时明显情绪化, 但仍然保持自己的语言风格' +
+      '\n  - 反复追问同一个细节直到对方给出具体例子' +
+      '\n  - 偏题去讲你 background 里的一段真实经历',
+    calmGuidance:
+      '【friction=high·平稳轮】这一轮你暂时稳定，保持基本合作与正常回应；不主动表达对抗、不翻旧账、不偏题。'
   },
   stress_test: {
     triggerProbability: 0.85,
@@ -159,7 +185,16 @@ const FRICTION_TABLE: Record<FrictionBudget, FrictionGuidance> = {
       '\n  - 强烈 emotionalTriggers 情绪化' +
       '\n  - 重复追问让对方挫败' +
       '\n  - 直接转去讲一段不相关但情绪化的过往' +
-      '\n仍然只输出学习者会自然说的话, 不要说"我在压测你"。'
+      '\n仍然只输出学习者会自然说的话, 不要说"我在压测你"。',
+    triggerGuidance:
+      '【friction=stress_test·触发轮】这一轮触发对抗，从以下任选 1-2 种（仍然只输出学习者会自然说的话，不要说"我在压测你"）：' +
+      '\n  - 直接拒绝当前建议 (用 adversarialPattern 的方式, 例: "这不现实")' +
+      '\n  - 翻 failurePatterns 的旧账质疑对方' +
+      '\n  - 强烈 emotionalTriggers 情绪化' +
+      '\n  - 重复追问让对方挫败' +
+      '\n  - 直接转去讲一段不相关但情绪化的过往',
+    calmGuidance:
+      '【friction=stress_test·平稳轮】这一轮保持合作，正面回应对方，不触发对抗行为。'
   }
 };
 
@@ -175,6 +210,33 @@ export function normalizeFrictionBudget(value: unknown): FrictionBudget {
     return value as FrictionBudget;
   }
   return DEFAULT_FRICTION_BUDGET;
+}
+
+export interface FrictionDecision {
+  budget: FrictionBudget;
+  /** 本轮是否触发对抗行为（编排层按 triggerProbability 采样决定，不交给 LLM 自行把握） */
+  triggered: boolean;
+  /** 按本轮是否触发选好的指导文本，直接注入 prompt */
+  guidance: string;
+}
+
+/**
+ * 把「对抗触发概率」从 prompt 文本移到编排层：
+ * 用随机采样决定本轮是否触发，LLM 只负责「触发了怎么演 / 没触发就合作」，
+ * 使 friction budget 可测量、可复现统计，而不是靠 LLM 自行把握概率。
+ */
+export function decideFrictionTrigger(
+  budget?: FrictionBudget | string | null,
+  random: () => number = Math.random
+): FrictionDecision {
+  const normalized = normalizeFrictionBudget(budget);
+  const guidance = FRICTION_TABLE[normalized];
+  const triggered = normalized !== 'none' && random() < guidance.triggerProbability;
+  return {
+    budget: normalized,
+    triggered,
+    guidance: triggered ? guidance.triggerGuidance : guidance.calmGuidance,
+  };
 }
 
 /**

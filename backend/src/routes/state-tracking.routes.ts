@@ -36,6 +36,7 @@ router.get('/current', async (req: any, res) => {
 
     const suggestion = stateTrackingService.generateSuggestion(currentState);
 
+    // currentState 已经是展示尺度 (0-100)
     res.json({
       success: true,
       data: {
@@ -91,60 +92,6 @@ router.get('/trends', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('[state-tracking-route] 获取学习趋势失败', { error });
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-/**
- * 计算学习状态指标
- * POST /state/calculate
- * Body: { difficulty, cognitiveLoad, effectiveness }
- */
-router.post('/calculate', async (req: any, res) => {
-  try {
-    const userId = req.user?.userId;
-    const { difficulty, cognitiveLoad, effectiveness } = req.body;
-
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: '用户未认证'
-      });
-    }
-
-    // 验证输入
-    if (typeof difficulty !== 'number' || typeof cognitiveLoad !== 'number' || typeof effectiveness !== 'number') {
-      return res.status(400).json({
-        success: false,
-        error: '请提供有效的评分数据（difficulty, cognitiveLoad, effectiveness）'
-      });
-    }
-
-    // 计算学习状态指标
-    const metrics = await stateTrackingService.calculateSessionMetrics(userId, {
-      difficulty,
-      cognitiveLoad,
-      effectiveness
-    });
-
-    // 生成学习建议
-    const suggestion = stateTrackingService.generateSuggestion(metrics);
-
-    res.json({
-      success: true,
-      data: {
-        lss: metrics.lss,
-        ktl: metrics.ktl,
-        lf: metrics.lf,
-        lsb: metrics.lsb,
-        suggestion
-      }
-    });
-  } catch (error: any) {
-    logger.error('[state-tracking-route] 计算学习状态指标失败', { error });
     res.status(500).json({
       success: false,
       error: error.message

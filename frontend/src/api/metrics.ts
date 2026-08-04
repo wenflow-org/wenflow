@@ -36,12 +36,17 @@ export interface TrendData {
   data: TrendDataPoint[];
 }
 
+export interface MetricsHistory {
+  lssHistory: Array<{ date: string; score: number }>;
+  sessionHistory: Array<{ date: string; taskId?: string; durationMinutes: number; lssScore: number; completed: boolean }>;
+}
+
 export const metricsAPI = {
   async getCurrentState(): Promise<CurrentState | null> {
     try {
-      const response = await api.get('/state/current');
-      return (response as any)?.data || null;
-    } catch (error: any) {
+      const response = await api.get<CurrentState>('/state/current');
+      return response?.data || null;
+    } catch (error: unknown) {
       console.error('获取学习状态失败:', error);
       return null;
     }
@@ -49,9 +54,9 @@ export const metricsAPI = {
 
   async getTrends(days: number = 30): Promise<TrendData> {
     try {
-      const response = await api.get(`/state/trends?days=${days}`);
-      return (response as any)?.data || { days, data: [] };
-    } catch (error: any) {
+      const response = await api.get<TrendData>(`/state/trends?days=${days}`);
+      return response?.data || { days, data: [] };
+    } catch (error: unknown) {
       console.error('获取趋势数据失败:', error);
       return { days, data: [] };
     }
@@ -59,19 +64,19 @@ export const metricsAPI = {
 
   async getCurrent(): Promise<LearningMetrics | null> {
     try {
-      const response = await api.get('/metrics/current');
-      return (response as any)?.data || null;
-    } catch (error: any) {
+      const response = await api.get<LearningMetrics>('/metrics/current');
+      return response?.data || null;
+    } catch (error: unknown) {
       console.error('获取学习指标失败:', error);
       return null;
     }
   },
 
-  async getHistory(): Promise<{ lssHistory: Array<{ date: string; score: number }>; sessionHistory: Array<{ date: string; taskId?: string; durationMinutes: number; lssScore: number; completed: boolean }> }> {
+  async getHistory(): Promise<MetricsHistory> {
     try {
-      const response = await api.get('/metrics/history');
-      return (response as any)?.data || { lssHistory: [], sessionHistory: [] };
-    } catch (error: any) {
+      const response = await api.get<MetricsHistory>('/metrics/history');
+      return response?.data || { lssHistory: [], sessionHistory: [] };
+    } catch (error: unknown) {
       console.error('获取学习历史失败:', error);
       return { lssHistory: [], sessionHistory: [] };
     }
@@ -79,9 +84,9 @@ export const metricsAPI = {
 
   async getAdvice(): Promise<string[]> {
     try {
-      const response = await api.get('/metrics/advice');
-      return (response as any)?.data || [];
-    } catch (error: any) {
+      const response = await api.get<string[]>('/metrics/advice');
+      return response?.data || [];
+    } catch (error: unknown) {
       console.error('获取学习建议失败:', error);
       return [];
     }

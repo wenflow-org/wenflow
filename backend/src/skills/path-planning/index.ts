@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Path Agent
  * 
  * 学习路径规划 + 动态重规划
@@ -14,20 +14,13 @@ import {
   AgentInput,
   AgentOutput,
   AgentContext,
-  MilestoneOutput,
-  SubtaskOutput
+  MilestoneOutput
 } from '../../agents/protocol';
-import { getAPIGateway, CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
-import { agentConfigService } from '../../services/agentConfig.service';
+import { CallerInfo } from '../../gateway/api-gateway';
 import { callPrompt } from '../../composers/prompt-composer';
+import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 
-type MessageRole = 'user' | 'assistant' | 'system';
-type ChatMessage = { role: MessageRole; content: string };
-import { EventBus, getEventBus } from '../../gateway/event-bus';
-import { textStructureAnalyzer } from '../../skills/text-structure-analyzer';
-import { pathSceneFramingDefinition } from '../../skills/path-scene-framing';
-import { stageDesignerDefinition } from '../../skills/stage-designer';
-import { labelGeneratorDefinition } from '../../skills/label-generator';
+import { getEventBus } from '../../gateway/event-bus';
 import { logger } from '../../utils/logger';
 
 const PATH_AGENT_MAX_TOKENS = 32000;
@@ -150,7 +143,28 @@ interface PathOutput {
     rawModelOutput?: string;
     extractedJson?: string;
   };
+  runtimeEnvelope?: ReturnType<typeof adaptToRuntimeEnvelope>;
   milestones: MilestoneOutput[];
+}
+
+export function validatePathPlanningOutput(parsed: any) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { valid: false as const, failureReason: 'PATH_PLANNING_OUTPUT_NOT_OBJECT' };
+  }
+
+  if (typeof parsed.name !== 'string' || !parsed.name.trim()) {
+    return { valid: false as const, failureReason: 'PATH_PLANNING_NAME_MISSING' };
+  }
+
+  if (!Array.isArray(parsed.milestones) || parsed.milestones.length === 0) {
+    return { valid: false as const, failureReason: 'PATH_PLANNING_MILESTONES_MISSING' };
+  }
+
+  if (!parsed.cognitiveCore || typeof parsed.cognitiveCore !== 'object' || Array.isArray(parsed.cognitiveCore)) {
+    return { valid: false as const, failureReason: 'PATH_PLANNING_COGNITIVE_CORE_MISSING' };
+  }
+
+  return { valid: true as const };
 }
 
 /**
@@ -344,8 +358,7 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
   replan?: any;
   pathSceneFraming?: any;
 }> {
-  const gateway = getAPIGateway();
-  const caller: CallerInfo = { agentId: 'skill:path-planning' };
+  const caller: CallerInfo = { agentId: 'path-agent', skillId: 'path-planning' };
    
   const structuredData = input.structuredData as any;
   const confirmedProposal = input.confirmedProposal as any;
@@ -389,81 +402,41 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
       focus: framingPainPoints.length > 0 ? framingPainPoints : (structuredData.end_user?.pain_points || []),
       context: framingContext || structuredData.end_user?.identity || '',
       confidence: input.confidenceScores?.understanding || 0.8,
-      // @ts-ignore
       scenario,
-      // @ts-ignore
       structuredData,
-      // @ts-ignore
       confirmedProposal,
-      // @ts-ignore
       conversationHistory,
-      // @ts-ignore
       replan,
-      // @ts-ignore
-      pathSceneFraming
+      pathSceneFraming,
     };
   }
   
-  const systemPrompt = `你是一位教育规划专家，负责分析用户的学习目标。
-请分析用户的学习目标，识别：
-1. 学习主题/领域（必须是 2-4 字的短标签，如"创业"、"编程"、"前端"、"数据分析"等）
-2. 适合的学习水平（必须优先尊重用户明确声明的水平）
-3. 学习重点
-4. 具体应用场景/上下文（保留用户提到的具体项目、公司、领域等，如"腾讯股票分析"、"电商运营"等；若无则为空字符串）
-5. 分析置信度
-
-重要规则（必须严格遵守）：
-- 【最高优先级】如果用户明确提到"零基础"、"初学者"、"入门"、"小白"、"新手"、"没有基础"、"完全不懂"等词，level 必须为 "beginner"
-- 如果用户明确提到"进阶"、"有基础"、"中级"、"有一定基础"等词，level 必须为 "intermediate"
-- 如果用户明确提到"高级"、"深入"、"专家"、"资深"等词，level 必须为 "advanced"
-- 不要忽略用户明确声明的自身水平，用户说自己是什么水平就是什么水平
-- 即使用户目标看起来很复杂，只要用户声明是零基础，level 就必须是 "beginner"
-
-请以 JSON 格式输出：
-{
-  "subject": "短标签（2-4 字）",
-  "level": "beginner|intermediate|advanced",
-  "focus": ["重点 1", "重点 2"],
-  "context": "具体应用场景（保留用户原话中的关键信息）",
-  "confidence": 0.8
-}`;
-
-  const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: `用户目标：${input.goal}
-${input.currentLevel ? `当前水平：${input.currentLevel}` : ''}
-${input.timePerDay ? `每天可用时间：${input.timePerDay}` : ''}` }
-];
- 
   const userId = context?.userId || input?.metadata?.userId;
-  const response = await gateway.execute(
-    {
-      messages,
-      max_tokens: PATH_AGENT_MAX_TOKENS
-    },
-    caller,
-    { userId }
-  );
-  const content = response.choices[0]?.message.content || '';
-  
-  try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        ...parsed,
-        level: framingLevel || parsed.level,
-        focus: framingPainPoints.length > 0 ? framingPainPoints : (Array.isArray(parsed.focus) ? parsed.focus : []),
-        context: framingContext || parsed.context || '',
-        replan,
-        pathSceneFraming,
-      };
-    }
-  } catch (error: any) {
-    throw new Error(`PATH_AGENT_GOAL_ANALYSIS_INVALID: ${error?.message || 'JSON parse failed'}`);
-  }
+  // 懒加载避免 skills/index -> path-planning -> skills/index 循环依赖
+  const { executeSkill, auxSkillDefinitionMap } = await import('..');
+  const parsed = await executeSkill(auxSkillDefinitionMap['goal-analysis'], {
+    goal: input.goal,
+    currentLevel: input.currentLevel,
+    timePerDay: input.timePerDay,
+    __onFailure: 'throw',
+    __prompt: { userId, requestPath: '/skills/path-planning/analyze-goal', callerAgentId: caller.agentId, callerAction: caller.action },
+  }) as {
+    subject: string;
+    level: string;
+    focus?: string[];
+    context?: string;
+    confidence?: number;
+  };
 
-  throw new Error('PATH_AGENT_GOAL_ANALYSIS_INVALID: response does not contain valid JSON');
+  return {
+    ...parsed,
+    level: framingLevel || parsed.level,
+    focus: framingPainPoints.length > 0 ? framingPainPoints : (Array.isArray(parsed.focus) ? parsed.focus : []),
+    context: framingContext || parsed.context || '',
+    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
+    replan,
+    pathSceneFraming,
+  };
 }
 
 /**
@@ -572,12 +545,12 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
 5. 如果已完成任务被冻结，请把它们视为既有学习历史，不要在新版本里简单复制同名任务来伪装重调。` : ''}
 
 【强制要求】以下所有生成内容必须紧密围绕"${analysis.context || input.goal}"展开：
-- 路径名称中必须包含"${analysis.context || input.goal}"或高度相关的关键词，不得使用通用模板名称
+- 路径名称必须包含"${analysis.context || input.goal}"的核心主题关键词（提取 2-6 字即可），不得使用通用模板名称
 - 每个里程碑的标题必须体现"${analysis.context || input.goal}"的具体阶段
 - 禁止使用电商、音乐 App、房价预测、鸢尾花、泰坦尼克号等通用示例，全部替换为"${analysis.context || input.goal}"相关场景
 
 重要要求：
-1. 路径名称必须直接反映用户的原始学习目标："${input.goal}"
+1. 路径名称必须是简洁主题名：核心主题/技能 + 水平词（如"Python 自动化 Excel 报表入门"），控制在 8-20 个字；名称只表达"学什么"，不要冒号加副标题、括号补充说明、"从…到…"完整过程句，也不要把用户目标原文整段搬入名称；具体场景、交付物与细节放进 summary 和 milestones
 2. 如果用户水平是 beginner（零基础），路径名称必须使用"入门"、"基础"、"从零开始"等词汇，绝对不能出现"中级"、"进阶"、"高级"等词
 3. 所有里程碑标题、描述、goal 都要具体化到"${analysis.context || input.goal}"场景，不要使用泛泛的通用描述
 
@@ -594,12 +567,9 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
   const result = await callPrompt<any, PathOutput>({
     agentId: 'skill:path-planning',
     defaultSystemPrompt: '',
-    caller: { agentId: 'skill:path-planning' },
-    modelDefaults: {
-      maxTokens: PATH_AGENT_MAX_TOKENS,
-      temperature: 0.2,
-    },
-    buildUserPayload: () => userPayload,
+    requireActivePrompt: true,
+    caller: { agentId: 'path-agent', skillId: 'path-planning' },
+        buildUserPayload: () => userPayload,
     normalizeOutput: (pathData) => ({
       id: `path_${Date.now()}`,
       name: pathData.name,
@@ -615,6 +585,20 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
         extractedJson: '',
       }
     }),
+    validateParsedOutput: (parsed) => validatePathPlanningOutput(parsed),
+    mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
+      contract: runtimeContract,
+      artifact: output,
+      phase: 'core-path-generated',
+      status: 'succeeded',
+      isTerminal: true,
+      nextAction: null,
+      nextState: null,
+    }),
+    retryStrategy: {
+      maxAttempts: 2,
+      onValidationFail: ({ failureReason }) => `请只输出一个学习路径 JSON 对象，必须包含非空 name、非空 milestones 数组和 cognitiveCore 对象。上次失败原因：${failureReason}`,
+    },
   }, input, { userId, ...(systemPromptOverride ? { systemPromptOverride } : {}) });
 
   if (!result.success || !result.output) {
@@ -623,99 +607,12 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
 
   return {
     ...result.output,
+    runtimeEnvelope: result.runtimeEnvelope,
     _debug: {
       rawModelOutput: result.debug.rawModelOutput,
       extractedJson: result.debug.extractedJson || undefined,
     }
   };
-}
-
-/**
- * 动态重规划路径（里程碑模式）
- */
-export async function replanPath(
-  currentPath: PathOutput,
-  signal: { type: string; intensity: number },
-  context: AgentContext
-): Promise<PathOutput> {
-  if (!currentPath) return currentPath;
-  
-  const eventBus = getEventBus();
-  const gateway = getAPIGateway();
-  const caller: CallerInfo = { agentId: 'skill:path-planning' };
-  
-  let adjustment = '';
-  
-  switch (signal.type) {
-    case 'accelerating':
-      adjustment = '用户学习速度加快，合并相似里程碑';
-      break;
-    case 'decelerating':
-      adjustment = '用户学习速度减慢，拆分里程碑，增加子任务';
-      break;
-    case 'fatigue-high':
-      adjustment = '用户疲劳度高，减少每个里程碑的子任务数量';
-      break;
-    case 'struggling':
-      adjustment = '用户遇到困难，在里程碑前插入补充里程碑';
-      break;
-    case 'mastery':
-      adjustment = '用户已掌握当前内容，跳过基础里程碑';
-      break;
-    default:
-      return currentPath;
-  }
-  
-  const systemPrompt = `你是一位动态学习路径规划专家。
-根据用户的实时学习状态，调整里程碑式学习路径。
-调整要求：${adjustment}
-
-请输出调整后的完整路径，保持相同的JSON格式。`;
-
-  const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: `当前路径：
-${JSON.stringify(currentPath, null, 2)}
-
-信号强度：${signal.intensity}` }
-  ];
-
-  try {
-    const userId = context?.userId;
-    const response = await gateway.execute(
-      {
-        messages,
-        max_tokens: PATH_AGENT_MAX_TOKENS
-      },
-      caller,
-      { userId }
-    );
-    const content = response.choices[0]?.message.content || '';
-    
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const newPath = JSON.parse(jsonMatch[0]);
-      
-      // 发布路径调整事件
-      await eventBus.emit({
-        type: 'path:adjusted',
-        source: 'skill:path-planning',
-        userId: context.userId,
-        data: {
-          oldPathId: currentPath.id,
-          newPathId: newPath.id,
-          signal: signal.type,
-          adjustment
-        }
-      });
-      
-      return { ...currentPath, ...newPath };
-    }
-  } catch (error: any) {
-    throw new Error(`PATH_REPLAN_FAILED: ${error?.message || 'unknown error'}`);
-  }
-
-  throw new Error('PATH_REPLAN_FAILED: response does not contain valid JSON');
 }
 
 export default pathAgentHandler;

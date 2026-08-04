@@ -32,16 +32,31 @@ dist-ssr
 
 # Database
 *.db
+*.db.*
 *.sqlite
+*.sqlite.*
 *.sqlite3
+*.sqlite3.*
 
-# Prisma
-backend/prisma/migrations/*_*/
-!backend/prisma/migrations/migration_lock.toml
-!backend/prisma/migrations/**/migration.sql
+# Manual and editor backups
+*.bak
+*.bak-*
+*.bak.*
+*.backup
+*.backup*
+*.old_backup
+*.backup2
+**/.backup_*/
+
+# Prisma migrations are source code and must be committed.
+!backend/prisma/migrations/**
+!backend/prisma/system/migrations/**
 
 # Backups
 *.sql
+!backend/prisma/migrations/**/*.sql
+!backend/prisma/system/migrations/**/*.sql
+!backend/prisma/legacy-migrations/**/*.sql
 backups/
 backup_*.sql
 
@@ -199,3 +214,7 @@ nul
 # Local architecture docs (do not track)
 doc/
 doc/archive/
+
+# Playwright MCP 会话临时文件
+.playwright-mcp/
+page-*.md

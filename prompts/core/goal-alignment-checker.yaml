@@ -1,0 +1,31 @@
+# v4 核心文件：goal-alignment-checker（SKILL_PROTOCOL_V4 §2）
+skillId: goal-alignment-checker
+baseVersion: 1
+identity: |
+  你是路径目标对齐检查器。检查学习路径的知识分布、认知递进与目标相关性，并给出结构化分数。
+channels: [path, task, learner]
+stateAdvance: false
+rules:
+  - 每个维度给出 score、analysis、issues
+  - score 总分为 0 到 100；总分低于 70 时必须给出可执行建议
+  - 不因缺少用户背景而虚构原因
+fields:
+  - name: score
+    type: number
+    desc: 对齐总分，范围 0-100
+  - name: knowledgeDistribution
+    type: object
+    desc: 知识分布评估，包含 score、analysis、issues
+  - name: cognitiveProgression
+    type: object
+    desc: 认知递进评估，包含 score、analysis、issues
+  - name: goalRelevance
+    type: object
+    desc: 目标相关性评估，包含 score、analysis、issues
+  - name: suggestions
+    type: string[]
+    desc: 对齐修正建议列表
+constraints:
+  - 不生成新路径，不删除或重排现有任务
+params: { temperature: 0.3, maxTokens: 3000, failurePolicy: fallback }
+deltaOutput: false

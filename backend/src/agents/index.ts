@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Agents 入口文件
  *
  * 统一导出所有 Agent
@@ -27,12 +27,10 @@ export {
 } from './plugin-types';
 export { agentPluginRegistry } from './plugin-registry';
 
-// 配置 - 修复导出名称
-export { agentPluginConfig } from '../config/agent-plugin-config';
 export { registerAllPlugins, getAllPlugins } from './plugins';
 
 // Path Agent
-export { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn, replanPath } from '../skills/path-planning';
+export { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn } from '../skills/path-planning';
 
 // Goal Conversation Agent
 export {
@@ -50,9 +48,9 @@ export {
 } from './learner-model-agent';
 
 export {
-  teachingTurnAgentDefinition,
-  teachingTurnAgentHandler,
-} from '../skills/teaching-turn';
+  learningTurnAgentDefinition,
+  learningTurnAgentHandler,
+} from '../skills/learning-turn';
 
 export {
   sessionWrapupAgentDefinition,
@@ -81,30 +79,12 @@ export {
   getApplicableStrategies
 } from '../skills/path-planning/strategies';
 
-// 插件
-export { genericPlanner } from './path-planner/plugins/generic-planner';
-export { basicGenerator } from './content-generator/plugins/basic-generator';
-
-// Content Strategy Selector
-export {
-  ContentStrategySelector,
-  contentStrategySelector,
-  selectContentStrategy,
-  inferCognitiveLoad,
-  type ContentStrategy,
-  type TaskType,
-  type CognitiveLoad,
-  type TaskMetadata,
-  type StrategySelection,
-  type StrategyConfig
-} from '../skills/content-strategy-selector';
-
 // 所有 Agent 定义
 import { AgentDefinition } from './protocol';
 import { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn } from '../skills/path-planning';
 import { learnerModelAgentDefinition, learnerModelAgentHandler as learnerModelAgentHandlerFn } from './learner-model-agent';
 import { goalConversationAgentDefinition, goalConversationAgentHandler } from '../skills/goal-conversation';
-import { teachingTurnAgentDefinition, teachingTurnAgentHandler } from '../skills/teaching-turn';
+import { learningTurnAgentDefinition, learningTurnAgentHandler } from '../skills/learning-turn';
 import { peerAgentDefinition, peerAgentHandler } from '../skills/peer-reinforcement';
 import { sessionWrapupAgentDefinition, sessionWrapupAgentHandler } from '../skills/session-wrapup';
 import { simulationOrchestratorAgentDefinition, simulationOrchestratorAgentHandler } from './simulation-agent';
@@ -115,7 +95,7 @@ export const allAgentDefinitions: AgentDefinition[] = [
   pathAgentDefinition,
   learnerModelAgentDefinition,
   goalConversationAgentDefinition,
-  teachingTurnAgentDefinition,
+  learningTurnAgentDefinition,
   peerAgentDefinition,
   sessionWrapupAgentDefinition,
   simulationOrchestratorAgentDefinition
@@ -125,7 +105,7 @@ export const agentHandlers: Record<string, (input: any, context: any) => Promise
   'skill:path-planning': pathAgentHandlerFn,
   'skill:learner-model': learnerModelAgentHandlerFn,
   'skill:goal-conversation': goalConversationAgentHandler,
-  'skill:teaching-turn': teachingTurnAgentHandler,
+  'skill:learning-turn': learningTurnAgentHandler,
   'skill:peer-reinforcement': peerAgentHandler,
   'skill:session-wrapup': sessionWrapupAgentHandler,
   'simulation-agent': simulationOrchestratorAgentHandler
@@ -143,24 +123,29 @@ export const agentHandlers: Record<string, (input: any, context: any) => Promise
 export async function registerOfficialAgents(gateway: {
   registerAgent: (definition: AgentDefinition, handler: any) => Promise<string>
 }): Promise<void> {
+  const registered: Array<{ id: string; name: string }> = [];
+  const skipped: Array<{ id: string; name: string }> = [];
   for (const definition of allAgentDefinitions) {
     const manifest = getAgentManifest(definition.id);
     if (manifest && !manifest.runtimeEnabled) {
-      logger.info('[agents] skipped disabled official agent', {
-        agentId: definition.id,
-        agentName: definition.name,
-      });
+      skipped.push({ id: definition.id, name: definition.name });
       continue;
     }
 
     const handler = agentHandlers[definition.id];
     if (handler) {
       await gateway.registerAgent(definition, handler);
-      logger.info('[agents] registered official agent', {
-        agentId: definition.id,
-        agentName: definition.name,
-      });
+      registered.push({ id: definition.id, name: definition.name });
     }
   }
+  if (skipped.length > 0) {
+    logger.info(`[agents] skipped disabled official agent${skipped.length > 1 ? 's' : ''}`, {
+      agentIds: skipped.map(item => item.id)
+    });
+  }
+  logger.info(`[agents] registered ${registered.length} official agents`, {
+    agentIds: registered.map(item => item.id),
+    agentNames: registered.map(item => item.name)
+  });
 }
 

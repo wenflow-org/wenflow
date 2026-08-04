@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Admin · Prompt 运营开发与评估中心
  * ============================================================
  * 服务于 /admin/agent-registry（V3.6 重构后的 Prompt 运营中心）
@@ -15,6 +15,7 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { rejectPromptOpsRuntimeMutation } from '../../middleware/prompt-file-truth.middleware';
 import { randomUUID } from 'crypto';
 import systemPrisma from '../../config/system-database';
 import prisma from '../../config/database';
@@ -43,8 +44,10 @@ import {
   updateFieldsInSource,
   type EditableField,
 } from '../../services/prompt-source-fields';
+import { resolveRuntimeContractsForAgents } from '../../services/prompt-lab/resolve-runtime-contract';
 
 const router = Router();
+router.use(rejectPromptOpsRuntimeMutation);
 
 // ============================================================
 // ============================================================
@@ -59,9 +62,8 @@ const router = Router();
 // ============================================================
 const SKILL_DISPLAY_NAMES: Record<string, string> = {
   'skill:adaptive-guidance-copy': '自适应引导文案',
-  'skill:dialogue-concept-extractor': '对话概念抽取',
+  'skill:lesson-knowledge-enricher': '课后知识增强',
   'skill:goal-profile-inference': '目标画像推断',
-  'skill:label-generator': '标签生成器',
   'skill:learning-pattern-distiller': '学习模式提炼',
   'skill:path-scene-framing': '路径场景包装',
   'skill:peer-reinforcement': '同伴强化对话',
@@ -76,24 +78,22 @@ const SKILL_DISPLAY_NAMES: Record<string, string> = {
 
 // ============================================================
 // agentId → stage 映射（运营在 AI 起草时挑该 stage 的字段）
-// stage 与 OrchestratorDefinitions 页一致：goal / path / learn
+// stage 与 OrchestratorDefinitions 页一致：澄清(goal) / 规划(path) / 学习(learning)
 // 暂未迁移到字段路由的 agent 留空，前端会回退到「手填字段 ID」
 // ============================================================
-const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'learn'> = {
+const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'learning'> = {
   'skill:goal-conversation': 'goal',
   'skill:goal-profile-inference': 'goal',
-  'skill:dialogue-concept-extractor': 'goal',
-  'skill:label-generator': 'goal',
   // 以下虽未迁移但确定隶属的 stage
   'skill:path-planning': 'path',
   'skill:path-scene-framing': 'path',
   'skill:stage-designer': 'path',
-  'skill:teaching-turn': 'learn',
-  'skill:session-wrapup': 'learn',
-  'skill:peer-reinforcement': 'learn',
-  'skill:adaptive-guidance-copy': 'learn',
-  'skill:learning-pattern-distiller': 'learn',
-  'skill:session-knowledge-distiller': 'learn',
+  'skill:learning-turn': 'learning',
+  'skill:session-wrapup': 'learning',
+  'skill:peer-reinforcement': 'learning',
+  'skill:adaptive-guidance-copy': 'learning',
+  'skill:learning-pattern-distiller': 'learning',
+  'skill:lesson-knowledge-enricher': 'learning',
 };
 
 // ============================================================
@@ -161,11 +161,23 @@ router.get('/agent-overview', async (_req: Request, res: Response) => {
       ...dbActives.map((r) => r.agentId),
     ]);
 
-    const items = Array.from(allAgentIds)
+    const agentIdList = Array.from(allAgentIds);
+    const archetypeByAgent = new Map<string, string>();
+    for (const agentId of agentIdList) {
+      const file = fileByAgent.get(agentId);
+      const archetype = (file as any)?.archetype;
+      if (typeof archetype === 'string' && archetype.trim()) {
+        archetypeByAgent.set(agentId, archetype.trim());
+      }
+    }
+    const runtimeContracts = await resolveRuntimeContractsForAgents(agentIdList, archetypeByAgent);
+
+    const items = agentIdList
       .map((agentId) => {
         const file = fileByAgent.get(agentId);
         const db = dbByAgent.get(agentId);
         const manifest = getAgentManifest(agentId);
+        const runtimeResolved = runtimeContracts.get(agentId);
 
         const fileHash = file ? simpleHash(file.systemPrompt) : null;
         const dbHash = db ? simpleHash(db.systemPrompt) : null;
@@ -200,9 +212,12 @@ router.get('/agent-overview', async (_req: Request, res: Response) => {
           displayName,
           description: manifest?.description || file?.description || null,
           archetype: (file as any)?.archetype || null,
+          promptContract: (file as any)?.promptContract || null,
           stage: AGENT_STAGE_MAP[agentId] || null,
           sources,
           health,
+          runtimeContract: runtimeResolved?.contract || null,
+          runtimeContractSource: runtimeResolved?.source || null,
           file: file
             ? {
                 path: `prompts/${agentId.replace(/:/g, '.')}.md`,
@@ -635,6 +650,7 @@ router.get('/prompt-schema/:agentId', async (req: Request, res: Response) => {
         source,
         promptText: sourceText,
         schema,
+        promptContract: (file as any)?.promptContract || null,
         fieldGovernanceStage: stage,
         suggestedRulePrefix: suggestRulePrefix(agentId),
         promptVersionId: dbActive?.id || null,

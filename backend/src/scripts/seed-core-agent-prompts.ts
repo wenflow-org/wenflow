@@ -9,9 +9,17 @@
  */
 
 import type { PrismaClient } from '../generated/system-client';
-import { loadAllPromptFiles } from '../composers/prompt-files/loader';
-
-const DEFAULT_MODEL = (process.env.AI_MODEL || '').trim();
+import { loadAllPromptFiles, type PromptFile } from '../composers/prompt-files/loader';
+import { computeCoreHash, loadCoreFile } from '../services/prompt-lab/core-file-loader';
+import {
+  normalizeRuntimeContract,
+  type RuntimeContract,
+} from '../services/prompt-lab/runtime-contract';
+import {
+  lintDeclaredSkillPromptContract,
+  type SkillPromptContract,
+} from '../services/skill-prompt-contract';
+import { buildV4CorePromptMetadata } from '../services/prompt-lab/core-prompt-metadata';
 
 export interface CoreAgentPromptSeed {
   agentId: string;
@@ -21,6 +29,12 @@ export interface CoreAgentPromptSeed {
   temperature: number;
   maxTokens: number;
   acceptableAgentIds?: string[];
+  /** 来自 prompt 文件 frontmatter 的运行时契约快照 */
+  metadata?: string;
+  /** v4 编译产物锚点：核心文件内容哈希 */
+  coreHash?: string;
+  /** v4 编译产物锚点：核心文件版本号 */
+  coreVersion?: number;
 }
 
 export interface CoreAgentPromptSeedResult {
@@ -41,14 +55,194 @@ export interface CoreAgentPromptEnsureResult {
   reason: 'seeded-empty-table' | 'table-not-empty' | 'backfilled-missing' | 'no-missing-prompts' | 'synced-from-code' | 'already-in-sync';
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function runtimeContractError(agentId: string, field: string, detail: string): Error {
+  const fieldPath = field ? `.${field}` : '';
+  return new Error(`Prompt ${agentId} has an invalid runtimeContract${fieldPath}: ${detail}`);
+}
+
+function requireNonBlankString(value: unknown, agentId: string, field: string): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw runtimeContractError(agentId, field, 'expected a non-empty string');
+  }
+  return value.trim();
+}
+
+function requireStringArray(value: unknown, agentId: string, field: string): string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw runtimeContractError(agentId, field, 'expected a non-empty string array');
+  }
+  return value.map((item, index) => requireNonBlankString(item, agentId, `${field}[${index}]`));
+}
+
+function requireOneOf<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+  agentId: string,
+  field: string
+): T {
+  const normalized = requireNonBlankString(value, agentId, field);
+  if (!allowed.includes(normalized as T)) {
+    throw runtimeContractError(agentId, field, `expected one of: ${allowed.join(', ')}`);
+  }
+  return normalized as T;
+}
+
 /**
- * 从 prompts/ 目录动态加载 prompt 文件
- * 替代原先硬编码的 CORE_AGENT_PROMPT_SEEDS 数组
+ * 明确声明的契约必须完整有效。normalizeRuntimeContract 会为缺失字段推断默认值，
+ * 因此前置校验以避免错误的文件声明在同步时被悄悄改写为默认契约。
  */
-export function loadCoreAgentPromptSeeds(): CoreAgentPromptSeed[] {
-  const promptFiles = loadAllPromptFiles();
-  
-  return promptFiles.map((file) => ({
+function validateDeclaredRuntimeContract(value: unknown, agentId: string): void {
+  if (!isRecord(value)) {
+    throw runtimeContractError(agentId, '', 'expected an object');
+  }
+
+  requireOneOf(value.version, ['prompt-runtime-contract/v1'] as const, agentId, 'version');
+  requireOneOf(
+    value.contextMode,
+    ['state-refresh', 'thread-context', 'snapshot-context', 'simulation-refresh'] as const,
+    agentId,
+    'contextMode'
+  );
+
+  if (!isRecord(value.businessState)) {
+    throw runtimeContractError(agentId, 'businessState', 'expected an object');
+  }
+  const businessState = value.businessState;
+  requireNonBlankString(businessState.domain, agentId, 'businessState.domain');
+  const phases = requireStringArray(businessState.phases, agentId, 'businessState.phases');
+  const defaultPhase = requireNonBlankString(businessState.defaultPhase, agentId, 'businessState.defaultPhase');
+  if (!phases.includes(defaultPhase)) {
+    throw runtimeContractError(agentId, 'businessState.defaultPhase', 'must be included in businessState.phases');
+  }
+  const terminalPhases = requireStringArray(
+    businessState.terminalPhases,
+    agentId,
+    'businessState.terminalPhases'
+  );
+  if (terminalPhases.some((phase) => !phases.includes(phase))) {
+    throw runtimeContractError(agentId, 'businessState.terminalPhases', 'must only contain businessState.phases values');
+  }
+  const statusValues = requireStringArray(businessState.statusValues, agentId, 'businessState.statusValues');
+  const allowedStatusValues = ['succeeded', 'partial', 'blocked', 'failed'];
+  if (statusValues.some((status) => !allowedStatusValues.includes(status))) {
+    throw runtimeContractError(
+      agentId,
+      'businessState.statusValues',
+      `must only contain: ${allowedStatusValues.join(', ')}`
+    );
+  }
+
+  if (!isRecord(value.contextUpdate)) {
+    throw runtimeContractError(agentId, 'contextUpdate', 'expected an object');
+  }
+  const contextUpdate = value.contextUpdate;
+  requireOneOf(
+    contextUpdate.mode,
+    ['none', 'state-refresh', 'thread-state', 'simulation-refresh'] as const,
+    agentId,
+    'contextUpdate.mode'
+  );
+  requireOneOf(
+    contextUpdate.stateOwner,
+    ['runtime', 'model', 'orchestrator', 'none'] as const,
+    agentId,
+    'contextUpdate.stateOwner'
+  );
+  if (contextUpdate.description !== undefined) {
+    requireNonBlankString(contextUpdate.description, agentId, 'contextUpdate.description');
+  }
+
+  requireOneOf(value.outputEnvelope, ['adapter', 'model'] as const, agentId, 'outputEnvelope');
+}
+
+export interface DeclaredPromptRuntimeContractIdentity {
+  agentId: string;
+  archetype?: string;
+}
+
+function normalizeDeclaredPromptContract(
+  file: Pick<PromptFile, 'agentId' | 'archetype' | 'promptContract'>,
+  runtimeContract?: RuntimeContract
+): SkillPromptContract | undefined {
+  if (file.promptContract === undefined) return undefined;
+  const result = lintDeclaredSkillPromptContract(file.promptContract, {
+    skillId: file.agentId,
+    archetype: file.archetype,
+    runtimeContract,
+  });
+  const errors = result.issues.filter((issue) => issue.level === 'error');
+  if (errors.length > 0) {
+    throw new Error(`Prompt ${file.agentId} has an invalid promptContract: ${errors.map((issue) => `${issue.field}: ${issue.message}`).join('; ')}`);
+  }
+  return result.contract;
+}
+
+/**
+ * 仅供已经显式声明的 runtimeContract 使用。先拒绝不完整或错误的声明，
+ * 再复用运行时标准化逻辑生成稳定快照，不能让默认推断掩盖声明错误。
+ */
+export function normalizeDeclaredPromptRuntimeContract(
+  value: unknown,
+  identity: DeclaredPromptRuntimeContractIdentity
+): RuntimeContract {
+  validateDeclaredRuntimeContract(value, identity.agentId);
+  return normalizeRuntimeContract(value, {
+    skillId: identity.agentId.replace(/^skill:/, ''),
+    archetype: identity.archetype || '',
+  });
+}
+
+/** 由 prompt frontmatter 生成新版本使用的 metadata 快照；没有声明时保持 metadata 缺失。 */
+export function buildPromptFileRuntimeContractMetadata(
+  file: Pick<PromptFile, 'agentId' | 'archetype' | 'promptContract' | 'runtimeContract' | 'coreHash' | 'coreVersion' | 'deltaOutput'>
+): string | undefined {
+  if (file.runtimeContract === undefined && file.promptContract === undefined && file.coreHash === undefined) return undefined;
+
+  if (file.coreHash !== undefined) {
+    const skillId = file.agentId.replace(/^skill:/, '');
+    return buildV4CorePromptMetadata({
+      skillId,
+      coreHash: file.coreHash,
+      coreVersion: file.coreVersion ?? 1,
+      deltaOutput: file.deltaOutput === true,
+    });
+  }
+
+  const runtimeContract = file.runtimeContract === undefined
+    ? undefined
+    : normalizeDeclaredPromptRuntimeContract(file.runtimeContract, file);
+  const promptContract = normalizeDeclaredPromptContract(file, runtimeContract);
+  return JSON.stringify({
+    promptLab: {
+      source: 'prompt-file',
+      // v4 锚点快照：漂移检测以 DB ACTIVE 与文件 frontmatter 一致为前提
+      ...(file.coreHash !== undefined ? { coreHash: file.coreHash } : {}),
+      ...(file.coreVersion !== undefined ? { coreVersion: file.coreVersion } : {}),
+      ...(file.deltaOutput === true ? { deltaOutput: true } : {}),
+      ...(runtimeContract
+        ? {
+            runtimeContractSource: 'prompt-frontmatter',
+            runtimeContract,
+          }
+        : {}),
+      ...(promptContract
+        ? {
+            promptContractSource: 'prompt-frontmatter',
+            promptContract,
+          }
+        : {}),
+    },
+  });
+}
+
+/** 将 File-as-Truth prompt 文件映射为可写入数据库的种子定义。 */
+export function mapPromptFileToCoreAgentPromptSeed(file: PromptFile): CoreAgentPromptSeed {
+  const metadata = buildPromptFileRuntimeContractMetadata(file);
+  return {
     agentId: file.agentId,
     name: file.name,
     description: file.description || `从文件 ${file.agentId}.md 加载`,
@@ -56,7 +250,31 @@ export function loadCoreAgentPromptSeeds(): CoreAgentPromptSeed[] {
     temperature: file.temperature ?? 0.7,
     maxTokens: file.maxTokens ?? 4000,
     acceptableAgentIds: file.acceptableAgentIds,
-  }));
+    ...(metadata === undefined ? {} : { metadata }),
+    ...(file.coreHash === undefined ? {} : { coreHash: file.coreHash }),
+    ...(file.coreVersion === undefined ? {} : { coreVersion: file.coreVersion }),
+  };
+}
+
+/**
+ * 从 prompts/ 目录动态加载 prompt 文件
+ * 替代原先硬编码的 CORE_AGENT_PROMPT_SEEDS 数组
+ */
+export function loadCoreAgentPromptSeeds(): CoreAgentPromptSeed[] {
+  return loadAllPromptFiles()
+    .filter((file) => file.archetype !== 'code-only')
+    .filter((file) => {
+      if (file.coreHash === undefined) return true;
+      const skillId = file.agentId.replace(/^skill:/, '');
+      const loaded = loadCoreFile(skillId);
+      const inSync = Boolean(loaded?.core && computeCoreHash(loaded.core) === file.coreHash);
+      if (!inSync) {
+        // core 已保存但尚未发布时，绝不能将它的快照混入旧 Runtime Prompt 的 ACTIVE 版本。
+        console.warn(`[prompt-sync] 跳过漂移 v4 prompt: ${file.agentId}；请通过 publish-core 发布核心文件`);
+      }
+      return inSync;
+    })
+    .map(mapPromptFileToCoreAgentPromptSeed);
 }
 
 /**
@@ -88,7 +306,8 @@ async function createPromptSeedRecord(
   prisma: PrismaClient,
   seed: CoreAgentPromptSeed,
   version: number,
-  createdBy: string
+  createdBy: string,
+  defaultModel: string
 ) {
   await prisma.agent_prompts.create({
     data: {
@@ -100,10 +319,13 @@ async function createPromptSeedRecord(
       systemPrompt: seed.systemPrompt,
       temperature: seed.temperature,
       maxTokens: seed.maxTokens,
-      model: DEFAULT_MODEL,
+      model: defaultModel || null,
       status: 'ACTIVE',
       createdBy,
       publishedAt: new Date(),
+      ...(seed.metadata === undefined ? {} : { metadata: seed.metadata }),
+      ...(seed.coreHash === undefined ? {} : { coreHash: seed.coreHash }),
+      ...(seed.coreVersion === undefined ? {} : { coreVersion: seed.coreVersion }),
     },
   });
 }
@@ -112,16 +334,52 @@ function normalizePromptText(value: string | null | undefined): string {
   return (value || '').replace(/\r\n/g, '\n').trim();
 }
 
-function matchesSeedConfig(activePrompt: {
+function stableStringifyForCompare(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringifyForCompare(item)).join(',')}]`;
+  }
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringifyForCompare(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+/**
+ * metadata 是契约快照（JSON 字符串）。键序可能因写入路径不同而漂移，
+ * 结构化比较避免误报；无法解析时按原文比较，宁可触发同步也不放过漂移。
+ */
+function normalizeMetadataForCompare(value: string | null | undefined): string {
+  if (!value) return '';
+  try {
+    return stableStringifyForCompare(JSON.parse(value));
+  } catch {
+    return value;
+  }
+}
+
+export function matchesSeedConfig(activePrompt: {
   systemPrompt: string | null;
   temperature: number | null;
   maxTokens: number | null;
   model: string | null;
-}, seed: CoreAgentPromptSeed): boolean {
+  metadata?: string | null;
+}, seed: CoreAgentPromptSeed, defaultModel: string): boolean {
   return normalizePromptText(activePrompt.systemPrompt) === normalizePromptText(seed.systemPrompt)
     && Number(activePrompt.temperature ?? seed.temperature) === Number(seed.temperature)
     && Number(activePrompt.maxTokens ?? seed.maxTokens) === Number(seed.maxTokens)
-    && String(activePrompt.model || DEFAULT_MODEL) === String(DEFAULT_MODEL);
+    && (!defaultModel || String(activePrompt.model || '') === defaultModel)
+    && normalizeMetadataForCompare(activePrompt.metadata) === normalizeMetadataForCompare(seed.metadata);
+}
+
+async function resolveDefaultModel(prisma: PrismaClient): Promise<string> {
+  const config = await prisma.platform_api_configs.findUnique({
+    where: { id: 'platform' },
+    select: { defaultModel: true }
+  });
+  return String(config?.defaultModel || process.env.AI_MODEL || '').trim();
 }
 
 async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
@@ -132,6 +390,7 @@ async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
   const created: string[] = [];
   const updated: string[] = [];
   const skipped: string[] = [];
+  const defaultModel = await resolveDefaultModel(prisma);
 
   const seeds = loadCoreAgentPromptSeeds();
   for (const seed of seeds) {
@@ -154,6 +413,7 @@ async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
         temperature: true,
         maxTokens: true,
         model: true,
+        metadata: true,
       }
     });
 
@@ -164,12 +424,12 @@ async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
         select: { version: true },
       });
       const nextVersion = (latest?.version || 0) + 1;
-      await createPromptSeedRecord(prisma, seed, nextVersion, 'system-sync');
+      await createPromptSeedRecord(prisma, seed, nextVersion, 'system-sync', defaultModel);
       created.push(seed.agentId);
       continue;
     }
 
-    if (matchesSeedConfig(activePrompt, seed)) {
+    if (matchesSeedConfig(activePrompt, seed, defaultModel)) {
       skipped.push(seed.agentId);
       continue;
     }
@@ -203,10 +463,13 @@ async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
           systemPrompt: seed.systemPrompt,
           temperature: seed.temperature,
           maxTokens: seed.maxTokens,
-          model: DEFAULT_MODEL,
+          model: defaultModel || null,
           status: 'ACTIVE',
           createdBy: 'system-sync',
           publishedAt: new Date(),
+          ...(seed.metadata === undefined ? {} : { metadata: seed.metadata }),
+          ...(seed.coreHash === undefined ? {} : { coreHash: seed.coreHash }),
+          ...(seed.coreVersion === undefined ? {} : { coreVersion: seed.coreVersion }),
         },
       });
     });
@@ -240,10 +503,7 @@ export async function findMissingCorePromptSeeds(prisma: PrismaClient): Promise<
 }
 
 export async function seedCoreAgentPrompts(prisma: PrismaClient): Promise<CoreAgentPromptSeedResult> {
-  if (!DEFAULT_MODEL) {
-    throw new Error('AI_MODEL is required to seed core agent prompts');
-  }
-
+  const defaultModel = await resolveDefaultModel(prisma);
   const result: CoreAgentPromptSeedResult = {
     created: [],
     skipped: [],
@@ -266,7 +526,7 @@ export async function seedCoreAgentPrompts(prisma: PrismaClient): Promise<CoreAg
       continue;
     }
 
-    await createPromptSeedRecord(prisma, seed, 1, 'system-seed');
+    await createPromptSeedRecord(prisma, seed, 1, 'system-seed', defaultModel);
 
     result.created.push(seed.agentId);
   }
@@ -278,10 +538,6 @@ export async function ensureCoreAgentPrompts(
   prisma: PrismaClient,
   mode: CoreAgentPromptEnsureMode
 ): Promise<CoreAgentPromptEnsureResult> {
-  if (!DEFAULT_MODEL) {
-    throw new Error('AI_MODEL is required to ensure core agent prompts');
-  }
-
   const totalPromptCountBefore = await prisma.agent_prompts.count();
   const missingBefore = (await findMissingCorePromptSeeds(prisma)).map((seed) => seed.agentId);
 
@@ -344,6 +600,7 @@ export async function ensureCoreAgentPrompts(
   }
 
   const created: string[] = [];
+  const defaultModel = await resolveDefaultModel(prisma);
   const skipped = seeds
     .map((seed) => seed.agentId)
     .filter((agentId) => !missingSeeds.some((seed) => seed.agentId === agentId));
@@ -355,7 +612,7 @@ export async function ensureCoreAgentPrompts(
       select: { version: true },
     });
     const nextVersion = (latest?.version || 0) + 1;
-    await createPromptSeedRecord(prisma, seed, nextVersion, 'system-backfill');
+    await createPromptSeedRecord(prisma, seed, nextVersion, 'system-backfill', defaultModel);
     created.push(seed.agentId);
   }
 

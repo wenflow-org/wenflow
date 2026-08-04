@@ -1,0 +1,30 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`session-wrapup payload snapshot parity payload carries the tagged sections the prompt input spec declares 1`] = `
+"【学科】JavaScript
+【主题】闭包
+【时长】25 分钟
+【学生消息数】2
+【助教消息数】1
+【任务类型】concept-explanation
+【任务标题】理解闭包
+【任务说明】无
+【路径标题】JS 进阶
+【路径摘要】无
+【路径背景】null
+【课堂最终状态】null
+【课堂事件历史】[{"type":"checkpoint"}]
+【阶段轨迹】[{"stage":"teaching","at":"t0"}]
+【结束原因】task-completed
+【知识点状态】[{"name":"闭包","status":"learning","progress":50},{"name":"词法作用域","status":"mastered","progress":90}]
+【知识点变化】{"newlyMastered":["词法作用域"],"stillLearning":["闭包"]}
+【学习状态】{"lss":5,"ktl":6,"lf":4,"lsb":5}
+【课堂证据】{"turnCount":3,"avgUnderstanding":0.7,"avgEngagement":0.8,"topConfusionPoints":["变量生命周期"]}
+【最近对话片段】1. 学生: 闭包是什么？
+
+2. 教师: 先看词法作用域。
+
+3. 学生: 懂了，是能记住外层变量。
+
+请同时输出 summary 与 evaluation。"
+`;

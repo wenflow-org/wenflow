@@ -125,7 +125,7 @@ export class ProfileAggregator {
     const emotional = this.mergeEmotional(goalConversation?.emotional, changes);
     const history = this.mergeHistory(sessions, changes);
     const narrativeInsights = this.buildNarrativeInsights({ goalConversation, cognitive, preferences, emotional, learning, history });
-    await this.enhanceNarrativeInsights({ userId, goalConversation, narrativeInsights });
+    await this.enhanceNarrativeInsights({ userId, goalConversation, narrativeInsights, history });
     const curriculumControls = this.buildCurriculumControls({ preferences, emotional, learning, narrativeInsights });
     
     const derivedInsights = this.calculateDerivedInsights({
@@ -193,15 +193,19 @@ export class ProfileAggregator {
     learnerBackground?: any;
   } | null> {
     try {
+      const goalEvidence = await prisma.learner_evidence.findFirst({
+        where: { userId, evidenceType: 'goal:understanding:updated' },
+        orderBy: { occurredAt: 'desc' }
+      });
       const conversation = await prisma.goal_conversations.findFirst({
         where: { userId, status: 'completed' },
         orderBy: { createdAt: 'desc' }
       });
-      
-      if (!conversation) return null;
-      
-      const data = JSON.parse(conversation.collectedData || '{}');
-      const understanding = data.understanding || {};
+      if (!goalEvidence && !conversation) return null;
+
+      const evidenceData = goalEvidence ? JSON.parse(goalEvidence.payload || '{}') : null;
+      const data = conversation ? JSON.parse(conversation.collectedData || '{}') : {};
+      const understanding = evidenceData?.understanding || data.understanding || {};
       const learnerBackground = data.learner_background && typeof data.learner_background === 'object'
         ? data.learner_background
         : null;
@@ -584,6 +588,7 @@ export class ProfileAggregator {
       };
     } | null;
     narrativeInsights: LearnerNarrativeInsights;
+    history: InteractionHistory;
   }): Promise<void> {
     try {
       const goalUnderstanding = input.goalConversation?.narratives
@@ -615,6 +620,8 @@ export class ProfileAggregator {
           });
         }
       }
+
+      if (input.history.totalSessions <= 0) return;
 
       const learnerSnapshotLike = {
         profile: {

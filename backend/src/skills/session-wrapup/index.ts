@@ -1,11 +1,11 @@
-﻿import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
-import { agentConfigService } from '../../services/agentConfig.service';
+import { CallerInfo } from '../../gateway/api-gateway';
 import { callPrompt } from '../../composers/prompt-composer';
+import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
+import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { PromptCallSpec } from '../../composers/types';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition, AgentOutput } from '../../agents/protocol';
-import { sessionKnowledgeDistillerDefinition } from '../../skills/session-knowledge-distiller';
-import { dialogueConceptExtractorDefinition } from '../../skills/dialogue-concept-extractor';
+import { buildSkillOutcome, type SkillOutcome } from '../outcome';
 
 export interface SessionWrapupInput {
   messages: Array<{
@@ -106,6 +106,7 @@ export interface SessionWrapupResult {
   evaluation: SessionWrapupEvaluation | null;
   summarySource: 'model' | 'fallback';
   evaluationSource: 'model' | 'ai-fallback' | 'failed';
+  runtimeEnvelope?: ReturnType<typeof adaptToRuntimeEnvelope>;
 }
 
 export interface SessionWrapupArtifact {
@@ -284,6 +285,28 @@ function extractEvaluation(value: unknown): SessionWrapupEvaluation | null {
   };
 }
 
+/**
+ * The primary prompt promises both blocks. Validate that raw contract before
+ * normalization so malformed model output gets one corrective retry instead
+ * of silently bypassing the model result and falling back immediately.
+ */
+export function validateSessionWrapupParsedOutput(parsed: unknown) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { valid: false as const, failureReason: 'SESSION_WRAPUP_OUTPUT_NOT_OBJECT' };
+  }
+
+  const record = parsed as Record<string, unknown>;
+  if (!isSummary(record.summary)) {
+    return { valid: false as const, failureReason: 'SESSION_WRAPUP_SUMMARY_INVALID' };
+  }
+
+  if (!extractEvaluation(record.evaluation)) {
+    return { valid: false as const, failureReason: 'SESSION_WRAPUP_EVALUATION_INVALID' };
+  }
+
+  return { valid: true as const };
+}
+
 function buildFallbackSummary(input: SessionWrapupInput): SessionWrapupSummary {
   const mastered = input.knowledgePoints.filter((kp) => kp.status === 'mastered').length;
   const total = input.knowledgePoints.length;
@@ -440,36 +463,78 @@ function buildConservativeEvaluation(input: SessionWrapupInput): SessionWrapupEv
   };
 }
 
+const SESSION_WRAPUP_FALLBACK_RUNTIME_CONTRACT = buildDefaultRuntimeContract('session-wrapup', 'distiller');
+
 const sessionWrapupPromptSpec: PromptCallSpec<SessionWrapupInput, Record<string, unknown> | null> = {
   agentId: AGENT_ID,
   defaultSystemPrompt: '',
+  requireActivePrompt: true,
   caller: {
-    agentId: AGENT_ID,
+    agentId: 'learning-agent',
+    skillId: 'session-wrapup',
   },
   buildUserPayload: (input) => buildWrapupUserPrompt(input, 'primary'),
   normalizeOutput: (parsed) => (parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null),
-  validateParsedOutput: (parsed) => ({
-    valid: !!(parsed && typeof parsed === 'object'),
-    failureReason: 'SESSION_WRAPUP_OUTPUT_INVALID',
+  validateParsedOutput: (parsed) => validateSessionWrapupParsedOutput(parsed),
+  mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
+    contract: runtimeContract,
+    artifact: output,
+    phase: 'wrapup-generated',
+    status: 'succeeded',
+    isTerminal: false,
+    nextAction: 'finalize-session',
+    nextState: {
+      stage: 'wrapup-generated',
+      hasSummary: !!(output && typeof output === 'object' && (output as any).summary),
+      hasEvaluation: !!(output && typeof output === 'object' && (output as any).evaluation),
+    },
   }),
-  modelDefaults: {
-    temperature: 0.7,
-    maxTokens: 4000,
+    retryStrategy: {
+    maxAttempts: 2,
+    onValidationFail: ({ failureReason }) => `请只输出完整的课后总结 JSON，必须同时包含符合规格的 summary 和 evaluation。上次失败原因：${failureReason}`,
   },
 };
 
 export function toWrapupArtifact(result: SessionWrapupResult, input: SessionWrapupInput): SessionWrapupArtifact {
+  const hasReliableEvaluation = result.evaluationSource !== 'failed' && !!result.evaluation;
   return {
-    status: result.evaluation ? 'complete' : 'summary-only',
+    status: hasReliableEvaluation ? 'complete' : 'summary-only',
     sources: {
       summary: result.summarySource,
       evaluation: result.evaluationSource,
     },
     summary: result.summary,
-    evaluation: result.evaluation,
+    evaluation: hasReliableEvaluation ? result.evaluation : null,
     progress: buildProgressSnapshot(input),
     evidence: buildEvidenceSnapshot(input),
   };
+}
+
+/**
+ * 内部 canonical sidecar；公开扁平 wrapup DTO 仍由 coordinator 投影 result/artifact。
+ * durable 写入仍由 Coordinator 负责，Phase 2 不在这里声明 ProposedTransition。
+ */
+export function toWrapupSkillOutcome(
+  result: SessionWrapupResult,
+  input: SessionWrapupInput
+): SkillOutcome<SessionWrapupArtifact> {
+  const artifact = toWrapupArtifact(result, input);
+  const quality =
+    result.summarySource === 'fallback' || result.evaluationSource === 'failed'
+      ? result.summarySource === 'fallback' && result.evaluationSource === 'failed'
+        ? 'fallback'
+        : 'partial'
+      : result.evaluationSource === 'ai-fallback'
+        ? 'partial'
+        : 'model';
+
+  return buildSkillOutcome({
+    skillId: AGENT_ID,
+    artifact,
+    quality,
+    runtimeEnvelope: result.runtimeEnvelope || null,
+    transition: null,
+  });
 }
 
 export class SessionWrapupAgent {
@@ -479,13 +544,15 @@ export class SessionWrapupAgent {
     let result: SessionWrapupResult | null = null;
 
     try {
-      const gateway = getAPIGateway();
-      const caller: CallerInfo = { agentId: AGENT_ID };
-      const promptResult = await callPrompt(sessionWrapupPromptSpec, input, {
-        userId: 'system',
-      });
+      const caller: CallerInfo = { agentId: 'learning-agent', skillId: 'session-wrapup' };
+      const promptResult = await callPrompt(sessionWrapupPromptSpec, input);
 
-      const parsed = promptResult.output;
+      // A failed raw-contract retry still retains the final extracted JSON in
+      // debug. Keep the existing partial-model fallback behavior: a valid
+      // summary or evaluation block must not be discarded just because its
+      // sibling block remains invalid after the corrective retry.
+      const parsed = promptResult.output
+        || parseContent(promptResult.debug.extractedJson || promptResult.debug.rawModelOutput);
       const parsedSummary = parsed?.summary;
       const parsedEvaluation = parsed?.evaluation;
 
@@ -496,7 +563,7 @@ export class SessionWrapupAgent {
       let evaluationSource: 'model' | 'ai-fallback' | 'failed' = evaluation ? 'model' : 'failed';
 
       if (!evaluation) {
-        evaluation = await this.generateEvaluationFallback(input, gateway, caller);
+        evaluation = await this.generateEvaluationFallback(input, caller);
         evaluationSource = evaluation ? 'ai-fallback' : 'failed';
       }
 
@@ -510,17 +577,38 @@ export class SessionWrapupAgent {
         evaluation,
         summarySource: isSummary(parsedSummary) ? 'model' : 'fallback',
         evaluationSource,
+        runtimeEnvelope: promptResult.runtimeEnvelope || adaptToRuntimeEnvelope({
+          contract: SESSION_WRAPUP_FALLBACK_RUNTIME_CONTRACT,
+          artifact: { summary, evaluation },
+          phase: evaluationSource === 'failed' ? 'wrapup-generated' : 'wrapup-generated',
+          status: evaluationSource === 'failed' ? 'partial' : 'succeeded',
+          isTerminal: false,
+          nextAction: 'finalize-session',
+          nextState: { stage: 'wrapup-generated', summarySource: isSummary(parsedSummary) ? 'model' : 'fallback', evaluationSource },
+        }),
       };
 
       return result;
     } catch (e) {
       error = e instanceof Error ? e : new Error('Unknown error');
       logger.error('[SessionWrapupAgent] 生成失败', { error });
+      const fallbackSummary = buildFallbackSummary(input);
+      const fallbackEvaluation = buildConservativeEvaluation(input);
       result = {
-        summary: buildFallbackSummary(input),
-        evaluation: buildConservativeEvaluation(input),
+        summary: fallbackSummary,
+        evaluation: fallbackEvaluation,
         summarySource: 'fallback',
         evaluationSource: 'failed',
+        runtimeEnvelope: adaptToRuntimeEnvelope({
+          contract: SESSION_WRAPUP_FALLBACK_RUNTIME_CONTRACT,
+          artifact: { summary: fallbackSummary, evaluation: fallbackEvaluation },
+          phase: 'wrapup-generated',
+          status: 'failed',
+          isTerminal: false,
+          nextAction: 'finalize-session',
+          reason: error.message,
+          nextState: { stage: 'wrapup-generated', summarySource: 'fallback', evaluationSource: 'failed' },
+        }),
       };
       return result;
     } finally {
@@ -535,26 +623,20 @@ export class SessionWrapupAgent {
 
   private async generateEvaluationFallback(
     input: SessionWrapupInput,
-    gateway: ReturnType<typeof getAPIGateway>,
     caller: CallerInfo
   ): Promise<SessionWrapupEvaluation | null> {
     try {
-      const response = await gateway.execute({
-        messages: [
-          {
-            role: 'system',
-            content: '你是一位课程评估员。请只输出单节课 evaluation JSON，对字段格式严格负责，不要输出 summary，不要输出额外说明。'
-          },
-          {
-            role: 'user',
-            content: buildWrapupUserPrompt(input, 'evaluation-fallback')
-          }
-        ]
-      }, caller, { userId: 'system' });
-
-      const content = response.choices[0]?.message.content || '{}';
-      const parsed = parseContent(content);
-      return extractEvaluation(parsed?.evaluation || parsed);
+      // 懒加载避免 skills/index -> session-wrapup -> skills/index 循环依赖
+      const { executeSkill, auxSkillDefinitionMap } = await import('..');
+      const output = await executeSkill(auxSkillDefinitionMap['session-evaluation-fallback'], {
+        ...input,
+        __fallback: null,
+        __prompt: {
+          requestPath: '/skills/session-wrapup/evaluation-fallback',
+          callerAgentId: caller.agentId,
+        },
+      });
+      return output ? (extractEvaluation(output) as SessionWrapupEvaluation) : null;
     } catch (error) {
       logger.warn('[SessionWrapupAgent] AI fallback evaluation 失败', {
         error: error instanceof Error ? error.message : String(error)
@@ -579,9 +661,13 @@ export async function sessionWrapupAgentHandler(input: any, context: any): Promi
       (sessionWrapupAgentDefinition.stats.successRate * (sessionWrapupAgentDefinition.stats.callCount - 1) + (success ? 1 : 0))
       / sessionWrapupAgentDefinition.stats.callCount;
 
+    const artifact = toWrapupArtifact(result, input);
+    const skillOutcome = toWrapupSkillOutcome(result, input);
+
     return {
       success: true,
       userVisible: result.summary.topicSummary,
+      runtimeEnvelope: result.runtimeEnvelope,
       internal: {
         core: {
           stage: 'wrapup-completed',
@@ -591,7 +677,9 @@ export async function sessionWrapupAgentHandler(input: any, context: any): Promi
         ext: {
           sessionWrapup: {
             result,
-            artifact: toWrapupArtifact(result, input),
+            artifact,
+            // 内部协议 sidecar；coordinator 继续读 result/artifact，公开 DTO 不变
+            skillOutcome,
           },
         }
       },

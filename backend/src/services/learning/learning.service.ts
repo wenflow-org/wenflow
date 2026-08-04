@@ -1,24 +1,53 @@
-﻿// 学习服务
+// 学习服务
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import aiService from '../ai/ai.service';
 import stateTrackingService from './state-tracking.service';
 import achievementService from '../achievements/achievement.service';
-import { updateLearningMetrics } from '../metrics/LearningMetricService';
-import learningStateService from './learning-state.service';
 import type { AgentInput } from '../../agents/protocol';
 import { getEventBus, type LearningEvent } from '../../gateway/event-bus';
-import { runWithContext } from '../../gateway/api-gateway/context';
 import { normalizeAgentOutput } from '../../agents/output-normalizer';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { dashboardGuidanceSnapshotService } from '../learner/DashboardGuidanceSnapshotService';
+import { runBackgroundTask } from '../background-task-tracker.service';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { learnerProgressService } from '../learner/LearnerProgressService';
+import { createDomainEvent } from '../../events/contracts';
+import { enqueueDomainEvent } from '../../events/outbox.repository';
+import {
+  PATH_GENERATION_LEASE_MS,
+  PATH_GENERATION_LEASE_OWNER,
+  assertGenerationRunFence,
+  assertStageTasksPresent,
+  buildGenerationRunStatus,
+  calculateStageProgress,
+  claimExpiredGenerationRun,
+  createAndClaimPathGenerationRun,
+  getSafeGenerationErrorMessage,
+  isGenerationRunStale,
+  resolveGenerationRetry,
+  type PathGenerationRollbackSnapshotV1,
+  type PathGenerationPhase,
+  type PathGenerationRetryType,
+  type PersistedPathGenerationRun,
+} from './path-generation-status';
+import {
+  assertPathMutationSafe,
+  buildPathReplanSnapshot,
+  claimPathReplanSnapshot,
+  createPathVersioningUnsupportedError,
+  isPathMutationConflictError,
+  PathMutationConflictError,
+  type PathMutationKind,
+  type PathMutationScope,
+  type PathReplanSnapshot,
+} from './path-mutation-safety';
 
 // Path 任务画像 Skills
 import { executeSkill } from '../../skills';
 import { pathSceneFramingDefinition } from '../../skills/path-scene-framing';
 import { stageDesignerDefinition } from '../../skills/stage-designer';
+import { pathAgentDefinition } from '../../skills/path-planning';
 
 interface CreateGoalData {
   userId: string;
@@ -36,6 +65,8 @@ interface GeneratePathData {
   deadlineText?: string;
   sourceConversationId?: string;
   existingPathId?: string;
+  generationRunId?: string;
+  createdPlaceholder?: boolean;
   userProfile?: {
     skillLevel?: string;
     currentSkillLevel?: string;
@@ -83,7 +114,7 @@ interface GeneratePathData {
 interface PathReplanRequest {
   pathId: string;
   userId: string;
-  triggerSource?: 'goal-conversation' | 'learner-model-agent' | 'skill:learner-model' | 'ai-teaching' | 'teaching-agent' | 'admin' | 'system' | 'api';
+  triggerSource?: 'goal-conversation' | 'learner-model-agent' | 'skill:learner-model' | 'ai-teaching' | 'learning-agent' | 'admin' | 'system' | 'api';
   reason?: string;
   mode?: 'new_version' | 'overwrite';
   stageNumber?: number;
@@ -93,9 +124,7 @@ interface PathReplanRequest {
 
 const STALE_GENERATING_PATH_MINUTES = 15;
 const ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES = [1, 5, 15] as const;
-const ENRICHMENT_AUTO_RETRY_SCAN_LIMIT = 200;
 
-type PathGenerationPhase = 'core' | 'stageDesign';
 type PathCoreStep = 'framing' | 'planning' | 'persist' | 'completed';
 
 interface PathGenerationLogPayload {
@@ -237,7 +266,7 @@ type NewPathTaskType = typeof NEW_PATH_TASK_TYPES[number];
 interface PathAdjustmentPolicy {
   allowedModes: Array<'expand' | 'compress' | 'replan'>;
   recommendedMode?: 'expand' | 'compress' | 'replan' | null;
-  triggerSource?: 'learn' | 'ai-teaching' | 'teaching-agent' | 'learner-model-agent' | 'skill:learner-model' | 'system' | null;
+  triggerSource?: 'learn' | 'ai-teaching' | 'learning-agent' | 'learner-model-agent' | 'skill:learner-model' | 'system' | null;
 }
 
 interface PathAdjustmentEvidence {
@@ -307,6 +336,12 @@ function parsePathSummary(raw: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+function cleanPathTitle(title: string): string {
+  const t = title.trim();
+  const cleaned = t.replace(/(?:[，,、\s]*)(?:学习路径|学习计划|路径计划)$/, '').trim();
+  return cleaned || t;
 }
 
 function normalizeStringArray(value: any): string[] {
@@ -935,6 +970,237 @@ function normalizeStageTracePhase(value: any): PathGenerationPhase | null {
 }
 
 class LearningService {
+  private createGenerationId(prefix: 'pgr' | 'pgsi'): string {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+  }
+
+  private async createAndClaimGenerationRun(
+    pathId: string,
+    phase: PathGenerationPhase,
+    retryType: PathGenerationRetryType | null = null,
+    totalItems = 0,
+    mutationKind?: PathMutationKind,
+    expectedActiveGenerationRunId?: string | null,
+    mutationScope: PathMutationScope = {}
+  ): Promise<any> {
+    const runId = this.createGenerationId('pgr');
+    return createAndClaimPathGenerationRun(prisma, {
+      runId,
+      pathId,
+      phase,
+      retryType,
+      totalItems,
+      ...(expectedActiveGenerationRunId === undefined ? {} : { expectedActiveGenerationRunId }),
+      guard: mutationKind
+        ? (tx) => assertPathMutationSafe(tx, pathId, mutationKind, mutationScope)
+        : undefined
+    });
+  }
+
+  private async restorePathAfterMutationConflict(
+    pathId: string,
+    runId: string,
+    error: unknown,
+    options: {
+      runStatus?: 'cancelled' | 'failed';
+      retryAllowed?: boolean;
+      errorCode?: string;
+    } = {}
+  ): Promise<void> {
+    const now = new Date();
+    const errorCode = options.errorCode || (isPathMutationConflictError(error)
+      ? error.code
+      : 'PATH_MUTATION_CONFLICT');
+    const runStatus = options.runStatus || 'cancelled';
+
+    await prisma.$transaction(async (tx) => {
+      const path = await tx.learning_paths.findUnique({
+        where: { id: pathId },
+        select: {
+          activeGenerationRunId: true,
+          aiPromptTemplate: true,
+          status: true
+        }
+      });
+      if (!path || path.activeGenerationRunId !== runId) return;
+
+      const run = await tx.path_generation_runs.findUnique({
+        where: { id: runId },
+        select: { rollbackSnapshot: true }
+      });
+      let rollbackSnapshot: PathGenerationRollbackSnapshotV1 | null = null;
+      try {
+        const parsed = run?.rollbackSnapshot ? JSON.parse(run.rollbackSnapshot) : null;
+        rollbackSnapshot = parsed?.version === 1 ? parsed as PathGenerationRollbackSnapshotV1 : null;
+      } catch {
+        rollbackSnapshot = null;
+      }
+
+      await tx.path_generation_runs.updateMany({
+        where: {
+          id: runId,
+          learningPathId: pathId,
+          status: { in: ['queued', 'processing'] }
+        },
+        data: {
+          status: runStatus,
+          retryAllowed: options.retryAllowed === true,
+          heartbeatAt: now,
+          leaseExpiresAt: now,
+          finishedAt: now,
+          errorCode,
+          errorMessage: error instanceof Error ? error.message : String(error)
+        }
+      });
+
+      const restoringCorePath = rollbackSnapshot?.path.restoreStatus === true;
+      if (restoringCorePath && path.status !== 'generating') return;
+
+      const restored = await tx.learning_paths.updateMany({
+        where: {
+          id: pathId,
+          activeGenerationRunId: runId,
+          ...(restoringCorePath ? { status: 'generating' } : {})
+        },
+        data: {
+          activeGenerationRunId: runStatus === 'failed'
+            ? runId
+            : rollbackSnapshot?.supersededRun
+              ? null
+              : rollbackSnapshot?.path.activeGenerationRunId || null,
+          aiPromptTemplate: rollbackSnapshot ? rollbackSnapshot.path.aiPromptTemplate : path.aiPromptTemplate,
+          ...(rollbackSnapshot?.path.restoreStatus && path.status === 'generating'
+            ? { status: rollbackSnapshot.path.status }
+            : {}),
+          updatedAt: now
+        }
+      });
+      if (restored.count !== 1) return;
+
+      if (!rollbackSnapshot) {
+        logger.warn('路径生成任务缺少回滚快照，仅释放当前生成指针', { pathId, runId });
+      }
+    });
+  }
+
+  private async claimQueuedGenerationRun(pathId: string, runId: string): Promise<any | null> {
+    const now = new Date();
+    const claimed = await prisma.path_generation_runs.updateMany({
+      where: {
+        id: runId,
+        learningPathId: pathId,
+        phase: 'stageDesign',
+        status: 'queued',
+        learningPath: { activeGenerationRunId: runId }
+      },
+      data: {
+        status: 'processing',
+        leaseOwner: PATH_GENERATION_LEASE_OWNER,
+        claimedAt: now,
+        startedAt: now,
+        heartbeatAt: now,
+        leaseExpiresAt: new Date(now.getTime() + PATH_GENERATION_LEASE_MS)
+      }
+    });
+    if (claimed.count !== 1) return null;
+    return this.getActiveGenerationRun(pathId, runId);
+  }
+
+  private async heartbeatGenerationRun(
+    pathId: string,
+    runId: string,
+    progressPatch: { completedItems?: number; totalItems?: number; progress?: number } = {}
+  ): Promise<void> {
+    const now = new Date();
+    const result = await prisma.path_generation_runs.updateMany({
+      where: {
+        id: runId,
+        learningPathId: pathId,
+        status: 'processing',
+        learningPath: { activeGenerationRunId: runId }
+      },
+      data: {
+        ...progressPatch,
+        leaseOwner: PATH_GENERATION_LEASE_OWNER,
+        heartbeatAt: now,
+        leaseExpiresAt: new Date(now.getTime() + PATH_GENERATION_LEASE_MS)
+      }
+    });
+    if (result.count !== 1) throw new Error('GENERATION_RUN_FENCED');
+  }
+
+  private startGenerationHeartbeat(pathId: string, runId: string): () => void {
+    let inFlight = false;
+    const timer = setInterval(() => {
+      if (inFlight) return;
+      inFlight = true;
+      void this.heartbeatGenerationRun(pathId, runId)
+        .catch((error) => {
+          if (!(error instanceof Error) || error.message !== 'GENERATION_RUN_FENCED') {
+            logger.warn('刷新路径生成任务心跳失败', {
+              pathId,
+              runId,
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
+        })
+        .finally(() => {
+          inFlight = false;
+        });
+    }, Math.max(30_000, Math.floor(PATH_GENERATION_LEASE_MS / 3)));
+    timer.unref?.();
+    return () => clearInterval(timer);
+  }
+
+  private async failGenerationRun(
+    pathId: string,
+    runId: string,
+    error: unknown,
+    errorCode: string,
+    retryType: PathGenerationRetryType,
+    pathStatus?: 'failed' | 'active'
+  ): Promise<boolean> {
+    const now = new Date();
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    return prisma.$transaction(async (tx) => {
+      const failed = await tx.path_generation_runs.updateMany({
+        where: {
+          id: runId,
+          learningPathId: pathId,
+          status: { in: ['queued', 'processing'] }
+        },
+        data: {
+          status: 'failed',
+          retryType,
+          retryAllowed: true,
+          heartbeatAt: now,
+          leaseExpiresAt: now,
+          finishedAt: now,
+          errorCode,
+          errorMessage
+        }
+      });
+      if (failed.count !== 1) return false;
+
+      const updatedPath = await tx.learning_paths.updateMany({
+        where: { id: pathId, activeGenerationRunId: runId },
+        data: {
+          ...(pathStatus ? { status: pathStatus } : {}),
+          updatedAt: now
+        }
+      });
+      return updatedPath.count === 1;
+    });
+  }
+
+  private async getActiveGenerationRun(pathId: string, activeGenerationRunId?: string | null): Promise<any | null> {
+    if (!activeGenerationRunId) return null;
+    return prisma.path_generation_runs.findFirst({
+      where: { id: activeGenerationRunId, learningPathId: pathId }
+    });
+  }
+
   private emitLearningEvent(event: LearningEvent, label: string) {
     try {
       void getEventBus().emit(event).catch((error) => {
@@ -1299,8 +1565,21 @@ class LearningService {
     });
   }
 
-  private getPathLearningAccessState(pathStatus: string | null | undefined, aiPromptTemplate: string | null) {
-    const generationStatus = parsePathGenerationStatus(aiPromptTemplate);
+  private getPathLearningAccessState(
+    pathStatus: string | null | undefined,
+    aiPromptTemplate: string | null,
+    activeRun?: PersistedPathGenerationRun | null,
+    aiGenerated = false,
+    taskCount = 0
+  ) {
+    const legacyGenerationStatus = parsePathGenerationStatus(aiPromptTemplate);
+    const persistedRunStatus = buildGenerationRunStatus(activeRun);
+    const generationStatus = legacyGenerationStatus || persistedRunStatus
+      ? {
+          ...(legacyGenerationStatus || {}),
+          ...(persistedRunStatus || {})
+        }
+      : null;
     const enrichmentStatus = generationStatus?.stageDesign;
 
     if (pathStatus !== 'active') {
@@ -1322,11 +1601,14 @@ class LearningService {
     }
 
     if (!generationStatus || !enrichmentStatus) {
+      const missingGeneratedState = pathStatus === 'active' && aiGenerated && taskCount === 0;
       return {
         generationStatus,
-        canStartLearning: pathStatus === 'active',
-        learningBlockedReason: pathStatus === 'active'
+        canStartLearning: pathStatus === 'active' && !missingGeneratedState,
+        learningBlockedReason: pathStatus === 'active' && !missingGeneratedState
           ? null
+          : missingGeneratedState
+            ? '学习路径生成状态缺失，暂不能开始学习，请重试生成。'
           : '学习路径当前不可开始，请稍后再试。'
       };
     }
@@ -1384,36 +1666,46 @@ class LearningService {
       deadline?: Date | null;
       deadlineText?: string | null;
       aiPromptTemplate?: string | null;
+      activeGenerationRunId?: string | null;
     },
     generationStatus: ParsedPathGenerationStatus | null
-  ): Promise<number> {
+  ): Promise<{ retryCount: number; runId: string }> {
     const retryCount = (generationStatus?.stageDesignRetryCount || 0) + 1;
     const retryAt = new Date().toISOString();
+    const run = await this.createAndClaimGenerationRun(
+      path.id,
+      'stageDesign',
+      'stageDesign',
+      0,
+      'replace-tasks',
+      path.activeGenerationRunId
+    );
 
     await this.updatePathGenerationStatus(path.id, {
-      stageDesign: 'pending',
+      stageDesign: 'processing',
       lastError: null,
       stageDesignRetryCount: retryCount,
       lastStageDesignRetryAt: retryAt,
       updatedAt: retryAt
-    });
+    }, run.id);
 
     const analysis = {
       ...this.parsePathPromptTemplate(path.aiPromptTemplate || null),
       subject: path.subject || '综合'
     };
 
-    void this.enrichLearningPathWithAnderson(path.id, {
+    runBackgroundTask('learning.path.stage-enrichment-retry', () => this.enrichLearningPathWithAnderson(path.id, run.id, {
       userId: path.userId,
       description: path.description || path.title || path.name || '个性化学习路径',
       subject: path.subject || undefined,
       deadline: path.deadline || undefined,
       deadlineText: path.deadlineText || undefined,
       sourceConversationId: generationStatus?.sourceConversationId || undefined,
+      generationRunId: run.id,
       userProfile: {}
-    }, analysis);
+    }, analysis), { pathId: path.id, runId: run.id, userId: path.userId });
 
-    return retryCount;
+    return { retryCount, runId: run.id };
   }
 
   private generateDisplayLabel(knowledgeType?: string | null, cognitiveLevel?: string | null): string | null {
@@ -1546,35 +1838,43 @@ class LearningService {
     return buildSceneSummaryFromFraming(sceneFraming, milestoneCount, taskCount);
   }
 
-  private async updatePathGenerationStatus(pathId: string, patch: PathGenerationStatusPatch): Promise<void> {
+  private async updatePathGenerationStatus(
+    pathId: string,
+    patch: PathGenerationStatusPatch,
+    runId?: string,
+    expectedRunStatus: 'processing' | 'failed' = 'processing'
+  ): Promise<void> {
     try {
-      const existing = await prisma.learning_paths.findUnique({
-        where: { id: pathId },
-        select: { aiPromptTemplate: true }
-      });
+      await prisma.$transaction(async (tx) => {
+        if (runId) await assertGenerationRunFence(tx, pathId, runId, expectedRunStatus);
+        const existing = await tx.learning_paths.findUnique({
+          where: { id: pathId },
+          select: { aiPromptTemplate: true }
+        });
+        if (!existing) return;
 
-      if (!existing) return;
+        const currentTemplate = this.parsePathPromptTemplate(existing.aiPromptTemplate);
+        const currentGeneration = currentTemplate._generation && typeof currentTemplate._generation === 'object'
+          ? currentTemplate._generation
+          : {};
 
-      const currentTemplate = this.parsePathPromptTemplate(existing.aiPromptTemplate);
-      const currentGeneration = currentTemplate._generation && typeof currentTemplate._generation === 'object'
-        ? currentTemplate._generation
-        : {};
-
-      await prisma.learning_paths.update({
-        where: { id: pathId },
-        data: {
-          aiPromptTemplate: JSON.stringify({
-            ...currentTemplate,
-            _generation: {
-              ...currentGeneration,
-              ...patch,
-              updatedAt: patch.updatedAt || new Date().toISOString()
-            }
-          }),
-          updatedAt: new Date()
-        }
+        await tx.learning_paths.update({
+          where: { id: pathId },
+          data: {
+            aiPromptTemplate: JSON.stringify({
+              ...currentTemplate,
+              _generation: {
+                ...currentGeneration,
+                ...patch,
+                updatedAt: patch.updatedAt || new Date().toISOString()
+              }
+            }),
+            updatedAt: new Date()
+          }
+        });
       });
     } catch (error) {
+      if (error instanceof Error && error.message === 'GENERATION_RUN_FENCED') throw error;
       logger.warn('更新路径生成状态失败', {
         pathId,
         patch,
@@ -1627,11 +1927,144 @@ class LearningService {
   }
 
   async recoverStaleGeneratingPaths(): Promise<number> {
+    const now = new Date();
+    const staleRuns = await prisma.path_generation_runs.findMany({
+      where: {
+        status: { in: ['queued', 'processing'] },
+        OR: [
+          { leaseExpiresAt: { lte: now } },
+          { status: 'processing', leaseExpiresAt: null }
+        ]
+      },
+      select: {
+        id: true,
+        learningPathId: true,
+        phase: true,
+        attempt: true,
+        inputSnapshot: true,
+        rollbackSnapshot: true,
+        learningPath: { select: { activeGenerationRunId: true } }
+      }
+    });
+    let recoveredRuns = 0;
+    for (const run of staleRuns) {
+      if (run.learningPath.activeGenerationRunId !== run.id) {
+        await prisma.path_generation_runs.updateMany({
+          where: { id: run.id, status: { in: ['queued', 'processing'] } },
+          data: {
+            status: 'cancelled',
+            retryAllowed: false,
+            leaseExpiresAt: now,
+            finishedAt: now,
+            errorCode: 'SUPERSEDED',
+            errorMessage: '已由新的生成任务接管'
+          }
+        });
+        continue;
+      }
+      let inputSnapshot: GeneratePathData | null = null;
+      let rollbackSnapshot: PathGenerationRollbackSnapshotV1 | null = null;
+      try {
+        inputSnapshot = run.inputSnapshot ? JSON.parse(run.inputSnapshot) as GeneratePathData : null;
+      } catch {
+        inputSnapshot = null;
+      }
+      try {
+        const parsed = run.rollbackSnapshot ? JSON.parse(run.rollbackSnapshot) : null;
+        rollbackSnapshot = parsed?.version === 1 ? parsed as PathGenerationRollbackSnapshotV1 : null;
+      } catch {
+        rollbackSnapshot = null;
+      }
+      const restoreExistingCorePath = run.phase === 'core'
+        && inputSnapshot?.createdPlaceholder !== true
+        && rollbackSnapshot?.path.status !== 'generating'
+        && rollbackSnapshot?.path.status !== 'failed'
+        && rollbackSnapshot?.path.restoreStatus === true;
+      const claimOutcome = await claimExpiredGenerationRun(prisma, {
+        runId: run.id,
+        pathId: run.learningPathId,
+        expiredAt: now,
+        restorePath: restoreExistingCorePath
+          ? {
+              status: rollbackSnapshot.path.status,
+              aiPromptTemplate: rollbackSnapshot.path.aiPromptTemplate
+            }
+          : undefined
+      });
+      if (claimOutcome.claimed) {
+        const pathStateChanged = claimOutcome.pathState?.status !== 'generating';
+        const hasExistingContent = run.phase === 'core'
+          && inputSnapshot?.createdPlaceholder !== true
+          && (claimOutcome.pathState?.milestoneCount || 0) > 0;
+        const unsafeExistingCoreState = run.phase === 'core'
+          && inputSnapshot?.createdPlaceholder !== true
+          && (!rollbackSnapshot || !claimOutcome.pathRestored)
+          && hasExistingContent;
+        const existingPathRestoreFailed = restoreExistingCorePath && !claimOutcome.pathRestored;
+        const preserveCurrentPath = run.phase === 'core'
+          && (pathStateChanged || unsafeExistingCoreState || existingPathRestoreFailed);
+
+        if (!claimOutcome.pathRestored && !preserveCurrentPath) {
+          await this.updatePathGenerationStatus(run.learningPathId, run.phase === 'stageDesign'
+            ? { stageDesign: 'failed', lastError: 'GENERATION_LEASE_EXPIRED' }
+            : { core: 'failed', lastError: 'GENERATION_LEASE_EXPIRED' }, run.id, 'failed');
+        }
+        if (run.phase === 'core' && !claimOutcome.pathRestored && !preserveCurrentPath) {
+          await prisma.learning_paths.updateMany({
+            where: {
+              id: run.learningPathId,
+              activeGenerationRunId: run.id,
+              status: 'generating'
+            },
+            data: { status: 'failed', updatedAt: new Date() }
+          });
+        }
+        recoveredRuns += 1;
+        const canAutoReplace = run.phase === 'core'
+          && inputSnapshot
+          && run.attempt < 3
+          && !pathStateChanged
+          && !unsafeExistingCoreState
+          && (inputSnapshot.createdPlaceholder === true || claimOutcome.pathRestored);
+        if (canAutoReplace) {
+          try {
+            const replacement = await this.createAndClaimGenerationRun(
+              run.learningPathId,
+              'core',
+              'core',
+              0,
+              undefined,
+              run.id
+            );
+            const recoveredInput: GeneratePathData = {
+              ...inputSnapshot,
+              existingPathId: run.learningPathId,
+              generationRunId: replacement.id,
+              createdPlaceholder: inputSnapshot.createdPlaceholder,
+              deadline: inputSnapshot.deadline ? new Date(inputSnapshot.deadline) : undefined
+            };
+            runBackgroundTask(
+              'learning.path.core-recovery',
+              () => this.generateLearningPath(recoveredInput),
+              { pathId: run.learningPathId, runId: replacement.id }
+            );
+          } catch (error) {
+            logger.warn('核心路径生成输入快照不可恢复', {
+              pathId: run.learningPathId,
+              runId: run.id,
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
+        }
+      }
+    }
+
     const staleBefore = new Date(Date.now() - STALE_GENERATING_PATH_MINUTES * 60 * 1000);
 
     const stalePaths = await prisma.learning_paths.findMany({
       where: {
         status: 'generating',
+        activeGenerationRunId: null,
         updatedAt: { lt: staleBefore }
       },
       select: { id: true }
@@ -1640,6 +2073,7 @@ class LearningService {
     const result = await prisma.learning_paths.updateMany({
       where: {
         status: 'generating',
+        activeGenerationRunId: null,
         updatedAt: { lt: staleBefore }
       },
       data: {
@@ -1656,12 +2090,11 @@ class LearningService {
 
       await Promise.all(stalePaths.map((path) => this.updatePathGenerationStatus(path.id, {
         core: 'failed',
-        stageDesign: 'failed',
         lastError: 'GENERATION_TIMEOUT_ORPHANED'
       })));
     }
 
-    return result.count;
+    return recoveredRuns + result.count;
   }
 
   async retryEligibleFailedPathPreparations(): Promise<number> {
@@ -1672,6 +2105,7 @@ class LearningService {
       },
       select: {
         id: true,
+        status: true,
         userId: true,
         title: true,
         name: true,
@@ -1680,18 +2114,19 @@ class LearningService {
         deadline: true,
         deadlineText: true,
         aiPromptTemplate: true,
+        activeGenerationRunId: true,
         updatedAt: true
       },
-      orderBy: { updatedAt: 'desc' },
-      take: ENRICHMENT_AUTO_RETRY_SCAN_LIMIT
+      orderBy: { updatedAt: 'desc' }
     });
 
     let retriedCount = 0;
 
     for (const path of candidatePaths) {
       const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate);
-
-      if (generationStatus?.stageDesign !== 'failed') {
+      const activeRun = await this.getActiveGenerationRun(path.id, path.activeGenerationRunId);
+      const retry = resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt);
+      if (!retry.allowed || retry.retryType !== 'stageDesign') {
         continue;
       }
 
@@ -1769,6 +2204,8 @@ class LearningService {
       where: {
         userId: path.userId,
         taskId: { in: taskIds },
+        status: 'completed',
+        wrapup: { not: null },
       },
       select: {
         taskId: true,
@@ -1964,7 +2401,6 @@ class LearningService {
 
   private async analyzePathWithAgent(data: GeneratePathData): Promise<any> {
     try {
-      const { pathAgentHandler } = await import('../../skills/path-planning');
       const agentInput = this.buildPathAgentInput(data);
       const agentContext: any = {
         userId: data.userId,
@@ -2002,11 +2438,10 @@ class LearningService {
         };
       }
 
-      const agentResult = await runWithContext({
-        userId: data.userId,
-        agentId: 'skill:path-planning',
-        action: 'generateLearningPath'
-      }, () => pathAgentHandler(agentInput, agentContext));
+      const agentResult = await executeSkill(pathAgentDefinition, {
+        input: agentInput,
+        context: agentContext,
+      });
 
       const normalizedPathResult = normalizeAgentOutput('skill:path-planning', agentResult);
       const pathPayload =
@@ -2043,6 +2478,9 @@ class LearningService {
         subject: path.subject || '综合',
         difficulty: data.userProfile?.skillLevel || 'beginner',
         estimatedTotalHours: path.estimatedHours || 0,
+        // AI 生成的路径简短摘要（path-planning 输出），随 aiPromptTemplate 持久化，
+        // 供列表接口 parsePathSummary 读取、前端卡片展示
+        summary: typeof path.summary === 'string' && path.summary.trim() ? path.summary.trim() : null,
         sceneFraming: data.userProfile?.pathSceneFraming || null,
         sceneFramingRaw: data.userProfile?.pathSceneFramingRaw || null,
         sceneFramingInput: data.userProfile?.pathSceneFramingInput || null,
@@ -2070,12 +2508,13 @@ class LearningService {
     }
   }
 
-  private async persistGeneratedPath(data: GeneratePathData, analysis: any, milestonesData: any[]) {
+  private async persistGeneratedPath(data: GeneratePathData, analysis: any, milestonesData: any[], runId?: string) {
     const cognitiveDesign = this.buildPathCognitiveDesign(data, analysis);
     const normalizedMilestonesData = this.normalizeMilestonesWithConcepts(milestonesData, cognitiveDesign);
     const adjustmentPolicy = this.buildPathAdjustmentPolicy();
     const adjustmentEvidence = this.buildPathAdjustmentEvidence(data);
-      const promptTemplatePayload = {
+    const generationUpdatedAt = new Date().toISOString();
+    const promptTemplatePayload = {
         ...analysis,
         source: data.source || (data.sourceConversationId ? 'goal' : 'api'),
         mode: data.mode || 'generate',
@@ -2090,16 +2529,34 @@ class LearningService {
         cognitiveDesign,
         adjustmentPolicy,
         adjustmentEvidence,
+        _generation: {
+          core: 'succeeded',
+          coreStep: 'completed',
+          stageDesign: 'pending',
+          lastError: null,
+          sourceConversationId: data.sourceConversationId || null,
+          triggerSource: data.sourceConversationId ? 'goal-conversation' : data.source === 'learn' ? 'ai-teaching' : data.source === 'replan' ? 'system' : 'api',
+          updatedAt: generationUpdatedAt,
+        }
     };
 
     const learningPath = await prisma.$transaction(async (tx) => {
       let path;
       if (data.existingPathId) {
+        if (!runId) throw new Error('GENERATION_RUN_REQUIRED');
+        await assertGenerationRunFence(tx, data.existingPathId, runId);
+        const lockedPath = await tx.learning_paths.updateMany({
+          where: { id: data.existingPathId, activeGenerationRunId: runId },
+          data: { updatedAt: new Date() }
+        });
+        if (lockedPath.count !== 1) throw new Error('GENERATION_RUN_FENCED');
+        await assertPathMutationSafe(tx, data.existingPathId, 'replace-path');
+        const pathTitle = cleanPathTitle(analysis.pathName || `${analysis.subject || '个性化'}学习路径`);
         path = await tx.learning_paths.update({
           where: { id: data.existingPathId },
           data: {
-            title: analysis.pathName || `${analysis.subject || '个性化'}学习路径`,
-            name: analysis.pathName || `${analysis.subject || '个性化'}学习路径`,
+            title: pathTitle,
+            name: pathTitle,
             description: (data.description && !data.description.includes('\uFFFD'))
               ? data.description
               : (normalizedMilestonesData.map((m: any) => m.goal || m.name).join('; ') || data.description || ''),
@@ -2124,12 +2581,13 @@ class LearningService {
           where: { learningPathId: path.id }
         });
       } else {
+        const pathTitle = cleanPathTitle(analysis.pathName || `${analysis.subject || '个性化'}学习路径`);
         path = await tx.learning_paths.create({
           data: {
             id: `lp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
             userId: data.userId,
-            title: analysis.pathName || `${analysis.subject || '个性化'}学习路径`,
-            name: analysis.pathName || `${analysis.subject || '个性化'}学习路径`,
+            title: pathTitle,
+            name: pathTitle,
             description: (data.description && !data.description.includes('\uFFFD'))
               ? data.description
               : (normalizedMilestonesData.map((m: any) => m.goal || m.name).join('; ') || data.description || ''),
@@ -2150,21 +2608,6 @@ class LearningService {
           }
         });
       }
-
-      await tx.path_decompositions.create({
-        data: {
-          id: `pd_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-          userId: data.userId,
-          goal: data.description,
-          stages: JSON.stringify(normalizedMilestonesData.map((m: any) => m.name) || []),
-          milestones: JSON.stringify(normalizedMilestonesData),
-          subtasks: JSON.stringify([]),
-          aiAnalysis: JSON.stringify(analysis),
-          feasibility: analysis.feasibility,
-          difficulty: analysis.difficulty,
-          recommendations: JSON.stringify(analysis.recommendations || [])
-        }
-      });
 
       for (let i = 0; i < normalizedMilestonesData.length; i++) {
         const milestoneData = normalizedMilestonesData[i];
@@ -2195,8 +2638,76 @@ class LearningService {
 
       await tx.learning_paths.update({
         where: { id: path.id },
-          data: { totalMilestones: normalizedMilestonesData.length }
+        data: { totalMilestones: normalizedMilestonesData.length }
       });
+
+      if (runId) {
+        await assertGenerationRunFence(tx, path.id, runId);
+        await tx.path_generation_runs.update({
+          where: { id: runId },
+          data: {
+            status: 'succeeded',
+            retryAllowed: false,
+            completedItems: normalizedMilestonesData.length,
+            totalItems: normalizedMilestonesData.length,
+            progress: 100,
+            heartbeatAt: new Date(),
+            leaseExpiresAt: new Date(),
+            finishedAt: new Date(),
+            errorCode: null,
+            errorMessage: null
+          }
+        });
+
+        const stageRunId = this.createGenerationId('pgr');
+        const stageRollbackSnapshot: PathGenerationRollbackSnapshotV1 = {
+          version: 1,
+          path: {
+            activeGenerationRunId: runId,
+            aiPromptTemplate: path.aiPromptTemplate,
+            status: path.status,
+            restoreStatus: false
+          },
+          supersededRun: null
+        };
+        await tx.path_generation_runs.create({
+          data: {
+            id: stageRunId,
+            learningPathId: path.id,
+            phase: 'stageDesign',
+            status: 'queued',
+            retryAllowed: false,
+            attempt: await tx.path_generation_runs.count({
+              where: { learningPathId: path.id, phase: 'stageDesign' }
+            }) + 1,
+            totalItems: normalizedMilestonesData.length,
+            completedItems: 0,
+            progress: 0,
+            rollbackSnapshot: JSON.stringify(stageRollbackSnapshot),
+            leaseExpiresAt: new Date(Date.now() + PATH_GENERATION_LEASE_MS)
+          }
+        });
+        await tx.learning_paths.update({
+          where: { id: path.id },
+          data: { activeGenerationRunId: stageRunId, updatedAt: new Date() }
+        });
+        (path as any).activeGenerationRunId = stageRunId;
+      }
+
+      await enqueueDomainEvent(tx, createDomainEvent({
+        type: 'path:created',
+        aggregateType: 'path',
+        aggregateId: path.id,
+        userId: data.userId,
+        source: 'learning-service',
+        data: {
+          pathId: path.id,
+          title: path.title,
+          subject: path.subject,
+          milestoneCount: normalizedMilestonesData.length,
+          sourceConversationId: data.sourceConversationId || null
+        }
+      }));
 
       return path;
     });
@@ -2204,9 +2715,28 @@ class LearningService {
     return this.getLearningPath(learningPath.id);
   }
 
-  private async enrichLearningPathWithAnderson(pathId: string, data: GeneratePathData, analysis: any): Promise<void> {
+  private async enrichLearningPathWithAnderson(
+    pathId: string,
+    runId: string,
+    data: GeneratePathData,
+    analysis: any
+  ): Promise<void> {
     const startTime = Date.now();
     const triggerSource = data.sourceConversationId ? 'goal-conversation' : 'api';
+    let stopHeartbeat = () => undefined;
+    let inFlightStageItemIds: Set<string> | null = null;
+
+    try {
+      const persistedRun = await this.getActiveGenerationRun(pathId, runId);
+      const run = persistedRun?.phase === 'stageDesign'
+        ? persistedRun.status === 'queued'
+          ? await this.claimQueuedGenerationRun(pathId, runId)
+          : persistedRun
+        : null;
+      if (!run || run.status !== 'processing') throw new Error('GENERATION_RUN_FENCED');
+      await assertGenerationRunFence(prisma, pathId, runId);
+      await assertPathMutationSafe(prisma, pathId, 'replace-tasks');
+      stopHeartbeat = this.startGenerationHeartbeat(pathId, runId);
 
       await this.recordPathGenerationStageLog({
         userId: data.userId,
@@ -2223,10 +2753,9 @@ class LearningService {
         lastError: null,
         sourceConversationId: data.sourceConversationId || null,
         triggerSource,
-      updatedAt: new Date().toISOString()
-    });
+        updatedAt: new Date().toISOString()
+      }, runId);
 
-    try {
       logger.info('开始阶段任务设计...', { userId: data.userId, pathId });
 
       const learningPath = await prisma.learning_paths.findUnique({
@@ -2246,6 +2775,14 @@ class LearningService {
       if (!learningPath) {
         throw new Error('PATH_ENRICHMENT_TARGET_NOT_FOUND');
       }
+      if (learningPath.milestones.length === 0) {
+        throw new Error('PATH_STAGE_DESIGN_HAS_NO_STAGES');
+      }
+      await this.heartbeatGenerationRun(pathId, runId, {
+        totalItems: learningPath.milestones.length,
+        completedItems: 0,
+        progress: 0
+      });
 
       const pathCognitiveDesign = parsePathCognitiveDesign(learningPath.aiPromptTemplate || null);
       const parsedTemplate = this.parsePathPromptTemplate(learningPath.aiPromptTemplate || null);
@@ -2267,7 +2804,28 @@ class LearningService {
       }> = [];
       let designedTaskCount = 0;
 
-      for (const milestone of learningPath.milestones) {
+      // 阶段任务设计并发度：串行 M 次 LLM 是纯时钟浪费；
+      // 限流 2 路，兼顾 LLM 速率限制与 SQLite 写入串行化。
+      const STAGE_DESIGN_CONCURRENCY = 2;
+      inFlightStageItemIds = new Set<string>();
+      let completedStageCount = 0;
+
+      const processStageDesign = async (stageIndex: number): Promise<void> => {
+        const milestone = learningPath.milestones[stageIndex];
+        const stageStartedAt = new Date();
+        const stageItemId = this.createGenerationId('pgsi');
+        inFlightStageItemIds.add(stageItemId);
+        await prisma.path_generation_stage_items.create({
+          data: {
+            id: stageItemId,
+            runId,
+            milestoneId: milestone.id,
+            stageNumber: milestone.stageNumber,
+            status: 'processing',
+            heartbeatAt: stageStartedAt,
+            startedAt: stageStartedAt
+          }
+        });
         const stageDesignerInput = {
           milestone: {
             stageNumber: milestone.stageNumber,
@@ -2283,6 +2841,7 @@ class LearningService {
         const stageResult = await executeSkill(stageDesignerDefinition, stageDesignerInput);
 
         const stageTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
+        assertStageTasksPresent(milestone.stageNumber, stageTasks);
         stageDesignRawOutputs[`stage-${milestone.stageNumber}`] = {
           inputPayload: stageDesignerInput,
           rawModelOutput: stageResult?._debug?.rawModelOutput || null,
@@ -2296,9 +2855,42 @@ class LearningService {
           stageNumber: milestone.stageNumber,
           subtasks: stageTasks,
         });
+        const stageFinishedAt = new Date();
+        await prisma.path_generation_stage_items.update({
+          where: { id: stageItemId },
+          data: {
+            status: 'succeeded',
+            taskCount: stageTasks.length,
+            heartbeatAt: stageFinishedAt,
+            finishedAt: stageFinishedAt,
+            errorCode: null,
+            errorMessage: null
+          }
+        });
+        inFlightStageItemIds.delete(stageItemId);
+        completedStageCount += 1;
+        await this.heartbeatGenerationRun(
+          pathId,
+          runId,
+          calculateStageProgress(completedStageCount, learningPath.milestones.length)
+        );
+      };
+
+      for (let batchStart = 0; batchStart < learningPath.milestones.length; batchStart += STAGE_DESIGN_CONCURRENCY) {
+        const batchIndexes = learningPath.milestones
+          .map((_, index) => index)
+          .slice(batchStart, batchStart + STAGE_DESIGN_CONCURRENCY);
+        await Promise.all(batchIndexes.map(processStageDesign));
       }
 
       await prisma.$transaction(async (tx) => {
+        await assertGenerationRunFence(tx, pathId, runId);
+        const lockedPath = await tx.learning_paths.updateMany({
+          where: { id: pathId, activeGenerationRunId: runId },
+          data: { updatedAt: new Date() }
+        });
+        if (lockedPath.count !== 1) throw new Error('GENERATION_RUN_FENCED');
+        await assertPathMutationSafe(tx, pathId, 'replace-tasks');
         for (const milestone of learningPath.milestones) {
           await tx.subtasks.deleteMany({ where: { milestoneId: milestone.id } });
           const stageOutput = stageDesignOutputs.find((item) => item.milestoneId === milestone.id);
@@ -2348,10 +2940,47 @@ class LearningService {
             aiPromptTemplate: JSON.stringify({
               ...parsedTemplate,
               stageDesigns: stageDesignRawOutputs,
+              _generation: {
+                ...(parsedTemplate?._generation && typeof parsedTemplate._generation === 'object' ? parsedTemplate._generation : {}),
+                stageDesign: 'succeeded',
+                lastError: null,
+                sourceConversationId: data.sourceConversationId || null,
+                triggerSource,
+                updatedAt: new Date().toISOString()
+              }
             }),
             updatedAt: new Date(),
           }
         });
+        await tx.path_generation_runs.update({
+          where: { id: runId },
+          data: {
+            status: 'succeeded',
+            retryAllowed: false,
+            completedItems: learningPath.milestones.length,
+            totalItems: learningPath.milestones.length,
+            progress: 100,
+            heartbeatAt: new Date(),
+            leaseExpiresAt: new Date(),
+            finishedAt: new Date(),
+            errorCode: null,
+            errorMessage: null
+          }
+        });
+        await enqueueDomainEvent(tx, createDomainEvent({
+          type: 'path:generated',
+          aggregateType: 'path',
+          aggregateId: pathId,
+          userId: data.userId,
+          source: 'learning-service',
+          data: {
+            pathId,
+            taskCount: designedTaskCount,
+            milestoneCount: learningPath.milestones.length,
+            sourceConversationId: data.sourceConversationId || null,
+            triggerSource
+          }
+        }));
       });
 
       logger.info('阶段任务设计完成', {
@@ -2374,34 +3003,41 @@ class LearningService {
           designedStages: learningPath.milestones.length
         }
       });
-      await this.updatePathGenerationStatus(pathId, {
-        stageDesign: 'succeeded',
-        lastError: null,
-        sourceConversationId: data.sourceConversationId || null,
-        triggerSource,
-        updatedAt: new Date().toISOString()
-      });
-      this.emitLearningEvent({
-        type: 'path:adjusted',
-        source: 'learning-service',
-        userId: data.userId,
-        data: {
-          pathId,
-          taskCount: designedTaskCount,
-          milestoneCount: learningPath.milestones.length,
-          reason: 'stage-design-succeeded',
-          sourceConversationId: data.sourceConversationId || null,
-          triggerSource,
-        }
-      }, 'path-stage-design')
-      void dashboardGuidanceSnapshotService.refresh(data.userId, 'path-created');
+      dashboardGuidanceSnapshotService.refreshInBackground(data.userId, 'path-created');
     } catch (andersonError: any) {
+      if (andersonError instanceof Error && andersonError.message === 'GENERATION_RUN_FENCED') {
+        logger.info('忽略已失效阶段生成任务', { pathId, runId });
+        return;
+      }
+      if (isPathMutationConflictError(andersonError)) {
+        await this.restorePathAfterMutationConflict(pathId, runId, andersonError);
+        logger.info('阶段任务生成因学习已开始而取消', {
+          pathId,
+          runId,
+          code: andersonError.code
+        });
+        return;
+      }
+
       logger.warn('阶段任务设计失败，路径保持骨架可用', {
         pathId,
         userId: data.userId,
         error: andersonError?.message || String(andersonError)
       });
 
+      if (inFlightStageItemIds && inFlightStageItemIds.size > 0) {
+        const failedAt = new Date();
+        await prisma.path_generation_stage_items.updateMany({
+          where: { id: { in: [...inFlightStageItemIds] }, runId, status: 'processing' },
+          data: {
+            status: 'failed',
+            heartbeatAt: failedAt,
+            finishedAt: failedAt,
+            errorCode: 'PATH_STAGE_DESIGN_ITEM_FAILED',
+            errorMessage: andersonError?.message || String(andersonError)
+          }
+        });
+      }
       await this.recordPathGenerationStageLog({
         userId: data.userId,
         pathId,
@@ -2413,13 +3049,27 @@ class LearningService {
         error: andersonError?.message || String(andersonError),
         errorCode: 'PATH_ENRICHMENT_FAILED'
       });
-      await this.updatePathGenerationStatus(pathId, {
-        stageDesign: 'failed',
-        lastError: andersonError?.message || String(andersonError),
-        sourceConversationId: data.sourceConversationId || null,
-        triggerSource,
-        updatedAt: new Date().toISOString()
-      });
+      try {
+        await this.updatePathGenerationStatus(pathId, {
+          stageDesign: 'failed',
+          lastError: andersonError?.message || String(andersonError),
+          sourceConversationId: data.sourceConversationId || null,
+          triggerSource,
+          updatedAt: new Date().toISOString()
+        }, runId);
+        await this.failGenerationRun(
+          pathId,
+          runId,
+          andersonError,
+          andersonError?.message?.includes('EMPTY_TASKS') ? 'PATH_STAGE_DESIGN_ZERO_TASKS' : 'PATH_ENRICHMENT_FAILED',
+          'stageDesign'
+        );
+      } catch (fenceError) {
+        if (!(fenceError instanceof Error) || fenceError.message !== 'GENERATION_RUN_FENCED') throw fenceError;
+        logger.info('忽略已失效阶段生成任务的迟到失败', { pathId, runId });
+      }
+    } finally {
+      stopHeartbeat();
     }
   }
 
@@ -2432,6 +3082,36 @@ class LearningService {
         : data.source === 'replan'
           ? 'system'
           : 'api';
+
+    const coreRun = data.existingPathId
+      ? data.generationRunId
+        ? await this.getActiveGenerationRun(data.existingPathId, data.generationRunId)
+        : null
+      : null;
+    if (data.existingPathId && (!coreRun || coreRun.status !== 'processing')) {
+      throw new Error(data.generationRunId ? 'GENERATION_RUN_FENCED' : 'GENERATION_RUN_REQUIRED');
+    }
+    const coreRunId = coreRun?.id as string | undefined;
+
+    if (data.existingPathId && coreRunId) {
+      await prisma.path_generation_runs.updateMany({
+        where: {
+          id: coreRunId,
+          learningPathId: data.existingPathId,
+          status: 'processing'
+        },
+        data: {
+          inputSnapshot: JSON.stringify({
+            ...data,
+            deadline: data.deadline?.toISOString?.() || data.deadline || null,
+            generationRunId: undefined
+          })
+        }
+      });
+    }
+    const stopHeartbeat = data.existingPathId && coreRunId
+      ? this.startGenerationHeartbeat(data.existingPathId, coreRunId)
+      : null;
 
     await this.recordPathGenerationStageLog({
       userId: data.userId,
@@ -2456,12 +3136,15 @@ class LearningService {
         sourceConversationId: data.sourceConversationId || null,
         triggerSource,
         updatedAt: new Date().toISOString()
-      });
+      }, coreRunId);
     }
 
     try {
       logger.info('开始生成学习路径...', { userId: data.userId, goal: data.description });
       const analysis = await this.analyzePathWithAgent(data);
+      if (data.existingPathId && coreRunId) {
+        await this.heartbeatGenerationRun(data.existingPathId, coreRunId, { progress: 50 });
+      }
 
       if (!analysis) {
         throw new Error('PATH_GENERATION_FAILED: empty analysis');
@@ -2477,7 +3160,7 @@ class LearningService {
       const fullPath = await this.persistGeneratedPath(data, {
         ...analysis,
         cognitiveDesign,
-      }, normalizedMilestonesData);
+      }, normalizedMilestonesData, coreRunId);
       const duration = Date.now() - startTime;
       const sceneSummary = buildSceneSummaryFromFraming(
         data.userProfile?.pathSceneFraming || null,
@@ -2506,18 +3189,41 @@ class LearningService {
         }
       });
 
-      await this.updatePathGenerationStatus(fullPath.id, {
-        core: 'succeeded',
-        stageDesign: 'pending',
-        lastError: null,
-        sourceConversationId: data.sourceConversationId || null,
-        triggerSource,
-        scene: sceneSummary,
-        updatedAt: new Date().toISOString()
-      });
+      if (sceneSummary) {
+        const persistedTemplate = this.parsePathPromptTemplate(fullPath.aiPromptTemplate || null);
+        await prisma.learning_paths.updateMany({
+          where: {
+            id: fullPath.id,
+            ...(fullPath.activeGenerationRunId ? { activeGenerationRunId: fullPath.activeGenerationRunId } : {})
+          },
+          data: {
+            aiPromptTemplate: JSON.stringify({
+              ...persistedTemplate,
+              _generation: {
+                ...(persistedTemplate._generation || {}),
+                scene: sceneSummary
+              }
+            })
+          }
+        });
+      }
 
       return { fullPath, analysis };
     } catch (error: any) {
+      if (data.existingPathId && coreRunId) {
+        if (isPathMutationConflictError(error)) {
+          await this.restorePathAfterMutationConflict(data.existingPathId, coreRunId, error);
+          throw error;
+        }
+        if (!data.createdPlaceholder) {
+          await this.restorePathAfterMutationConflict(data.existingPathId, coreRunId, error, {
+            runStatus: 'failed',
+            retryAllowed: true,
+            errorCode: 'PATH_GENERATION_CORE_FAILED'
+          });
+        }
+      }
+
       const duration = Date.now() - startTime;
       logger.error('生成学习路径失败', {
         error: error?.message || String(error),
@@ -2539,44 +3245,77 @@ class LearningService {
         errorCode: 'PATH_GENERATION_CORE_FAILED'
       });
 
-      if (data.existingPathId) {
-        await this.updatePathGenerationStatus(data.existingPathId, {
-          core: 'failed',
-          stageDesign: 'failed',
-          lastError: error?.message || String(error),
-          sourceConversationId: data.sourceConversationId || null,
-          triggerSource,
-          updatedAt: new Date().toISOString()
-        });
+      if (data.existingPathId && data.createdPlaceholder) {
+        try {
+          await this.updatePathGenerationStatus(data.existingPathId, {
+            core: 'failed',
+            lastError: error?.message || String(error),
+            sourceConversationId: data.sourceConversationId || null,
+            triggerSource,
+            updatedAt: new Date().toISOString()
+          }, coreRunId);
+          if (coreRunId) {
+            await this.failGenerationRun(
+              data.existingPathId,
+              coreRunId,
+              error,
+              'PATH_GENERATION_CORE_FAILED',
+              'core',
+              'failed'
+            );
+          }
+        } catch (fenceError) {
+          if (!(fenceError instanceof Error) || fenceError.message !== 'GENERATION_RUN_FENCED') throw fenceError;
+          logger.info('忽略已失效核心生成任务的迟到失败', { pathId: data.existingPathId, runId: coreRunId });
+        }
       }
 
       throw new Error(`生成学习路径失败：${error?.message || '未知错误'}。请稍后重试或联系支持。`);
+    } finally {
+      stopHeartbeat?.();
     }
   }
 
   // 使用 AI 生成学习路径 (阶段化设计)
   async generateLearningPath(data: GeneratePathData) {
-    const { fullPath, analysis } = await this.generateLearningPathCore(data);
+    let generationData = data;
+    if (!data.existingPathId) {
+      const placeholder = await prisma.learning_paths.create({
+        data: {
+          id: `lp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+          userId: data.userId,
+          title: data.description || '个性化学习路径',
+          name: data.description || '个性化学习路径',
+          description: data.description,
+          subject: data.subject || '综合',
+          status: 'generating',
+          difficulty: data.userProfile?.skillLevel || 'beginner',
+          estimatedHours: 0,
+          aiGenerated: true,
+          deadline: data.deadline || null,
+          deadlineText: data.deadlineText || null,
+          updatedAt: new Date()
+        }
+      });
+      const run = await this.createAndClaimGenerationRun(placeholder.id, 'core', null, 0, undefined, null);
+      generationData = {
+        ...data,
+        existingPathId: placeholder.id,
+        generationRunId: run.id,
+        createdPlaceholder: true
+      };
+    }
 
-    void this.enrichLearningPathWithAnderson(fullPath.id, data, analysis);
-    this.emitLearningEvent({
-      type: 'path:created',
-      source: 'learning-service',
-      userId: data.userId,
-      data: {
-        pathId: fullPath.id,
-        pathName: fullPath.title || fullPath.name || data.description,
-        totalMilestones: Array.isArray(fullPath.milestones) ? fullPath.milestones.length : 0,
-        sourceConversationId: data.sourceConversationId || null,
-        triggerSource: data.source || 'api',
-      }
-    }, 'path-created')
-    void learnerSnapshotRefreshService.refresh({
-      userId: data.userId,
-      pathId: fullPath.id,
-      scope: 'path',
-    });
-    void dashboardGuidanceSnapshotService.refresh(data.userId, 'path-created');
+    const { fullPath, analysis } = await this.generateLearningPathCore(generationData);
+
+    const stageRunId = fullPath.activeGenerationRunId;
+    if (!stageRunId) throw new Error('GENERATION_RUN_REQUIRED');
+    runBackgroundTask(
+      'learning.path.stage-enrichment',
+      () => this.enrichLearningPathWithAnderson(fullPath.id, stageRunId, generationData, analysis),
+      { pathId: fullPath.id, runId: stageRunId, userId: generationData.userId }
+    );
+    dashboardGuidanceSnapshotService.refreshInBackground(generationData.userId, 'path-created');
 
     return fullPath;
   }
@@ -2704,7 +3443,18 @@ const learningPath = await prisma.learning_paths.findUnique({
       }
 
       const pathWithActualMinutes = await this.attachActualMinutesToPath(path);
-      const accessState = this.getPathLearningAccessState(path.status, path.aiPromptTemplate);
+      const activeRun = await this.getActiveGenerationRun(path.id, path.activeGenerationRunId);
+      const taskCount = pathWithActualMinutes.milestones.reduce(
+        (sum: number, milestone: any) => sum + ((milestone.subtasks || []).length),
+        0
+      );
+      const accessState = this.getPathLearningAccessState(
+        path.status,
+        path.aiPromptTemplate,
+        activeRun,
+        path.aiGenerated,
+        taskCount
+      );
       const processDetail = this.buildPathProcessDetail(pathWithActualMinutes);
       const stageTraces = await this.getPathStageTraces(path.id, processDetail.sourceConversationId || null);
 
@@ -2712,6 +3462,7 @@ const learningPath = await prisma.learning_paths.findUnique({
         ...pathWithActualMinutes,
         summary: parsePathSummary(path.aiPromptTemplate),
         generationStatus: accessState.generationStatus,
+        generationRun: buildGenerationRunStatus(activeRun),
         sceneSummary: this.getPathSceneSummary(path.aiPromptTemplate, pathWithActualMinutes.milestones),
         cognitiveDesign: parsePathCognitiveDesign(path.aiPromptTemplate),
         adjustmentPolicy: parsePathAdjustmentPolicy(path.aiPromptTemplate),
@@ -2738,12 +3489,117 @@ const learningPath = await prisma.learning_paths.findUnique({
     }
   }
 
+  async getPathGenerationLifecycle(pathId: string, userId: string) {
+    const path = await prisma.learning_paths.findUnique({
+      where: { id: pathId },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        aiGenerated: true,
+        aiPromptTemplate: true,
+        activeGenerationRunId: true,
+        totalMilestones: true,
+        updatedAt: true,
+        activeGenerationRun: true,
+        milestones: {
+          select: {
+            stageNumber: true,
+            subtasks: { select: { id: true } }
+          },
+          orderBy: { stageNumber: 'asc' }
+        }
+      }
+    });
+
+    if (!path) throw new Error('学习路径不存在');
+    if (path.userId !== userId) throw new Error('无权访问此学习路径');
+
+    const run = path.activeGenerationRun;
+    const legacy = parsePathGenerationStatus(path.aiPromptTemplate);
+    const totalStages = Math.max(path.totalMilestones || 0, path.milestones.length, run?.totalItems || 0);
+    const taskCount = path.milestones.reduce((sum, milestone) => sum + milestone.subtasks.length, 0);
+    const accessState = this.getPathLearningAccessState(
+      path.status,
+      path.aiPromptTemplate,
+      run,
+      path.aiGenerated,
+      taskCount
+    );
+    const stale = isGenerationRunStale(run);
+    const retry = resolveGenerationRetry(path.status, legacy, run, path.updatedAt);
+
+    let phase: 'core' | 'stage_design' | 'ready' = 'ready';
+    let status: 'queued' | 'processing' | 'stale' | 'failed' | 'ready' = 'ready';
+
+    if (run && run.status !== 'cancelled') {
+      if (run.status === 'succeeded' && run.phase === 'stageDesign') {
+        phase = 'ready';
+        status = 'ready';
+      } else {
+        phase = run.phase === 'stageDesign' ? 'stage_design' : 'core';
+      }
+      if (stale) status = 'stale';
+      else if (run.status === 'failed') status = 'failed';
+      else if (run.status === 'queued') status = 'queued';
+      else if (run.status === 'processing') status = 'processing';
+      else if (run.status === 'succeeded' && run.phase === 'core') {
+        phase = 'stage_design';
+        status = 'queued';
+      }
+    } else if (path.status === 'generating' || path.status === 'failed' || legacy?.core === 'failed') {
+      phase = 'core';
+      status = path.status === 'failed' || legacy?.core === 'failed' ? 'failed' : 'processing';
+    } else if (legacy?.stageDesign === 'failed') {
+      phase = 'stage_design';
+      status = 'failed';
+    } else if (legacy?.stageDesign === 'pending' || legacy?.stageDesign === 'processing') {
+      phase = 'stage_design';
+      status = 'processing';
+    } else if (!accessState.canStartLearning) {
+      phase = 'stage_design';
+      status = 'stale';
+    }
+
+    const lifecycle = phase === 'ready'
+      ? 'ready'
+      : `${phase}_${status}`;
+    const completedStages = phase === 'ready'
+      ? totalStages
+      : phase === 'stage_design'
+        ? Math.min(run?.completedItems || 0, totalStages)
+        : 0;
+    const currentStageNumber = phase === 'stage_design' && status !== 'ready' && completedStages < totalStages
+      ? path.milestones[completedStages]?.stageNumber || completedStages + 1
+      : null;
+
+    return {
+      lifecycle,
+      phase,
+      status,
+      runId: run?.id || null,
+      heartbeatAt: run?.heartbeatAt?.toISOString?.() || legacy?.updatedAt || null,
+      retryAllowed: retry.allowed,
+      retryType: retry.retryType === 'stageDesign' ? 'stage_design' : retry.retryType,
+      completedStages,
+      totalStages,
+      currentStageNumber,
+      errorMessage: getSafeGenerationErrorMessage(
+        run?.phase || (phase === 'stage_design' ? 'stageDesign' : phase),
+        status,
+        run?.errorCode
+      ),
+      canStartLearning: phase === 'ready' && accessState.canStartLearning
+    };
+  }
+
 // 获取用户的学习路径列表
   async getUserLearningPaths(userId: string) {
     try {
       const paths = await prisma.learning_paths.findMany({
         where: { userId },
         include: {
+          activeGenerationRun: true,
           milestones: {
             orderBy: { stageNumber: 'asc' },
             include: {
@@ -2760,13 +3616,20 @@ const learningPath = await prisma.learning_paths.findUnique({
         const allTasks = path.milestones.flatMap((m: any) => m.subtasks || []);
         const totalTaskCount = allTasks.length;
         const completedTaskCount = allTasks.filter((t: any) => t.status === 'completed').length;
-        const accessState = this.getPathLearningAccessState(path.status, path.aiPromptTemplate);
+        const accessState = this.getPathLearningAccessState(
+          path.status,
+          path.aiPromptTemplate,
+          path.activeGenerationRun,
+          path.aiGenerated,
+          totalTaskCount
+        );
 
         return {
           ...path,
           name: path.title,
           summary: parsePathSummary(path.aiPromptTemplate),
           generationStatus: accessState.generationStatus,
+          generationRun: buildGenerationRunStatus(path.activeGenerationRun),
           sceneSummary: this.getPathSceneSummary(path.aiPromptTemplate, path.milestones),
           cognitiveDesign: parsePathCognitiveDesign(path.aiPromptTemplate),
           adjustmentPolicy: parsePathAdjustmentPolicy(path.aiPromptTemplate),
@@ -2828,7 +3691,13 @@ const learningPath = await prisma.learning_paths.findUnique({
       }
 
       const accessState = learningPath
-        ? this.getPathLearningAccessState(learningPath.status, learningPath.aiPromptTemplate)
+        ? this.getPathLearningAccessState(
+            learningPath.status,
+            learningPath.aiPromptTemplate,
+            null,
+            learningPath.aiGenerated,
+            1
+          )
         : {
             generationStatus: null,
             canStartLearning: true,
@@ -2839,6 +3708,7 @@ const learningPath = await prisma.learning_paths.findUnique({
         where: {
           taskId,
           ...(userId ? { userId } : {}),
+          status: 'completed',
           wrapup: { not: null },
         },
         orderBy: { startTime: 'desc' },
@@ -2903,17 +3773,77 @@ const learningPath = await prisma.learning_paths.findUnique({
     }
 
     const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate);
-
-    if (generationStatus?.stageDesign === 'processing') {
-      throw new Error('阶段任务仍在生成中，请稍后查看');
+    const activeRun = await this.getActiveGenerationRun(path.id, path.activeGenerationRunId);
+    const retry = resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt);
+    if (!retry.allowed || retry.retryType !== 'stageDesign') {
+      throw new Error(activeRun?.status === 'succeeded' || generationStatus?.stageDesign === 'succeeded'
+        ? '阶段任务已经准备完成，无需重试'
+        : '阶段任务仍在生成中，请稍后查看');
     }
 
-    const retryCount = await this.queuePathEnrichmentRetry(path, generationStatus);
+    const queued = await this.queuePathEnrichmentRetry(path, generationStatus);
 
     return {
       accepted: true,
-      retryCount
+      retryType: 'stageDesign',
+      retryCount: queued.retryCount,
+      runId: queued.runId
     };
+  }
+
+  async getPathGenerationRetry(pathId: string, userId: string) {
+    const path = await prisma.learning_paths.findUnique({ where: { id: pathId } });
+    if (!path) throw new Error('学习路径不存在');
+    if (path.userId !== userId) throw new Error('无权访问此学习路径');
+
+    const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate);
+    const activeRun = await this.getActiveGenerationRun(path.id, path.activeGenerationRunId);
+    return {
+      ...resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt),
+      expectedActiveGenerationRunId: path.activeGenerationRunId
+    };
+  }
+
+  async claimPathCoreGeneration(
+    pathId: string,
+    expectedActiveGenerationRunId?: string | null
+  ): Promise<string> {
+    const run = await this.createAndClaimGenerationRun(
+      pathId,
+      'core',
+      'core',
+      0,
+      'replace-path',
+      expectedActiveGenerationRunId
+    );
+    return run.id;
+  }
+
+  async markActiveGenerationFailed(pathId: string, error: unknown, runId?: string): Promise<void> {
+    const path = await prisma.learning_paths.findUnique({
+      where: { id: pathId },
+      select: { activeGenerationRunId: true }
+    });
+    const activeRunId = runId || path?.activeGenerationRunId;
+    if (!activeRunId || path?.activeGenerationRunId !== activeRunId) return;
+    const run = await this.getActiveGenerationRun(pathId, activeRunId);
+    if (!run || run.status === 'failed' || run.status === 'succeeded' || run.status === 'cancelled') return;
+
+    try {
+      await this.updatePathGenerationStatus(pathId, run.phase === 'stageDesign'
+        ? { stageDesign: 'failed', lastError: error instanceof Error ? error.message : String(error) }
+        : { core: 'failed', lastError: error instanceof Error ? error.message : String(error) }, activeRunId);
+      await this.failGenerationRun(
+        pathId,
+        activeRunId,
+        error,
+        run.phase === 'stageDesign' ? 'PATH_ENRICHMENT_FAILED' : 'PATH_GENERATION_CORE_FAILED',
+        run.phase === 'stageDesign' ? 'stageDesign' : 'core',
+        run.phase === 'core' ? 'failed' : undefined
+      );
+    } catch (fenceError) {
+      if (!(fenceError instanceof Error) || fenceError.message !== 'GENERATION_RUN_FENCED') throw fenceError;
+    }
   }
 
   async assertTaskReadyForLearning(taskId: string, userId: string) {
@@ -2927,7 +3857,8 @@ const learningPath = await prisma.learning_paths.findUnique({
                 id: true,
                 userId: true,
                 status: true,
-                aiPromptTemplate: true
+                aiPromptTemplate: true,
+                activeGenerationRunId: true
               }
             }
           }
@@ -2939,7 +3870,8 @@ const learningPath = await prisma.learning_paths.findUnique({
       throw new Error('任务不存在');
     }
 
-    const learningPath = task.milestones?.learning_paths;
+    const milestone = task.milestones;
+    const learningPath = milestone?.learning_paths;
 
     if (!learningPath) {
       return;
@@ -2949,7 +3881,19 @@ const learningPath = await prisma.learning_paths.findUnique({
       throw new Error('无权访问此任务');
     }
 
-    const accessState = this.getPathLearningAccessState(learningPath.status, learningPath.aiPromptTemplate);
+    // 校验 milestone 是否已解锁
+    if (milestone && milestone.status === 'locked') {
+      throw new Error('此阶段尚未解锁，请先完成前置阶段');
+    }
+
+    const activeRun = await this.getActiveGenerationRun(learningPath.id, learningPath.activeGenerationRunId);
+    const accessState = this.getPathLearningAccessState(
+      learningPath.status,
+      learningPath.aiPromptTemplate,
+      activeRun,
+      true,
+      1
+    );
 
     if (!accessState.canStartLearning) {
       throw new Error(accessState.learningBlockedReason || '学习内容还在准备中，暂不能开始学习');
@@ -2959,25 +3903,32 @@ const learningPath = await prisma.learning_paths.findUnique({
   // 删除学习路径
   async deleteLearningPath(pathId: string, userId: string) {
     try {
-      // 验证路径存在且属于当前用户
-      const path = await prisma.learning_paths.findUnique({
-        where: { id: pathId }
+      await prisma.$transaction(async (tx) => {
+        const path = await tx.learning_paths.findUnique({
+          where: { id: pathId },
+          select: { userId: true }
+        });
+
+        if (!path) {
+          throw new Error('学习路径不存在');
+        }
+
+        if (path.userId !== userId) {
+          throw new Error('无权删除此学习路径');
+        }
+
+        const lockedPath = await tx.learning_paths.updateMany({
+          where: { id: pathId },
+          data: { updatedAt: new Date() }
+        });
+        if (lockedPath.count !== 1) throw new Error('学习路径不存在');
+        await assertPathMutationSafe(tx, pathId, 'delete-path');
+        await tx.learning_paths.delete({
+          where: { id: pathId }
+        });
       });
 
-      if (!path) {
-        throw new Error('学习路径不存在');
-      }
-
-      if (path.userId !== userId) {
-        throw new Error('无权删除此学习路径');
-      }
-
-      // 删除路径（级联删除里程碑和子任务）
-      await prisma.learning_paths.delete({
-        where: { id: pathId }
-      });
-
-      void dashboardGuidanceSnapshotService.refresh(userId, 'path-deleted');
+      dashboardGuidanceSnapshotService.refreshInBackground(userId, 'path-deleted');
 
       logger.info(`学习路径删除：${pathId}`);
     } catch (error) {
@@ -2989,18 +3940,27 @@ const learningPath = await prisma.learning_paths.findUnique({
   // 预留：基于已学内容重调学习路径（默认 new_version）
   private resolveStageReplanTarget(path: any, requestedStageNumber?: number | null) {
     if (requestedStageNumber) {
-      return path.milestones.find((milestone: any) => milestone.stageNumber === requestedStageNumber) || null;
+      const requested = path.milestones.find((milestone: any) => milestone.stageNumber === requestedStageNumber) || null;
+      return requested?.status === 'completed' ? null : requested;
     }
 
     const activeMilestone = path.milestones.find((milestone: any) => {
+      if (milestone.status === 'completed') return false;
       const tasks = milestone.subtasks || [];
       return tasks.length === 0 || tasks.some((task: any) => task.status !== 'completed');
     });
 
-    return activeMilestone || path.milestones[0] || null;
+    return activeMilestone || null;
   }
 
-  private async redesignMilestoneTasks(path: any, milestone: any, data: PathReplanRequest, learnerReplanProjection: any) {
+  private async redesignMilestoneTasks(
+    path: any,
+    milestone: any,
+    data: PathReplanRequest,
+    learnerReplanProjection: any,
+    runId: string,
+    snapshot: PathReplanSnapshot
+  ) {
     const parsedTemplate = this.parsePathPromptTemplate(path.aiPromptTemplate || null);
     const pathCognitiveDesign = parsePathCognitiveDesign(path.aiPromptTemplate || null);
     const normalizedInput = getSceneFramingNormalizedInput(parsedTemplate?.sceneFraming)
@@ -3033,8 +3993,12 @@ const learningPath = await prisma.learning_paths.findUnique({
     const stageResult = await executeSkill(stageDesignerDefinition, stageDesignerInput);
 
     const newTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
+    assertStageTasksPresent(milestone.stageNumber, newTasks);
 
     await prisma.$transaction(async (tx) => {
+      await assertGenerationRunFence(tx, path.id, runId);
+      await claimPathReplanSnapshot(tx, snapshot);
+      await assertPathMutationSafe(tx, path.id, 'replan-stage', { milestoneId: milestone.id });
       await tx.subtasks.deleteMany({
         where: {
           milestoneId: milestone.id,
@@ -3071,7 +4035,7 @@ const learningPath = await prisma.learning_paths.findUnique({
             learningObjectives: null,
             transferable: taskData.transferable ?? false,
             annotationConfidence: null,
-            order: completedTasks.length + index,
+            order: Math.max(-1, ...completedTasks.map((task: any) => Number(task.order) || 0)) + 1 + index,
             status: 'todo',
             updatedAt: new Date(),
           }
@@ -3098,7 +4062,7 @@ const learningPath = await prisma.learning_paths.findUnique({
             },
             _generation: {
               ...(parsedTemplate?._generation && typeof parsedTemplate._generation === 'object' ? parsedTemplate._generation : {}),
-              enrichment: 'succeeded',
+              stageDesign: 'succeeded',
               lastError: null,
               triggerSource: data.triggerSource || 'api',
               updatedAt: new Date().toISOString(),
@@ -3107,6 +4071,37 @@ const learningPath = await prisma.learning_paths.findUnique({
           updatedAt: new Date(),
         }
       });
+      await tx.path_generation_runs.update({
+        where: { id: runId },
+        data: {
+          status: 'succeeded',
+          retryAllowed: false,
+          totalItems: 1,
+          completedItems: 1,
+          progress: 100,
+          heartbeatAt: new Date(),
+          leaseExpiresAt: new Date(),
+          finishedAt: new Date(),
+          errorCode: null,
+          errorMessage: null
+        }
+      });
+      await enqueueDomainEvent(tx, createDomainEvent({
+        type: 'path:adjusted',
+        aggregateType: 'path',
+        aggregateId: path.id,
+        userId: data.userId,
+        source: 'learning-service',
+        data: {
+          pathId: path.id,
+          milestoneId: milestone.id,
+          stageNumber: milestone.stageNumber,
+          redesignedTaskCount: newTasks.length,
+          preservedCompletedTaskCount: completedTasks.length,
+          reason: data.reason || null,
+          triggerSource: data.triggerSource || 'api'
+        }
+      }));
     });
 
     return {
@@ -3118,8 +4113,8 @@ const learningPath = await prisma.learning_paths.findUnique({
   }
 
   async requestPathReplan(data: PathReplanRequest) {
-    const requestedMode = data.mode || 'new_version';
-    const mode = requestedMode === 'new_version' ? 'overwrite' : requestedMode;
+    const requestedMode = data.mode || 'overwrite';
+    const mode = requestedMode;
     const triggerSource = data.triggerSource || 'api';
 
     const path = await prisma.learning_paths.findUnique({
@@ -3141,6 +4136,10 @@ const learningPath = await prisma.learning_paths.findUnique({
       throw new Error('无权访问此学习路径');
     }
 
+    if (requestedMode === 'new_version') {
+      throw createPathVersioningUnsupportedError();
+    }
+
     const completedTaskIds = path.milestones
       .flatMap((milestone: any) => milestone.subtasks || [])
       .filter((task: any) => task.status === 'completed')
@@ -3154,6 +4153,11 @@ const learningPath = await prisma.learning_paths.findUnique({
     const learnerReplanProjection = learnerProjectionService.toReplanProjection(learnerSnapshot);
     const replanSignal = learnerSnapshot.replanSignal;
     const targetMilestone = this.resolveStageReplanTarget(path, data.stageNumber || null);
+    const replanSnapshot = targetMilestone ? buildPathReplanSnapshot(targetMilestone) : null;
+
+    if (!targetMilestone || !replanSnapshot) {
+      throw new Error('当前路径没有可重设计的阶段');
+    }
 
     if (replanSignal?.shouldSuggest && data.requireConfirmation !== false) {
       return {
@@ -3177,42 +4181,72 @@ const learningPath = await prisma.learning_paths.findUnique({
       };
     }
 
-    if (!targetMilestone) {
-      throw new Error('当前路径没有可重设计的阶段');
-    }
-
     const currentMilestoneTitle = learnerReplanProjection?.path.currentPosition.milestoneTitle || '';
     const stableConcepts = learnerReplanProjection?.mastery.stableConcepts || [];
     const fragileConcepts = learnerReplanProjection?.mastery.fragileConcepts || [];
     const strugglingConcepts = learnerReplanProjection?.mastery.strugglingConcepts || [];
     const prerequisiteGaps = learnerReplanProjection?.risk.prerequisiteGaps?.map((item) => item.label) || [];
 
-    const redesignResult = await this.redesignMilestoneTasks(path, targetMilestone, data, {
-      ...learnerReplanProjection,
-      summary: {
-        currentMilestoneTitle,
-        stableConcepts,
-        fragileConcepts,
-        strugglingConcepts,
-        prerequisiteGaps,
-        freezeCompletedTaskIds: completedTaskIds,
-      }
-    });
-
-    this.emitLearningEvent({
-      type: 'path:adjusted',
-      source: 'learning-service',
-      userId: data.userId,
-      data: {
-        pathId: data.pathId,
-        stageNumber: targetMilestone.stageNumber,
-        redesignedTaskCount: redesignResult.redesignedTaskCount,
-        preservedCompletedTaskCount: redesignResult.preservedCompletedTaskCount,
-        reason: data.reason || replanSignal?.rationale || 'manual-replan',
+    const run = await this.createAndClaimGenerationRun(
+      data.pathId,
+      'stageDesign',
+      'stageDesign',
+      1,
+      'replan-stage',
+      path.activeGenerationRunId,
+      { milestoneId: targetMilestone.id }
+    );
+    const stopHeartbeat = this.startGenerationHeartbeat(data.pathId, run.id);
+    let redesignResult;
+    try {
+      await this.updatePathGenerationStatus(data.pathId, {
+        stageDesign: 'processing',
+        lastError: null,
         triggerSource,
+        updatedAt: new Date().toISOString()
+      }, run.id);
+      redesignResult = await this.redesignMilestoneTasks(path, targetMilestone, data, {
+        ...learnerReplanProjection,
+        summary: {
+          currentMilestoneTitle,
+          stableConcepts,
+          fragileConcepts,
+          strugglingConcepts,
+          prerequisiteGaps,
+          freezeCompletedTaskIds: completedTaskIds,
+        }
+      }, run.id, replanSnapshot);
+    } catch (error) {
+      if (isPathMutationConflictError(error)) {
+        await this.restorePathAfterMutationConflict(data.pathId, run.id, error);
+        throw error;
       }
-    }, 'path-replanned')
-    void dashboardGuidanceSnapshotService.refresh(data.userId, 'path-replanned');
+
+      try {
+        await this.updatePathGenerationStatus(data.pathId, {
+          stageDesign: 'failed',
+          lastError: error instanceof Error ? error.message : String(error),
+          triggerSource,
+          updatedAt: new Date().toISOString()
+        }, run.id);
+        await this.failGenerationRun(
+          data.pathId,
+          run.id,
+          error,
+          error instanceof Error && error.message.includes('EMPTY_TASKS')
+            ? 'PATH_STAGE_DESIGN_ZERO_TASKS'
+            : 'PATH_ENRICHMENT_FAILED',
+          'stageDesign'
+        );
+      } catch (fenceError) {
+        if (!(fenceError instanceof Error) || fenceError.message !== 'GENERATION_RUN_FENCED') throw fenceError;
+      }
+      throw error;
+    } finally {
+      stopHeartbeat();
+    }
+
+    dashboardGuidanceSnapshotService.refreshInBackground(data.userId, 'path-replanned');
 
     return {
       enabled: true,
@@ -3238,6 +4272,7 @@ const learningPath = await prisma.learning_paths.findUnique({
       },
       result: {
         pathId: data.pathId,
+        runId: run.id,
         redesignedStageNumber: redesignResult.redesignedStageNumber,
         redesignedTaskCount: redesignResult.redesignedTaskCount,
         preservedCompletedTaskCount: redesignResult.preservedCompletedTaskCount,
@@ -3250,72 +4285,232 @@ const learningPath = await prisma.learning_paths.findUnique({
   // 完成任务
   async completeTask(data: CompleteTaskData) {
     try {
-      const subtask = await prisma.subtasks.findUnique({
+      const observedSubtask = await prisma.subtasks.findUnique({
         where: { id: data.taskId },
         include: {
           milestones: {
-            select: {
-              learningPathId: true,
+            include: {
+              learning_paths: {
+                select: { id: true, userId: true }
+              }
             }
           }
         }
       });
 
-      if (!subtask) {
+      if (!observedSubtask) {
         throw new Error('任务不存在');
       }
 
-      // 更新任务状态
-      const updatedSubtask = await prisma.subtasks.update({
-        where: { id: data.taskId },
-        data: {
-          status: 'completed',
-          completedAt: new Date(),
-          rating: data.rating
-        }
-      });
-
-      // 更新学习指标 (LSS/KTL/LF/LSB)
-      let learningMetrics: Awaited<ReturnType<typeof updateLearningMetrics>> | null = null;
-      try {
-        learningMetrics = await updateLearningMetrics({
-          userId: data.userId,
-          taskId: data.taskId,
-          durationMinutes: data.actualMinutes || 30,
-          subjectiveDifficulty: data.subjectiveDifficulty,
-          completed: true,
-          notes: data.notes
-        });
-        logger.info('学习指标已更新', { userId: data.userId });
-      } catch (error) {
-        logger.warn('更新学习指标失败（不影响任务完成）', error);
+      if (
+        observedSubtask.userId !== data.userId
+        || observedSubtask.milestones?.learning_paths?.userId !== data.userId
+      ) {
+        throw new Error('无权访问此任务');
       }
 
-      if (learningMetrics) {
-        this.emitLearningEvent({
-          type: 'learning:completed',
-          source: 'learning-service',
+      const pathId = observedSubtask.milestones?.learningPathId;
+      const milestoneId = observedSubtask.milestoneId;
+      if (!pathId || !milestoneId) {
+        throw new PathMutationConflictError(
+          '任务所属学习路径已变化，请刷新后重试',
+          'PATH_TASK_PARENT_CHANGED'
+        );
+      }
+
+      const completedAt = new Date();
+      const completionResult = await prisma.$transaction(async (tx) => {
+        const lockedPath = await tx.learning_paths.updateMany({
+          where: { id: pathId, userId: data.userId },
+          data: { updatedAt: completedAt }
+        });
+        if (lockedPath.count !== 1) {
+          throw new PathMutationConflictError(
+            '任务所属学习路径已变化，请刷新后重试',
+            'PATH_TASK_PARENT_CHANGED'
+          );
+        }
+
+        const lockedMilestone = await tx.milestones.updateMany({
+          where: { id: milestoneId, learningPathId: pathId },
+          data: { updatedAt: completedAt }
+        });
+        if (lockedMilestone.count !== 1) {
+          throw new PathMutationConflictError(
+            '任务所属阶段已变化，请刷新后重试',
+            'PATH_TASK_PARENT_CHANGED'
+          );
+        }
+
+        const currentSubtask = await tx.subtasks.findUnique({
+          where: { id: data.taskId },
+          include: {
+            milestones: {
+              include: {
+                learning_paths: {
+                  select: { id: true, userId: true }
+                }
+              }
+            }
+          }
+        });
+        if (!currentSubtask) {
+          throw new PathMutationConflictError(
+            '任务已被学习路径调整替换，请刷新后重试',
+            'PATH_TASK_REPLACED'
+          );
+        }
+        if (
+          currentSubtask.userId !== data.userId
+          || currentSubtask.milestoneId !== milestoneId
+          || currentSubtask.milestones?.learningPathId !== pathId
+          || currentSubtask.milestones?.learning_paths?.userId !== data.userId
+        ) {
+          throw new PathMutationConflictError(
+            '任务所属学习路径已变化，请刷新后重试',
+            'PATH_TASK_PARENT_CHANGED'
+          );
+        }
+        if (currentSubtask.status === 'completed') {
+          return { task: currentSubtask, alreadyCompleted: true };
+        }
+
+        const completion = await tx.subtasks.updateMany({
+          where: {
+            id: data.taskId,
+            userId: data.userId,
+            status: { not: 'completed' }
+          },
+          data: {
+            status: 'completed',
+            completedAt,
+            rating: data.rating,
+            updatedAt: completedAt
+          }
+        });
+        if (completion.count !== 1) {
+          throw new PathMutationConflictError(
+            '任务状态已变化，请刷新后重试',
+            'PATH_TASK_STATE_CHANGED'
+          );
+        }
+
+        await tx.users.update({
+          where: { id: data.userId },
+          data: { xp: { increment: 50 } }
+        });
+
+        await enqueueDomainEvent(tx, createDomainEvent({
+          type: 'task:completed',
+          aggregateType: 'task',
+          aggregateId: data.taskId,
           userId: data.userId,
+          source: 'learning-service',
+          occurredAt: completedAt,
           data: {
             taskId: data.taskId,
-            pathId: subtask.milestones?.learningPathId || null,
-            milestoneId: subtask.milestoneId,
-            lss: learningMetrics.lss,
-            ktl: learningMetrics.ktl,
-            lf: learningMetrics.lf,
-            lsb: learningMetrics.lsb,
+            taskTitle: currentSubtask.title,
+            pathId,
+            milestoneId: currentSubtask.milestoneId,
+            actualMinutes: data.actualMinutes || null,
+            subjectiveDifficulty: data.subjectiveDifficulty || null,
+            rating: data.rating || null,
+            linkedConceptName: currentSubtask.linkedConceptName || currentSubtask.coreConcept || null
           }
-        }, 'task-completed')
-      }
+        }));
 
-      // 更新用户 XP
-      const XP_PER_TASK = 50;
-      await prisma.users.update({
-        where: { id: data.userId },
-        data: {
-          xp: { increment: XP_PER_TASK }
+        if (pathId) {
+          const remainingMilestoneTasks = await tx.subtasks.count({
+            where: {
+              milestoneId: currentSubtask.milestoneId,
+              status: { not: 'completed' }
+            }
+          });
+          if (remainingMilestoneTasks === 0) {
+            await tx.milestones.updateMany({
+              where: { id: currentSubtask.milestoneId, status: { not: 'completed' } },
+              data: { status: 'completed', completedAt, updatedAt: completedAt }
+            });
+            const nextMilestone = await tx.milestones.findFirst({
+              where: {
+                learningPathId: pathId,
+                stageNumber: { gt: currentSubtask.milestones.stageNumber },
+                status: 'locked'
+              },
+              orderBy: { stageNumber: 'asc' }
+            });
+            if (nextMilestone) {
+              await tx.milestones.update({
+                where: { id: nextMilestone.id },
+                data: { status: 'active', unlockedAt: nextMilestone.unlockedAt || completedAt, updatedAt: completedAt }
+              });
+            }
+            const completedMilestones = await tx.milestones.count({
+              where: { learningPathId: pathId, status: 'completed' }
+            });
+            await tx.learning_paths.update({
+              where: { id: pathId },
+              data: { completedMilestones, updatedAt: completedAt }
+            });
+          }
+
+          const remainingTasks = await tx.subtasks.count({
+            where: {
+              milestones: { learningPathId: pathId },
+              status: { not: 'completed' }
+            }
+          });
+          if (remainingTasks === 0) {
+            const completedMilestones = await tx.milestones.count({ where: { learningPathId: pathId, status: 'completed' } });
+            const completedPath = await tx.learning_paths.updateMany({
+              where: { id: pathId, status: { not: 'completed' } },
+              data: { status: 'completed', completedMilestones, updatedAt: completedAt }
+            });
+            if (completedPath.count === 1) {
+              await enqueueDomainEvent(tx, createDomainEvent({
+                type: 'path:completed',
+                aggregateType: 'path',
+                aggregateId: pathId,
+                userId: data.userId,
+                source: 'learning-service',
+                occurredAt: completedAt,
+                data: { pathId, completedByTaskId: data.taskId }
+              }));
+            }
+          }
         }
+
+        const updatedTask = await tx.subtasks.findUnique({
+          where: { id: data.taskId },
+          include: {
+            milestones: {
+              include: {
+                learning_paths: {
+                  select: { id: true, userId: true }
+                }
+              }
+            }
+          }
+        });
+        if (!updatedTask) {
+          throw new PathMutationConflictError(
+            '任务已被学习路径调整替换，请刷新后重试',
+            'PATH_TASK_REPLACED'
+          );
+        }
+        return { task: updatedTask, alreadyCompleted: false };
       });
+
+      const subtask = completionResult.task;
+      const updatedSubtask = completionResult.task;
+
+      if (completionResult.alreadyCompleted) {
+        return {
+          task: completionResult.task,
+          learningReport: undefined,
+          alreadyCompleted: true
+        };
+      }
 
       // 检查成就达成
       try {
@@ -3348,14 +4543,14 @@ const learningPath = await prisma.learning_paths.findUnique({
 
       logger.info(`任务完成：${subtask.id}`, { userId: data.userId });
 
-      void learnerSnapshotRefreshService.refresh({
+      runBackgroundTask('learner-snapshot.task-completed', () => learnerSnapshotRefreshService.refresh({
         userId: data.userId,
         pathId: subtask.milestones?.learningPathId || undefined,
         taskId: data.taskId,
         milestoneId: subtask.milestoneId,
         scope: 'teaching',
-      });
-      void dashboardGuidanceSnapshotService.refresh(data.userId, 'task-completed');
+      }), { userId: data.userId, taskId: data.taskId });
+      dashboardGuidanceSnapshotService.refreshInBackground(data.userId, 'task-completed');
 
       return {
         task: updatedSubtask,

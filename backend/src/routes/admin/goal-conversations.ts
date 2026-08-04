@@ -1,14 +1,10 @@
 // 目标对话管理路由（后台管理）
 import express from 'express';
 import prisma from '../../config/database';
-import { authMiddleware } from '../../middleware/auth.middleware';
-import { adminMiddleware } from '../../middleware/admin.middleware';
 import { generateLearningPathFromConversation } from '../../services/learning/goal-conversation.service';
 import { logger } from '../../utils/logger';
 
 const router = express.Router();
-
-router.use(authMiddleware, adminMiddleware);
 
 /**
  * 获取所有目标对话列表（分页）

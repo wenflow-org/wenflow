@@ -3,17 +3,27 @@ import {
   SkillExecutionResult,
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
+import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter';
+import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
+import { loadPromptFile } from '../../composers/prompt-files/loader';
 import {
   type VirtualLearnerPersona,
   type VirtualLearnerStory,
   type FrictionBudget,
-  getFrictionGuidance,
-  normalizeFrictionBudget,
+  decideFrictionTrigger,
   PERSONA_FIELD_ANCHORS_HINT,
 } from '../virtual-learner-shared';
 
 export const VIRTUAL_LEARNER_PATH_EVALUATOR_MAX_TOKENS = 1200;
 export const VIRTUAL_LEARNER_PATH_EVALUATOR_TEMPERATURE = 0.5;
+const PATH_EVALUATOR_FALLBACK_RUNTIME_CONTRACT = buildDefaultRuntimeContract(
+  'virtual-learner-path-evaluator'
+);
+
+// File-as-Truth: the ACTIVE prompt at runtime is compiled from prompts/core/*.yaml.
+// Load it from the compiled artifact here; do not embed a second copy (dual-source drift).
+export const VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT =
+  loadPromptFile('skill:virtual-learner-path-evaluator')?.systemPrompt || '';
 
 export interface VirtualLearnerPathEvaluatorInput {
   learner: VirtualLearnerPersona | Record<string, any>;
@@ -37,47 +47,15 @@ export interface VirtualLearnerPathEvaluatorOutput {
     internalDecision?: 'accept' | 'modify' | 'reject';
     internalConfidence?: number;
   };
+  runtimeEnvelope?: ReturnType<typeof mapSkillOutputEnvelope>;
 }
-
-export const VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT = `你是“虚拟学习者 Path 评估器”。
-
-你只扮演虚拟学习者本人，评估当前平台给出的学习路径是否贴合这个人此刻的真实处境。
-
-输入会提供：
-1. learner：学习者稳定身份。
-2. story：这次故事情景。
-3. pathProposal：平台给出的 path 或 replan 方案。
-4. goalState：Goal 阶段已形成的问题理解。
-5. previousReaction：上一版 path 的反应（如果有）。
-6. learnerState：当前学习者对方向的主观状态。
-
-评估原则：
-- 你不是 PathAgent，不负责生成路径，只评估“这版路径我愿不愿意按它走”。
-- 你只从学习者视角判断，不要替系统解释策略。
-- 如果方向大体对，但节奏、难度、前置要求不贴脸，更自然的是 modify，而不是直接 reject。
-- reject 只留给明显不贴目标、现实上不可做、或完全错位的方案。
-- 你可以在内部判断 accept/modify/reject，但对平台主链只输出学习者真正会说的话，不要把内部枚举判断当正式输出。
-
-输出 JSON：
-{
-  "reaction": "学习者会怎么说",
-  "visibleRequestedChanges": ["如果学习者在反应里明确提出希望修改的地方，就提取成短句数组；否则为空数组"],
-  "debug": {
-    "visibleSignal": "可选，学习者最在意的线索",
-    "stateChangeReason": "可选，为什么做这个判断",
-    "internalDecision": "accept | modify | reject",
-    "internalConfidence": 0.0
-  }
-}
-
-不要输出 markdown，不要输出解释，不要输出代码块。`;
 
 export const virtualLearnerPathEvaluatorDefinition: SkillDefinition = {
   name: 'virtual-learner-path-evaluator',
   displayName: '虚拟学习者 Path 评估器',
-  version: '1.1.0',
+  version: '1.2.0',
   category: 'analysis',
-  description: '从虚拟学习者视角评估当前学习路径或 replan 方案的贴合度，并给出 accept/modify/reject 反应。',
+  description: '从虚拟学习者视角评估当前学习路径或 replan 方案的贴合度，并给出 accept/modify/reject 反应。仅在 assisted（协调器）模式接入；blackbox 模式不调用（Path 就绪后直接进入 Learn）。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -192,8 +170,7 @@ function normalizeOutput(parsed: any, input: VirtualLearnerPathEvaluatorInput): 
 }
 
 function buildUserPayload(input: VirtualLearnerPathEvaluatorInput) {
-  const frictionBudget = normalizeFrictionBudget(input.frictionBudget);
-  const frictionGuidance = getFrictionGuidance(frictionBudget);
+  const friction = decideFrictionTrigger(input.frictionBudget);
   return {
     learner: input.learner || {},
     story: input.story || null,
@@ -202,9 +179,10 @@ function buildUserPayload(input: VirtualLearnerPathEvaluatorInput) {
     learnerState: input.learnerState || null,
     pathProposal: input.pathProposal || {},
     friction: {
-      budget: frictionBudget,
-      triggerProbability: frictionGuidance.triggerProbability,
-      guidance: frictionGuidance.promptHint
+      budget: friction.budget,
+      triggerProbability: friction.triggered ? 1 : 0,
+      triggered: friction.triggered,
+      guidance: friction.guidance
     },
     personaAnchorHint: PERSONA_FIELD_ANCHORS_HINT,
     task: {
@@ -228,16 +206,16 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
       defaultSystemPrompt: VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'virtual-learner-path-evaluator' },
-      modelDefaults: {
-        maxTokens: VIRTUAL_LEARNER_PATH_EVALUATOR_MAX_TOKENS,
-        temperature: VIRTUAL_LEARNER_PATH_EVALUATOR_TEMPERATURE,
-      },
-      buildUserPayload,
+            buildUserPayload,
       validateParsedOutput: (parsed) => ({
         valid: !!safeText(parsed?.reaction),
         failureReason: 'missing reaction'
       }),
       normalizeOutput,
+      mapEnvelope: (output, _input, runtimeContract) => mapSkillOutputEnvelope(runtimeContract, output, {
+        phase: 'simulation-step-completed',
+        nextState: (output as any)?.learnerState ?? null,
+      }),
       retryStrategy: {
         maxAttempts: 2,
         onValidationFail: () => '请只输出一个合法 JSON 对象，必须包含 reaction。'
@@ -245,11 +223,19 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
     }, input || {} as VirtualLearnerPathEvaluatorInput);
 
     if (!result.success || !result.output) {
+      const fallback = { ...buildFallback(input || {} as VirtualLearnerPathEvaluatorInput), degraded: true };
       return {
         success: true,
-        output: { ...buildFallback(input || {} as VirtualLearnerPathEvaluatorInput), degraded: true },
+        output: {
+          ...fallback,
+          runtimeEnvelope: mapSkillOutputEnvelope(PATH_EVALUATOR_FALLBACK_RUNTIME_CONTRACT, fallback, {
+            phase: 'simulation-step-completed',
+            status: 'partial',
+          }),
+        },
         duration: Date.now() - startTime,
         cached: true,
+        quality: 'fallback',
       };
     }
 
@@ -257,6 +243,7 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
       success: true,
       output: {
         ...result.output,
+        runtimeEnvelope: result.runtimeEnvelope,
         debug: {
           ...(result.output.debug || {}),
           rawModelOutput: result.debug.rawModelOutput,
@@ -265,6 +252,7 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
         } as any,
       },
       duration: result.debug.durationMs,
+      quality: 'model',
     };
   } catch {
     return {
@@ -272,6 +260,7 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
       output: { ...buildFallback(input || {} as VirtualLearnerPathEvaluatorInput), degraded: true },
       duration: Date.now() - startTime,
       cached: true,
+      quality: 'fallback',
     };
   }
 }

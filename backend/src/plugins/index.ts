@@ -5,4 +5,3 @@
  */
 
 export { goalAlignmentChecker } from './goal-alignment-checker';
-export { confidenceHandler } from './confidence-handler';

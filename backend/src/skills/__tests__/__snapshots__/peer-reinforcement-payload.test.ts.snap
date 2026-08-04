@@ -1,0 +1,14 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`peer-reinforcement payload snapshot parity payload carries the tagged sections the prompt input spec declares 1`] = `
+"请生成一段同伴讨论消息：
+【主题】闭包与变量生命周期
+【策略】feynman
+【策略要求】请像同学一样请学生把概念讲给你听，并用一个追问检验他是否真的理解。
+【学生认知层级】understand
+【理解度】0.6
+【最近对话】
+user: 闭包是什么？
+assistant: 先看词法作用域。
+【学生消息】我觉得闭包就是函数套函数"
+`;

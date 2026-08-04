@@ -1,0 +1,797 @@
+<template>
+  <div v-if="notFound" class="mk-page ld">
+    <div class="mk-empty">
+      <strong>未找到该学习者</strong>
+      <span>学习者可能已被删除，或链接已失效。</span>
+      <button type="button" class="mk-link" @click="closeSubPage">← 返回学习者中心</button>
+    </div>
+  </div>
+  <div v-else-if="detailError" class="mk-page ld">
+    <div class="mk-empty">
+      <span class="mk-empty__icon" aria-hidden="true">◌</span>
+      <strong>详情加载失败</strong>
+      <span>暂时无法获取该学习者的完整快照。</span>
+      <button type="button" class="mk-empty__action" @click="loadDetail(subPage?.id, isLive)">重试</button>
+    </div>
+  </div>
+  <div v-else-if="d" class="mk-page ld">
+    <div v-if="toast" class="mk-toast" :class="toastCls">{{ toast }}</div>
+
+    <!-- 头部：身份与状态 -->
+    <div class="ld-head">
+      <button type="button" class="ld-back" @click="closeSubPage">← 学习者中心</button>
+      <div class="ld-id">
+        <span class="ld-avatar">{{ d.name.charAt(0) }}</span>
+        <div>
+          <h1 class="ld-name">{{ d.name }}</h1>
+          <span class="ld-sub">{{ d.email }} · 加入 {{ d.joined }}</span>
+        </div>
+        <div class="ld-badges">
+          <span class="mk-badge" :class="trendBadge">趋势：{{ trendText }}</span>
+          <span class="mk-badge" :class="fatigueBadge">疲劳：{{ d.fatigue }}</span>
+          <span class="mk-badge mk-badge--muted">快照 {{ d.snapshot.version }} · {{ d.snapshot.generatedAt }}</span>
+        </div>
+        <button type="button" class="mk-status__action" style="margin-left:auto" :disabled="recomputing" @click="recompute">
+          {{ recomputing ? '重算中…' : '重算快照' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab 栏 -->
+    <div class="ld-tabs">
+      <button
+        v-for="t in tabs"
+        :key="t.id"
+        type="button"
+        class="mk-pill"
+        :class="{ 'mk-pill--active': tab === t.id }"
+        @click="tab = t.id"
+      >
+        {{ t.label }}
+      </button>
+    </div>
+
+    <!-- 总览 -->
+    <div v-if="tab === 'overview'" class="ld-grid">
+      <div class="ld-col">
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">当前进度</h3>
+            <span class="mk-badge mk-badge--info">{{ d.pct }}%</span>
+          </div>
+          <div class="ld-progress">
+            <strong>{{ d.path }}</strong>
+            <span class="ld-progress__stage">{{ d.stage }}</span>
+            <div class="ld-progress__bar"><i :style="{ width: d.pct + '%' }"></i></div>
+            <p class="ld-progress__task">正在做：{{ d.task }}</p>
+          </div>
+        </section>
+
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">知识点状态</h3>
+          </div>
+          <div class="ld-concepts">
+            <div class="ld-concept-group">
+              <span class="ld-concept-label ld-concept-label--ok">已掌握 {{ d.concepts.mastered.length }}</span>
+              <div class="ld-concept-list">
+                <span v-for="c in d.concepts.mastered" :key="c" class="ld-concept ld-concept--ok">{{ c }}</span>
+              </div>
+            </div>
+            <div class="ld-concept-group">
+              <span class="ld-concept-label ld-concept-label--warn">挣扎 {{ d.concepts.struggling.length }}</span>
+              <div class="ld-concept-list">
+                <span v-for="c in d.concepts.struggling" :key="c" class="ld-concept ld-concept--warn">{{ c }}</span>
+              </div>
+            </div>
+            <div class="ld-concept-group">
+              <span class="ld-concept-label ld-concept-label--bad">脆弱 {{ d.concepts.fragile.length }}</span>
+              <div class="ld-concept-list">
+                <span v-for="c in d.concepts.fragile" :key="c" class="ld-concept ld-concept--bad">{{ c }}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="ld-col">
+        <!-- 活跃柱图暂无真实数据源：live 且全 0 时隐藏，避免展示假趋势 -->
+        <section v-if="!isLive || d.trend7d.some((v) => v > 0)" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">7 天活跃趋势</h3>
+            <span class="mk-card__meta">{{ trendHint }}</span>
+          </div>
+          <div class="ld-trend">
+            <span
+              v-for="(v, i) in d.trend7d"
+              :key="i"
+              class="ld-trend__bar"
+              :class="{ 'ld-trend__bar--down': d.trend === 'down' }"
+              :style="{ height: (v / 7) * 100 + '%' }"
+              :title="`${['周一','周二','周三','周四','周五','周六','周日'][i]} · 活跃 ${v}`"
+            ></span>
+          </div>
+        </section>
+
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">最近会话</h3>
+          </div>
+          <div class="ld-sessions">
+            <div v-for="(s, i) in d.sessions" :key="i" class="ld-session">
+              <span class="ld-session__dot" :class="`is-${s.tone}`"></span>
+              <div class="ld-session__main">
+                <strong>{{ s.title }}</strong>
+                <span>{{ s.result }}</span>
+              </div>
+              <span class="ld-session__time">{{ s.time }}</span>
+            </div>
+            <p v-if="!d.sessions.length" class="ld-none">暂无会话记录</p>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- 认知画像 -->
+    <div v-else-if="tab === 'cognitive'" class="ld-tabpage">
+      <template v-if="profile">
+        <section class="mk-card">
+          <div class="mk-card__head"><h3 class="mk-card__title">认知特征</h3></div>
+          <div class="ld-kv">
+            <div v-for="kv in cognitiveRows" :key="kv.label" class="ld-kv__row">
+              <span>{{ kv.label }}</span>
+              <strong>{{ kv.value }}</strong>
+            </div>
+          </div>
+        </section>
+        <section class="mk-card">
+          <div class="mk-card__head"><h3 class="mk-card__title">偏好与情绪</h3></div>
+          <div class="ld-kv">
+            <div v-for="kv in preferenceRows" :key="kv.label" class="ld-kv__row">
+              <span>{{ kv.label }}</span>
+              <strong>{{ kv.value }}</strong>
+            </div>
+          </div>
+        </section>
+        <section v-if="narrativeInsights.length" class="mk-card">
+          <div class="mk-card__head"><h3 class="mk-card__title">叙述洞察</h3></div>
+          <div class="ld-insights">
+            <p v-for="(n, i) in narrativeInsights" :key="i">{{ n }}</p>
+          </div>
+        </section>
+      </template>
+      <p v-else class="ld-none">{{ isLive ? '暂无认知画像数据' : '演示模式下无数据' }}</p>
+    </div>
+
+    <!-- 动态状态 -->
+    <div v-else-if="tab === 'dynamic'" class="ld-tabpage">
+      <template v-if="dynamicState">
+        <div class="ld-metrics">
+          <div v-for="m in metricCards" :key="m.label" class="ld-metric">
+            <span>{{ m.label }}</span>
+            <strong :class="m.cls">{{ m.value }}</strong>
+            <em>{{ m.hint }}</em>
+          </div>
+        </div>
+        <section class="mk-card">
+          <div class="mk-card__head"><h3 class="mk-card__title">趋势与建议</h3></div>
+          <div class="ld-kv">
+            <div v-for="kv in dynamicRows" :key="kv.label" class="ld-kv__row">
+              <span>{{ kv.label }}</span>
+              <strong>{{ kv.value }}</strong>
+            </div>
+          </div>
+        </section>
+        <section v-if="controlFlags.length" class="mk-card">
+          <div class="mk-card__head"><h3 class="mk-card__title">教学控制信号</h3></div>
+          <div class="ld-flags">
+            <span v-for="f in controlFlags" :key="f.text" class="mk-badge" :class="f.on ? 'mk-badge--warn' : 'mk-badge--muted'">
+              {{ f.text }}：{{ f.on ? '是' : '否' }}
+            </span>
+          </div>
+        </section>
+      </template>
+      <p v-else class="ld-none">{{ isLive ? '暂无动态状态数据' : '演示模式下无数据' }}</p>
+    </div>
+
+    <!-- 知识记忆 -->
+    <div v-else-if="tab === 'memory'" class="ld-tabpage">
+      <template v-if="memoryRows.length">
+        <section class="mk-card">
+          <div class="mk-card__head"><h3 class="mk-card__title">全局信号与背景</h3></div>
+          <div class="ld-kv">
+            <div v-for="kv in memoryRows" :key="kv.label" class="ld-kv__row">
+              <span>{{ kv.label }}</span>
+              <strong>{{ kv.value }}</strong>
+            </div>
+          </div>
+        </section>
+      </template>
+      <p v-else class="ld-none">{{ isLive ? '暂无知识记忆数据' : '演示模式下无数据' }}</p>
+    </div>
+
+    <!-- 教学建议 -->
+    <div v-else-if="tab === 'teaching'" class="ld-tabpage">
+      <template v-if="teachingHints">
+        <section class="mk-card">
+          <div class="mk-card__head"><h3 class="mk-card__title">推荐教学策略</h3></div>
+          <div class="ld-kv">
+            <div class="ld-kv__row">
+              <span>推荐方式</span>
+              <strong>{{ teachingHints.recommendedApproach || '—' }}</strong>
+            </div>
+            <div class="ld-kv__row">
+              <span>Prompt 增强</span>
+              <strong>{{ teachingHints.promptEnhancement || '—' }}</strong>
+            </div>
+          </div>
+        </section>
+        <section class="mk-card">
+          <div class="mk-card__head"><h3 class="mk-card__title">强调 / 避免</h3></div>
+          <div class="ld-two">
+            <div>
+              <span class="ld-concept-label ld-concept-label--ok">强调</span>
+              <div class="ld-concept-list">
+                <span v-for="c in teachingHints.emphasize || []" :key="c" class="ld-concept ld-concept--ok">{{ c }}</span>
+                <span v-if="!(teachingHints.emphasize || []).length" class="ld-none">—</span>
+              </div>
+            </div>
+            <div>
+              <span class="ld-concept-label ld-concept-label--bad">避免</span>
+              <div class="ld-concept-list">
+                <span v-for="c in teachingHints.avoid || []" :key="c" class="ld-concept ld-concept--bad">{{ c }}</span>
+                <span v-if="!(teachingHints.avoid || []).length" class="ld-none">—</span>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section v-if="(teachingHints.riskFactors || []).length" class="mk-card">
+          <div class="mk-card__head"><h3 class="mk-card__title">风险因素</h3></div>
+          <div class="ld-insights">
+            <p v-for="(r, i) in teachingHints.riskFactors" :key="i">{{ r }}</p>
+          </div>
+        </section>
+      </template>
+      <p v-else class="ld-none">{{ isLive ? '暂无教学建议数据' : '演示模式下无数据' }}</p>
+    </div>
+
+    <!-- 证据记录 -->
+    <div v-else-if="tab === 'evidence'" class="ld-tabpage">
+      <section class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">证据时间线</h3>
+          <span class="mk-card__meta">{{ evidence.length }} 条</span>
+        </div>
+        <div v-if="evidence.length" class="ld-evidence">
+          <div v-for="(e, i) in evidence" :key="i" class="ld-ev">
+            <span class="ld-ev__dot" :class="e.score >= 0.8 ? 'is-bad' : 'is-ok'"></span>
+            <div class="ld-ev__main">
+              <strong>{{ e.title }}</strong>
+              <span>{{ e.detail }}</span>
+            </div>
+            <span class="ld-ev__time">{{ e.time }}</span>
+          </div>
+        </div>
+        <p v-else class="ld-none">{{ isLive ? '暂无证据记录' : '演示模式下无数据' }}</p>
+      </section>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import { subPage, closeSubPage, learnerDetails, dataSource } from './mockStore'
+import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveRecomputeLearner, timeAgo, errMsg } from './mockLive'
+
+interface Detail {
+  name: string
+  email: string
+  joined: string
+  trend: 'up' | 'down' | 'flat'
+  fatigue: string
+  path: string
+  stage: string
+  task: string
+  pct: number
+  concepts: { mastered: string[]; struggling: string[]; fragile: string[] }
+  trend7d: number[]
+  sessions: { time: string; title: string; result: string; tone: 'ok' | 'warn' | 'bad' }[]
+  snapshot: { version: string; generatedAt: string }
+}
+
+const isLive = computed(() => dataSource.value === 'live')
+const liveDetail = ref<Detail | null>(null)
+const rawDetail = ref<Record<string, unknown> | null>(null)
+const liveEvidence = ref<{ title: string; detail: string; time: string; score: number }[]>([])
+const recomputing = ref(false)
+const toast = ref('')
+const toastCls = ref('mk-toast--ok')
+const tab = ref('overview')
+
+const tabs = [
+  { id: 'overview', label: '总览' },
+  { id: 'cognitive', label: '认知画像' },
+  { id: 'dynamic', label: '动态状态' },
+  { id: 'memory', label: '知识记忆' },
+  { id: 'teaching', label: '教学建议' },
+  { id: 'evidence', label: '证据记录' }
+]
+/** 详情加载：成功全量数据；失败但有列表兜底 → 显示兜底；失败且无兜底 → 明确错误态 */
+const detailError = ref(false)
+/** 请求超时保护：详情接口挂起时不再无限「加载中…」，超时后走兜底/错误态 */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('详情请求超时')), ms)
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v) },
+      (e) => { clearTimeout(timer); reject(e) }
+    )
+  })
+}
+
+watch(
+  () => [subPage.value?.id, isLive.value] as const,
+  ([id, live]) => {
+    void loadDetail(id, live)
+  },
+  { immediate: true }
+)
+
+async function loadDetail(id: string | undefined, live: boolean) {
+  liveDetail.value = null
+  rawDetail.value = null
+  liveEvidence.value = []
+  detailError.value = false
+  tab.value = 'overview'
+  if (!id || !live) return
+  const base = liveLearners.value.find((l) => l.userId === id)
+  try {
+    const raw = (await withTimeout(liveGetLearnerDetail(id), 12000)) as Record<string, unknown>
+    rawDetail.value = raw
+    const model = (raw.model as Record<string, unknown>) || raw
+    const concepts = (model.concepts || raw.concepts || {}) as Record<string, string[]>
+    const evidenceItems = await liveGetLearnerEvidence(id).catch(() => [] as Record<string, unknown>[])
+    liveEvidence.value = evidenceItems.map((e) => ({
+      title: String(e.type || e.title || e.kind || '学习事件'),
+      detail: String(e.summary || e.signal || e.result || e.knowledgePoint || ''),
+      time: timeAgo(String(e.createdAt || e.at || '')),
+      score: Number(e.score || 0)
+    }))
+    liveDetail.value = {
+      name: base?.name || String(model.userName || id),
+      email: base?.email || '',
+      joined: '—',
+      trend: base?.trend || 'flat',
+      fatigue: base?.fatigue || '低',
+      path: base?.pathTitle || String(model.pathTitle || '尚未开始学习'),
+      stage: base?.currentMilestone || '',
+      task: base?.currentTask || '未开始',
+      pct: Number(model.progress ?? model.mastery ?? 0) || 0,
+      concepts: {
+        mastered: concepts.mastered || [],
+        struggling: base?.struggling || concepts.struggling || [],
+        fragile: base?.fragile || concepts.fragile || []
+      },
+      trend7d: [0, 0, 0, 0, 0, 0, 0],
+      sessions: liveEvidence.value.slice(0, 6).map((e) => ({
+        time: e.time,
+        title: e.title,
+        result: e.detail,
+        tone: e.score >= 0.8 ? 'bad' : 'ok' as const
+      })),
+      snapshot: { version: base ? `置信 ${(base.confidence * 100).toFixed(0)}%` : '—', generatedAt: timeAgo(base?.generatedAt) }
+    }
+  } catch (e) {
+    if (base) {
+      // 列表兜底：详情接口失败时至少展示列表里已有的信息
+      liveDetail.value = {
+        name: base.name,
+        email: base.email,
+        joined: '—',
+        trend: base.trend,
+        fatigue: base.fatigue,
+        path: base.pathTitle || '尚未开始学习',
+        stage: base.currentMilestone || '',
+        task: base.currentTask || '未开始',
+        pct: 0,
+        concepts: { mastered: [], struggling: base.struggling, fragile: base.fragile },
+        trend7d: [0, 0, 0, 0, 0, 0, 0],
+        sessions: [],
+        snapshot: { version: `置信 ${(base.confidence * 100).toFixed(0)}%`, generatedAt: timeAgo(base.generatedAt) }
+      }
+      toast.value = `详情接口暂时不可用，已显示列表快照：${errMsg(e)}`
+      toastCls.value = 'mk-toast--bad'
+    } else {
+      detailError.value = true
+    }
+  }
+}
+
+async function recompute() {
+  const id = subPage.value?.id
+  if (!id || recomputing.value) return
+  recomputing.value = true
+  try {
+    if (isLive.value) {
+      await liveRecomputeLearner(id)
+      toast.value = '快照已重算（真实）'
+      toastCls.value = 'mk-toast--ok'
+      const base = liveLearners.value.find((l) => l.userId === id)
+      if (base && liveDetail.value) {
+        liveDetail.value.snapshot = { version: `置信 ${(base.confidence * 100).toFixed(0)}%`, generatedAt: timeAgo(base.generatedAt) }
+      }
+    } else {
+      await new Promise((r) => setTimeout(r, 800))
+      toast.value = '快照已重算'
+      toastCls.value = 'mk-toast--ok'
+    }
+  } catch (e) {
+    toast.value = `重算失败：${errMsg(e)}`
+    toastCls.value = 'mk-toast--bad'
+  } finally {
+    recomputing.value = false
+    setTimeout(() => (toast.value = ''), 3000)
+  }
+}
+
+const d = computed<Detail | null>(() => {
+  if (isLive.value) {
+    if (detailError.value) return null
+    return liveDetail.value || {
+      name: '加载中…', email: '', joined: '', trend: 'flat', fatigue: '低',
+      path: '', stage: '', task: '', pct: 0,
+      concepts: { mastered: [], struggling: [], fragile: [] },
+      trend7d: [0, 0, 0, 0, 0, 0, 0], sessions: [],
+      snapshot: { version: '—', generatedAt: '—' }
+    }
+  }
+  const found = learnerDetails.find((x) => x.id === subPage.value?.id)
+  return found || null
+})
+
+/** demo 模式：未知 ID 一律显示「未找到」空态，严禁回退展示其他人的数据 */
+const notFound = computed(() => !isLive.value && !learnerDetails.some((x) => x.id === subPage.value?.id))
+
+/* ---------- Tab 数据推导 ---------- */
+/** demo 模式的完整诊断数据（对齐真实 learner-models 结构） */
+const DEMO_RAW: Record<string, unknown> = {
+  profile: {
+    cognitive: {
+      metacognitionLevel: '中等（能说出哪里不懂，但归因常偏表面）',
+      thinkingStyle: '示例驱动：先看成品再理解原理',
+      confusionPattern: '把不熟悉的概念归到已知框架里，造成隐性误用',
+      priorKnowledgeStructure: '办公场景经验丰富，编程概念零散',
+      selfAssessmentAccuracy: '偏低（自评掌握的模块实测正确率 62%）'
+    },
+    preferences: { learningStyle: '做中学，容忍短视频，不耐长文档', pacePreference: '25 分钟小任务' },
+    emotional: { baseline: '平稳，周五下午易焦躁', motivationDriver: '解决周报这一件事' }
+  },
+  dynamicState: {
+    metrics: { lss: 6.8, ktl: 5.9, lf: 3.2, lsb: 0.71 },
+    recentTrend: '上升',
+    fatigueRisk: '低',
+    confidenceTrend: '缓升',
+    recentSessionQuality: '良好（近 3 次 2 次一次通过）',
+    recommendedPacing: '保持当前节奏，可尝试每周加 1 次挑战任务',
+    recommendedInteraction: '示例先行，再追问原理；避免连续理论灌输'
+  },
+  learningControlState: {
+    shouldAvoidNewConcepts: false,
+    shouldPreferConsolidation: true,
+    shouldOfferBreak: false
+  },
+  knowledgeMemory: {
+    globalSignals: '数据清洗相关概念连续 3 次正迁移；数组公式仍是跨主题薄弱点',
+    globalBackground: '运营岗，Excel 日常使用 3 年，无编程背景；目标单一：周报自动化'
+  },
+  teachingHints: {
+    recommendedApproach: '示例驱动 + 小步练习：每个概念先给可复用模板，再拆原理',
+    promptEnhancement: '涉及表格结构时主动给出示例列名；置信度低时复述确认',
+    emphasize: ['单元格引用', 'SUMIF', '筛选', '真实场景迁移'],
+    avoid: ['数组公式（暂时）', '术语堆叠', '长时间纯讲解'],
+    riskFactors: ['自评偏高导致跳练', '周五下午疲劳窗口', '数据透视表可能触发畏难']
+  }
+}
+
+const DEMO_EVIDENCE = [
+  { title: '练习通过', detail: '数据清洗练习 2/3 · 掌握 +0.12', time: '6 分钟前', score: 0.4 },
+  { title: '概念挣扎', detail: '「数据透视表」连续 2 次未达标', time: '3 天前', score: 0.83 },
+  { title: '快照重算', detail: '置信 0.82 · v14', time: '昨天 21:14', score: 0.2 },
+  { title: '任务完成', detail: 'SUMIF 实战 · 一次通过', time: '昨天', score: 0.3 },
+  { title: '中途退出', detail: '数据透视表入门 · 标记复习', time: '3 天前', score: 0.68 }
+]
+
+const profile = computed(() => {
+  if (!isLive.value) return DEMO_RAW.profile as Record<string, unknown>
+  return (rawDetail.value?.profile || null) as Record<string, unknown> | null
+})
+const dynamicState = computed(() => {
+  if (!isLive.value) return DEMO_RAW.dynamicState as Record<string, unknown>
+  return (rawDetail.value?.dynamicState || null) as Record<string, unknown> | null
+})
+interface TeachingHintsShape {
+  recommendedApproach?: string
+  promptEnhancement?: string
+  emphasize?: string[]
+  avoid?: string[]
+  riskFactors?: string[]
+}
+
+const teachingHints = computed(() => {
+  if (!isLive.value) return DEMO_RAW.teachingHints as TeachingHintsShape
+  return (rawDetail.value?.teachingHints || null) as TeachingHintsShape | null
+})
+const knowledgeMemory = computed(() => {
+  if (!isLive.value) return DEMO_RAW.knowledgeMemory as Record<string, unknown>
+  return (rawDetail.value?.knowledgeMemory || null) as Record<string, unknown> | null
+})
+const controlState = computed(() => {
+  if (!isLive.value) return DEMO_RAW.learningControlState as Record<string, unknown>
+  return (rawDetail.value?.learningControlState || null) as Record<string, unknown> | null
+})
+/** 证据记录：live 用接口数据，demo 用演示时间线 */
+const evidence = computed(() => (isLive.value ? liveEvidence.value : DEMO_EVIDENCE))
+
+function kvRows(obj: Record<string, unknown> | null, labels: Record<string, string>) {
+  if (!obj) return [] as { label: string; value: string }[]
+  return Object.entries(labels)
+    .filter(([key]) => obj[key] != null && obj[key] !== '')
+    .map(([key, label]) => ({ label, value: String(obj[key]) }))
+}
+
+const cognitiveRows = computed(() =>
+  kvRows((profile.value?.cognitive || null) as Record<string, unknown> | null, {
+    metacognitionLevel: '元认知水平',
+    thinkingStyle: '思维风格',
+    confusionPattern: '困惑模式',
+    priorKnowledgeStructure: '先备知识结构',
+    selfAssessmentAccuracy: '自评准确度'
+  })
+)
+
+const preferenceRows = computed(() => [
+  ...kvRows((profile.value?.preferences || null) as Record<string, unknown> | null, {
+    learningStyle: '学习风格',
+    contentPreference: '内容偏好',
+    pacePreference: '节奏偏好'
+  }),
+  ...kvRows((profile.value?.emotional || null) as Record<string, unknown> | null, {
+    baseline: '情绪基线',
+    frustrationPattern: '挫败模式',
+    motivationDriver: '动机驱动'
+  })
+])
+
+const narrativeInsights = computed(() => {
+  const n = profile.value?.narrativeInsights
+  if (!n) return [] as string[]
+  if (Array.isArray(n)) return n.map(String)
+  return Object.values(n as Record<string, unknown>).flatMap((v) => (Array.isArray(v) ? v.map(String) : [String(v)])).slice(0, 6)
+})
+
+const metricCards = computed(() => {
+  const m = (dynamicState.value?.metrics || {}) as Record<string, number>
+  const fmt = (v?: number) => (v == null ? '—' : v.toFixed(1))
+  const tone = (v?: number) => (v == null ? '' : v >= 7 ? 'is-good' : v <= 4 ? 'is-bad' : '')
+  return [
+    { label: 'LSS 学习状态', value: fmt(m.lss), hint: '整体学习健康度', cls: tone(m.lss) },
+    { label: 'KTL 知识轨迹', value: fmt(m.ktl), hint: '知识增长曲线', cls: tone(m.ktl) },
+    { label: 'LF 学习疲劳', value: fmt(m.lf), hint: '越低越好', cls: m.lf != null && m.lf >= 6 ? 'is-bad' : '' },
+    { label: 'LSB 行为稳定', value: fmt(m.lsb), hint: '行为一致性', cls: tone(m.lsb) }
+  ]
+})
+
+const dynamicRows = computed(() => [
+  ...kvRows(dynamicState.value, {
+    recentTrend: '近期趋势',
+    fatigueRisk: '疲劳风险',
+    confidenceTrend: '置信趋势',
+    recentSessionQuality: '近期会话质量'
+  }),
+  ...kvRows(dynamicState.value, {
+    recommendedPacing: '建议节奏',
+    recommendedInteraction: '建议互动'
+  })
+])
+
+const controlFlags = computed(() => {
+  const c = controlState.value
+  if (!c) return [] as { text: string; on: boolean }[]
+  return [
+    { text: '避免新概念', on: !!c.shouldAvoidNewConcepts },
+    { text: '优先巩固', on: !!c.shouldPreferConsolidation },
+    { text: '建议休息', on: !!c.shouldOfferBreak }
+  ]
+})
+
+const memoryRows = computed(() => {
+  const km = knowledgeMemory.value
+  if (!km) return [] as { label: string; value: string }[]
+  const rows: { label: string; value: string }[] = []
+  for (const [key, label] of [['globalSignals', '全局信号'], ['globalBackground', '全局背景']] as const) {
+    const v = km[key]
+    if (v == null) continue
+    rows.push({ label, value: typeof v === 'string' ? v : JSON.stringify(v).slice(0, 200) })
+  }
+  return rows
+})
+
+const trendText = computed(() => (d.value?.trend === 'up' ? '↗ 上升' : d.value?.trend === 'down' ? '↘ 下降' : '→ 稳定'))
+const trendBadge = computed(() => (d.value?.trend === 'up' ? 'mk-badge--ok' : d.value?.trend === 'down' ? 'mk-badge--bad' : 'mk-badge--muted'))
+const fatigueBadge = computed(() => (d.value?.fatigue === '高' ? 'mk-badge--bad' : d.value?.fatigue === '中' ? 'mk-badge--warn' : 'mk-badge--ok'))
+const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，建议介入' : d.value?.trend === 'up' ? '稳步上升' : '平稳'))
+</script>
+
+<style scoped>
+.ld { gap: 16px; }
+.ld-back {
+  border: 0;
+  background: transparent;
+  color: var(--mk-blue);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  width: fit-content;
+}
+.ld-head { display: grid; gap: 12px; }
+.ld-id {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.ld-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #3478f6, #8d6bff);
+  color: #fff;
+  display: grid;
+  place-content: center;
+  font-size: 18px;
+  font-weight: 700;
+}
+.ld-id h3 { margin: 0; font-size: 18px; }
+.ld-name { margin: 0; font-size: 18px; line-height: 1.4; }
+.ld-sub { color: var(--mk-faint); font-size: 12px; }
+.ld-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.ld-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.ld-tabpage { display: grid; gap: 14px; align-content: start; }
+.ld-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: 12.5px; }
+
+.ld-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.ld-col { display: grid; gap: 14px; }
+
+.ld-progress { padding: 16px; display: grid; gap: 8px; }
+.ld-progress strong { font-size: 15px; }
+.ld-progress__stage { color: var(--mk-muted); font-size: 12.5px; }
+.ld-progress__bar {
+  height: 8px;
+  border-radius: 4px;
+  background: #eef2fa;
+  overflow: hidden;
+  margin: 4px 0;
+}
+.ld-progress__bar i { display: block; height: 100%; background: linear-gradient(90deg, #6aa0ff, #3478f6); }
+.ld-progress__task { margin: 0; font-size: 12.5px; color: var(--mk-muted); }
+
+.ld-concepts { padding: 16px; display: grid; gap: 14px; }
+.ld-concept-group { display: grid; gap: 7px; }
+.ld-concept-label { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
+.ld-concept-label--ok { color: var(--mk-green); }
+.ld-concept-label--warn { color: var(--mk-amber); }
+.ld-concept-label--bad { color: var(--mk-red); }
+.ld-concept-list { display: flex; gap: 6px; flex-wrap: wrap; }
+.ld-concept {
+  padding: 3px 10px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ld-concept--ok { background: var(--mk-green-bg); color: var(--mk-green); }
+.ld-concept--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
+.ld-concept--bad { background: var(--mk-red-bg); color: var(--mk-red); }
+
+.ld-trend {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 90px;
+  padding: 16px;
+}
+.ld-trend__bar {
+  flex: 1;
+  border-radius: 4px 4px 2px 2px;
+  background: linear-gradient(180deg, #6aa0ff, #3d7cff);
+  min-height: 6px;
+}
+.ld-trend__bar--down { background: linear-gradient(180deg, #fca5a5, #dc2626); }
+
+.ld-sessions { display: grid; }
+.ld-session {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid #f0f2f5;
+}
+.ld-session:last-child { border-bottom: none; }
+.ld-session__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ld-session__dot.is-ok { background: var(--mk-green); }
+.ld-session__dot.is-warn { background: var(--mk-amber); }
+.ld-session__dot.is-bad { background: var(--mk-red); }
+.ld-session__main { flex: 1; display: grid; min-width: 0; }
+.ld-session__main strong { font-size: 13px; }
+.ld-session__main span { font-size: 11.5px; color: var(--mk-faint); }
+.ld-session__time { font-size: 11.5px; color: var(--mk-faint); white-space: nowrap; }
+
+/* Tab 通用 */
+.ld-kv { display: grid; }
+.ld-kv__row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #f0f2f5;
+  font-size: 12.5px;
+}
+.ld-kv__row:last-child { border-bottom: none; }
+.ld-kv__row span { color: var(--mk-faint); }
+.ld-kv__row strong { font-weight: 600; white-space: pre-wrap; }
+
+.ld-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.ld-metric {
+  display: grid;
+  gap: 3px;
+  padding: 13px 16px;
+  border: 1px solid var(--mk-line);
+  border-radius: 12px;
+  background: var(--mk-surface);
+}
+.ld-metric span { font-size: 11.5px; color: var(--mk-muted); font-weight: 600; }
+.ld-metric strong { font-size: 22px; font-variant-numeric: tabular-nums; }
+.ld-metric strong.is-good { color: var(--mk-green); }
+.ld-metric strong.is-bad { color: var(--mk-red); }
+.ld-metric em { font-style: normal; font-size: 11px; color: var(--mk-faint); }
+
+.ld-flags { display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 16px; }
+.ld-insights { padding: 12px 16px; display: grid; gap: 8px; }
+.ld-insights p { margin: 0; font-size: 12.5px; color: var(--mk-muted); line-height: 1.7; }
+.ld-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px 16px; }
+.ld-two > div { display: grid; gap: 7px; align-content: start; }
+
+.ld-evidence { display: grid; }
+.ld-ev {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #f0f2f5;
+}
+.ld-ev:last-child { border-bottom: none; }
+.ld-ev__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ld-ev__dot.is-ok { background: var(--mk-green); }
+.ld-ev__dot.is-bad { background: var(--mk-red); }
+.ld-ev__main { flex: 1; display: grid; min-width: 0; }
+.ld-ev__main strong { font-size: 12.5px; }
+.ld-ev__main span { font-size: 11.5px; color: var(--mk-faint); }
+.ld-ev__time { font-size: 11px; color: var(--mk-faint); white-space: nowrap; }
+
+@media (max-width: 1100px) {
+  .ld-grid { grid-template-columns: 1fr; }
+  .ld-metrics { grid-template-columns: repeat(2, 1fr); }
+  .ld-two { grid-template-columns: 1fr; }
+}
+</style>

@@ -1,14 +1,17 @@
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 import { getAPIGateway } from '../gateway/api-gateway';
+import { decryptSecret, encryptSecret } from '../utils/secret-crypto';
+
+const SECRET_CONTEXT = 'main.user_agent_model_configs.apiKey';
 
 export interface UserAgentModelConfig {
   userId: string;
   agentId: string;
   model?: string;
   endpoint?: string;
-  apiKey?: string;
+  apiKey?: string | null;
   temperature?: number;
   maxTokens?: number;
   enabled: boolean;
@@ -17,7 +20,8 @@ export interface UserAgentModelConfig {
 class UserAgentModelConfigService {
   async getAllByUser(userId: string): Promise<UserAgentModelConfig[]> {
     try {
-      return await prisma.user_agent_model_configs.findMany({ where: { userId } });
+      const configs = await prisma.user_agent_model_configs.findMany({ where: { userId } });
+      return configs.map(config => ({ ...config, apiKey: decryptSecret(config.apiKey, SECRET_CONTEXT) }));
     } catch (error) {
       logger.error(`Failed to get user configs: ${userId}`, error);
       throw error;
@@ -26,9 +30,10 @@ class UserAgentModelConfigService {
 
   async get(userId: string, agentId: string): Promise<UserAgentModelConfig | null> {
     try {
-      return await prisma.user_agent_model_configs.findUnique({
+      const config = await prisma.user_agent_model_configs.findUnique({
         where: { userId_agentId: { userId, agentId } }
       });
+      return config ? { ...config, apiKey: decryptSecret(config.apiKey, SECRET_CONTEXT) } : null;
     } catch (error) {
       logger.error(`Failed to get user config: ${userId}/${agentId}`, error);
       throw error;
@@ -37,13 +42,16 @@ class UserAgentModelConfigService {
 
   async upsert(userId: string, agentId: string, config: Partial<UserAgentModelConfig>): Promise<UserAgentModelConfig> {
     try {
+      const data = config.apiKey === undefined
+        ? config
+        : { ...config, apiKey: encryptSecret(config.apiKey, SECRET_CONTEXT) };
       const result = await prisma.user_agent_model_configs.upsert({
         where: { userId_agentId: { userId, agentId } },
-        update: { ...config, updatedAt: new Date() },
-        create: { id: uuidv4(), userId, agentId, ...config, updatedAt: new Date() }
+        update: { ...data, updatedAt: new Date() },
+        create: { id: uuidv4(), userId, agentId, ...data, updatedAt: new Date() }
       });
       getAPIGateway().invalidateCache(userId, agentId);
-      return result;
+      return { ...result, apiKey: decryptSecret(result.apiKey, SECRET_CONTEXT) };
     } catch (error) {
       logger.error(`Failed to upsert user config: ${userId}/${agentId}`, error);
       throw error;

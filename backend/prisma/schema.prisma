@@ -7,47 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model ab_test {
-  id             String           @id
-  name           String
-  description    String?
-  testType       String
-  variants       String
-  trafficSplit   String
-  status         String           @default("draft")
-  startDate      DateTime?
-  endDate        DateTime?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime
-  ab_test_result ab_test_result[]
 
-  @@index([status])
-  @@index([testType])
-}
-
-model ab_test_result {
-  id             String   @id
-  testId         String
-  userId         String
-  sessionId      String
-  taskId         String
-  variantId      String
-  completionTime Int?
-  successRate    Float?
-  averageScore   Float?
-  engagement     Float?
-  frustration    Float?
-  satisfaction   Float?
-  preTestScore   Float?
-  postTestScore  Float?
-  learningGain   Float?
-  createdAt      DateTime @default(now())
-  ab_test        ab_test  @relation(fields: [testId], references: [id], onDelete: Cascade)
-
-  @@index([testId])
-  @@index([variantId])
-  @@index([userId])
-}
 
 model achievements {
   id          String    @id
@@ -67,22 +27,40 @@ model achievements {
 }
 
 model agent_call_logs {
-  id          String   @id
-  agentId     String
-  userId      String
-  sourceEntry String   @default("platform")
-  traceId     String?
-  callerAgent String?
-  userRole    String   @default("user")
-  input       String?
-  output      String?
-  success     Boolean  @default(false)
-  durationMs  Int      @default(0)
-  tokensUsed  Int?
-  error       String?
-  errorCode   String?
-  calledAt    DateTime @default(now())
-  metadata    String?
+  id                String   @id
+  agentId           String
+  userId            String
+  sourceEntry       String   @default("platform")
+  traceId           String?
+  callerAgent       String?
+  userRole          String   @default("user")
+  input             String?
+  output            String?
+  success           Boolean  @default(false)
+  durationMs        Int      @default(0)
+  tokensUsed        Int?
+  error             String?
+  errorCode         String?
+  calledAt          DateTime @default(now())
+  metadata          String?
+  executionLayer    String?
+  actorType         String?
+  actorId           String?
+  parentExecutionId String?
+  rootExecutionId   String?
+  promptCallId      String?
+  providerId        String?
+  providerType      String?
+  routeSource       String?
+  model             String?
+  statusCode        Int?
+  attemptCount      Int?
+  maxAttempts       Int?
+  promptTokens      Int?
+  completionTokens  Int?
+  finishReason      String?
+  completionId      String?
+  errorCategory     String?
 
   @@index([agentId, calledAt])
   @@index([calledAt])
@@ -91,57 +69,14 @@ model agent_call_logs {
   @@index([sourceEntry])
   @@index([userId])
   @@index([agentId])
+  @@index([parentExecutionId, calledAt])
+  @@index([promptCallId, calledAt])
+  @@index([executionLayer, calledAt])
+  @@index([providerId, calledAt])
 }
 
-model agent_execution_logs {
-  id         String   @id
-  instanceId String
-  agentName  String
-  action     String
-  status     String
-  input      String?
-  output     String?
-  error      String?
-  durationMs Int
-  timestamp  DateTime @default(now())
 
-  @@index([timestamp])
-  @@index([agentName])
-  @@index([instanceId])
-}
 
-model agent_instances {
-  id            String    @id
-  name          String
-  status        String    @default("idle")
-  agentType     String    @default("official")
-  currentTaskId String?
-  taskType      String?
-  avgDurationMs Int       @default(0)
-  totalCalls    Int       @default(0)
-  successCalls  Int       @default(0)
-  errorCalls    Int       @default(0)
-  cpuUsage      Float?
-  memoryUsage   Float?
-  lastHeartbeat DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime
-}
-
-model agent_logs {
-  id         String   @id
-  agentName  String
-  action     String
-  status     String
-  input      String?
-  output     String?
-  error      String?
-  durationMs Int
-  timestamp  DateTime @default(now())
-
-  @@index([timestamp])
-  @@index([agentName])
-}
 
 model prompt_call_logs {
   id                  String   @id
@@ -165,6 +100,13 @@ model prompt_call_logs {
   pipelineStepIndex   Int?
   traceId             String?
   parentExecutionId   String?
+  promptAttemptCount  Int      @default(1)
+  llmRequestCount     Int      @default(0)
+  finalLlmRequestId   String?
+  failureStage        String?
+  attemptTrace        String?
+  providerId          String?
+  model               String?
   createdAt           DateTime @default(now())
 
   @@index([agentId, createdAt])
@@ -173,261 +115,112 @@ model prompt_call_logs {
   @@index([userId])
   @@index([traceId])
   @@index([parentExecutionId])
+  @@index([finalLlmRequestId])
 }
 
-model arena_agent_logs {
-  id               String         @id
-  sessionId        String
-  agentName        String
-  agentType        String
-  status           String
-  startTime        DateTime
-  endTime          DateTime?
-  durationMs       Int?
-  input            String?
-  output           String?
-  promptTokens     Int?
-  completionTokens Int?
-  totalTokens      Int?
-  error            String?
-  metadata         String?
-  createdAt        DateTime       @default(now())
-  arena_sessions   arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+model llm_execution_attempts {
+  id                  String   @id
+  llmRequestId        String
+  parentExecutionId   String?
+  promptCallId        String?
+  rootExecutionId     String?
+  traceId             String?
+  userId              String?
+  sourceEntry         String   @default("platform")
+  promptAttemptNo     Int      @default(1)
+  transportAttemptNo  Int
+  maxAttempts         Int
+  providerId          String?
+  providerType        String?
+  routeSource         String?
+  requestedModel      String?
+  resolvedModel       String?
+  responseModel       String?
+  endpointHost        String?
+  success             Boolean  @default(false)
+  retryable           Boolean?
+  willRetry           Boolean  @default(false)
+  statusCode          Int?
+  errorCategory       String?
+  errorCode           String?
+  errorMessage        String?
+  startedAt           DateTime
+  completedAt         DateTime
+  durationMs          Int
+  backoffMs           Int?
+  retryAfterMs        Int?
+  configuredTimeoutMs Int?
+  effectiveTimeoutMs  Int?
+  promptTokens        Int?
+  completionTokens    Int?
+  totalTokens         Int?
+  finishReason        String?
+  completionId        String?
+  providerRequestId   String?
+  messageCount        Int?
+  requestBytes        Int?
+  responseBytes       Int?
+  expiresAt           DateTime
+  metadata            String?
+  createdAt           DateTime @default(now())
 
-  @@index([sessionId])
-  @@index([agentName])
-  @@index([status])
-  @@index([startTime])
+  @@unique([llmRequestId, transportAttemptNo])
+  @@index([startedAt, id])
+  @@index([traceId, startedAt])
+  @@index([parentExecutionId, startedAt])
+  @@index([promptCallId, promptAttemptNo, transportAttemptNo])
+  @@index([providerId, resolvedModel, startedAt])
+  @@index([rootExecutionId, startedAt])
+  @@index([userId, startedAt])
+  @@index([errorCategory, startedAt])
 }
 
-model arena_dialogues {
-  id               String         @id
-  sessionId        String         @unique
-  messages         String
-  messageCount     Int
-  userMessageCount Int
-  aiMessageCount   Int
-  generationTimeMs Int?
-  agentName        String?
-  timestamp        DateTime       @default(now())
-  arena_sessions   arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  @@index([sessionId])
-}
 
-model arena_evaluations {
-  id               String         @id
-  sessionId        String         @unique
-  overallScore     Int
-  personaScore     Int?
-  dialogueScore    Int?
-  extractionScore  Int?
-  proposalScore    Int?
-  pathScore        Int?
-  report           String?
-  suggestions      String?
-  generationTimeMs Int?
-  agentName        String?
-  timestamp        DateTime       @default(now())
-  arena_sessions   arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  @@index([sessionId])
-}
 
-model arena_extractions {
-  id                String         @id
-  sessionId         String         @unique
-  content           String?
-  surfaceGoal       String?
-  realProblem       String?
-  level             String?
-  timePerDay        String?
-  totalWeeks        String?
-  motivation        String?
-  urgency           String?
-  completenessScore Int?
-  missingFields     String?
-  followUpQuestions String?
-  generationTimeMs  Int?
-  agentName         String?
-  timestamp         DateTime       @default(now())
-  arena_sessions    arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  @@index([sessionId])
-}
 
-model arena_generations {
-  id               String         @id
-  sessionId        String         @unique
-  proposalContent  String?
-  pathContent      String?
-  totalWeeks       Int?
-  totalTasks       Int?
-  generationTimeMs Int?
-  agentName        String?
-  timestamp        DateTime       @default(now())
-  arena_sessions   arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  @@index([sessionId])
-}
-
-model arena_optimizations {
-  id                  String         @id
-  sessionId           String         @unique
-  suggestions         String?
-  optimizedPrompts    String?
-  expectedImprovement String?
-  generationTimeMs    Int?
-  agentName           String?
-  timestamp           DateTime       @default(now())
-  arena_sessions      arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@index([sessionId])
-}
-
-model arena_personas {
-  id               String         @id
-  sessionId        String         @unique
-  content          String?
-  surfaceGoal      String?
-  realProblem      String?
-  level            String?
-  timePerDay       String?
-  totalWeeks       String?
-  motivation       String?
-  urgency          String?
-  generationTimeMs Int?
-  agentName        String?
-  timestamp        DateTime       @default(now())
-  arena_sessions   arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@index([sessionId])
-}
-
-model arena_sessions {
-  id                  String               @id
-  name                String
-  description         String?
-  scenario            String               @default("default")
-  config              String?
-  status              String               @default("active")
-  agentCount          Int                  @default(0)
-  currentRound        Int                  @default(0)
-  totalRounds         Int?
-  startedAt           DateTime             @default(now())
-  completedAt         DateTime?
-  createdById         String?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @default(now())
-  arena_agent_logs    arena_agent_logs[]
-  arena_dialogues     arena_dialogues?
-  arena_evaluations   arena_evaluations?
-  arena_extractions   arena_extractions?
-  arena_generations   arena_generations?
-  arena_optimizations arena_optimizations?
-  arena_personas      arena_personas?
-}
 
 model content_feedback {
-  id             String   @id
-  userId         String
-  sessionId      String
-  subtaskId      String?
-  agentId        String   @default("ai-teaching-agent")
-  rating         Int
-  helpfulness    Int?
-  clarity        Int?
-  difficulty     Int?
-  comment        String?
-  suggestions    String?
-  confusionPoint String?
-  strategy       String?
-  uiType         String?
-  roundNumber    Int?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime
-  users          users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String    @id
+  feedbackKey     String?   @unique
+  userId          String
+  sessionId       String
+  subtaskId       String?
+  agentId         String    @default("teaching-agent")
+  rating          Int
+  helpfulness     Int?
+  clarity         Int?
+  difficulty      Int?
+  difficultyFit   String?
+  comment         String?
+  suggestions     String?
+  confusionPoint  String?
+  reasonCodes     String?
+  strategy        String?
+  uiType          String?
+  roundNumber     Int?
+  status          String    @default("new")
+  assigneeAdminId String?
+  internalNote    String?
+  resolvedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  users           users     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([sessionId])
   @@index([agentId])
+  @@index([status, createdAt])
+  @@index([rating, createdAt])
 }
 
-model debug_learning_paths {
-  id              String           @id
-  snapshotId      String
-  userId          String
-  goal            String
-  path            String?
-  version         Int              @default(1)
-  isActive        Boolean          @default(false)
-  totalWeeks      Int?
-  totalTasks      Int?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @default(now())
-  proposalId      String?
-  debug_snapshots debug_snapshots  @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
-  debug_proposals debug_proposals? @relation(fields: [proposalId], references: [id])
-}
 
-model debug_proposals {
-  id                   String                 @id
-  snapshotId           String
-  userId               String
-  goal                 String
-  proposal             String?
-  version              Int                    @default(1)
-  isActive             Boolean                @default(false)
-  status               String                 @default("pending")
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @default(now())
-  debug_learning_paths debug_learning_paths[]
-  debug_snapshots      debug_snapshots        @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
-}
 
-model debug_requirements {
-  id              String          @id
-  snapshotId      String
-  userId          String
-  requirement     String
-  version         Int             @default(1)
-  isActive        Boolean         @default(false)
-  realProblem     String?
-  status          String          @default("pending")
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @default(now())
-  debug_snapshots debug_snapshots @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
-}
 
-model debug_snapshots {
-  id                   String                 @id
-  userId               String
-  name                 String                 @default("未命名快照")
-  description          String?
-  sourceConversationId String?
-  rawMessages          String?
-  snapshot             String?
-  tags                 String?
-  createdAt            DateTime               @default(now())
-  debug_learning_paths debug_learning_paths[]
-  debug_proposals      debug_proposals[]
-  debug_requirements   debug_requirements[]
-}
 
-model dialogue_sessions {
-  id                String   @id
-  userId            String
-  taskId            String
-  pathId            String
-  status            String   @default("active")
-  round             Int      @default(0)
-  history           String
-  content           String
-  evaluation_params String
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime
-  users             users    @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
 
 model goal_conversations {
   id             String    @id
@@ -475,6 +268,7 @@ model learning_goals {
 
 model learning_metrics {
   id           String   @id
+  sourceKey    String?  @unique
   userId       String
   pathId       String?
   taskId       String?
@@ -500,32 +294,87 @@ model learning_metrics {
 }
 
 model learning_paths {
-  id                  String       @id
-  userId              String
-  title               String
-  name                String?
-  description         String?
-  subject             String?
-  status              String       @default("active")
-  difficulty          String       @default("beginner")
-  estimatedHours      Float?
-  totalMilestones     Int          @default(0)
-  completedMilestones Int          @default(0)
-  aiGenerated         Boolean      @default(false)
-  aiPromptTemplate    String?
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime
-  deadline            DateTime?
-  deadlineText        String?
-  replanMode          String?
-  replanReason        String?
-  replanTriggerSource String?
-  sourcePathId        String?
-  users               users        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  milestones          milestones[]
+  id                    String                  @id
+  userId                String
+  title                 String
+  name                  String?
+  description           String?
+  subject               String?
+  status                String                  @default("active")
+  difficulty            String                  @default("beginner")
+  estimatedHours        Float?
+  totalMilestones       Int                     @default(0)
+  completedMilestones   Int                     @default(0)
+  aiGenerated           Boolean                 @default(false)
+  aiPromptTemplate      String?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime
+  deadline              DateTime?
+  deadlineText          String?
+  replanMode            String?
+  replanReason          String?
+  replanTriggerSource   String?
+  sourcePathId          String?
+  activeGenerationRunId String?                 @unique
+  users                 users                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  milestones            milestones[]
+  generationRuns        path_generation_runs[]  @relation("PathGenerationRuns")
+  activeGenerationRun   path_generation_runs?   @relation("ActivePathGenerationRun", fields: [activeGenerationRunId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([status])
+}
+
+model path_generation_runs {
+  id                 String                        @id
+  learningPathId     String
+  phase              String
+  status             String                        @default("queued")
+  retryType          String?
+  retryAllowed       Boolean                       @default(false)
+  attempt            Int                           @default(1)
+  totalItems         Int                           @default(0)
+  completedItems     Int                           @default(0)
+  progress           Int                           @default(0)
+  inputSnapshot      String?
+  rollbackSnapshot   String?
+  heartbeatAt        DateTime?
+  leaseExpiresAt     DateTime?
+  leaseOwner         String?
+  claimedAt          DateTime?
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  errorCode          String?
+  errorMessage       String?
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+  learningPath       learning_paths                @relation("PathGenerationRuns", fields: [learningPathId], references: [id], onDelete: Cascade)
+  activeForPath      learning_paths?               @relation("ActivePathGenerationRun")
+  stageItems         path_generation_stage_items[]
+
+  @@index([learningPathId, createdAt])
+  @@index([status, leaseExpiresAt])
+  @@index([phase, status])
+}
+
+model path_generation_stage_items {
+  id             String               @id
+  runId          String
+  milestoneId    String?
+  stageNumber    Int
+  status         String               @default("queued")
+  taskCount      Int                  @default(0)
+  heartbeatAt    DateTime?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  errorCode      String?
+  errorMessage   String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  run            path_generation_runs @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, stageNumber])
+  @@index([runId, status])
 }
 
 model milestones {
@@ -553,20 +402,6 @@ model milestones {
   @@index([status])
 }
 
-model path_decompositions {
-  id              String   @id
-  userId          String
-  goal            String
-  stages          String
-  milestones      String
-  subtasks        String
-  aiAnalysis      String?
-  feasibility     String?
-  difficulty      String?
-  recommendations String?
-  createdAt       DateTime @default(now())
-  users           users    @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
 
 model platform_stats {
   id             String   @id
@@ -642,43 +477,149 @@ model subtasks {
   @@index([cognitiveLevel])
 }
 
-model system_announcements {
-  id        String    @id
-  title     String
-  content   String
-  priority  String    @default("normal")
-  active    Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  expiresAt DateTime?
-}
 
 model teaching_sessions {
-  id             String    @id
-  userId         String
-  taskId         String
-  learningPathId String?
-  milestoneId    String?
-  subject        String
-  topic          String
-  taskType       String    @default("practice")
-  mode           String    @default("tutor")
-  status         String    @default("active")
-  messages       String?
-  knowledgeState String?
-  teachingState  String?
-  wrapup         String?
-  advisory       String?
-  startTime      DateTime  @default(now())
-  endTime        DateTime?
-  duration       Int?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @default(now())
-  users          users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                      String    @id
+  userId                  String
+  taskId                  String
+  learningPathId          String?
+  milestoneId             String?
+  subject                 String
+  topic                   String
+  taskType                String    @default("practice")
+  mode                    String    @default("tutor")
+  status                  String    @default("active")
+  messages                String?
+  knowledgeState          String?
+  teachingState           String?
+  wrapup                  String?
+  advisory                String?
+  startTime               DateTime  @default(now())
+  endTime                 DateTime?
+  duration                Int?
+  revision                Int       @default(0)
+  openKey                 String?   @unique
+  operationId             String?
+  operationKind           String?
+  operationLeaseExpiresAt DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @default(now())
+  users                   users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  finalizationOperations  session_finalization_operations[]
 
   @@index([userId, taskId, status])
+  @@index([status, updatedAt])
+  @@index([operationLeaseExpiresAt])
   @@index([status])
   @@index([taskId])
   @@index([userId])
+}
+
+model session_finalization_operations {
+  id              String   @id @default(uuid())
+  sessionId       String
+  idempotencyKey  String
+  action          String
+  requestHash     String
+  requestJson     String
+  status          String   @default("processing")
+  leaseOwner      String?
+  leaseExpiresAt  DateTime?
+  attemptCount    Int      @default(1)
+  resultJson      String?
+  errorCode       String?
+  retryable       Boolean?
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  session         teaching_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, idempotencyKey])
+  @@index([status, leaseExpiresAt])
+  @@index([sessionId, action, createdAt])
+}
+
+model domain_event_outbox {
+  id               String   @id
+  eventType        String
+  schemaVersion    Int      @default(1)
+  aggregateType    String
+  aggregateId      String
+  aggregateVersion Int?
+  userId           String?
+  source           String
+  payload          String
+  metadata         String?
+  status           String   @default("pending")
+  attemptCount     Int      @default(0)
+  availableAt      DateTime @default(now())
+  lockedAt         DateTime?
+  lockOwner        String?
+  processedAt      DateTime?
+  lastError        String?
+  occurredAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([status, availableAt])
+  @@index([status, lockedAt])
+  @@index([aggregateType, aggregateId, occurredAt])
+  @@index([userId, occurredAt])
+}
+
+model domain_event_inbox {
+  id         String   @id
+  consumerId String
+  eventId    String
+  processedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@unique([consumerId, eventId])
+  @@index([eventId])
+}
+
+model learner_evidence {
+  id           String   @id
+  eventId      String
+  evidenceKey  String
+  userId       String
+  pathId       String?
+  milestoneId  String?
+  taskId       String?
+  sessionId    String?
+  evidenceType String
+  payload      String
+  confidence   Float    @default(1)
+  occurredAt   DateTime
+  createdAt    DateTime @default(now())
+
+  @@unique([eventId, evidenceKey])
+  @@index([userId, occurredAt])
+  @@index([pathId, occurredAt])
+  @@index([sessionId])
+  @@index([taskId])
+}
+
+model learner_projections {
+  id             String   @id
+  projectionKey  String   @unique
+  userId         String
+  scope          String
+  pathId         String?
+  milestoneId    String?
+  taskId         String?
+  version        Int      @default(1)
+  payload        String
+  lastEventId    String?
+  lastEventAt    DateTime?
+  generatedAt    DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId, scope])
+  @@index([userId, pathId, scope])
+  @@index([lastEventAt])
 }
 
 model user_agent_configs {
@@ -792,18 +733,18 @@ model users {
   currentLevel              String                     @default("beginner")
   xp                        Int                        @default(0)
   isAdmin                   Boolean                    @default(false)
+  isVirtualLearner          Boolean                    @default(false)
   createdAt                 DateTime                   @default(now())
   updatedAt                 DateTime
   lastLoginAt               DateTime?
   dashboardGuidanceSnapshot String?
+  learningStateRevision     Int                        @default(0)
   achievements              achievements[]
   content_feedback          content_feedback[]
-  dialogue_sessions         dialogue_sessions[]
   goal_conversations        goal_conversations[]
   learning_goals            learning_goals[]
   learning_metrics          learning_metrics[]
   learning_paths            learning_paths[]
-  path_decompositions       path_decompositions[]
   projection_access_grants  projection_access_grants[]
   student_baselines         student_baselines?
   subtasks                  subtasks[]
@@ -858,8 +799,106 @@ model virtual_sessions {
   completedAt              DateTime?
   users                    users                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   virtual_learner_profiles virtual_learner_profiles @relation(fields: [virtualProfileId], references: [id], onDelete: Cascade)
+  experimentLease          virtual_experiment_leases?
+  experimentCommands       virtual_experiment_commands[]
 
   @@index([virtualProfileId])
   @@index([userId])
   @@index([status])
+}
+
+model virtual_experiment_leases {
+  sessionId String   @id
+  ownerId   String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  session   virtual_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+}
+
+model virtual_experiment_commands {
+  id          String   @id @default(uuid())
+  sessionId   String
+  experimentId String
+  runId       String
+  commandId   String
+  sequence    Int
+  kind        String
+  requestJson String
+  status      String   @default("processing")
+  resultJson  String?
+  errorJson   String?
+  triggeredBy String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  completedAt DateTime?
+  session     virtual_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, commandId])
+  @@unique([runId, sequence])
+  @@index([sessionId, createdAt])
+  @@index([runId, status])
+}
+
+model virtual_quick_learn_runs {
+  id                String    @id @default(uuid())
+  profileId         String
+  userId            String
+  pathId            String
+  taskId            String
+  fixtureOfPathId   String?
+  mode              String    @default("fast_forward")
+  status            String    @default("queued")
+  maxTurns          Int       @default(25)
+  turns             Int       @default(0)
+  teachingSessionId String?
+  progress          String?
+  transcript        String?
+  report            String?
+  error             String?
+  abortRequestedAt  DateTime?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([profileId, createdAt])
+  @@index([status])
+  @@index([userId])
+}
+
+model virtual_experiment_runs {
+  id               String    @id @default(uuid())
+  mode             String    @default("blackbox-api")
+  status           String    @default("queued")
+  entriesJson      String
+  resultsJson      String    @default("[]")
+  progressJson     String    @default("{}")
+  error            String?
+  abortRequestedAt DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdBy        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model announcements {
+  id          String    @id @default(uuid())
+  title       String
+  body        String
+  severity    String    @default("info")
+  status      String    @default("draft")
+  publishedAt DateTime?
+  expiresAt   DateTime?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, publishedAt])
 }

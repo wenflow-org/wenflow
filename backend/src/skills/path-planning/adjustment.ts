@@ -1,5 +1,4 @@
 ﻿import { AgentContext, MilestoneOutput, SubtaskOutput, LearningSignal } from '../../agents/protocol';
-import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
 import { logger } from '../../utils/logger';
 
 export type AdjustmentType = 'insert' | 'remove' | 'modify' | 'reorder';
@@ -121,18 +120,30 @@ export class PathAdjustmentEngine {
     return { milestones, adjustments };
   }
   private async generateMilestoneForInsertion(milestones: MilestoneOutput[], adjustment: PathAdjustment, context: AgentContext): Promise<MilestoneOutput | null> {
-    const gateway = getAPIGateway();
-    const caller: CallerInfo = { agentId: 'skill:path-planning' };
     const existingTopics = milestones.map((m, i) => `${i + 1}. ${m.title}`).join('\n');
-    const systemPrompt = `你是一位课程设计专家。需要在现有学习路径中插入一个新的里程碑。现有里程碑主题：${existingTopics}插入位置：第 ${adjustment.position} 个里程碑之前插入原因：${ADJUSTMENT_PROMPTS[adjustment.reason]}请生成一个合适的新里程碑，返回JSON格式。{ "title": "里程碑标题", "description": "里程碑描述", "goal": "里程碑目标", "estimatedHours": 4, "subtasks": [{ "title": "子任务标题", "type": "acquire|deconstruct|model|execute|diagnose|refine|consolidate", "estimatedMinutes": 30, "description": "任务描述" }] }`;
     try {
-      const response = await gateway.execute({ messages: [{ role: 'system', content: systemPrompt }] }, caller, { temperature: 0.7 });
-      const content = response.choices[0]?.message.content || '';
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const milestoneData = JSON.parse(jsonMatch[0]);
-        return { stageNumber: (adjustment.position || 0) + 1, title: milestoneData.title, description: milestoneData.description, goal: milestoneData.goal, estimatedHours: milestoneData.estimatedHours, subtasks: milestoneData.subtasks.map((s: any, i: number) => ({ id: `subtask_${Date.now()}_${i}`, ...s })) };
-      }
+      // 懒加载避免 skills/index -> path-planning -> skills/index 循环依赖
+      const { executeSkill, auxSkillDefinitionMap } = await import('..');
+      const milestoneData = await executeSkill(auxSkillDefinitionMap['path-adjustment-generator'], {
+        adjustmentTarget: 'milestone',
+        position: adjustment.position ?? null,
+        reason: ADJUSTMENT_PROMPTS[adjustment.reason],
+        existingTopics,
+        milestones: milestones.map((m) => ({ stageNumber: m.stageNumber, title: m.title, description: m.description, goal: m.goal })),
+        __fallback: null,
+        __prompt: { userId: context.userId, requestPath: '/skills/path-planning/adjustment/milestone', callerAgentId: 'path-agent' },
+      });
+      if (!milestoneData) return null;
+      return {
+        stageNumber: (adjustment.position || 0) + 1,
+        title: milestoneData.title,
+        description: milestoneData.description,
+        goal: milestoneData.goal,
+        estimatedHours: milestoneData.estimatedHours,
+        subtasks: Array.isArray(milestoneData.subtasks)
+          ? milestoneData.subtasks.map((s: any, i: number) => ({ id: `subtask_${Date.now()}_${i}`, ...s }))
+          : [],
+      };
     } catch (error) {
       logger.error('[path-adjustment] failed to generate milestone', {
         userId: context.userId,
@@ -144,18 +155,20 @@ export class PathAdjustmentEngine {
     return null;
   }
   private async generateSubtaskForInsertion(milestone: MilestoneOutput, existingSubtasks: SubtaskOutput[], adjustment: PathAdjustment, context: AgentContext): Promise<SubtaskOutput | null> {
-    const gateway = getAPIGateway();
-    const caller: CallerInfo = { agentId: 'skill:path-planning' };
     const existingSubtasksList = existingSubtasks.map((t, i) => `${i + 1}. ${t.title} (${t.type})`).join('\n');
-    const systemPrompt = `你是一位课程设计专家。需要在现有里程碑中插入一个新的子任务。里程碑主题：${milestone.title}里程碑描述：${milestone.description || '无'}现有子任务：${existingSubtasksList}插入原因：${ADJUSTMENT_PROMPTS[adjustment.reason]}请生成一个合适的新子任务，返回JSON格式。{ "title": "子任务标题", "type": "acquire|deconstruct|model|execute|diagnose|refine|consolidate", "estimatedMinutes": 30, "description": "任务描述" }`;
     try {
-      const response = await gateway.execute({ messages: [{ role: 'system', content: systemPrompt }] }, caller, { temperature: 0.7 });
-      const content = response.choices[0]?.message.content || '';
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const subtaskData = JSON.parse(jsonMatch[0]);
-        return { id: `subtask_${Date.now()}`, ...subtaskData };
-      }
+      // 懒加载避免 skills/index -> path-planning -> skills/index 循环依赖
+      const { executeSkill, auxSkillDefinitionMap } = await import('..');
+      const subtaskData = await executeSkill(auxSkillDefinitionMap['path-adjustment-generator'], {
+        adjustmentTarget: 'subtask',
+        reason: ADJUSTMENT_PROMPTS[adjustment.reason],
+        milestone: { title: milestone.title, description: milestone.description || '无' },
+        existingSubtasks: existingSubtasksList,
+        __fallback: null,
+        __prompt: { userId: context.userId, requestPath: '/skills/path-planning/adjustment/subtask', callerAgentId: 'path-agent' },
+      });
+      if (!subtaskData) return null;
+      return { id: `subtask_${Date.now()}`, ...subtaskData };
     } catch (error) {
       logger.error('[path-adjustment] failed to generate subtask', {
         userId: context.userId,

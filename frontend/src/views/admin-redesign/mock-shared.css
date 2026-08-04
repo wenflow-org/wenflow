@@ -1,0 +1,497 @@
+﻿/* Admin 重设计实验室：共享样式（mk- 前缀，全局可用）。统一“运维简报式 Admin”语言：状态条 / 紧凑表格 / mono 点缀 */
+
+/* 层级 token：抽屉/弹窗/菜单统一 z-index，避免散落硬编码 */
+:root {
+  --mk-z-menu: 60;
+  --mk-z-drawer: 200;
+  --mk-z-sidebar: 220;
+  --mk-z-modal: 300;
+  --mk-z-toast: 400;
+
+  /* 颜色/字体 token 全局定义：抽屉/弹窗 Teleport 到 body 后不在 .mk-page 内，必须全局可用 */
+  --mk-ink: #1a2a44;
+  --mk-muted: #5b6577;
+  --mk-faint: #71809a;
+  --mk-line: #e6ebf4;
+  --mk-bg: #f7f8fa;
+  --mk-surface: #ffffff;
+  --mk-blue: #3478f6;
+  --mk-green: #15803d;
+  --mk-green-bg: #ecfdf5;
+  --mk-amber: #b45309;
+  --mk-amber-bg: #fffbeb;
+  --mk-red: #dc2626;
+  --mk-red-bg: #fef2f2;
+  --mk-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  --mk-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.mk-page {
+  background: var(--mk-bg);
+  color: var(--mk-ink);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 14px 16px 20px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-height: 100%;
+}
+
+/* 键盘焦点可见环（无障碍底线）：覆盖按钮/输入/选择/链接 */
+.mk-page :focus-visible {
+  outline: 2px solid rgba(52, 120, 246, 0.85);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ----- 鐘舵€佹潯锛堟瘡椤靛紑澶翠竴琛岋級 ----- */
+.mk-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--mk-line);
+  background: var(--mk-surface);
+  box-shadow: var(--mk-shadow-sm);
+  flex-wrap: wrap;
+}
+.mk-status__dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.mk-status--ok .mk-status__dot { background: var(--mk-green); }
+.mk-status--warn .mk-status__dot { background: var(--mk-amber); }
+.mk-status--bad .mk-status__dot { background: var(--mk-red); }
+.mk-status--muted .mk-status__dot { background: var(--mk-faint); }
+.mk-status__title { font-weight: 700; font-size: 14px; color: var(--mk-ink); }
+.mk-status__sep { width: 1px; height: 13px; background: var(--mk-line); }
+.mk-status__meta { color: var(--mk-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mk-status__action {
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--mk-line);
+  background: var(--mk-surface);
+  color: var(--mk-blue);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mk-status__action:hover { border-color: rgba(52, 120, 246, 0.4); }
+.mk-status__action--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
+
+/* ----- 鍗＄墖 ----- */
+.mk-card {
+  border: 1px solid var(--mk-line);
+  border-radius: 12px;
+  background: var(--mk-surface);
+  box-shadow: var(--mk-shadow-sm);
+  overflow: hidden;
+}
+.mk-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--mk-line);
+  flex-wrap: wrap;
+}
+.mk-card__title { margin: 0; font-size: 13px; font-weight: 700; }
+.mk-card__meta { color: var(--mk-faint); font-size: 12px; }
+
+/* ----- 琛ㄦ牸 ----- */
+.mk-table { width: 100%; border-collapse: collapse; }
+.mk-table th {
+  text-align: left;
+  padding: 9px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mk-faint);
+  background: #fafbfc;
+  border-bottom: 1px solid var(--mk-line);
+  white-space: nowrap;
+}
+.mk-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f6f7f9;
+  vertical-align: middle;
+}
+.mk-table tr:last-child td { border-bottom: none; }
+.mk-table tbody tr { transition: background 0.12s; }
+.mk-table tbody tr:hover { background: #f6f9ff; }
+.mk-table--click tbody tr { cursor: pointer; }
+
+/* 行内 ⋯ 菜单：低频/危险操作收进菜单，避免与高频操作平铺 */
+.mk-menu { position: relative; display: inline-flex; }
+.mk-menu__btn {
+  border: 1px solid transparent;
+  background: transparent;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--mk-faint);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+.mk-menu__btn:hover { background: #eef2fa; color: var(--mk-ink); }
+.mk-menu__pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: var(--mk-z-menu);
+  min-width: 148px;
+  padding: 4px;
+  display: grid;
+  gap: 2px;
+  background: var(--mk-surface);
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+}
+.mk-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--mk-muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mk-menu__item:hover { background: #f0f5ff; color: var(--mk-ink); }
+.mk-menu__item--danger { color: var(--mk-red, #dc2626); }
+.mk-menu__item--danger:hover { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
+.mk-menu__sep { height: 1px; margin: 3px 4px; background: var(--mk-line); }
+
+/* 表格横向滚动容器：窄屏多列表不溢出，粘性表头仍可用 */
+.mk-table-scroll { overflow-x: auto; }
+.mk-table-scroll .mk-table th { position: sticky; top: 0; z-index: 1; }
+
+.mk-cell-main { display: grid; gap: 1px; min-width: 0; }
+.mk-cell-main strong { display: block; max-width: 260px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-cell-sub { color: var(--mk-faint); font-size: 11.5px; font-family: var(--mk-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 数字列：不换行、右对齐、不被挤压（固定列宽规范） */
+.mk-num { font-family: var(--mk-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; min-width: 48px; }
+.mk-na { color: var(--mk-faint); }
+/* 操作列：不换行、不被挤压 */
+.mk-actions { display: flex; gap: 4px; justify-content: flex-end; white-space: nowrap; min-width: 72px; }
+.mk-actions .mk-menu__btn { flex-shrink: 0; }
+
+/* ----- 寰芥爣 ----- */
+.mk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.mk-badge--ok { background: var(--mk-green-bg); color: var(--mk-green); }
+/* 警告/漂移：虚线描边 + 琥珀色（形状编码：与实心红"失败"区分，色弱用户可辨） */
+.mk-badge--warn {
+  background: var(--mk-amber-bg);
+  color: var(--mk-amber);
+  border: 1px dashed rgba(180, 83, 9, 0.45);
+  padding: 1px 8px;
+}
+.mk-badge--bad { background: var(--mk-red-bg); color: var(--mk-red); }
+.mk-badge--muted { background: #f0f2f5; color: var(--mk-muted); }
+.mk-badge--info { background: #eff6ff; color: var(--mk-blue); }
+
+/* ----- 绛涢€夎 ----- */
+.mk-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.mk-filter__input,
+.mk-filter__select {
+  padding: 7px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--mk-line);
+  background: var(--mk-surface);
+  color: var(--mk-ink);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+  height: 34px;
+  box-sizing: border-box;
+  line-height: 1.4;
+}
+/* 下拉筛选：固定最小宽度，避免选中不同长度选项时 select 宽度跳动导致布局抖动 */
+.mk-filter__select {
+  min-width: 104px;
+  width: auto;
+}
+.mk-filter__input:focus,
+.mk-filter__select:focus { border-color: var(--mk-blue); }
+.mk-filter__input { min-width: 180px; }
+.mk-pills { display: inline-flex; gap: 4px; padding: 3px; background: #eef2fa; border-radius: 10px; }
+.mk-pill {
+  border: 0;
+  background: transparent;
+  padding: 5px 12px;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mk-muted);
+  cursor: pointer;
+}
+/* 激活 = 筛选生效：蓝色文字 + 蓝色描边，与"按钮激活"的白底灰边区分 */
+.mk-pill--active {
+  background: #fff;
+  color: var(--mk-blue);
+  font-weight: 700;
+  box-shadow: 0 0 0 1px rgba(52, 120, 246, 0.4), 0 1px 2px rgba(23, 32, 51, 0.08);
+}
+
+/* ----- 閾炬帴鎸夐挳 ----- */
+.mk-link {
+  border: 0;
+  background: transparent;
+  color: var(--mk-blue);
+  font: inherit;
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.mk-link:hover { background: #eff6ff; }
+.mk-actions { display: flex; gap: 4px; justify-content: flex-end; }
+
+/* ----- 绌烘€?----- */
+.mk-empty {
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--mk-faint);
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+}
+.mk-empty strong { color: var(--mk-muted); font-size: 13.5px; }
+.mk-empty span { font-size: 12.5px; }
+.mk-empty__icon {
+  width: 46px;
+  height: 46px;
+  margin-bottom: 6px;
+  border-radius: 13px;
+  background: #eef2fa;
+  color: var(--mk-faint);
+  display: grid;
+  place-items: center;
+  font-size: 19px;
+  font-weight: 800;
+}
+.mk-empty__action {
+  margin-top: 8px;
+  padding: 7px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(52, 120, 246, 0.3);
+  background: #eef5ff;
+  color: var(--mk-blue);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mk-empty__action:hover { background: #dbeafe; }
+
+/* ----- 寮圭獥锛堣〃鍗?缂栬緫锛?----- */
+.mk-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--mk-z-modal);
+  background: rgba(15, 23, 42, 0.36);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.mk-modal__panel {
+  width: min(480px, 100%);
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  background: var(--mk-surface, #fff);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
+  display: grid;
+}
+.mk-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--mk-line, #e1e8f2);
+}
+.mk-modal__title { margin: 0; font-size: 15px; font-weight: 700; }
+.mk-modal__close {
+  border: 0;
+  background: #f0f2f5;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: #5b6577;
+}
+.mk-modal__body { padding: 16px 18px; display: grid; gap: 14px; }
+.mk-modal__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--mk-line, #e1e8f2);
+}
+
+/* 琛ㄥ崟瀛楁 */
+.mk-field { display: grid; gap: 6px; }
+.mk-field__label { font-size: 12px; font-weight: 700; color: var(--mk-muted, #5b6577); }
+.mk-field__hint { font-size: 11px; color: var(--mk-faint, #8492ab); }
+.mk-field__input,
+.mk-field__select,
+.mk-field__textarea {
+  width: 100%;
+  padding: 8px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--mk-line, #e1e8f2);
+  background: var(--mk-surface, #fff);
+  color: var(--mk-ink, #1a2a44);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+}
+.mk-field__input:focus,
+.mk-field__select:focus,
+.mk-field__textarea:focus { border-color: var(--mk-blue, #3478f6); }
+.mk-field__textarea { min-height: 96px; resize: vertical; line-height: 1.6; }
+.mk-field--error .mk-field__input,
+.mk-field--error .mk-field__textarea { border-color: var(--mk-red, #dc2626); }
+.mk-field__err { font-size: 11px; color: var(--mk-red, #dc2626); font-weight: 600; }
+
+/* 鎸夐挳 */
+.mk-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--mk-line, #e1e8f2);
+  background: var(--mk-surface, #fff);
+  color: var(--mk-ink, #1a2a44);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mk-btn:hover { background: #f6f9ff; }
+.mk-btn--primary {
+  background: var(--mk-blue, #3478f6);
+  border-color: var(--mk-blue, #3478f6);
+  color: #fff;
+}
+.mk-btn--primary:hover { background: #2b64d8; }
+.mk-btn--sm { padding: 5px 11px; font-size: 11.5px; }
+.mk-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* 琛屽唴鎻愮ず鏉?*/
+.mk-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.mk-toast--ok { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #15803d); }
+.mk-toast--bad { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
+.mk-toast--info { background: #eff6ff; color: var(--mk-blue, #3478f6); }
+
+/* 鍔犺浇鐐?*/
+.mk-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(52, 120, 246, 0.25);
+  border-top-color: var(--mk-blue, #3478f6);
+  border-radius: 50%;
+  animation: mk-spin 0.7s linear infinite;
+  vertical-align: -2px;
+}
+@keyframes mk-spin { to { transform: rotate(360deg); } }
+
+/* ================= 超大屏（4K）适配 =================
+   与 MockShell 的 2000px/2800px 断点对齐：内容区字号跟随壳层放大。
+   覆盖层（抽屉/弹窗）在各文件内补镜像断点。 */
+
+@media (min-width: 2000px) {
+  .mk-page { font-size: 14.5px; padding: 18px 22px 26px; gap: 14px; }
+  .mk-status { padding: 8px 14px; border-radius: 12px; }
+  .mk-status__title { font-size: 16px; }
+  .mk-status__meta { font-size: 13.5px; }
+  .mk-table th { font-size: 12.5px; padding: 11px 16px; }
+  .mk-table td { font-size: 13.5px; padding: 12px 16px; }
+  .mk-cell-sub { font-size: 12.5px; }
+  .mk-badge { font-size: 13px; padding: 3px 10px; }
+  .mk-menu__item { font-size: 14px; }
+  .mk-menu__btn { width: 30px; height: 30px; font-size: 15px; }
+  .mk-filter__input { font-size: 14px; padding: 9px 13px; }
+  .mk-pill { font-size: 13.5px; padding: 6px 14px; }
+  .mk-empty strong { font-size: 15px; }
+  .mk-empty span { font-size: 14px; }
+  .mk-card__title { font-size: 14.5px; }
+  .mk-card__meta { font-size: 13.5px; }
+  .mk-num { font-size: 13.5px; }
+  .mk-modal__panel { width: min(620px, 100%); }
+  .mk-modal__title { font-size: 17px; }
+  .mk-field__label { font-size: 13.5px; }
+  .mk-field__input, .mk-field__select, .mk-field__textarea { font-size: 14px; padding: 10px 13px; }
+  .mk-btn { font-size: 14px; padding: 10px 18px; }
+  .mk-toast { font-size: 13.5px; }
+  .mk-link { font-size: 14px; }
+  .mk-actions { min-width: 84px; }
+}
+
+@media (min-width: 2800px) {
+  .mk-page { font-size: 17px; padding: 22px 28px 32px; gap: 16px; }
+  .mk-status { padding: 10px 18px; border-radius: 14px; }
+  .mk-status__title { font-size: 19px; }
+  .mk-status__meta { font-size: 16px; }
+  .mk-table th { font-size: 15px; padding: 13px 20px; }
+  .mk-table td { font-size: 16px; padding: 14px 20px; }
+  .mk-cell-sub { font-size: 15px; }
+  .mk-badge { font-size: 15.5px; padding: 4px 12px; }
+  .mk-menu__item { font-size: 16.5px; }
+  .mk-menu__btn { width: 36px; height: 36px; font-size: 18px; }
+  .mk-filter__input { font-size: 16.5px; padding: 11px 16px; }
+  .mk-pill { font-size: 16px; padding: 7px 17px; }
+  .mk-empty strong { font-size: 18px; }
+  .mk-empty span { font-size: 16.5px; }
+  .mk-card__title { font-size: 17px; }
+  .mk-card__meta { font-size: 16px; }
+  .mk-num { font-size: 16px; }
+  .mk-modal__panel { width: min(760px, 100%); }
+  .mk-modal__title { font-size: 20px; }
+  .mk-field__label { font-size: 16px; }
+  .mk-field__input, .mk-field__select, .mk-field__textarea { font-size: 16.5px; padding: 12px 16px; }
+  .mk-btn { font-size: 16.5px; padding: 12px 22px; }
+  .mk-toast { font-size: 16px; }
+  .mk-link { font-size: 16.5px; }
+  .mk-actions { min-width: 100px; }
+}

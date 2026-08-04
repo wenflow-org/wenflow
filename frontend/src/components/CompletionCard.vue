@@ -2,21 +2,22 @@
   <div class="completion-card">
     <div class="completion-header">
       <el-icon :size="24" color="#2e7d32"><CircleCheckFilled /></el-icon>
-      <h3 class="completion-title">当前任务完成</h3>
+      <h3 class="completion-title">本次学习已结束</h3>
     </div>
 
     <div class="completion-body">
       <div v-if="advisory?.shouldSuggest" class="completion-section advisory-section" :class="`advisory-section--${advisory.priority}`">
         <h4 class="section-title"><el-icon><MagicStick /></el-icon>{{ advisory.ui.title }}</h4>
         <p class="section-content">{{ advisory.ui.body }}</p>
-        <p class="section-hint">确认后系统会创建一个新的路径版本，只调整后续安排，不会改动你已完成的内容。</p>
+        <p class="section-hint">确认后会调整后续学习安排，已完成的内容不会改变。</p>
         <div class="advisory-options">
           <el-button
             v-for="option in advisory.ui.options"
             :key="option.key"
             size="small"
-            :type="option.key === 'reinforce' || option.key === 'accelerate' || option.key === 'resequence' ? 'primary' : 'default'"
+            :type="isAdjustmentAction(option.key) ? 'primary' : 'default'"
             plain
+            :disabled="busy"
             @click="emit('advisory-action', option.key)"
           >
             {{ option.label }}
@@ -28,7 +29,7 @@
         <div class="summary-item"><span class="summary-label">主题</span><span class="summary-value">{{ topic }}</span></div>
         <div class="summary-item"><span class="summary-label">知识点</span><span class="summary-value">{{ masteredCount }}/{{ totalCount }} 已学会</span></div>
         <div class="summary-item"><span class="summary-label">用时</span><span class="summary-value">{{ duration }}</span></div>
-        <div class="summary-item"><span class="summary-label">消息数</span><span class="summary-value">{{ messageCount }} 条</span></div>
+        <div class="summary-item"><span class="summary-label">学习消息</span><span class="summary-value">{{ messageCount }} 条</span></div>
       </div>
 
       <div class="completion-section">
@@ -93,25 +94,25 @@
       </div>
 
       <div class="completion-section">
-        <h4 class="section-title"><el-icon><Compass /></el-icon>本周行动</h4>
+        <h4 class="section-title"><el-icon><Compass /></el-icon>下一步建议</h4>
         <ol v-if="actionPlan.length" class="ordered-list"><li v-for="(item, idx) in actionPlan" :key="`${idx}-${item}`">{{ item }}</li></ol>
         <div v-else class="section-content"><MarkdownRenderer :content="summary.practiceAdvice" /></div>
       </div>
 
       <div class="completion-section">
         <h4 class="section-title"><el-icon><TrendCharts /></el-icon>学习评价</h4>
-        <div v-if="evaluationHighlights" class="evaluation-block">
-          <p class="evaluation-line"><strong>亮点：</strong>{{ formattedStrengths }}</p>
-          <p class="evaluation-line"><strong>改进：</strong>{{ formattedImprovements }}</p>
+        <div v-if="hasHighlights" class="evaluation-block">
+          <p v-if="formattedStrengths" class="evaluation-line"><strong>亮点：</strong>{{ formattedStrengths }}</p>
+          <p v-if="formattedImprovements" class="evaluation-line"><strong>改进：</strong>{{ formattedImprovements }}</p>
         </div>
         <p v-else class="section-content">{{ summary.learningEvaluation }}</p>
       </div>
     </div>
 
     <div class="completion-actions">
-      <el-button @click="emit('action', 'continue-task')">继续这个任务</el-button>
-      <el-button @click="emit('action', 'end')"><el-icon><VideoPause /></el-icon>返回学习路径</el-button>
-      <el-button type="primary" @click="emit('action', 'complete-task')">标记本任务已完成</el-button>
+      <el-button :disabled="busy" @click="emit('action', 'continue-task')">继续练习</el-button>
+      <el-button :disabled="busy" @click="emit('action', 'end')"><el-icon><VideoPause /></el-icon>返回学习路径</el-button>
+      <el-button type="primary" :loading="busy" @click="emit('action', 'complete-task')">完成任务</el-button>
     </div>
   </div>
 </template>
@@ -130,6 +131,7 @@ const props = defineProps<{
   messageCount: number;
   wrapup: WrapupArtifact;
   advisory?: ReplanAdvisory | null;
+  busy?: boolean;
 }>();
 
 const emit = defineEmits<{ action: [action: 'end' | 'continue-task' | 'complete-task']; 'advisory-action': [action: string] }>();
@@ -138,6 +140,8 @@ const summary = computed(() => props.wrapup.summary);
 const evaluation = computed(() => props.wrapup.evaluation);
 const stateUpdate = computed(() => props.wrapup.stateUpdate || null);
 const advisory = computed(() => props.advisory || null);
+const busy = computed(() => props.busy === true);
+const isAdjustmentAction = (action: string) => ['confirm', 'reinforce', 'slow_down', 'resequence', 'accelerate'].includes(action);
 
 const toFixed = (v: number | undefined) => Number(v || 0).toFixed(1);
 const getSimpleLevel = (v: number, h: number, m: number) => (v >= h ? { level: '高', tone: 'good' } : v >= m ? { level: '中', tone: 'normal' } : { level: '低', tone: 'warn' });
@@ -188,6 +192,10 @@ const knowledgeItems = computed(() => (summary.value?.knowledgeItems || []).map(
 const keyTakeaways = computed(() => summary.value?.keyTakeaways || []);
 const actionPlan = computed(() => summary.value?.actionPlan || []);
 const evaluationHighlights = computed(() => summary.value?.evaluationHighlights || null);
+const hasHighlights = computed(() => {
+  const h = evaluationHighlights.value;
+  return !!(h && ((h.strengths?.length || 0) > 0 || (h.improvements?.length || 0) > 0));
+});
 const sessionInterpretation = computed(() => summary.value?.metricInterpretation?.session || '本节表现反映本次课堂的即时投入和产出。');
 const longTermInterpretation = computed(() => summary.value?.metricInterpretation?.longTerm || '长期状态来自历史累计，不等于单节课程成绩。');
 

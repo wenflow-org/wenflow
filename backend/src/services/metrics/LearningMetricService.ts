@@ -12,6 +12,8 @@
 
 import prisma from '../../config/database';
 import learningStateService from '../learning/learning-state.service';
+import { logger } from '../../utils/logger';
+import type { DurableDomainEvent } from '../../events/contracts';
 
 export interface LearningStateMetrics {
   lss: number;           // 学习压力评分 (0-100)
@@ -28,6 +30,7 @@ export interface SessionMetricsInput {
   subjectiveDifficulty?: number; // 1-10 主观难度
   completed: boolean;           // 是否完成任务
   notes?: string;
+  timestamp?: Date;
 }
 
 /**
@@ -103,64 +106,58 @@ export function calculateEWMA(
  * - 学习时长
  * - 使用EWMA平滑短期波动
  */
-export function calculateKTL(
+export async function calculateKTL(
   userId: string,
   lssScore: number,
-  previousKTL: number = 0
+  previousKTL: number = 0,
+  asOf: Date = new Date()
 ): Promise<number> {
-  return new Promise(async (resolve) => {
-    try {
-      // 获取最近7天的学习会话
-      const now = new Date();
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(asOf.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-      const sessions = await prisma.teaching_sessions.findMany({
-        where: {
-          userId,
-          startTime: { gte: sevenDaysAgo },
-        },
-        orderBy: { startTime: 'desc' },
-      });
-
-      if (sessions.length === 0) {
-        // 没有历史记录，基于当前LSS初始化KTL
-        resolve(lssScore * 0.5);
-        return;
-      }
-
-      // 计算总学习时长和平均难度
-      const totalMinutes = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
-      const avgDifficulty = 5;
-
-      // KTL考虑因素：
-      // 1. 学习量因子：总学习时长 / 7天
-      const learningVolume = Math.min(totalMinutes / (7 * 60), 4); // 最多4小时/天 -> 4
-
-      // 2. 难度因子：平均难度 / 2
-      const difficultyFactor = avgDifficulty / 2;
-
-      // 3. 当前LSS影响
-      const lssFactor = lssScore / 100;
-
-      // 4. 任务完成率
-      const completedSessions = sessions.filter((s) => s.taskId).length;
-      const completionRate = sessions.length > 0 ? completedSessions / sessions.length : 0;
-
-      // 计算基础KTL
-      const ktlCurrent = (learningVolume + difficultyFactor) * (1 + lssFactor) * (0.5 + 0.5 * completionRate) * 20;
-
-      // 使用EWMA平滑
-      let ktlFinal = calculateEWMA(ktlCurrent, previousKTL, 0.4);
-
-      // 限制在0-100
-      ktlFinal = Math.max(0, Math.min(100, Math.round(ktlFinal)));
-
-      resolve(ktlFinal);
-    } catch (error) {
-      console.error('Error calculating KTL:', error);
-      resolve(Math.min(100, Math.round(lssScore * 0.5)));
-    }
+  const sessions = await prisma.teaching_sessions.findMany({
+    where: {
+      userId,
+      status: 'completed',
+      wrapup: { not: null },
+      startTime: { gte: sevenDaysAgo, lte: asOf },
+      endTime: { lte: asOf },
+    },
+    orderBy: { startTime: 'desc' },
   });
+
+  if (sessions.length === 0) {
+    // 没有历史记录，基于当前LSS初始化KTL
+    return lssScore * 0.5;
+  }
+
+  // 计算总学习时长和平均难度
+  const totalMinutes = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
+  const avgDifficulty = 5;
+
+  // KTL考虑因素：
+  // 1. 学习量因子：总学习时长 / 7天
+  const learningVolume = Math.min(totalMinutes / (7 * 60), 4); // 最多4小时/天 -> 4
+
+  // 2. 难度因子：平均难度 / 2
+  const difficultyFactor = avgDifficulty / 2;
+
+  // 3. 当前LSS影响
+  const lssFactor = lssScore / 100;
+
+  // 4. 任务完成率
+  const completedSessions = sessions.filter((s) => s.taskId).length;
+  const completionRate = sessions.length > 0 ? completedSessions / sessions.length : 0;
+
+  // 计算基础KTL
+  const ktlCurrent = (learningVolume + difficultyFactor) * (1 + lssFactor) * (0.5 + 0.5 * completionRate) * 20;
+
+  // 使用EWMA平滑
+  let ktlFinal = calculateEWMA(ktlCurrent, previousKTL, 0.4);
+
+  // 限制在0-100
+  ktlFinal = Math.max(0, Math.min(100, Math.round(ktlFinal)));
+
+  return ktlFinal;
 }
 
 /**
@@ -171,64 +168,57 @@ export function calculateKTL(
  * - 连续学习天数
  * - 7天衰减模型（每过一天衰减一部分）
  */
-export function calculateLF(userId: string): Promise<number> {
-  return new Promise(async (resolve) => {
-    try {
-      const now = new Date();
+export async function calculateLF(userId: string, asOf: Date = new Date()): Promise<number> {
+  // 获取过去7天的学习数据
+  const sevenDaysAgo = new Date(asOf.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-      // 获取过去7天的学习数据
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-      const sessions = await prisma.teaching_sessions.findMany({
-        where: {
-          userId,
-          startTime: { gte: sevenDaysAgo },
-        },
-        orderBy: { startTime: 'desc' },
-      });
-
-      if (sessions.length === 0) {
-        resolve(0);
-        return;
-      }
-
-      // 按天聚合学习时长
-      const dailyLearning = new Map<string, number>();
-
-      sessions.forEach((session) => {
-        const date = session.startTime.toISOString().split('T')[0];
-        const duration = session.duration || 0;
-        dailyLearning.set(date, (dailyLearning.get(date) || 0) + duration);
-      });
-
-      // 计算疲劳度
-      let lfCurrent = 0;
-
-      // 遍历过去7天
-      for (let i = 0; i < 7; i++) {
-        const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-        const dateStr = date.toISOString().split('T')[0];
-        const minutes = dailyLearning.get(dateStr) || 0;
-
-        // 衰减因子：越近的数据影响越大
-        // 第0天（今天）权重1，第6天权重0.5
-        const decayFactor = 1 - (i / 7) * 0.5;
-
-        // 学习疲劳因子：单日学习超过2小时累积疲劳
-        const dailyFatigue = Math.max(0, minutes - 120) / 60; // 超过2小时的每1小时增加1点疲劳
-
-        lfCurrent += dailyFatigue * decayFactor;
-      }
-
-      // 转换为0-100范围
-      lfCurrent = Math.min(100, Math.round(lfCurrent * 10));
-
-      resolve(lfCurrent);
-    } catch (error) {
-      console.error('Error calculating LF:', error);
-      resolve(0);
-    }
+  const sessions = await prisma.teaching_sessions.findMany({
+    where: {
+      userId,
+      status: 'completed',
+      wrapup: { not: null },
+      startTime: { gte: sevenDaysAgo, lte: asOf },
+      endTime: { lte: asOf },
+    },
+    orderBy: { startTime: 'desc' },
   });
+
+  if (sessions.length === 0) {
+    return 0;
+  }
+
+  // 按天聚合学习时长
+  const dailyLearning = new Map<string, number>();
+
+  sessions.forEach((session) => {
+    const date = session.startTime.toISOString().split('T')[0];
+    const duration = session.duration || 0;
+    dailyLearning.set(date, (dailyLearning.get(date) || 0) + duration);
+  });
+
+  // 计算疲劳度
+  let lfCurrent = 0;
+
+  // 遍历过去7天
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(asOf.getTime() - i * 24 * 60 * 60 * 1000);
+    const dateStr = date.toISOString().split('T')[0];
+    const minutes = dailyLearning.get(dateStr) || 0;
+
+    // 衰减因子：越近的数据影响越大
+    // 第0天（今天）权重1，第6天权重0.5
+    const decayFactor = 1 - (i / 7) * 0.5;
+
+    // 学习疲劳因子：单日学习超过2小时累积疲劳
+    const dailyFatigue = Math.max(0, minutes - 120) / 60; // 超过2小时的每1小时增加1点疲劳
+
+    lfCurrent += dailyFatigue * decayFactor;
+  }
+
+  // 转换为0-100范围
+  lfCurrent = Math.min(100, Math.round(lfCurrent * 10));
+
+  return lfCurrent;
 }
 
 /**
@@ -252,55 +242,69 @@ export async function updateLearningMetrics(
   input: SessionMetricsInput
 ): Promise<LearningStateMetrics> {
   try {
-    // 1. 计算当前LSS
-    const lssScore = input.lssScore ||
+    const lssScore = input.lssScore ??
       calculateLSS(
         input.completed,
         input.subjectiveDifficulty,
         input.durationMinutes
       );
+    const sourceKey = input.taskId ? `task-completion:${input.taskId}` : undefined;
+    const asOf = input.timestamp || new Date();
+    const committedMetrics = await learningStateService.commitDerivedDisplayMetrics(input.userId, async previousMetrics => {
+      const previousDisplayMetrics = previousMetrics
+        ? learningStateService.toDisplayMetrics(previousMetrics)
+        : null;
+      const ktlCurrent = await calculateKTL(input.userId, lssScore, previousDisplayMetrics?.ktl || 0, asOf);
+      const lfCurrent = await calculateLF(input.userId, asOf);
+      return {
+        lss: lssScore,
+        ktl: ktlCurrent,
+        lf: lfCurrent,
+        lsb: calculateLSB(ktlCurrent, lfCurrent),
+        timestamp: asOf,
+        source: 'task-completion',
+        taskId: input.taskId || null,
+        primaryMetric: 'lsb',
+      };
+    }, {
+      sourceKey,
+      reuseExisting: !!sourceKey,
+      ...(input.timestamp ? { asOf: input.timestamp } : {})
+    });
+    const displayMetrics = learningStateService.toDisplayMetrics(committedMetrics);
 
-    // 2. 获取当前指标
-    const currentMetrics = await getLearningMetrics(input.userId);
-
-    // 3. 计算KTL
-    const previousKTL = currentMetrics?.ktl || 0;
-    const ktlCurrent = await calculateKTL(input.userId, lssScore, previousKTL);
-
-    // 4. 计算LF
-    const lfCurrent = await calculateLF(input.userId);
-
-    // 5. 计算LSB
-    const lsbCurrent = calculateLSB(ktlCurrent, lfCurrent);
-
-    await learningStateService.commitDisplayMetrics(input.userId, {
-      lss: lssScore,
-      ktl: ktlCurrent,
-      lf: lfCurrent,
-      lsb: lsbCurrent,
-      timestamp: new Date(),
-      source: 'task-completion',
-      taskId: input.taskId || null,
-      primaryMetric: 'lsb',
+    logger.debug(`✅ Updated learning metrics for user ${input.userId}:`, {
+      LSS: displayMetrics.lss,
+      KTL: displayMetrics.ktl,
+      LF: displayMetrics.lf,
+      LSB: displayMetrics.lsb,
     });
 
-    console.log(`✅ Updated learning metrics for user ${input.userId}:`, {
-      LSS: lssScore,
-      KTL: ktlCurrent,
-      LF: lfCurrent,
-      LSB: lsbCurrent,
-    });
-
-    return {
-      lss: lssScore,
-      ktl: ktlCurrent,
-      lf: lfCurrent,
-      lsb: lsbCurrent,
-    };
+    return displayMetrics;
   } catch (error) {
-    console.error('Error updating learning metrics:', error);
+    logger.error('Error updating learning metrics:', error);
     throw error;
   }
+}
+
+export async function reconcileTaskCompletionMetric(
+  event: DurableDomainEvent
+): Promise<void> {
+  if (event.type !== 'task:completed' || !event.userId) return;
+  const data = event.data || {};
+  const taskId = typeof data.taskId === 'string' ? data.taskId : event.aggregateId;
+  if (!taskId) throw new Error('任务完成事件缺少 taskId');
+
+  await updateLearningMetrics({
+    userId: event.userId,
+    taskId,
+    durationMinutes: typeof data.actualMinutes === 'number' ? data.actualMinutes : 30,
+    subjectiveDifficulty: typeof data.subjectiveDifficulty === 'number'
+      ? data.subjectiveDifficulty
+      : undefined,
+    completed: true,
+    timestamp: event.occurredAt
+  });
 }
 
 /**

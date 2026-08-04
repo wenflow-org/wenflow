@@ -1,43 +1,29 @@
 <template>
-  <CapabilityShell
-    title="开发者接入"
-    description="以个人中心为入口，统一查看 API 调用方式、可用能力域和第三方接入路线。"
-  >
+  <CapabilityShell title="开发者接入">
     <div class="developer-access-page">
-      <section class="hero glass-card">
-        <div>
-          <p class="hero-eyebrow">Open Platform</p>
-          <h1>第三方接入工作台</h1>
-          <p>当前版本支持基于 JWT 的 API 调用接入，SDK / Webhook / 插件市场按阶段开放。</p>
-        </div>
-        <el-tag type="success" effect="plain">{{ overview.authMode || 'jwt-bearer' }}</el-tag>
-      </section>
+      <el-result v-if="!overviewLoading && overviewError" icon="error" title="开发者概览加载失败" :sub-title="overviewError">
+        <template #extra>
+          <el-button type="primary" @click="loadOverview">重新加载</el-button>
+        </template>
+      </el-result>
 
+      <template v-else-if="!overviewLoading">
       <section class="status-grid">
         <el-card class="glass-card">
-          <template #header>接入状态</template>
+          <template #header>状态</template>
           <div class="status-list">
-            <div class="status-item"><span>认证方式</span><strong>{{ overview.authMode || '-' }}</strong></div>
-            <div class="status-item"><span>SDK</span><strong>{{ overview.sdkStatus || '-' }}</strong></div>
-            <div class="status-item"><span>Webhook</span><strong>{{ overview.webhookStatus || '-' }}</strong></div>
-            <div class="status-item"><span>插件市场</span><strong>{{ overview.pluginMarketplaceStatus || '-' }}</strong></div>
+            <div class="status-item"><span>认证</span><strong>{{ overview.authMode === 'jwt-bearer' ? 'JWT Bearer' : (overview.authMode || '未配置') }}</strong></div>
+            <div class="status-item"><span>SDK</span><strong>{{ overview.sdkStatus === 'planned' ? '规划中' : (overview.sdkStatus || '未配置') }}</strong></div>
+            <div class="status-item"><span>Webhook</span><strong>{{ overview.webhookStatus === 'planned' ? '规划中' : (overview.webhookStatus || '未配置') }}</strong></div>
+            <div class="status-item"><span>插件市场</span><strong>{{ overview.pluginMarketplaceStatus === 'planned' ? '规划中' : (overview.pluginMarketplaceStatus || '未配置') }}</strong></div>
           </div>
-        </el-card>
-
-        <el-card class="glass-card">
-          <template #header>建议接入顺序</template>
-          <ol class="steps-list">
-            <li>先联调 Goal Conversation API</li>
-            <li>接 Learning Paths API 做结果闭环</li>
-            <li>最后在用户侧绑定平台已发布的 Agent 与 Skill</li>
-          </ol>
         </el-card>
       </section>
 
       <section class="endpoints glass-card">
         <div class="section-title-row">
-          <h2>可用 API 组</h2>
-          <el-button link type="primary" @click="$router.push('/docs')">查看完整文档</el-button>
+          <h2>API 组</h2>
+          <el-button link type="primary" @click="$router.push('/docs')">文档</el-button>
         </div>
         <div class="endpoint-group" v-for="group in overview.endpointGroups || []" :key="group.name">
           <div class="group-header">
@@ -49,13 +35,19 @@
           </div>
         </div>
       </section>
+      </template>
 
       <section class="quickstart glass-card">
         <div class="section-title-row">
           <h2>Quickstart</h2>
-          <el-button size="small" @click="copyQuickstart">复制示例</el-button>
+          <el-button size="small" :disabled="quickstartLoading || !quickstart" @click="copyQuickstart">复制</el-button>
         </div>
-        <pre>{{ quickstart }}</pre>
+        <el-result v-if="!quickstartLoading && quickstartError" icon="error" title="Quickstart 加载失败" :sub-title="quickstartError">
+          <template #extra>
+            <el-button type="primary" @click="loadQuickstart">重新加载</el-button>
+          </template>
+        </el-result>
+        <pre v-else-if="!quickstartLoading">{{ quickstart }}</pre>
       </section>
     </div>
   </CapabilityShell>
@@ -67,39 +59,64 @@ import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import { toast } from '../../utils/toast';
 import { getDeveloperOverview, getDeveloperQuickstart } from '@/api/userCustom';
 
-const overview = reactive<any>({
-  authMode: 'jwt-bearer',
-  sdkStatus: 'planned',
-  webhookStatus: 'planned',
-  pluginMarketplaceStatus: 'planned',
+interface DeveloperOverviewData {
+  authMode?: string;
+  sdkStatus?: string;
+  webhookStatus?: string;
+  pluginMarketplaceStatus?: string;
+  endpointGroups: Array<{
+    name: string;
+    basePath: string;
+    endpoints: string[];
+  }>;
+}
+
+const overview = reactive<DeveloperOverviewData>({
   endpointGroups: []
 });
 
-const quickstart = ref('加载中...');
+const overviewError = ref('');
+const overviewLoading = ref(true);
+const quickstart = ref('');
+const quickstartError = ref('');
+const quickstartLoading = ref(true);
 
 onMounted(async () => {
   await Promise.all([loadOverview(), loadQuickstart()]);
 });
 
 async function loadOverview() {
+  overviewLoading.value = true;
+  overviewError.value = '';
   try {
     const res = await getDeveloperOverview();
     Object.assign(overview, res.data || {});
   } catch {
-    toast.warning('开发者概览读取失败，展示默认信息');
+    overviewError.value = '无法读取开发者接入信息，请稍后重试。';
+    toast.error('开发者概览读取失败');
+  } finally {
+    overviewLoading.value = false;
   }
 }
 
 async function loadQuickstart() {
+  quickstartLoading.value = true;
+  quickstartError.value = '';
   try {
     const res = await getDeveloperQuickstart();
-    quickstart.value = res.data?.quickstart || '暂无 quickstart 内容';
+    quickstart.value = res.data?.quickstart || '';
+    if (!quickstart.value) quickstartError.value = '服务未返回 Quickstart 内容。';
   } catch {
-    quickstart.value = '暂无 quickstart 内容';
+    quickstart.value = '';
+    quickstartError.value = '无法读取 Quickstart，请稍后重试。';
+    toast.error('Quickstart 读取失败');
+  } finally {
+    quickstartLoading.value = false;
   }
 }
 
 async function copyQuickstart() {
+  if (!quickstart.value) return;
   try {
     await navigator.clipboard.writeText(quickstart.value);
     toast.success('Quickstart 已复制');

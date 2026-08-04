@@ -1,35 +1,51 @@
 import { Request, Response, NextFunction } from 'express';
 
 interface LoginAttempt {
-  username: string;
-  ip: string;
   timestamp: Date;
-  success: boolean;
 }
 
-const MAX_ATTEMPTS = parseInt(process.env.LOGIN_MAX_ATTEMPTS || '5');
-const LOCK_DURATION = parseInt(process.env.LOGIN_LOCK_DURATION || '900000');
+export type LoginRateLimitScope = 'user' | 'admin';
+
+const parsePositiveInteger = (value: string | undefined, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const MAX_ATTEMPTS = parsePositiveInteger(process.env.LOGIN_MAX_ATTEMPTS, 5);
+const configuredLockDurationSeconds = process.env.LOGIN_LOCK_DURATION_SECONDS;
+const legacyLockDuration = process.env.LOGIN_LOCK_DURATION;
+const parsedLegacyLockDuration = parsePositiveInteger(legacyLockDuration, 0);
+const LOCK_DURATION_SECONDS = configuredLockDurationSeconds
+  ? parsePositiveInteger(configuredLockDurationSeconds, 900)
+  : parsedLegacyLockDuration > 0
+    ? (parsedLegacyLockDuration > 86_400 ? Math.ceil(parsedLegacyLockDuration / 1000) : parsedLegacyLockDuration)
+    : 900;
+const LOCK_DURATION_MS = LOCK_DURATION_SECONDS * 1000;
+const MAX_RECORDED_ATTEMPTS = Math.max(20, MAX_ATTEMPTS);
 
 const loginAttempts: Map<string, LoginAttempt[]> = new Map();
 
-export const loginRateLimitMiddleware = (
+const buildLoginAttemptKey = (scope: LoginRateLimitScope, username: string, ip: string): string =>
+  `${scope}:${username}:${ip}`;
+
+const createLoginRateLimitMiddleware = (scope: LoginRateLimitScope) => (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
-  const { name } = req.body;
-  const clientIP = req.ip || req.headers['x-forwarded-for'] || 'unknown';
-  const key = `${name}:${clientIP}`;
+  const name = typeof req.body?.name === 'string' ? req.body.name : '';
+  const clientIP = (req.ip || req.headers['x-forwarded-for'] || 'unknown').toString();
+  const key = buildLoginAttemptKey(scope, name, clientIP);
   
   const attempts = loginAttempts.get(key) || [];
   const recentFailures = attempts.filter(
-    a => !a.success && Date.now() - a.timestamp.getTime() < LOCK_DURATION
+    attempt => Date.now() - attempt.timestamp.getTime() < LOCK_DURATION_MS
   );
   
   if (recentFailures.length >= MAX_ATTEMPTS) {
     const lastAttempt = recentFailures[recentFailures.length - 1];
     const remainingTime = Math.ceil(
-      (LOCK_DURATION - (Date.now() - lastAttempt.timestamp.getTime())) / 1000
+      (LOCK_DURATION_MS - (Date.now() - lastAttempt.timestamp.getTime())) / 1000
     );
     
     return res.status(429).json({
@@ -45,24 +61,35 @@ export const loginRateLimitMiddleware = (
   next();
 };
 
+export const loginRateLimitMiddleware = createLoginRateLimitMiddleware('user');
+export const adminLoginRateLimitMiddleware = createLoginRateLimitMiddleware('admin');
+
 export const recordLoginAttempt = (
   username: string,
   ip: string,
-  success: boolean
+  success: boolean,
+  scope: LoginRateLimitScope = 'user'
 ) => {
-  const key = `${username}:${ip}`;
+  const key = buildLoginAttemptKey(scope, username, ip);
+
+  if (success) {
+    loginAttempts.delete(key);
+    return;
+  }
+
   const attempts = loginAttempts.get(key) || [];
   
   attempts.push({
-    username,
-    ip,
-    timestamp: new Date(),
-    success
+    timestamp: new Date()
   });
   
-  if (attempts.length > 20) {
-    attempts.splice(0, attempts.length - 20);
+  if (attempts.length > MAX_RECORDED_ATTEMPTS) {
+    attempts.splice(0, attempts.length - MAX_RECORDED_ATTEMPTS);
   }
   
   loginAttempts.set(key, attempts);
+};
+
+export const resetLoginAttemptsForTests = () => {
+  loginAttempts.clear();
 };

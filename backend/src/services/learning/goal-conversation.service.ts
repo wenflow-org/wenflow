@@ -2,10 +2,22 @@
 // 核心理念：穿透表象，找到真问题，渐进式收集信息
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
-import { runGoalConversationAgent } from '../../skills/goal-conversation';
+import { executeSkill } from '../../skills';
+import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
-import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
+import learningService from './learning.service';
+import { createDomainEvent } from '../../events/contracts';
+import { enqueueDomainEvent } from '../../events/outbox.repository';
+
+interface GoalConversationOptions {
+  contextMode?: 'recent' | 'full';
+  confirmProposal?: boolean;
+  systemPromptOverrides?: {
+    goalAgent?: string;
+    pathAgent?: string;
+  };
+}
 
 interface GoalNormalizedStateV1 {
   version: '1.0';
@@ -97,6 +109,8 @@ class GoalConversationService {
 
 
 
+  private static readonly GOAL_STAGES = ['understanding', 'proposing', 'ready', 'completed'] as const;
+
   private getCore(internal: any): { stage: string; confidence: number; isCompleted: boolean; conversationId?: string | null; learningPath?: any } {
     const core = internal?.core || {};
     return {
@@ -133,7 +147,40 @@ class GoalConversationService {
     return aiResponse?.debug?.structuredOutputValid === true;
   }
 
+  /** 优先 runtimeEnvelope.businessState.phase，否则 internal.core.stage */
+  private resolveStageFromResponse(aiResponse: any): string {
+    const phase = aiResponse?.runtimeEnvelope?.businessState?.phase;
+    if (typeof phase === 'string' && (GoalConversationService.GOAL_STAGES as readonly string[]).includes(phase)) {
+      return phase;
+    }
+    return this.getCore(aiResponse?.internal).stage;
+  }
+
+  private resolveConfidenceFromResponse(aiResponse: any): number {
+    const envelopeConf = aiResponse?.runtimeEnvelope?.businessState?.confidence;
+    if (typeof envelopeConf === 'number' && Number.isFinite(envelopeConf)) return envelopeConf;
+    return this.getCore(aiResponse?.internal).confidence;
+  }
+
   private buildPreviousState(data: any, fallbackStage: string) {
+    const next = data?.runtimeNextState && typeof data.runtimeNextState === 'object'
+      ? data.runtimeNextState
+      : (data?.runtimeEnvelope?.contextUpdate?.nextState && typeof data.runtimeEnvelope.contextUpdate.nextState === 'object'
+        ? data.runtimeEnvelope.contextUpdate.nextState
+        : null);
+
+    if (next) {
+      return {
+        stage: next.stage || data?.stage || fallbackStage || 'understanding',
+        confidence: typeof next.confidence === 'number' ? next.confidence : (typeof data?.confidence === 'number' ? data.confidence : 0),
+        understanding: next.understanding || data?.understanding || {},
+        collected: next.collected || data?.collected || {},
+        structuredData: next.structuredData !== undefined ? next.structuredData : (data?.structuredData ?? null),
+        confirmedProposal: next.confirmedProposal !== undefined ? next.confirmedProposal : (data?.confirmedProposal ?? null),
+        confidenceScores: next.confidenceScores !== undefined ? next.confidenceScores : (data?.confidenceScores ?? null)
+      };
+    }
+
     return {
       stage: data?.stage || fallbackStage || 'understanding',
       confidence: typeof data?.confidence === 'number' ? data.confidence : 0,
@@ -148,6 +195,7 @@ class GoalConversationService {
   private withConversationId(result: any, conversationId: string) {
     return {
       ...result,
+      runtimeEnvelope: result?.runtimeEnvelope || null,
       internal: {
         ...(result?.internal || {}),
         core: {
@@ -165,6 +213,33 @@ class GoalConversationService {
     };
   }
 
+  private toServiceResult(aiResponse: any, conversationId: string, overrides?: {
+    stage?: string;
+    isCompleted?: boolean;
+    learningPath?: any;
+    userVisible?: string;
+  }) {
+    const stage = overrides?.stage || this.resolveStageFromResponse(aiResponse);
+    const confidence = this.resolveConfidenceFromResponse(aiResponse);
+    const goalExt = this.getGoalExt(aiResponse?.internal);
+    return {
+      userVisible: overrides?.userVisible ?? aiResponse?.userVisible ?? '',
+      runtimeEnvelope: aiResponse?.runtimeEnvelope || null,
+      internal: {
+        core: {
+          conversationId,
+          stage,
+          confidence,
+          isCompleted: overrides?.isCompleted ?? (stage === 'ready' || stage === 'completed'),
+          ...(overrides?.learningPath !== undefined ? { learningPath: overrides.learningPath } : {})
+        },
+        ext: {
+          goalConversation: goalExt
+        }
+      }
+    };
+  }
+
   private throwStructuredOutputInvalid(result: any): never {
     const error: any = new Error('STRUCTURED_OUTPUT_INVALID');
     error.status = 422;
@@ -173,10 +248,58 @@ class GoalConversationService {
     throw error;
   }
 
+  private async updateConversationLifecycle(
+    conversationId: string,
+    stage: 'understanding' | 'proposing' | 'ready' | 'completed',
+    options: {
+      status?: string;
+      completedAt?: Date | null;
+      learningPathId?: string | null;
+      learningPath?: { id: string; status?: string } | null;
+      appendMessage?: { role: 'user' | 'ai'; content: string };
+      mutateCollectedData?: (data: Record<string, any>) => void;
+    } = {}
+  ): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      const conversation = await tx.goal_conversations.findUnique({
+        where: { id: conversationId }
+      });
+      if (!conversation) throw new Error('对话会话不存在');
+
+      const collectedData = JSON.parse(conversation.collectedData || '{}');
+      collectedData.stage = stage;
+      options.mutateCollectedData?.(collectedData);
+
+      if (options.learningPath !== undefined) {
+        collectedData.learningPath = options.learningPath;
+      }
+
+      if (options.appendMessage) {
+        collectedData.messages = Array.isArray(collectedData.messages) ? collectedData.messages : [];
+        collectedData.messages.push({
+          role: options.appendMessage.role,
+          content: this.sanitizeVisibleContent(options.appendMessage.content),
+          time: new Date().toISOString()
+        });
+      }
+
+      await tx.goal_conversations.update({
+        where: { id: conversationId },
+        data: {
+          stage,
+          collectedData: JSON.stringify(collectedData),
+          status: options.status,
+          completedAt: options.completedAt,
+          learningPathId: options.learningPathId
+        }
+      });
+    });
+  }
+
   /**
    * 开始新的对话会话（新格式：分离 userVisible 和 internal）
    */
-  async startConversation(userId: string, initialGoal: string, options?: { contextMode?: 'recent' | 'full' }) {
+  async startConversation(userId: string, initialGoal: string, options?: GoalConversationOptions) {
     try {
       logger.info('开始问题穿透对话会话', { userId, initialGoal });
 
@@ -192,6 +315,7 @@ class GoalConversationService {
             messages: [],       // 对话历史
             collected: {},      // 已收集的信息
             understanding: {},  // 问题理解状态
+            stage: 'understanding',
             confidence: 0,
             confirmedProposal: null,
             structuredData: null,
@@ -205,10 +329,9 @@ class GoalConversationService {
       const aiResponse = await this.callAI(conversation.id, initialGoal, true, userId, options);
       const responseWithConversationId = this.withConversationId(aiResponse, conversation.id);
 
-      // 首轮用户输入始终保留，便于用户重试；只有结构化成功才写入 AI 回复和状态
-      await this.saveMessage(conversation.id, 'user', initialGoal);
-
       if (!this.getStructuredOutputValid(aiResponse)) {
+        // 422 恢复信封前先持久化本轮用户消息，避免刷新恢复后上下文丢失（AI 回复不落库）
+        await this.saveMessage(conversation.id, 'user', initialGoal);
         logger.warn('开始对话结构化输出失败，状态未更新', {
           conversationId: conversation.id,
           userId,
@@ -217,34 +340,20 @@ class GoalConversationService {
         this.throwStructuredOutputInvalid(responseWithConversationId);
       }
 
+      await this.saveMessage(conversation.id, 'user', initialGoal);
       await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible);
 
-      // 更新收集的数据
-      await this.updateCollectedData(conversation.id, aiResponse);
+      // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
+      await this.updateCollectedData(conversation.id, responseWithConversationId);
 
+      const stage = this.resolveStageFromResponse(responseWithConversationId);
       logger.info('对话会话创建成功', {
         conversationId: conversation.id,
-        stage: this.getCore(aiResponse.internal).stage,
-        confidence: this.getCore(aiResponse.internal).confidence
+        stage,
+        confidence: this.resolveConfidenceFromResponse(responseWithConversationId)
       });
 
-      const core = this.getCore(responseWithConversationId.internal);
-      const goalExt = this.getGoalExt(responseWithConversationId.internal);
-
-      return {
-        userVisible: aiResponse.userVisible,
-        internal: {
-          core: {
-            conversationId: conversation.id,
-            stage: core.stage,
-            confidence: core.confidence,
-              isCompleted: core.stage === 'ready' || core.stage === 'completed'
-          },
-          ext: {
-            goalConversation: goalExt
-          }
-        }
-      };
+      return this.toServiceResult(responseWithConversationId, conversation.id, { stage });
     } catch (error) {
       logger.error('开始对话会话失败:', error);
       throw error;
@@ -258,7 +367,7 @@ async continueConversation(
     conversationId: string,
     userReply: string,
     userId: string,
-    options?: { contextMode?: 'recent' | 'full'; confirmProposal?: boolean }
+    options?: GoalConversationOptions
   ) {
       try {
         // 获取当前对话状态
@@ -317,9 +426,6 @@ async continueConversation(
           const data = JSON.parse(conversation.collectedData || '{}');
           const understanding = data.understanding || {};
           
-          // 保存用户确认消息
-          await this.saveMessage(conversation.id, 'user', userReply);
-
           try {
             const seedResult = {
               userVisible: '',
@@ -340,36 +446,32 @@ async continueConversation(
             };
 
             const placeholderPath = await this.createGeneratingPlaceholderPath(conversation, seedResult);
+            const runId = await learningService.claimPathCoreGeneration(placeholderPath.id, null);
+
+            await this.updateConversationLifecycle(conversationId, 'completed', {
+              status: 'completed',
+              completedAt: new Date(),
+              learningPathId: placeholderPath.id,
+              learningPath: { id: placeholderPath.id, status: 'generating' },
+              appendMessage: { role: 'user', content: userReply }
+            });
 
             pathOrchestrator.runGoalAsync(
-              this.buildGoalPathRequest(conversation, seedResult, placeholderPath.id),
+              {
+                ...this.buildGoalPathRequest(conversation, seedResult, placeholderPath.id, options?.systemPromptOverrides),
+                generationRunId: runId,
+                createdPlaceholder: true
+              },
               {
                 onSuccess: () => {
                   logger.info('硬规则触发：异步学习路径生成成功', { conversationId, pathId: placeholderPath.id });
                 },
                 onError: async (pathError) => {
                   logger.error('硬规则触发：异步学习路径生成失败', { conversationId, pathId: placeholderPath.id, error: String(pathError) });
-                  try {
-                    await prisma.learning_paths.update({
-                      where: { id: placeholderPath.id },
-                      data: { status: 'failed', updatedAt: new Date() }
-                    });
-                  } catch (e) {
-                    logger.error('更新失败状态出错', e);
-                  }
+                  await learningService.markActiveGenerationFailed(placeholderPath.id, pathError, runId);
                 }
               }
             );
-
-            await prisma.goal_conversations.update({
-              where: { id: conversationId },
-              data: {
-                stage: 'completed',
-                status: 'completed',
-                completedAt: new Date(),
-                learningPathId: placeholderPath.id
-              }
-            });
 
             return {
               userVisible: '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。',
@@ -401,10 +503,9 @@ async continueConversation(
       const aiResponse = await this.callAI(conversation.id, userReply, false, userId, options);
       const responseWithConversationId = this.withConversationId(aiResponse, conversationId);
 
-      // 用户输入保留，结构化失败时仅保留用户消息，不推进状态/AI历史。
-      await this.saveMessage(conversation.id, 'user', userReply);
-
       if (!this.getStructuredOutputValid(aiResponse)) {
+        // 422 恢复信封前先持久化本轮用户消息，避免刷新恢复后对话上下文丢失（AI 回复不落库）
+        await this.saveMessage(conversation.id, 'user', userReply);
         logger.warn('继续对话结构化输出失败，状态未更新', {
           conversationId,
           userId,
@@ -414,24 +515,40 @@ async continueConversation(
         this.throwStructuredOutputInvalid(responseWithConversationId);
       }
 
+      await this.saveMessage(conversation.id, 'user', userReply);
       await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible);
 
-      // 更新收集的数据
-      await this.updateCollectedData(conversation.id, aiResponse);
-      void learnerSnapshotRefreshService.refresh({
-        userId,
-        scope: 'global'
-      });
-      const core = this.getCore(responseWithConversationId.internal);
+      // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
+      await this.updateCollectedData(conversation.id, responseWithConversationId);
+      const stage = this.resolveStageFromResponse(responseWithConversationId);
+      const confidence = this.resolveConfidenceFromResponse(responseWithConversationId);
       const goalExt = this.getGoalExt(responseWithConversationId.internal);
 
       // 如果对话完成，先生成学习路径
-      if (core.stage === 'ready' || core.stage === 'completed') {
+      if (stage === 'ready' || stage === 'completed') {
         try {
-            const placeholderPath = await this.createGeneratingPlaceholderPath(conversation, responseWithConversationId);
+            const latestConversation = await prisma.goal_conversations.findUnique({
+              where: { id: conversationId }
+            });
+            const placeholderPath = await this.createGeneratingPlaceholderPath(
+              latestConversation || conversation,
+              responseWithConversationId
+            );
+            const runId = await learningService.claimPathCoreGeneration(placeholderPath.id, null);
+
+            await this.updateConversationLifecycle(conversationId, 'completed', {
+              status: 'completed',
+              completedAt: new Date(),
+              learningPathId: placeholderPath.id,
+              learningPath: { id: placeholderPath.id, status: 'generating' }
+            });
 
             pathOrchestrator.runGoalAsync(
-            this.buildGoalPathRequest(conversation, responseWithConversationId, placeholderPath.id),
+            {
+              ...this.buildGoalPathRequest(latestConversation || conversation, responseWithConversationId, placeholderPath.id, options?.systemPromptOverrides),
+              generationRunId: runId,
+              createdPlaceholder: true
+            },
             {
               onSuccess: () => {
                 logger.info('异步学习路径生成成功', {
@@ -446,105 +563,48 @@ async continueConversation(
                   error: (pathError as any)?.message || String(pathError)
                 });
 
-                try {
-                  await prisma.learning_paths.update({
-                    where: { id: placeholderPath.id },
-                    data: {
-                      status: 'failed',
-                      updatedAt: new Date()
-                    }
-                  });
-                } catch (updateError) {
-                  logger.error('更新占位路径失败状态失败', updateError);
-                }
+                await learningService.markActiveGenerationFailed(placeholderPath.id, pathError, runId);
               }
             }
           );
 
-          // 学习路径生成成功后，再更新状态
-          await prisma.goal_conversations.update({
-            where: { id: conversationId },
-            data: {
-              stage: 'completed',
-              status: 'completed',
-              completedAt: new Date(),
-              learningPathId: placeholderPath.id
-            }
-          });
-
-          void learnerSnapshotRefreshService.refresh({
-            userId,
-            pathId: placeholderPath.id,
-            scope: 'path'
-          });
-
           // 新格式返回：completed 状态
-          return {
+          return this.toServiceResult(responseWithConversationId, conversationId, {
+            stage: 'completed',
+            isCompleted: true,
+            learningPath: { id: placeholderPath.id, status: 'generating' },
             userVisible: `${responseWithConversationId.userVisible}\n\n⏳ 学习路径已开始生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。`,
-            internal: {
-              core: {
-                conversationId,
-                stage: 'completed',
-                confidence: core.confidence,
-                isCompleted: true,
-                learningPath: {
-                  id: placeholderPath.id,
-                  status: 'generating'
-                }
-              },
-              ext: {
-                goalConversation: {
-                  ...goalExt,
-                  quickReplies: goalExt.quickReplies || []
-                }
-              }
-            }
-          };
+          });
         } catch (pathError) {
           // 学习路径生成失败，返回错误但不标记完成
           logger.error('学习路径生成失败，对话仍保留在 proposing 状态', pathError);
-          return {
+          await this.updateConversationLifecycle(conversationId, 'proposing', {
+            status: 'active',
+            completedAt: null,
+            mutateCollectedData: (data) => {
+              data.learningPath = null;
+            }
+          });
+          const failed = this.toServiceResult(responseWithConversationId, conversationId, {
+            stage: 'proposing',
+            isCompleted: false,
             userVisible: '抱歉，生成学习路径时遇到了问题。请稍后重试，或者点击"重试"按钮。',
+          });
+          return {
+            ...failed,
             internal: {
-              core: {
-                conversationId,
-                stage: 'proposing',
-                confidence: core.confidence,
-                isCompleted: false
-              },
-              ext: {
-                goalConversation: goalExt
-              },
+              ...failed.internal,
               error: '学习路径生成失败，请重试'
             }
           };
         }
       }
 
-      // 非完成状态，正常更新
-      await prisma.goal_conversations.update({
-        where: { id: conversationId },
-        data: {
-          stage: core.stage,
-          status: 'active'
-        }
-      });
-
       // 新格式返回：正常对话状态
-      return {
-        userVisible: responseWithConversationId.userVisible,
-        internal: {
-          core: {
-            conversationId,
-            stage: core.stage,
-            confidence: core.confidence,
-            isCompleted: false
-          },
-          ext: {
-            goalConversation: goalExt
-          }
-        }
-      };
+      return this.toServiceResult(responseWithConversationId, conversationId, {
+        stage,
+        isCompleted: false,
+      });
 
     } catch (error) {
       logger.error('继续对话失败:', error);
@@ -588,7 +648,7 @@ async continueConversation(
     userInput: string,
     isFirst: boolean,
     userId?: string,
-    options?: { contextMode?: 'recent' | 'full'; confirmProposal?: boolean }
+    options?: GoalConversationOptions
   ) {
     const startTime = Date.now();
 
@@ -600,15 +660,15 @@ async continueConversation(
 
       const data = JSON.parse(conversation.collectedData);
       const history = data.messages || [];
-      const previousUnderstanding = data.understanding || {};
       const previousState = this.buildPreviousState(data, conversation.stage);
+      const previousUnderstanding = previousState.understanding || data.understanding || {};
 
       // 正式链路固定使用完整可见历史 + state-first，与测试模式保持一致。
       const contextMode = 'full';
       const selectedHistory = history;
 
       // 调用专用 GoalConversationAgent
-      const aiResponse = await runGoalConversationAgent({
+      const aiResponse = await executeSkill(goalConversationAgentDefinition, {
         input: userInput,
         userId: userId || 'anonymous',
         conversationHistory: selectedHistory.map((msg: any) => ({
@@ -616,17 +676,18 @@ async continueConversation(
           content: msg.content
         })),
         previousUnderstanding,
-        previousStage: data.stage || conversation.stage,
+        previousStage: previousState.stage || data.stage || conversation.stage,
         previousState,
         maxFormatRetries: this.MAX_FORMAT_RETRIES,
-        confirmProposal: options?.confirmProposal === true
+        confirmProposal: options?.confirmProposal === true,
+        systemPromptOverride: options?.systemPromptOverrides?.goalAgent
       });
 
-        logger.info('AI响应', {
+        logger.debug('AI响应', {
         contextMode,
         historyCount: selectedHistory.length,
-        stage: this.getCore(aiResponse.internal).stage,
-        confidence: this.getCore(aiResponse.internal).confidence,
+        stage: this.resolveStageFromResponse(aiResponse),
+        confidence: this.resolveConfidenceFromResponse(aiResponse),
         responseLength: aiResponse.userVisible.length,
         promptVersion: aiResponse?.debug?.promptVersion || 'agent-managed',
         attemptCount: aiResponse?.debug?.attemptCount || 0,
@@ -675,6 +736,7 @@ async continueConversation(
   private async updateCollectedData(conversationId: string, aiResponse: {
     userVisible: string;
     internal: any;
+    runtimeEnvelope?: any;
   }) {
     const conversation = await prisma.goal_conversations.findUnique({
       where: { id: conversationId }
@@ -684,16 +746,27 @@ async continueConversation(
 
     const core = this.getCore(aiResponse.internal);
     const goalExt = this.getGoalExt(aiResponse.internal);
+    const stage = this.resolveStageFromResponse(aiResponse);
+    const confidence = this.resolveConfidenceFromResponse(aiResponse);
 
     // 合并已收集的信息（从 ext.goalConversation.collected）
     data.collected = { ...data.collected, ...goalExt.collected };
-    data.confidence = core.confidence;
+    data.confidence = confidence;
 
     // 保存 understanding 供前端展示
     data.understanding = goalExt.understanding || data.understanding || {};
 
-    // 保存 stage
-    data.stage = core.stage;
+    // 保存 stage（优先 envelope.phase）
+    data.stage = stage;
+
+    // 统一运行契约：落盘最近一次 envelope 快照（state-refresh nextState）
+    if (aiResponse.runtimeEnvelope) {
+      data.runtimeEnvelope = aiResponse.runtimeEnvelope;
+      const nextState = aiResponse.runtimeEnvelope?.contextUpdate?.nextState;
+      if (nextState && typeof nextState === 'object') {
+        data.runtimeNextState = nextState;
+      }
+    }
 
     // 保存待问问题
     if (goalExt.nextQuestions) {
@@ -718,28 +791,38 @@ async continueConversation(
       data.learningPath = core.learningPath || null;
     }
 
-    await prisma.goal_conversations.update({
-      where: { id: conversationId },
-      data: { collectedData: JSON.stringify(data) }
-    });
-
-    const conversationOwner = await prisma.goal_conversations.findUnique({
-      where: { id: conversationId },
-      select: { userId: true }
-    });
-
-    if (conversationOwner?.userId) {
-      void learnerSnapshotRefreshService.refresh({
-        userId: conversationOwner.userId,
-        scope: 'global'
+    await prisma.$transaction(async (tx) => {
+      await tx.goal_conversations.update({
+        where: { id: conversationId },
+        data: {
+          collectedData: JSON.stringify(data),
+          stage
+        }
       });
-    }
+      await enqueueDomainEvent(tx, createDomainEvent({
+        type: 'goal:understanding:updated',
+        aggregateType: 'goal',
+        aggregateId: conversationId,
+        userId: conversation.userId,
+        source: 'goal-conversation-service',
+        data: {
+          conversationId,
+          stage,
+          confidence,
+          understanding: data.understanding,
+          normalizedGoalState: data.normalizedGoalState,
+          confirmedProposal: data.confirmedProposal || null,
+          structuredData: data.structuredData || null
+        }
+      }));
+    });
   }
 
   private buildGoalPathRequest(
     conversation: any,
     aiResponse: any,
-    existingPathId?: string
+    existingPathId?: string,
+    systemPromptOverrides?: GoalConversationOptions['systemPromptOverrides']
   ): GoalPathRequest {
     const data = JSON.parse(conversation.collectedData);
     const goalExt = this.getGoalExt(aiResponse.internal);
@@ -766,8 +849,13 @@ async continueConversation(
         confirmedProposal,
         collected: data.collected || {},
       }),
+      // goal skill 产出的结构化画像透传（learner.identity/learning_context 等），供 path-planning scenario 判定
+      structuredData: (data as any)?.structuredData || null,
       conversationHistory,
       finalUserVisible: aiResponse.userVisible || null,
+      systemPromptOverrides: systemPromptOverrides?.pathAgent
+        ? { pathAgent: systemPromptOverrides.pathAgent }
+        : undefined,
     };
   }
 
@@ -796,11 +884,39 @@ async continueConversation(
   /**
    * 生成学习路径 - 基于真问题（新格式：从 internal 读取数据）
    */
-  private async generateLearningPath(conversation: any, aiResponse: any) {
+  private async generateLearningPath(
+    conversation: any,
+    aiResponse: any,
+    systemPromptOverrides?: GoalConversationOptions['systemPromptOverrides']
+  ) {
     try {
-      const learningPath = await pathOrchestrator.generateFromGoal(
-        this.buildGoalPathRequest(conversation, aiResponse, conversation.learningPathId || undefined)
+      const request = this.buildGoalPathRequest(
+        conversation,
+        aiResponse,
+        conversation.learningPathId || undefined,
+        systemPromptOverrides
       );
+      if (request.existingPathId) {
+        const path = await prisma.learning_paths.findUnique({
+          where: { id: request.existingPathId },
+          select: { activeGenerationRunId: true }
+        });
+        if (!path) {
+          // Goal 上的 learningPathId 可能因 Path 被重建/删除而过期；降级为新建路径，
+          // 由调用方把新 pathId 写回 goal_conversations，恢复 Goal ↔ Path 1:1 指针。
+          logger.warn('会话绑定的学习路径已不存在，改为生成新路径', {
+            conversationId: conversation.id,
+            stalePathId: request.existingPathId
+          });
+          request.existingPathId = undefined;
+        } else {
+          request.generationRunId = await learningService.claimPathCoreGeneration(
+            request.existingPathId,
+            path.activeGenerationRunId
+          );
+        }
+      }
+      const learningPath = await pathOrchestrator.generateFromGoal(request);
 
       const goalExt = this.getGoalExt(aiResponse.internal);
       const understanding = goalExt.understanding || {};
@@ -849,7 +965,12 @@ async continueConversation(
   /**
    * 重新生成学习路径（基于已完成的对话）
    */
-  async regeneratePath(conversationId: string, userId: string, adjustments?: string) {
+  async regeneratePath(
+    conversationId: string,
+    userId: string,
+    adjustments?: string,
+    systemPromptOverrides?: GoalConversationOptions['systemPromptOverrides']
+  ) {
     try {
       logger.info('重新生成学习路径', { conversationId, userId, adjustments });
 
@@ -872,17 +993,27 @@ async continueConversation(
       }
 
       // 重置状态为 proposing，准备重新生成
-      await prisma.goal_conversations.update({
-        where: { id: conversationId },
-        data: {
-          stage: 'proposing',
-          status: 'active',
-          completedAt: null
+      await this.updateConversationLifecycle(conversationId, 'proposing', {
+        status: 'active',
+        completedAt: null,
+        mutateCollectedData: (currentData) => {
+          currentData.understanding = understanding;
         }
       });
 
+      const updatedConversation = {
+        ...conversation,
+        stage: 'proposing',
+        status: 'active',
+        collectedData: JSON.stringify({
+          ...data,
+          stage: 'proposing',
+          understanding
+        })
+      };
+
       // 重新生成学习路径
-      const learningPath = await this.generateLearningPath(conversation, {
+      const learningPath = await this.generateLearningPath(updatedConversation, {
         userVisible: '正在重新生成学习路径...',
         internal: {
           core: {
@@ -898,17 +1029,16 @@ async continueConversation(
             }
           }
         }
-      });
+      }, systemPromptOverrides);
 
       // 更新状态为完成
-      await prisma.goal_conversations.update({
-        where: { id: conversationId },
-        data: {
-          stage: 'completed',
-          status: 'completed',
-          completedAt: new Date(),
-          learningPathId: learningPath?.id
-        }
+      await this.updateConversationLifecycle(conversationId, 'completed', {
+        status: 'completed',
+        completedAt: new Date(),
+        learningPathId: learningPath?.id,
+        learningPath: learningPath?.id
+          ? { id: learningPath.id, status: learningPath.status }
+          : null
       });
 
       logger.info('学习路径重新生成成功', {

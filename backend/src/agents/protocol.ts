@@ -135,6 +135,25 @@ export interface AgentOutput {
   // 虚拟学习者潜在状态（simulation）
   learnerState?: Record<string, any>;
 
+// 统一运行契约 envelope（可选，逐步接入）
+  runtimeEnvelope?: {
+    artifact: unknown;
+    businessState: {
+      domain: string;
+      phase: string;
+      status: string;
+      confidence?: number;
+      isTerminal: boolean;
+      nextAction?: string | null;
+      reason?: string | null;
+    };
+    contextUpdate: {
+      mode: string;
+      stateOwner: string;
+      nextState?: unknown | null;
+    };
+  };
+
 // 调试信息（可选）
   debug?: Record<string, any>;
 }

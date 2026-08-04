@@ -6,8 +6,7 @@
  */
 
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
-import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
-import { AgentConfigService } from '../../services/agentConfig.service';
+import { callPrompt } from '../../composers/prompt-composer';
 
 export const adaptiveGuidanceCopyDefinition: SkillDefinition = {
   name: 'adaptive-guidance-copy',
@@ -122,8 +121,6 @@ export const ADAPTIVE_GUIDANCE_COPY_PROMPT = `你是一个学习产品的动态�
 10. 所有文案必须和输入中的学习状态一致，不能虚构用户已经完成了什么。
 11. learning-state 页面要避免重复解释指标公式，更聚焦"当前状态意味着什么"。`;
 
-const promptConfigService = new AgentConfigService();
-
 function safeText(value: any): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -188,100 +185,88 @@ function buildFallback(input: AdaptiveGuidanceCopyInput): AdaptiveGuidanceCopyOu
   };
 }
 
+function normalizeAdaptiveOutput(parsed: any, input: AdaptiveGuidanceCopyInput): AdaptiveGuidanceCopyOutput {
+  const fallback = buildFallback(input);
+  const obj = parsed && typeof parsed === 'object' ? parsed : {};
+  return {
+    headline: safeText(obj.headline) || fallback.headline,
+    subtitle: safeText(obj.subtitle) || fallback.subtitle,
+    todayActions: Array.isArray(obj.todayActions)
+      ? obj.todayActions.slice(0, 3).map((item: any) => ({
+          title: safeText(item?.title) || '继续学习',
+          desc: safeText(item?.desc) || '',
+          action: safeText(item?.action) || '继续',
+          to: safeText(item?.to) || undefined,
+        }))
+      : fallback.todayActions,
+    pathHint: safeText(obj.pathHint) || fallback.pathHint,
+    nextStep: safeText(obj.nextStep) || fallback.nextStep,
+    paceHint: safeText(obj.paceHint) || fallback.paceHint,
+    emptyStateCopy: safeText(obj.emptyStateCopy) || fallback.emptyStateCopy,
+    warningCopy: safeText(obj.warningCopy) || fallback.warningCopy,
+  };
+}
+
 export async function adaptiveGuidanceCopy(
   input: AdaptiveGuidanceCopyInput
 ): Promise<AdaptiveGuidanceCopyResult> {
   const startTime = Date.now();
   const userPayload = buildPrompt(input);
-  let model: string | null = null;
-  let systemPromptVersion: number | null = null;
-  let rawModelOutput = '';
-  let normalizedOutput: AdaptiveGuidanceCopyOutput | null = null;
 
   try {
-    const gateway = getAPIGateway();
-    const caller: CallerInfo = { skillId: 'adaptive-guidance-copy' };
-    const promptConfig = await promptConfigService.getActivePrompt('skill:adaptive-guidance-copy');
-    if (!promptConfig?.systemPrompt?.trim()) {
-      throw new Error('SKILL_PROMPT_MISSING: adaptive-guidance-copy');
+    const result = await callPrompt<AdaptiveGuidanceCopyInput, AdaptiveGuidanceCopyOutput>({
+      agentId: 'skill:adaptive-guidance-copy',
+      defaultSystemPrompt: '',
+      requireActivePrompt: true,
+      caller: { skillId: 'adaptive-guidance-copy' },
+            buildUserPayload: () => userPayload,
+      normalizeOutput: (parsed, payload) => normalizeAdaptiveOutput(parsed, payload),
+      validateParsedOutput: (parsed) =>
+        parsed && typeof parsed === 'object'
+          ? { valid: true }
+          : { valid: false, failureReason: 'ADAPTIVE_GUIDANCE_OUTPUT_NOT_OBJECT' },
+    }, input);
+
+    if (!result.success || !result.output) {
+      throw new Error(result.error?.message || 'ADAPTIVE_GUIDANCE_COPY_FAILED');
     }
 
-    systemPromptVersion = promptConfig.version;
-    model = promptConfig.model || null;
-
-    const messages: ChatMessage[] = [
-      { role: 'system', content: promptConfig.systemPrompt },
-      { role: 'user', content: userPayload }
-    ];
-
-    const response = await gateway.execute({ messages }, caller, {
-      temperature: promptConfig.temperature,
-      maxTokens: promptConfig.maxTokens,
-      model: promptConfig.model,
-    });
-    model = response.model || model;
-
-    rawModelOutput = response.choices[0]?.message?.content || '';
-    const jsonMatch = rawModelOutput.match(/\{[\s\S]*\}/);
-    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
-    const fallback = buildFallback(input);
-
-    const output: AdaptiveGuidanceCopyOutput = {
-      headline: safeText(parsed.headline) || fallback.headline,
-      subtitle: safeText(parsed.subtitle) || fallback.subtitle,
-      todayActions: Array.isArray(parsed.todayActions)
-        ? parsed.todayActions.slice(0, 3).map((item: any) => ({
-            title: safeText(item?.title) || '继续学习',
-            desc: safeText(item?.desc) || '',
-            action: safeText(item?.action) || '继续',
-            to: safeText(item?.to) || undefined,
-          }))
-        : fallback.todayActions,
-      pathHint: safeText(parsed.pathHint) || fallback.pathHint,
-      nextStep: safeText(parsed.nextStep) || fallback.nextStep,
-      paceHint: safeText(parsed.paceHint) || fallback.paceHint,
-      emptyStateCopy: safeText(parsed.emptyStateCopy) || fallback.emptyStateCopy,
-      warningCopy: safeText(parsed.warningCopy) || fallback.warningCopy,
-    };
-
-    normalizedOutput = output;
     const duration = Date.now() - startTime;
-
     return {
       success: true,
-      output,
+      output: result.output,
       duration,
+      quality: 'model',
       debug: {
         skillId: 'adaptive-guidance-copy',
-        model,
-        systemPromptVersion,
+        model: null,
+        systemPromptVersion: result.debug.systemPromptVersion,
         userPayload,
-        rawModelOutput,
-        normalizedOutput,
+        rawModelOutput: result.debug.rawModelOutput,
+        normalizedOutput: result.output,
         durationMs: duration,
         cached: false,
-      }
+      },
     };
-  } catch (error: any) {
+  } catch {
     const fallback = buildFallback(input);
-    normalizedOutput = fallback;
     const duration = Date.now() - startTime;
-
     return {
       success: true,
       output: fallback,
       duration,
       cached: true,
+      quality: 'fallback',
       debug: {
         skillId: 'adaptive-guidance-copy',
-        model,
-        systemPromptVersion,
+        model: null,
+        systemPromptVersion: null,
         userPayload,
-        rawModelOutput,
-        normalizedOutput,
+        rawModelOutput: '',
+        normalizedOutput: fallback,
         durationMs: duration,
         cached: true,
-      }
+      },
     };
   }
 }

@@ -6,37 +6,7 @@
 
 // 协议
 export * from './protocol';
-
-import systemPrisma from '../config/system-database';
-import prisma from '../config/database';
-
-// 文本结构分析
-export { textStructureAnalyzerDefinition } from './text-structure-analyzer';
-import { textStructureAnalyzer as textStructureAnalyzerFn } from './text-structure-analyzer';
-
-// 检索
-export { retrievalDefinition } from './retrieval';
-import { retrieval as retrievalFn } from './retrieval';
-
-// Web 内容提取
-export { webExtractorDefinition } from './web-extractor';
-import { webExtractor as webExtractorFn } from './web-extractor';
-
-// 图片分析
-export { imageAnalyzerDefinition } from './image-analyzer';
-import { imageAnalyzer as imageAnalyzerFn } from './image-analyzer';
-
-// 记忆搜索
-export { memorySearchDefinition } from './memory-search';
-import { memorySearch as memorySearchFn } from './memory-search';
-
-// 智能搜索
-export { smartSearchDefinition } from './smart-search';
-import { smartSearch as smartSearchFn } from './smart-search';
-
-// 动态标签生成 (PathAgent v3.1)
-export { labelGeneratorDefinition } from './label-generator';
-import { labelGenerator as labelGeneratorFn } from './label-generator';
+export * from './context-envelope';
 
 // 路径场景 framing (PathAgent v3.2)
 export { pathSceneFramingDefinition } from './path-scene-framing';
@@ -58,13 +28,9 @@ import { goalProfileInference as goalProfileInferenceFn } from './goal-profile-i
 export { learningPatternDistillerDefinition } from './learning-pattern-distiller';
 import { learningPatternDistiller as learningPatternDistillerFn } from './learning-pattern-distiller';
 
-// 课堂知识蒸馏
-export { sessionKnowledgeDistillerDefinition } from './session-knowledge-distiller';
-import { sessionKnowledgeDistiller as sessionKnowledgeDistillerFn } from './session-knowledge-distiller';
-
-// 对话概念抽取
-export { dialogueConceptExtractorDefinition } from './dialogue-concept-extractor';
-import { dialogueConceptExtractor as dialogueConceptExtractorFn } from './dialogue-concept-extractor';
+// 课后知识增强（session-knowledge-distiller + dialogue-concept-extractor 于 2026-07 合并）
+export { lessonKnowledgeEnricherDefinition } from './lesson-knowledge-enricher';
+import { lessonKnowledgeEnricher as lessonKnowledgeEnricherFn } from './lesson-knowledge-enricher';
 
 // 结构化输出解析器（新增：通用 JSON 提取）
 export { structuredOutputParserDefinition } from './structured-output-parser';
@@ -79,12 +45,20 @@ export { acceptanceEvidenceEvaluatorDefinition } from './acceptance-evidence-eva
 import { acceptanceEvidenceEvaluator as acceptanceEvidenceEvaluatorFn } from './acceptance-evidence-evaluator';
 
 // 教学策略选择器（新增：策略别名映射 + 引导 prompt 构建）
-export { teachingStrategySelectorDefinition } from './teaching-strategy-selector';
-import { teachingStrategySelector as teachingStrategySelectorFn } from './teaching-strategy-selector';
+export { learningStrategySelectorDefinition } from './learning-strategy-selector';
+import { learningStrategySelector as learningStrategySelectorFn } from './learning-strategy-selector';
 
 // Prompt 编译器（新增：简化配置编译为完整 Prompt）
 export { promptCompilerDefinition, promptCompilerRuntimeDefinition } from './prompt-compiler';
 import { promptCompilerHandler as promptCompilerFn } from './prompt-compiler';
+
+// MCP 非 LLM 工具能力
+export { mcpToolDefinition } from './mcp-tool';
+import { executeMcpTool as executeMcpToolFn } from './mcp-tool';
+
+// v4 辅助 LLM Skills（由原遗留插件/旁路迁入）
+import { auxSkillDefinitions, auxSkillHandlers } from './v4-aux-skills';
+export { auxSkillDefinitions, auxSkillDefinitionMap } from './v4-aux-skills';
 
 // 虚拟学习者场景设计
 export { virtualLearnerScenarioDesignerDefinition, VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT, VIRTUAL_LEARNER_SCENARIO_DESIGNER_MAX_TOKENS, VIRTUAL_LEARNER_SCENARIO_DESIGNER_TEMPERATURE } from './virtual-learner-scenario-designer';
@@ -106,6 +80,14 @@ import { virtualLearnerPathEvaluator as virtualLearnerPathEvaluatorFn } from './
 export { virtualLearnerLearnTurnSimulatorDefinition, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE } from './virtual-learner-learn-turn-simulator';
 import { virtualLearnerLearnTurnSimulator as virtualLearnerLearnTurnSimulatorFn } from './virtual-learner-learn-turn-simulator';
 
+// 虚拟学习者实验旁路裁判
+export { virtualLearnerRefereeDefinition, VIRTUAL_LEARNER_REFEREE_PROMPT, VIRTUAL_LEARNER_REFEREE_MAX_TOKENS, VIRTUAL_LEARNER_REFEREE_TEMPERATURE } from './virtual-learner-referee';
+import { virtualLearnerReferee as virtualLearnerRefereeFn } from './virtual-learner-referee';
+
+// 虚拟学习者角色保真审计
+export { virtualLearnerActorAuditorDefinition, VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT, VIRTUAL_LEARNER_ACTOR_AUDITOR_MAX_TOKENS, VIRTUAL_LEARNER_ACTOR_AUDITOR_TEMPERATURE } from './virtual-learner-actor-auditor';
+import { virtualLearnerActorAuditor as virtualLearnerActorAuditorFn } from './virtual-learner-actor-auditor';
+
 // 安德森标注缓存 (PathAgent v3.1)
 export { andersonLabelerCache, AndersonLabelerCache, CachedLabel, CacheHitResult } from './anderson-labeler/cache';
 
@@ -114,67 +96,61 @@ export { andersonLabelerCache, AndersonLabelerCache, CachedLabel, CacheHitResult
 // ============================================================
 export { goalConversationAgentDefinition } from './goal-conversation';
 import { runGoalConversationAgent } from './goal-conversation';
-export { pathAgentDefinition, replanPath } from './path-planning';
+export { pathAgentDefinition } from './path-planning';
 import { pathAgentHandler } from './path-planning';
-export { teachingTurnAgentDefinition } from './teaching-turn';
-import { teachingTurnAgentHandler } from './teaching-turn';
-export { sessionWrapupAgentDefinition, sessionWrapupAgent, toWrapupArtifact } from './session-wrapup';
+export { learningTurnAgentDefinition, toLearningTurnSkillOutcome } from './learning-turn';
+export type { LearningTurnArtifact, LearningTurnInput, LearningTurnOutput } from './learning-turn';
+import { learningTurnAgentHandler } from './learning-turn';
+export { sessionWrapupAgentDefinition, sessionWrapupAgent, toWrapupArtifact, toWrapupSkillOutcome } from './session-wrapup';
 import { sessionWrapupAgentHandler } from './session-wrapup';
-export { peerAgentDefinition } from './peer-reinforcement';
+export { peerAgentDefinition, toPeerCanonicalArtifact, toPeerSkillOutcome } from './peer-reinforcement';
 import { peerAgentHandler } from './peer-reinforcement';
+export { buildSkillOutcome, noneTransition } from './outcome';
+export type { SkillOutcome, ProposedTransition, SkillOutcomeMeta } from './outcome';
 
 // 所有 Skill 定义
 import { SkillDefinition } from './protocol';
-import { textStructureAnalyzerDefinition } from './text-structure-analyzer';
-import { retrievalDefinition } from './retrieval';
-import { webExtractorDefinition } from './web-extractor';
-import { imageAnalyzerDefinition } from './image-analyzer';
-import { memorySearchDefinition } from './memory-search';
-import { smartSearchDefinition } from './smart-search';
-import { labelGeneratorDefinition } from './label-generator';
 import { pathSceneFramingDefinition } from './path-scene-framing';
 import { stageDesignerDefinition } from './stage-designer';
 import { adaptiveGuidanceCopyDefinition } from './adaptive-guidance-copy';
 import { goalProfileInferenceDefinition } from './goal-profile-inference';
 import { learningPatternDistillerDefinition } from './learning-pattern-distiller';
-import { sessionKnowledgeDistillerDefinition } from './session-knowledge-distiller';
-import { dialogueConceptExtractorDefinition } from './dialogue-concept-extractor';
+import { lessonKnowledgeEnricherDefinition } from './lesson-knowledge-enricher';
 import { virtualLearnerScenarioDesignerDefinition } from './virtual-learner-scenario-designer';
 import { virtualLearnerPersonaDesignerDefinition } from './virtual-learner-persona-designer';
 import { virtualLearnerGoalDialogueSimulatorDefinition } from './virtual-learner-goal-dialogue-simulator';
 import { virtualLearnerPathEvaluatorDefinition } from './virtual-learner-path-evaluator';
 import { virtualLearnerLearnTurnSimulatorDefinition } from './virtual-learner-learn-turn-simulator';
+import { virtualLearnerRefereeDefinition } from './virtual-learner-referee';
+import { virtualLearnerActorAuditorDefinition } from './virtual-learner-actor-auditor';
 import { structuredOutputParserDefinition } from './structured-output-parser';
 import { goalUnderstandingComposerDefinition } from './goal-understanding-composer';
 import { acceptanceEvidenceEvaluatorDefinition } from './acceptance-evidence-evaluator';
-import { teachingStrategySelectorDefinition } from './teaching-strategy-selector';
+import { learningStrategySelectorDefinition } from './learning-strategy-selector';
 import { promptCompilerDefinition } from './prompt-compiler';
+import { mcpToolDefinition } from './mcp-tool';
 
 export const allSkillDefinitions: SkillDefinition[] = [
-  textStructureAnalyzerDefinition,
-  retrievalDefinition,
-  webExtractorDefinition,
-  imageAnalyzerDefinition,
-  memorySearchDefinition,
-  smartSearchDefinition,
-  labelGeneratorDefinition,
   pathSceneFramingDefinition,
   stageDesignerDefinition,
   adaptiveGuidanceCopyDefinition,
   goalProfileInferenceDefinition,
   learningPatternDistillerDefinition,
-  sessionKnowledgeDistillerDefinition,
-  dialogueConceptExtractorDefinition,
+  lessonKnowledgeEnricherDefinition,
   virtualLearnerPersonaDesignerDefinition,
   virtualLearnerScenarioDesignerDefinition,
   virtualLearnerGoalDialogueSimulatorDefinition,
   virtualLearnerPathEvaluatorDefinition,
   virtualLearnerLearnTurnSimulatorDefinition,
+  virtualLearnerRefereeDefinition,
+  virtualLearnerActorAuditorDefinition,
   structuredOutputParserDefinition,
   goalUnderstandingComposerDefinition,
   acceptanceEvidenceEvaluatorDefinition,
-  teachingStrategySelectorDefinition,
+  learningStrategySelectorDefinition,
   promptCompilerDefinition,
+  mcpToolDefinition,
+  ...auxSkillDefinitions,
   // 核心 LLM 能力单元（注册为 Skill 以确保 agent-registry 可见）
   {
     name: 'goal-conversation',
@@ -201,7 +177,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
     stats: { callCount: 0, successRate: 1, avgLatency: 0 }
   },
   {
-    name: 'teaching-turn',
+    name: 'learning-turn',
     displayName: '教学回合 Skill',
     version: '1.0.0',
     status: 'working',
@@ -240,60 +216,36 @@ export const allSkillDefinitions: SkillDefinition[] = [
 
 // Skill 名称映射
 export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
-  'text-structure-analyzer': textStructureAnalyzerFn,
-  'retrieval': retrievalFn,
-  'web-extractor': webExtractorFn,
-  'image-analyzer': imageAnalyzerFn,
-  'memory-search': memorySearchFn,
-  'smart-search': smartSearchFn,
-  'label-generator': labelGeneratorFn,
   'path-scene-framing': pathSceneFramingFn,
   'stage-designer': stageDesignerFn,
   'adaptive-guidance-copy': adaptiveGuidanceCopyFn,
   'goal-profile-inference': goalProfileInferenceFn,
   'learning-pattern-distiller': learningPatternDistillerFn,
-  'session-knowledge-distiller': sessionKnowledgeDistillerFn,
-  'dialogue-concept-extractor': dialogueConceptExtractorFn,
+  'lesson-knowledge-enricher': lessonKnowledgeEnricherFn,
   'virtual-learner-persona-designer': virtualLearnerPersonaDesignerFn,
   'virtual-learner-scenario-designer': virtualLearnerScenarioDesignerFn,
   'virtual-learner-goal-dialogue-simulator': virtualLearnerGoalDialogueSimulatorFn,
   'virtual-learner-path-evaluator': virtualLearnerPathEvaluatorFn,
   'virtual-learner-learn-turn-simulator': virtualLearnerLearnTurnSimulatorFn,
+  'virtual-learner-referee': virtualLearnerRefereeFn,
+  'virtual-learner-actor-auditor': virtualLearnerActorAuditorFn,
   'structured-output-parser': structuredOutputParserFn,
   'goal-understanding-composer': goalUnderstandingComposerFn,
   'acceptance-evidence-evaluator': acceptanceEvidenceEvaluatorFn,
-  'teaching-strategy-selector': teachingStrategySelectorFn,
+  'learning-strategy-selector': learningStrategySelectorFn,
   'prompt-compiler': promptCompilerFn,
+  'mcp-tool': executeMcpToolFn,
+  ...auxSkillHandlers,
   // 核心 LLM 能力单元（原 agents/，已迁入 skills/）
   'goal-conversation': (input: any) => runGoalConversationAgent(input),
   'path-planning': (input: any) => pathAgentHandler(input.input, (input as any).context),
-  'teaching-turn': (input: any) => teachingTurnAgentHandler(input),
+  'learning-turn': (input: any) => learningTurnAgentHandler(input),
   'session-wrapup': (input: any) => sessionWrapupAgentHandler(input.input, (input as any).context),
   'peer-reinforcement': (input: any) => peerAgentHandler(input.input, (input as any).context),
 };
 
-import { getRequestContext, runWithContext } from '../gateway/api-gateway/context';
-import { logger } from '../utils/logger';
-
-function summarizeSkillPayload(value: any, depth = 0): any {
-  if (depth > 2) return '[max-depth]';
-  if (value == null) return value;
-  if (typeof value === 'string') {
-    return value.length > 160 ? `${value.slice(0, 160)}...` : value;
-  }
-  if (typeof value === 'number' || typeof value === 'boolean') return value;
-  if (Array.isArray(value)) {
-    return {
-      count: value.length,
-      sample: value.slice(0, 2).map((item) => summarizeSkillPayload(item, depth + 1)),
-    };
-  }
-  if (typeof value === 'object') {
-    const entries = Object.entries(value).slice(0, 10).map(([key, item]) => [key, summarizeSkillPayload(item, depth + 1)]);
-    return Object.fromEntries(entries);
-  }
-  return String(value);
-}
+import { executeSkillHandler } from './executor';
+import type { SkillExecutionOptions } from './protocol';
 
 /**
  * 执行 Skill
@@ -301,136 +253,31 @@ function summarizeSkillPayload(value: any, depth = 0): any {
  * @param input - 输入数据
  * @returns 执行结果
  */
-export async function executeSkill(
+/**
+ * 执行 Skill 并返回完整结果（含 quality/debug/runtimeEnvelope）。
+ * 需要区分 model/fallback 质量或读取 prompt 调试信息的调用方使用本入口。
+ */
+export async function executeSkillWithResult(
   definition: SkillDefinition | { id?: string; name?: string },
-  input: any
+  input: any,
+  options: SkillExecutionOptions = {}
 ): Promise<any> {
   const rawId = (definition.id || definition.name) as string;
-  // 兼容核心能力单元：AgentDefinition 的 id 形如 'skill:goal-conversation'，
-  // 而 skillHandlers 的 key 是去前缀的 'goal-conversation'。
   const skillId = skillHandlers[rawId] ? rawId : rawId.replace(/^skill:/, '');
   const handler = skillHandlers[skillId];
   if (!handler) {
     throw new Error(`Skill handler not found: ${skillId}`);
   }
-
-  const startedAt = Date.now();
-  const parentContext = getRequestContext();
-  const executionLogId = `acl_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-
-  return runWithContext({
-    ...parentContext,
-    skillId,
-    executionLogId,
-  }, async () => {
-    logger.info('[skill-executor] 开始执行', {
-      skillId,
-      inputSummary: summarizeSkillPayload(input),
-    });
-
-    try {
-      const result = await handler(input);
-
-      if (result && result.success === false) {
-        const errorMsg = result.error?.message || `Skill ${skillId} execution failed`;
-        throw new Error(errorMsg);
-      }
-
-      const durationMs = Date.now() - startedAt;
-      const output = result?.output || result;
-      await recordDirectSkillStats(skillId, true, durationMs);
-      void recordSkillSpan(executionLogId, skillId, parentContext, input, output, durationMs, true);
-
-      logger.info('[skill-executor] 执行完成', {
-        skillId,
-        durationMs,
-        outputSummary: summarizeSkillPayload(output),
-      });
-
-      return output;
-    } catch (error: any) {
-      const durationMs = Date.now() - startedAt;
-      await recordDirectSkillStats(skillId, false, durationMs);
-      void recordSkillSpan(executionLogId, skillId, parentContext, input, null, durationMs, false, error?.message || String(error));
-      logger.error('[skill-executor] 执行失败', {
-        skillId,
-        durationMs,
-        error: error?.message || String(error),
-      });
-      throw error;
-    }
-  });
+  return executeSkillHandler(definition, input, handler, options);
 }
 
-async function recordDirectSkillStats(skillId: string, success: boolean, durationMs: number): Promise<void> {
-  try {
-    const current = await systemPrisma.skill_registrations.findUnique({
-      where: { name: skillId },
-      select: { callCount: true, successRate: true }
-    });
-
-    if (!current) return;
-
-    const nextCallCount = current.callCount + 1;
-    const previousSuccesses = current.successRate * current.callCount;
-    const nextSuccessRate = (previousSuccesses + (success ? 1 : 0)) / nextCallCount;
-
-    await systemPrisma.skill_registrations.update({
-      where: { name: skillId },
-      data: {
-        callCount: nextCallCount,
-        successRate: nextSuccessRate,
-        updatedAt: new Date()
-      }
-    });
-  } catch (error: any) {
-    logger.warn('[skill-executor] 更新 Skill 统计失败', {
-      skillId,
-      success,
-      durationMs,
-      error: error?.message || String(error)
-    });
-  }
-}
-
-async function recordSkillSpan(
-  executionLogId: string,
-  skillId: string,
-  ctx: ReturnType<typeof getRequestContext>,
+export async function executeSkill(
+  definition: SkillDefinition | { id?: string; name?: string },
   input: any,
-  output: any,
-  durationMs: number,
-  success: boolean,
-  errorMessage?: string
-): Promise<void> {
-  try {
-    const inputStr = JSON.stringify(summarizeSkillPayload(input)).slice(0, 1000);
-    const outputStr = output ? JSON.stringify(summarizeSkillPayload(output)).slice(0, 1000) : null;
-    await prisma.agent_call_logs.create({
-      data: {
-        id: executionLogId,
-        agentId: `skill:${skillId}`,
-        userId: ctx.userId || 'system',
-        sourceEntry: ctx.sourceEntry || 'platform',
-        traceId: ctx.traceId || null,
-        callerAgent: ctx.callerAgent || null,
-        userRole: ctx.userRole || 'user',
-        input: inputStr,
-        output: outputStr,
-        success,
-        durationMs,
-        error: success ? null : (errorMessage || 'SKILL_EXECUTION_FAILED'),
-        errorCode: success ? null : 'SKILL_EXECUTION_FAILED',
-        metadata: JSON.stringify({
-          layer: 'skill-executor',
-          skillId,
-          parentSkillId: ctx.skillId || null,
-          actorType: 'skill',
-          actorId: skillId,
-        }),
-      },
-    });
-  } catch {
-    // 静默失败：调试日志不应影响主流程
-  }
+  options: SkillExecutionOptions = {}
+): Promise<any> {
+  const result = await executeSkillWithResult(definition, input, options);
+  return result.output;
 }
+
+export { executeSkillHandler } from './executor';

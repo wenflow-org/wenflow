@@ -2,11 +2,8 @@
 // 用户只能查看系统配置的 Skills，不能创建、修改或执行自定义代码
 import express from 'express';
 import prisma from '../config/database';
-import { authMiddleware } from '../middleware/auth.middleware';
 
 const router = express.Router();
-
-router.use(authMiddleware);
 
 // 获取用户 Skill 配置列表（只读）
 router.get('/', async (req, res, next) => {
