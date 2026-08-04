@@ -6,9 +6,12 @@
       <strong>{{ statusTitle }}</strong>
       <span class="log-status__sep"></span>
       <span class="log-status__meta mono">{{ filtered.length }} / {{ logs.length }} 行</span>
+      <span v-if="logs.length" class="log-status__meta mono">
+        失败 {{ errCount }} · 成功率 {{ successRate }}%
+      </span>
       <span v-if="isFiltered" class="log-status__filter">
         排查中：{{ intent.agentFilter }} · {{ intent.statusFilter === 'err' ? '仅失败' : '' }}
-        <button type="button" class="log-status__clear" @click="clearFilter">×</button>
+        <button type="button" class="log-status__clear" aria-label="清除筛选" @click="clearFilter">×</button>
       </span>
       <div class="log-status__filters">
         <div class="mk-pills">
@@ -23,6 +26,19 @@
             {{ p.label }}
           </button>
         </div>
+        <input
+          v-if="isLive"
+          v-model="keyword"
+          class="log-keyword"
+          placeholder="关键词，回车查询"
+          @keydown.enter="applyServerQuery"
+        />
+        <button type="button" class="log-adv" :class="{ 'log-adv--on': advOpen }" @click="advOpen = !advOpen">
+          高级筛选 <i class="log-adv__caret" :class="{ 'is-open': advOpen }">▾</i>
+        </button>
+        <button v-if="isLive" type="button" class="mk-link" @click="exportJson">导出</button>
+      </div>
+      <div v-if="advOpen" class="log-advpanel">
         <select v-model="agentFilter" class="log-agent mono">
           <option value="">全部节点</option>
           <option v-for="a in agentOptions" :key="a" :value="a">{{ a }}</option>
@@ -34,25 +50,18 @@
           <option value="month">近 30 天</option>
           <option value="all">全部</option>
         </select>
-        <input
-          v-if="isLive"
-          v-model="keyword"
-          class="log-keyword"
-          placeholder="关键词，回车查询"
-          @keydown.enter="applyServerQuery"
-        />
         <label v-if="isLive" class="log-auto">
           <input type="checkbox" v-model="autoRefresh" />
           自动刷新
         </label>
-        <button v-if="isLive" type="button" class="mk-link" @click="exportJson">导出</button>
       </div>
     </div>
 
     <!-- 日志流 -->
-    <div v-if="filtered.length" class="log-body" role="log">
+    <MockSkeletonTable v-if="liveLoading && !logs.length" :cols="4" :rows="6" />
+    <div v-else-if="filtered.length" class="log-body" role="log">
       <div
-        v-for="log in filtered"
+        v-for="log in shown"
         :key="log.id"
         class="tline"
         :class="[`tline--${log.status}`, { 'tline--open': openId === log.id }]"
@@ -125,6 +134,9 @@
           </template>
         </div>
       </div>
+      <div v-if="canMore" class="tline-more">
+        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
+      </div>
     </div>
 
     <div v-else class="mk-empty">
@@ -137,7 +149,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { spans, intent, openTrace, openSkillDrawer, clearInvestigation, dataSource } from './mockStore'
-import { fetchLogDetail, reloadLiveSpans, type LogDetail } from './mockLive'
+import { fetchLogDetail, reloadLiveSpans, liveLoading, type LogDetail } from './mockLive'
+import { useLoadMore } from './useLoadMore'
+import MockSkeletonTable from './MockSkeletonTable.vue'
 
 const openId = ref('')
 const statusFilter = ref('')
@@ -145,6 +159,7 @@ const agentFilter = ref('')
 const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('week')
 const keyword = ref('')
 const autoRefresh = ref(false)
+const advOpen = ref(false)
 const isLive = computed(() => dataSource.value === 'live')
 
 /* live 模式：服务端筛选（时间范围/关键词） */
@@ -229,8 +244,16 @@ const filtered = computed(() =>
   })
 )
 
+/* 长列表分批渲染：每批 50 行 */
+const { shown, canMore, loadMore } = useLoadMore(filtered, 50)
+
 const isFiltered = computed(() => !!(agentFilter.value || statusFilter.value))
 const errCount = computed(() => logs.value.filter((l) => l.status === 'err').length)
+const successRate = computed(() => {
+  if (!logs.value.length) return '—'
+  const ok = logs.value.filter((l) => l.status === 'ok').length
+  return Math.round((ok / logs.value.length) * 100)
+})
 const statusTone = computed(() => (!logs.value.length ? 'muted' : errCount.value ? 'bad' : 'ok'))
 const statusTitle = computed(() => {
   if (!logs.value.length) return '暂无日志'
@@ -302,6 +325,37 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
   justify-content: flex-end;
   min-width: 0;
 }
+.log-adv {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1px solid var(--mk-line);
+  border-radius: 8px;
+  background: var(--mk-surface);
+  color: var(--mk-muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.log-adv:hover { border-color: rgba(52, 120, 246, 0.4); color: var(--mk-ink); }
+.log-adv--on { border-color: rgba(52, 120, 246, 0.5); color: var(--mk-blue); background: #eef5ff; }
+.log-adv__caret { font-style: normal; font-size: 10px; transition: transform 0.15s ease; }
+.log-adv__caret.is-open { transform: rotate(180deg); }
+.log-advpanel {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 2px;
+  animation: log-adv-in 0.15s ease;
+}
+@keyframes log-adv-in {
+  from { opacity: 0; transform: translateY(-3px); }
+}
 @media (max-width: 1000px) {
   .log-status__filters {
     margin-left: 0;
@@ -345,10 +399,15 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
   overflow-y: auto;
   max-height: 72vh;
 }
+.tline-more {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 12px;
+  border-top: 1px dashed var(--mk-line);
+}
 
 .tline { border-left: 3px solid transparent; border-bottom: 1px solid #f0f2f5; }
-.tline:last-child { border-bottom: none; }
-.tline--ok { border-left-color: var(--mk-green); }
+.tline:last-child { border-bottom: none; }.tline--ok { border-left-color: var(--mk-green); }
 .tline--err { border-left-color: var(--mk-red); background: rgba(220, 38, 38, 0.04); }
 .tline--warn { border-left-color: var(--mk-amber); }
 

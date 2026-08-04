@@ -679,7 +679,7 @@ async continueConversation(
         systemPromptOverride: options?.systemPromptOverrides?.goalAgent
       });
 
-        logger.info('AI响应', {
+        logger.debug('AI响应', {
         contextMode,
         historyCount: selectedHistory.length,
         stage: this.resolveStageFromResponse(aiResponse),

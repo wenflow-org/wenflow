@@ -4,14 +4,19 @@ import { redactLogValue } from '../../utils/secret-redaction';
 import { ResolvedRoute, ChatRequest, ChatResponse, ExecutionContext } from './types';
 import { getDefaultAIRequestTimeoutMs } from '../../services/agentRequestTimeout.service';
 import { supportsThinkingMode } from '../../config/models.config';
-import { safeHttpRequest, UnsafeUrlError } from '../../utils/safe-http';
+import { safeHttpRequest, safeHttpStreamRequest, SafeHttpBodyLimitError, UnsafeUrlError } from '../../utils/safe-http';
 import { isEncryptedSecret } from '../../utils/secret-crypto';
 import { telemetryWriter } from '../../services/telemetry-writer.service';
 import { GatewayExecutionError, parseRetryAfterMs } from './failure-classification';
 import { consumeUpstreamAttempt, createRetryBudget } from './retry-budget';
 import { hoistLlmParamsFromContext } from '../../services/resolve-llm-call-params';
+import { SseParser } from '../../utils/sse-parser';
 
 const MAX_SINGLE_ATTEMPT_TIMEOUT_MS = 300_000;
+/** 流式响应的空闲超时：两次数据块间隔超过该值即判定超时（数据流动时重置） */
+const STREAM_IDLE_TIMEOUT_MS = 60_000;
+/** 流式响应累计字节上限 */
+const STREAM_MAX_RESPONSE_BYTES = 20 * 1024 * 1024;
 
 interface RequestResult {
   response: ChatResponse;
@@ -39,6 +44,8 @@ interface AttemptRecord {
   resolvedModel: string;
   backoffMs?: number;
   retryAfterMs?: number;
+  /** 本次尝试的传输模式：流式（上游 SSE）或缓冲（完整 JSON） */
+  executionMode: 'stream' | 'buffered';
 }
 
 export class APIExecutor {
@@ -90,6 +97,18 @@ export class APIExecutor {
     let attemptsMade = 0;
     let attemptTelemetryComplete = true;
     const attempts: AttemptRecord[] = [];
+    // 流式路径：仅「首字节（首个内容增量）之前」允许重试；
+    // 一旦内容已透传，连接不可重试（否则客户端收到两段拼接内容，且 HTTP 200 已提交）。
+    // request.stream 即触发流式（上游 SSE）；onStreamChunk 可选——未提供时仅流式请求，
+    // 不逐字透传（JSON 类输出在流结束时合成完整响应，由调用方整体解析校验）。
+    const streamRequested = request.stream === true;
+    let streamStarted = false;
+    const streamDeltaHandler = streamRequested
+      ? (delta: string) => {
+          streamStarted = true;
+          context.onStreamChunk?.(delta);
+        }
+      : undefined;
 
     if (isEncryptedSecret(route.apiKey)) {
       const error = new GatewayExecutionError('API Key 解密边界缺失，已阻止发送数据库密文', {
@@ -117,7 +136,7 @@ export class APIExecutor {
       attemptsMade = attempt;
       const attemptStartedAt = new Date();
       try {
-        const result = await this.executeRequest(route, request, normalizedContext);
+        const result = await this.executeRequest(route, request, normalizedContext, streamDeltaHandler);
         lastStatusCode = result.statusCode;
         const completedAt = new Date();
         const record: AttemptRecord = {
@@ -132,13 +151,14 @@ export class APIExecutor {
           response: result.response,
           providerRequestId: result.providerRequestId,
           responseBytes: result.responseBytes,
-          resolvedModel: result.resolvedModel
+          resolvedModel: result.resolvedModel,
+          executionMode: streamRequested ? 'stream' : 'buffered'
         };
         attempts.push(record);
         attemptTelemetryComplete = await this.persistAttempt(
           route, request, normalizedContext, llmRequestId, record, maxAttempts
         ) && attemptTelemetryComplete;
-        this.attachGatewayMetadata(result.response, route, request, llmRequestId, attempt);
+        this.attachGatewayMetadata(result.response, route, request, llmRequestId, attempt, streamRequested);
         await this.logExecution(
           route,
           request,
@@ -162,7 +182,7 @@ export class APIExecutor {
         lastStatusCode = executionError.statusCode || lastStatusCode;
         const retryEligible = executionError.retryable
           && (!executionError.retryAfterMs || executionError.retryAfterMs <= retryBudget.policy.maxRetryAfterMs);
-        let willRetry = retryEligible && attempt < maxAttempts;
+        let willRetry = retryEligible && attempt < maxAttempts && !streamStarted;
         let retryBudgetExhausted = false;
         if (
           retryEligible
@@ -213,7 +233,8 @@ export class APIExecutor {
           errorMessage: executionError.message,
           resolvedModel: request.model || route.model,
           backoffMs,
-          retryAfterMs: executionError.retryAfterMs
+          retryAfterMs: executionError.retryAfterMs,
+          executionMode: streamRequested ? 'stream' : 'buffered'
         };
         attempts.push(record);
         attemptTelemetryComplete = await this.persistAttempt(
@@ -283,25 +304,28 @@ export class APIExecutor {
   private async executeRequest(
     route: ResolvedRoute,
     request: ChatRequest,
-    context: ExecutionContext
+    context: ExecutionContext,
+    onStreamChunk?: (delta: string) => void
   ): Promise<RequestResult> {
+    if (request.stream === true) {
+      return this.executeStreamRequest(route, request, context, onStreamChunk);
+    }
+
     const configuredTimeoutMs = route.timeoutSource === 'environment-default'
       ? context.retryBudget?.policy.defaultRequestTimeoutMs ?? route.timeoutMs ?? this.defaultTimeoutMs
       : route.timeoutMs ?? this.defaultTimeoutMs;
     const effectiveTimeoutMs = Math.min(configuredTimeoutMs, MAX_SINGLE_ATTEMPT_TIMEOUT_MS);
     const requestUrl = this.resolveChatCompletionsUrl(route.endpoint);
     // 兼容历史误把 temperature/maxTokens/model 放进 ExecutionContext 的调用点
-    const hoisted = hoistLlmParamsFromContext(request, context);
-    const requestBody = {
-      ...request,
-      model: hoisted.model || route.model,
-      temperature: hoisted.temperature ?? route.temperature,
-      max_tokens: hoisted.max_tokens ?? route.maxTokens
-    };
-    this.applyThinkingMode(route, requestBody);
+    const requestBody = this.buildRequestBody(route, request, context);
+    // 非流式路径不得携带流式参数（部分 provider 收到 stream:true 会返回 SSE 而破坏缓冲解析）
+    if (requestBody.stream === true || requestBody.stream_options) {
+      delete requestBody.stream;
+      delete requestBody.stream_options;
+    }
 
     try {
-      logger.info('[api-gateway] request payload resolved', {
+      logger.debug('[api-gateway] request payload resolved', {
         providerId: route.providerId,
         source: route.source,
         requestUrl,
@@ -363,41 +387,8 @@ export class APIExecutor {
         );
       }
 
-      let parsedResponse: ChatResponse;
-      try {
-        const rawResponse = JSON.parse(responseText) as any;
-        parsedResponse = (!Array.isArray(rawResponse?.choices) && Array.isArray(rawResponse?.data?.choices)
-          ? {
-              ...rawResponse,
-              ...rawResponse.data,
-              model: rawResponse.data.model || rawResponse.model,
-              usage: rawResponse.data.usage || rawResponse.usage
-            }
-          : rawResponse) as ChatResponse;
-        if (!parsedResponse || typeof parsedResponse !== 'object'
-          || !Array.isArray(parsedResponse.choices)
-          || parsedResponse.choices.length === 0
-          || typeof parsedResponse.choices[0]?.message?.content !== 'string'
-          || !parsedResponse.choices[0].message.content.trim()) {
-          throw new GatewayExecutionError(
-            `API returned an invalid chat completion envelope from ${requestUrl}. Body preview: ${this.truncate(responseText, 300)}`,
-            {
-              category: 'protocol', code: 'INVALID_RESPONSE_SCHEMA', statusCode: response.status,
-              requestUrl, contentType, retryable: false
-            }
-          );
-        }
-        (parsedResponse as any)._routeThinkingMode = route.thinkingMode || 'default';
-      } catch (error) {
-        if (error instanceof GatewayExecutionError) throw error;
-        throw new GatewayExecutionError(
-          `API returned invalid JSON from ${requestUrl}. Body preview: ${this.truncate(responseText, 300)}`,
-          {
-            category: 'protocol', code: 'INVALID_JSON_RESPONSE', statusCode: response.status,
-            requestUrl, contentType, retryable: false
-          }
-        );
-      }
+      const parsedResponse = this.parseChatResponseBody(responseText, requestUrl, contentType, response.status);
+      (parsedResponse as any)._routeThinkingMode = route.thinkingMode || 'default';
 
       return {
         response: parsedResponse,
@@ -407,36 +398,294 @@ export class APIExecutor {
         resolvedModel: String(requestBody.model || route.model)
       };
     } catch (error: any) {
+      throw this.classifyTransportError(error, requestUrl, effectiveTimeoutMs);
+    }
+  }
+
+  /**
+   * 流式执行：请求上游 stream:true，逐段解析 SSE 并透传内容增量；
+   * 流结束时合成与缓冲路径一致的 ChatResponse（id/model/content/usage/finish_reason），
+   * 使 persistAttempt/logExecution 等遥测路径原样复用。
+   */
+  private async executeStreamRequest(
+    route: ResolvedRoute,
+    request: ChatRequest,
+    context: ExecutionContext,
+    onStreamChunk?: (delta: string) => void
+  ): Promise<RequestResult> {
+    const configuredTimeoutMs = route.timeoutSource === 'environment-default'
+      ? context.retryBudget?.policy.defaultRequestTimeoutMs ?? route.timeoutMs ?? this.defaultTimeoutMs
+      : route.timeoutMs ?? this.defaultTimeoutMs;
+    const effectiveTimeoutMs = Math.min(configuredTimeoutMs, MAX_SINGLE_ATTEMPT_TIMEOUT_MS);
+    const requestUrl = this.resolveChatCompletionsUrl(route.endpoint);
+    const baseBody = this.buildRequestBody(route, request, context);
+    logger.info('[api-gateway] streaming request started', {
+      traceId: context.traceId,
+      providerId: route.providerId,
+      model: request.model || route.model,
+      requestUrl,
+      requestPath: context.requestPath
+    });
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${route.apiKey}`
+    };
+    const privateNetworkPolicy = route.privateNetworkPolicy
+      || (route.source === 'user-provider' || route.source === 'user-agent-override'
+        ? 'public-only'
+        : 'runtime');
+
+    // 极少数 provider 不识别 stream_options 会报 400：去该参数重试一次（不消耗重试预算）
+    for (let pass = 0; pass < 2; pass++) {
+      const withUsage = pass === 0;
+      const state = {
+        chunks: [] as Buffer[],
+        parser: new SseParser(),
+        id: '',
+        model: '',
+        content: '',
+        usage: undefined as ChatResponse['usage'] | undefined,
+        finishReason: '',
+        sawSseEvent: false
+      };
+      let statusCode = 0;
+      let contentType = '';
+      let responseHeaders: Record<string, string> = {};
+      const requestBody: ChatRequest = {
+        ...baseBody,
+        stream: true,
+        ...(withUsage ? { stream_options: { include_usage: true } } : {})
+      };
+      try {
+        await safeHttpStreamRequest(requestUrl, {
+          method: 'POST',
+          headers,
+          body: requestBody,
+          timeoutMs: effectiveTimeoutMs,
+          idleTimeoutMs: STREAM_IDLE_TIMEOUT_MS,
+          maxResponseBytes: STREAM_MAX_RESPONSE_BYTES,
+          privateNetworkPolicy,
+          signal: context.abortSignal,
+          onHeaders: (status, responseHeadersValue) => {
+            statusCode = status;
+            contentType = responseHeadersValue['content-type'] || '';
+            responseHeaders = responseHeadersValue;
+          },
+          onChunk: (chunk) => {
+            state.chunks.push(chunk);
+            for (const event of state.parser.push(chunk)) {
+              state.sawSseEvent = true;
+              if (event.data === '[DONE]') continue;
+              let parsed: any;
+              try {
+                parsed = JSON.parse(event.data);
+              } catch {
+                continue;
+              }
+              const choice = parsed?.choices?.[0];
+              const delta = typeof choice?.delta?.content === 'string' ? choice.delta.content : undefined;
+              if (delta !== undefined) {
+                state.content += delta;
+                if (delta) onStreamChunk?.(delta);
+              }
+              if (typeof choice?.finish_reason === 'string' && choice.finish_reason) {
+                state.finishReason = choice.finish_reason;
+              }
+              if (parsed?.usage && typeof parsed.usage === 'object') {
+                state.usage = parsed.usage;
+              }
+              if (!state.id && typeof parsed?.id === 'string') state.id = parsed.id;
+              if (!state.model && typeof parsed?.model === 'string') state.model = parsed.model;
+            }
+          }
+        });
+        const retryAfterMs = parseRetryAfterMs(responseHeaders['retry-after']);
+        const fullText = Buffer.concat(state.chunks).toString('utf8');
+
+        if (statusCode < 200 || statusCode >= 300) {
+          const quota = this.isQuotaOrBalanceError(statusCode, fullText);
+          const authentication = statusCode === 401 || (statusCode === 403 && !quota);
+          const retryable = !quota && !authentication
+            && (statusCode >= 500 || statusCode === 429 || statusCode === 408 || statusCode === 425);
+          throw new GatewayExecutionError(
+            `API request failed with status ${statusCode}: ${this.truncate(fullText, 500)}`,
+            {
+              category: quota ? 'quota' : authentication ? 'authentication' : statusCode === 429 ? 'rate_limit' : 'provider_http',
+              code: quota ? 'QUOTA_EXHAUSTED' : authentication ? 'AUTH_INVALID' : statusCode === 429 ? 'RATE_LIMITED' : `UPSTREAM_${statusCode}`,
+              statusCode,
+              requestUrl,
+              contentType,
+              retryable,
+              retryAfterMs
+            }
+          );
+        }
+
+        const isSse = /text\/event-stream/i.test(contentType);
+        const isJson = this.isJsonContentType(contentType);
+        if (!isSse && !isJson) {
+          throw new GatewayExecutionError(
+            `API returned non-SSE/non-JSON response (content-type: ${contentType || 'unknown'}) from ${requestUrl}. Body preview: ${this.truncate(fullText, 300)}`,
+            {
+              category: 'protocol', code: 'NON_JSON_RESPONSE', statusCode,
+              requestUrl, contentType, retryable: false
+            }
+          );
+        }
+
+        let parsedResponse: ChatResponse;
+        if (isJson) {
+          // provider 忽略了 stream 参数并返回完整 JSON：回退缓冲解析
+          parsedResponse = this.parseChatResponseBody(fullText, requestUrl, contentType, statusCode);
+          (parsedResponse as any)._routeThinkingMode = route.thinkingMode || 'default';
+        } else {
+          if (!state.sawSseEvent) {
+            throw new GatewayExecutionError(
+              `API returned event-stream content-type without SSE events from ${requestUrl}. Body preview: ${this.truncate(fullText, 300)}`,
+              {
+                category: 'protocol', code: 'INVALID_STREAM_RESPONSE', statusCode,
+                requestUrl, contentType, retryable: false
+              }
+            );
+          }
+          parsedResponse = {
+            id: state.id || 'stream',
+            model: state.model || String(requestBody.model || route.model),
+            choices: [{
+              index: 0,
+              message: { role: 'assistant', content: state.content },
+              finish_reason: state.finishReason || 'stop'
+            }],
+            ...(state.usage ? { usage: state.usage } : {})
+          } as ChatResponse;
+          (parsedResponse as any)._routeThinkingMode = route.thinkingMode || 'default';
+        }
+
+        return {
+          response: parsedResponse,
+          statusCode,
+          providerRequestId: this.resolveProviderRequestId(responseHeaders),
+          responseBytes: state.chunks.reduce((total, chunk) => total + chunk.length, 0),
+          resolvedModel: String(requestBody.model || route.model)
+        };
+      } catch (error: any) {
+        const mapped = this.classifyTransportError(error, requestUrl, effectiveTimeoutMs);
+        if (
+          pass === 0
+          && mapped.statusCode === 400
+          && /stream_options|unknown parameter|unknown field|invalid.*parameter/i.test(mapped.message)
+        ) {
+          logger.debug('[api-gateway] provider rejected stream_options, retrying without include_usage', {
+            traceId: context.traceId,
+            providerId: route.providerId,
+            model: request.model || route.model,
+            requestUrl,
+            errorMessage: mapped.message
+          });
+          continue;
+        }
+        throw mapped;
+      }
+    }
+    throw this.classifyTransportError(new Error('Stream execution exhausted'), requestUrl, effectiveTimeoutMs);
+  }
+
+  /** 构造上游请求体（合并调用参数、路由兜底与 thinking 模式） */
+  private buildRequestBody(route: ResolvedRoute, request: ChatRequest, context: ExecutionContext): ChatRequest {
+    const hoisted = hoistLlmParamsFromContext(request, context);
+    const requestBody: ChatRequest = {
+      ...request,
+      model: hoisted.model || route.model,
+      temperature: hoisted.temperature ?? route.temperature,
+      max_tokens: hoisted.max_tokens ?? route.maxTokens
+    };
+    this.applyThinkingMode(route, requestBody);
+    return requestBody;
+  }
+
+  /** 解析并校验完整 JSON chat completion 信封（缓冲路径与流式 JSON 回退共用） */
+  private parseChatResponseBody(
+    responseText: string,
+    requestUrl: string,
+    contentType: string,
+    statusCode: number
+  ): ChatResponse {
+    try {
+      const rawResponse = JSON.parse(responseText) as any;
+      const parsedResponse = (!Array.isArray(rawResponse?.choices) && Array.isArray(rawResponse?.data?.choices)
+        ? {
+            ...rawResponse,
+            ...rawResponse.data,
+            model: rawResponse.data.model || rawResponse.model,
+            usage: rawResponse.data.usage || rawResponse.usage
+          }
+        : rawResponse) as ChatResponse;
+      if (!parsedResponse || typeof parsedResponse !== 'object'
+        || !Array.isArray(parsedResponse.choices)
+        || parsedResponse.choices.length === 0
+        || typeof parsedResponse.choices[0]?.message?.content !== 'string'
+        || !parsedResponse.choices[0].message.content.trim()) {
+        throw new GatewayExecutionError(
+          `API returned an invalid chat completion envelope from ${requestUrl}. Body preview: ${this.truncate(responseText, 300)}`,
+          {
+            category: 'protocol', code: 'INVALID_RESPONSE_SCHEMA', statusCode,
+            requestUrl, contentType, retryable: false
+          }
+        );
+      }
+      return parsedResponse;
+    } catch (error) {
       if (error instanceof GatewayExecutionError) throw error;
-      if (error instanceof UnsafeUrlError) {
-        throw new GatewayExecutionError(error.message, {
-          category: 'security', code: 'NETWORK_POLICY_BLOCKED', retryable: false, requestUrl
-        });
-      }
-      if (error?.code === 'ERR_CANCELED') {
-        throw new GatewayExecutionError('API request canceled', {
-          category: 'caller_abort', code: 'CALLER_ABORTED', retryable: false, requestUrl
-        });
-      }
-      if (error?.code === 'ECONNABORTED' || error?.code === 'ETIMEDOUT' || /timeout|超时/i.test(error?.message || '')) {
-        throw new GatewayExecutionError(`API request timed out after ${effectiveTimeoutMs}ms`, {
-          category: 'provider_timeout', code: 'ATTEMPT_TIMEOUT', retryable: true, requestUrl
-        });
-      }
-      if (['ECONNRESET', 'EPIPE', 'EAI_AGAIN', 'ECONNREFUSED'].includes(String(error?.code || ''))) {
-        throw new GatewayExecutionError(error?.message || 'Transient network error', {
-          category: 'network', code: 'NETWORK_TRANSIENT', retryable: true, requestUrl
-        });
-      }
-      if (['ENOTFOUND', 'CERT_HAS_EXPIRED', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'].includes(String(error?.code || ''))) {
-        throw new GatewayExecutionError(error?.message || 'Provider configuration error', {
-          category: 'configuration', code: 'PROVIDER_CONFIGURATION_ERROR', retryable: false, requestUrl
-        });
-      }
-      throw new GatewayExecutionError(error?.message || 'Internal API gateway error', {
-        category: 'internal', code: 'API_GATEWAY_INTERNAL_ERROR', retryable: false, requestUrl
+      throw new GatewayExecutionError(
+        `API returned invalid JSON from ${requestUrl}. Body preview: ${this.truncate(responseText, 300)}`,
+        {
+          category: 'protocol', code: 'INVALID_JSON_RESPONSE', statusCode,
+          requestUrl, contentType, retryable: false
+        }
+      );
+    }
+  }
+
+  /** 传输层错误归一化（缓冲路径与流式路径共用） */
+  private classifyTransportError(
+    error: any,
+    requestUrl: string,
+    effectiveTimeoutMs: number
+  ): GatewayExecutionError {
+    if (error instanceof GatewayExecutionError) return error;
+    if (error instanceof UnsafeUrlError) {
+      return new GatewayExecutionError(error.message, {
+        category: 'security', code: 'NETWORK_POLICY_BLOCKED', retryable: false, requestUrl
       });
     }
+    if (error instanceof SafeHttpBodyLimitError) {
+      return new GatewayExecutionError(error.message, {
+        category: 'protocol', code: 'RESPONSE_BODY_LIMIT_EXCEEDED', retryable: false, requestUrl
+      });
+    }
+    if (error?.code === 'ERR_CANCELED') {
+      return new GatewayExecutionError('API request canceled', {
+        category: 'caller_abort', code: 'CALLER_ABORTED', retryable: false, requestUrl
+      });
+    }
+    if (error?.code === 'ECONNABORTED' || error?.code === 'ETIMEDOUT' || /timeout|超时/i.test(error?.message || '')) {
+      return new GatewayExecutionError(`API request timed out after ${effectiveTimeoutMs}ms`, {
+        category: 'provider_timeout', code: 'ATTEMPT_TIMEOUT', retryable: true, requestUrl
+      });
+    }
+    if (['ECONNRESET', 'EPIPE', 'EAI_AGAIN', 'ECONNREFUSED'].includes(String(error?.code || ''))) {
+      return new GatewayExecutionError(error?.message || 'Transient network error', {
+        category: 'network', code: 'NETWORK_TRANSIENT', retryable: true, requestUrl
+      });
+    }
+    if (['ENOTFOUND', 'CERT_HAS_EXPIRED', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'].includes(String(error?.code || ''))) {
+      return new GatewayExecutionError(error?.message || 'Provider configuration error', {
+        category: 'configuration', code: 'PROVIDER_CONFIGURATION_ERROR', retryable: false, requestUrl
+      });
+    }
+    return new GatewayExecutionError(error?.message || 'Internal API gateway error', {
+      category: 'internal', code: 'API_GATEWAY_INTERNAL_ERROR', retryable: false, requestUrl
+    });
   }
 
   private attachGatewayMetadata(
@@ -444,7 +693,8 @@ export class APIExecutor {
     route: ResolvedRoute,
     request: ChatRequest,
     llmRequestId: string,
-    attemptCount: number
+    attemptCount: number,
+    streamed: boolean
   ): void {
     Object.defineProperty(response, '_gatewayMetadata', {
       enumerable: false,
@@ -456,7 +706,8 @@ export class APIExecutor {
         requestedModel: request.model,
         resolvedModel: request.model || route.model,
         responseModel: response.model,
-        attemptCount
+        attemptCount,
+        streamed
       }
     });
   }
@@ -522,6 +773,7 @@ export class APIExecutor {
         model: request.model ?? null,
         thinkingMode: route.thinkingMode ?? null,
         reasoningEffort: route.reasoningEffort ?? null,
+        executionMode: attempt.executionMode ?? null,
       })
     });
   }
@@ -543,7 +795,8 @@ export class APIExecutor {
     maxAttempts = 1
   ): Promise<void> {
     const durationMs = Date.now() - startTime;
-    const contentPreview = response?.choices?.[0]?.message?.content?.slice(0, 500);
+    const contentPreview = response?.choices?.[0]?.message?.content?.slice(0, 120);
+    const executionMode = attempts[0]?.executionMode || 'buffered';
     const logData = {
       traceId: context.traceId, llmRequestId,
       userId: context.userId, sessionId: context.sessionId, callerAgent: context.callerAgent,
@@ -551,7 +804,8 @@ export class APIExecutor {
       providerId: route.providerId, providerType: route.providerType, statusCode,
       requestPath: context.requestPath, durationMs, attempts: attemptsMade, success,
       usage: response?.usage, finishReason: response?.choices?.[0]?.finish_reason,
-      contentPreview, errorCategory: finalError?.category, errorCode: finalError?.code, errorMessage
+      contentPreview, errorCategory: finalError?.category, errorCode: finalError?.code, errorMessage,
+      executionMode
     };
     success ? logger.info('[api-gateway] execution succeeded', logData) : logger.error('[api-gateway] execution failed', logData);
 
@@ -592,6 +846,7 @@ export class APIExecutor {
       errorCategory: success ? null : (finalError?.category || 'internal'),
       metadata: JSON.stringify({
         layer: 'api-gateway-v2', executionLayer: 'api-gateway',
+        executionMode,
         skillId: context.skillId || null, agentId: context.agentId || null,
         sessionId: context.sessionId || null,
         conversationId: context.conversationId || null,

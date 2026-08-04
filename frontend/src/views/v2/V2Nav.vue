@@ -13,7 +13,11 @@
         >{{ item.label }}</router-link>
       </nav>
       <div class="v2nav__right">
-        <router-link to="/goal-conversation" class="v2nav__cta">规划新目标</router-link>
+        <router-link
+          to="/goal-conversation"
+          class="v2nav__cta"
+          @click="onNewGoalClick"
+        >规划新目标</router-link>
         <div class="v2nav__user" ref="userMenuRef">
           <button
             type="button"
@@ -88,6 +92,16 @@ const items = [
 
 function isActive(item: { match: string[] }) {
   return item.match.some((m) => route.path.startsWith(m));
+}
+
+/**
+ * 已在目标规划页内点击「规划新目标」：router-link 同路由不触发导航，
+ * 派发事件由 V2GoalConversation 监听并重置视图（清内存、保留本地恢复入口）。
+ */
+function onNewGoalClick() {
+  if (route.path === '/goal-conversation') {
+    window.dispatchEvent(new CustomEvent('v2:new-goal'));
+  }
 }
 
 const userName = computed(() => userStore.user?.name || '同学');

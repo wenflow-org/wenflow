@@ -30,7 +30,7 @@ const version = appVersion;
 
 <style scoped>
 .v2footer {
-  margin-top: 8px;
+  margin-top: 4px;
   border-top: 1px solid var(--line, #e3e9f4);
   background: rgba(255, 255, 255, 0.6);
 }

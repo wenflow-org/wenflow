@@ -25,7 +25,7 @@ function normalizeSkillId(definition: SkillDefinition | { id?: string; name?: st
 }
 
 function summarizeSkillPayload(value: any, depth = 0): any {
-  if (depth > 2) return '[max-depth]';
+  if (depth > 3) return '[max-depth]';
   if (value == null) return value;
   if (typeof value === 'string') {
     return value.length > 160 ? `${value.slice(0, 160)}...` : value;
@@ -38,6 +38,9 @@ function summarizeSkillPayload(value: any, depth = 0): any {
     };
   }
   if (typeof value === 'object') {
+    // 深度预算：depth>=2 的对象不再展开键名树（10×10×10 会展开出数百键），
+    // 仅保留对象形状摘要，防巨型日志
+    if (depth >= 2) return '[max-depth]';
     const entries = Object.entries(value)
       .slice(0, 10)
       .map(([key, item]) => [key, summarizeSkillPayload(item, depth + 1)]);
@@ -197,7 +200,7 @@ export async function executeSkillHandler(
   };
 
   return runWithContext(executionContext, async () => {
-    logger.info('[skill-executor] 开始执行', {
+    logger.debug('[skill-executor] 开始执行', {
       skillId,
       inputSummary: summarizeSkillLogPayload(skillId, input, 'input'),
     });
@@ -236,8 +239,7 @@ export async function executeSkillHandler(
       });
 
       return result;
-    } catch (error: any) {
-      const durationMs = Date.now() - startedAt;
+    } catch (error: any) {      const durationMs = Date.now() - startedAt;
       if (error && typeof error === 'object') {
         error.skillDurationMs = durationMs;
       }

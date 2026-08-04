@@ -520,3 +520,11 @@ body.admin-route :is(button, a, [role='button'], input, textarea, select):focus-
     transition-duration: 0.01ms !important;
   }
 }
+
+/* 4K 超大屏：整体等比放大（与用户侧 v2 页 zoom 机制一致） */
+@media (min-width: 2800px) {
+  body.admin-route .ac { zoom: 1.15; }
+}
+@media (min-width: 3600px) {
+  body.admin-route .ac { zoom: 1.3; }
+}

@@ -1,4 +1,5 @@
 import api, { AI_REQUEST_TIMEOUT } from '../utils/api';
+import { streamSsePost } from '../utils/sse';
 
 export interface TeachingSession {
   sessionId: string;
@@ -303,7 +304,13 @@ export interface FinalizationResult {
   projectionStatus?: 'pending' | 'not_started';
 }
 
-const finalizationKey = () => `finalize_${crypto.randomUUID()}`;
+function finalizationKey() {
+  // crypto.randomUUID 仅安全上下文（HTTPS/localhost）可用，非安全上下文需兜底
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `finalize_${crypto.randomUUID()}`;
+  }
+  return `finalize_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
 
 const finalizationStepCompleted = (result: FinalizationResult, action: FinalizeAction) => {
   if (action === 'end_only') {
@@ -329,9 +336,137 @@ export const aiTeachingAPI = {
     return result.data || result;
   },
 
+  /**
+   * SSE 流式发送消息：delta 事件逐段回调 onDelta，final 事件返回完整 MessageResult。
+   * 失败时 reject，错误对象携带来源标记：
+   * - transport=true：连接层失败且未收到任何内容，调用方可安全重发（非流式）
+   * - serverError=true：服务端业务失败（event: error），不可重发
+   * - partialStream=true：已收到部分内容后断连，不可重发
+   */
+  async streamSendMessage(
+    sessionId: string,
+    message: string,
+    revision: number,
+    handlers: { onDelta: (text: string) => void; onRestart?: () => void; signal?: AbortSignal }
+  ): Promise<MessageResult> {
+    return new Promise<MessageResult>((resolve, reject) => {
+      let result: MessageResult | null = null;
+      let receivedAnything = false;
+      let serverError: { code?: string; status?: number; message: string } | null = null;
+      let settled = false;
+      const settleReject = (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      };
+      streamSsePost(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision }, {
+        signal: handlers.signal,
+        onEvent: (event, data) => {
+          if (event === 'delta' && typeof data?.text === 'string') {
+            receivedAnything = true;
+            handlers.onDelta(data.text);
+          } else if (event === 'restart') {
+            receivedAnything = true;
+            handlers.onRestart?.();
+          } else if (event === 'final') {
+            receivedAnything = true;
+            result = data?.data || data || null;
+          } else if (event === 'error') {
+            receivedAnything = true;
+            serverError = {
+              code: data?.code,
+              status: data?.status,
+              message: data?.message || '生成失败'
+            };
+          }
+        }
+      }).then(
+        () => {
+          if (settled) return;
+          settled = true;
+          if (result) resolve(result);
+          else if (serverError) {
+            reject(Object.assign(new Error(serverError.message), {
+              code: serverError.code,
+              status: serverError.status,
+              serverError: true
+            }));
+          } else {
+            reject(new Error('未收到最终结果'));
+          }
+        },
+        (error) => {
+          const e = error as { partialStream?: boolean; transport?: boolean };
+          if (receivedAnything) e.partialStream = true;
+          else e.transport = true;
+          settleReject(error);
+        }
+      );
+    });
+  },
+
   async sendPeerMessage(sessionId: string, message: string): Promise<PeerMessageResult> {
     const result = await api.post(`/ai-teaching/sessions/${sessionId}/peer/messages`, { message }, { timeout: AI_REQUEST_TIMEOUT });
     return result.data || result;
+  },
+
+  /**
+   * SSE 流式伴学消息：final 事件返回完整结果；
+   * 失败标记与 streamSendMessage 一致（transport 可安全回退，serverError 不可）。
+   */
+  async streamSendPeerMessage(
+    sessionId: string,
+    message: string,
+    handlers: { signal?: AbortSignal }
+  ): Promise<PeerMessageResult> {
+    return new Promise<PeerMessageResult>((resolve, reject) => {
+      let result: PeerMessageResult | null = null;
+      let receivedAnything = false;
+      let serverError: { code?: string; status?: number; message: string } | null = null;
+      let settled = false;
+      const settleReject = (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      };
+      streamSsePost(`/ai-teaching/sessions/${sessionId}/peer/messages`, { message }, {
+        signal: handlers.signal,
+        onEvent: (event, data) => {
+          if (event === 'final') {
+            receivedAnything = true;
+            result = data?.data || data || null;
+          } else if (event === 'error') {
+            receivedAnything = true;
+            serverError = {
+              code: data?.code,
+              status: data?.status,
+              message: data?.message || '生成失败'
+            };
+          }
+        }
+      }).then(
+        () => {
+          if (settled) return;
+          settled = true;
+          if (result) resolve(result);
+          else if (serverError) {
+            reject(Object.assign(new Error(serverError.message), {
+              code: serverError.code,
+              status: serverError.status,
+              serverError: true
+            }));
+          } else {
+            reject(new Error('未收到最终结果'));
+          }
+        },
+        (error) => {
+          const e = error as { partialStream?: boolean; transport?: boolean };
+          if (receivedAnything) e.partialStream = true;
+          else e.transport = true;
+          settleReject(error);
+        }
+      );
+    });
   },
 
   async endSession(sessionId: string, revision: number): Promise<{
@@ -343,8 +478,13 @@ export const aiTeachingAPI = {
     return result.data || result;
   },
 
-  async pauseSession(sessionId: string, reason: 'manual' | 'pagehide', revision: number): Promise<number> {
+  async pauseSession(sessionId: string, reason: 'manual' | 'pagehide' | 'hidden', revision: number): Promise<number> {
     const result = await api.post(`/ai-teaching/sessions/${sessionId}/pause`, { reason, revision });
+    return result.data?.revision;
+  },
+
+  async resumeSession(sessionId: string, revision: number): Promise<number> {
+    const result = await api.post(`/ai-teaching/sessions/${sessionId}/resume`, { revision });
     return result.data?.revision;
   },
 

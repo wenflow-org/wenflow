@@ -24,6 +24,7 @@
         <h3 class="mk-card__title">核心文件</h3>
         <span class="mk-card__meta">{{ cores.length }} 个</span>
       </div>
+      <div class="mk-table-scroll">
       <table v-if="cores.length" class="mk-table mk-table--click">
         <thead>
           <tr>
@@ -52,7 +53,14 @@
           </tr>
         </tbody>
       </table>
-      <p v-if="!cores.length && !loading" class="pw-empty">未发现核心文件</p>
+      </div>
+      <div v-if="!cores.length && !loading" class="mk-empty">
+        <span v-if="!loadError" class="mk-empty__icon" aria-hidden="true">◌</span>
+        <strong>{{ loadError ? '清单加载失败' : '未发现核心文件' }}</strong>
+        <span v-if="loadError">{{ loadError }}</span>
+        <button v-if="loadError" type="button" class="mk-empty__action" @click="loadList">重试</button>
+        <span v-else>编辑与发布入口在 Skill 设计页的「协议」页签。</span>
+      </div>
     </section>
   </div>
 </template>
@@ -81,6 +89,7 @@ void props;
 const router = useRouter();
 const cores = ref<CoreListItem[]>([]);
 const loading = ref(false);
+const loadError = ref('');
 const toast = ref('');
 const toastCls = ref('mk-toast--ok');
 
@@ -117,10 +126,13 @@ function openDesign(skillId: string) {
 
 async function loadList() {
   loading.value = true;
+  loadError.value = '';
   try {
     const res = await adminPromptWorkbenchApi.getCoreList();
     cores.value = res.data?.items || [];
   } catch (e: any) {
+    cores.value = [];
+    loadError.value = `清单加载失败：${e?.message || e}`;
     showToast(`清单加载失败：${e?.message || e}`, false);
   } finally {
     loading.value = false;

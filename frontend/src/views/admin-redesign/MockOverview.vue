@@ -3,12 +3,15 @@
     <!-- 结论先行：今日简报 -->
     <header class="brief-head" :class="`brief-head--${data.tone}`">
       <div class="brief-head__verdict">
-        <div class="brief-score" :style="{ '--pct': data.score }">
-          <svg viewBox="0 0 44 44">
-            <circle class="brief-score__track" cx="22" cy="22" r="19" />
-            <circle class="brief-score__bar" cx="22" cy="22" r="19" :stroke-dasharray="scoreDash" />
-          </svg>
-          <strong>{{ data.score }}</strong>
+        <div class="brief-score-wrap">
+          <div class="brief-score" :style="{ '--pct': data.score }" :title="scoreTitle">
+            <svg viewBox="0 0 44 44">
+              <circle class="brief-score__track" cx="22" cy="22" r="19" />
+              <circle class="brief-score__bar" cx="22" cy="22" r="19" :stroke-dasharray="scoreDash" />
+            </svg>
+            <strong>{{ data.score }}</strong>
+          </div>
+          <span class="brief-score__cap">健康分</span>
         </div>
         <div>
           <h3>{{ health.headline }}</h3>
@@ -28,12 +31,32 @@
     </header>
 
     <div class="brief-grid">
+      <!-- KPI 行：今日窗口指标 -->
+      <section class="brief-kpis">
+        <div
+          v-for="(k, i) in data.kpis"
+          :key="k.label"
+          class="kpi kpi--clickable"
+          :title="`跳转到${kpiTargets[i] === 'execution-logs' ? '执行日志' : kpiTargets[i] === 'users' ? '用户' : kpiTargets[i] === 'goal-conversations' ? '目标对话' : 'Skill 目录'}`"
+          @click="jump(kpiTargets[i])"
+        >
+          <span class="kpi__label">{{ k.label }}</span>
+          <strong class="kpi__value">{{ k.value }}</strong>
+          <span class="kpi__hint">{{ k.hint }}</span>
+        </div>
+      </section>
+
       <!-- 学习漏斗 -->
       <section class="brief-card">
-        <h4>学习漏斗</h4>
+        <h4>学习漏斗 · 累计</h4>
         <div class="funnel">
           <template v-for="(n, i) in data.funnel" :key="n.label">
-            <div class="funnel__node" :class="{ 'funnel__node--idle': n.idle }">
+            <div
+              class="funnel__node funnel__node--clickable"
+              :class="{ 'funnel__node--idle': n.idle }"
+              :title="funnelTargets[i] === 'users' ? '查看用户' : funnelTargets[i] === 'goal-conversations' ? '查看目标对话' : '查看学习者中心'"
+              @click="jump(funnelTargets[i])"
+            >
               <span>{{ n.label }}</span>
               <strong>{{ n.value }}</strong>
             </div>
@@ -44,7 +67,6 @@
             >{{ data.rates[i] }}</span>
           </template>
         </div>
-        <p class="brief-card__note">{{ data.funnelNote }}</p>
       </section>
 
       <!-- 系统脉搏 -->
@@ -61,14 +83,110 @@
           ></div>
         </div>
         <div class="pulse__meta">
-          <span>总调用 <strong>{{ data.totalCalls }}</strong></span>
+          <span>24h 调用 <strong>{{ data.totalCalls }}</strong></span>
           <span>异常 <strong :class="{ 'is-bad': data.totalIssues > 0 }">{{ data.totalIssues }}</strong></span>
           <span>高峰 {{ data.peak }}</span>
         </div>
+        <div class="pulse__axis"><i>00</i><i>06</i><i>12</i><i>18</i><i>23</i></div>
       </section>
 
-      <!-- 动态时间线 -->
-      <section class="brief-card brief-card--feed">
+      <!-- 总结产出质量 -->
+      <section class="brief-card">
+        <h4>总结产出质量</h4>
+        <div v-if="data.wrapup.sampleSize > 0 && hasWrapupStats" class="wq">
+          <div class="wq__row">
+            <span class="wq__label">主题总结</span>
+            <div class="wq__bars">
+              <i class="wq__bar wq__bar--ok" :style="{ width: pct(data.wrapup.summaryModel, data.wrapup.sampleSize) }"></i>
+              <i class="wq__bar wq__bar--warn" :style="{ width: pct(data.wrapup.summaryFallback, data.wrapup.sampleSize) }"></i>
+            </div>
+            <span class="wq__nums">{{ data.wrapup.summaryModel }} 模型 / {{ data.wrapup.summaryFallback }} 兜底</span>
+          </div>
+          <div class="wq__row">
+            <span class="wq__label">表现分析</span>
+            <div class="wq__bars">
+              <i class="wq__bar wq__bar--ok" :style="{ width: pct(data.wrapup.evaluationModel, data.wrapup.sampleSize) }"></i>
+              <i class="wq__bar wq__bar--blue" :style="{ width: pct(data.wrapup.evaluationAiFallback, data.wrapup.sampleSize) }"></i>
+              <i class="wq__bar wq__bar--bad" :style="{ width: pct(data.wrapup.evaluationFailed, data.wrapup.sampleSize) }"></i>
+            </div>
+            <span class="wq__nums">{{ data.wrapup.evaluationModel }} 模型 / {{ data.wrapup.evaluationAiFallback }} AI 兜底 / {{ data.wrapup.evaluationFailed }} 失败</span>
+          </div>
+          <p class="wq__note">样本 {{ data.wrapup.sampleSize }} 次</p>
+        </div>
+        <p v-else-if="data.wrapup.sampleSize > 0" class="brief-card__note">已积累 {{ data.wrapup.sampleSize }} 次课后总结，统计解析中。</p>
+        <p v-else class="brief-card__note">还没有课后总结样本。</p>
+      </section>
+
+      <!-- LLM 用量与失败归因 -->
+      <section class="brief-card">
+        <h4>LLM 用量与失败归因</h4>
+        <div v-if="usageHasData" class="usage">
+          <div class="usage__big">
+            <strong>{{ fmtTokens(data.usage.totalTokens7d) }}</strong>
+            <span>近 7 天 token</span>
+            <em>{{ data.usage.calls7d }} 次调用 · 失败 {{ data.usage.failed7d }}</em>
+          </div>
+          <div v-if="data.usage.models7d.length" class="usage__section">
+            <span class="usage__label">模型用量</span>
+            <div class="usage__rows">
+              <div v-for="m in data.usage.models7d" :key="m.model" class="usage__row">
+                <span class="usage__row-name" :title="m.model">{{ m.model }}</span>
+                <div class="usage__bar-track">
+                  <i class="usage__bar" :style="{ width: modelPct(m.tokens) }"></i>
+                </div>
+                <span class="usage__row-num">{{ fmtTokens(m.tokens) }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="data.usage.failures7d.length" class="usage__section">
+            <span class="usage__label">失败归因（尝试级，含重试）</span>
+            <ul class="usage__fails">
+              <li v-for="f in data.usage.failures7d" :key="f.category" class="usage__fail" :title="`跳转到执行日志`" @click="jump('execution-logs')">
+                <span class="usage__dot"></span>
+                <span>{{ f.category }}</span>
+                <strong>{{ f.count }}</strong>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <p v-else class="brief-card__note">近 7 天还没有 LLM 调用记录。</p>
+      </section>
+
+      <!-- 近 7 天目标对话趋势 -->
+      <section class="brief-card brief-card--trend">
+        <div class="trend__head">
+          <h4>新增目标对话 · 近 7 天</h4>
+          <span class="trend__legend">
+            <i class="trend__dot trend__dot--new"></i>当日新增
+            <i class="trend__dot trend__dot--done"></i>其中完成
+          </span>
+        </div>
+        <div v-if="data.trend.length" class="trend">
+          <div
+            v-for="d in data.trend"
+            :key="d.date"
+            class="trend__col"
+            :class="{ 'trend__col--today': isToday(d.date) }"
+            :title="`${d.date} · 新增 ${d.total} · 完成 ${d.completed} · 按创建日期归集`"
+          >
+            <span class="trend__num" :class="{ 'trend__num--zero': !d.total }">{{ d.total || '·' }}</span>
+            <div class="trend__bars">
+              <i class="trend__bar" :style="{ height: trendH(d.total) }"></i>
+              <i class="trend__bar trend__bar--ok" :style="{ height: trendH(d.completed) }"></i>
+            </div>
+            <span class="trend__day" :class="{ 'trend__day--today': isToday(d.date) }">
+              {{ trendLabel(d.date) }}{{ isToday(d.date) ? ' 今日' : '' }}
+            </span>
+          </div>
+        </div>
+        <p v-else class="brief-card__note">近 7 天还没有目标对话。</p>
+        <p v-if="data.trend.length" class="trend__sum">
+          合计新增 {{ trendSum.total }} · 完成 {{ trendSum.completed }} · 完成率 {{ trendSum.rate }}
+        </p>
+      </section>
+
+      <!-- 动态时间线（全宽） -->
+      <section class="brief-card brief-card--feed brief-card--feed-full">
         <div class="brief-card__head brief-card__head--feed">
           <h4>动态</h4>
           <label class="feed-filter">
@@ -76,7 +194,7 @@
             <span>隐藏虚拟/测试账号</span>
           </label>
         </div>
-        <ul v-if="visibleFeed.length" class="feed">
+        <ul v-if="visibleFeed.length" class="feed feed--full">
           <li v-for="(f, i) in visibleFeed" :key="i">
             <span class="feed__dot" :class="`feed__dot--${f.tone}`"></span>
             <div>
@@ -86,7 +204,7 @@
           </li>
         </ul>
         <p v-else-if="data.feed.length" class="feed__empty">近期动态均为虚拟/测试账号，取消勾选即可查看。</p>
-        <p v-else class="feed__empty">暂无动态</p>
+        <p v-else class="feed__empty">还没有动态</p>
       </section>
     </div>
   </div>
@@ -94,7 +212,7 @@
 
 <script setup lang="ts">
 import { computed, watch } from 'vue';
-import { overviewHealth, investigateAgent, dataSource } from './mockStore';
+import { overviewHealth, investigateAgent, intent, dataSource } from './mockStore';
 import { liveOverviewFull, overviewHideTest, refreshLiveOverview } from './mockLive';
 
 type Tone = 'ok' | 'warn' | 'bad' | 'muted';
@@ -105,9 +223,25 @@ interface BriefData {
   headline: string;
   subline: string;
   actions: { text: string; link: string; tone: Tone; agentId: string }[];
+  kpis: { label: string; value: string; hint: string }[];
+  wrapup: {
+    sampleSize: number;
+    summaryModel: number;
+    summaryFallback: number;
+    evaluationModel: number;
+    evaluationAiFallback: number;
+    evaluationFailed: number;
+  };
+  usage: {
+    calls7d: number;
+    failed7d: number;
+    totalTokens7d: number;
+    models7d: { model: string; calls: number; tokens: number }[];
+    failures7d: { category: string; count: number }[];
+  };
+  trend: { date: string; total: number; completed: number }[];
   funnel: { label: string; value: string; idle: boolean }[];
   rates: string[];
-  funnelNote: string;
   pulse: { calls: number; issue: number }[];
   totalCalls: number;
   totalIssues: number;
@@ -136,6 +270,41 @@ const pulse = (hot: number[]) =>
     issue: 0
   }));
 
+const demoUsage: BriefData['usage'] = {
+  calls7d: 1824,
+  failed7d: 96,
+  totalTokens7d: 4018915,
+  models7d: [{ model: 'deepseek-v4-flash', calls: 1530, tokens: 4018915 }],
+  failures7d: [
+    { category: 'provider_http', count: 243 },
+    { category: 'authentication', count: 26 },
+    { category: 'protocol', count: 25 },
+    { category: 'caller_abort', count: 12 },
+    { category: 'rate_limit', count: 11 }
+  ]
+};
+const demoUsageIncident: BriefData['usage'] = {
+  ...demoUsage,
+  calls7d: 1562,
+  failed7d: 318,
+  failures7d: [
+    { category: 'provider_http', count: 227 },
+    { category: 'rate_limit', count: 48 },
+    { category: 'authentication', count: 26 },
+    { category: 'protocol', count: 25 },
+    { category: 'provider_timeout', count: 5 }
+  ]
+};
+const demoTrend: BriefData['trend'] = [
+  { date: '07-27', total: 2, completed: 1 },
+  { date: '07-28', total: 4, completed: 2 },
+  { date: '07-29', total: 3, completed: 1 },
+  { date: '07-30', total: 6, completed: 3 },
+  { date: '07-31', total: 5, completed: 2 },
+  { date: '08-01', total: 7, completed: 3 },
+  { date: '08-02', total: 4, completed: 2 }
+];
+
 const datasets: Record<string, BriefData> = {
   normal: {
     tone: 'ok',
@@ -143,15 +312,32 @@ const datasets: Record<string, BriefData> = {
     headline: '运行平稳',
     subline: '学习链路与模型服务都在正常区间。',
     actions: [],
+    kpis: [
+      { label: '今日调用', value: '273', hint: '超时 2' },
+      { label: '今日成功率', value: '99.3%', hint: '2 次失败' },
+      { label: '今日新增', value: '6', hint: '新用户' },
+      { label: '今日活跃', value: '18', hint: '32 名用户' },
+      { label: '进行中对话', value: '12', hint: '目标规划' },
+      { label: '活跃 Skill', value: '16', hint: '近 24h' }
+    ],
+    wrapup: {
+      sampleSize: 42,
+      summaryModel: 38,
+      summaryFallback: 4,
+      evaluationModel: 31,
+      evaluationAiFallback: 8,
+      evaluationFailed: 3
+    },
+    usage: demoUsage,
+    trend: demoTrend,
     funnel: [
       { label: '用户', value: '128', idle: false },
-      { label: '目标', value: '86', idle: false },
+      { label: '目标对话', value: '86', idle: false },
       { label: '路径', value: '64', idle: false },
       { label: '任务', value: '342', idle: false },
       { label: '完成', value: '217', idle: false }
     ],
     rates: ['67%', '74%', '×5.3 个/条', '63%'],
-    funnelNote: '目标 → 路径转化 74%，断点不明显；平均每条路径 5.3 个任务。',
     pulse: pulse([2, 1, 0, 0, 1, 3, 6, 9, 14, 18, 22, 19, 16, 21, 25, 28, 24, 19, 15, 12, 8, 5, 4, 3]),
     totalCalls: 273,
     totalIssues: 0,
@@ -172,15 +358,32 @@ const datasets: Record<string, BriefData> = {
       { text: 'teaching-round 连续 2 次 429 限流', link: '排查执行日志', tone: 'bad', agentId: 'teaching-round' },
       { text: '伴学降级介入，产出质量下降', link: '查看 Skill 详情', tone: 'warn', agentId: 'companion-boost' }
     ],
+    kpis: [
+      { label: '今日调用', value: '98', hint: '超时 14' },
+      { label: '今日成功率', value: '82.7%', hint: '17 次失败' },
+      { label: '今日新增', value: '3', hint: '新用户' },
+      { label: '今日活跃', value: '5', hint: '32 名用户' },
+      { label: '进行中对话', value: '6', hint: '目标规划' },
+      { label: '活跃 Skill', value: '11', hint: '近 24h' }
+    ],
+    wrapup: {
+      sampleSize: 31,
+      summaryModel: 19,
+      summaryFallback: 12,
+      evaluationModel: 10,
+      evaluationAiFallback: 9,
+      evaluationFailed: 12
+    },
+    usage: demoUsageIncident,
+    trend: demoTrend,
     funnel: [
       { label: '用户', value: '128', idle: false },
-      { label: '目标', value: '86', idle: false },
+      { label: '目标对话', value: '86', idle: false },
       { label: '路径', value: '64', idle: false },
       { label: '任务', value: '342', idle: false },
       { label: '完成', value: '217', idle: false }
     ],
     rates: ['67%', '74%', '×5.3 个/条', '63%'],
-    funnelNote: '漏斗本身健康，问题在执行层；平均每条路径 5.3 个任务。',
     pulse: (() => {
       const p = pulse([2, 1, 0, 0, 1, 3, 6, 9, 14, 18, 22, 19, 16, 21, 25, 28, 24, 19, 15, 12, 8, 5, 4, 3]);
       p[15].issue = 3;
@@ -203,15 +406,32 @@ const datasets: Record<string, BriefData> = {
     headline: '系统空闲',
     subline: '等待第一个真实学习者。',
     actions: [],
+    kpis: [
+      { label: '今日调用', value: '—', hint: '等待学习者开始' },
+      { label: '今日成功率', value: '—', hint: '无调用' },
+      { label: '今日新增', value: '2', hint: '新用户' },
+      { label: '今日活跃', value: '—', hint: '2 名用户' },
+      { label: '进行中对话', value: '—', hint: '目标规划' },
+      { label: '活跃 Skill', value: '—', hint: '近 24h' }
+    ],
+    wrapup: {
+      sampleSize: 0,
+      summaryModel: 0,
+      summaryFallback: 0,
+      evaluationModel: 0,
+      evaluationAiFallback: 0,
+      evaluationFailed: 0
+    },
+    usage: { calls7d: 0, failed7d: 0, totalTokens7d: 0, models7d: [], failures7d: [] },
+    trend: [],
     funnel: [
       { label: '用户', value: '2', idle: false },
-      { label: '目标', value: '0', idle: true },
+      { label: '目标对话', value: '0', idle: true },
       { label: '路径', value: '0', idle: true },
       { label: '任务', value: '0', idle: true },
       { label: '完成', value: '0', idle: true }
     ],
     rates: ['—', '—', '—', '—'],
-    funnelNote: '断点在第一步：还没有人创建目标。',
     pulse: pulse([]),
     totalCalls: 0,
     totalIssues: 0,
@@ -230,9 +450,12 @@ const data = computed<BriefData>(() => {
       headline: l.headline,
       subline: l.subline,
       actions: l.actions,
+      kpis: l.kpis,
+      wrapup: l.wrapup,
+      usage: l.usage,
+      trend: l.trend,
       funnel: l.funnel,
       rates: l.rates,
-      funnelNote: l.funnelNote,
       pulse: l.pulse,
       totalCalls: l.totalCalls,
       totalIssues: l.totalIssues,
@@ -245,8 +468,36 @@ const data = computed<BriefData>(() => {
 const maxCalls = computed(() => Math.max(1, ...data.value.pulse.map((b) => b.calls)));
 const barHeight = (calls: number) => `${calls > 0 ? Math.max((calls / maxCalls.value) * 100, 8) : 4}%`;
 const scoreDash = computed(() => `${data.value.score * 1.194} 119.4`);
+const scoreTitle = computed(() => `健康分 = 今日调用成功率（${data.value.score} 分）\n${health.value.subline}`);
 const barTitle = (hour: number, b: { calls: number; issue: number }) =>
   `${String(hour).padStart(2, '0')}:00 · ${b.calls} 次调用 · ${b.issue} 异常`;
+const pct = (n: number, total: number) => `${total > 0 ? Math.round((n / total) * 100) : 0}%`;
+const hasWrapupStats = computed(() => {
+  const w = data.value.wrapup;
+  return w.summaryModel > 0 || w.summaryFallback > 0 || w.evaluationModel > 0 || w.evaluationAiFallback > 0 || w.evaluationFailed > 0;
+});
+const usageHasData = computed(() => data.value.usage.totalTokens7d > 0 || data.value.usage.models7d.length > 0);
+const fmtTokens = (n: number) => (n >= 1000000 ? `${(n / 1000000).toFixed(2)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || '—'));
+const modelMax = computed(() => Math.max(1, ...data.value.usage.models7d.map((m) => m.tokens)));
+const modelPct = (tokens: number) => `${tokens > 0 ? Math.round((tokens / modelMax.value) * 100) : 0}%`;
+const trendMax = computed(() => Math.max(1, ...data.value.trend.map((d) => d.total)));
+const trendH = (n: number) => `${n > 0 ? Math.max((n / trendMax.value) * 100, 10) : 4}%`;
+const trendLabel = (date: string) => {
+  const m = String(date).match(/\d{2}-\d{2}$/);
+  return m ? m[0] : String(date).slice(5);
+};
+// 与后端 UTC 切日同口径；demo 数据为 MM-DD 短格式，兼容匹配
+const todayStr = new Date().toISOString().slice(0, 10);
+const isToday = (date: string) => date === todayStr || date === todayStr.slice(5);
+const trendSum = computed(() => {
+  const total = data.value.trend.reduce((a, d) => a + d.total, 0);
+  const completed = data.value.trend.reduce((a, d) => a + d.completed, 0);
+  return {
+    total,
+    completed,
+    rate: total > 0 ? `${Math.round((completed / total) * 100)}%` : '—'
+  };
+});
 
 // 漏斗相邻段速率说明（× 为 1:N 关系而非转化率）
 const rateHint = (i: number) => {
@@ -262,7 +513,15 @@ const rateHint = (i: number) => {
 // 动态筛选：默认隐藏虚拟学习者与测试/审计账号（后端 excludeTest 已按此过滤并重新拉取），
 // 前端正则仅为 demo 模式兜底
 const hideTestAccounts = overviewHideTest
-const isTestAccount = (text: string) => {
+const kpiTargets = ['execution-logs', 'execution-logs', 'users', 'users', 'goal-conversations', 'skills']
+const funnelTargets = ['users', 'goal-conversations', 'goal-conversations', 'learner-center', 'learner-center']
+function jump(scene: string) {
+  if (!scene) return
+  intent.agentFilter = ''
+  intent.statusFilter = ''
+  intent.traceId = ''
+  intent.scene = scene
+}const isTestAccount = (text: string) => {
   const email = String(text || '').replace(/^新用户注册：/, '');
   if (email.startsWith('virtual_') || email.endsWith('@test.local')) return true;
   return /^(audit_probe_|e2e_|ui_check|motion_review)/.test(email);
@@ -314,11 +573,17 @@ watch(hideTestAccounts, () => {
 .brief-head__verdict h3 { margin: 0; font-size: 18px; }
 .brief-head__verdict p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
 
+.brief-score-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
 .brief-score {
   position: relative;
   width: 52px;
   height: 52px;
-  flex-shrink: 0;
 }
 .brief-score svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .brief-score__track { fill: none; stroke: #edf1f8; stroke-width: 5; }
@@ -334,10 +599,19 @@ watch(hideTestAccounts, () => {
 .brief-score strong {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 14px;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
+}
+.brief-score__cap {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--faint);
+  white-space: nowrap;
 }
 
 .brief-actions {
@@ -390,21 +664,45 @@ watch(hideTestAccounts, () => {
   font-size: 13px;
 }
 
-/* 三列 */
+/* 三列 + KPI 行（KPI 全宽，下方三卡一行，动态全宽） */
 .brief-grid {
   display: grid;
   grid-template-columns: 1.1fr 1.2fr 1fr;
   gap: 14px;
   align-items: stretch;
 }
+.brief-kpis {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+.kpi {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.kpi__label { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: var(--faint); }
+.kpi__value {
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.kpi__hint { font-size: 11px; color: var(--faint); }
+.kpi--clickable { cursor: pointer; transition: border-color 0.12s ease, transform 0.12s ease; }
+.kpi--clickable:hover { border-color: rgba(52, 120, 246, 0.5); transform: translateY(-1px); }
 .brief-card {
   padding: 16px 18px;
   border-radius: 14px;
   border: 1px solid var(--line);
   background: #fff;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
-  align-content: start;
 }
 .brief-card h4 {
   margin: 0;
@@ -415,6 +713,11 @@ watch(hideTestAccounts, () => {
   color: var(--faint);
 }
 .brief-card__note { margin: 0; font-size: 12.5px; color: var(--muted); }
+/* 短卡（总结/用量）：等高拉伸时把末尾信息贴底，避免"卡片内空一大块" */
+.brief-card > .wq:last-child,
+.brief-card > .usage:last-child,
+.brief-card > .brief-card__note:last-child { margin-top: auto; }
+.brief-card--feed-full { grid-column: 1 / -1; }
 .brief-card__head--feed {
   display: flex;
   align-items: center;
@@ -434,6 +737,65 @@ watch(hideTestAccounts, () => {
   margin: 0;
   accent-color: #3478f6;
 }
+
+/* 总结产出质量 */
+.wq { display: grid; gap: 12px; }.wq__row { display: grid; grid-template-columns: 64px 1fr; gap: 8px 10px; align-items: center; }
+.wq__label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.wq__bars { display: flex; gap: 2px; height: 8px; border-radius: 99px; overflow: hidden; background: #f0f3f9; }
+.wq__bar { height: 100%; border-radius: 99px; }
+.wq__bar--ok { background: var(--green); }
+.wq__bar--blue { background: var(--blue); }
+.wq__bar--warn { background: var(--amber); }
+.wq__bar--bad { background: var(--red); }
+.wq__nums { grid-column: 2; font-size: 11.5px; color: var(--faint); }
+.wq__note { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+/* LLM 用量与失败归因 */
+.usage { display: grid; gap: 14px; }
+.usage__big { display: grid; gap: 2px; }
+.usage__big strong {
+  font-size: 26px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.usage__big span { font-size: 11.5px; color: var(--faint); font-weight: 600; letter-spacing: 0.04em; }
+.usage__big em { font-style: normal; font-size: 12.5px; color: var(--muted); }
+.usage__section { display: grid; gap: 6px; }
+.usage__label { font-size: 11px; font-weight: 700; color: var(--faint); letter-spacing: 0.04em; }
+.usage__rows { display: grid; gap: 5px; }
+.usage__row { display: grid; grid-template-columns: minmax(0, 1fr) 88px 52px; gap: 8px; align-items: center; font-size: 12px; }
+.usage__row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--ink); }
+.usage__bar-track { height: 6px; border-radius: 99px; background: #f0f3f9; overflow: hidden; }
+.usage__bar { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #6aa0ff, #3d7cff); }
+.usage__row-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.usage__fails { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; }
+.usage__fails li { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.usage__fail { cursor: pointer; border-radius: 6px; transition: background 0.12s ease; }
+.usage__fail:hover { background: #f5f8ff; }
+.usage__fails strong { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--ink); }
+.usage__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); flex-shrink: 0; }
+
+/* 近 7 天趋势（柱状区弹性撑满卡片，避免等高网格内留白） */
+.brief-card--trend { display: flex; flex-direction: column; }
+.brief-card--trend .trend { flex: 1; min-height: 0; }
+.trend__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.trend__legend { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; color: var(--faint); white-space: nowrap; }
+.trend__dot { width: 7px; height: 7px; border-radius: 2px; display: inline-block; margin-right: 3px; }
+.trend__dot--new { background: linear-gradient(180deg, #6aa0ff, #3d7cff); }
+.trend__dot--done { background: linear-gradient(180deg, #34d399, #15803d); }
+.trend { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.trend__col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; min-height: 0; border-radius: 8px; }
+.trend__col--today { background: #f0f6ff; box-shadow: inset 0 0 0 1px rgba(52, 120, 246, 0.25); }
+.trend__bars { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 3px; width: 100%; min-height: 56px; }
+.trend__day--today { color: var(--blue); font-weight: 800; }
+.trend__sum { margin: 0; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.trend__bar { width: 9px; border-radius: 3px 3px 1px 1px; background: linear-gradient(180deg, #6aa0ff, #3d7cff); opacity: 0.85; }
+.trend__bar--ok { background: linear-gradient(180deg, #34d399, #15803d); opacity: 1; }
+.trend__num { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 700; }
+.trend__num--zero { color: var(--faint); font-weight: 600; }
+.trend__day { font-size: 10.5px; color: var(--faint); }
+
 
 /* 漏斗 */
 .funnel {
@@ -456,6 +818,8 @@ watch(hideTestAccounts, () => {
 .funnel__node strong { font-size: 19px; font-variant-numeric: tabular-nums; }
 .funnel__node--idle { border-style: dashed; background: transparent; }
 .funnel__node--idle strong { color: var(--faint); }
+.funnel__node--clickable { cursor: pointer; transition: border-color 0.12s ease; }
+.funnel__node--clickable:hover { border-color: rgba(52, 120, 246, 0.5); }
 .funnel__rate { font-size: 10.5px; font-weight: 800; color: var(--faint); }
 
 /* 脉搏 */
@@ -483,8 +847,15 @@ watch(hideTestAccounts, () => {
 }
 .pulse__meta strong { color: var(--ink); font-variant-numeric: tabular-nums; }
 .pulse__meta strong.is-bad { color: var(--red); }
+.pulse__axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9.5px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
 
-/* 时间线 */
+/* 时间线（全宽卡：横向排列） */
 .feed {
   margin: 0;
   padding: 0;
@@ -493,6 +864,14 @@ watch(hideTestAccounts, () => {
   display: grid;
   gap: 12px;
 }
+.feed--full {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px 16px;
+}
+.feed--full::before { display: none; }
+.feed--full li { display: flex; gap: 9px; align-items: flex-start; }
+.feed--full li strong { font-size: 12.5px; font-weight: 600; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .feed::before {
   content: '';
   position: absolute;
@@ -520,18 +899,44 @@ watch(hideTestAccounts, () => {
 .feed__dot--ok { background: var(--green); }
 .feed__dot--warn { background: var(--amber); }
 .feed__dot--bad { background: var(--red); }
-.feed li div { display: grid; gap: 1px; }
+.feed li div { display: grid; gap: 1px; min-width: 0; }
 .feed li strong { font-size: 13px; font-weight: 600; }
 .feed li span { font-size: 11.5px; color: var(--faint); }
 .feed__empty { margin: 0; color: var(--faint); font-size: 13px; }
 
 @media (max-width: 1280px) and (min-width: 1001px) {
-  /* 中等宽度：三列过渡为两列，动态卡占整行，避免 1024 下三列挤成 ~250px */
+  /* 中等宽度：三列过渡为两列，KPI 与动态卡占整行 */
   .brief-grid { grid-template-columns: 1fr 1fr; }
+  .brief-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .brief-card--feed { grid-column: 1 / -1; }
 }
 
 @media (max-width: 1000px) {
   .brief-grid { grid-template-columns: 1fr; }
+  .brief-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* 4K：内容宽度兜底 + KPI 字号放大 */
+@media (min-width: 2000px) {
+  .brief { max-width: 1900px; margin: 0 auto; padding: 26px; }
+  .kpi__label { font-size: 13px; }
+  .kpi__value { font-size: 26px; }
+  .kpi__hint { font-size: 13px; }
+  .brief-card { padding: 20px 24px; }
+  .brief-card h4 { font-size: 13.5px; }
+  .brief-score { width: 64px; height: 64px; }
+  .brief-score strong { font-size: 17px; }
+  .brief-score__cap { font-size: 10.5px; }
+}
+@media (min-width: 2800px) {
+  .brief { max-width: 2300px; padding: 32px; }
+  .kpi__label { font-size: 15.5px; }
+  .kpi__value { font-size: 30px; }
+  .kpi__hint { font-size: 15.5px; }
+  .brief-card { padding: 24px 30px; }
+  .brief-card h4 { font-size: 16px; }
+  .brief-score { width: 76px; height: 76px; }
+  .brief-score strong { font-size: 20px; }
+  .brief-score__cap { font-size: 12.5px; }
 }
 </style>

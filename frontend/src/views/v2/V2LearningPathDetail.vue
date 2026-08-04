@@ -164,9 +164,15 @@
               </ol>
             </section>
 
-            <section v-if="path.sceneSummary" class="card sidecard">
+            <section v-if="sceneSummary" class="card sidecard">
               <span class="kicker">设计意图</span>
-              <p class="sidecard__text">{{ sceneSummaryText }}</p>
+              <strong v-if="sceneSummaryTitle" class="sidecard__intent-title">{{ sceneSummaryTitle }}</strong>
+              <dl v-if="sceneRows.length" class="sidecard__rows">
+                <div v-for="row in sceneRows" :key="row.label" class="sidecard__row">
+                  <dt>{{ row.label }}</dt>
+                  <dd>{{ row.value }}</dd>
+                </div>
+              </dl>
             </section>
           </aside>
         </div>
@@ -341,11 +347,31 @@ const nextTasks = computed(() => {
   return allTasks.value.slice(idx + 1, idx + 4);
 });
 
-const sceneSummaryText = computed(() => {
+const sceneSummary = computed(() => {
   const s = path.value?.sceneSummary;
+  if (!s) return null;
+  if (typeof s === 'string') return { title: s, rows: [] };
+  if (typeof s !== 'object') return null;
+  return s as Record<string, any>;
+});
+
+const sceneSummaryTitle = computed(() => {
+  const s = sceneSummary.value;
   if (!s) return '';
-  if (typeof s === 'string') return s;
-  return s.summary || s.intent || s.description || JSON.stringify(s);
+  return typeof s === 'string' ? s : (s.title || s.summary || s.intent || '');
+});
+
+const sceneRows = computed(() => {
+  const s = sceneSummary.value;
+  if (!s || typeof s === 'string') return [];
+  const rows: Array<{ label: string; value: string }> = [];
+  if (s.firstDeliverable) rows.push({ label: '第一阶段产出', value: String(s.firstDeliverable) });
+  if (s.targetState) rows.push({ label: '目标状态', value: String(s.targetState) });
+  if (Array.isArray(s.planningFocus) && s.planningFocus.length) rows.push({ label: '规划焦点', value: s.planningFocus.join('、') });
+  if (Array.isArray(s.excludedScope) && s.excludedScope.length) rows.push({ label: '先不学', value: s.excludedScope.join('、') });
+  if (s.timeBudget) rows.push({ label: '时间预算', value: String(s.timeBudget) });
+  if (s.timeHorizon) rows.push({ label: '时间跨度', value: String(s.timeHorizon) });
+  return rows;
 });
 
 /* ---------- 展示辅助 ---------- */
@@ -537,6 +563,11 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
 .next-list small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--faint); }
 .sidecard__sum { font-size: 12px; font-weight: 700; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 9px; }
 .sidecard__text { font-size: 13px; }
+.sidecard__intent-title { font-size: 14px; line-height: 1.5; }
+.sidecard__rows { margin: 0; display: grid; gap: 8px; }
+.sidecard__row { display: grid; gap: 2px; }
+.sidecard__row dt { font-size: 11px; font-weight: 800; color: var(--faint); letter-spacing: 0.03em; }
+.sidecard__row dd { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
 
 @media (max-width: 900px) {
   .detail__main { padding: 14px 14px 32px; }

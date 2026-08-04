@@ -1,6 +1,21 @@
 <template>
-  <div v-if="d" class="mk-page ld">
-    <div v-if="toast" class="mk-toast mk-toast--ok">{{ toast }}</div>
+  <div v-if="notFound" class="mk-page ld">
+    <div class="mk-empty">
+      <strong>未找到该学习者</strong>
+      <span>学习者可能已被删除，或链接已失效。</span>
+      <button type="button" class="mk-link" @click="closeSubPage">← 返回学习者中心</button>
+    </div>
+  </div>
+  <div v-else-if="detailError" class="mk-page ld">
+    <div class="mk-empty">
+      <span class="mk-empty__icon" aria-hidden="true">◌</span>
+      <strong>详情加载失败</strong>
+      <span>暂时无法获取该学习者的完整快照。</span>
+      <button type="button" class="mk-empty__action" @click="loadDetail(subPage?.id, isLive)">重试</button>
+    </div>
+  </div>
+  <div v-else-if="d" class="mk-page ld">
+    <div v-if="toast" class="mk-toast" :class="toastCls">{{ toast }}</div>
 
     <!-- 头部：身份与状态 -->
     <div class="ld-head">
@@ -8,7 +23,7 @@
       <div class="ld-id">
         <span class="ld-avatar">{{ d.name.charAt(0) }}</span>
         <div>
-          <h3>{{ d.name }}</h3>
+          <h1 class="ld-name">{{ d.name }}</h1>
           <span class="ld-sub">{{ d.email }} · 加入 {{ d.joined }}</span>
         </div>
         <div class="ld-badges">
@@ -290,6 +305,7 @@ const rawDetail = ref<Record<string, unknown> | null>(null)
 const liveEvidence = ref<{ title: string; detail: string; time: string; score: number }[]>([])
 const recomputing = ref(false)
 const toast = ref('')
+const toastCls = ref('mk-toast--ok')
 const tab = ref('overview')
 
 const tabs = [
@@ -300,75 +316,96 @@ const tabs = [
   { id: 'teaching', label: '教学建议' },
   { id: 'evidence', label: '证据记录' }
 ]
+/** 详情加载：成功全量数据；失败但有列表兜底 → 显示兜底；失败且无兜底 → 明确错误态 */
+const detailError = ref(false)
+/** 请求超时保护：详情接口挂起时不再无限「加载中…」，超时后走兜底/错误态 */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('详情请求超时')), ms)
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v) },
+      (e) => { clearTimeout(timer); reject(e) }
+    )
+  })
+}
 
 watch(
   () => [subPage.value?.id, isLive.value] as const,
-  async ([id, live]) => {
-    liveDetail.value = null
-    rawDetail.value = null
-    liveEvidence.value = []
-    tab.value = 'overview'
-    if (!id || !live) return
-    const base = liveLearners.value.find((l) => l.userId === id)
-    try {
-      const raw = (await liveGetLearnerDetail(id)) as Record<string, unknown>
-      rawDetail.value = raw
-      const model = (raw.model as Record<string, unknown>) || raw
-      const concepts = (model.concepts || raw.concepts || {}) as Record<string, string[]>
-      const evidenceItems = await liveGetLearnerEvidence(id).catch(() => [] as Record<string, unknown>[])
-      liveEvidence.value = evidenceItems.map((e) => ({
-        title: String(e.type || e.title || e.kind || '学习事件'),
-        detail: String(e.summary || e.signal || e.result || e.knowledgePoint || ''),
-        time: timeAgo(String(e.createdAt || e.at || '')),
-        score: Number(e.score || 0)
-      }))
-      liveDetail.value = {
-        name: base?.name || String(model.userName || id),
-        email: base?.email || '',
-        joined: '—',
-        trend: base?.trend || 'flat',
-        fatigue: base?.fatigue || '低',
-        path: base?.pathTitle || String(model.pathTitle || '尚未开始学习'),
-        stage: base?.currentMilestone || '',
-        task: base?.currentTask || '未开始',
-        pct: Number(model.progress ?? model.mastery ?? 0) || 0,
-        concepts: {
-          mastered: concepts.mastered || [],
-          struggling: base?.struggling || concepts.struggling || [],
-          fragile: base?.fragile || concepts.fragile || []
-        },
-        trend7d: [0, 0, 0, 0, 0, 0, 0],
-        sessions: liveEvidence.value.slice(0, 6).map((e) => ({
-          time: e.time,
-          title: e.title,
-          result: e.detail,
-          tone: e.score >= 0.8 ? 'bad' : 'ok' as const
-        })),
-        snapshot: { version: base ? `置信 ${(base.confidence * 100).toFixed(0)}%` : '—', generatedAt: timeAgo(base?.generatedAt) }
-      }
-    } catch (e) {
-      if (base) {
-        liveDetail.value = {
-          name: base.name,
-          email: base.email,
-          joined: '—',
-          trend: base.trend,
-          fatigue: base.fatigue,
-          path: base.pathTitle || '尚未开始学习',
-          stage: base.currentMilestone || '',
-          task: base.currentTask || '未开始',
-          pct: 0,
-          concepts: { mastered: [], struggling: base.struggling, fragile: base.fragile },
-          trend7d: [0, 0, 0, 0, 0, 0, 0],
-          sessions: [],
-          snapshot: { version: `置信 ${(base.confidence * 100).toFixed(0)}%`, generatedAt: timeAgo(base.generatedAt) }
-        }
-      }
-      void errMsg(e)
-    }
+  ([id, live]) => {
+    void loadDetail(id, live)
   },
   { immediate: true }
 )
+
+async function loadDetail(id: string | undefined, live: boolean) {
+  liveDetail.value = null
+  rawDetail.value = null
+  liveEvidence.value = []
+  detailError.value = false
+  tab.value = 'overview'
+  if (!id || !live) return
+  const base = liveLearners.value.find((l) => l.userId === id)
+  try {
+    const raw = (await withTimeout(liveGetLearnerDetail(id), 12000)) as Record<string, unknown>
+    rawDetail.value = raw
+    const model = (raw.model as Record<string, unknown>) || raw
+    const concepts = (model.concepts || raw.concepts || {}) as Record<string, string[]>
+    const evidenceItems = await liveGetLearnerEvidence(id).catch(() => [] as Record<string, unknown>[])
+    liveEvidence.value = evidenceItems.map((e) => ({
+      title: String(e.type || e.title || e.kind || '学习事件'),
+      detail: String(e.summary || e.signal || e.result || e.knowledgePoint || ''),
+      time: timeAgo(String(e.createdAt || e.at || '')),
+      score: Number(e.score || 0)
+    }))
+    liveDetail.value = {
+      name: base?.name || String(model.userName || id),
+      email: base?.email || '',
+      joined: '—',
+      trend: base?.trend || 'flat',
+      fatigue: base?.fatigue || '低',
+      path: base?.pathTitle || String(model.pathTitle || '尚未开始学习'),
+      stage: base?.currentMilestone || '',
+      task: base?.currentTask || '未开始',
+      pct: Number(model.progress ?? model.mastery ?? 0) || 0,
+      concepts: {
+        mastered: concepts.mastered || [],
+        struggling: base?.struggling || concepts.struggling || [],
+        fragile: base?.fragile || concepts.fragile || []
+      },
+      trend7d: [0, 0, 0, 0, 0, 0, 0],
+      sessions: liveEvidence.value.slice(0, 6).map((e) => ({
+        time: e.time,
+        title: e.title,
+        result: e.detail,
+        tone: e.score >= 0.8 ? 'bad' : 'ok' as const
+      })),
+      snapshot: { version: base ? `置信 ${(base.confidence * 100).toFixed(0)}%` : '—', generatedAt: timeAgo(base?.generatedAt) }
+    }
+  } catch (e) {
+    if (base) {
+      // 列表兜底：详情接口失败时至少展示列表里已有的信息
+      liveDetail.value = {
+        name: base.name,
+        email: base.email,
+        joined: '—',
+        trend: base.trend,
+        fatigue: base.fatigue,
+        path: base.pathTitle || '尚未开始学习',
+        stage: base.currentMilestone || '',
+        task: base.currentTask || '未开始',
+        pct: 0,
+        concepts: { mastered: [], struggling: base.struggling, fragile: base.fragile },
+        trend7d: [0, 0, 0, 0, 0, 0, 0],
+        sessions: [],
+        snapshot: { version: `置信 ${(base.confidence * 100).toFixed(0)}%`, generatedAt: timeAgo(base.generatedAt) }
+      }
+      toast.value = `详情接口暂时不可用，已显示列表快照：${errMsg(e)}`
+      toastCls.value = 'mk-toast--bad'
+    } else {
+      detailError.value = true
+    }
+  }
+}
 
 async function recompute() {
   const id = subPage.value?.id
@@ -378,6 +415,7 @@ async function recompute() {
     if (isLive.value) {
       await liveRecomputeLearner(id)
       toast.value = '快照已重算（真实）'
+      toastCls.value = 'mk-toast--ok'
       const base = liveLearners.value.find((l) => l.userId === id)
       if (base && liveDetail.value) {
         liveDetail.value.snapshot = { version: `置信 ${(base.confidence * 100).toFixed(0)}%`, generatedAt: timeAgo(base.generatedAt) }
@@ -385,17 +423,20 @@ async function recompute() {
     } else {
       await new Promise((r) => setTimeout(r, 800))
       toast.value = '快照已重算'
+      toastCls.value = 'mk-toast--ok'
     }
   } catch (e) {
     toast.value = `重算失败：${errMsg(e)}`
+    toastCls.value = 'mk-toast--bad'
   } finally {
     recomputing.value = false
     setTimeout(() => (toast.value = ''), 3000)
   }
 }
 
-const d = computed<Detail>(() => {
+const d = computed<Detail | null>(() => {
   if (isLive.value) {
+    if (detailError.value) return null
     return liveDetail.value || {
       name: '加载中…', email: '', joined: '', trend: 'flat', fatigue: '低',
       path: '', stage: '', task: '', pct: 0,
@@ -404,8 +445,12 @@ const d = computed<Detail>(() => {
       snapshot: { version: '—', generatedAt: '—' }
     }
   }
-  return learnerDetails.find((x) => x.id === subPage.value?.id) || learnerDetails[0]
+  const found = learnerDetails.find((x) => x.id === subPage.value?.id)
+  return found || null
 })
+
+/** demo 模式：未知 ID 一律显示「未找到」空态，严禁回退展示其他人的数据 */
+const notFound = computed(() => !isLive.value && !learnerDetails.some((x) => x.id === subPage.value?.id))
 
 /* ---------- Tab 数据推导 ---------- */
 /** demo 模式的完整诊断数据（对齐真实 learner-models 结构） */
@@ -571,10 +616,10 @@ const memoryRows = computed(() => {
   return rows
 })
 
-const trendText = computed(() => (d.value.trend === 'up' ? '↗ 上升' : d.value.trend === 'down' ? '↘ 下降' : '→ 稳定'))
-const trendBadge = computed(() => (d.value.trend === 'up' ? 'mk-badge--ok' : d.value.trend === 'down' ? 'mk-badge--bad' : 'mk-badge--muted'))
-const fatigueBadge = computed(() => (d.value.fatigue === '高' ? 'mk-badge--bad' : d.value.fatigue === '中' ? 'mk-badge--warn' : 'mk-badge--ok'))
-const trendHint = computed(() => (d.value.trend === 'down' ? '连续走低，建议介入' : d.value.trend === 'up' ? '稳步上升' : '平稳'))
+const trendText = computed(() => (d.value?.trend === 'up' ? '↗ 上升' : d.value?.trend === 'down' ? '↘ 下降' : '→ 稳定'))
+const trendBadge = computed(() => (d.value?.trend === 'up' ? 'mk-badge--ok' : d.value?.trend === 'down' ? 'mk-badge--bad' : 'mk-badge--muted'))
+const fatigueBadge = computed(() => (d.value?.fatigue === '高' ? 'mk-badge--bad' : d.value?.fatigue === '中' ? 'mk-badge--warn' : 'mk-badge--ok'))
+const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，建议介入' : d.value?.trend === 'up' ? '稳步上升' : '平稳'))
 </script>
 
 <style scoped>
@@ -609,6 +654,7 @@ const trendHint = computed(() => (d.value.trend === 'down' ? '连续走低，建
   font-weight: 700;
 }
 .ld-id h3 { margin: 0; font-size: 18px; }
+.ld-name { margin: 0; font-size: 18px; line-height: 1.4; }
 .ld-sub { color: var(--mk-faint); font-size: 12px; }
 .ld-badges { display: flex; gap: 8px; flex-wrap: wrap; }
 

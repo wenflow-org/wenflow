@@ -51,6 +51,9 @@ export interface ChatRequest {
   model?: string;
   temperature?: number;
   max_tokens?: number;
+  /** 请求上游以 SSE 流式返回（需同时提供 ExecutionContext.onStreamChunk 才生效） */
+  stream?: boolean;
+  stream_options?: { include_usage?: boolean };
   [key: string]: any;
 }
 
@@ -71,6 +74,8 @@ export interface ChatResponse {
     resolvedModel: string;
     responseModel?: string;
     attemptCount: number;
+    /** 本次执行是否走了流式（上游 SSE）路径 */
+    streamed: boolean;
   };
   [key: string]: any;
 }
@@ -100,6 +105,8 @@ export interface ExecutionContext {
   runId?: string;
   requestPath?: string;
   abortSignal?: AbortSignal;
+  /** 流式模式下逐段透传内容增量；与 request.stream 配合启用流式执行路径 */
+  onStreamChunk?: (delta: string) => void;
   [key: string]: any;
 }
 

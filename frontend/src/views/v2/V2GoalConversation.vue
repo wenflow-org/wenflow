@@ -37,16 +37,18 @@
       </div>
 
       <div class="entry__cards">
-        <button v-for="c in scenes" :key="c.title" type="button" class="scene-card" :disabled="live.sending" @click="startWith(c.seed)">
+          <div class="entry__cards-head">
+            <span class="entry__cards-title">试试这些方向</span>
+            <button type="button" class="cards-nav__btn" title="换一批" :disabled="live.sending" @click="shuffleScenes">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+            </button>
+          </div>
+        <button v-for="c in displayScenes" :key="c.title" type="button" class="scene-card" :disabled="live.sending" :title="c.desc" @click="startWith(c.seed)">
           <span class="scene-card__icon" :style="{ background: c.bg, color: c.ink }" v-html="c.icon"></span>
           <span class="scene-card__body">
             <strong>{{ c.title }}</strong>
-            <small>{{ c.desc }}</small>
           </span>
-          <span class="scene-card__meta">
-            <span class="scene-card__time">约 2 分钟</span>
-            <span class="scene-card__go">开始 ›</span>
-          </span>
+          <span class="scene-card__go" aria-hidden="true">›</span>
         </button>
       </div>
 
@@ -63,10 +65,6 @@
           <span class="composer__send" :class="{ 'composer__send--off': !input.trim() || live.sending }" @click="doSend">
             <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
           </span>
-        </div>
-        <div class="composer__hint">
-          <span>Enter 发送 · Shift+Enter 换行 · 点上方场景卡可直接开始</span>
-          <AiContentNote />
         </div>
       </div>
     </main>
@@ -137,7 +135,7 @@
 
           <!-- 快捷回复 -->
           <div v-if="!live.sending && live.quickReplies.length && live.stageIndex < 3" class="replies">
-            <div class="replies__hint">点一下直接发送，点 ＋ 先放进输入框</div>
+            <div v-if="!live.quickReplyHintShown" class="replies__hint">点一下直接发送，点 ＋ 先放进输入框</div>
             <div class="replies__row">
               <button v-for="q in live.quickReplies" :key="q.text" type="button" class="reply" @click="sendDirect(q.text)">
                 {{ q.text }}
@@ -250,12 +248,17 @@
       </section>
     </main>
 
+    <!-- AI 生成提示：置于页面底部、靠近页脚 -->
+    <div v-if="!live.started" class="goal__ai-note">
+      <AiContentNote />
+    </div>
+
     <V2Footer v-if="!live.started" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import MarkdownIt from 'markdown-it';
 import DOMPurify, { type Config as DOMPurifyConfig } from 'dompurify';
@@ -272,11 +275,46 @@ const live = useGoalLive();
 const loggedIn = hasUserSession();
 
 onMounted(() => {
+  window.addEventListener('v2:new-goal', onNewGoalEvent);
+  // 每次进入页面随机展示一批场景
+  shuffleScenes();
   const cid = typeof route.params.conversationId === 'string' ? route.params.conversationId : '';
   if (cid && cid !== live.conversationId) {
     live.resumeById(cid).catch(() => {});
+  } else if (!cid && live.started) {
+    // SPA 内从旧会话切换回来（如路径页点「规划新目标」）：清掉模块级残留的上一轮对话，
+    // 回到初始态；localStorage 保留，仍可「继续上次的规划」恢复。
+    live.resetView();
   }
 });
+
+onBeforeUnmount(() => {
+  window.removeEventListener('v2:new-goal', onNewGoalEvent);
+});
+
+/** 页面内点击导航「规划新目标」：重置为全新初始态（保留本地恢复入口） */
+function onNewGoalEvent() {
+  live.resetView();
+  phase.value = 'preview';
+  supplementMode.value = false;
+  supplementText.value = '';
+  input.value = '';
+  // 清掉 URL 中残留的旧会话参数，避免刷新后按旧 conversationId 恢复
+  if (typeof route.params.conversationId === 'string') {
+    router.replace({ name: 'V2GoalConversation' });
+  }
+}
+
+// 会话 ID 变化时同步视图状态（分享链接 / 恢复旧会话）
+watch(
+  () => route.params.conversationId,
+  (cid) => {
+    const next = typeof cid === 'string' ? cid : '';
+    if (next && next !== live.conversationId) {
+      live.resumeById(next).catch(() => {});
+    }
+  }
+);
 
 /* 会话开始后同步 URL（可刷新恢复、可分享） */
 watch(
@@ -331,6 +369,14 @@ async function scrollToBottom() {
 
 watch(() => live.messages.length, scrollToBottom);
 watch(() => live.sending, scrollToBottom);
+
+// 快捷回复提示只展示一次：首次出现快捷回复时置位
+watch(
+  () => live.quickReplies.length,
+  (count) => {
+    if (count > 0 && !live.quickReplyHintShown) live.quickReplyHintShown = true;
+  }
+);
 
 async function doSend() {
   const t = input.value.trim();
@@ -409,7 +455,8 @@ function doReset() {
   input.value = '';
 }
 
-const scenes = [
+const SCENE_BATCH_SIZE = 3;
+const scenePool = [
   {
     title: '用 Python 自动化 Excel 报表',
     desc: '每天省下的复制粘贴时间，一周就能看到',
@@ -430,8 +477,79 @@ const scenes = [
     seed: '我想做自媒体副业，用 AI 工具提高内容创作效率',
     bg: 'rgba(67,176,216,.14)', ink: '#3593b5',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h4a2 2 0 0 1 2 2v1.28c.6.35 1 .98 1 1.72a2 2 0 0 1-1 1.73V17a2 2 0 0 1-2 2h-4v1.27c.6.34 1 .99 1 1.73a2 2 0 1 1-4 0c0-.74.4-1.39 1-1.73V19H7a2 2 0 0 1-2-2v-3.27A2 2 0 0 1 4 12c0-.74.4-1.38 1-1.72V9a2 2 0 0 1 2-2h4V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/></svg>'
+  },
+  {
+    title: '零基础学前端开发',
+    desc: '从第一个网页到能独立做一个小项目',
+    seed: '我想从零开始学前端开发，能独立做出网页',
+    bg: 'rgba(240,101,149,.12)', ink: '#d1456f',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M14.6 16.6 19.2 12l-4.6-4.6 1.4-1.4L22 12l-5.9 5.9-1.5-1.3zm-5.2 0L7.8 18l-5.8-6 5.8-6 1.6 1.4L4.8 12l4.6 4.6z"/></svg>'
+  },
+  {
+    title: '用 SQL 做数据分析',
+    desc: '能从数据库里查数、会看数、会讲数',
+    seed: '我想学会 SQL 数据分析，能自己从数据库里查数据',
+    bg: 'rgba(67,176,216,.14)', ink: '#2a8fb3',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2C7.6 2 4 3.8 4 6v12c0 2.2 3.6 4 8 4s8-1.8 8-4V6c0-2.2-3.6-4-8-4zm0 2c3.9 0 6 1.5 6 2s-2.1 2-6 2-6-1.5-6-2 2.1-2 6-2zm6 14c0 .5-2.1 2-6 2s-6-1.5-6-2v-3.2C7.7 17.5 9.8 18 12 18s4.3-.5 6-1.2V18zm0-5.5c0 .5-2.1 2-6 2s-6-1.5-6-2V9.3C7.7 10.5 9.8 11 12 11s4.3-.5 6-1.2V12.5z"/></svg>'
+  },
+  {
+    title: '掌握 Git 版本控制',
+    desc: '提交、分支、回滚，代码管理不再手忙脚乱',
+    seed: '我想掌握 Git 版本控制，工作中代码管理不再混乱',
+    bg: 'rgba(244,170,70,.14)', ink: '#c97f1e',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M7 2a3 3 0 0 0-1 5.83v8.34A3.001 3.001 0 1 0 9 16.17V12h4a3 3 0 0 0 3-3V7.83A3 3 0 1 0 14 8v1a1 1 0 0 1-1 1H8V7.83A3 3 0 0 0 7 2zm0 2a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm10 8a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM7 16a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg>'
+  },
+  {
+    title: '学会写工作总结汇报',
+    desc: '把做的事说清楚，让成果被看见',
+    seed: '我想学会写工作总结和汇报，让领导看到我的成果',
+    bg: 'rgba(49,177,111,.12)', ink: '#218a56',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm9 1.5V8h4.5L15 3.5zM8 13h8v-1.5H8V13zm0 4h8v-1.5H8V17z"/></svg>'
+  },
+  {
+    title: '搭建个人知识库',
+    desc: '学过的内容沉淀下来，能真正用起来',
+    seed: '我想搭建自己的知识管理系统，学过的内容能真正用起来',
+    bg: 'rgba(52,120,246,.12)', ink: '#1f57cc',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 4h7v7H4V4zm2 2v3h3V6H6zm7-2h7v7h-7V4zm2 2v3h3V6h-3zM4 13h7v7H4v-7zm2 2v3h3v-3H6zm7-2h7v7h-7v-7zm2 2v3h3v-3h-3z"/></svg>'
+  },
+  {
+    title: '掌握 Linux 命令行',
+    desc: '文件、权限、进程，命令行操作行云流水',
+    seed: '我想掌握 Linux 命令行操作，能熟练处理文件和权限管理',
+    bg: 'rgba(49,177,111,.12)', ink: '#218a56',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM7.8 15.6 6.4 14.2 9.6 11l-3.2-3.2 1.4-1.4L12.4 11l-4.6 4.6zM12 17h6v-2h-6v2z"/></svg>'
+  },
+  {
+    title: '学习时间管理',
+    desc: '一天的事排得明明白白，告别忙乱',
+    seed: '我想学习时间管理，把每天的工作安排得有条不紊',
+    bg: 'rgba(67,176,216,.14)', ink: '#3593b5',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm1-12h-2v6l5 3 1-1.6-4-2.4V8z"/></svg>'
+  },
+  {
+    title: '学会基础理财规划',
+    desc: '工资存得住、钱能生钱，从记账开始',
+    seed: '我想学会基础理财规划，工资能存得住、钱能生钱',
+    bg: 'rgba(244,170,70,.14)', ink: '#c97f1e',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M21 7H6a1 1 0 0 1 0-2h13V3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zm-6 7.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>'
+  },
+  {
+    title: '学会写技术文档',
+    desc: '结构、示例、可读性，让文档真正有人读',
+    seed: '我想学会写技术文档，把知识表达清楚让别人能看懂',
+    bg: 'rgba(141,107,255,.13)', ink: '#6b4ae0',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M21 4H3a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1zM7 6h12v2H7V6zm0 5h12v2H7v-2zm0 5h8v2H7v-2z"/></svg>'
   }
 ];
+
+/** 场景展示：默认展示前 3 个，点「换一批」从全部场景中随机抽 3 个不重复 */
+const shuffledScenes = ref<typeof scenePool | null>(null);
+const displayScenes = computed(() => shuffledScenes.value ?? scenePool.slice(0, SCENE_BATCH_SIZE));
+
+function shuffleScenes() {
+  shuffledScenes.value = [...scenePool].sort(() => Math.random() - 0.5).slice(0, SCENE_BATCH_SIZE);
+}
 </script>
 
 <style scoped>
@@ -476,12 +594,25 @@ const scenes = [
 
 /* ---------- 初始态 / 登录门 ---------- */
 .entry {
+  flex: 1; width: 100%;
   max-width: 1080px; margin: 0 auto;
-  padding: 28px 28px 40px;
-  display: flex; flex-direction: column; gap: 22px;
+  /* 顶部留白与学习路径/学习状态页统一（24px） */
+  padding: 24px 28px 12px;
+  display: flex; flex-direction: column; gap: 16px;
+  /* 内容紧凑靠上，输入框紧跟场景卡 */
+  justify-content: flex-start;
 }
-.entry .composer--entry { margin-top: auto; }
-.entry .composer__hint { justify-content: center; padding-left: 0; }
+.entry .composer--entry {
+  max-width: 640px; width: 100%; margin: 0 auto;
+  /* 与卡片组保持约一张卡片的高度（gap 16px + margin 46px ≈ 62px） */
+  margin-top: 46px;
+}
+
+.goal__ai-note {
+  display: flex; justify-content: center;
+  padding: 0 28px 14px;
+}
+.goal__ai-note :deep(.ai-note) { font-size: 11px; opacity: 0.75; }
 .login-gate {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -538,13 +669,30 @@ const scenes = [
 }
 .errorbar__retry { text-decoration: underline; cursor: pointer; font-weight: 800; }
 
-.entry__cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.entry__cards {
+  display: grid; grid-template-columns: 1fr; gap: 12px;
+  max-width: 640px; width: 100%; margin: 0 auto;
+}
+.entry__cards-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.entry__cards-title { font-size: 12px; font-weight: 700; color: var(--faint); }
+.cards-nav__btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0;
+  border: 0; border-radius: 8px;
+  background: transparent; color: var(--faint);
+  font: inherit; cursor: pointer;
+  transition: color .15s ease, background .15s ease;
+}
+.cards-nav__btn:hover:not(:disabled) {
+  color: var(--muted); background: rgba(23, 32, 51, 0.05);
+}
+.cards-nav__btn:disabled { opacity: .4; cursor: default; }
 .scene-card {
-  display: grid; grid-template-columns: 1fr; gap: 10px; align-content: start;
-  padding: 18px 18px 16px;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 14px;
   font: inherit; text-align: left; cursor: pointer;
   transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
 }
@@ -554,16 +702,18 @@ const scenes = [
   transform: translateY(-1px);
 }
 .scene-card:disabled { opacity: .55; cursor: default; }
-.scene-card__icon { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; }
-.scene-card__body strong { display: block; font-size: 14.5px; }
-.scene-card__body small { display: block; margin-top: 3px; font-size: 12.5px; color: var(--faint); line-height: 1.55; }
-.scene-card__meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 6px; }
-.scene-card__time {
-  font-size: 11px; font-weight: 700; color: var(--muted);
-  background: #f1f5fb; border: 1px solid var(--line);
-  padding: 3px 9px; border-radius: 999px;
+.scene-card__icon { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; flex: 0 0 auto; }
+.scene-card__body { flex: 1; min-width: 0; }
+.scene-card__body strong {
+  display: block; font-size: 14px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.scene-card__go { font-size: 12.5px; font-weight: 800; color: var(--blue-deep); }
+.scene-card__go {
+  font-size: 18px; line-height: 1;
+  color: var(--faint); flex: 0 0 auto;
+  transition: color 0.16s ease, transform 0.16s ease;
+}
+.scene-card:hover:not(:disabled) .scene-card__go { color: var(--blue-deep); transform: translateX(2px); }
 
 /* ---------- 输入区 ---------- */
 .composer { display: grid; gap: 7px; }
@@ -684,7 +834,10 @@ const scenes = [
   background: rgba(49, 177, 111, 0.12);
   padding: 2px 7px; border-radius: 999px;
 }
-.panel__tip { font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px; }
+.panel__tip {
+  font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px;
+  margin-top: auto;
+}
 </style>
 
 <style scoped>

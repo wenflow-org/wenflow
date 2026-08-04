@@ -29,21 +29,21 @@ export const GLOBAL_STATES: MockStateDef[] = [
 
 export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'overview', label: '平台总览', group: '总览', realRoute: '/admin/console', glyph: '览' },
-  { id: 'users', label: '用户', group: '学习', realRoute: '/admin/console', glyph: '人' },
-  { id: 'learner-center', label: '学习者中心', group: '学习', realRoute: '/admin/console', glyph: '习' },
-  { id: 'teaching-sessions', label: '教学会话', group: '学习', realRoute: '/admin/console', glyph: '课' },
-  { id: 'goal-conversations', label: 'Goal 会话', group: '学习', realRoute: '/admin/console', glyph: '标' },
-  { id: 'feedback', label: '反馈中心', group: '学习', realRoute: '/admin/console', glyph: '馈' },
-  { id: 'virtual-learners', label: '虚拟学习者', group: '学习', realRoute: '/admin/console', glyph: '拟' },
+  { id: 'users', label: '用户', group: '学习者', realRoute: '/admin/console', glyph: '人' },
+  { id: 'learner-center', label: '学习者中心', group: '学习者', realRoute: '/admin/console', glyph: '习' },
+  { id: 'teaching-sessions', label: '教学会话', group: '学习者', realRoute: '/admin/console', glyph: '课' },
+  { id: 'goal-conversations', label: '目标对话', group: '学习者', realRoute: '/admin/console', glyph: '标' },
+  { id: 'feedback', label: '反馈中心', group: '学习者', realRoute: '/admin/console', glyph: '馈' },
+  { id: 'virtual-learners', label: '虚拟学习者', group: '学习者', realRoute: '/admin/console', glyph: '拟' },
   { id: 'skills', label: 'Skill 目录', group: '运行', realRoute: '/admin/console', glyph: '能' },
   { id: 'topology', label: 'Agent 拓扑', group: '运行', realRoute: '/admin/console', glyph: '络' },
   { id: 'orchestrator', label: '编排结构', group: '运行', realRoute: '/admin/console', glyph: '流' },
-  { id: 'execution-logs', label: '执行日志', group: '日志', realRoute: '/admin/console', glyph: '志' },
-  { id: 'prompt-call-logs', label: 'Prompt 调用', group: '日志', realRoute: '/admin/console', glyph: '提' },
-  { id: 'event-center', label: '事件中心', group: '日志', realRoute: '/admin/console', glyph: '事' },
-  { id: 'trace-waterfall', label: 'Trace 瀑布', group: '日志', realRoute: '/admin/console', glyph: '溯' },
-  { id: 'api-config', label: '连接与安全', group: '配置', realRoute: '/admin/console', glyph: '安' },
+  { id: 'execution-logs', label: '执行日志', group: '观测', realRoute: '/admin/console', glyph: '志' },
+  { id: 'prompt-call-logs', label: 'Prompt 调用', group: '观测', realRoute: '/admin/console', glyph: '提' },
+  { id: 'event-center', label: '事件中心', group: '观测', realRoute: '/admin/console', glyph: '事' },
+  { id: 'trace-waterfall', label: 'Trace 瀑布', group: '观测', realRoute: '/admin/console', glyph: '溯' },
+  { id: 'api-config', label: '模型与接入', group: '配置', realRoute: '/admin/console', glyph: '安' },
   { id: 'announcements', label: '公告', group: '配置', realRoute: '/admin/console', glyph: '告' },
   { id: 'addons', label: '外挂组件', group: '配置', realRoute: '/admin/console', glyph: '件' },
-  { id: 'prompt-workbench', label: 'Prompt 工作台', group: '调试', realRoute: '/admin/console', glyph: '台' }
+  { id: 'prompt-workbench', label: '核心文件同步', group: '配置', realRoute: '/admin/console', glyph: '台' }
 ]

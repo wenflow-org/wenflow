@@ -8,21 +8,13 @@ import { agentPluginRegistry } from '../plugin-registry';
 import { logger } from '../../utils/logger';
 
 // 导入所有插件
-import { genericPlanner } from '../path-planner/plugins/generic-planner';
-import { basicGenerator } from '../content-generator/plugins/basic-generator';
-import { basicExtractor } from './basic-extractor';
 import { basicEvaluator } from './basic-evaluator';
-import { dataMappingAgent } from './data-mapping';
 import { goalAlignmentChecker } from '../../plugins/goal-alignment-checker';
 import { adaptPluginToSkill } from './skill-adapter';
 
 // 插件列表
 export const allPlugins = [
-  genericPlanner,
-  basicGenerator,
-  basicExtractor,
   basicEvaluator,
-  dataMappingAgent,
   goalAlignmentChecker
 ];
 

@@ -319,6 +319,7 @@ import {
 } from './mockLive'
 import { adminPlatformSettingsApi, adminCapabilityProbeApi, adminSystemApi } from '@/api/adminApi'
 import { registrationEnabled, updateRegistrationSetting } from './mockLive'
+import { askConfirm } from './useConfirm'
 
 const props = defineProps<{ state: 'ready' | 'incomplete' }>()
 
@@ -626,7 +627,11 @@ async function saveAll() {
   if (saving.value) return
   // 高风险确认：开放公网访问需二次确认
   if (isLive.value && dirty.value.has('policy') && policy.adminAccessMode === 'any') {
-    const ok = window.confirm('你正在将 Admin 后台开放到公网/任意来源访问。任何能访问该服务地址的人都能看到管理入口，请确认已了解风险。')
+    const ok = await askConfirm({
+      title: '开放公网访问',
+      message: '你正在将 Admin 后台开放到公网/任意来源访问。\n任何能访问该服务地址的人都能看到管理入口，请确认已了解风险。',
+      confirmText: '确认开放'
+    })
     if (!ok) return
   }
   saving.value = true
@@ -695,11 +700,14 @@ const registrationBusy = ref(false)
 async function toggleRegistration() {
   if (registrationBusy.value || registrationEnabled.value === null) return
   const target = !registrationEnabled.value
-  const ok = window.confirm(
-    target
-      ? '确认开放新用户自助注册？任何人都能通过注册页创建账号。'
-      : '确认关闭新用户自助注册？关闭后新账号只能由管理员手动创建。'
-  )
+  const ok = await askConfirm({
+    title: target ? '开放注册' : '关闭注册',
+    message: target
+      ? '确认开放新用户自助注册？\n任何人都能通过注册页创建账号。'
+      : '确认关闭新用户自助注册？\n关闭后新账号只能由管理员手动创建。',
+    confirmText: target ? '开放注册' : '关闭注册',
+    danger: target
+  })
   if (!ok) return
   registrationBusy.value = true
   try {

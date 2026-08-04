@@ -425,7 +425,11 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       agentTimeoutToday,
       activeAgents24h,
       recentAgentLogs24h,
-      wrapupLogs
+      wrapupLogs,
+      usageTokens7d,
+      usageCalls7d,
+      usageModels7d,
+      usageFailures7d
     ] = await Promise.all([
       // 总用户数（不含虚拟学习者）
       prisma.users.count({
@@ -601,6 +605,42 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         orderBy: { calledAt: 'desc' },
         take: 200,
         select: { output: true }
+      }),
+
+      // 近 7 天 LLM 用量聚合（token 总量，来自执行尝试表）
+      prisma.llm_execution_attempts.aggregate({
+        where: { startedAt: { gte: new Date(Date.now() - 7 * 86400000) } },
+        _sum: { totalTokens: true },
+        _count: true,
+      }),
+
+      // 近 7 天调用与失败数
+      prisma.agent_call_logs.groupBy({
+        by: ['success'],
+        where: {
+          ...businessExecutionWhere,
+          calledAt: { gte: new Date(Date.now() - 7 * 86400000) }
+        },
+        _count: true,
+      }),
+
+      // 近 7 天模型用量分布（按解析后的模型名）
+      prisma.llm_execution_attempts.groupBy({
+        by: ['resolvedModel'],
+        where: { startedAt: { gte: new Date(Date.now() - 7 * 86400000) } },
+        _sum: { totalTokens: true },
+        _count: true,
+      }),
+
+      // 近 7 天失败归因（errorCategory 分布）
+      prisma.llm_execution_attempts.groupBy({
+        by: ['errorCategory'],
+        where: {
+          startedAt: { gte: new Date(Date.now() - 7 * 86400000) },
+          errorCategory: { not: null },
+          success: false,
+        },
+        _count: true,
       })
     ]);
 
@@ -691,6 +731,32 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       };
     });
 
+    /* 近 7 天 LLM 用量与失败归因 */
+    const sum7d = (usageTokens7d as { _sum?: { totalTokens?: number | null } })._sum || {};
+    const calls7dTotal = usageCalls7d.reduce((acc, g) => acc + g._count, 0);
+    const calls7dFailed = usageCalls7d.find(g => g.success === false)?._count || 0;
+    const models7d = (usageModels7d || [])
+      .filter(g => g.resolvedModel && g.resolvedModel !== 'null')
+      .map(g => ({
+        model: String(g.resolvedModel),
+        calls: g._count,
+        tokens: g._sum.totalTokens || 0,
+      }))
+      .sort((a, b) => b.tokens - a.tokens)
+      .slice(0, 5);
+    const failures7d = (usageFailures7d || [])
+      .filter(g => g.errorCategory)
+      .map(g => ({ category: String(g.errorCategory), count: g._count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+    const usage = {
+      calls7d: calls7dTotal,
+      failed7d: calls7dFailed,
+      totalTokens7d: Number(sum7d.totalTokens || 0),
+      models7d,
+      failures7d,
+    };
+
     res.json({
       success: true,
       data: {
@@ -724,6 +790,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
           last24h: hourlyTrend,
           wrapup: wrapupSourceStats,
         },
+        usage,
         platformStats,
       },
     });

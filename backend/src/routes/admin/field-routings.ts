@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import systemPrisma from '../../config/system-database';
+import { logger } from '../../utils/logger';
 
 const router = Router();
 
@@ -131,7 +132,7 @@ async function recordChange(payload: {
     });
   } catch (err) {
     // 审计写失败不影响主流程
-    console.warn('[field-routings] audit write failed', err);
+    logger.warn('[field-routings] audit write failed', { error: err instanceof Error ? err.message : String(err) });
   }
 }
 

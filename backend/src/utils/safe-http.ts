@@ -36,6 +36,15 @@ export class SafeHttpAbortError extends Error {
   }
 }
 
+export class SafeHttpBodyLimitError extends Error {
+  code = 'BODY_LIMIT_EXCEEDED'
+
+  constructor(maxResponseBytes: number) {
+    super(`流式响应超过最大字节限制 ${maxResponseBytes}`)
+    this.name = 'SafeHttpBodyLimitError'
+  }
+}
+
 export type SafeHttpRequestOptions = {
   method?: Method
   headers?: Record<string, string>
@@ -54,6 +63,46 @@ export type SafeHttpResponse<T> = {
   headers: Record<string, string>
   data: T
   url: string
+}
+
+export type SafeHttpStreamRequestOptions = {
+  method?: Method
+  headers?: Record<string, string>
+  body?: unknown
+  /** 响应头（首字节）超时预算；达到该预算仍未返回响应头即判定超时 */
+  timeoutMs?: number
+  /** 空闲超时：两次响应体数据块的最大间隔，收到数据即重置 */
+  idleTimeoutMs?: number
+  /** 累计响应体字节上限，超过则中断并抛 SafeHttpBodyLimitError */
+  maxResponseBytes?: number
+  privateNetworkPolicy?: 'runtime' | 'public-only'
+  signal?: AbortSignal
+  /** 响应头就绪时回调（在响应体数据之前同步触发） */
+  onHeaders?: (status: number, headers: Record<string, string>) => void
+  /** 每个响应体数据块回调 */
+  onChunk?: (chunk: Buffer) => void
+}
+
+export type SafeHttpStreamResult = {
+  status: number
+  statusText: string
+  headers: Record<string, string>
+  url: string
+  totalBytes: number
+}
+
+function buildPinnedLookup(validated: { address: string; family: 4 | 6 }) {
+  return (
+    _hostname: string,
+    lookupOptions: { all?: boolean } | undefined,
+    callback: (...args: any[]) => void
+  ) => {
+    if (lookupOptions?.all) {
+      callback(null, [{ address: validated.address, family: validated.family }])
+      return
+    }
+    callback(null, validated.address, validated.family)
+  }
 }
 
 function parseIpv4(address: string): number[] | null {
@@ -406,13 +455,7 @@ export async function safeHttpRequest<T = unknown>(
       })
       const remainingMs = deadline - Date.now()
       if (remainingMs <= 0) throw new SafeHttpTimeoutError()
-      const lookupPinned = (_hostname: string, lookupOptions: { all?: boolean } | undefined, callback: (...args: any[]) => void) => {
-        if (lookupOptions?.all) {
-          callback(null, [{ address: validated.address, family: validated.family }])
-          return
-        }
-        callback(null, validated.address, validated.family)
-      }
+      const lookupPinned = buildPinnedLookup(validated)
       const config: AxiosRequestConfig = {
         method: options.method || 'GET',
         url: validated.url.toString(),
@@ -467,6 +510,148 @@ export async function safeHttpRequest<T = unknown>(
     throw error
   } finally {
     clearTimeout(timeout)
+    options.signal?.removeEventListener('abort', abortFromCaller)
+  }
+}
+
+/**
+ * 流式 HTTP 请求（SSE / chunked 透传）。
+ *
+ * 与 safeHttpRequest 保持同等安全基线：validateExternalUrl 校验、
+ * DNS pinning（防重绑定）、私网策略、调用方 AbortSignal 传播、禁止跨源重定向。
+ *
+ * 超时模型区别于缓冲式请求的单死线：
+ * - timeoutMs 覆盖「请求发出 → 响应头就绪」（TTFT 预算）
+ * - idleTimeoutMs 覆盖「响应体数据块之间的最大间隔」，收到数据即重置
+ * - 累计字节超过 maxResponseBytes 时中断并抛 SafeHttpBodyLimitError
+ *
+ * 响应头先于响应体到达：onHeaders 在首个数据块前同步触发，调用方可在
+ * 收到错误状态码时决定是否继续消费响应体。
+ */
+export async function safeHttpStreamRequest(
+  rawUrl: string,
+  options: SafeHttpStreamRequestOptions = {}
+): Promise<SafeHttpStreamResult> {
+  const timeoutMs = Number.isFinite(options.timeoutMs) && Number(options.timeoutMs) > 0
+    ? Math.min(Math.floor(Number(options.timeoutMs)), SAFE_HTTP_MAX_TIMEOUT_MS)
+    : DEFAULT_TIMEOUT_MS
+  const idleTimeoutMs = Number.isFinite(options.idleTimeoutMs) && Number(options.idleTimeoutMs) > 0
+    ? Math.min(Math.floor(Number(options.idleTimeoutMs)), SAFE_HTTP_MAX_TIMEOUT_MS)
+    : 60_000
+  const maxResponseBytes = Number.isFinite(options.maxResponseBytes) && Number(options.maxResponseBytes) > 0
+    ? Math.floor(Number(options.maxResponseBytes))
+    : 20 * 1024 * 1024
+
+  const abortController = new AbortController()
+  let timedOut = false
+  let abortedByCaller = Boolean(options.signal?.aborted)
+  let bodyLimitExceeded = false
+  const abortFromCaller = () => {
+    abortedByCaller = true
+    abortController.abort()
+  }
+  options.signal?.addEventListener('abort', abortFromCaller, { once: true })
+  if (abortedByCaller) abortController.abort()
+
+  const ttftTimer = setTimeout(() => {
+    timedOut = true
+    abortController.abort()
+  }, timeoutMs)
+  ttftTimer.unref?.()
+
+  try {
+    const validated = await validateExternalUrl(rawUrl, {
+      privateNetworkPolicy: options.privateNetworkPolicy,
+      signal: abortController.signal
+    })
+    const lookupPinned = buildPinnedLookup(validated)
+    const config: AxiosRequestConfig = {
+      method: options.method || 'POST',
+      url: validated.url.toString(),
+      headers: options.headers,
+      data: options.body,
+      signal: abortController.signal,
+      responseType: 'stream',
+      maxRedirects: 0,
+      validateStatus: () => true,
+      proxy: false,
+      httpAgent: new http.Agent({ lookup: lookupPinned }),
+      httpsAgent: new https.Agent({ lookup: lookupPinned })
+    }
+
+    const response = await waitForAbortable(
+      axios.request(config),
+      abortController.signal
+    )
+    clearTimeout(ttftTimer)
+    const headers = normalizeHeaders(response.headers)
+    options.onHeaders?.(response.status, headers)
+
+    const stream: NodeJS.ReadableStream = response.data
+    return await new Promise<SafeHttpStreamResult>((resolve, reject) => {
+      let idleTimer: NodeJS.Timeout | null = null
+      let totalBytes = 0
+      let settled = false
+
+      const cleanup = () => {
+        if (idleTimer) clearTimeout(idleTimer)
+        abortController.signal.removeEventListener('abort', onAbort)
+      }
+      const settle = (action: () => void) => {
+        if (settled) return
+        settled = true
+        action()
+      }
+      const fail = (error: Error) => settle(() => {
+        cleanup()
+        if (timedOut) reject(new SafeHttpTimeoutError())
+        else if (abortedByCaller) reject(new SafeHttpAbortError())
+        else if (bodyLimitExceeded) reject(new SafeHttpBodyLimitError(maxResponseBytes))
+        else reject(error)
+      })
+      const resetIdle = () => {
+        if (idleTimer) clearTimeout(idleTimer)
+        idleTimer = setTimeout(() => {
+          timedOut = true
+          abortController.abort()
+        }, idleTimeoutMs)
+        idleTimer.unref?.()
+      }
+      const onAbort = () => fail(new SafeHttpAbortError())
+
+      abortController.signal.addEventListener('abort', onAbort)
+      resetIdle()
+      stream.on('data', (chunk: Buffer) => {
+        totalBytes += chunk.length
+        if (totalBytes > maxResponseBytes) {
+          bodyLimitExceeded = true
+          abortController.abort()
+          return
+        }
+        options.onChunk?.(chunk)
+        resetIdle()
+      })
+      stream.on('end', () => {
+        settle(() => {
+          cleanup()
+          resolve({
+            status: response.status,
+            statusText: response.statusText,
+            headers,
+            url: validated.url.toString(),
+            totalBytes
+          })
+        })
+      })
+      stream.on('error', (error) => fail(error))
+    })
+  } catch (error) {
+    if (timedOut) throw new SafeHttpTimeoutError()
+    if (abortedByCaller) throw new SafeHttpAbortError()
+    if (bodyLimitExceeded) throw new SafeHttpBodyLimitError(maxResponseBytes)
+    throw error
+  } finally {
+    clearTimeout(ttftTimer)
     options.signal?.removeEventListener('abort', abortFromCaller)
   }
 }

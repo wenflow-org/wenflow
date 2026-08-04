@@ -4,9 +4,10 @@
     <div class="ud-id">
       <span class="ud-avatar">{{ d.name.charAt(0) }}</span>
       <div>
-        <h3>{{ d.name }}</h3>
+        <h1 class="ud-name">{{ d.name }}</h1>
         <span class="ud-sub">{{ d.email }} · {{ d.role }} · 加入 {{ d.joined }}</span>
       </div>
+      <button type="button" class="ud-learner-link" @click="toLearner">查看学习者画像 →</button>
     </div>
 
     <div class="ud-stats">
@@ -57,7 +58,7 @@
       <p class="ud-grant__copy">
         仅当用户明确授予协助许可后，才能打开开发调试站进入该用户视角排查问题。
       </p>
-      <div v-if="grantMessage" class="ud-grant__notice">{{ grantMessage }}</div>
+      <div v-if="grantMessage" class="ud-grant__notice" :class="grantMsgTone">{{ grantMessage }}</div>
       <div class="ud-grant__grid">
         <div><span>开放范围</span><strong>{{ grantScopeLabel }}</strong></div>
         <div><span>到期时间</span><strong>{{ grantExpiresLabel }}</strong></div>
@@ -90,7 +91,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { subPage, closeSubPage, userDetails, dataSource } from './mockStore'
+import { subPage, closeSubPage, openSubPage, userDetails, dataSource } from './mockStore'
 import { liveUsers, liveGetUserDetail, timeAgo, errMsg } from './mockLive'
 import { adminUsersApi } from '@/api/adminApi'
 import { getProjectionGrantStatus, normalizeProjectionGrant, type ProjectionGrant } from '@/api/userCustom'
@@ -109,10 +110,17 @@ interface Detail {
 const liveDetail = ref<Detail | null>(null)
 const isLive = computed(() => dataSource.value === 'live')
 
+function toLearner() {
+  const id = subPage.value?.id
+  if (id) openSubPage('learner', id)
+}
+
 const projectionGrant = ref<ProjectionGrant | null>(null)
 const grantLoading = ref(false)
 const grantOpening = ref(false)
 const grantMessage = ref('')
+/** 许可消息语义色：info（蓝色提示）/ error（红色错误） */
+const grantMsgTone = ref('ud-grant__notice--info')
 
 const grantStatus = computed(() => getProjectionGrantStatus(projectionGrant.value))
 const grantStatusLabel = computed(() => {
@@ -146,10 +154,14 @@ async function loadGrant() {
     const list = Array.isArray(body) ? body : body?.items || body?.grants || (body ? [body] : [])
     const first = list[0] || null
     projectionGrant.value = normalizeProjectionGrant(first) || normalizeProjectionGrant(body)
-    if (!projectionGrant.value) grantMessage.value = '当前还没有生效中的协助授权。'
+    if (!projectionGrant.value) {
+      grantMessage.value = '当前还没有生效中的协助授权。'
+      grantMsgTone.value = 'ud-grant__notice--info'
+    }
   } catch (e) {
     projectionGrant.value = null
     grantMessage.value = `许可读取失败：${errMsg(e)}`
+    grantMsgTone.value = 'ud-grant__notice--error'
   } finally {
     grantLoading.value = false
   }
@@ -180,6 +192,7 @@ async function openDebugStation() {
     window.open('/admin/console', '_blank')
   } catch (e) {
     grantMessage.value = `打开失败：${errMsg(e)}`
+    grantMsgTone.value = 'ud-grant__notice--error'
   } finally {
     grantOpening.value = false
   }
@@ -268,6 +281,20 @@ const d = computed<Detail | undefined>(() => {
   width: fit-content;
 }
 .ud-id { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.ud-learner-link {
+  margin-left: auto;
+  padding: 6px 14px;
+  border: 1px solid rgba(52, 120, 246, 0.28);
+  border-radius: 999px;
+  background: #eef5ff;
+  color: var(--mk-blue, #3478f6);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.12s ease;
+}
+.ud-learner-link:hover { background: #dbeafe; border-color: rgba(52, 120, 246, 0.45); }
 .ud-avatar {
   width: 46px;
   height: 46px;
@@ -280,6 +307,7 @@ const d = computed<Detail | undefined>(() => {
   font-weight: 700;
 }
 .ud-id h3 { margin: 0; font-size: 18px; }
+.ud-name { margin: 0; font-size: 18px; line-height: 1.4; }
 .ud-sub { color: var(--mk-faint); font-size: 12px; }
 
 .ud-stats {
@@ -350,6 +378,10 @@ const d = computed<Detail | undefined>(() => {
   background: #eef5ff;
   color: var(--mk-blue);
   font-size: 12px;
+}
+.ud-grant__notice--error {
+  background: var(--mk-red-bg, #fef2f2);
+  color: var(--mk-red, #dc2626);
 }
 .ud-grant__grid {
   display: grid;

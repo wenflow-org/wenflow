@@ -41,7 +41,7 @@ const successTrace: TraceSpan[] = [
   { id: 's2', traceId: 'tr:8f31a2', kind: 'call', agent: 'goal-conversation', stage: '目标收集', title: 'Prompt 调用', startMs: 120, durationMs: 1100, status: 'ok', detail: 'deepseek-v4-flash · P 860 / C 204' },
   { id: 's3', traceId: 'tr:8f31a2', kind: 'call', agent: 'goal-profile-inference', stage: '目标收集', title: '画像推断调用', startMs: 1260, durationMs: 890, status: 'ok', detail: 'deepseek-v4-flash · P 620 / C 148' },
   { id: 's4', traceId: 'tr:8f31a2', kind: 'flow', agent: 'path-agent', stage: '核心路径生成', title: '路径草稿就绪', startMs: 2260, durationMs: 5100, status: 'ok', detail: '零基础 · 每周 4 小时 · 4 阶段' },
-  { id: 's5', traceId: 'tr:8f31a2', kind: 'call', agent: 'generic-planner', stage: '核心路径生成', title: '规划调用', startMs: 2380, durationMs: 4820, status: 'ok', detail: 'deepseek-v4-pro · P 2040 / C 1130', payload: '{\n  "stages": 4,\n  "milestones": 12,\n  "estimatedWeeks": 6\n}' },
+  { id: 's5', traceId: 'tr:8f31a2', kind: 'call', agent: 'path-planning', stage: '核心路径生成', title: '规划调用', startMs: 2380, durationMs: 4820, status: 'ok', detail: 'deepseek-v4-pro · P 2040 / C 1130', payload: '{\n  "stages": 4,\n  "milestones": 12,\n  "estimatedWeeks": 6\n}' },
   { id: 's6', traceId: 'tr:8f31a2', kind: 'flow', agent: 'path-agent', stage: '阶段任务设计', title: '路径生成完成', startMs: 7360, durationMs: 2600, status: 'ok', detail: '18 任务 · 总用时 9.9s' }
 ]
 
@@ -84,7 +84,7 @@ const planningTrace: TraceSpan[] = [
 const backgroundSpans: TraceSpan[] = [
   { id: 'b1', traceId: 'tr:8f319e', kind: 'call', agent: 'snapshot-refresh', stage: '状态回写', title: '快照刷新', startMs: 0, durationMs: 210, status: 'ok', detail: 'user_1784… · 210ms' },
   { id: 'b2', traceId: 'tr:8f319b', kind: 'call', agent: 'session-wrapup', stage: '课后产出', title: '产出写入', startMs: 0, durationMs: 1600, status: 'ok', detail: '3 条笔记 · 1.6s' },
-  { id: 'b3', traceId: 'tr:8f3188', kind: 'call', agent: 'basic-generator', stage: '内容生成', title: '输出接近上限', startMs: 0, durationMs: 2100, status: 'warn', detail: '3800/4000 tokens' },
+  { id: 'b3', traceId: 'tr:8f3188', kind: 'call', agent: 'learning-turn', stage: '教学执行', title: '输出接近上限', startMs: 0, durationMs: 2100, status: 'warn', detail: '3800/4000 tokens' },
   { id: 'b4', traceId: 'tr:8f3185', kind: 'call', agent: 'teaching-round', stage: '教学执行', title: '教学调用', startMs: 0, durationMs: 9800, status: 'ok', detail: '阶段 1 · 提问训练' },
   { id: 'b5', traceId: 'tr:8f3182', kind: 'call', agent: 'state-aggregator', stage: '状态回写', title: '状态聚合', startMs: 0, durationMs: 340, status: 'ok', detail: 'user_2211 · 340ms' }
 ]
@@ -134,7 +134,6 @@ export const skillProfiles: SkillProfile[] = [
   { id: 'goal-profile-inference', name: '目标画像推断', agentId: 'goal-agent', agentName: '目标 Agent', category: 'analysis', promptVersion: 'v2.1 · 已生效', description: '从对话推断学习者的基础、偏好与约束。' },
   { id: 'goal-understanding-composer', name: '目标理解合成', agentId: 'goal-agent', agentName: '目标 Agent', category: 'analysis', promptVersion: 'v1.4 · 已生效', description: '把多轮对话合成为结构化的目标理解。' },
   { id: 'dialogue-concept-extractor', name: '对话概念抽取', agentId: 'goal-agent', agentName: '目标 Agent', category: 'analysis', promptVersion: 'v2.0 · 已生效', description: '从对话中抽取候选学习概念。' },
-  { id: 'generic-planner', name: '通用路径规划', agentId: 'path-agent', agentName: '路径 Agent', category: 'generation', promptVersion: 'v4.0 · 已生效', description: '把目标拆解为阶段与里程碑。' },
   { id: 'path-scene-framer', name: '路径场景定帧', agentId: 'path-agent', agentName: '路径 Agent', category: 'analysis', promptVersion: 'v1.1 · 已生效', description: '确定路径的使用场景与节奏假设。' },
   { id: 'stage-designer', name: '阶段设计', agentId: 'path-agent', agentName: '路径 Agent', category: 'generation', promptVersion: 'v1.8 · 草案', description: '展开每个阶段的任务与验收标准。' },
   { id: 'teaching-round', name: '教学回合', agentId: 'teaching-agent', agentName: '教学 Agent', category: 'teaching', promptVersion: 'v5.1 · 已生效', description: '单轮教学：讲解、练习、反馈。' },
@@ -144,8 +143,7 @@ export const skillProfiles: SkillProfile[] = [
   { id: 'snapshot-refresh', name: '快照刷新', agentId: 'learner-agent', agentName: '学习者 Agent', category: 'analysis', promptVersion: 'v1.5 · 已生效', description: '聚合行为数据，重算学习者快照。' },
   { id: 'knowledge-distill', name: '知识沉淀', agentId: 'learner-agent', agentName: '学习者 Agent', category: 'analysis', promptVersion: 'v0.9 · 草案', description: '把掌握的知识点沉淀进概念图。' },
   { id: 'turn-simulator', name: '回合模拟', agentId: 'virtual-agent', agentName: '虚拟学习者 Agent', category: 'simulation', promptVersion: 'v1.0 · 已生效', description: '以虚拟学习者身份模拟教学回合。' },
-  { id: 'path-evaluator', name: '路径评估', agentId: 'virtual-agent', agentName: '虚拟学习者 Agent', category: 'simulation', promptVersion: 'v0.8 · 草案', description: '辅助调试：评估生成路径的可学性。' },
-  { id: 'basic-generator', name: '基础内容生成', agentId: 'teaching-agent', agentName: '教学 Agent', category: 'generation', promptVersion: 'generated · 默认草案', description: '通用生成兜底。' }
+  { id: 'path-evaluator', name: '路径评估', agentId: 'virtual-agent', agentName: '虚拟学习者 Agent', category: 'simulation', promptVersion: 'v0.8 · 草案', description: '辅助调试：评估生成路径的可学性。' }
 ]
 
 export interface SkillStat {
@@ -219,12 +217,12 @@ export function investigateAgent(agentId: string) {
   intent.scene = 'execution-logs'
 }
 
-/** 任意位置点 Trace → 事件中心瀑布视图 */
+/** 任意位置点 Trace → 独立 Trace 瀑布页（预填该链路） */
 export function openTrace(traceId: string) {
   intent.traceId = traceId
   intent.agentFilter = ''
   intent.statusFilter = ''
-  intent.scene = 'event-center'
+  intent.scene = 'trace-waterfall'
 }
 
 /** 打开 Skill 详情抽屉（不切换场景） */

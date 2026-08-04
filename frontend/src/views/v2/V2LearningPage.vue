@@ -86,7 +86,7 @@
             </div>
           </template>
 
-          <div v-if="typing" class="msg msg--ai">
+          <div v-if="typing && streamingBubbleIndex === -1" class="msg msg--ai">
             <span class="msg__avatar"><img src="/favicon.png" alt="问流" /></span>
             <div class="msg__bubble msg__bubble--typing"><i></i><i></i><i></i></div>
           </div>
@@ -230,6 +230,7 @@ import DOMPurify, { type Config as DOMPurifyConfig } from 'dompurify';
 import request from '@/utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import AiContentNote from '@/components/AiContentNote.vue';
+import { toast } from '@/utils/toast';
 import './v2.css';
 import { unwrap } from './unwrap';
 
@@ -305,8 +306,19 @@ async function sendPeer() {
   peerItems.value.push({ role: 'me', text: t, time: nowTime() });
   scrollPeerDown();
   peerSending.value = true;
+  // peer skill 为 JSON 输出（无 delta）：等待期间仅显示 typing 指示器，final 后一次性上屏
   try {
-    const r = await aiTeachingAPI.sendPeerMessage(session.value.sessionId, t) as unknown as Record<string, any>;
+    let r: Record<string, any>;
+    try {
+      peerStreamAbort = new AbortController();
+      r = await aiTeachingAPI.streamSendPeerMessage(session.value.sessionId, t, { signal: peerStreamAbort.signal }) as unknown as Record<string, any>;
+    } catch (peerError) {
+      // 传输层失败且未收到任何内容：回退非流式重发；业务失败交给外层报错
+      if (!(peerError as { transport?: boolean })?.transport) throw peerError;
+      r = await aiTeachingAPI.sendPeerMessage(session.value.sessionId, t) as unknown as Record<string, any>;
+    } finally {
+      peerStreamAbort = null;
+    }
     if (r?.peerResponse) {
       peerItems.value.push({ role: 'peer', text: String(r.peerResponse), time: nowTime() });
     }
@@ -357,6 +369,16 @@ async function boot() {
       knowledgePoints.value = s.knowledgePoints;
       showKpActions.value = true;
     }
+    // 会话来源提示：恢复上次课堂 / 已学完重开（避免「从头开始」困惑）
+    if (s.mode === 'resumed') {
+      toast.info('已恢复上次课堂');
+    } else if (s.mode === 'new') {
+      aiTeachingAPI.getLatestTaskEvaluation(taskId)
+        .then((latest) => {
+          if (latest?.sessionId) toast.info('本课已学过，本次将重新开始');
+        })
+        .catch(() => {});
+    }
     initing.value = false;
   } catch (e: any) {
     initError.value = e?.response?.data?.error?.message || '开课失败，请重试';
@@ -366,6 +388,16 @@ async function boot() {
 
 /* ---------- 对话 ---------- */
 let lastUserText = '';
+/** 流式发送中的 AbortController：离页/卸载时中止，触发后端 res close 止损上游生成 */
+let streamAbort: AbortController | null = null;
+/** 伴学窗流式发送的独立 AbortController（与主对话互不干扰） */
+let peerStreamAbort: AbortController | null = null;
+/**
+ * 流式内容气泡下标（-1 = 尚无气泡）：
+ * learning-turn 为 JSON 输出无 delta，期间仅显示 typing 指示器；首个 delta 到达时才建气泡，
+ * 避免「空气泡 + typing 指示器」双气泡。
+ */
+const streamingBubbleIndex = ref(-1);
 
 async function send() {
   const t = input.value.trim();
@@ -387,13 +419,50 @@ async function doSend(text: string) {
   typing.value = true;
   scrollDown();
   try {
-    const r = await aiTeachingAPI.sendMessage(session.value.sessionId, text, session.value.revision) as unknown as Record<string, any>;
+    let r: Record<string, any>;
+    try {
+      streamAbort = new AbortController();
+      r = await aiTeachingAPI.streamSendMessage(session.value.sessionId, text, session.value.revision, {
+        signal: streamAbort.signal,
+        onDelta: (delta) => {
+          // 首个 delta 到达时才建 AI 气泡，避免 JSON 输出（无 delta）产生空气泡
+          let m = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
+          if (!m || m.role !== 'ai') {
+            msgs.value.push({ role: 'ai', text: '', time: nowTime() });
+            streamingBubbleIndex.value = msgs.value.length - 1;
+            m = msgs.value[streamingBubbleIndex.value];
+          }
+          if (m) {
+            m.text += delta;
+            scrollDown();
+          }
+        },
+        onRestart: () => {
+          const m = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
+          if (m?.role === 'ai') m.text = '';
+        },
+      }) as unknown as Record<string, any>;
+    } catch (streamError) {
+      // 传输层失败且未收到任何内容：安全回退非流式重发；业务失败或已收到部分内容则交给外层报错
+      if (!(streamError as { transport?: boolean })?.transport) throw streamError;
+      if (streamingBubbleIndex.value >= 0) msgs.value.splice(streamingBubbleIndex.value, 1);
+      streamingBubbleIndex.value = -1;
+      r = await aiTeachingAPI.sendMessage(session.value.sessionId, text, session.value.revision) as unknown as Record<string, any>;
+    } finally {
+      streamAbort = null;
+    }
     session.value.revision = r.revision ?? session.value.revision + 1;
     // 导师回复（附带本轮捕获到的卡点，作为气泡下方的依据 chip）
     const confusion = Array.isArray(r.analysis?.confusionPoints)
       ? r.analysis.confusionPoints.map((p: unknown) => String(p || '').trim()).filter(Boolean).slice(0, 2)
       : [];
-    if (r.aiResponse) msgs.value.push({ role: 'ai', text: r.aiResponse, time: nowTime(), confusion });
+    const aiMsg = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
+    if (aiMsg?.role === 'ai') {
+      aiMsg.text = r.aiResponse || aiMsg.text;
+      aiMsg.confusion = confusion;
+    } else if (r.aiResponse) {
+      msgs.value.push({ role: 'ai', text: r.aiResponse, time: nowTime(), confusion });
+    }
     // 伴学触发：进独立浮动窗，不占主对话区
     if (r.peerTriggered && r.peerMessage) {
       peerItems.value.push({ role: 'peer', text: String(r.peerMessage), time: nowTime() });
@@ -415,8 +484,11 @@ async function doSend(text: string) {
       await finish('complete_task');
     }
   } catch {
+    // 流式气泡可能已有部分内容：移除后展示统一失败气泡
+    if (streamingBubbleIndex.value >= 0) msgs.value.splice(streamingBubbleIndex.value, 1);
     msgs.value.push({ role: 'ai', text: '这次回复失败了，点下方「重试」。', time: nowTime(), failed: true });
   } finally {
+    streamingBubbleIndex.value = -1;
     typing.value = false;
     scrollDown();
   }
@@ -550,18 +622,39 @@ function goEvaluation() {
 /* 关闭标签页/整页刷新时 Vue 不会走 onBeforeUnmount，
    用 pagehide + sendBeacon 兜底记暂停，避免时长统计把闲置时间算进去。 */
 function onPageHide() {
+  streamAbort?.abort();
+  peerStreamAbort?.abort();
   if (!session.value || completed.value) return;
   const payload = JSON.stringify({ reason: 'pagehide', revision: session.value.revision });
   const blob = new Blob([payload], { type: 'application/json' });
   navigator.sendBeacon?.(`/api/ai-teaching/sessions/${session.value.sessionId}/pause`, blob);
 }
 
+/* 切换标签页/窗口：隐藏时暂停、切回可见时恢复，学习时长只计页面激活时间 */
+let pauseSentAt = 0;
+function onVisibilityChange() {
+  if (!session.value || completed.value) return;
+  const sid = session.value.sessionId;
+  const revision = session.value.revision;
+  if (document.hidden) {
+    pauseSentAt = Date.now();
+    aiTeachingAPI.pauseSession(sid, 'hidden', revision).catch(() => {});
+  } else {
+    aiTeachingAPI.resumeSession(sid, revision).catch(() => {});
+    pauseSentAt = 0;
+  }
+}
+
 onMounted(() => {
   boot();
   window.addEventListener('pagehide', onPageHide);
+  document.addEventListener('visibilitychange', onVisibilityChange);
 });
 onBeforeUnmount(() => {
+  streamAbort?.abort();
+  peerStreamAbort?.abort();
   window.removeEventListener('pagehide', onPageHide);
+  document.removeEventListener('visibilitychange', onVisibilityChange);
   if (session.value && !completed.value) {
     aiTeachingAPI.pauseSession(session.value.sessionId, 'pagehide', session.value.revision).catch(() => {});
   }

@@ -635,7 +635,7 @@ export class LearningStateService {
     // 5. 保存到数据库
     await this.saveMetrics(userId, metrics, inputs);
 
-    logger.info(`[LearningState] 用户 ${userId}: LSS=${metrics.lss.toFixed(2)}, KTL=${metrics.ktl.toFixed(2)}, LF=${metrics.lf.toFixed(2)}, LSB=${metrics.lsb.toFixed(2)}`);
+    logger.debug(`[LearningState] 用户 ${userId}: LSS=${metrics.lss.toFixed(2)}, KTL=${metrics.ktl.toFixed(2)}, LF=${metrics.lf.toFixed(2)}, LSB=${metrics.lsb.toFixed(2)}`);
 
     return metrics;
   }

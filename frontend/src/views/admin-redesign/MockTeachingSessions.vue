@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="mk-page">
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
@@ -30,7 +30,7 @@
         <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}</span>
       </div>
 
-      <div class="ts-scroll">
+      <div class="mk-table-scroll">
         <table v-if="filtered.length" class="mk-table">
           <thead>
             <tr>
@@ -80,8 +80,8 @@
 
     <!-- 详情抽屉 -->
     <Teleport to="body">
-      <div v-if="detail" class="ts-mask" @mousedown.self="detail = null">
-        <aside class="ts-panel" role="dialog" aria-label="会话详情">
+      <div v-if="detail" ref="maskRef" class="ts-mask">
+        <aside ref="panelRef" class="ts-panel" role="dialog" aria-label="会话详情">
           <header class="ts-panel__head">
             <div class="ts-panel__title">
               <span class="mk-badge" :class="attentionBadge(detail.attention)">
@@ -151,6 +151,8 @@
 import { computed, ref, watch } from 'vue'
 import { dataSource } from './mockStore'
 import { timeAgo } from './mockLive'
+import { statusText } from './statusText'
+import { useOverlay, useMaskClose } from './useOverlay'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 
@@ -333,6 +335,10 @@ const statusTitle = computed(() =>
 /* 详情 */
 const detail = ref<Row | null>(null)
 useEscape(() => !!detail.value, () => { detail.value = null })
+const panelRef = ref<HTMLElement | null>(null)
+const maskRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => !!detail.value), panelRef)
+useMaskClose(maskRef, () => { detail.value = null })
 const openCards = ref<Set<string>>(new Set())
 
 function openDetail(r: Row) {
@@ -349,9 +355,9 @@ function toggleCard(key: string) {
 
 const isLong = (s?: string) => (s || '').length > 120
 
-const statusText = (s: string) => ({ completed: '已完成', in_progress: '进行中', active: '进行中', timeout: '超时', error: '错误' }[s] || s)
+/* 状态映射统一走共享字典（覆盖 paused / superseded / discarded 等全部枚举） */
 const statusBadge = (s: string) =>
-  s === 'completed' ? 'mk-badge--ok' : s === 'error' || s === 'timeout' ? 'mk-badge--bad' : 'mk-badge--info'
+  s === 'completed' || s === 'succeeded' ? 'mk-badge--ok' : s === 'error' || s === 'timeout' || s === 'discarded' ? 'mk-badge--bad' : 'mk-badge--info'
 const attentionBadge = (a: string) => (a === 'high' ? 'mk-badge--bad' : a === 'medium' ? 'mk-badge--warn' : 'mk-badge--ok')
 const taskTypeText = (t: string) =>
   ({ reading: '阅读', practice: '练习', project: '项目', quiz: '测验', acquire: '获取', deconstruct: '拆解', model: '建模', execute: '执行', diagnose: '诊断', refine: '打磨', consolidate: '巩固' }[t] || t || '任务')
@@ -359,8 +365,6 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
 </script>
 
 <style scoped>
-.ts-scroll { max-height: 68vh; overflow-y: auto; }
-.ts-scroll thead th { position: sticky; top: 0; background: var(--mk-surface); z-index: 1; }
 .ts-row { cursor: pointer; }
 .ts-row:hover { background: #f6f9ff; }
 .ts-go { color: var(--mk-faint); font-weight: 700; }
@@ -369,7 +373,7 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
 .ts-mask {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: var(--mk-z-drawer);
   background: rgba(15, 23, 42, 0.36);
   display: flex;
   justify-content: flex-end;
@@ -383,6 +387,8 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
   grid-template-rows: auto 1fr;
   animation: ts-in 0.2s ease;
 }
+
+/* 4K 断点见文件末尾（需在基础样式之后定义） */
 @keyframes ts-in { from { transform: translateX(30px); opacity: 0; } }
 .ts-panel__head {
   display: flex;
@@ -406,6 +412,10 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
 .ts-facts > div { display: grid; gap: 2px; }
 .ts-facts span { font-size: 11px; color: #8492ab; font-weight: 600; }
 .ts-facts strong { font-size: 12.5px; }
+
+@media (max-width: 560px) {
+  .ts-facts { grid-template-columns: repeat(2, 1fr); }
+}
 
 .ts-section { display: grid; gap: 8px; }
 .ts-section h4 {
@@ -470,5 +480,35 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* 4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
+@media (min-width: 2000px) {
+  .ts-panel { width: min(700px, 100vw); }
+  .ts-panel__head { padding: 20px 24px; }
+  .ts-panel__title h3 { font-size: 19px; }
+  .ts-panel__id { font-size: 12.5px; }
+  .ts-panel__body { padding: 20px 24px; }
+  .ts-facts span { font-size: 13px; }
+  .ts-facts strong { font-size: 14.5px; }
+  .ts-section h4 { font-size: 13px; }
+  .ts-card p { font-size: 14.5px; }
+  .ts-card span { font-size: 13px; }
+  .ts-json { font-size: 12.5px; }
+  .ts-more { font-size: 13.5px; }
+}
+@media (min-width: 2800px) {
+  .ts-panel { width: min(880px, 100vw); }
+  .ts-panel__head { padding: 24px 30px; }
+  .ts-panel__title h3 { font-size: 23px; }
+  .ts-panel__id { font-size: 15px; }
+  .ts-panel__body { padding: 24px 30px; }
+  .ts-facts span { font-size: 15.5px; }
+  .ts-facts strong { font-size: 17px; }
+  .ts-section h4 { font-size: 15.5px; }
+  .ts-card p { font-size: 17px; }
+  .ts-card span { font-size: 15.5px; }
+  .ts-json { font-size: 15px; }
+  .ts-more { font-size: 16px; }
 }
 </style>

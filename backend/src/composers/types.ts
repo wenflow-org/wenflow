@@ -4,6 +4,9 @@ export interface PromptDriftInfo {
   dbHash: string;
 }
 
+// 与 gateway/api-gateway/context 的 PromptStreamEvent 对齐
+import type { PromptStreamEvent } from '../gateway/api-gateway/context';
+
 export interface PromptCallContext {
   userId?: string;
   sessionId?: string;
@@ -36,6 +39,13 @@ export interface PromptCallContext {
     temperature?: number | null;
     maxTokens?: number | null;
   };
+  /**
+   * 流式 opt-in：为 true 且提供 onStream 时，markdown/text 类输出按增量透传；
+   * 优先级高于 ALS 中的 streamRequest（请求级意向由 HTTP 路由注入）。
+   */
+  stream?: boolean;
+  /** 流式事件回调（delta/restart/error）；缺省时回退到 ALS streamRequest.onStream */
+  onStream?: (event: PromptStreamEvent) => void;
 }
 
 export interface PromptAttemptTrace {

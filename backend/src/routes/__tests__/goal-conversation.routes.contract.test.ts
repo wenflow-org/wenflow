@@ -226,4 +226,88 @@ describe('goal-conversation public route contracts', () => {
     expect(response.data).not.toHaveProperty('runtimeEnvelope');
     expect(response.data).not.toHaveProperty('meta');
   });
+
+  describe('SSE 流式', () => {
+    function createSseResponse() {
+      const writes: string[] = [];
+      const res: any = {
+        status: jest.fn(),
+        json: jest.fn(),
+        setHeader: jest.fn(),
+        flushHeaders: jest.fn(),
+        write: jest.fn((chunk: string) => { writes.push(chunk); return true; }),
+        end: jest.fn(),
+        destroyed: false,
+        writableEnded: false,
+      };
+      res.status.mockReturnValue(res);
+      res.json.mockReturnValue(res);
+      return { res, writes };
+    }
+
+    it('Accept text/event-stream 时输出 final/done 事件并转发 orchestrator', async () => {
+      mockRequirementOrchestrator.start.mockResolvedValue(goalResult());
+      const handler = getRouteHandler('/start');
+      const { res, writes } = createSseResponse();
+
+      await handler({
+        user: { userId: 'user-1' },
+        headers: { accept: 'text/event-stream' },
+        body: { input: { text: '学习 TypeScript' } },
+      }, res);
+
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'text/event-stream; charset=utf-8');
+      expect(res.flushHeaders).toHaveBeenCalled();
+      expect(mockRequirementOrchestrator.start).toHaveBeenCalledWith('user-1', '学习 TypeScript', { contextMode: 'recent' });
+      const joined = writes.join('');
+      expect(joined).toContain('event: final\n');
+      expect(joined).toContain('"userVisible":"我会先了解你的学习背景。"');
+      expect(joined).toContain('event: done\ndata: {}');
+      expect(res.end).toHaveBeenCalled();
+    });
+
+    it('SSE 失败时 error 事件携带 422 恢复信封', async () => {
+      mockRequirementOrchestrator.start.mockRejectedValue(Object.assign(
+        new Error('STRUCTURED_OUTPUT_INVALID'),
+        { status: 422, code: 'STRUCTURED_OUTPUT_INVALID', result: goalResult({ userVisible: '部分产出可用' }) }
+      ));
+      const handler = getRouteHandler('/start');
+      const { res, writes } = createSseResponse();
+
+      await handler({
+        user: { userId: 'user-1' },
+        headers: { accept: 'text/event-stream' },
+        body: { input: { text: '学习 TypeScript' } },
+      }, res);
+
+      const joined = writes.join('');
+      expect(joined).toContain('event: error\n');
+      expect(joined).toContain('STRUCTURED_OUTPUT_INVALID');
+      expect(joined).toContain('"data":');
+      expect(joined).toContain('"userVisible":"部分产出可用"');
+      expect(res.end).toHaveBeenCalled();
+    });
+
+    it('reply 端点 SSE 同样生效（含 confirmProposal 透传）', async () => {
+      mockRequirementOrchestrator.step.mockResolvedValue(goalResult());
+      const handler = getRouteHandler('/:conversationId/reply');
+      const { res, writes } = createSseResponse();
+
+      await handler({
+        user: { userId: 'user-1' },
+        params: { conversationId: 'conversation-1' },
+        headers: { accept: 'text/event-stream' },
+        body: { input: { text: '每周五小时' }, confirmProposal: true },
+      }, res);
+
+      expect(mockRequirementOrchestrator.step).toHaveBeenCalledWith('conversation-1', '每周五小时', 'user-1', {
+        contextMode: 'recent',
+        confirmProposal: true,
+      });
+      const joined = writes.join('');
+      expect(joined).toContain('event: final\n');
+      expect(joined).toContain('event: done\ndata: {}');
+      expect(res.end).toHaveBeenCalled();
+    });
+  });
 });

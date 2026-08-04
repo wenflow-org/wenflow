@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="mshell">
     <!-- 迷你侧边栏（同时是导航与「侧栏再设计」演示） -->
     <aside class="mshell__side">
@@ -6,7 +6,6 @@
         <!-- 展开：长方形全 logo（图标 + 问流）；折叠：正方形图标 -->
         <img src="/logo.png" alt="问流" class="mshell__logo-full" />
         <img src="/favicon.png" alt="问流" class="mshell__logo-mark" />
-        <span class="mshell__brand-tag">Admin</span>
       </div>
       <nav class="mshell__nav">
         <section v-for="group in groupedScenes" :key="group.title" class="mshell__group">
@@ -18,11 +17,11 @@
             class="mshell__item"
             :class="{ 'mshell__item--active': item.id === current }"
             :title="item.label"
-            @click="$emit('navigate', item.id)"
+            @click="go(item)"
           >
             <span class="mshell__item-glyph">{{ item.glyph }}</span>
             <span class="mshell__item-label">{{ item.label }}</span>
-            <span v-if="badgeOf(item)" class="mshell__item-badge">{{ badgeOf(item) }}</span>
+            <span v-if="badgeOf(item)" class="mshell__item-badge" :class="{ 'mshell__item-badge--alarm': isAlarmBadge(item) }">{{ badgeOf(item) }}</span>
           </button>
         </section>
       </nav>
@@ -80,14 +79,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { MOCK_SCENES, type MockSceneDef } from './mockManifest'
 import { dataSource } from './mockStore'
-import { liveNavBadges, loadLiveData, liveLoading } from './mockLive'
+import { liveNavBadges, alarmNavBadges, loadLiveData, liveLoading } from './mockLive'
 import { adminAuthApi } from '@/api/adminApi'
 
 const props = defineProps<{ current: string; crumb?: string; release?: boolean }>()
-defineEmits<{ (e: 'navigate', id: string): void; (e: 'palette'): void }>()
+const emit = defineEmits<{ (e: 'navigate', id: string): void; (e: 'palette'): void }>()
 
 const sourceLabel = computed(() => (dataSource.value === 'live' ? '真实数据' : '演示数据'))
 
@@ -101,6 +100,44 @@ function badgeOf(item: MockSceneDef): string {
     return liveNavBadges.value[item.id] || ''
   }
   return item.badge || ''
+}
+
+/* 报警徽章可平息：已读数存 localStorage，只有失败数超过已读数才脉冲 */
+const ALARM_READ_KEY = 'wf_admin_alarm_read'
+const alarmRead = ref<Record<string, number>>(loadAlarmRead())
+
+function loadAlarmRead(): Record<string, number> {
+  try {
+    return JSON.parse(localStorage.getItem(ALARM_READ_KEY) || '{}') as Record<string, number>
+  } catch {
+    return {}
+  }
+}
+function persistAlarmRead() {
+  try {
+    localStorage.setItem(ALARM_READ_KEY, JSON.stringify(alarmRead.value))
+  } catch {
+    /* 隐私模式等场景忽略 */
+  }
+}
+function markAlarmRead(item: MockSceneDef) {
+  const count = Number(liveNavBadges.value[item.id] || 0)
+  if (alarmNavBadges.has(item.id) && count > 0 && alarmRead.value[item.id] !== count) {
+    alarmRead.value = { ...alarmRead.value, [item.id]: count }
+    persistAlarmRead()
+  }
+}
+
+function isAlarmBadge(item: MockSceneDef): boolean {
+  if (dataSource.value !== 'live') return false
+  const cur = Number(liveNavBadges.value[item.id] || 0)
+  const read = Number(alarmRead.value[item.id] || 0)
+  return alarmNavBadges.has(item.id) && cur > 0 && cur > read
+}
+
+function go(item: MockSceneDef) {
+  markAlarmRead(item)
+  emit('navigate', item.id)
 }
 
 /* release 模式：管理员信息与退出登录 */
@@ -156,6 +193,10 @@ const groupedScenes = computed(() => {
   border-right: 1px solid #e1e8f2;
   padding: 14px 10px 10px;
   gap: 14px;
+  /* 高于抽屉遮罩(200)、低于命令面板(300)：抽屉打开时侧栏仍可点击，
+     点击导航由 AdminConsole watch(scene) 联动关闭抽屉 */
+  position: relative;
+  z-index: var(--mk-z-sidebar);
 }
 .mshell__brand {
   display: flex;
@@ -173,15 +214,6 @@ const groupedScenes = computed(() => {
   height: 34px;
   width: 34px;
 }
-.mshell__brand-tag {
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: #eef2fa;
-  color: #8492ab;
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
 
 .mshell__nav { flex: 1; overflow-y: auto; display: grid; gap: 14px; align-content: start; }
 .mshell__group-title {
@@ -198,9 +230,9 @@ const groupedScenes = computed(() => {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 10px;
+  padding: 8px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
   color: #5b6577;
   font: inherit;
@@ -214,21 +246,22 @@ const groupedScenes = computed(() => {
 .mshell__item--active {
   background: #eef5ff;
   color: #1f57cc;
-  box-shadow: inset 2px 0 0 #3478f6;
+  box-shadow: inset 3px 0 0 #3478f6;
 }
 .mshell__item-label { flex: 1; }
 .mshell__item-glyph {
   display: none;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   align-items: center;
   justify-content: center;
   border-radius: 8px;
   background: #eef2fa;
   color: #5b6577;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 .mshell__item--active .mshell__item-glyph { background: #dbe9ff; color: #1f57cc; }
 .mshell__item-badge {
@@ -241,6 +274,15 @@ const groupedScenes = computed(() => {
   font-variant-numeric: tabular-nums;
 }
 .mshell__item--active .mshell__item-badge { background: #dbe9ff; color: #1f57cc; }
+.mshell__item-badge--alarm {
+  background: #fee2e2;
+  color: #dc2626;
+  animation: mshell-alarm-pulse 1.6s ease-in-out infinite;
+}
+@keyframes mshell-alarm-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.32); }
+  50% { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0); }
+}
 
 .mshell__foot {
   display: flex;
@@ -267,6 +309,7 @@ const groupedScenes = computed(() => {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+  min-height: 52px;
   padding: 7px 20px;
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(10px);
@@ -350,6 +393,38 @@ const groupedScenes = computed(() => {
 .mshell__footer-logo { height: 16px; width: 16px; border-radius: 4px; opacity: 0.8; }
 .mshell__footer-sep { color: #c3cede; }
 
+/* 大屏（2000+）：侧栏加宽、字号放大；2800+（4K）再升一档（zoom 之上叠加） */
+@media (min-width: 2000px) {
+  .mshell {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+  .mshell__side { padding: 18px 14px 14px; gap: 18px; }
+  .mshell__logo-full { height: 48px; }
+  .mshell__group-title { font-size: 12.5px; padding: 0 12px 7px; }
+  .mshell__item { font-size: 14.5px; padding: 11px 12px; gap: 8px; }
+  .mshell__item-badge { font-size: 12.5px; padding: 2px 9px; }
+  .mshell__foot { font-size: 13px; padding: 10px 12px; }
+  .mshell__topbar { min-height: 64px; padding: 8px 24px; }
+  .mshell__crumb-group,
+  .mshell__crumb-sub { font-size: 13.5px; }
+  .mshell__search { padding: 8px 12px; font-size: 13.5px; }
+}
+@media (min-width: 2800px) {
+  .mshell {
+    grid-template-columns: 360px minmax(0, 1fr);
+  }
+  .mshell__side { padding: 22px 18px 16px; gap: 22px; }
+  .mshell__logo-full { height: 60px; }
+  .mshell__group-title { font-size: 15px; padding: 0 14px 8px; }
+  .mshell__item { font-size: 17px; padding: 14px 14px; gap: 10px; border-radius: 10px; }
+  .mshell__item-badge { font-size: 14px; padding: 3px 10px; }
+  .mshell__foot { font-size: 15px; padding: 12px 14px; }
+  .mshell__topbar { min-height: 78px; padding: 10px 28px; }
+  .mshell__crumb-group,
+  .mshell__crumb-sub { font-size: 16px; }
+  .mshell__search { padding: 10px 14px; font-size: 16px; }
+}
+
 @media (max-width: 860px) {
   .mshell { grid-template-columns: 64px minmax(0, 1fr); }
   .mshell__brand-name,
@@ -364,7 +439,8 @@ const groupedScenes = computed(() => {
 
   /* 折叠：长方形 logo 换正方形图标 */
   .mshell__logo-full,
-  .mshell__brand-tag { display: none; }
+  .mshell__brand-sub,
+  .mshell__brand-divider { display: none; }
   .mshell__logo-mark { display: block; }
   .mshell__brand { justify-content: center; padding: 2px 0 0; }
 }

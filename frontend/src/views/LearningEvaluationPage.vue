@@ -29,8 +29,10 @@
 
       <template v-else-if="sessionDetail">
         <section v-if="evaluationDegraded" class="evaluation-degraded" role="status">
-          <strong>课堂总结已生成，详细表现分析暂不可用</strong>
-          <p>这不会影响你保存进度、完成任务或查看本次对话。</p>
+          <strong v-if="!sessionDetail?.wrapup">本次会话未正常结束，未生成课堂总结</strong>
+          <strong v-else-if="isTimeoutFallback">本次会话未正常结束，已为你保留基础学习记录</strong>
+          <strong v-else>课堂总结已生成，详细表现分析暂不可用</strong>
+          <p>不影响你保存进度、完成任务或查看本次对话。</p>
         </section>
 
         <CompletionCard
@@ -136,17 +138,17 @@ const wrapup = computed<WrapupArtifact>(() => {
     status: 'summary-only',
     sources: { summary: 'fallback', evaluation: 'failed' },
     summary: {
-      topicSummary: '本次课程已结束，评估尚在生成。',
-      knowledgeSummary: '知识点状态稍后更新。',
-      practiceAdvice: '请稍后刷新查看完整建议。',
-      learningEvaluation: '评估尚未完成。',
+      topicSummary: '本次会话未正常结束，没有生成学习总结。',
+      knowledgeSummary: '未生成知识点评估。',
+      practiceAdvice: '完成一次完整的课堂学习后，这里会给出下一步建议。',
+      learningEvaluation: '未生成学习评价。',
       knowledgeItems: [],
       keyTakeaways: [],
       actionPlan: [],
-      evaluationHighlights: { strengths: [], improvements: [] },
+      evaluationHighlights: null,
       metricInterpretation: {
-        session: '正在计算本节课堂表现。',
-        longTerm: '长期状态将在评估完成后更新。'
+        session: '未生成本节课堂表现。',
+        longTerm: '未生成长期状态评估。'
       },
       summaryVersion: 'v2'
     },
@@ -173,15 +175,31 @@ const wrapup = computed<WrapupArtifact>(() => {
 const knowledgePoints = computed(() => sessionDetail.value?.knowledgePoints || []);
 const evaluationDegraded = computed(() => {
   const currentWrapup = sessionDetail.value?.wrapup;
+  if (!currentWrapup) return true;
   return currentWrapup?.evaluationSource === 'failed'
     || currentWrapup?.sources?.evaluation === 'failed';
 });
+const isTimeoutFallback = computed(() => sessionDetail.value?.wrapup?.sources?.summary === 'timeout-fallback');
 const canSubmitSessionFeedback = computed(() => !isProjectionMode());
 const mainDialogueMessages = computed(() => (sessionDetail.value?.messages || []).filter((message) => message.role === 'user' || message.role === 'assistant'));
-const durationSeconds = computed(() => {
-  const minutes = sessionDetail.value?.wrapup?.duration ?? sessionDetail.value?.duration ?? 0;
-  return typeof minutes === 'number' ? Math.max(0, Math.round(minutes * 60)) : 0;
+
+/* 会话活跃时长（分钟）：wrapup 缺省时用消息时间戳估算，间隔 > 30 分钟视为暂停 */
+const activeDurationMinutes = computed(() => {
+  const minutes = sessionDetail.value?.wrapup?.duration ?? sessionDetail.value?.duration;
+  if (typeof minutes === 'number' && minutes > 0) return minutes;
+  const times = mainDialogueMessages.value
+    .map((m) => (m.timestamp ? new Date(m.timestamp).getTime() : NaN))
+    .filter((t) => Number.isFinite(t))
+    .sort((a, b) => a - b);
+  if (times.length < 2) return 0;
+  let active = 0;
+  for (let i = 1; i < times.length; i++) {
+    active += Math.min((times[i] - times[i - 1]) / 60000, 30);
+  }
+  return Math.max(0, Math.round(active));
 });
+
+const durationSeconds = computed(() => Math.max(0, Math.round(activeDurationMinutes.value * 60)));
 
 const getMessageRoleLabel = (role: string) => (role === 'assistant' ? 'AI 导师' : '你');
 

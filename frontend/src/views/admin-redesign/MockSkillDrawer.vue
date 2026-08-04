@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <Teleport to="body">
-    <div v-if="entity" class="msk" @mousedown.self="closeSkillDrawer">
-      <aside class="msk__panel" role="dialog" aria-label="详情">
+    <div v-if="entity" ref="maskRef" class="msk">
+      <aside ref="panelRef" class="msk__panel" role="dialog" aria-label="详情">
         <!-- 头部：身份区（阶段色 + 类别图标 + 状态 chips） -->
         <header class="msk__head" :style="{ '--hue': tone.hue, '--soft': tone.soft }">
           <div class="msk__id-row">
@@ -356,8 +356,15 @@ import {
 import { liveSkillProfiles, liveExtraProfiles, liveApiConfig, errMsg, fetchProtocolView, fetchRulesOverview, type LiveProtocol, type LiveRulesOverview, type LiveRule } from './mockLive'
 import { adminSkillWorkbenchApi, adminSkillsApi, adminAgentPromptsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
+import { useOverlay, useMaskClose } from './useOverlay'
+import { askConfirm } from './useConfirm'
 
 useEscape(() => !!intent.skillDrawerId, closeSkillDrawer)
+
+const panelRef = ref<HTMLElement | null>(null)
+const maskRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => !!intent.skillDrawerId), panelRef)
+useMaskClose(maskRef, closeSkillDrawer)
 
 const router = useRouter()
 
@@ -628,7 +635,12 @@ async function reloadPromptData(id: string) {
 async function publishVersion(v: { id: string; version: string | number; name: string }) {
   const id = intent.skillDrawerId
   if (!id || versionBusy.value) return
-  if (!window.confirm(`发布 v${v.version}「${v.name}」为生效版本？当前生效版本将下线。`)) return
+  const ok = await askConfirm({
+    title: '发布版本',
+    message: `发布 v${v.version}「${v.name}」为生效版本？\n当前生效版本将下线。`,
+    confirmText: '发布'
+  })
+  if (!ok) return
   versionBusy.value = v.id
   versionMsg.value = ''
   try {
@@ -646,7 +658,12 @@ async function publishVersion(v: { id: string; version: string | number; name: s
 async function deleteVersion(v: { id: string; version: string | number; name: string }) {
   const id = intent.skillDrawerId
   if (!id || versionBusy.value) return
-  if (!window.confirm(`删除草稿 v${v.version}「${v.name}」？该操作不可撤销。`)) return
+  const ok = await askConfirm({
+    title: '删除草稿',
+    message: `删除草稿 v${v.version}「${v.name}」？\n该操作不可撤销。`,
+    confirmText: '删除'
+  })
+  if (!ok) return
   versionBusy.value = v.id
   versionMsg.value = ''
   try {
@@ -858,7 +875,7 @@ function goFullEditor() {
 .msk {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: var(--mk-z-drawer);
   background: rgba(15, 23, 42, 0.36);
   display: flex;
   justify-content: flex-end;
@@ -872,6 +889,8 @@ function goFullEditor() {
   grid-template-rows: auto auto 1fr;
   animation: msk-in 0.2s ease;
 }
+
+
 @keyframes msk-in {
   from { transform: translateX(30px); opacity: 0; }
 }
@@ -960,12 +979,12 @@ function goFullEditor() {
 .msk__close {
   border: 0;
   background: rgba(240, 242, 245, 0.8);
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
   cursor: pointer;
   color: #5b6577;
-  font-size: 12px;
+  font-size: 13px;
   flex-shrink: 0;
   transition: background 0.15s ease;
 }
@@ -1444,4 +1463,77 @@ function goFullEditor() {
   text-align: left;
 }
 .msk__primary-link:hover { background: #e0edff; }
+
+
+/* 4K：抽屉加宽 + 字号跟随壳层放大（原 460px + 10px 是全站最小） */
+@media (min-width: 2000px) {
+  .msk__panel { width: min(600px, 100vw); }
+  .msk__name { font-size: 19px; }
+  .msk__id { font-size: 12.5px; }
+  .msk__close { width: 34px; height: 34px; font-size: 16px; }
+  .msk__chip { font-size: 12.5px; }
+  .msk__tab-badge { font-size: 12px; }
+  .msk__stat span { font-size: 12px; }
+  .msk__stat strong { font-size: 18px; }
+  .msk__row { font-size: 14px; }
+  .msk__row-id { font-size: 12.5px; }
+  .msk__row-num { font-size: 12.5px; }
+  .msk__note { font-size: 12.5px; }
+  .msk__sec-head h4 { font-size: 13px; }
+  .msk__sec-meta { font-size: 12.5px; }
+  .msk__kv span { font-size: 13px; }
+  .msk__field > span { font-size: 13px; }
+  .msk__input { font-size: 14px; }
+  .msk__code { font-size: 12.5px; }
+  .msk__msg { font-size: 13.5px; }
+  .msk__rule { font-size: 14px; }
+  .msk__rule-id { font-size: 12.5px; }
+  .msk__conflict { font-size: 13.5px; }
+  .msk__protocol p { font-size: 13.5px; }
+  .msk__protocol-sites { font-size: 12.5px; }
+  .msk__prompt { font-size: 13.5px; }
+  .msk__budget { font-size: 12.5px; }
+  .msk__version-tag { font-size: 12px; }
+  .msk__version-row { font-size: 13px; }
+  .msk__versions-label { font-size: 12.5px; }
+  .msk__versions-msg { font-size: 13px; }
+  .msk__op { font-size: 13px; }
+  .msk__diff-head { font-size: 12.5px; }
+  .msk__diff-body { font-size: 12.5px; }
+}
+@media (min-width: 2800px) {
+  .msk__panel { width: min(760px, 100vw); }
+  .msk__name { font-size: 23px; }
+  .msk__id { font-size: 15px; }
+  .msk__close { width: 40px; height: 40px; font-size: 19px; }
+  .msk__chip { font-size: 15px; }
+  .msk__tab-badge { font-size: 14px; }
+  .msk__stat span { font-size: 14px; }
+  .msk__stat strong { font-size: 22px; }
+  .msk__row { font-size: 16.5px; }
+  .msk__row-id { font-size: 15px; }
+  .msk__row-num { font-size: 15px; }
+  .msk__note { font-size: 15px; }
+  .msk__sec-head h4 { font-size: 15.5px; }
+  .msk__sec-meta { font-size: 15px; }
+  .msk__kv span { font-size: 15.5px; }
+  .msk__field > span { font-size: 15.5px; }
+  .msk__input { font-size: 16.5px; }
+  .msk__code { font-size: 15px; }
+  .msk__msg { font-size: 16px; }
+  .msk__rule { font-size: 16.5px; }
+  .msk__rule-id { font-size: 15px; }
+  .msk__conflict { font-size: 16px; }
+  .msk__protocol p { font-size: 16px; }
+  .msk__protocol-sites { font-size: 15px; }
+  .msk__prompt { font-size: 16px; }
+  .msk__budget { font-size: 15px; }
+  .msk__version-tag { font-size: 14px; }
+  .msk__version-row { font-size: 15.5px; }
+  .msk__versions-label { font-size: 15px; }
+  .msk__versions-msg { font-size: 15.5px; }
+  .msk__op { font-size: 15.5px; }
+  .msk__diff-head { font-size: 15px; }
+  .msk__diff-body { font-size: 15px; }
+}
 </style>

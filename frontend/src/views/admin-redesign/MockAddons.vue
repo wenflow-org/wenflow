@@ -2,18 +2,17 @@
   <div class="mk-page">
     <div class="mk-status" :class="rows.length ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ rows.length ? '外挂组件运行正常' : '还没有外挂组件' }}</strong>
+      <strong class="mk-status__title">{{ rows.length ? '外挂组件运行正常' : '暂无外挂组件' }}</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ rows.length }} 个组件</span>
       <span class="mk-status__meta">独立配置 {{ customCount }}</span>
       <span class="mk-status__meta">继承默认 {{ rows.length - customCount }}</span>
-      <span class="mk-status__hint">编辑统一在 Skill 抽屉进行</span>
     </div>
 
     <div v-if="toast" class="mk-toast" :class="toastCls">{{ toast }}</div>
 
     <div class="mk-card">
-      <div class="addon-scroll">
+      <div class="mk-table-scroll">
         <table v-if="rows.length" class="mk-table">
           <thead>
             <tr>
@@ -52,8 +51,9 @@
         </table>
 
         <div v-if="!rows.length" class="mk-empty">
-          <strong>还没有外挂组件</strong>
-          <span>外挂能力 Skill（检索 / 解析类）的平台配置入口。</span>
+          <span v-if="!loading" class="mk-empty__icon" aria-hidden="true">⌥</span>
+          <strong>{{ loading ? '加载中…' : '暂无外挂组件' }}</strong>
+          <span v-if="!loading">在「模型与接入」中启用 MCP 工具或外挂能力 Skill 后，这里会列出各组件的模型与超时配置。</span>
         </div>
       </div>
     </div>
@@ -159,15 +159,5 @@ function showToast(msg: string, cls = 'mk-toast--ok') {
 <style scoped>
 .mono { font-family: var(--mk-mono); font-size: 12px; }
 .mk-toast--bad { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
-.addon-scroll {
-  max-height: 62vh;
-  overflow-y: auto;
-}
-.addon-scroll thead th {
-  position: sticky;
-  top: 0;
-  background: var(--mk-surface);
-  z-index: 1;
-}
 .mk-status__hint { font-size: 11.5px; color: var(--mk-faint); margin-left: auto; }
 </style>

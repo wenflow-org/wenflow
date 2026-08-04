@@ -8,6 +8,7 @@
         </transition>
       </RouterView>
       <ToastHost />
+      <MockConfirm />
     </div>
   </el-config-provider>
 </template>
@@ -17,6 +18,7 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import { useUserStore } from './stores/user';
 import ToastHost from './components/ui/ToastHost.vue';
 import AnnouncementBanner from './components/AnnouncementBanner.vue';
+import MockConfirm from './views/admin-redesign/MockConfirm.vue';
 
 const userStore = useUserStore();
 // 同步恢复登录态，避免子组件 onMounted/watch 时 isLoggedIn 仍为 false

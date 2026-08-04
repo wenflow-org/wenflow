@@ -10,6 +10,12 @@
       <span class="mk-status__meta">失败 {{ errorCount }}</span>
       <div class="wf-tracepick">
         <span class="wf-tracepick__count">{{ traceIds.length }} 条链路</span>
+        <input
+          v-model="traceKeyword"
+          class="wf-tracepick__search mono"
+          placeholder="筛选链路 ID"
+          title="按链路 ID 片段过滤"
+        />
         <select class="wf-tracepick__select mono" v-model="activeTrace" aria-label="选择链路">
           <option v-for="t in traceIds" :key="t" :value="t">
             {{ traceLabel(t) }}
@@ -47,9 +53,7 @@
               class="wf-row__bar"
               :class="`wf-row__bar--${span.status}`"
               :style="{ left: barLeft(span), width: barWidth(span) }"
-            >
-              <span v-if="span.durationMs >= 1200" class="wf-row__bar-text">{{ fmtMs(span.durationMs) }}</span>
-            </span>
+            ></span>
           </span>
           <span class="wf-row__dur mono">{{ fmtMs(span.durationMs) }}</span>
         </button>
@@ -95,6 +99,7 @@ import { spans, intent, openSkillDrawer, type TraceSpan } from './mockStore'
 
 const activeTrace = ref('')
 const openSpanId = ref('')
+const traceKeyword = ref('')
 
 // intent.traceId 驱动（从日志/总览跳进来时预填）
 watch(
@@ -105,9 +110,14 @@ watch(
   { immediate: true }
 )
 
-const traceIds = computed(() => [...new Set(spans.value.map((s) => s.traceId))])
+const allTraceIds = computed(() => [...new Set(spans.value.map((s) => s.traceId))])
+const traceIds = computed(() => {
+  const q = traceKeyword.value.trim().toLowerCase()
+  if (!q) return allTraceIds.value
+  return allTraceIds.value.filter((t) => t.toLowerCase().includes(q))
+})
 watch(
-  traceIds,
+  allTraceIds,
   (ids) => {
     if (!ids.includes(activeTrace.value)) activeTrace.value = intent.traceId && ids.includes(intent.traceId) ? intent.traceId : ids[0] || ''
   },
@@ -196,6 +206,17 @@ const verdictText = computed(() => {
   min-width: 0;
 }
 .wf-tracepick__count { font-size: 11.5px; color: var(--mk-faint); white-space: nowrap; }
+.wf-tracepick__search {
+  width: 120px;
+  padding: 6px 10px;
+  border: 1px solid var(--mk-line);
+  border-radius: 8px;
+  background: var(--mk-surface);
+  font-size: 11px;
+  color: var(--mk-ink);
+  outline: none;
+}
+.wf-tracepick__search:focus { border-color: rgba(52, 120, 246, 0.5); }
 .wf-tracepick__select {
   max-width: 320px;
   padding: 6px 10px;
@@ -312,7 +333,6 @@ const verdictText = computed(() => {
 .wf-row__bar--ok { background: linear-gradient(90deg, #6aa0ff, #3d7cff); }
 .wf-row__bar--warn { background: linear-gradient(90deg, #fcd34d, #f59e0b); }
 .wf-row__bar--err { background: linear-gradient(90deg, #f87171, #dc2626); }
-.wf-row__bar-text { font-size: 10px; font-weight: 700; color: #fff; }
 
 .wf-row__dur { font-size: 11px; color: var(--mk-muted); text-align: right; }
 .mono { font-family: var(--mk-mono); }

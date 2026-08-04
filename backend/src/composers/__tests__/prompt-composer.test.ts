@@ -82,7 +82,8 @@ describe('callPrompt runtime overrides', () => {
       ],
       model: 'frozen-model',
       max_tokens: 321,
-      temperature: 0.15
+      temperature: 0.15,
+      stream: true
     }, { skillId: 'test' }, expect.objectContaining({
       userId: 'admin-original',
       promptCallId: expect.stringMatching(/^pcl_/),
@@ -519,5 +520,103 @@ describe('callPrompt runtime overrides', () => {
         failureStage: 'prompt_resolution'
       })
     }))
+  })
+
+  describe('全局请求级流式', () => {
+    const MARKDOWN_CONTRACT = {
+      version: 'skill-prompt-contract/v2',
+      executionMode: 'llm',
+      artifactKind: 'text',
+      interactionMode: 'turn',
+      input: { transport: 'json', schemaSource: 'runtime-validator' },
+      output: { media: 'markdown', schemaSource: 'runtime-validator', envelope: 'adapter' },
+      context: { envelope: 'context-envelope/v1', delivery: 'sidecar', modelExposure: 'projected' },
+      failurePolicy: 'retry'
+    }
+
+    const baseSpec = {
+      agentId: 'skill:test',
+      defaultSystemPrompt: 'default prompt',
+      caller: { skillId: 'test' },
+      buildUserPayload: () => 'payload',
+      normalizeOutput: (parsed: any) => parsed
+    } as any
+
+    beforeEach(() => {
+      mockGetActivePrompt.mockResolvedValue(null)
+    })
+
+    it('默认所有 LLM 调用以流式请求发出（stream: true），JSON 类输出不挂 delta 回调', async () => {
+      await runWithContext({}, () => callPrompt(baseSpec, {}))
+
+      expect(mockGatewayExecute).toHaveBeenCalledWith(
+        expect.objectContaining({ stream: true }),
+        expect.anything(),
+        expect.not.objectContaining({ onStreamChunk: expect.any(Function) })
+      )
+    })
+
+    it('context.stream === false 时显式禁用流式请求', async () => {
+      await callPrompt(baseSpec, {}, { stream: false })
+
+      expect(mockGatewayExecute).toHaveBeenCalledWith(
+        expect.objectContaining({ stream: false }),
+        expect.anything(),
+        expect.anything()
+      )
+    })
+
+    it('请求级 streamRequest 注入且输出 markdown 时，delta 逐字透传并消费 consumed 标记', async () => {
+      const onStream = jest.fn()
+      mockGetActivePrompt.mockResolvedValue({
+        systemPrompt: 'active prompt',
+        metadata: { promptLab: { promptContract: MARKDOWN_CONTRACT } }
+      })
+      mockGatewayExecute.mockImplementation(async (_request: any, _caller: any, ctx: any) => {
+        ctx?.onStreamChunk?.('你')
+        ctx?.onStreamChunk?.('好')
+        return {
+          id: 'c-stream',
+          model: 'm',
+          choices: [{ index: 0, message: { role: 'assistant', content: '你好' }, finish_reason: 'stop' }]
+        }
+      })
+
+      const streamRequest: { enabled: boolean; onStream: jest.Mock; consumed?: boolean } = { enabled: true, onStream }
+      await runWithContext({ streamRequest }, () => callPrompt(baseSpec, {}))
+
+      expect(mockGatewayExecute).toHaveBeenCalledWith(
+        expect.objectContaining({ stream: true }),
+        expect.anything(),
+        expect.objectContaining({ onStreamChunk: expect.any(Function) })
+      )
+      expect(onStream).toHaveBeenCalledWith({ type: 'delta', text: '你' })
+      expect(onStream).toHaveBeenCalledWith({ type: 'delta', text: '好' })
+      expect(streamRequest.consumed).toBe(true)
+    })
+
+    it('请求级 streamRequest 注入但输出为 JSON 时：请求流式、不产生 delta 事件', async () => {
+      const onStream = jest.fn()
+      mockGetActivePrompt.mockResolvedValue({
+        systemPrompt: 'active prompt',
+        metadata: { promptLab: { promptContract: { ...MARKDOWN_CONTRACT, output: { ...MARKDOWN_CONTRACT.output, media: 'json' } } } }
+      })
+      mockGatewayExecute.mockResolvedValue({
+        id: 'c-json',
+        model: 'm',
+        choices: [{ index: 0, message: { role: 'assistant', content: '{"reply":"ok"}' }, finish_reason: 'stop' }]
+      })
+
+      const streamRequest: { enabled: boolean; onStream: jest.Mock; consumed?: boolean } = { enabled: true, onStream }
+      await runWithContext({ streamRequest }, () => callPrompt(baseSpec, {}))
+
+      expect(mockGatewayExecute).toHaveBeenCalledWith(
+        expect.objectContaining({ stream: true }),
+        expect.anything(),
+        expect.not.objectContaining({ onStreamChunk: expect.any(Function) })
+      )
+      expect(onStream).not.toHaveBeenCalled()
+      expect(streamRequest.consumed).toBeUndefined()
+    })
   })
 })

@@ -18,9 +18,7 @@
           <span class="kicker">路径总览</span>
           <h1>{{ cards.length ? '继续你的学习计划' : '还没有学习路径' }}</h1>
           <p>{{ cards.length ? '查看当前任务、路径进度和需要处理的问题。' : '规划第一个目标，问流会为你生成可执行的学习路径。' }}</p>
-          <AiContentNote />
         </div>
-        <router-link to="/goal-conversation" class="btn-primary">＋ 规划新目标</router-link>
       </div>
 
       <!-- 加载 -->
@@ -51,46 +49,45 @@
 
         <!-- 卡片列表 -->
         <div v-if="visibleCards.length" class="cards">
-          <article v-for="card in visibleCards" :key="card.id" class="pcard" :class="`pcard--${card.kind}`">
+          <article v-for="card in visibleCards" :key="card.id" class="pcard" :class="`pcard--${card.kind}`" @click="openPath(card)">
             <div class="pcard__head">
-              <span class="pcard__badge" :class="badgeCls(card)">{{ statusLabel(card) }}</span>
-              <span class="pcard__more-wrap">
-                <span class="pcard__more" title="更多操作" @click.stop="menuFor = menuFor === card.id ? '' : card.id">⋯</span>
-                <span v-if="menuFor === card.id" class="pcard__menu">
-                  <span v-if="card.kind === 'failed'" class="pcard__menu-item" @click="doRetry(card)">重新生成</span>
-                  <span class="pcard__menu-item pcard__menu-item--danger" @click="askDelete(card)">删除路径</span>
+              <span class="pcard__thumb" aria-hidden="true">{{ thumbLetter(card) }}</span>
+              <div class="pcard__body">
+                <h3 class="pcard__title">{{ card.title }}</h3>
+                <p v-if="card.desc" class="pcard__desc">{{ card.desc }}</p>
+              </div>
+              <div class="pcard__head-right">
+                <span v-if="card.kind === 'generating' || card.kind === 'failed'" class="pcard__badge" :class="badgeCls(card)">{{ statusLabel(card) }}</span>
+                <span class="pcard__more-wrap">
+                  <span class="pcard__more" title="更多操作" @click.stop="menuFor = menuFor === card.id ? '' : card.id">⋯</span>
+                  <span v-if="menuFor === card.id" class="pcard__menu" @click.stop>
+                    <span v-if="card.kind === 'failed'" class="pcard__menu-item" @click="doRetry(card)">重新生成</span>
+                    <span class="pcard__menu-item pcard__menu-item--danger" @click="askDelete(card)">删除路径</span>
+                  </span>
                 </span>
-              </span>
+              </div>
             </div>
-            <h3 class="pcard__title">{{ card.title }}</h3>
-            <p class="pcard__desc">{{ card.desc }}</p>
 
-            <!-- ready：阶段与进度 -->
+            <!-- ready：进度行 + 底部信息栏 -->
             <template v-if="card.kind === 'ready' || card.kind === 'completed'">
-              <div v-if="card.stages > 0" class="pcard__stages">
-                <span
-                  v-for="s in card.stages"
-                  :key="s"
-                  class="pcard__stage-dot"
-                  :class="{ 'pcard__stage-dot--done': s <= card.stageDone, 'pcard__stage-dot--current': s === card.stageDone + 1 && card.kind === 'ready' }"
-                >{{ s }}</span>
-                <span class="pcard__stage-text">阶段 {{ Math.min(card.stageDone + 1, card.stages) }} / {{ card.stages }}</span>
+              <div class="pcard__progress-row">
+                <div class="pcard__progress"><i :style="{ width: card.percent + '%' }"></i></div>
+                <span class="pcard__percent">{{ card.percent }}%</span>
               </div>
-              <div class="pcard__progress"><i :style="{ width: card.percent + '%' }"></i></div>
-              <div class="pcard__nums">
-                <span>{{ card.kind === 'completed' ? '已完成' : `整体 ${card.percent}%` }}</span>
-                <span v-if="card.hours">预计投入 {{ card.hours }} 小时</span>
+              <div class="pcard__foot">
+                <span class="pcard__meta">
+                  阶段 {{ Math.max(1, Math.min(card.stageDone + 1, card.stages)) }} / {{ card.stages }}
+                  <template v-if="card.hours"> · 预计 {{ card.hours }} 小时</template>
+                </span>
+                <span class="pcard__cta">
+                  {{ card.kind === 'completed' ? '查看学习成果' : '继续学习' }}
+                  <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M13 5v6H5v2h8v6l7-7z"/></svg>
+                </span>
               </div>
-              <div v-if="deleting === card.id" class="pcard__confirm">
+              <div v-if="deleting === card.id" class="pcard__confirm" @click.stop>
                 确认删除这条路径？
                 <span class="pcard__confirm-yes" @click="doDelete(card)">删除</span>
                 <span class="pcard__confirm-no" @click="deleting = ''">取消</span>
-              </div>
-              <div class="pcard__actions">
-                <router-link :to="`/learning-path/${card.id}`" class="btn-primary">
-                  {{ card.kind === 'completed' ? '查看学习成果' : '继续学习' }}
-                </router-link>
-                <router-link :to="`/learning-path/${card.id}`" class="btn-ghost">查看详情</router-link>
               </div>
             </template>
 
@@ -102,24 +99,23 @@
               </div>
               <div class="pcard__skeleton"><i style="width: 76%"></i><i style="width: 52%"></i><i style="width: 64%"></i></div>
               <div class="pcard__actions">
-                <span class="btn-ghost" @click="refreshStatus(card)">刷新状态</span>
+                <span class="btn-ghost" @click.stop="refreshStatus(card)">刷新状态</span>
               </div>
             </template>
 
             <!-- failed：待重试 -->
             <template v-else>
               <div class="pcard__fail-reason">{{ card.errorText || '生成失败，目标和已确认信息已保留。' }}</div>
-              <div v-if="deleting === card.id" class="pcard__confirm">
+              <div v-if="deleting === card.id" class="pcard__confirm" @click.stop>
                 确认删除这条路径？
                 <span class="pcard__confirm-yes" @click="doDelete(card)">删除</span>
                 <span class="pcard__confirm-no" @click="deleting = ''">取消</span>
               </div>
               <div class="pcard__actions">
-                <span class="btn-primary" :class="{ 'btn-primary--off': retrying === card.id }" @click="doRetry(card)">
+                <span class="btn-primary" :class="{ 'btn-primary--off': retrying === card.id }" @click.stop="doRetry(card)">
                   <span v-if="retrying === card.id" class="spinner spinner--sm"></span>
                   {{ retrying === card.id ? '正在重新生成…' : card.retryLabel }}
                 </span>
-                <router-link :to="`/learning-path/${card.id}`" class="btn-ghost">查看详情</router-link>
               </div>
             </template>
           </article>
@@ -134,6 +130,11 @@
         </div>
       </template>
     </main>
+
+    <!-- AI 生成提示：独立于页脚，贴近页面底部 -->
+    <div class="paths__ai-note">
+      <AiContentNote />
+    </div>
 
     <V2Footer />
 
@@ -151,7 +152,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import request, { AI_REQUEST_TIMEOUT } from '@/utils/api';
 import { learningAPI } from '@/api/learning';
 import V2Nav from './V2Nav.vue';
@@ -177,6 +178,7 @@ interface PathCard {
 }
 
 const route = useRoute();
+const router = useRouter();
 const cards = ref<PathCard[]>([]);
 const loading = ref(true);
 const loadError = ref(false);
@@ -197,7 +199,8 @@ function showToast(text: string) {
 function normalize(p: Record<string, any>): PathCard {
   const lc = p.generationLifecycle;
   const title = p.title || p.name || '未命名路径';
-  const desc = p.description || p.summary || '';
+  // AI 生成的简短摘要优先（path-planning summary），旧数据回退用户目标原文
+  const desc = p.summary || p.description || '';
   const stages: number = lc?.totalStages || p.totalStages || (p.milestones?.length ?? p.weeks?.length ?? 0);
   const hours = p.estimatedHours;
 
@@ -340,7 +343,17 @@ async function doDelete(card: PathCard) {
 }
 
 const countOf = (k: CardKind) => cards.value.filter((c) => c.kind === k).length;
-const filterList = computed(() => [
+
+/** 图标锚点：取路径标题首字符（视觉识别） */
+function thumbLetter(card: PathCard) {
+  const t = (card.title || '').trim();
+  return t ? t.charAt(0).toUpperCase() : '路';
+}
+
+/** 整卡可点击：进入路径详情页 */
+function openPath(card: PathCard) {
+  router.push(`/learning-path/${card.id}`);
+}const filterList = computed(() => [
   { key: 'all' as const, label: '全部', count: cards.value.length },
   { key: 'ready' as const, label: '进行中', count: countOf('ready') },
   { key: 'completed' as const, label: '已完成', count: countOf('completed') },
@@ -386,6 +399,12 @@ onBeforeUnmount(() => {
   display: grid; gap: 18px;
 }
 .paths__hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.paths__ai-note {
+  display: flex; justify-content: center;
+  max-width: 1080px; margin: 0 auto;
+  padding: 4px 28px 16px;
+}
+.paths__ai-note :deep(.ai-note) { font-size: 11px; opacity: 0.75; }
 .kicker {
   font-size: 12px; font-weight: 800; letter-spacing: .06em;
   color: var(--blue-deep);
@@ -422,6 +441,7 @@ onBeforeUnmount(() => {
 
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
 .pcard {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -429,35 +449,67 @@ onBeforeUnmount(() => {
   display: flex; flex-direction: column; gap: 12px;
   box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
   transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  cursor: pointer;
 }
-.pcard:hover { border-color: rgba(52, 120, 246, 0.3); box-shadow: 0 14px 34px rgba(23, 32, 51, 0.09); }
+.pcard:hover { border-color: rgba(52, 120, 246, 0.3); box-shadow: 0 14px 34px rgba(23, 32, 51, 0.09); transform: translateY(-1px); }
+/* 状态色侧条 */
+.pcard::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  border-radius: 16px 0 0 16px; background: transparent;
+}
+.pcard--ready::before { background: linear-gradient(180deg, var(--blue), var(--cyan)); }
+.pcard--completed::before { background: var(--green); }
+.pcard--generating::before { background: var(--cyan); }
+.pcard--failed::before { background: linear-gradient(180deg, var(--red), var(--amber)); }
 .pcard--generating { background: linear-gradient(180deg, rgba(67, 176, 216, 0.04), var(--surface) 55%); }
 .pcard--failed { border-color: rgba(239, 117, 120, 0.3); }
-.pcard__head { display: flex; align-items: center; justify-content: space-between; }
-.pcard__badge { padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; }
+.pcard__head { display: flex; align-items: flex-start; gap: 12px; }
+.pcard__thumb {
+  width: 36px; height: 36px; border-radius: 11px;
+  display: grid; place-items: center;
+  color: #fff; font-size: 15px; font-weight: 800;
+  flex: 0 0 auto;
+}
+.pcard--ready .pcard__thumb { background: linear-gradient(135deg, var(--blue), var(--cyan)); }
+.pcard--completed .pcard__thumb { background: linear-gradient(135deg, var(--green), #58c98f); }
+.pcard--generating .pcard__thumb { background: linear-gradient(135deg, #43b0d8, #7cc7e2); }
+.pcard--failed .pcard__thumb { background: linear-gradient(135deg, var(--red), var(--amber)); }
+.pcard__body { flex: 1; min-width: 0; }
+.pcard__head-right { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.pcard__badge { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; flex: 0 0 auto; }
+.pcard__badge--green { color: #218a56; background: rgba(49, 177, 111, 0.12); }
 .pcard__badge--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
 .pcard__badge--cyan { color: #2b7a99; background: rgba(67, 176, 216, 0.14); }
 .pcard__badge--red { color: #c0454a; background: rgba(239, 117, 120, 0.12); }
 .pcard__more { color: var(--faint); font-size: 18px; cursor: pointer; padding: 0 6px; }
-.pcard__title { margin: 0; font-size: 17px; }
-.pcard__desc { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
-
-.pcard__stages { display: flex; align-items: center; gap: 6px; }
-.pcard__stage-dot {
-  width: 22px; height: 22px; border-radius: 8px;
-  background: #eef2f8; color: var(--faint);
-  font-size: 11px; font-weight: 800;
-  display: grid; place-items: center;
+.pcard__title {
+  margin: 0; font-size: 15.5px; line-height: 1.4;
+  min-width: 0;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.pcard__stage-dot--done { background: var(--green); color: #fff; }
-.pcard__stage-dot--current { background: linear-gradient(135deg, var(--blue), var(--blue-deep)); color: #fff; box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.15); }
-.pcard__stage-text { margin-left: 6px; font-size: 12px; color: var(--muted); }
-.pcard__progress { height: 8px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
+.pcard__desc {
+  margin: 4px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+.pcard__progress-row { display: flex; align-items: center; gap: 10px; }
+.pcard__progress { flex: 1; height: 6px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
 .pcard__progress i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
-.pcard__nums { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
-.pcard__actions { display: flex; gap: 10px; margin-top: 2px; flex-wrap: wrap; }
-.pcard__actions .btn-primary { padding: 9px 18px; font-size: 13px; }
-.pcard__actions .btn-ghost { padding: 8px 14px; font-size: 13px; }
+.pcard__percent {
+  font-size: 12px; font-weight: 800; color: var(--blue-deep);
+  font-variant-numeric: tabular-nums; flex: 0 0 auto;
+}
+.pcard__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 2px; }
+.pcard__meta { font-size: 12px; color: var(--faint); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcard__cta {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 13px; font-weight: 800; color: var(--blue-deep);
+  white-space: nowrap; flex: 0 0 auto;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+.pcard__cta svg { transition: transform 0.15s ease; }
+.pcard:hover .pcard__cta { transform: translateX(2px); }
+.pcard__actions { display: flex; justify-content: flex-end; margin-top: 2px; }
 
 .pcard__generating {
   display: flex; align-items: center; gap: 9px;

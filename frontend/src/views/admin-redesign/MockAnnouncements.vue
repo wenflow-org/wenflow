@@ -13,7 +13,8 @@
     <div v-if="toast" class="mk-toast" :class="toastCls">{{ toast }}</div>
 
     <div class="mk-card">
-      <table v-if="rows.length" class="mk-table">
+      <div v-if="rows.length" class="mk-table-scroll">
+      <table class="mk-table">
         <thead>
           <tr>
             <th>公告</th>
@@ -48,6 +49,7 @@
           </tr>
         </tbody>
       </table>
+      </div>
 
       <div v-else class="mk-empty">
         <strong>还没有公告</strong>
@@ -56,8 +58,8 @@
     </div>
 
     <!-- 新建公告 -->
-    <div v-if="createOpen" class="mk-modal" @mousedown.self="createOpen = false">
-      <div class="mk-modal__panel" role="dialog" aria-label="新建公告">
+    <div v-if="createOpen" ref="maskRef" class="mk-modal">
+      <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="新建公告">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">新建公告</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="createOpen = false">✕</button>
@@ -123,6 +125,8 @@ import {
   errMsg
 } from './mockLive'
 import { useEscape } from './useEscape'
+import { useOverlay, useMaskClose } from './useOverlay'
+import { askConfirm } from './useConfirm'
 
 defineProps<{ state: string }>()
 
@@ -231,7 +235,12 @@ async function archive(r: Row) {
 }
 
 async function remove(r: Row) {
-  if (!window.confirm(`确认删除公告「${r.title}」？`)) return
+  const ok = await askConfirm({
+    title: '删除公告',
+    message: `确认删除公告「${r.title}」？\n该操作不可撤销。`,
+    confirmText: '删除'
+  })
+  if (!ok) return
   r.busy = true
   try {
     if (isLive.value) await liveDeleteAnnouncement(r.id)
@@ -247,6 +256,10 @@ async function remove(r: Row) {
 /* 新建 */
 const createOpen = ref(false)
 useEscape(() => createOpen.value, () => { createOpen.value = false })
+const panelRef = ref<HTMLElement | null>(null)
+const maskRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => createOpen.value), panelRef)
+useMaskClose(maskRef, () => { createOpen.value = false })
 
 /* 命令面板快捷动作：直达并打开新建弹窗 */
 watch(

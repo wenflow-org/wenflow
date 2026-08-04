@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="mk-page sdp">
     <!-- 顶部：返回 + 状态条（与 console 统一的运维简报语言） -->
     <header class="sdp-head">
@@ -11,8 +11,10 @@
           ↑ {{ workbenchMeta.parentAgent.name }}
         </span>
         <span class="mk-status__sep"></span>
-        <span class="mk-status__meta mono">{{ overview.agentId }}</span>
-        <span v-if="overview.file" class="mk-status__meta mono sdp-ellipsis" :title="overview.file.path">{{ overview.file.path }}</span>
+        <span
+          class="mk-status__meta mono sdp-ellipsis"
+          :title="`${overview.agentId}${overview.file ? ' · ' + overview.file.path : ''}`"
+        >{{ overview.agentId }}<template v-if="overview.file"> · {{ shortFilePath(overview.file.path) }}</template></span>
         <span v-if="overview.db?.version" class="mk-status__meta">DB ACTIVE <b class="mono">v{{ overview.db.version }}</b></span>
         <span v-if="workbenchMeta?.stats" class="mk-status__meta">
           调用 <b class="mono">{{ workbenchMeta.stats.totalCalls }}</b>
@@ -31,7 +33,8 @@
       </div>
       <div v-else class="mk-status mk-status--muted">
         <span class="mk-status__dot"></span>
-        <strong class="mk-status__title">{{ loading ? '加载中…' : skillId }}</strong>
+        <strong class="mk-status__title">{{ loading ? '加载中…' : loadFailed ? '概览加载失败' : skillId }}</strong>
+        <button v-if="loadFailed && !loading" type="button" class="mk-status__action" @click="loadAll">重试</button>
       </div>
     </header>
 
@@ -72,12 +75,26 @@
               <h4>试跑</h4>
               <span class="sdp-block__meta">
                 <button type="button" class="mk-link" :disabled="!trialInput.trim()" @click="formatTrialJson">格式化</button>
-                <button type="button" class="sdp-btn sdp-btn--primary sdp-btn--sm" :disabled="trialRunning" @click="runTrial">
+                <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="trialRunning" @click="runTrial">
                   {{ trialRunning ? '运行中…' : '运行预览' }}
                 </button>
               </span>
             </header>
-            <textarea v-model="trialInput" class="sdp-json mono" rows="7" placeholder='{"input": "…"}'></textarea>
+            <!-- 试跑输入（JSON 语法高亮覆盖层） -->
+            <div class="sdp-codehl sdp-codehl--json">
+              <pre class="sdp-codehl__pre mono" aria-hidden="true"><code v-html="trialHighlighted"></code></pre>
+              <textarea
+                ref="trialTextareaRef"
+                v-model="trialInput"
+                class="sdp-json mono sdp-codehl__ta"
+                rows="7"
+                wrap="off"
+                spellcheck="false"
+                placeholder='{"input": "…"}'
+                @input="coreDirty = true; syncTrialHlScroll()"
+                @scroll="syncTrialHlScroll"
+              ></textarea>
+            </div>
             <div v-if="trialResult" class="sdp-trial__meta">
               <span class="mk-badge" :class="trialResult.success ? 'mk-badge--ok' : 'mk-badge--bad'">
                 {{ trialResult.success ? '成功' : '失败' }}
@@ -171,6 +188,7 @@
                   </div>
                 </div>
               </div>
+              <p v-else-if="recentLogsError" class="sdp-none sdp-bad-text">近 60 条日志加载失败。<button type="button" class="mk-link" @click="loadRecentLogs">重试</button></p>
               <p v-else class="sdp-none">近 60 条日志窗口内无调用。</p>
         </section>
       </div>
@@ -190,7 +208,7 @@
                 <button type="button" class="mk-link" :disabled="!coreLoaded || coreCompiling" @click="previewCore">
                   {{ coreCompiling ? '编译中…' : '编译预览' }}
                 </button>
-                <button type="button" class="sdp-btn sdp-btn--primary sdp-btn--sm" :disabled="!coreLoaded || corePublishing" @click="publishCore(false)">
+                <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="!coreLoaded || corePublishing" @click="publishCore(false)">
                   {{ corePublishing ? '发布中…' : '发布' }}
                 </button>
               </span>
@@ -234,7 +252,10 @@
               <template v-if="coreForm">
                 <!-- 身份 -->
                 <section class="sdp-pwform__card">
-                  <h5>身份</h5>
+                  <button type="button" class="sdp-pwform__cardhead" @click="toggleFormSection('identity')">
+                    <span>身份</span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('identity') }">▾</i>
+                  </button>
+                  <div v-show="openFormSections.has('identity')" class="sdp-pwform__cardbody">
                   <label class="sdp-pwform__field">
                     <span>identity（角色定位）</span>
                     <textarea v-model="coreForm.identity" rows="3" class="sdp-input" @input="coreDirty = true"></textarea>
@@ -264,11 +285,15 @@
                       </select>
                     </label>
                   </div>
+                  </div>
                 </section>
 
                 <!-- 输入声明（上游字段引用） -->
                 <section class="sdp-pwform__card">
-                  <h5>输入声明 <b class="mono">{{ coreForm.inputs.length }}</b></h5>
+                  <button type="button" class="sdp-pwform__cardhead" @click="toggleFormSection('inputs')">
+                    <span>输入声明 <b class="mono">{{ coreForm.inputs.length }}</b></span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('inputs') }">▾</i>
+                  </button>
+                  <div v-show="openFormSections.has('inputs')" class="sdp-pwform__cardbody">
                   <p class="sdp-pwform__note">
                     声明本 Skill 消费同一链条上哪个上游 Skill 的哪个输出字段（<code class="mono">skill:xxx.fieldPath</code>）。
                     保存/发布时与字段路由 handoff 对账（advisory）；血缘表自动收录。
@@ -276,29 +301,37 @@
                   <div v-for="(input, i) in coreForm.inputs" :key="i" class="sdp-pwform__inputrow">
                     <input v-model="input.ref" class="sdp-input mono" placeholder="skill:path-scene-framing.normalizedInput" @input="coreDirty = true" />
                     <input v-model="input.note" class="sdp-input" placeholder="用途说明（可选）" @input="coreDirty = true" />
-                    <button type="button" class="mk-link mk-link--danger" @click="removeInput(i)">删</button>
+                    <button type="button" class="mk-link mk-link--danger" @click="removeInput(i)">删除</button>
                   </div>
                   <button type="button" class="mk-link" @click="addInput">+ 添加上游输入</button>
+                  </div>
                 </section>
 
                 <!-- 规则 -->
                 <section class="sdp-pwform__card">
-                  <h5>执行规则 <b class="mono">{{ coreForm.rules.length }}</b></h5>
+                  <button type="button" class="sdp-pwform__cardhead" @click="toggleFormSection('rules')">
+                    <span>执行规则 <b class="mono">{{ coreForm.rules.length }}</b></span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('rules') }">▾</i>
+                  </button>
+                  <div v-show="openFormSections.has('rules')" class="sdp-pwform__cardbody">
                   <div v-for="i in coreForm.rules.length" :key="i - 1" class="sdp-pwform__listitem">
                     <span class="sdp-pwform__idx mono">{{ i }}</span>
                     <textarea v-model="coreForm.rules[i - 1]" rows="2" class="sdp-input" @input="coreDirty = true"></textarea>
                     <span class="sdp-pwform__itemops">
                       <button type="button" class="mk-link" :disabled="i === 1" @click="moveItem(coreForm.rules, i - 1, -1)">↑</button>
                       <button type="button" class="mk-link" :disabled="i === coreForm.rules.length" @click="moveItem(coreForm.rules, i - 1, 1)">↓</button>
-                      <button type="button" class="mk-link mk-link--danger" @click="removeItem(coreForm.rules, i - 1)">删</button>
+                      <button type="button" class="mk-link mk-link--danger" @click="removeItem(coreForm.rules, i - 1)">删除</button>
                     </span>
                   </div>
                   <button type="button" class="mk-link" @click="addItem(coreForm.rules)">+ 添加规则</button>
+                  </div>
                 </section>
 
                 <!-- 输出字段（高危：字段冻结守门） -->
                 <section class="sdp-pwform__card sdp-pwform__card--danger">
-                  <h5>输出字段 <b class="mono">{{ coreForm.fields.length }}</b></h5>
+                  <button type="button" class="sdp-pwform__cardhead" @click="toggleFormSection('fields')">
+                    <span>输出字段 <b class="mono">{{ coreForm.fields.length }}</b></span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('fields') }">▾</i>
+                  </button>
+                  <div v-show="openFormSections.has('fields')" class="sdp-pwform__cardbody">
                   <p class="sdp-pwform__warn">增删字段、改型、改名会触发字段冻结守门。</p>
                   <div class="sdp-pwform__fields">
                     <div class="sdp-pwform__fieldrow sdp-pwform__fieldrow--head">
@@ -309,33 +342,41 @@
                       <select v-model="f.baseType" class="sdp-input" @change="coreDirty = true">
                         <option v-for="t in CORE_FIELD_TYPES" :key="t" :value="t">{{ t }}</option>
                       </select>
-                      <input v-model="f.optional" type="checkbox" @change="coreDirty = true" />
+                      <input v-model="f.optional" type="checkbox" aria-label="可选" @change="coreDirty = true" />
                       <input v-model="f.desc" class="sdp-input" placeholder="功能描述" @input="coreDirty = true" />
-                      <input v-model="f.turn" type="checkbox" @change="coreDirty = true" />
-                      <button type="button" class="mk-link mk-link--danger" @click="removeField(i)">删</button>
+                      <input v-model="f.turn" type="checkbox" aria-label="turn（回合输出）" @change="coreDirty = true" />
+                      <button type="button" class="mk-link mk-link--danger" @click="removeField(i)">删除</button>
                     </div>
                   </div>
                   <button type="button" class="mk-link" @click="addField">+ 添加字段</button>
+                  </div>
                 </section>
 
                 <!-- 约束 -->
                 <section class="sdp-pwform__card">
-                  <h5>自检约束 <b class="mono">{{ coreForm.constraints.length }}</b></h5>
+                  <button type="button" class="sdp-pwform__cardhead" @click="toggleFormSection('constraints')">
+                    <span>自检约束 <b class="mono">{{ coreForm.constraints.length }}</b></span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('constraints') }">▾</i>
+                  </button>
+                  <div v-show="openFormSections.has('constraints')" class="sdp-pwform__cardbody">
                   <div v-for="i in coreForm.constraints.length" :key="i - 1" class="sdp-pwform__listitem">
                     <span class="sdp-pwform__idx mono">-</span>
                     <textarea v-model="coreForm.constraints[i - 1]" rows="2" class="sdp-input" @input="coreDirty = true"></textarea>
                     <span class="sdp-pwform__itemops">
                       <button type="button" class="mk-link" :disabled="i === 1" @click="moveItem(coreForm.constraints, i - 1, -1)">↑</button>
                       <button type="button" class="mk-link" :disabled="i === coreForm.constraints.length" @click="moveItem(coreForm.constraints, i - 1, 1)">↓</button>
-                      <button type="button" class="mk-link mk-link--danger" @click="removeItem(coreForm.constraints, i - 1)">删</button>
+                      <button type="button" class="mk-link mk-link--danger" @click="removeItem(coreForm.constraints, i - 1)">删除</button>
                     </span>
                   </div>
                   <button type="button" class="mk-link" @click="addItem(coreForm.constraints)">+ 添加约束</button>
+                  </div>
                 </section>
 
                 <!-- 参数 -->
                 <section class="sdp-pwform__card">
-                  <h5>生成参数</h5>
+                  <button type="button" class="sdp-pwform__cardhead" @click="toggleFormSection('params')">
+                    <span>生成参数</span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('params') }">▾</i>
+                  </button>
+                  <div v-show="openFormSections.has('params')" class="sdp-pwform__cardbody">
                   <div class="sdp-pwform__row3">
                     <label class="sdp-pwform__field">
                       <span>temperature</span>
@@ -352,21 +393,27 @@
                       </select>
                     </label>
                   </div>
+                  </div>
                 </section>
               </template>
               <p v-else class="sdp-none">{{ coreMissing ? '该 Skill 暂无核心文件' : '加载中…' }}</p>
             </div>
 
-            <!-- 源码视图 -->
-            <textarea
-              v-else
-              v-model="coreText"
-              class="sdp-pw__textarea mono"
-              spellcheck="false"
-              :placeholder="coreMissing ? '该 Skill 暂无核心文件（prompts/core/' + skillId + '.yaml）' : '加载中…'"
-              :disabled="!coreLoaded"
-              @input="coreDirty = true"
-            ></textarea>
+            <!-- 源码视图（YAML 语法高亮覆盖层） -->
+            <div v-else class="sdp-codehl">
+              <pre class="sdp-codehl__pre mono" aria-hidden="true"><code v-html="coreHighlighted"></code></pre>
+              <textarea
+                ref="coreTextareaRef"
+                v-model="coreText"
+                class="sdp-pw__textarea mono sdp-codehl__ta"
+                spellcheck="false"
+                wrap="off"
+                :placeholder="coreMissing ? '该 Skill 暂无核心文件（prompts/core/' + skillId + '.yaml）' : '加载中…'"
+                :disabled="!coreLoaded"
+                @input="coreDirty = true; syncHlScroll()"
+                @scroll="syncHlScroll"
+              ></textarea>
+            </div>
             <div v-if="corePublishResult" class="sdp-pw__publish" :class="`sdp-pw__publish--${corePublishResult.ok ? 'ok' : 'bad'}`">
               <template v-if="corePublishResult.ok">
                 已发布：{{ corePublishResult.agentId }} v{{ corePublishResult.version }} · coreHash
@@ -378,7 +425,7 @@
               <strong>含义冻结判定不确定</strong>
               <p>{{ coreUncertain.rationale || 'judge 无法确定语义等价性' }}</p>
               <ul><li v-for="(f, i) in coreUncertain.findings || []" :key="i">[{{ f.severity }}] {{ f.aspect }}：{{ f.issue }}</li></ul>
-              <button type="button" class="sdp-btn sdp-btn--primary sdp-btn--sm" :disabled="corePublishing" @click="publishCore(true)">
+              <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="corePublishing" @click="publishCore(true)">
                 人工确认无误，强制发布
               </button>
             </div>
@@ -649,9 +696,9 @@
 
           <div class="sdp-form__footer">
             <p v-if="rtMsg" class="sdp-form__msg" :class="{ 'is-err': rtErr }">{{ rtMsg }}</p>
-            <button type="button" class="sdp-btn sdp-btn--danger" :disabled="rtSaving" @click="resetRuntime">恢复默认</button>
-            <button type="button" class="sdp-btn" :disabled="rtSaving" @click="loadRuntime">刷新</button>
-            <button type="button" class="sdp-btn sdp-btn--primary" :disabled="rtSaving" @click="saveRuntime">
+            <button type="button" class="mk-btn sdp-btn--danger" :disabled="rtSaving" @click="resetRuntime">恢复默认</button>
+            <button type="button" class="mk-btn" :disabled="rtSaving" @click="loadRuntime">刷新</button>
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="rtSaving" @click="saveRuntime">
               {{ rtSaving ? '保存中…' : '保存配置' }}
             </button>
           </div>
@@ -770,8 +817,14 @@
  *   运行时 = 路由/可靠性表单
  *   工程 = 低频 kv / 契约 / 协议 / 规则
  */
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import hljs from 'highlight.js/lib/core'
+import yaml from 'highlight.js/lib/languages/yaml'
+import json from 'highlight.js/lib/languages/json'
+import 'highlight.js/styles/github-dark.css'
+hljs.registerLanguage('yaml', yaml)
+hljs.registerLanguage('json', json)
 import {
   adminAgentPromptsApi,
   adminAgentsApi,
@@ -781,6 +834,7 @@ import {
   adminSkillWorkbenchApi,
   adminSkillsApi
 } from '@/api/adminApi'
+import { askConfirm } from './useConfirm'
 import './mock-shared.css'
 
 /* ---------- 路由与基础 ---------- */
@@ -793,7 +847,15 @@ const agentIdParam = computed(() => {
 })
 const skillId = computed(() => agentIdParam.value.replace(/^skill:/, ''))
 
-function goConsole() {
+async function goConsole() {
+  if (coreDirty.value) {
+    const ok = await askConfirm({
+      title: '离开设计页',
+      message: '当前 Skill 有未保存的修改，离开后将丢失，确定离开？',
+      confirmText: '离开并放弃修改'
+    })
+    if (!ok) return
+  }
   void router.push('/admin/console')
 }
 
@@ -934,7 +996,12 @@ async function loadVersions() {
 
 async function publishVersion(v: VersionItem) {
   if (versionBusy.value) return
-  if (!window.confirm(`发布 v${v.version}「${v.name}」为生效版本？当前生效版本将下线。`)) return
+  const ok = await askConfirm({
+    title: '发布版本',
+    message: `发布 v${v.version}「${v.name}」为生效版本？\n当前生效版本将下线。`,
+    confirmText: '发布'
+  })
+  if (!ok) return
   versionBusy.value = v.id
   versionMsg.value = ''
   try {
@@ -951,7 +1018,12 @@ async function publishVersion(v: VersionItem) {
 
 async function deleteVersion(v: VersionItem) {
   if (versionBusy.value) return
-  if (!window.confirm(`删除草稿 v${v.version}「${v.name}」？该操作不可撤销。`)) return
+  const ok = await askConfirm({
+    title: '删除草稿',
+    message: `删除草稿 v${v.version}「${v.name}」？\n该操作不可撤销。`,
+    confirmText: '删除'
+  })
+  if (!ok) return
   versionBusy.value = v.id
   versionMsg.value = ''
   try {
@@ -1076,6 +1148,7 @@ interface LogRow {
   detail: { input?: string; output?: string; error?: string } | null
 }
 const recentLogs = ref<LogRow[]>([])
+const recentLogsError = ref(false)
 const openLogId = ref('')
 
 const recentFailures = computed(() => recentLogs.value.filter((l) => l.status !== 'ok').length)
@@ -1085,7 +1158,13 @@ function mapLogStatus(s: unknown): LogRow['status'] {
 }
 
 async function loadRecentLogs() {
+  recentLogsError.value = false
   const res = await adminAgentsApi.getLogs({ agentName: `skill:${skillId.value}`, limit: 8, timeRange: 'week' }).catch(() => null)
+  if (!res) {
+    recentLogsError.value = true
+    recentLogs.value = []
+    return
+  }
   const body = res?.data?.data ?? res?.data ?? {}
   const items: Record<string, unknown>[] = Array.isArray(body) ? body : body.items || body.logs || []
   recentLogs.value = items.map((l) => {
@@ -1242,7 +1321,12 @@ async function saveRuntime() {
 
 async function resetRuntime() {
   if (rtSaving.value) return
-  if (!window.confirm('确定恢复该 Skill 的默认模型配置吗？独立配置将被删除。')) return
+  const ok = await askConfirm({
+    title: '恢复默认配置',
+    message: '确定恢复该 Skill 的默认模型配置吗？\n独立配置将被删除，恢复为继承上层 / 平台默认。',
+    confirmText: '恢复默认'
+  })
+  if (!ok) return
   rtSaving.value = true
   rtMsg.value = ''
   try {
@@ -1301,6 +1385,45 @@ const coreSaving = ref(false)
 const coreCompiling = ref(false)
 const corePublishing = ref(false)
 const coreRollbacking = ref(false)
+
+/* 源码视图：YAML 语法高亮覆盖层（高亮层与 textarea 同步滚动） */
+const coreTextareaRef = ref<HTMLTextAreaElement | null>(null)
+const coreHighlighted = computed(() => {
+  if (!coreText.value) return ''
+  try {
+    return hljs.highlight(coreText.value, { language: 'yaml', ignoreIllegals: true }).value
+  } catch {
+    return coreText.value.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] || c)
+  }
+})
+function syncHlScroll() {
+  syncHlScrollFor(coreTextareaRef)
+}
+
+/** 通用高亮层滚动同步（core YAML / 试跑 JSON 共用） */
+function syncHlScrollFor(taRef: { value: HTMLTextAreaElement | null }) {
+  const ta = taRef.value
+  if (!ta) return
+  const pre = ta.parentElement?.querySelector('.sdp-codehl__pre') as HTMLElement | null
+  if (pre) {
+    pre.scrollTop = ta.scrollTop
+    pre.scrollLeft = ta.scrollLeft
+  }
+}
+
+/** 试跑输入 JSON 高亮 */
+const trialTextareaRef = ref<HTMLTextAreaElement | null>(null)
+function syncTrialHlScroll() {
+  syncHlScrollFor(trialTextareaRef)
+}
+const trialHighlighted = computed(() => {
+  if (!trialInput.value) return ''
+  try {
+    return hljs.highlight(trialInput.value, { language: 'json', ignoreIllegals: true }).value
+  } catch {
+    return trialInput.value.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] || c)
+  }
+})
 const coreDiagnostics = ref<CoreDiagnostic[]>([])
 const coreInputWarnings = ref<CoreDiagnostic[]>([])
 const coreClassification = ref<CoreClassification | null>(null)
@@ -1316,6 +1439,15 @@ const coreLineage = ref<CoreLineageEntry[]>([])
 const coreViewMode = ref<'form' | 'raw'>('form')
 const coreForm = ref<CoreFormState | null>(null)
 let coreRequested = false
+
+/* 协议表单折叠：高频段（身份/输入/输出字段）默认展开，低频段默认收起 */
+const openFormSections = ref<Set<string>>(new Set(['identity', 'inputs', 'fields']))
+function toggleFormSection(key: string) {
+  const next = new Set(openFormSections.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  openFormSections.value = next
+}
 
 /* ---------- 表单视图：CoreFile JSON → 表单状态 ---------- */
 function initCoreForm(core: Record<string, unknown> | null) {
@@ -1497,14 +1629,18 @@ async function previewCore() {
   coreSideTab.value = 'preview'
   coreGates.value = null
   coreCompiledPrompt.value = ''
+  coreDiagnostics.value = []
   try {
     const res = await adminPromptWorkbenchApi.compileCore({ skillId: skillId.value })
     coreGates.value = res.data?.gates || null
     coreCompiledPrompt.value = res.data?.prompt || ''
     coreCompiledMeta.value = { coreHash: res.data?.coreHash, coreVersion: res.data?.coreVersion }
   } catch (e) {
-    const data = (e as { response?: { data?: { error?: string } } })?.response?.data
-    showToast(data?.error || `编译失败：${errText(e)}`, 'mk-toast--bad')
+    const data = (e as { response?: { data?: { error?: string; diagnostics?: CoreDiagnostic[] } } })?.response?.data
+    // 编译错误落入行内诊断区（可停留查看），toast 仅作补充
+    const message = data?.error || errText(e)
+    coreDiagnostics.value = data?.diagnostics?.length ? data.diagnostics : [{ code: 'COMPILE_FAILED', message }]
+    showToast(`编译失败：${message}`, 'mk-toast--bad')
   } finally {
     coreCompiling.value = false
   }
@@ -1514,12 +1650,17 @@ async function publishCore(confirmUncertain: boolean) {
   if (!coreLoaded.value || corePublishing.value) return
   let developerApproval: { reference: string } | undefined
   if (coreClassification.value && coreClassification.value.level !== 'safe') {
-    const reference = window.prompt(
-      coreClassification.value.level === 'blocked'
-        ? '字段删除或类型变更须先完成消费者同步。请输入对应开发提交、PR 或变更单引用：'
-        : '新增字段须经开发确认消费者接入。请输入对应开发提交、PR 或变更单引用：'
-    )?.trim()
-    if (!reference) {
+    const reference = await askConfirm({
+      title: coreClassification.value.level === 'blocked' ? '发布被阻止：需开发确认' : '发布需开发确认',
+      message:
+        coreClassification.value.level === 'blocked'
+          ? '字段删除或类型变更须先完成消费者同步。\n请输入对应开发提交、PR 或变更单引用：'
+          : '新增字段须经开发确认消费者接入。\n请输入对应开发提交、PR 或变更单引用：',
+      confirmText: '提交并发布',
+      danger: coreClassification.value.level === 'blocked',
+      input: { label: '开发提交 / PR / 变更单引用', placeholder: '例如 pr#123 或 提交哈希' }
+    })
+    if (!reference || typeof reference !== 'string') {
       showToast('未提供开发确认引用，已取消发布', 'mk-toast--bad')
       return
     }
@@ -1585,7 +1726,12 @@ async function openCoreVersions() {
 
 async function rollbackCore(version: number) {
   if (coreRollbacking.value) return
-  if (!window.confirm(`确认回滚 ${skillId.value} 到 v${version}？现行文件与 ACTIVE 将被替换。`)) return
+  const ok = await askConfirm({
+    title: '回滚版本',
+    message: `确认回滚 ${skillId.value} 到 v${version}？\n现行文件与 ACTIVE 将被替换。`,
+    confirmText: '回滚'
+  })
+  if (!ok) return
   coreRollbacking.value = true
   try {
     await adminPromptWorkbenchApi.rollbackCore(skillId.value, version)
@@ -1654,6 +1800,13 @@ watch(tab, (t) => {
 
 /* ---------- 工具 ---------- */
 const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`)
+
+/** 状态条文件路径短显：保留最后两段 */
+function shortFilePath(p?: string) {
+  if (!p) return ''
+  const parts = p.split('/')
+  return parts.length > 2 ? `…/${parts.slice(-2).join('/')}` : p
+}
 const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12: false }) : '—')
 const errText = (e: unknown) => {
   const r = e as { response?: { data?: { error?: { message?: string } | string } }; message?: string }
@@ -1687,9 +1840,20 @@ async function copy(content: string) {
 }
 
 /* ---------- 总加载 ---------- */
+const loadFailed = ref(false)
 async function loadAll() {
   if (!skillId.value) return
+  // 刷新会丢弃未保存的 core 修改，先确认
+  if (coreDirty.value) {
+    const ok = await askConfirm({
+      title: '刷新设计页',
+      message: '当前 Skill 有未保存的修改，刷新后将丢失，确定刷新？',
+      confirmText: '刷新并放弃修改'
+    })
+    if (!ok) return
+  }
   loading.value = true
+  loadFailed.value = false
   notFound.value = false
   try {
     const r = await adminPromptOpsApi.getAgentOverview()
@@ -1705,14 +1869,29 @@ async function loadAll() {
     workbenchMeta.value = meta?.data?.data ?? meta?.data ?? null
     await Promise.all([loadInspect(), loadVersions(), loadRuntime(), loadRecentLogs()])
   } catch (e) {
+    loadFailed.value = true
     showToast(`加载失败：${errText(e)}`, 'mk-toast--bad')
   } finally {
     loading.value = false
   }
 }
 
-watch(agentIdParam, () => {
-  // 切换 skill：core 状态全部重置，协议页签下次激活时重新拉取
+/* 脏态离开保护：切 Skill / 关闭页面 / 刷新前确认，避免静默丢编辑内容 */
+let lastAgentId = ''
+watch(agentIdParam, async (id) => {
+  // 切换 Skill：core 状态全部重置，协议页签下次激活时重新拉取
+  if (coreDirty.value && id && id !== lastAgentId) {
+    const ok = await askConfirm({
+      title: '切换 Skill',
+      message: '当前 Skill 有未保存的修改，切换后将丢失，确定离开？',
+      confirmText: '离开并放弃修改'
+    })
+    if (!ok) {
+      void router.replace({ path: `/admin/skills/${lastAgentId}`, query: route.query })
+      return
+    }
+  }
+  lastAgentId = id
   coreRequested = false
   coreLoaded.value = false
   coreMissing.value = false
@@ -1731,11 +1910,20 @@ watch(agentIdParam, () => {
   if (agentIdParam.value) void loadAll()
   if (tab.value === 'protocol') void ensureCoreLoaded()
 })
+
+function onPageBeforeUnload(e: BeforeUnloadEvent) {
+  if (coreDirty.value) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
 onMounted(() => {
   void loadAll()
   if (tab.value === 'engineering') void loadEngineering()
   if (tab.value === 'protocol') void ensureCoreLoaded()
+  window.addEventListener('beforeunload', onPageBeforeUnload)
 })
+onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnload))
 </script>
 
 <style scoped>
@@ -1762,6 +1950,7 @@ onMounted(() => {
   min-height: 100vh;
   font-family: Inter, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
 }
+
 .mono { font-family: var(--mk-mono); }
 .sdp-ok { color: var(--mk-green); }
 .sdp-warn { color: var(--mk-amber); }
@@ -1812,23 +2001,9 @@ onMounted(() => {
 .sdp-chip--amber b { color: var(--mk-amber); }
 .sdp-chip--bad { background: var(--mk-red-bg); color: var(--mk-red); }
 
-.sdp-btn {
-  padding: 7px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--mk-line);
-  background: var(--mk-surface);
-  color: var(--mk-ink);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.sdp-btn:hover { background: #f6f9ff; }
-.sdp-btn:disabled { opacity: 0.55; cursor: not-allowed; }
-.sdp-btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
-.sdp-btn--primary:hover { background: #2b64d8; }
+/* 危险色修饰（mk-btn 共享按钮之上）：重置默认配置等破坏性操作 */
 .sdp-btn--danger { color: var(--mk-red); border-color: rgba(220, 38, 38, 0.35); background: transparent; }
-.sdp-btn--sm { padding: 5px 11px; font-size: 11.5px; }
+.sdp-btn--danger:hover { background: var(--mk-red-bg); }
 
 /* ---------- 漂移警告 ---------- */
 .sdp-drift {
@@ -1990,6 +2165,20 @@ onMounted(() => {
   background: #fbfcfe;
 }
 .sdp-json:focus { outline: none; border-color: var(--mk-blue); }
+
+/* 试跑 JSON 覆盖层：高度受控（rows=7 等效），浅色容器与深色高亮层分离 */
+.sdp-codehl--json,
+.sdp-codehl--json .sdp-codehl__pre,
+.sdp-codehl--json .sdp-codehl__ta { min-height: 0; }
+.sdp-codehl--json { height: 180px; margin-bottom: 12px; }
+.sdp-codehl--json .sdp-codehl__pre,
+.sdp-codehl--json .sdp-codehl__ta { height: 100%; padding: 10px 12px; font-size: 11px; }
+.sdp-codehl--json .sdp-codehl__ta {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  resize: none;
+}
 .sdp-trial__meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .sdp-output {
   margin: 0;
@@ -2283,7 +2472,7 @@ onMounted(() => {
   position: fixed;
   right: 20px;
   bottom: 20px;
-  z-index: 300;
+  z-index: var(--mk-z-modal);
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
 }
 
@@ -2320,6 +2509,46 @@ onMounted(() => {
   box-sizing: border-box;
 }
 .sdp-pw__textarea:focus { border-color: var(--mk-blue); }
+
+/* 源码视图：高亮覆盖层（深色编辑器） */
+.sdp-codehl {
+  position: relative;
+  margin: 0 0 12px;
+  min-height: 46vh;
+  border: 1px solid #1c2a40;
+  border-radius: 10px;
+  background: #0d1420;
+  overflow: hidden;
+}
+.sdp-codehl__pre {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  scrollbar-width: none;
+  background: #0d1420;
+  color: #c9d4e3;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre;
+  pointer-events: none;
+}
+.sdp-codehl__pre::-webkit-scrollbar { display: none; }
+.sdp-codehl__ta {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: #e8eef5;
+  white-space: pre;
+  overflow: auto;
+  min-height: 46vh;
+  border-color: transparent;
+}
+.sdp-codehl__ta::placeholder { color: rgba(201, 212, 227, 0.4); }
+.sdp-codehl__ta:focus { border-color: transparent; }
 .sdp-pw__textarea:disabled { background: #f6f8fc; color: var(--mk-faint); }
 .sdp-pw__classify {
   margin: 0 16px 10px;
@@ -2419,10 +2648,39 @@ onMounted(() => {
 .sdp-pwform__card {
   border: 1px solid var(--mk-line);
   border-radius: 14px;
-  padding: 16px 18px;
+  padding: 14px 18px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
   background: #fff;
+}
+.sdp-pwform__cardhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--mk-ink);
+  text-align: left;
+  cursor: pointer;
+}
+.sdp-pwform__cardhead:hover { color: var(--mk-blue); }
+.sdp-pwform__cardhead b { color: var(--mk-faint); font-weight: 600; }
+.sdp-pwform__caret {
+  font-style: normal;
+  color: var(--mk-faint);
+  transition: transform 0.15s ease;
+}
+.sdp-pwform__caret.is-open { transform: rotate(180deg); }
+.sdp-pwform__cardbody {
+  display: grid;
+  gap: 12px;
+  padding-top: 2px;
 }
 .sdp-pwform__card h5 {
   margin: 0;
@@ -2488,7 +2746,7 @@ onMounted(() => {
 .sdp-pwform__fields { display: grid; gap: 8px; }
 .sdp-pwform__fieldrow {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 116px 34px minmax(150px, 1.6fr) 34px 30px;
+  grid-template-columns: minmax(120px, 1fr) 116px 34px minmax(150px, 1.6fr) 34px 52px;
   gap: 10px;
   align-items: center;
   padding: 4px 0;
@@ -2503,7 +2761,34 @@ onMounted(() => {
 .sdp-pwform .sdp-input { min-height: 36px; padding: 8px 12px; font-size: 13px; }
 .sdp-pwform textarea.sdp-input { line-height: 1.65; }
 @media (max-width: 860px) {
-  .sdp-pwform__fieldrow { grid-template-columns: 1fr 96px 30px; }
+  .sdp-pwform__fieldrow { grid-template-columns: 1fr 96px 52px; }
   .sdp-pwform__fieldrow--head { display: none; }
+}
+
+
+
+
+/* 4K：设计页放宽 + 编辑器字号跟随壳层放大 */
+@media (min-width: 2000px) {
+  .sdp { max-width: 2000px; }
+  .sdp-pw__textarea,
+  .sdp-codehl__pre,
+  .sdp-json,
+  .sdp-output,
+  .sdp-prompt__code { font-size: 13.5px; }
+  .sdp-pwform .sdp-input { font-size: 14px; }
+  .sdp-eng__kvs code,
+  .sdp-pw__pre { font-size: 13px; }
+}
+@media (min-width: 2800px) {
+  .sdp { max-width: 2600px; }
+  .sdp-pw__textarea,
+  .sdp-codehl__pre,
+  .sdp-json,
+  .sdp-output,
+  .sdp-prompt__code { font-size: 16px; }
+  .sdp-pwform .sdp-input { font-size: 16.5px; }
+  .sdp-eng__kvs code,
+  .sdp-pw__pre { font-size: 15.5px; }
 }
 </style>

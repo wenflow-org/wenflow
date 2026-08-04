@@ -229,6 +229,99 @@ describe('ai-teaching routes', () => {
     expect(mockCoordinator.processStudentMessage).not.toHaveBeenCalled();
   });
 
+  it('SSE 流式：Accept text/event-stream 时输出 final/done 事件并关闭连接', async () => {
+    mockCoordinator.processStudentMessage.mockResolvedValue({
+      aiResponse: '继续',
+      analysis: {
+        cognitiveLevel: 'understand',
+        levelScore: 3,
+        understanding: 0.8,
+        confusionPoints: [],
+        engagement: 0.9,
+        emotionalState: 'positive',
+      },
+      currentState: { lss: 1, ktl: 2, lf: 3, lsb: 4 },
+      strategies: [],
+      knowledgePoint: null,
+      knowledgePoints: [],
+      isCompletion: false,
+      shouldConfirmEnd: false,
+      endReason: null,
+      recovered: false,
+      autoEnded: false,
+      peerTriggered: false,
+      checkpoint: null,
+      revision: 4,
+    });
+
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    const writes: string[] = [];
+    const res: any = {
+      status: jest.fn(),
+      json: jest.fn(),
+      setHeader: jest.fn(),
+      flushHeaders: jest.fn(),
+      write: jest.fn((chunk: string) => { writes.push(chunk); return true; }),
+      end: jest.fn(),
+      destroyed: false,
+      writableEnded: false,
+    };
+    res.status.mockReturnValue(res);
+    res.json.mockReturnValue(res);
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      headers: { accept: 'text/event-stream' },
+      body: { message: '我完成了', revision: 3 },
+    }, res);
+
+    expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'text/event-stream; charset=utf-8');
+    expect(res.flushHeaders).toHaveBeenCalled();
+    expect(mockCoordinator.processStudentMessage).toHaveBeenCalledWith(
+      'session-1',
+      '我完成了',
+      { expectedRevision: 3 },
+    );
+    const joined = writes.join('');
+    expect(joined).toContain('event: final\ndata: {"aiResponse":"继续",');
+    expect(joined).toContain('event: done\ndata: {}');
+    expect(res.end).toHaveBeenCalled();
+  });
+
+  it('SSE 流式：业务失败时以带内 error 事件返回并关闭连接', async () => {
+    mockCoordinator.processStudentMessage.mockRejectedValue(
+      Object.assign(new Error('无法处理'), { code: 'TEACHING_SESSION_STATE_CHANGED' })
+    );
+
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    const writes: string[] = [];
+    const res: any = {
+      status: jest.fn(),
+      json: jest.fn(),
+      setHeader: jest.fn(),
+      flushHeaders: jest.fn(),
+      write: jest.fn((chunk: string) => { writes.push(chunk); return true; }),
+      end: jest.fn(),
+      destroyed: false,
+      writableEnded: false,
+    };
+    res.status.mockReturnValue(res);
+    res.json.mockReturnValue(res);
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      headers: { accept: 'text/event-stream' },
+      body: { message: '继续', revision: 3 },
+    }, res);
+
+    const joined = writes.join('');
+    expect(joined).toContain('event: error\n');
+    expect(joined).toContain('TEACHING_SESSION_STATE_CHANGED');
+    expect(res.end).toHaveBeenCalled();
+  });
+
   it('Finalization 正在执行时返回 202 和轮询信息', async () => {
     mockSessionFinalizationService.finalize.mockResolvedValue({
       operationId: 'finalize-1',

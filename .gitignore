@@ -214,3 +214,7 @@ nul
 # Local architecture docs (do not track)
 doc/
 doc/archive/
+
+# Playwright MCP 会话临时文件
+.playwright-mcp/
+page-*.md

@@ -2478,6 +2478,9 @@ class LearningService {
         subject: path.subject || '综合',
         difficulty: data.userProfile?.skillLevel || 'beginner',
         estimatedTotalHours: path.estimatedHours || 0,
+        // AI 生成的路径简短摘要（path-planning 输出），随 aiPromptTemplate 持久化，
+        // 供列表接口 parsePathSummary 读取、前端卡片展示
+        summary: typeof path.summary === 'string' && path.summary.trim() ? path.summary.trim() : null,
         sceneFraming: data.userProfile?.pathSceneFraming || null,
         sceneFramingRaw: data.userProfile?.pathSceneFramingRaw || null,
         sceneFramingInput: data.userProfile?.pathSceneFramingInput || null,

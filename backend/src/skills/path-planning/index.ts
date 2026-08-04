@@ -545,12 +545,12 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
 5. 如果已完成任务被冻结，请把它们视为既有学习历史，不要在新版本里简单复制同名任务来伪装重调。` : ''}
 
 【强制要求】以下所有生成内容必须紧密围绕"${analysis.context || input.goal}"展开：
-- 路径名称中必须包含"${analysis.context || input.goal}"或高度相关的关键词，不得使用通用模板名称
+- 路径名称必须包含"${analysis.context || input.goal}"的核心主题关键词（提取 2-6 字即可），不得使用通用模板名称
 - 每个里程碑的标题必须体现"${analysis.context || input.goal}"的具体阶段
 - 禁止使用电商、音乐 App、房价预测、鸢尾花、泰坦尼克号等通用示例，全部替换为"${analysis.context || input.goal}"相关场景
 
 重要要求：
-1. 路径名称必须直接反映用户的原始学习目标："${input.goal}"
+1. 路径名称必须是简洁主题名：核心主题/技能 + 水平词（如"Python 自动化 Excel 报表入门"），控制在 8-20 个字；名称只表达"学什么"，不要冒号加副标题、括号补充说明、"从…到…"完整过程句，也不要把用户目标原文整段搬入名称；具体场景、交付物与细节放进 summary 和 milestones
 2. 如果用户水平是 beginner（零基础），路径名称必须使用"入门"、"基础"、"从零开始"等词汇，绝对不能出现"中级"、"进阶"、"高级"等词
 3. 所有里程碑标题、描述、goal 都要具体化到"${analysis.context || input.goal}"场景，不要使用泛泛的通用描述
 

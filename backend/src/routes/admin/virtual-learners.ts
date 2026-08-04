@@ -925,7 +925,7 @@ router.post('/generate-profile', async (req: any, res) => {
       }
     });
 
-    logger.info('[generate-profile] Skill返回', { result: JSON.stringify(result).substring(0, 1000) });
+    logger.info('[generate-profile] Skill返回', { result: JSON.stringify(result).substring(0, 300) });
 
     if (!result?.personaSeed) {
       return res.status(500).json({

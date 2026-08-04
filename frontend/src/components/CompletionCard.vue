@@ -101,9 +101,9 @@
 
       <div class="completion-section">
         <h4 class="section-title"><el-icon><TrendCharts /></el-icon>学习评价</h4>
-        <div v-if="evaluationHighlights" class="evaluation-block">
-          <p class="evaluation-line"><strong>亮点：</strong>{{ formattedStrengths }}</p>
-          <p class="evaluation-line"><strong>改进：</strong>{{ formattedImprovements }}</p>
+        <div v-if="hasHighlights" class="evaluation-block">
+          <p v-if="formattedStrengths" class="evaluation-line"><strong>亮点：</strong>{{ formattedStrengths }}</p>
+          <p v-if="formattedImprovements" class="evaluation-line"><strong>改进：</strong>{{ formattedImprovements }}</p>
         </div>
         <p v-else class="section-content">{{ summary.learningEvaluation }}</p>
       </div>
@@ -192,6 +192,10 @@ const knowledgeItems = computed(() => (summary.value?.knowledgeItems || []).map(
 const keyTakeaways = computed(() => summary.value?.keyTakeaways || []);
 const actionPlan = computed(() => summary.value?.actionPlan || []);
 const evaluationHighlights = computed(() => summary.value?.evaluationHighlights || null);
+const hasHighlights = computed(() => {
+  const h = evaluationHighlights.value;
+  return !!(h && ((h.strengths?.length || 0) > 0 || (h.improvements?.length || 0) > 0));
+});
 const sessionInterpretation = computed(() => summary.value?.metricInterpretation?.session || '本节表现反映本次课堂的即时投入和产出。');
 const longTermInterpretation = computed(() => summary.value?.metricInterpretation?.longTerm || '长期状态来自历史累计，不等于单节课程成绩。');
 

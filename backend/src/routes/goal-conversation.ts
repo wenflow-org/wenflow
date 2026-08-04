@@ -1,9 +1,82 @@
-import express, { Request, Response } from 'express';
+﻿import express, { Request, Response } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
 import requirementOrchestrator from '../coordinators/requirement.coordinator';
+import { PromptStreamEvent, setRequestContext } from '../gateway/api-gateway/context';
 
 const router = express.Router();
+
+/** 写一条 SSE 事件。HTTP 200 已提交后无法再改状态码，业务失败统一以 event: error 带内下发。 */
+const writeSseEvent = (res: Response, event: string, data: unknown) => {
+  if (!res || res.destroyed || res.writableEnded) return;
+  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+};
+
+/** 统一错误映射（SSE 场景复用；422 恢复信封随 error 事件 data 下发） */
+const resolveGoalError = (error: any, req: Request): { status: number; code: string; message: string; data?: any } => {
+  if (error?.status === 422 && error?.code === 'STRUCTURED_OUTPUT_INVALID' && error?.result) {
+    return {
+      status: 422,
+      code: 'STRUCTURED_OUTPUT_INVALID',
+      message: 'STRUCTURED_OUTPUT_INVALID',
+      data: goalEnvelopeForRequest(req, error.result)
+    };
+  }
+  const message = error instanceof Error ? error.message : String(error || '处理失败');
+  return {
+    status: message === '对话会话不存在' ? 404 : 500,
+    code: 'INTERNAL_ERROR',
+    message
+  };
+};
+
+/**
+ * 流式 Goal 请求处理：SSE 连接 + 注入 streamRequest（请求级流式意向）。
+ * goal skill 为 JSON 输出，不产生 delta，final 事件携带完整 goal envelope。
+ */
+const handleStreamingGoal = async (
+  req: Request,
+  res: Response,
+  task: () => Promise<any>,
+  envelope: (result: any) => any
+) => {
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  setRequestContext({
+    streamRequest: {
+      enabled: true,
+      onStream: (event: PromptStreamEvent) => {
+        if (event.type === 'delta') {
+          writeSseEvent(res, 'delta', { text: event.text });
+        } else if (event.type === 'restart') {
+          writeSseEvent(res, 'restart', { attempt: event.attempt });
+        } else if (event.type === 'error') {
+          writeSseEvent(res, 'error', { code: event.code, message: event.message });
+        }
+      },
+    },
+  });
+
+  try {
+    const result = await task();
+    writeSseEvent(res, 'final', envelope(result));
+    writeSseEvent(res, 'done', {});
+  } catch (error: any) {
+    const { status, code, message, data } = resolveGoalError(error, req);
+    writeSseEvent(res, 'error', {
+      status,
+      code,
+      message,
+      ...(data !== undefined ? { data } : {})
+    });
+  } finally {
+    if (!res.destroyed && !res.writableEnded) res.end();
+  }
+};
 
 function envelopeGoalConversation(result: any, fallbackConversationId?: string) {
   const internal = result?.internal || {};
@@ -92,6 +165,15 @@ router.post('/start', authMiddleware, async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: '学习目标不能为空' });
     }
 
+    if (String(req.headers?.accept || '').includes('text/event-stream')) {
+      return handleStreamingGoal(
+        req,
+        res,
+        () => requirementOrchestrator.start(userId, goal, { contextMode: getContextMode(req.body) }),
+        (result) => goalEnvelopeForRequest(req, result)
+      );
+    }
+
     const result = await requirementOrchestrator.start(userId, goal, {
       contextMode: getContextMode(req.body)
     });
@@ -126,6 +208,18 @@ router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: 
       return res.status(400).json({ success: false, error: '回复内容不能为空' });
     }
 
+    if (String(req.headers?.accept || '').includes('text/event-stream')) {
+      return handleStreamingGoal(
+        req,
+        res,
+        () => requirementOrchestrator.step(conversationId, reply, userId, {
+          contextMode: getContextMode(req.body),
+          confirmProposal: getConfirmProposal(req.body)
+        }),
+        (result) => goalEnvelopeForRequest(req, result, conversationId)
+      );
+    }
+
     const result = await requirementOrchestrator.step(conversationId, reply, userId, {
       contextMode: getContextMode(req.body),
       confirmProposal: getConfirmProposal(req.body)
@@ -156,6 +250,15 @@ router.post('/:conversationId/regenerate', authMiddleware, async (req: Request, 
 
     if (!userId) {
       return res.status(401).json({ success: false, error: '用户未认证' });
+    }
+
+    if (String(req.headers?.accept || '').includes('text/event-stream')) {
+      return handleStreamingGoal(
+        req,
+        res,
+        () => requirementOrchestrator.regenerate(conversationId, userId, adjustments?.trim() || undefined),
+        (result) => goalEnvelopeForRequest(req, result, conversationId)
+      );
     }
 
     const result = await requirementOrchestrator.regenerate(conversationId, userId, adjustments?.trim() || undefined);

@@ -1,6 +1,9 @@
 <template>
   <div class="mk-page cp">
-    <button type="button" class="cp-back" @click="closeSubPage">← 画像</button>
+    <div class="cp-head">
+      <button type="button" class="cp-back" @click="closeSubPage">← 虚拟学习者</button>
+      <h1 class="cp-title">会话座舱 <span class="cp-title__id mono">{{ shortId }}</span></h1>
+    </div>
 
     <div v-if="toast" class="mk-toast" :class="toastCls">{{ toast }}</div>
 
@@ -29,8 +32,8 @@
       <template v-for="(st, i) in stageFlow" :key="st">
         <div
           class="cp-stage"
-          :class="[stageCls(st), { 'cp-stage--tab': !isBlackbox && activeTab === st }]"
-          :title="isBlackbox ? undefined : `查看${stageLabel(st)}`"
+          :class="[stageCls(st), { 'cp-stage--tab': !isBlackbox && activeTab === st, 'cp-stage--locked': isBlackbox }]"
+          :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `查看${stageLabel(st)}`"
           @click="selectStageTab(st)"
         >
           <span class="cp-stage__order">{{ String(i + 1).padStart(2, '0') }}</span>
@@ -75,11 +78,11 @@
             <p>{{ goalInfo }}</p>
           </div>
           <div v-if="pathInfo" class="cp-summary__item">
-            <span>Path</span>
+            <span>路径</span>
             <p>{{ pathInfo }}</p>
           </div>
           <div v-if="learnInfo" class="cp-summary__item">
-            <span>Learn</span>
+            <span>学习</span>
             <p>{{ learnInfo }}</p>
           </div>
           <p v-if="!goalInfo && !pathInfo && !learnInfo" class="cp-none">会话刚启动，推进后这里显示各阶段摘要。</p>
@@ -521,6 +524,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { subPage, closeSubPage } from './mockStore'
 import { errMsg } from './mockLive'
+import { askConfirm } from './useConfirm'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 
 const sessionId = computed(() => subPage.value?.id || '')
@@ -1576,7 +1580,12 @@ async function act(kind: string) {
 }
 
 async function removeSession() {
-  if (!window.confirm('确认删除该会话？')) return
+  const ok = await askConfirm({
+    title: '删除会话',
+    message: '确认删除该会话？\n运行记录将一并清理，该操作不可撤销。',
+    confirmText: '删除'
+  })
+  if (!ok) return
   try {
     await adminVirtualLearnersApi.deleteVirtualSession(sessionId.value)
     closeSubPage()
@@ -1650,6 +1659,9 @@ const statusText = (s?: unknown) =>
 
 <style scoped>
 .cp { gap: 14px; }
+.cp-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.cp-title { margin: 0; font-size: 16px; line-height: 1.4; }
+.cp-title__id { font-size: 11.5px; color: var(--mk-faint); font-weight: 600; }
 .cp-back {
   border: 0;
   background: transparent;
@@ -1682,6 +1694,8 @@ const statusText = (s?: unknown) =>
 .cp-stage strong { font-size: 13px; }
 .cp-stage__state { font-size: 11px; color: var(--mk-faint); }
 .cp-stage { cursor: pointer; }
+.cp-stage--locked { cursor: default; opacity: 0.85; }
+.cp-stage--locked:hover { background: transparent; }
 .cp-stage--active { border-color: var(--mk-blue); background: #eef5ff; }
 .cp-stage--active .cp-stage__state { color: var(--mk-blue); font-weight: 700; }
 .cp-stage--tab { box-shadow: 0 0 0 2px rgba(52, 120, 246, 0.35); }

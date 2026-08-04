@@ -1,9 +1,16 @@
 <template>
-  <div v-if="d" class="mk-page vp">
+  <div v-if="notFound" class="mk-page vp">
+    <div class="mk-empty">
+      <strong>未找到该虚拟学习者</strong>
+      <span>样本可能已被删除，或链接已失效。</span>
+      <button type="button" class="mk-link" @click="closeSubPage">← 虚拟学习者</button>
+    </div>
+  </div>
+  <div v-else-if="d" class="mk-page vp">
     <header class="vp-top">
-      <button type="button" class="vp-back" @click="closeSubPage">← 返回列表</button>
+      <button type="button" class="vp-back" @click="closeSubPage">← 虚拟学习者</button>
       <div class="vp-top__meta">
-        <h2 class="vp-top__name">{{ d.name }}</h2>
+        <h1 class="vp-top__name">{{ d.name }}</h1>
         <span v-if="d.archetype" class="mk-badge mk-badge--info">{{ d.archetype }}</span>
         <span v-if="levelLabel" class="vp-top__level">{{ levelLabel }}</span>
       </div>
@@ -90,7 +97,12 @@
               :key="s.id || i"
               class="vp-story-item"
               :class="{ 'is-selected': selectedStoryId === (s.id || String(i)) }"
+              role="button"
+              tabindex="0"
+              :aria-pressed="selectedStoryId === (s.id || String(i))"
               @click="selectStory(s, i)"
+              @keydown.enter.prevent="selectStory(s, i)"
+              @keydown.space.prevent="selectStory(s, i)"
             >
               <!-- 标题行：标题 + 状态 + 操作（主操作随内容走） -->
               <div class="vp-story-item__head">
@@ -233,7 +245,7 @@
             <button type="button" class="vp-tool" :disabled="projecting" @click="openProjection('dashboard')">
               {{ projecting ? '生成中…' : '投影首页' }}
             </button>
-            <button type="button" class="vp-tool" :disabled="projecting" @click="openProjection('goal')">Goal</button>
+            <button type="button" class="vp-tool" :disabled="projecting" @click="openProjection('goal')">目标投影</button>
             <button type="button" class="vp-tool" :disabled="projecting" @click="openProjection('paths')">路径</button>
             <button type="button" class="vp-tool" :disabled="projecting" @click="openProjection('state')">状态</button>
           </div>
@@ -247,8 +259,8 @@
     />
 
     <!-- 编辑画像 -->
-    <div v-if="editOpen" class="mk-modal" @mousedown.self="editOpen = false">
-      <div class="mk-modal__panel" role="dialog" aria-label="编辑画像">
+    <div v-if="editOpen" ref="maskRef" class="mk-modal">
+      <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="编辑画像">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">编辑画像</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="editOpen = false">✕</button>
@@ -302,6 +314,9 @@ import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './mockLive'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { setProjectionToken } from '@/utils/projection'
 import QuickLearnPanel from '@/views/admin/components/virtual/QuickLearnPanel.vue'
+import { useEscape } from './useEscape'
+import { useOverlay, useMaskClose } from './useOverlay'
+import { askConfirm } from './useConfirm'
 
 interface RunItem {
   time: string
@@ -389,7 +404,8 @@ const DEMO_STORIES: Record<string, StoryItem[]> = {
 }
 const displayStories = computed<StoryItem[]>(() => {
   if (isLive.value) return stories.value
-  return DEMO_STORIES[subPage.value?.id || ''] || DEMO_STORIES['vl-001']
+  // demo 模式：未知 ID 不回退到其他样本的故事，显示空故事池（配合「未找到」空态）
+  return DEMO_STORIES[subPage.value?.id || ''] || []
 })
 
 const selectedStory = computed(() => {
@@ -440,6 +456,11 @@ const projecting = ref(false)
 const quickLearnOpen = ref(false)
 const editOpen = ref(false)
 const editForm = ref({ name: '', goal: '', level: 'beginner', notes: '' })
+useEscape(() => editOpen.value, () => { editOpen.value = false })
+const panelRef = ref<HTMLElement | null>(null)
+const maskRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => editOpen.value), panelRef)
+useMaskClose(maskRef, () => { editOpen.value = false })
 const toast = ref('')
 const toastCls = ref('mk-toast--ok')
 let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -615,6 +636,10 @@ function openEdit() {
 async function saveProfile() {
   const id = subPage.value?.id
   if (!id || saving.value) return
+  if (!editForm.value.name.trim()) {
+    showToast('请填写画像名称', 'mk-toast--bad')
+    return
+  }
   saving.value = true
   try {
     await adminVirtualLearnersApi.updateVirtualLearner(id, {
@@ -677,7 +702,12 @@ async function generateStory() {
 async function removeStory(index: number) {
   const id = subPage.value?.id
   if (!id || storyBusy.value) return
-  if (!window.confirm(`确认删除第 ${index + 1} 个故事？`)) return
+  const ok = await askConfirm({
+    title: '删除故事',
+    message: `确认删除第 ${index + 1} 个故事？\n关联的运行记录将一并清理，该操作不可撤销。`,
+    confirmText: '删除'
+  })
+  if (!ok) return
   storyBusy.value = true
   try {
     await adminVirtualLearnersApi.deleteStory(id, index)
@@ -724,7 +754,12 @@ async function runStory(story?: StoryItem, index?: number) {
 
 async function removeSession(sessionId: string) {
   if (!sessionId || sessionBusy.value) return
-  if (!window.confirm('确认删除该会话？')) return
+  const ok = await askConfirm({
+    title: '删除会话',
+    message: '确认删除该会话？\n运行记录将一并清理，该操作不可撤销。',
+    confirmText: '删除'
+  })
+  if (!ok) return
   sessionBusy.value = true
   try {
     await adminVirtualLearnersApi.deleteVirtualSession(sessionId)
@@ -782,9 +817,13 @@ const levelLabel = computed(() => ({
   advanced: '进阶'
 }[d.value?.level || ''] || d.value?.level || ''))
 
+/** demo 模式：未知 ID 一律显示「未找到」空态，严禁回退展示其他人的数据 */
+const notFound = computed(() => !isLive.value && !virtualProfiles.some((x) => x.id === subPage.value?.id))
+
 const d = computed<Detail | undefined>(() => {
   if (isLive.value) return liveDetail.value || undefined
-  const demo = virtualProfiles.find((x) => x.id === subPage.value?.id) || virtualProfiles[0]
+  const demo = virtualProfiles.find((x) => x.id === subPage.value?.id)
+  if (!demo) return undefined
   return { ...demo, level: 'beginner', notes: '' }
 })
 
@@ -995,6 +1034,10 @@ function formatRunResult(result: string) {
   border-bottom: 1px solid #f0f2f5;
   cursor: pointer;
   transition: background 0.12s ease;
+}
+.vp-story-item:focus-visible {
+  outline: 2px solid rgba(52, 120, 246, 0.85);
+  outline-offset: -2px;
 }
 .vp-story-item:hover { background: #f7f9fc; }
 .vp-story-item.is-selected {

@@ -10,6 +10,7 @@ import path from 'path';
 import yaml from 'js-yaml';
 import { randomUUID as uuidv4 } from 'crypto';
 import systemPrisma from '../config/system-database';
+import { logger } from '../utils/logger';
 import { getAPIGateway } from '../gateway/api-gateway';
 import { promptCache } from '../services/cache/prompt-cache.service';
 import { getAgentRoutings } from '../services/field-dispatcher';
@@ -670,7 +671,7 @@ router.post('/publish-core', async (req, res) => {
       getAPIGateway().invalidateCache(undefined, undefined, skillId);
       getAPIGateway().invalidateCache(undefined, agentId);
     } catch (cacheErr: any) {
-      console.warn('Failed to invalidate prompt/gateway cache:', cacheErr?.message || cacheErr);
+      logger.warn('Failed to invalidate prompt/gateway cache:', { error: cacheErr?.message || String(cacheErr) });
     }
 
     res.json({
@@ -943,7 +944,7 @@ router.post('/core/:skillId/rollback', async (req, res) => {
       getAPIGateway().invalidateCache(undefined, undefined, skillId);
       getAPIGateway().invalidateCache(undefined, agentId);
     } catch (cacheErr: any) {
-      console.warn('Failed to invalidate prompt/gateway cache:', cacheErr?.message || cacheErr);
+      logger.warn('Failed to invalidate prompt/gateway cache:', { error: cacheErr?.message || String(cacheErr) });
     }
 
     res.json({ success: true, skillId, agentId, version, rolledBack: true });

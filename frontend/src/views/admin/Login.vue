@@ -126,8 +126,6 @@
     <footer class="auth__footer">
       <img src="/favicon.png" alt="" class="auth__footer-logo" />
       <span>WenFlow Admin</span>
-      <span class="auth__footer-sep">·</span>
-      <span>Quiet UI · 运维简报式</span>
     </footer>
   </div>
 </template>
@@ -276,6 +274,20 @@ onMounted(() => {
   border-radius: 20px;
   box-shadow: 0 2px 4px rgba(23, 32, 51, 0.04), 0 24px 60px rgba(23, 32, 51, 0.08);
   overflow: hidden;
+}
+
+/* 大屏（2000-2799）：卡片与内容放大；2800+ 交由 v2.css zoom 机制 */
+@media (min-width: 2000px) and (max-width: 2799px) {
+  .auth__logo img { height: 64px; }
+  .auth__card {
+    width: min(1080px, 100%);
+    border-radius: 26px;
+  }
+  .auth__form-side { padding: 36px 40px 28px; gap: 22px; }
+  .auth__demo-side { padding: 36px 36px 38px; }
+  .auth__main { gap: 36px; }
+  .demo__tagline { font-size: 17px; }
+  .demo__msg { font-size: 15px; }
 }
 
 .auth__form-side {

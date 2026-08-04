@@ -320,12 +320,12 @@ class AIService {
     let error: any = null;
 
     try {
-      logger.info('AI 请求发送', { 
+      logger.debug('AI 请求发送', {
         messageCount: messages.length,
         agentId: options?.agentId,
         userId: options?.userId,
         action: options?.action,
-        messagesPreview: JSON.stringify(messages).substring(0, 500)
+        messagesPreview: JSON.stringify(messages).substring(0, 200)
       });
 
       const systemPrompt = messages.find((message) => message.role === 'system')?.content || '';
@@ -374,8 +374,6 @@ class AIService {
           : undefined,
       } as any;
 
-
-      logger.info('AI 响应原始数据', { response: JSON.stringify(response, null, 2).substring(0, 1000) });
 
       let reply = '';
       let reasoning = '';

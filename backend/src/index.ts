@@ -74,7 +74,13 @@ const RETIRED_SKILLS = [
   // 注册表/DB 不应残留，启动时 purge 防止幽灵注册出现在 Skill 目录
   'teaching-turn',
   'teaching-opening-generator',
-  'teaching-strategy-selector'
+  'teaching-strategy-selector',
+  // 2026-08 legacy 插件适配链退役：generic-planner/basic-generator/basic-extractor/data-mapping
+  // 仅被 agentPluginConfig（零消费者）与插件自身互相转发引用，业务主链不走，零调用
+  'generic-planner',
+  'basic-generator',
+  'basic-extractor',
+  'data-mapping'
 ] as const;
 
 // ACP 中间件
@@ -110,7 +116,7 @@ if (process.env.JWT_SECRET === 'your-secret-key-change-in-production' ||
   process.exit(1);
 }
 
-console.log('✅ 安全配置检查通过');
+  logger.info('✅ 安全配置检查通过');
 validateSecretEncryptionConfig(true);
 validateSafeHttpConfig();
 validateRuntimeDatabaseUrls(process.env.DATABASE_URL, process.env.SYSTEM_DATABASE_URL);
@@ -167,6 +173,23 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+// HTTP 请求日志（dev 调试用，debug 级别；不记录 body，仅 method/path/status/耗时）
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/', (req, res, next) => {
+    if (req.path === '/health' || req.path === '/livez' || req.path === '/readyz') return next();
+    const startedAt = Date.now();
+    res.on('finish', () => {
+      logger.debug(`[http] ${req.method} ${req.originalUrl} → ${res.statusCode} ${Date.now() - startedAt}ms`, {
+        method: req.method,
+        path: req.originalUrl,
+        status: res.statusCode,
+        durationMs: Date.now() - startedAt
+      });
+    });
+    next();
+  });
+}
 
 // 应用全局限流到 API 路由
 app.use('/api/', globalApiLimiter);
@@ -548,15 +571,21 @@ export async function startServer() {
       ...(systemDatabasePath ? [{ path: systemDatabasePath, kind: 'file' as const }] : [])
     ].filter((target, index, items) => existsSync(target.path)
       && items.findIndex(item => item.path === target.path) === index);
-    const permissionFindings = await auditSensitivePaths(sensitivePaths);
-    assertStartupActive();
-    const unsafePermissions = permissionFindings.filter(finding => finding.status === 'too_open' || finding.status === 'error');
-    if (unsafePermissions.length > 0) {
-      logger.warn('敏感存储权限审计发现风险，请运行 npm run permissions:audit / permissions:repair', {
-        findings: unsafePermissions
-      });
+    const permissionAuditDisabled =
+      process.env.SKIP_PERMISSIONS_AUDIT === '1'
+      || (process.env.SKIP_PERMISSIONS_AUDIT !== '0' && process.env.NODE_ENV !== 'production');
+    if (permissionAuditDisabled) {
+      logger.debug('敏感存储权限审计已跳过（dev 默认跳过；设置 SKIP_PERMISSIONS_AUDIT=0 强制启用，=1 强制禁用）');
+    } else {
+      const permissionFindings = await auditSensitivePaths(sensitivePaths);
+      assertStartupActive();
+      const unsafePermissions = permissionFindings.filter(finding => finding.status === 'too_open' || finding.status === 'error');
+      if (unsafePermissions.length > 0) {
+        logger.warn('敏感存储权限审计发现风险，请运行 npm run permissions:audit / permissions:repair', {
+          findings: unsafePermissions
+        });
+      }
     }
-
     const networkPolicy = await refreshRuntimeNetworkPolicy();
     assertStartupActive();
     logger.info('运行时网络策略加载完成', {
@@ -571,10 +600,12 @@ export async function startServer() {
       mode: promptBootstrap.mode,
       performed: promptBootstrap.performed,
       reason: promptBootstrap.reason,
+      createdCount: promptBootstrap.created?.length || 0,
+      updatedCount: promptBootstrap.updated?.length || 0,
+      skippedCount: promptBootstrap.skipped?.length || 0,
+      missingBeforeCount: promptBootstrap.missingBefore?.length || 0,
       created: promptBootstrap.created,
       updated: promptBootstrap.updated || [],
-      skipped: promptBootstrap.skipped,
-      missingBefore: promptBootstrap.missingBefore,
     });
 
     const fieldRoutingBootstrap = await bootstrapFieldRoutings({ database: systemPrisma });
@@ -600,7 +631,11 @@ export async function startServer() {
      await purgeRetiredSkills();
       await initializeGateway();
       assertStartupActive();
-     await aiCapabilityHealthService.refresh();
+      if (process.env.STARTUP_CANARY === '0') {
+        logger.debug('[ai-capability] 启动金丝雀探测已跳过（STARTUP_CANARY=0）');
+      } else {
+        await aiCapabilityHealthService.refresh();
+      }
       {
         const probeEnabled = await getRuntimeCapabilityProbeEnabled();
         await aiCapabilityHealthService.setEnabled(probeEnabled);

@@ -16,7 +16,8 @@ import {
   adminPromptOpsApi,
   adminAgentTopologyApi,
   adminPlatformSettingsApi,
-  adminAnnouncementsApi
+  adminAnnouncementsApi,
+  adminGoalConversationsApi
 } from '@/api/adminApi'
 import {
   dataSource,
@@ -63,6 +64,12 @@ export function errMsg(e: unknown): string {
   if (raw && typeof raw.message === 'string') return raw.message
   if (err?.response?.status === 401) return '需要 admin 登录'
   return err?.message || '网络错误'
+}
+
+/** 长 ID（UUID / traceId）在动态、列表等紧凑场景的截断显示 */
+export function shortId(s: string, head = 12, tail = 6): string {
+  const id = String(s || '')
+  return id.length > head + tail + 3 ? `${id.slice(0, head)}…${id.slice(-tail)}` : id
 }
 
 /* ================= 执行日志 → TraceSpan ================= */
@@ -113,7 +120,7 @@ function mapLogsToSpans(items: RawLog[]): TraceSpan[] {
       startMs: Math.max(0, ts - (byTrace.get(traceId) || ts)),
       durationMs: Number(log.durationMs || 0),
       status: mapStatus(log.status),
-      detail: [log.status === 'error' ? '失败' : log.status === 'timeout' ? '超时' : '成功', `${log.durationMs || 0}ms`, timeAgo(log.createdAt)].filter(Boolean).join(' · '),
+      detail: [log.status === 'error' ? '失败' : log.status === 'timeout' ? '超时' : '成功', timeAgo(log.createdAt)].filter(Boolean).join(' · '),
       payload: errText || undefined
     }
   })
@@ -297,13 +304,29 @@ export interface LiveOverviewFull {
   score: number
   headline: string
   subline: string
+  kpis: { label: string; value: string; hint: string }[]
+  wrapup: {
+    sampleSize: number
+    summaryModel: number
+    summaryFallback: number
+    evaluationModel: number
+    evaluationAiFallback: number
+    evaluationFailed: number
+  }
   funnel: { label: string; value: string; idle: boolean }[]
   rates: string[]
-  funnelNote: string
   pulse: { calls: number; issue: number }[]
   totalCalls: number
   totalIssues: number
   peak: string
+  usage: {
+    calls7d: number
+    failed7d: number
+    totalTokens7d: number
+    models7d: { model: string; calls: number; tokens: number }[]
+    failures7d: { category: string; count: number }[]
+  }
+  trend: { date: string; total: number; completed: number }[]
   feed: { text: string; time: string; tone: 'ok' | 'warn' | 'bad' | 'muted'; ts?: number }[]
   actions: { text: string; link: string; tone: 'bad' | 'warn'; agentId: string }[]
 }
@@ -314,9 +337,10 @@ export const liveOverviewFull = ref<LiveOverviewFull | null>(null)
 export const overviewHideTest = ref(true)
 
 async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; score: number; headline: string; subline: string }> {
-  const [statsRes, activityRes] = await Promise.all([
+  const [statsRes, activityRes, trendRes] = await Promise.all([
     adminDashboardApi.getStats(),
-    adminDashboardApi.getActivity(30, overviewHideTest.value).catch(() => null)
+    adminDashboardApi.getActivity(30, overviewHideTest.value).catch(() => null),
+    adminGoalConversationsApi.getStats().catch(() => null)
   ])
   const stats = statsRes.data?.data ?? statsRes.data ?? {}
   const agents = stats.agents || {}
@@ -350,9 +374,7 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
 
   /* 漏斗：目标=完成澄清的对话数（非记录数）；路径保留总量、失败数单列用于断点归因 */
   const completedConversations = Number(conv.completed || 0)
-  const totalConversations = Number(conv.total || 0)
   const totalPaths = Number(learning.totalPaths || 0)
-  const failedPaths = Number(learning.failedPaths || 0)
   const funnelRaw = [
     { label: '用户', value: Number(users.total || 0) },
     { label: '目标对话', value: completedConversations },
@@ -368,22 +390,6 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
     if (f.label === '任务' || f.value > prev) return `×${(f.value / prev).toFixed(1)}`
     return `${Math.round((f.value / prev) * 100)}%`
   })
-  /* 断点归因：路径生成失败 > 澄清完成率低 > 零值断点，按序取第一个成立项 */
-  const completedRate = totalConversations > 0 ? completedConversations / totalConversations : 0
-  let funnelNote: string
-  if (failedPaths > 0) {
-    funnelNote = `规划环节 ${failedPaths}/${totalPaths} 条路径生成失败，断点疑似在路径生成，先排查 path-agent。`
-  } else if (totalConversations > 0 && completedRate < 0.3) {
-    funnelNote = `澄清完成率低（${completedConversations}/${totalConversations}），多数对话未收敛到方向。`
-  } else {
-    const zeroIdx = funnelRaw.findIndex((f) => f.value === 0)
-    funnelNote = zeroIdx === -1
-      ? `目标 → 路径转化 ${rates[1]}，任务完成率 ${learning.completionRate ?? 0}%。`
-      : zeroIdx <= 1
-        ? '断点在第一步：还没有人完成目标澄清。'
-        : `断点在「${funnelRaw[zeroIdx].label}」：上游有量、这里为零。`
-  }
-
   /* 24h 脉搏（后端已按小时聚合）；空数据不回退全量累计，避免时间口径错位 */
   const last24h: { label?: string; total?: number; error?: number; timeout?: number }[] = agents.last24h || []
   const pulse = last24h.length
@@ -404,7 +410,9 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
     feed.push({ text: `新用户注册：${u.email || u.name}`, time: timeAgo(u.createdAt), ts: new Date(u.createdAt).getTime(), tone: 'muted' })
   }
   for (const s of act.recentSessions || []) {
-    feed.push({ text: `教学会话：${s.title || s.id}`, time: timeAgo(s.createdAt || s.updatedAt), ts: new Date(s.createdAt || s.updatedAt).getTime(), tone: 'ok' })
+    const title = String(s.title || '')
+    const label = title || shortId(String(s.id || ''))
+    feed.push({ text: `教学会话：${label}`, time: timeAgo(s.createdAt || s.updatedAt), ts: new Date(s.createdAt || s.updatedAt).getTime(), tone: 'ok' })
   }
   for (const t of act.completedTasks || []) {
     feed.push({ text: `任务完成：${t.title || t.id}`, time: timeAgo(t.completedAt || t.updatedAt), ts: new Date(t.completedAt || t.updatedAt).getTime(), tone: 'ok' })
@@ -426,16 +434,64 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
       agentId
     }))
 
+  /* KPI 行：今日窗口 + 活跃量；真实 0 显示 0，非数值才显示 —（避免「无数据」与「零」混淆） */
+  const fmt = (n: number, suffix = '') => (Number.isFinite(n) ? `${n}${suffix}` : '—')
+  const kpis = [
+    { label: '今日调用', value: fmt(todayCalls), hint: todayCalls > 0 ? `超时 ${Number(agents.todayTimeouts || 0)}` : '等待学习者开始' },
+    { label: '今日成功率', value: todayCalls > 0 ? `${todaySuccessRate}%` : '—', hint: todayFailed > 0 ? `${todayFailed} 次失败` : '无失败' },
+    { label: '今日新增', value: fmt(Number(users.newToday || 0)), hint: '新用户' },
+    { label: '今日活跃', value: fmt(activeUsers), hint: `总用户 ${users.total ?? 0}` },
+    { label: '进行中对话', value: fmt(Number(conv.active || 0)), hint: '目标澄清阶段' },
+    { label: '活跃 Skill', value: fmt(Number(agents.activeAgents24h || 0)), hint: '近 24h 有调用' },
+  ]
+
+  /* 总结产出质量：wrapup 生成链路健康度（model / fallback / failed） */
+  const wrap = (stats.agents?.wrapup || {}) as Record<string, number>
+  const wrapup = {
+    sampleSize: Number(wrap.sampleSize || 0),
+    summaryModel: Number(wrap.summaryModel || 0),
+    summaryFallback: Number(wrap.summaryFallback || 0),
+    evaluationModel: Number(wrap.evaluationModel || 0),
+    evaluationAiFallback: Number(wrap.evaluationAiFallback || 0),
+    evaluationFailed: Number(wrap.evaluationFailed || 0),
+  }
+
+  /* 近 7 天 LLM 用量与失败归因 */
+  const usageRaw = (stats.usage || {}) as {
+    calls7d?: number
+    failed7d?: number
+    totalTokens7d?: number
+    models7d?: { model: string; calls: number; tokens: number }[]
+    failures7d?: { category: string; count: number }[]
+  }
+  const usage = {
+    calls7d: Number(usageRaw.calls7d || 0),
+    failed7d: Number(usageRaw.failed7d || 0),
+    totalTokens7d: Number(usageRaw.totalTokens7d || 0),
+    models7d: (usageRaw.models7d || []).slice(0, 5),
+    failures7d: (usageRaw.failures7d || []).slice(0, 5),
+  }
+
+  /* 近 7 天目标对话趋势（目标澄清量，含完成数） */
+  const trendRaw = ((trendRes?.data?.data ?? {}) as { dailyStats?: { date: string; total: number; completed: number }[] }).dailyStats || []
+  const trend = trendRaw
+    .map((d) => ({ date: d.date, total: Number(d.total || 0), completed: Number(d.completed || 0) }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-7)
+
   liveOverviewFull.value = {
     ...head,
+    kpis,
+    wrapup,
     funnel,
     rates,
-    funnelNote,
     pulse,
     // 脉搏卡展示 24h 汇总；与健康分（今日窗口）分离，避免时间口径混用
     totalCalls: pulseCalls24h,
     totalIssues,
     peak,
+    usage,
+    trend,
     feed: feed.slice(0, 6),
     actions
   }
@@ -458,10 +514,14 @@ export interface LiveUser {
 
 export const liveUsers = ref<LiveUser[]>([])
 
+/** 后端用户总数（分页 total；前端只拉前 100 行，用于截断提示） */
+export const liveUsersTotal = ref(0)
+
 async function fetchLiveUsers(): Promise<void> {
   const res = await adminUsersApi.getUsers({ limit: 100 })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.users || body.items || []
+  liveUsersTotal.value = Number(body.pagination?.total || items.length)
   liveUsers.value = items.map((u: Record<string, unknown>) => ({
     id: String(u.id),
     name: String(u.name || u.email || u.id),
@@ -917,8 +977,14 @@ export const liveNavBadges = computed<Record<string, string>>(() => {
   if (addons > 0) out.addons = String(addons)
   const published = liveAnnouncements.value.filter((a) => a.status === 'published').length
   if (published > 0) out.announcements = String(published)
+  // 事故信号：近 7 天失败数（>0 时侧栏亮红）
+  const failed = (liveSpans.value || []).filter((s) => s.status === 'err').length
+  if (failed > 0) out['execution-logs'] = String(failed)
   return out
 })
+
+/** 红色告警徽章场景（事故信号，区别于普通计数徽章） */
+export const alarmNavBadges = new Set(['execution-logs'])
 
 async function fetchLiveAnnouncements(): Promise<void> {
   const res = await adminAnnouncementsApi.list()

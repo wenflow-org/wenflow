@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="mk-page">
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
@@ -33,7 +33,7 @@
         <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}</span>
       </div>
 
-      <div class="pcl-scroll">
+      <div class="mk-table-scroll">
         <table v-if="filtered.length" class="mk-table">
           <thead>
             <tr>
@@ -48,7 +48,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in filtered" :key="r.id" class="pcl-row" @click="openDetail(r)">
+            <tr v-for="r in shown" :key="r.id" class="pcl-row" @click="openDetail(r)">
               <td class="mk-na">{{ r.time }}</td>
               <td><span class="mono pcl-agent">{{ r.agentId }}</span></td>
               <td>
@@ -67,13 +67,16 @@
         <div v-else class="mk-empty">
           <strong>{{ keyword ? '当前筛选无记录' : '暂无调用记录' }}</strong>
         </div>
+        <div v-if="canMore" class="pcl-more">
+          <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
+        </div>
       </div>
     </div>
 
     <!-- 详情抽屉 -->
     <Teleport to="body">
-      <div v-if="detail" class="pcl-mask" @mousedown.self="detail = null">
-        <aside class="pcl-panel" role="dialog" aria-label="调用详情">
+      <div v-if="detail" ref="maskRef" class="pcl-mask">
+        <aside ref="panelRef" class="pcl-panel" role="dialog" aria-label="调用详情">
           <header class="pcl-panel__head">
             <div class="pcl-panel__title">
               <span class="mk-badge" :class="detail.success ? 'mk-badge--ok' : 'mk-badge--bad'">
@@ -87,13 +90,13 @@
 
           <div class="pcl-panel__body">
             <div class="pcl-facts">
-              <div><span>模型</span><strong class="mono">{{ detail.model || '—' }}</strong></div>
+              <div><span>模型</span><strong class="mono" :title="detail.model">{{ detail.model || '—' }}</strong></div>
               <div><span>版本</span><strong>v{{ detail.version }}</strong></div>
               <div><span>耗时</span><strong>{{ fmtMs(detail.durationMs) }}</strong></div>
-              <div><span>Tokens</span><strong>{{ detail.tokens || '—' }}</strong></div>
+              <div><span>Tokens</span><strong :title="detail.tokens">{{ detail.tokens || '—' }}</strong></div>
               <div><span>逻辑尝试</span><strong>{{ detail.promptAttempts || 1 }}</strong></div>
               <div><span>LLM 请求</span><strong>{{ detail.llmRequests || 1 }}</strong></div>
-              <div><span>Trace</span><strong class="mono">{{ detail.traceId || '—' }}</strong></div>
+              <div><span>Trace</span><strong class="mono" :title="detail.traceId">{{ detail.traceId || '—' }}</strong></div>
               <div><span>漂移</span><strong :class="{ 'pcl-bad': detail.drift }">{{ detail.drift ? '是' : '否' }}</strong></div>
             </div>
 
@@ -126,6 +129,8 @@
 import { computed, ref, watch } from 'vue'
 import { dataSource } from './mockStore'
 import { timeAgo } from './mockLive'
+import { useLoadMore } from './useLoadMore'
+import { useOverlay, useMaskClose } from './useOverlay'
 import { adminRuntimeDefinitionsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 
@@ -177,7 +182,7 @@ const demoRows: Row[] = [
     extractedJson: '{\n  "level": "beginner"\n}', normalizedOutput: '{\n  "profile": "…"\n}', tokenUsage: '{\n  "prompt": 620,\n  "completion": 148\n}'
   },
   {
-    id: 'pcl-demo-4', agentId: 'skill:generic-planner', success: true, drift: false, version: 4,
+    id: 'pcl-demo-4', agentId: 'skill:path-planning', success: true, drift: false, version: 4,
     durationMs: 4820, tokens: 'P 2040 / C 1130', digest: '', time: '15 分钟前', model: 'deepseek-v4-pro',
     traceId: 'tr:8f31a2', errorCode: '', errorMessage: '', promptAttempts: 1, llmRequests: 1,
     userPayload: '{\n  "goal": "Excel 自动化入门"\n}', rawModelOutput: '{\n  "stages": 4\n}',
@@ -314,6 +319,9 @@ const filtered = computed(() =>
 
 const failCount = computed(() => rows.value.filter((r) => !r.success).length)
 const driftCount = computed(() => rows.value.filter((r) => r.drift).length)
+
+/* 长列表分批渲染：每批 50 行 */
+const { shown, canMore, loadMore } = useLoadMore(filtered, 50)
 const statusTone = computed(() => (!rows.value.length ? 'mk-status--muted' : failCount.value ? 'mk-status--bad' : driftCount.value ? 'mk-status--warn' : 'mk-status--ok'))
 const statusTitle = computed(() =>
   !rows.value.length ? '还没有 Prompt 调用记录' : failCount.value ? `${failCount.value} 次调用失败` : driftCount.value ? `注意：${driftCount.value} 次漂移` : 'Prompt 调用健康'
@@ -322,6 +330,10 @@ const statusTitle = computed(() =>
 /* 详情 */
 const detail = ref<Row | null>(null)
 useEscape(() => !!detail.value, () => { detail.value = null })
+const panelRef = ref<HTMLElement | null>(null)
+const maskRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => !!detail.value), panelRef)
+useMaskClose(maskRef, () => { detail.value = null })
 const tab = ref('input')
 const tabs = [
   { id: 'input', label: '输入载荷' },
@@ -352,13 +364,17 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
 </script>
 
 <style scoped>
-.pcl-scroll { max-height: 68vh; overflow-y: auto; }
-.pcl-scroll thead th { position: sticky; top: 0; background: var(--mk-surface); z-index: 1; }
 .pcl-row { cursor: pointer; }
 .pcl-row:hover { background: #f6f9ff; }
 .pcl-go { color: var(--mk-faint); font-weight: 700; }
 .pcl-row:hover .pcl-go { color: var(--mk-blue); }
 .pcl-agent { font-size: 11px; color: var(--mk-blue); }
+.pcl-more {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 12px;
+  border-top: 1px dashed var(--mk-line);
+}
 .pcl-digest {
   font-size: 12px;
   color: var(--mk-muted);
@@ -372,7 +388,7 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
 .pcl-mask {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: var(--mk-z-drawer);
   background: rgba(15, 23, 42, 0.36);
   display: flex;
   justify-content: flex-end;
@@ -386,6 +402,8 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
   grid-template-rows: auto 1fr;
   animation: pcl-in 0.2s ease;
 }
+
+
 @keyframes pcl-in { from { transform: translateX(30px); opacity: 0; } }
 .pcl-panel__head {
   display: flex;
@@ -409,6 +427,11 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
 .pcl-facts > div { display: grid; gap: 2px; min-width: 0; }
 .pcl-facts span { font-size: 11px; color: #8492ab; font-weight: 600; }
 .pcl-facts strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 窄屏：facts 网格塌缩为 2 列，避免每格过窄不可读 */
+@media (max-width: 560px) {
+  .pcl-facts { grid-template-columns: repeat(2, 1fr); }
+}
 .pcl-bad { color: var(--mk-red); }
 
 .pcl-error {
@@ -434,5 +457,30 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+
+/* 4K：抽屉加宽 + 字号跟随壳层放大 */
+@media (min-width: 2000px) {
+  .pcl-panel { width: min(740px, 100vw); }
+  .pcl-panel__head { padding: 20px 24px; }
+  .pcl-panel__title h3 { font-size: 19px; }
+  .pcl-panel__id { font-size: 13px; }
+  .pcl-panel__body { padding: 20px 24px; }
+  .pcl-facts span { font-size: 13px; }
+  .pcl-facts strong { font-size: 14px; }
+  .pcl-error p { font-size: 14.5px; }
+  .pcl-payload { font-size: 13px; }
+}
+@media (min-width: 2800px) {
+  .pcl-panel { width: min(920px, 100vw); }
+  .pcl-panel__head { padding: 24px 30px; }
+  .pcl-panel__title h3 { font-size: 23px; }
+  .pcl-panel__id { font-size: 15.5px; }
+  .pcl-panel__body { padding: 24px 30px; }
+  .pcl-facts span { font-size: 15.5px; }
+  .pcl-facts strong { font-size: 16.5px; }
+  .pcl-error p { font-size: 17px; }
+  .pcl-payload { font-size: 15.5px; }
 }
 </style>

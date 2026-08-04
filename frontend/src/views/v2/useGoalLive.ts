@@ -8,6 +8,9 @@ import {
   replyGoalConversation,
   getGoalConversation,
   regenerateGoalConversation,
+  streamStartGoalConversation,
+  streamReplyGoalConversation,
+  streamRegenerateGoalConversation,
   type GoalConversationEnvelope,
   type GoalUnderstanding
 } from '@/api/goalConversation';
@@ -90,6 +93,8 @@ const failed = ref<'start' | 'reply' | 'confirm' | 'supplement' | 'resume' | ''>
 const lastPayload = ref('');
 const freshKeys = ref<string[]>([]);
 const started = ref(false);
+/** 快捷回复操作提示：每个会话只展示一次（首次出现快捷回复时） */
+const quickReplyHintShown = ref(false);
 
 const FIELD_DEFS: Array<{ key: string; label: string; read: (u: GoalUnderstanding, c: Record<string, unknown>) => string }> = [
   { key: 'real_problem', label: '想解决的问题', read: (u, c) => pickText(u.real_problem, u.pain_points, u.surface_goal, c.real_problem, c.problem) },
@@ -191,18 +196,43 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
   sending.value = true;
   failed.value = '';
   lastPayload.value = text;
+  // goal skill 为 JSON 输出（无 delta），期间由 typing 指示器呈现等待态；
+  // final 到达后由 applyEnvelope 一次性合并消息，无需占位气泡。
   try {
-    let env: GoalConversationEnvelope;
-    if (action === 'start') {
-      env = await startGoalConversation(text);
-    } else if (action === 'confirm') {
-      env = await replyGoalConversation(conversationId.value, text, { confirmProposal: true });
-    } else if (action === 'supplement') {
-      env = await regenerateGoalConversation(conversationId.value, text);
-    } else {
-      env = await replyGoalConversation(conversationId.value, text);
+    let env: GoalConversationEnvelope | null = null;
+    try {
+      if (action === 'start') {
+        env = await streamStartGoalConversation(text);
+      } else if (action === 'confirm') {
+        env = await streamReplyGoalConversation(conversationId.value, text, { confirmProposal: true });
+      } else if (action === 'supplement') {
+        env = await streamRegenerateGoalConversation(conversationId.value, text);
+      } else {
+        env = await streamReplyGoalConversation(conversationId.value, text);
+      }
+    } catch (streamError) {
+      const e = streamError as { transport?: boolean; recoveryEnvelope?: GoalConversationEnvelope };
+      if (e.recoveryEnvelope) {
+        // 422 恢复信封：模型部分产出可用，应用后视为本轮已处理
+        applyEnvelope(e.recoveryEnvelope, { userText: action === 'supplement' ? '' : text });
+      } else if (!e.transport) {
+        throw streamError;
+      } else {
+        // 传输层失败且未收到任何内容：回退非流式重发
+        if (action === 'start') {
+          env = await startGoalConversation(text);
+        } else if (action === 'confirm') {
+          env = await replyGoalConversation(conversationId.value, text, { confirmProposal: true });
+        } else if (action === 'supplement') {
+          env = await regenerateGoalConversation(conversationId.value, text);
+        } else {
+          env = await replyGoalConversation(conversationId.value, text);
+        }
+      }
     }
-    applyEnvelope(env, { userText: action === 'supplement' ? '' : text });
+    if (env) {
+      applyEnvelope(env, { userText: action === 'supplement' ? '' : text });
+    }
   } catch (e) {
     failed.value = action;
     if (action !== 'start' && action !== 'supplement') {
@@ -284,7 +314,7 @@ function hasSession(): boolean {
   return !!localStorage.getItem(CID_KEY);
 }
 
-function reset() {
+function reset(clearStorage = true) {
   conversationId.value = '';
   messages.value = [];
   stage.value = '';
@@ -298,8 +328,20 @@ function reset() {
   freshKeys.value = [];
   failed.value = '';
   started.value = false;
-  localStorage.removeItem(CID_KEY);
-  localStorage.removeItem(MSG_KEY);
+  quickReplyHintShown.value = false;
+  if (clearStorage) {
+    localStorage.removeItem(CID_KEY);
+    localStorage.removeItem(MSG_KEY);
+  }
+}
+
+/**
+ * 仅清内存状态、保留本地恢复入口：
+ * SPA 内从旧会话切换回来时调用，避免模块级残留的上一轮对话直接上屏；
+ * localStorage 保留，初始页仍可「继续上次的规划」恢复。
+ */
+function resetView() {
+  reset(false);
 }
 
 export function useGoalLive() {
@@ -319,6 +361,7 @@ export function useGoalLive() {
     sending,
     failed,
     started,
+    quickReplyHintShown,
     send,
     confirm,
     supplement,
@@ -326,6 +369,7 @@ export function useGoalLive() {
     resume,
     resumeById,
     hasSession,
-    reset
+    reset,
+    resetView
   });
 }

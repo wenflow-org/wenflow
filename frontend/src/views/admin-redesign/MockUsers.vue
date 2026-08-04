@@ -6,9 +6,12 @@
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ users.length }} 人</span>
       <span class="mk-status__meta">管理员 {{ adminCount }}</span>
-      <span class="mk-status__meta">今日活跃 {{ activeToday }}</span>
+      <span class="mk-status__meta">当前在线 {{ activeToday }}</span>
       <span v-if="isLive && registrationEnabled !== null" class="mk-status__meta" :class="registrationEnabled ? '' : 'ul-reg--closed'">
         注册{{ registrationEnabled ? '开放' : '关闭' }}
+      </span>
+      <span v-if="isLive && liveUsersTotal > users.length" class="mk-status__meta ul-truncated" :title="`后端共 ${liveUsersTotal} 人，列表仅加载前 ${users.length} 行`">
+        已截断 · 共 {{ liveUsersTotal }} 人
       </span>
       <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建用户</button>
     </div>
@@ -35,48 +38,73 @@
         <span class="mk-card__meta">{{ filtered.length }} / {{ users.length }} 人</span>
       </div>
 
-      <table v-if="filtered.length" class="mk-table">
-        <thead>
-          <tr>
-            <th v-if="isLive" style="width:32px">
-              <input type="checkbox" :checked="allChecked" @change="toggleAll" />
-            </th>
-            <th>用户</th>
-            <th>角色</th>
-            <th>路径 / 会话</th>
-            <th>最后登录</th>
-            <th style="text-align:right">操作</th>
-          </tr>
-        </thead>
+      <MockSkeletonTable v-if="liveLoading && !users.length" :cols="6" />
+      <div v-else-if="filtered.length" class="mk-table-scroll">
+        <table class="mk-table">
+          <thead>
+            <tr>
+              <th v-if="isLive" style="width:32px">
+                <input type="checkbox" :checked="allChecked" @change="toggleAll" />
+              </th>
+              <th>用户</th>
+              <th>角色</th>
+              <th>路径 / 会话</th>
+              <th>注册时间</th>
+              <th>最后登录</th>
+              <th style="text-align:right">操作</th>
+            </tr>
+          </thead>
         <tbody>
-          <tr v-for="u in filtered" :key="u.id">
-            <td v-if="isLive"><input v-model="selected" type="checkbox" :value="u.id" /></td>
+          <tr v-for="u in shown" :key="u.id" class="ul-row" @click="openSubPage('user', u.id)">
+            <td v-if="isLive"><input v-model="selected" type="checkbox" :value="u.id" @click.stop /></td>
             <td>
               <div class="mk-cell-main">
                 <strong>{{ u.name }}</strong>
                 <span class="mk-cell-sub">{{ u.email }}</span>
               </div>
+              <div class="ul-tags">
+                <span v-if="isSelf(u)" class="ul-tag ul-tag--self">当前管理员</span>
+                <span v-else-if="isTestAccount(u)" class="ul-tag ul-tag--test">测试账号</span>
+              </div>
             </td>
             <td><span class="mk-badge" :class="u.admin ? 'mk-badge--info' : 'mk-badge--muted'">{{ u.admin ? '管理员' : '用户' }}</span></td>
             <td class="mk-num">{{ u.paths }} / {{ u.sessions }}</td>
+            <td><span :class="u.createdAt === '从未' ? 'mk-na' : ''">{{ u.createdAt }}</span></td>
             <td><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
             <td>
               <div class="mk-actions">
                 <button type="button" class="mk-link" @click="openSubPage('user', u.id)">详情</button>
-                <template v-if="isLive">
-                  <button type="button" class="mk-link" @click="openEdit(u)">编辑</button>
-                  <button type="button" class="mk-link" :disabled="u.busy" @click="toggleRole(u)">{{ u.admin ? '降为用户' : '设为管理员' }}</button>
-                  <button type="button" class="mk-link mk-link--danger" :disabled="u.busy" @click="removeUser(u)">删除</button>
-                </template>
+                <div v-if="isLive" class="mk-menu">
+                  <button type="button" class="mk-menu__btn" aria-label="更多操作" @click.stop="toggleMenu(u.id)">⋯</button>
+                  <div v-if="openMenu === u.id" class="mk-menu__pop" @click.stop>
+                    <button type="button" class="mk-menu__item" :disabled="u.busy" @click="menuEdit(u)">编辑</button>
+                    <button
+                      v-if="!isSelf(u) && !isTestAccount(u)"
+                      type="button"
+                      class="mk-menu__item"
+                      :class="{ 'mk-menu__item--danger': u.admin }"
+                      :disabled="u.busy"
+                      @click="menuRole(u)"
+                    >{{ u.admin ? '降为用户' : '设为管理员' }}</button>
+                    <template v-if="!isSelf(u)">
+                      <div class="mk-menu__sep"></div>
+                      <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="u.busy" @click="menuDelete(u)">删除</button>
+                    </template>
+                  </div>
+                </div>
               </div>
             </td>
           </tr>
         </tbody>
       </table>
+      </div>
 
       <div v-else class="mk-empty">
         <strong>没有匹配的用户</strong>
         <span>放宽筛选条件，或邀请第一位真实用户。</span>
+      </div>
+      <div v-if="canMore" class="ul-more">
+        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }} 人）</button>
       </div>
     </div>
 
@@ -90,11 +118,11 @@
     </div>
 
     <!-- 新建/编辑用户 -->
-    <div v-if="createOpen" class="mk-modal" @mousedown.self="createOpen = false">
-      <div class="mk-modal__panel" role="dialog" :aria-label="editTarget ? '编辑用户' : '新建用户'">
+    <div v-if="createOpen" ref="maskRef" class="mk-modal">
+      <div ref="panelRef" class="mk-modal__panel" role="dialog" :aria-label="editTarget ? '编辑用户' : '新建用户'">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">{{ editTarget ? `编辑用户 · ${editTarget.name}` : '新建用户' }}</h3>
-          <button type="button" class="mk-modal__close" aria-label="关闭" @click="createOpen = false">×</button>
+          <button type="button" class="mk-modal__close" aria-label="关闭" @click="createOpen = false">✕</button>
         </div>
         <div class="mk-modal__body">
           <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
@@ -134,7 +162,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { openSubPage, dataSource, intent } from './mockStore'
-import { liveUsers, liveCreateUser, liveDeleteUser, liveSetUserRole, timeAgo, errMsg, registrationEnabled } from './mockLive'
+import { liveUsers, liveCreateUser, liveDeleteUser, liveSetUserRole, liveUsersTotal, timeAgo, errMsg, registrationEnabled, liveLoading } from './mockLive'
+import { useLoadMore } from './useLoadMore'
+import { useOverlay, useMaskClose } from './useOverlay'
+import { useRowMenu } from './useRowMenu'
+import { askConfirm } from './useConfirm'
+import MockSkeletonTable from './MockSkeletonTable.vue'
 import { adminUsersApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 
@@ -142,12 +175,34 @@ const props = defineProps<{ state: 'normal' | 'empty' }>()
 
 const isLive = computed(() => dataSource.value === 'live')
 
+/* 当前登录管理员（保护自己不被降级/删除） */
+const currentAdmin = computed(() => {
+  const raw = localStorage.getItem('admin_user') || sessionStorage.getItem('admin_user')
+  if (!raw) return { id: '', name: 'admin', email: 'admin@wenflow.local' }
+  try {
+    const d = JSON.parse(raw)
+    return { id: String(d.id || ''), name: String(d.name || ''), email: String(d.email || '') }
+  } catch {
+    return { id: '', name: 'admin', email: 'admin@wenflow.local' }
+  }
+})
+const isSelf = (u: UserRow) =>
+  u.id === currentAdmin.value.id ||
+  u.email === currentAdmin.value.email ||
+  (!!currentAdmin.value.name && u.name === currentAdmin.value.name)
+/** 虚拟学习者与审计/测试账号：不参与管理员提升（无意义且有风险） */
+const isTestAccount = (u: UserRow) =>
+  /@test\.local$/.test(u.email) ||
+  /^virtual_/.test(u.id) ||
+  /^(e2e_|uxaudit_|audit_probe_|ui_check|motion_review)/i.test(u.name)
+
 interface UserRow {
   id: string
   name: string
   email: string
   admin: boolean
   online: boolean
+  createdAt: string
   lastLogin: string
   paths: number
   sessions: number
@@ -155,18 +210,18 @@ interface UserRow {
 }
 
 const normalUsers: UserRow[] = [
-  { id: 'u1', name: '陈晓', email: 'chenxiao@example.com', admin: false, online: true, lastLogin: '12 分钟前', paths: 1, sessions: 8 },
-  { id: 'u2', name: '刘一帆', email: 'liu**@163.com', admin: false, online: true, lastLogin: '1 小时前', paths: 1, sessions: 3 },
-  { id: 'u3', name: '王梓', email: 'wangzi@example.com', admin: false, online: false, lastLogin: '昨天 21:14', paths: 2, sessions: 11 },
-  { id: 'u4', name: '赵敏', email: 'zhaomin@example.com', admin: false, online: false, lastLogin: '3 天前', paths: 1, sessions: 6 },
-  { id: 'u5', name: 'admin', email: 'admin@wenflow.local', admin: true, online: true, lastLogin: '刚刚', paths: 0, sessions: 0 },
-  { id: 'u6', name: '孙可', email: 'sunke@example.com', admin: false, online: false, lastLogin: '2 天前', paths: 1, sessions: 4 },
-  { id: 'u7', name: '周洁', email: 'zhoujie@example.com', admin: false, online: false, lastLogin: '1 周前', paths: 1, sessions: 2 },
-  { id: 'u8', name: '吴迪', email: 'wudi@example.com', admin: false, online: false, lastLogin: '昨天 08:32', paths: 0, sessions: 1 },
-  { id: 'u9', name: '郑爽', email: 'zhengshuang@example.com', admin: false, online: true, lastLogin: '26 分钟前', paths: 2, sessions: 9 },
-  { id: 'u10', name: '冯远', email: 'fengyuan@example.com', admin: false, online: false, lastLogin: '4 小时前', paths: 1, sessions: 5 },
-  { id: 'u11', name: '褚燕', email: 'chuyan@example.com', admin: false, online: false, lastLogin: '从未', paths: 0, sessions: 0 },
-  { id: 'u12', name: '测试账号', email: 'test@wenflow.local', admin: true, online: false, lastLogin: '从未', paths: 0, sessions: 0 }
+  { id: 'u1', name: '陈晓', email: 'chenxiao@example.com', admin: false, online: true, createdAt: '5 个月前', lastLogin: '12 分钟前', paths: 1, sessions: 8 },
+  { id: 'u2', name: '刘一帆', email: 'liu**@163.com', admin: false, online: true, createdAt: '4 个月前', lastLogin: '1 小时前', paths: 1, sessions: 3 },
+  { id: 'u3', name: '王梓', email: 'wangzi@example.com', admin: false, online: false, createdAt: '6 个月前', lastLogin: '昨天 21:14', paths: 2, sessions: 11 },
+  { id: 'u4', name: '赵敏', email: 'zhaomin@example.com', admin: false, online: false, createdAt: '3 个月前', lastLogin: '3 天前', paths: 1, sessions: 6 },
+  { id: 'u5', name: 'admin', email: 'admin@wenflow.local', admin: true, online: true, createdAt: '8 个月前', lastLogin: '刚刚', paths: 0, sessions: 0 },
+  { id: 'u6', name: '孙可', email: 'sunke@example.com', admin: false, online: false, createdAt: '2 个月前', lastLogin: '2 天前', paths: 1, sessions: 4 },
+  { id: 'u7', name: '周洁', email: 'zhoujie@example.com', admin: false, online: false, createdAt: '1 个月前', lastLogin: '1 周前', paths: 1, sessions: 2 },
+  { id: 'u8', name: '吴迪', email: 'wudi@example.com', admin: false, online: false, createdAt: '2 周前', lastLogin: '昨天 08:32', paths: 0, sessions: 1 },
+  { id: 'u9', name: '郑爽', email: 'zhengshuang@example.com', admin: false, online: true, createdAt: '5 个月前', lastLogin: '26 分钟前', paths: 2, sessions: 9 },
+  { id: 'u10', name: '冯远', email: 'fengyuan@example.com', admin: false, online: false, createdAt: '3 个月前', lastLogin: '4 小时前', paths: 1, sessions: 5 },
+  { id: 'u11', name: '褚燕', email: 'chuyan@example.com', admin: false, online: false, createdAt: '3 周前', lastLogin: '从未', paths: 0, sessions: 0 },
+  { id: 'u12', name: '测试账号', email: 'test@wenflow.local', admin: true, online: false, createdAt: '2 个月前', lastLogin: '从未', paths: 0, sessions: 0 }
 ]
 
 const demoUsers = ref<UserRow[]>([])
@@ -186,6 +241,7 @@ const users = computed<UserRow[]>(() => {
       email: u.email,
       admin: u.isAdmin,
       online: !!u.lastLoginAt && Date.now() - new Date(u.lastLoginAt).getTime() < 30 * 60000,
+      createdAt: timeAgo(u.createdAt),
       lastLogin: timeAgo(u.lastLoginAt),
       paths: u.paths,
       sessions: u.sessions
@@ -205,6 +261,25 @@ const pills = [
 /* 新建 / 编辑用户 */
 const createOpen = ref(false)
 useEscape(() => createOpen.value, () => { createOpen.value = false })
+const { openMenu, toggleMenu, closeMenu } = useRowMenu()
+
+/** 行内 ⋯ 菜单项：先关菜单再执行 */
+function menuEdit(u: UserRow) {
+  closeMenu()
+  openEdit(u)
+}
+function menuRole(u: UserRow) {
+  closeMenu()
+  void toggleRole(u)
+}
+function menuDelete(u: UserRow) {
+  closeMenu()
+  void removeUser(u)
+}
+const panelRef = ref<HTMLElement | null>(null)
+const maskRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => createOpen.value), panelRef)
+useMaskClose(maskRef, () => { createOpen.value = false })
 
 /* 命令面板快捷动作：直达并打开新建弹窗 */
 watch(
@@ -288,6 +363,7 @@ async function saveUser() {
         email: form.value.email.trim(),
         admin: form.value.admin,
         online: false,
+        createdAt: '刚刚',
         lastLogin: '从未',
         paths: 0,
         sessions: 0
@@ -314,7 +390,12 @@ function toggleAll() {
 
 async function batchDelete() {
   if (!selected.value.length || batchBusy.value) return
-  if (!window.confirm(`确认批量删除 ${selected.value.length} 个用户？该操作不可撤销。`)) return
+  const ok = await askConfirm({
+    title: '批量删除用户',
+    message: `确认批量删除 ${selected.value.length} 个用户？该操作不可撤销，将同时删除其学习记录。`,
+    confirmText: `删除 ${selected.value.length} 个用户`
+  })
+  if (!ok) return
   batchBusy.value = true
   try {
     await adminUsersApi.batchDeleteUsers([...selected.value])
@@ -331,6 +412,16 @@ async function batchDelete() {
 
 async function toggleRole(u: UserRow) {
   const targetAdmin = !u.admin
+  const verb = targetAdmin ? '设为管理员' : '降为普通用户'
+  const ok = await askConfirm({
+    title: `${verb}「${u.name}」`,
+    message: targetAdmin
+      ? `确认将「${u.name}」设为管理员？该用户将获得全部管理权限。`
+      : `确认将「${u.name}」降为普通用户？将失去管理后台访问权限。`,
+    confirmText: verb,
+    danger: !targetAdmin
+  })
+  if (!ok) return
   u.busy = true
   try {
     await liveSetUserRole(u.id, targetAdmin)
@@ -343,7 +434,12 @@ async function toggleRole(u: UserRow) {
 }
 
 async function removeUser(u: UserRow) {
-  if (!window.confirm(`确认删除用户「${u.name}」（${u.email}）？该操作不可撤销。`)) return
+  const ok = await askConfirm({
+    title: '删除用户',
+    message: `确认删除用户「${u.name}」（${u.email}）？\n该操作不可撤销，将同时删除其学习记录。`,
+    confirmText: '删除'
+  })
+  if (!ok) return
   u.busy = true
   try {
     await liveDeleteUser(u.id)
@@ -367,11 +463,16 @@ const filtered = computed(() =>
     return true
   })
 )
+
+/* 长列表分批渲染：每批 15 行 */
+const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
 </script>
 
 <style scoped>
 .mk-link--danger { color: var(--mk-red, #dc2626); }
 .mk-toast--bad { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
+.ul-row { cursor: pointer; }
+.ul-row:hover { background: #f6f9ff; }
 .ul-batch {
   position: sticky;
   bottom: 12px;
@@ -401,4 +502,21 @@ const filtered = computed(() =>
 }
 .ul-batch__danger:disabled { opacity: 0.6; }
 .ul-reg--closed { color: var(--mk-amber); font-weight: 700; }
+.ul-truncated { color: var(--mk-amber); font-weight: 700; }
+.ul-tags { display: flex; gap: 6px; margin-top: 2px; }
+.ul-tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.ul-tag--self { background: #dbeafe; color: #1f57cc; }
+.ul-tag--test { background: #fef3c7; color: #b45309; }
+.ul-more {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 12px;
+  border-top: 1px dashed var(--mk-line);
+}
 </style>

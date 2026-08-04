@@ -21,7 +21,9 @@ jest.mock('../../../config/models.config', () => ({
 
 jest.mock('../../../utils/safe-http', () => ({
   safeHttpRequest: jest.fn(),
-  UnsafeUrlError: class UnsafeUrlError extends Error {}
+  safeHttpStreamRequest: jest.fn(),
+  UnsafeUrlError: class UnsafeUrlError extends Error {},
+  SafeHttpBodyLimitError: class SafeHttpBodyLimitError extends Error {}
 }))
 
 import { APIExecutor } from '../executor'
@@ -29,9 +31,10 @@ import type { ResolvedRoute } from '../types'
 import type { RetryBudget } from '../retry-budget'
 import { createRetryBudget } from '../retry-budget'
 import { logger } from '../../../utils/logger'
-import { safeHttpRequest } from '../../../utils/safe-http'
+import { safeHttpRequest, safeHttpStreamRequest } from '../../../utils/safe-http'
 
 const safeHttpRequestMock = safeHttpRequest as jest.Mock
+const streamRequestMock = safeHttpStreamRequest as jest.Mock
 
 const route: ResolvedRoute = {
   providerType: 'openai-compatible',
@@ -476,5 +479,191 @@ describe('APIExecutor retry attempts', () => {
 
     await expect(execution).rejects.toThrow('API request canceled')
     expect(safeHttpRequestMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('APIExecutor streaming (SSE)', () => {
+  beforeEach(() => {
+    jest.restoreAllMocks()
+    safeHttpRequestMock.mockReset()
+    streamRequestMock.mockReset()
+    agentLogCreate.mockReset().mockResolvedValue({})
+    attemptCreate.mockReset().mockResolvedValue({})
+  })
+
+  function sseResponse(status: number, body: string, headers: Record<string, string> = {}) {
+    return async (url: string, options: any) => {
+      const responseHeaders = { 'content-type': 'text/event-stream', ...headers }
+      options.onHeaders?.(status, responseHeaders)
+      options.onChunk?.(Buffer.from(body))
+      return { status, headers: responseHeaders, url, totalBytes: Buffer.byteLength(body) }
+    }
+  }
+
+  it('解析 SSE 增量透传并合成完整 ChatResponse（含 usage/finish_reason 遥测）', async () => {
+    const sseBody = [
+      'data: {"id":"c-stream","model":"test-model","choices":[{"index":0,"delta":{"content":"你"},"finish_reason":null}]}',
+      '',
+      'data: {"id":"c-stream","model":"test-model","choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}',
+      '',
+      'data: {"id":"c-stream","model":"test-model","choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":4,"total_tokens":14}}',
+      '',
+      'data: [DONE]',
+      ''
+    ].join('\n')
+    streamRequestMock.mockImplementation(sseResponse(200, sseBody))
+
+    const deltas: string[] = []
+    const response = await new APIExecutor().execute(
+      route,
+      { messages: [{ role: 'user', content: 'hello' }], stream: true },
+      { traceId: 'trace-stream', onStreamChunk: (delta) => deltas.push(delta) }
+    )
+
+    expect(deltas).toEqual(['你', '好'])
+    expect(response.choices[0].message.content).toBe('你好')
+    expect(response.choices[0].finish_reason).toBe('stop')
+    expect(response.usage).toEqual({ prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 })
+    expect(response.id).toBe('c-stream')
+    expect(attemptCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({
+      success: true,
+      finishReason: 'stop',
+      promptTokens: 10,
+      completionTokens: 4
+    }))
+    expect(streamRequestMock).toHaveBeenCalledWith(
+      'https://example.com/v1/chat/completions',
+      expect.objectContaining({
+        body: expect.objectContaining({ stream: true, stream_options: { include_usage: true } })
+      })
+    )
+  })
+
+  it('内容增量已透传后传输失败不重试', async () => {
+    streamRequestMock.mockImplementation(async (url: string, options: any) => {
+      options.onHeaders?.(200, { 'content-type': 'text/event-stream' })
+      options.onChunk?.(Buffer.from('data: {"choices":[{"index":0,"delta":{"content":"半截"}}]}\n\n'))
+      throw Object.assign(new Error('connection reset'), { code: 'ECONNRESET' })
+    })
+
+    await expect(new APIExecutor().execute(
+      route,
+      { messages: [{ role: 'user', content: 'hello' }], stream: true },
+      { traceId: 'trace-stream-no-retry', onStreamChunk: () => {}, retryBudget: createRetryBudget() }
+    )).rejects.toMatchObject({ code: 'NETWORK_TRANSIENT' })
+
+    expect(streamRequestMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('首个内容增量之前失败按重试预算重试', async () => {
+    jest.spyOn(APIExecutor.prototype as any, 'delay').mockResolvedValue(undefined)
+    const budget = createRetryBudget()
+    streamRequestMock
+      .mockRejectedValueOnce(Object.assign(new Error('HTTP 请求超时'), { code: 'ETIMEDOUT' }))
+      .mockImplementationOnce(sseResponse(200, 'data: {"choices":[{"index":0,"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n'))
+
+    const deltas: string[] = []
+    const response = await new APIExecutor().execute(
+      route,
+      { messages: [{ role: 'user', content: 'hello' }], stream: true },
+      { traceId: 'trace-stream-retry', onStreamChunk: (delta) => deltas.push(delta), retryBudget: budget }
+    )
+
+    expect(streamRequestMock).toHaveBeenCalledTimes(2)
+    expect(deltas).toEqual(['ok'])
+    expect(response.choices[0].message.content).toBe('ok')
+  })
+
+  it('非 2xx 状态码在无内容增量时可重试', async () => {
+    jest.spyOn(APIExecutor.prototype as any, 'delay').mockResolvedValue(undefined)
+    const rateBody = JSON.stringify({ error: 'rate limit exceeded' })
+    streamRequestMock
+      .mockImplementationOnce(async (url: string, options: any) => {
+        options.onHeaders?.(429, { 'content-type': 'application/json' })
+        options.onChunk?.(Buffer.from(rateBody))
+        return { status: 429, headers: { 'content-type': 'application/json' }, url, totalBytes: rateBody.length }
+      })
+      .mockImplementationOnce(sseResponse(200, 'data: {"choices":[{"index":0,"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n'))
+
+    const response = await new APIExecutor().execute(
+      route,
+      { messages: [{ role: 'user', content: 'hello' }], stream: true },
+      { traceId: 'trace-stream-status-retry', onStreamChunk: () => {}, retryBudget: createRetryBudget() }
+    )
+
+    expect(streamRequestMock).toHaveBeenCalledTimes(2)
+    expect(response.choices[0].message.content).toBe('ok')
+  })
+
+  it('provider 忽略 stream 参数返回 JSON 时回退缓冲解析', async () => {
+    const jsonBody = JSON.stringify({
+      id: 'c-buffered',
+      model: 'test-model',
+      choices: [{ index: 0, message: { role: 'assistant', content: '完整内容' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 }
+    })
+    streamRequestMock.mockImplementation(async (url: string, options: any) => {
+      options.onHeaders?.(200, { 'content-type': 'application/json' })
+      options.onChunk?.(Buffer.from(jsonBody))
+      return { status: 200, headers: { 'content-type': 'application/json' }, url, totalBytes: jsonBody.length }
+    })
+
+    const deltas: string[] = []
+    const response = await new APIExecutor().execute(
+      route,
+      { messages: [{ role: 'user', content: 'hello' }], stream: true },
+      { traceId: 'trace-stream-json-fallback', onStreamChunk: (delta) => deltas.push(delta) }
+    )
+
+    expect(deltas).toEqual([])
+    expect(response.choices[0].message.content).toBe('完整内容')
+  })
+
+  it('request.stream 但未提供 onStreamChunk 时仍以流式请求发出（JSON 类输出场景）', async () => {
+    const sseBody = 'data: {"id":"c-json","model":"test-model","choices":[{"index":0,"delta":{"content":"{\\"reply\\":\\"hi\\",\\"ok\\":true}"},"finish_reason":null}]}\n\ndata: {"id":"c-json","model":"test-model","choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'
+    streamRequestMock.mockImplementation(sseResponse(200, sseBody))
+
+    const response = await new APIExecutor().execute(
+      route,
+      { messages: [{ role: 'user', content: 'hello' }], stream: true },
+      { traceId: 'trace-stream-no-callback' }
+    )
+
+    expect(streamRequestMock).toHaveBeenCalledWith(
+      'https://example.com/v1/chat/completions',
+      expect.objectContaining({
+        body: expect.objectContaining({ stream: true, stream_options: { include_usage: true } })
+      })
+    )
+    expect(response.choices[0].message.content).toBe('{"reply":"hi","ok":true}')
+    expect(response.choices[0].finish_reason).toBe('stop')
+  })
+
+  it('provider 拒绝 stream_options 时去参数重试一次', async () => {
+    const errorBody = JSON.stringify({ error: { message: 'unknown parameter: stream_options' } })
+    const bodies: any[] = []
+    streamRequestMock.mockImplementation(async (url: string, options: any) => {
+      bodies.push(options.body)
+      if (bodies.length === 1) {
+        options.onHeaders?.(400, { 'content-type': 'application/json' })
+        options.onChunk?.(Buffer.from(errorBody))
+        return { status: 400, headers: { 'content-type': 'application/json' }, url, totalBytes: errorBody.length }
+      }
+      options.onHeaders?.(200, { 'content-type': 'text/event-stream' })
+      options.onChunk?.(Buffer.from('data: {"choices":[{"index":0,"delta":{"content":"retried"}}]}\n\ndata: [DONE]\n\n'))
+      return { status: 200, headers: { 'content-type': 'text/event-stream' }, url, totalBytes: 30 }
+    })
+
+    const response = await new APIExecutor().execute(
+      route,
+      { messages: [{ role: 'user', content: 'hello' }], stream: true },
+      { traceId: 'trace-stream-params-fallback', onStreamChunk: () => {} }
+    )
+
+    expect(streamRequestMock).toHaveBeenCalledTimes(2)
+    expect(bodies[0].stream_options).toEqual({ include_usage: true })
+    expect(bodies[1].stream_options).toBeUndefined()
+    expect(bodies[1].stream).toBe(true)
+    expect(response.choices[0].message.content).toBe('retried')
   })
 })

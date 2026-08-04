@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <Teleport to="body">
-    <div v-if="open" class="pal" @mousedown.self="close">
-      <div class="pal__panel" role="dialog" aria-label="命令面板">
+    <div v-if="open" ref="maskRef" class="pal">
+      <div ref="panelRef" class="pal__panel" role="dialog" aria-label="命令面板">
         <div class="pal__input-row">
           <span class="pal__icon">⌕</span>
           <input
@@ -45,6 +45,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { MOCK_SCENES } from './mockManifest'
 import { dataSource, openTrace, queueQuickAction } from './mockStore'
 import { loadLiveData, backToDemo } from './mockLive'
+import { useOverlay, useMaskClose } from './useOverlay'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{
@@ -152,6 +153,12 @@ const grouped = computed(() => {
 
 const flat = computed(() => filtered.value)
 
+/* 覆盖层统一行为：滚动锁定 + 焦点（输入框自动聚焦）+ 遮罩安全关闭 */
+const panelRef = ref<HTMLElement | null>(null)
+const maskRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => props.open), panelRef)
+useMaskClose(maskRef, close)
+
 watch(
   () => props.open,
   async (v) => {
@@ -186,7 +193,7 @@ function close() {
 .pal {
   position: fixed;
   inset: 0;
-  z-index: 300;
+  z-index: var(--mk-z-modal);
   background: rgba(15, 23, 42, 0.4);
   display: flex;
   justify-content: center;
@@ -203,6 +210,8 @@ function close() {
   overflow: hidden;
   animation: pal-in 0.16s ease;
 }
+
+
 @keyframes pal-in { from { transform: translateY(-8px); opacity: 0; } }
 
 .pal__input-row {
@@ -259,4 +268,25 @@ function close() {
 .pal__item-label { flex: 1; }
 .pal__item-hint { font-size: 11px; color: #8492ab; }
 .pal__empty { padding: 20px; text-align: center; color: #8492ab; font-size: 13px; margin: 0; }
+
+
+/* 4K：命令面板加宽 + 字号跟随壳层放大 */
+@media (min-width: 2000px) {
+  .pal__panel { width: min(640px, 92vw); }
+  .pal__input-row { padding: 16px 20px; }
+  .pal__input { font-size: 16.5px; }
+  .pal__item { font-size: 15px; padding: 11px 14px; }
+  .pal__item-hint { font-size: 13px; }
+  .pal__group { font-size: 12.5px; }
+  .pal__esc { font-size: 12px; }
+}
+@media (min-width: 2800px) {
+  .pal__panel { width: min(760px, 92vw); }
+  .pal__input-row { padding: 20px 26px; }
+  .pal__input { font-size: 20px; }
+  .pal__item { font-size: 17.5px; padding: 13px 17px; }
+  .pal__item-hint { font-size: 15.5px; }
+  .pal__group { font-size: 15px; }
+  .pal__esc { font-size: 14px; }
+}
 </style>

@@ -27,8 +27,6 @@ export {
 } from './plugin-types';
 export { agentPluginRegistry } from './plugin-registry';
 
-// 配置 - 修复导出名称
-export { agentPluginConfig } from '../config/agent-plugin-config';
 export { registerAllPlugins, getAllPlugins } from './plugins';
 
 // Path Agent
@@ -81,10 +79,6 @@ export {
   getApplicableStrategies
 } from '../skills/path-planning/strategies';
 
-// 插件
-export { genericPlanner } from './path-planner/plugins/generic-planner';
-export { basicGenerator } from './content-generator/plugins/basic-generator';
-
 // 所有 Agent 定义
 import { AgentDefinition } from './protocol';
 import { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn } from '../skills/path-planning';
@@ -129,24 +123,29 @@ export const agentHandlers: Record<string, (input: any, context: any) => Promise
 export async function registerOfficialAgents(gateway: {
   registerAgent: (definition: AgentDefinition, handler: any) => Promise<string>
 }): Promise<void> {
+  const registered: Array<{ id: string; name: string }> = [];
+  const skipped: Array<{ id: string; name: string }> = [];
   for (const definition of allAgentDefinitions) {
     const manifest = getAgentManifest(definition.id);
     if (manifest && !manifest.runtimeEnabled) {
-      logger.info('[agents] skipped disabled official agent', {
-        agentId: definition.id,
-        agentName: definition.name,
-      });
+      skipped.push({ id: definition.id, name: definition.name });
       continue;
     }
 
     const handler = agentHandlers[definition.id];
     if (handler) {
       await gateway.registerAgent(definition, handler);
-      logger.info('[agents] registered official agent', {
-        agentId: definition.id,
-        agentName: definition.name,
-      });
+      registered.push({ id: definition.id, name: definition.name });
     }
   }
+  if (skipped.length > 0) {
+    logger.info(`[agents] skipped disabled official agent${skipped.length > 1 ? 's' : ''}`, {
+      agentIds: skipped.map(item => item.id)
+    });
+  }
+  logger.info(`[agents] registered ${registered.length} official agents`, {
+    agentIds: registered.map(item => item.id),
+    agentNames: registered.map(item => item.name)
+  });
 }
 

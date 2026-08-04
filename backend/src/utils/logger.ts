@@ -52,9 +52,9 @@ export const logger = winston.createLogger({
   format: logFormat,
   defaultMeta: { service: 'wenflow' },
   transports: [
-    // 写入所有日志到combined.log
-    new winston.transports.File({ filename: resolve(logDir, 'error.log'), level: 'error' }),
-    new winston.transports.File({ filename: resolve(logDir, 'combined.log') })
+    // 写入所有日志到combined.log，单文件 20MB、保留 5 份，防无限增长
+    new winston.transports.File({ filename: resolve(logDir, 'error.log'), level: 'error', maxsize: 20 * 1024 * 1024, maxFiles: 5, tailable: true }),
+    new winston.transports.File({ filename: resolve(logDir, 'combined.log'), maxsize: 20 * 1024 * 1024, maxFiles: 5, tailable: true })
   ]
 });
 

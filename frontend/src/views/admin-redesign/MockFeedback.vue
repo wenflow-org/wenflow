@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="mk-page">
     <!-- 状态条 -->
     <div class="mk-status" :class="pendingCount > 0 ? 'mk-status--warn' : 'mk-status--ok'">
@@ -50,13 +50,14 @@
 
       <!-- 列表 -->
       <div class="mk-card">
-        <table v-if="filtered.length" class="mk-table">
+        <div v-if="filtered.length" class="mk-table-scroll">
+        <table class="mk-table">
           <thead>
             <tr>
               <th>用户</th>
               <th>评分</th>
               <th>评论</th>
-              <th>Agent</th>
+              <th>节点</th>
               <th>策略</th>
               <th>状态</th>
               <th>时间</th>
@@ -89,16 +90,19 @@
             </tr>
           </tbody>
         </table>
+        </div>
         <div v-else class="mk-empty">
+          <span v-if="!loading" class="mk-empty__icon" aria-hidden="true">◌</span>
           <strong>{{ loading ? '加载中…' : (keyword || statusFilter || lowOnly ? '当前筛选无匹配' : '暂无反馈') }}</strong>
+          <span v-if="!loading">{{ keyword || statusFilter || lowOnly ? '放宽筛选条件试试。' : '学习者评分与评论出现后会在这里汇总，低分反馈会自动标记「待处理」。' }}</span>
         </div>
       </div>
     </template>
 
     <!-- 处理面板 -->
     <Teleport to="body">
-      <div v-if="detail" class="fb-mask" @mousedown.self="detail = null">
-        <aside class="fb-panel" role="dialog" aria-label="反馈详情">
+      <div v-if="detail" ref="maskRef" class="fb-mask">
+        <aside ref="panelRef" class="fb-panel" role="dialog" aria-label="反馈详情">
           <header class="fb-panel__head">
             <div class="fb-panel__title">
               <span class="mk-badge" :class="statusBadge(detail.status)">{{ statusLabel(detail.status) }}</span>
@@ -115,7 +119,7 @@
               <div><span>难度</span><strong class="mono">{{ detail.difficulty ?? '—' }}</strong></div>
               <div><span>难度适配</span><strong>{{ detail.difficultyFit || '—' }}</strong></div>
               <div><span>轮次</span><strong class="mono">{{ detail.roundNumber ?? '—' }}</strong></div>
-              <div><span>Agent</span><strong class="mono">{{ detail.agentId || '—' }}</strong></div>
+              <div><span>节点</span><strong class="mono">{{ detail.agentId || '—' }}</strong></div>
               <div><span>策略</span><strong>{{ detail.strategy || '—' }}</strong></div>
               <div><span>UI 类型</span><strong>{{ detail.uiType || '—' }}</strong></div>
             </div>
@@ -168,6 +172,7 @@ import { dataSource } from './mockStore'
 import { errMsg, timeAgo } from './mockLive'
 import { adminFeedbackApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
+import { useOverlay, useMaskClose } from './useOverlay'
 
 defineProps<{ state: string }>()
 
@@ -213,6 +218,10 @@ const lowOnly = ref(false)
 const detail = ref<Detail | null>(null)
 const noteDraft = ref('')
 useEscape(() => !!detail.value, () => { detail.value = null })
+const panelRef = ref<HTMLElement | null>(null)
+const maskRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => !!detail.value), panelRef)
+useMaskClose(maskRef, () => { detail.value = null })
 
 const toast = ref('')
 const toastCls = ref('mk-toast--ok')
@@ -370,7 +379,7 @@ onMounted(() => {
 .fb-mask {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: var(--mk-z-drawer);
   background: rgba(15, 23, 42, 0.36);
   display: flex;
   justify-content: flex-end;
@@ -384,6 +393,8 @@ onMounted(() => {
   grid-template-rows: auto 1fr;
   animation: fb-in 0.2s ease;
 }
+
+
 @keyframes fb-in { from { transform: translateX(30px); opacity: 0; } }
 .fb-panel__head {
   display: flex;
@@ -472,4 +483,35 @@ onMounted(() => {
   cursor: pointer;
 }
 .fb-meta { margin: 0; font-size: 10px; color: var(--mk-faint); word-break: break-all; }
+
+
+/* 4K：抽屉加宽 + 字号跟随壳层放大 */
+@media (min-width: 2000px) {
+  .fb-panel { width: min(680px, 100vw); }
+  .fb-panel__head { padding: 20px 24px; }
+  .fb-panel__title h3 { font-size: 19px; }
+  .fb-panel__id { font-size: 12.5px; }
+  .fb-panel__body { padding: 20px 24px; }
+  .fb-facts span { font-size: 13px; }
+  .fb-facts strong { font-size: 14px; }
+  .fb-section h4 { font-size: 13px; }
+  .fb-text { font-size: 14.5px; }
+  .fb-note { font-size: 14px; }
+  .fb-code { font-size: 12.5px; }
+  .fb-meta { font-size: 12px; }
+}
+@media (min-width: 2800px) {
+  .fb-panel { width: min(860px, 100vw); }
+  .fb-panel__head { padding: 24px 30px; }
+  .fb-panel__title h3 { font-size: 23px; }
+  .fb-panel__id { font-size: 15px; }
+  .fb-panel__body { padding: 24px 30px; }
+  .fb-facts span { font-size: 15.5px; }
+  .fb-facts strong { font-size: 16.5px; }
+  .fb-section h4 { font-size: 15.5px; }
+  .fb-text { font-size: 17px; }
+  .fb-note { font-size: 16.5px; }
+  .fb-code { font-size: 15px; }
+  .fb-meta { font-size: 14px; }
+}
 </style>

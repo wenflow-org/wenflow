@@ -46,7 +46,7 @@ export class AgentPluginRegistry {
       totalDuration: 0
     });
     
-    logger.info(`✅ Plugin registered: ${plugin.id} (${plugin.name})`);
+    logger.debug(`✅ Plugin registered: ${plugin.id} (${plugin.name})`);
   }
 
   async ready(): Promise<void> {

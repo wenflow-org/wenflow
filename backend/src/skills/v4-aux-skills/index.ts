@@ -26,11 +26,7 @@ export type AuxSkillId =
   | 'course-design'
   | 'skill-author'
   | 'skill-compiler'
-  | 'generic-planner'
-  | 'basic-extractor'
   | 'basic-evaluator'
-  | 'basic-generator'
-  | 'data-mapping'
   | 'goal-alignment-checker'
   | 'concept-priority';
 
@@ -174,11 +170,7 @@ const META: Record<AuxSkillId, AuxSkillMeta> = {
   'course-design': { skillId: 'course-design', displayName: '课程设计器', description: '为周次主题生成结构化课程任务', category: 'generation' },
   'skill-author': { skillId: 'skill-author', displayName: 'Prompt 起草助手', description: '为新 Skill 起草 system prompt', category: 'generation' },
   'skill-compiler': { skillId: 'skill-compiler', displayName: 'Skill Prompt 验收器', description: '执行 system prompt 并检查必填字段覆盖情况', category: 'analysis' },
-  'generic-planner': { skillId: 'generic-planner', displayName: '通用学习路径规划器', description: '为普通学习目标生成阶段化学习方案', category: 'generation' },
-  'basic-extractor': { skillId: 'basic-extractor', displayName: '内容结构化提取器', description: '提取内容摘要、知识点、链接、难度与标签', category: 'analysis' },
   'basic-evaluator': { skillId: 'basic-evaluator', displayName: '学习质量评估器', description: '评估学习内容、答案或任务完成情况', category: 'analysis' },
-  'basic-generator': { skillId: 'basic-generator', displayName: '基础教学内容生成器', description: '生成教学讲解、代码示例、练习与常见错误分析', category: 'generation' },
-  'data-mapping': { skillId: 'data-mapping', displayName: '数据映射器', description: '将输入数据映射为目标字段结构', category: 'analysis' },
   'goal-alignment-checker': { skillId: 'goal-alignment-checker', displayName: '路径目标对齐检查器', description: '检查学习路径与目标的对齐程度', category: 'analysis' },
   'concept-priority': { skillId: 'concept-priority', displayName: '概念优先级调整器', description: '将实践任务升级为概念理解任务', category: 'generation' },
 };
@@ -353,30 +345,6 @@ async function skillCompilerHandler(input: any) {
   });
 }
 
-async function genericPlannerHandler(input: any) {
-  return runAux({
-    meta: META['generic-planner'],
-    input,
-        buildUserPayload: (d) => d.input ?? d,
-    normalize: (parsed) => parsed,
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'GENERIC_PLANNER_OUTPUT_NOT_OBJECT' },
-  });
-}
-
-async function basicExtractorHandler(input: any) {
-  return runAux({
-    meta: META['basic-extractor'],
-    input,
-        buildUserPayload: (d) => ({ input: d.input, analysisPrompt: d.analysisPrompt }),
-    normalize: (parsed) => parsed,
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'BASIC_EXTRACTOR_OUTPUT_NOT_OBJECT' },
-  });
-}
-
 async function basicEvaluatorHandler(input: any) {
   return runAux({
     meta: META['basic-evaluator'],
@@ -386,35 +354,6 @@ async function basicEvaluatorHandler(input: any) {
     validate: (parsed) => parsed && typeof parsed === 'object'
       ? { valid: true }
       : { valid: false, failureReason: 'BASIC_EVALUATOR_OUTPUT_NOT_OBJECT' },
-  });
-}
-
-async function basicGeneratorHandler(input: any) {
-  return runAux({
-    meta: META['basic-generator'],
-    input,
-        buildUserPayload: (d) => ({ input: d.input, learningContext: d.learningContext }),
-    normalize: (parsed) => parsed,
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'BASIC_GENERATOR_OUTPUT_NOT_OBJECT' },
-  });
-}
-
-async function dataMappingHandler(input: any) {
-  return runAux({
-    meta: META['data-mapping'],
-    input,
-        buildUserPayload: (d) => ({
-      mappingType: d.mappingType,
-      sourceData: d.sourceData,
-      targetSchema: d.targetSchema,
-      mappingPrompt: d.mappingPrompt,
-    }),
-    normalize: (parsed) => parsed?.mapped || parsed,
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'DATA_MAPPING_OUTPUT_NOT_OBJECT' },
   });
 }
 
@@ -466,11 +405,7 @@ export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillE
   'course-design': courseDesignHandler,
   'skill-author': skillAuthorHandler,
   'skill-compiler': skillCompilerHandler,
-  'generic-planner': genericPlannerHandler,
-  'basic-extractor': basicExtractorHandler,
   'basic-evaluator': basicEvaluatorHandler,
-  'basic-generator': basicGeneratorHandler,
-  'data-mapping': dataMappingHandler,
   'goal-alignment-checker': goalAlignmentCheckerHandler,
   'concept-priority': conceptPriorityHandler,
 };

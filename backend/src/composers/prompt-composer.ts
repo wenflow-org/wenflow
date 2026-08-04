@@ -3,6 +3,7 @@ import { getAPIGateway } from '../gateway/api-gateway';
 import { getRequestContext } from '../gateway/api-gateway/context';
 import { agentConfigService } from '../services/agentConfig.service';
 import { telemetryWriter } from '../services/telemetry-writer.service';
+import { logger } from '../utils/logger';
 import { consumeLogicalRetry } from '../gateway/api-gateway/retry-budget';
 import {
   createRuntimeRetryBudget,
@@ -172,7 +173,7 @@ export async function callPrompt<TInput, TOutput>(
 
   // envelope 不一致时以 runtimeContract 为权威映射基准；lint/seed 已硬失败，运行时降级为告警
   if (promptContract.output.envelope !== runtimeContract.outputEnvelope) {
-    console.warn(
+    logger.warn(
       `[callPrompt] ${spec.agentId} promptContract.output.envelope=${promptContract.output.envelope} 与 runtimeContract.outputEnvelope=${runtimeContract.outputEnvelope} 不一致，以 runtimeContract 为准`
     );
   }
@@ -270,6 +271,24 @@ export async function callPrompt<TInput, TOutput>(
   const systemPromptHash = hashPrompt(systemPrompt);
   const attempts: PromptAttemptTrace[] = [];
   const gateway = getAPIGateway();
+  // 请求形态层（默认全流）：所有 LLM 调用一律以流式请求发出（上游 SSE，更早收到首字节），
+  // 网关在流结束时合成完整 ChatResponse，JSON 整体校验、逻辑重试与遥测语义不变。
+  // 可通过 context.stream === false 显式禁用（如连通性探测等不需要的场景）。
+  // delta 逐字透传层：仅当调用方注入流式意向（context.stream=true 或请求级 streamRequest.enabled）
+  // 且输出 media 为 markdown/text 时，才挂 onStreamChunk 把增量转发给客户端；
+  // 同请求内首个 delta 调用消费 streamRequest.consumed，后续调用自动降级为整包。
+  const streamRequest = requestContext.streamRequest;
+  const streamOnStream = context.onStream ?? streamRequest?.onStream;
+  const streamRequested = context.stream !== false;
+  const streamDeltaEligible = streamRequested
+    && typeof streamOnStream === 'function'
+    && (context.stream === true || streamRequest?.enabled === true)
+    && streamRequest?.consumed !== true
+    && (promptContract.output.media === 'markdown' || promptContract.output.media === 'text');
+  if (streamDeltaEligible && streamRequest) {
+    // 本请求内首个 markdown/text 调用消费 delta 通道；同请求的后续调用自动降级整包
+    streamRequest.consumed = true;
+  }
   const maxAttempts = Math.max(1, spec.retryStrategy?.maxAttempts || 1);
   const startTime = Date.now();
   let lastRaw = '';
@@ -308,6 +327,10 @@ export async function callPrompt<TInput, TOutput>(
       localLogicalRetries += 1;
     }
     const attemptStartedAt = Date.now();
+    // 逻辑重试重新生成：仅在已向客户端透传 delta 时发 restart，清空已显示内容避免新旧拼接
+    if (attempt > 1 && streamDeltaEligible) {
+      streamOnStream?.({ type: 'restart', attempt });
+    }
     const retryNotice = attempt > 1 && spec.retryStrategy?.onValidationFail
       ? spec.retryStrategy.onValidationFail({
           input,
@@ -351,6 +374,7 @@ export async function callPrompt<TInput, TOutput>(
       response = await gateway.execute({
         messages,
         ...llmParams.request,
+        stream: streamRequested,
       }, spec.caller, {
         userId: runtimeOverride.routingUserIdOverride || context.userId,
         traceId: traceId || undefined,
@@ -364,7 +388,10 @@ export async function callPrompt<TInput, TOutput>(
           requestPath: context.requestPath,
          promptCallId,
         promptAttemptNo: attempt,
-        retryBudget
+        retryBudget,
+        ...(streamDeltaEligible
+          ? { onStreamChunk: (delta: string) => streamOnStream?.({ type: 'delta', text: delta }) }
+          : {}),
       });
     } catch (error) {
       const failureReason = error instanceof Error ? error.message : String(error);

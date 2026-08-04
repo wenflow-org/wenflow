@@ -12,6 +12,7 @@
 
 import prisma from '../../config/database';
 import learningStateService from '../learning/learning-state.service';
+import { logger } from '../../utils/logger';
 import type { DurableDomainEvent } from '../../events/contracts';
 
 export interface LearningStateMetrics {
@@ -272,7 +273,7 @@ export async function updateLearningMetrics(
     });
     const displayMetrics = learningStateService.toDisplayMetrics(committedMetrics);
 
-    console.log(`✅ Updated learning metrics for user ${input.userId}:`, {
+    logger.debug(`✅ Updated learning metrics for user ${input.userId}:`, {
       LSS: displayMetrics.lss,
       KTL: displayMetrics.ktl,
       LF: displayMetrics.lf,
@@ -281,7 +282,7 @@ export async function updateLearningMetrics(
 
     return displayMetrics;
   } catch (error) {
-    console.error('Error updating learning metrics:', error);
+    logger.error('Error updating learning metrics:', error);
     throw error;
   }
 }

@@ -11,12 +11,15 @@
         <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" @click="onlyAttention = false">全部</button>
         <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" @click="onlyAttention = true">仅看需关注</button>
       </div>
-      <select v-if="isLive" v-model="statsRange" class="sk-range" title="统计时间窗口（默认近 7 天）">
-        <option value="7d">近 7 天</option>
-        <option value="24h">近 24 小时</option>
-        <option value="30d">近 30 天</option>
-        <option value="all">全部</option>
-      </select>
+      <label v-if="isLive" class="sk-range-wrap" title="统计时间窗口（默认近 7 天）">
+        <span class="sk-range-label">统计窗口</span>
+        <select v-model="statsRange" class="sk-range">
+          <option value="7d">近 7 天</option>
+          <option value="24h">近 24 小时</option>
+          <option value="30d">近 30 天</option>
+          <option value="all">全部</option>
+        </select>
+      </label>
       <div class="sk-view">
         <button type="button" class="sk-view__btn" :class="{ 'sk-view__btn--active': view === 'list' }" @click="view = 'list'">列表</button>
         <button type="button" class="sk-view__btn" :class="{ 'sk-view__btn--active': view === 'grid' }" @click="view = 'grid'">网格</button>
@@ -32,7 +35,7 @@
       </div>
 
       <!-- 列表视图：列对齐 + 排序，问题浮顶 -->
-      <div v-if="view === 'list'" class="sk-scroll">
+      <div v-if="view === 'list'" class="mk-table-scroll">
         <table v-if="filtered.length" class="mk-table sk-table">
           <thead>
             <tr>
@@ -53,7 +56,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in filtered" :key="s.id" class="sk-row" @click="openSkillDrawer(s.id)">
+            <tr v-for="s in shown" :key="s.id" class="sk-row" @click="openSkillDrawer(s.id)">
               <td>
                 <div class="sk-cell">
                   <span class="sk-dot" :class="`sk-dot--${s.health}`"></span>
@@ -63,7 +66,7 @@
                   </div>
                 </div>
               </td>
-              <td><span class="mk-badge mk-badge--muted">{{ s.category }}</span></td>
+              <td><span class="mk-badge mk-badge--muted" :title="s.category">{{ categoryText(s.category) }}</span></td>
               <td class="mk-num">{{ s.calls || '—' }}</td>
               <td class="mk-num" :class="{ 'sk-err': s.errors > 0 }">{{ s.calls ? s.errors : '—' }}</td>
               <td class="mk-num">{{ successRate(s) }}</td>
@@ -78,7 +81,7 @@
       <!-- 网格视图：健康矩阵（保留对比） -->
       <div v-else class="sk-grid sk-grid--inset">
         <button
-          v-for="s in filtered"
+          v-for="s in shown"
           :key="s.id"
           type="button"
           class="sk-card"
@@ -87,10 +90,10 @@
         >
           <span class="sk-card__head">
             <span class="sk-card__dot"></span>
-            <span class="sk-card__cat">{{ s.category }}</span>
+            <span class="sk-card__cat">{{ categoryText(s.category) }}</span>
             <span v-if="s.health !== 'ok'" class="sk-card__flag">{{ s.health === 'error' ? '异常' : '空闲' }}</span>
           </span>
-          <strong class="sk-card__name">{{ s.name }}</strong>
+          <strong class="sk-card__name" :title="s.name">{{ s.name }}</strong>
           <span class="sk-card__id">{{ s.id }}</span>
           <span class="sk-card__stats">
             <span>{{ s.calls }} 调用</span>
@@ -105,6 +108,9 @@
         <span v-if="onlyAttention">一切健康。</span>
         <span v-else-if="keyword">换个关键词试试。</span>
       </div>
+      <div v-if="canMore" class="sk-more">
+        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
+      </div>
     </div>
   </div>
 </template>
@@ -113,6 +119,8 @@
 import { computed, ref, watch } from 'vue'
 import { skillProfiles, skillStatOf, openSkillDrawer, dataSource } from './mockStore'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills } from './mockLive'
+import { categoryText } from './statusText'
+import { useLoadMore } from './useLoadMore'
 
 type Health = 'ok' | 'idle' | 'error'
 type SortKey = 'calls' | 'errors' | 'avgMs'
@@ -169,6 +177,9 @@ const filtered = computed(() => {
 const activeCount = computed(() => cards.value.filter((c) => c.calls > 0).length)
 const errorCount = computed(() => cards.value.filter((c) => c.errors > 0).length)
 
+/* 长列表分批渲染：每批 15 行 */
+const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
+
 const statusTone = computed(() => (errorCount.value ? 'mk-status--bad' : activeCount.value ? 'mk-status--ok' : 'mk-status--muted'))
 const statusTitle = computed(() =>
   errorCount.value ? `${errorCount.value} 个节点存在失败` : activeCount.value ? 'Skill 网络健康' : '还没有运行数据'
@@ -187,6 +198,14 @@ const successRate = (s: { calls: number; errors: number }) =>
   padding: 2px;
   background: #eef2fa;
   border-radius: 8px;
+}
+.sk-range-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--mk-muted);
+  white-space: nowrap;
 }
 .sk-range {
   border: 1px solid #d6deeb;
@@ -210,19 +229,25 @@ const successRate = (s: { calls: number; errors: number }) =>
 .sk-view__btn--active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 2px rgba(23, 32, 51, 0.1); }
 
 /* 列表视图 */
-.sk-scroll { max-height: 68vh; overflow-y: auto; }
-.sk-table thead th {
-  position: sticky;
-  top: 0;
-  background: var(--mk-surface);
-  z-index: 1;
-}
 .sk-sort { cursor: pointer; user-select: none; white-space: nowrap; }
 .sk-sort:hover { color: var(--mk-blue); }
 .sk-sort--on { color: var(--mk-blue); }
 .sk-row { cursor: pointer; }
 .sk-row:hover { background: #f6f9ff; }
 .sk-cell { display: flex; align-items: center; gap: 10px; }
+.sk-cell .mk-cell-main strong {
+  max-width: 460px;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.sk-more {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 12px;
+  border-top: 1px dashed var(--mk-line);
+}
 .sk-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .sk-dot--ok { background: var(--mk-green); }
 .sk-dot--idle { background: #c3cede; }

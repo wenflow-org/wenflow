@@ -18,7 +18,8 @@
         <input class="mk-filter__input" v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
       </div>
 
-      <table v-if="filtered.length" class="mk-table mk-table--click">
+      <div v-if="filtered.length" class="mk-table-scroll">
+      <table class="mk-table mk-table--click">
         <thead>
           <tr>
             <th>样本</th>
@@ -58,12 +59,18 @@
                 >
                   运行
                 </button>
-                <button v-if="isLive" type="button" class="mk-link mk-link--danger" :disabled="s.busy" @click="removeSample(s)">删除</button>
+                <div v-if="isLive" class="mk-menu">
+                  <button type="button" class="mk-menu__btn" aria-label="更多操作" @click.stop="toggleMenu(s.id)">⋯</button>
+                  <div v-if="openMenu === s.id" class="mk-menu__pop" @click.stop>
+                    <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="s.busy" @click="menuRemove(s)">删除</button>
+                  </div>
+                </div>
               </div>
             </td>
           </tr>
         </tbody>
       </table>
+      </div>
 
       <div v-else class="mk-empty">
         <strong>{{ samples.length ? '没有匹配的样本' : '暂无虚拟学习者' }}</strong>
@@ -72,11 +79,11 @@
     </div>
 
     <!-- 新建虚拟学习者 -->
-    <div v-if="createOpen" class="mk-modal" @mousedown.self="createOpen = false">
-      <div class="mk-modal__panel" role="dialog" aria-label="新建虚拟学习者">
+    <div v-if="createOpen" ref="maskRef" class="mk-modal">
+      <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="新建虚拟学习者">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">新建虚拟学习者</h3>
-          <button type="button" class="mk-modal__close" aria-label="关闭" @click="createOpen = false">×</button>
+          <button type="button" class="mk-modal__close" aria-label="关闭" @click="createOpen = false">✕</button>
         </div>
         <div class="mk-modal__body">
           <p class="vl-steps">
@@ -127,8 +134,8 @@
     </div>
 
     <!-- 启动实验：必须选故事（一人多故事 → 一故事一 Path） -->
-    <div v-if="launchTarget" class="mk-modal" @mousedown.self="launchTarget = null">
-      <div class="mk-modal__panel" role="dialog" aria-label="启动实验">
+    <div v-if="launchTarget" ref="launchMaskRef" class="mk-modal">
+      <div ref="launchPanelRef" class="mk-modal__panel" role="dialog" aria-label="启动实验">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">启动实验 · {{ launchTarget.name }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="launchTarget = null">✕</button>
@@ -186,6 +193,9 @@ import { openSubPage, dataSource, intent } from './mockStore'
 import { liveVirtuals, liveCreateVirtual, liveDeleteVirtual, timeAgo, errMsg } from './mockLive'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
+import { useOverlay, useMaskClose } from './useOverlay'
+import { useRowMenu } from './useRowMenu'
+import { askConfirm } from './useConfirm'
 
 const props = defineProps<{ state: 'normal' | 'empty' }>()
 
@@ -307,7 +317,12 @@ async function createSample() {
 }
 
 async function removeSample(s: Sample) {
-  if (!window.confirm(`确认删除样本「${s.name}」？其会话记录将一并清理。`)) return
+  const ok = await askConfirm({
+    title: '删除虚拟学习者',
+    message: `确认删除样本「${s.name}」？\n其会话记录将一并清理，该操作不可撤销。`,
+    confirmText: '删除'
+  })
+  if (!ok) return
   s.busy = true
   try {
     await liveDeleteVirtual(s.id)
@@ -363,6 +378,22 @@ interface LaunchStory {
 const launchTarget = ref<Sample | null>(null)
 useEscape(() => createOpen.value, () => { createOpen.value = false })
 useEscape(() => !!launchTarget.value, () => { launchTarget.value = null })
+
+const { openMenu, toggleMenu, closeMenu } = useRowMenu()
+/** 行内 ⋯ 菜单项：先关菜单再执行 */
+function menuRemove(s: Sample) {
+  closeMenu()
+  void removeSample(s)
+}
+
+const panelRef = ref<HTMLElement | null>(null)
+const maskRef = ref<HTMLElement | null>(null)
+const launchPanelRef = ref<HTMLElement | null>(null)
+const launchMaskRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => createOpen.value), panelRef)
+useMaskClose(maskRef, () => { createOpen.value = false })
+useOverlay(computed(() => !!launchTarget.value), launchPanelRef)
+useMaskClose(launchMaskRef, () => { launchTarget.value = null })
 
 /* 命令面板快捷动作：直达并打开新建弹窗 */
 watch(

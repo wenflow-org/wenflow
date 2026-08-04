@@ -6,9 +6,9 @@
         <span class="topo-status-dot" :class="hasError ? 'is-error' : 'is-ok'"></span>
         <strong class="topo-toolbar__title">{{ hasError ? '拓扑存在异常节点' : '拓扑运行正常' }}</strong>
         <span class="topo-toolbar__sep"></span>
-        <span class="topo-toolbar__meta"><b>{{ agentNodes.length }}</b> AGENTS</span>
-        <span class="topo-toolbar__meta"><b>{{ skillNodes.length }}</b> SKILLS</span>
-        <span class="topo-toolbar__meta"><b>{{ totalCalls }}</b> CALLS</span>
+        <span class="topo-toolbar__meta"><b>{{ agentNodes.length }}</b> 个 Agent</span>
+        <span class="topo-toolbar__meta"><b>{{ skillNodes.length }}</b> 个 Skill</span>
+        <span class="topo-toolbar__meta"><b>{{ totalCalls }}</b> 次调用</span>
         <span class="topo-toolbar__hint">点 Skill 看详情 · 点 Agent 查日志</span>
       </div>
       <div class="topo-toolbar__controls">

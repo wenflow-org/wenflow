@@ -6,13 +6,21 @@
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">流程 {{ flowCount }}</span>
       <span class="mk-status__meta">调用 {{ callCount }}</span>
-      <span class="mk-status__meta">瀑布 {{ waterfallCount }}</span>
       <input
         class="mk-filter__input"
         style="margin-left: auto"
         v-model="trace"
         placeholder="粘贴 Trace ID 跨 Tab 联查"
       />
+      <button
+        type="button"
+        class="mk-link"
+        :disabled="!trace.trim()"
+        :title="trace.trim() ? '在新 Tab 打开 Trace 瀑布' : '先在上方输入 Trace ID 才能跨 Tab 联查'"
+        @click="goWaterfall"
+      >
+        在 Trace 瀑布打开 →
+      </button>
       <button type="button" class="mk-status__action" :disabled="loading" @click="refresh">
         {{ loading ? '刷新中…' : '刷新' }}
       </button>
@@ -27,13 +35,10 @@
       <button type="button" class="ec-tab" :class="{ 'ec-tab--active': tab === 'call' }" @click="tab = 'call'">
         Prompt 调用 <b>{{ callCount }}</b>
       </button>
-      <button type="button" class="ec-tab" :class="{ 'ec-tab--active': tab === 'waterfall' }" @click="tab = 'waterfall'">
-        Trace 瀑布 <b>{{ waterfallCount }}</b>
-      </button>
     </div>
 
     <!-- 流程事件 / Prompt 调用时间线 -->
-    <div v-if="tab !== 'waterfall' && filtered.length" class="ec-timeline">
+    <div v-if="filtered.length" class="ec-timeline">
       <div
         v-for="(e, i) in filtered"
         :key="i"
@@ -41,11 +46,19 @@
         :class="{ 'ec-row--hit': trace && e.trace.includes(trace) }"
       >
         <span class="ec-row__dot" :class="`ec-row__dot--${e.tone}`"></span>
-        <span class="ec-row__time mono">{{ e.time }}</span>
+        <span class="ec-row__time">{{ e.time }}</span>
         <span class="ec-row__stage">{{ e.stage }}</span>
         <div class="ec-row__main">
           <strong>{{ e.title }}</strong>
-          <span>{{ e.detail }}</span>
+          <span class="ec-row__detail" :class="{ 'ec-row__detail--long': isLongDetail(e.detail) }">
+            <span class="ec-row__detail-text">{{ expanded.has(i) ? e.detail : truncateDetail(e.detail) }}</span>
+            <button
+              v-if="isLongDetail(e.detail)"
+              type="button"
+              class="ec-row__more"
+              @click.stop="toggleExpand(i)"
+            >{{ expanded.has(i) ? '收起' : '展开' }}</button>
+          </span>
         </div>
         <span class="mk-badge" :class="e.statusCls">{{ e.status }}</span>
         <button
@@ -60,22 +73,19 @@
       </div>
     </div>
 
-    <div v-else-if="tab !== 'waterfall'" class="mk-empty">
+    <div v-else class="mk-empty">
       <strong>{{ emptyTitle }}</strong>
       <span>{{ emptyHint }}</span>
     </div>
-
-    <!-- Trace 瀑布（原 event-center 实现，保留为第三 Tab） -->
-    <MockTraceWaterfall v-else :state="state" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { dataSource } from './mockStore'
+import { dataSource, openTrace } from './mockStore'
 import { errMsg, timeAgo } from './mockLive'
+import { statusText } from './statusText'
 import { adminRuntimeDefinitionsApi } from '@/api/adminApi'
-import MockTraceWaterfall from './MockTraceWaterfall.vue'
 
 const props = defineProps<{ state: 'normal' | 'empty' | 'incident' | 'fresh' }>()
 
@@ -92,7 +102,7 @@ interface Ev {
 }
 
 const isLive = computed(() => dataSource.value === 'live')
-const tab = ref<'flow' | 'call' | 'waterfall'>('flow')
+const tab = ref<'flow' | 'call'>('flow')
 const trace = ref('')
 const loading = ref(false)
 const flowEvents = ref<Ev[]>([])
@@ -108,6 +118,12 @@ function showToast(msg: string, cls = 'mk-toast--ok') {
   toastTimer = setTimeout(() => (toast.value = ''), 2800)
 }
 
+function goWaterfall() {
+  const id = trace.value.trim()
+  if (!id) return
+  openTrace(id)
+}
+
 const DEMO_FLOW: Ev[] = [
   { kind: 'flow', time: '16:42:07', stage: '阶段任务设计', title: '路径生成完成', detail: '4 阶段 · 18 任务 · 用时 42s', status: '成功', statusCls: 'mk-badge--ok', trace: 'tr:8f31a2', tone: 'ok' },
   { kind: 'flow', time: '16:41:31', stage: '核心路径生成', title: '路径草稿就绪', detail: '学习者基础：零基础 · 每周 4 小时', status: '成功', statusCls: 'mk-badge--ok', trace: 'tr:8f31a2', tone: 'ok' },
@@ -115,7 +131,7 @@ const DEMO_FLOW: Ev[] = [
 ]
 const DEMO_CALL: Ev[] = [
   { kind: 'call', time: '16:41:58', stage: 'stage-designer', title: 'Prompt 调用', detail: 'deepseek-v4-pro · 3.2s · P 1180 / C 642', status: '成功', statusCls: 'mk-badge--ok', trace: 'tr:8f31a2', tone: 'ok' },
-  { kind: 'call', time: '16:40:55', stage: 'generic-planner', title: 'Prompt 调用', detail: 'deepseek-v4-pro · 5.1s · P 2040 / C 1130', status: '成功', statusCls: 'mk-badge--ok', trace: 'tr:8f31a2', tone: 'ok' },
+  { kind: 'call', time: '16:40:55', stage: 'path-planning', title: 'Prompt 调用', detail: 'deepseek-v4-pro · 5.1s · P 2040 / C 1130', status: '成功', statusCls: 'mk-badge--ok', trace: 'tr:8f31a2', tone: 'ok' },
   { kind: 'call', time: '16:38:12', stage: 'teaching-round', title: 'Prompt 调用', detail: 'deepseek-v4-flash · 1.1s · 漂移', status: '漂移', statusCls: 'mk-badge--warn', trace: 'tr:8f319b', tone: 'warn' }
 ]
 
@@ -131,10 +147,36 @@ function badgeOf(status: string) {
 }
 function statusLabel(status: string) {
   const s = String(status || '')
+  // 先走共享字典（succeeded / started / failed 等枚举直接中文化）
+  const mapped = statusText(s)
+  if (mapped !== s) return mapped
   if (/success|ok|成功/i.test(s)) return '成功'
   if (/fail|error|失败/i.test(s)) return '失败'
   if (/drift|漂移/i.test(s)) return '漂移'
   return s || '—'
+}
+
+/** 清洗失败事件摘要：去掉 provider 原始 JSON（含 request id 等内部噪音），只留可读原因 */
+function cleanError(text: string): string {
+  const s = String(text || '')
+  const jsonIdx = s.indexOf('{')
+  if (jsonIdx > 0) {
+    const head = s.slice(0, jsonIdx).trim().replace(/[:：]\s*$/, '')
+    if (head) return head
+  }
+  return s
+}
+
+/** 长详情截断（默认 80 字符），过长可展开查看 */
+const DETAIL_LIMIT = 80
+const isLongDetail = (s: string) => s.length > DETAIL_LIMIT
+const truncateDetail = (s: string) => (isLongDetail(s) ? `${s.slice(0, DETAIL_LIMIT)}…` : s)
+const expanded = ref<Set<number>>(new Set())
+function toggleExpand(i: number) {
+  const next = new Set(expanded.value)
+  if (next.has(i)) next.delete(i)
+  else next.add(i)
+  expanded.value = next
 }
 
 function mapFlowItem(raw: Record<string, unknown>): Ev {
@@ -142,14 +184,14 @@ function mapFlowItem(raw: Record<string, unknown>): Ev {
   const status = String(raw.status || raw.outcome || 'success')
   const phase = String(raw.phase || raw.stage || raw.eventType || '流程')
   const title = String(raw.title || raw.message || raw.eventType || '路径生成事件')
-  const detail = String(raw.detail || raw.summary || raw.error || raw.pathId || '')
+  const detail = cleanError(String(raw.detail || raw.summary || raw.error || raw.pathId || ''))
   const tr = String(raw.traceId || raw.trace || '—')
   return {
     kind: 'flow',
     time: createdAt ? timeAgo(createdAt) : '—',
     stage: phase,
     title,
-    detail: detail.slice(0, 160) || '—',
+    detail: detail || '—',
     status: statusLabel(status),
     statusCls: badgeOf(status),
     trace: tr,
@@ -227,15 +269,6 @@ onMounted(() => {
 
 const flowCount = computed(() => flowEvents.value.length)
 const callCount = computed(() => callEvents.value.length)
-/** 瀑布 Tab 计数 = 两事件流合并后的去重 Trace 数 */
-const waterfallCount = computed(() => {
-  const traces = new Set(
-    [...flowEvents.value, ...callEvents.value]
-      .map((e) => e.trace)
-      .filter((t) => t && t !== '—')
-  )
-  return traces.size || '·'
-})
 
 const filtered = computed(() => {
   const src = tab.value === 'flow' ? flowEvents.value : callEvents.value
@@ -357,6 +390,20 @@ const emptyHint = computed(() =>
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.ec-row__detail { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.ec-row__detail-text { min-width: 0; }
+.ec-row__more {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--mk-blue);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ec-row__more:hover { text-decoration: underline; }
 .ec-row__trace {
   font-size: 10.5px;
   color: var(--mk-faint);

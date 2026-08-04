@@ -1247,7 +1247,7 @@ export class AITeachingOrchestrator {
             ? 'knowledge-only'
             : 'neither';
     if (completionAlignment === 'envelope-only' || completionAlignment === 'knowledge-only') {
-      logger.info('[AITeaching] completion soft-AND 分歧', {
+      logger.debug('[AITeaching] completion soft-AND 分歧', {
         sessionId: session.id,
         completionAlignment,
         knowledgeComplete: completionReady,
@@ -1985,7 +1985,7 @@ export class AITeachingOrchestrator {
   async pauseSession(
     sessionId: string,
     userId: string,
-    reason: 'manual' | 'pagehide' = 'manual',
+    reason: 'manual' | 'pagehide' | 'hidden' = 'manual',
     expectedRevision?: number
   ): Promise<number> {
     requireTeachingRevision(expectedRevision);
@@ -2019,6 +2019,63 @@ export class AITeachingOrchestrator {
           ...currentArtifacts,
           pausedAt: new Date().toISOString(),
           pauseReason: reason,
+        }),
+      });
+      committed = true;
+      return operationClaim.session.revision + 1;
+    } finally {
+      if (!committed) {
+        await teachingSessionRepository.releaseOperation(sessionId, operationClaim.operationId);
+      }
+    }
+  }
+
+  /**
+   * 恢复暂停的授课会话：把暂停时长累加进 pausedDurationMs，状态回到 active。
+   * 用于页面切回标签页/窗口恢复可见时，避免把切走的时间计入学习时长。
+   */
+  async resumeSession(
+    sessionId: string,
+    userId: string,
+    expectedRevision?: number
+  ): Promise<number> {
+    requireTeachingRevision(expectedRevision);
+    const session = await teachingSessionRepository.getById(sessionId);
+    if (!session || session.userId !== userId) {
+      throw new Error('会话不存在');
+    }
+    if (session.status !== 'paused') {
+      return session.revision;
+    }
+
+    const sessionArtifacts = parseSessionArtifacts(session.teachingState);
+    const wasPausedAt = typeof sessionArtifacts.pausedAt === 'string'
+      ? new Date(sessionArtifacts.pausedAt).getTime()
+      : null;
+    if (!wasPausedAt || Number.isNaN(wasPausedAt)) {
+      return session.revision;
+    }
+    const pausedDurationMs = Math.max(0, Date.now() - wasPausedAt)
+      + Math.max(0, Number(sessionArtifacts.pausedDurationMs || 0));
+
+    const operationClaim = await teachingSessionRepository.claimOperation(
+      sessionId,
+      'resume',
+      ['paused'],
+      expectedRevision
+    );
+    let committed = false;
+    try {
+      await teachingSessionRepository.commitLifecycleState(sessionId, operationClaim.operationId, {
+        status: 'active',
+        endTime: null,
+        duration: null,
+        teachingState: buildTeachingStateWithArtifacts(operationClaim.session.teachingState, {
+          ...sessionArtifacts,
+          pausedAt: null,
+          pauseReason: null,
+          pausedDurationMs,
+          resumedAt: new Date().toISOString(),
         }),
       });
       committed = true;
@@ -2197,7 +2254,88 @@ export class AITeachingOrchestrator {
       const timedOut = await teachingSessionRepository.timeoutIfIdle(session.id, session.revision, cutoff);
       if (timedOut) {
         await this.syncVirtualSessionTimeout(session.id);
+        await this.applyTimeoutWrapupFallback(session.id);
       }
+    }
+  }
+
+  /**
+   * 超时会话兜底：写入轻量学习记录（不调 LLM），避免评估页出现
+   * 「总结全空 + 用时 0 分钟」；用户之后恢复继续学习并正常结束时会被正式 wrapup 覆盖。
+   */
+  private async applyTimeoutWrapupFallback(sessionId: string): Promise<void> {
+    try {
+      const session = await teachingSessionRepository.getById(sessionId);
+      if (!session || session.status !== 'timeout' || session.wrapup) return;
+
+      // 活跃时长：按消息时间戳估算（间隔 > 30 分钟视为暂停），避免把 idle 时间算入
+      const messages = Array.isArray(session.messages) ? session.messages : [];
+      const times = messages
+        .map((m) => (m.timestamp ? new Date(m.timestamp).getTime() : NaN))
+        .filter((t) => Number.isFinite(t))
+        .sort((a, b) => a - b);
+      let activeMinutes = 0;
+      for (let i = 1; i < times.length; i++) {
+        activeMinutes += Math.min((times[i] - times[i - 1]) / 60000, 30);
+      }
+      const durationMinutes = Math.max(1, Math.round(activeMinutes));
+
+      const knowledgePoints = cloneKnowledgePoints(session.knowledgeState);
+      const mastered = knowledgePoints.filter((p) => p.status === 'mastered').map((p) => p.name);
+      const learning = knowledgePoints.filter((p) => p.status === 'learning').map((p) => p.name);
+
+      const wrapup = {
+        status: 'summary-only' as const,
+        sources: { summary: 'timeout-fallback' as const, evaluation: 'failed' as const },
+        duration: durationMinutes,
+        summary: {
+          topicSummary: '本次会话未正常结束，为你保留了基础学习记录。',
+          knowledgeSummary: mastered.length > 0 ? `已掌握：${mastered.join('、')}。` : '暂未确认掌握的知识点。',
+          practiceAdvice: '重新开始本节，完成一次完整的学习后这里会给出完整建议。',
+          learningEvaluation: '未生成学习评价。',
+          knowledgeItems: knowledgePoints.map((p) => ({
+            name: p.name,
+            status: p.status,
+            evidence: p.status === 'mastered' ? '会话中确认掌握' : '会话中未完成确认',
+          })),
+          keyTakeaways: [] as string[],
+          actionPlan: [] as string[],
+          evaluationHighlights: null,
+          metricInterpretation: {
+            session: '未生成本节课堂表现。',
+            longTerm: '未生成长期状态评估。',
+          },
+          summaryVersion: 'v2',
+        },
+        evaluation: null,
+        progress: {
+          newlyMastered: mastered,
+          movedToReview: [] as string[],
+          stillLearning: learning,
+          unchangedMastered: [] as string[],
+        },
+        evidence: {
+          turnCount: messages.length,
+          avgUnderstanding: null,
+          avgEngagement: null,
+          dominantCognitiveLevel: null,
+          lastCognitiveLevel: null,
+          topConfusionPoints: [] as string[],
+          emotionalSignals: { positive: 0, neutral: 0, frustrated: 0, confused: 0 },
+          completionCandidateSeen: false,
+        },
+      };
+
+      await prisma.teaching_sessions.update({
+        where: { id: sessionId },
+        data: { wrapup: JSON.stringify(wrapup) }
+      });
+      logger.info('[AITeaching] 超时会话已写入兜底学习记录', { sessionId, durationMinutes });
+    } catch (error) {
+      logger.warn('[AITeaching] 超时会话兜底记录写入失败', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   }
 

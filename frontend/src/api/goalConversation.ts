@@ -1,4 +1,5 @@
 import api, { AI_REQUEST_TIMEOUT } from '@/utils/api';
+import { streamSsePost } from '@/utils/sse';
 
 export interface GoalUnderstanding {
   surface_goal?: string;
@@ -143,6 +144,112 @@ export async function regenerateGoalConversation(conversationId: string, adjustm
   }, { timeout: AI_REQUEST_TIMEOUT }) as GoalConversationApiResponse;
 
   return response.data;
+}
+
+/**
+ * SSE 流式 Goal 请求（start/reply/regenerate 共用）。
+ * goal skill 为 JSON 输出：不产生 delta，final 事件携带完整 envelope。
+ * 失败时 reject，错误对象携带来源标记（transport=true 可安全回退非流式；
+ * serverError=true 为服务端业务失败；422 恢复信封在 error.data）。
+ */
+export type GoalStreamAction = 'start' | 'reply' | 'regenerate';
+
+async function streamGoalRequest(
+  action: GoalStreamAction,
+  conversationId: string | null,
+  payload: { text?: string; contextMode?: GoalConversationContextMode; confirmProposal?: boolean; adjustments?: string },
+  signal?: AbortSignal
+): Promise<GoalConversationEnvelope> {
+  const url = action === 'start'
+    ? '/goal-conversation/start'
+    : `/goal-conversation/${conversationId}/${action === 'reply' ? 'reply' : 'regenerate'}`;
+  const body: Record<string, unknown> = {};
+  if (payload.text !== undefined) {
+    body.input = { text: payload.text };
+    body.contextMode = payload.contextMode || 'recent';
+  }
+  if (payload.confirmProposal === true) body.confirmProposal = true;
+  if (payload.adjustments !== undefined) body.adjustments = payload.adjustments;
+
+  return new Promise<GoalConversationEnvelope>((resolve, reject) => {
+    let envelope: GoalConversationEnvelope | null = null;
+    let receivedAnything = false;
+    let serverError: { code?: string; status?: number; message: string; data?: unknown } | null = null;
+    let settled = false;
+    const settleReject = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+    streamSsePost(url, body, {
+      signal,
+      onEvent: (event, data) => {
+        if (event === 'final') {
+          receivedAnything = true;
+          envelope = data?.data || data || null;
+        } else if (event === 'error') {
+          receivedAnything = true;
+          serverError = {
+            code: data?.code,
+            status: data?.status,
+            message: data?.message || '处理失败',
+            data: data?.data
+          };
+        }
+      }
+    }).then(
+      () => {
+        if (settled) return;
+        settled = true;
+        if (envelope) resolve(envelope);
+        else if (serverError) {
+          reject(Object.assign(new Error(serverError.message), {
+            code: serverError.code,
+            status: serverError.status,
+            recoveryEnvelope: serverError.data,
+            serverError: true
+          }));
+        } else {
+          reject(new Error('未收到最终结果'));
+        }
+      },
+      (error) => {
+        const e = error as { partialStream?: boolean; transport?: boolean };
+        if (receivedAnything) e.partialStream = true;
+        else e.transport = true;
+        settleReject(error);
+      }
+    );
+  });
+}
+
+export async function streamStartGoalConversation(
+  text: string,
+  options: GoalConversationRequestOptions = {},
+  signal?: AbortSignal
+): Promise<GoalConversationEnvelope> {
+  return streamGoalRequest('start', null, { text, contextMode: options.contextMode }, signal);
+}
+
+export async function streamReplyGoalConversation(
+  conversationId: string,
+  text: string,
+  options: GoalConversationRequestOptions = {},
+  signal?: AbortSignal
+): Promise<GoalConversationEnvelope> {
+  return streamGoalRequest('reply', conversationId, {
+    text,
+    contextMode: options.contextMode,
+    confirmProposal: options.confirmProposal
+  }, signal);
+}
+
+export async function streamRegenerateGoalConversation(
+  conversationId: string,
+  adjustments?: string,
+  signal?: AbortSignal
+): Promise<GoalConversationEnvelope> {
+  return streamGoalRequest('regenerate', conversationId, { adjustments }, signal);
 }
 
 export async function deleteGoalConversation(conversationId: string): Promise<void> {

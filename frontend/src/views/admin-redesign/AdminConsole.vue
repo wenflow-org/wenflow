@@ -58,7 +58,7 @@ import MockSessionCockpit from './MockSessionCockpit.vue';
 import MockCommandPalette from './MockCommandPalette.vue';
 import MockVirtualProfile from './MockVirtualProfile.vue';
 import MockUserDetail from './MockUserDetail.vue';
-import { intent, subPage } from './mockStore';
+import { intent, subPage, closeSkillDrawer } from './mockStore';
 import { loadLiveData, liveLoading } from './mockLive';
 import './mock-shared.css';
 
@@ -106,6 +106,8 @@ const crumbLabel = computed(() => {
 
 watch(scene, () => {
   subPage.value = null;
+  // 切换页面时自动关闭 Skill 抽屉，避免遮挡侧栏导航
+  closeSkillDrawer();
 });
 watch(scene, (s) => {
   if (intent.scene !== s) intent.scene = s;
@@ -142,11 +144,14 @@ onMounted(() => {
 onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey));
 
 function onGlobalKey(e: KeyboardEvent) {
+  const target = e.target as HTMLElement | null
+  const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-    e.preventDefault();
-    paletteOpen.value = !paletteOpen.value;
+    if (isTyping) return
+    e.preventDefault()
+    paletteOpen.value = !paletteOpen.value
   } else if (e.key === 'Escape' && paletteOpen.value) {
-    paletteOpen.value = false;
+    paletteOpen.value = false
   }
 }
 
