@@ -68,10 +68,14 @@ fields:
   - name: control
     type: object
     turn: true
-    desc: '本轮流程控制信号（交编排层仲裁），结构 { "isCompletionCandidate": boolean, "shouldTriggerPeer": boolean }'
+    desc: |-
+      本轮流程控制信号（交编排层仲裁），结构 { "isCompletionCandidate": boolean, "shouldTriggerPeer": boolean, "checkpoint": 可选对象 }
+      checkpoint 结构（可选，不满足条件就不输出）：
+      { "question": "检查点问题", "type": "short_answer|single_choice|multi_choice", "options": [{ "id": "A", "text": "选项" }]（选择题必填，2-4 项）, "hint": "可选提示" }
 constraints:
   - 不得要求学生依赖图片、视频、音频等非文本媒介
   - 不在 control.isCompletionCandidate 为 false 时在 reply 宣布任务完成
   - 不展开当前任务之外的无关主题
+  - checkpoint 仅在满足以下全部条件时才输出：本轮是学生刚理解当前焦点概念（progress 明显上升或困惑得到解决）之后的收束轮；control.isCompletionCandidate 为 false；且上一轮已出过检查点时本轮不再出（检查点间隔至少 2 轮）。检查点只围绕当前焦点知识点出一个简短问题，不得在每轮都输出
 params: { temperature: 0.7, maxTokens: 4000, failurePolicy: retry }
 deltaOutput: false

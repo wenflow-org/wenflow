@@ -41,6 +41,18 @@ const stripPathGenerationInternals = (path: any) => {
     const { core, stageDesign, updatedAt } = safePath.generationStatus;
     safePath.generationStatus = { core, stageDesign, updatedAt };
   }
+  // 保留 generationRun 的轻量子集（含阶段进度/重试信息），供前端 normalizeGenerationLifecycle 首帧准确推断；
+  // 剔除 lease/heartbeat 等运行态内部字段
+  if (safePath.generationRun && typeof safePath.generationRun === 'object') {
+    const {
+      runId, phase, status, progress, completedItems, totalItems,
+      error, errorCode, retryType, retryAllowed,
+    } = safePath.generationRun;
+    safePath.generationRun = {
+      runId, phase, status, progress, completedItems, totalItems,
+      error, errorCode, retryType, retryAllowed,
+    };
+  }
   return safePath;
 };
 
@@ -737,6 +749,7 @@ router.post('/paths/:pathId/retry-stage-design', async (req, res, next) => {
     if (
       error.message === '学习路径主结构尚未完成，暂不能继续生成阶段任务'
       || error.message === '阶段任务仍在生成中，请稍后查看'
+      || error.message === '阶段任务已经准备完成，无需重试'
     ) {
       return res.status(400).json({
         success: false,

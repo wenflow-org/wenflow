@@ -110,11 +110,9 @@ const buildMessageResultData = (result: any, synthetic: boolean): Record<string,
   if (synthetic) {
     return {
       aiResponse: result.aiResponse,
-      autoEnded: result.autoEnded === true,
       shouldConfirmEnd: result.shouldConfirmEnd === true,
       endReason: result.endReason || null,
       recovered: result.recovered === true,
-      wrapup: result.autoEnded === true ? result.wrapup || null : null,
       peerMessage: result.peerTriggered ? result.peerMessage || null : null,
       revision: result.revision,
       schemaVersion: 'synthetic-user-v1'
@@ -131,10 +129,11 @@ const buildMessageResultData = (result: any, synthetic: boolean): Record<string,
       emotionalState: result.analysis.emotionalState,
     },
     state: {
-      lss: result.currentState.lss,
-      ktl: result.currentState.ktl,
-      lf: result.currentState.lf,
-      lsb: result.currentState.lsb,
+      // 0-10 内部尺度 → 0-100 展示尺度（与 /api/state/current 一致）
+      lss: Math.round((result.currentState?.lss ?? 0) * 10),
+      ktl: Math.round((result.currentState?.ktl ?? 0) * 10),
+      lf: Math.round((result.currentState?.lf ?? 0) * 10),
+      lsb: Math.round((result.currentState?.lsb ?? 0) * 10),
     },
     strategies: result.strategies,
     knowledgePoint: result.knowledgePoint,
@@ -143,8 +142,6 @@ const buildMessageResultData = (result: any, synthetic: boolean): Record<string,
     shouldConfirmEnd: result.shouldConfirmEnd === true,
     endReason: result.endReason || null,
     recovered: result.recovered === true,
-    autoEnded: result.autoEnded === true,
-    wrapup: result.wrapup || null,
     advisory: result.advisory || null,
     peerTriggered: result.peerTriggered,
     peerMessage: result.peerMessage,
@@ -307,7 +304,8 @@ router.post('/sessions/:sessionId/pause', async (req: any, res) => {
     }
 
     const { sessionId } = req.params;
-    const reason = req.body?.reason === 'pagehide' ? 'pagehide' : 'manual';
+    // 'hidden'（标签页隐藏）与 'manual' 分开记录，保留前端可见性归因
+    const reason = req.body?.reason === 'pagehide' || req.body?.reason === 'hidden' ? req.body.reason : 'manual';
 
     await teachingSessionRepository.assertOwnership(sessionId, userId);
     const revision = await aiTeachingCoordinator.pauseSession(
@@ -460,6 +458,7 @@ router.post('/sessions/:sessionId/checkpoints/:checkpointId/submit', async (req:
 /**
  * 结束授课会话
  * POST /api/ai-teaching/sessions/:sessionId/end
+ * 收敛为 /finalize(end_only) 的薄封装：稳定幂等 key + 统一 202 轮询契约
  */
 router.post('/sessions/:sessionId/end', async (req: any, res) => {
   try {
@@ -471,15 +470,20 @@ router.post('/sessions/:sessionId/end', async (req: any, res) => {
     const { sessionId } = req.params;
     
     await teachingSessionRepository.assertOwnership(sessionId, userId);
-    
+
     const endReason = req.body?.reason === 'learner-abandoned'
       ? 'learner-abandoned'
       : req.body?.reason === 'task-completed' ? 'task-completed' : 'manual-end';
-    const result = await aiTeachingCoordinator.endSession(
+    const revision = requireExpectedRevision(req.body?.revision);
+    const result = await sessionFinalizationService.finalize({
       sessionId,
+      userId,
+      action: 'end_only',
+      // 稳定幂等 key（而非每次随机 UUID）：重复调用复用同一次最终化，避免孤儿操作行
+      operationId: `end:${sessionId}:${revision}`,
+      revision,
       endReason,
-      requireExpectedRevision(req.body?.revision)
-    );
+    });
 
     res.status(result.status === 'processing' ? 202 : 200).json({
       success: true,
@@ -576,14 +580,16 @@ router.get('/state', async (req: any, res) => {
 
     // 生成建议
     const suggestion = learningStateService.generateSuggestion(state);
+    // 统一输出 0-100 展示尺度（与 /api/state/current 一致）
+    const displayState = learningStateService.toDisplayMetrics(state);
 
     res.json({
       success: true,
       data: {
-        lss: state.lss,
-        ktl: state.ktl,
-        lf: state.lf,
-        lsb: state.lsb,
+        lss: displayState.lss,
+        ktl: displayState.ktl,
+        lf: displayState.lf,
+        lsb: displayState.lsb,
         suggestion,
       },
     });
@@ -614,10 +620,10 @@ router.get('/trends', async (req: any, res) => {
       success: true,
       data: trends.map(t => ({
         timestamp: t.timestamp,
-        lss: t.lss,
-        ktl: t.ktl,
-        lf: t.lf,
-        lsb: t.lsb,
+        lss: Number((t.lss * 10).toFixed(2)),
+        ktl: Number((t.ktl * 10).toFixed(2)),
+        lf: Number((t.lf * 10).toFixed(2)),
+        lsb: Number((t.lsb * 10).toFixed(2)),
       })),
     });
   } catch (error: any) {

@@ -48,7 +48,7 @@ export interface CheckpointSubmitResult {
   passed: boolean;
   feedback: string;
   hint?: string;
-  nextAction: 'continue' | 'review' | 'retry';
+  nextAction: 'continue' | 'review';
   revision: number;
 }
 
@@ -198,7 +198,7 @@ export interface WrapupEvidence {
 export interface WrapupArtifact {
   status: 'complete' | 'summary-only';
   sources: {
-    summary: 'model' | 'fallback';
+    summary: 'model' | 'fallback' | 'timeout-fallback';
     evaluation: 'model' | 'ai-fallback' | 'failed';
   };
   summary: SessionSummary;

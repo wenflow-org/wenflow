@@ -187,6 +187,8 @@ const menuFor = ref('');
 const deleting = ref('');
 const toast = ref('');
 const goalBanner = ref(route.query.from === 'goal');
+/** 生成状态轮询连续失败计数（超过阈值停止空转） */
+const pollFailCount = ref(0);
 
 let toastTimer = 0;
 function showToast(text: string) {
@@ -236,7 +238,7 @@ function normalize(p: Record<string, any>): PathCard {
     }
     if (stageAllDone) stageDone += 1;
   }
-  const percent = totalTasks ? Math.round((doneTasks / totalTasks) * 100) : (lc ? 0 : 0);
+  const percent = totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0;
   const kind: CardKind = p.status === 'completed' || percent >= 100 ? 'completed' : 'ready';
   return {
     id: p.id, title, desc, kind, stages: stages || weeks.length, stageDone,
@@ -268,6 +270,7 @@ function schedulePolling() {
 
 async function pollOnce() {
   const generating = cards.value.filter((c) => c.kind === 'generating');
+  let failCount = 0;
   for (const c of generating) {
     try {
       const lc = await learningAPI.getPathGenerationStatus(c.id);
@@ -283,8 +286,18 @@ async function pollOnce() {
       }
       c.phaseText = lc.phase === 'core' ? '主结构生成中…' : `阶段任务准备中（${lc.completedStages ?? 0}/${lc.totalStages ?? '?'}）…`;
     } catch {
-      /* 单条失败静默，下轮再试 */
+      // 单条失败静默累计；连续失败过多说明状态接口异常，停止空转轮询
+      failCount += 1;
     }
+  }
+  if (failCount > 0 && failCount >= generating.length && pollFailCount.value >= 6) {
+    showToast('生成状态查询失败，请手动刷新');
+    return;
+  }
+  if (failCount >= generating.length) {
+    pollFailCount.value += 1;
+  } else {
+    pollFailCount.value = 0;
   }
   schedulePolling();
 }
@@ -294,6 +307,9 @@ async function refreshStatus(card: PathCard) {
     const lc = await learningAPI.getPathGenerationStatus(card.id);
     if (lc.phase === 'ready') {
       showToast(`「${card.title}」已生成，可以开始了`);
+      await load();
+    } else if (lc.status === 'failed' || lc.status === 'stale') {
+      showToast(`「${card.title}」生成失败，可重试`);
       await load();
     } else {
       showToast('仍在生成中…');

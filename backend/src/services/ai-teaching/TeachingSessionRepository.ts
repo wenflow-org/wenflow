@@ -61,6 +61,10 @@ export interface TeachingSessionMessage {
   peerTriggered?: boolean;
   peerMessage?: string | null;
   peerDebug?: Record<string, any> | null;
+  /** 检查点合成消息标记：不参与学生行为证据统计 */
+  checkpoint?: boolean;
+  /** 伴学对话消息标记：不属于正式教学回合 */
+  peer?: boolean;
 }
 
 export interface TeachingKnowledgePointState {
@@ -235,8 +239,11 @@ export class TeachingSessionRepository {
             && existing.updatedAt < new Date(now.getTime() - recoveryWindowMs);
           const initializingLeaseExpired = existing.status === 'initializing'
             && (!existing.operationLeaseExpiresAt || existing.operationLeaseExpiresAt <= now);
+          // finalization_failed：最终化失败且无活跃 lease 时允许回收重开，避免 openKey 被永久锁死
+          const finalizationFailedRecoverable = existing.status === 'finalization_failed'
+            && (!existing.operationLeaseExpiresAt || existing.operationLeaseExpiresAt <= now);
           const canSupersede = existing.status !== 'finalizing'
-            && (recoveryExpired || initializingLeaseExpired);
+            && (recoveryExpired || initializingLeaseExpired || finalizationFailedRecoverable);
 
           if (!canSupersede) {
             return { session: mapRecord(existing), created: false, operationId: null };
@@ -479,8 +486,7 @@ export class TeachingSessionRepository {
       markTaskInProgress?: boolean;
       allowedStatuses?: string[];
     }
-  ): Promise<void> {
-    await prisma.$transaction(async (tx) => {
+  ): Promise<void> {    await prisma.$transaction(async (tx) => {
       const updated = await tx.teaching_sessions.updateMany({
         where: {
           id: sessionId,
@@ -521,6 +527,34 @@ export class TeachingSessionRepository {
         });
       }
     });
+  }
+
+  /**
+   * 追加伴学对话消息（revision 乐观锁）：不参与教学回合的 knowledgeState/teachingState 变更，
+   * 仅在 active/timeout 会话上生效，避免与 commitTurnState 并发覆盖。
+   */
+  async appendPeerMessages(sessionId: string, messages: TeachingSessionMessage[]): Promise<void> {
+    const session = await prisma.teaching_sessions.findUnique({
+      where: { id: sessionId },
+      select: { messages: true, revision: true, status: true }
+    });
+    if (!session) {
+      throw new Error('会话不存在或已结束');
+    }
+    if (session.status !== 'active' && session.status !== 'timeout') {
+      throw new TeachingSessionConflictError('课堂已结束，无法继续伴学对话', 'TEACHING_SESSION_STATE_CHANGED');
+    }
+    const current: TeachingSessionMessage[] = JSON.parse(session.messages || '[]');
+    const updated = await prisma.teaching_sessions.updateMany({
+      where: { id: sessionId, revision: session.revision, status: { in: ['active', 'timeout'] } },
+      data: {
+        messages: JSON.stringify([...current, ...messages]),
+        updatedAt: new Date()
+      }
+    });
+    if (updated.count !== 1) {
+      throw new TeachingSessionConflictError('课堂状态已变化，伴学消息未保存', 'TEACHING_SESSION_STATE_CHANGED');
+    }
   }
 
   async commitLifecycleState(

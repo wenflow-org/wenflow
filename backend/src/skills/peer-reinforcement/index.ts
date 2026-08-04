@@ -98,6 +98,8 @@ export interface PeerDiscussionInput {
   tutorContext: Array<{ role: string; content: string }>;
   cognitiveLevel?: string;
   understanding?: number;
+  /** 此前伴学对话历史（peer 标记消息） */
+  peerHistory?: Array<{ role: string; content: string }>;
 }
 
 export interface PeerModelArtifact {
@@ -163,6 +165,10 @@ function buildPeerUserPayload(input: PeerDiscussionInput) {
     ? `\n【最近对话】\n${input.tutorContext.slice(-5).map((m) => `${m.role}: ${m.content.substring(0, 100)}`).join('\n')}`
     : '';
 
+  const peerHistorySection = Array.isArray(input.peerHistory) && input.peerHistory.length > 0
+    ? `\n【此前伴学对话】\n${input.peerHistory.slice(-6).map((m) => `${m.role === 'user' ? '学生' : '伴学伙伴'}: ${m.content.substring(0, 100)}`).join('\n')}`
+    : '';
+
   const studentMessageSection = input.studentMessage
     ? `\n【学生消息】${input.studentMessage}`
     : '';
@@ -175,7 +181,7 @@ function buildPeerUserPayload(input: PeerDiscussionInput) {
 【主题】${input.topic}
 【策略】${input.strategy}
 【策略要求】${getStrategyInstruction(input.strategy)}
-【学生认知层级】${input.cognitiveLevel || 'understand'}${understandingSection}${contextSection}${studentMessageSection}`;
+【学生认知层级】${input.cognitiveLevel || 'understand'}${understandingSection}${contextSection}${peerHistorySection}${studentMessageSection}`;
 }
 
 export function validatePeerParsedOutput(parsed: unknown) {

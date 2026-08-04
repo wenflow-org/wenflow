@@ -29,17 +29,6 @@
         <span class="topo-legend"><i class="lg lg--ok"></i>正常</span>
         <span class="topo-legend"><i class="lg lg--idle"></i>空闲</span>
         <span class="topo-legend"><i class="lg lg--err"></i>异常</span>
-        <span class="topo-toolbar__vsep"></span>
-        <button class="topo-ctrl" type="button" title="缩小" @click="stepZoom(-1)">−</button>
-        <button
-          class="topo-ctrl topo-ctrl--zoom"
-          type="button"
-          :title="zoom === 1 && tx === 0 && ty === 0 ? '当前缩放' : '重置视图'"
-          @click="resetView"
-        >
-          {{ Math.round(zoom * 100) }}%
-        </button>
-        <button class="topo-ctrl" type="button" title="放大" @click="stepZoom(1)">+</button>
       </div>
     </div>
 
@@ -60,6 +49,40 @@
       <i class="tk tk--tr"></i>
       <i class="tk tk--bl"></i>
       <i class="tk tk--br"></i>
+
+      <!-- 空态 -->
+      <div v-if="isEmpty" class="topo-empty">
+        <div class="topo-empty__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="6" cy="6" r="2.6" />
+            <circle cx="18" cy="6" r="2.6" />
+            <circle cx="6" cy="18" r="2.6" />
+            <circle cx="18" cy="18" r="2.6" />
+            <path d="M8.3 7.4l7.4 9.2M15.7 7.4l-7.4 9.2" />
+          </svg>
+        </div>
+        <p>暂无可展示的 Agent / Skill 节点</p>
+        <p class="topo-empty__sub">检查时间范围或稍后刷新</p>
+      </div>
+
+      <!-- 交互提示（左下角） -->
+      <div class="topo-hint" aria-hidden="true">
+        滚轮缩放 · 拖拽平移 · 点 Skill 看详情 · 点 Agent 查日志
+      </div>
+
+      <!-- 缩放控制（右下角浮层） -->
+      <div class="topo-zoom" v-if="!isEmpty">
+        <button class="topo-ctrl" type="button" title="缩小" @click="stepZoom(-1)">−</button>
+        <button
+          class="topo-ctrl topo-ctrl--zoom"
+          type="button"
+          :title="zoom === 1 && tx === 0 && ty === 0 ? '当前缩放' : '重置视图'"
+          @click="resetView"
+        >
+          {{ Math.round(zoom * 100) }}%
+        </button>
+        <button class="topo-ctrl" type="button" title="放大" @click="stepZoom(1)">+</button>
+      </div>
 
       <div class="topo-viewport" :style="viewportStyle">
         <!-- 连线层 -->
@@ -86,7 +109,7 @@
             :d="e.d"
             fill="none"
             :stroke="e.stroke"
-            :stroke-opacity="edgeDim(e) ? 0.08 : e.opacity"
+            :stroke-opacity="e.opacity"
             :stroke-width="e.width"
             :stroke-dasharray="e.dashed ? '3 5' : undefined"
             :stroke-linecap="e.dashed ? 'round' : undefined"
@@ -96,7 +119,6 @@
           <!-- 活跃边的数据流（dash 动画层） -->
           <path
             v-for="(e, i) in flowEdges"
-            v-show="!edgeDim(e)"
             :key="`f-${i}`"
             :d="e.d"
             fill="none"
@@ -126,7 +148,7 @@
           v-for="a in agentCards"
           :key="a.id"
           class="agent-card"
-          :class="{ 'is-error': a.errorCount > 0, 'is-dim': hoverAgentIdx != null && hoverAgentIdx !== a.idx }"
+          :class="{ 'is-error': a.errorCount > 0 }"
           :style="{
             left: `${a.x}px`,
             top: `${a.y}px`,
@@ -138,9 +160,8 @@
           tabindex="0"
           @click="guardedInvestigate(a.id)"
           @keydown.enter="guardedInvestigate(a.id)"
-          @mouseenter="hoverAgentIdx = a.idx"
-          @mouseleave="hoverAgentIdx = null"
         >
+          <span class="agent-card__band" aria-hidden="true"></span>
           <div class="agent-card__top">
             <span class="agent-card__icon" aria-hidden="true">
               <svg v-if="a.idx === 0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
@@ -167,28 +188,28 @@
               </svg>
             </span>
             <div class="agent-card__idbox">
-              <div class="agent-card__name">{{ a.name }}</div>
-              <div class="agent-card__sub">AGENT · {{ String(a.idx + 1).padStart(2, '0') }}</div>
+              <div class="agent-card__name" :title="a.id">{{ a.name }}</div>
+              <div class="agent-card__sub">{{ a.id }} · {{ a.memberCount }} Skill</div>
             </div>
-            <span class="agent-card__dot" :class="a.errorCount > 0 ? 'is-error' : 'is-ok'"></span>
+            <span v-if="a.errorCount > 0" class="agent-card__dot is-error">{{ a.errorCount > 9 ? '9+' : a.errorCount }}</span>
+            <span v-else class="agent-card__dot is-ok"></span>
           </div>
           <div class="agent-card__meta">
-            <b>{{ a.memberCount }}</b> Skill
-            <span class="agent-card__sep">·</span>
-            <b>{{ a.calls }}</b> 调用
-            <template v-if="a.errorCount > 0">
-              <span class="agent-card__sep">·</span>
-              <em class="agent-card__err"><b>{{ a.errorCount }}</b> 异常</em>
-            </template>
+            <span class="agent-card__calls"><b>{{ a.calls }}</b>&nbsp;<i>调用</i></span>
+            <span
+              v-if="a.rate != null"
+              class="agent-card__pct"
+              :class="a.rate >= 0.99 ? 'is-ok' : a.rate >= 0.9 ? 'is-warn' : 'is-bad'"
+              :title="`${a.calls} 调用 · ${a.errorCount} 异常 · 成功率 ${(a.rate * 100).toFixed(1)}%`"
+            >{{ (a.rate * 100).toFixed(1) }}%</span>
           </div>
-          <!-- 成功率微条 -->
-          <span
-            v-if="a.rate != null"
-            class="agent-card__rate"
-            :class="a.rate >= 0.99 ? 'is-ok' : a.rate >= 0.9 ? 'is-warn' : 'is-bad'"
-            :style="{ width: `${Math.max(4, a.rate * 182)}px` }"
-            :title="`成功率 ${(a.rate * 100).toFixed(1)}%`"
-          ></span>
+          <div v-if="a.rate != null" class="agent-card__ratebar">
+            <span
+              class="agent-card__rate"
+              :class="a.rate >= 0.99 ? 'is-ok' : a.rate >= 0.9 ? 'is-warn' : 'is-bad'"
+              :style="{ width: `${Math.max(3, a.rate * 100)}%` }"
+            ></span>
+          </div>
         </div>
 
         <!-- Skill 卡片 -->
@@ -198,8 +219,7 @@
           class="skill-card"
           :class="{
             'is-idle': s.idle,
-            'is-error': s.error,
-            'is-dim': (hoverSkillKey != null && hoverSkillKey !== s.id) || (hoverSkillKey == null && hoverAgentIdx != null && hoverAgentIdx !== s.agentIdx)
+            'is-error': s.error
           }"
           :style="{
             left: `${s.x}px`,
@@ -211,12 +231,10 @@
           tabindex="0"
           @click="guardedOpenSkill(s.skillId)"
           @keydown.enter="guardedOpenSkill(s.skillId)"
-          @mouseenter="hoverSkillKey = s.id"
-          @mouseleave="hoverSkillKey = null"
         >
           <span class="skill-card__tick"></span>
           <div class="skill-card__body">
-            <div class="skill-card__name">{{ s.name }}</div>
+            <div class="skill-card__name" :title="s.skillId">{{ s.name }}</div>
             <div class="skill-card__meta">
               <template v-if="s.idle">未调用</template>
               <template v-else>
@@ -224,7 +242,6 @@
               </template>
             </div>
           </div>
-          <span v-if="s.error" class="skill-card__flag">{{ s.errors }}</span>
           <button
             type="button"
             class="skill-card__go"
@@ -282,6 +299,17 @@ const MAX_ZOOM = 2.6
 const userInteracted = ref(false)
 let resizeObserver: ResizeObserver | null = null
 
+/* 响应式窗口状态：4K 下全站 zoom 1.3（≥2000px 1.15），fitView/画布高度需在逻辑坐标系下计算 */
+const winH = ref(window.innerHeight)
+const globalZoom = ref(1)
+function refreshViewport() {
+  const ac = document.querySelector('.ac')
+  const z = ac ? parseFloat((getComputedStyle(ac) as unknown as { zoom?: string }).zoom || '1') : 1
+  globalZoom.value = Number.isFinite(z) && z > 0 ? z : 1
+  winH.value = window.innerHeight
+}
+window.addEventListener('resize', refreshViewport)
+
 const viewportStyle = computed(() => ({
   width: `${contentW.value}px`,
   height: `${contentH.value}px`,
@@ -294,16 +322,20 @@ function toCanvasPoint(event: { clientX: number; clientY: number }) {
   return { x: event.clientX - rect.left, y: event.clientY - rect.top }
 }
 
-/** 初始/重置视图：内容完整适配画布并水平居中 */
+/** 可视高度（逻辑空间）：窗口减顶栏与页面内边距，用于 4K 自适应 */
+const availHeight = () => Math.max(420, winH.value / globalZoom.value - 104)
+
+/** 初始/重置视图：内容完整适配画布并水平居中（zoom 不受 1 限制，4K 自动放大） */
 function fitView() {
   const rect = canvasRef.value?.getBoundingClientRect()
   if (!rect || rect.width === 0) return
   const padding = 20
-  const zx = (rect.width - padding * 2) / contentW.value
-  const zy = (rect.height - padding * 2) / contentH.value
-  zoom.value = Math.min(1, zx, zy)
-  tx.value = Math.max(padding, (rect.width - contentW.value * zoom.value) / 2)
-  ty.value = Math.max(padding, (rect.height - contentH.value * zoom.value) / 2)
+  const zx = (rect.width / globalZoom.value - padding * 2) / contentW.value
+  const zy = (availHeight() - padding * 2) / contentH.value
+  zoom.value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(zx, zy)))
+  const nextH = availHeight()
+  tx.value = Math.max(padding, (rect.width / globalZoom.value - contentW.value * zoom.value) / 2)
+  ty.value = Math.max(padding, (nextH - contentH.value * zoom.value) / 2)
 }
 
 function zoomAt(anchor: { x: number; y: number }, nextZoomRaw: number) {
@@ -334,6 +366,7 @@ function resetView() {
 }
 
 onMounted(() => {
+  refreshViewport()
   fitView()
   resizeObserver = new ResizeObserver(() => {
     if (!userInteracted.value) fitView()
@@ -343,6 +376,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
+  window.removeEventListener('resize', refreshViewport)
 })
 
 let panOrigin: { x: number; y: number; tx: number; ty: number; pointerId: number } | null = null
@@ -446,10 +480,6 @@ function skillsOf(agentId: string): SkillItem[] {
 
 const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`)
 
-/* ========== Hover 联动（高亮本列、压暗他列） ========== */
-const hoverAgentIdx = ref<number | null>(null)
-const hoverSkillKey = ref<string | null>(null)
-
 /* 时间范围（live） */
 const rangeOptions: Array<{ id: '24h' | '7d' | '30d' | 'all'; label: string }> = [
   { id: '24h', label: '24h' },
@@ -526,6 +556,8 @@ const skillCards = computed(() => {
 const agentNodes = agentCards
 const skillNodes = skillCards
 
+const isEmpty = computed(() => agentCards.value.length === 0)
+
 const totalCalls = computed(() => agentCards.value.reduce((sum, a) => sum + a.calls, 0))
 
 const maxSkillCount = computed(() =>
@@ -535,8 +567,8 @@ const maxSkillCount = computed(() =>
 const contentW = computed(() => COL_X0 * 2 + agentDefs.value.length * COL_W + (agentDefs.value.length - 1) * COL_GAP)
 const contentH = computed(() => SKILL_Y0 + maxSkillCount.value * (SKILL_H + SKILL_GAP) + CANVAS_PAD_BOTTOM)
 
-/** 画布高度跟随内容，过高时封顶并交给缩放适配 */
-const canvasHeight = computed(() => Math.min(720, Math.max(480, contentH.value)))
+/** 画布高度 = 可视逻辑高度（zoom 上限时内容居中，4K 下撑满可视区） */
+const canvasHeight = computed(() => (isEmpty.value ? 520 : Math.round(availHeight())))
 
 /* ========== 连线 ========== */
 interface TopoEdge {
@@ -578,13 +610,6 @@ const edges = computed<TopoEdge[]>(() => {
 
 /** 活跃边上的流动层（数据包动画） */
 const flowEdges = computed(() => edges.value.filter((e) => e.active))
-
-/** hover 联动：无关列压暗 */
-function edgeDim(e: TopoEdge): boolean {
-  if (hoverSkillKey.value) return e.skillKey !== hoverSkillKey.value
-  if (hoverAgentIdx.value != null) return e.agentIdx !== hoverAgentIdx.value
-  return false
-}
 
 /** Agent 之间的流水线箭头（渐变 + 三角箭头） */
 const flows = computed(() => {
@@ -696,14 +721,16 @@ const flows = computed(() => {
   border: 1px solid var(--mk-line);
   border-radius: 16px;
   background:
-    radial-gradient(720px 320px at 16% 0%, rgba(52, 120, 246, 0.05), transparent 70%),
-    radial-gradient(circle, #dde4f1 1px, transparent 1px) 0 0 / 22px 22px,
-    linear-gradient(180deg, #fcfdff, #f3f6fb);
+    radial-gradient(640px 320px at 14% 0%, rgba(52, 120, 246, 0.06), transparent 70%),
+    linear-gradient(90deg, rgba(214, 223, 238, 0.55) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(180deg, rgba(214, 223, 238, 0.55) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(180deg, #fbfcff, #f2f5fa);
   overflow: hidden;
-  cursor: grab;
+  cursor: default;
   touch-action: none;
   user-select: none;
 }
+/* 拖拽平移中显示抓取反馈 */
 .topo-canvas.is-panning { cursor: grabbing; }
 
 /* 图纸角标刻度 */
@@ -719,6 +746,71 @@ const flows = computed(() => {
 .tk--tr { top: 10px; right: 10px; border-top: 1.5px solid #c3cfe4; border-right: 1.5px solid #c3cfe4; border-top-right-radius: 3px; }
 .tk--bl { bottom: 10px; left: 10px; border-bottom: 1.5px solid #c3cfe4; border-left: 1.5px solid #c3cfe4; border-bottom-left-radius: 3px; }
 .tk--br { bottom: 10px; right: 10px; border-bottom: 1.5px solid #c3cfe4; border-right: 1.5px solid #c3cfe4; border-bottom-right-radius: 3px; }
+
+/* 交互提示（左下角） */
+.topo-hint {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  z-index: 2;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--mk-faint);
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(203, 213, 231, 0.65);
+  border-radius: 8px;
+  padding: 4px 9px;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* 缩放控制（右下角浮层） */
+.topo-zoom {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  background: var(--mk-surface);
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(30, 58, 110, 0.1);
+}
+.topo-zoom .topo-ctrl {
+  width: 27px;
+  height: 27px;
+  font-size: 15px;
+}
+
+/* 空态 */
+.topo-empty {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
+}
+.topo-empty__icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px dashed var(--mk-line);
+  color: #b3c0d6;
+}
+.topo-empty__icon svg { width: 26px; height: 26px; }
+.topo-empty p { font-size: 13px; font-weight: 600; color: var(--mk-muted); }
+.topo-empty__sub { font-weight: 400 !important; font-size: 11.5px !important; color: var(--mk-faint) !important; margin-top: 4px; }
 
 .topo-viewport {
   position: absolute;
@@ -745,10 +837,6 @@ const flows = computed(() => {
 @keyframes tk-flow {
   to { stroke-dashoffset: -23; }
 }
-
-/* hover 联动：压暗态 */
-.agent-card.is-dim,
-.skill-card.is-dim { opacity: 0.4; }
 
 /* 时间范围切换 */
 .topo-range {
@@ -778,23 +866,36 @@ const flows = computed(() => {
   position: absolute;
   width: 208px;
   height: 88px;
-  background: #ffffff;
-  border: 1px solid #e4e9f4;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--hue) 5%, #ffffff), #ffffff 55%);
+  border: 1px solid color-mix(in srgb, var(--hue) 18%, #e6ecf6);
   border-radius: 13px;
-  padding: 11px 13px;
-  box-shadow: 0 1px 2px rgba(30, 58, 110, 0.05), 0 10px 26px rgba(30, 58, 110, 0.07);
-  cursor: pointer;
+  padding: 12px 13px 11px;
+  box-shadow: 0 1px 2px rgba(30, 58, 110, 0.04), 0 8px 20px rgba(30, 58, 110, 0.06);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   transition: opacity 0.18s ease, transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
   animation: tk-rise 0.48s cubic-bezier(0.22, 0.8, 0.32, 1) backwards;
   animation-delay: var(--d, 0ms);
+  overflow: hidden;
 }
+/* 左侧身份色带：恒为阶段色；异常由红点 + 指标数字提示 */
+.agent-card__band {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--hue);
+  opacity: 0.85;
+}
+/* 卡片平时默认箭头，悬停时提示可点击 */
+.agent-card:hover,
+.skill-card:hover { cursor: pointer; }
 .agent-card:hover {
   transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--hue) 42%, #e4e9f4);
-  box-shadow: 0 2px 4px rgba(30, 58, 110, 0.06), 0 14px 32px color-mix(in srgb, var(--hue) 16%, transparent);
+  border-color: color-mix(in srgb, var(--hue) 40%, #e6ecf6);
+  box-shadow: 0 2px 4px rgba(30, 58, 110, 0.05), 0 14px 30px color-mix(in srgb, var(--hue) 14%, transparent);
 }
 .agent-card__top {
   display: flex;
@@ -802,73 +903,116 @@ const flows = computed(() => {
   gap: 9px;
 }
 .agent-card__icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: var(--soft);
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--hue) 16%, #ffffff), color-mix(in srgb, var(--hue) 5%, #ffffff));
   color: var(--hue);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hue) 22%, transparent);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
-.agent-card__icon svg { width: 16px; height: 16px; }
+.agent-card__icon svg { width: 15px; height: 15px; }
 .agent-card__idbox { min-width: 0; flex: 1; }
+/* 主标题：中文名（sans 13/700）；身份行：id + 成员数（mono 灰） */
 .agent-card__name {
-  font-size: 14.5px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: #16233c;
   letter-spacing: 0.01em;
-  line-height: 1.25;
+  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .agent-card__sub {
   margin-top: 2px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: var(--hue);
-  opacity: 0.85;
   font-family: var(--mk-mono);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--mk-faint);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+/* 状态：ok 绿点；error 红色计数徽标 */
 .agent-card__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  align-self: flex-start;
-  margin-top: 3px;
+  font-family: var(--mk-mono);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
-.agent-card__dot.is-ok { background: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12); }
-.agent-card__dot.is-error { background: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12); }
+.agent-card__dot.is-ok {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12);
+}
+.agent-card__dot.is-error {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 10px;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14);
+}
+/* 指标行：调用数（左） + 成功率（右） */
 .agent-card__meta {
   display: flex;
   align-items: baseline;
-  gap: 5px;
-  font-size: 11px;
-  color: #5b6b85;
-  padding-left: 41px;
+  justify-content: space-between;
+  gap: 8px;
+  padding-left: 30px;
+  white-space: nowrap;
 }
-.agent-card__meta b {
+.agent-card__calls b {
   font-family: var(--mk-mono);
   font-weight: 600;
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: #1a2a44;
   font-variant-numeric: tabular-nums;
 }
-.agent-card__sep { color: #c3cede; }
-.agent-card__err { font-style: normal; color: #dc2626; }
-.agent-card__err b { color: #dc2626; }
+.agent-card__calls i {
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--mk-faint);
+  margin-left: 2px;
+}
+.agent-card__pct {
+  font-family: var(--mk-mono);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.agent-card__pct.is-ok { color: #16a34a; }
+.agent-card__pct.is-warn { color: #b45309; }
+.agent-card__pct.is-bad { color: #dc2626; }
 
-/* 成功率微条（卡底 2px） */
-.agent-card__rate {
-  position: absolute;
-  left: 13px;
-  bottom: 5px;
-  height: 2px;
+/* 成功率条（轨道 + 填充），与指标行同左缘成组 */
+.agent-card__ratebar {
+  margin-left: 30px;
+  margin-top: 7px;
+  height: 3px;
   border-radius: 2px;
+  background: #edf1f8;
+  overflow: hidden;
+}
+.agent-card__rate {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
 }
 .agent-card__rate.is-ok { background: linear-gradient(90deg, #16a34a, #4ade80); }
 .agent-card__rate.is-warn { background: linear-gradient(90deg, #b45309, #fbbf24); }
@@ -881,43 +1025,44 @@ const flows = computed(() => {
   height: 56px;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   background: #ffffff;
   border: 1px solid #e6ecf6;
   border-radius: 11px;
   padding: 0 12px;
-  box-shadow: 0 1px 2px rgba(30, 58, 110, 0.04);
-  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(30, 58, 110, 0.04), 0 4px 12px rgba(30, 58, 110, 0.04);
   transition: opacity 0.18s ease, transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
   animation: tk-rise 0.48s cubic-bezier(0.22, 0.8, 0.32, 1) backwards;
   animation-delay: var(--d, 0ms);
 }
 .skill-card:hover {
   transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--hue) 42%, #e6ecf6);
-  box-shadow: 0 6px 18px color-mix(in srgb, var(--hue) 13%, transparent);
+  border-color: color-mix(in srgb, var(--hue) 40%, #e6ecf6);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--hue) 12%, transparent);
 }
 .skill-card.is-idle {
   background: rgba(255, 255, 255, 0.55);
   border-style: dashed;
   box-shadow: none;
 }
-.skill-card.is-error { border-color: #f0c4c4; }
+/* 左侧短色条：层级区分（Agent 为全高色带 + 淡色底，Skill 为短条 + 纯白底） */
 .skill-card__tick {
-  width: 3px;
-  height: 22px;
-  border-radius: 2px;
+  width: 4px;
+  height: 24px;
+  border-radius: 3px;
   background: var(--hue);
   flex-shrink: 0;
+  opacity: 0.9;
 }
 .skill-card.is-idle .skill-card__tick { background: #d3dbe9; }
 .skill-card.is-error .skill-card__tick { background: #dc2626; }
 .skill-card__body { min-width: 0; flex: 1; }
+/* 主标题：中文名（sans 11.5/600）；英文 skillId 入 tooltip */
 .skill-card__name {
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: 11.5px;
+  font-weight: 600;
   color: #223252;
-  line-height: 1.3;
+  line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -925,9 +1070,10 @@ const flows = computed(() => {
 .skill-card.is-idle .skill-card__name { color: #8a99b5; }
 .skill-card__meta {
   margin-top: 2px;
-  font-size: 10px;
+  font-size: 10.5px;
   color: #8a99b5;
   font-variant-numeric: tabular-nums;
+  padding-right: 22px;
 }
 .skill-card__meta b {
   font-family: var(--mk-mono);
@@ -935,26 +1081,13 @@ const flows = computed(() => {
   color: #41516e;
 }
 .skill-card__meta em { font-style: normal; font-family: var(--mk-mono); font-weight: 600; color: #dc2626; }
-.skill-card__flag {
-  flex-shrink: 0;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: rgba(220, 38, 38, 0.1);
-  color: #dc2626;
-  font-size: 10px;
-  font-weight: 600;
-  font-family: var(--mk-mono);
-  font-variant-numeric: tabular-nums;
-}
 
-/* ↗ 设计页直达（hover 显现） */
+/* ↗ 设计页直达：absolute 右上浮层，不占内容布局（hover 显现） */
 .skill-card__go {
-  flex-shrink: 0;
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 22px;
   height: 22px;
   border: 1px solid transparent;

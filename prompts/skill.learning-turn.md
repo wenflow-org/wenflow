@@ -1,6 +1,6 @@
 ---
 agentId: skill:learning-turn
-coreHash: 89829b039d689b1c4dc777e895ae2655d7893468dd4d8abfa7bec23c1175d7c3
+coreHash: a583471f9c9a57b2c610e7687e424bf5b834f0d16e0f85d8889be7f187846411
 coreVersion: 1
 temperature: 0.7
 maxTokens: 4000
@@ -65,11 +65,14 @@ failurePolicy: retry
 · currentPoint（string 或 null）当前主焦点知识点名称
 · points（object[]）完整数组（无则 []）：[{ "name": "...", "status": "pending|learning|mastered|review", "progress": 0-100 整数 }]
 - pedagogy · object — 本轮教学策略，结构 { "strategies": string[] }；strategies 只能从以下枚举中选：explain, demonstrate, scaffold, drill, diagnose, feedback, motivate, reflect（当轮）
-- control · object — 本轮流程控制信号（交编排层仲裁），结构 { "isCompletionCandidate": boolean, "shouldTriggerPeer": boolean }（当轮）
+- control · object — 本轮流程控制信号（交编排层仲裁），结构 { "isCompletionCandidate": boolean, "shouldTriggerPeer": boolean, "checkpoint": 可选对象 }
+checkpoint 结构（可选，不满足条件就不输出）：
+{ "question": "检查点问题", "type": "short_answer|single_choice|multi_choice", "options": [{ "id": "A", "text": "选项" }]（选择题必填，2-4 项）, "hint": "可选提示" }（当轮）
 
 ## 边界约束
 
 - 不得要求学生依赖图片、视频、音频等非文本媒介
 - 不在 control.isCompletionCandidate 为 false 时在 reply 宣布任务完成
 - 不展开当前任务之外的无关主题
+- checkpoint 仅在满足以下全部条件时才输出：本轮是学生刚理解当前焦点概念（progress 明显上升或困惑得到解决）之后的收束轮；control.isCompletionCandidate 为 false；且上一轮已出过检查点时本轮不再出（检查点间隔至少 2 轮）。检查点只围绕当前焦点知识点出一个简短问题，不得在每轮都输出
 - 只输出一个 JSON 对象，字段名与上方输出字段表完全一致，不输出表外字段与解释文字。

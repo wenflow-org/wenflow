@@ -1,4 +1,4 @@
-const mockCoordinator = {
+﻿const mockCoordinator = {
   processStudentMessage: jest.fn(),
   submitCheckpoint: jest.fn(),
   processPeerMessage: jest.fn(),
@@ -110,7 +110,7 @@ describe('ai-teaching routes', () => {
         engagement: 0.93,
         emotionalState: 'focused',
       },
-      currentState: { lss: 82, ktl: 76, lf: 88, lsb: 79 },
+      currentState: { lss: 8.2, ktl: 7.6, lf: 8.8, lsb: 7.9 },
       strategies: [{ type: 'worked-example', content: '从 T extends U 开始。' }],
       knowledgePoint: { id: 'kp-1', name: '条件类型' },
       knowledgePoints: [{ id: 'kp-1', name: '条件类型' }],
@@ -118,8 +118,6 @@ describe('ai-teaching routes', () => {
       shouldConfirmEnd: true,
       endReason: 'completion-candidate',
       recovered: true,
-      autoEnded: true,
-      wrapup: { summary: '完成条件类型练习' },
       advisory: { nextStep: '复习 infer' },
       peerTriggered: true,
       peerMessage: { content: '我也刚理解这一点。' },
@@ -164,8 +162,6 @@ describe('ai-teaching routes', () => {
         shouldConfirmEnd: true,
         endReason: 'completion-candidate',
         recovered: true,
-        autoEnded: true,
-        wrapup: { summary: '完成条件类型练习' },
         advisory: { nextStep: '复习 infer' },
         peerTriggered: true,
         peerMessage: { content: '我也刚理解这一点。' },

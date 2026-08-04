@@ -107,6 +107,11 @@
           <span class="chat__clear" @click="doReset">清空重聊</span>
         </div>
 
+        <!-- 会话态内 start 失败：错误条 + 重试（初始态 errorbar 在此视图不渲染） -->
+        <div v-if="live.failed === 'start'" class="errorbar chat__errorbar">
+          连接失败，没能开始对话。<span class="errorbar__retry" @click="doRetry">重试</span>
+        </div>
+
         <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal }">
           <template v-for="(m, i) in live.messages" :key="i">
             <div v-if="m.role === 'user'" class="msg msg--user">
@@ -425,10 +430,18 @@ async function doConfirm() {
 async function doSupplement() {
   const t = supplementText.value.trim();
   if (!t || live.sending) return;
+  confirmError.value = false;
   try {
     await live.supplement(t);
     supplementText.value = '';
     supplementMode.value = false;
+    // supplement 走 /regenerate（同步生成路径）：成功后直接进入 done 态展示路径入口，
+    // 避免响应无 confirmedProposal 导致方案浮层消失的死胡同与重复确认生成的重复路径
+    if (live.learningPath || live.isCompleted || live.stage === 'completed' || live.stage === 'ready') {
+      phase.value = 'done';
+    } else {
+      phase.value = 'preview';
+    }
   } catch {
     /* ignore */
   }
@@ -662,6 +675,7 @@ function shuffleScenes() {
   font-size: 13px; font-weight: 600;
 }
 .errorbar__retry { text-decoration: underline; cursor: pointer; font-weight: 800; }
+.chat__errorbar { margin: 10px 14px 0; }
 
 .entry__cards {
   display: grid; grid-template-columns: 1fr; gap: 12px;

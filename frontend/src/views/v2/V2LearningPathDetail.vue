@@ -18,7 +18,7 @@
 
       <!-- 失败 -->
       <div v-else-if="loadError" class="errorbar">
-        路径详情加载失败。<span class="errorbar__retry" @click="load">重试</span>
+        路径详情加载失败。<span class="errorbar__retry" @click="load()">重试</span>
       </div>
 
       <template v-else-if="path">
@@ -183,10 +183,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { learningAPI } from '@/api/learning';
 import { aiTeachingAPI } from '@/api/aiTeaching';
+import { toast } from '@/utils/toast';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
@@ -194,7 +195,7 @@ import './v2.css';
 
 const route = useRoute();
 const router = useRouter();
-const pathId = String(route.params.id || '');
+const pathId = ref(String(route.params.id || ''));
 
 const path = ref<Record<string, any> | null>(null);
 const lifecycle = ref<Record<string, any> | null>(null);
@@ -205,11 +206,11 @@ const openStages = ref<number[]>([]);
 
 const pathTitle = computed(() => path.value?.title || path.value?.name || '');
 
-async function load() {
-  loading.value = true;
+async function load(silent = false) {
+  if (!silent) loading.value = true;
   loadError.value = false;
   try {
-    const p = await learningAPI.getPathDetail(pathId) as unknown as Record<string, any>;
+    const p = await learningAPI.getPathDetail(pathId.value) as unknown as Record<string, any>;
     path.value = p;
     lifecycle.value = p.generationLifecycle ?? null;
     if (p.generationLifecycle && p.generationLifecycle.phase !== 'ready') {
@@ -221,11 +222,23 @@ async function load() {
     const idx = stages.value.findIndex((s) => stageStatusRaw(s) !== 'done');
     openStages.value = idx >= 0 ? [...new Set([Math.max(0, idx - 1), idx])] : stages.value.map((_, i) => i);
   } catch {
-    loadError.value = true;
+    if (!silent) loadError.value = true;
   } finally {
     loading.value = false;
   }
 }
+
+// 同一路由组件在 /learning-path/a → /learning-path/b 间复用时重新加载
+watch(
+  () => route.params.id,
+  (next) => {
+    if (typeof next === 'string' && next !== pathId.value) {
+      pathId.value = next;
+      openStages.value = [];
+      load();
+    }
+  }
+);
 
 const lifecycleFailed = computed(() => lifecycle.value && (lifecycle.value.status === 'failed' || lifecycle.value.status === 'stale'));
 const canLearn = computed(() => !lifecycle.value || lifecycle.value.phase === 'ready');
@@ -238,9 +251,10 @@ function schedulePoll() {
 }
 async function pollOnce() {
   try {
-    const lc = await learningAPI.getPathGenerationStatus(pathId) as unknown as Record<string, any>;
+    const lc = await learningAPI.getPathGenerationStatus(pathId.value) as unknown as Record<string, any>;
     if (lc.phase === 'ready' || lc.status === 'failed' || lc.status === 'stale') {
-      await load();
+      // 生成完成/失败：静默刷新详情，避免整页 loading 闪烁
+      await load(true);
       return;
     }
     lifecycle.value = lc;
@@ -253,13 +267,15 @@ async function doRetry() {
   retrying.value = true;
   try {
     if (lifecycle.value.retryType === 'stage_design') {
-      await learningAPI.retryPathEnrichment(pathId);
+      await learningAPI.retryPathEnrichment(pathId.value);
     } else {
-      await learningAPI.retryPathGeneration(pathId);
+      await learningAPI.retryPathGeneration(pathId.value);
     }
     lifecycle.value = { ...lifecycle.value, status: 'processing' };
     schedulePoll();
-  } catch { /* toast 省略 */ } finally {
+  } catch {
+    toast.error('重新生成失败，请稍后再试');
+  } finally {
     retrying.value = false;
   }
 }
@@ -408,8 +424,12 @@ async function viewFeedback(task: Record<string, any>) {
     const detail = await aiTeachingAPI.getLatestTaskEvaluation(task.id);
     if (detail?.sessionId) {
       router.push(`/learn/${task.id}/evaluation/${detail.sessionId}`);
+    } else {
+      toast.warning('暂无当堂评估记录');
     }
-  } catch { /* ignore */ }
+  } catch {
+    toast.error('加载评估失败，请稍后再试');
+  }
 }
 
 onMounted(load);

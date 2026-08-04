@@ -257,8 +257,14 @@ const pollEvaluation = async () => {
     }
   } catch (err: any) {
     if (componentUnmounted) return;
-    stopPolling();
-    error.value = err?.message || '加载评估失败';
+    // 网络类错误跳过本轮继续轮询（会话可能仍在后台结算），仅超时才终止
+    const status = (err as any)?.status;
+    if (status === 404 || status === 500 || status === 401) {
+      stopPolling();
+      error.value = err?.message || '加载评估失败';
+      return;
+    }
+    schedulePoll();
   }
 };
 
@@ -400,10 +406,12 @@ const handleAdvisoryAction = async (action: string) => {
       accelerate: '根据课后建议，压缩下一阶段以加快推进',
       slow_down: '根据课后建议，放慢下一阶段节奏'
     };
-    await api.post(`/learning/paths/${learningPathId}/replan`, {
+    const res = await api.post(`/learning/paths/${learningPathId}/replan`, {
       triggerSource: 'ai-teaching',
       mode: 'overwrite',
       reason: reasonMap[resolvedAction],
+      // 用户已在本弹窗二次确认：跳过 awaiting-confirmation，直接执行重设计
+      requireConfirmation: false,
       evidence: {
         advisoryAction: resolvedAction,
         advisory,
@@ -412,7 +420,12 @@ const handleAdvisoryAction = async (action: string) => {
         taskTitle: detail.topic
       }
     });
-    toast.success('已调整当前路径的后续阶段');
+    const replanRes = (res as any)?.data || res;
+    if (replanRes?.status === 'awaiting-confirmation' || replanRes?.enabled === false) {
+      toast.warning('调整方案已生成，需在路径页确认后生效');
+    } else {
+      toast.success('已调整当前路径的后续阶段');
+    }
   } catch (err: any) {
     if (err !== 'cancel') toast.error(err?.message || '调整下一阶段失败');
   }

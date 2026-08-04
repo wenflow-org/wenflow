@@ -92,6 +92,8 @@ export interface GoalPathRequest {
   visibleSummary?: GoalFinalPayload['visibleSummary'];
   conversationHistory?: Array<{ role: string; content: string }>;
   finalUserVisible?: string;
+  /** goal skill 产出的结构化画像（learner.identity/learning_context 等），供 path-planning scenario 判定 */
+  structuredData?: Record<string, any> | null;
   systemPromptOverrides?: {
     pathAgent?: string;
   };
@@ -249,7 +251,7 @@ class PathCoordinator {
     const availableTime = this.pickFirstDefined(source, config.normalizedInput.timePerDaySources)
       || normalizedInputV1.resources.timeBudget
       || normalizedInputV1.resources.timePerWeek
-      || '1 灏忔椂';
+      || '1 小时';
     const deadlineRaw = this.pickFirstDefined(source, config.normalizedInput.deadlineTextSources);
 
     let deadline: Date | undefined;
@@ -291,7 +293,7 @@ class PathCoordinator {
         skillLevel,
         currentSkillLevel: skillLevel,
         timePerDay: availableTime,
-        structuredData: null,
+        structuredData: input.structuredData || null,
         confirmedProposal: config.normalizedInput.includeConfirmedProposal ? input.visibleSummary?.confirmedProposal || null : null,
         confidenceScores: null,
         conversationHistory: config.normalizedInput.includeConversationHistory ? input.conversationHistory || [] : [],

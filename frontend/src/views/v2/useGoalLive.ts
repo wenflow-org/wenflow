@@ -234,6 +234,14 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
       applyEnvelope(env, { userText: action === 'supplement' ? '' : text });
     }
   } catch (e) {
+    // 非流式回退请求的 422 恢复信封：axios 拦截器把信封放在 error.response.data.data，
+    // 与 SSE 路径的 recoveryEnvelope 对齐处理（模型部分产出可用，应用后视为本轮已处理）
+    const axiosErr = e as { status?: number; response?: { data?: { error?: string; data?: GoalConversationEnvelope } } };
+    const axiosRecovery = axiosErr?.response?.data?.data;
+    if (axiosRecovery && (axiosErr.response?.data?.error === 'STRUCTURED_OUTPUT_INVALID' || axiosErr.status === 422)) {
+      applyEnvelope(axiosRecovery, { userText: action === 'supplement' ? '' : text });
+      return;
+    }
     failed.value = action;
     if (action !== 'start' && action !== 'supplement') {
       messages.value.push({ role: 'ai', content: '这次没有成功处理你的回答，点下方「重试」继续。', time: nowTime(), failed: true });

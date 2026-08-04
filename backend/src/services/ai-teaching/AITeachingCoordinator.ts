@@ -106,12 +106,13 @@ function toMessageRole(role: string): 'user' | 'assistant' | 'system' {
   return 'user';
 }
 
-function appendTimestamp(messages: Array<{ role: string; content: string; timestamp?: string; analysis?: any }>): TeachingSessionMessage[] {
+function appendTimestamp(messages: Array<{ role: string; content: string; timestamp?: string; analysis?: any; checkpoint?: boolean }>): TeachingSessionMessage[] {
   return messages.map((message) => ({
     role: toMessageRole(message.role),
     content: message.content,
     timestamp: message.timestamp || new Date().toISOString(),
-    ...(message.analysis ? { analysis: message.analysis } : {})
+    ...(message.analysis ? { analysis: message.analysis } : {}),
+    ...(message.checkpoint ? { checkpoint: true } : {})
   }));
 }
 
@@ -484,27 +485,43 @@ function cloneKnowledgePoints(points: TeachingKnowledgePointState[] | null | und
     }));
 }
 
+/** 合并后知识点的总数上限（防止模型每轮新增点导致无限膨胀） */
+const MAX_KNOWLEDGE_POINTS = 12;
+
 function normalizeFrozenKnowledgeState(
   frozenPoints: TeachingKnowledgePointState[] | null | undefined,
   currentPoints: TeachingKnowledgePointState[] | null | undefined,
 ): TeachingKnowledgePointState[] {
   const frozen = cloneKnowledgePoints(frozenPoints);
+  const current = cloneKnowledgePoints(currentPoints);
   if (frozen.length === 0) {
-    return cloneKnowledgePoints(currentPoints);
+    return current.slice(0, MAX_KNOWLEDGE_POINTS);
   }
 
+  const frozenMap = new Map(
+    frozen.map((point) => [point.name.trim().toLowerCase(), point])
+  );
   const currentMap = new Map(
-    cloneKnowledgePoints(currentPoints).map((point) => [point.name.trim().toLowerCase(), point])
+    current.map((point) => [point.name.trim().toLowerCase(), point])
   );
 
-  return frozen.map((point, index) => {
-    const current = currentMap.get(point.name.trim().toLowerCase());
+  const merged = frozen.map((point, index) => {
+    const currentPoint = currentMap.get(point.name.trim().toLowerCase());
     return {
       name: point.name,
-      status: current?.status || point.status || (index === 0 ? 'learning' : 'pending'),
-      progress: current ? Math.max(point.progress || 0, current.progress || 0) : (point.progress || 0),
+      status: currentPoint?.status || point.status || (index === 0 ? 'learning' : 'pending'),
+      progress: currentPoint ? Math.max(point.progress || 0, currentPoint.progress || 0) : (point.progress || 0),
     };
   });
+
+  // 保留模型/合并中新出现的点（不在种子集合里）：追加到末尾，避免新发现被静默丢弃
+  for (const currentPoint of current) {
+    if (!frozenMap.has(currentPoint.name.trim().toLowerCase())) {
+      merged.push({ ...currentPoint });
+    }
+    if (merged.length >= MAX_KNOWLEDGE_POINTS) break;
+  }
+  return merged;
 }
 
 function isKnowledgeStateComplete(points: TeachingKnowledgePointState[] | null | undefined): boolean {
@@ -628,7 +645,8 @@ function computeKnowledgeDelta(
 }
 
 function computeSessionEvidence(session: TeachingSessionRecord) {
-  const analyzedMessages = session.messages.filter((message) => !!message.analysis);
+  // 排除检查点合成消息（非真实学生话语），避免污染理解/参与度统计
+  const analyzedMessages = session.messages.filter((message) => !!message.analysis && !message.checkpoint);
   const avg = (values: number[]) => values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
   const understandingScores = analyzedMessages
     .map((message) => Number(message.analysis?.understanding))
@@ -830,7 +848,6 @@ function extractTeachingPromptDebug(agentOutput: any) {
 }
 
 export class AITeachingOrchestrator {
-  private peerMessages: Map<string, Array<{ role: string; content: string }>> = new Map();
   private idleTimeoutMs = 120 * 60 * 1000;
   private idleTimer: NodeJS.Timeout | null = null;
   private idleCheckInFlight: Promise<void> | null = null;
@@ -1190,6 +1207,8 @@ export class AITeachingOrchestrator {
         role: 'user',
         content: message,
         timestamp: new Date().toISOString(),
+        // 检查点合成消息打标记：进入教学上下文供模型分析答案，但不参与学生行为证据统计
+        ...(options.checkpointId ? { checkpoint: true } : {}),
       }
     ]);
 
@@ -1485,6 +1504,32 @@ export class AITeachingOrchestrator {
             : parseSessionArtifacts(session.teachingState).endReason,
       },
       };
+
+      // 检查点产生：learning-turn 可选输出 control.checkpoint，按规则落库为 pendingCheckpoint
+      const checkpointCandidate = teachingOutput.control.checkpoint;
+      if (
+        !submittedCheckpoint
+        && !completionReady
+        && !endIntent.isEndIntent
+        && checkpointCandidate
+        && !previousTeachingState.pendingCheckpoint
+        && (teachingState.lastCheckpointTurn === undefined
+          || updatedMessages.length - teachingState.lastCheckpointTurn >= 4)
+      ) {
+        const checkpointTitle = checkpointCandidate.question.length > 20
+          ? `${checkpointCandidate.question.slice(0, 20)}…`
+          : checkpointCandidate.question;
+        teachingState.pendingCheckpoint = {
+          id: `cp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          type: checkpointCandidate.type,
+          title: checkpointTitle,
+          question: checkpointCandidate.question,
+          ...(checkpointCandidate.options ? { options: checkpointCandidate.options } : {}),
+          allowSkip: true,
+          ...(checkpointCandidate.hint ? { contextHint: checkpointCandidate.hint } : {}),
+        };
+        teachingState.lastCheckpointTurn = updatedMessages.length;
+      }
 
       let checkpointResolution: { passed: boolean; understanding: number } | undefined;
       if (submittedCheckpoint) {
@@ -2349,12 +2394,14 @@ export class AITeachingOrchestrator {
     if (!session) {
       throw new Error('会话不存在或已结束');
     }
-
-    if (!this.peerMessages.has(sessionId)) {
-      this.peerMessages.set(sessionId, []);
+    if (session.status !== 'active' && session.status !== 'timeout') {
+      throw new TeachingSessionConflictError('课堂已结束，无法继续伴学对话', 'TEACHING_SESSION_STATE_CHANGED');
     }
-    const peerHistory = this.peerMessages.get(sessionId)!;
-    peerHistory.push({ role: 'user', content: message });
+
+    // 伴学历史从已落库消息中恢复（peer 标记），不再依赖进程内 Map
+    const peerHistory = session.messages
+      .filter((item: any) => item.peer === true)
+      .map((item: any) => ({ role: item.role, content: item.content }));
 
     const peerResult = await executeSkill(peerAgentDefinition, {
       input: {
@@ -2367,6 +2414,7 @@ export class AITeachingOrchestrator {
         })),
         cognitiveLevel: (session.teachingState as any)?.analysis?.cognitiveLevel,
         understanding: (session.teachingState as any)?.analysis?.understanding,
+        peerHistory,
       },
       context: {
         userId: session.userId,
@@ -2381,7 +2429,12 @@ export class AITeachingOrchestrator {
     });
 
     const peerResponse = peerResult.internal?.ext?.peer?.message || peerResult.userVisible || '';
-    peerHistory.push({ role: 'assistant', content: peerResponse });
+    // 伴学对话落库（带 peer 标记），页面刷新后不丢失
+    const now = new Date().toISOString();
+    await teachingSessionRepository.appendPeerMessages(sessionId, [
+      { role: 'user', content: message, timestamp: now, peer: true },
+      { role: 'assistant', content: peerResponse, timestamp: now, peer: true },
+    ]);
     return { peerResponse };
   }
 }

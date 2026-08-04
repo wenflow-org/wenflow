@@ -137,6 +137,13 @@ export interface LearningTurnOutput {
       decision: 'accepted' | 'rejected' | 'no-criteria';
       reason: string;
     };
+    /** 可选理解检查点：模型在适当时机输出，由 coordinator 落库为 pendingCheckpoint */
+    checkpoint?: {
+      question: string;
+      type: 'short_answer' | 'single_choice' | 'multi_choice';
+      options?: Array<{ id: string; text: string }>;
+      hint?: string;
+    };
   };
 }
 
@@ -358,7 +365,30 @@ function normalizeOutput(parsed: Record<string, any>, input: LearningTurnInput):
             decision: taskCompletionEvidence.matched ? 'accepted' : 'rejected',
             reason: taskCompletionEvidence.reason,
           },
+      ...(typeof control.checkpoint?.question === 'string' && control.checkpoint.question.trim()
+        ? { checkpoint: normalizeCheckpoint(control.checkpoint) }
+        : {}),
     },
+  };
+}
+
+/** 归一化可选检查点输出：question 必填、type/options 兜底校验 */
+function normalizeCheckpoint(value: Record<string, any>): NonNullable<LearningTurnOutput['control']['checkpoint']> {
+  const options = Array.isArray(value.options)
+    ? value.options
+        .filter((option: any) => typeof option?.id === 'string' && typeof option?.text === 'string')
+        .slice(0, 5)
+        .map((option: any) => ({ id: option.id, text: option.text }))
+    : [];
+  const wantsChoice = value.type === 'single_choice' || value.type === 'multi_choice';
+  const type = wantsChoice && options.length >= 2
+    ? (value.type as 'single_choice' | 'multi_choice')
+    : 'short_answer';
+  return {
+    question: String(value.question).trim(),
+    type,
+    ...(type !== 'short_answer' ? { options } : {}),
+    ...(typeof value.hint === 'string' && value.hint.trim() ? { hint: value.hint.trim() } : {}),
   };
 }
 

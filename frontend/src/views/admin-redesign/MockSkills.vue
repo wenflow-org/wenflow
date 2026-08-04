@@ -68,8 +68,8 @@
                 <div class="sk-cell">
                   <span class="sk-dot" :class="`sk-dot--${s.health}`"></span>
                   <div class="mk-cell-main">
-                    <strong :title="s.name">{{ displayNameOf(s) }}</strong>
-                    <span class="mk-cell-sub" :class="{ mono: !isLongName(s) }">{{ isLongName(s) ? s.name : s.id }}</span>
+                    <strong class="sk-id-main" :title="s.name">{{ s.id }}</strong>
+                    <span class="sk-name-desc" :title="s.name">{{ s.name }}</span>
                   </div>
                 </div>
               </td>
@@ -100,8 +100,8 @@
             <span class="sk-card__cat">{{ categoryText(s.category) }}</span>
             <span v-if="s.health !== 'ok'" class="sk-card__flag">{{ s.health === 'error' ? '异常' : '空闲' }}</span>
           </span>
-          <strong class="sk-card__name" :title="s.name">{{ s.name }}</strong>
-          <span class="sk-card__id">{{ s.id }}</span>
+          <strong class="sk-card__name" :title="s.name">{{ s.id }}</strong>
+          <span class="sk-card__id">{{ s.name }}</span>
           <span class="sk-card__stats">
             <span>{{ s.calls }} 调用</span>
             <span v-if="s.errors" class="sk-card__err">{{ s.errors }} 失败</span>
@@ -140,11 +140,6 @@ const sortKey = ref<SortKey>('errors')
 const sortDir = ref<'asc' | 'desc'>('desc')
 const isLive = computed(() => dataSource.value === 'live')
 const statsRange = liveSkillStatsRange
-
-/** 名称列信息层级：name 是长描述时主行显示 ID（可识别），描述降级副行 */
-const LONG_NAME = 28
-const isLongName = (c: { name: string }) => c.name.length > LONG_NAME
-const displayNameOf = (c: { name: string; id: string }) => (isLongName(c) ? c.id : c.name)
 
 /** 成功率阈值着色：<70% 红、<90% 琥珀 */
 function rateTone(s: { calls: number; errors: number }) {
@@ -265,12 +260,25 @@ const successRate = (s: { calls: number; errors: number }) =>
 .sk-row { cursor: pointer; }
 .sk-row:hover { background: #f6f9ff; }
 .sk-cell { display: flex; align-items: center; gap: 10px; }
-.sk-cell .mk-cell-main strong {
+/* 英文原名（id）主行：等宽突出；中文描述副行：灰色正文（非 mono） */
+.sk-id-main {
+  font-family: var(--mk-mono);
+  font-weight: 700;
   max-width: 460px;
-  white-space: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sk-name-desc {
+  font-size: 11.5px;
+  color: var(--mk-faint);
+  line-height: 1.5;
+  font-family: inherit;
+  overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  max-width: 460px;
 }
 .sk-more {
   display: flex;
@@ -327,14 +335,23 @@ const successRate = (s: { calls: number; errors: number }) =>
 .sk-card__flag { margin-left: auto; font-size: 10.5px; font-weight: 700; color: var(--mk-red); }
 .sk-card--idle .sk-card__flag { color: var(--mk-faint); }
 
-.sk-card__name { font-size: 13.5px; font-weight: 700; }
-.sk-card__id {
+/* 英文原名（id）主行 + 中文解释副行 */
+.sk-card__name {
   font-family: var(--mk-mono);
-  font-size: 11px;
-  color: var(--mk-faint);
+  font-size: 13px;
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.sk-card__id {
+  font-size: 11px;
+  color: var(--mk-faint);
+  line-height: 1.5;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 .sk-card__stats {
   display: flex;

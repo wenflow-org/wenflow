@@ -227,7 +227,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import MarkdownIt from 'markdown-it';
 import DOMPurify, { type Config as DOMPurifyConfig } from 'dompurify';
-import request from '@/utils/api';
+import request, { API_BASE_URL } from '@/utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import AiContentNote from '@/components/AiContentNote.vue';
 import { toast } from '@/utils/toast';
@@ -355,8 +355,8 @@ async function boot() {
     try {
       const task = unwrap<Record<string, any>>(await request.get(`/learning/tasks/${taskId}`));
       taskTitle.value = task?.title || task?.displayLabel || '';
-      pathName.value = task?.pathTitle || task?.learningPathTitle || '';
-      pathId.value = task?.learningPathId || task?.pathId || '';
+      pathName.value = task?.pathTitle || task?.learningPathTitle || task?.learningPath?.title || '';
+      pathId.value = task?.learningPathId || task?.pathId || task?.learningPath?.id || '';
     } catch { /* 任务信息拿不到也能上课 */ }
 
     const s = await aiTeachingAPI.startSession(taskId) as unknown as Record<string, any>;
@@ -392,6 +392,8 @@ let lastUserText = '';
 let streamAbort: AbortController | null = null;
 /** 伴学窗流式发送的独立 AbortController（与主对话互不干扰） */
 let peerStreamAbort: AbortController | null = null;
+/** 检查点通过后的自动关闭 timer（提交/卸载时清理，防竞态） */
+let checkpointCloseTimer = 0;
 /**
  * 流式内容气泡下标（-1 = 尚无气泡）：
  * learning-turn 为 JSON 输出无 delta，期间仅显示 typing 指示器；首个 delta 到达时才建气泡，
@@ -523,7 +525,9 @@ async function submitCheckpoint() {
     checkpointPassed.value = r.passed === true;
     checkpointFeedback.value = r.feedback || (r.passed ? '回答正确' : r.hint || '再想想');
     if (r.passed || r.nextAction === 'continue') {
-      window.setTimeout(() => {
+      // 记录 timer 并在下次提交/卸载时清理，避免前一次 timeout 清掉新反馈
+      window.clearTimeout(checkpointCloseTimer);
+      checkpointCloseTimer = window.setTimeout(() => {
         checkpoint.value = null;
         checkpointFeedback.value = '';
       }, 1600);
@@ -554,8 +558,8 @@ async function finish(action: 'complete_task' | 'end_only') {
     wrapupText.value = wrapup?.summary?.topicSummary || wrapup?.summary?.learningEvaluation || '';
     const stats: Array<{ label: string; value: string | number }> = [];
     if (wrapup?.progress?.newlyMastered?.length) stats.push({ label: '新掌握知识点', value: wrapup.progress.newlyMastered.length });
-    if (r.evaluation?.duration) stats.push({ label: '分钟', value: Math.round(r.evaluation.duration) });
-    if (r.evaluation?.messageCount) stats.push({ label: '次对话', value: r.evaluation.messageCount });
+    if (wrapup?.evaluation?.duration) stats.push({ label: '分钟', value: Math.round(wrapup.evaluation.duration) });
+    if (wrapup?.evaluation?.messageCount) stats.push({ label: '次对话', value: wrapup.evaluation.messageCount });
     finishStats.value = stats;
     evaluationUrl.value = `/learn/${taskId}/evaluation/${session.value.sessionId}`;
   } catch {
@@ -627,7 +631,7 @@ function onPageHide() {
   if (!session.value || completed.value) return;
   const payload = JSON.stringify({ reason: 'pagehide', revision: session.value.revision });
   const blob = new Blob([payload], { type: 'application/json' });
-  navigator.sendBeacon?.(`/api/ai-teaching/sessions/${session.value.sessionId}/pause`, blob);
+  navigator.sendBeacon?.(`${API_BASE_URL}/ai-teaching/sessions/${session.value.sessionId}/pause`, blob);
 }
 
 /* 切换标签页/窗口：隐藏时暂停、切回可见时恢复，学习时长只计页面激活时间 */
@@ -653,6 +657,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   streamAbort?.abort();
   peerStreamAbort?.abort();
+  window.clearTimeout(checkpointCloseTimer);
   window.removeEventListener('pagehide', onPageHide);
   document.removeEventListener('visibilitychange', onVisibilityChange);
   if (session.value && !completed.value) {

@@ -516,7 +516,7 @@ const visibleTabs = computed<Array<{ key: DrawerTab; label: string; badge?: stri
     {
       key: 'overview',
       label: '概览',
-      badge: !skillProfile.value && memberSkills.length ? String(memberSkills.length) : undefined,
+      badge: !skillProfile.value && memberSkills.value.length ? String(memberSkills.value.length) : undefined,
       badgeCls: undefined
     }
   ]

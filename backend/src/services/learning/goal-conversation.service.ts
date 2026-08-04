@@ -330,6 +330,8 @@ class GoalConversationService {
       const responseWithConversationId = this.withConversationId(aiResponse, conversation.id);
 
       if (!this.getStructuredOutputValid(aiResponse)) {
+        // 422 恢复信封前先持久化本轮用户消息，避免刷新恢复后上下文丢失（AI 回复不落库）
+        await this.saveMessage(conversation.id, 'user', initialGoal);
         logger.warn('开始对话结构化输出失败，状态未更新', {
           conversationId: conversation.id,
           userId,
@@ -502,6 +504,8 @@ async continueConversation(
       const responseWithConversationId = this.withConversationId(aiResponse, conversationId);
 
       if (!this.getStructuredOutputValid(aiResponse)) {
+        // 422 恢复信封前先持久化本轮用户消息，避免刷新恢复后对话上下文丢失（AI 回复不落库）
+        await this.saveMessage(conversation.id, 'user', userReply);
         logger.warn('继续对话结构化输出失败，状态未更新', {
           conversationId,
           userId,
@@ -845,6 +849,8 @@ async continueConversation(
         confirmedProposal,
         collected: data.collected || {},
       }),
+      // goal skill 产出的结构化画像透传（learner.identity/learning_context 等），供 path-planning scenario 判定
+      structuredData: (data as any)?.structuredData || null,
       conversationHistory,
       finalUserVisible: aiResponse.userVisible || null,
       systemPromptOverrides: systemPromptOverrides?.pathAgent

@@ -387,6 +387,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import request from '@/utils/api';
 import { learningAPI } from '@/api/learning';
+import { toast } from '@/utils/toast';
 import { useUserStore } from '@/stores/user';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
@@ -647,6 +648,8 @@ async function doRetry() {
       await learningAPI.retryPathGeneration(primaryPath.value.id);
     }
     window.setTimeout(loadAll, 4000);
+  } catch {
+    toast.error('重新生成失败，请稍后再试');
   } finally {
     retrying.value = false;
   }
