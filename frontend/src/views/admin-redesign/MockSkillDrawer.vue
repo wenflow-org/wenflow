@@ -36,29 +36,29 @@
             <button type="button" class="msk__close" aria-label="关闭" @click="closeSkillDrawer">✕</button>
           </div>
           <div class="msk__chips">
-            <span class="msk__status" :class="stat.errors ? 'is-bad' : 'is-ok'">
-              <i></i>{{ stat.errors ? `${stat.errors} 次失败` : '健康' }}
+            <span class="mk-badge" :class="stat.errors ? 'mk-badge--bad' : 'mk-badge--ok'">
+              {{ stat.errors ? `${stat.errors} 次失败` : '健康' }}
             </span>
             <template v-if="skillProfile">
-              <span class="msk__chip mono">{{ categoryLabel }}</span>
-              <span class="msk__chip">{{ liveMeta?.agentName || skillProfile.agentName || '—' }}</span>
+              <span class="mk-badge mk-badge--muted">{{ categoryLabel }}</span>
+              <span class="mk-badge mk-badge--muted">{{ liveMeta?.agentName || skillProfile.agentName || '—' }}</span>
             </template>
             <template v-else>
-              <span class="msk__chip mono">AGENT</span>
-              <span class="msk__chip">{{ memberSkills.length }} Skill<template v-if="memberErrors"> · {{ memberErrors }} 异常</template></span>
+              <span class="mk-badge mk-badge--muted">Agent</span>
+              <span class="mk-badge mk-badge--muted">{{ memberSkills.length }} Skill<template v-if="memberErrors"> · {{ memberErrors }} 异常</template></span>
             </template>
           </div>
-          <p v-if="entity.description" class="msk__desc">{{ entity.description }}</p>
+          <p v-if="entity.description" class="msk__desc" :title="entity.description">{{ entity.description }}</p>
         </header>
 
-        <!-- 页签：概览 / 运行 / Prompt / 协议 -->
-        <nav class="msk__tabs" aria-label="详情页签">
+        <!-- 页签：概览 / 运行 / Prompt / 协议（统一 mk-pills） -->
+        <nav class="mk-pills msk__tabs" aria-label="详情页签">
           <button
             v-for="t in visibleTabs"
             :key="t.key"
             type="button"
-            class="msk__tab"
-            :class="{ 'is-active': activeTab === t.key }"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': activeTab === t.key }"
             @click="activateTab(t.key)"
           >
             {{ t.label }}
@@ -178,13 +178,13 @@
               </div>
               <p class="msk__budget">平台预算 <em class="mono">{{ platformBudget }}</em></p>
               <div class="msk__actions">
-                <button type="button" class="msk__btn-primary" :disabled="cfgBusy" @click="saveCfg">
+                <button type="button" class="mk-btn mk-btn--primary" :disabled="cfgBusy" @click="saveCfg">
                   {{ cfgBusy ? '保存中…' : '保存配置' }}
                 </button>
                 <button
                   v-if="runtimeCfg.hasSkillOverride"
                   type="button"
-                  class="msk__btn-danger"
+                  class="mk-btn msk__btn-danger"
                   :disabled="cfgBusy"
                   @click="deleteCfg"
                 >
@@ -203,7 +203,7 @@
             </header>
             <textarea v-model="testInput" class="msk__test-input mono" rows="3" placeholder='{"input": "测试输入"}'></textarea>
             <div class="msk__actions">
-              <button type="button" class="msk__btn-primary" :disabled="testBusy" @click="runTest">
+              <button type="button" class="mk-btn mk-btn--primary" :disabled="testBusy" @click="runTest">
                 {{ testBusy ? '运行中…' : '运行测试' }}
               </button>
             </div>
@@ -512,7 +512,13 @@ type DrawerTab = 'overview' | 'run' | 'prompt' | 'rules'
 const activeTab = ref<DrawerTab>('overview')
 const visibleTabs = computed<Array<{ key: DrawerTab; label: string; badge?: string; badgeCls?: string }>>(() => {
   const tabs: Array<{ key: DrawerTab; label: string; badge?: string; badgeCls?: string }> = [
-    { key: 'overview', label: '概览', badge: stat.value.errors ? String(stat.value.errors) : undefined, badgeCls: 'is-bad' }
+    // 概览 badge：Agent 视图显示下辖 Skill 数；Skill 视图不挂 badge（失败数已由头部徽章 + 指标条展示）
+    {
+      key: 'overview',
+      label: '概览',
+      badge: !skillProfile.value && memberSkills.length ? String(memberSkills.length) : undefined,
+      badgeCls: undefined
+    }
   ]
   if (skillProfile.value && isLive.value) tabs.push({ key: 'run', label: '运行' })
   if (skillProfile.value) tabs.push({ key: 'prompt', label: 'Prompt' })
@@ -881,7 +887,7 @@ function goFullEditor() {
   justify-content: flex-end;
 }
 .msk__panel {
-  width: min(460px, 100vw);
+  width: min(520px, 100vw);
   height: 100%;
   background: #fff;
   box-shadow: -16px 0 48px rgba(15, 23, 42, 0.18);
@@ -895,34 +901,11 @@ function goFullEditor() {
   from { transform: translateX(30px); opacity: 0; }
 }
 
-/* ========== 页签 ========== */
+/* ========== 页签（统一 mk-pills 分段控件） ========== */
 .msk__tabs {
-  display: flex;
-  gap: 2px;
-  padding: 0 14px;
-  border-bottom: 1px solid #e1e8f2;
-  background: #fbfdff;
-}
-.msk__tab {
-  border: 0;
-  background: transparent;
-  padding: 10px 12px 9px;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: #8492ab;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  transition: color 0.14s ease, border-color 0.14s ease;
-}
-.msk__tab:hover { color: #16233c; }
-.msk__tab.is-active {
-  color: var(--hue, #3478f6);
-  border-bottom-color: var(--hue, #3478f6);
+  margin: 0 14px;
+  width: fit-content;
+  padding: 3px;
 }
 .msk__tab-badge {
   min-width: 16px;
@@ -931,10 +914,14 @@ function goFullEditor() {
   border-radius: 999px;
   display: inline-grid;
   place-items: center;
-  font-size: 10px;
+  font-size: 12.5px;
   font-weight: 800;
+  background: #eef2fa;
+  color: #8492ab;
+  margin-left: 3px;
 }
 .msk__tab-badge.is-bad { background: #fef2f2; color: #dc2626; }
+.mk-pill--active .msk__tab-badge { background: #dbe9ff; color: #1f57cc; }
 
 /* ========== 头部身份区 ========== */
 .msk__head {
@@ -972,7 +959,7 @@ function goFullEditor() {
 .msk__id {
   display: block;
   margin-top: 2px;
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: #8492ab;
   word-break: break-all;
 }
@@ -997,36 +984,16 @@ function goFullEditor() {
   flex-wrap: wrap;
   padding-left: 49px;
 }
-.msk__status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 9px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-}
-.msk__status i { width: 6px; height: 6px; border-radius: 50%; }
-.msk__status.is-ok { background: #ecfdf5; color: #15803d; }
-.msk__status.is-ok i { background: #16a34a; }
-.msk__status.is-bad { background: #fef2f2; color: #dc2626; }
-.msk__status.is-bad i { background: #dc2626; }
-.msk__chip {
-  padding: 2px 9px;
-  border-radius: 999px;
-  background: rgba(240, 244, 250, 0.9);
-  color: #5b6577;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.msk__chip.mono { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
 .msk__desc {
   margin: 0;
   padding-left: 49px;
   color: #5b6577;
   font-size: 12.5px;
   line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* ========== 正文 ========== */
@@ -1042,20 +1009,21 @@ function goFullEditor() {
 .msk__stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  border: 1px solid #e1e8f2;
+  border: 1px solid var(--mk-line);
   border-radius: 12px;
   overflow: hidden;
+  box-shadow: var(--mk-shadow-sm);
 }
 .msk__stat {
   display: grid;
-  gap: 1px;
-  padding: 9px 12px 10px;
+  gap: 2px;
+  padding: 10px 12px 11px;
 }
 .msk__stat + .msk__stat { border-left: 1px solid #eef2f8; }
-.msk__stat span { font-size: 10px; color: #8492ab; font-weight: 600; }
+.msk__stat span { font-size: 12px; color: #8492ab; font-weight: 600; }
 .msk__stat strong {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 15px;
+  font-family: var(--mk-mono);
+  font-size: 16px;
   font-weight: 600;
   color: #1a2a44;
   font-variant-numeric: tabular-nums;
@@ -1064,7 +1032,7 @@ function goFullEditor() {
 .msk__stat strong.is-ok { color: #15803d; }
 .msk__stat strong.is-warn { color: #b45309; }
 .msk__stat strong.is-na { color: #8492ab; }
-.msk__note { margin: -8px 0 0; font-size: 10.5px; color: #8492ab; }
+.msk__note { margin: -8px 0 0; font-size: 12.5px; color: #8492ab; }
 
 /* 生效模型 kv 行 */
 .msk__kv {
@@ -1075,11 +1043,11 @@ function goFullEditor() {
   border: 1px dashed #e1e8f2;
   border-radius: 10px;
 }
-.msk__kv span { font-size: 11px; color: #8492ab; font-weight: 600; }
+.msk__kv span { font-size: 12px; color: #8492ab; font-weight: 600; }
 .msk__kv strong { font-size: 12px; color: #1a2a44; font-weight: 600; }
 .msk__src {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 12.5px;
   font-style: normal;
   font-weight: 600;
   color: #8492ab;
@@ -1095,7 +1063,7 @@ function goFullEditor() {
 }
 .msk__sec-head h4 {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1116,7 +1084,7 @@ function goFullEditor() {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: #8492ab;
   font-weight: 600;
 }
@@ -1127,7 +1095,7 @@ function goFullEditor() {
 }
 .msk__chev.is-open { transform: rotate(90deg); }
 .msk__src-chip {
-  font-size: 10px;
+  font-size: 12.5px;
   font-weight: 700;
   color: #8492ab;
   padding: 2px 8px;
@@ -1166,17 +1134,17 @@ function goFullEditor() {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.msk__row-num { color: #5b6577; font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.msk__row-num { color: #5b6577; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .msk__row-id {
   color: #8492ab;
-  font-size: 10px;
+  font-size: 12.5px;
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .msk__none { margin: 0; color: #8492ab; font-size: 12px; }
-.mono { font-family: 'JetBrains Mono', monospace; }
+.mono { font-family: var(--mk-mono); }
 
 /* 运行配置卡片 */
 .msk__card {
@@ -1188,7 +1156,7 @@ function goFullEditor() {
   background: #f8fafd;
 }
 .msk__field { display: grid; gap: 4px; }
-.msk__field > span { font-size: 11px; color: #8492ab; font-weight: 600; }
+.msk__field > span { font-size: 12px; color: #8492ab; font-weight: 600; }
 .msk__field--check {
   display: flex;
   align-items: center;
@@ -1218,43 +1186,26 @@ function goFullEditor() {
   border-radius: 8px;
   background: #eef4fc;
   border: 1px solid #dbe7f6;
-  font-size: 11px;
+  font-size: 12px;
   color: #5b6577;
   line-height: 1.5;
 }
 .msk__budget {
   margin: 0;
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: #8492ab;
   font-weight: 600;
 }
 .msk__budget em { font-style: normal; font-weight: 400; color: #5b6577; }
 .msk__actions { display: flex; gap: 8px; align-items: center; }
-.msk__btn-primary {
-  padding: 7px 14px;
-  border-radius: 8px;
-  border: 0;
-  background: #3478f6;
-  color: #fff;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.msk__btn-primary:hover { background: #2b64d8; }
-.msk__btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+/* 危险色修饰（复用 mk-btn 基础；实心红与确认对话框 danger 一致） */
 .msk__btn-danger {
-  padding: 7px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(220, 38, 38, 0.35);
-  background: transparent;
-  color: #dc2626;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
+  border: 1px solid var(--mk-red);
+  background: var(--mk-red);
+  color: #fff;
 }
-.msk__msg { margin: 0; font-size: 11.5px; color: #15803d; font-weight: 600; }
+.msk__btn-danger:hover { background: #b91c1c; border-color: #b91c1c; }
+.msk__msg { margin: 0; font-size: 12.5px; color: #15803d; font-weight: 600; }
 .msk__msg--err { color: #dc2626; }
 
 /* 试跑 */
@@ -1263,7 +1214,7 @@ function goFullEditor() {
   padding: 8px 10px;
   border: 1px solid #dbe3ef;
   border-radius: 9px;
-  font-size: 11px;
+  font-size: 12px;
   resize: vertical;
   line-height: 1.55;
 }
@@ -1277,7 +1228,7 @@ function goFullEditor() {
   background: #101826;
   border: 1px solid #1c2a40;
   color: #9db8dc;
-  font: 10.5px/1.65 'JetBrains Mono', monospace;
+  font: 12px/1.65 'JetBrains Mono', monospace;
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 180px;
@@ -1297,7 +1248,7 @@ function goFullEditor() {
   border-radius: 0 8px 8px 0;
   font-size: 12px;
 }
-.msk__rule-id { color: #8d6bff; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.msk__rule-id { color: #8d6bff; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
 .msk__rule-text { color: #263950; line-height: 1.55; }
 .msk__conflict {
   margin: 0;
@@ -1306,7 +1257,7 @@ function goFullEditor() {
   background: #fff7ed;
   border: 1px solid rgba(180, 83, 9, 0.3);
   color: #b45309;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 .msk__protocols { display: grid; gap: 6px; margin-top: 4px; }
@@ -1319,8 +1270,8 @@ function goFullEditor() {
 }
 .msk__protocol-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .msk__protocol-head strong { font-size: 12px; font-weight: 600; color: #223252; }
-.msk__protocol p { margin: 0; font-size: 11.5px; color: #5b6577; line-height: 1.6; }
-.msk__protocol-sites { font-size: 10px; color: #8492ab; word-break: break-all; }
+.msk__protocol p { margin: 0; font-size: 12.5px; color: #5b6577; line-height: 1.6; }
+.msk__protocol-sites { font-size: 12.5px; color: #8492ab; word-break: break-all; }
 
 /* Prompt 版本 */
 .msk__prompt {
@@ -1331,7 +1282,7 @@ function goFullEditor() {
   padding: 9px 12px;
   border: 1px dashed #e1e8f2;
   border-radius: 9px;
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: #5b6577;
 }
 .mk-link {
@@ -1350,7 +1301,7 @@ function goFullEditor() {
   margin-top: 4px;
 }
 .msk__versions-label {
-  font-size: 10.5px;
+  font-size: 12.5px;
   font-weight: 700;
   color: #8492ab;
   padding-bottom: 2px;
@@ -1360,7 +1311,7 @@ function goFullEditor() {
   grid-template-columns: 44px 64px 1fr auto;
   gap: 8px;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
   color: #5b6577;
   padding: 4px 0;
   border-bottom: 1px solid #f0f2f5;
@@ -1372,7 +1323,7 @@ function goFullEditor() {
   border-radius: 5px;
   background: #eef2fa;
   color: #41516e;
-  font-size: 10px;
+  font-size: 12.5px;
   width: fit-content;
 }
 .msk__version-name {
@@ -1386,7 +1337,7 @@ function goFullEditor() {
   background: transparent;
   color: #3478f6;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   padding: 2px 5px;
@@ -1397,7 +1348,7 @@ function goFullEditor() {
 .msk__op:disabled { opacity: 0.5; cursor: not-allowed; }
 .msk__op--danger { color: #dc2626; }
 .msk__op--danger:hover { background: #fef2f2; }
-.msk__versions-msg { margin: 0; font-size: 11px; color: #15803d; font-weight: 600; }
+.msk__versions-msg { margin: 0; font-size: 12px; color: #15803d; font-weight: 600; }
 
 /* 版本对比 */
 .msk__diff {
@@ -1413,10 +1364,10 @@ function goFullEditor() {
   padding: 7px 10px;
   background: #f8fafd;
   border-bottom: 1px solid #eef2f8;
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: #5b6577;
 }
-.msk__diff-head .mono { font-size: 10px; }
+.msk__diff-head .mono { font-size: 12.5px; }
 .msk__diff-count { font-weight: 700; color: #b45309; }
 .msk__diff-count.is-clean { color: #15803d; }
 .msk__diff-head .msk__op { margin-left: auto; }
@@ -1424,7 +1375,7 @@ function goFullEditor() {
   max-height: 260px;
   overflow-y: auto;
   padding: 6px 0;
-  font-size: 10.5px;
+  font-size: 12.5px;
   line-height: 1.6;
 }
 .msk__diff-line {

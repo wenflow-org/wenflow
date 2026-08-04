@@ -231,6 +231,9 @@
   font: inherit;
   font-size: 12.5px;
   outline: none;
+  height: 34px;
+  box-sizing: border-box;
+  line-height: 1.4;
 }
 /* 下拉筛选：固定最小宽度，避免选中不同长度选项时 select 宽度跳动导致布局抖动 */
 .mk-filter__select {

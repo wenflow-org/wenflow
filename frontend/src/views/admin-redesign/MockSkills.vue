@@ -29,6 +29,13 @@
     <div class="mk-card">
       <div class="mk-card__head">
         <div class="mk-filter">
+          <select v-model="categoryFilter" class="mk-filter__select" aria-label="按类别筛选">
+            <option value="">全部类别</option>
+            <option value="analysis">分析</option>
+            <option value="generation">生成</option>
+            <option value="parsing">解析</option>
+            <option value="computation">计算</option>
+          </select>
           <input class="mk-filter__input" v-model="keyword" placeholder="搜索名称 / ID / 类别" />
         </div>
         <span class="mk-card__meta">{{ filtered.length }} / {{ cards.length }}</span>
@@ -61,16 +68,16 @@
                 <div class="sk-cell">
                   <span class="sk-dot" :class="`sk-dot--${s.health}`"></span>
                   <div class="mk-cell-main">
-                    <strong :title="s.name">{{ s.name }}</strong>
-                    <span class="mk-cell-sub mono">{{ s.id }}</span>
+                    <strong :title="s.name">{{ displayNameOf(s) }}</strong>
+                    <span class="mk-cell-sub" :class="{ mono: !isLongName(s) }">{{ isLongName(s) ? s.name : s.id }}</span>
                   </div>
                 </div>
               </td>
               <td><span class="mk-badge mk-badge--muted" :title="s.category">{{ categoryText(s.category) }}</span></td>
               <td class="mk-num">{{ s.calls || '—' }}</td>
               <td class="mk-num" :class="{ 'sk-err': s.errors > 0 }">{{ s.calls ? s.errors : '—' }}</td>
-              <td class="mk-num">{{ successRate(s) }}</td>
-              <td class="mk-num">{{ s.calls ? fmtMs(s.avgMs) : '—' }}</td>
+              <td class="mk-num" :class="rateTone(s)">{{ successRate(s) }}</td>
+              <td class="mk-num" :class="latencyTone(s)">{{ s.calls ? fmtMs(s.avgMs) : '—' }}</td>
               <td><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
               <td style="text-align:right"><span class="sk-go">→</span></td>
             </tr>
@@ -127,11 +134,33 @@ type SortKey = 'calls' | 'errors' | 'avgMs'
 
 const onlyAttention = ref(false)
 const keyword = ref('')
+const categoryFilter = ref('')
 const view = ref<'list' | 'grid'>('list')
 const sortKey = ref<SortKey>('errors')
 const sortDir = ref<'asc' | 'desc'>('desc')
 const isLive = computed(() => dataSource.value === 'live')
 const statsRange = liveSkillStatsRange
+
+/** 名称列信息层级：name 是长描述时主行显示 ID（可识别），描述降级副行 */
+const LONG_NAME = 28
+const isLongName = (c: { name: string }) => c.name.length > LONG_NAME
+const displayNameOf = (c: { name: string; id: string }) => (isLongName(c) ? c.id : c.name)
+
+/** 成功率阈值着色：<70% 红、<90% 琥珀 */
+function rateTone(s: { calls: number; errors: number }) {
+  if (!s.calls) return ''
+  const rate = ((s.calls - s.errors) / s.calls) * 100
+  if (rate < 70) return 'sk-rate--bad'
+  if (rate < 90) return 'sk-rate--warn'
+  return ''
+}
+/** 平均耗时阈值着色：>40s 红、>20s 琥珀 */
+function latencyTone(s: { calls: number; avgMs: number }) {
+  if (!s.calls || !s.avgMs) return ''
+  if (s.avgMs > 40000) return 'sk-lat--bad'
+  if (s.avgMs > 20000) return 'sk-lat--warn'
+  return ''
+}
 // 时间窗口切换 → 按新窗口重新拉取统计
 watch(statsRange, () => {
   if (isLive.value) void refreshLiveSkills()
@@ -163,6 +192,7 @@ const filtered = computed(() => {
   let list = cards.value
   // "仅看需关注"只含失败节点；"从未调用"（idle）是常态不是问题
   if (onlyAttention.value) list = list.filter((c) => c.health === 'error')
+  if (categoryFilter.value) list = list.filter((c) => c.category === categoryFilter.value)
   const q = keyword.value.trim().toLowerCase()
   if (q) list = list.filter((c) => `${c.name} ${c.id} ${c.category}`.toLowerCase().includes(q))
   // 排序：默认失败优先，其次调用量
@@ -253,6 +283,11 @@ const successRate = (s: { calls: number; errors: number }) =>
 .sk-dot--idle { background: #c3cede; }
 .sk-dot--error { background: var(--mk-red); animation: sk-blink 1.2s ease infinite; }
 .sk-err { color: var(--mk-red); font-weight: 700; }
+/* 指标阈值着色 */
+.sk-rate--bad { color: var(--mk-red); font-weight: 700; }
+.sk-rate--warn { color: var(--mk-amber); font-weight: 700; }
+.sk-lat--bad { color: var(--mk-red); font-weight: 700; }
+.sk-lat--warn { color: var(--mk-amber); font-weight: 700; }
 .sk-go { color: var(--mk-faint); font-weight: 700; }
 .sk-row:hover .sk-go { color: var(--mk-blue); }
 .mono { font-family: var(--mk-mono); }

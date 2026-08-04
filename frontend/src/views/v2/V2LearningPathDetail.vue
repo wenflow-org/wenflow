@@ -47,7 +47,6 @@
         <section class="hero card">
           <div class="hero__main">
             <div class="hero__tags">
-              <span class="kicker">路径详情</span>
               <span class="badge" :class="badgeCls">{{ badgeText }}</span>
             </div>
             <h1>{{ pathTitle }}</h1>

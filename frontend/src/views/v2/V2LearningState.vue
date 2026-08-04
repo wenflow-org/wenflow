@@ -6,7 +6,6 @@
       <!-- 页头 -->
       <div class="state__hero">
         <div>
-          <span class="kicker">学习状态</span>
           <h1>{{ heroTitle }}</h1>
           <p>基于你的学习记录实时评估。</p>
         </div>

@@ -69,10 +69,18 @@
         <slot />
       </main>
       <footer class="mshell__footer">
-        <img src="/favicon.png" alt="" class="mshell__footer-logo" />
-        <span>{{ release ? 'WenFlow Admin' : 'WenFlow Admin · 重设计实验稿' }}</span>
-        <span class="mshell__footer-sep">·</span>
-        <span>{{ sourceLabel }}</span>
+        <div class="mshell__footer-left">
+          <img src="/favicon.png" alt="" class="mshell__footer-logo" />
+          <span class="mshell__footer-name">WenFlow Admin</span>
+          <span class="mshell__footer-ver">v{{ version }}</span>
+        </div>
+        <div class="mshell__footer-right">
+          <span class="mshell__footer-source" :class="dataSource === 'live' ? 'mshell__footer-source--live' : ''">
+            <i class="mshell__footer-dot" aria-hidden="true"></i>{{ sourceLabel }}
+          </span>
+          <span class="mshell__footer-sep">·</span>
+          <span>© {{ year }}</span>
+        </div>
       </footer>
     </div>
   </div>
@@ -84,9 +92,13 @@ import { MOCK_SCENES, type MockSceneDef } from './mockManifest'
 import { dataSource } from './mockStore'
 import { liveNavBadges, alarmNavBadges, loadLiveData, liveLoading } from './mockLive'
 import { adminAuthApi } from '@/api/adminApi'
+import { version as appVersion } from '../../../package.json'
 
 const props = defineProps<{ current: string; crumb?: string; release?: boolean }>()
 const emit = defineEmits<{ (e: 'navigate', id: string): void; (e: 'palette'): void }>()
+
+const version = appVersion
+const year = new Date().getFullYear()
 
 const sourceLabel = computed(() => (dataSource.value === 'live' ? '真实数据' : '演示数据'))
 
@@ -384,13 +396,36 @@ const groupedScenes = computed(() => {
 .mshell__footer {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 20px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 20px;
   border-top: 1px solid #e1e8f2;
+  background: #fff;
   color: #8492ab;
-  font-size: 11.5px;
+  font-size: 12px;
 }
-.mshell__footer-logo { height: 16px; width: 16px; border-radius: 4px; opacity: 0.8; }
+.mshell__footer-left,
+.mshell__footer-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.mshell__footer-logo { height: 18px; width: 18px; border-radius: 5px; object-fit: contain; }
+.mshell__footer-name { font-weight: 700; color: #5b6577; }
+.mshell__footer-ver {
+  font-size: 11px; color: #b3bfd0;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 7px; border-radius: 999px;
+  background: #f1f5fb; border: 1px solid #e3e9f4;
+}
+.mshell__footer-source { display: inline-flex; align-items: center; gap: 6px; }
+.mshell__footer-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #c3cede;
+}
+.mshell__footer-source--live { color: #218a56; }
+.mshell__footer-source--live .mshell__footer-dot { background: var(--green, #31b16f); }
 .mshell__footer-sep { color: #c3cede; }
 
 /* 大屏（2000+）：侧栏加宽、字号放大；2800+（4K）再升一档（zoom 之上叠加） */

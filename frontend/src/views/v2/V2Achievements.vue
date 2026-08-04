@@ -5,7 +5,6 @@
     <main class="ach__main">
       <!-- 页头 -->
       <div class="ach__hero">
-        <span class="kicker">成就</span>
         <h1>查看你的学习里程碑</h1>
         <p>每一次小进步都算数。</p>
       </div>

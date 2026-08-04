@@ -7,7 +7,6 @@
     <main v-if="!loggedIn" class="entry">
       <div class="login-gate">
         <img src="/favicon.png" alt="问流" class="login-gate__logo" />
-        <span class="entry__kicker">目标规划</span>
         <h1>登录后体验真实对话</h1>
         <p>登录后，和问流聊聊你最近想解决的事。两三分钟的对话，就能收敛出你的第一版学习计划。</p>
         <a class="btn-primary btn-primary--lg" href="/login?redirect=/goal-conversation">去登录</a>
@@ -18,7 +17,6 @@
     <main v-else-if="!live.started" class="entry">
       <div class="entry__hero">
         <div class="entry__hero-text">
-          <span class="entry__kicker">目标规划</span>
           <h1>从一件真实的小事开始</h1>
           <p>不用整理、不用说得很准。聊 2 分钟，问流帮你收敛出目标和第一阶段安排。</p>
         </div>
@@ -651,10 +649,6 @@ function shuffleScenes() {
   gap: 20px; flex-wrap: wrap;
 }
 .entry__hero-text { display: grid; gap: 10px; }
-.entry__kicker {
-  font-size: 12px; font-weight: 800; letter-spacing: .06em;
-  color: var(--blue-deep);
-}
 .entry__hero h1 { margin: 0; font-size: 28px; letter-spacing: -0.01em; }
 .entry__hero p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 52ch; line-height: 1.7; }
 
