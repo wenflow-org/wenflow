@@ -232,6 +232,11 @@
   font-size: 12.5px;
   outline: none;
 }
+/* 下拉筛选：固定最小宽度，避免选中不同长度选项时 select 宽度跳动导致布局抖动 */
+.mk-filter__select {
+  min-width: 104px;
+  width: auto;
+}
 .mk-filter__input:focus,
 .mk-filter__select:focus { border-color: var(--mk-blue); }
 .mk-filter__input { min-width: 180px; }

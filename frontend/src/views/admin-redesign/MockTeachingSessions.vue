@@ -25,6 +25,10 @@
               {{ p.label }}
             </button>
           </div>
+          <select v-model="statusFilter" class="mk-filter__select" aria-label="按状态筛选">
+            <option value="">全部状态</option>
+            <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
+          </select>
           <input class="mk-filter__input" v-model="keyword" placeholder="搜索主题 / 用户 / ID" />
         </div>
         <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}</span>
@@ -307,16 +311,32 @@ function mapRow(s: Record<string, unknown>): Row {
 /* 筛选 */
 const pill = ref<'all' | 'attention' | 'missing'>('all')
 const keyword = ref('')
+const statusFilter = ref('')
 const pills = [
   { id: 'all' as const, label: '全部' },
   { id: 'attention' as const, label: '待关注' },
   { id: 'missing' as const, label: '缺总结' }
+]
+/* 状态筛选选项（覆盖教学会话实际出现的全部状态枚举；进行中含 in_progress/active） */
+const statusOptions = [
+  { value: 'completed', label: '已完成' },
+  { value: 'in_progress', label: '进行中' },
+  { value: 'timeout', label: '超时' },
+  { value: 'paused', label: '已暂停' },
+  { value: 'superseded', label: '已被替代' },
+  { value: 'discarded', label: '已废弃' },
+  { value: 'error', label: '错误' }
 ]
 
 const filtered = computed(() => {
   let list = rows.value
   if (pill.value === 'attention') list = list.filter((r) => r.attention !== 'low')
   if (pill.value === 'missing') list = list.filter((r) => r.wrapupStatus === 'missing')
+  if (statusFilter.value) {
+    list = list.filter(
+      (r) => r.status === statusFilter.value || (statusFilter.value === 'in_progress' && r.status === 'active')
+    )
+  }
   const q = keyword.value.trim().toLowerCase()
   if (q) list = list.filter((r) => `${r.topic} ${r.userName} ${r.email} ${r.id}`.toLowerCase().includes(q))
   return list
@@ -366,6 +386,8 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
 
 <style scoped>
 .ts-row { cursor: pointer; }
+/* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字） */
+.ts-row td:nth-child(3) .mk-badge { min-width: 60px; justify-content: center; }
 .ts-row:hover { background: #f6f9ff; }
 .ts-go { color: var(--mk-faint); font-weight: 700; }
 .ts-row:hover .ts-go { color: var(--mk-blue); }

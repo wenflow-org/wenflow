@@ -31,7 +31,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="s in filtered" :key="s.id">
+          <tr v-for="s in filtered" :key="s.id" class="vl-row" @click="openSubPage('virtual', s.id)">
             <td>
               <div class="mk-cell-main">
                 <strong>{{ s.name }}</strong>
@@ -55,7 +55,7 @@
                   class="mk-link"
                   :class="{ 'mk-link--muted': s.storyCount === 0 }"
                   :title="s.storyCount === 0 ? '建议先在画像页生成故事' : '启动实验会话'"
-                  @click="openLaunch(s)"
+                  @click.stop="openLaunch(s)"
                 >
                   运行
                 </button>
@@ -502,6 +502,8 @@ const totalSessions = computed(() => samples.value.reduce((a, s) => a + s.sessio
 <style scoped>
 .mk-link--danger { color: var(--mk-red, #dc2626); }
 .mk-link--muted { opacity: 0.55; }
+.vl-row { cursor: pointer; }
+.vl-row:hover { background: #f6f9ff; }
 .mk-toast--bad { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .vl-steps {
   margin: 0 0 4px;

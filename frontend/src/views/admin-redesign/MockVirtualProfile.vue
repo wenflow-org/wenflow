@@ -22,28 +22,40 @@
 
     <div v-if="toast" class="mk-toast" :class="toastCls">{{ toast }}</div>
 
-    <!-- 统计条：只放数字与长期倾向；人物背景全文在「画像」页 -->
+    <!-- 统计条：故事/运行/进行中 + 长期倾向（KPI 卡片风格） -->
     <div class="vp-overview">
-      <span><b>{{ displayStories.length }}</b> 故事</span>
-      <span><b>{{ allRuns.length }}</b> 运行</span>
-      <span v-if="runningCount > 0" class="is-live"><b>{{ runningCount }}</b> 进行中</span>
-      <span class="vp-overview__goal">长期倾向：{{ d.goal || '由故事产生当次学习需求' }}</span>
+      <div class="vp-overview__item">
+        <b>{{ displayStories.length }}</b>
+        <span>故事</span>
+      </div>
+      <div class="vp-overview__item">
+        <b>{{ allRuns.length }}</b>
+        <span>运行</span>
+      </div>
+      <div v-if="runningCount > 0" class="vp-overview__item is-live">
+        <b>{{ runningCount }}</b>
+        <span>进行中</span>
+      </div>
+      <div class="vp-overview__item vp-overview__goal">
+        <span>长期倾向</span>
+        <strong :title="d.goal || '由故事产生当次学习需求'">{{ d.goal || '由故事产生当次学习需求' }}</strong>
+      </div>
     </div>
 
     <!-- 分页：故事池是主工作区，画像/运行/验收各归其页 -->
-    <nav class="vp-tabs">
+    <div class="mk-pills vp-tabs">
       <button
         v-for="t in tabs"
         :key="t.key"
         type="button"
-        class="vp-tab"
-        :class="{ 'is-active': activeTab === t.key }"
+        class="mk-pill"
+        :class="{ 'mk-pill--active': activeTab === t.key }"
         @click="activeTab = t.key"
       >
         {{ t.label }}
         <span v-if="t.count !== undefined" class="vp-tab__count">{{ t.count }}</span>
       </button>
-    </nav>
+    </div>
 
     <div class="vp-body">
         <section v-if="activeTab === 'profile'" class="mk-card vp-hero">
@@ -104,12 +116,15 @@
               @keydown.enter.prevent="selectStory(s, i)"
               @keydown.space.prevent="selectStory(s, i)"
             >
-              <!-- 标题行：标题 + 状态 + 操作（主操作随内容走） -->
+              <!-- 头部：选中标记 + 标题 + 状态 + 操作 -->
               <div class="vp-story-item__head">
-                <strong>{{ s.title }}</strong>
-                <span class="mk-badge" :class="s.status === 'ready' ? 'mk-badge--ok' : 'mk-badge--muted'">
-                  {{ storyStatusLabel(s) }}
-                </span>
+                <span class="vp-story-item__mark" aria-hidden="true"></span>
+                <div class="vp-story-item__title">
+                  <strong>{{ s.title }}</strong>
+                  <span class="mk-badge" :class="s.status === 'ready' ? 'mk-badge--ok' : 'mk-badge--muted'">
+                    {{ storyStatusLabel(s) }}
+                  </span>
+                </div>
                 <div v-if="isLive" class="vp-story-item__ops" @click.stop>
                   <button type="button" class="mk-link" :disabled="running" @click="runStory(s, i)">按此故事运行</button>
                   <button type="button" class="mk-link mk-link--danger" :disabled="storyBusy" @click="removeStory(i)">删除</button>
@@ -143,19 +158,15 @@
                   </span>
                 </span>
                 <span v-if="(s.runningCount || 0) > 0" class="vp-pipe__running">● {{ s.runningCount }} 运行中</span>
-              </div>
-
-              <!-- 最近运行一行：无则显示空态，保持卡片节奏一致 -->
-              <div class="vp-story-item__latest" @click.stop>
-                <template v-if="s.latestRun">
-                  最近运行：{{ formatRunStage(s.latestRun.currentStage) }} · {{ formatRunResult(s.latestRun.status) }} · {{ timeAgo(String(s.latestRun.updatedAt || s.latestRun.createdAt || '')) }}
-                  <button type="button" class="mk-link" @click="openSubPage('session', s.latestRun.sessionId)">控制台</button>
-                </template>
-                <span v-else class="vp-story-item__never">尚未运行</span>
+                <span v-if="!s.runningCount && s.latestRun" class="vp-pipe__latest">{{ formatRunResult(s.latestRun.status) }} · {{ timeAgo(String(s.latestRun.updatedAt || s.latestRun.createdAt || '')) }}</span>
               </div>
 
               <template v-if="selectedStoryId === (s.id || String(i))">
                 <div class="vp-story-runs" @click.stop>
+                  <div class="vp-story-runs__head">
+                    <span>运行历史</span>
+                    <button v-if="s.latestRun?.sessionId" type="button" class="mk-link" @click="openSubPage('session', s.latestRun.sessionId)">最新控制台 →</button>
+                  </div>
                   <template v-if="runsForStory(s).length">
                     <div v-for="(r, ri) in runsForStory(s)" :key="r.sessionId || ri" class="vp-run">
                       <span class="vp-run__dot" :class="`is-${r.tone}`"></span>
@@ -921,57 +932,67 @@ function formatRunResult(result: string) {
   gap: 8px;
 }
 
-/* 统计条 */
+/* 统计条：KPI 卡片风格 */
 .vp-overview {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 18px;
-  padding: 10px 16px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(96px, 1fr)) minmax(0, 2fr);
+  gap: 10px;
+}
+.vp-overview__item {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   background: var(--mk-surface);
-  font-size: 12px;
-  color: var(--mk-faint);
+  box-shadow: var(--mk-shadow-sm);
 }
-.vp-overview b {
-  font-family: var(--mk-mono, ui-monospace, monospace);
-  font-size: 14px;
+.vp-overview__item b {
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
   color: var(--mk-ink);
-  margin-right: 2px;
+  line-height: 1.1;
 }
-.vp-overview .is-live b { color: var(--mk-amber, #b7791f); }
-.vp-overview__goal { margin-left: auto; color: var(--mk-faint); }
-
-/* 分页 */
-.vp-tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--mk-line);
-}
-.vp-tab {
-  border: 0;
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 700;
+.vp-overview__item span {
+  font-size: 11.5px;
   color: var(--mk-faint);
-  padding: 8px 12px 10px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
 }
-.vp-tab:hover { color: var(--mk-ink); }
-.vp-tab.is-active { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+.vp-overview__item.is-live b { color: var(--mk-amber, #b7791f); }
+.vp-overview__goal {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  grid-column: 4;
+}
+.vp-overview__goal span { font-size: 11px; }
+.vp-overview__goal strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mk-muted);
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+@media (max-width: 860px) {
+  .vp-overview { grid-template-columns: repeat(3, minmax(80px, 1fr)); }
+  .vp-overview__goal { grid-column: 1 / -1; }
+}
+
+/* 分页：统一 mk-pills 分段控件 */
+.vp-tabs { width: fit-content; }
 .vp-tab__count {
   font-family: var(--mk-mono, ui-monospace, monospace);
   font-size: 11px;
   color: var(--mk-faint);
+  margin-left: 3px;
 }
-.vp-tab.is-active .vp-tab__count { color: var(--mk-blue); }
+.mk-pill--active .vp-tab__count { color: var(--mk-blue); }
 
 .vp-body { display: grid; gap: 14px; }
 
@@ -1026,32 +1047,54 @@ function formatRunResult(result: string) {
   gap: 12px;
   flex-wrap: wrap;
 }
-.vp-stories { display: grid; }
+.vp-stories { display: grid; gap: 10px; padding: 12px; }
 .vp-story-item {
   display: grid;
-  gap: 6px;
-  padding: 14px 18px;
-  border-bottom: 1px solid #f0f2f5;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--mk-line);
+  border-radius: 12px;
+  background: var(--mk-surface);
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
 }
 .vp-story-item:focus-visible {
   outline: 2px solid rgba(52, 120, 246, 0.85);
   outline-offset: -2px;
 }
-.vp-story-item:hover { background: #f7f9fc; }
+.vp-story-item:hover { border-color: rgba(52, 120, 246, 0.35); }
 .vp-story-item.is-selected {
-  background: #eef5ff;
-  box-shadow: inset 3px 0 0 var(--mk-blue, #3478f6);
+  background: #f6faff;
+  border-color: rgba(52, 120, 246, 0.5);
+  box-shadow: 0 0 0 1px rgba(52, 120, 246, 0.15), var(--mk-shadow-sm);
 }
-.vp-story-item:last-child { border-bottom: none; }
 .vp-story-item__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+/* 选中标记：radio 圆点 */
+.vp-story-item__mark {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid #c4ccd9;
+  background: #fff;
+  transition: border-color 0.14s ease;
+}
+.vp-story-item.is-selected .vp-story-item__mark {
+  border-color: var(--mk-blue);
+  background: radial-gradient(circle, var(--mk-blue) 0 4px, #fff 4.5px);
+}
+.vp-story-item__title {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
-.vp-story-item__head strong { font-size: 13.5px; line-height: 1.4; min-width: 0; }
+.vp-story-item__title strong { font-size: 13.5px; line-height: 1.4; min-width: 0; }
 .vp-story-item__ops {
   margin-left: auto;
   display: flex;
@@ -1116,6 +1159,12 @@ function formatRunResult(result: string) {
   font-weight: 700;
   font-size: 11px;
 }
+/* 最近运行结果摘要（未选中时的紧凑提示） */
+.vp-pipe__latest {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--mk-faint);
+}
 .vp-story-item__latest {
   display: flex;
   flex-wrap: wrap;
@@ -1126,9 +1175,27 @@ function formatRunResult(result: string) {
   color: var(--mk-faint);
 }
 .vp-story-runs {
-  margin-top: 6px;
-  border-top: 1px dashed #edf0f5;
+  margin-top: 4px;
+  border-top: 1px dashed #e3e9f3;
+  padding-top: 8px;
   display: grid;
+  gap: 2px;
+}
+.vp-story-runs__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 2px 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mk-faint);
+}
+.vp-story-runs__head .mk-link {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
 }
 .vp-story-runs .vp-run { padding: 10px 2px; }
 .vp-story-runs .vp-none { padding: 10px 2px; }
