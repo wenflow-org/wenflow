@@ -256,7 +256,7 @@ export interface SessionSummary {
   evaluationHighlights?: {
     strengths: string[];
     improvements: string[];
-  };
+  } | null;
   metricInterpretation?: {
     session: string;
     longTerm: string;

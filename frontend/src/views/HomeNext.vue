@@ -208,9 +208,7 @@ const modes = [
 ]
 
 const primaryPath = computed(() => (loggedIn.value ? '/goal-conversation' : '/register'))
-const secondaryPath = computed(() => (loggedIn.value ? '/dashboard' : '/login'))
 const primaryLabel = computed(() => (loggedIn.value ? '规划新目标' : '从一个问题开始'))
-const secondaryLabel = computed(() => (loggedIn.value ? '回到学习台' : '登录'))
 
 function syncAuthState() {
   loggedIn.value = hasUserSession()
