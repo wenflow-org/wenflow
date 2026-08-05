@@ -16,7 +16,7 @@
 > ⚠️ **注意**: Demo 站点会定期清理所有账号和数据，请勿用于存放重要信息。
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D18-green.svg)](https://nodejs.org)
+[![Node](https://img.shields.io/badge/node-%3E%3D20.17.0-green.svg)](https://nodejs.org)
 [![Vue](https://img.shields.io/badge/vue-3.x-brightgreen.svg)](https://vuejs.org)
 
 ---
@@ -71,8 +71,8 @@ WenFlow 想从另一个地方开始：先帮你说清真正想解决的事。
 
 | 指标 | 含义 | 用途 |
 |------|------|------|
-| LSS | 学习压力评分 | 基于任务难度、时长、认知负荷 |
-| KTL | 知识掌握度 | 长期积累，42天衰减因子 0.95 |
+| LSS | 学习压力评分 | 基于任务难度、时长、认知负荷，EWMA 平滑 |
+| KTL | 知识训练负荷（Knowledge Training Load） | 长期积累，42天衰减因子 0.95 |
 | LF | 学习疲劳度 | 短期累计，7天衰减因子 0.70 |
 | LSB | 学习状态平衡 | KTL - LF，预警过度学习 |
 
@@ -82,29 +82,49 @@ WenFlow 想从另一个地方开始：先帮你说清真正想解决的事。
 flowchart TD
     U[用户] --> G1[目标对话 Skill\n澄清学习目标]
     G1 --> P1[路径规划 Skill\n生成阶段与任务]
-    P1 --> T0[AI 教学编排器\n管理整节课流程]
+    P1 --> T0[AI 教学编排器\n6 阶段状态机管理整节课]
 
     T0 --> T1[教学回合 Skill\n每轮讲解 提问 诊断]
     T1 --> K1[知识状态更新\n知识点进度]
     T1 --> S1[学习状态更新\nLSS KTL LF LSB]
+    T1 --> C1[检查点测验\n提交与判定]
 
     T1 --> D{需要强化?}
     D -- 是 --> PEER[伴学补强 Skill\n讨论式强化]
     D -- 否 --> NEXT[继续教学]
 
     NEXT --> END{本节结束?}
+    C1 --> NEXT
     PEER --> END
 
-    END -- 结束 --> W1[课后产出 Skill\n总结与评估]
+    END -- 结束 --> W1[课后产出 Skill\n总结与评估 + 知识增强]
     W1 --> R1[重规划建议\n是否调整路径]
     R1 --> P1
 ```
 
 - 当前顶层 Agent 更偏编排器；真正持有 prompt 并直接调用 LLM 的主要是 Skills。
 - 先澄清目标，再把目标拆成可执行学习路径
-- 教学阶段按回合推进，边教边判断理解程度
+- 教学阶段按回合推进，边教边判断理解程度（opening → teaching → intervention → checkpoint → wrapup）
 - 学生卡住时触发伴学强化，不直接放弃当前任务
-- 课后自动产出总结与评估，并给出是否重规划建议
+- 课后自动产出总结与评估，并给出是否重规划建议（自动调整默认关闭，以建议形式给出）
+
+### 虚拟学习者实验室（Virtual Learner Lab）
+
+用"虚拟学习者"账号沿**真实生产链路**模拟真实用户，用于验证平台功能：
+
+- **黑盒模拟**：按普通用户 API 驱动 goal → path → learn 全流程，配裁判（referee）与角色保真审计（actor-auditor）
+- **Quick Learn**：选定虚拟账号的任务，自动跑完一节课并产出 Propagation Report，状态持久化
+
+### 管理端
+
+`/admin` 提供 16+ 功能页面：平台总览、用户/学习者中心、教学会话、目标对话、虚拟学习者、Skill 目录与 Prompt 设计台、Agent 拓扑（Topology）、编排结构（Orchestrator）、执行日志、Trace 瀑布、模型与接入、核心文件同步工作台等。
+
+### Prompt 工程体系（Prompt Lab v4，File-as-Truth）
+
+- **真源**：`prompts/core/*.yaml`（业务逻辑唯一人工编辑入口，进 git）
+- **编译产物**：`prompts/skill.*.md`（确定性编译生成，模型唯一读取文本）
+- **发布链路**：编辑 core.yaml → compile（守门三查）→ publish（写回 md + DB ACTIVE）→ rollback（可回滚）
+- **数据库**：`agent_prompts` 只是运行时镜像，文件为准、DB 为镜像
 
 ---
 
@@ -112,12 +132,16 @@ flowchart TD
 
 | 层级 | 技术 |
 |------|------|
-| **前端** | Vue 3 + TypeScript + Vite 5 + Element Plus + Pinia |
+| **前端** | Vue 3 + TypeScript + Vite 6 + Element Plus + Pinia |
 | **后端** | Node.js + Express + TypeScript + Prisma |
-| **数据库（当前）** | SQLite（主库 + system 库） |
-| **AI 接入** | OpenAI 兼容模型网关（默认 DeepSeek） |
-| **Agent / Skill 编排** | EduClaw Gateway + Agent / Skill 编排层 + Event Bus |
-| **部署** | PowerShell 启动脚本 + 可选 Nginx（测试部署） |
+| **数据库（当前）** | SQLite（主库 36 表 + system 库 16 表，双库架构） |
+| **AI 接入** | OpenAI 兼容模型网关（默认 DeepSeek：deepseek-v4-flash / v4-pro / r1），支持 SSE 流式、重试预算、thinking mode 控制 |
+| **Agent / Skill 编排** | EduClaw Gateway + Agent（7 个官方 Agent）/ Skill 编排层 + Coordinators + Event Bus（outbox 持久化事件） |
+| **模型配置分层** | 环境变量 → 平台默认 → Agent/Skill 级 → 用户自定义 API / 模型覆盖 |
+| **虚拟实验** | Virtual Learner Lab（黑盒模拟 + Quick Learn） |
+| **可观测** | Agent/Skill 调用日志、Trace 瀑布、LLM 执行明细 |
+| **安全** | JWT + CSRF + 登录限流 + Secret AES-256-GCM 静态加密 + 敏感存储权限审计 |
+| **部署** | PowerShell 启动脚本 + 可选 Nginx（测试部署）+ Docker（Linux/macOS） |
 
 ---
 
@@ -152,7 +176,7 @@ npm run env:setup
 ```
 
 说明：建议首次使用先完成环境初始化，再选择启动脚本。若 `backend/.env` 缺失或 `JWT_SECRET` 不合格，启动脚本也会自动拉起初始化流程。
-启动后端时，系统会自动把核心 skill prompts 从仓库 `prompts/*.md`（File-as-Truth）同步到数据库 ACTIVE 版本；这样别人从 GitHub 拉下项目后，默认运行版本会和仓库中的 prompt 真相源保持一致。
+启动后端时，系统会自动把核心 prompts（File-as-Truth：`prompts/core/*.yaml` 为真源，编译产物 `prompts/skill.*.md` 同步到数据库 ACTIVE 版本）；这样别人从 GitHub 拉下项目后，默认运行版本会和仓库中的 prompt 真相源保持一致。
 
 ### 本机开发
 
@@ -177,7 +201,7 @@ npm run dev:lan
 ./start-lan.ps1 -LanIP 192.168.31.26
 ```
 
-说明：自动将局域网 IP 加入 `CORS_ORIGIN`，适合多设备调试前台页面；不会改变管理员登录仅限本机访问的限制。
+说明：自动将局域网 IP 加入 `CORS_ORIGIN`，适合多设备调试前台页面；不会改变管理员登录的 `ADMIN_ACCESS_MODE` 访问限制。
 
 ### 一键测试部署（本机 Nginx，HTTP）
 
@@ -197,6 +221,27 @@ npm run dev:nginx
 
 说明：`-UseNginx` 模式会自动执行 `npm run build`（前端）并生成运行时配置到 `runtime/nginx/wenflow.nginx.conf`；启动前会校验 80 端口可用，若系统 nginx 或其他进程已占用 80 端口，需要先手动停止。
 
+### Docker 部署（Linux/macOS）
+
+```bash
+# 一键启动（交互式补齐 backend/.env，也支持环境变量非交互传入）
+./docker-start.sh
+
+# 数据库备份（一次性 operations 服务，只读挂载数据卷）
+docker compose -f docker-compose.operations.yml run --rm backup
+```
+
+说明：`docker-compose.yml` 提供 migrate / backend / nginx 三个服务，默认只发布 Nginx（80），不发布后端 `3001`；后端强制 `ADMIN_ACCESS_MODE=private`。详见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+
+### 质量检查（本地 CI 同款）
+
+```bash
+# 依次执行：secret 扫描 → Prisma 双 schema 校验 → 空库迁移回放 → 后端 typecheck → 后端测试 → 前后端构建
+npm run check
+```
+
+说明：GitHub Actions（`.github/workflows/quality-check.yml`）在 push main/master 与 PR 时会执行相同检查（另加 Git 历史 secret 扫描）。
+
 ### 环境配置辅助命令
 
 ```bash
@@ -209,18 +254,27 @@ npm run env:edit
 
 说明：`env:setup` 不再单独询问域名；Nginx 模式下域名由 `-Domain`（优先）或 `backend/.env` 中的 `FRONTEND_URL` 推断。
 
-### Prompt 初始化与维护
+### Prompt 初始化与维护（File-as-Truth）
+
+核心 prompts 采用两级模型：**真源**是 `prompts/core/*.yaml`（唯一人工编辑入口，进 git），**编译产物**是 `prompts/skill.*.md`（模型唯一读取文本），数据库 `agent_prompts` 只是运行时镜像。编辑 → 编译 → 发布链路（含守门检查与回滚）见管理端「Prompt 设计台」，机制详见 [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md)。
 
 ```bash
-# 手动将核心 prompts 从仓库 `prompts/*.md` 同步到数据库 ACTIVE 版本
+# 把 prompts/core/*.yaml 全部确定性编译，重新生成 prompts/skill.*.md（不写数据库）
 cd backend
+npm run prompts:compile-all
+
+# 把编译产物同步到数据库 ACTIVE 版本（启动时也会自动执行）
 npm run prompts:sync-core
 
 # 升级后补齐新增的 prompt 节点，不覆盖已有 ACTIVE 配置
 npm run prompts:backfill-core
+
+# 校验与对账
+npm run prompts:lint
+npm run prompts:core:check
 ```
 
-说明：`prompts:sync-core` 会以仓库 `prompts/*.md` 为准，同步核心 prompts 到数据库 ACTIVE 版本；若仓库版本与数据库 ACTIVE 不一致，会自动创建新版本并切换到 ACTIVE。`prompts:backfill-core` 只补缺失节点，不覆盖已有 ACTIVE 配置。若直接在 `backend/` 下运行 `npm run dev`，后端启动时也会自动执行一次 core prompts 同步。
+说明：`prompts:sync-core` 会以仓库编译产物为准，同步核心 prompts 到数据库 ACTIVE 版本；若仓库版本与数据库 ACTIVE 不一致，会自动创建新版本并切换到 ACTIVE（旧版归档）。`prompts:backfill-core` 只补缺失节点，不覆盖已有 ACTIVE 配置。若直接在 `backend/` 下运行 `npm run dev`，后端启动时也会自动执行一次 core prompts 同步。更多说明见 [`prompts/_README.md`](prompts/_README.md)。
 
 ### 本地 SQLite 路径约定
 
@@ -239,6 +293,8 @@ npm run prompts:backfill-core
 
 如需更细粒度的部署或非脚本方式启动，可参考 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
+架构设计、Skill 协议、Prompt 管理与虚拟学习者链路等设计文档见 [`doc/README.md`](doc/README.md)（设计文档索引）。
+
 ### 访问地址
 
 **Demo 站点**: https://wenflow.org
@@ -248,7 +304,7 @@ npm run prompts:backfill-core
 - 后端: http://localhost:3001
 - 管理后台: http://localhost:5173/admin
 
-说明：管理员登录接口默认仅允许本机访问；如需远程访问，可设置 `ADMIN_LOCALHOST_ONLY=false`（不推荐直接暴露公网管理登录）。
+说明：管理员登录默认 `ADMIN_ACCESS_MODE=private`（仅本机 + 局域网），也可设为 `loopback`（仅本机）或 `any`（不限来源），并支持 `ADMIN_ALLOWED_IPS` 精确放行（不推荐直接暴露公网管理登录）。
 
 ---
 
@@ -265,9 +321,7 @@ INIT_ADMIN_PASSWORD=YourStrongPassword123
 
 建议：首次登录管理端后立即修改密码；对外部署时请使用强密码。
 
-注意：管理员登录接口默认仅允许 `localhost` / `127.0.0.1` / `::1` 访问；如确有远程管理需求，可在 `.env` 中设置 `ADMIN_LOCALHOST_ONLY=false`，并自行承担安全加固责任。
-
-详见 [ADMIN_SETUP.md](ADMIN_SETUP.md)
+注意：管理员登录默认 `ADMIN_ACCESS_MODE=private`，仅允许本机与局域网（RFC1918）来源访问；可设为 `loopback`（仅本机）或 `any`（不限制来源），并用 `ADMIN_ALLOWED_IPS` 精确放行指定客户端 IP。访问模式策略可在管理端「模型与接入」页面热生效，环境变量仅作默认值。如确有公网远程管理需求，请配合 VPN 或精确 IP 白名单，并自行承担安全加固责任。详见 [ADMIN_LOGIN_GUIDE.md](ADMIN_LOGIN_GUIDE.md) 与 [ADMIN_SETUP.md](ADMIN_SETUP.md)
 
 ### 反向代理常见坑
 
