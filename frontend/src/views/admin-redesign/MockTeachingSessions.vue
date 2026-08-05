@@ -533,4 +533,8 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
   .ts-json { font-size: 15px; }
   .ts-more { font-size: 16px; }
 }
+
+/* 数值列（互动）表头与单元格居中 */
+.mk-table td.mk-num,
+.mk-table th:nth-child(4) { text-align: center; }
 </style>

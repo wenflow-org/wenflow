@@ -48,7 +48,7 @@
               </th>
               <th>用户</th>
               <th>角色</th>
-              <th>路径 / 会话</th>
+              <th class="ul-th-num">路径 / 会话</th>
               <th>注册时间</th>
               <th>最后登录</th>
               <th style="text-align:right">操作</th>
@@ -519,4 +519,8 @@ const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
   padding: 10px 0 12px;
   border-top: 1px dashed var(--mk-line);
 }
+
+/* 数值列（路径/会话）表头与单元格居中；类选择器不受 live 勾选列影响 */
+.mk-table td.mk-num,
+.mk-table th.ul-th-num { text-align: center; }
 </style>

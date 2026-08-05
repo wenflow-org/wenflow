@@ -483,4 +483,10 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
   .pcl-error p { font-size: 17px; }
   .pcl-payload { font-size: 15.5px; }
 }
+
+/* 数值列（版本/耗时/Tokens）表头与单元格居中 */
+.mk-table td.mk-num,
+.mk-table th:nth-child(4),
+.mk-table th:nth-child(5),
+.mk-table th:nth-child(6) { text-align: center; }
 </style>

@@ -574,4 +574,8 @@ const totalSessions = computed(() => samples.value.reduce((a, s) => a + s.sessio
   opacity: 0.6;
   cursor: default;
 }
+
+/* 数值列（会话）表头与单元格居中 */
+.mk-table td.mk-num,
+.mk-table th:nth-child(4) { text-align: center; }
 </style>
