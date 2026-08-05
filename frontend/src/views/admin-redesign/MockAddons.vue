@@ -160,4 +160,8 @@ function showToast(msg: string, cls = 'mk-toast--ok') {
 .mono { font-family: var(--mk-mono); font-size: 12px; }
 .mk-toast--bad { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .mk-status__hint { font-size: 11.5px; color: var(--mk-faint); margin-left: auto; }
+
+/* 数值列（超时）表头与单元格居中 */
+.mk-table td.mk-num,
+.mk-table th:nth-child(4) { text-align: center; }
 </style>

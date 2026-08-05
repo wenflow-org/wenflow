@@ -189,7 +189,7 @@
             </span>
             <div class="agent-card__idbox">
               <div class="agent-card__name" :title="a.id">{{ a.name }}</div>
-              <div class="agent-card__sub">{{ a.id }} · {{ a.memberCount }} Skill</div>
+              <div class="agent-card__sub">{{ a.id }}</div>
             </div>
             <span v-if="a.errorCount > 0" class="agent-card__dot is-error">{{ a.errorCount > 9 ? '9+' : a.errorCount }}</span>
             <span v-else class="agent-card__dot is-ok"></span>
@@ -234,7 +234,7 @@
         >
           <span class="skill-card__tick"></span>
           <div class="skill-card__body">
-            <div class="skill-card__name" :title="s.skillId">{{ s.name }}</div>
+            <div class="skill-card__name" :title="s.name">{{ s.skillId }}</div>
             <div class="skill-card__meta">
               <template v-if="s.idle">未调用</template>
               <template v-else>
@@ -1057,8 +1057,9 @@ const flows = computed(() => {
 .skill-card.is-idle .skill-card__tick { background: #d3dbe9; }
 .skill-card.is-error .skill-card__tick { background: #dc2626; }
 .skill-card__body { min-width: 0; flex: 1; }
-/* 主标题：中文名（sans 11.5/600）；英文 skillId 入 tooltip */
+/* 主标题：英文 skillId（mono）；中文名入 tooltip */
 .skill-card__name {
+  font-family: var(--mk-mono);
   font-size: 11.5px;
   font-weight: 600;
   color: #223252;

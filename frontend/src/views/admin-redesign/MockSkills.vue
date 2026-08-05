@@ -364,4 +364,14 @@ const successRate = (s: { calls: number; errors: number }) =>
   margin-top: 2px;
 }
 .sk-card__err { color: var(--mk-red); font-weight: 700; }
+
+/* 数值列（调用/失败/成功率/平均耗时）表头与单元格居中 */
+.sk-table th:nth-child(3),
+.sk-table th:nth-child(4),
+.sk-table th:nth-child(5),
+.sk-table th:nth-child(6),
+.sk-table td:nth-child(3),
+.sk-table td:nth-child(4),
+.sk-table td:nth-child(5),
+.sk-table td:nth-child(6) { text-align: center; }
 </style>
