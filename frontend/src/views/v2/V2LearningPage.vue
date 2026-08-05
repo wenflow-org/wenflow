@@ -635,17 +635,14 @@ function onPageHide() {
 }
 
 /* 切换标签页/窗口：隐藏时暂停、切回可见时恢复，学习时长只计页面激活时间 */
-let pauseSentAt = 0;
 function onVisibilityChange() {
   if (!session.value || completed.value) return;
   const sid = session.value.sessionId;
   const revision = session.value.revision;
   if (document.hidden) {
-    pauseSentAt = Date.now();
     aiTeachingAPI.pauseSession(sid, 'hidden', revision).catch(() => {});
   } else {
     aiTeachingAPI.resumeSession(sid, revision).catch(() => {});
-    pauseSentAt = 0;
   }
 }
 
