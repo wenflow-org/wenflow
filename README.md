@@ -16,7 +16,7 @@
 > ⚠️ **注意**: Demo 站点会定期清理所有账号和数据，请勿用于存放重要信息。
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D18-green.svg)](https://nodejs.org)
+[![Node](https://img.shields.io/badge/node-%3E%3D20.17.0-green.svg)](https://nodejs.org)
 [![Vue](https://img.shields.io/badge/vue-3.x-brightgreen.svg)](https://vuejs.org)
 
 ---
@@ -33,11 +33,11 @@ WenFlow 想从另一个地方开始：先帮你说清真正想解决的事。
 
 当 AI 已经能快速给出大量答案，真正更值得训练的，不只是记住内容，而是：
 
-- 定义问题
-- 看见结构
-- 判断取舍
-- 与 AI 协作
-- 在反馈中持续修正
+- 问题定义：把模糊目标变成可探索的问题
+- 系统思维：看见知识、场景与行动之间的结构
+- 判断力：在信息过载中判断什么值得相信
+- AI 协作：把 AI 当作追问、反馈与推演的伙伴
+- 创造力：在已有知识之间建立新的连接
 
 **答案会越来越多，问题本身会越来越重要。**
 
@@ -47,32 +47,40 @@ WenFlow 想从另一个地方开始：先帮你说清真正想解决的事。
 
 ### 产品流程预览
 
-这 5 张图按“从真实问题出发，到进入完整学习闭环”的顺序展示 WenFlow 的核心体验。
+这 6 张图按“从真实问题出发，到进入完整学习闭环”的顺序展示 WenFlow 的核心体验。
 
-| 从一个问题开始 |
+| ① 从一个问题开始 |
 |:---:|
 | ![从一个问题开始](docs/images/home-start-from-problem.png) |
+| 进来先说出你的问题，而不是先找课 |
 
-| 澄清真实目标 | 生成学习路径 |
+| ② 澄清真实目标 | ③ 生成学习路径 |
 |:---:|:---:|
 | ![澄清真实目标](docs/images/goal-clarification.png) | ![生成学习路径](docs/images/learning-path.png) |
+| AI 多轮追问，把目标问清楚 | 把模糊目标拆成阶段、任务，还有今天就能做的一步 |
 
-| 进入回合式学习 | 学习闭环总览 |
+| ④ 进入回合式学习 | ⑤ 学习闭环总览 |
 |:---:|:---:|
 | ![进入回合式学习](docs/images/round-based-learning.png) | ![学习闭环总览](docs/images/learning-loop-overview.png) |
+| AI 讲、你答，当场反馈，边学边调整 | 课后出总结和评估，告诉你下一步学什么 |
+
+| ⑥ 学习状态追踪 |
+|:---:|
+| ![学习状态追踪](docs/images/learning-state.png) |
+| LSS / KTL / LF / LSB 持续追踪，学累了会提醒你 |
 
 ### 从问题到路径
-- **问题澄清**：通过多轮自然对话，补齐场景、基础、时间和限制
-- **路径生成**：把模糊目标拆成阶段、任务和今天能开始的第一步
-- **回合式学习**：AI 提问、用户回答、即时反馈，并根据理解情况继续调整
+- **问题澄清**：通过多轮自然对话，把目标问清楚
+- **路径生成**：把模糊目标拆成阶段、任务，还有今天能开始的第一步
+- **回合式学习**：AI 讲、你答、当场反馈，并根据理解情况继续调整
 
 ### 学习状态追踪
 借鉴运动科学中的负荷与恢复思路，持续追踪学习状态，而不只记录是否完成任务：
 
 | 指标 | 含义 | 用途 |
 |------|------|------|
-| LSS | 学习压力评分 | 基于任务难度、时长、认知负荷 |
-| KTL | 知识掌握度 | 长期积累，42天衰减因子 0.95 |
+| LSS | 学习压力评分 | 基于任务难度、时长、认知负荷，EWMA 平滑 |
+| KTL | 知识训练负荷（Knowledge Training Load） | 长期积累，42天衰减因子 0.95 |
 | LF | 学习疲劳度 | 短期累计，7天衰减因子 0.70 |
 | LSB | 学习状态平衡 | KTL - LF，预警过度学习 |
 
@@ -80,31 +88,59 @@ WenFlow 想从另一个地方开始：先帮你说清真正想解决的事。
 
 ```mermaid
 flowchart TD
-    U[用户] --> G1[目标对话 Skill\n澄清学习目标]
-    G1 --> P1[路径规划 Skill\n生成阶段与任务]
-    P1 --> T0[AI 教学编排器\n管理整节课流程]
+    U[用户] --> G1[目标对话 Skill\n多轮澄清 → 方案确认]
+    G1 -- 用户显式确认 --> P1[路径规划 Skill\n认知图景 + 阶段骨架]
+    P1 --> P2[阶段设计 Skill\n阶段 → 任务 + 验收点]
+    P2 --> T0[AI 教学编排器\n回合状态机]
 
-    T0 --> T1[教学回合 Skill\n每轮讲解 提问 诊断]
+    T0 --> T1[教学回合 Skill\n讲解 提问 诊断]
     T1 --> K1[知识状态更新\n知识点进度]
     T1 --> S1[学习状态更新\nLSS KTL LF LSB]
+    T1 --> C1[检查点测验\n未通过 → 回教学]
 
     T1 --> D{需要强化?}
-    D -- 是 --> PEER[伴学补强 Skill\n讨论式强化]
-    D -- 否 --> NEXT[继续教学]
+    D -- 是 --> PEER[伴学补强 Skill\n费曼式讨论强化]
+    D -- 否 --> NEXT{本节结束?}
+    C1 --> NEXT
+    PEER --> NEXT
 
-    NEXT --> END{本节结束?}
-    PEER --> END
-
-    END -- 结束 --> W1[课后产出 Skill\n总结与评估]
-    W1 --> R1[重规划建议\n是否调整路径]
-    R1 --> P1
+    NEXT -- 结束 --> W1[课后产出 Skill\n总结与评估]
+    W1 -- lesson:completed 事件 --> E1[outbox 事件\n学习者证据/投影刷新]
+    W1 --> R1[重规划建议\n用户确认后生效]
+    E1 -. 下一节上下文 .-> T0
+    R1 -. 确认后 .-> P1
 ```
 
-- 当前顶层 Agent 更偏编排器；真正持有 prompt 并直接调用 LLM 的主要是 Skills。
-- 先澄清目标，再把目标拆成可执行学习路径
-- 教学阶段按回合推进，边教边判断理解程度
-- 学生卡住时触发伴学强化，不直接放弃当前任务
-- 课后自动产出总结与评估，并给出是否重规划建议
+- 顶层 Agent 负责编排，真正持有 prompt、直接调模型的其实是 Skills。
+- 先澄清目标，再拆成路径。路径生成要你确认后才开始（AI 自己说"完成了"不算）。
+- 教学按 opening → teaching ⇄ intervention → ready_to_close → wrapup 推进；检查点只在回合内出现；课堂模式固定 tutor。
+- 学生卡住（求助关键词、连续几轮没听懂）会触发伴学，不会直接放弃当前任务。
+- 课后自动出总结和评估，附重规划建议。路径不会自动改，要你确认才生成新版本。
+- 一节课结束后，事件会保存下来并更新学习者画像；下一节课开始时，AI 会带着这些信息继续。
+
+### 虚拟学习者实验室（Virtual Learner Lab）
+
+用虚拟学习者账号，按真实用户的方式把产品跑一遍，用来验证功能：
+
+- **黑盒模拟**：像普通用户一样走完“目标 → 路径 → 学习”全流程，另有裁判和角色保真审计把关
+- **Quick Learn**：挑一个虚拟账号的任务，自动上完一节课并生成传播报告
+
+### 管理端
+
+管理后台在 `/admin`，16+ 个页面，数据来自真实 API（没有数据时才用演示数据）：
+
+- **总览与用户**：平台总览——今天健不健康、哪个模型失败最多、哪里要排查；用户和学习者中心——看学习状态、风险和疲劳度，能手动重算快照；教学会话、目标对话、反馈中心
+- **Prompt 工程**：改 Prompt 的一套流程——编译、守门检查、发布、回滚、版本对比，还能拿最近一次真实调用重跑验证
+- **观测调试**：拓扑图看哪些节点在失败、哪些闲置；编排看数据在阶段之间怎么流动；执行日志带重试时间线，可自动刷新、导出；Trace 瀑布把一次慢请求拆到每个环节找原因
+- **模型与接入**：模型怎么路由（对话 / 推理 / 评估）、连不连得通、能访问哪些网络、重试和超时怎么设
+- **虚拟实验**：AI 生成人设、故事池跑实验、Quick Learn 自动上课、会话驾驶舱做黑盒模拟，详见下方「虚拟学习者实验室」
+
+### Prompt 工程体系（Prompt Lab v4，File-as-Truth）
+
+- **真源**：`prompts/core/*.yaml`（唯一人工编辑的入口，进 git）
+- **编译产物**：`prompts/skill.*.md`（确定性编译生成，模型只读这个文本）
+- **发布链路**：编辑 core.yaml → compile（守门检查）→ publish（写回 md + DB ACTIVE）→ 可 rollback
+- **数据库**：`agent_prompts` 只是运行时镜像，文件为准、DB 为镜像
 
 ---
 
@@ -112,12 +148,16 @@ flowchart TD
 
 | 层级 | 技术 |
 |------|------|
-| **前端** | Vue 3 + TypeScript + Vite 5 + Element Plus + Pinia |
+| **前端** | Vue 3 + TypeScript + Vite 6 + Element Plus + Pinia |
 | **后端** | Node.js + Express + TypeScript + Prisma |
-| **数据库（当前）** | SQLite（主库 + system 库） |
-| **AI 接入** | OpenAI 兼容模型网关（默认 DeepSeek） |
-| **Agent / Skill 编排** | EduClaw Gateway + Agent / Skill 编排层 + Event Bus |
-| **部署** | PowerShell 启动脚本 + 可选 Nginx（测试部署） |
+| **数据库（当前）** | SQLite（主库 36 表 + system 库 16 表，双库架构） |
+| **AI 接入** | OpenAI 兼容模型网关（默认 DeepSeek：deepseek-v4-flash / v4-pro / r1），支持 SSE 流式、重试预算、thinking mode 控制 |
+| **Agent / Skill 编排** | EduClaw Gateway + Agent（7 个官方 Agent）/ Skill 编排层 + Coordinators + Event Bus（outbox 持久化事件） |
+| **模型配置分层** | 环境变量 → 平台默认 → Agent/Skill 级 → 用户自定义 API / 模型覆盖 |
+| **虚拟实验** | Virtual Learner Lab（黑盒模拟 + Quick Learn） |
+| **可观测** | Agent/Skill 调用日志、Trace 瀑布、LLM 执行明细 |
+| **安全** | JWT + CSRF + 登录限流 + Secret AES-256-GCM 静态加密 + 敏感存储权限审计 |
+| **部署** | PowerShell 启动脚本 + 可选 Nginx（测试部署）+ Docker（Linux/macOS） |
 
 ---
 
@@ -152,7 +192,7 @@ npm run env:setup
 ```
 
 说明：建议首次使用先完成环境初始化，再选择启动脚本。若 `backend/.env` 缺失或 `JWT_SECRET` 不合格，启动脚本也会自动拉起初始化流程。
-启动后端时，系统会自动把核心 skill prompts 从仓库 `prompts/*.md`（File-as-Truth）同步到数据库 ACTIVE 版本；这样别人从 GitHub 拉下项目后，默认运行版本会和仓库中的 prompt 真相源保持一致。
+启动后端时会自动把仓库里的核心 prompts 同步进数据库；从 GitHub 拉下来就能跑，不用手动导。
 
 ### 本机开发
 
@@ -161,7 +201,7 @@ npm run env:setup
 ./start-dev.ps1
 ```
 
-说明：脚本会自动检查并安装依赖、生成双 Prisma Client、对主库和 System DB 分别执行 `prisma migrate deploy`、必要时引导创建或补全 `backend/.env`，并在启动前自动执行一次 core prompts 同步。
+说明：脚本会自动装依赖、生成双 Prisma Client、给主库和 System DB 分别执行 migrate、必要时引导创建或补全 `backend/.env`，启动前再自动同步一次 core prompts。
 如需跳过 Prisma 初始化可使用：`./start-dev.ps1 -SkipPrisma`。注意：该选项也会跳过启动前的 core prompts 同步，仅适用于数据库和 prompts 已经准备好的环境。
 
 ### 局域网开发模式
@@ -177,7 +217,7 @@ npm run dev:lan
 ./start-lan.ps1 -LanIP 192.168.31.26
 ```
 
-说明：自动将局域网 IP 加入 `CORS_ORIGIN`，适合多设备调试前台页面；不会改变管理员登录仅限本机访问的限制。
+说明：自动将局域网 IP 加入 `CORS_ORIGIN`，适合多设备调试前台页面；不会改变管理员登录的 `ADMIN_ACCESS_MODE` 访问限制。
 
 ### 一键测试部署（本机 Nginx，HTTP）
 
@@ -197,6 +237,27 @@ npm run dev:nginx
 
 说明：`-UseNginx` 模式会自动执行 `npm run build`（前端）并生成运行时配置到 `runtime/nginx/wenflow.nginx.conf`；启动前会校验 80 端口可用，若系统 nginx 或其他进程已占用 80 端口，需要先手动停止。
 
+### Docker 部署（Linux/macOS）
+
+```bash
+# 一键启动（交互式补齐 backend/.env，也支持环境变量非交互传入）
+./docker-start.sh
+
+# 数据库备份（一次性 operations 服务，只读挂载数据卷）
+docker compose -f docker-compose.operations.yml run --rm backup
+```
+
+说明：`docker-compose.yml` 提供 migrate / backend / nginx 三个服务，默认只发布 Nginx（80），不发布后端 `3001`；后端强制 `ADMIN_ACCESS_MODE=private`。详见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+
+### 质量检查（本地 CI 同款）
+
+```bash
+# 依次执行：secret 扫描 → Prisma 双 schema 校验 → 空库迁移回放 → 后端 typecheck → 后端测试 → 前后端构建
+npm run check
+```
+
+说明：GitHub Actions（`.github/workflows/quality-check.yml`）在 push main/master 与 PR 时会执行相同检查（另加 Git 历史 secret 扫描）。
+
 ### 环境配置辅助命令
 
 ```bash
@@ -209,18 +270,27 @@ npm run env:edit
 
 说明：`env:setup` 不再单独询问域名；Nginx 模式下域名由 `-Domain`（优先）或 `backend/.env` 中的 `FRONTEND_URL` 推断。
 
-### Prompt 初始化与维护
+### Prompt 初始化与维护（File-as-Truth）
+
+核心 prompts 采用两级模型：**真源**是 `prompts/core/*.yaml`（唯一人工编辑入口，进 git），**编译产物**是 `prompts/skill.*.md`（模型唯一读取文本），数据库 `agent_prompts` 只是运行时镜像。编辑 → 编译 → 发布链路（含守门检查与回滚）见管理端「Prompt 设计台」，机制详见 [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md)。
 
 ```bash
-# 手动将核心 prompts 从仓库 `prompts/*.md` 同步到数据库 ACTIVE 版本
+# 把 prompts/core/*.yaml 全部确定性编译，重新生成 prompts/skill.*.md（不写数据库）
 cd backend
+npm run prompts:compile-all
+
+# 把编译产物同步到数据库 ACTIVE 版本（启动时也会自动执行）
 npm run prompts:sync-core
 
 # 升级后补齐新增的 prompt 节点，不覆盖已有 ACTIVE 配置
 npm run prompts:backfill-core
+
+# 校验与对账
+npm run prompts:lint
+npm run prompts:core:check
 ```
 
-说明：`prompts:sync-core` 会以仓库 `prompts/*.md` 为准，同步核心 prompts 到数据库 ACTIVE 版本；若仓库版本与数据库 ACTIVE 不一致，会自动创建新版本并切换到 ACTIVE。`prompts:backfill-core` 只补缺失节点，不覆盖已有 ACTIVE 配置。若直接在 `backend/` 下运行 `npm run dev`，后端启动时也会自动执行一次 core prompts 同步。
+说明：`prompts:sync-core` 以仓库编译产物为准，把数据库 ACTIVE 版本同步成一致；不一致时自动创建新版本并切换（旧版归档）。`prompts:backfill-core` 只补缺失节点，不覆盖已有 ACTIVE 配置。若直接在 `backend/` 下运行 `npm run dev`，后端启动时也会自动做一次同步。更多说明见 [`prompts/_README.md`](prompts/_README.md)。
 
 ### 本地 SQLite 路径约定
 
@@ -239,6 +309,8 @@ npm run prompts:backfill-core
 
 如需更细粒度的部署或非脚本方式启动，可参考 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
+架构设计、Skill 协议、Prompt 管理与虚拟学习者链路等设计文档见 [`doc/README.md`](doc/README.md)（设计文档索引）。
+
 ### 访问地址
 
 **Demo 站点**: https://wenflow.org
@@ -248,7 +320,7 @@ npm run prompts:backfill-core
 - 后端: http://localhost:3001
 - 管理后台: http://localhost:5173/admin
 
-说明：管理员登录接口默认仅允许本机访问；如需远程访问，可设置 `ADMIN_LOCALHOST_ONLY=false`（不推荐直接暴露公网管理登录）。
+说明：管理员登录默认 `ADMIN_ACCESS_MODE=private`（仅本机 + 局域网），也可设为 `loopback`（仅本机）或 `any`（不限来源），并支持 `ADMIN_ALLOWED_IPS` 精确放行（不推荐直接暴露公网管理登录）。
 
 ---
 
@@ -265,9 +337,7 @@ INIT_ADMIN_PASSWORD=YourStrongPassword123
 
 建议：首次登录管理端后立即修改密码；对外部署时请使用强密码。
 
-注意：管理员登录接口默认仅允许 `localhost` / `127.0.0.1` / `::1` 访问；如确有远程管理需求，可在 `.env` 中设置 `ADMIN_LOCALHOST_ONLY=false`，并自行承担安全加固责任。
-
-详见 [ADMIN_SETUP.md](ADMIN_SETUP.md)
+注意：管理员登录默认 `ADMIN_ACCESS_MODE=private`，仅允许本机与局域网（RFC1918）来源访问；可设为 `loopback`（仅本机）或 `any`（不限制来源），并用 `ADMIN_ALLOWED_IPS` 精确放行指定客户端 IP。访问模式策略可在管理端「模型与接入」页面热生效，环境变量仅作默认值。如确有公网远程管理需求，请配合 VPN 或精确 IP 白名单，并自行承担安全加固责任。详见 [ADMIN_LOGIN_GUIDE.md](ADMIN_LOGIN_GUIDE.md) 与 [ADMIN_SETUP.md](ADMIN_SETUP.md)
 
 ### 反向代理常见坑
 
@@ -280,14 +350,15 @@ INIT_ADMIN_PASSWORD=YourStrongPassword123
 
 ## 教育理论基础
 
-基于 6 大教育理论：
+设计背后的理论，每条都有对应实现：
 
-1. **认知负荷理论** - 避免信息过载
-2. **自我导向学习** - 用户自主决定
-3. **Dreyfus 五阶段模型** - 动态评估用户阶段
-4. **最近发展区 + 支架** - 难度略高于当前水平
-5. **形成性评估** - 即时反馈
-6. **刻意练习** - 针对弱点突破
+1. **认知负荷理论** - 单轮知识点上限、回复形态预算，长对话自动压缩
+2. **自我导向学习** - 目标你来说、方案你确认，节奏由你掌控
+3. **最近发展区 + 支架** - 难度随理解度自动升降，卡住时回补前置基础
+4. **形成性评估** - 每轮理解度诊断 + 检查点测验，当场反馈、失败重学
+5. **刻意练习 + 检索练习** - 能独立讲出才算掌握；课后检索式自测，下一节开场承接
+6. **费曼技巧（自我解释）** - 用自己的话讲给别人听，讲不清楚就重学
+7. **安德森认知目标分类** - 从"记忆"到"创造"6 级认知目标，贯穿标注、教学与完成判定
 
 ---
 
