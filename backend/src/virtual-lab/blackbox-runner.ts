@@ -750,7 +750,7 @@ export class BlackboxVirtualLearnerRunner {
           return { action, result: await this.act(sessionId, operatorId, action) }
         }
         action = { type: 'start_learning', taskId: latest.visibleTask?.id }
-      } else if (latest.stage === 'learning') {
+      } else if (latest.stage === 'teaching') {
         const history = this.visibleHistory(state).map((item: any) => ({
           role: item.role === 'platform' ? 'teacher' : 'learner',
           content: item.content
@@ -764,14 +764,18 @@ export class BlackboxVirtualLearnerRunner {
               history,
               lastTeacherMessage: [...history].reverse().find((item: any) => item.role === 'teacher')?.content || ''
             },
-            currentPhase: state.blackbox?.learnerPrivateState?.learning?.phaseFocus || 'trying',
-            previousLearnerState: state.blackbox?.learnerPrivateState?.learning || null,
+            currentPhase: state.blackbox?.learnerPrivateState?.teaching?.phaseFocus || 'trying',
+            previousLearnerState: state.blackbox?.learnerPrivateState?.teaching || null,
             currentTask: latest.visibleTask || null,
-            knowledgeSnapshot: [],
+            knowledgeSnapshot: latest.visibleTask?.linkedConcept
+              ? [{ name: String(latest.visibleTask.linkedConcept), status: 'learning', progress: 40 }]
+              : (latest.visibleTask?.title
+                ? [{ name: String(latest.visibleTask.title), status: 'learning', progress: 30 }]
+                : []),
             frictionBudget: snapshot.frictionBudget
           },
           snapshot,
-          'learning'
+          'teaching'
         )
         if (!output?.reply) throw new Error('虚拟学习者 Learn 动作生成失败')
         action = latest.availableActions.includes('confirm_complete')
@@ -783,7 +787,7 @@ export class BlackboxVirtualLearnerRunner {
           : output.learnerState?.wantsWorkedExample
             ? { type: 'request_example', text: output.reply }
             : { type: 'chat', text: output.reply }
-        await this.persistPrivateState(session, state, 'learning', {
+        await this.persistPrivateState(session, state, 'teaching', {
           ...output.learnerState,
           learnerFeedback: output.learnerFeedback
         }, {
@@ -871,20 +875,20 @@ export class BlackboxVirtualLearnerRunner {
       control.terminalDetail = control.terminalDetail || result.observation.lastActionResult?.visibleMessage || '平台返回错误观察'
       nextState.blackbox.control = control
     }
-    if (result.diagnostic?.resetLearningPrivateState === true && nextState.blackbox?.learnerPrivateState?.learning) {
-      const completedTaskState = nextState.blackbox.learnerPrivateState.learning
+    if (result.diagnostic?.resetLearningPrivateState === true && nextState.blackbox?.learnerPrivateState?.teaching) {
+      const completedTaskState = nextState.blackbox.learnerPrivateState.teaching
       const privateStateTrace = Array.isArray(nextState.blackbox.learnerPrivateStateTrace)
         ? nextState.blackbox.learnerPrivateStateTrace : []
       const completedTaskTrace = [...privateStateTrace].reverse().find((entry: any) =>
-        entry?.stage === 'learning' && (!entry?.taskId || entry.taskId === previousControl.taskId)
+        entry?.stage === 'teaching' && (!entry?.taskId || entry.taskId === previousControl.taskId)
       )
       const completedTaskId = previousControl.taskId || fresh.currentTaskId || null
       const alreadyArchived = privateStateTrace.some((entry: any) =>
-        entry?.stage === 'learning' && entry?.taskId === completedTaskId && entry?.transition === 'task_completed'
+        entry?.stage === 'teaching' && entry?.taskId === completedTaskId && entry?.transition === 'task_completed'
       )
       nextState.blackbox.learnerPrivateStateTrace = (alreadyArchived ? privateStateTrace : [...privateStateTrace, {
         sequence: publicTrace.length,
-        stage: 'learning',
+        stage: 'teaching',
         taskId: completedTaskId,
         state: completedTaskState,
         emotion: completedTaskTrace?.emotion || null,
@@ -894,7 +898,7 @@ export class BlackboxVirtualLearnerRunner {
         transition: 'task_completed',
         generatedAt: new Date().toISOString()
       }]).slice(-120)
-      const { learning: _completedTaskState, ...remainingPrivateState } = nextState.blackbox.learnerPrivateState
+      const { teaching: _completedTaskState, ...remainingPrivateState } = nextState.blackbox.learnerPrivateState
       nextState.blackbox.learnerPrivateState = remainingPrivateState
     }
     const completedTaskIncrement = result.control.taskCompleted === true && previousControl.taskId !== result.control.taskId ? 1 : 0
@@ -1265,7 +1269,7 @@ export class BlackboxVirtualLearnerRunner {
     }
 
     if (action.type === 'confirm_complete') {
-      if (latestObservation.stage !== 'learning' || !control.taskId || !control.teachingSessionId) {
+      if (latestObservation.stage !== 'teaching' || !control.taskId || !control.teachingSessionId) {
         throw new BlackboxRunStateError('当前教学任务尚未满足完成条件', 'BLACKBOX_COMPLETION_NOT_READY')
       }
       if (latestObservation.visibleTask?.id && latestObservation.visibleTask.id !== control.taskId) {
@@ -1422,7 +1426,7 @@ export class BlackboxVirtualLearnerRunner {
       : `课堂已结束，但任务完成同步失败：${errorMessage}。请重试完成任务。`
     return {
       observation: {
-        stage: 'learning',
+        stage: 'teaching',
         visibleMessages: [
           ...(teachingEndResult?.observation?.visibleMessages || []),
           { role: 'platform', content: visibleMessage }
@@ -1575,14 +1579,14 @@ export class BlackboxVirtualLearnerRunner {
     const trace = Array.isArray(state.blackbox?.learnerPrivateStateTrace)
       ? state.blackbox.learnerPrivateStateTrace.slice(-120) : []
     return trace.map((entry: any, index: number) => {
-      const stage = entry?.stage === 'learning' ? 'learning' : 'goal'
+      const stage = entry?.stage === 'teaching' ? 'teaching' : 'goal'
       const actorState = entry?.state && typeof entry.state === 'object' ? entry.state : {}
       const feedback = actorState.learnerFeedback && typeof actorState.learnerFeedback === 'object'
         ? actorState.learnerFeedback : {}
       const metricKeys = stage === 'goal'
         ? ['feltUnderstood', 'problemClarity', 'proposalFit', 'taskRelevance', 'executionConcern', 'goalReadiness']
         : ['taskUnderstanding', 'conceptualMastery', 'proceduralMastery', 'misconceptionRisk', 'helpSeekingReadiness', 'cognitiveLoad']
-      const feedbackKeys = stage === 'learning' ? ['satisfaction', 'confidence'] : []
+      const feedbackKeys = stage === 'teaching' ? ['satisfaction', 'confidence'] : []
       const metrics = Object.fromEntries([
         ...metricKeys.map((key) => [key, this.displayActorMetric(actorState[key])]),
         ...feedbackKeys.map((key) => [key, this.displayActorMetric(feedback[key])])
@@ -1590,7 +1594,7 @@ export class BlackboxVirtualLearnerRunner {
       const flagKeys = stage === 'goal'
         ? ['willingToTry', 'readyToProceed', 'wantsClarification', 'readyToAdvance']
         : ['wantsHint', 'wantsWorkedExample', 'readyForNextTask']
-      const feedbackFlagKeys = stage === 'learning'
+      const feedbackFlagKeys = stage === 'teaching'
         ? ['selfReportedTaskDone', 'wantsMoreHelp', 'stopAsking'] : []
       const flags = Object.fromEntries([
         ...flagKeys.map((key) => [key, actorState[key]]),
@@ -1735,7 +1739,7 @@ export class BlackboxVirtualLearnerRunner {
     const stageCoverage = {
       goal: false,
       path: false,
-      learning: false,
+      teaching: false,
       completed: false,
       error: false
     } as Record<LearnerObservation['stage'], boolean>
@@ -1784,14 +1788,14 @@ export class BlackboxVirtualLearnerRunner {
   private compactLearnerPrivateStateTrace(raw: any): Array<Record<string, unknown>> {
     const trace = Array.isArray(raw) ? raw.slice(-120) : []
     return trace.map((entry: any, index: number) => {
-      const stage = entry?.stage === 'learning' ? 'learning' : 'goal'
+      const stage = entry?.stage === 'teaching' ? 'teaching' : 'goal'
       const actorState = entry?.state && typeof entry.state === 'object' ? entry.state : {}
       const feedback = actorState.learnerFeedback && typeof actorState.learnerFeedback === 'object'
         ? actorState.learnerFeedback : {}
       const metricKeys = stage === 'goal'
         ? ['feltUnderstood', 'problemClarity', 'proposalFit', 'taskRelevance', 'executionConcern', 'goalReadiness']
         : ['taskUnderstanding', 'conceptualMastery', 'proceduralMastery', 'misconceptionRisk', 'helpSeekingReadiness', 'cognitiveLoad']
-      const feedbackKeys = stage === 'learning' ? ['satisfaction', 'confidence'] : []
+      const feedbackKeys = stage === 'teaching' ? ['satisfaction', 'confidence'] : []
       const metrics = Object.fromEntries([
         ...metricKeys.map((key) => [key, this.displayActorMetric(actorState[key])]),
         ...feedbackKeys.map((key) => [key, this.displayActorMetric(feedback[key])])
@@ -1799,7 +1803,7 @@ export class BlackboxVirtualLearnerRunner {
       const flagKeys = stage === 'goal'
         ? ['willingToTry', 'readyToProceed', 'wantsClarification', 'readyToAdvance']
         : ['wantsHint', 'wantsWorkedExample', 'readyForNextTask']
-      const feedbackFlagKeys = stage === 'learning' ? ['selfReportedTaskDone', 'wantsMoreHelp', 'stopAsking'] : []
+      const feedbackFlagKeys = stage === 'teaching' ? ['selfReportedTaskDone', 'wantsMoreHelp', 'stopAsking'] : []
       const flags = Object.fromEntries([
         ...flagKeys.map((key) => [key, actorState[key]]),
         ...feedbackFlagKeys.map((key) => [key, feedback[key]])
@@ -1835,7 +1839,7 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   private sanitizeObservation(value: any): LearnerObservation {
-    const stage = ['goal', 'path', 'learning', 'completed', 'error'].includes(value?.stage) ? value.stage : 'error'
+    const stage = ['goal', 'path', 'teaching', 'completed', 'error'].includes(value?.stage) ? value.stage : 'error'
     return {
       stage,
       visibleMessages: (Array.isArray(value?.visibleMessages) ? value.visibleMessages : []).slice(0, 30).map((item: any) => ({
@@ -1905,7 +1909,7 @@ export class BlackboxVirtualLearnerRunner {
       learnerPrivateStateTrace: [...trace, {
         sequence: (latestState.blackbox?.publicTrace || []).length,
         stage,
-        taskId: stage === 'learning' ? latestState.blackbox?.control?.taskId || fresh.currentTaskId || null : null,
+        taskId: stage === 'teaching' ? latestState.blackbox?.control?.taskId || fresh.currentTaskId || null : null,
         state: privateState,
         emotion: this.timelineText(metadata.emotion, 64),
         degraded: metadata.degraded === true,
@@ -1975,7 +1979,7 @@ export class BlackboxVirtualLearnerRunner {
   ) {
     const prompts = await this.resolveSimulatorPrompts()
     const gateway = getAPIGateway()
-    const [goalRoute, learningRoute] = await Promise.all([
+    const [goalRoute, teachingRoute] = await Promise.all([
       gateway.resolveRoute({ skillId: virtualLearnerGoalDialogueSimulatorDefinition.name }, routingUserId),
       gateway.resolveRoute({ skillId: virtualLearnerLearnTurnSimulatorDefinition.name }, routingUserId)
     ])
@@ -1998,27 +2002,27 @@ export class BlackboxVirtualLearnerRunner {
           maxTokens: prompts.goal.maxTokens,
           route: this.sanitizeSimulatorRoute(goalRoute)
         },
-        learning: {
+        teaching: {
           skillId: virtualLearnerLearnTurnSimulatorDefinition.name,
           version: virtualLearnerLearnTurnSimulatorDefinition.version,
-          promptVersion: prompts.learning.version,
-          promptFingerprint: this.valueFingerprint(prompts.values.learning),
-          temperature: prompts.learning.temperature,
-          maxTokens: prompts.learning.maxTokens,
-          route: this.sanitizeSimulatorRoute(learningRoute)
+          promptVersion: prompts.teaching.version,
+          promptFingerprint: this.valueFingerprint(prompts.values.teaching),
+          temperature: prompts.teaching.temperature,
+          maxTokens: prompts.teaching.maxTokens,
+          route: this.sanitizeSimulatorRoute(teachingRoute)
         }
       }
     }
   }
 
   private async resolveSimulatorPrompts() {
-    const [goal, learning] = await Promise.all([
+    const [goal, teaching] = await Promise.all([
       agentConfigService.getActivePrompt('skill:virtual-learner-goal-dialogue-simulator'),
       agentConfigService.getActivePrompt('skill:virtual-learner-learn-turn-simulator')
     ])
     const goalPrompt = goal?.systemPrompt?.trim()
-    const learningPrompt = learning?.systemPrompt?.trim()
-    if (!goalPrompt || !learningPrompt) {
+    const teachingPrompt = teaching?.systemPrompt?.trim()
+    if (!goalPrompt || !teachingPrompt) {
       throw new BlackboxRunStateError('虚拟学习者 Simulator 缺少 ACTIVE Prompt，不能创建可复现实验', 'BLACKBOX_SIMULATOR_PROMPT_MISSING', 503)
     }
     return {
@@ -2028,15 +2032,15 @@ export class BlackboxVirtualLearnerRunner {
         maxTokens: Number(goal?.maxTokens) > 0
           ? Number(goal.maxTokens) : VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_MAX_TOKENS
       },
-      learning: {
-        version: learning?.version || null,
-        temperature: learning?.temperature ?? VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE,
+      teaching: {
+        version: teaching?.version || null,
+        temperature: teaching?.temperature ?? VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE,
         maxTokens: Math.max(
-          Number(learning?.maxTokens) > 0 ? Number(learning.maxTokens) : VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS,
+          Number(teaching?.maxTokens) > 0 ? Number(teaching.maxTokens) : VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS,
           VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS
         )
       },
-      values: { goal: goalPrompt, learning: learningPrompt }
+      values: { goal: goalPrompt, teaching: teachingPrompt }
     }
   }
 
@@ -2081,11 +2085,11 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   private assertReplayableExperimentSnapshot(snapshot: Record<string, any>) {
-    const simulators = [snapshot?.simulators?.goal, snapshot?.simulators?.learning]
+    const simulators = [snapshot?.simulators?.goal, snapshot?.simulators?.teaching]
     const complete = snapshot?.actorProfile
       && snapshot?.frictionBudget
       && typeof snapshot?.simulatorPrompts?.goal === 'string'
-      && typeof snapshot?.simulatorPrompts?.learning === 'string'
+      && typeof snapshot?.simulatorPrompts?.teaching === 'string'
       && simulators.every((item: any) => item?.route?.providerId
         && item?.route?.credentialFingerprint
         && item?.route?.endpoint
@@ -2097,7 +2101,7 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private simulatorRuntime(snapshot: any, stage: 'goal' | 'learning') {
+  private simulatorRuntime(snapshot: any, stage: 'goal' | 'teaching') {
     const simulator = snapshot.simulators?.[stage] || null
     const route = simulator?.route || null
     return {
@@ -2119,7 +2123,7 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private async executeSimulatorSkill(definition: any, input: any, snapshot: any, stage: 'goal' | 'learning') {
+  private async executeSimulatorSkill(definition: any, input: any, snapshot: any, stage: 'goal' | 'teaching') {
     const parentContext = getRequestContext()
     return runWithContext({
       ...parentContext,

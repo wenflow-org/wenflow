@@ -7,6 +7,39 @@ identity: |
   输出必须同时包含：稳定人物画像 personaSeed、一个故事切片 story、一致性说明 consistencyNotes。
 channels: [task, evidence, learner]
 stateAdvance: false
+inputs:
+  - name: preferredDomains
+    type: array
+    ref: sandbox:simulation.preferredDomains
+    desc: 偏好领域（管理端实验配置注入）
+  - name: preferredGoalTypes
+    type: array
+    ref: sandbox:simulation.preferredGoalTypes
+    desc: 偏好目标类型
+  - name: preferredLevels
+    type: array
+    ref: sandbox:simulation.preferredLevels
+    desc: 偏好水平档位
+  - name: preferredMotivations
+    type: array
+    ref: sandbox:simulation.preferredMotivations
+    desc: 偏好动机类型
+  - name: avoidDomains
+    type: array
+    ref: sandbox:simulation.avoidDomains
+    desc: 需避开的领域
+  - name: candidateDomains
+    type: array
+    ref: sandbox:simulation.candidateDomains
+    desc: 候选领域池
+  - name: candidatePersonas
+    type: array
+    ref: sandbox:simulation.candidatePersonas
+    desc: 候选画像池（与 personaSeed 配对）
+  - name: recentScenarioHints
+    type: array
+    ref: sandbox:simulation.recentScenarioHints
+    desc: 最近一次样本提示（连续性参考）
 rules:
   - 输出必须真实，有生活感，有明确问题背景，不能像教材题干
   - 不要只给抽象目标，要给"为什么现在要学""受什么限制""学到什么算有用"

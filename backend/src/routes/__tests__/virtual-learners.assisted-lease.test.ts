@@ -174,8 +174,8 @@ describe('assisted virtual learner route leases', () => {
     })
   })
 
-  it('wraps learning-step around the assisted check and coordinator mutation', async () => {
-    const handler = getPostHandler('/sessions/:sessionId/learning-step')
+  it('wraps teaching-step around the assisted check and coordinator mutation', async () => {
+    const handler = getPostHandler('/sessions/:sessionId/teaching-step')
     const res = createResponse()
 
     await handler({ params: { sessionId: 'session-1' }, body: {} }, res)
@@ -214,7 +214,7 @@ describe('assisted virtual learner route leases', () => {
     mockRunLeasedExclusive.mockImplementation(
       async (_sessionId: string, work: (assertLeaseOwned: () => void) => Promise<any>) => work(assertLeaseOwned)
     )
-    const handler = getPostHandler('/sessions/:sessionId/learning-step')
+    const handler = getPostHandler('/sessions/:sessionId/teaching-step')
     const res = createResponse()
 
     await handler({ params: { sessionId: 'session-1' }, body: {} }, res)
@@ -273,7 +273,7 @@ describe('assisted virtual learner route leases', () => {
       new Error('当前模拟会话正在执行其他写操作，请稍后重试'),
       { code: 'VIRTUAL_SESSION_BUSY', statusCode: 409, retryable: true }
     ))
-    const handler = getPostHandler('/sessions/:sessionId/learning-step')
+    const handler = getPostHandler('/sessions/:sessionId/teaching-step')
     const res = createResponse()
 
     await handler({ params: { sessionId: 'session-1' }, body: {} }, res)
@@ -410,7 +410,7 @@ describe('assisted virtual learner route leases', () => {
       userId: 'user-1',
       goalConversationId: 'goal-1',
       learningPathId: null,
-      stageResults: JSON.stringify({ learning: { teachingSessionId: 'teaching-1' } })
+      stageResults: JSON.stringify({ teaching: { teachingSessionId: 'teaching-1' } })
     })
     mockTeachingSessionFindFirst.mockResolvedValue({ id: 'teaching-1' })
     const handler = getDeleteHandler('/sessions/:sessionId')

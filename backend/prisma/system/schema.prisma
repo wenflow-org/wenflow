@@ -209,6 +209,9 @@ model field_definitions {
   valueType       String   @default("string")
   snakeName       String?
   camelName       String?
+  // 值抽取路径：字段值在产出方原始输出中的物理位置（如 internal.ext.goalConversation.understanding.real_problem）。
+  // 配置式字段值流转（V3 Dispatcher 接线）的抽取依据；空 = 尚未登记。
+  pathInRawOutput String?
   description     String?
   enumValues      String?
   schemaVersion   String   @default("v3")

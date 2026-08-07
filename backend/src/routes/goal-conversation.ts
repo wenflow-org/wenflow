@@ -59,6 +59,10 @@ const handleStreamingGoal = async (
         }
       },
     },
+    // 目标对话以 conversationId 作为会话标识，注入后执行日志/瀑布可归组追溯
+    sessionId: (req as any).params?.conversationId || undefined,
+    conversationId: (req as any).params?.conversationId || undefined,
+    sourceEntry: 'platform',
   });
 
   try {

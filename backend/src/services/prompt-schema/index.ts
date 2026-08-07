@@ -974,12 +974,11 @@ export function suggestRulePrefix(agentId: string): string {
     'skill:goal-profile-inference': 'GI',
     'skill:learning-pattern-distiller': 'LP',
     'skill:adaptive-guidance-copy': 'AG',
-    'skill:path-scene-framing': 'PSF',
     'skill:peer-reinforcement': 'PR',
     'skill:stage-designer': 'SD',
     'skill:goal-conversation': 'GC',
     'skill:path-planning': 'PA',
-    'skill:learning-turn': 'TT',
+    'skill:teaching-turn': 'TT',
     'skill:session-wrapup': 'SW',
   };
   if (customMap[agentId]) return customMap[agentId];

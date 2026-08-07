@@ -10,8 +10,20 @@ import { logger } from '../utils/logger';
 import pathOrchestrator from '../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
 import { isPathMutationConflictError } from '../services/learning/path-mutation-safety';
+import { setRequestContext, getRequestContext } from '../gateway/api-gateway/context';
 
 const router = express.Router();
+
+/** 在 LLM 触发链路前注入业务上下文（pathId 归组，执行日志/瀑布可追溯） */
+const withPathContext = (req: express.Request, pathId?: string | null, conversationId?: string | null) => {
+  setRequestContext({
+    ...getRequestContext(),
+    userId: req.user?.userId || undefined,
+    pathId: pathId || undefined,
+    conversationId: conversationId || undefined,
+    sourceEntry: 'platform',
+  });
+};
 
 const sendPathMutationConflict = (res: express.Response, error: unknown) => {
   if (!isPathMutationConflictError(error)) return false;
@@ -338,6 +350,7 @@ router.post('/paths/generate', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const data = generatePathSchema.parse(req.body);
+    withPathContext(req);
 
 const result = await pathOrchestrator.generate({
       userId,
@@ -536,6 +549,7 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const { pathId } = req.params;
+    withPathContext(req, pathId, String(req.body?.sourceConversationId || ''));
 
     const path = await prisma.learning_paths.findUnique({
       where: { id: pathId }
@@ -604,6 +618,7 @@ router.post('/paths/:pathId/replan', async (req, res, next) => {
     const userId = req.user.userId;
     const { pathId } = req.params;
     const payload = replanPathSchema.parse(req.body || {});
+    withPathContext(req, pathId);
 
     const result = await learningService.requestPathReplan({
       pathId,
@@ -723,6 +738,7 @@ router.post('/paths/:pathId/retry-stage-design', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const { pathId } = req.params;
+    withPathContext(req, pathId);
 
     const result = await learningService.retryPathEnrichment(pathId, userId);
 

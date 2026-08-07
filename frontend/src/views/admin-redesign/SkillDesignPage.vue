@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="mk-page sdp">
     <!-- 顶部：返回 + 状态条（与 console 统一的运维简报语言） -->
     <header class="sdp-head">
@@ -295,15 +295,18 @@
                   </button>
                   <div v-show="openFormSections.has('inputs')" class="sdp-pwform__cardbody">
                   <p class="sdp-pwform__note">
-                    声明本 Skill 消费同一链条上哪个上游 Skill 的哪个输出字段（<code class="mono">skill:xxx.fieldPath</code>）。
-                    保存/发布时与字段路由 handoff 对账（advisory）；血缘表自动收录。
+                    声明本 Skill 消费的输入。ref 前缀 = 来源分类：<code class="mono">skill:xxx.fieldPath</code>（上游 Skill 模型输出）/
+                    <code class="mono">sandbox:agent.key</code>（编排注入，对照沙盘说明书 <code class="mono">prompts/agent-snapshots.md</code>）/
+                    <code class="mono">user:path</code>（用户/平台，绿灯）。保存/发布时对账（skill→handoff、sandbox→沙盘注册表、user→通过）。
                   </p>
                   <div v-for="(input, i) in coreForm.inputs" :key="i" class="sdp-pwform__inputrow">
-                    <input v-model="input.ref" class="sdp-input mono" placeholder="skill:path-scene-framing.normalizedInput" @input="coreDirty = true" />
-                    <input v-model="input.note" class="sdp-input" placeholder="用途说明（可选）" @input="coreDirty = true" />
+                    <input v-model="input.name" class="sdp-input" placeholder="别名 name（可选）" @input="coreDirty = true" />
+                    <input v-model="input.type" class="sdp-input" placeholder="类型 type（可选）" @input="coreDirty = true" />
+                    <input v-model="input.ref" class="sdp-input mono" placeholder="skill:path-planning.milestones | sandbox:path.normalizedInput | user:latestMessage" @input="coreDirty = true" />
+                    <input v-model="input.desc" class="sdp-input" placeholder="用途说明 desc（可选）" @input="coreDirty = true" />
                     <button type="button" class="mk-link mk-link--danger" @click="removeInput(i)">删除</button>
                   </div>
-                  <button type="button" class="mk-link" @click="addInput">+ 添加上游输入</button>
+                  <button type="button" class="mk-link" @click="addInput">+ 添加输入声明</button>
                   </div>
                 </section>
 
@@ -802,8 +805,6 @@
         </section>
       </div>
     </template>
-
-    <div v-if="toast" class="mk-toast sdp-toast" :class="toastCls">{{ toast }}</div>
   </div>
 </template>
 
@@ -835,7 +836,8 @@ import {
   adminSkillsApi
 } from '@/api/adminApi'
 import { askConfirm } from './useConfirm'
-import './mock-shared.css'
+import './shared.css'
+import { toast } from '@/utils/toast'
 
 /* ---------- 路由与基础 ---------- */
 const route = useRoute()
@@ -869,7 +871,9 @@ const AGENT_TONES: Record<string, { hue: string; soft: string }> = {
   'goal-agent': { hue: '#4f46e5', soft: 'rgba(79, 70, 229, 0.1)' },
   'path-agent': { hue: '#0d9488', soft: 'rgba(13, 148, 136, 0.1)' },
   'teaching-agent': { hue: '#3478f6', soft: 'rgba(52, 120, 246, 0.1)' },
+  'profile-agent': { hue: '#d97706', soft: 'rgba(217, 119, 6, 0.1)' },
   'learner-agent': { hue: '#d97706', soft: 'rgba(217, 119, 6, 0.1)' },
+  'simulation-agent': { hue: '#7c3aed', soft: 'rgba(124, 58, 237, 0.1)' },
   'virtual-agent': { hue: '#7c3aed', soft: 'rgba(124, 58, 237, 0.1)' }
 }
 const tone = computed(() => {
@@ -878,16 +882,6 @@ const tone = computed(() => {
 })
 
 /* ---------- Toast ---------- */
-const toast = ref('')
-const toastCls = ref('mk-toast--ok')
-let toastTimer: ReturnType<typeof setTimeout> | null = null
-function showToast(msg: string, cls = 'mk-toast--ok') {
-  toast.value = msg
-  toastCls.value = cls
-  if (toastTimer) clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => (toast.value = ''), 3000)
-}
-
 /* ---------- 总览与元数据 ---------- */
 interface OverviewItem {
   agentId: string
@@ -1106,7 +1100,7 @@ function formatTrialJson() {
   try {
     trialInput.value = JSON.stringify(JSON.parse(trialInput.value), null, 2)
   } catch (e) {
-    showToast(`JSON 不合法：${errText(e)}`, 'mk-toast--bad')
+    toast.success(`JSON 不合法：${errText(e)}`)
   }
 }
 
@@ -1120,7 +1114,7 @@ async function runTrial() {
   try {
     payload = JSON.parse(trialInput.value || '{}')
   } catch (e) {
-    showToast(`输入 JSON 不合法：${errText(e)}`, 'mk-toast--bad')
+    toast.error(`输入 JSON 不合法：${errText(e)}`)
     return
   }
   if (trialRunning.value) return
@@ -1220,12 +1214,12 @@ async function toggleLogDetail(log: LogRow) {
 async function rerun(log: LogRow) {
   await ensureLogDetail(log)
   if (!log.detail?.input) {
-    showToast('该调用没有可用输入', 'mk-toast--bad')
+    toast.error('该调用没有可用输入')
     return
   }
   trialInput.value = log.detail.input
   tab.value = 'trial'
-  showToast('已填入真实输入，正在重跑…')
+  toast.error('已填入真实输入，正在重跑…')
   await runTrial()
 }
 
@@ -1361,7 +1355,7 @@ interface CoreFormState {
   stateAdvance: boolean
   deltaOutput: boolean
   outputMedia: string
-  inputs: { ref: string; note: string }[]
+  inputs: { ref: string; note: string; name?: string; type?: string; desc?: string }[]
   rules: string[]
   constraints: string[]
   examples: string[]
@@ -1466,7 +1460,10 @@ function initCoreForm(core: Record<string, unknown> | null) {
     inputs: Array.isArray(core.inputs)
       ? (core.inputs as Array<Record<string, unknown>>).map((item) => ({
           ref: String(item.ref || ''),
-          note: String(item.note || '')
+          note: String(item.note || ''),
+          name: String(item.name || ''),
+          type: String(item.type || ''),
+          desc: String(item.desc || '')
         }))
       : [],
     rules: Array.isArray(core.rules) ? core.rules.map((r) => String(r)) : [],
@@ -1503,6 +1500,9 @@ function buildCorePayload() {
     outputMedia: f.outputMedia,
     inputs: f.inputs.filter((item) => item.ref.trim()).map((item) => ({
       ref: item.ref.trim(),
+      ...(item.name?.trim() ? { name: item.name.trim() } : {}),
+      ...(item.type?.trim() ? { type: item.type.trim() } : {}),
+      ...(item.desc?.trim() ? { desc: item.desc.trim() } : {}),
       ...(item.note.trim() ? { note: item.note.trim() } : {})
     })),
     rules: f.rules,
@@ -1555,7 +1555,7 @@ function removeField(i: number) {
   coreDirty.value = true
 }
 function addInput() {
-  coreForm.value?.inputs.push({ ref: '', note: '' })
+  coreForm.value?.inputs.push({ ref: '', note: '', name: '', type: '', desc: '' })
   coreDirty.value = true
 }
 function removeInput(i: number) {
@@ -1587,7 +1587,7 @@ async function ensureCoreLoaded() {
     coreLoaded.value = false
     coreMissing.value = true
     const status = (e as { response?: { status?: number } })?.response?.status
-    if (status !== 404) showToast(`核心文件读取失败：${errText(e)}`, 'mk-toast--bad')
+    if (status !== 404) toast.success(`核心文件读取失败：${errText(e)}`)
   }
 }
 
@@ -1613,11 +1613,11 @@ async function saveCore() {
       coreInputWarnings.value = res.data?.inputWarnings || []
     }
     coreDirty.value = false
-    showToast(`已保存（${coreLevelLabel(coreClassification.value?.level || 'safe')}），状态：待编译发布`)
+    toast.error(`已保存（${coreLevelLabel(coreClassification.value?.level || 'safe')}），状态：待编译发布`)
   } catch (e) {
     const data = (e as { response?: { data?: { diagnostics?: CoreDiagnostic[]; error?: string } } })?.response?.data
     coreDiagnostics.value = data?.diagnostics || []
-    showToast(data?.error || `保存失败：${errText(e)}`, 'mk-toast--bad')
+    toast.success(data?.error || `保存失败：${errText(e)}`)
   } finally {
     coreSaving.value = false
   }
@@ -1640,7 +1640,7 @@ async function previewCore() {
     // 编译错误落入行内诊断区（可停留查看），toast 仅作补充
     const message = data?.error || errText(e)
     coreDiagnostics.value = data?.diagnostics?.length ? data.diagnostics : [{ code: 'COMPILE_FAILED', message }]
-    showToast(`编译失败：${message}`, 'mk-toast--bad')
+    toast.error(`编译失败：${message}`)
   } finally {
     coreCompiling.value = false
   }
@@ -1661,7 +1661,7 @@ async function publishCore(confirmUncertain: boolean) {
       input: { label: '开发提交 / PR / 变更单引用', placeholder: '例如 pr#123 或 提交哈希' }
     })
     if (!reference || typeof reference !== 'string') {
-      showToast('未提供开发确认引用，已取消发布', 'mk-toast--bad')
+      toast.error('未提供开发确认引用，已取消发布')
       return
     }
     developerApproval = { reference }
@@ -1681,7 +1681,7 @@ async function publishCore(confirmUncertain: boolean) {
       version: res.data?.version,
       coreHash: res.data?.coreHash
     }
-    showToast(`发布成功：v${res.data?.version}（运行时已生效）`)
+    toast.error(`发布成功：v${res.data?.version}（运行时已生效）`)
     // 发布改 ACTIVE：同步刷新检视与版本页数据
     await Promise.all([loadInspect(), loadVersions(), loadOverviewLite()])
   } catch (e) {
@@ -1689,14 +1689,14 @@ async function publishCore(confirmUncertain: boolean) {
     const data = (e as { response?: { data?: any } })?.response?.data || {}
     if (status === 409 && data?.code === 'SEMANTIC_UNCERTAIN') {
       coreUncertain.value = data?.judgement || {}
-      showToast('含义冻结不确定，需人工确认', 'mk-toast--bad')
+      toast.success('含义冻结不确定，需人工确认')
     } else {
       if (data?.classification) coreClassification.value = data.classification
       corePublishResult.value = { ok: false, message: data?.error || `发布失败：${errText(e)}` }
       if (data?.issues?.length) {
         coreUncertain.value = { findings: data.issues, rationale: data.error }
       }
-      showToast(data?.error || '发布被阻断', 'mk-toast--bad')
+      toast.error(data?.error || '发布被阻断')
     }
   } finally {
     corePublishing.value = false
@@ -1718,7 +1718,7 @@ async function openCoreVersions() {
     const res = await adminPromptWorkbenchApi.getCoreVersions(skillId.value)
     coreVersions.value = res.data?.versions || []
   } catch (e) {
-    showToast(`版本加载失败：${errText(e)}`, 'mk-toast--bad')
+    toast.error(`版本加载失败：${errText(e)}`)
   } finally {
     coreVersionsLoading.value = false
   }
@@ -1735,12 +1735,12 @@ async function rollbackCore(version: number) {
   coreRollbacking.value = true
   try {
     await adminPromptWorkbenchApi.rollbackCore(skillId.value, version)
-    showToast(`已回滚到 v${version}`)
+    toast.error(`已回滚到 v${version}`)
     await openCoreVersions()
     await Promise.all([loadInspect(), loadVersions(), loadOverviewLite()])
   } catch (e) {
     const data = (e as { response?: { data?: { error?: string } } })?.response?.data
-    showToast(data?.error || `回滚失败：${errText(e)}`, 'mk-toast--bad')
+    toast.success(data?.error || `回滚失败：${errText(e)}`)
   } finally {
     coreRollbacking.value = false
   }
@@ -1752,7 +1752,7 @@ async function openCoreLineage() {
     const res = await adminPromptWorkbenchApi.getCoreLineage(skillId.value)
     coreLineage.value = res.data?.lineage || []
   } catch (e) {
-    showToast(`血缘加载失败：${errText(e)}`, 'mk-toast--bad')
+    toast.error(`血缘加载失败：${errText(e)}`)
   }
 }
 
@@ -1833,9 +1833,9 @@ async function copy(content: string) {
   if (!content) return
   try {
     await navigator.clipboard.writeText(content)
-    showToast('已复制')
+    toast.error('已复制')
   } catch {
-    showToast('复制失败：剪贴板不可用', 'mk-toast--bad')
+    toast.success('复制失败：剪贴板不可用')
   }
 }
 
@@ -1870,7 +1870,7 @@ async function loadAll() {
     await Promise.all([loadInspect(), loadVersions(), loadRuntime(), loadRecentLogs()])
   } catch (e) {
     loadFailed.value = true
-    showToast(`加载失败：${errText(e)}`, 'mk-toast--bad')
+    toast.error(`加载失败：${errText(e)}`)
   } finally {
     loading.value = false
   }
@@ -2790,5 +2790,95 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   .sdp-pwform .sdp-input { font-size: 16.5px; }
   .sdp-eng__kvs code,
   .sdp-pw__pre { font-size: 15.5px; }
+}
+@media (min-width: 3600px) {
+  /* 4K：设计页独立渲染（无全局 zoom），字号大幅放大以对齐管理台基线 */
+  .sdp { max-width: 3000px; }
+  .sdp-back { font-size: 19px; }
+  .sdp-parent { font-size: 18px; }
+  .sdp-chip { font-size: 16.5px; padding: 4px 12px; }
+  .sdp-drift { font-size: 18px; padding: 14px 18px; }
+  .sdp-drift code { font-size: 17px; }
+  .sdp-tabs { padding: 6px; }
+  .sdp-tab { font-size: 19px; padding: 10px 24px; }
+  .sdp-notice { font-size: 18px; padding: 14px 18px; }
+  .sdp-notice code { font-size: 17px; }
+  .sdp-sec-head h4 { font-size: 17.5px; }
+  .sdp-sec-meta { font-size: 17.5px; }
+  .sdp-block, .sdp-prompt { padding: 16px 18px; gap: 12px; }
+  .sdp-block__head h4 { font-size: 17.5px; }
+  .sdp-block__meta { font-size: 17.5px; }
+  .sdp-viewswitch { border-radius: 10px; }
+  .sdp-viewswitch__btn { font-size: 18px; padding: 7px 18px; }
+  .sdp-prompt__facts { font-size: 17.5px; gap: 18px; }
+  .sdp-prompt__facts code { font-size: 16.5px; }
+  .sdp-prompt__code { font-size: 19px; padding: 18px; }
+  .sdp-prompt__hint { font-size: 17.5px; }
+  .sdp-prompt__hint code { font-size: 16.5px; }
+  .sdp-json { font-size: 19px; padding: 14px 16px; }
+  .sdp-codehl--json { height: 240px; }
+  .sdp-codehl--json .sdp-codehl__pre,
+  .sdp-codehl--json .sdp-codehl__ta { padding: 14px 16px; font-size: 19px; }
+  .sdp-output { font-size: 19px; padding: 16px; max-height: 420px; }
+  .sdp-error { font-size: 18px; padding: 14px 16px; }
+  .sdp-log__main { font-size: 18px; padding: 12px 14px; }
+  .sdp-log__time { font-size: 16px; }
+  .sdp-log__dur { font-size: 16.5px; }
+  .sdp-log__rerun { font-size: 17.5px; padding: 0 14px; }
+  .sdp-log__io span { font-size: 16px; }
+  .sdp-log__io pre { font-size: 16.5px; padding: 12px 14px; }
+  .sdp-versions-msg { font-size: 18px; }
+  .sdp-vtag { font-size: 16.5px; padding: 2px 9px; }
+  .sdp-diff__head { font-size: 17.5px; padding: 12px 16px; }
+  .sdp-diff__body { font-size: 16.5px; max-height: 460px; }
+  .sdp-diff__same { font-size: 17.5px; }
+  .sdp-chiprow { padding: 14px 16px; }
+  .sdp-chiprow__label { font-size: 18px; }
+  .sdp-form { padding: 18px 20px; gap: 14px; }
+  .sdp-field > span { font-size: 18px; }
+  .sdp-input { font-size: 19px; padding: 12px 15px; }
+  .sdp-divider strong { font-size: 19px; }
+  .sdp-divider span { font-size: 18px; }
+  .sdp-form__msg { font-size: 18px; }
+  .sdp-eng__desc { font-size: 18px; }
+  .sdp-kv { font-size: 18px; }
+  .sdp-kv th { font-size: 17px; padding: 10px 16px; }
+  .sdp-kv td { padding: 10px 16px; }
+  .sdp-kv code { font-size: 17px; }
+  .sdp-protocol { padding: 14px 16px; }
+  .sdp-protocol strong { font-size: 19px; }
+  .sdp-protocol p { font-size: 18px; }
+  .sdp-protocol__sites { font-size: 16.5px; }
+  .sdp-conflict { font-size: 18px; padding: 13px 16px; }
+  .sdp-rule { font-size: 18px; padding: 10px 12px 10px 16px; }
+  .sdp-rule__id { font-size: 16.5px; }
+  .sdp-pw { grid-template-columns: minmax(0, 1fr) 520px; }
+  .sdp-pw__hint { font-size: 18px; }
+  .sdp-pw__hint code { font-size: 16.5px; }
+  .sdp-pw__textarea,
+  .sdp-codehl__pre { font-size: 19px; }
+  .sdp-pwform .sdp-input { font-size: 19.5px; min-height: 46px; }
+  .sdp-eng__kvs code,
+  .sdp-pw__pre { font-size: 18px; }
+  .sdp-pw__classify { font-size: 18px; }
+  .sdp-pw__diag-item { font-size: 18px; }
+  .sdp-pw__publish { font-size: 18px; }
+  .sdp-pw__uncertain { font-size: 18px; }
+  .sdp-pw__pill { font-size: 18px; padding: 8px 18px; }
+  .sdp-pw__gate { font-size: 18px; }
+  .sdp-pw__gate-issue { font-size: 17.5px; }
+  .sdp-pw__meta { font-size: 17.5px; }
+  .sdp-pw__table { font-size: 18px; }
+  .sdp-pw__consumer { font-size: 17.5px; }
+  .sdp-pw__audit { font-size: 17.5px; }
+  .sdp-pw__viewbtn { font-size: 18px; padding: 8px 20px; }
+  .sdp-pwform__cardhead { font-size: 19px; }
+  .sdp-pwform__card h5 { font-size: 19px; }
+  .sdp-pwform__warn { font-size: 18px; }
+  .sdp-pwform__note { font-size: 18px; }
+  .sdp-pwform__field > span { font-size: 18px; }
+  .sdp-pwform__check { font-size: 18.5px; }
+  .sdp-pwform__fieldrow--head { font-size: 17.5px; }
+  .sdp-pwform__idx { font-size: 17px; }
 }
 </style>

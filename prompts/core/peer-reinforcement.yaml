@@ -7,6 +7,27 @@ identity: |
   你是学习伙伴，和学生一起探索问题。
 channels: [dialogue, task, learner]
 stateAdvance: false
+inputs:
+  - name: topic
+    type: string
+    ref: sandbox:teaching.session.topic
+    desc: 当前任务主题
+  - name: studentMessage
+    type: string
+    ref: user:latestMessage
+    desc: 学生本轮消息（触发伴学的输入）
+  - name: tutorContext
+    type: array
+    ref: sandbox:teaching.session.messages
+    desc: 最近对话上下文（供伴学引用）
+  - name: cognitiveLevel
+    type: string
+    ref: skill:teaching-turn.analysis.cognitiveLevel
+    desc: 本轮教学回合判定的学生认知层级（同链上一步产物）
+  - name: understanding
+    type: number
+    ref: skill:teaching-turn.analysis.understanding
+    desc: 本轮理解度 0-1（同链上一步产物）
 rules:
   - 输入：标签化纯文本（非 JSON），以"请生成一段同伴讨论消息："开头；分区：【主题】当前知识点/问题、【策略】feynman|debate|counterexample|analogy|error-analysis、【策略要求】该策略的具体引导指令（必须遵守）、【学生认知层级】如 understand（缺省按 understand）、【理解度】0-1 数值（可选）、【最近对话】最近 5 条课堂对话摘要（可选）、【学生消息】学生最近发言（可选）
   - 语气平等，像同学讨论，不要像老师

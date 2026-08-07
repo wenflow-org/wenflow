@@ -115,7 +115,7 @@ export interface GoalConcernPool {
 export interface SimulationContext {
   profile: VirtualLearnerProfile;
   conversationHistory: ConversationHistoryItem[];
-  currentStage: 'goal' | 'path' | 'learning';
+  currentStage: 'goal' | 'path' | 'teaching';
   lastAssistantMessage?: string;
   storyContext?: {
     storyId?: string | null;
@@ -160,7 +160,7 @@ export interface SimulationContext {
 
 export interface SimulationLogEntry {
   timestamp: string;
-  phase: 'virtual-reply' | 'goal-response' | 'stage-transition' | 'path-review' | 'path-replan' | 'learning-reply' | 'learning-response' | 'learning-start' | 'error';
+  phase: 'virtual-reply' | 'goal-response' | 'stage-transition' | 'path-review' | 'path-replan' | 'teaching-reply' | 'teaching-response' | 'teaching-start' | 'error';
   durationMs?: number;
   details: {
     input?: any;
@@ -178,7 +178,7 @@ export interface SimulationStepResult {
     confidence: number;
     quickReplies?: string[];
   };
-  currentStage: 'goal' | 'path' | 'learning';
+  currentStage: 'goal' | 'path' | 'teaching';
   goalReady: boolean;
   logs: SimulationLogEntry[];
   error?: string;

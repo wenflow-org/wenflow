@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <CapabilityShell title="调用日志">
     <template #actions>
       <div class="actions">
@@ -24,7 +24,7 @@
         <el-form-item label="Agent">
           <el-select v-model="filters.agentId" placeholder="全部" clearable>
             <el-option label="Path Agent" value="skill:path-planning" />
-            <el-option label="AI Teaching Agent" value="learning-agent" />
+            <el-option label="AI Teaching Agent" value="teaching-agent" />
             <el-option label="AI Teaching Agent (legacy)" value="ai-teaching-agent" />
             <el-option label="Learner State Hub" value="learner-model-agent" />
           </el-select>
@@ -540,7 +540,7 @@ const formatAgentId = (logOrAgentId: string | AgentLogItem | null | undefined) =
     'skill:path-planning': '学习路径规划',
     'skill:goal-conversation': '目标对话',
     'ai-teaching-agent': 'AI 授课',
-    'learning-agent': 'AI 授课',
+    'teaching-agent': 'AI 授课',
     'ai-tutor': 'AI 辅导',
     'learner-model-agent': '学习者模型',
     'course-design': '课程设计',
@@ -582,8 +582,8 @@ const getCapabilityType = (agentId?: string) => {
   const mapping: Record<string, string> = {
     'skill:goal-conversation': 'goal',
     'skill:path-planning': 'path',
-    'ai-teaching-agent': 'learning',
-    'learning-agent': 'learning',
+    'ai-teaching-agent': 'teaching',
+    'teaching-agent': 'teaching',
     'ai-tutor': 'tutoring',
     'learner-model-agent': 'profile',
     'unknown': 'system',

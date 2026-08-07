@@ -28,8 +28,8 @@ const CAPABILITIES: Array<{ id: string; caller: CallerInfo }> = [
   { id: 'goal-conversation', caller: { agentId: 'goal-agent', skillId: 'goal-conversation' } },
   { id: 'path-planning', caller: { agentId: 'path-agent', skillId: 'path-planning' } },
   { id: 'stage-designer', caller: { agentId: 'path-agent', skillId: 'stage-designer' } },
-  { id: 'learning-turn', caller: { agentId: 'learning-agent', skillId: 'learning-turn' } },
-  { id: 'session-wrapup', caller: { agentId: 'learning-agent', skillId: 'session-wrapup' } }
+  { id: 'teaching-turn', caller: { agentId: 'teaching-agent', skillId: 'teaching-turn' } },
+  { id: 'session-wrapup', caller: { agentId: 'teaching-agent', skillId: 'session-wrapup' } }
 ];
 
 const STALE_AFTER_MS = 5 * 60_000;

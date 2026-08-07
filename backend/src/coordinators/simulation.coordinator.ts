@@ -363,6 +363,24 @@ class SimulationOrchestrator {
     return 'trying';
   }
 
+  /**
+   * phaseFocus 以模拟器（LLM 基于对话+看板）判断为主，编排器只做钳制：
+   * 1. 模拟器上次输出的 phaseFocus 若合法且非孤立 ready_to_close（需 readyForNextTask=true），直接沿用；
+   * 2. 否则回退阈值机推断（首轮/缺失/非法/自相矛盾时兜底）。
+   */
+  private resolveLearnerPhase(learnerState: LearnerLatentState | null | undefined): 'trying' | 'blocked' | 'verifying' | 'ready_to_close' {
+    const state = learnerState || {};
+    const current = state.phaseFocus;
+    const VALID_PHASES: Array<'trying' | 'blocked' | 'verifying' | 'ready_to_close'> = ['trying', 'blocked', 'verifying', 'ready_to_close'];
+    if (VALID_PHASES.includes(current as any)) {
+      if (current === 'ready_to_close' && state.readyForNextTask !== true) {
+        return this.inferLearningPhase(state);
+      }
+      return current as any;
+    }
+    return this.inferLearningPhase(state);
+  }
+
   private getRunnableTasks(tasks: any[] = []) {
     return tasks.filter(task => task.status !== 'completed');
   }
@@ -518,7 +536,7 @@ class SimulationOrchestrator {
 
     logs.push({
       timestamp: now,
-      phase: 'learning-start',
+      phase: 'teaching-start',
       details: {
         output: {
           teachingSessionId: nextTeachingSession.sessionId,
@@ -628,7 +646,7 @@ class SimulationOrchestrator {
     profile: VirtualLearnerProfile,
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
     lastAssistantMessage: string,
-    currentStage: 'goal' | 'path' | 'learning',
+    currentStage: 'goal' | 'path' | 'teaching',
     storyContext?: any,
     goalState?: any,
     learnerState?: any,
@@ -680,7 +698,7 @@ class SimulationOrchestrator {
 
   private buildDefaultLearnerState(
     profile: VirtualLearnerProfile,
-    currentStage: 'goal' | 'path' | 'learning'
+    currentStage: 'goal' | 'path' | 'teaching'
   ): LearnerLatentState {
     const traits = profile.personalityTraits || {};
     const p = profile.profile || {};
@@ -716,7 +734,7 @@ class SimulationOrchestrator {
   private mergeLearnerState(
     profile: VirtualLearnerProfile,
     learnerState: any,
-    currentStage: 'goal' | 'path' | 'learning',
+    currentStage: 'goal' | 'path' | 'teaching',
     storyContext?: any
   ): LearnerLatentState {
     const merged = {
@@ -739,7 +757,7 @@ class SimulationOrchestrator {
       }
     }
 
-    if (currentStage === 'learning') {
+    if (currentStage === 'teaching') {
       if (typeof merged.taskUnderstanding !== 'number' || !Number.isFinite(merged.taskUnderstanding)) {
         merged.taskUnderstanding = merged.understandingLevel;
       }
@@ -1029,7 +1047,7 @@ class SimulationOrchestrator {
     try {
       const session = await this.getVirtualSession(sessionId);
       const stageResults = this.parseStageResultsPayload(session.stageResults);
-      const learning = stageResults.learning || {};
+      const learning = stageResults.teaching || {};
       const now = new Date().toISOString();
       const failedLearning = {
         ...learning,
@@ -1042,8 +1060,8 @@ class SimulationOrchestrator {
         }
       };
 
-      await this.updateStageResults(sessionId, 'learning', failedLearning);
-      await this.updateSessionStatus(sessionId, 'failed', 'learning');
+      await this.updateStageResults(sessionId, 'teaching', failedLearning);
+      await this.updateSessionStatus(sessionId, 'failed', 'teaching');
       const failureLog: SimulationLogEntry = {
         timestamp: now,
         phase: 'error',
@@ -1071,7 +1089,7 @@ class SimulationOrchestrator {
     options: {
       keepGoalConversation?: boolean;
       keepLearningPath?: boolean;
-      nextStage: 'goal' | 'path' | 'learning';
+      nextStage: 'goal' | 'path' | 'teaching';
       nextStatus?: 'created' | 'running' | 'completed' | 'failed';
       removeStageResults?: string[];
       logPhasesToRemove?: string[];
@@ -1157,7 +1175,7 @@ class SimulationOrchestrator {
     } catch (error: any) {
       const boundedError = this.boundTaskCompletionError(error);
       const updatedAt = new Date().toISOString();
-      await this.updateStageResults(sessionId, 'learning', {
+      await this.updateStageResults(sessionId, 'teaching', {
         ...learningState,
         teachingRevision: taskRuntime.teachingRevision ?? learningState.teachingRevision,
         taskRuntime: {
@@ -1214,7 +1232,7 @@ class SimulationOrchestrator {
     const nextProgress = this.buildProgressAfterTaskCompletion(milestones, taskMatch.task.id);
     const latestSession = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } });
     const latestStageResults = this.parseStageResultsPayload(latestSession?.stageResults);
-    const latestLearningState = latestStageResults.learning || learningState;
+    const latestLearningState = latestStageResults.teaching || learningState;
     const baseCompletedLearningState = {
       ...latestLearningState,
       teachingRevision: taskRuntime.teachingRevision ?? learningState.teachingRevision,
@@ -1244,13 +1262,13 @@ class SimulationOrchestrator {
       data: {
         stageResults: JSON.stringify({
           ...latestStageResults,
-          learning: baseCompletedLearningState
+          teaching: baseCompletedLearningState
         }),
         currentTaskId: nextProgress.progress.currentTaskId,
         completedTasks: currentProgress.completedTasks,
         totalTasks: currentProgress.totalTasks,
         status: nextProgress.isPathCompleted ? 'completed' : undefined,
-        currentStage: nextProgress.isPathCompleted ? 'learning' : undefined,
+        currentStage: nextProgress.isPathCompleted ? 'teaching' : undefined,
         updatedAt: new Date()
       }
     });
@@ -1270,7 +1288,7 @@ class SimulationOrchestrator {
         );
         completedLearningState = transition.learningState;
         nextTaskStarted = transition.nextTaskStarted;
-        await this.updateStageResults(sessionId, 'learning', completedLearningState);
+        await this.updateStageResults(sessionId, 'teaching', completedLearningState);
         await this.assertCurrentSessionLeaseOwned(sessionId);
         await prisma.virtual_sessions.update({
           where: { id: sessionId },
@@ -1279,7 +1297,7 @@ class SimulationOrchestrator {
             completedTasks: currentProgress.completedTasks,
             totalTasks: currentProgress.totalTasks,
             status: 'running',
-            currentStage: 'learning',
+            currentStage: 'teaching',
             updatedAt: new Date()
           }
         });
@@ -1294,7 +1312,7 @@ class SimulationOrchestrator {
             updatedAt: new Date().toISOString()
           }
         };
-        await this.updateStageResults(sessionId, 'learning', completedLearningState);
+        await this.updateStageResults(sessionId, 'teaching', completedLearningState);
         await this.persistLearningFailure(sessionId, error, logs);
         logs.push({
           timestamp: new Date().toISOString(),
@@ -1870,7 +1888,7 @@ class SimulationOrchestrator {
       summary.pathGenerated = !!updatedAfterGoal.learningPathId;
 
       // ========== Phase B: Path -> Learn bridge ==========
-      if (updatedAfterGoal.learningPathId && updatedAfterGoal.currentStage !== 'learning') {
+      if (updatedAfterGoal.learningPathId && updatedAfterGoal.currentStage !== 'teaching') {
         try {
           const review = await this.resolvePathReview(sessionId, {
             startLearning: options.autoAdvanceToLearning ?? false
@@ -1888,7 +1906,7 @@ class SimulationOrchestrator {
 
       // ========== Phase C: Learn loop with continueOnTaskComplete ==========
       const refreshed = await this.getVirtualSession(sessionId);
-      if (refreshed.currentStage !== 'learning') {
+      if (refreshed.currentStage !== 'teaching') {
         summary.finalStage = refreshed.currentStage;
         summary.success = true;
         return summary;
@@ -2330,13 +2348,13 @@ class SimulationOrchestrator {
       await this.addSessionLog(sessionId, {
         timestamp: new Date().toISOString(),
         phase: 'stage-transition',
-        details: { output: { from: 'path', to: 'learning', reason: 'path-review-accepted', learningPathId: session.learningPathId } }
+        details: { output: { from: 'path', to: 'teaching', reason: 'path-review-accepted', learningPathId: session.learningPathId } }
       });
       const learning = await this.startLearningPhase(sessionId);
       return {
         success: learning.success,
         decision: review.decision,
-        currentStage: learning.success ? 'learning' : 'path',
+        currentStage: learning.success ? 'teaching' : 'path',
         learningPathId: session.learningPathId,
         error: learning.error
       };
@@ -2441,14 +2459,14 @@ class SimulationOrchestrator {
       await this.updateSessionStatus(
         sessionId,
         'running',
-        'learning',
+        'teaching',
         session.goalConversationId || undefined,
         session.learningPathId
       );
       
       await this.addSessionLog(sessionId, {
         timestamp: new Date().toISOString(),
-        phase: 'learning-start',
+        phase: 'teaching-start',
         details: {
           output: {
             teachingSessionId: teachingSession.sessionId,
@@ -2459,7 +2477,7 @@ class SimulationOrchestrator {
         }
       });
       
-      await this.updateStageResults(sessionId, 'learning', {
+      await this.updateStageResults(sessionId, 'teaching', {
         success: true,
         teachingSessionId: teachingSession.sessionId,
         teachingRevision: teachingSession.revision,
@@ -2526,7 +2544,7 @@ class SimulationOrchestrator {
       
       const stageResults: any = this.parseStageResultsPayload(session.stageResults)
 
-      const learningState = stageResults.learning || {};
+      const learningState = stageResults.teaching || {};
       if (learningState.manualStop || session.status === 'failed') {
         return {
           success: false,
@@ -2601,7 +2619,7 @@ class SimulationOrchestrator {
             teachingRevision: teachingDetail.revision,
             taskRuntime: recoveredRuntime
           };
-          await this.updateStageResults(sessionId, 'learning', recoveredLearningState);
+          await this.updateStageResults(sessionId, 'teaching', recoveredLearningState);
           return await this.completeCheckpointedSimulationTask(
             sessionId,
             session,
@@ -2694,7 +2712,7 @@ class SimulationOrchestrator {
           };
         }
         
-        await this.updateStageResults(sessionId, 'learning', {
+        await this.updateStageResults(sessionId, 'teaching', {
           ...learningState,
           ...this.buildLearningProgressSnapshot(milestones, nextMilestoneIdx, 0)
         });
@@ -2731,15 +2749,15 @@ class SimulationOrchestrator {
         .reverse()
         .find((item: any) => item.role === 'assistant')?.content || '';
 
-      const mergedLearnerState = this.mergeLearnerState(profile, learningState.learnerState, 'learning', this.parseStoryContextFromStageResults(stageResults))
+      const mergedLearnerState = this.mergeLearnerState(profile, learningState.learnerState, 'teaching', this.parseStoryContextFromStageResults(stageResults))
       const simulationContext = {
         profile,
         conversationHistory: trimmedConversationHistory,
         lastAssistantMessage,
-        currentStage: 'learning',
+        currentStage: 'teaching',
         learnerState: {
           ...mergedLearnerState,
-          phaseFocus: this.inferLearningPhase(mergedLearnerState)
+          phaseFocus: this.resolveLearnerPhase(mergedLearnerState)
         },
         learningState: {
           currentMilestone: currentMilestone.title,
@@ -2750,7 +2768,19 @@ class SimulationOrchestrator {
       };
       
       const virtualReplyStart = Date.now();
-      const virtualReplyOutput = await this.retryLearnUpstream(sessionId, 'simulate-learning-turn', () => executeSkill(virtualLearnerLearnTurnSimulatorDefinition, {
+      // 知识看板快照：以当前任务的 linkedConcept 与里程碑概念为锚，供模拟器校准自评（不再恒空）
+      const knowledgeSnapshot = [
+        ...(currentTask?.linkedConcept
+          ? [{ name: String(currentTask.linkedConcept), status: 'learning', progress: 40 }]
+          : []),
+        ...(currentMilestone?.coreConceptId
+          ? [{ name: String(currentMilestone.coreConceptId), status: 'learning', progress: 30 }]
+          : []),
+      ];
+      if (knowledgeSnapshot.length === 0) {
+        knowledgeSnapshot.push({ name: currentTask.title || currentMilestone.title || '当前任务概念', status: 'learning', progress: 30 });
+      }
+      const virtualReplyOutput = await this.retryLearnUpstream(sessionId, 'simulate-teaching-turn', () => executeSkill(virtualLearnerLearnTurnSimulatorDefinition, {
         learner: {
           profile: profile.profile || {},
           learningGoal: profile.learningGoal,
@@ -2775,7 +2805,7 @@ class SimulationOrchestrator {
           acceptanceCriteria: currentTask.acceptanceCriteria || null,
           description: currentTask.description || null,
         },
-        knowledgeSnapshot: [],
+        knowledgeSnapshot,
         frictionBudget: this.getSessionFrictionBudget(session),
       }));
 
@@ -2800,7 +2830,7 @@ class SimulationOrchestrator {
       
       logs.push({
         timestamp: new Date().toISOString(),
-        phase: 'learning-reply',
+        phase: 'teaching-reply',
         durationMs: Date.now() - virtualReplyStart,
         details: {
           output: {
@@ -2831,7 +2861,7 @@ class SimulationOrchestrator {
         try {
           const aiResponseStart = Date.now();
           await this.assertCurrentSessionLeaseOwned(sessionId);
-          const aiResult = await this.retryLearnUpstream(sessionId, 'process-learning-turn', () =>
+          const aiResult = await this.retryLearnUpstream(sessionId, 'process-teaching-turn', () =>
             aiTeachingOrchestrator.processStudentMessage(
               teachingSessionId,
               virtualReplyResult.userVisible,
@@ -2871,7 +2901,7 @@ class SimulationOrchestrator {
 
           logs.push({
             timestamp: new Date().toISOString(),
-            phase: 'learning-response',
+            phase: 'teaching-response',
             durationMs: Date.now() - aiResponseStart,
             details: {
               output: {
@@ -2903,7 +2933,7 @@ class SimulationOrchestrator {
             const checkpointLearnerState = this.mergeLearnerState(
               profile,
               virtualReplyResult.learnerState || virtualReplyResult.internal?.learnerState,
-              'learning',
+              'teaching',
               this.parseStoryContextFromStageResults(stageResults)
             );
             const checkpointConversationHistory = [
@@ -2933,7 +2963,7 @@ class SimulationOrchestrator {
               taskRuntime: pendingTaskRuntime,
               conversationHistory: checkpointConversationHistory
             };
-            await this.updateStageResults(sessionId, 'learning', checkpointLearningState);
+            await this.updateStageResults(sessionId, 'teaching', checkpointLearningState);
             const taskCompletionResult = await this.completeCheckpointedSimulationTask(
               sessionId,
               session,
@@ -2953,7 +2983,7 @@ class SimulationOrchestrator {
                   phase: 'stage-transition',
                   details: {
                     output: {
-                      from: 'learning',
+                      from: 'teaching',
                       to: 'completed',
                       message: '学习路径已完成'
                     }
@@ -3015,7 +3045,7 @@ class SimulationOrchestrator {
               output: {
                 currentTask: currentTask.title,
                 currentMilestone: currentMilestone.title,
-                action: 'learning-step-stopped'
+                action: 'teaching-step-stopped'
               }
             }
           });
@@ -3031,7 +3061,7 @@ class SimulationOrchestrator {
             output: {
               currentTask: currentTask.title,
               currentMilestone: currentMilestone.title,
-              action: 'learning-step-stopped'
+              action: 'teaching-step-stopped'
             }
           }
         });
@@ -3052,7 +3082,7 @@ class SimulationOrchestrator {
               totalMilestones: milestones.length
             }
           : this.buildLearningProgressSnapshot(milestones, nextMilestoneIdx, nextTaskIdx)),
-        learnerState: this.mergeLearnerState(profile, virtualReplyResult.learnerState || virtualReplyResult.internal?.learnerState, 'learning', this.parseStoryContextFromStageResults(stageResults)),
+        learnerState: this.mergeLearnerState(profile, virtualReplyResult.learnerState || virtualReplyResult.internal?.learnerState, 'teaching', this.parseStoryContextFromStageResults(stageResults)),
         latestLearnerFeedback: virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null,
         closureDecision,
         taskRuntime: {
@@ -3081,14 +3111,14 @@ class SimulationOrchestrator {
         ]
       };
 
-      await this.updateStageResults(sessionId, 'learning', nextLearningState);
+      await this.updateStageResults(sessionId, 'teaching', nextLearningState);
       await this.assertCurrentSessionLeaseOwned(sessionId);
       await prisma.virtual_sessions.update({
         where: { id: sessionId },
         data: {
           currentTaskId: isPathCompleted ? null : currentTask.id,
           status: learningStepError ? 'failed' : undefined,
-          currentStage: learningStepError ? 'learning' : undefined,
+          currentStage: learningStepError ? 'teaching' : undefined,
           updatedAt: new Date()
         }
       });
@@ -3099,7 +3129,7 @@ class SimulationOrchestrator {
           phase: 'stage-transition',
           details: {
             output: {
-              from: 'learning',
+              from: 'teaching',
               to: 'failed',
               message: 'Learn 上游调用重试耗尽，保留当前 task 供重启 Learn 恢复',
               currentTaskId: currentTask.id
@@ -3109,14 +3139,14 @@ class SimulationOrchestrator {
       }
       
       if (isPathCompleted) {
-        await this.updateSessionStatus(sessionId, 'completed', 'learning');
+        await this.updateSessionStatus(sessionId, 'completed', 'teaching');
         
         logs.push({
           timestamp: new Date().toISOString(),
           phase: 'stage-transition',
           details: {
             output: {
-              from: 'learning',
+              from: 'teaching',
               to: 'completed',
               message: '学习路径已完成'
             }
@@ -3215,14 +3245,14 @@ class SimulationOrchestrator {
       }
 
       const initialStageResults = this.parseStageResultsPayload(session.stageResults)
-      if (initialStageResults.learning?.manualStop || session.status === 'failed') {
+      if (initialStageResults.teaching?.manualStop || session.status === 'failed') {
         return {
           success: false,
-          error: initialStageResults.learning?.stoppedReason ? `学习已停止: ${initialStageResults.learning.stoppedReason}` : '学习已停止'
+          error: initialStageResults.teaching?.stoppedReason ? `学习已停止: ${initialStageResults.teaching.stoppedReason}` : '学习已停止'
         }
       }
 
-      if (session.currentStage !== 'learning') {
+      if (session.currentStage !== 'teaching') {
         const startResult = await this.startLearningPhase(sessionId);
         if (!startResult.success) {
           return { success: false, error: startResult.error };
@@ -3236,11 +3266,11 @@ class SimulationOrchestrator {
       for (let i = 0; i < maxSteps; i++) {
         const latestSession = await this.getVirtualSession(sessionId)
         const latestStageResults = this.parseStageResultsPayload(latestSession.stageResults)
-        if (latestStageResults.learning?.manualStop || latestSession.status === 'failed') {
+        if (latestStageResults.teaching?.manualStop || latestSession.status === 'failed') {
           return {
             success: false,
             totalSteps: steps,
-            error: latestStageResults.learning?.stoppedReason ? `学习已停止: ${latestStageResults.learning.stoppedReason}` : '学习已停止'
+            error: latestStageResults.teaching?.stoppedReason ? `学习已停止: ${latestStageResults.teaching.stoppedReason}` : '学习已停止'
           }
         }
 
@@ -3321,7 +3351,7 @@ class SimulationOrchestrator {
         stageResults = JSON.parse(session.stageResults || '{}');
       } catch {}
 
-      const learningState = stageResults.learning || {};
+      const learningState = stageResults.teaching || {};
       const teachingSessionId = learningState.teachingSessionId;
 
       if (teachingSessionId) {
@@ -3338,14 +3368,14 @@ class SimulationOrchestrator {
         ).catch(() => {});
       }
 
-      await this.updateStageResults(sessionId, 'learning', {
+      await this.updateStageResults(sessionId, 'teaching', {
         ...learningState,
         manualStop: true,
         stoppedAt: new Date().toISOString(),
         stoppedReason: reason
       });
 
-      await this.updateSessionStatus(sessionId, 'failed', 'learning');
+      await this.updateSessionStatus(sessionId, 'failed', 'teaching');
 
       await this.addSessionLog(sessionId, {
         timestamp: new Date().toISOString(),
@@ -3382,7 +3412,7 @@ class SimulationOrchestrator {
         stageResults = JSON.parse(session.stageResults || '{}')
       } catch {}
 
-      const learningState = stageResults.learning || {}
+      const learningState = stageResults.teaching || {}
       const teachingSessionId = learningState.teachingSessionId
 
       if (session.learningPathId) {
@@ -3422,8 +3452,8 @@ class SimulationOrchestrator {
         keepLearningPath: false,
         nextStage: 'path',
         nextStatus: 'running',
-        removeStageResults: ['path', 'path_review', 'learning'],
-        logPhasesToRemove: ['learning-start', 'learning-step', 'stage-transition'],
+        removeStageResults: ['path', 'path_review', 'teaching'],
+        logPhasesToRemove: ['teaching-start', 'teaching-step', 'stage-transition'],
         // 重启课堂不重置 Path 上已完成 task 的真实进度。
         resetTaskProgress: false,
         clearCompletedAt: true
@@ -3459,7 +3489,7 @@ class SimulationOrchestrator {
         stageResults = JSON.parse(session.stageResults || '{}')
       } catch {}
 
-      const learningState = stageResults.learning || {}
+      const learningState = stageResults.teaching || {}
       const teachingSessionId = learningState.teachingSessionId
       const preferredTaskId = options.taskId || learningState.currentTaskId || undefined
       const teachingSessionHistory = [
@@ -3490,10 +3520,10 @@ class SimulationOrchestrator {
       await this.resetSessionRuntime(sessionId, {
         keepGoalConversation: true,
         keepLearningPath: true,
-        nextStage: 'learning',
+        nextStage: 'teaching',
         nextStatus: 'running',
-        removeStageResults: ['learning'],
-        logPhasesToRemove: ['learning-start', 'learning-step', 'learning-reply', 'learning-response', 'stage-transition'],
+        removeStageResults: ['teaching'],
+        logPhasesToRemove: ['teaching-start', 'teaching-step', 'teaching-reply', 'teaching-response', 'stage-transition'],
         resetTaskProgress: true,
         clearCompletedAt: true
       })
@@ -3502,8 +3532,8 @@ class SimulationOrchestrator {
       if (restartResult.success) {
         const restartedSession = await this.getVirtualSession(sessionId)
         const restartedStageResults = this.parseStageResultsPayload(restartedSession.stageResults)
-        await this.updateStageResults(sessionId, 'learning', {
-          ...(restartedStageResults.learning || {}),
+        await this.updateStageResults(sessionId, 'teaching', {
+          ...(restartedStageResults.teaching || {}),
           teachingSessionHistory
         })
         return restartResult
@@ -3535,13 +3565,13 @@ class SimulationOrchestrator {
 
   /**
    * 学习完成后生成 wrapup 总结 (调用 skill:session-wrapup)
-   * 将结果写入 stageResults.learning.wrapup
+   * 将结果写入 stageResults.teaching.wrapup
    */
   async generateWrapupForSession(sessionId: string): Promise<{ success: boolean; error?: string }> {
     try {
       const session = await this.getVirtualSession(sessionId);
       const stageResults = this.parseStageResultsPayload(session.stageResults);
-      const learning = stageResults.learning || {};
+      const learning = stageResults.teaching || {};
       const storyContext = stageResults.story || stageResults.storyContext || null;
 
       // 已经生成过就不重复
@@ -3602,8 +3632,8 @@ class SimulationOrchestrator {
 
       const result = await sessionWrapupAgent.generate(wrapupInput);
 
-      // 写回 stageResults.learning.wrapup
-      await this.updateStageResults(sessionId, 'learning', {
+      // 写回 stageResults.teaching.wrapup
+      await this.updateStageResults(sessionId, 'teaching', {
         ...learning,
         wrapup: {
           generatedAt: new Date().toISOString(),

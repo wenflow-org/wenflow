@@ -1,15 +1,19 @@
-import dotenv from 'dotenv';
+﻿import dotenv from 'dotenv';
 import systemPrisma from '../config/system-database';
 import { pathAgentRuntimeDefinition } from '../skills/path-planning/definition';
 import { goalConversationRuntimeDefinition } from '../skills/goal-conversation/definition';
-import { learningTurnRuntimeDefinition } from '../skills/learning-turn/definition';
+import { teachingTurnRuntimeDefinition } from '../skills/teaching-turn/definition';
 import { peerRuntimeDefinition } from '../skills/peer-reinforcement/definition';
 import { sessionWrapupRuntimeDefinition } from '../skills/session-wrapup/definition';
 import { learnerModelRuntimeDefinition } from '../agents/learner-model-agent/definition';
-import { pathSceneFramingRuntimeDefinition } from '../skills/path-scene-framing/definition';
 import { stageDesignerRuntimeDefinition } from '../skills/stage-designer/definition';
 import { virtualLearnerPersonaDesignerRuntimeDefinition } from '../skills/virtual-learner-persona-designer/definition';
 import { virtualLearnerScenarioDesignerRuntimeDefinition } from '../skills/virtual-learner-scenario-designer/definition';
+import { virtualLearnerGoalDialogueSimulatorRuntimeDefinition } from '../skills/virtual-learner-goal-dialogue-simulator/definition';
+import { virtualLearnerPathEvaluatorRuntimeDefinition } from '../skills/virtual-learner-path-evaluator/definition';
+import { virtualLearnerLearnTurnSimulatorRuntimeDefinition } from '../skills/virtual-learner-learn-turn-simulator/definition';
+import { virtualLearnerRefereeRuntimeDefinition } from '../skills/virtual-learner-referee/definition';
+import { virtualLearnerActorAuditorRuntimeDefinition } from '../skills/virtual-learner-actor-auditor/definition';
 import { goalAgentRuntimeDefinition as goalOrchestratorRuntimeDefinition } from '../coordinators/goal.definition';
 import { pathAgentRuntimeDefinition as pathOrchestratorRuntimeDefinition } from '../coordinators/path.definition';
 import { AITeachingCoordinatorRuntimeDefinition } from '../coordinators/ai-teaching.definition';
@@ -19,24 +23,21 @@ import { simulationAgentRuntimeDefinition as simulationOrchestratorRuntimeDefini
 dotenv.config();
 
 async function main() {
-  await systemPrisma.agent_definitions.deleteMany({
-    where: {
-      id: 'skill:peer-reinforcement',
-      managedByCode: true,
-    }
-  });
-
   const definitions = [
     pathAgentRuntimeDefinition,
     goalConversationRuntimeDefinition,
     learnerModelRuntimeDefinition,
-    learningTurnRuntimeDefinition,
+    teachingTurnRuntimeDefinition,
     peerRuntimeDefinition,
     sessionWrapupRuntimeDefinition,
-    pathSceneFramingRuntimeDefinition,
     stageDesignerRuntimeDefinition,
     virtualLearnerPersonaDesignerRuntimeDefinition,
     virtualLearnerScenarioDesignerRuntimeDefinition,
+    virtualLearnerGoalDialogueSimulatorRuntimeDefinition,
+    virtualLearnerPathEvaluatorRuntimeDefinition,
+    virtualLearnerLearnTurnSimulatorRuntimeDefinition,
+    virtualLearnerRefereeRuntimeDefinition,
+    virtualLearnerActorAuditorRuntimeDefinition,
   ];
 
   const orchestratorDefinitions = [

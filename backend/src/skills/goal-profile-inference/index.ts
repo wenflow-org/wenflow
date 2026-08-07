@@ -55,6 +55,17 @@ function safeText(value: any): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function readTimeConstraint(understanding: any): string {
+  return safeText(understanding?.available_resources?.time_budget)
+    || safeText(understanding?.available_resources?.time_horizon)
+    || safeText(understanding?.background?.available_time);
+}
+
+function readCurrentLevel(understanding: any): string {
+  return safeText(understanding?.current_baseline?.level)
+    || safeText(understanding?.background?.current_level);
+}
+
 function buildFallback(input: GoalProfileInferenceInput): GoalProfileInferenceOutput {
   const understanding = input.understanding || {};
   return {
@@ -63,11 +74,11 @@ function buildFallback(input: GoalProfileInferenceInput): GoalProfileInferenceOu
       ? understanding.background_experience.join('；')
       : safeText(understanding.background_experience) || '背景信息仍不充分，需要结合后续学习表现补足。',
     motivationNarrative: safeText(understanding.motivation) || '当前动机信息较弱，建议后续继续观察真实任务驱动力。',
-    timeConstraintNote: safeText(understanding.background?.available_time)
-      ? `可投入时间大致为 ${safeText(understanding.background?.available_time)}。`
+    timeConstraintNote: readTimeConstraint(understanding)
+      ? `可投入时间大致为 ${readTimeConstraint(understanding)}。`
       : '时间约束还不明确，课程应先按中等节奏试探。',
-    selfAssessmentNote: safeText(understanding.background?.current_level)
-      ? `当前自述水平为 ${safeText(understanding.background?.current_level)}，需要结合后续真实表现持续修正。`
+    selfAssessmentNote: readCurrentLevel(understanding)
+      ? `当前自述水平为 ${readCurrentLevel(understanding)}，需要结合后续真实表现持续修正。`
       : '当前缺少稳定自评基线，需要在学习过程中逐步校正。'
   };
 }

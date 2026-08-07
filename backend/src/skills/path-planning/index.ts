@@ -36,12 +36,9 @@ function normalizePromptStringArray(value: any): string[] {
     .filter((item): item is string => !!item);
 }
 
-function buildPathSceneFramingPromptInput(pathSceneFraming: any) {
-  if (!pathSceneFraming || typeof pathSceneFraming !== 'object') return null;
+function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
+  if (!normalizedInput || typeof normalizedInput !== 'object') return null;
 
-  const normalizedInput = pathSceneFraming.normalizedInput && typeof pathSceneFraming.normalizedInput === 'object'
-    ? pathSceneFraming.normalizedInput
-    : {};
   const learnerProfile = normalizedInput.learnerProfile && typeof normalizedInput.learnerProfile === 'object'
     ? normalizedInput.learnerProfile
     : {};
@@ -164,6 +161,45 @@ export function validatePathPlanningOutput(parsed: any) {
     return { valid: false as const, failureReason: 'PATH_PLANNING_COGNITIVE_CORE_MISSING' };
   }
 
+  const coreConcepts = Array.isArray(parsed.cognitiveCore.coreConcepts)
+    ? parsed.cognitiveCore.coreConcepts.filter((c: any) => c && typeof c === 'object')
+    : [];
+  if (coreConcepts.length > 0) {
+    const hubCount = coreConcepts.filter((c: any) => c.role === 'hub').length;
+    if (hubCount === 0) {
+      return { valid: false as const, failureReason: 'PATH_PLANNING_HUB_CONCEPT_MISSING' };
+    }
+    if (hubCount > 1) {
+      return { valid: false as const, failureReason: 'PATH_PLANNING_HUB_CONCEPT_MULTIPLE' };
+    }
+  }
+
+  const conceptIds = new Set<string>();
+  const conceptNames = new Set<string>();
+  for (const concept of coreConcepts) {
+    if (typeof concept.id === 'string' && concept.id) conceptIds.add(concept.id)
+    if (typeof concept.name === 'string' && concept.name) conceptNames.add(concept.name)
+  }
+  for (const milestone of parsed.milestones) {
+    if (!milestone || typeof milestone !== 'object') {
+      return { valid: false as const, failureReason: 'PATH_PLANNING_MILESTONE_INVALID' };
+    }
+    if (milestone.subtasks !== undefined || milestone.acceptanceCriteria !== undefined) {
+      return { valid: false as const, failureReason: 'PATH_PLANNING_LEGACY_TASK_FIELDS' };
+    }
+    if (conceptIds.size > 0 && typeof milestone.coreConcept === 'string' && milestone.coreConcept
+      && !conceptIds.has(milestone.coreConcept) && !conceptNames.has(milestone.coreConcept)) {
+      return { valid: false as const, failureReason: 'PATH_PLANNING_MILESTONE_CONCEPT_UNBOUND' };
+    }
+  }
+  const stageNumbers = parsed.milestones.map((m: any) => m && m.stageNumber).filter((n: any) => typeof n === 'number');
+  if (stageNumbers.length === parsed.milestones.length && stageNumbers.length > 0) {
+    const contiguous = stageNumbers.every((n: number, i: number) => n === i + 1);
+    if (!contiguous) {
+      return { valid: false as const, failureReason: 'PATH_PLANNING_STAGE_NUMBER_GAP' };
+    }
+  }
+
   return { valid: true as const };
 }
 
@@ -179,7 +215,6 @@ export const pathAgentDefinition: AgentDefinition = {
   description: '根据用户目标生成里程碑式学习路径，支持动态调整',
   
   capabilities: [
-    'goal-analysis',
     'path-generation',
     'milestone-planning',
     'dynamic-replanning',
@@ -356,7 +391,7 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
   conversationHistory?: any[];
   scenario?: string;
   replan?: any;
-  pathSceneFraming?: any;
+  normalizedInput?: any;
 }> {
   const caller: CallerInfo = { agentId: 'path-agent', skillId: 'path-planning' };
    
@@ -364,9 +399,8 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
   const confirmedProposal = input.confirmedProposal as any;
   const conversationHistory = input.conversationHistory as any[] || [];
   const replan = input.metadata?.replan as any;
-  const pathSceneFraming = input.metadata?.pathSceneFraming as any;
-  const framingNormalizedInput = pathSceneFraming?.normalizedInput && typeof pathSceneFraming.normalizedInput === 'object'
-    ? pathSceneFraming.normalizedInput
+  const framingNormalizedInput = input.metadata?.normalizedInput && typeof input.metadata.normalizedInput === 'object'
+    ? input.metadata.normalizedInput
     : null;
   const framingPainPoints = Array.isArray(framingNormalizedInput?.learnerProfile?.painPoints)
     ? framingNormalizedInput.learnerProfile.painPoints.filter(Boolean)
@@ -407,25 +441,22 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
       confirmedProposal,
       conversationHistory,
       replan,
-      pathSceneFraming,
+      normalizedInput: framingNormalizedInput,
     };
   }
   
   const userId = context?.userId || input?.metadata?.userId;
-  // 懒加载避免 skills/index -> path-planning -> skills/index 循环依赖
-  const { executeSkill, auxSkillDefinitionMap } = await import('..');
-  const parsed = await executeSkill(auxSkillDefinitionMap['goal-analysis'], {
-    goal: input.goal,
-    currentLevel: input.currentLevel,
-    timePerDay: input.timePerDay,
-    __onFailure: 'throw',
-    __prompt: { userId, requestPath: '/skills/path-planning/analyze-goal', callerAgentId: caller.agentId, callerAction: caller.action },
-  }) as {
-    subject: string;
-    level: string;
-    focus?: string[];
-    context?: string;
-    confidence?: number;
+  // 无结构化数据时的确定性兜底分析（原 goal-analysis aux skill 已移除：
+  // 主流程有 normalizedInput/structuredData 时不调用，fallback 输出也被 framing 覆盖，2026-08 去 LLM 化）
+  void userId;
+  const parsed = {
+    subject: String(input.goal || '学习目标'),
+    level: ['beginner', 'intermediate', 'advanced'].includes(input.currentLevel as string)
+      ? input.currentLevel as string
+      : 'beginner',
+    focus: [] as string[],
+    context: '',
+    confidence: 0.5,
   };
 
   return {
@@ -435,7 +466,7 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
     context: framingContext || parsed.context || '',
     confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
     replan,
-    pathSceneFraming,
+    normalizedInput: framingNormalizedInput,
   };
 }
 
@@ -456,16 +487,15 @@ async function generatePath(
     confirmedProposal?: any;
     conversationHistory?: any[];
     replan?: any;
-    pathSceneFraming?: any;
+    normalizedInput?: any;
   }
 ): Promise<PathOutput> {
   
   const confirmedProposal = analysis.confirmedProposal;
   const conversationHistory = analysis.conversationHistory;
   const replan = analysis.replan;
-  const pathSceneFraming = analysis.pathSceneFraming;
-  const framingNormalizedInput = pathSceneFraming?.normalizedInput && typeof pathSceneFraming.normalizedInput === 'object'
-    ? pathSceneFraming.normalizedInput
+  const framingNormalizedInput = analysis.normalizedInput && typeof analysis.normalizedInput === 'object'
+    ? analysis.normalizedInput
     : null;
   const framingConfirmedProposal = framingNormalizedInput?.confirmedProposal && typeof framingNormalizedInput.confirmedProposal === 'object'
     ? framingNormalizedInput.confirmedProposal
@@ -494,7 +524,7 @@ async function generatePath(
         : [];
   const observableResult = framingNormalizedInput?.successCriteria?.observableResult || null;
   const acceptanceCheck = framingNormalizedInput?.successCriteria?.acceptanceCheck || null;
-  const promptFriendlySceneFraming = buildPathSceneFramingPromptInput(pathSceneFraming);
+  const promptFriendlySceneFraming = buildPromptFriendlyNormalizedInput(framingNormalizedInput);
 
   const userPayload = `原始学习目标：${input.goal}
 学习主题：${analysis.subject}

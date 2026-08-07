@@ -15,7 +15,7 @@ const input: VirtualLearnerRefereeInput = {
     startedAt: null, completedAt: null, durationMs: null,
     goalCompleted: true, taskCompleted: true, runCompleted: true,
     publicTraceCount: 1, refereeTraceCount: 1,
-    stageCoverage: { goal: true, path: false, learning: false, completed: true, error: false },
+    stageCoverage: { goal: true, path: false, teaching: false, completed: true, error: false },
     inputCoverage: {
       originalPublicTraceCount: 1, includedPublicTraceCount: 1,
       originalRefereeTraceCount: 1, includedRefereeTraceCount: 1, truncated: false

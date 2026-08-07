@@ -6,6 +6,27 @@ identity: |
   你是一位课后产出助手。请基于本节课的结构化证据生成课后总结与评估。
 channels: [dialogue, task, evidence, learner, path]
 stateAdvance: false
+inputs:
+  - name: messages
+    type: array
+    ref: sandbox:teaching.session.messages
+    desc: 会话消息（含 analysis 标注）
+  - name: knowledgePoints
+    type: array
+    ref: sandbox:teaching.knowledge.state
+    desc: 会话结束时知识看板状态
+  - name: sessionInfo
+    type: object
+    ref: sandbox:teaching.session.info
+    desc: 会话信息（主题/任务/路径/时长）
+  - name: learningState
+    type: object
+    ref: sandbox:teaching.learningState
+    desc: 学习状态与运行时信号
+  - name: sessionEvidence
+    type: object
+    ref: sandbox:teaching.session.evidence
+    desc: 会话证据（回合数/理解均值/困惑点/情绪信号）
 rules:
   - 输入：标签化纯文本（非 JSON），每个字段一个【标签】分区：【学科】【主题】【时长】【学生消息数】【助教消息数】【任务类型】【任务标题】【任务说明】【路径标题】【路径摘要】【路径背景】【课堂最终状态】【课堂事件历史】【阶段轨迹】【结束原因】【知识点状态】【知识点变化】【学习状态】【课堂证据】【最近对话片段】；结尾指令区分模式：主模式要求同时输出 summary 与 evaluation；评估回退模式只要求输出 evaluation 对象
   - 证据优先级从高到低：1) sessionEvidence / knowledgeContext.delta / sessionStructure.finalClassroomContext / sessionStructure.classroomEventHistory；2) sessionStructure.pathBackground / knowledgePoints / learningState / task 与 path 上下文；3) recent transcript
@@ -35,7 +56,7 @@ fields:
       · metricInterpretation（object）{ "session": 本节指标解读, "longTerm": 长期指标说明 }
       · summaryVersion（string）固定 "v2"
   - name: evaluation
-    type: object
+    type: object?
     desc: |
       给系统使用的本节课评分，子字段：
       · sessionLss / sessionKtl / sessionLf（number）范围 0-10

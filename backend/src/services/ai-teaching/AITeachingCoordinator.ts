@@ -3,7 +3,7 @@ import { logger } from '../../utils/logger';
 import prisma from '../../config/database';
 import learningStateService, { LearningStateMetrics } from '../learning/learning-state.service';
 import type { SessionWrapupArtifact, SessionWrapupSummary } from '../../skills/session-wrapup';
-import { learningTurnAgentDefinition, type LearningTurnInput, type LearningTurnOutput } from '../../skills/learning-turn';
+import { teachingTurnAgentDefinition, type TeachingTurnInput, type TeachingTurnOutput } from '../../skills/teaching-turn';
 import { executeSkill, executeSkillWithResult, auxSkillDefinitionMap, sessionWrapupAgentDefinition, peerAgentDefinition } from '../../skills';
 import { getEventBus } from '../../gateway/event-bus';
 import { buildTeachingScenarioContext, type TeachingScenarioContext } from './TeachingContextBuilder';
@@ -22,6 +22,7 @@ import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefresh
 import { learnerSnapshotService } from '../learner/LearnerSnapshotService';
 import { dashboardGuidanceSnapshotService } from '../learner/DashboardGuidanceSnapshotService';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
+import { assembleTeachingTurnChannels } from '../field-dispatcher';
 import { createDomainEvent } from '../../events/contracts';
 import { replanAdvisoryService, type ReplanAdvisory } from './ReplanAdvisoryService';
 import { hasReliableSessionEvaluation, mergeFinalTeachingState } from './SessionFinalizationPolicy';
@@ -29,7 +30,7 @@ import { classifyFinalizationError } from './FinalizationErrors';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
 
 export type TeachingMode = 'tutor' | 'peer' | 'debate';
-const AI_TEACHING_AGENT_ID = 'learning-agent';
+const AI_TEACHING_AGENT_ID = 'teaching-agent';
 
 export interface KnowledgePointStatus {
   name: string;
@@ -309,7 +310,7 @@ function detectEndIntent(message: string) {
 
 function determineNextStage(params: {
   currentStage: LearnStage;
-  teachingOutput: LearningTurnOutput;
+  teachingOutput: TeachingTurnOutput;
   peerTriggered: boolean;
   learnerMessage: string;
 }): { stage: LearnStage; reason: string } {
@@ -348,7 +349,7 @@ function buildClassroomContext(params: {
   previousState: Record<string, any> | null | undefined;
   stage: LearnStage;
   stageReason: string;
-  teachingOutput?: LearningTurnOutput | null;
+  teachingOutput?: TeachingTurnOutput | null;
   learnerMessage: string;
   context: TeachingScenarioContext;
   knowledgeState: TeachingKnowledgePointState[];
@@ -709,10 +710,10 @@ function computeSessionEvidence(session: TeachingSessionRecord) {
   };
 }
 
-function buildLearningTurnInput(
+async function buildTeachingTurnInput(
   session: TeachingSessionRecord,
   context: TeachingScenarioContext
-): LearningTurnInput {
+): Promise<TeachingTurnInput> {
   const compression = teachingContextCompressionService.compress(session.messages);
   const teachingState = session.teachingState || {};
   const classroomContext = teachingState.classroomContext || {};
@@ -729,9 +730,18 @@ function buildLearningTurnInput(
       : [],
   };
 
+  // 配置式输入通道（P2 声明 + 本链运行时消费）：routings 表 teaching-agent 通道行抽值优先，
+  // 缺失回退既有组装；visibleDialogueContext 保持 {role, content} 映射语义
+  const { channels } = await assembleTeachingTurnChannels({ session, teachingState, context }).catch(() => ({ channels: {}, skipped: [] }));
+  const configuredVisible = Array.isArray(channels['visibleDialogueContext'])
+    ? channels['visibleDialogueContext']
+        .filter((item: any) => item && (typeof item.role === 'string' || typeof item.role === 'number'))
+        .map((item: any) => ({ role: item.role, content: typeof item.content === 'string' ? item.content : '' }))
+    : null;
+
   return {
     messages: compression.messages,
-    learner: context.learnerProjection,
+    learner: channels['learner.learnerProjection'] || context.learnerProjection,
     scenario: {
       subject: context.subject,
       topic: context.topic,
@@ -759,18 +769,20 @@ function buildLearningTurnInput(
         recap: compression.recap,
       } : undefined,
     },
-    classroomContext,
+    classroomContext: channels['classroomContext'] || classroomContext,
     classroomEventContext,
-    visibleDialogueContext: session.messages.map((item) => ({
+    visibleDialogueContext: configuredVisible || session.messages.map((item) => ({
       role: item.role,
       content: item.content,
     })),
     knowledge: {
-      points: session.knowledgeState,
+      points: (channels['knowledge.state'] && Array.isArray(channels['knowledge.state'])
+        ? channels['knowledge.state']
+        : session.knowledgeState),
     },
     controls: {
       mode: session.mode as TeachingMode,
-      teachingControlContext,
+      teachingControlContext: channels['controls.teachingControlContext'] || teachingControlContext,
     }
   };
 }
@@ -803,7 +815,7 @@ function pruneOverlyBroadCoreConceptPoints(
 
 function reconcileTeachingKnowledgeState(
   context: TeachingScenarioContext,
-  output: LearningTurnOutput,
+  output: TeachingTurnOutput,
   existingPoints: TeachingKnowledgePointState[]
 ) {
   const coreConcept = context.taskProfile.coreConcept || context.taskProfile.linkedConceptName || null;
@@ -827,16 +839,16 @@ function reconcileTeachingKnowledgeState(
         currentPoint,
         points: filteredOutputPoints,
       }
-    } as LearningTurnOutput,
+    } as TeachingTurnOutput,
     existingPoints: filteredExistingPoints,
   };
 }
 
-function extractTeachingOutput(agentOutput: any): LearningTurnOutput {
+function extractTeachingOutput(agentOutput: any): TeachingTurnOutput {
   return (
-    agentOutput?.internal?.ext?.learningTurnOutcome?.artifact
+    agentOutput?.internal?.ext?.teachingTurnOutcome?.artifact
     || agentOutput?.internal?.ext?.teaching
-  ) as LearningTurnOutput;
+  ) as TeachingTurnOutput;
 }
 
 function extractPeerDebug(agentOutput: any) {
@@ -1095,7 +1107,7 @@ export class AITeachingOrchestrator {
     const fallbackOpening = buildFallbackOpening(context, openingMode);
     let parsed: any = null;
     try {
-      const result = await withTimeout(executeSkillWithResult(auxSkillDefinitionMap['learning-opening-generator'], {
+      const result = await withTimeout(executeSkillWithResult(auxSkillDefinitionMap['teaching-opening-generator'], {
         subject: context.subject,
         topic: context.topic,
         taskTitle: context.taskTitle,
@@ -1147,7 +1159,7 @@ export class AITeachingOrchestrator {
     message: string,
     options: ProcessStudentMessageOptions = {},
   ): Promise<{
-    analysis: LearningTurnOutput['analysis'];
+    analysis: TeachingTurnOutput['analysis'];
     aiResponse: string;
     strategies: string[];
     knowledgePoint: string | null;
@@ -1224,12 +1236,12 @@ export class AITeachingOrchestrator {
       session.knowledgeState,
     );
 
-    const turnInput = buildLearningTurnInput({
+    const turnInput = await buildTeachingTurnInput({
       ...session,
       messages: updatedMessages,
       knowledgeState: frozenKnowledgeState,
     }, context);
-    const turnResult = await executeSkill(learningTurnAgentDefinition, turnInput, {
+    const turnResult = await executeSkill(teachingTurnAgentDefinition, turnInput, {
       contextEnvelope: {
         schemaVersion: 'context-envelope/v1',
         principal: { userId: session.userId },
@@ -1237,7 +1249,7 @@ export class AITeachingOrchestrator {
       },
     });
     if (!turnResult.success) {
-      throw new Error(typeof turnResult.error === 'string' ? turnResult.error : turnResult.error?.message || 'LEARNING_TURN_FAILED');
+      throw new Error(typeof turnResult.error === 'string' ? turnResult.error : turnResult.error?.message || 'TEACHING_TURN_FAILED');
     }
 
     const turnRuntimeEnvelope = turnResult?.runtimeEnvelope || null;
@@ -1274,7 +1286,7 @@ export class AITeachingOrchestrator {
         envelopeTerminal: turnRuntimeEnvelope?.businessState?.isTerminal === true,
       });
     }
-    const effectiveTeachingOutput: LearningTurnOutput = {
+    const effectiveTeachingOutput: TeachingTurnOutput = {
       ...teachingOutput,
       control: {
         ...teachingOutput.control,
@@ -1352,7 +1364,7 @@ export class AITeachingOrchestrator {
       ? [...previousTeachingState.classroomEventHistory]
       : [];
 
-    classroomEvents.push(buildClassroomEvent('learning-turn', nextStageDecision.reason, {
+    classroomEvents.push(buildClassroomEvent('teaching-turn', nextStageDecision.reason, {
       stage: nextStageDecision.stage,
       focusKnowledgePoint: classroomContext.focus.currentKnowledgePoint,
       learnerMessage: message,
@@ -1505,7 +1517,7 @@ export class AITeachingOrchestrator {
       },
       };
 
-      // 检查点产生：learning-turn 可选输出 control.checkpoint，按规则落库为 pendingCheckpoint
+      // 检查点产生：teaching-turn 可选输出 control.checkpoint，按规则落库为 pendingCheckpoint
       const checkpointCandidate = teachingOutput.control.checkpoint;
       if (
         !submittedCheckpoint
@@ -2174,7 +2186,7 @@ export class AITeachingOrchestrator {
 
   private async syncVirtualSessionTimeout(sessionId: string): Promise<void> {
     const sessions = await prisma.virtual_sessions.findMany({
-      where: { currentStage: 'learning' },
+      where: { currentStage: 'teaching' },
       select: {
         id: true,
         status: true,
@@ -2191,7 +2203,7 @@ export class AITeachingOrchestrator {
         stageResults = {};
       }
 
-      const learningState = stageResults.learning || {};
+      const learningState = stageResults.teaching || {};
       if (learningState?.teachingSessionId !== sessionId) continue;
 
       const nextLearningState = {
@@ -2225,7 +2237,7 @@ export class AITeachingOrchestrator {
               details: {
                 error: 'TEACHING_SESSION_TIMEOUT',
                 output: {
-                  action: 'learning-step-stopped',
+                  action: 'teaching-step-stopped',
                   teachingSessionId: sessionId
                 }
               }

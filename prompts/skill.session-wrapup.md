@@ -1,6 +1,6 @@
 ---
 agentId: skill:session-wrapup
-coreHash: 6a248735085ef2de0c1351a2566b6fbf5be1d9c616f12e9ea01bf5e5c08e9a7a
+coreHash: b766b25515b0c5e302da0cf7e4ff1bea354bb557e41a1d0884220e9fb47994cd
 coreVersion: 1
 temperature: 0.7
 maxTokens: 4000
@@ -18,6 +18,13 @@ failurePolicy: fallback
 - evidence：客观事实轨迹：课堂证据、知识变化、课后总结、运行统计（只读追加）
 - learner：学习者画像投影（长期特征）
 - path：路径与确认方案上下文
+
+输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
+- 「messages（array）」`sandbox:teaching.session.messages`（编排注入） — 会话消息（含 analysis 标注）
+- 「knowledgePoints（array）」`sandbox:teaching.knowledge.state`（编排注入） — 会话结束时知识看板状态
+- 「sessionInfo（object）」`sandbox:teaching.session.info`（编排注入） — 会话信息（主题/任务/路径/时长）
+- 「learningState（object）」`sandbox:teaching.learningState`（编排注入） — 学习状态与运行时信号
+- 「sessionEvidence（object）」`sandbox:teaching.session.evidence`（编排注入） — 会话证据（回合数/理解均值/困惑点/情绪信号）
 
 ## 执行规则
 
@@ -47,7 +54,7 @@ failurePolicy: fallback
 · evaluationHighlights（object）{ "strengths": string[], "improvements": string[] }
 · metricInterpretation（object）{ "session": 本节指标解读, "longTerm": 长期指标说明 }
 · summaryVersion（string）固定 "v2"
-- evaluation · object — 给系统使用的本节课评分，子字段：
+- evaluation · object? — 给系统使用的本节课评分，子字段：
 · sessionLss / sessionKtl / sessionLf（number）范围 0-10
 · confidence（number）范围 0-1，表示证据充分度，不是主观自信
 · reasoning（string）最多 120 字，并引用 1-2 个关键证据

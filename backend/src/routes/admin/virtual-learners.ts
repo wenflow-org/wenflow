@@ -22,6 +22,7 @@ import { signProjectionToken, SyntheticCapability, verifyProjectionToken } from 
 import blackboxVirtualLearnerRunner from '../../virtual-lab/blackbox-runner';
 import type { LearnerAction } from '../../virtual-lab/contracts';
 import { assertAssistedSessionMode } from '../../virtual-lab/session-mode';
+import { setRequestContext, getRequestContext } from '../../gateway/api-gateway/context';
 import {
   parseJson,
   normalizeStoryPoolData,
@@ -34,6 +35,12 @@ import {
 } from '../../virtual-lab/session-factory';
 
 const router = express.Router();
+
+/** 模拟会话操作统一注入 sessionId：执行日志/瀑布可按模拟会话归组追溯 */
+router.param('sessionId', (req, _res, next, sessionId) => {
+  setRequestContext({ ...getRequestContext(), sessionId, sourceEntry: 'platform' });
+  next();
+});
 
 const DEFAULT_SCENARIO_CANDIDATE_DOMAINS = [
   '番茄工作法与时间管理',
@@ -118,7 +125,7 @@ function parseStoryContext(session: any) {
 function parseLearningProgress(session: any) {
   try {
     const stageResults = JSON.parse(session.stageResults || '{}');
-    return stageResults.learning || {};
+    return stageResults.teaching || {};
   } catch {
     return {};
   }
@@ -145,29 +152,29 @@ function buildLearningConversationProjection(logs: any[] = []) {
   const conversation: Array<{ role: 'assistant' | 'user'; content: string; phase: string; timestamp?: string | null }> = [];
 
   for (const log of logs) {
-    if (log?.phase === 'learning-start' && log?.details?.output?.welcomeMessage) {
+    if (log?.phase === 'teaching-start' && log?.details?.output?.welcomeMessage) {
       conversation.push({
         role: 'assistant',
         content: String(log.details.output.welcomeMessage),
-        phase: 'learning-start',
+        phase: 'teaching-start',
         timestamp: log.timestamp || null,
       });
     }
 
-    if (log?.phase === 'learning-reply' && log?.details?.output?.reply) {
+    if (log?.phase === 'teaching-reply' && log?.details?.output?.reply) {
       conversation.push({
         role: 'user',
         content: String(log.details.output.reply),
-        phase: 'learning-reply',
+        phase: 'teaching-reply',
         timestamp: log.timestamp || null,
       });
     }
 
-    if (log?.phase === 'learning-response' && log?.details?.output?.aiResponse) {
+    if (log?.phase === 'teaching-response' && log?.details?.output?.aiResponse) {
       conversation.push({
         role: 'assistant',
         content: String(log.details.output.aiResponse),
-        phase: 'learning-response',
+        phase: 'teaching-response',
         timestamp: log.timestamp || null,
       });
     }
@@ -204,7 +211,7 @@ function buildLearningConversationRoundsProjection(logs: any[] = []) {
   let roundNumber = 0;
 
   for (const log of logs) {
-    if (log?.phase === 'learning-start' && log?.details?.output?.welcomeMessage) {
+    if (log?.phase === 'teaching-start' && log?.details?.output?.welcomeMessage) {
       rounds.push({
         round: roundNumber,
         isOpening: true,
@@ -234,7 +241,7 @@ function buildLearningConversationRoundsProjection(logs: any[] = []) {
       continue;
     }
 
-    if (log?.phase === 'learning-reply' && log?.details?.output?.reply) {
+    if (log?.phase === 'teaching-reply' && log?.details?.output?.reply) {
       pendingLearner = {
         timestamp: log.timestamp || null,
         content: String(log.details.output.reply),
@@ -247,7 +254,7 @@ function buildLearningConversationRoundsProjection(logs: any[] = []) {
       continue;
     }
 
-    if (log?.phase === 'learning-response' && pendingLearner) {
+    if (log?.phase === 'teaching-response' && pendingLearner) {
       roundNumber += 1;
       const output = log?.details?.output || {};
       rounds.push({
@@ -408,7 +415,7 @@ function buildSessionConversations(session: any, logs: any[] = [], goalConversat
 
 function buildSessionBindings(session: any) {
   const stageResults = parseStageResults(session);
-  const learningState = stageResults.learning || {};
+  const learningState = stageResults.teaching || {};
 
   return {
     goalConversationId: session.goalConversationId || null,
@@ -421,7 +428,7 @@ function buildSessionBindings(session: any) {
 function buildSessionLearnerStateProjection(session: any, stageResults: any, storyContext: any) {
   const goalState = stageResults.goal || {};
   const pathReviewState = stageResults.path_review || {};
-  const learningState = stageResults.learning || {};
+  const learningState = stageResults.teaching || {};
   const goalLearnerState = goalState.learnerState && typeof goalState.learnerState === 'object' ? goalState.learnerState : null;
   const pathReviewLearnerState = pathReviewState.learnerState && typeof pathReviewState.learnerState === 'object' ? pathReviewState.learnerState : null;
   const learningLearnerState = learningState.learnerState && typeof learningState.learnerState === 'object' ? learningState.learnerState : null;
@@ -455,9 +462,9 @@ function buildSessionLearnerStateProjection(session: any, stageResults: any, sto
 }
 
 function buildSessionKnowledgeProjection(stageResults: any, logs: any[] = [], teachingSession?: any) {
-  const learningState = stageResults.learning || {};
+  const learningState = stageResults.teaching || {};
   const learningConversation = Array.isArray(learningState.conversationHistory) ? learningState.conversationHistory : [];
-  const latestLearningResponse = [...logs].reverse().find((log: any) => log?.phase === 'learning-response')?.details?.output || {};
+  const latestLearningResponse = [...logs].reverse().find((log: any) => log?.phase === 'teaching-response')?.details?.output || {};
   const teachingKnowledgePoints = Array.isArray(teachingSession?.knowledgeState) ? teachingSession.knowledgeState : [];
   const knowledgePoints = teachingKnowledgePoints.length
     ? teachingKnowledgePoints
@@ -496,7 +503,7 @@ function buildSessionRuntime(session: any, teachingSession?: any) {
   const goalState = stageResults.goal || {};
   const pathState = stageResults.path || {};
   const pathReviewState = stageResults.path_review || {};
-  const learningState = stageResults.learning || {};
+  const learningState = stageResults.teaching || {};
   const bindings = buildSessionBindings(session);
   const learnerState = buildSessionLearnerStateProjection(session, stageResults, storyContext);
   const knowledgeState = buildSessionKnowledgeProjection(stageResults, logs, teachingSession);
@@ -559,11 +566,11 @@ function buildVirtualLearnerTestProjection(profile: any) {
     ? storyPool.find((story: any) => story?.id === latestStoryContext.storyId) || latestStoryContext
     : latestStoryContext || storyPool[0] || null;
 
-  let recommendedEntry: 'dashboard' | 'goal' | 'path' | 'learning' = 'dashboard';
+  let recommendedEntry: 'dashboard' | 'goal' | 'path' | 'teaching' = 'dashboard';
   let recommendedReason = '当前还没有运行记录，先进入前台总览。';
 
   if (latestSession && latestBindings?.currentTaskId) {
-    recommendedEntry = 'learning';
+    recommendedEntry = 'teaching';
     recommendedReason = '最近一次运行已经进入学习阶段，直接查看当前学习任务最贴近真实状态。';
   } else if (latestSession && latestBindings?.learningPathId) {
     recommendedEntry = 'path';
@@ -630,7 +637,7 @@ function normalizeGoalLearnerStateForSummary(session: any, goalState: any) {
   const finalStage = String(goalState?.finalStage || goalState?.stage || '').toLowerCase();
   const goalCompleted = ['ready', 'completed'].includes(finalStage)
     || session?.currentStage === 'path'
-    || session?.currentStage === 'learning'
+    || session?.currentStage === 'teaching'
     || !!session?.learningPathId;
 
   if (!goalCompleted) return learnerState;
@@ -648,9 +655,9 @@ function buildSessionSummary(session: any) {
   const storyContext = parseStoryContext(session);
   const stageResults = parseStageResults(session);
   const goalState = stageResults.goal || {};
-  const learningProgress = stageResults.learning || {};
+  const learningProgress = stageResults.teaching || {};
   const logs = parseLogs(session);
-  const roundCount = logs.filter((log: any) => log?.phase === 'virtual-reply' || log?.phase === 'learning-reply').length;
+  const roundCount = logs.filter((log: any) => log?.phase === 'virtual-reply' || log?.phase === 'teaching-reply').length;
   const runtime = buildSessionRuntime(session);
   const conversations = buildSessionConversations(session, logs);
 
@@ -1958,7 +1965,7 @@ router.get('/sessions/:sessionId', async (req: any, res) => {
     }
 
     let teachingSession: any = null;
-    const teachingSessionId = stageResults?.learning?.teachingSessionId;
+    const teachingSessionId = stageResults?.teaching?.teachingSessionId;
     if (typeof teachingSessionId === 'string' && teachingSessionId.trim()) {
       teachingSession = await teachingSessionRepository.getById(teachingSessionId.trim());
     }
@@ -2170,7 +2177,7 @@ router.get('/sessions/:sessionId/context', async (req: any, res) => {
       });
     }
 
-    const teachingSessionId = stageResults?.learning?.teachingSessionId;
+    const teachingSessionId = stageResults?.teaching?.teachingSessionId;
     if (typeof teachingSessionId === 'string' && teachingSessionId.trim()) {
       teachingSession = await teachingSessionRepository.getById(teachingSessionId.trim());
     }
@@ -2329,11 +2336,11 @@ router.post('/sessions/:sessionId/blackbox-rerun', async (req: any, res) => {
       return res.status(409).json({ success: false, error: '当前会话不是 blackbox-api 实验' });
     }
     const snapshot = sourceState.experimentSnapshot;
-    const simulatorSnapshots = [snapshot?.simulators?.goal, snapshot?.simulators?.learning];
+    const simulatorSnapshots = [snapshot?.simulators?.goal, snapshot?.simulators?.teaching];
     const hasCompleteRuntimeSnapshot = snapshot?.actorProfile
       && snapshot?.frictionBudget
       && typeof snapshot?.simulatorPrompts?.goal === 'string'
-      && typeof snapshot?.simulatorPrompts?.learning === 'string'
+      && typeof snapshot?.simulatorPrompts?.teaching === 'string'
       && simulatorSnapshots.every((item: any) => item?.route?.providerId
         && item?.route?.credentialFingerprint
         && item?.route?.endpoint
@@ -2799,9 +2806,9 @@ router.post('/sessions/:sessionId/start-learning', async (req: any, res) => {
 
 /**
  * 执行单步学习
- * POST /api/admin/virtual-sessions/:sessionId/learning-step
+ * POST /api/admin/virtual-sessions/:sessionId/teaching-step
  */
-router.post('/sessions/:sessionId/learning-step', async (req: any, res) => {
+router.post('/sessions/:sessionId/teaching-step', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
     const result = await runAssistedSessionMutation(sessionId, () =>
@@ -3275,11 +3282,11 @@ router.get('/regression/compare-sessions', async (req: any, res) => {
         updatedAt: s.updatedAt,
         goalStage: stageResults?.goal?.finalStage || stageResults?.goal?.stage || null,
         pathReady: !!stageResults?.path?.success,
-        learnerStateSnapshot: stageResults?.learning?.learnerState || stageResults?.goal?.learnerState || null,
-        wrapup: stageResults?.learning?.wrapup || null,
+        learnerStateSnapshot: stageResults?.teaching?.learnerState || stageResults?.goal?.learnerState || null,
+        wrapup: stageResults?.teaching?.wrapup || null,
         rounds: {
           goal: Array.isArray(stageResults?.goal?.conversationHistory) ? stageResults.goal.conversationHistory.length : 0,
-          learning: Array.isArray(stageResults?.learning?.conversationHistory) ? stageResults.learning.conversationHistory.length : 0,
+          learning: Array.isArray(stageResults?.teaching?.conversationHistory) ? stageResults.teaching.conversationHistory.length : 0,
         }
       };
     };

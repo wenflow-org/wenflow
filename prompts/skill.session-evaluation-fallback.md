@@ -1,6 +1,6 @@
 ---
 agentId: skill:session-evaluation-fallback
-coreHash: f798d5cce66a3077fd20bc2ca2853190d1af72bd10e8d7b5424927a193621f38
+coreHash: 73341ab164a53c40218b9379cdd935554f4d87579604689ed33c289e6f8b0cae
 coreVersion: 1
 temperature: 0.2
 maxTokens: 1500
@@ -27,9 +27,9 @@ failurePolicy: fallback
 
 ## 输出字段
 
-- sessionLss · number — 本节课学习状态得分，范围 0-10，基于参与度、理解信号与节奏
-- sessionKtl · number — 本节课知识转化得分，范围 0-10，基于知识点掌握变化
-- sessionLf · number — 本节课流畅度得分，范围 0-10，基于连续推进与卡点情况
+- sessionLss · number — 本节学习压力得分，范围 0-10，与主文件 session-wrapup 极性一致：8-10 多轮阻塞、反复困惑、高负荷；5-7 明显吃力和停顿但引导下仍能推进；1-4 课堂整体顺畅
+- sessionKtl · number — 本节知识获得质量得分，范围 0-10，极性：8-10 学生能独立完成核心任务或修正关键误解后稳定应用核心知识点；5-7 引导下能推进但对核心概念仍模糊；1-4 反复卡住或关键误解未解决
+- sessionLf · number — 本节疲劳负担得分，范围 0-10，与主文件 session-wrapup 极性一致：8-10 明显疲劳、低效重复、情绪受挫或持续投入下降；5-7 存在一定疲劳或重复但仍能维持参与；1-4 精力基本稳定、课堂参与和回应效率良好
 - confidence · number — 评估可信度，范围 0-1；证据不足时必须低于 0.7
 - reasoning · string — 评估依据，一句话概括使用了哪些课堂证据
 

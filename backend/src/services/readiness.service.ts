@@ -1,5 +1,6 @@
 import { decryptSecret } from '../utils/secret-crypto';
-import { FIELD_ROUTING_SEED_MANIFEST } from './field-routing-bootstrap.service';
+import { FIELD_ROUTING_SEED_MANIFEST, detectFieldRoutingDrift } from './field-routing-bootstrap.service';
+import { logger } from '../utils/logger';
 
 export interface ReadinessResult {
   ready: boolean;
@@ -22,9 +23,9 @@ interface MainDatabase {
 interface SystemDatabase {
   platform_api_configs: { findFirst(args: any): Promise<any> };
   agent_prompts: { findMany(args: any): Promise<Array<{ agentId: string }>> };
-  agent_contracts: { count(args: any): Promise<number> };
-  field_definitions: { count(args: any): Promise<number> };
-  agent_field_routings: { count(args: any): Promise<number> };
+  agent_contracts: { count(args: any): Promise<number>; findMany(args?: any): Promise<Array<Record<string, any>>> };
+  field_definitions: { count(args: any): Promise<number>; findMany(args?: any): Promise<Array<Record<string, any>>> };
+  agent_field_routings: { count(args: any): Promise<number>; findMany(args?: any): Promise<Array<Record<string, any>>> };
   agent_registrations: { count(): Promise<number> };
   skill_registrations: { count(): Promise<number> };
 }
@@ -33,7 +34,7 @@ const CRITICAL_PROMPT_IDS = [
   'skill:goal-conversation',
   'skill:path-planning',
   'skill:stage-designer',
-  'skill:learning-turn',
+  'skill:teaching-turn',
   'skill:session-wrapup'
 ] as const;
 
@@ -116,8 +117,34 @@ export class ReadinessService {
         && routingCount === FIELD_ROUTING_SEED_MANIFEST.routings.length
         ? 'ok' : 'failed';
       checks.gatewayRegistry = agentCount > 0 && skillCount > 0 ? 'ok' : 'failed';
+
+      // seed 漂移检测：seed 声明 vs DB 行内容 diff（只读，warn 不阻断）
+      // bootstrap 的 upsert(update:{}) 只建不更新，seed 改动后旧行不会自动同步——
+      // 此检测让"声明一套、库里另一套"的漂移在启动时可见
+      this.detectFieldRoutingDriftWarnings().catch(() => undefined);
     } catch {
       checks.systemDatabase = 'failed';
+    }
+  }
+
+  private async detectFieldRoutingDriftWarnings(): Promise<void> {
+    try {
+      const report = await detectFieldRoutingDrift(this.systemDatabase);
+      if (report.driftCount > 0) {
+        logger.warn(`[readiness] 字段路由 seed 漂移 ${report.driftCount} 项（seed 声明与 DB 不一致，admin 编辑行已豁免）`, {
+          items: report.items.slice(0, 20).map((item) => ({
+            kind: item.kind,
+            key: item.key,
+            field: item.field,
+            seed: item.seedValue,
+            db: item.dbValue,
+          })),
+        });
+      }
+    } catch (error) {
+      logger.debug('[readiness] 字段路由漂移检测失败（不影响就绪判定）', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

@@ -32,11 +32,11 @@ It turns a vague goal into an actionable learning path: clarify the problem, gen
 
 As AI gets better at producing answers, the more valuable capabilities are no longer just remembering content, but:
 
-- defining problems
-- seeing structure
-- making judgments
-- collaborating with AI
-- continuously adjusting through feedback
+- **problem definition**: turning a vague goal into an explorable question
+- **systems thinking**: seeing the structure between knowledge, context, and action
+- **judgment**: deciding what is worth believing amid information overload
+- **AI collaboration**: treating AI as a partner for questioning, feedback, and reasoning
+- **creativity**: making new connections between what you already know
 
 **Answers will keep getting cheaper. Problems will matter more.**
 
@@ -46,24 +46,32 @@ As AI gets better at producing answers, the more valuable capabilities are no lo
 
 ### Product Flow Preview
 
-These five screenshots show WenFlow's core experience, from a real problem to a complete learning loop.
+These six screenshots show WenFlow's core experience, from a real problem to a complete learning loop.
 
-| Start from a Real Problem |
+| ① Start from a Real Problem |
 |:---:|
 | ![Start from a Real Problem](docs/images/home-start-from-problem.png) |
+| Say what you're trying to solve first, instead of hunting for courses |
 
-| Clarify the Real Goal | Generate a Learning Path |
+| ② Clarify the Real Goal | ③ Generate a Learning Path |
 |:---:|:---:|
 | ![Clarify the Real Goal](docs/images/goal-clarification.png) | ![Generate a Learning Path](docs/images/learning-path.png) |
+| The AI keeps asking until the goal is clear | A vague goal becomes phases, tasks, and a first step you can do today |
 
-| Enter Round-based Learning | Learning Loop Overview |
+| ④ Enter Round-based Learning | ⑤ Learning Loop Overview |
 |:---:|:---:|
 | ![Enter Round-based Learning](docs/images/round-based-learning.png) | ![Learning Loop Overview](docs/images/learning-loop-overview.png) |
+| The AI teaches, you answer, feedback is instant | A post-session summary and evaluation show you what to learn next |
+
+| ⑥ Learning State Tracking |
+|:---:|
+| ![Learning State Tracking](docs/images/learning-state.png) |
+| LSS / KTL / LF / LSB tracked continuously, and it tells you when to rest |
 
 ### From Problem to Path
-- **Problem Clarification**: use 5-8 rounds of natural dialogue to surface context, prior knowledge, time, and constraints
-- **Path Generation**: turn a vague goal into phases, tasks, and a first step you can start today
-- **Round-based Learning**: AI asks, the user responds, feedback is immediate, and the path keeps adjusting with understanding
+- **Problem Clarification**: multi-round dialogue until the goal is clear
+- **Path Generation**: a vague goal becomes phases, tasks, and a first step you can start today
+- **Round-based Learning**: the AI teaches, you answer, feedback is instant, and the path keeps adjusting to your understanding
 
 ### Learning State Tracking
 Inspired by load-and-recovery ideas from sports science, WenFlow tracks learning state rather than only whether a task was completed:
@@ -79,49 +87,57 @@ Inspired by load-and-recovery ideas from sports science, WenFlow tracks learning
 
 ```mermaid
 flowchart TD
-    U[User] --> G1[Goal Conversation Skill\nClarify Learning Goals]
-    G1 --> P1[Path Planning Skill\nGenerate Phases and Tasks]
-    P1 --> T0[AI Teaching Orchestrator\n6-phase State Machine]
+    U[User] --> G1[Goal Conversation Skill\nMulti-round Clarify → Proposal Confirm]
+    G1 -- explicit user confirm --> P1[Path Planning Skill\nCognitive Map + Milestone Skeleton]
+    P1 --> P2[Stage Designer Skill\nStage → Tasks + Acceptance Criteria]
+    P2 --> T0[AI Teaching Orchestrator\nRound-based State Machine]
 
     T0 --> T1[Learning Turn Skill\nExplain, Ask, Diagnose Each Round]
     T1 --> K1[Knowledge State Update\nTopic Progress]
     T1 --> S1[Learning State Update\nLSS, KTL, LF, LSB]
-    T1 --> C1[Checkpoint Quiz\nSubmit and Judge]
+    T1 --> C1[Checkpoint Quiz\nFail → Back to Teaching]
 
     T1 --> D{Need Reinforcement?}
-    D -- Yes --> PEER[Peer Learning Skill\nDiscussion-based Reinforcement]
-    D -- No --> NEXT[Continue Teaching]
-
-    NEXT --> END{Lesson Complete?}
+    D -- Yes --> PEER[Peer Learning Skill\nFeynman-style Discussion]
+    D -- No --> NEXT{Lesson Complete?}
     C1 --> NEXT
-    PEER --> END
+    PEER --> NEXT
 
-    END -- Complete --> W1[Post-session Skill\nSummary, Evaluation + Knowledge Enrichment]
-    W1 --> R1[Replan Suggestion\nAdjust Path?]
-    R1 --> P1
+    NEXT -- Complete --> W1[Post-session Skill\nSummary + Evaluation]
+    W1 -- lesson:completed event --> E1[Outbox Event\nLearner Evidence / Projection Refresh]
+    W1 --> R1[Replan Suggestion\nApplied After User Confirm]
+    E1 -. next-lesson context .-> T0
+    R1 -. after confirm .-> P1
 ```
 
-- Top-level agents are orchestration-oriented; the Skills hold prompts and call the LLM directly.
-- First clarify goals, then break them into executable learning paths
-- Teaching progresses in rounds, continuously assessing understanding (opening → teaching → intervention → checkpoint → wrapup)
-- Trigger peer reinforcement when student struggles, never abandon current task
-- Automatically generate summary and evaluation after each session, with replan suggestions (auto-adjustment is off by default; suggestions only)
+- Top-level agents are orchestration-oriented; the Skills actually hold the prompts and call the LLM.
+- Clarify the goal first, then break it into a path. Generation starts only after you confirm (an AI-reported "ready" doesn't count).
+- Teaching progresses opening → teaching ⇄ intervention → ready_to_close → wrapup; checkpoints only appear inside rounds; session mode is always tutor.
+- When the student gets stuck (help keywords, several low-understanding rounds), peer reinforcement kicks in — the current task is never abandoned.
+- Each session ends with a summary, evaluation, and replan suggestions. Paths are never changed automatically; a new version is created only after you confirm.
+- After a lesson, events are persisted and the learner profile is updated; the next lesson starts with that context.
 
 ### Virtual Learner Lab
 
-Virtual learner accounts exercise the **real production chain** to validate the platform:
+Virtual learner accounts exercise the product the way a real user would, to validate the platform:
 
-- **Black-box simulation**: drives goal → path → learn through the normal user API, with referee and actor-auditor checks
-- **Quick Learn**: picks a virtual account's task, auto-completes a lesson, and produces a Propagation Report with persisted state
+- **Black-box simulation**: walks through goal → path → learning like a normal user, with a referee and actor-fidelity audit checking the results
+- **Quick Learn**: picks a virtual account's task, auto-completes a lesson, and produces a propagation report
 
 ### Admin Console
 
-`/admin` provides 16+ pages: platform overview, users/learner center, teaching sessions, goal conversations, virtual learners, Skill catalog and Prompt design workbench, Agent topology, orchestrator structure, execution logs, trace waterfall, model & API config, core-file sync workbench, etc.
+The admin panel lives at `/admin` with 16+ pages, all backed by real APIs (demo data only when nothing is available):
+
+- **Overview & Users**: platform overview — is today healthy, which model fails the most, what needs investigation; users / learner center — learning state, risk and fatigue, with manual snapshot recompute; teaching sessions, goal conversations, feedback center
+- **Prompt Engineering**: a full workflow for editing prompts — compile, gate checks, publish, rollback, version diff, plus rerunning a recent real call to verify
+- **Observability & Debugging**: topology canvas shows which nodes are failing or idle; orchestrator shows how data flows between stages; execution logs include retry timelines with auto-refresh and export; trace waterfall breaks a slow request down to each step
+- **Models & Access**: how models are routed (chat / reasoning / evaluation), connectivity checks, network boundary policy, retry and timeout settings
+- **Virtual Experiments**: AI-generated personas, story-pool driven experiments, Quick Learn auto-teaching, and a session cockpit for black-box simulation — see the "Virtual Learner Lab" section below
 
 ### Prompt Engineering (Prompt Lab v4, File-as-Truth)
 
 - **Source of truth**: `prompts/core/*.yaml` (the only manual edit entry, committed to git)
-- **Compiled artifacts**: `prompts/skill.*.md` (generated deterministically, the only text models read)
+- **Compiled artifacts**: `prompts/skill.*.md` (generated deterministically; models read this text only)
 - **Publish chain**: edit core.yaml → compile (gate checks) → publish (write md + DB ACTIVE) → rollback
 - **Database**: `agent_prompts` is only a runtime mirror; files are the truth, DB is the mirror
 
@@ -174,7 +190,7 @@ npm run env:setup
 ```
 
 Note: For first-time use, it is recommended to finish environment setup before choosing a startup script. If `backend/.env` is missing or `JWT_SECRET` is invalid, the startup scripts will also launch the setup flow automatically.
-When the backend starts, it automatically syncs core prompts (File-as-Truth: `prompts/core/*.yaml` are the source of truth; the compiled `prompts/skill.*.md` artifacts sync to database ACTIVE versions). This keeps a fresh GitHub checkout aligned with the repository's prompt source of truth.
+When the backend starts, core prompts are synced from the repo into the database automatically; a fresh GitHub checkout just works, no manual import needed.
 
 ### Local Development
 
@@ -183,7 +199,7 @@ When the backend starts, it automatically syncs core prompts (File-as-Truth: `pr
 ./start-dev.ps1
 ```
 
-Note: The script checks dependencies, generates both Prisma clients, runs `prisma migrate deploy` independently for the main and System databases, guides environment setup if needed, and runs one core prompt sync before startup.
+Note: The script installs dependencies, generates both Prisma clients, runs migrations for the main and System databases, guides environment setup if needed, and syncs core prompts once before startup.
 To skip Prisma initialization: `./start-dev.ps1 -SkipPrisma`  
 Important: this flag also skips the startup prompt sync, so it should only be used when both the database schema and prompt records are already ready.
 
@@ -273,7 +289,7 @@ npm run prompts:lint
 npm run prompts:core:check
 ```
 
-Note: `prompts:sync-core` treats the compiled repository artifacts as the source of truth for core prompts and syncs database ACTIVE versions to match. If repo and DB differ, it creates a new version, activates it, and archives the old one. `prompts:backfill-core` only fills missing nodes and does not overwrite existing ACTIVE prompts. If you run `npm run dev` directly inside `backend/`, the server also performs the same core prompt sync during startup. See [`prompts/_README.md`](prompts/_README.md) for more.
+Note: `prompts:sync-core` aligns the database ACTIVE versions with the compiled repo artifacts, creating and switching to a new version when they differ (the old one is archived). `prompts:backfill-core` only fills missing nodes and never overwrites existing ACTIVE prompts. If you run `npm run dev` directly inside `backend/`, the same sync also runs during startup. See [`prompts/_README.md`](prompts/_README.md) for more.
 
 ### Local SQLite Path Rule
 
@@ -333,14 +349,15 @@ See [ADMIN_SETUP.md](ADMIN_SETUP.md) for details.
 
 ## Educational Theory Foundation
 
-Based on 6 major educational theories:
+The design is grounded in these theories, each backed by concrete implementation:
 
-1. **Cognitive Load Theory** - Avoid information overload
-2. **Self-directed Learning** - User autonomy
-3. **Dreyfus Five-stage Model** - Dynamic stage assessment
-4. **Zone of Proximal Development + Scaffolding** - Slightly above current level
-5. **Formative Assessment** - Immediate feedback
-6. **Deliberate Practice** - Targeted weakness improvement
+1. **Cognitive Load Theory** - per-round knowledge-point caps, response-format budgets, automatic context compression
+2. **Self-directed Learning** - you state the goal and confirm the plan; pacing is yours
+3. **Zone of Proximal Development + Scaffolding** - difficulty adjusts to understanding; prerequisite gaps are backfilled first
+4. **Formative Assessment** - per-round understanding diagnosis plus checkpoint quizzes; instant feedback, retry on failure
+5. **Deliberate + Retrieval Practice** - mastery means explaining it yourself; post-session retrieval self-tests carry into the next lesson
+6. **Feynman Technique (Self-explanation)** - explain it in your own words to someone else; if you can't, learn it again
+7. **Anderson's Taxonomy** - six cognitive levels from remember to create, applied across labeling, teaching, and completion checks
 
 ---
 

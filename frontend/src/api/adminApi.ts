@@ -253,25 +253,6 @@ export const adminPlatformSettingsApi = {
   }
 };
 
-export interface AdvanceTimePreviewResponse {
-  dayDiff: number;
-  simulatedAsOf: string;
-  hasMetricRecord: boolean;
-  latestMetricAt?: string;
-  before: Record<string, unknown>;
-  after: Record<string, unknown> | null;
-}
-
-export const adminDevtoolsApi = {
-  advanceTimePreview: async (data: { days: number; userId?: string; pathId?: string }) => {
-    const response = await adminAxios.post('/admin/devtools/advance-time', data);
-    return response.data?.data as AdvanceTimePreviewResponse;
-  },
-  getDebugEvents: async (params?: { limit?: number; userId?: string; types?: string[]; from?: string; to?: string }) => {
-    const response = await adminAxios.get('/admin/debug/events', { params });
-    return response.data?.data;
-  }
-};
 
 /**
  * 测试工具 API
@@ -438,110 +419,11 @@ export interface AdminRegistryResponse {
   };
 }
 
-export interface AgentDesignDetail {
-  agentId: string;
-  requestedAgentId: string;
-  basic: {
-    name: string;
-    version: string;
-    type: string;
-    category: string;
-    description: string;
-  };
-  runtime: {
-    role: 'agent' | 'orchestrator';
-    kind: 'agent' | 'orchestrator' | 'alias';
-    runtimeEnabled: boolean;
-    userVisible: boolean;
-    monitoringGroup: string | null;
-    ioContractVersion: 'legacy' | 'agent-output-v1';
-    aliases: string[];
-    agentFlow?: {
-      description?: string;
-      steps?: Array<{ agentId: string; action?: string; condition?: string }>;
-    };
-    promptManagement?: {
-      mode: 'agent-prompt' | 'agent-no-direct-prompt' | 'legacy-service';
-      note: string | null;
-    };
-  };
-  definition: {
-    capabilities: string[];
-    subscribes: string[];
-    publishes: string[];
-    inputSchema: Record<string, unknown>;
-    outputSchema: Record<string, unknown>;
-  };
-  samples: {
-    agentCallLogs: Array<{
-      id: string;
-      calledAt: string;
-      success: boolean;
-      durationMs: number;
-      error: string | null;
-      input: unknown;
-      output: unknown;
-    }>;
-  };
-}
 
-export interface AgentRelationItem {
-  agentId: string;
-  group: string;
-  members: Array<{
-    agentId: string;
-    name: string;
-    role: 'agent' | 'orchestrator';
-  }>;
-}
 
-export interface OrchestratorRelationItem {
-  orchestratorId: string;
-  group: string;
-  members: Array<{
-    agentId: string;
-    name: string;
-    role: 'agent' | 'orchestrator';
-  }>;
-}
 
-export interface PathAgentInputConfig {
-  version: string;
-  normalizedInput: {
-    descriptionSources: string[];
-    subjectSources: string[];
-    skillLevelSources: string[];
-    timePerDaySources: string[];
-    deadlineTextSources: string[];
-    includeStructuredData: boolean;
-    includeConfirmedProposal: boolean;
-    includeConfidenceScores: boolean;
-    includeConversationHistory: boolean;
-  };
-}
 
-export interface AgentDataContractSection {
-  name: string;
-  description: string;
-  fields: Array<{
-    key: string;
-    description: string;
-  }>;
-}
 
-export interface PathAgentNormalizedInputPreview {
-  description: string | null;
-  subject: string | null;
-  deadlineText: string | null;
-  sourceConversationId: string | null;
-  existingPathId: string | null;
-  skillLevel: string | null;
-  timePerDay: string | null;
-  structuredData: Record<string, unknown> | null;
-  confirmedProposal: Record<string, unknown> | null;
-  confidenceScores: Record<string, unknown> | null;
-  conversationHistory: Array<{ role: string; content: string }>;
-}
 
 export interface PathAgentSupportingEvidencePreview {
   usagePolicy: 'reference_only';
@@ -551,68 +433,9 @@ export interface PathAgentSupportingEvidencePreview {
   notes: string[];
 }
 
-export interface ManifestDiagnosticsData {
-  summary: {
-    manifestTotal: number;
-    registrationTotal: number;
-    modelConfigTotal: number;
-    calledAgentTotal: number;
-    catalogTotal: number;
-    driftCount: number;
-    outputContractSampleSize?: number;
-  };
-  outputContracts?: {
-    agentCallLogs: {
-      sampleSize: number;
-      v1: number;
-      legacy: number;
-      mixed: number;
-      unknown: number;
-    };
-  };
-  drift: {
-    missingRegistrations: string[];
-    unknownRegistrations: string[];
-    aliasRegistrations: Array<{ id: string; canonicalId: string }>;
-    unknownModelConfigs: string[];
-    aliasModelConfigs: Array<{ id: string; canonicalId: string }>;
-    unknownLogAgents: string[];
-    aliasLogAgents: Array<{ id: string; canonicalId: string; calls: number }>;
-    catalogOnly: string[];
-  };
-  samples: {
-    registrations: Array<{
-      id: string;
-      name: string;
-      type: string;
-      updatedAt: string;
-    }>;
-    modelConfigs: Array<{
-      agentId: string;
-      enabled: boolean;
-      updatedAt: string;
-    }>;
-    calledAgents: Array<{
-      agentId: string;
-      _count: { _all: number };
-    }>;
-  };
-}
 
 export const adminAgentsApi = {
-  /**
-   * 获取 Agent 列表
-   */
-  getAgents: async () => {
-    return adminAxios.get('/admin/agents');
-  },
 
-  /**
-   * 获取 Agent 状态
-   */
-  status: async () => {
-    return adminAxios.get('/admin/agents/status');
-  },
 
   /**
    * 获取 Agent 日志
@@ -638,95 +461,18 @@ export const adminAgentsApi = {
     return adminAxios.get(`/admin/agents/logs/${encodeURIComponent(id)}`);
   },
 
-  getRegistry: async () => {
-    return adminAxios.get<AdminRegistryResponse>('/admin/agents/registry');
-  },
 
-  getAgentDesign: async (agentId: string) => {
-    return adminAxios.get<{ data: AgentDesignDetail }>(`/admin/agents/design/${encodeURIComponent(agentId)}`);
-  },
 
-  getAgentRelations: async () => {
-    return adminAxios.get<{ data: { agents: AgentRelationItem[] } }>('/admin/agents/relations');
-  },
 
-  getOrchestratorRelations: async () => {
-    return adminAxios.get<{ data: { agents: OrchestratorRelationItem[]; orchestrators: OrchestratorRelationItem[] } }>(
-      '/admin/agents/relations'
-    );
-  },
 
-  getAgentConfig: async (agentId: string) => {
-    return adminAxios.get<{ data: {
-      agentId: string;
-      config: PathAgentInputConfig;
-      defaults: PathAgentInputConfig;
-      availableSourcePaths: Record<string, string[]>;
-    } }>(`/admin/agents/${encodeURIComponent(agentId)}/config`);
-  },
 
-  getAgentDataContract: async (agentId: string) => {
-    return adminAxios.get<{ data: {
-      agentId: string;
-      entryPayload: AgentDataContractSection;
-      derivedInput: AgentDataContractSection;
-      outputContract: AgentDataContractSection;
-    } }>(`/admin/agents/${encodeURIComponent(agentId)}/data-contract`);
-  },
 
-  previewAgentConfig: async (agentId: string, sampleGoalFinalPayload: Record<string, unknown>) => {
-    return adminAxios.post<{ data: {
-      agentId: string;
-      normalizedInput: PathAgentNormalizedInputPreview;
-    } }>(`/admin/agents/${encodeURIComponent(agentId)}/config-preview`, {
-      sampleGoalFinalPayload
-    });
-  },
 
-  updateAgentConfig: async (agentId: string, config: PathAgentInputConfig) => {
-    return adminAxios.put<{ data: { agentId: string; config: PathAgentInputConfig } }>(
-      `/admin/agents/${encodeURIComponent(agentId)}/config`,
-      config
-    );
-  },
 
-  getOrchestratorConfig: async (agentId: string) => {
-    return adminAxios.get<{ data: {
-      agentId: string;
-      config: PathAgentInputConfig;
-      defaults: PathAgentInputConfig;
-      availableSourcePaths: Record<string, string[]>;
-    } }>(`/admin/agents/${encodeURIComponent(agentId)}/config`);
-  },
 
-  getOrchestratorDataContract: async (agentId: string) => {
-    return adminAxios.get<{ data: {
-      agentId: string;
-      entryPayload: AgentDataContractSection;
-      derivedInput: AgentDataContractSection;
-      outputContract: AgentDataContractSection;
-    } }>(`/admin/agents/${encodeURIComponent(agentId)}/data-contract`);
-  },
 
-  previewOrchestratorConfig: async (agentId: string, sampleGoalFinalPayload: Record<string, unknown>) => {
-    return adminAxios.post<{ data: {
-      agentId: string;
-      normalizedInput: PathAgentNormalizedInputPreview;
-    } }>(`/admin/agents/${encodeURIComponent(agentId)}/config-preview`, {
-      sampleGoalFinalPayload
-    });
-  },
 
-  updateOrchestratorConfig: async (agentId: string, config: PathAgentInputConfig) => {
-    return adminAxios.put<{ data: { agentId: string; config: PathAgentInputConfig } }>(
-      `/admin/agents/${encodeURIComponent(agentId)}/config`,
-      config
-    );
-  },
 
-  getManifestDiagnostics: async () => {
-    return adminAxios.get<{ data: ManifestDiagnosticsData }>('/admin/manifest/diagnostics');
-  },
 };
 
 export const adminRuntimeDefinitionsApi = {
@@ -734,17 +480,11 @@ export const adminRuntimeDefinitionsApi = {
     return adminAxios.get('/admin/runtime-definitions/agents');
   },
 
-  getAgentDefinitionDetail: async (id: string) => {
-    return adminAxios.get(`/admin/runtime-definitions/agents/${encodeURIComponent(id)}`);
-  },
 
   getOrchestratorDefinitions: async () => {
     return adminAxios.get('/admin/runtime-definitions/orchestrators');
   },
 
-  getOrchestratorDefinitionDetail: async (id: string) => {
-    return adminAxios.get(`/admin/runtime-definitions/orchestrators/${encodeURIComponent(id)}`);
-  },
 
   getPromptCallLogs: async (params?: {
     limit?: number;
@@ -758,15 +498,6 @@ export const adminRuntimeDefinitionsApi = {
     return adminAxios.get('/admin/runtime-definitions/prompt-call-logs', { params });
   },
 
-  getPathGenerationEvents: async (params?: {
-    limit?: number;
-    pathId?: string;
-    traceId?: string;
-    status?: string;
-    phase?: string;
-  }) => {
-    return adminAxios.get('/admin/flow-events/path-generation', { params });
-  },
 };
 
 // ============================================================
@@ -794,20 +525,6 @@ export interface CreateFieldPayload {
   reason?: string;
 }
 
-export const adminFieldRoutingsApi = {
-  getStages: async () => adminAxios.get('/admin/field-routings/stages'),
-  getStageDetail: async (stage: string) =>
-    adminAxios.get(`/admin/field-routings/stages/${encodeURIComponent(stage)}`),
-  createField: async (payload: CreateFieldPayload) =>
-    adminAxios.post('/admin/field-routings/fields', payload),
-  patchRouting: async (agentId: string, fieldId: string, patch: FieldRoutingPatch) =>
-    adminAxios.patch(
-      `/admin/field-routings/routings/${encodeURIComponent(agentId)}/${encodeURIComponent(fieldId)}`,
-      patch
-    ),
-  getChanges: async (params?: { fieldId?: string; agentId?: string; limit?: number }) =>
-    adminAxios.get('/admin/field-routings/changes', { params }),
-};
 
 /**
  * Skill 工作台综合元数据 API
@@ -818,6 +535,39 @@ export const adminSkillWorkbenchApi = {
     const canonicalSkillId = skillId.startsWith('skill:') ? skillId : `skill:${skillId}`;
     return adminAxios.get(`/admin/skills/${encodeURIComponent(canonicalSkillId)}/workbench-meta`);
   },
+};
+
+/**
+ * 字段路由中心 API（agent 管辖 skill 的字段归属/流向/编辑）
+ */
+export const adminFieldRoutingsApi = {
+  getStages: async () => adminAxios.get('/admin/field-routings/stages'),
+
+  getStageDetail: async (stage: string) =>
+    adminAxios.get(`/admin/field-routings/stages/${encodeURIComponent(stage)}`),
+
+  getFlow: async (stage: string) =>
+    adminAxios.get(`/admin/field-routings/flow/${encodeURIComponent(stage)}`),
+
+  updateRouting: async (agentId: string, fieldId: string, data: {
+    render?: 'visible' | 'hidden';
+    handoff?: string[];
+    internal?: boolean;
+    accumulate?: boolean;
+    notes?: string;
+  }) =>
+    adminAxios.patch(`/admin/field-routings/routings/${encodeURIComponent(agentId)}/${encodeURIComponent(fieldId)}`, data),
+
+  createField: async (data: {
+    fieldId: string;
+    stage: string;
+    promptRole: string;
+    valueType?: string;
+    description?: string;
+  }) => adminAxios.post('/admin/field-routings/fields', data),
+
+  getChanges: async (params?: { stage?: string; fieldId?: string; limit?: number }) =>
+    adminAxios.get('/admin/field-routings/changes', { params }),
 };
 
 /**
@@ -939,9 +689,6 @@ export const adminGoalConversationsApi = {
   getDetail: async (id: string) => {
     return adminAxios.get(`/admin/goal-conversations/${encodeURIComponent(id)}`);
   },
-  update: async (id: string, payload: { status?: string; collectedData?: string }) => {
-    return adminAxios.patch(`/admin/goal-conversations/${encodeURIComponent(id)}`, payload);
-  },
   remove: async (id: string) => {
     return adminAxios.delete(`/admin/goal-conversations/${encodeURIComponent(id)}`);
   },
@@ -963,6 +710,9 @@ export const adminAnnouncementsApi = {
   create: async (data: Record<string, unknown>) => {
     return adminAxios.post('/admin/announcements', data);
   },
+  update: async (id: string, data: Record<string, unknown>) => {
+    return adminAxios.put(`/admin/announcements/${encodeURIComponent(id)}`, data);
+  },
   publish: async (id: string) => {
     return adminAxios.put(`/admin/announcements/${encodeURIComponent(id)}/publish`);
   },
@@ -971,6 +721,27 @@ export const adminAnnouncementsApi = {
   },
   remove: async (id: string) => {
     return adminAxios.delete(`/admin/announcements/${encodeURIComponent(id)}`);
+  }
+};
+
+/**
+ * 平台 MCP 工具管理（外挂能力页）
+ */
+export const adminMcpApi = {
+  list: async () => {
+    return adminAxios.get('/admin/mcp');
+  },
+  createTool: async (data: Record<string, unknown>) => {
+    return adminAxios.post('/admin/mcp/tools', data);
+  },
+  updateTool: async (id: string, data: Record<string, unknown>) => {
+    return adminAxios.put(`/admin/mcp/tools/${encodeURIComponent(id)}`, data);
+  },
+  removeTool: async (id: string) => {
+    return adminAxios.delete(`/admin/mcp/tools/${encodeURIComponent(id)}`);
+  },
+  testTool: async (id: string) => {
+    return adminAxios.post(`/admin/mcp/tools/${encodeURIComponent(id)}/test`);
   }
 };
 
@@ -985,33 +756,8 @@ export const adminAgentPromptsApi = {
     return adminAxios.get('/admin/agent-prompts', { params });
   },
 
-  /**
-   * 获取 Agent 活跃 Prompt
-   */
-  getActivePrompt: async (agentId: string) => {
-    return adminAxios.get(`/admin/agent-prompts/${agentId}/active`);
-  },
 
-  /**
-   * 获取 Prompt 详情
-   */
-  getPromptDetail: async (id: string) => {
-    return adminAxios.get(`/admin/agent-prompts/detail/${id}`);
-  },
 
-  /**
-   * 创建新 Prompt 版本
-   */
-  createPrompt: async (data: {
-    agentId: string;
-    name: string;
-    description?: string;
-    systemPrompt: string;
-    temperature?: number;
-    maxTokens?: number;
-  }) => {
-    return adminAxios.post('/admin/agent-prompts', data);
-  },
 
   /**
    * 发布 Prompt 版本
@@ -1020,22 +766,6 @@ export const adminAgentPromptsApi = {
     return adminAxios.put(`/admin/agent-prompts/${id}/publish`);
   },
 
-  seedCorePrompts: async () => {
-    return adminAxios.post('/admin/agent-prompts/seed-core');
-  },
-
-  /**
-   * 更新 Prompt 草稿
-   */
-  updatePrompt: async (id: string, data: {
-    name?: string;
-    description?: string;
-    systemPrompt?: string;
-    temperature?: number;
-    maxTokens?: number;
-  }) => {
-    return adminAxios.put(`/admin/agent-prompts/${id}`, data);
-  },
 
   /**
    * 删除 Prompt 草稿
@@ -1082,11 +812,9 @@ export const adminSkillsApi = {
     enabled?: boolean;
   }) => {
     // Phase 2：不提交 temperature/maxTokens，避免旧调用方误写
-    const {
-      temperature: _t,
-      maxTokens: _m,
-      ...routingOnly
-    } = data;
+    const { temperature, maxTokens, ...routingOnly } = data;
+    void temperature;
+    void maxTokens;
     return adminAxios.put(`/admin/skill-model-configs/${skillId}`, routingOnly);
   },
 
@@ -1101,10 +829,6 @@ export const adminSkillsApi = {
   getEffectiveSkillPrompt: async (skillId: string) => {
     return adminAxios.get(`/admin/skills/${encodeURIComponent(skillId)}/effective-prompt`);
   },
-
-  getAgentRelations: async () => {
-    return adminAxios.get('/admin/skills/agent-relations');
-  },
 };
 
 export const adminVirtualLearnersApi = {
@@ -1114,29 +838,6 @@ export const adminVirtualLearnersApi = {
     existingPersonaSeed?: Record<string, unknown>;
   }) => {
     return adminAxios.post('/admin/virtual-learners/generate-persona', data || {});
-  },
-
-  generateScenario: async (data?: {
-    preferredDomains?: string[];
-    preferredGoalTypes?: string[];
-    preferredLevels?: string[];
-    preferredMotivations?: string[];
-    avoidDomains?: string[];
-  }) => {
-    return adminAxios.post('/admin/virtual-learners/generate-scenario', data || {});
-  },
-
-  generateProfile: async (data: {
-    learningGoal: string;
-    knowledgeLevel: string;
-    simulationMode?: string;
-    personalityTraits?: {
-      verbosity?: string;
-      enthusiasm?: string;
-      confusionStyle?: string;
-    };
-  }) => {
-    return adminAxios.post('/admin/virtual-learners/generate-profile', data);
   },
 
   getVirtualLearners: async (params?: { page?: number; limit?: number }) => {
@@ -1151,39 +852,12 @@ export const adminVirtualLearnersApi = {
     return adminAxios.get(`/admin/virtual-learners/${id}/stories`);
   },
 
-  getVirtualLearnerTestProjection: async (id: string) => {
-    return adminAxios.get(`/admin/virtual-learners/${id}/test-projection`);
-  },
-
   createProjectionToken: async (id: string, data?: { storyId?: string; virtualSessionId?: string; scope?: 'dashboard' | 'full' }) => {
     return adminAxios.post(`/admin/virtual-learners/${id}/projection-token`, data || {});
   },
 
-  resolveProjectionToken: async (token: string) => {
-    return adminAxios.post('/admin/virtual-learners/projection/resolve', { token });
-  },
-
-  draftVirtualLearnerProfile: async (id: string) => {
-    return adminAxios.post(`/admin/virtual-learners/${id}/draft-profile`);
-  },
-
   draftVirtualLearnerStories: async (id: string) => {
     return adminAxios.post(`/admin/virtual-learners/${id}/draft-stories`);
-  },
-
-  updateStoryStatus: async (
-    profileId: string,
-    storyIndex: number,
-    payload: {
-      status?: string;
-      title?: string;
-      storyOutline?: string;
-      storyTriggerEvent?: string;
-      visibleOpening?: string;
-      pressurePoints?: string[];
-    }
-  ) => {
-    return adminAxios.put(`/admin/virtual-learners/${profileId}/stories/${storyIndex}`, payload);
   },
 
   deleteStory: async (profileId: string, storyIndex: number) => {
@@ -1247,22 +921,6 @@ export const adminVirtualLearnersApi = {
     return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}`);
   },
 
-  getVirtualSessionContext: async (sessionId: string) => {
-    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/context`);
-  },
-
-  getVirtualSessionGoalConversation: async (sessionId: string) => {
-    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/goal-conversation`);
-  },
-
-  getVirtualSessionLearningPath: async (sessionId: string) => {
-    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/learning-path`);
-  },
-
-  getVirtualSessionLearningTask: async (sessionId: string) => {
-    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/learning-task`);
-  },
-
   getVirtualSessionTeachingDetail: async (sessionId: string, teachingSessionId?: string) => {
     return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/teaching-detail`, {
       params: teachingSessionId ? { teachingSessionId } : undefined,
@@ -1279,18 +937,6 @@ export const adminVirtualLearnersApi = {
 
   executeBlackboxVirtualAction: async (sessionId: string, action: Record<string, unknown>, expectedTraceCount: number) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-action`, action, blackboxCommandConfig(expectedTraceCount));
-  },
-
-  observeBlackboxVirtualSession: async (sessionId: string, expectedTraceCount: number) => {
-    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-observe`, {}, blackboxCommandConfig(expectedTraceCount));
-  },
-
-  getBlackboxVirtualSnapshot: async (sessionId: string) => {
-    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/blackbox-snapshot`);
-  },
-
-  generateBlackboxRefereeReport: async (sessionId: string) => {
-    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-referee`);
   },
 
   generateBlackboxEvaluations: async (sessionId: string) => {
@@ -1354,7 +1000,7 @@ export const adminVirtualLearnersApi = {
   },
 
   virtualSessionLearningStep: async (sessionId: string) => {
-    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/learning-step`);
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/teaching-step`);
   },
 
   virtualSessionAutoLearning: async (sessionId: string, data?: { maxMilestones?: number }) => {
@@ -1404,21 +1050,6 @@ export const adminVirtualLearnersApi = {
   deleteVirtualSession: async (sessionId: string) => {
     return adminAxios.delete(`/admin/virtual-learners/sessions/${sessionId}`);
   },
-
-  regressionRun: async (profileId: string, data?: {
-    storyId?: string;
-    storyIndex?: number;
-    systemPromptOverrides?: { goalAgent?: string; pathAgent?: string };
-    maxGoalRounds?: number;
-  }) => {
-    return adminAxios.post(`/admin/virtual-learners/${profileId}/regression-run`, data);
-  },
-
-  compareSessions: async (sessionA: string, sessionB: string) => {
-    return adminAxios.get('/admin/virtual-learners/regression/compare-sessions', {
-      params: { sessionA, sessionB }
-    });
-  },
 };
 
 // ============================================================
@@ -1451,61 +1082,6 @@ export const adminPromptOpsApi = {
     return adminAxios.get('/admin/prompt-ops/protocol-view');
   },
 
-  listEvalCases: async (agentId?: string) => {
-    return adminAxios.get('/admin/prompt-ops/eval-cases', {
-      params: agentId ? { agentId } : {}
-    });
-  },
-
-  createEvalCase: async (payload: CreateEvalCasePayload) => {
-    return adminAxios.post('/admin/prompt-ops/eval-cases', payload);
-  },
-
-  updateEvalCase: async (id: string, payload: Partial<CreateEvalCasePayload>) => {
-    return adminAxios.put(`/admin/prompt-ops/eval-cases/${id}`, payload);
-  },
-
-  deleteEvalCase: async (id: string) => {
-    return adminAxios.delete(`/admin/prompt-ops/eval-cases/${id}`);
-  },
-
-  runEval: async (payload: {
-    agentId: string;
-    promptVersionId?: string | null;
-    promptVersion?: number | null;
-    customPrompt?: string;
-    model?: string;
-    repeatCount?: number;
-    caseIds?: string[];
-    adhocCases?: Array<Record<string, unknown>>;
-  }) => {
-    return adminAxios.post('/admin/prompt-ops/run-eval', payload);
-  },
-
-  listEvalRuns: async (agentId?: string, limit = 20) => {
-    return adminAxios.get('/admin/prompt-ops/eval-runs', {
-      params: { ...(agentId ? { agentId } : {}), limit }
-    });
-  },
-
-  getEvalRun: async (id: string) => {
-    return adminAxios.get(`/admin/prompt-ops/eval-runs/${id}`);
-  },
-
-  getAgentFields: async (agentId: string) => {
-    return adminAxios.get(`/admin/prompt-ops/agent-fields/${encodeURIComponent(agentId)}`);
-  },
-
-  getRecentCallSamples: async (agentId: string, limit = 20) => {
-    return adminAxios.get('/admin/prompt-ops/recent-call-samples', {
-      params: { agentId, limit }
-    });
-  },
-
-  getPromptSchema: async (agentId: string) => {
-    return adminAxios.get(`/admin/prompt-ops/prompt-schema/${encodeURIComponent(agentId)}`);
-  },
-
   getSkillRulesOverview: async () => {
     return adminAxios.get('/admin/prompt-ops/skill-rules-overview');
   },
@@ -1515,35 +1091,13 @@ export const adminPromptOpsApi = {
     return adminAxios.get(`/admin/prompt-ops/${encodeURIComponent(agentId)}/compile-info`);
   },
 
-  recompilePrompt: async (agentId: string) => {
-    return adminAxios.post(`/admin/prompt-ops/${encodeURIComponent(agentId)}/recompile`);
-  },
-
   // P-PROMPT-COMPILE: 保存源 + 自动编译 + 失效缓存 (一键 编辑→编译)
-  savePromptSource: async (agentId: string, payload: { systemPrompt: string; autoCompile?: boolean }) => {
-    return adminAxios.put(`/admin/prompt-ops/${encodeURIComponent(agentId)}/source`, payload);
-  },
 
   // P-PROMPT-COMPILE: skill 目录 (agent.skill.字段 三级树, 用于可视化字段选择器)
   getSkillCatalog: async () => {
     return adminAxios.get('/admin/prompt-ops/skill-catalog');
   },
 
-  // P-PROMPT-COMPILE: GUI 字段表 (input + output) 读写
-  getPromptFields: async (agentId: string) => {
-    return adminAxios.get(`/admin/prompt-ops/${encodeURIComponent(agentId)}/fields`);
-  },
-
-  updatePromptFields: async (
-    agentId: string,
-    payload: {
-      inputFields?: Array<Record<string, unknown>>;
-      outputFields?: Array<Record<string, unknown>>;
-      autoCompile?: boolean;
-    }
-  ) => {
-    return adminAxios.put(`/admin/prompt-ops/${encodeURIComponent(agentId)}/fields`, payload);
-  }
 };
 
 // ============================================================
@@ -1635,17 +1189,10 @@ export const adminApi = {
   // PromptOps
   ...adminPromptOpsApi,
 
-  // Devtools
-  ...adminDevtoolsApi,
-
   // ---- 同名冲突显式解决（与展开顺序的最终生效结果一致）----
   // users: adminDashboardApi.users（宽松签名）被 adminUsersApi.users 覆盖；两者同端点
   // GET /admin/users，保留类型更精确的 adminUsersApi 版本
   users: adminUsersApi.users,
-  // getAgentRelations: adminAgentsApi 版本请求 GET /admin/agents/relations，
-  // adminSkillsApi 版本请求 GET /admin/skills/agent-relations（不同端点）；
-  // 此处保留后展开的 skills 版本，agents 版本请用 adminAgentsApi.getAgentRelations()
-  getAgentRelations: adminSkillsApi.getAgentRelations,
   // getPromptVersions: 绑定语义更通用的 prompts 版本
   getPromptVersions: adminAgentPromptsApi.getPromptVersions,
 };

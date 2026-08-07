@@ -166,8 +166,8 @@ router.get('/stages', async (_req: Request, res: Response) => {
           status: 'active',
         },
         {
-          id: 'learning',
-          displayName: '学习阶段',
+          id: 'teaching',
+          displayName: '教学阶段',
           description: '授课执行：Teaching Turn → Peer/Checkpoint → Wrapup',
           status: 'active',
         },
@@ -278,10 +278,7 @@ router.get('/flow/:stage', async (req: Request, res: Response) => {
     goal: 'goal-agent',
     requirement: 'goal-agent',
     path: 'path-agent',
-    learning: 'learning-agent',
-    execution: 'learning-agent',
-    teaching: 'learning-agent',
-    learn: 'learning-agent',
+    teaching: 'teaching-agent',
     profile: 'profile-agent',
     learner: 'profile-agent'
   };

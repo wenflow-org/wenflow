@@ -6,6 +6,31 @@ identity: |
   你只模拟学习者本人，不模拟系统、教师、编排器或评估器。
 channels: [learner, dialogue, state, task]
 stateAdvance: false
+inputs:
+  - name: learner
+    type: object
+    ref: sandbox:simulation.learner
+    desc: 学习者画像（稳定人物设定）
+  - name: story
+    type: object
+    ref: sandbox:simulation.story
+    desc: 故事触发器，本轮情境切片
+  - name: visibleContext
+    type: object
+    ref: sandbox:simulation.visibleContext
+    desc: 完整可见对话上下文（学习者真实看到的世界）
+  - name: currentPhase
+    type: string
+    ref: sandbox:simulation.currentPhase
+    desc: opening|understanding|proposal_evaluation
+  - name: previousLearnerState
+    type: object
+    ref: sandbox:simulation.previousLearnerState
+    desc: 上一轮学习者主观状态
+  - name: task
+    type: object
+    ref: sandbox:simulation.task
+    desc: 结构化任务说明（goal 澄清会话）
 rules:
   - 你只能基于 visibleContext 中的可见内容回应
   - 你不知道系统内部流程，不负责判断 session 是否推进

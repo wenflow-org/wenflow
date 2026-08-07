@@ -470,7 +470,7 @@ const sessionWrapupPromptSpec: PromptCallSpec<SessionWrapupInput, Record<string,
   defaultSystemPrompt: '',
   requireActivePrompt: true,
   caller: {
-    agentId: 'learning-agent',
+    agentId: 'teaching-agent',
     skillId: 'session-wrapup',
   },
   buildUserPayload: (input) => buildWrapupUserPrompt(input, 'primary'),
@@ -544,7 +544,7 @@ export class SessionWrapupAgent {
     let result: SessionWrapupResult | null = null;
 
     try {
-      const caller: CallerInfo = { agentId: 'learning-agent', skillId: 'session-wrapup' };
+      const caller: CallerInfo = { agentId: 'teaching-agent', skillId: 'session-wrapup' };
       const promptResult = await callPrompt(sessionWrapupPromptSpec, input);
 
       // A failed raw-contract retry still retains the final extracted JSON in

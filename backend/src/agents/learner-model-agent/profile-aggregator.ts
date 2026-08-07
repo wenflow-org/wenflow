@@ -25,9 +25,6 @@ import {
   SessionLength
 } from './types';
 import { studentBaselineService } from '../../services/student-baseline.service';
-import { executeSkill } from '../../skills';
-import { goalProfileInferenceDefinition } from '../../skills/goal-profile-inference';
-import { learningPatternDistillerDefinition } from '../../skills/learning-pattern-distiller';
 import { logger } from '../../utils/logger';
 
 function mergeStringArrays(...values: Array<Array<string> | undefined>): string[] {
@@ -124,8 +121,9 @@ export class ProfileAggregator {
     const preferences = this.mergePreferences(goalConversation?.preferences, changes);
     const emotional = this.mergeEmotional(goalConversation?.emotional, changes);
     const history = this.mergeHistory(sessions, changes);
+    // 画像叙述由 buildNarrativeInsights 确定性产出；原 goal-profile-inference / learning-pattern-distiller
+    // LLM 增强已移除（输入与输出同字段、换措辞零增量，2026-08 去 LLM 化）
     const narrativeInsights = this.buildNarrativeInsights({ goalConversation, cognitive, preferences, emotional, learning, history });
-    await this.enhanceNarrativeInsights({ userId, goalConversation, narrativeInsights, history });
     const curriculumControls = this.buildCurriculumControls({ preferences, emotional, learning, narrativeInsights });
     
     const derivedInsights = this.calculateDerivedInsights({
@@ -221,7 +219,11 @@ export class ProfileAggregator {
         preferences: {
           preferredStyle: understanding.learning_style?.preferred_format as PreferredStyle,
           theoryVsPractice: understanding.learning_style?.theory_vs_practice as TheoryVsPractice,
-          sessionLength: this.inferSessionLength(understanding.background?.available_time)
+          sessionLength: this.inferSessionLength(
+            understanding.available_resources?.time_budget
+              || understanding.available_resources?.time_horizon
+              || understanding.background?.available_time
+          )
         },
         emotional: {
           motivationTrigger: understanding.emotional_profile?.motivation_trigger,
@@ -229,8 +231,10 @@ export class ProfileAggregator {
           confidenceLevel: understanding.emotional_profile?.confidence_level
         },
         background: {
-          currentLevel: understanding.background?.current_level,
-          availableTime: understanding.background?.available_time
+          currentLevel: understanding.current_baseline?.level || understanding.background?.current_level,
+          availableTime: understanding.available_resources?.time_budget
+            || understanding.available_resources?.time_horizon
+            || understanding.background?.available_time
         },
         narratives: {
           realProblem: understanding.real_problem,
@@ -241,8 +245,10 @@ export class ProfileAggregator {
             : understanding.background_experience,
           painPoints: Array.isArray(understanding.pain_points) ? understanding.pain_points : [],
           learningSignal: understanding.learning_signal,
-          currentLevel: understanding.background?.current_level,
-          availableTime: understanding.background?.available_time
+          currentLevel: understanding.current_baseline?.level || understanding.background?.current_level,
+          availableTime: understanding.available_resources?.time_budget
+            || understanding.available_resources?.time_horizon
+            || understanding.background?.available_time
         },
         learnerBackground,
       };
@@ -573,90 +579,6 @@ export class ProfileAggregator {
     };
   }
 
-  private async enhanceNarrativeInsights(input: {
-    userId: string;
-    goalConversation?: {
-      narratives?: {
-        realProblem?: string;
-        surfaceGoal?: string;
-        motivation?: string;
-        backgroundExperience?: string;
-        painPoints?: string[];
-        learningSignal?: any;
-        currentLevel?: string;
-        availableTime?: string;
-      };
-    } | null;
-    narrativeInsights: LearnerNarrativeInsights;
-    history: InteractionHistory;
-  }): Promise<void> {
-    try {
-      const goalUnderstanding = input.goalConversation?.narratives
-        ? {
-            real_problem: input.goalConversation.narratives.realProblem,
-            surface_goal: input.goalConversation.narratives.surfaceGoal,
-            motivation: input.goalConversation.narratives.motivation,
-            background_experience: input.goalConversation.narratives.backgroundExperience,
-            pain_points: input.goalConversation.narratives.painPoints,
-            learning_signal: input.goalConversation.narratives.learningSignal,
-            background: {
-              current_level: input.goalConversation.narratives.currentLevel,
-              available_time: input.goalConversation.narratives.availableTime,
-            }
-          }
-        : null;
-
-      if (goalUnderstanding) {
-        const goalResult = await executeSkill(goalProfileInferenceDefinition, {
-          understanding: goalUnderstanding,
-        }).catch(() => null);
-        if (goalResult) {
-          Object.assign(input.narrativeInsights, {
-            goalNarrative: goalResult.goalNarrative || input.narrativeInsights.goalNarrative,
-            backgroundContextNote: goalResult.backgroundContextNote || input.narrativeInsights.backgroundContextNote,
-            motivationNarrative: goalResult.motivationNarrative || input.narrativeInsights.motivationNarrative,
-            timeConstraintNote: goalResult.timeConstraintNote || input.narrativeInsights.timeConstraintNote,
-            selfAssessmentNote: goalResult.selfAssessmentNote || input.narrativeInsights.selfAssessmentNote,
-          });
-        }
-      }
-
-      if (input.history.totalSessions <= 0) return;
-
-      const learnerSnapshotLike = {
-        profile: {
-          preferences: {
-            preferredStyle: input.narrativeInsights.contentReceptionPattern,
-            theoryVsPractice: input.narrativeInsights.practicePreferenceNote,
-          },
-          emotional: {
-            confidenceLevel: input.narrativeInsights.supportStyleNote,
-          }
-        },
-        dynamicState: {
-          recommendedPacing: input.narrativeInsights.taskGranularityNote,
-        }
-      };
-
-      const learningPatternResult = await executeSkill(learningPatternDistillerDefinition, {
-        learnerSnapshot: learnerSnapshotLike,
-      }).catch(() => null);
-
-      if (learningPatternResult) {
-        Object.assign(input.narrativeInsights, {
-          contentReceptionPattern: learningPatternResult.contentReceptionPattern || input.narrativeInsights.contentReceptionPattern,
-          practicePreferenceNote: learningPatternResult.practicePreferenceNote || input.narrativeInsights.practicePreferenceNote,
-          frictionPatternNote: learningPatternResult.frictionPatternNote || input.narrativeInsights.frictionPatternNote,
-          effectiveTeachingPattern: learningPatternResult.effectiveTeachingPattern || input.narrativeInsights.effectiveTeachingPattern,
-          supportStyleNote: learningPatternResult.supportStyleNote || input.narrativeInsights.supportStyleNote,
-          taskGranularityNote: learningPatternResult.taskGranularityNote || input.narrativeInsights.taskGranularityNote,
-        });
-      }
-    } catch {
-      // Narrative enhancement is best-effort only.
-    }
-  }
-  
   private identifyRiskFactors(profile: Partial<LearnerModelProfile>): string[] {
     const risks: string[] = [];
     

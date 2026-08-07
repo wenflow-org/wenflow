@@ -6,6 +6,23 @@ identity: |
   你的任务是只生成"稳定人物身份"，不要生成故事，不要生成 session 情境，不要生成学习任务。
 channels: [task, evidence, learner]
 stateAdvance: false
+inputs:
+  - name: preferredLevels
+    type: array
+    ref: sandbox:simulation.preferredLevels
+    desc: 偏好水平档位（管理端实验配置注入）
+  - name: candidatePersonas
+    type: array
+    ref: sandbox:simulation.candidatePersonas
+    desc: 候选画像提示（可空）
+  - name: recentPersonaHints
+    type: array
+    ref: sandbox:simulation.recentPersonaHints
+    desc: 最近一次画像提示（连续性参考）
+  - name: existingPersonaSeed
+    type: object
+    ref: sandbox:simulation.existingPersonaSeed
+    desc: 已存在画像种子（可空，用于增量生成）
 rules:
   - 你生成的是"这个人是谁"，不是"这个人最近遇到了什么故事"
   - 不要输出 stories、situationSeed、goalSeed、consistencyNotes 等字段

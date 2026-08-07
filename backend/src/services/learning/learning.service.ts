@@ -45,7 +45,8 @@ import {
 
 // Path 任务画像 Skills
 import { executeSkill } from '../../skills';
-import { pathSceneFramingDefinition } from '../../skills/path-scene-framing';
+import { buildFramedNormalizedInput } from './path-planning-hints';
+import { assembleStageDesignerChannels } from '../field-dispatcher';
 import { stageDesignerDefinition } from '../../skills/stage-designer';
 import { pathAgentDefinition } from '../../skills/path-planning';
 
@@ -114,7 +115,7 @@ interface GeneratePathData {
 interface PathReplanRequest {
   pathId: string;
   userId: string;
-  triggerSource?: 'goal-conversation' | 'learner-model-agent' | 'skill:learner-model' | 'ai-teaching' | 'learning-agent' | 'admin' | 'system' | 'api';
+  triggerSource?: 'goal-conversation' | 'learner-model-agent' | 'skill:learner-model' | 'ai-teaching' | 'teaching-agent' | 'admin' | 'system' | 'api';
   reason?: string;
   mode?: 'new_version' | 'overwrite';
   stageNumber?: number;
@@ -266,7 +267,7 @@ type NewPathTaskType = typeof NEW_PATH_TASK_TYPES[number];
 interface PathAdjustmentPolicy {
   allowedModes: Array<'expand' | 'compress' | 'replan'>;
   recommendedMode?: 'expand' | 'compress' | 'replan' | null;
-  triggerSource?: 'learn' | 'ai-teaching' | 'learning-agent' | 'learner-model-agent' | 'skill:learner-model' | 'system' | null;
+  triggerSource?: 'learn' | 'ai-teaching' | 'teaching-agent' | 'learner-model-agent' | 'skill:learner-model' | 'system' | null;
 }
 
 interface PathAdjustmentEvidence {
@@ -845,12 +846,6 @@ function parseJsonSafe(raw: any): any {
   } catch {
     return null;
   }
-}
-
-function stripSceneFramingDebugMeta(sceneFraming: any) {
-  if (!sceneFraming || typeof sceneFraming !== 'object') return sceneFraming;
-  const { _debug, ...rest } = sceneFraming;
-  return rest;
 }
 
 function isSuspiciousCognitiveDomain(value: string | null | undefined): boolean {
@@ -1728,7 +1723,8 @@ class LearningService {
   }
 
   private buildPathCognitiveDesign(data: GeneratePathData, analysis: any): PathCognitiveDesign {
-    const sceneFraming = data.userProfile?.pathSceneFraming as PathSceneFraming | undefined;
+    const sceneFraming = (analysis?.sceneFraming as PathSceneFraming | undefined)
+      || (data.userProfile?.pathSceneFraming as PathSceneFraming | undefined);
     const generatedCognitiveDesign = analysis?.cognitiveDesign && typeof analysis.cognitiveDesign === 'object'
       ? analysis.cognitiveDesign
       : null;
@@ -2391,7 +2387,6 @@ class LearningService {
         totalWeeks: data.userProfile?.totalWeeks,
         userId: data.userId,
         replan: data.userProfile?.replan,
-        pathSceneFraming: data.userProfile?.pathSceneFraming,
         goalFinalPayload: data.userProfile?.goalFinalPayload || null,
         normalizedInput: data.userProfile?.normalizedInput || null,
         conversationHistory: Array.isArray(data.userProfile?.conversationHistory) ? data.userProfile.conversationHistory : [],
@@ -2409,32 +2404,24 @@ class LearningService {
           : undefined
       };
 
-      if (!data.userProfile?.pathSceneFraming) {
-        const pathSceneFramingInput = {
-          goal: agentInput.goal,
-          currentLevel: agentInput.currentLevel,
-          timePerDay: agentInput.timePerDay,
-          structuredData: agentInput.structuredData,
-          confirmedProposal: agentInput.confirmedProposal,
-          metadata: agentInput.metadata || {},
-        };
-        const sceneFramingResult = await executeSkill(pathSceneFramingDefinition, {
-          ...pathSceneFramingInput,
+      // path 输入定帧：skill:path-scene-framing 已移除（LLM 环节信息零增量、输出被 seed 覆盖），
+      // normalizedInput 由确定性 buildFramedNormalizedInput 清洗并附加 planningHints。
+      // API/裸输入模式（无结构化 normalizedInput）用最小兜底结构，保证 planningHints 不缺失。
+      const framedNormalizedInput = buildFramedNormalizedInput(data.userProfile?.normalizedInput || null)
+        || buildFramedNormalizedInput({
+          version: '1.0',
+          learnerProfile: { surfaceGoal: data.description },
+          problemSpace: { realProblem: data.description },
+          resources: { timeBudget: data.userProfile?.timePerDay || null },
         });
-        const sceneFraming = stripSceneFramingDebugMeta(sceneFramingResult);
-        const sceneFramingRaw = typeof sceneFramingResult?._debug?.rawModelOutput === 'string'
-          ? sceneFramingResult._debug.rawModelOutput
-          : null;
+      if (framedNormalizedInput) {
         data.userProfile = {
           ...(data.userProfile || {}),
-          pathSceneFraming: sceneFraming,
-          pathSceneFramingRaw: sceneFramingRaw,
-          pathSceneFramingInput,
-          normalizedInput: getSceneFramingNormalizedInput(sceneFraming) || data.userProfile?.normalizedInput || null,
+          normalizedInput: framedNormalizedInput,
         };
         agentInput.metadata = {
           ...(agentInput.metadata || {}),
-          pathSceneFraming: sceneFraming
+          normalizedInput: framedNormalizedInput,
         };
       }
 
@@ -2481,9 +2468,9 @@ class LearningService {
         // AI 生成的路径简短摘要（path-planning 输出），随 aiPromptTemplate 持久化，
         // 供列表接口 parsePathSummary 读取、前端卡片展示
         summary: typeof path.summary === 'string' && path.summary.trim() ? path.summary.trim() : null,
-        sceneFraming: data.userProfile?.pathSceneFraming || null,
-        sceneFramingRaw: data.userProfile?.pathSceneFramingRaw || null,
-        sceneFramingInput: data.userProfile?.pathSceneFramingInput || null,
+        sceneFraming: framedNormalizedInput ? { normalizedInput: framedNormalizedInput } : null,
+        sceneFramingRaw: null,
+        sceneFramingInput: null,
         pathAgentInput,
         pathAgentRaw,
         suggestedMilestones: taskChainMilestones.map((m: any, idx: number) => ({
@@ -2826,6 +2813,15 @@ class LearningService {
             startedAt: stageStartedAt
           }
         });
+        const previousMilestone = stageIndex > 0 ? learningPath.milestones[stageIndex - 1] : null;
+        // 配置式跨轮上下文（第三条链）：routings 表 path-agent 注入行抽值优先，回退手拼
+        const { channels: designerChannels } = await assembleStageDesignerChannels({
+          previousMilestone: previousMilestone ? {
+            stageNumber: previousMilestone.stageNumber,
+            title: previousMilestone.title,
+            coreConcept: previousMilestone.coreConceptId || null,
+          } : null,
+        }).catch(() => ({ channels: {}, skipped: [] }));
         const stageDesignerInput = {
           milestone: {
             stageNumber: milestone.stageNumber,
@@ -2835,6 +2831,13 @@ class LearningService {
             goal: milestone.goal || null,
             estimatedHours: milestone.estimatedHours || null,
           },
+          ...(designerChannels['previousMilestone'] || previousMilestone ? {
+            previousMilestone: designerChannels['previousMilestone'] || (previousMilestone ? {
+              stageNumber: previousMilestone.stageNumber,
+              title: previousMilestone.title,
+              coreConcept: previousMilestone.coreConceptId || null,
+            } : null),
+          } : {}),
           ...stageDesignerBaseInput,
           repairHints: null,
         };
@@ -3163,7 +3166,7 @@ class LearningService {
       }, normalizedMilestonesData, coreRunId);
       const duration = Date.now() - startTime;
       const sceneSummary = buildSceneSummaryFromFraming(
-        data.userProfile?.pathSceneFraming || null,
+        analysis.sceneFraming || data.userProfile?.pathSceneFraming || null,
         normalizedMilestonesData.length,
         normalizedMilestonesData.reduce((sum: number, milestone: any) => sum + ((milestone?.tasks || []).length), 0)
       );
@@ -3970,6 +3973,9 @@ const learningPath = await prisma.learning_paths.findUnique({
       ? parsedTemplate.sceneFraming
       : null;
     const completedTasks = (milestone.subtasks || []).filter((task: any) => task.status === 'completed');
+    const sortedMilestones = [...(path.milestones || [])].sort((a: any, b: any) => a.stageNumber - b.stageNumber);
+    const milestoneIndex = sortedMilestones.findIndex((m: any) => m.id === milestone.id);
+    const previousMilestone = milestoneIndex > 0 ? sortedMilestones[milestoneIndex - 1] : null;
 
     const stageDesignerInput = {
       milestone: {
@@ -3980,6 +3986,13 @@ const learningPath = await prisma.learning_paths.findUnique({
         goal: milestone.goal || null,
         estimatedHours: milestone.estimatedHours || null,
       },
+      ...(previousMilestone ? {
+        previousMilestone: {
+          stageNumber: previousMilestone.stageNumber,
+          title: previousMilestone.title,
+          coreConcept: previousMilestone.coreConceptId || null,
+        },
+      } : {}),
       cognitiveCore: pathCognitiveDesign,
       normalizedInput,
       repairHints: {

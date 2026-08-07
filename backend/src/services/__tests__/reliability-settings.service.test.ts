@@ -89,7 +89,7 @@ describe('reliability settings service', () => {
 
     const budget = await createRuntimeRetryBudget()
     const skillLimit = await getEffectiveLogicalRetryLimit(
-      'learning-turn',
+      'teaching-turn',
       budget.limits.maxLogicalRetries
     )
 
@@ -110,7 +110,7 @@ describe('reliability settings service', () => {
   it('Skill 不能提高平台逻辑重试上限', async () => {
     skillFindUnique.mockResolvedValue({ maxLogicalRetries: 2 })
 
-    await expect(getEffectiveLogicalRetryLimit('learning-turn', 0)).resolves.toBe(0)
-    await expect(getEffectiveLogicalRetryLimit('learning-turn', 1)).resolves.toBe(1)
+    await expect(getEffectiveLogicalRetryLimit('teaching-turn', 0)).resolves.toBe(0)
+    await expect(getEffectiveLogicalRetryLimit('teaching-turn', 1)).resolves.toBe(1)
   })
 })

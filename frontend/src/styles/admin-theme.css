@@ -521,10 +521,17 @@ body.admin-route :is(button, a, [role='button'], input, textarea, select):focus-
   }
 }
 
-/* 4K 超大屏：整体等比放大（与用户侧 v2 页 zoom 机制一致） */
+/* 4K 超大屏：整体等比放大（与用户侧 v2 页 zoom 机制一致）。
+   zoom 会等比放大 .ac 内所有 100vh/100dvh 尺寸（布局高度 → 渲染高度 ×1.15/×1.3），
+   因此 .ac 与 .ac .mshell 的 min-height 必须换算回逻辑坐标（÷zoom），
+   否则每页底部会出现 ≈30% 视口高的空滚动区。 */
 @media (min-width: 2800px) {
   body.admin-route .ac { zoom: 1.15; }
+  body.admin-route .ac,
+  body.admin-route .ac .mshell { min-height: calc(100vh / 1.15); }
 }
 @media (min-width: 3600px) {
   body.admin-route .ac { zoom: 1.3; }
+  body.admin-route .ac,
+  body.admin-route .ac .mshell { min-height: calc(100vh / 1.3); }
 }

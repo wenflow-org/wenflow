@@ -231,7 +231,7 @@ export class PlatformUserAdapter {
     const visibleText = result?.welcomeMessage || ''
     return {
       observation: {
-        stage: 'learning',
+        stage: 'teaching',
         visibleMessages: visibleText ? [{ role: 'platform', content: visibleText }] : [],
         visibleTask: { id: taskId, title: result?.topic || result?.subject || '当前任务' },
         availableActions: ['chat', 'request_hint', 'request_example', 'submit_answer', 'submit_code', 'abandon'],
@@ -241,7 +241,7 @@ export class PlatformUserAdapter {
         teachingSessionId: result?.sessionId,
         teachingRevision: result?.revision,
         taskId,
-        platformStage: 'learning',
+        platformStage: 'teaching',
         rawTraceId: traceIdFrom(response.headers)
       }
     }
@@ -266,7 +266,7 @@ export class PlatformUserAdapter {
     const nextRevision = requireTeachingRevision(result?.revision, 'Teaching 消息')
     return {
       observation: {
-        stage: result?.autoEnded ? 'completed' : 'learning',
+        stage: result?.autoEnded ? 'completed' : 'teaching',
         visibleMessages: [
           { role: 'learner', content: message },
           ...(platformText ? [{ role: 'platform' as const, content: platformText }] : [])
@@ -287,7 +287,7 @@ export class PlatformUserAdapter {
       control: {
         teachingSessionId: sessionId,
         teachingRevision: nextRevision,
-        platformStage: result?.autoEnded ? 'completed' : 'learning',
+        platformStage: result?.autoEnded ? 'completed' : 'teaching',
         rawTraceId: traceIdFrom(response.headers)
       },
       diagnostic: {

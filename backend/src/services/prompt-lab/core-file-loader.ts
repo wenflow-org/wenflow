@@ -59,24 +59,53 @@ export interface CoreFileParams {
   failurePolicy: CoreFailurePolicy;
 }
 
-/** §2.5 上游字段输入声明：ref = `skill:<skillId>.<fieldPath>` */
+/**
+ * §2.5 输入契约声明。ref 前缀 = 来源分类（kind）：
+ * - skill:<skillId>.<fieldPath>：上游 Skill 的模型输出字段
+ * - sandbox:<agentId>.<key>：编排层注入/确定性定帧/状态池（沙盘路径）
+ * - user:<path>：用户/平台注入（自文档化；运行时由执行信封承载）
+ */
 export interface CoreInputRef {
-  /** 原始引用，如 skill:path-scene-framing.normalizedInput */
+  /** 原始引用，如 skill:path-planning.milestones / sandbox:path.normalizedInput / user:latestMessage */
   ref: string;
-  /** 上游 skillId（不含 skill: 前缀） */
+  kind: 'skill' | 'sandbox' | 'user';
+  /** 上游 skillId（不含 skill: 前缀）；kind=sandbox/user 时为空 */
   skill: string;
-  /** 上游输出字段路径 */
+  /** 上游输出字段路径；kind=sandbox/user 时为空 */
   fieldPath: string;
+  /** 沙盘路径（不含 sandbox: 前缀，形如 path.normalizedInput）；kind=skill/user 时为空 */
+  sandboxPath: string;
+  /** 用户注入路径（不含 user: 前缀）；kind≠user 时为空 */
+  userPath: string;
+  /** 输入别名（写 Prompt 时可引用的名字，可选） */
+  name?: string;
+  /** 类型（复用 §2.3 受控词表，可选） */
+  type?: string;
   /** 用途说明（可选） */
+  desc?: string;
+  /** 旧版 note（保留兼容） */
   note?: string;
 }
 
 const INPUT_REF_PATTERN = /^skill:([a-z0-9][a-z0-9-]*)\.([A-Za-z0-9_.\[\]-]+)$/;
+const SANDBOX_REF_PATTERN = /^sandbox:([A-Za-z0-9_.\[\]-]+)$/;
+const USER_REF_PATTERN = /^user:([A-Za-z0-9_.\[\]-]+)$/;
 
-/** 解析 inputs ref；不合法返回 null */
-export function parseInputRef(ref: string): { skill: string; fieldPath: string } | null {
-  const m = INPUT_REF_PATTERN.exec(ref.trim());
-  return m ? { skill: m[1], fieldPath: m[2] } : null;
+export type ParsedInputRef =
+  | { kind: 'skill'; skill: string; fieldPath: string }
+  | { kind: 'sandbox'; path: string }
+  | { kind: 'user'; path: string };
+
+/** 解析 inputs ref（skill:/sandbox:/user: 三前缀）；不合法返回 null */
+export function parseInputRef(ref: string): ParsedInputRef | null {
+  const trimmed = ref.trim();
+  const skillMatch = INPUT_REF_PATTERN.exec(trimmed);
+  if (skillMatch) return { kind: 'skill', skill: skillMatch[1], fieldPath: skillMatch[2] };
+  const sandboxMatch = SANDBOX_REF_PATTERN.exec(trimmed);
+  if (sandboxMatch) return { kind: 'sandbox', path: sandboxMatch[1] };
+  const userMatch = USER_REF_PATTERN.exec(trimmed);
+  if (userMatch) return { kind: 'user', path: userMatch[1] };
+  return null;
 }
 
 export interface CoreFile {
@@ -190,26 +219,27 @@ export function validateCoreFileShape(raw: unknown): CoreFileIssue[] {
     }
   }
 
-  // inputs：可选；每项 { ref: skill:<skillId>.<fieldPath>, note? }
+  // inputs：可选；每项 { ref: skill:<skillId>.<fieldPath> | sandbox:<path> | user:<path>, name?, type?, desc?, note? }
   if (raw.inputs !== undefined && raw.inputs !== null) {
     if (!Array.isArray(raw.inputs)) {
-      issues.push({ code: 'inputs-invalid', message: 'inputs 必须是数组：每项 { ref, note? }' });
+      issues.push({ code: 'inputs-invalid', message: 'inputs 必须是数组：每项 { ref, name?, type?, desc?, note? }' });
     } else {
       const seenRefs = new Set<string>();
+      const seenNames = new Set<string>();
       raw.inputs.forEach((item, index) => {
         const label = `inputs[${index}]`;
         if (!isPlainObject(item)) {
-          issues.push({ code: 'input-not-object', message: `${label} 必须是对象 { ref, note? }` });
+          issues.push({ code: 'input-not-object', message: `${label} 必须是对象 { ref, name?, type?, desc?, note? }` });
           return;
         }
         const ref = asNonEmptyString(item.ref);
         if (ref == null) {
-          issues.push({ code: 'input-ref-required', message: `${label}.ref 必填（形如 skill:path-scene-framing.normalizedInput）` });
+          issues.push({ code: 'input-ref-required', message: `${label}.ref 必填（形如 skill:path-planning.milestones 或 sandbox:path.normalizedInput）` });
         } else {
           if (!parseInputRef(ref)) {
             issues.push({
               code: 'input-ref-invalid',
-              message: `${label}.ref "${ref}" 格式不合法（应为 skill:<skillId>.<fieldPath>）`,
+              message: `${label}.ref "${ref}" 格式不合法（应为 skill:<skillId>.<fieldPath> / sandbox:<path> / user:<path>）`,
             });
           }
           if (seenRefs.has(ref)) {
@@ -217,7 +247,20 @@ export function validateCoreFileShape(raw: unknown): CoreFileIssue[] {
           }
           seenRefs.add(ref);
         }
-        if (item.note !== undefined && typeof item.note !== 'string') {
+        const name = asNonEmptyString(item.name);
+        if (name != null) {
+          if (seenNames.has(name)) {
+            issues.push({ code: 'input-name-duplicate', message: `${label}.name "${name}" 与既有输入别名重复` });
+          }
+          seenNames.add(name);
+        }
+        if (item.type !== undefined && item.type !== null && typeof item.type !== 'string') {
+          issues.push({ code: 'input-type-invalid', message: `${label}.type 必须是字符串（复用 §2.3 受控词表）` });
+        }
+        if (item.desc !== undefined && item.desc !== null && typeof item.desc !== 'string') {
+          issues.push({ code: 'input-desc-invalid', message: `${label}.desc 必须是字符串` });
+        }
+        if (item.note !== undefined && item.note !== null && typeof item.note !== 'string') {
           issues.push({ code: 'input-note-invalid', message: `${label}.note 必须是字符串` });
         }
       });
@@ -340,12 +383,23 @@ export function normalizeCoreFile(raw: Record<string, unknown>): CoreFile {
           inputs: (raw.inputs as Array<Record<string, unknown>>).map((item) => {
             const ref = String(item.ref).trim();
             const parts = parseInputRef(ref)!;
-            return {
+            const base: CoreInputRef = {
               ref,
-              skill: parts.skill,
-              fieldPath: parts.fieldPath,
-              ...(asNonEmptyString(item.note) ? { note: String(item.note).trim() } : {}),
+              kind: parts.kind,
+              skill: parts.kind === 'skill' ? parts.skill : '',
+              fieldPath: parts.kind === 'skill' ? parts.fieldPath : '',
+              sandboxPath: parts.kind === 'sandbox' ? parts.path : '',
+              userPath: parts.kind === 'user' ? parts.path : '',
             };
+            const name = asNonEmptyString(item.name);
+            if (name) base.name = name.trim();
+            const type = asNonEmptyString(item.type);
+            if (type) base.type = type.trim();
+            const desc = asNonEmptyString(item.desc);
+            if (desc) base.desc = desc.trim();
+            const note = asNonEmptyString(item.note);
+            if (note) base.note = note.trim();
+            return base;
           }),
         }
       : {}),

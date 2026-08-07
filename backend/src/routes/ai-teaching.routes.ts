@@ -20,7 +20,7 @@ import {
   teachingSessionRepository
 } from '../services/ai-teaching/TeachingSessionRepository';
 import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
-import { PromptStreamEvent, setRequestContext } from '../gateway/api-gateway/context';
+import { PromptStreamEvent, setRequestContext, getRequestContext } from '../gateway/api-gateway/context';
 
 const router = Router();
 
@@ -179,7 +179,8 @@ const handleStreamingMessage = async (
       }
     },
   };
-  setRequestContext({ streamRequest });
+  // 注入业务会话上下文：执行日志/瀑布按 sessionId 归组，链路可追溯
+  setRequestContext({ streamRequest, sessionId, sourceEntry: 'platform' });
 
   try {
     const result = await aiTeachingCoordinator.processStudentMessage(sessionId, message, { expectedRevision });
@@ -198,7 +199,8 @@ const handleStreamingMessage = async (
 const handleStreamingSession = async (
   req: any,
   res: any,
-  task: () => Promise<Record<string, unknown>>
+  task: () => Promise<Record<string, unknown>>,
+  sessionId?: string
 ) => {
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -218,7 +220,8 @@ const handleStreamingSession = async (
       }
     },
   };
-  setRequestContext({ streamRequest });
+  // 注入业务会话上下文：执行日志/瀑布按 sessionId 归组，链路可追溯
+  setRequestContext({ streamRequest, sessionId, sourceEntry: 'platform' });
 
   try {
     const data = await task();
@@ -253,6 +256,8 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
     if (String(req.headers?.accept || '').includes('text/event-stream')) {
       return handleStreamingSession(req, res, async () => {
         const session = await aiTeachingCoordinator.startSession({ userId, taskId });
+        // 会话创建后补注入：本次请求后续的 LLM 调用都带上 sessionId，链路可追溯
+        setRequestContext({ ...getRequestContext(), sessionId: session.sessionId });
         return {
           sessionId: session.sessionId,
           subject: session.subject,
@@ -663,7 +668,7 @@ router.post('/sessions/:sessionId/peer/messages', async (req: any, res) => {
       return handleStreamingSession(req, res, async () => {
         const result = await aiTeachingCoordinator.processPeerMessage(sessionId, message);
         return { peerResponse: result.peerResponse };
-      });
+      }, sessionId);
     }
 
     const result = await aiTeachingCoordinator.processPeerMessage(

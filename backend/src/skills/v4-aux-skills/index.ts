@@ -17,11 +17,10 @@ import { agentConfigService } from '../../services/agentConfig.service';
 import { resolveEffectivePromptContract } from '../../services/prompt-lab/resolve-prompt-contract';
 
 export type AuxSkillId =
-  | 'learning-opening-generator'
+  | 'teaching-opening-generator'
   | 'session-evaluation-fallback'
   | 'learner-progress-report'
   | 'path-adjustment-generator'
-  | 'goal-analysis'
   | 'generic-chat'
   | 'course-design'
   | 'skill-author'
@@ -161,11 +160,10 @@ async function resolveDefaultFailureMode(skillId: AuxSkillId): Promise<'throw' |
 // ============================================================
 
 const META: Record<AuxSkillId, AuxSkillMeta> = {
-  'learning-opening-generator': { skillId: 'learning-opening-generator', displayName: '课堂开场交互生成器', description: '生成教学 Session 的开场 message、question 与 quickReplies', category: 'generation' },
+  'teaching-opening-generator': { skillId: 'teaching-opening-generator', displayName: '课堂开场交互生成器', description: '生成教学 Session 的开场 message、question 与 quickReplies', category: 'generation' },
   'session-evaluation-fallback': { skillId: 'session-evaluation-fallback', displayName: '课程评估补全器', description: '在主课后总结缺少 evaluation 时补齐结构化评估', category: 'analysis' },
   'learner-progress-report': { skillId: 'learner-progress-report', displayName: '学习进展报告生成器', description: '基于学习指标和信号生成简短进展反馈', category: 'analysis' },
   'path-adjustment-generator': { skillId: 'path-adjustment-generator', displayName: '路径动态调整生成器', description: '生成可插入路径的 milestone 或 subtask', category: 'generation' },
-  'goal-analysis': { skillId: 'goal-analysis', displayName: '学习目标分析器', description: '从用户目标中提取主题、水平、重点与场景', category: 'analysis' },
   'generic-chat': { skillId: 'generic-chat', displayName: '平台通用文本能力', description: '无更专用 Skill 时的通用文本调用能力', category: 'generation' },
   'course-design': { skillId: 'course-design', displayName: '课程设计器', description: '为周次主题生成结构化课程任务', category: 'generation' },
   'skill-author': { skillId: 'skill-author', displayName: 'Prompt 起草助手', description: '为新 Skill 起草 system prompt', category: 'generation' },
@@ -179,9 +177,9 @@ const META: Record<AuxSkillId, AuxSkillMeta> = {
 // Handlers
 // ============================================================
 
-async function learningOpeningGeneratorHandler(input: any) {
+async function teachingOpeningGeneratorHandler(input: any) {
   return runAux({
-    meta: META['learning-opening-generator'],
+    meta: META['teaching-opening-generator'],
     input,
         buildUserPayload: (d) => ({
       subject: d.subject,
@@ -265,29 +263,6 @@ async function pathAdjustmentGeneratorHandler(input: any) {
       ? { valid: true }
       : { valid: false, failureReason: 'PATH_ADJUSTMENT_OUTPUT_NOT_OBJECT' },
     builtinFallback: () => null,
-  });
-}
-
-async function goalAnalysisHandler(input: any) {
-  return runAux({
-    meta: META['goal-analysis'],
-    input,
-        buildUserPayload: (d) => ({
-      goal: d.goal,
-      currentLevel: d.currentLevel ?? null,
-      timePerDay: d.timePerDay ?? null,
-    }),
-    normalize: (parsed) => parsed,
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'GOAL_ANALYSIS_OUTPUT_NOT_OBJECT' },
-    builtinFallback: (d) => ({
-      subject: String(d.goal || '学习目标'),
-      level: ['beginner', 'intermediate', 'advanced'].includes(d.currentLevel) ? d.currentLevel : 'beginner',
-      focus: [],
-      context: '',
-      confidence: 0.5,
-    }),
   });
 }
 
@@ -396,11 +371,10 @@ export const auxSkillDefinitionMap: Record<AuxSkillId, SkillDefinition> = Object
 ) as Record<AuxSkillId, SkillDefinition>;
 
 export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillExecutionResult<any>>> = {
-  'learning-opening-generator': learningOpeningGeneratorHandler,
+  'teaching-opening-generator': teachingOpeningGeneratorHandler,
   'session-evaluation-fallback': sessionEvaluationFallbackHandler,
   'learner-progress-report': learnerProgressReportHandler,
   'path-adjustment-generator': pathAdjustmentGeneratorHandler,
-  'goal-analysis': goalAnalysisHandler,
   'generic-chat': genericChatHandler,
   'course-design': courseDesignHandler,
   'skill-author': skillAuthorHandler,

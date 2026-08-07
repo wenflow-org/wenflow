@@ -8,10 +8,10 @@ import { computeCoreHash, loadCoreFile } from '../../services/prompt-lab/core-fi
 
 function makePromptFile(runtimeContract?: unknown): PromptFile {
   return {
-    agentId: 'skill:learning-turn',
-    name: 'default-skill-learning-turn',
+    agentId: 'skill:teaching-turn',
+    name: 'default-skill-teaching-turn',
     systemPrompt: 'System prompt',
-    filePath: 'D:/prompts/skill.learning-turn.md',
+    filePath: 'D:/prompts/skill.teaching-turn.md',
     archetype: 'conversational',
     ...(runtimeContract === undefined ? {} : { runtimeContract }),
   };
@@ -93,13 +93,13 @@ describe('File-as-Truth runtime-contract seed snapshots', () => {
     };
 
     expect(() => buildPromptFileRuntimeContractMetadata(makePromptFile(invalidContract)))
-      .toThrow('Prompt skill:learning-turn has an invalid runtimeContract.contextMode');
+      .toThrow('Prompt skill:teaching-turn has an invalid runtimeContract.contextMode');
   });
 });
 
 describe('v4 coreHash seed snapshots', () => {
   it('passes coreHash/coreVersion through to the seed and metadata', () => {
-    const coreHash = computeCoreHash(loadCoreFile('learning-turn')!.core!);
+    const coreHash = computeCoreHash(loadCoreFile('teaching-turn')!.core!);
     const file = { ...makePromptFile(), coreHash, coreVersion: 2 };
     const seed = mapPromptFileToCoreAgentPromptSeed(file);
 
@@ -113,11 +113,11 @@ describe('v4 coreHash seed snapshots', () => {
       runtimeContractSource: 'manifest',
       promptContractSource: 'manifest',
     }));
-    expect(metadata.promptLab.coreSnapshot).toContain('skillId: learning-turn');
+    expect(metadata.promptLab.coreSnapshot).toContain('skillId: teaching-turn');
   });
 
   it('v4 file without contracts still gets anchor-only metadata', () => {
-    const coreHash = computeCoreHash(loadCoreFile('learning-turn')!.core!);
+    const coreHash = computeCoreHash(loadCoreFile('teaching-turn')!.core!);
     const seed = mapPromptFileToCoreAgentPromptSeed({ ...makePromptFile(), coreHash });
 
     const metadata = JSON.parse(seed.metadata!);
@@ -126,7 +126,7 @@ describe('v4 coreHash seed snapshots', () => {
       coreHash,
       coreVersion: 1,
     }));
-    expect(metadata.promptLab.coreSnapshot).toContain('skillId: learning-turn');
+    expect(metadata.promptLab.coreSnapshot).toContain('skillId: teaching-turn');
     expect(seed.coreVersion).toBeUndefined();
   });
 
@@ -139,8 +139,8 @@ describe('v4 coreHash seed snapshots', () => {
       metadata: JSON.stringify({ promptLab: { coreHash: 'aaa' } }),
     };
     const seed = {
-      agentId: 'skill:learning-turn',
-      name: 'default-skill-learning-turn',
+      agentId: 'skill:teaching-turn',
+      name: 'default-skill-teaching-turn',
       description: 'seed',
       systemPrompt: 'System prompt',
       temperature: 0.7,
@@ -165,8 +165,8 @@ describe('matchesSeedConfig metadata drift detection', () => {
 
   function makeSeed(metadata?: string) {
     return {
-      agentId: 'skill:learning-turn',
-      name: 'default-skill-learning-turn',
+      agentId: 'skill:teaching-turn',
+      name: 'default-skill-teaching-turn',
       description: 'seed',
       systemPrompt: 'System prompt',
       temperature: 0.7,

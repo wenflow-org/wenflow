@@ -18,7 +18,7 @@ export type AgentRuntimeKind = 'agent' | 'skill' | 'alias';
 export type MonitoringGroupName =
   | 'Goal'
   | 'Path'
-  | 'Learning'
+  | 'Teaching'
   | 'Profile'
   | 'Simulation'
   | 'Tool'
@@ -81,25 +81,24 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     monitoringGroup: 'Path',
     agentMembers: [
       'skill:path-planning',
-      'skill:path-scene-framing',
       'skill:stage-designer'
     ]
   },
   {
-    id: 'learning-agent',
-    name: '学习 Agent',
+    id: 'teaching-agent',
+    name: '教学 Agent',
     description: 'AI 教学会话编排：单轮教学、伴学补强、课后产出',
     category: 'agent',
     kind: 'agent',
     runtimeEnabled: true,
     userVisible: true,
-    monitoringGroup: 'Learning',
+    monitoringGroup: 'Teaching',
     aliases: ['ai-teaching-agent', 'ai-teaching'],
     agentMembers: [
-      'skill:learning-turn',
+      'skill:teaching-turn',
       'skill:peer-reinforcement',
       'skill:session-wrapup',
-      'skill:learning-strategy-selector',
+      'skill:teaching-strategy-selector',
       'skill:adaptive-guidance-copy',
       'skill:acceptance-evidence-evaluator'
     ]
@@ -193,18 +192,6 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.4, maxTokens: 32000 }
   },
   {
-    id: 'skill:path-scene-framing',
-    name: '路径场景定帧 Skill',
-    description: '为路径阶段设计具体学习场景与情境',
-    category: 'path',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Path',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.6, maxTokens: 2000 }
-  },
-  {
     id: 'skill:stage-designer',
     name: '阶段设计 Skill',
     description: '细化阶段内的任务与验收点',
@@ -219,15 +206,15 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
 
   // ============ Learning 下辖 Skills ============
   {
-    id: 'skill:learning-turn',
-    name: '学习回合 Skill',
+    id: 'skill:teaching-turn',
+    name: '教学回合 Skill',
     description: '生成单轮教学回复与结构化教学状态',
-    category: 'learning',
+    category: 'teaching',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Learning',
-    aliases: ['learning-turn-agent', 'teaching-turn-agent'],
+    monitoringGroup: 'Teaching',
+    aliases: ['teaching-turn-agent'],
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.5, maxTokens: 2200 }
   },
@@ -235,11 +222,11 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     id: 'skill:peer-reinforcement',
     name: '伴学补强 Skill',
     description: '同伴式引导讨论与理解补强',
-    category: 'learning',
+    category: 'teaching',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Learning',
+    monitoringGroup: 'Teaching',
     aliases: ['peer-agent'],
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.8, maxTokens: 1000 }
@@ -248,24 +235,24 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     id: 'skill:session-wrapup',
     name: '课后产出 Skill',
     description: '生成课后总结与评估',
-    category: 'learning',
+    category: 'teaching',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Learning',
+    monitoringGroup: 'Teaching',
     aliases: ['session-wrapup-agent'],
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.2, maxTokens: 2200 }
   },
   {
-    id: 'skill:learning-strategy-selector',
+    id: 'skill:teaching-strategy-selector',
     name: '学习策略选择 Skill',
     description: '基于学习者状态选择教学策略',
-    category: 'learning',
+    category: 'teaching',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Learning',
+    monitoringGroup: 'Teaching',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.3, maxTokens: 800 }
   },
@@ -273,11 +260,11 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     id: 'skill:adaptive-guidance-copy',
     name: '自适应引导文案 Skill',
     description: '根据情境生成自适应引导话术',
-    category: 'learning',
+    category: 'teaching',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Learning',
+    monitoringGroup: 'Teaching',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.7, maxTokens: 800 }
   },
@@ -285,11 +272,11 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     id: 'skill:acceptance-evidence-evaluator',
     name: '验收证据评估 Skill',
     description: '评估学习者输出是否满足验收点',
-    category: 'learning',
+    category: 'teaching',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Learning',
+    monitoringGroup: 'Teaching',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.2, maxTokens: 1200 }
   },
@@ -420,72 +407,6 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.2, maxTokens: 5000 }
   },
   // ============ Tool Skills（工具类，无 LLM prompt） ============
-  {
-    id: 'skill:text-structure-analyzer',
-    name: '文本结构分析器 Skill',
-    description: '分析文本结构，提取大纲、章节、关键词等',
-    category: 'tool',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Tool',
-    noPromptFile: true
-  },
-  {
-    id: 'skill:retrieval',
-    name: '内容检索器 Skill',
-    description: '从提供的资料中检索相关内容',
-    category: 'tool',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Tool',
-    noPromptFile: true
-  },
-  {
-    id: 'skill:web-extractor',
-    name: '网页内容提取器 Skill',
-    description: '从网页URL提取结构化学习内容，包括标题、大纲、代码块、表格等',
-    category: 'tool',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Tool',
-    noPromptFile: true
-  },
-  {
-    id: 'skill:image-analyzer',
-    name: '图片分析器 Skill',
-    description: '分析图片内容，支持代码截图识别、报错分析、架构图解析、OCR文字提取等',
-    category: 'tool',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Tool',
-    noPromptFile: true
-  },
-  {
-    id: 'skill:memory-search',
-    name: '学习记忆搜索器 Skill',
-    description: '检索用户学习历史、对话记录、成就、进度等记忆数据，支持智能分析和洞察生成',
-    category: 'tool',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Tool',
-    noPromptFile: true
-  },
-  {
-    id: 'skill:smart-search',
-    name: '智能搜索器 Skill',
-    description: '智能搜索技能，支持语义搜索、关键词匹配、多源聚合和智能排序',
-    category: 'tool',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Tool',
-    noPromptFile: true
-  },
   {
     id: 'skill:structured-output-parser',
     name: '结构化输出解析器 Skill',

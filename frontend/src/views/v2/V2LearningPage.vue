@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="learn v2-page">
     <!-- 沉浸式头部 -->
     <header class="learn__head">
@@ -396,7 +396,7 @@ let peerStreamAbort: AbortController | null = null;
 let checkpointCloseTimer = 0;
 /**
  * 流式内容气泡下标（-1 = 尚无气泡）：
- * learning-turn 为 JSON 输出无 delta，期间仅显示 typing 指示器；首个 delta 到达时才建气泡，
+ * teaching-turn 为 JSON 输出无 delta，期间仅显示 typing 指示器；首个 delta 到达时才建气泡，
  * 避免「空气泡 + typing 指示器」双气泡。
  */
 const streamingBubbleIndex = ref(-1);

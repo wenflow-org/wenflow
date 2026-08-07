@@ -1,11 +1,13 @@
-﻿/**
+/**
  * Path 阶段字段路由 seed（skill 粒度）
  *
  * 契约（按执行顺序）：
- *   - skill:path-scene-framing：输入清洗 → normalizedInput / planningHints
  *   - skill:path-planning：认知图景 + milestone 骨架
  *   - skill:stage-designer：milestone → subtasks
  *   - path-agent：聚合输出，handoff 到 execution 阶段
+ *
+ * normalizedInput.* 由编排层确定性定帧（buildFramedNormalizedInput，
+ * 原 skill:path-scene-framing 已移除），挂 path-agent 名下。
  *
  * 字段命名 = 各 skill prompt `## 输出规格` 的 camelCase
  */
@@ -16,21 +18,20 @@ import type { PrismaClient } from '../generated/system-client';
 type PromptRole = 'hard-required' | 'soft-info' | 'hidden-inference' | 'public-reply' | 'proposal-output' | 'derived-presentation' | 'control-signal';
 type RenderValue = 'visible' | 'hidden';
 
-interface SeedField { fieldId: string; promptRole: PromptRole; valueType: string; snakeName?: string; camelName?: string; description: string; enumValues?: string[]; systemLocked?: boolean; structureLocked?: boolean; bindings?: Record<string, unknown>; }
+interface SeedField { fieldId: string; promptRole: PromptRole; valueType: string; snakeName?: string; camelName?: string; pathInRawOutput?: string; description: string; enumValues?: string[]; systemLocked?: boolean; structureLocked?: boolean; bindings?: Record<string, unknown>; }
 interface SeedContract { agentId: string; displayName: string; description: string; }
 interface SeedRouting { agentId: string; fieldId: string; render: RenderValue; handoff: string[]; internal: boolean; accumulate: boolean; visibilityPreset?: string; notes?: string; }
 
 const STAGE = 'path';
 
 export const PATH_FIELD_ROUTING_CONTRACTS: SeedContract[] = [
-  { agentId: 'skill:path-scene-framing', displayName: '路径场景定帧 Skill', description: 'Goal 输出 → normalizedInput 标准化输入与 planningHints' },
   { agentId: 'skill:path-planning', displayName: '路径规划 Skill', description: '认知图景 + 学习路径的 milestone 骨架' },
   { agentId: 'skill:stage-designer', displayName: '阶段设计 Skill', description: 'milestone → subtasks 的任务展开' },
-  { agentId: 'path-agent', displayName: '路径 Agent', description: '路径阶段聚合编排，handoff 到 execution 阶段' },
+  { agentId: 'path-agent', displayName: '路径 Agent', description: '路径阶段聚合编排（含 normalizedInput 确定性定帧），handoff 到 execution 阶段' },
 ];
 
 export const PATH_FIELD_ROUTING_FIELDS: SeedField[] = [
-  // === skill:path-scene-framing 产出 normalizedInput.* ===
+  // === path-agent 确定性定帧产出 normalizedInput.*（原 skill:path-scene-framing） ===
   { fieldId: 'normalizedInput.learnerProfile.backgroundExperience', promptRole: 'soft-info', valueType: 'string', description: '学习者背景经验（清洗）' },
   { fieldId: 'normalizedInput.learnerProfile.constraintsAndBoundaries', promptRole: 'soft-info', valueType: 'string', description: '学习者约束与边界（清洗）' },
   { fieldId: 'normalizedInput.problemSpace.realProblem', promptRole: 'hard-required', valueType: 'string', description: '真实问题（清洗）', systemLocked: true },
@@ -47,6 +48,8 @@ export const PATH_FIELD_ROUTING_FIELDS: SeedField[] = [
   { fieldId: 'normalizedInput.planningHints.subtasksPerStageRange', promptRole: 'hidden-inference', valueType: 'string', description: '推断的每阶段 subtask 数量范围' },
   { fieldId: 'normalizedInput.planningHints.subtaskMinutesRange', promptRole: 'hidden-inference', valueType: 'string', description: '推断的 subtask 分钟数范围' },
   { fieldId: 'normalizedInput.planningHints.maxWeeks', promptRole: 'hidden-inference', valueType: 'number', description: '推断的最大周数' },
+  // === path-agent 编排注入（loopOver 上下文，非 LLM 产出） ===
+  { fieldId: 'previousMilestone', promptRole: 'derived-presentation', valueType: 'object', pathInRawOutput: 'previousMilestone', description: '前一里程碑上下文（title/coreConcept），consolidate 回捞输入；首阶段不注入' },
 
   // === skill:path-planning 产出 ===
   { fieldId: 'path.id', promptRole: 'control-signal', valueType: 'string', description: '路径 ID', systemLocked: true },
@@ -73,7 +76,7 @@ export const PATH_FIELD_ROUTING_FIELDS: SeedField[] = [
 ];
 
 export const PATH_FIELD_ROUTINGS: SeedRouting[] = [
-  // path-scene-framing → path-planning
+  // path-agent（确定性定帧）→ path-planning + stage-designer
   ...['normalizedInput.learnerProfile.backgroundExperience', 'normalizedInput.learnerProfile.constraintsAndBoundaries',
       'normalizedInput.problemSpace.realProblem', 'normalizedInput.problemSpace.scenario', 'normalizedInput.problemSpace.currentPainPoint',
       'normalizedInput.resources.timeBudget', 'normalizedInput.resources.timeBudgetCadence',
@@ -82,12 +85,14 @@ export const PATH_FIELD_ROUTINGS: SeedRouting[] = [
       'normalizedInput.planningHints.paceSignal', 'normalizedInput.planningHints.milestoneRange',
       'normalizedInput.planningHints.conceptRange', 'normalizedInput.planningHints.subtasksPerStageRange',
       'normalizedInput.planningHints.subtaskMinutesRange', 'normalizedInput.planningHints.maxWeeks'].map(fieldId => ({
-    agentId: 'skill:path-scene-framing' as const, fieldId,
+    agentId: 'path-agent' as const, fieldId,
     // normalizedInput 同时供 stage-designer（learning.service stageDesignerBaseInput）
     render: 'hidden' as RenderValue, handoff: ['skill:path-planning', 'skill:stage-designer'],
     internal: true, accumulate: false,
-    visibilityPreset: 'agent-internal'
+    visibilityPreset: 'agent-internal',
+    notes: '确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出'
   })),
+  { agentId: 'path-agent', fieldId: 'previousMilestone', render: 'hidden', handoff: ['skill:stage-designer'], internal: true, accumulate: false, visibilityPreset: 'agent-internal', notes: 'loopOver 编排注入（前一 milestone 上下文），非 LLM 输出' },
 
   // path-planning → stage-designer + path-agent
   { agentId: 'skill:path-planning', fieldId: 'path.id', render: 'visible', handoff: ['path-agent'], internal: false, accumulate: false },
@@ -116,7 +121,7 @@ export const PATH_FIELD_ROUTINGS: SeedRouting[] = [
   // path-agent → learning（聚合 handoff）
   ...['path.name', 'path.summary', 'milestones.title', 'milestones.goal', 'subtasks.title', 'subtasks.acceptanceCriteria'].map(fieldId => ({
     agentId: 'path-agent' as const, fieldId,
-    render: 'visible' as RenderValue, handoff: ['learning'],
+    render: 'visible' as RenderValue, handoff: ['teaching'],
     internal: false, accumulate: false,
   })),
 ];
@@ -138,7 +143,7 @@ export async function ensurePathFieldRoutings(systemPrisma: PrismaClient): Promi
 
   for (const f of PATH_FIELD_ROUTING_FIELDS) {
     const exists = await systemPrisma.field_definitions.findUnique({ where: { fieldId: f.fieldId } });
-    await systemPrisma.field_definitions.upsert({ where: { fieldId: f.fieldId }, update: {}, create: { id: randomUUID(), fieldId: f.fieldId, stage: STAGE, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, description: f.description, enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, bindings: f.bindings ? JSON.stringify(f.bindings) : null } });
+    await systemPrisma.field_definitions.upsert({ where: { fieldId: f.fieldId }, update: {}, create: { id: randomUUID(), fieldId: f.fieldId, stage: STAGE, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, pathInRawOutput: f.pathInRawOutput ?? null, description: f.description, enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, bindings: f.bindings ? JSON.stringify(f.bindings) : null } });
     exists ? result.fieldsSkipped++ : result.fieldsCreated++;
   }
 

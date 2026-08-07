@@ -4,6 +4,11 @@ import { encryptSecret } from '../../utils/secret-crypto'
 
 const originalSecretKeys = process.env.SECRET_ENCRYPTION_KEYS
 const originalSecretKeyId = process.env.SECRET_ENCRYPTION_CURRENT_KEY_ID
+// logger 模块加载会触发 dotenv，注入 backend/.env 的 AI_API_*；测试须显式隔离，
+// 避免"平台 AI 路由缺配置"用例被环境变量兜底误判为 ok
+const originalAiKey = process.env.AI_API_KEY
+const originalAiUrl = process.env.AI_API_URL
+const originalAiModel = process.env.AI_MODEL
 
 function createDatabases() {
   const main = {
@@ -24,13 +29,13 @@ function createDatabases() {
         { agentId: 'skill:goal-conversation' },
         { agentId: 'skill:path-planning' },
         { agentId: 'skill:stage-designer' },
-        { agentId: 'skill:learning-turn' },
+        { agentId: 'skill:teaching-turn' },
         { agentId: 'skill:session-wrapup' }
       ])
     },
-    agent_contracts: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.contractAgentIds.length) },
-    field_definitions: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.fieldIds.length) },
-    agent_field_routings: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.routings.length) },
+    agent_contracts: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.contractAgentIds.length), findMany: jest.fn().mockResolvedValue([]) },
+    field_definitions: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.fieldIds.length), findMany: jest.fn().mockResolvedValue([]) },
+    agent_field_routings: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.routings.length), findMany: jest.fn().mockResolvedValue([]) },
     agent_registrations: { count: jest.fn().mockResolvedValue(1) },
     skill_registrations: { count: jest.fn().mockResolvedValue(1) }
   }
@@ -38,11 +43,23 @@ function createDatabases() {
 }
 
 describe('ReadinessService', () => {
+  beforeEach(() => {
+    delete process.env.AI_API_KEY
+    delete process.env.AI_API_URL
+    delete process.env.AI_MODEL
+  })
+
   afterEach(() => {
     if (originalSecretKeys === undefined) delete process.env.SECRET_ENCRYPTION_KEYS
     else process.env.SECRET_ENCRYPTION_KEYS = originalSecretKeys
     if (originalSecretKeyId === undefined) delete process.env.SECRET_ENCRYPTION_CURRENT_KEY_ID
     else process.env.SECRET_ENCRYPTION_CURRENT_KEY_ID = originalSecretKeyId
+    if (originalAiKey === undefined) delete process.env.AI_API_KEY
+    else process.env.AI_API_KEY = originalAiKey
+    if (originalAiUrl === undefined) delete process.env.AI_API_URL
+    else process.env.AI_API_URL = originalAiUrl
+    if (originalAiModel === undefined) delete process.env.AI_MODEL
+    else process.env.AI_MODEL = originalAiModel
   })
 
   it('双库和核心运行态可读时返回 ready', async () => {

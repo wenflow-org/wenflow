@@ -9,14 +9,13 @@ import prisma from '../../config/database';
 import systemPrisma from '../../config/system-database';
 import { getGateway } from '../../gateway';
 import { AgentConfigService } from '../../services/agentConfig.service';
-import { getAgentManifest, getCanonicalAgentId } from '../../services/agent-manifest.service';
+import { getAgentManifest, getAgentOfSkill, getCanonicalAgentId } from '../../services/agent-manifest.service';
 import {
   getUnifiedSkillStats,
   resolveEffectiveSkillRuntimeConfig,
   toLegacySkillRuntimeStats,
   type SkillStatsRange,
 } from '../../services/skill-runtime-contract.service';
-import { PATH_SCENE_FRAMING_PROMPT } from '../../skills/path-scene-framing';
 import { STAGE_DESIGNER_PROMPT } from '../../skills/stage-designer';
 import { ADAPTIVE_GUIDANCE_COPY_PROMPT } from '../../skills/adaptive-guidance-copy';
 import { GOAL_PROFILE_INFERENCE_PROMPT } from '../../skills/goal-profile-inference';
@@ -35,7 +34,6 @@ import { STRUCTURED_OUTPUT_PARSER_PROMPT } from '../../skills/structured-output-
 const router = Router();
 
 const SKILL_FALLBACK_PROMPTS: Record<string, string> = {
-  'path-scene-framing': PATH_SCENE_FRAMING_PROMPT,
   'stage-designer': STAGE_DESIGNER_PROMPT,
   'adaptive-guidance-copy': ADAPTIVE_GUIDANCE_COPY_PROMPT,
   'goal-profile-inference': GOAL_PROFILE_INFERENCE_PROMPT,
@@ -125,6 +123,7 @@ router.get('/', async (req: Request, res: Response) => {
     
     const skillList = skills.map(s => {
       const stats = runtimeStats.get(s.definition.name) || s.definition.stats;
+      const agentOf = getAgentOfSkill(s.definition.name);
       return {
         name: s.definition.name,
         version: s.definition.version,
@@ -134,7 +133,10 @@ router.get('/', async (req: Request, res: Response) => {
         dependencies: s.definition.dependencies,
         stats,
         lastCalledAt: runtimeStats.get(s.definition.name)?.lastCalledAt || s.lastCalledAt,
-        registeredAt: s.registeredAt
+        registeredAt: s.registeredAt,
+        displayName: s.definition.displayName || s.definition.name,
+        agentId: agentOf?.id ?? null,
+        agentName: agentOf?.name ?? null
       };
     });
     
@@ -153,46 +155,6 @@ router.get('/', async (req: Request, res: Response) => {
 /**
  * 按分类统计
  */
-router.get('/categories', async (req: Request, res: Response) => {
-  try {
-    const gateway = getGateway();
-    const skills = gateway.matchSkills({});
-    
-    const categoryMap: Record<string, { count: number; totalCalls: number; avgSuccessRate: number }> = {};
-    
-    skills.forEach(s => {
-      const cat = s.definition.category;
-      if (!categoryMap[cat]) {
-        categoryMap[cat] = { count: 0, totalCalls: 0, avgSuccessRate: 0 };
-      }
-      categoryMap[cat].count++;
-      categoryMap[cat].totalCalls += s.definition.stats.callCount;
-    });
-    
-    Object.keys(categoryMap).forEach(cat => {
-      const catSkills = skills.filter(s => s.definition.category === cat);
-      categoryMap[cat].avgSuccessRate = catSkills.length > 0
-        ? catSkills.reduce((sum, s) => sum + s.definition.stats.successRate, 0) / catSkills.length
-        : 0;
-    });
-    
-    const categories = Object.entries(categoryMap).map(([name, data]) => ({
-      name,
-      label: getCategoryLabel(name),
-      ...data
-    }));
-    
-    res.json({
-      success: true,
-      data: categories
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
 
 
 /**
@@ -203,74 +165,6 @@ router.get('/categories', async (req: Request, res: Response) => {
  * 
  * 注意：此函数路由必须在 /:name 通配路由之前注册，避免 Express 把 "agent-relations" 当作 skill name 匹配。
  */
-router.get('/agent-relations', async (_req: Request, res: Response) => {
-  try {
-    const gateway = getGateway();
-    const skills = gateway.matchSkills({});
-    const allSkillNames = skills.map(s => s.definition.name);
-
-    const relations: Record<string, { agents: string[]; orchestrators: string[]; totalReferences: number }> = {};
-    for (const name of allSkillNames) {
-      relations[name] = { agents: [], orchestrators: [], totalReferences: 0 };
-    }
-
-    const fs = await import('fs');
-    const path = await import('path');
-
-    const agentDir = path.resolve(__dirname, '../../agents');
-    const orchDir = path.resolve(__dirname, '../../orchestrators');
-
-    function scanDir(dir: string, kind: 'agents' | 'orchestrators') {
-      if (!fs.existsSync(dir)) return;
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          scanDir(fullPath, kind);
-        } else if (entry.isFile() && entry.name.endsWith('.ts')) {
-          try {
-            const content = fs.readFileSync(fullPath, 'utf-8');
-            const dirName = entry.name === 'index.ts'
-              ? path.basename(path.dirname(fullPath))
-              : entry.name.replace('.ts', '');
-            for (const skillName of allSkillNames) {
-              if (
-                content.includes(`'${skillName}'`) ||
-                content.includes(`"${skillName}"`) ||
-                content.includes(`skill:${skillName}`) ||
-                content.includes(`skills/${skillName}`)
-              ) {
-                if (kind === 'agents') {
-                  relations[skillName].agents.push(dirName);
-                } else {
-                  relations[skillName].orchestrators.push(dirName);
-                }
-                relations[skillName].totalReferences++;
-              }
-            }
-          } catch {
-            // skip unreadable files
-          }
-        }
-      }
-    }
-
-    scanDir(agentDir, 'agents');
-    scanDir(orchDir, 'orchestrators');
-
-    for (const [skillName, rel] of Object.entries(relations)) {
-      rel.agents = [...new Set(rel.agents)];
-      rel.orchestrators = [...new Set(rel.orchestrators)];
-    }
-
-    res.json({ success: true, data: relations });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
 
 /**
  * 批量获取 Skill Prompt 摘要
@@ -282,181 +176,14 @@ router.get('/agent-relations', async (_req: Request, res: Response) => {
  *
  * 注意：此路由必须在 /:name 通配路由之前注册，避免 Express 把 "prompt-summaries" 当作 skill name 匹配。
  */
-router.get('/prompt-summaries', async (req: Request, res: Response) => {
-  try {
-    const rawSkillIds = String(req.query.skillIds || '');
-    const skillIds = Array.from(new Set(
-      rawSkillIds
-        .split(',')
-        .map((item) => item.trim().replace(/^skill:/, ''))
-        .filter((item) => !!item)
-    )).slice(0, 100);
-
-    if (!skillIds.length) {
-      return res.json({ success: true, data: { summaries: {} } });
-    }
-
-    // 汇总所有候选 agentId（skill: 前缀 id + 规范 id + manifest 别名），一次查询代替逐 Skill 查询
-    const candidateIdsBySkill = new Map<string, string[]>();
-    const allCandidateIds = new Set<string>();
-    for (const skillId of skillIds) {
-      const lookupId = `skill:${skillId}`;
-      const manifest = getAgentManifest(lookupId);
-      const candidates = new Set<string>([lookupId, getCanonicalAgentId(lookupId)]);
-      for (const alias of manifest?.aliases || []) {
-        candidates.add(alias);
-      }
-      const ids = Array.from(candidates);
-      candidateIdsBySkill.set(skillId, ids);
-      ids.forEach((id) => allCandidateIds.add(id));
-    }
-
-    const prompts = await systemPrisma.agent_prompts.findMany({
-      where: { agentId: { in: Array.from(allCandidateIds) } },
-      orderBy: [
-        { agentId: 'asc' },
-        { version: 'desc' },
-      ],
-      select: {
-        id: true,
-        agentId: true,
-        version: true,
-        name: true,
-        description: true,
-        status: true,
-        model: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-
-    const promptsByAgentId = new Map<string, typeof prompts>();
-    for (const prompt of prompts) {
-      const list = promptsByAgentId.get(prompt.agentId) || [];
-      list.push(prompt);
-      promptsByAgentId.set(prompt.agentId, list);
-    }
-
-    const gateway = getGateway();
-    const summaries: Record<string, {
-      skillId: string;
-      agentId: string;
-      source: 'db' | 'code-fallback' | 'generated-default' | 'missing';
-      prompt: unknown;
-    }> = {};
-
-    for (const skillId of skillIds) {
-      const agentId = `skill:${skillId}`;
-      const candidateIds = candidateIdsBySkill.get(skillId) || [agentId];
-      const versions = candidateIds.flatMap((id) => promptsByAgentId.get(id) || []);
-      const selected = versions.find((item) => (item.status || '').toUpperCase() === 'ACTIVE') || versions[0] || null;
-
-      if (selected) {
-        summaries[skillId] = { skillId, agentId, source: 'db', prompt: selected };
-        continue;
-      }
-
-      if (SKILL_FALLBACK_PROMPTS[skillId]) {
-        summaries[skillId] = { skillId, agentId, source: 'code-fallback', prompt: null };
-        continue;
-      }
-
-      if (gateway.getSkill(skillId)) {
-        summaries[skillId] = { skillId, agentId, source: 'generated-default', prompt: null };
-        continue;
-      }
-
-      summaries[skillId] = { skillId, agentId, source: 'missing', prompt: null };
-    }
-
-    res.json({ success: true, data: { summaries } });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
 
 /**
  * 获取 Skill 详情
  */
-router.get('/:name', async (req: Request, res: Response) => {
-  try {
-    const { name } = req.params;
-    const gateway = getGateway();
-    const skill = gateway.getSkill(name);
-    const runtimeStats = await getSkillRuntimeStats([name]);
-    
-    if (!skill) {
-      return res.status(404).json({
-        success: false,
-        error: 'Skill not found'
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: {
-        name: skill.definition.name,
-        version: skill.definition.version,
-        category: skill.definition.category,
-        description: skill.definition.description,
-        inputSchema: skill.definition.inputSchema,
-        outputSchema: skill.definition.outputSchema,
-        capabilities: skill.definition.capabilities,
-        dependencies: skill.definition.dependencies,
-        stats: runtimeStats.get(name) || skill.definition.stats,
-        lastCalledAt: runtimeStats.get(name)?.lastCalledAt || skill.lastCalledAt,
-        registeredAt: skill.registeredAt
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
 
 /**
  * 获取 Skill 数据库统计
  */
-router.get('/:name/db-stats', async (req: Request, res: Response) => {
-  try {
-    const { name } = req.params;
-    
-    const record = await systemPrisma.skill_registrations.findUnique({
-      where: { name }
-    });
-    
-    if (!record) {
-      return res.status(404).json({
-        success: false,
-        error: 'Skill not found in database'
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: {
-        name: record.name,
-        version: record.version,
-        category: record.category,
-        description: record.description,
-        callCount: record.callCount,
-        successRate: record.successRate,
-        createdAt: record.createdAt,
-        updatedAt: record.updatedAt
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
 
 /**
  * 测试执行 Skill
@@ -673,48 +400,6 @@ router.get('/:name/effective-prompt', async (req: Request, res: Response) => {
 /**
  * 获取使用趋势（最近7天调用统计）
  */
-router.get('/usage/trends', async (req: Request, res: Response) => {
-  try {
-    const skills = await systemPrisma.skill_registrations.findMany({
-      select: {
-        name: true,
-        callCount: true,
-        successRate: true,
-        updatedAt: true
-      },
-      orderBy: {
-        callCount: 'desc'
-      }
-    });
-    
-    const totalCalls = skills.reduce((sum, s) => sum + s.callCount, 0);
-    const avgSuccessRate = skills.length > 0
-      ? skills.reduce((sum, s) => sum + s.successRate, 0) / skills.length
-      : 0;
-    
-    res.json({
-      success: true,
-      data: {
-        skills: skills.map(s => ({
-          name: s.name,
-          callCount: s.callCount,
-          successRate: s.successRate,
-          lastUpdated: s.updatedAt
-        })),
-        summary: {
-          totalCalls,
-          avgSuccessRate,
-          totalSkills: skills.length
-        }
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
 
 /**
  * 获取分类中文标签
@@ -742,7 +427,7 @@ function getCategoryLabel(category: string): string {
  *   - 字段契约（agent_contracts 表，按 stage）
  *   - 调用统计（agent_call_logs 聚合）
  *
- * 同时接受老 id（如 'learning-turn-agent'）通过 alias 解析。
+ * 同时接受老 id（如 'teaching-turn-agent'）通过 alias 解析。
  */
 router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
   try {

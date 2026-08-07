@@ -41,7 +41,6 @@ jest.mock('../learning-state.service', () => ({ __esModule: true, default: {} })
 jest.mock('../../learner/LearnerProjectionService', () => ({ learnerProjectionService: {} }))
 jest.mock('../../../gateway/event-bus', () => ({ getEventBus: () => ({ emit: jest.fn() }) }))
 jest.mock('../../../skills', () => ({ executeSkill: jest.fn() }))
-jest.mock('../../../skills/path-scene-framing', () => ({ pathSceneFramingDefinition: {} }))
 jest.mock('../../../skills/stage-designer', () => ({ stageDesignerDefinition: {} }))
 
 import learningService from '../learning.service'

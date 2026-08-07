@@ -6,6 +6,7 @@ import { executeSkill } from '../../skills';
 import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
+import { assembleGoalHandoff } from '../../services/field-dispatcher';
 import learningService from './learning.service';
 import { createDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
@@ -458,7 +459,7 @@ async continueConversation(
 
             pathOrchestrator.runGoalAsync(
               {
-                ...this.buildGoalPathRequest(conversation, seedResult, placeholderPath.id, options?.systemPromptOverrides),
+                ...await this.buildGoalPathRequest(conversation, seedResult, placeholderPath.id, options?.systemPromptOverrides),
                 generationRunId: runId,
                 createdPlaceholder: true
               },
@@ -524,80 +525,24 @@ async continueConversation(
       const confidence = this.resolveConfidenceFromResponse(responseWithConversationId);
       const goalExt = this.getGoalExt(responseWithConversationId.internal);
 
-      // 如果对话完成，先生成学习路径
+      // 模型自报 ready/completed 不产生学习路径：路径生成只能由用户通过 UI 按钮显式确认触发
+      // （见上方 confirmProposal 硬规则路径）。模型自报一律回落 proposing，等待用户确认方案。
       if (stage === 'ready' || stage === 'completed') {
-        try {
-            const latestConversation = await prisma.goal_conversations.findUnique({
-              where: { id: conversationId }
-            });
-            const placeholderPath = await this.createGeneratingPlaceholderPath(
-              latestConversation || conversation,
-              responseWithConversationId
-            );
-            const runId = await learningService.claimPathCoreGeneration(placeholderPath.id, null);
-
-            await this.updateConversationLifecycle(conversationId, 'completed', {
-              status: 'completed',
-              completedAt: new Date(),
-              learningPathId: placeholderPath.id,
-              learningPath: { id: placeholderPath.id, status: 'generating' }
-            });
-
-            pathOrchestrator.runGoalAsync(
-            {
-              ...this.buildGoalPathRequest(latestConversation || conversation, responseWithConversationId, placeholderPath.id, options?.systemPromptOverrides),
-              generationRunId: runId,
-              createdPlaceholder: true
-            },
-            {
-              onSuccess: () => {
-                logger.info('异步学习路径生成成功', {
-                  conversationId,
-                  pathId: placeholderPath.id
-                });
-              },
-              onError: async (pathError) => {
-                logger.error('异步学习路径生成失败', {
-                  conversationId,
-                  pathId: placeholderPath.id,
-                  error: (pathError as any)?.message || String(pathError)
-                });
-
-                await learningService.markActiveGenerationFailed(placeholderPath.id, pathError, runId);
-              }
-            }
-          );
-
-          // 新格式返回：completed 状态
-          return this.toServiceResult(responseWithConversationId, conversationId, {
-            stage: 'completed',
-            isCompleted: true,
-            learningPath: { id: placeholderPath.id, status: 'generating' },
-            userVisible: `${responseWithConversationId.userVisible}\n\n⏳ 学习路径已开始生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。`,
-          });
-        } catch (pathError) {
-          // 学习路径生成失败，返回错误但不标记完成
-          logger.error('学习路径生成失败，对话仍保留在 proposing 状态', pathError);
-          await this.updateConversationLifecycle(conversationId, 'proposing', {
-            status: 'active',
-            completedAt: null,
-            mutateCollectedData: (data) => {
-              data.learningPath = null;
-            }
-          });
-          const failed = this.toServiceResult(responseWithConversationId, conversationId, {
-            stage: 'proposing',
-            isCompleted: false,
-            userVisible: '抱歉，生成学习路径时遇到了问题。请稍后重试，或者点击"重试"按钮。',
-          });
-          return {
-            ...failed,
-            internal: {
-              ...failed.internal,
-              error: '学习路径生成失败，请重试'
-            }
-          };
-        }
+        await this.updateConversationLifecycle(conversationId, 'proposing', {
+          status: 'active',
+          completedAt: null,
+          mutateCollectedData: (data) => {
+            data.stage = 'proposing';
+          }
+        });
+        logger.warn('模型自报 ready 已被回落为 proposing，等待用户显式确认', {
+          conversationId,
+          userId
+        });
+        return this.toServiceResult(responseWithConversationId, conversationId, {
+          stage: 'proposing',
+          isCompleted: false,
+        });
       }
 
       // 新格式返回：正常对话状态
@@ -818,12 +763,12 @@ async continueConversation(
     });
   }
 
-  private buildGoalPathRequest(
+  private async buildGoalPathRequest(
     conversation: any,
     aiResponse: any,
     existingPathId?: string,
     systemPromptOverrides?: GoalConversationOptions['systemPromptOverrides']
-  ): GoalPathRequest {
+  ): Promise<GoalPathRequest> {
     const data = JSON.parse(conversation.collectedData);
     const goalExt = this.getGoalExt(aiResponse.internal);
     const understanding = goalExt.understanding || data.understanding || {};
@@ -837,6 +782,10 @@ async continueConversation(
           .filter((message: { role: string; content: string }) => message.content)
       : [];
 
+    // 配置式值流转（P1 试点）：按 routings 表 goal-agent 交付行 + pathInRawOutput
+    // 从 skill 输出抽取 goal→path 字段，与 visibleSummary 并行产出（golden 验证/后续装配切换）
+    const goalHandoffFields = await assembleGoalHandoff(aiResponse).catch(() => null);
+
     return {
       userId: conversation.userId,
       sourceConversationId: conversation.id,
@@ -849,6 +798,7 @@ async continueConversation(
         confirmedProposal,
         collected: data.collected || {},
       }),
+      ...(goalHandoffFields ? { goalHandoffFields: goalHandoffFields.fields } : {}),
       // goal skill 产出的结构化画像透传（learner.identity/learning_context 等），供 path-planning scenario 判定
       structuredData: (data as any)?.structuredData || null,
       conversationHistory,
@@ -859,8 +809,8 @@ async continueConversation(
     };
   }
 
-  private buildPlaceholderPromptTemplatePayload(conversation: any, aiResponse: any, existingPathId: string) {
-    const goalPathRequest = this.buildGoalPathRequest(conversation, aiResponse, existingPathId);
+  private async buildPlaceholderPromptTemplatePayload(conversation: any, aiResponse: any, existingPathId: string) {
+    const goalPathRequest = await this.buildGoalPathRequest(conversation, aiResponse, existingPathId);
 
     return {
       source: 'goal',
@@ -890,7 +840,7 @@ async continueConversation(
     systemPromptOverrides?: GoalConversationOptions['systemPromptOverrides']
   ) {
     try {
-      const request = this.buildGoalPathRequest(
+      const request = await this.buildGoalPathRequest(
         conversation,
         aiResponse,
         conversation.learningPathId || undefined,

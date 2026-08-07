@@ -101,6 +101,35 @@ router.put('/:id/archive', async (req: Request, res: Response) => {
   }
 });
 
+/** PUT /:id — 编辑（标题/正文/级别/过期；不改变发布状态） */
+router.put('/:id', async (req: Request, res: Response) => {
+  try {
+    const { title, body, severity, expiresAt } = req.body || {};
+    if (!title || !String(title).trim()) {
+      return res.status(400).json({ success: false, error: '标题必填' });
+    }
+    if (!body || !String(body).trim()) {
+      return res.status(400).json({ success: false, error: '正文必填' });
+    }
+    if (!SEVERITIES.has(severity)) {
+      return res.status(400).json({ success: false, error: `severity 只能是 ${[...SEVERITIES].join('/')}` });
+    }
+    const updated = await prisma.announcements.update({
+      where: { id: req.params.id },
+      data: {
+        title: String(title).trim(),
+        body: String(body).trim(),
+        severity,
+        expiresAt: expiresAt ? new Date(expiresAt) : null
+      }
+    });
+    res.json({ success: true, data: shape(updated as unknown as Record<string, unknown>) });
+  } catch (error) {
+    logger.error('[admin-announcements] update failed:', error);
+    res.status(500).json({ success: false, error: '编辑公告失败' });
+  }
+});
+
 /** DELETE /:id — 删除 */
 router.delete('/:id', async (req: Request, res: Response) => {
   try {

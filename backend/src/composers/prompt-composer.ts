@@ -22,6 +22,7 @@ import {
 import { resolveEffectiveRuntimeContract } from '../services/prompt-lab/resolve-runtime-contract';
 import { resolveEffectivePromptContract } from '../services/prompt-lab/resolve-prompt-contract';
 import { adaptToRuntimeEnvelope } from '../services/prompt-lab/envelope-adapter';
+import { validateSkillOutputFields } from '../services/skill-output-validator';
 import type { RuntimeContract } from '../services/prompt-lab/runtime-contract';
 import { resolveLlmCallParams } from '../services/resolve-llm-call-params';
 import type { SkillPromptOutputMedia } from '../services/skill-prompt-contract';
@@ -483,6 +484,27 @@ export async function callPrompt<TInput, TOutput>(
       lastViolations = Array.isArray(validation.violations)
         ? [...validation.violations]
         : [lastFailureReason];
+      attempts.push({
+        attempt, rawOutput: rawModelOutput, failureReason: lastFailureReason,
+        violations: lastViolations,
+        status: 'validation_failed', durationMs: Date.now() - attemptStartedAt,
+        llmRequestId: lastLlmRequestId || undefined,
+        transportAttemptCount: gatewayMetadata?.attemptCount
+      });
+      continue;
+    }
+
+    // P3 试点：core fields 声明契约校验（skill 领域校验通过后追加；
+    // delta 语义按 core 文件 deltaOutput 判定，File-as-Truth，不受 ACTIVE metadata 影响）
+    const fieldsValidation = await validateSkillOutputFields(
+      spec.agentId,
+      extracted.parsed
+    );
+    if (fieldsValidation && !fieldsValidation.valid) {
+      lastFailureReason = `fields contract violation: ${fieldsValidation.issues
+        .map((issue) => `${issue.field}(${issue.code}:${issue.expected})`)
+        .join('; ')}`;
+      lastViolations = [lastFailureReason];
       attempts.push({
         attempt, rawOutput: rawModelOutput, failureReason: lastFailureReason,
         violations: lastViolations,

@@ -229,7 +229,7 @@ const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, PeerModelArtifact> = {
   defaultSystemPrompt: '',
   requireActivePrompt: true,
   caller: {
-    agentId: 'learning-agent',
+    agentId: 'teaching-agent',
     skillId: 'peer-reinforcement',
   },
   buildUserPayload: (input) => buildPeerUserPayload(input),

@@ -103,17 +103,15 @@ describe('path-planning payload snapshot parity', () => {
     expect(payload).toContain('表格基础')
   })
 
-  it('scene framing input surfaces as the high-priority normalized JSON section', async () => {
+  it('normalized input surfaces as the high-priority normalized JSON section', async () => {
     await pathAgentHandler({
       ...BASE_INPUT,
       metadata: {
         ...BASE_INPUT.metadata,
-        pathSceneFraming: {
-          normalizedInput: {
-            problemSpace: { realProblem: '财报指标看不懂', scenario: '财务分析' },
-            successCriteria: { observableResult: '独立分析一份财报', acceptanceCheck: '能解释关键指标' },
-            confirmedProposal: { learningDirection: '财务数据分析', firstDeliverable: '财报解读' },
-          },
+        normalizedInput: {
+          problemSpace: { realProblem: '财报指标看不懂', scenario: '财务分析' },
+          successCriteria: { observableResult: '独立分析一份财报', acceptanceCheck: '能解释关键指标' },
+          confirmedProposal: { learningDirection: '财务数据分析', firstDeliverable: '财报解读' },
         },
       },
     } as any, { userId: 'user-1' } as any)

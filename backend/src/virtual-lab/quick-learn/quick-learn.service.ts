@@ -2,7 +2,7 @@
  * Quick Learn Service（虚拟账号自动学习运行器）
  *
  * 开发者选定虚拟学习者账号名下的 Task，系统沿真实生产链驱动这个账号学完一节课：
- *   startSession → learning-turn × N（双重收束）→ endSession（含 wrapup）
+ *   startSession → teaching-turn × N（双重收束）→ endSession（含 wrapup）
  *   → completeTask → 等待异步投影 → 生成 Propagation Report。
  *
  * 设计文档：doc/VIRTUAL_LEARNER_QUICK_LEARN_DESIGN_2026-07-21_091152.md
@@ -354,6 +354,7 @@ export class QuickLearnService {
           previousLearnerState,
           taskTitle: task.title,
           milestoneTitle: milestone.title,
+          taskConcept: (task as any).linkedConcept || null,
         });
 
         if (!simulatorOutput || !simulatorOutput.reply || simulatorOutput.degraded) {
@@ -401,7 +402,7 @@ export class QuickLearnService {
 
         await this.updateProgress(run.id, {
           turn,
-          phase: 'learning',
+          phase: 'teaching',
           lastAction: `turn-${turn}${teacherReady ? '-teacher-ready' : ''}`,
           updatedAt: new Date().toISOString(),
         }, turns);
@@ -551,6 +552,7 @@ export class QuickLearnService {
     previousLearnerState: Record<string, any> | null;
     taskTitle: string;
     milestoneTitle: string;
+    taskConcept?: string | null;
   }): Promise<LearnLearnerSimulationOutput | null> {
     const history = input.visibleHistory.slice(-VISIBLE_HISTORY_LIMIT);
     const lastTeacherMessage = [...history].reverse().find((item) => item.role === 'teacher')?.content;
@@ -562,7 +564,9 @@ export class QuickLearnService {
         currentPhase: input.currentPhase,
         previousLearnerState: input.previousLearnerState,
         currentTask: { title: input.taskTitle, milestoneTitle: input.milestoneTitle },
-        knowledgeSnapshot: [],
+        knowledgeSnapshot: input.taskConcept
+          ? [{ name: input.taskConcept, status: 'learning', progress: 40 }]
+          : [{ name: input.taskTitle, status: 'learning', progress: 30 }],
         frictionBudget: 'none',
       });
       return (output || null) as LearnLearnerSimulationOutput | null;

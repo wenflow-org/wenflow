@@ -5,6 +5,7 @@ import {
   runBackgroundTask
 } from '../services/background-task-tracker.service';
 import learningService from '../services/learning/learning.service';
+import { buildFramedNormalizedInput } from '../services/learning/path-planning-hints';
 import {
   getPathAgentInputConfig,
   type PathAgentInputConfig
@@ -38,6 +39,8 @@ interface GoalFinalPayload {
   visibleSummary?: GoalPathVisibleSummary | null;
   conversationHistory?: Array<{ role: string; content: string }>;
   finalUserVisible?: string | null;
+  /** 配置式值流转（P1 试点）：routings 表 goal-agent 交付行抽取的 goal→path 字段 */
+  goalHandoffFields?: Record<string, any>;
 }
 
 interface NormalizedPathInputV1 {
@@ -152,6 +155,76 @@ class PathCoordinator {
       : null;
   }
 
+  /**
+   * normalizedInputV1 配置式装配（P1/P2 golden 验证后的正式切换）：
+   * goal-agent 交付字段（goalHandoffFields，来自 routings 表声明）优先，
+   * visibleSummary 确定性投影回退；派生字段（timeBudgetCadence/timePerWeek/
+   * currentPainPoint）保持既有派生逻辑。
+   */
+  private buildNormalizedInputV1(
+    handoffFields: Record<string, any> | null,
+    visibleSummary: GoalPathVisibleSummary | null | undefined,
+    rawGoal: string | null | undefined
+  ): NormalizedPathInputV1 {
+    const pick = (handoffKey: string): any => {
+      const value = handoffFields?.[handoffKey];
+      return value === undefined || value === null ? undefined : value;
+    };
+    const str = (handoffKey: string, fallback: any): string | null =>
+      this.normalizeString(pick(handoffKey)) ?? this.normalizeString(fallback);
+    const arr = (handoffKey: string, fallback: any): string[] =>
+      pick(handoffKey) !== undefined
+        ? this.normalizeStringArray(pick(handoffKey))
+        : this.normalizeStringArray(fallback);
+
+    const timeBudget = str('understanding.available_resources.time_budget', visibleSummary?.resources?.timeBudget)
+      ?? str('understanding.available_resources.time_budget', visibleSummary?.resources?.timePerWeek);
+    const timePerWeek = str('understanding.available_resources.time_budget', visibleSummary?.resources?.timePerWeek) || timeBudget;
+    const painPoints = arr('understanding.pain_points', visibleSummary?.painPoints);
+
+    return {
+      version: '1.0',
+      learnerProfile: {
+        surfaceGoal: str('understanding.surface_goal', visibleSummary?.surfaceGoal)
+          || this.normalizeString(rawGoal),
+        currentBaseline: {
+          level: str('understanding.current_baseline.level', visibleSummary?.currentBaseline?.level),
+          evidence: str('understanding.current_baseline.evidence', visibleSummary?.currentBaseline?.evidence),
+        },
+        motivation: str('understanding.motivation', visibleSummary?.motivation),
+        urgency: str('understanding.urgency', visibleSummary?.urgency),
+        backgroundExperience: str('understanding.background_experience', visibleSummary?.backgroundExperience),
+        painPoints,
+        learningSignal: str('understanding.learning_signal', visibleSummary?.learningSignal),
+        constraintsAndBoundaries: arr('understanding.constraints_and_boundaries', visibleSummary?.constraintsAndBoundaries),
+      },
+      problemSpace: {
+        realProblem: str('understanding.real_problem', visibleSummary?.realProblem),
+        scenario: str('understanding.scenario', visibleSummary?.scenario),
+        currentPainPoint: this.normalizeString(visibleSummary?.currentPainPoint) || painPoints[0] || null,
+      },
+      resources: {
+        timeBudget,
+        timeBudgetCadence: this.normalizeCadence(visibleSummary?.resources?.timeBudgetCadence),
+        timePerWeek,
+        timePerSession: str('understanding.available_resources.time_per_session', visibleSummary?.resources?.timePerSession),
+        timeHorizon: str('understanding.available_resources.time_horizon', visibleSummary?.resources?.timeHorizon),
+        deadlineText: str('understanding.deadline_text', visibleSummary?.resources?.deadlineText),
+      },
+      successCriteria: {
+        observableResult: str('understanding.success_criteria.observable_result', visibleSummary?.successCriteria?.observableResult),
+        acceptanceCheck: str('understanding.success_criteria.acceptance_check', visibleSummary?.successCriteria?.acceptanceCheck),
+      },
+      confirmedProposal: (pick('confirmedProposal.learning_direction') !== undefined
+        || pick('confirmedProposal.first_deliverable') !== undefined
+        || visibleSummary?.confirmedProposal) ? {
+        learningDirection: str('confirmedProposal.learning_direction', visibleSummary?.confirmedProposal?.learningDirection),
+        firstDeliverable: str('confirmedProposal.first_deliverable', visibleSummary?.confirmedProposal?.firstDeliverable),
+        keyStages: arr('confirmedProposal.key_stages', visibleSummary?.confirmedProposal?.keyStages),
+        outOfScope: arr('confirmedProposal.out_of_scope', visibleSummary?.confirmedProposal?.outOfScope),
+      } : null,
+    };
+  }
   private buildNormalizedGoalInput(input: GoalPathRequest, config: PathAgentInputConfig): PathGenerationInput {
     const goalFinalPayload: GoalFinalPayload = {
       sourceConversationId: input.sourceConversationId,
@@ -200,45 +273,11 @@ class PathCoordinator {
     };
 
     const visibleSummary = goalFinalPayload.visibleSummary;
-    const normalizedInputV1: NormalizedPathInputV1 = {
-      version: '1.0',
-      learnerProfile: {
-        surfaceGoal: this.normalizeString(visibleSummary?.surfaceGoal) || this.normalizeString(goalFinalPayload.rawGoal),
-        currentBaseline: {
-          level: this.normalizeString(visibleSummary?.currentBaseline?.level),
-          evidence: this.normalizeString(visibleSummary?.currentBaseline?.evidence),
-        },
-        motivation: this.normalizeString(visibleSummary?.motivation),
-        urgency: this.normalizeString(visibleSummary?.urgency),
-        backgroundExperience: this.normalizeString(visibleSummary?.backgroundExperience),
-        painPoints: this.normalizeStringArray(visibleSummary?.painPoints),
-        learningSignal: this.normalizeString(visibleSummary?.learningSignal),
-        constraintsAndBoundaries: this.normalizeStringArray(visibleSummary?.constraintsAndBoundaries),
-      },
-      problemSpace: {
-        realProblem: this.normalizeString(visibleSummary?.realProblem),
-        scenario: this.normalizeString(visibleSummary?.scenario),
-        currentPainPoint: this.normalizeString(visibleSummary?.currentPainPoint),
-      },
-      resources: {
-        timeBudget: this.normalizeString(visibleSummary?.resources?.timeBudget) || this.normalizeString(visibleSummary?.resources?.timePerWeek),
-        timeBudgetCadence: this.normalizeCadence(visibleSummary?.resources?.timeBudgetCadence),
-        timePerWeek: this.normalizeString(visibleSummary?.resources?.timePerWeek),
-        timePerSession: this.normalizeString(visibleSummary?.resources?.timePerSession),
-        timeHorizon: this.normalizeString(visibleSummary?.resources?.timeHorizon),
-        deadlineText: this.normalizeString(visibleSummary?.resources?.deadlineText),
-      },
-      successCriteria: {
-        observableResult: this.normalizeString(visibleSummary?.successCriteria?.observableResult),
-        acceptanceCheck: this.normalizeString(visibleSummary?.successCriteria?.acceptanceCheck),
-      },
-      confirmedProposal: visibleSummary?.confirmedProposal ? {
-        learningDirection: this.normalizeString(visibleSummary.confirmedProposal.learningDirection),
-        firstDeliverable: this.normalizeString(visibleSummary.confirmedProposal.firstDeliverable),
-        keyStages: this.normalizeStringArray(visibleSummary.confirmedProposal.keyStages),
-        outOfScope: this.normalizeStringArray(visibleSummary.confirmedProposal.outOfScope),
-      } : null,
-    };
+    const normalizedInputV1 = this.buildNormalizedInputV1(
+      goalFinalPayload.goalHandoffFields || null,
+      visibleSummary,
+      goalFinalPayload.rawGoal
+    );
 
     const description = this.pickFirstDefined(source, config.normalizedInput.descriptionSources)
       || normalizedInputV1.problemSpace.realProblem
@@ -297,7 +336,7 @@ class PathCoordinator {
         confirmedProposal: config.normalizedInput.includeConfirmedProposal ? input.visibleSummary?.confirmedProposal || null : null,
         confidenceScores: null,
         conversationHistory: config.normalizedInput.includeConversationHistory ? input.conversationHistory || [] : [],
-        normalizedInput: normalizedInputV1,
+        normalizedInput: buildFramedNormalizedInput(normalizedInputV1) || normalizedInputV1,
         goalFinalPayload: {
           source: 'goal',
           mode: 'generate',

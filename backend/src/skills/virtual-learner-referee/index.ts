@@ -100,7 +100,7 @@ export function normalizeRefereeOutput(parsed: any, input: VirtualLearnerReferee
       ? clampScore(rawScores.goalUnderstanding, 50)
       : null,
     pathExperience: coverage.path ? clampScore(rawScores.pathExperience, 50) : null,
-    teachingExperience: coverage.learning ? clampScore(rawScores.teachingExperience, 50) : null,
+    teachingExperience: coverage.teaching ? clampScore(rawScores.teachingExperience, 50) : null,
     controlConsistency: clampScore(rawScores.controlConsistency, 50),
     boundaryIntegrity: clampScore(rawScores.boundaryIntegrity, 50),
     evidenceSufficiency: clampScore(rawScores.evidenceSufficiency, evidence.length ? 60 : 20)

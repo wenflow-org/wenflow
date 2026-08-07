@@ -85,10 +85,41 @@ export class McpGateway {
   private config: IMcpConfig;
   private serverStatus: Map<string, boolean> = new Map();
   private healthCheckTimer?: NodeJS.Timeout;
+  private configPath: string;
 
   constructor(configPath?: string) {
-    this.config = this.loadConfig(configPath);
+    this.configPath = configPath || path.join(__dirname, '../../../config/mcp.json');
+    this.config = this.loadConfig(this.configPath);
     this.initHealthCheck();
+  }
+
+  /** 当前配置（管理台只读展示/编辑用） */
+  getConfig(): IMcpConfig {
+    return this.config;
+  }
+
+  /**
+   * 更新配置并原子写回 mcp.json（保留 $schema/agents/routing 等字段，只替换 servers/tools）
+   */
+  async updateConfig(next: Partial<Pick<IMcpConfig, 'servers' | 'tools'>>): Promise<void> {
+    const raw = fs.readFileSync(this.configPath, 'utf-8').replace(/^\uFEFF/, '');
+    const onDisk: IMcpConfig = JSON.parse(raw);
+    if (next.servers !== undefined && !Array.isArray(next.servers)) {
+      throw new Error('servers 必须是数组');
+    }
+    if (next.tools !== undefined && !Array.isArray(next.tools)) {
+      throw new Error('tools 必须是数组');
+    }
+    const merged: IMcpConfig = {
+      ...onDisk,
+      ...(next.servers !== undefined ? { servers: next.servers } : {}),
+      ...(next.tools !== undefined ? { tools: next.tools } : {}),
+    };
+    const tmpPath = `${this.configPath}.tmp`;
+    fs.writeFileSync(tmpPath, JSON.stringify(merged, null, 2), 'utf-8');
+    fs.renameSync(tmpPath, this.configPath);
+    this.config = this.loadConfig(this.configPath);
+    this.serverStatus.clear();
   }
 
   /**

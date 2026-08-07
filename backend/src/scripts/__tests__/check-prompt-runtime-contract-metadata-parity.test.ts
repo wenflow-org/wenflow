@@ -41,10 +41,10 @@ function validPromptContract() {
 
 function makeFile(overrides: Partial<PromptFile> = {}): PromptFile {
   return {
-    agentId: 'skill:learning-turn',
-    name: 'default-skill-learning-turn',
+    agentId: 'skill:teaching-turn',
+    name: 'default-skill-teaching-turn',
     systemPrompt: 'System prompt',
-    filePath: 'D:/prompts/skill.learning-turn.md',
+    filePath: 'D:/prompts/skill.teaching-turn.md',
     archetype: 'conversational',
     runtimeContract: validRuntimeContract(),
     ...overrides,
@@ -54,7 +54,7 @@ function makeFile(overrides: Partial<PromptFile> = {}): PromptFile {
 function makeRow(overrides: Partial<ActivePromptRuntimeContractMetadataRow> = {}): ActivePromptRuntimeContractMetadataRow {
   return {
     id: 'prompt-1',
-    agentId: 'skill:learning-turn',
+    agentId: 'skill:teaching-turn',
     version: 3,
     metadata: JSON.stringify({
       promptLab: {
@@ -81,7 +81,7 @@ describe('prompt runtime-contract metadata parity checker', () => {
       errorCount: 0,
     })
     expect(report.results).toEqual([expect.objectContaining({
-      agentId: 'skill:learning-turn',
+      agentId: 'skill:teaching-turn',
       status: 'in-sync',
     })])
   })
@@ -105,7 +105,7 @@ describe('prompt runtime-contract metadata parity checker', () => {
   })
 
   it('uses v4 manifest contracts when the Runtime Prompt frontmatter carries coreHash', () => {
-    const coreHash = computeCoreHash(loadCoreFile('learning-turn')!.core!)
+    const coreHash = computeCoreHash(loadCoreFile('teaching-turn')!.core!)
     const v4File = makeFile({
       coreHash,
       coreVersion: 1,
@@ -114,7 +114,7 @@ describe('prompt runtime-contract metadata parity checker', () => {
     })
     const report = analyze([v4File], [makeRow({
       metadata: buildV4CorePromptMetadata({
-        skillId: 'learning-turn', coreHash, coreVersion: 1,
+        skillId: 'teaching-turn', coreHash, coreVersion: 1,
       }),
     })])
 
@@ -177,20 +177,20 @@ describe('prompt runtime-contract metadata parity checker', () => {
   })
 
   it('requires the sole ACTIVE row to use the canonical agent ID', () => {
-    const report = analyze([makeFile({ acceptableAgentIds: ['learning-turn'] })], [makeRow({
-      agentId: 'learning-turn',
+    const report = analyze([makeFile({ acceptableAgentIds: ['teaching-turn'] })], [makeRow({
+      agentId: 'teaching-turn',
     })])
 
     expect(report.results[0]).toMatchObject({
       status: 'active-alias-not-canonical',
-      activePrompt: { agentId: 'learning-turn' },
+      activePrompt: { agentId: 'teaching-turn' },
     })
   })
 
   it('reports multiple ACTIVE rows across canonical and aliases as ambiguous', () => {
-    const report = analyze([makeFile({ acceptableAgentIds: ['learning-turn'] })], [
+    const report = analyze([makeFile({ acceptableAgentIds: ['teaching-turn'] })], [
       makeRow(),
-      makeRow({ id: 'prompt-2', agentId: 'learning-turn', version: 2 }),
+      makeRow({ id: 'prompt-2', agentId: 'teaching-turn', version: 2 }),
     ])
 
     expect(report.results[0]).toMatchObject({ status: 'ambiguous-active' })
@@ -206,6 +206,11 @@ describe('prompt runtime-contract metadata parity checker', () => {
 
     expect(report.results).toEqual([
       expect.objectContaining({
+        filePath: 'D:/prompts/three.md',
+        status: 'alias-collision',
+        sourceIssues: ['alias-collision'],
+      }),
+      expect.objectContaining({
         filePath: 'D:/prompts/one.md',
         status: 'duplicate-canonical-agent-id',
         sourceIssues: expect.arrayContaining(['duplicate-canonical-agent-id', 'alias-collision']),
@@ -214,11 +219,6 @@ describe('prompt runtime-contract metadata parity checker', () => {
         filePath: 'D:/prompts/two.md',
         status: 'duplicate-canonical-agent-id',
         sourceIssues: expect.arrayContaining(['duplicate-canonical-agent-id', 'alias-collision']),
-      }),
-      expect.objectContaining({
-        filePath: 'D:/prompts/three.md',
-        status: 'alias-collision',
-        sourceIssues: ['alias-collision'],
       }),
     ])
   })
@@ -371,7 +371,7 @@ describe('prompt runtime-contract metadata parity checker', () => {
     expect(findMany).toHaveBeenCalledWith({
       where: {
         status: 'ACTIVE',
-        agentId: { in: ['skill:learning-turn'] },
+        agentId: { in: ['skill:teaching-turn'] },
       },
       select: {
         id: true,

@@ -29,12 +29,12 @@ export const FIELD_LINEAGE: FieldLineageEntry[] = [
   { skillId: 'goal-conversation', field: 'understanding', consumers: ['backend: goal-conversation.service updateCollectedData（主记忆持久化）', 'backend: learning.service（path-planning 输入）'] },
   { skillId: 'goal-conversation', field: 'confirmedProposal', consumers: ['backend: learning.service（path-planning confirmedProposal）', 'frontend: GoalConversation.vue（方案确认卡）'] },
   { skillId: 'goal-conversation', field: 'confidenceScores', consumers: ['backend: prompt-stability 观测（debug）'] },
-  // learning-turn
-  { skillId: 'learning-turn', field: 'reply', consumers: ['frontend: LearningPage.vue（aiResponse）', 'backend: AITeachingCoordinator（消息持久化）'] },
-  { skillId: 'learning-turn', field: 'analysis', consumers: ['frontend: LearningPage.vue', 'frontend: CognitiveStatePanel.vue（confusionPoints）'] },
-  { skillId: 'learning-turn', field: 'knowledge', consumers: ['backend: AITeachingCoordinator reconcileTeachingKnowledgeState（看板回灌）', 'frontend: LearningPage.vue（knowledgePoints）'] },
-  { skillId: 'learning-turn', field: 'pedagogy', consumers: ['frontend: LearningPage.vue（strategies）'] },
-  { skillId: 'learning-turn', field: 'control', consumers: ['backend: AITeachingCoordinator（课堂收束判断）', 'backend: peerTriggerService.shouldTrigger（同伴触发）'] },
+  // teaching-turn
+  { skillId: 'teaching-turn', field: 'reply', consumers: ['frontend: LearningPage.vue（aiResponse）', 'backend: AITeachingCoordinator（消息持久化）'] },
+  { skillId: 'teaching-turn', field: 'analysis', consumers: ['frontend: LearningPage.vue', 'frontend: CognitiveStatePanel.vue（confusionPoints）'] },
+  { skillId: 'teaching-turn', field: 'knowledge', consumers: ['backend: AITeachingCoordinator reconcileTeachingKnowledgeState（看板回灌）', 'frontend: LearningPage.vue（knowledgePoints）'] },
+  { skillId: 'teaching-turn', field: 'pedagogy', consumers: ['frontend: LearningPage.vue（strategies）'] },
+  { skillId: 'teaching-turn', field: 'control', consumers: ['backend: AITeachingCoordinator（课堂收束判断）', 'backend: peerTriggerService.shouldTrigger（同伴触发）'] },
   // session-wrapup
   { skillId: 'session-wrapup', field: 'summary', consumers: ['frontend: CompletionCard.vue', 'backend: learner.coordinator / LessonKnowledgeEnrichmentConsumer（回灌蒸馏器）'] },
   { skillId: 'session-wrapup', field: 'evaluation', consumers: ['backend: AITeachingCoordinator.endSession（持久化）', 'frontend: LearningEvaluationPage.vue'] },
@@ -49,7 +49,6 @@ export const FIELD_LINEAGE: FieldLineageEntry[] = [
   { skillId: 'learning-pattern-distiller', field: '*', consumers: ['backend: profile-aggregator'] },
   // path 家族
   { skillId: 'path-planning', field: '*', consumers: ['backend: learning.service persistGeneratedPath（learning_paths/milestones 表）', 'frontend: LearningPaths.vue / LearningPathDetail.vue（间接）'] },
-  { skillId: 'path-scene-framing', field: 'normalizedInput', consumers: ['backend: learning.service（path-planning metadata）', 'backend: stage-designer 输入'] },
   { skillId: 'stage-designer', field: 'subtasks', consumers: ['backend: learning.service（subtasks.create / replan 重建）', 'frontend: LearningPathDetail.vue（间接）'] },
   // virtual-learner 家族
   { skillId: 'virtual-learner-goal-dialogue-simulator', field: '*', consumers: ['backend: simulation.coordinator（stageResults.goal）'] },
@@ -80,7 +79,8 @@ export function getFieldLineageWithDeclarations(skillId: string): FieldLineageEn
   for (const core of files) {
     if (core.skillId === skillId || !core.inputs?.length) continue;
     for (const input of core.inputs) {
-      if (input.skill !== skillId) continue;
+      // 血缘只推导 skill: 上游产物引用；sandbox（编排注入）/user（用户平台）不参与 skill 血缘
+      if (input.kind !== 'skill' || input.skill !== skillId) continue;
       const consumer = `skill:${core.skillId}（inputs 声明）`;
       const existing = merged.get(input.fieldPath);
       if (existing) {

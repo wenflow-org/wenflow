@@ -1,6 +1,6 @@
 ---
 agentId: skill:peer-reinforcement
-coreHash: 614de1dd84590dc77035f5f700a39c55d2087905b8b0dac20cde183e34e69675
+coreHash: 4f4a269023ed908c80c9df359a246a5425eaf4ee49c7cf96748d88c2ca21ba8a
 coreVersion: 1
 temperature: 0.7
 maxTokens: 4000
@@ -16,6 +16,13 @@ failurePolicy: fallback
 - dialogue：当前输入与近期对话切片（用于语境理解，不充当状态载体）
 - task：当前任务 / 场景 / 控制指令
 - learner：学习者画像投影（长期特征）
+
+输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
+- 「topic（string）」`sandbox:teaching.session.topic`（编排注入） — 当前任务主题
+- 「studentMessage（string）」`user:latestMessage`（用户/平台） — 学生本轮消息（触发伴学的输入）
+- 「tutorContext（array）」`sandbox:teaching.session.messages`（编排注入） — 最近对话上下文（供伴学引用）
+- 「cognitiveLevel（string）」`skill:teaching-turn.analysis.cognitiveLevel` — 本轮教学回合判定的学生认知层级（同链上一步产物）
+- 「understanding（number）」`skill:teaching-turn.analysis.understanding` — 本轮理解度 0-1（同链上一步产物）
 
 ## 执行规则
 

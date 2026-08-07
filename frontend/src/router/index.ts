@@ -162,10 +162,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/DeveloperDocs.vue'),
     meta: { title: '开发者文档' }
   },
-  {
-    path: '/redesign-lab',
-    redirect: '/dashboard'
-  },
   // ===== /v2 已上线：旧地址全部重定向到正式路径 =====
   {
     path: '/v2',
@@ -200,13 +196,6 @@ const routes: RouteRecordRaw[] = [
     redirect: '/achievements'
   },
   {
-    // 管理控制台（唯一正式入口）
-    path: '/admin/console',
-    name: 'AdminConsole',
-    component: () => import('@/views/admin-redesign/AdminConsole.vue'),
-    meta: { title: '管理控制台', requiresAdminAuth: true }
-  },
-  {
     path: '/admin/login',
     name: 'AdminLogin',
     component: () => import('@/views/admin/Login.vue'),
@@ -214,99 +203,59 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/admin',
-    redirect: '/admin/console'
+    redirect: '/admin/overview'
   },
-  // 旧版运营后台 URL → 新控制台（书签/外链兼容）
+  // 旧版 /admin/console/:page → 新平级 URL（书签/外链兼容）
   {
-    path: '/admin/dashboard',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/users',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/learner-center',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/learner-models/:userId?',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/teaching-sessions',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/api-config',
-    redirect: '/admin/console'
+    path: '/admin/console/:page?',
+    redirect: (to) => ({ path: `/admin/${(to.params.page as string) || 'overview'}` })
   },
   {
     // Prompt 二级设计页（Skill 级编辑台：检视/试运行/运行时/工程，重设计版）
-    path: '/admin/skills/:agentId?',
+    // agentId 必填：避免 /admin/skills（Skill 目录）被可选参数吞入设计页
+    path: '/admin/skills/:agentId+',
     name: 'AdminSkillEditor',
     component: () => import('@/views/admin-redesign/SkillDesignPage.vue'),
     meta: { title: 'Prompt 设计', requiresAdminAuth: true }
   },
+  // 旧版带参数路由 → 新平级页面（参数型无法被 /admin/:page 吸收，保留重定向）
   {
-    path: '/admin/agents/topology',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/orchestrator-definitions',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/agent-definitions',
-    redirect: '/admin/console'
+    path: '/admin/learner-models/:userId?',
+    redirect: '/admin/learner-center'
   },
   {
     path: '/admin/agent-registry/:agentId?',
-    redirect: '/admin/console'
+    redirect: '/admin/topology'
   },
   {
     path: '/admin/skill-workbench/:agentId?',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/skill-manager',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/virtual-learners/:pathMatch(.*)*',
-    redirect: '/admin/console'
+    redirect: (to) => ({ path: to.params.agentId ? `/admin/skills/${to.params.agentId}` : '/admin/skills' })
   },
   {
     path: '/admin/virtual-session/:sessionId',
-    redirect: '/admin/console'
+    redirect: '/admin/virtual-learners'
   },
   {
-    path: '/admin/regression-lab',
-    redirect: '/admin/console'
+    // 旧深链兜底：虚拟学习者子页（原 :pathMatch 捕获，至少一段避免空匹配自循环）→ 列表页
+    path: '/admin/virtual-learners/:pathMatch(.*)+',
+    redirect: '/admin/virtual-learners'
   },
   {
-    path: '/admin/execution-logs',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/path-generation-events',
-    redirect: '/admin/console'
-  },
-  {
+    // Prompt 调用已并入执行日志（同 traceId 关联契约维度）
     path: '/admin/prompt-call-logs',
-    redirect: '/admin/console'
+    redirect: '/admin/execution-logs'
   },
   {
-    path: '/admin/skill-model-configs',
-    redirect: '/admin/console'
+    // 事件中心下线：路径生成事件无业务消费价值，统一入口走执行日志
+    path: '/admin/event-center',
+    redirect: '/admin/execution-logs'
   },
   {
-    path: '/admin/prompt-lab',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/announcements',
-    redirect: '/admin/console'
+    // 管理控制台：/admin/:page 反映当前页面（深链/前进后退），动态段置于静态路由之后
+    path: '/admin/:page?',
+    name: 'AdminConsole',
+    component: () => import('@/views/admin-redesign/AdminConsole.vue'),
+    meta: { title: '管理控制台', requiresAdminAuth: true }
   },
   {
     path: '/:pathMatch(.*)*',
@@ -315,7 +264,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '页面不存在' }
   }
 ];
-
 const router = createRouter({
   history: createWebHistory(),
   routes,
@@ -361,7 +309,7 @@ router.beforeEach((to, _from, next) => {
 
   // 已登录管理员访问管理登录页
   if (to.name === 'AdminLogin' && adminSession) {
-    next('/admin/console');
+    next('/admin/overview');
     return;
   }
   

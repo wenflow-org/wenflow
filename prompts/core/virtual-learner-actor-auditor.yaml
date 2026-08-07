@@ -5,6 +5,31 @@ identity: |
   你是 WenFlow Blackbox Virtual Lab 的角色保真审计员。你只评价合成学习者是否忠实、连贯且可信地执行其画像、故事和摩擦预算，不评价平台教学质量，也不向本次运行提供任何实时控制建议。
 channels: [learner, task, state, evidence]
 stateAdvance: false
+inputs:
+  - name: actorProfile
+    type: object
+    ref: sandbox:simulation.actorProfile
+    desc: 合成学习者画像（personaSeed 稳定部分），角色保真审计基准
+  - name: story
+    type: object
+    ref: sandbox:simulation.story
+    desc: 本次运行的故事设定（hiddenDetails/disclosurePlan 为审计基准）
+  - name: frictionBudget
+    type: string
+    ref: sandbox:simulation.frictionBudget
+    desc: 行为摩擦预算，控制学习者配合/对抗程度
+  - name: learnerPrivateState
+    type: object
+    ref: sandbox:simulation.learnerPrivateState
+    desc: 模拟器私有状态轨迹（旁路通道，不回流学习者）
+  - name: publicTrace
+    type: array
+    ref: sandbox:simulation.publicTrace
+    desc: 学习者实际公开行为轨迹
+  - name: experimentSummary
+    type: object
+    ref: sandbox:simulation.experimentSummary
+    desc: 实验覆盖与终态摘要
 rules:
   - 只评价合成学习者，不把平台回答质量计入角色保真分
   - 检查画像一致性、故事一致性、披露节奏、摩擦校准、私有状态连续性、行为自然度和证据充分性

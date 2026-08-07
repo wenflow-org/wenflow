@@ -65,12 +65,11 @@ const SKILL_DISPLAY_NAMES: Record<string, string> = {
   'skill:lesson-knowledge-enricher': '课后知识增强',
   'skill:goal-profile-inference': '目标画像推断',
   'skill:learning-pattern-distiller': '学习模式提炼',
-  'skill:path-scene-framing': '路径场景包装',
   'skill:peer-reinforcement': '同伴强化对话',
   'skill:session-knowledge-distiller': '会话知识沉淀',
   'skill:stage-designer': '阶段设计师',
   'skill:virtual-learner-goal-dialogue-simulator': '虚拟学员·目标对话模拟',
-  'skill:virtual-learner-learn-turn-simulator': '虚拟学员·学习回合模拟',
+  'skill:virtual-learner-learn-turn-simulator': '虚拟学员·教学回合模拟',
   'skill:virtual-learner-path-evaluator': '虚拟学员·路径评估',
   'skill:virtual-learner-persona-designer': '虚拟学员·人设设计',
   'skill:virtual-learner-scenario-designer': '虚拟学员·场景设计',
@@ -81,19 +80,18 @@ const SKILL_DISPLAY_NAMES: Record<string, string> = {
 // stage 与 OrchestratorDefinitions 页一致：澄清(goal) / 规划(path) / 学习(learning)
 // 暂未迁移到字段路由的 agent 留空，前端会回退到「手填字段 ID」
 // ============================================================
-const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'learning'> = {
+const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'teaching'> = {
   'skill:goal-conversation': 'goal',
   'skill:goal-profile-inference': 'goal',
   // 以下虽未迁移但确定隶属的 stage
   'skill:path-planning': 'path',
-  'skill:path-scene-framing': 'path',
   'skill:stage-designer': 'path',
-  'skill:learning-turn': 'learning',
-  'skill:session-wrapup': 'learning',
-  'skill:peer-reinforcement': 'learning',
-  'skill:adaptive-guidance-copy': 'learning',
-  'skill:learning-pattern-distiller': 'learning',
-  'skill:lesson-knowledge-enricher': 'learning',
+  'skill:teaching-turn': 'teaching',
+  'skill:session-wrapup': 'teaching',
+  'skill:peer-reinforcement': 'teaching',
+  'skill:adaptive-guidance-copy': 'teaching',
+  'skill:learning-pattern-distiller': 'teaching',
+  'skill:lesson-knowledge-enricher': 'teaching',
 };
 
 // ============================================================

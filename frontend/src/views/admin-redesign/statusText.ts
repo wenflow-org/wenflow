@@ -3,7 +3,7 @@
  * 后端枚举（snake_case / camelCase / 英文）→ 中文展示
  */
 
-export const STATUS_TEXT: Record<string, string> = {
+const STATUS_TEXT: Record<string, string> = {
   completed: '已完成',
   succeeded: '成功',
   success: '成功',
@@ -16,8 +16,10 @@ export const STATUS_TEXT: Record<string, string> = {
   processing: '处理中',
   timeout: '超时',
   error: '错误',
+  err: '失败',
   failed: '失败',
   fail: '失败',
+  warn: '降级',
   paused: '已暂停',
   superseded: '已被替代',
   discarded: '已废弃',
@@ -28,7 +30,9 @@ export const STATUS_TEXT: Record<string, string> = {
   published: '已发布',
   archived: '已下线',
   offline: '已下线',
-  closed: '已关闭'
+  closed: '已关闭',
+  created: '已创建',
+  abandoned: '已放弃'
 }
 
 /** 状态英文值 → 中文；未知值原样返回（不返回 —，避免丢失信息） */
@@ -38,7 +42,7 @@ export function statusText(s: string | null | undefined): string {
 }
 
 /** Goal 会话阶段枚举 → 中文 */
-export const STAGE_TEXT: Record<string, string> = {
+const STAGE_TEXT: Record<string, string> = {
   understanding: '澄清中',
   proposal: '方案收敛中',
   planning: '规划中',
@@ -53,11 +57,15 @@ export function stageText(s: string | null | undefined): string {
 }
 
 /** Skill 类别 → 中文 */
-export const CATEGORY_TEXT: Record<string, string> = {
+const CATEGORY_TEXT: Record<string, string> = {
   analysis: '分析',
   generation: '生成',
   parsing: '解析',
   computation: '计算',
+  standard: '标准',
+  teaching: '教学',
+  simulation: '模拟',
+  tool: '工具',
   skill: 'Skill'
 }
 

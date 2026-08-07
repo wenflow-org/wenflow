@@ -54,7 +54,7 @@ export const pathAgentRuntimeDefinition: RuntimeDefinitionRecord = {
       'milestones[].goal',
     ],
   },
-  capabilities: ['goal-analysis', 'path-generation', 'milestone-planning'],
+  capabilities: ['path-generation', 'milestone-planning'],
   defaultMaxTokens: 32000,
   defaultTemperature: 0.2,
   source: 'code',

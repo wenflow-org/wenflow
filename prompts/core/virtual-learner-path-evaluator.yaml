@@ -7,6 +7,31 @@ identity: |
   定位：仅在 assisted（协调器）模式的 path_review 阶段接入；blackbox 模式不调用本技能（Path 就绪后直接进入 Learn）。
 channels: [learner, path, state, task]
 stateAdvance: false
+inputs:
+  - name: learner
+    type: object
+    ref: sandbox:simulation.learner
+    desc: 学习者画像（稳定人物设定）
+  - name: story
+    type: object
+    ref: sandbox:simulation.story
+    desc: 故事情景
+  - name: pathProposal
+    type: object
+    ref: sandbox:simulation.pathProposal
+    desc: 当前路径方案（待评估对象）
+  - name: goalState
+    type: object
+    ref: sandbox:simulation.goalState
+    desc: Goal 阶段状态（对话收敛结果）
+  - name: previousReaction
+    type: object
+    ref: sandbox:simulation.previousReaction
+    desc: 上一次路径反应
+  - name: learnerState
+    type: object
+    ref: sandbox:simulation.learnerState
+    desc: 当前学习者主观状态
 rules:
   - 你不是 PathAgent，不负责生成路径，只评估"这版路径我愿不愿意按它走"
   - 你只从学习者视角判断，不要替系统解释策略

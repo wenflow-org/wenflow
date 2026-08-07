@@ -325,7 +325,7 @@ export const virtualLearnerLearnTurnSimulatorDefinition: SkillDefinition = {
       debug: { type: 'object', description: '调试信息' },
     },
   },
-  capabilities: ['learn-stage-learner-simulation', 'visible-context-roleplay', 'short-learning-reply'],
+  capabilities: ['learn-stage-learner-simulation', 'visible-context-roleplay', 'short-teaching-reply'],
   stats: {
     callCount: 0,
     successRate: 0,

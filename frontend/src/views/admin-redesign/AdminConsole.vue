@@ -9,20 +9,20 @@
       </div>
     </div>
 
-    <MockShell :current="scene" :crumb="crumbLabel" release @navigate="navigate" @palette="paletteOpen = true">
+    <Shell :current="scene" :crumb="crumbLabel" release @navigate="navigate" @palette="paletteOpen = true">
       <div v-if="booting" class="ac-boot">
         <span class="ac-boot__spinner"></span>
         加载中…
       </div>
       <component v-else :is="detailComponent || currentComponent" :state="'normal'" />
-    </MockShell>
+    </Shell>
 
-    <MockCommandPalette
+    <CommandPalette
       :open="paletteOpen"
       @close="paletteOpen = false"
       @navigate="navigate"
     />
-    <MockSkillDrawer />
+    <SkillDrawer />
   </section>
 </template>
 
@@ -33,61 +33,60 @@
  * 特点：
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import MockShell from './MockShell.vue';
-import MockOverview from './MockOverview.vue';
-import MockUsers from './MockUsers.vue';
-import MockLearnerCenter from './MockLearnerCenter.vue';
-import MockVirtualLearners from './MockVirtualLearners.vue';
-import MockSkills from './MockSkills.vue';
-import MockTopology from './MockTopology.vue';
-import MockOrchestrator from './MockOrchestrator.vue';
-import MockExecLogs from './MockExecLogs.vue';
-import MockPromptCallLogs from './MockPromptCallLogs.vue';
-import MockEventCenter from './MockEventCenter.vue';
-import MockTraceWaterfall from './MockTraceWaterfall.vue';
-import MockApiConfig from './MockApiConfig.vue';
-import MockAddons from './MockAddons.vue';
-import MockAnnouncements from './MockAnnouncements.vue';
-import MockPromptWorkbench from './MockPromptWorkbench.vue';
-import MockSkillDrawer from './MockSkillDrawer.vue';
-import MockLearnerDetail from './MockLearnerDetail.vue';
-import MockTeachingSessions from './MockTeachingSessions.vue';
-import MockGoalConversations from './MockGoalConversations.vue';
-import MockFeedback from './MockFeedback.vue';
-import MockSessionCockpit from './MockSessionCockpit.vue';
-import MockCommandPalette from './MockCommandPalette.vue';
-import MockVirtualProfile from './MockVirtualProfile.vue';
-import MockUserDetail from './MockUserDetail.vue';
-import { intent, subPage, closeSkillDrawer } from './mockStore';
-import { loadLiveData, liveLoading } from './mockLive';
-import './mock-shared.css';
+import { useRoute, useRouter } from 'vue-router';
+import Shell from './Shell.vue';
+import Overview from './Overview.vue';
+import Users from './Users.vue';
+import LearnerCenter from './LearnerCenter.vue';
+import VirtualLearners from './VirtualLearners.vue';
+import Skills from './Skills.vue';
+import Topology from './Topology.vue';
+import Orchestrator from './Orchestrator.vue';
+import FieldRoutings from './FieldRoutings.vue';
+import ExecLogs from './ExecLogs.vue';
+import TraceWaterfall from './TraceWaterfall.vue';
+import ApiConfig from './ApiConfig.vue';
+import Addons from './Addons.vue';
+import Announcements from './Announcements.vue';
+import PromptWorkbench from './PromptWorkbench.vue';
+import SkillDrawer from './SkillDrawer.vue';
+import LearnerDetail from './LearnerDetail.vue';
+import TeachingSessions from './TeachingSessions.vue';
+import GoalConversations from './GoalConversations.vue';
+import Feedback from './Feedback.vue';
+import SessionCockpit from './SessionCockpit.vue';
+import CommandPalette from './CommandPalette.vue';
+import VirtualProfile from './VirtualProfile.vue';
+import UserDetail from './UserDetail.vue';
+import { intent, subPage, closeSkillDrawer } from './store';
+import { loadLiveData } from './live';
+import './shared.css';
 
 const components: Record<string, unknown> = {
-  'overview': MockOverview,
-  'users': MockUsers,
-  'learner-center': MockLearnerCenter,
-  'teaching-sessions': MockTeachingSessions,
-  'goal-conversations': MockGoalConversations,
-  feedback: MockFeedback,
-  'virtual-learners': MockVirtualLearners,
-  'skills': MockSkills,
-  'topology': MockTopology,
-  'orchestrator': MockOrchestrator,
-  'execution-logs': MockExecLogs,
-  'prompt-call-logs': MockPromptCallLogs,
-  'event-center': MockEventCenter,
-  'trace-waterfall': MockTraceWaterfall,
-  'api-config': MockApiConfig,
-  'addons': MockAddons,
-  'announcements': MockAnnouncements,
-  'prompt-workbench': MockPromptWorkbench
+  'overview': Overview,
+  'users': Users,
+  'learner-center': LearnerCenter,
+  'teaching-sessions': TeachingSessions,
+  'goal-conversations': GoalConversations,
+  feedback: Feedback,
+  'virtual-learners': VirtualLearners,
+  'skills': Skills,
+  'topology': Topology,
+  'orchestrator': Orchestrator,
+  'field-routings': FieldRoutings,
+  'execution-logs': ExecLogs,
+  'trace-waterfall': TraceWaterfall,
+  'api-config': ApiConfig,
+  'addons': Addons,
+  'announcements': Announcements,
+  'prompt-workbench': PromptWorkbench
 };
 
 const detailComponents: Record<string, unknown> = {
-  learner: MockLearnerDetail,
-  virtual: MockVirtualProfile,
-  user: MockUserDetail,
-  session: MockSessionCockpit
+  learner: LearnerDetail,
+  virtual: VirtualProfile,
+  user: UserDetail,
+  session: SessionCockpit
 };
 
 const scene = ref('overview');
@@ -104,7 +103,28 @@ const crumbLabel = computed(() => {
   return `${id.slice(0, 8)}…${id.slice(-4)}`
 })
 
-watch(scene, () => {
+/* —— 真路由化：scene ↔ URL /admin/console/:page 双向同步 —— */
+const route = useRoute()
+const router = useRouter()
+
+// URL → scene（浏览器前进/后退、深链直达）；非法 page 回退 overview 并修正 URL
+// immediate：整页直达 /admin/console/:page 时初始值也需校验（否则 URL 与 scene 脱节）
+watch(
+  () => route.params.page,
+  (p) => {
+    const id = typeof p === 'string' ? p : ''
+    if (id && components[id]) {
+      if (id !== scene.value) scene.value = id
+    } else if (id) {
+      void router.replace('/admin/console')
+    }
+  },
+  { immediate: true }
+)
+// scene → URL（侧栏/命令面板/意图跳转）；push 保留历史，浏览器后退可回到上一页面
+watch(scene, (s) => {
+  const cur = typeof route.params.page === 'string' ? route.params.page : ''
+  if (cur !== s) void router.push(`/admin/${s}`)
   subPage.value = null;
   // 切换页面时自动关闭 Skill 抽屉，避免遮挡侧栏导航
   closeSkillDrawer();
@@ -129,15 +149,20 @@ async function boot() {
   await loadLiveData();
   booting.value = false;
   // loadLiveData 内部已做局部容错；仅核心域（日志）失败才提示整页错误
-  const { liveFailures } = await import('./mockLive');
+  const { liveFailures } = await import('./live');
   if (liveFailures.value.spans) {
     bootError.value = liveFailures.value.spans;
   }
 }
 
 onMounted(() => {
-  // 跨路由入口可能在控制台挂载前已写入 intent，首次挂载时需主动消费。
-  if (components[intent.scene]) scene.value = intent.scene;
+  // 初始场景优先级：URL :page（深链/刷新恢复）> intent（跨路由入口）> overview 兜底
+  const fromRoute = typeof route.params.page === 'string' ? route.params.page : ''
+  if (fromRoute && components[fromRoute]) {
+    scene.value = fromRoute
+  } else if (components[intent.scene]) {
+    scene.value = intent.scene
+  }
   void boot();
   window.addEventListener('keydown', onGlobalKey);
 });
@@ -154,8 +179,6 @@ function onGlobalKey(e: KeyboardEvent) {
     paletteOpen.value = false
   }
 }
-
-void liveLoading;
 </script>
 
 <style scoped>

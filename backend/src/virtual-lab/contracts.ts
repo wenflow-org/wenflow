@@ -11,7 +11,7 @@ export type LearnerAction =
   | { type: 'abandon'; reason: string }
 
 export type LearnerObservation = {
-  stage: 'goal' | 'path' | 'learning' | 'completed' | 'error'
+  stage: 'goal' | 'path' | 'teaching' | 'completed' | 'error'
   visibleMessages: Array<{
     role: 'platform' | 'learner'
     content: string

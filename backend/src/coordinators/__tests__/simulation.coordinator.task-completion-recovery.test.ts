@@ -110,10 +110,10 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
   })
 
   const setLearningState = (learning: any) => {
-    sessionRecord.stageResults = JSON.stringify({ learning })
+    sessionRecord.stageResults = JSON.stringify({ teaching: learning })
   }
 
-  const getLearningState = () => JSON.parse(sessionRecord.stageResults).learning
+  const getLearningState = () => JSON.parse(sessionRecord.stageResults).teaching
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -123,10 +123,10 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
       id: 'simulation-1',
       userId: 'user-1',
       status: 'running',
-      currentStage: 'learning',
+      currentStage: 'teaching',
       learningPathId: 'path-1',
       currentTaskId: 'task-1',
-      stageResults: JSON.stringify({ learning: buildLearningState() }),
+      stageResults: JSON.stringify({ teaching: buildLearningState() }),
       logs: '[]',
       virtual_learner_profiles: {
         id: 'profile-1',
@@ -362,7 +362,7 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     }))
     expect(mockProcessStudentMessage).toHaveBeenCalledTimes(3)
     expect(sessionRecord.status).toBe('failed')
-    expect(sessionRecord.currentStage).toBe('learning')
+    expect(sessionRecord.currentStage).toBe('teaching')
     expect(learning.taskRuntime).toEqual(expect.objectContaining({
       status: 'error',
       taskId: 'task-1',
@@ -398,7 +398,7 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(mockProcessStudentMessage).not.toHaveBeenCalled()
     expect(mockCompleteTask).not.toHaveBeenCalled()
     expect(sessionRecord.status).toBe('failed')
-    expect(sessionRecord.currentStage).toBe('learning')
+    expect(sessionRecord.currentStage).toBe('teaching')
     expect(learning.taskRuntime).toEqual(expect.objectContaining({
       status: 'error',
       taskId: 'task-1'

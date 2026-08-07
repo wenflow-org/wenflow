@@ -18,7 +18,7 @@ export const peerTriggerConfig = {
 }
 
 // ============================================================
-// 策略别名映射（skill:learning-turn normalizeAllowedStrategy）
+// 策略别名映射（skill:teaching-turn normalizeAllowedStrategy）
 // ============================================================
 export const strategyAliasConfig: Record<string, string> = {
   explanation: 'explain',
@@ -49,7 +49,7 @@ export const allowedPedagogyStrategies = [
 ] as const
 
 // ============================================================
-// 回退策略（skill:learning-turn deriveFallbackStrategies）
+// 回退策略（skill:teaching-turn deriveFallbackStrategies）
 // ============================================================
 export const fallbackStrategyConfig: Record<string, string[]> = {
   factual: ['explain', 'drill'],
@@ -60,7 +60,7 @@ export const fallbackStrategyConfig: Record<string, string[]> = {
 }
 
 // ============================================================
-// 规划提示范围（path-scene-framing derivePlanningHints）
+// 规划提示范围（path-planning-hints derivePlanningHints）
 // ============================================================
 export const paceSignalRangeConfig = {
   compact: {
@@ -95,7 +95,7 @@ export const timeHorizonPaceMapping: Record<string, string> = {
 }
 
 // ============================================================
-// 紧预算阈值（path-scene-framing）
+// 紧预算阈值（path-planning-hints）
 // ============================================================
 export const tightBudgetConfig = {
   thresholds: {
@@ -111,7 +111,7 @@ export const tightBudgetConfig = {
 }
 
 // ============================================================
-// 操作阶段模式（path-scene-framing isOperationalStageLike）
+// 操作阶段模式（path-planning-hints isOperationalStageLike）
 // ============================================================
 export const operationalStagePatterns = {
   verbPrefixes: [
@@ -215,7 +215,7 @@ export const teachingStrategyConfig = {
 }
 
 // ============================================================
-// 完成判定关键词（skill:learning-turn evaluateCompletionByTaskProfile）
+// 完成判定关键词（skill:teaching-turn evaluateCompletionByTaskProfile）
 // ============================================================
 export const completionKeywordConfig = {
   knowledgeType: {

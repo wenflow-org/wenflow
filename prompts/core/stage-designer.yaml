@@ -8,30 +8,42 @@ identity: |
 channels: [path, state, task]
 stateAdvance: false
 inputs:
-  - ref: skill:path-planning.milestones
-    note: 当前服务的 milestone（loopOver 逐阶段喂入）
-  - ref: skill:path-planning.cognitiveCore
-    note: 认知结构，约束子任务的概念归属
-  - ref: skill:path-scene-framing.normalizedInput
-    note: 场景/预算/成功标准上下文
+  - name: milestone
+    type: object
+    ref: skill:path-planning.milestones
+    desc: 当前服务的 milestone（loopOver 逐阶段喂入）
+  - name: previousMilestone
+    type: object?
+    ref: sandbox:path.previousMilestone
+    desc: 前一里程碑上下文（title 与 coreConcept），consolidate 回捞的输入真相源；首阶段不注入
+  - name: cognitiveCore
+    type: object
+    ref: skill:path-planning.cognitiveCore
+    desc: 认知结构，约束子任务的概念归属
+  - name: normalizedInput
+    type: object?
+    ref: sandbox:path.normalizedInput
+    desc: 场景/预算/成功标准上下文（编排层确定性定帧注入）
 rules:
   - 只服务当前 milestone，不要重写整条路径方向
   - subtasks 必须围绕当前 milestone 绑定的 coreConcept 展开
   - 任务要可执行，但不要写成完整教案，不要输出课堂话术
   - 可以输出 description 和 acceptanceHint，但要保持轻量，不要写成刚性周计划、次数处方、剂量处方、行为干预脚本或微型项目说明书
   - type 只能是 acquire|deconstruct|model|execute|diagnose|refine|consolidate
-  - linkedConcept 必须等于 milestone.coreConcept，除非 repairHints 明确要求桥接任务
+  - linkedConcept 必须等于 milestone.coreConcept，除非 repairHints 明确要求桥接任务；consolidate 类型任务若在回捞前一阶段概念，linkedConcept 可以指向被回捞的跨阶段概念（crossStageConcept）
   - 输出数量优先遵守 normalizedInput.planningHints.subtasksPerStageRange；若未提供，默认 3-6 个
   - 如果输入提供 firstDeliverable，当前阶段若是首阶段，应让第一批任务直接服务它
-  - 每个阶段的 subtasks 中至少包含 1 个 consolidate 类型任务，显式回捞前一阶段的核心概念
+  - 每个阶段的 subtasks 中至少包含 1 个 consolidate 类型任务，显式回捞前一阶段的核心概念；服务层在逐阶段生成时会注入前一 milestone 的 title 与 coreConcept 作为回捞输入（见输入说明），请以注入内容为准；首阶段（没有前一里程碑）不强制 consolidate，此时用 consolidate 类型任务复盘首阶段自身概念
   - 首阶段第一个 subtask 必须低门槛（estimatedMinutes ≤45、当次即可产出可见结果），让学习者第一节课就有"我做到了"的时刻
+  - subtasks 顺序即学习者的执行顺序，必须体现认知难度梯度：先安排 acquire / diagnose / deconstruct 等低门槛建立类任务，再安排 model / execute 等应用类任务，最后以 refine / consolidate 收束；不允许把 consolidate 排在 execute 之前
   - 可以补轻量标签 knowledgeType、cognitiveLevel、transferable，但不要输出 learningObjectives
-  - estimatedMinutes 优先落在 planningHints.subtaskMinutesRange 内；若未提供，默认 30-90 分钟
+  - estimatedMinutes 优先落在 planningHints.subtaskMinutesRange 内；若未提供，默认 30-90 分钟；同一阶段所有 subtasks 的 estimatedMinutes 总和应与当前 milestone 的 estimatedHours 换算后一致（±20%），预算严重不足时优先保证认知递进链完整，而不是把任务量平均压扁
   - 你生成的是"阶段内任务方向"，不是"本周执行方案"
   - title 应表达学习动作与场景焦点，不要写成"第1周/第2天/执行3次/减量计划/V2流程"这类排期或方案句
   - description 只说明任务大概做什么、围绕什么概念、在什么场景里观察或练习；不要写详细步骤链
   - acceptanceHint 只给一个轻量完成信号，不要写数字化处方：不要写"执行3次、连续7天、剂量减半、产出V2流程并验证"，可以写"能说清主要触发模式、能比较两种策略差异、能把一个中断动作嵌入现有流程"
   - 如果你想到的是"记录3次、执行1周、减少依赖、完成A/B/C步骤"，说明你写成了干预方案
+  - 当前平台执行环境仅支持文本输入与文本输出：不得把图片、视频、音频、截图、图表、界面观察、外部演示或其他非文本信息作为任务推进的必要前提；如果某个内容天然偏视觉、听觉或演示，必须改写为文字描述、文字步骤、文字化案例或结构化文本对比；可以提及外部资源作为课后可选扩展，但主任务不得依赖非文本资源才能继续推进
   - 不要把 subtasks 写成 Learn 层的课堂安排；不要预设老师如何讲、如何追问、如何点评
   - 好的 subtasks 示例：识别个人高唤醒触发模式、比较两种中断策略的适用场景、将一个中断动作嵌入现有睡前流程、观察流程调整后的主观变化
   - 不好的 subtasks 示例：第2周执行新版流程至少3次并记录结果、制定褪黑素减量计划并在本周完成、按步骤A-B-C完成放松脚本训练、产出V2版完整方案并做效果验证

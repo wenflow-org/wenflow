@@ -70,17 +70,21 @@ const RETIRED_SKILLS = [
   // 2026-07 合并入 lesson-knowledge-enricher
   'session-knowledge-distiller',
   'dialogue-concept-extractor',
-  // 2026-07 阶段词统一后改名（learning-*）；旧 id 仅保留在 agent-manifest 别名，
-  // 注册表/DB 不应残留，启动时 purge 防止幽灵注册出现在 Skill 目录
-  'teaching-turn',
-  'teaching-opening-generator',
-  'teaching-strategy-selector',
+  // 2026-08 第三阶段命名反转：learning-* 改回 teaching-*（一次 breaking）；
+  // 旧 id 仅作历史日志/数据解析，注册表/DB 不应残留，启动时 purge 防止幽灵注册
+  'learning-turn',
+  'learning-opening-generator',
+  'learning-strategy-selector',
   // 2026-08 legacy 插件适配链退役：generic-planner/basic-generator/basic-extractor/data-mapping
   // 仅被 agentPluginConfig（零消费者）与插件自身互相转发引用，业务主链不走，零调用
   'generic-planner',
   'basic-generator',
   'basic-extractor',
-  'data-mapping'
+  'data-mapping',
+  // 2026-08 冗余 LLM 层退役：path-scene-framing（信息零增量，确定性定帧 buildFramedNormalizedInput 取代）
+  'path-scene-framing',
+  // 2026-08 冗余 LLM 层退役：goal-analysis（主流程不调用、fallback 输出被确定性 framing 覆盖，path-planning 内联兜底）
+  'goal-analysis'
 ] as const;
 
 // ACP 中间件
@@ -242,14 +246,11 @@ import adaptiveGuidanceRoutes from './routes/adaptive-guidance.routes';
 import adminAuthRoutes from './routes/admin-auth';
 import adminApiConfigRoutes from './routes/admin/api-config';
 import adminSkillsRoutes from './routes/admin/skills';
-import adminAgentModelConfigsRoutes from './routes/admin/agent-model-configs';
-import adminAgentPromptsRoutes from './routes/admin/agent-prompts';
-import adminPromptStabilityRoutes from './routes/admin/prompt-stability';
-import adminRuntimeDefinitionsRoutes from './routes/admin/runtime-definitions';
 import adminFieldRoutingsRoutes from './routes/admin/field-routings';
+import adminAgentPromptsRoutes from './routes/admin/agent-prompts';
+import adminRuntimeDefinitionsRoutes from './routes/admin/runtime-definitions';
 import promptLabRoutes from './routes/prompt-lab';
 import adminPromptOpsRoutes from './routes/admin/prompt-ops';
-import adminSkillAuthorRoutes from './routes/admin/skill-author';
 import adminSkillModelConfigsRoutes from './routes/admin/skill-model-configs';
 import adminPlatformRoutes from './routes/admin/platform';
 import adminGoalConversationsRoutes from './routes/admin/goal-conversations';
@@ -260,10 +261,9 @@ import announcementsRoutes from './routes/announcements';
 import adminVirtualLearnersRoutes from './routes/admin/virtual-learners';
 import adminVirtualQuickLearnRoutes from './routes/admin/virtual-quick-learn';
 import adminProjectionAccessGrantsRoutes from './routes/admin/projection-access-grants';
-import adminDevtoolsRoutes from './routes/admin/devtools';
-import adminDebugRoutes from './routes/admin/debug';
 import adminFeedbackRoutes from './routes/admin/feedback';
 import adminSystemStatusRoutes from './routes/admin/system-status';
+import adminMcpRoutes from './routes/admin/mcp';
 import aiTeachingRoutes from './routes/ai-teaching.routes';
 import feedbackRoutes from './routes/feedback';
 import configRoutes from './routes/config';
@@ -308,11 +308,10 @@ app.get('/api', (req, res) => {
     },
 agents: {
       'skill:path-planning': '学习路径规划',
-      'learning-agent': 'AI授课编排',
+      'teaching-agent': 'AI授课编排',
       'skill:learner-model': '学习者画像与状态中心'
     },
     skills: [
-      'path-scene-framing',
       'stage-designer',
       'adaptive-guidance-copy',
       'goal-profile-inference',
@@ -362,16 +361,14 @@ app.use('/api/admin-auth', adminAccessRestrictMiddleware, adminAuthRoutes);
 const adminRouteMiddleware = [adminAccessRestrictMiddleware, adminAuthMiddleware, adminMiddleware, acpContextMiddleware('admin')];
 app.use('/api/admin/api-config', ...adminRouteMiddleware, adminApiConfigRoutes);
 app.use('/api/admin/skills', ...adminRouteMiddleware, adminSkillsRoutes);
-app.use('/api/admin/agent-model-configs', ...adminRouteMiddleware, adminAgentModelConfigsRoutes);
-app.use('/api/admin/agent-prompts', ...adminRouteMiddleware, adminAgentPromptsRoutes);
-app.use('/api/admin/prompt-stability', ...adminRouteMiddleware, adminPromptStabilityRoutes);
-app.use('/api/admin/runtime-definitions', ...adminRouteMiddleware, adminRuntimeDefinitionsRoutes);
 app.use('/api/admin/field-routings', ...adminRouteMiddleware, adminFieldRoutingsRoutes);
+app.use('/api/admin/agent-prompts', ...adminRouteMiddleware, adminAgentPromptsRoutes);
+app.use('/api/admin/runtime-definitions', ...adminRouteMiddleware, adminRuntimeDefinitionsRoutes);
 app.use('/api/admin/prompt-ops', ...adminRouteMiddleware, adminPromptOpsRoutes);
-app.use('/api/admin/skill-author', ...adminRouteMiddleware, adminSkillAuthorRoutes);
 app.use('/api/admin/skill-model-configs', ...adminRouteMiddleware, adminSkillModelConfigsRoutes);
 app.use('/api/admin/users', ...adminRouteMiddleware, adminUsersRoutes);
 app.use('/api/admin/announcements', ...adminRouteMiddleware, adminAnnouncementsRoutes);
+app.use('/api/admin/mcp', ...adminRouteMiddleware, adminMcpRoutes);
 app.use('/api/admin/learner-models', ...adminRouteMiddleware, adminLearnerModelsRoutes);
 app.use('/api/admin/goal-conversations', ...adminRouteMiddleware, adminGoalConversationsRoutes);
 app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualLearnersRoutes);
@@ -380,8 +377,6 @@ app.use('/api/admin/projection-access-grants', ...adminRouteMiddleware, adminPro
 app.use('/api/admin/feedback', ...adminRouteMiddleware, adminFeedbackRoutes);
 app.use('/api/admin/system', ...adminRouteMiddleware, adminSystemStatusRoutes);
 app.use('/api/admin/prompt-lab', ...adminRouteMiddleware, promptLabRoutes);
-app.use('/api/admin', ...adminRouteMiddleware, adminDebugRoutes);
-app.use('/api/admin', ...adminRouteMiddleware, adminDevtoolsRoutes);
 app.use('/api/admin', ...adminRouteMiddleware, adminPlatformRoutes);
 app.use('/api/users', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), userRoutes);
 app.use('/api/agents', authMiddleware, acpContextMiddleware('user'), agentsRoutes);

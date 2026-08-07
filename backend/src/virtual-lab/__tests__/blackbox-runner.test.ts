@@ -90,7 +90,7 @@ function sessionWith(control: Record<string, unknown>, privateState: Record<stri
     learningPathId: 'p1',
     currentTaskId: control.taskId || null,
     status: 'running',
-    currentStage: 'learning',
+    currentStage: 'teaching',
     stageResults: JSON.stringify(state)
   }
 }
@@ -159,12 +159,12 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const state = JSON.parse(session.stageResults)
     state.blackbox.publicTrace = [{
       timestamp: '2026-07-14T10:01:00.000Z',
-      observation: { stage: 'learning', visibleMessages: [], availableActions: ['chat'] },
+      observation: { stage: 'teaching', visibleMessages: [], availableActions: ['chat'] },
       control: { teachingSessionId: 'teach-1', taskId: 'task-1' }
     }]
     state.blackbox.learnerPrivateStateTrace = [{
       sequence: 1,
-      stage: 'learning',
+      stage: 'teaching',
       taskId: 'task-1',
       emotion: 'confused',
       degraded: true,
@@ -205,7 +205,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     expect(learningStateService.getSessionStateTimeline).toHaveBeenCalledWith('u1', ['teach-1'])
     expect(snapshot.stateTimeline.actor.entries[0]).toEqual(expect.objectContaining({
       sequence: 1,
-      stage: 'learning',
+      stage: 'teaching',
       emotion: 'confused',
       degraded: true,
       metrics: expect.objectContaining({ cognitiveLoad: 72, confidence: 35, satisfaction: 40 }),
@@ -273,7 +273,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     expect(state.experiment.runId).toMatch(/^run_/)
     expect(state.experimentSnapshot).toEqual(expect.objectContaining({
       routingUserId: 'admin1',
-      simulatorPrompts: { goal: 'frozen goal', learning: 'frozen learn' }
+      simulatorPrompts: { goal: 'frozen goal', teaching: 'frozen learn' }
     }))
     expect(state.experimentSnapshot.simulators.goal).toEqual(expect.objectContaining({
       promptVersion: 7,
@@ -284,7 +284,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
         model: 'virtual-learner-goal-dialogue-simulator-model'
       })
     }))
-    expect(state.experimentSnapshot.simulators.learning).toEqual(expect.objectContaining({
+    expect(state.experimentSnapshot.simulators.teaching).toEqual(expect.objectContaining({
       promptVersion: 8,
       temperature: 0.35,
       maxTokens: 800
@@ -336,13 +336,13 @@ describe('BlackboxVirtualLearnerRunner', () => {
       actorProfile: { learningGoal: '旧目标' },
       story: null,
       frictionBudget: 'stress_test',
-      simulatorPrompts: { goal: 'old goal', learning: 'old learn' },
+      simulatorPrompts: { goal: 'old goal', teaching: 'old learn' },
       simulators: {
         goal: {
           temperature: 0.1, maxTokens: 111,
           route: { providerId: 'provider-old', credentialFingerprint: 'hash-old', endpoint: 'https://old.example/v1', model: 'model-old' }
         },
-        learning: {
+        teaching: {
           temperature: 0.2, maxTokens: 222,
           route: { providerId: 'provider-old', credentialFingerprint: 'hash-old', endpoint: 'https://old.example/v1', model: 'model-old' }
         }
@@ -929,12 +929,12 @@ describe('BlackboxVirtualLearnerRunner', () => {
     }
     const teachingResult = {
       observation: {
-        stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '第一个任务' },
+        stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '第一个任务' },
         availableActions: ['chat', 'abandon']
       },
       control: {
         learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1',
-        teachingRevision: 1, platformStage: 'learning'
+        teachingRevision: 1, platformStage: 'teaching'
       }
     }
     const adapter = {
@@ -980,7 +980,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     expect(adapter.startTeaching).toHaveBeenCalledTimes(1)
     expect(response.result).toEqual({
       action: { type: 'start_learning', taskId: 't1' }, result: expect.objectContaining({
-        observation: expect.objectContaining({ stage: 'learning' })
+        observation: expect.objectContaining({ stage: 'teaching' })
       })
     })
     const projectedCommandIds = JSON.parse(currentSession.stageResults).blackbox.projectedCommandIds
@@ -1076,12 +1076,12 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith(
       { conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 7 },
-      { learning: { phaseFocus: 'trying' } }
+      { teaching: { phaseFocus: 'trying' } }
     )
     const initialState = JSON.parse(session.stageResults)
     initialState.blackbox.learnerPrivateStateTrace = [{
       sequence: 1,
-      stage: 'learning',
+      stage: 'teaching',
       taskId: 't1',
       state: { phaseFocus: 'trying' },
       emotion: 'confused',
@@ -1091,7 +1091,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     }]
     session.stageResults = JSON.stringify(initialState)
     addObservation(session, {
-      stage: 'learning',
+      stage: 'teaching',
       visibleMessages: [],
       visibleTask: { id: 't1', title: '第一个任务' },
       availableActions: ['chat', 'confirm_complete', 'abandon']
@@ -1138,7 +1138,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const update = updates.at(-1)![0]
     const persisted = JSON.parse(update.data.stageResults)
     expect(update.data).toEqual(expect.objectContaining({ currentTaskId: 't2', status: 'running' }))
-    expect(persisted.blackbox.learnerPrivateState.learning).toBeUndefined()
+    expect(persisted.blackbox.learnerPrivateState.teaching).toBeUndefined()
     expect(persisted.blackbox.learnerPrivateStateTrace.at(-1)).toEqual(expect.objectContaining({
       taskId: 't1',
       transition: 'task_completed',
@@ -1164,10 +1164,10 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith(
       { conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 7 },
-      { learning: { phaseFocus: 'trying' } }
+      { teaching: { phaseFocus: 'trying' } }
     )
     addObservation(session, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['chat', 'abandon']
     })
     const adapter = {
@@ -1216,10 +1216,10 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith(
       { conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 7 },
-      { learning: { phaseFocus: 'trying' } }
+      { teaching: { phaseFocus: 'trying' } }
     )
     addObservation(session, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['confirm_complete', 'abandon']
     })
     const adapter = {
@@ -1237,7 +1237,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
 
     const result = await runner.act('vs1', 'admin1', { type: 'confirm_complete' })
 
-    expect(result.observation.stage).toBe('learning')
+    expect(result.observation.stage).toBe('teaching')
     expect(result.observation.availableActions).toContain('confirm_complete')
     expect(result.observation.lastActionResult).toEqual(expect.objectContaining({ status: 'error' }))
     expect(result.observation.lastActionResult?.visibleMessage).toContain('请重试完成任务')
@@ -1245,24 +1245,24 @@ describe('BlackboxVirtualLearnerRunner', () => {
     expect(adapter.getPath).not.toHaveBeenCalled()
     const persisted = JSON.parse(currentSession().stageResults)
     expect(currentSession()).toEqual(expect.objectContaining({
-      status: 'running', currentStage: 'learning', completedAt: null
+      status: 'running', currentStage: 'teaching', completedAt: null
     }))
     expect(persisted.blackbox.control.terminalReason).toBeUndefined()
     expect(persisted.blackbox.control.taskCompletionCheckpoint).toEqual(expect.objectContaining({
       taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 8,
       status: 'teaching_finalized', lastError: '任务服务暂时不可用'
     }))
-    expect(persisted.blackbox.learnerPrivateState.learning).toEqual({ phaseFocus: 'trying' })
+    expect(persisted.blackbox.learnerPrivateState.teaching).toEqual({ phaseFocus: 'trying' })
   })
 
   it('endTeaching 后检查点写失败时停止且不调用 completeTask', async () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     let currentSession = sessionWith(
       { conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 7 },
-      { learning: { phaseFocus: 'trying' } }
+      { teaching: { phaseFocus: 'trying' } }
     )
     addObservation(currentSession, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['confirm_complete', 'abandon']
     })
     const adapter = {
@@ -1301,10 +1301,10 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     let currentSession = sessionWith(
       { conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 7 },
-      { learning: { phaseFocus: 'trying' } }
+      { teaching: { phaseFocus: 'trying' } }
     )
     addObservation(currentSession, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['confirm_complete', 'abandon']
     })
     const adapter = {
@@ -1355,7 +1355,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
       teachingSessionId: 'teach1', teachingRevision: 7
     })
     addObservation(currentSession, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['confirm_complete', 'abandon']
     })
     const adapter = {
@@ -1436,10 +1436,10 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith(
       { conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 7 },
-      { learning: { phaseFocus: 'trying' } }
+      { teaching: { phaseFocus: 'trying' } }
     )
     addObservation(session, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['confirm_complete', 'abandon']
     })
     const adapter = {
@@ -1484,10 +1484,10 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith(
       { conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 7 },
-      { learning: { phaseFocus: 'trying' } }
+      { teaching: { phaseFocus: 'trying' } }
     )
     addObservation(session, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['confirm_complete', 'abandon']
     })
     const adapter = {
@@ -1514,7 +1514,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const pending = await runner.act('vs1', 'admin1', { type: 'confirm_complete' })
     const resumed = await runner.act('vs1', 'admin1', { type: 'confirm_complete' })
 
-    expect(pending.observation.stage).toBe('learning')
+    expect(pending.observation.stage).toBe('teaching')
     expect(pending.control).toEqual(expect.objectContaining({
       taskCompleted: true,
       platformStage: 'path-refresh-pending',
@@ -1538,7 +1538,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
       teachingRevision: 8, taskCompletionCheckpoint: checkpoint
     })
     addObservation(session, {
-      stage: 'learning', visibleMessages: [{ role: 'platform', content: '请重试完成任务' }],
+      stage: 'teaching', visibleMessages: [{ role: 'platform', content: '请重试完成任务' }],
       visibleTask: { id: 't1', title: '任务' }, availableActions: ['confirm_complete', 'abandon']
     })
     const state = JSON.parse(session.stageResults)
@@ -1574,12 +1574,12 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const adapter = {
       startTeaching: jest.fn().mockResolvedValue({
         observation: {
-          stage: 'learning', visibleMessages: [], visibleTask: { id: 't2', title: '下一任务' },
+          stage: 'teaching', visibleMessages: [], visibleTask: { id: 't2', title: '下一任务' },
           availableActions: ['chat', 'abandon']
         },
         control: {
           learningPathId: 'p1', taskId: 't2', teachingSessionId: 'teach2',
-          teachingRevision: 1, platformStage: 'learning'
+          teachingRevision: 1, platformStage: 'teaching'
         }
       })
     }
@@ -1602,7 +1602,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
       teachingRevision: 9
     })
     addObservation(session, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' }, availableActions: ['chat', 'abandon']
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' }, availableActions: ['chat', 'abandon']
     })
     const adapter = {
       endTeaching: jest.fn().mockResolvedValue({
@@ -1632,7 +1632,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith({ conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1' })
     addObservation(session, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' }, availableActions: ['chat', 'abandon']
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' }, availableActions: ['chat', 'abandon']
     })
     const adapter = {
       endTeaching: jest.fn(),
@@ -1708,16 +1708,16 @@ describe('BlackboxVirtualLearnerRunner', () => {
       teachingSessionId: 'teach1', teachingRevision: 7
     })
     addObservation(currentSession, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['chat', 'abandon']
     })
     const adapter = {
       sendTeachingMessage: jest.fn().mockResolvedValue({
         observation: {
-          stage: 'learning', visibleMessages: [{ role: 'platform', content: '继续' }],
+          stage: 'teaching', visibleMessages: [{ role: 'platform', content: '继续' }],
           availableActions: ['chat', 'abandon']
         },
-        control: { teachingSessionId: 'teach1', teachingRevision: 8, platformStage: 'learning' }
+        control: { teachingSessionId: 'teach1', teachingRevision: 8, platformStage: 'teaching' }
       })
     }
     runner.getSession = jest.fn(async () => currentSession)
@@ -1734,7 +1734,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
 
     expect(adapter.sendTeachingMessage).toHaveBeenCalledTimes(1)
     expect(prisma.virtual_sessions.update).toHaveBeenCalledTimes(1)
-    expect(currentSession).toEqual(expect.objectContaining({ status: 'running', currentStage: 'learning' }))
+    expect(currentSession).toEqual(expect.objectContaining({ status: 'running', currentStage: 'teaching' }))
     expect(JSON.parse(currentSession.stageResults).blackbox.control.terminalReason).toBeUndefined()
   })
 
@@ -1745,7 +1745,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
       teachingSessionId: 'teach1', teachingRevision: 7
     })
     addObservation(currentSession, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['confirm_complete', 'abandon']
     })
     const adapter = {
@@ -1905,7 +1905,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
       control: { learningPathId: 'p1', taskId: 't1' }
     })
     runner.act = jest.fn().mockResolvedValue({
-      observation: { stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '第一个任务' }, availableActions: ['chat'] },
+      observation: { stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '第一个任务' }, availableActions: ['chat'] },
       control: { learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1' }
     })
     ;(prisma.virtual_learner_profiles.findUnique as jest.Mock).mockResolvedValue({
@@ -1916,7 +1916,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
 
     expect(runner.observe).toHaveBeenCalledWith('vs1', 'admin1')
     expect(runner.act).toHaveBeenCalledWith('vs1', 'admin1', { type: 'start_learning', taskId: 't1' })
-    expect(result.result.observation.stage).toBe('learning')
+    expect(result.result.observation.stage).toBe('teaching')
     expect(executeSkill).not.toHaveBeenCalled()
   })
 
@@ -1925,7 +1925,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     let currentSession: any = {
       ...sessionWith(
         { conversationId: 'g1', learningPathId: 'p1', taskId: null, runCompleted: true, terminalReason: 'completed' },
-        { learning: { phaseFocus: 'reflecting' } }
+        { teaching: { phaseFocus: 'reflecting' } }
       ),
       status: 'completed',
       currentStage: 'completed',
@@ -2003,7 +2003,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     let currentSession: any = {
       ...sessionWith(
         { conversationId: 'g1', runCompleted: true, terminalReason: 'completed' },
-        { goal: { trust: 0.5 }, learning: { phaseFocus: 'reflecting' } }
+        { goal: { trust: 0.5 }, teaching: { phaseFocus: 'reflecting' } }
       ),
       status: 'completed',
       currentStage: 'completed',

@@ -29,7 +29,6 @@ jest.mock('../../learner/LearnerProgressService', () => ({ learnerProgressServic
 jest.mock('../../background-task-tracker.service', () => ({ runBackgroundTask: mockRunBackgroundTask }))
 jest.mock('../../../gateway/event-bus', () => ({ getEventBus: () => ({ emit: jest.fn() }) }))
 jest.mock('../../../skills', () => ({ executeSkill: jest.fn() }))
-jest.mock('../../../skills/path-scene-framing', () => ({ pathSceneFramingDefinition: {} }))
 jest.mock('../../../skills/stage-designer', () => ({ stageDesignerDefinition: {} }))
 jest.mock('../../../skills/path-planning', () => ({ pathAgentDefinition: {} }))
 

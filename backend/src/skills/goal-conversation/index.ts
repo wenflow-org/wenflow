@@ -151,7 +151,7 @@ interface GoalPromptInput {
   confirmProposal?: boolean;
 }
 
-function buildGoalConversationUserPayload(input: {
+export function buildGoalConversationUserPayload(input: {
   userInput: string;
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
   previousState?: GoalConversationStateSnapshot;
@@ -391,12 +391,35 @@ function hasThinProposalPayload(payload: {
   const isNonEmptyArray = (v: any): boolean =>
     Array.isArray(v) && v.filter((item) => typeof item === 'string' && item.trim().length > 0).length >= 2;
 
+  // real_problem 必须是具体诊断：过短（<6 字）视为症状级；与 surface_goal 重叠率 ≥0.75
+  // 视为同义改写（未完成诊断），两者都不能满足推进硬条件
+  const isSubstantiveRealProblem = (real: any, surface: any): boolean => {
+    if (!isNonEmptyString(real) || !isNonEmptyString(surface)) return isNonEmptyString(real);
+    const r = real.trim().replace(/\s+/g, '');
+    if (r.length < 6) return false;
+    const s = surface.trim().replace(/\s+/g, '');
+    const overlap = [...r].filter((ch) => s.includes(ch)).length;
+    return overlap / r.length < 0.75;
+  };
+
+  // 时间字段"未明确/不清楚/不知道/无"不满足硬条件
+  const isUsableTime = (v: any): boolean => {
+    if (!isNonEmptyString(v)) return false;
+    return !/^(未明确|不清楚|不知道|无|没有)$/.test(v.trim());
+  };
+
   if (requiredFields && requiredFields.length > 0) {
     // 把 fieldId 拆到 understanding / confirmedProposal 两个根上
     const checkField = (fieldId: string): boolean => {
       if (fieldId.startsWith('understanding.')) {
         const path = fieldId.slice('understanding.'.length);
         const v = valueAt(understanding, path);
+        if (path === 'real_problem') {
+          return isSubstantiveRealProblem(v, valueAt(understanding, 'surface_goal'));
+        }
+        if (path === 'available_resources.time_budget' || path === 'available_resources.time_horizon') {
+          return isUsableTime(v);
+        }
         return isNonEmptyString(v) || isNonEmptyArray(v);
       }
       if (fieldId.startsWith('confirmedProposal.')) {
@@ -409,11 +432,11 @@ function hasThinProposalPayload(payload: {
       return true; // userVisible / core.* 等不参与该判定
     };
 
-    // 特殊处理 time_budget OR time_horizon（任意其一即可）
+    // 特殊处理 time_budget OR time_horizon（任意其一即可，且必须非"未明确"）
     const hasTimeAny = (() => {
       const tb = valueAt(understanding, 'available_resources.time_budget');
       const th = valueAt(understanding, 'available_resources.time_horizon');
-      return isNonEmptyString(tb) || isNonEmptyString(th);
+      return isUsableTime(tb) || isUsableTime(th);
     })();
 
     const otherChecks = requiredFields
@@ -433,10 +456,8 @@ function hasThinProposalPayload(payload: {
 
   // 兜底：原硬编码逻辑
   const hasRealProblem = typeof understanding.real_problem === 'string' && understanding.real_problem.trim().length > 0;
-  const hasTimeBudget = typeof understanding.available_resources?.time_budget === 'string'
-    && understanding.available_resources.time_budget.trim().length > 0;
-  const hasTimeHorizon = typeof understanding.available_resources?.time_horizon === 'string'
-    && understanding.available_resources.time_horizon.trim().length > 0;
+  const hasTimeBudget = isUsableTime(valueAt(understanding, 'available_resources.time_budget'));
+  const hasTimeHorizon = isUsableTime(valueAt(understanding, 'available_resources.time_horizon'));
   const hasSuccessCriteria = typeof understanding.success_criteria?.observable_result === 'string'
     && understanding.success_criteria.observable_result.trim().length > 0;
   const hasProposalDirection = typeof confirmedProposal.learning_direction === 'string'

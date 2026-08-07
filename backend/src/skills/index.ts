@@ -8,10 +8,6 @@
 export * from './protocol';
 export * from './context-envelope';
 
-// 路径场景 framing (PathAgent v3.2)
-export { pathSceneFramingDefinition } from './path-scene-framing';
-import { pathSceneFraming as pathSceneFramingFn } from './path-scene-framing';
-
 // 阶段任务设计器
 export { stageDesignerDefinition } from './stage-designer';
 import { stageDesigner as stageDesignerFn } from './stage-designer';
@@ -45,8 +41,8 @@ export { acceptanceEvidenceEvaluatorDefinition } from './acceptance-evidence-eva
 import { acceptanceEvidenceEvaluator as acceptanceEvidenceEvaluatorFn } from './acceptance-evidence-evaluator';
 
 // 教学策略选择器（新增：策略别名映射 + 引导 prompt 构建）
-export { learningStrategySelectorDefinition } from './learning-strategy-selector';
-import { learningStrategySelector as learningStrategySelectorFn } from './learning-strategy-selector';
+export { teachingStrategySelectorDefinition } from './teaching-strategy-selector';
+import { teachingStrategySelector as teachingStrategySelectorFn } from './teaching-strategy-selector';
 
 // Prompt 编译器（新增：简化配置编译为完整 Prompt）
 export { promptCompilerDefinition, promptCompilerRuntimeDefinition } from './prompt-compiler';
@@ -98,9 +94,9 @@ export { goalConversationAgentDefinition } from './goal-conversation';
 import { runGoalConversationAgent } from './goal-conversation';
 export { pathAgentDefinition } from './path-planning';
 import { pathAgentHandler } from './path-planning';
-export { learningTurnAgentDefinition, toLearningTurnSkillOutcome } from './learning-turn';
-export type { LearningTurnArtifact, LearningTurnInput, LearningTurnOutput } from './learning-turn';
-import { learningTurnAgentHandler } from './learning-turn';
+export { teachingTurnAgentDefinition, toTeachingTurnSkillOutcome } from './teaching-turn';
+export type { TeachingTurnArtifact, TeachingTurnInput, TeachingTurnOutput } from './teaching-turn';
+import { teachingTurnAgentHandler } from './teaching-turn';
 export { sessionWrapupAgentDefinition, sessionWrapupAgent, toWrapupArtifact, toWrapupSkillOutcome } from './session-wrapup';
 import { sessionWrapupAgentHandler } from './session-wrapup';
 export { peerAgentDefinition, toPeerCanonicalArtifact, toPeerSkillOutcome } from './peer-reinforcement';
@@ -110,7 +106,6 @@ export type { SkillOutcome, ProposedTransition, SkillOutcomeMeta } from './outco
 
 // 所有 Skill 定义
 import { SkillDefinition } from './protocol';
-import { pathSceneFramingDefinition } from './path-scene-framing';
 import { stageDesignerDefinition } from './stage-designer';
 import { adaptiveGuidanceCopyDefinition } from './adaptive-guidance-copy';
 import { goalProfileInferenceDefinition } from './goal-profile-inference';
@@ -126,12 +121,11 @@ import { virtualLearnerActorAuditorDefinition } from './virtual-learner-actor-au
 import { structuredOutputParserDefinition } from './structured-output-parser';
 import { goalUnderstandingComposerDefinition } from './goal-understanding-composer';
 import { acceptanceEvidenceEvaluatorDefinition } from './acceptance-evidence-evaluator';
-import { learningStrategySelectorDefinition } from './learning-strategy-selector';
+import { teachingStrategySelectorDefinition } from './teaching-strategy-selector';
 import { promptCompilerDefinition } from './prompt-compiler';
 import { mcpToolDefinition } from './mcp-tool';
 
 export const allSkillDefinitions: SkillDefinition[] = [
-  pathSceneFramingDefinition,
   stageDesignerDefinition,
   adaptiveGuidanceCopyDefinition,
   goalProfileInferenceDefinition,
@@ -147,7 +141,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   structuredOutputParserDefinition,
   goalUnderstandingComposerDefinition,
   acceptanceEvidenceEvaluatorDefinition,
-  learningStrategySelectorDefinition,
+  teachingStrategySelectorDefinition,
   promptCompilerDefinition,
   mcpToolDefinition,
   ...auxSkillDefinitions,
@@ -177,7 +171,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
     stats: { callCount: 0, successRate: 1, avgLatency: 0 }
   },
   {
-    name: 'learning-turn',
+    name: 'teaching-turn',
     displayName: '教学回合 Skill',
     version: '1.0.0',
     status: 'working',
@@ -216,7 +210,6 @@ export const allSkillDefinitions: SkillDefinition[] = [
 
 // Skill 名称映射
 export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
-  'path-scene-framing': pathSceneFramingFn,
   'stage-designer': stageDesignerFn,
   'adaptive-guidance-copy': adaptiveGuidanceCopyFn,
   'goal-profile-inference': goalProfileInferenceFn,
@@ -232,14 +225,14 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'structured-output-parser': structuredOutputParserFn,
   'goal-understanding-composer': goalUnderstandingComposerFn,
   'acceptance-evidence-evaluator': acceptanceEvidenceEvaluatorFn,
-  'learning-strategy-selector': learningStrategySelectorFn,
+  'teaching-strategy-selector': teachingStrategySelectorFn,
   'prompt-compiler': promptCompilerFn,
   'mcp-tool': executeMcpToolFn,
   ...auxSkillHandlers,
   // 核心 LLM 能力单元（原 agents/，已迁入 skills/）
   'goal-conversation': (input: any) => runGoalConversationAgent(input),
   'path-planning': (input: any) => pathAgentHandler(input.input, (input as any).context),
-  'learning-turn': (input: any) => learningTurnAgentHandler(input),
+  'teaching-turn': (input: any) => teachingTurnAgentHandler(input),
   'session-wrapup': (input: any) => sessionWrapupAgentHandler(input.input, (input as any).context),
   'peer-reinforcement': (input: any) => peerAgentHandler(input.input, (input as any).context),
 };
