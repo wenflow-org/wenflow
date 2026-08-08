@@ -4531,8 +4531,6 @@ const learningPath = await prisma.learning_paths.findUnique({
           difficulty: subtask.estimatedMinutes ? Math.min(subtask.estimatedMinutes / 30, 10) : 5
         });
 
-        await learnerProgressService.emitSignals(data.userId, [progressResult.signal]);
-
         learningReport = {
           reasoning: progressResult.metrics?.reasoning,
           suggestion: progressResult.metrics?.suggestion,
