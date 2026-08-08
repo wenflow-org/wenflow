@@ -614,6 +614,42 @@ async continueConversation(
       const contextMode = 'full';
       const selectedHistory = history;
 
+      // L2 声明化装配（第一阶段，只读对账）：把 previousState/历史组装成 goal 沙盘状态池，
+      // 校验 core yaml 声明的 sandbox refs 能否解析。缺键打 warn（把"纯文档/静默脱节"变成运行时可见），不阻断。
+      try {
+        const { checkSandboxRefs, extractSandboxRefsFromCore } = await import('../sandbox-resolver.service');
+        const sandboxRefs = await extractSandboxRefsFromCore('goal-conversation');
+        const goalSandboxRefs = sandboxRefs.filter((ref) => ref.agentAlias === 'goal');
+        if (goalSandboxRefs.length > 0) {
+          const latestMessage = selectedHistory.length > 0
+            ? selectedHistory[selectedHistory.length - 1]?.content
+            : undefined;
+          const { refs, missingCount } = checkSandboxRefs(
+            'goal',
+            goalSandboxRefs.map((ref) => ref.path),
+            {
+              goal: {
+                collectedData: {
+                  state: previousState,
+                  history: selectedHistory.map((msg: any) => ({ role: msg.role, text: msg.content })),
+                  understanding: previousState.understanding,
+                  confirmedProposal: previousState.confirmedProposal ?? null,
+                  latestMessage,
+                },
+              },
+            }
+          );
+          if (missingCount > 0) {
+            logger.warn('[goal-conversation] 沙盘声明键运行时不可解析（声明与装配脱节）', {
+              conversationId,
+              missing: refs.filter((r) => !r.resolved).map((r) => r.missing),
+            });
+          }
+        }
+      } catch {
+        // 对账失败不影响主流程
+      }
+
       // 调用专用 GoalConversationAgent
       const aiResponse = await executeSkill(goalConversationAgentDefinition, {
         input: userInput,
