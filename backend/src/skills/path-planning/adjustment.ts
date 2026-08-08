@@ -1,5 +1,6 @@
 ﻿import { AgentContext, MilestoneOutput, SubtaskOutput, LearningSignal } from '../../agents/protocol';
 import { logger } from '../../utils/logger';
+import { memoryTraceService } from '../../services/memory/memory-trace.service';
 
 export type AdjustmentType = 'insert' | 'remove' | 'modify' | 'reorder';
 export type AdjustmentTarget = 'milestone' | 'subtask';
@@ -217,7 +218,15 @@ export class PathAdjustmentEngine {
       const insertPosition = Math.floor(milestones.length / 2);
       const newMilestone = await this.generateMilestoneForInsertion(milestones, { type: 'insert', target: 'milestone', position: insertPosition, reason: 'decelerating', signal }, context);
       if (newMilestone) {
-        newMilestone.title = `复习：${milestones[insertPosition]?.title || '巩固所学'}`;
+        const baseTitle = milestones[insertPosition]?.title || '巩固所学';
+        // 记忆引擎 M2：优先用到期记忆痕迹作为旧知唤醒内容（best-effort，查询失败回退原逻辑）
+        const dueLabels = await memoryTraceService
+          .getDueTraces(context.userId, { limit: 3 })
+          .then((traces) => traces.map((trace) => trace.label || trace.conceptKey).filter(Boolean).slice(0, 2))
+          .catch(() => [] as string[]);
+        newMilestone.title = dueLabels.length > 0
+          ? `复习：${baseTitle}（旧知唤醒：${dueLabels.join('、')}）`
+          : `复习：${baseTitle}`;
         milestones.splice(insertPosition, 0, newMilestone);
         this.renumberMilestones(milestones);
         adjustments.push({ type: 'insert', target: 'milestone', position: insertPosition, content: newMilestone, reason: 'decelerating', signal });
