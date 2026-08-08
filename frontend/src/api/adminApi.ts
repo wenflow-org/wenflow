@@ -1082,6 +1082,11 @@ export const adminPromptOpsApi = {
     return adminAxios.get('/admin/prompt-ops/protocol-view');
   },
 
+  // 沙盘契约视图（只读）：5 个顶层 agent 的输入通道 / 输出字段 / 合法沙盘键
+  getSandboxView: async () => {
+    return adminAxios.get('/admin/prompt-ops/sandbox-view');
+  },
+
   getSkillRulesOverview: async () => {
     return adminAxios.get('/admin/prompt-ops/skill-rules-overview');
   },

@@ -5,6 +5,42 @@
       <p class="frc__sub">字段归属 / 流向 / 可见性配置。修改后由 seed 漂移检测与对账脚本守护一致性（admin 编辑行豁免）。</p>
     </div>
 
+    <details class="frc__sandbox">
+      <summary class="frc__sandbox-summary">沙盘契约视图（输入通道 / 输出字段 / 合法沙盘键，只读）</summary>
+      <div v-if="sandboxError" class="frc__empty">{{ sandboxError }}</div>
+      <template v-else-if="sandboxAgents.length">
+        <div v-for="agent in sandboxAgents" :key="agent.agentId" class="frc__agent">
+          <div class="frc__agenthead">
+            <span class="frc__agentname mono">{{ agent.agentId }}</span>
+            <span class="frc__agentdesc">{{ agent.agentName }}</span>
+          </div>
+          <div class="frc__sandbox-grid">
+            <div>
+              <h4 class="frc__sandbox-label">输入通道（编排注入）</h4>
+              <ul v-if="agent.inputChannels.length" class="frc__sandbox-list mono">
+                <li v-for="c in agent.inputChannels" :key="c.path">
+                  {{ c.path }}<span v-if="c.type" class="frc__sandbox-type">（{{ c.type }}）</span>
+                  <span class="frc__sandbox-src">[{{ c.source }}]</span>
+                </li>
+              </ul>
+              <p v-else class="frc__empty">无登记输入通道</p>
+            </div>
+            <div>
+              <h4 class="frc__sandbox-label">输出 / 交付字段</h4>
+              <ul v-if="agent.outputFields.length" class="frc__sandbox-list mono">
+                <li v-for="f in agent.outputFields" :key="f.fieldId">
+                  {{ f.fieldId }}<span v-if="f.type" class="frc__sandbox-type">（{{ f.type }}）</span>
+                  <span v-if="f.handoff?.length" class="frc__sandbox-handoff">移交→{{ f.handoff.join('/') }}</span>
+                </li>
+              </ul>
+              <p v-else class="frc__empty">无输出字段</p>
+            </div>
+          </div>
+        </div>
+      </template>
+      <p v-else class="frc__empty">加载中…</p>
+    </details>
+
     <div class="frc__tabs">
       <button
         v-for="s in stageList"
@@ -77,7 +113,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { adminFieldRoutingsApi } from '@/api/adminApi';
+import { adminFieldRoutingsApi, adminPromptOpsApi } from '@/api/adminApi';
 
 interface StageItem { id: string; displayName: string }
 interface FieldItem { fieldId: string; valueType?: string; promptRole?: string; locks?: { level?: string } }
@@ -92,6 +128,21 @@ interface RoutingItem {
   accumulate: boolean;
   locks?: { level?: string };
 }
+interface SandboxChannel {
+  path: string;
+  key: string;
+  fieldId: string;
+  type: string;
+  source: 'routing-channel' | 'routing-output';
+  pathInRawOutput?: string | null;
+  description?: string;
+}
+interface SandboxAgent {
+  agentId: string;
+  agentName: string;
+  inputChannels: SandboxChannel[];
+  outputFields: Array<{ fieldId: string; type: string; handoff: string[] }>;
+}
 
 const stageList = ref<StageItem[]>([]);
 const stage = ref('');
@@ -101,6 +152,8 @@ const routings = ref<RoutingItem[]>([]);
 const changes = ref<Array<Record<string, unknown>>>([]);
 const loading = ref(false);
 const error = ref('');
+const sandboxAgents = ref<SandboxAgent[]>([]);
+const sandboxError = ref('');
 
 const fieldMap = () => new Map(fields.value.map((f) => [f.fieldId, f]));
 
@@ -124,7 +177,7 @@ function lockLabel(level?: string) {
 
 async function loadStages() {
   const res = await adminFieldRoutingsApi.getStages();
-  stageList.value = (res.data?.data?.stages || []).filter((s: StageItem) => ['goal', 'path', 'teaching', 'profile'].includes(s.id));
+  stageList.value = (res.data?.data?.stages || []).filter((s: StageItem) => ['goal', 'path', 'teaching', 'profile', 'simulation'].includes(s.id));
   if (stageList.value.length) await switchStage(stageList.value[0].id);
 }
 
@@ -171,7 +224,21 @@ async function toggleAccumulate(agentId: string, row: RoutingItem) {
   await patch(agentId, row, { accumulate: !row.accumulate });
 }
 
-onMounted(loadStages);
+async function loadSandboxView() {
+  sandboxError.value = '';
+  try {
+    const res = await adminPromptOpsApi.getSandboxView();
+    sandboxAgents.value = res.data?.data?.agents || [];
+  } catch (e: any) {
+    sandboxError.value = e?.message || '沙盘契约加载失败';
+    sandboxAgents.value = [];
+  }
+}
+
+onMounted(() => {
+  void loadStages();
+  void loadSandboxView();
+});
 </script>
 
 <style scoped>
@@ -181,6 +248,15 @@ onMounted(loadStages);
 .frc__tabs { display: flex; gap: 8px; margin-bottom: 16px; }
 .frc__tab { padding: 6px 14px; border: 1px solid var(--mk-border, #ddd); border-radius: 6px; background: #fff; cursor: pointer; }
 .frc__tab.is-active { background: var(--mk-primary, #4f46e5); color: #fff; border-color: transparent; }
+.frc__sandbox { margin-bottom: 16px; border: 1px solid var(--mk-border, #ddd); border-radius: 8px; padding: 0 14px; }
+.frc__sandbox-summary { padding: 10px 0; cursor: pointer; font-weight: 600; color: var(--mk-primary, #4f46e5); }
+.frc__sandbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding-bottom: 12px; }
+.frc__sandbox-label { margin: 6px 0 6px; font-size: 12px; color: #888; }
+.frc__sandbox-list { margin: 0; padding-left: 18px; max-height: 260px; overflow-y: auto; }
+.frc__sandbox-list li { margin-bottom: 3px; }
+.frc__sandbox-type { color: #888; }
+.frc__sandbox-src { color: #aaa; font-size: 12px; }
+.frc__sandbox-handoff { color: var(--mk-primary, #4f46e5); font-size: 12px; }
 .frc__agent { margin-bottom: 18px; border: 1px solid var(--mk-border, #ddd); border-radius: 8px; overflow: hidden; }
 .frc__agenthead { padding: 10px 14px; background: #f7f7f9; display: flex; align-items: baseline; gap: 10px; }
 .frc__agentname { font-weight: 600; }
