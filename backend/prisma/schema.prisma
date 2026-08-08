@@ -238,24 +238,6 @@ model goal_conversations {
   users          users     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model learningContents {
-  id          String   @id
-  subtaskId   String
-  contentType String   @default("lesson")
-  content     String
-  summary     String?
-  keyPoints   String?
-  resources   String?
-  exercises   String?
-  generatedBy String?
-  generatedAt DateTime @default(now())
-  version     Int      @default(1)
-  subtasks    subtasks @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
-
-  @@index([subtaskId])
-  @@index([contentType])
-}
-
 model learning_goals {
   id          String   @id
   userId      String
@@ -404,18 +386,6 @@ model milestones {
 }
 
 
-model platform_stats {
-  id             String   @id
-  date           DateTime @default(now())
-  totalUsers     Int      @default(0)
-  activeUsers    Int      @default(0)
-  totalPaths     Int      @default(0)
-  activePaths    Int      @default(0)
-  totalTasks     Int      @default(0)
-  completedTasks Int      @default(0)
-  metadata       String?
-}
-
 model student_baselines {
   id                       String    @id
   userId                   String    @unique
@@ -467,7 +437,6 @@ model subtasks {
   transferable         Boolean?           @default(false)
   linkedConceptId      String?
   linkedConceptName    String?
-  learningContents     learningContents[]
   users                users?             @relation(fields: [usersId], references: [id])
   milestones           milestones         @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
 

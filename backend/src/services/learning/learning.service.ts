@@ -3668,8 +3668,7 @@ const learningPath = await prisma.learning_paths.findUnique({
                 orderBy: { order: 'asc' }
               }
             }
-          },
-          learningContents: true
+          }
         }
       });
 
@@ -3735,7 +3734,6 @@ const learningPath = await prisma.learning_paths.findUnique({
               learningBlockedReason: accessState.learningBlockedReason
             }
           : learningPath,
-        contents: subtask.learningContents
       };
     } catch (error) {
       logger.error('获取任务详情失败:', error);

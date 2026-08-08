@@ -450,7 +450,6 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       completedConversations,
       activeConversations,
       totalAgentLogs,
-      platformStats,
       agentCallsToday,
       agentSuccessToday,
       agentTimeoutToday,
@@ -556,12 +555,6 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         by: ['success'],
         where: businessExecutionWhere,
         _count: true,
-      }),
-      
-      // 最近的 platform stats
-      prisma.platform_stats.findMany({
-        take: 7,
-        orderBy: { date: 'desc' },
       }),
 
       // 今日 Agent 调用数
@@ -822,7 +815,6 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
           wrapup: wrapupSourceStats,
         },
         usage,
-        platformStats,
       },
     });
   } catch (error: any) {
