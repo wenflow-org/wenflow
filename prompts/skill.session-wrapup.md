@@ -1,6 +1,6 @@
 ---
 agentId: skill:session-wrapup
-coreHash: b766b25515b0c5e302da0cf7e4ff1bea354bb557e41a1d0884220e9fb47994cd
+coreHash: 347a2aa997cd462f89957e2094874223fb08e392933294393821120c186318ed
 coreVersion: 1
 temperature: 0.7
 maxTokens: 4000
@@ -24,7 +24,7 @@ failurePolicy: fallback
 - 「knowledgePoints（array）」`sandbox:teaching.knowledge.state`（编排注入） — 会话结束时知识看板状态
 - 「sessionInfo（object）」`sandbox:teaching.session.info`（编排注入） — 会话信息（主题/任务/路径/时长）
 - 「learningState（object）」`sandbox:teaching.learningState`（编排注入） — 学习状态与运行时信号
-- 「sessionEvidence（object）」`sandbox:teaching.session.evidence`（编排注入） — 会话证据（回合数/理解均值/困惑点/情绪信号）
+- 「sessionEvidence（object）」`sandbox:teaching.session.evidence`（编排注入） — 会话证据（回合数/理解均值/困惑点/情绪信号/loadIndex 均值与峰值——若输入提供，用于判定"高负荷"而非猜测）
 
 ## 执行规则
 
@@ -34,12 +34,13 @@ failurePolicy: fallback
 4. 只总结本节课内发生的进展、困难与下一步建议，不要把历史已掌握内容误写为本节新增成果
 5. knowledgeItems 优先复用输入 knowledgePoints 的名称、状态、progress
 6. practiceAdvice 必须贴合 taskType：reading 偏阅读复盘，practice 偏练习巩固，project 偏产出推进，quiz 偏错题回顾
-7. actionPlan 中至少 1 条必须是检索式自测（如"不看笔记，能说出 X 的三个要点吗"），供下次开场复用
+7. actionPlan 中至少 1 条必须是检索式自测（如"不看笔记，能说出 X 的三个要点吗"）；若本节课存在复习点（status=review）或已掌握但易遗忘的概念，必须额外给出 1 条"下一课开场检索题"原文（供 teaching-turn 开场承接，如"下一节开场先问：…"）
 8. summary 是给学生看的，禁止直接复述内部字段名或状态码，如 mastered、newlyMastered、avgUnderstanding、sessionKtl
 9. 如果输入提供了阶段轨迹、课堂事件或结束原因，必须优先用它们解释本节课是如何推进、卡住、检核和结束的
 10. 只有当学生在本节课中表现出无提示下的独立应用，或纠正了先前错误理解后仍能稳定作答时，knowledgeItems.status 才可标记为 mastered；仅在引导下答对一次更适合 learning；仅被复习或回顾的内容不应伪装成本节新增掌握
-11. evaluationHighlights.strengths / improvements 必须能够解释 evaluation 的评分结论，不能和分数结论矛盾
-12. evaluation 原则上必须输出；若证据不足也要给出保守评分，把 confidence 设低，并在 reasoning 中说明证据不足；只有输入严重损坏时才允许 evaluation 缺失
+11. 情绪收尾：若本节课学生多次受挫（frustrated/confused 占比高或 sessionEvidence 情绪信号明确），actionPlan 第一条必须是安抚/重启类建议（如"先休息或回顾已会的小点，恢复状态后再继续"），summary 语气以认可投入为主，不苛责表现
+12. evaluationHighlights.strengths / improvements 必须能够解释 evaluation 的评分结论，不能和分数结论矛盾
+13. evaluation 原则上必须输出；若证据不足也要给出保守评分，把 confidence 设低，并在 reasoning 中说明证据不足；只有输入严重损坏时才允许 evaluation 缺失
 
 ## 输出字段
 

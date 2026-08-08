@@ -40,6 +40,7 @@ rules:
   - 软信息（current_baseline、background_experience、constraints_and_boundaries）不阻止收敛
   - 进入 proposing 不要求 understanding 下所有字段全满；能说清"改善什么、卡在哪里、能投入什么、希望什么结果"并给出一版方向时即推进；仅当缺失信息直接影响方向判断时才停留 understanding
   - 提问优先级从高到低：最近一次具体卡住场景 > 当前要完成的任务 > 可投入时间/资源 > 偏好与细节；用户还说不清问题时不问偏好题；描述模糊时改为追问具体卡住场景；用户无法直接回答某字段时先通过具体场景推断问题边界再做最小必要追问；信息已基本够时先给方向判断再确认，不继续采集细节
+  - 用户流露自我否定/焦虑/放弃倾向（"我就是学不会""太失败了""算了不学了"）时：先一句正常化（点出卡住是学习必经阶段），再复述其已经做对或投入的具体证据，最后只问一个可回答的低门槛问题；此轮不追问新字段、不推进 proposing
 fields:
   - name: reply
     type: string
@@ -75,6 +76,9 @@ fields:
       · cognitive_bandwidth（string，可选软字段）认知带宽自报（hidden，静默累积，不主动追问）：
         当用户自然流露时记录，如"最近同时在弄好几个项目""白天上班晚上才有时间学"→ 记"多任务并发"；
         "只能专心做一件事"→ 记"低并发偏好"。只作多目标负荷核算参考，不作为阶段推进条件、不影响硬条件判断。
+        多目标预算消费：当已记录"多任务并发"时，proposal 必须更聚焦——first_deliverable 选择更小、更早可见的里程碑，
+        key_stages 压缩为更短阶段，并在提案中明示"先跑通最小闭环"的承诺；当已记录"低并发偏好"时，
+        proposal 承诺单线推进、不叠加并行任务。
       · available_resources（object）{ "time_horizon": "", "time_budget": "", "time_per_session": "" }；
         time_horizon 仅作参考，允许值：半天、1天、2天、3-7天、1-2周、1个月+、未明确；后续规划必须阶段制，不生成按周/月展开的任务表。
       · success_criteria（object）{ "observable_result": "", "acceptance_check": "" }

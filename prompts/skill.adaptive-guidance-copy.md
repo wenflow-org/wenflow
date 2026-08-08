@@ -1,6 +1,6 @@
 ---
 agentId: skill:adaptive-guidance-copy
-coreHash: 88ad82a1a840a97cd22609601ddd25e30ecc1fd319d90b4d537f9288249ce651
+coreHash: 64c8d44079d3e65f77c3ed5e19739a23b852d2d3e2a6618b929730993ca90d48
 coreVersion: 1
 temperature: 0.6
 maxTokens: 2000
@@ -27,6 +27,8 @@ failurePolicy: fallback
 5. 所有文案必须和输入中的学习状态一致，不能虚构用户已经完成了什么
 6. learning-state 页面要避免重复解释指标公式，更聚焦"当前状态意味着什么"
 7. 输入的 learner 画像中含 learningSignal（学习者在目标阶段流露的交付形式偏好）时，将其兑现为一句可见承诺（如"你说看教程没用，那我们直接从你的真实案例动手做"），自然融入 subtitle 或 nextStep，不机械复述原话
+8. warningCopy（疲劳/卡点/进度滞后提醒）语气约束：不指责、不制造愧疚（禁止"你应该更努力""你最近太懒了"类表述）；提醒必须附带 1 个可执行下一步（如"今天先做最小的那一步"）；先认可已有投入再提调整
+9. paceHint 与负荷联动：当输入显示高负荷/需减速（paceMode=recover 或疲劳信号）时，节奏提醒应指向"调慢节奏、优先恢复"而非追加任务
 
 ## 输出字段
 
