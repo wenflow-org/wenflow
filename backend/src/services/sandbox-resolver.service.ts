@@ -5,8 +5,8 @@
  *  - 解析失败打 warn（把"纯文档/静默脱节"变成运行时可见）
  *  - 不改变现有装配行为（当前仍是编排代码装配，本服务做声明↔运行时对账）
  *
- * 第二阶段（2026-08）：各业务链的状态池形状集中为本模块的 pool builder，
- * 后续可升级为 provider 注册表（agentAlias → pool 构造函数）支撑声明驱动装配。
+ * 第三阶段（2026-08）：状态池 shape 以 provider 注册表集中声明——
+ * 各业务链只提供原始 context，池形状由 provider 决定，为声明驱动装配提供统一挂点。
  */
 
 export interface SandboxResolveResult {
@@ -142,7 +142,54 @@ export async function checkAgentSandboxRefs(
 }
 
 // ============================================================
-// 各业务链的状态池 builder（状态池形状集中于此，后续可升级为 provider 注册表）
+// Provider 注册表（L2 第三阶段）：agentAlias → 状态池构造函数
+// 各业务链只提供原始 context，池形状由 provider 决定。
+// ============================================================
+
+export type SandboxPoolProvider = (context: any) => Record<string, Record<string, unknown>>;
+
+const poolProviders = new Map<string, SandboxPoolProvider>();
+
+/** 注册某 agent 的状态池构造函数（幂等，重复注册覆盖） */
+export function registerSandboxPoolProvider(agentAlias: string, provider: SandboxPoolProvider): void {
+  poolProviders.set(agentAlias, provider);
+}
+
+export function getSandboxPoolProvider(agentAlias: string): SandboxPoolProvider | undefined {
+  return poolProviders.get(agentAlias);
+}
+
+export interface CheckFromContextOptions extends CheckAgentSandboxRefsOptions {
+  /** 缺 provider 时静默返回（不视为错误） */
+  allowMissingProvider?: boolean;
+}
+
+/**
+ * 从注册表取 provider 构造状态池并校验声明 refs。
+ * 业务链接入方式：只传原始 context，池形状由 provider 声明。
+ */
+export async function checkAgentSandboxRefsFromContext(
+  skillId: string,
+  agentAlias: string,
+  context: any,
+  options: CheckFromContextOptions = {}
+): Promise<SandboxRefsCheckResult | null> {
+  const provider = poolProviders.get(agentAlias);
+  if (!provider) {
+    if (options.allowMissingProvider) return null;
+    return null;
+  }
+  let pools: Record<string, Record<string, unknown>>;
+  try {
+    pools = provider(context);
+  } catch {
+    return null;
+  }
+  return checkAgentSandboxRefs(skillId, agentAlias, pools, options);
+}
+
+// ============================================================
+// 各业务链的状态池 builder（provider 内部使用；形状集中于此）
 // ============================================================
 
 /** goal 链：goal.conversation.service buildPreviousState + 可见历史 */
@@ -210,3 +257,42 @@ export function buildPathSandboxPool(
     },
   };
 }
+
+// ============================================================
+// 内置 provider 注册（各业务链的"状态池装配声明"集中于此）
+// ============================================================
+
+/** goal 链：调用方 context = { previousState, history } */
+registerSandboxPoolProvider('goal', (context) =>
+  buildGoalSandboxPool(context?.previousState || {}, context?.history || [])
+);
+
+/** teaching 链：调用方 context = buildTeachingSandboxPool 的同名字段 */
+registerSandboxPoolProvider('teaching', (context) =>
+  buildTeachingSandboxPool({
+    sessionMessages: context?.sessionMessages || [],
+    sessionId: context?.sessionId || '',
+    mode: context?.mode || '',
+    topic: context?.topic,
+    learnerProjection: context?.learnerProjection,
+    knowledgeState: context?.knowledgeState,
+    classroomContext: context?.classroomContext,
+    teachingControlContext: context?.teachingControlContext,
+    scenario: context?.scenario,
+    interactionProfile: context?.interactionProfile,
+  })
+);
+
+/** path 链：调用方 context = { normalizedInputV1 } */
+registerSandboxPoolProvider('path', (context) =>
+  buildPathSandboxPool(context?.normalizedInputV1 || {})
+);
+
+/**
+ * simulation 链：调用方 context = { input }，仿真 skill 的输入字段即状态池
+ * （learner/story/visibleContext/currentPhase/previousLearnerState/task 等）。
+ * 注意：simulation 是实验链，键为人工约定（seed 不建输入行），对账仅做运行时可见性。
+ */
+registerSandboxPoolProvider('simulation', (context) => ({
+  simulation: context?.input || {},
+}));

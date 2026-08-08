@@ -762,14 +762,14 @@ async function buildTeachingTurnInput(
     } : undefined,
   };
 
-  // L2 声明化装配（只读对账）：把本回合组装结果建成 teaching 沙盘状态池，
-  // 校验 teaching-turn.yaml 声明的 sandbox refs 能否解析。缺键打 warn，不阻断。
+  // L2 声明化装配（只读对账）：状态池形状由 sandbox-resolver 的 teaching provider 声明，
+  // 本链只提供原始 context。缺键打 warn，不阻断。
   try {
-    const { checkAgentSandboxRefs, buildTeachingSandboxPool } = await import('../sandbox-resolver.service');
-    await checkAgentSandboxRefs(
+    const { checkAgentSandboxRefsFromContext } = await import('../sandbox-resolver.service');
+    await checkAgentSandboxRefsFromContext(
       'teaching-turn',
       'teaching',
-      buildTeachingSandboxPool({
+      {
         sessionMessages: session.messages.map((item) => ({ role: item.role, content: item.content })),
         sessionId: session.id,
         mode: session.mode,
@@ -780,7 +780,7 @@ async function buildTeachingTurnInput(
         teachingControlContext,
         scenario: scenario as Record<string, unknown>,
         interactionProfile: (context as any).interactionProfile,
-      }),
+      },
       { warnContext: { sessionId: session.id } }
     );
   } catch {

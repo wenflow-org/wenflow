@@ -614,18 +614,18 @@ async continueConversation(
       const contextMode = 'full';
       const selectedHistory = history;
 
-      // L2 声明化装配（只读对账）：把 previousState/历史组装成 goal 沙盘状态池，
-      // 校验 core yaml 声明的 sandbox refs 能否解析。缺键打 warn（把"纯文档/静默脱节"变成运行时可见），不阻断。
+      // L2 声明化装配（只读对账）：状态池形状由 sandbox-resolver 的 goal provider 声明，
+      // 本链只提供原始 context（previousState + 可见历史）。缺键打 warn，不阻断。
       try {
-        const { checkAgentSandboxRefs, buildGoalSandboxPool } = await import('../sandbox-resolver.service');
+        const { checkAgentSandboxRefsFromContext } = await import('../sandbox-resolver.service');
         const historyItems = selectedHistory.map((msg: any) => ({
           role: msg.role === 'user' ? 'user' : 'assistant',
           content: String(msg.content || ''),
         }));
-        await checkAgentSandboxRefs(
+        await checkAgentSandboxRefsFromContext(
           'goal-conversation',
           'goal',
-          buildGoalSandboxPool(previousState, historyItems),
+          { previousState, history: historyItems },
           { warnContext: { conversationId } }
         );
       } catch {

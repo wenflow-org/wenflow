@@ -279,15 +279,15 @@ class PathCoordinator {
       goalFinalPayload.rawGoal
     );
 
-    // L2 声明化装配（只读对账）：把确定性定帧结果建成 path 沙盘状态池，
-    // 校验 path-planning.yaml 声明的 sandbox refs 能否解析。缺键打 warn，不阻断。
+    // L2 声明化装配（只读对账）：状态池形状由 sandbox-resolver 的 path provider 声明，
+    // 本链只提供确定性定帧结果。缺键打 warn，不阻断。
     void (async () => {
       try {
-        const { checkAgentSandboxRefs, buildPathSandboxPool } = await import('../services/sandbox-resolver.service');
-        await checkAgentSandboxRefs(
+        const { checkAgentSandboxRefsFromContext } = await import('../services/sandbox-resolver.service');
+        await checkAgentSandboxRefsFromContext(
           'path-planning',
           'path',
-          buildPathSandboxPool(normalizedInputV1),
+          { normalizedInputV1 },
           { warnContext: { sourceConversationId: input.sourceConversationId || null } }
         );
       } catch {

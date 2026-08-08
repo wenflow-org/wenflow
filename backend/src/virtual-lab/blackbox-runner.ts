@@ -2125,6 +2125,18 @@ export class BlackboxVirtualLearnerRunner {
 
   private async executeSimulatorSkill(definition: any, input: any, snapshot: any, stage: 'goal' | 'teaching') {
     const parentContext = getRequestContext()
+    // L2 声明化装配（只读对账）：仿真 skill 的输入字段即 simulation 状态池，
+    // 校验对应 core yaml 声明的 sandbox refs（实验链，仅运行时可见性，不阻断）
+    void (async () => {
+      try {
+        const { checkAgentSandboxRefsFromContext } = await import('../services/sandbox-resolver.service');
+        const skillId = String(definition?.id || '').replace(/^skill:/, '');
+        if (!skillId) return;
+        await checkAgentSandboxRefsFromContext(skillId, 'simulation', { input });
+      } catch {
+        // 对账失败不影响主流程
+      }
+    })();
     return runWithContext({
       ...parentContext,
       promptRuntimeOverride: this.simulatorRuntime(snapshot, stage)
