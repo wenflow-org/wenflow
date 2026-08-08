@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-learn-turn-simulator
-coreHash: 6095481789d77b4b9321e9416d18417d8c081674353f502abc8901eae0a83542
+coreHash: 99c0a748935ca2b07c879b71a0a4860b719551f678da92217714565319e26a1a
 coreVersion: 1
 temperature: 0.7
 maxTokens: 800
@@ -19,6 +19,15 @@ failurePolicy: fallback
 - state：平台维护的主记忆快照（当前值，含 stage）
 - task：当前任务 / 场景 / 控制指令
 - evidence：客观事实轨迹：课堂证据、知识变化、课后总结、运行统计（只读追加）
+
+输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
+- 「learner（object）」`sandbox:simulation.learner`（编排注入） — 学习者画像（稳定人物设定）
+- 「story（object）」`sandbox:simulation.story`（编排注入） — 故事触发器，本轮情境切片
+- 「visibleContext（object）」`sandbox:simulation.visibleContext`（编排注入） — 完整可见对话上下文（学习者真实看到的世界）
+- 「currentPhase（string）」`sandbox:simulation.currentPhase`（编排注入） — trying|blocked|verifying|ready_to_close
+- 「previousLearnerState（object）」`sandbox:simulation.previousLearnerState`（编排注入） — 上一轮学习者主观状态
+- 「currentTask（object）」`sandbox:simulation.currentTask`（编排注入） — 当前 task 信息（学习者视角的任务描述）
+- 「knowledgeSnapshot（array）」`sandbox:simulation.knowledgeSnapshot`（编排注入） — 当前任务知识看板（服务端注入）
 
 ## 执行规则
 

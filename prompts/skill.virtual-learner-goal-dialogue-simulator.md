@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-goal-dialogue-simulator
-coreHash: 6f5d5a08d4c6bd6076f17fde6a3c09853884b3266ad21ff98fdb50e53cebc7e9
+coreHash: 11b35278f358eb4315ec847c6a45496079b1ff42628b23c621e83e2f1b930058
 coreVersion: 1
 temperature: 0.8
 maxTokens: 1200
@@ -18,6 +18,14 @@ failurePolicy: fallback
 - dialogue：当前输入与近期对话切片（用于语境理解，不充当状态载体）
 - state：平台维护的主记忆快照（当前值，含 stage）
 - task：当前任务 / 场景 / 控制指令
+
+输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
+- 「learner（object）」`sandbox:simulation.learner`（编排注入） — 学习者画像（稳定人物设定）
+- 「story（object）」`sandbox:simulation.story`（编排注入） — 故事触发器，本轮情境切片
+- 「visibleContext（object）」`sandbox:simulation.visibleContext`（编排注入） — 完整可见对话上下文（学习者真实看到的世界）
+- 「currentPhase（string）」`sandbox:simulation.currentPhase`（编排注入） — opening|understanding|proposal_evaluation
+- 「previousLearnerState（object）」`sandbox:simulation.previousLearnerState`（编排注入） — 上一轮学习者主观状态
+- 「task（object）」`sandbox:simulation.task`（编排注入） — 结构化任务说明（goal 澄清会话）
 
 ## 执行规则
 

@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-path-evaluator
-coreHash: 3678755794c010bac120298a061260a00853a31fc983d216a8594f11898ae5f0
+coreHash: 3c46100bf8fa143dc72ed0a9185693d8c7f30f47ed8052a2d4901cb87396ecba
 coreVersion: 1
 temperature: 0.5
 maxTokens: 1200
@@ -19,6 +19,14 @@ failurePolicy: fallback
 - path：路径与确认方案上下文
 - state：平台维护的主记忆快照（当前值，含 stage）
 - task：当前任务 / 场景 / 控制指令
+
+输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
+- 「learner（object）」`sandbox:simulation.learner`（编排注入） — 学习者画像（稳定人物设定）
+- 「story（object）」`sandbox:simulation.story`（编排注入） — 故事情景
+- 「pathProposal（object）」`sandbox:simulation.pathProposal`（编排注入） — 当前路径方案（待评估对象）
+- 「goalState（object）」`sandbox:simulation.goalState`（编排注入） — Goal 阶段状态（对话收敛结果）
+- 「previousReaction（object）」`sandbox:simulation.previousReaction`（编排注入） — 上一次路径反应
+- 「learnerState（object）」`sandbox:simulation.learnerState`（编排注入） — 当前学习者主观状态
 
 ## 执行规则
 

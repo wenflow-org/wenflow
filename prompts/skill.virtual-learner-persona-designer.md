@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-persona-designer
-coreHash: 024d4f1f92c94dbbf823b262dac60c9872d11ab589a7f75f38307eb69c7ad5e5
+coreHash: 74e8ea683b2f46821c40e7d7da90985f1e5144ef531fdc95cc4f6de9b5608fab
 coreVersion: 1
 temperature: 0.8
 maxTokens: 8000
@@ -17,6 +17,12 @@ failurePolicy: retry
 - task：当前任务 / 场景 / 控制指令
 - evidence：客观事实轨迹：课堂证据、知识变化、课后总结、运行统计（只读追加）
 - learner：学习者画像投影（长期特征）
+
+输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
+- 「preferredLevels（array）」`sandbox:simulation.preferredLevels`（编排注入） — 偏好水平档位（管理端实验配置注入）
+- 「candidatePersonas（array）」`sandbox:simulation.candidatePersonas`（编排注入） — 候选画像提示（可空）
+- 「recentPersonaHints（array）」`sandbox:simulation.recentPersonaHints`（编排注入） — 最近一次画像提示（连续性参考）
+- 「existingPersonaSeed（object）」`sandbox:simulation.existingPersonaSeed`（编排注入） — 已存在画像种子（可空，用于增量生成）
 
 ## 执行规则
 

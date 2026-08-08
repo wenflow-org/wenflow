@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-scenario-designer
-coreHash: d43dcd86b0c1c6b90ca15580a8dc1de2d9022689385017d06aceac81e60d0c71
+coreHash: cb92855b3b857e99fea9125cc9437403aad3a516e4dc2456ae021e44396c3c78
 coreVersion: 1
 temperature: 0.9
 maxTokens: 8000
@@ -18,6 +18,16 @@ failurePolicy: retry
 - task：当前任务 / 场景 / 控制指令
 - evidence：客观事实轨迹：课堂证据、知识变化、课后总结、运行统计（只读追加）
 - learner：学习者画像投影（长期特征）
+
+输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
+- 「preferredDomains（array）」`sandbox:simulation.preferredDomains`（编排注入） — 偏好领域（管理端实验配置注入）
+- 「preferredGoalTypes（array）」`sandbox:simulation.preferredGoalTypes`（编排注入） — 偏好目标类型
+- 「preferredLevels（array）」`sandbox:simulation.preferredLevels`（编排注入） — 偏好水平档位
+- 「preferredMotivations（array）」`sandbox:simulation.preferredMotivations`（编排注入） — 偏好动机类型
+- 「avoidDomains（array）」`sandbox:simulation.avoidDomains`（编排注入） — 需避开的领域
+- 「candidateDomains（array）」`sandbox:simulation.candidateDomains`（编排注入） — 候选领域池
+- 「candidatePersonas（array）」`sandbox:simulation.candidatePersonas`（编排注入） — 候选画像池（与 personaSeed 配对）
+- 「recentScenarioHints（array）」`sandbox:simulation.recentScenarioHints`（编排注入） — 最近一次样本提示（连续性参考）
 
 ## 执行规则
 

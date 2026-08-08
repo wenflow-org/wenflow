@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-actor-auditor
-coreHash: a5dad7d033370518ca973ada4ebc06f89e08e1f06f45217d07efed3e296a41b3
+coreHash: a209a114b539318fa4b4c466b9cc3ee422bf45464006d7d7c1546b9f6523f8a5
 coreVersion: 1
 temperature: 0.2
 maxTokens: 5000
@@ -17,6 +17,14 @@ failurePolicy: retry
 - task：当前任务 / 场景 / 控制指令
 - state：平台维护的主记忆快照（当前值，含 stage）
 - evidence：客观事实轨迹：课堂证据、知识变化、课后总结、运行统计（只读追加）
+
+输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
+- 「actorProfile（object）」`sandbox:simulation.actorProfile`（编排注入） — 合成学习者画像（personaSeed 稳定部分），角色保真审计基准
+- 「story（object）」`sandbox:simulation.story`（编排注入） — 本次运行的故事设定（hiddenDetails/disclosurePlan 为审计基准）
+- 「frictionBudget（string）」`sandbox:simulation.frictionBudget`（编排注入） — 行为摩擦预算，控制学习者配合/对抗程度
+- 「learnerPrivateState（object）」`sandbox:simulation.learnerPrivateState`（编排注入） — 模拟器私有状态轨迹（旁路通道，不回流学习者）
+- 「publicTrace（array）」`sandbox:simulation.publicTrace`（编排注入） — 学习者实际公开行为轨迹
+- 「experimentSummary（object）」`sandbox:simulation.experimentSummary`（编排注入） — 实验覆盖与终态摘要
 
 ## 执行规则
 
