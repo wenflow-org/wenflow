@@ -762,43 +762,27 @@ async function buildTeachingTurnInput(
     } : undefined,
   };
 
-  // L2 声明化装配（第一阶段，只读对账）：把本回合组装结果建成 teaching 沙盘状态池，
+  // L2 声明化装配（只读对账）：把本回合组装结果建成 teaching 沙盘状态池，
   // 校验 teaching-turn.yaml 声明的 sandbox refs 能否解析。缺键打 warn，不阻断。
   try {
-    const { checkSandboxRefs, extractSandboxRefsFromCore } = await import('../sandbox-resolver.service');
-    const sandboxRefs = await extractSandboxRefsFromCore('teaching-turn');
-    const teachingSandboxRefs = sandboxRefs.filter((ref) => ref.agentAlias === 'teaching');
-    if (teachingSandboxRefs.length > 0) {
-      const { refs, missingCount } = checkSandboxRefs(
-        'teaching',
-        teachingSandboxRefs.map((ref) => ref.path),
-        {
-          teaching: {
-            session: {
-              messages: compression.messages,
-              topic: context.topic,
-              info: { sessionId: session.id, mode: session.mode },
-              evidence: session.messages,
-            },
-            learner: { learnerProjection: context.learnerProjection },
-            knowledge: { state: session.knowledgeState },
-            classroomContext,
-            visibleDialogueContext: session.messages,
-            controls: { teachingControlContext },
-            scenario: {
-              ...scenario,
-              interactionProfile: (context as any).interactionProfile,
-            },
-          },
-        }
-      );
-      if (missingCount > 0) {
-        logger.warn('[teaching-turn] 沙盘声明键运行时不可解析（声明与装配脱节）', {
-          sessionId: session.id,
-          missing: refs.filter((r) => !r.resolved).map((r) => r.missing),
-        });
-      }
-    }
+    const { checkAgentSandboxRefs, buildTeachingSandboxPool } = await import('../sandbox-resolver.service');
+    await checkAgentSandboxRefs(
+      'teaching-turn',
+      'teaching',
+      buildTeachingSandboxPool({
+        sessionMessages: session.messages.map((item) => ({ role: item.role, content: item.content })),
+        sessionId: session.id,
+        mode: session.mode,
+        topic: context.topic,
+        learnerProjection: context.learnerProjection,
+        knowledgeState: session.knowledgeState,
+        classroomContext,
+        teachingControlContext,
+        scenario: scenario as Record<string, unknown>,
+        interactionProfile: (context as any).interactionProfile,
+      }),
+      { warnContext: { sessionId: session.id } }
+    );
   } catch {
     // 对账失败不影响主流程
   }

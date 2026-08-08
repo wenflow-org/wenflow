@@ -1,8 +1,13 @@
 import {
   resolveSandboxPath,
   checkSandboxRefs,
+  checkAgentSandboxRefs,
   extractSandboxRefsFromCore,
+  buildGoalSandboxPool,
+  buildTeachingSandboxPool,
+  buildPathSandboxPool,
 } from '../sandbox-resolver.service';
+import { logger } from '../../utils/logger';
 
 describe('sandbox-resolver', () => {
   describe('resolveSandboxPath', () => {
@@ -76,6 +81,88 @@ describe('sandbox-resolver', () => {
     it('未知 skill 返回空数组', async () => {
       const refs = await extractSandboxRefsFromCore('not-a-real-skill');
       expect(refs).toEqual([]);
+    });
+  });
+
+  describe('pool builders', () => {
+    it('goal 池：声明键全部可解析（state/history/understanding/confirmedProposal/latestMessage）', () => {
+      const pools = buildGoalSandboxPool(
+        { understanding: { surface_goal: 'x' }, confirmedProposal: { learning_direction: 'y' } },
+        [{ role: 'user', content: '你好' }]
+      );
+      const result = checkSandboxRefs(
+        'goal',
+        ['collectedData.state', 'collectedData.history', 'collectedData.understanding', 'collectedData.confirmedProposal', 'collectedData.latestMessage'],
+        pools
+      );
+      expect(result.missingCount).toBe(0);
+    });
+
+    it('teaching 池：teaching-turn.yaml 声明的 8 键全部可解析', () => {
+      const pools = buildTeachingSandboxPool({
+        sessionMessages: [{ role: 'user', content: 'q' }],
+        sessionId: 's1',
+        mode: 'active',
+        topic: 't',
+        learnerProjection: { id: 'u1' },
+        knowledgeState: [{ name: 'k1' }],
+        classroomContext: { stage: { current: 'teaching' } },
+        teachingControlContext: { mode: 'normal' },
+        scenario: { subject: 's' },
+        interactionProfile: { engagement: 'high' },
+      });
+      const refs = [
+        'session.messages',
+        'learner.learnerProjection',
+        'knowledge.state',
+        'classroomContext',
+        'visibleDialogueContext',
+        'controls.teachingControlContext',
+        'scenario',
+        'scenario.interactionProfile',
+      ];
+      const result = checkSandboxRefs('teaching', refs, pools);
+      expect(result.missingCount).toBe(0);
+    });
+
+    it('path 池：path-planning.yaml 声明的 path 键可解析', () => {
+      const pools = buildPathSandboxPool({
+        learnerProfile: { surfaceGoal: '目标' },
+        confirmedProposal: { learningDirection: '方向' },
+      });
+      const result = checkSandboxRefs(
+        'path',
+        ['normalizedInput', 'normalizedInput.learnerProfile.surfaceGoal', 'normalizedInput.confirmedProposal', 'replan', 'previousMilestone'],
+        pools
+      );
+      expect(result.missingCount).toBe(0);
+    });
+  });
+
+  describe('checkAgentSandboxRefs（统一入口）', () => {
+    it('声明缺失时打 warn 并返回明细', async () => {
+      const loggerSpy = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      // 无状态池 → 声明的 sandbox 键全部不可解析
+      const result = await checkAgentSandboxRefs('goal-conversation', 'goal', {}, { warnContext: { conversationId: 'c1' } });
+      expect(result).not.toBeNull();
+      expect(result!.missingCount).toBeGreaterThan(0);
+      expect(loggerSpy).toHaveBeenCalledWith(
+        '[sandbox-resolver] goal-conversation 沙盘声明键运行时不可解析（声明与装配脱节）',
+        expect.objectContaining({ conversationId: 'c1' })
+      );
+      loggerSpy.mockRestore();
+    });
+
+    it('全部可解析时不打 warn', async () => {
+      const loggerSpy = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const pools = buildGoalSandboxPool(
+        { understanding: { surface_goal: 'x' }, confirmedProposal: null },
+        [{ role: 'user', content: 'hi' }]
+      );
+      const result = await checkAgentSandboxRefs('goal-conversation', 'goal', pools);
+      expect(result!.missingCount).toBe(0);
+      expect(loggerSpy).not.toHaveBeenCalled();
+      loggerSpy.mockRestore();
     });
   });
 });

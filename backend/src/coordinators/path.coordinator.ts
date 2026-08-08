@@ -279,32 +279,17 @@ class PathCoordinator {
       goalFinalPayload.rawGoal
     );
 
-    // L2 声明化装配（第一阶段，只读对账）：把确定性定帧结果建成 path 沙盘状态池，
+    // L2 声明化装配（只读对账）：把确定性定帧结果建成 path 沙盘状态池，
     // 校验 path-planning.yaml 声明的 sandbox refs 能否解析。缺键打 warn，不阻断。
     void (async () => {
       try {
-        const { checkSandboxRefs, extractSandboxRefsFromCore } = await import('../services/sandbox-resolver.service');
-        const sandboxRefs = await extractSandboxRefsFromCore('path-planning');
-        const pathSandboxRefs = sandboxRefs.filter((ref) => ref.agentAlias === 'path');
-        if (pathSandboxRefs.length > 0) {
-          const { refs, missingCount } = checkSandboxRefs(
-            'path',
-            pathSandboxRefs.map((ref) => ref.path),
-            {
-              path: {
-                normalizedInput: normalizedInputV1,
-                replan: null, // goal→path 生成场景无 replan（replan 走 learn 链）
-                previousMilestone: null, // stage-designer 通道，由 stage 链单独校验
-              },
-            }
-          );
-          if (missingCount > 0) {
-            logger.warn('[path-planning] 沙盘声明键运行时不可解析（声明与装配脱节）', {
-              sourceConversationId: input.sourceConversationId || null,
-              missing: refs.filter((r) => !r.resolved).map((r) => r.missing),
-            });
-          }
-        }
+        const { checkAgentSandboxRefs, buildPathSandboxPool } = await import('../services/sandbox-resolver.service');
+        await checkAgentSandboxRefs(
+          'path-planning',
+          'path',
+          buildPathSandboxPool(normalizedInputV1),
+          { warnContext: { sourceConversationId: input.sourceConversationId || null } }
+        );
       } catch {
         // 对账失败不影响主流程
       }
