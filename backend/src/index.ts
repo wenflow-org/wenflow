@@ -511,7 +511,12 @@ async function purgeRetiredSkills() {
     systemPrisma.skill_registrations.deleteMany({ where: { name: { in: retiredSkillNames } } }),
     systemPrisma.skill_model_configs.deleteMany({ where: { skillId: { in: retiredSkillNames } } }),
     prisma.user_skill_configs.deleteMany({ where: { skillName: { in: retiredSkillNames } } }),
-    systemPrisma.agent_prompts.deleteMany({ where: { agentId: { in: retiredAgentIds } } })
+    systemPrisma.agent_prompts.deleteMany({ where: { agentId: { in: retiredAgentIds } } }),
+    // 2026-08 统一化：退役 skill 的管道/契约残留一并清理（bootstrap 只建不更新，残留行不可达）
+    systemPrisma.agent_field_routings.deleteMany({ where: { agentId: { in: retiredAgentIds } } }),
+    systemPrisma.agent_contracts.deleteMany({ where: { agentId: { in: retiredAgentIds } } }),
+    // agent-snapshots.md 是自动生成的沙盘说明书（非 prompt 源），误入 agent_prompts 的行一并清理
+    systemPrisma.agent_prompts.deleteMany({ where: { agentId: 'agent-snapshots' } })
   ]);
 
   logger.info('已清理退役 Skill 配置残留', {

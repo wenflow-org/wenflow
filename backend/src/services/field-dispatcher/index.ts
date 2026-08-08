@@ -110,32 +110,6 @@ export async function getAgentRoutings(
   return inner ? Array.from(inner.values()) : [];
 }
 
-/**
- * 判定某字段在某编排器下的 render 状态
- * 缺省：visible（向后兼容旧字段未在路由表里登记的情况）
- */
-export async function getFieldRender(
-  agentId: string,
-  fieldId: string
-): Promise<RenderValue> {
-  const routings = await loadRoutings();
-  const r = routings.byAgent.get(getCanonicalAgentId(agentId))?.get(fieldId);
-  return r?.render || 'visible';
-}
-
-/**
- * 判定某字段是否要 handoff 给某下游编排器
- */
-export async function shouldHandoff(
-  agentId: string,
-  fieldId: string,
-  downstream: string
-): Promise<boolean> {
-  const routings = await loadRoutings();
-  const r = routings.byAgent.get(getCanonicalAgentId(agentId))?.get(fieldId);
-  return r?.handoff?.includes(downstream) || false;
-}
-
 // ============================================================
 // 配置式值抽取与组装（V3 Dispatcher 接线，P1 goal→path 试点）
 // ============================================================
@@ -453,61 +427,4 @@ export async function dispatchGoalEnvelope(
       unmappedFields: unmapped,
     },
   };
-}
-
-// ============================================================
-// Path skill handoff：取出该字段是否要交付 path
-// ============================================================
-
-/**
- * Feature flag：决定是否启用 dispatcher（默认 true，可通过环境变量关闭）
- */
-export function isDispatcherEnabled(): boolean {
-  const v = process.env.WENFLOW_FIELD_DISPATCHER;
-  if (typeof v !== 'string') return true;
-  const lo = v.trim().toLowerCase();
-  return !['0', 'false', 'off', 'no'].includes(lo);
-}
-
-/**
- * 漂移检测：把 dispatcher 输出与 legacy envelope 做差异比较
- * 仅打 log，不改流程
- */
-export function logEnvelopeDrift(legacy: any, fromDispatcher: any, conversationId?: string): void {
-  try {
-    const legacyKeys = new Set<string>();
-    const dispKeys = new Set<string>();
-    const collect = (obj: any, prefix: string, set: Set<string>) => {
-      if (!obj || typeof obj !== 'object') return;
-      for (const k of Object.keys(obj)) {
-        const path = prefix ? `${prefix}.${k}` : k;
-        const v = obj[k];
-        if (v && typeof v === 'object' && !Array.isArray(v)) {
-          collect(v, path, set);
-        } else {
-          set.add(path);
-        }
-      }
-    };
-    collect(legacy, '', legacyKeys);
-    collect(fromDispatcher, '', dispKeys);
-    const onlyLegacy: string[] = [];
-    const onlyDisp: string[] = [];
-    legacyKeys.forEach((k) => {
-      if (!dispKeys.has(k)) onlyLegacy.push(k);
-    });
-    dispKeys.forEach((k) => {
-      if (!legacyKeys.has(k)) onlyDisp.push(k);
-    });
-    if (onlyLegacy.length || onlyDisp.length) {
-      logger.info('[FieldDispatcher] envelope drift', {
-        conversationId,
-        onlyLegacy: onlyLegacy.slice(0, 20),
-        onlyDispatcher: onlyDisp.slice(0, 20),
-      });
-    }
-  } catch (err) {
-    // 不影响主流程
-    logger.debug('[FieldDispatcher] drift detection error', { error: (err as Error).message });
-  }
 }

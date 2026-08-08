@@ -146,7 +146,9 @@ function getPromptFilePaths(promptsDir: string): string[] {
   return fs.readdirSync(promptsDir, { withFileTypes: true })
     .filter((entry) => entry.isFile()
       && /\.md$/i.test(entry.name)
-      && !entry.name.startsWith('_'))
+      && !entry.name.startsWith('_')
+      // agent-snapshots.md 是自动生成的沙盘说明书（非 prompt 源），排除防止误入 agent_prompts
+      && entry.name !== 'agent-snapshots.md')
     .map((entry) => path.join(promptsDir, entry.name));
 }
 

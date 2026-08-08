@@ -893,25 +893,6 @@ model virtual_quick_learn_runs {
   @@index([userId])
 }
 
-model virtual_experiment_runs {
-  id               String    @id @default(uuid())
-  mode             String    @default("blackbox-api")
-  status           String    @default("queued")
-  entriesJson      String
-  resultsJson      String    @default("[]")
-  progressJson     String    @default("{}")
-  error            String?
-  abortRequestedAt DateTime?
-  startedAt        DateTime?
-  completedAt      DateTime?
-  createdBy        String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  @@index([status])
-  @@index([createdAt])
-}
-
 model announcements {
   id          String    @id @default(uuid())
   title       String

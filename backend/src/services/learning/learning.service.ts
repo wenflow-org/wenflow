@@ -5,7 +5,7 @@ import aiService from '../ai/ai.service';
 import stateTrackingService from './learning-state.service';
 import achievementService from '../achievements/achievement.service';
 import type { AgentInput } from '../../agents/protocol';
-import { getEventBus, type LearningEvent } from '../../gateway/event-bus';
+import { getEventBus } from '../../gateway/event-bus';
 import { normalizeAgentOutput } from '../../agents/output-normalizer';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { dashboardGuidanceSnapshotService } from '../learner/DashboardGuidanceSnapshotService';
@@ -1194,24 +1194,6 @@ class LearningService {
     return prisma.path_generation_runs.findFirst({
       where: { id: activeGenerationRunId, learningPathId: pathId }
     });
-  }
-
-  private emitLearningEvent(event: LearningEvent, label: string) {
-    try {
-      void getEventBus().emit(event).catch((error) => {
-        logger.warn(`[learning-service] ${label} 事件发送失败`, {
-          eventType: event.type,
-          userId: event.userId,
-          error: error instanceof Error ? error.message : String(error)
-        })
-      })
-    } catch (error) {
-      logger.warn(`[learning-service] ${label} 事件总线不可用`, {
-        eventType: event.type,
-        userId: event.userId,
-        error: error instanceof Error ? error.message : String(error)
-      })
-    }
   }
 
   private buildPathProcessDetail(path: any) {
