@@ -10,8 +10,6 @@ import systemPrisma from '../config/system-database';
 import { EventBus, createEventBus } from './event-bus';
 import { AgentRegistry } from './registries/agent-registry';
 import { SkillRegistry } from './registries/skill-registry';
-import { SignalRegistry } from './registries/signal-registry';
-import { StrategyRegistry } from './registries/strategy-registry';
 import { getAPIGateway } from './api-gateway';
 import { getRequestContext, runWithContext } from './api-gateway/context';
 import { logger } from '../utils/logger';
@@ -20,8 +18,7 @@ import {
   AgentOutput,
   AgentContext,
   AgentExecutionRequest,
-  AgentExecutionResult,
-  LearningSignal
+  AgentExecutionResult
 } from '../agents/protocol';
 import { LearningEvent } from './event-bus';
 import { normalizeAgentOutput } from '../agents/output-normalizer';
@@ -63,8 +60,6 @@ export class EduClawGateway {
   private eventBus: EventBus;
   private agentRegistry: AgentRegistry;
   private skillRegistry: SkillRegistry;
-  private signalRegistry: SignalRegistry;
-  private strategyRegistry: StrategyRegistry;
   private config: GatewayConfig;
 
   constructor(prisma: PrismaClient, config: Partial<GatewayConfig> = {}) {
@@ -83,73 +78,6 @@ export class EduClawGateway {
     this.eventBus = createEventBus(prisma, this.config.eventBus);
     this.agentRegistry = new AgentRegistry(systemPrisma as any);
     this.skillRegistry = new SkillRegistry(systemPrisma as any);
-    this.signalRegistry = new SignalRegistry();
-    this.strategyRegistry = new StrategyRegistry();
-
-    // 设置事件监听
-    this.setupEventListeners();
-  }
-
-  /**
-   * 设置事件监听
-   */
-  private setupEventListeners(): void {
-    // 监听学习信号事件
-    const signalEvents = [
-      'learning:speed:change',
-      'learning:focus:shift',
-      'learning:fatigue:high',
-      'learning:struggle',
-      'learning:mastery'
-    ];
-
-    signalEvents.forEach(eventType => {
-      this.eventBus.on(eventType as any, async (event: LearningEvent) => {
-        try {
-          await this.handleSignalEvent(event);
-        } catch (error) {
-          logger.error('[gateway] failed to handle signal event', {
-            eventType,
-            eventId: event.id,
-            userId: event.userId,
-            error,
-          });
-          // 错误边界：不抛出异常，避免影响主流程
-        }
-      });
-    });
-  }
-
-  /**
-   * 处理信号事件
-   */
-  private async handleSignalEvent(event: LearningEvent): Promise<void> {
-    // 查找订阅了此事件的 Agent
-    const agents = this.agentRegistry.getAll().filter(
-      reg => reg.definition.subscribes.includes(event.type)
-    );
-
-    // 通知相关 Agent
-    for (const agent of agents) {
-      if (agent.handler) {
-        try {
-          // 这里可以触发 Agent 的重新规划逻辑
-          logger.info('[gateway] signal event matched agent', {
-            agentId: agent.definition.id,
-            agentName: agent.definition.name,
-            eventType: event.type,
-            userId: event.userId,
-          });
-        } catch (error) {
-          logger.error('[gateway] signal event notification failed', {
-            agentId: agent.definition.id,
-            agentName: agent.definition.name,
-            eventType: event.type,
-            error,
-          });
-        }
-      }
-    }
   }
 
   // ============ Agent 相关方法 ============
@@ -176,103 +104,6 @@ export class EduClawGateway {
    */
   getAgent(agentId: string): any {
     return this.agentRegistry.get(agentId);
-  }
-
-  /**
-   * 执行 Agent（带2分钟超时控制）
-   */
-  async executeAgent(request: AgentExecutionRequest): Promise<AgentExecutionResult> {
-    const startTime = Date.now();
-    const registration = this.agentRegistry.get(request.agentId);
-
-    if (!registration) {
-      return {
-        success: false,
-        error: {
-          code: 'AGENT_NOT_FOUND',
-          message: `Agent ${request.agentId} not found`
-        },
-        duration: Date.now() - startTime
-      };
-    }
-
-    try {
-      if (!registration.handler) {
-        throw new Error('Agent has no handler');
-      }
-
-      // 发布 Agent 调用事件
-      await this.eventBus.emit({
-        type: 'agent:called',
-        source: 'gateway',
-        userId: request.context.userId,
-        data: { agentId: request.agentId, input: request.input }
-      });
-
-      // 执行 Agent（带超时控制）
-      const TIMEOUT_MS = 5 * 60 * 1000; // 5分钟超时（Content Agent 需要多个 AI 调用）
-      
-      const rawOutput = await Promise.race([
-        runWithContext({
-          ...getRequestContext(),
-          userId: request.context.userId,
-          agentId: request.agentId,
-          action: 'execute',
-          sourceEntry: request.context.sourceEntry || 'platform'
-        }, () => registration.handler(request.input, request.context)),
-        new Promise<never>((_, reject) => {
-          setTimeout(() => {
-            reject(new Error(`Agent execution timeout after ${TIMEOUT_MS}ms`));
-          }, TIMEOUT_MS);
-        })
-      ]);
-      
-      const output = normalizeAgentOutput(request.agentId, rawOutput);
-      const duration = Date.now() - startTime;
-
-      // 更新统计
-      await this.agentRegistry.updateStats(request.agentId, true, duration);
-
-      // 发布完成事件
-      await this.eventBus.emit({
-        type: 'agent:completed',
-        source: request.agentId,
-        userId: request.context.userId,
-        data: { output, duration }
-      });
-
-      return {
-        success: true,
-        output,
-        duration,
-        tokensUsed: output.metadata ? undefined : undefined // TODO: 从 AI 响应中提取
-      };
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      
-      // 更新统计
-      await this.agentRegistry.updateStats(request.agentId, false, duration);
-
-      // 发布错误事件
-      await this.eventBus.emit({
-        type: 'agent:error',
-        source: request.agentId,
-        userId: request.context.userId,
-        data: { error: error instanceof Error ? error.message : String(error) }
-      });
-
-      // 判断是否是超时错误
-      const isTimeout = error instanceof Error && error.message.includes('timeout');
-      
-      return {
-        success: false,
-        error: {
-          code: isTimeout ? 'AGENT_TIMEOUT' : 'AGENT_EXECUTION_ERROR',
-          message: error instanceof Error ? error.message : 'Unknown error'
-        },
-        duration
-      };
-    }
   }
 
   // ============ Skill 相关方法 ============
@@ -322,51 +153,6 @@ export class EduClawGateway {
       this.skillRegistry.recordExecution(skillName, false, error?.skillDurationMs || 0);
       throw error;
     }
-  }
-
-  // ============ Signal 相关方法 ============
-
-  /**
-   * 注册信号检测器
-   */
-  registerSignalDetector(detector: any): void {
-    this.signalRegistry.register(detector);
-  }
-
-  /**
-   * 检测信号
-   */
-  async detectSignals(data: any): Promise<LearningSignal[]> {
-    return this.signalRegistry.detect(data);
-  }
-
-  // ============ Strategy 相关方法 ============
-
-  /**
-   * 注册策略
-   */
-  registerStrategy(strategy: any): void {
-    this.strategyRegistry.register(strategy);
-  }
-
-  /**
-   * 应用策略
-   */
-  async applyStrategy(signals: LearningSignal[], context: any): Promise<any> {
-    const matchedStrategies = this.strategyRegistry.match(signals, context);
-    
-    if (matchedStrategies.length === 0) {
-      return { applied: false, message: 'No matching strategy found' };
-    }
-
-    // 执行优先级最高的策略
-    const results = [];
-    for (const strategy of matchedStrategies) {
-      const result = await this.strategyRegistry.execute(strategy, context);
-      results.push({ strategy: strategy.name, result });
-    }
-
-    return { applied: true, results };
   }
 
   // ============ Event 相关方法 ============
@@ -463,6 +249,4 @@ export function getGateway(): EduClawGateway {
 export { EventBus } from './event-bus';
 export { AgentRegistry } from './registries/agent-registry';
 export { SkillRegistry } from './registries/skill-registry';
-export { SignalRegistry } from './registries/signal-registry';
-export { StrategyRegistry } from './registries/strategy-registry';
 export { getAPIGateway, APIGateway } from './api-gateway';
