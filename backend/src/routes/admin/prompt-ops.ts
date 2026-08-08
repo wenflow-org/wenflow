@@ -764,6 +764,29 @@ router.get('/skill-rules-overview', async (_req: Request, res: Response) => {
 });
 
 // ============================================================
+// GET /api/admin/prompt-ops/sandbox-view
+// 沙盘契约视图（只读）：5 个顶层 agent 的输入通道/输出字段/合法沙盘键
+// 数据源：routings 表 + core fields 声明（agent-contract-view 动态推导）
+// ============================================================
+router.get('/sandbox-view', async (_req: Request, res: Response) => {
+  try {
+    const { buildAllAgentSandboxViews, SANDBOX_AGENT_IDS, SANDBOX_EXTRA_KEYS } = await import('../../services/agent-contract-view');
+    const views = await buildAllAgentSandboxViews();
+    res.json({
+      success: true,
+      data: {
+        agents: views,
+        agentIds: [...SANDBOX_AGENT_IDS],
+        extraKeys: SANDBOX_EXTRA_KEYS,
+        generatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error.message || '加载沙盘视图失败' } });
+  }
+});
+
+// ============================================================
 // GET /api/admin/prompt-ops/protocol-view
 // 只读协议视图：Goal→Path / Path→Learn 关键 schema
 // 当前：硬编码（来源于代码静态导出，避免运行时反射）

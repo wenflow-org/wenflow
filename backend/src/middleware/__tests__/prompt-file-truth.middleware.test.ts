@@ -48,16 +48,20 @@ describe('Prompt File-as-Truth mutation guards', () => {
   })
 
   it.each([
-    '/sync',
-    '/skill%3Agoal-conversation/recompile',
     '/skill%3Agoal-conversation/source',
     '/skill%3Agoal-conversation/fields'
-  ])('prompt-ops 拒绝正式运行态写入 %s', path => {
+  ])('prompt-ops 拒绝直接改写 DB prompt %s', path => {
     const res = createResponse()
     const next = jest.fn()
     rejectPromptOpsRuntimeMutation({ method: 'POST', path } as any, res, next)
     expect(res.statusCode).toBe(409)
     expect(next).not.toHaveBeenCalled()
+  })
+
+  it.each(['/sync', '/skill%3Agoal-conversation/recompile'])('prompt-ops 放行 File-as-Truth 衍生操作 %s', path => {
+    const next = jest.fn()
+    rejectPromptOpsRuntimeMutation({ method: 'POST', path } as any, createResponse(), next)
+    expect(next).toHaveBeenCalledTimes(1)
   })
 
   it.each(['/eval-cases', '/run-eval'])('保留评测操作 %s', path => {

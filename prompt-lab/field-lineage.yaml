@@ -5,7 +5,7 @@ version: field-lineage/v1
 
 entries:
   # goal-conversation
-  - { skillId: goal-conversation, field: reply, consumers: ['frontend: GoalConversation.vue（对话气泡）', 'frontend: v2/useGoalLive.ts', 'frontend: redesign/useGoalLive.ts'] }
+  - { skillId: goal-conversation, field: reply, consumers: ['frontend: GoalConversation.vue（对话气泡）', 'frontend: v2/useGoalLive.ts'] }
   - { skillId: goal-conversation, field: nextQuestions, consumers: ['frontend: GoalConversation.vue（追问提示）'] }
   - { skillId: goal-conversation, field: quickReplies, consumers: ['frontend: GoalConversation.vue renderHints', 'frontend: useGoalLive ×2', 'frontend: constants/fieldBindings/goal.ts'] }
   - { skillId: goal-conversation, field: state, consumers: ['backend: goal-conversation.service resolveStage/Confidence（阶段推进）', 'backend: runtimeEnvelope businessState'] }
@@ -26,14 +26,11 @@ entries:
   - { skillId: peer-reinforcement, field: followUpQuestions, consumers: ['frontend: LearningPage.vue'] }
   # adaptive-guidance-copy
   - { skillId: adaptive-guidance-copy, field: '*', consumers: ['frontend: Dashboard.vue（引导文案）', 'frontend: V2Dashboard.vue（nextStep）'] }
-  # 蒸馏/抽取家族
-  - { skillId: session-knowledge-distiller, field: '*', consumers: ['backend: learner.coordinator applyProfileUpdate', 'backend: LessonKnowledgeEnrichmentConsumer（learner_evidence 表）'] }
-  - { skillId: dialogue-concept-extractor, field: '*', consumers: ['backend: learner.coordinator', 'backend: LessonKnowledgeEnrichmentConsumer'] }
-  - { skillId: goal-profile-inference, field: '*', consumers: ['backend: profile-aggregator（narrativeInsights → learner profile）'] }
-  - { skillId: learning-pattern-distiller, field: '*', consumers: ['backend: profile-aggregator'] }
+  # 蒸馏/抽取家族（合并入 lesson-knowledge-enricher；session-knowledge-distiller /
+  # dialogue-concept-extractor / goal-profile-inference / learning-pattern-distiller 已退役）
+  - { skillId: lesson-knowledge-enricher, field: '*', consumers: ['backend: LessonKnowledgeEnrichmentConsumer（learner_evidence 表）'] }
   # path 家族
   - { skillId: path-planning, field: '*', consumers: ['backend: learning.service persistGeneratedPath（learning_paths/milestones 表）', 'frontend: LearningPaths.vue / LearningPathDetail.vue（间接）'] }
-  - { skillId: path-scene-framing, field: normalizedInput, consumers: ['backend: learning.service（path-planning metadata）', 'backend: stage-designer 输入'] }
   - { skillId: stage-designer, field: subtasks, consumers: ['backend: learning.service（subtasks.create / replan 重建）', 'frontend: LearningPathDetail.vue（间接）'] }
   # virtual-learner 家族
   - { skillId: virtual-learner-goal-dialogue-simulator, field: '*', consumers: ['backend: simulation.coordinator（stageResults.goal）'] }
