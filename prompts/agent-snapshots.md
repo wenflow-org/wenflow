@@ -282,17 +282,6 @@ sandbox:teaching-agent.wrapup.summary.knowledgeItems
 
 | 字段 | 类型 | handoff |
 |---|---|---|
-| `goalNarrative` | string | profile-agent |
-| `backgroundContextNote` | string | profile-agent |
-| `motivationNarrative` | string | profile-agent |
-| `timeConstraintNote` | string | profile-agent |
-| `selfAssessmentNote` | string | profile-agent |
-| `contentReceptionPattern` | string | profile-agent |
-| `practicePreferenceNote` | string | profile-agent |
-| `frictionPatternNote` | string | profile-agent |
-| `effectiveTeachingPattern` | string | profile-agent |
-| `supportStyleNote` | string | profile-agent |
-| `taskGranularityNote` | string | profile-agent |
 | `conceptLedger` | object[] | profile-agent |
 | `reusableFoundations` | string[] | profile-agent |
 | `blockedFoundations` | string[] | profile-agent |
@@ -309,29 +298,18 @@ sandbox:teaching-agent.wrapup.summary.knowledgeItems
 ### 合法沙盘键（sandbox: 对账注册表）
 
 ```
-sandbox:profile-agent.backgroundContextNote
 sandbox:profile-agent.blockedFoundations
 sandbox:profile-agent.conceptLedger
-sandbox:profile-agent.contentReceptionPattern
-sandbox:profile-agent.effectiveTeachingPattern
-sandbox:profile-agent.frictionPatternNote
-sandbox:profile-agent.goalNarrative
-sandbox:profile-agent.motivationNarrative
-sandbox:profile-agent.practicePreferenceNote
 sandbox:profile-agent.profile.curriculumControls
 sandbox:profile-agent.profile.narrativeInsights
 sandbox:profile-agent.recurringConfusions
 sandbox:profile-agent.reusableFoundations
-sandbox:profile-agent.selfAssessmentNote
 sandbox:profile-agent.snapshot.dynamicState
 sandbox:profile-agent.snapshot.knowledgeMemory.currentPath
 sandbox:profile-agent.snapshot.knowledgeMemory.globalSignals
 sandbox:profile-agent.snapshot.learningControlState
 sandbox:profile-agent.snapshot.replanSignal
 sandbox:profile-agent.snapshot.teachingHints
-sandbox:profile-agent.supportStyleNote
-sandbox:profile-agent.taskGranularityNote
-sandbox:profile-agent.timeConstraintNote
 sandbox:profile-agent.transferSignals
 ```
 

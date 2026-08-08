@@ -145,14 +145,13 @@ export function validateCoreFieldDeclarations(fields: CoreFieldDeclaration[]): s
 /**
  * 排除名单：默认全部 LLM skill 启用 fields 契约校验，
  * 以下场景排除（按原因分类）：
- * - 非 JSON 对象输出：generic-chat（string）、prompt-compiler（markdown）、skill-author（markdown）
+ * - 非 JSON 对象输出：generic-chat（string）、skill-author（markdown）
  * - 平台守门直调：semantic-freeze-judge（发布门禁，失败后果重，不走常规重试语义）
  * - 模拟器家族：virtual-learner-*（turn 字段多、fallback 路径特殊、referee 旁路通道）
  * - 无生产调用：basic-evaluator / concept-priority / course-design / goal-alignment-checker
  */
 const FIELD_VALIDATION_EXCLUDED_SKILLS = new Set([
   'skill:generic-chat',
-  'skill:prompt-compiler',
   'skill:skill-author',
   'skill:semantic-freeze-judge',
   'skill:virtual-learner-goal-dialogue-simulator',

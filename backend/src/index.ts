@@ -84,7 +84,14 @@ const RETIRED_SKILLS = [
   // 2026-08 冗余 LLM 层退役：path-scene-framing（信息零增量，确定性定帧 buildFramedNormalizedInput 取代）
   'path-scene-framing',
   // 2026-08 冗余 LLM 层退役：goal-analysis（主流程不调用、fallback 输出被确定性 framing 覆盖，path-planning 内联兜底）
-  'goal-analysis'
+  'goal-analysis',
+  // 2026-08 零调用退役：goal-profile-inference / learning-pattern-distiller（画像叙述改由
+  // profile-aggregator 确定性 buildNarrativeInsights 产出）、structured-output-parser（无消费方）、
+  // prompt-compiler skill（与 services/prompt-compiler 确定性编译器同名，且无生产调用）
+  'goal-profile-inference',
+  'learning-pattern-distiller',
+  'structured-output-parser',
+  'prompt-compiler'
 ] as const;
 
 // ACP 中间件
@@ -314,8 +321,6 @@ agents: {
     skills: [
       'stage-designer',
       'adaptive-guidance-copy',
-      'goal-profile-inference',
-      'learning-pattern-distiller',
       'lesson-knowledge-enricher'
     ]
   });

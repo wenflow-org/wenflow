@@ -63,8 +63,6 @@ router.use(rejectPromptOpsRuntimeMutation);
 const SKILL_DISPLAY_NAMES: Record<string, string> = {
   'skill:adaptive-guidance-copy': '自适应引导文案',
   'skill:lesson-knowledge-enricher': '课后知识增强',
-  'skill:goal-profile-inference': '目标画像推断',
-  'skill:learning-pattern-distiller': '学习模式提炼',
   'skill:peer-reinforcement': '同伴强化对话',
   'skill:session-knowledge-distiller': '会话知识沉淀',
   'skill:stage-designer': '阶段设计师',
@@ -82,7 +80,6 @@ const SKILL_DISPLAY_NAMES: Record<string, string> = {
 // ============================================================
 const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'teaching'> = {
   'skill:goal-conversation': 'goal',
-  'skill:goal-profile-inference': 'goal',
   // 以下虽未迁移但确定隶属的 stage
   'skill:path-planning': 'path',
   'skill:stage-designer': 'path',
@@ -90,7 +87,6 @@ const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'teaching'> = {
   'skill:session-wrapup': 'teaching',
   'skill:peer-reinforcement': 'teaching',
   'skill:adaptive-guidance-copy': 'teaching',
-  'skill:learning-pattern-distiller': 'teaching',
   'skill:lesson-knowledge-enricher': 'teaching',
 };
 

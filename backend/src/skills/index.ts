@@ -16,21 +16,9 @@ import { stageDesigner as stageDesignerFn } from './stage-designer';
 export { adaptiveGuidanceCopyDefinition } from './adaptive-guidance-copy';
 import { adaptiveGuidanceCopy as adaptiveGuidanceCopyFn } from './adaptive-guidance-copy';
 
-// goal 阶段画像推断
-export { goalProfileInferenceDefinition } from './goal-profile-inference';
-import { goalProfileInference as goalProfileInferenceFn } from './goal-profile-inference';
-
-// learn 阶段模式蒸馏
-export { learningPatternDistillerDefinition } from './learning-pattern-distiller';
-import { learningPatternDistiller as learningPatternDistillerFn } from './learning-pattern-distiller';
-
 // 课后知识增强（session-knowledge-distiller + dialogue-concept-extractor 于 2026-07 合并）
 export { lessonKnowledgeEnricherDefinition } from './lesson-knowledge-enricher';
 import { lessonKnowledgeEnricher as lessonKnowledgeEnricherFn } from './lesson-knowledge-enricher';
-
-// 结构化输出解析器（新增：通用 JSON 提取）
-export { structuredOutputParserDefinition } from './structured-output-parser';
-import { structuredOutputParser as structuredOutputParserFn } from './structured-output-parser';
 
 // 目标理解编排器（新增：understanding 管理）
 export { goalUnderstandingComposerDefinition } from './goal-understanding-composer';
@@ -43,10 +31,6 @@ import { acceptanceEvidenceEvaluator as acceptanceEvidenceEvaluatorFn } from './
 // 教学策略选择器（新增：策略别名映射 + 引导 prompt 构建）
 export { teachingStrategySelectorDefinition } from './teaching-strategy-selector';
 import { teachingStrategySelector as teachingStrategySelectorFn } from './teaching-strategy-selector';
-
-// Prompt 编译器（新增：简化配置编译为完整 Prompt）
-export { promptCompilerDefinition, promptCompilerRuntimeDefinition } from './prompt-compiler';
-import { promptCompilerHandler as promptCompilerFn } from './prompt-compiler';
 
 // MCP 非 LLM 工具能力
 export { mcpToolDefinition } from './mcp-tool';
@@ -105,8 +89,6 @@ export type { SkillOutcome, ProposedTransition, SkillOutcomeMeta } from './outco
 import { SkillDefinition } from './protocol';
 import { stageDesignerDefinition } from './stage-designer';
 import { adaptiveGuidanceCopyDefinition } from './adaptive-guidance-copy';
-import { goalProfileInferenceDefinition } from './goal-profile-inference';
-import { learningPatternDistillerDefinition } from './learning-pattern-distiller';
 import { lessonKnowledgeEnricherDefinition } from './lesson-knowledge-enricher';
 import { virtualLearnerScenarioDesignerDefinition } from './virtual-learner-scenario-designer';
 import { virtualLearnerPersonaDesignerDefinition } from './virtual-learner-persona-designer';
@@ -115,18 +97,14 @@ import { virtualLearnerPathEvaluatorDefinition } from './virtual-learner-path-ev
 import { virtualLearnerLearnTurnSimulatorDefinition } from './virtual-learner-learn-turn-simulator';
 import { virtualLearnerRefereeDefinition } from './virtual-learner-referee';
 import { virtualLearnerActorAuditorDefinition } from './virtual-learner-actor-auditor';
-import { structuredOutputParserDefinition } from './structured-output-parser';
 import { goalUnderstandingComposerDefinition } from './goal-understanding-composer';
 import { acceptanceEvidenceEvaluatorDefinition } from './acceptance-evidence-evaluator';
 import { teachingStrategySelectorDefinition } from './teaching-strategy-selector';
-import { promptCompilerDefinition } from './prompt-compiler';
 import { mcpToolDefinition } from './mcp-tool';
 
 export const allSkillDefinitions: SkillDefinition[] = [
   stageDesignerDefinition,
   adaptiveGuidanceCopyDefinition,
-  goalProfileInferenceDefinition,
-  learningPatternDistillerDefinition,
   lessonKnowledgeEnricherDefinition,
   virtualLearnerPersonaDesignerDefinition,
   virtualLearnerScenarioDesignerDefinition,
@@ -135,11 +113,9 @@ export const allSkillDefinitions: SkillDefinition[] = [
   virtualLearnerLearnTurnSimulatorDefinition,
   virtualLearnerRefereeDefinition,
   virtualLearnerActorAuditorDefinition,
-  structuredOutputParserDefinition,
   goalUnderstandingComposerDefinition,
   acceptanceEvidenceEvaluatorDefinition,
   teachingStrategySelectorDefinition,
-  promptCompilerDefinition,
   mcpToolDefinition,
   ...auxSkillDefinitions,
   // 核心 LLM 能力单元（注册为 Skill 以确保 agent-registry 可见）
@@ -209,8 +185,6 @@ export const allSkillDefinitions: SkillDefinition[] = [
 export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'stage-designer': stageDesignerFn,
   'adaptive-guidance-copy': adaptiveGuidanceCopyFn,
-  'goal-profile-inference': goalProfileInferenceFn,
-  'learning-pattern-distiller': learningPatternDistillerFn,
   'lesson-knowledge-enricher': lessonKnowledgeEnricherFn,
   'virtual-learner-persona-designer': virtualLearnerPersonaDesignerFn,
   'virtual-learner-scenario-designer': virtualLearnerScenarioDesignerFn,
@@ -219,11 +193,9 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'virtual-learner-learn-turn-simulator': virtualLearnerLearnTurnSimulatorFn,
   'virtual-learner-referee': virtualLearnerRefereeFn,
   'virtual-learner-actor-auditor': virtualLearnerActorAuditorFn,
-  'structured-output-parser': structuredOutputParserFn,
   'goal-understanding-composer': goalUnderstandingComposerFn,
   'acceptance-evidence-evaluator': acceptanceEvidenceEvaluatorFn,
   'teaching-strategy-selector': teachingStrategySelectorFn,
-  'prompt-compiler': promptCompilerFn,
   'mcp-tool': executeMcpToolFn,
   ...auxSkillHandlers,
   // 核心 LLM 能力单元（原 agents/，已迁入 skills/）

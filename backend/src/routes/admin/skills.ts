@@ -18,8 +18,6 @@ import {
 } from '../../services/skill-runtime-contract.service';
 import { STAGE_DESIGNER_PROMPT } from '../../skills/stage-designer';
 import { ADAPTIVE_GUIDANCE_COPY_PROMPT } from '../../skills/adaptive-guidance-copy';
-import { GOAL_PROFILE_INFERENCE_PROMPT } from '../../skills/goal-profile-inference';
-import { LEARNING_PATTERN_DISTILLER_PROMPT } from '../../skills/learning-pattern-distiller';
 import { VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT } from '../../skills/virtual-learner-persona-designer';
 import { VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT } from '../../skills/virtual-learner-scenario-designer';
 import { VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT } from '../../skills/virtual-learner-goal-dialogue-simulator';
@@ -29,15 +27,12 @@ import { VIRTUAL_LEARNER_REFEREE_PROMPT } from '../../skills/virtual-learner-ref
 import { VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT } from '../../skills/virtual-learner-actor-auditor';
 import { GOAL_UNDERSTANDING_COMPOSER_PROMPT } from '../../skills/goal-understanding-composer';
 import { ACCEPTANCE_EVIDENCE_EVALUATOR_PROMPT } from '../../skills/acceptance-evidence-evaluator';
-import { STRUCTURED_OUTPUT_PARSER_PROMPT } from '../../skills/structured-output-parser';
 
 const router = Router();
 
 const SKILL_FALLBACK_PROMPTS: Record<string, string> = {
   'stage-designer': STAGE_DESIGNER_PROMPT,
   'adaptive-guidance-copy': ADAPTIVE_GUIDANCE_COPY_PROMPT,
-  'goal-profile-inference': GOAL_PROFILE_INFERENCE_PROMPT,
-  'learning-pattern-distiller': LEARNING_PATTERN_DISTILLER_PROMPT,
   'virtual-learner-persona-designer': VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT,
   'virtual-learner-scenario-designer': VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT,
   'virtual-learner-goal-dialogue-simulator': VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT,
@@ -47,7 +42,6 @@ const SKILL_FALLBACK_PROMPTS: Record<string, string> = {
   'virtual-learner-actor-auditor': VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT,
   'goal-understanding-composer': GOAL_UNDERSTANDING_COMPOSER_PROMPT,
   'acceptance-evidence-evaluator': ACCEPTANCE_EVIDENCE_EVALUATOR_PROMPT,
-  'structured-output-parser': STRUCTURED_OUTPUT_PARSER_PROMPT,
 };
 
 type SkillRuntimeStats = {

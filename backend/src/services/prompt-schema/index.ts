@@ -971,8 +971,6 @@ export const BLOCK_RULE_PREFIX: Partial<Record<PromptSection, string>> = {
  */
 export function suggestRulePrefix(agentId: string): string {
   const customMap: Record<string, string> = {
-    'skill:goal-profile-inference': 'GI',
-    'skill:learning-pattern-distiller': 'LP',
     'skill:adaptive-guidance-copy': 'AG',
     'skill:peer-reinforcement': 'PR',
     'skill:stage-designer': 'SD',

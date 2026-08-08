@@ -66,7 +66,6 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     aliases: ['requirement-agent'],
     agentMembers: [
       'skill:goal-conversation',
-      'skill:goal-profile-inference',
       'skill:goal-understanding-composer'
     ]
   },
@@ -114,7 +113,6 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     monitoringGroup: 'Profile',
     agentMembers: [
       'skill:learner-model',
-      'skill:learning-pattern-distiller',
       'skill:lesson-knowledge-enricher'
     ]
   },
@@ -152,18 +150,6 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     ioContractVersion: 'agent-output-v1',
     // 与 prompts/skill.goal-conversation.md 及 handler codeDefaults 对齐（仅展示/兜底，权威在 ACTIVE prompt）
     defaultModelConfig: { temperature: 0.7, maxTokens: 8000 }
-  },
-  {
-    id: 'skill:goal-profile-inference',
-    name: '目标画像推断 Skill',
-    description: '从目标对话推断学习者背景与画像信号',
-    category: 'goal',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Goal',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.3, maxTokens: 1200 }
   },
   {
     id: 'skill:goal-understanding-composer',
@@ -297,18 +283,6 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.3, maxTokens: 1000 }
   },
   {
-    id: 'skill:learning-pattern-distiller',
-    name: '学习模式蒸馏 Skill',
-    description: '从历史学习行为蒸馏稳定模式',
-    category: 'profile',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Profile',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.3, maxTokens: 1500 }
-  },
-  {
     id: 'skill:lesson-knowledge-enricher',
     name: '课后知识增强 Skill',
     description: '课后单次调用：蒸馏知识台账增量并抽取隐性概念线索',
@@ -407,17 +381,6 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.2, maxTokens: 5000 }
   },
   // ============ Tool Skills（工具类，无 LLM prompt） ============
-  {
-    id: 'skill:structured-output-parser',
-    name: '结构化输出解析器 Skill',
-    description: '从 LLM 原始响应中提取 JSON 对象，处理 markdown 代码块、裸 JSON、多段落等场景',
-    category: 'tool',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Tool',
-    noPromptFile: true
-  },
   {
     id: 'skill:mcp-tool',
     name: 'MCP 工具调用 Skill',

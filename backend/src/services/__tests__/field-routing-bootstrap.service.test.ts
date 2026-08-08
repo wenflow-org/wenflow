@@ -44,8 +44,8 @@ describe('field routing bootstrap', () => {
   })
 
   it('seed manifest 的全局键唯一且数量稳定', () => {
-    expect(FIELD_ROUTING_SEED_MANIFEST.contractAgentIds).toHaveLength(23)
-    expect(FIELD_ROUTING_SEED_MANIFEST.fieldIds).toHaveLength(158)
-    expect(FIELD_ROUTING_SEED_MANIFEST.routings).toHaveLength(223)
+    expect(FIELD_ROUTING_SEED_MANIFEST.contractAgentIds).toHaveLength(21)
+    expect(FIELD_ROUTING_SEED_MANIFEST.fieldIds).toHaveLength(147)
+    expect(FIELD_ROUTING_SEED_MANIFEST.routings).toHaveLength(201)
   })
 })

@@ -144,15 +144,6 @@ function inferPhases(skillId: string, domain: string): { phases: string[]; defau
   if (skillId === 'lesson-knowledge-enricher') {
     return { phases: ['knowledge-enriched'], defaultPhase: 'knowledge-enriched', terminalPhases: ['knowledge-enriched'] };
   }
-  if (skillId === 'learning-pattern-distiller') {
-    return { phases: ['pattern-distilled'], defaultPhase: 'pattern-distilled', terminalPhases: ['pattern-distilled'] };
-  }
-  if (skillId === 'goal-profile-inference') {
-    return { phases: ['profile-inferred'], defaultPhase: 'profile-inferred', terminalPhases: ['profile-inferred'] };
-  }
-  if (skillId === 'prompt-compiler') {
-    return { phases: ['prompt-compiled'], defaultPhase: 'prompt-compiled', terminalPhases: ['prompt-compiled'] };
-  }
   if (domain === 'virtual-learner') {
     return { phases: ['simulation-step-completed'], defaultPhase: 'simulation-step-completed', terminalPhases: ['simulation-step-completed'] };
   }

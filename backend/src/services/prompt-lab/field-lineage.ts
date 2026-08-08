@@ -45,8 +45,6 @@ export const FIELD_LINEAGE: FieldLineageEntry[] = [
   { skillId: 'adaptive-guidance-copy', field: '*', consumers: ['frontend: Dashboard.vue（引导文案）', 'frontend: V2Dashboard.vue（nextStep）'] },
   // 蒸馏/抽取家族（后台消费，无前端直接绑定）
   { skillId: 'lesson-knowledge-enricher', field: '*', consumers: ['backend: LessonKnowledgeEnrichmentConsumer（learner_evidence 表）'] },
-  { skillId: 'goal-profile-inference', field: '*', consumers: ['backend: profile-aggregator（narrativeInsights → learner profile）'] },
-  { skillId: 'learning-pattern-distiller', field: '*', consumers: ['backend: profile-aggregator'] },
   // path 家族
   { skillId: 'path-planning', field: '*', consumers: ['backend: learning.service persistGeneratedPath（learning_paths/milestones 表）', 'frontend: LearningPaths.vue / LearningPathDetail.vue（间接）'] },
   { skillId: 'stage-designer', field: 'subtasks', consumers: ['backend: learning.service（subtasks.create / replan 重建）', 'frontend: LearningPathDetail.vue（间接）'] },

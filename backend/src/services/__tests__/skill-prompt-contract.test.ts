@@ -10,14 +10,15 @@ import path from 'path'
 import yaml from 'js-yaml'
 
 describe('Skill Prompt Contract v2', () => {
-  it('区分 normalization、compilation 与 code-only，而不滥用 archetype', () => {
+  it('区分 normalization 与 code-only，而不滥用 archetype', () => {
+    // 默认推断：无特例的 LLM skill 走 generation/json/json（prompt-compiler 特例已于 2026-08 退役）
     expect(buildDefaultSkillPromptContract({
-      skillId: 'prompt-compiler',
+      skillId: 'stage-designer',
       archetype: 'generator'
     })).toEqual(expect.objectContaining({
-      artifactKind: 'compilation',
-      input: expect.objectContaining({ transport: 'yaml' }),
-      output: expect.objectContaining({ media: 'markdown' })
+      artifactKind: 'generation',
+      input: expect.objectContaining({ transport: 'json' }),
+      output: expect.objectContaining({ media: 'json' })
     }))
 
     expect(buildDefaultSkillPromptContract({
