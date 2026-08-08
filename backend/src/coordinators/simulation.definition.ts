@@ -1,7 +1,7 @@
 export const simulationAgentRuntimeDefinition = {
   id: 'simulation-agent',
   displayName: 'Virtual Learner Simulation Agent',
-  description: '正式黑盒链路为 Virtual Learner -> Goal Conversation -> Path Result -> AI Teaching；Path Review 仅用于 legacy assisted 调试。',
+  description: '正式黑盒链路为 Virtual Learner -> Goal Conversation -> Path Result -> AI Teaching；Path Review 仅用于 legacy assisted 调试。persona/scenario 设计为前置配置阶段（routes/admin/virtual-learners.ts），不在主链 steps 内；referee/auditor 在 virtual-lab/blackbox-runner 旁路执行。',
   category: 'agent',
   steps: [
     { step: 1, agentId: 'skill:virtual-learner-goal-dialogue-simulator', role: 'goal-stage-learner-turn-simulation', loopOver: 'goal-rounds' },

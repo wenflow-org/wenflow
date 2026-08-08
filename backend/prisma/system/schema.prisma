@@ -74,40 +74,6 @@ model agent_prompts {
   @@index([status])
 }
 
-model agent_definitions {
-  id                 String   @id
-  displayName        String
-  description        String?
-  category           String
-  inputSchema        String?
-  outputSchema       String?
-  variableBindings   String?
-  capabilities       String?
-  defaultMaxTokens   Int?
-  defaultTemperature Float?
-  schemaVersion      Int      @default(1)
-  source             String   @default("code")
-  managedByCode      Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
-  @@index([category])
-  @@index([managedByCode])
-}
-
-model orchestrator_definitions {
-  id            String   @id
-  displayName   String
-  description   String?
-  category      String   @default("agent")
-  steps         String
-  variableGraph String?
-  source        String   @default("code")
-  managedByCode Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
-
 model agent_registrations {
   id           String   @id
   name         String   @unique

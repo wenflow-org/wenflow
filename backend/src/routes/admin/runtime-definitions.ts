@@ -1,6 +1,17 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../../config/database';
 import systemPrisma from '../../config/system-database';
+import {
+  listAgentManifest,
+  getAgentManifest,
+  listTopLevelAgents,
+  listSkillsOfAgent,
+  validateManifest,
+} from '../../services/agent-manifest.service';
+import {
+  SKILL_RUNTIME_DEFINITIONS,
+  ORCHESTRATOR_RUNTIME_DEFINITIONS,
+} from '../../coordinators/definitions-registry';
 
 const router = Router();
 
@@ -13,15 +24,52 @@ function parseJson(value: string | null | undefined) {
   }
 }
 
-router.get('/agents', async (_req: Request, res: Response) => {
-  const rows = await systemPrisma.agent_definitions.findMany({
-    orderBy: [
-      { category: 'asc' },
-      { displayName: 'asc' },
-    ],
-  });
+const skillDefMap = new Map(SKILL_RUNTIME_DEFINITIONS.map((def) => [def.id, def]));
 
-  const agentIds = rows.map((row) => row.id);
+/**
+ * 实时编译：编排 steps 的 agentId → manifest 解析（displayName/kind）
+ * 服务节点（kind: 'service'）不在 manifest，保留原 id 并标注 service
+ */
+function resolveStepAgent(agentId: string, step?: { kind?: string }) {
+  const entry = getAgentManifest(agentId);
+  if (entry) {
+    return {
+      agentId: entry.id,
+      displayName: entry.name,
+      kind: entry.kind,
+      nodeKind: step?.kind || entry.kind,
+    };
+  }
+  return {
+    agentId,
+    displayName: agentId,
+    kind: step?.kind || 'unknown',
+    nodeKind: step?.kind || 'unknown',
+    unresolved: true,
+  };
+}
+
+function compileOrchestrator(def: (typeof ORCHESTRATOR_RUNTIME_DEFINITIONS)[number]) {
+  return {
+    id: def.id,
+    displayName: def.displayName,
+    description: def.description,
+    category: def.category,
+    steps: (def.steps || []).map((step: any) => ({
+      ...step,
+      resolved: resolveStepAgent(step.agentId, step),
+    })),
+    variableGraph: def.variableGraph || null,
+    source: def.source || 'code',
+    managedByCode: def.managedByCode ?? true,
+  };
+}
+
+router.get('/agents', async (_req: Request, res: Response) => {
+  const manifest = listAgentManifest();
+  const skillEntries = manifest.filter((entry) => entry.kind === 'skill');
+
+  const agentIds = skillEntries.map((entry) => entry.id);
   const activePrompts = await systemPrisma.agent_prompts.findMany({
     where: {
       agentId: { in: agentIds },
@@ -39,43 +87,45 @@ router.get('/agents', async (_req: Request, res: Response) => {
       model: true,
     },
   });
-
   const promptMap = new Map(activePrompts.map((item) => [item.agentId, item]));
 
   res.json({
     success: true,
-    data: rows.map((row) => ({
-      activePrompt: promptMap.get(row.id) || null,
-      id: row.id,
-      displayName: row.displayName,
-      description: row.description,
-      category: row.category,
-      inputSchema: parseJson(row.inputSchema),
-      outputSchema: parseJson(row.outputSchema),
-      variableBindings: parseJson(row.variableBindings),
-      capabilities: parseJson(row.capabilities) || [],
-      defaultMaxTokens: row.defaultMaxTokens,
-      defaultTemperature: row.defaultTemperature,
-      schemaVersion: row.schemaVersion,
-      source: row.source,
-      managedByCode: row.managedByCode,
-      updatedAt: row.updatedAt,
-    })),
+    data: skillEntries.map((entry) => {
+      const def = skillDefMap.get(entry.id);
+      return {
+        activePrompt: promptMap.get(entry.id) || null,
+        id: entry.id,
+        displayName: def?.displayName || entry.name,
+        description: def?.description || entry.description,
+        category: entry.category,
+        inputSchema: def?.inputSchema || null,
+        outputSchema: def?.outputSchema || null,
+        variableBindings: def?.variableBindings || null,
+        capabilities: def?.capabilities || [],
+        defaultMaxTokens: def?.defaultMaxTokens ?? entry.defaultModelConfig?.maxTokens ?? null,
+        defaultTemperature: def?.defaultTemperature ?? entry.defaultModelConfig?.temperature ?? null,
+        schemaVersion: (def as any)?.schemaVersion ?? 1,
+        source: def?.source || 'code',
+        managedByCode: def?.managedByCode ?? true,
+        parentAgentId: entry.agentMembers ? undefined : undefined,
+      };
+    }),
   });
 });
 
 router.get('/agents/:id', async (req: Request, res: Response) => {
-  const row = await systemPrisma.agent_definitions.findUnique({
-    where: { id: req.params.id },
-  });
+  const id = req.params.id;
+  const entry = getAgentManifest(id);
+  const def = skillDefMap.get(id);
 
-  if (!row) {
+  if (!entry && !def) {
     return res.status(404).json({ success: false, error: { message: 'Definition 不存在' } });
   }
 
   const activePrompt = await systemPrisma.agent_prompts.findFirst({
     where: {
-      agentId: row.id,
+      agentId: id,
       status: 'ACTIVE',
     },
     select: {
@@ -93,7 +143,7 @@ router.get('/agents/:id', async (req: Request, res: Response) => {
   });
 
   const recentPromptCalls = await prisma.prompt_call_logs.findMany({
-    where: { agentId: row.id },
+    where: { agentId: id },
     orderBy: { createdAt: 'desc' },
     take: 5,
   });
@@ -115,68 +165,86 @@ router.get('/agents/:id', async (req: Request, res: Response) => {
         extractedJson: item.extractedJson,
         normalizedOutput: parseJson(item.normalizedOutput),
       })),
-      id: row.id,
-      displayName: row.displayName,
-      description: row.description,
-      category: row.category,
-      inputSchema: parseJson(row.inputSchema),
-      outputSchema: parseJson(row.outputSchema),
-      variableBindings: parseJson(row.variableBindings),
-      capabilities: parseJson(row.capabilities) || [],
-      defaultMaxTokens: row.defaultMaxTokens,
-      defaultTemperature: row.defaultTemperature,
-      schemaVersion: row.schemaVersion,
-      source: row.source,
-      managedByCode: row.managedByCode,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
+      id,
+      displayName: def?.displayName || entry!.name,
+      description: def?.description || entry!.description,
+      category: entry!.category,
+      inputSchema: def?.inputSchema || null,
+      outputSchema: def?.outputSchema || null,
+      variableBindings: def?.variableBindings || null,
+      capabilities: def?.capabilities || [],
+      defaultMaxTokens: def?.defaultMaxTokens ?? entry!.defaultModelConfig?.maxTokens ?? null,
+      defaultTemperature: def?.defaultTemperature ?? entry!.defaultModelConfig?.temperature ?? null,
+      schemaVersion: (def as any)?.schemaVersion ?? 1,
+      source: def?.source || 'code',
+      managedByCode: def?.managedByCode ?? true,
     },
   });
 });
 
-router.get('/orchestrators', async (_req: Request, res: Response) => {
-  const rows = await systemPrisma.orchestrator_definitions.findMany({
-    orderBy: { displayName: 'asc' },
-  });
-
+router.get('/orchestrators', (_req: Request, res: Response) => {
   res.json({
     success: true,
-    data: rows.map((row) => ({
-      id: row.id,
-      displayName: row.displayName,
-      description: row.description,
-      category: row.category,
-      steps: parseJson(row.steps) || [],
-      variableGraph: parseJson(row.variableGraph),
-      source: row.source,
-      managedByCode: row.managedByCode,
-      updatedAt: row.updatedAt,
-    })),
+    data: ORCHESTRATOR_RUNTIME_DEFINITIONS.map(compileOrchestrator),
   });
 });
 
-router.get('/orchestrators/:id', async (req: Request, res: Response) => {
-  const row = await systemPrisma.orchestrator_definitions.findUnique({
-    where: { id: req.params.id },
-  });
-
-  if (!row) {
+router.get('/orchestrators/:id', (req: Request, res: Response) => {
+  const def = ORCHESTRATOR_RUNTIME_DEFINITIONS.find((item) => item.id === req.params.id);
+  if (!def) {
     return res.status(404).json({ success: false, error: { message: 'Orchestrator definition 不存在' } });
   }
-
   return res.json({
     success: true,
+    data: compileOrchestrator(def),
+  });
+});
+
+/**
+ * 定义-运行时一致性校验：steps.agentId 可解析性 + 成员数对账
+ */
+router.get('/consistency', (_req: Request, res: Response) => {
+  const manifestValidation = validateManifest();
+
+  const orchestrators = ORCHESTRATOR_RUNTIME_DEFINITIONS.map((def) => {
+    const missing: Array<{ step: number; agentId: string }> = [];
+    const aliasResolved: Array<{ step: number; agentId: string; resolvedTo: string }> = [];
+    for (const step of (def.steps || []) as any[]) {
+      if (step.kind === 'service') continue; // 服务节点白名单（TeachingContextBuilder 等）
+      const entry = getAgentManifest(step.agentId);
+      if (!entry) {
+        missing.push({ step: step.step, agentId: step.agentId });
+      } else if (entry.id !== step.agentId) {
+        aliasResolved.push({ step: step.step, agentId: step.agentId, resolvedTo: entry.id });
+      }
+    }
+    const memberCount = listSkillsOfAgent(def.id).length;
+    const stepCount = (def.steps || []).length;
+    return {
+      orchestratorId: def.id,
+      displayName: def.displayName,
+      stepCount,
+      memberCount,
+      missing,
+      aliasResolved,
+      ok: missing.length === 0,
+    };
+  });
+
+  const manifestSkills = listAgentManifest().filter((entry) => entry.kind === 'skill').length;
+  const registeredSkills = SKILL_RUNTIME_DEFINITIONS.length;
+
+  res.json({
+    success: true,
     data: {
-      id: row.id,
-      displayName: row.displayName,
-      description: row.description,
-      category: row.category,
-      steps: parseJson(row.steps) || [],
-      variableGraph: parseJson(row.variableGraph),
-      source: row.source,
-      managedByCode: row.managedByCode,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
+      manifestOk: manifestValidation.ok,
+      manifestErrors: manifestValidation.ok ? [] : (manifestValidation as any).errors,
+      orchestrators,
+      counts: {
+        manifestSkills,
+        registeredSkills,
+        topLevelAgents: listTopLevelAgents().length,
+      },
     },
   });
 });
