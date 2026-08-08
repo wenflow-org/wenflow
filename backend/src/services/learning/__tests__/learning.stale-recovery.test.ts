@@ -17,7 +17,6 @@ jest.mock('../../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
 }))
 jest.mock('../../ai/ai.service', () => ({ __esModule: true, default: {} }))
-jest.mock('../state-tracking.service', () => ({ __esModule: true, default: {} }))
 jest.mock('../learning-state.service', () => ({ __esModule: true, default: {} }))
 jest.mock('../../achievements/achievement.service', () => ({ __esModule: true, default: {} }))
 jest.mock('../../learner/LearnerSnapshotRefreshService', () => ({ learnerSnapshotRefreshService: {} }))

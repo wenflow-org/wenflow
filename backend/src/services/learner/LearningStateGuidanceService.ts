@@ -13,7 +13,7 @@ import { adaptiveGuidanceCopyDefinition, type AdaptiveGuidanceCopyOutput } from 
 import { learnerSnapshotRefreshService } from './LearnerSnapshotRefreshService';
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
 import { learningDecisionFeedService, type LearningDecisionCard } from './LearningDecisionFeedService';
-import stateTrackingService from '../learning/state-tracking.service';
+import stateTrackingService from '../learning/learning-state.service';
 import { logger } from '../../utils/logger';
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
@@ -116,8 +116,8 @@ class LearningStateGuidanceService {
       const learnerSnapshot = await learnerSnapshotRefreshService.refresh({ userId, scope: 'global' });
 
       const warnings = await stateTrackingService.checkWarnings(userId).catch(() => []);
-      const currentState = await stateTrackingService.getCurrentState(userId).catch(() => null);
-      const suggestion = currentState ? stateTrackingService.generateSuggestion(currentState) : null;
+      const currentState = await stateTrackingService.getCurrentStateDisplay(userId).catch(() => null);
+      const suggestion = currentState ? stateTrackingService.generateDisplaySuggestion(currentState) : null;
 
       const completedCount = subtasks.filter((t) => t.status === 'completed').length;
       const inProgressCount = subtasks.filter((t) => t.status === 'in_progress').length;

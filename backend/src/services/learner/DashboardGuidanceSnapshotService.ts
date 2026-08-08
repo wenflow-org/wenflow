@@ -3,7 +3,7 @@ import { executeSkill } from '../../skills';
 import { adaptiveGuidanceCopyDefinition, type AdaptiveGuidanceCopyOutput } from '../../skills/adaptive-guidance-copy';
 import { learnerSnapshotRefreshService } from './LearnerSnapshotRefreshService';
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
-import stateTrackingService from '../learning/state-tracking.service';
+import stateTrackingService from '../learning/learning-state.service';
 import { logger } from '../../utils/logger';
 import { runBackgroundTask } from '../background-task-tracker.service';
 
@@ -62,8 +62,8 @@ interface DashboardLearningState {
     progress: number;
     completionRate: string;
   };
-  state: Awaited<ReturnType<typeof stateTrackingService.getCurrentState>> | null;
-  suggestion: ReturnType<typeof stateTrackingService.generateSuggestion> | null;
+  state: Awaited<ReturnType<typeof stateTrackingService.getCurrentStateDisplay>> | null;
+  suggestion: ReturnType<typeof stateTrackingService.generateDisplaySuggestion> | null;
 }
 
 export interface DashboardGuidanceSnapshotPayload {
@@ -266,8 +266,8 @@ class DashboardGuidanceSnapshotService {
       const sessionWrapup = latestPathSession?.wrapup ? parseJsonSafe(latestPathSession.wrapup) : null;
       const advisory = latestPathSession?.advisory ? parseJsonSafe(latestPathSession.advisory) : null;
       const warnings = await stateTrackingService.checkWarnings(userId).catch(() => []);
-      const currentState = await stateTrackingService.getCurrentState(userId).catch(() => null);
-      const suggestion = currentState ? stateTrackingService.generateSuggestion(currentState) : null;
+      const currentState = await stateTrackingService.getCurrentStateDisplay(userId).catch(() => null);
+      const suggestion = currentState ? stateTrackingService.generateDisplaySuggestion(currentState) : null;
 
       const completedSubtasks = subtasks.filter((task) => task.status === 'completed');
       const inProgressSubtasks = subtasks.filter((task) => task.status === 'in_progress');

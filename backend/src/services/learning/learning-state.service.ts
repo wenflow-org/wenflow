@@ -45,6 +45,43 @@ export interface LearningStateMetrics {
   timestamp: Date;
 }
 
+// 显示层指标（0-100 刻度，前端展示用；原 state-tracking.service 类型，2026-08 合并入本服务）
+export interface LearningStateDisplayMetrics {
+  lss: number; // Learning Stress Score (0-100)
+  ktl: number; // Knowledge Training Load (0-100, EWMA)
+  lf: number;  // Learning Fatigue (0-100, short-term EWMA)
+  lsb: number; // Learning State Balance = KTL - LF (-100 to +100)
+  updatedAt?: string;
+}
+
+export interface LearningStateTrendPoint {
+  date: Date;
+  lss: number | null;
+  ktl: number | null;
+  lf: number | null;
+  lsb: number | null;
+}
+
+export interface LearningStateTrendWindow {
+  trends: LearningStateTrendPoint[];
+  range: {
+    mode: 'recent' | 'all';
+    requestedDays: number | 'all';
+    actualDays: number;
+    registeredAt: string;
+    startDate: string;
+    endDate: string;
+  };
+}
+
+export type LearningStateWarning = {
+  type: 'fatigue' | 'lsb_negative' | 'efficiency_drop' | 'overstudy';
+  level: 'critical' | 'warning' | 'info';
+  title: string;
+  message: string;
+  suggestion: string;
+};
+
 export interface SessionScoreInput {
   sessionLss: number;
   sessionKtl?: number;
@@ -1221,6 +1258,393 @@ export class LearningStateService {
       title: '注意效率',
       message: '当前学习效率一般，建议调整学习方法。',
     };
+  }
+
+  // ============================================================
+  // 显示层（0-100 刻度）——原 state-tracking.service 并入（2026-08 去重合并）
+  // 前端展示、建议与预警统一走这些方法；内部计算仍用 0-10 内部量。
+  // ============================================================
+
+  private hasUsableDisplayMetrics(metrics: {
+    lss: number | null;
+    ktl: number | null;
+    lf: number | null;
+    lsb: number | null;
+  }): boolean {
+    const values = [metrics.lss, metrics.ktl, metrics.lf, metrics.lsb];
+    const normalized = values.map((value) => (typeof value === 'number' && Number.isFinite(value) ? value : 0));
+    return !normalized.every((value) => value === 0);
+  }
+
+  /**
+   * 获取当前学习状态（显示层 0-100）；无可用数据返回 null
+   */
+  async getCurrentStateDisplay(userId: string): Promise<LearningStateDisplayMetrics | null> {
+    try {
+      const metrics = await this.getCurrentState(userId);
+      if (!metrics) return null;
+      const displayMetrics = this.toDisplayMetrics(metrics);
+      if (!this.hasUsableDisplayMetrics(displayMetrics)) return null;
+      return {
+        lss: displayMetrics.lss,
+        ktl: displayMetrics.ktl,
+        lf: displayMetrics.lf,
+        lsb: displayMetrics.lsb,
+        updatedAt: metrics.timestamp.toISOString(),
+      };
+    } catch (error) {
+      logger.error('获取当前学习状态失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取学习状态趋势（显示层，最近 N 天）
+   */
+  async getStateTrends(
+    userId: string,
+    days: number = 30
+  ): Promise<LearningStateTrendPoint[]> {
+    const result = await this.getStateTrendWindow(userId, { days, mode: 'recent' });
+    return result.trends;
+  }
+
+  /**
+   * 获取学习状态趋势窗口（显示层；recent=最近 N 天，all=自注册日起）
+   */
+  async getStateTrendWindow(
+    userId: string,
+    options?: {
+      days?: number;
+      mode?: 'recent' | 'all';
+    }
+  ): Promise<LearningStateTrendWindow> {
+    try {
+      const requestedDays = Math.max(1, Math.min(365, options?.days ?? 30));
+      const mode = options?.mode === 'all' ? 'all' : 'recent';
+      const user = await prisma.users.findUnique({
+        where: { id: userId },
+        select: { createdAt: true },
+      });
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const registeredAt = user?.createdAt ? new Date(user.createdAt) : new Date(today);
+      registeredAt.setHours(0, 0, 0, 0);
+
+      const requestedStartDate = new Date(today);
+      requestedStartDate.setDate(today.getDate() - (requestedDays - 1));
+
+      const startDate = mode === 'all'
+        ? new Date(registeredAt)
+        : new Date(Math.max(requestedStartDate.getTime(), registeredAt.getTime()));
+
+      const actualDays = Math.max(1, Math.floor((today.getTime() - startDate.getTime()) / 86400000) + 1);
+      const metrics = await this.getTrendsSince(userId, startDate);
+      const currentState = await this.getCurrentState(userId);
+      const latestMetricBeforeWindow = await this.getLatestCommittedMetricBefore(userId, startDate);
+
+      const toDateKey = (date: Date): string => {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      };
+
+      const metricsByDay = new Map<string, typeof metrics>();
+      for (const metric of metrics) {
+        const key = toDateKey(metric.timestamp);
+        const list = metricsByDay.get(key) || [];
+        list.push(metric);
+        metricsByDay.set(key, list);
+      }
+
+      const trends: LearningStateTrendPoint[] = [];
+      let lastKnownMetric = latestMetricBeforeWindow;
+      const todayKey = toDateKey(new Date());
+
+      for (let i = 0; i < actualDays; i += 1) {
+        const currentDate = new Date(startDate);
+        currentDate.setDate(startDate.getDate() + i);
+        currentDate.setHours(12, 0, 0, 0);
+        const key = toDateKey(currentDate);
+        const dayMetrics = metricsByDay.get(key) || [];
+
+        if (dayMetrics.length === 0) {
+          if (!lastKnownMetric) {
+            trends.push({ date: new Date(currentDate), lss: null, ktl: null, lf: null, lsb: null });
+            continue;
+          }
+
+          const restoredMetric = key === todayKey && currentState
+            ? currentState
+            : this.restoreMetrics(lastKnownMetric, currentDate);
+          const displayMetric = this.toDisplayMetrics(restoredMetric);
+          trends.push({
+            date: new Date(currentDate),
+            lss: displayMetric.lss,
+            ktl: displayMetric.ktl,
+            lf: displayMetric.lf,
+            lsb: displayMetric.lsb,
+          });
+          continue;
+        }
+
+        const displayDayMetrics = dayMetrics.map((m) => this.toDisplayMetrics(m));
+        const validLss = displayDayMetrics
+          .map((m) => m.lss)
+          .filter((value): value is number => typeof value === 'number');
+        const avgLss = validLss.length > 0
+          ? validLss.reduce((sum, value) => sum + value, 0) / validLss.length
+          : null;
+
+        const lastMetric = displayDayMetrics[displayDayMetrics.length - 1];
+        lastKnownMetric = dayMetrics[dayMetrics.length - 1];
+        trends.push({
+          date: new Date(currentDate),
+          lss: avgLss,
+          ktl: lastMetric?.ktl ?? null,
+          lf: lastMetric?.lf ?? null,
+          lsb: lastMetric?.lsb ?? null,
+        });
+      }
+
+      return {
+        trends,
+        range: {
+          mode,
+          requestedDays: mode === 'all' ? 'all' : requestedDays,
+          actualDays,
+          registeredAt: registeredAt.toISOString(),
+          startDate: new Date(startDate).toISOString(),
+          endDate: new Date(today).toISOString(),
+        },
+      };
+    } catch (error) {
+      logger.error('获取学习趋势失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 生成学习建议（显示层 4 分类：压力/状态/知识增长/时长）
+   */
+  generateDisplaySuggestion(metrics: LearningStateDisplayMetrics): {
+    level: 'critical' | 'warning' | 'normal' | 'optimal';
+    message: string;
+    action: string;
+    categories: {
+      pressure: { status: string; message: string };
+      state: { status: string; message: string };
+      growth: { status: string; message: string };
+      duration: { status: string; message: string };
+    };
+  } {
+    const { lsb, lss, ktl, lf } = metrics;
+
+    // 1. 压力建议（基于LSS）
+    let pressureAdvice: { status: string; message: string };
+    if (lss > 80) {
+      pressureAdvice = {
+        status: 'danger',
+        message: '压力极大，建议暂停学习，休息放松'
+      };
+    } else if (lss > 70) {
+      pressureAdvice = {
+        status: 'warning',
+        message: '压力较大，明天降低难度或减少学习时间'
+      };
+    } else if (lss >= 50) {
+      pressureAdvice = {
+        status: 'normal',
+        message: '压力正常，继续保持'
+      };
+    } else if (lss >= 30) {
+      pressureAdvice = {
+        status: 'info',
+        message: '压力较小，可适当增加挑战'
+      };
+    } else {
+      pressureAdvice = {
+        status: 'success',
+        message: '强度太低，建议增加学习任务量'
+      };
+    }
+
+    // 2. 状态建议（基于LSB）
+    let stateAdvice: { status: string; message: string };
+    let level: 'critical' | 'warning' | 'normal' | 'optimal';
+    let mainMessage: string;
+    let mainAction: string;
+
+    if (lsb < 0) {
+      level = 'critical';
+      stateAdvice = {
+        status: 'danger',
+        message: '疲劳状态，建议强制休息1-2天'
+      };
+      mainMessage = '过度疲劳，建议强制休息';
+      mainAction = '停止所有新任务，复习旧知识或休息1-2天';
+    } else if (lsb < 20) {
+      level = 'warning';
+      stateAdvice = {
+        status: 'warning',
+        message: '状态一般，注意休息，可做轻松复习'
+      };
+      mainMessage = '疲劳较高，建议降低难度';
+      mainAction = '选择简单任务，观看视频教程，避免高强度学习';
+    } else if (lsb < 40) {
+      level = 'normal';
+      stateAdvice = {
+        status: 'normal',
+        message: '正常学习状态，继续当前节奏'
+      };
+      mainMessage = '正常学习状态';
+      mainAction = '继续当前学习节奏，保持稳定';
+    } else {
+      level = 'optimal';
+      stateAdvice = {
+        status: 'success',
+        message: '高效状态，可挑战高难度任务'
+      };
+      mainMessage = '学习状态极佳';
+      mainAction = '尝试项目实践，深入研究，挑战自己';
+    }
+
+    // 3. 知识增长建议（基于KTL）
+    let growthAdvice: { status: string; message: string };
+    if (ktl >= 70) {
+      growthAdvice = {
+        status: 'success',
+        message: '知识掌握优秀，继续保持'
+      };
+    } else if (ktl >= 50) {
+      growthAdvice = {
+        status: 'normal',
+        message: '知识正常增长，持续学习'
+      };
+    } else if (ktl >= 30) {
+      growthAdvice = {
+        status: 'info',
+        message: '知识增长缓慢，需要加强复习和实践'
+      };
+    } else {
+      growthAdvice = {
+        status: 'warning',
+        message: '知识积累较少，建议增加学习投入'
+      };
+    }
+
+    // 4. 时长建议（基于LF，LF高说明近期学习多）
+    let durationAdvice: { status: string; message: string };
+    if (lf > 70) {
+      durationAdvice = {
+        status: 'warning',
+        message: '近期学习强度高，注意劳逸结合'
+      };
+    } else if (lf >= 40) {
+      durationAdvice = {
+        status: 'normal',
+        message: '学习时长合理，注意适当休息'
+      };
+    } else {
+      durationAdvice = {
+        status: 'success',
+        message: '精力充沛，可以适当增加学习时间'
+      };
+    }
+
+    return {
+      level,
+      message: mainMessage,
+      action: mainAction,
+      categories: {
+        pressure: pressureAdvice,
+        state: stateAdvice,
+        growth: growthAdvice,
+        duration: durationAdvice
+      }
+    };
+  }
+
+  /**
+   * 检查学习预警（显示层；数据不足不产生预警）
+   */
+  async checkWarnings(userId: string): Promise<LearningStateWarning[]> {
+    const warnings: LearningStateWarning[] = [];
+
+    try {
+      // 获取最近7天的数据
+      const trends = await this.getStateTrends(userId, 7);
+      const validTrends = trends.filter(
+        (item): item is { date: Date; lss: number; ktl: number; lf: number; lsb: number } =>
+          item.lss !== null && item.ktl !== null && item.lf !== null && item.lsb !== null
+      );
+
+      if (validTrends.length < 2) {
+        return warnings; // 数据不足，不产生预警
+      }
+
+      // 1. 检查连续高疲劳（LF > 70 连续3天）
+      const recentLF = validTrends.slice(-3);
+      if (recentLF.length >= 3 && recentLF.every(t => t.lf > 70)) {
+        warnings.push({
+          type: 'fatigue',
+          level: 'critical',
+          title: '⚠️ 学习疲劳预警',
+          message: `你的疲劳度（LF）已连续 ${recentLF.length} 天超过 70。这表明你可能过度学习。`,
+          suggestion: '建议暂停学习1-2天，做一些轻松的事情恢复精力，后续降低学习强度。'
+        });
+      }
+
+      // 2. 检查LSB持续为负
+      const recentLSB = validTrends.slice(-3);
+      if (recentLSB.length >= 2 && recentLSB.every(t => t.lsb < 0)) {
+        warnings.push({
+          type: 'lsb_negative',
+          level: 'warning',
+          title: '📉 学习状态预警',
+          message: `你的学习状态值（LSB）已连续 ${recentLSB.length} 次为负，说明疲劳已超过知识积累能力。`,
+          suggestion: '建议调整学习计划，减少每日学习量或选择更简单的任务。'
+        });
+      }
+
+      // 3. 检查效率下降（通过LSS趋势判断）
+      const recentLSS = validTrends.slice(-5);
+      if (recentLSS.length >= 3) {
+        const avgLSSRecent = recentLSS.slice(-2).reduce((a, b) => a + b.lss, 0) / 2;
+        const avgLSSBefore = recentLSS.slice(0, -2).reduce((a, b) => a + b.lss, 0) / (recentLSS.length - 2);
+
+        // 如果最近LSS明显高于之前，说明压力增大（效率可能下降）
+        if (avgLSSRecent > avgLSSBefore + 15) {
+          warnings.push({
+            type: 'efficiency_drop',
+            level: 'warning',
+            title: '📊 学习效率预警',
+            message: `你最近的学习压力评分明显上升（从 ${avgLSSBefore.toFixed(1)} 到 ${avgLSSRecent.toFixed(1)}）。`,
+            suggestion: '可能是任务难度过高或疲劳累积，建议回顾学习方法或适当休息。'
+          });
+        }
+      }
+
+      // 4. 检查过度学习（KTL很高但LSB很低）
+      const current = validTrends[validTrends.length - 1];
+      if (current && current.ktl > 60 && current.lsb < 10) {
+        warnings.push({
+          type: 'overstudy',
+          level: 'info',
+          title: '💡 学习平衡提醒',
+          message: `你已掌握较多知识（KTL = ${current.ktl.toFixed(1)}），但当前状态不佳（LSB = ${current.lsb.toFixed(1)}）。`,
+          suggestion: '知识积累很好，但疲劳度较高。建议今天做轻松的复习，不要学习新内容。'
+        });
+      }
+
+      return warnings;
+    } catch (error) {
+      logger.error('检查学习预警失败:', error);
+      return warnings;
+    }
   }
 }
 

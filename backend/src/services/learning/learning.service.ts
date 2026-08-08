@@ -2,7 +2,7 @@
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import aiService from '../ai/ai.service';
-import stateTrackingService from './state-tracking.service';
+import stateTrackingService from './learning-state.service';
 import achievementService from '../achievements/achievement.service';
 import type { AgentInput } from '../../agents/protocol';
 import { getEventBus, type LearningEvent } from '../../gateway/event-bus';
@@ -4629,8 +4629,8 @@ const learningPath = await prisma.learning_paths.findUnique({
         : 0;
 
       // 获取学习状态指标
-      const currentState = await stateTrackingService.getCurrentState(userId);
-      const suggestion = currentState ? stateTrackingService.generateSuggestion(currentState) : null;
+      const currentState = await stateTrackingService.getCurrentStateDisplay(userId);
+      const suggestion = currentState ? stateTrackingService.generateDisplaySuggestion(currentState) : null;
       const displayState = currentState || null;
 
       return {
