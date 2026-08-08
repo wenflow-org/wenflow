@@ -97,9 +97,6 @@ import { virtualLearnerPathEvaluatorDefinition } from './virtual-learner-path-ev
 import { virtualLearnerLearnTurnSimulatorDefinition } from './virtual-learner-learn-turn-simulator';
 import { virtualLearnerRefereeDefinition } from './virtual-learner-referee';
 import { virtualLearnerActorAuditorDefinition } from './virtual-learner-actor-auditor';
-import { goalUnderstandingComposerDefinition } from './goal-understanding-composer';
-import { acceptanceEvidenceEvaluatorDefinition } from './acceptance-evidence-evaluator';
-import { teachingStrategySelectorDefinition } from './teaching-strategy-selector';
 import { mcpToolDefinition } from './mcp-tool';
 
 export const allSkillDefinitions: SkillDefinition[] = [
@@ -113,9 +110,6 @@ export const allSkillDefinitions: SkillDefinition[] = [
   virtualLearnerLearnTurnSimulatorDefinition,
   virtualLearnerRefereeDefinition,
   virtualLearnerActorAuditorDefinition,
-  goalUnderstandingComposerDefinition,
-  acceptanceEvidenceEvaluatorDefinition,
-  teachingStrategySelectorDefinition,
   mcpToolDefinition,
   ...auxSkillDefinitions,
   // 核心 LLM 能力单元（注册为 Skill 以确保 agent-registry 可见）
@@ -193,9 +187,6 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'virtual-learner-learn-turn-simulator': virtualLearnerLearnTurnSimulatorFn,
   'virtual-learner-referee': virtualLearnerRefereeFn,
   'virtual-learner-actor-auditor': virtualLearnerActorAuditorFn,
-  'goal-understanding-composer': goalUnderstandingComposerFn,
-  'acceptance-evidence-evaluator': acceptanceEvidenceEvaluatorFn,
-  'teaching-strategy-selector': teachingStrategySelectorFn,
   'mcp-tool': executeMcpToolFn,
   ...auxSkillHandlers,
   // 核心 LLM 能力单元（原 agents/，已迁入 skills/）

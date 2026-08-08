@@ -65,8 +65,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     // Phase 3：裸名 goal-conversation 归 skill，不再作为 goal-agent 别名（避免与 skill 冲突）
     aliases: ['requirement-agent'],
     agentMembers: [
-      'skill:goal-conversation',
-      'skill:goal-understanding-composer'
+      'skill:goal-conversation'
     ]
   },
   {
@@ -97,9 +96,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
       'skill:teaching-turn',
       'skill:peer-reinforcement',
       'skill:session-wrapup',
-      'skill:teaching-strategy-selector',
-      'skill:adaptive-guidance-copy',
-      'skill:acceptance-evidence-evaluator'
+      'skill:adaptive-guidance-copy'
     ]
   },
   {
@@ -150,18 +147,6 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     ioContractVersion: 'agent-output-v1',
     // 与 prompts/skill.goal-conversation.md 及 handler codeDefaults 对齐（仅展示/兜底，权威在 ACTIVE prompt）
     defaultModelConfig: { temperature: 0.7, maxTokens: 8000 }
-  },
-  {
-    id: 'skill:goal-understanding-composer',
-    name: '目标理解合成 Skill',
-    description: '将对话与推断结果合成结构化 Goal Understanding',
-    category: 'goal',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Goal',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.3, maxTokens: 2000 }
   },
 
   // ============ Path 下辖 Skills ============
@@ -231,18 +216,6 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.7, maxTokens: 4000 }
   },
   {
-    id: 'skill:teaching-strategy-selector',
-    name: '学习策略选择 Skill',
-    description: '基于学习者状态选择教学策略',
-    category: 'teaching',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Teaching',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.3, maxTokens: 800 }
-  },
-  {
     id: 'skill:adaptive-guidance-copy',
     name: '自适应引导文案 Skill',
     description: '根据情境生成自适应引导话术',
@@ -253,18 +226,6 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     monitoringGroup: 'Teaching',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.7, maxTokens: 800 }
-  },
-  {
-    id: 'skill:acceptance-evidence-evaluator',
-    name: '验收证据评估 Skill',
-    description: '评估学习者输出是否满足验收点',
-    category: 'teaching',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Teaching',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.2, maxTokens: 1200 }
   },
 
   // ============ Profile 下辖 Skills ============

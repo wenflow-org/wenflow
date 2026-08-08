@@ -16,6 +16,10 @@ const RETIRED_SKILLS = [
   'generic-planner', 'basic-generator', 'basic-extractor', 'data-mapping',
   'path-scene-framing', 'goal-analysis',
   'goal-profile-inference', 'learning-pattern-distiller', 'structured-output-parser', 'prompt-compiler',
+  // 2026-08 LLM skill 本体注销（保留确定性纯函数，不再注册为可执行 skill）
+  'goal-understanding-composer', 'teaching-strategy-selector', 'acceptance-evidence-evaluator',
+  // 2026-08 插件链/死链 aux 退役
+  'basic-evaluator', 'goal-alignment-checker', 'concept-priority', 'path-adjustment-generator',
 ] as const;
 
 async function main() {
