@@ -6,7 +6,7 @@ import type { SessionWrapupArtifact, SessionWrapupSummary } from '../../skills/s
 import { teachingTurnAgentDefinition, type TeachingTurnInput, type TeachingTurnOutput } from '../../skills/teaching-turn';
 import { executeSkill, executeSkillWithResult, auxSkillDefinitionMap, sessionWrapupAgentDefinition, peerAgentDefinition } from '../../skills';
 import { getEventBus } from '../../gateway/event-bus';
-import { buildTeachingScenarioContext, type TeachingScenarioContext } from './TeachingContextBuilder';
+import { buildTeachingScenarioContext, type TeachingScenarioContext, type InteractionMetaRecord } from './TeachingContextBuilder';
 import {
   teachingSessionRepository,
   TeachingSessionConflictError,
@@ -28,6 +28,7 @@ import { replanAdvisoryService, type ReplanAdvisory } from './ReplanAdvisoryServ
 import { hasReliableSessionEvaluation, mergeFinalTeachingState } from './SessionFinalizationPolicy';
 import { classifyFinalizationError } from './FinalizationErrors';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
+import { memoryTraceService } from '../memory/memory-trace.service';
 
 export type TeachingMode = 'tutor' | 'peer' | 'debate';
 const AI_TEACHING_AGENT_ID = 'teaching-agent';
@@ -79,6 +80,8 @@ interface ProcessStudentMessageOptions {
   operationClaim?: TeachingSessionOperationClaim;
   checkpointId?: string;
   expectedRevision?: number;
+  /** 前端交互特征（认知负荷量测 · 前端情报层）：随学生消息落库并注入教学上下文 */
+  interactionMeta?: InteractionMetaRecord | null;
 }
 
 const RECOVERY_WINDOW_MS = 48 * 60 * 60 * 1000;
@@ -107,13 +110,14 @@ function toMessageRole(role: string): 'user' | 'assistant' | 'system' {
   return 'user';
 }
 
-function appendTimestamp(messages: Array<{ role: string; content: string; timestamp?: string; analysis?: any; checkpoint?: boolean }>): TeachingSessionMessage[] {
+function appendTimestamp(messages: Array<{ role: string; content: string; timestamp?: string; analysis?: any; checkpoint?: boolean; meta?: Record<string, number> | null }>): TeachingSessionMessage[] {
   return messages.map((message) => ({
     role: toMessageRole(message.role),
     content: message.content,
     timestamp: message.timestamp || new Date().toISOString(),
     ...(message.analysis ? { analysis: message.analysis } : {}),
-    ...(message.checkpoint ? { checkpoint: true } : {})
+    ...(message.checkpoint ? { checkpoint: true } : {}),
+    ...(message.meta && Object.keys(message.meta).length > 0 ? { meta: message.meta } : {})
   }));
 }
 
@@ -730,6 +734,75 @@ async function buildTeachingTurnInput(
       : [],
   };
 
+  const scenario: TeachingTurnInput['scenario'] = {
+    subject: context.subject,
+    topic: context.topic,
+    taskTitle: context.taskTitle,
+    taskDescription: context.taskDescription,
+    taskType: context.taskType,
+    taskProfile: context.taskProfile,
+    currentTaskContext: context.currentTaskContext,
+    cognitiveFrame: context.cognitiveFrame,
+    teachingStrategyGuidance: context.teachingStrategyGuidance,
+    pathTitle: context.pathProgress.pathTitle,
+    pathSummary: context.pathProgress.pathSummary,
+    currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,
+    currentStageNumber: context.pathProgress.currentStageNumber,
+    currentTaskOrder: context.pathProgress.currentTaskOrder,
+    totalTasksInMilestone: context.pathProgress.totalTasksInMilestone,
+    taskKnowledgeScope: context.taskKnowledgeScope,
+    pathBackgroundContext: buildPathBackgroundContext(context),
+    learningSignal: context.learningSignal,
+    lastLessonRecap: context.lastLessonRecap,
+    contextCompression: compression.compressed ? {
+      enabled: true,
+      estimatedTokens: compression.estimatedTokens,
+      triggerTokens: compression.triggerTokens,
+      recap: compression.recap,
+    } : undefined,
+  };
+
+  // L2 声明化装配（第一阶段，只读对账）：把本回合组装结果建成 teaching 沙盘状态池，
+  // 校验 teaching-turn.yaml 声明的 sandbox refs 能否解析。缺键打 warn，不阻断。
+  try {
+    const { checkSandboxRefs, extractSandboxRefsFromCore } = await import('../sandbox-resolver.service');
+    const sandboxRefs = await extractSandboxRefsFromCore('teaching-turn');
+    const teachingSandboxRefs = sandboxRefs.filter((ref) => ref.agentAlias === 'teaching');
+    if (teachingSandboxRefs.length > 0) {
+      const { refs, missingCount } = checkSandboxRefs(
+        'teaching',
+        teachingSandboxRefs.map((ref) => ref.path),
+        {
+          teaching: {
+            session: {
+              messages: compression.messages,
+              topic: context.topic,
+              info: { sessionId: session.id, mode: session.mode },
+              evidence: session.messages,
+            },
+            learner: { learnerProjection: context.learnerProjection },
+            knowledge: { state: session.knowledgeState },
+            classroomContext,
+            visibleDialogueContext: session.messages,
+            controls: { teachingControlContext },
+            scenario: {
+              ...scenario,
+              interactionProfile: (context as any).interactionProfile,
+            },
+          },
+        }
+      );
+      if (missingCount > 0) {
+        logger.warn('[teaching-turn] 沙盘声明键运行时不可解析（声明与装配脱节）', {
+          sessionId: session.id,
+          missing: refs.filter((r) => !r.resolved).map((r) => r.missing),
+        });
+      }
+    }
+  } catch {
+    // 对账失败不影响主流程
+  }
+
   // 配置式输入通道（P2 声明 + 本链运行时消费）：routings 表 teaching-agent 通道行抽值优先，
   // 缺失回退既有组装；visibleDialogueContext 保持 {role, content} 映射语义
   const { channels } = await assembleTeachingTurnChannels({ session, teachingState, context }).catch(() => ({ channels: {}, skipped: [] }));
@@ -742,33 +815,7 @@ async function buildTeachingTurnInput(
   return {
     messages: compression.messages,
     learner: channels['learner.learnerProjection'] || context.learnerProjection,
-    scenario: {
-      subject: context.subject,
-      topic: context.topic,
-      taskTitle: context.taskTitle,
-      taskDescription: context.taskDescription,
-      taskType: context.taskType,
-      taskProfile: context.taskProfile,
-      currentTaskContext: context.currentTaskContext,
-      cognitiveFrame: context.cognitiveFrame,
-      teachingStrategyGuidance: context.teachingStrategyGuidance,
-      pathTitle: context.pathProgress.pathTitle,
-      pathSummary: context.pathProgress.pathSummary,
-      currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,
-      currentStageNumber: context.pathProgress.currentStageNumber,
-      currentTaskOrder: context.pathProgress.currentTaskOrder,
-      totalTasksInMilestone: context.pathProgress.totalTasksInMilestone,
-      taskKnowledgeScope: context.taskKnowledgeScope,
-      pathBackgroundContext: buildPathBackgroundContext(context),
-      learningSignal: context.learningSignal,
-      lastLessonRecap: context.lastLessonRecap,
-      contextCompression: compression.compressed ? {
-        enabled: true,
-        estimatedTokens: compression.estimatedTokens,
-        triggerTokens: compression.triggerTokens,
-        recap: compression.recap,
-      } : undefined,
-    },
+    scenario,
     classroomContext: channels['classroomContext'] || classroomContext,
     classroomEventContext,
     visibleDialogueContext: configuredVisible || session.messages.map((item) => ({
@@ -907,6 +954,34 @@ export class AITeachingOrchestrator {
   }> {
     const context = await buildTeachingScenarioContext(input.userId, input.taskId, null);
     const seededKnowledgeState = cloneKnowledgePoints(context.taskKnowledgeSeeds);
+    // 记忆引擎 M2：惰性检查到期复习点，作为 review 状态注入本节课知识看板（旧知唤醒，
+    // best-effort：查询失败不阻断开课）
+    try {
+      const dueTraces = await memoryTraceService.getDueTraces(input.userId, { limit: 2 });
+      if (dueTraces.length > 0) {
+        const existingKeys = new Set(seededKnowledgeState.map((point) => point.name));
+        for (const trace of dueTraces) {
+          if (existingKeys.has(trace.conceptKey)) continue;
+          seededKnowledgeState.push({
+            name: trace.conceptKey,
+            status: 'review',
+            progress: Math.round(trace.retention * 100),
+          });
+          existingKeys.add(trace.conceptKey);
+          logger.info('[AITeaching] 到期旧知唤醒注入看板', {
+            userId: input.userId,
+            taskId: input.taskId,
+            conceptKey: trace.conceptKey,
+            retention: trace.retention,
+          });
+        }
+      }
+    } catch (error) {
+      logger.warn('[AITeaching] 到期复习点查询失败，跳过注入', {
+        userId: input.userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     const sessionId = buildSessionId(input.userId);
     const reservation = await teachingSessionRepository.reserve({
       id: sessionId,
@@ -1210,7 +1285,7 @@ export class AITeachingOrchestrator {
         throw new Error('理解检查不存在或已处理');
       }
 
-      const context = await buildTeachingScenarioContext(session.userId, session.taskId, session);
+      const context = await buildTeachingScenarioContext(session.userId, session.taskId, session, options.interactionMeta);
       const endIntent = detectEndIntent(message);
 
     const updatedMessages = appendTimestamp([
@@ -1221,6 +1296,10 @@ export class AITeachingOrchestrator {
         timestamp: new Date().toISOString(),
         // 检查点合成消息打标记：进入教学上下文供模型分析答案，但不参与学生行为证据统计
         ...(options.checkpointId ? { checkpoint: true } : {}),
+        // 前端交互特征（认知负荷量测 · 前端情报层）：随消息落库，供后续轮次对比
+        ...(options.interactionMeta && Object.keys(options.interactionMeta).length > 0
+          ? { meta: options.interactionMeta as Record<string, number> }
+          : {}),
       }
     ]);
 
@@ -1877,6 +1956,14 @@ export class AITeachingOrchestrator {
       }
 
       dashboardGuidanceSnapshotService.refreshInBackground(session.userId, 'lesson-wrapup');
+      // 记忆引擎 M2：课后按知识看板状态确定性回写内化强度（best-effort，失败不阻断课堂完成）
+      memoryTraceService.recordSessionOutcome(session.userId, session.knowledgeState, 'derived').catch((error) => {
+        logger.warn('[AITeaching] 记忆痕迹回写失败', {
+          sessionId,
+          userId: session.userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
       return {
         status: 'completed',
         operationId,
