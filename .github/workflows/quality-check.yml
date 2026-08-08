@@ -48,3 +48,5 @@ jobs:
           npm run prompts:seed-routings
           npm run prompts:check-handoff:strict
           npm run prompts:snapshots:check
+          npm run prompts:core:check
+          npm run prompts:runtime-contract:check
