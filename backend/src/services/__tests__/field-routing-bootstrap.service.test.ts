@@ -4,7 +4,7 @@ import {
 } from '../field-routing-bootstrap.service'
 
 describe('field routing bootstrap', () => {
-  it('固定按 goal、path、learning、profile 顺序执行', async () => {
+  it('固定按 goal、path、learning、profile、simulation 顺序执行', async () => {
     const calls: string[] = []
     const ensure = (name: string) => jest.fn(async () => {
       calls.push(name)
@@ -15,11 +15,12 @@ describe('field routing bootstrap', () => {
       ensureGoal: ensure('goal') as any,
       ensurePath: ensure('path') as any,
       ensureTeaching: ensure('teaching') as any,
-      ensureProfile: ensure('profile') as any
+      ensureProfile: ensure('profile') as any,
+      ensureSimulation: ensure('simulation') as any
     })
 
-    expect(calls).toEqual(['goal', 'path', 'teaching', 'profile'])
-    expect(Object.keys(result)).toEqual(['goal', 'path', 'teaching', 'profile'])
+    expect(calls).toEqual(['goal', 'path', 'teaching', 'profile', 'simulation'])
+    expect(Object.keys(result)).toEqual(['goal', 'path', 'teaching', 'profile', 'simulation'])
   })
 
   it('阶段失败时停止后续 seed 并传播错误', async () => {
@@ -27,21 +28,24 @@ describe('field routing bootstrap', () => {
     const ensurePath = jest.fn().mockRejectedValue(new Error('path seed failed'))
     const ensureTeaching = jest.fn()
     const ensureProfile = jest.fn()
+    const ensureSimulation = jest.fn()
 
     await expect(bootstrapFieldRoutings({
       database: {} as any,
       ensureGoal,
       ensurePath,
       ensureTeaching,
-      ensureProfile
+      ensureProfile,
+      ensureSimulation
     } as any)).rejects.toThrow('path seed failed')
     expect(ensureTeaching).not.toHaveBeenCalled()
     expect(ensureProfile).not.toHaveBeenCalled()
+    expect(ensureSimulation).not.toHaveBeenCalled()
   })
 
   it('seed manifest 的全局键唯一且数量稳定', () => {
-    expect(FIELD_ROUTING_SEED_MANIFEST.contractAgentIds).toHaveLength(15)
-    expect(FIELD_ROUTING_SEED_MANIFEST.fieldIds).toHaveLength(131)
-    expect(FIELD_ROUTING_SEED_MANIFEST.routings).toHaveLength(189)
+    expect(FIELD_ROUTING_SEED_MANIFEST.contractAgentIds).toHaveLength(23)
+    expect(FIELD_ROUTING_SEED_MANIFEST.fieldIds).toHaveLength(158)
+    expect(FIELD_ROUTING_SEED_MANIFEST.routings).toHaveLength(223)
   })
 })

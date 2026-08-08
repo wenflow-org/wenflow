@@ -21,10 +21,50 @@ import {
   getAgentRoutings,
   type FieldRoutingRow,
 } from '../field-dispatcher';
+import { createHash } from 'crypto';
 import { logger } from '../../utils/logger';
 
 const SUPPLEMENT_BANNER = '═══ 字段路由 SUPPLEMENT（运行时由路由表自动渲染，admin 可调）═══';
 const SUPPLEMENT_END_BANNER = '═══ SUPPLEMENT 结束 ═══';
+
+// supplement 渲染缓存：路由表经 field-dispatcher 30s TTL 缓存，渲染文本与之同周期缓存，
+// 避免每轮对话重复拼接；admin 改表后最多 30s 生效（与路由表缓存一致）。
+const SUPPLEMENT_RENDER_TTL_MS = 30_000;
+interface SupplementRenderCacheEntry {
+  loadedAt: number;
+  text: string;
+  fieldsCovered: number;
+  routingHash: string | null;
+}
+const supplementRenderCache = new Map<string, SupplementRenderCacheEntry>();
+
+/**
+ * 路由快照指纹：由路由行关键字段（fieldId/promptRole/valueType/pathInRawOutput/handoff）
+ * 确定性导出。用于：
+ *  - supplement 渲染缓存 key
+ *  - prompt_call_logs.routingContextHash（admin 改表后 hash 变化，版本归因可见）
+ */
+export async function getRoutingSnapshotHash(agentId: string): Promise<string | null> {
+  try {
+    const rows = await getAgentRoutings(agentId);
+    if (!rows.length) return null;
+    const snapshot = rows
+      .map((r) => ({
+        fieldId: r.fieldId,
+        promptRole: r.promptRole || null,
+        valueType: r.valueType || null,
+        pathInRawOutput: r.pathInRawOutput || null,
+        handoff: [...(r.handoff || [])].sort(),
+        render: r.render,
+        internal: r.internal,
+        accumulate: r.accumulate,
+      }))
+      .sort((a, b) => (a.fieldId < b.fieldId ? -1 : 1));
+    return createHash('sha256').update(JSON.stringify(snapshot)).digest('hex').slice(0, 16);
+  } catch {
+    return null;
+  }
+}
 
 const ROLE_GROUP_LABELS: Record<string, string> = {
   'hard-required': '【必填字段（缺一不进 proposing）】',
@@ -140,20 +180,29 @@ export async function composePromptFromAgentRouting(
   fieldsCovered: number;
 }> {
   try {
-    const rows = await getAgentRoutings(agentId);
-    if (!rows.length) {
-      return { finalPrompt: basePrompt, supplementApplied: false, fieldsCovered: 0 };
+    const now = Date.now();
+    const cached = supplementRenderCache.get(agentId);
+    if (!cached || now - cached.loadedAt >= SUPPLEMENT_RENDER_TTL_MS) {
+      const rows = await getAgentRoutings(agentId);
+      const routingHash = await getRoutingSnapshotHash(agentId);
+      const { text, fieldsCovered } = renderSupplementText(rows);
+      supplementRenderCache.set(agentId, {
+        loadedAt: now,
+        text,
+        fieldsCovered,
+        routingHash,
+      });
     }
-    const { text, fieldsCovered } = renderSupplementText(rows);
-    if (!text) {
+    const entry = supplementRenderCache.get(agentId)!;
+    if (!entry.text) {
       return { finalPrompt: basePrompt, supplementApplied: false, fieldsCovered: 0 };
     }
     // 防御：如果 basePrompt 已经包含 supplement banner，先剥掉再追加，避免叠加
     const cleaned = stripExistingSupplement(basePrompt);
     return {
-      finalPrompt: `${cleaned}\n${text}`,
+      finalPrompt: `${cleaned}\n${entry.text}`,
       supplementApplied: true,
-      fieldsCovered,
+      fieldsCovered: entry.fieldsCovered,
     };
   } catch (err) {
     logger.warn('[prompt-composer] failed to compose supplement', {
@@ -161,6 +210,15 @@ export async function composePromptFromAgentRouting(
       error: (err as Error).message,
     });
     return { finalPrompt: basePrompt, supplementApplied: false, fieldsCovered: 0 };
+  }
+}
+
+/** 测试/管理端用：清空 supplement 渲染缓存 */
+export function clearSupplementRenderCache(agentId?: string): void {
+  if (agentId) {
+    supplementRenderCache.delete(agentId);
+  } else {
+    supplementRenderCache.clear();
   }
 }
 

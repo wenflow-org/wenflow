@@ -29,6 +29,7 @@
     "prompts:check-handoff": "ts-node src/scripts/check-input-handoffs.ts",
     "prompts:snapshots": "ts-node src/scripts/generate-agent-snapshots.ts",
     "prompts:snapshots:check": "ts-node src/scripts/generate-agent-snapshots.ts --check",
+    "prompts:seed-routings": "ts-node src/scripts/seed-field-routings.ts",
     "prompts:check:all": "npm run prompts:lint && npm run prompts:check-handoff:strict && npm run prompts:snapshots:check",
     "prompts:check-handoff:strict": "ts-node src/scripts/check-input-handoffs.ts --strict",
     "prompts:core:check": "npm run runtime:validate && ts-node src/scripts/check-core-hash-parity.ts",

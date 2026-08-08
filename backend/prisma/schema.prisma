@@ -93,6 +93,7 @@ model prompt_call_logs {
   promptDrift         Boolean  @default(false)
   durationMs          Int      @default(0)
   tokenUsage          String?
+  routingContextHash  String?
   pathId              String?
   userId              String?
   conversationId      String?
@@ -620,6 +621,29 @@ model learner_projections {
   @@index([userId, scope])
   @@index([userId, pathId, scope])
   @@index([lastEventAt])
+}
+
+/// 知识点记忆痕迹（记忆引擎 M2）：ACT-R 幂律衰减的持久化载体。
+/// 每个（用户 × 概念）一行；masteryScore 为最近一次评估的内化强度，
+/// lastSeenAt 为最近一次提取/复习时间，decayFactor 为幂律衰减参数 d（默认 0.5，预留个性化标定）。
+model memory_traces {
+  id              String    @id
+  userId          String
+  conceptKey      String
+  label           String?
+  masteryScore    Float     @default(0.5)
+  stability       String    @default("developing") // unknown | fragile | developing | stable
+  lastSeenAt      DateTime?
+  extractionCount Int       @default(0)
+  decayFactor     Float     @default(0.5)
+  lastRetention   Float?
+  source          String?   // derived（从 knowledgeState 确定性映射）| model（LLM 评估，预留）
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, conceptKey])
+  @@index([userId, lastSeenAt])
+  @@index([userId, stability])
 }
 
 model user_agent_configs {

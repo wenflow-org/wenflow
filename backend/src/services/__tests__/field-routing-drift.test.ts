@@ -25,7 +25,7 @@ describe('detectFieldRoutingDrift', () => {
     const contracts = [...GOAL_FIELD_ROUTING_CONTRACTS, ...PATH_FIELD_ROUTING_CONTRACTS, ...TEACHING_FIELD_ROUTING_CONTRACTS, ...PROFILE_FIELD_ROUTING_CONTRACTS]
       .map((c) => ({ agentId: c.agentId, displayName: c.displayName, description: c.description, stage: 'goal', managedByCode: true }))
     const fields = [...GOAL_FIELD_ROUTING_FIELDS, ...PATH_FIELD_ROUTING_FIELDS, ...TEACHING_FIELD_ROUTING_FIELDS, ...PROFILE_FIELD_ROUTING_FIELDS]
-      .map((f) => ({ fieldId: f.fieldId, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, managedByCode: true }))
+      .map((f) => ({ fieldId: f.fieldId, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, pathInRawOutput: f.pathInRawOutput ?? null, description: f.description ?? null, bindings: f.bindings ? JSON.stringify(f.bindings) : null, managedByCode: true }))
     const routings = [...GOAL_FIELD_ROUTINGS, ...PATH_FIELD_ROUTINGS, ...TEACHING_FIELD_ROUTINGS, ...PROFILE_FIELD_ROUTINGS]
       .map((r) => ({ agentId: r.agentId, fieldId: r.fieldId, render: r.render, handoff: r.handoff.length ? JSON.stringify(r.handoff) : null, internalFlag: r.internal, accumulate: r.accumulate, visibilityPreset: r.visibilityPreset ?? null, managedByCode: true }))
 

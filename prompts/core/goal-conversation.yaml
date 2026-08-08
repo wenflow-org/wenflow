@@ -72,7 +72,10 @@ fields:
       · learning_signal（string）学习承接信号（hidden，静默累积）。不主动追问"学习偏好"，
         但当用户自然流露信号时（如"看了很多教程还是不会""能不能直接给我一个模板"）静默记录，
         供后续路径生成调整交付形式，不作为阶段推进条件。
-      · available_resources（object）{ "time_horizon": "", "time_budget": "" }；
+      · cognitive_bandwidth（string，可选软字段）认知带宽自报（hidden，静默累积，不主动追问）：
+        当用户自然流露时记录，如"最近同时在弄好几个项目""白天上班晚上才有时间学"→ 记"多任务并发"；
+        "只能专心做一件事"→ 记"低并发偏好"。只作多目标负荷核算参考，不作为阶段推进条件、不影响硬条件判断。
+      · available_resources（object）{ "time_horizon": "", "time_budget": "", "time_per_session": "" }；
         time_horizon 仅作参考，允许值：半天、1天、2天、3-7天、1-2周、1个月+、未明确；后续规划必须阶段制，不生成按周/月展开的任务表。
       · success_criteria（object）{ "observable_result": "", "acceptance_check": "" }
       · constraints_and_boundaries（string[]）硬约束、禁区
@@ -100,6 +103,11 @@ fields:
     type: object
     turn: true
     desc: 各维度置信度评分（debug 用途）
+  - name: structuredData
+    type: object?
+    desc: >-
+      可选旁路字段，承载结构化画像信息（learner.identity / learning_context 等），
+      不要求每轮产出；产出后由平台透传给路径规划阶段。
 constraints:
   - 默认面向提问者本人，不输出第三方作为主要学习执行者的计划
   - 不编造用户没有明确提供的信息；不确定就空白或继续追问

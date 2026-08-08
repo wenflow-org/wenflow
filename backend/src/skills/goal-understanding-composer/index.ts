@@ -106,6 +106,8 @@ export function mergeUnderstanding(previousUnderstanding: any, parsedJson: any):
 }
 
 export function buildCollected(understanding: any, parsedJson: any): any {
+  // level/timePerDay/expected_time 优先读主契约路径（current_baseline / available_resources），
+  // legacy background.* 仅作旧数据兜底
   return {
     surface_goal: understanding.surface_goal || null,
     real_problem: understanding.real_problem || null,
@@ -117,9 +119,9 @@ export function buildCollected(understanding: any, parsedJson: any): any {
     background: understanding.background || {},
     learning_style: understanding.learning_style || {},
     goal: understanding.real_problem || understanding.surface_goal || null,
-    level: understanding.background?.current_level || null,
-    timePerDay: understanding.background?.available_time || understanding.background?.expected_time || null,
-    expected_time: understanding.background?.expected_time || null,
+    level: understanding.current_baseline?.level || understanding.background?.current_level || null,
+    timePerDay: understanding.available_resources?.time_budget || understanding.background?.available_time || understanding.background?.expected_time || null,
+    expected_time: understanding.available_resources?.time_horizon || understanding.background?.expected_time || null,
     questions_to_ask: parsedJson?.nextQuestions || parsedJson?.next_questions || []
   }
 }

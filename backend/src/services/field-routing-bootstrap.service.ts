@@ -24,24 +24,33 @@ import {
   PROFILE_FIELD_ROUTING_FIELDS,
   PROFILE_FIELD_ROUTINGS
 } from '../scripts/seed-learner-field-routings';
+import {
+  ensureSimulationFieldRoutings,
+  SIMULATION_FIELD_ROUTING_CONTRACTS,
+  SIMULATION_FIELD_ROUTING_FIELDS,
+  SIMULATION_FIELD_ROUTINGS
+} from '../scripts/seed-simulation-field-routings';
 
 const contractGroups = [
   GOAL_FIELD_ROUTING_CONTRACTS,
   PATH_FIELD_ROUTING_CONTRACTS,
   TEACHING_FIELD_ROUTING_CONTRACTS,
-  PROFILE_FIELD_ROUTING_CONTRACTS
+  PROFILE_FIELD_ROUTING_CONTRACTS,
+  SIMULATION_FIELD_ROUTING_CONTRACTS
 ];
 const fieldGroups = [
   GOAL_FIELD_ROUTING_FIELDS,
   PATH_FIELD_ROUTING_FIELDS,
   TEACHING_FIELD_ROUTING_FIELDS,
-  PROFILE_FIELD_ROUTING_FIELDS
+  PROFILE_FIELD_ROUTING_FIELDS,
+  SIMULATION_FIELD_ROUTING_FIELDS
 ];
 const routingGroups = [
   GOAL_FIELD_ROUTINGS,
   PATH_FIELD_ROUTINGS,
   TEACHING_FIELD_ROUTINGS,
-  PROFILE_FIELD_ROUTINGS
+  PROFILE_FIELD_ROUTINGS,
+  SIMULATION_FIELD_ROUTINGS
 ];
 
 export const FIELD_ROUTING_SEED_MANIFEST = {
@@ -131,6 +140,7 @@ export interface FieldRoutingBootstrapDependencies {
   ensurePath?: typeof ensurePathFieldRoutings;
   ensureTeaching?: typeof ensureTeachingFieldRoutings;
   ensureProfile?: typeof ensureProfileFieldRoutings;
+  ensureSimulation?: typeof ensureSimulationFieldRoutings;
 }
 
 export async function bootstrapFieldRoutings(dependencies: FieldRoutingBootstrapDependencies) {
@@ -138,7 +148,8 @@ export async function bootstrapFieldRoutings(dependencies: FieldRoutingBootstrap
   const path = await (dependencies.ensurePath || ensurePathFieldRoutings)(dependencies.database);
   const teaching = await (dependencies.ensureTeaching || ensureTeachingFieldRoutings)(dependencies.database);
   const profile = await (dependencies.ensureProfile || ensureProfileFieldRoutings)(dependencies.database);
-  return { goal, path, teaching, profile };
+  const simulation = await (dependencies.ensureSimulation || ensureSimulationFieldRoutings)(dependencies.database);
+  return { goal, path, teaching, profile, simulation };
 }
 
 // ============================================================
@@ -220,6 +231,11 @@ export async function detectFieldRoutingDrift(systemDb: SystemDbLike): Promise<F
       ['camelName', seed.camelName ?? null, db.camelName ?? null],
       ['systemLocked', seed.systemLocked ?? false, db.systemLocked ?? false],
       ['structureLocked', seed.structureLocked ?? false, db.structureLocked ?? false],
+      // pathInRawOutput 是配置式值抽取的依据，seed 声明与 DB 不一致会导致
+      // assemble* 抽取静默跑偏，必须纳入漂移检测（2026-08 补强）
+      ['pathInRawOutput', seed.pathInRawOutput ?? null, db.pathInRawOutput ?? null],
+      ['description', seed.description ?? null, db.description ?? null],
+      ['bindings', seed.bindings ? JSON.stringify(seed.bindings) : null, db.bindings ?? null],
     ];
     for (const [field, seedValue, dbValue] of pairs) {
       if (JSON.stringify(seedValue ?? null) !== JSON.stringify(dbValue ?? null)) {

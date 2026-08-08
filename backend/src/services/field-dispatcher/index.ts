@@ -173,10 +173,7 @@ export async function assembleGoalHandoff(
 ): Promise<{ fields: Record<string, any>; skipped: string[] }> {
   const rows = rowsOverride
     ? rowsOverride
-    : (() => {
-        const inner = cache?.byAgent.get('goal-agent');
-        return inner ? Array.from(inner.values()) : [];
-      })();
+    : Array.from((await loadRoutings()).byAgent.get('goal-agent')?.values() || []);
   const handingRows = rows.filter((row) => row.handoff.includes('path'));
   const fields = extractFieldsByPath(result, handingRows);
   const skipped = handingRows
@@ -197,10 +194,7 @@ export async function assembleStageDesignerChannels(
 ): Promise<{ channels: Record<string, any>; skipped: string[] }> {
   const rows = rowsOverride
     ? rowsOverride
-    : (() => {
-        const inner = cache?.byAgent.get('path-agent');
-        return inner ? Array.from(inner.values()) : [];
-      })();
+    : Array.from((await loadRoutings()).byAgent.get('path-agent')?.values() || []);
   const channelRows = rows.filter((row) => row.handoff.includes('skill:stage-designer'));
   const channels = extractFieldsByPath(source, channelRows);
   const skipped = channelRows
@@ -214,10 +208,7 @@ export async function assembleTeachingTurnChannels(
 ): Promise<{ channels: Record<string, any>; skipped: string[] }> {
   const rows = rowsOverride
     ? rowsOverride
-    : (() => {
-        const inner = cache?.byAgent.get('teaching-agent');
-        return inner ? Array.from(inner.values()) : [];
-      })();
+    : Array.from((await loadRoutings()).byAgent.get('teaching-agent')?.values() || []);
   const channelRows = rows.filter((row) => row.handoff.includes('skill:teaching-turn'));
   const channels = extractFieldsByPath(source, channelRows);
   const skipped = channelRows
@@ -467,42 +458,6 @@ export async function dispatchGoalEnvelope(
 // ============================================================
 // Path skill handoff：取出该字段是否要交付 path
 // ============================================================
-
-export interface GoalToPathHandoffOutput {
-  fields: Record<string, any>;
-  skipped: string[];
-}
-
-/**
- * 拿"goal-conversation 编排器"路由里 handoff 包含 'requirement' 或 'path' 的所有字段
- * 用于在 buildGoalPathVisibleSummary 里替代硬编码字段拣选
- */
-export async function pickGoalHandoffFields(
-  result: any,
-  downstream: 'requirement' | 'path' | 'teaching'
-): Promise<GoalToPathHandoffOutput> {
-  const routings = await loadRoutings();
-  const inner = routings.byAgent.get('skill:goal-conversation') || new Map();
-
-  const flat = flattenGoalResult(result);
-  const fields: Record<string, any> = {};
-  const skipped: string[] = [];
-
-  for (const [fieldId, value] of Object.entries(flat)) {
-    const r = inner.get(fieldId);
-    if (!r) {
-      skipped.push(`${fieldId}(unmapped)`);
-      continue;
-    }
-    if (!r.handoff.includes(downstream)) {
-      skipped.push(`${fieldId}(no-handoff-to-${downstream})`);
-      continue;
-    }
-    fields[fieldId] = value;
-  }
-
-  return { fields, skipped };
-}
 
 /**
  * Feature flag：决定是否启用 dispatcher（默认 true，可通过环境变量关闭）

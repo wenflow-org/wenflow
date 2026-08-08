@@ -25,6 +25,7 @@ import { adaptToRuntimeEnvelope } from '../services/prompt-lab/envelope-adapter'
 import { validateSkillOutputFields } from '../services/skill-output-validator';
 import type { RuntimeContract } from '../services/prompt-lab/runtime-contract';
 import { resolveLlmCallParams } from '../services/resolve-llm-call-params';
+import { getRoutingSnapshotHash } from '../services/prompt-composer';
 import type { SkillPromptOutputMedia } from '../services/skill-prompt-contract';
 import {
   mergeContextEnvelopes,
@@ -270,6 +271,12 @@ export async function callPrompt<TInput, TOutput>(
   }
   const promptDrift = detectPromptDrift(spec.defaultSystemPrompt, promptConfig?.systemPrompt || null);
   const systemPromptHash = hashPrompt(systemPrompt);
+  // 路由表快照指纹：admin 改 routings 后 hash 变化（≤30s），让按 version/coreHash 归因的分析
+  // 能识别"prompt 变了但版本没变"的场景（版本追踪盲区补强）
+  let routingContextHash: string | null = null;
+  if (spec.caller?.skillId && typeof getRoutingSnapshotHash === 'function') {
+    routingContextHash = await getRoutingSnapshotHash(spec.caller.skillId).catch(() => null);
+  }
   const attempts: PromptAttemptTrace[] = [];
   const gateway = getAPIGateway();
   // 请求形态层（默认全流）：所有 LLM 调用一律以流式请求发出（上游 SSE，更早收到首字节），
@@ -536,6 +543,7 @@ export async function callPrompt<TInput, TOutput>(
       normalizedOutput: JSON.stringify(normalizedOutput),
       success: true,
       promptDrift: !!promptDrift?.driftDetected,
+      routingContextHash,
       durationMs,
       tokenUsage: JSON.stringify(tokenUsage),
        pathId,
@@ -583,6 +591,7 @@ export async function callPrompt<TInput, TOutput>(
     errorCode,
     errorMessage: lastFailureReason,
     promptDrift: !!promptDrift?.driftDetected,
+    routingContextHash,
     durationMs,
      pathId,
     userId: context.userId || requestContext.userId || null,

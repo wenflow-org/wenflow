@@ -1,6 +1,6 @@
 ---
 agentId: skill:goal-conversation
-coreHash: 19c13a483e55afb00877134502953805b945b72e7a8d7e6e74f09d3a7aaa1d80
+coreHash: 0e3a6362136f0dc8cea16a7983b0fa1b4d860be51ff389bd7af453635f123765
 coreVersion: 1
 temperature: 0.7
 maxTokens: 8000
@@ -60,7 +60,10 @@ deltaOutput: true
 · learning_signal（string）学习承接信号（hidden，静默累积）。不主动追问"学习偏好"，
   但当用户自然流露信号时（如"看了很多教程还是不会""能不能直接给我一个模板"）静默记录，
   供后续路径生成调整交付形式，不作为阶段推进条件。
-· available_resources（object）{ "time_horizon": "", "time_budget": "" }；
+· cognitive_bandwidth（string，可选软字段）认知带宽自报（hidden，静默累积，不主动追问）：
+  当用户自然流露时记录，如"最近同时在弄好几个项目""白天上班晚上才有时间学"→ 记"多任务并发"；
+  "只能专心做一件事"→ 记"低并发偏好"。只作多目标负荷核算参考，不作为阶段推进条件、不影响硬条件判断。
+· available_resources（object）{ "time_horizon": "", "time_budget": "", "time_per_session": "" }；
   time_horizon 仅作参考，允许值：半天、1天、2天、3-7天、1-2周、1个月+、未明确；后续规划必须阶段制，不生成按周/月展开的任务表。
 · success_criteria（object）{ "observable_result": "", "acceptance_check": "" }
 · constraints_and_boundaries（string[]）硬约束、禁区
@@ -76,6 +79,7 @@ deltaOutput: true
 · key_stages（string[]）大致阶段，通常 2-5 个
 · out_of_scope（string[]）先不展开的内容，允许空数组
 - confidenceScores · object — 各维度置信度评分（debug 用途）（当轮）
+- structuredData · object? — 可选旁路字段，承载结构化画像信息（learner.identity / learning_context 等）， 不要求每轮产出；产出后由平台透传给路径规划阶段。
 
 ## 边界约束
 

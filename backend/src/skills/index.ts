@@ -84,9 +84,6 @@ import { virtualLearnerReferee as virtualLearnerRefereeFn } from './virtual-lear
 export { virtualLearnerActorAuditorDefinition, VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT, VIRTUAL_LEARNER_ACTOR_AUDITOR_MAX_TOKENS, VIRTUAL_LEARNER_ACTOR_AUDITOR_TEMPERATURE } from './virtual-learner-actor-auditor';
 import { virtualLearnerActorAuditor as virtualLearnerActorAuditorFn } from './virtual-learner-actor-auditor';
 
-// 安德森标注缓存 (PathAgent v3.1)
-export { andersonLabelerCache, AndersonLabelerCache, CachedLabel, CacheHitResult } from './anderson-labeler/cache';
-
 // ============================================================
 // 核心 LLM 能力单元（原 agents/，已迁入 skills/）
 // ============================================================

@@ -40,3 +40,11 @@ jobs:
         run: npm run security:scan:history
       - name: Run required quality checks
         run: npm run check
+      - name: Run prompt contract gates (File-as-Truth)
+        working-directory: backend
+        run: |
+          npm run prompts:lint
+          npm run prisma:migrate:deploy:all
+          npm run prompts:seed-routings
+          npm run prompts:check-handoff:strict
+          npm run prompts:snapshots:check

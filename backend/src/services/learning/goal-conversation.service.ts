@@ -18,6 +18,8 @@ interface GoalConversationOptions {
     goalAgent?: string;
     pathAgent?: string;
   };
+  /** 前端交互特征（认知负荷量测 · 前端情报层）：随用户消息落库，供后续多目标核算等使用 */
+  meta?: Record<string, number> | null;
 }
 
 interface GoalNormalizedStateV1 {
@@ -506,7 +508,7 @@ async continueConversation(
 
       if (!this.getStructuredOutputValid(aiResponse)) {
         // 422 恢复信封前先持久化本轮用户消息，避免刷新恢复后对话上下文丢失（AI 回复不落库）
-        await this.saveMessage(conversation.id, 'user', userReply);
+        await this.saveMessage(conversation.id, 'user', userReply, options?.meta);
         logger.warn('继续对话结构化输出失败，状态未更新', {
           conversationId,
           userId,
@@ -516,7 +518,7 @@ async continueConversation(
         this.throwStructuredOutputInvalid(responseWithConversationId);
       }
 
-      await this.saveMessage(conversation.id, 'user', userReply);
+      await this.saveMessage(conversation.id, 'user', userReply, options?.meta);
       await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible);
 
       // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
@@ -641,6 +643,23 @@ async continueConversation(
         structuredOutputValid: this.getStructuredOutputValid(aiResponse)
       });
 
+      // 字段流转诊断（零副作用）：按路由表检查 envelope 的 hidden 剔除与未映射字段，
+      // 便于发现"字段产出但路由表未登记"的契约断链
+      try {
+        const { dispatchGoalEnvelope } = await import('../field-dispatcher');
+        const { diagnostics } = await dispatchGoalEnvelope({ result: aiResponse, agentId: 'skill:goal-conversation' });
+        if (diagnostics.unmappedFields.length > 0 || diagnostics.hiddenFieldsRemoved.length > 0) {
+          logger.debug('[goal-conversation] envelope dispatch diagnostics', {
+            conversationId,
+            stage: this.resolveStageFromResponse(aiResponse),
+            unmappedFields: diagnostics.unmappedFields,
+            hiddenFieldsRemoved: diagnostics.hiddenFieldsRemoved,
+          });
+        }
+      } catch {
+        // 诊断失败不影响主流程
+      }
+
       return aiResponse;
 
     } catch (error: any) {
@@ -652,10 +671,10 @@ async continueConversation(
     }
   }
 
-/**
+  /**
    * 保存消息到历史
    */
-  private async saveMessage(conversationId: string, role: string, content: string) {
+  private async saveMessage(conversationId: string, role: string, content: string, meta?: Record<string, number> | null) {
     const conversation = await prisma.goal_conversations.findUnique({
       where: { id: conversationId }
     });
@@ -666,7 +685,8 @@ async continueConversation(
     data.messages.push({
       role,
       content: sanitizedContent,
-      time: new Date().toISOString()
+      time: new Date().toISOString(),
+      ...(meta && Object.keys(meta).length > 0 ? { meta } : {})
     });
 
     await prisma.goal_conversations.update({
@@ -784,7 +804,19 @@ async continueConversation(
 
     // 配置式值流转（P1 试点）：按 routings 表 goal-agent 交付行 + pathInRawOutput
     // 从 skill 输出抽取 goal→path 字段，与 visibleSummary 并行产出（golden 验证/后续装配切换）
-    const goalHandoffFields = await assembleGoalHandoff(aiResponse).catch(() => null);
+    const goalHandoffFields = await assembleGoalHandoff(aiResponse).catch((err) => {
+      logger.warn('[goal-conversation] assembleGoalHandoff failed, falling back to visibleSummary', {
+        conversationId: conversation.id,
+        error: (err as Error).message,
+      });
+      return null;
+    });
+    if (goalHandoffFields && goalHandoffFields.skipped.length > 0) {
+      logger.warn('[goal-conversation] goal→path handoff fields skipped (config-driven extraction)', {
+        conversationId: conversation.id,
+        skipped: goalHandoffFields.skipped,
+      });
+    }
 
     return {
       userId: conversation.userId,

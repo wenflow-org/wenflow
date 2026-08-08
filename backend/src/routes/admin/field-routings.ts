@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import systemPrisma from '../../config/system-database';
 import { logger } from '../../utils/logger';
+import { clearRoutingCache } from '../../services/field-dispatcher';
+import { clearSupplementRenderCache } from '../../services/prompt-composer';
 
 const router = Router();
 
@@ -175,6 +177,12 @@ router.get('/stages', async (_req: Request, res: Response) => {
           id: 'profile',
           displayName: '画像阶段',
           description: '学习者画像增强与背景知识沉淀（编排器内部）',
+          status: 'active',
+        },
+        {
+          id: 'simulation',
+          displayName: '仿真阶段',
+          description: '虚拟学习者实验：样本设计 → 模拟器 → 旁路审计（服务端注入输入，无阶段间 handoff）',
           status: 'active',
         },
       ],
@@ -481,6 +489,10 @@ router.post('/fields', async (req: Request, res: Response) => {
     reason: body.reason || 'admin create field',
   });
 
+  // 字段表变化会改变 supplement 渲染与 handoff 抽取结果，立即失效缓存
+  clearRoutingCache();
+  clearSupplementRenderCache();
+
   res.status(201).json({ success: true, data: { ...serializeField(created), locks: lockSummary(created, null) } });
 });
 
@@ -584,6 +596,10 @@ router.patch('/routings/:agentId/:fieldId', async (req: Request, res: Response) 
     actorRole: actor.actorRole,
     reason: body.reason || 'admin update routing',
   });
+
+  // 路由变化立即生效：失效 field-dispatcher 缓存（handoff 抽取/supplement 渲染/hard-required 清单）
+  clearRoutingCache();
+  clearSupplementRenderCache();
 
   res.json({ success: true, data: { ...serializeRouting(saved), locks: lockSummary(field, saved) } });
 });

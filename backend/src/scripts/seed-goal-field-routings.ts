@@ -85,8 +85,8 @@ export const GOAL_FIELD_ROUTING_FIELDS: SeedField[] = [
   { fieldId: 'understanding.current_baseline.evidence', pathInRawOutput: 'internal.ext.goalConversation.understanding.current_baseline.evidence', promptRole: 'soft-info', valueType: 'string', description: '当前水平的证据' },
   { fieldId: 'understanding.success_criteria.acceptance_check', pathInRawOutput: 'internal.ext.goalConversation.understanding.success_criteria.acceptance_check', promptRole: 'soft-info', valueType: 'string', description: '验收检查方法' },
   { fieldId: 'understanding.available_resources.time_per_session', pathInRawOutput: 'internal.ext.goalConversation.understanding.available_resources.time_per_session', promptRole: 'soft-info', valueType: 'string', description: '每次学习时长' },
-  { fieldId: 'understanding.constraints_and_boundaries', pathInRawOutput: 'internal.ext.goalConversation.understanding.constraints_and_boundaries', promptRole: 'soft-info', valueType: 'string', description: '约束与边界', bindings: { accumulate: true } },
-  { fieldId: 'understanding.pain_points', pathInRawOutput: 'internal.ext.goalConversation.understanding.pain_points', promptRole: 'soft-info', valueType: 'string', description: '当前痛点' },
+  { fieldId: 'understanding.constraints_and_boundaries', pathInRawOutput: 'internal.ext.goalConversation.understanding.constraints_and_boundaries', promptRole: 'soft-info', valueType: 'array<string>', description: '约束与边界', bindings: { accumulate: true } },
+  { fieldId: 'understanding.pain_points', pathInRawOutput: 'internal.ext.goalConversation.understanding.pain_points', promptRole: 'soft-info', valueType: 'array<string>', description: '当前痛点' },
   { fieldId: 'understanding.motivation', pathInRawOutput: 'internal.ext.goalConversation.understanding.motivation', promptRole: 'soft-info', valueType: 'string', description: '学习动机' },
   { fieldId: 'understanding.urgency', pathInRawOutput: 'internal.ext.goalConversation.understanding.urgency', promptRole: 'soft-info', valueType: 'string', description: '紧急程度' },
   { fieldId: 'understanding.scenario', pathInRawOutput: 'internal.ext.goalConversation.understanding.scenario', promptRole: 'soft-info', valueType: 'string', description: '学习场景' },
@@ -95,12 +95,16 @@ export const GOAL_FIELD_ROUTING_FIELDS: SeedField[] = [
   // hidden-inference
   { fieldId: 'understanding.background_experience', pathInRawOutput: 'internal.ext.goalConversation.understanding.background_experience', promptRole: 'hidden-inference', valueType: 'string', description: '背景经验推断（prompt 明确不展示给前端）' },
   { fieldId: 'understanding.learning_signal', pathInRawOutput: 'internal.ext.goalConversation.understanding.learning_signal', promptRole: 'hidden-inference', valueType: 'string', description: '学习信号（隐式推断）' },
+  { fieldId: 'understanding.cognitive_bandwidth', pathInRawOutput: 'internal.ext.goalConversation.understanding.cognitive_bandwidth', promptRole: 'hidden-inference', valueType: 'string', description: '认知带宽推断（可选 hidden，core yaml 已声明）' },
+
+  // 平台派生/旁路字段（模型可产出，登记以便 handoff 与观测）
+  { fieldId: 'structuredData', pathInRawOutput: 'internal.ext.goalConversation.structuredData', promptRole: 'soft-info', valueType: 'object', description: '结构化画像旁路字段（learner.identity/learning_context 等）' },
 
   // proposal-output
   { fieldId: 'confirmedProposal.learning_direction', pathInRawOutput: 'internal.ext.goalConversation.confirmedProposal.learning_direction', promptRole: 'proposal-output', valueType: 'string', description: '确认的学习方向' },
   { fieldId: 'confirmedProposal.first_deliverable', pathInRawOutput: 'internal.ext.goalConversation.confirmedProposal.first_deliverable', promptRole: 'proposal-output', valueType: 'string', description: '第一个交付物' },
-  { fieldId: 'confirmedProposal.key_stages', pathInRawOutput: 'internal.ext.goalConversation.confirmedProposal.key_stages', promptRole: 'proposal-output', valueType: 'string', description: '关键阶段' },
-  { fieldId: 'confirmedProposal.out_of_scope', pathInRawOutput: 'internal.ext.goalConversation.confirmedProposal.out_of_scope', promptRole: 'proposal-output', valueType: 'string', description: '不在此次学习的范围' },
+  { fieldId: 'confirmedProposal.key_stages', pathInRawOutput: 'internal.ext.goalConversation.confirmedProposal.key_stages', promptRole: 'proposal-output', valueType: 'array<string>', description: '关键阶段' },
+  { fieldId: 'confirmedProposal.out_of_scope', pathInRawOutput: 'internal.ext.goalConversation.confirmedProposal.out_of_scope', promptRole: 'proposal-output', valueType: 'array<string>', description: '不在此次学习的范围' },
 
   // public-reply（对话 UI 相关）
   { fieldId: 'userVisible', pathInRawOutput: 'userVisible', promptRole: 'public-reply', valueType: 'string', description: '给用户看的内容（适合 LLM 聊天 UI）' },
@@ -112,6 +116,7 @@ export const GOAL_FIELD_ROUTING_FIELDS: SeedField[] = [
   { fieldId: 'core.stage', pathInRawOutput: 'internal.core.stage', promptRole: 'control-signal', valueType: 'string', description: '对话阶段' },
   { fieldId: 'core.confidence', pathInRawOutput: 'internal.core.confidence', promptRole: 'control-signal', valueType: 'number', description: '收敛置信度', notes: 'internal — 仅作 UI 进度条' },
   { fieldId: 'core.isCompleted', pathInRawOutput: 'internal.core.isCompleted', promptRole: 'control-signal', valueType: 'boolean', description: '对话是否完成' },
+  { fieldId: 'confidenceScores', pathInRawOutput: 'internal.ext.goalConversation.confidenceScores', promptRole: 'control-signal', valueType: 'object', description: '分项置信度评分（每轮产出）' },
 ];
 
 // 路由：每个字段的 agent→handoff 映射
@@ -144,6 +149,9 @@ export const GOAL_FIELD_ROUTINGS: SeedRouting[] = [
   // hidden-inference: hidden, handoff to goal-agent, accumulate to learner model
   { agentId: 'skill:goal-conversation', fieldId: 'understanding.background_experience', render: 'hidden', handoff: ['goal-agent'], internal: false, accumulate: true, visibilityPreset: 'agent-internal' },
   { agentId: 'skill:goal-conversation', fieldId: 'understanding.learning_signal', render: 'hidden', handoff: ['goal-agent'], internal: false, accumulate: true, visibilityPreset: 'agent-internal' },
+  { agentId: 'skill:goal-conversation', fieldId: 'understanding.cognitive_bandwidth', render: 'hidden', handoff: ['goal-agent'], internal: false, accumulate: true, visibilityPreset: 'agent-internal' },
+  // 平台派生/旁路字段
+  { agentId: 'skill:goal-conversation', fieldId: 'structuredData', render: 'visible', handoff: ['goal-agent'], internal: false, accumulate: false, visibilityPreset: 'agent-internal' },
   // proposal-output: visible, handoff to goal-agent
   ...['confirmedProposal.learning_direction', 'confirmedProposal.first_deliverable',
      'confirmedProposal.key_stages', 'confirmedProposal.out_of_scope'].map(fieldId => ({
@@ -160,11 +168,13 @@ export const GOAL_FIELD_ROUTINGS: SeedRouting[] = [
   { agentId: 'skill:goal-conversation', fieldId: 'core.stage', render: 'visible', handoff: ['goal-agent'], internal: false, accumulate: false },
   { agentId: 'skill:goal-conversation', fieldId: 'core.confidence', render: 'visible', handoff: [], internal: true, accumulate: false, notes: 'internal — 仅作 UI 进度条' },
   { agentId: 'skill:goal-conversation', fieldId: 'core.isCompleted', render: 'visible', handoff: ['goal-agent'], internal: false, accumulate: false },
+  { agentId: 'skill:goal-conversation', fieldId: 'confidenceScores', render: 'visible', handoff: ['goal-agent'], internal: false, accumulate: false },
 
   // === goal-agent 桥接路由：接收并转交到 path ===
   // 交付行覆盖 path 实际消费的全部 goal 字段（V3 设计 §7.3；2026-08 P1 补全）
   ...['understanding.surface_goal', 'understanding.real_problem',
      'understanding.background_experience', 'understanding.learning_signal',
+     'understanding.cognitive_bandwidth',
      'understanding.constraints_and_boundaries', 'understanding.pain_points',
      'understanding.motivation', 'understanding.urgency',
      'understanding.scenario', 'understanding.deadline_text',
@@ -173,13 +183,14 @@ export const GOAL_FIELD_ROUTINGS: SeedRouting[] = [
      'understanding.available_resources.time_budget', 'understanding.available_resources.time_horizon',
      'understanding.available_resources.time_per_session',
      'confirmedProposal.learning_direction', 'confirmedProposal.first_deliverable',
-     'confirmedProposal.key_stages', 'confirmedProposal.out_of_scope'].map(fieldId => ({
+     'confirmedProposal.key_stages', 'confirmedProposal.out_of_scope',
+     'structuredData', 'confidenceScores'].map(fieldId => ({
     agentId: 'goal-agent' as const, fieldId,
-    render: (fieldId === 'understanding.background_experience' || fieldId === 'understanding.learning_signal')
+    render: (fieldId === 'understanding.background_experience' || fieldId === 'understanding.learning_signal' || fieldId === 'understanding.cognitive_bandwidth')
       ? 'hidden' as RenderValue : 'visible' as RenderValue,
     handoff: ['path'],
     internal: false, accumulate: false,
-    ...(fieldId === 'understanding.background_experience' || fieldId === 'understanding.learning_signal'
+    ...(fieldId === 'understanding.background_experience' || fieldId === 'understanding.learning_signal' || fieldId === 'understanding.cognitive_bandwidth'
       ? { visibilityPreset: 'agent-internal' as const } : {}),
     ...(fieldId === 'understanding.real_problem' ? { notes: 'path description 的最终兜底' } : {}),
   })),

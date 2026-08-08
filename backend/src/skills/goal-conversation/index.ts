@@ -374,7 +374,7 @@ function hasThinProposalPayload(payload: {
   understanding?: any;
   confirmedProposal?: any;
   structuredData?: any;
-}): boolean {
+}): { thin: boolean; missing: string[] } {
   const understanding = payload.understanding || {};
   const confirmedProposal = payload.confirmedProposal || {};
   const structuredData = payload.structuredData || {};
@@ -408,6 +408,9 @@ function hasThinProposalPayload(payload: {
     return !/^(未明确|不清楚|不知道|无|没有)$/.test(v.trim());
   };
 
+  // 缺失字段收集（排障用）：checkField 返回 false 时记录 fieldId
+  const missing: string[] = [];
+
   if (requiredFields && requiredFields.length > 0) {
     // 把 fieldId 拆到 understanding / confirmedProposal 两个根上
     const checkField = (fieldId: string): boolean => {
@@ -433,25 +436,36 @@ function hasThinProposalPayload(payload: {
     };
 
     // 特殊处理 time_budget OR time_horizon（任意其一即可，且必须非"未明确"）
-    const hasTimeAny = (() => {
-      const tb = valueAt(understanding, 'available_resources.time_budget');
-      const th = valueAt(understanding, 'available_resources.time_horizon');
-      return isUsableTime(tb) || isUsableTime(th);
-    })();
+    const tb = valueAt(understanding, 'available_resources.time_budget');
+    const th = valueAt(understanding, 'available_resources.time_horizon');
+    const hasTimeAny = isUsableTime(tb) || isUsableTime(th);
+    if (!hasTimeAny) {
+      missing.push(
+        tb || th
+          ? 'available_resources.time_budget/time_horizon(未明确)'
+          : 'available_resources.time_budget/time_horizon(缺失)'
+      );
+    }
 
-    const otherChecks = requiredFields
-      .filter(
-        (id) =>
-          id !== 'understanding.available_resources.time_budget' &&
-          id !== 'understanding.available_resources.time_horizon'
-      )
-      .map(checkField);
+    const nonTimeFields = requiredFields.filter(
+      (id) =>
+        id !== 'understanding.available_resources.time_budget' &&
+        id !== 'understanding.available_resources.time_horizon'
+    );
+    const otherChecks = nonTimeFields.map(checkField);
+
+    for (let i = 0; i < otherChecks.length; i++) {
+      if (!otherChecks[i]) {
+        const fieldId = nonTimeFields[i];
+        if (fieldId) missing.push(fieldId);
+      }
+    }
 
     const allRequiredHit = hasTimeAny && otherChecks.every(Boolean);
     // V3：阈值 = 硬必需字段数（time_budget/time_horizon 二选一算 1 个）
     // 旧硬编码兜底固定阈值 5，但 V3 routing 实际数量可能少于 5（当前 5 个 = 3 + 1）
     // 用 otherChecks.length + 1 与 allRequiredHit 含义一致；不再 max(_, 5)
-    return !allRequiredHit;
+    return { thin: !allRequiredHit, missing };
   }
 
   // 兜底：原硬编码逻辑
@@ -480,7 +494,17 @@ function hasThinProposalPayload(payload: {
     hasStructuredOutline
   ].filter(Boolean).length;
 
-  return !(hasRealProblem && (hasTimeBudget || hasTimeHorizon) && hasSuccessCriteria && hasProposalDirection && hasFirstDeliverable && hasKeyStages && hasOutOfScope) || evidenceCount < 6;
+  const thin = !(hasRealProblem && (hasTimeBudget || hasTimeHorizon) && hasSuccessCriteria && hasProposalDirection && hasFirstDeliverable && hasKeyStages && hasOutOfScope) || evidenceCount < 6;
+  if (thin) {
+    if (!hasRealProblem) missing.push('real_problem');
+    if (!hasTimeBudget && !hasTimeHorizon) missing.push('available_resources.time_budget/time_horizon');
+    if (!hasSuccessCriteria) missing.push('success_criteria.observable_result');
+    if (!hasProposalDirection) missing.push('confirmedProposal.learning_direction');
+    if (!hasFirstDeliverable) missing.push('confirmedProposal.first_deliverable');
+    if (!hasKeyStages) missing.push('confirmedProposal.key_stages');
+    if (!hasOutOfScope) missing.push('confirmedProposal.out_of_scope');
+  }
+  return { thin, missing };
 }
 
 // V3 §10 P1.7: 模块级缓存——hard-required 字段清单
@@ -508,9 +532,8 @@ async function refreshHardRequiredCache(): Promise<void> {
     const ids = rows
       .filter((r) => r.promptRole === 'hard-required')
       .map((r) => r.fieldId);
-    if (ids.length > 0) {
-      _hardRequiredCache = ids;
-    }
+    // 允许清空：admin 移除全部 hard-required 后缓存必须同步更新（旧守卫会永久保留旧清单）
+    _hardRequiredCache = ids;
   } catch (err) {
     logger.debug('[skill:goal-conversation] refresh hard-required cache failed', {
       error: (err as Error).message,
@@ -628,9 +651,14 @@ function parseGoalConversationResponse(
   stage = stageControl.stage;
   confidence = stageControl.confidence;
 
-  if (stage === 'proposing' && hasThinProposalPayload({ understanding, confirmedProposal, structuredData })) {
+  const thinCheck = hasThinProposalPayload({ understanding, confirmedProposal, structuredData });
+  if (stage === 'proposing' && thinCheck.thin) {
     stage = 'understanding';
     confidence = Math.min(confidence, 0.78);
+    // 压回可观测性：记录缺失的 hard-required 字段（路由表驱动），便于排障
+    logger.warn('[skill:goal-conversation] proposing → understanding 压回（硬必需字段不齐）', {
+      missing: thinCheck.missing,
+    });
   }
 
   understanding = sanitizeUnderstanding(understanding);

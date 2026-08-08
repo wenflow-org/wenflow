@@ -27,18 +27,20 @@
 | `understanding.current_baseline.evidence` | string | goal-agent |
 | `understanding.success_criteria.acceptance_check` | string | goal-agent |
 | `understanding.available_resources.time_per_session` | string | goal-agent |
-| `understanding.constraints_and_boundaries` | string | goal-agent |
-| `understanding.pain_points` | string | goal-agent |
+| `understanding.constraints_and_boundaries` | array<string> | goal-agent |
+| `understanding.pain_points` | array<string> | goal-agent |
 | `understanding.motivation` | string | goal-agent |
 | `understanding.urgency` | string | goal-agent |
 | `understanding.scenario` | string | goal-agent |
 | `understanding.deadline_text` | string | goal-agent |
 | `understanding.background_experience` | string | goal-agent |
 | `understanding.learning_signal` | string | goal-agent |
+| `understanding.cognitive_bandwidth` | string | goal-agent |
+| `structuredData` | object? | goal-agent |
 | `confirmedProposal.learning_direction` | string | goal-agent |
 | `confirmedProposal.first_deliverable` | string | goal-agent |
-| `confirmedProposal.key_stages` | string | goal-agent |
-| `confirmedProposal.out_of_scope` | string | goal-agent |
+| `confirmedProposal.key_stages` | array<string> | goal-agent |
+| `confirmedProposal.out_of_scope` | array<string> | goal-agent |
 | `userVisible` | string | — |
 | `goalConversation.nextQuestions` | array<string> | — |
 | `goalConversation.quickReplies` | array<string> | — |
@@ -46,6 +48,7 @@
 | `core.stage` | string | goal-agent |
 | `core.confidence` | number | — |
 | `core.isCompleted` | boolean | goal-agent |
+| `confidenceScores` | object | goal-agent |
 
 ### 合法沙盘键（sandbox: 对账注册表）
 
@@ -55,14 +58,17 @@ sandbox:goal-agent.collectedData.history
 sandbox:goal-agent.collectedData.latestMessage
 sandbox:goal-agent.collectedData.state
 sandbox:goal-agent.collectedData.understanding
+sandbox:goal-agent.confidenceScores
 sandbox:goal-agent.confirmedProposal.first_deliverable
 sandbox:goal-agent.confirmedProposal.key_stages
 sandbox:goal-agent.confirmedProposal.learning_direction
 sandbox:goal-agent.confirmedProposal.out_of_scope
+sandbox:goal-agent.structuredData
 sandbox:goal-agent.understanding.available_resources.time_budget
 sandbox:goal-agent.understanding.available_resources.time_horizon
 sandbox:goal-agent.understanding.available_resources.time_per_session
 sandbox:goal-agent.understanding.background_experience
+sandbox:goal-agent.understanding.cognitive_bandwidth
 sandbox:goal-agent.understanding.constraints_and_boundaries
 sandbox:goal-agent.understanding.current_baseline.evidence
 sandbox:goal-agent.understanding.current_baseline.level
@@ -252,6 +258,7 @@ sandbox:teaching-agent.learner.learnerProjection
 sandbox:teaching-agent.learningState
 sandbox:teaching-agent.pedagogy.strategies
 sandbox:teaching-agent.scenario
+sandbox:teaching-agent.scenario.interactionProfile
 sandbox:teaching-agent.session.evidence
 sandbox:teaching-agent.session.info
 sandbox:teaching-agent.session.knowledgeState

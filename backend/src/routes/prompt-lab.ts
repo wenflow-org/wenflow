@@ -810,6 +810,9 @@ router.put('/core/:skillId', async (req, res) => {
       classification = classifyCoreEdit(activeSnapshot.core, parsed.core);
     }
 
+    // 先对账再写盘：inputs 声明 ↔ handoff 路由表（advisory；基于待保存内容而非旧文件）
+    const inputWarnings = await checkInputHandoffs(parsed.core);
+
     // 备份后写入
     try {
       const backupsDir = path.join(BACKUPS_DIR, skillId, 'core');
@@ -826,8 +829,8 @@ router.put('/core/:skillId', async (req, res) => {
       skillId,
       coreHash: computeCoreHash(parsed.core),
       classification,
-      // inputs 声明 ↔ handoff 对账（advisory 告警）
-      inputWarnings: await checkInputHandoffs(parsed.core),
+      // inputs 声明 ↔ handoff 对账（advisory 告警，写盘前计算）
+      inputWarnings,
       status: 'pending-compile',
     });
   } catch (error) {

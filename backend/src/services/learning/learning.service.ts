@@ -2815,13 +2815,21 @@ class LearningService {
         });
         const previousMilestone = stageIndex > 0 ? learningPath.milestones[stageIndex - 1] : null;
         // 配置式跨轮上下文（第三条链）：routings 表 path-agent 注入行抽值优先，回退手拼
-        const { channels: designerChannels } = await assembleStageDesignerChannels({
-          previousMilestone: previousMilestone ? {
-            stageNumber: previousMilestone.stageNumber,
-            title: previousMilestone.title,
-            coreConcept: previousMilestone.coreConceptId || null,
-          } : null,
-        }).catch(() => ({ channels: {}, skipped: [] }));
+        const { channels: designerChannels, skipped: designerSkipped } =
+          await assembleStageDesignerChannels({
+            previousMilestone: previousMilestone ? {
+              stageNumber: previousMilestone.stageNumber,
+              title: previousMilestone.title,
+              coreConcept: previousMilestone.coreConceptId || null,
+            } : null,
+          }).catch(() => ({ channels: {}, skipped: [] }));
+        if (designerSkipped.length > 0) {
+          logger.warn('[path-generation] stage-designer channels skipped (config-driven extraction)', {
+            runId,
+            milestoneId: milestone.id,
+            skipped: designerSkipped,
+          });
+        }
         const stageDesignerInput = {
           milestone: {
             stageNumber: milestone.stageNumber,

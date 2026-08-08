@@ -7,6 +7,7 @@
 
 import systemPrisma from '../../config/system-database';
 import { responseCache } from './response-cache.service';
+import { agentConfigService } from '../agentConfig.service';
 import { logger } from '../../utils/logger';
 
 /**
@@ -153,6 +154,8 @@ export class PromptCacheService {
    * @returns 清除的数量
    */
   clearAgentCache(agentId: string): number {
+    // 联动失效 AgentConfigService 的运行时 ACTIVE prompt 缓存（发布/回滚/删除统一入口）
+    agentConfigService.clearCachedPrompt(agentId);
     const prefix = `${this.PROMPT_PREFIX}${agentId}:`;
     return this.clearByPrefix(prefix);
   }
