@@ -9,7 +9,7 @@ export interface TeachingSession {
   startTime: string;
   welcomeMessage: string;
   knowledgePoints?: KnowledgePointStatus[];
-  mode?: 'new' | 'resumed';
+  mode?: 'new' | 'resumed' | 'review';
   revision: number;
   opening?: {
     message: string;
@@ -62,6 +62,8 @@ export interface MessageResult {
     confusionPoints: string[];
     engagement: string;
     emotionalState: string;
+    loadIndex?: number;
+    loadBasis?: string;
   };
   state: {
     lss: number;
@@ -327,8 +329,24 @@ const finalizationStepCompleted = (result: FinalizationResult, action: FinalizeA
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
 
 export const aiTeachingAPI = {
-  async startSession(taskId: string): Promise<TeachingSession> {
-    const result = await api.post(`/ai-teaching/tasks/${taskId}/session`, {}, { timeout: AI_REQUEST_TIMEOUT });
+  async startSession(taskId: string, mode?: 'tutor' | 'review'): Promise<TeachingSession> {
+    const result = await api.post(
+      `/ai-teaching/tasks/${taskId}/session`,
+      mode ? { mode } : {},
+      { timeout: AI_REQUEST_TIMEOUT }
+    );
+    return result.data || result;
+  },
+
+  /** 到期复习清单（复习闭环） */
+  async getReviewDue(): Promise<Array<{ conceptKey: string; label: string; retention: number; reason: string; estimatedMinutes: number }>> {
+    const result = await api.get('/ai-teaching/review/due');
+    return result.data?.items || [];
+  },
+
+  /** 开始复习课（mode=review，knowledgeState 注入到期复习点） */
+  async startReviewSession(taskId: string): Promise<TeachingSession> {
+    const result = await api.post('/ai-teaching/review/sessions', { taskId }, { timeout: AI_REQUEST_TIMEOUT });
     return result.data || result;
   },
 

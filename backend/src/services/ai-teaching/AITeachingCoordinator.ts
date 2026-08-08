@@ -66,6 +66,8 @@ export interface CheckpointSubmitResult {
 export interface TeachingSessionStartInput {
   userId: string;
   taskId: string;
+  /** 会话模式：tutor（默认教学）/ review（复习课，knowledgeState 注入到期复习点） */
+  mode?: 'tutor' | 'review';
 }
 
 export interface TeachingOpening {
@@ -951,6 +953,27 @@ export class AITeachingOrchestrator {
   }> {
     const context = await buildTeachingScenarioContext(input.userId, input.taskId, null);
     const seededKnowledgeState = cloneKnowledgePoints(context.taskKnowledgeSeeds);
+    // 复习课模式：knowledgeState 种子 = 任务种子 + 到期复习点（全部注入，非 limit 2）
+    if (input.mode === 'review') {
+      try {
+        const dueTraces = await learnerExitService.getDueReview(input.userId, 20);
+        const existingKeys = new Set(seededKnowledgeState.map((point) => point.name));
+        for (const trace of dueTraces) {
+          if (existingKeys.has(trace.conceptKey)) continue;
+          seededKnowledgeState.push({
+            name: trace.conceptKey,
+            status: 'review',
+            progress: Math.round(trace.retention * 100),
+          });
+          existingKeys.add(trace.conceptKey);
+        }
+      } catch (error) {
+        logger.warn('[AITeaching] 复习课到期点注入失败，使用任务种子', {
+          userId: input.userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     // 记忆引擎 M2：经 learn agent 出口惰性检查到期复习点，作为 review 状态注入本节课知识看板
     // （旧知唤醒，best-effort：查询失败不阻断开课；出口=LearnerExitService.getDueReview）
     try {
@@ -989,7 +1012,7 @@ export class AITeachingOrchestrator {
       subject: context.subject,
       topic: context.topic,
       taskType: context.taskType,
-      mode: 'tutor',
+      mode: input.mode || 'tutor',
       messages: [],
       knowledgeState: seededKnowledgeState,
       teachingState: null,

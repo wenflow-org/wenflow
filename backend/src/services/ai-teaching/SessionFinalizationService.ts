@@ -13,6 +13,7 @@ import {
 } from './TeachingSessionRepository';
 import { logger } from '../../utils/logger';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
+import { memoryTraceService } from '../memory/memory-trace.service';
 
 export interface FinalizeSessionInput {
   sessionId: string;
@@ -64,10 +65,30 @@ export class SessionFinalizationService {
     const requestIdentity = finalizationRequestIdentity(input);
 
     if (input.action === 'complete_review') {
-      const error = new Error('当前版本尚未开放复习完成操作');
-      (error as any).code = 'FINALIZATION_ACTION_UNSUPPORTED';
-      (error as any).status = 409;
-      throw error;
+      // 复习课完成：走标准收束（wrapup + lesson:completed），随后把看板中已推进
+      // （非 review/pending）的复习点回写记忆引擎（复习即提取，extractionCount+1、lastSeenAt 刷新）
+      const result = await aiTeachingCoordinator.endSession(
+        input.sessionId,
+        input.endReason || 'review-completed',
+        input.revision,
+        operationId,
+        requestIdentity.requestHash,
+        requestIdentity.requestJson
+      );
+      if (result.status === 'processing') {
+        return {
+          operationId: result.operationId,
+          status: 'processing' as const,
+          pollAfterMs: 1500,
+          revision: result.revision
+        };
+      }
+      const completedSession = await teachingSessionRepository.assertOwnership(input.sessionId, input.userId);
+      await this.applyReviewExtraction(completedSession);
+      return this.completedResponse(completedSession, result.operationId, {
+        status: 'skipped',
+        alreadyCompleted: false
+      });
     }
 
     if (input.action === 'end_only') {
@@ -243,6 +264,50 @@ export class SessionFinalizationService {
       projectionStatus: 'pending' as const,
       finalization: finalizationState(session)
     };
+  }
+
+  /**
+   * 复习课完成回写：看板中已推进（非 review/pending）的复习点 → 记忆引擎 recordExtraction
+   * （复习即提取：extractionCount+1、lastSeenAt 刷新；best-effort，失败不阻断收束）
+   */
+  private async applyReviewExtraction(session: TeachingSessionRecord): Promise<void> {
+    try {
+      const points = Array.isArray(session.knowledgeState)
+        ? session.knowledgeState
+        : (() => {
+            try {
+              const parsed = typeof session.knowledgeState === 'string' ? JSON.parse(session.knowledgeState) : session.knowledgeState;
+              return Array.isArray(parsed) ? parsed : [];
+            } catch {
+              return [];
+            }
+          })();
+      const progressed = points.filter(
+        (p: any) => p && typeof p.name === 'string' && p.status && p.status !== 'review' && p.status !== 'pending'
+      );
+      if (progressed.length === 0) return;
+      for (const p of progressed) {
+        const mastery = p.status === 'mastered' ? (Number(p.progress) >= 100 ? 0.9 : 0.85) : 0.5;
+        await memoryTraceService.recordExtraction({
+          userId: session.userId,
+          conceptKey: p.name,
+          label: p.name,
+          masteryScore: mastery,
+          stability: p.status === 'mastered' ? 'stable' : 'fragile',
+          source: 'derived',
+        });
+      }
+      logger.info('[SessionFinalization] 复习完成回写记忆引擎', {
+        sessionId: session.id,
+        userId: session.userId,
+        extractionCount: progressed.length,
+      });
+    } catch (error) {
+      logger.warn('[SessionFinalization] 复习回写失败（不影响收束）', {
+        sessionId: session.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }
 

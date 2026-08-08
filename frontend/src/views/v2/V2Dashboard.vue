@@ -86,7 +86,6 @@
             </template>
           </section>
 
-          <!-- 需要处理：修复卡 -->
           <section v-else-if="pageState === 'attention'" class="card action action--alert">
             <div class="action__eyebrow action__eyebrow--alert">
               <span>需要先处理</span>
@@ -165,6 +164,26 @@
             </div>
           </aside>
         </div>
+
+        <!-- 今日复习（到期旧知唤醒，复习闭环） -->
+        <section v-if="reviewDue.length" class="card review dash__review">
+          <div class="review__head">
+            <span class="review__eyebrow">今日复习 · {{ reviewDue.length }} 个知识点到期</span>
+            <span class="review__sub">间隔复习对抗遗忘（ACT-R）</span>
+          </div>
+          <ul class="review__list">
+            <li v-for="item in reviewDue.slice(0, 5)" :key="item.conceptKey" class="review__item">
+              <span class="review__name">{{ item.label }}</span>
+              <span class="review__bar"><i :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
+              <span class="review__pct">{{ Math.round(item.retention * 100) }}%</span>
+              <span class="review__minutes">约 {{ item.estimatedMinutes }} 分钟</span>
+            </li>
+          </ul>
+          <div class="review__footer">
+            <router-link v-if="todayTask?.id" :to="`/learn/${todayTask.id}?mode=review`" class="btn-primary review__go">开始复习</router-link>
+            <span class="review__hint">复习课会优先回捞这些到期知识点</span>
+          </div>
+        </section>
 
         <!-- 本周节奏 + 激励区 -->
         <div class="dash__grid-week">
@@ -426,20 +445,26 @@ const dateText = computed(() => {
 const examples = ['用 Python 自动化处理 Excel 报表', '提升职场沟通和表达能力', '用 AI 工具做自媒体副业'];
 
 /* ================= 数据加载 ================= */
+const reviewDue = ref<Array<{ conceptKey: string; label: string; retention: number; reason: string; estimatedMinutes: number }>>([]);
 async function loadAll() {
   loading.value = true;
-  const [statsR, pathsR, guidanceR, sessionsR, achR] = await Promise.allSettled([
+  const [statsR, pathsR, guidanceR, sessionsR, achR, dueR] = await Promise.allSettled([
     learningAPI.getStats(),
     learningAPI.getPaths(),
     learningAPI.getAdaptiveGuidance(),
     fetchSessions(monthCursor.value),
-    request.get('/achievements/all')
+    request.get('/achievements/all'),
+    request.get('/ai-teaching/review/due')
   ]);
   if (statsR.status === 'fulfilled') stats.value = statsR.value as Record<string, any>;
   if (pathsR.status === 'fulfilled') paths.value = pathsR.value as unknown as Array<Record<string, any>>;
   if (guidanceR.status === 'fulfilled') guidance.value = guidanceR.value as Record<string, any> | null;
   if (sessionsR.status === 'fulfilled') sessions.value = sessionsR.value;
   if (achR.status === 'fulfilled') achievements.value = unwrapArray(achR.value);
+  if (dueR.status === 'fulfilled') {
+    const body = dueR.value?.data ?? dueR.value ?? {};
+    reviewDue.value = Array.isArray(body.items) ? body.items : [];
+  }
   loading.value = false;
 }
 
@@ -1064,9 +1089,25 @@ onMounted(loadAll);
 .link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; }
 .link-muted:hover { color: var(--blue-deep); }
 
+/* ---------- 今日复习（复习闭环） ---------- */
+.dash__review { margin-bottom: 16px; }
+.review { padding: 16px 18px; }
+.review__head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.review__eyebrow { font-size: 14px; font-weight: 700; }
+.review__sub { font-size: 12px; color: var(--faint); }
+.review__list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
+.review__item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.review__name { min-width: 140px; font-weight: 600; }
+.review__bar { flex: 1; height: 6px; border-radius: 3px; background: #eef0f4; overflow: hidden; }
+.review__bar i { display: block; height: 100%; border-radius: 3px; background: var(--blue, #3b82f6); }
+.review__pct { width: 42px; text-align: right; color: var(--faint); font-size: 12px; }
+.review__minutes { width: 90px; text-align: right; color: var(--faint); font-size: 12px; }
+.review__footer { display: flex; align-items: center; gap: 12px; }
+.review__go { padding: 6px 16px; border-radius: 8px; }
+.review__hint { font-size: 12px; color: var(--faint); }
+
 /* ---------- 主区 ---------- */
-.dash__grid-main {
-  display: grid;
+.dash__grid-main {  display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;

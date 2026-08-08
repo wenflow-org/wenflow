@@ -239,6 +239,7 @@ import { unwrap } from './unwrap';
 const route = useRoute();
 const router = useRouter();
 const taskId = String(route.params.taskId || '');
+const isReviewMode = computed(() => route.query.mode === 'review');
 const interactionMeta = useInteractionMeta();
 
 /* ---------- 基础 ---------- */
@@ -362,7 +363,9 @@ async function boot() {
       pathId.value = task?.learningPathId || task?.pathId || task?.learningPath?.id || '';
     } catch { /* 任务信息拿不到也能上课 */ }
 
-    const s = await aiTeachingAPI.startSession(taskId) as unknown as Record<string, any>;
+    const s = (isReviewMode.value
+      ? await aiTeachingAPI.startReviewSession(taskId)
+      : await aiTeachingAPI.startSession(taskId)) as unknown as Record<string, any>;
     session.value = { sessionId: s.sessionId, revision: s.revision ?? 0 };
     const openingText = s.opening?.message || s.welcomeMessage;
     if (openingText) msgs.value.push({ role: 'ai', text: openingText, time: nowTime() });
@@ -488,7 +491,7 @@ async function doSend(text: string) {
       answerText.value = '';
     }
     if (r.isCompletion) {
-      await finish('complete_task');
+      await finish(isReviewMode.value ? 'complete_review' : 'complete_task');
     }
   } catch {
     // 流式气泡可能已有部分内容：移除后展示统一失败气泡
@@ -550,13 +553,13 @@ function skipCheckpoint() {
 }
 
 /* ---------- 结束 ---------- */
-async function finish(action: 'complete_task' | 'end_only') {
+async function finish(action: 'complete_task' | 'end_only' | 'complete_review') {
   if (!session.value || completed.value) return;
   try {
     const r = await aiTeachingAPI.finalizeSessionReliably(session.value.sessionId, {
       action,
       revision: session.value.revision,
-      reason: action === 'complete_task' ? 'task-completed' : 'manual-end'
+      reason: action === 'complete_task' ? 'task-completed' : action === 'complete_review' ? 'manual-end' : 'manual-end'
     }) as unknown as Record<string, any>;
     completed.value = true;
     const wrapup = r.wrapup;

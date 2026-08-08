@@ -20,10 +20,76 @@ import {
   teachingSessionRepository
 } from '../services/ai-teaching/TeachingSessionRepository';
 import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
+import { learnerExitService } from '../services/learner/LearnerExitService';
 import { PromptStreamEvent, setRequestContext, getRequestContext } from '../gateway/api-gateway/context';
 import type { InteractionMetaRecord } from '../services/ai-teaching/TeachingContextBuilder';
 
 const router = Router();
+
+/**
+ * 到期复习清单（复习闭环 · learn agent 出口）
+ * GET /api/ai-teaching/review/due
+ */
+router.get('/review/due', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: '未登录' });
+    }
+    const due = await learnerExitService.getDueReview(userId, 20);
+    res.json({
+      success: true,
+      data: {
+        items: due.map((item) => ({
+          conceptKey: item.conceptKey,
+          label: item.label || item.conceptKey,
+          retention: item.retention,
+          reason: item.reason,
+          masteryScore: item.masteryScore,
+          estimatedMinutes: Math.max(5, Math.round(item.retention * 20)),
+        })),
+      },
+    });
+  } catch (error: any) {
+    logger.error('[review] 到期复习清单获取失败:', error);
+    res.status(500).json({ success: false, error: error?.message || '获取复习清单失败' });
+  }
+});
+
+/**
+ * 开始复习课（复习闭环 · mode=review 会话，knowledgeState 注入到期复习点）
+ * POST /api/ai-teaching/review/sessions  body: { taskId }
+ */
+router.post('/review/sessions', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: '未登录' });
+    }
+    const taskId = req.body?.taskId;
+    if (!taskId || typeof taskId !== 'string') {
+      return res.status(400).json({ success: false, error: '缺少 taskId' });
+    }
+    await learningService.assertTaskReadyForLearning(taskId, userId);
+    const session = await aiTeachingCoordinator.startSession({ userId, taskId, mode: 'review' });
+    res.json({
+      success: true,
+      data: {
+        sessionId: session.sessionId,
+        subject: session.subject,
+        topic: session.topic,
+        startTime: session.startTime,
+        welcomeMessage: session.welcomeMessage,
+        opening: session.opening,
+        mode: session.mode,
+        revision: session.revision,
+      },
+    });
+  } catch (error: any) {
+    logger.error('[review] 复习课创建失败:', error);
+    return sendTeachingError(res, error, '创建复习课失败');
+  }
+});
 
 const parseExpectedRevision = (value: unknown): number | undefined => {
   return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
