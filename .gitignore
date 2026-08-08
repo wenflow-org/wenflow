@@ -218,3 +218,5 @@ doc/archive/
 # Playwright MCP 会话临时文件
 .playwright-mcp/
 page-*.md
+
+*.db-journal
