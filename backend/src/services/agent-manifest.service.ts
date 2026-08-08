@@ -175,7 +175,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Path',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.4, maxTokens: 32000 }
+    defaultModelConfig: { temperature: 0.2, maxTokens: 32000 }
   },
   {
     id: 'skill:stage-designer',
@@ -187,7 +187,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Path',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.4, maxTokens: 4000 }
+    defaultModelConfig: { temperature: 0.3, maxTokens: 32000 }
   },
 
   // ============ Learning 下辖 Skills ============
@@ -202,7 +202,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     monitoringGroup: 'Teaching',
     aliases: ['teaching-turn-agent'],
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.5, maxTokens: 2200 }
+    defaultModelConfig: { temperature: 0.7, maxTokens: 4000 }
   },
   {
     id: 'skill:peer-reinforcement',
@@ -215,7 +215,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     monitoringGroup: 'Teaching',
     aliases: ['peer-agent'],
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.8, maxTokens: 1000 }
+    defaultModelConfig: { temperature: 0.7, maxTokens: 4000 }
   },
   {
     id: 'skill:session-wrapup',
@@ -228,7 +228,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     monitoringGroup: 'Teaching',
     aliases: ['session-wrapup-agent'],
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.2, maxTokens: 2200 }
+    defaultModelConfig: { temperature: 0.7, maxTokens: 4000 }
   },
   {
     id: 'skill:teaching-strategy-selector',
@@ -306,7 +306,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.8, maxTokens: 1500 }
+    defaultModelConfig: { temperature: 0.8, maxTokens: 8000 }
   },
   {
     id: 'skill:virtual-learner-scenario-designer',
@@ -318,7 +318,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.7, maxTokens: 1500 }
+    defaultModelConfig: { temperature: 0.9, maxTokens: 8000 }
   },
   {
     id: 'skill:virtual-learner-goal-dialogue-simulator',
@@ -330,7 +330,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.8, maxTokens: 1200 }
+    defaultModelConfig: { temperature: 0.8, maxTokens: 8000 }
   },
   {
     id: 'skill:virtual-learner-path-evaluator',
@@ -342,7 +342,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.6, maxTokens: 1500 }
+    defaultModelConfig: { temperature: 0.8, maxTokens: 8000 }
   },
   {
     id: 'skill:virtual-learner-learn-turn-simulator',
@@ -354,7 +354,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.8, maxTokens: 1200 }
+    defaultModelConfig: { temperature: 0.8, maxTokens: 8000 }
   },
   {
     id: 'skill:virtual-learner-referee',
@@ -378,7 +378,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.2, maxTokens: 5000 }
+    defaultModelConfig: { temperature: 0.2, maxTokens: 2400 }
   },
   // ============ Tool Skills（工具类，无 LLM prompt） ============
   {

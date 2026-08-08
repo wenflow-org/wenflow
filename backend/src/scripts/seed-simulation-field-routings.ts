@@ -15,6 +15,7 @@
 
 import { randomUUID } from 'crypto';
 import type { PrismaClient } from '../generated/system-client';
+import { deriveContract } from './seed-contract-helper';
 
 type PromptRole =
   | 'hard-required' | 'soft-info' | 'hidden-inference'
@@ -57,46 +58,14 @@ interface SeedRouting {
 const STAGE = 'simulation';
 
 export const SIMULATION_FIELD_ROUTING_CONTRACTS: SeedContract[] = [
-  {
-    agentId: 'skill:virtual-learner-persona-designer',
-    displayName: '虚拟学习者人格设计 Skill',
-    description: '为虚拟学习者生成稳定人格设定',
-  },
-  {
-    agentId: 'skill:virtual-learner-scenario-designer',
-    displayName: '虚拟学习者场景设计 Skill',
-    description: '基于稳定 persona 生成故事场景与一致性校验说明',
-  },
-  {
-    agentId: 'skill:virtual-learner-goal-dialogue-simulator',
-    displayName: '虚拟学习者 Goal 对话模拟器 Skill',
-    description: '模拟虚拟学习者在 Goal 阶段的自然回应与方案取向',
-  },
-  {
-    agentId: 'skill:virtual-learner-path-evaluator',
-    displayName: '虚拟学习者 Path 评估器 Skill',
-    description: '从学习者视角评估路径与 replan 方案，输出 accept/modify/reject 反应',
-  },
-  {
-    agentId: 'skill:virtual-learner-learn-turn-simulator',
-    displayName: '虚拟学习者 Learn 回合模拟器 Skill',
-    description: '模拟虚拟学习者在 Learn 阶段的短回应、情绪与主观状态',
-  },
-  {
-    agentId: 'skill:virtual-learner-referee',
-    displayName: '虚拟学习者实验裁判 Skill',
-    description: '基于公开轨迹、旁路诊断和控制回执生成独立实验裁判报告',
-  },
-  {
-    agentId: 'skill:virtual-learner-actor-auditor',
-    displayName: '虚拟学习者角色保真审计 Skill',
-    description: '基于画像、故事、摩擦预算、私有状态和公开行为评估合成学习者可信度',
-  },
-  {
-    agentId: 'simulation-agent',
-    displayName: '仿真 Agent',
-    description: '仿真编排层：blackbox-runner 与 simulation 协调器注入输入、组装输出（无阶段间 handoff）',
-  },
+  deriveContract('skill:virtual-learner-persona-designer'),
+  deriveContract('skill:virtual-learner-scenario-designer'),
+  deriveContract('skill:virtual-learner-goal-dialogue-simulator'),
+  deriveContract('skill:virtual-learner-path-evaluator'),
+  deriveContract('skill:virtual-learner-learn-turn-simulator'),
+  deriveContract('skill:virtual-learner-referee'),
+  deriveContract('skill:virtual-learner-actor-auditor'),
+  deriveContract('simulation-agent'),
 ];
 
 export const SIMULATION_FIELD_ROUTING_FIELDS: SeedField[] = [

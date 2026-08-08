@@ -14,6 +14,7 @@
 
 import { randomUUID } from 'crypto';
 import type { PrismaClient } from '../generated/system-client';
+import { deriveContract } from './seed-contract-helper';
 
 type PromptRole = 'hard-required' | 'soft-info' | 'hidden-inference' | 'public-reply' | 'proposal-output' | 'derived-presentation' | 'control-signal';
 type RenderValue = 'visible' | 'hidden';
@@ -25,9 +26,9 @@ interface SeedRouting { agentId: string; fieldId: string; render: RenderValue; h
 const STAGE = 'path';
 
 export const PATH_FIELD_ROUTING_CONTRACTS: SeedContract[] = [
-  { agentId: 'skill:path-planning', displayName: '路径规划 Skill', description: '认知图景 + 学习路径的 milestone 骨架' },
-  { agentId: 'skill:stage-designer', displayName: '阶段设计 Skill', description: 'milestone → subtasks 的任务展开' },
-  { agentId: 'path-agent', displayName: '路径 Agent', description: '路径阶段聚合编排（含 normalizedInput 确定性定帧），handoff 到 execution 阶段' },
+  deriveContract('skill:path-planning'),
+  deriveContract('skill:stage-designer'),
+  deriveContract('path-agent'),
 ];
 
 export const PATH_FIELD_ROUTING_FIELDS: SeedField[] = [

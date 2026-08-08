@@ -13,6 +13,7 @@
 
 import { randomUUID } from 'crypto';
 import type { PrismaClient } from '../generated/system-client';
+import { deriveContract } from './seed-contract-helper';
 
 type PromptRole = 'hard-required' | 'soft-info' | 'hidden-inference' | 'public-reply' | 'proposal-output' | 'derived-presentation' | 'control-signal';
 type RenderValue = 'visible' | 'hidden';
@@ -24,11 +25,11 @@ interface SeedRouting { agentId: string; fieldId: string; render: RenderValue; h
 const STAGE = 'teaching';
 
 export const TEACHING_FIELD_ROUTING_CONTRACTS: SeedContract[] = [
-  { agentId: 'skill:teaching-turn', displayName: '教学回合 Skill', description: '生成单轮教学回复，输出 reply + analysis + knowledge + control' },
-  { agentId: 'skill:peer-reinforcement', displayName: '伴学补强 Skill', description: '同伴式引导讨论与理解补强' },
-  { agentId: 'skill:session-wrapup', displayName: '课后产出 Skill', description: '生成课后总结、评估、知识点结晶' },
-  { agentId: 'skill:adaptive-guidance-copy', displayName: '自适应引导文案 Skill', description: '根据情境生成自适应引导话术' },
-  { agentId: 'teaching-agent', displayName: '教学 Agent', description: '教学阶段聚合编排，handoff 到 profile 累积画像' },
+  deriveContract('skill:teaching-turn'),
+  deriveContract('skill:peer-reinforcement'),
+  deriveContract('skill:session-wrapup'),
+  deriveContract('skill:adaptive-guidance-copy'),
+  deriveContract('teaching-agent'),
 ];
 
 export const TEACHING_FIELD_ROUTING_FIELDS: SeedField[] = [

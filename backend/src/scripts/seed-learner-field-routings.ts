@@ -18,6 +18,7 @@
 
 import { randomUUID } from 'crypto';
 import type { PrismaClient } from '../generated/system-client';
+import { deriveContract } from './seed-contract-helper';
 
 type PromptRole = 'hard-required' | 'soft-info' | 'hidden-inference' | 'public-reply' | 'proposal-output' | 'derived-presentation' | 'control-signal';
 type RenderValue = 'visible' | 'hidden';
@@ -29,9 +30,9 @@ interface SeedRouting { agentId: string; fieldId: string; render: RenderValue; h
 const STAGE = 'profile';
 
 export const PROFILE_FIELD_ROUTING_CONTRACTS: SeedContract[] = [
-  { agentId: 'skill:lesson-knowledge-enricher', displayName: '会话知识蒸馏 Skill', description: '从教学会话蒸馏 conceptLedger / 基础概念（承接已退役的 session-knowledge-distiller 与 dialogue-concept-extractor）' },
-  { agentId: 'skill:learner-model', displayName: '学习者聚合 Skill', description: '画像聚合（确定性）：叙述/控制/动态态/知识记忆 → snapshot/projection' },
-  { agentId: 'profile-agent', displayName: '学习者 Agent', description: '学习者画像编排，聚合所有 distiller 输出并刷新 snapshot / projection' },
+  deriveContract('skill:lesson-knowledge-enricher'),
+  deriveContract('skill:learner-model'),
+  deriveContract('profile-agent'),
 ];
 
 export const PROFILE_FIELD_ROUTING_FIELDS: SeedField[] = [

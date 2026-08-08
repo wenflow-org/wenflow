@@ -16,6 +16,7 @@
 
 import { randomUUID } from 'crypto';
 import type { PrismaClient } from '../generated/system-client';
+import { deriveContract } from './seed-contract-helper';
 
 type PromptRole =
   | 'hard-required' | 'soft-info' | 'hidden-inference'
@@ -58,16 +59,8 @@ interface SeedRouting {
 const STAGE = 'goal';
 
 export const GOAL_FIELD_ROUTING_CONTRACTS: SeedContract[] = [
-  {
-    agentId: 'skill:goal-conversation',
-    displayName: '目标对话 Skill',
-    description: '与用户多轮对话，收集学习目标与上下文信号',
-  },
-  {
-    agentId: 'goal-agent',
-    displayName: '目标 Agent',
-    description: 'Goal 阶段汇总编排，将字段 handoff 到 Path 阶段',
-  },
+  deriveContract('skill:goal-conversation'),
+  deriveContract('goal-agent'),
 ];
 
 // 字段定义 = prompt 输出规格 + 人工补充的桥接字段
