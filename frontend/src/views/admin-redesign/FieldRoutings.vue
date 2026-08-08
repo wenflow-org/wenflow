@@ -6,6 +6,38 @@
     </div>
 
     <details class="frc__sandbox">
+      <summary class="frc__sandbox-summary">新建字段（仅 soft-info / hidden-inference / derived-presentation 可建）</summary>
+      <div class="frc__newfield">
+        <input v-model="newField.fieldId" class="frc__input mono" placeholder="fieldId（如 myField）" />
+        <input v-model="newField.valueType" class="frc__input mono" placeholder="valueType（如 string）" />
+        <select v-model="newField.promptRole" class="frc__input">
+          <option value="soft-info">soft-info</option>
+          <option value="hidden-inference">hidden-inference</option>
+          <option value="derived-presentation">derived-presentation</option>
+        </select>
+        <input v-model="newField.description" class="frc__input" placeholder="描述" />
+        <button class="frc__tab" :disabled="!newField.fieldId" @click="submitNewField">创建</button>
+        <span v-if="newFieldMsg" class="frc__newfield-msg">{{ newFieldMsg }}</span>
+      </div>
+    </details>
+
+    <details class="frc__sandbox">
+      <summary class="frc__sandbox-summary">漂移报告（seed vs DB，admin 编辑行豁免）</summary>
+      <div v-if="driftLoading" class="frc__empty">检测中…</div>
+      <div v-else-if="drift.items.length === 0" class="frc__empty">✅ 无漂移（seed 与 DB 一致）</div>
+      <ul v-else class="frc__drift-list">
+        <li v-for="(d, i) in drift.items" :key="i" class="frc__drift-item">
+          <span class="mono frc__drift-kind">{{ d.kind }}</span>
+          <span class="mono frc__drift-key">{{ d.key }}</span>
+          <span class="frc__drift-field">{{ d.field }}</span>
+          <span class="mono frc__drift-val">seed={{ stringify(d.seedValue) }}</span>
+          <span class="mono frc__drift-val">db={{ stringify(d.dbValue) }}</span>
+        </li>
+      </ul>
+      <p v-if="drift.totalDriftCount > drift.items.length" class="frc__empty">（共 {{ drift.totalDriftCount }} 项，当前筛选显示 {{ drift.items.length }}）</p>
+    </details>
+
+    <details class="frc__sandbox">
       <summary class="frc__sandbox-summary">沙盘契约视图（输入通道 / 输出字段 / 合法沙盘键，只读）</summary>
       <div v-if="sandboxError" class="frc__empty">{{ sandboxError }}</div>
       <template v-else-if="sandboxAgents.length">
@@ -85,7 +117,16 @@
                   <option value="hidden">hidden</option>
                 </select>
               </td>
-              <td class="mono frc__handoff">{{ formatHandoff(row.handoff) }}</td>
+              <td>
+                <input
+                  v-if="row.locks?.level !== 'system-locked'"
+                  class="frc__handoff-input mono"
+                  :value="formatHandoff(row.handoff)"
+                  placeholder="逗号分隔：skill:xxx / stage"
+                  @change="onHandoff(agent.agentId, row, ($event.target as HTMLInputElement).value)"
+                />
+                <span v-else class="mono frc__handoff">{{ formatHandoff(row.handoff) }}</span>
+              </td>
               <td>{{ row.internal ? '是' : '否' }}</td>
               <td>{{ row.accumulate ? '是' : '否' }}</td>
               <td><span class="frc__lock" :class="`frc__lock--${row.locks?.level || 'editable'}`">{{ lockLabel(row.locks?.level) }}</span></td>
@@ -154,6 +195,10 @@ const loading = ref(false);
 const error = ref('');
 const sandboxAgents = ref<SandboxAgent[]>([]);
 const sandboxError = ref('');
+const newField = ref({ fieldId: '', valueType: '', promptRole: 'soft-info', description: '' });
+const newFieldMsg = ref('');
+const drift = ref<{ items: Array<Record<string, unknown>>; totalDriftCount: number }>({ items: [], totalDriftCount: 0 });
+const driftLoading = ref(false);
 
 const fieldMap = () => new Map(fields.value.map((f) => [f.fieldId, f]));
 
@@ -161,13 +206,18 @@ function typeOf(fieldId: string) { return fieldMap().get(fieldId)?.valueType || 
 function roleOf(fieldId: string) { return fieldMap().get(fieldId)?.promptRole || '—'; }
 function routingsOf(agentId: string) { return routings.value.filter((r) => r.agentId === agentId); }
 function formatHandoff(raw: string | null) {
-  if (!raw) return '—';
+  if (!raw) return '';
   try {
     const arr = JSON.parse(raw);
     return Array.isArray(arr) ? arr.join(', ') : raw;
   } catch {
     return raw;
   }
+}
+function stringify(value: unknown) {
+  if (value === null || value === undefined) return 'null';
+  if (Array.isArray(value) || typeof value === 'object') return JSON.stringify(value);
+  return String(value);
 }
 function lockLabel(level?: string) {
   if (level === 'system-locked') return '系统锁';
@@ -197,9 +247,46 @@ async function switchStage(id: string) {
   }
   try {
     const c = await adminFieldRoutingsApi.getChanges({ stage: id, limit: 10 });
-    changes.value = c.data?.data?.changes || [];
+    changes.value = Array.isArray(c.data?.data) ? c.data.data : (c.data?.data?.changes || []);
   } catch {
     changes.value = [];
+  }
+}
+
+async function onHandoff(agentId: string, row: RoutingItem, value: string) {
+  const handoff = value.split(',').map((s) => s.trim()).filter(Boolean);
+  await patch(agentId, row, { handoff });
+}
+
+async function submitNewField() {
+  newFieldMsg.value = '';
+  if (!newField.value.fieldId || !stage.value) return;
+  try {
+    await adminFieldRoutingsApi.createField({
+      fieldId: newField.value.fieldId,
+      stage: stage.value,
+      promptRole: newField.value.promptRole as 'soft-info' | 'hidden-inference' | 'derived-presentation',
+      valueType: newField.value.valueType || undefined,
+      description: newField.value.description || undefined,
+    });
+    newFieldMsg.value = '创建成功';
+    newField.value = { fieldId: '', valueType: '', promptRole: 'soft-info', description: '' };
+    await switchStage(stage.value);
+    await loadDrift();
+  } catch (e: any) {
+    newFieldMsg.value = e?.message || '创建失败';
+  }
+}
+
+async function loadDrift() {
+  driftLoading.value = true;
+  try {
+    const res = await adminFieldRoutingsApi.getDrift();
+    drift.value = res.data?.data || { items: [], totalDriftCount: 0 };
+  } catch {
+    drift.value = { items: [], totalDriftCount: 0 };
+  } finally {
+    driftLoading.value = false;
   }
 }
 
@@ -238,6 +325,7 @@ async function loadSandboxView() {
 onMounted(() => {
   void loadStages();
   void loadSandboxView();
+  void loadDrift();
 });
 </script>
 
@@ -266,6 +354,16 @@ onMounted(() => {
 .frc__table th { background: #fafafa; font-weight: 500; }
 .frc__field { max-width: 300px; word-break: break-all; }
 .frc__handoff { max-width: 220px; }
+.frc__handoff-input { width: 220px; padding: 3px 6px; border: 1px solid var(--mk-border, #ddd); border-radius: 4px; font-size: 12px; }
+.frc__newfield { display: flex; gap: 8px; align-items: center; padding-bottom: 12px; flex-wrap: wrap; }
+.frc__input { padding: 5px 8px; border: 1px solid var(--mk-border, #ddd); border-radius: 4px; font-size: 12px; }
+.frc__newfield-msg { color: var(--mk-primary, #4f46e5); font-size: 12px; }
+.frc__drift-list { margin: 0; padding: 0 0 12px; list-style: none; }
+.frc__drift-item { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; border-bottom: 1px dashed #eee; font-size: 12px; }
+.frc__drift-kind { padding: 1px 6px; border-radius: 4px; background: #fef3c7; color: #92400e; }
+.frc__drift-key { font-weight: 600; }
+.frc__drift-field { color: #888; }
+.frc__drift-val { color: #b91c1c; }
 .frc__lock { padding: 2px 6px; border-radius: 4px; font-size: 12px; }
 .frc__lock--system-locked { background: #fee2e2; color: #b91c1c; }
 .frc__lock--structure-locked { background: #fef3c7; color: #92400e; }

@@ -63,6 +63,25 @@
           </div>
         </div>
 
+        <!-- 定义级步骤（编排定义实时编译） -->
+        <div v-if="current.defSteps?.length" class="orch-defsteps">
+          <span class="orch-defsteps__label">定义步骤（{{ current.defSteps.length }}）</span>
+          <div
+            v-for="step in current.defSteps"
+            :key="step.step"
+            class="orch-defstep"
+            :class="{ 'orch-defstep--service': step.resolved?.nodeKind === 'service', 'orch-defstep--unresolved': step.resolved?.unresolved }"
+          >
+            <span class="orch-defstep__order">{{ step.step }}</span>
+            <span class="orch-defstep__id mono">{{ step.agentId }}</span>
+            <span class="orch-defstep__role">{{ step.role || '—' }}</span>
+            <span v-if="step.condition" class="orch-defstep__cond">if {{ step.condition }}</span>
+            <span v-if="step.loopOver" class="orch-defstep__cond">loop {{ step.loopOver }}</span>
+            <span v-if="step.resolved?.nodeKind === 'service'" class="orch-defstep__badge">service</span>
+            <span v-if="step.resolved?.unresolved" class="orch-defstep__badge orch-defstep__badge--warn">unresolved</span>
+          </div>
+        </div>
+
         <!-- Skill 节点 -->
         <div class="orch-skills">
           <div v-for="s in current.skills" :key="s.id" class="orch-skill" role="button" tabindex="0" @click="openSkillDrawer(s.id)" @keydown.enter="openSkillDrawer(s.id)">
@@ -95,6 +114,7 @@ const defsLoaded = ref(false)
 const orchCount = ref(0)
 const agentDefCount = ref(0)
 const definitionNotes = ref<string[]>([])
+const orchDefs = ref<Array<Record<string, any>>>([])
 
 async function loadDefinitions() {
   if (!isLive.value) return
@@ -110,6 +130,7 @@ async function loadDefinitions() {
     const agentItems = Array.isArray(agentBody) ? agentBody : agentBody.items || agentBody.agents || []
     orchCount.value = orchItems.length
     agentDefCount.value = agentItems.length
+    orchDefs.value = orchItems
     definitionNotes.value = [
       ...orchItems.slice(0, 6).map((o: Record<string, unknown>) =>
         `编排 ${String(o.id || o.name || '—')} · ${String(o.title || o.label || o.description || '').slice(0, 48)}`
@@ -131,6 +152,7 @@ onMounted(() => {
 })
 
 interface SkillNode { id: string; name: string; calls: number; produces: string[] }
+interface DefStep { step: number; role?: string; condition?: string; loopOver?: string; agentId?: string; resolved?: { displayName?: string; kind?: string; nodeKind?: string; unresolved?: boolean } }
 interface Stage {
   id: string
   name: string
@@ -138,6 +160,7 @@ interface Stage {
   consumes: string[]
   produces: string[]
   skills: SkillNode[]
+  defSteps?: DefStep[]
 }
 
 const demoStages: Stage[] = [
@@ -202,6 +225,7 @@ const demoStages: Stage[] = [
 ]
 
 const active = ref('goal')
+const defById = computed(() => new Map(orchDefs.value.map((d) => [d.id, d])))
 const stages = computed<Stage[]>(() => {
   if (dataSource.value !== 'live' || !liveTopoNodes.value.length) return demoStages
 
@@ -227,11 +251,15 @@ const stages = computed<Stage[]>(() => {
     // 阶段级变量：下辖 Skill 输入 = 消费，输出 = 产出（有真实字段时覆盖演示值）
     const allInputs = [...new Set(skills.flatMap((s) => catalogById.get(s.id)?.inputFields || []))]
     const allOutputs = [...new Set(skills.flatMap((s) => s.produces))]
+    // 定义级步骤（编排定义实时编译，含 role/condition/loopOver/resolved）
+    const def = defById.value.get(stage.agentId)
+    const defSteps: DefStep[] = def?.steps || []
     return {
       ...stage,
       consumes: allInputs.length ? allInputs.slice(0, 5) : stage.consumes,
       produces: allOutputs.length ? allOutputs.slice(0, 5) : stage.produces,
-      skills
+      skills,
+      defSteps
     }
   })
 })
@@ -296,6 +324,17 @@ const current = computed(() => stages.value.find((s) => s.id === active.value) |
 }
 .orch-link i { display: block; width: 100%; height: 2px; background: var(--mk-line); }
 .orch-link b { font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; }
+.orch-defsteps { display: grid; gap: 4px; margin-top: 10px; }
+.orch-defsteps__label { font-size: 11px; color: var(--mk-faint); }
+.orch-defstep { display: flex; gap: 8px; align-items: baseline; padding: 4px 8px; border: 1px solid var(--mk-line); border-radius: 6px; font-size: 12px; }
+.orch-defstep--service { background: #f0f7ff; }
+.orch-defstep--unresolved { border-color: #fca5a5; background: #fef2f2; }
+.orch-defstep__order { font-size: 10px; color: var(--mk-faint); font-weight: 700; }
+.orch-defstep__id { font-weight: 600; }
+.orch-defstep__role { color: var(--mk-muted); }
+.orch-defstep__cond { color: var(--mk-faint); font-size: 11px; }
+.orch-defstep__badge { padding: 0 5px; border-radius: 4px; background: #e0e7ff; color: #3730a3; font-size: 10px; }
+.orch-defstep__badge--warn { background: #fee2e2; color: #b91c1c; }
 
 .orch-detail { display: grid; gap: 14px; padding: 16px; }
 .orch-vars {

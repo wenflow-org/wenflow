@@ -568,6 +568,9 @@ export const adminFieldRoutingsApi = {
 
   getChanges: async (params?: { stage?: string; fieldId?: string; limit?: number }) =>
     adminAxios.get('/admin/field-routings/changes', { params }),
+
+  getDrift: async (params?: { kind?: 'contract' | 'field' | 'routing'; stage?: string }) =>
+    adminAxios.get('/admin/field-routings/drift', { params }),
 };
 
 /**

@@ -4,6 +4,7 @@ import systemPrisma from '../../config/system-database';
 import { logger } from '../../utils/logger';
 import { clearRoutingCache } from '../../services/field-dispatcher';
 import { clearSupplementRenderCache } from '../../services/prompt-composer';
+import { detectFieldRoutingDrift } from '../../services/field-routing-bootstrap.service';
 
 const router = Router();
 
@@ -605,6 +606,29 @@ router.patch('/routings/:agentId/:fieldId', async (req: Request, res: Response) 
 });
 
 // ============================================================
+// GET /api/admin/field-routings/drift?kind=&stage=
+// seed vs DB 漂移报告（managedByCode=true 行参与 diff；admin 改过的行跳过）
+// ============================================================
+router.get('/drift', async (req: Request, res: Response) => {
+  const kind = typeof req.query.kind === 'string' && req.query.kind.trim() ? req.query.kind.trim() : undefined;
+  const stage = typeof req.query.stage === 'string' && req.query.stage.trim() ? req.query.stage.trim() : undefined;
+
+  const report = await detectFieldRoutingDrift(systemPrisma);
+
+  const items = report.items
+    .filter((item) => (kind ? item.kind === kind : true))
+    .filter((item) => (stage ? item.key.includes(`:${stage}:`) || item.key.startsWith(`${stage}:`) : true));
+
+  res.json({
+    success: true,
+    data: {
+      driftCount: items.length,
+      totalDriftCount: report.driftCount,
+      items,
+    },
+  });
+});
+
 // GET /api/admin/field-routings/changes?stage=&fieldId=&limit=
 // 审计日志
 // ============================================================

@@ -240,6 +240,9 @@
               <template v-else>
                 <b>{{ s.calls }}</b> 调用 · {{ fmtMs(s.avgMs) }}<template v-if="s.error"> · <em>{{ s.errors }}</em> 失败</template>
               </template>
+              <span v-if="s.ioContract || s.model" class="skill-card__def" :title="`IO 契约 ${s.ioContract || '—'} · 模型 ${s.model || '—'}`">
+                {{ s.ioContract || '' }}<template v-if="s.model"> · {{ s.model }}</template>
+              </span>
             </div>
           </div>
           <button
@@ -438,7 +441,7 @@ function goDesign(id: string) {
 
 /* ========== 数据（保持 store 接口不变） ========== */
 interface AgentDef { id: string; name: string }
-interface SkillItem { id: string; name: string; agentId: string; calls: number; errors: number; avgMs: number }
+interface SkillItem { id: string; name: string; agentId: string; calls: number; errors: number; avgMs: number; ioContract?: string; model?: string }
 
 const demoAgentDefs: AgentDef[] = [
   { id: 'goal-agent', name: '目标 Agent' },
@@ -462,7 +465,9 @@ const liveSkills = computed<SkillItem[]>(() =>
       agentId: n.parentAgentId as string,
       calls: n.stats.totalCalls,
       errors: n.stats.failed,
-      avgMs: n.stats.avgDuration
+      avgMs: n.stats.avgDuration,
+      ioContract: n.ioContractVersion,
+      model: n.modelConfig?.model
     }))
 )
 
@@ -530,6 +535,7 @@ const skillCards = computed(() => {
     id: string; skillId: string; name: string
     x: number; y: number; idle: boolean; error: boolean; errors: number; calls: number; avgMs: number
     hue: string; delay: number; agentIdx: number
+    ioContract?: string; model?: string
   }> = []
   agentDefs.value.forEach((a, i) => {
     skillsOf(a.id).forEach((p, j) => {
@@ -547,6 +553,8 @@ const skillCards = computed(() => {
         hue: stageOf(i).hue,
         delay: 120 + i * 50 + j * 35,
         agentIdx: i,
+        ioContract: p.ioContract,
+        model: p.model,
       })
     })
   })

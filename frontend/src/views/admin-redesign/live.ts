@@ -1051,6 +1051,8 @@ async function fetchLiveSkillCatalog(): Promise<void> {
   parentAgentId?: string
   memberCount?: number
   stats: { totalCalls: number; failed: number; avgDuration: number }
+  ioContractVersion?: string
+  modelConfig?: { model?: string; temperature?: number; maxTokens?: number; source?: string }
 }
 
 export const liveTopoNodes = ref<LiveTopoNode[]>([])
@@ -1074,7 +1076,9 @@ async function fetchLiveTopology(): Promise<void> {
         totalCalls: Number(stats.totalCalls || 0),
         failed: Number(stats.failed || 0),
         avgDuration: Number(stats.avgDuration || 0)
-      }
+      },
+      ioContractVersion: n.ioContractVersion ? String(n.ioContractVersion) : undefined,
+      modelConfig: n.modelConfig as LiveTopoNode['modelConfig']
     }
   })
 }
