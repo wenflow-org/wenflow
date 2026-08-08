@@ -17,6 +17,7 @@ interface Config {
   endpoint: string;
   apiKey: string;
   model: string;
+  reasoningModel?: string;
   thinkingMode?: 'default' | 'enabled' | 'disabled';
   reasoningEffort?: 'default' | 'high' | 'max';
   temperature: number;
@@ -238,6 +239,7 @@ export class APIRouter {
           endpoint: true,
           apiKey: true,
           chatModel: true,
+          reasoningModel: true,
           enabled: true
         }
       });
@@ -251,6 +253,7 @@ export class APIRouter {
         endpoint: config.endpoint,
         apiKey: decryptSecret(config.apiKey, USER_KEY_CONTEXT) || '',
         model: this.resolveModel(config.chatModel),
+        reasoningModel: config.reasoningModel ? this.resolveModel(config.reasoningModel) : undefined,
         thinkingMode: 'default',
         reasoningEffort: 'default',
         temperature: 0.7,

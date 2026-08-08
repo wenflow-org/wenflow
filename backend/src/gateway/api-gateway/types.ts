@@ -25,6 +25,8 @@ export interface ResolvedRoute {
   endpoint: string;
   apiKey: string;
   model: string;
+  /** 推理模型（用户双模型配置：reasoningModel / 平台 defaultReasoningModel），供两段式调用使用 */
+  reasoningModel?: string;
   thinkingMode?: 'default' | 'enabled' | 'disabled';
   reasoningEffort?: 'default' | 'high' | 'max';
   temperature: number;

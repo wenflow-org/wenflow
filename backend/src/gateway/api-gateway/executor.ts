@@ -446,8 +446,10 @@ export class APIExecutor {
         content: '',
         usage: undefined as ChatResponse['usage'] | undefined,
         finishReason: '',
-        sawSseEvent: false
+        sawSseEvent: false,
+        ttftMs: undefined as number | undefined,
       };
+      const streamStartAt = Date.now();
       let statusCode = 0;
       let contentType = '';
       let responseHeaders: Record<string, string> = {};
@@ -485,6 +487,7 @@ export class APIExecutor {
               const choice = parsed?.choices?.[0];
               const delta = typeof choice?.delta?.content === 'string' ? choice.delta.content : undefined;
               if (delta !== undefined) {
+                if (state.ttftMs === undefined) state.ttftMs = Date.now() - streamStartAt;
                 state.content += delta;
                 if (delta) onStreamChunk?.(delta);
               }
@@ -559,6 +562,7 @@ export class APIExecutor {
             ...(state.usage ? { usage: state.usage } : {})
           } as ChatResponse;
           (parsedResponse as any)._routeThinkingMode = route.thinkingMode || 'default';
+          if (state.ttftMs !== undefined) (parsedResponse as any).ttftMs = state.ttftMs;
         }
 
         return {
@@ -774,6 +778,10 @@ export class APIExecutor {
         thinkingMode: route.thinkingMode ?? null,
         reasoningEffort: route.reasoningEffort ?? null,
         executionMode: attempt.executionMode ?? null,
+        // 可观测增量（2026-08）：TTFT 与 DeepSeek 前缀缓存命中（usage 透传字段）
+        ttftMs: (response as any)?.ttftMs ?? null,
+        promptCacheHitTokens: (response as any)?.usage?.prompt_cache_hit_tokens ?? null,
+        promptCacheMissTokens: (response as any)?.usage?.prompt_cache_miss_tokens ?? null,
       })
     });
   }
