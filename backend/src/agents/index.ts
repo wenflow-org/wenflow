@@ -65,20 +65,6 @@ export {
   simulationOrchestrator
 } from './simulation-agent';
 
-// Path Adjustment
-export {
-  pathAdjustmentEngine,
-  PathAdjustment,
-  AdjustmentType,
-  AdjustmentTarget,
-  AdjustmentReason
-} from '../skills/path-planning/adjustment';
-
-export {
-  allAdjustmentStrategies,
-  getApplicableStrategies
-} from '../skills/path-planning/strategies';
-
 // 所有 Agent 定义
 import { AgentDefinition } from './protocol';
 import { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn } from '../skills/path-planning';

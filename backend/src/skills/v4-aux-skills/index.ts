@@ -20,14 +20,12 @@ export type AuxSkillId =
   | 'teaching-opening-generator'
   | 'session-evaluation-fallback'
   | 'learner-progress-report'
-  | 'path-adjustment-generator'
   | 'generic-chat'
   | 'course-design'
   | 'skill-author'
   | 'skill-compiler'
   | 'basic-evaluator'
-  | 'goal-alignment-checker'
-  | 'concept-priority';
+  | 'goal-alignment-checker';
 
 interface AuxPlumbing extends PromptCallContext {
   callerAgentId?: string;
@@ -163,14 +161,12 @@ const META: Record<AuxSkillId, AuxSkillMeta> = {
   'teaching-opening-generator': { skillId: 'teaching-opening-generator', displayName: '课堂开场交互生成器', description: '生成教学 Session 的开场 message、question 与 quickReplies', category: 'generation' },
   'session-evaluation-fallback': { skillId: 'session-evaluation-fallback', displayName: '课程评估补全器', description: '在主课后总结缺少 evaluation 时补齐结构化评估', category: 'analysis' },
   'learner-progress-report': { skillId: 'learner-progress-report', displayName: '学习进展报告生成器', description: '基于学习指标和信号生成简短进展反馈', category: 'analysis' },
-  'path-adjustment-generator': { skillId: 'path-adjustment-generator', displayName: '路径动态调整生成器', description: '生成可插入路径的 milestone 或 subtask', category: 'generation' },
   'generic-chat': { skillId: 'generic-chat', displayName: '平台通用文本能力', description: '无更专用 Skill 时的通用文本调用能力', category: 'generation' },
   'course-design': { skillId: 'course-design', displayName: '课程设计器', description: '为周次主题生成结构化课程任务', category: 'generation' },
   'skill-author': { skillId: 'skill-author', displayName: 'Prompt 起草助手', description: '为新 Skill 起草 system prompt', category: 'generation' },
   'skill-compiler': { skillId: 'skill-compiler', displayName: 'Skill Prompt 验收器', description: '执行 system prompt 并检查必填字段覆盖情况', category: 'analysis' },
   'basic-evaluator': { skillId: 'basic-evaluator', displayName: '学习质量评估器', description: '评估学习内容、答案或任务完成情况', category: 'analysis' },
   'goal-alignment-checker': { skillId: 'goal-alignment-checker', displayName: '路径目标对齐检查器', description: '检查学习路径与目标的对齐程度', category: 'analysis' },
-  'concept-priority': { skillId: 'concept-priority', displayName: '概念优先级调整器', description: '将实践任务升级为概念理解任务', category: 'generation' },
 };
 
 // ============================================================
@@ -247,22 +243,6 @@ async function learnerProgressReportHandler(input: any) {
     validate: (parsed) => parsed && typeof parsed === 'object'
       ? { valid: true }
       : { valid: false, failureReason: 'LEARNER_PROGRESS_REPORT_OUTPUT_NOT_OBJECT' },
-  });
-}
-
-async function pathAdjustmentGeneratorHandler(input: any) {
-  return runAux({
-    meta: META['path-adjustment-generator'],
-    input,
-        buildUserPayload: (d) => {
-      const { temperature: _t, maxTokens: _m, ...payload } = d;
-      return payload;
-    },
-    normalize: (parsed) => parsed?.milestone || parsed?.subtask || parsed,
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'PATH_ADJUSTMENT_OUTPUT_NOT_OBJECT' },
-    builtinFallback: () => null,
   });
 }
 
@@ -344,22 +324,6 @@ async function goalAlignmentCheckerHandler(input: any) {
   });
 }
 
-async function conceptPriorityHandler(input: any) {
-  return runAux({
-    meta: META['concept-priority'],
-    input,
-        buildUserPayload: (d) => ({ tasks: d.tasks, priorityContext: d.priorityContext, signal: d.signal }),
-    normalize: (parsed) => ({
-      upgradedTasks: Array.isArray(parsed?.upgradedTasks) ? parsed.upgradedTasks : [],
-      upgradeReasons: Array.isArray(parsed?.upgradeReasons) ? parsed.upgradeReasons : [],
-      confidence: Number.isFinite(Number(parsed?.confidence)) ? Number(parsed.confidence) : 0.7,
-    }),
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'CONCEPT_PRIORITY_OUTPUT_NOT_OBJECT' },
-  });
-}
-
 // ============================================================
 // 注册表
 // ============================================================
@@ -374,12 +338,10 @@ export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillE
   'teaching-opening-generator': teachingOpeningGeneratorHandler,
   'session-evaluation-fallback': sessionEvaluationFallbackHandler,
   'learner-progress-report': learnerProgressReportHandler,
-  'path-adjustment-generator': pathAdjustmentGeneratorHandler,
   'generic-chat': genericChatHandler,
   'course-design': courseDesignHandler,
   'skill-author': skillAuthorHandler,
   'skill-compiler': skillCompilerHandler,
   'basic-evaluator': basicEvaluatorHandler,
   'goal-alignment-checker': goalAlignmentCheckerHandler,
-  'concept-priority': conceptPriorityHandler,
 };

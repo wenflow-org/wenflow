@@ -16,7 +16,6 @@ import { registerPluginSkills } from './agents/plugins';
 import { allSkillDefinitions, skillHandlers } from './skills';
 import { validateManifest, listTopLevelAgents } from './services/agent-manifest.service';
 
-import { AgentCollaborationService, createAgentCollaborationService } from './services/agent-collaboration.service';
 import { getEventBus } from './gateway/event-bus';
 import learningService from './services/learning/learning.service';
 import { ensureCoreAgentPrompts } from './scripts/seed-core-agent-prompts';
@@ -139,7 +138,6 @@ let enrichmentRetryTimer: NodeJS.Timeout | null = null;
 let enrichmentRetryInFlight: Promise<void> | null = null;
 let httpServer: Server | null = null;
 let gateway: EduClawGateway | null = null;
-let collaborationService: AgentCollaborationService | null = null;
 const lifecycle = new ApplicationLifecycle();
 const readinessService = new ReadinessService(prisma, systemPrisma, 2000, () => lifecycle.isDraining());
 const shutdownDeadlineMs = resolveShutdownDeadlineMs(process.env.SHUTDOWN_DEADLINE_MS);
@@ -524,29 +522,6 @@ async function purgeRetiredSkills() {
   });
 }
 
-/**
- * 初始化 Agent 协作服务
- */
-async function initializeAgentCollaboration() {
-  logger.info('Initializing Agent Collaboration Service...');
-  
-  const eventBus = getEventBus();
-  
-  const service = createAgentCollaborationService({
-    enableAutoAdjustment: false,
-    adjustmentCooldown: 300000,
-    minSignalsForAdjustment: 2,
-    profileUpdateInterval: 60000
-  });
-  collaborationService = service;
-  
-  service.start();
-  
-  logger.info('✅ Agent Collaboration Service started');
-  
-  return service;
-}
-
 function assertStartupActive() {
   if (lifecycle.isDraining()) throw new Error('服务已进入关闭流程，终止后续启动');
 }
@@ -650,10 +625,6 @@ export async function startServer() {
       }
       assertStartupActive();
     
-     // 初始化 Agent 协作服务
-     await initializeAgentCollaboration();
-     assertStartupActive();
-
       const durableConsumers = new DurableEventConsumerRegistry();
       durableConsumers.register(['task:completed'], reconcileTaskCompletionMetric);
       durableConsumers.register([
@@ -748,7 +719,6 @@ export async function shutdown(signal: string) {
       await aiCapabilityHealthService.stop();
     },
     teaching: aiTeachingOrchestrator,
-    collaboration: collaborationService,
     backgroundTaskTracker,
     outbox: outboxWorker,
     gateway,
