@@ -12,7 +12,6 @@ import { globalApiLimiter } from './middleware/api-rate-limit.middleware';
 // EduClaw Gateway
 import { createGateway, EduClawGateway } from './gateway';
 import { registerOfficialAgents } from './agents';
-import { registerPluginSkills } from './agents/plugins';
 import { allSkillDefinitions, skillHandlers } from './skills';
 import { validateManifest, listTopLevelAgents } from './services/agent-manifest.service';
 
@@ -490,8 +489,6 @@ async function initializeGateway() {
     }
   }
 
-  // 外挂 Plugin 通过 Adapter 注册为 Skill，统一执行、上下文、日志和统计边界。
-  await registerPluginSkills(instance);
   
   // 加载已有的注册
   await instance.loadRegistrations();

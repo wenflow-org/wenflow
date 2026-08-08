@@ -23,7 +23,6 @@ import {
 import { LearningEvent } from './event-bus';
 import { normalizeAgentOutput } from '../agents/output-normalizer';
 import { executeSkillHandler } from '../skills/executor';
-import { agentPluginRegistry } from '../agents/plugin-registry';
 import { mcpGateway } from '../core/mcp/McpGateway';
 
 // Gateway 配置
@@ -215,7 +214,6 @@ export class EduClawGateway {
    * 关闭 Gateway
    */
   async close(): Promise<void> {
-    await agentPluginRegistry.clear();
     mcpGateway.destroy();
     await this.eventBus.close();
   }

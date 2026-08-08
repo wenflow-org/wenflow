@@ -18,17 +18,6 @@ export {
   ProgressMetrics
 } from './protocol';
 
-// 新的插件系统 - 使用别名避免冲突
-export { 
-  AgentPlugin, 
-  AgentConfig,
-  AgentRegistration,
-  AgentPluginFactory 
-} from './plugin-types';
-export { agentPluginRegistry } from './plugin-registry';
-
-export { registerAllPlugins, getAllPlugins } from './plugins';
-
 // Path Agent
 export { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn } from '../skills/path-planning';
 
