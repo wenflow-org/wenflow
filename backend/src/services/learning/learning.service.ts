@@ -2333,11 +2333,11 @@ class LearningService {
   }
 
   // 获取用户的学习目标
-  async getLearningGoals(userId: string) {
+  async getLearningGoals(userId: string, status?: string) {
     try {
       const goals = await prisma.learning_goals.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' }
+        where: { userId, ...(status ? { status } : {}) },
+        orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }]
       });
 
       return goals;
@@ -2345,6 +2345,106 @@ class LearningService {
       logger.error('获取学习目标失败:', error);
       throw error;
     }
+  }
+
+  // 更新学习目标（多目标预算台账元数据：status/pathId/priority/plannedMinutesPerDay/cognitiveBandwidth）
+  async updateLearningGoal(
+    userId: string,
+    goalId: string,
+    data: {
+      status?: 'active' | 'paused' | 'completed' | 'archived';
+      pathId?: string | null;
+      priority?: number;
+      plannedMinutesPerDay?: number | null;
+      cognitiveBandwidth?: string | null;
+    }
+  ) {
+    const goal = await prisma.learning_goals.findFirst({ where: { id: goalId, userId } });
+    if (!goal) throw new Error('学习目标不存在');
+    return prisma.learning_goals.update({
+      where: { id: goalId },
+      data: {
+        ...(data.status ? { status: data.status } : {}),
+        ...(data.pathId !== undefined ? { pathId: data.pathId } : {}),
+        ...(data.priority !== undefined ? { priority: data.priority } : {}),
+        ...(data.plannedMinutesPerDay !== undefined ? { plannedMinutesPerDay: data.plannedMinutesPerDay } : {}),
+        ...(data.cognitiveBandwidth !== undefined ? { cognitiveBandwidth: data.cognitiveBandwidth } : {}),
+        updatedAt: new Date(),
+      },
+    });
+  }
+
+  /**
+   * 今日预算视图（多目标调度 · learn agent 台账）：
+   * active goals（含预算）+ 今日 ledger + 活跃教学会话，产出每个目标的预算/已耗/建议
+   */
+  async getTodaySchedule(userId: string) {
+    const today = new Date().toISOString().slice(0, 10);
+    const [goals, ledgers, activeSessions] = await Promise.all([
+      prisma.learning_goals.findMany({
+        where: { userId, status: 'active' },
+        orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+      }),
+      prisma.goal_scheduling_ledger.findMany({
+        where: { userId, date: today },
+      }),
+      prisma.teaching_sessions.findMany({
+        where: { userId, status: 'active' },
+        select: { id: true, taskId: true, startTime: true },
+      }),
+    ]);
+
+    const ledgerByGoal = new Map(ledgers.map((l) => [l.goalId, l]));
+    const todayMinutes = activeSessions.reduce((sum, s) => sum + 0, 0);
+
+    return {
+      date: today,
+      totalPlanned: goals.reduce((sum, g) => sum + (g.plannedMinutesPerDay ?? 0), 0),
+      activeGoals: goals.map((goal) => {
+        const ledger = ledgerByGoal.get(goal.id);
+        return {
+          goalId: goal.id,
+          title: goal.title,
+          pathId: goal.pathId,
+          priority: goal.priority,
+          cognitiveBandwidth: goal.cognitiveBandwidth,
+          plannedMinutes: goal.plannedMinutesPerDay ?? 30,
+          consumedMinutes: ledger?.consumedMinutes ?? 0,
+          loadAvg: ledger?.loadAvg ?? null,
+          remainingMinutes: Math.max((goal.plannedMinutesPerDay ?? 30) - (ledger?.consumedMinutes ?? 0), 0),
+        };
+      }),
+      activeSessions: activeSessions.length,
+      todayMinutes,
+    };
+  }
+
+  /** 今日台账写入（幂等 upsert：userId×goalId×date） */
+  async planTodaySchedule(userId: string, plan: Array<{ goalId: string; budgetMinutes: number; plannedTasks?: string[] }>) {
+    const today = new Date().toISOString().slice(0, 10);
+    const results = [];
+    for (const item of plan) {
+      const goal = await prisma.learning_goals.findFirst({ where: { id: item.goalId, userId } });
+      if (!goal) continue;
+      const ledger = await prisma.goal_scheduling_ledger.upsert({
+        where: { userId_goalId_date: { userId, goalId: item.goalId, date: today } },
+        update: {
+          budgetMinutes: item.budgetMinutes,
+          plannedTasks: item.plannedTasks?.length ? JSON.stringify(item.plannedTasks) : null,
+          updatedAt: new Date(),
+        },
+        create: {
+          id: `gsl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+          userId,
+          goalId: item.goalId,
+          date: today,
+          budgetMinutes: item.budgetMinutes,
+          plannedTasks: item.plannedTasks?.length ? JSON.stringify(item.plannedTasks) : null,
+        },
+      });
+      results.push(ledger);
+    }
+    return results;
   }
 
   private buildPathAgentInput(data: GeneratePathData): AgentInput {

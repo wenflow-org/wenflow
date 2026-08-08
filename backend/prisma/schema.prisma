@@ -239,14 +239,38 @@ model goal_conversations {
 }
 
 model learning_goals {
-  id          String   @id
-  userId      String
-  title       String
-  description String?
-  status      String   @default("active")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now())
-  users       users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String   @id
+  userId                String
+  title                 String
+  description           String?
+  status                String   @default("active")
+  // 多目标预算台账（阶段 8）：目标级调度元数据
+  pathId                String?
+  priority              Int      @default(0)
+  plannedMinutesPerDay  Int?
+  cognitiveBandwidth    String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @default(now())
+  users                 users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
+
+model goal_scheduling_ledger {
+  id                String   @id
+  userId            String
+  goalId            String?
+  date              String
+  budgetMinutes     Int      @default(30)
+  consumedMinutes   Float    @default(0)
+  plannedTasks      String?
+  loadAvg           Float?
+  status            String   @default("scheduled")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now())
+
+  @@unique([userId, goalId, date])
+  @@index([userId, date])
 }
 
 model learning_metrics {

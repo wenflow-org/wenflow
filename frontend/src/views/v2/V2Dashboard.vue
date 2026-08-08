@@ -165,6 +165,22 @@
           </aside>
         </div>
 
+        <!-- 今日预算（多目标调度台账） -->
+        <section v-if="todaySchedule?.activeGoals?.length" class="card budget dash__budget">
+          <div class="budget__head">
+            <span class="budget__title">今日预算 · {{ todaySchedule.activeGoals.length }} 个目标</span>
+            <span class="budget__total">共 {{ todaySchedule.totalPlanned }} 分钟</span>
+          </div>
+          <ul class="budget__list">
+            <li v-for="g in todaySchedule.activeGoals" :key="g.goalId" class="budget__item">
+              <span class="budget__name">{{ g.title }}</span>
+              <span class="budget__bar"><i :style="{ width: Math.min((g.consumedMinutes / Math.max(g.plannedMinutes, 1)) * 100, 100) + '%' }"></i></span>
+              <span class="budget__num">{{ g.consumedMinutes }} / {{ g.plannedMinutes }} 分钟</span>
+              <span v-if="g.cognitiveBandwidth" class="budget__bw">{{ g.cognitiveBandwidth }}</span>
+            </li>
+          </ul>
+        </section>
+
         <!-- 今日复习（到期旧知唤醒，复习闭环） -->
         <section v-if="reviewDue.length" class="card review dash__review">
           <div class="review__head">
@@ -446,15 +462,17 @@ const examples = ['用 Python 自动化处理 Excel 报表', '提升职场沟通
 
 /* ================= 数据加载 ================= */
 const reviewDue = ref<Array<{ conceptKey: string; label: string; retention: number; reason: string; estimatedMinutes: number }>>([]);
+const todaySchedule = ref<Record<string, any> | null>(null);
 async function loadAll() {
   loading.value = true;
-  const [statsR, pathsR, guidanceR, sessionsR, achR, dueR] = await Promise.allSettled([
+  const [statsR, pathsR, guidanceR, sessionsR, achR, dueR, scheduleR] = await Promise.allSettled([
     learningAPI.getStats(),
     learningAPI.getPaths(),
     learningAPI.getAdaptiveGuidance(),
     fetchSessions(monthCursor.value),
     request.get('/achievements/all'),
-    request.get('/ai-teaching/review/due')
+    request.get('/ai-teaching/review/due'),
+    request.get('/learning/schedule/today')
   ]);
   if (statsR.status === 'fulfilled') stats.value = statsR.value as Record<string, any>;
   if (pathsR.status === 'fulfilled') paths.value = pathsR.value as unknown as Array<Record<string, any>>;
@@ -464,6 +482,10 @@ async function loadAll() {
   if (dueR.status === 'fulfilled') {
     const body = dueR.value?.data ?? dueR.value ?? {};
     reviewDue.value = Array.isArray(body.items) ? body.items : [];
+  }
+  if (scheduleR.status === 'fulfilled') {
+    const body = scheduleR.value?.data ?? scheduleR.value ?? {};
+    todaySchedule.value = body;
   }
   loading.value = false;
 }
@@ -1088,6 +1110,20 @@ onMounted(loadAll);
 .card-head { display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
 .link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; }
 .link-muted:hover { color: var(--blue-deep); }
+
+/* ---------- 今日预算（多目标调度台账） ---------- */
+.dash__budget { margin-bottom: 16px; }
+.budget { padding: 16px 18px; }
+.budget__head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.budget__title { font-size: 14px; font-weight: 700; }
+.budget__total { font-size: 12px; color: var(--faint); }
+.budget__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.budget__item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.budget__name { min-width: 140px; font-weight: 600; }
+.budget__bar { flex: 1; height: 6px; border-radius: 3px; background: #eef0f4; overflow: hidden; }
+.budget__bar i { display: block; height: 100%; border-radius: 3px; background: #10b981; }
+.budget__num { width: 110px; text-align: right; color: var(--faint); font-size: 12px; }
+.budget__bw { padding: 1px 6px; border-radius: 4px; background: #f0fdf4; color: #047857; font-size: 11px; }
 
 /* ---------- 今日复习（复习闭环） ---------- */
 .dash__review { margin-bottom: 16px; }

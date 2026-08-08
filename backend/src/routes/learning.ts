@@ -298,17 +298,61 @@ router.post('/goals', async (req, res, next) => {
   }
 });
 
-// 获取学习目标列表
+// 获取学习目标列表（可 status 过滤）
 router.get('/goals', async (req, res, next) => {
   try {
     const userId = req.user.userId;
+    const status = typeof req.query.status === 'string' && req.query.status.trim() ? req.query.status.trim() : undefined;
 
-    const goals = await learningService.getLearningGoals(userId);
+    const goals = await learningService.getLearningGoals(userId, status);
 
     res.json({
       success: true,
       data: goals
     });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+// 更新学习目标（多目标预算台账：status/pathId/priority/plannedMinutesPerDay）
+router.patch('/goals/:goalId', async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+    const goalId = String(req.params.goalId);
+    const body = req.body || {};
+    const goal = await learningService.updateLearningGoal(userId, goalId, {
+      ...(body.status ? { status: body.status } : {}),
+      ...(body.pathId !== undefined ? { pathId: body.pathId } : {}),
+      ...(body.priority !== undefined ? { priority: Number(body.priority) } : {}),
+      ...(body.plannedMinutesPerDay !== undefined ? { plannedMinutesPerDay: Number(body.plannedMinutesPerDay) } : {}),
+      ...(body.cognitiveBandwidth !== undefined ? { cognitiveBandwidth: body.cognitiveBandwidth } : {}),
+    });
+
+    res.json({ success: true, data: goal });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+// 今日预算视图（多目标调度台账）
+router.get('/schedule/today', async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+    const schedule = await learningService.getTodaySchedule(userId);
+    res.json({ success: true, data: schedule });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+// 今日台账写入
+router.post('/schedule/plan', async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+    const plan = Array.isArray(req.body?.plan) ? req.body.plan : [];
+    const results = await learningService.planTodaySchedule(userId, plan);
+    res.json({ success: true, data: results });
   } catch (error: any) {
     next(error);
   }
