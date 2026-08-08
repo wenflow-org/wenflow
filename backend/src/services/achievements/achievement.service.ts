@@ -2,6 +2,7 @@
 // Achievement Service - Handle achievements unlocking and tracking
 
 import prisma from '../../config/database';
+import type { Prisma } from '@prisma/client';
 import { logger } from '../../utils/logger';
 import AchievementSystem, { ACHIEVEMENTS, type AchievementDefinition } from './achievement-system';
 import learningStateService from '../learning/learning-state.service';
@@ -71,8 +72,8 @@ class AchievementService {
 
         const unlockedAt = new Date();
         try {
-          await prisma.$transaction([
-            prisma.achievements.create({
+          await prisma.$transaction(async (tx) => {
+            await tx.achievements.create({
               data: {
                 id: achievementRecordId(userId, achievement.id),
                 userId,
@@ -85,14 +86,9 @@ class AchievementService {
                 unlockedAt,
                 earnedAt: unlockedAt
               }
-            }),
-            prisma.users.update({
-              where: { id: userId },
-              data: {
-                xp: { increment: achievement.xpReward }
-              }
-            })
-          ]);
+            });
+            await this.addXp(userId, achievement.xpReward, tx);
+          });
         } catch (error) {
           // 稳定主键充当并发 claim；另一请求已解锁时不重复发放 XP。
           if ((error as { code?: string })?.code === 'P2002') continue;
@@ -295,6 +291,18 @@ class AchievementService {
     logger.info(`触发成就检测: ${eventType}`, { userId });
 
     return await this.checkAndUnlockAchievements(userId);
+  }
+
+  /**
+   * users.xp 唯一写入口（边界契约 B3：xp 收敛到成就域服务）
+   * @param tx 可选事务客户端（调用方在事务内时传入，参与同一事务）
+   */
+  async addXp(userId: string, amount: number, tx?: Prisma.TransactionClient): Promise<void> {
+    const client = tx ?? prisma;
+    await client.users.update({
+      where: { id: userId },
+      data: { xp: { increment: amount } },
+    });
   }
 }
 

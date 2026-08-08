@@ -6,6 +6,7 @@ const mockPrisma: any = {
 }
 const mockUpdateLearningMetrics = jest.fn()
 const mockAchievementCheck = jest.fn()
+const mockAddXp = jest.fn()
 const mockEvaluateTaskCompletion = jest.fn()
 const mockEmitSignals = jest.fn()
 const mockSnapshotRefresh = jest.fn()
@@ -15,7 +16,7 @@ jest.mock('../../../config/database', () => ({ __esModule: true, default: mockPr
 jest.mock('../../metrics/LearningMetricService', () => ({ updateLearningMetrics: mockUpdateLearningMetrics }))
 jest.mock('../../achievements/achievement.service', () => ({
   __esModule: true,
-  default: { triggerAchievementCheck: mockAchievementCheck }
+  default: { triggerAchievementCheck: mockAchievementCheck, addXp: mockAddXp }
 }))
 jest.mock('../../learner/LearnerProgressService', () => ({
   learnerProgressService: {
@@ -102,6 +103,7 @@ describe('LearningService.completeTask milestone progression', () => {
     mockPrisma.subtasks.findUnique.mockImplementation(async ({ where }: any) => taskRecord(where.id))
     mockUpdateLearningMetrics.mockResolvedValue(null)
     mockAchievementCheck.mockResolvedValue([])
+    mockAddXp.mockResolvedValue(undefined)
     mockEvaluateTaskCompletion.mockResolvedValue({
       signal: { type: 'steady' },
       metrics: { reasoning: '稳定', suggestion: '继续' },
@@ -185,7 +187,7 @@ describe('LearningService.completeTask milestone progression', () => {
     expect(milestones[1].status).toBe('active')
     expect(milestones[1].unlockedAt).toBeInstanceOf(Date)
     expect(path).toEqual(expect.objectContaining({ status: 'active', completedMilestones: 1 }))
-    expect(xp).toBe(50)
+    expect(mockAddXp).toHaveBeenCalledWith(userId, 50, tx)
     expect(outbox.map(item => item.eventType)).toEqual(['task:completed'])
     expect(tx.milestones.findFirst).toHaveBeenCalledWith({
       where: {
@@ -200,7 +202,7 @@ describe('LearningService.completeTask milestone progression', () => {
 
     expect(milestones[1].status).toBe('completed')
     expect(path).toEqual(expect.objectContaining({ status: 'completed', completedMilestones: 2 }))
-    expect(xp).toBe(100)
+    expect(mockAddXp).toHaveBeenCalledTimes(2)
     expect(outbox.map(item => item.eventType)).toEqual(['task:completed', 'task:completed', 'path:completed'])
     expect(JSON.parse(outbox[2].payload)).toEqual({ pathId, completedByTaskId: 'task-3' })
     expect(tx.learning_paths.updateMany).toHaveBeenCalledWith(expect.objectContaining({
@@ -209,7 +211,7 @@ describe('LearningService.completeTask milestone progression', () => {
 
     const duplicate = await learningService.completeTask({ taskId: 'task-3', userId })
     expect(duplicate.alreadyCompleted).toBe(true)
-    expect(xp).toBe(100)
+    expect(mockAddXp).toHaveBeenCalledTimes(2)
     expect(outbox.map(item => item.eventType)).toEqual(['task:completed', 'task:completed', 'path:completed'])
     expect(mockUpdateLearningMetrics).not.toHaveBeenCalled()
   })

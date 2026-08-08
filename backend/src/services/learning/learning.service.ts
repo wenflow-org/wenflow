@@ -4396,10 +4396,7 @@ const learningPath = await prisma.learning_paths.findUnique({
           );
         }
 
-        await tx.users.update({
-          where: { id: data.userId },
-          data: { xp: { increment: 50 } }
-        });
+        await achievementService.addXp(data.userId, 50, tx);
 
         await enqueueDomainEvent(tx, createDomainEvent({
           type: 'task:completed',

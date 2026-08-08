@@ -20,6 +20,7 @@ import {
   ProfileUpdateSource
 } from './types';
 import { learnerSnapshotService } from '../../services/learner/LearnerSnapshotService';
+import { learnerExitService } from '../../services/learner/LearnerExitService';
 import { learnerProfileService } from '../../services/learner/LearnerProfileService';
 import { logger } from '../../utils/logger';
 
@@ -53,7 +54,7 @@ export const learnerModelAgentDefinition: AgentDefinition = {
   inputSchema: {
     type: 'object',
       properties: {
-        action: { type: 'string', enum: ['get', 'update', 'get-personalization', 'get-snapshot'] },
+        action: { type: 'string', enum: ['get', 'update', 'get-personalization', 'get-snapshot', 'get-exit'] },
         userId: { type: 'string' },
         dataType: { type: 'string' },
         data: { type: 'object' }
@@ -104,6 +105,17 @@ class LearnerModelAgent {
           
         case 'get-personalization':
           result = await this.getPersonalization(context.userId);
+          break;
+
+        case 'get-exit':
+          // learn agent 统一出口（LearnerExitService）：snapshot + dueReview + accountView
+          result = await learnerExitService.getLearnerContext({
+            userId: context.userId,
+            learningPathId: input.metadata?.learningPathId,
+            milestoneId: input.metadata?.milestoneId,
+            taskId: input.metadata?.taskId,
+            mode: input.metadata?.mode,
+          });
           break;
           
         default:

@@ -28,6 +28,7 @@ import { replanAdvisoryService, type ReplanAdvisory } from './ReplanAdvisoryServ
 import { hasReliableSessionEvaluation, mergeFinalTeachingState } from './SessionFinalizationPolicy';
 import { classifyFinalizationError } from './FinalizationErrors';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
+import { learnerExitService } from '../learner/LearnerExitService';
 import { memoryTraceService } from '../memory/memory-trace.service';
 
 export type TeachingMode = 'tutor' | 'peer' | 'debate';
@@ -754,6 +755,18 @@ async function buildTeachingTurnInput(
     pathBackgroundContext: buildPathBackgroundContext(context),
     learningSignal: context.learningSignal,
     lastLessonRecap: context.lastLessonRecap,
+    interactionProfile: context.interactionProfile
+      ? {
+          current: (context.interactionProfile.current ?? null) as Record<string, number> | null,
+          history: (context.interactionProfile.history ?? []).map((h) => ({
+            role: h.role,
+            timestamp: h.timestamp,
+            meta: (h.meta ?? null) as Record<string, number> | null,
+            textLength: h.textLength,
+          })),
+          absent: context.interactionProfile.absent,
+        }
+      : undefined,
     contextCompression: compression.compressed ? {
       enabled: true,
       estimatedTokens: compression.estimatedTokens,
@@ -938,10 +951,10 @@ export class AITeachingOrchestrator {
   }> {
     const context = await buildTeachingScenarioContext(input.userId, input.taskId, null);
     const seededKnowledgeState = cloneKnowledgePoints(context.taskKnowledgeSeeds);
-    // 记忆引擎 M2：惰性检查到期复习点，作为 review 状态注入本节课知识看板（旧知唤醒，
-    // best-effort：查询失败不阻断开课）
+    // 记忆引擎 M2：经 learn agent 出口惰性检查到期复习点，作为 review 状态注入本节课知识看板
+    // （旧知唤醒，best-effort：查询失败不阻断开课；出口=LearnerExitService.getDueReview）
     try {
-      const dueTraces = await memoryTraceService.getDueTraces(input.userId, { limit: 2 });
+      const dueTraces = await learnerExitService.getDueReview(input.userId, 2);
       if (dueTraces.length > 0) {
         const existingKeys = new Set(seededKnowledgeState.map((point) => point.name));
         for (const trace of dueTraces) {

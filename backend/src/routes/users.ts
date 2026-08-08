@@ -3,6 +3,7 @@ import express from 'express';
 import prisma from '../config/database';
 import { rejectProjectionAccess } from '../middleware/projection-access.middleware';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
+import { getLevelFromXp } from '../services/learner/level.util';
 
 const router = express.Router();
 
@@ -89,8 +90,8 @@ router.get('/me', async (req, res, next) => {
       });
     }
 
-    // 计算用户等级（基于XP）
-    const calculatedLevel = Math.floor(Math.sqrt(user.xp / 100)) + 1;
+    // 计算用户等级（基于XP，单点公式 level.util）
+    const calculatedLevel = getLevelFromXp(user.xp);
 
     res.json({
       success: true,
