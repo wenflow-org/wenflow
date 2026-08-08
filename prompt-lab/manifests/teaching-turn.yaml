@@ -37,6 +37,7 @@ promptContract:
   fields:
     latestLearnerMessage: { direction: input, visibility: user-visible }
     scenario: { direction: input, visibility: internal }
+    interactionProfile: { direction: input, visibility: internal }
     learner: { direction: state, visibility: handoff, owner: orchestrator }
     classroomContext: { direction: state, visibility: handoff, owner: orchestrator }
     classroomEventContext: { direction: state, visibility: handoff, owner: orchestrator }

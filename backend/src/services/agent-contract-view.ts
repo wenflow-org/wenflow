@@ -81,6 +81,7 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'session.wrapup',
     'learningState',
     'scenario',
+    'scenario.interactionProfile',
     'teachingState.classroomContext',
     'teachingState.teachingControlContext',
     'teachingState.classroomEventHistory',

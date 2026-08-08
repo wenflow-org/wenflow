@@ -1,5 +1,6 @@
 import api, { AI_REQUEST_TIMEOUT } from '../utils/api';
 import { streamSsePost } from '../utils/sse';
+import type { InteractionMeta } from '../composables/useInteractionMeta';
 
 export interface TeachingSession {
   sessionId: string;
@@ -331,8 +332,8 @@ export const aiTeachingAPI = {
     return result.data || result;
   },
 
-  async sendMessage(sessionId: string, message: string, revision: number): Promise<MessageResult> {
-    const result = await api.post(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision }, { timeout: AI_REQUEST_TIMEOUT });
+  async sendMessage(sessionId: string, message: string, revision: number, meta?: InteractionMeta): Promise<MessageResult> {
+    const result = await api.post(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision, ...(meta ? { meta } : {}) }, { timeout: AI_REQUEST_TIMEOUT });
     return result.data || result;
   },
 
@@ -347,7 +348,8 @@ export const aiTeachingAPI = {
     sessionId: string,
     message: string,
     revision: number,
-    handlers: { onDelta: (text: string) => void; onRestart?: () => void; signal?: AbortSignal }
+    handlers: { onDelta: (text: string) => void; onRestart?: () => void; signal?: AbortSignal },
+    meta?: InteractionMeta
   ): Promise<MessageResult> {
     return new Promise<MessageResult>((resolve, reject) => {
       let result: MessageResult | null = null;
@@ -359,7 +361,7 @@ export const aiTeachingAPI = {
         settled = true;
         reject(error);
       };
-      streamSsePost(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision }, {
+      streamSsePost(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision, ...(meta ? { meta } : {}) }, {
         signal: handlers.signal,
         onEvent: (event, data) => {
           if (event === 'delta' && typeof data?.text === 'string') {

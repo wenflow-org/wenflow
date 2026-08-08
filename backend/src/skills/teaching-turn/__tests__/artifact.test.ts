@@ -31,6 +31,8 @@ const artifact: TeachingTurnOutput = {
     confusionPoints: [],
     engagement: 0.8,
     emotionalState: 'neutral',
+    loadIndex: 0.5,
+    loadBasis: 'absent',
   },
   knowledge: {
     currentPoint: '条件类型',

@@ -1,12 +1,15 @@
 /**
  * EMA (Exponential Moving Average) 服务
- * 
+ *
  * 用于建立学生个人化动态基线
- * 
+ *
  * 核心公式:
  * EMA_t = α × X_t + (1-α) × EMA_{t-1}
  * EMVar_t = α × (X_t - EMA_t)² + (1-α) × EMVar_{t-1}
  * Z_t = (X_t - EMA_{t-1}) / √EMVar_{t-1}
+ *
+ * @deprecated 2026-08 认知负荷量测改由"前端交互特征 + LLM 语义判断"承担（见 M1 认知负荷感知层），
+ * 语言特征相对化通过 prompt 对比近几轮实现，不再维护统计基线管道；本服务无生产调用方，待清理。
  */
 
 export interface EMABaseline {

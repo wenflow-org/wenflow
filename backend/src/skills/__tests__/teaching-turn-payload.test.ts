@@ -79,6 +79,7 @@ describe('teaching-turn payload snapshot parity', () => {
       'classroomContext',
       'classroomEventContext',
       'controls',
+      'interactionProfile',
       'knowledge',
       'latestLearnerMessage',
       'learner',
@@ -89,6 +90,7 @@ describe('teaching-turn payload snapshot parity', () => {
     ])
     // prompt 文档不再声明 messages —— runtime 键是 recentDialogueContext
     expect(payload).not.toHaveProperty('messages')
+    expect(payload.interactionProfile).toBeNull()
     expect(payload).toMatchSnapshot({
       latestLearnerMessage: expect.any(String),
       promptDirectives: expect.any(Object),
@@ -130,6 +132,7 @@ describe('teaching-turn payload snapshot parity', () => {
     const declaredInputs = Object.keys(fields).filter((key) => fields[key].direction === 'input')
     expect(declaredInputs.sort()).toEqual([
       'controls',
+      'interactionProfile',
       'latestLearnerMessage',
       'promptDirectives',
       'recentDialogueContext',
@@ -153,5 +156,90 @@ describe('teaching-turn payload snapshot parity', () => {
     expect(fields.control).toMatchObject({ direction: 'output', visibility: 'handoff' })
     expect(fields.reply).toMatchObject({ direction: 'output', visibility: 'user-visible' })
     expect(fields.knowledge).toMatchObject({ direction: 'state', visibility: 'handoff', owner: 'orchestrator' })
+  })
+})
+
+describe('teaching-turn interactionProfile（认知负荷量测 · 前端情报层）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockCallPrompt.mockResolvedValue(SUCCESS_RESULT)
+  })
+
+  const WITH_PROFILE = {
+    ...MINIMAL_INPUT,
+    scenario: {
+      ...MINIMAL_INPUT.scenario,
+      interactionProfile: {
+        current: { draftMs: 24000, idleMsBefore: 90000, lastIdleMs: 6000, editingCount: 14, deleteCount: 38, charsPerSentence: 12 },
+        history: [
+          { role: 'assistant' as const, timestamp: '2026-08-07T10:00:00.000Z', meta: null, textLength: 200 },
+          { role: 'user' as const, timestamp: '2026-08-07T10:01:00.000Z', meta: { draftMs: 5000, charsPerSentence: 28 }, textLength: 60 },
+        ],
+        absent: false,
+      },
+    },
+  }
+
+  it('payload carries interactionProfile when provided', async () => {
+    await teachingTurnAgentHandler(WITH_PROFILE as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    const payload = spec.buildUserPayload(input, {})
+
+    expect(payload.interactionProfile).toMatchObject({
+      absent: false,
+      current: expect.objectContaining({ draftMs: 24000, charsPerSentence: 12 }),
+      history: expect.arrayContaining([
+        expect.objectContaining({ role: 'user', textLength: 60, meta: expect.objectContaining({ charsPerSentence: 28 }) }),
+      ]),
+    })
+  })
+
+  it('normalizeOutput defaults loadIndex 0.5 / loadBasis absent when model omits them', async () => {
+    await teachingTurnAgentHandler(MINIMAL_INPUT as any)
+
+    const [spec] = mockCallPrompt.mock.calls[0]
+    const normalized = spec.normalizeOutput({
+      reply: '继续。',
+      analysis: { cognitiveLevel: 'understand', understanding: 0.6 },
+      knowledge: { currentPoint: '闭包', points: [] },
+      pedagogy: { strategies: ['analogy'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }, MINIMAL_INPUT)
+
+    expect(normalized.analysis.loadIndex).toBe(0.5)
+    expect(normalized.analysis.loadBasis).toBe('absent')
+  })
+
+  it('normalizeOutput clamps loadIndex into 0-1 and validates loadBasis enum', async () => {
+    await teachingTurnAgentHandler(MINIMAL_INPUT as any)
+
+    const [spec] = mockCallPrompt.mock.calls[0]
+    const normalized = spec.normalizeOutput({
+      reply: '继续。',
+      analysis: { cognitiveLevel: 'understand', understanding: 0.6, loadIndex: 1.7, loadBasis: 'invented' },
+      knowledge: { currentPoint: '闭包', points: [] },
+      pedagogy: { strategies: ['analogy'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }, MINIMAL_INPUT)
+
+    expect(normalized.analysis.loadIndex).toBe(1)
+    expect(normalized.analysis.loadBasis).toBe('absent')
+  })
+
+  it('normalizeOutput keeps valid loadIndex and loadBasis from model', async () => {
+    await teachingTurnAgentHandler(MINIMAL_INPUT as any)
+
+    const [spec] = mockCallPrompt.mock.calls[0]
+    const normalized = spec.normalizeOutput({
+      reply: '继续。',
+      analysis: { cognitiveLevel: 'understand', understanding: 0.6, loadIndex: 0.78, loadBasis: 'combined' },
+      knowledge: { currentPoint: '闭包', points: [] },
+      pedagogy: { strategies: ['analogy'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }, MINIMAL_INPUT)
+
+    expect(normalized.analysis.loadIndex).toBe(0.78)
+    expect(normalized.analysis.loadBasis).toBe('combined')
   })
 })

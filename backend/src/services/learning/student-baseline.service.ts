@@ -1,6 +1,9 @@
 // 学生基线服务
 // 使用指数加权移动平均 (EMA) 追踪学生的响应模式基线
 // 使用 student_baselines 表（conversationBaseline 表已废弃）
+//
+// @deprecated 2026-08 认知负荷量测改由"前端交互特征 + LLM 语义判断"承担（见 M1 认知负荷感知层），
+// 语言特征相对化通过 prompt 对比近几轮实现，不再维护统计基线管道；本服务无生产调用方，待清理。
 
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';

@@ -58,6 +58,7 @@
             rows="1"
             maxlength="500"
             placeholder="先说说你最近想解决什么，或现在卡在哪里…"
+            @input="live.meta.onInput(input.length)"
             @keydown.enter.exact.prevent="doSend"
           ></textarea>
           <span class="composer__send" :class="{ 'composer__send--off': !input.trim() || live.sending }" @click="doSend">

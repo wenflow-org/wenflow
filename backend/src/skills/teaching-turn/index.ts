@@ -15,6 +15,7 @@ type MessageRole = 'user' | 'assistant' | 'system';
 const ALLOWED_COGNITIVE_LEVELS = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'] as const;
 const ALLOWED_EMOTIONAL_STATES = ['positive', 'neutral', 'frustrated', 'confused'] as const;
 const ALLOWED_KNOWLEDGE_STATUSES = ['pending', 'learning', 'mastered', 'review'] as const;
+const ALLOWED_LOAD_BASIS = ['semantic', 'structure', 'pacing', 'combined', 'absent'] as const;
 
 export interface TeachingTurnInput {
   messages: Array<{ role: MessageRole; content: string }>;
@@ -86,6 +87,17 @@ export interface TeachingTurnInput {
       retrievalCue?: string | null;
       unresolvedPoints?: string[];
     } | null;
+    /** 前端交互特征情报（认知负荷量测）：本轮统计 + 近轮对比，仅供判断 loadIndex */
+    interactionProfile?: {
+      current?: Record<string, number> | null;
+      history?: Array<{
+        role: string;
+        timestamp: string;
+        meta?: Record<string, number> | null;
+        textLength: number;
+      }>;
+      absent?: boolean;
+    } | null;
   };
   knowledge: {
     points: Array<{
@@ -112,6 +124,10 @@ export interface TeachingTurnOutput {
     confusionPoints: string[];
     engagement: number;
     emotionalState: string;
+    /** 合成认知负荷 0-1（LLM 基于语义+前端交互特征判断），默认 0.5 */
+    loadIndex: number;
+    /** 判断依据：semantic|structure|pacing|combined|absent，默认 absent */
+    loadBasis: string;
   };
   knowledge: {
     currentPoint: string | null;
@@ -340,6 +356,12 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
       emotionalState: (typeof analysis.emotionalState === 'string' && (ALLOWED_EMOTIONAL_STATES as readonly string[]).includes(analysis.emotionalState))
         ? analysis.emotionalState
         : 'neutral',
+      loadIndex: Number.isFinite(analysis.loadIndex)
+        ? Math.max(0, Math.min(1, Number(analysis.loadIndex)))
+        : 0.5,
+      loadBasis: (typeof analysis.loadBasis === 'string' && (ALLOWED_LOAD_BASIS as readonly string[]).includes(analysis.loadBasis))
+        ? analysis.loadBasis
+        : 'absent',
     },
     knowledge: {
       currentPoint: currentPointRemovedByFilter
@@ -406,6 +428,7 @@ function buildPromptInput(input: TeachingTurnInput) {
     controls: input.controls,
     visibleDialogueContext: input.visibleDialogueContext || input.messages,
     recentDialogueContext: input.messages,
+    interactionProfile: input.scenario.interactionProfile ?? null,
     promptDirectives: {
       ...(strategyGuidancePrompt ? { strategyGuidance: strategyGuidancePrompt } : {}),
       taskExecution: taskExecutionPrompt,

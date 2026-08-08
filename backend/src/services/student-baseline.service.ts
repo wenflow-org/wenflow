@@ -1,16 +1,19 @@
 import { PrismaClient } from '@prisma/client';
-import { 
-  updateEMA, 
-  calculateZScore, 
+import {
+  updateEMA,
+  calculateZScore,
   processObservation,
   initializeBaseline,
-  EMABaseline 
+  EMABaseline
 } from './ema.service';
 
 const prisma = new PrismaClient();
 
 /**
  * 学生基线数据
+ *
+ * @deprecated 2026-08 认知负荷量测改由"前端交互特征 + LLM 语义判断"承担（见 M1 认知负荷感知层），
+ * 语言特征相对化通过 prompt 对比近几轮实现，不再维护统计基线管道；本服务无生产调用方，待清理。
  */
 export interface StudentBaselineData {
   responseTime: EMABaseline;

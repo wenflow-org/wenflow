@@ -16,7 +16,7 @@ class RequirementCoordinator {
     return goalConversationService.startConversation(userId, goal, options);
   }
 
-  async step(conversationId: string, reply: string, userId: string, options?: { contextMode?: 'recent' | 'full'; confirmProposal?: boolean }) {
+  async step(conversationId: string, reply: string, userId: string, options?: { contextMode?: 'recent' | 'full'; confirmProposal?: boolean; meta?: Record<string, number> | null }) {
     logger.info('[requirement-coordinator] step', {
       agentId: this.id,
       userId,

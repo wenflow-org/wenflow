@@ -21,6 +21,7 @@ import {
 } from '../services/ai-teaching/TeachingSessionRepository';
 import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
 import { PromptStreamEvent, setRequestContext, getRequestContext } from '../gateway/api-gateway/context';
+import type { InteractionMetaRecord } from '../services/ai-teaching/TeachingContextBuilder';
 
 const router = Router();
 
@@ -37,6 +38,26 @@ const requireExpectedRevision = (value: unknown): number => {
   }
   return revision;
 };
+
+const META_KEYS = ['draftMs', 'idleMsBefore', 'lastIdleMs', 'editingCount', 'deleteCount', 'charsPerSentence'] as const;
+
+/**
+ * 清洗前端交互特征（认知负荷量测 · 前端情报层）。
+ * 只保留合法数值字段；meta 缺失/非法时返回 undefined（走 absent 降级路径）。
+ */
+function sanitizeInteractionMeta(raw: unknown): InteractionMetaRecord | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const meta: InteractionMetaRecord = {};
+  let valid = false;
+  for (const key of META_KEYS) {
+    const value = (raw as Record<string, unknown>)[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      (meta as Record<string, number>)[key] = value;
+      valid = true;
+    }
+  }
+  return valid ? meta : undefined;
+}
 
 const requireIdempotencyKey = (value: unknown): string => {
   const key = typeof value === 'string' ? value.trim() : '';
@@ -158,7 +179,8 @@ const handleStreamingMessage = async (
   res: any,
   sessionId: string,
   message: string,
-  expectedRevision: number
+  expectedRevision: number,
+  interactionMeta?: InteractionMetaRecord
 ) => {
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -183,7 +205,7 @@ const handleStreamingMessage = async (
   setRequestContext({ streamRequest, sessionId, sourceEntry: 'platform' });
 
   try {
-    const result = await aiTeachingCoordinator.processStudentMessage(sessionId, message, { expectedRevision });
+    const result = await aiTeachingCoordinator.processStudentMessage(sessionId, message, { expectedRevision, interactionMeta });
     const synthetic = req.user?.projection?.grantSource === 'synthetic';
     writeSseEvent(res, 'final', buildMessageResultData(result, synthetic));
     writeSseEvent(res, 'done', {});
@@ -397,6 +419,7 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
     await teachingSessionRepository.assertOwnership(sessionId, userId);
 
     const { message } = req.body;
+    const interactionMeta = sanitizeInteractionMeta(req.body?.meta);
 
     if (!message) {
       return res.status(400).json({
@@ -409,13 +432,13 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
     const wantsStream = String(req.headers?.accept || '').includes('text/event-stream');
 
     if (wantsStream) {
-      return handleStreamingMessage(req, res, sessionId, message, expectedRevision);
+      return handleStreamingMessage(req, res, sessionId, message, expectedRevision, interactionMeta);
     }
 
     const result = await aiTeachingCoordinator.processStudentMessage(
       sessionId,
       message,
-      { expectedRevision }
+      { expectedRevision, interactionMeta }
     );
 
     const synthetic = req.user?.projection?.grantSource === 'synthetic';

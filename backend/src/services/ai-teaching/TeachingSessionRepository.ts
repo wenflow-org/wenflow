@@ -53,6 +53,8 @@ export interface TeachingSessionMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: string;
+  /** 前端交互特征（认知负荷量测 · 前端情报层）：随消息落库，供后续轮次对比 */
+  meta?: Record<string, number> | null;
   analysis?: Record<string, any>;
   strategies?: string[];
   knowledgePoint?: string | null;

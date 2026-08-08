@@ -14,6 +14,7 @@ import {
   type GoalConversationEnvelope,
   type GoalUnderstanding
 } from '@/api/goalConversation';
+import { useInteractionMeta, type InteractionMeta } from '@/composables/useInteractionMeta';
 
 export interface LiveMessage {
   role: 'user' | 'ai';
@@ -80,6 +81,8 @@ function formatMsgTime(raw?: string): string {
 
 const conversationId = ref('');
 const messages = ref<LiveMessage[]>([]);
+/** 交互特征采集器（认知负荷量测 · 前端情报层），暴露给页面做输入埋点 */
+const metaTracker = useInteractionMeta();
 const stage = ref<'understanding' | 'proposing' | 'ready' | 'completed' | ''>('');
 const confidence = ref(0);
 const isCompleted = ref(false);
@@ -149,6 +152,9 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
   const core = env.internal?.core;
   const ext = env.internal?.ext?.goalConversation;
 
+  // AI 回复落地：更新交互特征采集的"上一条回复时间"锚点
+  metaTracker.markAssistantLanded();
+
   if (core?.conversationId) {
     conversationId.value = core.conversationId;
     localStorage.setItem(CID_KEY, core.conversationId);
@@ -192,7 +198,7 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
   started.value = true;
 }
 
-async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: string) {
+async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: string, meta?: InteractionMeta) {
   sending.value = true;
   failed.value = '';
   lastPayload.value = text;
@@ -202,13 +208,13 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
     let env: GoalConversationEnvelope | null = null;
     try {
       if (action === 'start') {
-        env = await streamStartGoalConversation(text);
+        env = await streamStartGoalConversation(text, { meta });
       } else if (action === 'confirm') {
         env = await streamReplyGoalConversation(conversationId.value, text, { confirmProposal: true });
       } else if (action === 'supplement') {
         env = await streamRegenerateGoalConversation(conversationId.value, text);
       } else {
-        env = await streamReplyGoalConversation(conversationId.value, text);
+        env = await streamReplyGoalConversation(conversationId.value, text, { meta });
       }
     } catch (streamError) {
       const e = streamError as { transport?: boolean; recoveryEnvelope?: GoalConversationEnvelope };
@@ -220,13 +226,13 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
       } else {
         // 传输层失败且未收到任何内容：回退非流式重发
         if (action === 'start') {
-          env = await startGoalConversation(text);
+          env = await startGoalConversation(text, { meta });
         } else if (action === 'confirm') {
           env = await replyGoalConversation(conversationId.value, text, { confirmProposal: true });
         } else if (action === 'supplement') {
           env = await regenerateGoalConversation(conversationId.value, text);
         } else {
-          env = await replyGoalConversation(conversationId.value, text);
+          env = await replyGoalConversation(conversationId.value, text, { meta });
         }
       }
     }
@@ -259,10 +265,11 @@ async function send(text: string) {
   messages.value.push({ role: 'user', content: t, time: nowTime() });
   started.value = true;
   localStorage.setItem(MSG_KEY, JSON.stringify(messages.value.slice(-60)));
+  const meta = metaTracker.collect(t);
   if (!conversationId.value) {
-    await run('start', t);
+    await run('start', t, meta);
   } else {
-    await run('reply', t);
+    await run('reply', t, meta);
   }
 }
 
@@ -370,6 +377,7 @@ export function useGoalLive() {
     failed,
     started,
     quickReplyHintShown,
+    meta: metaTracker,
     send,
     confirm,
     supplement,

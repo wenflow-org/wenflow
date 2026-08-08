@@ -144,6 +144,7 @@
               rows="1"
               maxlength="800"
               placeholder="随时提问，或说说你的理解…"
+              @input="interactionMeta.onInput(input.length)"
               @keydown.enter.exact.prevent="send"
             ></textarea>
             <span class="composer__count">{{ input.length }} / 800</span>
@@ -231,12 +232,14 @@ import request, { API_BASE_URL } from '@/utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import AiContentNote from '@/components/AiContentNote.vue';
 import { toast } from '@/utils/toast';
+import { useInteractionMeta } from '@/composables/useInteractionMeta';
 import './v2.css';
 import { unwrap } from './unwrap';
 
 const route = useRoute();
 const router = useRouter();
 const taskId = String(route.params.taskId || '');
+const interactionMeta = useInteractionMeta();
 
 /* ---------- 基础 ---------- */
 const taskTitle = ref('');
@@ -420,6 +423,7 @@ async function doSend(text: string) {
   quickReplies.value = [];
   typing.value = true;
   scrollDown();
+  const meta = interactionMeta.collect(text);
   try {
     let r: Record<string, any>;
     try {
@@ -443,17 +447,18 @@ async function doSend(text: string) {
           const m = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
           if (m?.role === 'ai') m.text = '';
         },
-      }) as unknown as Record<string, any>;
+      }, meta) as unknown as Record<string, any>;
     } catch (streamError) {
       // 传输层失败且未收到任何内容：安全回退非流式重发；业务失败或已收到部分内容则交给外层报错
       if (!(streamError as { transport?: boolean })?.transport) throw streamError;
       if (streamingBubbleIndex.value >= 0) msgs.value.splice(streamingBubbleIndex.value, 1);
       streamingBubbleIndex.value = -1;
-      r = await aiTeachingAPI.sendMessage(session.value.sessionId, text, session.value.revision) as unknown as Record<string, any>;
+      r = await aiTeachingAPI.sendMessage(session.value.sessionId, text, session.value.revision, meta) as unknown as Record<string, any>;
     } finally {
       streamAbort = null;
     }
     session.value.revision = r.revision ?? session.value.revision + 1;
+    interactionMeta.markAssistantLanded();
     // 导师回复（附带本轮捕获到的卡点，作为气泡下方的依据 chip）
     const confusion = Array.isArray(r.analysis?.confusionPoints)
       ? r.analysis.confusionPoints.map((p: unknown) => String(p || '').trim()).filter(Boolean).slice(0, 2)

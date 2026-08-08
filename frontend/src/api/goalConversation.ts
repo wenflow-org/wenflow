@@ -1,5 +1,6 @@
 import api, { AI_REQUEST_TIMEOUT } from '@/utils/api';
 import { streamSsePost } from '@/utils/sse';
+import type { InteractionMeta } from '@/composables/useInteractionMeta';
 
 export interface GoalUnderstanding {
   surface_goal?: string;
@@ -103,6 +104,8 @@ export type GoalConversationContextMode = 'recent' | 'full';
 interface GoalConversationRequestOptions {
   contextMode?: GoalConversationContextMode;
   confirmProposal?: boolean;
+  /** 前端交互特征（认知负荷量测 · 可选，缺失走 absent 路径） */
+  meta?: InteractionMeta;
 }
 
 export async function startGoalConversation(
@@ -111,7 +114,8 @@ export async function startGoalConversation(
 ): Promise<GoalConversationEnvelope> {
   const response = await api.post('/goal-conversation/start', {
     input: { text },
-    contextMode: options.contextMode || 'recent'
+    contextMode: options.contextMode || 'recent',
+    ...(options.meta ? { meta: options.meta } : {})
   }, { timeout: AI_REQUEST_TIMEOUT }) as GoalConversationApiResponse;
 
   return response.data;
@@ -125,7 +129,8 @@ export async function replyGoalConversation(
   const response = await api.post(`/goal-conversation/${conversationId}/reply`, {
     input: { text },
     contextMode: options.contextMode || 'recent',
-    confirmProposal: options.confirmProposal === true
+    confirmProposal: options.confirmProposal === true,
+    ...(options.meta ? { meta: options.meta } : {})
   }, { timeout: AI_REQUEST_TIMEOUT }) as GoalConversationApiResponse;
 
   return response.data;
@@ -157,7 +162,7 @@ export type GoalStreamAction = 'start' | 'reply' | 'regenerate';
 async function streamGoalRequest(
   action: GoalStreamAction,
   conversationId: string | null,
-  payload: { text?: string; contextMode?: GoalConversationContextMode; confirmProposal?: boolean; adjustments?: string },
+  payload: { text?: string; contextMode?: GoalConversationContextMode; confirmProposal?: boolean; adjustments?: string; meta?: InteractionMeta },
   signal?: AbortSignal
 ): Promise<GoalConversationEnvelope> {
   const url = action === 'start'
@@ -170,6 +175,7 @@ async function streamGoalRequest(
   }
   if (payload.confirmProposal === true) body.confirmProposal = true;
   if (payload.adjustments !== undefined) body.adjustments = payload.adjustments;
+  if (payload.meta !== undefined) body.meta = payload.meta;
 
   return new Promise<GoalConversationEnvelope>((resolve, reject) => {
     let envelope: GoalConversationEnvelope | null = null;
@@ -228,7 +234,7 @@ export async function streamStartGoalConversation(
   options: GoalConversationRequestOptions = {},
   signal?: AbortSignal
 ): Promise<GoalConversationEnvelope> {
-  return streamGoalRequest('start', null, { text, contextMode: options.contextMode }, signal);
+  return streamGoalRequest('start', null, { text, contextMode: options.contextMode, meta: options.meta }, signal);
 }
 
 export async function streamReplyGoalConversation(
@@ -240,7 +246,8 @@ export async function streamReplyGoalConversation(
   return streamGoalRequest('reply', conversationId, {
     text,
     contextMode: options.contextMode,
-    confirmProposal: options.confirmProposal
+    confirmProposal: options.confirmProposal,
+    meta: options.meta
   }, signal);
 }
 

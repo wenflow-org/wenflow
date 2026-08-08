@@ -7,6 +7,7 @@ exports[`teaching-turn payload snapshot parity payload contains exactly the keys
   "controls": {
     "mode": "tutor",
   },
+  "interactionProfile": null,
   "knowledge": {
     "points": [
       {

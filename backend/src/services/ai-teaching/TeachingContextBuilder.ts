@@ -94,6 +94,70 @@ export interface TeachingScenarioContext {
     retrievalCue: string | null;
     unresolvedPoints: string[];
   } | null;
+  /**
+   * 交互特征情报（认知负荷量测 · 前端情报层）：
+   * 本轮学生输入的打字节奏统计 + 近 5 轮学生消息特征对比，缺失字段为 undefined（absent）。
+   * 仅供 LLM 结合文本语义判断 loadIndex，不参与任何规则计算。
+   */
+  interactionProfile: {
+    current: InteractionMetaRecord | null;
+    history: InteractionHistoryEntry[];
+    absent: boolean;
+  } | null;
+}
+
+/**
+ * 前端交互特征（认知负荷量测）：前端在输入框聚合的统计值，随消息提交。
+ * 全部为可选数值；缺失字段在 prompt 层按 absent 处理。
+ */
+export interface InteractionMetaRecord {
+  draftMs?: number;
+  idleMsBefore?: number;
+  lastIdleMs?: number;
+  editingCount?: number;
+  deleteCount?: number;
+  charsPerSentence?: number;
+}
+
+/** 近轮消息的交互特征对比条目（供 LLM 判断相对异动，替代统计基线） */
+export interface InteractionHistoryEntry {
+  role: 'user' | 'assistant';
+  timestamp: string;
+  meta?: InteractionMetaRecord | null;
+  textLength: number;
+}
+
+/** 仅提取每条消息中可用的数值特征（meta 中的合法数字字段） */
+function extractInteractionMeta(message: { meta?: InteractionMetaRecord | null }): InteractionMetaRecord | null {
+  if (!message.meta || typeof message.meta !== 'object') return null;
+  const meta: InteractionMetaRecord = {};
+  let hasAny = false;
+  for (const [key, value] of Object.entries(message.meta)) {
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      (meta as Record<string, number>)[key] = value;
+      hasAny = true;
+    }
+  }
+  return hasAny ? meta : null;
+}
+
+/** 组装 interactionProfile：本轮特征 + 近 5 轮特征对比（供 LLM 判断相对异动，替代统计基线） */
+function buildInteractionProfile(
+  interactionMeta: InteractionMetaRecord | null | undefined,
+  messages: TeachingSessionRecord['messages']
+): TeachingScenarioContext['interactionProfile'] {
+  const history: InteractionHistoryEntry[] = [];
+  const recent = messages.slice(-6);
+  for (const message of recent) {
+    history.push({
+      role: message.role === 'assistant' ? 'assistant' : 'user',
+      timestamp: message.timestamp,
+      meta: extractInteractionMeta(message as { meta?: InteractionMetaRecord | null }),
+      textLength: typeof message.content === 'string' ? message.content.length : 0,
+    });
+  }
+  const current = extractInteractionMeta({ meta: interactionMeta ?? null });
+  return { current, history, absent: current === null };
 }
 
 function parseJsonSafe(raw: string | null | undefined): any {
@@ -323,7 +387,8 @@ function buildTeachingStrategyGuidance(taskProfile: TeachingScenarioContext['tas
 export async function buildTeachingScenarioContext(
   userId: string,
   taskId: string,
-  previousSession?: TeachingSessionRecord | null
+  previousSession?: TeachingSessionRecord | null,
+  interactionMeta?: InteractionMetaRecord | null
 ): Promise<TeachingScenarioContext> {
   const task = await prisma.subtasks.findUnique({
     where: { id: taskId },
@@ -459,5 +524,6 @@ export async function buildTeachingScenarioContext(
       } : null,
     learningSignal,
     lastLessonRecap,
+    interactionProfile: buildInteractionProfile(interactionMeta, previousSession?.messages ?? []),
   };
 }

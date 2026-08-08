@@ -6,6 +6,23 @@ import { PromptStreamEvent, setRequestContext } from '../gateway/api-gateway/con
 
 const router = express.Router();
 
+const META_KEYS = ['draftMs', 'idleMsBefore', 'lastIdleMs', 'editingCount', 'deleteCount', 'charsPerSentence'] as const;
+
+/** 清洗前端交互特征（认知负荷量测 · 前端情报层）：只保留合法数值，缺失/非法返回 undefined（absent 降级） */
+function sanitizeMeta(raw: unknown): Record<string, number> | null | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const meta: Record<string, number> = {};
+  let valid = false;
+  for (const key of META_KEYS) {
+    const value = (raw as Record<string, unknown>)[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      meta[key] = value;
+      valid = true;
+    }
+  }
+  return valid ? meta : undefined;
+}
+
 /** 写一条 SSE 事件。HTTP 200 已提交后无法再改状态码，业务失败统一以 event: error 带内下发。 */
 const writeSseEvent = (res: Response, event: string, data: unknown) => {
   if (!res || res.destroyed || res.writableEnded) return;
@@ -218,7 +235,8 @@ router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: 
         res,
         () => requirementOrchestrator.step(conversationId, reply, userId, {
           contextMode: getContextMode(req.body),
-          confirmProposal: getConfirmProposal(req.body)
+          confirmProposal: getConfirmProposal(req.body),
+          meta: sanitizeMeta(req.body?.meta)
         }),
         (result) => goalEnvelopeForRequest(req, result, conversationId)
       );
@@ -226,7 +244,8 @@ router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: 
 
     const result = await requirementOrchestrator.step(conversationId, reply, userId, {
       contextMode: getContextMode(req.body),
-      confirmProposal: getConfirmProposal(req.body)
+      confirmProposal: getConfirmProposal(req.body),
+      meta: sanitizeMeta(req.body?.meta)
     });
     return res.json({
       success: true,
