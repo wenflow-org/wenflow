@@ -328,13 +328,17 @@ function determineNextStage(params: {
     ? teachingOutput.analysis.confusionPoints
     : [];
   const completionCandidate = teachingOutput.control?.isCompletionCandidate === true;
+  // loadIndex 作为 intervention 的辅助证据（认知过载 >0.85 且理解不足时倾向干预，
+  // 而非仅依赖情绪/困惑点显式信号；M1 感知层消费接入）
+  const loadIndex = Number(teachingOutput.analysis?.loadIndex);
+  const highLoad = Number.isFinite(loadIndex) && loadIndex > 0.85;
 
   if (completionCandidate) {
     return { stage: 'ready_to_close', reason: '检测到完成候选，当前任务已接近收束' };
   }
 
-  if (peerTriggered || understanding < 0.35 || emotion === 'frustrated' || confusionPoints.length >= 2) {
-    return { stage: 'intervention', reason: '学生出现明显卡点，进入干预阶段' };
+  if (peerTriggered || understanding < 0.35 || emotion === 'frustrated' || confusionPoints.length >= 2 || (highLoad && understanding < 0.6)) {
+    return { stage: 'intervention', reason: highLoad ? '认知负荷过高，进入干预降载' : '学生出现明显卡点，进入干预阶段' };
   }
 
   if (currentStage === 'opening' && learnerMessage.trim()) {
@@ -652,8 +656,52 @@ function computeKnowledgeDelta(
   };
 }
 
-function computeSessionEvidence(session: TeachingSessionRecord) {
-  // 排除检查点合成消息（非真实学生话语），避免污染理解/参与度统计
+/**
+ * session_load 聚合（loadIndex 聚合消费）：从会话消息的 analysis.loadIndex 聚合
+ * 均值/峰值/loadBasis 分布，以 metricType='session_load' 幂等写入 learning_metrics
+ * （sourceKey=session-load:{sessionId}）。无 loadIndex 证据时跳过。
+ */
+async function commitSessionLoadMetric(session: TeachingSessionRecord): Promise<void> {
+  const loadIndexes: number[] = [];
+  const basisCounter = new Map<string, number>();
+  for (const message of session.messages) {
+    const load = Number(message.analysis?.loadIndex);
+    if (Number.isFinite(load)) loadIndexes.push(load);
+    const basis = message.analysis?.loadBasis;
+    if (typeof basis === 'string' && basis) {
+      basisCounter.set(basis, (basisCounter.get(basis) || 0) + 1);
+    }
+  }
+  if (loadIndexes.length === 0) return;
+  const avg = loadIndexes.reduce((sum, value) => sum + value, 0) / loadIndexes.length;
+  const max = Math.max(...loadIndexes);
+  const basisDist: Record<string, number> = {};
+  for (const [key, count] of basisCounter) basisDist[key] = count;
+
+  await prisma.learning_metrics.upsert({
+    where: {
+      sourceKey: `session-load:${session.id}`,
+    },
+    update: {},
+    create: {
+      id: `sl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+      sourceKey: `session-load:${session.id}`,
+      userId: session.userId,
+      pathId: session.learningPathId || null,
+      taskId: session.taskId,
+      metricType: 'session_load',
+      value: Number(avg.toFixed(3)),
+      metadata: JSON.stringify({
+        max: Number(max.toFixed(3)),
+        basisDist,
+        perTurnCount: loadIndexes.length,
+        scale: '0-1',
+      }),
+    },
+  });
+}
+
+function computeSessionEvidence(session: TeachingSessionRecord) {  // 排除检查点合成消息（非真实学生话语），避免污染理解/参与度统计
   const analyzedMessages = session.messages.filter((message) => !!message.analysis && !message.checkpoint);
   const avg = (values: number[]) => values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
   const understandingScores = analyzedMessages
@@ -1947,6 +1995,13 @@ export class AITeachingOrchestrator {
           wrapup: finalWrapup,
           advisory
         }
+      });
+
+      await commitSessionLoadMetric(session).catch((error) => {
+        logger.warn('[AITeaching] session_load 指标写入失败（不影响收束）', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       });
 
       try {
