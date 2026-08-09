@@ -171,9 +171,7 @@ const demoStages: Stage[] = [
     consumes: ['user_message'],
     produces: ['goal_understanding', 'learner_profile'],
     skills: [
-      { id: 'goal-conversation', name: '目标对话', calls: 1284, produces: ['dialogue_concepts'] },
-      { id: 'goal-profile-inference', name: '画像推断', calls: 856, produces: ['learner_profile'] },
-      { id: 'goal-understanding-composer', name: '理解合成', calls: 640, produces: ['goal_understanding'] }
+      { id: 'goal-conversation', name: '目标对话', calls: 1284, produces: ['dialogue_concepts'] }
     ]
   },
   {
@@ -207,8 +205,7 @@ const demoStages: Stage[] = [
     produces: ['learner_snapshot', 'risk_signals'],
     skills: [
       { id: 'learner-model', name: '状态聚合', calls: 930, produces: ['learner_snapshot'] },
-      { id: 'learning-pattern-distiller', name: '快照刷新', calls: 1204, produces: ['risk_signals'] },
-      { id: 'lesson-knowledge-enricher', name: '知识沉淀', calls: 260, produces: ['concept_map'] }
+      { id: 'lesson-knowledge-enricher', name: '知识蒸馏', calls: 260, produces: ['concept_map'] }
     ]
   },
   {

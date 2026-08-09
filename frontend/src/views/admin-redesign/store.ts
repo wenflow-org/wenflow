@@ -57,7 +57,7 @@ export interface TraceSpan {
 const successTrace: TraceSpan[] = [
   { id: 's1', traceId: 'tr:8f31a2', kind: 'flow', agent: 'goal-agent', stage: '目标收集', title: '目标对话完成', startMs: 0, durationMs: 1240, status: 'ok', detail: '抽取 2 个概念：Excel 周报、自动化', payload: '{\n  "round": 7,\n  "concepts": ["Excel 周报", "自动化"],\n  "confidence": 0.86\n}' },
   { id: 's2', traceId: 'tr:8f31a2', kind: 'call', agent: 'goal-conversation', stage: '目标收集', title: 'Prompt 调用', startMs: 120, durationMs: 1100, status: 'ok', detail: 'deepseek-v4-flash · P 860 / C 204' },
-  { id: 's3', traceId: 'tr:8f31a2', kind: 'call', agent: 'goal-profile-inference', stage: '目标收集', title: '画像推断调用', startMs: 1260, durationMs: 890, status: 'ok', detail: 'deepseek-v4-flash · P 620 / C 148' },
+  { id: 's3', traceId: 'tr:8f31a2', kind: 'call', agent: 'goal-conversation', stage: '目标收集', title: '画像推断调用', startMs: 1260, durationMs: 890, status: 'ok', detail: 'deepseek-v4-flash · P 620 / C 148' },
   { id: 's4', traceId: 'tr:8f31a2', kind: 'flow', agent: 'path-agent', stage: '核心路径生成', title: '路径草稿就绪', startMs: 2260, durationMs: 5100, status: 'ok', detail: '零基础 · 每周 4 小时 · 4 阶段' },
   { id: 's5', traceId: 'tr:8f31a2', kind: 'call', agent: 'path-planning', stage: '核心路径生成', title: '规划调用', startMs: 2380, durationMs: 4820, status: 'ok', detail: 'deepseek-v4-pro · P 2040 / C 1130', payload: '{\n  "stages": 4,\n  "milestones": 12,\n  "estimatedWeeks": 6\n}' },
   { id: 's6', traceId: 'tr:8f31a2', kind: 'flow', agent: 'path-agent', stage: '阶段任务设计', title: '路径生成完成', startMs: 7360, durationMs: 2600, status: 'ok', detail: '18 任务 · 总用时 9.9s' }
@@ -66,45 +66,45 @@ const successTrace: TraceSpan[] = [
 /** 事故链路：教学回合遭遇 429 限流并级联 */
 const incidentTrace: TraceSpan[] = [
   { id: 'i1', traceId: 'tr:8f31c4', kind: 'flow', agent: 'teaching-agent', stage: '教学执行', title: '教学回合开始', startMs: 0, durationMs: 30000, status: 'err', detail: '阶段 2 · 数据清洗练习', payload: '{\n  "milestone": "m2-3",\n  "user": "user_chenxiao"\n}' },
-  { id: 'i2', traceId: 'tr:8f31c4', kind: 'call', agent: 'teaching-round', stage: '教学执行', title: '教学调用 · 尝试 1', startMs: 80, durationMs: 18400, status: 'err', detail: '429 rate limit · 18.4s', payload: '{\n  "error": "RateLimitExceeded",\n  "provider": "deepseek",\n  "retryAfterMs": 20000,\n  "attempt": 1\n}' },
-  { id: 'i3', traceId: 'tr:8f31c4', kind: 'call', agent: 'teaching-round', stage: '教学执行', title: '教学调用 · 尝试 2（退避后）', startMs: 20500, durationMs: 9400, status: 'err', detail: '429 rate limit · 9.4s', payload: '{\n  "error": "RateLimitExceeded",\n  "retryAfterMs": 20000,\n  "attempt": 2\n}' },
-  { id: 'i4', traceId: 'tr:8f31c4', kind: 'call', agent: 'companion-boost', stage: '教学执行', title: '伴学降级介入', startMs: 30100, durationMs: 1300, status: 'warn', detail: '改用缓存讲解 · 质量分 0.58' },
+  { id: 'i2', traceId: 'tr:8f31c4', kind: 'call', agent: 'teaching-turn', stage: '教学执行', title: '教学调用 · 尝试 1', startMs: 80, durationMs: 18400, status: 'err', detail: '429 rate limit · 18.4s', payload: '{\n  "error": "RateLimitExceeded",\n  "provider": "deepseek",\n  "retryAfterMs": 20000,\n  "attempt": 1\n}' },
+  { id: 'i3', traceId: 'tr:8f31c4', kind: 'call', agent: 'teaching-turn', stage: '教学执行', title: '教学调用 · 尝试 2（退避后）', startMs: 20500, durationMs: 9400, status: 'err', detail: '429 rate limit · 9.4s', payload: '{\n  "error": "RateLimitExceeded",\n  "retryAfterMs": 20000,\n  "attempt": 2\n}' },
+  { id: 'i4', traceId: 'tr:8f31c4', kind: 'call', agent: 'peer-reinforcement', stage: '教学执行', title: '伴学降级介入', startMs: 30100, durationMs: 1300, status: 'warn', detail: '改用缓存讲解 · 质量分 0.58' },
   { id: 'i5', traceId: 'tr:8f31c4', kind: 'flow', agent: 'profile-agent', stage: '状态回写', title: '疲劳信号上调', startMs: 31600, durationMs: 480, status: 'warn', detail: 'fatigue: 低 → 中（连续失败）' }
 ]
 
 /** 教学链路：一节课的完整执行（教学 → 伴学 → 产出 → 状态回写） */
 const teachingTrace: TraceSpan[] = [
   { id: 't1', traceId: 'tr:8f31b7', kind: 'flow', agent: 'teaching-agent', stage: '教学执行', title: '教学回合完成', startMs: 0, durationMs: 14200, status: 'ok', detail: '阶段 2 · 数据清洗练习 · 一次通过', payload: '{\n  "milestone": "m2-2",\n  "user": "user_chenxiao",\n  "masteryDelta": 0.12\n}' },
-  { id: 't2', traceId: 'tr:8f31b7', kind: 'call', agent: 'teaching-round', stage: '教学执行', title: '教学调用', startMs: 120, durationMs: 12600, status: 'ok', detail: 'deepseek-v4-pro · P 3120 / C 1890' },
-  { id: 't3', traceId: 'tr:8f31b7', kind: 'call', agent: 'companion-boost', stage: '教学执行', title: '伴学轻量补强', startMs: 12800, durationMs: 940, status: 'ok', detail: '概念「绝对引用」小贴士' },
+  { id: 't2', traceId: 'tr:8f31b7', kind: 'call', agent: 'teaching-turn', stage: '教学执行', title: '教学调用', startMs: 120, durationMs: 12600, status: 'ok', detail: 'deepseek-v4-pro · P 3120 / C 1890' },
+  { id: 't3', traceId: 'tr:8f31b7', kind: 'call', agent: 'peer-reinforcement', stage: '教学执行', title: '伴学轻量补强', startMs: 12800, durationMs: 940, status: 'ok', detail: '概念「绝对引用」小贴士' },
   { id: 't4', traceId: 'tr:8f31b7', kind: 'call', agent: 'session-wrapup', stage: '课后产出', title: '产出写入', startMs: 13800, durationMs: 1600, status: 'ok', detail: '3 条笔记 · 1 条练习建议' },
-  { id: 't5', traceId: 'tr:8f31b7', kind: 'call', agent: 'state-aggregator', stage: '状态回写', title: '状态聚合', startMs: 15500, durationMs: 380, status: 'ok', detail: '行为事件 ×14 → 状态视图' },
-  { id: 't6', traceId: 'tr:8f31b7', kind: 'call', agent: 'snapshot-refresh', stage: '状态回写', title: '快照刷新', startMs: 15900, durationMs: 460, status: 'ok', detail: '置信 0.82 · v15' },
-  { id: 't7', traceId: 'tr:8f31b7', kind: 'call', agent: 'knowledge-distill', stage: '状态回写', title: '知识沉淀', startMs: 16400, durationMs: 720, status: 'ok', detail: '掌握 +2 · 脆弱 -1' }
+  { id: 't5', traceId: 'tr:8f31b7', kind: 'call', agent: 'learner-model', stage: '状态回写', title: '状态聚合', startMs: 15500, durationMs: 380, status: 'ok', detail: '行为事件 ×14 → 状态视图' },
+  { id: 't6', traceId: 'tr:8f31b7', kind: 'call', agent: 'lesson-knowledge-enricher', stage: '状态回写', title: '快照刷新', startMs: 15900, durationMs: 460, status: 'ok', detail: '置信 0.82 · v15' },
+  { id: 't7', traceId: 'tr:8f31b7', kind: 'call', agent: 'lesson-knowledge-enricher', stage: '状态回写', title: '知识沉淀', startMs: 16400, durationMs: 720, status: 'ok', detail: '掌握 +2 · 脆弱 -1' }
 ]
 
 /** 模拟链路：虚拟学习者的一轮黑盒评估 */
 const simulationTrace: TraceSpan[] = [
   { id: 'v1', traceId: 'tr:8f31c9', kind: 'flow', agent: 'simulation-agent', stage: '黑盒模拟', title: 'Learn 回合模拟完成', startMs: 0, durationMs: 9400, status: 'ok', detail: '样本 vl-001 · 5 轮 · 未触发疲劳', payload: '{\n  "story": "疲惫的运营小张",\n  "rounds": 5,\n  "friction": "normal"\n}' },
-  { id: 'v2', traceId: 'tr:8f31c9', kind: 'call', agent: 'turn-simulator', stage: '黑盒模拟', title: '回合模拟', startMs: 100, durationMs: 8200, status: 'ok', detail: '角色保真 0.91' },
-  { id: 'v3', traceId: 'tr:8f31c9', kind: 'call', agent: 'path-evaluator', stage: '黑盒模拟', title: '路径可学性评估', startMs: 8400, durationMs: 860, status: 'ok', detail: '难度评分 0.64 · 通过' }
+  { id: 'v2', traceId: 'tr:8f31c9', kind: 'call', agent: 'virtual-learner-learn-turn-simulator', stage: '黑盒模拟', title: '回合模拟', startMs: 100, durationMs: 8200, status: 'ok', detail: '角色保真 0.91' },
+  { id: 'v3', traceId: 'tr:8f31c9', kind: 'call', agent: 'virtual-learner-path-evaluator', stage: '黑盒模拟', title: '路径可学性评估', startMs: 8400, durationMs: 860, status: 'ok', detail: '难度评分 0.64 · 通过' }
 ]
 
 /** 理解与规划链路：概念抽取到阶段设计 */
 const planningTrace: TraceSpan[] = [
-  { id: 'p1', traceId: 'tr:8f31d1', kind: 'call', agent: 'dialogue-concept-extractor', stage: '目标收集', title: '概念抽取', startMs: 0, durationMs: 2100, status: 'ok', detail: '候选概念 ×3 · 置信 0.88' },
-  { id: 'p2', traceId: 'tr:8f31d1', kind: 'call', agent: 'goal-understanding-composer', stage: '目标收集', title: '目标理解合成', startMs: 2200, durationMs: 1700, status: 'ok', detail: '场景：周报自动化' },
-  { id: 'p3', traceId: 'tr:8f31d1', kind: 'call', agent: 'path-scene-framer', stage: '核心路径生成', title: '场景定帧', startMs: 4000, durationMs: 1100, status: 'ok', detail: '办公桌面 · 每周五 30 分钟' },
+  { id: 'p1', traceId: 'tr:8f31d1', kind: 'call', agent: 'goal-conversation', stage: '目标收集', title: '概念抽取', startMs: 0, durationMs: 2100, status: 'ok', detail: '候选概念 ×3 · 置信 0.88' },
+  { id: 'p2', traceId: 'tr:8f31d1', kind: 'call', agent: 'goal-conversation', stage: '目标收集', title: '目标理解合成', startMs: 2200, durationMs: 1700, status: 'ok', detail: '场景：周报自动化' },
+  { id: 'p3', traceId: 'tr:8f31d1', kind: 'call', agent: 'path-planning', stage: '核心路径生成', title: '场景定帧', startMs: 4000, durationMs: 1100, status: 'ok', detail: '办公桌面 · 每周五 30 分钟' },
   { id: 'p4', traceId: 'tr:8f31d1', kind: 'call', agent: 'stage-designer', stage: '阶段任务设计', title: '阶段展开', startMs: 5200, durationMs: 3400, status: 'ok', detail: '阶段 3/4 · 6 任务' }
 ]
 
 /** 背景噪音日志（不构成完整 trace） */
 const backgroundSpans: TraceSpan[] = [
-  { id: 'b1', traceId: 'tr:8f319e', kind: 'call', agent: 'snapshot-refresh', stage: '状态回写', title: '快照刷新', startMs: 0, durationMs: 210, status: 'ok', detail: 'user_1784… · 210ms' },
+  { id: 'b1', traceId: 'tr:8f319e', kind: 'call', agent: 'lesson-knowledge-enricher', stage: '状态回写', title: '快照刷新', startMs: 0, durationMs: 210, status: 'ok', detail: 'user_1784… · 210ms' },
   { id: 'b2', traceId: 'tr:8f319b', kind: 'call', agent: 'session-wrapup', stage: '课后产出', title: '产出写入', startMs: 0, durationMs: 1600, status: 'ok', detail: '3 条笔记 · 1.6s' },
   { id: 'b3', traceId: 'tr:8f3188', kind: 'call', agent: 'teaching-turn', stage: '教学执行', title: '输出接近上限', startMs: 0, durationMs: 2100, status: 'warn', detail: '3800/4000 tokens' },
-  { id: 'b4', traceId: 'tr:8f3185', kind: 'call', agent: 'teaching-round', stage: '教学执行', title: '教学调用', startMs: 0, durationMs: 9800, status: 'ok', detail: '阶段 1 · 提问训练' },
-  { id: 'b5', traceId: 'tr:8f3182', kind: 'call', agent: 'state-aggregator', stage: '状态回写', title: '状态聚合', startMs: 0, durationMs: 340, status: 'ok', detail: 'user_2211 · 340ms' }
+  { id: 'b4', traceId: 'tr:8f3185', kind: 'call', agent: 'teaching-turn', stage: '教学执行', title: '教学调用', startMs: 0, durationMs: 9800, status: 'ok', detail: '阶段 1 · 提问训练' },
+  { id: 'b5', traceId: 'tr:8f3182', kind: 'call', agent: 'learner-model', stage: '状态回写', title: '状态聚合', startMs: 0, durationMs: 340, status: 'ok', detail: 'user_2211 · 340ms' }
 ]
 
 const demoSpans = computed<TraceSpan[]>(() => {
@@ -149,19 +149,20 @@ export function skillsOfAgent(agentId: string): SkillProfile[] {
 
 export const skillProfiles: SkillProfile[] = [
   { id: 'goal-conversation', name: '目标对话', agentId: 'goal-agent', agentName: '目标 Agent', category: 'analysis', promptVersion: 'v3.2 · 已生效', description: '与用户聊清真实场景，抽取可规划的概念。' },
-  { id: 'goal-profile-inference', name: '目标画像推断', agentId: 'goal-agent', agentName: '目标 Agent', category: 'analysis', promptVersion: 'v2.1 · 已生效', description: '从对话推断学习者的基础、偏好与约束。' },
-  { id: 'goal-understanding-composer', name: '目标理解合成', agentId: 'goal-agent', agentName: '目标 Agent', category: 'analysis', promptVersion: 'v1.4 · 已生效', description: '把多轮对话合成为结构化的目标理解。' },
-  { id: 'dialogue-concept-extractor', name: '对话概念抽取', agentId: 'goal-agent', agentName: '目标 Agent', category: 'analysis', promptVersion: 'v2.0 · 已生效', description: '从对话中抽取候选学习概念。' },
-  { id: 'path-scene-framer', name: '路径场景定帧', agentId: 'path-agent', agentName: '路径 Agent', category: 'analysis', promptVersion: 'v1.1 · 已生效', description: '确定路径的使用场景与节奏假设。' },
+  { id: 'path-planning', name: '路径规划', agentId: 'path-agent', agentName: '路径 Agent', category: 'generation', promptVersion: 'v2.1 · 已生效', description: '生成认知核心与阶段化路径骨架。' },
   { id: 'stage-designer', name: '阶段设计', agentId: 'path-agent', agentName: '路径 Agent', category: 'generation', promptVersion: 'v1.8 · 草案', description: '展开每个阶段的任务与验收标准。' },
-  { id: 'teaching-round', name: '教学回合', agentId: 'teaching-agent', agentName: '教学 Agent', category: 'teaching', promptVersion: 'v5.1 · 已生效', description: '单轮教学：讲解、练习、反馈。' },
-  { id: 'companion-boost', name: '伴学补强', agentId: 'teaching-agent', agentName: '教学 Agent', category: 'teaching', promptVersion: 'v1.2 · 已生效', description: '在主教学失败或薄弱时介入补强。' },
-  { id: 'session-wrapup', name: '课后产出', agentId: 'teaching-agent', agentName: '教学 Agent', category: 'generation', promptVersion: 'v2.4 · 已生效', description: '把会话沉淀为笔记与下一步建议。' },
-  { id: 'state-aggregator', name: '状态聚合', agentId: 'profile-agent', agentName: '学习者 Agent', category: 'analysis', promptVersion: 'v1.3 · 已生效', description: '聚合行为数据为学习者状态视图。' },
-  { id: 'snapshot-refresh', name: '快照刷新', agentId: 'profile-agent', agentName: '学习者 Agent', category: 'analysis', promptVersion: 'v1.5 · 已生效', description: '聚合行为数据，重算学习者快照。' },
-  { id: 'knowledge-distill', name: '知识沉淀', agentId: 'profile-agent', agentName: '学习者 Agent', category: 'analysis', promptVersion: 'v0.9 · 草案', description: '把掌握的知识点沉淀进概念图。' },
-  { id: 'turn-simulator', name: '回合模拟', agentId: 'simulation-agent', agentName: '虚拟学习者 Agent', category: 'simulation', promptVersion: 'v1.0 · 已生效', description: '以虚拟学习者身份模拟教学回合。' },
-  { id: 'path-evaluator', name: '路径评估', agentId: 'simulation-agent', agentName: '虚拟学习者 Agent', category: 'simulation', promptVersion: 'v0.8 · 草案', description: '辅助调试：评估生成路径的可学性。' }
+  { id: 'teaching-turn', name: '教学回合', agentId: 'teaching-agent', agentName: '教学 Agent', category: 'teaching', promptVersion: 'v5.1 · 已生效', description: '单轮教学：讲解、练习、反馈与认知负荷判定。' },
+  { id: 'peer-reinforcement', name: '伴学补强', agentId: 'teaching-agent', agentName: '教学 Agent', category: 'teaching', promptVersion: 'v1.2 · 已生效', description: '以同伴视角引导讨论与理解补强。' },
+  { id: 'session-wrapup', name: '课后产出', agentId: 'teaching-agent', agentName: '教学 Agent', category: 'generation', promptVersion: 'v2.4 · 已生效', description: '把会话沉淀为笔记、评估与下一步建议。' },
+  { id: 'learner-model', name: '学习者聚合', agentId: 'profile-agent', agentName: '学习者 Agent', category: 'analysis', promptVersion: 'handler-only', description: '聚合画像、状态、知识记忆与教学控制态（确定性）。' },
+  { id: 'lesson-knowledge-enricher', name: '会话知识蒸馏', agentId: 'profile-agent', agentName: '学习者 Agent', category: 'analysis', promptVersion: 'v1.1 · 已生效', description: '从教学会话蒸馏概念账本与基础概念。' },
+  { id: 'virtual-learner-learn-turn-simulator', name: '回合模拟', agentId: 'simulation-agent', agentName: '虚拟学习者 Agent', category: 'simulation', promptVersion: 'v1.0 · 已生效', description: '以虚拟学习者身份模拟教学回合。' },
+  { id: 'virtual-learner-path-evaluator', name: '路径评估', agentId: 'simulation-agent', agentName: '虚拟学习者 Agent', category: 'simulation', promptVersion: 'v0.8 · 草案', description: '辅助调试：评估生成路径的可学性。' },
+  { id: 'virtual-learner-goal-dialogue-simulator', name: '目标对话模拟', agentId: 'simulation-agent', agentName: '虚拟学习者 Agent', category: 'simulation', promptVersion: 'v1.0 · 已生效', description: '以虚拟学习者身份参与目标澄清对话。' },
+  { id: 'virtual-learner-referee', name: '平台质量裁判', agentId: 'simulation-agent', agentName: '虚拟学习者 Agent', category: 'simulation', promptVersion: 'v1.0 · 已生效', description: '黑盒实验终态的平台质量评审。' },
+  { id: 'virtual-learner-actor-auditor', name: '角色保真审计', agentId: 'simulation-agent', agentName: '虚拟学习者 Agent', category: 'simulation', promptVersion: 'v1.0 · 已生效', description: '审计虚拟学习者的角色保真度。' },
+  { id: 'virtual-learner-persona-designer', name: 'Persona 设计', agentId: 'simulation-agent', agentName: '虚拟学习者 Agent', category: 'simulation', promptVersion: 'v1.0 · 已生效', description: '为虚拟学习者设计稳定人设。' },
+  { id: 'virtual-learner-scenario-designer', name: '场景设计', agentId: 'simulation-agent', agentName: '虚拟学习者 Agent', category: 'simulation', promptVersion: 'v1.0 · 已生效', description: '设计虚拟学习者的故事与场景。' }
 ]
 
 export interface SkillStat {
