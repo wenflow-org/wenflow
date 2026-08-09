@@ -770,10 +770,15 @@ export class APIExecutor {
       messageCount: request.messages?.length || 0,
       requestBytes: Buffer.byteLength(JSON.stringify(request), 'utf8'),
       responseBytes: attempt.responseBytes || null,
-      // KV 前缀缓存可观测列（2026-08）：TTFT 与 DeepSeek 自动前缀缓存命中
+      // KV 前缀缓存可观测列（2026-08）：TTFT 与缓存命中
+      // 兼容两种 usage 形态：DeepSeek 新版 prompt_tokens_details.cached_tokens / OpenAI 旧版 prompt_cache_hit_tokens
       ttftMs: (response as any)?.ttftMs ?? null,
-      promptCacheHitTokens: (response as any)?.usage?.prompt_cache_hit_tokens ?? null,
-      promptCacheMissTokens: (response as any)?.usage?.prompt_cache_miss_tokens ?? null,
+      promptCacheHitTokens: (response as any)?.usage?.prompt_tokens_details?.cached_tokens
+        ?? (response as any)?.usage?.prompt_cache_hit_tokens
+        ?? null,
+      promptCacheMissTokens: (response as any)?.usage?.prompt_tokens_details?.uncached_tokens
+        ?? (response as any)?.usage?.prompt_cache_miss_tokens
+        ?? null,
       expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
       metadata: JSON.stringify({
         temperature: request.temperature ?? null,
@@ -782,10 +787,14 @@ export class APIExecutor {
         thinkingMode: route.thinkingMode ?? null,
         reasoningEffort: route.reasoningEffort ?? null,
         executionMode: attempt.executionMode ?? null,
-        // 可观测增量（2026-08）：TTFT 与 DeepSeek 前缀缓存命中（usage 透传字段，列已落、此处保留 JSON 冗余）
+        // 可观测增量（2026-08）：TTFT 与缓存命中（列已落、此处保留 JSON 冗余）
         ttftMs: (response as any)?.ttftMs ?? null,
-        promptCacheHitTokens: (response as any)?.usage?.prompt_cache_hit_tokens ?? null,
-        promptCacheMissTokens: (response as any)?.usage?.prompt_cache_miss_tokens ?? null,
+        promptCacheHitTokens: (response as any)?.usage?.prompt_tokens_details?.cached_tokens
+          ?? (response as any)?.usage?.prompt_cache_hit_tokens
+          ?? null,
+        promptCacheMissTokens: (response as any)?.usage?.prompt_tokens_details?.uncached_tokens
+          ?? (response as any)?.usage?.prompt_cache_miss_tokens
+          ?? null,
       })
     });
   }
