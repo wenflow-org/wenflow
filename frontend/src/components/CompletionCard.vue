@@ -44,6 +44,11 @@
             <div class="knowledge-head">
               <span class="knowledge-name">{{ item.title }}</span>
               <el-tag size="small" :type="item.type">{{ item.label }}</el-tag>
+              <router-link
+                v-if="item.type === 'danger' && taskId"
+                :to="`/learn/${taskId}?mode=review`"
+                class="review-link"
+              >去复习 →</router-link>
             </div>
             <p class="knowledge-evidence">{{ item.text }}</p>
           </li>
@@ -132,6 +137,7 @@ const props = defineProps<{
   wrapup: WrapupArtifact;
   advisory?: ReplanAdvisory | null;
   busy?: boolean;
+  taskId?: string;
 }>();
 
 const emit = defineEmits<{ action: [action: 'end' | 'continue-task' | 'complete-task']; 'advisory-action': [action: string] }>();
@@ -251,6 +257,8 @@ const getKnowledgeStatusLabel = (s: string) => (s === 'mastered' ? '已学会' :
 .advisory-section--low { border-color: #b7ddb6; background: rgba(244, 252, 244, 0.92); }
 .section-title { margin: 0 0 10px; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: #1b5e20; }
 .section-hint { margin: 0 0 10px; font-size: 12px; color: #607d8b; }
+.review-link { margin-left: auto; font-size: 12px; font-weight: 600; color: #b3261e; text-decoration: none; }
+.review-link:hover { text-decoration: underline; }
 .section-content { margin: 0; font-size: 13px; line-height: 1.7; color: #37474f; }
 .advisory-options { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
 .metrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
