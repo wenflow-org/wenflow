@@ -129,6 +129,8 @@
                       <span>{{ a.model || 'model?' }}</span>
                       <span v-if="a.statusCode">HTTP {{ a.statusCode }}</span>
                       <span v-if="a.promptTokens != null">P {{ a.promptTokens }} / C {{ a.completionTokens ?? 0 }}</span>
+                      <span v-if="a.ttftMs != null" :title="'TTFT（首字节）'">TTFT {{ a.ttftMs }}ms</span>
+                      <span v-if="a.promptCacheHitTokens" class="tline-attempt__cache" :title="'DeepSeek 自动前缀缓存命中'">缓存 {{ a.promptCacheHitTokens }} tok</span>
                       <span v-if="a.routeSource">路由 {{ a.routeSource }}</span>
                       <span v-if="a.endpointHost">{{ a.endpointHost }}</span>
                     </div>
@@ -716,6 +718,7 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
 .tline-attempt__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .tline-attempt__no { font-family: var(--mk-mono); font-size: 10.5px; font-weight: 800; color: var(--mk-muted); }
 .tline-attempt__retry { font-size: 10.5px; font-weight: 700; color: var(--mk-amber); }
+.tline-attempt__cache { font-weight: 700; color: var(--mk-green, #15803d); }
 .tline-attempt__dur { margin-left: auto; font-size: 10.5px; color: var(--mk-faint); }
 .tline-attempt__meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 10px; color: var(--mk-faint); }
 .tline-attempt__err { margin: 0; font-size: 11px; color: var(--mk-red); word-break: break-all; }

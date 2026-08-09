@@ -1548,18 +1548,7 @@ router.post('/', async (req: any, res) => {
       }
     });
     
-    await prisma.student_baselines.create({
-      data: {
-        id: uuidv4(),
-        userId: user.id,
-        totalXp: 0,
-        totalTime: 0,
-        totalTasks: 0,
-        completedTasks: 0,
-        avgRating: 0,
-        streakDays: 0
-      }
-    });
+    // student_baselines 已退役（2026-08 M1 认知负荷改造），虚拟学习者不再初始化 EMA 基线
     
     const virtualProfile = await prisma.virtual_learner_profiles.create({
       data: {

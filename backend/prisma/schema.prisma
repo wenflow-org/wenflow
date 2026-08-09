@@ -161,6 +161,10 @@ model llm_execution_attempts {
   messageCount        Int?
   requestBytes        Int?
   responseBytes       Int?
+  // KV 前缀缓存可观测（2026-08）：TTFT（流式首 delta）与 DeepSeek 自动前缀缓存命中
+  ttftMs               Int?
+  promptCacheHitTokens Int?
+  promptCacheMissTokens Int?
   expiresAt           DateTime
   metadata            String?
   createdAt           DateTime @default(now())

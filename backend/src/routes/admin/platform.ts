@@ -1650,7 +1650,11 @@ router.get('/agents/logs/:id', async (req: Request, res: Response) => {
           totalTokens: attempt.totalTokens,
           finishReason: attempt.finishReason,
           completionId: attempt.completionId,
-          providerRequestId: attempt.providerRequestId
+          providerRequestId: attempt.providerRequestId,
+          // KV 前缀缓存可观测（2026-08）：TTFT 与缓存命中透出
+          ttftMs: attempt.ttftMs ?? null,
+          promptCacheHitTokens: attempt.promptCacheHitTokens ?? null,
+          promptCacheMissTokens: attempt.promptCacheMissTokens ?? null
         }))
       }
     });

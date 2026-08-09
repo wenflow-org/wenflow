@@ -314,6 +314,9 @@ export interface LogAttempt {
   promptTokens: number | null
   completionTokens: number | null
   finishReason: string
+  ttftMs?: number | null
+  promptCacheHitTokens?: number | null
+  promptCacheMissTokens?: number | null
 }
 
 export interface LogDetail {
@@ -345,7 +348,10 @@ function mapAttempt(a: Record<string, unknown>): LogAttempt {
     timeoutMs: Number(a.effectiveTimeoutMs || a.configuredTimeoutMs || 0),
     promptTokens: a.promptTokens != null ? Number(a.promptTokens) : null,
     completionTokens: a.completionTokens != null ? Number(a.completionTokens) : null,
-    finishReason: String(a.finishReason || '')
+    finishReason: String(a.finishReason || ''),
+    ttftMs: a.ttftMs != null ? Number(a.ttftMs) : null,
+    promptCacheHitTokens: a.promptCacheHitTokens != null ? Number(a.promptCacheHitTokens) : null,
+    promptCacheMissTokens: a.promptCacheMissTokens != null ? Number(a.promptCacheMissTokens) : null
   }
 }
 
