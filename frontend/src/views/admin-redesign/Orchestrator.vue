@@ -45,10 +45,24 @@
     <!-- 当前阶段详情 -->
     <div class="mk-card">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">{{ current.name }}阶段 · 节点与变量</h3>
+        <h3 class="mk-card__title">{{ current.name }}阶段 · 节点与配置</h3>
         <span class="mk-card__meta">节点 ID <span class="mono">{{ current.agentId }}</span></span>
       </div>
-      <div class="orch-detail">
+
+      <!-- tab 切换（定义 / 字段路由 / 沙盘 / 漂移与审计） -->
+      <div class="orch-tabs">
+        <button
+          v-for="t in tabs"
+          :key="t.id"
+          type="button"
+          class="orch-tab"
+          :class="{ 'is-active': activeTab === t.id }"
+          @click="activeTab = t.id"
+        >{{ t.label }}</button>
+      </div>
+
+      <!-- Tab：定义（变量流 + 定义级步骤 + Skill 节点） -->
+      <div v-if="activeTab === 'definition'" class="orch-detail">
         <!-- 变量流 -->
         <div class="orch-vars">
           <div class="orch-vars__group">
@@ -97,6 +111,17 @@
           </div>
         </div>
       </div>
+
+      <!-- Tab：字段路由（可写配置） -->
+      <FieldRoutingTable v-else-if="activeTab === 'field-routings'" :stage="current.id" @changed="reloadDrift" />
+
+      <!-- Tab：沙盘契约视图 -->
+      <SandboxView v-else-if="activeTab === 'sandbox'" />
+
+      <!-- Tab：漂移与审计 -->
+      <div v-else-if="activeTab === 'drift'" class="orch-tabpane">
+        <DriftAuditPanel ref="driftPanel" :stage="current.id" />
+      </div>
     </div>
   </div>
 </template>
@@ -105,9 +130,25 @@
 import { computed, onMounted, ref } from 'vue'
 import { openSkillDrawer, dataSource, isLive } from './store'
 import { liveTopoNodes, liveSkillCatalog, errMsg } from './live'
-import { adminRuntimeDefinitionsApi } from '@/api/adminApi'
+import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi } from '@/api/adminApi'
+import FieldRoutingTable from './FieldRoutingTable.vue'
+import SandboxView from './SandboxView.vue'
+import DriftAuditPanel from './DriftAuditPanel.vue'
 
 defineProps<{ state: 'normal' }>()
+
+const tabs = [
+  { id: 'definition', label: '定义' },
+  { id: 'field-routings', label: '字段路由' },
+  { id: 'sandbox', label: '沙盘' },
+  { id: 'drift', label: '漂移与审计' },
+]
+const activeTab = ref('definition')
+const driftPanel = ref<InstanceType<typeof DriftAuditPanel> | null>(null)
+
+function reloadDrift() {
+  void driftPanel.value?.reload()
+}
 
 const defsLoading = ref(false)
 const defsLoaded = ref(false)
@@ -149,6 +190,7 @@ async function loadDefinitions() {
 
 onMounted(() => {
   if (isLive.value) void loadDefinitions()
+  void loadStages()
 })
 
 interface SkillNode { id: string; name: string; calls: number; produces: string[] }
@@ -223,6 +265,28 @@ const demoStages: Stage[] = [
 
 const active = ref('goal')
 const defById = computed(() => new Map(orchDefs.value.map((d) => [d.id, d])))
+// 5 阶段统一后端源（A3）：GET /admin/field-routings/stages；demoStages 仅离线 fallback
+const stageList = ref<Array<{ id: string; displayName: string }>>([])
+const stageNames = computed(() => new Map(stageList.value.map((s) => [s.id, s.displayName])))
+
+async function loadStages() {
+  try {
+    const res = await adminFieldRoutingsApi.getStages()
+    const stages = (res.data?.data?.stages || []).filter((s: { id: string }) =>
+      ['goal', 'path', 'teaching', 'profile', 'simulation'].includes(s.id)
+    )
+    if (stages.length) {
+      stageList.value = stages
+      if (!stages.some((s: { id: string }) => s.id === active.value)) {
+        active.value = stages[0].id
+      }
+    }
+  } catch {
+    // 后端不可用时回退 demo 骨架（仅 name 来源）
+    stageList.value = []
+  }
+}
+
 const stages = computed<Stage[]>(() => {
   if (dataSource.value !== 'live' || !liveTopoNodes.value.length) return demoStages
 
@@ -253,6 +317,8 @@ const stages = computed<Stage[]>(() => {
     const defSteps: DefStep[] = def?.steps || []
     return {
       ...stage,
+      // 阶段名以后端 stages 源优先（A3 统一）
+      name: stageNames.value.get(stage.id) || stage.name,
       consumes: allInputs.length ? allInputs.slice(0, 5) : stage.consumes,
       produces: allOutputs.length ? allOutputs.slice(0, 5) : stage.produces,
       skills,
@@ -275,6 +341,10 @@ const current = computed(() => stages.value.find((s) => s.id === active.value) |
   color: var(--mk-muted);
   line-height: 1.5;
 }
+.orch-tabs { display: flex; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--mk-line); }
+.orch-tab { padding: 9px 14px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--mk-faint); border-bottom: 2px solid transparent; }
+.orch-tab.is-active { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+.orch-tabpane { padding: 16px; }
 .orch-flow {
   display: flex;
   align-items: center;

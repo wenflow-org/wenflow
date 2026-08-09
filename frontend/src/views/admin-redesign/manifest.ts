@@ -23,7 +23,6 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'skills', label: 'Skill 目录', group: '运行', glyph: '能' },
   { id: 'topology', label: 'Agent 拓扑', group: '运行', glyph: '络' },
   { id: 'orchestrator', label: '编排结构', group: '运行', glyph: '流' },
-  { id: 'field-routings', label: '字段路由中心', group: '运行', glyph: '路' },
   { id: 'execution-logs', label: '执行日志', group: '观测', glyph: '志' },
   { id: 'trace-waterfall', label: 'Trace 瀑布', group: '观测', glyph: '溯' },
   { id: 'api-config', label: '模型与接入', group: '配置', glyph: '安' },

@@ -42,7 +42,6 @@ import VirtualLearners from './VirtualLearners.vue';
 import Skills from './Skills.vue';
 import Topology from './Topology.vue';
 import Orchestrator from './Orchestrator.vue';
-import FieldRoutings from './FieldRoutings.vue';
 import ExecLogs from './ExecLogs.vue';
 import TraceWaterfall from './TraceWaterfall.vue';
 import ApiConfig from './ApiConfig.vue';
@@ -73,7 +72,6 @@ const components: Record<string, unknown> = {
   'skills': Skills,
   'topology': Topology,
   'orchestrator': Orchestrator,
-  'field-routings': FieldRoutings,
   'execution-logs': ExecLogs,
   'trace-waterfall': TraceWaterfall,
   'api-config': ApiConfig,
