@@ -2,7 +2,7 @@ import { logger } from '../../utils/logger';
 import { agentConfigService } from '../../services/agentConfig.service';
 import { mergeStateDelta } from './delta-merge';
 import {
-  composePromptFromAgentRouting,
+  getSupplementTextForAgent,
   isPromptSupplementEnabled,
 } from '../../services/prompt-composer';
 import { callPrompt } from '../../composers/prompt-composer';
@@ -149,6 +149,8 @@ interface GoalPromptInput {
   previousUnderstanding?: any;
   previousStage?: string;
   confirmProposal?: boolean;
+  /** 字段路由 supplement 纯文本（user 前缀注入，system 纯静态） */
+  supplementText?: string | null;
 }
 
 export function buildGoalConversationUserPayload(input: {
@@ -157,6 +159,8 @@ export function buildGoalConversationUserPayload(input: {
   previousState?: GoalConversationStateSnapshot;
   previousUnderstanding?: any;
   previousStage?: string;
+  /** 字段路由 supplement 纯文本（KV 前缀缓存友好化：注入 user 前缀，system 保持纯静态；30s 粒度） */
+  supplementText?: string | null;
 }): string {
   const statePayload = input.previousState
     ? input.previousState
@@ -177,10 +181,9 @@ export function buildGoalConversationUserPayload(input: {
     text: item.content
   }));
 
-  return JSON.stringify({
-    userInput: input.userInput,
-    state: statePayload,
-    conversationContext,
+  // 键序按"稳定→动态"（KV 前缀缓存）：task 常量前置（跨轮/跨用户稳定），
+  // 动态块（state 全量快照 / 当轮输入 / 增长历史）后置，最大化 user 内前缀命中。
+  const payloadJson = JSON.stringify({
     task: {
       mode: 'goal-conversation-turn-update',
       requirements: [
@@ -190,8 +193,14 @@ export function buildGoalConversationUserPayload(input: {
         'do not treat conversationContext as chat history to continue',
         'return exactly one raw JSON object with no extra text'
       ]
-    }
+    },
+    state: statePayload,
+    userInput: input.userInput,
+    conversationContext
   }, null, 2);
+
+  // supplement 作为 JSON 外前缀文本（不污染 JSON 键集）；无 supplement 时纯 JSON
+  return input.supplementText ? `${input.supplementText}\n\n${payloadJson}` : payloadJson;
 }
 
 export const goalConversationAgentDefinition: AgentDefinition = {
@@ -795,17 +804,8 @@ function buildGoalPromptSpec(
       previousState: payload.previousState,
       previousUnderstanding: payload.previousUnderstanding,
       previousStage: payload.previousStage,
+      supplementText: payload.supplementText,
     }),
-    prepareSystemPrompt: async (systemPrompt) => {
-      if (!isPromptSupplementEnabled()) return systemPrompt;
-      const { finalPrompt, supplementApplied, fieldsCovered } =
-        await composePromptFromAgentRouting('goal-conversation', systemPrompt);
-      if (supplementApplied) {
-        logger.debug('[skill:goal-conversation] field routing supplement applied', { fieldsCovered });
-        return finalPrompt;
-      }
-      return systemPrompt;
-    },
     parseRawOutput: (rawOutput) => {
       // Delta 模式（§5.4）：state/understanding 缺席合法（缺席=不变）
       const validation = validateGoalConversationStructuredOutput(rawOutput, { deltaMode });
@@ -890,6 +890,10 @@ export async function goalConversationAgentHandler(
       previousUnderstanding,
       previousStage: input.metadata?.previousStage,
       confirmProposal: input.metadata?.confirmProposal === true,
+      // KV 前缀缓存友好化：supplement 以 user 前缀注入（system 纯静态）；30s 粒度缓存
+      supplementText: isPromptSupplementEnabled()
+        ? (await getSupplementTextForAgent('skill:goal-conversation')).text
+        : null,
     };
 
     // 旧语义：maxFormatRetries=2 → 最多 3 次尝试（含首次）

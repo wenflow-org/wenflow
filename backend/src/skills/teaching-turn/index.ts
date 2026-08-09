@@ -420,21 +420,29 @@ function buildPromptInput(input: TeachingTurnInput) {
   const strategyGuidancePrompt = buildStrategyGuidancePrompt(input);
   const taskExecutionPrompt = buildTaskExecutionPrompt(input);
 
+  // KV 前缀缓存友好化：scenario 内动态子键（contextCompression/interactionProfile）挪到尾部，
+  // 稳定主体（任务/路径/策略上下文）保持前置，最大化 user 内前缀命中
+  const { interactionProfile: scenarioInteractionProfile, contextCompression: scenarioCompression, ...stableScenario } = input.scenario;
+
   return {
-    latestLearnerMessage: [...input.messages].reverse().find((message) => message.role === 'user')?.content || '',
-    scenario: input.scenario,
-    learner: input.learner,
-    classroomContext: input.classroomContext,
-    classroomEventContext: input.classroomEventContext,
-    knowledge: input.knowledge,
-    controls: input.controls,
-    visibleDialogueContext: input.visibleDialogueContext || input.messages,
-    recentDialogueContext: input.messages,
-    interactionProfile: input.scenario.interactionProfile ?? null,
+    scenario: {
+      ...stableScenario,
+      ...(scenarioCompression ? { contextCompression: scenarioCompression } : {}),
+      interactionProfile: scenarioInteractionProfile,
+    },
     promptDirectives: {
       ...(strategyGuidancePrompt ? { strategyGuidance: strategyGuidancePrompt } : {}),
       taskExecution: taskExecutionPrompt,
     },
+    knowledge: input.knowledge,
+    learner: input.learner,
+    controls: input.controls,
+    classroomContext: input.classroomContext,
+    classroomEventContext: input.classroomEventContext,
+    interactionProfile: scenarioInteractionProfile ?? null,
+    visibleDialogueContext: input.visibleDialogueContext || input.messages,
+    recentDialogueContext: input.messages,
+    latestLearnerMessage: [...input.messages].reverse().find((message) => message.role === 'user')?.content || '',
     // 双引擎试点：第一段（推理模型）产出的 analysis 作为第二段的既定认知判定
     ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
   };

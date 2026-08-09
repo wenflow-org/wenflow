@@ -169,48 +169,26 @@ export function renderSupplementText(
 }
 
 /**
- * 把 supplement 拼到 system prompt 末尾
+ * 取得字段路由 supplement 纯文本（KV 前缀缓存友好化）：
+ * 供调用方以"user payload JSON 外前缀文本"注入（system 保持纯静态）。
+ * 复用 30s 渲染缓存；无 supplement 时返回 null。
  */
-export async function composePromptFromAgentRouting(
-  agentId: string,
-  basePrompt: string
-): Promise<{
-  finalPrompt: string;
-  supplementApplied: boolean;
-  fieldsCovered: number;
-}> {
-  try {
-    const now = Date.now();
-    const cached = supplementRenderCache.get(agentId);
-    if (!cached || now - cached.loadedAt >= SUPPLEMENT_RENDER_TTL_MS) {
-      const rows = await getAgentRoutings(agentId);
-      const routingHash = await getRoutingSnapshotHash(agentId);
-      const { text, fieldsCovered } = renderSupplementText(rows);
-      supplementRenderCache.set(agentId, {
-        loadedAt: now,
-        text,
-        fieldsCovered,
-        routingHash,
-      });
-    }
-    const entry = supplementRenderCache.get(agentId)!;
-    if (!entry.text) {
-      return { finalPrompt: basePrompt, supplementApplied: false, fieldsCovered: 0 };
-    }
-    // 防御：如果 basePrompt 已经包含 supplement banner，先剥掉再追加，避免叠加
-    const cleaned = stripExistingSupplement(basePrompt);
-    return {
-      finalPrompt: `${cleaned}\n${entry.text}`,
-      supplementApplied: true,
-      fieldsCovered: entry.fieldsCovered,
-    };
-  } catch (err) {
-    logger.warn('[prompt-composer] failed to compose supplement', {
-      agentId,
-      error: (err as Error).message,
+export async function getSupplementTextForAgent(agentId: string): Promise<{ text: string | null }> {
+  const now = Date.now();
+  const cached = supplementRenderCache.get(agentId);
+  if (!cached || now - cached.loadedAt >= SUPPLEMENT_RENDER_TTL_MS) {
+    const rows = await getAgentRoutings(agentId);
+    const routingHash = await getRoutingSnapshotHash(agentId);
+    const { text, fieldsCovered } = renderSupplementText(rows);
+    supplementRenderCache.set(agentId, {
+      loadedAt: now,
+      text,
+      fieldsCovered,
+      routingHash,
     });
-    return { finalPrompt: basePrompt, supplementApplied: false, fieldsCovered: 0 };
   }
+  const entry = supplementRenderCache.get(agentId)!;
+  return { text: entry.text || null };
 }
 
 /** 测试/管理端用：清空 supplement 渲染缓存 */
@@ -220,15 +198,6 @@ export function clearSupplementRenderCache(agentId?: string): void {
   } else {
     supplementRenderCache.clear();
   }
-}
-
-/**
- * 剥掉已有的 supplement 段（如果之前 prompt 里被人手贴过）
- */
-export function stripExistingSupplement(prompt: string): string {
-  if (!prompt.includes(SUPPLEMENT_BANNER)) return prompt;
-  const idx = prompt.indexOf(SUPPLEMENT_BANNER);
-  return prompt.slice(0, idx).trimEnd();
 }
 
 /**
