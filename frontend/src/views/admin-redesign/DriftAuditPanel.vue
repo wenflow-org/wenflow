@@ -27,8 +27,8 @@
           <span class="mono fdp__drift-kind">{{ d.kind }}</span>
           <span class="mono fdp__drift-key">{{ d.key }}</span>
           <span class="fdp__drift-field">{{ d.field }}</span>
-          <span class="mono fdp__drift-val">seed={{ stringify(d.seedValue) }}</span>
-          <span class="mono fdp__drift-val">db={{ stringify(d.dbValue) }}</span>
+          <span class="mono fdp__drift-val fdp__drift-val--seed">seed={{ stringify(d.seedValue) }}</span>
+          <span class="mono fdp__drift-val fdp__drift-val--db">db={{ stringify(d.dbValue) }}</span>
         </li>
       </ul>
       <p v-if="drift.totalDriftCount > drift.items.length" class="fdp__empty">（共 {{ drift.totalDriftCount }} 项，当前筛选显示 {{ drift.items.length }}）</p>
@@ -38,7 +38,11 @@
     <details class="fdp__box">
       <summary class="fdp__box-summary">最近变更（审计）</summary>
       <ul v-if="changes.length" class="fdp__changes-list">
-        <li v-for="(c, i) in changes" :key="i" class="mono">{{ c.changeType }} · {{ c.targetTable }} · {{ c.targetId }}</li>
+        <li v-for="(c, i) in changes" :key="i" class="fdp__change">
+          <span class="fdp__change-kind">{{ String(c.changeType || '—') }}</span>
+          <span class="fdp__change-target">{{ String(c.targetTable || '') }}</span>
+          <span class="mono">{{ String(c.targetId || '') }}</span>
+        </li>
       </ul>
       <p v-else class="fdp__empty">暂无变更记录</p>
     </details>
@@ -120,18 +124,114 @@ watch(() => props.stage, () => {
 </script>
 
 <style scoped>
-.fdp__box { margin-bottom: 12px; border: 1px solid var(--mk-border, #ddd); border-radius: 8px; padding: 0 14px; }
-.fdp__box-summary { padding: 10px 0; cursor: pointer; font-weight: 600; color: var(--mk-primary, #4f46e5); }
-.fdp__newfield { display: flex; gap: 8px; align-items: center; padding-bottom: 12px; flex-wrap: wrap; }
-.fdp__input { padding: 5px 8px; border: 1px solid var(--mk-border, #ddd); border-radius: 4px; font-size: 12px; }
-.fdp__btn { padding: 6px 14px; border: 1px solid var(--mk-border, #ddd); border-radius: 6px; background: #fff; cursor: pointer; }
-.fdp__msg { color: var(--mk-primary, #4f46e5); font-size: 12px; }
-.fdp__drift-list { margin: 0; padding: 0 0 12px; list-style: none; }
-.fdp__drift-item { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; border-bottom: 1px dashed #eee; font-size: 12px; }
-.fdp__drift-kind { padding: 1px 6px; border-radius: 4px; background: #fef3c7; color: #92400e; }
-.fdp__drift-key { font-weight: 600; }
-.fdp__drift-field { color: #888; }
-.fdp__drift-val { color: #b91c1c; }
-.fdp__changes-list { margin: 0; padding: 0 0 12px 18px; color: #666; }
-.fdp__empty { padding: 20px; color: #888; text-align: center; }
+.fdp__box {
+  margin-bottom: 12px;
+  border: 1px solid var(--mk-line, #e6ebf4);
+  border-radius: 12px;
+  background: var(--mk-surface, #fff);
+  box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06));
+  overflow: hidden;
+}
+.fdp__box-summary {
+  padding: 11px 14px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--mk-ink, #1a2a44);
+  list-style: none;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fdp__box-summary::-webkit-details-marker { display: none; }
+.fdp__box-summary::before {
+  content: '▸';
+  font-size: 11px;
+  color: var(--mk-faint, #71809a);
+  transition: transform 0.16s ease;
+}
+.fdp__box[open] > .fdp__box-summary::before { transform: rotate(90deg); }
+.fdp__box[open] > .fdp__box-summary { border-bottom: 1px solid var(--mk-line, #e6ebf4); }
+.fdp__newfield { display: flex; gap: 8px; align-items: center; padding: 12px 14px; flex-wrap: wrap; }
+.fdp__input {
+  padding: 6px 10px;
+  border: 1px solid var(--mk-line, #e6ebf4);
+  border-radius: 8px;
+  background: var(--mk-surface, #fff);
+  color: var(--mk-ink, #1a2a44);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+}
+.fdp__input:focus { border-color: var(--mk-blue, #3478f6); }
+.fdp__btn {
+  padding: 6px 16px;
+  border: 1px solid var(--mk-blue, #3478f6);
+  border-radius: 8px;
+  background: var(--mk-blue, #3478f6);
+  color: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.fdp__btn:hover { background: #2b64d8; }
+.fdp__btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.fdp__msg { color: var(--mk-blue, #3478f6); font-size: 12px; font-weight: 600; }
+.fdp__drift-list { margin: 0; padding: 6px 14px 12px; list-style: none; }
+.fdp__drift-item {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 7px 10px;
+  margin-top: 6px;
+  border: 1px solid var(--mk-line, #e6ebf4);
+  border-radius: 9px;
+  background: #fafbfd;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.fdp__drift-kind {
+  flex-shrink: 0;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--mk-amber-bg, #fffbeb);
+  color: var(--mk-amber, #b45309);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.fdp__drift-key { font-weight: 700; color: var(--mk-ink, #1a2a44); }
+.fdp__drift-field { color: var(--mk-faint, #71809a); }
+.fdp__drift-val { font-size: 11.5px; }
+.fdp__drift-val--seed { color: var(--mk-muted, #5b6577); }
+.fdp__drift-val--db { color: var(--mk-blue, #3478f6); font-weight: 600; }
+.fdp__changes-list { margin: 0; padding: 8px 14px 12px; list-style: none; }
+.fdp__change {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-top: 6px;
+  border: 1px solid var(--mk-line, #e6ebf4);
+  border-radius: 9px;
+  background: #fafbfd;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.fdp__change-kind {
+  flex-shrink: 0;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #eef2fa;
+  color: var(--mk-muted, #5b6577);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.fdp__change-target { color: var(--mk-muted, #5b6577); }
+.fdp__empty { padding: 20px; color: var(--mk-faint, #71809a); text-align: center; }
 </style>

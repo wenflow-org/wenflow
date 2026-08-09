@@ -7,6 +7,7 @@
         <div class="frt__agenthead">
           <span class="frt__agentname mono">{{ agent.agentId }}</span>
           <span class="frt__agentdesc">{{ agent.description }}</span>
+          <span class="frt__agentcount">{{ routingsOf(agent.agentId).length }} 行</span>
         </div>
         <table class="frt__table">
           <thead>
@@ -26,9 +27,9 @@
             <tr v-for="row in routingsOf(agent.agentId)" :key="row.id">
               <td class="mono frt__field">{{ row.fieldId }}</td>
               <td class="mono">{{ typeOf(row.fieldId) }}</td>
-              <td>{{ roleOf(row.fieldId) }}</td>
+              <td><span class="frt__role">{{ roleOf(row.fieldId) }}</span></td>
               <td>
-                <select :value="row.render" @change="onRender(agent.agentId, row, ($event.target as HTMLSelectElement).value)">
+                <select class="frt__select" :value="row.render" @change="onRender(agent.agentId, row, ($event.target as HTMLSelectElement).value)">
                   <option value="visible">visible</option>
                   <option value="hidden">hidden</option>
                 </select>
@@ -155,22 +156,71 @@ watch(() => props.stage, () => void loadStage());
 </script>
 
 <style scoped>
-.frt__agent { margin-bottom: 18px; border: 1px solid var(--mk-border, #ddd); border-radius: 8px; overflow: hidden; }
-.frt__agenthead { padding: 10px 14px; background: #f7f7f9; display: flex; align-items: baseline; gap: 10px; }
-.frt__agentname { font-weight: 600; }
-.frt__agentdesc { color: #888; }
+.frt__agent { margin-bottom: 18px; border: 1px solid var(--mk-line, #e6ebf4); border-radius: 12px; overflow: hidden; background: var(--mk-surface, #fff); box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06)); }
+.frt__agenthead { padding: 10px 14px; background: #fafbfd; border-bottom: 1px solid var(--mk-line, #e6ebf4); display: flex; align-items: baseline; gap: 10px; }
+.frt__agentname { font-weight: 700; color: var(--mk-ink, #1a2a44); }
+.frt__agentdesc { color: var(--mk-faint, #71809a); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frt__agentcount { margin-left: auto; padding: 1px 9px; border-radius: 999px; background: #eef2fa; color: var(--mk-muted, #5b6577); font-size: 11px; font-weight: 700; white-space: nowrap; }
 .frt__table { width: 100%; border-collapse: collapse; }
-.frt__table th, .frt__table td { padding: 6px 10px; border-bottom: 1px solid #eee; text-align: left; }
-.frt__table th { background: #fafafa; font-weight: 500; }
-.frt__field { max-width: 300px; word-break: break-all; }
-.frt__handoff { max-width: 220px; }
-.frt__handoff-input { width: 220px; padding: 3px 6px; border: 1px solid var(--mk-border, #ddd); border-radius: 4px; font-size: 12px; }
-.frt__op { padding: 2px 6px; border: 1px solid var(--mk-border, #ddd); border-radius: 4px; background: #fff; cursor: pointer; font-size: 12px; }
-.frt__op:hover { border-color: var(--mk-primary, #4f46e5); color: var(--mk-primary, #4f46e5); }
-.frt__lock { padding: 2px 6px; border-radius: 4px; font-size: 12px; }
-.frt__lock--system-locked { background: #fee2e2; color: #b91c1c; }
-.frt__lock--structure-locked { background: #fef3c7; color: #92400e; }
-.frt__lock--editable { background: #dcfce7; color: #15803d; }
-.frt__empty { padding: 30px; color: #888; text-align: center; }
-.frt__emptyrow { color: #aaa; text-align: center; padding: 10px; }
+.frt__table th, .frt__table td { padding: 8px 12px; text-align: left; }
+.frt__table th {
+  background: #fafbfc;
+  border-bottom: 1px solid var(--mk-line, #e6ebf4);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mk-faint, #71809a);
+  white-space: nowrap;
+}
+.frt__table td { border-bottom: 1px solid #f6f7f9; font-size: 12.5px; vertical-align: middle; }
+.frt__table tr:last-child td { border-bottom: none; }
+.frt__table tbody tr { transition: background 0.12s; }
+.frt__table tbody tr:hover { background: #f6f9ff; }
+.frt__field { max-width: 300px; word-break: break-all; color: var(--mk-ink, #1a2a44); }
+.frt__role { display: inline-block; padding: 1px 8px; border-radius: 999px; background: #f0f2f5; color: var(--mk-muted, #5b6577); font-size: 11px; font-weight: 600; }
+.frt__handoff { max-width: 220px; color: var(--mk-faint, #71809a); }
+.frt__select {
+  padding: 3px 8px;
+  border: 1px solid var(--mk-line, #e6ebf4);
+  border-radius: 7px;
+  background: var(--mk-surface, #fff);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.frt__select:focus { border-color: var(--mk-blue, #3478f6); }
+.frt__handoff-input {
+  width: 220px;
+  padding: 4px 8px;
+  border: 1px solid var(--mk-line, #e6ebf4);
+  border-radius: 7px;
+  background: var(--mk-surface, #fff);
+  color: var(--mk-ink, #1a2a44);
+  font-size: 12px;
+  outline: none;
+  box-sizing: border-box;
+}
+.frt__handoff-input:focus { border-color: var(--mk-blue, #3478f6); }
+.frt__op {
+  padding: 3px 9px;
+  margin-right: 4px;
+  border: 1px solid var(--mk-line, #e6ebf4);
+  border-radius: 7px;
+  background: var(--mk-surface, #fff);
+  color: var(--mk-muted, #5b6577);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: border-color 0.12s ease, color 0.12s ease;
+}
+.frt__op:hover { border-color: rgba(52, 120, 246, 0.45); color: var(--mk-blue, #3478f6); }
+.frt__lock { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.frt__lock--system-locked { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
+.frt__lock--structure-locked { background: var(--mk-amber-bg, #fffbeb); color: var(--mk-amber, #b45309); border: 1px dashed rgba(180, 83, 9, 0.45); }
+.frt__lock--editable, .frt__lock--fully-editable { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #15803d); }
+.frt__empty { padding: 30px; color: var(--mk-faint, #71809a); text-align: center; }
+.frt__emptyrow { color: var(--mk-faint, #71809a); text-align: center; padding: 14px; }
 </style>
