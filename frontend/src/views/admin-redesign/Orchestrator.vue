@@ -19,7 +19,13 @@
         <span class="mk-card__meta">orchestrators + agents</span>
       </div>
       <ul class="orch-defs__list">
-        <li v-for="(n, i) in definitionNotes" :key="i">{{ n }}</li>
+        <li v-for="(n, i) in definitionNotes" :key="i" class="orch-defs__item">
+          <span
+            class="orch-defs__tag"
+            :class="n.startsWith('编排') ? 'orch-defs__tag--orch' : 'orch-defs__tag--agent'"
+          >{{ n.startsWith('编排') ? '编排' : 'Agent' }}</span>
+          <span class="orch-defs__text">{{ n.replace(/^(编排|Agent)\s+/, '') }}</span>
+        </li>
       </ul>
     </section>
 
@@ -32,11 +38,14 @@
           :class="{ 'orch-stage--active': active === st.id }"
           @click="active = st.id"
         >
-          <span class="orch-stage__order">{{ String(i + 1).padStart(2, '0') }}</span>
-          <strong>{{ st.name }}</strong>
-          <span class="orch-stage__meta">{{ st.skills.length }} Skills</span>
+          <span class="orch-stage__bar"></span>
+          <span class="orch-stage__num">{{ String(i + 1).padStart(2, '0') }}</span>
+          <span class="orch-stage__body">
+            <strong class="orch-stage__name">{{ st.name }}</strong>
+            <span class="orch-stage__meta">{{ st.skills.length }} Skills · {{ stageCalls(st) }} 次调用</span>
+          </span>
         </button>
-        <span v-if="i < stages.length - 1" class="orch-link">
+        <span v-if="i < stages.length - 1" class="orch-link" :class="{ 'orch-link--on': i >= activeIdx }">
           <i></i><b>接力</b>
         </span>
       </template>
@@ -66,13 +75,13 @@
         <!-- 变量流 -->
         <div class="orch-vars">
           <div class="orch-vars__group">
-            <span class="orch-vars__label">输入</span>
+            <span class="orch-vars__label orch-vars__label--in">输入</span>
             <span v-for="v in current.consumes" :key="v" class="orch-var orch-var--in">{{ v }}</span>
             <span v-if="!current.consumes.length" class="mk-na">—</span>
           </div>
-          <span class="orch-vars__arrow">→</span>
+          <span class="orch-vars__arrow" aria-hidden="true">→</span>
           <div class="orch-vars__group">
-            <span class="orch-vars__label">输出</span>
+            <span class="orch-vars__label orch-vars__label--out">输出</span>
             <span v-for="v in current.produces" :key="v" class="orch-var orch-var--out">{{ v }}</span>
           </div>
         </div>
@@ -80,19 +89,27 @@
         <!-- 定义级步骤（编排定义实时编译） -->
         <div v-if="current.defSteps?.length" class="orch-defsteps">
           <span class="orch-defsteps__label">定义步骤（{{ current.defSteps.length }}）</span>
-          <div
-            v-for="step in current.defSteps"
-            :key="step.step"
-            class="orch-defstep"
-            :class="{ 'orch-defstep--service': step.resolved?.nodeKind === 'service', 'orch-defstep--unresolved': step.resolved?.unresolved }"
-          >
-            <span class="orch-defstep__order">{{ step.step }}</span>
-            <span class="orch-defstep__id mono">{{ step.agentId }}</span>
-            <span class="orch-defstep__role">{{ step.role || '—' }}</span>
-            <span v-if="step.condition" class="orch-defstep__cond">if {{ step.condition }}</span>
-            <span v-if="step.loopOver" class="orch-defstep__cond">loop {{ step.loopOver }}</span>
-            <span v-if="step.resolved?.nodeKind === 'service'" class="orch-defstep__badge">service</span>
-            <span v-if="step.resolved?.unresolved" class="orch-defstep__badge orch-defstep__badge--warn">unresolved</span>
+          <div class="orch-defsteps__rail">
+            <div
+              v-for="step in current.defSteps"
+              :key="step.step"
+              class="orch-defstep"
+              :class="{ 'orch-defstep--service': step.resolved?.nodeKind === 'service', 'orch-defstep--unresolved': step.resolved?.unresolved }"
+            >
+              <span class="orch-defstep__dot"></span>
+              <div class="orch-defstep__main">
+                <span class="orch-defstep__head">
+                  <span class="orch-defstep__id mono">{{ step.agentId }}</span>
+                  <span class="orch-defstep__role">{{ step.role || '—' }}</span>
+                  <span v-if="step.resolved?.nodeKind === 'service'" class="orch-defstep__badge">service</span>
+                  <span v-if="step.resolved?.unresolved" class="orch-defstep__badge orch-defstep__badge--warn">unresolved</span>
+                </span>
+                <span v-if="step.condition || step.loopOver" class="orch-defstep__conds">
+                  <span v-if="step.condition" class="orch-defstep__cond">if {{ step.condition }}</span>
+                  <span v-if="step.loopOver" class="orch-defstep__cond">loop {{ step.loopOver }}</span>
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -107,7 +124,7 @@
             <div class="orch-skill__vars">
               <span v-for="v in s.produces" :key="v" class="orch-var orch-var--out">{{ v }}</span>
             </div>
-            <span class="mk-num">{{ s.calls || '—' }}</span>
+            <span class="mk-num orch-skill__calls">{{ s.calls || '—' }}</span>
           </div>
         </div>
       </div>
@@ -337,6 +354,8 @@ const stages = computed<Stage[]>(() => {
 
 const totalSkills = computed(() => stages.value.reduce((sum, stage) => sum + stage.skills.length, 0))
 const current = computed(() => stages.value.find((s) => s.id === active.value) || stages.value[0])
+const activeIdx = computed(() => stages.value.findIndex((s) => s.id === active.value))
+const stageCalls = (st: Stage) => st.skills.reduce((sum, s) => sum + (s.calls || 0), 0)
 // 后端阶段名已含"阶段"（如"Goal 阶段"），demo 名无后缀，避免重复拼接
 const stageTitle = computed(() => {
   const name = current.value?.name || ''
@@ -345,91 +364,194 @@ const stageTitle = computed(() => {
 </script>
 
 <style scoped>
+/* ========== 运行时定义 ========== */
 .orch-defs__list {
   margin: 0;
-  padding: 0 16px 14px 32px;
+  padding: 12px 14px 14px;
   display: grid;
-  gap: 6px;
-  font-size: 12.5px;
-  color: var(--mk-muted);
-  line-height: 1.5;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 8px;
+  list-style: none;
 }
-.orch-tabs { display: flex; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--mk-line); }
-.orch-tab { padding: 9px 14px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--mk-faint); border-bottom: 2px solid transparent; }
-.orch-tab.is-active { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
-.orch-tabpane { padding: 16px; }
-.orch-flow {
+.orch-defs__item {
   display: flex;
   align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--mk-line);
+  border-radius: 9px;
+  background: #fafbfd;
+  font-size: 12px;
+  line-height: 1.45;
+  min-width: 0;
+}
+.orch-defs__tag {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.orch-defs__tag--orch { background: #e5f0ff; color: #2563eb; }
+.orch-defs__tag--agent { background: #e8f7ef; color: #15803d; }
+.orch-defs__text {
+  color: var(--mk-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ========== 阶段流水线 ========== */
+.orch-flow {
+  display: flex;
+  align-items: stretch;
   gap: 0;
   overflow-x: auto;
   padding: 4px 2px;
 }
 .orch-stage {
   flex: 1 1 0;
-  min-width: 130px;
+  min-width: 148px;
+  position: relative;
   display: grid;
-  gap: 3px;
-  justify-items: center;
-  padding: 12px 10px;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   background: var(--mk-surface);
   font: inherit;
+  text-align: left;
   cursor: pointer;
-  transition: 0.14s ease;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
-.orch-stage:hover { border-color: rgba(52, 120, 246, 0.35); }
+.orch-stage__bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 3px;
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  background: transparent;
+  transition: background 0.16s ease;
+}
+.orch-stage:hover { border-color: rgba(52, 120, 246, 0.35); transform: translateY(-1px); }
 .orch-stage--active {
   border-color: var(--mk-blue);
-  background: #eef5ff;
-  box-shadow: 0 0 0 1px var(--mk-blue) inset;
+  box-shadow: 0 0 0 1px rgba(52, 120, 246, 0.25), 0 6px 18px rgba(52, 120, 246, 0.1);
+  transform: translateY(-1px);
 }
-.orch-stage__order {
-  font-size: 10.5px;
-  font-weight: 800;
+.orch-stage--active .orch-stage__bar { background: var(--mk-blue); }
+.orch-stage__num {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #eef2fa;
   color: var(--mk-faint);
-  letter-spacing: 0.06em;
+  font-family: var(--mk-mono);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  transition: background 0.16s ease, color 0.16s ease;
 }
-.orch-stage--active .orch-stage__order { color: var(--mk-blue); }
-.orch-stage strong { font-size: 14px; }
-.orch-stage__meta { font-size: 11px; color: var(--mk-faint); }
+.orch-stage--active .orch-stage__num { background: var(--mk-blue); color: #fff; }
+.orch-stage__body { display: grid; gap: 2px; min-width: 0; }
+.orch-stage__name {
+  font-size: 13.5px;
+  color: var(--mk-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.orch-stage__meta {
+  font-size: 11px;
+  color: var(--mk-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
+/* 接力连接器：后续链路点亮 */
 .orch-link {
   display: grid;
   justify-items: center;
+  align-self: center;
   gap: 1px;
-  min-width: 44px;
+  min-width: 48px;
   color: var(--mk-faint);
 }
-.orch-link i { display: block; width: 100%; height: 2px; background: var(--mk-line); }
+.orch-link i {
+  display: block;
+  width: 100%;
+  height: 2px;
+  background: var(--mk-line);
+  border-radius: 2px;
+  transition: background 0.16s ease;
+}
+.orch-link--on i { background: linear-gradient(90deg, rgba(52, 120, 246, 0.9), rgba(52, 120, 246, 0.55)); }
 .orch-link b { font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; }
-.orch-defsteps { display: grid; gap: 4px; margin-top: 10px; }
-.orch-defsteps__label { font-size: 11px; color: var(--mk-faint); }
-.orch-defstep { display: flex; gap: 8px; align-items: baseline; padding: 4px 8px; border: 1px solid var(--mk-line); border-radius: 6px; font-size: 12px; }
-.orch-defstep--service { background: #f0f7ff; }
-.orch-defstep--unresolved { border-color: #fca5a5; background: #fef2f2; }
-.orch-defstep__order { font-size: 10px; color: var(--mk-faint); font-weight: 700; }
-.orch-defstep__id { font-weight: 600; }
-.orch-defstep__role { color: var(--mk-muted); }
-.orch-defstep__cond { color: var(--mk-faint); font-size: 11px; }
-.orch-defstep__badge { padding: 0 5px; border-radius: 4px; background: #e0e7ff; color: #3730a3; font-size: 10px; }
-.orch-defstep__badge--warn { background: #fee2e2; color: #b91c1c; }
+.orch-link--on b { color: var(--mk-blue); }
 
-.orch-detail { display: grid; gap: 14px; padding: 16px; }
+/* ========== tab（胶囊 segment） ========== */
+.orch-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px 0;
+}
+.orch-tab {
+  padding: 6px 16px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--mk-muted);
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+.orch-tab:hover { background: #f0f5ff; color: var(--mk-ink); }
+.orch-tab.is-active {
+  background: var(--mk-blue);
+  border-color: var(--mk-blue);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(52, 120, 246, 0.3);
+}
+.orch-tabpane { padding: 14px 16px 16px; }
+
+/* ========== 定义 tab ========== */
+.orch-detail { display: grid; gap: 14px; padding: 14px 16px 16px; }
+
+/* 变量流 */
 .orch-vars {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   flex-wrap: wrap;
   padding: 12px 14px;
-  border-radius: 10px;
-  background: #fafbfc;
-  border: 1px dashed var(--mk-line);
+  border-radius: 11px;
+  background: linear-gradient(180deg, #fbfcfe, #f7f9fc);
+  border: 1px solid var(--mk-line);
 }
 .orch-vars__group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.orch-vars__label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
-.orch-vars__arrow { color: var(--mk-faint); }
+.orch-vars__label {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.orch-vars__label--in { background: #e8edf7; color: #4a5568; }
+.orch-vars__label--out { background: #e0f6ec; color: #15803d; }
+.orch-vars__arrow {
+  font-family: var(--mk-mono);
+  font-weight: 800;
+  color: var(--mk-blue);
+  font-size: 15px;
+}
 .orch-var {
   padding: 2px 8px;
   border-radius: 6px;
@@ -440,78 +562,165 @@ const stageTitle = computed(() => {
 .orch-var--in { background: #eef2fa; color: #5b6577; }
 .orch-var--out { background: #ecfdf5; color: #15803d; }
 
-.orch-skills { display: grid; gap: 6px; }
+/* 定义步骤（时间线） */
+.orch-defsteps { display: grid; gap: 8px; }
+.orch-defsteps__label { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: var(--mk-faint); }
+.orch-defsteps__rail { display: grid; gap: 4px; padding-left: 0; }
+.orch-defstep {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 10px;
+  padding: 8px 12px 8px 0;
+}
+.orch-defstep:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 26px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--mk-line);
+  border-radius: 2px;
+}
+.orch-defstep__dot {
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  border-radius: 50%;
+  background: #dbe4f2;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 1px var(--mk-line);
+  justify-self: start;
+}
+.orch-defstep--service .orch-defstep__dot { background: var(--mk-blue); }
+.orch-defstep--unresolved .orch-defstep__dot { background: var(--mk-red); }
+.orch-defstep__main { display: grid; gap: 3px; min-width: 0; }
+.orch-defstep__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.orch-defstep__id { font-weight: 600; font-size: 12.5px; color: var(--mk-ink); }
+.orch-defstep__role { font-size: 11.5px; color: var(--mk-muted); }
+.orch-defstep__conds { display: flex; gap: 6px; flex-wrap: wrap; }
+.orch-defstep__cond {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #f3f5f9;
+  color: var(--mk-faint);
+  font-family: var(--mk-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.orch-defstep__badge {
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: #e0e7ff;
+  color: #3730a3;
+  font-size: 10px;
+  font-weight: 800;
+}
+.orch-defstep__badge--warn { background: #fee2e2; color: #b91c1c; }
+
+/* Skill 节点（网格卡片） */
+.orch-skills {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 8px;
+}
 .orch-skill {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 11px 12px;
   border: 1px solid var(--mk-line);
-  border-radius: 10px;
+  border-radius: 11px;
   background: var(--mk-surface);
   cursor: pointer;
-  transition: border-color 0.14s ease;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease;
 }
-.orch-skill:hover { border-color: rgba(52, 120, 246, 0.35); }
-.orch-skill__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-green); flex-shrink: 0; }
-.orch-skill__dot--idle { background: #c3cede; }
-.orch-skill__main { display: grid; min-width: 160px; }
-.orch-skill__main strong { font-size: 13px; }
-.orch-skill__vars { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
+.orch-skill:hover {
+  border-color: rgba(52, 120, 246, 0.4);
+  box-shadow: 0 4px 14px rgba(52, 120, 246, 0.08);
+  transform: translateY(-1px);
+}
+.orch-skill__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--mk-green);
+  box-shadow: 0 0 0 3px var(--mk-green-bg);
+  flex-shrink: 0;
+}
+.orch-skill__dot--idle { background: #c3cede; box-shadow: 0 0 0 3px #f0f2f5; }
+.orch-skill__main { display: grid; gap: 1px; min-width: 0; }
+.orch-skill__main strong { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orch-skill__vars { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; max-width: 180px; }
+.orch-skill__calls { font-size: 12px; color: var(--mk-faint); min-width: 34px; }
 .mono { font-family: var(--mk-mono); font-size: 11px; color: var(--mk-faint); }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .orch-defs__list { font-size: 14px; padding: 0 18px 16px 38px; }
-  .orch-stage { min-width: 150px; padding: 14px 12px; border-radius: 14px; }
-  .orch-stage__order { font-size: 12px; }
-  .orch-stage strong { font-size: 15.5px; }
+  .orch-defs__list { font-size: 14px; padding: 14px 16px 16px; gap: 10px; }
+  .orch-defs__tag { font-size: 12px; padding: 2px 10px; }
+  .orch-stage { min-width: 170px; padding: 14px 16px; border-radius: 14px; }
+  .orch-stage__num { width: 34px; height: 34px; font-size: 13.5px; border-radius: 10px; }
+  .orch-stage__name { font-size: 15px; }
   .orch-stage__meta { font-size: 12.5px; }
-  .orch-link { min-width: 52px; }
+  .orch-link { min-width: 56px; }
   .orch-link b { font-size: 11px; }
-  .orch-detail { gap: 16px; padding: 18px; }
-  .orch-vars { gap: 14px; padding: 14px 16px; }
+  .orch-tab { font-size: 14px; padding: 7px 18px; }
+  .orch-detail { gap: 16px; padding: 16px 18px 18px; }
+  .orch-vars { gap: 16px; padding: 14px 16px; }
   .orch-vars__label { font-size: 12px; }
   .orch-var { font-size: 12.5px; padding: 3px 10px; }
-  .orch-skill { gap: 14px; padding: 12px 14px; }
-  .orch-skill__main { min-width: 190px; }
+  .orch-defstep__id { font-size: 14px; }
+  .orch-defstep__role { font-size: 13px; }
+  .orch-skill { gap: 12px; padding: 13px 14px; }
   .orch-skill__main strong { font-size: 14.5px; }
+  .orch-skill__calls { font-size: 13.5px; }
   .mono { font-size: 12.5px; }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号继续放大 */
   .orch-defs__list { font-size: 15.5px; }
-  .orch-stage { min-width: 175px; padding: 16px 14px; }
-  .orch-stage__order { font-size: 13.5px; }
-  .orch-stage strong { font-size: 17px; }
-  .orch-stage__meta { font-size: 14px; }
-  .orch-link { min-width: 62px; }
+  .orch-defs__tag { font-size: 13.5px; }
+  .orch-stage { min-width: 200px; padding: 16px 18px; }
+  .orch-stage__num { width: 40px; height: 40px; font-size: 15.5px; border-radius: 12px; }
+  .orch-stage__name { font-size: 17px; }
+  .orch-stage__meta { font-size: 14.5px; }
+  .orch-link { min-width: 66px; }
   .orch-link b { font-size: 12.5px; }
-  .orch-detail { gap: 18px; padding: 22px; }
-  .orch-vars { gap: 16px; padding: 16px 18px; }
+  .orch-tab { font-size: 16px; padding: 8px 22px; }
+  .orch-detail { gap: 18px; padding: 20px 22px 22px; }
+  .orch-vars { gap: 18px; padding: 16px 18px; }
   .orch-vars__label { font-size: 13.5px; }
   .orch-var { font-size: 14px; padding: 4px 12px; border-radius: 8px; }
-  .orch-skill { gap: 16px; padding: 14px 16px; }
-  .orch-skill__main { min-width: 220px; }
+  .orch-defstep__id { font-size: 16px; }
+  .orch-defstep__role { font-size: 15px; }
+  .orch-skill { gap: 14px; padding: 15px 16px; }
   .orch-skill__main strong { font-size: 16px; }
+  .orch-skill__calls { font-size: 15.5px; }
   .mono { font-size: 14px; }
 }
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：字号继续放大，与页面基线对齐 */
   .orch-defs__list { font-size: 18px; }
-  .orch-stage { min-width: 205px; padding: 18px 16px; }
-  .orch-stage__order { font-size: 16px; }
-  .orch-stage strong { font-size: 20px; }
-  .orch-stage__meta { font-size: 16.5px; }
-  .orch-link { min-width: 74px; }
+  .orch-defs__tag { font-size: 15.5px; }
+  .orch-stage { min-width: 235px; padding: 18px 22px; }
+  .orch-stage__num { width: 46px; height: 46px; font-size: 18px; border-radius: 14px; }
+  .orch-stage__name { font-size: 20px; }
+  .orch-stage__meta { font-size: 17px; }
+  .orch-link { min-width: 78px; }
   .orch-link b { font-size: 15px; }
-  .orch-detail { gap: 22px; padding: 26px; }
-  .orch-vars { gap: 18px; padding: 18px 22px; }
+  .orch-tab { font-size: 19px; padding: 9px 26px; }
+  .orch-detail { gap: 22px; padding: 24px 26px 26px; }
+  .orch-vars { gap: 22px; padding: 18px 22px; }
   .orch-vars__label { font-size: 16px; }
   .orch-var { font-size: 16.5px; padding: 5px 14px; }
-  .orch-skill { gap: 18px; padding: 16px 18px; }
-  .orch-skill__main { min-width: 260px; }
+  .orch-defstep__id { font-size: 19px; }
+  .orch-defstep__role { font-size: 17px; }
+  .orch-skill { gap: 16px; padding: 17px 20px; }
   .orch-skill__main strong { font-size: 18.5px; }
+  .orch-skill__calls { font-size: 18px; }
   .mono { font-size: 16.5px; }
 }
 </style>
