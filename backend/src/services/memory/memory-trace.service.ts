@@ -153,6 +153,7 @@ class MemoryTraceService {
           retentionTargetDays,
           retentionThreshold: threshold,
           decayFactor: trace.decayFactor ?? DEFAULT_DECAY_FACTOR,
+          intervalFactor: trace.intervalFactor ?? 1,
           now,
         });
         return {
@@ -208,9 +209,19 @@ class MemoryTraceService {
     }));
   }
 
-  async getTrace(userId: string, conceptKey: string) {
-    return prisma.memory_traces.findUnique({
+  async getTrace(userId: string, conceptKey: string) {    return prisma.memory_traces.findUnique({
       where: { userId_conceptKey: { userId, conceptKey } },
+    });
+  }
+
+  /**
+   * SM-2 式间隔递增：复习成功后下次间隔 ×2（factor 上限由 actr.MAX_INTERVAL_FACTOR 计算侧 clamp）。
+   * 仅当痕迹存在时生效；best-effort。
+   */
+  async bumpReviewInterval(userId: string, conceptKey: string): Promise<void> {
+    await prisma.memory_traces.updateMany({
+      where: { userId, conceptKey },
+      data: { intervalFactor: { multiply: 2 } },
     });
   }
 }

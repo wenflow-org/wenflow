@@ -629,6 +629,8 @@ model memory_traces {
   lastSeenAt      DateTime?
   extractionCount Int       @default(0)
   decayFactor     Float     @default(0.5)
+  // SM-2 式间隔递增因子：复习成功 ×2（上限在计算侧 clamp 32），初始 1
+  intervalFactor  Float     @default(1)
   lastRetention   Float?
   source          String?   // derived（从 knowledgeState 确定性映射）| model（LLM 评估，预留）
   createdAt       DateTime  @default(now())

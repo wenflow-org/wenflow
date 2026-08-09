@@ -296,6 +296,8 @@ export class SessionFinalizationService {
           stability: p.status === 'mastered' ? 'stable' : 'fragile',
           source: 'derived',
         });
+        // SM-2 式间隔递增：复习成功 → 下次间隔 ×2（上限计算侧 clamp 32）
+        await memoryTraceService.bumpReviewInterval(session.userId, p.name);
       }
       logger.info('[SessionFinalization] 复习完成回写记忆引擎', {
         sessionId: session.id,

@@ -51,10 +51,14 @@ export function calculateRetention(
 
 /**
  * Cepeda 10%-20% 间隔规则：目标保留 T 天 → 复习间隔取中值 15%（下限 1 天）。
+ * SM-2 式递增：intervalFactor（复习成功倍增）参与缩放，计算侧 clamp 上限 32×。
  */
-export function reviewIntervalDays(retentionTargetDays: number): number {
+export const MAX_INTERVAL_FACTOR = 32;
+
+export function reviewIntervalDays(retentionTargetDays: number, intervalFactor = 1): number {
   if (!Number.isFinite(retentionTargetDays) || retentionTargetDays <= 0) return 1;
-  return Math.max(1, Math.round(retentionTargetDays * 0.15));
+  const factor = Number.isFinite(intervalFactor) ? Math.min(Math.max(intervalFactor, 1), MAX_INTERVAL_FACTOR) : 1;
+  return Math.max(1, Math.round(retentionTargetDays * 0.15 * factor));
 }
 
 export type ReviewDueReason =
@@ -81,6 +85,7 @@ export function isReviewDue(options: {
   retentionTargetDays: number;
   retentionThreshold?: number;
   decayFactor?: number;
+  intervalFactor?: number;
   now?: Date;
 }): ReviewDueResult {
   const now = options.now ?? new Date();
@@ -89,7 +94,7 @@ export function isReviewDue(options: {
     : DEFAULT_RETENTION_THRESHOLD;
   const retention = calculateRetention(options.masteryScore, options.lastSeenAt, now, options.decayFactor);
   const elapsed = daysSince(options.lastSeenAt, now);
-  const intervalDays = reviewIntervalDays(options.retentionTargetDays);
+  const intervalDays = reviewIntervalDays(options.retentionTargetDays, options.intervalFactor);
 
   if (elapsed === null) {
     return { due: false, retention, intervalDays, daysSinceLastSeen: null, reason: 'never-seen' };
