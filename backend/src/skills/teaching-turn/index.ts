@@ -1,6 +1,6 @@
 import { callPrompt } from '../../composers/prompt-composer';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
-import { PromptCallSpec } from '../../composers/types';
+import { PromptCallSpec, type PromptCallResult } from '../../composers/types';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition, AgentOutput } from '../../agents/protocol';
 import { evaluateByCriteria, evaluateByProfile } from '../../skills/acceptance-evidence-evaluator';
@@ -113,6 +113,8 @@ export interface TeachingTurnInput {
   classroomContext?: Record<string, any>;
   classroomEventContext?: Record<string, any>;
   visibleDialogueContext?: Array<{ role: MessageRole; content: string }>;
+  /** 双引擎试点（内部透传）：第一段 analysis-only 的产出，注入第二段作为约束 */
+  _analysisStage?: Record<string, any> | null;
 }
 
 export interface TeachingTurnOutput {
@@ -433,6 +435,21 @@ function buildPromptInput(input: TeachingTurnInput) {
       ...(strategyGuidancePrompt ? { strategyGuidance: strategyGuidancePrompt } : {}),
       taskExecution: taskExecutionPrompt,
     },
+    // 双引擎试点：第一段（推理模型）产出的 analysis 作为第二段的既定认知判定
+    ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
+  };
+}
+
+/**
+ * 双引擎试点 · 第一段 analysis-only payload：
+ * 同 teaching-turn 输入 + 显式指令（只产出 analysis，供推理模型做深层认知判定）
+ */
+function buildAnalysisOnlyPayload(input: TeachingTurnInput) {
+  return {
+    ...buildPromptInput(input),
+    _analysisOnlyDirective:
+      '【本次调用为认知判定阶段】只输出 analysis 对象（含 cognitiveLevel/levelScore/understanding/confusionPoints/engagement/emotionalState/loadIndex/loadBasis），'
+      + '不输出 reply/knowledge/pedagogy/control。所有判定必须基于输入证据，无证据时按规则取默认值。',
   };
 }
 
@@ -545,62 +562,89 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
   },
 };
 
-export async function teachingTurnAgentHandler(input: TeachingTurnInput): Promise<AgentOutput> {
-  try {
-    const result = await callPrompt(teachingTurnPromptSpec, input);
-
-    if (!result.success || !result.output) {
-      throw new Error(result.error?.message || 'TEACHING_TURN_OUTPUT_INVALID');
+/**
+ * 双引擎试点 · 第一段 analysis-only spec（推理模型深层认知判定）：
+ * 复用 teaching-turn 的 ACTIVE prompt，payload 追加 analysis-only 指令；失败降级单段。
+ */
+const teachingAnalysisPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutput> = {
+  agentId: AGENT_ID,
+  defaultSystemPrompt: '',
+  requireActivePrompt: true,
+  caller: {
+    agentId: 'teaching-agent',
+    skillId: 'teaching-turn',
+  },
+  buildUserPayload: (input) => buildAnalysisOnlyPayload(input),
+  normalizeOutput: (parsed) => ({ ...parsed }),
+  validateParsedOutput: (parsed) => {
+    if (!parsed || typeof parsed !== 'object' || !parsed.analysis || typeof parsed.analysis !== 'object') {
+      return { valid: false, failureReason: 'TEACHING_TURN_ANALYSIS_MISSING' };
     }
+    return { valid: true };
+  },
+  retryStrategy: {
+    maxAttempts: 1,
+  },
+};
 
-    const output = result.output;
-    const skillOutcome = toTeachingTurnSkillOutcome(output, result.runtimeEnvelope);
-    return {
-      success: true,
-      userVisible: output.reply,
-      internal: {
-        core: {
-          stage: 'turn-completed',
-          confidence: 0.8,
-          isCompleted: output.control.isCompletionCandidate,
-        },
-        ext: {
-          teaching: output,
-          // Internal canonical sidecar. Keep `teaching` unchanged for legacy consumers.
-          teachingTurnOutcome: skillOutcome,
-          promptDebug: result.debug,
-        }
-      },
-      runtimeEnvelope: result.runtimeEnvelope,
-      renderHints: {
-        component: 'teaching-turn'
-      },
-      schemaVersion: 'agent-output-v1',
-      metadata: {
-        agentId: AGENT_ID,
-        agentName: '教学回合 Skill',
-        agentType: 'teaching',
-        confidence: 0.8,
-        generatedAt: new Date().toISOString(),
+export async function teachingTurnAgentHandler(input: TeachingTurnInput): Promise<AgentOutput> {
+  // 双引擎试点（feature flag 默认关）：WENFLOW_TWO_STAGE_TEACHING=1 时先 reasoning 产 analysis，再 chat 产 reply
+  if (process.env.WENFLOW_TWO_STAGE_TEACHING === '1') {
+    try {
+      const analysisResult = await callPrompt(teachingAnalysisPromptSpec, input);
+      if (analysisResult.success && analysisResult.output?.analysis) {
+        const fullResult = await callPrompt(teachingTurnPromptSpec, {
+          ...input,
+          _analysisStage: analysisResult.output.analysis,
+        });
+        return buildTeachingOutcome(fullResult, input);
       }
-    };
-  } catch (error) {
-    logger.error('[TeachingTurnAgent] 执行失败', { error });
-    return {
-      success: false,
-      userVisible: '这一轮教学内容生成失败，请稍后重试。',
-      error: {
-        code: 'TEACHING_TURN_FAILED',
-        message: error instanceof Error ? error.message : String(error)
-      },
-      schemaVersion: 'agent-output-v1',
-      metadata: {
-        agentId: AGENT_ID,
-        agentName: '教学回合 Skill',
-        agentType: 'teaching',
-        confidence: 0,
-        generatedAt: new Date().toISOString(),
-      }
-    };
+      logger.warn('[TeachingTurnAgent] 双引擎第一段失败，降级单段');
+    } catch (error) {
+      logger.warn('[TeachingTurnAgent] 双引擎异常，降级单段', { error });
+    }
   }
+  const result = await callPrompt(teachingTurnPromptSpec, input);
+  return buildTeachingOutcome(result, input);
+}
+
+function buildTeachingOutcome(
+  result: PromptCallResult<TeachingTurnOutput>,
+  input: TeachingTurnInput
+): AgentOutput {
+  if (!result.success || !result.output) {
+    throw new Error(result.error?.message || 'TEACHING_TURN_OUTPUT_INVALID');
+  }
+
+  const output = result.output;
+  const skillOutcome = toTeachingTurnSkillOutcome(output, result.runtimeEnvelope);
+  return {
+    success: true,
+    userVisible: output.reply,
+    internal: {
+      core: {
+        stage: 'turn-completed',
+        confidence: 0.8,
+        isCompleted: output.control.isCompletionCandidate,
+      },
+      ext: {
+        teaching: output,
+        // Internal canonical sidecar. Keep `teaching` unchanged for legacy consumers.
+        teachingTurnOutcome: skillOutcome,
+        promptDebug: result.debug,
+      }
+    },
+    runtimeEnvelope: result.runtimeEnvelope,
+    renderHints: {
+      component: 'teaching-turn'
+    },
+    schemaVersion: 'agent-output-v1',
+    metadata: {
+      agentId: AGENT_ID,
+      agentName: '教学回合 Skill',
+      agentType: 'teaching',
+      confidence: 0.8,
+      generatedAt: new Date().toISOString(),
+    }
+  };
 }
