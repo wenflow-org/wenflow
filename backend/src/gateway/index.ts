@@ -7,7 +7,6 @@
 
 import { PrismaClient } from '@prisma/client';
 import systemPrisma from '../config/system-database';
-import { EventBus, createEventBus } from './event-bus';
 import { AgentRegistry } from './registries/agent-registry';
 import { SkillRegistry } from './registries/skill-registry';
 import { getAPIGateway } from './api-gateway';
@@ -20,7 +19,6 @@ import {
   AgentExecutionRequest,
   AgentExecutionResult
 } from '../agents/protocol';
-import { LearningEvent } from './event-bus';
 import { normalizeAgentOutput } from '../agents/output-normalizer';
 import { executeSkillHandler } from '../skills/executor';
 import { mcpGateway } from '../core/mcp/McpGateway';
@@ -33,9 +31,6 @@ export interface GatewayConfig {
     defaultModel: string;
     defaultReasoningModel?: string;
   };
-  eventBus: {
-    persistEvents: boolean;
-  };
 }
 
 // 默认配置
@@ -46,9 +41,6 @@ const DEFAULT_CONFIG: GatewayConfig = {
     defaultModel: process.env.AI_MODEL || '',
     defaultReasoningModel: process.env.AI_MODEL_REASONING || '',
   },
-  eventBus: {
-    persistEvents: true,
-  }
 };
 
 /**
@@ -56,7 +48,6 @@ const DEFAULT_CONFIG: GatewayConfig = {
  */
 export class EduClawGateway {
   private prisma: PrismaClient;
-  private eventBus: EventBus;
   private agentRegistry: AgentRegistry;
   private skillRegistry: SkillRegistry;
   private config: GatewayConfig;
@@ -74,7 +65,6 @@ export class EduClawGateway {
     };
 
     // 初始化组件
-    this.eventBus = createEventBus(prisma, this.config.eventBus);
     this.agentRegistry = new AgentRegistry(systemPrisma as any);
     this.skillRegistry = new SkillRegistry(systemPrisma as any);
   }
@@ -154,29 +144,6 @@ export class EduClawGateway {
     }
   }
 
-  // ============ Event 相关方法 ============
-
-  /**
-   * 发布事件
-   */
-  async emitEvent(event: LearningEvent): Promise<void> {
-    return this.eventBus.emit(event);
-  }
-
-  /**
-   * 订阅事件
-   */
-  onEvent(eventType: string, handler: (event: LearningEvent) => void): void {
-    this.eventBus.on(eventType as any, handler);
-  }
-
-  /**
-   * 获取事件历史
-   */
-  async getEventHistory(options: any): Promise<LearningEvent[]> {
-    return this.eventBus.getHistory(options);
-  }
-
   // ============ AI 相关方法 ============
 
   /**
@@ -215,7 +182,6 @@ export class EduClawGateway {
    */
   async close(): Promise<void> {
     mcpGateway.destroy();
-    await this.eventBus.close();
   }
 }
 
@@ -244,7 +210,6 @@ export function getGateway(): EduClawGateway {
 }
 
 // 导出所有组件
-export { EventBus } from './event-bus';
 export { AgentRegistry } from './registries/agent-registry';
 export { SkillRegistry } from './registries/skill-registry';
 export { getAPIGateway, APIGateway } from './api-gateway';

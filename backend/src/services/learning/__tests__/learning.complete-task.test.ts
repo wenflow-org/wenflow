@@ -39,7 +39,6 @@ jest.mock('../../../utils/logger', () => ({
 jest.mock('../../ai/ai.service', () => ({ __esModule: true, default: {} }))
 jest.mock('../learning-state.service', () => ({ __esModule: true, default: {} }))
 jest.mock('../../learner/LearnerProjectionService', () => ({ learnerProjectionService: {} }))
-jest.mock('../../../gateway/event-bus', () => ({ getEventBus: () => ({ emit: jest.fn() }) }))
 jest.mock('../../../skills', () => ({ executeSkill: jest.fn() }))
 jest.mock('../../../skills/stage-designer', () => ({ stageDesignerDefinition: {} }))
 

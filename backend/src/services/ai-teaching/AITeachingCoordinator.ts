@@ -5,7 +5,6 @@ import learningStateService, { LearningStateMetrics } from '../learning/learning
 import type { SessionWrapupArtifact, SessionWrapupSummary } from '../../skills/session-wrapup';
 import { teachingTurnAgentDefinition, type TeachingTurnInput, type TeachingTurnOutput } from '../../skills/teaching-turn';
 import { executeSkill, executeSkillWithResult, auxSkillDefinitionMap, sessionWrapupAgentDefinition, peerAgentDefinition } from '../../skills';
-import { getEventBus } from '../../gateway/event-bus';
 import { buildTeachingScenarioContext, type TeachingScenarioContext, type InteractionMetaRecord } from './TeachingContextBuilder';
 import {
   teachingSessionRepository,

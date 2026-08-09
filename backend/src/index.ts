@@ -15,7 +15,6 @@ import { registerOfficialAgents } from './agents';
 import { allSkillDefinitions, skillHandlers } from './skills';
 import { validateManifest, listTopLevelAgents } from './services/agent-manifest.service';
 
-import { getEventBus } from './gateway/event-bus';
 import learningService from './services/learning/learning.service';
 import { ensureCoreAgentPrompts } from './scripts/seed-core-agent-prompts';
 import { bootstrapFieldRoutings } from './services/field-routing-bootstrap.service';
@@ -455,9 +454,6 @@ async function initializeGateway() {
       apiKey: process.env.AI_API_KEY || '',
       defaultModel: process.env.AI_MODEL || '',
       defaultReasoningModel: process.env.AI_MODEL_REASONING || '',
-    },
-    eventBus: {
-      persistEvents: true,
     }
   });
   gateway = instance;

@@ -1,5 +1,4 @@
 import { executeSkill, auxSkillDefinitionMap } from '../../skills';
-import { getEventBus } from '../../gateway/event-bus';
 import { calculateCognitiveEngagement, CognitiveEngagementInput } from '../learning/cognitive-engagement.service';
 import type { LearningSignal, ProgressMetrics } from '../../agents/protocol';
 

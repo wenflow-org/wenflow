@@ -20,7 +20,6 @@ import { CallerInfo } from '../../gateway/api-gateway';
 import { callPrompt } from '../../composers/prompt-composer';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 
-import { getEventBus } from '../../gateway/event-bus';
 import { logger } from '../../utils/logger';
 
 const PATH_AGENT_MAX_TOKENS = 32000;
@@ -304,7 +303,6 @@ export async function pathAgentHandler(
   context: AgentContext
 ): Promise<AgentOutput> {
   const startTime = Date.now();
-  const eventBus = getEventBus();
   
   try {
     // 1. 分析用户目标
@@ -313,17 +311,7 @@ export async function pathAgentHandler(
     // 2. 生成学习路径（包含里程碑）
     const path = await generatePath(input, context, goalAnalysis);
     
-    // 3. 发布路径创建事件
-    await eventBus.emit({
-      type: 'path:created',
-      source: 'skill:path-planning',
-      userId: context.userId,
-      data: {
-        pathId: path.id,
-        pathName: path.name,
-        totalMilestones: path.milestones?.length || 0
-      }
-    });
+    // 注：path:created 事件由 durable outbox 承担（learning.service persistGeneratedPath），内存总线已退役
 
     return {
       success: true,

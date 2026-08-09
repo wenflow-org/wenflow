@@ -5,7 +5,6 @@ import aiService from '../ai/ai.service';
 import stateTrackingService from './learning-state.service';
 import achievementService from '../achievements/achievement.service';
 import type { AgentInput } from '../../agents/protocol';
-import { getEventBus } from '../../gateway/event-bus';
 import { normalizeAgentOutput } from '../../agents/output-normalizer';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { dashboardGuidanceSnapshotService } from '../learner/DashboardGuidanceSnapshotService';

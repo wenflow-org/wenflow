@@ -10,7 +10,6 @@ import {
   AgentOutput,
   AgentContext
 } from '../protocol';
-import { getEventBus } from '../../gateway/event-bus';
 import { profileAggregator } from './profile-aggregator';
 import { personalizationEngine } from './personalization';
 import {
@@ -78,7 +77,6 @@ export const learnerModelAgentDefinition: AgentDefinition = {
 class LearnerModelAgent {
   async handler(input: AgentInput, context: AgentContext): Promise<AgentOutput> {
     const startTime = Date.now();
-    const eventBus = getEventBus();
     const action = input.metadata?.action || 'get';
     
     try {
@@ -190,17 +188,6 @@ class LearnerModelAgent {
     if (!updateResult.success) throw new Error('LEARNER_PROFILE_UPDATE_FAILED');
     learnerProfileService.clear(userId);
     const result = await learnerProfileService.getProfile(userId);
-    
-    const eventBus = getEventBus();
-    await eventBus.emit({
-      type: 'profile:updated',
-      source: 'learner-model-agent',
-      userId,
-      data: {
-        changes: updateResult.changes,
-        confidence: result.confidence
-      }
-    });
     
     return { profile: result.profile, changes: updateResult.changes };
   }

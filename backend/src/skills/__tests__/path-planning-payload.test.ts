@@ -1,13 +1,8 @@
 const mockCallPrompt = jest.fn()
-const mockEventBusEmit = jest.fn()
 const mockGatewayExecute = jest.fn()
 
 jest.mock('../../composers/prompt-composer', () => ({
   callPrompt: mockCallPrompt,
-}))
-jest.mock('../../gateway/event-bus', () => ({
-  getEventBus: () => ({ emit: mockEventBusEmit }),
-  EventBus: class {},
 }))
 jest.mock('../../gateway/api-gateway', () => ({
   getAPIGateway: () => ({ execute: mockGatewayExecute }),
@@ -51,7 +46,6 @@ describe('path-planning payload snapshot parity', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockCallPrompt.mockResolvedValue(SUCCESS_RESULT)
-    mockEventBusEmit.mockResolvedValue(undefined)
   })
 
   it('payload carries the tagged sections the prompt input spec declares', async () => {
