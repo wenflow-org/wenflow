@@ -410,30 +410,6 @@ model milestones {
 }
 
 
-model student_baselines {
-  id                       String    @id
-  userId                   String    @unique
-  totalXp                  Int       @default(0)
-  totalTime                Int       @default(0)
-  totalTasks               Int       @default(0)
-  completedTasks           Int       @default(0)
-  avgRating                Float     @default(0)
-  streakDays               Int       @default(0)
-  lastActive               DateTime?
-  responseTimeEma          Float     @default(10.0)
-  responseTimeEmVar        Float     @default(1.0)
-  messageLengthEma         Float     @default(50.0)
-  messageLengthEmVar       Float     @default(100.0)
-  interactionIntervalEma   Float     @default(5.0)
-  interactionIntervalEmVar Float     @default(1.0)
-  aiScoreEma               Float     @default(0.5)
-  aiScoreEmVar             Float     @default(0.01)
-  updateCount              Int       @default(0)
-  createdAt                DateTime  @default(now())
-  updatedAt                DateTime  @default(now())
-  users                    users     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
 model subtasks {
   id                   String             @id
   milestoneId          String
@@ -765,7 +741,6 @@ model users {
   learning_metrics          learning_metrics[]
   learning_paths            learning_paths[]
   projection_access_grants  projection_access_grants[]
-  student_baselines         student_baselines?
   subtasks                  subtasks[]
   teaching_sessions         teaching_sessions[]
   user_agent_configs        user_agent_configs[]

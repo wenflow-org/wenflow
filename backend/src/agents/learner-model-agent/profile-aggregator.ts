@@ -24,7 +24,6 @@ import {
   TheoryVsPractice,
   SessionLength
 } from './types';
-import { studentBaselineService } from '../../services/student-baseline.service';
 import { logger } from '../../utils/logger';
 
 function mergeStringArrays(...values: Array<Array<string> | undefined>): string[] {
@@ -259,19 +258,10 @@ export class ProfileAggregator {
   }
   
   private async fetchBaselineData(userId: string): Promise<BehavioralBaseline | null> {
-    try {
-      const baseline = await studentBaselineService.getOrCreateBaseline(userId);
-      return {
-        avgResponseTime: baseline.responseTime.ema,
-        avgMessageLength: baseline.messageLength.ema,
-        avgInteractionInterval: baseline.interactionInterval.ema,
-        engagementLevel: this.calculateEngagement(baseline),
-        consistencyScore: this.calculateConsistency(baseline)
-      };
-    } catch (error) {
-      logger.error('[profile-aggregator] failed to fetch baseline data', { userId, error });
-      return null;
-    }
+    // EMA 统计基线已退役（2026-08 M1 认知负荷改造：交互特征 + LLM 语义判断承担）；
+    // behavioral 画像回落到 DEFAULT_BEHAVIORAL，student_baselines 表随迁移删除。
+    void userId;
+    return null;
   }
   
   private async fetchMetricsData(userId: string): Promise<LearningState | null> {
@@ -615,22 +605,6 @@ export class ProfileAggregator {
     }
     
     return strengths;
-  }
-  
-  private calculateEngagement(baseline: any): number {
-    if (!baseline) return 0.5;
-    const responseRate = 1 / (1 + Math.exp(-(baseline.responseTime.ema - 10) / 5));
-    const lengthScore = Math.min(1, baseline.messageLength.ema / 100);
-    return (responseRate + lengthScore) / 2;
-  }
-  
-  private calculateConsistency(baseline: any): number {
-    if (!baseline) return 0.5;
-    const variance = (
-      (baseline.responseTime.emVar || 1) +
-      (baseline.messageLength.emVar || 100) / 100
-    ) / 2;
-    return Math.max(0, 1 - variance);
   }
   
   private inferProgress(metricsOrTrends: any): 'improving' | 'stable' | 'declining' {
