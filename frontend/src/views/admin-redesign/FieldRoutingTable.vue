@@ -47,8 +47,8 @@
               <td>{{ row.accumulate ? '是' : '否' }}</td>
               <td><span class="frt__lock" :class="`frt__lock--${row.locks?.level || 'editable'}`">{{ lockLabel(row.locks?.level) }}</span></td>
               <td>
-                <button v-if="row.locks?.level !== 'system-locked'" class="mk-link" @click="toggleInternal(agent.agentId, row)">internal↔</button>
-                <button v-if="row.locks?.level !== 'system-locked'" class="mk-link" @click="toggleAccumulate(agent.agentId, row)">accumulate↔</button>
+                <button v-if="row.locks?.level !== 'system-locked'" class="frt__op" @click="toggleInternal(agent.agentId, row)">internal↔</button>
+                <button v-if="row.locks?.level !== 'system-locked'" class="frt__op" @click="toggleAccumulate(agent.agentId, row)">accumulate↔</button>
               </td>
             </tr>
             <tr v-if="routingsOf(agent.agentId).length === 0">
@@ -165,6 +165,8 @@ watch(() => props.stage, () => void loadStage());
 .frt__field { max-width: 300px; word-break: break-all; }
 .frt__handoff { max-width: 220px; }
 .frt__handoff-input { width: 220px; padding: 3px 6px; border: 1px solid var(--mk-border, #ddd); border-radius: 4px; font-size: 12px; }
+.frt__op { padding: 2px 6px; border: 1px solid var(--mk-border, #ddd); border-radius: 4px; background: #fff; cursor: pointer; font-size: 12px; }
+.frt__op:hover { border-color: var(--mk-primary, #4f46e5); color: var(--mk-primary, #4f46e5); }
 .frt__lock { padding: 2px 6px; border-radius: 4px; font-size: 12px; }
 .frt__lock--system-locked { background: #fee2e2; color: #b91c1c; }
 .frt__lock--structure-locked { background: #fef3c7; color: #92400e; }

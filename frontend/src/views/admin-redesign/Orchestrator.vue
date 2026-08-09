@@ -113,10 +113,14 @@
       </div>
 
       <!-- Tab：字段路由（可写配置） -->
-      <FieldRoutingTable v-else-if="activeTab === 'field-routings'" :stage="current.id" @changed="reloadDrift" />
+      <div v-else-if="activeTab === 'field-routings'" class="orch-tabpane">
+        <FieldRoutingTable :stage="current.id" @changed="reloadDrift" />
+      </div>
 
       <!-- Tab：沙盘契约视图 -->
-      <SandboxView v-else-if="activeTab === 'sandbox'" />
+      <div v-else-if="activeTab === 'sandbox'" class="orch-tabpane">
+        <SandboxView />
+      </div>
 
       <!-- Tab：漂移与审计 -->
       <div v-else-if="activeTab === 'drift'" class="orch-tabpane">
@@ -146,6 +150,10 @@ const tabs = [
 const activeTab = ref('definition')
 const driftPanel = ref<InstanceType<typeof DriftAuditPanel> | null>(null)
 
+// 字段路由写操作后联动刷新漂移报告。
+// 说明：drift 与 field-routings 为互斥 tab（v-else-if 重建），每次进入 drift tab 时
+// DriftAuditPanel 重新挂载并自动 loadDrift；此回调覆盖"drift tab 曾打开、ref 存活"的
+// 边角场景，保持写后数据一致。
 function reloadDrift() {
   void driftPanel.value?.reload()
 }

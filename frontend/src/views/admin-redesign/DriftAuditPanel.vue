@@ -46,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { adminFieldRoutingsApi } from '@/api/adminApi';
 
 const props = defineProps<{ stage: string }>();
@@ -108,6 +108,12 @@ async function submitNewField() {
 defineExpose({ reload: () => Promise.all([loadDrift(), loadChanges()]) });
 
 onMounted(() => {
+  void loadDrift();
+  void loadChanges();
+});
+
+// 切换阶段时刷新（审计按 stage 过滤）
+watch(() => props.stage, () => {
   void loadDrift();
   void loadChanges();
 });
