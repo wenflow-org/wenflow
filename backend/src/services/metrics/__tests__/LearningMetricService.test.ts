@@ -23,8 +23,6 @@ jest.mock('../../learning/learning-state.service', () => ({
 }))
 
 import {
-  calculateKTL,
-  calculateLF,
   reconcileTaskCompletionMetric,
   updateLearningMetrics
 } from '../LearningMetricService'
@@ -82,50 +80,43 @@ describe('LearningMetricService task completion persistence', () => {
     )
     const deriveMetrics = mockCommitDerivedDisplayMetrics.mock.calls[0][1]
     await expect(deriveMetrics(null)).resolves.toEqual(expect.objectContaining({ timestamp: occurredAt }))
-    expect(mockPrisma.teaching_sessions.findMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      where: expect.objectContaining({
-        startTime: {
-          gte: new Date('2026-07-12T08:30:00.000Z'),
-          lte: occurredAt
-        },
-        endTime: { lte: occurredAt }
-      })
-    }))
-    expect(mockPrisma.teaching_sessions.findMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      where: expect.objectContaining({
-        startTime: {
-          gte: new Date('2026-07-12T08:30:00.000Z'),
-          lte: occurredAt
-        },
-        endTime: { lte: occurredAt }
-      })
-    }))
   })
 
-  it('uses the supplied as-of time for LF day decay', async () => {
+  it('derives 0-10 display metrics via the learning-state EWMA semantics (KTL/LF 收敛)', async () => {
     const asOf = new Date('2026-07-19T08:30:00.000Z')
-    mockPrisma.teaching_sessions.findMany.mockResolvedValue([{ 
-      startTime: new Date('2026-07-19T01:00:00.000Z'),
-      duration: 180,
-      taskId: 'task-1'
-    }])
+    mockPrisma.teaching_sessions.findMany.mockResolvedValue([])
+    let derived: any = null
+    mockCommitDerivedDisplayMetrics.mockImplementation(async (_userId: string, derive: any) => {
+      derived = await derive(null)
+      return { lss: derived.lss, ktl: derived.ktl, lf: derived.lf, lsb: derived.lsb, timestamp: asOf }
+    })
 
-    await expect(calculateLF('user-1', asOf)).resolves.toBe(10)
+    await updateLearningMetrics({
+      userId: 'user-1',
+      taskId: 'task-1',
+      durationMinutes: 30,
+      subjectiveDifficulty: 6,
+      completed: true,
+      timestamp: asOf
+    })
+
+    expect(derived).toEqual(expect.objectContaining({
+      lss: expect.any(Number),
+      ktl: expect.any(Number),
+      lf: expect.any(Number),
+      lsb: expect.any(Number),
+    }))
+    // 0-10 尺度（internal-10）：所有值在 [-10, 10] 内，不再产出 0-100
+    for (const key of ['lss', 'ktl', 'lf', 'lsb'] as const) {
+      expect(derived[key]).toBeGreaterThanOrEqual(-10)
+      expect(derived[key]).toBeLessThanOrEqual(10)
+    }
+    expect(derived.source).toBe('task-completion')
+    expect(derived.primaryMetric).toBe('lsb')
   })
 
-  it('rejects KTL and LF query errors instead of returning fallback metrics', async () => {
-    mockPrisma.teaching_sessions.findMany.mockRejectedValueOnce(new Error('ktl query failed'))
-    await expect(calculateKTL('user-1', 80, 0)).rejects.toThrow('ktl query failed')
-
-    mockPrisma.teaching_sessions.findMany.mockRejectedValueOnce(new Error('lf query failed'))
-    await expect(calculateLF('user-1')).rejects.toThrow('lf query failed')
-  })
-
-  it('rejects canonical metric reconciliation when LF calculation fails', async () => {
-    mockCommitDerivedDisplayMetrics.mockImplementation(async (_userId: string, derive: any) => derive(null))
-    mockPrisma.teaching_sessions.findMany
-      .mockResolvedValueOnce([])
-      .mockRejectedValueOnce(new Error('lf query failed'))
+  it('rejects metric commit errors instead of returning fallback metrics', async () => {
+    mockCommitDerivedDisplayMetrics.mockRejectedValue(new Error('commit failed'))
 
     await expect(updateLearningMetrics({
       userId: 'user-1',
@@ -133,6 +124,6 @@ describe('LearningMetricService task completion persistence', () => {
       durationMinutes: 30,
       completed: true,
       timestamp: new Date('2026-07-19T08:30:00.000Z')
-    })).rejects.toThrow('lf query failed')
+    })).rejects.toThrow('commit failed')
   })
 })

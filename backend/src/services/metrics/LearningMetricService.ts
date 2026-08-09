@@ -98,142 +98,6 @@ export function calculateEWMA(
 }
 
 /**
- * 计算知识训练负荷 (KTL - Knowledge Training Load)
- *
- * KTL 基于学习历史的综合评估：
- * - 完成的任务数量
- * - 任务难度和类型
- * - 学习时长
- * - 使用EWMA平滑短期波动
- */
-export async function calculateKTL(
-  userId: string,
-  lssScore: number,
-  previousKTL: number = 0,
-  asOf: Date = new Date()
-): Promise<number> {
-  const sevenDaysAgo = new Date(asOf.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-  const sessions = await prisma.teaching_sessions.findMany({
-    where: {
-      userId,
-      status: 'completed',
-      wrapup: { not: null },
-      startTime: { gte: sevenDaysAgo, lte: asOf },
-      endTime: { lte: asOf },
-    },
-    orderBy: { startTime: 'desc' },
-  });
-
-  if (sessions.length === 0) {
-    // 没有历史记录，基于当前LSS初始化KTL
-    return lssScore * 0.5;
-  }
-
-  // 计算总学习时长和平均难度
-  const totalMinutes = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
-  const avgDifficulty = 5;
-
-  // KTL考虑因素：
-  // 1. 学习量因子：总学习时长 / 7天
-  const learningVolume = Math.min(totalMinutes / (7 * 60), 4); // 最多4小时/天 -> 4
-
-  // 2. 难度因子：平均难度 / 2
-  const difficultyFactor = avgDifficulty / 2;
-
-  // 3. 当前LSS影响
-  const lssFactor = lssScore / 100;
-
-  // 4. 任务完成率
-  const completedSessions = sessions.filter((s) => s.taskId).length;
-  const completionRate = sessions.length > 0 ? completedSessions / sessions.length : 0;
-
-  // 计算基础KTL
-  const ktlCurrent = (learningVolume + difficultyFactor) * (1 + lssFactor) * (0.5 + 0.5 * completionRate) * 20;
-
-  // 使用EWMA平滑
-  let ktlFinal = calculateEWMA(ktlCurrent, previousKTL, 0.4);
-
-  // 限制在0-100
-  ktlFinal = Math.max(0, Math.min(100, Math.round(ktlFinal)));
-
-  return ktlFinal;
-}
-
-/**
- * 计算学习疲劳度 (LF - Learning Fatigue)
- *
- * LF 基于学习历史的衰减因子：
- * - 学习时长累积
- * - 连续学习天数
- * - 7天衰减模型（每过一天衰减一部分）
- */
-export async function calculateLF(userId: string, asOf: Date = new Date()): Promise<number> {
-  // 获取过去7天的学习数据
-  const sevenDaysAgo = new Date(asOf.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-  const sessions = await prisma.teaching_sessions.findMany({
-    where: {
-      userId,
-      status: 'completed',
-      wrapup: { not: null },
-      startTime: { gte: sevenDaysAgo, lte: asOf },
-      endTime: { lte: asOf },
-    },
-    orderBy: { startTime: 'desc' },
-  });
-
-  if (sessions.length === 0) {
-    return 0;
-  }
-
-  // 按天聚合学习时长
-  const dailyLearning = new Map<string, number>();
-
-  sessions.forEach((session) => {
-    const date = session.startTime.toISOString().split('T')[0];
-    const duration = session.duration || 0;
-    dailyLearning.set(date, (dailyLearning.get(date) || 0) + duration);
-  });
-
-  // 计算疲劳度
-  let lfCurrent = 0;
-
-  // 遍历过去7天
-  for (let i = 0; i < 7; i++) {
-    const date = new Date(asOf.getTime() - i * 24 * 60 * 60 * 1000);
-    const dateStr = date.toISOString().split('T')[0];
-    const minutes = dailyLearning.get(dateStr) || 0;
-
-    // 衰减因子：越近的数据影响越大
-    // 第0天（今天）权重1，第6天权重0.5
-    const decayFactor = 1 - (i / 7) * 0.5;
-
-    // 学习疲劳因子：单日学习超过2小时累积疲劳
-    const dailyFatigue = Math.max(0, minutes - 120) / 60; // 超过2小时的每1小时增加1点疲劳
-
-    lfCurrent += dailyFatigue * decayFactor;
-  }
-
-  // 转换为0-100范围
-  lfCurrent = Math.min(100, Math.round(lfCurrent * 10));
-
-  return lfCurrent;
-}
-
-/**
- * 计算学习状态平衡值 (LSB - Learning State Balance)
- *
- * LSB = KTL - LF
- *
- * 正值表示学习状态良好，负值表示状态不佳
- */
-export function calculateLSB(ktl: number, lf: number): number {
-  const lsb = ktl - lf;
-  return Math.max(-100, Math.min(100, Math.round(lsb)));
-}
-
-/**
  * 更新学习指标
  *
  * 核心函数：在每次学习会话结束时调用
@@ -251,16 +115,21 @@ export async function updateLearningMetrics(
     const sourceKey = input.taskId ? `task-completion:${input.taskId}` : undefined;
     const asOf = input.timestamp || new Date();
     const committedMetrics = await learningStateService.commitDerivedDisplayMetrics(input.userId, async previousMetrics => {
-      const previousDisplayMetrics = previousMetrics
-        ? learningStateService.toDisplayMetrics(previousMetrics)
-        : null;
-      const ktlCurrent = await calculateKTL(input.userId, lssScore, previousDisplayMetrics?.ktl || 0, asOf);
-      const lfCurrent = await calculateLF(input.userId, asOf);
+      // KTL/LF 收敛（2026-08）：统一走 learning-state 的 0-10 EWMA 语义（主状态机），
+      // 不再使用本文件第三套 0-100 私有公式（此前 0-100 值写入 internal-10 字段属语义不一致）
+      const lss10 = Math.max(0, Math.min(10, lssScore / 10));
+      const prev = previousMetrics ? learningStateService.toDisplayMetrics(previousMetrics) : null;
+      const ktl = prev?.ktl != null
+        ? Math.max(0, Math.min(10, prev.ktl * 0.95 + lss10 * 0.05))
+        : Math.max(0, Math.min(10, lss10 * 0.5));
+      const lf = prev?.lf != null
+        ? Math.max(0, Math.min(10, prev.lf * 0.7 + lss10 * 0.15))
+        : Math.max(0, Math.min(10, lss10 * 0.3));
       return {
-        lss: lssScore,
-        ktl: ktlCurrent,
-        lf: lfCurrent,
-        lsb: calculateLSB(ktlCurrent, lfCurrent),
+        lss: lss10,
+        ktl,
+        lf,
+        lsb: Math.max(-10, Math.min(10, ktl - lf)),
         timestamp: asOf,
         source: 'task-completion',
         taskId: input.taskId || null,
