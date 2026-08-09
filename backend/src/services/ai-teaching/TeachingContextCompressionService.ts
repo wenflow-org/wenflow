@@ -1,6 +1,8 @@
 import type { TeachingSessionMessage } from './TeachingSessionRepository';
 
-const DEFAULT_CONTEXT_WINDOW_TOKENS = Number(process.env.TEACHING_CONTEXT_WINDOW_TOKENS || 1_000_000);
+// 压缩窗口默认 40k token（约 160k 字符 ≈ 百轮级对话触发；此前 1M 实际永不触发）。
+// 触发比 0.7、保留最近 12 条；均可用 env 覆盖。
+const DEFAULT_CONTEXT_WINDOW_TOKENS = Number(process.env.TEACHING_CONTEXT_WINDOW_TOKENS || 40_000);
 const DEFAULT_COMPRESSION_TRIGGER_RATIO = Number(process.env.TEACHING_CONTEXT_COMPRESSION_RATIO || 0.7);
 const DEFAULT_RECENT_MESSAGES_TO_KEEP = Number(process.env.TEACHING_CONTEXT_RECENT_MESSAGES || 12);
 

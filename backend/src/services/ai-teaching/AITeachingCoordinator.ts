@@ -864,10 +864,19 @@ async function buildTeachingTurnInput(
     scenario,
     classroomContext: channels['classroomContext'] || classroomContext,
     classroomEventContext,
-    visibleDialogueContext: configuredVisible || session.messages.map((item) => ({
-      role: item.role,
-      content: item.content,
-    })),
+    // visibleDialogueContext 压缩修复（KV 前缀优化）：压缩后只带最近 N 条（recap 由
+    // scenario.contextCompression 承担），避免全量历史绕过压缩导致 user payload 无界增长
+    visibleDialogueContext: configuredVisible || (() => {
+      if (compression.compressed) {
+        return compression.messages
+          .filter((item) => item.role !== 'system')
+          .map((item) => ({ role: item.role as 'user' | 'assistant', content: item.content }));
+      }
+      return session.messages.map((item) => ({
+        role: item.role,
+        content: item.content,
+      }));
+    })(),
     knowledge: {
       points: (channels['knowledge.state'] && Array.isArray(channels['knowledge.state'])
         ? channels['knowledge.state']
