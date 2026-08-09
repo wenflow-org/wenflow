@@ -45,7 +45,7 @@
     <!-- 当前阶段详情 -->
     <div class="mk-card">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">{{ current.name }}阶段 · 节点与配置</h3>
+        <h3 class="mk-card__title">{{ stageTitle }} · 节点与配置</h3>
         <span class="mk-card__meta">节点 ID <span class="mono">{{ current.agentId }}</span></span>
       </div>
 
@@ -337,6 +337,11 @@ const stages = computed<Stage[]>(() => {
 
 const totalSkills = computed(() => stages.value.reduce((sum, stage) => sum + stage.skills.length, 0))
 const current = computed(() => stages.value.find((s) => s.id === active.value) || stages.value[0])
+// 后端阶段名已含"阶段"（如"Goal 阶段"），demo 名无后缀，避免重复拼接
+const stageTitle = computed(() => {
+  const name = current.value?.name || ''
+  return name.endsWith('阶段') ? name : `${name}阶段`
+})
 </script>
 
 <style scoped>
