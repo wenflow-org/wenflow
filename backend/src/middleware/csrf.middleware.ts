@@ -25,6 +25,13 @@ export const csrfMiddleware = (
     .filter(Boolean);
   
   if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') {
+    if (!origin && !referer) {
+      return res.status(403).json({
+        success: false,
+        error: { message: '缺少请求来源信息' }
+      });
+    }
+
     if (origin && !allowedOrigins.includes(origin)) {
       return res.status(403).json({
         success: false,

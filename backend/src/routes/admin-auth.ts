@@ -57,7 +57,7 @@ router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: R
       });
     }
 
-    // 生成 JWT Token（管理员专用）
+    // 生成 JWT Token（管理员专用）：记住登录签发 7 天，否则签发 24 小时短会话
     const token = signSessionToken(
       {
         userId: admin.id,
@@ -66,7 +66,7 @@ router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: R
         isAdmin: true,
       },
       'admin',
-      '7d'
+      remember ? '7d' : '24h'
     );
 
     recordLoginAttempt(name, clientIP, true, 'admin');
