@@ -20,7 +20,7 @@
       <div v-else-if="drift.items.length === 0" class="fdp__empty">✅ 无漂移（seed 与 DB 一致）</div>
       <ul v-else class="fdp__drift-list">
         <li v-for="(d, i) in drift.items" :key="i" class="fdp__drift-item">
-          <span class="mono fdp__drift-kind">{{ d.kind }}</span>
+          <span class="mono fdp__drift-kind">{{ kindLabel(d.kind) }}</span>
           <span class="mono fdp__drift-key">{{ d.key }}</span>
           <span class="fdp__drift-field">{{ d.field }}</span>
           <span class="mono fdp__drift-val fdp__drift-val--seed">seed={{ stringify(d.seedValue) }}</span>
@@ -59,6 +59,12 @@ function stringify(value: unknown) {
   if (value === null || value === undefined) return 'null';
   if (Array.isArray(value) || typeof value === 'object') return JSON.stringify(value);
   return String(value);
+}
+
+/* drift kind 中文映射（未知值原样展示） */
+const driftKindLabels: Record<string, string> = { contract: '契约', field: '字段', routing: '路由' };
+function kindLabel(kind: unknown) {
+  return driftKindLabels[String(kind || '')] || String(kind || '');
 }
 
 async function loadDrift() {
@@ -134,14 +140,13 @@ watch(() => props.stage, () => {
   padding: 8px 12px;
   border: 1px solid rgba(52, 120, 246, 0.35);
   border-radius: 9px;
-  background: #f0f5ff;
+  background: var(--mk-blue-bg, #eff6ff);
   color: var(--mk-blue, #3478f6);
   font-size: 12.5px;
   font-weight: 700;
 }
 .fdp__guide-file .mono { font-size: 12px; font-weight: 700; color: var(--mk-blue, #3478f6); }
 .fdp__guide-text code { font-family: var(--mk-mono, ui-monospace, monospace); font-size: 11.5px; background: #f0f2f5; padding: 1px 6px; border-radius: 5px; }
-.fdp__msg { color: var(--mk-blue, #3478f6); font-size: 12px; font-weight: 600; }
 .fdp__drift-list { margin: 0; padding: 6px 14px 12px; list-style: none; }
 .fdp__drift-item {
   display: flex;

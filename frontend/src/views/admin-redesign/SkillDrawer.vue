@@ -110,7 +110,12 @@
                 class="msk__row"
                 @click="openSkillDrawer(s.id)"
               >
-                <span class="msk__dot" :class="skillStatOf(s.id).errors ? 'is-err' : skillStatOf(s.id).calls ? 'is-ok' : 'is-idle'"></span>
+                <span
+                  class="msk__dot"
+                  :class="skillStatOf(s.id).errors ? 'is-err' : skillStatOf(s.id).calls ? 'is-ok' : 'is-idle'"
+                  :title="memberDotLabel(s.id)"
+                  :aria-label="memberDotLabel(s.id)"
+                ></span>
                 <span class="msk__row-title">{{ s.name }}</span>
                 <span class="msk__row-num mono">{{ skillStatOf(s.id).calls || '—' }}</span>
                 <span class="msk__row-id mono">{{ s.id }}</span>
@@ -131,7 +136,7 @@
                 class="msk__row"
                 @click="goTrace(s.traceId)"
               >
-                <span class="msk__dot" :class="`is-${s.status}`"></span>
+                <span class="msk__dot" :class="`is-${s.status}`" :title="statusDotLabel(s.status)" :aria-label="statusDotLabel(s.status)"></span>
                 <span class="msk__row-title">{{ s.title }}</span>
                 <span class="msk__row-num mono">{{ fmtMs(s.durationMs) }}</span>
                 <span class="msk__row-id mono">{{ s.traceId }}</span>
@@ -226,7 +231,7 @@
             </div>
             <div v-if="isLive && promptVersions.length" class="msk__versions">
               <span class="msk__versions-label">历史版本（可与生效版对比）</span>
-              <p v-if="versionMsg" class="msk__versions-msg">{{ versionMsg }}</p>
+              <p v-if="versionMsg" class="msk__versions-msg" :class="{ 'is-err': versionErr }">{{ versionMsg }}</p>
               <div v-for="v in promptVersions" :key="v.id" class="msk__version-row">
                 <span class="msk__version-tag mono">v{{ v.version }}</span>
                 <span class="msk__version-status">
@@ -342,6 +347,7 @@ import {
 } from './store'
 import { liveSkillProfiles, liveExtraProfiles, liveApiConfig, errMsg, fetchProtocolView, fetchRulesOverview, type LiveProtocol, type LiveRulesOverview, type LiveRule } from './live'
 import { adminSkillWorkbenchApi, adminSkillsApi, adminAgentPromptsApi } from '@/api/adminApi'
+import { askConfirm } from './useConfirm'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 
@@ -471,6 +477,12 @@ async function saveCfg() {
 async function deleteCfg() {
   const id = intent.skillDrawerId
   if (!id || cfgBusy.value) return
+  const ok = await askConfirm({
+    title: '删除独立配置',
+    message: '确定删除该 Skill 的独立运行配置吗？\n删除后将回退为继承 Agent / 平台默认。',
+    confirmText: '删除'
+  })
+  if (!ok) return
   cfgBusy.value = true
   cfgMsg.value = ''
   try {
@@ -592,6 +604,7 @@ const promptVersions = ref<Array<{ id: string; version: string | number; status:
 const versionBusy = ref('')
 const compareLoading = ref('')
 const versionMsg = ref('')
+const versionErr = ref(false)
 interface DiffLine { type: 'added' | 'removed'; no: number | string; text: string }
 interface DiffGroup { gap: boolean; lines: DiffLine[] }
 const compareResult = ref<{ aLabel: string; bLabel: string; changedLines: number; groups: DiffGroup[] } | null>(null)
@@ -601,11 +614,13 @@ async function compareWithActive(v: { id: string; version: string | number; name
   const active = promptVersions.value.find((x) => x.status === 'ACTIVE')
   if (!active) {
     versionMsg.value = '当前没有生效版本可作对比基准'
+    versionErr.value = true
     return
   }
   if (compareLoading.value) return
   compareLoading.value = v.id
   versionMsg.value = ''
+  versionErr.value = false
   try {
     const res = await adminAgentPromptsApi.comparePrompts(active.id, v.id)
     const d = res.data?.data ?? res.data ?? {}
@@ -646,6 +661,7 @@ async function compareWithActive(v: { id: string; version: string | number; name
     }
   } catch (e) {
     versionMsg.value = `对比失败：${errMsg(e)}`
+    versionErr.value = true
   } finally {
     compareLoading.value = ''
   }
@@ -689,6 +705,7 @@ watch(
     promptVersions.value = []
     compareResult.value = null
     versionMsg.value = ''
+    versionErr.value = false
     versionBusy.value = ''
     if (!id || !isLive.value || !skillProfile.value) return
     void loadRuntimeCfg(id)
@@ -747,6 +764,13 @@ watch(
 
 const memberSkills = computed(() => (agentProfile.value ? skillsOfAgent(agentProfile.value.id) : []))
 const memberErrors = computed(() => memberSkills.value.filter((s) => skillStatOf(s.id).errors > 0).length)
+
+/** 状态点可访问性文本 */
+const memberDotLabel = (id: string) => {
+  const st = skillStatOf(id)
+  return st.errors ? '该 Skill 有失败' : st.calls ? '正常' : '无调用'
+}
+const statusDotLabel = (s: string) => (s === 'ok' ? '成功' : s === 'err' ? '失败' : '超时')
 
 const stat = computed(() => {
   if (skillProfile.value) return skillStatOf(skillProfile.value.id)
@@ -829,16 +853,16 @@ function goFullEditor() {
   font-size: 12.5px;
   font-weight: 800;
   background: #eef2fa;
-  color: #8492ab;
+  color: var(--mk-faint);
   margin-left: 3px;
 }
 .msk__tab-badge.is-bad { background: #fef2f2; color: #dc2626; }
-.mk-pill--active .msk__tab-badge { background: #dbe9ff; color: #1f57cc; }
+.mk-pill--active .msk__tab-badge { background: #dbe9ff; color: var(--mk-accent-deep); }
 
 /* ========== 头部身份区 ========== */
 .msk__head {
   padding: 16px 18px 14px;
-  border-bottom: 1px solid #e1e8f2;
+  border-bottom: 1px solid var(--mk-line);
   background: linear-gradient(180deg, var(--soft, rgba(52, 120, 246, 0.06)), rgba(255, 255, 255, 0) 90%);
   display: grid;
   gap: 10px;
@@ -1118,7 +1142,7 @@ function goFullEditor() {
 .msk__budget {
   margin: 0;
   font-size: 12.5px;
-  color: #8492ab;
+  color: var(--mk-faint);
   font-weight: 600;
 }
 .msk__budget em { font-style: normal; font-weight: 400; color: #5b6577; }
@@ -1137,7 +1161,7 @@ function goFullEditor() {
 .msk__test-input {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid #dbe3ef;
+  border: 1px solid var(--mk-line);
   border-radius: 9px;
   font-size: 12px;
   resize: vertical;
@@ -1150,9 +1174,9 @@ function goFullEditor() {
   margin: 0;
   padding: 10px 12px;
   border-radius: 10px;
-  background: #101826;
-  border: 1px solid #1c2a40;
-  color: #9db8dc;
+  background: var(--mk-code-bg, #101826);
+  border: 1px solid var(--mk-code-border, #1c2a40);
+  color: var(--mk-code-fg, #9db8dc);
   font: 12px/1.65 'JetBrains Mono', monospace;
   white-space: pre-wrap;
   word-break: break-word;
@@ -1169,6 +1193,7 @@ function goFullEditor() {
   gap: 3px;
   padding: 7px 10px 7px 12px;
   border-left: 2px solid rgba(141, 107, 255, 0.45);
+  border-left: 2px solid color-mix(in srgb, var(--mk-purple, #8d6bff) 45%, transparent);
   background: #faf9ff;
   border-radius: 0 8px 8px 0;
   font-size: 12px;
@@ -1275,7 +1300,8 @@ function goFullEditor() {
 .msk__op.is-active:hover { background: transparent; }
 .msk__op--danger { color: #dc2626; }
 .msk__op--danger:hover { background: #fef2f2; }
-.msk__versions-msg { margin: 0; font-size: 12px; color: #15803d; font-weight: 600; }
+.msk__versions-msg { margin: 0; font-size: 12px; color: var(--mk-green); font-weight: 600; }
+.msk__versions-msg.is-err { color: var(--mk-red); }
 
 /* 版本对比 */
 .msk__diff {

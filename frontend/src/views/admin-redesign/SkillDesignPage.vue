@@ -21,9 +21,8 @@
           · 成功率 <b class="mono">{{ workbenchMeta.stats.successRate ?? '—' }}%</b>
           · 均耗 <b class="mono">{{ fmtMs(workbenchMeta.stats.avgDuration || 0) }}</b>
         </span>
-        <span v-if="recentFailures > 0" class="mk-status__meta sdp-bad-text">近 60 条 {{ recentFailures }} 失败</span>
+        <span v-if="recentFailures > 0" class="mk-status__meta sdp-bad-text">近 8 条 {{ recentFailures }} 失败</span>
         <span v-if="overview.drift === 'file-vs-db-mismatch'" class="mk-badge mk-badge--warn">版本不一致</span>
-        <span v-if="overview.tsFallback" class="mk-badge mk-badge--warn">代码兜底</span>
         <button type="button" class="mk-status__action" :disabled="loading" @click="loadAll">
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
@@ -138,7 +137,8 @@
               <span>{{ compileInfo?.status || '—' }}</span>
               <span class="sdp-prompt__used">{{ effectivePrompt?.prompt?._usedCompiled ? '运行时使用编译产物' : '运行时使用源内容' }}</span>
             </div>
-            <pre class="sdp-prompt__code">{{ (promptView === 'source' ? compileInfo?.source : compileInfo?.compiled) || '暂无内容' }}</pre>
+            <p v-if="inspectError" class="sdp-none sdp-bad-text">Prompt 检视加载失败。<button type="button" class="mk-link" @click="loadInspect">重试</button></p>
+            <pre class="sdp-prompt__code">{{ (promptView === 'source' ? compileInfo?.source : compileInfo?.compiled) || (inspectError ? '加载失败，请重试' : '暂无内容') }}</pre>
             <p class="sdp-prompt__hint">
               File-as-Truth：正式内容只能修改 <code class="mono">{{ overview.file?.path || 'prompts/skill.*.md' }}</code>，经部署同步生效。
             </p>
@@ -188,8 +188,9 @@
                   </div>
                 </div>
               </div>
-              <p v-else-if="recentLogsError" class="sdp-none sdp-bad-text">近 60 条日志加载失败。<button type="button" class="mk-link" @click="loadRecentLogs">重试</button></p>
-              <p v-else class="sdp-none">近 60 条日志窗口内无调用。</p>
+              <p v-if="recentLogsLoading" class="sdp-none">日志加载中…</p>
+              <p v-else-if="recentLogsError" class="sdp-none sdp-bad-text">近 8 条日志加载失败。<button type="button" class="mk-link" @click="loadRecentLogs">重试</button></p>
+              <p v-else class="sdp-none">近 8 条日志窗口内无调用。</p>
         </section>
       </div>
 
@@ -205,10 +206,10 @@
                 <button type="button" class="mk-link" :disabled="!coreLoaded || coreSaving" @click="saveCore">
                   {{ coreSaving ? '保存中…' : '保存并校验' }}
                 </button>
-                <button type="button" class="mk-link" :disabled="!coreLoaded || coreCompiling || coreDirty" @click="previewCore">
+                <button type="button" class="mk-link" :disabled="!coreLoaded || coreCompiling || coreDirty" :title="coreDirty ? '有未保存修改，请先保存' : ''" @click="previewCore">
                   {{ coreCompiling ? '编译中…' : '编译预览' }}
                 </button>
-                <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="!coreLoaded || corePublishing || coreDirty" @click="publishCore(false)">
+                <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="!coreLoaded || corePublishing || coreDirty" :title="coreDirty ? '有未保存修改，请先保存' : ''" @click="publishCore(false)">
                   {{ corePublishing ? '发布中…' : '发布' }}
                 </button>
               </span>
@@ -534,7 +535,7 @@
             <h4>版本管理</h4>
             <span class="sdp-sec-meta">{{ promptVersions.length }} 个版本</span>
           </header>
-          <p v-if="versionMsg" class="sdp-versions-msg">{{ versionMsg }}</p>
+          <p v-if="versionMsg" class="sdp-versions-msg" :class="{ 'is-err': versionErr }">{{ versionMsg }}</p>
           <div class="mk-table-wrap">
             <table class="mk-table">
               <thead>
@@ -542,7 +543,7 @@
                   <th>版本</th>
                   <th>状态</th>
                   <th>名称</th>
-                  <th style="text-align: right">操作</th>
+                  <th class="mk-th--right">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -624,6 +625,7 @@
         </div>
 
         <div class="sdp-form mk-card">
+          <div v-if="rtLoadFailed" class="sdp-error">运行时配置加载失败，已重置为默认值。<button type="button" class="mk-link" @click="loadRuntime">重试</button></div>
           <label class="sdp-field sdp-field--check">
             <input v-model="rtForm.enabled" type="checkbox" />
             <span>独立配置<em>关闭后继承调用 Agent 或平台默认</em></span>
@@ -739,17 +741,6 @@
           </table>
         </section>
 
-        <section v-if="overview.tsFallback" class="sdp-eng">
-          <header class="sdp-sec-head"><h4>.ts 兜底常量</h4></header>
-          <p class="sdp-eng__desc">以下 TypeScript 常量目前作为 <code class="mono">callPrompt</code> 的 <code class="mono">defaultSystemPrompt</code> 兜底。</p>
-          <table class="sdp-kv">
-            <tbody>
-              <tr><th>file</th><td><code class="mono">{{ overview.tsFallback.file }}</code></td></tr>
-              <tr><th>const name</th><td><code class="mono">{{ overview.tsFallback.constName }}</code></td></tr>
-            </tbody>
-          </table>
-        </section>
-
         <section class="sdp-eng">
           <header class="sdp-sec-head">
             <h4>协议视图</h4>
@@ -765,6 +756,7 @@
               <span class="sdp-protocol__sites mono">{{ p.callSites }}</span>
             </article>
           </div>
+          <p v-if="engProtoFailed" class="sdp-none sdp-bad-text">协议数据加载失败。<button type="button" class="mk-link" @click="retryEngineering">重试</button></p>
           <p v-else class="sdp-none">暂无协议数据。</p>
         </section>
 
@@ -790,6 +782,7 @@
               <span class="sdp-rule__text">{{ r.text }}</span>
             </div>
           </div>
+          <p v-if="engRulesFailed" class="sdp-none sdp-bad-text">规则数据加载失败。</p>
           <p v-else class="sdp-none">本节点没有登记规则。</p>
         </section>
       </div>
@@ -863,7 +856,6 @@ interface OverviewItem {
   health: 'good' | 'warn' | 'risk'
   file: { path?: string; hash?: string } | null
   db: { id?: string; version?: number | string; hash?: string; useCount?: number; model?: string; publishedAt?: string } | null
-  tsFallback: { file?: string; constName?: string } | null
   drift: 'in-sync' | 'file-vs-db-mismatch' | null
   runtimeContract?: {
     version?: string
@@ -931,16 +923,23 @@ interface EffectivePrompt {
 const compileInfo = ref<CompileInfo | null>(null)
 const effectivePrompt = ref<EffectivePrompt | null>(null)
 const promptView = ref<'source' | 'compiled'>('source')
+const inspectError = ref(false)
 
 const shortHash = (v?: string | null) => (v ? v.slice(0, 12) : '—')
 
 async function loadInspect() {
   const id = skillId.value
-  const [ci, ep] = await Promise.all([
-    adminPromptOpsApi.getPromptCompileInfo(`skill:${id}`).catch(() => null),
-    adminSkillsApi.getEffectiveSkillPrompt(id).catch(() => null)
-  ])
+  inspectError.value = false
+  let ciOk = true
+  let epOk = true
+  const ci = await adminPromptOpsApi
+    .getPromptCompileInfo(`skill:${id}`)
+    .catch(() => { ciOk = false; return null })
+  const ep = await adminSkillsApi
+    .getEffectiveSkillPrompt(id)
+    .catch(() => { epOk = false; return null })
   if (id !== skillId.value) return
+  inspectError.value = !ciOk || !epOk
   compileInfo.value = ci?.data?.data ?? null
   effectivePrompt.value = ep?.data?.data ?? null
 }
@@ -951,6 +950,7 @@ const promptVersions = ref<VersionItem[]>([])
 const versionBusy = ref('')
 const compareLoading = ref('')
 const versionMsg = ref('')
+const versionErr = ref(false)
 interface DiffLine { type: 'added' | 'removed'; no: number | string; text: string }
 interface DiffGroup { gap: boolean; lines: DiffLine[] }
 const compareResult = ref<{ aLabel: string; bLabel: string; changedLines: number; groups: DiffGroup[] } | null>(null)
@@ -977,11 +977,13 @@ async function compareWithActive(v: VersionItem) {
   const active = promptVersions.value.find((x) => x.status === 'ACTIVE')
   if (!active) {
     versionMsg.value = '当前没有生效版本可作对比基准'
+    versionErr.value = true
     return
   }
   if (compareLoading.value) return
   compareLoading.value = v.id
   versionMsg.value = ''
+  versionErr.value = false
   try {
     const res = await adminAgentPromptsApi.comparePrompts(active.id, v.id)
     const d = res.data?.data ?? res.data ?? {}
@@ -1020,6 +1022,7 @@ async function compareWithActive(v: VersionItem) {
     }
   } catch (e) {
     versionMsg.value = `对比失败：${errText(e)}`
+    versionErr.value = true
   } finally {
     compareLoading.value = ''
   }
@@ -1087,6 +1090,7 @@ interface LogRow {
 }
 const recentLogs = ref<LogRow[]>([])
 const recentLogsError = ref(false)
+const recentLogsLoading = ref(false)
 const openLogId = ref('')
 
 const recentFailures = computed(() => recentLogs.value.filter((l) => l.status !== 'ok').length)
@@ -1098,28 +1102,33 @@ function mapLogStatus(s: unknown): LogRow['status'] {
 async function loadRecentLogs() {
   const id = skillId.value
   recentLogsError.value = false
-  const res = await adminAgentsApi.getLogs({ agentName: `skill:${id}`, limit: 8, timeRange: 'week' }).catch(() => null)
-  if (id !== skillId.value) return
-  if (!res) {
-    recentLogsError.value = true
-    recentLogs.value = []
-    return
-  }
-  const body = res?.data?.data ?? res?.data ?? {}
-  const items: Record<string, unknown>[] = Array.isArray(body) ? body : body.items || body.logs || []
-  recentLogs.value = items.map((l) => {
-    const status = mapLogStatus(l.status)
-    const errText = String(l.errorMessage || l.error || '')
-    return {
-      id: String(l.id),
-      status,
-      time: timeAgo(String(l.createdAt || '')),
-      durationMs: Number(l.durationMs || 0),
-      summary: status === 'ok' ? '成功' : errText.slice(0, 60) || (status === 'timeout' ? '超时' : '失败'),
-      loading: false,
-      detail: null
+  recentLogsLoading.value = true
+  try {
+    const res = await adminAgentsApi.getLogs({ agentName: `skill:${id}`, limit: 8, timeRange: 'week' }).catch(() => null)
+    if (id !== skillId.value) return
+    if (!res) {
+      recentLogsError.value = true
+      recentLogs.value = []
+      return
     }
-  })
+    const body = res?.data?.data ?? res?.data ?? {}
+    const items: Record<string, unknown>[] = Array.isArray(body) ? body : body.items || body.logs || []
+    recentLogs.value = items.map((l) => {
+      const status = mapLogStatus(l.status)
+      const errText = String(l.errorMessage || l.error || '')
+      return {
+        id: String(l.id),
+        status,
+        time: timeAgo(String(l.createdAt || '')),
+        durationMs: Number(l.durationMs || 0),
+        summary: status === 'ok' ? '成功' : errText.slice(0, 60) || (status === 'timeout' ? '超时' : '失败'),
+        loading: false,
+        detail: null
+      }
+    })
+  } finally {
+    if (id === skillId.value) recentLogsLoading.value = false
+  }
 }
 
 /** 拉详情（输入/输出），供展开与重跑共用；input 保留完整原文供重跑，展示时再截断 */
@@ -1193,6 +1202,7 @@ const rtForm = ref<RuntimeForm>({
 const rtSaving = ref(false)
 const rtMsg = ref('')
 const rtErr = ref(false)
+const rtLoadFailed = ref(false)
 const platformLogicalRetries = ref(1)
 const logicalRetryMode = ref<'inherit' | 'disabled' | 'custom'>('inherit')
 const customLogicalRetries = ref(1)
@@ -1228,11 +1238,13 @@ function resetRtForm() {
 
 async function loadRuntime() {
   const id = skillId.value
+  rtLoadFailed.value = false
   const [skillRes, relRes] = await Promise.allSettled([
     adminSkillsApi.getSkillModelConfig(id),
     adminPlatformSettingsApi.getReliabilitySettings()
   ])
   if (id !== skillId.value) return
+  if (skillRes.status === 'rejected') rtLoadFailed.value = true
   if (relRes.status === 'fulfilled') {
     platformLogicalRetries.value = Number(relRes.value.data?.data?.settings?.maxLogicalRetries ?? 1)
   }
@@ -1751,6 +1763,8 @@ interface RuleItem { ruleId: string; text: string; agentId: string }
 const protocols = ref<Protocol[]>([])
 const rulesOverview = ref<{ summary: { totalRules: number; totalPrefixes: number; conflictPrefixCount: number }; conflictPrefixes: Array<{ prefix: string; agentIds: string[] }>; byPrefix: Record<string, RuleItem[]> } | null>(null)
 let engLoaded = false
+const engProtoFailed = ref(false)
+const engRulesFailed = ref(false)
 
 const nodeRules = computed(() => {
   if (!rulesOverview.value) return [] as RuleItem[]
@@ -1767,10 +1781,14 @@ const nodeRules = computed(() => {
 async function loadEngineering() {
   if (engLoaded) return
   engLoaded = true
+  let pvOk = true
+  let roOk = true
   const [pv, ro] = await Promise.all([
-    adminPromptOpsApi.getProtocolView().catch(() => null),
-    adminPromptOpsApi.getSkillRulesOverview().catch(() => null)
+    adminPromptOpsApi.getProtocolView().catch(() => { pvOk = false; return null }),
+    adminPromptOpsApi.getSkillRulesOverview().catch(() => { roOk = false; return null })
   ])
+  engProtoFailed.value = !pvOk
+  engRulesFailed.value = !roOk
   const pBody = pv?.data?.data ?? pv?.data ?? {}
   protocols.value = ((pBody.protocols as Record<string, unknown>[]) || []).map((p) => ({
     id: String(p.id || ''),
@@ -1780,6 +1798,11 @@ async function loadEngineering() {
     callSites: String(p.callSites || '')
   }))
   rulesOverview.value = (ro?.data?.data ?? ro?.data ?? null) as typeof rulesOverview.value
+}
+
+function retryEngineering() {
+  engLoaded = false
+  void loadEngineering()
 }
 
 watch(tab, (t) => {
@@ -2051,7 +2074,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   border: 0;
   background: transparent;
   padding: 6px 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
@@ -2131,7 +2154,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   gap: 2px;
   padding: 2px;
   background: #eef2fa;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 .sdp-viewswitch__btn {
   border: 0;
@@ -2202,9 +2225,9 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   margin: 0;
   padding: 12px;
   border-radius: 10px;
-  background: #101826;
-  border: 1px solid #1c2a40;
-  color: #9db8dc;
+  background: var(--mk-code-bg, #101826);
+  border: 1px solid var(--mk-code-border, #1c2a40);
+  color: var(--mk-code-fg, #9db8dc);
   font-size: 11px;
   line-height: 1.65;
   white-space: pre-wrap;
@@ -2299,10 +2322,11 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
 /* ---------- 版本 ---------- */
 .sdp-versions { display: grid; gap: 8px; }
 .sdp-versions-msg { margin: 0; font-size: 11.5px; color: var(--mk-green); font-weight: 600; display: flex; gap: 8px; align-items: center; }
+.sdp-versions-msg.is-err { color: var(--mk-red); }
 .mk-table-wrap {
   border: 1px solid var(--mk-line);
   border-radius: 12px;
-  overflow: hidden;
+  overflow-x: auto;
   background: #fff;
 }
 .sdp-vtag {
@@ -2533,9 +2557,9 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   position: relative;
   margin: 0 0 12px;
   min-height: 46vh;
-  border: 1px solid #1c2a40;
+  border: 1px solid var(--mk-code-border, #1c2a40);
   border-radius: 10px;
-  background: #0d1420;
+  background: var(--mk-code-bg, #0d1420);
   overflow: hidden;
 }
 .sdp-codehl__pre {
@@ -2545,8 +2569,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   padding: 12px;
   overflow: auto;
   scrollbar-width: none;
-  background: #0d1420;
-  color: #c9d4e3;
+  background: var(--mk-code-bg, #0d1420);
+  color: var(--mk-code-fg, #c9d4e3);
   font-size: 12px;
   line-height: 1.6;
   white-space: pre;
@@ -2598,7 +2622,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   font-size: 12px;
 }
 .sdp-pw__uncertain ul { margin: 6px 0 10px; padding-left: 18px; }
-.sdp-pw__pills { display: inline-flex; gap: 4px; background: #eef2fa; border-radius: 9px; padding: 3px; }
+.sdp-pw__pills { display: inline-flex; gap: 4px; background: #eef2fa; border-radius: 10px; padding: 3px; }
 .sdp-pw__pill {
   border: 0;
   background: transparent;

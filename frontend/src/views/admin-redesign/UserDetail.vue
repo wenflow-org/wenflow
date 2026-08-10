@@ -31,7 +31,7 @@
             <div class="ud-path__bar"><i :style="{ width: p.pct + '%' }" :class="{ warn: p.tone === 'warn' }"></i></div>
             <span class="ud-path__pct">{{ p.pct }}%</span>
           </div>
-          <p v-if="!d.recentPaths.length" class="ud-none">还没有路径</p>
+          <p v-if="!d.recentPaths.length" class="ud-none">路径明细暂不可用</p>
         </div>
       </section>
 
@@ -72,12 +72,23 @@
           type="button"
           class="mk-status__action mk-status__action--primary"
           :disabled="grantStatus !== 'active' || grantOpening"
+          :title="grantStatus !== 'active' ? '需先授权' : undefined"
           @click="openDebugStation"
         >
           {{ grantOpening ? '打开中…' : '打开开发调试站' }}
         </button>
       </div>
     </section>
+  </div>
+
+  <div v-else-if="detailError" class="mk-page ud">
+    <button type="button" class="ud-back" @click="closeSubPage">← 用户</button>
+    <div class="mk-empty">
+      <span class="mk-empty__icon" aria-hidden="true">◌</span>
+      <strong>详情加载失败</strong>
+      <span>暂时无法获取该用户的完整信息。</span>
+      <button type="button" class="mk-empty__action" @click="loadDetail">重试</button>
+    </div>
   </div>
 
   <div v-else class="mk-page">
@@ -108,6 +119,8 @@ interface Detail {
 }
 
 const liveDetail = ref<Detail | null>(null)
+/** 详情接口失败且无列表兜底 → 明确错误态 + 重试（参照 VirtualProfile.detailError 模式） */
+const detailError = ref(false)
 
 function toLearner() {
   const id = subPage.value?.id
@@ -199,63 +212,74 @@ async function openDebugStation() {
 
 watch(
   () => [subPage.value?.id, isLive.value] as const,
-  async ([id, live]) => {
+  ([id, live]) => {
     liveDetail.value = null
     projectionGrant.value = null
     grantMessage.value = ''
+    detailError.value = false
     if (!id || !live) return
-    void loadGrant()
-    const base = liveUsers.value.find((u) => u.id === id)
-    // 活跃明细无接口：用列表数据的最后登录/会话数合成，保证卡片有真实内容
-    const activityOf = (b: typeof base) =>
-      b
-        ? [
-            { text: `最后登录：${b.lastLoginAt || '—'}`, time: '' },
-            ...(b.sessions ? [{ text: `累计会话 ${b.sessions} 次`, time: '' }] : [])
-          ]
-        : []
-    try {
-      const raw = (await liveGetUserDetail(id)) as Record<string, unknown>
-      const user = (raw.user as Record<string, unknown>) || raw
-      // 后端不返回 learning_paths 明细：路径计数用 _count 兜底，卡片显示空态（与统计条口径一致）
-      const counts = (user._count as Record<string, number>) || {}
-      const pathCount = Number(counts.learningPaths ?? counts.learning_paths ?? base?.paths ?? 0)
+    void loadDetail()
+  },
+  { immediate: true }
+)
+
+async function loadDetail() {
+  const id = subPage.value?.id
+  if (!id || !isLive.value) return
+  liveDetail.value = null
+  detailError.value = false
+  void loadGrant()
+  const base = liveUsers.value.find((u) => u.id === id)
+  // 活跃明细无接口：用列表数据的最后登录/会话数合成，保证卡片有真实内容
+  const activityOf = (b: typeof base) =>
+    b
+      ? [
+          { text: `最后登录：${b.lastLoginAt || '—'}`, time: '' },
+          ...(b.sessions ? [{ text: `累计会话 ${b.sessions} 次`, time: '' }] : [])
+        ]
+      : []
+  try {
+    const raw = (await liveGetUserDetail(id)) as Record<string, unknown>
+    const user = (raw.user as Record<string, unknown>) || raw
+    // 后端不返回 learning_paths 明细：路径计数用 _count 兜底，卡片显示空态（与统计条口径一致）
+    const counts = (user._count as Record<string, number>) || {}
+    const pathCount = Number(counts.learningPaths ?? counts.learning_paths ?? base?.paths ?? 0)
+    liveDetail.value = {
+      name: String(user.name || base?.name || id),
+      email: String(user.email || base?.email || ''),
+      role: user.isAdmin || base?.isAdmin ? '管理员' : '用户',
+      joined: timeAgo(String(user.createdAt || base?.createdAt || '')),
+      stats: [
+        { label: '路径', value: String(base?.paths ?? pathCount) },
+        { label: '会话', value: String(base?.sessions ?? 0) },
+        { label: 'XP', value: String(user.xp ?? 0) },
+        { label: '等级', value: String(user.currentLevel || '—') }
+      ],
+      recentPaths: [],
+      activity: activityOf(base)
+    }
+  } catch {
+    // 详情接口失败：用列表数据兜底；无兜底 → 明确错误态
+    if (base) {
       liveDetail.value = {
-        name: String(user.name || base?.name || id),
-        email: String(user.email || base?.email || ''),
-        role: user.isAdmin || base?.isAdmin ? '管理员' : '用户',
-        joined: timeAgo(String(user.createdAt || base?.createdAt || '')),
+        name: base.name,
+        email: base.email,
+        role: base.isAdmin ? '管理员' : '用户',
+        joined: timeAgo(base.createdAt),
         stats: [
-          { label: '路径', value: String(base?.paths ?? pathCount) },
-          { label: '会话', value: String(base?.sessions ?? 0) },
-          { label: 'XP', value: String(user.xp ?? 0) },
-          { label: '等级', value: String(user.currentLevel || '—') }
+          { label: '路径', value: String(base.paths) },
+          { label: '会话', value: String(base.sessions) },
+          { label: 'XP', value: String(base.xp) },
+          { label: '等级', value: base.currentLevel || '—' }
         ],
         recentPaths: [],
         activity: activityOf(base)
       }
-    } catch {
-      // 详情接口失败：用列表数据兜底
-      if (base) {
-        liveDetail.value = {
-          name: base.name,
-          email: base.email,
-          role: base.isAdmin ? '管理员' : '用户',
-          joined: timeAgo(base.createdAt),
-          stats: [
-            { label: '路径', value: String(base.paths) },
-            { label: '会话', value: String(base.sessions) },
-            { label: 'XP', value: String(base.xp) },
-            { label: '等级', value: base.currentLevel || '—' }
-          ],
-          recentPaths: [],
-          activity: activityOf(base)
-        }
-      }
+    } else {
+      detailError.value = true
     }
-  },
-  { immediate: true }
-)
+  }
+}
 
 const d = computed<Detail | undefined>(() => {
   if (isLive.value) return liveDetail.value || undefined

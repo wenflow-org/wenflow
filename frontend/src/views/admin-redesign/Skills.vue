@@ -46,18 +46,24 @@
               <th>Skill</th>
               <th>所属阶段</th>
               <th>类别</th>
-              <th class="sk-sort" :class="{ 'sk-sort--on': sortKey === 'calls' }" @click="toggleSort('calls')">
-                调用 {{ sortKey === 'calls' ? (sortDir === 'desc' ? '↓' : '↑') : '' }}
+              <th>
+                <button type="button" class="sk-sort" :class="{ 'sk-sort--on': sortKey === 'calls' }" @click="toggleSort('calls')">
+                  调用 {{ sortKey === 'calls' ? (sortDir === 'desc' ? '↓' : '↑') : '' }}
+                </button>
               </th>
-              <th class="sk-sort" :class="{ 'sk-sort--on': sortKey === 'errors' }" @click="toggleSort('errors')">
-                失败 {{ sortKey === 'errors' ? (sortDir === 'desc' ? '↓' : '↑') : '' }}
+              <th>
+                <button type="button" class="sk-sort" :class="{ 'sk-sort--on': sortKey === 'errors' }" @click="toggleSort('errors')">
+                  失败 {{ sortKey === 'errors' ? (sortDir === 'desc' ? '↓' : '↑') : '' }}
+                </button>
               </th>
               <th>成功率</th>
-              <th class="sk-sort" :class="{ 'sk-sort--on': sortKey === 'avgMs' }" @click="toggleSort('avgMs')">
-                平均耗时 {{ sortKey === 'avgMs' ? (sortDir === 'desc' ? '↓' : '↑') : '' }}
+              <th>
+                <button type="button" class="sk-sort" :class="{ 'sk-sort--on': sortKey === 'avgMs' }" @click="toggleSort('avgMs')">
+                  平均耗时 {{ sortKey === 'avgMs' ? (sortDir === 'desc' ? '↓' : '↑') : '' }}
+                </button>
               </th>
               <th>最近调用</th>
-              <th style="text-align:right">详情</th>
+              <th class="mk-th--right">详情</th>
             </tr>
           </thead>
           <tbody>
@@ -112,7 +118,12 @@
         </button>
       </div>
 
-      <div v-if="!filtered.length" class="mk-empty">
+      <div v-if="skillsError && !cards.length" class="mk-empty">
+        <strong>Skill 数据加载失败</strong>
+        <span>{{ skillsError }}</span>
+        <button type="button" class="mk-empty__action" @click="retrySkills">重试</button>
+      </div>
+      <div v-else-if="!filtered.length" class="mk-empty">
         <strong>{{ onlyAttention ? '没有需关注的 Skill' : keyword ? '没有匹配的 Skill' : '暂无运行数据' }}</strong>
         <span v-if="onlyAttention">一切健康。</span>
         <span v-else-if="keyword">换个关键词试试。</span>
@@ -127,7 +138,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { skillProfiles, skillStatOf, openSkillDrawer, dataSource, isLive } from './store'
-import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills } from './live'
+import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, errMsg } from './live'
 import { categoryText } from './statusText'
 import { useLoadMore } from './useLoadMore'
 
@@ -168,9 +179,30 @@ function latencyTone(s: { calls: number; avgMs: number }) {
   return ''
 }
 // 时间窗口切换 → 按新窗口重新拉取统计
-watch(statsRange, () => {
-  if (isLive.value) void refreshLiveSkills()
+watch(statsRange, async () => {
+  if (isLive.value) {
+    try {
+      await refreshLiveSkills()
+      liveSkillsError.value = ''
+    } catch (e) {
+      liveSkillsError.value = errMsg(e)
+    }
+  }
 })
+
+/** live 拉取失败：初始装载失败（liveFailures.skills）或窗口切换/重试失败（本地） */
+const liveSkillsError = ref('')
+const skillsError = computed(() => liveSkillsError.value || (isLive.value ? liveFailures.value.skills || '' : ''))
+
+async function retrySkills() {
+  liveSkillsError.value = ''
+  try {
+    await refreshLiveSkills()
+    if (liveFailures.value.skills) delete liveFailures.value.skills
+  } catch (e) {
+    liveSkillsError.value = errMsg(e)
+  }
+}
 
 // 卡片数据 = 档案 + 实时统计（live 模式用真实注册表，为空即空态；demo 模式用演示档案）
 const cards = computed(() => {
@@ -233,7 +265,7 @@ const successRate = (s: { calls: number; errors: number }) =>
   gap: 3px;
   padding: 2px;
   background: #eef2fa;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 .sk-range-wrap {
   display: inline-flex;
@@ -244,7 +276,7 @@ const successRate = (s: { calls: number; errors: number }) =>
   white-space: nowrap;
 }
 .sk-range {
-  border: 1px solid #d6deeb;
+  border: 1px solid var(--mk-line);
   border-radius: 8px;
   padding: 3px 8px;
   font-size: 12px;
@@ -265,11 +297,20 @@ const successRate = (s: { calls: number; errors: number }) =>
 .sk-view__btn--active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 2px rgba(23, 32, 51, 0.1); }
 
 /* 列表视图 */
-.sk-sort { cursor: pointer; user-select: none; white-space: nowrap; }
+/* 可排序表头：button 包裹表头文字，样式重置为继承 th 外观 */
+.sk-sort {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
 .sk-sort:hover { color: var(--mk-blue); }
 .sk-sort--on { color: var(--mk-blue); }
 .sk-row { cursor: pointer; }
-.sk-row:hover { background: #f6f9ff; }
 .sk-cell { display: flex; align-items: center; gap: 10px; }
 /* 英文原名（id）主行：等宽突出；中文描述副行：灰色正文（非 mono） */
 .sk-id-main {
@@ -309,7 +350,6 @@ const successRate = (s: { calls: number; errors: number }) =>
 .sk-lat--warn { color: var(--mk-amber); font-weight: 700; }
 .sk-go { color: var(--mk-faint); font-weight: 700; }
 .sk-row:hover .sk-go { color: var(--mk-blue); }
-.mono { font-family: var(--mk-mono); }
 
 /* 网格视图 */
 .sk-grid {
@@ -375,16 +415,6 @@ const successRate = (s: { calls: number; errors: number }) =>
   margin-top: 2px;
 }
 .sk-card__err { color: var(--mk-red); font-weight: 700; }
-
-/* 数值列（调用/失败/成功率/平均耗时）表头与单元格居中 */
-.sk-table th:nth-child(4),
-.sk-table th:nth-child(5),
-.sk-table th:nth-child(6),
-.sk-table th:nth-child(7),
-.sk-table td:nth-child(4),
-.sk-table td:nth-child(5),
-.sk-table td:nth-child(6),
-.sk-table td:nth-child(7) { text-align: center; }
 
 /* 所属阶段标签 */
 .sk-agent-tag {

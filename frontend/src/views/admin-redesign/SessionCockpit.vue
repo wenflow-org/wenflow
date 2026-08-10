@@ -22,8 +22,14 @@
           {{ refereeReports.length + actorAuditReports.length }} 份终局评估
         </span>
       </template>
-      <button type="button" class="mk-status__action" :disabled="busy" @click="refresh">刷新</button>
-      <button type="button" class="mk-status__action cp-danger" :disabled="busy" @click="removeSession">删除会话</button>
+      <button type="button" class="mk-status__action" :disabled="busy" @click="refresh">
+        <span v-if="busy"><span class="mk-spinner"></span> 执行中…</span>
+        <span v-else>刷新</span>
+      </button>
+      <button type="button" class="mk-status__action cp-danger" :disabled="busy" @click="removeSession">
+        <span v-if="busy"><span class="mk-spinner"></span> 执行中…</span>
+        <span v-else>删除会话</span>
+      </button>
     </div>
 
     <!-- 阶段进度（点击切换下方分页） -->
@@ -33,7 +39,10 @@
           class="cp-stage"
           :class="[stageCls(st), { 'cp-stage--tab': !isBlackbox && activeTab === st, 'cp-stage--locked': isBlackbox }]"
           :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `查看${stageLabel(st)}`"
+          role="button"
+          tabindex="0"
           @click="selectStageTab(st)"
+          @keydown.enter="selectStageTab(st)"
         >
           <span class="cp-stage__order">{{ String(i + 1).padStart(2, '0') }}</span>
           <strong>{{ stageLabel(st) }}</strong>
@@ -52,9 +61,9 @@
         </div>
         <div class="cp-controls">
           <button v-if="!isBlackbox" type="button" class="cp-btn cp-btn--primary" :disabled="runFullDisabled" :title="runFullTitle" @click="act('runFull')">一键全流程</button>
-          <button v-if="isBlackbox && !isTerminal" type="button" class="cp-btn cp-danger-btn" :disabled="busy" :title="busy ? '操作执行中' : '终止当前黑盒实验'" @click="act('abandon')">放弃实验</button>
-          <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn cp-btn--primary" :disabled="busy" :title="busy ? '操作执行中' : '生成终局裁判评估'" @click="act('referee')">生成裁判评估</button>
-          <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn" :disabled="busy" :title="busy ? '操作执行中' : '以相同输入创建新的实验会话'" @click="act('rerun')">按原输入重跑</button>
+          <button v-if="isBlackbox && !isTerminal" type="button" class="cp-btn cp-danger-btn" :disabled="busy" :title="busy ? '操作执行中' : '终止当前黑盒实验'" @click="act('abandon')">{{ busy ? '执行中…' : '放弃实验' }}</button>
+          <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn cp-btn--primary" :disabled="busy" :title="busy ? '操作执行中' : '生成终局裁判评估'" @click="act('referee')">{{ busy ? '执行中…' : '生成裁判评估' }}</button>
+          <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn" :disabled="busy" :title="busy ? '操作执行中' : '以相同输入创建新的实验会话'" @click="act('rerun')">{{ busy ? '执行中…' : '按原输入重跑' }}</button>
           <span v-if="!isBlackbox" class="cp-controls__hint">各阶段操作在下方对应分页内</span>
         </div>
         <div v-if="!isBlackbox" class="cp-config">
@@ -99,11 +108,20 @@
           <span class="mk-card__meta">{{ isTerminal ? '已终态' : '5s 轮询' }}</span>
         </div>
         <div class="cp-logs" ref="logBox" @scroll="onLogScroll">
-          <div v-for="(l, i) in logs" :key="i" class="cp-log">
-            <span class="cp-log__time">{{ l.time }}</span>
-            <span class="cp-log__text">{{ l.text }}</span>
-          </div>
-          <p v-if="!logs.length" class="cp-none">暂无日志</p>
+          <template v-if="!session">
+            <div v-for="n in 4" :key="n" class="cp-log-skel" aria-hidden="true"></div>
+          </template>
+          <template v-else>
+            <div v-for="(l, i) in logs" :key="i" class="cp-log">
+              <span class="cp-log__time">{{ l.time }}</span>
+              <span class="cp-log__text">{{ l.text }}</span>
+            </div>
+            <p v-if="logsFailed" class="cp-degrade">
+              日志获取失败
+              <button type="button" class="mk-link" @click="loadLogs">重试</button>
+            </p>
+            <p v-else-if="!logs.length" class="cp-none">暂无日志</p>
+          </template>
         </div>
       </section>
     </div>
@@ -122,36 +140,45 @@
       <div class="cp-path-grid">
         <!-- 主区：路径内容 -->
         <div class="cp-path-detail">
-          <template v-if="hasPath">
-            <div class="cp-path-detail__head">
-              <strong>{{ pathDetailTitle }}</strong>
-              <span v-if="pathDetailMeta" class="cp-path-detail__meta">{{ pathDetailMeta }}</span>
-            </div>
-            <p v-if="pathDetailSummary" class="cp-path-detail__summary">{{ pathDetailSummary }}</p>
-            <details v-if="pathMilestonesView.length" class="cp-transcript" open>
-              <summary>里程碑 · {{ pathMilestonesView.length }} 个</summary>
-              <article v-for="m in pathMilestonesView" :key="m.stageNumber" class="cp-milestone">
-                <div class="cp-milestone__head">
-                  <span class="cp-milestone__order">M{{ m.stageNumber }}</span>
-                  <strong>{{ m.title }}</strong>
-                  <span v-if="m.estimatedHours" class="cp-milestone__meta">{{ m.estimatedHours }}h</span>
-                </div>
-                <p v-if="m.description" class="cp-milestone__desc">{{ m.description }}</p>
-                <ul v-if="m.tasks.length" class="cp-task-list">
-                  <li
-                    v-for="t in m.tasks"
-                    :key="t.id || t.title"
-                    :class="{ 'is-done': t.completed, 'is-current': t.current }"
-                  >
-                    <span class="cp-task-list__mark">{{ t.completed ? '✓' : t.current ? '▸' : '·' }}</span>
-                    {{ t.title }}
-                  </li>
-                </ul>
-              </article>
-            </details>
-            <p v-else-if="pathGenerationInProgress" class="cp-none">Path 阶段任务仍在生成，稍后自动刷新。</p>
+          <div v-if="!session" class="cp-path-skel" aria-hidden="true">
+            <div v-for="n in 3" :key="n"></div>
+          </div>
+          <template v-else>
+            <template v-if="hasPath">
+              <div class="cp-path-detail__head">
+                <strong>{{ pathDetailTitle }}</strong>
+                <span v-if="pathDetailMeta" class="cp-path-detail__meta">{{ pathDetailMeta }}</span>
+              </div>
+              <p v-if="pathDetailSummary" class="cp-path-detail__summary">{{ pathDetailSummary }}</p>
+              <details v-if="pathMilestonesView.length" class="cp-transcript" open>
+                <summary>里程碑 · {{ pathMilestonesView.length }} 个</summary>
+                <article v-for="m in pathMilestonesView" :key="m.stageNumber" class="cp-milestone">
+                  <div class="cp-milestone__head">
+                    <span class="cp-milestone__order">M{{ m.stageNumber }}</span>
+                    <strong>{{ m.title }}</strong>
+                    <span v-if="m.estimatedHours" class="cp-milestone__meta">{{ m.estimatedHours }}h</span>
+                  </div>
+                  <p v-if="m.description" class="cp-milestone__desc">{{ m.description }}</p>
+                  <ul v-if="m.tasks.length" class="cp-task-list">
+                    <li
+                      v-for="t in m.tasks"
+                      :key="t.id || t.title"
+                      :class="{ 'is-done': t.completed, 'is-current': t.current }"
+                    >
+                      <span class="cp-task-list__mark">{{ t.completed ? '✓' : t.current ? '▸' : '·' }}</span>
+                      {{ t.title }}
+                    </li>
+                  </ul>
+                </article>
+              </details>
+              <p v-else-if="pathGenerationInProgress" class="cp-none">Path 阶段任务仍在生成，稍后自动刷新。</p>
+            </template>
+            <p v-if="!hasPath && pathStatusFailed" class="cp-degrade">
+              Path 状态获取失败
+              <button type="button" class="mk-link" @click="loadPathStatus">重试</button>
+            </p>
+            <p v-else-if="!hasPath" class="cp-none">{{ pathEmptyHint }}</p>
           </template>
-          <p v-if="!hasPath" class="cp-none">{{ pathEmptyHint }}</p>
         </div>
 
         <!-- 旁路：评审面板（独立质量环，不阻塞 Learn） -->
@@ -302,13 +329,18 @@
         <article
           v-for="(message, index) in learnConversationMessages"
           :key="`learn-${index}`"
+          v-if="learnConversationMessages.length"
           class="cp-transcript__message"
           :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'"
         >
           <span>{{ message.role === 'assistant' ? '教师' : '虚拟学习者' }}</span>
           <p>{{ message.content }}</p>
         </article>
-        <p v-if="!teachingDetailLoading && !learnConversationMessages.length" class="cp-none">
+        <p v-else-if="teachingDetailFailed && !learnConversationMessages.length" class="cp-degrade">
+          教学记录获取失败
+          <button type="button" class="mk-link" @click="loadTeachingDetail(selectedTeachingSessionId)">重试</button>
+        </p>
+        <p v-else-if="!learnConversationMessages.length" class="cp-none">
           {{ learnEmptyHint }}
         </p>
       </div>
@@ -533,6 +565,7 @@ const shortId = computed(() => (sessionId.value.length > 20 ? `…${sessionId.va
 
 const session = ref<Record<string, unknown> | null>(null)
 const logs = ref<{ id: string; time: string; text: string }[]>([])
+const logsFailed = ref(false)
 const logBox = ref<HTMLElement | null>(null)
 const LOG_WINDOW = 60
 /* 日志滚动：接近底部才跟随，用户上翻时不打扰 */
@@ -565,7 +598,9 @@ function appendLogs(entries: Array<{ id: string; time: string; text: string }>) 
   scrollLogsIfFollowing()
 }
 const pathStatus = ref<Record<string, unknown> | null>(null)
+const pathStatusFailed = ref(false)
 const teachingDetail = ref<Record<string, unknown> | null>(null)
+const teachingDetailFailed = ref(false)
 const teachingDetailLoading = ref(false)
 const selectedTeachingSessionId = ref('')
 
@@ -872,6 +907,7 @@ function openLesson(lesson: LearnLesson) {
 
 /* Learn 空态只反映 Learn 自身状态，不写跨阶段操作引导（解耦：引导在各页操作区与按钮 tooltip） */
 const learnEmptyHint = computed(() => {
+  if (teachingDetailFailed.value) return '教学记录获取失败，请重试。'
   if (teachingSessionHistory.value.length) return '该课堂暂未记录可展示消息。'
   if (!hasPath.value) return '尚未启动 Learn。'
   if (learningBlockedReason.value) return `尚未启动 Learn：${learningBlockedReason.value}`
@@ -1209,15 +1245,17 @@ const resetLearningTitle = computed(() => {
   return isFailedTerminal.value ? '从当前可运行任务恢复失败的 Learn' : '以可运行任务重新启动 Learn（评审为独立旁路）'
 })
 const showPathReadiness = computed(() =>
-  !isBlackbox.value && (goalConverged.value || hasPath.value || ['path', 'learning', 'wrapup'].includes(currentStage.value))
+  !isBlackbox.value && (pathStatusFailed.value || goalConverged.value || hasPath.value || ['path', 'learning', 'wrapup'].includes(currentStage.value))
 )
 const pathReadinessTone = computed(() => {
+  if (pathStatusFailed.value) return 'bad'
   if (pathGenerationFailed.value) return 'bad'
   if (pathGenerationInProgress.value) return 'warn'
   if (pathStartable.value) return 'ok'
   return 'muted'
 })
 const pathReadinessText = computed(() => {
+  if (pathStatusFailed.value) return 'Path 状态获取失败，请重试。'
   if (!hasPath.value) return goalConverged.value ? 'Goal 已收敛，等待生成 Path。' : '等待 Goal 对话收敛后生成 Path。'
   if (pathGenerationFailed.value) return learningBlockedReason.value || 'Path 生成失败，请重新生成。'
   if (pathGenerationInProgress.value) return learningBlockedReason.value || 'Path 正在生成或补全阶段任务，请稍候。'
@@ -1379,9 +1417,11 @@ async function loadLogs() {
       time: l.createdAt ? new Date(String(l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
       text: String(l.message || l.text || l.type || JSON.stringify(l)).slice(0, 160)
     })))
+    logsFailed.value = false
   } catch {
+    // 失败保留旧日志，标记降级并给出重试入口（不把「无日志」误读为空）
     if (sessionId.value !== id) return
-    logs.value = []
+    logsFailed.value = true
   }
 }
 
@@ -1395,10 +1435,11 @@ async function loadPathStatus() {
     const res = await adminVirtualLearnersApi.getVirtualSessionPathStatus(id)
     if (sessionId.value !== id) return
     pathStatus.value = asRecord(res.data?.data ?? res.data)
+    pathStatusFailed.value = false
   } catch {
-    // Path 状态仅用于控制台就绪提示；主会话数据仍可正常操作和刷新。
+    // 失败保留旧快照，标记降级（避免把「获取失败」误读成「Goal 未收敛 / 尚无 Path」）
     if (sessionId.value !== id) return
-    pathStatus.value = null
+    pathStatusFailed.value = true
   }
 }
 
@@ -1421,10 +1462,11 @@ async function loadTeachingDetail(teachingSessionId = selectedTeachingSessionId.
     const res = await adminVirtualLearnersApi.getVirtualSessionTeachingDetail(id, teachingSessionId || undefined)
     if (sessionId.value !== id) return
     teachingDetail.value = asRecord(res.data?.data ?? res.data)
+    teachingDetailFailed.value = false
   } catch {
-    // 当前课堂尚未创建或历史课堂被清理时，仍可展示会话日志投影。
+    // 失败保留旧记录，标记降级（避免把「获取失败」误读成「该课堂暂未记录」）
     if (sessionId.value !== id) return
-    teachingDetail.value = null
+    teachingDetailFailed.value = true
   } finally {
     if (!options.silent && sessionId.value === id) teachingDetailLoading.value = false
   }
@@ -1525,9 +1567,18 @@ async function saveFriction() {
 async function act(kind: string) {
   if (busy.value) return
   busy.value = true
-  const id = sessionId.value
-  const stage = currentStage.value
   try {
+    /* 终止黑盒实验：不可撤销，先二次确认（确认框弹出期间按钮保持禁用） */
+    if (kind === 'abandon') {
+      const ok = await askConfirm({
+        title: '终止黑盒实验',
+        message: '确认终止当前黑盒实验？\n实验将被标记为已终止，公开轨迹与评估保留，该操作不可撤销。',
+        confirmText: '终止实验'
+      })
+      if (!ok) return
+    }
+    const id = sessionId.value
+    const stage = currentStage.value
     switch (kind) {
       case 'step':
         // 黑盒模式无 step 入口（仅 abandon/referee/rerun），此分支只服务辅助模式
@@ -1687,9 +1738,12 @@ watch(
     pollTimer = null
     session.value = null
     logs.value = []
+    logsFailed.value = false
     logFollowsBottom = true
     pathStatus.value = null
+    pathStatusFailed.value = false
     teachingDetail.value = null
+    teachingDetailFailed.value = false
     selectedTeachingSessionId.value = ''
     refereeReports.value = []
     actorAuditReports.value = []
@@ -1730,7 +1784,8 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   padding: 0;
   width: fit-content;
 }
-.cp-danger { color: var(--mk-red) !important; border-color: rgba(220, 38, 38, 0.35) !important; }
+.cp-danger { background: var(--mk-red-strong, var(--mk-red)); border-color: var(--mk-red-strong, var(--mk-red)); color: #fff; }
+.cp-danger:hover:not(:disabled) { opacity: 0.9; }
 
 .cp-stages {
   display: flex;
@@ -1774,13 +1829,13 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   padding: 14px 16px 0;
 }
 .cp-btn {
-  padding: 7px 13px;
+  padding: 8px 16px;
   border-radius: 8px;
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
   color: var(--mk-ink);
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -1788,7 +1843,9 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .cp-btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
 .cp-btn--primary:hover:not(:disabled) { color: #fff; opacity: 0.9; }
-.cp-danger-btn { color: var(--mk-red) !important; border-color: rgba(220, 38, 38, 0.35) !important; }
+/* 危险操作：实心红（与 .mk-btn--danger 一致） */
+.cp-danger-btn { background: var(--mk-red-strong, var(--mk-red)); border-color: var(--mk-red-strong, var(--mk-red)); color: #fff; }
+.cp-danger-btn:hover:not(:disabled) { color: #fff; opacity: 0.9; }
 .cp-config {
   padding: 10px 16px 0;
   display: flex;
@@ -1833,8 +1890,8 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-path-readiness--ok p { color: #15803d; }
 .cp-path-readiness--warn { border-left-color: #d97706; background: #fffbeb; }
 .cp-path-readiness--warn p { color: #b45309; }
-.cp-path-readiness--bad { border-left-color: var(--mk-red); background: #fff1f0; }
-.cp-path-readiness--bad p { color: #cf1322; }
+.cp-path-readiness--bad { border-left-color: var(--mk-red); background: var(--mk-red-bg); }
+.cp-path-readiness--bad p { color: var(--mk-red); }
 
 .cp-logs {
   max-height: 320px;
@@ -1846,6 +1903,27 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-log { display: flex; gap: 10px; font-size: 12px; }
 .cp-log__time { color: var(--mk-faint); font-family: var(--mk-mono); font-size: 10.5px; white-space: nowrap; padding-top: 1px; }
 .cp-log__text { color: var(--mk-muted); word-break: break-all; }
+
+/* 初始加载占位（session 未就绪时不显示假空态） */
+.cp-log-skel { height: 13px; border-radius: 4px; background: linear-gradient(90deg, #eef2fa, #f7f9fc 55%, #eef2fa); background-size: 220% 100%; animation: cp-skel 1.4s ease infinite; }
+@keyframes cp-skel { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+.cp-path-skel { display: grid; gap: 8px; }
+.cp-path-skel > div { height: 40px; border-radius: 8px; background: linear-gradient(90deg, #eef2fa, #f7f9fc 55%, #eef2fa); background-size: 220% 100%; animation: cp-skel 1.4s ease infinite; }
+
+/* 区块降级提示（获取失败 + 重试） */
+.cp-degrade {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mk-red);
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--mk-red-bg);
+}
+.cp-degrade .mk-link { font-size: 12px; }
 
 .cp-transcripts { display: grid; gap: 10px; padding: 12px 16px 16px; }
 .cp-transcript {
@@ -1865,7 +1943,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   background: #f8fafc;
 }
 .cp-transcript__message.is-teacher { border-left-color: var(--mk-blue); background: #eff6ff; }
-.cp-transcript__message.is-learner { border-left-color: #0f766e; background: #f0fdfa; }
+.cp-transcript__message.is-learner { border-left-color: var(--mk-teal); background: #f0fdfa; }
 .cp-transcript__message span { font-size: 10.5px; font-weight: 800; color: var(--mk-faint); }
 .cp-transcript__message p { margin: 0; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 .cp-teaching-history { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1895,10 +1973,10 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-lesson-head__main { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .cp-lesson-head__main strong { font-size: 13px; }
 .cp-lesson-head__ms { font-size: 11px; color: var(--mk-faint); }
-.cp-lesson-head__state { padding: 2px 8px; border-radius: 5px; font-size: 10.5px; font-weight: 800; background: #f3f5f9; color: var(--mk-muted); }
-.cp-lesson-head__state[data-state='done'] { background: #f0fdf4; color: #15803d; }
+.cp-lesson-head__state { padding: 2px 8px; border-radius: 4px; font-size: 10.5px; font-weight: 800; background: #f3f5f9; color: var(--mk-muted); }
+.cp-lesson-head__state[data-state='done'] { background: var(--mk-green-bg); color: var(--mk-green); }
 .cp-lesson-head__state[data-state='active'] { background: #eff6ff; color: var(--mk-blue); }
-.cp-lesson-head__state[data-state='failed'] { background: #fff1f0; color: #cf1322; }
+.cp-lesson-head__state[data-state='failed'] { background: var(--mk-red-bg); color: var(--mk-red); }
 .cp-lesson-head__nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .cp-lesson-head__select {
   max-width: 240px;
@@ -1950,10 +2028,10 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-task-list__mark { flex: 0 0 auto; font-family: var(--mk-mono); }
 .cp-review { display: grid; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #f8fafc; }
 .cp-review__badges { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.cp-review__badge { padding: 2px 8px; border-radius: 5px; font-size: 11px; font-weight: 800; background: #f3f5f9; color: var(--mk-muted); }
-.cp-review__badge[data-decision='accept'] { background: #f0fdf4; color: #15803d; }
-.cp-review__badge[data-decision='modify'] { background: #fffbeb; color: #b45309; }
-.cp-review__badge[data-decision='reject'] { background: #fff1f0; color: #cf1322; }
+.cp-review__badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 800; background: #f3f5f9; color: var(--mk-muted); }
+.cp-review__badge[data-decision='accept'] { background: var(--mk-green-bg); color: var(--mk-green); }
+.cp-review__badge[data-decision='modify'] { background: var(--mk-amber-bg); color: var(--mk-amber); }
+.cp-review__badge[data-decision='reject'] { background: var(--mk-red-bg); color: var(--mk-red); }
 .cp-review__meta { font-size: 10.5px; color: var(--mk-faint); }
 .cp-review__reaction { margin: 0; font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
 .cp-review__concern { margin: 0; font-size: 11.5px; color: #b45309; }
@@ -2029,15 +2107,15 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-finding p { margin: 4px 0 0; font-size: 12px; color: var(--mk-muted); line-height: 1.6; }
 .cp-finding__sev {
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: 4px;
   font-size: 10.5px;
   font-weight: 700;
   height: fit-content;
   background: #f3f5f9;
   color: var(--mk-muted);
 }
-.cp-finding__sev[data-sev='critical'] { background: #fff1f0; color: #cf1322; }
-.cp-finding__sev[data-sev='major'] { background: #fff7e6; color: #d46b08; }
+.cp-finding__sev[data-sev='critical'] { background: var(--mk-red-bg); color: var(--mk-red); }
+.cp-finding__sev[data-sev='major'] { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .cp-finding__sev[data-sev='minor'] { background: #e6f4ff; color: #0958d9; }
 .cp-finding__sev[data-sev='info'] { background: #f0fff5; color: #389e0d; }
 
@@ -2052,7 +2130,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-rec__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .cp-rec strong { font-size: 12px; }
 .cp-rec__codes { display: inline-flex; flex-wrap: wrap; gap: 4px; }
-.cp-rec__codes code { font-size: 10px; padding: 1px 5px; background: #f3f5f9; color: var(--mk-faint); border-radius: 3px; }
+.cp-rec__codes code { font-size: 10px; padding: 1px 5px; background: #f3f5f9; color: var(--mk-faint); border-radius: 4px; }
 .cp-rec p { margin: 4px 0 0; font-size: 12.5px; color: var(--mk-muted); }
 .cp-rec__rationale { margin-top: 6px; font-size: 11.5px; color: var(--mk-faint); }
 .cp-rec__rationale summary { cursor: pointer; font-weight: 600; }
@@ -2114,7 +2192,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   padding: 1px 6px; border-radius: 4px; font-size: 10.5px;
   background: #f3f5f9; color: var(--mk-muted);
 }
-.cp-trace-list__degraded { padding: 1px 6px; border-radius: 4px; font-size: 10.5px; background: #fff1f0; color: #cf1322; }
+.cp-trace-list__degraded { padding: 1px 6px; border-radius: 4px; font-size: 10.5px; background: var(--mk-red-bg); color: var(--mk-red); }
 .cp-trace-list__focus,
 .cp-trace-list__reason { font-size: 11.5px; color: var(--mk-muted); }
 .cp-trace-list__signal { font-size: 11.5px; color: var(--mk-faint); font-style: italic; }
@@ -2126,7 +2204,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-trace-list__flags > span { padding: 2px 7px; border-radius: 4px; font-size: 10.5px; background: #f3f5f9; color: var(--mk-faint); border: 1px solid transparent; }
 .cp-trace-list__flags > span.active { background: #e6f4ff; color: #0958d9; border-color: #91caff; }
 .cp-trace-list__blockers { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11.5px; color: var(--mk-muted); }
-.cp-trace-list__blocker { padding: 1px 6px; background: #fff7e6; color: #d46b08; border-radius: 3px; }
+.cp-trace-list__blocker { padding: 1px 6px; background: var(--mk-amber-bg); color: var(--mk-amber); border-radius: 4px; }
 .cp-trace-list__body {
   margin: 4px 0 0; padding: 8px 10px; background: #f8fafc;
   border-radius: 4px; font-size: 10.5px; line-height: 1.5;

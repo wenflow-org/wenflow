@@ -30,7 +30,7 @@
           <span class="mk-badge" :class="fatigueBadge">疲劳：{{ d.fatigue }}</span>
           <span class="mk-badge mk-badge--muted">快照 {{ d.snapshot.version }} · {{ d.snapshot.generatedAt }}</span>
         </div>
-        <button type="button" class="mk-status__action" style="margin-left:auto" :disabled="recomputing" @click="recompute">
+        <button type="button" class="mk-status__action" :disabled="recomputing" @click="recompute">
           {{ recomputing ? '重算中…' : '重算快照' }}
         </button>
       </div>
@@ -159,7 +159,10 @@
           </div>
         </section>
       </template>
-      <p v-else class="ld-none">{{ isLive ? '暂无认知画像数据' : '演示模式下无数据' }}</p>
+      <p v-else class="ld-none">
+        {{ isLive ? '暂无认知画像数据' : '演示模式下无数据' }}
+        <span v-if="isLive" class="ld-none__hint">重算快照后生成。</span>
+      </p>
     </div>
 
     <!-- 动态状态 -->
@@ -190,7 +193,10 @@
           </div>
         </section>
       </template>
-      <p v-else class="ld-none">{{ isLive ? '暂无动态状态数据' : '演示模式下无数据' }}</p>
+      <p v-else class="ld-none">
+        {{ isLive ? '暂无动态状态数据' : '演示模式下无数据' }}
+        <span v-if="isLive" class="ld-none__hint">重算快照后生成。</span>
+      </p>
     </div>
 
     <!-- 知识记忆 -->
@@ -206,7 +212,10 @@
           </div>
         </section>
       </template>
-      <p v-else class="ld-none">{{ isLive ? '暂无知识记忆数据' : '演示模式下无数据' }}</p>
+      <p v-else class="ld-none">
+        {{ isLive ? '暂无知识记忆数据' : '演示模式下无数据' }}
+        <span v-if="isLive" class="ld-none__hint">重算快照后生成。</span>
+      </p>
     </div>
 
     <!-- 教学建议 -->
@@ -251,7 +260,10 @@
           </div>
         </section>
       </template>
-      <p v-else class="ld-none">{{ isLive ? '暂无教学建议数据' : '演示模式下无数据' }}</p>
+      <p v-else class="ld-none">
+        {{ isLive ? '暂无教学建议数据' : '演示模式下无数据' }}
+        <span v-if="isLive" class="ld-none__hint">重算快照后生成。</span>
+      </p>
     </div>
 
     <!-- 证据记录 -->
@@ -271,7 +283,10 @@
             <span class="ld-ev__time">{{ e.time }}</span>
           </div>
         </div>
-        <p v-else class="ld-none">{{ isLive ? '暂无证据记录' : '演示模式下无数据' }}</p>
+        <p v-else class="ld-none">
+          {{ isLive ? '暂无证据记录' : '演示模式下无数据' }}
+          <span v-if="isLive" class="ld-none__hint">学习事件累积后自动生成。</span>
+        </p>
       </section>
     </div>
   </div>
@@ -691,14 +706,14 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
   width: 46px;
   height: 46px;
   border-radius: 14px;
-  background: linear-gradient(135deg, #3478f6, #8d6bff);
+  background: linear-gradient(135deg, #3478f6, var(--mk-purple));
   color: #fff;
   display: grid;
   place-content: center;
   font-size: 18px;
   font-weight: 700;
 }
-.ld-id h3 { margin: 0; font-size: 18px; }
+.ld-id h3,
 .ld-name { margin: 0; font-size: 18px; line-height: 1.4; }
 .ld-sub { color: var(--mk-faint); font-size: 12px; }
 .ld-badges { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -706,6 +721,7 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
 .ld-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .ld-tabpage { display: grid; gap: 14px; align-content: start; }
 .ld-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: 12.5px; }
+.ld-none__hint { display: block; margin-top: 4px; font-size: 11.5px; opacity: 0.9; }
 
 .ld-grid {
   display: grid;

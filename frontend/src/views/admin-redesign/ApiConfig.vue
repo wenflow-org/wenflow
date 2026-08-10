@@ -179,10 +179,15 @@
     </section>
 
     <!-- AI 调用与健康（全宽分区：可靠性 → 探测 → 健康） -->
-    <section v-if="isLive && (reliability || probe.loaded)" class="mk-card">
+    <section v-if="isLive && (reliability || probe.loaded || configLoadFailed)" class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">AI 调用与健康</h3>
         <span class="mk-badge" :class="healthBadgeCls">{{ healthLabel }}</span>
+      </div>
+
+      <div v-if="configLoadFailed && !reliability && !probe.loaded" class="ac-config-error" role="alert">
+        <span>配置读取失败</span>
+        <button type="button" class="mk-link" @click="retryConfigLoad">重试</button>
       </div>
 
       <!-- 两列：左 = 调用参数，右 = 能力健康 -->
@@ -278,6 +283,10 @@
               <span class="ac-health__time">{{ c.checkedAt ? timeAgo(c.checkedAt) : '未探测' }}</span>
             </div>
           </div>
+          <div v-else-if="healthFailed" class="ac-rel__note ac-rel__error">
+            健康快照不可用
+            <button type="button" class="mk-link" :disabled="healthProbing" @click="probeHealth">{{ healthProbing ? '探测中…' : '重试' }}</button>
+          </div>
           <p v-else class="ac-rel__note">健康快照加载中…</p>
           <div class="ac-health__foot">
             <button type="button" class="mk-status__action" :disabled="healthProbing" @click="probeHealth">
@@ -332,6 +341,7 @@ interface CapSnapshot {
   capabilities: CapHealth[]
 }
 const health = ref<CapSnapshot | null>(null)
+const healthFailed = ref(false)
 const healthProbing = ref(false)
 
 const healthLabel = computed(
@@ -355,8 +365,10 @@ async function loadHealth() {
   try {
     const res = await adminSystemApi.getCapabilities()
     health.value = res.data?.data ?? res.data ?? null
+    healthFailed.value = false
   } catch {
-    health.value = null
+    // 失败标记不可用（不再显示永久的「加载中…」），保留旧快照供重试后对比
+    healthFailed.value = true
   }
 }
 
@@ -366,6 +378,9 @@ async function probeHealth() {
   try {
     const res = await adminSystemApi.probeCapabilities()
     health.value = res.data?.data ?? res.data ?? null
+    healthFailed.value = false
+  } catch {
+    healthFailed.value = true
   } finally {
     healthProbing.value = false
   }
@@ -413,6 +428,7 @@ interface Reliability {
   jitterEnabled: boolean
 }
 const reliability = ref<Reliability | null>(null)
+const configLoadFailed = ref(false)
 
 const probe = reactive({
   enabled: false,
@@ -437,8 +453,10 @@ async function loadReliability() {
       maxRetryAfterMs: Number(s.maxRetryAfterMs ?? 30000),
       jitterEnabled: s.jitterEnabled !== false
     }
+    configLoadFailed.value = false
   } catch {
     reliability.value = null
+    configLoadFailed.value = true
   }
 }
 
@@ -454,9 +472,17 @@ async function loadProbe() {
     if (typeof d.minIntervalMs === 'number') probe.minIntervalMs = d.minIntervalMs
     if (typeof d.maxIntervalMs === 'number') probe.maxIntervalMs = d.maxIntervalMs
     probe.loaded = true
+    configLoadFailed.value = false
   } catch {
     probe.loaded = false
+    configLoadFailed.value = true
   }
+}
+
+/** 配置域重试：重新拉取可靠性 + 探测设置 */
+function retryConfigLoad() {
+  void loadReliability()
+  void loadProbe()
 }
 
 /* demo 数据 */
@@ -592,15 +618,12 @@ async function runTest() {
         latency: r.latencyMs ? `${r.latencyMs}ms` : `${Date.now() - started}ms`,
         usage: r.usage
       }
-      toast.success('测试通过')
     } else {
       await new Promise((r) => setTimeout(r, 800))
       testResult.value = { ok: true, text: '模型测试成功。', latency: '238ms', usage: 'P 12 / C 9 / T 21' }
-      toast.success('测试通过 · 238ms')
     }
   } catch (e) {
     testResult.value = { ok: false, text: errMsg(e).slice(0, 80) }
-    toast.error(`测试失败：${errMsg(e)}`)
   } finally {
     testing.value = false
   }
@@ -685,7 +708,7 @@ function discardAll() {
     void loadReliability()
     void loadProbe()
   } else applyDemoState()
-  toast.error('已放弃未保存的变更')
+  toast.info('已放弃未保存的变更')
 }
 
 /* 注册开关：高风险操作，二次确认 */
@@ -707,7 +730,9 @@ async function toggleRegistration() {
     await updateRegistrationSetting(target)
     toast.success(target ? '注册已开放' : '注册已关闭，新账号只能由管理员创建')
   } catch (e) {
-    toast.success(`切换失败：${errMsg(e)}`)
+    // 失败回滚本地状态（updateRegistrationSetting 仅在成功后写回）
+    registrationEnabled.value = !target
+    toast.error(`切换失败：${errMsg(e)}`)
   } finally {
     registrationBusy.value = false
   }
@@ -829,7 +854,7 @@ async function toggleRegistration() {
 .ac-health__dot.is-degraded { background: var(--mk-amber); }
 .ac-health__dot.is-unavailable { background: var(--mk-red); }
 .ac-health__dot.is-unknown { background: var(--mk-faint); }
-.ac-health__id { font-size: 11px; color: var(--mk-ink); }
+.ac-health__id { font-size: 11px; color: var(--mk-ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ac-health__msg { color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ac-health__lat { font-size: 11px; color: var(--mk-muted); font-variant-numeric: tabular-nums; }
 .ac-health__time { font-size: 11px; color: var(--mk-faint); white-space: nowrap; }
@@ -922,6 +947,27 @@ async function toggleRegistration() {
   font-size: 11.5px;
   color: var(--mk-faint);
 }
+/* 降级提示：健康快照不可用 / 配置读取失败 */
+.ac-rel__error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mk-red);
+  font-weight: 600;
+}
+.ac-rel__error .mk-link { font-size: 11.5px; }
+.ac-config-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 16px 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--mk-red-bg);
+  color: var(--mk-red);
+  font-size: 12.5px;
+  font-weight: 600;
+}
 
 .ac-save {
   position: sticky;
@@ -961,6 +1007,8 @@ async function toggleRegistration() {
 }
 @media (max-width: 800px) {
   .ac-group__fields { grid-template-columns: 1fr; }
+  .ac-health__row { grid-template-columns: 10px minmax(0, 1fr) auto; }
+  .ac-health__msg { display: none; }
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */

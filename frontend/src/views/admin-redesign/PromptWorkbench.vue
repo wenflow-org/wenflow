@@ -32,7 +32,7 @@
             <th>输出</th>
             <th>coreHash</th>
             <th>状态</th>
-            <th style="text-align:right">操作</th>
+            <th class="mk-th--right">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -133,8 +133,8 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.pw-ok { color: var(--mq-ok, #2e7d32); }
-.pw-warn { color: var(--mq-warn, #b26a00); }
+.pw-ok { color: var(--mk-green, #15803d); }
+.pw-warn { color: var(--mk-amber, #b45309); }
 .pw-lead {
   margin: 0;
   font-size: 12.5px;

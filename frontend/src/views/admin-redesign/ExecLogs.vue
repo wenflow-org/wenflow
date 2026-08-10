@@ -130,7 +130,7 @@
                       <span v-if="a.statusCode">HTTP {{ a.statusCode }}</span>
                       <span v-if="a.promptTokens != null">P {{ a.promptTokens }} / C {{ a.completionTokens ?? 0 }}</span>
                       <span v-if="a.ttftMs != null" :title="'TTFT（首字节）'">TTFT {{ a.ttftMs }}ms</span>
-                      <span v-if="a.promptCacheHitTokens" class="tline-attempt__cache" :title="'DeepSeek 自动前缀缓存命中'">缓存 {{ a.promptCacheHitTokens }} tok</span>
+                      <span v-if="a.promptCacheHitTokens" class="tline-attempt__cache" :title="'DeepSeek 自动前缀缓存命中'">缓存 {{ a.promptCacheHitTokens }} token</span>
                       <span v-if="a.routeSource">路由 {{ a.routeSource }}</span>
                       <span v-if="a.endpointHost">{{ a.endpointHost }}</span>
                     </div>
@@ -336,7 +336,7 @@ const filtered = computed(() =>
 /* 长列表分批渲染：每批 50 行 */
 const { shown, canMore, loadMore } = useLoadMore(filtered, 50)
 
-const isFiltered = computed(() => !!(agentFilter.value || statusFilter.value))
+const isFiltered = computed(() => !!(agentFilter.value || statusFilter.value || keyword.value.trim()))
 /* live：全量统计来自后端 stats（非 200 行样本）；demo 回退样本计算 */
 const liveStats = computed(() => (isLive.value ? liveLogStats.value : null))
 const totalCount = computed(() => liveStats.value?.total ?? logs.value.length)
@@ -356,9 +356,15 @@ const statusTitle = computed(() => {
   if (errCount.value) return `执行日志 · ${errCount.value} 次失败`
   return '执行日志 · 运行平稳'
 })
-/* 排查徽章：读本地筛选（修复此前读 intent 导致的空值） */
+/* 排查徽章：读本地筛选（修复此前读 intent 导致的空值）；live 下补充关键词与时间范围 */
+const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部' } as const
 const filterLabel = computed(() =>
-  [agentFilter.value || '', statusFilter.value === 'err' ? '仅失败' : statusFilter.value === 'warn' ? '仅超时' : statusFilter.value === 'ok' ? '仅成功' : '']
+  [
+    isLive.value && timeRange.value !== 'week' ? timeRangeLabels[timeRange.value] : '',
+    agentFilter.value || '',
+    statusFilter.value === 'err' ? '仅失败' : statusFilter.value === 'warn' ? '仅超时' : statusFilter.value === 'ok' ? '仅成功' : '',
+    keyword.value.trim() ? `关键词「${keyword.value.trim()}」` : ''
+  ]
     .filter(Boolean)
     .join(' · ')
 )
@@ -372,6 +378,7 @@ const statusPills = [
 function clearFilter() {
   agentFilter.value = ''
   statusFilter.value = ''
+  keyword.value = ''
   clearInvestigation()
 }
 
@@ -418,6 +425,8 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-sm);
   flex-wrap: wrap;
+  /* 终端页例外：字号/圆角与 mk-status 基础规格一致，
+     内边距略大是为容纳状态条内的筛选区（pills + 关键词 + 高级筛选） */
 }
 .log-status__dot { width: 9px; height: 9px; border-radius: 50%; }
 .log-status--ok .log-status__dot { background: var(--mk-green); }
@@ -495,6 +504,12 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
     justify-content: flex-start;
   }
   .log-keyword { flex: 1 1 140px; min-width: 0; }
+}
+/* 窄屏：压缩时间/节点固定列，给消息列腾空间（时间 72→56、节点 240→160） */
+@media (max-width: 860px) {
+  .tline-head,
+  .tline__main { grid-template-columns: 56px 40px 160px minmax(200px, 480px) 44px 44px 56px; gap: 8px; }
+  .tline__payload { padding-left: 56px; }
 }
 .log-agent {
   padding: 6px 10px;
@@ -604,7 +619,7 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
 }
 .tline__kind--flow { background: #eff6ff; color: var(--mk-blue); }
 .tline__kind--call { background: #f0f2f5; color: var(--mk-muted); }
-.tline__kind--skill { background: #f0f7f6; color: #0d9488; }
+.tline__kind--skill { background: #f0f7f6; color: var(--mk-teal); }
 .tline__agent {
   font-size: 11px;
   color: var(--mk-blue);
@@ -700,13 +715,13 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   padding: 1px 8px;
   white-space: nowrap;
 }
-.tline__badge--ok { background: rgba(22, 163, 74, 0.1); color: #16a34a; }
-.tline__badge--warn { background: rgba(217, 119, 6, 0.1); color: #b45309; }
+.tline__badge--ok { background: var(--mk-green-bg); color: var(--mk-green); }
+.tline__badge--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .tline__badge--err { background: rgba(220, 38, 38, 0.1); color: #dc2626; }
 .tline__trace { font-size: 11px; color: var(--mk-faint); text-align: right; }
 .tline__session { font-size: 11px; color: #3478f6; cursor: pointer; }
 .tline__session:hover { text-decoration: underline; }
-.tline__trace:hover { color: #b45309; text-decoration: underline; }
+.tline__trace:hover { color: var(--mk-amber); text-decoration: underline; }
 
 .tline__payload { padding: 2px 14px 12px 68px; display: grid; gap: 8px; }
 .tline__payload-meta {

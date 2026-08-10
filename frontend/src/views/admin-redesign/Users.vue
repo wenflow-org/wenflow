@@ -37,25 +37,31 @@
         <span class="mk-card__meta">{{ filtered.length }} / {{ users.length }} 人</span>
       </div>
 
-      <MockSkeletonTable v-if="liveLoading && !users.length" :cols="6" />
+      <MockSkeletonTable v-if="liveLoading && !users.length" :cols="7" />
+      <div v-else-if="loadFailed" class="mk-empty">
+        <span class="mk-empty__icon" aria-hidden="true">◌</span>
+        <strong>数据加载失败</strong>
+        <span>无法从后端拉取用户列表。</span>
+        <button type="button" class="mk-empty__action" @click="retryLoad">重试</button>
+      </div>
       <div v-else-if="filtered.length" class="mk-table-scroll">
         <table class="mk-table">
           <thead>
             <tr>
-              <th v-if="isLive" style="width:32px">
-                <input type="checkbox" :checked="allChecked" @change="toggleAll" />
+              <th v-if="isLive" scope="col" style="width:32px">
+                <input type="checkbox" aria-label="全选" :checked="allChecked" @change="toggleAll" />
               </th>
-              <th>用户</th>
-              <th>角色</th>
-              <th class="ul-th-num">路径 / 会话</th>
-              <th>注册时间</th>
-              <th>最后登录</th>
-              <th style="text-align:right">操作</th>
+              <th scope="col">用户</th>
+              <th scope="col">角色</th>
+              <th scope="col" class="mk-th--right">路径 / 会话</th>
+              <th scope="col">注册时间</th>
+              <th scope="col">最后登录</th>
+              <th scope="col" class="mk-th--right">操作</th>
             </tr>
           </thead>
         <tbody>
           <tr v-for="u in shown" :key="u.id" class="ul-row" @click="openSubPage('user', u.id)">
-            <td v-if="isLive"><input v-model="selected" type="checkbox" :value="u.id" @click.stop /></td>
+            <td v-if="isLive"><input v-model="selected" type="checkbox" :value="u.id" :aria-label="`选择 ${u.name}`" @click.stop /></td>
             <td>
               <div class="mk-cell-main">
                 <strong>{{ u.name }}</strong>
@@ -74,8 +80,8 @@
               <div class="mk-actions">
                 <button type="button" class="mk-link" @click="openSubPage('user', u.id)">详情</button>
                 <div v-if="isLive" class="mk-menu">
-                  <button type="button" class="mk-menu__btn" aria-label="更多操作" @click.stop="toggleMenu(u.id)">⋯</button>
-                  <div v-if="openMenu === u.id" class="mk-menu__pop" @click.stop>
+                  <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(u.id)">⋯</button>
+                  <div v-if="openMenu === u.id" class="mk-menu__pop" :style="popStyle" @click.stop>
                     <button type="button" class="mk-menu__item" :disabled="u.busy" @click="menuEdit(u)">编辑</button>
                     <button
                       v-if="!isSelf(u) && !isTestAccount(u)"
@@ -161,7 +167,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { openSubPage, intent, isLive } from './store'
-import { liveUsers, liveCreateUser, liveDeleteUser, liveSetUserRole, liveUsersTotal, timeAgo, errMsg, registrationEnabled, liveLoading } from './live'
+import { liveUsers, liveCreateUser, liveDeleteUser, liveSetUserRole, liveUsersTotal, timeAgo, errMsg, registrationEnabled, liveLoading, liveFailures, loadLiveData } from './live'
 import { useLoadMore } from './useLoadMore'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
@@ -244,6 +250,14 @@ const users = computed<UserRow[]>(() => {
 
 const pill = ref('all')
 const keyword = ref('')
+
+/** live 用户域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
+const loadFailed = computed(
+  () => isLive.value && !liveLoading.value && !!liveFailures.value.users && !liveUsers.value.length
+)
+function retryLoad() {
+  void loadLiveData()
+}
 const pills = [
   { id: 'all', label: '全部' },
   { id: 'admin', label: '管理员' },
@@ -253,7 +267,7 @@ const pills = [
 /* 新建 / 编辑用户 */
 const createOpen = ref(false)
 useEscape(() => createOpen.value, () => { createOpen.value = false })
-const { openMenu, toggleMenu, closeMenu } = useRowMenu()
+const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
 
 /** 行内 ⋯ 菜单项：先关菜单再执行 */
 function menuEdit(u: UserRow) {
@@ -456,9 +470,7 @@ const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
 </script>
 
 <style scoped>
-.mk-link--danger { color: var(--mk-red, #dc2626); }
 .ul-row { cursor: pointer; }
-.ul-row:hover { background: #f6f9ff; }
 .ul-batch {
   position: sticky;
   bottom: 12px;
@@ -505,8 +517,4 @@ const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
   padding: 10px 0 12px;
   border-top: 1px dashed var(--mk-line);
 }
-
-/* 数值列（路径/会话）表头与单元格居中；类选择器不受 live 勾选列影响 */
-.mk-table td.mk-num,
-.mk-table th.ul-th-num { text-align: center; }
 </style>

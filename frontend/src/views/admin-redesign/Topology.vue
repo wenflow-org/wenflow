@@ -192,7 +192,7 @@
               <div class="agent-card__sub">{{ a.id }}</div>
             </div>
             <span v-if="a.errorCount > 0" class="agent-card__dot is-error">{{ a.errorCount > 9 ? '9+' : a.errorCount }}</span>
-            <span v-else class="agent-card__dot is-ok"></span>
+            <span v-else class="agent-card__dot is-ok" title="状态正常" aria-label="状态正常"></span>
           </div>
           <div class="agent-card__meta">
             <span class="agent-card__calls"><b>{{ a.calls }}</b>&nbsp;<i>调用</i></span>
@@ -227,12 +227,13 @@
             '--hue': s.hue,
             '--d': `${s.delay}ms`
           }"
-          role="button"
-          tabindex="0"
           @click="guardedOpenSkill(s.skillId)"
-          @keydown.enter="guardedOpenSkill(s.skillId)"
         >
-          <span class="skill-card__tick"></span>
+          <span
+            class="skill-card__tick"
+            :title="s.error ? '状态异常' : s.idle ? '未调用' : '状态正常'"
+            :aria-label="s.error ? '状态异常' : s.idle ? '未调用' : '状态正常'"
+          ></span>
           <div class="skill-card__body">
             <div class="skill-card__name" :title="s.name">{{ s.skillId }}</div>
             <div class="skill-card__meta">
@@ -279,12 +280,13 @@ const CANVAS_PAD_BOTTOM = 40
 
 /* ========== 阶段身份色（仅用于标识，状态语义仍走绿/红） ========== */
 interface StageTone { hue: string; soft: string }
+// 色相统一走共享 token：紫/靛同色系合并为 --mk-purple，其余一一对应
 const STAGES: StageTone[] = [
-  { hue: '#4f46e5', soft: 'rgba(79, 70, 229, 0.1)' }, // 目标 · 靛蓝
-  { hue: '#0d9488', soft: 'rgba(13, 148, 136, 0.1)' }, // 路径 · 青
-  { hue: '#3478f6', soft: 'rgba(52, 120, 246, 0.1)' }, // 教学 · 品牌蓝
-  { hue: '#d97706', soft: 'rgba(217, 119, 6, 0.1)' }, // 学习者 · 琥珀
-  { hue: '#7c3aed', soft: 'rgba(124, 58, 237, 0.1)' } // 虚拟 · 紫罗兰
+  { hue: 'var(--mk-purple)', soft: 'rgba(79, 70, 229, 0.1)' }, // 目标 · 紫
+  { hue: 'var(--mk-teal)', soft: 'rgba(13, 148, 136, 0.1)' }, // 路径 · 青
+  { hue: 'var(--mk-blue)', soft: 'rgba(52, 120, 246, 0.1)' }, // 教学 · 品牌蓝
+  { hue: 'var(--mk-amber)', soft: 'rgba(217, 119, 6, 0.1)' }, // 学习者 · 琥珀
+  { hue: 'var(--mk-purple)', soft: 'rgba(124, 58, 237, 0.1)' } // 虚拟 · 紫（与目标合并同色系）
 ]
 const stageOf = (i: number): StageTone => STAGES[i] ?? STAGES[STAGES.length - 1]
 
@@ -665,13 +667,13 @@ const flows = computed(() => {
   flex-wrap: wrap;
 }
 .topo-status-dot {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 .topo-status-dot.is-ok {
-  background: #16a34a;
+  background: var(--mk-green);
   animation: tk-pulse 2.6s ease-out infinite;
 }
 .topo-status-dot.is-error { background: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14); }
@@ -683,7 +685,7 @@ const flows = computed(() => {
 .topo-toolbar__title { font-size: 13px; font-weight: 600; color: #16233c; }
 .topo-toolbar__sep { width: 1px; height: 14px; background: var(--mk-line); }
 .topo-toolbar__meta {
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--mk-faint);
@@ -700,7 +702,7 @@ const flows = computed(() => {
 }
 .topo-legend { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--mk-muted); }
 .lg { width: 7px; height: 7px; display: inline-block; border-radius: 50%; }
-.lg--ok { background: #16a34a; }
+.lg--ok { background: var(--mk-green); }
 .lg--idle { background: #c3cede; }
 .lg--err { background: #dc2626; }
 .topo-toolbar__vsep { width: 1px; height: 16px; background: var(--mk-line); }
@@ -798,6 +800,10 @@ const flows = computed(() => {
   height: 27px;
   font-size: 15px;
 }
+/* 窄屏：hint 与缩放控件同处底角会重叠，隐藏 hint（同文案工具栏已展示） */
+@media (max-width: 416px) {
+  .topo-hint { display: none; }
+}
 
 /* 空态 */
 .topo-empty {
@@ -817,7 +823,7 @@ const flows = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 16px;
+  border-radius: 12px;
   background: #fff;
   border: 1px dashed var(--mk-line);
   color: #b3c0d6;
@@ -967,7 +973,7 @@ const flows = computed(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #16a34a;
+  background: var(--mk-green);
   box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12);
 }
 .agent-card__dot.is-error {
@@ -1009,7 +1015,7 @@ const flows = computed(() => {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.agent-card__pct.is-ok { color: #16a34a; }
+.agent-card__pct.is-ok { color: var(--mk-green); }
 .agent-card__pct.is-warn { color: #b45309; }
 .agent-card__pct.is-bad { color: #dc2626; }
 
@@ -1082,11 +1088,11 @@ const flows = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.skill-card.is-idle .skill-card__name { color: #8a99b5; }
+.skill-card.is-idle .skill-card__name { color: var(--mk-faint); }
 .skill-card__meta {
   margin-top: 2px;
   font-size: 10.5px;
-  color: #8a99b5;
+  color: var(--mk-faint);
   font-variant-numeric: tabular-nums;
   padding-right: 22px;
 }
@@ -1115,7 +1121,8 @@ const flows = computed(() => {
   opacity: 0;
   transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
-.skill-card:hover .skill-card__go { opacity: 1; }
+.skill-card:hover .skill-card__go,
+.skill-card__go:focus-visible { opacity: 1; }
 .skill-card__go:hover {
   color: var(--hue);
   background: color-mix(in srgb, var(--hue) 10%, transparent);

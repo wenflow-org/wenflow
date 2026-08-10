@@ -37,6 +37,11 @@
         <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}<template v-if="dataSource === 'live'"> · 仅显示最近 100 条</template></span>
       </div>
 
+      <div v-if="loadFailed" class="ts-error" role="alert">
+        <span>教学会话加载失败</span>
+        <button type="button" class="mk-link" :disabled="refreshing" @click="refreshNow">{{ refreshing ? '重试中…' : '重试' }}</button>
+      </div>
+
       <div class="mk-table-scroll">
         <table v-if="filtered.length" class="mk-table">
           <thead>
@@ -47,7 +52,7 @@
               <th>互动</th>
               <th>产物</th>
               <th>关注</th>
-              <th style="text-align:right">详情</th>
+              <th class="mk-th--right">详情</th>
             </tr>
           </thead>
           <tbody>
@@ -256,8 +261,9 @@ const demoRows: Row[] = [
 
 const rows = ref<Row[]>([])
 const refreshing = ref(false)
+const loadFailed = ref(false)
 
-/* 静默拉取：live 模式成功即整表替换；失败保留旧数据（轮询不闪空态） */
+/* 静默拉取：live 模式成功即整表替换；失败保留旧数据（轮询不闪空态），并标记错误条 */
 async function fetchRows(): Promise<boolean> {
   if (dataSource.value !== 'live') return false
   try {
@@ -265,8 +271,10 @@ async function fetchRows(): Promise<boolean> {
     const body = res.data?.data ?? res.data ?? {}
     const items = body.items || []
     rows.value = items.map((s: Record<string, unknown>) => mapRow(s))
+    loadFailed.value = false
     return true
   } catch {
+    loadFailed.value = true
     return false
   }
 }
@@ -427,9 +435,22 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
 .ts-row { cursor: pointer; }
 /* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字） */
 .ts-row td:nth-child(3) .mk-badge { min-width: 60px; justify-content: center; }
-.ts-row:hover { background: #f6f9ff; }
 .ts-go { color: var(--mk-faint); font-weight: 700; }
 .ts-row:hover .ts-go { color: var(--mk-blue); }
+
+/* 加载失败错误条 */
+.ts-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 16px 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--mk-red-bg);
+  color: var(--mk-red);
+  font-size: 12.5px;
+  font-weight: 600;
+}
 
 .ts-mask {
   position: fixed;
@@ -460,7 +481,7 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
   border-bottom: 1px solid #e1e8f2;
 }
 .ts-panel__title { display: grid; gap: 6px; justify-items: start; }
-.ts-panel__title h3 { margin: 0; font-size: 17px; }
+.ts-panel__title h3 { margin: 0; font-size: 16px; }
 .ts-panel__id { font-family: var(--mk-mono); font-size: 10.5px; color: #8492ab; word-break: break-all; }
 .ts-panel__close { border: 0; background: #f0f2f5; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; color: #5b6577; }
 .ts-panel__body { padding: 16px 18px; display: grid; gap: 16px; align-content: start; overflow-y: auto; }

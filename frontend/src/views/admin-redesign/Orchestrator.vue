@@ -556,7 +556,7 @@ const stageTitle = computed(() => {
   gap: 14px;
   flex-wrap: wrap;
   padding: 12px 14px;
-  border-radius: 11px;
+  border-radius: 12px;
   background: linear-gradient(180deg, #fbfcfe, #f7f9fc);
   border: 1px solid var(--mk-line);
 }
@@ -656,7 +656,7 @@ const stageTitle = computed(() => {
   gap: 10px;
   padding: 11px 12px;
   border: 1px solid var(--mk-line);
-  border-radius: 11px;
+  border-radius: 12px;
   background: var(--mk-surface);
   cursor: pointer;
   transition: border-color 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease;

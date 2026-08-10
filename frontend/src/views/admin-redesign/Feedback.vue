@@ -60,7 +60,7 @@
               <th>策略</th>
               <th>状态</th>
               <th>时间</th>
-              <th style="text-align: right">操作</th>
+              <th class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -89,6 +89,12 @@
             </tr>
           </tbody>
         </table>
+        </div>
+        <div v-else-if="loadFailed" class="mk-empty">
+          <span class="mk-empty__icon" aria-hidden="true">◌</span>
+          <strong>反馈数据加载失败</strong>
+          <span>无法从后端拉取反馈列表。</span>
+          <button type="button" class="mk-empty__action" @click="load">重试</button>
         </div>
         <div v-else class="mk-empty">
           <span v-if="!loading" class="mk-empty__icon" aria-hidden="true">◌</span>
@@ -204,6 +210,8 @@ interface Detail extends Row {
 }
 
 const loading = ref(false)
+/** live 拉取失败 → 行内错误态（区别于真正无数据的空态） */
+const loadFailed = ref(false)
 const saving = ref(false)
 const rows = ref<Row[]>([])
 const total = ref(0)
@@ -263,6 +271,7 @@ const filtered = computed(() => {
 async function load() {
   if (!isLive.value || loading.value) return
   loading.value = true
+  loadFailed.value = false
   try {
     const [listRes, newRes, trendRes] = await Promise.all([
       adminFeedbackApi.list({ limit: 100 }),
@@ -276,6 +285,7 @@ async function load() {
     const trend = trendRes?.data?.data ?? trendRes?.data
     recent30.value = Array.isArray(trend) ? trend.reduce((s: number, d: Record<string, unknown>) => s + Number(d.count || d.total || 0), 0) : null
   } catch (e) {
+    loadFailed.value = true
     toast.error(`加载失败：${errMsg(e)}`)
   } finally {
     loading.value = false
@@ -360,7 +370,16 @@ onMounted(() => {
   color: var(--mk-muted);
 }
 .fb-agent { font-size: 11px; color: var(--mk-muted); }
-.fb-strategy { font-size: 11.5px; color: var(--mk-muted); }
+.fb-strategy {
+  display: inline-block;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  font-size: 11.5px;
+  color: var(--mk-muted);
+}
 
 /* 处理面板 */
 .fb-mask {
@@ -414,6 +433,10 @@ onMounted(() => {
 .fb-facts span { font-size: 11px; color: var(--mk-faint); font-weight: 600; }
 .fb-facts strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+@media (max-width: 560px) {
+  .fb-facts { grid-template-columns: repeat(2, 1fr); }
+}
+
 .fb-section { display: grid; gap: 8px; }
 .fb-section h4 {
   margin: 0;
@@ -456,7 +479,11 @@ onMounted(() => {
   font-weight: 700;
   cursor: pointer;
 }
-.fb-btn--green { background: var(--mk-green); }
+.fb-btn--green {
+  background: transparent;
+  border: 1px solid var(--mk-green);
+  color: var(--mk-green);
+}
 .fb-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 .fb-btn-muted {
   padding: 8px 12px;

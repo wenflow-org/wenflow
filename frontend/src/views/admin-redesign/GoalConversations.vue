@@ -54,7 +54,7 @@
               <th>阶段</th>
               <th>路径</th>
               <th>创建时间</th>
-              <th style="text-align: right">操作</th>
+              <th class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -79,8 +79,8 @@
                     {{ r.regenerating ? '生成中…' : '重建路径' }}
                   </button>
                   <div class="mk-menu">
-                    <button type="button" class="mk-menu__btn" aria-label="更多操作" @click.stop="toggleMenu(r.id)">⋯</button>
-                    <div v-if="openMenu === r.id" class="mk-menu__pop" @click.stop>
+                    <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(r.id)">⋯</button>
+                    <div v-if="openMenu === r.id" class="mk-menu__pop" :style="popStyle" @click.stop>
                       <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuRemove(r)">删除会话</button>
                     </div>
                   </div>
@@ -91,7 +91,9 @@
         </table>
         </div>
         <div v-else class="mk-empty">
+          <span v-if="!loading" class="mk-empty__icon" aria-hidden="true">◌</span>
           <strong>{{ loading ? '加载中…' : (keyword || statusFilter ? '当前筛选无匹配' : '暂无会话') }}</strong>
+          <span v-if="!loading">{{ keyword || statusFilter ? '放宽筛选条件试试。' : '虚拟学习者发起目标对话后，会话记录会出现在这里。' }}</span>
         </div>        <div v-if="canMore" class="gc-more">
           <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
         </div>
@@ -268,7 +270,7 @@ const detailConfidence = computed(() => {
 })
 
 useEscape(() => !!detail.value, closeDetail)
-const { openMenu, toggleMenu, closeMenu } = useRowMenu()
+const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
 
 /** 菜单项执行：先关菜单再执行（避免菜单残留与整行点击冒泡） */
 function menuRemove(r: Row) {
@@ -683,29 +685,29 @@ onMounted(() => {
 }
 
 .gc-actions { display: flex; gap: 8px; }
+/* 按钮规格对齐 .mk-btn（8x16 / 12.5px）；危险操作实心红（与 .mk-btn--danger 一致） */
 .gc-btn-primary {
-  padding: 8px 14px;
+  padding: 8px 16px;
   border-radius: 8px;
   border: 0;
   background: var(--mk-blue);
   color: #fff;
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.12s ease;
 }
 .gc-btn-primary:hover:not(:disabled) { background: #2b64d8; }
 .gc-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-/* 删除：实心红（与确认对话框 danger 按钮一致），危险操作视觉权重明确 */
 .gc-btn-danger {
-  padding: 8px 14px;
+  padding: 8px 16px;
   border-radius: 8px;
-  border: 1px solid var(--mk-red);
-  background: var(--mk-red);
+  border: 1px solid var(--mk-red-strong, var(--mk-red));
+  background: var(--mk-red-strong, var(--mk-red));
   color: #fff;
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.12s ease;

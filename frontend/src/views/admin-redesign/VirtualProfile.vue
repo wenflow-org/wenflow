@@ -28,6 +28,12 @@
       </div>
     </header>
 
+    <!-- 详情接口失败但有列表兜底：明确提示，避免静默降级 -->
+    <div v-if="fallbackNotice" class="vp-fallback">
+      <span>详情加载失败，正在展示列表缓存数据</span>
+      <button type="button" class="mk-link" @click="loadDetail(subPage?.id)">重试</button>
+    </div>
+
 
     <!-- 统计条：故事/运行/进行中 + 长期倾向（KPI 卡片风格） -->
     <div class="vp-overview">
@@ -284,9 +290,10 @@
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="editOpen = false">✕</button>
         </div>
         <div class="mk-modal__body">
-          <label class="mk-field">
+          <label class="mk-field" :class="{ 'mk-field--error': editErrors.name }">
             <span class="mk-field__label">名称</span>
             <input v-model="editForm.name" class="mk-field__input" />
+            <span v-if="editErrors.name" class="mk-field__err">{{ editErrors.name }}</span>
           </label>
           <label class="mk-field">
             <span class="mk-field__label">长期倾向（可选，非故事目标）</span>
@@ -401,6 +408,8 @@ const stories = ref<StoryItem[]>([])
 const selectedStoryId = ref<string | null>(null)
 /** 详情加载失败（无列表兜底数据时）→ 明确错误态 + 重试 */
 const detailError = ref(false)
+/** 详情接口失败但有列表兜底 → 展示兜底数据 + 提示条（区别于 detailError 全失败态） */
+const fallbackNotice = ref(false)
 
 /* 分页：故事池是主工作区（默认页），画像/运行/验收各归其页 */
 type ProfileTab = 'stories' | 'runs' | 'profile' | 'verify'
@@ -476,6 +485,7 @@ const projecting = ref(false)
 const quickLearnOpen = ref(false)
 const editOpen = ref(false)
 const editForm = ref({ name: '', goal: '', level: 'beginner', notes: '' })
+const editErrors = ref<{ name?: string }>({})
 useEscape(() => editOpen.value, () => { editOpen.value = false })
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
@@ -551,6 +561,7 @@ async function loadDetail(id?: string) {
   liveDetail.value = null
   stories.value = []
   detailError.value = false
+  fallbackNotice.value = false
   try {
     const [raw, storiesRes] = await Promise.all([
       liveGetVirtualDetail(id) as Promise<Record<string, unknown>>,
@@ -611,6 +622,7 @@ async function loadDetail(id?: string) {
   } catch {
     const base = liveVirtuals.value.find((v) => v.id === id)
     if (base) {
+      fallbackNotice.value = true
       liveDetail.value = {
         name: base.name,
         archetype: '自定义样本',
@@ -645,14 +657,16 @@ function openEdit() {
     level: liveDetail.value.level,
     notes: liveDetail.value.notes || liveDetail.value.story
   }
+  editErrors.value = {}
   editOpen.value = true
 }
 
 async function saveProfile() {
   const id = subPage.value?.id
   if (!id || saving.value) return
+  editErrors.value = {}
   if (!editForm.value.name.trim()) {
-    toast.info('请填写画像名称')
+    editErrors.value.name = '请填写画像名称'
     return
   }
   saving.value = true
@@ -1250,6 +1264,19 @@ function formatRunResult(result: string) {
   color: #1f57cc;
   font-size: 13px;
   line-height: 1.6;
+}
+.vp-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--mk-amber-bg);
+  border: 1px solid rgba(180, 83, 9, 0.25);
+  color: var(--mk-amber);
+  font-size: 12.5px;
+  font-weight: 600;
 }
 .mk-link--danger { color: var(--mk-red, #dc2626); }
 

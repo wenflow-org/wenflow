@@ -27,7 +27,7 @@
               <th>超时</th>
               <th>配置</th>
               <th>最近调用</th>
-              <th style="text-align:right">操作</th>
+              <th class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -88,12 +88,18 @@
             <span v-if="testResult?.id === t.id" class="ac-mcp__test" :class="testResult.ok ? 'is-ok' : 'is-bad'">
               {{ testResult.ok ? `通过 · ${testResult.latencyMs}ms` : `失败 · ${testResult.error || ''}` }}
             </span>
-            <button type="button" class="mk-link" @click="openToolEdit(t)">编辑</button>
-            <button type="button" class="mk-link mk-link--danger" @click="removeTool(t)">删除</button>
+            <div class="mk-menu">
+              <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(t.id)">⋯</button>
+              <div v-if="openMenu === t.id" class="mk-menu__pop" :style="popStyle" @click.stop>
+                <button type="button" class="mk-menu__item" @click="menuEdit(t)">编辑</button>
+                <div class="mk-menu__sep"></div>
+                <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuRemove(t)">删除</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-      <div v-else class="mk-empty" style="padding: 24px 16px">
+      <div v-else class="mk-empty mk-empty--compact">
         <strong>{{ loading ? '加载中…' : '暂无 MCP 服务' }}</strong>
         <span v-if="!loading">MCP 工具（如网页搜索、生图）在此登记，供外挂能力调用。</span>
       </div>
@@ -164,6 +170,7 @@ import { adminSkillsApi, adminMcpApi } from '@/api/adminApi'
 import { EXTRA_COMPONENT_VISIBLE_SKILLS, EXTRA_CAPABILITY_META } from '@/views/admin/capabilityCatalog'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
+import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 
@@ -369,6 +376,19 @@ async function removeTool(t: McpTool) {
 const testingId = ref('')
 const testResult = ref<{ id: string; ok: boolean; latencyMs?: number; error?: string } | null>(null)
 
+/* 行内 ⋯ 菜单：编辑/删除收进菜单，测试（带行内结果）保持平铺 */
+const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
+
+function menuEdit(t: McpTool) {
+  closeMenu()
+  openToolEdit(t)
+}
+
+function menuRemove(t: McpTool) {
+  closeMenu()
+  void removeTool(t)
+}
+
 async function testTool(t: McpTool) {
   if (testingId.value) return
   testingId.value = t.id
@@ -433,11 +453,35 @@ function goConfig() {
 .ac-mcp__endpoint {
   font-size: 11px;
   color: var(--mk-faint);
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .ac-mcp__formrow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* 窄屏：MCP 行两行重排（状态点/名称/徽标一行，类型/endpoint 次行，操作收底行） */
+@media (max-width: 700px) {
+  .ac-mcp__row {
+    grid-template-columns: 10px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'dot main badge'
+      '. type endpoint'
+      '. actions actions';
+    row-gap: 5px;
+    column-gap: 12px;
+    padding: 12px 16px;
+  }
+  .ac-mcp__dot { grid-area: dot; }
+  .ac-mcp__main { grid-area: main; }
+  .ac-mcp__type { grid-area: type; }
+  .ac-mcp__endpoint { grid-area: endpoint; }
+  .ac-mcp__row .mk-badge { grid-area: badge; }
+  .ac-mcp__row .mk-actions { grid-area: actions; }
+}
+@media (max-width: 800px) {
+  .ac-mcp__formrow { grid-template-columns: 1fr; }
+}
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {

@@ -22,12 +22,14 @@
             type="button"
             class="wf-mode__btn"
             :class="{ 'wf-mode__btn--on': viewMode === 'trace' }"
+            :aria-pressed="viewMode === 'trace'"
             @click="viewMode = 'trace'"
           >链路</button>
           <button
             type="button"
             class="wf-mode__btn"
             :class="{ 'wf-mode__btn--on': viewMode === 'session' }"
+            :aria-pressed="viewMode === 'session'"
             @click="viewMode = 'session'"
           >会话</button>
         </span>
@@ -83,7 +85,7 @@
         class="wf-row"
         :class="{ 'wf-row--open': openSpanId === span.id, 'wf-row--err': span.status === 'err' }"
       >
-        <button type="button" class="wf-row__main" @click="openSpanId = openSpanId === span.id ? '' : span.id">
+        <button type="button" class="wf-row__main" :aria-expanded="openSpanId === span.id" @click="openSpanId = openSpanId === span.id ? '' : span.id">
           <span class="wf-row__stage">
             <span class="wf-row__kind" :class="`wf-row__kind--${span.kind}`">{{ span.kind === 'flow' ? '流程' : '调用' }}</span>
             <span class="wf-row__stage-body">
@@ -616,7 +618,7 @@ const verdictText = computed(() => {
 }
 .wf-row__kind {
   padding: 1px 6px;
-  border-radius: 5px;
+  border-radius: 4px;
   font-size: 10px;
   font-weight: 700;
   flex-shrink: 0;
@@ -650,7 +652,7 @@ const verdictText = computed(() => {
   font-size: 10.5px;
   color: var(--mk-faint);
   background: #f0f2f5;
-  border-radius: 5px;
+  border-radius: 4px;
   padding: 1px 6px;
   white-space: nowrap;
 }
@@ -660,7 +662,7 @@ const verdictText = computed(() => {
   font-weight: 700;
   color: #dc2626;
   background: rgba(220, 38, 38, 0.08);
-  border-radius: 5px;
+  border-radius: 4px;
   padding: 1px 6px;
   white-space: nowrap;
 }
@@ -669,7 +671,7 @@ const verdictText = computed(() => {
   font-weight: 700;
   color: var(--mk-amber);
   background: rgba(217, 119, 6, 0.1);
-  border-radius: 5px;
+  border-radius: 4px;
   padding: 1px 6px;
   white-space: nowrap;
 }
@@ -681,7 +683,7 @@ const verdictText = computed(() => {
   font-size: 11px;
   color: var(--mk-muted);
   background: #f0f2f5;
-  border-radius: 6px;
+  border-radius: 4px;
   padding: 2px 8px;
 }
 .wf-fact--bad { color: #dc2626; background: rgba(220, 38, 38, 0.08); }
@@ -753,6 +755,12 @@ const verdictText = computed(() => {
 }
 .wf-verdict strong { font-size: 12px; color: var(--mk-red); }
 .wf-verdict p { margin: 0; font-size: 12.5px; color: var(--mk-muted); line-height: 1.6; }
+
+/* 窄屏：左列 280 → 180，阶段名已有 ellipsis 兜底 */
+@media (max-width: 860px) {
+  .wf-ruler { grid-template-columns: 180px 1fr; }
+  .wf-row__main { grid-template-columns: 180px 1fr auto; gap: 8px; }
+}
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {

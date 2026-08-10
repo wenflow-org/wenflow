@@ -16,35 +16,37 @@
           <span class="frt__agentdesc">{{ agent.description }}</span>
           <span class="frt__agentcount">{{ routingsOf(agent.agentId).length }} 行</span>
         </div>
-        <table class="frt__table">
-          <thead>
-            <tr>
-              <th>字段</th>
-              <th>类型</th>
-              <th>角色</th>
-              <th>render</th>
-              <th>handoff</th>
-              <th>internal</th>
-              <th>accumulate</th>
-              <th>锁定</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in routingsOf(agent.agentId)" :key="row.id">
-              <td class="mono frt__field">{{ row.fieldId }}</td>
-              <td class="mono">{{ typeOf(row.fieldId) }}</td>
-              <td><span class="frt__role">{{ roleOf(row.fieldId) }}</span></td>
-              <td><span class="mono frt__render">{{ row.render }}</span></td>
-              <td><span class="mono frt__handoff">{{ formatHandoff(row.handoff) }}</span></td>
-              <td>{{ row.internal ? '是' : '否' }}</td>
-              <td>{{ row.accumulate ? '是' : '否' }}</td>
-              <td><span class="frt__lock" :class="`frt__lock--${row.locks?.level || 'editable'}`">{{ lockLabel(row.locks?.level) }}</span></td>
-            </tr>
-            <tr v-if="routingsOf(agent.agentId).length === 0">
-              <td colspan="8" class="frt__emptyrow">该 Agent 无字段路由行</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="frt__scroll">
+          <table class="frt__table">
+            <thead>
+              <tr>
+                <th scope="col">字段</th>
+                <th scope="col">类型</th>
+                <th scope="col">角色</th>
+                <th scope="col">render</th>
+                <th scope="col">handoff</th>
+                <th scope="col">internal</th>
+                <th scope="col">accumulate</th>
+                <th scope="col">锁定</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in routingsOf(agent.agentId)" :key="row.id">
+                <td class="mono frt__field">{{ row.fieldId }}</td>
+                <td class="mono">{{ typeOf(row.fieldId) }}</td>
+                <td><span class="frt__role">{{ roleOf(row.fieldId) }}</span></td>
+                <td><span class="mono frt__render">{{ row.render }}</span></td>
+                <td><span class="mono frt__handoff">{{ formatHandoff(row.handoff) }}</span></td>
+                <td>{{ row.internal ? '是' : '否' }}</td>
+                <td>{{ row.accumulate ? '是' : '否' }}</td>
+                <td><span class="frt__lock" :class="`frt__lock--${row.locks?.level || 'editable'}`">{{ lockLabel(row.locks?.level) }}</span></td>
+              </tr>
+              <tr v-if="routingsOf(agent.agentId).length === 0">
+                <td colspan="8" class="frt__emptyrow">该 Agent 无字段路由行</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </template>
 
@@ -248,8 +250,8 @@ watch(() => props.stage, () => void loadStage());
   line-height: 1.55;
 }
 .frt__toolbar-btn {
-  padding: 6px 14px;
-  border: 1px solid rgba(52, 120, 246, 0.5);
+  padding: 8px 16px;
+  border: 1px solid var(--mk-line, #e6ebf4);
   border-radius: 8px;
   background: var(--mk-surface, #fff);
   color: var(--mk-blue, #3478f6);
@@ -257,9 +259,9 @@ watch(() => props.stage, () => void loadStage());
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.14s ease, color 0.14s ease;
+  transition: background 0.14s ease, border-color 0.14s ease;
 }
-.frt__toolbar-btn:hover { background: #f0f5ff; }
+.frt__toolbar-btn:hover { background: #f6f9ff; border-color: rgba(52, 120, 246, 0.4); }
 .frt__toolbar-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .frt__toolbar-hint { color: var(--mk-faint, #71809a); font-size: 12px; }
 .frt__orch-panel { width: min(820px, 100%); }
@@ -309,6 +311,12 @@ watch(() => props.stage, () => void loadStage());
 .frt__agentdesc { color: var(--mk-faint, #71809a); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .frt__agentcount { margin-left: auto; padding: 1px 9px; border-radius: 999px; background: #eef2fa; color: var(--mk-muted, #5b6577); font-size: 11px; font-weight: 700; white-space: nowrap; }
 .frt__table { width: 100%; border-collapse: collapse; }
+/* 8 列表格：窄屏横向滚动（≤860px 设最小宽度，列不被挤压） */
+.frt__scroll { overflow-x: auto; }
+@media (max-width: 860px) {
+  .frt__table { min-width: 720px; }
+  .frt__table th, .frt__table td { padding: 7px 9px; }
+}
 .frt__table th, .frt__table td { padding: 8px 12px; text-align: left; }
 .frt__table th {
   background: #fafbfc;
@@ -327,7 +335,7 @@ watch(() => props.stage, () => void loadStage());
 .frt__field { max-width: 300px; word-break: break-all; color: var(--mk-ink, #1a2a44); }
 .frt__role { display: inline-block; padding: 1px 8px; border-radius: 999px; background: #f0f2f5; color: var(--mk-muted, #5b6577); font-size: 11px; font-weight: 600; }
 .frt__render { color: var(--mk-ink, #1a2a44); }
-.frt__handoff { max-width: 220px; color: var(--mk-faint, #71809a); }
+.frt__handoff { max-width: 220px; color: var(--mk-faint, #71809a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .frt__lock { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .frt__lock--system-locked { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .frt__lock--structure-locked { background: var(--mk-amber-bg, #fffbeb); color: var(--mk-amber, #b45309); border: 1px dashed rgba(180, 83, 9, 0.45); }

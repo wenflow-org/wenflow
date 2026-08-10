@@ -24,9 +24,9 @@
             <th>样本</th>
             <th>长期倾向</th>
             <th>故事池</th>
-            <th>会话</th>
+            <th class="mk-th--right">会话</th>
             <th>创建</th>
-            <th style="text-align:right">操作</th>
+            <th class="mk-th--right">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -59,8 +59,8 @@
                   运行
                 </button>
                 <div v-if="isLive" class="mk-menu">
-                  <button type="button" class="mk-menu__btn" aria-label="更多操作" @click.stop="toggleMenu(s.id)">⋯</button>
-                  <div v-if="openMenu === s.id" class="mk-menu__pop" @click.stop>
+                  <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(s.id)">⋯</button>
+                  <div v-if="openMenu === s.id" class="mk-menu__pop" :style="popStyle" @click.stop>
                     <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="s.busy" @click="menuRemove(s)">删除</button>
                   </div>
                 </div>
@@ -71,6 +71,12 @@
       </table>
       </div>
 
+      <div v-else-if="loadFailed" class="mk-empty">
+        <span class="mk-empty__icon" aria-hidden="true">◌</span>
+        <strong>虚拟学习者加载失败</strong>
+        <span>无法从后端拉取样本列表。</span>
+        <button type="button" class="mk-empty__action" @click="retryLoad">重试</button>
+      </div>
       <div v-else class="mk-empty">
         <strong>{{ samples.length ? '没有匹配的样本' : '暂无虚拟学习者' }}</strong>
         <span>新建虚拟人后，在画像页生成故事即可运行。</span>
@@ -189,7 +195,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { openSubPage, intent, isLive } from './store'
-import { liveVirtuals, liveCreateVirtual, liveDeleteVirtual, timeAgo, errMsg } from './live'
+import { liveVirtuals, liveCreateVirtual, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -232,6 +238,13 @@ const samples = computed<Sample[]>(() => {
 })
 
 const keyword = ref('')
+/** live 虚拟人域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
+const loadFailed = computed(
+  () => isLive.value && !liveLoading.value && !!liveFailures.value.virtuals && !liveVirtuals.value.length
+)
+function retryLoad() {
+  void loadLiveData()
+}
 const filtered = computed(() => {
   const q = keyword.value.trim().toLowerCase()
   if (!q) return samples.value
@@ -358,7 +371,7 @@ const launchTarget = ref<Sample | null>(null)
 useEscape(() => createOpen.value, () => { createOpen.value = false })
 useEscape(() => !!launchTarget.value, () => { launchTarget.value = null })
 
-const { openMenu, toggleMenu, closeMenu } = useRowMenu()
+const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
 /** 行内 ⋯ 菜单项：先关菜单再执行 */
 function menuRemove(s: Sample) {
   closeMenu()
@@ -479,10 +492,8 @@ const totalSessions = computed(() => samples.value.reduce((a, s) => a + s.sessio
 </script>
 
 <style scoped>
-.mk-link--danger { color: var(--mk-red, #dc2626); }
 .mk-link--muted { opacity: 0.55; }
 .vl-row { cursor: pointer; }
-.vl-row:hover { background: #f6f9ff; }
 .vl-steps {
   margin: 0 0 4px;
   padding: 8px 10px;
@@ -539,21 +550,5 @@ const totalSessions = computed(() => samples.value.reduce((a, s) => a + s.sessio
 .vl-advanced summary::-webkit-details-marker { display: none; }
 .vl-advanced[open] summary { margin-bottom: 8px; }
 .vl-advanced .mk-field { margin-bottom: 0; }
-.mk-btn--ghost {
-  border: 1px solid rgba(52, 120, 246, 0.28);
-  background: #eef5ff;
-  color: var(--mk-blue, #1f57cc);
-  font-weight: 700;
-}
-.mk-btn--ghost:hover:not(:disabled) {
-  background: #dbeafe;
-}
-.mk-btn--ghost:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
 
-/* 数值列（会话）表头与单元格居中 */
-.mk-table td.mk-num,
-.mk-table th:nth-child(4) { text-align: center; }
 </style>

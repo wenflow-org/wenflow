@@ -21,7 +21,7 @@
             <th>状态</th>
             <th>发布</th>
             <th>过期</th>
-            <th style="text-align:right">操作</th>
+            <th class="mk-th--right">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -43,12 +43,24 @@
                 <button v-if="r.status !== 'published'" type="button" class="mk-link" :disabled="r.busy" @click="publish(r)">发布</button>
                 <button v-if="r.status === 'published'" type="button" class="mk-link" :disabled="r.busy" @click="archive(r)">下线</button>
                 <button type="button" class="mk-link" :disabled="r.busy" @click="openEdit(r)">编辑</button>
-                <button type="button" class="mk-link mk-link--danger" :disabled="r.busy" @click="remove(r)">删除</button>
+                <div class="mk-menu">
+                  <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(r.id)">⋯</button>
+                  <div v-if="openMenu === r.id" class="mk-menu__pop" :style="popStyle" @click.stop>
+                    <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="r.busy" @click="menuRemove(r)">删除</button>
+                  </div>
+                </div>
               </div>
             </td>
           </tr>
         </tbody>
       </table>
+      </div>
+
+      <div v-else-if="liveFailed" class="mk-empty">
+        <span class="mk-empty__icon" aria-hidden="true">!</span>
+        <strong>公告加载失败</strong>
+        <span>无法从服务读取公告列表。</span>
+        <button type="button" class="mk-empty__action" :disabled="liveRetrying" @click="retryLive">{{ liveRetrying ? '重试中…' : '重试' }}</button>
       </div>
 
       <div v-else class="mk-empty">
@@ -122,11 +134,14 @@ import {
   livePublishAnnouncement,
   liveArchiveAnnouncement,
   liveDeleteAnnouncement,
+  liveFailures,
   timeAgo,
   errMsg
 } from './live'
+import { adminAnnouncementsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
+import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 
@@ -177,6 +192,50 @@ const demoList = ref<Row[]>([])
 
 const rows = computed<Row[]>(() => (isLive.value ? liveAnnouncements.value : demoList.value))
 
+/* live 拉取失败态：liveFailures 由 store 的 loadLiveData 填充（announcements 域失败时置位） */
+const liveFailed = ref(false)
+const liveRetrying = ref(false)
+
+watch(
+  liveFailures,
+  () => {
+    liveFailed.value = isLive.value && !!liveFailures.value.announcements
+  },
+  { deep: true, immediate: true }
+)
+
+/** 重试公告拉取：页面内直连 API，成功后写回 store（同步侧栏徽章）并清除失败标记 */
+async function retryLive() {
+  if (liveRetrying.value) return
+  liveRetrying.value = true
+  try {
+    const res = await adminAnnouncementsApi.list()
+    const body = res.data?.data ?? res.data ?? {}
+    const items = body.items || []
+    liveAnnouncements.value = items.map((a: Record<string, unknown>) => ({
+      id: String(a.id),
+      title: String(a.title || ''),
+      body: String(a.body || ''),
+      severity: (a.severity as Row['severity']) || 'info',
+      status: (a.status as Row['status']) || 'draft',
+      publishedAt: (a.publishedAt as string) || null,
+      expiresAt: (a.expiresAt as string) || null,
+      createdBy: (a.createdBy as string) || null,
+      createdAt: String(a.createdAt || '')
+    }))
+    const next = { ...liveFailures.value }
+    delete next.announcements
+    liveFailures.value = next
+    liveFailed.value = false
+    toast.success('公告列表已刷新')
+  } catch (e) {
+    liveFailed.value = true
+    toast.error(`加载失败：${errMsg(e)}`)
+  } finally {
+    liveRetrying.value = false
+  }
+}
+
 watch(
   () => dataSource.value,
   (src) => {
@@ -193,6 +252,13 @@ const draftCount = computed(() => rows.value.filter((r) => r.status === 'draft')
 const archivedCount = computed(() => rows.value.filter((r) => r.status === 'archived').length)
 
 /* 操作 */
+const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
+
+/** 菜单项执行：先关菜单再执行（避免菜单残留） */
+function menuRemove(r: Row) {
+  closeMenu()
+  void remove(r)
+}
 
 async function publish(r: Row) {
   r.busy = true
@@ -397,7 +463,6 @@ function fmtDate(iso: string | null): string {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.mk-link--danger { color: var(--mk-red, #dc2626); }
 .an-severity { display: flex; gap: 6px; }
 .an-sev {
   padding: 6px 14px;
@@ -410,7 +475,7 @@ function fmtDate(iso: string | null): string {
   color: var(--mk-muted);
   cursor: pointer;
 }
-.an-sev--on.an-sev--info { border-color: var(--mk-blue); color: var(--mk-blue); background: #eef5ff; }
+.an-sev--on.an-sev--info { border-color: var(--mk-blue); color: var(--mk-blue); background: var(--mk-blue-bg, #eef5ff); }
 .an-sev--on.an-sev--warning { border-color: var(--mk-amber); color: var(--mk-amber); background: var(--mk-amber-bg); }
 .an-sev--on.an-sev--critical { border-color: var(--mk-red); color: var(--mk-red); background: var(--mk-red-bg); }
 .an-publish-now { display: flex; align-items: center; gap: 8px; }

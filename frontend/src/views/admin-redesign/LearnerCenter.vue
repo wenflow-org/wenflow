@@ -30,7 +30,14 @@
         <span class="mk-card__meta">先找有问题的人</span>
       </div>
 
-      <div v-if="filtered.length" class="mk-table-scroll">
+      <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="8" />
+      <div v-else-if="loadFailed" class="mk-empty">
+        <span class="mk-empty__icon" aria-hidden="true">◌</span>
+        <strong>学习者快照加载失败</strong>
+        <span>无法从后端拉取学习者状态。</span>
+        <button type="button" class="mk-empty__action" @click="retryLoad">重试</button>
+      </div>
+      <div v-else-if="filtered.length" class="mk-table-scroll">
       <table class="mk-table">
         <thead>
           <tr>
@@ -41,7 +48,7 @@
             <th title="快照置信度：模型对该学习者状态的把握程度，低于 50% 为低置信">置信</th>
             <th>风险摘要</th>
             <th>更新</th>
-            <th style="text-align:right">操作</th>
+            <th class="mk-th--right">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -98,9 +105,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { openSubPage, isLive } from './store'
-import { liveLearners, liveRecomputeLearner, timeAgo, errMsg } from './live'
+import { liveLearners, liveRecomputeLearner, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg } from './live'
 import { useLoadMore } from './useLoadMore'
+import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
+import MockSkeletonTable from './SkeletonTable.vue'
 
 interface Row {
   id: string
@@ -183,6 +192,14 @@ const filtered = computed(() => {
 const statusTone = computed(() => (!rows.value.length ? 'mk-status--muted' : riskCount.value > 0 ? 'mk-status--warn' : 'mk-status--ok'))
 const statusTitle = computed(() => (!rows.value.length ? '还没有学习者快照' : riskCount.value > 0 ? `${riskCount.value} 位学习者需要关注` : '学习者状态平稳'))
 
+/** live 学习者域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
+const loadFailed = computed(
+  () => isLive.value && !liveLoading.value && !!liveFailures.value.learners && !liveLearners.value.length
+)
+function retryLoad() {
+  void loadLiveData()
+}
+
 /* 长列表分批渲染：每批 15 行 */
 const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
 
@@ -219,6 +236,13 @@ async function recompute(row: Row) {
 
 async function recomputeAll() {
   if (recomputingAll.value || !rows.value.length) return
+  const ok = await askConfirm({
+    title: '全部重算快照',
+    message: `确认重算全部 ${rows.value.length} 位学习者的快照？将逐个重新生成，耗时取决于人数。`,
+    confirmText: '全部重算',
+    danger: false
+  })
+  if (!ok) return
   recomputingAll.value = true
   recomputeProgress.value = 0
   if (isLive.value) {
@@ -250,7 +274,6 @@ async function recomputeAll() {
 
 <style scoped>
 .lc-row { cursor: pointer; }
-.lc-row:hover { background: #f6f9ff; }
 .trend { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .trend--up { color: var(--mk-green); }
 .trend--down { color: var(--mk-red); }
