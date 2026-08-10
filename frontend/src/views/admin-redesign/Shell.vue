@@ -38,6 +38,7 @@
           <span class="mshell__crumb-group">{{ currentScene?.group }}</span>
           <span class="mshell__crumb-sep">/</span>
           <strong>{{ currentScene?.label }}</strong>
+          <span v-if="dataSource === 'demo'" class="mk-badge mk-badge--warn mshell__demo-badge">演示模式</span>
           <template v-if="crumb">
             <span class="mshell__crumb-sep">/</span>
             <span class="mshell__crumb-sub">{{ crumb }}</span>
@@ -193,7 +194,7 @@ const groupedScenes = computed(() => {
 .mshell {
   display: grid;
   grid-template-columns: 208px minmax(0, 1fr);
-  min-height: 720px;
+  min-height: max(720px, 100dvh);
   background: #f6f8fc;
   color: #1a2a44;
   font-size: 13px;
@@ -236,7 +237,7 @@ const groupedScenes = computed(() => {
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: #8492ab;
+  color: var(--mk-faint);
 }
 .mshell__group { display: grid; gap: 1px; }
 .mshell__item {
@@ -282,7 +283,7 @@ const groupedScenes = computed(() => {
   padding: 1px 7px;
   border-radius: 999px;
   background: #eef2fa;
-  color: #8492ab;
+  color: var(--mk-faint);
   font-size: 10.5px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -304,7 +305,7 @@ const groupedScenes = computed(() => {
   gap: 8px;
   padding: 8px 10px;
   border-top: 1px solid #eef2fa;
-  color: #8492ab;
+  color: var(--mk-faint);
   font-size: 11.5px;
 }
 .mshell__kbd {
@@ -330,13 +331,13 @@ const groupedScenes = computed(() => {
   border-bottom: 1px solid #e1e8f2;
 }
 .mshell__crumbs { display: flex; align-items: center; gap: 8px; }
-.mshell__crumb-group { color: #8492ab; font-size: 12px; font-weight: 600; }
+.mshell__crumb-group { color: var(--mk-faint); font-size: 12px; font-weight: 600; }
 .mshell__crumb-sep { color: #c3cede; margin: 0 2px; }
 .mshell__crumb-sub {
   color: #3478f6;
   font-size: 12px;
   font-weight: 700;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--mk-mono);
   max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -350,7 +351,7 @@ const groupedScenes = computed(() => {
   border: 1px solid #e1e8f2;
   border-radius: 8px;
   background: #fafbfc;
-  color: #8492ab;
+  color: var(--mk-faint);
   font: inherit;
   font-size: 12px;
   cursor: pointer;
@@ -376,7 +377,7 @@ const groupedScenes = computed(() => {
   transition: color 0.15s ease, border-color 0.15s ease;
 }
 .mshell__refresh:hover:not(:disabled) { color: #3478f6; border-color: rgba(52, 120, 246, 0.4); }
-.mshell__refresh:disabled { cursor: default; color: #8492ab; }
+.mshell__refresh:disabled { cursor: default; color: var(--mk-faint); }
 .mshell__refresh-icon { display: inline-block; font-size: 13px; line-height: 1; }
 .mshell__refresh-icon.is-spinning { animation: mshell-spin 0.9s linear infinite; }
 @keyframes mshell-spin { to { transform: rotate(360deg); } }
@@ -403,7 +404,7 @@ const groupedScenes = computed(() => {
   padding: 10px 20px;
   border-top: 1px solid #e1e8f2;
   background: #fff;
-  color: #8492ab;
+  color: var(--mk-faint);
   font-size: 12px;
 }
 .mshell__footer-left,
@@ -416,7 +417,7 @@ const groupedScenes = computed(() => {
 .mshell__footer-logo { height: 18px; width: 18px; border-radius: 5px; object-fit: contain; }
 .mshell__footer-name { font-weight: 700; color: #5b6577; }
 .mshell__footer-ver {
-  font-size: 11px; color: #b3bfd0;
+  font-size: 11px; color: #71809a;
   font-variant-numeric: tabular-nums;
   padding: 1px 7px; border-radius: 999px;
   background: #f1f5fb; border: 1px solid #e3e9f4;

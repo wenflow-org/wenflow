@@ -8,6 +8,10 @@
             ref="inputEl"
             v-model="query"
             class="pal__input"
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="pal-listbox"
+            :aria-activedescendant="flat[active] ? `pal-opt-${flat[active].key}` : undefined"
             placeholder="搜索页面或操作…（↑↓ 选择，Enter 执行）"
             @keydown.down.prevent="move(1)"
             @keydown.up.prevent="move(-1)"
@@ -16,15 +20,18 @@
           <span class="pal__esc">ESC</span>
         </div>
 
-        <div class="pal__list">
+        <div id="pal-listbox" class="pal__list" role="listbox">
           <template v-for="group in grouped" :key="group.title">
             <div class="pal__group">{{ group.title }}</div>
             <button
               v-for="item in group.items"
               :key="item.key"
+              :id="`pal-opt-${item.key}`"
               type="button"
+              role="option"
               class="pal__item"
               :class="{ 'pal__item--active': flat[active] === item }"
+              :aria-selected="flat[active] === item"
               @mouseenter="active = flat.indexOf(item)"
               @click="run(flat.indexOf(item))"
             >
@@ -219,9 +226,9 @@ function close() {
   align-items: center;
   gap: 10px;
   padding: 13px 16px;
-  border-bottom: 1px solid #e1e8f2;
+  border-bottom: 1px solid var(--mk-line);
 }
-.pal__icon { color: #8492ab; font-size: 15px; }
+.pal__icon { color: var(--mk-faint); font-size: 15px; }
 .pal__input {
   flex: 1;
   border: 0;
@@ -231,11 +238,15 @@ function close() {
   color: #1a2a44;
   background: transparent;
 }
+.pal__input:focus {
+  border-color: var(--mk-blue);
+  box-shadow: 0 0 0 3px rgba(44, 99, 208, 0.15);
+}
 .pal__esc {
   font-size: 10px;
   font-weight: 700;
-  color: #8492ab;
-  border: 1px solid #e1e8f2;
+  color: var(--mk-faint);
+  border: 1px solid var(--mk-line);
   border-radius: 5px;
   padding: 2px 6px;
 }
@@ -246,7 +257,7 @@ function close() {
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: #8492ab;
+  color: var(--mk-faint);
 }
 .pal__item {
   display: flex;
@@ -266,8 +277,8 @@ function close() {
 .pal__item--active { background: #eef5ff; }
 .pal__item-icon { color: #3478f6; font-size: 12px; width: 16px; text-align: center; }
 .pal__item-label { flex: 1; }
-.pal__item-hint { font-size: 11px; color: #8492ab; }
-.pal__empty { padding: 20px; text-align: center; color: #8492ab; font-size: 13px; margin: 0; }
+.pal__item-hint { font-size: 11px; color: var(--mk-faint); }
+.pal__empty { padding: 20px; text-align: center; color: var(--mk-faint); font-size: 13px; margin: 0; }
 
 
 /* 4K：命令面板加宽 + 字号跟随壳层放大 */

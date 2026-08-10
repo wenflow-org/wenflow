@@ -11,11 +11,11 @@
   /* 颜色/字体 token 全局定义：抽屉/弹窗 Teleport 到 body 后不在 .mk-page 内，必须全局可用 */
   --mk-ink: #1a2a44;
   --mk-muted: #5b6577;
-  --mk-faint: #71809a;
+  --mk-faint: #5f6f8c;
   --mk-line: #e6ebf4;
   --mk-bg: #f7f8fa;
   --mk-surface: #ffffff;
-  --mk-blue: #3478f6;
+  --mk-blue: #2c63d0;
   --mk-green: #15803d;
   --mk-green-bg: #ecfdf5;
   --mk-amber: #b45309;
@@ -24,6 +24,26 @@
   --mk-red-bg: #fef2f2;
   --mk-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
   --mk-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+
+  /* 设计 token（审计收敛）：字体栈 / 强调色 / 代码块 / 圆角 / 阴影 */
+  --mk-sans: Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mk-accent-deep: #1f57cc;
+  --mk-purple: #8d6bff;
+  --mk-teal: #0d9488;
+  --mk-red-strong: #b91c1c;
+  --mk-code-bg: #0d1420;
+  --mk-code-fg: #8ba3c7;
+  --mk-code-border: #1c2a40;
+  --mk-radius-xs: 4px;
+  --mk-radius-sm: 6px;
+  --mk-radius-md: 8px;
+  --mk-radius-lg: 10px;
+  --mk-radius-xl: 12px;
+  --mk-radius-modal: 16px;
+  --mk-radius-pill: 999px;
+  --mk-shadow-pop: 0 12px 32px rgba(15, 23, 42, 0.16);
+  --mk-shadow-drawer: -16px 0 48px rgba(15, 23, 42, 0.18);
+  --mk-shadow-modal: 0 24px 64px rgba(15, 23, 42, 0.22);
 }
 
 .mk-page {
@@ -38,8 +58,8 @@
   min-height: 100%;
 }
 
-/* 键盘焦点可见环（无障碍底线）：覆盖按钮/输入/选择/链接 */
-.mk-page :focus-visible {
+/* 键盘焦点可见环（无障碍底线）：覆盖按钮/输入/选择/链接；:root 级使 Teleport 到 body 的抽屉/弹窗同样生效 */
+:root :focus-visible {
   outline: 2px solid rgba(52, 120, 246, 0.85);
   outline-offset: 2px;
   border-radius: 4px;
@@ -213,6 +233,8 @@
 .mk-badge--bad { background: var(--mk-red-bg); color: var(--mk-red); }
 .mk-badge--muted { background: #f0f2f5; color: var(--mk-muted); }
 .mk-badge--info { background: #eff6ff; color: var(--mk-blue); }
+/* 直角徽章：需要与文字/表格行对齐的紧凑场景 */
+.mk-badge--chip { border-radius: 4px; }
 
 /* ----- 筛选行 ----- */
 .mk-filter {
@@ -277,7 +299,11 @@
   white-space: nowrap;
 }
 .mk-link:hover { background: #eff6ff; }
-.mk-actions { display: flex; gap: 4px; justify-content: flex-end; }
+
+/* ----- 通用工具类 ----- */
+.mono { font-family: var(--mk-mono); }
+.mk-th--right { text-align: right; }
+.mk-empty--compact { padding: 24px 16px; }
 
 /* ----- 空态 ----- */
 .mk-empty {
@@ -406,8 +432,48 @@
   color: #fff;
 }
 .mk-btn--primary:hover { background: #2b64d8; }
+/* 危险按钮：红底白字（规格对齐 .mk-btn--primary），悬停/按下加深 */
+.mk-btn--danger {
+  background: var(--mk-red, #dc2626);
+  border-color: var(--mk-red, #dc2626);
+  color: #fff;
+}
+.mk-btn--danger:hover,
+.mk-btn--danger:active {
+  background: var(--mk-red-strong, #b91c1c);
+  border-color: var(--mk-red-strong, #b91c1c);
+}
+/* 幽灵按钮：浅蓝底 + 深蓝字 + 蓝描边（次级强调，与主按钮同族） */
+.mk-btn--ghost {
+  background: #eef5ff;
+  border-color: #d6e4ff;
+  color: #1f57cc;
+}
+.mk-btn--ghost:hover { background: #dbeafe; }
 .mk-btn--sm { padding: 5px 11px; font-size: 11.5px; }
-.mk-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.mk-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+
+/* 按压反馈：按钮/状态条操作/筛选胶囊/链接按钮 按下轻微下沉 */
+.mk-btn,
+.mk-status__action,
+.mk-pill,
+.mk-link {
+  transition: transform 0.1s ease;
+}
+.mk-btn:active,
+.mk-status__action:active,
+.mk-pill:active,
+.mk-link:active {
+  transform: translateY(1px);
+}
+
+/* 禁用态统一：状态条操作/链接按钮/筛选胶囊 */
+.mk-status__action:disabled,
+.mk-link:disabled,
+.mk-pill:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
 
 /* 行内提示条 */
 .mk-toast {
@@ -515,4 +581,13 @@
   .mk-toast { font-size: 16px; }
   .mk-link { font-size: 16.5px; }
   .mk-actions { min-width: 100px; }
+}
+
+/* 减少动态偏好：全局关闭动画/过渡（无障碍底线，抽屉/弹窗等覆盖层同样生效） */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

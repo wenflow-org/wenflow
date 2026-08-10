@@ -28,9 +28,11 @@
                 class="field__input"
                 placeholder="请输入管理员账号"
                 autocomplete="username"
+                :aria-invalid="!!errors.name"
+                :aria-describedby="errors.name ? 'login-err-name' : undefined"
                 @blur="touch('name')"
               />
-              <span v-if="errors.name" class="field__error">{{ errors.name }}</span>
+              <span v-if="errors.name" id="login-err-name" class="field__error">{{ errors.name }}</span>
             </label>
 
             <label class="field" :class="{ 'field--error': errors.password }">
@@ -42,6 +44,8 @@
                   class="field__input"
                   placeholder="请输入密码"
                   autocomplete="current-password"
+                  :aria-invalid="!!errors.password"
+                  :aria-describedby="errors.password ? 'login-err-password' : undefined"
                   @blur="touch('password')"
                 />
                 <button
@@ -64,7 +68,7 @@
                   </svg>
                 </button>
               </span>
-              <span v-if="errors.password" class="field__error">{{ errors.password }}</span>
+              <span v-if="errors.password" id="login-err-password" class="field__error">{{ errors.password }}</span>
             </label>
 
             <label class="remember">

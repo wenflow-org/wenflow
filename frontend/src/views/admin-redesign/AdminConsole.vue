@@ -186,10 +186,10 @@ function onGlobalKey(e: KeyboardEvent) {
 
 <style scoped>
 .ac {
-  --ink: #1a2a44;
+  --ink: var(--mk-ink);
   min-height: 100vh;
   background: #f6f8fc;
-  font-family: Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-family: var(--mk-sans);
 }
 .ac :deep(.mshell) {
   min-height: 100vh;
@@ -230,7 +230,7 @@ function onGlobalKey(e: KeyboardEvent) {
   border: 1px solid #e1e8f2;
   border-radius: 16px;
   background: #fff;
-  box-shadow: 0 24px 60px rgba(23, 32, 51, 0.1);
+  box-shadow: var(--mk-shadow-modal);
 }
 .ac-error__card strong { font-size: 16px; color: #1a2a44; }
 .ac-error__card span { font-size: 13px; color: #8492ab; }
