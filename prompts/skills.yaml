@@ -1,0 +1,335 @@
+# prompts/skills.yaml —— skill 户口簿（跨阶段技能注册唯一声明源，File-as-Truth）
+#
+# 定位：全部"活跃" skill（mainline / aux / handler-only）的注册登记唯一声明源。
+# 消费方：agent-manifest.service.ts（agentMembers 由 parentAgent 运行时派生，P1）、
+#         skills:check 校验器（F1~F12）、coordinator 挂接点校验、admin 向导（P5 预留）。
+# 规格：doc/SKILLS_YAML_SPEC.md（schema §1、校验清单 §2.4、迁移 §3、风险回滚 §5）。
+#
+# 维护规则：
+# 1. 新增 skill：追加一行（kind/stage/parentAgent/handlerRef/coreFile/displayName/description），
+#    并四同步：prompts/core/<id>.yaml、backend/src/skills/<id>/index.ts + skills/index.ts 注册、
+#    mainline 还需进 prompts/orchestration/<stage>.yaml contracts（铁律，F3 校验）。
+# 2. 退役 skill：**不放进本文件**（从 skills[] 移除）；名单执行权威 =
+#    backend/src/skills/retired-skills.ts（PURGED_SKILLS / ALL_RETIRED_SKILLS），
+#    本文件只做活跃/退役互斥校验（F8）。僵尸项（basic-evaluator / goal-alignment-checker /
+#    course-design）保留登记为 aux，notes 注明状态，禁止进退役名单。
+# 3. 字段路由边界：prompts/orchestration/<stage>.yaml 仍是字段路由数据面唯一声明源
+#    （本文件不承载 prompt 文本/字段语义）；coordinator 块只做挂接点登记（F10 校验 +
+#    向导粘贴片段，definition.ts 保持手写权威）。
+# 4. registrationPoint 例外账：learner-model → agents（backend/src/agents/ 注册）、
+#    semantic-freeze-judge → platform-direct（平台守门直调，豁免 handler 注册检查）。
+
+version: 1
+
+# ============ goal-agent 下辖（mainline） ============
+skills:
+  - skillId: goal-conversation
+    kind: mainline
+    stage: goal
+    parentAgent: goal-agent
+    handlerRef: backend/src/skills/goal-conversation/index.ts
+    coreFile: prompts/core/goal-conversation.yaml
+    displayName: 目标对话 Skill
+    description: 与学习者多轮对话，收集学习目标
+    aliases: [goal-conversation-agent, goal-conversation]
+    coordinator:
+      agentId: goal-agent
+      steps:
+        - { step: 1, role: goal-clarification, loopOver: conversation-rounds, condition: until goal confirmed }
+    notes: deltaOutput 试点；alias goal-conversation 为裸名旧 id 兼容（Phase 3）
+
+  # ============ path-agent 下辖（mainline） ============
+  - skillId: path-planning
+    kind: mainline
+    stage: path
+    parentAgent: path-agent
+    handlerRef: backend/src/skills/path-planning/index.ts
+    coreFile: prompts/core/path-planning.yaml
+    displayName: 路径规划 Skill
+    description: 生成学习路径主结构
+    coordinator:
+      agentId: path-agent
+      steps:
+        - { step: 2, role: cognitive-core-and-milestones }
+
+  - skillId: stage-designer
+    kind: mainline
+    stage: path
+    parentAgent: path-agent
+    handlerRef: backend/src/skills/stage-designer/index.ts
+    coreFile: prompts/core/stage-designer.yaml
+    displayName: 阶段设计 Skill
+    description: 细化阶段内的任务与验收点
+    coordinator:
+      agentId: path-agent
+      steps:
+        - { step: 3, role: stage-task-expansion, loopOver: milestones }
+
+  # ============ teaching-agent 下辖（mainline） ============
+  - skillId: teaching-turn
+    kind: mainline
+    stage: teaching
+    parentAgent: teaching-agent
+    handlerRef: backend/src/skills/teaching-turn/index.ts
+    coreFile: prompts/core/teaching-turn.yaml
+    displayName: 教学回合 Skill
+    description: 生成单轮教学回复与结构化教学状态
+    aliases: [teaching-turn-agent]
+    coordinator:
+      agentId: teaching-agent
+      steps:
+        - { step: 3, role: teaching-turn-generation, loopOver: messages }
+
+  - skillId: peer-reinforcement
+    kind: mainline
+    stage: teaching
+    parentAgent: teaching-agent
+    handlerRef: backend/src/skills/peer-reinforcement/index.ts
+    coreFile: prompts/core/peer-reinforcement.yaml
+    displayName: 伴学补强 Skill
+    description: 同伴式引导讨论与理解补强
+    aliases: [peer-agent]
+    coordinator:
+      agentId: teaching-agent
+      steps:
+        - { step: 4, role: peer-reinforcement, condition: when control.shouldTriggerPeer = true }
+
+  - skillId: session-wrapup
+    kind: mainline
+    stage: teaching
+    parentAgent: teaching-agent
+    handlerRef: backend/src/skills/session-wrapup/index.ts
+    coreFile: prompts/core/session-wrapup.yaml
+    displayName: 课后产出 Skill
+    description: 生成课后总结与评估
+    aliases: [session-wrapup-agent]
+    coordinator:
+      agentId: teaching-agent
+      steps:
+        - { step: 6, role: session-wrapup, condition: when session ends }
+
+  - skillId: adaptive-guidance-copy
+    kind: mainline
+    stage: teaching
+    parentAgent: teaching-agent
+    handlerRef: backend/src/skills/adaptive-guidance-copy/index.ts
+    coreFile: prompts/core/adaptive-guidance-copy.yaml
+    displayName: 自适应引导文案 Skill
+    description: 根据情境生成自适应引导话术
+    coordinator:
+      agentId: teaching-agent
+      steps: []
+    notes: dashboard 侧调用（services/learner/DashboardGuidanceSnapshotService），不在 ai-teaching.definition.ts steps 内；contracts 有登记
+
+  # ============ profile-agent 下辖（handler-only 优先于 mainline，保持派生 agentMembers 顺序） ============
+  - skillId: learner-model
+    kind: handler-only
+    stage: profile
+    parentAgent: profile-agent
+    handlerRef: backend/src/agents/learner-model-agent/index.ts
+    registrationPoint: agents
+    noPromptFile: true
+    displayName: 学习者模型 Skill
+    description: 聚合学习者画像、状态与知识记忆（handler-only，无 LLM prompt）
+    aliases: [learner-model-agent]
+    coordinator:
+      agentId: profile-agent
+      steps:
+        - { step: 1, role: goal-and-learning-signal-ingestion, condition: when learner profile related events arrive }
+
+  - skillId: lesson-knowledge-enricher
+    kind: mainline
+    stage: profile
+    parentAgent: profile-agent
+    handlerRef: backend/src/skills/lesson-knowledge-enricher/index.ts
+    coreFile: prompts/core/lesson-knowledge-enricher.yaml
+    displayName: 课后知识增强 Skill
+    description: 课后单次调用：蒸馏知识台账增量并抽取隐性概念线索
+    coordinator:
+      agentId: profile-agent
+      steps:
+        - { step: 2, role: lesson-knowledge-enrichment, condition: when lesson ends }
+
+  # ============ simulation-agent 下辖（mainline，黑盒实验链） ============
+  - skillId: virtual-learner-persona-designer
+    kind: mainline
+    stage: simulation
+    parentAgent: simulation-agent
+    handlerRef: backend/src/skills/virtual-learner-persona-designer/index.ts
+    coreFile: prompts/core/virtual-learner-persona-designer.yaml
+    displayName: 虚拟学习者人格设计 Skill
+    description: 为虚拟学习者生成稳定人格设定
+    coordinator:
+      agentId: simulation-agent
+      steps: []
+    notes: 前置配置阶段（routes/admin/virtual-learners.ts），不在 simulation.definition.ts 主链 steps 内
+
+  - skillId: virtual-learner-scenario-designer
+    kind: mainline
+    stage: simulation
+    parentAgent: simulation-agent
+    handlerRef: backend/src/skills/virtual-learner-scenario-designer/index.ts
+    coreFile: prompts/core/virtual-learner-scenario-designer.yaml
+    displayName: 虚拟学习者场景设计 Skill
+    description: 设计虚拟学习者的学习目标场景
+    coordinator:
+      agentId: simulation-agent
+      steps: []
+    notes: 前置配置阶段（同 persona-designer），不在主链 steps 内
+
+  - skillId: virtual-learner-goal-dialogue-simulator
+    kind: mainline
+    stage: simulation
+    parentAgent: simulation-agent
+    handlerRef: backend/src/skills/virtual-learner-goal-dialogue-simulator/index.ts
+    coreFile: prompts/core/virtual-learner-goal-dialogue-simulator.yaml
+    displayName: 虚拟学习者目标对话模拟 Skill
+    description: 模拟虚拟学习者在 Goal 阶段的回复
+    coordinator:
+      agentId: simulation-agent
+      steps:
+        - { step: 1, role: goal-stage-learner-turn-simulation, loopOver: goal-rounds }
+
+  - skillId: virtual-learner-path-evaluator
+    kind: mainline
+    stage: simulation
+    parentAgent: simulation-agent
+    handlerRef: backend/src/skills/virtual-learner-path-evaluator/index.ts
+    coreFile: prompts/core/virtual-learner-path-evaluator.yaml
+    displayName: 虚拟学习者路径评估 Skill
+    description: 模拟虚拟学习者对 Path 的反馈与评估
+    coordinator:
+      agentId: simulation-agent
+      steps:
+        - { step: 4, role: legacy-assisted-path-review, condition: legacy assisted mode only }
+    notes: 仅 legacy assisted 调试使用，正式黑盒链路不走
+
+  - skillId: virtual-learner-learn-turn-simulator
+    kind: mainline
+    stage: simulation
+    parentAgent: simulation-agent
+    handlerRef: backend/src/skills/virtual-learner-learn-turn-simulator/index.ts
+    coreFile: prompts/core/virtual-learner-learn-turn-simulator.yaml
+    displayName: 虚拟学习者教学回合模拟 Skill
+    description: 模拟虚拟学习者在 Learn 阶段的单轮回复
+    coordinator:
+      agentId: simulation-agent
+      steps:
+        - { step: 5, role: teaching-stage-learner-turn-simulation, condition: when teaching phase starts, loopOver: teaching-turns }
+
+  - skillId: virtual-learner-referee
+    kind: mainline
+    stage: simulation
+    parentAgent: simulation-agent
+    handlerRef: backend/src/skills/virtual-learner-referee/index.ts
+    coreFile: prompts/core/virtual-learner-referee.yaml
+    displayName: 平台体验裁判 Skill
+    description: 基于 Blackbox 公开轨迹、旁路诊断和控制回执生成独立实验裁判报告
+    coordinator:
+      agentId: simulation-agent
+      steps:
+        - { step: 7, role: platform-quality-referee, condition: after blackbox experiment reaches terminal state }
+
+  - skillId: virtual-learner-actor-auditor
+    kind: mainline
+    stage: simulation
+    parentAgent: simulation-agent
+    handlerRef: backend/src/skills/virtual-learner-actor-auditor/index.ts
+    coreFile: prompts/core/virtual-learner-actor-auditor.yaml
+    displayName: 角色保真审计 Skill
+    description: 基于画像、故事、摩擦预算、私有状态和公开行为评估合成学习者可信度
+    coordinator:
+      agentId: simulation-agent
+      steps:
+        - { step: 8, role: synthetic-learner-fidelity-audit, condition: after blackbox experiment reaches terminal state }
+
+  # ============ 独立 handler-only（无 parentAgent，不进 agentMembers 派生） ============
+  - skillId: mcp-tool
+    kind: handler-only
+    handlerRef: backend/src/skills/mcp-tool/index.ts
+    noPromptFile: true
+    displayName: MCP 工具调用 Skill
+    description: 通过统一 Capability Runtime 调用用户或平台配置的 MCP 工具
+
+  # ============ aux（9 条，不进字段路由；v4-aux-skills 注册） ============
+  - skillId: teaching-opening-generator
+    kind: aux
+    handlerRef: backend/src/skills/v4-aux-skills/index.ts
+    coreFile: prompts/core/teaching-opening-generator.yaml
+    displayName: 课堂开场交互生成器
+    description: 生成教学 Session 的开场 message、question 与 quickReplies
+    coordinator:
+      agentId: teaching-agent
+      steps:
+        - { step: 2, role: opening-generation, condition: on session start }
+    notes: v4-aux 旁挂 teaching-agent（ai-teaching.definition.ts step 2）
+
+  - skillId: session-evaluation-fallback
+    kind: aux
+    handlerRef: backend/src/skills/v4-aux-skills/index.ts
+    coreFile: prompts/core/session-evaluation-fallback.yaml
+    displayName: 课程评估补全器
+    description: 在主课后总结缺少 evaluation 时补齐结构化评估
+
+  - skillId: learner-progress-report
+    kind: aux
+    handlerRef: backend/src/skills/v4-aux-skills/index.ts
+    coreFile: prompts/core/learner-progress-report.yaml
+    displayName: 学习进展报告生成器
+    description: 基于学习指标和信号生成简短进展反馈
+
+  - skillId: generic-chat
+    kind: aux
+    handlerRef: backend/src/skills/v4-aux-skills/index.ts
+    coreFile: prompts/core/generic-chat.yaml
+    displayName: 平台通用文本能力
+    description: 无更专用 Skill 时的通用文本调用能力
+
+  - skillId: course-design
+    kind: aux
+    handlerRef: backend/src/skills/v4-aux-skills/index.ts
+    coreFile: prompts/core/course-design.yaml
+    displayName: 课程设计器
+    description: 为周次主题生成结构化课程任务
+    notes: 注册中零调用（唯一调用点 designWeekCourses 无调用者）——僵尸状态保留，禁止进退役名单（RETIRED_SKILLS_FIX_PLAN §4.3）
+
+  - skillId: skill-author
+    kind: aux
+    handlerRef: backend/src/skills/v4-aux-skills/index.ts
+    coreFile: prompts/core/skill-author.yaml
+    displayName: Prompt 起草助手
+    description: 为新 Skill 起草 system prompt
+
+  - skillId: skill-compiler
+    kind: aux
+    handlerRef: backend/src/skills/v4-aux-skills/index.ts
+    coreFile: prompts/core/skill-compiler.yaml
+    displayName: Skill Prompt 验收器
+    description: 执行 system prompt 并检查必填字段覆盖情况
+
+  - skillId: basic-evaluator
+    kind: aux
+    handlerRef: backend/src/skills/v4-aux-skills/index.ts
+    coreFile: prompts/core/basic-evaluator.yaml
+    displayName: 学习质量评估器
+    description: 评估学习内容、答案或任务完成情况
+    notes: 僵尸项——保留注册但零生产调用（RETIRED_SKILLS_FIX_PLAN §4.3），不进退役名单
+
+  - skillId: goal-alignment-checker
+    kind: aux
+    handlerRef: backend/src/skills/v4-aux-skills/index.ts
+    coreFile: prompts/core/goal-alignment-checker.yaml
+    displayName: 路径目标对齐检查器
+    description: 检查学习路径与目标的对齐程度
+    notes: 僵尸项——保留注册但零生产调用（RETIRED_SKILLS_FIX_PLAN §4.3），不进退役名单
+
+  # ============ 平台守门（aux 变体，registrationPoint=platform-direct 豁免注册检查） ============
+  - skillId: semantic-freeze-judge
+    kind: aux
+    handlerRef: backend/src/skills/v4-aux-skills/index.ts
+    registrationPoint: platform-direct
+    platformGate: true
+    coreFile: prompts/core/semantic-freeze-judge.yaml
+    displayName: 语义冻结裁判
+    description: 判定两个 prompt 版本在目标语义上的冻结一致性（发布流水线 Gate#3）
+    notes: 发布流水线 Gate#3，services/prompt-lab/semantic-freeze-judge.ts 直调 callPrompt，不走 v4-aux handlers

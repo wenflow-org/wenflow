@@ -4,13 +4,19 @@
  * 架构：
  *   - 5 个顶层 Agent（kind=agent）：goal / path / teaching / learner / simulation
  *     - Agent 是"编排器"，不持有 system prompt，不直接调用 LLM
- *     - Agent 下辖一组 Skill（agentMembers）
+ *     - Agent 下辖一组 Skill（agentMembers，由 prompts/skills.yaml parentAgent 派生，P1）
  *   - N 个 Skill（kind=skill）：实际持有 prompt、调用 LLM 的执行单元
  *
  * 铁律（由 validateManifest 启动时强制）：
  *   - kind=agent: 不允许有 defaultModelConfig，agentMembers 必须非空
  *   - kind=skill: id 必须以 'skill:' 开头
  *   - alias: 仅用于旧 id 向新 id 的兼容映射
+ *
+ * agentMembers 派生（SKILLS_YAML_SPEC §2.3①）：
+ *   - 数据源 = prompts/skills.yaml 条目 parentAgent 字段（唯一来源），本模块惰性加载
+ *     （首次调用 getAgentMembersOfAgent 时 require skills-file，避免模块顶部静态 import
+ *     造成循环依赖与启动顺序问题）。
+ *   - 过渡回滚：SKILLS_FILE_DISABLED=1 时回退 LEGACY_AGENT_MEMBERS（旧手写值，见 §5.3）。
  */
 
 export type AgentRuntimeKind = 'agent' | 'skill' | 'alias';
@@ -63,10 +69,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: true,
     monitoringGroup: 'Goal',
     // Phase 3：裸名 goal-conversation 归 skill，不再作为 goal-agent 别名（避免与 skill 冲突）
-    aliases: ['requirement-agent'],
-    agentMembers: [
-      'skill:goal-conversation'
-    ]
+    aliases: ['requirement-agent']
+    // agentMembers 由 prompts/skills.yaml parentAgent 派生（P1，见 getAgentMembersOfAgent）
   },
   {
     id: 'path-agent',
@@ -76,11 +80,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     kind: 'agent',
     runtimeEnabled: true,
     userVisible: true,
-    monitoringGroup: 'Path',
-    agentMembers: [
-      'skill:path-planning',
-      'skill:stage-designer'
-    ]
+    monitoringGroup: 'Path'
+    // agentMembers 由 prompts/skills.yaml parentAgent 派生（P1）
   },
   {
     id: 'teaching-agent',
@@ -91,13 +92,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     runtimeEnabled: true,
     userVisible: true,
     monitoringGroup: 'Teaching',
-    aliases: ['ai-teaching-agent', 'ai-teaching'],
-    agentMembers: [
-      'skill:teaching-turn',
-      'skill:peer-reinforcement',
-      'skill:session-wrapup',
-      'skill:adaptive-guidance-copy'
-    ]
+    aliases: ['ai-teaching-agent', 'ai-teaching']
+    // agentMembers 由 prompts/skills.yaml parentAgent 派生（P1）
   },
   {
     id: 'profile-agent',
@@ -107,11 +103,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     kind: 'agent',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Profile',
-    agentMembers: [
-      'skill:learner-model',
-      'skill:lesson-knowledge-enricher'
-    ]
+    monitoringGroup: 'Profile'
+    // agentMembers 由 prompts/skills.yaml parentAgent 派生（P1）
   },
   {
     id: 'simulation-agent',
@@ -121,16 +114,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     kind: 'agent',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Simulation',
-    agentMembers: [
-      'skill:virtual-learner-persona-designer',
-      'skill:virtual-learner-scenario-designer',
-      'skill:virtual-learner-goal-dialogue-simulator',
-      'skill:virtual-learner-path-evaluator',
-      'skill:virtual-learner-learn-turn-simulator',
-      'skill:virtual-learner-referee',
-      'skill:virtual-learner-actor-auditor'
-    ]
+    monitoringGroup: 'Simulation'
+    // agentMembers 由 prompts/skills.yaml parentAgent 派生（P1）
   },
 
   // ============ Goal 下辖 Skills ============
@@ -364,14 +349,84 @@ for (const item of AGENT_MANIFEST) {
   }
 }
 
-export function listAgentManifest(): AgentManifestEntry[] {
+// ============================================================
+// agentMembers 派生（P1，SKILLS_YAML_SPEC §2.3①）
+// ============================================================
+
+/**
+ * 旧手写 agentMembers 过渡镜像（deprecated）：
+ * - 用途 1：SKILLS_FILE_DISABLED=1 过渡回滚点（规格 §5.3，仅限一版发布窗口）；
+ * - 用途 2：P1 验收"派生结果与手写逐项相等"的 diff 基准（check-skills-file.ts / 单测断言）。
+ * 正常路径不读取本表；agentMembers 唯一来源 = prompts/skills.yaml parentAgent。
+ */
+export const LEGACY_AGENT_MEMBERS: Record<string, string[]> = {
+  'goal-agent': ['skill:goal-conversation'],
+  'path-agent': ['skill:path-planning', 'skill:stage-designer'],
+  'teaching-agent': ['skill:teaching-turn', 'skill:peer-reinforcement', 'skill:session-wrapup', 'skill:adaptive-guidance-copy'],
+  'profile-agent': ['skill:learner-model', 'skill:lesson-knowledge-enricher'],
+  'simulation-agent': [
+    'skill:virtual-learner-persona-designer',
+    'skill:virtual-learner-scenario-designer',
+    'skill:virtual-learner-goal-dialogue-simulator',
+    'skill:virtual-learner-path-evaluator',
+    'skill:virtual-learner-learn-turn-simulator',
+    'skill:virtual-learner-referee',
+    'skill:virtual-learner-actor-auditor'
+  ]
+};
+
+let derivedParentAgentMembers: Map<string, string[]> | null = null;
+
+/**
+ * 读取某顶层 Agent 下辖的成员 skill id 列表（含 skill: 前缀，顺序 = skills.yaml 文件顺序）。
+ * 惰性加载：首次调用时 require skills-file（绝不在模块顶部静态 import，避免循环依赖），
+ * 结果进程级缓存。SKILLS_FILE_DISABLED=1 时回退 LEGACY_AGENT_MEMBERS。
+ */
+export function getAgentMembersOfAgent(agentId: string): string[] {
+  if (process.env.SKILLS_FILE_DISABLED === '1') {
+    return [...(LEGACY_AGENT_MEMBERS[agentId] || [])];
+  }
+  if (!derivedParentAgentMembers) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const skillsFile = require('./skill-registry/skills-file');
+    const book = skillsFile.loadSkillsBookRaw();
+    const map = new Map<string, string[]>();
+    for (const entry of book.skills) {
+      if (!entry.parentAgent) continue;
+      const members = map.get(entry.parentAgent) || [];
+      members.push(`skill:${entry.skillId}`);
+      map.set(entry.parentAgent, members);
+    }
+    derivedParentAgentMembers = map;
+  }
+  return [...(derivedParentAgentMembers.get(agentId) || [])];
+}
+
+/** 返回带派生 agentMembers 的条目副本（对外 API 形状不变，内容与手写时代一致） */
+function withDerivedMembers(entry: AgentManifestEntry): AgentManifestEntry {
+  const copy = { ...entry };
+  if (copy.kind === 'agent') {
+    copy.agentMembers = getAgentMembersOfAgent(copy.id);
+  }
+  return copy;
+}
+
+/**
+ * 原始条目（不附加派生 agentMembers），供 skills-file 校验器（F12）与脚本对账使用。
+ * 注意：不要在此处调用任何会触发 agentMembers 派生的函数（否则与 loadSkillsFile 互为递归）。
+ */
+export function listRawManifestEntries(): AgentManifestEntry[] {
   return AGENT_MANIFEST.map(item => ({ ...item }));
+}
+
+export function listAgentManifest(): AgentManifestEntry[] {
+  return AGENT_MANIFEST.map(withDerivedMembers);
 }
 
 export function getAgentManifest(agentId: string): AgentManifestEntry | undefined {
   const canonical = getCanonicalAgentId(agentId);
   const entry = manifestMap.get(canonical);
-  return entry ? { ...entry } : undefined;
+  return entry ? withDerivedMembers(entry) : undefined;
 }
 
 export function getCanonicalAgentId(agentId: string): string {
@@ -402,7 +457,7 @@ export function isManifestSkill(agentId: string): boolean {
  * 列出顶层 Agent（kind=agent），用于 Agent 拓扑视图
  */
 export function listTopLevelAgents(): AgentManifestEntry[] {
-  return AGENT_MANIFEST.filter(item => item.kind === 'agent').map(item => ({ ...item }));
+  return AGENT_MANIFEST.filter(item => item.kind === 'agent').map(withDerivedMembers);
 }
 
 /**
@@ -411,8 +466,8 @@ export function listTopLevelAgents(): AgentManifestEntry[] {
 export function listSkillsOfAgent(agentId: string): AgentManifestEntry[] {
   const canonical = getCanonicalAgentId(agentId);
   const agent = manifestMap.get(canonical);
-  if (!agent || agent.kind !== 'agent' || !agent.agentMembers) return [];
-  return agent.agentMembers
+  if (!agent || agent.kind !== 'agent') return [];
+  return getAgentMembersOfAgent(canonical)
     .map(memberId => manifestMap.get(getCanonicalAgentId(memberId)))
     .filter((x): x is AgentManifestEntry => !!x);
 }
@@ -423,8 +478,8 @@ export function listSkillsOfAgent(agentId: string): AgentManifestEntry[] {
 export function getAgentOfSkill(skillId: string): AgentManifestEntry | undefined {
   const canonical = getCanonicalAgentId(skillId);
   for (const item of AGENT_MANIFEST) {
-    if (item.kind !== 'agent' || !item.agentMembers) continue;
-    if (item.agentMembers.some(m => getCanonicalAgentId(m) === canonical)) {
+    if (item.kind !== 'agent') continue;
+    if (getAgentMembersOfAgent(item.id).some(m => getCanonicalAgentId(m) === canonical)) {
       return { ...item };
     }
   }
@@ -465,11 +520,12 @@ export function getMonitoringGroupMappings() {
 
 export function getAgentRelations() {
   return AGENT_MANIFEST
-    .filter(item => item.kind === 'agent' && item.agentMembers)
+    .filter(item => item.kind === 'agent')
+    .filter(item => getAgentMembersOfAgent(item.id).length > 0)
     .map(item => ({
       agentId: item.id,
       group: item.monitoringGroup,
-      members: item.agentMembers || [item.id]
+      members: getAgentMembersOfAgent(item.id)
     }));
 }
 
@@ -489,7 +545,7 @@ export function getDefaultAgentModelConfigs() {
  *
  * 规则：
  *   - kind=agent 不允许有 defaultModelConfig
- *   - kind=agent 必须有非空 agentMembers
+ *   - kind=agent 必须有非空 agentMembers（派生自 skills.yaml parentAgent）
  *   - kind=skill id 必须以 'skill:' 开头
  *   - kind=skill 必须有 defaultModelConfig（否则无法运行）
  *   - kind=skill 引用的 Agent.agentMembers 必须能在 manifest 中找到
@@ -504,10 +560,11 @@ export function validateManifest(): { ok: true } | { ok: false; errors: string[]
       if (item.defaultModelConfig) {
         errors.push(`[manifest] Agent "${item.id}" 不应有 defaultModelConfig（Agent 是编排器，无 prompt 无 LLM 调用）`);
       }
-      if (!item.agentMembers || item.agentMembers.length === 0) {
-        errors.push(`[manifest] Agent "${item.id}" 必须有非空 agentMembers`);
+      const members = getAgentMembersOfAgent(item.id);
+      if (members.length === 0) {
+        errors.push(`[manifest] Agent "${item.id}" 必须有非空 agentMembers（派生自 skills.yaml parentAgent）`);
       } else {
-        for (const memberId of item.agentMembers) {
+        for (const memberId of members) {
           const canonical = aliasToCanonical.get(memberId) || memberId;
           if (!ids.has(canonical)) {
             errors.push(`[manifest] Agent "${item.id}" 引用的成员 "${memberId}" 在 manifest 中找不到`);
