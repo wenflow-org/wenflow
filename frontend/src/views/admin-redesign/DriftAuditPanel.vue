@@ -1,19 +1,15 @@
 <template>
   <div class="fdp">
-    <!-- 新建字段 -->
+    <!-- 新建字段引导 -->
     <details class="fdp__box">
-      <summary class="fdp__box-summary">新建字段（仅 soft-info / hidden-inference / derived-presentation 可建）</summary>
-      <div class="fdp__newfield">
-        <input v-model="newField.fieldId" class="fdp__input mono" placeholder="fieldId（如 myField）" />
-        <input v-model="newField.valueType" class="fdp__input mono" placeholder="valueType（如 string）" />
-        <select v-model="newField.promptRole" class="fdp__input">
-          <option value="soft-info">soft-info</option>
-          <option value="hidden-inference">hidden-inference</option>
-          <option value="derived-presentation">derived-presentation</option>
-        </select>
-        <input v-model="newField.description" class="fdp__input" placeholder="描述" />
-        <button class="fdp__btn" :disabled="!newField.fieldId || !stage" @click="submitNewField">创建</button>
-        <span v-if="newFieldMsg" class="fdp__msg">{{ newFieldMsg }}</span>
+      <summary class="fdp__box-summary">新建字段（已改为编排文件编辑）</summary>
+      <div class="fdp__guide">
+        <p class="fdp__guide-text">
+          新建字段请直接编辑编排文件，保存后新字段/新路由立即进入 DB（已有行修改见下方漂移报告）。
+        </p>
+        <p class="fdp__guide-file"><span class="mono">prompts/orchestration/{{ stage }}.yaml</span></p>
+        <p class="fdp__guide-text">入口：<strong>「字段路由」页顶部「编排文件」按钮</strong>，在文本框中按现有结构追加
+          <code class="mono">fields:</code> / <code class="mono">routings:</code> 条目后点击「保存到编排文件」。</p>
       </div>
     </details>
 
@@ -54,10 +50,7 @@ import { onMounted, ref, watch } from 'vue';
 import { adminFieldRoutingsApi } from '@/api/adminApi';
 
 const props = defineProps<{ stage: string }>();
-const emit = defineEmits<{ changed: [] }>();
 
-const newField = ref({ fieldId: '', valueType: '', promptRole: 'soft-info', description: '' });
-const newFieldMsg = ref('');
 const drift = ref<{ items: Array<Record<string, unknown>>; totalDriftCount: number }>({ items: [], totalDriftCount: 0 });
 const driftLoading = ref(false);
 const changes = ref<Array<Record<string, unknown>>>([]);
@@ -86,26 +79,6 @@ async function loadChanges() {
     changes.value = Array.isArray(c.data?.data) ? c.data.data : (c.data?.data?.changes || []);
   } catch {
     changes.value = [];
-  }
-}
-
-async function submitNewField() {
-  newFieldMsg.value = '';
-  if (!newField.value.fieldId || !props.stage) return;
-  try {
-    await adminFieldRoutingsApi.createField({
-      fieldId: newField.value.fieldId,
-      stage: props.stage,
-      promptRole: newField.value.promptRole as 'soft-info' | 'hidden-inference' | 'derived-presentation',
-      valueType: newField.value.valueType || undefined,
-      description: newField.value.description || undefined,
-    });
-    newFieldMsg.value = '创建成功';
-    newField.value = { fieldId: '', valueType: '', promptRole: 'soft-info', description: '' };
-    await Promise.all([loadDrift(), loadChanges()]);
-    emit('changed');
-  } catch (e: any) {
-    newFieldMsg.value = e?.message || '创建失败';
   }
 }
 
@@ -154,31 +127,20 @@ watch(() => props.stage, () => {
 }
 .fdp__box[open] > .fdp__box-summary::before { transform: rotate(90deg); }
 .fdp__box[open] > .fdp__box-summary { border-bottom: 1px solid var(--mk-line, #e6ebf4); }
-.fdp__newfield { display: flex; gap: 8px; align-items: center; padding: 12px 14px; flex-wrap: wrap; }
-.fdp__input {
-  padding: 6px 10px;
-  border: 1px solid var(--mk-line, #e6ebf4);
-  border-radius: 8px;
-  background: var(--mk-surface, #fff);
-  color: var(--mk-ink, #1a2a44);
-  font: inherit;
-  font-size: 12.5px;
-  outline: none;
-}
-.fdp__input:focus { border-color: var(--mk-blue, #3478f6); }
-.fdp__btn {
-  padding: 6px 16px;
-  border: 1px solid var(--mk-blue, #3478f6);
-  border-radius: 8px;
-  background: var(--mk-blue, #3478f6);
-  color: #fff;
-  font: inherit;
+.fdp__guide { display: grid; gap: 8px; padding: 12px 14px; }
+.fdp__guide-text { margin: 0; color: var(--mk-muted, #5b6577); font-size: 12.5px; line-height: 1.6; }
+.fdp__guide-file {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid rgba(52, 120, 246, 0.35);
+  border-radius: 9px;
+  background: #f0f5ff;
+  color: var(--mk-blue, #3478f6);
   font-size: 12.5px;
   font-weight: 700;
-  cursor: pointer;
 }
-.fdp__btn:hover { background: #2b64d8; }
-.fdp__btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.fdp__guide-file .mono { font-size: 12px; font-weight: 700; color: var(--mk-blue, #3478f6); }
+.fdp__guide-text code { font-family: var(--mk-mono, ui-monospace, monospace); font-size: 11.5px; background: #f0f2f5; padding: 1px 6px; border-radius: 5px; }
 .fdp__msg { color: var(--mk-blue, #3478f6); font-size: 12px; font-weight: 600; }
 .fdp__drift-list { margin: 0; padding: 6px 14px 12px; list-style: none; }
 .fdp__drift-item {

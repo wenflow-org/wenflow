@@ -1,51 +1,82 @@
-import {
-  bootstrapFieldRoutings,
-  FIELD_ROUTING_SEED_MANIFEST
-} from '../field-routing-bootstrap.service'
+import * as service from '../field-routing-bootstrap.service'
+import { loadOrchestrationFiles, type OrchestrationStage } from '../field-routing/orchestration-file'
+
+const stubStage = (stage: string): OrchestrationStage => ({
+  stage,
+  contracts: [{ agentId: `agent:${stage}`, displayName: 'x', description: 'x' }],
+  fields: [],
+  routings: [],
+})
+
+const emptyDatabase = (): any => ({
+  agent_contracts: {
+    findUnique: jest.fn(async () => null),
+    upsert: jest.fn(async (args: any) => ({ id: 'id', ...args.create })),
+  },
+  field_definitions: {
+    findUnique: jest.fn(async () => null),
+    upsert: jest.fn(async (args: any) => ({ id: 'id', ...args.create })),
+  },
+  agent_field_routings: {
+    findUnique: jest.fn(async () => null),
+    upsert: jest.fn(async (args: any) => ({ id: 'id', ...args.create })),
+  },
+})
 
 describe('field routing bootstrap', () => {
-  it('固定按 goal、path、learning、profile、simulation 顺序执行', async () => {
-    const calls: string[] = []
-    const ensure = (name: string) => jest.fn(async () => {
-      calls.push(name)
-      return { name }
-    })
-    const result = await bootstrapFieldRoutings({
-      database: {} as any,
-      ensureGoal: ensure('goal') as any,
-      ensurePath: ensure('path') as any,
-      ensureTeaching: ensure('teaching') as any,
-      ensureProfile: ensure('profile') as any,
-      ensureSimulation: ensure('simulation') as any
+  it('固定按 goal、path、teaching、profile、simulation 顺序执行', async () => {
+    const database = emptyDatabase()
+    const order = ['goal', 'path', 'teaching', 'profile', 'simulation']
+
+    await service.bootstrapFieldRoutings({
+      database: database as any,
+      stagesOverride: order.map((name) => stubStage(name)),
     })
 
-    expect(calls).toEqual(['goal', 'path', 'teaching', 'profile', 'simulation'])
-    expect(Object.keys(result)).toEqual(['goal', 'path', 'teaching', 'profile', 'simulation'])
+    const createdAgentIds = database.agent_contracts.upsert.mock.calls.map(
+      (call: any[]) => call[0].create.agentId
+    )
+    expect(createdAgentIds).toEqual(order.map((name) => `agent:${name}`))
   })
 
   it('阶段失败时停止后续 seed 并传播错误', async () => {
-    const ensureGoal = jest.fn().mockResolvedValue({})
-    const ensurePath = jest.fn().mockRejectedValue(new Error('path seed failed'))
-    const ensureTeaching = jest.fn()
-    const ensureProfile = jest.fn()
-    const ensureSimulation = jest.fn()
+    const database = emptyDatabase()
+    database.agent_contracts.findUnique.mockImplementation(async (args: any) => {
+      if (args.where.agentId === 'agent:path') throw new Error('path seed failed')
+      return null
+    })
+    const order = ['goal', 'path', 'teaching', 'profile', 'simulation']
 
-    await expect(bootstrapFieldRoutings({
-      database: {} as any,
-      ensureGoal,
-      ensurePath,
-      ensureTeaching,
-      ensureProfile,
-      ensureSimulation
-    } as any)).rejects.toThrow('path seed failed')
-    expect(ensureTeaching).not.toHaveBeenCalled()
-    expect(ensureProfile).not.toHaveBeenCalled()
-    expect(ensureSimulation).not.toHaveBeenCalled()
+    await expect(
+      service.bootstrapFieldRoutings({
+        database: database as any,
+        stagesOverride: order.map((name) => stubStage(name)),
+      })
+    ).rejects.toThrow('path seed failed')
+
+    const createdAgentIds = database.agent_contracts.upsert.mock.calls.map(
+      (call: any[]) => call[0].create.agentId
+    )
+    expect(createdAgentIds).toEqual(['agent:goal'])
   })
 
-  it('seed manifest 的全局键唯一且数量稳定', () => {
-    expect(FIELD_ROUTING_SEED_MANIFEST.contractAgentIds).toHaveLength(21)
-    expect(FIELD_ROUTING_SEED_MANIFEST.fieldIds).toHaveLength(147)
-    expect(FIELD_ROUTING_SEED_MANIFEST.routings).toHaveLength(201)
+  it('seed manifest 的全局键唯一且与编排文件数量一致', () => {
+    const stages = loadOrchestrationFiles()
+    const manifest = service.FIELD_ROUTING_SEED_MANIFEST
+    expect(manifest.contractAgentIds).toHaveLength(new Set(manifest.contractAgentIds).size)
+    expect(manifest.fieldIds).toHaveLength(new Set(manifest.fieldIds).size)
+    expect(manifest.routings.map((r) => `${r.agentId}\0${r.fieldId}`)).toHaveLength(
+      new Set(manifest.routings.map((r) => `${r.agentId}\0${r.fieldId}`)).size
+    )
+    expect(stages).toHaveLength(5)
+    expect(manifest.contractAgentIds).toHaveLength(
+      stages.reduce((sum, s) => sum + s.contracts.length, 0)
+    )
+    expect(manifest.fieldIds).toHaveLength(
+      stages.reduce((sum, s) => sum + s.fields.length, 0)
+    )
+    expect(manifest.routings).toHaveLength(
+      stages.reduce((sum, s) => sum + s.routings.length, 0)
+    )
   })
 })

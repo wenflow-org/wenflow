@@ -118,7 +118,7 @@ export class ReadinessService {
         ? 'ok' : 'failed';
       checks.gatewayRegistry = agentCount > 0 && skillCount > 0 ? 'ok' : 'failed';
 
-      // seed 漂移检测：seed 声明 vs DB 行内容 diff（只读，warn 不阻断）
+      // 声明漂移检测：编排文件声明 vs DB 行内容 diff（只读，warn 不阻断）
       // bootstrap 的 upsert(update:{}) 只建不更新，seed 改动后旧行不会自动同步——
       // 此检测让"声明一套、库里另一套"的漂移在启动时可见
       this.detectFieldRoutingDriftWarnings().catch(() => undefined);
@@ -131,7 +131,7 @@ export class ReadinessService {
     try {
       const report = await detectFieldRoutingDrift(this.systemDatabase);
       if (report.driftCount > 0) {
-        logger.warn(`[readiness] 字段路由 seed 漂移 ${report.driftCount} 项（seed 声明与 DB 不一致，admin 编辑行已豁免）`, {
+        logger.warn(`[readiness] 字段路由声明漂移 ${report.driftCount} 项（编排文件声明与 DB 不一致，admin 编辑行已豁免）`, {
           items: report.items.slice(0, 20).map((item) => ({
             kind: item.kind,
             key: item.key,

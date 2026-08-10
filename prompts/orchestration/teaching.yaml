@@ -1,0 +1,571 @@
+# Teaching 阶段编排文件（字段路由单源化）
+# 由字段路由 seed TS 机械迁移（1:1）；seed TS 已退役，本文件为唯一声明源。
+# 2026-08 词汇统一批次：路由表 fieldId 去除 agent 前缀（peer.*/wrapup.*/* → 顶层），
+# 仅影响路由表身份与展示层，不改变 coordinator/blackbox 的运行时 JSON 键。
+
+stage: teaching
+displayName: 教学阶段
+description: 授课执行：Teaching Turn → Peer/Checkpoint → Wrapup
+
+contracts:
+  - agentId: skill:teaching-turn
+  - agentId: skill:peer-reinforcement
+  - agentId: skill:session-wrapup
+  - agentId: skill:adaptive-guidance-copy
+  - agentId: teaching-agent
+
+fields:
+  # === skill:teaching-turn 产出 ===
+  - fieldId: reply
+    promptRole: public-reply
+    valueType: string
+    description: 教学回合的对话回复
+    systemLocked: true
+  - fieldId: analysis.cognitiveLevel
+    promptRole: hidden-inference
+    valueType: string
+    description: 学习者认知层级（Bloom 等级）
+  - fieldId: analysis.levelScore
+    promptRole: hidden-inference
+    valueType: number
+    description: 认知层级量化分数
+  - fieldId: analysis.understanding
+    promptRole: hidden-inference
+    valueType: number
+    description: 本轮理解程度 0-1
+  - fieldId: analysis.confusionPoints
+    promptRole: hidden-inference
+    valueType: array<string>
+    description: 本轮检测到的困惑点
+  - fieldId: analysis.engagement
+    promptRole: hidden-inference
+    valueType: number
+    description: 本轮参与度 0-1
+  - fieldId: analysis.emotionalState
+    promptRole: hidden-inference
+    valueType: string
+    description: 情绪状态推断
+  - fieldId: knowledge.currentPoint
+    promptRole: derived-presentation
+    valueType: string
+    description: 当前知识点
+  - fieldId: knowledge.points
+    promptRole: derived-presentation
+    valueType: array<object>
+    description: 本轮涉及的知识点状态列表
+  - fieldId: pedagogy.strategies
+    promptRole: hidden-inference
+    valueType: array<string>
+    description: 使用的教学策略
+  - fieldId: control.isCompletionCandidate
+    promptRole: control-signal
+    valueType: boolean
+    description: 是否触发 task 完成判定
+  - fieldId: control.shouldTriggerPeer
+    promptRole: control-signal
+    valueType: boolean
+    description: 是否触发伴学回合
+  - fieldId: control.checkpoint
+    promptRole: control-signal
+    valueType: object
+    description: 检查点（question/type/options/hint），间隔满足时可选输出
+  - fieldId: control.completionCandidateEvidence
+    promptRole: hidden-inference
+    valueType: object
+    description: 完成候选的内部证据（供编排层门禁，不面向前端）
+
+  # === skill:teaching-turn 输入通道（teaching-agent 编排注入） ===
+  # pathInRawOutput 以回合装配源 { session, teachingState, context } 为根
+  - fieldId: learner.learnerProjection
+    promptRole: soft-info
+    valueType: object
+    pathInRawOutput: context.learnerProjection
+    description: 学习者教学投影（toTeachingProjection）
+  - fieldId: knowledge.state
+    promptRole: soft-info
+    valueType: object
+    pathInRawOutput: session.knowledgeState
+    description: 知识看板当前状态（points/currentPoint）
+  - fieldId: controls.teachingControlContext
+    promptRole: soft-info
+    valueType: object
+    pathInRawOutput: teachingState.teachingControlContext
+    description: 教学控制上下文（priority/allow* 标志）
+  - fieldId: classroomContext
+    promptRole: soft-info
+    valueType: object
+    pathInRawOutput: teachingState.classroomContext
+    description: 课堂上下文（上轮持久化）
+  - fieldId: visibleDialogueContext
+    promptRole: soft-info
+    valueType: array<object>
+    pathInRawOutput: session.messages
+    description: 最近可见对话（role/content）
+
+  # === skill:peer-reinforcement 产出 ===
+  - fieldId: message
+    promptRole: public-reply
+    valueType: string
+    description: 伴学补强的对话回复
+  - fieldId: followUpQuestions
+    promptRole: public-reply
+    valueType: array<string>
+    description: 伴学后续追问
+
+  # === skill:session-wrapup 产出 ===
+  - fieldId: summary.topicSummary
+    promptRole: public-reply
+    valueType: string
+    description: 本次会话主题总结
+  - fieldId: summary.knowledgeSummary
+    promptRole: public-reply
+    valueType: string
+    description: 本次会话知识点总结
+  - fieldId: summary.knowledgeItems
+    promptRole: derived-presentation
+    valueType: array<object>
+    description: 本次会话知识点列表（name/status/progress/evidence）
+  - fieldId: summary.learningEvaluation
+    promptRole: public-reply
+    valueType: string
+    description: 学习评估文本
+  - fieldId: summary.practiceAdvice
+    promptRole: public-reply
+    valueType: string
+    description: 练习建议
+  - fieldId: evaluation.sessionLss
+    promptRole: hidden-inference
+    valueType: number
+    description: 本次会话 LSS（学习压力评分，8-10 高压力）
+  - fieldId: evaluation.sessionKtl
+    promptRole: hidden-inference
+    valueType: number
+    description: 本次会话 KTL（知识获得质量，8-10 好）
+  - fieldId: evaluation.sessionLf
+    promptRole: hidden-inference
+    valueType: number
+    description: 本次会话 LF（疲劳负担，8-10 高疲劳）
+  - fieldId: evaluation.confidence
+    promptRole: hidden-inference
+    valueType: number
+    description: 本次评估的置信度
+  - fieldId: evaluation.reasoning
+    promptRole: hidden-inference
+    valueType: string
+    description: 评估依据（引用 1-2 个关键证据）
+  - fieldId: summary.keyTakeaways
+    promptRole: public-reply
+    valueType: array<string>
+    description: 收获列表
+  - fieldId: summary.actionPlan
+    promptRole: public-reply
+    valueType: array<string>
+    description: 行动列表（含检索式自测）
+  - fieldId: summary.evaluationHighlights
+    promptRole: public-reply
+    valueType: object
+    description: 亮点与改进（strengths/improvements）
+  - fieldId: summary.metricInterpretation
+    promptRole: derived-presentation
+    valueType: object
+    description: 本节/长期指标解读
+  - fieldId: summary.summaryVersion
+    promptRole: derived-presentation
+    valueType: string
+    description: summary 结构版本（固定 v2）
+
+  # === skill:adaptive-guidance-copy 产出 ===
+  - fieldId: headline
+    promptRole: public-reply
+    valueType: string
+    description: 引导文案主标题
+  - fieldId: subtitle
+    promptRole: public-reply
+    valueType: string
+    description: 引导文案副标题
+  - fieldId: todayActions
+    promptRole: public-reply
+    valueType: array<object>
+    description: 今日行动列表（label/to）
+  - fieldId: nextStep
+    promptRole: public-reply
+    valueType: string
+    description: 下一步建议
+  - fieldId: pathHint
+    promptRole: public-reply
+    valueType: string
+    description: 路径相关提示
+  - fieldId: paceHint
+    promptRole: public-reply
+    valueType: string
+    description: 节奏相关提示
+  - fieldId: emptyStateCopy
+    promptRole: public-reply
+    valueType: string
+    description: 空态文案
+  - fieldId: warningCopy
+    promptRole: public-reply
+    valueType: string
+    description: 预警文案
+
+routings:
+  # teaching-turn 输出
+  - agentId: skill:teaching-turn
+    fieldId: reply
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:teaching-turn
+    fieldId: analysis.levelScore
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:teaching-turn
+    fieldId: analysis.confusionPoints
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:teaching-turn
+    fieldId: analysis.engagement
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:teaching-turn
+    fieldId: analysis.emotionalState
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  # cognitiveLevel/understanding 同链交付 peer（peer-reinforcement 消费）
+  - agentId: skill:teaching-turn
+    fieldId: analysis.cognitiveLevel
+    render: hidden
+    handoff: [teaching-agent, skill:peer-reinforcement]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:teaching-turn
+    fieldId: analysis.understanding
+    render: hidden
+    handoff: [teaching-agent, skill:peer-reinforcement]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:teaching-turn
+    fieldId: knowledge.currentPoint
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:teaching-turn
+    fieldId: knowledge.points
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+  - agentId: skill:teaching-turn
+    fieldId: pedagogy.strategies
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:teaching-turn
+    fieldId: control.isCompletionCandidate
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:teaching-turn
+    fieldId: control.shouldTriggerPeer
+    render: visible
+    handoff: [skill:peer-reinforcement, teaching-agent]
+    internal: false
+    accumulate: false
+    notes: 触发 peer 流程的信号
+  - agentId: skill:teaching-turn
+    fieldId: control.checkpoint
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+    notes: 可选输出：满足间隔时才产生
+  - agentId: skill:teaching-turn
+    fieldId: control.completionCandidateEvidence
+    render: hidden
+    handoff: [teaching-agent]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 编排层门禁内部证据，不面向前端
+
+  # teaching-agent → skill:teaching-turn 输入通道（编排注入，非 LLM 产出）
+  - agentId: teaching-agent
+    fieldId: learner.learnerProjection
+    render: hidden
+    handoff: [skill:teaching-turn]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 回合输入通道（AITeachingOrchestrator 组装注入）
+  - agentId: teaching-agent
+    fieldId: knowledge.state
+    render: hidden
+    handoff: [skill:teaching-turn]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 回合输入通道（AITeachingOrchestrator 组装注入）
+  - agentId: teaching-agent
+    fieldId: controls.teachingControlContext
+    render: hidden
+    handoff: [skill:teaching-turn]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 回合输入通道（AITeachingOrchestrator 组装注入）
+  - agentId: teaching-agent
+    fieldId: classroomContext
+    render: hidden
+    handoff: [skill:teaching-turn]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 回合输入通道（AITeachingOrchestrator 组装注入）
+  - agentId: teaching-agent
+    fieldId: visibleDialogueContext
+    render: hidden
+    handoff: [skill:teaching-turn]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 回合输入通道（AITeachingOrchestrator 组装注入）
+
+  # peer-reinforcement 输出
+  - agentId: skill:peer-reinforcement
+    fieldId: message
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:peer-reinforcement
+    fieldId: followUpQuestions
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+
+  # session-wrapup 输出
+  - agentId: skill:session-wrapup
+    fieldId: summary.topicSummary
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+  - agentId: skill:session-wrapup
+    fieldId: summary.knowledgeSummary
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+  - agentId: skill:session-wrapup
+    fieldId: summary.knowledgeItems
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+  - agentId: skill:session-wrapup
+    fieldId: summary.learningEvaluation
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+  - agentId: skill:session-wrapup
+    fieldId: summary.practiceAdvice
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+  - agentId: skill:session-wrapup
+    fieldId: summary.keyTakeaways
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+  - agentId: skill:session-wrapup
+    fieldId: summary.actionPlan
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+  - agentId: skill:session-wrapup
+    fieldId: summary.evaluationHighlights
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+  - agentId: skill:session-wrapup
+    fieldId: summary.metricInterpretation
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:session-wrapup
+    fieldId: summary.summaryVersion
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+    visibilityPreset: agent-internal
+  - agentId: skill:session-wrapup
+    fieldId: evaluation.sessionLss
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:session-wrapup
+    fieldId: evaluation.sessionKtl
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:session-wrapup
+    fieldId: evaluation.sessionLf
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:session-wrapup
+    fieldId: evaluation.confidence
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:session-wrapup
+    fieldId: evaluation.reasoning
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+
+  # adaptive-guidance-copy 输出
+  - agentId: skill:adaptive-guidance-copy
+    fieldId: headline
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:adaptive-guidance-copy
+    fieldId: subtitle
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:adaptive-guidance-copy
+    fieldId: todayActions
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:adaptive-guidance-copy
+    fieldId: nextStep
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:adaptive-guidance-copy
+    fieldId: pathHint
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:adaptive-guidance-copy
+    fieldId: paceHint
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:adaptive-guidance-copy
+    fieldId: emptyStateCopy
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:adaptive-guidance-copy
+    fieldId: warningCopy
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+
+  # teaching-agent → learner（累积画像）
+  - agentId: teaching-agent
+    fieldId: analysis.understanding
+    render: hidden
+    handoff: [profile]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: teaching-agent
+    fieldId: analysis.confusionPoints
+    render: hidden
+    handoff: [profile]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: teaching-agent
+    fieldId: knowledge.points
+    render: hidden
+    handoff: [profile]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: teaching-agent
+    fieldId: pedagogy.strategies
+    render: hidden
+    handoff: [profile]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: teaching-agent
+    fieldId: summary.knowledgeItems
+    render: hidden
+    handoff: [profile]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: teaching-agent
+    fieldId: evaluation.sessionLss
+    render: hidden
+    handoff: [profile]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: teaching-agent
+    fieldId: evaluation.sessionKtl
+    render: hidden
+    handoff: [profile]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: teaching-agent
+    fieldId: evaluation.sessionLf
+    render: hidden
+    handoff: [profile]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal

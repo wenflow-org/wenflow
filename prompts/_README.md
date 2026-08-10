@@ -13,6 +13,7 @@
 ```text
 prompts/
 ├── core/                # v4 核心文件（YAML，唯一人工编辑入口，业务 SSOT）
+├── orchestration/       # 字段路由编排文件（数据面声明源，见 orchestration/_README.md）
 ├── skill.*.md           # 编译产物（由 compile 生成，勿手改；漂移会被 sync 跳过）
 ├── backups/             # 发布/回滚前的生产快照（按 skillId/时间戳归档）
 ├── _README.md           # 本说明
@@ -37,6 +38,7 @@ prompts/
 
 - `npm run prompts:lint` —— 核心文件 schema 与编译产物五块结构校验
 - `npm run prompts:core:check` —— coreHash 三方对账（核心文件 / 编译产物 / DB ACTIVE）
+- 字段路由编排文件（`prompts/orchestration/*.yaml`，数据面配置）由 bootstrap 灌入 DB 三表，为字段路由唯一声明源（seed TS 已退役），详见 `orchestration/_README.md`
 
 ## 注意事项
 

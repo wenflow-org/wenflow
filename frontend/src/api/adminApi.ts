@@ -503,28 +503,6 @@ export const adminRuntimeDefinitionsApi = {
 // ============================================================
 // V3 字段路由（AGENT_IO_DESIGN_V3 §3）
 // ============================================================
-export interface FieldRoutingPatch {
-  render?: 'visible' | 'hidden';
-  handoff?: string[];
-  internal?: boolean;
-  accumulate?: boolean;
-  notes?: string;
-  reason?: string;
-}
-
-export interface CreateFieldPayload {
-  fieldId: string;
-  stage: string;
-  promptRole: 'soft-info' | 'hidden-inference' | 'derived-presentation';
-  valueType?: string;
-  snakeName?: string;
-  camelName?: string;
-  description?: string;
-  enumValues?: string[];
-  bindings?: Record<string, unknown>;
-  reason?: string;
-}
-
 
 /**
  * Skill 工作台综合元数据 API
@@ -546,31 +524,20 @@ export const adminFieldRoutingsApi = {
   getStageDetail: async (stage: string) =>
     adminAxios.get(`/admin/field-routings/stages/${encodeURIComponent(stage)}`),
 
-  getFlow: async (stage: string) =>
-    adminAxios.get(`/admin/field-routings/flow/${encodeURIComponent(stage)}`),
-
-  updateRouting: async (agentId: string, fieldId: string, data: {
-    render?: 'visible' | 'hidden';
-    handoff?: string[];
-    internal?: boolean;
-    accumulate?: boolean;
-    notes?: string;
-  }) =>
-    adminAxios.patch(`/admin/field-routings/routings/${encodeURIComponent(agentId)}/${encodeURIComponent(fieldId)}`, data),
-
-  createField: async (data: {
-    fieldId: string;
-    stage: string;
-    promptRole: string;
-    valueType?: string;
-    description?: string;
-  }) => adminAxios.post('/admin/field-routings/fields', data),
-
   getChanges: async (params?: { stage?: string; fieldId?: string; limit?: number }) =>
     adminAxios.get('/admin/field-routings/changes', { params }),
 
   getDrift: async (params?: { kind?: 'contract' | 'field' | 'routing'; stage?: string }) =>
     adminAxios.get('/admin/field-routings/drift', { params }),
+
+  getOrchestrationFile: async (stage: string) =>
+    adminAxios.get(`/admin/field-routings/orchestration/${encodeURIComponent(stage)}`),
+
+  saveOrchestrationFile: async (stage: string, content: string) =>
+    adminAxios.put(`/admin/field-routings/orchestration/${encodeURIComponent(stage)}`, { content }),
+
+  syncOrchestrationFile: async (stage: string) =>
+    adminAxios.post(`/admin/field-routings/orchestration/${encodeURIComponent(stage)}/sync`),
 };
 
 /**

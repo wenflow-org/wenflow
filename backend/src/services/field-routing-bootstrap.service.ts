@@ -1,57 +1,18 @@
 import type { PrismaClient } from '../generated/system-client';
+import { randomUUID } from 'crypto';
 import { getCanonicalAgentId, getAgentManifest } from './agent-manifest.service';
 import {
-  ensureGoalFieldRoutings,
-  GOAL_FIELD_ROUTING_CONTRACTS,
-  GOAL_FIELD_ROUTING_FIELDS,
-  GOAL_FIELD_ROUTINGS
-} from '../scripts/seed-goal-field-routings';
-import {
-  ensurePathFieldRoutings,
-  PATH_FIELD_ROUTING_CONTRACTS,
-  PATH_FIELD_ROUTING_FIELDS,
-  PATH_FIELD_ROUTINGS
-} from '../scripts/seed-path-field-routings';
-import {
-  ensureTeachingFieldRoutings,
-  TEACHING_FIELD_ROUTING_CONTRACTS,
-  TEACHING_FIELD_ROUTING_FIELDS,
-  TEACHING_FIELD_ROUTINGS
-} from '../scripts/seed-execution-field-routings';
-import {
-  ensureProfileFieldRoutings,
-  PROFILE_FIELD_ROUTING_CONTRACTS,
-  PROFILE_FIELD_ROUTING_FIELDS,
-  PROFILE_FIELD_ROUTINGS
-} from '../scripts/seed-learner-field-routings';
-import {
-  ensureSimulationFieldRoutings,
-  SIMULATION_FIELD_ROUTING_CONTRACTS,
-  SIMULATION_FIELD_ROUTING_FIELDS,
-  SIMULATION_FIELD_ROUTINGS
-} from '../scripts/seed-simulation-field-routings';
+  loadOrchestrationFiles,
+  type OrchestrationStage
+} from './field-routing/orchestration-file';
 
-const contractGroups = [
-  GOAL_FIELD_ROUTING_CONTRACTS,
-  PATH_FIELD_ROUTING_CONTRACTS,
-  TEACHING_FIELD_ROUTING_CONTRACTS,
-  PROFILE_FIELD_ROUTING_CONTRACTS,
-  SIMULATION_FIELD_ROUTING_CONTRACTS
-];
-const fieldGroups = [
-  GOAL_FIELD_ROUTING_FIELDS,
-  PATH_FIELD_ROUTING_FIELDS,
-  TEACHING_FIELD_ROUTING_FIELDS,
-  PROFILE_FIELD_ROUTING_FIELDS,
-  SIMULATION_FIELD_ROUTING_FIELDS
-];
-const routingGroups = [
-  GOAL_FIELD_ROUTINGS,
-  PATH_FIELD_ROUTINGS,
-  TEACHING_FIELD_ROUTINGS,
-  PROFILE_FIELD_ROUTINGS,
-  SIMULATION_FIELD_ROUTINGS
-];
+// 编排文件（prompts/orchestration/<stage>.yaml）是字段路由的唯一声明源；
+// seed-*-field-routings.ts 已退役（2026-08 单源化收尾），编排文件为唯一编辑入口。
+const ORCHESTRATION_STAGES: OrchestrationStage[] = loadOrchestrationFiles();
+
+const contractGroups = ORCHESTRATION_STAGES.map((stage) => stage.contracts);
+const fieldGroups = ORCHESTRATION_STAGES.map((stage) => stage.fields);
+const routingGroups = ORCHESTRATION_STAGES.map((stage) => stage.routings);
 
 export const FIELD_ROUTING_SEED_MANIFEST = {
   contractAgentIds: contractGroups.flat().map(item => item.agentId),
@@ -77,14 +38,15 @@ assertUnique(
 // 3. 自环 handoff 拒绝
 // ============================================================
 
-const STAGE_NAMES = new Set(['goal', 'path', 'teaching', 'profile']);
+// 阶段词表：goal/path/teaching/profile/simulation（2026-08 单源化补全 simulation）
+const STAGE_NAMES = new Set(ORCHESTRATION_STAGES.map((stage) => stage.stage));
 
 function validateHandoffTarget(target: string, key: string, errors: string[]) {
   const canonical = getCanonicalAgentId(target);
   if (target === canonical && STAGE_NAMES.has(target)) return; // 阶段名
   const entry = getAgentManifest(canonical);
   if (entry) return; // manifest 中存在的 skill 或 agent
-  errors.push(`[field-routing] ${key} 的 handoff 目标 "${target}" 不在 manifest（也不是阶段名 goal/path/teaching/profile）`);
+  errors.push(`[field-routing] ${key} 的 handoff 目标 "${target}" 不在 manifest（也不是阶段名 ${[...STAGE_NAMES].join('/')}）`);
 }
 
 export interface SeedRoutingLike {
@@ -136,27 +98,108 @@ if (FIELD_ROUTING_SEED_SEMANTIC_ERRORS.length > 0) {
 
 export interface FieldRoutingBootstrapDependencies {
   database: PrismaClient;
-  ensureGoal?: typeof ensureGoalFieldRoutings;
-  ensurePath?: typeof ensurePathFieldRoutings;
-  ensureTeaching?: typeof ensureTeachingFieldRoutings;
-  ensureProfile?: typeof ensureProfileFieldRoutings;
-  ensureSimulation?: typeof ensureSimulationFieldRoutings;
+  /** 测试注入：覆盖编排文件数据 */
+  stagesOverride?: OrchestrationStage[];
+}
+
+export interface FieldRoutingBootstrapResult {
+  fieldsCreated: number;
+  fieldsSkipped: number;
+  contractsCreated: number;
+  contractsSkipped: number;
+  routingsCreated: number;
+  routingsSkipped: number;
+}
+
+/** 通用 ensure：按编排文件数据对单个阶段执行三表 upsert（update:{} 只建不更新） */
+export async function ensureStageFieldRoutings(
+  systemPrisma: PrismaClient,
+  stage: OrchestrationStage
+): Promise<FieldRoutingBootstrapResult> {
+  const result: FieldRoutingBootstrapResult = { fieldsCreated: 0, fieldsSkipped: 0, contractsCreated: 0, contractsSkipped: 0, routingsCreated: 0, routingsSkipped: 0 };
+
+  for (const c of stage.contracts) {
+    const exists = await systemPrisma.agent_contracts.findUnique({ where: { agentId: c.agentId } });
+    await systemPrisma.agent_contracts.upsert({
+      where: { agentId: c.agentId },
+      update: {},
+      create: {
+        id: randomUUID(),
+        agentId: c.agentId,
+        stage: stage.stage,
+        displayName: c.displayName,
+        description: c.description,
+        schemaVersion: 'v3',
+        source: 'code',
+        managedByCode: true,
+      },
+    });
+    exists ? result.contractsSkipped++ : result.contractsCreated++;
+  }
+
+  for (const f of stage.fields) {
+    const exists = await systemPrisma.field_definitions.findUnique({ where: { fieldId: f.fieldId } });
+    await systemPrisma.field_definitions.upsert({
+      where: { fieldId: f.fieldId },
+      update: {},
+      create: {
+        id: randomUUID(),
+        fieldId: f.fieldId,
+        stage: stage.stage,
+        promptRole: f.promptRole,
+        valueType: f.valueType,
+        snakeName: f.snakeName ?? null,
+        camelName: f.camelName ?? null,
+        pathInRawOutput: f.pathInRawOutput ?? null,
+        description: f.description,
+        enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null,
+        systemLocked: f.systemLocked ?? false,
+        structureLocked: f.structureLocked ?? false,
+        bindings: f.bindings ? JSON.stringify(f.bindings) : null,
+      },
+    });
+    exists ? result.fieldsSkipped++ : result.fieldsCreated++;
+  }
+
+  for (const r of stage.routings) {
+    const exists = await systemPrisma.agent_field_routings.findUnique({ where: { agentId_fieldId: { agentId: r.agentId, fieldId: r.fieldId } } });
+    await systemPrisma.agent_field_routings.upsert({
+      where: { agentId_fieldId: { agentId: r.agentId, fieldId: r.fieldId } },
+      update: {},
+      create: {
+        id: randomUUID(),
+        agentId: r.agentId,
+        fieldId: r.fieldId,
+        render: r.render,
+        handoff: r.handoff.length ? JSON.stringify(r.handoff) : null,
+        internalFlag: r.internal,
+        accumulate: r.accumulate,
+        visibilityPreset: r.visibilityPreset ?? null,
+        notes: r.notes ?? null,
+        source: 'code',
+        managedByCode: true,
+      },
+    });
+    exists ? result.routingsSkipped++ : result.routingsCreated++;
+  }
+
+  return result;
 }
 
 export async function bootstrapFieldRoutings(dependencies: FieldRoutingBootstrapDependencies) {
-  const goal = await (dependencies.ensureGoal || ensureGoalFieldRoutings)(dependencies.database);
-  const path = await (dependencies.ensurePath || ensurePathFieldRoutings)(dependencies.database);
-  const teaching = await (dependencies.ensureTeaching || ensureTeachingFieldRoutings)(dependencies.database);
-  const profile = await (dependencies.ensureProfile || ensureProfileFieldRoutings)(dependencies.database);
-  const simulation = await (dependencies.ensureSimulation || ensureSimulationFieldRoutings)(dependencies.database);
-  return { goal, path, teaching, profile, simulation };
+  const stages = dependencies.stagesOverride || ORCHESTRATION_STAGES;
+  const results: Record<string, FieldRoutingBootstrapResult> = {};
+  for (const stage of stages) {
+    results[stage.stage] = await ensureStageFieldRoutings(dependencies.database, stage);
+  }
+  return results;
 }
 
 // ============================================================
-// Seed 漂移检测（只读 diff）
+// 编排文件声明漂移检测（只读 diff）
 //
-// bootstrap 的 upsert(update:{}) 语义是"只建不更新"——seed 改动后
-// DB 已有行不会自动更新（保留 admin 编辑）。本检测对比 seed 声明与
+// bootstrap 的 upsert(update:{}) 语义是"只建不更新"——编排文件声明改动后
+// DB 已有行不会自动更新（保留 admin 编辑）。本检测对比编排文件声明与
 // DB 行内容，让"声明一套、库里另一套"的漂移可见。
 // 规则：managedByCode=true 的行参与 diff；admin 创建/改过的行跳过。
 // ============================================================
@@ -193,7 +236,7 @@ function normalizeDriftValue(value: unknown): unknown {
 }
 
 export async function detectFieldRoutingDrift(systemDb: SystemDbLike): Promise<FieldRoutingDriftReport> {
-  const [seedContracts, seedFields, seedRoutings] = [
+  const [declaredContracts, declaredFields, declaredRoutings] = [
     contractGroups.flat(),
     fieldGroups.flat(),
     routingGroups.flat(),
@@ -207,59 +250,59 @@ export async function detectFieldRoutingDrift(systemDb: SystemDbLike): Promise<F
   const items: FieldRoutingDriftItem[] = [];
 
   const dbContractMap = new Map(dbContracts.map((row) => [row.agentId, row]));
-  for (const seed of seedContracts) {
-    const db = dbContractMap.get(seed.agentId);
+  for (const declared of declaredContracts) {
+    const db = dbContractMap.get(declared.agentId);
     if (!db) continue; // 缺失由 readiness 数量检查覆盖
     if (db.managedByCode === false) continue; // admin 全权行跳过
-    if (JSON.stringify(normalizeDriftValue(seed.displayName)) !== JSON.stringify(normalizeDriftValue(db.displayName))) {
-      items.push({ kind: 'contract', key: seed.agentId, field: 'displayName', seedValue: seed.displayName, dbValue: db.displayName });
+    if (JSON.stringify(normalizeDriftValue(declared.displayName)) !== JSON.stringify(normalizeDriftValue(db.displayName))) {
+      items.push({ kind: 'contract', key: declared.agentId, field: 'displayName', seedValue: declared.displayName, dbValue: db.displayName });
     }
-    if (JSON.stringify(normalizeDriftValue(seed.description)) !== JSON.stringify(normalizeDriftValue(db.description))) {
-      items.push({ kind: 'contract', key: seed.agentId, field: 'description', seedValue: seed.description, dbValue: db.description });
+    if (JSON.stringify(normalizeDriftValue(declared.description)) !== JSON.stringify(normalizeDriftValue(db.description))) {
+      items.push({ kind: 'contract', key: declared.agentId, field: 'description', seedValue: declared.description, dbValue: db.description });
     }
   }
 
   const dbFieldMap = new Map(dbFields.map((row) => [row.fieldId, row]));
-  for (const seed of seedFields) {
-    const db = dbFieldMap.get(seed.fieldId);
+  for (const declared of declaredFields) {
+    const db = dbFieldMap.get(declared.fieldId);
     if (!db) continue;
     if (db.managedByCode === false) continue;
     const pairs: Array<[string, unknown, unknown]> = [
-      ['promptRole', seed.promptRole, db.promptRole],
-      ['valueType', seed.valueType, db.valueType],
-      ['snakeName', seed.snakeName ?? null, db.snakeName ?? null],
-      ['camelName', seed.camelName ?? null, db.camelName ?? null],
-      ['systemLocked', seed.systemLocked ?? false, db.systemLocked ?? false],
-      ['structureLocked', seed.structureLocked ?? false, db.structureLocked ?? false],
-      // pathInRawOutput 是配置式值抽取的依据，seed 声明与 DB 不一致会导致
+      ['promptRole', declared.promptRole, db.promptRole],
+      ['valueType', declared.valueType, db.valueType],
+      ['snakeName', declared.snakeName ?? null, db.snakeName ?? null],
+      ['camelName', declared.camelName ?? null, db.camelName ?? null],
+      ['systemLocked', declared.systemLocked ?? false, db.systemLocked ?? false],
+      ['structureLocked', declared.structureLocked ?? false, db.structureLocked ?? false],
+      // pathInRawOutput 是配置式值抽取的依据，编排文件声明与 DB 不一致会导致
       // assemble* 抽取静默跑偏，必须纳入漂移检测（2026-08 补强）
-      ['pathInRawOutput', seed.pathInRawOutput ?? null, db.pathInRawOutput ?? null],
-      ['description', seed.description ?? null, db.description ?? null],
-      ['bindings', seed.bindings ? JSON.stringify(seed.bindings) : null, db.bindings ?? null],
+      ['pathInRawOutput', declared.pathInRawOutput ?? null, db.pathInRawOutput ?? null],
+      ['description', declared.description ?? null, db.description ?? null],
+      ['bindings', declared.bindings ? JSON.stringify(declared.bindings) : null, db.bindings ?? null],
     ];
     for (const [field, seedValue, dbValue] of pairs) {
       if (JSON.stringify(seedValue ?? null) !== JSON.stringify(dbValue ?? null)) {
-        items.push({ kind: 'field', key: seed.fieldId, field, seedValue: seedValue ?? null, dbValue: dbValue ?? null });
+        items.push({ kind: 'field', key: declared.fieldId, field, seedValue: seedValue ?? null, dbValue: dbValue ?? null });
       }
     }
   }
 
   const dbRoutingMap = new Map(dbRoutings.map((row) => [`${row.agentId}\0${row.fieldId}`, row]));
-  for (const seed of seedRoutings) {
-    const key = `${seed.agentId}\0${seed.fieldId}`;
+  for (const declared of declaredRoutings) {
+    const key = `${declared.agentId}\0${declared.fieldId}`;
     const db = dbRoutingMap.get(key);
     if (!db) continue;
     if (db.managedByCode === false) continue; // admin 改过的行跳过
-    const seedHandoff = seed.handoff.length ? JSON.stringify(seed.handoff) : null;
+    const declaredHandoff = declared.handoff.length ? JSON.stringify(declared.handoff) : null;
     const dbHandoff = db.handoff ?? null;
-    if (seedHandoff !== dbHandoff) {
-      items.push({ kind: 'routing', key, field: 'handoff', seedValue: seed.handoff, dbValue: db.handoff });
+    if (declaredHandoff !== dbHandoff) {
+      items.push({ kind: 'routing', key, field: 'handoff', seedValue: declared.handoff, dbValue: db.handoff });
     }
     const pairs: Array<[string, unknown, unknown]> = [
-      ['render', seed.render, db.render],
-      ['internalFlag', seed.internal, !!db.internalFlag],
-      ['accumulate', seed.accumulate, !!db.accumulate],
-      ['visibilityPreset', seed.visibilityPreset ?? null, db.visibilityPreset ?? null],
+      ['render', declared.render, db.render],
+      ['internalFlag', declared.internal, !!db.internalFlag],
+      ['accumulate', declared.accumulate, !!db.accumulate],
+      ['visibilityPreset', declared.visibilityPreset ?? null, db.visibilityPreset ?? null],
     ];
     for (const [field, seedValue, dbValue] of pairs) {
       if (JSON.stringify(seedValue ?? null) !== JSON.stringify(dbValue ?? null)) {

@@ -1,38 +1,27 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import systemPrisma from '../../config/system-database';
 import { logger } from '../../utils/logger';
 import { clearRoutingCache } from '../../services/field-dispatcher';
 import { clearSupplementRenderCache } from '../../services/prompt-composer';
-import { detectFieldRoutingDrift } from '../../services/field-routing-bootstrap.service';
+import { detectFieldRoutingDrift, ensureStageFieldRoutings } from '../../services/field-routing-bootstrap.service';
+import {
+  loadOrchestrationFiles,
+  ORCHESTRATION_DIR,
+  PROMPT_ROLES,
+  RENDER_VALUES,
+  validateOrchestrationContent,
+  type OrchestrationStage,
+} from '../../services/field-routing/orchestration-file';
 
 const router = Router();
-
-const PROMPT_ROLES = [
-  'hard-required',
-  'soft-info',
-  'hidden-inference',
-  'public-reply',
-  'proposal-output',
-  'derived-presentation',
-  'control-signal',
-] as const;
-
-const RENDER_VALUES = ['visible', 'hidden'] as const;
 
 function parseJson<T = any>(value: string | null | undefined): T | null {
   if (!value) return null;
   try {
     return JSON.parse(value) as T;
-  } catch {
-    return null;
-  }
-}
-
-function stringifyOrNull(value: unknown): string | null {
-  if (value === undefined || value === null) return null;
-  try {
-    return JSON.stringify(value);
   } catch {
     return null;
   }
@@ -105,88 +94,20 @@ function serializeContract(row: any) {
   };
 }
 
-async function recordChange(payload: {
-  changeType: string;
-  targetTable: string;
-  targetId: string;
-  agentId?: string | null;
-  fieldId?: string | null;
-  before?: unknown;
-  after?: unknown;
-  actorId?: string | null;
-  actorRole?: string | null;
-  reason?: string | null;
-}) {
-  try {
-    await systemPrisma.node_config_changes.create({
-      data: {
-        id: randomUUID(),
-        changeType: payload.changeType,
-        targetTable: payload.targetTable,
-        targetId: payload.targetId,
-        agentId: payload.agentId ?? null,
-        fieldId: payload.fieldId ?? null,
-        before: stringifyOrNull(payload.before),
-        after: stringifyOrNull(payload.after),
-        actorId: payload.actorId ?? null,
-        actorRole: payload.actorRole ?? null,
-        reason: payload.reason ?? null,
-      },
-    });
-  } catch (err) {
-    // 审计写失败不影响主流程
-    logger.warn('[field-routings] audit write failed', { error: err instanceof Error ? err.message : String(err) });
-  }
-}
-
-function actorOf(req: Request): { actorId: string | null; actorRole: string | null } {
-  const u = (req as any).user || {};
-  return {
-    actorId: u.id || u.userId || null,
-    actorRole: u.role || 'admin',
-  };
-}
-
 // ============================================================
 // GET /api/admin/field-routings/stages
-// 返回支持的 stage 清单 + 元信息
+// 返回支持的 stage 清单 + 元信息（派生自 prompts/orchestration/*.yaml）
 // ============================================================
 router.get('/stages', async (_req: Request, res: Response) => {
   res.json({
     success: true,
     data: {
-      stages: [
-        {
-          id: 'goal',
-          displayName: 'Goal 阶段',
-          description: '目标对话：澄清目标、收集背景、收敛到方向方案',
-          status: 'active',
-        },
-        {
-          id: 'path',
-          displayName: 'Path 阶段',
-          description: '学习路径生成：Framing → Path Planning → Stage Designer',
-          status: 'active',
-        },
-        {
-          id: 'teaching',
-          displayName: '教学阶段',
-          description: '授课执行：Teaching Turn → Peer/Checkpoint → Wrapup',
-          status: 'active',
-        },
-        {
-          id: 'profile',
-          displayName: '画像阶段',
-          description: '学习者画像增强与背景知识沉淀（编排器内部）',
-          status: 'active',
-        },
-        {
-          id: 'simulation',
-          displayName: '仿真阶段',
-          description: '虚拟学习者实验：样本设计 → 模拟器 → 旁路审计（服务端注入输入，无阶段间 handoff）',
-          status: 'active',
-        },
-      ],
+      stages: loadOrchestrationFiles().map((stage) => ({
+        id: stage.stage,
+        displayName: stage.displayName || stage.stage,
+        description: stage.description || '',
+        status: 'active',
+      })),
       promptRoles: PROMPT_ROLES,
       renderValues: RENDER_VALUES,
     },
@@ -258,351 +179,286 @@ router.get('/stages/:stage', async (req: Request, res: Response) => {
 });
 
 // ============================================================
-// GET /api/admin/field-routings/flow/:stage
-// 字段流图数据：节点 = Agent + Skill，边 = 字段在 handoff 中的传递
-//
-// 输出：
-//   nodes: [{ id, type: 'agent'|'skill', label, ... }]
-//   edges: [{ id, source, target, label, fields: [{ fieldId, routing }], routing }]
-//
-// 规则：
-//   - source = 某 Agent / Skill（已生产该字段）
-//   - target = handoff 目标（可能是 stage 字符串如 'path'，转成对应顶层 Agent）
-//   - 一条 source -> target 上多个字段聚合
-//   - accumulate / handoff / render=hidden 等用不同颜色区分
+// 编排文件编辑侧（单源化批次 C）
+// 编排文件 prompts/orchestration/<stage>.yaml 是字段路由唯一声明源。
+// 行级 PATCH /routings/:agentId/:fieldId 与 POST /fields 已退役（批次 D）。
 // ============================================================
-router.get('/flow/:stage', async (req: Request, res: Response) => {
+
+/** 解析 URL 中的 stage 并定位编排文件；非法/不存在返回 null（防路径穿越） */
+function resolveOrchestrationFile(stage: string): string | null {
+  if (!stage || !/^[\w.-]+$/.test(stage)) return null;
+  const yamlPath = path.join(ORCHESTRATION_DIR, `${stage}.yaml`);
+  if (fs.existsSync(yamlPath)) return yamlPath;
+  const ymlPath = path.join(ORCHESTRATION_DIR, `${stage}.yml`);
+  if (fs.existsSync(ymlPath)) return ymlPath;
+  return null;
+}
+
+// ============================================================
+// GET /api/admin/field-routings/orchestration/:stage
+// 返回编排文件原文与解析摘要
+// ============================================================
+router.get('/orchestration/:stage', async (req: Request, res: Response) => {
   const stage = String(req.params.stage || '').trim();
-  if (!stage) {
-    return res.status(400).json({ success: false, error: { message: 'stage 参数缺失' } });
+  const filePath = resolveOrchestrationFile(stage);
+  if (!filePath) {
+    return res.status(404).json({ success: false, error: { message: `编排文件不存在：${stage}` } });
   }
 
-  const { listTopLevelAgents, getCanonicalAgentId, getAgentOfSkill, listAgentManifest } = await import('../../services/agent-manifest.service');
-  const topAgents = listTopLevelAgents();
-  const allManifest = listAgentManifest();
-  const manifestMap = new Map(allManifest.map(m => [m.id, m]));
-
-  // stage -> 顶层 Agent ID 的映射（handoff 用 stage 名指代下游）
-  const STAGE_TO_AGENT: Record<string, string> = {
-    goal: 'goal-agent',
-    requirement: 'goal-agent',
-    path: 'path-agent',
-    teaching: 'teaching-agent',
-    profile: 'profile-agent',
-    learner: 'profile-agent'
-  };
-
-  const [fields, contracts] = await Promise.all([
-    systemPrisma.field_definitions.findMany({ where: { stage } }),
-    systemPrisma.agent_contracts.findMany({ where: { stage } })
-  ]);
-
-  const stageAgentIds = contracts.map(c => c.agentId);
-  const routings = stageAgentIds.length > 0
-    ? await systemPrisma.agent_field_routings.findMany({ where: { agentId: { in: stageAgentIds } } })
-    : [];
-
-  const fieldMap = new Map(fields.map(f => [f.fieldId, f]));
-
-  // 节点集合：本 stage 涉及到的 Agent/Skill（含 handoff 目标 Agent）
-  const involvedNodes = new Map<string, any>();
-
-  const addNode = (rawId: string) => {
-    const canonical = getCanonicalAgentId(rawId);
-    if (involvedNodes.has(canonical)) return;
-    const manifest = manifestMap.get(canonical);
-    if (manifest) {
-      involvedNodes.set(canonical, {
-        id: canonical,
-        type: manifest.kind,
-        label: manifest.name,
-        category: manifest.category,
-        parentAgentId: manifest.kind === 'skill' ? (getAgentOfSkill(canonical)?.id || null) : null
-      });
-    } else {
-      // stage 名作为虚拟节点
-      involvedNodes.set(canonical, {
-        id: canonical,
-        type: 'stage',
-        label: canonical,
-        category: 'stage'
-      });
-    }
-  };
-
-  // 把 contracts 涉及的 agent / skill 都加进节点
-  for (const c of contracts) addNode(c.agentId);
-
-  // 把 handoff 目标涉及的下游 Agent 也加节点（基于 stage 名映射）
-  for (const r of routings) {
-    const handoff = parseHandoff(r.handoff);
-    for (const h of handoff) {
-      const mappedAgentId = STAGE_TO_AGENT[h] || h;
-      addNode(mappedAgentId);
-    }
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, 'utf-8');
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: { message: `编排文件读取失败：${filePath}（${error instanceof Error ? error.message : String(error)}）` },
+    });
   }
 
-  // 构造边：按 (source, target) 聚合
-  const edgeAgg = new Map<string, { source: string; target: string; fields: any[]; renderBuckets: Record<string, number>; routingTypes: Set<string> }>();
-
-  for (const r of routings) {
-    const sourceCanonical = getCanonicalAgentId(r.agentId);
-    const f = fieldMap.get(r.fieldId);
-    const handoff = parseHandoff(r.handoff);
-
-    if (handoff.length === 0) {
-      // 没有 handoff 但 accumulate=true → 流向 profile-agent
-      if (r.accumulate) {
-        const target = 'profile-agent';
-        addNode(target);
-        const key = `${sourceCanonical}__${target}`;
-        if (!edgeAgg.has(key)) {
-          edgeAgg.set(key, { source: sourceCanonical, target, fields: [], renderBuckets: {}, routingTypes: new Set() });
-        }
-        const e = edgeAgg.get(key)!;
-        e.fields.push({ fieldId: r.fieldId, render: r.render, promptRole: f?.promptRole, routingMode: 'accumulate' });
-        e.routingTypes.add('accumulate');
-        e.renderBuckets[r.render || 'visible'] = (e.renderBuckets[r.render || 'visible'] || 0) + 1;
-      }
-      continue;
-    }
-
-    for (const h of handoff) {
-      const target = STAGE_TO_AGENT[h] || h;
-      addNode(target);
-      const key = `${sourceCanonical}__${target}`;
-      if (!edgeAgg.has(key)) {
-        edgeAgg.set(key, { source: sourceCanonical, target, fields: [], renderBuckets: {}, routingTypes: new Set() });
-      }
-      const e = edgeAgg.get(key)!;
-      e.fields.push({ fieldId: r.fieldId, render: r.render, promptRole: f?.promptRole, routingMode: 'handoff' });
-      e.routingTypes.add('handoff');
-      e.renderBuckets[r.render || 'visible'] = (e.renderBuckets[r.render || 'visible'] || 0) + 1;
-    }
+  let parsed: OrchestrationStage;
+  try {
+    parsed = validateOrchestrationContent(content);
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: { message: `编排文件解析失败（文件本身损坏，需先修复）：${error instanceof Error ? error.message : String(error)}` },
+    });
   }
-
-  const edges = Array.from(edgeAgg.values()).map(e => ({
-    id: `${e.source}__${e.target}`,
-    source: e.source,
-    target: e.target,
-    fieldCount: e.fields.length,
-    fields: e.fields,
-    renderBuckets: e.renderBuckets,
-    routingTypes: Array.from(e.routingTypes),
-    label: `${e.fields.length} 个字段`
-  }));
 
   res.json({
     success: true,
     data: {
       stage,
-      nodes: Array.from(involvedNodes.values()),
-      edges,
-      summary: {
-        nodeCount: involvedNodes.size,
-        edgeCount: edges.length,
-        fieldCount: fields.length,
-        routingCount: routings.length
-      }
-    }
-  });
-});
-
-function parseHandoff(raw: any): string[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) return raw.map(String);
-  if (typeof raw === 'string') {
-    try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed.map(String) : [];
-    } catch {
-      return raw.split(',').map(s => s.trim()).filter(Boolean);
-    }
-  }
-  return [];
-}
-
-// ============================================================
-// POST /api/admin/field-routings/fields
-// 新建字段定义（系统锁字段不允许由 admin 创建到 hard-required / control-signal）
-// ============================================================
-router.post('/fields', async (req: Request, res: Response) => {
-  const body = req.body || {};
-  const fieldId = String(body.fieldId || '').trim();
-  const stage = String(body.stage || '').trim();
-  const promptRole = String(body.promptRole || '').trim();
-
-  if (!fieldId || !stage || !promptRole) {
-    return res.status(400).json({ success: false, error: { message: 'fieldId / stage / promptRole 必填' } });
-  }
-  if (!PROMPT_ROLES.includes(promptRole as any)) {
-    return res.status(400).json({ success: false, error: { message: `promptRole 非法，须在 ${PROMPT_ROLES.join(',')} 中` } });
-  }
-
-  // V3 §10 P1.0：admin 只允许新建到 soft-info / hidden-inference / derived-presentation
-  const ADMIN_ALLOWED = new Set(['soft-info', 'hidden-inference', 'derived-presentation']);
-  if (!ADMIN_ALLOWED.has(promptRole)) {
-    return res.status(400).json({
-      success: false,
-      error: {
-        message: `admin 不允许新建 promptRole=${promptRole} 的字段（hard-required / public-reply / proposal-output / control-signal 必须先有代码消费）`,
+      fileName: path.basename(filePath),
+      content,
+      parsed: {
+        contractCount: parsed.contracts.length,
+        fieldCount: parsed.fields.length,
+        routingCount: parsed.routings.length,
       },
-    });
-  }
-
-  // 重复检查
-  const exists = await systemPrisma.field_definitions.findUnique({ where: { fieldId } });
-  if (exists) {
-    return res.status(409).json({ success: false, error: { message: `字段 ${fieldId} 已存在` } });
-  }
-
-  const id = randomUUID();
-  const created = await systemPrisma.field_definitions.create({
-    data: {
-      id,
-      fieldId,
-      stage,
-      promptRole,
-      valueType: String(body.valueType || 'string'),
-      snakeName: body.snakeName || null,
-      camelName: body.camelName || null,
-      description: body.description || null,
-      enumValues: stringifyOrNull(body.enumValues),
-      schemaVersion: body.schemaVersion || 'v3',
-      source: 'admin',
-      managedByCode: false,
-      systemLocked: false,
-      structureLocked: false,
-      bindings: stringifyOrNull(body.bindings),
-      metadata: stringifyOrNull(body.metadata),
     },
   });
-
-  const actor = actorOf(req);
-  await recordChange({
-    changeType: 'field-create',
-    targetTable: 'field_definitions',
-    targetId: id,
-    fieldId,
-    after: serializeField(created),
-    actorId: actor.actorId,
-    actorRole: actor.actorRole,
-    reason: body.reason || 'admin create field',
-  });
-
-  // 字段表变化会改变 supplement 渲染与 handoff 抽取结果，立即失效缓存
-  clearRoutingCache();
-  clearSupplementRenderCache();
-
-  res.status(201).json({ success: true, data: { ...serializeField(created), locks: lockSummary(created, null) } });
 });
 
 // ============================================================
-// PATCH /api/admin/field-routings/routings/:orchestratorId/:fieldId
-// 调整某字段在某编排器下的 4 路由属性
+// PUT /api/admin/field-routings/orchestration/:stage
+// 保存完整编排文件 YAML：内存校验 → 备份 → 写盘 → ensure 同步（只建不更新）→ 清缓存
 // ============================================================
-router.patch('/routings/:agentId/:fieldId', async (req: Request, res: Response) => {
-  const { agentId, fieldId } = req.params;
-  const body = req.body || {};
-
-  const [field, existing, contract] = await Promise.all([
-    systemPrisma.field_definitions.findUnique({ where: { fieldId } }),
-    systemPrisma.agent_field_routings.findUnique({
-      where: { agentId_fieldId: { agentId, fieldId } },
-    }),
-    systemPrisma.agent_contracts.findUnique({ where: { agentId } }),
-  ]);
-
-  if (!field) {
-    return res.status(404).json({ success: false, error: { message: `field ${fieldId} 不存在` } });
-  }
-  if (!contract) {
-    return res.status(404).json({ success: false, error: { message: `agent ${agentId} 不存在` } });
+router.put('/orchestration/:stage', async (req: Request, res: Response) => {
+  const stage = String(req.params.stage || '').trim();
+  const filePath = resolveOrchestrationFile(stage);
+  if (!filePath) {
+    return res.status(404).json({ success: false, error: { message: `编排文件不存在：${stage}` } });
   }
 
-  // 锁检查
-  const locks = lockSummary(field, existing);
-  if (locks.systemLocked) {
-    return res.status(403).json({
+  const content = typeof (req.body || {}).content === 'string' ? (req.body as { content: string }).content : '';
+  if (!content.trim()) {
+    return res.status(400).json({ success: false, error: { message: 'content（完整编排文件 YAML 文本）必填' } });
+  }
+
+  let validated: OrchestrationStage;
+  try {
+    validated = validateOrchestrationContent(content);
+  } catch (error) {
+    return res.status(400).json({
       success: false,
-      error: { message: 'system-locked 字段不允许任何调整（必须先改代码）' },
+      error: { message: `编排文件校验失败：${error instanceof Error ? error.message : String(error)}` },
     });
   }
-  if (locks.structureLocked) {
-    // structure-locked 仅允许 prompt 级精调；当前没有 prompt 字段，因此完全只读
-    return res.status(403).json({
+  if (validated.stage !== stage) {
+    return res.status(400).json({
       success: false,
-      error: { message: 'structure-locked 字段不允许调整路由（仅允许 prompt 级精调）' },
+      error: { message: `编排文件内 stage 声明（${validated.stage}）与 URL（${stage}）不一致` },
     });
   }
 
-  const data: Record<string, any> = {};
-
-  if (typeof body.render === 'string') {
-    if (!RENDER_VALUES.includes(body.render)) {
-      return res.status(400).json({ success: false, error: { message: `render 非法` } });
-    }
-    data.render = body.render;
-  }
-  if (Array.isArray(body.handoff)) {
-    data.handoff = stringifyOrNull(body.handoff);
-  }
-  if (typeof body.internal === 'boolean') {
-    data.internalFlag = body.internal;
-  }
-  if (typeof body.accumulate === 'boolean') {
-    data.accumulate = body.accumulate;
-  }
-  if (typeof body.notes === 'string') {
-    data.notes = body.notes;
+  // 备份当前生产文件（失败静默，不阻断保存）
+  try {
+    const backupsDir = path.join(path.dirname(ORCHESTRATION_DIR), 'backups', 'orchestration', stage);
+    await fs.promises.mkdir(backupsDir, { recursive: true });
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    await fs.promises.copyFile(filePath, path.join(backupsDir, `${ts}.yaml`));
+  } catch (error) {
+    logger.warn('[field-routings] orchestration backup failed', { stage, error: error instanceof Error ? error.message : String(error) });
   }
 
-  if (!Object.keys(data).length) {
-    return res.status(400).json({ success: false, error: { message: '没有有效字段被更新' } });
+  // 写盘（文件为准）
+  await fs.promises.writeFile(filePath, content, 'utf-8');
+
+  // 立即 ensure（只建不更新：新字段/新路由进 DB；已有行属性修改待同步）——失败不阻断写盘结果
+  let synced = true;
+  let syncHint = '';
+  try {
+    await ensureStageFieldRoutings(systemPrisma, validated);
+  } catch (error) {
+    synced = false;
+    syncHint = `DB 同步失败：${error instanceof Error ? error.message : String(error)}（新建行未入库，可在「漂移与审计」复查）`;
+  }
+  if (synced) {
+    syncHint = '新建字段/路由已生效；已有行属性修改需「强制同步 DB」或重启后由 bootstrap 覆盖生效';
   }
 
-  let saved: any;
-  if (existing) {
-    saved = await systemPrisma.agent_field_routings.update({
-      where: { agentId_fieldId: { agentId, fieldId } },
-      data: { ...data, updatedAt: new Date() },
-    });
-  } else {
-    saved = await systemPrisma.agent_field_routings.create({
-      data: {
-        id: randomUUID(),
-        agentId,
-        fieldId,
-        render: data.render || 'visible',
-        handoff: data.handoff || null,
-        internalFlag: typeof data.internalFlag === 'boolean' ? data.internalFlag : false,
-        accumulate: typeof data.accumulate === 'boolean' ? data.accumulate : false,
-        notes: data.notes || null,
-        source: 'admin',
-        managedByCode: false,
-      },
-    });
-  }
-
-  const actor = actorOf(req);
-  await recordChange({
-    changeType: existing ? 'routing-update' : 'routing-create',
-    targetTable: 'agent_field_routings',
-    targetId: saved.id,
-    agentId,
-    fieldId,
-    before: existing ? serializeRouting(existing) : null,
-    after: serializeRouting(saved),
-    actorId: actor.actorId,
-    actorRole: actor.actorRole,
-    reason: body.reason || 'admin update routing',
-  });
-
-  // 路由变化立即生效：失效 field-dispatcher 缓存（handoff 抽取/supplement 渲染/hard-required 清单）
   clearRoutingCache();
   clearSupplementRenderCache();
 
-  res.json({ success: true, data: { ...serializeRouting(saved), locks: lockSummary(field, saved) } });
+  res.json({
+    success: true,
+    data: {
+      stage,
+      fieldCount: validated.fields.length,
+      routingCount: validated.routings.length,
+      contractCount: validated.contracts.length,
+      synced,
+      syncHint,
+    },
+  });
+});
+
+// ============================================================
+// POST /api/admin/field-routings/orchestration/:stage/sync
+// 全量对账（文件为准，立即生效）：三表 upsert(update: 全部业务列)
+// admin 覆盖行（managedByCode=false）跳过更新并记入 skipped 清单
+// ============================================================
+router.post('/orchestration/:stage/sync', async (req: Request, res: Response) => {
+  const stage = String(req.params.stage || '').trim();
+  const found = loadOrchestrationFiles().find((s) => s.stage === stage);
+  if (!found) {
+    return res.status(404).json({ success: false, error: { message: `编排文件不存在：${stage}` } });
+  }
+
+  const skippedAdminRows: Array<{ table: string; key: string }> = [];
+  let contractsUpdated = 0;
+  let fieldsUpdated = 0;
+  let routingsUpdated = 0;
+  let createdCount = 0;
+
+  for (const c of found.contracts) {
+    const exists = await systemPrisma.agent_contracts.findUnique({ where: { agentId: c.agentId } });
+    if (exists) {
+      if (exists.managedByCode === false) {
+        skippedAdminRows.push({ table: 'agent_contracts', key: c.agentId });
+        continue;
+      }
+      await systemPrisma.agent_contracts.update({
+        where: { agentId: c.agentId },
+        data: { stage, displayName: c.displayName, description: c.description, updatedAt: new Date() },
+      });
+      contractsUpdated++;
+    } else {
+      await systemPrisma.agent_contracts.create({
+        data: {
+          id: randomUUID(),
+          agentId: c.agentId,
+          stage,
+          displayName: c.displayName,
+          description: c.description,
+          schemaVersion: 'v3',
+          source: 'code',
+          managedByCode: true,
+        },
+      });
+      createdCount++;
+    }
+  }
+
+  for (const f of found.fields) {
+    const exists = await systemPrisma.field_definitions.findUnique({ where: { fieldId: f.fieldId } });
+    if (exists) {
+      if (exists.managedByCode === false) {
+        skippedAdminRows.push({ table: 'field_definitions', key: f.fieldId });
+        continue;
+      }
+      await systemPrisma.field_definitions.update({
+        where: { fieldId: f.fieldId },
+        data: {
+          stage,
+          promptRole: f.promptRole,
+          valueType: f.valueType,
+          snakeName: f.snakeName ?? null,
+          camelName: f.camelName ?? null,
+          pathInRawOutput: f.pathInRawOutput ?? null,
+          description: f.description,
+          enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null,
+          systemLocked: f.systemLocked ?? false,
+          structureLocked: f.structureLocked ?? false,
+          bindings: f.bindings ? JSON.stringify(f.bindings) : null,
+          updatedAt: new Date(),
+        },
+      });
+      fieldsUpdated++;
+    } else {
+      await systemPrisma.field_definitions.create({
+        data: {
+          id: randomUUID(),
+          fieldId: f.fieldId,
+          stage,
+          promptRole: f.promptRole,
+          valueType: f.valueType,
+          snakeName: f.snakeName ?? null,
+          camelName: f.camelName ?? null,
+          pathInRawOutput: f.pathInRawOutput ?? null,
+          description: f.description,
+          enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null,
+          systemLocked: f.systemLocked ?? false,
+          structureLocked: f.structureLocked ?? false,
+          bindings: f.bindings ? JSON.stringify(f.bindings) : null,
+          schemaVersion: 'v3',
+          source: 'code',
+          managedByCode: true,
+        },
+      });
+      createdCount++;
+    }
+  }
+
+  for (const r of found.routings) {
+    const where = { agentId_fieldId: { agentId: r.agentId, fieldId: r.fieldId } };
+    const exists = await systemPrisma.agent_field_routings.findUnique({ where });
+    if (exists) {
+      if (exists.managedByCode === false) {
+        skippedAdminRows.push({ table: 'agent_field_routings', key: `${r.agentId}/${r.fieldId}` });
+        continue;
+      }
+      await systemPrisma.agent_field_routings.update({
+        where,
+        data: {
+          render: r.render,
+          handoff: r.handoff.length ? JSON.stringify(r.handoff) : null,
+          internalFlag: r.internal,
+          accumulate: r.accumulate,
+          visibilityPreset: r.visibilityPreset ?? null,
+          notes: r.notes ?? null,
+          updatedAt: new Date(),
+        },
+      });
+      routingsUpdated++;
+    } else {
+      await systemPrisma.agent_field_routings.create({
+        data: {
+          id: randomUUID(),
+          agentId: r.agentId,
+          fieldId: r.fieldId,
+          render: r.render,
+          handoff: r.handoff.length ? JSON.stringify(r.handoff) : null,
+          internalFlag: r.internal,
+          accumulate: r.accumulate,
+          visibilityPreset: r.visibilityPreset ?? null,
+          notes: r.notes ?? null,
+          source: 'code',
+          managedByCode: true,
+        },
+      });
+      createdCount++;
+    }
+  }
+
+  clearRoutingCache();
+  clearSupplementRenderCache();
+
+  res.json({
+    success: true,
+    data: { stage, contractsUpdated, fieldsUpdated, routingsUpdated, createdCount, skippedAdminRows },
+  });
 });
 
 // ============================================================

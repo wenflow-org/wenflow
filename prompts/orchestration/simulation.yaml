@@ -1,0 +1,257 @@
+# Simulation 阶段编排文件（字段路由单源化）
+# 由字段路由 seed TS 机械迁移（1:1）；seed TS 已退役，本文件为唯一声明源。
+# 2026-08 词汇统一批次：路由表 fieldId 与运行时输出键对齐（learnerEmotion→emotion、actor*→verdict 等），
+# 仅影响路由表身份与展示层，不改变 coordinator/blackbox 的运行时 JSON 键。
+# 注：learnerReply 暂未改名（teaching-turn 已占用顶层 reply，全局 fieldId 唯一约束冲突，2026-08 词汇统一批次遗留）。
+#
+# 路由规则（与 goal/path/teaching 不同：仿真无阶段间 handoff）：
+#   - 输入通道全部为服务端注入（见 agent-contract-view SANDBOX_EXTRA_KEYS['simulation-agent']），不建输入行
+#   - 输出字段登记交付声明：展示类（黑盒会话 UI 可见）→ visible；调试类 → hidden + internal
+#   - handoff 统一指向 simulation-agent（交付给仿真编排层组装；旁路审计链由 blackbox-runner 运行时拼接）
+
+stage: simulation
+displayName: 仿真阶段
+description: 虚拟学习者实验：样本设计 → 模拟器 → 旁路审计（服务端注入输入，无阶段间 handoff）
+
+contracts:
+  - agentId: skill:virtual-learner-persona-designer
+  - agentId: skill:virtual-learner-scenario-designer
+  - agentId: skill:virtual-learner-goal-dialogue-simulator
+  - agentId: skill:virtual-learner-path-evaluator
+  - agentId: skill:virtual-learner-learn-turn-simulator
+  - agentId: skill:virtual-learner-referee
+  - agentId: skill:virtual-learner-actor-auditor
+  - agentId: simulation-agent
+
+fields:
+  # === persona-designer 输出 ===
+  - fieldId: personaSeed
+    promptRole: proposal-output
+    valueType: object
+    description: 稳定人物画像（occupation/corePersonality/helpSeekingPattern 等）
+
+  # === scenario-designer 输出 ===
+  # （goalSeed/situationSeed/stories 已退役：语义由 story.goalSeed 子字段与 profileData.storyPool 承接，2026-08 词汇统一批次删除声明台账）
+  - fieldId: consistencyNotes
+    promptRole: proposal-output
+    valueType: array
+    description: 故事与 persona 的一致性校验说明
+
+  # === goal-dialogue / learn-turn / path-evaluator 共享输出 ===
+  - fieldId: learnerReply
+    promptRole: public-reply
+    valueType: string
+    description: 学习者自然回应文本
+  - fieldId: emotion
+    promptRole: public-reply
+    valueType: string
+    description: 学习者当前情绪
+  - fieldId: learnerState
+    promptRole: proposal-output
+    valueType: object
+    description: 学习者主观状态（阶段相关）
+  - fieldId: debug
+    promptRole: hidden-inference
+    valueType: object
+    description: 模拟器/路径评估调试信息
+    notes: internal — 仅调试
+
+  # === learn-turn 独有输出 ===
+  - fieldId: learnerFeedback
+    promptRole: public-reply
+    valueType: object
+    description: 学习者对当前 task 是否学完的自我反馈
+
+  # === path-evaluator 输出 ===
+  - fieldId: reaction
+    promptRole: public-reply
+    valueType: string
+    description: 学习者对路径的自然反应（accept/modify/reject）
+  - fieldId: visibleRequestedChanges
+    promptRole: proposal-output
+    valueType: array
+    description: 学习者明确提出的可见修改项
+
+  # === referee / actor-auditor 共享输出（词汇统一批次：actor* 并入 referee 语义） ===
+  - fieldId: verdict
+    promptRole: public-reply
+    valueType: string
+    description: 结论判定：实验裁判 pass|pass_with_concerns|fail|inconclusive；角色保真 credible|credible_with_concerns|invalid|inconclusive
+  - fieldId: scores
+    promptRole: proposal-output
+    valueType: object
+    description: 各维度 0-100 分（实验：goalExperience/goalUnderstanding/pathExperience/teachingExperience/controlConsistency/boundaryIntegrity/evidenceSufficiency；角色保真度维度）
+  - fieldId: findings
+    promptRole: proposal-output
+    valueType: array
+    description: 带证据引用的问题发现（含角色保真度问题）
+  - fieldId: recommendations
+    promptRole: proposal-output
+    valueType: array
+    description: 面向实验/模拟器维护者的改进建议
+  - fieldId: evidence
+    promptRole: proposal-output
+    valueType: array
+    description: 可定位到输入轨迹/角色设定和行为轨迹的证据
+
+routings:
+  # === persona-designer ===
+  - agentId: skill:virtual-learner-persona-designer
+    fieldId: personaSeed
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+
+  # === scenario-designer ===
+  - agentId: skill:virtual-learner-scenario-designer
+    fieldId: consistencyNotes
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+
+  # === goal-dialogue ===
+  - agentId: skill:virtual-learner-goal-dialogue-simulator
+    fieldId: learnerReply
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-goal-dialogue-simulator
+    fieldId: emotion
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-goal-dialogue-simulator
+    fieldId: learnerState
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-goal-dialogue-simulator
+    fieldId: debug
+    render: hidden
+    handoff: [simulation-agent]
+    internal: true
+    accumulate: false
+    notes: internal — 仅调试
+
+  # === path-evaluator ===
+  - agentId: skill:virtual-learner-path-evaluator
+    fieldId: reaction
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-path-evaluator
+    fieldId: visibleRequestedChanges
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-path-evaluator
+    fieldId: debug
+    render: hidden
+    handoff: [simulation-agent]
+    internal: true
+    accumulate: false
+    notes: internal — 仅调试
+
+  # === learn-turn ===
+  - agentId: skill:virtual-learner-learn-turn-simulator
+    fieldId: learnerReply
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-learn-turn-simulator
+    fieldId: emotion
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-learn-turn-simulator
+    fieldId: learnerState
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-learn-turn-simulator
+    fieldId: learnerFeedback
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-learn-turn-simulator
+    fieldId: debug
+    render: hidden
+    handoff: [simulation-agent]
+    internal: true
+    accumulate: false
+    notes: internal — 仅调试
+
+  # === referee ===
+  - agentId: skill:virtual-learner-referee
+    fieldId: verdict
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-referee
+    fieldId: scores
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-referee
+    fieldId: findings
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-referee
+    fieldId: recommendations
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-referee
+    fieldId: evidence
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+
+  # === actor-auditor（与 referee 共享 fieldId，词汇统一批次） ===
+  - agentId: skill:virtual-learner-actor-auditor
+    fieldId: verdict
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-actor-auditor
+    fieldId: scores
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-actor-auditor
+    fieldId: findings
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-actor-auditor
+    fieldId: recommendations
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-actor-auditor
+    fieldId: evidence
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
