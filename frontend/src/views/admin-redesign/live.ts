@@ -277,12 +277,18 @@ async function fetchLiveSpans(): Promise<TraceSpan[]> {
 
 /** 带筛选的服务端重查（执行日志页：时间范围 / 关键词 / 节点 / 状态） */
 export interface SpanQuery {
-  timeRange?: 'today' | 'yesterday' | 'last7days' | 'week' | 'month' | 'all'
+  timeRange?: 'today' | 'yesterday' | 'week' | 'month' | 'all'
   keyword?: string
   agentName?: string
   status?: 'success' | 'error' | 'timeout'
   limit?: number
 }
+
+/**
+ * 执行日志页带筛选的重查结果：与全局 liveSpans（总览全量口径）隔离，
+ * 避免筛选结果污染其他页面的统计与列表
+ */
+export const liveLogsFiltered = ref<TraceSpan[]>([])
 
 export async function reloadLiveSpans(query: SpanQuery): Promise<void> {
   const res = await adminAgentsApi.getLogs({ limit: 100, ...query })
@@ -290,7 +296,7 @@ export async function reloadLiveSpans(query: SpanQuery): Promise<void> {
   const items: RawLog[] = Array.isArray(body) ? body : body.items || body.logs || []
   const stats = body.stats as LiveLogStats | undefined
   if (stats) liveLogStats.value = stats
-  liveSpans.value = mapLogsToSpans(items)
+  liveLogsFiltered.value = mapLogsToSpans(items)
 }
 
 /** 日志详情（展开行时拉真实 input/output + 重试尝试时间线；超长截断） */
@@ -469,7 +475,7 @@ export interface LiveOverviewFull {
   }
   funnel: { label: string; value: string; idle: boolean }[]
   rates: string[]
-  pulse: { calls: number; issue: number }[]
+  pulse: { label?: string; calls: number; issue: number }[]
   totalCalls: number
   totalIssues: number
   peak: string
@@ -504,7 +510,8 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
 
   // 指标一律带时间窗口：头部结论只用今日数据（累计值仅作副文案）
   const todayCalls = Number(agents.todayCalls || 0)
-  const todaySuccessRate = Number(agents.todaySuccessRate ?? 100)
+  // 后端可能返回字符串或非法值（0/0 场景），统一收敛为有限数
+  const todaySuccessRate = Number.isFinite(Number(agents.todaySuccessRate ?? 100)) ? Number(agents.todaySuccessRate ?? 100) : 100
   const todayFailed = Math.max(0, Math.round(todayCalls * (1 - todaySuccessRate / 100)))
   const activeUsers = Number(users.activeToday || 0)
 
@@ -544,16 +551,17 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
     if (f.label === '任务' || f.value > prev) return `×${(f.value / prev).toFixed(1)}`
     return `${Math.round((f.value / prev) * 100)}%`
   })
-  /* 24h 脉搏（后端已按小时聚合）；空数据不回退全量累计，避免时间口径错位 */
+  /* 24h 脉搏（后端已按小时聚合的滚动窗口：index 0 = 23h 前，每桶带 label 'HH:00'）；
+     空数据不回退全量累计，避免时间口径错位；demo 模式另走壁钟数组，与本块无关 */
   const last24h: { label?: string; total?: number; error?: number; timeout?: number }[] = agents.last24h || []
   const pulse = last24h.length
-    ? last24h.map((b) => ({ calls: Number(b.total || 0), issue: Number(b.error || 0) + Number(b.timeout || 0) }))
-    : Array.from({ length: 24 }, () => ({ calls: 0, issue: 0 }))
+    ? last24h.map((b) => ({ label: b.label, calls: Number(b.total || 0), issue: Number(b.error || 0) + Number(b.timeout || 0) }))
+    : Array.from({ length: 24 }, () => ({ label: undefined, calls: 0, issue: 0 }))
   const totalIssues = pulse.reduce((a, b) => a + b.issue, 0)
   const peakIdx = pulse.reduce((mi, b, i) => (b.calls > (pulse[mi]?.calls || 0) ? i : mi), 0)
-  // 与柱图 title（按 0–23 下标）一致，不用后端 label（易错位成「高峰 12:00」）
+  // 高峰小时直接用后端 label（滚动窗口下标 ≠ 壁钟小时）；兜底下标仅用于无 label 的桶
   const peak = pulse[peakIdx]?.calls
-    ? `${String(peakIdx).padStart(2, '0')}:00`
+    ? pulse[peakIdx].label || `${String(peakIdx).padStart(2, '0')}:00`
     : '—'
   const pulseCalls24h = pulse.reduce((a, b) => a + b.calls, 0)
 
@@ -564,7 +572,7 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
     feed.push({ text: `新用户注册：${u.email || u.name}`, time: timeAgo(u.createdAt), ts: new Date(u.createdAt).getTime(), tone: 'muted' })
   }
   for (const s of act.recentSessions || []) {
-    const title = String(s.title || '')
+    const title = String(s.subject || s.topic || '')
     const label = title || shortId(String(s.id || ''))
     feed.push({ text: `教学会话：${label}`, time: timeAgo(s.createdAt || s.updatedAt), ts: new Date(s.createdAt || s.updatedAt).getTime(), tone: 'ok' })
   }
@@ -695,6 +703,7 @@ export async function liveCreateUser(data: { name: string; email: string; passwo
     name: data.name,
     email: data.email,
     password: data.password,
+    isAdmin: data.admin,
     role: data.admin ? 'admin' : 'user'
   })
   await fetchLiveUsers()
@@ -777,7 +786,7 @@ export async function liveGetLearnerDetail(userId: string): Promise<Record<strin
 export async function liveGetLearnerEvidence(userId: string): Promise<Record<string, unknown>[]> {
   const res = await adminLearnerModelsApi.getEvidence(userId, { limit: 20 })
   const body = res.data?.data ?? res.data ?? {}
-  return body.items || body.evidence || []
+  return Array.isArray(body) ? body : (body?.items || body?.evidence || [])
 }
 
 /* ================= 虚拟学习者 ================= */
@@ -959,7 +968,7 @@ export interface LiveRulesOverview {
   totalRules: number
   totalPrefixes: number
   conflictPrefixCount: number
-  conflictPrefixes: string[]
+  conflictPrefixes: { prefix: string; agentIds: string[] }[]
   rules: LiveRule[]
 }
 
@@ -1005,7 +1014,10 @@ export async function fetchRulesOverview(): Promise<LiveRulesOverview> {
     totalRules: Number(summary.totalRules || rules.length),
     totalPrefixes: Number(summary.totalPrefixes || 0),
     conflictPrefixCount: Number(summary.conflictPrefixCount || 0),
-    conflictPrefixes: (body.conflictPrefixes || []).map(String),
+    conflictPrefixes: ((body.conflictPrefixes || []) as Record<string, unknown>[]).map((c) => ({
+      prefix: String(c.prefix || c.prefixId || c.id || ''),
+      agentIds: Array.isArray(c.agentIds) ? c.agentIds.map(String) : []
+    })),
     rules
   }
   return rulesCache
@@ -1031,7 +1043,7 @@ function fieldName(f: unknown): string {
   if (f == null) return ''
   if (typeof f === 'string') return f
   const o = f as Record<string, unknown>
-  return String(o.name || o.fieldId || o.id || o.field || '')
+  return String(o.path || o.name || o.fieldId || o.id || o.field || '')
 }
 
 async function fetchLiveSkillCatalog(): Promise<void> {

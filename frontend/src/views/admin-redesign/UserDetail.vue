@@ -217,24 +217,21 @@ watch(
     try {
       const raw = (await liveGetUserDetail(id)) as Record<string, unknown>
       const user = (raw.user as Record<string, unknown>) || raw
-      const paths = (raw.learning_paths || raw.learningPaths || user.learning_paths || []) as Record<string, unknown>[]
+      // 后端不返回 learning_paths 明细：路径计数用 _count 兜底，卡片显示空态（与统计条口径一致）
+      const counts = (user._count as Record<string, number>) || {}
+      const pathCount = Number(counts.learningPaths ?? counts.learning_paths ?? base?.paths ?? 0)
       liveDetail.value = {
         name: String(user.name || base?.name || id),
         email: String(user.email || base?.email || ''),
         role: user.isAdmin || base?.isAdmin ? '管理员' : '用户',
         joined: timeAgo(String(user.createdAt || base?.createdAt || '')),
         stats: [
-          { label: '路径', value: String(base?.paths ?? (paths.length || 0)) },
+          { label: '路径', value: String(base?.paths ?? pathCount) },
           { label: '会话', value: String(base?.sessions ?? 0) },
           { label: 'XP', value: String(user.xp ?? 0) },
           { label: '等级', value: String(user.currentLevel || '—') }
         ],
-        recentPaths: paths.slice(0, 4).map((p) => ({
-          title: String(p.title || p.goal || '未命名路径'),
-          stage: String(p.status || p.current_stage || ''),
-          pct: Number(p.progress ?? p.completion_rate ?? 0),
-          tone: 'ok' as const
-        })),
+        recentPaths: [],
         activity: activityOf(base)
       }
     } catch {

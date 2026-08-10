@@ -174,8 +174,6 @@ import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 
-defineProps<{ state: string }>()
-
 type Status = 'new' | 'triaged' | 'resolved' | 'dismissed'
 
 interface Row {
@@ -278,7 +276,7 @@ async function load() {
     const trend = trendRes?.data?.data ?? trendRes?.data
     recent30.value = Array.isArray(trend) ? trend.reduce((s: number, d: Record<string, unknown>) => s + Number(d.count || d.total || 0), 0) : null
   } catch (e) {
-    toast.success(`加载失败：${errMsg(e)}`)
+    toast.error(`加载失败：${errMsg(e)}`)
   } finally {
     loading.value = false
   }
@@ -331,9 +329,9 @@ async function save(status: Status) {
     if (row) row.status = status
     if (status === 'resolved' || status === 'dismissed') detail.value = null
     pendingCount.value = rows.value.filter((x) => x.status === 'new').length
-    toast.error(`已标记为${statusLabel(status)}`)
+    toast.success(`已标记为${statusLabel(status)}`)
   } catch (e) {
-    toast.success(`保存失败：${errMsg(e)}`)
+    toast.error(`保存失败：${errMsg(e)}`)
   } finally {
     saving.value = false
   }

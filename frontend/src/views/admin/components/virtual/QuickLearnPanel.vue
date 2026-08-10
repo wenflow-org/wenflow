@@ -201,7 +201,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { adminApi } from '@/api/adminApi'
 import { setProjectionToken } from '@/utils/projection'
@@ -278,7 +278,7 @@ interface QuickLearnRun {
 }
 
 interface ApiErrorLike {
-  response?: { data?: { error?: string } }
+  response?: { data?: { error?: string }; status?: number }
   message?: string
 }
 
@@ -474,10 +474,19 @@ async function loadRun(runId: string) {
     } else {
       stopPolling()
     }
-  } catch {
-    // 轮询中的瞬时错误静默处理
+  } catch (error: unknown) {
+    // 404 等非瞬时错误：运行已不存在，停止轮询并明确提示；其余瞬时错误静默等待下一轮
+    const status = (error as ApiErrorLike)?.response?.status
+    if (status != null && status >= 400 && status !== 408 && status !== 429) {
+      stopPolling()
+      ElMessage.error(apiErrorMessage(error, '获取运行状态失败，已停止轮询'))
+    }
   }
 }
+
+onBeforeUnmount(() => {
+  stopPolling()
+})
 
 async function abortRun() {
   if (!currentRun.value) return

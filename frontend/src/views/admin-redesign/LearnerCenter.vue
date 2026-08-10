@@ -72,11 +72,11 @@
               <span v-else class="mk-na" :title="r.task ? '' : '尚未开始学习，暂无置信度'">—</span>
             </td>
             <td class="risk-text" :class="{ 'mk-na': !r.risk }">{{ r.risk || '—' }}</td>
-            <td class="mk-na">{{ r.updating ? '重算中…' : r.updated }}</td>
+            <td class="mk-na">{{ isUpdating(r.id) ? '重算中…' : r.updated }}</td>
             <td>
               <div class="mk-actions">
                 <button type="button" class="mk-link" @click="openSubPage('learner', r.id)">详情</button>
-                <button type="button" class="mk-link" :disabled="r.updating" @click="recompute(r)">重算</button>
+                <button type="button" class="mk-link" :disabled="isUpdating(r.id)" @click="recompute(r)">重算</button>
               </div>
             </td>
           </tr>
@@ -96,14 +96,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { openSubPage, isLive } from './store'
 import { liveLearners, liveRecomputeLearner, timeAgo, errMsg } from './live'
 import { useLoadMore } from './useLoadMore'
 import { toast } from '@/utils/toast'
-
-const props = defineProps<{ state: 'normal' | 'risk' | 'empty' }>()
-
 
 interface Row {
   id: string
@@ -118,7 +115,6 @@ interface Row {
   confidence?: number
   /** 更新时间戳（用于排序），demo 按相对时间倒推 */
   ts?: number
-  updating?: boolean
 }
 
 const now = Date.now()
@@ -133,24 +129,9 @@ const normalRows: Row[] = [
   { id: 'l8', name: '冯远', email: 'fengyuan@…', path: '日语 N5', task: '阶段 1 · 五十音', trend: 'down', fatigue: '中', risk: '近 5 天活跃下降', updated: '3 小时前', confidence: 0.59, ts: now - 180 * 60000 }
 ]
 
-const riskRows: Row[] = [
-  { id: 'l3', name: '赵敏', email: 'zhaomin@…', path: 'SQL 基础', task: '阶段 3 · JOIN 实战', trend: 'down', fatigue: '高', risk: '连续 3 次任务失败', updated: '4 分钟前', confidence: 0.38, ts: now - 4 * 60000 },
-  { id: 'l4', name: '孙可', email: 'sunke@…', path: 'Python 入门', task: '阶段 2 · 函数', trend: 'down', fatigue: '中', risk: '近 7 天活跃下降 60%', updated: '13 分钟前', confidence: 0.44, ts: now - 13 * 60000 },
-  { id: 'l1', name: '陈晓', email: 'chenxiao@…', path: 'Excel 自动化入门', task: '阶段 2 · 数据清洗练习', trend: 'up', fatigue: '低', risk: '', updated: '6 分钟前', confidence: 0.86, ts: now - 6 * 60000 },
-  { id: 'l2', name: '刘一帆', email: 'liu**@…', path: '数据分析思维', task: '阶段 1 · 提问训练', trend: 'flat', fatigue: '中', risk: '概念「采样偏差」挣扎', updated: '22 分钟前', confidence: 0.72, ts: now - 22 * 60000 }
-]
-
 const pill = ref<'all' | 'risk' | 'stale'>('all')
 
-const demoRows = ref<Row[]>([])
-watch(
-  () => props.state,
-  (s) => {
-    demoRows.value = s === 'risk' ? [...riskRows] : s === 'empty' ? [] : [...normalRows]
-    pill.value = s === 'risk' ? 'risk' : 'all'
-  },
-  { immediate: true }
-)
+const demoRows = ref<Row[]>([...normalRows])
 
 const rows = computed<Row[]>(() => {
   if (isLive.value) {
@@ -211,10 +192,13 @@ const fatigueBadge = (f: string) => (f === '高' ? 'mk-badge--bad' : f === '中'
 /* 重算 */
 const recomputingAll = ref(false)
 const recomputeProgress = ref(0)
+/** 行级重算中状态：独立 Set，保证模板能及时响应重渲染 */
+const updatingIds = ref<Set<string>>(new Set())
+const isUpdating = (id: string) => updatingIds.value.has(id)
 
 async function recompute(row: Row) {
-  if (row.updating) return
-  row.updating = true
+  if (isUpdating(row.id)) return
+  updatingIds.value = new Set(updatingIds.value).add(row.id)
   try {
     if (isLive.value) {
       await liveRecomputeLearner(row.id)
@@ -225,9 +209,11 @@ async function recompute(row: Row) {
       toast.success(`「${row.name}」快照已重算`)
     }
   } catch (e) {
-    toast.success(`重算失败：${errMsg(e)}`)
+    toast.error(`重算失败：${errMsg(e)}`)
   } finally {
-    row.updating = false
+    const next = new Set(updatingIds.value)
+    next.delete(row.id)
+    updatingIds.value = next
   }
 }
 
@@ -239,14 +225,16 @@ async function recomputeAll() {
     let ok = 0
     let fail = 0
     for (const r of rows.value) {
-      r.updating = true
+      updatingIds.value = new Set(updatingIds.value).add(r.id)
       try {
         await liveRecomputeLearner(r.id)
         ok++
       } catch {
         fail++
       } finally {
-        r.updating = false
+        const next = new Set(updatingIds.value)
+        next.delete(r.id)
+        updatingIds.value = next
         recomputeProgress.value++
       }
     }

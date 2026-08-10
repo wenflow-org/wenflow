@@ -136,7 +136,7 @@
           </label>
           <label v-if="isLive" class="mk-field" :class="{ 'mk-field--error': errors.password }">
             <span class="mk-field__label">{{ editTarget ? '重置密码' : '初始密码' }}</span>
-            <input v-model="form.password" type="password" class="mk-field__input" :placeholder="editTarget ? '留空则不修改' : '至少 6 位'" />
+            <input v-model="form.password" type="password" class="mk-field__input" :placeholder="editTarget ? '留空则不修改' : '至少 8 位，含字母和数字'" />
             <span v-if="errors.password" class="mk-field__err">{{ errors.password }}</span>
           </label>
           <label class="mk-field">
@@ -171,8 +171,8 @@ import { adminUsersApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
 
-const props = defineProps<{ state: 'normal' | 'empty' }>()
-
+/** 与后端 validatePasswordRule 一致：≥8 位且同时包含字母和数字 */
+const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
 
 /* 当前登录管理员（保护自己不被降级/删除） */
 const currentAdmin = computed(() => {
@@ -223,14 +223,7 @@ const normalUsers: UserRow[] = [
   { id: 'u12', name: '测试账号', email: 'test@wenflow.local', admin: true, online: false, createdAt: '2 个月前', lastLogin: '从未', paths: 0, sessions: 0 }
 ]
 
-const demoUsers = ref<UserRow[]>([])
-watch(
-  () => props.state,
-  (s) => {
-    demoUsers.value = s === 'empty' ? [normalUsers[4]] : [...normalUsers]
-  },
-  { immediate: true }
-)
+const demoUsers = ref<UserRow[]>([...normalUsers])
 
 const users = computed<UserRow[]>(() => {
   if (isLive.value) {
@@ -315,8 +308,8 @@ async function saveUser() {
   if (!form.value.name.trim()) errors.value.name = '请输入昵称'
   if (!form.value.email.trim()) errors.value.email = '请输入邮箱'
   else if (!/^\S+@\S+\.\S+$/.test(form.value.email.trim())) errors.value.email = '邮箱格式不正确'
-  if (isLive.value && !editTarget.value && form.value.password.length < 6) errors.value.password = '密码至少 6 位'
-  if (isLive.value && editTarget.value && form.value.password && form.value.password.length < 6) errors.value.password = '密码至少 6 位'
+  if (isLive.value && !editTarget.value && !PASSWORD_RULE.test(form.value.password)) errors.value.password = '密码至少 8 位，且同时包含字母和数字'
+  if (isLive.value && editTarget.value && form.value.password && !PASSWORD_RULE.test(form.value.password)) errors.value.password = '密码至少 8 位，且同时包含字母和数字'
   if (Object.keys(errors.value).length) return
 
   creating.value = true
@@ -362,38 +355,43 @@ async function saveUser() {
     createOpen.value = false
     pill.value = 'all'
   } catch (e) {
-    toast.success(`保存失败：${errMsg(e)}`)
+    toast.error(`保存失败：${errMsg(e)}`)
   } finally {
     creating.value = false
   }
 }
 
-/* 批量删除 */
+/* 批量删除（测试/虚拟账号不参与勾选与提交，参照行菜单过滤逻辑） */
 const selected = ref<string[]>([])
 const batchBusy = ref(false)
-const allChecked = computed(() => filtered.value.length > 0 && selected.value.length === filtered.value.length)
+const selectable = computed(() => filtered.value.filter((u) => !isTestAccount(u)))
+const allChecked = computed(() => selectable.value.length > 0 && selected.value.length === selectable.value.length)
 
 function toggleAll() {
-  selected.value = allChecked.value ? [] : filtered.value.map((u) => u.id)
+  selected.value = allChecked.value ? [] : selectable.value.map((u) => u.id)
 }
 
 async function batchDelete() {
-  if (!selected.value.length || batchBusy.value) return
+  const ids = selected.value.filter((id) => {
+    const u = users.value.find((x) => x.id === id)
+    return u ? !isTestAccount(u) : false
+  })
+  if (!ids.length || batchBusy.value) return
   const ok = await askConfirm({
     title: '批量删除用户',
-    message: `确认批量删除 ${selected.value.length} 个用户？该操作不可撤销，将同时删除其学习记录。`,
-    confirmText: `删除 ${selected.value.length} 个用户`
+    message: `确认批量删除 ${ids.length} 个用户？该操作不可撤销，将同时删除其学习记录。`,
+    confirmText: `删除 ${ids.length} 个用户`
   })
   if (!ok) return
   batchBusy.value = true
   try {
-    await adminUsersApi.batchDeleteUsers([...selected.value])
-    const removed = new Set(selected.value)
+    await adminUsersApi.batchDeleteUsers([...ids])
+    const removed = new Set(ids)
     liveUsers.value = liveUsers.value.filter((u) => !removed.has(u.id))
-    toast.error(`已删除 ${selected.value.length} 个用户`)
+    toast.success(`已删除 ${ids.length} 个用户`)
     selected.value = []
   } catch (e) {
-    toast.success(`批量删除失败：${errMsg(e)}`)
+    toast.error(`批量删除失败：${errMsg(e)}`)
   } finally {
     batchBusy.value = false
   }
@@ -414,9 +412,9 @@ async function toggleRole(u: UserRow) {
   u.busy = true
   try {
     await liveSetUserRole(u.id, targetAdmin)
-    toast.error(`「${u.name}」已${targetAdmin ? '设为管理员' : '降为用户'}`)
+    toast.success(`「${u.name}」已${targetAdmin ? '设为管理员' : '降为用户'}`)
   } catch (e) {
-    toast.success(`操作失败：${errMsg(e)}`)
+    toast.error(`操作失败：${errMsg(e)}`)
   } finally {
     u.busy = false
   }
@@ -432,9 +430,9 @@ async function removeUser(u: UserRow) {
   u.busy = true
   try {
     await liveDeleteUser(u.id)
-    toast.error(`「${u.name}」已删除`)
+    toast.success(`「${u.name}」已删除`)
   } catch (e) {
-    toast.success(`删除失败：${errMsg(e)}`)
+    toast.error(`删除失败：${errMsg(e)}`)
   } finally {
     u.busy = false
   }

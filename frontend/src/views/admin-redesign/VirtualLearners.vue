@@ -197,9 +197,6 @@ import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 
-const props = defineProps<{ state: 'normal' | 'empty' }>()
-
-
 interface Sample {
   id: string
   name: string
@@ -218,14 +215,7 @@ const all: Sample[] = [
   { id: 'vl-005', name: '退休学摄影的阿姨', goal: '学会手机修图', storyCount: 0, sessions: 0, created: '2 小时前' }
 ]
 
-const demoSamples = ref<Sample[]>([])
-watch(
-  () => props.state,
-  (s) => {
-    demoSamples.value = s === 'empty' ? [] : [...all]
-  },
-  { immediate: true }
-)
+const demoSamples = ref<Sample[]>([...all])
 
 const samples = computed<Sample[]>(() => {
   if (isLive.value) {
@@ -299,7 +289,7 @@ async function createSample() {
       openSubPage('virtual', id)
     }
   } catch (e) {
-    toast.success(`创建失败：${errMsg(e)}`)
+    toast.error(`创建失败：${errMsg(e)}`)
   } finally {
     creating.value = false
   }
@@ -315,9 +305,9 @@ async function removeSample(s: Sample) {
   s.busy = true
   try {
     await liveDeleteVirtual(s.id)
-    toast.error(`「${s.name}」已删除`)
+    toast.success(`「${s.name}」已删除`)
   } catch (e) {
-    toast.success(`删除失败：${errMsg(e)}`)
+    toast.error(`删除失败：${errMsg(e)}`)
   } finally {
     s.busy = false
   }
@@ -349,9 +339,9 @@ async function generatePersona() {
     if (nameFromSeed) form.value.name = nameFromSeed
     const background = String(seed.background || seed.corePersonality || seed.behavioralProfileSummary || '').trim()
     if (background) form.value.story = background
-    toast.error('人设已回填，可改后点「创建虚拟人」')
+    toast.success('人设已回填，可改后点「创建虚拟人」')
   } catch (e) {
-    toast.success(`生成失败：${errMsg(e)}`)
+    toast.error(`生成失败：${errMsg(e)}`)
   } finally {
     personaBusy.value = false
   }
@@ -475,10 +465,10 @@ async function startLaunch() {
     const sid = String(session.id || session.sessionId || '')
     const storyTitle = launchStories.value.find((x) => x.id === launchForm.value.storyId)?.title || '故事'
     launchTarget.value = null
-    toast.error(`已按「${storyTitle}」启动：${sid.slice(0, 14)}${sid.length > 14 ? '…' : ''}`)
+    toast.success(`已按「${storyTitle}」启动：${sid.slice(0, 14)}${sid.length > 14 ? '…' : ''}`)
     openSubPage('virtual', target.id)
   } catch (e) {
-    toast.success(`启动失败：${errMsg(e)}`)
+    toast.error(`启动失败：${errMsg(e)}`)
   } finally {
     launchBusy.value = false
   }

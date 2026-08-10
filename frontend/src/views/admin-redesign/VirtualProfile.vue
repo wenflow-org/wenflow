@@ -6,6 +6,14 @@
       <button type="button" class="mk-link" @click="closeSubPage">← 虚拟学习者</button>
     </div>
   </div>
+  <div v-else-if="detailError" class="mk-page vp">
+    <div class="mk-empty">
+      <span class="mk-empty__icon" aria-hidden="true">◌</span>
+      <strong>画像加载失败</strong>
+      <span>暂时无法获取该虚拟学习者的画像与故事池。</span>
+      <button type="button" class="mk-empty__action" @click="loadDetail(subPage?.id)">重试</button>
+    </div>
+  </div>
   <div v-else-if="d" class="mk-page vp">
     <header class="vp-top">
       <button type="button" class="vp-back" @click="closeSubPage">← 虚拟学习者</button>
@@ -391,6 +399,8 @@ interface StoryItem {
 const liveDetail = ref<Detail | null>(null)
 const stories = ref<StoryItem[]>([])
 const selectedStoryId = ref<string | null>(null)
+/** 详情加载失败（无列表兜底数据时）→ 明确错误态 + 重试 */
+const detailError = ref(false)
 
 /* 分页：故事池是主工作区（默认页），画像/运行/验收各归其页 */
 type ProfileTab = 'stories' | 'runs' | 'profile' | 'verify'
@@ -536,9 +546,11 @@ function parseSessionStory(session: Record<string, unknown>) {
   }
 }
 
-async function loadDetail(id: string) {
+async function loadDetail(id?: string) {
+  if (!id) return
   liveDetail.value = null
   stories.value = []
+  detailError.value = false
   try {
     const [raw, storiesRes] = await Promise.all([
       liveGetVirtualDetail(id) as Promise<Record<string, unknown>>,
@@ -573,7 +585,8 @@ async function loadDetail(id: string) {
       traits: Object.entries(traitsRaw).slice(0, 5).map(([k, v]) => `${k}: ${String(v)}`),
       runs: sessions.slice(0, 12).map((s) => {
         const storyMeta = parseSessionStory(s)
-        const pathId = s.learningPathId ? String(s.learningPathId) : null
+        const sessionBindings = (s.bindings || {}) as Record<string, unknown>
+        const pathId = sessionBindings.learningPathId ? String(sessionBindings.learningPathId) : s.learningPathId ? String(s.learningPathId) : null
         return {
           time: timeAgo(String(s.createdAt || s.startedAt || '')),
           stage: String(s.currentStage || s.stage || s.phase || 'goal'),
@@ -609,6 +622,8 @@ async function loadDetail(id: string) {
         runs: [],
         aiProfile: [{ label: '知识水平', value: base.level || '—' }]
       }
+    } else {
+      detailError.value = true
     }
   }
 }
@@ -650,9 +665,9 @@ async function saveProfile() {
     })
     await loadDetail(id)
     editOpen.value = false
-    toast.error('画像已保存（真实写入）')
+    toast.success('画像已保存（真实写入）')
   } catch (e) {
-    toast.success(`保存失败：${errMsg(e)}`)
+    toast.error(`保存失败：${errMsg(e)}`)
   } finally {
     saving.value = false
   }
@@ -667,13 +682,13 @@ async function generateStory() {
   try {
     await adminVirtualLearnersApi.draftVirtualLearnerStories(id)
     await loadDetail(id)
-    toast.error('新故事已生成')
+    toast.success('新故事已生成')
   } catch (e) {
     const msg = errMsg(e)
     // 画像字段不完整（旧样本缺 learningStyle 等）：先 AI 补全画像再重试一次
     if (msg.includes('personaSeed') || msg.includes('SCENARIO_OUTPUT_INVALID')) {
       try {
-        toast.success('画像不完整，正在 AI 补全后重试…')
+        toast.info('画像不完整，正在 AI 补全后重试…')
         const base = liveVirtuals.value.find((v) => v.id === id)
         const g = await adminVirtualLearnersApi.generatePersona({
           existingPersonaSeed: {
@@ -689,7 +704,7 @@ async function generateStory() {
         await loadDetail(id)
         toast.success('画像已补全，新故事已生成')
       } catch (e2) {
-        toast.success(`生成失败：${errMsg(e2)}`)
+        toast.error(`生成失败：${errMsg(e2)}`)
       }
     } else {
       toast.error(`生成失败：${msg}`)
@@ -712,9 +727,9 @@ async function removeStory(index: number) {
   try {
     await adminVirtualLearnersApi.deleteStory(id, index)
     await loadDetail(id)
-    toast.error('故事已删除')
+    toast.success('故事已删除')
   } catch (e) {
-    toast.success(`删除失败：${errMsg(e)}`)
+    toast.error(`删除失败：${errMsg(e)}`)
   } finally {
     storyBusy.value = false
   }
@@ -739,14 +754,14 @@ async function runStory(story?: StoryItem, index?: number) {
       const res = await adminVirtualLearnersApi.startVirtualSession(id, payload)
       const session = res.data?.data ?? res.data ?? {}
       const storyLabel = selectedStoryTitle.value || story?.title || '故事'
-      toast.error(`已按「${storyLabel}」启动：${String(session.id || session.sessionId || '').slice(0, 14)}…`)
+      toast.success(`已按「${storyLabel}」启动：${String(session.id || session.sessionId || '').slice(0, 14)}…`)
       await loadDetail(id)
     } else {
       await new Promise((r) => setTimeout(r, 900))
       toast.success('演示运行完成：Goal 对话 8 轮收敛')
     }
   } catch (e) {
-    toast.success(`启动失败：${errMsg(e)}`)
+    toast.error(`启动失败：${errMsg(e)}`)
   } finally {
     running.value = false
   }
@@ -765,9 +780,9 @@ async function removeSession(sessionId: string) {
     await adminVirtualLearnersApi.deleteVirtualSession(sessionId)
     const id = subPage.value?.id
     if (id) await loadDetail(id)
-    toast.error('会话已删除')
+    toast.success('会话已删除')
   } catch (e) {
-    toast.success(`删除失败：${errMsg(e)}`)
+    toast.error(`删除失败：${errMsg(e)}`)
   } finally {
     sessionBusy.value = false
   }
@@ -790,9 +805,9 @@ async function openProjection(entry: 'dashboard' | 'goal' | 'paths' | 'state' = 
           : entry === 'state' ? '/learning-state'
             : '/dashboard'
     window.open(href, '_blank')
-    toast.error(`已在新窗口打开投影：${href}`)
+    toast.success(`已在新窗口打开投影：${href}`)
   } catch (e) {
-    toast.success(`投影失败：${errMsg(e)}`)
+    toast.error(`投影失败：${errMsg(e)}`)
   } finally {
     projecting.value = false
   }

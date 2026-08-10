@@ -346,12 +346,21 @@ async function loadDetail(id: string | undefined, live: boolean) {
     const raw = (await withTimeout(liveGetLearnerDetail(id), 12000)) as Record<string, unknown>
     rawDetail.value = raw
     const model = (raw.model as Record<string, unknown>) || raw
-    const concepts = (model.concepts || raw.concepts || {}) as Record<string, string[]>
+    const km = ((model.knowledgeMemory as Record<string, unknown>) || (raw.knowledgeMemory as Record<string, unknown>) || {}) as Record<string, unknown>
+    const currentPath = (km.currentPath || {}) as Record<string, unknown>
+    const progress = (currentPath.progress || {}) as Record<string, number>
+    const globalSignals = (km.globalSignals || {}) as Record<string, unknown>
+    const conceptStates = Array.isArray(currentPath.conceptStates)
+      ? (currentPath.conceptStates as { label?: string; status?: string }[])
+      : []
+    const totalTasks = Number(progress.totalTasks || 0)
+    const completedTasks = Number(progress.completedTasks || 0)
+    const pct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
     const evidenceItems = await liveGetLearnerEvidence(id).catch(() => [] as Record<string, unknown>[])
     liveEvidence.value = evidenceItems.map((e) => ({
-      title: String(e.type || e.title || e.kind || '学习事件'),
-      detail: String(e.summary || e.signal || e.result || e.knowledgePoint || ''),
-      time: timeAgo(String(e.createdAt || e.at || '')),
+      title: String(e.type || e.kind || '学习事件'),
+      detail: String(e.signal || ''),
+      time: timeAgo(String(e.happenedAt || e.createdAt || '')),
       score: Number(e.score || 0)
     }))
     liveDetail.value = {
@@ -360,14 +369,14 @@ async function loadDetail(id: string | undefined, live: boolean) {
       joined: '—',
       trend: base?.trend || 'flat',
       fatigue: base?.fatigue || '低',
-      path: base?.pathTitle || String(model.pathTitle || '尚未开始学习'),
-      stage: base?.currentMilestone || '',
+      path: String((currentPath.pathTitle as string) || model.pathTitle || '尚未开始学习'),
+      stage: base?.currentMilestone || String(progress.totalMilestones ? `已完成 ${progress.completedMilestones ?? 0}/${progress.totalMilestones} 个里程碑` : ''),
       task: base?.currentTask || '未开始',
-      pct: Number(model.progress ?? model.mastery ?? 0) || 0,
+      pct,
       concepts: {
-        mastered: concepts.mastered || [],
-        struggling: base?.struggling || concepts.struggling || [],
-        fragile: base?.fragile || concepts.fragile || []
+        mastered: (globalSignals.masteredConcepts as string[]) || [],
+        struggling: base?.struggling || conceptStates.filter((c) => c.status === 'struggling').map((c) => String(c.label)),
+        fragile: base?.fragile || conceptStates.filter((c) => c.status === 'fragile').map((c) => String(c.label))
       },
       trend7d: [0, 0, 0, 0, 0, 0, 0],
       sessions: liveEvidence.value.slice(0, 6).map((e) => ({
@@ -524,11 +533,36 @@ const controlState = computed(() => {
 /** 证据记录：live 用接口数据，demo 用演示时间线 */
 const evidence = computed(() => (isLive.value ? liveEvidence.value : DEMO_EVIDENCE))
 
+/** 后端快照的英文枚举 → 中文（参照 LearnerCenter mapTrend/mapFatigue 模式） */
+const EN_ZH: Record<string, string> = {
+  high: '高', medium: '中', low: '低',
+  intuitive: '直觉型', logical: '逻辑型', visual: '视觉型', practical: '实践型', mixed: '混合型',
+  'concept-confusion': '概念混淆', 'application-difficulty': '应用困难', 'principle-misunderstanding': '原理误解', none: '无',
+  scattered: '零散', systematic: '系统', blank: '空白',
+  overconfident: '偏高', accurate: '准确', underconfident: '偏低',
+  video: '视频', reading: '阅读', practice: '实践',
+  'theory-first': '理论优先', 'practice-first': '实践优先', balanced: '均衡',
+  short: '短', long: '长',
+  easy: '简单', hard: '挑战',
+  interest: '兴趣驱动', 'problem-solving': '问题驱动', 'external-pressure': '外部压力', career: '职业目标',
+  confident: '自信', moderate: '适中', anxious: '焦虑',
+  improving: '上升', stable: '稳定', declining: '下降',
+  rising: '上升', falling: '下降',
+  strong: '良好', weak: '较弱',
+  slow: '放缓', fast: '加快',
+  immediate: '即时', delayed: '延迟', 'on-request': '按需',
+  true: '是', false: '否'
+}
+const zh = (v: unknown): string => {
+  const s = String(v ?? '')
+  return EN_ZH[s] ?? s
+}
+
 function kvRows(obj: Record<string, unknown> | null, labels: Record<string, string>) {
   if (!obj) return [] as { label: string; value: string }[]
   return Object.entries(labels)
     .filter(([key]) => obj[key] != null && obj[key] !== '')
-    .map(([key, label]) => ({ label, value: String(obj[key]) }))
+    .map(([key, label]) => ({ label, value: zh(obj[key]) }))
 }
 
 const cognitiveRows = computed(() =>
@@ -543,14 +577,18 @@ const cognitiveRows = computed(() =>
 
 const preferenceRows = computed(() => [
   ...kvRows((profile.value?.preferences || null) as Record<string, unknown> | null, {
-    learningStyle: '学习风格',
-    contentPreference: '内容偏好',
-    pacePreference: '节奏偏好'
+    preferredStyle: '偏好风格',
+    theoryVsPractice: '理论 vs 实践',
+    sessionLength: '单次时长',
+    preferredDifficulty: '难度偏好',
+    prefersHints: '是否偏好提示'
   }),
   ...kvRows((profile.value?.emotional || null) as Record<string, unknown> | null, {
-    baseline: '情绪基线',
-    frustrationPattern: '挫败模式',
-    motivationDriver: '动机驱动'
+    motivationTrigger: '动机触发',
+    urgencyLevel: '紧迫感',
+    confidenceLevel: '自信水平',
+    frustrationTolerance: '挫败耐受',
+    rewardSensitivity: '奖励敏感度'
   })
 ])
 
@@ -573,18 +611,33 @@ const metricCards = computed(() => {
   ]
 })
 
-const dynamicRows = computed(() => [
-  ...kvRows(dynamicState.value, {
-    recentTrend: '近期趋势',
-    fatigueRisk: '疲劳风险',
-    confidenceTrend: '置信趋势',
-    recentSessionQuality: '近期会话质量'
-  }),
-  ...kvRows(dynamicState.value, {
-    recommendedPacing: '建议节奏',
-    recommendedInteraction: '建议互动'
-  })
-])
+const dynamicRows = computed(() => {
+  /* recommendedInteraction 是 {hintTiming, encouragement, challenge} 对象，拆三项展示 */
+  const ri = dynamicState.value?.recommendedInteraction
+  const riRows: { label: string; value: string }[] = []
+  if (ri != null) {
+    const o = ri as Record<string, unknown>
+    if (typeof o === 'string') {
+      riRows.push({ label: '建议互动', value: zh(o) })
+    } else {
+      if (o.hintTiming != null && o.hintTiming !== '') riRows.push({ label: '提示时机', value: zh(o.hintTiming) })
+      if (o.encouragement != null && o.encouragement !== '') riRows.push({ label: '鼓励方式', value: zh(o.encouragement) })
+      if (o.challenge != null && o.challenge !== '') riRows.push({ label: '挑战设计', value: zh(o.challenge) })
+    }
+  }
+  return [
+    ...kvRows(dynamicState.value, {
+      recentTrend: '近期趋势',
+      fatigueRisk: '疲劳风险',
+      confidenceTrend: '置信趋势',
+      recentSessionQuality: '近期会话质量'
+    }),
+    ...kvRows(dynamicState.value, {
+      recommendedPacing: '建议节奏'
+    }),
+    ...riRows
+  ]
+})
 
 const controlFlags = computed(() => {
   const c = controlState.value
