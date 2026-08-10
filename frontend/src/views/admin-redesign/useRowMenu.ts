@@ -90,19 +90,25 @@ export function useRowMenu() {
   /** 鎸夎Е鍙戞寜閽?rect 璁＄畻 fixed 鍧愭爣锛岃秴鍑鸿鍙ｅ彸/涓嬭竟鐣屾椂鍥炵Щ */
   function positionPop() {
     if (!openMenu.value || !popEl || !triggerEl) return
+    const ac = document.querySelector('.ac')
+    const zoom = ac ? parseFloat((getComputedStyle(ac) as any).zoom || '') || 1 : 1
     const triggerRect = triggerEl.getBoundingClientRect()
     const height = popEl.offsetHeight || 132
-    let left = triggerRect.left
-    let top = triggerRect.bottom + MENU_GAP
-    if (top + height > window.innerHeight - VIEWPORT_MARGIN) {
-      top = triggerRect.top - height - MENU_GAP
+    // getBoundingClientRect 返回物理坐标（4K 档 .ac 有 zoom 1.15/1.3），换算回逻辑坐标统一计算
+    let left = triggerRect.left / zoom
+    let top = triggerRect.bottom / zoom + MENU_GAP
+    if (top * zoom + height * zoom > window.innerHeight - VIEWPORT_MARGIN) {
+      top = (triggerRect.top / zoom) - height - MENU_GAP
     }
-    if (left + MENU_WIDTH > window.innerWidth - VIEWPORT_MARGIN) {
-      left = window.innerWidth - MENU_WIDTH - VIEWPORT_MARGIN
+    // zoom 档（4K 1.15/1.3）下 fixed 的 left/top 会随 zoom 放大而宽度不放大，
+    // 回移判断需按物理像素换算（left×zoom + 菜单物理宽 ≤ 物理视口）
+    const popPhysicalW = (popEl.offsetWidth || MENU_WIDTH) * zoom
+    if (left * zoom + popPhysicalW > window.innerWidth - VIEWPORT_MARGIN) {
+      left = (window.innerWidth - popPhysicalW - VIEWPORT_MARGIN) / zoom
     }
     if (left < VIEWPORT_MARGIN) left = VIEWPORT_MARGIN
     if (top < VIEWPORT_MARGIN) top = VIEWPORT_MARGIN
-    popStyle.value = { position: 'fixed', left: left + "px", top: top + "px", zIndex: 120 }
+    popStyle.value = { position: 'fixed', left: left + 'px', top: top + 'px', zIndex: 120 }
   }
 
   function toggleMenu(id: string) {
