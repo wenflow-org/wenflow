@@ -89,7 +89,7 @@
               <td class="mk-num" :class="rateTone(s)">{{ successRate(s) }}</td>
               <td class="mk-num" :class="latencyTone(s)">{{ s.calls ? fmtMs(s.avgMs) : '—' }}</td>
               <td><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
-              <td style="text-align:right"><span class="sk-go">→</span></td>
+              <td><span class="sk-go">→</span></td>
             </tr>
           </tbody>
         </table>

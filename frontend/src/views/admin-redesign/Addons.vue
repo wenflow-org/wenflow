@@ -424,9 +424,6 @@ function goConfig() {
 .mono { font-family: var(--mk-mono); font-size: 12px; }
 .mk-link--danger { color: var(--mk-red, #dc2626); }
 
-/* 数值列（超时）表头与单元格居中 */
-.mk-table td.mk-num,
-.mk-table th:nth-child(4) { text-align: center; }
 
 /* ② MCP 服务行 */
 .ac-mcp { display: grid; }

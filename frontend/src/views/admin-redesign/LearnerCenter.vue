@@ -67,7 +67,7 @@
             </td>
             <td><span class="trend" :class="`trend--${r.trend}`">{{ trendText(r.trend) }}</span></td>
             <td><span class="mk-badge" :class="fatigueBadge(r.fatigue)">{{ r.fatigue }}</span></td>
-            <td>
+            <td class="mk-num">
               <span
                 v-if="r.confidence != null && r.task"
                 class="conf"

@@ -79,7 +79,7 @@
                 <span v-if="r.hasAdvisory" class="mk-badge mk-badge--info" style="margin-left:4px">建议</span>
               </td>
               <td><span class="mk-badge" :class="attentionBadge(r.attention)">{{ r.attention === 'high' ? '高' : r.attention === 'medium' ? '中' : '低' }}</span></td>
-              <td style="text-align:right"><span class="ts-go">→</span></td>
+              <td><span class="ts-go">→</span></td>
             </tr>
           </tbody>
         </table>
@@ -616,7 +616,4 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
   .ts-more { font-size: 18.5px; }
 }
 
-/* 数值列（互动）表头与单元格居中 */
-.mk-table td.mk-num,
-.mk-table th:nth-child(4) { text-align: center; }
 </style>
