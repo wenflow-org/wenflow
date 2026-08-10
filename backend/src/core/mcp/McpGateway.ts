@@ -5,8 +5,24 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { decryptSecret, encryptSecret } from '../../utils/secret-crypto';
 import { safeHttpRequest, UnsafeUrlError } from '../../utils/safe-http';
 import { readFileWithinRoots } from '../../utils/secure-file-reader';
+
+const MCP_SECRET_CONTEXT = 'system.mcp_config.apiKey';
+const ENV_TEMPLATE_PATTERN = /^\$\{[\s\S]*\}$/;
+
+function encryptStoredApiKey(value: string | undefined): string | undefined {
+  if (!value) return value;
+  // 环境变量模板（${VAR}）保持原样，仅对真实明文密钥加密
+  if (ENV_TEMPLATE_PATTERN.test(value)) return value;
+  return encryptSecret(value, MCP_SECRET_CONTEXT) ?? value;
+}
+
+function decryptStoredApiKey(value: string | undefined): string | undefined {
+  // decryptSecret 对明文幂等（非 wfsec: 前缀原样返回）
+  return value ? (decryptSecret(value, MCP_SECRET_CONTEXT) ?? value) : value;
+}
 
 export interface IMcpServerConfig {
   id: string;
@@ -37,19 +53,11 @@ export interface IMcpToolConfig {
   userAccessible?: boolean;
 }
 
-export interface IMcpAgentConfig {
-  mcpServer: string;
-  model: string;
-  maxTokens?: number;
-  temperature?: number;
-}
-
 export interface IMcpConfig {
   version: string;
   description: string;
   servers: IMcpServerConfig[];
   tools: IMcpToolConfig[];
-  agents: Record<string, IMcpAgentConfig>;
   routing: {
     strategy: string;
     fallback: boolean;
@@ -57,27 +65,6 @@ export interface IMcpConfig {
       enabled: boolean;
       interval: number;
     };
-  };
-}
-
-export interface IChatCompletionRequest {
-  model: string;
-  messages: Array<{ role: string; content: string }>;
-  temperature?: number;
-  max_tokens?: number;
-}
-
-export interface IChatCompletionResponse {
-  choices: Array<{
-    message: {
-      content: string;
-      role: string;
-    };
-  }>;
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
   };
 }
 
@@ -99,7 +86,8 @@ export class McpGateway {
   }
 
   /**
-   * 更新配置并原子写回 mcp.json（保留 $schema/agents/routing 等字段，只替换 servers/tools）
+   * 更新配置并原子写回 mcp.json（保留 $schema/routing 等字段，只替换 servers/tools；
+   * apiKey 落盘前加密，环境变量模板 ${VAR} 保持原样）
    */
   async updateConfig(next: Partial<Pick<IMcpConfig, 'servers' | 'tools'>>): Promise<void> {
     const raw = fs.readFileSync(this.configPath, 'utf-8').replace(/^\uFEFF/, '');
@@ -112,8 +100,14 @@ export class McpGateway {
     }
     const merged: IMcpConfig = {
       ...onDisk,
-      ...(next.servers !== undefined ? { servers: next.servers } : {}),
-      ...(next.tools !== undefined ? { tools: next.tools } : {}),
+      ...(next.servers !== undefined
+        ? { servers: next.servers.map(server => ({ ...server, apiKey: encryptStoredApiKey(server.apiKey) })) }
+        : {}),
+      ...(next.tools !== undefined
+        ? { tools: next.tools.map(tool => (
+            tool.apiKey !== undefined ? { ...tool, apiKey: encryptStoredApiKey(tool.apiKey) } : tool
+          )) }
+        : {}),
     };
     const tmpPath = `${this.configPath}.tmp`;
     fs.writeFileSync(tmpPath, JSON.stringify(merged, null, 2), 'utf-8');
@@ -159,93 +153,11 @@ export class McpGateway {
   }
 
   /**
-   * 获取可用的 MCP 服务器
+   * 获取指定 ID 的启用工具
    */
-  getAvailableServers(): IMcpServerConfig[] {
-    return this.config.servers
-      .filter(s => s.enabled && this.serverStatus.get(s.id) !== false)
-      .sort((a, b) => a.priority - b.priority);
-  }
-
-  /**
-   * 获取指定 ID 的服务器配置
-   */
-  getServer(serverId: string): IMcpServerConfig | undefined {
-    return this.config.servers.find(s => s.id === serverId && s.enabled);
-  }
-
   getTool(toolId: string): IMcpToolConfig | undefined {
     const normalizedId = toolId.trim().toLowerCase();
     return this.config.tools.find(tool => tool.id.trim().toLowerCase() === normalizedId && tool.enabled);
-  }
-
-  /**
-   * 获取 Agent 的 MCP 配置
-   */
-  getAgentMcpConfig(agentId: string): IMcpAgentConfig | undefined {
-    return this.config.agents[agentId];
-  }
-
-  /**
-   * 调用 Chat Completion
-   */
-  async chatCompletion(
-    request: IChatCompletionRequest,
-    serverId?: string
-  ): Promise<IChatCompletionResponse> {
-    const server = serverId
-      ? this.getServer(serverId)
-      : this.getAvailableServers()[0];
-
-    if (!server) {
-      throw new Error('没有可用的 MCP 服务器');
-    }
-
-    const url = `${server.endpoint}/chat/completions`;
-
-    try {
-      const response = await safeHttpRequest<IChatCompletionResponse>(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${server.apiKey}`,
-        },
-        body: {
-          model: request.model || server.defaultModel,
-          messages: request.messages,
-          temperature: request.temperature ?? server.config.temperature,
-          max_tokens: request.max_tokens ?? server.config.maxTokens,
-        },
-        timeoutMs: server.config.timeout,
-      });
-
-      if (response.status < 200 || response.status >= 300) {
-        throw new Error(`MCP 服务器错误: ${response.status} ${response.statusText}`);
-      }
-
-      const data = response.data;
-      
-      // 验证响应格式
-      if (!data.choices || !Array.isArray(data.choices)) {
-        throw new Error('MCP 响应格式错误：缺少 choices 字段');
-      }
-
-      return data;
-    } catch (error: any) {
-      // 标记服务器不可用
-      this.serverStatus.set(server.id, false);
-
-      // 如果启用了 fallback，尝试下一个服务器
-      if (this.config.routing.fallback && !serverId) {
-        const nextServer = this.getAvailableServers().find(s => s.id !== server.id);
-        if (nextServer) {
-          return await this.chatCompletion(request, nextServer.id);
-        }
-      }
-
-      // 如果没有可用服务器或 fallback 失败，抛出错误
-      throw error;
-    }
   }
 
   /**
@@ -289,12 +201,12 @@ export class McpGateway {
     }
 
     try {
-      // 远程工具调用
+      // 远程工具调用（apiKey 落盘为密文，调用时解密；明文/用户级已解密值幂等直通）
       const response = await safeHttpRequest<any>(tool.endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(tool.apiKey && { 'Authorization': `Bearer ${tool.apiKey}` }),
+          ...(tool.apiKey && { 'Authorization': `Bearer ${decryptStoredApiKey(tool.apiKey)}` }),
         },
         body: params,
         timeoutMs: tool.config?.timeout,
@@ -333,9 +245,6 @@ export class McpGateway {
    */
   private async executeLocalTool(tool: IMcpToolConfig, params: any): Promise<any> {
     switch (tool.type) {
-      case 'code':
-        // 代码解释器 - 使用 vm2 或子进程执行
-        return { result: '代码执行功能待实现' };
       case 'filesystem':
         // 文件读取
         return this.executeFileTool(tool, params);
@@ -359,26 +268,51 @@ export class McpGateway {
   }
 
   /**
-   * 健康检查
+   * 健康检查：低频轮询 + 失败退避；策略拒绝（https-only / 私网策略）不误伤服务器状态
    */
+  private healthCheckBackoffUntil: Map<string, number> = new Map();
+
+  private healthCheckBackoffMs(interval: number): number {
+    return Math.max(interval, 60_000) * 3;
+  }
+
+  private async runHealthCheck(server: IMcpServerConfig, interval: number): Promise<void> {
+    const backoffUntil = this.healthCheckBackoffUntil.get(server.id) || 0;
+    if (Date.now() < backoffUntil) return;
+
+    try {
+      const response = await safeHttpRequest(`${server.endpoint}/models`, {
+        headers: { 'Authorization': `Bearer ${decryptStoredApiKey(server.apiKey)}` },
+        timeoutMs: server.config.timeout,
+      });
+      const healthy = response.status >= 200 && response.status < 300;
+      this.serverStatus.set(server.id, healthy);
+      if (healthy) {
+        this.healthCheckBackoffUntil.delete(server.id);
+      } else {
+        this.healthCheckBackoffUntil.set(server.id, Date.now() + this.healthCheckBackoffMs(interval));
+      }
+    } catch (error) {
+      const backoffUntil = Date.now() + this.healthCheckBackoffMs(interval);
+      if (error instanceof UnsafeUrlError) {
+        // 策略拒绝（如生产环境 https-only 拦截 http 端点）非真实故障：保留原状态，仅退避，避免误伤
+        this.healthCheckBackoffUntil.set(server.id, backoffUntil);
+        return;
+      }
+      this.serverStatus.set(server.id, false);
+      this.healthCheckBackoffUntil.set(server.id, backoffUntil);
+    }
+  }
+
   private initHealthCheck(): void {
     if (!this.config.routing.healthCheck?.enabled) return;
 
     const interval = this.config.routing.healthCheck.interval;
 
-    this.healthCheckTimer = setInterval(async () => {
+    this.healthCheckTimer = setInterval(() => {
       for (const server of this.config.servers) {
         if (!server.enabled) continue;
-
-        try {
-          const response = await safeHttpRequest(`${server.endpoint}/models`, {
-            headers: { 'Authorization': `Bearer ${server.apiKey}` },
-            timeoutMs: server.config.timeout,
-          });
-          this.serverStatus.set(server.id, response.status >= 200 && response.status < 300);
-        } catch {
-          this.serverStatus.set(server.id, false);
-        }
+        void this.runHealthCheck(server, interval);
       }
     }, interval);
     this.healthCheckTimer.unref?.();

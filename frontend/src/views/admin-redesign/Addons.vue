@@ -254,7 +254,6 @@ interface McpTool {
 }
 
 const demoMcpTools: McpTool[] = [
-  { id: 'code-interpreter', name: '代码解释器', description: '沙箱执行代码', type: 'code', endpoint: 'local', enabled: true },
   { id: 'web-search', name: '网页搜索', description: '实时搜索并返回结果摘要', type: 'search', endpoint: '${SEARCH_API_URL}', enabled: false },
   { id: 'file-reader', name: '文件读取', description: '读取工作区文件', type: 'filesystem', endpoint: 'local', enabled: true }
 ]

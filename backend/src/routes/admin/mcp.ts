@@ -6,6 +6,20 @@ const router = Router();
 
 const TOOL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 
+/** 响应不回显 apiKey：仅返回是否已配置 */
+function sanitizeToolResponse(tool: IMcpToolConfig) {
+  return {
+    id: tool.id,
+    name: tool.name,
+    description: tool.description,
+    type: tool.type,
+    endpoint: tool.endpoint,
+    enabled: tool.enabled,
+    userAccessible: !!tool.userAccessible,
+    hasApiKey: !!tool.apiKey,
+  };
+}
+
 /** GET / — 平台 MCP 工具与服务（外挂能力页 ② MCP 服务区）；apiKey 等敏感字段脱敏 */
 router.get('/', async (_req: Request, res: Response) => {
   try {
@@ -63,7 +77,7 @@ router.post('/tools', async (req: Request, res: Response) => {
       ...(config && typeof config === 'object' ? { config } : {}),
     };
     await mcpGateway.updateConfig({ tools: [...cfg.tools, next] });
-    res.json({ success: true, data: next });
+    res.json({ success: true, data: sanitizeToolResponse(next) });
   } catch (error: any) {
     logger.error('[admin-mcp] create tool failed:', error);
     res.status(500).json({ success: false, error: '新增 MCP 工具失败' });
@@ -94,7 +108,7 @@ router.put('/tools/:id', async (req: Request, res: Response) => {
     const tools = [...cfg.tools];
     tools[idx] = next;
     await mcpGateway.updateConfig({ tools });
-    res.json({ success: true, data: next });
+    res.json({ success: true, data: sanitizeToolResponse(next) });
   } catch (error: any) {
     logger.error('[admin-mcp] update tool failed:', error);
     res.status(500).json({ success: false, error: '更新 MCP 工具失败' });

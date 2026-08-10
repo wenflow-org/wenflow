@@ -90,42 +90,14 @@
         "maxFileSize": 10485760
       },
       "enabled": true
-    },
-    {
-      "id": "code-interpreter",
-      "name": "代码解释器",
-      "description": "",
-      "type": "code",
-      "endpoint": "local",
-      "enabled": true
     }
   ],
-  "agents": {
-    "skill:path-planning": {
-      "mcpServer": "newapi",
-      "model": "deepseek-v4-flash",
-      "maxTokens": 4000,
-      "temperature": 0.5
-    },
-    "ai-teaching-agent": {
-      "mcpServer": "newapi",
-      "model": "deepseek-v4-flash",
-      "maxTokens": 2000,
-      "temperature": 0.7
-    },
-    "planner-agent": {
-      "mcpServer": "newapi",
-      "model": "deepseek-v4-pro",
-      "maxTokens": 6000,
-      "temperature": 0.3
-    }
-  },
   "routing": {
     "strategy": "priority",
     "fallback": true,
     "healthCheck": {
       "enabled": true,
-      "interval": 30000
+      "interval": 300000
     }
   }
 }

@@ -9,12 +9,7 @@
     "updatedAt": "2026-04-11T00:00:00.000Z",
     "updatedBy": "system"
   },
-  "ai-teaching-agent": {
-    "status": "published",
-    "updatedAt": "2026-04-11T00:00:00.000Z",
-    "updatedBy": "system"
-  },
-  "progress-agent": {
+  "teaching-agent": {
     "status": "published",
     "updatedAt": "2026-04-11T00:00:00.000Z",
     "updatedBy": "system"
@@ -24,7 +19,7 @@
     "updatedAt": "2026-04-11T00:00:00.000Z",
     "updatedBy": "system"
   },
-  "learner-model-agent": {
+  "skill:learner-model": {
     "status": "published",
     "updatedAt": "2026-04-11T00:00:00.000Z",
     "updatedBy": "system"
