@@ -14,7 +14,7 @@
         <span class="ac-boot__spinner"></span>
         加载中…
       </div>
-      <component v-else :is="detailComponent || currentComponent" :state="'normal'" />
+      <component v-else :is="detailComponent || currentComponent" />
     </Shell>
 
     <CommandPalette
@@ -138,6 +138,11 @@ watch(
 );
 
 function navigate(id: string) {
+  // 相同 scene 再点击：scene watch 不会触发，这里显式清空 subPage 返回列表
+  if (id === scene.value) {
+    subPage.value = null;
+    return;
+  }
   scene.value = id;
 }
 

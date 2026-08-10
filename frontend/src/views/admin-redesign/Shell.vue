@@ -91,7 +91,7 @@ import { computed, ref } from 'vue'
 import { MOCK_SCENES, type MockSceneDef } from './manifest'
 import { dataSource } from './store'
 import { liveNavBadges, alarmNavBadges, loadLiveData, liveLoading } from './live'
-import { adminAuthApi } from '@/api/adminApi'
+import { adminAuthApi, clearAdminSession } from '@/api/adminApi'
 import { version as appVersion } from '../../../package.json'
 
 const props = defineProps<{ current: string; crumb?: string; release?: boolean }>()
@@ -166,9 +166,11 @@ const adminName = computed(() => {
 async function logout() {
   try {
     await adminAuthApi.logout()
-  } finally {
-    window.location.replace('/admin/login')
+  } catch {
+    // 登出接口失败：本地清理会话再跳转，避免守卫检测到残留会话又弹回控制台
+    clearAdminSession()
   }
+  window.location.replace('/admin/login')
 }
 
 const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.current))

@@ -5,13 +5,8 @@
  * - 所有页面读同一份 span 数据（执行日志 / 事件中心 / Skill / 总览看到的
  *   是同一次 429 爆发的不同切面）
  * - intent 驱动跨页排查动线：总览事故卡 → 已过滤的日志 → Trace 瀑布 → Skill 抽屉
- * - labState 全局切换（normal / incident / fresh），全站一致
  */
 import { computed, reactive, ref } from 'vue'
-
-export type LabState = 'normal' | 'incident' | 'fresh'
-
-export const labState = ref<LabState>('normal')
 
 /* ---------- 数据源：演示 / 真实 ---------- */
 export const dataSource = ref<'demo' | 'live'>('demo')
@@ -63,15 +58,6 @@ const successTrace: TraceSpan[] = [
   { id: 's6', traceId: 'tr:8f31a2', kind: 'flow', agent: 'path-agent', stage: '阶段任务设计', title: '路径生成完成', startMs: 7360, durationMs: 2600, status: 'ok', detail: '18 任务 · 总用时 9.9s' }
 ]
 
-/** 事故链路：教学回合遭遇 429 限流并级联 */
-const incidentTrace: TraceSpan[] = [
-  { id: 'i1', traceId: 'tr:8f31c4', kind: 'flow', agent: 'teaching-agent', stage: '教学执行', title: '教学回合开始', startMs: 0, durationMs: 30000, status: 'err', detail: '阶段 2 · 数据清洗练习', payload: '{\n  "milestone": "m2-3",\n  "user": "user_chenxiao"\n}' },
-  { id: 'i2', traceId: 'tr:8f31c4', kind: 'call', agent: 'teaching-turn', stage: '教学执行', title: '教学调用 · 尝试 1', startMs: 80, durationMs: 18400, status: 'err', detail: '429 rate limit · 18.4s', payload: '{\n  "error": "RateLimitExceeded",\n  "provider": "deepseek",\n  "retryAfterMs": 20000,\n  "attempt": 1\n}' },
-  { id: 'i3', traceId: 'tr:8f31c4', kind: 'call', agent: 'teaching-turn', stage: '教学执行', title: '教学调用 · 尝试 2（退避后）', startMs: 20500, durationMs: 9400, status: 'err', detail: '429 rate limit · 9.4s', payload: '{\n  "error": "RateLimitExceeded",\n  "retryAfterMs": 20000,\n  "attempt": 2\n}' },
-  { id: 'i4', traceId: 'tr:8f31c4', kind: 'call', agent: 'peer-reinforcement', stage: '教学执行', title: '伴学降级介入', startMs: 30100, durationMs: 1300, status: 'warn', detail: '改用缓存讲解 · 质量分 0.58' },
-  { id: 'i5', traceId: 'tr:8f31c4', kind: 'flow', agent: 'profile-agent', stage: '状态回写', title: '疲劳信号上调', startMs: 31600, durationMs: 480, status: 'warn', detail: 'fatigue: 低 → 中（连续失败）' }
-]
-
 /** 教学链路：一节课的完整执行（教学 → 伴学 → 产出 → 状态回写） */
 const teachingTrace: TraceSpan[] = [
   { id: 't1', traceId: 'tr:8f31b7', kind: 'flow', agent: 'teaching-agent', stage: '教学执行', title: '教学回合完成', startMs: 0, durationMs: 14200, status: 'ok', detail: '阶段 2 · 数据清洗练习 · 一次通过', payload: '{\n  "milestone": "m2-2",\n  "user": "user_chenxiao",\n  "masteryDelta": 0.12\n}' },
@@ -107,15 +93,13 @@ const backgroundSpans: TraceSpan[] = [
   { id: 'b5', traceId: 'tr:8f3182', kind: 'call', agent: 'learner-model', stage: '状态回写', title: '状态聚合', startMs: 0, durationMs: 340, status: 'ok', detail: 'user_2211 · 340ms' }
 ]
 
-const demoSpans = computed<TraceSpan[]>(() => {
-  if (labState.value === 'fresh') return []
-  if (labState.value === 'incident') return [...incidentTrace, ...successTrace.slice(0, 3), ...teachingTrace.slice(3), ...backgroundSpans]
-  return [...successTrace, ...teachingTrace, ...simulationTrace, ...planningTrace, ...backgroundSpans]
-})
+/** demo 模式链路集合（离线演示数据；live 模式不得回退使用） */
+const demoSpans: TraceSpan[] = [...successTrace, ...teachingTrace, ...simulationTrace, ...planningTrace, ...backgroundSpans]
 
 export const spans = computed<TraceSpan[]>(() => {
-  if (dataSource.value === 'live' && liveSpans.value) return liveSpans.value
-  return demoSpans.value
+  // live：严格按 ref 是否已写入判断（空数组也算已就绪，不回退 demo 数据）
+  if (dataSource.value === 'live' && liveSpans.value !== null) return liveSpans.value
+  return demoSpans
 })
 
 /* ---------- Skill 档案（统计由 spans 推导） ---------- */
@@ -216,8 +200,6 @@ export interface InvestigationIntent {
   skillDrawerId: string
   /** 业务会话 ID（跳瀑布时优先进入会话分组视图） */
   sessionId: string
-  /** Prompt 工作台预选 Skill（抽屉直达） */
-  promptLabSkill: string
   /** 页面级快捷动作（命令面板「新建用户」等直达并触发页面动作） */
   quickAction: string
 }
@@ -229,7 +211,6 @@ export const intent = reactive<InvestigationIntent>({
   traceId: '',
   skillDrawerId: '',
   sessionId: '',
-  promptLabSkill: '',
   quickAction: ''
 })
 
@@ -580,7 +561,6 @@ export const userDetails: UserDetail[] = [
 export const overviewHealth = computed(() => {
   // 真实数据模式：用后端统计推导
   if (dataSource.value === 'live' && liveOverview.value) return liveOverview.value
-  if (labState.value === 'fresh') return { tone: 'muted' as const, score: 100, headline: '系统空闲', subline: '部署完成，等待第一个真实学习者。' }
   const errs = spans.value.filter((s) => s.status === 'err').length
   if (errs > 0) return { tone: 'warn' as const, score: 61, headline: `需要关注：${errs} 次失败`, subline: '教学链路连续 429 限流，伴学已降级介入。' }
   return { tone: 'ok' as const, score: 92, headline: '运行平稳', subline: '学习链路与模型服务都在正常区间。' }

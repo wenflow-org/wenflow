@@ -1,13 +1,13 @@
 <template>
   <div class="mk-page">
-    <div class="mk-status mk-status--ok">
+    <div class="mk-status" :class="`mk-status--${statusTone}`">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">编排主链完整</strong>
+      <strong class="mk-status__title">{{ statusTitle }}</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ stages.length }} 阶段</span>
       <span class="mk-status__meta">{{ totalSkills }} Skills</span>
       <span class="mk-status__meta">接力 {{ Math.max(stages.length - 1, 0) }} 处</span>
-      <span v-if="defsLoaded" class="mk-status__meta">定义源 {{ orchCount }} 编排 / {{ agentDefCount }} Agent</span>
+      <span v-if="defsLoaded" class="mk-status__meta">定义源 {{ orchCount }} 编排 / {{ skillDefCount }} Skill</span>
       <button v-if="isLive" type="button" class="mk-status__action" :disabled="defsLoading" @click="loadDefinitions">
         {{ defsLoading ? '拉取中…' : '刷新定义' }}
       </button>
@@ -22,8 +22,8 @@
         <li v-for="(n, i) in definitionNotes" :key="i" class="orch-defs__item">
           <span
             class="orch-defs__tag"
-            :class="n.startsWith('编排') ? 'orch-defs__tag--orch' : 'orch-defs__tag--agent'"
-          >{{ n.startsWith('编排') ? '编排' : 'Agent' }}</span>
+            :class="n.startsWith('编排') ? 'orch-defs__tag--orch' : 'orch-defs__tag--skill'"
+          >{{ n.startsWith('编排') ? '编排' : 'Skill' }}</span>
           <span class="orch-defs__text">{{ n.replace(/^(编排|Agent)\s+/, '') }}</span>
         </li>
       </ul>
@@ -52,10 +52,10 @@
     </div>
 
     <!-- 当前阶段详情 -->
-    <div class="mk-card">
+    <div v-if="current" class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">{{ stageTitle }} · 节点与配置</h3>
-        <span class="mk-card__meta">节点 ID <span class="mono">{{ current.agentId }}</span></span>
+        <span class="mk-card__meta">节点 ID <span class="mono">{{ current?.agentId }}</span></span>
       </div>
 
       <!-- tab 切换（定义 / 字段路由 / 沙盘 / 漂移与审计） -->
@@ -131,7 +131,7 @@
 
       <!-- Tab：字段路由（可写配置） -->
       <div v-else-if="activeTab === 'field-routings'" class="orch-tabpane">
-        <FieldRoutingTable :stage="current.id" @changed="reloadDrift" />
+        <FieldRoutingTable :stage="current.id" />
       </div>
 
       <!-- Tab：沙盘契约视图 -->
@@ -141,22 +141,20 @@
 
       <!-- Tab：漂移与审计 -->
       <div v-else-if="activeTab === 'drift'" class="orch-tabpane">
-        <DriftAuditPanel ref="driftPanel" :stage="current.id" />
+        <DriftAuditPanel :stage="current.id" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { openSkillDrawer, dataSource, isLive } from './store'
 import { liveTopoNodes, liveSkillCatalog, errMsg } from './live'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi } from '@/api/adminApi'
 import FieldRoutingTable from './FieldRoutingTable.vue'
 import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
-
-defineProps<{ state: 'normal' }>()
 
 const tabs = [
   { id: 'definition', label: '定义' },
@@ -165,20 +163,11 @@ const tabs = [
   { id: 'drift', label: '漂移与审计' },
 ]
 const activeTab = ref('definition')
-const driftPanel = ref<InstanceType<typeof DriftAuditPanel> | null>(null)
-
-// 字段路由写操作后联动刷新漂移报告。
-// 说明：drift 与 field-routings 为互斥 tab（v-else-if 重建），每次进入 drift tab 时
-// DriftAuditPanel 重新挂载并自动 loadDrift；此回调覆盖"drift tab 曾打开、ref 存活"的
-// 边角场景，保持写后数据一致。
-function reloadDrift() {
-  void driftPanel.value?.reload()
-}
 
 const defsLoading = ref(false)
 const defsLoaded = ref(false)
 const orchCount = ref(0)
-const agentDefCount = ref(0)
+const skillDefCount = ref(0)
 const definitionNotes = ref<string[]>([])
 const orchDefs = ref<Array<Record<string, any>>>([])
 
@@ -193,16 +182,17 @@ async function loadDefinitions() {
     const orchBody = orchRes.data?.data ?? orchRes.data ?? []
     const agentBody = agentRes.data?.data ?? agentRes.data ?? []
     const orchItems = Array.isArray(orchBody) ? orchBody : orchBody.items || orchBody.orchestrators || []
-    const agentItems = Array.isArray(agentBody) ? agentBody : agentBody.items || agentBody.agents || []
+    // 后端 getAgentDefinitions 返回的是 skill 条目（含 agent 归属），计数口径为 Skill 定义数
+    const skillItems = Array.isArray(agentBody) ? agentBody : agentBody.items || agentBody.agents || []
     orchCount.value = orchItems.length
-    agentDefCount.value = agentItems.length
+    skillDefCount.value = skillItems.length
     orchDefs.value = orchItems
     definitionNotes.value = [
       ...orchItems.slice(0, 6).map((o: Record<string, unknown>) =>
         `编排 ${String(o.id || o.name || '—')} · ${String(o.title || o.label || o.description || '').slice(0, 48)}`
       ),
-      ...agentItems.slice(0, 6).map((a: Record<string, unknown>) =>
-        `Agent ${String(a.id || a.agentId || '—')} · ${String(a.name || a.title || '').slice(0, 40)}`
+      ...skillItems.slice(0, 6).map((a: Record<string, unknown>) =>
+        `Skill ${String(a.id || a.skillId || '—')} · ${String(a.name || a.title || '').slice(0, 40)}`
       )
     ]
     defsLoaded.value = true
@@ -216,6 +206,13 @@ async function loadDefinitions() {
 onMounted(() => {
   if (isLive.value) void loadDefinitions()
   void loadStages()
+})
+// demo → live 切换后：阶段清单与运行时定义需要按真实源重拉（初始 onMounted 时可能尚未切到 live）
+watch(dataSource, () => {
+  if (dataSource.value === 'live') {
+    void loadStages()
+    if (!defsLoaded.value) void loadDefinitions()
+  }
 })
 
 interface SkillNode { id: string; name: string; calls: number; produces: string[] }
@@ -309,14 +306,17 @@ async function loadStages() {
       }
     }
   } catch {
-    // demo-only：后端不可用时回退 demo 骨架（仅 demo 模式可见）
+    // 端点不可用：stageList 置空（live 下由拓扑 Agent 节点派生，仍为真实数据；demo 下走演示骨架）
     stageList.value = []
   }
 }
 
 const stages = computed<Stage[]>(() => {
-  // demo-only：离线兜底（非 live 或拓扑未就绪时的演示骨架）
-  if (dataSource.value !== 'live' || !liveTopoNodes.value.length) return demoStages
+  // demo-only：演示/离线模式回退演示骨架；live 模式永不返回 demoStages
+  if (dataSource.value !== 'live') return demoStages
+
+  // live：拓扑未就绪（为空/拉取失败）时返回空数组，渲染空态
+  if (!liveTopoNodes.value.length) return []
 
   // live：阶段清单以 GET stages（编排文件派生）为准，无白名单过滤；
   // 该端点失败时退化为拓扑 Agent 节点派生（仍为真实数据，无 demo 兜底）。
@@ -364,9 +364,22 @@ const stages = computed<Stage[]>(() => {
 })
 
 const totalSkills = computed(() => stages.value.reduce((sum, stage) => sum + stage.skills.length, 0))
-const current = computed(() => stages.value.find((s) => s.id === active.value) || stages.value[0])
+// 空拓扑时 current 为 undefined，模板由 v-if="current" 保护
+const current = computed<Stage | undefined>(() => stages.value.find((s) => s.id === active.value) || stages.value[0])
 const activeIdx = computed(() => stages.value.findIndex((s) => s.id === active.value))
 const stageCalls = (st: Stage) => st.skills.reduce((sum, s) => sum + (s.calls || 0), 0)
+// 状态条按实际数据着色/文案：空拓扑 → muted；存在未解析的定义节点 → warn；否则 ok
+const statusTone = computed(() => {
+  if (!stages.value.length) return 'muted'
+  const unresolved = stages.value.some((s) => s.defSteps?.some((d) => d.resolved?.unresolved))
+  return unresolved ? 'warn' : 'ok'
+})
+const statusTitle = computed(() => {
+  if (!stages.value.length) return '暂无编排阶段数据'
+  const unresolved = stages.value.some((s) => s.defSteps?.some((d) => d.resolved?.unresolved))
+  if (unresolved) return '编排存在未解析节点'
+  return '编排主链完整'
+})
 // 后端阶段名已含"阶段"（如"Goal 阶段"），demo 名无后缀，避免重复拼接
 const stageTitle = computed(() => {
   const name = current.value?.name || ''
@@ -405,7 +418,7 @@ const stageTitle = computed(() => {
   letter-spacing: 0.04em;
 }
 .orch-defs__tag--orch { background: #e5f0ff; color: #2563eb; }
-.orch-defs__tag--agent { background: #e8f7ef; color: #15803d; }
+.orch-defs__tag--skill { background: #e8f7ef; color: #15803d; }
 .orch-defs__text {
   color: var(--mk-muted);
   overflow: hidden;

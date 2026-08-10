@@ -1,5 +1,5 @@
 <template>
-  <div class="brief">
+  <div v-if="data" class="brief">
     <!-- 结论先行：今日简报 -->
     <header class="brief-head" :class="`brief-head--${data.tone}`">
       <div class="brief-head__verdict">
@@ -87,7 +87,9 @@
           <span>异常 <strong :class="{ 'is-bad': data.totalIssues > 0 }">{{ data.totalIssues }}</strong></span>
           <span>高峰 {{ data.peak }}</span>
         </div>
-        <div class="pulse__axis"><i>00</i><i>06</i><i>12</i><i>18</i><i>23</i></div>
+        <div class="pulse__axis">
+          <i v-for="a in pulseAxis" :key="a">{{ a }}</i>
+        </div>
       </section>
 
       <!-- 总结产出质量 -->
@@ -208,12 +210,15 @@
       </section>
     </div>
   </div>
+  <div v-else class="brief brief--empty">
+    <p class="brief-card__note">真实数据暂不可用，请刷新或稍后重试。</p>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed, watch } from 'vue';
 import { overviewHealth, investigateAgent, intent, dataSource } from './store';
-import { liveOverviewFull, overviewHideTest, refreshLiveOverview } from './live';
+import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading } from './live';
 
 type Tone = 'ok' | 'warn' | 'bad' | 'muted';
 
@@ -242,20 +247,19 @@ interface BriefData {
   trend: { date: string; total: number; completed: number }[];
   funnel: { label: string; value: string; idle: boolean }[];
   rates: string[];
-  pulse: { calls: number; issue: number }[];
+  pulse: { calls: number; issue: number; label?: string }[];
   totalCalls: number;
   totalIssues: number;
   peak: string;
   feed: { text: string; time: string; tone: Tone }[];
 }
 
-const props = defineProps<{ state: 'normal' | 'incident' | 'fresh' }>();
-
-// 结论来自 store（由 spans 推导，与日志/瀑布/Skill 同源）；funnel/pulse/feed 为静态演示
+// 结论来自 store（由 spans 推导，与日志/瀑布/Skill 同源）；funnel/pulse/feed 为演示数据
 const health = computed(() => overviewHealth.value);
 
 // 健康结论与行动项同源：health 提示异常时即使静态 actions 为空也要给出排查入口，避免「需关注」与「无事可做」并存
 const effectiveActions = computed(() => {
+  if (!data.value) return [];
   if (data.value.actions.length) return data.value.actions;
   const tone = health.value.tone;
   if (tone === 'warn') {
@@ -283,18 +287,6 @@ const demoUsage: BriefData['usage'] = {
     { category: 'rate_limit', count: 11 }
   ]
 };
-const demoUsageIncident: BriefData['usage'] = {
-  ...demoUsage,
-  calls7d: 1562,
-  failed7d: 318,
-  failures7d: [
-    { category: 'provider_http', count: 227 },
-    { category: 'rate_limit', count: 48 },
-    { category: 'authentication', count: 26 },
-    { category: 'protocol', count: 25 },
-    { category: 'provider_timeout', count: 5 }
-  ]
-};
 const demoTrend: BriefData['trend'] = [
   { date: '07-27', total: 2, completed: 1 },
   { date: '07-28', total: 4, completed: 2 },
@@ -305,193 +297,98 @@ const demoTrend: BriefData['trend'] = [
   { date: '08-02', total: 4, completed: 2 }
 ];
 
-const datasets: Record<string, BriefData> = {
-  normal: {
-    tone: 'ok',
-    score: 92,
-    headline: '运行平稳',
-    subline: '学习链路与模型服务都在正常区间。',
-    actions: [],
-    kpis: [
-      { label: '今日调用', value: '273', hint: '超时 2' },
-      { label: '今日成功率', value: '99.3%', hint: '2 次失败' },
-      { label: '今日新增', value: '6', hint: '新用户' },
-      { label: '今日活跃', value: '18', hint: '32 名用户' },
-      { label: '进行中对话', value: '12', hint: '目标规划' },
-      { label: '活跃 Skill', value: '16', hint: '近 24h' }
-    ],
-    wrapup: {
-      sampleSize: 42,
-      summaryModel: 38,
-      summaryFallback: 4,
-      evaluationModel: 31,
-      evaluationAiFallback: 8,
-      evaluationFailed: 3
-    },
-    usage: demoUsage,
-    trend: demoTrend,
-    funnel: [
-      { label: '用户', value: '128', idle: false },
-      { label: '目标对话', value: '86', idle: false },
-      { label: '路径', value: '64', idle: false },
-      { label: '任务', value: '342', idle: false },
-      { label: '完成', value: '217', idle: false }
-    ],
-    rates: ['67%', '74%', '×5.3 个/条', '63%'],
-    pulse: pulse([2, 1, 0, 0, 1, 3, 6, 9, 14, 18, 22, 19, 16, 21, 25, 28, 24, 19, 15, 12, 8, 5, 4, 3]),
-    totalCalls: 273,
-    totalIssues: 0,
-    peak: '15:00',
-    feed: [
-      { text: '「数据分析入门」路径第 3 阶段完成', time: '6 分钟前', tone: 'ok' },
-      { text: '新用户注册：liu**@163.com', time: '18 分钟前', tone: 'muted' },
-      { text: '路径「Excel 自动化」生成成功', time: '42 分钟前', tone: 'ok' },
-      { text: '学习者快照重算完成 ×12', time: '1 小时前', tone: 'muted' }
-    ]
+const datasets: BriefData = {
+  tone: 'ok',
+  score: 92,
+  headline: '运行平稳',
+  subline: '学习链路与模型服务都在正常区间。',
+  actions: [],
+  kpis: [
+    { label: '今日调用', value: '273', hint: '超时 2' },
+    { label: '今日成功率', value: '99.3%', hint: '2 次失败' },
+    { label: '今日新增', value: '6', hint: '新用户' },
+    { label: '今日活跃', value: '18', hint: '32 名用户' },
+    { label: '进行中对话', value: '12', hint: '目标规划' },
+    { label: '活跃 Skill', value: '16', hint: '近 24h' }
+  ],
+  wrapup: {
+    sampleSize: 42,
+    summaryModel: 38,
+    summaryFallback: 4,
+    evaluationModel: 31,
+    evaluationAiFallback: 8,
+    evaluationFailed: 3
   },
-  incident: {
-    tone: 'warn',
-    score: 61,
-    headline: '需要关注：2 件',
-    subline: '教学链路连续失败，学习侧今日无活跃。',
-    actions: [
-      { text: 'teaching-round 连续 2 次 429 限流', link: '排查执行日志', tone: 'bad', agentId: 'teaching-round' },
-      { text: '伴学降级介入，产出质量下降', link: '查看 Skill 详情', tone: 'warn', agentId: 'companion-boost' }
-    ],
-    kpis: [
-      { label: '今日调用', value: '98', hint: '超时 14' },
-      { label: '今日成功率', value: '82.7%', hint: '17 次失败' },
-      { label: '今日新增', value: '3', hint: '新用户' },
-      { label: '今日活跃', value: '5', hint: '32 名用户' },
-      { label: '进行中对话', value: '6', hint: '目标规划' },
-      { label: '活跃 Skill', value: '11', hint: '近 24h' }
-    ],
-    wrapup: {
-      sampleSize: 31,
-      summaryModel: 19,
-      summaryFallback: 12,
-      evaluationModel: 10,
-      evaluationAiFallback: 9,
-      evaluationFailed: 12
-    },
-    usage: demoUsageIncident,
-    trend: demoTrend,
-    funnel: [
-      { label: '用户', value: '128', idle: false },
-      { label: '目标对话', value: '86', idle: false },
-      { label: '路径', value: '64', idle: false },
-      { label: '任务', value: '342', idle: false },
-      { label: '完成', value: '217', idle: false }
-    ],
-    rates: ['67%', '74%', '×5.3 个/条', '63%'],
-    pulse: (() => {
-      const p = pulse([2, 1, 0, 0, 1, 3, 6, 9, 14, 18, 22, 19, 16, 21, 25, 28, 24, 19, 15, 12, 8, 5, 4, 3]);
-      p[15].issue = 3;
-      p[16].issue = 2;
-      return p;
-    })(),
-    totalCalls: 273,
-    totalIssues: 5,
-    peak: '15:00',
-    feed: [
-      { text: 'teaching-round 失败：429 rate limit', time: '2 分钟前', tone: 'bad' },
-      { text: '阶段展开重试 2/3', time: '9 分钟前', tone: 'warn' },
-      { text: '画像推断解析失败，已回退默认', time: '21 分钟前', tone: 'warn' },
-      { text: '目标对话回合完成', time: '36 分钟前', tone: 'ok' }
-    ]
-  },
-  fresh: {
-    tone: 'muted',
-    score: 100,
-    headline: '系统空闲',
-    subline: '等待第一个真实学习者。',
-    actions: [],
-    kpis: [
-      { label: '今日调用', value: '—', hint: '等待学习者开始' },
-      { label: '今日成功率', value: '—', hint: '无调用' },
-      { label: '今日新增', value: '2', hint: '新用户' },
-      { label: '今日活跃', value: '—', hint: '2 名用户' },
-      { label: '进行中对话', value: '—', hint: '目标规划' },
-      { label: '活跃 Skill', value: '—', hint: '近 24h' }
-    ],
-    wrapup: {
-      sampleSize: 0,
-      summaryModel: 0,
-      summaryFallback: 0,
-      evaluationModel: 0,
-      evaluationAiFallback: 0,
-      evaluationFailed: 0
-    },
-    usage: { calls7d: 0, failed7d: 0, totalTokens7d: 0, models7d: [], failures7d: [] },
-    trend: [],
-    funnel: [
-      { label: '用户', value: '2', idle: false },
-      { label: '目标对话', value: '0', idle: true },
-      { label: '路径', value: '0', idle: true },
-      { label: '任务', value: '0', idle: true },
-      { label: '完成', value: '0', idle: true }
-    ],
-    rates: ['—', '—', '—', '—'],
-    pulse: pulse([]),
-    totalCalls: 0,
-    totalIssues: 0,
-    peak: '—',
-    feed: []
-  }
-};
+  usage: demoUsage,
+  trend: demoTrend,
+  funnel: [
+    { label: '用户', value: '128', idle: false },
+    { label: '目标对话', value: '86', idle: false },
+    { label: '路径', value: '64', idle: false },
+    { label: '任务', value: '342', idle: false },
+    { label: '完成', value: '217', idle: false }
+  ],
+  rates: ['67%', '74%', '×5.3 个/条', '63%'],
+  pulse: pulse([2, 1, 0, 0, 1, 3, 6, 9, 14, 18, 22, 19, 16, 21, 25, 28, 24, 19, 15, 12, 8, 5, 4, 3]),
+  totalCalls: 273,
+  totalIssues: 0,
+  peak: '15:00',
+  feed: [
+    { text: '「数据分析入门」路径第 3 阶段完成', time: '6 分钟前', tone: 'ok' },
+    { text: '新用户注册：liu**@163.com', time: '18 分钟前', tone: 'muted' },
+    { text: '路径「Excel 自动化」生成成功', time: '42 分钟前', tone: 'ok' },
+    { text: '学习者快照重算完成 ×12', time: '1 小时前', tone: 'muted' }
+  ]
+}
 
-const data = computed<BriefData>(() => {
-  // live 模式：全部来自真实统计
-  if (dataSource.value === 'live' && liveOverviewFull.value) {
-    const l = liveOverviewFull.value;
-    return {
-      tone: l.tone,
-      score: l.score,
-      headline: l.headline,
-      subline: l.subline,
-      actions: l.actions,
-      kpis: l.kpis,
-      wrapup: l.wrapup,
-      usage: l.usage,
-      trend: l.trend,
-      funnel: l.funnel,
-      rates: l.rates,
-      pulse: l.pulse,
-      totalCalls: l.totalCalls,
-      totalIssues: l.totalIssues,
-      peak: l.peak,
-      feed: l.feed
-    };
-  }
-  return datasets[props.state];
+const data = computed<BriefData | null>(() => {
+  // live 模式：全部来自真实统计；数据为空/拉取失败时不回退 demo 假数据（模板有 v-else 空态）
+  if (dataSource.value === 'live') return liveOverviewFull.value
+  return datasets
 });
-const maxCalls = computed(() => Math.max(1, ...data.value.pulse.map((b) => b.calls)));
+const maxCalls = computed(() => Math.max(1, ...(data.value?.pulse.map((b) => b.calls) || [])));
 const barHeight = (calls: number) => `${calls > 0 ? Math.max((calls / maxCalls.value) * 100, 8) : 4}%`;
-const scoreDash = computed(() => `${data.value.score * 1.194} 119.4`);
-const scoreTitle = computed(() => `健康分 = 今日调用成功率（${data.value.score} 分）\n${health.value.subline}`);
-const barTitle = (hour: number, b: { calls: number; issue: number }) =>
-  `${String(hour).padStart(2, '0')}:00 · ${b.calls} 次调用 · ${b.issue} 异常`;
+const scoreDash = computed(() => `${(data.value?.score ?? 0) * 1.194} 119.4`);
+const scoreTitle = computed(() =>
+  data.value ? `健康分 = 今日调用成功率（${data.value.score} 分）\n${health.value.subline}` : ''
+);
+// 后端滚动窗口桶带 label（'HH:00'），柱图 title 直接用它；demo 数据无 label 时按下标兜底
+const barTitle = (hour: number, b: { calls: number; issue: number; label?: string }) =>
+  `${b.label || `${String(hour).padStart(2, '0')}:00`} · ${b.calls} 次调用 · ${b.issue} 异常`;
+// 脉搏 x 轴：live 用后端 label（滚动窗口，index 0 = 23h 前）；demo 无 label 回退壁钟刻度
+const pulseAxis = computed<string[]>(() => {
+  const labels = data.value?.pulse.map((b) => b.label).filter(Boolean) as string[];
+  if (labels && labels.length === 24) {
+    return [labels[0], labels[6], labels[12], labels[18], labels[23]];
+  }
+  return ['00', '06', '12', '18', '23'];
+});
 const pct = (n: number, total: number) => `${total > 0 ? Math.round((n / total) * 100) : 0}%`;
 const hasWrapupStats = computed(() => {
-  const w = data.value.wrapup;
+  const w = data.value?.wrapup;
+  if (!w) return false;
   return w.summaryModel > 0 || w.summaryFallback > 0 || w.evaluationModel > 0 || w.evaluationAiFallback > 0 || w.evaluationFailed > 0;
 });
-const usageHasData = computed(() => data.value.usage.totalTokens7d > 0 || data.value.usage.models7d.length > 0);
+const usageHasData = computed(() => {
+  const u = data.value?.usage;
+  return !!u && (u.totalTokens7d > 0 || u.models7d.length > 0);
+});
 const fmtTokens = (n: number) => (n >= 1000000 ? `${(n / 1000000).toFixed(2)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || '—'));
-const modelMax = computed(() => Math.max(1, ...data.value.usage.models7d.map((m) => m.tokens)));
+const modelMax = computed(() => Math.max(1, ...(data.value?.usage.models7d.map((m) => m.tokens) || [])));
 const modelPct = (tokens: number) => `${tokens > 0 ? Math.round((tokens / modelMax.value) * 100) : 0}%`;
-const trendMax = computed(() => Math.max(1, ...data.value.trend.map((d) => d.total)));
+const trendMax = computed(() => Math.max(1, ...(data.value?.trend.map((d) => d.total) || [])));
 const trendH = (n: number) => `${n > 0 ? Math.max((n / trendMax.value) * 100, 10) : 4}%`;
 const trendLabel = (date: string) => {
   const m = String(date).match(/\d{2}-\d{2}$/);
   return m ? m[0] : String(date).slice(5);
 };
-// 与后端 UTC 切日同口径；demo 数据为 MM-DD 短格式，兼容匹配
-const todayStr = new Date().toISOString().slice(0, 10);
-const isToday = (date: string) => date === todayStr || date === todayStr.slice(5);
+// 与后端 UTC 切日同口径；demo 数据为 MM-DD 短格式，兼容匹配（computed：跨午夜后仍正确）
+const todayStr = computed(() => new Date().toISOString().slice(0, 10));
+const isToday = (date: string) => date === todayStr.value || date === todayStr.value.slice(5);
 const trendSum = computed(() => {
-  const total = data.value.trend.reduce((a, d) => a + d.total, 0);
-  const completed = data.value.trend.reduce((a, d) => a + d.completed, 0);
+  const trend = data.value?.trend || [];
+  const total = trend.reduce((a, d) => a + d.total, 0);
+  const completed = trend.reduce((a, d) => a + d.completed, 0);
   return {
     total,
     completed,
@@ -521,17 +418,37 @@ function jump(scene: string) {
   intent.statusFilter = ''
   intent.traceId = ''
   intent.scene = scene
-}const isTestAccount = (text: string) => {
+}
+const isTestAccount = (text: string) => {
   const email = String(text || '').replace(/^新用户注册：/, '');
   if (email.startsWith('virtual_') || email.endsWith('@test.local')) return true;
   return /^(audit_probe_|e2e_|ui_check|motion_review)/.test(email);
 };
-const visibleFeed = computed(() =>
-  hideTestAccounts.value ? data.value.feed.filter((f) => !isTestAccount(f.text)) : data.value.feed
-);
-// 开关切换 → 后端按 excludeTest 重新拉取动态
+const visibleFeed = computed(() => {
+  const feed = data.value?.feed || [];
+  return hideTestAccounts.value ? feed.filter((f) => !isTestAccount(f.text)) : feed;
+});
+// 开关切换 → 后端按 excludeTest 重新拉取动态。
+// refreshLiveOverview 内部有 liveLoading 守卫（初始加载中会吞请求），这里用
+// pending 标志 + liveLoading 回落 watch 保证开关一定生效（last-wins，只重拉一次）
+let pendingOverviewReload = false
+async function refreshOverviewQueued() {
+  if (dataSource.value !== 'live') return
+  if (liveLoading.value) {
+    pendingOverviewReload = true
+    return
+  }
+  pendingOverviewReload = false
+  await refreshLiveOverview()
+}
 watch(hideTestAccounts, () => {
-  if (dataSource.value === 'live') void refreshLiveOverview()
+  if (dataSource.value === 'live') void refreshOverviewQueued()
+})
+watch(liveLoading, (loading) => {
+  if (!loading && pendingOverviewReload && dataSource.value === 'live') {
+    pendingOverviewReload = false
+    void refreshLiveOverview()
+  }
 })
 </script>
 
@@ -551,6 +468,13 @@ watch(hideTestAccounts, () => {
   background: #f6f8fc;
   font-size: 14px;
   color: var(--ink);
+}
+/* live 数据不可用时的空态 */
+.brief--empty {
+  min-height: 50vh;
+  display: grid;
+  place-content: center;
+  text-align: center;
 }
 
 /* 简报头 */

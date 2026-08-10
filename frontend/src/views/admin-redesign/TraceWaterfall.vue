@@ -211,20 +211,36 @@ const activeSession = ref('')
 onMounted(() => {
   if (dataSource.value === 'live') void loadPromptIndex()
 })
+// demo → live 切换后重载（与 ExecLogs 一致）
+watch(dataSource, () => {
+  if (dataSource.value === 'live') void loadPromptIndex()
+})
 function promptOf(span: { traceId: string; agent: string }): PromptMetaRow | undefined {
   const list = livePromptIndex.value[span.traceId]
   if (!list?.length) return undefined
   return list.find((p) => p.agentId.replace(/^skill:/, '') === span.agent || `skill:${span.agent}` === p.agentId)
 }
 
-/* 展开时拉取重试时间线 + 输入输出（live） */
+/* 展开时拉取重试时间线 + 输入输出（live）；detailCache 上限见下方 setDetail */
+const DETAIL_CACHE_MAX = 50
+
+/** 简单 LRU：插入新条目，超过上限时淘汰最早插入的条目 */
+function setDetail(id: string, d: LogDetail) {
+  const next = { ...detailCache.value, [id]: d }
+  const keys = Object.keys(next)
+  if (keys.length > DETAIL_CACHE_MAX) {
+    for (const k of keys.slice(0, keys.length - DETAIL_CACHE_MAX)) delete next[k]
+  }
+  detailCache.value = next
+}
+
 watch(openSpanId, async (id) => {
   if (!id || dataSource.value !== 'live' || detailCache.value[id]) return
   detailLoading.value = id
   try {
-    detailCache.value = { ...detailCache.value, [id]: await fetchLogDetail(id) }
+    setDetail(id, await fetchLogDetail(id))
   } catch {
-    detailCache.value = { ...detailCache.value, [id]: { attempts: [], attemptCount: 0, maxAttempts: 1 } }
+    setDetail(id, { attempts: [], attemptCount: 0, maxAttempts: 1 })
   } finally {
     if (detailLoading.value === id) detailLoading.value = ''
   }

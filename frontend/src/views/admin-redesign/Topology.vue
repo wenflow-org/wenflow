@@ -261,7 +261,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { skillProfiles, skillStatOf, openSkillDrawer, investigateAgent, spans, dataSource } from './store'
 import { liveTopoNodes, liveTopoRange, reloadLiveTopology } from './live'
@@ -443,7 +443,8 @@ function goDesign(id: string) {
 interface AgentDef { id: string; name: string }
 interface SkillItem { id: string; name: string; agentId: string; calls: number; errors: number; avgMs: number; ioContract?: string; model?: string }
 
-const isLive = computed(() => dataSource.value === 'live' && liveTopoNodes.value.length > 0)
+// live 模式判定与拓扑是否非空解耦：空拓扑也走 live 分支显示空态，不回退 demo agentDefs
+const isLive = computed(() => dataSource.value === 'live')
 
 const liveAgents = computed<AgentDef[]>(() =>
   liveTopoNodes.value.filter((n) => n.type === 'agent').map((n) => ({ id: n.id, name: n.label }))
@@ -500,6 +501,9 @@ async function switchRange(r: '24h' | '7d' | '30d' | 'all') {
   rangeLoading.value = true
   try {
     await reloadLiveTopology(r)
+    // 内容尺寸（节点数/技能数）变化后重新适配视图
+    await nextTick()
+    fitView()
   } finally {
     rangeLoading.value = false
   }

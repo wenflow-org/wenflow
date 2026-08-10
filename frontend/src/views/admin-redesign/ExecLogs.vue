@@ -168,7 +168,8 @@
                 <pre v-if="promptOf(log)!.extractedJson">{{ promptOf(log)!.extractedJson }}</pre>
                 <pre v-if="promptOf(log)!.normalizedOutput">{{ promptOf(log)!.normalizedOutput }}</pre>
               </div>
-              <p v-if="!detailCache[log.id].attempts.length && !detailCache[log.id].error && !detailCache[log.id].input && !detailCache[log.id].output" class="tline__none">无 payload 记录</p>
+              <p v-if="detailFailed[log.id]" class="tline__none tline__none--err">详情拉取失败，请稍后重试</p>
+              <p v-else-if="!detailCache[log.id].attempts.length && !detailCache[log.id].error && !detailCache[log.id].input && !detailCache[log.id].output" class="tline__none">无 payload 记录</p>
             </template>
             <p v-else class="tline__none">详情不可用</p>
           </template>
@@ -193,7 +194,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { spans, intent, openTrace, openSession, openSkillDrawer, clearInvestigation, dataSource, isLive } from './store'
-import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogStats, livePromptIndex, loadPromptIndex, type LogDetail, type PromptMetaRow } from './live'
+import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow } from './live'
 import { useLoadMore } from './useLoadMore'
 import MockSkeletonTable from './SkeletonTable.vue'
 
@@ -219,11 +220,20 @@ function promptOf(log: { traceId: string; agent: string }): PromptMetaRow | unde
   return list.find((p) => p.agentId === agentId || p.agentId.replace(/^skill:/, '') === log.agent)
 }
 
-/* live 模式：服务端筛选（时间范围/关键词） */
+/* live 模式：服务端筛选（时间范围/关键词）。
+   reloadLiveSpans 写入独立的 liveLogsFiltered（不污染全局 liveSpans）；
+   请求重叠时 last-wins：旧响应后到（直接覆盖 ref）用序列号 + pending 识别并重拉最新参数 */
 let querying = false
+let queryPending = false
+let querySeq = 0
 async function applyServerQuery() {
-  if (!isLive.value || querying) return
+  if (!isLive.value) return
+  if (querying) {
+    queryPending = true
+    return
+  }
   querying = true
+  const seq = ++querySeq
   try {
     await reloadLiveSpans({
       timeRange: timeRange.value,
@@ -231,6 +241,11 @@ async function applyServerQuery() {
     })
   } finally {
     querying = false
+  }
+  // 本次响应期间有新查询：结果可能已被旧响应覆盖，以最新参数重拉保证一致
+  if (seq !== querySeq || queryPending) {
+    queryPending = false
+    void applyServerQuery()
   }
 }
 
@@ -264,17 +279,34 @@ function exportJson() {
 }
 
 /* live 模式：展开行时拉真实 input/output + 重试时间线 */
+const DETAIL_CACHE_MAX = 50
 const detailCache = ref<Record<string, LogDetail>>({})
 const detailLoading = ref('')
+/** 详情拉取失败标记（与「无 payload 记录」区分） */
+const detailFailed = ref<Record<string, boolean>>({})
+
+/** 简单 LRU：插入新条目，超过上限时淘汰最早插入的条目 */
+function setDetail(id: string, d: LogDetail) {
+  const next = { ...detailCache.value, [id]: d }
+  const keys = Object.keys(next)
+  if (keys.length > DETAIL_CACHE_MAX) {
+    for (const k of keys.slice(0, keys.length - DETAIL_CACHE_MAX)) delete next[k]
+  }
+  detailCache.value = next
+}
 
 watch(openId, async (id) => {
   if (!id || !isLive.value || detailCache.value[id]) return
   detailLoading.value = id
   try {
     const d = await fetchLogDetail(id)
-    detailCache.value = { ...detailCache.value, [id]: d }
+    setDetail(id, d)
+    const f = { ...detailFailed.value }
+    delete f[id]
+    detailFailed.value = f
   } catch {
-    detailCache.value = { ...detailCache.value, [id]: { attempts: [], attemptCount: 0, maxAttempts: 1 } }
+    setDetail(id, { attempts: [], attemptCount: 0, maxAttempts: 1 })
+    detailFailed.value = { ...detailFailed.value, [id]: true }
   } finally {
     if (detailLoading.value === id) detailLoading.value = ''
   }
@@ -290,8 +322,8 @@ watch(
   { immediate: true }
 )
 
-const logs = computed(() => spans.value)
-const agentOptions = computed(() => [...new Set(spans.value.map((s) => s.agent))].sort())
+const logs = computed(() => (isLive.value ? liveLogsFiltered.value : spans.value))
+const agentOptions = computed(() => [...new Set(logs.value.map((s) => s.agent))].sort())
 
 const filtered = computed(() =>
   logs.value.filter((l) => {
@@ -698,6 +730,7 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   word-break: break-all;
 }
 .tline__none { margin: 0; font-size: 11.5px; color: var(--mk-faint); }
+.tline__none--err { color: var(--mk-red); font-weight: 600; }
 .tline__section { display: grid; gap: 4px; }
 .tline__label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
 .tline__label--err { color: var(--mk-red); }
