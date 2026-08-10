@@ -1,5 +1,5 @@
 <template>
-  <div class="mk-card skl-card">
+  <div class="mk-card skl-card" :style="{ '--skl-cols': cols }">
     <div class="skl" v-for="i in rows" :key="i">
       <span
         v-for="j in cols"
