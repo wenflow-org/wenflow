@@ -172,10 +172,10 @@ watch(statsRange, () => {
   if (isLive.value) void refreshLiveSkills()
 })
 
-// 卡片数据 = 档案 + 实时统计（live 模式用真实注册表，demo 模式用演示档案）
+// 卡片数据 = 档案 + 实时统计（live 模式用真实注册表，为空即空态；demo 模式用演示档案）
 const cards = computed(() => {
   const profiles =
-    dataSource.value === 'live' && liveSkillProfiles.value.length
+    dataSource.value === 'live'
       ? liveSkillProfiles.value.map((p) => ({ ...p, promptVersion: '', description: '' }))
       : skillProfiles
   return profiles.map((p) => {
@@ -198,7 +198,7 @@ const filtered = computed(() => {
   let list = cards.value
   // "仅看需关注"只含失败节点；"从未调用"（idle）是常态不是问题
   if (onlyAttention.value) list = list.filter((c) => c.health === 'error')
-  if (categoryFilter.value) list = list.filter((c) => c.category === categoryFilter.value)
+  if (categoryFilter.value) list = list.filter((c) => String(c.category || '').toLowerCase() === categoryFilter.value)
   const q = keyword.value.trim().toLowerCase()
   if (q) list = list.filter((c) => `${c.name} ${c.id} ${c.category}`.toLowerCase().includes(q))
   // 排序：默认失败优先，其次调用量

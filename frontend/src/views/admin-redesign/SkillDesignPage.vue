@@ -91,7 +91,7 @@
                 wrap="off"
                 spellcheck="false"
                 placeholder='{"input": "…"}'
-                @input="coreDirty = true; syncTrialHlScroll()"
+                @input="syncTrialHlScroll()"
                 @scroll="syncTrialHlScroll"
               ></textarea>
             </div>
@@ -175,7 +175,7 @@
                   <div v-if="openLogId === log.id && log.detail" class="sdp-log__detail">
                     <div v-if="log.detail.input" class="sdp-log__io">
                       <span>输入</span>
-                      <pre class="mono">{{ log.detail.input }}</pre>
+                      <pre class="mono">{{ displayCap(log.detail.input) }}</pre>
                     </div>
                     <div v-if="log.detail.output" class="sdp-log__io">
                       <span>输出</span>
@@ -205,10 +205,10 @@
                 <button type="button" class="mk-link" :disabled="!coreLoaded || coreSaving" @click="saveCore">
                   {{ coreSaving ? '保存中…' : '保存并校验' }}
                 </button>
-                <button type="button" class="mk-link" :disabled="!coreLoaded || coreCompiling" @click="previewCore">
+                <button type="button" class="mk-link" :disabled="!coreLoaded || coreCompiling || coreDirty" @click="previewCore">
                   {{ coreCompiling ? '编译中…' : '编译预览' }}
                 </button>
-                <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="!coreLoaded || corePublishing" @click="publishCore(false)">
+                <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="!coreLoaded || corePublishing || coreDirty" @click="publishCore(false)">
                   {{ corePublishing ? '发布中…' : '发布' }}
                 </button>
               </span>
@@ -428,9 +428,19 @@
               <strong>含义冻结判定不确定</strong>
               <p>{{ coreUncertain.rationale || 'judge 无法确定语义等价性' }}</p>
               <ul><li v-for="(f, i) in coreUncertain.findings || []" :key="i">[{{ f.severity }}] {{ f.aspect }}：{{ f.issue }}</li></ul>
-              <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="corePublishing" @click="publishCore(true)">
+              <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="corePublishing || coreDirty" @click="publishCore(true)">
                 人工确认无误，强制发布
               </button>
+            </div>
+            <div v-if="corePublishIssues.length" class="sdp-pw__uncertain">
+              <strong>发布被阻断（{{ corePublishIssues.length }} 个问题）</strong>
+              <p>{{ corePublishIssues[0].message || '编译/校验未通过，请先处理以下问题' }}</p>
+              <ul>
+                <li v-for="(f, i) in corePublishIssues" :key="i">
+                  <template v-if="f.code || f.severity">[{{ f.code || f.severity }}]</template>
+                  {{ f.message || f.aspect || f.issue }}
+                </li>
+              </ul>
             </div>
           </section>
 
@@ -524,10 +534,7 @@
             <h4>版本管理</h4>
             <span class="sdp-sec-meta">{{ promptVersions.length }} 个版本</span>
           </header>
-          <p v-if="versionMsg" class="sdp-versions-msg">
-            {{ versionMsg }}
-            <button v-if="versionMsg.startsWith('已发布')" type="button" class="mk-link" @click="tab = 'trial'">去试跑验证 →</button>
-          </p>
+          <p v-if="versionMsg" class="sdp-versions-msg">{{ versionMsg }}</p>
           <div class="mk-table-wrap">
             <table class="mk-table">
               <thead>
@@ -555,24 +562,6 @@
                         @click="compareWithActive(v)"
                       >
                         {{ compareLoading === v.id ? '对比中…' : '对比生效版' }}
-                      </button>
-                      <button
-                        v-if="v.status !== 'ACTIVE'"
-                        type="button"
-                        class="mk-link"
-                        :disabled="versionBusy === v.id"
-                        @click="publishVersion(v)"
-                      >
-                        发布
-                      </button>
-                      <button
-                        v-if="v.status === 'DRAFT'"
-                        type="button"
-                        class="mk-link mk-link--danger"
-                        :disabled="versionBusy === v.id"
-                        @click="deleteVersion(v)"
-                      >
-                        删除
                       </button>
                       <span v-if="v.status === 'ACTIVE'" class="mk-na">当前生效</span>
                     </div>
@@ -819,7 +808,7 @@
  *   工程 = 低频 kv / 契约 / 协议 / 规则
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import hljs from 'highlight.js/lib/core'
 import yaml from 'highlight.js/lib/languages/yaml'
 import json from 'highlight.js/lib/languages/json'
@@ -851,14 +840,6 @@ const agentIdParam = computed(() => {
 const skillId = computed(() => agentIdParam.value.replace(/^skill:/, ''))
 
 async function goConsole() {
-  if (coreDirty.value) {
-    const ok = await askConfirm({
-      title: '离开设计页',
-      message: '当前 Skill 有未保存的修改，离开后将丢失，确定离开？',
-      confirmText: '离开并放弃修改'
-    })
-    if (!ok) return
-  }
   void router.push('/admin/console')
 }
 
@@ -927,10 +908,14 @@ const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'engineering', label: '工程' }
 ]
 // ?tab= 直达 + 旧链接兼容（workbench 已拆入试跑）
-const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
-if (['protocol', 'trial', 'versions', 'runtime', 'engineering'].includes(qTab)) tab.value = qTab as TabKey
-if (qTab === 'workbench' || qTab === 'inspect' || qTab === 'preview' || qTab === 'trial') tab.value = 'trial'
-if (qTab === 'edit') tab.value = 'protocol'
+function applyQTab() {
+  const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
+  if (['protocol', 'trial', 'versions', 'runtime', 'engineering'].includes(qTab)) tab.value = qTab as TabKey
+  if (qTab === 'workbench' || qTab === 'inspect' || qTab === 'preview' || qTab === 'trial') tab.value = 'trial'
+  if (qTab === 'edit') tab.value = 'protocol'
+}
+applyQTab()
+watch(() => route.query.tab, applyQTab)
 
 /* ---------- Prompt 内容 ---------- */
 interface CompileInfo {
@@ -950,10 +935,12 @@ const promptView = ref<'source' | 'compiled'>('source')
 const shortHash = (v?: string | null) => (v ? v.slice(0, 12) : '—')
 
 async function loadInspect() {
+  const id = skillId.value
   const [ci, ep] = await Promise.all([
-    adminPromptOpsApi.getPromptCompileInfo(`skill:${skillId.value}`).catch(() => null),
-    adminSkillsApi.getEffectiveSkillPrompt(skillId.value).catch(() => null)
+    adminPromptOpsApi.getPromptCompileInfo(`skill:${id}`).catch(() => null),
+    adminSkillsApi.getEffectiveSkillPrompt(id).catch(() => null)
   ])
+  if (id !== skillId.value) return
   compileInfo.value = ci?.data?.data ?? null
   effectivePrompt.value = ep?.data?.data ?? null
 }
@@ -969,59 +956,21 @@ interface DiffGroup { gap: boolean; lines: DiffLine[] }
 const compareResult = ref<{ aLabel: string; bLabel: string; changedLines: number; groups: DiffGroup[] } | null>(null)
 
 async function loadVersions() {
-  const res = await adminAgentPromptsApi.getPromptVersions({ agentId: `skill:${skillId.value}` }).catch(() => null)
+  const id = skillId.value
+  const res = await adminAgentPromptsApi.getPromptVersions({ agentId: `skill:${id}` }).catch(() => null)
+  if (id !== skillId.value) return
   const body = res?.data?.data ?? res?.data ?? []
   const items = Array.isArray(body) ? body : body.list || body.items || body.versions || []
-  promptVersions.value = items.slice(0, 12).map((v: Record<string, unknown>) => ({
+  // ACTIVE 优先排前，避免切片后「对比生效版」误报没有生效版本
+  const sorted = [...(items as Array<Record<string, unknown>>)].sort(
+    (a, b) => Number(String(b.status === 'ACTIVE')) - Number(String(a.status === 'ACTIVE'))
+  )
+  promptVersions.value = sorted.slice(0, 12).map((v: Record<string, unknown>) => ({
     id: String(v.id || ''),
     version: (v.version as string | number) ?? '—',
     status: String(v.status || '—'),
     name: String(v.name || '')
   }))
-}
-
-async function publishVersion(v: VersionItem) {
-  if (versionBusy.value) return
-  const ok = await askConfirm({
-    title: '发布版本',
-    message: `发布 v${v.version}「${v.name}」为生效版本？\n当前生效版本将下线。`,
-    confirmText: '发布'
-  })
-  if (!ok) return
-  versionBusy.value = v.id
-  versionMsg.value = ''
-  try {
-    await adminAgentPromptsApi.publishPrompt(v.id)
-    await Promise.all([loadVersions(), loadInspect()])
-    compareResult.value = null
-    versionMsg.value = `已发布 v${v.version}`
-  } catch (e) {
-    versionMsg.value = `发布失败：${errText(e)}`
-  } finally {
-    versionBusy.value = ''
-  }
-}
-
-async function deleteVersion(v: VersionItem) {
-  if (versionBusy.value) return
-  const ok = await askConfirm({
-    title: '删除草稿',
-    message: `删除草稿 v${v.version}「${v.name}」？\n该操作不可撤销。`,
-    confirmText: '删除'
-  })
-  if (!ok) return
-  versionBusy.value = v.id
-  versionMsg.value = ''
-  try {
-    await adminAgentPromptsApi.deletePrompt(v.id)
-    await loadVersions()
-    compareResult.value = null
-    versionMsg.value = `已删除草稿 v${v.version}`
-  } catch (e) {
-    versionMsg.value = `删除失败：${errText(e)}`
-  } finally {
-    versionBusy.value = ''
-  }
 }
 
 async function compareWithActive(v: VersionItem) {
@@ -1092,7 +1041,7 @@ function formatTrialJson() {
   try {
     trialInput.value = JSON.stringify(JSON.parse(trialInput.value), null, 2)
   } catch (e) {
-    toast.success(`JSON 不合法：${errText(e)}`)
+    toast.error(`JSON 不合法：${errText(e)}`)
   }
 }
 
@@ -1102,6 +1051,7 @@ function clearTrial() {
 }
 
 async function runTrial() {
+  const id = skillId.value
   let payload: unknown
   try {
     payload = JSON.parse(trialInput.value || '{}')
@@ -1113,9 +1063,11 @@ async function runTrial() {
   trialRunning.value = true
   trialError.value = ''
   try {
-    const res = await adminSkillsApi.testSkill(skillId.value, payload)
+    const res = await adminSkillsApi.testSkill(id, payload)
+    if (id !== skillId.value) return
     trialResult.value = res.data?.data ?? res.data ?? null
   } catch (e) {
+    if (id !== skillId.value) return
     trialResult.value = null
     trialError.value = `试运行失败：${errText(e)}`
   } finally {
@@ -1144,8 +1096,10 @@ function mapLogStatus(s: unknown): LogRow['status'] {
 }
 
 async function loadRecentLogs() {
+  const id = skillId.value
   recentLogsError.value = false
-  const res = await adminAgentsApi.getLogs({ agentName: `skill:${skillId.value}`, limit: 8, timeRange: 'week' }).catch(() => null)
+  const res = await adminAgentsApi.getLogs({ agentName: `skill:${id}`, limit: 8, timeRange: 'week' }).catch(() => null)
+  if (id !== skillId.value) return
   if (!res) {
     recentLogsError.value = true
     recentLogs.value = []
@@ -1168,7 +1122,7 @@ async function loadRecentLogs() {
   })
 }
 
-/** 拉详情（输入/输出），供展开与重跑共用 */
+/** 拉详情（输入/输出），供展开与重跑共用；input 保留完整原文供重跑，展示时再截断 */
 async function ensureLogDetail(log: LogRow): Promise<void> {
   if (log.detail || log.loading) return
   log.loading = true
@@ -1176,13 +1130,17 @@ async function ensureLogDetail(log: LogRow): Promise<void> {
     const res = await adminAgentsApi.getLogDetail(log.id)
     const body = res.data?.data ?? res.data ?? {}
     const d = (body.log || body) as Record<string, unknown>
+    const raw = (v: unknown): string | undefined => {
+      if (v == null) return undefined
+      return typeof v === 'string' ? v : JSON.stringify(v, null, 2)
+    }
     const cap = (v: unknown): string | undefined => {
       if (v == null) return undefined
       const s = typeof v === 'string' ? v : JSON.stringify(v, null, 2)
       return s.length > 3000 ? `${s.slice(0, 3000)}\n…（截断）` : s
     }
     log.detail = {
-      input: cap(d.input ?? d.userPayload ?? d.requestPayload),
+      input: raw(d.input ?? d.userPayload ?? d.requestPayload),
       output: cap(d.output ?? d.modelOutput ?? d.responsePayload),
       error: cap(d.errorMessage ?? d.error)
     }
@@ -1211,7 +1169,7 @@ async function rerun(log: LogRow) {
   }
   trialInput.value = log.detail.input
   tab.value = 'trial'
-  toast.error('已填入真实输入，正在重跑…')
+  toast.info('已填入真实输入，正在重跑…')
   await runTrial()
 }
 
@@ -1254,11 +1212,27 @@ watch(
   }
 )
 
+/** 默认运行时表单（与初始定义一致）；切 skill / 404 时显式回退，避免残留上一个 skill 的数据 */
+function resetRtForm() {
+  rtForm.value = {
+    tier: 'chat',
+    model: '',
+    thinkingMode: 'default',
+    reasoningEffort: 'default',
+    requestTimeoutMs: null,
+    enabled: false
+  }
+  logicalRetryMode.value = 'inherit'
+  customLogicalRetries.value = 1
+}
+
 async function loadRuntime() {
+  const id = skillId.value
   const [skillRes, relRes] = await Promise.allSettled([
-    adminSkillsApi.getSkillModelConfig(skillId.value),
+    adminSkillsApi.getSkillModelConfig(id),
     adminPlatformSettingsApi.getReliabilitySettings()
   ])
+  if (id !== skillId.value) return
   if (relRes.status === 'fulfilled') {
     platformLogicalRetries.value = Number(relRes.value.data?.data?.settings?.maxLogicalRetries ?? 1)
   }
@@ -1276,6 +1250,8 @@ async function loadRuntime() {
     logicalRetryMode.value = raw?.maxLogicalRetries == null ? 'inherit' : raw.maxLogicalRetries === 0 ? 'disabled' : 'custom'
     customLogicalRetries.value = raw?.maxLogicalRetries && raw.maxLogicalRetries > 0 ? Math.min(raw.maxLogicalRetries, platformLogicalRetries.value || 1) : 1
   } else {
+    // 无独立配置（404）等失败：显式重置为默认值，不残留上一 skill
+    resetRtForm()
     generationParams.value = null
   }
 }
@@ -1284,14 +1260,19 @@ async function saveRuntime() {
   if (rtSaving.value) return
   rtSaving.value = true
   rtMsg.value = ''
+  // v-model.number 空输入会得到 ''/NaN：保存前归一为 null，避免 400
+  const normNum = (v: unknown): number | null => {
+    if (v == null || v === '' || !Number.isFinite(Number(v))) return null
+    return Number(v)
+  }
   try {
     await adminSkillsApi.updateSkillModelConfig(skillId.value, {
       tier: rtForm.value.tier,
       model: rtForm.value.model || undefined,
       thinkingMode: rtForm.value.thinkingMode,
       reasoningEffort: rtForm.value.thinkingMode === 'disabled' ? 'default' : rtForm.value.reasoningEffort,
-      requestTimeoutMs: rtForm.value.enabled ? rtForm.value.requestTimeoutMs : null,
-      maxLogicalRetries: logicalRetryMode.value === 'inherit' ? null : logicalRetryMode.value === 'disabled' ? 0 : customLogicalRetries.value,
+      requestTimeoutMs: rtForm.value.enabled ? normNum(rtForm.value.requestTimeoutMs) : null,
+      maxLogicalRetries: logicalRetryMode.value === 'inherit' ? null : logicalRetryMode.value === 'disabled' ? 0 : normNum(customLogicalRetries.value),
       enabled: rtForm.value.enabled
     })
     rtErr.value = false
@@ -1419,6 +1400,7 @@ const coreCompiledPrompt = ref('')
 const coreCompiledMeta = ref<{ coreHash: string; coreVersion: number } | null>(null)
 const corePublishResult = ref<{ ok: boolean; message?: string; agentId?: string; version?: number; coreHash?: string } | null>(null)
 const coreUncertain = ref<any>(null)
+const corePublishIssues = ref<Array<Record<string, unknown>>>([])
 const coreVersions = ref<CoreVersionRow[]>([])
 const coreVersionsLoading = ref(false)
 const coreLineage = ref<CoreLineageEntry[]>([])
@@ -1566,20 +1548,27 @@ function coreLevelLabel(level: string) {
 async function ensureCoreLoaded() {
   if (coreRequested) return
   coreRequested = true
+  const id = skillId.value
   coreDiagnostics.value = []
   try {
-    const res = await adminPromptWorkbenchApi.getCore(skillId.value)
+    const res = await adminPromptWorkbenchApi.getCore(id)
+    if (id !== skillId.value) return
     coreText.value = res.data?.raw || ''
     coreDiagnostics.value = res.data?.diagnostics || []
     initCoreForm((res.data?.core || null) as Record<string, unknown> | null)
     coreLoaded.value = true
     coreMissing.value = false
   } catch (e) {
+    if (id !== skillId.value) return
     coreText.value = ''
     coreLoaded.value = false
     coreMissing.value = true
     const status = (e as { response?: { status?: number } })?.response?.status
-    if (status !== 404) toast.success(`核心文件读取失败：${errText(e)}`)
+    if (status !== 404) {
+      // 非 404 允许重试；404 视为该 skill 无核心文件，保持锁定
+      coreRequested = false
+      toast.error(`核心文件读取失败：${errText(e)}`)
+    }
   }
 }
 
@@ -1605,11 +1594,11 @@ async function saveCore() {
       coreInputWarnings.value = res.data?.inputWarnings || []
     }
     coreDirty.value = false
-    toast.error(`已保存（${coreLevelLabel(coreClassification.value?.level || 'safe')}），状态：待编译发布`)
+    toast.success(`已保存（${coreLevelLabel(coreClassification.value?.level || 'safe')}），状态：待编译发布`)
   } catch (e) {
     const data = (e as { response?: { data?: { diagnostics?: CoreDiagnostic[]; error?: string } } })?.response?.data
     coreDiagnostics.value = data?.diagnostics || []
-    toast.success(data?.error || `保存失败：${errText(e)}`)
+    toast.error(data?.error || `保存失败：${errText(e)}`)
   } finally {
     coreSaving.value = false
   }
@@ -1623,7 +1612,8 @@ async function previewCore() {
   coreCompiledPrompt.value = ''
   coreDiagnostics.value = []
   try {
-    const res = await adminPromptWorkbenchApi.compileCore({ skillId: skillId.value })
+    // 预览是 dry run：不触发语义 judge（避免误置「含义冻结」不确定态）
+    const res = await adminPromptWorkbenchApi.compileCore({ skillId: skillId.value, semanticJudge: false })
     coreGates.value = res.data?.gates || null
     coreCompiledPrompt.value = res.data?.prompt || ''
     coreCompiledMeta.value = { coreHash: res.data?.coreHash, coreVersion: res.data?.coreVersion }
@@ -1661,6 +1651,7 @@ async function publishCore(confirmUncertain: boolean) {
   corePublishing.value = true
   corePublishResult.value = null
   coreUncertain.value = null
+  corePublishIssues.value = []
   try {
     const res = await adminPromptWorkbenchApi.publishCore({
       skillId: skillId.value,
@@ -1673,20 +1664,22 @@ async function publishCore(confirmUncertain: boolean) {
       version: res.data?.version,
       coreHash: res.data?.coreHash
     }
-    toast.error(`发布成功：v${res.data?.version}（运行时已生效）`)
+    toast.success(`发布成功：v${res.data?.version}（运行时已生效）`)
     // 发布改 ACTIVE：同步刷新检视与版本页数据
     await Promise.all([loadInspect(), loadVersions(), loadOverviewLite()])
   } catch (e) {
     const status = (e as { response?: { status?: number } })?.response?.status
     const data = (e as { response?: { data?: any } })?.response?.data || {}
     if (status === 409 && data?.code === 'SEMANTIC_UNCERTAIN') {
+      // 仅语义 judge 不确定（409）提供「强制发布」兜底
       coreUncertain.value = data?.judgement || {}
-      toast.success('含义冻结不确定，需人工确认')
+      toast.warning('含义冻结不确定，需人工确认')
     } else {
       if (data?.classification) coreClassification.value = data.classification
       corePublishResult.value = { ok: false, message: data?.error || `发布失败：${errText(e)}` }
+      // 422 issues 只展示问题列表，不提供强制发布入口
       if (data?.issues?.length) {
-        coreUncertain.value = { findings: data.issues, rationale: data.error }
+        corePublishIssues.value = data.issues
       }
       toast.error(data?.error || '发布被阻断')
     }
@@ -1727,12 +1720,16 @@ async function rollbackCore(version: number) {
   coreRollbacking.value = true
   try {
     await adminPromptWorkbenchApi.rollbackCore(skillId.value, version)
-    toast.error(`已回滚到 v${version}`)
+    toast.success(`已回滚到 v${version}`)
+    // 回滚替换了磁盘文件：重新拉取 core，避免编辑器与磁盘不一致
+    coreRequested = false
+    coreDirty.value = false
+    await ensureCoreLoaded()
     await openCoreVersions()
     await Promise.all([loadInspect(), loadVersions(), loadOverviewLite()])
   } catch (e) {
     const data = (e as { response?: { data?: { error?: string } } })?.response?.data
-    toast.success(data?.error || `回滚失败：${errText(e)}`)
+    toast.error(data?.error || `回滚失败：${errText(e)}`)
   } finally {
     coreRollbacking.value = false
   }
@@ -1793,6 +1790,11 @@ watch(tab, (t) => {
 /* ---------- 工具 ---------- */
 const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`)
 
+/** 展开详情展示截断（detail 保留完整原文供重跑） */
+function displayCap(v?: string) {
+  return v && v.length > 3000 ? `${v.slice(0, 3000)}\n…（截断）` : v || ''
+}
+
 /** 状态条文件路径短显：保留最后两段 */
 function shortFilePath(p?: string) {
   if (!p) return ''
@@ -1825,16 +1827,17 @@ async function copy(content: string) {
   if (!content) return
   try {
     await navigator.clipboard.writeText(content)
-    toast.error('已复制')
+    toast.success('已复制')
   } catch {
-    toast.success('复制失败：剪贴板不可用')
+    toast.error('复制失败：剪贴板不可用')
   }
 }
 
 /* ---------- 总加载 ---------- */
 const loadFailed = ref(false)
 async function loadAll() {
-  if (!skillId.value) return
+  const id = skillId.value
+  if (!id) return
   // 刷新会丢弃未保存的 core 修改，先确认
   if (coreDirty.value) {
     const ok = await askConfirm({
@@ -1849,8 +1852,9 @@ async function loadAll() {
   notFound.value = false
   try {
     const r = await adminPromptOpsApi.getAgentOverview()
+    if (id !== skillId.value) return
     const items = (r.data?.data?.items || []) as OverviewItem[]
-    const found = items.find((x) => x.agentId === `skill:${skillId.value}` || x.agentId === skillId.value) || null
+    const found = items.find((x) => x.agentId === `skill:${id}` || x.agentId === id) || null
     if (!found) {
       overview.value = null
       notFound.value = true
@@ -1858,20 +1862,23 @@ async function loadAll() {
     }
     overview.value = found
     const meta = await adminSkillWorkbenchApi.getMeta(found.agentId).catch(() => null)
+    if (id !== skillId.value) return
     workbenchMeta.value = meta?.data?.data ?? meta?.data ?? null
     await Promise.all([loadInspect(), loadVersions(), loadRuntime(), loadRecentLogs()])
   } catch (e) {
+    if (id !== skillId.value) return
     loadFailed.value = true
     toast.error(`加载失败：${errText(e)}`)
   } finally {
-    loading.value = false
+    if (id === skillId.value) loading.value = false
   }
 }
 
 /* 脏态离开保护：切 Skill / 关闭页面 / 刷新前确认，避免静默丢编辑内容 */
 let lastAgentId = ''
 watch(agentIdParam, async (id) => {
-  // 切换 Skill：core 状态全部重置，协议页签下次激活时重新拉取
+  // router.replace 回弹（取消切换）会以原 id 再触发一次：直接跳过，避免误重置
+  if (id === lastAgentId) return
   if (coreDirty.value && id && id !== lastAgentId) {
     const ok = await askConfirm({
       title: '切换 Skill',
@@ -1879,11 +1886,12 @@ watch(agentIdParam, async (id) => {
       confirmText: '离开并放弃修改'
     })
     if (!ok) {
+      // 取消：回滚 URL，不执行任何重置（回弹再进 watcher 时因 id === lastAgentId 直接跳过）
       void router.replace({ path: `/admin/skills/${lastAgentId}`, query: route.query })
       return
     }
   }
-  lastAgentId = id
+  // 确认离开或非脏切换：core 状态全部重置，协议页签下次激活时重新拉取
   coreRequested = false
   coreLoaded.value = false
   coreMissing.value = false
@@ -1897,10 +1905,28 @@ watch(agentIdParam, async (id) => {
   coreCompiledMeta.value = null
   corePublishResult.value = null
   coreUncertain.value = null
+  corePublishIssues.value = []
   coreVersions.value = []
   coreLineage.value = []
+  // 试跑 / 运行时状态一并清空，避免跨 skill 残留
+  trialResult.value = null
+  trialError.value = ''
+  trialInput.value = ''
+  resetRtForm()
+  lastAgentId = id
   if (agentIdParam.value) void loadAll()
   if (tab.value === 'protocol') void ensureCoreLoaded()
+})
+
+/* SPA 内导航离开（返回控制台 / 跳其他路由）有未保存修改必须确认；刷新/关闭由 beforeunload 兜底 */
+onBeforeRouteLeave(async () => {
+  if (!coreDirty.value) return true
+  const ok = await askConfirm({
+    title: '离开设计页',
+    message: '当前 Skill 有未保存的修改，离开后将丢失，确定离开？',
+    confirmText: '离开并放弃修改'
+  })
+  return ok === true
 })
 
 function onPageBeforeUnload(e: BeforeUnloadEvent) {

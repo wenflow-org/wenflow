@@ -68,7 +68,6 @@
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { adminPromptWorkbenchApi } from '@/api/adminApi';
-import { intent } from './store';
 import { toast } from '@/utils/toast'
 
 interface CoreListItem {
@@ -82,9 +81,6 @@ interface CoreListItem {
   publishedHash: string | null;
   status: 'synced' | 'pending-compile' | 'no-prompt';
 }
-
-const props = defineProps<{ state?: string }>();
-void props;
 
 const router = useRouter();
 const cores = ref<CoreListItem[]>([]);
@@ -132,13 +128,6 @@ async function loadList() {
 }
 
 onMounted(async () => {
-  // 旧入口（抽屉 / AgentEditor）带预选 skill：直接重定向到设计页协议页签
-  const requestedSkill = intent.promptLabSkill;
-  intent.promptLabSkill = '';
-  if (requestedSkill) {
-    void router.replace(`/admin/skills/${encodeURIComponent(requestedSkill)}?tab=protocol`);
-    return;
-  }
   await loadList();
 });
 </script>

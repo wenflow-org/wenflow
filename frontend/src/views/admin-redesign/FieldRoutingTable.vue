@@ -95,7 +95,7 @@ interface RoutingItem {
   agentId: string;
   fieldId: string;
   render: string;
-  handoff: string | null;
+  handoff: string | string[] | null;
   internal: boolean;
   accumulate: boolean;
   locks?: { level?: string };
@@ -115,8 +115,9 @@ const fieldMap = () => new Map(fields.value.map((f) => [f.fieldId, f]));
 function typeOf(fieldId: string) { return fieldMap().get(fieldId)?.valueType || '—'; }
 function roleOf(fieldId: string) { return fieldMap().get(fieldId)?.promptRole || '—'; }
 function routingsOf(agentId: string) { return routings.value.filter((r) => r.agentId === agentId); }
-function formatHandoff(raw: string | null) {
+function formatHandoff(raw: string | string[] | null) {
   if (!raw) return '';
+  if (Array.isArray(raw)) return raw.join(', ');
   try {
     const arr = JSON.parse(raw);
     return Array.isArray(arr) ? arr.join(', ') : raw;

@@ -130,8 +130,6 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 
-defineProps<{ state: string }>()
-
 interface Row {
   id: string
   title: string
@@ -206,7 +204,7 @@ async function publish(r: Row) {
     }
     toast.success(`「${r.title}」已发布，用户端立即可见`)
   } catch (e) {
-    toast.success(`发布失败：${errMsg(e)}`)
+    toast.error(`发布失败：${errMsg(e)}`)
   } finally {
     r.busy = false
   }
@@ -217,9 +215,9 @@ async function archive(r: Row) {
   try {
     if (isLive.value) await liveArchiveAnnouncement(r.id)
     else r.status = 'archived'
-    toast.error(`「${r.title}」已下线`)
+    toast.success(`「${r.title}」已下线`)
   } catch (e) {
-    toast.success(`下线失败：${errMsg(e)}`)
+    toast.error(`下线失败：${errMsg(e)}`)
   } finally {
     r.busy = false
   }
@@ -236,9 +234,9 @@ async function remove(r: Row) {
   try {
     if (isLive.value) await liveDeleteAnnouncement(r.id)
     else demoList.value = demoList.value.filter((x) => x.id !== r.id)
-    toast.error('公告已删除')
+    toast.success('公告已删除')
   } catch (e) {
-    toast.success(`删除失败：${errMsg(e)}`)
+    toast.error(`删除失败：${errMsg(e)}`)
   } finally {
     r.busy = false
   }
@@ -302,6 +300,13 @@ function toLocalInput(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+/** datetime-local 产生的是无时区本地值：提交前转 ISO 时间戳，避免时区漂移 */
+function toIso(v: string): string | null {
+  if (!v) return null
+  const d = new Date(v)
+  return Number.isNaN(d.getTime()) ? null : d.toISOString()
+}
+
 async function saveEdit() {
   errors.value = {}
   if (!form.value.title.trim()) errors.value.title = '请输入标题'
@@ -314,7 +319,7 @@ async function saveEdit() {
         title: form.value.title.trim(),
         body: form.value.body.trim(),
         severity: form.value.severity,
-        expiresAt: form.value.expiresAt || null
+        expiresAt: toIso(form.value.expiresAt)
       })
     } else {
       const r = demoList.value.find((x) => x.id === editingId.value)
@@ -322,13 +327,13 @@ async function saveEdit() {
         r.title = form.value.title.trim()
         r.body = form.value.body.trim()
         r.severity = form.value.severity
-        r.expiresAt = form.value.expiresAt || null
+        r.expiresAt = toIso(form.value.expiresAt)
       }
     }
     createOpen.value = false
-    toast.error('公告已保存')
+    toast.success('公告已保存')
   } catch (e) {
-    toast.success(`保存失败：${errMsg(e)}`)
+    toast.error(`保存失败：${errMsg(e)}`)
   } finally {
     creating.value = false
   }
@@ -346,7 +351,7 @@ async function create() {
         title: form.value.title.trim(),
         body: form.value.body.trim(),
         severity: form.value.severity,
-        expiresAt: form.value.expiresAt || null,
+        expiresAt: toIso(form.value.expiresAt),
         publishNow: form.value.publishNow
       })
     } else {
@@ -357,13 +362,13 @@ async function create() {
         severity: form.value.severity,
         status: form.value.publishNow ? 'published' : 'draft',
         publishedAt: form.value.publishNow ? new Date().toISOString() : null,
-        expiresAt: form.value.expiresAt || null
+        expiresAt: toIso(form.value.expiresAt)
       })
     }
     createOpen.value = false
-    toast.error(form.value.publishNow ? '公告已创建并发布' : '草稿已创建')
+    toast.success(form.value.publishNow ? '公告已创建并发布' : '草稿已创建')
   } catch (e) {
-    toast.success(`创建失败：${errMsg(e)}`)
+    toast.error(`创建失败：${errMsg(e)}`)
   } finally {
     creating.value = false
   }

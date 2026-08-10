@@ -30,13 +30,16 @@
           </label>
           <label class="ac-field ac-field--row">
             <span>API Key</span>
-            <input
-              class="mk-filter__input"
-              type="password"
-              v-model="form.apiKey"
-              :placeholder="keySet ? '已配置，留空沿用' : '输入 API Key'"
-              @input="markDirty('conn')"
-            />
+            <span class="ac-key-wrap">
+              <input
+                class="mk-filter__input"
+                type="password"
+                v-model="form.apiKey"
+                :placeholder="keySet ? '已配置，留空沿用' : '输入 API Key'"
+                @input="markDirty('conn')"
+              />
+              <em v-if="keyHintNeeded" class="ac-keyhint">⚠ 更换服务地址需重新输入密钥</em>
+            </span>
           </label>
         </div>
         <label class="ac-field">
@@ -314,9 +317,6 @@ import { registrationEnabled, updateRegistrationSetting } from './live'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 
-const props = defineProps<{ state: 'ready' | 'incomplete' }>()
-
-
 /* ---------- AI 能力健康快照 ---------- */
 interface CapHealth {
   id: string
@@ -388,6 +388,10 @@ const policy = reactive({
 const fetchedModels = ref<string[]>([])
 const keySet = ref(false)
 const connectionStatus = ref('unknown')
+/** 曾成功拉取过模型列表（含从已保存配置载入）：此后提交才携带 availableModels，避免空数组清空后端列表 */
+const modelsFetchedOnce = ref(false)
+/** 已保存的服务地址：endpoint 被改动且 Key 留空时提示重新输入密钥 */
+const savedApiUrl = ref('')
 
 const dirty = ref<Set<string>>(new Set())
 function markDirty(group: string) {
@@ -468,43 +472,34 @@ function applyLiveConfig() {
   fetchedModels.value = [...cfg.value.availableModels]
   keySet.value = cfg.value.apiKeyConfigured
   connectionStatus.value = cfg.value.connectionStatus
+  savedApiUrl.value = cfg.value.apiUrl
+  modelsFetchedOnce.value = true
   Object.assign(policy, cfg.value.networkPolicy)
   dirty.value = new Set()
 }
 
-function applyDemoState(s: 'ready' | 'incomplete') {
-  if (s === 'ready') {
-    form.apiUrl = 'https://api.deepseek.com/v1'
-    form.apiKey = ''
-    form.defaultModel = 'deepseek-v4-flash'
-    form.defaultReasoningModel = 'deepseek-v4-pro'
-    form.defaultEvaluationModel = 'deepseek-v4-pro'
-    fetchedModels.value = [...DEMO_MODELS]
-    keySet.value = true
-    connectionStatus.value = 'connected'
-    dirty.value = new Set(['conn', 'route'])
-  } else {
-    form.apiUrl = ''
-    form.apiKey = ''
-    form.defaultModel = ''
-    form.defaultReasoningModel = ''
-    form.defaultEvaluationModel = ''
-    fetchedModels.value = []
-    keySet.value = false
-    connectionStatus.value = 'unknown'
-    dirty.value = new Set()
-  }
+function applyDemoState() {
+  form.apiUrl = 'https://api.deepseek.com/v1'
+  form.apiKey = ''
+  form.defaultModel = 'deepseek-v4-flash'
+  form.defaultReasoningModel = 'deepseek-v4-pro'
+  form.defaultEvaluationModel = 'deepseek-v4-pro'
+  fetchedModels.value = [...DEMO_MODELS]
+  keySet.value = true
+  connectionStatus.value = 'connected'
+  savedApiUrl.value = form.apiUrl
+  dirty.value = new Set(['conn', 'route'])
 }
 
 watch(
-  () => [dataSource.value, cfg.value, props.state] as const,
+  () => [dataSource.value, cfg.value] as const,
   () => {
     if (dataSource.value === 'live') {
       applyLiveConfig()
       if (!reliability.value) void loadReliability()
       if (!probe.loaded) void loadProbe()
       void loadHealth()
-    } else applyDemoState(props.state)
+    } else applyDemoState()
   },
   { immediate: true, deep: true }
 )
@@ -528,6 +523,11 @@ const connBadge = computed(() => {
   if (connectionStatus.value === 'failed') return { cls: 'mk-badge--bad', text: '上次连接失败' }
   return { cls: 'mk-badge--muted', text: ready.value ? '已配置' : '待配置' }
 })
+
+/** 已配置密钥但改了服务地址且 Key 留空：密钥不会随地址迁移，需提示重新输入 */
+const keyHintNeeded = computed(
+  () => keySet.value && !!form.apiUrl && form.apiUrl !== savedApiUrl.value && !form.apiKey.trim()
+)
 
 const accessOptions = [
   { id: 'loopback' as const, label: '仅本机' },
@@ -553,6 +553,7 @@ async function fetchModels() {
     if (isLive.value) {
       const list = await liveFetchModels(form.apiUrl, form.apiKey)
       fetchedModels.value = list
+      modelsFetchedOnce.value = true
       connectionStatus.value = 'connected'
       markDirty('conn')
       toast.info(list.length ? `已获取 ${list.length} 个模型，记得保存` : '连接成功，但服务未返回模型列表')
@@ -566,7 +567,7 @@ async function fetchModels() {
     }
   } catch (e) {
     connectionStatus.value = 'failed'
-    toast.success(`连接失败：${errMsg(e)}`)
+    toast.error(`连接失败：${errMsg(e)}`)
   } finally {
     fetching.value = false
   }
@@ -591,7 +592,7 @@ async function runTest() {
         latency: r.latencyMs ? `${r.latencyMs}ms` : `${Date.now() - started}ms`,
         usage: r.usage
       }
-      toast.error('测试通过')
+      toast.success('测试通过')
     } else {
       await new Promise((r) => setTimeout(r, 800))
       testResult.value = { ok: true, text: '模型测试成功。', latency: '238ms', usage: 'P 12 / C 9 / T 21' }
@@ -599,7 +600,7 @@ async function runTest() {
     }
   } catch (e) {
     testResult.value = { ok: false, text: errMsg(e).slice(0, 80) }
-    toast.success(`测试失败：${errMsg(e)}`)
+    toast.error(`测试失败：${errMsg(e)}`)
   } finally {
     testing.value = false
   }
@@ -620,14 +621,23 @@ async function saveAll() {
   try {
     if (isLive.value) {
       if (dirty.value.has('conn') || dirty.value.has('route')) {
-        await liveSaveApiConfig({
+        const payload: {
+          apiUrl: string
+          apiKey: string
+          defaultModel: string
+          defaultReasoningModel: string
+          defaultEvaluationModel: string
+          availableModels?: string[]
+        } = {
           apiUrl: form.apiUrl,
           apiKey: form.apiKey,
-          availableModels: fetchedModels.value,
           defaultModel: form.defaultModel,
           defaultReasoningModel: form.defaultReasoningModel,
           defaultEvaluationModel: form.defaultEvaluationModel
-        })
+        }
+        // G5：从未成功拉取过模型时不提交 availableModels，避免空数组清空后端模型列表
+        if (modelsFetchedOnce.value) payload.availableModels = fetchedModels.value
+        await liveSaveApiConfig(payload as Parameters<typeof liveSaveApiConfig>[0])
       }
       if (dirty.value.has('policy')) {
         await liveSaveNetworkPolicy({ ...policy })
@@ -654,15 +664,16 @@ async function saveAll() {
           }
         }
       }
-      dirty.value = new Set()
-      toast.error('配置已保存并生效')
+      // L5：probe 未加载成功时保留其脏标记，避免静默丢弃用户改动
+      dirty.value = new Set(dirty.value.has('probe') && !probe.loaded ? ['probe'] : [])
+      toast.success('配置已保存并生效')
     } else {
       await new Promise((r) => setTimeout(r, 400))
       dirty.value = new Set()
       toast.success('连接与安全配置已保存')
     }
   } catch (e) {
-    toast.success(`保存失败：${errMsg(e)}`)
+    toast.error(`保存失败：${errMsg(e)}`)
   } finally {
     saving.value = false
   }
@@ -673,7 +684,7 @@ function discardAll() {
     applyLiveConfig()
     void loadReliability()
     void loadProbe()
-  } else applyDemoState(props.state)
+  } else applyDemoState()
   toast.error('已放弃未保存的变更')
 }
 
@@ -720,6 +731,14 @@ async function toggleRegistration() {
   gap: 10px;
 }
 .ac-field--row > span { white-space: nowrap; }
+.ac-key-wrap { display: grid; gap: 4px; min-width: 0; }
+.ac-keyhint {
+  font-size: 11.5px;
+  color: var(--mk-amber);
+  font-weight: 600;
+  font-style: normal;
+  white-space: normal;
+}
 
 /* 连通性验证行：测试模型 + 运行测试 + 结果内联（底边对齐，按钮与输入控件同水平线） */
 .ac-test {

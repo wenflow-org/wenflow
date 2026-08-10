@@ -1,7 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="entity" ref="maskRef" class="msk">
-      <aside ref="panelRef" class="msk__panel" role="dialog" aria-label="详情">
+    <div v-if="entity" ref="maskRef" class="msk">      <aside ref="panelRef" class="msk__panel" role="dialog" aria-label="详情">
         <!-- 头部：身份区（阶段色 + 类别图标 + 状态 chips） -->
         <header class="msk__head" :style="{ '--hue': tone.hue, '--soft': tone.soft }">
           <div class="msk__id-row">
@@ -193,7 +192,7 @@
               </div>
               <p v-if="cfgMsg" class="msk__msg" :class="{ 'msk__msg--err': cfgErr }">{{ cfgMsg }}</p>
             </div>
-            <p v-else class="msk__none">配置加载中…</p>
+            <p v-else class="msk__none">{{ cfgErr ? cfgMsg : '配置加载中…' }}</p>
           </section>
 
           <!-- 试跑（live：对齐生产 testSkill 预览） -->
@@ -226,7 +225,7 @@
               <button type="button" class="mk-link" @click="goPromptLab">编辑协议 / 发布 →</button>
             </div>
             <div v-if="isLive && promptVersions.length" class="msk__versions">
-              <span class="msk__versions-label">历史版本（可与生效版对比、发布草稿）</span>
+              <span class="msk__versions-label">历史版本（可与生效版对比）</span>
               <p v-if="versionMsg" class="msk__versions-msg">{{ versionMsg }}</p>
               <div v-for="v in promptVersions" :key="v.id" class="msk__version-row">
                 <span class="msk__version-tag mono">v{{ v.version }}</span>
@@ -246,24 +245,7 @@
                   >
                     {{ compareLoading === v.id ? '…' : '对比' }}
                   </button>
-                  <button
-                    v-if="v.status !== 'ACTIVE'"
-                    type="button"
-                    class="msk__op msk__op--primary"
-                    :disabled="versionBusy === v.id"
-                    @click="publishVersion(v)"
-                  >
-                    发布
-                  </button>
-                  <button
-                    v-if="v.status === 'DRAFT'"
-                    type="button"
-                    class="msk__op msk__op--danger"
-                    :disabled="versionBusy === v.id"
-                    @click="deleteVersion(v)"
-                  >
-                    删
-                  </button>
+                  <span v-if="v.status === 'ACTIVE'" class="msk__op is-active">当前生效</span>
                 </span>
               </div>
 
@@ -335,6 +317,10 @@
         </div>
       </aside>
     </div>
+    <div v-else-if="intent.skillDrawerId" class="msk__notfound">
+      <strong>未找到 Skill「{{ intent.skillDrawerId }}」</strong>
+      <span>它可能未注册或 ID 有误。</span>
+    </div>
   </Teleport>
 </template>
 
@@ -358,7 +344,6 @@ import { liveSkillProfiles, liveExtraProfiles, liveApiConfig, errMsg, fetchProto
 import { adminSkillWorkbenchApi, adminSkillsApi, adminAgentPromptsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
-import { askConfirm } from './useConfirm'
 
 useEscape(() => !!intent.skillDrawerId, closeSkillDrawer)
 
@@ -373,7 +358,7 @@ const isLive = computed(() => dataSource.value === 'live')
 
 const skillProfile = computed(() => {
   const id = intent.skillDrawerId
-  // live 模式优先真实注册表（含外挂能力 Skill），demo 档案仅离线兜底
+  // live 模式只认真实注册表（含外挂能力 Skill）：查不到即「未找到」，不静默回退 demo 档案
   if (isLive.value) {
     const live =
       liveSkillProfiles.value.find((p) => p.id === id) ||
@@ -381,6 +366,7 @@ const skillProfile = computed(() => {
     if (live) {
       return { id: live.id, name: live.name, agentId: '', agentName: '', category: live.category, promptVersion: '', description: '' }
     }
+    return null
   }
   return skillProfiles.find((p) => p.id === id) || null
 })
@@ -446,9 +432,16 @@ async function loadRuntimeCfg(id: string) {
       maxLogicalRetries: c.maxLogicalRetries != null ? Number(c.maxLogicalRetries) : null,
       timeoutSec: c.requestTimeoutMs != null ? Math.round(Number(c.requestTimeoutMs) / 1000) : null
     }
-  } catch {
-    // 无独立配置：以继承默认值起步，保存即创建覆盖
-    runtimeCfg.value = { model: '', enabled: true, hasSkillOverride: false, maxLogicalRetries: null, timeoutSec: null }
+  } catch (e) {
+    const status = (e as { response?: { status?: number } })?.response?.status
+    if (status === 404) {
+      // 无独立配置：以继承默认值起步，保存即创建覆盖
+      runtimeCfg.value = { model: '', enabled: true, hasSkillOverride: false, maxLogicalRetries: null, timeoutSec: null }
+    } else {
+      // 其他错误：提示用户，保持空态
+      cfgErr.value = true
+      cfgMsg.value = `配置加载失败：${errMsg(e)}`
+    }
   }
 }
 
@@ -536,15 +529,12 @@ const agentRules = computed(() => {
 
 const conflictNote = computed(() => {
   if (!rulesOverview.value) return ''
+  // live.ts 的 conflictPrefixes 为 { prefix, agentIds }[]（每项带归属 Agent 列表）
   const prefixes = new Set(agentRules.value.map((r) => r.prefix))
-  const hit = rulesOverview.value.conflictPrefixes.filter((p) => prefixes.has(p))
-  if (hit.length) return `前缀冲突：${hit.join('、')} 与其他节点的规则撞号，建议改名归并`
-  return rulesOverview.value.conflictPrefixCount > 0 ? '' : ''
+  const hit = rulesOverview.value.conflictPrefixes.filter((p) => prefixes.has(p.prefix))
+  if (!hit.length) return ''
+  return `前缀冲突：${hit.map((p) => p.prefix).join('、')} 与其他节点的规则撞号，建议改名归并`
 })
-
-function agentRulesReset() {
-  // 换节点时保留缓存（rulesOverview/protocols 是全局数据），仅重置展开态
-}
 
 async function ensureProtocolLoaded() {
   if (protocols.value.length || protocolLoading.value) return
@@ -605,76 +595,6 @@ const versionMsg = ref('')
 interface DiffLine { type: 'added' | 'removed'; no: number | string; text: string }
 interface DiffGroup { gap: boolean; lines: DiffLine[] }
 const compareResult = ref<{ aLabel: string; bLabel: string; changedLines: number; groups: DiffGroup[] } | null>(null)
-
-/** 发布/删除后刷新版本列表与生效 Prompt 摘要 */
-async function reloadPromptData(id: string) {
-  const [versionsRes, promptRes] = await Promise.all([
-    adminAgentPromptsApi.getPromptVersions({ agentId: id }).catch(() => null),
-    adminSkillsApi.getEffectiveSkillPrompt(id).catch(() => null)
-  ])
-  const vBody = versionsRes?.data?.data ?? versionsRes?.data ?? []
-  const vItems = Array.isArray(vBody) ? vBody : vBody.items || vBody.versions || []
-  promptVersions.value = vItems.slice(0, 8).map((v: Record<string, unknown>) => ({
-    id: String(v.id || ''),
-    version: (v.version as string | number) ?? '—',
-    status: String(v.status || '—'),
-    name: String(v.name || '')
-  }))
-  const promptBody = promptRes?.data?.data ?? promptRes?.data ?? {}
-  const prompt = (promptBody.prompt || {}) as Record<string, unknown>
-  if (liveMeta.value && prompt.id) {
-    const version = prompt.version ? `v${String(prompt.version)}` : ''
-    const promptName = prompt.name ? String(prompt.name) : ''
-    liveMeta.value.promptVersion = [version, promptName].filter(Boolean).join(' · ')
-    liveMeta.value.effectivePrompt = String(prompt.systemPrompt || '').slice(0, 1200)
-  }
-}
-
-async function publishVersion(v: { id: string; version: string | number; name: string }) {
-  const id = intent.skillDrawerId
-  if (!id || versionBusy.value) return
-  const ok = await askConfirm({
-    title: '发布版本',
-    message: `发布 v${v.version}「${v.name}」为生效版本？\n当前生效版本将下线。`,
-    confirmText: '发布'
-  })
-  if (!ok) return
-  versionBusy.value = v.id
-  versionMsg.value = ''
-  try {
-    await adminAgentPromptsApi.publishPrompt(v.id)
-    await reloadPromptData(id)
-    compareResult.value = null
-    versionMsg.value = `已发布 v${v.version}`
-  } catch (e) {
-    versionMsg.value = `发布失败：${errMsg(e)}`
-  } finally {
-    versionBusy.value = ''
-  }
-}
-
-async function deleteVersion(v: { id: string; version: string | number; name: string }) {
-  const id = intent.skillDrawerId
-  if (!id || versionBusy.value) return
-  const ok = await askConfirm({
-    title: '删除草稿',
-    message: `删除草稿 v${v.version}「${v.name}」？\n该操作不可撤销。`,
-    confirmText: '删除'
-  })
-  if (!ok) return
-  versionBusy.value = v.id
-  versionMsg.value = ''
-  try {
-    await adminAgentPromptsApi.deletePrompt(v.id)
-    await reloadPromptData(id)
-    compareResult.value = null
-    versionMsg.value = `已删除草稿 v${v.version}`
-  } catch (e) {
-    versionMsg.value = `删除失败：${errMsg(e)}`
-  } finally {
-    versionBusy.value = ''
-  }
-}
 
 /** 与当前 ACTIVE 版本做行级对比：modified 拆成删+增两行，连续变更分组，长同文段折叠为 … */
 async function compareWithActive(v: { id: string; version: string | number; name: string }) {
@@ -762,6 +682,7 @@ watch(
   async (id) => {
     liveMeta.value = null
     runtimeCfg.value = null
+    platformReliability.value = null
     cfgMsg.value = ''
     testResult.value = ''
     activeTab.value = 'overview'
@@ -769,7 +690,6 @@ watch(
     compareResult.value = null
     versionMsg.value = ''
     versionBusy.value = ''
-    agentRulesReset()
     if (!id || !isLive.value || !skillProfile.value) return
     void loadRuntimeCfg(id)
     try {
@@ -811,7 +731,7 @@ watch(
         statsRange: String(stats.range || 'all')
       }
       const vBody = versionsRes?.data?.data ?? versionsRes?.data ?? []
-      const vItems = Array.isArray(vBody) ? vBody : vBody.items || vBody.versions || []
+      const vItems = Array.isArray(vBody) ? vBody : vBody.list || vBody.items || vBody.versions || []
       promptVersions.value = vItems.slice(0, 8).map((v: Record<string, unknown>) => ({
         id: String(v.id || ''),
         version: (v.version as string | number) ?? '—',
@@ -864,7 +784,7 @@ function goPromptLab() {
 function goFullEditor() {
   const id = intent.skillDrawerId
   closeSkillDrawer()
-  void router.push(`/admin/skills/${id}`)
+  void router.push(`/admin/skills/${encodeURIComponent(id)}`)
 }
 </script>
 
@@ -1136,6 +1056,19 @@ function goFullEditor() {
   white-space: nowrap;
 }
 .msk__none { margin: 0; color: #8492ab; font-size: 12px; }
+.msk__notfound {
+  width: min(520px, 100vw);
+  height: 100%;
+  margin-left: auto;
+  background: #fff;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 24px;
+}
+.msk__notfound strong { font-size: 14px; color: #223252; }
+.msk__notfound span { font-size: 12.5px; color: #8492ab; }
 .mono { font-family: var(--mk-mono); }
 
 /* 运行配置卡片 */
@@ -1338,6 +1271,8 @@ function goFullEditor() {
 }
 .msk__op:hover { background: #eff6ff; }
 .msk__op:disabled { opacity: 0.5; cursor: not-allowed; }
+.msk__op.is-active { color: #15803d; cursor: default; }
+.msk__op.is-active:hover { background: transparent; }
 .msk__op--danger { color: #dc2626; }
 .msk__op--danger:hover { background: #fef2f2; }
 .msk__versions-msg { margin: 0; font-size: 12px; color: #15803d; font-weight: 600; }

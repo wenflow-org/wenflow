@@ -167,8 +167,6 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 
-defineProps<{ state: 'normal' | 'empty' }>()
-
 
 /* ---------- ① 外挂能力（白名单驱动） ---------- */
 interface CapabilityRow {
@@ -339,9 +337,9 @@ async function saveTool() {
       }
     }
     toolOpen.value = false
-    toast.error(toolEditingId.value ? 'MCP 服务已更新' : 'MCP 服务已创建')
+    toast.success(toolEditingId.value ? 'MCP 服务已更新' : 'MCP 服务已创建')
   } catch (e) {
-    toast.success(`保存失败：${errMsg(e)}`)
+    toast.error(`保存失败：${errMsg(e)}`)
   } finally {
     toolSaving.value = false
   }
@@ -361,9 +359,9 @@ async function removeTool(t: McpTool) {
     } else {
       mcpTools.value = mcpTools.value.filter((x) => x.id !== t.id)
     }
-    toast.error('MCP 服务已删除')
+    toast.success('MCP 服务已删除')
   } catch (e) {
-    toast.success(`删除失败：${errMsg(e)}`)
+    toast.error(`删除失败：${errMsg(e)}`)
   }
 }
 
