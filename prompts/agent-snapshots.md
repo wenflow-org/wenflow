@@ -219,31 +219,31 @@ sandbox:path-agent.subtasks.title
 | `controls.teachingControlContext` | object | skill:teaching-turn |
 | `classroomContext` | object | skill:teaching-turn |
 | `visibleDialogueContext` | array<object> | skill:teaching-turn |
-| `peer.message` | string | teaching-agent |
-| `peer.followUpQuestions` | array<string> | teaching-agent |
-| `wrapup.summary.topicSummary` | string | teaching-agent |
-| `wrapup.summary.knowledgeSummary` | string | teaching-agent |
-| `wrapup.summary.knowledgeItems` | array<object> | teaching-agent |
-| `wrapup.summary.learningEvaluation` | string | teaching-agent |
-| `wrapup.summary.practiceAdvice` | string | teaching-agent |
-| `wrapup.summary.keyTakeaways` | array<string> | teaching-agent |
-| `wrapup.summary.actionPlan` | array<string> | teaching-agent |
-| `wrapup.summary.evaluationHighlights` | object | teaching-agent |
-| `wrapup.summary.metricInterpretation` | object | teaching-agent |
-| `wrapup.summary.summaryVersion` | string | teaching-agent |
-| `wrapup.evaluation.sessionLss` | number | teaching-agent |
-| `wrapup.evaluation.sessionKtl` | number | teaching-agent |
-| `wrapup.evaluation.sessionLf` | number | teaching-agent |
-| `wrapup.evaluation.confidence` | number | teaching-agent |
-| `wrapup.evaluation.reasoning` | string | teaching-agent |
-| `guidance.headline` | string | teaching-agent |
-| `guidance.subtitle` | string | teaching-agent |
-| `guidance.todayActions` | array<object> | teaching-agent |
-| `guidance.nextStep` | string | teaching-agent |
-| `guidance.pathHint` | string | teaching-agent |
-| `guidance.paceHint` | string | teaching-agent |
-| `guidance.emptyStateCopy` | string | teaching-agent |
-| `guidance.warningCopy` | string | teaching-agent |
+| `message` | string | teaching-agent |
+| `followUpQuestions` | string[] | teaching-agent |
+| `summary.topicSummary` | string | teaching-agent |
+| `summary.knowledgeSummary` | string | teaching-agent |
+| `summary.knowledgeItems` | array<object> | teaching-agent |
+| `summary.learningEvaluation` | string | teaching-agent |
+| `summary.practiceAdvice` | string | teaching-agent |
+| `summary.keyTakeaways` | array<string> | teaching-agent |
+| `summary.actionPlan` | array<string> | teaching-agent |
+| `summary.evaluationHighlights` | object | teaching-agent |
+| `summary.metricInterpretation` | object | teaching-agent |
+| `summary.summaryVersion` | string | teaching-agent |
+| `evaluation.sessionLss` | number | teaching-agent |
+| `evaluation.sessionKtl` | number | teaching-agent |
+| `evaluation.sessionLf` | number | teaching-agent |
+| `evaluation.confidence` | number | teaching-agent |
+| `evaluation.reasoning` | string | teaching-agent |
+| `headline` | string | teaching-agent |
+| `subtitle` | string | teaching-agent |
+| `todayActions` | object[] | teaching-agent |
+| `nextStep` | string | teaching-agent |
+| `pathHint` | string | teaching-agent |
+| `paceHint` | string | teaching-agent |
+| `emptyStateCopy` | string | teaching-agent |
+| `warningCopy` | string | teaching-agent |
 
 ### 合法沙盘键（sandbox: 对账注册表）
 
@@ -252,6 +252,9 @@ sandbox:teaching-agent.analysis.confusionPoints
 sandbox:teaching-agent.analysis.understanding
 sandbox:teaching-agent.classroomContext
 sandbox:teaching-agent.controls.teachingControlContext
+sandbox:teaching-agent.evaluation.sessionKtl
+sandbox:teaching-agent.evaluation.sessionLf
+sandbox:teaching-agent.evaluation.sessionLss
 sandbox:teaching-agent.knowledge.points
 sandbox:teaching-agent.knowledge.state
 sandbox:teaching-agent.learner.learnerProjection
@@ -266,14 +269,11 @@ sandbox:teaching-agent.session.messages
 sandbox:teaching-agent.session.mode
 sandbox:teaching-agent.session.topic
 sandbox:teaching-agent.session.wrapup
+sandbox:teaching-agent.summary.knowledgeItems
 sandbox:teaching-agent.teachingState.classroomContext
 sandbox:teaching-agent.teachingState.classroomEventHistory
 sandbox:teaching-agent.teachingState.teachingControlContext
 sandbox:teaching-agent.visibleDialogueContext
-sandbox:teaching-agent.wrapup.evaluation.sessionKtl
-sandbox:teaching-agent.wrapup.evaluation.sessionLf
-sandbox:teaching-agent.wrapup.evaluation.sessionLss
-sandbox:teaching-agent.wrapup.summary.knowledgeItems
 ```
 
 ## 学习者 Agent（Profile）（profile-agent）
