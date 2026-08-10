@@ -13,7 +13,9 @@ import { globalApiLimiter } from './middleware/api-rate-limit.middleware';
 import { createGateway, EduClawGateway } from './gateway';
 import { registerOfficialAgents } from './agents';
 import { allSkillDefinitions, skillHandlers } from './skills';
+import { PURGED_SKILLS } from './skills/retired-skills';
 import { validateManifest, listTopLevelAgents } from './services/agent-manifest.service';
+import { loadSkillsFile } from './services/skill-registry/skills-file';
 
 import learningService from './services/learning/learning.service';
 import { ensureCoreAgentPrompts } from './scripts/seed-core-agent-prompts';
@@ -42,54 +44,6 @@ import { existsSync } from 'fs';
 import { resolve } from 'path';
 
 const ENRICHMENT_RETRY_POLL_INTERVAL_MS = 60 * 1000;
-const RETIRED_SKILLS = [
-  'pdf-parser',
-  'time-estimator',
-  'quiz-generation',
-  'exercise-generator',
-  'content-generation',
-  'error-pattern',
-  'code-explainer',
-  'answer-generation',
-  'batch-anderson-labeler',
-  'goal-type-identifier',
-  'task-profile-builder',
-  // 2026-07 调用调查后退役：生产零调用或事件无发射者
-  'state-assessment',
-  'confidence-handler',
-  'label-generator',
-  'text-structure-analyzer',
-  'retrieval',
-  'web-extractor',
-  'image-analyzer',
-  'memory-search',
-  'smart-search',
-  // 2026-07 合并入 lesson-knowledge-enricher
-  'session-knowledge-distiller',
-  'dialogue-concept-extractor',
-  // 2026-08 第三阶段命名反转：learning-* 改回 teaching-*（一次 breaking）；
-  // 旧 id 仅作历史日志/数据解析，注册表/DB 不应残留，启动时 purge 防止幽灵注册
-  'learning-turn',
-  'learning-opening-generator',
-  'learning-strategy-selector',
-  // 2026-08 legacy 插件适配链退役：generic-planner/basic-generator/basic-extractor/data-mapping
-  // 仅被 agentPluginConfig（零消费者）与插件自身互相转发引用，业务主链不走，零调用
-  'generic-planner',
-  'basic-generator',
-  'basic-extractor',
-  'data-mapping',
-  // 2026-08 冗余 LLM 层退役：path-scene-framing（信息零增量，确定性定帧 buildFramedNormalizedInput 取代）
-  'path-scene-framing',
-  // 2026-08 冗余 LLM 层退役：goal-analysis（主流程不调用、fallback 输出被确定性 framing 覆盖，path-planning 内联兜底）
-  'goal-analysis',
-  // 2026-08 零调用退役：goal-profile-inference / learning-pattern-distiller（画像叙述改由
-  // profile-aggregator 确定性 buildNarrativeInsights 产出）、structured-output-parser（无消费方）、
-  // prompt-compiler skill（与 services/prompt-compiler 确定性编译器同名，且无生产调用）
-  'goal-profile-inference',
-  'learning-pattern-distiller',
-  'structured-output-parser',
-  'prompt-compiler'
-] as const;
 
 // ACP 中间件
 import { acpContextMiddleware } from './middleware/acp-context.middleware';
@@ -471,6 +425,20 @@ async function initializeGateway() {
   const topAgents = listTopLevelAgents();
   logger.info(`[startup] Agent manifest OK · ${topAgents.length} 个顶层 Agent: ${topAgents.map(a => a.id).join(', ')}`);
 
+  // skills.yaml 户口簿校验（P0，SKILLS_YAML_SPEC §2.4 表 A）：F1~F10/F12 任一失败即终止启动
+  // （fail-fast，与 field-routing import 期 fail-fast 同风格）。过渡开关 SKILLS_FILE_DISABLED=1
+  // 跳过（规格 §5.3 回滚点，仅限一版发布窗口）。
+  if (process.env.SKILLS_FILE_DISABLED === '1') {
+    logger.info('[startup] skills.yaml 户口簿校验已跳过（SKILLS_FILE_DISABLED=1，过渡回滚点）');
+  } else {
+    const skillsBook = loadSkillsFile();
+    const kindCounts = skillsBook.skills.reduce((acc, entry) => {
+      acc[entry.kind] = (acc[entry.kind] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    logger.info(`[startup] skills.yaml 户口簿校验 OK · ${skillsBook.skills.length} 条活跃登记（kind 分布: ${Object.entries(kindCounts).map(([kind, count]) => `${kind}=${count}`).join(' ')})`);
+  }
+
   await registerOfficialAgents({
     registerAgent: async (definition, handler) => {
       return instance.registerAgent(definition, handler);
@@ -495,7 +463,7 @@ async function initializeGateway() {
 }
 
 async function purgeRetiredSkills() {
-  const retiredSkillNames = [...RETIRED_SKILLS];
+  const retiredSkillNames = [...PURGED_SKILLS];
   const retiredAgentIds = retiredSkillNames.map((name) => `skill:${name}`);
 
   await Promise.all([

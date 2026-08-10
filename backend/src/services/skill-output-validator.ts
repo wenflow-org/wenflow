@@ -9,7 +9,10 @@
  *
  * 与 skill 自有 validateParsedOutput（领域校验）互补：领域校验先行，
  * 本校验器作为"字段声明契约"层兜底（试点 skill 白名单启用）。
+ * 类型词表单一来源：yaml-vocabulary CORE_FIELD_TYPES（2026-08 词表统一）。
  */
+
+import { CORE_FIELD_TYPES } from './yaml-vocabulary';
 
 export interface CoreFieldDeclaration {
   name: string;
@@ -31,7 +34,6 @@ export interface FieldValidationResult {
 }
 
 const ENUM_MARKERS = ['|', '，', ','];
-const VALID_TYPES = new Set(['string', 'number', 'boolean', 'enum', 'object', 'object[]', 'string[]']);
 
 function parseType(declared: string): { base: string; optional: boolean } {
   const trimmed = declared.trim();
@@ -131,8 +133,8 @@ export function validateCoreFieldDeclarations(fields: CoreFieldDeclaration[]): s
     }
     names.add(field.name);
     const { base } = parseType(field.type);
-    if (!VALID_TYPES.has(base)) {
-      errors.push(`字段 ${field.name} 类型 ${field.type} 不在受控词表（${[...VALID_TYPES].join('|')}）`);
+    if (!(CORE_FIELD_TYPES as readonly string[]).includes(base)) {
+      errors.push(`字段 ${field.name} 类型 ${field.type} 不在受控词表（${CORE_FIELD_TYPES.join('|')}）`);
     }
   }
   return errors;
@@ -148,7 +150,9 @@ export function validateCoreFieldDeclarations(fields: CoreFieldDeclaration[]): s
  * - 非 JSON 对象输出：generic-chat（string）、skill-author（markdown）
  * - 平台守门直调：semantic-freeze-judge（发布门禁，失败后果重，不走常规重试语义）
  * - 模拟器家族：virtual-learner-*（turn 字段多、fallback 路径特殊、referee 旁路通道）
- * - 无生产调用：basic-evaluator / concept-priority / course-design / goal-alignment-checker
+ * - 零调用或不可达：basic-evaluator / goal-alignment-checker（注册中零调用，v4-aux 僵尸项，
+ *   保留注册由 retired:check 守卫保护，不入退役名单）、concept-priority（已退役，仅 manifest 残留）、
+ *   course-design（注册但生产不可达：唯一调用点 designWeekCourses 无调用者）
  */
 const FIELD_VALIDATION_EXCLUDED_SKILLS = new Set([
   'skill:generic-chat',
