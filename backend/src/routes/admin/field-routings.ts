@@ -362,14 +362,14 @@ router.post('/orchestration/:stage/sync', async (req: Request, res: Response) =>
   }
 
   for (const f of found.fields) {
-    const exists = await systemPrisma.field_definitions.findUnique({ where: { fieldId: f.fieldId } });
+    const exists = await systemPrisma.field_definitions.findFirst({ where: { stage, fieldId: f.fieldId } });
     if (exists) {
       if (exists.managedByCode === false) {
-        skippedAdminRows.push({ table: 'field_definitions', key: f.fieldId });
+        skippedAdminRows.push({ table: 'field_definitions', key: `${stage}/${f.fieldId}` });
         continue;
       }
       await systemPrisma.field_definitions.update({
-        where: { fieldId: f.fieldId },
+        where: { stage_fieldId: { stage, fieldId: f.fieldId } },
         data: {
           stage,
           promptRole: f.promptRole,

@@ -14,7 +14,8 @@ const PATH = stageOf('path')
 const TEACHING = stageOf('teaching')
 const PROFILE = stageOf('profile')
 const CONTRACTS = [...GOAL.contracts, ...PATH.contracts, ...TEACHING.contracts, ...PROFILE.contracts]
-const FIELDS = [...GOAL.fields, ...PATH.fields, ...TEACHING.fields, ...PROFILE.fields]
+// 字段按 (stage, fieldId) 复合身份对账：跨 stage 同名（如 teaching/simulation 的 reply）允许且互不覆盖
+const FIELDS = ORCHESTRATION_STAGES.flatMap((s) => s.fields.map((f) => ({ stage: s.stage, ...f })))
 const ROUTINGS = [...GOAL.routings, ...PATH.routings, ...TEACHING.routings, ...PROFILE.routings]
 
 function buildDatabase(overrides: {
@@ -34,7 +35,7 @@ describe('detectFieldRoutingDrift', () => {
     const contracts = CONTRACTS
       .map((c) => ({ agentId: c.agentId, displayName: c.displayName, description: c.description, stage: 'goal', managedByCode: true }))
     const fields = FIELDS
-      .map((f) => ({ fieldId: f.fieldId, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, pathInRawOutput: f.pathInRawOutput ?? null, description: f.description ?? null, bindings: f.bindings ? JSON.stringify(f.bindings) : null, managedByCode: true }))
+      .map((f) => ({ stage: f.stage, fieldId: f.fieldId, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, pathInRawOutput: f.pathInRawOutput ?? null, description: f.description ?? null, bindings: f.bindings ? JSON.stringify(f.bindings) : null, managedByCode: true }))
     const routings = ROUTINGS
       .map((r) => ({ agentId: r.agentId, fieldId: r.fieldId, render: r.render, handoff: r.handoff.length ? JSON.stringify(r.handoff) : null, internalFlag: r.internal, accumulate: r.accumulate, visibilityPreset: r.visibilityPreset ?? null, managedByCode: true }))
 
@@ -58,6 +59,20 @@ describe('detectFieldRoutingDrift', () => {
 
     const report = await detectFieldRoutingDrift(buildDatabase({ routings: dbRoutings }))
     expect(report.driftCount).toBe(0)
+  })
+
+  it('跨 stage 同名 fieldId（teaching/simulation 的 reply）按 stage 区分，不互相污染', async () => {
+    const fields = FIELDS
+      .map((f) => ({ stage: f.stage, fieldId: f.fieldId, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, pathInRawOutput: f.pathInRawOutput ?? null, description: f.description ?? null, bindings: f.bindings ? JSON.stringify(f.bindings) : null, managedByCode: true }))
+    // 篡改 teaching 的 reply 定义：应只命中 teaching/reply，不影响 simulation/reply
+    const teachingReply = fields.find((f) => f.stage === 'teaching' && f.fieldId === 'reply')
+    expect(teachingReply).toBeDefined()
+    teachingReply!.promptRole = 'hidden-inference'
+
+    const report = await detectFieldRoutingDrift(buildDatabase({ fields }))
+    const items = report.items.filter((i) => i.kind === 'field' && i.key.endsWith('/reply'))
+    expect(items).toHaveLength(1)
+    expect(items[0]).toEqual(expect.objectContaining({ key: 'teaching/reply', field: 'promptRole' }))
   })
 })
 

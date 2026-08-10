@@ -17460,10 +17460,11 @@ export namespace Prisma {
 
   export type field_definitionsWhereUniqueInput = Prisma.AtLeast<{
     id?: string
-    fieldId?: string
+    stage_fieldId?: field_definitionsStageFieldIdCompoundUniqueInput
     AND?: field_definitionsWhereInput | field_definitionsWhereInput[]
     OR?: field_definitionsWhereInput[]
     NOT?: field_definitionsWhereInput | field_definitionsWhereInput[]
+    fieldId?: StringFilter<"field_definitions"> | string
     stage?: StringFilter<"field_definitions"> | string
     promptRole?: StringFilter<"field_definitions"> | string
     valueType?: StringFilter<"field_definitions"> | string
@@ -17481,7 +17482,7 @@ export namespace Prisma {
     metadata?: StringNullableFilter<"field_definitions"> | string | null
     createdAt?: DateTimeFilter<"field_definitions"> | Date | string
     updatedAt?: DateTimeFilter<"field_definitions"> | Date | string
-  }, "id" | "fieldId">
+  }, "id" | "stage_fieldId">
 
   export type field_definitionsOrderByWithAggregationInput = {
     id?: SortOrder
@@ -20491,6 +20492,11 @@ export namespace Prisma {
   export type skill_registrationsSumOrderByAggregateInput = {
     callCount?: SortOrder
     successRate?: SortOrder
+  }
+
+  export type field_definitionsStageFieldIdCompoundUniqueInput = {
+    stage: string
+    fieldId: string
   }
 
   export type field_definitionsCountOrderByAggregateInput = {

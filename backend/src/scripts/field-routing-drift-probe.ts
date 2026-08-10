@@ -27,13 +27,15 @@ async function main() {
   ]);
 
   const declaredContractIds = new Set(FIELD_ROUTING_SEED_MANIFEST.contractAgentIds);
-  const declaredFieldIds = new Set(FIELD_ROUTING_SEED_MANIFEST.fieldIds);
+  const declaredFieldKeys = new Set(
+    stages.flatMap((s) => s.fields.map((f) => `${s.stage}\0${f.fieldId}`)),
+  );
   const declaredRoutingKeys = new Set(
     FIELD_ROUTING_SEED_MANIFEST.routings.map((r) => `${r.agentId}\0${r.fieldId}`),
   );
 
   const orphanContracts = dbContracts.filter((r) => !declaredContractIds.has(r.agentId));
-  const orphanFields = dbFields.filter((r) => !declaredFieldIds.has(r.fieldId));
+  const orphanFields = dbFields.filter((r) => !declaredFieldKeys.has(`${r.stage}\0${r.fieldId}`));
   const orphanRoutings = dbRoutings.filter((r) => !declaredRoutingKeys.has(`${r.agentId}\0${r.fieldId}`));
 
   const adminContracts = dbContracts.filter((r) => r.managedByCode === false);
@@ -50,12 +52,12 @@ async function main() {
       sample: report.items.slice(0, 10),
       counts: {
         contracts: { db: dbContracts.length, declared: declaredContractIds.size, orphan: orphanContracts.length, admin: adminContracts.length },
-        fields: { db: dbFields.length, declared: declaredFieldIds.size, orphan: orphanFields.length, admin: adminFields.length },
+        fields: { db: dbFields.length, declared: declaredFieldKeys.size, orphan: orphanFields.length, admin: adminFields.length },
         routings: { db: dbRoutings.length, declared: declaredRoutingKeys.size, orphan: orphanRoutings.length, admin: adminRoutings.length },
       },
       orphanDetails: {
         contracts: orphanContracts.map((r) => ({ agentId: r.agentId, managedByCode: r.managedByCode })),
-        fields: orphanFields.map((r) => ({ fieldId: r.fieldId, managedByCode: r.managedByCode })),
+        fields: orphanFields.map((r) => ({ fieldId: r.fieldId, stage: r.stage, managedByCode: r.managedByCode })),
         routings: orphanRoutings.map((r) => ({ key: `${r.agentId}/${r.fieldId}`, managedByCode: r.managedByCode })),
       },
       adminDetails: {

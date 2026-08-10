@@ -1,8 +1,8 @@
 # Simulation 阶段编排文件（字段路由单源化）
 # 由字段路由 seed TS 机械迁移（1:1）；seed TS 已退役，本文件为唯一声明源。
-# 2026-08 词汇统一批次：路由表 fieldId 与运行时输出键对齐（learnerEmotion→emotion、actor*→verdict 等），
+# 2026-08 词汇统一批次：路由表 fieldId 与运行时输出键对齐（learnerEmotion→emotion、actor*→verdict、learnerReply→reply 等），
 # 仅影响路由表身份与展示层，不改变 coordinator/blackbox 的运行时 JSON 键。
-# 注：learnerReply 暂未改名（teaching-turn 已占用顶层 reply，全局 fieldId 唯一约束冲突，2026-08 词汇统一批次遗留）。
+# reply 与 teaching 阶段顶层 reply 跨 stage 同名：fieldId 唯一约束为 (stage, fieldId)，按 stage 区分，互不影响。
 #
 # 路由规则（与 goal/path/teaching 不同：仿真无阶段间 handoff）：
 #   - 输入通道全部为服务端注入（见 agent-contract-view SANDBOX_EXTRA_KEYS['simulation-agent']），不建输入行
@@ -38,7 +38,8 @@ fields:
     description: 故事与 persona 的一致性校验说明
 
   # === goal-dialogue / learn-turn / path-evaluator 共享输出 ===
-  - fieldId: learnerReply
+  # reply 与 teaching 顶层 reply 同名，按 stage 区分（字段身份 = stage + fieldId）
+  - fieldId: reply
     promptRole: public-reply
     valueType: string
     description: 学习者自然回应文本
@@ -113,7 +114,7 @@ routings:
 
   # === goal-dialogue ===
   - agentId: skill:virtual-learner-goal-dialogue-simulator
-    fieldId: learnerReply
+    fieldId: reply
     render: visible
     handoff: [simulation-agent]
     internal: false
@@ -161,7 +162,7 @@ routings:
 
   # === learn-turn ===
   - agentId: skill:virtual-learner-learn-turn-simulator
-    fieldId: learnerReply
+    fieldId: reply
     render: visible
     handoff: [simulation-agent]
     internal: false

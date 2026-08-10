@@ -169,7 +169,7 @@ model skill_registrations {
 
 model field_definitions {
   id              String   @id
-  fieldId         String   @unique
+  fieldId         String
   stage           String
   promptRole      String
   valueType       String   @default("string")
@@ -190,6 +190,8 @@ model field_definitions {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @default(now())
 
+  // fieldId 唯一约束为 stage 内唯一（跨 stage 允许同名，如 teaching/simulation 的 reply）
+  @@unique([stage, fieldId])
   @@index([stage])
   @@index([promptRole])
 }

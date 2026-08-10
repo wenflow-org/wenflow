@@ -92,7 +92,7 @@ routings:`
     expectOk('ensureStageFieldRoutings 执行完成', true);
     // 清理：删除本次验证创建的探针字段，不留库副作用
     try {
-      await systemPrisma.field_definitions.delete({ where: { fieldId: 'verify.edit_side_probe' } });
+      await systemPrisma.field_definitions.deleteMany({ where: { fieldId: 'verify.edit_side_probe', stage: 'goal' } });
       console.log('  ✓ 已清理探针字段 verify.edit_side_probe');
     } catch (e: any) {
       console.warn(`  ⚠ 探针字段清理失败：${String(e?.message || e).slice(0, 120)}`);

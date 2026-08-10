@@ -66,14 +66,14 @@ async function syncStage(stage: ReturnType<typeof loadOrchestrationFiles>[number
   }
 
   for (const f of stage.fields) {
-    const exists = await systemPrisma.field_definitions.findUnique({ where: { fieldId: f.fieldId } });
+    const exists = await systemPrisma.field_definitions.findFirst({ where: { stage: stage.stage, fieldId: f.fieldId } });
     if (exists) {
       if (exists.managedByCode === false) {
-        report.skippedAdminRows.push({ table: 'field_definitions', key: f.fieldId });
+        report.skippedAdminRows.push({ table: 'field_definitions', key: `${stage.stage}/${f.fieldId}` });
         continue;
       }
       await systemPrisma.field_definitions.update({
-        where: { fieldId: f.fieldId },
+        where: { stage_fieldId: { stage: stage.stage, fieldId: f.fieldId } },
         data: {
           stage: stage.stage,
           promptRole: f.promptRole,

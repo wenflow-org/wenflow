@@ -25,7 +25,14 @@ function assertUnique(values: string[], label: string) {
 }
 
 assertUnique(FIELD_ROUTING_SEED_MANIFEST.contractAgentIds, 'agent_contracts');
-assertUnique(FIELD_ROUTING_SEED_MANIFEST.fieldIds, 'field_definitions');
+// fieldId 唯一约束为 stage 内唯一：逐 stage 去重；跨 stage 允许同名（如 teaching/simulation 的 reply）。
+// FIELD_ROUTING_SEED_MANIFEST.fieldIds 保持全局展平（readiness 数量用，重名在 in 查询中无害）。
+for (const stage of ORCHESTRATION_STAGES) {
+  assertUnique(
+    stage.fields.map((f) => f.fieldId),
+    `field_definitions@${stage.stage}`,
+  );
+}
 assertUnique(
   FIELD_ROUTING_SEED_MANIFEST.routings.map(item => `${item.agentId}\0${item.fieldId}`),
   'agent_field_routings'
@@ -58,6 +65,14 @@ export interface SeedRoutingLike {
   accumulate: boolean;
 }
 
+// 路由行 → 所属 stage / (stage, fieldId) → 字段定义 的查表（跨 stage 同名按 stage 区分）
+const routingKeyToStage = new Map<string, string>();
+const fieldByStageAndId = new Map<string, { fieldId: string; promptRole: string }>();
+for (const s of ORCHESTRATION_STAGES) {
+  for (const r of s.routings) routingKeyToStage.set(`${r.agentId}\0${r.fieldId}`, s.stage);
+  for (const f of s.fields) fieldByStageAndId.set(`${s.stage}\0${f.fieldId}`, { fieldId: f.fieldId, promptRole: f.promptRole });
+}
+
 export function validateFieldRoutingSeedSemantics(
   routingsOverride?: SeedRoutingLike[]
 ): string[] {
@@ -66,6 +81,10 @@ export function validateFieldRoutingSeedSemantics(
 
   for (const routing of allRoutings) {
     const key = `${routing.agentId}\0${routing.fieldId}`;
+    // 优先按 (stage, fieldId) 取字段元数据；override 行查不到时回退全局展平（历史行为）
+    const stage = routingKeyToStage.get(key);
+    const field = (stage && fieldByStageAndId.get(`${stage}\0${routing.fieldId}`))
+      ?? fieldGroups.flat().find((f) => f.fieldId === routing.fieldId);
     if (routing.handoff.includes(routing.agentId)) {
       errors.push(`[field-routing] ${key} handoff 自环（指向自身 ${routing.agentId}）`);
     }
@@ -74,14 +93,12 @@ export function validateFieldRoutingSeedSemantics(
     }
     if (routing.render === 'visible' && routing.internal) {
       // visible+internal 仅允许 control-signal 类（UI 进度条），宽松放行但记录约束来源
-      const field = fieldGroups.flat().find((f) => f.fieldId === routing.fieldId);
       if (field?.promptRole !== 'control-signal') {
         errors.push(`[field-routing] ${key} render=visible 与 internal=true 组合仅允许 control-signal 字段（${routing.fieldId} 是 ${field?.promptRole || 'unknown'}）`);
       }
     }
     if (routing.handoff.length === 0 && !routing.internal && !routing.accumulate && routing.render === 'visible') {
       // 对话终点（public-reply）合法；画像终点为 internal+accumulate；其余无流转终点需要备注说明
-      const field = fieldGroups.flat().find((f) => f.fieldId === routing.fieldId);
       if (field?.promptRole !== 'public-reply') {
         errors.push(`[field-routing] ${key} handoff 为空且非 public-reply/画像终点（internal+accumulate），缺少流转去向`);
       }
@@ -138,9 +155,9 @@ export async function ensureStageFieldRoutings(
   }
 
   for (const f of stage.fields) {
-    const exists = await systemPrisma.field_definitions.findUnique({ where: { fieldId: f.fieldId } });
+    const exists = await systemPrisma.field_definitions.findFirst({ where: { stage: stage.stage, fieldId: f.fieldId } });
     await systemPrisma.field_definitions.upsert({
-      where: { fieldId: f.fieldId },
+      where: { stage_fieldId: { stage: stage.stage, fieldId: f.fieldId } },
       update: {},
       create: {
         id: randomUUID(),
@@ -236,9 +253,8 @@ function normalizeDriftValue(value: unknown): unknown {
 }
 
 export async function detectFieldRoutingDrift(systemDb: SystemDbLike): Promise<FieldRoutingDriftReport> {
-  const [declaredContracts, declaredFields, declaredRoutings] = [
+  const [declaredContracts, declaredRoutings] = [
     contractGroups.flat(),
-    fieldGroups.flat(),
     routingGroups.flat(),
   ];
   const [dbContracts, dbFields, dbRoutings] = await Promise.all([
@@ -262,9 +278,13 @@ export async function detectFieldRoutingDrift(systemDb: SystemDbLike): Promise<F
     }
   }
 
-  const dbFieldMap = new Map(dbFields.map((row) => [row.fieldId, row]));
-  for (const declared of declaredFields) {
-    const db = dbFieldMap.get(declared.fieldId);
+  // 字段按 (stage, fieldId) 复合键对账：跨 stage 同名时互不覆盖（2026-08 单源化收尾）
+  const declaredFieldRows = ORCHESTRATION_STAGES.flatMap((s) =>
+    s.fields.map((f) => ({ stage: s.stage, ...f })),
+  );
+  const dbFieldMap = new Map(dbFields.map((row) => [`${row.stage}\0${row.fieldId}`, row]));
+  for (const declared of declaredFieldRows) {
+    const db = dbFieldMap.get(`${declared.stage}\0${declared.fieldId}`);
     if (!db) continue;
     if (db.managedByCode === false) continue;
     const pairs: Array<[string, unknown, unknown]> = [
@@ -282,7 +302,8 @@ export async function detectFieldRoutingDrift(systemDb: SystemDbLike): Promise<F
     ];
     for (const [field, seedValue, dbValue] of pairs) {
       if (JSON.stringify(seedValue ?? null) !== JSON.stringify(dbValue ?? null)) {
-        items.push({ kind: 'field', key: declared.fieldId, field, seedValue: seedValue ?? null, dbValue: dbValue ?? null });
+        // key 带 stage 前缀（跨 stage 同名可区分，admin drift 页 stage 过滤可命中）
+        items.push({ kind: 'field', key: `${declared.stage}/${declared.fieldId}`, field, seedValue: seedValue ?? null, dbValue: dbValue ?? null });
       }
     }
   }

@@ -15,7 +15,7 @@
 
 import systemPrisma from '../../config/system-database';
 import { logger } from '../../utils/logger';
-import { getCanonicalAgentId } from '../agent-manifest.service';
+import { getAgentManifest, getCanonicalAgentId } from '../agent-manifest.service';
 
 export type RenderValue = 'visible' | 'hidden';
 
@@ -42,6 +42,37 @@ interface CachedRoutings {
 const ROUTING_CACHE_TTL_MS = 30 * 1000;
 let cache: CachedRoutings | null = null;
 
+// 5 个字段路由 stage（与 agent-manifest 的 skill category 对齐）
+const STAGE_CATEGORIES = new Set(['goal', 'path', 'teaching', 'profile', 'simulation']);
+
+/**
+ * 解析路由行所属 stage（用于按 (stage, fieldId) JOIN field_definitions）：
+ *   - skill：manifest category 即 stage 名（goal/path/teaching/profile/simulation）
+ *   - 顶层 agent（goal-agent/path-agent/...，category='agent'）：取其成员 skill 的 category
+ *   - 无法解析（非 manifest agent 等）：返回 undefined，调用方回退 fieldId 裸键（兼容）
+ */
+function resolveRoutingStage(agentId: string, stageCache: Map<string, string | undefined>): string | undefined {
+  const canonical = getCanonicalAgentId(agentId);
+  if (stageCache.has(canonical)) return stageCache.get(canonical);
+  let stage: string | undefined;
+  const entry = getAgentManifest(canonical);
+  if (entry) {
+    if (STAGE_CATEGORIES.has(entry.category)) {
+      stage = entry.category;
+    } else if (entry.kind === 'agent' && entry.agentMembers?.length) {
+      for (const memberId of entry.agentMembers) {
+        const member = getAgentManifest(memberId);
+        if (member && STAGE_CATEGORIES.has(member.category)) {
+          stage = member.category;
+          break;
+        }
+      }
+    }
+  }
+  stageCache.set(canonical, stage);
+  return stage;
+}
+
 function safeParseJson<T>(value: string | null | undefined, fallback: T): T {
   if (!value) return fallback;
   try {
@@ -61,11 +92,17 @@ async function loadRoutings(): Promise<CachedRoutings> {
     systemPrisma.field_definitions.findMany(),
   ]);
 
+  // fieldMap 键：`stage\0fieldId`（跨 stage 同名互不覆盖，如 teaching/simulation 的 reply）。
+  // 同时保留裸 fieldId 别名：仅当无跨 stage 同名时写入（首个 stage 生效），
+  // 供无法解析 stage 的路由行回退 JOIN（兼容非 manifest agent）。
   const fieldMap = new Map<string, { promptRole: string; valueType: string; pathInRawOutput: string | null }>();
   for (const f of fields) {
-    fieldMap.set(f.fieldId, { promptRole: f.promptRole, valueType: f.valueType, pathInRawOutput: f.pathInRawOutput ?? null });
+    const meta = { promptRole: f.promptRole, valueType: f.valueType, pathInRawOutput: f.pathInRawOutput ?? null };
+    fieldMap.set(`${f.stage}\0${f.fieldId}`, meta);
+    if (!fieldMap.has(f.fieldId)) fieldMap.set(f.fieldId, meta);
   }
 
+  const stageCache = new Map<string, string | undefined>();
   const byAgent = new Map<string, Map<string, FieldRoutingRow>>();
   for (const r of routings) {
     // 路由表主键统一为 canonical id（skill: 前缀）；裸名/历史别名经 getCanonicalAgentId 归一，
@@ -76,7 +113,9 @@ async function loadRoutings(): Promise<CachedRoutings> {
       inner = new Map();
       byAgent.set(canonicalAgentId, inner);
     }
-    const fieldMeta = fieldMap.get(r.fieldId);
+    const stage = resolveRoutingStage(r.agentId, stageCache);
+    let fieldMeta = stage ? fieldMap.get(`${stage}\0${r.fieldId}`) : undefined;
+    if (!fieldMeta) fieldMeta = fieldMap.get(r.fieldId);
     inner.set(r.fieldId, {
       agentId: canonicalAgentId,
       fieldId: r.fieldId,

@@ -64,7 +64,8 @@ describe('field routing bootstrap', () => {
     const stages = loadOrchestrationFiles()
     const manifest = service.FIELD_ROUTING_SEED_MANIFEST
     expect(manifest.contractAgentIds).toHaveLength(new Set(manifest.contractAgentIds).size)
-    expect(manifest.fieldIds).toHaveLength(new Set(manifest.fieldIds).size)
+    // fieldId 唯一约束为 stage 内唯一：跨 stage 允许同名（teaching/simulation 的 reply），
+    // manifest.fieldIds 是全局展平列表（readiness 数量用），逐 stage 唯一断言在 bootstrap 内 fail-fast
     expect(manifest.routings.map((r) => `${r.agentId}\0${r.fieldId}`)).toHaveLength(
       new Set(manifest.routings.map((r) => `${r.agentId}\0${r.fieldId}`)).size
     )
@@ -75,6 +76,9 @@ describe('field routing bootstrap', () => {
     expect(manifest.fieldIds).toHaveLength(
       stages.reduce((sum, s) => sum + s.fields.length, 0)
     )
+    // 跨 stage 同名存在性检查：至少 teaching 与 simulation 各有一个 reply
+    expect(stages.find((s) => s.stage === 'teaching')!.fields.some((f) => f.fieldId === 'reply')).toBe(true)
+    expect(stages.find((s) => s.stage === 'simulation')!.fields.some((f) => f.fieldId === 'reply')).toBe(true)
     expect(manifest.routings).toHaveLength(
       stages.reduce((sum, s) => sum + s.routings.length, 0)
     )

@@ -164,7 +164,7 @@ routings:`
   // 清理：DB 探针字段 + 临时目录
   try {
     const { default: systemPrisma } = await import('../config/system-database');
-    await systemPrisma.field_definitions.delete({ where: { fieldId: 'verify.http_probe' } });
+    await systemPrisma.field_definitions.deleteMany({ where: { fieldId: 'verify.http_probe', stage: 'goal' } });
     console.log('  ✓ 已清理 DB 探针字段 verify.http_probe');
     await systemPrisma.$disconnect();
   } catch (e: any) {
