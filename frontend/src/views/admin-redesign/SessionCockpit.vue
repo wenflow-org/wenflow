@@ -60,7 +60,7 @@
         <div v-if="!isBlackbox" class="cp-config">
           <label>
             对抗预算
-            <select v-model="frictionBudget" class="mk-filter__select" @change="saveFriction">
+            <select v-model="frictionBudget" class="mk-filter__select" :disabled="frictionSaving" @change="saveFriction">
               <option value="none">无</option>
               <option value="low">低</option>
               <option value="normal">正常</option>
@@ -98,7 +98,7 @@
           <h3 class="mk-card__title">会话日志</h3>
           <span class="mk-card__meta">{{ isTerminal ? '已终态' : '5s 轮询' }}</span>
         </div>
-        <div class="cp-logs" ref="logBox">
+        <div class="cp-logs" ref="logBox" @scroll="onLogScroll">
           <div v-for="(l, i) in logs" :key="i" class="cp-log">
             <span class="cp-log__time">{{ l.time }}</span>
             <span class="cp-log__text">{{ l.text }}</span>
@@ -520,8 +520,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { subPage, closeSubPage } from './store'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { subPage, closeSubPage, openSubPage } from './store'
 import { errMsg } from './live'
 import { askConfirm } from './useConfirm'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
@@ -532,7 +532,38 @@ const sessionId = computed(() => subPage.value?.id || '')
 const shortId = computed(() => (sessionId.value.length > 20 ? `…${sessionId.value.slice(-16)}` : sessionId.value))
 
 const session = ref<Record<string, unknown> | null>(null)
-const logs = ref<{ time: string; text: string }[]>([])
+const logs = ref<{ id: string; time: string; text: string }[]>([])
+const logBox = ref<HTMLElement | null>(null)
+const LOG_WINDOW = 60
+/* 日志滚动：接近底部才跟随，用户上翻时不打扰 */
+let logFollowsBottom = true
+function onLogScroll() {
+  const box = logBox.value
+  if (!box) return
+  logFollowsBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80
+}
+function scrollLogsIfFollowing() {
+  void nextTick(() => {
+    const box = logBox.value
+    if (!box || !logFollowsBottom) return
+    box.scrollTop = box.scrollHeight
+  })
+}
+/* 按消息 id 去重追加，保留窗口上限 */
+function appendLogs(entries: Array<{ id: string; time: string; text: string }>) {
+  if (!entries.length) return
+  const seen = new Set(logs.value.map((l) => l.id || `${l.time}|${l.text}`))
+  const added: Array<{ id: string; time: string; text: string }> = []
+  for (const entry of entries) {
+    const key = entry.id || `${entry.time}|${entry.text}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    added.push(entry)
+  }
+  if (!added.length) return
+  logs.value = [...logs.value, ...added].slice(-LOG_WINDOW)
+  scrollLogsIfFollowing()
+}
 const pathStatus = ref<Record<string, unknown> | null>(null)
 const teachingDetail = ref<Record<string, unknown> | null>(null)
 const teachingDetailLoading = ref(false)
@@ -648,30 +679,39 @@ const blackboxTraceCount = computed(() => {
 const modeText = computed(() => (isBlackbox.value ? '黑盒模式' : '辅助模式'))
 const isTerminal = computed(() => {
   const st = normalized(session.value?.status || runtime.value.status)
-  return ['completed', 'failed', 'abandoned', 'error', 'done', 'wrapup', 'timeout'].includes(st)
+  return ['completed', 'failed', 'abandoned'].includes(st)
 })
 const terminalStatus = computed(() => normalized(session.value?.status || runtime.value.status))
-const isFailedTerminal = computed(() => ['failed', 'abandoned', 'error', 'timeout'].includes(terminalStatus.value))
+const isFailedTerminal = computed(() => ['failed', 'abandoned'].includes(terminalStatus.value))
+/* 手动停止（emergencyStop）后后端写 status=failed + stageResults.teaching.manualStop */
+const manualStopped = computed(() =>
+  learningResult.value.manualStop === true
+  || stageStatus.value.learning?.manualStop === true
+)
 const statusTone = computed(() =>
   !session.value
     ? 'mk-status--muted'
-    : isFailedTerminal.value
-      ? 'mk-status--bad'
-      : isTerminal.value
-        ? 'mk-status--ok'
-        : 'mk-status--warn'
+    : terminalStatus.value === 'created'
+      ? 'mk-status--muted'
+      : isFailedTerminal.value
+        ? 'mk-status--bad'
+        : isTerminal.value
+          ? 'mk-status--ok'
+          : 'mk-status--warn'
 )
 const statusTitle = computed(() =>
   !session.value
     ? '加载中…'
-    : isFailedTerminal.value
-      ? '会话失败'
-      : isTerminal.value
-        ? '会话已完成'
-        : '会话进行中'
+    : terminalStatus.value === 'created'
+      ? '会话未开始'
+      : isFailedTerminal.value
+        ? manualStopped.value ? '已手动停止' : '会话失败'
+        : isTerminal.value
+          ? '会话已完成'
+          : '会话进行中'
 )
 
-/* 阶段流：与后端 currentStage 对齐（learning，不是 learn） */
+/* 阶段流：后端 currentStage 枚举是 goal/path/teaching，前端归一为 learning */
 const stageFlow = ['goal', 'path', 'learning', 'wrapup'] as const
 type StageKey = (typeof stageFlow)[number]
 
@@ -712,9 +752,9 @@ const bindings = computed(() => {
 })
 
 const goalResult = computed(() => asRecord(stageResults.value.goal))
-const pathResult = computed(() => asRecord(stageResults.value.path))
 const pathReview = computed(() => asRecord(stageResults.value.path_review || stageResults.value.pathReview))
-const learningResult = computed(() => asRecord(stageResults.value.learning))
+/* 后端 stageResults 只写 teaching 键；learningResult 统一读 teaching 分支 */
+const learningResult = computed(() => asRecord(stageResults.value.teaching))
 const conversations = computed(() => asRecord(session.value?.conversations))
 const goalConversationMessages = computed(() => conversationMessages(asRecord(conversations.value.goal).messages))
 const fallbackLearnConversationMessages = computed(() => conversationMessages(asRecord(conversations.value.learning).messages))
@@ -865,7 +905,7 @@ const pathGenerationFailed = computed(() =>
   pathStateValues.value.some((state) => ['failed', 'error', 'cancelled'].includes(state))
 )
 const hasPath = computed(() =>
-  !!(pathId.value || stageStatus.value.path?.generated || pathResult.value.generated)
+  !!(pathId.value || stageStatus.value.path?.generated)
 )
 const pathGeneratedOrReady = computed(() =>
   hasPath.value
@@ -964,8 +1004,8 @@ const pathEmptyHint = computed(() =>
 
 const currentStage = computed(() => {
   const raw = String(runtime.value.currentStage || session.value?.currentStage || 'goal').toLowerCase()
-  // 兼容旧 UI / 日志里的 learn 别名
-  if (raw === 'learn' || raw === 'teach') return 'learning'
+  // 后端枚举是 teaching，前端统一用 learning；兼容旧日志里的 learn/teach 别名
+  if (raw === 'teaching' || raw === 'learn' || raw === 'teach') return 'learning'
   if (raw === 'summary') return 'wrapup'
   return raw
 })
@@ -1201,13 +1241,13 @@ const effectiveStageIndex = computed(() => {
 })
 
 const hasWrapup = computed(() => {
-  const learning = (stageResults.value.learning || {}) as Record<string, unknown>
-  return !!(stageStatus.value.learning?.wrapup || learning.wrapup)
+  const teaching = (stageResults.value.teaching || {}) as Record<string, unknown>
+  return !!(stageStatus.value.learning?.wrapup || teaching.wrapup)
 })
 
 /* Wrapup 分页内容：summary/evaluation 可能是结构化对象，按只读证据渲染 */
 const wrapupSections = computed(() => {
-  const learning = asRecord(stageResults.value.learning)
+  const learning = asRecord(stageResults.value.teaching)
   const wrapup = asRecord(learning.wrapup || stageStatus.value.learning?.wrapup)
   if (!Object.keys(wrapup).length) return [] as Array<{ label: string; text: string; isJson: boolean }>
   const render = (value: unknown) => typeof value === 'string'
@@ -1298,9 +1338,11 @@ const learnInfo = computed(() => {
 
 /* 数据加载 */
 async function refresh() {
-  if (!sessionId.value) return
+  const id = sessionId.value
+  if (!id) return
   try {
-    const res = await adminVirtualLearnersApi.getVirtualSession(sessionId.value)
+    const res = await adminVirtualLearnersApi.getVirtualSession(id)
+    if (sessionId.value !== id) return
     session.value = res.data?.data ?? res.data ?? {}
     const sr = (session.value?.stageResults || {}) as Record<string, unknown>
     const simCfg = (sr.simulationConfig || {}) as Record<string, unknown>
@@ -1315,44 +1357,54 @@ async function refresh() {
       isBlackbox.value ? Promise.resolve() : loadTeachingDetail()
     ])
   } catch (e) {
-    toast.success(`加载失败：${errMsg(e)}`)
+    if (sessionId.value !== id) return
+    toast.error(`加载失败：${errMsg(e)}`)
   }
 }
 
 async function loadLogs() {
+  const id = sessionId.value
+  if (!id) return
   try {
-    const res = await adminVirtualLearnersApi.getVirtualSessionLogs(sessionId.value)
+    const res = await adminVirtualLearnersApi.getVirtualSessionLogs(id)
+    if (sessionId.value !== id) return
     const body = res.data?.data ?? res.data ?? []
     let items = Array.isArray(body) ? body : body.logs || body.items || []
     // 回退：会话对象自带的 logs 字段
     if (!items.length && Array.isArray(session.value?.logs)) {
       items = session.value.logs as Record<string, unknown>[]
     }
-    logs.value = items.slice(-60).map((l: Record<string, unknown>) => ({
+    appendLogs(items.slice(-LOG_WINDOW).map((l: Record<string, unknown>) => ({
+      id: String(l.id ?? l.messageId ?? ''),
       time: l.createdAt ? new Date(String(l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
       text: String(l.message || l.text || l.type || JSON.stringify(l)).slice(0, 160)
-    }))
+    })))
   } catch {
+    if (sessionId.value !== id) return
     logs.value = []
   }
 }
 
 async function loadPathStatus() {
-  if (!sessionId.value || isBlackbox.value) {
+  const id = sessionId.value
+  if (!id || isBlackbox.value) {
     pathStatus.value = null
     return
   }
   try {
-    const res = await adminVirtualLearnersApi.getVirtualSessionPathStatus(sessionId.value)
+    const res = await adminVirtualLearnersApi.getVirtualSessionPathStatus(id)
+    if (sessionId.value !== id) return
     pathStatus.value = asRecord(res.data?.data ?? res.data)
   } catch {
     // Path 状态仅用于控制台就绪提示；主会话数据仍可正常操作和刷新。
+    if (sessionId.value !== id) return
     pathStatus.value = null
   }
 }
 
 async function loadTeachingDetail(teachingSessionId = selectedTeachingSessionId.value, options: { silent?: boolean } = {}) {
-  if (!sessionId.value || isBlackbox.value) {
+  const id = sessionId.value
+  if (!id || isBlackbox.value) {
     teachingDetail.value = null
     return
   }
@@ -1366,13 +1418,15 @@ async function loadTeachingDetail(teachingSessionId = selectedTeachingSessionId.
   // 轮询走静默刷新：不闪「正在读取」占位，避免页面高度变化导致滚动跳动。
   if (!options.silent) teachingDetailLoading.value = true
   try {
-    const res = await adminVirtualLearnersApi.getVirtualSessionTeachingDetail(sessionId.value, teachingSessionId || undefined)
+    const res = await adminVirtualLearnersApi.getVirtualSessionTeachingDetail(id, teachingSessionId || undefined)
+    if (sessionId.value !== id) return
     teachingDetail.value = asRecord(res.data?.data ?? res.data)
   } catch {
     // 当前课堂尚未创建或历史课堂被清理时，仍可展示会话日志投影。
+    if (sessionId.value !== id) return
     teachingDetail.value = null
   } finally {
-    if (!options.silent) teachingDetailLoading.value = false
+    if (!options.silent && sessionId.value === id) teachingDetailLoading.value = false
   }
 }
 
@@ -1448,16 +1502,22 @@ function summarizeDiagnostic(value: Record<string, unknown> | null): string {
 }
 
 const frictionBudget = ref<'none' | 'low' | 'normal' | 'high' | 'stress_test'>('normal')
+const frictionSaving = ref(false)
 
 async function saveFriction() {
-  if (!sessionId.value || isBlackbox.value) return
+  if (!sessionId.value || isBlackbox.value || busy.value || frictionSaving.value) return
+  frictionSaving.value = true
+  const previous = frictionBudget.value
   try {
     await adminVirtualLearnersApi.updateSessionSimulationConfig(sessionId.value, {
       frictionBudget: frictionBudget.value
     })
-    toast.error(`对抗预算已更新：${frictionBudget.value}`)
+    toast.success(`对抗预算已更新：${frictionBudget.value}`)
   } catch (e) {
-    toast.success(`更新失败：${errMsg(e)}`)
+    frictionBudget.value = previous
+    toast.error(`更新失败：${errMsg(e)}`)
+  } finally {
+    frictionSaving.value = false
   }
 }
 
@@ -1470,9 +1530,8 @@ async function act(kind: string) {
   try {
     switch (kind) {
       case 'step':
-        if (isBlackbox.value) {
-          await adminVirtualLearnersApi.blackboxVirtualSessionStep(id, blackboxTraceCount.value)
-        } else if (stage === 'learning') {
+        // 黑盒模式无 step 入口（仅 abandon/referee/rerun），此分支只服务辅助模式
+        if (stage === 'learning') {
           await adminVirtualLearnersApi.virtualSessionLearningStep(id)
         } else {
           await adminVirtualLearnersApi.virtualSessionStep(id)
@@ -1534,8 +1593,13 @@ async function act(kind: string) {
         const res = await adminVirtualLearnersApi.rerunBlackboxVirtualSession(id)
         const d = res.data?.data ?? res.data ?? {}
         const newId = String(d.id || d.sessionId || '')
-        toast.error('已按原输入重跑，正在切换到新会话')
-        if (newId) subPage.value = { view: 'session', id: newId }
+        if (!newId) {
+          toast.info('已按原输入重跑，但未返回新会话 ID；已刷新当前会话')
+          await refresh()
+          return
+        }
+        toast.info('已按原输入重跑，正在切换到新会话')
+        openSubPage('session', newId)
         return
       }
     }
@@ -1565,7 +1629,7 @@ async function act(kind: string) {
   } catch (e) {
     const message = `执行失败：${errMsg(e)}`
     await refresh()
-    toast.success(message)
+    toast.error(message)
   } finally {
     busy.value = false
   }
@@ -1586,14 +1650,22 @@ async function removeSession() {
   }
 }
 
-/* 会话、日志与 Path 就绪状态共用同一轮询（非终态 5s） */
+/* 会话、日志与 Path 就绪状态共用同一轮询（非终态 5s；终态即停止，act 期间跳过） */
 let pollTimer: ReturnType<typeof setInterval> | null = null
 function startPolling() {
   if (pollTimer) clearInterval(pollTimer)
   pollTimer = setInterval(() => {
-    if (document.hidden || isTerminal.value) return
+    if (isTerminal.value) {
+      if (pollTimer) clearInterval(pollTimer)
+      pollTimer = null
+      return
+    }
+    if (document.hidden || busy.value) return
+    const id = sessionId.value
+    if (!id) return
     void loadLogs()
-    void adminVirtualLearnersApi.getVirtualSession(sessionId.value).then((res) => {
+    void adminVirtualLearnersApi.getVirtualSession(id).then((res) => {
+      if (sessionId.value !== id) return
       session.value = res.data?.data ?? res.data ?? {}
       parseBlackbox()
       if (isBlackbox.value) {
@@ -1611,8 +1683,11 @@ watch(
   sessionId,
   async (id) => {
     if (!id) return
+    if (pollTimer) clearInterval(pollTimer)
+    pollTimer = null
     session.value = null
     logs.value = []
+    logFollowsBottom = true
     pathStatus.value = null
     teachingDetail.value = null
     selectedTeachingSessionId.value = ''
@@ -1622,7 +1697,9 @@ watch(
     refereeTraceCount.value = 0
     privateStateTrace.value = []
     privateStateTraceCount.value = 0
+    frictionBudget.value = 'normal'
     await refresh()
+    if (sessionId.value !== id) return
     const stage = currentStage.value
     activeTab.value = (stageFlow as readonly string[]).includes(stage) ? stage as StageKey : 'goal'
     startPolling()

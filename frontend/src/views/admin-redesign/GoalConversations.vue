@@ -108,7 +108,7 @@
               <h3>{{ detail.userName }} 的目标对话</h3>
               <span class="gc-panel__id mono">{{ detail.id }}</span>
             </div>
-            <button type="button" class="gc-panel__close" aria-label="关闭" @click="detail = null">✕</button>
+            <button type="button" class="gc-panel__close" aria-label="关闭" @click="closeDetail">✕</button>
           </header>
           <div class="gc-panel__body">
             <div class="gc-facts">
@@ -259,7 +259,6 @@ const detailProposal = computed(() => {
   const p = (detail.value?.collectedRaw?.confirmedProposal ?? {}) as Record<string, unknown>
   return {
     direction: String(p.learning_direction || p.learningDirection || ''),
-    deliverable: String(p.first_deliverable || p.firstDeliverable || ''),
     stages: Array.isArray(p.key_stages) ? p.key_stages.map(String) : []
   }
 })
@@ -268,7 +267,7 @@ const detailConfidence = computed(() => {
   return Number.isFinite(v) && v > 0 ? Math.round(v * 100) : null
 })
 
-useEscape(() => !!detail.value, () => { detail.value = null })
+useEscape(() => !!detail.value, closeDetail)
 const { openMenu, toggleMenu, closeMenu } = useRowMenu()
 
 /** 菜单项执行：先关菜单再执行（避免菜单残留与整行点击冒泡） */
@@ -279,7 +278,7 @@ function menuRemove(r: Row) {
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => !!detail.value), panelRef)
-useMaskClose(maskRef, () => { detail.value = null })
+useMaskClose(maskRef, closeDetail)
 
 const statusPills = [
   { id: 'active', label: '进行中' },
@@ -348,7 +347,7 @@ async function load() {
         }
       : null
   } catch (e) {
-    toast.success(`加载失败：${errMsg(e)}`)
+    toast.error(`加载失败：${errMsg(e)}`)
   } finally {
     loading.value = false
   }
@@ -375,6 +374,13 @@ function parseMessages(raw: unknown): Array<{ role: string; text: string; time: 
 
 /** 详情面板加载态 */
 const detailLoading = ref(false)
+/* 详情抽屉竞态：请求代际号，关闭/切换行后丢弃迟到的响应 */
+let detailReqSeq = 0
+
+function closeDetail() {
+  detailReqSeq += 1
+  detail.value = null
+}
 
 /** 归一化消息角色：后端用 ai/assistant，统一为 assistant */
 function normRole(r: unknown): string {
@@ -406,6 +412,7 @@ function parseCollected(raw: unknown): { obj: Record<string, unknown> | null; me
 }
 
 async function openDetail(r: Row) {
+  const seq = ++detailReqSeq
   detail.value = {
     ...r,
     description: '',
@@ -418,10 +425,12 @@ async function openDetail(r: Row) {
   detailLoading.value = true
   try {
     const res = await adminGoalConversationsApi.getDetail(r.id)
+    // 已关闭抽屉或已切换到其他行：丢弃本次响应
+    if (seq !== detailReqSeq || !detail.value || detail.value.id !== r.id) return
     const c = (res.data?.data ?? res.data ?? {}) as Record<string, unknown>
     const parsed = parseCollected(c.collectedData ?? c.messages)
     detail.value = {
-      ...detail.value!,
+      ...detail.value,
       description: String(c.description || ''),
       updatedAt: timeAgo(String(c.updatedAt || '')),
       completedAt: c.completedAt ? timeAgo(String(c.completedAt)) : '',
@@ -430,9 +439,10 @@ async function openDetail(r: Row) {
       messages: parsed.messages.length ? parsed.messages : parseMessages(c.messages)
     }
   } catch (e) {
+    if (seq !== detailReqSeq) return
     toast.error(`详情加载失败：${errMsg(e)}`)
   } finally {
-    detailLoading.value = false
+    if (seq === detailReqSeq) detailLoading.value = false
   }
 }
 
@@ -449,11 +459,11 @@ async function regenerate(r: Row) {
   try {
     const res = await adminGoalConversationsApi.regeneratePath(r.id)
     const d = res.data?.data ?? res.data ?? {}
-    toast.error(`已生成路径「${d.learningPathName || '未命名'}」（v${d.version ?? '—'}）`)
+    toast.success(`已生成路径「${d.learningPathName || '未命名'}」（v${d.version ?? '—'}）`)
     r.hasPath = true
     if (detail.value?.id === r.id) detail.value.hasPath = true
   } catch (e) {
-    toast.success(`重建失败：${errMsg(e)}`)
+    toast.error(`重建失败：${errMsg(e)}`)
   } finally {
     r.regenerating = false
   }
@@ -470,9 +480,9 @@ async function remove(r: Row) {
     await adminGoalConversationsApi.remove(r.id)
     rows.value = rows.value.filter((x) => x.id !== r.id)
     if (detail.value?.id === r.id) detail.value = null
-    toast.error('会话已删除')
+    toast.success('会话已删除')
   } catch (e) {
-    toast.success(`删除失败：${errMsg(e)}`)
+    toast.error(`删除失败：${errMsg(e)}`)
   }
 }
 

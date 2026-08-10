@@ -8,6 +8,9 @@
       <span class="mk-status__meta">进行中 {{ inProgressCount }}</span>
       <span class="mk-status__meta">有建议 {{ advisoryCount }}</span>
       <span class="mk-status__meta">缺总结 {{ missingWrapupCount }}</span>
+      <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshNow">
+        {{ refreshing ? '刷新中…' : '刷新' }}
+      </button>
     </div>
 
     <div class="mk-card">
@@ -31,7 +34,7 @@
           </select>
           <input class="mk-filter__input" v-model="keyword" placeholder="搜索主题 / 用户 / ID" />
         </div>
-        <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}</span>
+        <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}<template v-if="dataSource === 'live'"> · 仅显示最近 100 条</template></span>
       </div>
 
       <div class="mk-table-scroll">
@@ -131,12 +134,12 @@
               </div>
             </section>
 
-            <section v-if="detail.advisory" class="ts-section">
+            <section v-if="detail.advisory && detail.advisory.priority && detail.advisory.priority !== 'none'" class="ts-section">
               <h4>额外建议</h4>
               <div class="ts-card ts-card--advisory">
-                <span>优先级 {{ detail.advisory.priority || '—' }}</span>
-                <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('advisory') }">{{ detail.advisory.text || detail.advisory.body || detail.advisory }}</p>
-                <button v-if="isLong(String(detail.advisory.text || detail.advisory.body || detail.advisory))" type="button" class="ts-more" @click="toggleCard('advisory')">{{ openCards.has('advisory') ? '收起' : '展开全文' }}</button>
+                <span>优先级 {{ detail.advisory.priority || '—' }}<template v-if="detail.advisory.title"> · {{ detail.advisory.title }}</template></span>
+                <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('advisory') }">{{ detail.advisory.text || '—' }}</p>
+                <button v-if="isLong(detail.advisory.text)" type="button" class="ts-more" @click="toggleCard('advisory')">{{ openCards.has('advisory') ? '收起' : '展开全文' }}</button>
               </div>
             </section>
 
@@ -152,15 +155,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { dataSource } from './store'
 import { timeAgo } from './live'
 import { statusText } from './statusText'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
-
-defineProps<{ state: string }>()
 
 interface WrapupSummary {
   topicSummary?: string
@@ -185,7 +186,7 @@ interface Row {
   startAt: string
   wrapup: WrapupSummary | null
   wrapupSource: string
-  advisory: Record<string, unknown> | null
+  advisory: { title: string; text: string; priority: string } | null
   rawJson: string
 }
 
@@ -201,14 +202,14 @@ const demoRows: Row[] = [
       practiceAdvice: '建议完成一次真实表格的缺失值清洗：先统计每列缺失率，再分别给出填充或删除的理由。',
       learningEvaluation: '理解到位，练习一次通过，可以进入下一阶段「数据透视」。'
     },
-    wrapupSource: '模型生成', advisory: { priority: 'medium', text: '可安排一次真实数据练习巩固：用她自己团队的周报（脱敏后）做一次完整清洗，强化迁移。' },
+    wrapupSource: '模型生成', advisory: { priority: 'medium', title: '', text: '可安排一次真实数据练习巩固：用她自己团队的周报（脱敏后）做一次完整清洗，强化迁移。' },
     rawJson: '{\n  "demo": true\n}'
   },
   {
     id: 'ts-demo-2', topic: 'JOIN 实战 3/4', subject: 'SQL 基础', taskType: 'practice',
-    userName: '赵敏', email: 'zhaomin@…', status: 'error', duration: 620, messageCount: 4,
+    userName: '赵敏', email: 'zhaomin@…', status: 'failed', duration: 620, messageCount: 4,
     wrapupStatus: 'missing', hasAdvisory: true, attention: 'high', startAt: '4 分钟前',
-    wrapup: null, wrapupSource: '—', advisory: { priority: 'high', text: '连续 3 次任务失败且本次会话异常中断：建议伴学介入，把 JOIN 去重拆成「先 DISTINCT 再 JOIN」两步，并临时降低练习难度。' },
+    wrapup: null, wrapupSource: '—', advisory: { priority: 'high', title: '', text: '连续 3 次任务失败且本次会话异常中断：建议伴学介入，把 JOIN 去重拆成「先 DISTINCT 再 JOIN」两步，并临时降低练习难度。' },
     rawJson: '{\n  "demo": true\n}'
   },
   {
@@ -221,7 +222,7 @@ const demoRows: Row[] = [
       practiceAdvice: '用一个真实运营场景，写出假设并标注每个假设需要的证据。',
       learningEvaluation: '框架已有，概念「采样偏差」挣扎，建议安排一次专项复盘。'
     },
-    wrapupSource: '模型生成', advisory: { priority: 'medium', text: '概念「采样偏差」连续两次未达标，建议下节课前插入 5 分钟图例复盘。' },
+    wrapupSource: '模型生成', advisory: { priority: 'medium', title: '', text: '概念「采样偏差」连续两次未达标，建议下节课前插入 5 分钟图例复盘。' },
     rawJson: '{\n  "demo": true\n}'
   },
   {
@@ -239,7 +240,7 @@ const demoRows: Row[] = [
   },
   {
     id: 'ts-demo-5', topic: '邮件表达：开场与诉求句', subject: '职场英语', taskType: 'reading',
-    userName: '周洁', email: 'zhoujie@…', status: 'in_progress', duration: 480, messageCount: 3,
+    userName: '周洁', email: 'zhoujie@…', status: 'active', duration: 480, messageCount: 3,
     wrapupStatus: 'missing', hasAdvisory: false, attention: 'low', startAt: '18 分钟前',
     wrapup: null, wrapupSource: '—', advisory: null,
     rawJson: '{\n  "demo": true\n}'
@@ -248,12 +249,37 @@ const demoRows: Row[] = [
     id: 'ts-demo-6', topic: '五十音图：か行・さ行', subject: '日语 N5', taskType: 'quiz',
     userName: '冯远', email: 'fengyuan@…', status: 'timeout', duration: 360, messageCount: 2,
     wrapupStatus: 'missing', hasAdvisory: true, attention: 'high', startAt: '1 小时前',
-    wrapup: null, wrapupSource: '—', advisory: { priority: 'high', text: '测验超时且中途离开：近 5 天活跃度持续下降，建议触发挽留流程并下调每日任务量。' },
+    wrapup: null, wrapupSource: '—', advisory: { priority: 'high', title: '', text: '测验超时且中途离开：近 5 天活跃度持续下降，建议触发挽留流程并下调每日任务量。' },
     rawJson: '{\n  "demo": true\n}'
   }
 ]
 
 const rows = ref<Row[]>([])
+const refreshing = ref(false)
+
+/* 静默拉取：live 模式成功即整表替换；失败保留旧数据（轮询不闪空态） */
+async function fetchRows(): Promise<boolean> {
+  if (dataSource.value !== 'live') return false
+  try {
+    const res = await adminTeachingSessionsApi.list({ limit: 100 })
+    const body = res.data?.data ?? res.data ?? {}
+    const items = body.items || []
+    rows.value = items.map((s: Record<string, unknown>) => mapRow(s))
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function refreshNow() {
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    await fetchRows()
+  } finally {
+    refreshing.value = false
+  }
+}
 
 watch(
   () => dataSource.value,
@@ -262,29 +288,45 @@ watch(
       rows.value = [...demoRows]
       return
     }
-    try {
-      const res = await adminTeachingSessionsApi.list({ limit: 100 })
-      const body = res.data?.data ?? res.data ?? {}
-      const items = body.items || []
-      rows.value = items.map((s: Record<string, unknown>) => mapRow(s))
-    } catch {
-      rows.value = []
-    }
+    const ok = await fetchRows()
+    if (!ok) rows.value = []
   },
   { immediate: true }
 )
 
+/* G4：停留页面时静默轮询，避免状态过期 */
+let pollTimer: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  pollTimer = setInterval(() => {
+    if (document.hidden) return
+    void fetchRows()
+  }, 20000)
+})
+onBeforeUnmount(() => {
+  if (pollTimer) clearInterval(pollTimer)
+})
+
 function mapRow(s: Record<string, unknown>): Row {
   const wrapup = (s.wrapup as Record<string, unknown>) || null
   const summary = (wrapup?.summary as WrapupSummary) || null
-  const advisory = (s.advisory as Record<string, unknown>) || null
+  /* 后端 ReplanAdvisory：{shouldSuggest, priority, recommendation, scope, rationale, reasonCodes, ui:{title,body,options}} */
+  const rawAdvisory = (s.advisory as Record<string, unknown>) || null
+  const advisoryUi = rawAdvisory ? (rawAdvisory.ui as Record<string, unknown>) || {} : {}
+  const advisory = rawAdvisory
+    ? {
+        title: String(advisoryUi.title || ''),
+        text: String(advisoryUi.body || rawAdvisory.rationale || ''),
+        priority: String(rawAdvisory.priority || '')
+      }
+    : null
+  const advisoryRelevant = !!advisory && rawAdvisory?.shouldSuggest !== false && !['none', ''].includes(advisory.priority)
   const wrapupStatus = wrapup?.status === 'complete' ? 'complete' : 'missing'
   const attention: Row['attention'] =
-    s.status === 'error' || s.status === 'timeout' || (s.status === 'completed' && wrapupStatus === 'missing')
+    s.status === 'failed' || s.status === 'timeout' || (s.status === 'completed' && wrapupStatus === 'missing')
       ? 'high'
-      : advisory?.priority === 'high'
+      : advisoryRelevant && advisory?.priority === 'high'
         ? 'high'
-        : advisory
+        : advisoryRelevant
           ? 'medium'
           : 'low'
   return {
@@ -298,7 +340,7 @@ function mapRow(s: Record<string, unknown>): Row {
     duration: Number(s.duration || 0),
     messageCount: Number(s.messageCount || 0),
     wrapupStatus,
-    hasAdvisory: !!advisory,
+    hasAdvisory: advisoryRelevant,
     attention,
     startAt: timeAgo(String(s.startTime || '')),
     wrapup: summary,
@@ -317,15 +359,14 @@ const pills = [
   { id: 'attention' as const, label: '待关注' },
   { id: 'missing' as const, label: '缺总结' }
 ]
-/* 状态筛选选项（覆盖教学会话实际出现的全部状态枚举；进行中含 in_progress/active） */
+/* 状态筛选选项（对齐后端枚举：completed/failed/active/timeout/paused/discarded） */
 const statusOptions = [
   { value: 'completed', label: '已完成' },
-  { value: 'in_progress', label: '进行中' },
+  { value: 'active', label: '进行中' },
+  { value: 'failed', label: '失败' },
   { value: 'timeout', label: '超时' },
   { value: 'paused', label: '已暂停' },
-  { value: 'superseded', label: '已被替代' },
-  { value: 'discarded', label: '已废弃' },
-  { value: 'error', label: '错误' }
+  { value: 'discarded', label: '已废弃' }
 ]
 
 const filtered = computed(() => {
@@ -333,16 +374,14 @@ const filtered = computed(() => {
   if (pill.value === 'attention') list = list.filter((r) => r.attention !== 'low')
   if (pill.value === 'missing') list = list.filter((r) => r.wrapupStatus === 'missing')
   if (statusFilter.value) {
-    list = list.filter(
-      (r) => r.status === statusFilter.value || (statusFilter.value === 'in_progress' && r.status === 'active')
-    )
+    list = list.filter((r) => r.status === statusFilter.value)
   }
   const q = keyword.value.trim().toLowerCase()
   if (q) list = list.filter((r) => `${r.topic} ${r.userName} ${r.email} ${r.id}`.toLowerCase().includes(q))
   return list
 })
 
-const inProgressCount = computed(() => rows.value.filter((r) => r.status === 'in_progress' || r.status === 'active').length)
+const inProgressCount = computed(() => rows.value.filter((r) => r.status === 'active').length)
 const advisoryCount = computed(() => rows.value.filter((r) => r.hasAdvisory).length)
 const missingWrapupCount = computed(() => rows.value.filter((r) => r.wrapupStatus === 'missing').length)
 const attentionCount = computed(() => rows.value.filter((r) => r.attention !== 'low').length)
@@ -375,9 +414,9 @@ function toggleCard(key: string) {
 
 const isLong = (s?: string) => (s || '').length > 120
 
-/* 状态映射统一走共享字典（覆盖 paused / superseded / discarded 等全部枚举） */
+/* 状态映射统一走共享字典（对齐后端枚举：completed/failed/active/timeout/paused/discarded） */
 const statusBadge = (s: string) =>
-  s === 'completed' || s === 'succeeded' ? 'mk-badge--ok' : s === 'error' || s === 'timeout' || s === 'discarded' ? 'mk-badge--bad' : 'mk-badge--info'
+  s === 'completed' || s === 'succeeded' ? 'mk-badge--ok' : s === 'failed' || s === 'timeout' || s === 'discarded' ? 'mk-badge--bad' : 'mk-badge--info'
 const attentionBadge = (a: string) => (a === 'high' ? 'mk-badge--bad' : a === 'medium' ? 'mk-badge--warn' : 'mk-badge--ok')
 const taskTypeText = (t: string) =>
   ({ reading: '阅读', practice: '练习', project: '项目', quiz: '测验', acquire: '获取', deconstruct: '拆解', model: '建模', execute: '执行', diagnose: '诊断', refine: '打磨', consolidate: '巩固' }[t] || t || '任务')

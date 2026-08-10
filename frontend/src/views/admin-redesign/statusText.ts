@@ -32,7 +32,9 @@ const STATUS_TEXT: Record<string, string> = {
   offline: '已下线',
   closed: '已关闭',
   created: '已创建',
-  abandoned: '已放弃'
+  abandoned: '已放弃',
+  finalizing: '收尾中',
+  finalization_failed: '收尾失败'
 }
 
 /** 状态英文值 → 中文；未知值原样返回（不返回 —，避免丢失信息） */
