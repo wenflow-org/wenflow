@@ -8,11 +8,11 @@ channels: [dialogue, task, evidence, learner, path]
 stateAdvance: false
 inputs:
   - name: messages
-    type: array
+    type: object[]
     ref: sandbox:teaching.session.messages
     desc: 会话消息（含 analysis 标注）
   - name: knowledgePoints
-    type: array
+    type: object[]
     ref: sandbox:teaching.knowledge.state
     desc: 会话结束时知识看板状态
   - name: sessionInfo

@@ -19,7 +19,7 @@ publish:
 runtimeDefaults:
   tier: chat
   temperature: 0.5
-  maxTokens: 32000
+  maxTokens: 12000
   model: null
   thinkingMode: default
   reasoningEffort: default

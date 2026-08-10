@@ -26,7 +26,7 @@ inputs:
     ref: sandbox:path.normalizedInput.confirmedProposal
     desc: 用户确认的方向（learningDirection/firstDeliverable/keyStages/outOfScope）
   - name: conversationHistory
-    type: array
+    type: object[]
     ref: sandbox:goal.collectedData.history
     desc: 完整对话历史（验证关键信息）
   - name: replan

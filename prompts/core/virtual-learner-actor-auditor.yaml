@@ -23,7 +23,7 @@ inputs:
     ref: sandbox:simulation.learnerPrivateState
     desc: 模拟器私有状态轨迹（旁路通道，不回流学习者）
   - name: publicTrace
-    type: array
+    type: object[]
     ref: sandbox:simulation.publicTrace
     desc: 学习者实际公开行为轨迹
   - name: experimentSummary

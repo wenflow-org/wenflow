@@ -9,35 +9,35 @@ channels: [task, evidence, learner]
 stateAdvance: false
 inputs:
   - name: preferredDomains
-    type: array
+    type: string[]
     ref: sandbox:simulation.preferredDomains
     desc: 偏好领域（管理端实验配置注入）
   - name: preferredGoalTypes
-    type: array
+    type: string[]
     ref: sandbox:simulation.preferredGoalTypes
     desc: 偏好目标类型
   - name: preferredLevels
-    type: array
+    type: string[]
     ref: sandbox:simulation.preferredLevels
     desc: 偏好水平档位
   - name: preferredMotivations
-    type: array
+    type: string[]
     ref: sandbox:simulation.preferredMotivations
     desc: 偏好动机类型
   - name: avoidDomains
-    type: array
+    type: string[]
     ref: sandbox:simulation.avoidDomains
     desc: 需避开的领域
   - name: candidateDomains
-    type: array
+    type: string[]
     ref: sandbox:simulation.candidateDomains
     desc: 候选领域池
   - name: candidatePersonas
-    type: array
+    type: string[]
     ref: sandbox:simulation.candidatePersonas
     desc: 候选画像池（与 personaSeed 配对）
   - name: recentScenarioHints
-    type: array
+    type: string[]
     ref: sandbox:simulation.recentScenarioHints
     desc: 最近一次样本提示（连续性参考）
 rules:

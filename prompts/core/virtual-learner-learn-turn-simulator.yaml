@@ -32,7 +32,7 @@ inputs:
     ref: sandbox:simulation.currentTask
     desc: 当前 task 信息（学习者视角的任务描述）
   - name: knowledgeSnapshot
-    type: array
+    type: object[]
     ref: sandbox:simulation.knowledgeSnapshot
     desc: 当前任务知识看板（服务端注入）
 rules:

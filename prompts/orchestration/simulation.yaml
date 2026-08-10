@@ -34,7 +34,7 @@ fields:
   # （goalSeed/situationSeed/stories 已退役：语义由 story.goalSeed 子字段与 profileData.storyPool 承接，2026-08 词汇统一批次删除声明台账）
   - fieldId: consistencyNotes
     promptRole: proposal-output
-    valueType: array
+    valueType: array<string>
     description: 故事与 persona 的一致性校验说明
 
   # === goal-dialogue / learn-turn / path-evaluator 共享输出 ===
@@ -70,7 +70,7 @@ fields:
     description: 学习者对路径的自然反应（accept/modify/reject）
   - fieldId: visibleRequestedChanges
     promptRole: proposal-output
-    valueType: array
+    valueType: array<string>
     description: 学习者明确提出的可见修改项
 
   # === referee / actor-auditor 共享输出（词汇统一批次：actor* 并入 referee 语义） ===
@@ -84,15 +84,15 @@ fields:
     description: 各维度 0-100 分（实验：goalExperience/goalUnderstanding/pathExperience/teachingExperience/controlConsistency/boundaryIntegrity/evidenceSufficiency；角色保真度维度）
   - fieldId: findings
     promptRole: proposal-output
-    valueType: array
+    valueType: array<object>
     description: 带证据引用的问题发现（含角色保真度问题）
   - fieldId: recommendations
     promptRole: proposal-output
-    valueType: array
+    valueType: array<object>
     description: 面向实验/模拟器维护者的改进建议
   - fieldId: evidence
     promptRole: proposal-output
-    valueType: array
+    valueType: array<object>
     description: 可定位到输入轨迹/角色设定和行为轨迹的证据
 
 routings:

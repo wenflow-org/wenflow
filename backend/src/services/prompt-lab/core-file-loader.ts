@@ -12,6 +12,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import crypto from 'crypto';
 import yaml from 'js-yaml';
+import { CORE_FIELD_TYPES, FAILURE_POLICY_CORE } from '../yaml-vocabulary';
+
+/** 兼容 re-export：既有 import 路径（core-yaml-writer 等）保持不变，定义单一化到 yaml-vocabulary */
+export { CORE_FIELD_TYPES, FAILURE_POLICY_CORE } from '../yaml-vocabulary';
 
 /** 核心文件目录解析：默认仓库根 prompts/core/，可用 CORE_FILES_DIR 覆盖 */
 export const CORE_FILES_DIR = process.env.CORE_FILES_DIR
@@ -22,18 +26,8 @@ export const CORE_FILES_DIR = process.env.CORE_FILES_DIR
 export const CORE_CHANNELS = ['dialogue', 'state', 'task', 'evidence', 'learner', 'path'] as const;
 export type CoreChannel = (typeof CORE_CHANNELS)[number];
 
-/** §2.3 字段类型受控词表（不含 ? 后缀） */
-export const CORE_FIELD_TYPES = [
-  'string',
-  'number',
-  'boolean',
-  'enum',
-  'object',
-  'object[]',
-  'string[]',
-] as const;
-
-export const CORE_FAILURE_POLICIES = ['retry', 'fallback', 'propagate'] as const;
+/** §2.3 字段类型受控词表（不含 ? 后缀；定义单一源：yaml-vocabulary，此处兼容 re-export） */
+export const CORE_FAILURE_POLICIES = FAILURE_POLICY_CORE;
 export type CoreFailurePolicy = (typeof CORE_FAILURE_POLICIES)[number];
 
 /** §2.4.3 平台包装字段（与 SkillResult/meta 碰撞者）：禁止出现在 fields 表 */
@@ -254,8 +248,18 @@ export function validateCoreFileShape(raw: unknown): CoreFileIssue[] {
           }
           seenNames.add(name);
         }
-        if (item.type !== undefined && item.type !== null && typeof item.type !== 'string') {
-          issues.push({ code: 'input-type-invalid', message: `${label}.type 必须是字符串（复用 §2.3 受控词表）` });
+        if (item.type !== undefined && item.type !== null) {
+          if (typeof item.type !== 'string') {
+            issues.push({ code: 'input-type-invalid', message: `${label}.type 必须是字符串（复用 §2.3 受控词表）` });
+          } else {
+            const base = item.type.trim().replace(/\?$/, '');
+            if (!(CORE_FIELD_TYPES as readonly string[]).includes(base)) {
+              issues.push({
+                code: 'input-type-unknown',
+                message: `${label}.type "${item.type}" 不在受控词表（${CORE_FIELD_TYPES.join(' | ')}，可带 ? 后缀）`,
+              });
+            }
+          }
         }
         if (item.desc !== undefined && item.desc !== null && typeof item.desc !== 'string') {
           issues.push({ code: 'input-desc-invalid', message: `${label}.desc 必须是字符串` });

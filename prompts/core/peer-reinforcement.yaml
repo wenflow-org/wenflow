@@ -17,7 +17,7 @@ inputs:
     ref: user:latestMessage
     desc: 学生本轮消息（触发伴学的输入）
   - name: tutorContext
-    type: array
+    type: object[]
     ref: sandbox:teaching.session.messages
     desc: 最近对话上下文（供伴学引用）
   - name: cognitiveLevel

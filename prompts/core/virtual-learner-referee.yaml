@@ -7,11 +7,11 @@ channels: [evidence, task]
 stateAdvance: false
 inputs:
   - name: publicTrace
-    type: array
+    type: object[]
     ref: sandbox:simulation.publicTrace
     desc: 学习者实际可见的公开轨迹
   - name: refereeTrace
-    type: array
+    type: object[]
     ref: sandbox:simulation.refereeTrace
     desc: 不回流学习者的旁路诊断轨迹
   - name: control

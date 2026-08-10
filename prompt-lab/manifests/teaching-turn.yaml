@@ -10,7 +10,6 @@ description: 结构化教学回合生成器
 acceptableAgentIds:
   - skill:teaching-turn
   - teaching-turn-agent
-  - teaching-turn-agent
 
 publish:
   enabled: true

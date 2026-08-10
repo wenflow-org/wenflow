@@ -8,15 +8,15 @@ channels: [task, evidence, learner]
 stateAdvance: false
 inputs:
   - name: preferredLevels
-    type: array
+    type: string[]
     ref: sandbox:simulation.preferredLevels
     desc: 偏好水平档位（管理端实验配置注入）
   - name: candidatePersonas
-    type: array
+    type: string[]
     ref: sandbox:simulation.candidatePersonas
     desc: 候选画像提示（可空）
   - name: recentPersonaHints
-    type: array
+    type: string[]
     ref: sandbox:simulation.recentPersonaHints
     desc: 最近一次画像提示（连续性参考）
   - name: existingPersonaSeed

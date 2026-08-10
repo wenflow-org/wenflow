@@ -15,25 +15,23 @@ import * as fs from 'fs';
 import * as path from 'path';
 import yaml from 'js-yaml';
 import { deriveContract } from '../../scripts/seed-contract-helper';
+import {
+  CORE_VALUE_TYPES,
+  PROMPT_ROLES,
+  RENDER_VALUES,
+  VISIBILITY_PRESETS,
+  type PromptRole,
+  type RenderValue,
+} from '../yaml-vocabulary';
+
+/** 兼容 re-export：定义单一源为 yaml-vocabulary（rewrite-output-section / field-routings 既有 import 不变） */
+export { PROMPT_ROLES, RENDER_VALUES } from '../yaml-vocabulary';
+export type { PromptRole, RenderValue } from '../yaml-vocabulary';
 
 /** 编排文件目录：默认仓库根 prompts/orchestration/，可用 ORCHESTRATION_DIR 覆盖 */
 export const ORCHESTRATION_DIR = process.env.ORCHESTRATION_DIR
   ? path.resolve(process.env.ORCHESTRATION_DIR)
   : path.resolve(__dirname, '../../../../prompts/orchestration');
-
-export const PROMPT_ROLES = [
-  'hard-required',
-  'soft-info',
-  'hidden-inference',
-  'public-reply',
-  'proposal-output',
-  'derived-presentation',
-  'control-signal',
-] as const;
-export type PromptRole = (typeof PROMPT_ROLES)[number];
-
-export const RENDER_VALUES = ['visible', 'hidden'] as const;
-export type RenderValue = (typeof RENDER_VALUES)[number];
 
 export interface OrchestrationContract {
   agentId: string;
@@ -116,10 +114,14 @@ function parseField(raw: unknown, index: number): OrchestrationField {
     ? raw.enumValues.map((v) => asString(v, `fields[${index}].enumValues`))
     : undefined;
   const bindings = isRecord(raw.bindings) ? (raw.bindings as Record<string, unknown>) : undefined;
+  const valueType = asString(raw.valueType, `fields[${index}].valueType`);
+  if (!(CORE_VALUE_TYPES as readonly string[]).includes(valueType)) {
+    throw new Error(`[orchestration] fields[${index}] valueType=${valueType} 非法（须在 ${CORE_VALUE_TYPES.join(',')} 中）`);
+  }
   return {
     fieldId,
     promptRole: promptRole as PromptRole,
-    valueType: asString(raw.valueType, `fields[${index}].valueType`),
+    valueType,
     snakeName: asOptionalString(raw.snakeName),
     camelName: asOptionalString(raw.camelName),
     pathInRawOutput: asOptionalString(raw.pathInRawOutput),
@@ -140,6 +142,10 @@ function parseRouting(raw: unknown, index: number): OrchestrationRouting {
   const handoff = Array.isArray(raw.handoff)
     ? raw.handoff.map((v) => asString(v, `routings[${index}].handoff`))
     : [];
+  const visibilityPreset = asOptionalString(raw.visibilityPreset);
+  if (visibilityPreset !== undefined && !(VISIBILITY_PRESETS as readonly string[]).includes(visibilityPreset)) {
+    throw new Error(`[orchestration] routings[${index}] visibilityPreset=${visibilityPreset} 非法（须在 ${VISIBILITY_PRESETS.join(',')} 中）`);
+  }
   return {
     agentId: asString(raw.agentId, `routings[${index}].agentId`),
     fieldId: asString(raw.fieldId, `routings[${index}].fieldId`),
@@ -147,7 +153,7 @@ function parseRouting(raw: unknown, index: number): OrchestrationRouting {
     handoff,
     internal: asBoolean(raw.internal, `routings[${index}].internal`, false),
     accumulate: asBoolean(raw.accumulate, `routings[${index}].accumulate`, false),
-    visibilityPreset: asOptionalString(raw.visibilityPreset),
+    visibilityPreset,
     notes: asOptionalString(raw.notes),
   };
 }

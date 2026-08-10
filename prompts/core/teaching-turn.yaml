@@ -8,7 +8,7 @@ channels: [dialogue, task, learner, state, evidence]
 stateAdvance: false
 inputs:
   - name: messages
-    type: array
+    type: object[]
     ref: sandbox:teaching.session.messages
     desc: 当前回合可见消息（压缩切片，含学生最新输入）
   - name: learner
@@ -24,7 +24,7 @@ inputs:
     ref: sandbox:teaching.classroomContext
     desc: 课堂上下文（阶段/焦点，上轮持久化）
   - name: visibleDialogueContext
-    type: array
+    type: object[]
     ref: sandbox:teaching.visibleDialogueContext
     desc: 最近可见对话（role/content）
   - name: controls

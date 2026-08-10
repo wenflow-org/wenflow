@@ -20,7 +20,7 @@ inputs:
     ref: sandbox:goal.collectedData.state
     desc: 当前理解状态、置信度与阶段（本 Agent 状态池，来自上一轮合并结果）
   - name: conversationContext
-    type: array
+    type: object[]
     ref: sandbox:goal.collectedData.history
     desc: 完整可见历史消息（核对原话、补足细节）
 rules:
