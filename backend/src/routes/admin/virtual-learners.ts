@@ -667,6 +667,7 @@ function buildSessionSummary(session: any) {
     currentStage: session.currentStage,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
+    learningPathId: runtime.bindings?.learningPathId || null,
     storyContext,
     roundCount,
     goalStage: goalState.stage || null,

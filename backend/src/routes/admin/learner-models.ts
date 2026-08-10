@@ -50,7 +50,25 @@ router.get('/:userId', async (req, res) => {
       scope: (req.query.mode as 'global' | 'path' | 'teaching' | undefined) || 'global',
     });
 
-    return res.json({ success: true, data: snapshot });
+    const currentPath = snapshot.knowledgeMemory.currentPath;
+    const pathProgress = currentPath?.progress;
+    const globalSignals = snapshot.knowledgeMemory.globalSignals;
+
+    return res.json({
+      success: true,
+      data: {
+        ...snapshot,
+        progress: pathProgress?.totalTasks
+          ? Number(((pathProgress.completedTasks / pathProgress.totalTasks) * 100).toFixed(1))
+          : 0,
+        concepts: {
+          mastered: globalSignals.masteredConcepts,
+          struggling: globalSignals.strugglingConcepts,
+          fragile: globalSignals.fragileConcepts,
+        },
+        pathTitle: currentPath?.pathTitle || null,
+      },
+    });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: { message: error.message || '获取学习者模型详情失败' } });
   }
@@ -90,7 +108,9 @@ router.get('/:userId/evidence', async (req, res) => {
 
     return res.json({
       success: true,
-      data: snapshot.knowledgeMemory.currentPath?.recentEvidence || [],
+      data: {
+        items: snapshot.knowledgeMemory.currentPath?.recentEvidence || [],
+      },
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: { message: error.message || '获取学习证据失败' } });

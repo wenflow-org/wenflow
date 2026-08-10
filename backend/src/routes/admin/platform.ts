@@ -712,8 +712,8 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       : 1.0;
 
     const agentTodaySuccessRate = agentCallsToday > 0
-      ? (agentSuccessToday / agentCallsToday)
-      : 1.0;
+      ? ((agentSuccessToday / agentCallsToday) * 100).toFixed(1)
+      : null;
 
     const hourKeys: string[] = [];
     const hourlyTrendMap: Record<string, { total: number; error: number; timeout: number }> = {};
@@ -788,7 +788,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
           total: totalUsers,
           newToday: newUsersToday,
           activeToday: activeUsersCount,
-          activeRate: totalUsers > 0 ? (activeUsersCount / totalUsers * 100).toFixed(1) : 0,
+          activeRate: totalUsers > 0 ? (activeUsersCount / totalUsers * 100).toFixed(1) : '0.0',
         },
         learning: {
           totalPaths,
@@ -796,7 +796,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
           activePaths: activePathsCount,
           totalTasks,
           completedTasks,
-          completionRate: totalTasks > 0 ? (completedTasks / totalTasks * 100).toFixed(1) : 0,
+          completionRate: totalTasks > 0 ? (completedTasks / totalTasks * 100).toFixed(1) : '0.0',
         },
         conversations: {
           total: totalConversations,
@@ -809,7 +809,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
           failedCalls: agentStats.error,
           activeAgents24h: activeAgents24h.length,
           todayCalls: agentCallsToday,
-          todaySuccessRate: (agentTodaySuccessRate * 100).toFixed(1),
+          todaySuccessRate: agentTodaySuccessRate,
           todayTimeouts: agentTimeoutToday,
           last24h: hourlyTrend,
           wrapup: wrapupSourceStats,
@@ -1132,10 +1132,21 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       if (endTime) calledAt.lte = new Date(String(endTime));
       where.calledAt = calledAt;
     } else if (timeRange && timeRange !== 'all') {
+      const rangeValue = String(timeRange);
+      const validTimeRanges = ['today', 'yesterday', 'week', 'month'];
+      if (!validTimeRanges.includes(rangeValue)) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: `非法 timeRange 参数: ${rangeValue}（可选值: ${validTimeRanges.join('/')}/all）`,
+            status: 400,
+          },
+        });
+      }
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
-      switch (timeRange) {
+      switch (rangeValue) {
         case 'today':
           where.calledAt = { gte: today };
           break;
@@ -1853,6 +1864,15 @@ router.get('/activity', async (req: Request, res: Response) => {
  * GET /api/admin/teaching-sessions
  * 教学会话调试视图：聚焦 wrapup / advisory
  */
+function parseJsonSafe<T>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 router.get('/teaching-sessions', async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
@@ -1888,10 +1908,10 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
     ]);
 
     const items = sessions.map((session) => {
-      const wrapup = session.wrapup ? JSON.parse(session.wrapup) : null;
-      const advisory = session.advisory ? JSON.parse(session.advisory) : null;
-      const messages = session.messages ? JSON.parse(session.messages) : [];
-      const knowledgePoints = session.knowledgeState ? JSON.parse(session.knowledgeState) : [];
+      const wrapup = parseJsonSafe<any>(session.wrapup, null);
+      const advisory = parseJsonSafe<any>(session.advisory, null);
+      const messages = parseJsonSafe<any[]>(session.messages, []);
+      const knowledgePoints = parseJsonSafe<any[]>(session.knowledgeState, []);
 
       return {
         id: session.id,

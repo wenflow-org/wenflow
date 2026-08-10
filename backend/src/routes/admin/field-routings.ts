@@ -471,9 +471,34 @@ router.get('/drift', async (req: Request, res: Response) => {
 
   const report = await detectFieldRoutingDrift(systemPrisma);
 
-  const items = report.items
-    .filter((item) => (kind ? item.kind === kind : true))
-    .filter((item) => (stage ? item.key.includes(`:${stage}:`) || item.key.startsWith(`${stage}:`) : true));
+  let items = report.items;
+  if (kind) {
+    items = items.filter((item) => item.kind === kind);
+  }
+
+  // stage 过滤：drift 条目 key 是 agentId（contract）或 fieldId（field），
+  // routing 条目 key 是 `${agentId}\0${fieldId}`。
+  // 先按 stage 查 agent_contracts / field_definitions 得到该阶段的 agentIds / fieldIds，
+  // 再按 agentId 或 fieldId 命中过滤（原来的 key.includes(':stage:') 永远匹配不到）。
+  if (stage) {
+    const [contracts, fields] = await Promise.all([
+      systemPrisma.agent_contracts.findMany({ where: { stage }, select: { agentId: true } }),
+      systemPrisma.field_definitions.findMany({ where: { stage }, select: { fieldId: true } }),
+    ]);
+    const agentIds = new Set(contracts.map((c) => c.agentId));
+    const fieldIds = new Set(fields.map((f) => f.fieldId));
+    items = items.filter((item) => {
+      if (item.kind === 'contract') return agentIds.has(item.key);
+      if (item.kind === 'field') return fieldIds.has(item.key);
+      if (item.kind === 'routing') {
+        const sep = item.key.indexOf('\0');
+        const agentId = sep >= 0 ? item.key.slice(0, sep) : item.key;
+        const fieldId = sep >= 0 ? item.key.slice(sep + 1) : '';
+        return agentIds.has(agentId) || fieldIds.has(fieldId);
+      }
+      return false;
+    });
+  }
 
   res.json({
     success: true,
@@ -490,11 +515,32 @@ router.get('/drift', async (req: Request, res: Response) => {
 // ============================================================
 router.get('/changes', async (req: Request, res: Response) => {
   const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+  const stage = typeof req.query.stage === 'string' && req.query.stage.trim() ? req.query.stage.trim() : undefined;
   const fieldId = typeof req.query.fieldId === 'string' && req.query.fieldId.trim() ? req.query.fieldId.trim() : undefined;
   const agentId = typeof req.query.agentId === 'string' && req.query.agentId.trim() ? req.query.agentId.trim() : undefined;
 
+  let stageWhere: any = {};
+  if (stage) {
+    const [contracts, fields] = await Promise.all([
+      systemPrisma.agent_contracts.findMany({ where: { stage }, select: { agentId: true } }),
+      systemPrisma.field_definitions.findMany({ where: { stage }, select: { fieldId: true } }),
+    ]);
+    const agentIds = contracts.map((c) => c.agentId);
+    const fieldIds = fields.map((f) => f.fieldId);
+    if (agentIds.length === 0 && fieldIds.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+    stageWhere = {
+      OR: [
+        ...(agentIds.length ? [{ agentId: { in: agentIds } }] : []),
+        ...(fieldIds.length ? [{ fieldId: { in: fieldIds } }] : []),
+      ],
+    };
+  }
+
   const rows = await systemPrisma.node_config_changes.findMany({
     where: {
+      ...stageWhere,
       ...(fieldId ? { fieldId } : {}),
       ...(agentId ? { agentId } : {}),
     },

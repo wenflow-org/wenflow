@@ -96,8 +96,11 @@ export class LearnerSnapshotRefreshService {
     const page = Math.max(1, Number(params?.page || 1));
     const limit = Math.max(1, Math.min(100, Number(params?.limit || 20)));
 
+    const userWhere = params?.userId ? { id: params.userId } : undefined;
+    const total = await prisma.users.count({ where: userWhere });
+
     const users = await prisma.users.findMany({
-      where: params?.userId ? { id: params.userId } : undefined,
+      where: userWhere,
       select: {
         id: true,
         name: true,
@@ -138,6 +141,7 @@ export class LearnerSnapshotRefreshService {
         fatigueRisk: snapshot.dynamicState.fatigueRisk,
         currentMilestone: snapshot.knowledgeMemory.currentPath?.currentPosition.milestoneTitle || null,
         currentTask: snapshot.knowledgeMemory.currentPath?.currentPosition.taskTitle || null,
+        masteredConcepts: snapshot.knowledgeMemory.globalSignals.masteredConcepts.slice(0, 5),
         fragileConcepts: snapshot.knowledgeMemory.globalSignals.fragileConcepts.slice(0, 5),
         strugglingConcepts: snapshot.knowledgeMemory.globalSignals.strugglingConcepts.slice(0, 5),
       };
@@ -159,7 +163,7 @@ export class LearnerSnapshotRefreshService {
     return {
       page,
       limit,
-      total: filtered.length,
+      total,
       items: filtered,
     };
   }

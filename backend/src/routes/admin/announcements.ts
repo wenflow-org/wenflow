@@ -12,6 +12,19 @@ router.use(authMiddleware);
 
 const SEVERITIES = new Set(['info', 'warning', 'critical']);
 
+/**
+ * 解析 expiresAt：接受 ISO 8601 带时区时间戳（如 2026-12-31T23:59:59+08:00 / 2026-12-31T15:59:59Z），
+ * 统一按 UTC 存储。null/undefined/空串 表示不设置过期时间；无效日期抛错由调用方返回 400。
+ */
+function parseExpiresAt(value: unknown): Date | null {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error('expiresAt 格式无效，请使用 ISO 8601 时间戳（如 2026-12-31T23:59:59Z，按 UTC 存储）');
+  }
+  return parsed;
+}
+
 function shape(a: Record<string, unknown>) {
   return {
     id: a.id,
@@ -54,13 +67,19 @@ router.post('/', async (req: Request, res: Response) => {
     if (!SEVERITIES.has(severity)) {
       return res.status(400).json({ success: false, error: `severity 只能是 ${[...SEVERITIES].join('/')}` });
     }
+    let expiresAtDate: Date | null = null;
+    try {
+      expiresAtDate = parseExpiresAt(expiresAt);
+    } catch (error: any) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
     const admin = (req as Request & { user?: { userId?: string; name?: string } }).user;
     const created = await prisma.announcements.create({
       data: {
         title: String(title).trim(),
         body: String(body).trim(),
         severity,
-        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        expiresAt: expiresAtDate,
         status: publishNow ? 'published' : 'draft',
         publishedAt: publishNow ? new Date() : null,
         createdBy: admin?.name || admin?.userId || null
@@ -114,13 +133,19 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (!SEVERITIES.has(severity)) {
       return res.status(400).json({ success: false, error: `severity 只能是 ${[...SEVERITIES].join('/')}` });
     }
+    let expiresAtDate: Date | null = null;
+    try {
+      expiresAtDate = parseExpiresAt(expiresAt);
+    } catch (error: any) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
     const updated = await prisma.announcements.update({
       where: { id: req.params.id },
       data: {
         title: String(title).trim(),
         body: String(body).trim(),
         severity,
-        expiresAt: expiresAt ? new Date(expiresAt) : null
+        expiresAt: expiresAtDate
       }
     });
     res.json({ success: true, data: shape(updated as unknown as Record<string, unknown>) });

@@ -164,7 +164,7 @@ router.post('/', async (req, res, next) => {
       role = 'user',
       currentLevel = 'beginner',
       xp = 0,
-      isAdmin = false
+      isAdmin
     } = req.body;
 
     if (!email || !password || !name) {
@@ -182,6 +182,22 @@ router.post('/', async (req, res, next) => {
       });
     }
 
+    // isAdmin 严格布尔解析：仅接受 true（兼容字符串 'true'），
+    // 避免 Boolean('false') 之类的字符串陷阱把用户误判为管理员
+    const adminFlag = isAdmin === true || isAdmin === 'true';
+
+    const allowedRoles = ['user', 'admin'];
+    if (typeof role !== 'string' || !allowedRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: `role 仅支持 ${allowedRoles.join(' / ')}` }
+      });
+    }
+
+    // isAdmin 与 role 强绑定：管理员时强制 'admin'；
+    // 非管理员时不允许 role 为 'admin'（忽略并降级为 'user'）
+    const finalRole = adminFlag ? 'admin' : (role === 'admin' ? 'user' : role);
+
     const existing = await prisma.users.findUnique({ where: { email } });
     if (existing) {
       return res.status(409).json({
@@ -198,10 +214,10 @@ router.post('/', async (req, res, next) => {
         email: String(email),
         name: String(name),
         password: hashedPassword,
-        role: isAdmin ? 'admin' : String(role),
+        role: finalRole,
         currentLevel: String(currentLevel),
         xp: Number(xp) || 0,
-        isAdmin: Boolean(isAdmin),
+        isAdmin: adminFlag,
         updatedAt: new Date()
       },
       select: {
@@ -254,6 +270,20 @@ router.patch('/:id', async (req, res, next) => {
         success: false,
         error: { message: '不能取消当前登录管理员的管理员权限' }
       });
+    }
+
+    // 最后管理员保护：把管理员降为普通用户前，确认剩余管理员 ≥ 2
+    if (typeof isAdmin === 'boolean' && isAdmin === false && existing.isAdmin) {
+      const remainingAdmins = await prisma.users.count({ where: { isAdmin: true } }) - 1;
+      if (remainingAdmins <= 1) {
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: 'LAST_ADMIN_PROTECTED',
+            message: '系统至少需要保留 2 名管理员，无法降级最后的管理员'
+          }
+        });
+      }
     }
 
     if (email && email !== existing.email) {
@@ -320,11 +350,11 @@ router.post('/batch-delete', async (req, res, next) => {
       return res.status(403).json(permission.response);
     }
 
-    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(Boolean) : [];
-    if (ids.length === 0) {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    if (!(Array.isArray(ids) && ids.length > 0 && ids.length <= 100 && ids.every((item: any) => typeof item === 'string'))) {
       return res.status(400).json({
         success: false,
-        error: { message: '请提供要删除的用户 ID 列表' }
+        error: { message: 'ids 必须是 1-100 个用户 ID 字符串的数组' }
       });
     }
 
@@ -333,6 +363,39 @@ router.post('/batch-delete', async (req, res, next) => {
         success: false,
         error: { message: '批量删除中不能包含当前登录管理员账号' }
       });
+    }
+
+    // 虚拟学习者保护：虚拟用户由虚拟学习者管理模块维护，不允许在此直接删除
+    const virtualProfiles = await prisma.virtual_learner_profiles.findMany({
+      where: { userId: { in: ids } },
+      select: { userId: true }
+    });
+    if (virtualProfiles.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'VIRTUAL_LEARNER_PROTECTED',
+          message: `以下用户是虚拟学习者底层账号，请在「虚拟学习者管理」中处理：${virtualProfiles.map((p) => p.userId).join(', ')}`
+        }
+      });
+    }
+
+    // 最后管理员保护：删除管理员前统计删除后的剩余管理员数量
+    const adminsInBatch = await prisma.users.findMany({
+      where: { id: { in: ids }, isAdmin: true },
+      select: { id: true }
+    });
+    if (adminsInBatch.length > 0) {
+      const remainingAdmins = await prisma.users.count({ where: { isAdmin: true } }) - adminsInBatch.length;
+      if (remainingAdmins <= 1) {
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: 'LAST_ADMIN_PROTECTED',
+            message: '系统至少需要保留 2 名管理员，批量删除中不能包含最后的管理员'
+          }
+        });
+      }
     }
 
     const result = await prisma.users.deleteMany({
@@ -425,7 +488,7 @@ router.delete('/:id', async (req, res, next) => {
 
     const target = await prisma.users.findUnique({
       where: { id: userId },
-      select: { id: true }
+      select: { id: true, isAdmin: true }
     });
 
     if (!target) {
@@ -433,6 +496,20 @@ router.delete('/:id', async (req, res, next) => {
         success: false,
         error: { message: '用户不存在' }
       });
+    }
+
+    // 最后管理员保护：删除管理员前统计剩余管理员数量
+    if (target.isAdmin) {
+      const remainingAdmins = await prisma.users.count({ where: { isAdmin: true } }) - 1;
+      if (remainingAdmins <= 1) {
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: 'LAST_ADMIN_PROTECTED',
+            message: '系统至少需要保留 2 名管理员，无法删除最后的管理员'
+          }
+        });
+      }
     }
 
     await prisma.users.delete({ where: { id: userId } });

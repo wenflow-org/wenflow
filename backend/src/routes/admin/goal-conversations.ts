@@ -121,6 +121,14 @@ router.patch('/:id', async (req: any, res) => {
     const { id } = req.params;
     const { status, collectedData } = req.body;
 
+    const ALLOWED_STATUSES = ['active', 'completed', 'cancelled', 'discarded'];
+    if (status !== undefined && (typeof status !== 'string' || !ALLOWED_STATUSES.includes(status))) {
+      return res.status(400).json({
+        success: false,
+        error: { message: `status 仅支持 ${ALLOWED_STATUSES.join(' / ')}` }
+      });
+    }
+
     const updateData: any = {};
     if (status) {
       updateData.status = status;

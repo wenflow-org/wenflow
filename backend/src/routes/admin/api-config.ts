@@ -153,11 +153,14 @@ router.put('/', async (req, res) => {
       });
     }
 
-    const modelsArray = Array.isArray(availableModels)
+    const parsedModelsArray = Array.isArray(availableModels)
       ? availableModels
       : typeof availableModels === 'string'
         ? availableModels.split(',').map((m: string) => m.trim()).filter(Boolean)
         : currentConfig.availableModels;
+    const modelsArray = Array.isArray(parsedModelsArray) && parsedModelsArray.length > 0
+      ? parsedModelsArray
+      : currentConfig.availableModels;
 
     const updatedConfig = await apiConfigService.updateConfig({
       apiUrl: finalApiUrl,

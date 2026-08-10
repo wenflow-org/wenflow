@@ -1803,12 +1803,14 @@ router.get('/skill-catalog', async (_req: Request, res: Response) => {
               const schema = parsePromptSchema(prompt.systemPrompt);
               inputFields = (schema.inputFields || []).map((f) => ({
                 path: f.path,
+                name: f.path,
                 valueType: f.valueType,
                 enumValues: f.enumValues || null,
                 note: f.note || '',
               }));
               outputFields = (schema.outputFields || []).map((f) => ({
                 path: f.path,
+                name: f.path,
                 valueType: f.valueType,
                 enumValues: f.enumValues || null,
                 note: f.note || '',
