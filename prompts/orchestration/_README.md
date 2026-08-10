@@ -67,6 +67,36 @@ prompts/orchestration/<stage>.yaml
 
 - **单源化**：seed-*-field-routings.ts 已退役（2026-08 单源化收尾），编排文件为字段路由唯一声明源与唯一编辑入口。
 
+## 运营阅读指南
+
+> 给不写代码的运营同学：这张表（admin → 编排 →「字段路由」tab）在讲什么、怎么看。
+
+### 怎么看一个字段
+
+1. **字段名**（如 `understanding.scenario`）是点分路径：第一段是命名空间（`understanding`=理解/澄清），后面逐级细化（`scenario`=场景）。表里字段名下方有浅色分段小字，含义列直接给一句话人话，不需要翻本文件。
+2. **含义列**：悬停可看 取值枚举 / 备注。
+3. **角色列**决定"这个字段是干嘛的"，见下表。
+4. **render 列**决定"用户看不看得到"：visible=对外可见，hidden=仅内部流转。
+5. **锁定列**决定"能不能改"：系统锁/结构锁要改编排文件并谨慎操作，可编辑也不建议直接改 DB（唯一编辑入口就是「编排文件」按钮）。
+
+### 角色人话表（promptRole）
+
+| promptRole | 人话 |
+|---|---|
+| hard-required | 必填：缺了这个字段，本阶段流程就无法推进 |
+| soft-info | 可选补充：拿到更好，缺失也能继续 |
+| hidden-inference | 隐式推断：模型内部推理，不直接展示给用户 |
+| public-reply | 公开回复：直接呈现给用户看的对话内容 |
+| proposal-output | 方案产出：确认下来的结论 / 计划 / 范围 |
+| derived-presentation | 派生展示：由其他字段计算派生，用于界面展示 |
+| control-signal | 控制信号：平台流程 / UI 控制用，不是学习内容 |
+
+### 流转怎么读
+
+- **handoff**：该字段产完后移交给谁（`goal-agent` / `path` 等阶段或 skill），空 = 不转交。
+- **internal = 是**：仅供 UI 消费、不进业务状态；**accumulate = 是**：累积进学习者状态。
+- 字段的实际物理位置（`pathInRawOutput`）在编排文件 `fields[].pathInRawOutput` 里，admin 表当前版本不展示。
+
 ## 变更流程
 
 1. **改字段/路由 = 改编排文件** + 跑 bootstrap（`npm run prompts:bootstrap`，或等后端启动自动灌入）。

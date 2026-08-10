@@ -7,6 +7,66 @@
     <p class="frt__notice">
       行级编辑已收敛：修改字段路由请使用右上角「编排文件」按钮，保存后新建行即时生效，已有行修改后点「强制同步 DB」
     </p>
+
+    <!-- 图例：角色 / render / 锁定 一句话人话表（可折叠） -->
+    <details class="frt__legend" :open="legendOpen" @toggle="legendOpen = ($event.target as HTMLDetailsElement).open">
+      <summary class="frt__legend-summary">图例：字段角色 / render / 锁定 —— 不懂就看这里</summary>
+      <div class="frt__legend-body">
+        <div class="frt__legend-group frt__legend-group--roles">
+          <h5 class="frt__legend-title">字段角色（promptRole）</h5>
+          <ul class="frt__legend-list">
+            <li v-for="m in ROLE_META" :key="m.id" class="frt__legend-item">
+              <span class="frt__role" :class="`frt__role--${m.id}`">{{ m.label }}</span>
+              <span class="frt__legend-en mono">{{ m.id }}</span>
+              <span class="frt__legend-hint">{{ m.hint }}</span>
+            </li>
+          </ul>
+        </div>
+        <div class="frt__legend-group">
+          <h5 class="frt__legend-title">render（是否对外可见）</h5>
+          <ul class="frt__legend-list">
+            <li class="frt__legend-item">
+              <span class="frt__render-badge frt__render-badge--visible">visible</span>
+              <span class="frt__legend-hint">可见：会出现在对外交付（用户 / 界面）</span>
+            </li>
+            <li class="frt__legend-item">
+              <span class="frt__render-badge frt__render-badge--hidden">hidden</span>
+              <span class="frt__legend-hint">隐藏：仅内部流转，不对外展示</span>
+            </li>
+          </ul>
+          <h5 class="frt__legend-title">锁定</h5>
+          <ul class="frt__legend-list">
+            <li class="frt__legend-item">
+              <span class="frt__lock frt__lock--system-locked">系统锁</span>
+              <span class="frt__legend-hint">平台派生 / 代码消费，admin 不可直接改（需改编排文件）</span>
+            </li>
+            <li class="frt__legend-item">
+              <span class="frt__lock frt__lock--structure-locked">结构锁</span>
+              <span class="frt__legend-hint">结构约束锁定，修改需谨慎</span>
+            </li>
+            <li class="frt__legend-item">
+              <span class="frt__lock frt__lock--editable">可编辑</span>
+              <span class="frt__legend-hint">可自由调整（仍走编排文件入口）</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <p class="frt__legend-foot">
+        机制说明见仓库 <span class="mono">prompts/orchestration/_README.md</span> · 设计落盘
+        <span class="mono">doc/FIELD_ROUTING_UX_REDESIGN.md</span>
+      </p>
+    </details>
+
+    <!-- 搜索 / 角色过滤 -->
+    <div class="mk-filter frt__filter">
+      <input v-model="keyword" class="mk-filter__input" type="search" placeholder="搜索字段名 / 含义 / 角色 / render / 移交…" />
+      <select v-model="roleFilter" class="mk-filter__select" aria-label="按角色过滤">
+        <option value="">全部角色</option>
+        <option v-for="m in ROLE_META" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>
+      </select>
+      <span v-if="filterActive" class="frt__filter-count">命中 {{ filteredTotal }} / {{ routings.length }} 行</span>
+    </div>
+
     <div v-if="loading" class="frt__empty">加载中…</div>
     <div v-else-if="error" class="frt__empty">{{ error }}</div>
     <template v-else>
@@ -14,13 +74,14 @@
         <div class="frt__agenthead">
           <span class="frt__agentname mono">{{ agent.agentId }}</span>
           <span class="frt__agentdesc">{{ agent.description }}</span>
-          <span class="frt__agentcount">{{ routingsOf(agent.agentId).length }} 行</span>
+          <span class="frt__agentcount">{{ filteredOf(agent.agentId).length }}<template v-if="filterActive"> / {{ routingsOf(agent.agentId).length }}</template> 行</span>
         </div>
         <div class="frt__scroll">
           <table class="frt__table">
             <thead>
               <tr>
                 <th scope="col">字段</th>
+                <th scope="col">含义</th>
                 <th scope="col">类型</th>
                 <th scope="col">角色</th>
                 <th scope="col">render</th>
@@ -31,18 +92,40 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in routingsOf(agent.agentId)" :key="row.id">
-                <td class="mono frt__field">{{ row.fieldId }}</td>
+              <tr v-for="row in filteredOf(agent.agentId)" :key="row.id">
+                <td class="frt__fieldcell">
+                  <span class="mono frt__field">{{ row.fieldId }}</span>
+                  <span v-if="pathParts(row.fieldId).length > 1" class="frt__fieldpath" :title="row.fieldId">{{ pathParts(row.fieldId).join(' · ') }}</span>
+                </td>
+                <td class="frt__meaning">
+                  <span class="frt__meaning-text" :title="meaningTitle(row)">{{ descOf(row.fieldId) || '—' }}</span>
+                </td>
                 <td class="mono">{{ typeOf(row.fieldId) }}</td>
-                <td><span class="frt__role">{{ roleOf(row.fieldId) }}</span></td>
-                <td><span class="mono frt__render">{{ row.render }}</span></td>
-                <td><span class="mono frt__handoff">{{ formatHandoff(row.handoff) }}</span></td>
+                <td>
+                  <span
+                    v-if="roleMetaOf(row.fieldId)"
+                    class="frt__role"
+                    :class="`frt__role--${roleMetaOf(row.fieldId)!.id}`"
+                    :title="roleMetaOf(row.fieldId)!.hint"
+                  >{{ roleMetaOf(row.fieldId)!.label }}</span>
+                  <span v-else class="mk-na">—</span>
+                </td>
+                <td>
+                  <span
+                    class="frt__render-badge"
+                    :class="`frt__render-badge--${row.render}`"
+                    :title="renderHint(row)"
+                  >{{ row.render }}</span>
+                </td>
+                <td><span class="mono frt__handoff" :title="handoffTitle(row)">{{ formatHandoff(row.handoff) }}</span></td>
                 <td>{{ row.internal ? '是' : '否' }}</td>
                 <td>{{ row.accumulate ? '是' : '否' }}</td>
-                <td><span class="frt__lock" :class="`frt__lock--${row.locks?.level || 'editable'}`">{{ lockLabel(row.locks?.level) }}</span></td>
+                <td><span class="frt__lock" :class="`frt__lock--${row.locks?.level || 'editable'}`" :title="lockHint(row.locks?.level)">{{ lockLabel(row.locks?.level) }}</span></td>
               </tr>
-              <tr v-if="routingsOf(agent.agentId).length === 0">
-                <td colspan="8" class="frt__emptyrow">该 Agent 无字段路由行</td>
+              <tr v-if="filteredOf(agent.agentId).length === 0">
+                <td colspan="9" class="frt__emptyrow">
+                  {{ routingsOf(agent.agentId).length ? '无匹配行，试试调整搜索或角色过滤' : '该 Agent 无字段路由行' }}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -84,13 +167,20 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { onMounted, ref, computed, watch } from 'vue';
 import { adminFieldRoutingsApi } from '@/api/adminApi';
 import { useEscape } from './useEscape';
 import { useOverlay, useMaskClose } from './useOverlay';
 import { toast } from '@/utils/toast';
 
-interface FieldItem { fieldId: string; valueType?: string; promptRole?: string; locks?: { level?: string } }
+interface FieldItem {
+  fieldId: string;
+  valueType?: string;
+  promptRole?: string;
+  description?: string | null;
+  enumValues?: unknown;
+  locks?: { level?: string };
+}
 interface AgentItem { agentId: string; description?: string }
 interface RoutingItem {
   id: string;
@@ -101,22 +191,74 @@ interface RoutingItem {
   internal: boolean;
   accumulate: boolean;
   locks?: { level?: string };
+  notes?: string | null;
+  visibilityPreset?: string | null;
 }
 
 const props = defineProps<{ stage: string }>();
 const emit = defineEmits<{ changed: [] }>();
+
+/* ============ 词表：角色人话映射（图例 + 单元格共用单一来源） ============ */
+
+const ROLE_META: Array<{ id: string; label: string; hint: string }> = [
+  { id: 'hard-required', label: '必填', hint: '必填：缺了这个字段，本阶段流程就无法推进' },
+  { id: 'soft-info', label: '可选补充', hint: '可选补充：拿到更好，缺失也能继续' },
+  { id: 'hidden-inference', label: '隐式推断', hint: '隐式推断：模型内部推理，不直接展示给用户' },
+  { id: 'public-reply', label: '公开回复', hint: '公开回复：直接呈现给用户看的对话内容' },
+  { id: 'proposal-output', label: '方案产出', hint: '方案产出：确认下来的结论 / 计划 / 范围' },
+  { id: 'derived-presentation', label: '派生展示', hint: '派生展示：由其他字段计算派生，用于界面展示' },
+  { id: 'control-signal', label: '控制信号', hint: '控制信号：平台流程 / UI 控制用，不是学习内容' },
+];
 
 const fields = ref<FieldItem[]>([]);
 const agents = ref<AgentItem[]>([]);
 const routings = ref<RoutingItem[]>([]);
 const loading = ref(false);
 const error = ref('');
+const keyword = ref('');
+const roleFilter = ref('');
+const legendOpen = ref(false);
 
 const fieldMap = () => new Map(fields.value.map((f) => [f.fieldId, f]));
 
 function typeOf(fieldId: string) { return fieldMap().get(fieldId)?.valueType || '—'; }
-function roleOf(fieldId: string) { return fieldMap().get(fieldId)?.promptRole || '—'; }
+function descOf(fieldId: string) { return fieldMap().get(fieldId)?.description || ''; }
+function roleOf(fieldId: string) { return fieldMap().get(fieldId)?.promptRole || ''; }
+function roleMetaOf(fieldId: string) {
+  const role = roleOf(fieldId);
+  if (!role) return undefined;
+  const meta = ROLE_META.find((m) => m.id === role);
+  return meta || { id: role, label: role, hint: role };
+}
+function pathParts(fieldId: string) { return fieldId.split('.'); }
 function routingsOf(agentId: string) { return routings.value.filter((r) => r.agentId === agentId); }
+
+const filterActive = computed(() => Boolean(keyword.value.trim() || roleFilter.value));
+const filteredTotal = computed(() => routings.value.filter(matches).length);
+
+function matches(r: RoutingItem) {
+  if (roleFilter.value && roleOf(r.fieldId) !== roleFilter.value) return false;
+  const kw = keyword.value.trim().toLowerCase();
+  if (!kw) return true;
+  const meta = roleMetaOf(r.fieldId);
+  const hay = [
+    r.fieldId,
+    descOf(r.fieldId),
+    meta?.label || '',
+    meta?.hint || '',
+    r.render,
+    r.visibilityPreset || '',
+    formatHandoff(r.handoff),
+    lockLabel(r.locks?.level),
+    r.notes || '',
+  ].join(' ').toLowerCase();
+  return hay.includes(kw);
+}
+
+function filteredOf(agentId: string) {
+  return routingsOf(agentId).filter(matches);
+}
+
 function formatHandoff(raw: string | string[] | null) {
   if (!raw) return '';
   if (Array.isArray(raw)) return raw.join(', ');
@@ -127,10 +269,35 @@ function formatHandoff(raw: string | string[] | null) {
     return raw;
   }
 }
+function handoffTitle(row: RoutingItem) {
+  const parts: string[] = [];
+  if (row.handoff) parts.push(`移交 → ${formatHandoff(row.handoff)}`);
+  if (row.visibilityPreset) parts.push(`可见性预设：${row.visibilityPreset}`);
+  if (row.notes) parts.push(`备注：${row.notes}`);
+  return parts.join('\n');
+}
+function meaningTitle(row: RoutingItem) {
+  const parts: string[] = [];
+  const desc = descOf(row.fieldId);
+  if (desc) parts.push(desc);
+  const ev = fieldMap().get(row.fieldId)?.enumValues;
+  if (Array.isArray(ev) && ev.length) parts.push(`取值：${ev.join(' / ')}`);
+  if (row.notes) parts.push(`备注：${row.notes}`);
+  return parts.join('\n');
+}
+function renderHint(row: RoutingItem) {
+  const base = row.render === 'hidden' ? '隐藏：仅内部流转，不对外展示' : '可见：会出现在对外交付（用户 / 界面）';
+  return row.visibilityPreset ? `${base}\n可见性预设：${row.visibilityPreset}` : base;
+}
 function lockLabel(level?: string) {
   if (level === 'system-locked') return '系统锁';
   if (level === 'structure-locked') return '结构锁';
   return '可编辑';
+}
+function lockHint(level?: string) {
+  if (level === 'system-locked') return '系统锁：平台派生 / 代码消费，admin 不可直接改（需改编排文件）';
+  if (level === 'structure-locked') return '结构锁：结构约束锁定，修改需谨慎';
+  return '可编辑：可自由调整（仍走编排文件入口）';
 }
 
 async function loadStage() {
@@ -264,6 +431,69 @@ watch(() => props.stage, () => void loadStage());
 .frt__toolbar-btn:hover { background: #f6f9ff; border-color: rgba(52, 120, 246, 0.4); }
 .frt__toolbar-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .frt__toolbar-hint { color: var(--mk-faint, #71809a); font-size: 12px; }
+
+/* ========== 图例（可折叠） ========== */
+.frt__legend {
+  margin: 0 0 12px;
+  border: 1px solid var(--mk-line, #e6ebf4);
+  border-radius: 10px;
+  background: var(--mk-surface, #fff);
+  box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06));
+}
+.frt__legend-summary {
+  padding: 9px 14px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--mk-muted, #5b6577);
+  list-style: none;
+  transition: color 0.14s ease;
+}
+.frt__legend-summary::-webkit-details-marker { display: none; }
+.frt__legend-summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 7px;
+  color: var(--mk-blue, #3478f6);
+  transition: transform 0.14s ease;
+}
+.frt__legend[open] .frt__legend-summary::before { transform: rotate(90deg); }
+.frt__legend-summary:hover { color: var(--mk-ink, #1a2a44); }
+.frt__legend-body {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 14px;
+  padding: 4px 14px 10px;
+}
+@media (max-width: 860px) {
+  .frt__legend-body { grid-template-columns: 1fr; }
+}
+.frt__legend-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mk-faint, #71809a);
+}
+.frt__legend-group--roles + .frt__legend-group .frt__legend-title { margin-top: 10px; }
+.frt__legend-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+.frt__legend-item { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.frt__legend-en { flex-shrink: 0; font-size: 11px; color: var(--mk-faint, #71809a); }
+.frt__legend-hint { font-size: 12px; color: var(--mk-muted, #5b6577); min-width: 0; }
+.frt__legend-foot {
+  margin: 0;
+  padding: 6px 14px 10px;
+  font-size: 11px;
+  color: var(--mk-faint, #71809a);
+}
+.frt__legend-foot .mono { font-size: 11px; color: var(--mk-blue, #3478f6); }
+
+/* ========== 搜索 / 过滤 ========== */
+.frt__filter { margin-bottom: 12px; }
+.frt__filter-count { font-size: 11.5px; color: var(--mk-faint, #71809a); font-weight: 600; }
+
 .frt__orch-panel { width: min(820px, 100%); }
 .frt__orch-summary {
   display: flex;
@@ -311,10 +541,10 @@ watch(() => props.stage, () => void loadStage());
 .frt__agentdesc { color: var(--mk-faint, #71809a); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .frt__agentcount { margin-left: auto; padding: 1px 9px; border-radius: 999px; background: #eef2fa; color: var(--mk-muted, #5b6577); font-size: 11px; font-weight: 700; white-space: nowrap; }
 .frt__table { width: 100%; border-collapse: collapse; }
-/* 8 列表格：窄屏横向滚动（≤860px 设最小宽度，列不被挤压） */
+/* 9 列表格：窄屏横向滚动（≤860px 设最小宽度，列不被挤压） */
 .frt__scroll { overflow-x: auto; }
 @media (max-width: 860px) {
-  .frt__table { min-width: 720px; }
+  .frt__table { min-width: 900px; }
   .frt__table th, .frt__table td { padding: 7px 9px; }
 }
 .frt__table th, .frt__table td { padding: 8px 12px; text-align: left; }
@@ -332,9 +562,43 @@ watch(() => props.stage, () => void loadStage());
 .frt__table tr:last-child td { border-bottom: none; }
 .frt__table tbody tr { transition: background 0.12s; }
 .frt__table tbody tr:hover { background: #f6f9ff; }
-.frt__field { max-width: 300px; word-break: break-all; color: var(--mk-ink, #1a2a44); }
-.frt__role { display: inline-block; padding: 1px 8px; border-radius: 999px; background: #f0f2f5; color: var(--mk-muted, #5b6577); font-size: 11px; font-weight: 600; }
-.frt__render { color: var(--mk-ink, #1a2a44); }
+
+/* 字段列：点分名 + 层级分段小字 */
+.frt__fieldcell { max-width: 300px; display: grid; gap: 2px; min-width: 0; }
+.frt__field { word-break: break-all; color: var(--mk-ink, #1a2a44); }
+.frt__fieldpath {
+  font-size: 10.5px;
+  color: var(--mk-faint, #71809a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 含义列 */
+.frt__meaning { min-width: 200px; max-width: 340px; }
+.frt__meaning-text {
+  display: block;
+  color: var(--mk-muted, #5b6577);
+  line-height: 1.5;
+  max-height: 3em;
+  overflow: hidden;
+}
+
+/* 角色徽章（7 类着色，与图例共用） */
+.frt__role { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.frt__role--hard-required { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red-strong, #b91c1c); }
+.frt__role--soft-info { background: #eff6ff; color: #2563eb; }
+.frt__role--hidden-inference { background: #f4f0ff; color: #7c3aed; }
+.frt__role--public-reply { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #15803d); }
+.frt__role--proposal-output { background: #effcf9; color: #0d9488; }
+.frt__role--derived-presentation { background: var(--mk-amber-bg, #fffbeb); color: var(--mk-amber, #b45309); }
+.frt__role--control-signal { background: #f0f2f5; color: #5b6577; }
+
+/* render 徽章 */
+.frt__render-badge { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.frt__render-badge--visible { background: #e8f7ef; color: #15803d; }
+.frt__render-badge--hidden { background: #f0f2f5; color: #5b6577; }
+
 .frt__handoff { max-width: 220px; color: var(--mk-faint, #71809a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .frt__lock { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .frt__lock--system-locked { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
