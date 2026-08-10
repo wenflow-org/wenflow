@@ -657,7 +657,11 @@ const flows = computed(() => {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  padding: 2px 2px 12px;
+  padding: 8px 14px;
+  background: var(--mk-surface);
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  box-shadow: var(--mk-shadow-sm);
 }
 .topo-toolbar__status {
   display: flex;
@@ -682,14 +686,12 @@ const flows = computed(() => {
   70% { box-shadow: 0 0 0 6px rgba(22, 163, 74, 0); }
   100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
 }
-.topo-toolbar__title { font-size: 13px; font-weight: 600; color: #16233c; }
+.topo-toolbar__title { font-size: 14px; font-weight: 700; color: var(--mk-ink); }
 .topo-toolbar__sep { width: 1px; height: 14px; background: var(--mk-line); }
 .topo-toolbar__meta {
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.06em;
   color: var(--mk-faint);
-  font-family: var(--mk-mono);
   font-variant-numeric: tabular-nums;
 }
 .topo-toolbar__meta b { color: var(--mk-ink); font-weight: 600; margin-right: 3px; }
@@ -735,7 +737,7 @@ const flows = computed(() => {
 .topo-canvas {
   position: relative;
   border: 1px solid var(--mk-line);
-  border-radius: 16px;
+  border-radius: 12px;
   background:
     radial-gradient(640px 320px at 14% 0%, rgba(52, 120, 246, 0.06), transparent 70%),
     linear-gradient(90deg, rgba(214, 223, 238, 0.55) 1px, transparent 1px) 0 0 / 24px 24px,
@@ -888,7 +890,7 @@ const flows = computed(() => {
   height: 88px;
   background: linear-gradient(180deg, color-mix(in srgb, var(--hue) 5%, #ffffff), #ffffff 55%);
   border: 1px solid color-mix(in srgb, var(--hue) 18%, #e6ecf6);
-  border-radius: 13px;
+  border-radius: 12px;
   padding: 12px 13px 11px;
   box-shadow: 0 1px 2px rgba(30, 58, 110, 0.04), 0 8px 20px rgba(30, 58, 110, 0.06);
   display: flex;
