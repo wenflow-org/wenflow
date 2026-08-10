@@ -427,17 +427,7 @@ const verdictText = computed(() => {
 </script>
 
 <style scoped>
-/* 页面撑满视口：瀑布列表内部滚动（同执行日志模式；高度 = 100vh − 顶栏 52 − 页脚 42） */
-.mk-page {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 94px);
-  min-height: 480px;
-}
 .wf {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   background: var(--mk-surface);
@@ -764,8 +754,6 @@ const verdictText = computed(() => {
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  /* 顶栏升 64px：页面高度跟随（100vh − 顶栏 64 − 页脚 42） */
-  .mk-page { height: calc(100vh - 106px); }
   .wf-tracepick__count { font-size: 13px; }
   .wf-tracepick__search { font-size: 12.5px; padding: 8px 12px; width: 150px; }
   .wf-tracepick__select { font-size: 13px; padding: 8px 12px; max-width: 380px; }
@@ -781,8 +769,7 @@ const verdictText = computed(() => {
   .wf-verdict p { font-size: 14.5px; }
 }
 @media (min-width: 2800px) {
-  /* zoom 1.15 档：高度换算回逻辑坐标（100vh ÷ 1.15 − 顶栏 78 − 页脚 42） */
-  .mk-page { height: calc(100vh / 1.15 - 120px); }
+  /* zoom 1.15 档：字号沿用 2000px 档 */
   .wf-tracepick__count { font-size: 15.5px; }
   .wf-tracepick__search { font-size: 15px; padding: 10px 14px; width: 180px; }
   .wf-tracepick__select { font-size: 15.5px; padding: 10px 14px; max-width: 460px; }
@@ -798,8 +785,7 @@ const verdictText = computed(() => {
   .wf-verdict p { font-size: 17px; }
 }
 @media (min-width: 3600px) {
-  /* 4K 分辨率（zoom 1.3 档）：高度换算回逻辑坐标（100vh ÷ 1.3 − 顶栏 78 − 页脚 42），字号继续放大 */
-  .mk-page { height: calc(100vh / 1.3 - 120px); }
+  /* 4K 分辨率（zoom 1.3 档）：字号继续放大 */
   .wf-ruler { grid-template-columns: 460px 1fr; }
   .wf-ruler__label { font-size: 17.5px; padding: 14px 24px; }
   .wf-row__main { grid-template-columns: 460px 1fr auto; }

@@ -1372,8 +1372,10 @@ function goFullEditor() {
 /* 4K：抽屉加宽 + 字号跟随壳层放大（原 460px + 10px 是全站最小） */
 @media (min-width: 2000px) {
   .msk__panel { width: min(600px, 100vw); }
+  .msk__head { padding: 20px 24px; }
   .msk__name { font-size: 19px; }
   .msk__id { font-size: 12.5px; }
+  .msk__body { padding: 20px 24px; }
   .msk__close { width: 34px; height: 34px; font-size: 16px; }
   .msk__chip { font-size: 12.5px; }
   .msk__tab-badge { font-size: 12px; }
@@ -1407,8 +1409,10 @@ function goFullEditor() {
 }
 @media (min-width: 2800px) {
   .msk__panel { width: min(760px, 100vw); }
+  .msk__head { padding: 24px 30px; }
   .msk__name { font-size: 23px; }
   .msk__id { font-size: 15px; }
+  .msk__body { padding: 24px 30px; }
   .msk__close { width: 40px; height: 40px; font-size: 19px; }
   .msk__chip { font-size: 15px; }
   .msk__tab-badge { font-size: 14px; }
@@ -1443,8 +1447,10 @@ function goFullEditor() {
 @media (min-width: 3600px) {
   /* 4K（抽屉 Teleport 到 body，无 zoom）：面板再加宽、字号继续放大 */
   .msk__panel { width: min(890px, 100vw); }
+  .msk__head { padding: 28px 36px; }
   .msk__name { font-size: 27px; }
   .msk__id { font-size: 17.5px; }
+  .msk__body { padding: 28px 36px; }
   .msk__close { width: 47px; height: 47px; font-size: 22px; }
   .msk__chip { font-size: 17.5px; }
   .msk__tab-badge { font-size: 16.5px; }

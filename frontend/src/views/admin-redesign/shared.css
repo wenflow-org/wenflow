@@ -8,6 +8,16 @@
   --mk-z-modal: 300;
   --mk-z-toast: 400;
 
+  /* 覆盖层高度上限 token：弹层/抽屉共用。当前各页面仍有字面量（CommandPalette 60vh /
+     Skills 68vh / SkillDesignPage 74vh），后续收敛到此统一上限（min 兜底小屏不溢出） */
+  --mk-overlay-maxh: min(74vh, 680px);
+
+  /* 抽屉宽度档 token：供各详情抽屉 4K 镜像断点复用（base 560 → lg 700 → xl 880 → xxl 1040） */
+  --mk-drawer-w: 560px;
+  --mk-drawer-w-lg: 700px;
+  --mk-drawer-w-xl: 880px;
+  --mk-drawer-w-xxl: 1040px;
+
   /* 颜色/字体 token 全局定义：抽屉/弹窗 Teleport 到 body 后不在 .mk-page 内，必须全局可用 */
   --mk-ink: #1a2a44;
   --mk-muted: #5b6577;

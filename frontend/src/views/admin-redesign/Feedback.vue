@@ -507,12 +507,13 @@ onMounted(() => {
   .fb-panel__id { font-size: 12.5px; }
   .fb-panel__body { padding: 20px 24px; }
   .fb-facts span { font-size: 13px; }
-  .fb-facts strong { font-size: 14px; }
+  .fb-facts strong { font-size: 14.5px; }
   .fb-section h4 { font-size: 13px; }
   .fb-text { font-size: 14.5px; }
   .fb-note { font-size: 14px; }
   .fb-code { font-size: 12.5px; }
   .fb-meta { font-size: 12px; }
+  .fb-btn-primary, .fb-btn-muted { font-size: 14px; }
 }
 @media (min-width: 2800px) {
   .fb-panel { width: min(860px, 100vw); }
@@ -521,12 +522,13 @@ onMounted(() => {
   .fb-panel__id { font-size: 15px; }
   .fb-panel__body { padding: 24px 30px; }
   .fb-facts span { font-size: 15.5px; }
-  .fb-facts strong { font-size: 16.5px; }
+  .fb-facts strong { font-size: 17px; }
   .fb-section h4 { font-size: 15.5px; }
   .fb-text { font-size: 17px; }
   .fb-note { font-size: 16.5px; }
   .fb-code { font-size: 15px; }
   .fb-meta { font-size: 14px; }
+  .fb-btn-primary, .fb-btn-muted { font-size: 16.5px; }
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
@@ -536,12 +538,12 @@ onMounted(() => {
   .fb-panel__id { font-size: 17.5px; }
   .fb-panel__body { padding: 28px 36px; }
   .fb-facts span { font-size: 18px; }
-  .fb-facts strong { font-size: 19.5px; }
+  .fb-facts strong { font-size: 20px; }
   .fb-section h4 { font-size: 18px; }
   .fb-text { font-size: 20px; }
   .fb-note { font-size: 19.5px; }
   .fb-code { font-size: 17.5px; }
   .fb-meta { font-size: 16.5px; }
-  .fb-btn-primary, .fb-btn-muted { font-size: 16.5px; }
+  .fb-btn-primary, .fb-btn-muted { font-size: 19.5px; }
 }
 </style>

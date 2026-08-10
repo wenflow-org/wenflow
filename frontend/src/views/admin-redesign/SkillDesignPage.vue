@@ -2556,7 +2556,10 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
 .sdp-codehl {
   position: relative;
   margin: 0 0 12px;
-  min-height: 46vh;
+  min-height: min(46vh, 620px);
+  max-height: min(74vh, 620px);
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--mk-code-border, #1c2a40);
   border-radius: 10px;
   background: var(--mk-code-bg, #0d1420);
@@ -2581,12 +2584,14 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   position: relative;
   z-index: 1;
   margin: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  resize: none;
   background: transparent;
   color: transparent;
   caret-color: #e8eef5;
   white-space: pre;
   overflow: auto;
-  min-height: 46vh;
   border-color: transparent;
 }
 .sdp-codehl__ta::placeholder { color: rgba(201, 212, 227, 0.4); }

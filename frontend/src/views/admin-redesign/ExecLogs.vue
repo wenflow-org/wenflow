@@ -539,19 +539,10 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   white-space: nowrap;
 }
 
-.mk-page {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 94px);
-  min-height: 480px;
-}
 .log-body {
-  flex: 1;
-  min-height: 0;
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   background: var(--mk-surface);
-  overflow-y: auto;
 }
 
 /* 表头：与全站表格页同规范（sticky 顶部、uppercase 小号标签） */
@@ -773,8 +764,6 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3，高度换算回逻辑坐标） ========== */
 @media (min-width: 2000px) {
-  /* 顶栏升 64px：页面高度跟随（100vh − 顶栏 64 − 页脚 42） */
-  .mk-page { height: calc(100vh - 106px); }
   .log-status { padding: 10px 16px; }
   .log-status strong { font-size: 15.5px; }
   .log-status__meta { font-size: 13px; }
@@ -795,13 +784,11 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   .tline-attempt__meta { font-size: 11.5px; }
 }
 @media (min-width: 2800px) {
-  /* zoom 1.15 档：高度换算回逻辑坐标（100vh ÷ 1.15 − 顶栏 78 − 页脚 42）；字号沿用 2000px 档 */
-  .mk-page { height: calc(100vh / 1.15 - 120px); }
+  /* zoom 1.15 档：字号沿用 2000px 档 */
   .log-status { padding: 12px 18px; border-radius: 14px; }
 }
 @media (min-width: 3600px) {
-  /* zoom 1.3 档：高度换算回逻辑坐标（100vh ÷ 1.3 − 顶栏 78 − 页脚 42）；字号继续放大 */
-  .mk-page { height: calc(100vh / 1.3 - 120px); }
+  /* zoom 1.3 档：字号继续放大 */
   .log-status { padding: 14px 22px; }
   .log-status strong { font-size: 18px; }
   .log-status__meta { font-size: 15px; }
