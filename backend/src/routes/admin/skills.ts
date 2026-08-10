@@ -27,6 +27,18 @@ import { VIRTUAL_LEARNER_REFEREE_PROMPT } from '../../skills/virtual-learner-ref
 import { VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT } from '../../skills/virtual-learner-actor-auditor';
 import { GOAL_UNDERSTANDING_COMPOSER_PROMPT } from '../../skills/goal-understanding-composer';
 import { ACCEPTANCE_EVIDENCE_EVALUATOR_PROMPT } from '../../skills/acceptance-evidence-evaluator';
+import { checkSkillsReadiness } from '../../services/skills-readiness.service';
+import { analyzeW2 } from '../../services/skills-readiness.service';
+import { loadSkillsBookRaw } from '../../services/skill-registry/skills-file';
+import { getSkillCompletion } from '../../services/skill-registry/skill-completion.service';
+import {
+  scaffoldSkill,
+  getScaffoldMeta,
+  ScaffoldInputError,
+  ScaffoldConflictError,
+} from '../../services/skill-registry/skill-scaffold.service';
+import { listRawManifestEntries } from '../../services/agent-manifest.service';
+import { loadOrchestrationFiles } from '../../services/field-routing/orchestration-file';
 
 const router = Router();
 
@@ -142,6 +154,63 @@ router.get('/', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/skills/scaffold/meta
+ * scaffold 表单元数据：kind/stage 枚举 + manifest kind=agent 条目（parentAgent 下拉数据源）。
+ */
+router.get('/scaffold/meta', async (_req: Request, res: Response) => {
+  try {
+    const meta = getScaffoldMeta();
+    res.json({ success: true, data: meta });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: { message: error instanceof Error ? error.message : 'scaffold meta 加载失败' },
+    });
+  }
+});
+
+/**
+ * POST /api/admin/skills/scaffold
+ * 新建 Skill 一条龙（SCAFFOLD_P5_SURVEY §5 / SKILL_READINESS_SPEC §5 步骤 1）：
+ * 确定性生成 core.yaml 骨架 + skills.yaml 条目 + 编排 contracts 追加（mainline）+ handler 占位，
+ * 每个生成物写盘前后过对应校验器；注册/接线片段仅返回文本不落盘。
+ *
+ * 幂等（以 skills.yaml 为唯一状态事实）：
+ *   条目与生成物齐备 → 409 already-exists；条目在但缺生成物 → 200 completed（补齐缺失）。
+ * 响应：{ success, data: { skillId, kind, status, generated, completion, snippets, note } }
+ */
+router.post('/scaffold', async (req: Request, res: Response) => {
+  try {
+    if (process.env.SKILLS_FILE_DISABLED === '1') {
+      return res.status(503).json({
+        success: false,
+        error: { message: 'SKILLS_FILE_DISABLED=1 过渡开关打开，户口簿未加载，拒绝写盘（无人校验）' },
+      });
+    }
+    const outcome = await scaffoldSkill(req.body || {});
+    if (outcome.status === 'already-exists') {
+      return res.status(409).json({
+        success: false,
+        error: { message: `skillId "${outcome.skillId}" 已存在（skills.yaml 有条目且生成物齐备）；如需补齐缺失生成物请直接重放本请求` },
+        data: { skillId: outcome.skillId, completion: outcome.completion },
+      });
+    }
+    res.json({ success: true, data: outcome });
+  } catch (error) {
+    if (error instanceof ScaffoldInputError) {
+      return res.status(400).json({ success: false, error: { message: error.message } });
+    }
+    if (error instanceof ScaffoldConflictError) {
+      return res.status(409).json({ success: false, error: { message: error.message } });
+    }
+    res.status(500).json({
+      success: false,
+      error: { message: error instanceof Error ? error.message : 'scaffold 执行失败' },
     });
   }
 });
@@ -432,6 +501,22 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
     const manifest = getAgentManifest(canonicalId);
 
     if (!manifest) {
+      // 404 降级（SKILL_READINESS_SPEC §1.2/§1.3）：不在 manifest 但户口簿有登记的 skill
+      // （scaffold 后、manifest 代码未合并前）→ 200 + draft 态 completion，否则才 404。
+      const shortSkillId = canonicalId.replace(/^skill:/, '');
+      const bookEntry = loadSkillsBookRaw().skills.find((entry) => entry.skillId === shortSkillId);
+      if (bookEntry) {
+        const completion = await getSkillCompletion(bookEntry.skillId);
+        return res.json({
+          success: true,
+          data: {
+            draft: true,
+            completion,
+            displayName: bookEntry.displayName || shortSkillId,
+            description: bookEntry.description || null,
+          },
+        });
+      }
       return res.status(404).json({
         success: false,
         error: { message: `Skill "${rawSkillId}" 不在 manifest 中` }
@@ -479,6 +564,14 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
     const stats = unifiedStats.get(shortSkillId);
     const activePrompt = promptVersions.find(p => p.status === 'ACTIVE' || p.status === 'published') || null;
 
+    // 完成度状态机（SKILL_READINESS_SPEC §1）：派生投影，复用本次查询的 promptVersions/stats
+    const completion = await getSkillCompletion(shortSkillId, {
+      activePromptIds: new Set(
+        promptVersions.some((p) => p.status === 'ACTIVE') ? [canonicalId] : [],
+      ),
+      lastCalledAt: stats?.lastCalledAt ? new Date(stats.lastCalledAt).toISOString() : null,
+    });
+
     res.json({
       success: true,
       data: {
@@ -491,6 +584,7 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
           ioContractVersion: manifest.ioContractVersion,
           noPromptFile: !!manifest.noPromptFile
         },
+        completion,
         parentAgent: parentAgent ? {
           id: parentAgent.id,
           name: parentAgent.name,
@@ -565,6 +659,126 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: { message: error?.message || 'workbench meta load failed' }
+    });
+  }
+});
+
+/**
+ * GET /api/admin/skills/reconciliation
+ *
+ * 技能四向对账（SKILL_READINESS_SPEC §4.2）：户口簿 / manifest / gateway 注册 / ACTIVE prompt
+ * 全量逐 skill 状态 + 完成度状态机投影 + 差集标记（unregistered / active-missing），
+ * 另附注册表幽灵残留（户口簿无登记）清单。前端 Skills.vue 对账面板唯一数据源。
+ */
+router.get('/reconciliation', async (req: Request, res: Response) => {
+  try {
+    const book = loadSkillsBookRaw();
+    const manifestSkillIds = new Set(
+      listRawManifestEntries()
+        .filter((item) => item.kind === 'skill' && item.id.startsWith('skill:'))
+        .map((item) => item.id.slice('skill:'.length)),
+    );
+    const [activeRows, registrations] = await Promise.all([
+      systemPrisma.agent_prompts.findMany({
+        where: { status: 'ACTIVE' },
+        select: { agentId: true },
+      }),
+      systemPrisma.skill_registrations.findMany({
+        select: { name: true },
+      }),
+    ]);
+    const activeIds = new Set(activeRows.map((row) => row.agentId));
+    const registeredNames = new Set(registrations.map((row) => row.name));
+
+    // 注册豁免点（agents/platform-direct 不落 skill_registrations 是预期，W2 语义）
+    const w2 = analyzeW2(book, registrations);
+    const exemptRegistrationPoints = new Set(['agents', 'platform-direct']);
+    const unregisteredSet = new Set(w2.missingRegistration);
+    const orphanRegistrations = registrations
+      .map((row) => row.name)
+      .filter((name) => !book.skills.some((entry) => entry.skillId === name))
+      .sort();
+
+    const orchestrationStages = loadOrchestrationFiles();
+    const items: Array<Record<string, unknown>> = [];
+    const byStatus: Record<string, number> = {};
+    let activeCount = 0;
+    let registeredCount = 0;
+
+    for (const entry of book.skills) {
+      const completion = await getSkillCompletion(entry.skillId, {
+        book,
+        orchestrationStages,
+        activePromptIds: activeIds,
+      });
+      const registered = registeredNames.has(entry.skillId);
+      const registrationExempt = exemptRegistrationPoints.has(entry.registrationPoint || 'skillHandlers');
+      const active = entry.noPromptFile === true ? true : activeIds.has(`skill:${entry.skillId}`);
+      if (registered) registeredCount += 1;
+      if (active) activeCount += 1;
+      byStatus[completion.status] = (byStatus[completion.status] || 0) + 1;
+
+      let diff: 'unregistered' | 'active-missing' | null = null;
+      if (!registered && !registrationExempt) diff = 'unregistered';
+      else if (!active && entry.noPromptFile !== true) diff = 'active-missing';
+
+      items.push({
+        skillId: entry.skillId,
+        kind: entry.kind,
+        displayName: entry.displayName || null,
+        stage: entry.stage || null,
+        book: true,
+        manifest: manifestSkillIds.has(entry.skillId),
+        registered,
+        active,
+        noPromptFile: entry.noPromptFile === true,
+        registrationExempt,
+        diff,
+        completion,
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        generatedAt: new Date().toISOString(),
+        summary: {
+          total: book.skills.length,
+          registered: registeredCount,
+          active: activeCount,
+          byStatus,
+          unregistered: unregisteredSet.size,
+          activeMissing: items.filter((item) => item.diff === 'active-missing').length,
+          orphanRegistrations: orphanRegistrations.length,
+        },
+        items,
+        orphanRegistrations: orphanRegistrations.map((name) => ({ name })),
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: { message: error?.message || 'skills reconciliation failed' },
+    });
+  }
+});
+
+/**
+ * GET /api/admin/skills/readiness
+ *
+ * W1-W5 技能完成度诊断（SKILL_READINESS_SPEC §3，全 warn 不阻断 ready）：
+ * 默认返回 60s 缓存；?refresh=1 时总是重算（按需正确性优先）。
+ * 结构：{ checks: { W1..W5 }, generatedAt }，与 readiness.service 启动异步通道同一份报告。
+ */
+router.get('/readiness', async (req: Request, res: Response) => {
+  try {
+    const refresh = req.query.refresh === '1' || req.query.refresh === 'true';
+    const report = await checkSkillsReadiness(systemPrisma as any, { skipCache: refresh });
+    res.json({ success: true, data: report });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: { message: error?.message || 'skills readiness check failed' }
     });
   }
 });

@@ -474,10 +474,60 @@ export const adminRuntimeDefinitionsApi = {
 /**
  * Skill 工作台综合元数据 API
  * 一次拉回：skill manifest + 隶属 Agent + 模型配置 + prompt 版本 + 字段契约 + 调用统计
+ * 完成度扩展（SKILL_READINESS_SPEC §1.3）：completion 字段；不在 manifest 但户口簿有登记的
+ * skill 降级返回 draft 态（data.draft=true + completion + displayName/description），不再 404。
  */
+export interface SkillCompletionGateDetail {
+  ok: boolean;
+  detail: string;
+}
+
+export interface SkillCompletionItem {
+  id: string;
+  label: string;
+  ok: boolean | null;
+  hint?: string;
+}
+
+export interface SkillCompletion {
+  status: 'draft' | 'handler-ready' | 'core-ready' | 'fields-synced' | 'live';
+  gates: {
+    draft: SkillCompletionGateDetail;
+    handlerReady: SkillCompletionGateDetail;
+    coreReady: SkillCompletionGateDetail;
+    fieldsSynced: SkillCompletionGateDetail;
+    live: SkillCompletionGateDetail;
+  };
+  items: SkillCompletionItem[];
+  warnings: string[];
+}
+
+export interface SkillWorkbenchMeta {
+  skill?: {
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+    aliases: string[];
+    ioContractVersion?: string;
+    noPromptFile: boolean;
+  };
+  parentAgent?: { id: string; name: string; monitoringGroup?: string } | null;
+  completion?: SkillCompletion;
+  /** 404 降级分支：不在 manifest 但户口簿有登记的 skill */
+  draft?: boolean;
+  displayName?: string;
+  description?: string | null;
+  activePromptId?: string | null;
+  [key: string]: unknown;
+}
+
 export const adminSkillWorkbenchApi = {
   getMeta: async (skillId: string) => {
     const canonicalSkillId = skillId.startsWith('skill:') ? skillId : `skill:${skillId}`;
+    // 返回体结构：{ success, data: SkillWorkbenchMeta }；data.completion 为可选新增字段，
+    // 404 降级分支 data.draft=true。既有调用方（SkillDrawer/SkillDesignPage）用
+    // `res?.data?.data ?? res?.data` 取值，保持返回类型宽松不破坏。
     return adminAxios.get(`/admin/skills/${encodeURIComponent(canonicalSkillId)}/workbench-meta`);
   },
 };
@@ -766,7 +816,99 @@ export const adminSkillsApi = {
   getEffectiveSkillPrompt: async (skillId: string) => {
     return adminAxios.get(`/admin/skills/${encodeURIComponent(skillId)}/effective-prompt`);
   },
+
+  /**
+   * 技能四向对账（SKILL_READINESS_SPEC §4.2）：户口簿 / manifest / gateway 注册 / ACTIVE prompt
+   * 全量逐 skill 状态 + 完成度投影 + 差集标记（Skills.vue 对账面板数据源）。
+   */
+  getReconciliation: async () => {
+    return adminAxios.get<{ success: boolean; data: SkillReconciliationReport }>('/admin/skills/reconciliation');
+  },
+
+  /**
+   * W1-W5 readiness 诊断（全 warn 不阻断 ready）；refresh=true 时总是重算。
+   */
+  getReadiness: async (refresh = false) => {
+    return adminAxios.get('/admin/skills/readiness', { params: refresh ? { refresh: 1 } : {} });
+  },
+
+  /**
+   * 新建 Skill 一条龙（P5 scaffold，SKILL_READINESS_SPEC §5 步骤 1）：
+   * 确定性生成 core.yaml 骨架 + skills.yaml 条目 + 编排 contracts 追加（mainline）+ handler 占位，
+   * 注册/接线片段仅返回文本。幂等：条目与生成物齐备 → 409；条目在但缺生成物 → completed 补齐。
+   */
+  scaffold: async (payload: SkillScaffoldPayload) => {
+    return adminAxios.post<{ success: boolean; data: SkillScaffoldResult }>('/admin/skills/scaffold', payload);
+  },
+
+  /** scaffold 表单元数据：kind/stage 枚举 + manifest 顶层 agent（parentAgent 下拉数据源） */
+  getScaffoldMeta: async () => {
+    return adminAxios.get<{ success: boolean; data: SkillScaffoldMeta }>('/admin/skills/scaffold/meta');
+  },
 };
+
+export interface SkillScaffoldPayload {
+  skillId: string;
+  kind: 'mainline' | 'aux' | 'handler-only';
+  /** mainline 必填 */
+  stage?: string;
+  /** mainline 必填 */
+  parentAgent?: string;
+  displayName?: string;
+  description?: string;
+  aliases?: string[];
+}
+
+export interface SkillScaffoldSnippet {
+  title: string;
+  content: string;
+}
+
+export interface SkillScaffoldResult {
+  skillId: string;
+  kind: 'mainline' | 'aux' | 'handler-only';
+  status: 'created' | 'completed';
+  generated: string[];
+  completion: SkillCompletion;
+  snippets: SkillScaffoldSnippet[];
+  note: string;
+}
+
+export interface SkillScaffoldMeta {
+  kinds: Array<'mainline' | 'aux' | 'handler-only'>;
+  stages: string[];
+  agents: Array<{ id: string; name: string }>;
+}
+
+export interface SkillReconciliationRow {
+  skillId: string;
+  kind: 'mainline' | 'aux' | 'handler-only';
+  displayName: string | null;
+  stage: string | null;
+  book: boolean;
+  manifest: boolean;
+  registered: boolean;
+  active: boolean;
+  noPromptFile: boolean;
+  registrationExempt: boolean;
+  diff: 'unregistered' | 'active-missing' | null;
+  completion: SkillCompletion;
+}
+
+export interface SkillReconciliationReport {
+  generatedAt: string;
+  summary: {
+    total: number;
+    registered: number;
+    active: number;
+    byStatus: Record<string, number>;
+    unregistered: number;
+    activeMissing: number;
+    orphanRegistrations: number;
+  };
+  items: SkillReconciliationRow[];
+  orphanRegistrations: Array<{ name: string }>;
+}
 
 export const adminVirtualLearnersApi = {
   generatePersona: async (data?: {

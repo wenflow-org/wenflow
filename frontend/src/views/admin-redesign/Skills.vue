@@ -135,16 +135,114 @@
         <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
       </div>
     </div>
+
+    <!-- 技能对账面板（SKILL_READINESS_SPEC §4.2）：户口簿 × manifest × 注册 × ACTIVE + 完成度 -->
+    <div class="mk-card sk-rec">
+      <div class="mk-card__head">
+        <div class="sk-rec__title">
+          <strong>技能对账</strong>
+          <span class="mk-card__meta">户口簿 × manifest × gateway 注册 × ACTIVE prompt</span>
+        </div>
+        <div v-if="recLoading" class="sk-rec__loading">加载中…</div>
+        <template v-else-if="recReport">
+          <div class="sk-rec__pills">
+            <span class="mk-pill">完成度 live {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
+            <span v-if="recReport.summary.unregistered" class="mk-pill sk-pill--bad">未注册 {{ recReport.summary.unregistered }}</span>
+            <span v-if="recReport.summary.activeMissing" class="mk-pill sk-pill--warn">缺 ACTIVE {{ recReport.summary.activeMissing }}</span>
+            <span v-if="recReport.summary.orphanRegistrations" class="mk-pill sk-pill--bad">幽灵注册 {{ recReport.summary.orphanRegistrations }}</span>
+            <span v-else class="mk-pill">幽灵注册 0</span>
+          </div>
+          <button type="button" class="sk-rec__refresh" :disabled="recLoading" @click="refreshReconciliation">刷新</button>
+        </template>
+      </div>
+
+      <div v-if="recError" class="mk-empty">
+        <strong>对账数据加载失败</strong>
+        <span>{{ recError }}</span>
+        <button type="button" class="mk-empty__action" @click="refreshReconciliation">重试</button>
+      </div>
+      <div v-else-if="recLoading && !recReport" class="sk-rec__skeleton">
+        <span v-for="n in 8" :key="n"></span>
+      </div>
+      <template v-else-if="recReport">
+        <div class="mk-table-scroll">
+          <table v-if="recReport.items.length" class="mk-table sk-table sk-rec-table">
+            <thead>
+              <tr>
+                <th>Skill</th>
+                <th>户口簿</th>
+                <th>manifest</th>
+                <th>gateway 注册</th>
+                <th>ACTIVE prompt</th>
+                <th>完成度</th>
+                <th>差集</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in recReport.items" :key="row.skillId" class="sk-row" @click="openSkillDrawer(row.skillId)">
+                <td>
+                  <div class="sk-cell">
+                    <span class="sk-dot" :class="`sk-dot--${recDotTone(row)}`"></span>
+                    <div class="mk-cell-main">
+                      <strong class="sk-id-main" style="max-width:340px">{{ row.skillId }}</strong>
+                      <span class="sk-name-desc" style="max-width:340px">{{ row.displayName || recKindText(row.kind) }}<template v-if="row.stage"> · {{ row.stage }}</template></span>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="sk-rec-yn sk-rec-yn--ok">✓</span></td>
+                <td>
+                  <span :class="['sk-rec-yn', row.manifest ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ row.manifest ? '✓' : '✗' }}</span>
+                  <span v-if="row.kind === 'aux' && !row.manifest" class="sk-rec-tag">F12 豁免</span>
+                </td>
+                <td>
+                  <span :class="['sk-rec-yn', row.registered ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ row.registered ? '✓' : '✗' }}</span>
+                  <span v-if="row.registrationExempt" class="sk-rec-tag">豁免</span>
+                </td>
+                <td>
+                  <span :class="['sk-rec-yn', row.active ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ row.active ? '✓' : '✗' }}</span>
+                  <span v-if="row.noPromptFile" class="sk-rec-tag">handler-only</span>
+                </td>
+                <td>
+                  <span class="sk-rec-badge" :class="`sk-rec-badge--${row.completion.status}`" :title="recGateDetail(row.completion)">
+                    {{ recStatusText(row.completion.status) }}
+                  </span>
+                </td>
+                <td>
+                  <span v-if="row.diff === 'unregistered'" class="sk-rec-diff sk-rec-diff--bad">未注册</span>
+                  <span v-else-if="row.diff === 'active-missing'" class="sk-rec-diff sk-rec-diff--warn">缺 ACTIVE</span>
+                  <span v-else class="mk-na">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-if="recReport.orphanRegistrations.length" class="sk-rec-orphans">
+          <strong>幽灵注册残留（注册表有、户口簿无）</strong>
+          <span v-for="orphan in recReport.orphanRegistrations" :key="orphan.name" class="sk-rec-tag sk-rec-tag--bad">{{ orphan.name }}</span>
+        </div>
+        <div class="sk-rec-legend">
+          <span v-for="s in recStatusOrder" :key="s" class="sk-rec-legend__item">
+            <i class="sk-rec-badge" :class="`sk-rec-badge--${s}`"></i>{{ recStatusText(s) }}
+          </span>
+          <span class="mk-card__meta" style="margin-left:auto">点击行进入设计页 · {{ recReport.generatedAt ? '对账于 ' + new Date(recReport.generatedAt).toLocaleString() : '' }}</span>
+        </div>
+      </template>
+      <div v-else class="mk-empty">
+        <strong>对账面板需要真实数据</strong>
+        <span>请切换到「真实数据」模式后查看（户口簿/manifest/注册表/ACTIVE 为后端快照）。</span>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { skillProfiles, skillStatOf, openSkillDrawer, dataSource, isLive } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
 import { useLoadMore } from './useLoadMore'
 import MockSkeletonTable from './SkeletonTable.vue'
+import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
 
 type Health = 'ok' | 'idle' | 'error'
 type SortKey = 'calls' | 'errors' | 'avgMs'
@@ -260,6 +358,71 @@ const statusTitle = computed(() =>
 const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
 const successRate = (s: { calls: number; errors: number }) =>
   s.calls ? `${(((s.calls - s.errors) / s.calls) * 100).toFixed(0)}%` : '—'
+
+/* ================= 技能对账面板（SKILL_READINESS_SPEC §4.2） ================= */
+const recReport = ref<SkillReconciliationReport | null>(null)
+const recLoading = ref(false)
+const recError = ref('')
+
+async function refreshReconciliation() {
+  if (!isLive.value) return
+  recLoading.value = true
+  recError.value = ''
+  try {
+    const res = await adminSkillsApi.getReconciliation()
+    recReport.value = res.data?.data ?? null
+  } catch (e) {
+    recError.value = errMsg(e)
+    recReport.value = null
+  } finally {
+    recLoading.value = false
+  }
+}
+
+watch(isLive, (live) => {
+  if (live) refreshReconciliation()
+})
+
+onMounted(() => {
+  if (isLive.value) refreshReconciliation()
+})
+
+/** 完成度五档色标（draft → live） */
+const recStatusOrder = ['draft', 'handler-ready', 'core-ready', 'fields-synced', 'live'] as const
+const recStatusText = (status: string) =>
+  ({
+    draft: '草稿',
+    'handler-ready': 'handler 就绪',
+    'core-ready': 'core 就绪',
+    'fields-synced': '字段已同步',
+    live: '已上线',
+  })[status] || status
+
+const recKindText = (kind: string) =>
+  ({ mainline: '主线', aux: '辅助', 'handler-only': '仅 handler' })[kind] || kind
+
+/** 行健康点：live 绿、差集红、其余灰 */
+function recDotTone(row: SkillReconciliationReport['items'][number]) {
+  if (row.diff === 'unregistered') return 'error'
+  if (row.completion.status === 'live') return 'ok'
+  return 'idle'
+}
+
+/** 完成度徽标 tooltip：首个失败档的依据文本 */
+function recGateDetail(completion: SkillCompletion): string {
+  const gates: Array<[string, string]> = [
+    ['draft', '户口簿'],
+    ['handlerReady', 'handler 注册'],
+    ['coreReady', 'core 文件'],
+    ['fieldsSynced', '字段路由'],
+    ['live', 'ACTIVE prompt'],
+  ]
+  for (const [key, label] of gates) {
+    const gate = completion.gates[key as keyof typeof completion.gates]
+    if (!gate?.ok) return `${label}：${gate?.detail || '未通过'}`
+  }
+  return '全部门槛通过'
+}
 </script>
 
 <style scoped>
@@ -441,4 +604,91 @@ const successRate = (s: { calls: number; errors: number }) =>
   margin-right: 6px;
   flex-shrink: 0;
 }
+
+/* ================= 技能对账面板（SKILL_READINESS_SPEC §4.2） ================= */
+.sk-rec { margin-top: 14px; }
+.sk-rec__title { display: flex; flex-direction: column; gap: 2px; }
+.sk-rec__title strong { font-size: 14px; }
+.sk-rec__loading { color: var(--mk-faint); font-size: 12px; margin-left: auto; }
+.sk-rec__pills { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+.sk-pill--bad { color: var(--mk-red, #dc2626); background: #fdecec; }
+.sk-pill--warn { color: var(--mk-amber, #d97706); background: #fdf3e3; }
+.sk-rec__refresh {
+  border: 1px solid var(--mk-line);
+  background: #fff;
+  border-radius: 8px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--mk-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sk-rec__refresh:hover { border-color: rgba(52, 120, 246, 0.4); color: var(--mk-blue); }
+.sk-rec__refresh:disabled { opacity: 0.5; cursor: default; }
+.sk-rec__skeleton { display: grid; gap: 8px; padding: 12px; }
+.sk-rec__skeleton span { height: 26px; border-radius: 8px; background: linear-gradient(90deg, #eef2fa, #f7f9fc, #eef2fa); background-size: 200% 100%; animation: sk-rec-shimmer 1.2s infinite; }
+@keyframes sk-rec-shimmer { 50% { background-position: -200% 0; } }
+
+.sk-rec-table th, .sk-rec-table td { text-align: left; }
+.sk-rec-yn { font-weight: 700; font-size: 13px; }
+.sk-rec-yn--ok { color: var(--mk-green, #16a34a); }
+.sk-rec-yn--no { color: var(--mk-red, #dc2626); }
+.sk-rec-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #eef2fa;
+  color: #41516e;
+  font-size: 10px;
+  font-weight: 600;
+  vertical-align: 1px;
+}
+.sk-rec-tag--bad { background: #fdecec; color: var(--mk-red, #dc2626); }
+
+/* 完成度五档色标：draft → live */
+.sk-rec-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: #fff;
+}
+.sk-rec-badge--draft { background: #9aa4b2; }
+.sk-rec-badge--handler-ready { background: #d97706; }
+.sk-rec-badge--core-ready { background: #3478f6; }
+.sk-rec-badge--fields-synced { background: #0d9488; }
+.sk-rec-badge--live { background: #16a34a; }
+
+.sk-rec-diff { font-size: 11px; font-weight: 700; }
+.sk-rec-diff--bad { color: var(--mk-red, #dc2626); }
+.sk-rec-diff--warn { color: var(--mk-amber, #d97706); }
+
+.sk-rec-orphans {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-top: 1px dashed var(--mk-line);
+  font-size: 12px;
+  color: var(--mk-muted);
+}
+.sk-rec-orphans .sk-rec-tag { margin-left: 0; }
+
+.sk-rec-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-top: 1px dashed var(--mk-line);
+  font-size: 11.5px;
+  color: var(--mk-muted);
+}
+.sk-rec-legend__item { display: inline-flex; align-items: center; gap: 5px; }
+.sk-rec-legend__item .sk-rec-badge { padding: 2px 8px; font-size: 10px; }
 </style>

@@ -36,6 +36,8 @@ import {
   updatePlatformCapabilityProbeInterval
 } from '../../services/capability-probe-settings.service';
 import { aiCapabilityHealthService } from '../../services/ai-capability-health.service';
+import { loadSkillsBookRaw, getActiveSkillIds } from '../../services/skill-registry/skills-file';
+import { analyzeW2 } from '../../services/skills-readiness.service';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -237,7 +239,7 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
       'ai-service'
     ]);
 
-    const [registrations, modelConfigs, logGroups, catalog, agentCallOutputSamples] = await Promise.all([
+    const [registrations, modelConfigs, logGroups, catalog, agentCallOutputSamples, skillRegistrations] = await Promise.all([
       systemPrisma.agent_registrations.findMany({
         orderBy: { id: 'asc' },
         select: {
@@ -265,6 +267,13 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
         orderBy: { calledAt: 'desc' },
         take: 500,
         select: { output: true }
+      }),
+      systemPrisma.skill_registrations.findMany({
+        orderBy: { name: 'asc' },
+        select: {
+          name: true,
+          updatedAt: true
+        }
       })
     ]);
 
@@ -315,6 +324,40 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
 
     const catalogOnly = catalogIds.filter(id => !canonicalManifestIds.has(id));
 
+    // ---- skill_registrations 维度（SKILL_READINESS_SPEC §4.1）----
+    // 数据源：户口簿活跃集 vs skill_registrations（name 无 skill: 前缀）双向差集，
+    // 复用 skills-readiness W2 分析纯函数（analyzeW2，同一对账口径，不复制逻辑）。
+    const book = loadSkillsBookRaw();
+    const bookActiveIds = getActiveSkillIds(book);
+    const w2 = analyzeW2(book, skillRegistrations.map((item) => ({ name: item.name })));
+    const missingSkillRegistrations = w2.missingRegistration; // 户口簿有、注册表无（agents/platform-direct 豁免）
+    const unknownSkillRegistrations = w2.zombieRegistration;  // 注册表有、户口簿无（幽灵残留）
+
+    // 别名行：注册 name（无前缀）经 getCanonicalAgentId 归一判定（对齐 :287-289 模式）
+    const aliasSkillRegistrations = skillRegistrations
+      .map(item => ({
+        name: item.name,
+        canonicalId: getCanonicalAgentId(item.name)
+      }))
+      .filter(item => item.name !== item.canonicalId && canonicalManifestIds.has(item.canonicalId));
+
+    // 逐项明细：户口簿活跃集 ∪ 注册表 并集，每项 status = unregistered | orphan-registration | ok
+    const registeredNames = new Set(skillRegistrations.map((item) => item.name));
+    const exemptRegistrationPoints = new Set(['agents', 'platform-direct']);
+    const skillRegistrationItems = [
+      ...missingSkillRegistrations.map(skillId => ({ skillId, status: 'unregistered' as const })),
+      ...unknownSkillRegistrations.map(skillId => ({ skillId, status: 'orphan-registration' as const })),
+      ...[...bookActiveIds]
+        .filter(id => registeredNames.has(id) || exemptRegistrationPoints.has(book.skills.find(e => e.skillId === id)?.registrationPoint || ''))
+        .map(skillId => ({
+          skillId,
+          status: 'ok' as const,
+          detail: registeredNames.has(skillId)
+            ? 'skill_registrations 有行'
+            : 'agents/platform-direct 豁免（不落 skill_registrations 是预期）'
+        })),
+    ].sort((a, b) => a.skillId.localeCompare(b.skillId));
+
     res.json({
       success: true,
       data: {
@@ -325,12 +368,15 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
           calledAgentTotal: calledAgentIds.length,
           catalogTotal: catalogIds.length,
           outputContractSampleSize: agentCallContractCounts.sampleSize,
+          skillRegistrationTotal: skillRegistrations.length,
           driftCount:
             missingRegistrations.length +
             unknownRegistrations.length +
             unknownModelConfigs.length +
             unknownLogAgents.length +
-            catalogOnly.length
+            catalogOnly.length +
+            missingSkillRegistrations.length +
+            unknownSkillRegistrations.length
         },
         outputContracts: {
           agentCallLogs: agentCallContractCounts
@@ -343,7 +389,13 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
           aliasModelConfigs,
           unknownLogAgents,
           aliasLogAgents,
-          catalogOnly
+          catalogOnly,
+          skillRegistrations: {
+            missingSkillRegistrations,
+            unknownSkillRegistrations,
+            aliasSkillRegistrations,
+            items: skillRegistrationItems
+          }
         },
         samples: {
           registrations,
