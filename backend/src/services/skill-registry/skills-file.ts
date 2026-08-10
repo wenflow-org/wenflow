@@ -58,6 +58,27 @@ export interface SkillCoordinator {
   steps: SkillCoordinatorStep[];
 }
 
+/** dataSource.db 单条目：裸表名或 {table, keys?, via?} 细粒度形态（P4 W5） */
+export interface SkillDataSourceDbEntry {
+  table: string;
+  /** 关键列/JSON 键（可选，粒度到列；空表名形态可省略） */
+  keys?: string[];
+  /** 读取通道：prisma（协调器直读）| routings（字段路由表驱动）| service（服务封装）| event（领域事件），缺省 prisma */
+  via?: 'prisma' | 'routings' | 'service' | 'event';
+}
+
+/**
+ * P4 W5：输入血缘声明（声明对象 = 编排层为该 skill 组装 LLM 输入时读取的数据源，
+ * 见 doc/DATASOURCE_P4_SURVEY.md §3.1 —— 不是 handler 代码直读声明）。
+ * db 值为裸表名（string）或 {table, keys?, via?} 对象；api 类仅 mcp-tool（由 mcpTools 承担）；
+ * sandbox 为该 skill core.yaml inputs 中 sandbox ref 的 agent 前缀（goal/path/teaching/profile/simulation）。
+ */
+export interface SkillDataSource {
+  db?: SkillDataSourceDbEntry[];
+  api?: string[];
+  sandbox?: string[];
+}
+
 export interface SkillEntry {
   skillId: string;
   kind: SkillKind;
@@ -72,8 +93,8 @@ export interface SkillEntry {
   displayName?: string;
   description?: string;
   aliases?: string[];
-  /** P4 预留：数据源直读声明（仅 schema 校验，不实施交叉校验） */
-  dataSource?: { db?: string[]; api?: string[] };
+  /** P4 W5：输入血缘声明（schema 校验；交叉校验在 scripts/check-data-source.ts） */
+  dataSource?: SkillDataSource;
   /** P4 预留：平台工具 id（仅 schema 校验，不实施交叉校验） */
   mcpTools?: string[];
   coordinator?: SkillCoordinator;
@@ -296,14 +317,40 @@ function parseSkillsText(rawText: string, sourceLabel: string, topAgentIds: Set<
 
     const aliases = asOptionalStringArray(raw.aliases, `${label}.aliases`);
 
-    // F1g：dataSource / mcpTools（P4 预留，仅 schema 形状校验）
-    let dataSource: { db?: string[]; api?: string[] } | undefined;
+    // F1g：dataSource / mcpTools（P4 W5，schema 形状校验 + db 值域 prisma|routings|service|event）
+    let dataSource: SkillDataSource | undefined;
     if (raw.dataSource !== undefined && raw.dataSource !== null) {
       if (!isRecord(raw.dataSource)) throw new Error(`[skills.yaml] ${label}.dataSource 必须是对象`);
-      assertNoUnknownFields(raw.dataSource as RawSkillEntry, label, ['db', 'api']);
+      assertNoUnknownFields(raw.dataSource as RawSkillEntry, label, ['db', 'api', 'sandbox']);
+      const dbRaw = (raw.dataSource as RawSkillEntry).db;
+      let db: SkillDataSourceDbEntry[] | undefined;
+      if (dbRaw !== undefined && dbRaw !== null) {
+        if (!Array.isArray(dbRaw)) throw new Error(`[skills.yaml] ${label}.dataSource.db 必须为数组`);
+        db = dbRaw.map((item, i) => {
+          const itemLabel = `${label}.dataSource.db[${i}]`;
+          if (typeof item === 'string') {
+            if (!item.trim()) throw new Error(`[skills.yaml] ${itemLabel} 表名不能为空字符串`);
+            return { table: item };
+          }
+          if (!isRecord(item)) throw new Error(`[skills.yaml] ${itemLabel} 必须为表名字符串或 {table, keys?, via?} 对象`);
+          assertNoUnknownFields(item as RawSkillEntry, itemLabel, ['table', 'keys', 'via']);
+          const table = asString((item as RawSkillEntry).table, `${itemLabel}.table`);
+          const keys = asOptionalStringArray((item as RawSkillEntry).keys, `${itemLabel}.keys`);
+          const viaRaw = asOptionalString((item as RawSkillEntry).via, `${itemLabel}.via`);
+          if (viaRaw !== undefined && !(['prisma', 'routings', 'service', 'event'] as readonly string[]).includes(viaRaw)) {
+            throw new Error(`[skills.yaml] ${itemLabel}.via=${viaRaw} 非法（须在 prisma,routings,service,event 中）`);
+          }
+          return {
+            table,
+            ...(keys !== undefined ? { keys } : {}),
+            ...(viaRaw !== undefined ? { via: viaRaw as SkillDataSourceDbEntry['via'] } : {}),
+          };
+        });
+      }
       dataSource = {
-        db: asOptionalStringArray((raw.dataSource as RawSkillEntry).db, `${label}.dataSource.db`),
+        ...(db !== undefined ? { db } : {}),
         api: asOptionalStringArray((raw.dataSource as RawSkillEntry).api, `${label}.dataSource.api`),
+        sandbox: asOptionalStringArray((raw.dataSource as RawSkillEntry).sandbox, `${label}.dataSource.sandbox`),
       };
     }
     const mcpTools = asOptionalStringArray(raw.mcpTools, `${label}.mcpTools`);
@@ -526,6 +573,15 @@ export function loadSkillsFile(): SkillsBook {
     cachedValidatedBook = parseSkillsFile(SKILLS_FILE_PATH);
   }
   return cachedValidatedBook;
+}
+
+/**
+ * 清空进程级缓存（scaffold 写盘后调用）：使后续 loadSkillsFile / loadSkillsBookRaw
+ * 重新读取磁盘文件，保证新条目立即可见（幂等判定与完成度状态机以磁盘为事实）。
+ */
+export function invalidateSkillsFileCache(): void {
+  cachedValidatedBook = null;
+  cachedRawBook = null;
 }
 
 /**

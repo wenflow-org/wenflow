@@ -36,6 +36,12 @@ skills:
       agentId: goal-agent
       steps:
         - { step: 1, role: goal-clarification, loopOver: conversation-rounds, condition: until goal confirmed }
+    dataSource:
+      db:
+        - table: goal_conversations
+          keys: [collectedData]
+          via: prisma
+      sandbox: [goal]
     notes: deltaOutput 试点；alias goal-conversation 为裸名旧 id 兼容（Phase 3）
 
   # ============ path-agent 下辖（mainline） ============
@@ -51,6 +57,14 @@ skills:
       agentId: path-agent
       steps:
         - { step: 2, role: cognitive-core-and-milestones }
+    dataSource:
+      db:
+        - table: goal_conversations
+          keys: [collectedData]
+          via: prisma
+        - table: agent_lab_configs
+          via: service
+      sandbox: [path, goal]
 
   - skillId: stage-designer
     kind: mainline
@@ -64,6 +78,18 @@ skills:
       agentId: path-agent
       steps:
         - { step: 3, role: stage-task-expansion, loopOver: milestones }
+    dataSource:
+      db:
+        - table: learning_paths
+          keys: [aiPromptTemplate]
+          via: prisma
+        - table: milestones
+          via: prisma
+        - table: subtasks
+          via: prisma
+        - table: agent_field_routings
+          via: routings
+      sandbox: [path]
 
   # ============ teaching-agent 下辖（mainline） ============
   - skillId: teaching-turn
@@ -79,6 +105,24 @@ skills:
       agentId: teaching-agent
       steps:
         - { step: 3, role: teaching-turn-generation, loopOver: messages }
+    dataSource:
+      db:
+        - table: teaching_sessions
+          keys: [messages, knowledgeState, teachingState]
+          via: service
+        - table: subtasks
+          via: prisma
+        - table: milestones
+          via: prisma
+        - table: learning_paths
+          via: prisma
+        - table: learning_metrics
+          via: service
+        - table: learner_evidence
+          via: service
+        - table: agent_field_routings
+          via: routings
+      sandbox: [teaching]
 
   - skillId: peer-reinforcement
     kind: mainline
@@ -93,6 +137,12 @@ skills:
       agentId: teaching-agent
       steps:
         - { step: 4, role: peer-reinforcement, condition: when control.shouldTriggerPeer = true }
+    dataSource:
+      db:
+        - table: teaching_sessions
+          keys: [messages, teachingState]
+          via: service
+      sandbox: [teaching]
 
   - skillId: session-wrapup
     kind: mainline
@@ -107,6 +157,22 @@ skills:
       agentId: teaching-agent
       steps:
         - { step: 6, role: session-wrapup, condition: when session ends }
+    dataSource:
+      db:
+        - table: teaching_sessions
+          keys: [messages, knowledgeState, teachingState, wrapup]
+          via: service
+        - table: subtasks
+          via: prisma
+        - table: milestones
+          via: prisma
+        - table: learning_paths
+          via: prisma
+        - table: learning_metrics
+          via: service
+        - table: learner_evidence
+          via: service
+      sandbox: [teaching]
 
   - skillId: adaptive-guidance-copy
     kind: mainline
@@ -119,6 +185,23 @@ skills:
     coordinator:
       agentId: teaching-agent
       steps: []
+    dataSource:
+      db:
+        - table: users
+          keys: [name, xp]
+          via: prisma
+        - table: learning_paths
+          via: prisma
+        - table: subtasks
+          via: prisma
+        - table: teaching_sessions
+          keys: [wrapup, advisory]
+          via: service
+        - table: learner_evidence
+          via: service
+        - table: learning_metrics
+          via: service
+      sandbox: []
     notes: dashboard 侧调用（services/learner/DashboardGuidanceSnapshotService），不在 ai-teaching.definition.ts steps 内；contracts 有登记
 
   # ============ profile-agent 下辖（handler-only 优先于 mainline，保持派生 agentMembers 顺序） ============
@@ -136,6 +219,18 @@ skills:
       agentId: profile-agent
       steps:
         - { step: 1, role: goal-and-learning-signal-ingestion, condition: when learner profile related events arrive }
+    dataSource:
+      db:
+        - table: learner_evidence
+          via: service
+        - table: teaching_sessions
+          via: service
+        - table: subtasks
+          via: service
+        - table: learning_paths
+          via: service
+      sandbox: []
+    notes: handler 直读反例（P4 例外账）——handler 本体经 LearnerSnapshotService 直读 4 表（agents/learner-model-agent/index.ts:78-120），无 LLM 输入组装
 
   - skillId: lesson-knowledge-enricher
     kind: mainline
@@ -149,6 +244,13 @@ skills:
       agentId: profile-agent
       steps:
         - { step: 2, role: lesson-knowledge-enrichment, condition: when lesson ends }
+    dataSource:
+      db:
+        - table: domain_event_inbox
+          keys: [consumerId_eventId]
+          via: event
+      sandbox: []
+    notes: LLM 输入来自 lesson:completed 领域事件 payload（AITeachingCoordinator.ts:1981-2006 发布，teaching_sessions 数据投影）；domain_event_inbox 为消费幂等读（LessonKnowledgeEnrichmentConsumer.ts:12）
 
   # ============ simulation-agent 下辖（mainline，黑盒实验链） ============
   - skillId: virtual-learner-persona-designer
@@ -162,6 +264,12 @@ skills:
     coordinator:
       agentId: simulation-agent
       steps: []
+    dataSource:
+      db:
+        - table: virtual_learner_profiles
+          keys: [profile, learningGoal, notes]
+          via: prisma
+      sandbox: [simulation]
     notes: 前置配置阶段（routes/admin/virtual-learners.ts），不在 simulation.definition.ts 主链 steps 内
 
   - skillId: virtual-learner-scenario-designer
@@ -175,6 +283,12 @@ skills:
     coordinator:
       agentId: simulation-agent
       steps: []
+    dataSource:
+      db:
+        - table: virtual_learner_profiles
+          keys: [profile, learningGoal, notes]
+          via: prisma
+      sandbox: [simulation]
     notes: 前置配置阶段（同 persona-designer），不在主链 steps 内
 
   - skillId: virtual-learner-goal-dialogue-simulator
@@ -189,6 +303,17 @@ skills:
       agentId: simulation-agent
       steps:
         - { step: 1, role: goal-stage-learner-turn-simulation, loopOver: goal-rounds }
+    dataSource:
+      db:
+        - table: virtual_sessions
+          keys: [stageResults]
+          via: prisma
+        - table: virtual_learner_profiles
+          via: prisma
+        - table: goal_conversations
+          keys: [collectedData]
+          via: prisma
+      sandbox: [simulation]
 
   - skillId: virtual-learner-path-evaluator
     kind: mainline
@@ -202,6 +327,18 @@ skills:
       agentId: simulation-agent
       steps:
         - { step: 4, role: legacy-assisted-path-review, condition: legacy assisted mode only }
+    dataSource:
+      db:
+        - table: virtual_sessions
+          keys: [stageResults]
+          via: prisma
+        - table: virtual_learner_profiles
+          via: prisma
+        - table: learning_paths
+          via: prisma
+        - table: milestones
+          via: prisma
+      sandbox: [simulation]
     notes: 仅 legacy assisted 调试使用，正式黑盒链路不走
 
   - skillId: virtual-learner-learn-turn-simulator
@@ -216,6 +353,20 @@ skills:
       agentId: simulation-agent
       steps:
         - { step: 5, role: teaching-stage-learner-turn-simulation, condition: when teaching phase starts, loopOver: teaching-turns }
+    dataSource:
+      db:
+        - table: virtual_sessions
+          keys: [stageResults]
+          via: prisma
+        - table: virtual_learner_profiles
+          via: prisma
+        - table: learning_paths
+          via: prisma
+        - table: milestones
+          via: prisma
+        - table: subtasks
+          via: prisma
+      sandbox: [simulation]
 
   - skillId: virtual-learner-referee
     kind: mainline
@@ -229,6 +380,18 @@ skills:
       agentId: simulation-agent
       steps:
         - { step: 7, role: platform-quality-referee, condition: after blackbox experiment reaches terminal state }
+    dataSource:
+      db:
+        - table: virtual_sessions
+          keys: [stageResults]
+          via: prisma
+        - table: virtual_learner_profiles
+          via: service
+        - table: teaching_sessions
+          via: service
+        - table: learning_metrics
+          via: service
+      sandbox: [simulation]
 
   - skillId: virtual-learner-actor-auditor
     kind: mainline
@@ -242,6 +405,14 @@ skills:
       agentId: simulation-agent
       steps:
         - { step: 8, role: synthetic-learner-fidelity-audit, condition: after blackbox experiment reaches terminal state }
+    dataSource:
+      db:
+        - table: virtual_sessions
+          keys: [stageResults]
+          via: prisma
+        - table: virtual_learner_profiles
+          via: service
+      sandbox: [simulation]
 
   # ============ 独立 handler-only（无 parentAgent，不进 agentMembers 派生） ============
   - skillId: mcp-tool
@@ -250,6 +421,11 @@ skills:
     noPromptFile: true
     displayName: MCP 工具调用 Skill
     description: 通过统一 Capability Runtime 调用用户或平台配置的 MCP 工具
+    mcpTools: [user-mcp, platform-mcp]
+    dataSource:
+      db: []
+      sandbox: []
+    notes: handler 直读反例（P4 例外账）——handler 直读 user_mcp_configs（mcp-tool/index.ts:80 getUserMcpRuntimeConfig）与 config/mcp.json 平台工具（:126），外部调用 mcpGateway（:95/:140）；api 类由 mcpTools 字段承担，dataSource.db 保持空
 
   # ============ aux（9 条，不进字段路由；v4-aux-skills 注册） ============
   - skillId: teaching-opening-generator
@@ -262,7 +438,22 @@ skills:
       agentId: teaching-agent
       steps:
         - { step: 2, role: opening-generation, condition: on session start }
-    notes: v4-aux 旁挂 teaching-agent（ai-teaching.definition.ts step 2）
+    dataSource:
+      db:
+        - table: teaching_sessions
+          via: service
+        - table: subtasks
+          via: prisma
+        - table: milestones
+          via: prisma
+        - table: learning_paths
+          via: prisma
+        - table: learning_metrics
+          via: service
+        - table: learner_evidence
+          via: service
+      sandbox: []
+    notes: v4-aux 旁挂 teaching-agent（ai-teaching.definition.ts step 2）；输入 = buildTeachingScenarioContext 产物（AITeachingCoordinator.ts:1010/1144）
 
   - skillId: session-evaluation-fallback
     kind: aux
@@ -270,6 +461,10 @@ skills:
     coreFile: prompts/core/session-evaluation-fallback.yaml
     displayName: 课程评估补全器
     description: 在主课后总结缺少 evaluation 时补齐结构化评估
+    dataSource:
+      db: []
+      sandbox: []
+    notes: 嵌套调用（session-wrapup/index.ts:631），输入 = session-wrapup 的 input 透传，无独立 DB 直读
 
   - skillId: learner-progress-report
     kind: aux
@@ -277,6 +472,10 @@ skills:
     coreFile: prompts/core/learner-progress-report.yaml
     displayName: 学习进展报告生成器
     description: 基于学习指标和信号生成简短进展反馈
+    dataSource:
+      db: []
+      sandbox: []
+    notes: metrics/signals 由调用方内存计算（LearnerProgressService.ts:81-90 getCurrentMetrics 不落库），触发点 learning.service.ts:4623；无 DB 直读
 
   - skillId: generic-chat
     kind: aux
@@ -284,6 +483,10 @@ skills:
     coreFile: prompts/core/generic-chat.yaml
     displayName: 平台通用文本能力
     description: 无更专用 Skill 时的通用文本调用能力
+    dataSource:
+      db: []
+      sandbox: []
+    notes: 调用方消息/历史（ai.service.ts:331-354），无 DB 直读
 
   - skillId: course-design
     kind: aux
@@ -291,7 +494,10 @@ skills:
     coreFile: prompts/core/course-design.yaml
     displayName: 课程设计器
     description: 为周次主题生成结构化课程任务
-    notes: 注册中零调用（唯一调用点 designWeekCourses 无调用者）——僵尸状态保留，禁止进退役名单（RETIRED_SKILLS_FIX_PLAN §4.3）
+    dataSource:
+      db: []
+      sandbox: []
+    notes: 注册中零调用（唯一调用点 designWeekCourses 无调用者）——僵尸状态保留，禁止进退役名单（RETIRED_SKILLS_FIX_PLAN §4.3）；输入 = 请求体 + 代码常量（ai.service.ts:812）
 
   - skillId: skill-author
     kind: aux
@@ -299,6 +505,10 @@ skills:
     coreFile: prompts/core/skill-author.yaml
     displayName: Prompt 起草助手
     description: 为新 Skill 起草 system prompt
+    dataSource:
+      db: []
+      sandbox: []
+    notes: 用户提交的 prompt 文本/字段清单（skill-author/index.ts:47），无 DB 直读
 
   - skillId: skill-compiler
     kind: aux
@@ -306,6 +516,10 @@ skills:
     coreFile: prompts/core/skill-compiler.yaml
     displayName: Skill Prompt 验收器
     description: 执行 system prompt 并检查必填字段覆盖情况
+    dataSource:
+      db: []
+      sandbox: []
+    notes: 用户提交 systemPrompt/requiredFieldIds（skill-author/index.ts:145），无 DB 直读
 
   - skillId: basic-evaluator
     kind: aux
@@ -313,6 +527,9 @@ skills:
     coreFile: prompts/core/basic-evaluator.yaml
     displayName: 学习质量评估器
     description: 评估学习内容、答案或任务完成情况
+    dataSource:
+      db: []
+      sandbox: []
     notes: 僵尸项——保留注册但零生产调用（RETIRED_SKILLS_FIX_PLAN §4.3），不进退役名单
 
   - skillId: goal-alignment-checker
@@ -321,6 +538,9 @@ skills:
     coreFile: prompts/core/goal-alignment-checker.yaml
     displayName: 路径目标对齐检查器
     description: 检查学习路径与目标的对齐程度
+    dataSource:
+      db: []
+      sandbox: []
     notes: 僵尸项——保留注册但零生产调用（RETIRED_SKILLS_FIX_PLAN §4.3），不进退役名单
 
   # ============ 平台守门（aux 变体，registrationPoint=platform-direct 豁免注册检查） ============
@@ -332,4 +552,7 @@ skills:
     coreFile: prompts/core/semantic-freeze-judge.yaml
     displayName: 语义冻结裁判
     description: 判定两个 prompt 版本在目标语义上的冻结一致性（发布流水线 Gate#3）
-    notes: 发布流水线 Gate#3，services/prompt-lab/semantic-freeze-judge.ts 直调 callPrompt，不走 v4-aux handlers
+    dataSource:
+      db: []
+      sandbox: []
+    notes: 发布流水线 Gate#3，services/prompt-lab/semantic-freeze-judge.ts 直调 callPrompt，不走 v4-aux handlers；输入 = 两个 prompt 版本文本（无 DB）

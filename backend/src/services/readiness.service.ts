@@ -1,5 +1,6 @@
 import { decryptSecret } from '../utils/secret-crypto';
 import { FIELD_ROUTING_SEED_MANIFEST, detectFieldRoutingDrift } from './field-routing-bootstrap.service';
+import { checkSkillsReadiness } from './skills-readiness.service';
 import { logger } from '../utils/logger';
 
 export interface ReadinessResult {
@@ -122,6 +123,9 @@ export class ReadinessService {
       // bootstrap 的 upsert(update:{}) 只建不更新，seed 改动后旧行不会自动同步——
       // 此检测让"声明一套、库里另一套"的漂移在启动时可见
       this.detectFieldRoutingDriftWarnings().catch(() => undefined);
+
+      // W1-W5 技能完成度诊断（warn 级，不阻断就绪判定；60s 缓存防 /readyz 轮询反复 fs 扫描）
+      this.runSkillReadinessWarnings().catch(() => undefined);
     } catch {
       checks.systemDatabase = 'failed';
     }
@@ -143,6 +147,34 @@ export class ReadinessService {
       }
     } catch (error) {
       logger.debug('[readiness] 字段路由漂移检测失败（不影响就绪判定）', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async runSkillReadinessWarnings(): Promise<void> {
+    try {
+      const report = await checkSkillsReadiness(this.systemDatabase as unknown as Parameters<typeof checkSkillsReadiness>[0]);
+      const items = [
+        ...report.checks.W1.items,
+        ...report.checks.W2.items,
+        ...report.checks.W3.items,
+        ...report.checks.W4.items,
+      ];
+      if (items.length > 0) {
+        logger.warn(`[readiness] 技能完成度诊断 ${items.length} 项（W1..W5，不阻断就绪判定）`, {
+          items: items.map((item) => ({
+            code: item.code,
+            skillId: item.skillId,
+            message: item.message,
+            hint: item.hint,
+          })),
+        });
+      } else {
+        logger.info('[readiness] 技能完成度诊断通过（W1..W5 无告警）');
+      }
+    } catch (error) {
+      logger.debug('[readiness] 技能完成度诊断失败（不影响就绪判定）', {
         error: error instanceof Error ? error.message : String(error),
       });
     }
