@@ -8,9 +8,25 @@
       <span class="mk-status__meta">{{ totalSkills }} Skills</span>
       <span class="mk-status__meta">接力 {{ Math.max(stages.length - 1, 0) }} 处</span>
       <span v-if="defsLoaded" class="mk-status__meta">定义源 {{ orchCount }} 编排 / {{ skillDefCount }} Skill</span>
+      <span v-if="isLive && recSummary" class="mk-status__meta">完成度 <b class="mk-status__num mk-status__num--live">{{ recSummary.byStatus.live || 0 }}</b> / {{ recSummary.total }}</span>
+      <span v-if="isLive && recSummary && recSummary.unregistered" class="mk-status__meta mk-status__meta--warn">未注册 {{ recSummary.unregistered }}</span>
+      <span v-if="isLive && recSummary && recSummary.activeMissing" class="mk-status__meta mk-status__meta--warn">缺 ACTIVE {{ recSummary.activeMissing }}</span>
+      <span v-if="isLive && recSummary && recSummary.orphanRegistrations" class="mk-status__meta mk-status__meta--bad">幽灵注册 {{ recSummary.orphanRegistrations }}</span>
+      <span v-if="isLive && w4Drifted.length" class="mk-status__meta mk-status__meta--bad">W4 漂移 {{ w4Drifted.length }}</span>
       <button v-if="isLive" type="button" class="mk-status__action" :disabled="defsLoading" @click="loadDefinitions">
         {{ defsLoading ? '拉取中…' : '刷新定义' }}
       </button>
+      <button
+        v-if="unresolvedNodes.length"
+        type="button"
+        class="mk-status__action"
+        @click="unresolvedOpen = !unresolvedOpen"
+      >{{ unresolvedOpen ? '收起明细' : `未解析明细 ${unresolvedNodes.length}` }}</button>
+    </div>
+
+    <div v-if="unresolvedOpen && unresolvedNodes.length" class="orch-unresolved">
+      <span class="orch-unresolved__label">未解析节点（运行时定义引用但拓扑未落位）：</span>
+      <span v-for="n in unresolvedNodes" :key="n" class="orch-unresolved__item mono">{{ n }}</span>
     </div>
 
     <section v-if="isLive && definitionNotes.length" class="mk-card orch-defs">
@@ -43,6 +59,14 @@
           <span class="orch-stage__body">
             <strong class="orch-stage__name">{{ st.name }}</strong>
             <span class="orch-stage__meta">{{ st.skills.length }} Skills · {{ stageCalls(st) }} 次调用</span>
+            <span v-if="stageComp(st.id).length" class="orch-stage__comp" :title="stageCompTitle(st.id)">
+              <span
+                v-for="c in stageComp(st.id)"
+                :key="c.status"
+                class="orch-stage__comp-item"
+                :class="`orch-stage__comp-item--${c.status}`"
+              >{{ c.short }} {{ c.count }}</span>
+            </span>
           </span>
         </button>
         <span v-if="i < stages.length - 1" class="orch-link" :class="{ 'orch-link--on': i >= activeIdx }">
@@ -151,7 +175,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { openSkillDrawer, dataSource, isLive } from './store'
 import { liveTopoNodes, liveSkillCatalog, errMsg } from './live'
-import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi } from '@/api/adminApi'
+import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
 import FieldRoutingTable from './FieldRoutingTable.vue'
 import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
@@ -170,6 +194,67 @@ const orchCount = ref(0)
 const skillDefCount = ref(0)
 const definitionNotes = ref<string[]>([])
 const orchDefs = ref<Array<Record<string, any>>>([])
+
+/* ================= 完成度对账（reconciliation + readiness W4，live-only） ================= */
+const recReport = ref<SkillReconciliationReport | null>(null)
+const w4Drifted = ref<string[]>([])
+const unresolvedOpen = ref(false)
+
+async function loadReconciliation() {
+  if (!isLive.value) return
+  const [rec, read] = await Promise.all([
+    adminSkillsApi.getReconciliation().catch(() => null),
+    adminSkillsApi.getReadiness(false).catch(() => null),
+  ])
+  recReport.value = rec?.data?.data ?? null
+  const checks = (read?.data?.data as { checks?: { W4?: { drifted?: string[] } } } | undefined)?.checks
+  w4Drifted.value = checks?.W4?.drifted || []
+}
+
+const recSummary = computed(() => recReport.value?.summary || null)
+
+/** 按 stage 聚合完成度分布（reconciliation items 自带 stage） */
+const recByStage = computed(() => {
+  const map = new Map<string, Record<string, number>>()
+  for (const row of recReport.value?.items || []) {
+    if (!row.stage) continue
+    const bucket = map.get(row.stage) || {}
+    bucket[row.completion.status] = (bucket[row.completion.status] || 0) + 1
+    map.set(row.stage, bucket)
+  }
+  return map
+})
+
+const recStatusOrder = ['draft', 'handler-ready', 'core-ready', 'fields-synced', 'live'] as const
+const recStatusShort: Record<string, string> = {
+  draft: '草稿',
+  'handler-ready': 'handler',
+  'core-ready': 'core',
+  'fields-synced': '同步',
+  live: 'live',
+}
+
+function stageComp(stageId: string) {
+  const bucket = recByStage.value.get(stageId)
+  if (!bucket) return []
+  return recStatusOrder
+    .filter((s) => (bucket[s] || 0) > 0)
+    .map((s) => ({ status: s, short: recStatusShort[s] || s, count: bucket[s] }))
+}
+function stageCompTitle(stageId: string) {
+  return stageComp(stageId).map((c) => `${c.short} ${c.count}`).join(' · ')
+}
+
+/** 未解析节点清单（来自运行时定义 steps 的 resolved.unresolved） */
+const unresolvedNodes = computed(() => {
+  const out: string[] = []
+  for (const st of stages.value) {
+    for (const d of st.defSteps || []) {
+      if (d.resolved?.unresolved && d.agentId) out.push(`${st.name} · ${d.agentId}`)
+    }
+  }
+  return out
+})
 
 async function loadDefinitions() {
   if (!isLive.value) return
@@ -204,7 +289,10 @@ async function loadDefinitions() {
 }
 
 onMounted(() => {
-  if (isLive.value) void loadDefinitions()
+  if (isLive.value) {
+    void loadDefinitions()
+    void loadReconciliation()
+  }
   void loadStages()
 })
 // demo → live 切换后：阶段清单与运行时定义需要按真实源重拉（初始 onMounted 时可能尚未切到 live）
@@ -212,6 +300,7 @@ watch(dataSource, () => {
   if (dataSource.value === 'live') {
     void loadStages()
     if (!defsLoaded.value) void loadDefinitions()
+    if (!recReport.value) void loadReconciliation()
   }
 })
 
@@ -388,6 +477,32 @@ const stageTitle = computed(() => {
 </script>
 
 <style scoped>
+/* ========== 状态条元数据扩展（完成度对账） ========== */
+.mk-status__meta--warn { color: var(--mk-amber, #b45309); font-weight: 700; }
+.mk-status__meta--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
+.mk-status__num { font-variant-numeric: tabular-nums; }
+.mk-status__num--live { color: var(--mk-green, #15803d); }
+.orch-unresolved {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  border-radius: 10px;
+  background: var(--mk-red-bg, #fef2f2);
+  font-size: 12px;
+}
+.orch-unresolved__label { font-weight: 700; color: var(--mk-red, #dc2626); }
+.orch-unresolved__item {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--mk-ink, #1a2a44);
+  font-size: 11px;
+}
+
 /* ========== 运行时定义 ========== */
 .orch-defs__list {
   margin: 0;
@@ -497,6 +612,30 @@ const stageTitle = computed(() => {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* 阶段完成度分布徽章（reconciliation 按 stage 聚合） */
+.orch-stage__comp {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  white-space: nowrap;
+}
+.orch-stage__comp-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 15px;
+  color: #fff;
+}
+.orch-stage__comp-item--draft { background: #9aa4b2; }
+.orch-stage__comp-item--handler-ready { background: #d97706; }
+.orch-stage__comp-item--core-ready { background: #3478f6; }
+.orch-stage__comp-item--fields-synced { background: #0d9488; }
+.orch-stage__comp-item--live { background: #16a34a; }
 
 /* 接力连接器：后续链路点亮 */
 .orch-link {
@@ -683,6 +822,9 @@ const stageTitle = computed(() => {
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
+  .orch-unresolved { font-size: 13.5px; }
+  .orch-unresolved__item { font-size: 12.5px; }
+  .orch-stage__comp-item { font-size: 11.5px; line-height: 17px; }
   .orch-defs__list { font-size: 14px; padding: 14px 16px 16px; gap: 10px; }
   .orch-defs__tag { font-size: 12px; padding: 2px 10px; }
   .orch-stage { min-width: 170px; padding: 14px 16px; border-radius: 14px; }
@@ -705,6 +847,9 @@ const stageTitle = computed(() => {
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号继续放大 */
+  .orch-unresolved { font-size: 15.5px; }
+  .orch-unresolved__item { font-size: 14px; }
+  .orch-stage__comp-item { font-size: 13px; line-height: 19px; }
   .orch-defs__list { font-size: 15.5px; }
   .orch-defs__tag { font-size: 13.5px; }
   .orch-stage { min-width: 200px; padding: 16px 18px; }
@@ -727,6 +872,9 @@ const stageTitle = computed(() => {
 }
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：字号继续放大，与页面基线对齐 */
+  .orch-unresolved { font-size: 18px; }
+  .orch-unresolved__item { font-size: 16px; }
+  .orch-stage__comp-item { font-size: 15px; line-height: 22px; }
   .orch-defs__list { font-size: 18px; }
   .orch-defs__tag { font-size: 15.5px; }
   .orch-stage { min-width: 235px; padding: 18px 22px; }
