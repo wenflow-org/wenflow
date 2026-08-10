@@ -302,7 +302,7 @@ type SkillResult = {
 
 **落地注记（2026-08，P3）**：字段声明契约校验已默认全量启用（`services/skill-output-validator.ts`，经 callPrompt 在 skill 领域校验后追加）：
 - 规则：按核心文件 fields 声明校验——必填缺失（`missing-required`）/类型不匹配（`type-mismatch`，受控词表）/enum 越界（`enum-out-of-range`）；`?` 可缺省；delta 模式仅验类型（缺席合法）。
-- 排除名单（14 个，与 `services/skill-output-validator.ts` 实际名单一致）：非 JSON 输出（generic-chat / skill-author；prompt-compiler 已退役不在名单）、平台守门（semantic-freeze-judge）、模拟器家族（virtual-learner-*，fallback/旁路特殊）、无生产调用（basic-evaluator / concept-priority / course-design / goal-alignment-checker）。
+- 排除名单（14 个，与 `services/skill-output-validator.ts` 实际名单一致）：非 JSON 输出（generic-chat / skill-author；prompt-compiler 已退役不在名单）、平台守门（semantic-freeze-judge）、模拟器家族（virtual-learner-*，fallback/旁路特殊）、零调用或不可达（basic-evaluator / goal-alignment-checker 注册中零调用、concept-priority 已退役仅 manifest 残留、course-design 注册但生产不可达）。
 - fields 声明即运行时校验契约：新增字段须标 `?` 或保证模型必出，否则会驱动重试（编辑分级 §7.1 的"新增字段受限级"同步生效）。
 
 ### 5.6 辅助 Skill（v4-aux-skills）调用约定与失败策略执行语义
@@ -394,6 +394,7 @@ acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-
 > 退役注记（2026-07 调用碎片化治理）：session-knowledge-distiller 与 dialogue-concept-extractor 合并为 lesson-knowledge-enricher（同一事件消费者、输入高度重叠，单次 LLM 调用产出全部 5 个字段）。
 > 退役注记（2026-08 清单收敛）：goal-profile-inference、learning-pattern-distiller、path-scene-framing、prompt-compiler、goal-analysis、basic-generator、generic-planner、basic-extractor、data-mapping、structured-output-parser 随 RETIRED_SKILLS 退役，附录 A 同步移除。
 > 退役注记（2026-08-09 复核）：concept-priority、path-adjustment-generator 无 core.yaml、无 handler，仅 manifest 残留，一并退役。
+> 退役注记（2026-08-10 名单单源化）：退役名单收敛至 `backend/src/skills/retired-skills.ts`（`PURGED_SKILLS` 35 项 = 启动 purge 语义；`ALL_RETIRED_SKILLS` 40 项 = 追加仅残留清理项 5 项），index.ts 与 `scripts/cleanup-retired-field-data.ts` 均自此派生，`retired:check` 门禁（`scripts/check-retired-skill-lists.ts`，已挂入 `prompts:check:all`）守卫"PURGED ⊆ ALL、名单 ∩ 注册集 = ∅、无 core/manifest 残留"三项不变量；basic-evaluator / goal-alignment-checker 为注册中零调用项（§5.6 aux），保留注册并移出清理名单（其 skill_model_configs 不可自愈），由门禁活跃守卫保护；goal-analysis 的 manifest 残留随本次单源化删除。
 
 ## 附录 B. goal-conversation 核心文件（参照样例）
 
