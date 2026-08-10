@@ -6,7 +6,6 @@ const ADMIN_SESSION_REQUEST_TIMEOUT_MS = 10000;
 
 /**
  * 管理员会话标记：token 已通过 HttpOnly Cookie 下发，JS 侧只记录"已登录"标记（非敏感）
- * 旧的 admin_token 为历史遗留，读取处保留兼容
  */
 export const ADMIN_SESSION_KEY = 'wenflow_admin_session';
 export const ADMIN_SESSION_CLEAR_EVENT_KEY = 'wenflow_admin_session_cleared';
@@ -40,15 +39,7 @@ export function isAdminSessionClearBroadcast(value: string | null): boolean {
 
 export const hasAdminSession = (): boolean =>
   localStorage.getItem(ADMIN_SESSION_KEY) === '1'
-  || sessionStorage.getItem(ADMIN_SESSION_KEY) === '1'
-  || !!getAuthToken();
-
-/**
- * 获取认证 Token（仅兼容历史遗留的 localStorage 存储；新登录走 HttpOnly Cookie）
- */
-function getAuthToken(): string | null {
-  return localStorage.getItem('admin_token') || sessionStorage.getItem('admin_token');
-}
+  || sessionStorage.getItem(ADMIN_SESSION_KEY) === '1';
 
 function createCommandId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -76,19 +67,7 @@ const adminAxios = axios.create({
   },
 });
 
-// 请求拦截器 - 添加 Token
-adminAxios.interceptors.request.use(
-  (config) => {
-    const token = getAuthToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+// 会话认证依赖 HttpOnly Cookie（withCredentials），无需在请求头注入 Token
 
 let unauthorizedRedirect: Promise<void> | null = null;
 
@@ -134,8 +113,6 @@ export { adminAxios };
 
 /** 清除管理员会话的所有本地标记，并默认通知其他标签页 */
 export function clearAdminSession(notifyOtherTabs = true): void {
-  localStorage.removeItem('admin_token');
-  sessionStorage.removeItem('admin_token');
   localStorage.removeItem('admin_user');
   sessionStorage.removeItem('admin_user');
   localStorage.removeItem(ADMIN_SESSION_KEY);
@@ -155,9 +132,6 @@ export function clearAdminSession(notifyOtherTabs = true): void {
 
 /** 记录管理员会话标记（remember 决定存 localStorage 还是 sessionStorage） */
 export function markAdminSession(remember: boolean): void {
-  // 新登录必须清除旧 Bearer Token，否则请求拦截器会优先发送失效 Token 并遮蔽新 Cookie。
-  localStorage.removeItem('admin_token');
-  sessionStorage.removeItem('admin_token');
   localStorage.removeItem(ADMIN_SESSION_KEY);
   sessionStorage.removeItem(ADMIN_SESSION_KEY);
   const storage = remember ? localStorage : sessionStorage;
@@ -214,13 +188,6 @@ export const adminDashboardApi = {
    */
   getActivity: async (limit?: number, excludeTest?: boolean) => {
     return adminAxios.get('/admin/activity', { params: { limit, excludeTest: excludeTest ? '1' : undefined } });
-  },
-
-  /**
-   * 获取用户列表（兼容旧版）
-   */
-  users: async (params?: Record<string, unknown>) => {
-    return adminAxios.get('/admin/users', { params });
   },
 };
 
@@ -449,7 +416,7 @@ export const adminAgentsApi = {
     sessionId?: string;
     status?: 'success' | 'error' | 'timeout';
     keyword?: string;
-    timeRange?: 'today' | 'yesterday' | 'last7days' | 'last30days' | 'week' | 'month' | 'all';
+    timeRange?: 'today' | 'yesterday' | 'week' | 'month' | 'all';
     sourceEntry?: string;
     startTime?: string;
     endTime?: string;

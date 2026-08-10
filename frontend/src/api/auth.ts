@@ -34,30 +34,19 @@ const unwrapAuthPayload = <T>(response: unknown): T => {
 };
 
 export const authAPI = {
-
-  // 鐧诲綍
-
+  // 登录
   async login(data: LoginData): Promise<AuthResponse> {
-
     const response = await api.post('/auth/login', data);
-
     return unwrapAuthPayload<AuthResponse>(response);
-
   },
 
-
-
-  // 娉ㄥ唽
-
+  // 注册
   async register(data: RegisterData): Promise<AuthResponse> {
-
     const response = await api.post('/auth/register', data);
-
     return unwrapAuthPayload<AuthResponse>(response);
-
   },
 
-  // 娉ㄥ唽鐘舵€?
+  // 注册状态
   async getRegistrationStatus(): Promise<{
     registrationEnabled: boolean;
     configuredRegistrationEnabled?: boolean;
@@ -71,16 +60,9 @@ export const authAPI = {
     }>(response) || { registrationEnabled: false, temporaryUnavailable: true };
   },
 
-
-
-  // 楠岃瘉 token
-
+  // 验证 token
   async verifyToken(token: string): Promise<unknown> {
-
     const response = await api.post('/auth/verify', { token });
-
     return unwrapAuthPayload<unknown>(response);
-
   }
-
 };
