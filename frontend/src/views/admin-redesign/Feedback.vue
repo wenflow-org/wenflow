@@ -22,33 +22,35 @@
     </div>
 
     <template v-else>
-      <!-- 筛选 -->
-      <div class="mk-filter">
-        <input v-model="keyword" class="mk-filter__input" placeholder="搜索用户 / 评论 / 任务" />
-        <div class="mk-pills">
-          <button
-            v-for="p in statusPills"
-            :key="p.id"
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': statusFilter === p.id }"
-            @click="statusFilter = statusFilter === p.id ? '' : p.id"
-          >
-            {{ p.label }}
-          </button>
-        </div>
-        <button
-          type="button"
-          class="mk-pill"
-          :class="{ 'mk-pill--active': lowOnly }"
-          @click="lowOnly = !lowOnly"
-        >
-          仅低分 ≤2
-        </button>
-      </div>
-
       <!-- 列表 -->
       <div class="mk-card">
+        <div class="mk-card__head">
+          <div class="mk-filter">
+            <input v-model="keyword" class="mk-filter__input" placeholder="搜索用户 / 评论 / 任务" />
+            <div class="mk-pills">
+              <button
+                v-for="p in statusPills"
+                :key="p.id"
+                type="button"
+                class="mk-pill"
+                :class="{ 'mk-pill--active': statusFilter === p.id }"
+                @click="statusFilter = statusFilter === p.id ? '' : p.id"
+              >
+                {{ p.label }}
+              </button>
+            </div>
+            <button
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': lowOnly }"
+              @click="lowOnly = !lowOnly"
+            >
+              仅低分 ≤2
+            </button>
+          </div>
+          <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}</span>
+        </div>
+
         <div v-if="filtered.length" class="mk-table-scroll">
         <table class="mk-table">
           <thead>
@@ -391,7 +393,7 @@ onMounted(() => {
   justify-content: flex-end;
 }
 .fb-panel {
-  width: min(540px, 100vw);
+  width: min(560px, 100vw);
   height: 100%;
   background: #fff;
   box-shadow: -16px 0 48px rgba(15, 23, 42, 0.18);
@@ -501,7 +503,7 @@ onMounted(() => {
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大 */
 @media (min-width: 2000px) {
-  .fb-panel { width: min(680px, 100vw); }
+  .fb-panel { width: min(700px, 100vw); }
   .fb-panel__head { padding: 20px 24px; }
   .fb-panel__title h3 { font-size: 19px; }
   .fb-panel__id { font-size: 12.5px; }
@@ -516,7 +518,7 @@ onMounted(() => {
   .fb-btn-primary, .fb-btn-muted { font-size: 14px; }
 }
 @media (min-width: 2800px) {
-  .fb-panel { width: min(860px, 100vw); }
+  .fb-panel { width: min(880px, 100vw); }
   .fb-panel__head { padding: 24px 30px; }
   .fb-panel__title h3 { font-size: 23px; }
   .fb-panel__id { font-size: 15px; }
@@ -532,7 +534,7 @@ onMounted(() => {
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
-  .fb-panel { width: min(1020px, 100vw); }
+  .fb-panel { width: min(1040px, 100vw); }
   .fb-panel__head { padding: 28px 36px; }
   .fb-panel__title h3 { font-size: 27px; }
   .fb-panel__id { font-size: 17.5px; }

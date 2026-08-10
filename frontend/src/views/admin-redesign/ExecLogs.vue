@@ -435,7 +435,6 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
 .log-status strong { font-size: 14px; }
 .log-status__sep { width: 1px; height: 14px; background: var(--mk-line); }
 .log-status__meta { color: var(--mk-muted); font-size: 12px; }
-.mono { font-family: var(--mk-mono); }
 
 .log-status__filter {
   display: inline-flex;

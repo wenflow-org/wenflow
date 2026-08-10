@@ -38,6 +38,8 @@
         <span class="mk-card__meta">{{ filtered.length }} / {{ cards.length }}</span>
       </div>
 
+      <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="9" />
+      <template v-else>
       <!-- 列表视图：列对齐 + 排序，问题浮顶 -->
       <div v-if="view === 'list'" class="mk-table-scroll">
         <table v-if="filtered.length" class="mk-table sk-table">
@@ -128,6 +130,7 @@
         <span v-if="onlyAttention">一切健康。</span>
         <span v-else-if="keyword">换个关键词试试。</span>
       </div>
+      </template>
       <div v-if="canMore" class="sk-more">
         <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
       </div>
@@ -138,9 +141,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { skillProfiles, skillStatOf, openSkillDrawer, dataSource, isLive } from './store'
-import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, errMsg } from './live'
+import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
 import { useLoadMore } from './useLoadMore'
+import MockSkeletonTable from './SkeletonTable.vue'
 
 type Health = 'ok' | 'idle' | 'error'
 type SortKey = 'calls' | 'errors' | 'avgMs'

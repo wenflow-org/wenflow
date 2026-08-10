@@ -24,25 +24,27 @@
     </div>
 
     <template v-else>
-      <!-- 筛选 -->
-      <div class="mk-filter">
-        <input v-model="keyword" class="mk-filter__input" placeholder="搜索用户 / 邮箱 / 目标摘要" />
-        <div class="mk-pills">
-          <button
-            v-for="p in statusPills"
-            :key="p.id"
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': statusFilter === p.id }"
-            @click="statusFilter = statusFilter === p.id ? '' : p.id"
-          >
-            {{ p.label }}
-          </button>
-        </div>
-      </div>
-
       <!-- 列表 -->
       <div class="mk-card">
+        <div class="mk-card__head">
+          <div class="mk-filter">
+            <input v-model="keyword" class="mk-filter__input" placeholder="搜索用户 / 邮箱 / 目标摘要" />
+            <div class="mk-pills">
+              <button
+                v-for="p in statusPills"
+                :key="p.id"
+                type="button"
+                class="mk-pill"
+                :class="{ 'mk-pill--active': statusFilter === p.id }"
+                @click="statusFilter = statusFilter === p.id ? '' : p.id"
+              >
+                {{ p.label }}
+              </button>
+            </div>
+          </div>
+          <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}</span>
+        </div>
+
         <MockSkeletonTable v-if="loading && !rows.length" :cols="6" />
         <div v-else-if="filtered.length" class="mk-table-scroll">
         <table class="mk-table">

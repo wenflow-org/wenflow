@@ -12,7 +12,8 @@
 
 
     <div class="mk-card">
-      <div v-if="rows.length" class="mk-table-scroll">
+      <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="6" />
+      <div v-else-if="rows.length" class="mk-table-scroll">
       <table class="mk-table">
         <thead>
           <tr>
@@ -135,6 +136,7 @@ import {
   liveArchiveAnnouncement,
   liveDeleteAnnouncement,
   liveFailures,
+  liveLoading,
   timeAgo,
   errMsg
 } from './live'
@@ -144,6 +146,7 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
+import MockSkeletonTable from './SkeletonTable.vue'
 
 interface Row {
   id: string

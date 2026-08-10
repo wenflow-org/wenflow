@@ -896,7 +896,7 @@ function goFullEditor() {
   display: block;
   margin-top: 2px;
   font-size: 12.5px;
-  color: #8492ab;
+  color: var(--mk-faint);
   word-break: break-all;
 }
 .msk__close {
@@ -906,7 +906,7 @@ function goFullEditor() {
   height: 30px;
   border-radius: 8px;
   cursor: pointer;
-  color: #5b6577;
+  color: var(--mk-muted);
   font-size: 13px;
   flex-shrink: 0;
   transition: background 0.15s ease;
@@ -956,7 +956,7 @@ function goFullEditor() {
   padding: 10px 12px 11px;
 }
 .msk__stat + .msk__stat { border-left: 1px solid #eef2f8; }
-.msk__stat span { font-size: 12px; color: #8492ab; font-weight: 600; }
+.msk__stat span { font-size: 12px; color: var(--mk-faint); font-weight: 600; }
 .msk__stat strong {
   font-family: var(--mk-mono);
   font-size: 16px;
@@ -967,8 +967,8 @@ function goFullEditor() {
 .msk__stat strong.is-bad { color: #dc2626; }
 .msk__stat strong.is-ok { color: #15803d; }
 .msk__stat strong.is-warn { color: #b45309; }
-.msk__stat strong.is-na { color: #8492ab; }
-.msk__note { margin: -8px 0 0; font-size: 12.5px; color: #8492ab; }
+.msk__stat strong.is-na { color: var(--mk-faint); }
+.msk__note { margin: -8px 0 0; font-size: 12.5px; color: var(--mk-faint); }
 
 /* 生效模型 kv 行 */
 .msk__kv {
@@ -976,17 +976,17 @@ function goFullEditor() {
   align-items: baseline;
   gap: 8px;
   padding: 8px 12px;
-  border: 1px dashed #e1e8f2;
+  border: 1px dashed var(--mk-line);
   border-radius: 10px;
 }
-.msk__kv span { font-size: 12px; color: #8492ab; font-weight: 600; }
+.msk__kv span { font-size: 12px; color: var(--mk-faint); font-weight: 600; }
 .msk__kv strong { font-size: 12px; color: #1a2a44; font-weight: 600; }
 .msk__src {
   margin-left: auto;
   font-size: 12.5px;
   font-style: normal;
   font-weight: 600;
-  color: #8492ab;
+  color: var(--mk-faint);
 }
 
 /* 小节系统 */
@@ -1003,7 +1003,7 @@ function goFullEditor() {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #8492ab;
+  color: var(--mk-faint);
 }
 .msk__sec-head--btn {
   width: 100%;
@@ -1021,7 +1021,7 @@ function goFullEditor() {
   align-items: center;
   gap: 7px;
   font-size: 12.5px;
-  color: #8492ab;
+  color: var(--mk-faint);
   font-weight: 600;
 }
 .msk__chev {
@@ -1033,7 +1033,7 @@ function goFullEditor() {
 .msk__src-chip {
   font-size: 12.5px;
   font-weight: 700;
-  color: #8492ab;
+  color: var(--mk-faint);
   padding: 2px 8px;
   border-radius: 999px;
   background: #f0f2f5;
@@ -1072,14 +1072,14 @@ function goFullEditor() {
 }
 .msk__row-num { color: #5b6577; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .msk__row-id {
-  color: #8492ab;
+  color: var(--mk-faint);
   font-size: 12.5px;
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.msk__none { margin: 0; color: #8492ab; font-size: 12px; }
+.msk__none { margin: 0; color: var(--mk-faint); font-size: 12px; }
 .msk__notfound {
   width: min(520px, 100vw);
   height: 100%;
@@ -1092,20 +1092,19 @@ function goFullEditor() {
   padding: 24px;
 }
 .msk__notfound strong { font-size: 14px; color: #223252; }
-.msk__notfound span { font-size: 12.5px; color: #8492ab; }
-.mono { font-family: var(--mk-mono); }
+.msk__notfound span { font-size: 12.5px; color: var(--mk-faint); }
 
 /* 运行配置卡片 */
 .msk__card {
   display: grid;
   gap: 10px;
   padding: 12px;
-  border: 1px solid #e1e8f2;
+  border: 1px solid var(--mk-line);
   border-radius: 12px;
   background: #f8fafd;
 }
 .msk__field { display: grid; gap: 4px; }
-.msk__field > span { font-size: 12px; color: #8492ab; font-weight: 600; }
+.msk__field > span { font-size: 12px; color: var(--mk-faint); font-weight: 600; }
 .msk__field--check {
   display: flex;
   align-items: center;
@@ -1192,7 +1191,6 @@ function goFullEditor() {
   display: grid;
   gap: 3px;
   padding: 7px 10px 7px 12px;
-  border-left: 2px solid rgba(141, 107, 255, 0.45);
   border-left: 2px solid color-mix(in srgb, var(--mk-purple, #8d6bff) 45%, transparent);
   background: #faf9ff;
   border-radius: 0 8px 8px 0;
@@ -1221,7 +1219,7 @@ function goFullEditor() {
 .msk__protocol-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .msk__protocol-head strong { font-size: 12px; font-weight: 600; color: #223252; }
 .msk__protocol p { margin: 0; font-size: 12.5px; color: #5b6577; line-height: 1.6; }
-.msk__protocol-sites { font-size: 12.5px; color: #8492ab; word-break: break-all; }
+.msk__protocol-sites { font-size: 12.5px; color: var(--mk-faint); word-break: break-all; }
 
 /* Prompt 版本 */
 .msk__prompt {
@@ -1230,7 +1228,7 @@ function goFullEditor() {
   justify-content: space-between;
   gap: 10px;
   padding: 9px 12px;
-  border: 1px dashed #e1e8f2;
+  border: 1px dashed var(--mk-line);
   border-radius: 9px;
   font-size: 12.5px;
   color: #5b6577;
@@ -1253,7 +1251,7 @@ function goFullEditor() {
 .msk__versions-label {
   font-size: 12.5px;
   font-weight: 700;
-  color: #8492ab;
+  color: var(--mk-faint);
   padding-bottom: 2px;
 }
 .msk__version-row {
@@ -1306,7 +1304,7 @@ function goFullEditor() {
 /* 版本对比 */
 .msk__diff {
   margin-top: 8px;
-  border: 1px solid #e1e8f2;
+  border: 1px solid var(--mk-line);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -1343,7 +1341,7 @@ function goFullEditor() {
 .msk__diff-line.is-removed { background: #fef2f2; }
 .msk__diff-line.is-removed .msk__diff-text { color: #b91c1c; }
 .msk__diff-line.is-removed .msk__diff-no::after { content: '−'; color: #b91c1c; margin-left: 3px; }
-.msk__diff-no { color: #8492ab; text-align: right; user-select: none; }
+.msk__diff-no { color: var(--mk-faint); text-align: right; user-select: none; }
 .msk__diff-text { white-space: pre-wrap; word-break: break-word; color: #41516e; }
 .msk__diff-gap {
   padding: 2px 10px;

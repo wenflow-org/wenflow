@@ -665,7 +665,6 @@ const verdictText = computed(() => {
   padding: 1px 6px;
   white-space: nowrap;
 }
-.mono { font-family: var(--mk-mono); }
 
 /* 展开：事实区 / Prompt 契约 / 重试时间线 */
 .wf-facts { display: flex; gap: 8px; flex-wrap: wrap; }

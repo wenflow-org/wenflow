@@ -1992,7 +1992,6 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   font-family: Inter, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
 }
 
-.mono { font-family: var(--mk-mono); }
 .sdp-ok { color: var(--mk-green); }
 .sdp-warn { color: var(--mk-amber); }
 .sdp-none { margin: 0; font-size: 12px; color: var(--mk-faint); }

@@ -8,11 +8,8 @@
   --mk-z-modal: 300;
   --mk-z-toast: 400;
 
-  /* 覆盖层高度上限 token：弹层/抽屉共用。当前各页面仍有字面量（CommandPalette 60vh /
-     Skills 68vh / SkillDesignPage 74vh），后续收敛到此统一上限（min 兜底小屏不溢出） */
-  --mk-overlay-maxh: min(74vh, 680px);
-
-  /* 抽屉宽度档 token：供各详情抽屉 4K 镜像断点复用（base 560 → lg 700 → xl 880 → xxl 1040） */
+  /* 抽屉宽度档 token：供各详情抽屉 4K 镜像断点复用（base 560 → lg 700 → xl 880 → xxl 1040）。
+     例外：SkillDrawer 有意更窄（520/600/760/890，需容纳两侧并排的版本对比等密集区），保持自身档位 */
   --mk-drawer-w: 560px;
   --mk-drawer-w-lg: 700px;
   --mk-drawer-w-xl: 880px;
@@ -75,7 +72,9 @@
   border-radius: 4px;
 }
 
-/* ----- 状态条（每页开头一行） ----- */
+/* ----- 状态条（每页开头一行） -----
+   例外授权：ExecLogs 终端页自建 .log-status（规格一致的本地副本，内边距略大以容纳筛选区），
+   不再回归本类，属登记在案的状态条例外形态 */
 .mk-status {
   display: flex;
   align-items: center;

@@ -42,7 +42,8 @@
         <button type="button" class="mk-link" :disabled="refreshing" @click="refreshNow">{{ refreshing ? '重试中…' : '重试' }}</button>
       </div>
 
-      <div class="mk-table-scroll">
+      <MockSkeletonTable v-if="refreshing && !rows.length" :cols="7" />
+      <div v-else class="mk-table-scroll">
         <table v-if="filtered.length" class="mk-table">
           <thead>
             <tr>
@@ -83,7 +84,7 @@
           </tbody>
         </table>
 
-        <div v-else class="mk-empty">
+        <div v-else-if="!loadFailed" class="mk-empty">
           <strong>{{ rows.length ? '当前筛选无会话' : '还没有教学会话' }}</strong>
           <span>{{ rows.length ? '放宽筛选条件。' : '真实学习者开始上课后出现在这里。' }}</span>
         </div>
@@ -167,6 +168,7 @@ import { statusText } from './statusText'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
+import MockSkeletonTable from './SkeletonTable.vue'
 
 interface WrapupSummary {
   topicSummary?: string
@@ -296,8 +298,13 @@ watch(
       rows.value = [...demoRows]
       return
     }
-    const ok = await fetchRows()
-    if (!ok) rows.value = []
+    refreshing.value = true
+    try {
+      const ok = await fetchRows()
+      if (!ok) rows.value = []
+    } finally {
+      refreshing.value = false
+    }
   },
   { immediate: true }
 )
@@ -478,12 +485,12 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
   justify-content: space-between;
   gap: 10px;
   padding: 16px 18px;
-  border-bottom: 1px solid #e1e8f2;
+  border-bottom: 1px solid var(--mk-line);
 }
 .ts-panel__title { display: grid; gap: 6px; justify-items: start; }
 .ts-panel__title h3 { margin: 0; font-size: 16px; }
-.ts-panel__id { font-family: var(--mk-mono); font-size: 10.5px; color: #8492ab; word-break: break-all; }
-.ts-panel__close { border: 0; background: #f0f2f5; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; color: #5b6577; }
+.ts-panel__id { font-family: var(--mk-mono); font-size: 10.5px; color: var(--mk-faint); word-break: break-all; }
+.ts-panel__close { border: 0; background: #f0f2f5; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; color: var(--mk-muted); }
 .ts-panel__body { padding: 16px 18px; display: grid; gap: 16px; align-content: start; overflow-y: auto; }
 
 .ts-facts {
@@ -492,7 +499,7 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
   gap: 10px;
 }
 .ts-facts > div { display: grid; gap: 2px; }
-.ts-facts span { font-size: 11px; color: #8492ab; font-weight: 600; }
+.ts-facts span { font-size: 11px; color: var(--mk-faint); font-weight: 600; }
 .ts-facts strong { font-size: 12.5px; }
 
 @media (max-width: 560px) {
@@ -506,20 +513,20 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #8492ab;
+  color: var(--mk-faint);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 .ts-src { font-size: 10.5px; font-weight: 600; text-transform: none; letter-spacing: 0; }
 .ts-card {
-  border: 1px solid #e1e8f2;
+  border: 1px solid var(--mk-line);
   border-radius: 10px;
   padding: 10px 12px;
   display: grid;
   gap: 4px;
 }
-.ts-card span { font-size: 11px; color: #8492ab; font-weight: 700; }
+.ts-card span { font-size: 11px; color: var(--mk-faint); font-weight: 700; }
 .ts-card p { margin: 0; font-size: 12.5px; line-height: 1.7; white-space: pre-wrap; }
 .ts-card--advisory { border-color: rgba(180, 83, 9, 0.3); background: #fffdf5; }
 
@@ -548,7 +555,7 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #8492ab;
+  color: var(--mk-faint);
   padding: 2px 0;
 }
 .ts-json {

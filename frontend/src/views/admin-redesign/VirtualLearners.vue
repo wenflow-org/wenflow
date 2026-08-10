@@ -17,7 +17,8 @@
         <input class="mk-filter__input" v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
       </div>
 
-      <div v-if="filtered.length" class="mk-table-scroll">
+      <MockSkeletonTable v-if="liveLoading && !samples.length" :cols="6" />
+      <div v-else-if="filtered.length" class="mk-table-scroll">
       <table class="mk-table mk-table--click">
         <thead>
           <tr>
@@ -202,6 +203,7 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
+import MockSkeletonTable from './SkeletonTable.vue'
 
 interface Sample {
   id: string
