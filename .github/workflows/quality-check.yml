@@ -46,6 +46,7 @@ jobs:
           npm run prompts:lint
           npm run prisma:migrate:deploy:all
           npm run prompts:seed-routings
+          npm run prompts:drift-check
           npm run prompts:check-handoff:strict
           npm run prompts:snapshots:check
           npm run prompts:core:check
