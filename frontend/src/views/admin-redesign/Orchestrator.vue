@@ -230,6 +230,10 @@ interface Stage {
   defSteps?: DefStep[]
 }
 
+// demo-only：离线/演示模式的阶段骨架与调用数（假数据仅 demo 模式可见）。
+// live 模式（下方 stages computed 的 live 分支）完全由 API 驱动：
+//   GET stages（编排文件派生）+ 拓扑节点 + skill-catalog + 编排定义，
+//   不再以本清单为骨架，避免 demo 阶段/假调用数污染真实展示。
 const demoStages: Stage[] = [
   {
     id: 'goal',
@@ -290,16 +294,14 @@ const demoStages: Stage[] = [
 
 const active = ref('goal')
 const defById = computed(() => new Map(orchDefs.value.map((d) => [d.id, d])))
-// 5 阶段统一后端源（A3）：GET /admin/field-routings/stages；demoStages 仅离线 fallback
+// 阶段清单统一后端源：GET /admin/field-routings/stages（派生自编排文件），
+// 全量消费、不过滤后端结果；demo 模式回退 demoStages 骨架
 const stageList = ref<Array<{ id: string; displayName: string }>>([])
-const stageNames = computed(() => new Map(stageList.value.map((s) => [s.id, s.displayName])))
 
 async function loadStages() {
   try {
     const res = await adminFieldRoutingsApi.getStages()
-    const stages = (res.data?.data?.stages || []).filter((s: { id: string }) =>
-      ['goal', 'path', 'teaching', 'profile', 'simulation'].includes(s.id)
-    )
+    const stages = res.data?.data?.stages || []
     if (stages.length) {
       stageList.value = stages
       if (!stages.some((s: { id: string }) => s.id === active.value)) {
@@ -307,47 +309,56 @@ async function loadStages() {
       }
     }
   } catch {
-    // 后端不可用时回退 demo 骨架（仅 name 来源）
+    // demo-only：后端不可用时回退 demo 骨架（仅 demo 模式可见）
     stageList.value = []
   }
 }
 
 const stages = computed<Stage[]>(() => {
+  // demo-only：离线兜底（非 live 或拓扑未就绪时的演示骨架）
   if (dataSource.value !== 'live' || !liveTopoNodes.value.length) return demoStages
 
-  return demoStages.map((stage) => {
+  // live：阶段清单以 GET stages（编排文件派生）为准，无白名单过滤；
+  // 该端点失败时退化为拓扑 Agent 节点派生（仍为真实数据，无 demo 兜底）。
+  // stage → 顶层 Agent 的约定映射 <stage>-agent 与后端 STAGE_AGENT_MAP 同源
+  // （每个编排文件 contracts 中 manifest kind=agent 者均为 <stage>-agent）；
+  // 拓扑中查不到 Agent 的阶段仍展示（真实字段路由 tab 可用），成员列表为空。
+  const list = stageList.value.length
+    ? stageList.value
+    : liveTopoNodes.value
+        .filter((n) => n.type === 'agent')
+        .map((n) => ({ id: n.id.replace(/-agent$/, ''), displayName: n.label }))
+  return list.map((s) => {
+    const agentId = `${s.id}-agent`
     const members = liveTopoNodes.value.filter(
-      (n) => n.type === 'skill' && n.parentAgentId === stage.agentId
+      (n) => n.type === 'skill' && n.parentAgentId === agentId
     )
-    const demoById = new Map(stage.skills.map((skill) => [skill.id, skill]))
-    // 真实变量流：来自 prompt-ops skill-catalog 的 input/output 字段
-    const catalogAgent = liveSkillCatalog.value.find((a) => a.agentId === stage.agentId)
-    const catalogById = new Map((catalogAgent?.skills || []).map((s) => [s.skillId, s]))
+    // 真实变量流：来自 prompt-ops skill-catalog 的 input/output 字段（无 demo 兜底）
+    const catalogAgent = liveSkillCatalog.value.find((a) => a.agentId === agentId)
+    const catalogById = new Map((catalogAgent?.skills || []).map((c) => [c.skillId, c]))
     const skills = members.map((node) => {
       const id = node.id.replace(/^skill:/, '')
-      const fallback = demoById.get(id)
       const catalog = catalogById.get(id)
       return {
         id,
         name: node.label.replace(/ Skill$/, ''),
         calls: node.stats.totalCalls,
-        produces: catalog?.outputFields.length ? catalog.outputFields : fallback?.produces || []
+        produces: catalog?.outputFields || []
       }
     })
-    // 阶段级变量：下辖 Skill 输入 = 消费，输出 = 产出（有真实字段时覆盖演示值）
-    const allInputs = [...new Set(skills.flatMap((s) => catalogById.get(s.id)?.inputFields || []))]
-    const allOutputs = [...new Set(skills.flatMap((s) => s.produces))]
+    // 阶段级变量：下辖 Skill 输入 = 消费，输出 = 产出
+    const allInputs = [...new Set(skills.flatMap((skill) => catalogById.get(skill.id)?.inputFields || []))]
+    const allOutputs = [...new Set(skills.flatMap((skill) => skill.produces))]
     // 定义级步骤（编排定义实时编译，含 role/condition/loopOver/resolved）
-    const def = defById.value.get(stage.agentId)
-    const defSteps: DefStep[] = def?.steps || []
+    const def = defById.value.get(agentId)
     return {
-      ...stage,
-      // 阶段名以后端 stages 源优先（A3 统一）
-      name: stageNames.value.get(stage.id) || stage.name,
-      consumes: allInputs.length ? allInputs.slice(0, 5) : stage.consumes,
-      produces: allOutputs.length ? allOutputs.slice(0, 5) : stage.produces,
+      id: s.id,
+      name: s.displayName,
+      agentId,
+      consumes: allInputs.slice(0, 5),
+      produces: allOutputs.slice(0, 5),
       skills,
-      defSteps
+      defSteps: def?.steps || []
     }
   })
 })

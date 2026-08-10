@@ -535,7 +535,10 @@ const formatAgentId = (logOrAgentId: string | AgentLogItem | null | undefined) =
     return '平台底层调用';
   }
   
-  // 友好显示映射
+  // 友好显示映射（agentId → 展示名）。
+  // 来源说明：本页为用户侧执行日志，无现成 agent 清单 API 可复用；id 含
+  // 历史/业务别名（ai-teaching-agent、ai-tutor 等）与 admin 注册表不同构，
+  // 保持本地字典，仅作显示层映射（未命中时原样回退 agentId）。
   const agentNames: Record<string, string> = {
     'skill:path-planning': '学习路径规划',
     'skill:goal-conversation': '目标对话',
@@ -579,6 +582,8 @@ const getLogSourceType = (log: AgentLogItem) => {
 };
 
 const getCapabilityType = (agentId?: string) => {
+  // agent → 能力类型映射（显示层字典，与上方 agentNames 同源；无 agent 清单 API，
+  // 保持本地映射，未命中归为 system）
   const mapping: Record<string, string> = {
     'skill:goal-conversation': 'goal',
     'skill:path-planning': 'path',

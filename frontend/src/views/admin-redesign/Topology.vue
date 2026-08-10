@@ -443,14 +443,6 @@ function goDesign(id: string) {
 interface AgentDef { id: string; name: string }
 interface SkillItem { id: string; name: string; agentId: string; calls: number; errors: number; avgMs: number; ioContract?: string; model?: string }
 
-const demoAgentDefs: AgentDef[] = [
-  { id: 'goal-agent', name: '目标 Agent' },
-  { id: 'path-agent', name: '路径 Agent' },
-  { id: 'teaching-agent', name: '教学 Agent' },
-  { id: 'profile-agent', name: '学习者 Agent' },
-  { id: 'simulation-agent', name: '虚拟学习者 Agent' }
-]
-
 const isLive = computed(() => dataSource.value === 'live' && liveTopoNodes.value.length > 0)
 
 const liveAgents = computed<AgentDef[]>(() =>
@@ -471,7 +463,17 @@ const liveSkills = computed<SkillItem[]>(() =>
     }))
 )
 
-const agentDefs = computed<AgentDef[]>(() => (isLive.value ? liveAgents.value.slice(0, 5) : demoAgentDefs))
+// demo-only：离线兜底的 Agent 清单，派生自演示 skillProfiles（无硬编码清单，顺序与名称与历史一致）
+const demoAgentDefs = computed<AgentDef[]>(() => {
+  const seen = new Map<string, string>()
+  for (const p of skillProfiles) {
+    if (p.agentId && !seen.has(p.agentId)) seen.set(p.agentId, p.agentName)
+  }
+  return [...seen.entries()].map(([id, name]) => ({ id, name }))
+})
+
+// live 模式全量消费拓扑 Agent 节点（无 5 上限）；demo 模式走演示档案
+const agentDefs = computed<AgentDef[]>(() => (isLive.value ? liveAgents.value : demoAgentDefs.value))
 
 function skillsOf(agentId: string): SkillItem[] {
   if (isLive.value) return liveSkills.value.filter((s) => s.agentId === agentId)

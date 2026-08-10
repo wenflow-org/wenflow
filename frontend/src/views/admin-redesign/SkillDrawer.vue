@@ -351,7 +351,8 @@ import {
   openTrace,
   openSkillDrawer,
   closeSkillDrawer,
-  dataSource
+  dataSource,
+  AGENT_TONES
 } from './store'
 import { liveSkillProfiles, liveExtraProfiles, liveApiConfig, errMsg, fetchProtocolView, fetchRulesOverview, type LiveProtocol, type LiveRulesOverview, type LiveRule } from './live'
 import { adminSkillWorkbenchApi, adminSkillsApi, adminAgentPromptsApi } from '@/api/adminApi'
@@ -372,9 +373,7 @@ const isLive = computed(() => dataSource.value === 'live')
 
 const skillProfile = computed(() => {
   const id = intent.skillDrawerId
-  const demo = skillProfiles.find((p) => p.id === id)
-  if (demo) return demo
-  // live 模式：真实注册表（含外挂能力 Skill，从外挂组件页跳入时）
+  // live 模式优先真实注册表（含外挂能力 Skill），demo 档案仅离线兜底
   if (isLive.value) {
     const live =
       liveSkillProfiles.value.find((p) => p.id === id) ||
@@ -383,21 +382,12 @@ const skillProfile = computed(() => {
       return { id: live.id, name: live.name, agentId: '', agentName: '', category: live.category, promptVersion: '', description: '' }
     }
   }
-  return null
+  return skillProfiles.find((p) => p.id === id) || null
 })
 const agentProfile = computed(() => agentProfiles.find((p) => p.id === intent.skillDrawerId) || null)
 const entity = computed(() => skillProfile.value || agentProfile.value)
 
 /* 身份色：与 Agent 拓扑同套阶段色（按所属 Agent 取色） */
-const AGENT_TONES: Record<string, { hue: string; soft: string }> = {
-  'goal-agent': { hue: '#4f46e5', soft: 'rgba(79, 70, 229, 0.1)' },
-  'path-agent': { hue: '#0d9488', soft: 'rgba(13, 148, 136, 0.1)' },
-  'teaching-agent': { hue: '#3478f6', soft: 'rgba(52, 120, 246, 0.1)' },
-  'profile-agent': { hue: '#d97706', soft: 'rgba(217, 119, 6, 0.1)' },
-  'learner-agent': { hue: '#d97706', soft: 'rgba(217, 119, 6, 0.1)' },
-  'simulation-agent': { hue: '#7c3aed', soft: 'rgba(124, 58, 237, 0.1)' },
-  'virtual-agent': { hue: '#7c3aed', soft: 'rgba(124, 58, 237, 0.1)' }
-}
 const tone = computed(() => {
   const key = skillProfile.value ? skillProfile.value.agentId : intent.skillDrawerId
   return AGENT_TONES[key || ''] || { hue: '#3478f6', soft: 'rgba(52, 120, 246, 0.1)' }

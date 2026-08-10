@@ -136,10 +136,6 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
   ],
 };
 
-function stripSkillPrefix(fieldId: string): string {
-  return fieldId;
-}
-
 /**
  * 沙盘路径注册表：该 agent 下所有合法 sandbox 键。
  * 键来源：
@@ -169,8 +165,8 @@ export async function buildAgentSandboxView(agentId: string): Promise<AgentSandb
     seenInputs.add(row.fieldId);
     const fieldType = await resolveFieldType(row);
     inputChannels.push({
-      path: `sandbox:${agentId}.${stripSkillPrefix(row.fieldId)}`,
-      key: stripSkillPrefix(row.fieldId),
+      path: `sandbox:${agentId}.${row.fieldId}`,
+      key: row.fieldId,
       fieldId: row.fieldId,
       type: fieldType,
       source: row.agentId === agentId ? 'routing-channel' : 'routing-output',

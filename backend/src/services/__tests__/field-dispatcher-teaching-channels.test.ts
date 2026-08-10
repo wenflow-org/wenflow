@@ -6,7 +6,12 @@
  */
 
 import { assembleTeachingTurnChannels } from '../field-dispatcher';
-import { TEACHING_FIELD_ROUTING_FIELDS, TEACHING_FIELD_ROUTINGS } from '../../scripts/seed-execution-field-routings';
+import { loadOrchestrationFiles } from '../field-routing/orchestration-file';
+
+// 字段路由声明源：编排文件（seed TS 已退役）
+const TEACHING_STAGE = loadOrchestrationFiles().find((s) => s.stage === 'teaching')!;
+const TEACHING_FIELD_ROUTING_FIELDS = TEACHING_STAGE.fields;
+const TEACHING_FIELD_ROUTINGS = TEACHING_STAGE.routings;
 
 const TEACHING_CHANNEL_ROWS = TEACHING_FIELD_ROUTINGS
   .filter((r) => r.agentId === 'teaching-agent' && r.handoff.includes('skill:teaching-turn'))

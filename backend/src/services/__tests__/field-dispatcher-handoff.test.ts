@@ -5,7 +5,12 @@
 
 import { assembleGoalHandoff, extractFieldsByPath } from '../field-dispatcher';
 import { buildGoalPathVisibleSummary } from '../learning/goal-path-visible-summary';
-import { GOAL_FIELD_ROUTING_FIELDS, GOAL_FIELD_ROUTINGS } from '../../scripts/seed-goal-field-routings';
+import { loadOrchestrationFiles } from '../field-routing/orchestration-file';
+
+// 字段路由声明源：编排文件（seed TS 已退役）
+const GOAL_STAGE = loadOrchestrationFiles().find((s) => s.stage === 'goal')!;
+const GOAL_FIELD_ROUTING_FIELDS = GOAL_STAGE.fields;
+const GOAL_FIELD_ROUTINGS = GOAL_STAGE.routings;
 
 const GOAL_AGENT_HANDOFF_ROWS = GOAL_FIELD_ROUTINGS
   .filter((r) => r.agentId === 'goal-agent' && r.handoff.includes('path'))
@@ -96,7 +101,7 @@ describe('assembleGoalHandoff（配置式 goal→path 值抽取）', () => {
     expect(skipped.some((item) => item.includes('understanding.real_problem'))).toBe(true)
   })
 
-  it('seed 的 pathInRawOutput 与 goal skill 输出结构一致（全部可解析）', () => {
+  it('编排文件的 pathInRawOutput 与 goal skill 输出结构一致（全部可解析）', () => {
     const output = buildGoalSkillOutput()
     const rows = GOAL_FIELD_ROUTING_FIELDS.map((f) => ({ fieldId: f.fieldId, pathInRawOutput: f.pathInRawOutput }))
     const flat = extractFieldsByPath(output, rows)

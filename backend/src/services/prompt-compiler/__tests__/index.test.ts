@@ -86,7 +86,7 @@ payload 中会包含:
     expect(result.body).toBe(sample);
   });
 
-  it('有 input 角色 routing → 替换 json 块, 保留 prose', () => {
+  it('promptRole 词表无输入侧角色 → 恒 no-op（保留源 body）', () => {
     const routings: FieldRoutingRow[] = [
       {
         agentId: 'test',
@@ -95,7 +95,7 @@ payload 中会包含:
         handoff: [],
         internal: false,
         accumulate: false,
-        promptRole: 'input-required',
+        promptRole: 'public-reply',
         valueType: 'string',
       },
       {
@@ -105,20 +105,13 @@ payload 中会包含:
         handoff: [],
         internal: false,
         accumulate: false,
-        promptRole: 'input-required',
+        promptRole: 'control-signal',
         valueType: 'object',
       },
     ];
     const result = rewriteInputSection(block, routings);
-    expect(result.rewritten).toBe(true);
-    expect(result.fieldsApplied).toBe(2);
-    // 新 json 含新字段
-    expect(result.body).toContain('"userInput"');
-    expect(result.body).toContain('"state"');
-    // 旧字段被冲掉
-    expect(result.body).not.toContain('"old_field"');
-    // prose bullet 仍在 (源 body 里的 markdown 描述)
-    expect(result.body).toContain('- old_field: 旧字段描述');
+    expect(result.rewritten).toBe(false);
+    expect(result.body).toBe(sample);
   });
 });
 

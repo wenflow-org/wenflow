@@ -836,6 +836,7 @@ import {
   adminSkillsApi
 } from '@/api/adminApi'
 import { askConfirm } from './useConfirm'
+import { AGENT_TONES } from './store'
 import './shared.css'
 import { toast } from '@/utils/toast'
 
@@ -866,16 +867,7 @@ function goDryRun() {
   tab.value = 'trial'
 }
 
-/* ---------- 阶段色（与拓扑/抽屉同套） ---------- */
-const AGENT_TONES: Record<string, { hue: string; soft: string }> = {
-  'goal-agent': { hue: '#4f46e5', soft: 'rgba(79, 70, 229, 0.1)' },
-  'path-agent': { hue: '#0d9488', soft: 'rgba(13, 148, 136, 0.1)' },
-  'teaching-agent': { hue: '#3478f6', soft: 'rgba(52, 120, 246, 0.1)' },
-  'profile-agent': { hue: '#d97706', soft: 'rgba(217, 119, 6, 0.1)' },
-  'learner-agent': { hue: '#d97706', soft: 'rgba(217, 119, 6, 0.1)' },
-  'simulation-agent': { hue: '#7c3aed', soft: 'rgba(124, 58, 237, 0.1)' },
-  'virtual-agent': { hue: '#7c3aed', soft: 'rgba(124, 58, 237, 0.1)' }
-}
+/* ---------- 阶段色（与拓扑/抽屉同套，单源 store.AGENT_TONES） ---------- */
 const tone = computed(() => {
   const pid = workbenchMeta.value?.parentAgent?.id || ''
   return AGENT_TONES[pid] || { hue: '#3478f6', soft: 'rgba(52, 120, 246, 0.1)' }

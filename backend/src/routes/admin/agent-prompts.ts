@@ -3,20 +3,16 @@
  * 
  * 【重要变更】
  * - prompts/*.md 文件是唯一权威源，进 git
- * - 在线编辑功能已禁用：POST create、PUT update、DELETE、PUT publish 不再可用
- * - 只保留只读查看：GET list、GET detail、GET stats
+ * - 写端点（POST create、PUT update、DELETE、PUT publish、POST seed-core）已整体移除；
+ *   路由级 rejectAgentPromptMutation 仍挂载，防止未来误加写端点
+ * - 只保留只读查看：GET list、GET active、GET detail、GET stats、GET history、GET compare
  * - 修改 prompt 的唯一方式：编辑 prompts/*.md 文件 + git commit + 启动/手动 sync
  */
 
 import { Router, Request, Response } from 'express';
 import systemPrisma from '../../config/system-database';
-import { randomUUID as uuidv4 } from 'crypto';
 import { logger } from '../../utils/logger';
 import { getAgentManifest, getCanonicalAgentId } from '../../services/agent-manifest.service';
-import {
-  loadCoreAgentPromptSeeds,
-  ensureCoreAgentPrompts,
-} from '../../scripts/seed-core-agent-prompts';
 import { rejectAgentPromptMutation } from '../../middleware/prompt-file-truth.middleware';
 
 const router = Router();
@@ -165,198 +161,6 @@ router.get('/detail/:id', async (req: Request, res: Response) => {
       success: false,
       error: { message: '获取 Prompt 详情失败' },
     });
-  }
-});
-
-router.post('/seed-core', async (_req: Request, res: Response) => {
-  try {
-    const result = await ensureCoreAgentPrompts(systemPrisma, 'backfill');
-    res.json({
-      success: true,
-      data: {
-        seeds: loadCoreAgentPromptSeeds().map((seed) => ({
-          agentId: seed.agentId,
-          name: seed.name,
-        })),
-        result,
-      },
-    });
-  } catch (error) {
-    logger.error('初始化核心 Agent Prompt 失败:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: '初始化核心 Agent Prompt 失败' },
-    });
-  }
-});
-
-// POST /api/admin/agent-prompts
-// 创建新版本（草稿状态）
-router.post('/', async (req: Request, res: Response) => {
-  try {
-    const {
-      agentId,
-      name,
-      description,
-      systemPrompt,
-      temperature,
-      maxTokens,
-      model,
-    } = req.body;
-
-    // 验证必填字段
-    if (!agentId || !name || !systemPrompt) {
-      return res.status(400).json({
-        success: false,
-        error: { message: 'agentId, name, systemPrompt 是必填字段' },
-      });
-    }
-
-    // 获取当前最大版本号
-    const latestVersion = await systemPrisma.agent_prompts.findFirst({
-      where: { agentId },
-      orderBy: { version: 'desc' },
-      select: { version: true },
-    });
-
-    const newVersion = (latestVersion?.version || 0) + 1;
-
-    const resolvedModel = (model || process.env.AI_MODEL || '').trim();
-    if (!resolvedModel) {
-      return res.status(400).json({
-        success: false,
-        error: { message: 'model 未配置，请在管理员配置默认模型或请求中传入 model' },
-      });
-    }
-
-    // 创建新版本
-    const prompt = await systemPrisma.agent_prompts.create({
-      data: {
-        id: uuidv4(),
-        agentId,
-        version: newVersion,
-        name,
-        description: description || null,
-        systemPrompt,
-        temperature: temperature ?? 0.7,
-        maxTokens: maxTokens ?? 2000,
-        model: resolvedModel,
-        status: 'DRAFT',
-        createdBy: req.body.createdBy || 'admin',
-      },
-    });
-
-    logger.info(`创建新 Prompt 版本: ${agentId} v${newVersion}`);
-
-    res.status(201).json({
-      success: true,
-      data: prompt,
-    });
-  } catch (error) {
-    logger.error('创建 Prompt 版本失败:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: '创建 Prompt 版本失败' },
-    });
-  }
-});
-
-// PUT /api/admin/agent-prompts/:id/publish
-// 发布版本：把指定版本状态置为 ACTIVE，同时把同 agentId 的其他 ACTIVE 改为 ARCHIVED
-router.put('/:id/publish', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const target = await systemPrisma.agent_prompts.findUnique({ where: { id } });
-    if (!target) {
-      return res.status(404).json({ success: false, error: { message: 'Prompt 版本不存在' } });
-    }
-
-    await systemPrisma.$transaction([
-      systemPrisma.agent_prompts.updateMany({
-        where: { agentId: target.agentId, status: 'ACTIVE' },
-        data: { status: 'ARCHIVED' },
-      }),
-      systemPrisma.agent_prompts.update({
-        where: { id },
-        data: {
-          status: 'ACTIVE',
-          publishedAt: new Date(),
-        },
-      }),
-    ]);
-
-    const fresh = await systemPrisma.agent_prompts.findUnique({ where: { id } });
-
-    logger.info(`Prompt 版本已发布: ${target.agentId} ${target.name} v${target.version}`);
-    res.json({
-      success: true,
-      data: fresh,
-      warning: '注意：File-as-Truth 架构下，下次启动若 prompts/*.md 与 DB 不一致会被覆盖',
-    });
-  } catch (error: any) {
-    logger.error('发布 Prompt 版本失败:', error?.message || error);
-    res.status(500).json({ success: false, error: { message: '发布 Prompt 版本失败' } });
-  }
-});
-
-// PUT /api/admin/agent-prompts/:id
-// 更新草稿版本（仅允许 status=DRAFT 的版本被改写；ACTIVE/ARCHIVED 不允许）
-router.put('/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const existing = await systemPrisma.agent_prompts.findUnique({ where: { id } });
-    if (!existing) {
-      return res.status(404).json({ success: false, error: { message: 'Prompt 版本不存在' } });
-    }
-    if (existing.status !== 'DRAFT') {
-      return res.status(409).json({
-        success: false,
-        error: { message: `仅允许编辑 DRAFT 状态的 Prompt（当前 status=${existing.status}）` },
-      });
-    }
-
-    const { name, description, systemPrompt, temperature, maxTokens, model } = req.body || {};
-    const data: any = {};
-    if (typeof name === 'string') data.name = name;
-    if (typeof description === 'string') data.description = description;
-    if (typeof systemPrompt === 'string') data.systemPrompt = systemPrompt;
-    if (typeof temperature === 'number') data.temperature = temperature;
-    if (typeof maxTokens === 'number') data.maxTokens = maxTokens;
-    if (typeof model === 'string' && model.trim()) data.model = model.trim();
-
-    if (!Object.keys(data).length) {
-      return res.status(400).json({ success: false, error: { message: '没有可更新字段' } });
-    }
-    data.updatedAt = new Date();
-
-    const updated = await systemPrisma.agent_prompts.update({ where: { id }, data });
-    res.json({ success: true, data: updated });
-  } catch (error: any) {
-    logger.error('更新 Prompt 版本失败:', error?.message || error);
-    res.status(500).json({ success: false, error: { message: '更新 Prompt 版本失败' } });
-  }
-});
-
-// DELETE /api/admin/agent-prompts/:id
-// 删除 Prompt 版本：仅允许 DRAFT 状态版本删除；ACTIVE/ARCHIVED 一律拒绝
-router.delete('/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const existing = await systemPrisma.agent_prompts.findUnique({ where: { id } });
-    if (!existing) {
-      return res.status(404).json({ success: false, error: { message: 'Prompt 版本不存在' } });
-    }
-    if (existing.status !== 'DRAFT') {
-      return res.status(409).json({
-        success: false,
-        error: { message: `仅允许删除 DRAFT 状态的 Prompt（当前 status=${existing.status}）` },
-      });
-    }
-    await systemPrisma.agent_prompts.delete({ where: { id } });
-    res.json({ success: true });
-  } catch (error: any) {
-    logger.error('删除 Prompt 版本失败:', error?.message || error);
-    res.status(500).json({ success: false, error: { message: '删除 Prompt 版本失败' } });
   }
 });
 

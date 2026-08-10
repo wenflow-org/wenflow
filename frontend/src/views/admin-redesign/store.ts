@@ -135,6 +135,18 @@ export interface AgentProfile {
   description: string
 }
 
+/* ---------- 身份色（拓扑 / 编排 / 抽屉 / 设计页共用，单源） ---------- */
+/** 各顶层 Agent 的身份色；key = Agent id。历史重复定义（SkillDesignPage/SkillDrawer 内嵌）已收敛至此 */
+export const AGENT_TONES: Record<string, { hue: string; soft: string }> = {
+  'goal-agent': { hue: '#4f46e5', soft: 'rgba(79, 70, 229, 0.1)' },
+  'path-agent': { hue: '#0d9488', soft: 'rgba(13, 148, 136, 0.1)' },
+  'teaching-agent': { hue: '#3478f6', soft: 'rgba(52, 120, 246, 0.1)' },
+  'profile-agent': { hue: '#d97706', soft: 'rgba(217, 119, 6, 0.1)' },
+  'simulation-agent': { hue: '#7c3aed', soft: 'rgba(124, 58, 237, 0.1)' }
+}
+
+// demo-only：演示/离线模式的 Agent 档案。
+// live 模式由 live.ts 的真实注册表驱动（drawer 以 skill 维度展示），本表仅离线兜底。
 export const agentProfiles: AgentProfile[] = [
   { id: 'goal-agent', name: '目标 Agent', description: '收集学习目标与上下文，输出 Goal Understanding。' },
   { id: 'path-agent', name: '路径 Agent', description: '规划学习路径与阶段拆解。' },
@@ -144,9 +156,12 @@ export const agentProfiles: AgentProfile[] = [
 ]
 
 export function skillsOfAgent(agentId: string): SkillProfile[] {
+  // demo-only：仅离线兜底（drawer 的 Agent 视图）；live 模式走拓扑/注册表
   return skillProfiles.filter((p) => p.agentId === agentId)
 }
 
+// demo-only：演示/离线模式的 Skill 档案（含演示统计口径）。
+// live 模式由 live.ts 的 liveSkillProfiles（真实注册表）驱动，本表不得污染 live 展示。
 export const skillProfiles: SkillProfile[] = [
   { id: 'goal-conversation', name: '目标对话', agentId: 'goal-agent', agentName: '目标 Agent', category: 'analysis', promptVersion: 'v3.2 · 已生效', description: '与用户聊清真实场景，抽取可规划的概念。' },
   { id: 'path-planning', name: '路径规划', agentId: 'path-agent', agentName: '路径 Agent', category: 'generation', promptVersion: 'v2.1 · 已生效', description: '生成认知核心与阶段化路径骨架。' },

@@ -6,8 +6,13 @@
  */
 
 import { extractFieldsByPath, assembleStageDesignerChannels } from '../field-dispatcher';
-import { PATH_FIELD_ROUTING_FIELDS, PATH_FIELD_ROUTINGS } from '../../scripts/seed-path-field-routings';
+import { loadOrchestrationFiles } from '../field-routing/orchestration-file';
 import { buildFramedNormalizedInput } from '../learning/path-planning-hints';
+
+// 字段路由声明源：编排文件（seed TS 已退役）
+const PATH_STAGE = loadOrchestrationFiles().find((s) => s.stage === 'path')!;
+const PATH_FIELD_ROUTING_FIELDS = PATH_STAGE.fields;
+const PATH_FIELD_ROUTINGS = PATH_STAGE.routings;
 
 const MILESTONE = {
   stageNumber: 2,

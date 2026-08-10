@@ -1,7 +1,7 @@
 /**
  * 生成沙盘说明书 prompts/agent-snapshots.md（P-A 固化产物，纳入版本控制）
  *
- * 数据源：字段路由 seed 常量（与运行时 routings 表同源）+ core fields 声明。
+ * 数据源：字段路由编排文件（与运行时 routings 表同源）+ core fields 声明。
  * 运行方式：npx ts-node src/scripts/generate-agent-snapshots.ts
  * CI 校验：生成后 git diff --exit-code（产物漂移即失败）
  */
@@ -9,10 +9,7 @@
 import fs from 'fs';
 import path from 'path';
 import { SANDBOX_AGENT_IDS, SANDBOX_EXTRA_KEYS } from '../services/agent-contract-view';
-import { GOAL_FIELD_ROUTING_CONTRACTS, GOAL_FIELD_ROUTING_FIELDS, GOAL_FIELD_ROUTINGS } from './seed-goal-field-routings';
-import { PATH_FIELD_ROUTING_CONTRACTS, PATH_FIELD_ROUTING_FIELDS, PATH_FIELD_ROUTINGS } from './seed-path-field-routings';
-import { TEACHING_FIELD_ROUTING_CONTRACTS, TEACHING_FIELD_ROUTING_FIELDS, TEACHING_FIELD_ROUTINGS } from './seed-execution-field-routings';
-import { PROFILE_FIELD_ROUTING_CONTRACTS, PROFILE_FIELD_ROUTING_FIELDS, PROFILE_FIELD_ROUTINGS } from './seed-learner-field-routings';
+import { loadOrchestrationFiles } from '../services/field-routing/orchestration-file';
 import { loadCoreFieldDeclarations } from '../services/skill-output-validator';
 
 interface SeedRoutingLike {
@@ -21,16 +18,20 @@ interface SeedRoutingLike {
   handoff: string[];
 }
 
+// 字段路由声明源：编排文件（seed TS 已退役）；displayName 保留既有展示文案
+const STAGES_BY_NAME = new Map(loadOrchestrationFiles().map((s) => [s.stage, s]));
+const stageData = (stage: string) => STAGES_BY_NAME.get(stage)!;
+
 const STAGE_SEEDS: Array<{
   agentId: string;
   displayName: string;
   fields: Array<{ fieldId: string; valueType?: string; pathInRawOutput?: string; description: string }>;
   routings: SeedRoutingLike[];
 }> = [
-  { agentId: 'goal-agent', displayName: '目标 Agent（Goal）', fields: GOAL_FIELD_ROUTING_FIELDS, routings: GOAL_FIELD_ROUTINGS },
-  { agentId: 'path-agent', displayName: '路径 Agent（Path）', fields: PATH_FIELD_ROUTING_FIELDS, routings: PATH_FIELD_ROUTINGS },
-  { agentId: 'teaching-agent', displayName: '教学 Agent（Teaching）', fields: TEACHING_FIELD_ROUTING_FIELDS, routings: TEACHING_FIELD_ROUTINGS },
-  { agentId: 'profile-agent', displayName: '学习者 Agent（Profile）', fields: PROFILE_FIELD_ROUTING_FIELDS, routings: PROFILE_FIELD_ROUTINGS },
+  { agentId: 'goal-agent', displayName: '目标 Agent（Goal）', fields: stageData('goal').fields, routings: stageData('goal').routings },
+  { agentId: 'path-agent', displayName: '路径 Agent（Path）', fields: stageData('path').fields, routings: stageData('path').routings },
+  { agentId: 'teaching-agent', displayName: '教学 Agent（Teaching）', fields: stageData('teaching').fields, routings: stageData('teaching').routings },
+  { agentId: 'profile-agent', displayName: '学习者 Agent（Profile）', fields: stageData('profile').fields, routings: stageData('profile').routings },
 ];
 
 async function resolveType(fieldId: string, ownerAgentId: string, fallbackType?: string): Promise<string> {
@@ -38,7 +39,7 @@ async function resolveType(fieldId: string, ownerAgentId: string, fallbackType?:
   const skillIds = ownerAgentId.startsWith('skill:')
     ? [ownerAgentId.replace(/^skill:/, '')]
     : (() => {
-        // agent 名：尝试其成员 skill（按阶段 seed 的 handoff 推断太绕，直接试常见映射）
+        // agent 名：尝试其成员 skill（按阶段编排文件的 handoff 推断太绕，直接试常见映射）
         const stage = STAGE_SEEDS.find((s) => s.agentId === ownerAgentId);
         if (!stage) return [];
         const memberSkillIds = new Set<string>();

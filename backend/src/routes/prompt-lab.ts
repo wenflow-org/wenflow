@@ -13,7 +13,6 @@ import systemPrisma from '../config/system-database';
 import { logger } from '../utils/logger';
 import { getAPIGateway } from '../gateway/api-gateway';
 import { promptCache } from '../services/cache/prompt-cache.service';
-import { getAgentRoutings } from '../services/field-dispatcher';
 import {
   buildDefaultRuntimeContract,
   normalizeRuntimeContract,
@@ -335,23 +334,6 @@ async function getPlatformReasoningDefaultModel() {
   } catch {
     return null;
   }
-}
-
-async function resolveCompileRoutingKey(agentId: string, skillId: string) {
-  const candidates = Array.from(new Set([
-    agentId,
-    skillId,
-    agentId.startsWith('skill:') ? agentId.slice(6) : ''
-  ].filter(Boolean)));
-
-  for (const candidate of candidates) {
-    const routings = await getAgentRoutings(candidate);
-    if (routings.length > 0) {
-      return candidate;
-    }
-  }
-
-  return agentId;
 }
 
 /**

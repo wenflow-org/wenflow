@@ -39,11 +39,6 @@ import {
   listTopLevelAgents,
   listSkillsOfAgent,
 } from '../../services/agent-manifest.service';
-import {
-  extractFieldsFromSource,
-  updateFieldsInSource,
-  type EditableField,
-} from '../../services/prompt-source-fields';
 import { resolveRuntimeContractsForAgents } from '../../services/prompt-lab/resolve-runtime-contract';
 
 const router = Router();
@@ -78,7 +73,7 @@ const SKILL_DISPLAY_NAMES: Record<string, string> = {
 // stage 与 OrchestratorDefinitions 页一致：澄清(goal) / 规划(path) / 学习(learning)
 // 暂未迁移到字段路由的 agent 留空，前端会回退到「手填字段 ID」
 // ============================================================
-const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'teaching'> = {
+const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'teaching' | 'profile'> = {
   'skill:goal-conversation': 'goal',
   // 以下虽未迁移但确定隶属的 stage
   'skill:path-planning': 'path',
@@ -87,7 +82,7 @@ const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'teaching'> = {
   'skill:session-wrapup': 'teaching',
   'skill:peer-reinforcement': 'teaching',
   'skill:adaptive-guidance-copy': 'teaching',
-  'skill:lesson-knowledge-enricher': 'teaching',
+  'skill:lesson-knowledge-enricher': 'profile',
 };
 
 // ============================================================
@@ -1855,144 +1850,6 @@ router.get('/skill-catalog', async (_req: Request, res: Response) => {
       success: false,
       error: error.message || '加载 skill 目录失败',
     });
-  }
-});
-
-/**
- * GET /admin/prompt-ops/:agentId/fields
- *
- * 从 prompt 源里抽出 input + output 可编辑字段表 (供 GUI 渲染).
- * source-of-truth 仍是 prompt source 里的 ```json``` 块, 这只是一个 GUI 友好视图.
- */
-router.get('/:agentId/fields', async (req: Request, res: Response) => {
-  try {
-    const rawId = req.params.agentId;
-    const ids = rawId.startsWith('skill:') ? [rawId, rawId.slice(6)] : [rawId, `skill:${rawId}`];
-
-    let activePrompt: any = null;
-    for (const id of ids) {
-      activePrompt = await systemPrisma.agent_prompts.findFirst({
-        where: { agentId: id, status: 'ACTIVE' },
-        orderBy: { version: 'desc' },
-      });
-      if (activePrompt) break;
-    }
-    if (!activePrompt) {
-      return res.status(404).json({ success: false, error: `未找到 agentId=${rawId} 的 ACTIVE prompt` });
-    }
-
-    const source: string = activePrompt.systemPrompt || '';
-    const inputFields = extractFieldsFromSource(source, 'input');
-    const outputFields = extractFieldsFromSource(source, 'output');
-
-    res.json({
-      success: true,
-      data: {
-        agentId: rawId,
-        inputFields,
-        outputFields,
-        inputFieldCount: inputFields.length,
-        outputFieldCount: outputFields.length,
-      },
-    });
-  } catch (error: any) {
-    logger.error('fields GET 失败:', error);
-    res.status(500).json({ success: false, error: error.message || '加载字段失败' });
-  }
-});
-
-/**
- * PUT /admin/prompt-ops/:agentId/fields
- * body: { inputFields?: EditableField[], outputFields?: EditableField[], autoCompile?: boolean }
- *
- * 把字段表序列化回 prompt 源里的 ```json``` 块, 等价于 GUI 字段编辑 → 改源 → 自动编译 → 热更换.
- * 仅替换 ```json``` 块, 段内 prose / OUT-XX / IN-XX 全部保留.
- */
-router.put('/:agentId/fields', async (req: Request, res: Response) => {
-  try {
-    const rawId = req.params.agentId;
-    const { inputFields, outputFields, autoCompile = true } = req.body || {};
-
-    if (!inputFields && !outputFields) {
-      return res.status(400).json({ success: false, error: '至少提供 inputFields 或 outputFields' });
-    }
-
-    const ids = rawId.startsWith('skill:') ? [rawId, rawId.slice(6)] : [rawId, `skill:${rawId}`];
-
-    let activePrompt: any = null;
-    for (const id of ids) {
-      activePrompt = await systemPrisma.agent_prompts.findFirst({
-        where: { agentId: id, status: 'ACTIVE' },
-        orderBy: { version: 'desc' },
-      });
-      if (activePrompt) break;
-    }
-    if (!activePrompt) {
-      return res.status(404).json({ success: false, error: `未找到 agentId=${rawId} 的 ACTIVE prompt` });
-    }
-
-    const currentSource: string = activePrompt.systemPrompt || '';
-    const { source: newSource, warnings } = updateFieldsInSource(
-      currentSource,
-      inputFields as EditableField[] | undefined,
-      outputFields as EditableField[] | undefined
-    );
-
-    if (newSource === currentSource) {
-      return res.json({
-        success: true,
-        data: { changed: false, warnings, note: '字段表未变化, 源未更新' },
-      });
-    }
-
-    // 写回源
-    await systemPrisma.agent_prompts.update({
-      where: { id: activePrompt.id },
-      data: {
-        systemPrompt: newSource,
-        updatedAt: new Date(),
-        compileStatus: autoCompile ? activePrompt.compileStatus : 'stale',
-      },
-    });
-
-    let compileResult: any = null;
-    if (autoCompile) {
-      const routingKey = rawId.startsWith('skill:') ? rawId.slice(6) : rawId;
-      compileResult = await compilePrompt(newSource, routingKey);
-      await systemPrisma.agent_prompts.update({
-        where: { id: activePrompt.id },
-        data: {
-          compiledSystemPrompt: compileResult.compiled,
-          compiledAt: new Date(),
-          sourceHash: compileResult.sourceHash,
-          compileContextHash: compileResult.compileContextHash,
-          compileStatus: compileResult.status,
-          compileError: compileResult.error || null,
-        },
-      });
-    }
-
-    try {
-      promptCache.clearAgentCache(activePrompt.agentId);
-      if (activePrompt.agentId !== rawId) promptCache.clearAgentCache(rawId);
-    } catch (cacheErr: any) {
-      logger.warn('清缓存失败 (非致命):', cacheErr?.message);
-    }
-
-    res.json({
-      success: true,
-      data: {
-        changed: true,
-        autoCompile,
-        compileStatus: compileResult?.status || (autoCompile ? null : 'stale'),
-        fieldsApplied: compileResult?.fieldsApplied || 0,
-        warnings: [...warnings, ...(compileResult?.warnings || [])],
-        error: compileResult?.error || null,
-      },
-    });
-  } catch (error: any) {
-    logger.error('fields PUT 失败:', error);
-    res.status(500).json({ success: false, error: error.message || '保存字段失败' });
   }
 });
 

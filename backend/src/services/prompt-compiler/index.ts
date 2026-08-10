@@ -225,22 +225,6 @@ export async function compilePrompt(
   }
 }
 
-/**
- * 便利: 只检查 source/context 是否变了 (用于 stale 检测)
- */
-export async function checkCompileFreshness(
-  source: string,
-  agentId: string,
-  knownSourceHash: string | null | undefined,
-  knownContextHash: string | null | undefined
-): Promise<{ stale: boolean; sourceHash: string; contextHash: string }> {
-  const sourceHash = sha256(source);
-  const routings = await getAgentRoutings(agentId);
-  const contextHash = computeContextHash(routings);
-  const stale = sourceHash !== knownSourceHash || contextHash !== knownContextHash;
-  return { stale, sourceHash, contextHash };
-}
-
 // 导出子模块
 export { rewriteInputSection } from './rewrite-input-section';
 export { rewriteOutputSection } from './rewrite-output-section';

@@ -19,16 +19,10 @@
 
 import type { PromptBlock } from '../prompt-schema';
 import type { FieldRoutingRow } from '../field-dispatcher';
+import { PROMPT_ROLES } from '../field-routing/orchestration-file';
 
-const OUTPUT_ROLES = new Set([
-  'hard-required',
-  'soft-info',
-  'hidden-inference',
-  'proposal-output',
-  'public-reply',
-  'derived-presentation',
-  'control-signal',
-]);
+// 输出侧角色 = 编排文件声明的 promptRole 全集（单源：orchestration-file.ts PROMPT_ROLES）
+const OUTPUT_ROLES = new Set<string>(PROMPT_ROLES);
 
 function isOutputRole(role: string | undefined): boolean {
   if (!role) return false;

@@ -209,14 +209,3 @@ export function isPromptSupplementEnabled(): boolean {
   const lo = v.trim().toLowerCase();
   return !['0', 'false', 'off', 'no'].includes(lo);
 }
-
-/**
- * 测试用：返回 routing supplement 文本（方便 admin 在管理面板看到当前 supplement）
- */
-export async function previewSupplementForAgent(agentId: string): Promise<{
-  text: string;
-  fieldsCovered: number;
-}> {
-  const rows = await getAgentRoutings(agentId);
-  return renderSupplementText(rows);
-}

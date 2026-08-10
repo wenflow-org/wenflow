@@ -661,23 +661,6 @@ async continueConversation(
         structuredOutputValid: this.getStructuredOutputValid(aiResponse)
       });
 
-      // 字段流转诊断（零副作用）：按路由表检查 envelope 的 hidden 剔除与未映射字段，
-      // 便于发现"字段产出但路由表未登记"的契约断链
-      try {
-        const { dispatchGoalEnvelope } = await import('../field-dispatcher');
-        const { diagnostics } = await dispatchGoalEnvelope({ result: aiResponse, agentId: 'skill:goal-conversation' });
-        if (diagnostics.unmappedFields.length > 0 || diagnostics.hiddenFieldsRemoved.length > 0) {
-          logger.debug('[goal-conversation] envelope dispatch diagnostics', {
-            conversationId,
-            stage: this.resolveStageFromResponse(aiResponse),
-            unmappedFields: diagnostics.unmappedFields,
-            hiddenFieldsRemoved: diagnostics.hiddenFieldsRemoved,
-          });
-        }
-      } catch {
-        // 诊断失败不影响主流程
-      }
-
       return aiResponse;
 
     } catch (error: any) {
