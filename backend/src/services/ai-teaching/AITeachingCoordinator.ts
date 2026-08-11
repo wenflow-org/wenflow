@@ -1396,13 +1396,19 @@ export class AITeachingOrchestrator {
       messages: updatedMessages,
       knowledgeState: frozenKnowledgeState,
     }, context);
-    const turnResult = await executeSkill(teachingTurnAgentDefinition, turnInput, {
-      contextEnvelope: {
-        schemaVersion: 'context-envelope/v1',
-        principal: { userId: session.userId },
-        session: { sessionId: session.id, taskId: session.taskId },
-      },
-    });
+    // 教学回合 wall-clock 超时兜底：LLM 挂起时避免操作租约（30min）被占导致会话内所有操作 409 BUSY；
+    // 超时走 releaseOperation + 客户端重试路径（revision 未递增，重试安全）。
+    const turnResult = await withTimeout(
+      executeSkill(teachingTurnAgentDefinition, turnInput, {
+        contextEnvelope: {
+          schemaVersion: 'context-envelope/v1',
+          principal: { userId: session.userId },
+          session: { sessionId: session.id, taskId: session.taskId },
+        },
+      }),
+      90_000,
+      'TEACHING_TURN_TIMEOUT: 教学回合执行超过 90 秒'
+    );
     if (!turnResult.success) {
       throw new Error(typeof turnResult.error === 'string' ? turnResult.error : turnResult.error?.message || 'TEACHING_TURN_FAILED');
     }
@@ -2553,10 +2559,14 @@ export class AITeachingOrchestrator {
         },
       };
 
-      await prisma.teaching_sessions.update({
-        where: { id: sessionId },
+      const guarded = await prisma.teaching_sessions.updateMany({
+        where: { id: sessionId, status: 'timeout', wrapup: null },
         data: { wrapup: JSON.stringify(wrapup) }
       });
+      if (guarded.count !== 1) {
+        logger.info('[AITeaching] 兜底 wrapup 被跳过（会话已离开 timeout 或已有正式总结）', { sessionId });
+        return;
+      }
       logger.info('[AITeaching] 超时会话已写入兜底学习记录', { sessionId, durationMinutes });
     } catch (error) {
       logger.warn('[AITeaching] 超时会话兜底记录写入失败', {

@@ -538,13 +538,18 @@ export class TeachingSessionRepository {
   async appendPeerMessages(sessionId: string, messages: TeachingSessionMessage[]): Promise<void> {
     const session = await prisma.teaching_sessions.findUnique({
       where: { id: sessionId },
-      select: { messages: true, revision: true, status: true }
+      select: { messages: true, revision: true, status: true, operationId: true }
     });
     if (!session) {
       throw new Error('会话不存在或已结束');
     }
     if (session.status !== 'active' && session.status !== 'timeout') {
       throw new TeachingSessionConflictError('课堂已结束，无法继续伴学对话', 'TEACHING_SESSION_STATE_CHANGED');
+    }
+    // 教学回合在途（operationId 非空）：commitTurnState 会用回合开始时快照整包覆写 messages，
+    // 此时写入会被静默覆盖丢失——拒绝并让客户端重试（回合提交后 revision 变更，重试自然通过）。
+    if (session.operationId) {
+      throw new TeachingSessionConflictError('教学回合进行中，伴学消息稍后重试', 'TEACHING_TURN_IN_PROGRESS');
     }
     const current: TeachingSessionMessage[] = JSON.parse(session.messages || '[]');
     const updated = await prisma.teaching_sessions.updateMany({
