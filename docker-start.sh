@@ -308,17 +308,26 @@ docker compose up -d --build
 # ==========================================
 
 echo ""
-printf "> 等待后端启动"
+printf "> 等待后端就绪（经 nginx :%s/readyz）" "$NGINX_PORT"
 
+BACKEND_READY=false
 for i in $(seq 1 30); do
-    if curl -sf http://localhost:3001/readyz >/dev/null 2>&1; then
-        echo ""
-        echo -e "${GREEN}> 后端已就绪${NC}"
+    if curl -sf "http://localhost:${NGINX_PORT}/readyz" >/dev/null 2>&1; then
+        BACKEND_READY=true
         break
     fi
     printf "."
     sleep 2
 done
+
+if [ "$BACKEND_READY" != "true" ]; then
+    echo ""
+    echo -e "${RED}> 后端未在预期时间内就绪，启动失败${NC}"
+    echo -e "  排查日志: docker compose logs backend"
+    exit 1
+fi
+echo ""
+echo -e "${GREEN}> 后端已就绪${NC}"
 
 # ==========================================
 # 12. 完成

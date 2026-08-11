@@ -9,7 +9,7 @@ export interface ReadinessResult {
     mainDatabase: 'ok' | 'failed';
     systemDatabase: 'ok' | 'failed';
     corePrompts: 'ok' | 'failed';
-    aiConfiguration: 'ok' | 'failed';
+    aiConfiguration: 'ok' | 'warning';
     fieldRouting: 'ok' | 'failed';
     gatewayRegistry: 'ok' | 'failed';
   };
@@ -52,7 +52,7 @@ export class ReadinessService {
       mainDatabase: 'failed',
       systemDatabase: 'failed',
       corePrompts: 'failed',
-      aiConfiguration: 'failed',
+      aiConfiguration: 'warning',
       fieldRouting: 'failed',
       gatewayRegistry: 'failed'
     };
@@ -64,8 +64,13 @@ export class ReadinessService {
       this.checkSystemDatabase(checks)
     ])).catch(() => undefined);
 
+    // AI 配置可选：缺失仅置 warning，不计入整体 readiness（其余五项为硬条件）
     return {
-      ready: Object.values(checks).every(value => value === 'ok'),
+      ready: checks.mainDatabase === 'ok'
+        && checks.systemDatabase === 'ok'
+        && checks.corePrompts === 'ok'
+        && checks.fieldRouting === 'ok'
+        && checks.gatewayRegistry === 'ok',
       checks
     };
   }
@@ -112,7 +117,7 @@ export class ReadinessService {
       checks.systemDatabase = 'ok';
       const activePromptIds = new Set(activePrompts.map(prompt => prompt.agentId));
       checks.corePrompts = CRITICAL_PROMPT_IDS.every(agentId => activePromptIds.has(agentId)) ? 'ok' : 'failed';
-      checks.aiConfiguration = this.hasValidAIConfiguration(platformConfig) ? 'ok' : 'failed';
+      checks.aiConfiguration = this.hasValidAIConfiguration(platformConfig) ? 'ok' : 'warning';
       checks.fieldRouting = contractCount === FIELD_ROUTING_SEED_MANIFEST.contractAgentIds.length
         && fieldCount === FIELD_ROUTING_SEED_MANIFEST.fieldIds.length
         && routingCount === FIELD_ROUTING_SEED_MANIFEST.routings.length

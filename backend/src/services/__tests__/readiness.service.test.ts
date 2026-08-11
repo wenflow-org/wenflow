@@ -98,7 +98,7 @@ describe('ReadinessService', () => {
     expect(result.checks.gatewayRegistry).toBe('failed')
   })
 
-  it('平台 AI 路由缺少 endpoint、key 或 model 时不 ready', async () => {
+  it('平台 AI 路由缺少 endpoint、key 或 model 时降级为 warning 且不阻塞整体 ready', async () => {
     const { main, system } = createDatabases()
     system.platform_api_configs.findFirst.mockResolvedValue({
       apiUrl: 'https://api.example.com/v1',
@@ -107,8 +107,8 @@ describe('ReadinessService', () => {
     })
     const result = await new ReadinessService(main, system).check()
 
-    expect(result.ready).toBe(false)
-    expect(result.checks.aiConfiguration).toBe('failed')
+    expect(result.ready).toBe(true)
+    expect(result.checks.aiConfiguration).toBe('warning')
   })
 
   it('平台 API Key 加密后仍会验证其可解密性', async () => {
@@ -127,7 +127,7 @@ describe('ReadinessService', () => {
     expect(result.checks.aiConfiguration).toBe('ok')
   })
 
-  it('平台 API Key 密文无法解密时不 ready', async () => {
+  it('平台 API Key 密文无法解密时降级为 warning 且不阻塞整体 ready', async () => {
     process.env.SECRET_ENCRYPTION_KEYS = `test:${Buffer.alloc(32, 7).toString('base64')}`
     process.env.SECRET_ENCRYPTION_CURRENT_KEY_ID = 'test'
     const encrypted = encryptSecret('test-key', 'system.platform_api_configs.apiKey')
@@ -142,8 +142,8 @@ describe('ReadinessService', () => {
 
     const result = await new ReadinessService(main, system).check()
 
-    expect(result.ready).toBe(false)
-    expect(result.checks.aiConfiguration).toBe('failed')
+    expect(result.ready).toBe(true)
+    expect(result.checks.aiConfiguration).toBe('warning')
   })
 
   it('字段路由 seed 只完成一部分时不 ready', async () => {

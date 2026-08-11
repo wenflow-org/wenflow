@@ -12,6 +12,10 @@ services:
       - SYSTEM_DATABASE_URL=file:/app/data/system.db
       - NODE_ENV=production
       - LOG_DIR=/app/data/logs
+      - PROMPTS_DIR=/app/prompts
+      - CORE_FILES_DIR=/app/prompts/core
+      - SKILLS_FILE=/app/prompts/skills.yaml
+      - ORCHESTRATION_DIR=/app/prompts/orchestration
     user: "0:0"
     entrypoint: ["sh", "-c", "umask 077 && npm run prisma:migrate:deploy:all && chown -R 10001:10001 /app/data"]
     restart: "no"
@@ -24,6 +28,8 @@ services:
       - "3001"
     volumes:
       - wenflow_data:/app/data
+      - ./backend/src:/backend/src:ro
+      - ./prompts:/prompts:ro
     env_file:
       - backend/.env
     environment:
@@ -33,6 +39,10 @@ services:
       - TRUST_PROXY=${WENFLOW_NGINX_PROXY_IP:-172.29.0.10}
       - ADMIN_ACCESS_MODE=private
       - LOG_DIR=/app/data/logs
+      - PROMPTS_DIR=/app/prompts
+      - CORE_FILES_DIR=/app/prompts/core
+      - SKILLS_FILE=/app/prompts/skills.yaml
+      - ORCHESTRATION_DIR=/app/prompts/orchestration
     depends_on:
       migrate:
         condition: service_completed_successfully

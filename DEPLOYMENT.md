@@ -176,9 +176,11 @@ icacls 'D:\WenFlowBackups' /inheritance:r
 icacls 'D:\WenFlowBackups' /grant:r "$env:USERNAME:(OI)(CI)F"
 ```
 
-Linux 目录和文件权限不得宽于：
+Linux 备份目录需预先创建，并确保容器内备份进程（镜像内固定 `uid=10001` 的 wenflow 用户）可写。目录和文件权限不得宽于：
 
 ```bash
+mkdir -p /var/backups/wenflow
+chown -R 10001:10001 /var/backups/wenflow
 chmod 700 /var/backups/wenflow
 chmod 600 /var/backups/wenflow/*
 ```
@@ -207,6 +209,7 @@ Docker 部署先停止后端写流量，再运行一次性 operations profile。
 ```bash
 export COMPOSE_PROJECT_NAME=wenflow
 export WENFLOW_BACKUP_HOST_DIR=/var/backups/wenflow
+mkdir -p /var/backups/wenflow && chown -R 10001:10001 /var/backups/wenflow && chmod 700 /var/backups/wenflow
 docker compose stop backend
 docker compose -f docker-compose.operations.yml run --rm backup
 docker compose start backend
