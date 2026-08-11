@@ -59,6 +59,8 @@
                 @change="toggleAgent(row)"
                 :active-value="true"
                 :inactive-value="false"
+                :loading="togglingAgents.has(row.agentName)"
+                :disabled="togglingAgents.has(row.agentName)"
               />
             </template>
           </el-table-column>
@@ -162,6 +164,7 @@ interface AgentLogItem {
 const loading = ref(false)
 const loadError = ref('')
 const submitting = ref(false)
+const togglingAgents = ref<Set<string>>(new Set())
 const activeTab = ref('all')
 const agents = ref<UserAgentItem[]>([])
 const dialogVisible = ref(false)
@@ -218,6 +221,9 @@ const viewLogs = async (agent: UserAgentItem) => {
 }
 
 const toggleAgent = async (agent: UserAgentItem) => {
+  // 行级防重复提交：快速连点不再并发触发 enable/disable
+  if (togglingAgents.value.has(agent.agentName)) return;
+  togglingAgents.value.add(agent.agentName);
   try {
     if (agent.enabled) {
       if (agent.userConfigId) {
@@ -252,6 +258,8 @@ const toggleAgent = async (agent: UserAgentItem) => {
   } catch {
     toast.error('操作失败')
     agent.enabled = !agent.enabled
+  } finally {
+    togglingAgents.value.delete(agent.agentName)
   }
 }
 

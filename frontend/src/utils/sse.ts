@@ -1,6 +1,8 @@
 // SSE 流式客户端：与 axios 拦截器对齐认证（Bearer / X-Projection-Token / credentials）
 import { API_BASE_URL } from './api';
 import { getProjectionToken } from './projection';
+import { setAuthFlashMessage } from './authFlash';
+import { clearUserLocalState } from './sessionCleanup';
 
 export interface StreamSseHandlers {
   /** 每个 SSE 事件回调（event 为 'delta' | 'final' | 'done' | 'error' | 'restart' 等） */
@@ -43,6 +45,14 @@ export async function streamSsePost(
   }
 
   if (!response.ok) {
+    // 401：与 axios 拦截器行为对齐（清会话 + 跳登录），避免 SSE 路径静默保留过期会话
+    if (response.status === 401) {
+      clearUserLocalState();
+      setAuthFlashMessage('登录状态已失效，请重新登录');
+      const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.replace(`/login?redirect=${redirect}`);
+      throw new Error('登录状态已失效，请重新登录');
+    }
     let message = '请求失败';
     try {
       const data = await response.json();

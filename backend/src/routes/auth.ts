@@ -1,7 +1,7 @@
 // 认证路由
 import express from 'express';
 import { z } from 'zod';
-import authService, { InvalidCredentialsError } from '../services/auth/auth.service';
+import authService, { InvalidCredentialsError, UsernameTakenError } from '../services/auth/auth.service';
 import { getPlatformSettings } from '../services/platform-settings.service';
 import { loginRateLimitMiddleware, recordLoginAttempt } from '../middleware/login-rate-limit.middleware';
 import { authMiddleware } from '../middleware/auth.middleware';
@@ -41,6 +41,41 @@ const recordRegisterAttempt = (ip: string, success: boolean) => {
   registerAttemptsByIp.set(ip, attempts);
 };
 
+// ---- 通用端点限速（按 IP）：change-password / verify 等敏感端点防暴力与滥用 ----
+function createIpLimiter(maxAttempts: number, windowMs: number) {
+  const attemptsByIp = new Map<string, Date[]>();
+
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const ip = (req.ip || req.headers['x-forwarded-for'] || 'unknown').toString();
+    const now = Date.now();
+    const attempts = (attemptsByIp.get(ip) || []).filter(
+      (timestamp) => now - timestamp.getTime() < windowMs
+    );
+    attemptsByIp.set(ip, attempts);
+
+    if (attempts.length >= maxAttempts) {
+      const last = attempts[attempts.length - 1];
+      const remainingSeconds = Math.max(1, Math.ceil((windowMs - (now - last.getTime())) / 1000));
+      return res.status(429).json({
+        success: false,
+        error: {
+          message: `操作过于频繁，请 ${remainingSeconds} 秒后重试`,
+          code: 'RATE_LIMITED',
+          status: 429
+        }
+      });
+    }
+
+    attempts.push(new Date());
+    attemptsByIp.set(ip, attempts);
+    next();
+  };
+}
+
+// 改密 30 次/小时/IP；verify 120 次/小时/IP
+const changePasswordLimiter = createIpLimiter(30, 60 * 60 * 1000);
+const verifyLimiter = createIpLimiter(120, 60 * 60 * 1000);
+
 // 注册状态（公开）
 router.get('/registration-status', async (req, res, next) => {
   try {
@@ -60,8 +95,13 @@ router.get('/registration-status', async (req, res, next) => {
 });
 
 // 验证 schema
+// 用户名白名单：Unicode 字母/数字/下划线/连字符（禁止控制字符与 HTML 注入面）
+const USERNAME_PATTERN = /^[\p{L}\p{N}_-]+$/u;
 const registerSchema = z.object({
-  name: z.string().min(2, '用户名至少 2 位').max(64, '用户名最长 64 位'),
+  name: z.string()
+    .min(2, '用户名至少 2 位')
+    .max(64, '用户名最长 64 位')
+    .regex(USERNAME_PATTERN, '用户名仅支持字母、数字、下划线和连字符'),
   password: z.string()
     .min(8, '密码至少 8 位')
     .max(1024, '密码最长 1024 位')
@@ -115,17 +155,16 @@ router.post('/register', async (req, res, next) => {
     // 调用服务
     const result = await authService.register(data);
 
-    // G1 备注：authService.register 对已占用用户名抛 '用户名已被使用'（经全局错误处理返回 500），
-    // 与成功 201 的响应差异可被用于用户名枚举。为不破坏前端提示，此处不统一文案，
-    // 由注册限速（按 IP 10 次/小时）抑制枚举扫描；如需彻底消除差异，应改为统一业务错误码。
     recordRegisterAttempt(clientIP, true);
 
     // 同步写入 HttpOnly Cookie（前端不再需要将 token 存入 localStorage）
-    setAuthCookie(res, result.token, 'user');
+    // 安全加固：token 仅经 Cookie 下发，响应体不再返回（消除 JS 内存可窃取面）
+    const { token, ...safeResult } = result;
+    setAuthCookie(res, token, 'user');
 
     res.status(201).json({
       success: true,
-      data: result
+      data: safeResult
     });
   } catch (error: any) {
     if (error.name === 'ZodError') {
@@ -134,6 +173,18 @@ router.post('/register', async (req, res, next) => {
         error: {
           message: '数据验证失败',
           details: error.errors
+        }
+      });
+    }
+
+    // 用户名冲突以 409 返回（统一业务错误码，消除 500/201 的枚举差异）
+    if (error instanceof UsernameTakenError) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          message: error.message,
+          code: error.code,
+          status: error.status
         }
       });
     }
@@ -158,12 +209,13 @@ router.post('/login', loginRateLimitMiddleware, async (req, res, next) => {
 
     recordLoginAttempt(data.name, clientIP.toString(), true);
 
-    // 同步写入 HttpOnly Cookie（前端不再需要将 token 存入 localStorage）
-    setAuthCookie(res, result.token, 'user');
+    // 同步写入 HttpOnly Cookie；token 仅经 Cookie 下发，响应体不再返回
+    const { token, ...safeResult } = result;
+    setAuthCookie(res, token, 'user');
 
     res.status(200).json({
       success: true,
-      data: result
+      data: safeResult
     });
   } catch (error: any) {
     if (error.name === 'ZodError') {
@@ -211,7 +263,7 @@ const changePasswordSchema = z.object({
     .regex(/[0-9]/, '新密码必须包含数字'),
 });
 
-router.post('/change-password', authMiddleware, async (req: any, res, next) => {
+router.post('/change-password', authMiddleware, changePasswordLimiter, async (req: any, res, next) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
@@ -252,7 +304,7 @@ router.post('/change-password', authMiddleware, async (req: any, res, next) => {
 });
 
 // 验证 Token (protected endpoint)
-router.post('/verify', async (req, res, next) => {
+router.post('/verify', verifyLimiter, async (req, res, next) => {
   try {
     const { token } = req.body;
 

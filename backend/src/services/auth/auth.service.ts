@@ -31,6 +31,17 @@ export class InvalidCredentialsError extends Error {
   }
 }
 
+/** 注册时用户名已被占用：业务冲突，应以 409 返回（此前裸 Error 导致 500，与成功 201 形成枚举差异） */
+export class UsernameTakenError extends Error {
+  readonly status = 409;
+  readonly code = 'USERNAME_TAKEN';
+
+  constructor() {
+    super('用户名已被使用');
+    this.name = 'UsernameTakenError';
+  }
+}
+
 class AuthService {
   private JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
@@ -49,7 +60,7 @@ class AuthService {
       });
 
       if (existingUser) {
-        throw new Error('用户名已被使用');
+        throw new UsernameTakenError();
       }
 
       // 加密密码

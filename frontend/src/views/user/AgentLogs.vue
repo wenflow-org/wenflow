@@ -35,7 +35,6 @@
             <el-option label="路径规划" value="path" />
             <el-option label="教学讲解" value="teaching" />
             <el-option label="辅导答疑" value="tutoring" />
-            <el-option label="进度追踪" value="tracking" />
             <el-option label="学习画像更新" value="profile" />
             <el-option label="系统底层调用" value="system" />
           </el-select>
@@ -77,15 +76,15 @@
         <strong>{{ pagination.total }}</strong>
       </div>
       <div class="stat-card">
-        <span>成功率</span>
+        <span>成功率（本页）</span>
         <strong>{{ successRate }}%</strong>
       </div>
       <div class="stat-card">
-        <span>平均耗时</span>
+        <span>平均耗时（本页）</span>
         <strong>{{ avgDuration }}ms</strong>
       </div>
       <div class="stat-card">
-        <span>Token</span>
+        <span>Token（本页）</span>
         <strong>{{ totalTokens }}</strong>
       </div>
     </div>
@@ -794,125 +793,6 @@ const copyText = async (text: string, successMessage: string) => {
     min-width: 0;
     overflow: hidden;
 
-    .log-card-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 16px;
-      margin-bottom: 20px;
-    }
-
-    .cards-headline {
-      margin-bottom: 14px;
-
-      h3 {
-        margin: 0 0 4px;
-        font-size: 16px;
-        color: var(--text-primary);
-      }
-
-      p {
-        margin: 0;
-        font-size: 13px;
-        color: var(--text-secondary);
-      }
-    }
-
-    .log-card {
-      border-radius: 22px;
-      border: 1px solid #d9e8f2;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(249, 252, 255, 0.92) 100%);
-
-      &__header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 12px;
-        margin-bottom: 14px;
-
-        p {
-          margin: 8px 0 0;
-          color: var(--el-text-color-secondary);
-          line-height: 1.5;
-        }
-      }
-
-      &__title-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-
-        h3 {
-          margin: 0;
-          font-size: 18px;
-          color: var(--el-text-color-primary);
-        }
-      }
-
-      &__meta {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px;
-        margin-bottom: 14px;
-      }
-
-      &__meta-item {
-        display: grid;
-        gap: 6px;
-        padding: 12px;
-        border-radius: 14px;
-        background: var(--bg-muted);
-        min-width: 0;
-
-        span {
-          font-size: 12px;
-          color: var(--el-text-color-secondary);
-        }
-
-        strong {
-          color: var(--el-text-color-primary);
-          word-break: break-word;
-        }
-      }
-
-      &__error {
-        margin-bottom: 14px;
-        padding: 12px 14px;
-        border-radius: 14px;
-        background: var(--color-danger-bg);
-        border: 1px solid var(--color-danger-border);
-        color: var(--color-danger-dark);
-        font-size: 13px;
-        line-height: 1.6;
-        word-break: break-word;
-      }
-
-      &__actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-      }
-    }
-
-    .log-action-btn {
-      border-radius: 10px;
-      font-weight: 600;
-      padding: 7px 10px;
-    }
-
-    .log-action-btn--detail {
-      border-color: #c6dff0;
-      color: var(--brand-ink);
-      background: var(--brand-soft);
-    }
-
-    .log-action-btn--copy {
-      border-color: #bfe4de;
-      color: var(--accent-ink);
-      background: var(--accent-soft);
-    }
-
     .logs-table-panel {
       min-width: 0;
       width: 100%;
@@ -921,15 +801,6 @@ const copyText = async (text: string, successMessage: string) => {
         width: 100%;
         max-width: 100%;
         overflow-x: auto;
-      }
-
-      :deep(.el-table) {
-        width: 100% !important;
-      }
-
-      :deep(.el-table__header),
-      :deep(.el-table__body) {
-        width: 100% !important;
       }
 
       .table-actions {
@@ -962,31 +833,11 @@ const copyText = async (text: string, successMessage: string) => {
       border-color: rgba(96, 165, 250, 0.1);
       box-shadow: 0 20px 38px rgba(0, 0, 0, 0.22);
     }
-
-    .logs-list :deep(.stats .el-card) {
-      background: linear-gradient(180deg, rgba(26, 37, 47, 0.88), rgba(15, 24, 32, 0.8));
-      border-color: rgba(96, 165, 250, 0.1);
-      box-shadow: 0 18px 32px rgba(0, 0, 0, 0.22);
-    }
-  }
-
-  @media (max-width: 1024px) {
-    .logs-list {
-      .log-card-grid {
-        grid-template-columns: 1fr;
-      }
-    }
   }
 
   @media (max-width: 768px) {
     .logs-list {
       padding: 16px;
-
-      .log-card {
-        &__meta {
-          grid-template-columns: 1fr;
-        }
-      }
     }
 
     .filters {

@@ -2,7 +2,7 @@
 .v2-page {
   --ink: #172033;
   --muted: #5b6577;
-  --faint: #8492ab;
+  --faint: #67758f;
   --line: #e3e9f4;
   --canvas: #f3f6fb;
   --surface: #ffffff;
@@ -10,7 +10,7 @@
   --blue-deep: #1f57cc;
   --accent: #8d6bff;
   --cyan: #43b0d8;
-  --green: #31b16f;
+  --green: #1e9e58;
   --amber: #f4aa46;
   --red: #ef7578;
   min-height: 100vh;
@@ -19,6 +19,29 @@
   background: var(--canvas);
   color: var(--ink);
   font-family: Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+
+/* 暗色模式：全局 token 覆写（此前 v2 体系无 dark 段，导致"亮页+暗弹窗"混搭） */
+[data-theme='dark'] .v2-page {
+  --ink: #e6edf7;
+  --muted: #9aa8bf;
+  --faint: #7d8ba3;
+  --line: #2a3648;
+  --canvas: #0f1620;
+  --surface: #182230;
+  --blue: #4d8bf8;
+  --blue-deep: #6fa3ff;
+  --accent: #a78bff;
+  --cyan: #5fc3e6;
+  --green: #3ec984;
+  --amber: #f6bb63;
+  --red: #f28588;
+}
+
+/* 焦点可见性（可访问性基线）：用户侧统一 focus 样式 */
+.v2-page :is(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
 }
 
 .v2-page > main {
@@ -78,7 +101,7 @@
   padding: 10px 18px;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--surface);
   font-size: 14px;
   font-weight: 700;
   color: var(--muted);

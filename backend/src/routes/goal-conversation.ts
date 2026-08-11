@@ -57,11 +57,13 @@ const resolveGoalError = (error: any, req: Request): { status: number; code: str
       data: goalEnvelopeForRequest(req, error.result)
     };
   }
-  const message = error instanceof Error ? error.message : String(error || '处理失败');
+  const raw = error instanceof Error ? error.message : String(error || '处理失败');
+  // 安全加固：仅白名单消息可回显，其余一律脱敏为通用文案（防止内部错误/堆栈泄漏）
+  const safe = raw === '对话会话不存在';
   return {
-    status: message === '对话会话不存在' ? 404 : 500,
+    status: safe ? 404 : 500,
     code: 'INTERNAL_ERROR',
-    message
+    message: safe ? raw : '处理失败，请稍后重试'
   };
 };
 
@@ -233,7 +235,7 @@ router.post('/start', authMiddleware, goalConversationUserLimiter, async (req: R
         data: goalEnvelopeForRequest(req, error.result)
       });
     }
-    return res.status(500).json({ success: false, error: error.message || '开始对话失败' });
+    return res.status(500).json({ success: false, error: '开始对话失败，请稍后重试' });
   }
 });
 
@@ -287,7 +289,7 @@ router.post('/:conversationId/reply', authMiddleware, goalConversationUserLimite
       });
     }
     const status = error.message === '对话会话不存在' ? 404 : 500;
-    return res.status(status).json({ success: false, error: error.message || '继续对话失败' });
+    return res.status(status).json({ success: false, error: status === 404 ? error.message : '继续对话失败，请稍后重试' });
   }
 });
 
@@ -326,7 +328,7 @@ router.post('/:conversationId/regenerate', authMiddleware, goalConversationUserL
       return res.status(409).json({ success: false, error: { message: '路径正在生成中，请稍后再试', code: 'PATH_GENERATION_RUN_CHANGED', status: 409 } });
     }
     const status = error.message === '对话会话不存在' ? 404 : 500;
-    return res.status(status).json({ success: false, error: error.message || '重新生成路径失败' });
+    return res.status(status).json({ success: false, error: status === 404 ? error.message : '重新生成路径失败，请稍后重试' });
   }
 });
 
@@ -344,7 +346,7 @@ router.delete('/:conversationId', authMiddleware, async (req: Request, res: Resp
   } catch (error: any) {
     logger.error('重置对话失败:', error);
     const status = error.message === '对话会话不存在' ? 404 : 500;
-    return res.status(status).json({ success: false, error: error.message || '重置对话失败' });
+    return res.status(status).json({ success: false, error: status === 404 ? error.message : '重置对话失败，请稍后重试' });
   }
 });
 
@@ -413,7 +415,7 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
   } catch (error: any) {
     logger.error('获取对话会话失败:', error);
     const status = error.message === '对话会话不存在' ? 404 : 500;
-    return res.status(status).json({ success: false, error: error.message || '获取对话会话失败' });
+    return res.status(status).json({ success: false, error: status === 404 ? error.message : '获取对话会话失败，请稍后重试' });
   }
 });
 

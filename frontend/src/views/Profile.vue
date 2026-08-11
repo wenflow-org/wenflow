@@ -107,7 +107,6 @@
               <span>范围</span>
               <el-select v-model="projectionGrantForm.scope">
                 <el-option label="仅学习台" value="dashboard" />
-                <el-option label="全部学习页" value="full" />
               </el-select>
             </label>
 

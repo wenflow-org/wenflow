@@ -26,7 +26,7 @@ describe('acpContextMiddleware userRole', () => {
     }))
   })
 
-  it('普通用户不能通过来源 Header 提升角色', () => {
+  it('普通用户不能通过来源 Header 伪造 sourceEntry（固定为会话默认来源）', () => {
     let captured: ReturnType<typeof getRequestContext> | undefined
     const req: any = {
       headers: { 'x-source-entry': 'admin' },
@@ -39,8 +39,26 @@ describe('acpContextMiddleware userRole', () => {
     })
 
     expect(captured).toEqual(expect.objectContaining({
-      sourceEntry: 'admin',
+      sourceEntry: 'user',
       userRole: 'user'
+    }))
+  })
+
+  it('管理员会话可通过来源 Header 覆盖 sourceEntry（测试站点等受控场景）', () => {
+    let captured: ReturnType<typeof getRequestContext> | undefined
+    const req: any = {
+      headers: { 'x-source-entry': 'test' },
+      user: { userId: 'admin-1', isAdmin: true, sessionType: 'admin' }
+    }
+    const res: any = { setHeader: jest.fn() }
+
+    acpContextMiddleware('admin')(req, res, () => {
+      captured = getRequestContext()
+    })
+
+    expect(captured).toEqual(expect.objectContaining({
+      sourceEntry: 'test',
+      userRole: 'admin'
     }))
   })
 

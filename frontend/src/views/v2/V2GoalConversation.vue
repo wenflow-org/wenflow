@@ -264,13 +264,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import MarkdownIt from 'markdown-it';
-import DOMPurify, { type Config as DOMPurifyConfig } from 'dompurify';
 import { useGoalLive } from './useGoalLive';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import { hasUserSession } from '@/utils/api';
+import { renderAiMessageHtml } from '@/utils/sanitize';
+import { ElMessageBox } from 'element-plus';
 import './v2.css';
 
 const route = useRoute();
@@ -351,12 +351,7 @@ const supplementMode = ref(false);
 const supplementText = ref('');
 const confirmError = ref(false);
 
-const md = new MarkdownIt({ html: true, linkify: true, breaks: true });
-const SANITIZE: DOMPurifyConfig = {
-  FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'link', 'meta', 'base', 'svg'],
-  ALLOW_DATA_ATTR: false
-};
-const formatMessage = (text: string) => DOMPurify.sanitize(md.render(text || ''), SANITIZE);
+const formatMessage = (text: string) => renderAiMessageHtml(text);
 
 const stageLabel = computed(() => {
   if (live.stageIndex === 3) return '可生成路径';
@@ -470,12 +465,20 @@ async function doResume() {
 }
 
 function doReset() {
-  live.reset();
-  resetToEntry();
-  // 清掉 URL 中残留的 conversationId，避免刷新后 resumeById 恢复旧会话
-  if (typeof route.params.conversationId === 'string') {
-    router.replace({ name: 'V2GoalConversation' });
-  }
+  ElMessageBox.confirm(
+    '清空后本机保存的对话记录将被删除，此操作不可恢复。',
+    '清空重聊',
+    { confirmButtonText: '清空', cancelButtonText: '取消', type: 'warning' }
+  ).then(() => {
+    live.reset();
+    resetToEntry();
+    // 清掉 URL 中残留的 conversationId，避免刷新后 resumeById 恢复旧会话
+    if (typeof route.params.conversationId === 'string') {
+      router.replace({ name: 'V2GoalConversation' });
+    }
+  }).catch(() => {
+    // 用户取消
+  });
 }
 
 const SCENE_BATCH_SIZE = 3;

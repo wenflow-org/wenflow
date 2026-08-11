@@ -159,7 +159,8 @@ router.put('/me', directUserSessionOnly, async (req, res, next) => {
     const userId = req.user.userId;
     const { name } = req.body;
 
-    // G8：name 校验——非空、长度 ≤64；users.name 非唯一（仅 email 唯一），按设计不做重名校验
+    // G8：name 校验——非空、长度 ≤64、字符集白名单（与注册一致）；users.name 非唯一（仅 email 唯一），按设计不做重名校验
+    const USERNAME_PATTERN = /^[\p{L}\p{N}_-]+$/u;
     let normalizedName: string | undefined;
     if (name !== undefined) {
       if (typeof name !== 'string') {
@@ -171,6 +172,9 @@ router.put('/me', directUserSessionOnly, async (req, res, next) => {
       }
       if (trimmed.length > 64) {
         return res.status(400).json({ success: false, error: { message: 'name 不能超过 64 字符' } });
+      }
+      if (!USERNAME_PATTERN.test(trimmed)) {
+        return res.status(400).json({ success: false, error: { message: '用户名仅支持字母、数字、下划线和连字符' } });
       }
       normalizedName = trimmed;
     }
@@ -224,7 +228,8 @@ router.get('/me/achievements', async (req, res, next) => {
 router.get('/me/sessions', async (req, res, next) => {
   try {
     const userId = req.user.userId;
-    const limit = parseInt(req.query.limit as string) || 100;
+    // limit 钳制（1-100），防止无上限分页拉全表
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 100, 1), 100);
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
 
@@ -315,7 +320,8 @@ router.get('/me/agent-logs', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    // limit 钳制（1-100），防止无上限分页拉全表
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
     const where = buildAgentLogWhere(userId, req.query);
 
     const [logs, total] = await Promise.all([

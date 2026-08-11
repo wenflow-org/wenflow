@@ -43,6 +43,7 @@ const tabs = [
   { to: '/user/account', label: '账户', match: ['/user/account'] },
   { to: '/user/agents', label: 'AI 助手', match: ['/user/agents'] },
   { to: '/user/skills', label: 'Skill', match: ['/user/skills'] },
+  { to: '/user/agent-model-settings', label: '高级模型', match: ['/user/agent-model-settings'] },
   { to: '/user/settings', label: 'API 接入', match: ['/user/settings'] },
   { to: '/user/developer', label: '开发者接入', match: ['/user/developer', '/user/code-repo'] },
   { to: '/user/agent-logs', label: '调用日志', match: ['/user/agent-logs'] }
@@ -167,12 +168,17 @@ function isActive(t: { match: string[] }) {
   font-weight: 700;
 }
 
-.uc__body :deep(.el-button:not(.el-button--primary)) {
+/* 修复：仅"洗白"默认按钮；保留 danger/link 语义色，避免危险操作与普通按钮混淆 */
+.uc__body :deep(.el-button--default:not(.is-link):not(.is-text)) {
   border-radius: 12px !important;
   border-color: var(--line, #e3e9f4) !important;
   background: #fff !important;
   color: var(--muted, #5b6577) !important;
   font-weight: 700;
+}
+
+.uc__body :deep(.el-button--default:not(.is-link):not(.is-text).is-disabled) {
+  opacity: 0.55;
 }
 
 @media (max-width: 900px) {

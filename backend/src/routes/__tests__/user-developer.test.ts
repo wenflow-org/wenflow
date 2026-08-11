@@ -56,7 +56,7 @@ describe('user developer access grants', () => {
     projectionGrantMocks.create.mockResolvedValue({
       id: 'grant-new',
       userId: 'user-1',
-      scope: 'full',
+      scope: 'dashboard',
       scopeDefinition: null,
       purpose: '排查问题',
       createdAt,
@@ -67,7 +67,7 @@ describe('user developer access grants', () => {
     });
     const req: any = {
       user: { userId: 'user-1' },
-      body: { scope: 'full', expiresInMinutes: 60, purpose: '排查问题' }
+      body: { scope: 'dashboard', expiresInMinutes: 60, purpose: '排查问题' }
     };
     const res = createResponse();
 
@@ -86,7 +86,22 @@ describe('user developer access grants', () => {
     expect(res.body.data.id).toBe('grant-new');
   });
 
-  it('撤销授权时清理该用户全部 active 授权', async () => {
+  it('拒绝用户自授 full 范围（full 仅管理员可授予）', async () => {
+    const req: any = {
+      user: { userId: 'user-1' },
+      body: { scope: 'full', expiresInMinutes: 60 }
+    };
+    const res = createResponse();
+
+    await routes['POST /access-grants'](req, res);
+
+    expect(projectionGrantMocks.create).not.toHaveBeenCalled();
+    expect(projectionGrantMocks.updateMany).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error.message).toContain('full 范围仅支持管理员授予');
+  });
+
+  it('撤销授权时只撤销目标授权（此前会连带撤销该用户全部 active 授权）', async () => {
     const createdAt = new Date();
     projectionGrantMocks.findFirst.mockResolvedValue({
       id: 'grant-1',
@@ -110,6 +125,7 @@ describe('user developer access grants', () => {
 
     expect(projectionGrantMocks.updateMany).toHaveBeenCalledWith({
       where: {
+        id: 'grant-1',
         userId: 'user-1',
         revokedAt: null,
         expiresAt: { gt: expect.any(Date) }

@@ -19,9 +19,10 @@ router.get('/platform-default', async (req, res) => {
     const platformDefault = await apiConfigService.getPlatformDefault();
     res.json({ success: true, data: platformDefault });
   } catch (error: any) {
+    console.error('[user-api-config] 获取平台默认配置失败:', error);
     res.status(500).json({
       success: false,
-      error: { message: '获取平台默认配置失败', details: error.message }
+      error: { message: '获取平台默认配置失败，请稍后重试' }
     });
   }
 });
@@ -231,11 +232,11 @@ router.post('/test', async (req, res, next) => {
         data: { model: response.data.model }
       });
     } catch (error: any) {
+      console.error('[user-api-config] 测试连接失败:', error);
       res.status(400).json({
         success: false,
-        error: { 
-          message: '连接失败', 
-          details: error.message
+        error: {
+          message: '连接失败，请检查端点与密钥配置'
         }
       });
     }

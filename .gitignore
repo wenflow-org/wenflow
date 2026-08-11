@@ -33,6 +33,8 @@ dist-ssr
 # Database
 *.db
 *.db.*
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite.*
 *.sqlite3

@@ -1,7 +1,8 @@
 ﻿// Axios API 客户端
 import axios, { type AxiosRequestConfig } from 'axios';
-import { clearProjectionToken, getProjectionToken, isProjectionMode } from './projection';
+import { getProjectionToken } from './projection';
 import { setAuthFlashMessage } from './authFlash';
+import { clearUserLocalState } from './sessionCleanup';
 
 const isDev = import.meta.env.DEV;
 // 统一使用 VITE_API_BASE_URL（VITE_API_URL 为历史遗留别名，保留兼容）
@@ -31,12 +32,7 @@ export const hasUserSession = (): boolean =>
 const redirectToLoginOnce = () => {
   if (!unauthorizedRedirect) {
     unauthorizedRedirect = Promise.resolve().then(() => {
-      if (isProjectionMode()) {
-        clearProjectionToken();
-      }
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      localStorage.removeItem(USER_SESSION_KEY);
+      clearUserLocalState();
       setAuthFlashMessage('登录状态已失效，请重新登录');
       // 保留回跳地址，重新登录后可返回原页面
       const redirect = encodeURIComponent(window.location.pathname + window.location.search);
@@ -46,6 +42,9 @@ const redirectToLoginOnce = () => {
 
   return unauthorizedRedirect;
 };
+
+// 认证类端点自身返回 401 表示"凭证错误"，不应被误判为会话失效
+const AUTH_ENDPOINT_PATTERN = /^\/auth\/(login|register|verify)(\?|$)/;
 
 interface RequestKeyCarrier {
   __wenflowRequestKey?: string;
@@ -117,9 +116,12 @@ api.interceptors.response.use(
 
     if (error.response) {
       const { status, data } = error.response;
+      const url = typeof error.config?.url === 'string' ? error.config.url : '';
 
-      // 401 未授权 - 跳转登录
-      if (status === 401 && (hasUserSession() || getProjectionToken())) {
+      // 401 未授权 - 跳转登录（认证类端点自身 401 为凭证错误，不触发会话失效跳转）
+      if (status === 401
+        && !AUTH_ENDPOINT_PATTERN.test(url)
+        && (hasUserSession() || getProjectionToken())) {
         void redirectToLoginOnce();
       }
 

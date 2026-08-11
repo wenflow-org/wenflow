@@ -10,6 +10,36 @@ import {
 
 const router = express.Router();
 
+// 参数校验：model/temperature/maxTokens/systemPrompt 类型与范围（L5 修复）
+const MAX_SYSTEM_PROMPT_CHARS = 8000;
+function validateAgentConfigInput(body: any): string | null {
+  if (body === null || typeof body !== 'object') {
+    return '请求体格式无效';
+  }
+  if (body.model !== undefined && body.model !== null && typeof body.model !== 'string') {
+    return 'model 必须是字符串';
+  }
+  if (body.temperature !== undefined && body.temperature !== null) {
+    const t = Number(body.temperature);
+    if (!Number.isFinite(t) || t < 0 || t > 2) {
+      return 'temperature 必须是 0-2 之间的数值';
+    }
+  }
+  if (body.maxTokens !== undefined && body.maxTokens !== null) {
+    const m = Number(body.maxTokens);
+    if (!Number.isInteger(m) || m < 1 || m > 131072) {
+      return 'maxTokens 必须是 1-131072 之间的整数';
+    }
+  }
+  if (body.systemPrompt !== undefined && body.systemPrompt !== null && typeof body.systemPrompt !== 'string') {
+    return 'systemPrompt 必须是字符串';
+  }
+  if (typeof body.systemPrompt === 'string' && body.systemPrompt.length > MAX_SYSTEM_PROMPT_CHARS) {
+    return `systemPrompt 过长（最多 ${MAX_SYSTEM_PROMPT_CHARS} 字符）`;
+  }
+  return null;
+}
+
 // 获取 Agent 列表（平台托管）
 router.get('/', async (req, res, next) => {
   try {
@@ -175,6 +205,14 @@ router.post('/', async (req, res, next) => {
       });
     }
 
+    const validationError = validateAgentConfigInput(req.body);
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        error: { message: validationError }
+      });
+    }
+
     const existing = await prisma.user_agent_configs.findFirst({
       where: {
         userId,
@@ -257,6 +295,14 @@ router.put('/:name', async (req, res, next) => {
       return res.status(400).json({
         success: false,
         error: { message: '当前版本不支持用户代码导入' }
+      });
+    }
+
+    const validationError = validateAgentConfigInput(req.body);
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        error: { message: validationError }
       });
     }
 
@@ -406,7 +452,8 @@ router.get('/:name/logs', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const { name } = req.params;
-    const limit = parseInt(req.query.limit as string) || 50;
+    // limit 钳制：防止 limit 无上限导致全表扫描（1-100）
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 100);
 
     if (!isOfficialAgent(name)) {
       return res.status(400).json({

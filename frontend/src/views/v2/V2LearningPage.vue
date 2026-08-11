@@ -226,13 +226,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import MarkdownIt from 'markdown-it';
-import DOMPurify, { type Config as DOMPurifyConfig } from 'dompurify';
 import request, { API_BASE_URL } from '@/utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import AiContentNote from '@/components/AiContentNote.vue';
 import { toast } from '@/utils/toast';
 import { useInteractionMeta } from '@/composables/useInteractionMeta';
+import { renderAiMessageHtml } from '@/utils/sanitize';
+import { ElMessageBox } from 'element-plus';
 import './v2.css';
 import { unwrap } from './unwrap';
 
@@ -250,6 +250,8 @@ const session = ref<{ sessionId: string; revision: number } | null>(null);
 const initing = ref(true);
 const initError = ref('');
 const typing = ref(false);
+/** 菜单危险动作（结束/重新开始）in-flight 防重 */
+const actionBusy = ref(false);
 const menuOpen = ref(false);
 
 const friendlyError = computed(() => {
@@ -339,12 +341,7 @@ async function sendPeer() {
   }
 }
 
-const md = new MarkdownIt({ html: true, linkify: true, breaks: true });
-const SANITIZE: DOMPurifyConfig = {
-  FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'link', 'meta', 'base', 'svg'],
-  ALLOW_DATA_ATTR: false
-};
-const formatMessage = (text: string) => DOMPurify.sanitize(md.render(text || ''), SANITIZE);
+const formatMessage = (text: string) => renderAiMessageHtml(text);
 
 function nowTime() {
   const d = new Date();
@@ -588,7 +585,22 @@ async function finish(action: 'complete_task' | 'end_only' | 'complete_review') 
 
 async function endSession() {
   menuOpen.value = false;
-  await finish('end_only');
+  if (actionBusy.value) return;
+  try {
+    await ElMessageBox.confirm(
+      '结束本次学习？结束后将生成本次学习总结，未完成的对话进度会保留。',
+      '结束本次学习',
+      { confirmButtonText: '结束', cancelButtonText: '取消', type: 'warning' }
+    );
+  } catch {
+    return;
+  }
+  actionBusy.value = true;
+  try {
+    await finish('end_only');
+  } finally {
+    actionBusy.value = false;
+  }
 }
 
 async function pauseAndLeave() {
@@ -604,15 +616,31 @@ async function pauseAndLeave() {
 
 async function restart() {
   menuOpen.value = false;
+  if (actionBusy.value) return;
   if (!session.value) return;
   try {
+    await ElMessageBox.confirm(
+      '重新开始将清空当前学习进度与消息记录，此操作不可恢复。',
+      '重新开始',
+      { confirmButtonText: '重新开始', cancelButtonText: '取消', type: 'warning' }
+    );
+  } catch {
+    return;
+  }
+  actionBusy.value = true;
+  try {
+    // 流式生成中先中止，避免与 reset 竞态
+    streamAbort?.abort();
+    streamAbort = null;
     const rev = await aiTeachingAPI.resetSession(session.value.sessionId, session.value.revision);
     session.value.revision = typeof rev === 'number' ? rev : session.value.revision + 1;
     msgs.value = [];
     checkpoint.value = null;
     completed.value = false;
     await boot();
-  } catch { /* ignore */ }
+  } catch { /* ignore */ } finally {
+    actionBusy.value = false;
+  }
 }
 
 /* ---------- 知识点 ---------- */
