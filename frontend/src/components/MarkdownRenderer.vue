@@ -7,7 +7,8 @@ import { computed, ref, watch, onMounted, nextTick } from 'vue';
 import MarkdownIt from 'markdown-it';
 import 'highlight.js/styles/github-dark.css';
 import 'katex/dist/katex.min.css';
-import markdownItKatex from 'markdown-it-katex';
+import katex from 'katex';
+import texmath from 'markdown-it-texmath';
 // 按需注册常用语言，避免 highlight.js 全量语言包（约 1MB）
 import hljs from 'highlight.js/lib/core';
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -108,7 +109,7 @@ const md: MarkdownIt = new MarkdownIt({
   },
 });
 
-md.use(markdownItKatex);
+md.use(texmath, { engine: katex, delimiters: ['dollars', 'brackets'] });
 
 function postProcessMermaid(html: string): string {
   return html
