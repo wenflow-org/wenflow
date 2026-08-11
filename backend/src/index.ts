@@ -40,6 +40,7 @@ import { backgroundTaskTracker, runBackgroundTask } from './services/background-
 import { aiTeachingOrchestrator } from './services/ai-teaching/AITeachingCoordinator';
 import { aiCapabilityHealthService } from './services/ai-capability-health.service';
 import { getRuntimeCapabilityProbeEnabled } from './services/capability-probe-settings.service';
+import { logRetentionService } from './services/log-retention.service';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
 
@@ -495,6 +496,8 @@ export async function startServer() {
     await Promise.all([prisma.$connect(), systemPrisma.$connect()]);
     assertStartupActive();
     logger.info('✅ Main and System databases connected successfully');
+    logRetentionService.start(lifecycle);
+    assertStartupActive();
 
     const backendRoot = resolve(__dirname, '..');
     const repoRoot = resolve(backendRoot, '..');
@@ -677,6 +680,7 @@ export async function shutdown(signal: string) {
     stopSchedulers: async () => {
       if (enrichmentRetryTimer) clearInterval(enrichmentRetryTimer);
       enrichmentRetryTimer = null;
+      await logRetentionService.stop();
       await aiCapabilityHealthService.stop();
     },
     teaching: aiTeachingOrchestrator,
