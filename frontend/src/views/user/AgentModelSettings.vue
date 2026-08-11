@@ -1,86 +1,116 @@
 <template>
   <CapabilityShell title="高级模型">
     <div class="agent-model-settings">
-      <section class="agent-model-settings__panel glass-card">
-        <div class="agent-model-settings__table mobile-table-scroll">
-          <el-result
-            v-if="loadError && !loading && configs.length === 0"
-            icon="error"
-            title="模型配置加载失败"
-            :sub-title="loadError"
-          >
-            <template #extra>
-              <el-button type="primary" @click="fetchConfigs">重新加载</el-button>
-            </template>
-          </el-result>
-          <el-table v-else :data="configs" v-loading="loading" table-layout="fixed" style="width: 100%">
-            <el-table-column label="能力" min-width="160" show-overflow-tooltip>
-              <template #default="{ row }">
-                <div class="agent-cell">
-                  <strong>{{ row.displayName || row.agentId }}</strong>
-                  <span>{{ row.agentId }}</span>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column prop="model" label="模型" min-width="120" show-overflow-tooltip>
-              <template #default="{ row }">
-                {{ row.model || '系统默认' }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="temperature" label="温度" width="80">
-              <template #default="{ row }">
-                {{ row.temperature ?? '默认' }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="enabled" label="自定义" width="80">
-              <template #default="{ row }">
-                <el-switch v-model="row.enabled" :loading="busyAgentId === row.agentId" :disabled="isBusy" @change="toggleOverride(row)" />
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="140" fixed="right">
-              <template #default="{ row }">
-                <div class="table-actions">
-                  <el-button link type="primary" :disabled="isBusy" @click="editOverride(row)">编辑</el-button>
-                  <el-button link type="danger" :loading="busyAgentId === row.agentId && busyAction === 'reset'" :disabled="isBusy" @click="resetOverride(row)">重置</el-button>
-                </div>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </section>
-
-      <el-dialog v-model="editDialogVisible" title="自定义配置" width="min(560px, calc(100vw - 32px))" :close-on-click-modal="!isBusy" :close-on-press-escape="!isBusy" :show-close="!isBusy">
-        <el-form :model="editForm" label-position="top">
-          <el-form-item label="AI 能力">
-            <el-input v-model="editForm.agentId" disabled />
-          </el-form-item>
-          <el-form-item label="生成随机性（Temperature）">
-            <el-slider v-model="editForm.temperature" :min="0" :max="2" :step="0.1" show-input />
-          </el-form-item>
-          <el-form-item label="最大输出长度（Token）">
-            <el-input-number v-model="editForm.maxTokens" :min="100" :max="8000" />
-          </el-form-item>
-          <el-form-item label="模型名称">
-            <el-input v-model="editForm.model" placeholder="留空使用系统配置" />
-          </el-form-item>
-        </el-form>
-        <template #footer>
-          <div class="dialog-actions">
-            <el-button :disabled="isBusy" @click="editDialogVisible = false">取消</el-button>
-            <el-button type="primary" :loading="busyAction === 'save'" :disabled="isBusy && busyAction !== 'save'" @click="saveOverride">保存</el-button>
+      <article class="uc-card">
+        <div class="uc-card__head">
+          <div>
+            <h3>能力模型覆盖</h3>
+            <p>为各项能力单独指定模型与参数；留空则使用系统默认</p>
           </div>
-        </template>
-      </el-dialog>
+        </div>
+
+        <div v-if="loadError && !loading && configs.length === 0" class="uc-errorbar" role="alert">
+          {{ loadError }}
+          <button type="button" class="uc-errorbar__retry" @click="fetchConfigs">重新加载</button>
+        </div>
+
+        <div v-if="loading && !configs.length" class="uc-loading">
+          <span class="uc-spinner"></span>
+          加载模型配置…
+        </div>
+
+        <div v-else-if="!loading && configs.length === 0" class="uc-empty">
+          <strong>暂无能力配置</strong>
+          <span>平台能力会显示在这里</span>
+        </div>
+
+        <div v-else class="uc-table-wrap ams-scroll">
+          <table class="uc-table ams-table">
+            <thead>
+              <tr>
+                <th>能力</th>
+                <th>模型</th>
+                <th>温度</th>
+                <th>自定义</th>
+                <th class="uc-table__right">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in configs" :key="row.agentId">
+                <td>
+                  <strong>{{ row.displayName || row.agentId }}</strong>
+                  <span class="uc-table__sub">{{ row.agentId }}</span>
+                </td>
+                <td class="uc-table__muted">{{ row.model || '系统默认' }}</td>
+                <td class="uc-table__muted">{{ row.temperature ?? '默认' }}</td>
+                <td>
+                  <label class="uc-switch">
+                    <input
+                      type="checkbox"
+                      v-model="row.enabled"
+                      :disabled="isBusy"
+                      @change="toggleOverride(row)"
+                    />
+                    <span class="uc-switch__track"></span>
+                  </label>
+                </td>
+                <td class="uc-table__right">
+                  <button type="button" class="uc-btn uc-btn--link" :disabled="isBusy" @click="editOverride(row)">编辑</button>
+                  <button type="button" class="uc-btn uc-btn--link uc-btn--link-danger" :disabled="isBusy" @click="resetOverride(row)">重置</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <!-- 编辑弹窗 -->
+      <div v-if="editDialogVisible" class="uc-dialog-mask" @click.self="editDialogVisible = false">
+        <div class="uc-dialog" role="dialog" aria-modal="true" aria-label="自定义配置">
+          <div class="uc-dialog__head">
+            <h3>自定义配置</h3>
+            <button type="button" class="uc-dialog__close" aria-label="关闭" @click="editDialogVisible = false">✕</button>
+          </div>
+          <div class="uc-dialog__body">
+            <label class="uc-field">
+              <span class="uc-field__label">AI 能力</span>
+              <input :value="editForm.agentId" class="uc-field__input" disabled />
+            </label>
+            <label class="uc-field">
+              <span class="uc-field__label">生成随机性（Temperature：0-2）</span>
+              <input v-model.number="editForm.temperature" type="number" min="0" max="2" step="0.1" class="uc-field__input" />
+            </label>
+            <label class="uc-field">
+              <span class="uc-field__label">最大输出长度（Token）</span>
+              <input v-model.number="editForm.maxTokens" type="number" min="100" max="8000" class="uc-field__input" />
+            </label>
+            <label class="uc-field">
+              <span class="uc-field__label">模型名称</span>
+              <input v-model="editForm.model" class="uc-field__input" placeholder="留空使用系统配置" />
+            </label>
+          </div>
+          <div class="uc-dialog__foot">
+            <button type="button" class="uc-btn" :disabled="isBusy" @click="editDialogVisible = false">取消</button>
+            <button type="button" class="uc-btn uc-btn--primary" :disabled="isBusy" @click="saveOverride">
+              {{ busyAction === 'save' ? '保存中…' : '保存' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <UcConfirm :state="confirmState" />
   </CapabilityShell>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue';
-import { ElMessageBox } from 'element-plus';
 import api from '@/utils/api';
 import { toast } from '../../utils/toast';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
+import UcConfirm from '@/components/user/UcConfirm.vue';
+import { useUcConfirm } from '@/components/user/useUcConfirm';
+import '@/components/user/uc.css';
 
 interface UserAgentConfig {
   agentId: string;
@@ -108,6 +138,7 @@ const editForm = ref<UserAgentConfig>({
   agentId: '',
   enabled: false
 });
+const { state: confirmState, openConfirm } = useUcConfirm();
 
 const buildConfigRows = (agents: AgentDefinition[], overrides: UserAgentConfig[]) => {
   const overrideMap = new Map(overrides.map((item) => [item.agentId, item]));
@@ -208,34 +239,27 @@ const saveOverride = async () => {
 
 const resetOverride = async (row: UserAgentConfig) => {
   if (isBusy.value) return;
-  try {
-    await ElMessageBox.confirm(
-      `确认清除“${row.displayName || row.agentId}”的自定义模型参数并恢复系统默认吗？`,
-      '恢复系统默认',
-      {
-        type: 'warning',
-        confirmButtonText: '确认恢复',
-        cancelButtonText: '取消'
+  openConfirm(
+    '恢复系统默认',
+    `确认清除“${row.displayName || row.agentId}”的自定义模型参数并恢复系统默认吗？`,
+    async () => {
+      busyAgentId.value = row.agentId;
+      busyAction.value = 'reset';
+      try {
+        if (row.hasOverride) {
+          await api.delete(`/user/agent-model-configs/${encodeURIComponent(row.agentId)}`);
+        }
+        toast.success('已重置为系统默认');
+        await fetchConfigs();
+      } catch (error) {
+        toast.error('重置失败');
+      } finally {
+        busyAgentId.value = '';
+        busyAction.value = '';
       }
-    );
-  } catch {
-    return;
-  }
-
-  busyAgentId.value = row.agentId;
-  busyAction.value = 'reset';
-  try {
-    if (row.hasOverride) {
-      await api.delete(`/user/agent-model-configs/${encodeURIComponent(row.agentId)}`);
-    }
-    toast.success('已重置为系统默认');
-    await fetchConfigs();
-  } catch (error) {
-    toast.error('重置失败');
-  } finally {
-    busyAgentId.value = '';
-    busyAction.value = '';
-  }
+    },
+    { confirmText: '确认恢复', danger: true }
+  );
 };
 
 onMounted(() => {
@@ -246,134 +270,24 @@ onMounted(() => {
 <style scoped>
 .agent-model-settings {
   display: grid;
-  gap: 20px;
-}
-
-.agent-model-settings__intro,
-.agent-model-settings__panel {
-  padding: 22px;
-  border-radius: 16px;
-}
-
-.agent-model-settings__intro {
-  display: grid;
   gap: 16px;
-  background: var(--surface, #fff);
-  border: 1px solid var(--line, #e3e9f4);
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
+  min-width: 0;
 }
 
-.agent-model-settings__panel {
-  background: var(--surface, #fff);
-  border: 1px solid var(--line, #e3e9f4);
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
+.ams-scroll {
+  overflow-x: auto;
 }
 
-.agent-model-settings__intro h2,
-.agent-model-settings__header h3 {
-  margin: 0;
-  color: var(--ink, #172033);
-}
-
-.agent-model-settings__header {
-  margin-bottom: 16px;
-}
-
-.agent-model-settings__header p {
-  margin: 8px 0 0;
-  color: var(--muted, #5b6577);
-  line-height: 1.6;
-}
-
-.agent-model-settings__intro :deep(.el-alert) {
-  border: 1px solid rgba(67, 176, 216, 0.16);
-  background: var(--surface, #fff);
-}
-
-.agent-model-settings__table {
-  width: 100%;
-}
-
-.agent-model-settings__table :deep(.el-table) {
+.ams-table {
   min-width: 860px;
 }
 
-.agent-cell {
-  display: grid;
-  gap: 4px;
+.uc-btn--link-danger {
+  color: #c0454a;
 }
 
-.agent-cell strong {
-  color: var(--text-primary);
-  font-size: 13px;
-}
-
-.agent-cell span {
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.4;
-  word-break: break-all;
-}
-
-.table-actions {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 2px;
-}
-
-.table-actions :deep(.el-button) {
-  margin-left: 0;
-  padding: 0 4px;
-}
-
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.dialog-actions :deep(.el-button--primary) {
-  border: none;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
-}
-
-@media (max-width: 768px) {
-  .agent-model-settings__intro,
-  .agent-model-settings__panel {
-    padding: 18px;
-    border-radius: 20px;
-  }
-
-  .dialog-actions {
-    flex-direction: column;
-  }
-
-  .dialog-actions :deep(.el-button) {
-    width: 100%;
-    margin-left: 0;
-  }
-
-  .agent-model-settings__table {
-    margin-inline: -2px;
-    padding-inline: 2px;
-  }
-
-  :deep(.el-dialog__body),
-  :deep(.el-dialog__footer) {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-  :deep(.el-slider__input) {
-    width: 100%;
-  }
-}
-
-@media (max-width: 520px) {
-  .agent-model-settings__intro,
-  .agent-model-settings__panel {
-    padding: 16px;
-  }
+.uc-btn--link-danger:hover:not(:disabled) {
+  background: rgba(239, 117, 120, 0.08);
+  color: #c0454a;
 }
 </style>

@@ -27,100 +27,142 @@
         </div>
       </div>
 
-      <el-result
-        v-if="loadError && !loading"
-        icon="error"
-        title="加载失败"
-        :sub-title="loadError"
-      >
-        <template #extra>
-          <el-button type="primary" @click="loadAgents">重新加载</el-button>
-        </template>
-      </el-result>
-
-      <el-empty v-else-if="!loading && agents.length === 0" description="暂无助手" />
-
-      <div v-else class="agent-table-panel">
-        <el-table :data="agents" v-loading="loading" style="width: 100%" row-key="agentName">
-          <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip>
-            <template #default="{ row }">
-              {{ row.name || row.agentName }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="model" label="模型" min-width="140" show-overflow-tooltip>
-            <template #default="{ row }">
-              {{ row.model || '默认' }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="enabled" label="启用" width="90">
-            <template #default="{ row }">
-              <el-switch
-                v-model="row.enabled"
-                @change="toggleAgent(row)"
-                :active-value="true"
-                :inactive-value="false"
-                :loading="togglingAgents.has(row.agentName)"
-                :disabled="togglingAgents.has(row.agentName)"
-              />
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="120" fixed="right">
-            <template #default="{ row }">
-              <el-button link type="primary" @click="configPlatformAgent(row)">配置</el-button>
-              <el-button link type="primary" @click="viewLogs(row)">日志</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+      <div v-if="loadError && !loading" class="uc-card">
+        <div class="uc-errorbar" role="alert">
+          {{ loadError }}
+          <button type="button" class="uc-errorbar__retry" @click="loadAgents">重新加载</button>
+        </div>
       </div>
 
-      <el-dialog
-        v-model="dialogVisible"
-        title="配置"
-        width="min(560px, calc(100vw - 32px))"
-        @close="resetForm"
-      >
-        <el-form :model="formData" label-width="100px">
-          <el-form-item label="名称">
-            <el-input v-model="formData.agentName" disabled />
-          </el-form-item>
-          <el-form-item label="模型">
-            <el-input v-model="formData.model" placeholder="deepseek-v4-flash" />
-          </el-form-item>
-          <el-form-item label="Temperature">
-            <el-input-number v-model="formData.temperature" :min="0" :max="2" :step="0.1" />
-          </el-form-item>
-          <el-form-item label="Max Tokens">
-            <el-input-number v-model="formData.maxTokens" :min="100" :max="100000" :step="100" />
-          </el-form-item>
-          <el-form-item label="System Prompt">
-            <el-input v-model="formData.systemPrompt" type="textarea" :rows="4" />
-          </el-form-item>
-        </el-form>
-        <template #footer>
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitForm" :loading="submitting">保存</el-button>
-        </template>
-      </el-dialog>
+      <div v-else-if="loading && !agents.length" class="uc-card">
+        <div class="uc-loading">
+          <span class="uc-spinner"></span>
+          加载助手列表…
+        </div>
+      </div>
 
-      <el-dialog v-model="logsVisible" title="调用日志" width="min(720px, calc(100vw - 32px))">
-        <el-table :data="agentLogs" style="width: 100%">
-          <el-table-column prop="success" label="状态" width="80">
-            <template #default="{ row }">
-              <el-tag :type="row.success ? 'success' : 'danger'" size="small">
-                {{ row.success ? '成功' : '失败' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="durationMs" label="耗时" width="90" />
-          <el-table-column prop="tokensUsed" label="Token" width="80" />
-          <el-table-column prop="error" label="错误" min-width="120" show-overflow-tooltip />
-          <el-table-column prop="calledAt" label="时间" width="150">
-            <template #default="{ row }">
-              {{ formatDate(row.calledAt) }}
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-dialog>
+      <div v-else-if="!loading && agents.length === 0" class="uc-empty">
+        <strong>暂无助手</strong>
+        <span>平台托管 Agent 会出现在这里</span>
+      </div>
+
+      <article v-else class="uc-card uc-card--flush">
+        <div class="uc-table-wrap">
+          <table class="uc-table">
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>模型</th>
+                <th>启用</th>
+                <th class="uc-table__right">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="agent in agents" :key="agent.agentName">
+                <td>
+                  {{ agent.name || agent.agentName }}
+                  <span v-if="agent.description" class="uc-table__sub">{{ agent.description }}</span>
+                </td>
+                <td class="uc-table__muted">{{ agent.model || '默认' }}</td>
+                <td>
+                  <label class="uc-switch">
+                    <input
+                      type="checkbox"
+                      v-model="agent.enabled"
+                      :disabled="togglingAgents.has(agent.agentName)"
+                      @change="toggleAgent(agent)"
+                    />
+                    <span class="uc-switch__track"></span>
+                  </label>
+                </td>
+                <td class="uc-table__right">
+                  <button type="button" class="uc-btn uc-btn--link" @click="configPlatformAgent(agent)">配置</button>
+                  <button type="button" class="uc-btn uc-btn--link" @click="viewLogs(agent)">日志</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <!-- 配置弹窗 -->
+      <div v-if="dialogVisible" class="uc-dialog-mask" @click.self="dialogVisible = false">
+        <div class="uc-dialog" role="dialog" aria-modal="true" aria-label="Agent 配置">
+          <div class="uc-dialog__head">
+            <h3>配置 · {{ formData.agentName }}</h3>
+            <button type="button" class="uc-dialog__close" aria-label="关闭" @click="closeDialog">✕</button>
+          </div>
+          <div class="uc-dialog__body">
+            <label class="uc-field">
+              <span class="uc-field__label">模型</span>
+              <input v-model="formData.model" class="uc-field__input" placeholder="deepseek-v4-flash" />
+            </label>
+            <div class="form-grid">
+              <label class="uc-field">
+                <span class="uc-field__label">Temperature</span>
+                <input v-model.number="formData.temperature" type="number" min="0" max="2" step="0.1" class="uc-field__input" />
+              </label>
+              <label class="uc-field">
+                <span class="uc-field__label">Max Tokens</span>
+                <input v-model.number="formData.maxTokens" type="number" min="100" max="100000" step="100" class="uc-field__input" />
+              </label>
+            </div>
+            <label class="uc-field">
+              <span class="uc-field__label">System Prompt</span>
+              <textarea v-model="formData.systemPrompt" class="uc-field__input" rows="4"></textarea>
+            </label>
+          </div>
+          <div class="uc-dialog__foot">
+            <button type="button" class="uc-btn" :disabled="submitting" @click="closeDialog">取消</button>
+            <button type="button" class="uc-btn uc-btn--primary" :disabled="submitting" @click="submitForm">
+              {{ submitting ? '保存中…' : '保存' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 调用日志弹窗 -->
+      <div v-if="logsVisible" class="uc-dialog-mask" @click.self="logsVisible = false">
+        <div class="uc-dialog uc-dialog--wide" role="dialog" aria-modal="true" aria-label="调用日志">
+          <div class="uc-dialog__head">
+            <h3>调用日志 · {{ currentLogAgent }}</h3>
+            <button type="button" class="uc-dialog__close" aria-label="关闭" @click="logsVisible = false">✕</button>
+          </div>
+          <div class="uc-dialog__body">
+            <div v-if="!agentLogs.length" class="uc-empty">
+              <strong>暂无日志</strong>
+              <span>该 Agent 还没有调用记录</span>
+            </div>
+            <div v-else class="uc-table-wrap">
+              <table class="uc-table">
+                <thead>
+                  <tr>
+                    <th>状态</th>
+                    <th>耗时</th>
+                    <th>Token</th>
+                    <th>错误</th>
+                    <th>时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(log, i) in agentLogs" :key="i">
+                    <td><span class="uc-badge" :class="log.success ? 'uc-badge--ok' : 'uc-badge--bad'">
+                      {{ log.success ? '成功' : '失败' }}
+                    </span></td>
+                    <td class="uc-table__muted">{{ log.durationMs ?? '-' }}</td>
+                    <td class="uc-table__muted">{{ log.tokensUsed ?? '-' }}</td>
+                    <td class="uc-table__muted">{{ log.error || '-' }}</td>
+                    <td class="uc-table__muted">{{ formatDate(log.calledAt) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="uc-dialog__foot">
+            <button type="button" class="uc-btn" @click="logsVisible = false">关闭</button>
+          </div>
+        </div>
+      </div>
     </div>
   </CapabilityShell>
 </template>
@@ -138,6 +180,7 @@ import {
   getUserAgentLogs
 } from '@/api/userCustom'
 import dayjs from 'dayjs'
+import '@/components/user/uc.css'
 
 interface UserAgentItem {
   agentName: string
@@ -170,6 +213,7 @@ const agents = ref<UserAgentItem[]>([])
 const dialogVisible = ref(false)
 const logsVisible = ref(false)
 const currentAgent = ref<UserAgentItem | null>(null)
+const currentLogAgent = ref('')
 const agentLogs = ref<AgentLogItem[]>([])
 
 const enabledCount = computed(() => agents.value.filter((a) => a.enabled).length)
@@ -214,6 +258,7 @@ const viewLogs = async (agent: UserAgentItem) => {
   try {
     const res = await getUserAgentLogs(agent.agentName, 50)
     agentLogs.value = res.data
+    currentLogAgent.value = agent.name || agent.agentName
     logsVisible.value = true
   } catch {
     toast.error('加载日志失败')
@@ -273,6 +318,12 @@ const configPlatformAgent = (agent: UserAgentItem) => {
   dialogVisible.value = true
 }
 
+const closeDialog = () => {
+  if (submitting.value) return
+  dialogVisible.value = false
+  resetForm()
+}
+
 const submitForm = async () => {
   if (!formData.agentName) {
     toast.warning('请填写名称')
@@ -318,15 +369,15 @@ const resetForm = () => {
   currentAgent.value = null
 }
 
-const formatDate = (date: string) => {
+const formatDate = (date?: string) => {
   return dayjs(date).format('YYYY-MM-DD HH:mm:ss')
 }
 </script>
 
-<style scoped lang="scss">
+<style scoped>
 .agent-config-page {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
   width: 100%;
   max-width: 100%;
@@ -380,14 +431,19 @@ const formatDate = (date: string) => {
   }
 }
 
-.agent-table-panel {
-  min-width: 0;
-  width: 100%;
-  padding: 16px;
-  border-radius: 16px;
-  border: 1px solid var(--line, #e3e9f4);
-  background: var(--surface, #fff);
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
-  overflow: hidden;
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.uc-dialog--wide {
+  width: min(720px, 100%);
 }
 </style>

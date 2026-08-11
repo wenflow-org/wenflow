@@ -2,16 +2,13 @@
   <CapabilityShell title="调用日志">
     <template #actions>
       <div class="actions">
-        <button type="button" class="btn btn--ghost btn--sm" :disabled="exporting" @click="exportLogs('json')">
-          <el-icon><Download /></el-icon>
+        <button type="button" class="uc-btn uc-btn--sm" :disabled="exporting" @click="exportLogs('json')">
           {{ exportingFormat === 'json' ? '导出中...' : '导出 JSON' }}
         </button>
-        <button type="button" class="btn btn--ghost btn--sm" :disabled="exporting" @click="exportLogs('csv')">
-          <el-icon><Download /></el-icon>
+        <button type="button" class="uc-btn uc-btn--sm" :disabled="exporting" @click="exportLogs('csv')">
           {{ exportingFormat === 'csv' ? '导出中...' : '导出 CSV' }}
         </button>
-        <button type="button" class="btn btn--primary btn--sm" @click="copyDiagnosticsSummary">
-          <el-icon><DocumentCopy /></el-icon>
+        <button type="button" class="uc-btn uc-btn--primary uc-btn--sm" @click="copyDiagnosticsSummary">
           复制排查信息
         </button>
       </div>
@@ -20,54 +17,57 @@
 
     <!-- 筛选器 -->
     <div class="filters">
-      <el-form :inline="true" :model="filters">
-        <el-form-item label="Agent">
-          <el-select v-model="filters.agentId" placeholder="全部" clearable>
-            <el-option label="Path Agent" value="skill:path-planning" />
-            <el-option label="AI Teaching Agent" value="teaching-agent" />
-            <el-option label="AI Teaching Agent (legacy)" value="ai-teaching-agent" />
-            <el-option label="Learner State Hub" value="learner-model-agent" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="活动类型">
-          <el-select v-model="filters.capabilityType" placeholder="全部" clearable>
-            <el-option label="目标对话" value="goal" />
-            <el-option label="路径规划" value="path" />
-            <el-option label="教学讲解" value="teaching" />
-            <el-option label="辅导答疑" value="tutoring" />
-            <el-option label="学习画像更新" value="profile" />
-            <el-option label="系统底层调用" value="system" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="filters.success" placeholder="全部" clearable>
-            <el-option label="成功" :value="true" />
-            <el-option label="失败" :value="false" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-switch
-            v-model="filters.includeSystem"
-            inline-prompt
-            active-text="显示底层调用"
-            inactive-text="隐藏底层调用"
-          />
-        </el-form-item>
-        <el-form-item label="时间范围">
-          <el-date-picker
-            v-model="dateRange"
-            type="daterange"
-            range-separator="至"
-            start-placeholder="开始日期"
-            end-placeholder="结束日期"
-            @change="onDateRangeChange"
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :loading="loading" @click="queryLogs">查询</el-button>
-          <el-button @click="resetFilters">重置</el-button>
-        </el-form-item>
-      </el-form>
+      <label class="filter-item">
+        <span class="filter-label">Agent</span>
+        <select v-model="filters.agentId" class="uc-field__input filter-select">
+          <option value="">全部</option>
+          <option value="skill:path-planning">Path Agent</option>
+          <option value="teaching-agent">AI Teaching Agent</option>
+          <option value="ai-teaching-agent">AI Teaching Agent (legacy)</option>
+          <option value="learner-model-agent">Learner State Hub</option>
+        </select>
+      </label>
+      <label class="filter-item">
+        <span class="filter-label">活动类型</span>
+        <select v-model="filters.capabilityType" class="uc-field__input filter-select">
+          <option value="">全部</option>
+          <option value="goal">目标对话</option>
+          <option value="path">路径规划</option>
+          <option value="teaching">教学讲解</option>
+          <option value="tutoring">辅导答疑</option>
+          <option value="profile">学习画像更新</option>
+          <option value="system">系统底层调用</option>
+        </select>
+      </label>
+      <label class="filter-item">
+        <span class="filter-label">状态</span>
+        <select v-model="filters.success" class="uc-field__input filter-select">
+          <option :value="undefined">全部</option>
+          <option :value="true">成功</option>
+          <option :value="false">失败</option>
+        </select>
+      </label>
+      <label class="filter-item">
+        <span class="filter-label">时间范围</span>
+        <div class="filter-dates">
+          <input v-model="startDateInput" type="date" class="uc-field__input" @change="onStartDateChange" />
+          <span class="filter-dates__sep">至</span>
+          <input v-model="endDateInput" type="date" class="uc-field__input" @change="onEndDateChange" />
+        </div>
+      </label>
+      <label class="filter-item filter-item--switch">
+        <span class="uc-switch">
+          <input type="checkbox" v-model="filters.includeSystem" />
+          <span class="uc-switch__track"></span>
+        </span>
+        <span class="filter-switch-label">{{ filters.includeSystem ? '显示底层调用' : '隐藏底层调用' }}</span>
+      </label>
+      <div class="filter-actions">
+        <button type="button" class="uc-btn uc-btn--primary uc-btn--sm" :disabled="loading" @click="queryLogs">
+          {{ loading ? '查询中…' : '查询' }}
+        </button>
+        <button type="button" class="uc-btn uc-btn--sm" @click="resetFilters">重置</button>
+      </div>
     </div>
 
     <div v-if="!loadError" class="stats">
@@ -90,161 +90,161 @@
     </div>
 
     <!-- 日志列表 -->
-    <div class="logs-list">
-      <el-result v-if="loadError" icon="error" title="日志加载失败" :sub-title="loadError">
-        <template #extra>
-          <el-button type="primary" @click="loadLogs">重新加载</el-button>
-        </template>
-      </el-result>
+    <article class="uc-card uc-card--flush logs-card">
+      <div v-if="loadError" class="uc-errorbar" role="alert" style="margin: 16px">
+        {{ loadError }}
+        <button type="button" class="uc-errorbar__retry" @click="loadLogs">重新加载</button>
+      </div>
+
+      <div v-else-if="loading && !displayLogs.length" class="uc-loading">
+        <span class="uc-spinner"></span>
+        加载日志…
+      </div>
+
+      <div v-else-if="!displayLogs.length" class="uc-empty">
+        <strong>暂无日志</strong>
+        <span>调整筛选条件或稍后再来查看</span>
+      </div>
 
       <template v-else>
-      <div class="logs-table-panel">
-        <div class="logs-table-panel__scroller">
-      <el-table :data="displayLogs" v-loading="loading" style="width: 100%">
-        <el-table-column prop="agentId" label="Agent" min-width="130" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ formatAgentId(row.agentId) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="来源" width="80">
-          <template #default="{ row }">
-            <el-tag :type="getLogSourceType(row)" size="small" effect="plain">
-              {{ getLogSourceLabel(row) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="能力" width="88">
-          <template #default="{ row }">
-            {{ getCapabilityTypeLabel(row.agentId) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="success" label="状态" width="70">
-          <template #default="{ row }">
-            <el-tag :type="row.success ? 'success' : 'danger'" size="small">
-              {{ row.success ? '成功' : '失败' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="durationMs" label="耗时" width="70" />
-        <el-table-column prop="tokensUsed" label="Token" width="70" />
-        <el-table-column label="模型" min-width="100" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ getModelSourceInfo(row).label }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="error" label="错误" min-width="120" show-overflow-tooltip />
-        <el-table-column prop="calledAt" label="时间" width="140">
-          <template #default="{ row }">
-            {{ formatDate(row.calledAt) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
-          <template #default="{ row }">
-            <div class="table-actions">
-              <el-button link type="primary" @click="viewDetail(row)">详情</el-button>
-              <el-button link type="primary" @click="copyLogFeedback(row)">复制</el-button>
-            </div>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="uc-table-wrap">
+        <table class="uc-table logs-table">
+          <thead>
+            <tr>
+              <th>Agent</th>
+              <th>来源</th>
+              <th>能力</th>
+              <th>状态</th>
+              <th>耗时</th>
+              <th>Token</th>
+              <th>模型</th>
+              <th>错误</th>
+              <th>时间</th>
+              <th class="uc-table__right">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in displayLogs" :key="row.id">
+              <td>{{ formatAgentId(row.agentId) }}</td>
+              <td><span class="uc-badge" :class="sourceBadgeClass(row)">{{ getLogSourceLabel(row) }}</span></td>
+              <td class="uc-table__muted">{{ getCapabilityTypeLabel(row.agentId) }}</td>
+              <td><span class="uc-badge" :class="row.success ? 'uc-badge--ok' : 'uc-badge--bad'">
+                {{ row.success ? '成功' : '失败' }}
+              </span></td>
+              <td class="uc-table__muted">{{ row.durationMs ?? '-' }}</td>
+              <td class="uc-table__muted">{{ row.tokensUsed ?? '-' }}</td>
+              <td class="uc-table__muted">{{ getModelSourceInfo(row).label }}</td>
+              <td class="uc-table__muted logs-error-cell">{{ row.error || '-' }}</td>
+              <td class="uc-table__muted">{{ formatDate(row.calledAt) }}</td>
+              <td class="uc-table__right">
+                <button type="button" class="uc-btn uc-btn--link" @click="viewDetail(row)">详情</button>
+                <button type="button" class="uc-btn uc-btn--link" @click="copyLogFeedback(row)">复制</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 手作分页 -->
+      <div class="pagination">
+        <span class="pagination__total">共 {{ pagination.total }} 条</span>
+        <select v-model.number="pagination.limit" class="uc-field__input pagination__size" @change="onLimitChange">
+          <option :value="10">10条/页</option>
+          <option :value="20">20条/页</option>
+          <option :value="50">50条/页</option>
+          <option :value="100">100条/页</option>
+        </select>
+        <div class="pagination__nav">
+          <button type="button" class="uc-btn uc-btn--sm" :disabled="pagination.page <= 1 || loading" @click="goPage(pagination.page - 1)">上一页</button>
+          <span class="pagination__page">第 {{ pagination.page }} / {{ totalPages }} 页</span>
+          <button type="button" class="uc-btn uc-btn--sm" :disabled="pagination.page >= totalPages || loading" @click="goPage(pagination.page + 1)">下一页</button>
         </div>
       </div>
-
-      <!-- 分页 -->
-      <div class="pagination">
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.limit"
-          :page-sizes="[10, 20, 50, 100]"
-          :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadLogs"
-          @current-change="loadLogs"
-        />
-      </div>
       </template>
-    </div>
+    </article>
 
-    <!-- 详情对话框 -->
-    <el-dialog
-      v-model="detailVisible"
-      title="日志详情与诊断"
-      width="min(880px, calc(100vw - 32px))"
-      :fullscreen="isMobileDetail"
-    >
-      <div v-loading="detailLoading" v-if="currentLog" class="detail-panel">
-        <el-alert
-          v-if="detailError"
-          type="warning"
-          show-icon
-          :closable="false"
-          :title="detailError"
-          class="detail-error-alert"
-        />
+    <!-- 详情弹窗 -->
+    <div v-if="detailVisible && currentLog" class="uc-dialog-mask" @click.self="closeDetail">
+      <div class="uc-dialog uc-dialog--detail" role="dialog" aria-modal="true" aria-label="日志详情与诊断">
+        <div class="uc-dialog__head">
+          <h3>日志详情与诊断</h3>
+          <button type="button" class="uc-dialog__close" aria-label="关闭" @click="closeDetail">✕</button>
+        </div>
+        <div class="uc-dialog__body">
+          <div v-if="detailError" class="uc-errorbar" role="alert" style="margin-bottom: 12px">
+            {{ detailError }}
+          </div>
 
-        <el-collapse v-model="detailSections" class="detail-collapse">
-          <el-collapse-item name="basic" title="基础信息">
-            <el-descriptions :column="2" border>
-              <el-descriptions-item label="ID">{{ currentLog.id }}</el-descriptions-item>
-              <el-descriptions-item label="Agent">{{ currentLog.agentId }}</el-descriptions-item>
-              <el-descriptions-item label="能力类型">{{ getCapabilityTypeLabel(currentLog.agentId) }}</el-descriptions-item>
-              <el-descriptions-item label="状态">
-                <el-tag :type="currentLog.success ? 'success' : 'danger'">
-                  {{ currentLog.success ? '成功' : '失败' }}
-                </el-tag>
-              </el-descriptions-item>
-              <el-descriptions-item label="耗时">{{ currentLog.durationMs }}ms</el-descriptions-item>
-              <el-descriptions-item label="Token">{{ currentLog.tokensUsed || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="模型来源">{{ getModelSourceInfo(currentLog).label }}</el-descriptions-item>
-              <el-descriptions-item label="Provider">{{ getModelSourceInfo(currentLog).providerName }}</el-descriptions-item>
-              <el-descriptions-item label="Provider 地址" :span="2">{{ getModelSourceInfo(currentLog).providerBaseUrl }}</el-descriptions-item>
-              <el-descriptions-item label="时间">{{ formatDate(currentLog.calledAt) }}</el-descriptions-item>
-              <el-descriptions-item label="Trace ID">{{ currentLog.traceId || detailMetadata.traceId || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="错误码">{{ currentLog.errorCode || detailMetadata.errorCode || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="来源入口">{{ currentLog.sourceEntry || detailMetadata.sourceEntry || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="调用方">{{ currentLog.callerAgent || detailMetadata.callerAgent || '-' }}</el-descriptions-item>
-            </el-descriptions>
-          </el-collapse-item>
+          <div v-if="detailLoading" class="uc-loading">
+            <span class="uc-spinner"></span>
+            加载详情…
+          </div>
 
-          <el-collapse-item name="error" title="错误信息" v-if="currentLog.error">
+          <template v-else>
+          <details class="detail-collapse" open>
+            <summary>基础信息</summary>
+            <div class="detail-facts">
+              <div class="detail-fact"><span>ID</span><strong>{{ currentLog.id }}</strong></div>
+              <div class="detail-fact"><span>Agent</span><strong>{{ currentLog.agentId }}</strong></div>
+              <div class="detail-fact"><span>能力类型</span><strong>{{ getCapabilityTypeLabel(currentLog.agentId) }}</strong></div>
+              <div class="detail-fact"><span>状态</span><span class="uc-badge" :class="currentLog.success ? 'uc-badge--ok' : 'uc-badge--bad'">
+                {{ currentLog.success ? '成功' : '失败' }}
+              </span></div>
+              <div class="detail-fact"><span>耗时</span><strong>{{ currentLog.durationMs }}ms</strong></div>
+              <div class="detail-fact"><span>Token</span><strong>{{ currentLog.tokensUsed || '-' }}</strong></div>
+              <div class="detail-fact"><span>模型来源</span><strong>{{ getModelSourceInfo(currentLog).label }}</strong></div>
+              <div class="detail-fact"><span>Provider</span><strong>{{ getModelSourceInfo(currentLog).providerName }}</strong></div>
+              <div class="detail-fact detail-fact--wide"><span>Provider 地址</span><strong>{{ getModelSourceInfo(currentLog).providerBaseUrl }}</strong></div>
+              <div class="detail-fact"><span>时间</span><strong>{{ formatDate(currentLog.calledAt) }}</strong></div>
+              <div class="detail-fact"><span>Trace ID</span><strong>{{ currentLog.traceId || detailMetadata.traceId || '-' }}</strong></div>
+              <div class="detail-fact"><span>错误码</span><strong>{{ currentLog.errorCode || detailMetadata.errorCode || '-' }}</strong></div>
+              <div class="detail-fact"><span>来源入口</span><strong>{{ currentLog.sourceEntry || detailMetadata.sourceEntry || '-' }}</strong></div>
+              <div class="detail-fact"><span>调用方</span><strong>{{ currentLog.callerAgent || detailMetadata.callerAgent || '-' }}</strong></div>
+            </div>
+          </details>
+
+          <details v-if="currentLog.error" class="detail-collapse" open>
+            <summary>错误信息</summary>
             <div class="detail-error-box">{{ currentLog.error }}</div>
-          </el-collapse-item>
+          </details>
 
-          <el-collapse-item name="context" title="输入与上下文">
+          <details class="detail-collapse" open>
+            <summary>输入与上下文</summary>
             <pre class="code-block">{{ formatJson(currentLog.metadata) }}</pre>
-          </el-collapse-item>
+          </details>
 
-          <el-collapse-item name="io" title="输入 / 输出摘要">
-            <el-descriptions :column="1" border class="io-descriptions">
-              <el-descriptions-item label="输入 (input)">
-                <pre class="code-block">{{ formatTextBlock(currentLog.input) }}</pre>
-              </el-descriptions-item>
-              <el-descriptions-item label="输出 (output)">
-                <pre class="code-block">{{ formatTextBlock(currentLog.output) }}</pre>
-              </el-descriptions-item>
-            </el-descriptions>
-          </el-collapse-item>
-        </el-collapse>
+          <details class="detail-collapse" open>
+            <summary>输入 / 输出摘要</summary>
+            <div class="io-block">
+              <span class="io-label">输入 (input)</span>
+              <pre class="code-block">{{ formatTextBlock(currentLog.input) }}</pre>
+            </div>
+            <div class="io-block">
+              <span class="io-label">输出 (output)</span>
+              <pre class="code-block">{{ formatTextBlock(currentLog.output) }}</pre>
+            </div>
+          </details>
+          </template>
+        </div>
+        <div class="uc-dialog__foot">
+          <button type="button" class="uc-btn dialog-btn--close" @click="closeDetail">关闭</button>
+          <button type="button" class="uc-btn uc-btn--primary" :disabled="!currentLog" @click="copyLogFeedback(currentLog)">
+            复制
+          </button>
+        </div>
       </div>
-      <template #footer>
-        <el-button class="dialog-btn dialog-btn--close" @click="detailVisible = false">关闭</el-button>
-        <el-button class="dialog-btn dialog-btn--copy" :disabled="!currentLog" @click="copyLogFeedback(currentLog)">
-          <el-icon><CopyDocument /></el-icon>
-          复制
-        </el-button>
-      </template>
-    </el-dialog>
+    </div>
     </div>
   </CapabilityShell>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
-import { CopyDocument, DocumentCopy, Download } from '@element-plus/icons-vue';
 import { toast } from '../../utils/toast';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import { getAgentLogDetail, getAgentLogs, exportAgentLogs } from '@/api/userCustom';
 import dayjs from 'dayjs';
+import '@/components/user/uc.css';
 
 interface AgentLogItem {
   id: string;
@@ -283,7 +283,6 @@ const currentLog = ref<AgentLogItem | null>(null);
 const isMobileDetail = ref(false);
 const detailLoading = ref(false);
 const detailError = ref('');
-const detailSections = ref<string[]>(['basic', 'context']);
 const loadError = ref('');
 const exportingFormat = ref<'' | 'json' | 'csv'>('');
 const exporting = computed(() => exportingFormat.value !== '');
@@ -298,6 +297,9 @@ const filters = reactive({
 });
 
 const dateRange = ref<[Date, Date] | null>(null);
+// 手作日期筛选（原生 date input）
+const startDateInput = ref(filters?.startDate || '');
+const endDateInput = ref(filters?.endDate || '');
 
 const pagination = reactive({
   page: 1,
@@ -379,15 +381,36 @@ const queryLogs = () => {
   loadLogs();
 };
 
-const onDateRangeChange = (dates: [Date, Date] | null) => {
-  if (dates && dates.length === 2) {
-    filters.startDate = dayjs(dates[0]).format('YYYY-MM-DD');
-    filters.endDate = dayjs(dates[1]).format('YYYY-MM-DD');
-  } else {
-    filters.startDate = '';
-    filters.endDate = '';
-  }
+const totalPages = computed(() => Math.max(1, Math.ceil(pagination.total / pagination.limit)));
+
+const goPage = (page: number) => {
+  if (page < 1 || page > totalPages.value || page === pagination.page) return;
+  pagination.page = page;
+  loadLogs();
 };
+
+const onLimitChange = () => {
+  pagination.page = 1;
+  loadLogs();
+};
+
+const onStartDateChange = () => {
+  filters.startDate = startDateInput.value || '';
+  queryLogs();
+};
+
+const onEndDateChange = () => {
+  filters.endDate = endDateInput.value || '';
+  queryLogs();
+};
+
+const closeDetail = () => {
+  detailVisible.value = false;
+  currentLog.value = null;
+};
+
+const sourceBadgeClass = (log: AgentLogItem) =>
+  getLogSourceLabel(log) === '平台底层' ? 'uc-badge--muted' : 'uc-badge--info';
 
 const resetFilters = () => {
   filters.agentId = '';
@@ -397,6 +420,8 @@ const resetFilters = () => {
   filters.startDate = '';
   filters.endDate = '';
   dateRange.value = null;
+  startDateInput.value = '';
+  endDateInput.value = '';
   pagination.page = 1;
   loadLogs();
 };
@@ -417,10 +442,6 @@ const viewDetail = async (log: AgentLogItem) => {
     detailError.value = '加载完整详情失败，当前展示的是列表摘要信息。';
     console.error('加载日志详情失败:', error);
   } finally {
-    const hasError = !!(currentLog.value?.error || currentLog.value?.errorCode);
-    detailSections.value = hasError
-      ? ['basic', 'error', 'context', 'io']
-      : ['basic', 'context', 'io'];
     detailLoading.value = false;
   }
 };
@@ -576,10 +597,6 @@ const getLogSourceLabel = (log: AgentLogItem) => {
   return '业务层';
 };
 
-const getLogSourceType = (log: AgentLogItem) => {
-  return getLogSourceLabel(log) === '平台底层' ? 'info' : 'success';
-};
-
 const getCapabilityType = (agentId?: string) => {
   // agent → 能力类型映射（显示层字典，与上方 agentNames 同源；无 agent 清单 API，
   // 保持本地映射，未命中归为 system）
@@ -703,343 +720,322 @@ const copyText = async (text: string, successMessage: string) => {
 };
 </script>
 
-<style scoped lang="scss">
+<style scoped>
 .agent-logs-page {
-  --brand-ink: #0d4f76;
-  --brand-soft: #e8f4fb;
-  --accent-ink: #0f766e;
-  --accent-soft: #e8f7f5;
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  overflow: hidden;
   display: grid;
   gap: 16px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.filters {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line, #e3e9f4);
+  border-radius: 16px;
+  background: var(--surface, #fff);
+  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: flex-end;
+}
+
+.filter-item {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.filter-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted, #5b6577);
+}
+
+.filter-select {
+  width: 150px;
+}
+
+.filter-dates {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-dates input {
+  width: 130px;
+}
+
+.filter-dates__sep {
+  color: var(--faint, #67758f);
+  font-size: 12px;
+}
+
+.filter-item--switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+}
+
+.filter-switch-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted, #5b6577);
+}
+
+.filter-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-bottom: 2px;
+}
+
+.stats {
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stat-card {
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line, #e3e9f4);
+  background: var(--canvas, #f3f6fb);
+  box-shadow: none;
+  display: grid;
+  gap: 6px;
+
+  span {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--faint, #67758f);
+  }
+
+  strong {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--ink, #172033);
+    line-height: 1.2;
+  }
+}
+
+.logs-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.logs-table {
+  min-width: 1080px;
+}
+
+.logs-error-cell {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pagination {
+  margin: 0;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--line, #e3e9f4);
+}
+
+.pagination__total {
+  font-size: 12.5px;
+  color: var(--muted, #5b6577);
+}
+
+.pagination__size {
+  width: 110px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+}
+
+.pagination__nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pagination__page {
+  font-size: 12.5px;
+  color: var(--muted, #5b6577);
+  white-space: nowrap;
+}
+
+.uc-dialog--detail {
+  width: min(880px, 100%);
+}
+
+.detail-collapse {
+  border: 1px solid var(--line, #e3e9f4);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  overflow: hidden;
+}
+
+.detail-collapse summary {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink, #172033);
+  background: var(--canvas, #f3f6fb);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.detail-collapse summary::after {
+  content: '▾';
+  color: var(--faint, #67758f);
+  font-size: 11px;
+  transition: transform 0.15s ease;
+}
+
+.detail-collapse:not([open]) summary::after {
+  transform: rotate(-90deg);
+}
+
+.detail-collapse summary::-webkit-details-marker {
+  display: none;
+}
+
+.detail-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  padding: 4px 0;
+}
+
+.detail-fact {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line, #e3e9f4);
+  align-items: baseline;
+  font-size: 13px;
+}
+
+.detail-fact--wide {
+  grid-column: 1 / -1;
+}
+
+.detail-fact span {
+  color: var(--faint, #67758f);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.detail-fact strong {
+  color: var(--ink, #172033);
+  word-break: break-all;
+  font-weight: 600;
+}
+
+.detail-error-box {
+  background: rgba(239, 117, 120, 0.08);
+  border: 1px solid rgba(239, 117, 120, 0.3);
+  color: #c0454a;
+  border-radius: 10px;
+  padding: 12px;
+  margin: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.code-block {
+  background: var(--canvas, #f3f6fb);
+  border: 1px solid var(--line, #e3e9f4);
+  padding: 10px;
+  border-radius: 8px;
+  max-height: 300px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-size: 12px;
+  color: var(--ink, #172033);
+  margin: 12px;
+}
+
+.io-block {
+  margin: 12px;
+}
+
+.io-block + .io-block {
+  margin-top: 16px;
+}
+
+.io-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--faint, #67758f);
+  margin-bottom: 6px;
+}
+
+.io-block .code-block {
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
   .actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-
-  .filters {
-    margin: 0;
-    padding: 14px 16px 4px;
-    border: 1px solid var(--line, #e3e9f4);
-    border-radius: 16px;
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
-    min-width: 0;
-  }
-
-  :deep(.filters .el-form) {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 8px;
-    align-items: center;
-  }
-
-  :deep(.filters .el-form-item) {
-    margin-bottom: 10px;
-    margin-right: 0;
-  }
-
-  :deep(.filters .el-select) {
-    width: 140px;
-  }
-
-  :deep(.filters .el-date-editor) {
-    width: 260px;
-  }
-
-  .stats {
-    margin: 0;
-    min-width: 0;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .stat-card {
-    padding: 14px 16px;
-    border-radius: 14px;
-    border: 1px solid var(--line, #e3e9f4);
-    background: var(--canvas, #f3f6fb);
-    box-shadow: none;
-    display: grid;
-    gap: 6px;
-
-    span {
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--faint, #67758f);
-    }
-
-    strong {
-      font-size: 22px;
-      font-weight: 800;
-      color: var(--ink, #172033);
-      line-height: 1.2;
-    }
-  }
-
-  .logs-list {
-    padding: 16px;
-    border: 1px solid var(--line, #e3e9f4);
-    border-radius: 16px;
-    background: var(--surface, #fff);
-    box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
-    min-width: 0;
-    overflow: hidden;
-
-    .logs-table-panel {
-      min-width: 0;
-      width: 100%;
-
-      &__scroller {
-        width: 100%;
-        max-width: 100%;
-        overflow-x: auto;
-      }
-
-      .table-actions {
-        display: flex;
-        flex-wrap: nowrap;
-        align-items: center;
-        gap: 2px;
-      }
-
-      .table-actions :deep(.el-button) {
-        margin-left: 0;
-        padding: 0 4px;
-      }
-    }
-
-    .el-button + .el-button {
-      margin-left: 0;
-    }
-
-    .pagination {
-      margin-top: 20px;
-      display: flex;
-      justify-content: flex-end;
-    }
-  }
-
-  [data-theme='dark'] {
-    .logs-list {
-      background: linear-gradient(180deg, rgba(26, 37, 47, 0.84), rgba(15, 24, 32, 0.76));
-      border-color: rgba(96, 165, 250, 0.1);
-      box-shadow: 0 20px 38px rgba(0, 0, 0, 0.22);
-    }
-  }
-
-  @media (max-width: 768px) {
-    .logs-list {
-      padding: 16px;
-    }
-
-    .filters {
-      padding: 16px 16px 2px;
-      border-radius: 20px;
-    }
-
-    .stats {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    :deep(.filters .el-form) {
-      display: grid;
-      gap: 8px;
-    }
-
-    :deep(.filters .el-form-item) {
-      width: 100%;
-      margin-right: 0;
-    }
-
-    :deep(.filters .el-form-item__content) {
-      width: 100%;
-    }
-
-    :deep(.filters .el-select),
-    :deep(.filters .el-date-editor),
-    :deep(.filters .el-button) {
-      width: 100%;
-    }
-
-    .actions {
-      width: 100%;
-      justify-content: stretch;
-    }
-
-    .actions > * {
-      flex: 1 1 100%;
-    }
-
-    .logs-table-panel__header {
-      gap: 8px;
-    }
-
-    .logs-table-panel__scroller {
-      margin-inline: -4px;
-      padding-inline: 4px;
-    }
-
-    .pagination {
-      justify-content: flex-start;
-      overflow-x: auto;
-    }
-
-    :deep(.el-dialog) {
-      margin: 0;
-      border-radius: 0;
-    }
-
-    :deep(.el-dialog__header),
-    :deep(.el-dialog__body),
-    :deep(.el-dialog__footer) {
-      padding-left: 16px;
-      padding-right: 16px;
-    }
-
-    :deep(.io-descriptions .el-descriptions__label) {
-      width: auto;
-      min-width: 84px;
-      white-space: normal;
-    }
-  }
-
-  .code-block {
-    background: var(--canvas, #f3f6fb);
-    border: 1px solid var(--line, #e3e9f4);
-    padding: 10px;
-    border-radius: 8px;
-    max-height: 300px;
-    overflow: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-    overflow-wrap: anywhere;
-    font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
-    font-size: 12px;
-    color: var(--ink, #172033);
-  }
-
-  .detail-alert {
-    margin-bottom: 14px;
-  }
-
-  .detail-panel {
-    border: 1px solid #d9e6ef;
-    border-radius: 12px;
-    background: #f9fcff;
-    padding: 10px;
-  }
-
-  .detail-error-alert {
-    margin-bottom: 10px;
-  }
-
-  .detail-collapse {
-    :deep(.el-collapse-item__header) {
-      font-weight: 700;
-      color: var(--ink, #172033);
-      background: var(--canvas, #f3f6fb);
-      border-radius: 8px;
-      padding: 0 12px;
-    }
-
-    :deep(.el-collapse-item__content) {
-      padding: 12px 6px 8px;
-    }
-  }
-
-  .detail-error-box {
-    background: rgba(239, 117, 120, 0.08);
-    border: 1px solid rgba(239, 117, 120, 0.3);
-    color: #c0454a;
-    border-radius: 10px;
-    padding: 12px;
-    line-height: 1.6;
-    white-space: pre-wrap;
-    word-break: break-word;
-    overflow-wrap: anywhere;
-  }
-
-  .dialog-btn {
-    border-radius: 10px;
-    font-weight: 600;
-  }
-
-  .dialog-btn--close {
-    border-color: var(--line, #e3e9f4);
-    color: var(--muted, #5b6577);
-    background: var(--canvas, #f3f6fb);
-  }
-
-  /* 对齐 v2 蓝渐变主按钮（原青绿渐变与品牌体系无关） */
-  .dialog-btn--copy {
-    border: none;
-    color: #fff;
-    background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
-  }
-
-  .dialog-btn--copy:hover {
-    filter: brightness(1.03);
-    box-shadow: 0 6px 14px rgba(31, 87, 204, 0.3);
-  }
-
-  :deep(.el-dialog) {
-    max-width: calc(100vw - 24px);
-  }
-
-  :deep(.el-dialog__body) {
-    max-height: min(72vh, 760px);
-    overflow: auto;
-    overflow-x: hidden;
-  }
-
-  :deep(.el-descriptions__table) {
     width: 100%;
-    table-layout: fixed;
+    justify-content: stretch;
   }
 
-  :deep(.el-descriptions__cell) {
-    word-break: break-word;
-    overflow-wrap: anywhere;
+  .actions > * {
+    flex: 1 1 100%;
   }
 
-  :deep(.io-descriptions .el-descriptions__label) {
-    width: 110px;
-    min-width: 110px;
-    white-space: nowrap;
+  .filter-dates input {
+    width: 100%;
   }
 
-  :deep(.io-descriptions .el-descriptions__content) {
-    padding-left: 10px;
+  .filter-select {
+    width: 100%;
   }
-}
 
-[data-theme="dark"] .agent-logs-page .filters,
-[data-theme="dark"] .agent-logs-page .logs-list {
-  background: var(--surface, #182230);
-  border-color: var(--line, #2a3648);
-}
+  .filter-item {
+    flex: 1 1 45%;
+  }
 
-[data-theme="dark"] .agent-logs-page .detail-panel {
-  background: var(--surface, #182230);
-  border-color: var(--line, #2a3648);
-}
+  .detail-facts {
+    grid-template-columns: 1fr;
+  }
 
-[data-theme="dark"] .agent-logs-page .dialog-btn--close {
-  background: var(--canvas, #0f1620);
-  border-color: var(--line, #2a3648);
-  color: var(--muted, #9aa8bf);
-}
-
-[data-theme="dark"] .agent-logs-page .log-card {
-  border-color: var(--line, #2a3648);
-  background: var(--surface, #182230);
+  .detail-fact--wide {
+    grid-column: auto;
+  }
 }
 </style>

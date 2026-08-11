@@ -1,106 +1,94 @@
 <template>
   <CapabilityShell title="API 接入">
     <div class="user-settings-page">
-      <el-card class="settings-card" shadow="never">
-        <el-alert
-          v-if="loadError"
-          type="error"
-          title="配置加载失败"
-          :description="loadError"
-          show-icon
-          :closable="false"
-          class="settings-load-error"
-        >
-          <el-button size="small" class="settings-load-error__retry" @click="loadApiConfig">重新加载</el-button>
-        </el-alert>
-
-        <el-form v-loading="loading" label-width="120px" class="api-form">
-          <el-form-item label="自定义 API">
-            <el-switch
+      <article class="uc-card">
+        <div class="uc-card__head">
+          <div>
+            <h3>自定义 API</h3>
+            <p>接入你自己的模型服务，覆盖平台默认配置</p>
+          </div>
+          <label class="uc-switch" :class="{ 'uc-switch--off': !apiConfig.enabled }">
+            <input
+              type="checkbox"
               v-model="apiConfig.enabled"
-              active-text="启用"
-              inactive-text="禁用"
               :disabled="busy"
               @change="handleEnabledChange"
-            />
-          </el-form-item>
+            />            <span class="uc-switch__track"></span>
+            <span class="uc-switch__label">{{ apiConfig.enabled ? '启用' : '禁用' }}</span>
+          </label>
+        </div>
 
-          <el-form-item label="端点">
-            <el-input
-              v-model="apiConfig.endpoint"
-              placeholder="https://api.openai.com/v1"
-              :disabled="busy"
-            />
-          </el-form-item>
+        <div v-if="loadError" class="uc-errorbar" role="alert">
+          {{ loadError }}
+          <button type="button" class="uc-errorbar__retry" @click="loadApiConfig">重新加载</button>
+        </div>
 
-          <el-form-item label="API Key">
-            <el-input
-              v-model="apiConfig.apiKey"
-              type="password"
-              :placeholder="hasSavedApiKey ? '已保存，留空继续使用' : 'sk-...'"
-              show-password
-              :disabled="busy"
-            />
-          </el-form-item>
+        <div v-if="loading" class="uc-loading">
+          <span class="uc-spinner"></span>
+          加载配置…
+        </div>
 
-          <el-form-item label="对话模型">
-            <el-input
-              v-model="apiConfig.chatModel"
-              placeholder="deepseek-v4-flash"
-              :disabled="busy"
-            />
-          </el-form-item>
+        <div v-else-if="!loadError" class="api-form">
+          <label class="uc-field">
+            <span class="uc-field__label">端点</span>
+            <input v-model="apiConfig.endpoint" class="uc-field__input" placeholder="https://api.openai.com/v1" :disabled="busy" />
+          </label>
 
-          <el-form-item label="推理模型">
-            <el-input
-              v-model="apiConfig.reasoningModel"
-              placeholder="deepseek-v4-pro"
-              :disabled="busy"
-            />
-          </el-form-item>
-
-          <el-form-item>
-            <div class="action-buttons">
-              <el-button
-                type="default"
-                :loading="testing"
-                @click="testConnection"
+          <label class="uc-field">
+            <span class="uc-field__label">API Key</span>
+            <div class="uc-field__pwd">
+              <input
+                v-model="apiConfig.apiKey"
+                type="password"
+                class="uc-field__input"
+                :placeholder="hasSavedApiKey ? '已保存，留空继续使用' : 'sk-...'"
                 :disabled="busy"
-              >
-                测试连接
-              </el-button>
-              <el-button
-                type="primary"
-                :loading="saving"
-                @click="saveApiConfig"
-                :disabled="busy"
-              >
-                保存配置
-              </el-button>
-              <el-button
-                v-if="apiConfig.enabled"
-                type="danger"
-                plain
-                :loading="disabling"
-                :disabled="busy"
-                @click="disableConfig"
-              >
-                禁用自定义 API
-              </el-button>
+              />
+              <button type="button" class="uc-field__eye" @click="showKey = !showKey" :aria-label="showKey ? '隐藏密钥' : '显示密钥'">
+                {{ showKey ? '隐藏' : '显示' }}
+              </button>
             </div>
-          </el-form-item>
-        </el-form>
-      </el-card>
+            <span v-if="hasSavedApiKey" class="uc-field__hint">已保存密钥，留空则继续使用</span>
+          </label>
+
+          <div class="api-form__grid">
+            <label class="uc-field">
+              <span class="uc-field__label">对话模型</span>
+              <input v-model="apiConfig.chatModel" class="uc-field__input" placeholder="deepseek-v4-flash" :disabled="busy" />
+            </label>
+            <label class="uc-field">
+              <span class="uc-field__label">推理模型</span>
+              <input v-model="apiConfig.reasoningModel" class="uc-field__input" placeholder="deepseek-v4-pro" :disabled="busy" />
+            </label>
+          </div>
+
+          <div class="action-buttons">
+            <button type="button" class="uc-btn" :disabled="busy" @click="testConnection">
+              {{ testing ? '测试中…' : '测试连接' }}
+            </button>
+            <button type="button" class="uc-btn uc-btn--primary" :disabled="busy" @click="saveApiConfig">
+              {{ saving ? '保存中…' : '保存配置' }}
+            </button>
+            <button v-if="apiConfig.enabled" type="button" class="uc-btn uc-btn--danger" :disabled="busy" @click="disableConfig">
+              {{ disabling ? '禁用中…' : '禁用自定义 API' }}
+            </button>
+          </div>
+        </div>
+      </article>
     </div>
+
+    <UcConfirm :state="confirmState" />
   </CapabilityShell>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { ElMessageBox } from 'element-plus';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
+import UcConfirm from '@/components/user/UcConfirm.vue';
+import { useUcConfirm } from '@/components/user/useUcConfirm';
 import { toast } from '../../utils/toast';
 import { disableUserApiConfig, getUserApiConfig, testApiConnection, updateUserApiConfig } from '@/api/userCustom';
+import '@/components/user/uc.css';
 
 const saving = ref(false);
 const testing = ref(false);
@@ -108,7 +96,9 @@ const loading = ref(false);
 const loadError = ref('');
 const disabling = ref(false);
 const hasSavedApiKey = ref(false);
+const showKey = ref(false);
 const busy = computed(() => loading.value || saving.value || testing.value || disabling.value);
+const { state: confirmState, openConfirm } = useUcConfirm();
 
 // 单配置模式
 const apiConfig = reactive({
@@ -225,37 +215,30 @@ const saveApiConfig = async (): Promise<boolean> => {
 };
 
 const disableConfig = async () => {
-  try {
-    await ElMessageBox.confirm(
-      '禁用后将立即改用平台默认模型，已保存的端点和 API Key 会保留。确认继续吗？',
-      '禁用自定义 API',
-      {
-        type: 'warning',
-        confirmButtonText: '确认禁用',
-        cancelButtonText: '取消'
+  openConfirm(
+    '禁用自定义 API',
+    '禁用后将立即改用平台默认模型，已保存的端点和 API Key 会保留。确认继续吗？',
+    async () => {
+      disabling.value = true;
+      try {
+        await disableUserApiConfig();
+        apiConfig.enabled = false;
+        toast.success('已禁用自定义 API，将使用平台默认配置');
+      } catch (error: any) {
+        apiConfig.enabled = true;
+        toast.error(`操作失败：${error.message}`);
+      } finally {
+        disabling.value = false;
       }
-    );
-  } catch {
-    apiConfig.enabled = true;
-    return;
-  }
-
-  disabling.value = true;
-  try {
-    await disableUserApiConfig();
-    apiConfig.enabled = false;
-    toast.success('已禁用自定义 API，将使用平台默认配置');
-  } catch (error: any) {
-    apiConfig.enabled = true;
-    toast.error(`操作失败：${error.message}`);
-  } finally {
-    disabling.value = false;
-  }
+    },
+    { confirmText: '确认禁用', danger: true }
+  );
 };
 
-const handleEnabledChange = async (enabled: boolean) => {
+const handleEnabledChange = () => {
+  const enabled = apiConfig.enabled
   if (!enabled) {
-    await disableConfig();
+    void disableConfig();
     return;
   }
 
@@ -266,114 +249,82 @@ const handleEnabledChange = async (enabled: boolean) => {
   }
 
   // 启用即保存，避免"界面显示已启用但服务端未生效"的不一致状态
-  const saved = await saveApiConfig();
-  if (!saved) {
-    apiConfig.enabled = false;
-  }
+  void saveApiConfig().then((saved) => {
+    if (!saved) {
+      apiConfig.enabled = false;
+    }
+  });
 };
 </script>
 
-<style scoped lang="scss">
+<style scoped>
 .user-settings-page {
   display: grid;
-  gap: 14px;
-}
-
-.settings-load-error {
-  margin-bottom: 14px;
-}
-
-.settings-load-error__retry {
-  margin-left: 12px;
-}
-
-.page-alert {
-  border-radius: 12px;
-}
-
-.settings-card {
-  border-radius: 16px;
-  border: 1px solid var(--line, #e3e9f4);
-  background: var(--surface, #fff);
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
-}
-
-.card-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-
-  h3 {
-    margin: 0;
-    font-size: 18px;
-    color: var(--ink, #172033);
-  }
-
-  p {
-    margin: 6px 0 0;
-    font-size: 13px;
-    color: var(--muted, #5b6577);
-  }
+  gap: 16px;
+  min-width: 0;
 }
 
 .api-form {
-  max-width: 600px;
+  display: grid;
+  gap: 16px;
+  max-width: 640px;
 }
 
-.api-form :deep(.el-form-item) {
-  margin-bottom: 24px;
+.api-form__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.api-form :deep(.el-input__wrapper),
-.api-form :deep(.el-textarea__inner) {
-  box-shadow: 0 0 0 1px rgba(52, 120, 246, 0.1) inset;
+@media (max-width: 640px) {
+  .api-form__grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .action-buttons {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-}
-
-.action-buttons :deep(.el-button--primary) {
-  border: none;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
-}
-
-.field-hint {
   margin-top: 6px;
+}
+
+.uc-field__pwd {
+  position: relative;
+}
+
+.uc-field__pwd .uc-field__input {
+  padding-right: 56px;
+}
+
+.uc-field__eye {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--faint, #67758f);
+  font: inherit;
   font-size: 12px;
-  color: #6e8798;
-  line-height: 1.5;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 8px;
 }
 
-.card-header {
-  h3 {
-    margin: 0 0 6px;
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--ink, #172033);
-  }
-
-  p {
-    margin: 0;
-    font-size: 13px;
-    color: var(--muted, #5b6577);
-  }
+.uc-field__eye:hover {
+  background: var(--canvas, #f3f6fb);
+  color: var(--muted, #5b6577);
 }
 
-@media (max-width: 768px) {
-  .card-header {
-    flex-direction: column;
-  }
+.uc-switch__label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted, #5b6577);
+}
 
-  .action-buttons {
-    flex-direction: column;
-    
-    .el-button {
-      width: 100%;
-    }
-  }
+.uc-switch--off .uc-switch__label {
+  color: var(--faint, #67758f);
 }
 </style>

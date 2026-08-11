@@ -1,169 +1,166 @@
 <template>
   <CapabilityShell title="账户">
     <div class="profile-page">
-      <el-result v-if="!profileLoading && profileLoadError" icon="error" title="账户信息加载失败" :sub-title="profileLoadError">
-        <template #extra>
-          <el-button type="primary" @click="loadUserProfile">重新加载</el-button>
-        </template>
-      </el-result>
+      <div v-if="!profileLoading && profileLoadError" class="uc-card">
+        <div class="uc-errorbar" role="alert">
+          {{ profileLoadError }}
+          <button type="button" class="uc-errorbar__retry" @click="loadUserProfile">重新加载</button>
+        </div>
+      </div>
 
-      <!-- P1 修复：初次加载整页 v-loading 遮罩，避免硬空白 -->
-      <div v-loading="profileLoading" element-loading-text="加载账户信息…" class="profile-content">
+      <div v-if="profileLoading" class="uc-loading">
+        <span class="uc-spinner"></span>
+        加载账户信息…
+      </div>
+
       <template v-if="!profileLoading && !profileLoadError">
-      <section class="profile-grid">
-        <article class="glass-card profile-card profile-card--hero">
+        <!-- 资料卡 -->
+        <article class="uc-card">
           <div class="profile-identity">
-            <el-avatar :size="64" class="profile-avatar">
-              {{ user.name?.charAt(0) || '用' }}
-            </el-avatar>
+            <div class="profile-avatar">{{ user.name?.charAt(0) || '用' }}</div>
             <div class="profile-identity__main">
               <div class="profile-name-row">
                 <template v-if="editingName">
-                  <el-input
+                  <input
                     v-model="nameDraft"
-                    size="small"
+                    class="uc-field__input profile-name-input"
                     maxlength="64"
-                    class="profile-name-input"
                     placeholder="输入新用户名"
                     @keyup.enter="handleSaveName"
                   />
-                  <el-button size="small" type="primary" :loading="nameSubmitting" @click="handleSaveName">保存</el-button>
-                  <el-button size="small" :disabled="nameSubmitting" @click="cancelEditName">取消</el-button>
+                  <button type="button" class="uc-btn uc-btn--primary uc-btn--sm" :disabled="nameSubmitting" @click="handleSaveName">
+                    {{ nameSubmitting ? '保存中…' : '保存' }}
+                  </button>
+                  <button type="button" class="uc-btn uc-btn--sm" :disabled="nameSubmitting" @click="cancelEditName">取消</button>
                 </template>
                 <template v-else>
                   <h2>{{ user.name || '未命名用户' }}</h2>
-                  <el-button size="small" text type="primary" @click="startEditName">编辑</el-button>
+                  <button type="button" class="uc-btn uc-btn--link" @click="startEditName">编辑</button>
                 </template>
               </div>
-              <p>{{ user.email || '未绑定邮箱' }}</p>
+              <p class="profile-email">{{ user.email || '未绑定邮箱' }}</p>
             </div>
           </div>
 
           <div class="profile-stats">
-            <article class="stat-card">
+            <div class="stat-card">
               <span>经验值（XP）</span>
               <strong>{{ user.xp || 0 }}</strong>
-            </article>
-            <article class="stat-card">
+            </div>
+            <div class="stat-card">
               <span>等级</span>
               <strong>{{ user.level || 1 }} 级</strong>
-            </article>
+            </div>
           </div>
         </article>
-      </section>
 
-      <section>
-        <article class="glass-card profile-card">
-          <div class="profile-card__head">
+        <!-- 账号安全：修改密码 -->
+        <article class="uc-card">
+          <div class="uc-card__head">
             <div>
-              <span class="section-kicker">账号安全</span>
               <h3>修改密码</h3>
+              <p>定期更换密码，保障账号安全</p>
             </div>
           </div>
-
-          <div class="grant-form-grid">
-            <label class="grant-form-field">
-              <span>当前密码</span>
-              <el-input v-model="pwdForm.oldPassword" type="password" show-password placeholder="输入当前密码" />
+          <div class="pwd-grid">
+            <label class="uc-field">
+              <span class="uc-field__label">当前密码</span>
+              <input v-model="pwdForm.oldPassword" type="password" class="uc-field__input" placeholder="输入当前密码" />
             </label>
-            <label class="grant-form-field">
-              <span>新密码</span>
-              <el-input v-model="pwdForm.newPassword" type="password" show-password placeholder="至少 8 位，含字母和数字" />
+            <label class="uc-field">
+              <span class="uc-field__label">新密码</span>
+              <input v-model="pwdForm.newPassword" type="password" class="uc-field__input" placeholder="至少 8 位，含字母和数字" />
             </label>
-            <label class="grant-form-field">
-              <span>确认新密码</span>
-              <el-input v-model="pwdForm.confirmPassword" type="password" show-password placeholder="再输入一次新密码" />
+            <label class="uc-field">
+              <span class="uc-field__label">确认新密码</span>
+              <input v-model="pwdForm.confirmPassword" type="password" class="uc-field__input" placeholder="再输入一次新密码" />
             </label>
           </div>
-
-          <div class="action-row">
-            <el-button type="primary" :loading="pwdSubmitting" :disabled="!pwdCanSubmit" @click="handleChangePassword">
-              更新密码
-            </el-button>
+          <div class="uc-card__foot">
+            <button type="button" class="uc-btn uc-btn--primary" :disabled="!pwdCanSubmit" @click="handleChangePassword">
+              {{ pwdSubmitting ? '更新中…' : '更新密码' }}
+            </button>
           </div>
         </article>
-      </section>
 
-      <section>
-        <article class="glass-card profile-card profile-card--danger">
-          <div class="profile-card__head">
+        <!-- 协助排查 -->
+        <article class="uc-card">
+          <template v-if="projectionGrantLoading">
+            <div class="uc-loading">
+              <span class="uc-spinner"></span>
+              读取授权状态…
+            </div>
+          </template>
+          <template v-else>
+          <div class="uc-card__head uc-card__head--spread">
             <div>
-              <span class="section-kicker">危险操作</span>
+              <h3>协助排查</h3>
+              <p>{{ projectionGrantStatusLabel }}{{ projectionGrantStatus === 'active' ? ` · ${projectionGrantExpiresAtLabel}` : '' }}</p>
+            </div>
+            <button type="button" class="uc-btn uc-btn--sm" @click="loadProjectionGrant">刷新</button>
+          </div>
+
+          <template v-if="!projectionGrantLoadError">
+            <div class="grant-form-grid">
+              <div class="uc-field">
+                <span class="uc-field__label">范围</span>
+                <div class="grant-scope-fixed">仅学习台</div>
+              </div>
+              <label class="uc-field">
+                <span class="uc-field__label">时长（小时）</span>
+                <input
+                  v-model.number="projectionGrantForm.expiresInHours"
+                  type="number"
+                  min="1"
+                  max="168"
+                  class="uc-field__input"
+                />
+              </label>
+            </div>
+            <label class="uc-field grant-form-full">
+              <span class="uc-field__label">说明（可选）</span>
+              <textarea v-model="projectionGrantForm.note" class="uc-field__input" rows="2" maxlength="200" placeholder="问题简述"></textarea>
+            </label>
+            <div class="uc-card__foot">
+              <button type="button" class="uc-btn uc-btn--primary" :disabled="projectionGrantSubmitting" @click="handleCreateProjectionGrant">
+                {{ projectionGrantSubmitting ? '提交中…' : projectionGrantActionLabel }}
+              </button>
+              <button type="button" class="uc-btn" :disabled="projectionGrantStatus !== 'active' || projectionGrantSubmitting" @click="handleRevokeProjectionGrant">
+                {{ projectionGrantRevoking ? '撤销中…' : '撤销' }}
+              </button>
+            </div>
+          </template>
+          </template>
+        </article>
+
+        <!-- 危险操作：注销 -->
+        <article class="uc-card uc-card--danger">
+          <div class="uc-card__head">
+            <div>
               <h3>注销账号</h3>
+              <p>注销后账号将被标记为已删除，学习数据将无法继续访问；此操作不可自助撤销（可联系管理员恢复）。</p>
             </div>
           </div>
-          <p class="danger-desc">注销后账号将被标记为已删除，所有学习数据将无法继续访问。此操作需要输入当前密码确认，且不可自助撤销（可联系管理员恢复）。</p>
           <div class="danger-form">
-            <el-input
-              v-model="deactivatePassword"
-              type="password"
-              show-password
-              placeholder="输入当前密码确认注销"
-              style="max-width: 320px"
-              @keyup.enter="handleDeactivate"
-            />
-            <el-button type="danger" plain :loading="deactivating" @click="handleDeactivate">注销账号</el-button>
+            <input v-model="deactivatePassword" type="password" class="uc-field__input" placeholder="输入当前密码确认注销" @keyup.enter="handleDeactivate" />
+            <button type="button" class="uc-btn uc-btn--danger" :disabled="deactivating" @click="handleDeactivate">
+              {{ deactivating ? '注销中…' : '注销账号' }}
+            </button>
           </div>
         </article>
-      </section>
-
-      <section>
-        <article v-loading="projectionGrantLoading" class="glass-card profile-card grant-card">
-          <div class="profile-card__head profile-card__head--spread">
-            <div>
-              <span class="section-kicker">协助排查</span>
-              <h3>{{ projectionGrantStatusLabel }}{{ projectionGrantStatus === 'active' ? ` · ${projectionGrantExpiresAtLabel}` : '' }}</h3>
-            </div>
-            <el-button size="small" @click="loadProjectionGrant">刷新</el-button>
-          </div>
-
-          <div v-if="!projectionGrantLoadError" class="grant-form-grid">
-            <label class="grant-form-field">
-              <span>范围</span>
-              <el-select v-model="projectionGrantForm.scope">
-                <el-option label="仅学习台" value="dashboard" />
-              </el-select>
-            </label>
-
-            <label class="grant-form-field">
-              <span>时长（小时）</span>
-              <el-input-number v-model="projectionGrantForm.expiresInHours" :min="1" :max="168" />
-            </label>
-          </div>
-
-          <label v-if="!projectionGrantLoadError" class="grant-form-field grant-form-field--full">
-            <span>说明（可选）</span>
-            <el-input
-              v-model="projectionGrantForm.note"
-              type="textarea"
-              :rows="2"
-              maxlength="200"
-              show-word-limit
-              placeholder="问题简述"
-            />
-          </label>
-
-          <div v-if="!projectionGrantLoadError" class="action-row">
-            <el-button type="primary" :loading="projectionGrantSubmitting" @click="handleCreateProjectionGrant">
-              {{ projectionGrantActionLabel }}
-            </el-button>
-            <el-button :disabled="projectionGrantStatus !== 'active' || projectionGrantSubmitting" :loading="projectionGrantRevoking" @click="handleRevokeProjectionGrant">
-              撤销
-            </el-button>
-          </div>
-        </article>
-      </section>
-      </template>
-      </div>
+        </template>
     </div>
+
+    <UcConfirm :state="confirmState" />
   </CapabilityShell>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
 import CapabilityShell from '@/components/user/CapabilityShell.vue'
+import UcConfirm from '@/components/user/UcConfirm.vue'
+import { useUcConfirm } from '@/components/user/useUcConfirm'
 import {
   createUserProjectionGrant,
   getProjectionGrantStatus,
@@ -176,10 +173,12 @@ import {
 import { toast } from '@/utils/toast'
 import request from '@/utils/api'
 import { useUserStore } from '../stores/user'
+import '@/components/user/uc.css'
 
 const router = useRouter()
 const userStore = useUserStore()
 const api = request
+const { state: confirmState, openConfirm } = useUcConfirm()
 
 /* ---------- 修改密码 ---------- */
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
@@ -320,7 +319,7 @@ async function loadProjectionGrant() {
   }
 }
 
-// ---- 用户名编辑（P1-6：资料编辑 UI） ----
+// ---- 用户名编辑 ----
 function startEditName() {
   nameDraft.value = user.value.name || ''
   editingName.value = true
@@ -354,92 +353,75 @@ async function handleSaveName() {
   }
 }
 
-// ---- 用户自助注销（P0-3：密码确认 + 软删除） ----
-async function handleDeactivate() {
-  if (!deactivatePassword.value) {
-    toast.error('请输入当前密码以确认注销')
-    return
-  }
-  try {
-    await ElMessageBox.confirm(
-      '注销后账号将被标记为已删除，学习数据将无法继续访问；此操作不可自助撤销。确定注销吗？',
-      '注销账号',
-      { confirmButtonText: '确认注销', cancelButtonText: '取消', type: 'warning' }
-    )
-  } catch {
-    return
-  }
-  deactivating.value = true
-  try {
-    await api.post('/users/me/deactivate', { password: deactivatePassword.value })
-    await userStore.logout()
-    toast.success('账号已注销')
-    await router.replace('/login')
-  } catch (error: any) {
-    toast.error(getErrorMessage(error, '注销失败，请稍后重试'))
-  } finally {
-    deactivating.value = false
-    deactivatePassword.value = ''
-  }
-}
-
+// ---- 协助排查 ----
 async function handleCreateProjectionGrant() {
-  if (projectionGrantRevoking.value) return
-  const wasActive = projectionGrantStatus.value === 'active'
+  if (projectionGrantSubmitting.value) return
   projectionGrantSubmitting.value = true
   try {
-    const res = await createUserProjectionGrant({
+    await createUserProjectionGrant({
       scope: projectionGrantForm.scope,
       expiresInHours: projectionGrantForm.expiresInHours,
       note: projectionGrantForm.note
     })
-
-    projectionGrant.value = normalizeProjectionGrant(res)
-    if (!projectionGrant.value) {
-      await loadProjectionGrant()
-    } else {
-      hydrateProjectionGrantForm(projectionGrant.value)
-      projectionGrantMessage.value = ''
-    }
-    toast.success(wasActive ? '授权已更新' : '授权已创建')
+    toast.success('协助授权已开通')
+    await loadProjectionGrant()
   } catch (error: any) {
-    toast.error(getErrorMessage(error, wasActive ? '更新授权失败' : '创建授权失败'))
+    toast.error(getErrorMessage(error, '开通协助授权失败'))
   } finally {
     projectionGrantSubmitting.value = false
   }
 }
 
+// ---- 手作确认弹窗（共享 UcConfirm） ----
 async function handleRevokeProjectionGrant() {
-  if (projectionGrantSubmitting.value) return
-  if (projectionGrantStatus.value !== 'active') {
-    toast.info('当前没有可撤销的协助授权')
+  openConfirm(
+    '撤销协助授权',
+    '撤销后，工作人员将不能再凭这份授权查看你的页面，确认继续吗？',
+    async () => {
+      projectionGrantRevoking.value = true
+      try {
+        const res = await revokeUserProjectionGrant(projectionGrant.value?.id)
+        projectionGrant.value = normalizeProjectionGrant(res)
+        if (!projectionGrant.value) {
+          projectionGrantMessage.value = '已撤销'
+        }
+        toast.success('协助授权已撤销')
+        await loadProjectionGrant()
+      } catch (error: any) {
+        toast.error(getErrorMessage(error, '撤销协助授权失败'))
+      } finally {
+        projectionGrantRevoking.value = false
+      }
+    },
+    { confirmText: '撤销', danger: true }
+  )
+}
+
+// ---- 注销 ----
+async function handleDeactivate() {
+  if (!deactivatePassword.value) {
+    toast.error('请输入当前密码以确认注销')
     return
   }
-
-  try {
-    await ElMessageBox.confirm(
-      '撤销后，工作人员将不能再凭这份授权查看你的页面，确认继续吗？',
-      '撤销协助授权',
-      { type: 'warning' }
-    )
-  } catch {
-    return
-  }
-
-  projectionGrantRevoking.value = true
-  try {
-    const res = await revokeUserProjectionGrant(projectionGrant.value?.id)
-    projectionGrant.value = normalizeProjectionGrant(res)
-    if (!projectionGrant.value) {
-      projectionGrantMessage.value = '已撤销'
-    }
-    toast.success('协助授权已撤销')
-    await loadProjectionGrant()
-  } catch (error: any) {
-    toast.error(getErrorMessage(error, '撤销协助授权失败'))
-  } finally {
-    projectionGrantRevoking.value = false
-  }
+  openConfirm(
+    '注销账号',
+    '注销后账号将被标记为已删除，学习数据将无法继续访问；此操作不可自助撤销。确定注销吗？',
+    async () => {
+      deactivating.value = true
+      try {
+        await api.post('/users/me/deactivate', { password: deactivatePassword.value })
+        await userStore.logout()
+        toast.success('账号已注销')
+        await router.replace('/login')
+      } catch (error: any) {
+        toast.error(getErrorMessage(error, '注销失败，请稍后重试'))
+      } finally {
+        deactivating.value = false
+        deactivatePassword.value = ''
+      }
+    },
+    { confirmText: '确认注销', danger: true }
+  )
 }
 </script>
 
@@ -451,62 +433,31 @@ async function handleRevokeProjectionGrant() {
 }
 
 .profile-content {
+  display: grid;
+  gap: 16px;
   min-height: 200px;
-}
-
-.profile-page .el-result {
-  background: #fff;
-  border: 1px solid var(--line, #e3e9f4);
-  border-radius: 16px;
-  padding: 32px;
-}
-.profile-page {
-  display: grid;
-  gap: 16px;
-}
-
-.profile-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
-  gap: 16px;
-}
-
-.profile-card {
-  padding: 20px;
-}
-
-.profile-card__head {
-  margin-bottom: 14px;
-}
-
-.profile-card__head--spread {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.section-kicker {
-  display: inline-block;
-  margin-bottom: 6px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  color: var(--blue-deep, #1f57cc);
-}
-
-.profile-card h2,
-.profile-card h3 {
-  margin: 0;
-  color: var(--ink, #172033);
-  letter-spacing: -0.02em;
+  min-width: 0;
 }
 
 .profile-identity {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+}
+
+.profile-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--blue, #3478f6), var(--accent, #8d6bff));
+  color: #fff;
+  font-size: 24px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
 }
 
 .profile-identity__main {
@@ -523,6 +474,8 @@ async function handleRevokeProjectionGrant() {
 
 .profile-name-row h2 {
   margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.01em;
 }
 
 .profile-name-input {
@@ -530,15 +483,92 @@ async function handleRevokeProjectionGrant() {
   max-width: 100%;
 }
 
-.profile-card--danger {
-  border-color: rgba(239, 117, 120, 0.35);
+.profile-email {
+  margin: 5px 0 0;
+  color: var(--muted, #5b6577);
+  font-size: 13.5px;
 }
 
-.danger-desc {
-  margin: 0 0 14px;
-  color: var(--muted, #5b6577);
-  line-height: 1.65;
-  font-size: 13.5px;
+.profile-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  max-width: 420px;
+}
+
+.stat-card {
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line, #e3e9f4);
+  background: var(--canvas, #f3f6fb);
+  display: grid;
+  gap: 6px;
+}
+
+.stat-card span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--faint, #67758f);
+}
+
+.stat-card strong {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink, #172033);
+}
+
+.pwd-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .pwd-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.uc-card__foot {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.grant-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+  max-width: 520px;
+}
+
+@media (max-width: 640px) {
+  .grant-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.grant-scope-fixed {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(52, 120, 246, 0.35);
+  background: rgba(52, 120, 246, 0.07);
+  color: var(--blue-deep, #1f57cc);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.grant-form-full {
+  max-width: 520px;
+}
+
+.uc-card--danger {
+  border-color: rgba(239, 117, 120, 0.35);
 }
 
 .danger-form {
@@ -548,157 +578,14 @@ async function handleRevokeProjectionGrant() {
   flex-wrap: wrap;
 }
 
-.profile-avatar {
-  background: var(--blue-deep, #1f57cc) !important;
-  color: #fff !important;
-  font-weight: 800;
-  border: 0;
-  box-shadow: none;
+.danger-form .uc-field__input {
+  max-width: 320px;
 }
 
-.profile-identity p,
-.card-copy {
-  margin: 6px 0 0;
-  color: var(--muted, #5b6577);
-  line-height: 1.65;
-  font-size: 13.5px;
-}
-
-.profile-stats,
-.snapshot-list {
-  display: grid;
-  gap: 10px;
-}
-
-.profile-stats {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.stat-card,
-.snapshot-item {
-  padding: 14px 16px;
-  border-radius: 14px;
-  border: 1px solid var(--line, #e3e9f4);
-  background: var(--canvas, #f3f6fb);
-}
-
-.stat-card span,
-.snapshot-item span {
-  display: block;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--faint, #67758f);
-}
-
-.stat-card strong,
-.snapshot-item strong {
-  display: block;
-  margin-top: 6px;
+.confirm-desc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
   color: var(--ink, #172033);
-  line-height: 1.45;
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(52, 120, 246, 0.1);
-  color: var(--blue-deep, #1f57cc);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.action-row {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 14px;
-}
-
-.grant-card {
-  display: grid;
-  gap: 14px;
-}
-
-.grant-card__head-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.grant-card__notice {
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px dashed rgba(52, 120, 246, 0.25);
-  background: rgba(52, 120, 246, 0.04);
-  color: var(--muted, #5b6577);
-  line-height: 1.6;
-  font-size: 13px;
-}
-
-.grant-card__summary {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.grant-form-field span {
-  display: block;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--faint, #8492ab);
-}
-
-.grant-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.grant-form-field {
-  display: grid;
-  gap: 6px;
-}
-
-.grant-form-field--full {
-  width: 100%;
-}
-
-.grant-form-field :deep(.el-select),
-.grant-form-field :deep(.el-input-number),
-.grant-form-field :deep(.el-textarea) {
-  width: 100%;
-}
-
-@media (max-width: 1100px) {
-  .profile-grid,
-  .profile-stats,
-  .grant-card__summary,
-  .grant-form-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 768px) {
-  .profile-card {
-    padding: 16px;
-  }
-
-  .profile-card__head--spread,
-  .profile-identity,
-  .action-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .action-row :deep(.el-button) {
-    width: 100%;
-    margin-left: 0;
-  }
 }
 </style>
