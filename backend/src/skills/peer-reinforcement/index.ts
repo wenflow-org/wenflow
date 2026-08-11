@@ -7,7 +7,6 @@ import { callPrompt } from '../../composers/prompt-composer';
 import { PromptCallSpec } from '../../composers/types';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition } from '../../agents/protocol';
-import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { buildSkillOutcome, noneTransition, type SkillOutcome } from '../outcome';
 
@@ -15,7 +14,6 @@ type MessageRole = 'user' | 'assistant' | 'system';
 interface ChatMessage { role: MessageRole; content: string }
 
 const AGENT_ID = 'skill:peer-reinforcement';
-const PEER_FALLBACK_RUNTIME_CONTRACT = buildDefaultRuntimeContract('peer-reinforcement', 'copywriter');
 
 
 
@@ -121,7 +119,7 @@ export interface PeerDiscussionOutput {
   promptDebug?: any;
   inputEcho?: PeerDiscussionInput;
   runtimeEnvelope?: ReturnType<typeof adaptToRuntimeEnvelope>;
-  /** model 主路径 vs 本地 fallback */
+  /** model 主路径（2026-08-11 移除本地 fallback 降级，失败改抛错冒泡） */
   source?: 'model' | 'fallback';
 }
 
@@ -287,37 +285,10 @@ export async function executePeerDiscussion(input: PeerDiscussionInput): Promise
     return result;
   } catch (e: any) {
     error = e instanceof Error ? e : new Error(e.message);
-    if (error.message === 'PEER_RESPONSE_EMPTY') {
-      logger.warn('[PeerReinforcementSkill] 讨论生成为空，使用 fallback');
-    } else {
-      logger.error(`[PeerReinforcementSkill] 讨论生成失败：${error.message}`);
-    }
-
-    const fallbackMessage = buildFallbackPeerMessage(input.strategy, input.topic);
-    const fallbackFollowUpQuestions: string[] = [];
-    result = {
-      message: fallbackMessage,
-      strategy: input.strategy,
-      followUpQuestions: fallbackFollowUpQuestions,
-      promptDebug: null,
-      inputEcho: input,
-      runtimeEnvelope: adaptToRuntimeEnvelope({
-        contract: PEER_FALLBACK_RUNTIME_CONTRACT,
-        artifact: {
-          message: fallbackMessage,
-          strategy: input.strategy,
-          followUpQuestions: fallbackFollowUpQuestions,
-        },
-        phase: 'discussion-generated',
-        status: 'partial',
-        isTerminal: false,
-        nextAction: 'continue-discussion',
-        reason: error.message,
-        nextState: { stage: 'discussion-generated', strategy: input.strategy, topic: input.topic, fallback: true },
-      }),
-      source: 'fallback',
-    };
-    return result;
+    // 2026-08-11 移除模板话术降级（策略模板在会话中冒充"同伴已回复"）：
+    // 失败显式抛错冒泡，由调用方 AITeachingCoordinator.ts:1498-1519 try/catch 容错跳过。
+    logger.error(`[PeerReinforcementSkill] 讨论生成失败：${error.message}`);
+    throw error;
   } finally {
     const durationMs = Date.now() - startTime;
     logger.debug('[PeerReinforcementSkill] 执行结束', {
@@ -326,20 +297,6 @@ export async function executePeerDiscussion(input: PeerDiscussionInput): Promise
       error: error?.message || null,
     });
   }
-}
-
-function buildFallbackPeerMessage(strategy: string, topic: string): string {
-    const shortTopic = topic.length > 20 ? topic.substring(0, 20) + '...' : topic;
-
-    const fallbacks: Record<string, string> = {
-      feynman: `你能给我讲讲"${shortTopic}"吗？就像我是第一次听说一样。`,
-      debate: `关于"${shortTopic}"，有人支持，有人反对。你怎么看？`,
-      counterexample: `如果条件变了，"${shortTopic}"的结论还成立吗？`,
-      analogy: `"${shortTopic}"让你想到之前学过的什么概念？有什么相似之处？`,
-      'error-analysis': `刚才那道题好像有点问题，你觉得哪里可能出错了？`,
-    };
-
-    return fallbacks[strategy] || fallbacks.feynman;
 }
 
 export async function peerAgentHandler(input: any, context: any): Promise<any> {
