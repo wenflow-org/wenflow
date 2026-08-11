@@ -47,6 +47,10 @@ const LEARN_UPSTREAM_RETRY_DELAY_MS = 750;
 const LEARN_TASK_TURN_BUDGET = 30;
 /** 「自动完成本课」单次调用的回合上限（按课界停止，不按里程碑数估算） */
 const LEARN_AUTO_TURN_CAP = 24;
+/** 保护工作（可能悬挂的 LLM 调用）超过该时限仍未收尾时，强制放行会话队列 */
+const WORK_SETTLE_TIMEOUT_MS = 5 * 60 * 1000;
+/** 疑似卡死 running 会话的判定阈值：无活跃租约且超过该时长未写入 */
+const STALE_RUNNING_SESSION_MS = 30 * 60 * 1000;
 
 function isPrismaErrorCode(error: unknown, code: string) {
   return typeof error === 'object' && error !== null && (error as any).code === code;
@@ -149,6 +153,7 @@ class SimulationOrchestrator {
       if (this.sessionLocks.get(sessionId) === queued) this.sessionLocks.delete(sessionId);
       throw error;
     }
+    await this.detectStaleRunningSession(sessionId);
 
     let rejectLeaseFailure!: (error: unknown) => void;
     const leaseFailurePromise = new Promise<never>((_, reject) => {
@@ -212,7 +217,20 @@ class SimulationOrchestrator {
       } catch {
         // 续租错误已经作为主结果处理，清理仍需继续释放 owner-scoped lease。
       }
-      await workSettled;
+      let forceReleaseTimer: NodeJS.Timeout | undefined;
+      const forceReleaseDeadline = new Promise<void>(resolve => {
+        forceReleaseTimer = setTimeout(() => {
+          logger.warn('[simulation-coordinator] 保护工作超过时限仍未收尾，强制放行会话队列', {
+            sessionId,
+            ownerId,
+            timeoutMs: WORK_SETTLE_TIMEOUT_MS
+          });
+          resolve();
+        }, WORK_SETTLE_TIMEOUT_MS);
+      });
+      forceReleaseTimer?.unref();
+      await Promise.race([workSettled, forceReleaseDeadline]);
+      if (forceReleaseTimer) clearTimeout(forceReleaseTimer);
       await this.releaseSessionLease(sessionId, ownerId);
     })()
       .finally(() => {
@@ -273,6 +291,30 @@ class SimulationOrchestrator {
     } catch (error) {
       if (isLeaseDatabaseBusyError(error)) throw new VirtualSessionDatabaseBusyError(error);
       throw error;
+    }
+  }
+
+  private async detectStaleRunningSession(sessionId: string) {
+    try {
+      const session = await prisma.virtual_sessions.findUnique({
+        where: { id: sessionId },
+        select: { status: true, currentStage: true, updatedAt: true }
+      });
+      if (!session || session.status !== 'running') return;
+      const updatedAt = session.updatedAt ? new Date(session.updatedAt as any).getTime() : 0;
+      if (Number.isFinite(updatedAt) && Date.now() - updatedAt > STALE_RUNNING_SESSION_MS) {
+        logger.warn('[simulation-coordinator] 检测到疑似卡死的 running 会话：无活跃租约且长时间未写入，请人工确认后重启', {
+          sessionId,
+          currentStage: session.currentStage,
+          staleMs: Date.now() - updatedAt,
+          thresholdMs: STALE_RUNNING_SESSION_MS
+        });
+      }
+    } catch (error) {
+      logger.warn('[simulation-coordinator] 检查疑似卡死会话状态失败', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   }
 
@@ -1076,10 +1118,11 @@ class SimulationOrchestrator {
       logs.push(failureLog);
       await this.addSessionLog(sessionId, failureLog);
     } catch (persistError: any) {
-      // 如果租约已丢失，不能越权写入；由新 owner 或后续恢复流程接管。
-      logger.warn('[simulation-coordinator] 持久化 Learn 失败状态失败', {
+      logger.error('[simulation-coordinator] 持久化 Learn 失败状态失败（failed 标记可能静默丢失）', {
         sessionId,
-        error: persistError?.message || String(persistError)
+        error: persistError?.message || String(persistError),
+        stack: persistError?.stack || undefined,
+        sourceError: error?.message || String(error)
       });
     }
   }
@@ -1929,15 +1972,20 @@ class SimulationOrchestrator {
           break;
         }
         if (after.status === 'failed') {
-          summary.error = '学习被中止';
+          summary.error = learnResult?.error || '学习被中止';
           break;
         }
         if (!continueOnTaskComplete) {
           break;
         }
 
+        if (!learnResult.success) {
+          summary.error = learnResult.error || '自动学习失败';
+          break;
+        }
+
         // if last loop ran 0 steps, no further progress is possible
-        if (!learnResult.success || (learnResult.totalSteps || 0) === 0) {
+        if ((learnResult.totalSteps || 0) === 0) {
           break;
         }
 
@@ -1945,7 +1993,7 @@ class SimulationOrchestrator {
       }
 
       summary.learningSteps = totalLearningSteps;
-      summary.success = true;
+      summary.success = !summary.error;
       return summary;
     } catch (error: any) {
       logger.error('[simulation-coordinator] 一键全流程失败', { sessionId, error });
@@ -2381,6 +2429,11 @@ class SimulationOrchestrator {
     try {
       const session = await this.getVirtualSession(sessionId);
       
+      const sessionStageResults = this.parseStageResultsPayload(session.stageResults);
+      if (session.status === 'failed' || sessionStageResults.teaching?.manualStop === true) {
+        throw new Error('学习会话已停止或失败，请先重新开始学习（restartLearningPhase）');
+      }
+
       if (!session.learningPathId) {
         throw new Error('学习路径不存在，请先生成路径');
       }
@@ -2517,6 +2570,46 @@ class SimulationOrchestrator {
         success: false,
         error: error.message
       };
+    }
+  }
+
+  /**
+   * 学习路径全部任务完成后的公共收口：写终态 + 生成 wrapup + 记录阶段日志。
+   * executeLearningStep 的各完成分支共用，避免「已完成但会话仍 running/teaching」的悬挂状态。
+   */
+  private async finalizePathCompletion(sessionId: string, logs: SimulationLogEntry[]) {
+    await this.updateSessionStatus(sessionId, 'completed', 'teaching');
+
+    logs.push({
+      timestamp: new Date().toISOString(),
+      phase: 'stage-transition',
+      details: {
+        output: {
+          from: 'teaching',
+          to: 'completed',
+          message: '学习路径已完成'
+        }
+      }
+    });
+
+    try {
+      await this.generateWrapupForSession(sessionId);
+      logs.push({
+        timestamp: new Date().toISOString(),
+        phase: 'stage-transition',
+        details: {
+          output: { message: '已生成学习总结' }
+        }
+      });
+    } catch (err: any) {
+      logger.warn('[simulation-coordinator] 生成 wrapup 失败', { sessionId, error: err.message });
+      logs.push({
+        timestamp: new Date().toISOString(),
+        phase: 'error',
+        details: {
+          error: err.message || 'wrapup generation failed'
+        }
+      });
     }
   }
 
@@ -2688,6 +2781,15 @@ class SimulationOrchestrator {
       const currentMilestone = milestones[currentMilestoneIdx];
       
       if (!currentMilestone) {
+        await this.finalizePathCompletion(sessionId, logs);
+        for (const log of logs) {
+          await this.addSessionLog(sessionId, log).catch((logError: any) => {
+            logger.warn('[simulation-coordinator] 记录学习完成日志失败', {
+              sessionId,
+              error: logError?.message || String(logError)
+            });
+          });
+        }
         return {
           success: true,
           isPathCompleted: true,
@@ -2705,6 +2807,15 @@ class SimulationOrchestrator {
       if (!currentTask) {
         const nextMilestoneIdx = currentMilestoneIdx + 1;
         if (nextMilestoneIdx >= milestones.length) {
+          await this.finalizePathCompletion(sessionId, logs);
+          for (const log of logs) {
+            await this.addSessionLog(sessionId, log).catch((logError: any) => {
+              logger.warn('[simulation-coordinator] 记录学习完成日志失败', {
+                sessionId,
+                error: logError?.message || String(logError)
+              });
+            });
+          }
           return {
             success: true,
             isPathCompleted: true,
@@ -3139,40 +3250,7 @@ class SimulationOrchestrator {
       }
       
       if (isPathCompleted) {
-        await this.updateSessionStatus(sessionId, 'completed', 'teaching');
-        
-        logs.push({
-          timestamp: new Date().toISOString(),
-          phase: 'stage-transition',
-          details: {
-            output: {
-              from: 'teaching',
-              to: 'completed',
-              message: '学习路径已完成'
-            }
-          }
-        });
-
-        // 触发 wrapup 总结生成
-        try {
-          await this.generateWrapupForSession(sessionId);
-          logs.push({
-            timestamp: new Date().toISOString(),
-            phase: 'stage-transition',
-            details: {
-              output: { message: '已生成学习总结' }
-            }
-          });
-        } catch (err: any) {
-          logger.warn('[simulation-coordinator] 生成 wrapup 失败', { sessionId, error: err.message });
-          logs.push({
-            timestamp: new Date().toISOString(),
-            phase: 'error',
-            details: {
-              error: err.message || 'wrapup generation failed'
-            }
-          });
-        }
+        await this.finalizePathCompletion(sessionId, logs);
       }
       
       for (const log of logs) {
@@ -3483,6 +3561,10 @@ class SimulationOrchestrator {
   }> {
     try {
       const session = await this.getVirtualSession(sessionId)
+
+      if (session.status === 'completed') {
+        throw new Error('学习会话已完成，不能重新开始学习')
+      }
 
       let stageResults: any = {}
       try {

@@ -12,6 +12,16 @@ import { logger } from '../../utils/logger';
 import { AgentDefinition, AgentContext, AgentInput, AgentOutput } from '../protocol';
 import simulationOrchestrator from '../../coordinators/simulation.coordinator';
 
+async function runLeasedSimulationMutation<T>(
+  sessionId: string,
+  work: () => Promise<T>
+): Promise<T> {
+  return simulationOrchestrator.runLeasedExclusive(sessionId, async () => {
+    const result = await work();
+    return result;
+  });
+}
+
 export const simulationOrchestratorAgentDefinition: AgentDefinition = {
   id: 'simulation-agent',
   name: '虚拟用户模拟编排器',
@@ -100,16 +110,20 @@ export async function simulationOrchestratorAgentHandler(
     let result: any;
 
     if (operationType === 'single-step') {
-      result = await simulationOrchestrator.executeSingleStep({
-        sessionId,
-        userId,
-        mode: 'single-step'
-      });
+      result = await runLeasedSimulationMutation(sessionId, () =>
+        simulationOrchestrator.executeSingleStep({
+          sessionId,
+          userId,
+          mode: 'single-step'
+        })
+      );
     } else if (operationType === 'auto-loop') {
       const maxRounds = input.metadata?.maxRounds || 20;
-      result = await simulationOrchestrator.executeAutoLoop(
-        { sessionId, userId, mode: 'auto-loop' },
-        { maxRounds }
+      result = await runLeasedSimulationMutation(sessionId, () =>
+        simulationOrchestrator.executeAutoLoop(
+          { sessionId, userId, mode: 'auto-loop' },
+          { maxRounds }
+        )
       );
       result = {
         success: true,
@@ -117,7 +131,9 @@ export async function simulationOrchestratorAgentHandler(
         lastResult: result[result.length - 1]
       };
     } else if (operationType === 'advance-path') {
-      result = await simulationOrchestrator.advanceToPathGeneration(sessionId);
+      result = await runLeasedSimulationMutation(sessionId, () =>
+        simulationOrchestrator.advanceToPathGeneration(sessionId)
+      );
     } else {
       return {
         success: false,
