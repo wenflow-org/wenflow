@@ -32,7 +32,8 @@
  */
 
 /**
- * 启动 purge 名单（35 项，2026-08-10 自 index.ts:45-92 单源化，逐项一致）。
+ * 启动 purge 名单（36 项，2026-08-10 自 index.ts:45-92 单源化，逐项一致；2026-08-11 增补
+ * session-evaluation-fallback）。
  * 语义：曾经注册过、启动时须清残留，防止幽灵注册；不 purge 注册中 skill 的配置行。
  */
 export const PURGED_SKILLS: readonly string[] = [
@@ -82,6 +83,11 @@ export const PURGED_SKILLS: readonly string[] = [
   'learning-pattern-distiller',
   'structured-output-parser',
   'prompt-compiler',
+  // 2026-08-11 完整退役：session-evaluation-fallback（曾注册于 v4-aux-skills）——43a01fb
+  // 纯重试+明确失败改造后失去全部调用语义（session-wrapup 缺 evaluation 直接 evaluation=null +
+  // 'unavailable'），注册/户口簿/产物四同步注销（doc/FALLBACK_RETIREMENT_PLAN.md Phase A）；
+  // 存量 skill_registrations/skill_model_configs 等行由启动 purge 清理
+  'session-evaluation-fallback',
 ] as const;
 
 /**
@@ -100,7 +106,7 @@ const RESIDUE_ONLY_SKILLS: readonly string[] = [
 ] as const;
 
 /**
- * 全量清理名单（40 项 = purge 35 + 残留 5）：cleanup-retired-field-data.ts 使用。
+ * 全量清理名单（41 项 = purge 36 + 残留 5）：cleanup-retired-field-data.ts 使用。
  * 不含僵尸项 basic-evaluator / goal-alignment-checker（注册中，见文件头处置说明）。
  */
 export const ALL_RETIRED_SKILLS: readonly string[] = [...PURGED_SKILLS, ...RESIDUE_ONLY_SKILLS] as const;

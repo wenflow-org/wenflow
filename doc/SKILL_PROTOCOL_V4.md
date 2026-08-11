@@ -17,7 +17,7 @@
 
 ### 1.2 范围
 
-- 本协议约束 **25 个 core skill**（15 个首批 + 9 个辅助 Skill（§5.6，v4-aux-skills 实际 handler 数）+ semantic-freeze-judge；清单见附录 A。**以 `prompts/core/` 实际文件数为准**（2026-08-09 复核：25 个 yaml 文件；此前 27 含 2 个已退役条目）。
+- 本协议约束 **24 个 core skill**（15 个首批 + 8 个辅助 Skill（§5.6，v4-aux-skills 实际 handler 数）+ semantic-freeze-judge；清单见附录 A。**以 `prompts/core/` 实际文件数为准**（2026-08-11 复核：24 个 yaml 文件；session-evaluation-fallback 已退役；此前 25 个，再此前 27 含 2 个已退役条目）。
 - code-only skill（acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-selector）豁免，不进入核心文件体系（handler-only 确定性组件，无 LLM prompt）。
 - 无生产调用点的注册 skill（label-generator 等 11 个）维持现状，接入生产时必须先满足本协议。
 
@@ -307,7 +307,7 @@ type SkillResult = {
 
 ### 5.6 辅助 Skill（v4-aux-skills）调用约定与失败策略执行语义
 
-遗留插件/旁路能力迁入的 9 个辅助 LLM Skill（`backend/src/skills/v4-aux-skills/index.ts`，AuxSkillId 枚举，2026-08-09 复核）与主 Skill 共用同一链路：`调用点 → executeSkill / executeSkillWithResult → aux handler → callPrompt → APIGateway`。handler 必须 `requireActivePrompt: true`。
+遗留插件/旁路能力迁入的 8 个辅助 LLM Skill（`backend/src/skills/v4-aux-skills/index.ts`，AuxSkillId 枚举，2026-08-11 复核：session-evaluation-fallback 已于当日退役）与主 Skill 共用同一链路：`调用点 → executeSkill / executeSkillWithResult → aux handler → callPrompt → APIGateway`。handler 必须 `requireActivePrompt: true`。
 
 1. **入口选择**：只要输出用 `executeSkill`；需要 `quality`/`debug`/`runtimeEnvelope`（区分 model/fallback、取 tokenUsage/model）用 `executeSkillWithResult`。
 2. **保留字段**（handler 从输入对象剥离，不进入 user payload）：
@@ -325,7 +325,7 @@ type SkillResult = {
 
 ### 6.1 版本模型
 
-- 现行 25 个核心文件（含 semantic-freeze-judge；以 `prompts/core/` 实际文件数为准）登记为基准 v1（baseVersion=1）。
+- 现行 24 个核心文件（含 semantic-freeze-judge；以 `prompts/core/` 实际文件数为准）登记为基准 v1（baseVersion=1）。
 - 每次编译发布产生新版本（agent_prompts 同 agentId 多行，version 递增，单 ACTIVE）。
 - 编译产物行必须携带 `coreHash` 与 `coreVersion`（新增列）。
 - **回滚 = 目标历史版本置 ACTIVE、其余置 ARCHIVED**，不需要重新编译。
@@ -379,10 +379,10 @@ extractor：virtual-learner-actor-auditor、virtual-learner-path-evaluator、vir
 distiller：lesson-knowledge-enricher、session-wrapup
 copywriter：adaptive-guidance-copy、peer-reinforcement
 
-辅助 Skill（9，§5.6，v4-aux-skills index.ts 实际 handler 数；另有 concept-priority / path-adjustment-generator **已退役，仅 manifest 残留（2026-08）**，无 core.yaml，不计数）：
+辅助 Skill（8，§5.6，v4-aux-skills index.ts 实际 handler 数；另有 concept-priority / path-adjustment-generator **已退役，仅 manifest 残留（2026-08）**，无 core.yaml，不计数）：
 conversational：generic-chat
 generator：course-design、teaching-opening-generator（~~concept-priority~~、~~path-adjustment-generator~~ 已退役，仅 manifest 残留（2026-08））
-extractor：basic-evaluator、goal-alignment-checker、session-evaluation-fallback、skill-compiler
+extractor：basic-evaluator、goal-alignment-checker、skill-compiler
 copywriter：learner-progress-report、skill-author
 
 平台守门（1）：semantic-freeze-judge（extractor，thinkingMode=disabled；调用方式见 §5.6 平台层例外）
@@ -395,6 +395,7 @@ acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-
 > 退役注记（2026-08 清单收敛）：goal-profile-inference、learning-pattern-distiller、path-scene-framing、prompt-compiler、goal-analysis、basic-generator、generic-planner、basic-extractor、data-mapping、structured-output-parser 随 RETIRED_SKILLS 退役，附录 A 同步移除。
 > 退役注记（2026-08-09 复核）：concept-priority、path-adjustment-generator 无 core.yaml、无 handler，仅 manifest 残留，一并退役。
 > 退役注记（2026-08-10 名单单源化）：退役名单收敛至 `backend/src/skills/retired-skills.ts`（`PURGED_SKILLS` 35 项 = 启动 purge 语义；`ALL_RETIRED_SKILLS` 40 项 = 追加仅残留清理项 5 项），index.ts 与 `scripts/cleanup-retired-field-data.ts` 均自此派生，`retired:check` 门禁（`scripts/check-retired-skill-lists.ts`，已挂入 `prompts:check:all`）守卫"PURGED ⊆ ALL、名单 ∩ 注册集 = ∅、无 core/manifest 残留"三项不变量；basic-evaluator / goal-alignment-checker 为注册中零调用项（§5.6 aux），保留注册并移出清理名单（其 skill_model_configs 不可自愈），由门禁活跃守卫保护；goal-analysis 的 manifest 残留随本次单源化删除。
+> 退役注记（2026-08-11 Phase A 完整退役）：session-evaluation-fallback 失去全部调用语义（43a01fb 改造后 session-wrapup 缺 evaluation 直接 evaluation=null + 'unavailable'），自 v4-aux-skills 注册/户口簿/core/manifest/md 产物四同步注销（`PURGED_SKILLS` → 36 项，`ALL_RETIRED_SKILLS` → 41 项），存量 DB 行由启动 purge 清理；附录 A 同步移除，aux 计数 9→8，core 文件 25→24。
 
 ## 附录 B. goal-conversation 核心文件（参照样例）
 

@@ -20,7 +20,6 @@ import { logger } from '../../utils/logger';
 
 export type AuxSkillId =
   | 'teaching-opening-generator'
-  | 'session-evaluation-fallback'
   | 'learner-progress-report'
   | 'generic-chat'
   | 'course-design'
@@ -167,10 +166,6 @@ async function resolveDefaultFailureMode(skillId: AuxSkillId): Promise<'throw' |
 
 const META: Record<AuxSkillId, AuxSkillMeta> = {
   'teaching-opening-generator': { skillId: 'teaching-opening-generator', displayName: '课堂开场交互生成器', description: '生成教学 Session 的开场 message、question 与 quickReplies', category: 'generation' },
-  'session-evaluation-fallback': { skillId: 'session-evaluation-fallback', displayName: '课程评估补全器', description: '在主课后总结缺少 evaluation 时补齐结构化评估', category: 'analysis' },
-  // 注：2026-08-11 纯重试+明确失败改造后，session-evaluation-fallback 不再被主链调用
-  // （session-wrapup 缺 evaluation 时直接返回 evaluation=null + evaluationSource='unavailable'）；
-  // 保留注册以兼容存量 ACTIVE prompt 与直接调用场景。
   'learner-progress-report': { skillId: 'learner-progress-report', displayName: '学习进展报告生成器', description: '基于学习指标和信号生成简短进展反馈', category: 'analysis' },
   'generic-chat': { skillId: 'generic-chat', displayName: '平台通用文本能力', description: '无更专用 Skill 时的通用文本调用能力', category: 'generation' },
   'course-design': { skillId: 'course-design', displayName: '课程设计器', description: '为周次主题生成结构化课程任务', category: 'generation' },
@@ -218,27 +213,6 @@ async function teachingOpeningGeneratorHandler(input: any) {
       && Array.isArray(parsed.quickReplies) && parsed.quickReplies.length > 0
       ? { valid: true }
       : { valid: false, failureReason: 'TEACHING_OPENING_OUTPUT_INCOMPLETE' },
-  });
-}
-
-async function sessionEvaluationFallbackHandler(input: any) {
-  return runAux({
-    meta: META['session-evaluation-fallback'],
-    input,
-        buildUserPayload: (d) => ({
-      transcript: d.messages,
-      sessionInfo: d.sessionInfo,
-      knowledgePoints: d.knowledgePoints,
-      knowledgeContext: d.knowledgeContext,
-      learningState: d.learningState,
-      sessionEvidence: d.sessionEvidence,
-      sessionStructure: d.sessionStructure,
-    }),
-    normalize: (parsed) => parsed,
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'SESSION_EVALUATION_OUTPUT_NOT_OBJECT' },
-    builtinFallback: () => null,
   });
 }
 
@@ -347,7 +321,6 @@ export const auxSkillDefinitionMap: Record<AuxSkillId, SkillDefinition> = Object
 
 export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillExecutionResult<any>>> = {
   'teaching-opening-generator': teachingOpeningGeneratorHandler,
-  'session-evaluation-fallback': sessionEvaluationFallbackHandler,
   'learner-progress-report': learnerProgressReportHandler,
   'generic-chat': genericChatHandler,
   'course-design': courseDesignHandler,

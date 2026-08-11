@@ -28,7 +28,7 @@
 skill 三分类现状：
 
 - **主链**（进字段路由）：manifest 17 条中除 mcp-tool 外的 skill（goal-conversation、path-planning、teaching-turn、session-wrapup、peer-reinforcement、stage-designer、adaptive-guidance-copy、learner-model、lesson-knowledge-enricher、virtual-learner-×7）。
-- **aux**（runAux 框架，不进路由）：`backend/src/skills/v4-aux-skills/index.ts` 的 META 表 9 个（generic-chat、course-design、skill-author、skill-compiler、basic-evaluator、goal-alignment-checker、teaching-opening-generator、session-evaluation-fallback、learner-progress-report），**不在 manifest 中**。
+- **aux**（runAux 框架，不进路由）：`backend/src/skills/v4-aux-skills/index.ts` 的 META 表 8 个（generic-chat、course-design、skill-author、skill-compiler、basic-evaluator、goal-alignment-checker、teaching-opening-generator、learner-progress-report；session-evaluation-fallback 已于 2026-08-11 退役），**不在 manifest 中**。
 - **handler-only**（纯函数，无 LLM prompt）：acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-selector、virtual-learner-shared 等，manifest 中仅 mcp-tool 带 `noPromptFile: true`，其余未登记。
 
 ### 1.2 字段拓展（现状双文件）

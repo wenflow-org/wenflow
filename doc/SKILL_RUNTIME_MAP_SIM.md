@@ -1,6 +1,6 @@
 # 仿真与辅助 Skill 运行环境地图
 
-> 审计员只读调查产物（2026-08-10）。覆盖：simulation 家族 8 个 skill + aux skill 9 个 + handler-only 1 个（skill:learner-model）。
+> 审计员只读调查产物（2026-08-10）。覆盖：simulation 家族 8 个 skill + aux skill 9 个 + handler-only 1 个（skill:learner-model）。注：aux 中 session-evaluation-fallback 已于 2026-08-11 退役（调查时点仍注册，见 §2.2 标注）。
 > 证据精确到 file:line。路径相对仓库根 `D:\wenflow\wenflow`。
 > 字段路由唯一源 = `prompts/orchestration/simulation.yaml`（simulation 家族）+ 主链各 stage yaml（goal/path/teaching/profile）。
 
@@ -13,7 +13,7 @@
 | `backend/src/coordinators/simulation.coordinator.ts` | 辅助模式（assisted）协调器 = `simulation-agent` 运行时 |
 | `backend/src/virtual-lab/blackbox-runner.ts` | 正式黑盒（blackbox-api）运行时 + 旁路裁判/审计 |
 | `backend/src/virtual-lab/quick-learn/quick-learn.service.ts` | 快速学习运行器（真实生产链账号自动学习） |
-| `backend/src/skills/v4-aux-skills/index.ts` | 9 个 aux skill 的 runAux 统一框架 |
+| `backend/src/skills/v4-aux-skills/index.ts` | 9 个 aux skill 的 runAux 统一框架（2026-08-11 起 8 个，session-evaluation-fallback 已退役） |
 | `backend/src/services/agent-manifest.service.ts` | agent 归属真理源（5 顶层 agent + 16 skill） |
 | `backend/src/services/skill-output-validator.ts` | core fields 契约校验 + 排除名单 |
 
@@ -108,6 +108,8 @@
 
 # 二、aux skill 档案（9）
 
+> ⚠️ 2026-08-11：本节为调查时点（2026-08-10）快照；§2.2 session-evaluation-fallback 已于当日完整退役（注册/户口簿/产物注销，见 doc/FALLBACK_RETIREMENT_PLAN.md Phase A），下文相关条目仅作历史图谱保留。
+
 > 统一框架：`backend/src/skills/v4-aux-skills/index.ts`。`runAux`（:74-138）约定：所有 handler 只经 `callPrompt` 调 ACTIVE prompt（requireActivePrompt）；`__prompt` 透传调用上下文、`__fallback` 提供降级值、`__onFailure` 覆盖策略；失败策略运行时从 ACTIVE prompt 的 failurePolicy 解析（resolveDefaultFailureMode :145-154：deterministic-fallback/best-effort→降级，blocking/retry→抛错，解析失败保守抛错）。
 > **共性：均无编排字段声明**（不在任何 prompts/orchestration/*.yaml contracts/routings 中，也不在 agent-manifest 中——agent-manifest.service.ts 全文无 aux id）。字段契约保障见总结节 §4.2。
 
@@ -120,6 +122,8 @@
 - **运行环境**：**平台直调（教学主链）**。触发：每次 startSession 自动。失败语义：fallback（__fallback 确定性 opening）；超时/异常 → fallbackOpening（:1286-1305），不阻断开课。字段契约：**不在排除名单**，受 core fields 校验（prompt-composer.ts:506-523）。
 
 ## 2.2 skill:session-evaluation-fallback（课程评估补全器）
+
+> ⚠️ **已退役（2026-08-11）**：本 skill 已四同步注销（v4-aux-skills 注册 / skills.yaml 户口簿 / core / manifest / md 产物删除，进 PURGED_SKILLS 由启动 purge 清存量 DB 行）。本节约为调查时点（2026-08-10）历史图谱，调用链描述已不适用。
 
 - **声明**：core.yaml fields：sessionLss/sessionKtl/sessionLf/confidence/reasoning（全 number/number/number/number/string）。failurePolicy=**fallback**。无编排字段。
 - **agent 归属**：无 manifest。
@@ -254,7 +258,7 @@ quick-learn.service.startRun :98 → executeRunInContext :258
 | skill | 调用者（file:line） | 输入组装 | 输出收取 | failurePolicy |
 |---|---|---|---|---|
 | teaching-opening-generator | AITeachingCoordinator.ts:1261 | 手拼 context 字段 + `__fallback`+`__prompt` | runAux normalize → message/question/quickReplies/mode（index.ts:193-203） | fallback |
-| session-evaluation-fallback | session-wrapup/index.ts:631 | SessionWrapupInput 全量 + `__fallback:null` | normalize 透传 → extractEvaluation（:639） | fallback |
+| session-evaluation-fallback | ~~session-wrapup/index.ts:631~~（已退役 2026-08-11，调用点已删） | SessionWrapupInput 全量 + `__fallback:null` | normalize 透传 → extractEvaluation（:639） | fallback |
 | learner-progress-report | LearnerProgressService.ts:251 | 手拼 task/metrics/signals + `__fallback` | normalize → reasoning/suggestion（:239-242） | fallback |
 | generic-chat | ai.service.ts:340（AIService.chat） | systemPrompt+message+history+generationOverride | normalize → string（:257） | propagate |
 | course-design | ai.service.ts:812（designWeekCourses） | params 全量 + model 覆盖 | normalize 透传（:272） | propagate |
@@ -267,7 +271,7 @@ quick-learn.service.startRun :98 → executeRunInContext :258
 1. **core.yaml fields 声明** = 契约源（每个 aux 的 core 文件均有 fields 表）；
 2. **callPrompt 管线层强制校验**：`validateSkillOutputFields`（skill-output-validator.ts:220-248）在 prompt-composer.ts:506-523 对**所有** LLM 调用生效——校验不过 → 该 attempt 失败重试/按 failurePolicy 处理；
 3. 排除名单（skill-output-validator.ts:153-168）豁免：generic-chat / skill-author（非 JSON 输出）、semantic-freeze-judge（守门直调）、simulation 家族 8 个、basic-evaluator/course-design/goal-alignment-checker/concept-priority（无生产调用）；
-4. 因此**实际受 core fields 契约校验的 aux = teaching-opening-generator / session-evaluation-fallback / learner-progress-report / skill-compiler**（4 个）；
+4. 因此**实际受 core fields 契约校验的 aux = teaching-opening-generator / learner-progress-report / skill-compiler**（3 个；session-evaluation-fallback 已退役不计数）；
 5. 输入侧契约 = runAux 的 `buildUserPayload` 白名单（index.ts:180-325）+ core.yaml `inputs` 声明；无 sandbox ref 校验（aux 无 ref 声明）、无编排字段注册（不进字段路由表）、无 agent-manifest（不可被 gateway 的 agent 拓扑/监控发现）。
 
 ## 4.3 运行环境分类表
@@ -279,7 +283,7 @@ quick-learn.service.startRun :98 → executeRunInContext :258
 | 辅助模式（assisted，legacy 调试） | goal-dialogue / path-evaluator / learn-turn | admin step/auto/run-full/regression-run（:2213/:2239/:2847/:3163） | retryLearnUpstream×3；turn 预算 30；path-evaluator fallback |
 | 快速学习 | learn-turn-simulator（friction='none'） | admin quick-learn/runs（virtual-quick-learn.ts:119） | 连续 3 次 degraded 终止；teacherReady streak>4 收束；不续跑（interrupted 标记 :218-228） |
 | 管理工具 | persona-designer / scenario-designer / skill-author / skill-compiler | admin 路由（virtual-learners.ts:914-1355；skill-author.ts:33/:89） | core retry/propagate；无 fallback；500 报错 |
-| 平台直调（主链/服务） | teaching-opening-generator / session-evaluation-fallback / learner-progress-report / generic-chat / learner-model（handler-only） | 教学主链 startSession、wrapup fallback 分支、LearnerProgressService、AIService.chat、snapshot 服务 | fallback（前三者）/ propagate（generic-chat）/ 纯函数 |
+| 平台直调（主链/服务） | teaching-opening-generator / ~~session-evaluation-fallback~~（已退役 2026-08-11）/ learner-progress-report / generic-chat / learner-model（handler-only） | 教学主链 startSession、wrapup fallback 分支、LearnerProgressService、AIService.chat、snapshot 服务 | fallback（前三者）/ propagate（generic-chat）/ 纯函数 |
 | 已退役（死注册） | basic-evaluator / goal-alignment-checker | 无 | 不生效；每次启动被重新注册 |
 
 ## 4.4 环境缺口

@@ -427,7 +427,7 @@ skills:
       sandbox: []
     notes: handler 直读反例（P4 例外账）——handler 直读 user_mcp_configs（mcp-tool/index.ts:80 getUserMcpRuntimeConfig）与 config/mcp.json 平台工具（:126），外部调用 mcpGateway（:95/:140）；api 类由 mcpTools 字段承担，dataSource.db 保持空
 
-  # ============ aux（9 条，不进字段路由；v4-aux-skills 注册） ============
+  # ============ aux（8 条，不进字段路由；v4-aux-skills 注册） ============
   - skillId: teaching-opening-generator
     kind: aux
     handlerRef: backend/src/skills/v4-aux-skills/index.ts
@@ -454,17 +454,6 @@ skills:
           via: service
       sandbox: []
     notes: v4-aux 旁挂 teaching-agent（ai-teaching.definition.ts step 2）；输入 = buildTeachingScenarioContext 产物（AITeachingCoordinator.ts:1010/1144）
-
-  - skillId: session-evaluation-fallback
-    kind: aux
-    handlerRef: backend/src/skills/v4-aux-skills/index.ts
-    coreFile: prompts/core/session-evaluation-fallback.yaml
-    displayName: 课程评估补全器
-    description: 在主课后总结缺少 evaluation 时补齐结构化评估
-    dataSource:
-      db: []
-      sandbox: []
-    notes: 2026-08-11 纯重试+明确失败改造后不再被主链调用（session-wrapup 缺 evaluation 直接返回 evaluation=null + 'unavailable'）；保留注册以兼容存量 ACTIVE prompt；db:[]（无独立 DB 直读）
 
   - skillId: learner-progress-report
     kind: aux

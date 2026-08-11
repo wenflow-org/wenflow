@@ -3,6 +3,9 @@
 > ✅ **已实施（2026-08-11）**：本报告对应的改造已落地——A 词表（11 个 core fallback→propagate + manifest blocking）、
 > B 运行时降级路径移除（session-wrapup 补全分支 / teaching-opening-generator / runAux 语义 / 重试预算 1→2）均已实施并验收，
 > 详见本报告 §1~§6 各节与提交说明。下文行号基于调查时点代码，实施时已重新核对。
+> 🔻 **后续退役（2026-08-11，Phase A）**：§1 主角 session-evaluation-fallback 随后被**完整退役**——v4-aux-skills
+> 注册/户口簿（skills.yaml）/core/manifest/md 产物四同步注销，进 `PURGED_SKILLS`（36 项）由启动 purge 清存量 DB 行
+> （doc/FALLBACK_RETIREMENT_PLAN.md Phase A）。本报告 §1 各节（行号基于调查时点）仅作历史影响面记录，不再适用。
 > 调查日期：2026-08-11 ｜ 性质：只读调查，不含任何代码改动
 > 目标：为"skill 失败处理改为 **纯重试 + 明确失败**（移除降级/兜底设计）"提供精确的影响面证据。
 > 范围：① session-evaluation-fallback ② teaching-opening-generator ③ runAux `__fallback` ④ executor 重试预算 ⑤ failurePolicy 词表。

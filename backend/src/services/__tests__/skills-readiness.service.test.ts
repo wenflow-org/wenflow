@@ -109,7 +109,7 @@ describe('skills-readiness：W3 接线双向', () => {
       makeEntry({ skillId: 'virtual-learner-persona-designer', coordinator: { agentId: 'simulation-agent', steps: [] } }),
       makeEntry({ skillId: 'virtual-learner-scenario-designer', coordinator: { agentId: 'simulation-agent', steps: [] } }),
       // 无 coordinator 块的 aux（service 直调）与 platform-direct
-      makeEntry({ skillId: 'session-evaluation-fallback', kind: 'aux' }),
+      makeEntry({ skillId: 'learner-progress-report', kind: 'aux' }),
       makeEntry({ skillId: 'semantic-freeze-judge', kind: 'aux', registrationPoint: 'platform-direct' }),
     ]);
     const check = analyzeW3(book, mockDefinitions);

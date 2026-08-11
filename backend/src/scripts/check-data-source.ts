@@ -3,7 +3,7 @@
  *
  * 语义（doc/DATASOURCE_P4_SURVEY.md §3.1）：dataSource 声明的是"编排层为该 skill
  * 组装 LLM 输入时读取的数据源"（输入血缘），不是 handler 代码直读（handler 层零直读，
- * 仅 learner-model/mcp-tool 两特例，见例外账）。校验对象 = skills.yaml 27 条 dataSource。
+ * 仅 learner-model/mcp-tool 两特例，见例外账）。校验对象 = skills.yaml 26 条 dataSource。
  *
  * 三通道：
  *   ① db 通道（W5a 未声明 / W5b 过期）：
@@ -124,9 +124,6 @@ const CALL_SITE_MANIFEST: Record<string, CallSite[]> = {
   ],
   'teaching-opening-generator': [
     { file: 'backend/src/services/ai-teaching/AITeachingCoordinator.ts', line: 1261 },
-  ],
-  'session-evaluation-fallback': [
-    { file: 'backend/src/skills/session-wrapup/index.ts', line: 631 },
   ],
   'learner-progress-report': [
     { file: 'backend/src/services/learner/LearnerProgressService.ts', line: 251 },
