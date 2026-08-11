@@ -2,7 +2,7 @@
   <div class="mk-page">
     <div class="mk-status" :class="users.length ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ users.length ? '用户体系正常' : '还没有真实用户' }}</strong>
+      <strong class="mk-status__title">{{ users.length ? '用户体系正常' : pill === 'deleted' ? '暂无已删除用户' : '还没有真实用户' }}</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ users.length }} 人</span>
       <span class="mk-status__meta">管理员 {{ adminCount }}</span>
@@ -10,7 +10,7 @@
       <span v-if="isLive && registrationEnabled !== null" class="mk-status__meta" :class="registrationEnabled ? '' : 'ul-reg--closed'">
         注册{{ registrationEnabled ? '开放' : '关闭' }}
       </span>
-      <span v-if="isLive && liveUsersTotal > users.length" class="mk-status__meta ul-truncated" :title="`后端共 ${liveUsersTotal} 人，列表仅加载前 ${users.length} 行`">
+      <span v-if="isLive && pill !== 'deleted' && liveUsersTotal > users.length" class="mk-status__meta ul-truncated" :title="`后端共 ${liveUsersTotal} 人，列表仅加载前 ${users.length} 行`">
         已截断 · 共 {{ liveUsersTotal }} 人
       </span>
       <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建用户</button>
@@ -37,7 +37,7 @@
         <span class="mk-card__meta">{{ filtered.length }} / {{ users.length }} 人</span>
       </div>
 
-      <MockSkeletonTable v-if="liveLoading && !users.length" :cols="7" />
+      <MockSkeletonTable v-if="liveLoading && !users.length || (deletedLoading && !users.length)" :cols="7" />
       <div v-else-if="loadFailed" class="mk-empty">
         <span class="mk-empty__icon" aria-hidden="true">◌</span>
         <strong>数据加载失败</strong>
@@ -60,15 +60,16 @@
             </tr>
           </thead>
         <tbody>
-          <tr v-for="u in shown" :key="u.id" class="ul-row" @click="openSubPage('user', u.id)">
-            <td v-if="isLive"><input v-model="selected" type="checkbox" :value="u.id" :aria-label="`选择 ${u.name}`" @click.stop /></td>
+          <tr v-for="u in shown" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" @click="openSubPage('user', u.id)">
+            <td v-if="isLive"><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted" :aria-label="`选择 ${u.name}`" @click.stop /></td>
             <td>
               <div class="mk-cell-main">
                 <strong>{{ u.name }}</strong>
                 <span class="mk-cell-sub">{{ u.email }}</span>
               </div>
               <div class="ul-tags">
-                <span v-if="isSelf(u)" class="ul-tag ul-tag--self">当前管理员</span>
+                <span v-if="u.deleted" class="ul-tag ul-tag--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
+                <span v-else-if="isSelf(u)" class="ul-tag ul-tag--self">当前管理员</span>
                 <span v-else-if="isTestAccount(u)" class="ul-tag ul-tag--test">测试账号</span>
               </div>
             </td>
@@ -82,18 +83,21 @@
                 <div v-if="isLive" class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(u.id)">⋯</button>
                   <div v-if="openMenu === u.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                    <button type="button" class="mk-menu__item" :disabled="u.busy" @click="menuEdit(u)">编辑</button>
-                    <button
-                      v-if="!isSelf(u) && !isTestAccount(u)"
-                      type="button"
-                      class="mk-menu__item"
-                      :class="{ 'mk-menu__item--danger': u.admin }"
-                      :disabled="u.busy"
-                      @click="menuRole(u)"
-                    >{{ u.admin ? '降为用户' : '设为管理员' }}</button>
-                    <template v-if="!isSelf(u)">
-                      <div class="mk-menu__sep"></div>
-                      <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="u.busy" @click="menuDelete(u)">删除</button>
+                    <button v-if="u.deleted" type="button" class="mk-menu__item" :disabled="u.busy" @click="menuRestore(u)">恢复</button>
+                    <template v-else>
+                      <button type="button" class="mk-menu__item" :disabled="u.busy" @click="menuEdit(u)">编辑</button>
+                      <button
+                        v-if="!isSelf(u) && !isTestAccount(u)"
+                        type="button"
+                        class="mk-menu__item"
+                        :class="{ 'mk-menu__item--danger': u.admin }"
+                        :disabled="u.busy"
+                        @click="menuRole(u)"
+                      >{{ u.admin ? '降为用户' : '设为管理员' }}</button>
+                      <template v-if="!isSelf(u)">
+                        <div class="mk-menu__sep"></div>
+                        <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="u.busy" @click="menuDelete(u)">删除</button>
+                      </template>
                     </template>
                   </div>
                 </div>
@@ -173,7 +177,7 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
-import { adminUsersApi } from '@/api/adminApi'
+import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
 
@@ -211,6 +215,9 @@ interface UserRow {
   lastLogin: string
   paths: number
   sessions: number
+  /** Phase 2：已软删账号（灰色标记 + 行菜单只保留「恢复」） */
+  deleted?: boolean
+  deletedAt?: string
   busy?: boolean
 }
 
@@ -231,8 +238,43 @@ const normalUsers: UserRow[] = [
 
 const demoUsers = ref<UserRow[]>([...normalUsers])
 
+/** Phase 2：已删除筛选 pill 的独立数据源（后端 status=deleted，与活跃列表隔离） */
+const deletedUsers = ref<UserRow[]>([])
+const deletedLoading = ref(false)
+
+function mapDeletedRow(u: Record<string, unknown>): UserRow {
+  return {
+    id: String(u.id),
+    name: String(u.name || u.email || u.id),
+    email: String(u.email || ''),
+    admin: !!u.isAdmin,
+    online: false,
+    createdAt: timeAgo(String(u.createdAt || '')),
+    lastLogin: timeAgo(u.lastLoginAt as string | null),
+    paths: Number((u._count as Record<string, number>)?.learning_paths || 0),
+    sessions: Number((u._count as Record<string, number>)?.teaching_sessions || 0),
+    deleted: true,
+    deletedAt: (u.deletedAt as string) || undefined
+  }
+}
+
+async function loadDeletedUsers() {
+  deletedLoading.value = true
+  try {
+    const res = await getDeletedUsers({ limit: 50 })
+    const body = res.data?.data ?? res.data ?? {}
+    const items = body.users || body.items || []
+    deletedUsers.value = items.map(mapDeletedRow)
+  } catch {
+    deletedUsers.value = []
+  } finally {
+    deletedLoading.value = false
+  }
+}
+
 const users = computed<UserRow[]>(() => {
   if (isLive.value) {
+    if (pill.value === 'deleted') return deletedUsers.value
     return liveUsers.value.map((u) => ({
       id: u.id,
       name: u.name,
@@ -261,8 +303,14 @@ function retryLoad() {
 const pills = [
   { id: 'all', label: '全部' },
   { id: 'admin', label: '管理员' },
-  { id: 'online', label: '近期在线' }
+  { id: 'online', label: '近期在线' },
+  { id: 'deleted', label: '已删除' }
 ]
+
+/* Phase 2：切到「已删除」pill 时拉取已删列表（live 模式）；恢复/删除后回「全部」保持一致性 */
+watch(pill, (p) => {
+  if (p === 'deleted' && isLive.value) void loadDeletedUsers()
+})
 
 /* 新建 / 编辑用户 */
 const createOpen = ref(false)
@@ -281,6 +329,10 @@ function menuRole(u: UserRow) {
 function menuDelete(u: UserRow) {
   closeMenu()
   void removeUser(u)
+}
+function menuRestore(u: UserRow) {
+  closeMenu()
+  void restoreUserRow(u)
 }
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
@@ -378,7 +430,7 @@ async function saveUser() {
 /* 批量删除（测试/虚拟账号不参与勾选与提交，参照行菜单过滤逻辑） */
 const selected = ref<string[]>([])
 const batchBusy = ref(false)
-const selectable = computed(() => filtered.value.filter((u) => !isTestAccount(u)))
+const selectable = computed(() => filtered.value.filter((u) => !isTestAccount(u) && !u.deleted))
 const allChecked = computed(() => selectable.value.length > 0 && selected.value.length === selectable.value.length)
 
 function toggleAll() {
@@ -452,11 +504,32 @@ async function removeUser(u: UserRow) {
   }
 }
 
+/** Phase 2：恢复已软删用户（身份保留策略下无需查重，后端直接清空 deletedAt/deletedBy） */
+async function restoreUserRow(u: UserRow) {
+  const ok = await askConfirm({
+    title: '恢复用户',
+    message: `确认恢复用户「${u.name}」（${u.email}）？\n恢复后该用户可重新登录，历史数据原样保留。`,
+    confirmText: '恢复'
+  })
+  if (!ok) return
+  u.busy = true
+  try {
+    await restoreUser(u.id)
+    toast.success(`「${u.name}」已恢复`)
+    deletedUsers.value = deletedUsers.value.filter((x) => x.id !== u.id)
+  } catch (e) {
+    toast.error(`恢复失败：${errMsg(e)}`)
+  } finally {
+    u.busy = false
+  }
+}
+
 const adminCount = computed(() => users.value.filter((u) => u.admin).length)
 const activeToday = computed(() => users.value.filter((u) => u.online).length)
 
 const filtered = computed(() =>
   users.value.filter((u) => {
+    if (pill.value === 'deleted' && !u.deleted) return false
     if (pill.value === 'admin' && !u.admin) return false
     if (pill.value === 'online' && !u.online) return false
     const q = keyword.value.trim().toLowerCase()
@@ -471,6 +544,8 @@ const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
 
 <style scoped>
 .ul-row { cursor: pointer; }
+.ul-row--deleted { opacity: 0.62; filter: saturate(0.2); }
+.ul-tag--deleted { background: #e5e7eb; color: #6b7280; }
 .ul-batch {
   position: sticky;
   bottom: 12px;

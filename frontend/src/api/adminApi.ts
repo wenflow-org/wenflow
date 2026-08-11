@@ -1349,3 +1349,25 @@ export const adminSessionsApi = {
     return adminAxios.post('/admin/sessions/revoke-all', payload);
   },
 };
+
+// ============================================================
+// V6 · 用户软删除 Phase 2：恢复 / 已删列表 / 含已删详情
+// 说明：现有 adminUsersApi.getUsers/getUser 未扩展参数，这里以独立函数末尾追加，
+//       不触碰既有代码；后端 GET /admin/users 支持 status=deleted，
+//       GET /admin/users/:id 支持 includeDeleted=1（见 backend/src/routes/admin/users.ts）
+// ============================================================
+
+/** 恢复已软删用户（POST /admin/users/:id/restore；目标不存在 404、未软删 409） */
+export const restoreUser = async (userId: string) => {
+  return adminAxios.post(`/admin/users/${encodeURIComponent(userId)}/restore`);
+};
+
+/** 已删用户列表（status=deleted 反转软删筛选，供「已删除」筛选 pill 使用） */
+export const getDeletedUsers = async (params?: { page?: number; limit?: number; search?: string }) => {
+  return adminAxios.get('/admin/users', { params: { ...params, status: 'deleted' } });
+};
+
+/** 含已软删用户在内的详情（includeDeleted=1；详情页恢复入口的数据源） */
+export const getUserIncludingDeleted = async (userId: string) => {
+  return adminAxios.get(`/admin/users/${encodeURIComponent(userId)}`, { params: { includeDeleted: '1' } });
+};

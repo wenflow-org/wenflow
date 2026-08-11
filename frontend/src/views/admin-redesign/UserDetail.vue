@@ -6,7 +6,11 @@
       <div>
         <h1 class="ud-name">{{ d.name }}</h1>
         <span class="ud-sub">{{ d.email }} · {{ d.role }} · 加入 {{ d.joined }}</span>
+        <span v-if="isDeleted" class="ud-badge">已删除</span>
       </div>
+      <button v-if="isDeleted" type="button" class="ud-restore" :disabled="restoring" @click="doRestore">
+        {{ restoring ? '恢复中…' : '恢复用户' }}
+      </button>
       <button type="button" class="ud-learner-link" @click="toLearner">查看学习者画像 →</button>
     </div>
 
@@ -103,10 +107,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { subPage, closeSubPage, openSubPage, userDetails, isLive } from './store'
-import { liveUsers, liveGetUserDetail, timeAgo, errMsg } from './live'
-import { adminUsersApi } from '@/api/adminApi'
+import { liveUsers, timeAgo, errMsg } from './live'
+import { adminUsersApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
 import { getProjectionGrantStatus, normalizeProjectionGrant, type ProjectionGrant } from '@/api/userCustom'
 import { setProjectionToken } from '@/utils/projection'
+import { toast } from '@/utils/toast'
+import { askConfirm } from './useConfirm'
 
 interface Detail {
   name: string
@@ -121,6 +127,9 @@ interface Detail {
 const liveDetail = ref<Detail | null>(null)
 /** 详情接口失败且无列表兜底 → 明确错误态 + 重试（参照 VirtualProfile.detailError 模式） */
 const detailError = ref(false)
+/** Phase 2：目标为已软删账号（详情走 includeDeleted=1 放行）→ 头部展示恢复入口 */
+const isDeleted = ref(false)
+const restoring = ref(false)
 
 function toLearner() {
   const id = subPage.value?.id
@@ -217,11 +226,35 @@ watch(
     projectionGrant.value = null
     grantMessage.value = ''
     detailError.value = false
+    isDeleted.value = false
     if (!id || !live) return
     void loadDetail()
   },
   { immediate: true }
 )
+
+/** Phase 2：恢复已软删用户（身份保留策略下无需查重；成功后重拉详情，恢复入口自动消失） */
+async function doRestore() {
+  const id = subPage.value?.id
+  if (!id || restoring.value) return
+  const ok = await askConfirm({
+    title: '恢复用户',
+    message: `确认恢复用户「${liveDetail.value?.name || id}」？\n恢复后该用户可重新登录，历史数据原样保留。`,
+    confirmText: '恢复'
+  })
+  if (!ok) return
+  restoring.value = true
+  try {
+    await restoreUser(id)
+    toast.success('用户已恢复，可重新登录')
+    isDeleted.value = false
+    void loadDetail()
+  } catch (e) {
+    toast.error(`恢复失败：${errMsg(e)}`)
+  } finally {
+    restoring.value = false
+  }
+}
 
 async function loadDetail() {
   const id = subPage.value?.id
@@ -239,7 +272,10 @@ async function loadDetail() {
         ]
       : []
   try {
-    const raw = (await liveGetUserDetail(id)) as Record<string, unknown>
+    // 已软删账号默认被详情接口隐藏（404 语义），Phase 2 用 includeDeleted=1 放行恢复入口
+    const res = await getUserIncludingDeleted(id)
+    const raw = (res.data?.data ?? res.data ?? {}) as Record<string, unknown>
+    isDeleted.value = !!raw.deletedAt
     const user = (raw.user as Record<string, unknown>) || raw
     // 后端不返回 learning_paths 明细：路径计数用 _count 兜底，卡片显示空态（与统计条口径一致）
     const counts = (user._count as Record<string, number>) || {}
@@ -329,6 +365,32 @@ const d = computed<Detail | undefined>(() => {
 .ud-id h3 { margin: 0; font-size: 18px; }
 .ud-name { margin: 0; font-size: 18px; line-height: 1.4; }
 .ud-sub { color: var(--mk-faint); font-size: 12px; }
+.ud-badge {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #6b7280;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.ud-restore {
+  margin-left: auto;
+  padding: 6px 14px;
+  border: 1px solid rgba(52, 120, 246, 0.28);
+  border-radius: 999px;
+  background: #eef5ff;
+  color: var(--mk-blue, #3478f6);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.12s ease;
+}
+.ud-restore:hover { background: #dbeafe; border-color: rgba(52, 120, 246, 0.45); }
+.ud-restore:disabled { opacity: 0.6; cursor: default; }
 
 .ud-stats {
   display: grid;

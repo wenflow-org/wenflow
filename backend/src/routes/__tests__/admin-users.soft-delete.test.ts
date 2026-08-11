@@ -207,6 +207,19 @@ describe('GET /admin/users 列表默认隐藏已删账号', () => {
     expect(usersCount).toHaveBeenCalledWith({ where: expect.objectContaining({ deletedAt: null }) })
   })
 
+  it('status=deleted 反转为仅查已删账号（已删列表/恢复入口）', async () => {
+    usersFindMany.mockResolvedValue([])
+    usersCount.mockResolvedValue(0)
+
+    const res = await runHandler('GET /', { query: { status: 'deleted' } })
+
+    expect(res.statusCode).toBe(200)
+    expect(usersFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ deletedAt: { not: null } }) })
+    )
+    expect(usersCount).toHaveBeenCalledWith({ where: expect.objectContaining({ deletedAt: { not: null } }) })
+  })
+
   it('详情接口对已删账号返回 404（默认隐藏）', async () => {
     usersFindFirst.mockResolvedValue(null)
 
@@ -216,5 +229,101 @@ describe('GET /admin/users 列表默认隐藏已删账号', () => {
     expect(usersFindFirst).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'u2', deletedAt: null } })
     )
+  })
+
+  it('includeDeleted=1 放行已删账号（详情页恢复入口）', async () => {
+    usersFindFirst.mockResolvedValue({ id: 'u2', deletedAt: new Date() })
+
+    const res = await runHandler('GET /:id', {
+      params: { id: 'u2' },
+      query: { includeDeleted: '1' }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(usersFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'u2' } })
+    )
+  })
+})
+
+describe('POST /admin/users/:id/restore 恢复已软删用户（Phase 2）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('恢复：deletedAt/deletedBy 清空为 null，身份保留策略下不查重', async () => {
+    mockOperatorAdmin()
+    usersFindUnique.mockImplementationOnce(() =>
+      Promise.resolve({ id: 'u2', deletedAt: new Date() })
+    )
+    usersUpdate.mockResolvedValue({ id: 'u2', deletedAt: null })
+
+    const res = await runHandler('POST /:id/restore', {
+      user: { userId: 'admin-1' },
+      params: { id: 'u2' }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body.success).toBe(true)
+    expect(usersUpdate).toHaveBeenCalledWith({
+      where: { id: 'u2' },
+      data: {
+        deletedAt: null,
+        deletedBy: null,
+        updatedAt: expect.any(Date)
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        isAdmin: true,
+        deletedAt: true
+      }
+    })
+    expect(loggerInfo).toHaveBeenCalledWith('用户已恢复', { userId: 'u2', restoredBy: 'admin-1' })
+    // 恢复过程不触发任何查重/删除
+    expect(usersFindUnique).toHaveBeenCalledTimes(2) // 操作者鉴权 + 目标查询
+    expect(usersDeleteMany).not.toHaveBeenCalled()
+  })
+
+  it('目标不存在返回 404', async () => {
+    mockOperatorAdmin()
+    usersFindUnique.mockImplementationOnce(() => Promise.resolve(null))
+
+    const res = await runHandler('POST /:id/restore', {
+      user: { userId: 'admin-1' },
+      params: { id: 'ghost' }
+    })
+
+    expect(res.statusCode).toBe(404)
+    expect(usersUpdate).not.toHaveBeenCalled()
+  })
+
+  it('未软删账号重复恢复返回 409 NOT_DELETED', async () => {
+    mockOperatorAdmin()
+    usersFindUnique.mockImplementationOnce(() =>
+      Promise.resolve({ id: 'u2', deletedAt: null })
+    )
+
+    const res = await runHandler('POST /:id/restore', {
+      user: { userId: 'admin-1' },
+      params: { id: 'u2' }
+    })
+
+    expect(res.statusCode).toBe(409)
+    expect(res.body.error.code).toBe('NOT_DELETED')
+    expect(usersUpdate).not.toHaveBeenCalled()
+  })
+
+  it('非管理员操作者被拒（403，管理员保护前置）', async () => {
+    usersFindUnique.mockImplementationOnce(() => Promise.resolve({ isAdmin: false }))
+
+    const res = await runHandler('POST /:id/restore', {
+      user: { userId: 'plain-user' },
+      params: { id: 'u2' }
+    })
+
+    expect(res.statusCode).toBe(403)
+    expect(usersUpdate).not.toHaveBeenCalled()
   })
 })

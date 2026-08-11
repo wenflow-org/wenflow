@@ -47,10 +47,11 @@ const requireAdmin = async (operatorId?: string) => {
 // 获取用户列表
 router.get('/', async (req, res, next) => {
   try {
-    const { page = 1, limit = 20, search, role } = req.query;
+    const { page = 1, limit = 20, search, role, status } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
-    const where: any = { deletedAt: null };
+    // Phase 2：status=deleted 反转为「仅已删账号」（恢复入口/已删列表）；其余维持默认隐藏
+    const where: any = status === 'deleted' ? { deletedAt: { not: null } } : { deletedAt: null };
     
     // 搜索条件
     if (search) {
@@ -81,6 +82,7 @@ router.get('/', async (req, res, next) => {
           currentLevel: true,
           lastLoginAt: true,
           createdAt: true,
+          deletedAt: true,
           _count: {
             select: {
               learning_paths: true,
@@ -114,9 +116,11 @@ router.get('/:id', async (req, res, next) => {
   try {
     const userId = req.params.id;
 
-    // 默认隐藏已软删用户（详情 404 语义）
+    // 默认隐藏已软删用户（详情 404 语义）；includeDeleted=1 时放行（已删列表的详情/恢复入口）
+    const includeDeleted = (req.query as { includeDeleted?: string } | undefined)?.includeDeleted === '1';
+
     const user = await prisma.users.findFirst({
-      where: { id: userId, deletedAt: null },
+      where: includeDeleted ? { id: userId } : { id: userId, deletedAt: null },
       select: {
         id: true,
         name: true,
@@ -126,6 +130,7 @@ router.get('/:id', async (req, res, next) => {
         isAdmin: true,
         role: true,
         createdAt: true,
+        deletedAt: true,
         _count: {
           select: {
             learning_paths: true,
@@ -317,6 +322,8 @@ router.patch('/:id', async (req, res, next) => {
         });
       }
       data.password = await bcrypt.hash(String(password), SALT_ROUNDS);
+      // 管理员重置密码：递增 tokenVersion，该用户所有旧 JWT 立即失效
+      data.tokenVersion = { increment: 1 };
     }
 
     const updated = await prisma.users.update({
@@ -568,6 +575,64 @@ router.delete('/:id', async (req, res, next) => {
     res.json({
       success: true,
       message: '删除成功'
+    });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+// 恢复已软删用户（Phase 2）
+router.post('/:id/restore', async (req, res, next) => {
+  try {
+    const operatorId = req.user?.userId;
+    const permission = await requireAdmin(operatorId);
+    if (!permission.ok) {
+      return res.status(403).json(permission.response);
+    }
+
+    const userId = req.params.id;
+
+    const target = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { id: true, deletedAt: true }
+    });
+
+    if (!target) {
+      return res.status(404).json({
+        success: false,
+        error: { message: '用户不存在' }
+      });
+    }
+
+    // 未软删账号重复恢复：409 幂等语义（与 DELETE 的 ALREADY_DELETED 对称）
+    if (!target.deletedAt) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'NOT_DELETED',
+          message: '用户未被删除'
+        }
+      });
+    }
+
+    // 身份保留策略（Phase 1 决策）：软删不释放 email/name，恢复无需查重
+    const restored = await prisma.users.update({
+      where: { id: userId },
+      data: { deletedAt: null, deletedBy: null, updatedAt: new Date() },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        isAdmin: true,
+        deletedAt: true
+      }
+    });
+
+    logger.info('用户已恢复', { userId, restoredBy: operatorId });
+
+    res.json({
+      success: true,
+      data: restored
     });
   } catch (error: any) {
     next(error);
