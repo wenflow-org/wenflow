@@ -6,7 +6,6 @@ archetype: distiller
 description: 课后知识增强（知识台账 + 隐性概念线索，单次调用）
 acceptableAgentIds: [skill:lesson-knowledge-enricher]
 publish: { enabled: true, exportTargets: [platform-prompts] }
-runtimeDefaults: { tier: chat, temperature: 0.4, maxTokens: 4000, model: null, thinkingMode: default, reasoningEffort: default }
 promptContract:
   version: skill-prompt-contract/v2
   executionMode: llm

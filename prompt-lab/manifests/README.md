@@ -12,12 +12,12 @@
 - `archetype`
 - `description`
 - `acceptableAgentIds`
-- `runtimeDefaults`
 - `publish` 策略
 
 说明：
 
-- `runtimeDefaults.tier` 代表平台运行路由层级
+- 运行参数（temperature/maxTokens/model/thinkingMode/reasoningEffort/tier）**不再写入 manifest**：
+  唯一写源 = `prompts/core/<skillId>.yaml` 的 `params`（P0-1 参数四写收敛，2026-08）。
 - `ownership.tier` 代表作者态治理或发布分层
 
 ## 为什么单独拆出来
@@ -42,7 +42,8 @@ manifests/<skillId>.yaml
 
 - 文件名中的 `<skillId>` 是最终真相标识
 - 文件内容中的 `skillId` 应与文件名一致
-- `runtimeDefaults.tier` 当前约定值为 `chat | reasoning | light`
+- （已废弃）`runtimeDefaults.tier` 旧约定值为 `chat | reasoning | light`——历史文件若残留该段，
+  仅兼容读取不再写出，运行参数以 core.yaml `params` 为准
 
 ## 状态说明
 

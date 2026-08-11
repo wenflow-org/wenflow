@@ -6,7 +6,6 @@ archetype: extractor
 description: 路径目标对齐检查器
 acceptableAgentIds: [skill:goal-alignment-checker]
 publish: { enabled: true, exportTargets: [platform-prompts] }
-runtimeDefaults: { tier: chat, temperature: 0.3, maxTokens: 3000, model: null, thinkingMode: default, reasoningEffort: default }
 promptContract:
   version: skill-prompt-contract/v2
   executionMode: llm

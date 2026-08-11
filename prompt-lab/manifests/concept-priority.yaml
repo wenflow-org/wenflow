@@ -6,7 +6,6 @@ archetype: generator
 description: 概念优先级调整器
 acceptableAgentIds: [skill:concept-priority]
 publish: { enabled: true, exportTargets: [platform-prompts] }
-runtimeDefaults: { tier: chat, temperature: 0.3, maxTokens: 3000, model: null, thinkingMode: default, reasoningEffort: default }
 promptContract:
   version: skill-prompt-contract/v2
   executionMode: llm

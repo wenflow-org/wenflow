@@ -6,7 +6,6 @@ archetype: generator
 description: 课程设计器
 acceptableAgentIds: [skill:course-design]
 publish: { enabled: true, exportTargets: [platform-prompts] }
-runtimeDefaults: { tier: chat, temperature: 0.7, maxTokens: 4000, model: null, thinkingMode: default, reasoningEffort: default }
 promptContract:
   version: skill-prompt-contract/v2
   executionMode: llm

@@ -6,7 +6,6 @@ archetype: extractor
 description: Skill Prompt 验收器
 acceptableAgentIds: [skill:skill-compiler]
 publish: { enabled: true, exportTargets: [platform-prompts] }
-runtimeDefaults: { tier: chat, temperature: 0.3, maxTokens: 2000, model: null, thinkingMode: default, reasoningEffort: default }
 promptContract:
   version: skill-prompt-contract/v2
   executionMode: llm

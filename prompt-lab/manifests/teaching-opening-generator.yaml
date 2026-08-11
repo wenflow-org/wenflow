@@ -6,7 +6,6 @@ archetype: generator
 description: 课堂开场交互生成器
 acceptableAgentIds: [skill:teaching-opening-generator]
 publish: { enabled: true, exportTargets: [platform-prompts] }
-runtimeDefaults: { tier: chat, temperature: 0.4, maxTokens: 1200, model: null, thinkingMode: default, reasoningEffort: default }
 promptContract:
   version: skill-prompt-contract/v2
   executionMode: llm

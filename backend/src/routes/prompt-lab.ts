@@ -65,7 +65,11 @@ type PromptLabManifest = {
     enabled: boolean;
     exportTargets: string[];
   };
-  runtimeDefaults: {
+  /**
+   * 已废弃（P0-1 参数四写收敛）：运行参数唯一写源 = core.yaml params（编译进 ACTIVE prompt）。
+   * 此处仅兼容读取历史 manifest；serialize 不再写出该段。
+   */
+  runtimeDefaults?: {
     tier: string;
     temperature: number;
     maxTokens: number;
@@ -149,14 +153,6 @@ function buildDefaultManifest(skillId: string, sourceContent = ''): PromptLabMan
       enabled: true,
       exportTargets: ['platform-prompts']
     },
-    runtimeDefaults: {
-      tier: 'chat',
-      temperature: 0.7,
-      maxTokens: 8000,
-      model: null,
-      thinkingMode: 'default',
-      reasoningEffort: 'default'
-    },
     runtimeContract: buildDefaultRuntimeContract(skillId, archetype),
     promptContract: buildDefaultSkillPromptContract({ skillId, archetype }),
     ownership: {
@@ -171,9 +167,11 @@ function buildDefaultManifest(skillId: string, sourceContent = ''): PromptLabMan
 function normalizeManifest(skillId: string, manifestInput: any, sourceContent = ''): PromptLabManifest {
   const base = buildDefaultManifest(skillId, sourceContent);
   const manifest = manifestInput && typeof manifestInput === 'object' ? manifestInput : {};
+  // runtimeDefaults 已废弃（P0-1：参数唯一写源 = core.yaml params）：仅容忍历史文件
+  // 携带该段（缺省即 undefined），serialize 时不再写出。
   const runtimeDefaults = manifest.runtimeDefaults && typeof manifest.runtimeDefaults === 'object'
     ? manifest.runtimeDefaults
-    : {};
+    : undefined;
   const runtimeContract = manifest.runtimeContract && typeof manifest.runtimeContract === 'object'
     ? manifest.runtimeContract
     : {};
@@ -203,16 +201,18 @@ function normalizeManifest(skillId: string, manifestInput: any, sourceContent = 
       enabled: typeof publish.enabled === 'boolean' ? publish.enabled : true,
       exportTargets: sanitizeStringArray(publish.exportTargets, ['platform-prompts']).filter(isSupportedExportTarget)
     },
-    runtimeDefaults: {
-      tier: ['chat', 'reasoning', 'light'].includes(sanitizeString(runtimeDefaults.tier, base.runtimeDefaults.tier))
-        ? sanitizeString(runtimeDefaults.tier, base.runtimeDefaults.tier)
-        : base.runtimeDefaults.tier,
-      temperature: sanitizeNumber(runtimeDefaults.temperature, base.runtimeDefaults.temperature, 0, 2),
-      maxTokens: sanitizeNumber(runtimeDefaults.maxTokens, base.runtimeDefaults.maxTokens, 1000, 64000),
-      model: sanitizeString(runtimeDefaults.model, '') || null,
-      thinkingMode: sanitizeString(runtimeDefaults.thinkingMode, base.runtimeDefaults.thinkingMode),
-      reasoningEffort: sanitizeString(runtimeDefaults.reasoningEffort, base.runtimeDefaults.reasoningEffort)
-    },
+    runtimeDefaults: runtimeDefaults
+      ? {
+          tier: ['chat', 'reasoning', 'light'].includes(sanitizeString(runtimeDefaults.tier, 'chat'))
+            ? sanitizeString(runtimeDefaults.tier, 'chat')
+            : 'chat',
+          temperature: sanitizeNumber(runtimeDefaults.temperature, 0.7, 0, 2),
+          maxTokens: sanitizeNumber(runtimeDefaults.maxTokens, 8000, 1000, 64000),
+          model: sanitizeString(runtimeDefaults.model, '') || null,
+          thinkingMode: sanitizeString(runtimeDefaults.thinkingMode, 'default'),
+          reasoningEffort: sanitizeString(runtimeDefaults.reasoningEffort, 'default')
+        }
+      : undefined,
     runtimeContract: normalizedRuntimeContract,
     promptContract: normalizeSkillPromptContract(promptContract, {
       skillId,
@@ -238,7 +238,7 @@ function serializeManifest(manifest: PromptLabManifest) {
     description: manifest.description,
     acceptableAgentIds: manifest.acceptableAgentIds,
     publish: manifest.publish,
-    runtimeDefaults: manifest.runtimeDefaults,
+    // runtimeDefaults 已废弃（P0-1）：不再写出，参数唯一写源 = core.yaml params
     runtimeContract: manifest.runtimeContract,
     promptContract: manifest.promptContract,
     ownership: manifest.ownership,
@@ -272,15 +272,7 @@ function mergeManifestWithPromptFrontmatter(skillId: string, manifest: PromptLab
     acceptableAgentIds: Array.isArray(frontmatter.acceptableAgentIds)
       ? frontmatter.acceptableAgentIds
       : manifest.acceptableAgentIds,
-    runtimeDefaults: {
-      ...manifest.runtimeDefaults,
-      tier: manifest.runtimeDefaults.tier,
-      temperature: typeof frontmatter.temperature === 'number' ? frontmatter.temperature : manifest.runtimeDefaults.temperature,
-      maxTokens: typeof frontmatter.maxTokens === 'number' ? frontmatter.maxTokens : manifest.runtimeDefaults.maxTokens,
-      model: sanitizeString(frontmatter.model, '') || manifest.runtimeDefaults.model,
-      thinkingMode: sanitizeString(frontmatter.thinkingMode, manifest.runtimeDefaults.thinkingMode),
-      reasoningEffort: sanitizeString(frontmatter.reasoningEffort, manifest.runtimeDefaults.reasoningEffort)
-    },
+    // runtimeDefaults 已废弃（P0-1）：不再从 frontmatter 重建该段；参数唯一写源 = core.yaml params
     runtimeContract: frontmatter.runtimeContract && typeof frontmatter.runtimeContract === 'object'
       ? frontmatter.runtimeContract
       : manifest.runtimeContract,
@@ -369,10 +361,7 @@ router.put('/manifest/:skillId', async (req, res) => {
         ...currentManifest.publish,
         ...(incoming.publish || {})
       },
-      runtimeDefaults: {
-        ...currentManifest.runtimeDefaults,
-        ...(incoming.runtimeDefaults || {})
-      },
+      // runtimeDefaults 已废弃（P0-1）：不再合并/写入；参数唯一写源 = core.yaml params
       runtimeContract: {
         ...currentManifest.runtimeContract,
         ...(incoming.runtimeContract || {}),

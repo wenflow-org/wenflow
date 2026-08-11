@@ -6,7 +6,6 @@ archetype: extractor
 description: 学习质量评估器
 acceptableAgentIds: [skill:basic-evaluator]
 publish: { enabled: true, exportTargets: [platform-prompts] }
-runtimeDefaults: { tier: chat, temperature: 0.5, maxTokens: 3000, model: null, thinkingMode: default, reasoningEffort: default }
 promptContract:
   version: skill-prompt-contract/v2
   executionMode: llm

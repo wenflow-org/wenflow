@@ -6,7 +6,6 @@ archetype: conversational
 description: 平台通用文本能力处理器
 acceptableAgentIds: [skill:generic-chat]
 publish: { enabled: true, exportTargets: [platform-prompts] }
-runtimeDefaults: { tier: chat, temperature: 0.7, maxTokens: 4000, model: null, thinkingMode: default, reasoningEffort: default }
 promptContract:
   version: skill-prompt-contract/v2
   executionMode: llm

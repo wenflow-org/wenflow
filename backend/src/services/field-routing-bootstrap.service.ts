@@ -225,6 +225,172 @@ export async function bootstrapFieldRoutings(dependencies: FieldRoutingBootstrap
 }
 
 // ============================================================
+// 全量对账（文件为准，立即生效）：三表 upsert(update: 全部业务列)
+//
+// 单一实现，三处消费（禁止复制逻辑）：
+// - POST /api/admin/field-routings/orchestration/:stage/sync
+// - scripts/field-routing-orchestration-sync.ts（CLI）
+// - health-center 一键修复 field-routing
+// admin 覆盖行（managedByCode=false）跳过更新并记入 skipped 清单；
+// 不删除任何行（孤儿行维度不在本对账范围）。
+// ============================================================
+
+export interface FieldRoutingFullSyncReport {
+  stage: string;
+  contractsUpdated: number;
+  fieldsUpdated: number;
+  routingsUpdated: number;
+  contractsCreated: number;
+  fieldsCreated: number;
+  routingsCreated: number;
+  /** 三表新增合计（route 响应兼容口径） */
+  createdCount: number;
+  skippedAdminRows: Array<{ table: string; key: string }>;
+}
+
+export async function syncStageFieldRoutingsFromFile(
+  prisma: PrismaClient,
+  stage: OrchestrationStage,
+): Promise<FieldRoutingFullSyncReport> {
+  const report: FieldRoutingFullSyncReport = {
+    stage: stage.stage,
+    contractsUpdated: 0,
+    fieldsUpdated: 0,
+    routingsUpdated: 0,
+    contractsCreated: 0,
+    fieldsCreated: 0,
+    routingsCreated: 0,
+    createdCount: 0,
+    skippedAdminRows: [],
+  };
+
+  for (const c of stage.contracts) {
+    const exists = await prisma.agent_contracts.findUnique({ where: { agentId: c.agentId } });
+    if (exists) {
+      if (exists.managedByCode === false) {
+        report.skippedAdminRows.push({ table: 'agent_contracts', key: c.agentId });
+        continue;
+      }
+      await prisma.agent_contracts.update({
+        where: { agentId: c.agentId },
+        data: { stage: stage.stage, displayName: c.displayName, description: c.description, updatedAt: new Date() },
+      });
+      report.contractsUpdated++;
+    } else {
+      await prisma.agent_contracts.create({
+        data: {
+          id: randomUUID(),
+          agentId: c.agentId,
+          stage: stage.stage,
+          displayName: c.displayName,
+          description: c.description,
+          schemaVersion: 'v3',
+          source: 'code',
+          managedByCode: true,
+        },
+      });
+      report.contractsCreated++;
+      report.createdCount++;
+    }
+  }
+
+  for (const f of stage.fields) {
+    const exists = await prisma.field_definitions.findFirst({ where: { stage: stage.stage, fieldId: f.fieldId } });
+    if (exists) {
+      if (exists.managedByCode === false) {
+        report.skippedAdminRows.push({ table: 'field_definitions', key: `${stage.stage}/${f.fieldId}` });
+        continue;
+      }
+      await prisma.field_definitions.update({
+        where: { stage_fieldId: { stage: stage.stage, fieldId: f.fieldId } },
+        data: {
+          stage: stage.stage,
+          promptRole: f.promptRole,
+          valueType: f.valueType,
+          snakeName: f.snakeName ?? null,
+          camelName: f.camelName ?? null,
+          pathInRawOutput: f.pathInRawOutput ?? null,
+          description: f.description,
+          enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null,
+          systemLocked: f.systemLocked ?? false,
+          structureLocked: f.structureLocked ?? false,
+          bindings: f.bindings ? JSON.stringify(f.bindings) : null,
+          updatedAt: new Date(),
+        },
+      });
+      report.fieldsUpdated++;
+    } else {
+      await prisma.field_definitions.create({
+        data: {
+          id: randomUUID(),
+          fieldId: f.fieldId,
+          stage: stage.stage,
+          promptRole: f.promptRole,
+          valueType: f.valueType,
+          snakeName: f.snakeName ?? null,
+          camelName: f.camelName ?? null,
+          pathInRawOutput: f.pathInRawOutput ?? null,
+          description: f.description,
+          enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null,
+          systemLocked: f.systemLocked ?? false,
+          structureLocked: f.structureLocked ?? false,
+          bindings: f.bindings ? JSON.stringify(f.bindings) : null,
+          schemaVersion: 'v3',
+          source: 'code',
+          managedByCode: true,
+        },
+      });
+      report.fieldsCreated++;
+      report.createdCount++;
+    }
+  }
+
+  for (const r of stage.routings) {
+    const where = { agentId_fieldId: { agentId: r.agentId, fieldId: r.fieldId } };
+    const exists = await prisma.agent_field_routings.findUnique({ where });
+    if (exists) {
+      if (exists.managedByCode === false) {
+        report.skippedAdminRows.push({ table: 'agent_field_routings', key: `${r.agentId}/${r.fieldId}` });
+        continue;
+      }
+      await prisma.agent_field_routings.update({
+        where,
+        data: {
+          render: r.render,
+          handoff: r.handoff.length ? JSON.stringify(r.handoff) : null,
+          internalFlag: r.internal,
+          accumulate: r.accumulate,
+          visibilityPreset: r.visibilityPreset ?? null,
+          notes: r.notes ?? null,
+          updatedAt: new Date(),
+        },
+      });
+      report.routingsUpdated++;
+    } else {
+      await prisma.agent_field_routings.create({
+        data: {
+          id: randomUUID(),
+          agentId: r.agentId,
+          fieldId: r.fieldId,
+          render: r.render,
+          handoff: r.handoff.length ? JSON.stringify(r.handoff) : null,
+          internalFlag: r.internal,
+          accumulate: r.accumulate,
+          visibilityPreset: r.visibilityPreset ?? null,
+          notes: r.notes ?? null,
+          source: 'code',
+          managedByCode: true,
+        },
+      });
+      report.routingsCreated++;
+      report.createdCount++;
+    }
+  }
+
+  return report;
+}
+
+// ============================================================
 // 编排文件声明漂移检测（只读 diff）
 //
 // bootstrap 的 upsert(update:{}) 语义是"只建不更新"——编排文件声明改动后

@@ -6,7 +6,6 @@ archetype: copywriter
 description: Prompt 起草助手
 acceptableAgentIds: [skill:skill-author]
 publish: { enabled: true, exportTargets: [platform-prompts] }
-runtimeDefaults: { tier: chat, temperature: 0.5, maxTokens: 2400, model: null, thinkingMode: default, reasoningEffort: default }
 promptContract:
   version: skill-prompt-contract/v2
   executionMode: llm

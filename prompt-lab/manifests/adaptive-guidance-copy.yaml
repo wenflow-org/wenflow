@@ -6,7 +6,6 @@ archetype: copywriter
 description: 学习状态与路径的动态引导文案生成器
 acceptableAgentIds: [skill:adaptive-guidance-copy]
 publish: { enabled: true, exportTargets: [platform-prompts] }
-runtimeDefaults: { tier: chat, temperature: 0.6, maxTokens: 2000, model: null, thinkingMode: default, reasoningEffort: default }
 promptContract:
   version: skill-prompt-contract/v2
   executionMode: llm

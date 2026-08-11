@@ -3,6 +3,33 @@
 > 本文件随协议修订维护：SKILL_PROTOCOL_V4.md 等现行规范文档每次修订，均在此登记变更条目。
 > 本文件是 doc/ 纳入版本控制（2026-08-10）后的变更基线；此前历次修订无 git 历史，仅以文档内注记（如"2026-08-09 复核"）为据。
 
+## 2026-08-11 — P0 三件（参数四写收敛第一步 / 快照 import 副作用 / CI 顺序）
+
+### P0-1 参数四写收敛第一步：manifest runtimeDefaults 废弃
+
+- **prompt-lab/manifests/*.yaml（27 个含 _template）删除 `runtimeDefaults` 段**：运行参数唯一写源 =
+  `prompts/core/<skillId>.yaml` `params`（core 编译值 → ACTIVE prompt 列 → 运行时 `resolve-llm-call-params`），
+  manifest runtimeDefaults 仅发布前 UI 展示镜像，不参与运行时（AUDIT_PERMISSION_AUDIT §4）。
+- prompt-lab.ts：`PromptLabManifest.runtimeDefaults` 改为可选并标注废弃；`normalizeManifest` 仅兼容读取
+  历史文件（缺省即 undefined）；`serializeManifest` 不再写出该段；PUT /manifest 不再合并 runtimeDefaults；
+  `mergeManifestWithPromptFrontmatter` 删除 frontmatter → runtimeDefaults 重建。
+- health-center P1 由三写降两写：`analyzeParamsConsistency` 只比对 core ↔ `skills/<id>/definition.ts`，
+  删除 manifest 装载（`loadManifestRuntimeDefaults` 移除）；params-consistency / yaml-crosscheck 项文案同步。
+- check-yaml-vocabulary **C2 语义变更**：由"双写比对"改为"core 单写检查"——core params 必填自检 +
+  历史 manifest 残留 `runtimeDefaults` 时兼容比对（缺省跳过）。
+- 协议文档：SKILL_PROTOCOL_V4.md 未提及 manifest runtimeDefaults，无需改动；manifests/README.md 同步。
+
+### P0-2 快照脚本 import 副作用
+
+- `generate-agent-snapshots.ts` 加 `if (require.main === module)` 守卫：import（health-center 复检等只读消费方）
+  不再触发写盘，仅 CLI 入口执行 main()（C6 修复）。
+
+### P0-3 CI 顺序缺陷
+
+- 根 `npm run check` 在 `prompts:check`（含 DB 类 `drift-check`）前插入
+  `npm --prefix backend run prisma:migrate:deploy:all`，修复空库 `no such table` 顺序缺陷
+  （quality-check.yml:42 的根 check 现与 CI post-migrate 段语义一致）。
+
 ## 2026-08-11 — 纯重试 + 明确失败改造（移除降级设计）
 
 ### 行为变化

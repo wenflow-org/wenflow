@@ -4,7 +4,8 @@
  * 检查项（YAML_UNIFICATION_AUDIT §2/§3.1，全部 fail-fast，零误报）：
  *   C1  failurePolicy 映射一致性：core params.failurePolicy（业务意图）经映射表
  *       必须等于 manifest promptContract.failurePolicy（运行时契约），双向闭包自洽
- *   C2  temperature/maxTokens 一致性：core params（真源）== manifest runtimeDefaults（镜像）
+ *   C2  参数单写：core params 必填自检（唯一写源）；manifest runtimeDefaults 已废弃
+ *       （P0-1 收敛），如历史文件仍携带该段则做兼容比对，缺省即跳过
  *   C3  acceptableAgentIds 无字面重复项（全部 manifest）
  *   C4  编排字段 valueType 全量 ∈ CORE_VALUE_TYPES，且 valueTypeToCoreType 闭环到合法 core 类型
  *   C5  编排 routings visibilityPreset 全量 ∈ VISIBILITY_PRESETS
@@ -107,20 +108,40 @@ export function runYamlVocabularyCheck(): YamlVocabularyCheckReport {
     }
   }
 
-  // ---- C2：temperature / maxTokens 一致性（core 为真源，manifest runtimeDefaults 为镜像） ----
+  // ---- C2：参数单写（P0-1 收敛：core params 为唯一写源；manifest runtimeDefaults 已废弃） ----
+  // core 必填自检：temperature/maxTokens 必须为合法数值（core 是参数唯一声明处）
+  let coreParamMissing = 0;
+  for (const core of cores) {
+    const temperatureValid = typeof core.params.temperature === 'number' && Number.isFinite(core.params.temperature);
+    const maxTokensValid = typeof core.params.maxTokens === 'number' && Number.isFinite(core.params.maxTokens);
+    if (!temperatureValid) {
+      coreParamMissing++;
+      errors.push(`C2 core 缺 temperature（参数单写，core 必填）：${core.skillId}=${core.params.temperature}`);
+    }
+    if (!maxTokensValid) {
+      coreParamMissing++;
+      errors.push(`C2 core 缺 maxTokens（参数单写，core 必填）：${core.skillId}=${core.params.maxTokens}`);
+    }
+  }
+  // 遗留段兼容比对：历史 manifest 若仍携带 runtimeDefaults，继续与 core 对账（缺省跳过）
+  let legacyManifestCount = 0;
   let paramMismatch = 0;
   for (const core of cores) {
     const manifest = manifests.get(core.skillId);
     if (!manifest || !manifest.runtimeDefaults) continue;
+    legacyManifestCount++;
     const { temperature, maxTokens } = manifest.runtimeDefaults;
     if (temperature !== core.params.temperature) {
       paramMismatch++;
-      errors.push(`C2 temperature 不一致：${core.skillId} core=${core.params.temperature} manifest=${temperature}`);
+      errors.push(`C2 temperature 不一致（manifest 遗留 runtimeDefaults 已废弃）：${core.skillId} core=${core.params.temperature} manifest=${temperature}`);
     }
     if (maxTokens !== core.params.maxTokens) {
       paramMismatch++;
-      errors.push(`C2 maxTokens 不一致：${core.skillId} core=${core.params.maxTokens} manifest=${maxTokens}`);
+      errors.push(`C2 maxTokens 不一致（manifest 遗留 runtimeDefaults 已废弃）：${core.skillId} core=${core.params.maxTokens} manifest=${maxTokens}`);
     }
+  }
+  if (legacyManifestCount > 0) {
+    notes.push(`C2 ${legacyManifestCount} 个 manifest 仍携带已废弃的 runtimeDefaults（参数唯一写源 = core.yaml params，P0-1 收敛；遗留段兼容比对中）`);
   }
 
   // ---- C3：acceptableAgentIds 无字面重复 ----
@@ -179,10 +200,13 @@ export function runYamlVocabularyCheck(): YamlVocabularyCheckReport {
   }
 
   // ---- 汇总 ----
+  const c2LegacyLine = legacyManifestCount > 0
+    ? `${legacyManifestCount} 个残留已兼容比对（${legacyManifestCount * 2 - paramMismatch}/${legacyManifestCount * 2} 项一致）`
+    : '0 个残留（缺省跳过）';
   const summaryLines = [
     `[yaml:check] core ${cores.length} 个 / orchestration ${stages.length} 个 stage / manifest ${manifests.size} 个（目录 ${MANIFESTS_DIR}）`,
     `[yaml:check] C1 failurePolicy: ${cores.length - failurePolicyMismatch}/${cores.length} 映射一致（core 词表 ${FAILURE_POLICY_CORE.join('/')} ↔ manifest ${FAILURE_POLICY_MANIFEST.join('/')}）`,
-    `[yaml:check] C2 参数双写: temperature+maxTokens 逐项一致（${cores.length * 2 - paramMismatch}/${cores.length * 2} 项）`,
+    `[yaml:check] C2 参数单写: core 必填 ${cores.length * 2 - coreParamMissing}/${cores.length * 2} 项；manifest runtimeDefaults 已废弃（${c2LegacyLine}）`,
     `[yaml:check] C3 acceptableAgentIds: ${manifests.size} 个 manifest 无字面重复（清理 ${dedupeCount} 项）`,
     `[yaml:check] C4 valueType: ${fieldCount} 字段全量 ∈ CORE_VALUE_TYPES 且映射闭环；分布 ${[...valueTypeCounts.entries()].map(([t, n]) => `${t}=${n}`).join(' ')}`,
     `[yaml:check] C5 visibilityPreset: ${presetCount} 处全量命中；分布 ${[...presetCounts.entries()].map(([t, n]) => `${t}=${n}`).join(' ')}`,

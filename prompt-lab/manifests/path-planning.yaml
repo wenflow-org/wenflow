@@ -16,14 +16,6 @@ publish:
   exportTargets:
     - platform-prompts
 
-runtimeDefaults:
-  tier: chat
-  temperature: 0.5
-  maxTokens: 12000
-  model: null
-  thinkingMode: default
-  reasoningEffort: default
-
 promptContract:
   version: skill-prompt-contract/v2
   executionMode: llm

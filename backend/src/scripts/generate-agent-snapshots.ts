@@ -4,6 +4,9 @@
  * 数据源：字段路由编排文件（与运行时 routings 表同源）+ core fields 声明。
  * 运行方式：npx ts-node src/scripts/generate-agent-snapshots.ts
  * CI 校验：生成后 git diff --exit-code（产物漂移即失败）
+ *
+ * render/check 导出供 health-center 聚合复用（generateAgentSnapshotsContent /
+ * agentSnapshotsDrift），单一实现不复制逻辑。
  */
 
 import fs from 'fs';
@@ -152,24 +155,51 @@ async function render(): Promise<string> {
   return lines.join('\n');
 }
 
+/** 渲染沙盘说明书正文（确定性：同一输入恒同输出；health-center 复检与 CLI --check 共用） */
+export async function generateAgentSnapshotsContent(): Promise<string> {
+  return render();
+}
+
+export const AGENT_SNAPSHOTS_TARGET = path.resolve(__dirname, '../../../prompts/agent-snapshots.md');
+
+/** 快照漂移检测：渲染正文 vs 磁盘产物（--check 与 health-center 共用同一实现） */
+export async function checkAgentSnapshotsDrift(
+  target = AGENT_SNAPSHOTS_TARGET,
+): Promise<{ drifted: boolean; detail: string }> {
+  const content = await render();
+  const existing = fs.existsSync(target) ? fs.readFileSync(target, 'utf-8') : null;
+  if (existing !== content) {
+    return {
+      drifted: true,
+      detail: 'prompts/agent-snapshots.md 与 seed/core 声明不一致，请重新生成（一键修复会重写该文件，需 git 提交）',
+    };
+  }
+  return { drifted: false, detail: 'agent-snapshots.md 与声明一致' };
+}
+
 async function main() {
   const content = await render();
-  const target = path.resolve(__dirname, '../../../prompts/agent-snapshots.md');
+  const target = AGENT_SNAPSHOTS_TARGET;
   const checkMode = process.argv.includes('--check');
   if (checkMode) {
-    const existing = fs.existsSync(target) ? fs.readFileSync(target, 'utf-8') : null;
-    if (existing !== content) {
-      console.error('[generate-agent-snapshots] 说明书漂移：prompts/agent-snapshots.md 与 seed/core 声明不一致。请运行 npm run prompts:snapshots 重新生成并提交。');
+    const report = await checkAgentSnapshotsDrift(target);
+    if (report.drifted) {
+      console.error(`[generate-agent-snapshots] 说明书漂移：${report.detail}`);
       process.exit(1);
     }
-    console.log('agent-snapshots.md 与声明一致');
+    console.log(report.detail);
     return;
   }
   fs.writeFileSync(target, content, 'utf-8');
   console.log(`已生成 ${target}`);
 }
 
-main().catch((error) => {
-  console.error('[generate-agent-snapshots] 失败', error);
-  process.exit(1);
-});
+// require.main 守卫：import 该模块（health-center 复检等只读消费方）不触发写盘，
+// 仅 CLI 入口（npx ts-node ... / --check）执行 main()。修复 C6：import 副作用
+// 曾静默重写 prompts/agent-snapshots.md，中和本地快照门禁。
+if (require.main === module) {
+  main().catch((error) => {
+    console.error('[generate-agent-snapshots] 失败', error);
+    process.exit(1);
+  });
+}

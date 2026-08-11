@@ -33,7 +33,7 @@
     "prompts:check": "npm --prefix backend run prompts:check:all",
     "prompts:core:check": "npm --prefix backend run prompts:core:check",
     "prompts:runtime-contract:check": "npm --prefix backend run prompts:runtime-contract:check",
-    "check": "npm run security:scan:current && npm run prisma:validate && npm run prisma:migrate:verify-clean && npm run typecheck:backend && npm run llm:calls:check && npm run prompts:check && npm test && npm run build:backend && npm run build:frontend",
+    "check": "npm run security:scan:current && npm run prisma:validate && npm run prisma:migrate:verify-clean && npm run typecheck:backend && npm run llm:calls:check && npm --prefix backend run prisma:migrate:deploy:all && npm run prompts:check && npm test && npm run build:backend && npm run build:frontend",
     "check:frontend-types": "npm --prefix frontend run typecheck",
     "lint": "npm --prefix backend run lint && npm --prefix frontend run lint"
   },

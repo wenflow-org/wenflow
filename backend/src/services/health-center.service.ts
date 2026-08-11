@@ -16,8 +16,8 @@
  * - 快照：checkAgentSnapshotsDrift / generateAgentSnapshotsContent（generate-agent-snapshots.ts）
  * - yaml 交叉：runYamlVocabularyCheck（check-yaml-vocabulary.ts）
  * - 契约 parity：analyzePromptRuntimeContractMetadataParity + 查询装配（check-prompt-runtime-contract-metadata-parity.ts）
- * - 参数一致性（P1 三写）：core params ↔ manifest runtimeDefaults ↔ skills/<skill>/definition.ts，
- *   只读比对（definition.ts 是代码声明，不可一键修）
+ * - 参数一致性（P1 两写）：core params ↔ skills/<skill>/definition.ts（manifest runtimeDefaults
+ *   已于 P0-1 废弃），只读比对（definition.ts 是代码声明，不可一键修）
  *
  * 修复（POST /fix，仅 semantics='baseline-drift' 且 action='fixable'）：
  * - w4-corehash：备份 skill.*.md → compileAllCorePromptFiles → ensureCoreAgentPrompts('sync')
@@ -29,7 +29,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import yaml from 'js-yaml';
 import { loadSkillsBookRaw } from './skill-registry/skills-file';
 import { scanPromptFiles } from '../composers/prompt-files/loader';
 import { scanCoreFiles, loadCoreFile, CORE_FILES_DIR } from './prompt-lab/core-file-loader';
@@ -129,7 +128,6 @@ export interface HealthCenterDbAdapter {
 export interface ParamsConsistencyRow {
   skillId: string;
   core: { temperature: number; maxTokens: number } | null;
-  manifest: { temperature?: number; maxTokens?: number } | null;
   definition: { defaultTemperature?: number; defaultMaxTokens?: number } | null;
 }
 
@@ -137,7 +135,6 @@ export interface ParamsConsistencyMismatch {
   skillId: string;
   field: 'temperature' | 'maxTokens';
   core: number | null;
-  manifest: number | null | undefined;
   definition: number | null | undefined;
 }
 
@@ -148,8 +145,8 @@ export interface ParamsConsistencyResult {
 }
 
 /**
- * P1 三写比对：core params（真源）↔ manifest runtimeDefaults（手写镜像）↔
- * skills/<skill>/definition.ts defaultTemperature/defaultMaxTokens（展示权威）。
+ * P1 两写比对：core params（真源）↔ skills/<skill>/definition.ts defaultTemperature/
+ * defaultMaxTokens（展示权威）。manifest runtimeDefaults 已于 P0-1 废弃（参数唯一写源 = core）。
  * 任一已声明处与其他处不一致即 mismatch；definition.ts 缺声明只注明。
  */
 export function analyzeParamsConsistency(rows: ParamsConsistencyRow[]): ParamsConsistencyResult {
@@ -171,11 +168,9 @@ export function analyzeParamsConsistency(rows: ParamsConsistencyRow[]): ParamsCo
 
     for (const field of ['temperature', 'maxTokens'] as const) {
       const coreValue = row.core[field];
-      const manifestValue = row.manifest?.[field];
       const defValue = field === 'temperature' ? def.defaultTemperature : def.defaultMaxTokens;
       const declared: Array<[string, number | undefined | null]> = [
         ['core', coreValue],
-        ['manifest', manifestValue],
         ['definition', defValue],
       ];
       const declaredValues = declared.filter(([, value]) => typeof value === 'number') as Array<[string, number]>;
@@ -187,7 +182,6 @@ export function analyzeParamsConsistency(rows: ParamsConsistencyRow[]): ParamsCo
           skillId: row.skillId,
           field,
           core: coreValue,
-          manifest: manifestValue,
           definition: defValue,
         });
       }
@@ -197,37 +191,9 @@ export function analyzeParamsConsistency(rows: ParamsConsistencyRow[]): ParamsCo
   return { mismatches, missingDeclarations: [...new Set(missingDeclarations)].sort() };
 }
 
-const MANIFESTS_DIR = path.resolve(__dirname, '../../../prompt-lab/manifests');
-
-interface RawManifestParams {
-  runtimeDefaults?: { temperature?: unknown; maxTokens?: unknown };
-}
-
-/** manifest runtimeDefaults 装载（与 check-yaml-vocabulary 同目录同口径；仅读取，不复制其比对逻辑） */
-function loadManifestRuntimeDefaults(): Map<string, { temperature?: number; maxTokens?: number }> {
-  const map = new Map<string, { temperature?: number; maxTokens?: number }>();
-  if (!fs.existsSync(MANIFESTS_DIR)) return map;
-  for (const name of fs.readdirSync(MANIFESTS_DIR).filter((n) => n.endsWith('.yaml')).sort()) {
-    try {
-      const parsed = yaml.load(fs.readFileSync(path.join(MANIFESTS_DIR, name), 'utf-8')) as RawManifestParams;
-      const rd = parsed?.runtimeDefaults;
-      if (rd && typeof rd === 'object') {
-        map.set(name.replace(/\.yaml$/, ''), {
-          temperature: typeof rd.temperature === 'number' ? rd.temperature : undefined,
-          maxTokens: typeof rd.maxTokens === 'number' ? rd.maxTokens : undefined,
-        });
-      }
-    } catch {
-      // 坏文件跳过（yaml 交叉校验项会报）
-    }
-  }
-  return map;
-}
-
-/** fs 装配：core 扫描 + manifest 装载 + SKILL_RUNTIME_DEFINITIONS 注册表 → 纯函数比对 */
+/** fs 装配：core 扫描 + SKILL_RUNTIME_DEFINITIONS 注册表 → 纯函数比对（P1 两写：manifest runtimeDefaults 已废弃） */
 export function buildParamsConsistencyCheck(): ParamsConsistencyResult {
   const { files: cores } = scanCoreFiles();
-  const manifests = loadManifestRuntimeDefaults();
   const definitions = new Map<string, { defaultTemperature?: number; defaultMaxTokens?: number }>();
   for (const def of SKILL_RUNTIME_DEFINITIONS) {
     const skillId = String(def.id || '').replace(/^skill:/, '').trim();
@@ -241,7 +207,6 @@ export function buildParamsConsistencyCheck(): ParamsConsistencyResult {
     cores.map((core) => ({
       skillId: core.skillId,
       core: { temperature: core.params.temperature, maxTokens: core.params.maxTokens },
-      manifest: manifests.get(core.skillId) ?? null,
       definition: definitions.get(core.skillId) ?? null,
     })),
   );
@@ -320,7 +285,7 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
     diagnostics: scan.diagnostics,
   });
 
-  // 快照 / yaml 交叉 / P1 参数三写
+  // 快照 / yaml 交叉 / P1 参数两写
   const [snapshotCheck, yamlCheck, paramsCheck] = await Promise.all([
     checkAgentSnapshotsDrift(),
     Promise.resolve(runYamlVocabularyCheck()),
@@ -433,20 +398,20 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       source: 'generate-agent-snapshots.ts',
     }),
     buildItem('yaml-crosscheck', {
-      label: 'YAML 交叉校验（C1 failurePolicy / C2 参数双写）',
+      label: 'YAML 交叉校验（C1 failurePolicy / C2 参数单写）',
       base: 'file:core.yaml',
       semantics: 'baseline-drift',
       severity: yamlCheck.ok ? 'ok' : 'error',
       status: yamlCheck.ok ? 'clean' : 'drifted',
       count: yamlCheck.errors.length,
       detail: yamlCheck.errors.slice(0, 20),
-      cause: 'core params（真源）与 manifest runtimeDefaults/promptContract（手写镜像）不一致（B3 平行声明）',
+      cause: 'core params（真源）与 manifest promptContract（手写镜像）不一致（B3 平行声明）；C2 已收敛为参数单写（manifest runtimeDefaults 废弃）',
       action: 'manual',
-      fixHint: '人工：manifest 镜像与 core 对齐后重新生成（镜像为手写，改 core 需同批改 manifest；长期建议按 DRIFT_BASELINE_SURVEY §5.1 消除手写镜像）',
+      fixHint: '人工：manifest promptContract 与 core 对齐后重新生成（镜像为手写，改 core 需同批改 manifest；长期建议按 DRIFT_BASELINE_SURVEY §5.1 消除手写镜像）',
       source: 'check-yaml-vocabulary.ts',
     }),
     buildItem('params-consistency', {
-      label: '参数一致性（P1 三写：core / manifest / definition.ts）',
+      label: '参数一致性（P1 两写：core / definition.ts）',
       base: 'file:core.yaml',
       semantics: 'baseline-drift',
       severity: paramsCheck.mismatches.length > 0 ? 'error' : paramsCheck.missingDeclarations.length > 0 ? 'warn' : 'ok',
@@ -458,14 +423,14 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       count: paramsCheck.mismatches.length > 0 ? paramsCheck.mismatches.length : paramsCheck.missingDeclarations.length,
       detail: [
         ...paramsCheck.mismatches.slice(0, 20).map((m) =>
-          `${m.skillId} ${m.field}：core=${m.core} manifest=${m.manifest ?? '—'} definition.ts=${m.definition ?? '—'}`,
+          `${m.skillId} ${m.field}：core=${m.core} definition.ts=${m.definition ?? '—'}`,
         ),
         ...paramsCheck.missingDeclarations.slice(0, 20).map((n) => `[注明] ${n}`),
       ],
-      cause: 'temperature/maxTokens 三处声明（core params 真源 / manifest runtimeDefaults 手写镜像 / skills/<skill>/definition.ts 展示权威），只读比对；definition.ts 是代码不可一键修',
+      cause: 'temperature/maxTokens 两处声明（core params 真源 / skills/<skill>/definition.ts 展示权威），只读比对；definition.ts 是代码不可一键修；manifest runtimeDefaults 已于 P0-1 废弃',
       action: 'manual',
-      fixHint: '人工：统一三处声明后重新生成（或按 DRIFT_BASELINE_SURVEY §5.1 把 manifest/definition.ts 参数改为从 core 派生）',
-      source: 'core-file-loader.ts + manifests/*.yaml + coordinators/definitions-registry.ts',
+      fixHint: '人工：统一两处声明后重新生成（或按 DRIFT_BASELINE_SURVEY §5.1 把 definition.ts 参数改为从 core 派生）',
+      source: 'core-file-loader.ts + coordinators/definitions-registry.ts',
     }),
     // ============ consistency（一致性偏差，双向对等，人工决策） ============
     buildItem('fields-sync', {
@@ -624,8 +589,8 @@ export const HEALTH_CENTER_FIXABLE_IDS: readonly string[] = [
 
 export const HEALTH_CENTER_MANUAL_GUIDANCE: Record<string, string> = {
   'contract-parity': '契约 parity 属人工决策类：npm run prompts:runtime-contract:check 定位，再 prompts:sync 使 DB 从 manifest 收敛',
-  'yaml-crosscheck': 'yaml 交叉属人工决策类：manifest 手写镜像（runtimeDefaults/promptContract）与 core 对齐后重新生成',
-  'params-consistency': '参数一致性属人工决策类：definition.ts 是代码声明，不可一键修——人工统一 core params ↔ manifest runtimeDefaults ↔ skills/<skill>/definition.ts 三处后重新生成',
+  'yaml-crosscheck': 'yaml 交叉属人工决策类：manifest 手写镜像（promptContract）与 core 对齐后重新生成；C2 参数已收敛为单写（core.yaml params）',
+  'params-consistency': '参数一致性属人工决策类：definition.ts 是代码声明，不可一键修——人工统一 core params ↔ skills/<skill>/definition.ts 两处后重新生成',
   'fields-sync': 'fields-sync 属一致性偏差（无单方基准）：人工决策——补编排路由、登记 EXEMPT_PLATFORM_ROOTS 豁免，或接受存量孤儿',
   'w1-active': 'W1 属一致性偏差：执行 npm run prompts:compile-all && prompts:sync（缺侧），或登记/清理（残留侧）',
   'w2-registration': 'W2 属一致性偏差：在 skills/index.ts 补注册片段后重启，或清理幽灵行',
