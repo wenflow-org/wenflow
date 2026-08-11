@@ -41,9 +41,6 @@ const route = useRoute()
 
 const tabs = [
   { to: '/user/account', label: '账户', match: ['/user/account'] },
-  { to: '/user/agents', label: 'AI 助手', match: ['/user/agents'] },
-  { to: '/user/skills', label: 'Skill', match: ['/user/skills'] },
-  { to: '/user/agent-model-settings', label: '高级模型', match: ['/user/agent-model-settings'] },
   { to: '/user/settings', label: 'API 接入', match: ['/user/settings'] },
   { to: '/user/agent-logs', label: '调用日志', match: ['/user/agent-logs'] }
 ]

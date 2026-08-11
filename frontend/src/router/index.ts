@@ -116,34 +116,16 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '账户', requiresAuth: true }
   },
   {
-    path: '/user/skills',
-    name: 'UserSkills',
-    component: () => import('@/views/user/Skills.vue'),
-    meta: { title: 'Skill', requiresAuth: true }
-  },
-  {
     path: '/user/agent-logs',
     name: 'UserAgentLogs',
     component: () => import('@/views/user/AgentLogs.vue'),
     meta: { title: '调用日志', requiresAuth: true }
   },
   {
-    path: '/user/agents',
-    name: 'UserAgents',
-    component: () => import('@/views/user/AgentCustomization.vue'),
-    meta: { title: 'AI 助手', requiresAuth: true }
-  },
-  {
     path: '/user/settings',
     name: 'UserSettings',
     component: () => import('@/views/user/Settings.vue'),
     meta: { title: 'API 接入', requiresAuth: true }
-  },
-  {
-    path: '/user/agent-model-settings',
-    name: 'UserAgentModelSettings',
-    component: () => import('@/views/user/AgentModelSettings.vue'),
-    meta: { title: '高级模型', requiresAuth: true }
   },
   {
     path: '/goal-conversation/:conversationId?',
