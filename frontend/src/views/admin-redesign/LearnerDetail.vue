@@ -357,8 +357,9 @@ async function loadDetail(id: string | undefined, live: boolean) {
   tab.value = 'overview'
   if (!id || !live) return
   const base = liveLearners.value.find((l) => l.userId === id)
+  const pathId = base?.pathId
   try {
-    const raw = (await withTimeout(liveGetLearnerDetail(id), 12000)) as Record<string, unknown>
+    const raw = (await withTimeout(liveGetLearnerDetail(id, pathId), 12000)) as Record<string, unknown>
     rawDetail.value = raw
     const model = (raw.model as Record<string, unknown>) || raw
     const km = ((model.knowledgeMemory as Record<string, unknown>) || (raw.knowledgeMemory as Record<string, unknown>) || {}) as Record<string, unknown>
@@ -371,7 +372,7 @@ async function loadDetail(id: string | undefined, live: boolean) {
     const totalTasks = Number(progress.totalTasks || 0)
     const completedTasks = Number(progress.completedTasks || 0)
     const pct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
-    const evidenceItems = await liveGetLearnerEvidence(id).catch(() => [] as Record<string, unknown>[])
+    const evidenceItems = await liveGetLearnerEvidence(id, pathId).catch(() => [] as Record<string, unknown>[])
     liveEvidence.value = evidenceItems.map((e) => ({
       title: String(e.type || e.kind || '学习事件'),
       detail: String(e.signal || ''),
@@ -433,12 +434,12 @@ async function recompute() {
   recomputing.value = true
   try {
     if (isLive.value) {
-      await liveRecomputeLearner(id)
-      toast.success('快照已重算（真实）')
       const base = liveLearners.value.find((l) => l.userId === id)
-      if (base && liveDetail.value) {
-        liveDetail.value.snapshot = { version: `置信 ${(base.confidence * 100).toFixed(0)}%`, generatedAt: timeAgo(base.generatedAt) }
-      }
+      await liveRecomputeLearner(id, base?.pathId)
+      toast.success('快照已重算（真实）')
+      const prevTab = tab.value
+      await loadDetail(id, true)
+      tab.value = prevTab
     } else {
       await new Promise((r) => setTimeout(r, 800))
       toast.success('快照已重算')

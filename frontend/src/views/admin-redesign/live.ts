@@ -290,13 +290,69 @@ export interface SpanQuery {
  */
 export const liveLogsFiltered = ref<TraceSpan[]>([])
 
-export async function reloadLiveSpans(query: SpanQuery): Promise<void> {
-  const res = await adminAgentsApi.getLogs({ limit: 100, ...query })
-  const body = res.data?.data ?? res.data ?? {}
-  const items: RawLog[] = Array.isArray(body) ? body : body.items || body.logs || []
-  const stats = body.stats as LiveLogStats | undefined
-  if (stats) liveLogStats.value = stats
-  liveLogsFiltered.value = mapLogsToSpans(items)
+/** 执行日志服务端查询 loading（首屏骨架屏用；与全局 liveLoading 区分，后者覆盖全量 boot） */
+export const liveLogsLoading = ref(false)
+/** 后端 pagination.total（筛选口径全量条数，供「加载更多」展示） */
+export const liveLogsTotal = ref(0)
+/** 服务端分页当前页；筛选/查询变化时回到第 1 页 */
+export const liveLogsPage = ref(1)
+/** 后端是否还有更多页：最近一次响应条数达到分页上限视为有（空页会自动翻转为 false） */
+export const liveLogsHasMore = ref(false)
+
+/** 执行日志服务端分页条数（后端默认 20，前端固定 100） */
+const LOGS_PAGE_SIZE = 100
+
+/* 服务端查询串行化：同一时刻只发一个请求，期间的更新以最新参数重拉（last-wins），
+   保证「加载更多（追加第 N 页）」与「筛选重查（回第 1 页）」并发时状态一致 */
+let logsQuerying = false
+let logsQueryPending = false
+let logsQuerySeq = 0
+let logsQueryLatest: { query: SpanQuery; page: number } | null = null
+
+export async function reloadLiveSpans(query: SpanQuery, page = 1): Promise<void> {
+  if (logsQuerying) {
+    logsQueryLatest = { query, page }
+    logsQueryPending = true
+    return
+  }
+  logsQuerying = true
+  const seq = ++logsQuerySeq
+  liveLogsLoading.value = true
+  try {
+    const res = await adminAgentsApi.getLogs({ limit: LOGS_PAGE_SIZE, page, ...query })
+    const body = res.data?.data ?? res.data ?? {}
+    const items: RawLog[] = Array.isArray(body) ? body : body.items || body.logs || []
+    const stats = body.stats as LiveLogStats | undefined
+    if (stats) liveLogStats.value = stats
+    const rawTotal = body.pagination?.total ?? stats?.total ?? items.length
+    const total = Number(rawTotal)
+    if (Number.isFinite(total)) liveLogsTotal.value = total
+    liveLogsHasMore.value = items.length >= LOGS_PAGE_SIZE
+    const mapped = mapLogsToSpans(items)
+    liveLogsPage.value = page
+    if (page <= 1) {
+      liveLogsFiltered.value = mapped
+    } else {
+      // 追加下一页并去重（同一筛选口径下 span id 与原始日志行 id 一致）
+      const seen = new Set(liveLogsFiltered.value.map((s) => s.id))
+      liveLogsFiltered.value = [...liveLogsFiltered.value, ...mapped.filter((s) => !seen.has(s.id))]
+    }
+  } finally {
+    logsQuerying = false
+    liveLogsLoading.value = false
+  }
+  // 本次响应期间收到更新：旧响应可能已污染状态，以最新参数重拉保证一致
+  if (seq !== logsQuerySeq || (logsQueryPending && logsQueryLatest)) {
+    const latest = logsQueryLatest
+    logsQueryPending = false
+    logsQueryLatest = null
+    if (latest) void reloadLiveSpans(latest.query, latest.page)
+  }
+}
+
+/** 执行日志「加载更多」：追加下一页（筛选/重查由 reloadLiveSpans 自动回到第 1 页） */
+export async function loadMoreLiveSpans(query: SpanQuery): Promise<void> {
+  await reloadLiveSpans(query, liveLogsPage.value + 1)
 }
 
 /** 日志详情（展开行时拉真实 input/output + 重试尝试时间线；超长截断） */
@@ -730,6 +786,7 @@ export interface LiveLearner {
   userId: string
   name: string
   email: string
+  pathId?: string
   pathTitle: string | null
   currentTask: string | null
   currentMilestone: string | null
@@ -761,6 +818,7 @@ async function fetchLiveLearners(): Promise<void> {
     userId: String(m.userId),
     name: String(m.userName || m.userId),
     email: String(m.email || ''),
+    pathId: (m.pathId as string) || undefined,
     pathTitle: (m.pathTitle as string) || null,
     currentTask: (m.currentTask as string) || null,
     currentMilestone: (m.currentMilestone as string) || null,
@@ -773,18 +831,18 @@ async function fetchLiveLearners(): Promise<void> {
   }))
 }
 
-export async function liveRecomputeLearner(userId: string): Promise<void> {
-  await adminLearnerModelsApi.recompute(userId)
+export async function liveRecomputeLearner(userId: string, pathId?: string): Promise<void> {
+  await adminLearnerModelsApi.recompute(userId, pathId ? { pathId } : undefined)
   await fetchLiveLearners()
 }
 
-export async function liveGetLearnerDetail(userId: string): Promise<Record<string, unknown>> {
-  const res = await adminLearnerModelsApi.getDetail(userId)
+export async function liveGetLearnerDetail(userId: string, pathId?: string): Promise<Record<string, unknown>> {
+  const res = await adminLearnerModelsApi.getDetail(userId, pathId ? { pathId } : undefined)
   return res.data?.data ?? res.data ?? {}
 }
 
-export async function liveGetLearnerEvidence(userId: string): Promise<Record<string, unknown>[]> {
-  const res = await adminLearnerModelsApi.getEvidence(userId, { limit: 20 })
+export async function liveGetLearnerEvidence(userId: string, pathId?: string): Promise<Record<string, unknown>[]> {
+  const res = await adminLearnerModelsApi.getEvidence(userId, { limit: 20, ...(pathId ? { pathId } : {}) })
   const body = res.data?.data ?? res.data ?? {}
   return Array.isArray(body) ? body : (body?.items || body?.evidence || [])
 }

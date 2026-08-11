@@ -44,10 +44,11 @@ router.get('/:userId', async (req, res) => {
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
     }
 
+    const pathId = req.query.pathId as string | undefined;
     const snapshot = await learnerSnapshotRefreshService.getLatest({
       userId: req.params.userId,
-      pathId: req.query.pathId as string | undefined,
-      scope: (req.query.mode as 'global' | 'path' | 'teaching' | undefined) || 'global',
+      pathId,
+      scope: pathId ? 'path' : (req.query.mode as 'global' | 'path' | 'teaching' | undefined) || 'global',
     });
 
     const currentPath = snapshot.knowledgeMemory.currentPath;
@@ -81,10 +82,11 @@ router.post('/:userId/recompute', async (req, res) => {
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
     }
 
+    const pathId = (req.body?.pathId as string | undefined) || (req.query.pathId as string | undefined);
     const snapshot = await learnerSnapshotRefreshService.refresh({
       userId: req.params.userId,
-      pathId: req.body?.pathId,
-      scope: req.body?.scope || 'global',
+      pathId,
+      scope: pathId ? 'path' : req.body?.scope || 'global',
     });
 
     return res.json({ success: true, data: snapshot, message: '学习者模型已重算' });

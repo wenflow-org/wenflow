@@ -13,7 +13,8 @@ export interface LearnerSnapshotRefreshInput {
 }
 
 export class LearnerSnapshotRefreshService {
-  private cache = new Map<string, LearnerSnapshot>();
+  private cache = new Map<string, { snapshot: LearnerSnapshot; cachedAt: number }>();
+  private static readonly CACHE_TTL_MS = 5 * 60 * 1000;
 
   async refresh(input: LearnerSnapshotRefreshInput): Promise<LearnerSnapshot> {
     const key = this.buildKey(input);
@@ -22,7 +23,7 @@ export class LearnerSnapshotRefreshService {
       if (existing?.lastEventId === input.lastEventId) {
         try {
           const snapshot = JSON.parse(existing.payload) as LearnerSnapshot;
-          this.cache.set(key, snapshot);
+          this.cache.set(key, { snapshot, cachedAt: Date.now() });
           return snapshot;
         } catch {
           // Rebuild malformed projections from source facts.
@@ -62,21 +63,22 @@ export class LearnerSnapshotRefreshService {
         generatedAt: new Date(snapshot.freshness.generatedAt)
       }
     });
-    this.cache.set(key, snapshot);
+    this.cache.set(key, { snapshot, cachedAt: Date.now() });
     return snapshot;
   }
 
   async getLatest(input: LearnerSnapshotRefreshInput): Promise<LearnerSnapshot> {
     const key = this.buildKey(input);
-    const cached = this.cache.get(key);
-    if (cached) {
-      return cached;
+    const entry = this.cache.get(key);
+    if (entry && Date.now() - entry.cachedAt < LearnerSnapshotRefreshService.CACHE_TTL_MS) {
+      return entry.snapshot;
     }
+    this.cache.delete(key);
     const persisted = await prisma.learner_projections.findUnique({ where: { projectionKey: key } });
     if (persisted && Date.now() - persisted.generatedAt.getTime() < 10 * 60 * 1000) {
       try {
         const snapshot = JSON.parse(persisted.payload) as LearnerSnapshot;
-        this.cache.set(key, snapshot);
+        this.cache.set(key, { snapshot, cachedAt: Date.now() });
         return snapshot;
       } catch {
         // Rebuild malformed projections from source facts.
