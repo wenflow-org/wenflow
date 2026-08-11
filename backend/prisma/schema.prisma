@@ -24,6 +24,9 @@ model achievements {
   unlockedAt  DateTime?
   earnedAt    DateTime?
   users       users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type, completed])
 }
 
 model agent_call_logs {
@@ -178,6 +181,8 @@ model llm_execution_attempts {
   @@index([rootExecutionId, startedAt])
   @@index([userId, startedAt])
   @@index([errorCategory, startedAt])
+  @@index([success, errorCategory, startedAt])
+  @@index([userId, startedAt, success])
 }
 
 
@@ -240,6 +245,10 @@ model goal_conversations {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @default(now())
   users          users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status, updatedAt])
+  @@index([learningPathId])
 }
 
 model learning_goals {
@@ -302,6 +311,8 @@ model learning_metrics {
   mki          Float?   @default(0)
   ski          Float?   @default(0)
   users        users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, calculatedAt])
 }
 
 model learning_paths {
@@ -334,6 +345,7 @@ model learning_paths {
 
   @@index([userId])
   @@index([status])
+  @@index([userId, status])
 }
 
 model path_generation_runs {
@@ -449,6 +461,7 @@ model subtasks {
   @@index([milestoneId])
   @@index([knowledgeType])
   @@index([cognitiveLevel])
+  @@index([status, completedAt])
 }
 
 
@@ -487,6 +500,8 @@ model teaching_sessions {
   @@index([status])
   @@index([taskId])
   @@index([userId])
+  @@index([userId, createdAt])
+  @@index([startTime])
 }
 
 model session_finalization_operations {
@@ -728,6 +743,8 @@ model users {
   email                     String                     @unique
   name                      String
   password                  String
+  // 数据层审计 S4：role 枚举（'user' | 'admin'）由应用层强制（isAdmin 为实际鉴权依据），
+  // 未加 CHECK 约束——SQLite 需重建整表（users 被 ~20 张子表外键引用，重建风险大于收益）。
   role                      String                     @default("user")
   currentLevel              String                     @default("beginner")
   xp                        Int                        @default(0)
@@ -879,5 +896,10 @@ model announcements {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  // 数据层审计 S4：status/severity 枚举约束由迁移 SQL 的 CHECK 约束强制
+  // （SQLite ALTER TABLE 不支持 ADD CONSTRAINT，已在迁移中重建表添加）：
+  //   status   IN ('draft','published','archived')
+  //   severity IN ('info','warning','critical')
   @@index([status, publishedAt])
+  @@index([status, expiresAt])
 }
