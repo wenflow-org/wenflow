@@ -7,8 +7,25 @@ import {
   getAgentLifecycleStatus,
   isOfficialAgent
 } from '../services/agent-catalog.service';
+import { decryptSecret, encryptSecret } from '../utils/secret-crypto';
+import { logger } from '../utils/logger';
 
 const router = express.Router();
+
+// systemPrompt 可能内嵌凭据，落库一律加密（信封 AES-256-GCM）
+const SYSTEM_PROMPT_SECRET_CONTEXT = 'main.user_agent_configs.systemPrompt';
+const encryptSystemPrompt = (value?: string | null): string | null | undefined =>
+  value ? encryptSecret(value, SYSTEM_PROMPT_SECRET_CONTEXT) : value;
+const decryptSystemPrompt = (value?: string | null): string | null | undefined => {
+  if (!value) return value;
+  try {
+    return decryptSecret(value, SYSTEM_PROMPT_SECRET_CONTEXT);
+  } catch {
+    // 存量明文兼容：非信封格式视为历史明文直接返回
+    logger.warn('[user-agents] systemPrompt 非加密信封，按存量明文处理');
+    return value;
+  }
+};
 
 // 参数校验：model/temperature/maxTokens/systemPrompt 类型与范围（L5 修复）
 const MAX_SYSTEM_PROMPT_CHARS = 8000;
@@ -81,7 +98,7 @@ router.get('/', async (req, res, next) => {
           model: userConfig?.model || process.env.AI_MODEL || '',
           temperature: userConfig?.temperature || 0.7,
           maxTokens: userConfig?.maxTokens || 4096,
-          systemPrompt: userConfig?.systemPrompt || '',
+          systemPrompt: decryptSystemPrompt(userConfig?.systemPrompt) || '',
           version: userConfig?.version || '1.0.0'
         };
       });
@@ -108,7 +125,7 @@ router.get('/', async (req, res, next) => {
           model: userConfig?.model || process.env.AI_MODEL || '',
           temperature: userConfig?.temperature || 0.7,
           maxTokens: userConfig?.maxTokens || 4096,
-          systemPrompt: userConfig?.systemPrompt || '',
+          systemPrompt: decryptSystemPrompt(userConfig?.systemPrompt) || '',
           version: userConfig?.version || '1.0.0'
         };
       });
@@ -232,7 +249,7 @@ router.post('/', async (req, res, next) => {
           model,
           temperature,
           maxTokens,
-          systemPrompt,
+          systemPrompt: encryptSystemPrompt(systemPrompt),
           customCode: null,
           ...(enabled !== undefined && { enabled }),
           version: incrementVersion(existing.version),
@@ -249,7 +266,7 @@ router.post('/', async (req, res, next) => {
         model,
         temperature,
         maxTokens,
-        systemPrompt,
+        systemPrompt: encryptSystemPrompt(systemPrompt),
         customCode: null,
         enabled: enabled !== undefined ? enabled : true,
         version: '1.0.0',
@@ -263,7 +280,10 @@ router.post('/', async (req, res, next) => {
 
     res.json({
       success: true,
-      data: agent
+      data: {
+        ...agent,
+        systemPrompt: decryptSystemPrompt(agent.systemPrompt) || ''
+      }
     });
   } catch (error) {
     next(error);
@@ -326,7 +346,7 @@ router.put('/:name', async (req, res, next) => {
         ...(model !== undefined && { model }),
         ...(temperature !== undefined && { temperature }),
         ...(maxTokens !== undefined && { maxTokens }),
-        ...(systemPrompt !== undefined && { systemPrompt }),
+        ...(systemPrompt !== undefined && { systemPrompt: encryptSystemPrompt(systemPrompt) }),
         version: incrementVersion(agent.version),
         updatedAt: new Date()
       }
@@ -334,7 +354,10 @@ router.put('/:name', async (req, res, next) => {
 
     res.json({
       success: true,
-      data: updated
+      data: {
+        ...updated,
+        systemPrompt: decryptSystemPrompt(updated.systemPrompt) || ''
+      }
     });
   } catch (error) {
     next(error);

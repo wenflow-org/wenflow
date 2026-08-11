@@ -143,7 +143,7 @@ describe('AuthService 修改密码', () => {
     expect(userMocks.update).not.toHaveBeenCalled()
   })
 
-  it('校验通过则写入新哈希并刷新 updatedAt', async () => {
+  it('校验通过则写入新哈希、递增 tokenVersion 并刷新 updatedAt', async () => {
     userMocks.findFirst.mockResolvedValue({ id: 'u1', name: 'u1', password: 'old-hash' })
     bcryptCompare.mockResolvedValue(true)
     bcryptHash.mockResolvedValue('new-hash')
@@ -153,7 +153,11 @@ describe('AuthService 修改密码', () => {
     expect(bcryptHash).toHaveBeenCalledWith('NewPass123', 10)
     expect(userMocks.update).toHaveBeenCalledWith({
       where: { id: 'u1' },
-      data: { password: 'new-hash', updatedAt: expect.any(Date) }
+      data: {
+        password: 'new-hash',
+        tokenVersion: { increment: 1 },
+        updatedAt: expect.any(Date)
+      }
     })
   })
 })
