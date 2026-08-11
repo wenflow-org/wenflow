@@ -72,6 +72,7 @@ class DashboardGuidanceSnapshotService {
   async backfillMissingForActiveUsers(limit = 100): Promise<{ total: number; refreshed: number }> {
     const users = await prisma.users.findMany({
       where: {
+        deletedAt: null,
         dashboardGuidanceSnapshot: null,
         learning_paths: {
           some: { status: 'active' },

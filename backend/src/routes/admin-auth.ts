@@ -28,7 +28,7 @@ router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: R
     const { name, password, remember } = loginSchema.parse(req.body);
     const clientIP = (req.ip || req.headers['x-forwarded-for'] || 'unknown').toString();
 
-    // 查找管理员用户（支持用户名或邮箱登录）
+    // 查找管理员用户（支持用户名或邮箱登录）；软删管理员视为不存在
     const admin = await prisma.users.findFirst({
       where: {
         OR: [
@@ -36,6 +36,7 @@ router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: R
           { email: name }
         ],
         isAdmin: true,
+        deletedAt: null,
       },
     });
 
@@ -118,8 +119,9 @@ router.post('/logout', (req: Request, res: Response) => {
 // 获取当前管理员信息
 router.get('/me', adminAuthMiddleware, adminMiddleware, async (req: Request, res: Response) => {
   try {
-    const admin = await prisma.users.findUnique({
-      where: { id: req.user!.userId },
+    // 软删管理员视为不存在（与不存在同样返回 404，不泄露删除状态）
+    const admin = await prisma.users.findFirst({
+      where: { id: req.user!.userId, deletedAt: null },
       select: {
         id: true,
         email: true,

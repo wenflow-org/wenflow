@@ -98,7 +98,8 @@ export class LearnerSnapshotRefreshService {
     const page = Math.max(1, Number(params?.page || 1));
     const limit = Math.max(1, Math.min(50, Number(params?.limit || 20)));
 
-    const userWhere = params?.userId ? { id: params.userId } : undefined;
+    // 软删用户不进入管理端快照列表（列表与总数口径一致）
+    const userWhere = params?.userId ? { id: params.userId, deletedAt: null } : { deletedAt: null };
     const total = await prisma.users.count({ where: userWhere });
 
     const users = await prisma.users.findMany({

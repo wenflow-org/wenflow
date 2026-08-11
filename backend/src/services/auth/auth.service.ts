@@ -43,9 +43,9 @@ class AuthService {
   // 注册
   async register(data: RegisterData) {
     try {
-      // 检查用户名是否已存在（使用 findFirst，因为 name 不是唯一字段）
+      // 检查用户名是否已存在（使用 findFirst，因为 name 不是唯一字段）；软删账号不占用用户名
       const existingUser = await prisma.users.findFirst({
-        where: { name: data.name }
+        where: { name: data.name, deletedAt: null }
       });
 
       if (existingUser) {
@@ -88,14 +88,15 @@ class AuthService {
   // 登录
   async login(data: LoginData) {
     try {
-      // 查找用户（支持用户名或邮箱登录）
+      // 查找用户（支持用户名或邮箱登录）；软删账号视为不存在，按普通凭据错误处理
       const user = await prisma.users.findFirst({
         where: {
           OR: [
             { name: data.name },
             { email: data.name }
           ],
-          isAdmin: false
+          isAdmin: false,
+          deletedAt: null
         }
       });
 
@@ -136,8 +137,9 @@ class AuthService {
 
   // 修改密码（需验证当前密码）
   async changePassword(userId: string, oldPassword: string, newPassword: string) {
-    const user = await prisma.users.findUnique({
-      where: { id: userId }
+    // 软删账号不允许修改密码，按凭据错误处理
+    const user = await prisma.users.findFirst({
+      where: { id: userId, deletedAt: null }
     });
 
     // 与登录同等的常量时间比较，避免通过响应时序探测
@@ -164,9 +166,9 @@ class AuthService {
       // 显式指定允许的算法，防止算法混淆攻击
       const decoded = verifySessionToken(token, 'user') as JWTPayload;
 
-      // 查找用户
-      const user = await prisma.users.findUnique({
-        where: { id: decoded.userId }
+      // 查找用户；软删账号视为不存在，令牌立即失效
+      const user = await prisma.users.findFirst({
+        where: { id: decoded.userId, deletedAt: null }
       });
 
       if (!user) {

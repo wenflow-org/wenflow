@@ -79,9 +79,17 @@ router.get('/me', async (req, res, next) => {
         xp: true,
         role: true,
         currentLevel: true,
-        createdAt: true
+        createdAt: true,
+        deletedAt: true
       }
     });
+
+    if (user?.deletedAt) {
+      return res.status(401).json({
+        success: false,
+        error: { message: '账号已被删除', status: 401 }
+      });
+    }
 
     if (!user) {
       return res.status(404).json({
@@ -93,10 +101,12 @@ router.get('/me', async (req, res, next) => {
     // 计算用户等级（基于XP，单点公式 level.util）
     const calculatedLevel = getLevelFromXp(user.xp);
 
+    const { deletedAt: _deletedAt, ...userPayload } = user;
+
     res.json({
       success: true,
       data: {
-        ...user,
+        ...userPayload,
         level: calculatedLevel,
         xpToNextLevel: (calculatedLevel * calculatedLevel * 100) - user.xp
       }

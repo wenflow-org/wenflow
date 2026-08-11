@@ -3,13 +3,13 @@ import { adminMiddleware } from '../admin.middleware';
 jest.mock('../../config/database', () => ({
   __esModule: true,
   default: {
-    users: { findUnique: jest.fn() }
+    users: { findFirst: jest.fn() }
   }
 }));
 
 import prisma from '../../config/database';
 
-const findUnique = prisma.users.findUnique as jest.Mock;
+const findFirst = prisma.users.findFirst as jest.Mock;
 
 function createResponse() {
   const response: any = {
@@ -29,7 +29,7 @@ function createResponse() {
 
 describe('adminMiddleware', () => {
   beforeEach(() => {
-    findUnique.mockReset();
+    findFirst.mockReset();
   });
 
   it('拒绝普通用户身份', async () => {
@@ -44,7 +44,7 @@ describe('adminMiddleware', () => {
     expect(res.statusCode).toBe(403);
     expect(res.body).toEqual({ success: false, error: { message: '需要管理员权限' } });
     expect(next).not.toHaveBeenCalled();
-    expect(findUnique).not.toHaveBeenCalled();
+    expect(findFirst).not.toHaveBeenCalled();
   });
 
   it('拒绝投影视角，即使请求身份带有管理员声明', async () => {
@@ -67,11 +67,11 @@ describe('adminMiddleware', () => {
       error: { message: '投影视角不允许访问管理员接口' }
     });
     expect(next).not.toHaveBeenCalled();
-    expect(findUnique).not.toHaveBeenCalled();
+    expect(findFirst).not.toHaveBeenCalled();
   });
 
   it('拒绝数据库中已被降权的管理员', async () => {
-    findUnique.mockResolvedValue({
+    findFirst.mockResolvedValue({
       id: 'admin-1',
       email: 'admin@example.com',
       isAdmin: false
@@ -89,8 +89,27 @@ describe('adminMiddleware', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it('拒绝已软删的管理员（deletedAt 过滤，视为权限失效 403）', async () => {
+    findFirst.mockResolvedValue(null);
+    const req: any = {
+      user: { userId: 'admin-1', email: 'admin@example.com', isAdmin: true, sessionType: 'admin' }
+    };
+    const res = createResponse();
+    const next = jest.fn();
+
+    await adminMiddleware(req, res, next);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual({ success: false, error: { message: '管理员权限已失效' } });
+    expect(next).not.toHaveBeenCalled();
+    expect(findFirst).toHaveBeenCalledWith({
+      where: { id: 'admin-1', deletedAt: null },
+      select: { id: true, email: true, isAdmin: true }
+    });
+  });
+
   it('接受 JWT 声明和数据库状态均有效的管理员', async () => {
-    findUnique.mockResolvedValue({
+    findFirst.mockResolvedValue({
       id: 'admin-1',
       email: 'current-admin@example.com',
       isAdmin: true
@@ -104,8 +123,8 @@ describe('adminMiddleware', () => {
     await adminMiddleware(req, res, next);
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(findUnique).toHaveBeenCalledWith({
-      where: { id: 'admin-1' },
+    expect(findFirst).toHaveBeenCalledWith({
+      where: { id: 'admin-1', deletedAt: null },
       select: { id: true, email: true, isAdmin: true }
     });
     expect(req.user).toEqual({

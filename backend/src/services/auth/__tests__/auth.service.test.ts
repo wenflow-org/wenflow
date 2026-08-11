@@ -8,6 +8,8 @@ const userMocks = {
 
 const bcryptCompare = jest.fn()
 const bcryptHash = jest.fn()
+const mockSessionTokenSign = jest.fn(() => 'user-token')
+const mockSessionTokenVerify = jest.fn()
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
@@ -22,6 +24,11 @@ jest.mock('bcryptjs', () => ({
     compare: bcryptCompare,
     hash: bcryptHash
   }
+}))
+
+jest.mock('../../../utils/session-token', () => ({
+  signSessionToken: mockSessionTokenSign,
+  verifySessionToken: mockSessionTokenVerify
 }))
 
 jest.mock('jsonwebtoken', () => ({
@@ -58,7 +65,8 @@ describe('AuthService 登录安全边界', () => {
     expect(userMocks.findFirst).toHaveBeenCalledWith({
       where: {
         OR: [{ name: 'admin' }, { email: 'admin' }],
-        isAdmin: false
+        isAdmin: false,
+        deletedAt: null
       }
     })
   })
@@ -78,13 +86,46 @@ describe('AuthService 登录安全边界', () => {
   })
 })
 
+describe('AuthService 软删除账号', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('登录查询排除软删账号（deletedAt: null）', async () => {
+    userMocks.findFirst.mockResolvedValue(null)
+    bcryptCompare.mockResolvedValue(false)
+
+    await expect(authService.login({ name: 'ghost', password: 'secret-password' }))
+      .rejects.toMatchObject({ status: 401, code: 'INVALID_CREDENTIALS' })
+
+    expect(userMocks.findFirst).toHaveBeenCalledWith({
+      where: {
+        OR: [{ name: 'ghost' }, { email: 'ghost' }],
+        isAdmin: false,
+        deletedAt: null
+      }
+    })
+  })
+
+  it('verifyToken 对软删账号拒绝（查询过滤 deletedAt: null）', async () => {
+    mockSessionTokenVerify.mockReturnValue({ userId: 'u1', name: 'u1' })
+    userMocks.findFirst.mockResolvedValue(null)
+
+    await expect(authService.verifyToken('any-token')).rejects.toThrow('无效的 Token')
+
+    expect(userMocks.findFirst).toHaveBeenCalledWith({
+      where: { id: 'u1', deletedAt: null }
+    })
+  })
+})
+
 describe('AuthService 修改密码', () => {
   beforeEach(() => {
     jest.clearAllMocks()
   })
 
   it('当前密码错误时拒绝且不写库', async () => {
-    userMocks.findUnique.mockResolvedValue({ id: 'u1', name: 'u1', password: 'old-hash' })
+    userMocks.findFirst.mockResolvedValue({ id: 'u1', name: 'u1', password: 'old-hash' })
     bcryptCompare.mockResolvedValue(false)
 
     await expect(authService.changePassword('u1', 'wrong-old', 'NewPass123'))
@@ -93,7 +134,7 @@ describe('AuthService 修改密码', () => {
   })
 
   it('用户不存在时也执行比较后拒绝', async () => {
-    userMocks.findUnique.mockResolvedValue(null)
+    userMocks.findFirst.mockResolvedValue(null)
     bcryptCompare.mockResolvedValue(false)
 
     await expect(authService.changePassword('ghost', 'any', 'NewPass123'))
@@ -103,7 +144,7 @@ describe('AuthService 修改密码', () => {
   })
 
   it('校验通过则写入新哈希并刷新 updatedAt', async () => {
-    userMocks.findUnique.mockResolvedValue({ id: 'u1', name: 'u1', password: 'old-hash' })
+    userMocks.findFirst.mockResolvedValue({ id: 'u1', name: 'u1', password: 'old-hash' })
     bcryptCompare.mockResolvedValue(true)
     bcryptHash.mockResolvedValue('new-hash')
 

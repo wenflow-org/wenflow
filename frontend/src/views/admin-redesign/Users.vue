@@ -393,7 +393,7 @@ async function batchDelete() {
   if (!ids.length || batchBusy.value) return
   const ok = await askConfirm({
     title: '批量删除用户',
-    message: `确认批量删除 ${ids.length} 个用户？该操作不可撤销，将同时删除其学习记录。`,
+    message: `确认批量删除 ${ids.length} 个用户？删除后用户将无法登录，历史数据保留，可在后台恢复。`,
     confirmText: `删除 ${ids.length} 个用户`
   })
   if (!ok) return
@@ -437,7 +437,7 @@ async function toggleRole(u: UserRow) {
 async function removeUser(u: UserRow) {
   const ok = await askConfirm({
     title: '删除用户',
-    message: `确认删除用户「${u.name}」（${u.email}）？\n该操作不可撤销，将同时删除其学习记录。`,
+    message: `确认删除用户「${u.name}」（${u.email}）？\n删除后用户将无法登录，历史数据保留，可在后台恢复。`,
     confirmText: '删除'
   })
   if (!ok) return

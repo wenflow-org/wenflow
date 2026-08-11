@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '../../config/database';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { randomUUID as uuidv4 } from 'crypto';
+import { logger } from '../../utils/logger';
 
 const router = express.Router();
 
@@ -48,7 +49,7 @@ router.get('/', async (req, res, next) => {
     const { page = 1, limit = 20, search, role } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
-    const where: any = {};
+    const where: any = { deletedAt: null };
     
     // 搜索条件
     if (search) {
@@ -112,8 +113,9 @@ router.get('/:id', async (req, res, next) => {
   try {
     const userId = req.params.id;
 
-    const user = await prisma.users.findUnique({
-      where: { id: userId },
+    // 默认隐藏已软删用户（详情 404 语义）
+    const user = await prisma.users.findFirst({
+      where: { id: userId, deletedAt: null },
       select: {
         id: true,
         name: true,
@@ -274,7 +276,7 @@ router.patch('/:id', async (req, res, next) => {
 
     // 最后管理员保护：把管理员降为普通用户前，确认剩余管理员 ≥ 2
     if (typeof isAdmin === 'boolean' && isAdmin === false && existing.isAdmin) {
-      const remainingAdmins = await prisma.users.count({ where: { isAdmin: true } }) - 1;
+      const remainingAdmins = await prisma.users.count({ where: { isAdmin: true, deletedAt: null } }) - 1;
       if (remainingAdmins <= 1) {
         return res.status(409).json({
           success: false,
@@ -380,13 +382,13 @@ router.post('/batch-delete', async (req, res, next) => {
       });
     }
 
-    // 最后管理员保护：删除管理员前统计删除后的剩余管理员数量
+    // 最后管理员保护：删除管理员前统计删除后的剩余管理员数量（软删管理员不计入）
     const adminsInBatch = await prisma.users.findMany({
-      where: { id: { in: ids }, isAdmin: true },
+      where: { id: { in: ids }, isAdmin: true, deletedAt: null },
       select: { id: true }
     });
     if (adminsInBatch.length > 0) {
-      const remainingAdmins = await prisma.users.count({ where: { isAdmin: true } }) - adminsInBatch.length;
+      const remainingAdmins = await prisma.users.count({ where: { isAdmin: true, deletedAt: null } }) - adminsInBatch.length;
       if (remainingAdmins <= 1) {
         return res.status(409).json({
           success: false,
@@ -398,11 +400,21 @@ router.post('/batch-delete', async (req, res, next) => {
       }
     }
 
-    const result = await prisma.users.deleteMany({
+    // 软删除：仅标记未删除的账号（deletedAt: null 兜底幂等），历史数据保留
+    const deletedAt = new Date();
+    const result = await prisma.users.updateMany({
       where: {
-        id: { in: ids }
+        id: { in: ids },
+        deletedAt: null
+      },
+      data: {
+        deletedAt,
+        deletedBy: operatorId,
+        updatedAt: deletedAt
       }
     });
+
+    logger.info('用户已批量软删除', { count: result.count, deletedBy: operatorId });
 
     res.json({
       success: true,
@@ -488,7 +500,7 @@ router.delete('/:id', async (req, res, next) => {
 
     const target = await prisma.users.findUnique({
       where: { id: userId },
-      select: { id: true, isAdmin: true }
+      select: { id: true, isAdmin: true, deletedAt: true }
     });
 
     if (!target) {
@@ -498,9 +510,20 @@ router.delete('/:id', async (req, res, next) => {
       });
     }
 
-    // 最后管理员保护：删除管理员前统计剩余管理员数量
+    // 已软删账号重复删除：409 幂等语义，与 404 区分
+    if (target.deletedAt) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'ALREADY_DELETED',
+          message: '用户已被删除'
+        }
+      });
+    }
+
+    // 最后管理员保护：删除管理员前统计剩余管理员数量（软删管理员不计入）
     if (target.isAdmin) {
-      const remainingAdmins = await prisma.users.count({ where: { isAdmin: true } }) - 1;
+      const remainingAdmins = await prisma.users.count({ where: { isAdmin: true, deletedAt: null } }) - 1;
       if (remainingAdmins <= 1) {
         return res.status(409).json({
           success: false,
@@ -512,7 +535,14 @@ router.delete('/:id', async (req, res, next) => {
       }
     }
 
-    await prisma.users.delete({ where: { id: userId } });
+    // 软删除：仅标记，历史数据（学习路径/会话/成就等）全部保留
+    const deletedAt = new Date();
+    await prisma.users.update({
+      where: { id: userId },
+      data: { deletedAt, deletedBy: operatorId, updatedAt: deletedAt }
+    });
+
+    logger.info('用户已软删除', { userId, deletedBy: operatorId });
 
     res.json({
       success: true,

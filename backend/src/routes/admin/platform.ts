@@ -69,6 +69,7 @@ const AGENT_RELATIONS = getAgentRelations();
  */
 const REAL_USER_WHERE = {
   isVirtualLearner: false,
+  deletedAt: null,
   NOT: [
     { email: { startsWith: 'virtual_' } },
     { email: { endsWith: '@test.local' } },
@@ -1848,11 +1849,11 @@ router.get('/activity', async (req: Request, res: Response) => {
       : [];
     const sessionTaskMap = new Map(sessionTasks.map((task) => [task.id, task]));
 
-    // 最近注册的用户（excludeTest 时排除虚拟学习者/测试账号）
+    // 最近注册的用户（excludeTest 时排除虚拟学习者/测试账号；软删账号一律隐藏）
     const recentUsers = await prisma.users.findMany({
       take: 20,
       orderBy: { createdAt: 'desc' },
-      where: excludeTest ? REAL_USER_WHERE : undefined,
+      where: excludeTest ? REAL_USER_WHERE : { deletedAt: null },
       select: {
         id: true,
         email: true,

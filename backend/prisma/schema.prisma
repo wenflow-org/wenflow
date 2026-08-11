@@ -750,6 +750,9 @@ model users {
   xp                        Int                        @default(0)
   isAdmin                   Boolean                    @default(false)
   isVirtualLearner          Boolean                    @default(false)
+  // 软删除（Phase 1）：deletedAt 非空即视为已删除，deletedBy 记录操作管理员；历史数据保留
+  deletedAt                 DateTime?
+  deletedBy                 String?
   createdAt                 DateTime                   @default(now())
   updatedAt                 DateTime
   lastLoginAt               DateTime?
@@ -771,6 +774,8 @@ model users {
   user_skill_configs        user_skill_configs[]
   virtual_learner_profiles  virtual_learner_profiles?
   virtual_sessions          virtual_sessions[]
+
+  @@index([deletedAt])
 }
 
 model virtual_learner_profiles {

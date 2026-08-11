@@ -36,8 +36,9 @@ export const adminMiddleware = async (
       });
     }
 
-    const admin = await prisma.users.findUnique({
-      where: { id: req.user.userId },
+    // 软删管理员视为权限失效（查询过滤 deletedAt: null）
+    const admin = await prisma.users.findFirst({
+      where: { id: req.user.userId, deletedAt: null },
       select: { id: true, email: true, isAdmin: true }
     });
 
