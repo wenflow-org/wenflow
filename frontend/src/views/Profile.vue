@@ -64,17 +64,17 @@
             </div>
           </div>
           <div class="pwd-grid">
-            <label class="uc-field">
+            <label class="uc-field pwd-field pwd-field--wide">
               <span class="uc-field__label">当前密码</span>
               <input v-model="pwdForm.oldPassword" type="password" class="uc-field__input" placeholder="输入当前密码" />
             </label>
-            <label class="uc-field">
+            <label class="uc-field pwd-field">
               <span class="uc-field__label">新密码</span>
               <input v-model="pwdForm.newPassword" type="password" class="uc-field__input" placeholder="至少 8 位，含字母和数字" />
             </label>
-            <label class="uc-field">
+            <label class="uc-field pwd-field">
               <span class="uc-field__label">确认新密码</span>
-              <input v-model="pwdForm.confirmPassword" type="password" class="uc-field__input" placeholder="再输入一次新密码" />
+              <input v-model="pwdForm.confirmPassword" type="password" class="uc-field__input" placeholder="再输入一次" />
             </label>
           </div>
           <div class="uc-card__foot">
@@ -538,6 +538,7 @@ async function handleDeactivate() {
 
 .profile-cols .uc-card .pwd-grid {
   flex: 1;
+  align-content: start;
 }
 
 @media (max-width: 900px) {
@@ -579,11 +580,15 @@ async function handleDeactivate() {
 
 .pwd-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
-@media (max-width: 900px) {
+.pwd-field--wide {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 560px) {
   .pwd-grid {
     grid-template-columns: 1fr;
   }
