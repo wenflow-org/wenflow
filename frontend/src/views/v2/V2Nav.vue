@@ -33,8 +33,6 @@
           <Transition name="v2menu">
             <div v-if="menuOpen" class="v2nav__menu" role="menu">
               <router-link to="/user/account" role="menuitem" @click="menuOpen = false">个人中心</router-link>
-              <router-link to="/user/agents" role="menuitem" @click="menuOpen = false">AI 助手</router-link>
-              <router-link to="/user/settings" role="menuitem" @click="menuOpen = false">API 接入</router-link>
               <router-link to="/docs" role="menuitem" @click="menuOpen = false">开发者文档</router-link>
               <button type="button" role="menuitem" class="v2nav__menu-danger" @click="handleLogout">
                 退出登录

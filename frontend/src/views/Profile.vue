@@ -7,13 +7,6 @@
         </template>
       </el-result>
 
-      <el-alert v-if="learnerCenterLoadError" type="error" :closable="false" show-icon title="学习概览加载失败">
-        <template #default>
-          <span>{{ learnerCenterLoadError }}</span>
-          <el-button link type="primary" @click="loadLearnerCenter">重新加载</el-button>
-        </template>
-      </el-alert>
-
       <!-- P1 修复：初次加载整页 v-loading 遮罩，避免硬空白 -->
       <div v-loading="profileLoading" element-loading-text="加载账户信息…" class="profile-content">
       <template v-if="!profileLoading && !profileLoadError">
@@ -55,26 +48,6 @@
               <span>等级</span>
               <strong>{{ user.level || 1 }} 级</strong>
             </article>
-            <article class="stat-card">
-              <span>当前节奏</span>
-              <strong>{{ paceLabel }}</strong>
-            </article>
-          </div>
-        </article>
-
-        <article v-if="!learnerCenterLoadError" class="glass-card profile-card">
-          <div class="profile-card__head profile-card__head--spread">
-            <div>
-              <span class="section-kicker">当前学习</span>
-              <h3>{{ currentPathTitle }}</h3>
-            </div>
-            <span v-if="currentPathId" class="status-chip">{{ paceLabel }}</span>
-          </div>
-
-          <div class="action-row">
-            <el-button type="primary" @click="goCurrentPath">{{ currentPathId ? '继续当前路径' : '查看学习路径' }}</el-button>
-            <el-button @click="router.push('/learning-state')">学习状态</el-button>
-            <el-button @click="router.push('/goal-conversation')">新目标</el-button>
           </div>
         </article>
       </section>
@@ -203,7 +176,6 @@ import {
 import { toast } from '@/utils/toast'
 import request from '@/utils/api'
 import { useUserStore } from '../stores/user'
-import { userAPI, type LearnerCenterSnapshot } from '../api/user'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -249,10 +221,8 @@ const user = ref({
   level: 1,
   role: 'user'
 })
-const learnerCenter = ref<LearnerCenterSnapshot | null>(null)
 const profileLoading = ref(true)
 const profileLoadError = ref('')
-const learnerCenterLoadError = ref('')
 // 用户名编辑
 const editingName = ref(false)
 const nameDraft = ref('')
@@ -272,15 +242,6 @@ const projectionGrantForm = reactive({
   note: ''
 })
 
-const paceLabel = computed(() => {
-  const pace = learnerCenter.value?.learningControlState?.paceMode
-  if (pace === 'recover') return '恢复'
-  if (pace === 'push') return '推进'
-  return '稳定'
-})
-
-const currentPathId = computed(() => learnerCenter.value?.knowledgeMemory?.currentPath?.learningPathId || '')
-const currentPathTitle = computed(() => learnerCenter.value?.knowledgeMemory?.currentPath?.pathTitle || '暂无进行中的路径')
 const projectionGrantStatus = computed(() => getProjectionGrantStatus(projectionGrant.value))
 const projectionGrantStatusLabel = computed(() => {
   if (projectionGrantLoadError.value) return '读取失败'
@@ -292,16 +253,8 @@ const projectionGrantStatusLabel = computed(() => {
 const projectionGrantExpiresAtLabel = computed(() => formatDateTime(projectionGrant.value?.expiresAt))
 const projectionGrantActionLabel = computed(() => (projectionGrantStatus.value === 'active' ? '更新授权' : `授权 ${projectionGrantForm.expiresInHours} 小时`))
 
-const goCurrentPath = () => {
-  if (currentPathId.value) {
-    router.push(`/learning-path/${currentPathId.value}`)
-    return
-  }
-  router.push('/learning-paths')
-}
-
 onMounted(async () => {
-  await Promise.all([loadUserProfile(), loadLearnerCenter(), loadProjectionGrant()])
+  await Promise.all([loadUserProfile(), loadProjectionGrant()])
 })
 
 function formatDateTime(value?: string | null) {
@@ -338,16 +291,6 @@ async function loadUserProfile() {
     profileLoadError.value = getErrorMessage(error, '无法读取账户信息，请稍后重试。')
   } finally {
     profileLoading.value = false
-  }
-}
-
-async function loadLearnerCenter() {
-  learnerCenterLoadError.value = ''
-  try {
-    learnerCenter.value = await userAPI.getLearnerCenter({ scope: 'global' })
-  } catch (error: any) {
-    learnerCenter.value = null
-    learnerCenterLoadError.value = getErrorMessage(error, '无法读取学习概览，请稍后重试。')
   }
 }
 
