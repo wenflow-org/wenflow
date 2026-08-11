@@ -37,8 +37,8 @@
             <td>
               <span class="mk-badge" :class="statusBadge(r)">{{ statusText(r) }}</span>
             </td>
-            <td class="mono" :class="{ 'mk-na': !r.publishedAt }" :title="r.publishedAt ? timeAgo(r.publishedAt) : ''">{{ r.publishedAt ? fmtDate(r.publishedAt) : '—' }}</td>
-            <td class="mono" :class="{ 'mk-na': !r.expiresAt }" :title="r.expiresAt ? timeAgo(r.expiresAt) : ''">{{ r.expiresAt ? fmtDate(r.expiresAt) : '不过期' }}</td>
+            <td :class="{ 'mk-na': !r.publishedAt }" :title="r.publishedAt ? fmtDate(r.publishedAt) : ''">{{ r.publishedAt ? timeAgo(r.publishedAt) : '—' }}</td>
+            <td :class="{ 'mk-na': !r.expiresAt }" :title="r.expiresAt ? fmtDate(r.expiresAt) : ''">{{ r.expiresAt ? timeAgo(r.expiresAt) : '不过期' }}</td>
             <td>
               <div class="mk-actions">
                 <button v-if="r.status !== 'published'" type="button" class="mk-link" :disabled="r.busy" @click="publish(r)">发布</button>
