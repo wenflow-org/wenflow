@@ -58,7 +58,7 @@
     </div>
 
     <!-- 日志流 -->
-    <MockSkeletonTable v-if="liveLoading && !logs.length" :cols="4" :rows="6" />
+    <MockSkeletonTable v-if="(liveLoading || liveLogsLoading) && !logs.length" :cols="4" :rows="6" />
     <div v-else-if="filtered.length" class="log-body" role="log">
       <div class="tline-head" aria-hidden="true">
         <span class="tline-head__time">时间</span>
@@ -180,7 +180,7 @@
         </div>
       </div>
       <div v-if="canMore" class="tline-more">
-        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
+        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ isLive ? liveLogsTotal || filtered.length : filtered.length }}）</button>
       </div>
     </div>
 
@@ -194,7 +194,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { spans, intent, openTrace, openSession, openSkillDrawer, clearInvestigation, dataSource, isLive } from './store'
-import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow } from './live'
+import { fetchLogDetail, reloadLiveSpans, loadMoreLiveSpans, liveLoading, liveLogsLoading, liveLogsTotal, liveLogsHasMore, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow } from './live'
 import { useLoadMore } from './useLoadMore'
 import MockSkeletonTable from './SkeletonTable.vue'
 
@@ -208,10 +208,17 @@ const advOpen = ref(false)
 
 /* prompt 契约维度：与执行日志同 traceId 关联（版本/漂移/tokens/JSON） */
 onMounted(() => {
-  if (isLive.value) void loadPromptIndex()
+  if (!isLive.value) return
+  void loadPromptIndex()
+  // 首屏必须触发服务端查询：liveLogsFiltered 只有 applyServerQuery 一个写入点，
+  // 不查则页面永远空列表（后端有数据也显示「暂无日志」）
+  void applyServerQuery()
 })
 watch(dataSource, () => {
-  if (dataSource.value === 'live') void loadPromptIndex()
+  if (dataSource.value !== 'live') return
+  void loadPromptIndex()
+  // demo → live 切换后同样触发首次查询
+  void applyServerQuery()
 })
 function promptOf(log: { traceId: string; agent: string }): PromptMetaRow | undefined {
   const list = livePromptIndex.value[log.traceId]
@@ -222,31 +229,13 @@ function promptOf(log: { traceId: string; agent: string }): PromptMetaRow | unde
 
 /* live 模式：服务端筛选（时间范围/关键词）。
    reloadLiveSpans 写入独立的 liveLogsFiltered（不污染全局 liveSpans）；
-   请求重叠时 last-wins：旧响应后到（直接覆盖 ref）用序列号 + pending 识别并重拉最新参数 */
-let querying = false
-let queryPending = false
-let querySeq = 0
+   并发与 last-wins 由 live.ts 串行化保证（loading 反馈见 liveLogsLoading） */
 async function applyServerQuery() {
   if (!isLive.value) return
-  if (querying) {
-    queryPending = true
-    return
-  }
-  querying = true
-  const seq = ++querySeq
-  try {
-    await reloadLiveSpans({
-      timeRange: timeRange.value,
-      keyword: keyword.value.trim() || undefined
-    })
-  } finally {
-    querying = false
-  }
-  // 本次响应期间有新查询：结果可能已被旧响应覆盖，以最新参数重拉保证一致
-  if (seq !== querySeq || queryPending) {
-    queryPending = false
-    void applyServerQuery()
-  }
+  await reloadLiveSpans({
+    timeRange: timeRange.value,
+    keyword: keyword.value.trim() || undefined
+  })
 }
 
 /* 自动刷新：10s 间隔，离开页面清除 */
@@ -333,8 +322,21 @@ const filtered = computed(() =>
   })
 )
 
-/* 长列表分批渲染：每批 50 行 */
-const { shown, canMore, loadMore } = useLoadMore(filtered, 50)
+/* 长列表分批渲染：每批 50 行（demo）；live 模式展示服务端已加载的全部行，
+   「加载更多」改为拉取后端下一页（liveLogsHasMore 驱动按钮显隐） */
+const { shown: demoShown, canMore: demoCanMore, loadMore: demoLoadMore } = useLoadMore(filtered, 50)
+const shown = computed(() => (isLive.value ? filtered.value : demoShown.value))
+const canMore = computed(() => (isLive.value ? liveLogsHasMore.value : demoCanMore.value))
+function loadMore() {
+  if (isLive.value) {
+    void loadMoreLiveSpans({
+      timeRange: timeRange.value,
+      keyword: keyword.value.trim() || undefined
+    })
+    return
+  }
+  demoLoadMore()
+}
 
 const isFiltered = computed(() => !!(agentFilter.value || statusFilter.value || keyword.value.trim()))
 /* live：全量统计来自后端 stats（非 200 行样本）；demo 回退样本计算 */

@@ -222,13 +222,13 @@
                 type="button"
                 class="sdp-pw__viewbtn"
                 :class="{ 'sdp-pw__viewbtn--active': coreViewMode === 'form' }"
-                @click="coreViewMode = 'form'"
+                @click="switchCoreView('form')"
               >表单</button>
               <button
                 type="button"
                 class="sdp-pw__viewbtn"
                 :class="{ 'sdp-pw__viewbtn--active': coreViewMode === 'raw' }"
-                @click="coreViewMode = 'raw'"
+                @click="switchCoreView('raw')"
               >源码</button>
             </div>
             <div v-if="coreClassification" class="sdp-pw__classify" :class="`sdp-pw__classify--${coreClassification.level}`">
@@ -1417,6 +1417,24 @@ const coreVersions = ref<CoreVersionRow[]>([])
 const coreVersionsLoading = ref(false)
 const coreLineage = ref<CoreLineageEntry[]>([])
 const coreViewMode = ref<'form' | 'raw'>('form')
+/**
+ * 切换表单/源码视图：当前视图有未保存修改时先保存到磁盘，再重拉使两视图同步，
+ * 避免「表单改动切到源码后保存覆盖」或反向丢失（保存失败阻止切换）。
+ */
+async function switchCoreView(mode: 'form' | 'raw') {
+  if (mode === coreViewMode.value) return
+  if (coreDirty.value && coreLoaded.value) {
+    const saved = await saveCore()
+    if (!saved) return
+  }
+  coreViewMode.value = mode
+  // raw 视图保存后 coreForm 未回读：统一重拉保持两视图一致
+  if (mode === 'form' && coreLoaded.value) {
+    coreRequested = false
+    await ensureCoreLoaded()
+  }
+}
+
 const coreForm = ref<CoreFormState | null>(null)
 let coreRequested = false
 
@@ -1607,10 +1625,12 @@ async function saveCore() {
     }
     coreDirty.value = false
     toast.success(`已保存（${coreLevelLabel(coreClassification.value?.level || 'safe')}），状态：待编译发布`)
+    return true
   } catch (e) {
     const data = (e as { response?: { data?: { diagnostics?: CoreDiagnostic[]; error?: string } } })?.response?.data
     coreDiagnostics.value = data?.diagnostics || []
     toast.error(data?.error || `保存失败：${errText(e)}`)
+    return false
   } finally {
     coreSaving.value = false
   }

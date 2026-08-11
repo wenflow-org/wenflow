@@ -58,6 +58,12 @@
       </div>
     </div>
 
+    <!-- 跳转目标不在当前加载样本内时的提示（trace/session 通用） -->
+    <div v-if="notice" class="wf-notice" role="alert">
+      <span>{{ notice }}</span>
+      <button type="button" class="wf-notice__close" aria-label="关闭提示" @click="notice = ''">×</button>
+    </div>
+
     <!-- 链路概要卡 -->
     <div v-if="traceSummary" class="wf-summary">
       <div class="wf-summary__item"><b>{{ traceSummary.spanCount }}</b><span>span</span></div>
@@ -205,6 +211,8 @@ const openSpanId = ref('')
 const traceKeyword = ref('')
 const detailCache = ref<Record<string, LogDetail>>({})
 const detailLoading = ref('')
+/* 跳转目标不在当前加载样本内的提示条（trace/session 共用；用户可手动关闭） */
+const notice = ref('')
 /* 会话视图：跨 trace 按业务会话归组（sessionId 链路已注入，数据积累后自动出现） */
 const viewMode = ref<'trace' | 'session'>('trace')
 const activeSession = ref('')
@@ -252,10 +260,10 @@ watch(openSpanId, async (id) => {
 watch(
   () => intent.traceId,
   (t) => {
-    if (t) {
-      activeTrace.value = t
-      viewMode.value = 'trace'
-    }
+    if (!t) return
+    viewMode.value = 'trace'
+    // 不在当前加载样本内时不静默选中其他链路：留待 allTraceIds 选择最相关链路，并提示用户
+    if (allTraceIds.value.includes(t)) activeTrace.value = t
   },
   { immediate: true }
 )
@@ -291,6 +299,17 @@ watch(
   },
   { immediate: true }
 )
+
+/* intent.traceId 不在当前加载样本内时提示（样本到达后自动恢复选中并清除提示） */
+const intentTraceMiss = computed(() => {
+  const t = intent.traceId
+  if (!t || !allTraceIds.value.length || allTraceIds.value.includes(t)) return ''
+  return t
+})
+watch(intentTraceMiss, (t) => {
+  if (t) notice.value = `链路 ${shortTrace(t)} 不在当前加载范围内（样本截断），已自动展示最相关链路`
+  else if (notice.value) notice.value = ''
+})
 
 const spansOfTrace = computed(() =>
   spans.value
@@ -334,21 +353,33 @@ const activeSpans = computed(() => (viewMode.value === 'session' ? spansOfSessio
 watch(
   sessionIds,
   (ids) => {
+    // 目标会话在样本中出现时恢复选中并清除提示（样本到达的自动恢复）
+    const wanted = intent.sessionId
+    if (wanted && ids.includes(wanted)) {
+      if (activeSession.value !== wanted) activeSession.value = wanted
+      notice.value = ''
+      return
+    }
     const cur = activeSession.value
     if (cur && ids.includes(cur)) return
     activeSession.value = ids[0] ?? ''
   },
   { immediate: true }
 )
-/* 从日志/总览带 sessionId 跳入时优先会话模式 */
+/* 从日志/总览带 sessionId 跳入时优先会话模式；不在样本内则提示而不是静默停在别的数据上 */
 watch(
   () => intent.sessionId,
   (sid) => {
-    if (sid && sessionIds.value.includes(sid)) {
+    if (!sid) return
+    if (sessionIds.value.includes(sid)) {
       activeSession.value = sid
       viewMode.value = 'session'
+      notice.value = ''
+    } else {
+      notice.value = `会话 ${shortTrace(sid)} 不在当前加载范围内（样本截断），无法按会话归组`
     }
-  }
+  },
+  { immediate: true }
 )
 
 function sessionLabel(id: string) {
@@ -448,6 +479,31 @@ const verdictText = computed(() => {
   min-width: 0;
 }
 .wf-locate { flex-shrink: 0; font-size: 11.5px; }
+
+/* 跳转目标不在当前加载样本内的提示条（琥珀色，与失败/漂移徽章同族） */
+.wf-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  border-radius: 10px;
+  background: #fff8ec;
+  color: #b45309;
+  font-size: 12px;
+  box-shadow: var(--mk-shadow-sm);
+}
+.wf-notice__close {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.wf-notice__close:hover { opacity: 0.7; }
 
 /* 链路 / 会话视图切换 */
 .wf-mode {
