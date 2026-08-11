@@ -3,6 +3,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../../config/database';
 import { authMiddleware } from '../../middleware/auth.middleware';
+import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { randomUUID as uuidv4 } from 'crypto';
 import { logger } from '../../utils/logger';
 
@@ -400,6 +401,14 @@ router.post('/batch-delete', async (req, res, next) => {
       }
     }
 
+    // 操作审计：批量删除前快照目标账号
+    const targets = await prisma.users.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, email: true, name: true, isAdmin: true, deletedAt: true }
+    });
+    setAuditAction(res, 'user-batch-delete', { targetType: 'user' });
+    setAuditBefore(res, targets);
+
     // 软删除：仅标记未删除的账号（deletedAt: null 兜底幂等），历史数据保留
     const deletedAt = new Date();
     const result = await prisma.users.updateMany({
@@ -452,6 +461,14 @@ router.patch('/:id/role', async (req, res, next) => {
         error: { message: '不能取消当前登录管理员的管理员权限' }
       });
     }
+
+    // 操作审计：角色变更前快照旧实体
+    const existing = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true, role: true, isAdmin: true, deletedAt: true }
+    });
+    setAuditAction(res, 'user-role-change', { targetType: 'user', targetId: userId });
+    setAuditBefore(res, existing);
 
     const updated = await prisma.users.update({
       where: { id: userId },
@@ -534,6 +551,10 @@ router.delete('/:id', async (req, res, next) => {
         });
       }
     }
+
+    // 操作审计：删除前快照旧实体（软删幂等分支已在上面提前返回）
+    setAuditAction(res, 'user-delete', { targetType: 'user', targetId: userId });
+    setAuditBefore(res, target);
 
     // 软删除：仅标记，历史数据（学习路径/会话/成就等）全部保留
     const deletedAt = new Date();

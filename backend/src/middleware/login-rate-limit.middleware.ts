@@ -1,5 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 
+// 延迟加载 prisma/logger：config/database 与 utils/logger 在模块求值期会触发 dotenv 加载，
+// 若静态导入，dotenv 副作用会先于下方限速配置常量求值，把 .env 中的 LOGIN_* 复活并覆盖
+// 测试注入的环境变量（jest.resetModules 后会重新求值）。运行期才加载真实依赖，互不干扰。
+const loadPrisma = () => (require('../config/database') as typeof import('../config/database')).default;
+const loadLogger = () => (require('../utils/logger') as typeof import('../utils/logger')).logger;
+
 interface LoginAttempt {
   timestamp: Date;
 }
@@ -118,6 +124,9 @@ const createLoginRateLimitMiddleware = (scope: LoginRateLimitScope) => (
   if (blocking.length > 0) {
     const remainingTime = Math.max(...blocking.map(check => check.remainingTime));
 
+    // 登录审计：锁定拒绝同样落库（success=false, reason=ACCOUNT_LOCKED）
+    persistLoginAttempt(name, clientIP, false, scope, 'ACCOUNT_LOCKED');
+
     return res.status(429).json({
       success: false,
       error: {
@@ -134,6 +143,38 @@ const createLoginRateLimitMiddleware = (scope: LoginRateLimitScope) => (
 export const loginRateLimitMiddleware = createLoginRateLimitMiddleware('user');
 export const adminLoginRateLimitMiddleware = createLoginRateLimitMiddleware('admin');
 
+/**
+ * 登录审计落库（fire-and-forget）：user/admin 双 scope 全覆盖，调用点零改动。
+ * 写库失败仅告警，绝不影响登录主流程与内存限速逻辑。
+ */
+const persistLoginAttempt = (
+  username: string,
+  ip: string,
+  success: boolean,
+  scope: LoginRateLimitScope,
+  reason?: string
+) => {
+  const prisma = loadPrisma();
+  const logger = loadLogger();
+  // 兼容 mock/无返回值调用场景：确保 .catch 链始终可用
+  Promise.resolve(prisma.login_attempts.create({
+    data: {
+      scope,
+      username,
+      ip: ip || null,
+      success,
+      reason: reason ?? null,
+      userId: null
+    }
+  })).catch((error) => {
+    logger.warn('[login-audit] 登录审计写入失败', {
+      error: error instanceof Error ? error.message : String(error),
+      scope,
+      username
+    });
+  });
+};
+
 export const recordLoginAttempt = (
   username: string,
   ip: string,
@@ -142,6 +183,10 @@ export const recordLoginAttempt = (
 ) => {
   // G3：用户名作为 Map key 使用，截断超长输入防止内存滥用
   const safeUsername = username.slice(0, 64);
+
+  // 登录审计：成功与失败均落库（schema 层用户名上限 64，与 Map key 截断一致）
+  persistLoginAttempt(safeUsername, ip, success, scope);
+
   const key = buildLoginAttemptKey(scope, safeUsername, ip);
   const ipKey = `${scope}:ip:${ip}`;
   const accountKey = `${scope}:account:${safeUsername}`;

@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import prisma from '../../config/database';
 import { authMiddleware } from '../../middleware/auth.middleware';
+import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { logger } from '../../utils/logger';
 
 /**
@@ -95,10 +96,16 @@ router.post('/', async (req: Request, res: Response) => {
 /** PUT /:id/publish — 发布 */
 router.put('/:id/publish', async (req: Request, res: Response) => {
   try {
+    // 操作审计：发布前快照旧实体
+    const existing = await prisma.announcements.findUnique({ where: { id: req.params.id } });
+    setAuditAction(res, 'announcement-publish', { targetType: 'announcement', targetId: req.params.id });
+    setAuditBefore(res, existing);
+
     const updated = await prisma.announcements.update({
       where: { id: req.params.id },
       data: { status: 'published', publishedAt: new Date() }
     });
+    setAuditAfter(res, updated);
     res.json({ success: true, data: shape(updated as unknown as Record<string, unknown>) });
   } catch (error) {
     logger.error('[admin-announcements] publish failed:', error);
@@ -109,10 +116,16 @@ router.put('/:id/publish', async (req: Request, res: Response) => {
 /** PUT /:id/archive — 下线 */
 router.put('/:id/archive', async (req: Request, res: Response) => {
   try {
+    // 操作审计：下线前快照旧实体
+    const existing = await prisma.announcements.findUnique({ where: { id: req.params.id } });
+    setAuditAction(res, 'announcement-archive', { targetType: 'announcement', targetId: req.params.id });
+    setAuditBefore(res, existing);
+
     const updated = await prisma.announcements.update({
       where: { id: req.params.id },
       data: { status: 'archived' }
     });
+    setAuditAfter(res, updated);
     res.json({ success: true, data: shape(updated as unknown as Record<string, unknown>) });
   } catch (error) {
     logger.error('[admin-announcements] archive failed:', error);

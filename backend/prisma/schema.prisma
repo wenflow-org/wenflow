@@ -908,3 +908,50 @@ model announcements {
   @@index([status, publishedAt])
   @@index([status, expiresAt])
 }
+
+// 操作审计日志（admin 后台敏感操作，P1）
+// 由 admin-audit.middleware 在响应 finish 时 fire-and-forget 写入；
+// before/after/request 快照均为 redactLogValue 脱敏后的 JSON 字符串。
+model admin_audit_logs {
+  id          String   @id @default(uuid())
+  adminId     String?
+  adminName   String?
+  action      String
+  targetType  String?
+  targetId    String?
+  beforeJson  String?
+  afterJson   String?
+  requestJson String?
+  method      String
+  path        String
+  statusCode  Int
+  success     Boolean
+  ip          String?
+  userAgent   String?
+  durationMs  Int?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([adminId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId, createdAt])
+}
+
+// 登录审计（user/admin 双 scope，P1）
+// 由 login-rate-limit.middleware 的 recordLoginAttempt / ACCOUNT_LOCKED 分支
+// fire-and-forget 写入；username 在写入前截断为 64 字符。
+model login_attempts {
+  id        String   @id @default(uuid())
+  scope     String
+  username  String
+  ip        String?
+  success   Boolean
+  reason    String?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  @@index([scope, createdAt])
+  @@index([username, createdAt])
+  @@index([ip, createdAt])
+  @@index([success, createdAt])
+}

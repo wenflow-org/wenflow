@@ -41,6 +41,7 @@ import { aiTeachingOrchestrator } from './services/ai-teaching/AITeachingCoordin
 import { aiCapabilityHealthService } from './services/ai-capability-health.service';
 import { getRuntimeCapabilityProbeEnabled } from './services/capability-probe-settings.service';
 import { logRetentionService } from './services/log-retention.service';
+import { auditCleanupService } from './services/audit-cleanup.service';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
 
@@ -51,6 +52,7 @@ import { acpContextMiddleware } from './middleware/acp-context.middleware';
 import { adminAuthMiddleware, authMiddleware } from './middleware/auth.middleware';
 import { adminMiddleware } from './middleware/admin.middleware';
 import { adminAccessRestrictMiddleware } from './middleware/admin-access-restrict.middleware';
+import { adminAuditMiddleware } from './middleware/admin-audit.middleware';
 import { csrfMiddleware } from './middleware/csrf.middleware';
 import { validateSecretEncryptionConfig } from './utils/secret-crypto';
 import { validateSafeHttpConfig } from './utils/safe-http';
@@ -314,7 +316,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/config', configRoutes);
 // 管理员登录路由（应用本地访问限制中间件）
 app.use('/api/admin-auth', adminAccessRestrictMiddleware, adminAuthRoutes);
-const adminRouteMiddleware = [adminAccessRestrictMiddleware, adminAuthMiddleware, adminMiddleware, acpContextMiddleware('admin')];
+const adminRouteMiddleware = [adminAccessRestrictMiddleware, adminAuthMiddleware, adminMiddleware, adminAuditMiddleware, acpContextMiddleware('admin')];
 app.use('/api/admin/api-config', ...adminRouteMiddleware, adminApiConfigRoutes);
 app.use('/api/admin/skills', ...adminRouteMiddleware, adminSkillsRoutes);
 app.use('/api/admin/field-routings', ...adminRouteMiddleware, adminFieldRoutingsRoutes);
@@ -497,6 +499,7 @@ export async function startServer() {
     assertStartupActive();
     logger.info('✅ Main and System databases connected successfully');
     logRetentionService.start(lifecycle);
+    auditCleanupService.start(lifecycle);
     assertStartupActive();
 
     const backendRoot = resolve(__dirname, '..');
@@ -681,6 +684,7 @@ export async function shutdown(signal: string) {
       if (enrichmentRetryTimer) clearInterval(enrichmentRetryTimer);
       enrichmentRetryTimer = null;
       await logRetentionService.stop();
+      await auditCleanupService.stop();
       await aiCapabilityHealthService.stop();
     },
     teaching: aiTeachingOrchestrator,
