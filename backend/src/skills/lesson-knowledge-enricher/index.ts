@@ -150,131 +150,50 @@ function normalizeConfusionItem(item: any): LessonKnowledgeEnricherOutput['recur
   };
 }
 
-function buildFallback(input: LessonKnowledgeEnricherInput): LessonKnowledgeEnricherOutput {
-  const knowledgeState = Array.isArray(input.knowledgeState) ? input.knowledgeState : [];
-  const taskId = normalizeText(input.taskContext?.taskId);
-  const pathId = normalizeText(input.taskContext?.learningPathId);
-
-  const conceptLedger = knowledgeState.map((point) => {
-    const familiarity: LessonKnowledgeEnricherOutput['conceptLedger'][number]['familiarity'] = point.status === 'mastered'
-      ? 'stable'
-      : point.status === 'review'
-        ? 'understood'
-        : point.status === 'learning'
-          ? 'practiced'
-          : 'seen';
-    const transferReadiness: LessonKnowledgeEnricherOutput['conceptLedger'][number]['transferReadiness'] = point.status === 'mastered'
-      ? 'high'
-      : point.progress >= 60
-        ? 'medium'
-        : 'low';
-    const misconceptionRisk: LessonKnowledgeEnricherOutput['conceptLedger'][number]['misconceptionRisk'] = point.status === 'review'
-      ? 'high'
-      : point.status === 'learning'
-        ? 'medium'
-        : 'low';
-    return {
-      conceptKey: point.name,
-      label: point.name,
-      familiarity,
-      transferReadiness,
-      misconceptionRisk,
-      sourcePaths: pathId ? [pathId] : [],
-      sourceTasks: taskId ? [taskId] : [],
-      evidenceCount: Math.max(1, Math.round(Math.max(0, Math.min(100, point.progress)) / 25)),
-    };
-  });
-
-  return {
-    conceptLedger,
-    reusableFoundations: uniqueStrings([
-      ...(input.knowledgeDelta?.newlyMastered || []),
-      ...conceptLedger.filter((item) => item.transferReadiness === 'high').map((item) => item.label),
-    ]).slice(0, 16),
-    blockedFoundations: uniqueStrings([
-      ...(input.knowledgeDelta?.movedToReview || []),
-      ...conceptLedger.filter((item) => item.misconceptionRisk === 'high').map((item) => item.label),
-    ]).slice(0, 16),
-    transferSignals: conceptLedger
-      .filter((item) => item.transferReadiness !== 'low')
-      .map((item) => ({
-        conceptKey: item.conceptKey,
-        label: item.label,
-        readiness: item.transferReadiness,
-        confidence: item.transferReadiness === 'high' ? 0.8 : 0.6,
-      }))
-      .slice(0, 16),
-    recurringConfusions: knowledgeState
-      .filter((item) => item.status === 'review')
-      .slice(0, 8)
-      .map((item) => ({
-        conceptKey: item.name,
-        label: item.name,
-        pattern: '课堂中该概念仍表现为回看或不稳定，需要后续继续作为重点复习项。',
-        confidence: 0.65,
-        count: 1,
-      })),
-  };
-}
-
 export async function lessonKnowledgeEnricher(input: LessonKnowledgeEnricherInput): Promise<SkillExecutionResult<LessonKnowledgeEnricherOutput>> {
   const startTime = Date.now();
-  try {
-    const result = await callPrompt<LessonKnowledgeEnricherInput, LessonKnowledgeEnricherOutput>({
-      agentId: 'skill:lesson-knowledge-enricher',
-      defaultSystemPrompt: '',
-      requireActivePrompt: true,
-      caller: { skillId: 'lesson-knowledge-enricher' },
-            buildUserPayload: (payload) => payload,
-      normalizeOutput: (parsed, payload) => {
-        const base = buildFallback(payload);
-        const obj = parsed && typeof parsed === 'object' ? parsed : {};
-        const ledger = safeArray(obj.conceptLedger)
-          .map(normalizeLedgerItem)
-          .filter((item) => item.conceptKey && item.label);
-        const signals = safeArray(obj.transferSignals)
-          .map(normalizeTransferSignal)
-          .filter((item) => item.conceptKey && item.label);
-        const confusions = safeArray(obj.recurringConfusions)
-          .map(normalizeConfusionItem)
-          .filter((item): item is NonNullable<typeof item> => item !== null);
-        return {
-          conceptLedger: ledger.length > 0 ? ledger : base.conceptLedger,
-          reusableFoundations: uniqueStrings(safeArray(obj.reusableFoundations)).length > 0
-            ? uniqueStrings(safeArray(obj.reusableFoundations)).slice(0, 16)
-            : base.reusableFoundations,
-          blockedFoundations: uniqueStrings(safeArray(obj.blockedFoundations)).length > 0
-            ? uniqueStrings(safeArray(obj.blockedFoundations)).slice(0, 16)
-            : base.blockedFoundations,
-          transferSignals: signals.length > 0 ? signals : base.transferSignals,
-          recurringConfusions: confusions.length > 0 ? confusions : base.recurringConfusions,
-        };
-      },
-      validateParsedOutput: (parsed) =>
-        parsed && typeof parsed === 'object'
-          ? { valid: true }
-          : { valid: false, failureReason: 'LESSON_KNOWLEDGE_ENRICHER_OUTPUT_NOT_OBJECT' },
-    }, input);
+  const result = await callPrompt<LessonKnowledgeEnricherInput, LessonKnowledgeEnricherOutput>({
+    agentId: 'skill:lesson-knowledge-enricher',
+    defaultSystemPrompt: '',
+    requireActivePrompt: true,
+    caller: { skillId: 'lesson-knowledge-enricher' },
+          buildUserPayload: (payload) => payload,
+    normalizeOutput: (parsed, _payload) => {
+      const obj = parsed && typeof parsed === 'object' ? parsed : {};
+      const ledger = safeArray(obj.conceptLedger)
+        .map(normalizeLedgerItem)
+        .filter((item) => item.conceptKey && item.label);
+      const signals = safeArray(obj.transferSignals)
+        .map(normalizeTransferSignal)
+        .filter((item) => item.conceptKey && item.label);
+      const confusions = safeArray(obj.recurringConfusions)
+        .map(normalizeConfusionItem)
+        .filter((item): item is NonNullable<typeof item> => item !== null);
+      return {
+        // 模型漏输出/输出空数组 → 保持空数组（空即空，不注入伪置信度/伪台账）
+        conceptLedger: ledger,
+        reusableFoundations: uniqueStrings(safeArray(obj.reusableFoundations)).slice(0, 16),
+        blockedFoundations: uniqueStrings(safeArray(obj.blockedFoundations)).slice(0, 16),
+        transferSignals: signals,
+        recurringConfusions: confusions,
+      };
+    },
+    validateParsedOutput: (parsed) =>
+      parsed && typeof parsed === 'object'
+        ? { valid: true }
+        : { valid: false, failureReason: 'LESSON_KNOWLEDGE_ENRICHER_OUTPUT_NOT_OBJECT' },
+  }, input);
 
-    if (!result.success || !result.output) {
-      throw new Error(result.error?.message || 'LESSON_KNOWLEDGE_ENRICHER_FAILED');
-    }
-
-    return {
-      success: true,
-      output: result.output,
-      duration: Date.now() - startTime,
-      quality: 'model',
-    };
-  } catch {
-    return {
-      success: true,
-      output: buildFallback(input),
-      duration: Date.now() - startTime,
-      cached: true,
-      quality: 'fallback',
-    };
+  if (!result.success || !result.output) {
+    throw new Error(result.error?.message || 'LESSON_KNOWLEDGE_ENRICHER_FAILED');
   }
+
+  return {
+    success: true,
+    output: result.output,
+    duration: Date.now() - startTime,
+    quality: 'model',
+  };
 }
 
 export default lessonKnowledgeEnricher;

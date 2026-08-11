@@ -67,7 +67,27 @@ describe('LessonKnowledgeEnrichmentConsumer', () => {
         expect.objectContaining({ evidenceType: 'dialogue-concepts-extracted' })
       ])
     });
+    const evidenceRows = tx.learner_evidence.createMany.mock.calls[0][0].data;
+    expect(evidenceRows.every((row: any) => !('confidence' in row))).toBe(true);
     expect(tx.domain_event_inbox.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('executeSkill 失败时不写证据、不写 receipt，并向 outbox 抛错（退避重投语义）', async () => {
+    inboxFindUnique.mockResolvedValue(null);
+    executeSkill.mockRejectedValue(new Error('LESSON_KNOWLEDGE_ENRICHER_FAILED: provider timeout'));
+
+    await expect(new LessonKnowledgeEnrichmentConsumer().handle(createDomainEvent({
+      id: 'evt-lesson-fail',
+      type: 'lesson:completed',
+      aggregateType: 'lesson',
+      aggregateId: 'session-1',
+      userId: 'user-1',
+      source: 'test',
+      data: { knowledgeState: [], visibleDialogueContext: [] }
+    }))).rejects.toThrow('LESSON_KNOWLEDGE_ENRICHER_FAILED: provider timeout');
+
+    expect(transaction).not.toHaveBeenCalled();
+    expect(inboxFindUnique).toHaveBeenCalledTimes(1);
   });
 
   it('skips the expensive skills when the event was already consumed', async () => {

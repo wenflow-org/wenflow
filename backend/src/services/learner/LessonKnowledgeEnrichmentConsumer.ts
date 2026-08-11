@@ -1,7 +1,8 @@
 import prisma from '../../config/database';
 import type { DurableDomainEvent } from '../../events/contracts';
 import { executeSkill } from '../../skills';
-import { lessonKnowledgeEnricherDefinition } from '../../skills/lesson-knowledge-enricher';
+import { lessonKnowledgeEnricherDefinition, type LessonKnowledgeEnricherOutput } from '../../skills/lesson-knowledge-enricher';
+import { logger } from '../../utils/logger';
 
 const CONSUMER_ID = 'lesson-knowledge-enrichment-v1';
 
@@ -24,22 +25,34 @@ export class LessonKnowledgeEnrichmentConsumer {
         : [];
 
     // 单次 LLM 调用完成知识台账蒸馏 + 隐性概念抽取（原两个 skill 合并）
-    const enriched = await executeSkill(lessonKnowledgeEnricherDefinition, {
-      knowledgeState,
-      knowledgeDelta: data.wrapup?.progress
-        ? {
-            newlyMastered: data.wrapup.progress.newlyMastered || [],
-            movedToReview: data.wrapup.progress.movedToReview || [],
-            stillLearning: data.wrapup.progress.stillLearning || [],
-            unchangedMastered: data.wrapup.progress.unchangedMastered || []
-          }
-        : null,
-      wrapup: data.wrapup || null,
-      taskContext: { learningPathId: data.pathId, taskId: data.taskId },
-      sessionEvidence: data.performance || null,
-      visibleDialogueContext,
-      classroomEventHistory,
-    });
+    // 隔离语义：enricher 失败 → 不写证据、不写 receipt → 抛错给 outbox worker
+    // （指数退避重投，MAX_ATTEMPTS=8 后 dead）；证据 ID 固定 + receipt 与证据同事务 → 重投幂等安全。
+    // 快照/投影链不受影响：enricher 未写证据仅少一层 enrichment，确定性基底照常；快照读路径自愈重建。
+    let enriched: LessonKnowledgeEnricherOutput | null = null;
+    try {
+      enriched = await executeSkill(lessonKnowledgeEnricherDefinition, {
+        knowledgeState,
+        knowledgeDelta: data.wrapup?.progress
+          ? {
+              newlyMastered: data.wrapup.progress.newlyMastered || [],
+              movedToReview: data.wrapup.progress.movedToReview || [],
+              stillLearning: data.wrapup.progress.stillLearning || [],
+              unchangedMastered: data.wrapup.progress.unchangedMastered || []
+            }
+          : null,
+        wrapup: data.wrapup || null,
+        taskContext: { learningPathId: data.pathId, taskId: data.taskId },
+        sessionEvidence: data.performance || null,
+        visibleDialogueContext,
+        classroomEventHistory,
+      });
+    } catch (error) {
+      logger.warn('[lesson-knowledge-enrichment] 课后知识增强失败，跳过本课证据写入（outbox 将退避重投）', {
+        eventId: event.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
 
     const sessionKnowledge = {
       conceptLedger: enriched?.conceptLedger || [],
@@ -71,7 +84,6 @@ export class LessonKnowledgeEnrichmentConsumer {
             sessionId: data.sessionId || null,
             evidenceType: 'session-knowledge-distilled',
             payload: JSON.stringify(sessionKnowledge || {}),
-            confidence: 0.8,
             occurredAt: event.occurredAt
           },
           {
@@ -85,7 +97,6 @@ export class LessonKnowledgeEnrichmentConsumer {
             sessionId: data.sessionId || null,
             evidenceType: 'dialogue-concepts-extracted',
             payload: JSON.stringify(dialogueKnowledge || {}),
-            confidence: 0.72,
             occurredAt: event.occurredAt
           }
         ]

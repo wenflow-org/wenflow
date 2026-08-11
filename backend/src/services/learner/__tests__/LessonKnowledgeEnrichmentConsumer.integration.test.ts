@@ -98,14 +98,15 @@ runIntegration('LessonKnowledgeEnrichmentConsumer 集成测试（真实数据库
     expect(evidenceA!.userId).toBe(ids.user)
     expect(evidenceA!.pathId).toBe('path-integration')
     expect(evidenceA!.sessionId).toBe('session-integration')
-    expect(evidenceA!.confidence).toBe(0.8)
+    // 伪置信度已砍：consumer 不再写 evidence 级置信度，落库为 schema 默认值 1
+    expect(evidenceA!.confidence).toBe(1)
 
     const payloadA = JSON.parse(evidenceA!.payload)
     expect(payloadA.conceptLedger).toHaveLength(1)
 
     expect(evidenceB).not.toBeNull()
     expect(evidenceB!.userId).toBe(ids.user)
-    expect(evidenceB!.confidence).toBe(0.72)
+    expect(evidenceB!.confidence).toBe(1)
 
     const payloadB = JSON.parse(evidenceB!.payload)
     expect(payloadB.recurringConfusions).toHaveLength(1)

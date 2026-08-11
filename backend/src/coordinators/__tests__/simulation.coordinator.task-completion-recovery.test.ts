@@ -175,6 +175,27 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     })
   })
 
+  it('learn-turn 模拟器失败 → 单步 success:false、会话标 failed、teaching 状态保留可恢复', async () => {
+    mockExecuteSkill.mockRejectedValue(new Error('VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED'))
+
+    const result = await coordinator.executeLearningStep('simulation-1')
+    const learning = getLearningState()
+
+    expect(result).toEqual(expect.objectContaining({
+      success: false
+    }))
+    expect(result.error).toContain('VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED')
+    // 会话显式 failed（可重启 Learn 恢复），不再用伪 selfReportedTaskDone 驱动教师收束
+    expect(sessionRecord.status).toBe('failed')
+    expect(learning.taskRuntime).toEqual(expect.objectContaining({
+      status: 'error'
+    }))
+    expect(learning.taskRuntime.error).toContain('VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED')
+    expect(learning.currentTaskId).toBe('task-1')
+    expect(mockProcessStudentMessage).not.toHaveBeenCalled()
+    expect(mockEndSession).not.toHaveBeenCalled()
+  })
+
   it('endSession 成功后 completeTask 失败会留下 pending checkpoint，且虚拟会话不终态化', async () => {
     const longError = `transient-${'x'.repeat(1200)}`
     let runtimeWhenCompleteTaskStarted: any

@@ -4,7 +4,6 @@ import {
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
 import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter';
-import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 import {
   type VirtualLearnerPersona,
@@ -16,9 +15,7 @@ import {
 
 export const VIRTUAL_LEARNER_PATH_EVALUATOR_MAX_TOKENS = 1200;
 export const VIRTUAL_LEARNER_PATH_EVALUATOR_TEMPERATURE = 0.5;
-const PATH_EVALUATOR_FALLBACK_RUNTIME_CONTRACT = buildDefaultRuntimeContract(
-  'virtual-learner-path-evaluator'
-);
+export const VIRTUAL_LEARNER_PATH_EVALUATION_FAILED = 'VIRTUAL_LEARNER_PATH_EVALUATION_FAILED';
 
 // File-as-Truth: the ACTIVE prompt at runtime is compiled from prompts/core/*.yaml.
 // Load it from the compiled artifact here; do not embed a second copy (dual-source drift).
@@ -46,6 +43,11 @@ export interface VirtualLearnerPathEvaluatorOutput {
     stateChangeReason?: string;
     internalDecision?: 'accept' | 'modify' | 'reject';
     internalConfidence?: number;
+    /** 归一化补齐检测：LLM 未输出、由代码用 fallback 默认值填充的状态字段统计 */
+    normalizedFallback?: {
+      fieldCount: number;
+      fields: string[];
+    };
   };
   runtimeEnvelope?: ReturnType<typeof mapSkillOutputEnvelope>;
 }
@@ -145,6 +147,18 @@ function buildFallback(input: VirtualLearnerPathEvaluatorInput): VirtualLearnerP
   };
 }
 
+const PATH_OUTPUT_FIELDS = [
+  'reaction', 'visibleRequestedChanges', 'internalDecision', 'internalConfidence',
+] as const;
+
+function pathFieldProvided(parsed: any, field: string): boolean {
+  if (field === 'reaction') return !!safeText(parsed?.reaction);
+  if (field === 'visibleRequestedChanges') return Array.isArray(parsed?.visibleRequestedChanges) && parsed.visibleRequestedChanges.length > 0;
+  if (field === 'internalDecision') return !!(parsed?.debug?.internalDecision ?? parsed?.decision);
+  if (field === 'internalConfidence') return !!(parsed?.debug?.internalConfidence ?? parsed?.confidence);
+  return false;
+}
+
 function normalizeOutput(parsed: any, input: VirtualLearnerPathEvaluatorInput): VirtualLearnerPathEvaluatorOutput {
   const fallback = buildFallback(input);
   // BUG FIX: prompt 要求模型输出 debug.internalDecision (不是 decision)
@@ -152,6 +166,11 @@ function normalizeOutput(parsed: any, input: VirtualLearnerPathEvaluatorInput): 
   const decision = rawDecision === 'modify' || rawDecision === 'reject' ? rawDecision : 'accept';
   const requestedChanges = normalizeStringArray(parsed?.visibleRequestedChanges);
   const modifyRequest = sanitizeText(parsed?.modifyRequest || '');
+  // 归一化补齐检测：LLM 未输出的字段由代码用 fallback 默认值填充，供审计区分
+  const normalizedFallback = {
+    fieldCount: PATH_OUTPUT_FIELDS.filter((field) => !pathFieldProvided(parsed, field)).length,
+    fields: PATH_OUTPUT_FIELDS.filter((field) => !pathFieldProvided(parsed, field)).slice(0, 8),
+  };
 
   return {
     reaction: sanitizeText(parsed?.reaction) || fallback.reaction,
@@ -165,9 +184,12 @@ function normalizeOutput(parsed: any, input: VirtualLearnerPathEvaluatorInput): 
       stateChangeReason: sanitizeText(parsed?.debug?.stateChangeReason || ''),
       internalDecision: decision,
       internalConfidence: clamp01(parsed?.debug?.internalConfidence ?? parsed?.confidence, fallback.debug?.internalConfidence || 0.6),
+      normalizedFallback,
     }
   };
 }
+
+export { normalizeOutput };
 
 function buildUserPayload(input: VirtualLearnerPathEvaluatorInput) {
   const friction = decideFrictionTrigger(input.frictionBudget);
@@ -223,19 +245,14 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
     }, input || {} as VirtualLearnerPathEvaluatorInput);
 
     if (!result.success || !result.output) {
-      const fallback = { ...buildFallback(input || {} as VirtualLearnerPathEvaluatorInput), degraded: true };
+      // 失败显式传播：不产出伪 reaction/伪 internalDecision（与 learn-turn 统一 success:false 语义）
       return {
-        success: true,
-        output: {
-          ...fallback,
-          runtimeEnvelope: mapSkillOutputEnvelope(PATH_EVALUATOR_FALLBACK_RUNTIME_CONTRACT, fallback, {
-            phase: 'simulation-step-completed',
-            status: 'partial',
-          }),
+        success: false,
+        error: {
+          code: VIRTUAL_LEARNER_PATH_EVALUATION_FAILED,
+          message: result.error?.message || 'path-evaluator-failed',
         },
-        duration: Date.now() - startTime,
-        cached: true,
-        quality: 'fallback',
+        duration: result.debug.durationMs || Date.now() - startTime,
       };
     }
 
@@ -254,13 +271,14 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
       duration: result.debug.durationMs,
       quality: 'model',
     };
-  } catch {
+  } catch (error: any) {
     return {
-      success: true,
-      output: { ...buildFallback(input || {} as VirtualLearnerPathEvaluatorInput), degraded: true },
-      duration: Date.now() - startTime,
-      cached: true,
-      quality: 'fallback',
+      success: false,
+      error: {
+        code: VIRTUAL_LEARNER_PATH_EVALUATION_FAILED,
+        message: error?.message || 'Unknown error',
+      },
+      duration: 0,
     };
   }
 }

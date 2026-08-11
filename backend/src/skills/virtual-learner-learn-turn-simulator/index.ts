@@ -4,7 +4,6 @@ import {
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
 import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter';
-import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 import {
   type VirtualLearnerPersona,
@@ -16,9 +15,7 @@ import {
 
 export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS = 800;
 export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE = 0.7;
-const LEARN_TURN_FALLBACK_RUNTIME_CONTRACT = buildDefaultRuntimeContract(
-  'virtual-learner-learn-turn-simulator'
-);
+export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED = 'VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED';
 
 // File-as-Truth: the ACTIVE prompt at runtime is compiled from prompts/core/*.yaml.
 // Load it from the compiled artifact here; do not embed a second copy (dual-source drift).
@@ -361,26 +358,14 @@ export async function virtualLearnerLearnTurnSimulator(input: any): Promise<Skil
     }, input || {});
 
     if (!result.success || !result.output) {
-      const fallback = buildFallback(input || {});
+      // 失败显式传播：不产出伪 learnerState/伪 selfReportedTaskDone（与 catch 路径统一 success:false 语义）
       return {
-        success: true,
-        output: {
-          ...fallback,
-          degraded: true,
-          runtimeEnvelope: mapSkillOutputEnvelope(LEARN_TURN_FALLBACK_RUNTIME_CONTRACT, fallback, {
-            phase: 'simulation-step-completed',
-            status: 'partial',
-            nextState: fallback?.learnerState ?? null,
-          }),
-          _debug: {
-            rawModelOutput: result.debug.rawModelOutput,
-            extractedJson: result.debug.extractedJson,
-            userPayload: result.debug.userPayload,
-            systemPromptVersion: result.debug.systemPromptVersion,
-            fallbackReason: result.error?.message || 'VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED',
-          },
+        success: false,
+        error: {
+          code: VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED,
+          message: result.error?.message || 'learn-turn-simulator-failed',
         },
-        duration: result.debug.durationMs,
+        duration: result.debug.durationMs || 0,
       };
     }
 
@@ -402,7 +387,7 @@ export async function virtualLearnerLearnTurnSimulator(input: any): Promise<Skil
     return {
       success: false,
       error: {
-        code: 'VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED',
+        code: VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED,
         message: error?.message || 'Unknown error',
       },
       duration: 0,
