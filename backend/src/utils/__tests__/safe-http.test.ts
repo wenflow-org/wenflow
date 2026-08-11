@@ -120,10 +120,18 @@ describe('safe-http SSRF policy', () => {
     expect(() => validateSafeHttpConfig()).toThrow('SAFE_HTTP_NAT64_PREFIXES 配置无效')
   })
 
-  it('public-only 调用在开发环境也拒绝 HTTP', async () => {
+  it('public-only 调用在开发环境允许公网 HTTP（私网/本机仍由 IP 校验拦截）', async () => {
+    // newapi 等第三方网关普遍以明文 HTTP 部署；生产仍强制 HTTPS
+    lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    requestMock.mockResolvedValue({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'application/json' },
+      data: { ok: true }
+    })
     await expect(validateExternalUrl('http://example.com', {
       privateNetworkPolicy: 'public-only'
-    })).rejects.toThrow('当前调用仅允许 HTTPS URL')
+    })).resolves.toBeTruthy()
   })
 
   it('固定请求到已校验的公网 IP', async () => {
