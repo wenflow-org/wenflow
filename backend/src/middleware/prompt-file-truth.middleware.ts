@@ -22,8 +22,9 @@ export function rejectAgentPromptMutation(req: Request, res: Response, next: Nex
 const PROMPT_OPS_MUTATIONS = [
   // 仅拦截直接改写 DB prompt 的路径（File-as-Truth：真源是 prompts/*.md，经 Git 审核后部署同步）。
   // /sync（文件 → DB 镜像同步）与 /recompile（编译产物刷新）是"文件为真源"的衍生操作，放行。
-  /^\/[^/]+\/source\/?$/,
-  /^\/[^/]+\/fields\/?$/
+  // i 标志：防止 PUT /SOURCE 等大小写变体绕过只读守卫。
+  /^\/[^/]+\/source\/?$/i,
+  /^\/[^/]+\/fields\/?$/i
 ]
 
 export function rejectPromptOpsRuntimeMutation(req: Request, res: Response, next: NextFunction) {
@@ -33,10 +34,10 @@ export function rejectPromptOpsRuntimeMutation(req: Request, res: Response, next
 }
 
 const PROMPT_LAB_FILE_MUTATIONS = [
-  /^\/source\/[^/]+\/?$/,
-  /^\/manifest\/[^/]+\/?$/,
-  /^\/source\/[^/]+\/create\/?$/,
-  /^\/publish\/?$/
+  /^\/source\/[^/]+\/?$/i,
+  /^\/manifest\/[^/]+\/?$/i,
+  /^\/source\/[^/]+\/create\/?$/i,
+  /^\/publish\/?$/i
 ]
 
 export function rejectPromptLabFileMutation(req: Request, res: Response, next: NextFunction) {

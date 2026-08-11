@@ -9,15 +9,23 @@ import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
 import { computeCoreHash, loadCoreFile } from './core-file-loader';
-import { normalizeRuntimeContract } from './runtime-contract';
-import { normalizeSkillPromptContract } from '../skill-prompt-contract';
+import { normalizeRuntimeContract, type RuntimeContract } from './runtime-contract';
+import { normalizeSkillPromptContract, type SkillPromptContract } from '../skill-prompt-contract';
+import { PROMPTS_DIR } from '../../composers/prompt-files/loader';
 
-const MANIFESTS_DIR = path.join(process.cwd(), '../prompt-lab/manifests');
+// M3：与 loader 的 PROMPTS_DIR 同源解析仓库根（支持 PROMPTS_DIR 环境变量覆盖），
+// manifests 位于仓库根 prompt-lab/manifests，避免 process.cwd() 双轨不一致。
+const MANIFESTS_DIR = path.join(path.dirname(PROMPTS_DIR), 'prompt-lab', 'manifests');
 
-function loadManifestContracts(skillId: string) {
+function loadManifestContracts(skillId: string): {
+  runtimeContract: RuntimeContract;
+  promptContract: SkillPromptContract;
+} | null {
   const filePath = path.join(MANIFESTS_DIR, `${skillId}.yaml`);
   if (!fs.existsSync(filePath)) {
-    throw new Error(`v4 skill 缺少契约 manifest: prompt-lab/manifests/${skillId}.yaml`);
+    // manifest 缺失降级为 null（不再 throw），由调用方记录告警；
+    // 避免文件已写盘、DB 未写时因 manifest 缺失抛错造成文件与 DB ACTIVE 分叉。
+    return null;
   }
   const parsed = (yaml.load(fs.readFileSync(filePath, 'utf-8')) || {}) as Record<string, unknown>;
   const archetype = typeof parsed.archetype === 'string' ? parsed.archetype.trim() : '';
@@ -49,7 +57,7 @@ export function buildV4CorePromptMetadata(input: {
       `拒绝为漂移版本写入 coreSnapshot：${input.skillId} 的 coreHash 与当前核心文件不一致`
     );
   }
-  const { runtimeContract, promptContract } = loadManifestContracts(input.skillId);
+  const contracts = loadManifestContracts(input.skillId);
   const coreSnapshot = input.coreSnapshot ?? fs.readFileSync(loaded.core.filePath, 'utf-8');
 
   return JSON.stringify({
@@ -62,10 +70,18 @@ export function buildV4CorePromptMetadata(input: {
       ...(input.developerApprovalReference
         ? { developerApproval: { reference: input.developerApprovalReference } }
         : {}),
-      runtimeContractSource: 'manifest',
-      runtimeContract,
-      promptContractSource: 'manifest',
-      promptContract,
+      ...(contracts
+        ? {
+            runtimeContractSource: 'manifest',
+            runtimeContract: contracts.runtimeContract,
+            promptContractSource: 'manifest',
+            promptContract: contracts.promptContract,
+          }
+        : {
+            // 契约 manifest 缺失：降级标记（原为 throw 阻断），由调用方记录告警
+            runtimeContractSource: 'manifest-missing',
+            promptContractSource: 'manifest-missing',
+          }),
     },
   });
 }

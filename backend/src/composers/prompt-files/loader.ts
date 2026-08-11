@@ -195,22 +195,52 @@ export function scanPromptFiles(promptsDir = PROMPTS_DIR): PromptFileScanResult 
   };
 }
 
-/** 加载所有 prompt 文件 */
-export function loadAllPromptFiles(): PromptFile[] {
+/**
+ * 容错加载所有 prompt 文件。单个文件的读取或 YAML frontmatter 错误会记入 diagnostics
+ * 并跳过该文件（与 scanPromptFiles 同一容错语义），不阻断其余文件。
+ */
+export function loadAllPromptFilesWithDiagnostics(): PromptFileScanResult {
   const files: PromptFile[] = [];
+  const diagnostics: PromptFileScanDiagnostic[] = [];
 
   for (const filePath of getPromptFilePaths(PROMPTS_DIR)) {
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    const parsed = parsePromptFile(filePath, raw);
-
-    if (!parsed.systemPrompt) {
-      // 空 prompt 视为无效，跳过以免覆盖 DB 现有内容
+    let raw: string;
+    try {
+      raw = fs.readFileSync(filePath, 'utf-8');
+    } catch (error) {
+      diagnostics.push({
+        filePath,
+        code: 'read-error',
+        message: error instanceof Error ? error.message : String(error),
+      });
       continue;
     }
-    files.push(parsed);
+
+    try {
+      const parsed = parsePromptFile(filePath, raw);
+      if (!parsed.systemPrompt) {
+        // 空 prompt 视为无效，跳过以免覆盖 DB 现有内容
+        continue;
+      }
+      files.push(parsed);
+    } catch (error) {
+      diagnostics.push({
+        filePath,
+        code: 'frontmatter-parse-error',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
-  return sortPromptFiles(files);
+  return {
+    files: sortPromptFiles(files),
+    diagnostics: diagnostics.sort((a, b) => a.filePath.localeCompare(b.filePath)),
+  };
+}
+
+/** 加载所有 prompt 文件（坏文件跳过；需要诊断明细时使用 loadAllPromptFilesWithDiagnostics） */
+export function loadAllPromptFiles(): PromptFile[] {
+  return loadAllPromptFilesWithDiagnostics().files;
 }
 
 /** 按 agentId 加载单个 prompt 文件（找不到返回 null） */

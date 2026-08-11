@@ -23,7 +23,7 @@ import {
   normalizeSkillPromptContract,
   type SkillPromptContract,
 } from '../services/skill-prompt-contract';
-import { parsePromptFrontmatterMeta } from '../composers/prompt-files/loader';
+import { parsePromptFrontmatterMeta, PROMPTS_DIR } from '../composers/prompt-files/loader';
 import {
   compileCoreFile,
   checkFiveBlockStructure,
@@ -45,9 +45,10 @@ import { checkInputHandoffs } from '../services/prompt-lab/input-handoff-check';
 const router = Router();
 router.use(rejectPromptLabFileMutation);
 
-const PROMPT_LAB_DIR = path.join(process.cwd(), '../prompt-lab');
+// M3：prompts 目录复用 loader 的 PROMPTS_DIR 解析（支持 PROMPTS_DIR 环境变量覆盖），
+// prompt-lab/manifests 与 prompts 同级存放于仓库根，避免 process.cwd() 双轨不一致。
+const PROMPT_LAB_DIR = path.join(path.dirname(PROMPTS_DIR), 'prompt-lab');
 const MANIFESTS_DIR = path.join(PROMPT_LAB_DIR, 'manifests');
-const PROMPTS_DIR = path.join(process.cwd(), '../prompts');
 // 发布备份与 prompts 同级存放（prompts/backups/<skillId>/），不再跨目录到 prompt-lab
 const BACKUPS_DIR = path.join(PROMPTS_DIR, 'backups');
 
@@ -437,6 +438,29 @@ async function nextCoreVersion(agentId: string): Promise<number> {
   return (latest?.coreVersion ?? 0) + 1;
 }
 
+/**
+ * H2：按 agentId 串行化同 skill 的发布（进程内互斥）。
+ * 并发 publish-core 会算出相同的 coreVersion/version，撞 @@unique([agentId, version]) 返回 500；
+ * 串行后后发请求能看到前一发布写入的 ACTIVE 版本，再算出递增的版本号。
+ * 发布失败（reject）同样释放锁，不会死锁后续发布。
+ */
+const publishLocks = new Map<string, Promise<unknown>>();
+
+function serializePublish<T>(agentId: string, task: () => Promise<T>): Promise<T> {
+  const prev = publishLocks.get(agentId) ?? Promise.resolve();
+  const run = prev.catch(() => undefined).then(task);
+  publishLocks.set(agentId, run);
+  run.then(
+    () => {
+      if (publishLocks.get(agentId) === run) publishLocks.delete(agentId);
+    },
+    () => {
+      if (publishLocks.get(agentId) === run) publishLocks.delete(agentId);
+    }
+  );
+  return run;
+}
+
 /** v4：读取核心文件原文（judge 对账用 SSOT 文本） */
 async function readCoreText(skillId: string): Promise<string> {
   return fs.readFile(path.join(CORE_FILES_DIR, `${skillId}.yaml`), 'utf-8');
@@ -505,167 +529,203 @@ router.post('/compile-core', async (req, res) => {
 /**
  * POST /api/prompt-lab/publish-core
  * v4：核心文件 → 确定性编译 → 守门检查 → 发布
- * 备份当前 → 写回 prompts/skill.<id>.md → 创建 DB ACTIVE 版本（携带 coreHash/coreVersion）
+ * 顺序（H1 原子性）：① 全部校验（含 manifest/哈希预检）→ ② 同一事务内 DB create + 旧 ACTIVE 归档 → ③ 最后写文件（temp + rename 原子替换）
  * 说明：v4 产物为确定性渲染，不经 compilePrompt LLM 改写；不回写 skill_model_configs（路由配置不动）
  */
 router.post('/publish-core', async (req, res) => {
   try {
     const skillId = assertValidSkillId(req.body?.skillId);
-    const loaded = loadCoreFile(skillId);
-    if (!loaded) {
-      return res.status(404).json({ error: `核心文件不存在: prompts/core/${skillId}.yaml` });
-    }
-    if (!loaded.core) {
-      return res.status(400).json({ error: '核心文件 schema 不合法', diagnostics: loaded.diagnostics });
-    }
-    const core = loaded.core;
     const agentId = `skill:${skillId}`;
-
-    const coreVersion = await nextCoreVersion(agentId);
-    const compiled = compileCoreFile(core, { coreVersion });
-    const gates: Record<string, unknown> = {
-      structure: checkFiveBlockStructure(compiled.prompt),
-      fieldFreeze: checkFieldFreeze(core, compiled.prompt),
-      // inputs 声明 ↔ handoff 对账（advisory，不参与阻断）
-      inputHandoff: await checkInputHandoffs(core)
-    };
-    const structuralIssues = [
-      ...(gates.structure as Array<unknown>),
-      ...(gates.fieldFreeze as Array<unknown>)
-    ];
-    if (structuralIssues.length > 0) {
-      return res.status(422).json({ error: '守门检查未通过，已阻断发布', gates, issues: structuralIssues });
-    }
-
-    // 字段结构变更以 ACTIVE 版本的 coreSnapshot 为基准，而不是磁盘当前 core。
-    // 这样 staging 后的重复保存也不能把 blocked/restricted 变成安全修改。
-    const activeForClassification = await systemPrisma.agent_prompts.findFirst({
-      where: { agentId, status: 'ACTIVE' },
-      orderBy: { version: 'desc' },
-      select: { metadata: true },
-    });
-    let classification: ReturnType<typeof classifyCoreEdit> = {
-      level: 'safe',
-      messages: ['首次发布核心文件'],
-    };
-    if (activeForClassification) {
-      const activeSnapshot = resolveCoreSnapshot(activeForClassification.metadata, skillId);
-      if (!activeSnapshot.core) {
-        return res.status(409).json({
-          error: activeSnapshot.error,
-          code: 'ACTIVE_CORE_SNAPSHOT_REQUIRED',
-        });
+    // H2：同 skill 的发布按 agentId 串行化（进程内互斥），
+    // 防止并发发布算出相同 coreVersion/version 撞 @@unique([agentId, version]) 返回 500。
+    await serializePublish(agentId, async () => {
+      const loaded = loadCoreFile(skillId);
+      if (!loaded) {
+        return res.status(404).json({ error: `核心文件不存在: prompts/core/${skillId}.yaml` });
       }
-      classification = classifyCoreEdit(activeSnapshot.core, core);
-    }
-    const developerApproval = normalizeDeveloperApproval(req.body?.developerApproval);
-    if (classification.level !== 'safe' && !developerApproval) {
-      return res.status(422).json({
-        error: classification.level === 'blocked'
-          ? '字段删除或类型变更必须先同步消费者，并提供开发确认引用后才能发布'
-          : '新增字段必须经开发确认消费者接入后才能发布',
-        code: 'STRUCTURAL_CHANGE_REQUIRES_DEVELOPER_APPROVAL',
-        classification,
+      if (!loaded.core) {
+        return res.status(400).json({ error: '核心文件 schema 不合法', diagnostics: loaded.diagnostics });
+      }
+      const core = loaded.core;
+
+      const coreVersion = await nextCoreVersion(agentId);
+      const compiled = compileCoreFile(core, { coreVersion });
+      const gates: Record<string, unknown> = {
+        structure: checkFiveBlockStructure(compiled.prompt),
+        fieldFreeze: checkFieldFreeze(core, compiled.prompt),
+        // inputs 声明 ↔ handoff 对账（advisory，不参与阻断）
+        inputHandoff: await checkInputHandoffs(core)
+      };
+      const structuralIssues = [
+        ...(gates.structure as Array<unknown>),
+        ...(gates.fieldFreeze as Array<unknown>)
+      ];
+      if (structuralIssues.length > 0) {
+        return res.status(422).json({ error: '守门检查未通过，已阻断发布', gates, issues: structuralIssues });
+      }
+
+      // 字段结构变更以 ACTIVE 版本的 coreSnapshot 为基准，而不是磁盘当前 core。
+      // 这样 staging 后的重复保存也不能把 blocked/restricted 变成安全修改。
+      const activeForClassification = await systemPrisma.agent_prompts.findFirst({
+        where: { agentId, status: 'ACTIVE' },
+        orderBy: { version: 'desc' },
+        select: { metadata: true },
       });
-    }
-
-    // 发布不可绕过含义冻结；结构审批未完成时不消耗 LLM judge 调用。
-    const semantic = await runSemanticGate(skillId, compiled.prompt, false);
-    let semanticDecision: string | null = null;
-    if (semantic) {
-      gates.semantic = semantic;
-      semanticDecision = decideSemanticGate(semantic, { confirmUncertain: req.body?.confirmUncertain === true });
-      gates.semanticDecision = semanticDecision;
-      if (semanticDecision === 'block-divergent') {
+      let classification: ReturnType<typeof classifyCoreEdit> = {
+        level: 'safe',
+        messages: ['首次发布核心文件'],
+      };
+      if (activeForClassification) {
+        const activeSnapshot = resolveCoreSnapshot(activeForClassification.metadata, skillId);
+        if (!activeSnapshot.core) {
+          return res.status(409).json({
+            error: activeSnapshot.error,
+            code: 'ACTIVE_CORE_SNAPSHOT_REQUIRED',
+          });
+        }
+        classification = classifyCoreEdit(activeSnapshot.core, core);
+      }
+      const developerApproval = normalizeDeveloperApproval(req.body?.developerApproval);
+      if (classification.level !== 'safe' && !developerApproval) {
         return res.status(422).json({
-          error: '含义冻结未通过：编译产物与核心文件语义不等价，已阻断发布',
-          gates,
-          issues: semantic.findings
+          error: classification.level === 'blocked'
+            ? '字段删除或类型变更必须先同步消费者，并提供开发确认引用后才能发布'
+            : '新增字段必须经开发确认消费者接入后才能发布',
+          code: 'STRUCTURAL_CHANGE_REQUIRES_DEVELOPER_APPROVAL',
+          classification,
         });
       }
-      if (semanticDecision === 'needs-confirm') {
-        return res.status(409).json({
-          error: '含义冻结判定不确定，需人工确认（确认无误后以 confirmUncertain: true 重新发布）',
-          code: 'SEMANTIC_UNCERTAIN',
-          gates,
-          judgement: semantic
-        });
+
+      // 发布不可绕过含义冻结；结构审批未完成时不消耗 LLM judge 调用。
+      const semantic = await runSemanticGate(skillId, compiled.prompt, false);
+      let semanticDecision: string | null = null;
+      if (semantic) {
+        gates.semantic = semantic;
+        semanticDecision = decideSemanticGate(semantic, { confirmUncertain: req.body?.confirmUncertain === true });
+        gates.semanticDecision = semanticDecision;
+        if (semanticDecision === 'block-divergent') {
+          return res.status(422).json({
+            error: '含义冻结未通过：编译产物与核心文件语义不等价，已阻断发布',
+            gates,
+            issues: semantic.findings
+          });
+        }
+        if (semanticDecision === 'needs-confirm') {
+          return res.status(409).json({
+            error: '含义冻结判定不确定，需人工确认（确认无误后以 confirmUncertain: true 重新发布）',
+            code: 'SEMANTIC_UNCERTAIN',
+            gates,
+            judgement: semantic
+          });
+        }
       }
-    }
 
-    // 备份当前生产文件
-    const prodPath = path.join(PROMPTS_DIR, `skill.${skillId}.md`);
-    try {
-      const backupsDir = path.join(BACKUPS_DIR, skillId);
-      await fs.mkdir(backupsDir, { recursive: true });
-      const ts = new Date().toISOString().replace(/[:.]/g, '-');
-      await fs.copyFile(prodPath, path.join(backupsDir, `${ts}.md`));
-    } catch {
-      // 备份失败不阻塞
-    }
-
-    // 写回 prompts/（编译产物自含完整 frontmatter：agentId/coreHash/coreVersion/执行参数）
-    await fs.writeFile(prodPath, compiled.prompt, 'utf-8');
-
-    // 创建 DB ACTIVE 版本
-    const latest = await systemPrisma.agent_prompts.findFirst({
-      where: { agentId },
-      orderBy: { version: 'desc' },
-      select: { version: true }
-    });
-    const newVersion = (latest?.version ?? 0) + 1;
-    const promptId = uuidv4();
-    await systemPrisma.agent_prompts.create({
-      data: {
-        id: promptId,
-        agentId,
-        name: `${skillId} v${newVersion}`,
-        systemPrompt: compiled.body,
-        status: 'ACTIVE',
-        version: newVersion,
-        temperature: core.params.temperature,
-        maxTokens: core.params.maxTokens,
-        model: null,
-        description: core.identity.split('\n')[0].slice(0, 100),
-        coreHash: compiled.coreHash,
-        coreVersion: compiled.coreVersion,
-        metadata: buildV4CorePromptMetadata({
+      // H1 ① 全部校验前置：manifest/核心文件哈希预检在写文件、写库之前完成，
+      // 失败直接阻断，杜绝"文件已写盘、DB 未写"造成的文件与 DB ACTIVE 永久分叉。
+      let metadata: string;
+      let metadataWarning: string | null = null;
+      try {
+        metadata = buildV4CorePromptMetadata({
           skillId,
           coreHash: compiled.coreHash,
           coreVersion: compiled.coreVersion,
           deltaOutput: core.deltaOutput && core.outputMedia === 'json',
           ...(developerApproval ? { developerApprovalReference: developerApproval.reference } : {}),
-        }),
-        publishedAt: new Date(),
-        createdBy: 'prompt-lab-core'
+        });
+      } catch (error) {
+        return res.status(422).json({
+          error: '发布前校验未通过（manifest 或核心文件哈希校验失败），未写入任何数据',
+          code: 'PUBLISH_PREFLIGHT_FAILED',
+          details: (error as Error).message,
+        });
       }
-    });
+      // manifest 缺失不再抛错（降级为警告）：metadata 携带 manifest-missing 标记
+      const metadataInfo = JSON.parse(metadata) as { promptLab?: { runtimeContractSource?: string } };
+      if (metadataInfo.promptLab?.runtimeContractSource === 'manifest-missing') {
+        metadataWarning = `v4 skill 缺少契约 manifest（prompt-lab/manifests/${skillId}.yaml），metadata 未携带 runtime/prompt 契约`;
+        logger.warn(metadataWarning);
+      }
 
-    // 旧 ACTIVE → ARCHIVED
-    await systemPrisma.agent_prompts.updateMany({
-      where: { agentId, status: 'ACTIVE', id: { not: promptId } },
-      data: { status: 'ARCHIVED' }
-    });
+      // 备份当前生产文件（best-effort，不阻断）
+      const prodPath = path.join(PROMPTS_DIR, `skill.${skillId}.md`);
+      try {
+        const backupsDir = path.join(BACKUPS_DIR, skillId);
+        await fs.mkdir(backupsDir, { recursive: true });
+        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+        await fs.copyFile(prodPath, path.join(backupsDir, `${ts}.md`));
+      } catch {
+        // 备份失败不阻塞
+      }
 
-    try {
-      promptCache.clearAgentCache(agentId);
-      promptCache.clearAgentCache(skillId);
-      getAPIGateway().invalidateCache(undefined, undefined, skillId);
-      getAPIGateway().invalidateCache(undefined, agentId);
-    } catch (cacheErr: any) {
-      logger.warn('Failed to invalidate prompt/gateway cache:', { error: cacheErr?.message || String(cacheErr) });
-    }
+      // H1 ② 同一事务内完成 DB create + 旧 ACTIVE 归档：
+      // 任一失败整体回滚，DB 内永远只有一个 ACTIVE 版本。
+      const { promptId, newVersion } = await systemPrisma.$transaction(async (tx) => {
+        const latest = await tx.agent_prompts.findFirst({
+          where: { agentId },
+          orderBy: { version: 'desc' },
+          select: { version: true }
+        });
+        const nextVersion = (latest?.version ?? 0) + 1;
+        const nextPromptId = uuidv4();
+        await tx.agent_prompts.create({
+          data: {
+            id: nextPromptId,
+            agentId,
+            name: `${skillId} v${nextVersion}`,
+            systemPrompt: compiled.body,
+            status: 'ACTIVE',
+            version: nextVersion,
+            temperature: core.params.temperature,
+            maxTokens: core.params.maxTokens,
+            model: null,
+            description: core.identity.split('\n')[0].slice(0, 100),
+            coreHash: compiled.coreHash,
+            coreVersion: compiled.coreVersion,
+            metadata,
+            publishedAt: new Date(),
+            createdBy: 'prompt-lab-core'
+          }
+        });
+        // 旧 ACTIVE → ARCHIVED
+        await tx.agent_prompts.updateMany({
+          where: { agentId, status: 'ACTIVE', id: { not: nextPromptId } },
+          data: { status: 'ARCHIVED' }
+        });
+        return { promptId: nextPromptId, newVersion: nextVersion };
+      });
 
-    res.json({
-      success: true,
-      version: newVersion,
-      agentId,
-      promptId,
-      coreHash: compiled.coreHash,
-      coreVersion: compiled.coreVersion,
-      gates,
-      classification,
-      ...(developerApproval ? { developerApproval } : {}),
+      // H1 ③ 最后写盘：temp 文件 + rename 原子替换，避免写一半留下半截文件；
+      // 与 PROMPTS_DIR 同目录保证 rename 不跨卷。
+      const tmpPath = path.join(PROMPTS_DIR, `.skill.${skillId}.md.${process.pid}.tmp`);
+      try {
+        await fs.writeFile(tmpPath, compiled.prompt, 'utf-8');
+        await fs.rename(tmpPath, prodPath);
+      } catch (fileError) {
+        await fs.unlink(tmpPath).catch(() => {});
+        throw fileError;
+      }
+
+      try {
+        promptCache.clearAgentCache(agentId);
+        promptCache.clearAgentCache(skillId);
+        getAPIGateway().invalidateCache(undefined, undefined, skillId);
+        getAPIGateway().invalidateCache(undefined, agentId);
+      } catch (cacheErr: any) {
+        logger.warn('Failed to invalidate prompt/gateway cache:', { error: cacheErr?.message || String(cacheErr) });
+      }
+
+      res.json({
+        success: true,
+        version: newVersion,
+        agentId,
+        promptId,
+        coreHash: compiled.coreHash,
+        coreVersion: compiled.coreVersion,
+        gates,
+        classification,
+        ...(developerApproval ? { developerApproval } : {}),
+        ...(metadataWarning ? { metadataWarning } : {}),
+      });
     });
   } catch (error) {
     console.error('Core publish error:', error);

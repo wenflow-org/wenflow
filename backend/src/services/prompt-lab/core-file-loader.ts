@@ -22,6 +22,9 @@ export const CORE_FILES_DIR = process.env.CORE_FILES_DIR
   ? path.resolve(process.env.CORE_FILES_DIR)
   : path.resolve(__dirname, '../../../../prompts/core');
 
+/** 核心文件大小上限（1MB）：超过视为异常，跳过并记录诊断，防止超大文件拖垮目录扫描 */
+const MAX_CORE_FILE_SIZE_BYTES = 1024 * 1024;
+
 /** §3.1 六大输入材料池 */
 export const CORE_CHANNELS = ['dialogue', 'state', 'task', 'evidence', 'learner', 'path'] as const;
 export type CoreChannel = (typeof CORE_CHANNELS)[number];
@@ -130,7 +133,7 @@ export interface CoreFileIssue {
 
 export interface CoreFileDiagnostic {
   filePath: string;
-  code: 'read-error' | 'yaml-parse-error' | 'schema-error';
+  code: 'read-error' | 'yaml-parse-error' | 'schema-error' | 'file-too-large';
   message: string;
   issues?: CoreFileIssue[];
 }
@@ -506,12 +509,42 @@ export function scanCoreFiles(dir = CORE_FILES_DIR): {
   const diagnostics: CoreFileDiagnostic[] = [];
   if (!fs.existsSync(dir)) return { files, diagnostics };
 
-  const entries = fs
-    .readdirSync(dir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && /\.ya?ml$/i.test(entry.name) && !entry.name.startsWith('_'))
-    .map((entry) => path.join(dir, entry.name));
+  let entries: string[];
+  try {
+    entries = fs
+      .readdirSync(dir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /\.ya?ml$/i.test(entry.name) && !entry.name.startsWith('_'))
+      .map((entry) => path.join(dir, entry.name));
+  } catch (error) {
+    // 目录级读取失败：返回空列表 + 诊断，不让 /core-list 等接口整体 500
+    diagnostics.push({
+      filePath: dir,
+      code: 'read-error',
+      message: `无法读取核心文件目录：${error instanceof Error ? error.message : String(error)}`,
+    });
+    return { files, diagnostics };
+  }
 
   for (const filePath of entries) {
+    let size: number;
+    try {
+      size = fs.statSync(filePath).size;
+    } catch (error) {
+      diagnostics.push({
+        filePath,
+        code: 'read-error',
+        message: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+    if (size > MAX_CORE_FILE_SIZE_BYTES) {
+      diagnostics.push({
+        filePath,
+        code: 'file-too-large',
+        message: `核心文件超过大小上限（${MAX_CORE_FILE_SIZE_BYTES} 字节），已跳过`,
+      });
+      continue;
+    }
     let raw: string;
     try {
       raw = fs.readFileSync(filePath, 'utf-8');
