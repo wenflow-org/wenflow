@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import learningStateService from '../learning/learning-state.service';
-import { learnerSnapshotService } from '../learner/LearnerSnapshotService';
+import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { teachingStrategyConfig } from '../../config/pedagogy.config';
 import type { TeachingKnowledgePointState, TeachingSessionRecord } from './TeachingSessionRepository';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
@@ -417,12 +417,12 @@ export async function buildTeachingScenarioContext(
     ? learningStateService.coerceMetrics(previousSession.teachingState)
     : null;
   const learningState = runtimeLearningState || await learningStateService.getCurrentState(userId);
-  const learnerSnapshot = await learnerSnapshotService.getSnapshot({
+  const learnerSnapshot = await learnerSnapshotRefreshService.getLatest({
     userId,
-    learningPathId: path.id,
+    pathId: path.id,
     milestoneId: task.milestoneId,
     taskId: task.id,
-    mode: 'teaching',
+    scope: 'teaching',
   });
   const learnerProjection = learnerProjectionService.toTeachingProjection(learnerSnapshot);
   const resolvedConcept = resolveTaskConceptFromPath(task, path);

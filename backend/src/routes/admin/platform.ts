@@ -136,6 +136,18 @@ const parseLogMetadata = (metadata: string | null): Record<string, any> => {
   }
 };
 
+/**
+ * 服务端截断日志详情大字段（input/output）。
+ * 前端 live.ts fetchLogDetail 已按 4000 字符二次兜底截断；后端先截断避免全量传输。
+ * 截断后含标记总长 ≤ 4000，不会触发前端二次截断标记。
+ */
+const truncateLogPayload = (value: string | null, limit = 4000): { value: string | null; truncated: boolean } => {
+  if (!value || value.length <= limit) return { value, truncated: false };
+  const marker = `\n…（已截断，共 ${value.length} 字符）`;
+  const keep = Math.max(1, limit - marker.length);
+  return { value: value.slice(0, keep) + marker, truncated: true };
+};
+
 const isPathGenerationFlowEventMetadata = (metadata: string | null): boolean => {
   const parsed = parseLogMetadata(metadata);
   return parsed.eventType === 'path-generation-stage';
@@ -450,9 +462,14 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
 /**
  * 获取平台概览数据
  * GET /api/admin/overview/stats
+ *
+ * 服务端缓存：45s TTL，避免每次进入概览页重复执行 20+ 条统计查询。
+ * /overview/stats 无请求参数，使用固定 key；/activity 的 key 含 excludeTest 与 limit。
  */
-router.get('/overview/stats', async (req: Request, res: Response) => {
-  try {
+const OVERVIEW_CACHE_TTL_MS = 45 * 1000;
+const overviewStatsCache = new Map<string, { payload: unknown; cachedAt: number }>();
+
+async function computeOverviewStats(): Promise<unknown> {
     // 获取今日统计
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -480,12 +497,13 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       ]
     };
     // 生产统计排除虚拟学习者与测试/审计账号：见模块级 REAL_USER_WHERE
-    const isTimeoutLog = (log: { errorCode: string | null; error: string | null }) => {
+    // 超时识别：优先 errorCode/errorCategory（现代 gateway 行写 errorCode=ATTEMPT_TIMEOUT、errorCategory=provider_timeout），
+    // 兼容旧行 errorCode 中直接含 timeout 字样（ETIMEDOUT 等）。
+    const isTimeoutLog = (log: { errorCode: string | null; errorCategory?: string | null }) => {
       const errorCode = String(log.errorCode || '').toLowerCase();
-      const errorMessage = String(log.error || '').toLowerCase();
-      return timeoutErrorSignals.some(signal =>
-        errorCode.includes(signal) || errorMessage.includes(signal)
-      );
+      const errorCategory = String(log.errorCategory || '').toLowerCase();
+      return errorCategory.includes('timeout')
+        || timeoutErrorSignals.some(signal => errorCode.includes(signal));
     };
 
     // 并行查询所有统计数据
@@ -632,7 +650,10 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         },
       }),
 
-      // 今日超时调用（按 error/errorCode 关键字识别）
+      // 今日超时调用（按 errorCode/errorCategory 识别）。
+      // 保守保留 LIKE 查询：现代 gateway 行带 errorCategory=provider_timeout / errorCode=ATTEMPT_TIMEOUT，
+      // 但旧平台与 skill 行只有 error/errorCode 文本信号（无 errorCategory 列值），
+      // 且 error 字段可能包含 'timed out' 等 errorCode 不含的信号，故不做枚举化改造。
       prisma.agent_call_logs.count({
         where: {
           AND: [
@@ -662,24 +683,26 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         }
       }),
 
-      // 最近 24h 调用趋势
+      // 最近 24h 调用趋势（抽样 50 条计算小时分布；select 裁剪避免拉取 error 全文）
       prisma.agent_call_logs.findMany({
         where: {
           ...businessExecutionWhere,
           calledAt: { gte: last24HoursStart }
         },
+        take: 50,
         select: {
           calledAt: true,
           success: true,
           errorCode: true,
-          error: true
+          errorCategory: true
         }
       }),
 
+      // wrapup 来源分布抽样（200 → 50：仅用于 wrapupSourceStats 比例估算）
       prisma.agent_call_logs.findMany({
         where: { agentId: 'skill:session-wrapup' },
         orderBy: { calledAt: 'desc' },
-        take: 200,
+        take: 50,
         select: { output: true }
       }),
 
@@ -833,9 +856,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       failures7d,
     };
 
-    res.json({
-      success: true,
-      data: {
+    return {
         users: {
           total: totalUsers,
           newToday: newUsersToday,
@@ -867,8 +888,19 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
           wrapup: wrapupSourceStats,
         },
         usage,
-      },
-    });
+    };
+}
+
+router.get('/overview/stats', async (req: Request, res: Response) => {
+  try {
+    const cacheKey = 'overview-stats';
+    const cached = overviewStatsCache.get(cacheKey);
+    if (cached && Date.now() - cached.cachedAt < OVERVIEW_CACHE_TTL_MS) {
+      return res.json({ success: true, data: cached.payload });
+    }
+    const data = await computeOverviewStats();
+    overviewStatsCache.set(cacheKey, { payload: data, cachedAt: Date.now() });
+    res.json({ success: true, data });
   } catch (error: any) {
     logger.error('[admin-platform] 获取平台概览失败', { error });
     res.status(500).json({
@@ -1370,11 +1402,34 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
     };
 
     const [logs, total, successCount, timeoutCount, errorCount, bySourceRows] = await Promise.all([
+      // select 裁剪：列表仅消费下列字段（input/output 由详情接口按需拉取，不在列表传输）
       prisma.agent_call_logs.findMany({
         where,
         skip,
         take: Number(limit),
         orderBy: { calledAt: 'desc' },
+        select: {
+          id: true,
+          agentId: true,
+          callerAgent: true,
+          sourceEntry: true,
+          success: true,
+          error: true,
+          errorCode: true,
+          traceId: true,
+          durationMs: true,
+          calledAt: true,
+          metadata: true,
+          executionLayer: true,
+          providerId: true,
+          providerType: true,
+          routeSource: true,
+          model: true,
+          statusCode: true,
+          attemptCount: true,
+          maxAttempts: true,
+          finishReason: true,
+        },
       }),
       prisma.agent_call_logs.count({ where }),
       prisma.agent_call_logs.count({
@@ -1429,8 +1484,7 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         callerAgent: log.callerAgent,
         action: 'invoke',
         status: buildStatusLabel(log),
-        input: log.input,
-        output: log.output,
+        // input/output 不再随列表传输（详情接口 /agents/logs/:id 按需拉取）
         error: log.error,
         errorCode: log.errorCode,
         traceId: log.traceId,
@@ -1664,12 +1718,19 @@ router.get('/agents/logs/:id', async (req: Request, res: Response) => {
     });
     const logMetadata = parseLogMetadata(log.metadata);
     const attemptTelemetryComplete = logMetadata.attemptTelemetryComplete !== false;
+    // 服务端截断 input/output（各 ≤4KB + truncated 标记），避免全量传输；前端 live.ts 已有 4000 字符兜底截断
+    const inputInfo = truncateLogPayload(log.input);
+    const outputInfo = truncateLogPayload(log.output);
 
     res.json({
       success: true,
       data: {
         log: {
           ...log,
+          input: inputInfo.value,
+          output: outputInfo.value,
+          inputTruncated: inputInfo.truncated,
+          outputTruncated: outputInfo.truncated,
           dataCompleteness: attempts.length > 0
             ? 'full'
             : log.executionLayer === 'api-gateway' && log.attemptCount === 0
@@ -1750,12 +1811,18 @@ router.get('/stats', async (req: Request, res: Response) => {
 /**
  * GET /api/admin/activity
  * 获取最近活动日志
+ * 服务端缓存：45s TTL；key 含 excludeTest 与 limit（同概览统计，见 OVERVIEW_CACHE_TTL_MS）。
  */
 router.get('/activity', async (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 50;
     // excludeTest=1 时过滤虚拟学习者与测试/审计账号（合成流量）
     const excludeTest = String(req.query.excludeTest || '') === '1';
+    const cacheKey = `activity:${excludeTest ? 1 : 0}:${limit}`;
+    const cached = overviewStatsCache.get(cacheKey);
+    if (cached && Date.now() - cached.cachedAt < OVERVIEW_CACHE_TTL_MS) {
+      return res.json({ success: true, data: cached.payload });
+    }
     const ACTIVITY_USER_WHERE = excludeTest
       ? REAL_USER_WHERE
       : { isVirtualLearner: false };
@@ -1844,9 +1911,7 @@ router.get('/activity', async (req: Request, res: Response) => {
       : [];
     const adminUserMap = new Map(adminUsers.map((user) => [user.id, user]));
 
-    res.json({
-      success: true,
-      data: {
+    const data = {
         recentSessions: recentSessions.map((session) => ({
           ...session,
           user: session.users
@@ -1898,8 +1963,9 @@ router.get('/activity', async (req: Request, res: Response) => {
               })()
             : null,
         }))
-      }
-    });
+    };
+    overviewStatsCache.set(cacheKey, { payload: data, cachedAt: Date.now() });
+    res.json({ success: true, data });
   } catch (error: any) {
     logger.error('[admin-platform] 获取活动日志失败', { error });
     res.status(500).json({

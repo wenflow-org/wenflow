@@ -96,7 +96,7 @@ export class LearnerSnapshotRefreshService {
     limit?: number;
   }) {
     const page = Math.max(1, Number(params?.page || 1));
-    const limit = Math.max(1, Math.min(100, Number(params?.limit || 20)));
+    const limit = Math.max(1, Math.min(50, Number(params?.limit || 20)));
 
     const userWhere = params?.userId ? { id: params.userId } : undefined;
     const total = await prisma.users.count({ where: userWhere });
@@ -123,14 +123,76 @@ export class LearnerSnapshotRefreshService {
       take: limit,
     });
 
-    const snapshots = await Promise.all(users.map(async (user) => {
+    // 批量取快照：先命中模块缓存，再按 projectionKey in [...] 批量读 learner_projections，
+    // 避免每用户逐个 getLatest 重建（原实现每页 100 用户 ≈1300+ 查询）。
+    const entries = Array.from(users, (user) => {
       const path = user.learning_paths[0];
-      const snapshot = await this.getLatest({
-        userId: user.id,
-        pathId: path?.id,
-        scope: path?.id ? 'path' : 'global',
-      });
+      return {
+        user,
+        path,
+        key: this.buildKey({
+          userId: user.id,
+          pathId: path?.id,
+          scope: path?.id ? 'path' : 'global',
+        }),
+      };
+    });
 
+    const snapshotsByUser = new Map<string, LearnerSnapshot>();
+    const refreshQueue: typeof entries = [];
+
+    for (const entry of entries) {
+      const cached = this.cache.get(entry.key);
+      if (cached && Date.now() - cached.cachedAt < LearnerSnapshotRefreshService.CACHE_TTL_MS) {
+        snapshotsByUser.set(entry.user.id, cached.snapshot);
+      } else {
+        if (cached) this.cache.delete(entry.key);
+        refreshQueue.push(entry);
+      }
+    }
+
+    if (refreshQueue.length > 0) {
+      const persisted = await prisma.learner_projections.findMany({
+        where: {
+          projectionKey: { in: refreshQueue.map((entry) => entry.key) },
+          generatedAt: { gte: new Date(Date.now() - 10 * 60 * 1000) },
+        },
+        select: { projectionKey: true, payload: true },
+      });
+      const rowByKey = new Map(persisted.map((row) => [row.projectionKey, row]));
+      const stillMissing: typeof entries = [];
+      for (const entry of refreshQueue) {
+        const row = rowByKey.get(entry.key);
+        if (row) {
+          try {
+            const snapshot = JSON.parse(row.payload) as LearnerSnapshot;
+            this.cache.set(entry.key, { snapshot, cachedAt: Date.now() });
+            snapshotsByUser.set(entry.user.id, snapshot);
+            continue;
+          } catch {
+            // 投影损坏：按未命中处理，走重建。
+          }
+        }
+        stillMissing.push(entry);
+      }
+      // 仅未命中（缓存过期且无新鲜投影）才重建。
+      if (stillMissing.length > 0) {
+        await Promise.all(stillMissing.map(async (entry) => {
+          const snapshot = await this.refresh({
+            userId: entry.user.id,
+            pathId: entry.path?.id,
+            scope: entry.path?.id ? 'path' : 'global',
+          });
+          snapshotsByUser.set(entry.user.id, snapshot);
+        }));
+      }
+    }
+
+    const snapshots = entries.map(({ user, path }) => {
+      const snapshot = snapshotsByUser.get(user.id);
+      if (!snapshot) {
+        throw new Error(`学习者快照构建失败: ${user.id}`);
+      }
       return {
         userId: user.id,
         userName: user.name,
@@ -147,7 +209,7 @@ export class LearnerSnapshotRefreshService {
         fragileConcepts: snapshot.knowledgeMemory.globalSignals.fragileConcepts.slice(0, 5),
         strugglingConcepts: snapshot.knowledgeMemory.globalSignals.strugglingConcepts.slice(0, 5),
       };
-    }));
+    });
 
     const filtered = snapshots.filter((item) => {
       if (params?.staleOnly) {
