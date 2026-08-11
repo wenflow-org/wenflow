@@ -467,6 +467,8 @@ export class TeachingSessionRepository {
   }
 
   async listByUser(userId: string, limit: number = 50): Promise<TeachingSessionRecord[]> {
+    // 已知限制（L5）：固定 take 50，无分页；历史消息较多的用户只返回最近 50 条。
+    // 完整历史需引入游标/offset 分页，且需同步调整调用方（getSessionHistory / getLatestTaskEvaluation）。
     const records = await prisma.teaching_sessions.findMany({
       where: { userId },
       orderBy: { startTime: 'desc' },
@@ -1055,7 +1057,9 @@ export class TeachingSessionRepository {
             { completedAt: new Date().toISOString() }
           )),
           wrapup: payload.wrapup ? JSON.stringify(payload.wrapup) : null,
-          advisory: payload.advisory ? JSON.stringify(payload.advisory) : null,
+          // M2：仅落库「建议生效」的 advisory（shouldSuggest=true）；无建议时写 null，
+          // 避免 NO_ADVISORY 空对象占据 advisory 列（admin onlyWithAdvisory 过滤也依赖此语义）。
+          advisory: payload.advisory?.shouldSuggest ? JSON.stringify(payload.advisory) : null,
           openKey: null,
           operationId: null,
           operationKind: null,
@@ -1172,6 +1176,34 @@ export class TeachingSessionRepository {
         id: sessionId,
         revision: expectedRevision,
         status: 'active',
+        updatedAt: { lte: cutoff },
+        OR: [
+          { operationId: null },
+          { operationLeaseExpiresAt: { lte: new Date() } }
+        ]
+      },
+      data: {
+        status: 'timeout',
+        endTime: new Date(),
+        operationId: null,
+        operationKind: null,
+        operationLeaseExpiresAt: null,
+        updatedAt: new Date()
+      }
+    });
+    return result.count === 1;
+  }
+
+  /**
+   * M4：长时间未恢复的 paused 会话（pausedAt 超过阈值）降级为 timeout，
+   * 复用与 active 超时相同的兜底路径；会话仍可通过下一轮教学回合恢复为 active。
+   */
+  async timeoutIfPaused(sessionId: string, expectedRevision: number, cutoff: Date): Promise<boolean> {
+    const result = await prisma.teaching_sessions.updateMany({
+      where: {
+        id: sessionId,
+        revision: expectedRevision,
+        status: 'paused',
         updatedAt: { lte: cutoff },
         OR: [
           { operationId: null },

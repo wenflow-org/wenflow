@@ -496,6 +496,74 @@ function cloneKnowledgePoints(points: TeachingKnowledgePointState[] | null | und
     }));
 }
 
+/**
+ * M1 兜底：正式课后产出（executeSkill）抛错 / 返回 success:false 时构造的
+ * summary-only wrapup（不调 LLM），结构对齐 applyTimeoutWrapupFallback，
+ * 保证 endSession 收束流程继续，不落入 finalization_failed。
+ */
+function buildEndWrapupFallback(session: TeachingSessionRecord, durationMinutes: number): {
+  result: any;
+  artifact: any;
+} {
+  const knowledgePoints = cloneKnowledgePoints(session.knowledgeState);
+  const mastered = knowledgePoints.filter((p) => p.status === 'mastered').map((p) => p.name);
+  const learning = knowledgePoints.filter((p) => p.status === 'learning').map((p) => p.name);
+  const summary = {
+    topicSummary: '本次学习记录生成遇到问题，为你保留了基础总结。',
+    knowledgeSummary: mastered.length > 0 ? `已掌握：${mastered.join('、')}。` : '暂未确认掌握的知识点。',
+    practiceAdvice: '重新完成一次完整的学习后，这里会给出完整建议。',
+    learningEvaluation: '未生成学习评价。',
+    knowledgeItems: knowledgePoints.map((p) => ({
+      name: p.name,
+      status: p.status,
+      progress: p.progress,
+      evidence: p.status === 'mastered' ? '会话中确认掌握' : '会话中未完成确认',
+    })),
+    keyTakeaways: [] as string[],
+    actionPlan: [] as string[],
+    evaluationHighlights: { strengths: [] as string[], improvements: [] as string[] },
+    metricInterpretation: {
+      session: '未生成本节课堂表现。',
+      longTerm: '未生成长期状态评估。',
+    },
+    summaryVersion: 'v2',
+  };
+  const progress = {
+    newlyMastered: mastered,
+    movedToReview: [] as string[],
+    stillLearning: learning,
+    unchangedMastered: [] as string[],
+  };
+  const evidence = {
+    turnCount: Array.isArray(session.messages) ? session.messages.length : 0,
+    avgUnderstanding: null,
+    avgEngagement: null,
+    dominantCognitiveLevel: null,
+    lastCognitiveLevel: null,
+    topConfusionPoints: [] as string[],
+    emotionalSignals: { positive: 0, neutral: 0, frustrated: 0, confused: 0 },
+    completionCandidateSeen: false,
+  };
+  return {
+    result: {
+      summary,
+      evaluation: null,
+      summarySource: 'fallback' as const,
+      evaluationSource: 'failed' as const,
+      runtimeEnvelope: null,
+    },
+    artifact: {
+      status: 'summary-only' as const,
+      sources: { summary: 'end-fallback' as const, evaluation: 'failed' as const },
+      summary,
+      evaluation: null,
+      progress,
+      evidence,
+      duration: durationMinutes,
+    },
+  };
+}
+
 /** 合并后知识点的总数上限（防止模型每轮新增点导致无限膨胀） */
 const MAX_KNOWLEDGE_POINTS = 12;
 
@@ -963,6 +1031,8 @@ function extractTeachingPromptDebug(agentOutput: any) {
 
 export class AITeachingOrchestrator {
   private idleTimeoutMs = 120 * 60 * 1000;
+  /** 长时间未恢复的 paused 会话视为放弃：超过该阈值按超时兜底处理（用户可随时通过下一轮教学回合恢复） */
+  private pausedSessionTimeoutMs = 24 * 60 * 60 * 1000;
   private idleTimer: NodeJS.Timeout | null = null;
   private idleCheckInFlight: Promise<void> | null = null;
   private stopping = false;
@@ -1845,7 +1915,9 @@ export class AITeachingOrchestrator {
     const sessionEvidence = computeSessionEvidence(session);
     const context = await buildTeachingScenarioContext(session.userId, session.taskId, session);
 
-    const wrapupOutput = await executeSkill(sessionWrapupAgentDefinition, {
+    let wrapupOutput: any = null;
+    try {
+      wrapupOutput = await executeSkill(sessionWrapupAgentDefinition, {
       input: {
         messages: session.messages.map((message) => ({
           role: message.role,
@@ -1894,9 +1966,19 @@ export class AITeachingOrchestrator {
         session: { sessionId: session.id, taskId: session.taskId },
       },
     });
+    } catch (error) {
+      logger.warn('[AITeaching] 课后产出生成异常，改用 summary-only 兜底继续收束', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
-    const wrapupResult = wrapupOutput.internal.ext.sessionWrapup.result;
-    const wrapupArtifact = wrapupOutput.internal.ext.sessionWrapup.artifact;
+    // M1 兜底：executeSkill 抛错或返回 success:false（internal.ext.sessionWrapup 缺失）时，
+    // 用 summary-only 对象顶替，保证收束流程继续，避免整次收束失败为 finalization_failed。
+    const endWrapupFallback = buildEndWrapupFallback(session, durationMinutes);
+    const sessionWrapupExt = wrapupOutput?.internal?.ext?.sessionWrapup;
+    const wrapupResult = sessionWrapupExt?.result || endWrapupFallback.result;
+    const wrapupArtifact = sessionWrapupExt?.artifact || endWrapupFallback.artifact;
     const wrapupRuntimeEnvelope = wrapupOutput?.runtimeEnvelope
       || wrapupResult?.runtimeEnvelope
       || null;
@@ -2486,6 +2568,42 @@ export class AITeachingOrchestrator {
     for (const session of sessions) {
       const timedOut = await teachingSessionRepository.timeoutIfIdle(session.id, session.revision, cutoff);
       if (timedOut) {
+        await this.syncVirtualSessionTimeout(session.id);
+        await this.applyTimeoutWrapupFallback(session.id);
+      }
+    }
+
+    // M4 兜底：paused 是客户端主动暂停，不短时打断；但 pausedAt 超过阈值（如 24h）视为放弃，
+    // 走与 active 超时相同的兜底路径（状态转 timeout + summary-only wrapup）。
+    // 用户之后可通过下一轮教学回合恢复（active/paused/timeout 均可），正常收束会覆盖兜底 wrapup。
+    const pausedCutoff = new Date(Date.now() - this.pausedSessionTimeoutMs);
+    const pausedSessions = await prisma.teaching_sessions.findMany({
+      where: { status: 'paused' },
+      select: {
+        id: true,
+        revision: true,
+        teachingState: true,
+      }
+    });
+
+    for (const session of pausedSessions) {
+      let teachingState: Record<string, any> | null = null;
+      try {
+        teachingState = JSON.parse(session.teachingState || '{}');
+      } catch {
+        teachingState = null;
+      }
+      const artifacts = parseSessionArtifacts(teachingState);
+      const pausedAt = typeof artifacts.pausedAt === 'string'
+        ? new Date(artifacts.pausedAt).getTime()
+        : NaN;
+      if (!Number.isFinite(pausedAt) || pausedAt > pausedCutoff.getTime()) continue;
+      const timedOut = await teachingSessionRepository.timeoutIfPaused(session.id, session.revision, pausedCutoff);
+      if (timedOut) {
+        logger.info('[AITeaching] 长时间未恢复的暂停会话按超时兜底处理', {
+          sessionId: session.id,
+          pausedAt: new Date(pausedAt).toISOString(),
+        });
         await this.syncVirtualSessionTimeout(session.id);
         await this.applyTimeoutWrapupFallback(session.id);
       }
