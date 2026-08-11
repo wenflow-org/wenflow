@@ -4,6 +4,7 @@
 # contracts.displayName/description 仍由 agent-manifest 派生（yaml 只声明 agentId）。
 
 stage: goal
+order: 1
 displayName: Goal 阶段
 description: 目标对话：澄清目标、收集背景、收敛到方向方案
 

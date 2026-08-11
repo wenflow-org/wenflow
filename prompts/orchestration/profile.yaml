@@ -6,6 +6,7 @@
 # （因为 snapshot/projection 会读，不是 skill 私有）。
 
 stage: profile
+order: 4
 displayName: 画像阶段
 description: 学习者画像增强与背景知识沉淀（编排器内部）
 

@@ -10,6 +10,7 @@
 #   - handoff 统一指向 simulation-agent（交付给仿真编排层组装；旁路审计链由 blackbox-runner 运行时拼接）
 
 stage: simulation
+order: 5
 displayName: 仿真阶段
 description: 虚拟学习者实验：样本设计 → 模拟器 → 旁路审计（服务端注入输入，无阶段间 handoff）
 

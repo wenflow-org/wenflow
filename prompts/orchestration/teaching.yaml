@@ -4,6 +4,7 @@
 # 仅影响路由表身份与展示层，不改变 coordinator/blackbox 的运行时 JSON 键。
 
 stage: teaching
+order: 3
 displayName: 教学阶段
 description: 授课执行：Teaching Turn → Peer/Checkpoint → Wrapup
 

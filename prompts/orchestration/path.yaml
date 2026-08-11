@@ -2,6 +2,7 @@
 # 由字段路由 seed TS 机械迁移（1:1）；seed TS 已退役，本文件为唯一声明源。
 
 stage: path
+order: 2
 displayName: Path 阶段
 description: 学习路径生成：Framing → Path Planning → Stage Designer
 

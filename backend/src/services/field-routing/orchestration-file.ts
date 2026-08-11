@@ -66,6 +66,8 @@ export interface OrchestrationRouting {
 
 export interface OrchestrationStage {
   stage: string;
+  /** 业务顺序（goal=1 → path=2 → teaching=3 → profile=4 → simulation=5；缺省按文件名兜底） */
+  order?: number;
   displayName?: string;
   description?: string;
   contracts: OrchestrationContract[];
@@ -75,6 +77,7 @@ export interface OrchestrationStage {
 
 interface RawStageFile {
   stage?: unknown;
+  order?: unknown;
   displayName?: unknown;
   description?: unknown;
   contracts?: unknown;
@@ -171,6 +174,7 @@ function parseOrchestrationText(rawText: string, sourceLabel: string): Orchestra
   }
   const raw = parsed as RawStageFile;
   const stage = asString(raw.stage, 'stage');
+  const order = typeof raw.order === 'number' && Number.isInteger(raw.order) && raw.order >= 1 ? raw.order : undefined;
 
   const contracts = Array.isArray(raw.contracts)
     ? raw.contracts.map((c, i) => {
@@ -205,6 +209,7 @@ function parseOrchestrationText(rawText: string, sourceLabel: string): Orchestra
 
   return {
     stage,
+    order,
     displayName: asOptionalString(raw.displayName),
     description: asOptionalString(raw.description),
     contracts,
@@ -243,8 +248,22 @@ export function loadOrchestrationFiles(): OrchestrationStage[] {
     .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
     .filter((name) => !name.startsWith('_'))
     .sort();
+  const orderedFiles = [...files].sort((a, b) => {
+    const orderOf = (name: string) => {
+      try {
+        const parsed = parseOrchestrationFile(path.join(ORCHESTRATION_DIR, name));
+        return parsed.order ?? Number.MAX_SAFE_INTEGER;
+      } catch {
+        return Number.MAX_SAFE_INTEGER;
+      }
+    };
+    const ao = orderOf(a);
+    const bo = orderOf(b);
+    if (ao !== bo) return ao - bo;
+    return a.localeCompare(b);
+  });
   if (files.length === 0) {
     throw new Error(`[orchestration] 目录为空：${ORCHESTRATION_DIR}`);
   }
-  return files.map((name) => parseOrchestrationFile(path.join(ORCHESTRATION_DIR, name)));
+  return orderedFiles.map((name) => parseOrchestrationFile(path.join(ORCHESTRATION_DIR, name)));
 }
