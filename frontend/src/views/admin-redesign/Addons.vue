@@ -17,6 +17,10 @@
         <h3 class="mk-card__title">外挂能力</h3>
         <span class="mk-card__meta">由白名单登记，新能力接入后自动列出</span>
       </div>
+      <div v-if="configsFailed" class="ac-error" role="alert">
+        <span>能力配置加载失败，以下表格为占位状态，无法反映真实接入情况。</span>
+        <button type="button" class="mk-link" @click="loadConfigs">重试</button>
+      </div>
       <div class="mk-table-scroll">
         <table v-if="capabilityRows.length" class="mk-table">
           <thead>
@@ -100,8 +104,8 @@
         </div>
       </div>
       <div v-else class="mk-empty mk-empty--compact">
-        <strong>{{ loading ? '加载中…' : '暂无 MCP 服务' }}</strong>
-        <span v-if="!loading">MCP 工具（如网页搜索、生图）在此登记，供外挂能力调用。</span>
+        <strong>{{ mcpLoading ? '加载中…' : mcpFailed ? 'MCP 服务加载失败' : '暂无 MCP 服务' }}</strong>
+        <span v-if="!mcpLoading && !mcpFailed">MCP 工具（如网页搜索、生图）在此登记，供外挂能力调用。</span>
       </div>
     </div>
 
@@ -164,6 +168,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { dataSource, openSkillDrawer, investigateAgent, isLive } from './store'
 import { timeAgo, errMsg } from './live'
 import { adminSkillsApi, adminMcpApi } from '@/api/adminApi'
@@ -174,6 +179,7 @@ import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 
+const router = useRouter()
 
 /* ---------- ① 外挂能力（白名单驱动） ---------- */
 interface CapabilityRow {
@@ -196,9 +202,12 @@ function formatTimeout(ms: unknown): string {
 
 const configMap = ref<Record<string, Record<string, unknown>>>({})
 const loading = ref(false)
+/** 能力配置拉取失败：保留现有表格并展示错误条，避免整表降级为「待配置」 */
+const configsFailed = ref(false)
 
 async function loadConfigs() {
   loading.value = true
+  configsFailed.value = false
   try {
     const res = await adminSkillsApi.getSkillModelConfigs()
     const body = res.data?.data ?? res.data ?? []
@@ -210,7 +219,7 @@ async function loadConfigs() {
     }
     configMap.value = map
   } catch (e) {
-    configMap.value = {}
+    configsFailed.value = true
     toast.error(`配置加载失败：${errMsg(e)}`)
   } finally {
     loading.value = false
@@ -259,8 +268,13 @@ const demoMcpTools: McpTool[] = [
 ]
 
 const mcpTools = ref<McpTool[]>([])
+/** MCP 服务列表 loading / 失败（独立于能力配置的 loading，避免两域状态互绑） */
+const mcpLoading = ref(false)
+const mcpFailed = ref(false)
 
 async function loadMcpTools() {
+  mcpLoading.value = true
+  mcpFailed.value = false
   try {
     const res = await adminMcpApi.list()
     const body = res.data?.data ?? {}
@@ -274,6 +288,9 @@ async function loadMcpTools() {
     }))
   } catch {
     mcpTools.value = []
+    mcpFailed.value = true
+  } finally {
+    mcpLoading.value = false
   }
 }
 
@@ -287,7 +304,9 @@ watch(
       configMap.value = {
         'mcp-tool': { displayName: 'MCP 工具调用', model: 'deepseek-v4-flash', requestTimeoutMs: 60000, lastCalledAt: new Date(Date.now() - 2 * 3600000).toISOString() }
       }
+      configsFailed.value = false
       mcpTools.value = demoMcpTools.map((t) => ({ ...t }))
+      mcpFailed.value = false
     }
   },
   { immediate: true }
@@ -414,7 +433,7 @@ function goLogs(skillId: string) {
   investigateAgent(skillId)
 }
 function goConfig() {
-  window.location.href = '/admin/api-config'
+  void router.push('/admin/api-config')
 }
 
 /* toast */
@@ -423,6 +442,21 @@ function goConfig() {
 <style scoped>
 .mono { font-family: var(--mk-mono); font-size: 12px; }
 .mk-link--danger { color: var(--mk-red, #dc2626); }
+
+/* 能力配置加载失败错误条 */
+.ac-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 16px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--mk-red-bg);
+  color: var(--mk-red);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.ac-error .mk-link { color: var(--mk-red); text-decoration: underline; }
 
 
 /* ② MCP 服务行 */

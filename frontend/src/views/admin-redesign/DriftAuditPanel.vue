@@ -17,6 +17,7 @@
     <details class="fdp__box" open>
       <summary class="fdp__box-summary">漂移报告（seed vs DB，admin 编辑行豁免）</summary>
       <div v-if="driftLoading" class="fdp__empty">检测中…</div>
+      <div v-else-if="driftFailed" class="fdp__empty fdp__empty--error">漂移检测失败：无法连接字段路由服务，请稍后重试。</div>
       <div v-else-if="drift.items.length === 0" class="fdp__empty">✅ 无漂移（seed 与 DB 一致）</div>
       <ul v-else class="fdp__drift-list">
         <li v-for="(d, i) in drift.items" :key="i" class="fdp__drift-item">
@@ -40,6 +41,7 @@
           <span class="mono">{{ String(c.targetId || '') }}</span>
         </li>
       </ul>
+      <p v-else-if="changesFailed" class="fdp__empty fdp__empty--error">变更记录加载失败：无法连接审计服务，请稍后重试。</p>
       <p v-else class="fdp__empty">暂无变更记录</p>
     </details>
   </div>
@@ -53,7 +55,9 @@ const props = defineProps<{ stage: string }>();
 
 const drift = ref<{ items: Array<Record<string, unknown>>; totalDriftCount: number }>({ items: [], totalDriftCount: 0 });
 const driftLoading = ref(false);
+const driftFailed = ref(false);
 const changes = ref<Array<Record<string, unknown>>>([]);
+const changesFailed = ref(false);
 
 function stringify(value: unknown) {
   if (value === null || value === undefined) return 'null';
@@ -69,10 +73,12 @@ function kindLabel(kind: unknown) {
 
 async function loadDrift() {
   driftLoading.value = true;
+  driftFailed.value = false;
   try {
-    const res = await adminFieldRoutingsApi.getDrift();
+    const res = await adminFieldRoutingsApi.getDrift({ stage: props.stage });
     drift.value = res.data?.data || { items: [], totalDriftCount: 0 };
   } catch {
+    driftFailed.value = true;
     drift.value = { items: [], totalDriftCount: 0 };
   } finally {
     driftLoading.value = false;
@@ -80,10 +86,12 @@ async function loadDrift() {
 }
 
 async function loadChanges() {
+  changesFailed.value = false;
   try {
     const c = await adminFieldRoutingsApi.getChanges({ stage: props.stage, limit: 10 });
     changes.value = Array.isArray(c.data?.data) ? c.data.data : (c.data?.data?.changes || []);
   } catch {
+    changesFailed.value = true;
     changes.value = [];
   }
 }
@@ -201,4 +209,5 @@ watch(() => props.stage, () => {
 }
 .fdp__change-target { color: var(--mk-muted, #5b6577); }
 .fdp__empty { padding: 20px; color: var(--mk-faint, #71809a); text-align: center; }
+.fdp__empty--error { color: var(--mk-red, #dc2626); font-weight: 600; }
 </style>

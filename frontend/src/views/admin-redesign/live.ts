@@ -885,24 +885,39 @@ async function fetchLiveVirtuals(): Promise<void> {
   })
 }
 
+/**
+ * 创建虚拟学习者：返回新样本 id。
+ * 「创建」与「列表刷新」错误分离——创建成功但刷新失败时返回 null 而非抛错，
+ * 避免调用方误报「创建失败」（创建成功却不导航/不提示刷新问题）。
+ */
 export async function liveCreateVirtual(data: {
   name: string
   /** 可选长期倾向；真正的当次学习需求来自故事 goalSeed */
   goal?: string
   story: string
   personaSeed?: Record<string, unknown>
-}): Promise<void> {
+}): Promise<string | null> {
   // personaSeed 存在时展开为完整画像（含 learningStyle 等故事生成必需字段）
   const profile: Record<string, unknown> = data.personaSeed
     ? { ...data.personaSeed, background: data.story || data.personaSeed.background }
     : { background: data.story }
-  await adminVirtualLearnersApi.createVirtualLearner({
+  const res = await adminVirtualLearnersApi.createVirtualLearner({
     name: data.name,
     learningGoal: (data.goal || '').trim(),
     notes: data.story,
     profile
   })
-  await fetchLiveVirtuals()
+  const created = res.data?.data ?? res.data ?? {}
+  const createdId = String(
+    created.id || created.profileId || created.userId || created.virtualLearnerId || ''
+  )
+  try {
+    await fetchLiveVirtuals()
+  } catch {
+    // 创建已成功：列表刷新失败不抛错，返回创建响应的 id（无则 null）
+    return createdId || null
+  }
+  return createdId || String(liveVirtuals.value[0]?.id || '') || null
 }
 
 export async function liveDeleteVirtual(id: string): Promise<void> {

@@ -374,13 +374,17 @@ const pills = [
   { id: 'attention' as const, label: '待关注' },
   { id: 'missing' as const, label: '缺总结' }
 ]
-/* 状态筛选选项（对齐后端枚举：completed/failed/active/timeout/paused/discarded） */
+/* 状态筛选选项（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
 const statusOptions = [
-  { value: 'completed', label: '已完成' },
+  { value: 'initializing', label: '初始化中' },
   { value: 'active', label: '进行中' },
-  { value: 'failed', label: '失败' },
-  { value: 'timeout', label: '超时' },
   { value: 'paused', label: '已暂停' },
+  { value: 'timeout', label: '超时' },
+  { value: 'superseded', label: '已被替代' },
+  { value: 'failed', label: '失败' },
+  { value: 'finalizing', label: '收尾中' },
+  { value: 'finalization_failed', label: '收尾失败' },
+  { value: 'completed', label: '已完成' },
   { value: 'discarded', label: '已废弃' }
 ]
 
@@ -429,9 +433,19 @@ function toggleCard(key: string) {
 
 const isLong = (s?: string) => (s || '').length > 120
 
-/* 状态映射统一走共享字典（对齐后端枚举：completed/failed/active/timeout/paused/discarded） */
+/* 状态映射统一走共享字典（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
 const statusBadge = (s: string) =>
-  s === 'completed' || s === 'succeeded' ? 'mk-badge--ok' : s === 'failed' || s === 'timeout' || s === 'discarded' ? 'mk-badge--bad' : 'mk-badge--info'
+  s === 'completed' || s === 'succeeded'
+    ? 'mk-badge--ok'
+    : s === 'failed' || s === 'timeout' || s === 'discarded' || s === 'finalization_failed'
+      ? 'mk-badge--bad'
+      : s === 'superseded'
+        ? 'mk-badge--warn'
+        : s === 'initializing'
+          ? 'mk-badge--muted'
+          : s === 'finalizing'
+            ? 'mk-badge--info'
+            : 'mk-badge--info'
 const attentionBadge = (a: string) => (a === 'high' ? 'mk-badge--bad' : a === 'medium' ? 'mk-badge--warn' : 'mk-badge--ok')
 const taskTypeText = (t: string) =>
   ({ reading: '阅读', practice: '练习', project: '项目', quiz: '测验', acquire: '获取', deconstruct: '拆解', model: '建模', execute: '执行', diagnose: '诊断', refine: '打磨', consolidate: '巩固' }[t] || t || '任务')

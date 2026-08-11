@@ -62,7 +62,7 @@
                 <div v-if="isLive" class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(s.id)">⋯</button>
                   <div v-if="openMenu === s.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                    <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="s.busy" @click="menuRemove(s)">删除</button>
+                    <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="busyId === s.id" @click="menuRemove(s)">删除</button>
                   </div>
                 </div>
               </div>
@@ -212,7 +212,6 @@ interface Sample {
   storyCount: number
   sessions: number
   created: string
-  busy?: boolean
 }
 
 const all: Sample[] = [
@@ -275,19 +274,18 @@ async function createSample() {
   creating.value = true
   try {
     if (isLive.value) {
-      await liveCreateVirtual({
+      const createdId = await liveCreateVirtual({
         name: form.value.name.trim(),
         goal: form.value.aspiration.trim(),
         story: form.value.story.trim(),
         personaSeed: personaSeed.value || undefined
       })
       createOpen.value = false
-      const created = liveVirtuals.value[0]
-      if (created?.id) {
+      if (createdId) {
         toast.success('虚拟人已创建。下一步：在画像页生成故事（产生学习需求）')
-        openSubPage('virtual', created.id)
+        openSubPage('virtual', createdId)
       } else {
-        toast.success('虚拟人已创建')
+        toast.success('虚拟人已创建，但列表刷新失败——若列表未出现，请手动刷新查看')
       }
     } else {
       const id = `vl-${String(demoSamples.value.length + 1).padStart(3, '0')}`
@@ -317,18 +315,20 @@ async function removeSample(s: Sample) {
     confirmText: '删除'
   })
   if (!ok) return
-  s.busy = true
+  busyId.value = s.id
   try {
     await liveDeleteVirtual(s.id)
     toast.success(`「${s.name}」已删除`)
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
   } finally {
-    s.busy = false
+    busyId.value = null
   }
 }
 
 /* AI 生成身份：skill:virtual-learner-persona-designer（只做人设，不依赖学习目标、不写故事） */
+/** 正在删除的样本 id（ref 驱动 :disabled，computed map 出的普通对象上写 busy 不触发重渲染） */
+const busyId = ref<string | null>(null)
 const personaBusy = ref(false)
 const personaSeed = ref<Record<string, unknown> | null>(null)
 async function generatePersona() {

@@ -873,10 +873,25 @@ function storyStatusLabel(s: StoryItem): string {
   return s.status === 'ready' ? '就绪' : s.status || '草稿'
 }
 
-/* 打开故事 projection 深链（前台正式页 / 测试台调试页） */
-function openLink(url?: string | null) {
+/* 打开故事 projection 深链（前台正式页 / 测试台调试页）：
+   与 QuickLearnPanel 同模式——先取投影 token 写入 localStorage，再开新窗，避免前台被登录墙拦截 */
+async function openLink(url?: string | null) {
   if (!url) return
-  window.open(url, '_blank')
+  const id = subPage.value?.id
+  if (!id) {
+    window.open(url, '_blank')
+    return
+  }
+  try {
+    const res = await adminVirtualLearnersApi.createProjectionToken(id, { scope: 'full' })
+    const body = res.data?.data ?? res.data ?? {}
+    const token = String(body.token || body.projectionToken || '')
+    if (!token) throw new Error('未返回投影 token')
+    setProjectionToken(token, { virtualLearnerId: id })
+    window.open(url, '_blank')
+  } catch (e) {
+    toast.error(`打开投影失败：${errMsg(e)}`)
+  }
 }
 
 function formatRunStage(stage: string) {

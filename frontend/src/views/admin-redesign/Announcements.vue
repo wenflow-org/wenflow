@@ -38,7 +38,7 @@
               <span class="mk-badge" :class="statusBadge(r)">{{ statusText(r) }}</span>
             </td>
             <td :class="{ 'mk-na': !r.publishedAt }" :title="r.publishedAt ? fmtDate(r.publishedAt) : ''">{{ r.publishedAt ? timeAgo(r.publishedAt) : '—' }}</td>
-            <td :class="{ 'mk-na': !r.expiresAt }" :title="r.expiresAt ? fmtDate(r.expiresAt) : ''">{{ r.expiresAt ? timeAgo(r.expiresAt) : '不过期' }}</td>
+            <td :class="{ 'mk-na': !r.expiresAt }" :title="r.expiresAt ? fmtDate(r.expiresAt) : ''">{{ r.expiresAt ? expiresLabel(r.expiresAt) : '不过期' }}</td>
             <td>
               <div class="mk-actions">
                 <button v-if="r.status !== 'published'" type="button" class="mk-link" :disabled="r.busy" @click="publish(r)">发布</button>
@@ -455,6 +455,19 @@ function fmtDate(iso: string | null): string {
   const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** 过期列：未来显示「剩 X 天/小时」，已过显示「已过期」（timeAgo 对未来一律「刚刚」，误导） */
+function expiresLabel(iso: string): string {
+  const t = new Date(iso).getTime()
+  if (!t || Number.isNaN(t)) return '不过期'
+  const diff = t - Date.now()
+  if (diff > 0) {
+    const h = Math.floor(diff / 3600000)
+    if (h < 1) return '即将过期'
+    return h < 24 ? `剩 ${h} 小时` : `剩 ${Math.floor(h / 24)} 天`
+  }
+  return '已过期'
 }
 </script>
 
