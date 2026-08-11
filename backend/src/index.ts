@@ -216,6 +216,7 @@ import adminPlatformRoutes from './routes/admin/platform';
 import adminGoalConversationsRoutes from './routes/admin/goal-conversations';
 import adminUsersRoutes from './routes/admin/users';
 import adminSessionsRoutes from './routes/admin/sessions';
+import adminAuditLogsRoutes from './routes/admin/audit-logs';
 import adminLearnerModelsRoutes from './routes/admin/learner-models';
 import adminAnnouncementsRoutes from './routes/admin/announcements';
 import announcementsRoutes from './routes/announcements';
@@ -327,6 +328,9 @@ app.use('/api/admin/prompt-ops', ...adminRouteMiddleware, adminPromptOpsRoutes);
 app.use('/api/admin/skill-model-configs', ...adminRouteMiddleware, adminSkillModelConfigsRoutes);
 app.use('/api/admin/users', ...adminRouteMiddleware, adminUsersRoutes);
 app.use('/api/admin/sessions', ...adminRouteMiddleware, adminSessionsRoutes);
+// 审计日志查询：仅 GET 只读端点，挂载时不经过 adminAuditMiddleware（审计查询本身不入审计，
+// 中间件对 GET 同样落库），其余鉴权中间件照常
+app.use('/api/admin/audit-logs', adminAccessRestrictMiddleware, adminAuthMiddleware, adminMiddleware, acpContextMiddleware('admin'), adminAuditLogsRoutes);
 app.use('/api/admin/announcements', ...adminRouteMiddleware, adminAnnouncementsRoutes);
 app.use('/api/admin/mcp', ...adminRouteMiddleware, adminMcpRoutes);
 app.use('/api/admin/learner-models', ...adminRouteMiddleware, adminLearnerModelsRoutes);

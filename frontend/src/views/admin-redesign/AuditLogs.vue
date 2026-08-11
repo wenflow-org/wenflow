@@ -1,0 +1,627 @@
+<template>
+  <div class="mk-page">
+    <!-- 状态条：● 审计日志 · N 条 · 失败 M 条 + tab 切换 + 筛选 -->
+    <div class="log-status" :class="`log-status--${statusTone}`">
+      <span class="log-status__dot"></span>
+      <strong>{{ statusTitle }}</strong>
+      <span class="log-status__sep"></span>
+      <span class="log-status__meta mono">{{ total }} 条</span>
+      <span v-if="total" class="log-status__meta mono">失败 {{ failed }}</span>
+
+      <div class="log-status__filters">
+        <div class="mk-pills">
+          <button
+            v-for="t in tabs"
+            :key="t.id"
+            type="button"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': tab === t.id }"
+            @click="switchTab(t.id)"
+          >
+            {{ t.label }}
+          </button>
+        </div>
+        <input
+          v-model="keyword"
+          class="log-keyword"
+          :placeholder="tab === 'login' ? '用户名 / IP，回车查询' : '关键词，回车查询'"
+          @keydown.enter="applyFilters"
+        />
+        <select v-model="timeRange" class="log-agent" @change="applyFilters">
+          <option value="today">今天</option>
+          <option value="yesterday">昨天</option>
+          <option value="week">近 7 天</option>
+          <option value="month">近 30 天</option>
+          <option value="all">全部</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 加载失败错误态 + 重试 -->
+    <div v-if="loadError" class="audit-error">
+      <div class="audit-error__card">
+        <strong>审计日志加载失败</strong>
+        <span>{{ loadError }}</span>
+        <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" @click="applyFilters">重试</button>
+      </div>
+    </div>
+
+    <!-- 加载中骨架 -->
+    <MockSkeletonTable v-else-if="loading && !rows.length" :cols="tab === 'login' ? 5 : 7" :rows="6" />
+
+    <!-- 操作审计列表 -->
+    <div v-else-if="tab === 'operation' && shownOp.length" class="log-body" role="log">
+      <div class="tline-head" aria-hidden="true">
+        <span class="tline-head__time">时间</span>
+        <span class="tline-head__admin">操作者</span>
+        <span class="tline-head__action">动作</span>
+        <span class="tline-head__target-type">目标类型</span>
+        <span class="tline-head__target">目标</span>
+        <span class="tline-head__badge">结果</span>
+        <span class="tline-head__ip">IP</span>
+      </div>
+      <div
+        v-for="log in shownOp"
+        :key="log.id"
+        class="tline"
+        :class="[log.success ? 'tline--ok' : 'tline--err', { 'tline--open': openId === log.id }]"
+      >
+        <button type="button" class="tline__main" @click="openId = openId === log.id ? '' : log.id">
+          <span class="tline__time mono" :title="fmtFull(log.createdAt)">{{ fmtTime(log.createdAt) }}</span>
+          <span class="tline__admin" :title="log.adminName || log.adminId || ''">
+            {{ log.adminName || (log.adminId ? shortId(log.adminId) : '—') }}
+          </span>
+          <span class="tline__action" :title="log.action">{{ actionText(log.action) }}</span>
+          <span class="tline__target-type">{{ targetTypeText(log.targetType) }}</span>
+          <span class="tline__target mono" :title="log.targetId || ''">{{ log.targetId ? shortId(log.targetId) : '—' }}</span>
+          <span class="tline__badge" :class="log.success ? 'tline__badge--ok' : 'tline__badge--err'">
+            {{ log.success ? '成功' : '失败' }}
+          </span>
+          <span class="tline__ip mono" :title="log.ip || ''">{{ log.ip || '—' }}</span>
+        </button>
+        <div v-if="openId === log.id" class="tline__payload">
+          <div class="tline__payload-meta">
+            <span>{{ log.method }} {{ log.path }} · HTTP {{ log.statusCode }}<template v-if="log.durationMs != null"> · {{ fmtMs(log.durationMs) }}</template></span>
+            <span v-if="log.userAgent" class="tline__ua" :title="log.userAgent">{{ log.userAgent }}</span>
+          </div>
+          <div v-if="log.requestJson" class="tline__section">
+            <span class="tline__label">请求</span>
+            <pre>{{ log.requestJson }}</pre>
+          </div>
+          <div v-if="log.beforeJson" class="tline__section">
+            <span class="tline__label">变更前</span>
+            <pre>{{ log.beforeJson }}</pre>
+          </div>
+          <div v-if="log.afterJson" class="tline__section">
+            <span class="tline__label">变更后</span>
+            <pre>{{ log.afterJson }}</pre>
+          </div>
+          <p v-if="!log.requestJson && !log.beforeJson && !log.afterJson" class="tline__none">无 payload 记录</p>
+        </div>
+      </div>
+      <div v-if="canMore" class="tline-more">
+        <button type="button" class="mk-link" @click="loadMore">
+          加载更多（已显示 {{ shownOp.length }} / {{ total }}）
+        </button>
+      </div>
+    </div>
+
+    <!-- 登录审计列表 -->
+    <div v-else-if="tab === 'login' && shownLogin.length" class="log-body" role="log">
+      <div class="tline-head tline-head--login" aria-hidden="true">
+        <span class="tline-head__time">时间</span>
+        <span class="tline-head__admin">用户名</span>
+        <span class="tline-head__ip">IP</span>
+        <span class="tline-head__badge">结果</span>
+        <span class="tline-head__reason">原因</span>
+      </div>
+      <div
+        v-for="a in shownLogin"
+        :key="a.id"
+        class="tline tline--login"
+        :class="a.success ? 'tline--ok' : 'tline--err'"
+      >
+        <div class="tline__main tline__main--static">
+          <span class="tline__time mono" :title="fmtFull(a.createdAt)">{{ fmtTime(a.createdAt) }}</span>
+          <span class="tline__admin" :title="a.username">{{ a.username || '—' }}</span>
+          <span class="tline__ip mono" :title="a.ip || ''">{{ a.ip || '—' }}</span>
+          <span class="tline__badge" :class="a.success ? 'tline__badge--ok' : 'tline__badge--err'">
+            {{ a.success ? '成功' : '失败' }}
+          </span>
+          <span class="tline__reason" :title="a.reason || ''">{{ reasonText(a.reason) }}</span>
+        </div>
+      </div>
+      <div v-if="canMore" class="tline-more">
+        <button type="button" class="mk-link" @click="loadMore">
+          加载更多（已显示 {{ shownLogin.length }} / {{ total }}）
+        </button>
+      </div>
+    </div>
+
+    <!-- 空态 -->
+    <div v-else class="mk-empty">
+      <div class="mk-empty__icon">{{ tab === 'login' ? '🔑' : '🕵️' }}</div>
+      <strong>{{ isFiltered ? '当前筛选无审计记录' : tab === 'login' ? '暂无登录审计' : '暂无审计记录' }}</strong>
+      <span>{{ tab === 'login' ? '管理员登录成功/失败都会在此留痕' : '管理员的增删改操作会自动记录留痕' }}</span>
+      <button v-if="isFiltered" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { adminAuditApi, type AuditLogQuery } from '@/api/adminApi'
+import { errMsg, shortId } from './live'
+import { useLoadMore } from './useLoadMore'
+import MockSkeletonTable from './SkeletonTable.vue'
+import { actionText, targetTypeText } from './statusText'
+
+/** admin_audit_logs 行（与后端 Prisma 模型一致） */
+interface AuditLogRow {
+  id: string
+  adminId?: string | null
+  adminName?: string | null
+  action: string
+  targetType?: string | null
+  targetId?: string | null
+  beforeJson?: string | null
+  afterJson?: string | null
+  requestJson?: string | null
+  method: string
+  path: string
+  statusCode: number
+  success: boolean
+  ip?: string | null
+  userAgent?: string | null
+  durationMs?: number | null
+  createdAt: string
+}
+
+/** login_attempts 行（与后端 Prisma 模型一致） */
+interface LoginAttemptRow {
+  id: string
+  scope: string
+  username: string
+  ip?: string | null
+  success: boolean
+  reason?: string | null
+  createdAt: string
+}
+
+const PAGE_SIZE = 50
+
+const tabs = [
+  { id: 'operation', label: '操作审计' },
+  { id: 'login', label: '登录审计' },
+] as const
+type TabId = (typeof tabs)[number]['id']
+
+const tab = ref<TabId>('operation')
+const keyword = ref('')
+const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('week')
+
+const logs = ref<AuditLogRow[]>([])
+const attempts = ref<LoginAttemptRow[]>([])
+const total = ref(0)
+const failed = ref(0)
+const page = ref(0)
+const loading = ref(false)
+const loadError = ref('')
+const openId = ref('')
+let fetching = false
+
+const rows = computed(() => (tab.value === 'operation' ? logs.value : attempts.value))
+
+/* 长列表分批渲染：每批 50 行；服务端还有下一页时「加载更多」拉取后端下一页 */
+const { shown: shownOp, canMore: canMoreOp, loadMore: loadMoreOp } = useLoadMore(computed(() => logs.value), 50)
+const { shown: shownLogin, canMore: canMoreLogin, loadMore: loadMoreLogin } = useLoadMore(computed(() => attempts.value), 50)
+const serverHasMore = computed(() => rows.value.length < total.value)
+const canMore = computed(() =>
+  tab.value === 'operation' ? serverHasMore.value || canMoreOp.value : serverHasMore.value || canMoreLogin.value
+)
+function loadMore() {
+  if (serverHasMore.value) {
+    void fetchPage()
+  } else if (tab.value === 'operation') {
+    loadMoreOp()
+  } else {
+    loadMoreLogin()
+  }
+}
+
+function buildParams(nextPage: number): AuditLogQuery {
+  return {
+    page: nextPage,
+    limit: PAGE_SIZE,
+    scope: tab.value,
+    keyword: keyword.value.trim() || undefined,
+    timeRange: timeRange.value === 'all' ? undefined : timeRange.value,
+  }
+}
+
+async function fetchPage() {
+  if (fetching) return
+  fetching = true
+  const next = page.value + 1
+  try {
+    const res = await adminAuditApi.getAuditLogs(buildParams(next))
+    const data = res.data?.data ?? {}
+    const list = (tab.value === 'operation' ? data.logs : data.attempts) ?? []
+    if (tab.value === 'operation') {
+      logs.value = [...logs.value, ...list]
+    } else {
+      attempts.value = [...attempts.value, ...list]
+    }
+    const pagination = data.pagination
+    if (pagination && typeof pagination.total === 'number') total.value = pagination.total
+    page.value = next
+    loadError.value = ''
+  } catch (e) {
+    loadError.value = errMsg(e)
+  } finally {
+    fetching = false
+  }
+}
+
+async function fetchStats() {
+  try {
+    const res = await adminAuditApi.getAuditStats(buildParams(1))
+    const stats = res.data?.data?.stats
+    if (stats) {
+      total.value = typeof stats.total === 'number' ? stats.total : total.value
+      failed.value = typeof stats.failed === 'number' ? stats.failed : 0
+    }
+  } catch {
+    // 统计接口不可用时回退到已加载样本计算（与执行日志页同策略）
+    failed.value = rows.value.filter((r) => !r.success).length
+  }
+}
+
+async function applyFilters() {
+  loadError.value = ''
+  loading.value = true
+  page.value = 0
+  logs.value = []
+  attempts.value = []
+  openId.value = ''
+  await fetchPage()
+  await fetchStats()
+  loading.value = false
+}
+
+function switchTab(id: TabId) {
+  if (tab.value === id) return
+  tab.value = id
+  void applyFilters()
+}
+
+const isFiltered = computed(() => !!keyword.value.trim() || timeRange.value !== 'week')
+function clearFilters() {
+  keyword.value = ''
+  timeRange.value = 'week'
+  void applyFilters()
+}
+
+const statusTone = computed(() => {
+  if (loadError.value) return 'bad'
+  if (!rows.value.length) return 'muted'
+  return failed.value ? 'bad' : 'ok'
+})
+const statusTitle = computed(() => {
+  if (loadError.value) return '审计日志加载失败'
+  if (!rows.value.length) return tab.value === 'login' ? '暂无登录审计' : '暂无审计记录'
+  return tab.value === 'login' ? '登录审计' : '审计日志'
+})
+
+const REASON_TEXT: Record<string, string> = {
+  account_locked: '账户已锁定',
+  invalid_credentials: '用户名或密码错误',
+  ok: '登录成功',
+}
+function reasonText(reason: string | null | undefined): string {
+  const key = String(reason || '').toLowerCase()
+  if (!key) return '—'
+  return REASON_TEXT[key] || String(reason)
+}
+
+function fmtMs(ms: number) {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`
+}
+const pad = (n: number) => String(n).padStart(2, '0')
+/* 绝对时间：今天内 HH:MM:SS，跨天 MM-DD HH:MM */
+function fmtTime(iso?: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  const now = new Date()
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) return hm
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${hm.slice(0, 5)}`
+}
+function fmtFull(iso?: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+onMounted(() => {
+  void applyFilters()
+})
+</script>
+
+<style scoped>
+.log-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--mk-line);
+  background: var(--mk-surface);
+  box-shadow: var(--mk-shadow-sm);
+  flex-wrap: wrap;
+}
+.log-status__dot { width: 9px; height: 9px; border-radius: 50%; }
+.log-status--ok .log-status__dot { background: var(--mk-green); }
+.log-status--bad .log-status__dot { background: var(--mk-red); }
+.log-status--muted .log-status__dot { background: var(--mk-faint); }
+.log-status strong { font-size: 14px; }
+.log-status__sep { width: 1px; height: 14px; background: var(--mk-line); }
+.log-status__meta { color: var(--mk-muted); font-size: 12px; }
+
+.log-status__filters {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+}
+@media (max-width: 1000px) {
+  .log-status__filters {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .log-keyword { flex: 1 1 140px; min-width: 0; }
+}
+.log-agent {
+  padding: 6px 10px;
+  border: 1px solid var(--mk-line);
+  border-radius: 8px;
+  background: var(--mk-surface);
+  font-size: 11.5px;
+  color: var(--mk-ink);
+}
+.log-keyword {
+  padding: 6px 10px;
+  border: 1px solid var(--mk-line);
+  border-radius: 8px;
+  background: var(--mk-surface);
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--mk-ink);
+  width: 150px;
+}
+
+/* 加载失败错误态 */
+.audit-error { padding: 40px 20px; }
+.audit-error__card {
+  max-width: 460px;
+  margin: 0 auto;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  padding: 28px 32px;
+  border: 1px solid var(--mk-line);
+  border-radius: 14px;
+  background: var(--mk-surface);
+  box-shadow: var(--mk-shadow-modal);
+  text-align: center;
+}
+.audit-error__card strong { font-size: 14px; color: var(--mk-ink); }
+.audit-error__card span { font-size: 12.5px; color: var(--mk-muted); word-break: break-all; }
+
+.log-body {
+  border: 1px solid var(--mk-line);
+  border-radius: 12px;
+  background: var(--mk-surface);
+}
+
+/* 表头：与全站表格页同规范（sticky 顶部、uppercase 小号标签） */
+.tline-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 72px 130px 140px 80px minmax(100px, 200px) 56px 130px;
+  gap: 10px;
+  align-items: baseline;
+  padding: 9px 14px;
+  background: #fafbfc;
+  border-bottom: 1px solid var(--mk-line);
+  border-radius: 12px 12px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mk-faint);
+  white-space: nowrap;
+}
+.tline-head--login {
+  grid-template-columns: 72px 160px 130px 56px minmax(160px, 280px);
+}
+.tline-more {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 12px;
+  border-top: 1px dashed var(--mk-line);
+}
+
+.tline { border-left: 3px solid transparent; border-bottom: 1px solid #f0f2f5; }
+.tline:last-child { border-bottom: none; }
+.tline--ok { border-left-color: var(--mk-green); }
+.tline--err { border-left-color: var(--mk-red); background: rgba(220, 38, 38, 0.04); }
+
+.tline__main {
+  display: grid;
+  grid-template-columns: 72px 130px 140px 80px minmax(100px, 200px) 56px 130px;
+  gap: 10px;
+  align-items: baseline;
+  width: 100%;
+  padding: 9px 14px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tline__main:hover { background: #f6f9ff; }
+.tline__main--static { cursor: default; }
+.tline__main--static:hover { background: transparent; }
+.tline--login .tline__main {
+  grid-template-columns: 72px 160px 130px 56px minmax(160px, 280px);
+}
+
+.tline__time {
+  font-size: 11px;
+  color: var(--mk-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tline__admin {
+  font-size: 12px;
+  color: var(--mk-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tline__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 5px;
+  padding: 1px 7px;
+  background: #eff6ff;
+  color: var(--mk-blue);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.tline__target-type {
+  font-size: 11.5px;
+  color: var(--mk-muted);
+  white-space: nowrap;
+}
+.tline__target {
+  font-size: 11px;
+  color: var(--mk-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tline__ip {
+  font-size: 11px;
+  color: var(--mk-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tline__reason {
+  font-size: 11.5px;
+  color: var(--mk-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tline__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+.tline__badge--ok { background: var(--mk-green-bg); color: var(--mk-green); }
+.tline__badge--err { background: rgba(220, 38, 38, 0.1); color: #dc2626; }
+
+.tline__payload { padding: 2px 14px 12px 66px; display: grid; gap: 8px; }
+.tline__payload-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--mk-faint);
+  font-family: var(--mk-mono);
+}
+.tline__ua {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45%;
+}
+.tline__payload pre {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #0d1420;
+  color: #8ba3c7;
+  font: 11px/1.6 'JetBrains Mono', monospace;
+  overflow: auto;
+  max-height: 240px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.tline__none { margin: 0; font-size: 11.5px; color: var(--mk-faint); }
+.tline__section { display: grid; gap: 4px; }
+.tline__label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
+
+/* 大屏/4K 适配（全站 mk 体系档位） */
+@media (min-width: 2000px) {
+  .log-status { padding: 10px 16px; }
+  .log-status strong { font-size: 15.5px; }
+  .log-status__meta { font-size: 13px; }
+  .tline-head,
+  .tline__main { grid-template-columns: 84px 160px 170px 95px minmax(120px, 240px) 66px 160px; gap: 12px; padding: 11px 18px; }
+  .tline-head--login,
+  .tline--login .tline__main { grid-template-columns: 84px 195px 160px 66px minmax(190px, 340px); }
+  .tline-head { font-size: 12.5px; }
+  .tline__time,
+  .tline__target,
+  .tline__ip { font-size: 13px; }
+  .tline__admin { font-size: 14px; }
+  .tline__action { font-size: 13px; }
+  .tline__badge { font-size: 12px; }
+  .tline__payload { padding-left: 84px; }
+  .tline__payload pre { font-size: 13px; }
+}
+@media (min-width: 2800px) {
+  .log-status { padding: 12px 18px; border-radius: 14px; }
+}
+@media (min-width: 3600px) {
+  .log-status { padding: 14px 22px; }
+  .log-status strong { font-size: 18px; }
+  .log-status__meta { font-size: 15px; }
+  .tline-head,
+  .tline__main { grid-template-columns: 100px 190px 200px 110px minmax(140px, 280px) 78px 190px; gap: 14px; padding: 13px 22px; }
+  .tline-head--login,
+  .tline--login .tline__main { grid-template-columns: 100px 235px 190px 78px minmax(220px, 400px); }
+  .tline-head { font-size: 14.5px; }
+  .tline__time,
+  .tline__target,
+  .tline__ip { font-size: 15.5px; }
+  .tline__admin { font-size: 16.5px; }
+  .tline__action { font-size: 15.5px; }
+  .tline__badge { font-size: 14px; }
+  .tline__payload { padding-left: 100px; }
+  .tline__payload pre { font-size: 15.5px; }
+}
+</style>

@@ -75,3 +75,38 @@ export function categoryText(s: string | null | undefined): string {
   const key = String(s || '').toLowerCase()
   return CATEGORY_TEXT[key] || String(s || '')
 }
+
+/** 操作审计 action → 中文；未知值回退原文 */
+const ACTION_TEXT: Record<string, string> = {
+  'user-create': '创建用户',
+  'user-update': '更新用户',
+  'user-role-change': '变更角色',
+  'user-delete': '删除用户',
+  'user-batch-delete': '批量删除用户',
+  'announcement-create': '创建公告',
+  'announcement-update': '更新公告',
+  'announcement-publish': '发布公告',
+  'announcement-archive': '归档公告',
+  'announcement-delete': '删除公告',
+  'admin-login': '管理员登录',
+  'admin-logout': '管理员登出',
+  'session-revoke': '强制下线会话'
+}
+
+export function actionText(s: string | null | undefined): string {
+  const key = String(s || '').toLowerCase()
+  return ACTION_TEXT[key] || String(s || '')
+}
+
+/** 审计目标类型 → 中文；未知值回退原文 */
+const TARGET_TEXT: Record<string, string> = {
+  user: '用户',
+  announcement: '公告',
+  session: '会话'
+}
+
+export function targetTypeText(s: string | null | undefined): string {
+  const key = String(s || '').toLowerCase()
+  if (!key) return '—'
+  return TARGET_TEXT[key] || String(s)
+}

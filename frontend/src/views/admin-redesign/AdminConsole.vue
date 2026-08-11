@@ -44,9 +44,11 @@ import Topology from './Topology.vue';
 import Orchestrator from './Orchestrator.vue';
 import ExecLogs from './ExecLogs.vue';
 import TraceWaterfall from './TraceWaterfall.vue';
+import AuditLogs from './AuditLogs.vue';
 import ApiConfig from './ApiConfig.vue';
 import Addons from './Addons.vue';
 import Announcements from './Announcements.vue';
+import SessionSecurity from './SessionSecurity.vue';
 import PromptWorkbench from './PromptWorkbench.vue';
 import SkillDrawer from './SkillDrawer.vue';
 import LearnerDetail from './LearnerDetail.vue';
@@ -74,9 +76,11 @@ const components: Record<string, unknown> = {
   'orchestrator': Orchestrator,
   'execution-logs': ExecLogs,
   'trace-waterfall': TraceWaterfall,
+  'audit-logs': AuditLogs,
   'api-config': ApiConfig,
   'addons': Addons,
   'announcements': Announcements,
+  'session-security': SessionSecurity,
   'prompt-workbench': PromptWorkbench
 };
 

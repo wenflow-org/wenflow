@@ -1,6 +1,7 @@
 // Admin 管理 API
 import axios from 'axios';
 import { setAuthFlashMessage } from '@/utils/authFlash';
+import { clearUserLocalState } from '@/utils/sessionCleanup';
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const ADMIN_SESSION_REQUEST_TIMEOUT_MS = 10000;
 
@@ -117,6 +118,8 @@ export function clearAdminSession(notifyOtherTabs = true): void {
   sessionStorage.removeItem('admin_user');
   localStorage.removeItem(ADMIN_SESSION_KEY);
   sessionStorage.removeItem(ADMIN_SESSION_KEY);
+  // 管理员登出同步清除投影令牌（真实凭据，防止残留放行受保护路由）
+  clearUserLocalState();
 
   if (notifyOtherTabs) {
     try {
@@ -1279,4 +1282,70 @@ export const adminApi = {
   users: adminUsersApi.users,
   // getPromptVersions: 绑定语义更通用的 prompts 版本
   getPromptVersions: adminAgentPromptsApi.getPromptVersions,
+};
+
+// ============================================================
+// V5 · 审计日志与会话安全（P3）
+// 契约：GET /api/admin/audit-logs（scope=operation|login）、GET /api/admin/audit-logs/stats、
+// GET /api/admin/sessions、DELETE /api/admin/sessions/:id、POST /api/admin/sessions/revoke-all
+// ============================================================
+
+export interface AuditLogQuery {
+  page?: number;
+  limit?: number;
+  /** operation=操作审计（admin_audit_logs，默认）；login=登录审计（login_attempts） */
+  scope?: 'operation' | 'login';
+  /** 登录审计的维度（scope=login 时生效）：admin=管理端 / user=用户端 */
+  loginScope?: 'admin' | 'user';
+  adminId?: string;
+  adminName?: string;
+  action?: string;
+  targetType?: string;
+  keyword?: string;
+  success?: boolean;
+  timeRange?: 'today' | 'yesterday' | 'week' | 'month' | 'all';
+  startTime?: string;
+  endTime?: string;
+}
+
+export const adminAuditApi = {
+  /**
+   * 审计日志分页查询：scope=operation 返回 data.logs（admin_audit_logs 行）；
+   * scope=login 返回 data.attempts（login_attempts 行）；两者均带 data.pagination。
+   */
+  getAuditLogs: async (params: AuditLogQuery = {}) => {
+    return adminAxios.get('/admin/audit-logs', { params });
+  },
+
+  /**
+   * 审计统计（状态条「N 条 · 失败 M 条」），筛选参数与 getAuditLogs 一致；
+   * 返回 data.stats = { total, failed }
+   */
+  getAuditStats: async (params: AuditLogQuery = {}) => {
+    return adminAxios.get('/admin/audit-logs/stats', { params });
+  },
+};
+
+export interface AdminSessionQuery {
+  adminId?: string;
+  status?: 'active' | 'revoked' | 'expired';
+}
+
+export const adminSessionsApi = {
+  /**
+   * 管理员会话列表（含 adminName/adminEmail 联查）；status 枚举与后端一致。
+   */
+  getAdminSessions: async (params?: AdminSessionQuery) => {
+    return adminAxios.get('/admin/sessions', { params });
+  },
+
+  /** 强制下线指定会话（禁止下线自己的当前会话，后端返回 409） */
+  revokeAdminSession: async (sessionId: string) => {
+    return adminAxios.delete(`/admin/sessions/${encodeURIComponent(sessionId)}`);
+  },
+
+  /** 批量吊销：指定 adminId（缺省为全部）的未吊销会话；excludeCurrent=true 保留请求者当前会话 */
+  revokeAllAdminSessions: async (payload: { adminId?: string; excludeCurrent?: boolean }) => {
+    return adminAxios.post('/admin/sessions/revoke-all', payload);
+  },
 };
