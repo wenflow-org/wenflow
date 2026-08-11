@@ -46,6 +46,11 @@
         </div>
 
         <MockSkeletonTable v-if="loading && !rows.length" :cols="6" />
+        <!-- P0 修复：加载失败行内错误 + 重试（此前失败伪装成「暂无会话」） -->
+        <div v-else-if="loadError" class="gc-error" role="alert">
+          <span>{{ loadError }}</span>
+          <button type="button" class="mk-link" @click="load">重试</button>
+        </div>
         <div v-else-if="filtered.length" class="mk-table-scroll">
         <table class="mk-table">
           <thead>
@@ -131,6 +136,12 @@
             </div>
 
             <p v-if="detailLoading" class="gc-none">正在加载对话详情…</p>
+
+            <!-- P0 修复：详情加载失败行内提示 + 重试 -->
+            <div v-if="detailError" class="gc-error" role="alert">
+              <span>{{ detailError }}</span>
+              <button type="button" class="mk-link" @click="retryDetail">重试</button>
+            </div>
 
             <section v-if="detail.description" class="gc-section">
               <h4>目标描述</h4>
@@ -245,6 +256,7 @@ interface Detail extends Row {
 
 const loading = ref(false)
 const rows = ref<Row[]>([])
+const loadError = ref('')
 const stats = ref<{ total: number; active: number; completed: number; completionRate: string } | null>(null)
 const keyword = ref('')
 const statusFilter = ref('')
@@ -334,6 +346,7 @@ const { shown, canMore, loadMore } = useLoadMore(filtered, 20)
 async function load() {
   if (!isLive.value || loading.value) return
   loading.value = true
+  loadError.value = ''
   try {
     const [listRes, statsRes] = await Promise.all([
       adminGoalConversationsApi.list({ limit: 100 }),
@@ -351,7 +364,11 @@ async function load() {
         }
       : null
   } catch (e) {
-    toast.error(`加载失败：${errMsg(e)}`)
+    // P0 修复：失败置行内错误标记（此前只有 toast，列表显示「暂无会话」伪装空态）
+    rows.value = []
+    stats.value = null
+    loadError.value = `加载失败：${errMsg(e)}`
+    toast.error(loadError.value)
   } finally {
     loading.value = false
   }
@@ -377,7 +394,13 @@ function parseMessages(raw: unknown): Array<{ role: string; text: string; time: 
 }
 
 /** 详情面板加载态 */
+/** 详情面板加载态 */
+function retryDetail() {
+  if (detail.value) void openDetail(detail.value)
+}
+
 const detailLoading = ref(false)
+const detailError = ref('')
 /* 详情抽屉竞态：请求代际号，关闭/切换行后丢弃迟到的响应 */
 let detailReqSeq = 0
 
@@ -427,6 +450,7 @@ async function openDetail(r: Row) {
     messages: []
   }
   detailLoading.value = true
+  detailError.value = ''
   try {
     const res = await adminGoalConversationsApi.getDetail(r.id)
     // 已关闭抽屉或已切换到其他行：丢弃本次响应
@@ -444,7 +468,8 @@ async function openDetail(r: Row) {
     }
   } catch (e) {
     if (seq !== detailReqSeq) return
-    toast.error(`详情加载失败：${errMsg(e)}`)
+    detailError.value = `详情加载失败：${errMsg(e)}`
+    toast.error(detailError.value)
   } finally {
     if (seq === detailReqSeq) detailLoading.value = false
   }
@@ -661,6 +686,21 @@ onMounted(() => {
 .gc-msg__time { font-size: 10.5px; color: var(--mk-faint); margin-left: auto; white-space: nowrap; }
 .gc-msg__bubble p { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--mk-ink); white-space: pre-wrap; word-break: break-word; }
 .gc-none { margin: 0; color: var(--mk-faint); font-size: 12px; }
+
+.gc-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(239, 117, 120, 0.08);
+  border: 1px solid rgba(239, 117, 120, 0.3);
+  color: #c0454a;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
 
 .gc-raw summary {
   cursor: pointer;

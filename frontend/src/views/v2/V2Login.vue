@@ -51,6 +51,12 @@
         <span>还没有账号？</span>
         <button type="button" @click="goRegister">立即注册</button>
       </div>
+
+      <div class="forgot-row">
+        <router-link :to="{ path: '/reset-password', query: safeRedirect ? { redirect: safeRedirect } : undefined }" class="forgot-link">
+          忘记密码？
+        </router-link>
+      </div>
     </form>
   </V2AuthLayout>
 </template>
@@ -184,6 +190,21 @@ onMounted(() => {
   cursor: pointer; padding: 0;
 }
 .switch button:hover { text-decoration: underline; }
+
+.forgot-row {
+  display: flex;
+  justify-content: center;
+  margin-top: -4px;
+}
+.forgot-link {
+  font-size: 12.5px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.forgot-link:hover {
+  color: var(--blue-deep);
+  text-decoration: underline;
+}
 </style>
 
 <style scoped>

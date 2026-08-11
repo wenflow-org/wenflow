@@ -1,9 +1,13 @@
 // 用户路由
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import prisma from '../config/database';
 import { rejectProjectionAccess } from '../middleware/projection-access.middleware';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
 import { getLevelFromXp } from '../services/learner/level.util';
+
+// 与 auth.service 等价的假哈希：密码比对失败时保持恒定时间，防时序探测
+const INVALID_LOGIN_PASSWORD_HASH = '$2b$10$OAioDMuBkv4OiDj1OPaJse/r3xbZoGaxLWtBNBD6VSlBa5T4nwkdG';
 
 const router = express.Router();
 
@@ -204,7 +208,59 @@ router.put('/me', directUserSessionOnly, async (req, res, next) => {
   }
 });
 
-// 获取用户成就
+// 用户自助注销：密码确认后软删除本人账号（deletedBy 记本人），并吊销全部旧 JWT
+router.post('/me/deactivate', async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        error: { message: '请输入密码以确认注销' }
+      });
+    }
+
+    const user = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { id: true, password: true, deletedAt: true }
+    });
+    if (!user || user.deletedAt) {
+      return res.status(404).json({
+        success: false,
+        error: { message: '账号不存在' }
+      });
+    }
+
+    const isValid = await bcrypt.compare(password, user.password || INVALID_LOGIN_PASSWORD_HASH);
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        error: { message: '密码不正确' }
+      });
+    }
+
+    await prisma.users.update({
+      where: { id: userId },
+      data: {
+        deletedAt: new Date(),
+        deletedBy: userId,
+        // 递增 tokenVersion：注销后旧 JWT 立即失效（middleware 也会因 deletedAt 拒绝）
+        tokenVersion: { increment: 1 }
+      }
+    });
+
+    // 清除 HttpOnly Cookie
+    res.clearCookie('wenflow_token', { httpOnly: true, sameSite: 'strict', path: '/' });
+
+    res.json({
+      success: true,
+      data: { message: '账号已注销，感谢使用' }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 router.get('/me/achievements', async (req, res, next) => {
   try {
     const userId = req.user.userId;

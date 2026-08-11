@@ -292,6 +292,8 @@ export const liveLogsFiltered = ref<TraceSpan[]>([])
 
 /** 执行日志服务端查询 loading（首屏骨架屏用；与全局 liveLoading 区分，后者覆盖全量 boot） */
 export const liveLogsLoading = ref(false)
+/** P0 修复：执行日志查询失败标记（此前 try/finally 吞错 → 失败伪装成「暂无日志」） */
+export const liveLogsError = ref('')
 /** 后端 pagination.total（筛选口径全量条数，供「加载更多」展示） */
 export const liveLogsTotal = ref(0)
 /** 服务端分页当前页；筛选/查询变化时回到第 1 页 */
@@ -318,6 +320,7 @@ export async function reloadLiveSpans(query: SpanQuery, page = 1): Promise<void>
   logsQuerying = true
   const seq = ++logsQuerySeq
   liveLogsLoading.value = true
+  liveLogsError.value = ''
   try {
     const res = await adminAgentsApi.getLogs({ limit: LOGS_PAGE_SIZE, page, ...query })
     const body = res.data?.data ?? res.data ?? {}
@@ -336,6 +339,14 @@ export async function reloadLiveSpans(query: SpanQuery, page = 1): Promise<void>
       // 追加下一页并去重（同一筛选口径下 span id 与原始日志行 id 一致）
       const seen = new Set(liveLogsFiltered.value.map((s) => s.id))
       liveLogsFiltered.value = [...liveLogsFiltered.value, ...mapped.filter((s) => !seen.has(s.id))]
+    }
+  } catch (error) {
+    // P0 修复：失败必须可见（此前吞错导致首查失败显示「暂无日志」）
+    liveLogsError.value = errMsg(error) || '执行日志加载失败'
+    if (page <= 1) {
+      liveLogsFiltered.value = []
+      liveLogsTotal.value = 0
+      liveLogsHasMore.value = false
     }
   } finally {
     logsQuerying = false

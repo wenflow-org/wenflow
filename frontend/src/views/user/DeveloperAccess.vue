@@ -7,6 +7,11 @@
         </template>
       </el-result>
 
+      <!-- P1 修复：初次加载显示占位卡，不再整块空白 -->
+      <section v-else-if="overviewLoading" v-loading="true" class="loading-placeholder">
+        <div class="loading-placeholder__inner">加载开发者概览…</div>
+      </section>
+
       <template v-else-if="!overviewLoading">
       <section class="status-grid">
         <el-card class="glass-card">
@@ -47,6 +52,7 @@
             <el-button type="primary" @click="loadQuickstart">重新加载</el-button>
           </template>
         </el-result>
+        <div v-else-if="quickstartLoading" class="quickstart-loading">加载中…</div>
         <pre v-else-if="!quickstartLoading">{{ quickstart }}</pre>
       </section>
     </div>
@@ -178,6 +184,29 @@ async function copyQuickstart() {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
+}
+
+/* P1 修复：加载占位 */
+.loading-placeholder {
+  border-radius: 16px;
+  border: 1px solid var(--line, #e3e9f4);
+  background: var(--surface, #fff);
+  padding: 24px;
+  min-height: 160px;
+}
+.loading-placeholder__inner {
+  color: var(--faint, #8492ab);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.quickstart-loading {
+  padding: 16px;
+  color: var(--faint, #8492ab);
+  font-size: 13px;
 }
 
 .status-list {

@@ -776,8 +776,23 @@ model users {
   user_skill_configs        user_skill_configs[]
   virtual_learner_profiles  virtual_learner_profiles?
   virtual_sessions          virtual_sessions[]
+  password_reset_tokens     password_reset_tokens[]
 
   @@index([deletedAt])
+}
+
+// 忘记密码自助重置令牌：tokenHash 存哈希，一次性使用，带过期时间
+model password_reset_tokens {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  users     users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
 }
 
 model virtual_learner_profiles {

@@ -14,6 +14,8 @@
         </template>
       </el-alert>
 
+      <!-- P1 修复：初次加载整页 v-loading 遮罩，避免硬空白 -->
+      <div v-loading="profileLoading" element-loading-text="加载账户信息…" class="profile-content">
       <template v-if="!profileLoading && !profileLoadError">
       <section class="profile-grid">
         <article class="glass-card profile-card profile-card--hero">
@@ -21,8 +23,25 @@
             <el-avatar :size="64" class="profile-avatar">
               {{ user.name?.charAt(0) || '用' }}
             </el-avatar>
-            <div>
-              <h2>{{ user.name || '未命名用户' }}</h2>
+            <div class="profile-identity__main">
+              <div class="profile-name-row">
+                <template v-if="editingName">
+                  <el-input
+                    v-model="nameDraft"
+                    size="small"
+                    maxlength="64"
+                    class="profile-name-input"
+                    placeholder="输入新用户名"
+                    @keyup.enter="handleSaveName"
+                  />
+                  <el-button size="small" type="primary" :loading="nameSubmitting" @click="handleSaveName">保存</el-button>
+                  <el-button size="small" :disabled="nameSubmitting" @click="cancelEditName">取消</el-button>
+                </template>
+                <template v-else>
+                  <h2>{{ user.name || '未命名用户' }}</h2>
+                  <el-button size="small" text type="primary" @click="startEditName">编辑</el-button>
+                </template>
+              </div>
               <p>{{ user.email || '未绑定邮箱' }}</p>
             </div>
           </div>
@@ -93,6 +112,29 @@
       </section>
 
       <section>
+        <article class="glass-card profile-card profile-card--danger">
+          <div class="profile-card__head">
+            <div>
+              <span class="section-kicker">危险操作</span>
+              <h3>注销账号</h3>
+            </div>
+          </div>
+          <p class="danger-desc">注销后账号将被标记为已删除，所有学习数据将无法继续访问。此操作需要输入当前密码确认，且不可自助撤销（可联系管理员恢复）。</p>
+          <div class="danger-form">
+            <el-input
+              v-model="deactivatePassword"
+              type="password"
+              show-password
+              placeholder="输入当前密码确认注销"
+              style="max-width: 320px"
+              @keyup.enter="handleDeactivate"
+            />
+            <el-button type="danger" plain :loading="deactivating" @click="handleDeactivate">注销账号</el-button>
+          </div>
+        </article>
+      </section>
+
+      <section>
         <article v-loading="projectionGrantLoading" class="glass-card profile-card grant-card">
           <div class="profile-card__head profile-card__head--spread">
             <div>
@@ -139,6 +181,7 @@
         </article>
       </section>
       </template>
+      </div>
     </div>
   </CapabilityShell>
 </template>
@@ -164,6 +207,7 @@ import { userAPI, type LearnerCenterSnapshot } from '../api/user'
 
 const router = useRouter()
 const userStore = useUserStore()
+const api = request
 
 /* ---------- 修改密码 ---------- */
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
@@ -209,6 +253,13 @@ const learnerCenter = ref<LearnerCenterSnapshot | null>(null)
 const profileLoading = ref(true)
 const profileLoadError = ref('')
 const learnerCenterLoadError = ref('')
+// 用户名编辑
+const editingName = ref(false)
+const nameDraft = ref('')
+const nameSubmitting = ref(false)
+// 注销
+const deactivatePassword = ref('')
+const deactivating = ref(false)
 const projectionGrant = ref<ProjectionGrant | null>(null)
 const projectionGrantLoading = ref(false)
 const projectionGrantSubmitting = ref(false)
@@ -326,6 +377,69 @@ async function loadProjectionGrant() {
   }
 }
 
+// ---- 用户名编辑（P1-6：资料编辑 UI） ----
+function startEditName() {
+  nameDraft.value = user.value.name || ''
+  editingName.value = true
+}
+
+function cancelEditName() {
+  editingName.value = false
+  nameDraft.value = ''
+}
+
+async function handleSaveName() {
+  const trimmed = nameDraft.value.trim()
+  if (!trimmed) {
+    toast.error('用户名不能为空')
+    return
+  }
+  if (!/^[\p{L}\p{N}_-]+$/u.test(trimmed)) {
+    toast.error('用户名仅支持字母、数字、下划线和连字符')
+    return
+  }
+  nameSubmitting.value = true
+  try {
+    const updated = await userStore.updateProfile({ name: trimmed })
+    user.value.name = updated.name || trimmed
+    editingName.value = false
+    toast.success('用户名已更新')
+  } catch (error: any) {
+    toast.error(getErrorMessage(error, '更新用户名失败'))
+  } finally {
+    nameSubmitting.value = false
+  }
+}
+
+// ---- 用户自助注销（P0-3：密码确认 + 软删除） ----
+async function handleDeactivate() {
+  if (!deactivatePassword.value) {
+    toast.error('请输入当前密码以确认注销')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '注销后账号将被标记为已删除，学习数据将无法继续访问；此操作不可自助撤销。确定注销吗？',
+      '注销账号',
+      { confirmButtonText: '确认注销', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  deactivating.value = true
+  try {
+    await api.post('/users/me/deactivate', { password: deactivatePassword.value })
+    await userStore.logout()
+    toast.success('账号已注销')
+    await router.replace('/login')
+  } catch (error: any) {
+    toast.error(getErrorMessage(error, '注销失败，请稍后重试'))
+  } finally {
+    deactivating.value = false
+    deactivatePassword.value = ''
+  }
+}
+
 async function handleCreateProjectionGrant() {
   if (projectionGrantRevoking.value) return
   const wasActive = projectionGrantStatus.value === 'active'
@@ -390,6 +504,22 @@ async function handleRevokeProjectionGrant() {
 .profile-page {
   display: grid;
   gap: 16px;
+  min-width: 0;
+}
+
+.profile-content {
+  min-height: 200px;
+}
+
+.profile-page .el-result {
+  background: #fff;
+  border: 1px solid var(--line, #e3e9f4);
+  border-radius: 16px;
+  padding: 32px;
+}
+.profile-page {
+  display: grid;
+  gap: 16px;
 }
 
 .profile-grid {
@@ -434,6 +564,45 @@ async function handleRevokeProjectionGrant() {
   align-items: center;
   gap: 14px;
   margin-bottom: 16px;
+}
+
+.profile-identity__main {
+  min-width: 0;
+  flex: 1;
+}
+
+.profile-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.profile-name-row h2 {
+  margin: 0;
+}
+
+.profile-name-input {
+  width: 220px;
+  max-width: 100%;
+}
+
+.profile-card--danger {
+  border-color: rgba(239, 117, 120, 0.35);
+}
+
+.danger-desc {
+  margin: 0 0 14px;
+  color: var(--muted, #5b6577);
+  line-height: 1.65;
+  font-size: 13.5px;
+}
+
+.danger-form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .profile-avatar {

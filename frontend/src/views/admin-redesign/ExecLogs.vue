@@ -58,7 +58,12 @@
     </div>
 
     <!-- 日志流 -->
-    <MockSkeletonTable v-if="(liveLoading || liveLogsLoading) && !logs.length" :cols="4" :rows="6" />
+    <!-- P0 修复：加载失败显示错误横幅 + 重试，不再伪装成「暂无日志」 -->
+    <div v-if="liveLogsError" class="exec-error" role="alert">
+      <span>{{ liveLogsError }}</span>
+      <button type="button" @click="retryLiveLogs">重试</button>
+    </div>
+    <MockSkeletonTable v-else-if="(liveLoading || liveLogsLoading) && !logs.length" :cols="4" :rows="6" />
     <div v-else-if="filtered.length" class="log-body" role="log">
       <div class="tline-head" aria-hidden="true">
         <span class="tline-head__time">时间</span>
@@ -194,7 +199,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { spans, intent, openTrace, openSession, openSkillDrawer, clearInvestigation, dataSource, isLive } from './store'
-import { fetchLogDetail, reloadLiveSpans, loadMoreLiveSpans, liveLoading, liveLogsLoading, liveLogsTotal, liveLogsHasMore, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow } from './live'
+import { fetchLogDetail, reloadLiveSpans, loadMoreLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsHasMore, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow } from './live'
 import { useLoadMore } from './useLoadMore'
 import MockSkeletonTable from './SkeletonTable.vue'
 
@@ -236,6 +241,11 @@ async function applyServerQuery() {
     timeRange: timeRange.value,
     keyword: keyword.value.trim() || undefined
   })
+}
+
+/* P0 修复：错误横幅重试 */
+function retryLiveLogs() {
+  void applyServerQuery()
 }
 
 /* 自动刷新：10s 间隔，离开页面清除 */
@@ -544,6 +554,36 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   background: var(--mk-surface);
+}
+
+/* P0 修复：执行日志加载失败横幅（对齐 ts-error 规范） */
+.exec-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(239, 117, 120, 0.08);
+  border: 1px solid rgba(239, 117, 120, 0.3);
+  color: #c0454a;
+  font-size: 13px;
+  font-weight: 600;
+}
+.exec-error button {
+  border: 1px solid rgba(239, 117, 120, 0.4);
+  background: transparent;
+  color: #c0454a;
+  border-radius: 8px;
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.exec-error button:hover {
+  background: rgba(239, 117, 120, 0.12);
 }
 
 /* 表头：与全站表格页同规范（sticky 顶部、uppercase 小号标签） */

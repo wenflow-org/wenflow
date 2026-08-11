@@ -1,12 +1,13 @@
 // 认证路由
 import express from 'express';
 import { z } from 'zod';
-import authService, { InvalidCredentialsError, UsernameTakenError } from '../services/auth/auth.service';
+import authService, { InvalidCredentialsError, ResetTokenInvalidError, UsernameTakenError } from '../services/auth/auth.service';
 import { getPlatformSettings } from '../services/platform-settings.service';
 import { loginRateLimitMiddleware, recordLoginAttempt } from '../middleware/login-rate-limit.middleware';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { setAuthCookie, clearAuthCookie } from '../utils/auth-cookie';
 import { aiCapabilityHealthService } from '../services/ai-capability-health.service';
+import { logger } from '../utils/logger';
 
 const router = express.Router();
 
@@ -75,6 +76,9 @@ function createIpLimiter(maxAttempts: number, windowMs: number) {
 // 改密 30 次/小时/IP；verify 120 次/小时/IP
 const changePasswordLimiter = createIpLimiter(30, 60 * 60 * 1000);
 const verifyLimiter = createIpLimiter(120, 60 * 60 * 1000);
+// 忘记密码 10 次/小时/IP（防枚举扫描）；重置 20 次/小时/IP
+const forgotPasswordLimiter = createIpLimiter(10, 60 * 60 * 1000);
+const resetPasswordLimiter = createIpLimiter(20, 60 * 60 * 1000);
 
 // 注册状态（公开）
 router.get('/registration-status', async (req, res, next) => {
@@ -323,6 +327,73 @@ router.post('/verify', verifyLimiter, async (req, res, next) => {
     });
   } catch (error: any) {
     next(error);
+  }
+});
+
+// 忘记密码：提交用户名，若存在则生成重置令牌并发送（统一响应防枚举）
+router.post('/forgot-password', forgotPasswordLimiter, async (req, res, next) => {
+  try {
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    if (!name || name.length > 64) {
+      return res.status(400).json({
+        success: false,
+        error: { message: '请输入正确的用户名' }
+      });
+    }
+
+    await authService.requestPasswordReset(name);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        message: '如果该用户名存在，重置链接已发送（当前开发环境请在后端日志中查看）'
+      }
+    });
+  } catch (error: any) {
+    logger.error('申请密码重置失败:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: '申请密码重置失败，请稍后重试' }
+    });
+  }
+});
+
+// 重置密码：携带一次性令牌 + 新密码
+router.post('/reset-password', resetPasswordLimiter, async (req, res, next) => {
+  try {
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        error: { message: '重置令牌不能为空' }
+      });
+    }
+
+    const data = changePasswordSchema.pick({ newPassword: true }).parse(req.body);
+    await authService.resetPassword(token, data.newPassword);
+
+    res.status(200).json({
+      success: true,
+      data: { message: '密码已重置，请使用新密码登录' }
+    });
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({
+        success: false,
+        error: { message: '数据验证失败', details: error.errors }
+      });
+    }
+    if (error instanceof ResetTokenInvalidError) {
+      return res.status(400).json({
+        success: false,
+        error: { message: error.message, code: error.code, status: error.status }
+      });
+    }
+    logger.error('重置密码失败:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: '重置密码失败，请稍后重试' }
+    });
   }
 });
 

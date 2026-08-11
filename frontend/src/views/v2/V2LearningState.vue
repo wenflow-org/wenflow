@@ -95,6 +95,10 @@
             </div>
 
             <!-- skill 生成块 -->
+            <!-- P1 修复：guidance 加载失败可见提示 -->
+            <div v-if="guidanceLoadFailed" class="chart__empty" role="alert">
+              AI 建议加载失败，请刷新页面重试。
+            </div>
             <template v-if="skillCopy">
               <div class="guide">
                 <h3 class="guide__title">{{ skillCopy.headline }}</h3>
@@ -139,6 +143,9 @@
             </template>
 
             <!-- 预警（数据告警，两种模式都展示） -->
+            <div v-if="warningsLoadFailed" class="chart__empty" role="alert">
+              预警数据加载失败，请刷新页面重试。
+            </div>
             <div v-if="skillCopy && warningRows.length" class="suggest__list suggest__list--warnings">
               <article v-for="(w, i) in warningRows" :key="i" class="sug" :class="`sug--${w.level}`">
                 <span class="sug__icon" :style="{ background: w.bg, color: w.ink }" v-html="w.icon"></span>
@@ -173,6 +180,11 @@
 
         <!-- 侧栏 -->
         <aside class="side">
+          <!-- P1 修复：learnerCenter 失败提示 -->
+          <section v-if="learnerCenterLoadFailed" class="card sidecard" role="alert">
+            <span class="kicker">学习画像</span>
+            <p class="chart__empty">画像数据加载失败，请刷新页面重试。</p>
+          </section>
           <section v-if="preferenceItems.length && hasAnyLoad" class="card sidecard">
             <span class="kicker">学习偏好</span>
             <ul class="pref">
@@ -243,6 +255,10 @@ function toneOf(key: MetricKey, v: number): { tone: string; color: string; note:
 
 const metricCards = computed(() =>
   metricOptions.map((m) => {
+    // P1 修复：加载失败显示「读取失败」而非伪装「暂无数据」
+    if (currentLoadFailed.value) {
+      return { ...m, value: '—', unit: m.key === 'lsb' ? '' : '分', tone: 'red', color: '#ef7578', note: '读取失败' };
+    }
     const v = current.value?.[m.key];
     const t = toneOf(m.key, v);
     return { ...m, value: v ?? '—', unit: m.key === 'lsb' ? '' : '分', ...t };
@@ -609,6 +625,11 @@ const preferenceItems = computed(() => {
 });
 
 const learnerCenter = ref<Record<string, any> | null>(null);
+// P1 修复：各数据源失败标记（此前 .catch 吞错 → 错误伪装成无数据）
+const currentLoadFailed = ref(false);
+const warningsLoadFailed = ref(false);
+const learnerCenterLoadFailed = ref(false);
+const guidanceLoadFailed = ref(false);
 
 onMounted(() => {
   // 各数据源独立并发，互不阻塞（skill 引导最慢，不应拖住其他区块）
@@ -616,22 +637,22 @@ onMounted(() => {
 
   metricsAPI.getCurrentState()
     .then((v) => { current.value = v as Record<string, any> | null; })
-    .catch(() => {});
+    .catch(() => { currentLoadFailed.value = true; });
 
   request.get('/state/warnings')
     .then((r) => {
       const w = unwrap<{ warnings?: Array<Record<string, any>> }>(r);
       warnings.value = w?.warnings ?? (Array.isArray(w) ? (w as unknown as Array<Record<string, any>>) : []);
     })
-    .catch(() => {});
+    .catch(() => { warningsLoadFailed.value = true; });
 
   request.get('/users/me/learner-center', { params: { scope: 'global' } })
     .then((r) => { learnerCenter.value = unwrap(r) as Record<string, any>; })
-    .catch(() => {});
+    .catch(() => { learnerCenterLoadFailed.value = true; });
 
   request.get('/adaptive-guidance/copy', { params: { view: 'learning-state' } })
     .then((r) => { guidance.value = unwrap(r) as Record<string, any> | null; })
-    .catch(() => {});
+    .catch(() => { guidanceLoadFailed.value = true; });
 });
 </script>
 

@@ -59,6 +59,18 @@ export const authAPI = {
     }>(response) || { registrationEnabled: false, temporaryUnavailable: true };
   },
 
+  // 认证API
+  // 忘记密码 / 重置密码
+  async forgotPassword(name: string): Promise<unknown> {
+    const response = await api.post('/auth/forgot-password', { name });
+    return unwrapAuthPayload<unknown>(response);
+  },
+
+  async resetPassword(token: string, newPassword: string): Promise<unknown> {
+    const response = await api.post('/auth/reset-password', { token, newPassword });
+    return unwrapAuthPayload<unknown>(response);
+  },
+
   // 验证 token
   async verifyToken(token: string): Promise<unknown> {
     const response = await api.post('/auth/verify', { token });
