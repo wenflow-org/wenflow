@@ -1,80 +1,117 @@
 <template>
   <CapabilityShell title="API 接入">
     <div class="user-settings-page">
-      <article class="uc-card">
-        <div class="uc-card__head">
+      <!-- 状态条 -->
+      <div class="settings-status">
+        <div class="settings-status__left">
+          <span class="uc-badge" :class="apiConfig.enabled ? 'uc-badge--ok' : 'uc-badge--muted'">
+            {{ apiConfig.enabled ? '已启用' : '未启用' }}
+          </span>
           <div>
-            <h3>自定义 API</h3>
-            <p>接入你自己的模型服务，覆盖平台默认配置</p>
+            <strong>{{ apiConfig.enabled ? '使用自定义模型服务' : '使用平台默认模型服务' }}</strong>
+            <p>对话模型 {{ apiConfig.chatModel || 'deepseek-v4-flash' }} · 推理模型 {{ apiConfig.reasoningModel || 'deepseek-v4-pro' }}</p>
           </div>
-          <label class="uc-switch" :class="{ 'uc-switch--off': !apiConfig.enabled }">
-            <input
-              type="checkbox"
-              v-model="apiConfig.enabled"
-              :disabled="busy"
-              @change="handleEnabledChange"
-            />            <span class="uc-switch__track"></span>
-            <span class="uc-switch__label">{{ apiConfig.enabled ? '启用' : '禁用' }}</span>
-          </label>
         </div>
+        <label class="uc-switch" :class="{ 'uc-switch--off': !apiConfig.enabled }">
+          <input
+            type="checkbox"
+            v-model="apiConfig.enabled"
+            :disabled="busy"
+            @change="handleEnabledChange"
+          />
+          <span class="uc-switch__track"></span>
+          <span class="uc-switch__label">{{ apiConfig.enabled ? '启用' : '禁用' }}</span>
+        </label>
+      </div>
 
-        <div v-if="loadError" class="uc-errorbar" role="alert">
-          {{ loadError }}
-          <button type="button" class="uc-errorbar__retry" @click="loadApiConfig">重新加载</button>
-        </div>
+      <div v-if="loadError" class="uc-errorbar" role="alert">
+        {{ loadError }}
+        <button type="button" class="uc-errorbar__retry" @click="loadApiConfig">重新加载</button>
+      </div>
 
-        <div v-if="loading" class="uc-loading">
+      <div v-if="loading" class="uc-card">
+        <div class="uc-loading">
           <span class="uc-spinner"></span>
           加载配置…
         </div>
+      </div>
 
-        <div v-else-if="!loadError" class="api-form">
-          <label class="uc-field">
-            <span class="uc-field__label">端点</span>
-            <input v-model="apiConfig.endpoint" class="uc-field__input" placeholder="https://api.openai.com/v1" :disabled="busy" />
-          </label>
+      <div v-else-if="!loadError" class="settings-cols">
+        <!-- 左：配置表单 -->
+        <article class="uc-card">
+          <div class="uc-card__head">
+            <div>
+              <h3>服务配置</h3>
+              <p>填写兼容 OpenAI 协议的自定义模型端点</p>
+            </div>
+          </div>
+          <div class="api-form">
+            <label class="uc-field">
+              <span class="uc-field__label">端点</span>
+              <input v-model="apiConfig.endpoint" class="uc-field__input" placeholder="https://api.openai.com/v1" :disabled="busy" />
+            </label>
 
-          <label class="uc-field">
-            <span class="uc-field__label">API Key</span>
-            <div class="uc-field__pwd">
-              <input
-                v-model="apiConfig.apiKey"
-                type="password"
-                class="uc-field__input"
-                :placeholder="hasSavedApiKey ? '已保存，留空继续使用' : 'sk-...'"
-                :disabled="busy"
-              />
-              <button type="button" class="uc-field__eye" @click="showKey = !showKey" :aria-label="showKey ? '隐藏密钥' : '显示密钥'">
-                {{ showKey ? '隐藏' : '显示' }}
+            <label class="uc-field">
+              <span class="uc-field__label">API Key</span>
+              <div class="uc-field__pwd">
+                <input
+                  v-model="apiConfig.apiKey"
+                  type="password"
+                  class="uc-field__input"
+                  :placeholder="hasSavedApiKey ? '已保存，留空继续使用' : 'sk-...'"
+                  :disabled="busy"
+                />
+                <button type="button" class="uc-field__eye" @click="showKey = !showKey" :aria-label="showKey ? '隐藏密钥' : '显示密钥'">
+                  {{ showKey ? '隐藏' : '显示' }}
+                </button>
+              </div>
+              <span v-if="hasSavedApiKey" class="uc-field__hint">已保存密钥，留空则继续使用</span>
+            </label>
+
+            <div class="api-form__grid">
+              <label class="uc-field">
+                <span class="uc-field__label">对话模型</span>
+                <input v-model="apiConfig.chatModel" class="uc-field__input" placeholder="deepseek-v4-flash" :disabled="busy" />
+              </label>
+              <label class="uc-field">
+                <span class="uc-field__label">推理模型</span>
+                <input v-model="apiConfig.reasoningModel" class="uc-field__input" placeholder="deepseek-v4-pro" :disabled="busy" />
+              </label>
+            </div>
+
+            <div class="action-buttons">
+              <button type="button" class="uc-btn" :disabled="busy" @click="testConnection">
+                {{ testing ? '测试中…' : '测试连接' }}
+              </button>
+              <button type="button" class="uc-btn uc-btn--primary" :disabled="busy" @click="saveApiConfig">
+                {{ saving ? '保存中…' : '保存配置' }}
+              </button>
+              <button v-if="apiConfig.enabled" type="button" class="uc-btn uc-btn--danger" :disabled="busy" @click="disableConfig">
+                {{ disabling ? '禁用中…' : '禁用' }}
               </button>
             </div>
-            <span v-if="hasSavedApiKey" class="uc-field__hint">已保存密钥，留空则继续使用</span>
-          </label>
-
-          <div class="api-form__grid">
-            <label class="uc-field">
-              <span class="uc-field__label">对话模型</span>
-              <input v-model="apiConfig.chatModel" class="uc-field__input" placeholder="deepseek-v4-flash" :disabled="busy" />
-            </label>
-            <label class="uc-field">
-              <span class="uc-field__label">推理模型</span>
-              <input v-model="apiConfig.reasoningModel" class="uc-field__input" placeholder="deepseek-v4-pro" :disabled="busy" />
-            </label>
           </div>
+        </article>
 
-          <div class="action-buttons">
-            <button type="button" class="uc-btn" :disabled="busy" @click="testConnection">
-              {{ testing ? '测试中…' : '测试连接' }}
-            </button>
-            <button type="button" class="uc-btn uc-btn--primary" :disabled="busy" @click="saveApiConfig">
-              {{ saving ? '保存中…' : '保存配置' }}
-            </button>
-            <button v-if="apiConfig.enabled" type="button" class="uc-btn uc-btn--danger" :disabled="busy" @click="disableConfig">
-              {{ disabling ? '禁用中…' : '禁用自定义 API' }}
-            </button>
-          </div>
-        </div>
-      </article>
+        <!-- 右：说明卡 -->
+        <aside class="settings-side">
+          <article class="uc-card">
+            <div class="uc-card__head">
+              <div>
+                <h3>什么是自定义 API？</h3>
+              </div>
+            </div>
+            <ul class="help-list">
+              <li><strong>自带模型服务</strong><span>接入你自己购买的模型服务（DeepSeek / OpenAI / 兼容端点），学习对话将使用你的模型</span></li>
+              <li><strong>平台默认</strong><span>不配置时使用平台内置模型，无需任何操作</span></li>
+              <li><strong>密钥安全</strong><span>API Key 加密存储，仅用于平台调用你的模型服务</span></li>
+            </ul>
+            <div class="help-tip">
+              需要帮助？将配置问题反馈给开发者，可附上调用日志。
+            </div>
+          </article>
+        </aside>
+      </div>
     </div>
 
     <UcConfirm :state="confirmState" />
@@ -262,6 +299,93 @@ const handleEnabledChange = () => {
   display: grid;
   gap: 16px;
   min-width: 0;
+}
+
+/* 状态条 */
+.settings-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border: 1px solid var(--line, #e3e9f4);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
+  flex-wrap: wrap;
+}
+
+.settings-status__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.settings-status__left strong {
+  display: block;
+  font-size: 14px;
+  color: var(--ink, #172033);
+}
+
+.settings-status__left p {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--faint, #67758f);
+}
+
+/* 两栏：表单 + 说明 */
+.settings-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .settings-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+.settings-side {
+  display: grid;
+  gap: 16px;
+}
+
+.help-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 14px;
+}
+
+.help-list li {
+  display: grid;
+  gap: 3px;
+}
+
+.help-list strong {
+  font-size: 13.5px;
+  color: var(--ink, #172033);
+}
+
+.help-list span {
+  font-size: 12.5px;
+  color: var(--muted, #5b6577);
+  line-height: 1.6;
+}
+
+.help-tip {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--canvas, #f3f6fb);
+  border: 1px dashed var(--line, #e3e9f4);
+  font-size: 12.5px;
+  color: var(--muted, #5b6577);
+  line-height: 1.6;
 }
 
 .api-form {

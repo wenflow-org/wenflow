@@ -14,6 +14,8 @@ export interface UserProfile {
   xp: number;
   level: number;
   xpToNextLevel?: number;
+  createdAt?: string;
+  lastLoginAt?: string | null;
 }
 
 export interface UpdateProfileData {

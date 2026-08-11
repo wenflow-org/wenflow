@@ -84,6 +84,7 @@ router.get('/me', async (req, res, next) => {
         role: true,
         currentLevel: true,
         createdAt: true,
+        lastLoginAt: true,
         deletedAt: true
       }
     });

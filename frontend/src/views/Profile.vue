@@ -14,8 +14,8 @@
       </div>
 
       <template v-if="!profileLoading && !profileLoadError">
-        <!-- 资料卡 -->
-        <article class="uc-card">
+        <!-- 资料 hero 卡：横贯全宽 -->
+        <article class="uc-card profile-hero">
           <div class="profile-identity">
             <div class="profile-avatar">{{ user.name?.charAt(0) || '用' }}</div>
             <div class="profile-identity__main">
@@ -39,22 +39,23 @@
                 </template>
               </div>
               <p class="profile-email">{{ user.email || '未绑定邮箱' }}</p>
+              <p class="profile-meta">注册于 {{ formatDateShort(user.createdAt) }} · 最近登录 {{ formatDateShort(user.lastLoginAt) }}</p>
             </div>
-          </div>
-
-          <div class="profile-stats">
-            <div class="stat-card">
-              <span>经验值（XP）</span>
-              <strong>{{ user.xp || 0 }}</strong>
-            </div>
-            <div class="stat-card">
-              <span>等级</span>
-              <strong>{{ user.level || 1 }} 级</strong>
+            <div class="profile-stats">
+              <div class="stat-card">
+                <span>经验值（XP）</span>
+                <strong>{{ user.xp || 0 }}</strong>
+              </div>
+              <div class="stat-card">
+                <span>等级</span>
+                <strong>{{ user.level || 1 }} 级</strong>
+              </div>
             </div>
           </div>
         </article>
 
-        <!-- 账号安全：修改密码 -->
+        <!-- 两栏：修改密码 + 协助排查 -->
+        <div class="profile-cols">
         <article class="uc-card">
           <div class="uc-card__head">
             <div>
@@ -132,6 +133,7 @@
           </template>
           </template>
         </article>
+        </div>
 
         <!-- 危险操作：注销 -->
         <article class="uc-card uc-card--danger">
@@ -218,7 +220,9 @@ const user = ref({
   email: '',
   xp: 0,
   level: 1,
-  role: 'user'
+  role: 'user',
+  createdAt: '',
+  lastLoginAt: null as string | null
 })
 const profileLoading = ref(true)
 const profileLoadError = ref('')
@@ -263,6 +267,13 @@ function formatDateTime(value?: string | null) {
   return date.toLocaleString('zh-CN')
 }
 
+function formatDateShort(value?: string | null) {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
 function getErrorMessage(error: any, fallback: string) {
   return error?.response?.data?.error?.message || error?.response?.data?.error || error?.message || fallback
 }
@@ -284,7 +295,9 @@ async function loadUserProfile() {
       email: userStore.user.email,
       xp: userStore.user.xp,
       level: userStore.user.level,
-      role: (userStore.user as any).role || 'user'
+      role: (userStore.user as any).role || 'user',
+      createdAt: (userStore.user as any).createdAt || '',
+      lastLoginAt: (userStore.user as any).lastLoginAt || null
     }
   } catch (error: any) {
     profileLoadError.value = getErrorMessage(error, '无法读取账户信息，请稍后重试。')
@@ -439,20 +452,23 @@ async function handleDeactivate() {
   min-width: 0;
 }
 
+.profile-hero {
+  padding: 24px 26px;
+}
+
 .profile-identity {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 18px;
+  gap: 18px;
 }
 
 .profile-avatar {
-  width: 64px;
-  height: 64px;
+  width: 72px;
+  height: 72px;
   border-radius: 999px;
   background: linear-gradient(135deg, var(--blue, #3478f6), var(--accent, #8d6bff));
   color: #fff;
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 800;
   display: flex;
   align-items: center;
@@ -474,7 +490,7 @@ async function handleDeactivate() {
 
 .profile-name-row h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: 24px;
   letter-spacing: -0.01em;
 }
 
@@ -486,14 +502,43 @@ async function handleDeactivate() {
 .profile-email {
   margin: 5px 0 0;
   color: var(--muted, #5b6577);
-  font-size: 13.5px;
+  font-size: 14px;
+}
+
+.profile-meta {
+  margin: 4px 0 0;
+  color: var(--faint, #67758f);
+  font-size: 12px;
 }
 
 .profile-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  max-width: 420px;
+  flex: none;
+}
+
+/* 两栏布局：改密 + 协助排查 */
+.profile-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .profile-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-identity {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .profile-stats {
+    width: 100%;
+  }
 }
 
 .stat-card {
