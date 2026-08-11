@@ -149,10 +149,26 @@ router.put('/me', directUserSessionOnly, async (req, res, next) => {
     const userId = req.user.userId;
     const { name } = req.body;
 
+    // G8：name 校验——非空、长度 ≤64；users.name 非唯一（仅 email 唯一），按设计不做重名校验
+    let normalizedName: string | undefined;
+    if (name !== undefined) {
+      if (typeof name !== 'string') {
+        return res.status(400).json({ success: false, error: { message: 'name 必须为字符串' } });
+      }
+      const trimmed = name.trim();
+      if (!trimmed) {
+        return res.status(400).json({ success: false, error: { message: 'name 不能为空' } });
+      }
+      if (trimmed.length > 64) {
+        return res.status(400).json({ success: false, error: { message: 'name 不能超过 64 字符' } });
+      }
+      normalizedName = trimmed;
+    }
+
     const user = await prisma.users.update({
       where: { id: userId },
       data: {
-        ...(name && { name })
+        ...(normalizedName ? { name: normalizedName } : {})
       },
       select: {
         id: true,

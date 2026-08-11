@@ -3,6 +3,12 @@ import prisma from '../config/database';
 
 const router = express.Router();
 const DEFAULT_GRANT_TTL_MINUTES = 24 * 60;
+// S2：自建 access grant 有效期上限（30 天 = 43200 分钟），防止长期有效的过高权限凭据
+const MAX_GRANT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+// S2：scopeDefinition 序列化后大小上限（2KB）
+const MAX_SCOPE_DEFINITION_BYTES = 2048;
+// S2：purpose 长度上限（200 字符）
+const MAX_PURPOSE_CHARS = 200;
 
 function normalizeProjectionScope(value: any): 'dashboard' | 'full' {
   return value === 'full' ? 'full' : 'dashboard';
@@ -226,6 +232,42 @@ router.post('/access-grants', async (req: any, res) => {
       });
     }
 
+    // S2：TTL 上限——自建 grant 不允许设置超长有效期（expiresInMinutes 或 expiresAt 超出 30 天均拒绝）
+    if (expiresAt.getTime() - Date.now() > MAX_GRANT_TTL_MS) {
+      return res.status(400).json({
+        success: false,
+        error: { message: '授权有效期不能超过 30 天' }
+      });
+    }
+
+    // S2：scopeDefinition 大小上限（序列化后 ≤2KB）
+    let scopeDefinition: string | null;
+    try {
+      scopeDefinition = serializeScopeDefinition(req.body?.scopeDefinition);
+    } catch {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'scopeDefinition 格式无效' }
+      });
+    }
+    if (scopeDefinition && Buffer.byteLength(scopeDefinition, 'utf8') > MAX_SCOPE_DEFINITION_BYTES) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'scopeDefinition 过大（序列化后不能超过 2KB）' }
+      });
+    }
+
+    // S2：purpose 长度上限
+    const purpose = typeof req.body?.purpose === 'string' && req.body.purpose.trim()
+      ? req.body.purpose.trim()
+      : null;
+    if (purpose && purpose.length > MAX_PURPOSE_CHARS) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'purpose 过长（最多 200 字符）' }
+      });
+    }
+
     const now = new Date();
     const grant = await prisma.$transaction(async (tx) => {
       await tx.projection_access_grants.updateMany({
@@ -241,10 +283,8 @@ router.post('/access-grants', async (req: any, res) => {
         data: {
           userId,
           scope: normalizeProjectionScope(req.body?.scope),
-          scopeDefinition: serializeScopeDefinition(req.body?.scopeDefinition),
-          purpose: typeof req.body?.purpose === 'string' && req.body.purpose.trim()
-            ? req.body.purpose.trim()
-            : null,
+          scopeDefinition,
+          purpose,
           expiresAt
         }
       });

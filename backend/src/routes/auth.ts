@@ -10,6 +10,37 @@ import { aiCapabilityHealthService } from '../services/ai-capability-health.serv
 
 const router = express.Router();
 
+// ---- 注册限速（G1）：注册为公开端点，按 IP 维度限速，缓解用户名枚举扫描与批量注册 ----
+const REGISTER_WINDOW_MS = 60 * 60 * 1000;
+const REGISTER_MAX_ATTEMPTS = 10;
+const registerAttemptsByIp: Map<string, Date[]> = new Map();
+
+const isRegisterRateLimited = (ip: string): number => {
+  const now = Date.now();
+  const attempts = (registerAttemptsByIp.get(ip) || []).filter(
+    (timestamp) => now - timestamp.getTime() < REGISTER_WINDOW_MS
+  );
+  registerAttemptsByIp.set(ip, attempts);
+
+  if (attempts.length >= REGISTER_MAX_ATTEMPTS) {
+    const last = attempts[attempts.length - 1];
+    return Math.max(1, Math.ceil((REGISTER_WINDOW_MS - (now - last.getTime())) / 1000));
+  }
+
+  return 0;
+};
+
+const recordRegisterAttempt = (ip: string, success: boolean) => {
+  if (success) {
+    registerAttemptsByIp.delete(ip);
+    return;
+  }
+
+  const attempts = registerAttemptsByIp.get(ip) || [];
+  attempts.push(new Date());
+  registerAttemptsByIp.set(ip, attempts);
+};
+
 // 注册状态（公开）
 router.get('/registration-status', async (req, res, next) => {
   try {
@@ -30,20 +61,23 @@ router.get('/registration-status', async (req, res, next) => {
 
 // 验证 schema
 const registerSchema = z.object({
-  name: z.string().min(2, '用户名至少 2 位'),
+  name: z.string().min(2, '用户名至少 2 位').max(64, '用户名最长 64 位'),
   password: z.string()
     .min(8, '密码至少 8 位')
+    .max(1024, '密码最长 1024 位')
     .regex(/[a-zA-Z]/, '密码必须包含字母')
     .regex(/[0-9]/, '密码必须包含数字'),
 });
 
 const loginSchema = z.object({
-  name: z.string().min(1, '用户名不能为空'),
-  password: z.string().min(1, '密码不能为空')
+  name: z.string().min(1, '用户名不能为空').max(64, '用户名最长 64 位'),
+  password: z.string().min(1, '密码不能为空').max(1024, '密码最长 1024 位')
 });
 
 // 注册
 router.post('/register', async (req, res, next) => {
+  let clientIP = 'unknown';
+
   try {
     const settings = await getPlatformSettings();
     const coreLearningBlocked = aiCapabilityHealthService.isCapabilityBlocked('goal-conversation');
@@ -61,11 +95,30 @@ router.post('/register', async (req, res, next) => {
       });
     }
 
+    // 注册限速：防止用户名枚举与批量注册（G1）
+    clientIP = (req.ip || req.headers['x-forwarded-for'] || 'unknown').toString();
+    const remainingSeconds = isRegisterRateLimited(clientIP);
+    if (remainingSeconds > 0) {
+      return res.status(429).json({
+        success: false,
+        error: {
+          message: `注册尝试过于频繁，请 ${remainingSeconds} 秒后重试`,
+          code: 'REGISTER_RATE_LIMITED',
+          status: 429
+        }
+      });
+    }
+
     // 验证请求数据
     const data = registerSchema.parse(req.body) as { name: string; password: string };
 
     // 调用服务
     const result = await authService.register(data);
+
+    // G1 备注：authService.register 对已占用用户名抛 '用户名已被使用'（经全局错误处理返回 500），
+    // 与成功 201 的响应差异可被用于用户名枚举。为不破坏前端提示，此处不统一文案，
+    // 由注册限速（按 IP 10 次/小时）抑制枚举扫描；如需彻底消除差异，应改为统一业务错误码。
+    recordRegisterAttempt(clientIP, true);
 
     // 同步写入 HttpOnly Cookie（前端不再需要将 token 存入 localStorage）
     setAuthCookie(res, result.token, 'user');
@@ -85,6 +138,7 @@ router.post('/register', async (req, res, next) => {
       });
     }
 
+    recordRegisterAttempt(clientIP, false);
     next(error);
   }
 });

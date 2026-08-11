@@ -1,6 +1,7 @@
 // 学习路由
 import express from 'express';
 import { z } from 'zod';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import prisma from '../config/database';
 import learningService from '../services/learning/learning.service';
 import aiService from '../services/ai/ai.service';
@@ -13,6 +14,23 @@ import { isPathMutationConflictError } from '../services/learning/path-mutation-
 import { setRequestContext, getRequestContext } from '../gateway/api-gateway/context';
 
 const router = express.Router();
+
+// ---- G5：LLM 计费端点按用户维度限速（额度可经环境变量调整）----
+const parseRateLimitEnvValue = (value: string | undefined, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+const llmGenerateUserLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: parseRateLimitEnvValue(process.env.LLM_GENERATE_MAX_PER_HOUR, 20),
+  message: { success: false, error: { message: '生成请求过于频繁，请稍后再试' } },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.userId || ipKeyGenerator(req.ip, 56),
+});
+
+// G7：deadline 需为 ISO 日期格式（日期或带时间的完整 ISO 8601）
+const ISO_DEADLINE_REGEX = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
 
 /** 在 LLM 触发链路前注入业务上下文（pathId 归组，执行日志/瀑布可追溯） */
 const withPathContext = (req: express.Request, pathId?: string | null, conversationId?: string | null) => {
@@ -215,23 +233,23 @@ router.get('/paths', learningPathsPollingLimiter, async (req, res, next) => {
 
 // 创建学习目标schema
 const createGoalSchema = z.object({
-  description: z.string().min(1, '学习目标不能为空'),
-  subject: z.string().optional()
+  description: z.string().min(1, '学习目标不能为空').max(4096, '学习目标不能超过 4096 字符'),
+  subject: z.string().max(200).optional()
 });
 
 // 生成学习路径schema
 const generatePathSchema = z.object({
-  description: z.string().min(1, '学习目标不能为空'),
-  subject: z.string().optional(),
-  deadline: z.string().optional(),
-  deadlineText: z.string().optional(),
+  description: z.string().min(1, '学习目标不能为空').max(4096, '学习目标不能超过 4096 字符'),
+  subject: z.string().max(200).optional(),
+  deadline: z.string().regex(ISO_DEADLINE_REGEX, 'deadline 必须是 ISO 日期格式').optional(),
+  deadlineText: z.string().max(500).optional(),
   userProfile: z.object({
     skillLevel: z.string().optional(),
     currentSkillLevel: z.string().optional(),
     learningStyle: z.string().optional(),
     timePerDay: z.string().optional(),
     totalWeeks: z.number().optional(),
-    learningGoal: z.string().optional(),
+    learningGoal: z.string().max(4096).optional(),
     deadline: z.string().optional(),
     deadlineText: z.string().optional(),
     cognitiveProfile: z.record(z.any()).optional(),
@@ -316,11 +334,54 @@ router.get('/goals', async (req, res, next) => {
 });
 
 // 更新学习目标（多目标预算台账：status/pathId/priority/plannedMinutesPerDay）
+const GOAL_STATUS_WHITELIST = ['active', 'paused', 'completed', 'archived'];
+
 router.patch('/goals/:goalId', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const goalId = String(req.params.goalId);
     const body = req.body || {};
+
+    // G2：status 白名单校验（与 learning.service updateLearningGoal 的类型枚举一致）
+    if (body.status !== undefined && !GOAL_STATUS_WHITELIST.includes(body.status)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'status 无效，仅支持 active/paused/completed/archived' }
+      });
+    }
+
+    // G2：pathId 必须归属当前用户，防止跨用户引用学习路径
+    if (body.pathId !== undefined && body.pathId !== null) {
+      const path = await prisma.learning_paths.findFirst({
+        where: { id: String(body.pathId), userId }
+      });
+      if (!path) {
+        return res.status(400).json({
+          success: false,
+          error: { message: 'pathId 无效或不属于当前用户' }
+        });
+      }
+    }
+
+    // G2：plannedMinutesPerDay 数值范围 0-1440
+    if (body.plannedMinutesPerDay !== undefined) {
+      const plannedMinutes = Number(body.plannedMinutesPerDay);
+      if (!Number.isFinite(plannedMinutes) || plannedMinutes < 0 || plannedMinutes > 1440) {
+        return res.status(400).json({
+          success: false,
+          error: { message: 'plannedMinutesPerDay 需为 0-1440 的数值' }
+        });
+      }
+    }
+
+    // priority 需为有限数值
+    if (body.priority !== undefined && !Number.isFinite(Number(body.priority))) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'priority 需为数值' }
+      });
+    }
+
     const goal = await learningService.updateLearningGoal(userId, goalId, {
       ...(body.status ? { status: body.status } : {}),
       ...(body.pathId !== undefined ? { pathId: body.pathId } : {}),
@@ -350,7 +411,43 @@ router.get('/schedule/today', async (req, res, next) => {
 router.post('/schedule/plan', async (req, res, next) => {
   try {
     const userId = req.user.userId;
-    const plan = Array.isArray(req.body?.plan) ? req.body.plan : [];
+
+    // G6：plan 输入校验——数组上限 20 项、budgetMinutes 0-1440、plannedTasks 字符串数组
+    const rawPlan = req.body?.plan;
+    if (!Array.isArray(rawPlan)) {
+      return res.status(400).json({ success: false, error: { message: 'plan 必须为数组' } });
+    }
+    if (rawPlan.length > 20) {
+      return res.status(400).json({ success: false, error: { message: 'plan 最多 20 项' } });
+    }
+
+    const plan: Array<{ goalId: string; budgetMinutes: number; plannedTasks?: string[] }> = [];
+    for (const item of rawPlan) {
+      if (!item || typeof item !== 'object') {
+        return res.status(400).json({ success: false, error: { message: 'plan 项格式无效' } });
+      }
+
+      const goalId = String(item.goalId || '');
+      if (!goalId) {
+        return res.status(400).json({ success: false, error: { message: 'plan 项缺少 goalId' } });
+      }
+
+      const budgetMinutes = Number(item.budgetMinutes);
+      if (!Number.isFinite(budgetMinutes) || budgetMinutes < 0 || budgetMinutes > 1440) {
+        return res.status(400).json({ success: false, error: { message: 'budgetMinutes 需为 0-1440 的数值' } });
+      }
+
+      let plannedTasks: string[] | undefined;
+      if (item.plannedTasks !== undefined) {
+        if (!Array.isArray(item.plannedTasks) || item.plannedTasks.some((task: any) => typeof task !== 'string')) {
+          return res.status(400).json({ success: false, error: { message: 'plannedTasks 需为字符串数组' } });
+        }
+        plannedTasks = item.plannedTasks;
+      }
+
+      plan.push({ goalId, budgetMinutes, plannedTasks });
+    }
+
     const results = await learningService.planTodaySchedule(userId, plan);
     res.json({ success: true, data: results });
   } catch (error: any) {
@@ -390,7 +487,7 @@ router.post('/paths', async (req, res, next) => {
 // 创建占位课程（立即返回，后台异步生成）
 
 // 生成学习路径
-router.post('/paths/generate', async (req, res, next) => {
+router.post('/paths/generate', llmGenerateUserLimiter, async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const data = generatePathSchema.parse(req.body);

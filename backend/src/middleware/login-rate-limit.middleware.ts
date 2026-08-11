@@ -102,7 +102,8 @@ const createLoginRateLimitMiddleware = (scope: LoginRateLimitScope) => (
   res: Response,
   next: NextFunction
 ) => {
-  const name = typeof req.body?.name === 'string' ? req.body.name : '';
+  // G3：用户名会作为内存 Map 的 key，截断超长输入防止内存滥用（schema 层另有 max(64) 校验）
+  const name = (typeof req.body?.name === 'string' ? req.body.name : '').slice(0, 64);
   const clientIP = (req.ip || req.headers['x-forwarded-for'] || 'unknown').toString();
   const key = buildLoginAttemptKey(scope, name, clientIP);
   const ipKey = `${scope}:ip:${clientIP}`;
@@ -139,9 +140,11 @@ export const recordLoginAttempt = (
   success: boolean,
   scope: LoginRateLimitScope = 'user'
 ) => {
-  const key = buildLoginAttemptKey(scope, username, ip);
+  // G3：用户名作为 Map key 使用，截断超长输入防止内存滥用
+  const safeUsername = username.slice(0, 64);
+  const key = buildLoginAttemptKey(scope, safeUsername, ip);
   const ipKey = `${scope}:ip:${ip}`;
-  const accountKey = `${scope}:account:${username}`;
+  const accountKey = `${scope}:account:${safeUsername}`;
 
   if (success) {
     loginAttempts.delete(key);

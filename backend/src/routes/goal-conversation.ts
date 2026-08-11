@@ -1,10 +1,28 @@
 ﻿import express, { Request, Response } from 'express';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
 import requirementOrchestrator from '../coordinators/requirement.coordinator';
 import { PromptStreamEvent, setRequestContext } from '../gateway/api-gateway/context';
 
 const router = express.Router();
+
+// ---- G5：LLM 计费端点按用户维度限速（额度可经环境变量调整）----
+const parseRateLimitEnvValue = (value: string | undefined, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+const goalConversationUserLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: parseRateLimitEnvValue(process.env.GOAL_CONVERSATION_MAX_PER_HOUR, 60),
+  message: { success: false, error: { message: '对话请求过于频繁，请稍后再试' } },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.userId || ipKeyGenerator(req.ip, 56),
+});
+
+// G5：LLM 输入长度上限（4KB），防止超长输入放大计费成本
+const GOAL_INPUT_MAX_CHARS = 4096;
 
 const META_KEYS = ['draftMs', 'idleMsBefore', 'lastIdleMs', 'editingCount', 'deleteCount', 'charsPerSentence'] as const;
 
@@ -173,7 +191,7 @@ function getConfirmProposal(body: any): boolean {
   return body?.confirmProposal === true;
 }
 
-router.post('/start', authMiddleware, async (req: Request, res: Response) => {
+router.post('/start', authMiddleware, goalConversationUserLimiter, async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
     const goal = getInputText(req.body);
@@ -184,6 +202,10 @@ router.post('/start', authMiddleware, async (req: Request, res: Response) => {
 
     if (!goal || goal.trim().length === 0) {
       return res.status(400).json({ success: false, error: '学习目标不能为空' });
+    }
+
+    if (goal.length > GOAL_INPUT_MAX_CHARS) {
+      return res.status(400).json({ success: false, error: `学习目标不能超过 ${GOAL_INPUT_MAX_CHARS} 字符` });
     }
 
     if (String(req.headers?.accept || '').includes('text/event-stream')) {
@@ -215,7 +237,7 @@ router.post('/start', authMiddleware, async (req: Request, res: Response) => {
   }
 });
 
-router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: Response) => {
+router.post('/:conversationId/reply', authMiddleware, goalConversationUserLimiter, async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
     const { conversationId } = req.params;
@@ -227,6 +249,10 @@ router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: 
 
     if (!reply || reply.trim().length === 0) {
       return res.status(400).json({ success: false, error: '回复内容不能为空' });
+    }
+
+    if (reply.length > GOAL_INPUT_MAX_CHARS) {
+      return res.status(400).json({ success: false, error: `回复内容不能超过 ${GOAL_INPUT_MAX_CHARS} 字符` });
     }
 
     if (String(req.headers?.accept || '').includes('text/event-stream')) {
@@ -265,14 +291,18 @@ router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: 
   }
 });
 
-router.post('/:conversationId/regenerate', authMiddleware, async (req: Request, res: Response) => {
+router.post('/:conversationId/regenerate', authMiddleware, goalConversationUserLimiter, async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
     const { conversationId } = req.params;
-    const { adjustments } = req.body;
+    const adjustments = typeof req.body?.adjustments === 'string' ? req.body.adjustments : undefined;
 
     if (!userId) {
       return res.status(401).json({ success: false, error: '用户未认证' });
+    }
+
+    if (adjustments && adjustments.length > GOAL_INPUT_MAX_CHARS) {
+      return res.status(400).json({ success: false, error: `调整说明不能超过 ${GOAL_INPUT_MAX_CHARS} 字符` });
     }
 
     if (String(req.headers?.accept || '').includes('text/event-stream')) {
