@@ -75,6 +75,21 @@
 - `history/reports/YYYY-MM/`：时间点报告（含 WENFLOW_FUNCTIONAL_MODULE_REPORT、安全/迁移报告）
 - `design/`：专项设计稿（platform-capabilities-design）
 
+### 已归档（2026-08-11）
+
+以下 10 份调查/规格文档使命已完成，结论已被实施吸收，移入 `archive/` 作背景参考：
+
+- [`RETIRED_SKILLS_FIX_PLAN.md`](./archive/RETIRED_SKILLS_FIX_PLAN.md) — 退役名单单源化 → `retired-skills.ts` 已建立
+- [`YAML_UNIFICATION_AUDIT.md`](./archive/YAML_UNIFICATION_AUDIT.md) — YAML 生态统一化 → yaml-vocabulary 已建立
+- [`DATASOURCE_P4_SURVEY.md`](./archive/DATASOURCE_P4_SURVEY.md) — dataSource 决策调查 → `dataSource` 已声明
+- [`SCAFFOLD_P5_SURVEY.md`](./archive/SCAFFOLD_P5_SURVEY.md) — admin 新建 Skill 向导调查 → scaffold 已实现
+- [`SKILL_READINESS_SPEC.md`](./archive/SKILL_READINESS_SPEC.md) — 完成度状态机规格 → readiness/状态机已实现
+- [`SKILL_LIFECYCLE_SURVEY.md`](./archive/SKILL_LIFECYCLE_SURVEY.md) — 注册链全景调查 → skills.yaml 已上线
+- [`SKILL_DIAGNOSTICS_SURVEY.md`](./archive/SKILL_DIAGNOSTICS_SURVEY.md) — 诊断面全景调查 → 诊断建议已实施
+- [`MCP_DOMAIN_SURVEY.md`](./archive/MCP_DOMAIN_SURVEY.md) — MCP 域机制调查 → 调查使命完成
+- [`CONFIG_SECURITY_CLEANUP.md`](./archive/CONFIG_SECURITY_CLEANUP.md) — 配置安全审计 → 安全清理已实施
+- [`SKILLS_YAML_SPEC.md`](./archive/SKILLS_YAML_SPEC.md) — skills.yaml 实施规格 → skills.yaml 已上线
+
 ### 2026-04 至 2026-05 历史材料
 
 以下文档记录早期平台扫描与设计演进。涉及当前架构、运行链路或协议时，应优先以本索引中的现行文档为准。
