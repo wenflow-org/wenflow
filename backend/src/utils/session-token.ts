@@ -12,6 +12,8 @@ export interface SessionTokenPayload extends JwtPayload {
   email?: string;
   isAdmin?: boolean;
   type?: SessionTokenType;
+  // P2 会话管理：签发时由调用方传入随机 UUID，用于 admin_sessions 表关联与吊销
+  jti?: string;
 }
 
 const getJwtSecret = (): string => {

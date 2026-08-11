@@ -937,6 +937,27 @@ model admin_audit_logs {
   @@index([targetType, targetId, createdAt])
 }
 
+// 管理员会话表（P2 方案 B：轻量完整会话表）
+// 由 admin-auth 签发/登出时写入，admin.middleware 鉴权时校验（revokedAt/expiresAt），
+// lastSeenAt 由内存节流（60s）fire-and-forget 更新。
+// 与 admin_audit_logs 同约定：adminId 为纯列（无外键），避免 SQLite 重建表风险。
+model admin_sessions {
+  id         String    @id
+  adminId    String
+  jti        String    @unique
+  ip         String?
+  userAgent  String?
+  remember   Boolean   @default(false)
+  issuedAt   DateTime
+  expiresAt  DateTime
+  lastSeenAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([revokedAt, expiresAt])
+}
+
 // 登录审计（user/admin 双 scope，P1）
 // 由 login-rate-limit.middleware 的 recordLoginAttempt / ACCOUNT_LOCKED 分支
 // fire-and-forget 写入；username 在写入前截断为 64 字符。

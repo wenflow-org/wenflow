@@ -215,6 +215,7 @@ import adminSkillModelConfigsRoutes from './routes/admin/skill-model-configs';
 import adminPlatformRoutes from './routes/admin/platform';
 import adminGoalConversationsRoutes from './routes/admin/goal-conversations';
 import adminUsersRoutes from './routes/admin/users';
+import adminSessionsRoutes from './routes/admin/sessions';
 import adminLearnerModelsRoutes from './routes/admin/learner-models';
 import adminAnnouncementsRoutes from './routes/admin/announcements';
 import announcementsRoutes from './routes/announcements';
@@ -325,6 +326,7 @@ app.use('/api/admin/runtime-definitions', ...adminRouteMiddleware, adminRuntimeD
 app.use('/api/admin/prompt-ops', ...adminRouteMiddleware, adminPromptOpsRoutes);
 app.use('/api/admin/skill-model-configs', ...adminRouteMiddleware, adminSkillModelConfigsRoutes);
 app.use('/api/admin/users', ...adminRouteMiddleware, adminUsersRoutes);
+app.use('/api/admin/sessions', ...adminRouteMiddleware, adminSessionsRoutes);
 app.use('/api/admin/announcements', ...adminRouteMiddleware, adminAnnouncementsRoutes);
 app.use('/api/admin/mcp', ...adminRouteMiddleware, adminMcpRoutes);
 app.use('/api/admin/learner-models', ...adminRouteMiddleware, adminLearnerModelsRoutes);

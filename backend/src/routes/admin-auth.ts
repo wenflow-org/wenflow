@@ -1,15 +1,19 @@
 import express, { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import prisma from '../config/database';
 import { z } from 'zod';
 import { logger } from '../utils/logger';
 import { adminAuthMiddleware } from '../middleware/auth.middleware';
 import { adminMiddleware } from '../middleware/admin.middleware';
 import { adminLoginRateLimitMiddleware, recordLoginAttempt } from '../middleware/login-rate-limit.middleware';
-import { signSessionToken } from '../utils/session-token';
-import { setAuthCookie, clearAuthCookie } from '../utils/auth-cookie';
+import { signSessionToken, verifySessionToken } from '../utils/session-token';
+import { setAuthCookie, clearAuthCookie, resolveAuthToken } from '../utils/auth-cookie';
 
 const ADMIN_SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const ADMIN_SESSION_SHORT_MS = 24 * 60 * 60 * 1000;
+const IP_MAX_CHARS = 100;
+const USER_AGENT_MAX_CHARS = 300;
 
 const router = express.Router();
 
@@ -58,19 +62,43 @@ router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: R
       });
     }
 
-    // 生成 JWT Token（管理员专用）：记住登录签发 7 天，否则签发 24 小时短会话
+    // 生成 JWT Token（管理员专用）：记住登录签发 7 天，否则签发 24 小时短会话；
+    // jti 关联 admin_sessions 表，支持后台会话管理与登出吊销
+    const sessionJti = randomUUID();
     const token = signSessionToken(
       {
         userId: admin.id,
         email: admin.email,
         name: admin.name,
         isAdmin: true,
+        jti: sessionJti,
       },
       'admin',
       remember ? '7d' : '24h'
     );
 
     recordLoginAttempt(name, clientIP, true, 'admin');
+
+    // 写入会话表（fail-open：写库失败不阻塞登录，仅告警；登出/吊销能力随之下线）
+    try {
+      const issuedAt = new Date();
+      await prisma.admin_sessions.create({
+        data: {
+          id: randomUUID(),
+          adminId: admin.id,
+          jti: sessionJti,
+          ip: clientIP.slice(0, IP_MAX_CHARS),
+          userAgent: typeof req.headers['user-agent'] === 'string'
+            ? req.headers['user-agent'].slice(0, USER_AGENT_MAX_CHARS)
+            : null,
+          remember: !!remember,
+          issuedAt,
+          expiresAt: new Date(issuedAt.getTime() + (remember ? ADMIN_SESSION_MAX_AGE_MS : ADMIN_SESSION_SHORT_MS)),
+        },
+      });
+    } catch (sessionError) {
+      logger.warn('管理员会话写入失败（不阻塞登录）:', sessionError);
+    }
 
     // 写入 HttpOnly Cookie：勾选"记住登录"给 7 天有效期，否则为会话 Cookie
     setAuthCookie(res, token, 'admin', remember ? ADMIN_SESSION_MAX_AGE_MS : null);
@@ -107,8 +135,28 @@ router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: R
   }
 });
 
-// 管理员登出：清除 HttpOnly 认证 Cookie
-router.post('/logout', (req: Request, res: Response) => {
+// 管理员登出：撤销会话表记录（从 Cookie/Header 解析 token 的 jti）+ 清除 HttpOnly 认证 Cookie。
+// 解析/撤销失败仅告警，不阻塞登出（Cookie 必清，保证前端退出成功）。
+router.post('/logout', async (req: Request, res: Response) => {
+  try {
+    const token = resolveAuthToken(req, 'admin');
+    if (token) {
+      try {
+        const payload = verifySessionToken(token, 'admin');
+        if (payload.jti) {
+          await prisma.admin_sessions.update({
+            where: { jti: payload.jti },
+            data: { revokedAt: new Date() },
+          });
+        }
+      } catch (tokenError) {
+        logger.warn('登出时解析会话 Token 失败（仅清理 Cookie）:', tokenError);
+      }
+    }
+  } catch (sessionError) {
+    logger.warn('登出时撤销会话失败（仅清理 Cookie）:', sessionError);
+  }
+
   clearAuthCookie(res, 'admin');
   res.json({
     success: true,
