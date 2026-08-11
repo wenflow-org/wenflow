@@ -637,6 +637,100 @@ export const adminSystemApi = {
   }
 };
 
+// ============================================================
+// 健康中心（漂移/健康提醒聚合，编排结构页顶部健康区数据源）
+// 契约：GET /api/admin/health-center（60s 缓存，refresh=1 强制）、
+//       POST /api/admin/health-center/fix（body: { id }，仅 fixable 类）
+// ============================================================
+
+export type HealthCenterItemId =
+  | 'w4-corehash'
+  | 'field-routing-contract'
+  | 'field-routing'
+  | 'contract-parity'
+  | 'snapshots'
+  | 'yaml-crosscheck'
+  | 'params-consistency'
+  | 'fields-sync'
+  | 'w1-active'
+  | 'w2-registration'
+  | 'w3-wiring'
+  | 'override-record'
+  | 'runtime-prompt';
+
+/** 基准元数据：谁是真源（DRIFT_BASELINE_SURVEY §4.1） */
+export type HealthCenterBase =
+  | 'file:core.yaml'
+  | 'file:manifest'
+  | 'file:orchestration'
+  | 'file:skills.yaml'
+  | 'bidirectional'
+  | 'db:managed'
+  | 'runtime';
+
+/** 语义分级：决定修复语义 */
+export type HealthCenterSemantics = 'baseline-drift' | 'consistency' | 'override-record' | 'runtime-info';
+
+export type HealthSeverity = 'ok' | 'warn' | 'error' | 'info';
+
+export interface HealthCenterItem {
+  id: HealthCenterItemId;
+  label: string;
+  base: HealthCenterBase;
+  semantics: HealthCenterSemantics;
+  severity: HealthSeverity;
+  status: string;
+  count: number;
+  detail: string[];
+  cause: string;
+  action: 'fixable' | 'manual' | 'none';
+  fixHint: string;
+  source: string;
+}
+
+export interface HealthCenterSummary {
+  total: number;
+  baselineDrift: number;
+  consistency: number;
+  overrideRecord: number;
+  fixable: number;
+}
+
+export interface HealthCenterReport {
+  generatedAt: string;
+  summary: HealthCenterSummary;
+  items: HealthCenterItem[];
+}
+
+export interface HealthCenterFixResult {
+  id: HealthCenterItemId;
+  fixed: boolean;
+  backupDir: string | null;
+  gitCommitHint: string;
+  before: HealthCenterItem;
+  after: HealthCenterItem;
+  auditId?: string;
+}
+
+export const adminHealthCenterApi = {
+  /**
+   * 统一健康清单；refresh=true 时绕过 60s 缓存强制重算。
+   */
+  get: async (refresh = false) => {
+    return adminAxios.get<{ success: boolean; data: HealthCenterReport }>('/admin/health-center', {
+      params: refresh ? { refresh: 1 } : {},
+    });
+  },
+
+  /**
+   * 一键修复（仅 fixable：w4-corehash / field-routing / snapshots）；
+   * manual 类后端返回 409 + 指引。
+   */
+  fix: async (id: HealthCenterItemId) => {
+    return adminAxios.post<{ success: boolean; data: HealthCenterFixResult }>('/admin/health-center/fix', { id });
+  },
+};
+
 /**
  * 用户反馈中心（前台教学反馈的收集与处理）
  */
@@ -1235,6 +1329,7 @@ export const adminPromptWorkbenchApi = {
   }
 };
 
+// ============================================================
 // ========== 统一导出 ==========
 
 /**
