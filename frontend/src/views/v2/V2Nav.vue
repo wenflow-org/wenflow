@@ -99,7 +99,8 @@ function isActive(item: { match: string[] }) {
  * 派发事件由 V2GoalConversation 监听并重置视图（清内存、保留本地恢复入口）。
  */
 function onNewGoalClick() {
-  if (route.path === '/goal-conversation') {
+  // 按路由 name 判断：深链 /goal-conversation/gc_xxx 与无参路由同样命中
+  if (route.name === 'V2GoalConversation') {
     window.dispatchEvent(new CustomEvent('v2:new-goal'));
   }
 }

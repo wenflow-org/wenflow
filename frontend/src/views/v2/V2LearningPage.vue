@@ -317,8 +317,11 @@ async function sendPeer() {
       peerStreamAbort = new AbortController();
       r = await aiTeachingAPI.streamSendPeerMessage(session.value.sessionId, t, { signal: peerStreamAbort.signal }) as unknown as Record<string, any>;
     } catch (peerError) {
-      // 传输层失败且未收到任何内容：回退非流式重发；业务失败交给外层报错
-      if (!(peerError as { transport?: boolean })?.transport) throw peerError;
+      // 传输层失败且未收到任何内容：回退非流式重发；业务失败交给外层报错；
+      // 用户离页触发的 abort 不重发
+      const pe = peerError as { cancelled?: boolean; transport?: boolean };
+      if (pe.cancelled) throw peerError;
+      if (!pe.transport) throw peerError;
       r = await aiTeachingAPI.sendPeerMessage(session.value.sessionId, t) as unknown as Record<string, any>;
     } finally {
       peerStreamAbort = null;
@@ -326,7 +329,9 @@ async function sendPeer() {
     if (r?.peerResponse) {
       peerItems.value.push({ role: 'peer', text: String(r.peerResponse), time: nowTime() });
     }
-  } catch {
+  } catch (e) {
+    // 离页中止：静默丢弃
+    if ((e as { cancelled?: boolean })?.cancelled) return;
     peerItems.value.push({ role: 'peer', text: '这次没接上，等下再跟我说一句试试。', time: nowTime() });
   } finally {
     peerSending.value = false;
@@ -452,6 +457,8 @@ async function doSend(text: string) {
         },
       }, meta) as unknown as Record<string, any>;
     } catch (streamError) {
+      // 用户离页触发的 abort：不重发、不当作失败
+      if ((streamError as { cancelled?: boolean })?.cancelled) throw streamError;
       // 传输层失败且未收到任何内容：安全回退非流式重发；业务失败或已收到部分内容则交给外层报错
       if (!(streamError as { transport?: boolean })?.transport) throw streamError;
       if (streamingBubbleIndex.value >= 0) msgs.value.splice(streamingBubbleIndex.value, 1);
@@ -493,7 +500,9 @@ async function doSend(text: string) {
     if (r.isCompletion) {
       await finish(isReviewMode.value ? 'complete_review' : 'complete_task');
     }
-  } catch {
+  } catch (e) {
+    // 离页中止：静默丢弃，不重发也不展示失败气泡
+    if ((e as { cancelled?: boolean })?.cancelled) return;
     // 流式气泡可能已有部分内容：移除后展示统一失败气泡
     if (streamingBubbleIndex.value >= 0) msgs.value.splice(streamingBubbleIndex.value, 1);
     msgs.value.push({ role: 'ai', text: '这次回复失败了，点下方「重试」。', time: nowTime(), failed: true });
@@ -586,7 +595,8 @@ async function pauseAndLeave() {
   menuOpen.value = false;
   if (session.value) {
     try {
-      await aiTeachingAPI.pauseSession(session.value.sessionId, 'manual', session.value.revision);
+      const rev = await aiTeachingAPI.pauseSession(session.value.sessionId, 'manual', session.value.revision);
+      if (typeof rev === 'number' && session.value) session.value.revision = rev;
     } catch { /* ignore */ }
   }
   goBack();
@@ -642,16 +652,73 @@ function onPageHide() {
   navigator.sendBeacon?.(`${API_BASE_URL}/ai-teaching/sessions/${session.value.sessionId}/pause`, blob);
 }
 
-/* 切换标签页/窗口：隐藏时暂停、切回可见时恢复，学习时长只计页面激活时间 */
+/* 切换标签页/窗口：隐藏时暂停、切回可见时恢复，学习时长只计页面激活时间。
+   pause/resume 返回值（服务端 revision+1 后的新值）写回 session.value.revision，
+   避免本地 revision 落后导致 resume/后续请求触发 TEACHING_SESSION_STALE 409 后会话永久卡死。
+   操作串行化：先等 pause 落定并回写 revision，再发 resume，杜绝并发导致的 expectedRevision 冲突。 */
+let lifecycleChain: Promise<void> = Promise.resolve();
+
+/** resume 失败后的会话恢复：重新 startSession 拿新 revision（服务端会 resume 同一会话），
+    无法恢复时明确提示刷新，绝不静默忽略。 */
+async function recoverSession(sid: string) {
+  const cur = session.value;
+  if (!cur || cur.sessionId !== sid || completed.value) return;
+  try {
+    const s = (isReviewMode.value
+      ? await aiTeachingAPI.startReviewSession(taskId)
+      : await aiTeachingAPI.startSession(taskId)) as unknown as Record<string, any>;
+    if (!session.value || session.value.sessionId !== sid) return;
+    session.value = { sessionId: s.sessionId, revision: s.revision ?? 0 };
+    if (s.mode === 'resumed') {
+      // 同一会话在后端恢复：本地消息仍有效，仅同步新 revision 与知识点状态
+      if (Array.isArray(s.knowledgePoints) && s.knowledgePoints.length) {
+        knowledgePoints.value = s.knowledgePoints;
+      }
+      toast.info('已恢复课堂连接');
+    } else {
+      // 旧会话已失效、服务端重新开课：清空本地展示并按新开场白初始化
+      msgs.value = [];
+      checkpoint.value = null;
+      checkpointFeedback.value = '';
+      completed.value = false;
+      quickReplies.value = (s.opening?.quickReplies || []).map((q: Record<string, any>) => q.text || q).filter(Boolean);
+      if (Array.isArray(s.knowledgePoints) && s.knowledgePoints.length) {
+        knowledgePoints.value = s.knowledgePoints;
+        showKpActions.value = true;
+      }
+      const openingText = s.opening?.message || s.welcomeMessage;
+      if (openingText) msgs.value.push({ role: 'ai', text: openingText, time: nowTime() });
+      if (s.opening?.question) msgs.value.push({ role: 'ai', text: s.opening.question, time: nowTime() });
+      toast.info('已重新开课');
+    }
+  } catch {
+    toast.error('课堂连接恢复失败，请刷新页面后继续');
+  }
+}
+
 function onVisibilityChange() {
   if (!session.value || completed.value) return;
   const sid = session.value.sessionId;
-  const revision = session.value.revision;
-  if (document.hidden) {
-    aiTeachingAPI.pauseSession(sid, 'hidden', revision).catch(() => {});
-  } else {
-    aiTeachingAPI.resumeSession(sid, revision).catch(() => {});
-  }
+  const hidden = document.hidden;
+  lifecycleChain = lifecycleChain.then(async () => {
+    const s = session.value;
+    if (!s || s.sessionId !== sid || completed.value) return;
+    try {
+      if (hidden) {
+        const rev = await aiTeachingAPI.pauseSession(sid, 'hidden', s.revision);
+        if (typeof rev === 'number' && session.value?.sessionId === sid) session.value.revision = rev;
+      } else {
+        try {
+          const rev = await aiTeachingAPI.resumeSession(sid, s.revision);
+          if (typeof rev === 'number' && session.value?.sessionId === sid) session.value.revision = rev;
+        } catch (resumeError) {
+          await recoverSession(sid);
+        }
+      }
+    } catch {
+      // pause 失败不致命：会话仍可交互，下次 visible 时由 resume/恢复逻辑兜底
+    }
+  });
 }
 
 onMounted(() => {

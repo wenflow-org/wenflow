@@ -27,13 +27,20 @@ export async function streamSsePost(
   if (token) headers.Authorization = `Bearer ${token}`;
   if (projectionToken) headers['X-Projection-Token'] = projectionToken;
 
-  const response = await fetch(`${API_BASE_URL}${url}`, {
-    method: 'POST',
-    headers,
-    credentials: 'include',
-    body: JSON.stringify(payload),
-    signal: handlers.signal
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${url}`, {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+      body: JSON.stringify(payload),
+      signal: handlers.signal
+    });
+  } catch (error) {
+    // 调用方主动 abort（离页/卸载止损）：单独标记 cancelled，避免被误判为传输层失败而重发
+    if (isAbort(error, handlers.signal)) throw markCancelled(error);
+    throw error;
+  }
 
   if (!response.ok) {
     let message = '请求失败';
@@ -87,20 +94,34 @@ export async function streamSsePost(
   };
 
   let streamDone = false;
-  while (!streamDone) {
-    const { done, value } = await reader.read();
-    if (done) {
-      streamDone = true;
-      break;
+  try {
+    while (!streamDone) {
+      const { done, value } = await reader.read();
+      if (done) {
+        streamDone = true;
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      let newlineIndex: number;
+      while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, newlineIndex).replace(/\r$/, '');
+        buffer = buffer.slice(newlineIndex + 1);
+        processLine(line);
+      }
     }
-    buffer += decoder.decode(value, { stream: true });
-    let newlineIndex: number;
-    while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-      const line = buffer.slice(0, newlineIndex).replace(/\r$/, '');
-      buffer = buffer.slice(newlineIndex + 1);
-      processLine(line);
-    }
+  } catch (error) {
+    if (isAbort(error, handlers.signal)) throw markCancelled(error);
+    throw error;
   }
   if (buffer) processLine(buffer.replace(/\r$/, ''));
   if (pendingData.length) dispatch(pendingEvent, pendingData.join('\n'));
+}
+
+function isAbort(error: unknown, signal?: AbortSignal): boolean {
+  return (error as { name?: string })?.name === 'AbortError' || signal?.aborted === true;
+}
+
+function markCancelled(error: unknown): unknown {
+  const e = error instanceof Error ? error : new Error('请求已取消');
+  return Object.assign(e, { cancelled: true });
 }

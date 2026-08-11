@@ -34,6 +34,14 @@ export interface LiveField {
 const CID_KEY = 'v2_goal_cid';
 const MSG_KEY = 'v2_goal_msgs';
 
+/**
+ * 会话代次（generation token）：reset/resetView 自增。
+ * 进行中的流式请求（run/resumeById）在响应落地前校验代次，
+ * 不一致说明会话已被重置（清空重聊/规划新目标），过期响应整体丢弃，
+ * 避免在途 final 把已清空的 conversationId/messages/localStorage 写回。
+ */
+let generation = 0;
+
 const INVALID_PATTERN = /待确认|待收集|未知|尚未|不确定|暂无|没有发现|未提供|n\/?a/i;
 
 function pickText(...candidates: unknown[]): string {
@@ -148,7 +156,9 @@ const proposal = computed(() => {
   return { problem, outcome, stages, skip };
 });
 
-function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string; replaceMessages?: boolean } = {}) {
+function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string; replaceMessages?: boolean } = {}, gen = generation) {
+  // 会话代次不一致：会话已被重置，丢弃过期响应
+  if (gen !== generation) return;
   const core = env.internal?.core;
   const ext = env.internal?.ext?.goalConversation;
 
@@ -199,6 +209,7 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
 }
 
 async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: string, meta?: InteractionMeta) {
+  const gen = generation;
   sending.value = true;
   failed.value = '';
   lastPayload.value = text;
@@ -217,10 +228,12 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
         env = await streamReplyGoalConversation(conversationId.value, text, { meta });
       }
     } catch (streamError) {
-      const e = streamError as { transport?: boolean; recoveryEnvelope?: GoalConversationEnvelope };
+      const e = streamError as { cancelled?: boolean; transport?: boolean; recoveryEnvelope?: GoalConversationEnvelope };
+      // 离页/取消：不重发
+      if (e.cancelled) throw streamError;
       if (e.recoveryEnvelope) {
         // 422 恢复信封：模型部分产出可用，应用后视为本轮已处理
-        applyEnvelope(e.recoveryEnvelope, { userText: action === 'supplement' ? '' : text });
+        applyEnvelope(e.recoveryEnvelope, { userText: action === 'supplement' ? '' : text }, gen);
       } else if (!e.transport) {
         throw streamError;
       } else {
@@ -237,15 +250,17 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
       }
     }
     if (env) {
-      applyEnvelope(env, { userText: action === 'supplement' ? '' : text });
+      applyEnvelope(env, { userText: action === 'supplement' ? '' : text }, gen);
     }
   } catch (e) {
+    // 会话已被重置：过期失败不写入状态
+    if (gen !== generation) return;
     // 非流式回退请求的 422 恢复信封：axios 拦截器把信封放在 error.response.data.data，
     // 与 SSE 路径的 recoveryEnvelope 对齐处理（模型部分产出可用，应用后视为本轮已处理）
     const axiosErr = e as { status?: number; response?: { data?: { error?: string; data?: GoalConversationEnvelope } } };
     const axiosRecovery = axiosErr?.response?.data?.data;
     if (axiosRecovery && (axiosErr.response?.data?.error === 'STRUCTURED_OUTPUT_INVALID' || axiosErr.status === 422)) {
-      applyEnvelope(axiosRecovery, { userText: action === 'supplement' ? '' : text });
+      applyEnvelope(axiosRecovery, { userText: action === 'supplement' ? '' : text }, gen);
       return;
     }
     failed.value = action;
@@ -254,7 +269,8 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
     }
     throw e;
   } finally {
-    sending.value = false;
+    // 仅当前代次负责收尾 sending，避免过期 run 的 finally 打断新会话的进行中状态
+    if (gen === generation) sending.value = false;
   }
 }
 
@@ -307,21 +323,22 @@ async function resume(): Promise<boolean> {
 }
 
 async function resumeById(cid: string): Promise<boolean> {
+  const gen = generation;
   failed.value = '';
   sending.value = true;
   try {
     const env = await getGoalConversation(cid);
-    applyEnvelope(env, { replaceMessages: true });
-    if (messages.value.length === 0) {
+    applyEnvelope(env, { replaceMessages: true }, gen);
+    if (gen === generation && messages.value.length === 0) {
       const cached = localStorage.getItem(MSG_KEY);
       if (cached) messages.value = JSON.parse(cached) as LiveMessage[];
     }
     return true;
   } catch (e) {
-    failed.value = 'resume';
+    if (gen === generation) failed.value = 'resume';
     return false;
   } finally {
-    sending.value = false;
+    if (gen === generation) sending.value = false;
   }
 }
 
@@ -330,6 +347,9 @@ function hasSession(): boolean {
 }
 
 function reset(clearStorage = true) {
+  // 自增代次：作废所有在途请求的响应，防止其把已清空的状态写回
+  generation += 1;
+  sending.value = false;
   conversationId.value = '';
   messages.value = [];
   stage.value = '';

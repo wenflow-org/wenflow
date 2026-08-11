@@ -288,7 +288,7 @@ onMounted(() => {
   } else if (!cid && live.started) {
     // SPA 内从旧会话切换回来（如路径页点「规划新目标」）：清掉模块级残留的上一轮对话，
     // 回到初始态；localStorage 保留，仍可「继续上次的规划」恢复。
-    live.resetView();
+    resetToEntry();
   }
 });
 
@@ -296,13 +296,18 @@ onBeforeUnmount(() => {
   window.removeEventListener('v2:new-goal', onNewGoalEvent);
 });
 
-/** 页面内点击导航「规划新目标」：重置为全新初始态（保留本地恢复入口） */
-function onNewGoalEvent() {
+/** 清回初始态（内存 + 组件局部状态；live.resetView 保留 localStorage 恢复入口） */
+function resetToEntry() {
   live.resetView();
   phase.value = 'preview';
   supplementMode.value = false;
   supplementText.value = '';
   input.value = '';
+}
+
+/** 页面内点击导航「规划新目标」：重置为全新初始态（保留本地恢复入口） */
+function onNewGoalEvent() {
+  resetToEntry();
   // 清掉 URL 中残留的旧会话参数，避免刷新后按旧 conversationId 恢复
   if (typeof route.params.conversationId === 'string') {
     router.replace({ name: 'V2GoalConversation' });
@@ -316,6 +321,10 @@ watch(
     const next = typeof cid === 'string' ? cid : '';
     if (next && next !== live.conversationId) {
       live.resumeById(next).catch(() => {});
+    } else if (!next && live.started) {
+      // 导航到无参路由（如「规划新目标」）时组件被复用、onMounted 不重跑：
+      // 这里清掉模块级残留的上一轮对话回到初始态；localStorage 保留，仍可恢复
+      resetToEntry();
     }
   }
 );
@@ -462,9 +471,11 @@ async function doResume() {
 
 function doReset() {
   live.reset();
-  phase.value = 'preview';
-  supplementMode.value = false;
-  input.value = '';
+  resetToEntry();
+  // 清掉 URL 中残留的 conversationId，避免刷新后 resumeById 恢复旧会话
+  if (typeof route.params.conversationId === 'string') {
+    router.replace({ name: 'V2GoalConversation' });
+  }
 }
 
 const SCENE_BATCH_SIZE = 3;
