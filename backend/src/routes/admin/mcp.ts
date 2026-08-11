@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { mcpGateway, type IMcpToolConfig } from '../../core/mcp/McpGateway';
 import { logger } from '../../utils/logger';
+import { setAuditAction, setAuditAfter, setAuditBefore } from '../../middleware/audit-context';
 
 const router = Router();
 
@@ -77,6 +78,9 @@ router.post('/tools', async (req: Request, res: Response) => {
       ...(config && typeof config === 'object' ? { config } : {}),
     };
     await mcpGateway.updateConfig({ tools: [...cfg.tools, next] });
+    // 操作审计：新建快照新工具（apiKey 等敏感字段由审计中间件统一脱敏）
+    setAuditAction(res, 'mcp-tool-create', { targetType: 'mcp-tool', targetId: id });
+    setAuditAfter(res, next);
     res.json({ success: true, data: sanitizeToolResponse(next) });
   } catch (error: any) {
     logger.error('[admin-mcp] create tool failed:', error);
@@ -108,6 +112,10 @@ router.put('/tools/:id', async (req: Request, res: Response) => {
     const tools = [...cfg.tools];
     tools[idx] = next;
     await mcpGateway.updateConfig({ tools });
+    // 操作审计：更新前快照旧工具、更新后快照新工具
+    setAuditAction(res, 'mcp-tool-update', { targetType: 'mcp-tool', targetId: req.params.id });
+    setAuditBefore(res, cur);
+    setAuditAfter(res, next);
     res.json({ success: true, data: sanitizeToolResponse(next) });
   } catch (error: any) {
     logger.error('[admin-mcp] update tool failed:', error);
@@ -119,11 +127,15 @@ router.put('/tools/:id', async (req: Request, res: Response) => {
 router.delete('/tools/:id', async (req: Request, res: Response) => {
   try {
     const cfg = mcpGateway.getConfig();
-    const tools = cfg.tools.filter((t) => t.id !== req.params.id);
-    if (tools.length === cfg.tools.length) {
+    const removed = cfg.tools.find((t) => t.id === req.params.id);
+    if (!removed) {
       return res.status(404).json({ success: false, error: '工具不存在' });
     }
+    const tools = cfg.tools.filter((t) => t.id !== req.params.id);
     await mcpGateway.updateConfig({ tools });
+    // 操作审计：删除前快照被删工具（apiKey 等敏感字段由审计中间件统一脱敏）
+    setAuditAction(res, 'mcp-tool-delete', { targetType: 'mcp-tool', targetId: req.params.id });
+    setAuditBefore(res, removed);
     res.json({ success: true });
   } catch (error: any) {
     logger.error('[admin-mcp] delete tool failed:', error);

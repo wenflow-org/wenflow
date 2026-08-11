@@ -11,6 +11,7 @@ import {
 } from '../../services/runtime-network-policy.service';
 import { aiCapabilityHealthService } from '../../services/ai-capability-health.service';
 import { endpointsMatch, resolveEndpointBoundSecret } from '../../utils/endpoint-identity';
+import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 
 const router = Router();
 
@@ -113,6 +114,9 @@ router.put('/', async (req, res) => {
     } = req.body;
 
     const currentConfig = await apiConfigService.getConfig();
+    // 操作审计：保存前快照旧配置（apiKey 等敏感字段由审计中间件统一脱敏）
+    setAuditAction(res, 'api-config-update', { targetType: 'api-config' });
+    setAuditBefore(res, currentConfig);
     const hasReasoningEndpoint = Object.prototype.hasOwnProperty.call(req.body || {}, 'reasoningEndpoint');
     const hasLightEndpoint = Object.prototype.hasOwnProperty.call(req.body || {}, 'lightEndpoint');
     const finalApiUrl = typeof apiUrl === 'string' ? apiUrl.trim() : currentConfig.apiUrl;
@@ -177,6 +181,8 @@ router.put('/', async (req, res) => {
       reasoningModels: reasoningModels || currentConfig.reasoningModels,
       lightModels: lightModels || currentConfig.lightModels
     });
+    // 操作审计：保存后快照新配置（脱敏由审计中间件完成）
+    setAuditAfter(res, updatedConfig);
 
     getAPIGateway().invalidateCache();
     void aiCapabilityHealthService.refresh().catch(() => undefined);

@@ -81,7 +81,7 @@ describe('adminAuditMiddleware', () => {
 
   it('query 的 token/key/secret 参数与 body 密码字段脱敏', () => {
     const req = createRequest({
-      method: 'GET',
+      method: 'POST',
       baseUrl: '/api/admin/users',
       path: '/u1',
       originalUrl: '/api/admin/users/u1?token=abc123&page=2',
@@ -96,6 +96,39 @@ describe('adminAuditMiddleware', () => {
     expect(data.path).toBe('/api/admin/users/u1?token=***&page=2');
     expect(data.targetId).toBe('u1');
     expect(JSON.parse(data.requestJson)).toEqual({ password: '[REDACTED]', name: 'alice' });
+  });
+
+  it('GET/HEAD/OPTIONS 只读请求不落库（含失败响应）', () => {
+    for (const method of ['GET', 'HEAD', 'OPTIONS']) {
+      const req = createRequest({
+        method,
+        baseUrl: '/api/admin/users',
+        path: '/',
+        originalUrl: `/api/admin/users/?page=1`
+      });
+      const okRes = createResponse(200);
+      adminAuditMiddleware(req, okRes, jest.fn());
+      okRes.emit('finish');
+      expect(create).not.toHaveBeenCalled();
+
+      const failedRes = createResponse(500);
+      adminAuditMiddleware(req, failedRes, jest.fn());
+      failedRes.emit('finish');
+      expect(create).not.toHaveBeenCalled();
+    }
+  });
+
+  it('黑名单命中且为 GET 时同样完全跳过（黑名单仅对写方法生效）', () => {
+    const req = createRequest({
+      method: 'GET',
+      baseUrl: '/api/admin/virtual-quick-learn',
+      path: '/p1/quick-learn/runs',
+      originalUrl: '/api/admin/virtual-quick-learn/p1/quick-learn/runs'
+    });
+    const res = createResponse(500);
+    adminAuditMiddleware(req, res, jest.fn());
+    res.emit('finish');
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('高频执行路由成功时跳过落库，失败时才记录', () => {
@@ -142,7 +175,7 @@ describe('adminAuditMiddleware', () => {
 
   it('未知路径回退为 method + path 原文', () => {
     const req = createRequest({
-      method: 'GET',
+      method: 'POST',
       baseUrl: '/api/admin/platform',
       path: '/stats',
       originalUrl: '/api/admin/platform/stats'
@@ -152,8 +185,32 @@ describe('adminAuditMiddleware', () => {
     res.emit('finish');
 
     const data = create.mock.calls[0][0].data;
-    expect(data.action).toBe('GET /api/admin/platform/stats');
+    expect(data.action).toBe('POST /api/admin/platform/stats');
     expect(data.targetType).toBeNull();
+  });
+
+  it('增强层 before/after 中的敏感字段在序列化时被脱敏', () => {
+    const req = createRequest({
+      method: 'PUT',
+      baseUrl: '/api/admin/api-config',
+      path: '/',
+      originalUrl: '/api/admin/api-config/'
+    });
+    const res = createResponse();
+    adminAuditMiddleware(req, res, jest.fn());
+    setAuditAction(res, 'api-config-update', { targetType: 'api-config' });
+    setAuditBefore(res, { apiUrl: 'https://old.example/v1', apiKey: 'sk-old-secret-key' });
+    setAuditAfter(res, { apiUrl: 'https://new.example/v1', apiKey: 'sk-new-secret-key', defaultModel: 'gpt-4o' });
+    res.emit('finish');
+
+    const data = create.mock.calls[0][0].data;
+    expect(data.action).toBe('api-config-update');
+    expect(JSON.parse(data.beforeJson)).toEqual({ apiUrl: 'https://old.example/v1', apiKey: '[REDACTED]' });
+    expect(JSON.parse(data.afterJson)).toEqual({
+      apiUrl: 'https://new.example/v1',
+      apiKey: '[REDACTED]',
+      defaultModel: 'gpt-4o'
+    });
   });
 
   it('res.locals.audit 增强信息合并进同一条记录', () => {

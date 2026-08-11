@@ -3,6 +3,7 @@ import skillModelConfigService from '../../services/skillModelConfig.service';
 import { preserveConfiguredSecret, toSecretSafeResponse } from '../../utils/secret-redaction';
 import { normalizeEndpointIdentity } from '../../utils/endpoint-identity';
 import { getPlatformReliabilitySettings } from '../../services/reliability-settings.service';
+import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 
 const router = Router();
 
@@ -68,6 +69,9 @@ router.get('/:skillId', async (req, res) => {
 router.put('/:skillId', async (req, res) => {
   try {
     const existing = await skillModelConfigService.get(req.params.skillId);
+    // 操作审计：保存前快照旧配置（apiKey 等敏感字段由审计中间件统一脱敏）
+    setAuditAction(res, 'skill-model-config-update', { targetType: 'skill-model-config', targetId: req.params.skillId });
+    setAuditBefore(res, existing);
     const body = req.body || {};
     if (body.temperature !== undefined || body.maxTokens !== undefined) {
       // 兼容旧客户端：忽略生成参数写入，不报 400，避免阻断保存路由字段
@@ -121,6 +125,8 @@ router.put('/:skillId', async (req, res) => {
       input.apiKey = null;
     }
     const config = await skillModelConfigService.upsert(req.params.skillId, input);
+    // 操作审计：保存后快照新配置
+    setAuditAfter(res, config);
     const { resolveLlmCallParams } = await import('../../services/resolve-llm-call-params');
     const llm = await resolveLlmCallParams({
       skillId: req.params.skillId,

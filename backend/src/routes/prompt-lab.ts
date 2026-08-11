@@ -41,6 +41,7 @@ import {
 import { buildV4CorePromptMetadata } from '../services/prompt-lab/core-prompt-metadata';
 import { normalizeDeveloperApproval, resolveCoreSnapshot } from '../services/prompt-lab/core-version-snapshot';
 import { checkInputHandoffs } from '../services/prompt-lab/input-handoff-check';
+import { setAuditAction, setAuditBefore, setAuditAfter } from '../middleware/audit-context';
 
 const router = Router();
 router.use(rejectPromptLabFileMutation);
@@ -714,6 +715,16 @@ router.post('/publish-core', async (req, res) => {
         logger.warn('Failed to invalidate prompt/gateway cache:', { error: cacheErr?.message || String(cacheErr) });
       }
 
+      // 操作审计：发布成功快照版本信息（不含 systemPrompt 全文）
+      setAuditAction(res, 'prompt-lab-publish-core', { targetType: 'skill', targetId: skillId });
+      setAuditAfter(res, {
+        agentId,
+        promptId,
+        version: newVersion,
+        coreHash: compiled.coreHash,
+        coreVersion: compiled.coreVersion,
+      });
+
       res.json({
         success: true,
         version: newVersion,
@@ -959,6 +970,15 @@ router.post('/core/:skillId/rollback', async (req, res) => {
       });
     }
 
+    // 操作审计：回滚前快照当前 ACTIVE 版本（旧版本），回滚后快照目标版本（新版本）
+    const activeBefore = await systemPrisma.agent_prompts.findFirst({
+      where: { agentId, status: 'ACTIVE' },
+      orderBy: { version: 'desc' },
+      select: { id: true, version: true, status: true, coreHash: true, coreVersion: true },
+    });
+    setAuditAction(res, 'prompt-lab-rollback', { targetType: 'skill', targetId: skillId });
+    setAuditBefore(res, activeBefore ?? null);
+
     // 1) 文件回写：先恢复 core SSOT，再由其确定性重建 Runtime Prompt。
     const prodPath = path.join(PROMPTS_DIR, `skill.${skillId}.md`);
     const corePath = path.join(CORE_FILES_DIR, `${skillId}.yaml`);
@@ -991,6 +1011,14 @@ router.post('/core/:skillId/rollback', async (req, res) => {
     } catch (cacheErr: any) {
       logger.warn('Failed to invalidate prompt/gateway cache:', { error: cacheErr?.message || String(cacheErr) });
     }
+
+    setAuditAfter(res, {
+      id: target.id,
+      version: target.version,
+      status: 'ACTIVE',
+      coreHash: target.coreHash,
+      coreVersion: target.coreVersion,
+    });
 
     res.json({ success: true, skillId, agentId, version, rolledBack: true });
   } catch (error) {

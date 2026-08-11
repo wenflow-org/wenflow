@@ -13,8 +13,14 @@ const USER_AGENT_MAX_CHARS = 300;
 const IP_MAX_CHARS = 100;
 
 /**
- * 高频执行类黑名单：路由命中则仅失败（success=false）时落库，避免成功噪音。
- * - virtual-learners 的 step/auto/advance-path/blackbox 系列（逐帧/逐轮推进）
+ * 设计定稿：只审计写操作。GET/HEAD/OPTIONS 只读请求不落库
+ * （列表加载噪音），登录审计独立承接登录事件。
+ */
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/**
+ * 高频执行类黑名单（仅对写方法生效）：路由命中则仅失败（success=false）时落库，避免成功噪音。
+ * - virtual-learners 的 step/auto/advance-path/blackbox 系列（逐帧/逐轮推进，均为 POST）
  * - virtual-quick-learn 的 runs 系列（自动学习运行轮询/推进）
  */
 const HIGH_FREQUENCY_PATH_PATTERNS: RegExp[] = [
@@ -100,9 +106,16 @@ function serializeSnapshot(value: unknown): string | undefined {
 
 /**
  * 操作审计中间件：挂在 admin 路由链上（adminMiddleware 之后，req.user 已解析）。
+ * 只审计 POST/PUT/PATCH/DELETE 写操作（GET/HEAD/OPTIONS 直接放行不落库）。
  * 响应 finish 时以 fire-and-forget 方式写入 admin_audit_logs，任何失败仅告警、不阻塞主流程。
  */
 export const adminAuditMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  // 入口过滤：非写方法直接放行，不注册 finish 监听（GET 列表加载等只读噪音不入审计）
+  if (!WRITE_METHODS.has(req.method)) {
+    next();
+    return;
+  }
+
   const startedAt = Date.now();
 
   res.on('finish', () => {
