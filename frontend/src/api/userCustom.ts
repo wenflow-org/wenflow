@@ -359,12 +359,3 @@ export const getMcpStatus = async () => {
   return await api.get(`${API_BASE}/mcp/status`);
 };
 
-// ==================== 开发者接入 ====================
-
-export const getDeveloperOverview = async () => {
-  return await api.get(`${API_BASE}/developer/overview`);
-};
-
-export const getDeveloperQuickstart = async () => {
-  return await api.get(`${API_BASE}/developer/quickstart`);
-};

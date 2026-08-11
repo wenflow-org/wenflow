@@ -128,11 +128,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '调用日志', requiresAuth: true }
   },
   {
-    path: '/user/code-repo',
-    redirect: '/user/developer',
-    meta: { title: '开发者接入', requiresAuth: true }
-  },
-  {
     path: '/user/agents',
     name: 'UserAgents',
     component: () => import('@/views/user/AgentCustomization.vue'),
@@ -143,12 +138,6 @@ const routes: RouteRecordRaw[] = [
     name: 'UserSettings',
     component: () => import('@/views/user/Settings.vue'),
     meta: { title: 'API 接入', requiresAuth: true }
-  },
-  {
-    path: '/user/developer',
-    name: 'UserDeveloperAccess',
-    component: () => import('@/views/user/DeveloperAccess.vue'),
-    meta: { title: '开发者接入', requiresAuth: true }
   },
   {
     path: '/user/agent-model-settings',

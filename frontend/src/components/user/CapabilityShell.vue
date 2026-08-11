@@ -45,7 +45,6 @@ const tabs = [
   { to: '/user/skills', label: 'Skill', match: ['/user/skills'] },
   { to: '/user/agent-model-settings', label: '高级模型', match: ['/user/agent-model-settings'] },
   { to: '/user/settings', label: 'API 接入', match: ['/user/settings'] },
-  { to: '/user/developer', label: '开发者接入', match: ['/user/developer', '/user/code-repo'] },
   { to: '/user/agent-logs', label: '调用日志', match: ['/user/agent-logs'] }
 ]
 
