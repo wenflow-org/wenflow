@@ -1,5 +1,6 @@
 // 认证服务
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { signSessionToken, verifySessionToken } from '../../utils/session-token';
@@ -17,6 +18,7 @@ interface LoginData {
 interface JWTPayload {
   userId: string;
   name: string;
+  tokenVersion?: number;
 }
 
 const INVALID_LOGIN_PASSWORD_HASH = '$2b$10$OAioDMuBkv4OiDj1OPaJse/r3xbZoGaxLWtBNBD6VSlBa5T4nwkdG';
@@ -66,8 +68,8 @@ class AuthService {
       // 加密密码
       const hashedPassword = await bcrypt.hash(data.password, 10);
 
-      // 创建用户（自动生成 email）
-      const userId = `user_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      // 创建用户（自动生成 email）；ID 用密码学随机 UUID，避免可预测/碰撞
+      const userId = `user_${randomUUID()}`;
       const user = await prisma.users.create({
         data: {
           id: userId,
@@ -127,8 +129,12 @@ class AuthService {
         data: { lastLoginAt: new Date() }
       });
 
-      // 生成 JWT
-      const token = this.generateToken({ userId: user.id, name: user.name });
+      // 生成 JWT（携带 tokenVersion，供改密/重置后吊销旧令牌）
+      const token = this.generateToken({
+        userId: user.id,
+        name: user.name,
+        tokenVersion: user.tokenVersion || 0,
+      });
 
       logger.info(`用户登录：${user.name}`);
 
@@ -163,9 +169,14 @@ class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
+    // 改密即递增 tokenVersion：此前签发的所有旧 JWT 立即失效（吊销机制）
     await prisma.users.update({
       where: { id: user.id },
-      data: { password: hashedPassword, updatedAt: new Date() }
+      data: {
+        password: hashedPassword,
+        tokenVersion: { increment: 1 },
+        updatedAt: new Date()
+      }
     });
 
     logger.info(`用户修改密码：${user.name}`);

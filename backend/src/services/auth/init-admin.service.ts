@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import prisma from '../../config/database';
 
 interface AdminDatabase {
@@ -53,7 +54,7 @@ export async function initializeAdmin(
     throw new Error('INIT_ADMIN_NAME 或 INIT_ADMIN_EMAIL 已被普通用户占用，拒绝自动提升权限');
   }
 
-  const adminId = `admin_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  const adminId = `admin_${randomUUID()}`;
   const now = new Date();
   await database.users.create({
     data: {

@@ -10,6 +10,7 @@ import { resolveAuthToken } from '../utils/auth-cookie';
 interface JwtPayload {
   userId: string;
   email: string;
+  tokenVersion?: number;
 }
 
 // 扩展Request类型
@@ -129,6 +130,29 @@ const authenticate = async (
 
     // 验证token（显式指定允许的算法）
     const decoded = verifySessionToken(token, expectedType) as JwtPayload;
+
+    // 用户令牌吊销校验：改密/管理员重置密码/软删后旧 JWT 立即失效
+    // （此前仅验签不查库，已删用户旧 token 在 7 天有效期内仍可访问全部接口）
+    if (expectedType === 'user') {
+      const userRecord = await prisma.users.findUnique({
+        where: { id: decoded.userId },
+        select: { deletedAt: true, tokenVersion: true }
+      });
+      if (!userRecord || userRecord.deletedAt) {
+        return res.status(401).json({
+          success: false,
+          error: { message: '会话已失效，请重新登录' }
+        });
+      }
+      // 兼容存量旧 token（payload 无 tokenVersion 时不做版本校验，随 7 天自然过期）
+      if (typeof decoded.tokenVersion === 'number'
+        && (userRecord.tokenVersion ?? 0) !== decoded.tokenVersion) {
+        return res.status(401).json({
+          success: false,
+          error: { message: '会话已失效，请重新登录' }
+        });
+      }
+    }
 
     // 将用户信息附加到request
     req.user = {

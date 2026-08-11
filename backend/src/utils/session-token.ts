@@ -14,6 +14,8 @@ export interface SessionTokenPayload extends JwtPayload {
   type?: SessionTokenType;
   // P2 会话管理：签发时由调用方传入随机 UUID，用于 admin_sessions 表关联与吊销
   jti?: string;
+  // 用户域令牌吊销版本：改密/管理员重置密码时递增，旧 token 校验不通过
+  tokenVersion?: number;
 }
 
 const getJwtSecret = (): string => {

@@ -753,6 +753,8 @@ model users {
   // 软删除（Phase 1）：deletedAt 非空即视为已删除，deletedBy 记录操作管理员；历史数据保留
   deletedAt                 DateTime?
   deletedBy                 String?
+  // 令牌吊销版本：改密/管理员重置密码时递增，旧 JWT 立即失效
+  tokenVersion              Int                        @default(0)
   createdAt                 DateTime                   @default(now())
   updatedAt                 DateTime
   lastLoginAt               DateTime?
