@@ -1,11 +1,11 @@
-ï»¿<template>
+<template>
   <div class="mshell">
-    <!-- è¿·ä½ ä¾§è¾¹æ ï¼ˆåŒæ—¶æ˜¯å¯¼èˆªä¸ã€Œä¾§æ å†è®¾è®¡ã€æ¼”ç¤ºï¼‰ -->
+    <!-- ÃÔÄã²à±ßÀ¸£¨Í¬Ê±ÊÇµ¼º½Óë¡¸²àÀ¸ÔÙÉè¼Æ¡¹ÑİÊ¾£© -->
     <aside class="mshell__side">
       <div class="mshell__brand">
-        <!-- å±•å¼€ï¼šé•¿æ–¹å½¢å…¨ logoï¼ˆå›¾æ ‡ + é—®æµï¼‰ï¼›æŠ˜å ï¼šæ­£æ–¹å½¢å›¾æ ‡ -->
-        <img src="/logo.png" alt="é—®æµ" class="mshell__logo-full" />
-        <img src="/favicon.png" alt="é—®æµ" class="mshell__logo-mark" />
+        <!-- Õ¹¿ª£º³¤·½ĞÎÈ« logo£¨Í¼±ê + ÎÊÁ÷£©£»ÕÛµş£ºÕı·½ĞÎÍ¼±ê -->
+        <img src="/logo.png" alt="ÎÊÁ÷" class="mshell__logo-full" />
+        <img src="/favicon.png" alt="ÎÊÁ÷" class="mshell__logo-mark" />
       </div>
       <nav class="mshell__nav">
         <section v-for="group in groupedScenes" :key="group.title" class="mshell__group">
@@ -26,19 +26,19 @@
         </section>
       </nav>
       <div class="mshell__foot">
-        <span class="mshell__kbd">âŒ˜K</span>
-        <span>å‘½ä»¤é¢æ¿</span>
+        <span class="mshell__kbd">?K</span>
+        <span>ÃüÁîÃæ°å</span>
       </div>
     </aside>
 
-    <!-- ä¸»åŒº -->
+    <!-- Ö÷Çø -->
     <div class="mshell__main">
       <header class="mshell__topbar">
         <div class="mshell__crumbs">
           <span class="mshell__crumb-group">{{ currentScene?.group }}</span>
           <span class="mshell__crumb-sep">/</span>
           <strong>{{ currentScene?.label }}</strong>
-          <span v-if="dataSource === 'demo'" class="mk-badge mk-badge--warn mshell__demo-badge">æ¼”ç¤ºæ¨¡å¼</span>
+          <span v-if="dataSource === 'demo'" class="mk-badge mk-badge--warn mshell__demo-badge">ÑİÊ¾Ä£Ê½</span>
           <template v-if="crumb">
             <span class="mshell__crumb-sep">/</span>
             <span class="mshell__crumb-sub">{{ crumb }}</span>
@@ -49,20 +49,20 @@
             type="button"
             class="mshell__refresh"
             :disabled="liveLoading"
-            title="åˆ·æ–°çœŸå®æ•°æ®"
+            title="Ë¢ĞÂÕæÊµÊı¾İ"
             @click="refreshData"
           >
-            <span class="mshell__refresh-icon" :class="{ 'is-spinning': liveLoading }">â†»</span>
-            <span class="mshell__refresh-label">{{ liveLoading ? 'åˆ·æ–°ä¸­' : 'åˆ·æ–°' }}</span>
+            <span class="mshell__refresh-icon" :class="{ 'is-spinning': liveLoading }">?</span>
+            <span class="mshell__refresh-label">{{ liveLoading ? 'Ë¢ĞÂÖĞ' : 'Ë¢ĞÂ' }}</span>
           </button>
           <button type="button" class="mshell__search" @click="$emit('palette')">
-            <span class="mshell__search-icon">âŒ•</span>
-            <span class="mshell__search-hint">å‘½ä»¤é¢æ¿</span>
-            <span class="mshell__kbd">âŒ˜K</span>
+            <span class="mshell__search-icon">?</span>
+            <span class="mshell__search-hint">ÃüÁîÃæ°å</span>
+            <span class="mshell__kbd">?K</span>
           </button>
           <template v-if="release">
             <span class="mshell__admin">{{ adminName }}</span>
-            <button type="button" class="mshell__logout" @click="logout">é€€å‡º</button>
+            <button type="button" class="mshell__logout" @click="logout">ÍË³ö</button>
           </template>
         </div>
       </header>
@@ -79,8 +79,8 @@
           <span class="mshell__footer-source" :class="dataSource === 'live' ? 'mshell__footer-source--live' : ''">
             <i class="mshell__footer-dot" aria-hidden="true"></i>{{ sourceLabel }}
           </span>
-          <span class="mshell__footer-sep">Â·</span>
-          <span>Â© {{ year }}</span>
+          <span class="mshell__footer-sep">¡¤</span>
+          <span>? {{ year }}</span>
         </div>
       </footer>
     </div>
@@ -101,11 +101,11 @@ const emit = defineEmits<{ (e: 'navigate', id: string): void; (e: 'palette'): vo
 const version = appVersion
 const year = new Date().getFullYear()
 
-const sourceLabel = computed(() => (dataSource.value === 'live' ? 'çœŸå®æ•°æ®' : 'æ¼”ç¤ºæ•°æ®'))
+const sourceLabel = computed(() => (dataSource.value === 'live' ? 'ÕæÊµÊı¾İ' : 'ÑİÊ¾Êı¾İ'))
 
 function refreshData() {
   if (liveLoading.value) return
-  void loadLiveData()
+  void loadLiveData(true)
 }
 
 function badgeOf(item: MockSceneDef): string {
@@ -115,7 +115,7 @@ function badgeOf(item: MockSceneDef): string {
   return item.badge || ''
 }
 
-/* æŠ¥è­¦å¾½ç« å¯å¹³æ¯ï¼šå·²è¯»æ•°å­˜ localStorageï¼Œåªæœ‰å¤±è´¥æ•°è¶…è¿‡å·²è¯»æ•°æ‰è„‰å†² */
+/* ±¨¾¯»ÕÕÂ¿ÉÆ½Ï¢£ºÒÑ¶ÁÊı´æ localStorage£¬Ö»ÓĞÊ§°ÜÊı³¬¹ıÒÑ¶ÁÊı²ÅÂö³å */
 const ALARM_READ_KEY = 'wf_admin_alarm_read'
 const alarmRead = ref<Record<string, number>>(loadAlarmRead())
 
@@ -130,7 +130,7 @@ function persistAlarmRead() {
   try {
     localStorage.setItem(ALARM_READ_KEY, JSON.stringify(alarmRead.value))
   } catch {
-    /* éšç§æ¨¡å¼ç­‰åœºæ™¯å¿½ç•¥ */
+    /* ÒşË½Ä£Ê½µÈ³¡¾°ºöÂÔ */
   }
 }
 function markAlarmRead(item: MockSceneDef) {
@@ -153,7 +153,7 @@ function go(item: MockSceneDef) {
   emit('navigate', item.id)
 }
 
-/* release æ¨¡å¼ï¼šç®¡ç†å‘˜ä¿¡æ¯ä¸é€€å‡ºç™»å½• */
+/* release Ä£Ê½£º¹ÜÀíÔ±ĞÅÏ¢ÓëÍË³öµÇÂ¼ */
 const adminName = computed(() => {
   const raw = localStorage.getItem('admin_user') || sessionStorage.getItem('admin_user')
   if (!raw) return 'admin'
@@ -168,7 +168,7 @@ async function logout() {
   try {
     await adminAuthApi.logout()
   } catch {
-    // ç™»å‡ºæ¥å£å¤±è´¥ï¼šæœ¬åœ°æ¸…ç†ä¼šè¯å†è·³è½¬ï¼Œé¿å…å®ˆå«æ£€æµ‹åˆ°æ®‹ç•™ä¼šè¯åˆå¼¹å›æ§åˆ¶å°
+    // µÇ³ö½Ó¿ÚÊ§°Ü£º±¾µØÇåÀí»á»°ÔÙÌø×ª£¬±ÜÃâÊØÎÀ¼ì²âµ½²ĞÁô»á»°ÓÖµ¯»Ø¿ØÖÆÌ¨
     clearAdminSession()
   }
   window.location.replace('/admin/login')
@@ -200,7 +200,7 @@ const groupedScenes = computed(() => {
   font-size: 13px;
 }
 
-/* ä¾§è¾¹æ  */
+/* ²à±ßÀ¸ */
 .mshell__side {
   display: flex;
   flex-direction: column;
@@ -208,8 +208,8 @@ const groupedScenes = computed(() => {
   border-right: 1px solid #e1e8f2;
   padding: 14px 10px 10px;
   gap: 14px;
-  /* é«˜äºæŠ½å±‰é®ç½©(200)ã€ä½äºå‘½ä»¤é¢æ¿(300)ï¼šæŠ½å±‰æ‰“å¼€æ—¶ä¾§æ ä»å¯ç‚¹å‡»ï¼Œ
-     ç‚¹å‡»å¯¼èˆªç”± AdminConsole watch(scene) è”åŠ¨å…³é—­æŠ½å±‰ */
+  /* ¸ßÓÚ³éÌëÕÚÕÖ(200)¡¢µÍÓÚÃüÁîÃæ°å(300)£º³éÌë´ò¿ªÊ±²àÀ¸ÈÔ¿Éµã»÷£¬
+     µã»÷µ¼º½ÓÉ AdminConsole watch(scene) Áª¶¯¹Ø±Õ³éÌë */
   position: relative;
   z-index: var(--mk-z-sidebar);
 }
@@ -317,7 +317,7 @@ const groupedScenes = computed(() => {
   font-weight: 700;
 }
 
-/* ä¸»åŒº */
+/* Ö÷Çø */
 .mshell__main { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; }
 .mshell__topbar {
   display: flex;
@@ -359,7 +359,7 @@ const groupedScenes = computed(() => {
 .mshell__search-hint { white-space: nowrap; }
 .mshell__content { min-width: 0; }
 
-/* release æ¨¡å¼ï¼šé¡¶æ å³ä¾§ç®¡ç†å‘˜åŒº */
+/* release Ä£Ê½£º¶¥À¸ÓÒ²à¹ÜÀíÔ±Çø */
 .mshell__topbar-right { display: flex; align-items: center; gap: 12px; }
 .mshell__refresh {
   display: flex;
@@ -395,7 +395,7 @@ const groupedScenes = computed(() => {
 }
 .mshell__logout:hover { color: #dc2626; border-color: rgba(220, 38, 38, 0.35); }
 
-/* é¡µè„š */
+/* Ò³½Å */
 .mshell__footer {
   display: flex;
   align-items: center;
@@ -431,7 +431,7 @@ const groupedScenes = computed(() => {
 .mshell__footer-source--live .mshell__footer-dot { background: var(--green, #31b16f); }
 .mshell__footer-sep { color: #c3cede; }
 
-/* å¤§å±ï¼ˆ2000+ï¼‰ï¼šä¾§æ åŠ å®½ã€å­—å·æ”¾å¤§ï¼›2800+ï¼ˆ4Kï¼‰å†å‡ä¸€æ¡£ï¼ˆzoom ä¹‹ä¸Šå åŠ ï¼‰ */
+/* ´óÆÁ£¨2000+£©£º²àÀ¸¼Ó¿í¡¢×ÖºÅ·Å´ó£»2800+£¨4K£©ÔÙÉıÒ»µµ£¨zoom Ö®ÉÏµş¼Ó£© */
 @media (min-width: 2000px) {
   .mshell {
     grid-template-columns: 280px minmax(0, 1fr);
@@ -463,7 +463,7 @@ const groupedScenes = computed(() => {
   .mshell__search { padding: 10px 14px; font-size: 16px; }
 }
 @media (min-width: 3600px) {
-  /* 4Kï¼ˆzoom 1.3 æ¡£ï¼‰ï¼šä¾§æ å†åŠ å®½ã€å­—å·ç»§ç»­æ”¾å¤§ */
+  /* 4K£¨zoom 1.3 µµ£©£º²àÀ¸ÔÙ¼Ó¿í¡¢×ÖºÅ¼ÌĞø·Å´ó */
   .mshell {
     grid-template-columns: 440px minmax(0, 1fr);
   }
@@ -486,11 +486,11 @@ const groupedScenes = computed(() => {
   .mshell__group-title,
   .mshell__foot span:last-child,
   .mshell__search { display: none; }
-  /* çª„å±å›¾æ ‡æ ï¼šæ˜¾ç¤ºå•å­—å›¾æ ‡ï¼Œæ‚¬åœæç¤ºå…¨å */
+  /* Õ­ÆÁÍ¼±êÀ¸£ºÏÔÊ¾µ¥×ÖÍ¼±ê£¬ĞüÍ£ÌáÊ¾È«Ãû */
   .mshell__item { justify-content: center; padding: 4px 0; }
   .mshell__item-glyph { display: inline-flex; }
 
-  /* æŠ˜å ï¼šé•¿æ–¹å½¢ logo æ¢æ­£æ–¹å½¢å›¾æ ‡ */
+  /* ÕÛµş£º³¤·½ĞÎ logo »»Õı·½ĞÎÍ¼±ê */
   .mshell__logo-full { display: none; }
   .mshell__logo-mark { display: block; }
   .mshell__brand { justify-content: center; padding: 2px 0 0; }

@@ -732,11 +732,11 @@ export interface LiveUser {
 
 export const liveUsers = ref<LiveUser[]>([])
 
-/** 后端用户总数（分页 total；前端只拉前 100 行，用于截断提示） */
+/** 后端用户总数（分页 total；前端只拉前 50 行，用于截断提示） */
 export const liveUsersTotal = ref(0)
 
 async function fetchLiveUsers(): Promise<void> {
-  const res = await adminUsersApi.getUsers({ limit: 100 })
+  const res = await adminUsersApi.getUsers({ limit: 50 })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.users || body.items || []
   liveUsersTotal.value = Number(body.pagination?.total || items.length)
@@ -811,7 +811,7 @@ function mapFatigue(f?: string): string {
 }
 
 async function fetchLiveLearners(): Promise<void> {
-  const res = await adminLearnerModelsApi.list({ limit: 100 })
+  const res = await adminLearnerModelsApi.list({ limit: 50 })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.items || []
   liveLearners.value = items.map((m: Record<string, unknown>) => ({
@@ -864,7 +864,7 @@ export interface LiveVirtual {
 export const liveVirtuals = ref<LiveVirtual[]>([])
 
 async function fetchLiveVirtuals(): Promise<void> {
-  const res = await adminVirtualLearnersApi.getVirtualLearners({ limit: 100 })
+  const res = await adminVirtualLearnersApi.getVirtualLearners({ limit: 50 })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.profiles || body.items || []
   liveVirtuals.value = items.map((p: Record<string, unknown>) => {
@@ -1290,12 +1290,45 @@ export async function refreshLiveSkills() {
   liveSkillStatsMap.value = await fetchLiveSkills()
 }
 
+/* ================= 域级 TTL 缓存 =================
+ * 性能审计 S5：Admin 每次进入（AdminConsole boot / 各页 retry）都会触发 loadLiveData，
+ * 一次导航 ≈ 11+ HTTP 请求、背后 30+ SQL。这里为每个域记录成功拉取时间戳，
+ * TTL 内且已有数据的域直接跳过重拉（页面间跳转 / 导航返回命中缓存）；
+ * 失败或空数据的域不满足 ready 条件，下次调用自动重拉。
+ * loadLiveData(true)（Shell 刷新按钮 / 命令面板 reload）强制绕过缓存全量重拉。
+ */
+const LIVE_DATA_TTL = 45_000
+const liveFetchAt: Record<string, number> = {}
+/** 各域「已有数据」判定：null 型 ref 以非 null 为准，数组型以非空为准（空列表视为未就绪，下次重拉） */
+const liveDomainReady: Record<string, () => boolean> = {
+  spans: () => liveSpans.value !== null,
+  skills: () => liveSkillStatsMap.value !== null,
+  overview: () => liveOverview.value !== null,
+  users: () => liveUsers.value.length > 0,
+  learners: () => liveLearners.value.length > 0,
+  virtuals: () => liveVirtuals.value.length > 0,
+  apiConfig: () => liveApiConfig.value !== null,
+  topology: () => liveTopoNodes.value.length > 0,
+  catalog: () => liveSkillCatalog.value.length > 0,
+  registration: () => registrationEnabled.value !== null,
+  announcements: () => liveAnnouncements.value.length > 0
+}
+
+const liveDomainFresh = (key: string): boolean => {
+  const at = liveFetchAt[key]
+  return !!at && Date.now() - at < LIVE_DATA_TTL
+}
+
+const liveDomainSkippable = (key: string, force: boolean): boolean =>
+  !force && liveDomainFresh(key) && liveDomainReady[key]()
+
 /* ================= 总入口 ================= */
 /**
  * 渐进式加载：首屏只等 spans + overview（落地页所需），
  * 其余 10 个域后台并行，页面响应式填充；liveLoading 到全部结束才复位。
+ * @param force 显式刷新（Shell 刷新按钮 / 命令面板 reload）：true 时绕过域级 TTL 缓存全量重拉
  */
-export async function loadLiveData() {
+export async function loadLiveData(force = false) {
   if (liveLoading.value) return
   liveLoading.value = true
   liveError.value = ''
@@ -1317,13 +1350,19 @@ export async function loadLiveData() {
 
   // spans 先于 overview（overview 的待办从 spans 推导）
   try {
-    await jobs.spans()
+    if (!liveDomainSkippable('spans', force)) {
+      await jobs.spans()
+      liveFetchAt.spans = Date.now()
+    }
   } catch (e) {
     liveFailures.value.spans = errMsg(e)
   }
   const { spans: _s, overview, ...rest } = jobs
   try {
-    await overview()
+    if (!liveDomainSkippable('overview', force)) {
+      await overview()
+      liveFetchAt.overview = Date.now()
+    }
   } catch (e) {
     liveFailures.value.overview = errMsg(e)
   }
@@ -1341,8 +1380,10 @@ export async function loadLiveData() {
   const entries = Object.entries(rest)
   void Promise.all(
     entries.map(async ([key, fn]) => {
+      if (liveDomainSkippable(key, force)) return
       try {
         await fn()
+        liveFetchAt[key] = Date.now()
       } catch (e) {
         liveFailures.value[key] = errMsg(e)
       }
