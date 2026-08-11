@@ -2,6 +2,7 @@ import { Router } from 'express';
 import userAgentModelConfigService from '../services/userAgentModelConfig.service';
 import { preserveConfiguredSecret, toSecretSafeResponse } from '../utils/secret-redaction';
 import { normalizeEndpointIdentity } from '../utils/endpoint-identity';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -11,7 +12,8 @@ router.get('/', async (req, res) => {
     const configs = await userAgentModelConfigService.getAllByUser(userId);
     res.json({ success: true, data: toSecretSafeResponse(configs) });
   } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+    logger.error('[user-agent-model-configs] GET / 失败:', error);
+    res.status(500).json({ success: false, error: '获取模型配置失败，请稍后重试' });
   }
 });
 
@@ -21,7 +23,8 @@ router.get('/:agentId', async (req, res) => {
     const config = await userAgentModelConfigService.get(userId, req.params.agentId);
     res.json({ success: true, data: toSecretSafeResponse(config || { enabled: false }) });
   } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+    logger.error('[user-agent-model-configs] GET /:agentId 失败:', error);
+    res.status(500).json({ success: false, error: '获取模型配置失败，请稍后重试' });
   }
 });
 
@@ -54,7 +57,8 @@ router.put('/:agentId', async (req, res) => {
     const config = await userAgentModelConfigService.upsert(userId, req.params.agentId, input);
     res.json({ success: true, data: toSecretSafeResponse(config), message: '配置已更新' });
   } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+    logger.error('[user-agent-model-configs] PUT /:agentId 失败:', error);
+    res.status(500).json({ success: false, error: '保存模型配置失败，请稍后重试' });
   }
 });
 
@@ -64,7 +68,8 @@ router.delete('/:agentId', async (req, res) => {
     await userAgentModelConfigService.delete(userId, req.params.agentId);
     res.json({ success: true, message: '已恢复使用系统默认配置' });
   } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+    logger.error('[user-agent-model-configs] DELETE /:agentId 失败:', error);
+    res.status(500).json({ success: false, error: '恢复默认配置失败，请稍后重试' });
   }
 });
 
