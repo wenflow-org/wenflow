@@ -2645,6 +2645,17 @@ class LearningService {
           }
         });
 
+        // G1 数据质量修复（孤儿清理）：重建里程碑前清除本路径旧 run 遗留的 stage items。
+        // path_generation_stage_items.milestoneId 无 FK（schema 仅 cascade runId），
+        // 旧 run 的 stage items 在 milestones.deleteMany 后 milestoneId 悬空成孤儿。
+        // 仅清理非当前 run 的 items；当前 core run 不产 stage items，stageDesign run 才会。
+        await tx.path_generation_stage_items.deleteMany({
+          where: {
+            run: { learningPathId: path.id },
+            ...(runId ? { runId: { not: runId } } : {})
+          }
+        });
+
         await (tx.milestones as any).deleteMany({
           where: { learningPathId: path.id }
         });

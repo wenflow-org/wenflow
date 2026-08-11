@@ -105,6 +105,22 @@ class GoalConversationService {
       .trim();
   }
 
+  /**
+   * S2 数据质量修复：判断会话是否"开始未完成"（collectedData.messages 中尚无任何 AI 回复）。
+   * start 流程先建行再调 AI，AI 失败/超时后重试会堆出多条同 description 的 active 空会话；
+   * 这类会话可安全复用（没有沉淀任何真实对话），而有 AI 回复的会话代表已完成过一次 start，
+   * 后续 start 属于用户显式"规划新目标"，必须新建，保留前端新对话语义。
+   */
+  private hasAiReplyInCollectedData(conversation: { collectedData: string | null }): boolean {
+    try {
+      const data = JSON.parse(conversation.collectedData || '{}');
+      const messages = Array.isArray(data.messages) ? data.messages : [];
+      return messages.some((m: any) => m?.role === 'ai' || m?.role === 'assistant');
+    } catch {
+      return false;
+    }
+  }
+
   private hasContinueDiscussIntent(text: string) {
     return /(不过|但是|但我|但还是|我担心|还是担心|还有个问题|还有一个问题|我还想问|我还想补充|能先说一下|能不能先说一下|具体怎么|要是|如果到时候|万一)/.test(text || '');
   }
@@ -291,6 +307,9 @@ class GoalConversationService {
         data: {
           stage,
           collectedData: JSON.stringify(collectedData),
+          // S1 数据质量修复：messages 列与 collectedData.messages 双写，
+          // 避免 messages 列停留在初始 '[]'（schema 必填列，真实历史只写进了 collectedData）
+          ...(options.appendMessage ? { messages: JSON.stringify(collectedData.messages) } : {}),
           status: options.status,
           completedAt: options.completedAt,
           learningPathId: options.learningPathId
@@ -306,27 +325,44 @@ class GoalConversationService {
     try {
       logger.info('开始问题穿透对话会话', { userId, initialGoal });
 
-// 创建对话会话
-      const conversation = await prisma.goal_conversations.create({
-        data: {
-          id: `gc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-          userId,
-          description: initialGoal,
-          stage: 'understanding',
-          messages: '[]', // 初始化为空 JSON 数组
-          collectedData: JSON.stringify({
-            messages: [],       // 对话历史
-            collected: {},      // 已收集的信息
-            understanding: {},  // 问题理解状态
-            stage: 'understanding',
-            confidence: 0,
-            confirmedProposal: null,
-            structuredData: null,
-            confidenceScores: null,
-            learningPath: null
-          })
-        }
+      // S2 数据质量修复（防重复 active 会话堆积）：
+      // 同 userId + 同 description 且仍 active 的会话若"开始未完成"（无 AI 回复，start 失败/超时后的残留），
+      // 直接复用而非新建，避免重试/超时重发把同 description 的空会话越堆越多。
+      // 注意：不覆盖"有真实对话历史"的会话 —— 前端有显式"规划新目标"入口（V2GoalConversation.vue/Profile.vue），
+      // 用户重复输入相同目标属合法新对话，必须新建。
+      let conversation = await prisma.goal_conversations.findFirst({
+        where: { userId, description: initialGoal, status: 'active' },
+        orderBy: { createdAt: 'desc' }
       });
+
+      if (conversation && !this.hasAiReplyInCollectedData(conversation)) {
+        logger.warn('复用未完成的相同目标会话（防止重复 active 会话堆积）', {
+          userId,
+          initialGoal,
+          existingConversationId: conversation.id
+        });
+      } else {
+        conversation = await prisma.goal_conversations.create({
+          data: {
+            id: `gc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+            userId,
+            description: initialGoal,
+            stage: 'understanding',
+            messages: '[]', // 初始化为空 JSON 数组（后续 append 双写同步，见 saveMessage/updateConversationLifecycle）
+            collectedData: JSON.stringify({
+              messages: [],       // 对话历史
+              collected: {},      // 已收集的信息
+              understanding: {},  // 问题理解状态
+              stage: 'understanding',
+              confidence: 0,
+              confirmedProposal: null,
+              structuredData: null,
+              confidenceScores: null,
+              learningPath: null
+            })
+          }
+        });
+      }
 
       // 让AI生成第一个回复
       const aiResponse = await this.callAI(conversation.id, initialGoal, true, userId, options);
@@ -690,9 +726,14 @@ async continueConversation(
       ...(meta && Object.keys(meta).length > 0 ? { meta } : {})
     });
 
+    // S1 数据质量修复：messages 列与 collectedData.messages 双写（追加后整列同步为完整对话数组）。
+    // 消费方（admin 详情兜底解析）按 {role, content, time} 数组读取该列，与 collectedData 语义一致。
     await prisma.goal_conversations.update({
       where: { id: conversationId },
-      data: { collectedData: JSON.stringify(data) }
+      data: {
+        collectedData: JSON.stringify(data),
+        messages: JSON.stringify(data.messages)
+      }
     });
   }
 
