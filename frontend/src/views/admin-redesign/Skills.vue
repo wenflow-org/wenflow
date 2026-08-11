@@ -240,6 +240,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { skillProfiles, skillStatOf, openSkillDrawer, dataSource, isLive } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
+import { completionMetaOf } from './glossaryMeta'
 import { useLoadMore } from './useLoadMore'
 import MockSkeletonTable from './SkeletonTable.vue'
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
@@ -387,16 +388,10 @@ onMounted(() => {
   if (isLive.value) refreshReconciliation()
 })
 
-/** 完成度五档色标（draft → live） */
+/** 完成度五档色标（draft → live）；文案单源：glossaryMeta.ts（与后端 glossary-content 对齐） */
 const recStatusOrder = ['draft', 'handler-ready', 'core-ready', 'fields-synced', 'live'] as const
 const recStatusText = (status: string) =>
-  ({
-    draft: '草稿',
-    'handler-ready': 'handler 就绪',
-    'core-ready': 'core 就绪',
-    'fields-synced': '字段已同步',
-    live: '已上线',
-  })[status] || status
+  completionMetaOf(status)?.label || status
 
 const recKindText = (kind: string) =>
   ({ mainline: '主线', aux: '辅助', 'handler-only': '仅 handler' })[kind] || kind

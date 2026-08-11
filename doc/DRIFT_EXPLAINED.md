@@ -1,8 +1,9 @@
 # 漂移（Drift）完全解释
 
-> 面向运营与开发：系统里"漂移"不是一个概念，有 7 类实现。本文逐一讲清：检测对象、检测实现（file:line）、检测时机、当前实际状态、成因、以及 admin 编排结构页顶部"W4 漂移 10"的确切含义。
+> 面向运营与开发：系统里"漂移"不是一个概念，有 7 类实现。本文逐一讲清：检测对象、检测实现（file:line）、检测时机、当前实际状态、成因、以及 admin 编排结构页顶部健康区（健康中心）各项检查的确切含义。
 >
-> 证据基准：2026-08-11 实测（backend 探针 + SQLite 直查 + git 历史），全部证据精确到 file:line。
+> 证据基准：2026-08-12 实测（backend 探针 + SQLite 直查 + git 历史），全部证据精确到 file:line。
+> 现状速览：健康中心（编排结构页顶部"健康区"，GET /api/admin/health-center）已上线，13 项检查聚合展示；W4 coreHash 当前 **0 漂移**（2026-08 词表统一批次遗留已通过一键修复清零）。
 
 ---
 
@@ -22,15 +23,17 @@
 
 ## 1. 漂移类型总表
 
-| 类型 | 检测对象（谁 vs 谁） | 实现 | 检测时机 | 当前状态（2026-08-11 实测） |
+| 类型 | 检测对象（谁 vs 谁） | 实现 | 检测时机 | 当前状态（2026-08-12 实测） |
 |---|---|---|---|---|
 | a. 字段路由漂移 | 编排文件 `prompts/orchestration/*.yaml` vs DB 三表（contracts/fields/routings） | `detectFieldRoutingDrift`（`backend/src/services/field-routing-bootstrap.service.ts:267-348`） | 启动 readiness warn（`readiness.service.ts:127-158`）+ admin「漂移与审计」tab（`field-routings.ts:468-511`）+ CI 门禁 `prompts:drift-check` | **0**（drift 0 / 孤儿 0 / admin 行 0） |
-| b. coreHash 漂移 | 核心文件 `prompts/core/*.yaml` 哈希 vs 编译产物 `prompts/skill.*.md` frontmatter coreHash vs DB ACTIVE 行 coreHash（三向） | `check-core-hash-parity.ts:84-200`；W4 复用（`skills-readiness.service.ts:23-25, 299-323`） | CI `prompts:core:check`（exit 1）+ readiness W4（60s 缓存）+ 启动日志 | **10 drift / 15 in-sync / 0 db-mismatch**（即页面上的"W4 漂移 10"） |
-| c. 快照漂移 | `prompts/agent-snapshots.md` 产物 vs 编排文件 + core fields 派生结果 | `generate-agent-snapshots.ts:155-170`（--check） | CI `prompts:snapshots:check`（已挂 `prompts:check:all` 链） | **一致** |
-| d. 契约漂移 | manifest `prompt-lab/manifests/*.yaml`（runtimeContract/promptContract）vs DB ACTIVE `metadata.promptLab` 嵌套契约 | `check-prompt-runtime-contract-metadata-parity.ts:455-700` | CI `prompts:runtime-contract:check` | **25/25 in-sync，0 错误** |
+| b. coreHash 漂移 | 核心文件 `prompts/core/*.yaml` 哈希 vs 编译产物 `prompts/skill.*.md` frontmatter coreHash vs DB ACTIVE 行 coreHash（三向） | `check-core-hash-parity.ts:84-200`；W4 复用（`skills-readiness.service.ts:23-25, 299-323`） | CI `prompts:core:check`（exit 1）+ readiness W4（60s 缓存）+ 启动日志 + 健康中心「W4 coreHash」项 | **0**（曾为 10，2026-08-11 经健康中心一键修复清零，见 §4） |
+| c. 快照漂移 | `prompts/agent-snapshots.md` 产物 vs 编排文件 + core fields 派生结果 | `generate-agent-snapshots.ts:155-170`（--check） | CI `prompts:snapshots:check`（已挂 `prompts:check:all` 链）+ 健康中心「snapshots」项 | **一致** |
+| d. 契约漂移 | manifest `prompt-lab/manifests/*.yaml`（runtimeContract/promptContract）vs DB ACTIVE `metadata.promptLab` 嵌套契约 | `check-prompt-runtime-contract-metadata-parity.ts:455-700` | CI `prompts:runtime-contract:check` + 健康中心「contract-parity」项 | **25/25 in-sync，0 错误** |
 | e. handoff 对账 | core 文件 inputs ref（`skill:Y.F`）vs 路由表 handoff | `check-input-handoffs.ts` + `services/prompt-lab/input-handoff-check.ts` | CI `prompts:check-handoff:strict`；默认模式 advisory（warn 退出 0） | **25/25 全部通过** |
-| f. fields-sync 孤儿/缺项 | core fields vs 编排产出路由行首段（root）双向 | `check-core-fields-sync.ts:144-249`；状态机复用（`skill-completion.ts` fields-synced 档） | CI `prompts:fields-sync:check`（缺项/类型 >0 退出 1）+ 完成度状态机 | **缺项 0 / 类型 0 / 孤儿 5（warn 不阻断）** |
-| g. yaml 交叉校验 | core ↔ manifest 双写一致性（temperature/maxTokens/failurePolicy）+ 词表闭包 | `check-yaml-vocabulary.ts`（C1-C5） | CI `prompts:yaml:check` | **C1 25/25、C2 50/50、C3 0 重复、C4 137 字段、C5 80 处 全过** |
+| f. fields-sync 孤儿/缺项 | core fields vs 编排产出路由行首段（root）双向 | `check-core-fields-sync.ts:144-249`；状态机复用（`skill-completion.ts` fields-synced 档） | CI `prompts:fields-sync:check`（缺项/类型 >0 退出 1）+ 完成度状态机 + 健康中心「fields-sync」项 | **缺项 0 / 类型 0 / 孤儿 5（warn 不阻断）** |
+| g. yaml 交叉校验 | core ↔ manifest 双写一致性（temperature/maxTokens/failurePolicy）+ 词表闭包 | `check-yaml-vocabulary.ts`（C1-C5） | CI `prompts:yaml:check` + 健康中心「yaml-crosscheck」项 | **C1 25/25、C2 50/50、C3 0 重复、C4 137 字段、C5 80 处 全过** |
+
+> 注：健康中心（health-center.service.ts）聚合了其中 6 类（w4-corehash / field-routing / snapshots / contract-parity / yaml-crosscheck / fields-sync）+ W1-W3 + params-consistency / override-record / runtime-prompt 共 13 项，页面入口在 admin 编排结构页顶部「健康区」，每项带运营语 cause 与修复动作；「这是什么」抽屉（admin 顶部按钮）可查术语人话。
 
 ---
 
@@ -46,13 +49,13 @@
 - **缺口不报 drift、由 readiness 数量检查兜底**：声明有、DB 无的行 `continue` 跳过（`:283, :300, :327`），由 `readiness.service.ts:100-124` 的 count 对比（`checks.fieldRouting`）判 failed。
 - **当前实际状态**：probe 实测 `driftCount=0`，三表 `db=声明数`（21/137/197），孤儿 0、admin 行 0。
 
-### b. coreHash 漂移（三向对账）—— 用户看到的"W4 漂移 10"
+### b. coreHash 漂移（三向对账）—— 曾体现为"W4 漂移 10"，当前 0
 
 - **三向**：`computeCoreHash(core文件)`（`core-file-loader.ts:569-582`，键序无关稳定序列化）vs 编译产物 frontmatter `coreHash` vs DB ACTIVE 行 `coreHash`（列优先，`metadata.promptLab.coreHash` 快照兜底，`check-core-hash-parity.ts:72-82`）。
 - **状态机**（`:22-29, :92-156`）：`in-sync` / `drift`（frontmatter ≠ 核心文件实际哈希）/ `db-mismatch`（DB 锚点 ≠ frontmatter）/ `core-file-missing` / `invalid-core-file` / `missing-active` / `not-declared`。
 - **W4 薄壳**（`skills-readiness.service.ts:299-323`）：`missing-active` 归 W1、`not-declared`（v2 文件）跳过、不在户口簿活跃集的文件跳过；`drifted` 列表 = 户口簿活跃集内且状态 ∈ {drift, db-mismatch, core-file-missing, invalid-core-file} 的 agentId 去重。
-- **页面数据流**：编排结构页顶部徽章 ← `Orchestrator.vue:15, 203-212` ← `GET /api/admin/skills/readiness`（`routes/admin/skills.ts:773-784`）← `checkSkillsReadiness`（60s 缓存，`skills-readiness.service.ts:356-376`）← `checkCoreHashParity`。
-- **当前实际状态**：25 个文件全声明 coreHash；**10 drift、15 in-sync、0 db-mismatch、0 missing-active**（明细见 §4）。
+- **页面数据流**：健康中心「W4 coreHash」项 + 编排结构页顶部徽章 ← `Orchestrator.vue:15, 203-212` ← `GET /api/admin/skills/readiness`（`routes/admin/skills.ts:773-784`）← `checkSkillsReadiness`（60s 缓存，`skills-readiness.service.ts:356-376`）← `checkCoreHashParity`。
+- **当前实际状态**：**0 漂移**（2026-08-11 曾为 10 drift / 15 in-sync，经健康中心「w4-corehash」一键修复清零：重编译产物 + 同步 DB ACTIVE；明细见 §4 历史记录）。
 
 ### c. 快照漂移
 
@@ -110,48 +113,41 @@
 ### 成因 3：人工编辑路径差异（三条互不联通的改法）
 - **admin 直写 DB**：已退役——seed TS 脚本注释明示"seed-*-field-routings.ts 已退役（2026-08 单源化收尾），编排文件为唯一编辑入口"（`field-routing-bootstrap.service.ts:9-10`）
 - **编排文件编辑（PUT）**：只建不更新（见成因 1），已有行改动不自动生效
-- **core 发布管线**：改 `prompts/core/*.yaml` 后必须手动两步——`npm run prompts:compile-all`（`compile-core-files.ts`）生成产物 + `npm run prompts:sync`（`ensure-core-agent-prompts.ts --sync`）写 DB。**少跑任一步就是三向对账里的一个分叉**（W4 的 10 条正是少跑了这两步）。
+- **core 发布管线**：改 `prompts/core/*.yaml` 后必须手动两步——`npm run prompts:compile-all`（`compile-core-files.ts`）生成产物 + `npm run prompts:sync`（`ensure-core-agent-prompts.ts --sync`）写 DB。**少跑任一步就是三向对账里的一个分叉**（2026-08-10 词表统一批次的 10 条 W4 漂移正是少跑了这两步，已清零）。
 
 ### 成因 4：手改编译产物绕过核心文件
 产物 frontmatter 带 coreHash 就是为了抓这个：任何人直接改 `prompts/skill.*.md` 而不动 core 文件，coreHash 立刻对不上（`check-core-hash-parity.ts:125` 的"手改痕迹"就是这条路径的检测文案；`core-prompt-metadata.ts:55-57` 的 coreSnapshot 写入也拒绝漂移版本）。
 
-### 成因 5：词表/命名变更后未同步（当前 W4 10 条的实锤）
-2026-08-10 commit `276ff8d`（"refactor: yaml 词表统一"）改了 10 个 core 文件的字段类型（`array` → `object[]`/`string[]`，共 22 处 type 归一）+ 2 个 manifest，但**没有重新编译产物、没有 sync DB**。编译产物最后改动停在 08-07（`5e48635`）或 08-09（`1bc7d96`/`75e4b83`）——产物与 DB 里是词表统一前的旧哈希。
+### 成因 5：词表/命名变更后未同步（W4 10 条的历史实锤，已修复）
+2026-08-10 commit `276ff8d`（"refactor: yaml 词表统一"）改了 10 个 core 文件的字段类型（`array` → `object[]`/`string[]`，共 22 处 type 归一）+ 2 个 manifest，但**没有重新编译产物、没有 sync DB**。编译产物最后改动停在 08-07（`5e48635`）或 08-09（`1bc7d96`/`75e4b83`）——产物与 DB 里是词表统一前的旧哈希。该批次遗留已于 2026-08-11 通过健康中心一键修复清零（见 §4）。
 
 ### 成因 6：历史遗留孤儿（seed 时代声明已删、DB 行残留）
 seed 时代声明过的字段后来从声明中移除，DB 行不自动删（bootstrap 只建不更新，删也需人工）。`cleanup-orphan-field-routings.ts:1-14` 记录了 2026-08 单源化收尾时的存量：**24 条孤儿 field_definitions（\*Narrative/Note/Pattern 系列、displayLabel 等）+ 14 条孤儿路由**，清理前逐一 grep 确认零消费后删除（备份 `prisma/system.db.backup-20260809-orphan-cleanup.bak`）。
 
 ---
 
-## 4. 当前实例明细：W4 漂移 10 具体是哪些（用户最关心）
+## 4. 当前实例明细：W4 coreHash 漂移（曾为 10，当前 0）
 
-**实测**（2026-08-11，`npm run prompts:core:check` 即 `check-core-hash-parity.ts`）：
+### 现状（2026-08-12 实测）
 
 ```
-状态分布：drift=10, in-sync=15, db-mismatch=0, missing-active=0, 其余=0
+状态分布：drift=0, in-sync=25, db-mismatch=0, missing-active=0, 其余=0
 ```
 
-| # | skill（agentId） | DB ACTIVE 版本 | frontmatter coreHash 前12位 | 核心文件实际哈希前12位 | 状态 |
-|---|---|---|---|---|---|
-| 1 | goal-conversation | v18 | 696963342a93 | 2c146fc41cd5 | drift |
-| 2 | path-planning | v18 | 7f4bd4d53e38 | 5cda13e88a32 | drift |
-| 3 | peer-reinforcement | v11 | b8bc21ae4764 | cd74d7eb0657 | drift |
-| 4 | session-wrapup | v13 | 347a2aa997cd | 884453dfa211 | drift |
-| 5 | teaching-turn | v3 | 1e0ff2581d07 | 0ad63257e408 | drift |
-| 6 | virtual-learner-actor-auditor | v6 | a209a114b539 | 0b3399616062 | drift |
-| 7 | virtual-learner-learn-turn-simulator | v9 | 99c0a748935c | 245a54930df1 | drift |
-| 8 | virtual-learner-persona-designer | v7 | 74e8ea683b2f | aa562157e223 | drift |
-| 9 | virtual-learner-referee | v7 | 646f95d94b3e | eea2d4d23251 | drift |
-| 10 | virtual-learner-scenario-designer | v6 | cb92855b3b85 | 27ccd69c723a | drift |
+**W4 漂移当前为 0**。此前（2026-08-11）曾存在 **10 条 drift**——2026-08-10 commit `276ff8d`（"refactor: yaml 词表统一"）改了 10 个 core 文件的字段类型（`array` → `object[]`/`string[]`，22 处）但没有重编译产物、没有同步 DB，产物与 DB 停在词表统一前的旧版。该批次遗留已通过健康中心「w4-corehash」一键修复清零（备份见 `prompts/backups/health-fix/`，产物重编译 + DB ACTIVE 同步）。
 
-**关键事实**（决定了"为什么"和"要不要慌"）：
+> 现在出现 W4 漂移时的处置：admin 编排结构页顶部「健康区」→「W4 coreHash」→「一键修复」即可（自动备份 → 重编译 → 同步 DB）；开发侧等价命令 `npm run prompts:compile-all && prompts:sync`。
+
+### 历史记录（2026-08-11 实测，仅存档）
+
+当时 10 条 drift 明细：goal-conversation / path-planning / peer-reinforcement / session-wrapup / teaching-turn / virtual-learner-actor-auditor / virtual-learner-learn-turn-simulator / virtual-learner-persona-designer / virtual-learner-referee / virtual-learner-scenario-designer（核心文件哈希 vs 产物/DB 不一致）。
+
+**关键事实**（决定"为什么"和"要不要慌"）：
 
 1. **DB ACTIVE 的 coreHash 与产物 frontmatter 完全一致**（如 goal-conversation 两边都是 `696963342a93…`，DB 直查确认）。所以不是"现场和台账打架"，而是**说明书（core 文件）先改了，产物和台账还停在旧版**。三向里断的是"core 文件 ↔ 产物/DB"这一向。
 2. **10 条恰好 = commit `276ff8d`（2026-08-10 13:59）改动的 10 个 core 文件**：字段类型 `array` → `object[]`/`string[]`（22 处）+ path-planning maxTokens 对齐。git 史实：产物最后一次提交早于该 commit（08-07/08-09）。
-3. **运行时实际跑的是旧版**：运行时从 **DB ACTIVE 取 prompt**（`agentConfig.service.ts:216-223`），所以当前线上行为 = 词表统一**前**的旧 prompt。10 条 W4 漂移的真实含义是：**这批词表统一改动写了说明书但还没"上线"**（缺 `compile-all + sync`），不是有非法改动混进了现场。
-4. 检测文案里的"手改痕迹"是泛化措辞（任何 frontmatter≠core 哈希都这么说），本案例方向是"core 改了没重编译"，不是"产物被手改"。
-
-**修复动作**（运营不用做，开发一条命令）：`npm run prompts:compile-all`（重生成 25 个产物 + 新 coreHash）→ `npm run prompts:sync`（写 DB ACTIVE）→ `npm run prompts:core:check` 验证归零。
+3. **运行时实际跑的是旧版**：运行时从 **DB ACTIVE 取 prompt**（`agentConfig.service.ts:216-223`），所以当时线上行为 = 词表统一**前**的旧 prompt。10 条 W4 漂移的真实含义是：**这批词表统一改动写了说明书但还没"上线"**（缺 `compile-all + sync`），不是有非法改动混进了现场。
+4. 检测文案里的"手改痕迹"是泛化措辞（任何 frontmatter≠core 哈希都这么说），该案例方向是"core 改了没重编译"，不是"产物被手改"。
 
 ### 其余实例的当前值（同批实测）
 

@@ -8,19 +8,20 @@
       行级编辑已收敛：修改字段路由请使用右上角「编排文件」按钮，保存后新建行即时生效，已有行修改后点「强制同步 DB」
     </p>
 
-    <!-- 图例：角色 / render / 锁定 一句话人话表（可折叠） -->
+    <!-- 图例：角色 / render / 锁定 / 流转 一句话人话表（可折叠） -->
     <details class="frt__legend" :open="legendOpen" @toggle="legendOpen = ($event.target as HTMLDetailsElement).open">
-      <summary class="frt__legend-summary">图例：字段角色 / render / 锁定 —— 不懂就看这里</summary>
+      <summary class="frt__legend-summary">图例：字段角色 / render / 锁定 / 流转 —— 不懂就看这里</summary>
       <div class="frt__legend-body">
         <div class="frt__legend-group frt__legend-group--roles">
           <h5 class="frt__legend-title">字段角色（promptRole）</h5>
-          <ul class="frt__legend-list">
-            <li v-for="m in ROLE_META" :key="m.id" class="frt__legend-item">
+          <ul v-if="roleMeta.length" class="frt__legend-list">
+            <li v-for="m in roleMeta" :key="m.id" class="frt__legend-item">
               <span class="frt__role" :class="`frt__role--${m.id}`">{{ m.label }}</span>
               <span class="frt__legend-en mono">{{ m.id }}</span>
               <span class="frt__legend-hint">{{ m.hint }}</span>
             </li>
           </ul>
+          <p v-else class="frt__legend-loading">角色词表待后端下发…</p>
         </div>
         <div class="frt__legend-group">
           <h5 class="frt__legend-title">render（是否对外可见）</h5>
@@ -32,6 +33,27 @@
             <li class="frt__legend-item">
               <span class="frt__render-badge frt__render-badge--hidden">hidden</span>
               <span class="frt__legend-hint">隐藏：仅内部流转，不对外展示</span>
+            </li>
+          </ul>
+          <h5 class="frt__legend-title">流转（handoff / internal / accumulate）</h5>
+          <ul class="frt__legend-list">
+            <li class="frt__legend-item">
+              <span class="frt__flow-badge frt__flow-badge--handoff">handoff</span>
+              <span class="frt__legend-hint">移交：字段产完后交给谁——下一阶段名（如 path）/ agent / skill；空 = 不转交</span>
+            </li>
+            <li class="frt__legend-item">
+              <span class="frt__flow-badge frt__flow-badge--internal">internal</span>
+              <span class="frt__legend-hint">内部信令：仅供平台内部 / UI 控制使用，不进业务状态</span>
+            </li>
+            <li class="frt__legend-item">
+              <span class="frt__flow-badge frt__flow-badge--accumulate">accumulate</span>
+              <span class="frt__legend-hint">累积：值会累积进学习者状态（画像 / 上下文），供后续阶段持续使用</span>
+            </li>
+          </ul>
+          <h5 class="frt__legend-title">落库键（persistKey）</h5>
+          <ul class="frt__legend-list">
+            <li class="frt__legend-item">
+              <span class="frt__legend-hint">字段值最终写入主库的键路径；与字段名不一致的字段（如 reply → 消息正文）单独标注，一致时默认显示字段名</span>
             </li>
           </ul>
           <h5 class="frt__legend-title">锁定</h5>
@@ -53,7 +75,7 @@
       </div>
       <p class="frt__legend-foot">
         机制说明见仓库 <span class="mono">prompts/orchestration/_README.md</span> · 设计落盘
-        <span class="mono">doc/FIELD_ROUTING_UX_REDESIGN.md</span>
+        <span class="mono">doc/FIELD_ROUTING_UX_REDESIGN.md</span> · 术语查「这是什么」抽屉
       </p>
     </details>
 
@@ -62,7 +84,7 @@
       <input v-model="keyword" class="mk-filter__input" type="search" placeholder="搜索字段名 / 含义 / 角色 / render / 移交…" />
       <select v-model="roleFilter" class="mk-filter__select" aria-label="按角色过滤">
         <option value="">全部角色</option>
-        <option v-for="m in ROLE_META" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>
+        <option v-for="m in roleMeta" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>
       </select>
       <span v-if="filterActive" class="frt__filter-count">命中 {{ filteredTotal }} / {{ routings.length }} 行</span>
     </div>
@@ -88,6 +110,7 @@
                 <th scope="col">handoff</th>
                 <th scope="col">internal</th>
                 <th scope="col">accumulate</th>
+                <th scope="col">落库键</th>
                 <th scope="col">锁定</th>
               </tr>
             </thead>
@@ -96,6 +119,7 @@
                 <td class="frt__fieldcell">
                   <span class="mono frt__field">{{ row.fieldId }}</span>
                   <span v-if="pathParts(row.fieldId).length > 1" class="frt__fieldpath" :title="row.fieldId">{{ pathParts(row.fieldId).join(' · ') }}</span>
+                  <span v-if="pathOf(row.fieldId)" class="frt__fieldpath" :title="`抽取路径（pathInRawOutput）：${pathOf(row.fieldId)}`">抽取 → {{ pathOf(row.fieldId) }}</span>
                 </td>
                 <td class="frt__meaning">
                   <span class="frt__meaning-text" :title="meaningTitle(row)">{{ descOf(row.fieldId) || '—' }}</span>
@@ -120,10 +144,19 @@
                 <td><span class="mono frt__handoff" :title="handoffTitle(row)">{{ formatHandoff(row.handoff) }}</span></td>
                 <td>{{ row.internal ? '是' : '否' }}</td>
                 <td>{{ row.accumulate ? '是' : '否' }}</td>
+                <td>
+                  <span
+                    class="mono frt__persist"
+                    :class="{ 'frt__persist--alias': persistKeyOf(row) !== row.fieldId }"
+                    :title="persistKeyOf(row) === row.fieldId
+                      ? '落库键与字段名一致'
+                      : `落库键与字段名不一致：值实际写入 ${persistKeyOf(row)}（见编排文件 persistKey 声明）`"
+                  >{{ persistKeyOf(row) }}</span>
+                </td>
                 <td><span class="frt__lock" :class="`frt__lock--${row.locks?.level || 'editable'}`" :title="lockHint(row.locks?.level)">{{ lockLabel(row.locks?.level) }}</span></td>
               </tr>
               <tr v-if="filteredOf(agent.agentId).length === 0">
-                <td colspan="9" class="frt__emptyrow">
+                <td colspan="10" class="frt__emptyrow">
                   {{ routingsOf(agent.agentId).length ? '无匹配行，试试调整搜索或角色过滤' : '该 Agent 无字段路由行' }}
                 </td>
               </tr>
@@ -144,6 +177,14 @@
           <div class="frt__orch-summary">
             <span class="mono">prompts/orchestration/{{ stage }}.yaml</span>
             <span>契约 {{ orchSummary.contractCount }} · 字段 {{ orchSummary.fieldCount }} · 路由 {{ orchSummary.routingCount }}</span>
+          </div>
+          <!-- 值域速查条：编辑时对照填写 -->
+          <div class="frt__orch-quick">
+            <span class="frt__orch-quick-title">值域速查：</span>
+            <span class="frt__orch-quick-item"><b>promptRole</b>{{ roleNames }}</span>
+            <span class="frt__orch-quick-item"><b>render</b>visible / hidden</span>
+            <span class="frt__orch-quick-item"><b>handoff</b>阶段名（goal/path/teaching/profile/simulation）或 agent / skill:</span>
+            <span class="frt__orch-quick-item"><b>persistKey</b>仅落库键与 fieldId 不一致时标注</span>
           </div>
           <textarea
             v-model="orchContent"
@@ -180,6 +221,8 @@ interface FieldItem {
   description?: string | null;
   enumValues?: unknown;
   locks?: { level?: string };
+  pathInRawOutput?: string | null;
+  persistKey?: string | null;
 }
 interface AgentItem { agentId: string; description?: string }
 interface RoutingItem {
@@ -195,20 +238,13 @@ interface RoutingItem {
   visibilityPreset?: string | null;
 }
 
+/** promptRole 人话：后端 yaml-vocabulary 单源下发（getStageDetail 响应 promptRoleMeta），前端不再各写一份 */
+interface RoleMeta { id: string; label: string; hint: string }
+
 const props = defineProps<{ stage: string }>();
 const emit = defineEmits<{ changed: [] }>();
 
-/* ============ 词表：角色人话映射（图例 + 单元格共用单一来源） ============ */
-
-const ROLE_META: Array<{ id: string; label: string; hint: string }> = [
-  { id: 'hard-required', label: '必填', hint: '必填：缺了这个字段，本阶段流程就无法推进' },
-  { id: 'soft-info', label: '可选补充', hint: '可选补充：拿到更好，缺失也能继续' },
-  { id: 'hidden-inference', label: '隐式推断', hint: '隐式推断：模型内部推理，不直接展示给用户' },
-  { id: 'public-reply', label: '公开回复', hint: '公开回复：直接呈现给用户看的对话内容' },
-  { id: 'proposal-output', label: '方案产出', hint: '方案产出：确认下来的结论 / 计划 / 范围' },
-  { id: 'derived-presentation', label: '派生展示', hint: '派生展示：由其他字段计算派生，用于界面展示' },
-  { id: 'control-signal', label: '控制信号', hint: '控制信号：平台流程 / UI 控制用，不是学习内容' },
-];
+const roleMeta = ref<RoleMeta[]>([]);
 
 const fields = ref<FieldItem[]>([]);
 const agents = ref<AgentItem[]>([]);
@@ -227,7 +263,7 @@ function roleOf(fieldId: string) { return fieldMap().get(fieldId)?.promptRole ||
 function roleMetaOf(fieldId: string) {
   const role = roleOf(fieldId);
   if (!role) return undefined;
-  const meta = ROLE_META.find((m) => m.id === role);
+  const meta = roleMeta.value.find((m) => m.id === role);
   return meta || { id: role, label: role, hint: role };
 }
 function pathParts(fieldId: string) { return fieldId.split('.'); }
@@ -235,6 +271,12 @@ function routingsOf(agentId: string) { return routings.value.filter((r) => r.age
 
 const filterActive = computed(() => Boolean(keyword.value.trim() || roleFilter.value));
 const filteredTotal = computed(() => routings.value.filter(matches).length);
+
+/** 弹窗速查条：promptRole 取值清单（后端词表下发；未加载时显示占位） */
+const roleNames = computed(() => {
+  const names = roleMeta.value.map((m) => `${m.id}(${m.label})`).join(' · ');
+  return names ? `：${names}` : '：加载中…';
+});
 
 function matches(r: RoutingItem) {
   if (roleFilter.value && roleOf(r.fieldId) !== roleFilter.value) return false;
@@ -251,6 +293,8 @@ function matches(r: RoutingItem) {
     formatHandoff(r.handoff),
     lockLabel(r.locks?.level),
     r.notes || '',
+    pathOf(r.fieldId),
+    persistKeyOf(r),
   ].join(' ').toLowerCase();
   return hay.includes(kw);
 }
@@ -282,8 +326,20 @@ function meaningTitle(row: RoutingItem) {
   if (desc) parts.push(desc);
   const ev = fieldMap().get(row.fieldId)?.enumValues;
   if (Array.isArray(ev) && ev.length) parts.push(`取值：${ev.join(' / ')}`);
+  const path = pathOf(row.fieldId);
+  if (path) parts.push(`抽取路径（pathInRawOutput）：${path}`);
   if (row.notes) parts.push(`备注：${row.notes}`);
   return parts.join('\n');
+}
+
+/** 落库键：编排声明了 persistKey 用 persistKey，否则默认与 fieldId 一致 */
+function persistKeyOf(row: RoutingItem) {
+  const k = fieldMap().get(row.fieldId)?.persistKey;
+  return k || row.fieldId;
+}
+/** 字段值在产出方原始输出里的物理抽取路径（pathInRawOutput，可空） */
+function pathOf(fieldId: string) {
+  return fieldMap().get(fieldId)?.pathInRawOutput || '';
 }
 function renderHint(row: RoutingItem) {
   const base = row.render === 'hidden' ? '隐藏：仅内部流转，不对外展示' : '可见：会出现在对外交付（用户 / 界面）';
@@ -309,6 +365,7 @@ async function loadStage() {
     fields.value = res.data?.data?.fields || [];
     agents.value = res.data?.data?.agents || [];
     routings.value = res.data?.data?.routings || [];
+    roleMeta.value = res.data?.data?.promptRoleMeta || [];
   } catch (e: any) {
     error.value = e?.message || '加载失败';
   } finally {
@@ -479,6 +536,7 @@ watch(() => props.stage, () => void loadStage());
 }
 .frt__legend-group--roles + .frt__legend-group .frt__legend-title { margin-top: 10px; }
 .frt__legend-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+.frt__legend-loading { margin: 0; font-size: 11.5px; color: var(--mk-faint, #71809a); }
 .frt__legend-item { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .frt__legend-en { flex-shrink: 0; font-size: 11px; color: var(--mk-faint, #71809a); }
 .frt__legend-hint { font-size: 12px; color: var(--mk-muted, #5b6577); min-width: 0; }
@@ -544,7 +602,7 @@ watch(() => props.stage, () => void loadStage());
 /* 9 列表格：窄屏横向滚动（≤860px 设最小宽度，列不被挤压） */
 .frt__scroll { overflow-x: auto; }
 @media (max-width: 860px) {
-  .frt__table { min-width: 900px; }
+  .frt__table { min-width: 1060px; }
   .frt__table th, .frt__table td { padding: 7px 9px; }
 }
 .frt__table th, .frt__table td { padding: 8px 12px; text-align: left; }
@@ -598,6 +656,34 @@ watch(() => props.stage, () => void loadStage());
 .frt__render-badge { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .frt__render-badge--visible { background: #e8f7ef; color: #15803d; }
 .frt__render-badge--hidden { background: #f0f2f5; color: #5b6577; }
+
+/* 流转徽章（图例） */
+.frt__flow-badge { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+.frt__flow-badge--handoff { background: #eef2ff; color: #4f46e5; }
+.frt__flow-badge--internal { background: #fdf2f8; color: #be185d; }
+.frt__flow-badge--accumulate { background: #f0fdf4; color: #15803d; }
+
+/* 落库键列 */
+.frt__persist { display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted, #5b6577); font-size: 11px; }
+.frt__persist--alias { color: var(--mk-amber, #b45309); background: #fffbeb; border-radius: 5px; padding: 0 5px; }
+
+/* 编排弹窗值域速查条 */
+.frt__orch-quick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 7px 12px;
+  margin-top: 8px;
+  border: 1px dashed rgba(52, 120, 246, 0.4);
+  border-radius: 9px;
+  background: #f0f5ff;
+  font-size: 11.5px;
+  color: var(--mk-muted, #5b6577);
+  line-height: 1.5;
+}
+.frt__orch-quick-title { font-weight: 800; color: var(--mk-blue, #3478f6); }
+.frt__orch-quick-item b { margin-right: 4px; color: var(--mk-ink, #1a2a44); }
 
 .frt__handoff { max-width: 220px; color: var(--mk-faint, #71809a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .frt__lock { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }

@@ -183,6 +183,7 @@ import { useRouter } from 'vue-router'
 import { openSkillDrawer, dataSource, isLive } from './store'
 import { liveTopoNodes, liveSkillCatalog, errMsg } from './live'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
+import { COMPLETION_META } from './glossaryMeta'
 import FieldRoutingTable from './FieldRoutingTable.vue'
 import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
@@ -247,13 +248,9 @@ const recByStage = computed(() => {
 })
 
 const recStatusOrder = ['draft', 'handler-ready', 'core-ready', 'fields-synced', 'live'] as const
-const recStatusShort: Record<string, string> = {
-  draft: '草稿',
-  'handler-ready': 'handler',
-  'core-ready': 'core',
-  'fields-synced': '同步',
-  live: 'live',
-}
+const recStatusShort: Record<string, string> = Object.fromEntries(
+  COMPLETION_META.map((m) => [m.status, m.short]),
+) as Record<string, string>
 
 function stageComp(stageId: string) {
   const bucket = recByStage.value.get(stageId)

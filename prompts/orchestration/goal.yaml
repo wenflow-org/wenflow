@@ -21,6 +21,7 @@ fields:
     pathInRawOutput: internal.ext.goalConversation.understanding.surface_goal
     snakeName: surface_goal
     camelName: surfaceGoal
+    persistKey: surfaceGoal
     description: 用户最初表述的"想学什么"原话
     systemLocked: true
   - fieldId: understanding.real_problem

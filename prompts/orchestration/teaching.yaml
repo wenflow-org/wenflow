@@ -20,7 +20,8 @@ fields:
   - fieldId: reply
     promptRole: public-reply
     valueType: string
-    description: 教学回合的对话回复
+    persistKey: messages[].content
+    description: 教学回合的对话回复（落库为消息正文）
     systemLocked: true
   - fieldId: analysis.cognitiveLevel
     promptRole: hidden-inference

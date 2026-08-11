@@ -178,6 +178,9 @@ model field_definitions {
   // 值抽取路径：字段值在产出方原始输出中的物理位置（如 internal.ext.goalConversation.understanding.real_problem）。
   // 配置式字段值流转（V3 Dispatcher 接线）的抽取依据；空 = 尚未登记。
   pathInRawOutput String?
+  // 落库键/消费键别名：字段值写入主库（或 skill 产出信封）时的键路径，与 fieldId 不一致时单独标注（AUDIT_FIELD_FLOW §3.2）。
+  // 空 = 落库键与 fieldId 一致。仅供展示与对账，不参与装配。
+  persistKey      String?
   description     String?
   enumValues      String?
   schemaVersion   String   @default("v3")

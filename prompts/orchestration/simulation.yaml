@@ -43,7 +43,8 @@ fields:
   - fieldId: reply
     promptRole: public-reply
     valueType: string
-    description: 学习者自然回应文本
+    persistKey: messages[].content
+    description: 学习者自然回应文本（黑盒模式落库为消息正文/轨迹观测）
   - fieldId: emotion
     promptRole: public-reply
     valueType: string

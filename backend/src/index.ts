@@ -226,6 +226,8 @@ import adminProjectionAccessGrantsRoutes from './routes/admin/projection-access-
 import adminFeedbackRoutes from './routes/admin/feedback';
 import adminSystemStatusRoutes from './routes/admin/system-status';
 import adminMcpRoutes from './routes/admin/mcp';
+import adminHealthCenterRoutes from './routes/admin/health-center';
+import adminGlossaryRoutes from './routes/admin/glossary';
 import aiTeachingRoutes from './routes/ai-teaching.routes';
 import feedbackRoutes from './routes/feedback';
 import configRoutes from './routes/config';
@@ -340,6 +342,8 @@ app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualQuic
 app.use('/api/admin/projection-access-grants', ...adminRouteMiddleware, adminProjectionAccessGrantsRoutes);
 app.use('/api/admin/feedback', ...adminRouteMiddleware, adminFeedbackRoutes);
 app.use('/api/admin/system', ...adminRouteMiddleware, adminSystemStatusRoutes);
+app.use('/api/admin/health-center', ...adminRouteMiddleware, adminHealthCenterRoutes);
+app.use('/api/admin/glossary', ...adminRouteMiddleware, adminGlossaryRoutes);
 app.use('/api/admin/prompt-lab', ...adminRouteMiddleware, promptLabRoutes);
 app.use('/api/admin', ...adminRouteMiddleware, adminPlatformRoutes);
 app.use('/api/users', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), userRoutes);

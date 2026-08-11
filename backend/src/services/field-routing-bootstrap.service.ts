@@ -172,6 +172,7 @@ export async function ensureStageFieldRoutings(
         snakeName: f.snakeName ?? null,
         camelName: f.camelName ?? null,
         pathInRawOutput: f.pathInRawOutput ?? null,
+        persistKey: f.persistKey ?? null,
         description: f.description,
         enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null,
         systemLocked: f.systemLocked ?? false,
@@ -310,6 +311,7 @@ export async function syncStageFieldRoutingsFromFile(
           snakeName: f.snakeName ?? null,
           camelName: f.camelName ?? null,
           pathInRawOutput: f.pathInRawOutput ?? null,
+          persistKey: f.persistKey ?? null,
           description: f.description,
           enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null,
           systemLocked: f.systemLocked ?? false,
@@ -330,6 +332,7 @@ export async function syncStageFieldRoutingsFromFile(
           snakeName: f.snakeName ?? null,
           camelName: f.camelName ?? null,
           pathInRawOutput: f.pathInRawOutput ?? null,
+          persistKey: f.persistKey ?? null,
           description: f.description,
           enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null,
           systemLocked: f.systemLocked ?? false,
@@ -475,6 +478,8 @@ export async function detectFieldRoutingDrift(systemDb: SystemDbLike): Promise<F
       // pathInRawOutput 是配置式值抽取的依据，编排文件声明与 DB 不一致会导致
       // assemble* 抽取静默跑偏，必须纳入漂移检测（2026-08 补强）
       ['pathInRawOutput', declared.pathInRawOutput ?? null, db.pathInRawOutput ?? null],
+      // persistKey 是落库键标注，声明与 DB 不一致会让"落库"列误导运营，纳入检测
+      ['persistKey', declared.persistKey ?? null, db.persistKey ?? null],
       ['description', declared.description ?? null, db.description ?? null],
       ['bindings', declared.bindings ? JSON.stringify(declared.bindings) : null, db.bindings ?? null],
     ];

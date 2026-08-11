@@ -169,6 +169,23 @@ describe('健康中心聚合（基准体系版）', () => {
       .toEqual(['fixable', 'fixable', 'fixable', 'fixable', 'manual', 'manual', 'manual']);
   });
 
+  it('文案运营语守卫：cause/fixHint 不再包含源码内部锚点（file:line / 表名 / 内部编号）', async () => {
+    const report = await buildHealthCenterReport(EMPTY_DB);
+    const sourceAnchors = ['deriveContract(', 'managedByCode', 'prompt_call_logs', 'B3', 'B5', 'P4 ', 'P5', 'zombie', 'file:line', 'diff', 'EXEMPT_PLATFORM_ROOTS', 'W3_STEPS_EMPTY_EXEMPT', 'registrationPoint'];
+    // file:line 锚点（如 orchestration-file.ts:182）；纯文件路径（如 definition.ts / skills/index.ts）是"调整 xx 文件"的合法操作语，不禁
+    const anchorPattern = /\.(ts|js):\d+/;
+    for (const item of report.items) {
+      for (const text of [item.cause, item.fixHint]) {
+        expect(text.match(anchorPattern)).toBeNull();
+        for (const anchor of sourceAnchors) {
+          expect(text).not.toContain(anchor);
+        }
+        // 每条 cause 都以运营可懂的中文短语开头（不是括号/编号开头）
+        expect(/^[（(【\d]/.test(text)).toBe(false);
+      }
+    }
+  });
+
   it('P4 名实不符：字段路由 contract 维度 base=file:manifest 且 label 注明 deriveContract', async () => {
     const report = await buildHealthCenterReport(EMPTY_DB);
     const contractItem = report.items.find((item) => item.id === 'field-routing-contract')!;

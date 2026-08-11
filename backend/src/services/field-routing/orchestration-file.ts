@@ -46,6 +46,8 @@ export interface OrchestrationField {
   snakeName?: string;
   camelName?: string;
   pathInRawOutput?: string;
+  /** 落库键/消费键别名：与 fieldId 不一致时标注（如 skill 产出键 acceptanceHint）；缺省 = 落库键与 fieldId 一致 */
+  persistKey?: string;
   description: string;
   enumValues?: string[];
   systemLocked?: boolean;
@@ -128,6 +130,7 @@ function parseField(raw: unknown, index: number): OrchestrationField {
     snakeName: asOptionalString(raw.snakeName),
     camelName: asOptionalString(raw.camelName),
     pathInRawOutput: asOptionalString(raw.pathInRawOutput),
+    persistKey: asOptionalString(raw.persistKey),
     description: asString(raw.description, `fields[${index}].description`),
     enumValues,
     systemLocked: asBoolean(raw.systemLocked, `fields[${index}].systemLocked`, false),

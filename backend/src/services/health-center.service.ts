@@ -337,9 +337,9 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       status: w4.drifted.length > 0 ? 'drifted' : 'clean',
       count: w4.drifted.length,
       detail: w4Detail,
-      cause: 'core.yaml 已改但产物/DB 未同步（frontmatter coreHash ≠ 核心文件哈希 或 DB ACTIVE 锚点）',
+      cause: '核心文件（core.yaml）已改动，但编译产物与数据库 ACTIVE 版本没跟着更新——线上仍在跑旧版 prompt',
       action: 'fixable',
-      fixHint: '一键修复：先备份 skill.*.md → 重编译产物 → 同步 DB ACTIVE；产物已更新需 git 提交',
+      fixHint: '点此一键修复：自动重新编译产物并同步数据库；若产物是代码库跟踪文件，完成后需提交代码',
       source: 'check-core-hash-parity.ts + compile-core-files.ts + seed-core-agent-prompts.ts',
     }),
     buildItem('field-routing-contract', {
@@ -350,9 +350,9 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       status: contractDrift.length > 0 ? 'drifted' : 'clean',
       count: contractDrift.length,
       detail: formatDrift(contractDrift),
-      cause: 'P4 名实不符：检查名义为"编排文件 vs DB"，但 contracts 只声明 agentId，displayName/description 由 deriveContract(manifest) 派生——真实基准是 manifest（orchestration-file.ts:182）',
+      cause: '契约名称来源标注有误：该检查名义是"编排文件 vs 数据库"，实际以 manifest（契约文件）为基准比对',
       action: 'fixable',
-      fixHint: '一键修复：字段路由全量对账（manifest 派生值向 agent_contracts 收敛，跳过 managedByCode=false 覆盖行）',
+      fixHint: '点此一键修复：按 manifest 契约基准全量对账数据库（admin 手工改过的行自动跳过保护）',
       source: 'field-routing-bootstrap.service.ts（detectFieldRoutingDrift kind=contract）',
     }),
     buildItem('field-routing', {
@@ -363,9 +363,9 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       status: fieldRoutingDrift.length > 0 ? 'drifted' : 'clean',
       count: fieldRoutingDrift.length,
       detail: formatDrift(fieldRoutingDrift),
-      cause: '编排文件声明与 DB 三表（field_definitions/agent_field_routings）不一致（managedByCode=true 行参与 diff）',
+      cause: '编排文件（数据面声明）与数据库中的字段/路由登记不一致：声明改了但库里没同步',
       action: 'fixable',
-      fixHint: '一键修复：全量对账（文件为准，admin 覆盖行保护）',
+      fixHint: '点此一键修复：以编排文件为准全量对账数据库（admin 手工改过的行自动跳过保护）',
       source: 'field-routing-bootstrap.service.ts（detectFieldRoutingDrift kind=field/routing）',
     }),
     buildItem('contract-parity', {
@@ -379,9 +379,9 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
         .filter((r) => r.status !== 'in-sync')
         .slice(0, 20)
         .map((r) => `${r.agentId} status=${r.status}${r.detail ? `：${r.detail}` : ''}`),
-      cause: 'manifest 是 v4 契约唯一声明处；DB ACTIVE metadata.promptLab 与其不一致（缺失/非法即失败，不回退默认值）',
+      cause: '契约文件（manifest）与数据库登记的契约元数据不一致：缺失或非法即判定失败，不回退默认值',
       action: 'manual',
-      fixHint: '人工：npm run prompts:runtime-contract:check 定位后执行 prompts:sync（DB 从声明收敛）；或先经 w4 一键修复的 DB 同步',
+      fixHint: '需开发处理：定位差异后执行契约同步（DB 从 manifest 收敛），或经 w4 一键修复的数据库同步后复查',
       source: 'check-prompt-runtime-contract-metadata-parity.ts',
     }),
     buildItem('snapshots', {
@@ -392,9 +392,9 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       status: snapshotCheck.drifted ? 'drifted' : 'clean',
       count: snapshotCheck.drifted ? 1 : 0,
       detail: snapshotCheck.drifted ? [snapshotCheck.detail] : [],
-      cause: 'agent-snapshots.md 与编排文件 + core fields 声明不一致（派生产物必须与重渲染逐字节一致）',
+      cause: '自动生成的沙盘说明书（agent-snapshots.md）与编排文件 + core 字段声明不一致：说明书过期了',
       action: 'fixable',
-      fixHint: '一键修复：重新生成 agent-snapshots.md（先备份；产物需 git 提交）',
+      fixHint: '点此一键修复：重新生成沙盘说明书（先备份；生成物需提交代码）',
       source: 'generate-agent-snapshots.ts',
     }),
     buildItem('yaml-crosscheck', {
@@ -405,9 +405,9 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       status: yamlCheck.ok ? 'clean' : 'drifted',
       count: yamlCheck.errors.length,
       detail: yamlCheck.errors.slice(0, 20),
-      cause: 'core params（真源）与 manifest promptContract（手写镜像）不一致（B3 平行声明）；C2 已收敛为参数单写（manifest runtimeDefaults 废弃）',
+      cause: '核心文件的运行参数（温度/token/失败策略）与契约文件的镜像声明不一致：同一参数写了两份',
       action: 'manual',
-      fixHint: '人工：manifest promptContract 与 core 对齐后重新生成（镜像为手写，改 core 需同批改 manifest；长期建议按 DRIFT_BASELINE_SURVEY §5.1 消除手写镜像）',
+      fixHint: '需开发处理：以核心文件为准对齐契约文件后重新生成；长期建议按 DRIFT_BASELINE_SURVEY §5.1 消除这份手写镜像',
       source: 'check-yaml-vocabulary.ts',
     }),
     buildItem('params-consistency', {
@@ -427,9 +427,9 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
         ),
         ...paramsCheck.missingDeclarations.slice(0, 20).map((n) => `[注明] ${n}`),
       ],
-      cause: 'temperature/maxTokens 两处声明（core params 真源 / skills/<skill>/definition.ts 展示权威），只读比对；definition.ts 是代码不可一键修；manifest runtimeDefaults 已于 P0-1 废弃',
+      cause: '模型参数（temperature/maxTokens）在核心文件与代码声明（definition.ts）两处不一致：同一条参数有两个值',
       action: 'manual',
-      fixHint: '人工：统一两处声明后重新生成（或按 DRIFT_BASELINE_SURVEY §5.1 把 definition.ts 参数改为从 core 派生）',
+      fixHint: '需开发处理：统一两处声明后重新生成（definition.ts 是代码，不可一键修；长期建议按 DRIFT_BASELINE_SURVEY §5.1 改为从 core 派生）',
       source: 'core-file-loader.ts + coordinators/definitions-registry.ts',
     }),
     // ============ consistency（一致性偏差，双向对等，人工决策） ============
@@ -455,9 +455,9 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
         ...fieldsSyncOrphans.map((o) => `[warn] 孤儿 ${o.coreField}：${o.detail}`),
         ...fieldsSyncTypeMismatch.map((t) => `[warn] 类型不一致 ${t.fieldId}：core=${t.coreType} → 期望 ${t.expectedValueType}，编排=${t.routingValueType}`),
       ].slice(0, 30),
-      cause: 'core 字段与编排产出行首段双向对等（缺项隐含向 core 收敛；孤儿无收敛方向，B5）——不叫"漂移"叫"不一致"',
+      cause: 'core 声明的字段与编排产出的字段对不上（缺项/孤儿/类型不一致）：两边分别维护，漏改了一方',
       action: 'manual',
-      fixHint: '人工决策：补编排路由、登记 EXEMPT_PLATFORM_ROOTS 豁免，或接受存量孤儿（现 5 条为真实漂移保留报）',
+      fixHint: '需开发决策：补编排路由、登记豁免，或明确接受存量孤儿（当前 5 条为有意保留）',
       source: 'check-core-fields-sync.ts',
     }),
     buildItem('w1-active', {
@@ -468,9 +468,9 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       status: w1.items.length > 0 ? 'unregistered' : 'clean',
       count: w1.items.length,
       detail: w1.items.map((i) => `W1 ${i.skillId || ''}：${i.message}`),
-      cause: '户口簿活跃集与 agent_prompts ACTIVE 双向差集（noPromptFile=true 豁免；zombie 技能 ACTIVE 残留单列）',
+      cause: '户口簿里的活跃技能与数据库 ACTIVE 版本对不上：有技能缺"当前生效版"，或数据库残留已下架技能',
       action: 'manual',
-      fixHint: '人工决策：npm run prompts:compile-all && prompts:sync（缺侧）或登记/清理（残留侧）',
+      fixHint: '需开发处理：执行"编译+同步"补缺侧（npm run prompts:compile-all && prompts:sync），或登记/清理残留侧',
       source: 'skills-readiness.service.ts',
     }),
     buildItem('w2-registration', {
@@ -481,9 +481,9 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       status: w2.items.length > 0 ? 'unregistered' : 'clean',
       count: w2.items.length,
       detail: w2.items.map((i) => `W2 ${i.skillId || ''}：${i.message}`),
-      cause: '户口簿与 skill_registrations 双向差集（registrationPoint=agents/platform-direct 豁免方向 A）',
+      cause: '户口簿与数据库注册表对不上：有技能没注册，或数据库有多出来的"幽灵注册"',
       action: 'manual',
-      fixHint: '人工决策：补注册片段（skills/index.ts）或清理幽灵行',
+      fixHint: '需开发处理：补注册片段（skills/index.ts），或清理幽灵行',
       source: 'skills-readiness.service.ts',
     }),
     buildItem('w3-wiring', {
@@ -494,9 +494,9 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       status: w3.items.length > 0 ? 'unwired' : 'clean',
       count: w3.items.length,
       detail: w3.items.map((i) => `W3 ${i.skillId || ''}：${i.message}`),
-      cause: 'definition.ts steps 与户口簿 coordinator 两处手写权威（P5），无派生方向（W3_STEPS_EMPTY_EXEMPT 硬编码豁免）',
+      cause: '运行时定义的执行步骤与户口簿的 coordinator 声明对不上：接线两边各维护了一份',
       action: 'manual',
-      fixHint: '人工决策：在 coordinator definition.ts 补 steps、登记豁免，或移除引用',
+      fixHint: '需开发处理：在 coordinator 定义里补 steps、登记豁免，或移除引用',
       source: 'skills-readiness.service.ts',
     }),
     // ============ override-record（覆盖层，info 只读） ============
@@ -513,9 +513,9 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
             '覆盖行跳过对账与强制同步是有意设计（保留人工微调）；覆盖是隐式的：无 owner/reason 元数据，与文件背离不可见',
           ]
         : ['当前无覆盖行（三表 managedByCode=false 均为 0）——漂移计数不为零即真实文件/DB 背离，与覆盖无关'],
-      cause: 'managedByCode=false 的 admin 覆盖行：覆盖权高于基准，不参与 diff（field-routing-bootstrap.service.ts:284/:301/:328）',
+      cause: 'admin 在后台手工改过的配置行清单：覆盖权高于文件基准，对账时自动跳过',
       action: 'none',
-      fixHint: '覆盖行只读展示（评估：撤销覆盖 = 把行标回 managedByCode=true 后执行字段路由 sync 向文件收敛；当前 0 条）',
+      fixHint: '只读展示：当前 0 条覆盖行；如需撤销覆盖，需开发将行恢复为代码托管后重新对账',
       source: 'field-routing-bootstrap.service.ts（三表 where managedByCode=false）',
     }),
     // ============ runtime-info（运行时观测，info 只读） ============
@@ -531,9 +531,9 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
         : runtimeDriftRows.rows.slice(0, 20).map((row) =>
             `${row.agentId} @ ${row.createdAt ? new Date(row.createdAt).toISOString() : '—'}`,
           ),
-      cause: '运行时传感器：每次 LLM 调用比对 代码侧 prompt vs DB ACTIVE，结果记入 prompt_call_logs.promptDrift（prompt-composer.ts:272/:433）',
+      cause: '运行时遥测：每次 LLM 调用时比对"代码侧 prompt 与数据库 ACTIVE 版本"是否一致，记录异常',
       action: 'none',
-      fixHint: '运行时观测项（info）：出现漂移的修复语义 = 重新 sync（w4 一键修复的 DB 同步覆盖）',
+      fixHint: '只读观察项：出现漂移时，修复=重新同步数据库（w4 一键修复覆盖）',
       source: 'prompt-composer.ts（detectPromptDrift）+ prompt_call_logs',
     }),
   ];
@@ -588,18 +588,18 @@ export const HEALTH_CENTER_FIXABLE_IDS: readonly string[] = [
 ];
 
 export const HEALTH_CENTER_MANUAL_GUIDANCE: Record<string, string> = {
-  'contract-parity': '契约 parity 属人工决策类：npm run prompts:runtime-contract:check 定位，再 prompts:sync 使 DB 从 manifest 收敛',
-  'yaml-crosscheck': 'yaml 交叉属人工决策类：manifest 手写镜像（promptContract）与 core 对齐后重新生成；C2 参数已收敛为单写（core.yaml params）',
-  'params-consistency': '参数一致性属人工决策类：definition.ts 是代码声明，不可一键修——人工统一 core params ↔ skills/<skill>/definition.ts 两处后重新生成',
-  'fields-sync': 'fields-sync 属一致性偏差（无单方基准）：人工决策——补编排路由、登记 EXEMPT_PLATFORM_ROOTS 豁免，或接受存量孤儿',
-  'w1-active': 'W1 属一致性偏差：执行 npm run prompts:compile-all && prompts:sync（缺侧），或登记/清理（残留侧）',
+  'contract-parity': '需开发处理：定位契约差异后执行契约同步（DB 从 manifest 收敛），或经 w4 一键修复的数据库同步后复查',
+  'yaml-crosscheck': '需开发处理：以核心文件为准对齐契约文件后重新生成（manifest 为手写镜像，改 core 需同批改 manifest）',
+  'params-consistency': '需开发处理：definition.ts 是代码声明，不可一键修——人工统一核心文件参数 ↔ skills/<skill>/definition.ts 两处后重新生成',
+  'fields-sync': 'fields-sync 属一致性偏差（无单方基准）：需开发决策——补编排路由、登记豁免，或明确接受存量孤儿',
+  'w1-active': 'W1 属一致性偏差：执行"编译+同步"补缺侧（npm run prompts:compile-all && prompts:sync），或登记/清理残留侧',
   'w2-registration': 'W2 属一致性偏差：在 skills/index.ts 补注册片段后重启，或清理幽灵行',
-  'w3-wiring': 'W3 属一致性偏差（两处手写权威）：在 coordinator definition.ts 补 steps，或登记 service 侧接线豁免',
+  'w3-wiring': 'W3 属一致性偏差（两边各维护一份）：在 coordinator 定义里补 steps，或登记豁免、移除引用',
 };
 
 export const HEALTH_CENTER_READONLY_GUIDANCE: Record<string, string> = {
-  'override-record': '覆盖行只读展示：覆盖权高于基准，跳过对账为有意设计；如需撤销覆盖请人工将行标回 managedByCode=true 后执行字段路由 sync',
-  'runtime-prompt': '运行时 prompt 漂移为观测项（info）：修复语义 = 重新 sync（w4 一键修复的 DB 同步覆盖）',
+  'override-record': '覆盖行只读展示：覆盖权高于文件基准，跳过对账为有意设计；如需撤销覆盖，需开发将行恢复为代码托管后重新对账',
+  'runtime-prompt': '运行时 prompt 漂移为观测项（info）：修复语义 = 重新同步数据库（w4 一键修复覆盖）',
 };
 
 export interface HealthCenterFixDeps {

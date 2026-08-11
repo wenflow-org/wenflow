@@ -150,6 +150,28 @@ export const PROMPT_ROLES = [
 ] as const;
 export type PromptRole = (typeof PROMPT_ROLES)[number];
 
+/**
+ * promptRole 7 类人话映射（label + hint，单源）。
+ * 消费方（禁止各自再写一份字面量）：
+ * - prompt-composer（LLM supplement 分组标签，经本表派生）
+ * - GET /api/admin/glossary（运营术语表抽屉）
+ * - GET /api/admin/field-routings/stages（字段路由表图例/角色徽章，前端只消费）
+ */
+export const PROMPT_ROLE_META: Array<{ id: PromptRole; label: string; hint: string }> = [
+  { id: 'hard-required', label: '必填', hint: '缺了这个字段，本阶段流程就无法推进' },
+  { id: 'soft-info', label: '可选补充', hint: '拿到更好，缺失也能继续' },
+  { id: 'hidden-inference', label: '隐式推断', hint: '模型内部推理，不直接展示给用户' },
+  { id: 'public-reply', label: '公开回复', hint: '直接呈现给用户看的对话内容' },
+  { id: 'proposal-output', label: '方案产出', hint: '确认下来的结论 / 计划 / 范围' },
+  { id: 'derived-presentation', label: '派生展示', hint: '由其他字段计算派生，用于界面展示' },
+  { id: 'control-signal', label: '控制信号', hint: '平台流程 / UI 控制用，不是学习内容' },
+];
+
+// 词表闭包守卫：人话表键集必须与受控词表完全一致（改词表必须同步改人话，防静默缺漏）
+const PROMPT_ROLE_META_IDS = PROMPT_ROLE_META.map((m) => m.id);
+const _vocabClosureGuard = PROMPT_ROLES.every((r) => PROMPT_ROLE_META_IDS.includes(r))
+  && PROMPT_ROLE_META_IDS.length === PROMPT_ROLES.length;
+
 /** 编排 render 受控词表（单源） */
 export const RENDER_VALUES = ['visible', 'hidden'] as const;
 export type RenderValue = (typeof RENDER_VALUES)[number];

@@ -20,7 +20,8 @@ fields:
   - fieldId: conceptLedger
     promptRole: derived-presentation
     valueType: array<object>
-    description: 概念账本（key/label/familiarity/transferReadiness/...）
+    persistKey: knowledgeMemory.globalBackground.conceptLedger
+    description: 概念账本（key/label/familiarity/transferReadiness/...，落库于画像 3 层 JSON 之下）
   - fieldId: reusableFoundations
     promptRole: derived-presentation
     valueType: array<string>

@@ -35,7 +35,7 @@ describe('detectFieldRoutingDrift', () => {
     const contracts = CONTRACTS
       .map((c) => ({ agentId: c.agentId, displayName: c.displayName, description: c.description, stage: 'goal', managedByCode: true }))
     const fields = FIELDS
-      .map((f) => ({ stage: f.stage, fieldId: f.fieldId, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, pathInRawOutput: f.pathInRawOutput ?? null, description: f.description ?? null, bindings: f.bindings ? JSON.stringify(f.bindings) : null, managedByCode: true }))
+      .map((f) => ({ stage: f.stage, fieldId: f.fieldId, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, pathInRawOutput: f.pathInRawOutput ?? null, persistKey: f.persistKey ?? null, description: f.description ?? null, bindings: f.bindings ? JSON.stringify(f.bindings) : null, managedByCode: true }))
     const routings = ROUTINGS
       .map((r) => ({ agentId: r.agentId, fieldId: r.fieldId, render: r.render, handoff: r.handoff.length ? JSON.stringify(r.handoff) : null, internalFlag: r.internal, accumulate: r.accumulate, visibilityPreset: r.visibilityPreset ?? null, managedByCode: true }))
 
@@ -63,7 +63,7 @@ describe('detectFieldRoutingDrift', () => {
 
   it('跨 stage 同名 fieldId（teaching/simulation 的 reply）按 stage 区分，不互相污染', async () => {
     const fields = FIELDS
-      .map((f) => ({ stage: f.stage, fieldId: f.fieldId, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, pathInRawOutput: f.pathInRawOutput ?? null, description: f.description ?? null, bindings: f.bindings ? JSON.stringify(f.bindings) : null, managedByCode: true }))
+      .map((f) => ({ stage: f.stage, fieldId: f.fieldId, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, pathInRawOutput: f.pathInRawOutput ?? null, persistKey: f.persistKey ?? null, description: f.description ?? null, bindings: f.bindings ? JSON.stringify(f.bindings) : null, managedByCode: true }))
     // 篡改 teaching 的 reply 定义：应只命中 teaching/reply，不影响 simulation/reply
     const teachingReply = fields.find((f) => f.stage === 'teaching' && f.fieldId === 'reply')
     expect(teachingReply).toBeDefined()

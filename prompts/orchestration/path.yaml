@@ -153,7 +153,8 @@ fields:
   - fieldId: subtasks.acceptanceCriteria
     promptRole: soft-info
     valueType: string
-    description: 验收标准
+    persistKey: acceptanceHint
+    description: 验收标准（skill 实际产出键为 acceptanceHint，落库时映射为 subtasks.acceptanceCriteria）
   - fieldId: subtasks.linkedConcept
     promptRole: soft-info
     valueType: string

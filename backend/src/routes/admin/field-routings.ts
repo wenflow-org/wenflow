@@ -6,7 +6,7 @@ import systemPrisma from '../../config/system-database';
 import { logger } from '../../utils/logger';
 import { clearRoutingCache } from '../../services/field-dispatcher';
 import { clearSupplementRenderCache } from '../../services/prompt-composer';
-import { detectFieldRoutingDrift, ensureStageFieldRoutings } from '../../services/field-routing-bootstrap.service';
+import { detectFieldRoutingDrift, ensureStageFieldRoutings, syncStageFieldRoutingsFromFile } from '../../services/field-routing-bootstrap.service';
 import {
   loadOrchestrationFiles,
   ORCHESTRATION_DIR,
@@ -15,6 +15,7 @@ import {
   validateOrchestrationContent,
   type OrchestrationStage,
 } from '../../services/field-routing/orchestration-file';
+import { PROMPT_ROLE_META } from '../../services/yaml-vocabulary';
 
 const router = Router();
 
@@ -45,6 +46,8 @@ function serializeField(row: any) {
     valueType: row.valueType,
     snakeName: row.snakeName,
     camelName: row.camelName,
+    pathInRawOutput: row.pathInRawOutput,
+    persistKey: row.persistKey,
     description: row.description,
     enumValues: parseJson(row.enumValues),
     schemaVersion: row.schemaVersion,
@@ -174,6 +177,8 @@ router.get('/stages/:stage', async (req: Request, res: Response) => {
       fields: fieldsWithLocks,
       agents: contractsOut,
       routings: routingsWithLocks,
+      // promptRole 人话单源：后端 yaml-vocabulary 派生下发，前端图例/徽章只消费（不再各写一份）
+      promptRoleMeta: PROMPT_ROLE_META,
     },
   });
 });
@@ -318,6 +323,8 @@ router.put('/orchestration/:stage', async (req: Request, res: Response) => {
 // POST /api/admin/field-routings/orchestration/:stage/sync
 // 全量对账（文件为准，立即生效）：三表 upsert(update: 全部业务列)
 // admin 覆盖行（managedByCode=false）跳过更新并记入 skipped 清单
+// 实现：syncStageFieldRoutingsFromFile（field-routing-bootstrap.service，
+// 与 CLI 脚本 / health-center 一键修复共用同一实现）
 // ============================================================
 router.post('/orchestration/:stage/sync', async (req: Request, res: Response) => {
   const stage = String(req.params.stage || '').trim();
@@ -326,138 +333,21 @@ router.post('/orchestration/:stage/sync', async (req: Request, res: Response) =>
     return res.status(404).json({ success: false, error: { message: `编排文件不存在：${stage}` } });
   }
 
-  const skippedAdminRows: Array<{ table: string; key: string }> = [];
-  let contractsUpdated = 0;
-  let fieldsUpdated = 0;
-  let routingsUpdated = 0;
-  let createdCount = 0;
-
-  for (const c of found.contracts) {
-    const exists = await systemPrisma.agent_contracts.findUnique({ where: { agentId: c.agentId } });
-    if (exists) {
-      if (exists.managedByCode === false) {
-        skippedAdminRows.push({ table: 'agent_contracts', key: c.agentId });
-        continue;
-      }
-      await systemPrisma.agent_contracts.update({
-        where: { agentId: c.agentId },
-        data: { stage, displayName: c.displayName, description: c.description, updatedAt: new Date() },
-      });
-      contractsUpdated++;
-    } else {
-      await systemPrisma.agent_contracts.create({
-        data: {
-          id: randomUUID(),
-          agentId: c.agentId,
-          stage,
-          displayName: c.displayName,
-          description: c.description,
-          schemaVersion: 'v3',
-          source: 'code',
-          managedByCode: true,
-        },
-      });
-      createdCount++;
-    }
-  }
-
-  for (const f of found.fields) {
-    const exists = await systemPrisma.field_definitions.findFirst({ where: { stage, fieldId: f.fieldId } });
-    if (exists) {
-      if (exists.managedByCode === false) {
-        skippedAdminRows.push({ table: 'field_definitions', key: `${stage}/${f.fieldId}` });
-        continue;
-      }
-      await systemPrisma.field_definitions.update({
-        where: { stage_fieldId: { stage, fieldId: f.fieldId } },
-        data: {
-          stage,
-          promptRole: f.promptRole,
-          valueType: f.valueType,
-          snakeName: f.snakeName ?? null,
-          camelName: f.camelName ?? null,
-          pathInRawOutput: f.pathInRawOutput ?? null,
-          description: f.description,
-          enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null,
-          systemLocked: f.systemLocked ?? false,
-          structureLocked: f.structureLocked ?? false,
-          bindings: f.bindings ? JSON.stringify(f.bindings) : null,
-          updatedAt: new Date(),
-        },
-      });
-      fieldsUpdated++;
-    } else {
-      await systemPrisma.field_definitions.create({
-        data: {
-          id: randomUUID(),
-          fieldId: f.fieldId,
-          stage,
-          promptRole: f.promptRole,
-          valueType: f.valueType,
-          snakeName: f.snakeName ?? null,
-          camelName: f.camelName ?? null,
-          pathInRawOutput: f.pathInRawOutput ?? null,
-          description: f.description,
-          enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null,
-          systemLocked: f.systemLocked ?? false,
-          structureLocked: f.structureLocked ?? false,
-          bindings: f.bindings ? JSON.stringify(f.bindings) : null,
-          schemaVersion: 'v3',
-          source: 'code',
-          managedByCode: true,
-        },
-      });
-      createdCount++;
-    }
-  }
-
-  for (const r of found.routings) {
-    const where = { agentId_fieldId: { agentId: r.agentId, fieldId: r.fieldId } };
-    const exists = await systemPrisma.agent_field_routings.findUnique({ where });
-    if (exists) {
-      if (exists.managedByCode === false) {
-        skippedAdminRows.push({ table: 'agent_field_routings', key: `${r.agentId}/${r.fieldId}` });
-        continue;
-      }
-      await systemPrisma.agent_field_routings.update({
-        where,
-        data: {
-          render: r.render,
-          handoff: r.handoff.length ? JSON.stringify(r.handoff) : null,
-          internalFlag: r.internal,
-          accumulate: r.accumulate,
-          visibilityPreset: r.visibilityPreset ?? null,
-          notes: r.notes ?? null,
-          updatedAt: new Date(),
-        },
-      });
-      routingsUpdated++;
-    } else {
-      await systemPrisma.agent_field_routings.create({
-        data: {
-          id: randomUUID(),
-          agentId: r.agentId,
-          fieldId: r.fieldId,
-          render: r.render,
-          handoff: r.handoff.length ? JSON.stringify(r.handoff) : null,
-          internalFlag: r.internal,
-          accumulate: r.accumulate,
-          visibilityPreset: r.visibilityPreset ?? null,
-          notes: r.notes ?? null,
-          source: 'code',
-          managedByCode: true,
-        },
-      });
-      createdCount++;
-    }
-  }
+  const report = await syncStageFieldRoutingsFromFile(systemPrisma, found);
 
   clearRoutingCache();
   clearSupplementRenderCache();
 
   res.json({
     success: true,
-    data: { stage, contractsUpdated, fieldsUpdated, routingsUpdated, createdCount, skippedAdminRows },
+    data: {
+      stage: report.stage,
+      contractsUpdated: report.contractsUpdated,
+      fieldsUpdated: report.fieldsUpdated,
+      routingsUpdated: report.routingsUpdated,
+      createdCount: report.createdCount,
+      skippedAdminRows: report.skippedAdminRows,
+    },
   });
 });
 

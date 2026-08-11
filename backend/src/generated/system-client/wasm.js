@@ -273,6 +273,7 @@ exports.Prisma.Field_definitionsScalarFieldEnum = {
   snakeName: 'snakeName',
   camelName: 'camelName',
   pathInRawOutput: 'pathInRawOutput',
+  persistKey: 'persistKey',
   description: 'description',
   enumValues: 'enumValues',
   schemaVersion: 'schemaVersion',

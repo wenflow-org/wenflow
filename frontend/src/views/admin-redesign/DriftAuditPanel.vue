@@ -15,17 +15,17 @@
 
     <!-- 漂移报告 -->
     <details class="fdp__box" open>
-      <summary class="fdp__box-summary">漂移报告（seed vs DB，admin 编辑行豁免）</summary>
+      <summary class="fdp__box-summary">漂移报告（编排文件 vs DB，admin 编辑行豁免）</summary>
       <div v-if="driftLoading" class="fdp__empty">检测中…</div>
       <div v-else-if="driftFailed" class="fdp__empty fdp__empty--error">漂移检测失败：无法连接字段路由服务，请稍后重试。</div>
-      <div v-else-if="drift.items.length === 0" class="fdp__empty">✅ 无漂移（seed 与 DB 一致）</div>
+      <div v-else-if="drift.items.length === 0" class="fdp__empty">✅ 无漂移（编排文件与 DB 一致）</div>
       <ul v-else class="fdp__drift-list">
         <li v-for="(d, i) in drift.items" :key="i" class="fdp__drift-item">
           <span class="mono fdp__drift-kind">{{ kindLabel(d.kind) }}</span>
           <span class="mono fdp__drift-key">{{ d.key }}</span>
           <span class="fdp__drift-field">{{ d.field }}</span>
-          <span class="mono fdp__drift-val fdp__drift-val--seed">seed={{ stringify(d.seedValue) }}</span>
-          <span class="mono fdp__drift-val fdp__drift-val--db">db={{ stringify(d.dbValue) }}</span>
+          <span class="mono fdp__drift-val fdp__drift-val--seed">声明={{ stringify(d.seedValue) }}</span>
+          <span class="mono fdp__drift-val fdp__drift-val--db">DB={{ stringify(d.dbValue) }}</span>
         </li>
       </ul>
       <p v-if="drift.totalDriftCount > drift.items.length" class="fdp__empty">（共 {{ drift.totalDriftCount }} 项，当前筛选显示 {{ drift.items.length }}）</p>

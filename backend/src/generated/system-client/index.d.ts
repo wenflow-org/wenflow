@@ -10264,6 +10264,7 @@ export namespace Prisma {
     snakeName: string | null
     camelName: string | null
     pathInRawOutput: string | null
+    persistKey: string | null
     description: string | null
     enumValues: string | null
     schemaVersion: string | null
@@ -10286,6 +10287,7 @@ export namespace Prisma {
     snakeName: string | null
     camelName: string | null
     pathInRawOutput: string | null
+    persistKey: string | null
     description: string | null
     enumValues: string | null
     schemaVersion: string | null
@@ -10308,6 +10310,7 @@ export namespace Prisma {
     snakeName: number
     camelName: number
     pathInRawOutput: number
+    persistKey: number
     description: number
     enumValues: number
     schemaVersion: number
@@ -10332,6 +10335,7 @@ export namespace Prisma {
     snakeName?: true
     camelName?: true
     pathInRawOutput?: true
+    persistKey?: true
     description?: true
     enumValues?: true
     schemaVersion?: true
@@ -10354,6 +10358,7 @@ export namespace Prisma {
     snakeName?: true
     camelName?: true
     pathInRawOutput?: true
+    persistKey?: true
     description?: true
     enumValues?: true
     schemaVersion?: true
@@ -10376,6 +10381,7 @@ export namespace Prisma {
     snakeName?: true
     camelName?: true
     pathInRawOutput?: true
+    persistKey?: true
     description?: true
     enumValues?: true
     schemaVersion?: true
@@ -10471,6 +10477,7 @@ export namespace Prisma {
     snakeName: string | null
     camelName: string | null
     pathInRawOutput: string | null
+    persistKey: string | null
     description: string | null
     enumValues: string | null
     schemaVersion: string
@@ -10510,6 +10517,7 @@ export namespace Prisma {
     snakeName?: boolean
     camelName?: boolean
     pathInRawOutput?: boolean
+    persistKey?: boolean
     description?: boolean
     enumValues?: boolean
     schemaVersion?: boolean
@@ -10532,6 +10540,7 @@ export namespace Prisma {
     snakeName?: boolean
     camelName?: boolean
     pathInRawOutput?: boolean
+    persistKey?: boolean
     description?: boolean
     enumValues?: boolean
     schemaVersion?: boolean
@@ -10554,6 +10563,7 @@ export namespace Prisma {
     snakeName?: boolean
     camelName?: boolean
     pathInRawOutput?: boolean
+    persistKey?: boolean
     description?: boolean
     enumValues?: boolean
     schemaVersion?: boolean
@@ -10580,6 +10590,7 @@ export namespace Prisma {
       snakeName: string | null
       camelName: string | null
       pathInRawOutput: string | null
+      persistKey: string | null
       description: string | null
       enumValues: string | null
       schemaVersion: string
@@ -10992,6 +11003,7 @@ export namespace Prisma {
     readonly snakeName: FieldRef<"field_definitions", 'String'>
     readonly camelName: FieldRef<"field_definitions", 'String'>
     readonly pathInRawOutput: FieldRef<"field_definitions", 'String'>
+    readonly persistKey: FieldRef<"field_definitions", 'String'>
     readonly description: FieldRef<"field_definitions", 'String'>
     readonly enumValues: FieldRef<"field_definitions", 'String'>
     readonly schemaVersion: FieldRef<"field_definitions", 'String'>
@@ -16406,6 +16418,7 @@ export namespace Prisma {
     snakeName: 'snakeName',
     camelName: 'camelName',
     pathInRawOutput: 'pathInRawOutput',
+    persistKey: 'persistKey',
     description: 'description',
     enumValues: 'enumValues',
     schemaVersion: 'schemaVersion',
@@ -17423,6 +17436,7 @@ export namespace Prisma {
     snakeName?: StringNullableFilter<"field_definitions"> | string | null
     camelName?: StringNullableFilter<"field_definitions"> | string | null
     pathInRawOutput?: StringNullableFilter<"field_definitions"> | string | null
+    persistKey?: StringNullableFilter<"field_definitions"> | string | null
     description?: StringNullableFilter<"field_definitions"> | string | null
     enumValues?: StringNullableFilter<"field_definitions"> | string | null
     schemaVersion?: StringFilter<"field_definitions"> | string
@@ -17445,6 +17459,7 @@ export namespace Prisma {
     snakeName?: SortOrderInput | SortOrder
     camelName?: SortOrderInput | SortOrder
     pathInRawOutput?: SortOrderInput | SortOrder
+    persistKey?: SortOrderInput | SortOrder
     description?: SortOrderInput | SortOrder
     enumValues?: SortOrderInput | SortOrder
     schemaVersion?: SortOrder
@@ -17471,6 +17486,7 @@ export namespace Prisma {
     snakeName?: StringNullableFilter<"field_definitions"> | string | null
     camelName?: StringNullableFilter<"field_definitions"> | string | null
     pathInRawOutput?: StringNullableFilter<"field_definitions"> | string | null
+    persistKey?: StringNullableFilter<"field_definitions"> | string | null
     description?: StringNullableFilter<"field_definitions"> | string | null
     enumValues?: StringNullableFilter<"field_definitions"> | string | null
     schemaVersion?: StringFilter<"field_definitions"> | string
@@ -17493,6 +17509,7 @@ export namespace Prisma {
     snakeName?: SortOrderInput | SortOrder
     camelName?: SortOrderInput | SortOrder
     pathInRawOutput?: SortOrderInput | SortOrder
+    persistKey?: SortOrderInput | SortOrder
     description?: SortOrderInput | SortOrder
     enumValues?: SortOrderInput | SortOrder
     schemaVersion?: SortOrder
@@ -17521,6 +17538,7 @@ export namespace Prisma {
     snakeName?: StringNullableWithAggregatesFilter<"field_definitions"> | string | null
     camelName?: StringNullableWithAggregatesFilter<"field_definitions"> | string | null
     pathInRawOutput?: StringNullableWithAggregatesFilter<"field_definitions"> | string | null
+    persistKey?: StringNullableWithAggregatesFilter<"field_definitions"> | string | null
     description?: StringNullableWithAggregatesFilter<"field_definitions"> | string | null
     enumValues?: StringNullableWithAggregatesFilter<"field_definitions"> | string | null
     schemaVersion?: StringWithAggregatesFilter<"field_definitions"> | string
@@ -19019,6 +19037,7 @@ export namespace Prisma {
     snakeName?: string | null
     camelName?: string | null
     pathInRawOutput?: string | null
+    persistKey?: string | null
     description?: string | null
     enumValues?: string | null
     schemaVersion?: string
@@ -19041,6 +19060,7 @@ export namespace Prisma {
     snakeName?: string | null
     camelName?: string | null
     pathInRawOutput?: string | null
+    persistKey?: string | null
     description?: string | null
     enumValues?: string | null
     schemaVersion?: string
@@ -19063,6 +19083,7 @@ export namespace Prisma {
     snakeName?: NullableStringFieldUpdateOperationsInput | string | null
     camelName?: NullableStringFieldUpdateOperationsInput | string | null
     pathInRawOutput?: NullableStringFieldUpdateOperationsInput | string | null
+    persistKey?: NullableStringFieldUpdateOperationsInput | string | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     enumValues?: NullableStringFieldUpdateOperationsInput | string | null
     schemaVersion?: StringFieldUpdateOperationsInput | string
@@ -19085,6 +19106,7 @@ export namespace Prisma {
     snakeName?: NullableStringFieldUpdateOperationsInput | string | null
     camelName?: NullableStringFieldUpdateOperationsInput | string | null
     pathInRawOutput?: NullableStringFieldUpdateOperationsInput | string | null
+    persistKey?: NullableStringFieldUpdateOperationsInput | string | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     enumValues?: NullableStringFieldUpdateOperationsInput | string | null
     schemaVersion?: StringFieldUpdateOperationsInput | string
@@ -19107,6 +19129,7 @@ export namespace Prisma {
     snakeName?: string | null
     camelName?: string | null
     pathInRawOutput?: string | null
+    persistKey?: string | null
     description?: string | null
     enumValues?: string | null
     schemaVersion?: string
@@ -19129,6 +19152,7 @@ export namespace Prisma {
     snakeName?: NullableStringFieldUpdateOperationsInput | string | null
     camelName?: NullableStringFieldUpdateOperationsInput | string | null
     pathInRawOutput?: NullableStringFieldUpdateOperationsInput | string | null
+    persistKey?: NullableStringFieldUpdateOperationsInput | string | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     enumValues?: NullableStringFieldUpdateOperationsInput | string | null
     schemaVersion?: StringFieldUpdateOperationsInput | string
@@ -19151,6 +19175,7 @@ export namespace Prisma {
     snakeName?: NullableStringFieldUpdateOperationsInput | string | null
     camelName?: NullableStringFieldUpdateOperationsInput | string | null
     pathInRawOutput?: NullableStringFieldUpdateOperationsInput | string | null
+    persistKey?: NullableStringFieldUpdateOperationsInput | string | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     enumValues?: NullableStringFieldUpdateOperationsInput | string | null
     schemaVersion?: StringFieldUpdateOperationsInput | string
@@ -20508,6 +20533,7 @@ export namespace Prisma {
     snakeName?: SortOrder
     camelName?: SortOrder
     pathInRawOutput?: SortOrder
+    persistKey?: SortOrder
     description?: SortOrder
     enumValues?: SortOrder
     schemaVersion?: SortOrder
@@ -20530,6 +20556,7 @@ export namespace Prisma {
     snakeName?: SortOrder
     camelName?: SortOrder
     pathInRawOutput?: SortOrder
+    persistKey?: SortOrder
     description?: SortOrder
     enumValues?: SortOrder
     schemaVersion?: SortOrder
@@ -20552,6 +20579,7 @@ export namespace Prisma {
     snakeName?: SortOrder
     camelName?: SortOrder
     pathInRawOutput?: SortOrder
+    persistKey?: SortOrder
     description?: SortOrder
     enumValues?: SortOrder
     schemaVersion?: SortOrder

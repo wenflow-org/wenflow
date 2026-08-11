@@ -732,6 +732,33 @@ export const adminHealthCenterApi = {
 };
 
 /**
+ * 运营术语表（全局「这是什么」抽屉数据源）
+ * 后端从 yaml-vocabulary（promptRole 人话）+ glossary-content（概念/完成度/文档）派生
+ */
+export interface GlossaryTerm {
+  term: string;
+  def: string;
+  category: 'concept' | 'flow' | 'status' | 'health';
+  where?: string;
+}
+
+export interface GlossaryPayload {
+  promptRoles: Array<{ id: string; label: string; hint: string }>;
+  completionStates: Array<{ status: string; label: string; short: string; hint: string }>;
+  semantics: Array<{ id: string; label: string; hint: string }>;
+  stages: Array<{ id: string; label: string; hint: string }>;
+  terms: GlossaryTerm[];
+  docs: Array<{ title: string; path: string; desc: string }>;
+  vocabularyVersion: string;
+}
+
+export const adminGlossaryApi = {
+  get: async () => {
+    return adminAxios.get<{ success: boolean; data: GlossaryPayload }>('/admin/glossary');
+  },
+};
+
+/**
  * 用户反馈中心（前台教学反馈的收集与处理）
  */
 export const adminFeedbackApi = {

@@ -23,6 +23,7 @@ import {
 } from '../field-dispatcher';
 import { createHash } from 'crypto';
 import { logger } from '../../utils/logger';
+import { PROMPT_ROLE_META } from '../yaml-vocabulary';
 
 const SUPPLEMENT_BANNER = '═══ 字段路由 SUPPLEMENT（运行时由路由表自动渲染，admin 可调）═══';
 const SUPPLEMENT_END_BANNER = '═══ SUPPLEMENT 结束 ═══';
@@ -66,25 +67,15 @@ export async function getRoutingSnapshotHash(agentId: string): Promise<string | 
   }
 }
 
-const ROLE_GROUP_LABELS: Record<string, string> = {
-  'hard-required': '【必填字段（缺一不进 proposing）】',
-  'soft-info': '【可选信息字段（不阻止收敛，但有最好填）】',
-  'hidden-inference': '【隐藏推断字段（仅做内部累积，不要展示给用户）】',
-  'proposal-output': '【方向方案产物（proposing 阶段输出）】',
-  'public-reply': '【面向用户的回复字段】',
-  'derived-presentation': '【派生展示字段（系统派生，仅供前端展示）】',
-  'control-signal': '【控制信号（驱动状态机）】',
-};
+/**
+ * promptRole 分组标签（渲染进 LLM supplement）。
+ * 单源：yaml-vocabulary.PROMPT_ROLE_META（本处只做格式包装，不写第二份人话文案）。
+ */
+const ROLE_GROUP_LABELS: Record<string, string> = Object.fromEntries(
+  PROMPT_ROLE_META.map((m) => [m.id, `【${m.label}（${m.hint}）】`]),
+);
 
-const ROLE_DISPLAY_ORDER: Array<keyof typeof ROLE_GROUP_LABELS> = [
-  'hard-required',
-  'soft-info',
-  'hidden-inference',
-  'proposal-output',
-  'public-reply',
-  'derived-presentation',
-  'control-signal',
-];
+const ROLE_DISPLAY_ORDER: string[] = PROMPT_ROLE_META.map((m) => m.id);
 
 interface RoutingGroupItem {
   fieldId: string;

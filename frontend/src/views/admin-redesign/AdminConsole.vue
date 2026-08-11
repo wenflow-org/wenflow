@@ -9,7 +9,7 @@
       </div>
     </div>
 
-    <Shell :current="scene" :crumb="crumbLabel" release @navigate="navigate" @palette="paletteOpen = true">
+    <Shell :current="scene" :crumb="crumbLabel" release @navigate="navigate" @palette="paletteOpen = true" @glossary="glossaryOpen = true">
       <div v-if="booting" class="ac-boot">
         <span class="ac-boot__spinner"></span>
         加载中…
@@ -22,6 +22,7 @@
       @close="paletteOpen = false"
       @navigate="navigate"
     />
+    <AdminGlossaryDrawer :open="glossaryOpen" @close="glossaryOpen = false" />
     <SkillDrawer />
   </section>
 </template>
@@ -51,6 +52,7 @@ import Announcements from './Announcements.vue';
 import SessionSecurity from './SessionSecurity.vue';
 import PromptWorkbench from './PromptWorkbench.vue';
 import SkillDrawer from './SkillDrawer.vue';
+import AdminGlossaryDrawer from './AdminGlossaryDrawer.vue';
 import LearnerDetail from './LearnerDetail.vue';
 import TeachingSessions from './TeachingSessions.vue';
 import GoalConversations from './GoalConversations.vue';
@@ -93,6 +95,7 @@ const detailComponents: Record<string, unknown> = {
 
 const scene = ref('overview');
 const paletteOpen = ref(false);
+const glossaryOpen = ref(false);
 const booting = ref(true);
 const bootError = ref('');
 
