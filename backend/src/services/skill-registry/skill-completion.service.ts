@@ -282,9 +282,11 @@ export function defaultRegisteredCheck(entry: SkillEntry): boolean {
   const rp = resolveRegistrationPoint(entry);
   if (rp === 'platform-direct' || rp === 'none') return true; // 平台守门直调 / 无注册语义，豁免
   if (rp === 'agents') {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- 惰性 require 防循环依赖
     const { agentHandlers } = require('../../agents') as { agentHandlers: Record<string, unknown> };
     return Object.prototype.hasOwnProperty.call(agentHandlers, `skill:${entry.skillId}`);
   }
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- 惰性 require 防循环依赖
   const { skillHandlers, allSkillDefinitions } = require('../../skills') as {
     skillHandlers: Record<string, unknown>;
     allSkillDefinitions: Array<{ name: string }>;

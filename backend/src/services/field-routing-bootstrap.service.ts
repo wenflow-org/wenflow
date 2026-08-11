@@ -151,7 +151,11 @@ export async function ensureStageFieldRoutings(
         managedByCode: true,
       },
     });
-    exists ? result.contractsSkipped++ : result.contractsCreated++;
+    if (exists) {
+      result.contractsSkipped++;
+    } else {
+      result.contractsCreated++;
+    }
   }
 
   for (const f of stage.fields) {
@@ -175,7 +179,11 @@ export async function ensureStageFieldRoutings(
         bindings: f.bindings ? JSON.stringify(f.bindings) : null,
       },
     });
-    exists ? result.fieldsSkipped++ : result.fieldsCreated++;
+    if (exists) {
+      result.fieldsSkipped++;
+    } else {
+      result.fieldsCreated++;
+    }
   }
 
   for (const r of stage.routings) {
@@ -197,7 +205,11 @@ export async function ensureStageFieldRoutings(
         managedByCode: true,
       },
     });
-    exists ? result.routingsSkipped++ : result.routingsCreated++;
+    if (exists) {
+      result.routingsSkipped++;
+    } else {
+      result.routingsCreated++;
+    }
   }
 
   return result;

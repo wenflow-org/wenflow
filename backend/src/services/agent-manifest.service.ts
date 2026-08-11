@@ -387,7 +387,7 @@ export function getAgentMembersOfAgent(agentId: string): string[] {
     return [...(LEGACY_AGENT_MEMBERS[agentId] || [])];
   }
   if (!derivedParentAgentMembers) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const skillsFile = require('./skill-registry/skills-file');
     const book = skillsFile.loadSkillsBookRaw();
     const map = new Map<string, string[]>();

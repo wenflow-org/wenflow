@@ -262,7 +262,11 @@ async function recomputeAll() {
         recomputeProgress.value++
       }
     }
-    fail ? toast.error(`重算完成：${ok} 成功 · ${fail} 失败`) : toast.success(`已重算 ${ok} 个快照（真实）`)
+    if (fail) {
+      toast.error(`重算完成：${ok} 成功 · ${fail} 失败`)
+    } else {
+      toast.success(`已重算 ${ok} 个快照（真实）`)
+    }
   } else {
     await new Promise((r) => setTimeout(r, 1200))
     demoRows.value.forEach((r) => (r.updated = '刚刚'))

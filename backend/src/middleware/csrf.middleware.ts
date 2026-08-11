@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { randomBytes } from 'crypto';
 
 const normalizeOrigin = (value?: string): string => {
   if (!value) {
@@ -9,7 +10,7 @@ const normalizeOrigin = (value?: string): string => {
 };
 
 export const generateCsrfToken = (): string => {
-  return require('crypto').randomBytes(32).toString('hex');
+  return randomBytes(32).toString('hex');
 };
 
 export const csrfMiddleware = (

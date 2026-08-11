@@ -828,7 +828,11 @@ export class APIExecutor {
       contentPreview, errorCategory: finalError?.category, errorCode: finalError?.code, errorMessage,
       executionMode
     };
-    success ? logger.info('[api-gateway] execution succeeded', logData) : logger.error('[api-gateway] execution failed', logData);
+    if (success) {
+      logger.info('[api-gateway] execution succeeded', logData);
+    } else {
+      logger.error('[api-gateway] execution failed', logData);
+    }
 
     const promptTokens = attempts.reduce((sum, item) => sum + (item.response?.usage?.prompt_tokens || 0), 0);
     const completionTokens = attempts.reduce((sum, item) => sum + (item.response?.usage?.completion_tokens || 0), 0);
