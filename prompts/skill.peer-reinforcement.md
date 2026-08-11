@@ -1,10 +1,10 @@
 ---
 agentId: skill:peer-reinforcement
-coreHash: cd74d7eb06573d444427477d6bf15cbc89ec3bc1ab115f03a98800660f1df0cc
+coreHash: d5bfbd6c6f35aff0e4afd6bbde32209dd4c2d4d1eb8a02be7dac94591926f16b
 coreVersion: 1
 temperature: 0.7
 maxTokens: 4000
-failurePolicy: fallback
+failurePolicy: propagate
 ---
 
 ## 身份

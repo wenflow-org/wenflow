@@ -1,6 +1,6 @@
 # v4 核心文件：peer-reinforcement（SKILL_PROTOCOL_V4 §2）
 # 由 prompts/skill.peer-reinforcement.md 基准 v1 反向提取（M1 块映射）
-# 说明：failurePolicy 由 v2 契约 deterministic-fallback 归一为 fallback（运行时契约以 manifest 为准）
+# 说明：failurePolicy 由 v2 契约 deterministic-fallback 归一为 fallback（运行时契约以 manifest 为准）；2026-08-11 纯重试+明确失败改造后改为 propagate（manifest blocking）
 skillId: peer-reinforcement
 baseVersion: 1
 identity: |
@@ -53,5 +53,5 @@ constraints:
   - 不直接给正确答案，只引导
   - message 内容不使用 markdown 格式
   - 学生高负荷（理解度低且连续受挫）时不得用辩论/反例等高压策略
-params: { temperature: 0.7, maxTokens: 4000, failurePolicy: fallback }
+params: { temperature: 0.7, maxTokens: 4000, failurePolicy: propagate }
 deltaOutput: false
