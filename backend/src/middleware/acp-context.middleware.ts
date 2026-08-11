@@ -24,8 +24,16 @@ export const acpContextMiddleware = (defaultSourceEntry: SourceEntry) => {
   return (req: Request, res: Response, next: NextFunction) => {
     const headerSourceEntry = req.headers['x-source-entry'] as string;
     let sourceEntry: SourceEntry = defaultSourceEntry;
-    
-    if (headerSourceEntry === 'user' || headerSourceEntry === 'test' || headerSourceEntry === 'admin' || headerSourceEntry === 'platform' || headerSourceEntry === 'arena' || headerSourceEntry === 'lab' || headerSourceEntry === 'simulation') {
+
+    // 安全加固：来源仅允许服务端按会话推导。普通用户会话一律忽略客户端头，
+    // 防止伪造 X-Source-Entry: admin/platform/test 污染调用日志与遥测审计。
+    // 仅管理员会话可显式覆盖（用于测试站点等受控场景）。
+    const isAdminSession = req.user?.isAdmin === true || req.user?.sessionType === 'admin';
+    if (isAdminSession && (
+      headerSourceEntry === 'user' || headerSourceEntry === 'test' || headerSourceEntry === 'admin'
+      || headerSourceEntry === 'platform' || headerSourceEntry === 'arena' || headerSourceEntry === 'lab'
+      || headerSourceEntry === 'simulation'
+    )) {
       sourceEntry = headerSourceEntry;
     }
     

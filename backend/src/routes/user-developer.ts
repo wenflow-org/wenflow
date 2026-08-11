@@ -1,5 +1,6 @@
 import express from 'express';
 import prisma from '../config/database';
+import { logger } from '../utils/logger';
 
 const router = express.Router();
 const DEFAULT_GRANT_TTL_MINUTES = 24 * 60;
@@ -11,7 +12,15 @@ const MAX_SCOPE_DEFINITION_BYTES = 2048;
 const MAX_PURPOSE_CHARS = 200;
 
 function normalizeProjectionScope(value: any): 'dashboard' | 'full' {
+  // 安全加固：用户自建 grant 仅允许 dashboard 范围；full 仅管理员可授予
   return value === 'full' ? 'full' : 'dashboard';
+}
+
+function rejectFullScope(value: any): string | null {
+  if (value === 'full') {
+    return 'full 范围仅支持管理员授予，请使用仅学习台（dashboard）范围';
+  }
+  return null;
 }
 
 function serializeScopeDefinition(value: any): string | null {
@@ -203,9 +212,10 @@ router.get('/access-grants', async (req: any, res) => {
       }
     });
   } catch (error: any) {
+    logger.error('[user-developer] 查询 access grant 失败:', error);
     res.status(500).json({
       success: false,
-      error: { message: error.message || '查询 access grant 失败' }
+      error: { message: '查询 access grant 失败，请稍后重试' }
     });
   }
 });
@@ -268,6 +278,15 @@ router.post('/access-grants', async (req: any, res) => {
       });
     }
 
+    // 安全加固：full 范围仅管理员可授予（防止用户自授过高权限投影许可）
+    const fullScopeError = rejectFullScope(req.body?.scope);
+    if (fullScopeError) {
+      return res.status(400).json({
+        success: false,
+        error: { message: fullScopeError }
+      });
+    }
+
     const now = new Date();
     const grant = await prisma.$transaction(async (tx) => {
       await tx.projection_access_grants.updateMany({
@@ -295,9 +314,10 @@ router.post('/access-grants', async (req: any, res) => {
       data: formatGrant(grant)
     });
   } catch (error: any) {
+    logger.error('[user-developer] 创建 access grant 失败:', error);
     res.status(500).json({
       success: false,
-      error: { message: error.message || '创建 access grant 失败' }
+      error: { message: '创建 access grant 失败，请稍后重试' }
     });
   }
 });
@@ -326,8 +346,10 @@ router.post('/access-grants/:grantId/revoke', async (req: any, res) => {
     }
 
     const now = new Date();
+    // 修复：revoke 只撤销目标 grant（此前缺 id 条件会连带撤销该用户全部活跃 grant）
     await prisma.projection_access_grants.updateMany({
       where: {
+        id: grantId,
         userId,
         revokedAt: null,
         expiresAt: { gt: now }
@@ -344,9 +366,10 @@ router.post('/access-grants/:grantId/revoke', async (req: any, res) => {
       data: formatGrant(grant)
     });
   } catch (error: any) {
+    logger.error('[user-developer] 撤销 access grant 失败:', error);
     res.status(500).json({
       success: false,
-      error: { message: error.message || '撤销 access grant 失败' }
+      error: { message: '撤销 access grant 失败，请稍后重试' }
     });
   }
 });
