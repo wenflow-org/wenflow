@@ -43,16 +43,9 @@ describe('session-wrapup payload snapshot parity', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockCallPrompt.mockImplementation((spec: any) => {
-      if (spec?.agentId === 'skill:session-evaluation-fallback') {
-        return Promise.resolve({
-          success: true,
-          output: { sessionLss: 5, sessionKtl: 6, sessionLf: 4, confidence: 0.7, reasoning: 'ok' },
-          debug: { attempts: [], extractedJson: null, rawModelOutput: '' },
-        })
-      }
       return Promise.resolve({
         success: false,
-        error: { code: 'SESSION_WRAPUP_FAILED', message: 'force fallback path' },
+        error: { code: 'SESSION_WRAPUP_FAILED', message: 'force failure path' },
         debug: { attempts: [], extractedJson: null, rawModelOutput: '' },
       })
     })
@@ -61,7 +54,7 @@ describe('session-wrapup payload snapshot parity', () => {
   it('payload carries the tagged sections the prompt input spec declares', async () => {
     await sessionWrapupAgent.generate(MINIMAL_INPUT as any)
 
-    expect(mockCallPrompt).toHaveBeenCalledTimes(2)
+    expect(mockCallPrompt).toHaveBeenCalledTimes(1)
     const [spec] = mockCallPrompt.mock.calls[0]
     const payload = spec.buildUserPayload(MINIMAL_INPUT, {})
 
@@ -100,5 +93,57 @@ describe('session-wrapup payload snapshot parity', () => {
     const payload = spec.buildUserPayload(input, {})
 
     expect(payload).toContain('【学习状态】无')
+  })
+})
+
+describe('session-wrapup 纯重试+明确失败：evaluation 缺失形态', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('主调用失败（重试耗尽）→ summary 降级 + evaluation=null + evaluationSource=unavailable，不再调补全 skill', async () => {
+    mockCallPrompt.mockImplementation(() => Promise.resolve({
+      success: false,
+      error: { code: 'SESSION_WRAPUP_FAILED', message: 'force failure path' },
+      debug: { attempts: [], extractedJson: null, rawModelOutput: '' },
+    }))
+
+    const result = await sessionWrapupAgent.generate(MINIMAL_INPUT as any)
+
+    expect(mockCallPrompt).toHaveBeenCalledTimes(1)
+    expect(result.summarySource).toBe('fallback')
+    expect(result.evaluation).toBeNull()
+    expect(result.evaluationSource).toBe('unavailable')
+  })
+
+  it('主调用成功但缺 evaluation → summary 保留 + evaluation=null + evaluationSource=unavailable', async () => {
+    const validSummary = {
+      topicSummary: '本节课围绕"闭包"进行了学习。',
+      knowledgeSummary: '本节共涉及2个知识点。',
+      practiceAdvice: '复盘本节课核心概念。',
+      learningEvaluation: '建议根据当前掌握情况继续推进。',
+      knowledgeItems: [
+        { name: '闭包', status: 'learning', progress: 50, evidence: '继续练习' },
+        { name: '词法作用域', status: 'mastered', progress: 90, evidence: '表达和应用较稳' },
+      ],
+      keyTakeaways: ['完成本节学习回顾'],
+      actionPlan: ['继续完成下一步练习'],
+      evaluationHighlights: { strengths: ['有知识点推进证据'], improvements: ['继续巩固'] },
+      metricInterpretation: { session: '本节课总结已生成。', longTerm: '长期指标需后续观察。' },
+      summaryVersion: 'v2',
+    }
+    mockCallPrompt.mockImplementation(() => Promise.resolve({
+      success: true,
+      output: { summary: validSummary },
+      debug: { attempts: [], extractedJson: null, rawModelOutput: '' },
+    }))
+
+    const result = await sessionWrapupAgent.generate(MINIMAL_INPUT as any)
+
+    expect(mockCallPrompt).toHaveBeenCalledTimes(1)
+    expect(result.summarySource).toBe('model')
+    expect(result.summary.topicSummary).toContain('闭包')
+    expect(result.evaluation).toBeNull()
+    expect(result.evaluationSource).toBe('unavailable')
   })
 })

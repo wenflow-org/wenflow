@@ -29,5 +29,5 @@ fields:
 constraints:
   - message 与 question 必须互不相同，也不能让 question 重复 message 的原句
   - 不解释 mode 的定义，不输出分析过程，不输出任务验收结论
-params: { temperature: 0.4, maxTokens: 1200, failurePolicy: fallback }
+params: { temperature: 0.4, maxTokens: 1200, failurePolicy: propagate }
 deltaOutput: false

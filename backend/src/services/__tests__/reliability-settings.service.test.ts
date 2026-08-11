@@ -37,7 +37,7 @@ describe('reliability settings service', () => {
     await expect(getPlatformReliabilitySettings()).resolves.toEqual({
       maxUpstreamAttempts: 3,
       maxTransportRetries: 1,
-      maxLogicalRetries: 1,
+      maxLogicalRetries: 2,
       defaultRequestTimeoutMs: 300000,
       retryBaseDelayMs: 1000,
       maxRetryAfterMs: 10000,

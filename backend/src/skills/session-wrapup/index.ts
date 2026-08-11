@@ -105,7 +105,14 @@ export interface SessionWrapupResult {
   summary: SessionWrapupSummary;
   evaluation: SessionWrapupEvaluation | null;
   summarySource: 'model' | 'fallback';
-  evaluationSource: 'model' | 'ai-fallback' | 'failed';
+  /**
+   * evaluation 来源：
+   * - 'model'：主 prompt 产出
+   * - 'ai-fallback'：仅存量数据可能携带（2026-08-11 起不再产出）
+   * - 'unavailable'：evaluation 缺失（纯重试+明确失败：不补全、不保守评分，evaluation=null）
+   * - 'failed'：历史/兜底路径标记
+   */
+  evaluationSource: 'model' | 'ai-fallback' | 'failed' | 'unavailable';
   runtimeEnvelope?: ReturnType<typeof adaptToRuntimeEnvelope>;
 }
 
@@ -113,7 +120,7 @@ export interface SessionWrapupArtifact {
   status: 'complete' | 'summary-only';
   sources: {
     summary: 'model' | 'fallback';
-    evaluation: 'model' | 'ai-fallback' | 'failed';
+    evaluation: 'model' | 'ai-fallback' | 'failed' | 'unavailable';
   };
   summary: SessionWrapupSummary;
   evaluation: SessionWrapupEvaluation | null;
@@ -434,35 +441,6 @@ function buildEvidenceSnapshot(input: SessionWrapupInput) {
   };
 }
 
-function buildConservativeEvaluation(input: SessionWrapupInput): SessionWrapupEvaluation {
-  const turnCount = input.sessionEvidence?.turnCount || 0;
-  const avgUnderstanding = typeof input.sessionEvidence?.avgUnderstanding === 'number'
-    ? input.sessionEvidence.avgUnderstanding
-    : 0.5;
-  const avgEngagement = typeof input.sessionEvidence?.avgEngagement === 'number'
-    ? input.sessionEvidence.avgEngagement
-    : 0.5;
-  const confusionCount = input.sessionEvidence?.topConfusionPoints?.length || 0;
-  const progressRatio = input.knowledgePoints.length > 0
-    ? input.knowledgePoints.reduce((sum, point) => sum + Math.max(0, Math.min(100, point.progress)), 0) / (input.knowledgePoints.length * 100)
-    : 0.35;
-  const masteredRatio = input.knowledgePoints.length > 0
-    ? input.knowledgePoints.filter((point) => point.status === 'mastered').length / input.knowledgePoints.length
-    : 0;
-
-  const sessionKtl = Math.max(1, Math.min(10, Number(((progressRatio * 4.5) + (masteredRatio * 3) + (avgUnderstanding * 2.5)).toFixed(1))));
-  const sessionLss = Math.max(1, Math.min(10, Number((((1 - avgUnderstanding) * 4.5) + (confusionCount * 1.2) + ((turnCount > 6 ? 1 : 0) * 1.5)).toFixed(1))));
-  const sessionLf = Math.max(1, Math.min(10, Number((((1 - avgEngagement) * 5) + (turnCount > 8 ? 2 : turnCount > 5 ? 1 : 0)).toFixed(1))));
-
-  return {
-    sessionLss,
-    sessionKtl,
-    sessionLf,
-    confidence: 0.2,
-    reasoning: '证据不足，已基于本节对话轮数、理解度、投入度与知识点进展生成保守评分。',
-  };
-}
-
 const SESSION_WRAPUP_FALLBACK_RUNTIME_CONTRACT = buildDefaultRuntimeContract('session-wrapup', 'distiller');
 
 const sessionWrapupPromptSpec: PromptCallSpec<SessionWrapupInput, Record<string, unknown> | null> = {
@@ -496,7 +474,8 @@ const sessionWrapupPromptSpec: PromptCallSpec<SessionWrapupInput, Record<string,
 };
 
 export function toWrapupArtifact(result: SessionWrapupResult, input: SessionWrapupInput): SessionWrapupArtifact {
-  const hasReliableEvaluation = result.evaluationSource !== 'failed' && !!result.evaluation;
+  const hasReliableEvaluation =
+    (result.evaluationSource === 'model' || result.evaluationSource === 'ai-fallback') && !!result.evaluation;
   return {
     status: hasReliableEvaluation ? 'complete' : 'summary-only',
     sources: {
@@ -519,9 +498,10 @@ export function toWrapupSkillOutcome(
   input: SessionWrapupInput
 ): SkillOutcome<SessionWrapupArtifact> {
   const artifact = toWrapupArtifact(result, input);
+  const evaluationFailed = result.evaluationSource === 'failed' || result.evaluationSource === 'unavailable';
   const quality =
-    result.summarySource === 'fallback' || result.evaluationSource === 'failed'
-      ? result.summarySource === 'fallback' && result.evaluationSource === 'failed'
+    result.summarySource === 'fallback' || evaluationFailed
+      ? result.summarySource === 'fallback' && evaluationFailed
         ? 'fallback'
         : 'partial'
       : result.evaluationSource === 'ai-fallback'
@@ -544,7 +524,6 @@ export class SessionWrapupAgent {
     let result: SessionWrapupResult | null = null;
 
     try {
-      const caller: CallerInfo = { agentId: 'teaching-agent', skillId: 'session-wrapup' };
       const promptResult = await callPrompt(sessionWrapupPromptSpec, input);
 
       // A failed raw-contract retry still retains the final extracted JSON in
@@ -559,18 +538,10 @@ export class SessionWrapupAgent {
       const summary = isSummary(parsedSummary)
         ? parsedSummary
         : buildFallbackSummary(input);
-      let evaluation = extractEvaluation(parsedEvaluation);
-      let evaluationSource: 'model' | 'ai-fallback' | 'failed' = evaluation ? 'model' : 'failed';
-
-      if (!evaluation) {
-        evaluation = await this.generateEvaluationFallback(input, caller);
-        evaluationSource = evaluation ? 'ai-fallback' : 'failed';
-      }
-
-      if (!evaluation) {
-        evaluation = buildConservativeEvaluation(input);
-        evaluationSource = 'failed';
-      }
+      // 纯重试+明确失败：主 prompt 重试后仍缺 evaluation → 不补全、不保守评分，
+      // 直接 evaluation=null + evaluationSource='unavailable'（下游全链 null 容忍，与 M1 兜底同形态）。
+      const evaluation = extractEvaluation(parsedEvaluation);
+      const evaluationSource: SessionWrapupResult['evaluationSource'] = evaluation ? 'model' : 'unavailable';
 
       result = {
         summary,
@@ -580,8 +551,8 @@ export class SessionWrapupAgent {
         runtimeEnvelope: promptResult.runtimeEnvelope || adaptToRuntimeEnvelope({
           contract: SESSION_WRAPUP_FALLBACK_RUNTIME_CONTRACT,
           artifact: { summary, evaluation },
-          phase: evaluationSource === 'failed' ? 'wrapup-generated' : 'wrapup-generated',
-          status: evaluationSource === 'failed' ? 'partial' : 'succeeded',
+          phase: 'wrapup-generated',
+          status: evaluationSource === 'unavailable' ? 'partial' : 'succeeded',
           isTerminal: false,
           nextAction: 'finalize-session',
           nextState: { stage: 'wrapup-generated', summarySource: isSummary(parsedSummary) ? 'model' : 'fallback', evaluationSource },
@@ -593,21 +564,20 @@ export class SessionWrapupAgent {
       error = e instanceof Error ? e : new Error('Unknown error');
       logger.error('[SessionWrapupAgent] 生成失败', { error });
       const fallbackSummary = buildFallbackSummary(input);
-      const fallbackEvaluation = buildConservativeEvaluation(input);
       result = {
         summary: fallbackSummary,
-        evaluation: fallbackEvaluation,
+        evaluation: null,
         summarySource: 'fallback',
-        evaluationSource: 'failed',
+        evaluationSource: 'unavailable',
         runtimeEnvelope: adaptToRuntimeEnvelope({
           contract: SESSION_WRAPUP_FALLBACK_RUNTIME_CONTRACT,
-          artifact: { summary: fallbackSummary, evaluation: fallbackEvaluation },
+          artifact: { summary: fallbackSummary, evaluation: null },
           phase: 'wrapup-generated',
           status: 'failed',
           isTerminal: false,
           nextAction: 'finalize-session',
           reason: error.message,
-          nextState: { stage: 'wrapup-generated', summarySource: 'fallback', evaluationSource: 'failed' },
+          nextState: { stage: 'wrapup-generated', summarySource: 'fallback', evaluationSource: 'unavailable' },
         }),
       };
       return result;
@@ -618,30 +588,6 @@ export class SessionWrapupAgent {
         success: result !== null && error === null,
         error: error?.message || null,
       });
-    }
-  }
-
-  private async generateEvaluationFallback(
-    input: SessionWrapupInput,
-    caller: CallerInfo
-  ): Promise<SessionWrapupEvaluation | null> {
-    try {
-      // 懒加载避免 skills/index -> session-wrapup -> skills/index 循环依赖
-      const { executeSkill, auxSkillDefinitionMap } = await import('..');
-      const output = await executeSkill(auxSkillDefinitionMap['session-evaluation-fallback'], {
-        ...input,
-        __fallback: null,
-        __prompt: {
-          requestPath: '/skills/session-wrapup/evaluation-fallback',
-          callerAgentId: caller.agentId,
-        },
-      });
-      return output ? (extractEvaluation(output) as SessionWrapupEvaluation) : null;
-    } catch (error) {
-      logger.warn('[SessionWrapupAgent] AI fallback evaluation 失败', {
-        error: error instanceof Error ? error.message : String(error)
-      });
-      return null;
     }
   }
 }

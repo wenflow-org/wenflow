@@ -177,7 +177,9 @@ const evaluationDegraded = computed(() => {
   const currentWrapup = sessionDetail.value?.wrapup;
   if (!currentWrapup) return true;
   return currentWrapup?.evaluationSource === 'failed'
-    || currentWrapup?.sources?.evaluation === 'failed';
+    || currentWrapup?.evaluationSource === 'unavailable'
+    || currentWrapup?.sources?.evaluation === 'failed'
+    || currentWrapup?.sources?.evaluation === 'unavailable';
 });
 const isTimeoutFallback = computed(() => sessionDetail.value?.wrapup?.sources?.summary === 'timeout-fallback');
 const canSubmitSessionFeedback = computed(() => !isProjectionMode());

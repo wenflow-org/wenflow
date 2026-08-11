@@ -65,7 +65,7 @@ export function createRetryBudget(options: RetryBudgetOptions = {}): RetryBudget
       ),
       maxLogicalRetries: clampInteger(
         options.maxLogicalRetries,
-        1,
+        2,
         0,
         RETRY_BUDGET_HARD_LIMITS.maxLogicalRetries
       )

@@ -3,6 +3,20 @@
 > 本文件随协议修订维护：SKILL_PROTOCOL_V4.md 等现行规范文档每次修订，均在此登记变更条目。
 > 本文件是 doc/ 纳入版本控制（2026-08-10）后的变更基线；此前历次修订无 git 历史，仅以文档内注记（如"2026-08-09 复核"）为据。
 
+## 2026-08-11 — 纯重试 + 明确失败改造（移除降级设计）
+
+### 行为变化
+
+- **failurePolicy 词表**：11 个 `fallback` core 全部改为 `propagate`（manifest 同步 `blocking`）；core 词表保留 `fallback` 仅为兼容历史数据，中期收敛为 `retry | propagate`（见 RETRY_FAILURE_IMPACT.md §5.2 路径 B）。
+- **session-wrapup**：evaluation 缺失时不再调 session-evaluation-fallback 补全、不再保守评分；直接 `evaluation=null + evaluationSource='unavailable'`（全链路 null 容忍，与 M1 兜底同形态）。
+- **teaching-opening-generator**：开场生成失败/超时不再返回确定性 fallback opening，改为抛错（`OPENING_GENERATION_FAILED`，保留 15s 超时边界）→ `failInitialization` 清理会话 + 前端可见"开课失败"。
+- **runAux**：`resolveDefaultFailureMode` 对存量 `deterministic-fallback`/`best-effort` 防御性按 propagate 处理并 warn；`__fallback` 保留（调用方显式兜底属调用方决策）。
+- **重试预算**：`maxLogicalRetries` 默认 1 → 2（硬上限 2 保持，与 `RETRY_BUDGET_HARD_LIMITS` 对齐）。
+
+### 文档
+
+- SKILL_PROTOCOL_V4.md §2.4.4：failurePolicy 语义同步（fallback 已退役、防御性 propagate 处理）。
+
 ## 2026-08-09 — v4.0-draft → v4.1-draft
 
 ### 新增

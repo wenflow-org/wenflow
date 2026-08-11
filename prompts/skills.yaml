@@ -464,7 +464,7 @@ skills:
     dataSource:
       db: []
       sandbox: []
-    notes: 嵌套调用（session-wrapup/index.ts:631），输入 = session-wrapup 的 input 透传，无独立 DB 直读
+    notes: 2026-08-11 纯重试+明确失败改造后不再被主链调用（session-wrapup 缺 evaluation 直接返回 evaluation=null + 'unavailable'）；保留注册以兼容存量 ACTIVE prompt；db:[]（无独立 DB 直读）
 
   - skillId: learner-progress-report
     kind: aux

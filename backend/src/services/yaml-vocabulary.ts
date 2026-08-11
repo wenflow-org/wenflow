@@ -40,7 +40,11 @@ export type CoreValueType = (typeof CORE_VALUE_TYPES)[number];
 export const VISIBILITY_PRESETS = ['user-clarification', 'agent-internal'] as const;
 export type VisibilityPreset = (typeof VISIBILITY_PRESETS)[number];
 
-/** core params.failurePolicy（业务意图词表，SKILL_PROTOCOL_V4 §2.4.4） */
+/**
+ * core params.failurePolicy（业务意图词表，SKILL_PROTOCOL_V4 §2.4.4）
+ * 2026-08-11：fallback 已退役（纯重试+明确失败改造），存量 core 已收敛为 retry/propagate；
+ * 词表保留 fallback 仅为兼容历史数据，中期收敛为 retry | propagate 两值（见 RETRY_FAILURE_IMPACT.md §5.2 路径 B）。
+ */
 export const FAILURE_POLICY_CORE = ['retry', 'fallback', 'propagate'] as const;
 export type CoreFailurePolicy = (typeof FAILURE_POLICY_CORE)[number];
 

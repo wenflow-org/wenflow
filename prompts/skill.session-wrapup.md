@@ -1,10 +1,10 @@
 ---
 agentId: skill:session-wrapup
-coreHash: 884453dfa2111cc5e1f021bd1acd379b86314755d8fb205de7079917f58edd7f
+coreHash: ef3b5e5377488127c3b9aae667151495555ee52726d5b9ede0738301c9bc5d79
 coreVersion: 1
 temperature: 0.7
 maxTokens: 4000
-failurePolicy: fallback
+failurePolicy: propagate
 ---
 
 ## 身份

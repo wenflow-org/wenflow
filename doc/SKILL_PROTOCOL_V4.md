@@ -52,7 +52,7 @@ constraints: [string, ...]   # 必填，业务边界约束，可为空数组
 params:                      # 必填，执行参数
   temperature: number        #   必填
   maxTokens: integer         #   必填
-  failurePolicy: enum        #   必填，retry | fallback | propagate
+  failurePolicy: enum        #   必填，retry | fallback | propagate；2026-08-11 起 fallback 已退役（纯重试+明确失败），存量 core 已收敛为 retry/propagate
 examples: [string, ...]      # 可选，编译参考用例，不进字段表
 outputMedia: enum            # 可选，json（默认）| markdown | text；决定 §4.3 注入条款分支
 deltaOutput: boolean         # 可选，默认 false；试验性条款，见 §5.4（仅 outputMedia=json 时生效）
@@ -312,13 +312,13 @@ type SkillResult = {
 1. **入口选择**：只要输出用 `executeSkill`；需要 `quality`/`debug`/`runtimeEnvelope`（区分 model/fallback、取 tokenUsage/model）用 `executeSkillWithResult`。
 2. **保留字段**（handler 从输入对象剥离，不进入 user payload）：
    - `__prompt`：PromptCallContext 透传（`requestPath`/`userId`/`retryBudget`/`assistantMessages`/...），另支持 `callerAgentId`/`callerAction` 写入 gateway caller。
-   - `__fallback`：LLM 失败时返回的降级输出；优先级高于 handler 内置降级。
+   - `__fallback`：调用方显式注入的确定性兜底值（属调用方决策，非系统降级；2026-08-11 起 runAux 不再按 core 策略自动降级）。
    - `__onFailure`：`'throw' | 'fallback'`，覆盖 core 声明的默认策略（仅用于必须保持既有抛出契约的调用点，如 path-planning 的 goal-analysis）。
 3. **失败策略执行语义**（handler 行为必须与 core `params.failurePolicy` 一致）：
    - `propagate`：失败抛错（经 executor 记录 failed span 后重抛），由调用方 try/catch 决定降级。
-   - `fallback`：返回 `__fallback` 或内置确定性降级，结果标 `quality: 'fallback'`，不抛错。
+   - `fallback`：**已退役**（2026-08-11 纯重试+明确失败改造后 core 无 fallback 值）；存量数据带该值时 runAux 防御性按 propagate 处理并 warn，不产出降级产物。
    - `retry`：由 callPrompt 的 retryStrategy 与逻辑重试预算承载，handler 不重复实现。
-4. **failurePolicy 双词表映射**（历史存量，唯一合法映射）：core 词表 → manifest 词表为 `propagate → blocking`、`fallback → deterministic`、`retry → retry`；两边一一对应，lint/parity 检查已硬约束。新文件不得创造第四种取值。
+4. **failurePolicy 双词表映射**（历史存量，唯一合法映射）：core 词表 → manifest 词表为 `propagate → blocking`、`fallback → deterministic`、`retry → retry`；两边一一对应，lint/parity 检查已硬约束。新文件不得创造第四种取值；中期收敛目标：词表收缩为 `retry | propagate`（RETRY_FAILURE_IMPACT.md §5.2 路径 B）。
 5. **平台层例外**：`semantic-freeze-judge` 是发布流水线的 Gate #3，由 `services/prompt-lab/semantic-freeze-judge.ts` 直调 `callPrompt`，不注册进 `skillHandlers`；这是唯一合法的业务外直调例外，新增例外须先修改本节。
 
 ## 6. 版本、发布与漂移检测

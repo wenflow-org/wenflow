@@ -71,5 +71,5 @@ constraints:
   - 只基于输入证据输出，不虚构学生已掌握的内容
   - summary 是给学生看的，不直接复述内部字段名或状态码
   - 不把历史已掌握内容误写为本节新增成果
-params: { temperature: 0.7, maxTokens: 4000, failurePolicy: fallback }
+params: { temperature: 0.7, maxTokens: 4000, failurePolicy: propagate }
 deltaOutput: false

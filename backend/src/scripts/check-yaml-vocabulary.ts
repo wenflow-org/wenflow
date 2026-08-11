@@ -51,7 +51,21 @@ function loadManifests(): Map<string, RawManifest> {
   return manifests;
 }
 
-function main() {
+export interface YamlVocabularyCheckReport {
+  ok: boolean;
+  /** 阻断级问题（C1~C5 失败条目） */
+  errors: string[];
+  /** 非阻断说明（词表零使用等） */
+  notes: string[];
+  /** 每类检查的统计行（CLI 展示用） */
+  summaryLines: string[];
+}
+
+/**
+ * C1~C5 词表交叉校验（纯 fs 读盘，同步；check-yaml-vocabulary.ts main() 与
+ * health-center 聚合共用同一实现，不复制逻辑）。
+ */
+export function runYamlVocabularyCheck(): YamlVocabularyCheckReport {
   const errors: string[] = [];
   const notes: string[] = [];
 
@@ -164,16 +178,25 @@ function main() {
     }
   }
 
-  // ---- 汇总输出 ----
-  console.log(`[yaml:check] core ${cores.length} 个 / orchestration ${stages.length} 个 stage / manifest ${manifests.size} 个（目录 ${MANIFESTS_DIR}）`);
-  console.log(`[yaml:check] C1 failurePolicy: ${cores.length - failurePolicyMismatch}/${cores.length} 映射一致（core 词表 ${FAILURE_POLICY_CORE.join('/')} ↔ manifest ${FAILURE_POLICY_MANIFEST.join('/')}）`);
-  console.log(`[yaml:check] C2 参数双写: temperature+maxTokens 逐项一致（${cores.length * 2 - paramMismatch}/${cores.length * 2} 项）`);
-  console.log(`[yaml:check] C3 acceptableAgentIds: ${manifests.size} 个 manifest 无字面重复（清理 ${dedupeCount} 项）`);
-  console.log(`[yaml:check] C4 valueType: ${fieldCount} 字段全量 ∈ CORE_VALUE_TYPES 且映射闭环；分布 ${[...valueTypeCounts.entries()].map(([t, n]) => `${t}=${n}`).join(' ')}`);
-  console.log(`[yaml:check] C5 visibilityPreset: ${presetCount} 处全量命中；分布 ${[...presetCounts.entries()].map(([t, n]) => `${t}=${n}`).join(' ')}`);
+  // ---- 汇总 ----
+  const summaryLines = [
+    `[yaml:check] core ${cores.length} 个 / orchestration ${stages.length} 个 stage / manifest ${manifests.size} 个（目录 ${MANIFESTS_DIR}）`,
+    `[yaml:check] C1 failurePolicy: ${cores.length - failurePolicyMismatch}/${cores.length} 映射一致（core 词表 ${FAILURE_POLICY_CORE.join('/')} ↔ manifest ${FAILURE_POLICY_MANIFEST.join('/')}）`,
+    `[yaml:check] C2 参数双写: temperature+maxTokens 逐项一致（${cores.length * 2 - paramMismatch}/${cores.length * 2} 项）`,
+    `[yaml:check] C3 acceptableAgentIds: ${manifests.size} 个 manifest 无字面重复（清理 ${dedupeCount} 项）`,
+    `[yaml:check] C4 valueType: ${fieldCount} 字段全量 ∈ CORE_VALUE_TYPES 且映射闭环；分布 ${[...valueTypeCounts.entries()].map(([t, n]) => `${t}=${n}`).join(' ')}`,
+    `[yaml:check] C5 visibilityPreset: ${presetCount} 处全量命中；分布 ${[...presetCounts.entries()].map(([t, n]) => `${t}=${n}`).join(' ')}`,
+  ];
+
+  return { ok: errors.length === 0, errors, notes, summaryLines };
+}
+
+function main(): void {
+  const { ok, errors, notes, summaryLines } = runYamlVocabularyCheck();
+  for (const line of summaryLines) console.log(line);
   for (const note of notes) console.log(`[yaml:check] NOTE ${note}`);
 
-  if (errors.length > 0) {
+  if (!ok) {
     for (const message of errors) console.error(`[yaml:check] FAIL ${message}`);
     process.exitCode = 1;
     return;
@@ -181,4 +204,6 @@ function main() {
   console.log('[yaml:check] OK：C1~C5 词表交叉校验全部通过');
 }
 
-main();
+if (require.main === module) {
+  main();
+}

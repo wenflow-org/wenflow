@@ -3,11 +3,12 @@
  *
  * 统一约定：
  * - 所有 handler 只经 callPrompt 调用 ACTIVE prompt（requireActivePrompt）。
- * - 失败策略遵循 core 声明：propagate 技能失败时抛错；fallback 技能返回确定性降级结果（quality='fallback'）。
- * - 调用方通过输入对象中的保留字段注入调用上下文与降级值：
+ * - 失败策略遵循 core 声明：propagate 技能失败时抛错；fallback 已退役（2026-08-11），
+ *   存量 fallback 值防御性按 propagate 处理（见 resolveDefaultFailureMode）。
+ * - 调用方通过输入对象中的保留字段注入调用上下文与显式兜底：
  *     __prompt:    PromptCallContext 透传（requestPath/userId/retryBudget/assistantMessages/...），
  *                  另支持 callerAgentId / callerAction（写入 gateway caller）。
- *     __fallback:  LLM 失败时返回的降级输出（仅 fallback 策略技能生效；未提供时使用内置确定性降级）。
+ *     __fallback:  调用方显式注入的确定性兜底值（属调用方决策，不是系统降级；未提供时无降级）。
  *     __onFailure: 'throw' | 'fallback'，覆盖 core 声明的默认策略（用于必须保持既有抛出契约的调用点）。
  */
 import { callPrompt } from '../../composers/prompt-composer';
@@ -15,6 +16,7 @@ import type { PromptCallContext } from '../../composers/types';
 import type { SkillDefinition, SkillExecutionResult } from '../protocol';
 import { agentConfigService } from '../../services/agentConfig.service';
 import { resolveEffectivePromptContract } from '../../services/prompt-lab/resolve-prompt-contract';
+import { logger } from '../../utils/logger';
 
 export type AuxSkillId =
   | 'teaching-opening-generator'
@@ -139,7 +141,9 @@ async function runAux<TOutput>(opts: RunAuxOptions<TOutput>): Promise<SkillExecu
 
 /**
  * 解析 skill 默认失败策略：读取 ACTIVE prompt 的 promptContract.failurePolicy。
- * 映射：deterministic（core fallback）→ 降级；blocking/retry（core propagate/retry）→ 抛错。
+ * 映射：retry / blocking（core retry / propagate）→ 抛错；deterministic-fallback / best-effort
+ * 为已退役词表（2026-08-11 纯重试+明确失败改造后 core 无 fallback 值）——防御性兜底：
+ * 若存量数据仍带这些值，按 propagate（抛错）处理并 warn，不再产出降级产物。
  * 读取失败时保守抛错（fail loud）。
  */
 async function resolveDefaultFailureMode(skillId: AuxSkillId): Promise<'throw' | 'fallback'> {
@@ -147,7 +151,11 @@ async function resolveDefaultFailureMode(skillId: AuxSkillId): Promise<'throw' |
     const agentId = `skill:${skillId}`;
     const promptConfig = await agentConfigService.getActivePrompt(agentId);
     const { contract } = await resolveEffectivePromptContract(agentId, promptConfig);
-    return ['deterministic-fallback', 'best-effort'].includes(contract.failurePolicy) ? 'fallback' : 'throw';
+    if (['deterministic-fallback', 'best-effort'].includes(contract.failurePolicy)) {
+      logger.warn(`[runAux] ${skillId} 的 failurePolicy=${contract.failurePolicy} 已退役（fallback 语义下线），按 propagate 抛错处理`);
+      return 'throw';
+    }
+    return 'throw';
   } catch {
     return 'throw';
   }
@@ -160,6 +168,9 @@ async function resolveDefaultFailureMode(skillId: AuxSkillId): Promise<'throw' |
 const META: Record<AuxSkillId, AuxSkillMeta> = {
   'teaching-opening-generator': { skillId: 'teaching-opening-generator', displayName: '课堂开场交互生成器', description: '生成教学 Session 的开场 message、question 与 quickReplies', category: 'generation' },
   'session-evaluation-fallback': { skillId: 'session-evaluation-fallback', displayName: '课程评估补全器', description: '在主课后总结缺少 evaluation 时补齐结构化评估', category: 'analysis' },
+  // 注：2026-08-11 纯重试+明确失败改造后，session-evaluation-fallback 不再被主链调用
+  // （session-wrapup 缺 evaluation 时直接返回 evaluation=null + evaluationSource='unavailable'）；
+  // 保留注册以兼容存量 ACTIVE prompt 与直接调用场景。
   'learner-progress-report': { skillId: 'learner-progress-report', displayName: '学习进展报告生成器', description: '基于学习指标和信号生成简短进展反馈', category: 'analysis' },
   'generic-chat': { skillId: 'generic-chat', displayName: '平台通用文本能力', description: '无更专用 Skill 时的通用文本调用能力', category: 'generation' },
   'course-design': { skillId: 'course-design', displayName: '课程设计器', description: '为周次主题生成结构化课程任务', category: 'generation' },

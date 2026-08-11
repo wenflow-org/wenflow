@@ -627,57 +627,6 @@ function hasPrematureNextStepLanguage(reply: string): boolean {
   return patterns.some((pattern) => pattern.test(text));
 }
 
-function buildFallbackOpening(
-  context: TeachingScenarioContext,
-  openingMode: TeachingOpening['mode']
-): TeachingOpening {
-  const taskTitle = context.taskTitle || context.topic || '当前任务';
-  const coreConcept = context.taskProfile.coreConcept || context.taskProfile.linkedConceptName || context.pathProgress.currentMilestoneTitle;
-  const acceptanceCriteria = context.currentTaskContext.acceptanceCriteria || context.currentTaskContext.description || context.taskDescription || '';
-  const shortGoal = acceptanceCriteria.trim() || `先把 ${taskTitle} 这一步做清楚`;
-
-  if (openingMode === 'example-first') {
-    return {
-      mode: openingMode,
-      message: `这节课我们先不铺开讲，直接拿 **${taskTitle}** 里最小的一步开始。`,
-      question: coreConcept
-        ? `如果你现在就动手做，围绕“${coreConcept}”你会先观察哪一点？`
-        : `如果你现在就动手做，你觉得这一步最先该确认什么？`,
-      quickReplies: [
-        { text: '先看字段或输入差异' },
-        { text: '先拆成最小步骤' },
-        { text: '先给我一个示范' },
-      ],
-    };
-  }
-
-  if (openingMode === 'predict') {
-    return {
-      mode: openingMode,
-      message: `开始之前，先做一个快速判断，看看你对 **${taskTitle}** 的直觉在哪里。`,
-      question: coreConcept
-        ? `围绕“${coreConcept}”，你猜这一步最容易出错的是哪里？`
-        : `你猜这一步最容易卡住的地方是什么？`,
-      quickReplies: [
-        { text: '我大概知道风险点' },
-        { text: '我只能猜个方向' },
-        { text: '我想先听你拆解' },
-      ],
-    };
-  }
-
-  return {
-    mode: openingMode,
-    message: `开始前先快速校准一下，我们这节会聚焦 **${taskTitle}**，目标是 ${shortGoal}。`,
-    question: '你现在更接近哪种状态？',
-    quickReplies: [
-      { text: '我知道大概要做什么' },
-      { text: '我只有模糊感觉' },
-      { text: '我想先看一个例子' },
-    ],
-  };
-}
-
 function computeKnowledgeDelta(
   initialPoints: TeachingKnowledgePointState[],
   finalPoints: TeachingKnowledgePointState[]
@@ -1325,7 +1274,6 @@ export class AITeachingOrchestrator {
         && runtimeSignals.recommendedPacing !== 'slow'
         ? 'predict'
         : 'self-assess';
-    const fallbackOpening = buildFallbackOpening(context, openingMode);
     let parsed: any = null;
     try {
       const result = await withTimeout(executeSkillWithResult(auxSkillDefinitionMap['teaching-opening-generator'], {
@@ -1344,7 +1292,6 @@ export class AITeachingOrchestrator {
         openingMode,
         ...(context.learningSignal ? { learningSignal: context.learningSignal } : {}),
         ...(context.lastLessonRecap ? { lastLessonRecap: context.lastLessonRecap } : {}),
-        __fallback: fallbackOpening,
         __prompt: {
           userId: context.userId,
           taskId: context.taskId,
@@ -1354,25 +1301,31 @@ export class AITeachingOrchestrator {
       }), 15000, 'OPENING_GENERATION_TIMEOUT');
       parsed = result.success && result.output ? result.output : null;
     } catch (error) {
-      logger.warn('[AITeaching] 开场交互块生成失败，使用 fallback opening', {
+      // 纯重试+明确失败：开场生成失败不再降级为确定性 fallback opening，
+      // 直接抛错（带错误码），由 startSession catch → failInitialization 清理会话，前端收到错误。
+      logger.warn('[AITeaching] 开场交互块生成失败', {
         error: error instanceof Error ? error.message : String(error),
         userId: context.userId,
         taskId: context.taskId,
         topic: context.topic,
       });
-      return fallbackOpening;
+      throw Object.assign(new Error(`开场交互块生成失败：${error instanceof Error ? error.message : String(error)}`), {
+        code: 'OPENING_GENERATION_FAILED',
+      });
     }
 
     if (parsed) {
       return parsed as TeachingOpening;
     }
 
-    logger.warn('[AITeaching] 开场交互块缺少有效结构，使用 fallback opening', {
+    logger.warn('[AITeaching] 开场交互块缺少有效结构', {
       userId: context.userId,
       taskId: context.taskId,
       topic: context.topic,
     });
-    return fallbackOpening;
+    throw Object.assign(new Error('开场交互块缺少有效结构（OPENING_GENERATION_FAILED）'), {
+      code: 'OPENING_GENERATION_FAILED',
+    });
   }
 
   async processStudentMessage(
@@ -1400,7 +1353,7 @@ export class AITeachingOrchestrator {
       stateUpdate: LearningStateMetrics | null;
       duration: number;
       summarySource: 'model' | 'fallback';
-      evaluationSource: 'model' | 'ai-fallback' | 'failed';
+      evaluationSource: 'model' | 'ai-fallback' | 'failed' | 'unavailable';
     };
     advisory?: ReplanAdvisory;
     revision: number;
@@ -1860,7 +1813,7 @@ export class AITeachingOrchestrator {
       stateUpdate: LearningStateMetrics | null;
       duration: number;
       summarySource: 'model' | 'fallback';
-      evaluationSource: 'model' | 'ai-fallback' | 'failed';
+      evaluationSource: 'model' | 'ai-fallback' | 'failed' | 'unavailable';
     };
     advisory?: ReplanAdvisory;
     revision: number;
@@ -2016,7 +1969,7 @@ export class AITeachingOrchestrator {
         ktl: finalState?.ktl ?? 0,
         lf: finalState?.lf ?? 0,
         lsb: finalState?.lsb ?? 0,
-        evaluationSource: (evaluationResult?.source || 'failed') as 'model' | 'ai-fallback' | 'failed',
+        evaluationSource: (evaluationResult?.source || 'unavailable') as 'model' | 'ai-fallback' | 'failed' | 'unavailable',
         messageCount: session.messages.filter((message) => message.role === 'user').length,
         avgUnderstanding: sessionEvidence.avgUnderstanding ?? 0,
         avgCognitiveLevel: lastAnalyzedMessage?.analysis?.cognitiveLevel || 'understand',

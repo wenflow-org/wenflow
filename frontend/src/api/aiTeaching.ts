@@ -168,7 +168,7 @@ export interface SessionEvaluation {
   sessionKtl?: number;
   sessionLf?: number;
   confidence?: number;
-  evaluationSource?: 'model' | 'ai-fallback' | 'failed';
+  evaluationSource?: 'model' | 'ai-fallback' | 'failed' | 'unavailable';
   messageCount: number;
   avgUnderstanding: number;
   avgCognitiveLevel?: string;
@@ -202,7 +202,7 @@ export interface WrapupArtifact {
   status: 'complete' | 'summary-only';
   sources: {
     summary: 'model' | 'fallback' | 'timeout-fallback';
-    evaluation: 'model' | 'ai-fallback' | 'failed';
+    evaluation: 'model' | 'ai-fallback' | 'failed' | 'unavailable';
   };
   summary: SessionSummary;
   evaluation: (SessionEvaluation & {
@@ -222,7 +222,7 @@ export interface WrapupArtifact {
   } | null;
   duration?: number;
   summarySource?: 'model' | 'fallback';
-  evaluationSource?: 'model' | 'ai-fallback' | 'failed';
+  evaluationSource?: 'model' | 'ai-fallback' | 'failed' | 'unavailable';
 }
 
 export interface ReplanAdvisory {

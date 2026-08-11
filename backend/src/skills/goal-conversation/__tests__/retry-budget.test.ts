@@ -36,7 +36,7 @@ describe('Goal Conversation retry budget', () => {
     getActivePromptMock.mockReset().mockResolvedValue(null)
   })
 
-  it('复用请求预算并在一次逻辑重试后停止', async () => {
+  it('复用请求预算并在两次逻辑重试后停止（纯重试改造后默认预算 1→2）', async () => {
     const retryBudget = createRetryBudget()
 
     const result = await runWithContext({ retryBudget }, () => goalConversationAgentHandler(
@@ -45,17 +45,17 @@ describe('Goal Conversation retry budget', () => {
       { maxFormatRetries: 2, systemPromptOverride: '测试提示词' }
     ))
 
-    expect(executeMock).toHaveBeenCalledTimes(2)
+    expect(executeMock).toHaveBeenCalledTimes(3)
     expect(executeMock.mock.calls[0][2].retryBudget).toBe(retryBudget)
     expect(executeMock.mock.calls[1][2].retryBudget).toBe(retryBudget)
-    expect(retryBudget.used.logicalRetries).toBe(1)
-    expect(retryBudget.exhaustedBy).toBe('logical-retries')
+    expect(executeMock.mock.calls[2][2].retryBudget).toBe(retryBudget)
+    expect(retryBudget.used.logicalRetries).toBe(2)
     expect(result).toMatchObject({
       success: false,
       error: 'STRUCTURED_OUTPUT_INVALID',
       debug: {
-        attemptCount: 2,
-        actualRetryCount: 1,
+        attemptCount: 3,
+        actualRetryCount: 2,
         structuredOutputValid: false
       }
     })

@@ -6,8 +6,9 @@ import {
 } from '../SessionFinalizationPolicy'
 
 describe('SessionFinalizationPolicy', () => {
-  it('failed 来源的保守评估不能提交长期状态', () => {
+  it('failed / unavailable 来源的评估不能提交长期状态', () => {
     expect(hasReliableSessionEvaluation({ sessionLss: 5 }, 'failed')).toBe(false)
+    expect(hasReliableSessionEvaluation({ sessionLss: 5 }, 'unavailable')).toBe(false)
     expect(hasReliableSessionEvaluation({ sessionLss: 5 }, 'ai-fallback')).toBe(true)
     expect(hasReliableSessionEvaluation(null, 'model')).toBe(false)
   })
