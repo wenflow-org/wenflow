@@ -31,6 +31,7 @@ jest.mock('../../services/skill-registry/skills-file', () => {
         skillId: 'goal-conversation',
         kind: 'mainline',
         stage: 'goal',
+        parentAgent: 'goal-agent',
         handlerRef: 'backend/src/skills/goal-conversation/index.ts',
         coreFile: 'prompts/core/goal-conversation.yaml',
         displayName: '目标对话',
@@ -141,6 +142,9 @@ describe('GET /api/admin/skills/reconciliation：四向对账', () => {
         completion: expect.objectContaining({ status: 'live' }),
       }),
     );
+    // P2：items 增加 parentAgent 维度（goal-agent 下辖 → 面板按 agent 分组）
+    expect(goal.parentAgent).toBe('goal-agent');
+    expect(goal.stage).toBe('goal');
 
     // platform-direct 豁免：未注册是预期 → 不标 unregistered；无 ACTIVE 且非 noPromptFile → active-missing
     const exempt = items.find((item: any) => item.skillId === 'semantic-freeze-judge');
@@ -155,6 +159,8 @@ describe('GET /api/admin/skills/reconciliation：四向对账', () => {
     expect(unregistered.registrationExempt).toBe(false);
     expect(unregistered.diff).toBe('unregistered');
     expect(unregistered.manifest).toBe(false);
+    // 无 parentAgent 声明的条目 → null（前端归"未归属"组）
+    expect(unregistered.parentAgent).toBeNull();
   });
 
   it('幽灵残留单列：注册表有、户口簿无 → orphanRegistrations + summary 计数', async () => {

@@ -558,6 +558,14 @@ export const adminFieldRoutingsApi = {
 
   syncOrchestrationFile: async (stage: string) =>
     adminAxios.post(`/admin/field-routings/orchestration/${encodeURIComponent(stage)}/sync`),
+
+  /**
+   * 清理孤儿行（P2 补全）：编排文件声明删除 → DB 孤儿行清理。
+   * dryRun 默认 true（只报告不删）；dryRun=false 才执行删除（删除前写
+   * node_config_changes 审计，changeType='orchestration-prune'）。
+   */
+  pruneOrchestrationFile: async (stage: string, dryRun = true) =>
+    adminAxios.post(`/admin/field-routings/orchestration/${encodeURIComponent(stage)}/prune`, { dryRun }),
 };
 
 /**
@@ -1009,6 +1017,7 @@ export interface SkillReconciliationRow {
   kind: 'mainline' | 'aux' | 'handler-only';
   displayName: string | null;
   stage: string | null;
+  parentAgent: string | null;
   book: boolean;
   manifest: boolean;
   registered: boolean;

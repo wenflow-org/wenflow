@@ -60,6 +60,7 @@ jest.mock('../../config/system-database', () => ({
   default: {
     agent_prompts: { findMany: jest.fn(async () => []) },
     agent_contracts: { findUnique: jest.fn(async () => null) },
+    node_config_changes: { create: jest.fn(async (args: any) => ({ id: 'audit-1', ...args.data })) },
   },
 }));
 
@@ -116,7 +117,10 @@ describe('skills scaffold 端点', () => {
       kind: 'mainline',
       generated: ['prompts/core/test-scaffold-demo.yaml', 'backend/src/skills/test-scaffold-demo/index.ts'],
       completion: completionFixture,
-      snippets: [{ title: 'skills/index.ts 注册片段', content: '// x' }],
+      snippets: [
+        { title: 'skills/index.ts 注册片段', content: '// x' },
+        { title: 'agent-manifest.service.ts 条目模板（F12：mainline/handler-only 必须登记，kind=skill）', content: "// { id: 'skill:test-scaffold-demo', ... }" },
+      ],
       note: 'handler 未实现前调用会抛 SC_NOT_IMPLEMENTED',
     });
     mockGetScaffoldMeta.mockReturnValue({
@@ -141,12 +145,31 @@ describe('skills scaffold 端点', () => {
     expect(body.data.completion.status).toBe('handler-ready');
     expect(body.data.generated).toHaveLength(2);
     expect(body.data.note).toContain('SC_NOT_IMPLEMENTED');
+    // P2：响应 snippets 含 manifest 条目模板（F12 登记指引）
+    expect(body.data.snippets.some((s: any) => s.title.includes('agent-manifest.service.ts'))).toBe(true);
     expect(mockScaffoldSkill).toHaveBeenCalledWith(
       expect.objectContaining({ skillId: 'test-scaffold-demo', kind: 'mainline' }),
     );
   });
 
-  it('已存在（条目与生成物齐备）→ 409 + completion', async () => {
+  it('创建成功时写 node_config_changes 审计（changeType=skill-scaffold，targetId=skillId，before=null，after=生成物摘要）', async () => {
+    const res = await callScaffold({ skillId: 'test-scaffold-demo', kind: 'mainline', stage: 'goal', parentAgent: 'goal-agent' });
+    expect(res.status).not.toHaveBeenCalled();
+    const systemDb = (jest.requireMock('../../config/system-database') as any).default;
+    const createMock = systemDb.node_config_changes.create as jest.Mock;
+    expect(createMock).toHaveBeenCalledTimes(1);
+    const [call] = createMock.mock.calls;
+    expect(call[0].data.changeType).toBe('skill-scaffold');
+    expect(call[0].data.targetTable).toBe('skills');
+    expect(call[0].data.targetId).toBe('test-scaffold-demo');
+    expect(call[0].data.before).toBeNull();
+    const after = JSON.parse(call[0].data.after);
+    expect(after.status).toBe('created');
+    expect(after.kind).toBe('mainline');
+    expect(after.generated).toHaveLength(2);
+  });
+
+  it('已存在（条目与生成物齐备）→ 409 + completion（不写审计：无实际写入）', async () => {
     mockScaffoldSkill.mockResolvedValue({
       status: 'already-exists',
       skillId: 'test-scaffold-demo',
@@ -157,6 +180,8 @@ describe('skills scaffold 端点', () => {
     const body = res.json.mock.calls[0][0];
     expect(body.success).toBe(false);
     expect(body.data.completion.status).toBe('handler-ready');
+    const systemDb = (jest.requireMock('../../config/system-database') as any).default;
+    expect(systemDb.node_config_changes.create).not.toHaveBeenCalled();
   });
 
   it('输入非法 → 400', async () => {

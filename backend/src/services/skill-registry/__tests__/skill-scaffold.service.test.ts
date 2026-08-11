@@ -184,6 +184,17 @@ describe('skill-scaffold：mainline 全量创建', () => {
       // 注册片段返回文本（不落盘）
       expect(result.snippets.length).toBeGreaterThan(0);
       expect(result.snippets[0].title).toContain('skills/index.ts');
+
+      // P2：manifest 条目模板片段（F12 必须登记，mainline/handler-only）
+      const manifestSnippet = result.snippets.find((s) => s.title.includes('agent-manifest.service.ts'));
+      expect(manifestSnippet).toBeDefined();
+      expect(manifestSnippet!.content).toContain(`id: 'skill:test-scaffold-demo'`);
+      expect(manifestSnippet!.content).toContain(`category: 'goal'`);
+      expect(manifestSnippet!.content).toContain(`monitoringGroup: 'Goal'`);
+      expect(manifestSnippet!.content).toContain(`defaultModelConfig: { temperature: 0.5, maxTokens: 4000 }`);
+      expect(manifestSnippet!.content).toContain(`name: '${mainlineReq.displayName} Skill'`);
+      expect(manifestSnippet!.content).toContain(`description: '${mainlineReq.description}'`);
+      expect(result.note).toContain('F12');
     } finally {
       afterEachCleanup(h);
     }
@@ -311,6 +322,8 @@ describe('skill-scaffold：kind 差异（aux / handler-only）', () => {
       expect(entry.noPromptFile).toBe(false);
       expect(fs.existsSync(path.join(h.skillsDir, 'test-aux-demo', 'index.ts'))).toBe(true);
       expect(result.snippets[0].title).toContain('v4-aux-skills');
+      // aux 不要求 manifest 登记（F12 仅 mainline/handler-only）→ 无 manifest 片段
+      expect(result.snippets.some((s) => s.title.includes('agent-manifest.service.ts'))).toBe(false);
       // 不触碰编排文件
       const stage = parseOrchestrationFile(path.join(h.orchestrationDir, 'goal.yaml'));
       expect(stage.contracts.some((contract) => contract.agentId === 'skill:test-aux-demo')).toBe(false);
@@ -333,6 +346,12 @@ describe('skill-scaffold：kind 差异（aux / handler-only）', () => {
       expect(fs.existsSync(path.join(h.skillsDir, 'test-handler-only-demo', 'index.ts'))).toBe(true);
       const result = outcome as ScaffoldResult;
       expect(result.snippets[0].title).toContain('skills/index.ts');
+      // handler-only 同样必须登记 manifest（F12）→ 有 manifest 模板片段（无 stage → 无 monitoringGroup 行）
+      const manifestSnippet = result.snippets.find((s) => s.title.includes('agent-manifest.service.ts'));
+      expect(manifestSnippet).toBeDefined();
+      expect(manifestSnippet!.content).toContain(`id: 'skill:test-handler-only-demo'`);
+      expect(manifestSnippet!.content).toContain(`category: 'skill'`);
+      expect(manifestSnippet!.content).not.toContain('monitoringGroup:');
     } finally {
       afterEachCleanup(h);
     }

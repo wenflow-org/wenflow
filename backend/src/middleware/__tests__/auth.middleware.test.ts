@@ -5,6 +5,9 @@ process.env.JWT_SECRET = 'test-jwt-secret-with-at-least-thirty-two-characters'
 jest.mock('../../config/database', () => ({
   __esModule: true,
   default: {
+    users: {
+      findUnique: jest.fn(async () => ({ deletedAt: null, tokenVersion: 0 }))
+    },
     projection_access_grants: {
       findUnique: jest.fn(),
       update: jest.fn()

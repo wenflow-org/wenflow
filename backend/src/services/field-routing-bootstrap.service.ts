@@ -5,6 +5,7 @@ import {
   loadOrchestrationFiles,
   type OrchestrationStage
 } from './field-routing/orchestration-file';
+import { writeNodeConfigChange } from './node-config-change-audit';
 
 // 编排文件（prompts/orchestration/<stage>.yaml）是字段路由的唯一声明源；
 // seed-*-field-routings.ts 已退役（2026-08 单源化收尾），编排文件为唯一编辑入口。
@@ -387,6 +388,151 @@ export async function syncStageFieldRoutingsFromFile(
       });
       report.routingsCreated++;
       report.createdCount++;
+    }
+  }
+
+  return report;
+}
+
+// ============================================================
+// 孤儿行清理（prune）：编排文件为唯一声明源，声明删除 → DB 行应消失
+//
+// 设计（P2 补全，AUDIT_CHANGEABILITY §七.5 缺口）：
+//   - 只删 managedByCode=true 的行；managedByCode=false（admin 覆盖行）任何情况下
+//     不删，仅记入 protectedRows 报告（硬性约束）。
+//   - 全局声明集保护：某行若仍在任意编排文件（含其他 stage）声明，不视为孤儿。
+//   - 默认 dry-run（只报告不删）；dryRun=false 才执行删除，删除前逐行写
+//     node_config_changes 审计（changeType='orchestration-prune'，before=被删行全量）。
+//   - 行归属：contracts/fields 按 stage 列归属；routings 无 stage 列，按
+//     agentId ∈ 本 stage 声明契约 ∨ fieldId ∈ 本 stage 声明字段 ∨ agentId ∈
+//     本 stage 待删契约 判定归属（覆盖"整契约+其路由一起删"的场景）。
+// ============================================================
+
+export interface StagePruneCandidate {
+  table: 'agent_contracts' | 'field_definitions' | 'agent_field_routings';
+  key: string;
+  /** 被删行全量（审计 before 与响应清单的数据源） */
+  row: Record<string, any>;
+}
+
+export interface StagePruneReport {
+  stage: string;
+  /** true = 只报告不删（默认）；false = 已执行删除 */
+  dryRun: boolean;
+  candidates: StagePruneCandidate[];
+  /** managedByCode=false 覆盖行（候选但受保护，仅报告不删） */
+  protectedRows: Array<{ table: string; key: string }>;
+  deletedCount: number;
+  auditIds: string[];
+}
+
+export async function pruneStageFieldRoutings(
+  prisma: PrismaClient,
+  stage: OrchestrationStage,
+  options: { dryRun?: boolean; actorId?: string } = {},
+): Promise<StagePruneReport> {
+  const dryRun = options.dryRun !== false;
+  const report: StagePruneReport = {
+    stage: stage.stage,
+    dryRun,
+    candidates: [],
+    protectedRows: [],
+    deletedCount: 0,
+    auditIds: [],
+  };
+
+  // 全局声明集（防止把其他 stage 文件仍声明的行当孤儿删掉）
+  const declaredContractAgentIds = new Set(
+    ORCHESTRATION_STAGES.flatMap((s) => s.contracts.map((c) => c.agentId)),
+  );
+  const declaredFieldKeys = new Set(
+    ORCHESTRATION_STAGES.flatMap((s) => s.fields.map((f) => `${s.stage}\0${f.fieldId}`)),
+  );
+  const declaredRoutingKeys = new Set(
+    ORCHESTRATION_STAGES.flatMap((s) => s.routings.map((r) => `${r.agentId}\0${r.fieldId}`)),
+  );
+  const stageContractIds = new Set(stage.contracts.map((c) => c.agentId));
+  const stageFieldIds = new Set(stage.fields.map((f) => f.fieldId));
+
+  // 1) agent_contracts：stage 归属本阶段 + 不在任何文件声明
+  const contracts = await prisma.agent_contracts.findMany({ where: { stage: stage.stage } });
+  const orphanContractIds = new Set<string>();
+  for (const row of contracts) {
+    if (declaredContractAgentIds.has(row.agentId)) continue;
+    if (row.managedByCode === false) {
+      report.protectedRows.push({ table: 'agent_contracts', key: row.agentId });
+      continue;
+    }
+    orphanContractIds.add(row.agentId);
+    report.candidates.push({ table: 'agent_contracts', key: row.agentId, row: { ...row } });
+  }
+
+  // 2) field_definitions：（stage, fieldId）复合键不在任何文件声明
+  const fields = await prisma.field_definitions.findMany({ where: { stage: stage.stage } });
+  for (const row of fields) {
+    const key = `${stage.stage}\0${row.fieldId}`;
+    if (declaredFieldKeys.has(key)) continue;
+    if (row.managedByCode === false) {
+      report.protectedRows.push({ table: 'field_definitions', key: `${stage.stage}/${row.fieldId}` });
+      continue;
+    }
+    report.candidates.push({ table: 'field_definitions', key, row: { ...row } });
+  }
+
+  // 3) agent_field_routings：键不在任何文件声明，且归属本 stage
+  const routingOwners = [...new Set([...stageContractIds, ...orphanContractIds])];
+  const routingRows = await prisma.agent_field_routings.findMany({
+    where: {
+      OR: [
+        ...(routingOwners.length > 0 ? [{ agentId: { in: routingOwners } }] : []),
+        ...(stageFieldIds.size > 0 ? [{ fieldId: { in: [...stageFieldIds] } }] : []),
+      ],
+    },
+  });
+  for (const row of routingRows) {
+    const key = `${row.agentId}\0${row.fieldId}`;
+    if (declaredRoutingKeys.has(key)) continue;
+    const ownsStage = stageContractIds.has(row.agentId) || stageFieldIds.has(row.fieldId) || orphanContractIds.has(row.agentId);
+    if (!ownsStage) continue;
+    if (row.managedByCode === false) {
+      report.protectedRows.push({ table: 'agent_field_routings', key: `${row.agentId}/${row.fieldId}` });
+      continue;
+    }
+    report.candidates.push({ table: 'agent_field_routings', key, row: { ...row } });
+  }
+
+  // 4) 执行：逐行先写审计（before=被删行全量）再删除；dry-run 不删不写
+  if (!dryRun) {
+    for (const candidate of report.candidates) {
+      const auditId = await writeNodeConfigChange(prisma, {
+        changeType: 'orchestration-prune',
+        targetTable: 'orchestration',
+        targetId: stage.stage,
+        agentId: candidate.table === 'agent_field_routings' || candidate.table === 'agent_contracts'
+          ? String(candidate.row.agentId ?? '')
+          : undefined,
+        fieldId: candidate.table === 'field_definitions' || candidate.table === 'agent_field_routings'
+          ? String(candidate.row.fieldId ?? '')
+          : undefined,
+        before: candidate.row,
+        after: null,
+        actorId: options.actorId,
+        reason: 'orchestration prune（编排文件声明删除 → DB 孤儿行清理）',
+      });
+      report.auditIds.push(auditId);
+
+      if (candidate.table === 'agent_contracts') {
+        await prisma.agent_contracts.delete({ where: { agentId: candidate.row.agentId } });
+      } else if (candidate.table === 'field_definitions') {
+        await prisma.field_definitions.delete({
+          where: { stage_fieldId: { stage: stage.stage, fieldId: candidate.row.fieldId } },
+        });
+      } else {
+        await prisma.agent_field_routings.delete({
+          where: { agentId_fieldId: { agentId: candidate.row.agentId, fieldId: candidate.row.fieldId } },
+        });
+      }
+      report.deletedCount += 1;
     }
   }
 

@@ -39,6 +39,7 @@ import {
 } from '../../services/skill-registry/skill-scaffold.service';
 import { listRawManifestEntries } from '../../services/agent-manifest.service';
 import { loadOrchestrationFiles } from '../../services/field-routing/orchestration-file';
+import { writeNodeConfigChange } from '../../services/node-config-change-audit';
 
 const router = Router();
 
@@ -199,6 +200,30 @@ router.post('/scaffold', async (req: Request, res: Response) => {
         error: { message: `skillId "${outcome.skillId}" 已存在（skills.yaml 有条目且生成物齐备）；如需补齐缺失生成物请直接重放本请求` },
         data: { skillId: outcome.skillId, completion: outcome.completion },
       });
+    }
+    // P2 审计补强：scaffold 写 node_config_changes（changeType='skill-scaffold'，targetId=skillId，
+    // before=null，after=生成物清单摘要）——审计失败不阻断写盘结果
+    try {
+      const actorId = (req as Request & { user?: { userId?: string } }).user?.userId || 'admin';
+      const body = (req.body || {}) as { stage?: string; parentAgent?: string };
+      await writeNodeConfigChange(systemPrisma, {
+        changeType: 'skill-scaffold',
+        targetTable: 'skills',
+        targetId: outcome.skillId,
+        before: null,
+        after: {
+          status: outcome.status,
+          kind: outcome.kind,
+          stage: body.stage ?? null,
+          parentAgent: body.parentAgent ?? null,
+          generated: outcome.generated,
+          snippetCount: outcome.snippets?.length ?? 0,
+        },
+        actorId,
+        reason: `skill scaffold 生成（status=${outcome.status}）`,
+      });
+    } catch (auditError) {
+      console.error(`[skills:scaffold] 审计写入失败（不阻断响应）:`, auditError);
     }
     res.json({ success: true, data: outcome });
   } catch (error) {
@@ -727,6 +752,7 @@ router.get('/reconciliation', async (req: Request, res: Response) => {
         kind: entry.kind,
         displayName: entry.displayName || null,
         stage: entry.stage || null,
+        parentAgent: entry.parentAgent || null,
         book: true,
         manifest: manifestSkillIds.has(entry.skillId),
         registered,

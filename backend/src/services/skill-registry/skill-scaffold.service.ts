@@ -275,6 +275,29 @@ function buildSnippets(input: ScaffoldRequest): Array<{ title: string; content: 
         '',
       ].join('\n'),
     },
+    // F12 铁律：mainline/handler-only 必须在 AGENT_MANIFEST 登记（check-skills-file F12 双向一致）。
+    // 对照既有 skill 条目（agent-manifest.service.ts:60 AGENT_MANIFEST 数组）的占位结构。
+    {
+      title: 'agent-manifest.service.ts 条目模板（F12：mainline/handler-only 必须登记，kind=skill）',
+      content: [
+        `// 粘贴进 AGENT_MANIFEST 数组（backend/src/services/agent-manifest.service.ts:60），字段对照既有 skill 条目：`,
+        `{`,
+        `  id: 'skill:${skillId}',`,
+        `  name: '${input.displayName || skillId} Skill',`,
+        `  description: '${input.description || 'TODO: 填写职责描述'}',`,
+        `  category: '${input.stage || 'skill'}',`,
+        `  kind: 'skill',`,
+        `  runtimeEnabled: true,`,
+        `  userVisible: false,`,
+        ...(input.stage ? [`  monitoringGroup: '${input.stage.charAt(0).toUpperCase()}${input.stage.slice(1)}',`] : []),
+        ...(input.aliases && input.aliases.length > 0 ? [`  aliases: ['${input.aliases.join("', '")}'],`] : []),
+        `  ioContractVersion: 'agent-output-v1',`,
+        `  // 与 core.yaml params / handler codeDefaults 对齐（仅展示/兜底，权威在 ACTIVE prompt）`,
+        `  defaultModelConfig: { temperature: 0.5, maxTokens: 4000 },`,
+        `},`,
+        '',
+      ].join('\n'),
+    },
   ];
   if (input.kind === 'mainline' && input.parentAgent) {
     snippets.push({
@@ -512,7 +535,7 @@ export async function scaffoldSkill(input: ScaffoldRequest, deps?: ScaffoldDeps)
     generated,
     completion,
     snippets,
-    note: 'handler 未实现前调用会抛 SC_NOT_IMPLEMENTED（占位不注册，启动安全；实现后请粘贴返回的注册片段）',
+    note: 'handler 未实现前调用会抛 SC_NOT_IMPLEMENTED（占位不注册，启动安全；实现后请粘贴返回的注册片段）；登记进 agent-manifest.service.ts 后 F12 通过（片段见上）',
   };
 }
 

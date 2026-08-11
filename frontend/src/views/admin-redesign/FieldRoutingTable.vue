@@ -196,9 +196,19 @@
           <p v-if="orchMsg" class="frt__orch-msg">{{ orchMsg }}</p>
         </div>
         <div class="mk-modal__foot">
-          <button type="button" class="mk-btn" :disabled="orchSaving || orchSyncing" @click="orchOpen = false">关闭</button>
-          <button type="button" class="mk-btn" :disabled="orchSaving || orchSyncing" @click="forceSync">强制同步 DB</button>
-          <button type="button" class="mk-btn mk-btn--primary" :disabled="orchSaving || orchSyncing" @click="saveOrchestration">
+          <button type="button" class="mk-btn" :disabled="orchSaving || orchSyncing || orchPruning" @click="orchOpen = false">关闭</button>
+          <button type="button" class="mk-btn frt__prune" :disabled="orchSaving || orchSyncing || orchPruning" @click="runPrune(false)">
+            {{ orchPruning ? '清理中…' : '清理孤儿行' }}
+          </button>
+          <button
+            v-if="pruneConfirming"
+            type="button"
+            class="mk-btn frt__prune--danger"
+            :disabled="orchSaving || orchSyncing || orchPruning"
+            @click="runPrune(true)"
+          >确认清理（删除 DB 行）</button>
+          <button type="button" class="mk-btn" :disabled="orchSaving || orchSyncing || orchPruning" @click="forceSync">强制同步 DB</button>
+          <button type="button" class="mk-btn mk-btn--primary" :disabled="orchSaving || orchSyncing || orchPruning" @click="saveOrchestration">
             {{ orchSaving ? '保存中…' : '保存到编排文件' }}
           </button>
         </div>
@@ -380,6 +390,8 @@ const orchContent = ref('');
 const orchSummary = ref({ contractCount: 0, fieldCount: 0, routingCount: 0 });
 const orchSaving = ref(false);
 const orchSyncing = ref(false);
+const orchPruning = ref(false);
+const pruneConfirming = ref(false);
 const orchMsg = ref('');
 const orchPanelRef = ref<HTMLElement | null>(null);
 const orchMaskRef = ref<HTMLElement | null>(null);
@@ -394,6 +406,7 @@ function errOf(e: any) {
 
 async function openOrchestration() {
   orchMsg.value = '';
+  pruneConfirming.value = false;
   try {
     const res = await adminFieldRoutingsApi.getOrchestrationFile(props.stage);
     const data = res.data?.data || {};
@@ -402,6 +415,56 @@ async function openOrchestration() {
     orchOpen.value = true;
   } catch (e: any) {
     toast.error(errOf(e));
+  }
+}
+
+/**
+ * 清理孤儿行（P2 补全，变更路径审计 C 缺口）：编排文件为唯一声明源，
+ * 声明删除 → DB 孤儿行清理。流程：先 dry-run 展示候选清单 → 确认后执行
+ * （执行前逐行写 node_config_changes 审计；managedByCode=false 覆盖行只报告不删）。
+ */
+async function runPrune(apply: boolean) {
+  orchMsg.value = '';
+  orchPruning.value = true;
+  try {
+    const res = await adminFieldRoutingsApi.pruneOrchestrationFile(props.stage, !apply);
+    const data = res.data?.data || {};
+    const candidates: Array<{ table: string; key: string }> = Array.isArray(data.candidates) ? data.candidates : [];
+    const byTable = (t: string) => candidates.filter((c) => c.table === t).length;
+    const protectedCount: number = Array.isArray(data.protectedRows) ? data.protectedRows.length : 0;
+
+    let msg = '';
+    if (data.dryRun) {
+      msg = `dry-run：孤儿行 ${candidates.length} 条（契约 ${byTable('agent_contracts')} · 字段 ${byTable('field_definitions')} · 路由 ${byTable('agent_field_routings')}）`;
+      if (candidates.length) {
+        msg += '；确认无误后点「确认清理（删除 DB 行）」执行';
+        pruneConfirming.value = true;
+      } else {
+        msg += '；无待清理孤儿行';
+        pruneConfirming.value = false;
+      }
+    } else {
+      msg = `已清理 ${data.deletedCount ?? 0} 行孤儿数据（契约 ${byTable('agent_contracts')} · 字段 ${byTable('field_definitions')} · 路由 ${byTable('agent_field_routings')}）`;
+      if (Array.isArray(data.auditIds) && data.auditIds.length) {
+        msg += `；审计留痕 ${data.auditIds.length} 条（node_config_changes / orchestration-prune）`;
+      }
+      pruneConfirming.value = false;
+    }
+    if (protectedCount) {
+      msg += `；admin 覆盖行（managedByCode=false）跳过 ${protectedCount} 条（只报告不删）`;
+    }
+    orchMsg.value = msg;
+
+    if (!data.dryRun) {
+      toast.success('孤儿行清理完成');
+      await loadStage();
+      emit('changed');
+    }
+  } catch (e: any) {
+    orchMsg.value = errOf(e);
+    pruneConfirming.value = false;
+  } finally {
+    orchPruning.value = false;
   }
 }
 
@@ -592,6 +655,21 @@ watch(() => props.stage, () => void loadStage());
   font-size: 12px;
   font-weight: 600;
   line-height: 1.5;
+}
+
+/* 清理孤儿行按钮（P2：dry-run 只报告；确认态红色危险按钮） */
+.frt__prune {
+  border-color: rgba(180, 83, 9, 0.35);
+  color: var(--mk-amber, #b45309);
+}
+.frt__prune--danger {
+  border-color: rgba(220, 38, 38, 0.45);
+  background: var(--mk-red, #dc2626);
+  color: #fff;
+}
+.frt__prune--danger:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
 }
 .frt__agent { margin-bottom: 18px; border: 1px solid var(--mk-line, #e6ebf4); border-radius: 12px; overflow: hidden; background: var(--mk-surface, #fff); box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06)); }
 .frt__agenthead { padding: 10px 14px; background: #fafbfd; border-bottom: 1px solid var(--mk-line, #e6ebf4); display: flex; align-items: baseline; gap: 10px; }

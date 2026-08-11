@@ -12,6 +12,7 @@ jest.mock('express', () => ({
         routeOrder.push(path);
         routes[`GET ${path}`] = handler;
       },
+      post: jest.fn(),
       put: jest.fn(),
       use: jest.fn()
     })

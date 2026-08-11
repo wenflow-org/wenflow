@@ -179,40 +179,49 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in recReport.items" :key="row.skillId" class="sk-row" @click="openSkillDrawer(row.skillId)">
-                <td>
-                  <div class="sk-cell">
-                    <span class="sk-dot" :class="`sk-dot--${recDotTone(row)}`"></span>
-                    <div class="mk-cell-main">
-                      <strong class="sk-id-main" style="max-width:340px">{{ row.skillId }}</strong>
-                      <span class="sk-name-desc" style="max-width:340px">{{ row.displayName || recKindText(row.kind) }}<template v-if="row.stage"> · {{ row.stage }}</template></span>
+              <template v-for="group in recGroups" :key="group.parentAgent">
+                <tr class="sk-rec-group">
+                  <td colspan="7">
+                    <span class="sk-rec-group__name">{{ group.parentAgent }}</span>
+                    <span class="sk-rec-group__meta">下辖 {{ group.items.length }} 条</span>
+                    <span class="sk-rec-group__meta">live {{ group.liveCount }} / {{ group.items.length }}</span>
+                  </td>
+                </tr>
+                <tr v-for="row in group.items" :key="row.skillId" class="sk-row" @click="openSkillDrawer(row.skillId)">
+                  <td>
+                    <div class="sk-cell">
+                      <span class="sk-dot" :class="`sk-dot--${recDotTone(row)}`"></span>
+                      <div class="mk-cell-main">
+                        <strong class="sk-id-main" style="max-width:340px">{{ row.skillId }}</strong>
+                        <span class="sk-name-desc" style="max-width:340px">{{ row.displayName || recKindText(row.kind) }}<template v-if="row.stage"> · {{ row.stage }}</template></span>
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td><span class="sk-rec-yn sk-rec-yn--ok">✓</span></td>
-                <td>
-                  <span :class="['sk-rec-yn', row.manifest ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ row.manifest ? '✓' : '✗' }}</span>
-                  <span v-if="row.kind === 'aux' && !row.manifest" class="sk-rec-tag">F12 豁免</span>
-                </td>
-                <td>
-                  <span :class="['sk-rec-yn', row.registered ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ row.registered ? '✓' : '✗' }}</span>
-                  <span v-if="row.registrationExempt" class="sk-rec-tag">豁免</span>
-                </td>
-                <td>
-                  <span :class="['sk-rec-yn', row.active ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ row.active ? '✓' : '✗' }}</span>
-                  <span v-if="row.noPromptFile" class="sk-rec-tag">handler-only</span>
-                </td>
-                <td>
-                  <span class="sk-rec-badge" :class="`sk-rec-badge--${row.completion.status}`" :title="recGateDetail(row.completion)">
-                    {{ recStatusText(row.completion.status) }}
-                  </span>
-                </td>
-                <td>
-                  <span v-if="row.diff === 'unregistered'" class="sk-rec-diff sk-rec-diff--bad">未注册</span>
-                  <span v-else-if="row.diff === 'active-missing'" class="sk-rec-diff sk-rec-diff--warn">缺 ACTIVE</span>
-                  <span v-else class="mk-na">—</span>
-                </td>
-              </tr>
+                  </td>
+                  <td><span class="sk-rec-yn sk-rec-yn--ok">✓</span></td>
+                  <td>
+                    <span :class="['sk-rec-yn', row.manifest ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ row.manifest ? '✓' : '✗' }}</span>
+                    <span v-if="row.kind === 'aux' && !row.manifest" class="sk-rec-tag">F12 豁免</span>
+                  </td>
+                  <td>
+                    <span :class="['sk-rec-yn', row.registered ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ row.registered ? '✓' : '✗' }}</span>
+                    <span v-if="row.registrationExempt" class="sk-rec-tag">豁免</span>
+                  </td>
+                  <td>
+                    <span :class="['sk-rec-yn', row.active ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ row.active ? '✓' : '✗' }}</span>
+                    <span v-if="row.noPromptFile" class="sk-rec-tag">handler-only</span>
+                  </td>
+                  <td>
+                    <span class="sk-rec-badge" :class="`sk-rec-badge--${row.completion.status}`" :title="recGateDetail(row.completion)">
+                      {{ recStatusText(row.completion.status) }}
+                    </span>
+                  </td>
+                  <td>
+                    <span v-if="row.diff === 'unregistered'" class="sk-rec-diff sk-rec-diff--bad">未注册</span>
+                    <span v-else-if="row.diff === 'active-missing'" class="sk-rec-diff sk-rec-diff--warn">缺 ACTIVE</span>
+                    <span v-else class="mk-na">—</span>
+                  </td>
+                </tr>
+              </template>
             </tbody>
           </table>
         </div>
@@ -392,6 +401,35 @@ onMounted(() => {
 const recStatusOrder = ['draft', 'handler-ready', 'core-ready', 'fields-synced', 'live'] as const
 const recStatusText = (status: string) =>
   completionMetaOf(status)?.label || status
+
+/** 对账面板按 parentAgent 分组（P2：goal-agent 下辖 N 条 节头）；无 parentAgent 归"未归属" */
+const REC_AGENT_ORDER = ['goal-agent', 'path-agent', 'teaching-agent', 'profile-agent', 'simulation-agent']
+const recGroups = computed(() => {
+  if (!recReport.value) return []
+  const groups = new Map<string, SkillReconciliationReport['items']>()
+  for (const row of recReport.value.items) {
+    const key = row.parentAgent || '未归属'
+    const list = groups.get(key) || []
+    list.push(row)
+    groups.set(key, list)
+  }
+  const keys = [...groups.keys()].sort((a, b) => {
+    const ai = REC_AGENT_ORDER.indexOf(a)
+    const bi = REC_AGENT_ORDER.indexOf(b)
+    const ar = ai === -1 ? REC_AGENT_ORDER.length : ai
+    const br = bi === -1 ? REC_AGENT_ORDER.length : bi
+    if (ar !== br) return ar - br
+    return a.localeCompare(b)
+  })
+  return keys.map((parentAgent) => {
+    const items = groups.get(parentAgent)!
+    return {
+      parentAgent,
+      items,
+      liveCount: items.filter((row) => row.completion.status === 'live').length,
+    }
+  })
+})
 
 const recKindText = (kind: string) =>
   ({ mainline: '主线', aux: '辅助', 'handler-only': '仅 handler' })[kind] || kind
@@ -673,6 +711,25 @@ function recGateDetail(completion: SkillCompletion): string {
   color: var(--mk-muted);
 }
 .sk-rec-orphans .sk-rec-tag { margin-left: 0; }
+
+/* parentAgent 分组节头（P2 补全：goal-agent 下辖 N 条） */
+.sk-rec-group td {
+  padding: 6px 14px;
+  background: #f4f7fc;
+  border-bottom: 1px solid var(--mk-line, #e6ebf4);
+}
+.sk-rec-group__name {
+  font-family: var(--mk-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--mk-blue, #3478f6);
+}
+.sk-rec-group__meta {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mk-muted, #5b6577);
+}
 
 .sk-rec-legend {
   display: flex;

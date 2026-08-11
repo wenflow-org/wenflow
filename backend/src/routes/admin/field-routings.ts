@@ -6,7 +6,7 @@ import systemPrisma from '../../config/system-database';
 import { logger } from '../../utils/logger';
 import { clearRoutingCache } from '../../services/field-dispatcher';
 import { clearSupplementRenderCache } from '../../services/prompt-composer';
-import { detectFieldRoutingDrift, ensureStageFieldRoutings, syncStageFieldRoutingsFromFile } from '../../services/field-routing-bootstrap.service';
+import { detectFieldRoutingDrift, ensureStageFieldRoutings, syncStageFieldRoutingsFromFile, pruneStageFieldRoutings } from '../../services/field-routing-bootstrap.service';
 import {
   loadOrchestrationFiles,
   ORCHESTRATION_DIR,
@@ -16,6 +16,7 @@ import {
   type OrchestrationStage,
 } from '../../services/field-routing/orchestration-file';
 import { PROMPT_ROLE_META } from '../../services/yaml-vocabulary';
+import { writeNodeConfigChange, summarizeTextDigest } from '../../services/node-config-change-audit';
 
 const router = Router();
 
@@ -287,8 +288,33 @@ router.put('/orchestration/:stage', async (req: Request, res: Response) => {
     logger.warn('[field-routings] orchestration backup failed', { stage, error: error instanceof Error ? error.message : String(error) });
   }
 
+  // 写盘前快照（P2 审计 before 摘要的数据源）
+  let beforeText = '';
+  try {
+    beforeText = await fs.promises.readFile(filePath, 'utf-8');
+  } catch (error) {
+    logger.warn('[field-routings] orchestration before-snapshot read failed', { stage, error: error instanceof Error ? error.message : String(error) });
+  }
+
   // 写盘（文件为准）
   await fs.promises.writeFile(filePath, content, 'utf-8');
+
+  // P2 审计补强：编排保存写 node_config_changes（changeType='orchestration-save'，
+  // before/after = 保存前/后文件摘要：行数 + 字符数 + sha1 短哈希）——失败不阻断保存
+  try {
+    const actorId = (req as Request & { user?: { userId?: string } }).user?.userId || 'admin';
+    await writeNodeConfigChange(systemPrisma, {
+      changeType: 'orchestration-save',
+      targetTable: 'orchestration',
+      targetId: stage,
+      before: summarizeTextDigest(beforeText),
+      after: summarizeTextDigest(content),
+      actorId,
+      reason: '编排文件 PUT 保存（admin 管理端编排弹窗）',
+    });
+  } catch (auditError) {
+    logger.warn('[field-routings] orchestration-save audit write failed（不阻断保存）', { stage, error: auditError instanceof Error ? auditError.message : String(auditError) });
+  }
 
   // 立即 ensure（只建不更新：新字段/新路由进 DB；已有行属性修改待同步）——失败不阻断写盘结果
   let synced = true;
@@ -349,6 +375,48 @@ router.post('/orchestration/:stage/sync', async (req: Request, res: Response) =>
       skippedAdminRows: report.skippedAdminRows,
     },
   });
+});
+
+// ============================================================
+// POST /api/admin/field-routings/orchestration/:stage/prune
+// 清理孤儿行（变更路径审计 C 缺口补全）：编排文件为唯一声明源，
+// 删除声明中已不存在的 DB 行（managedByCode=true；managedByCode=false 覆盖行只报告不删）。
+// body: { dryRun?: boolean } —— 默认 true（只报告不删）；dryRun=false 才执行删除，
+// 删除前逐行写 node_config_changes 审计（changeType='orchestration-prune'，before=被删行全量）。
+// ============================================================
+router.post('/orchestration/:stage/prune', async (req: Request, res: Response) => {
+  const stage = String(req.params.stage || '').trim();
+  const found = loadOrchestrationFiles().find((s) => s.stage === stage);
+  if (!found) {
+    return res.status(404).json({ success: false, error: { message: `编排文件不存在：${stage}` } });
+  }
+
+  const dryRun = (req.body || {}).dryRun !== false;
+  const actorId = (req as Request & { user?: { userId?: string } }).user?.userId || 'admin';
+
+  try {
+    const report = await pruneStageFieldRoutings(systemPrisma, found, { dryRun, actorId });
+
+    clearRoutingCache();
+    clearSupplementRenderCache();
+
+    res.json({
+      success: true,
+      data: {
+        stage: report.stage,
+        dryRun: report.dryRun,
+        candidates: report.candidates,
+        protectedRows: report.protectedRows,
+        deletedCount: report.deletedCount,
+        auditIds: report.auditIds,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: { message: error?.message || 'orchestration prune failed' },
+    });
+  }
 });
 
 // ============================================================
@@ -424,6 +492,9 @@ router.get('/changes', async (req: Request, res: Response) => {
       OR: [
         ...(agentIds.length ? [{ agentId: { in: agentIds } }] : []),
         ...(fieldIds.length ? [{ fieldId: { in: fieldIds } }] : []),
+        // P2：stage 级审计（orchestration-save / orchestration-prune 等 targetTable='orchestration' 的行
+        // 不带 agentId/fieldId，按 targetId=stage 命中，避免被行级过滤漏掉）
+        { targetTable: 'orchestration', targetId: stage },
       ],
     };
   }
