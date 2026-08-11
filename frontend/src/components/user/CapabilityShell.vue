@@ -64,12 +64,19 @@ function isActive(t: { match: string[] }) {
 
 .uc.v2-page > main.uc__main {
   flex: 1;
-  width: min(1180px, calc(100% - 40px));
+  width: min(1080px, calc(100% - 40px));
   margin: 0 auto;
   padding: 22px 0 40px;
   display: grid;
   gap: 16px;
   align-content: start;
+}
+
+/* 与 v2 页面一致：≥1680px 加宽 */
+@media (min-width: 1680px) {
+  .uc.v2-page > main.uc__main {
+    width: min(1360px, calc(100% - 40px));
+  }
 }
 
 .uc__head {
@@ -85,14 +92,14 @@ function isActive(t: { match: string[] }) {
   margin-bottom: 8px;
   font-size: 12px;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   color: var(--blue-deep, #1f57cc);
 }
 
 .uc__head h1 {
   margin: 0 0 6px;
-  font-size: clamp(24px, 3vw, 30px);
-  letter-spacing: -0.03em;
+  font-size: 28px;
+  letter-spacing: -0.01em;
   line-height: 1.2;
 }
 
@@ -124,7 +131,7 @@ function isActive(t: { match: string[] }) {
   font-size: 13px;
   font-weight: 700;
   color: var(--muted, #5b6577);
-  background: #fff;
+  background: var(--surface, #fff);
   border: 1px solid var(--line, #e3e9f4);
   text-decoration: none;
   transition: all 0.15s ease;
@@ -135,11 +142,12 @@ function isActive(t: { match: string[] }) {
   border-color: rgba(52, 120, 246, 0.35);
 }
 
+/* v2 风格激活态：淡彩药丸（蓝 7% 底 + 蓝 45% 边框 + blue-deep 字），替代渐变实底 */
 .uc__tab--on {
-  color: #fff;
-  background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
-  border-color: transparent;
-  box-shadow: 0 8px 18px rgba(52, 120, 246, 0.22);
+  color: var(--blue-deep, #1f57cc);
+  background: rgba(52, 120, 246, 0.07);
+  border-color: rgba(52, 120, 246, 0.45);
+  box-shadow: none;
 }
 
 .uc__body {
@@ -148,10 +156,18 @@ function isActive(t: { match: string[] }) {
   min-width: 0;
 }
 
+/* 统一实色卡：覆盖所有用户中心卡片类（含玻璃卡），对齐 v2 16px 实色语言 */
 .uc__body :deep(.glass-card),
 .uc__body :deep(.profile-card),
-.uc__body :deep(.uc-card) {
-  background: #fff;
+.uc__body :deep(.uc-card),
+.uc__body :deep(.settings-card),
+.uc__body :deep(.agent-model-panel),
+.uc__body :deep(.__panel),
+.uc__body :deep(.__intro),
+.uc__body :deep(.agent-table-panel),
+.uc__body :deep(.skills-table-panel),
+.uc__body :deep(.logs-list) {
+  background: var(--surface, #fff);
   border: 1px solid var(--line, #e3e9f4);
   border-radius: 16px;
   box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
@@ -165,6 +181,13 @@ function isActive(t: { match: string[] }) {
   background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc)) !important;
   box-shadow: 0 10px 22px rgba(52, 120, 246, 0.22);
   font-weight: 700;
+}
+
+/* 扩展覆盖：design-system 的 .btn 系（999px）收敛到 12px */
+.uc__body :deep(.btn),
+.uc__body :deep(.btn--primary),
+.uc__body :deep(.btn--ghost) {
+  border-radius: 12px !important;
 }
 
 /* 修复：仅"洗白"默认按钮；保留 danger/link 语义色，避免危险操作与普通按钮混淆 */

@@ -344,7 +344,7 @@ const formatDate = (date: string) => {
   display: inline-flex;
   padding: 3px;
   border-radius: 12px;
-  background: #fff;
+  background: var(--canvas, #f3f6fb);
   border: 1px solid var(--line, #e3e9f4);
   gap: 2px;
 }
@@ -383,11 +383,11 @@ const formatDate = (date: string) => {
 .agent-table-panel {
   min-width: 0;
   width: 100%;
-  padding: 12px;
+  padding: 16px;
   border-radius: 16px;
   border: 1px solid var(--line, #e3e9f4);
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
+  background: var(--surface, #fff);
+  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
   overflow: hidden;
 }
 </style>

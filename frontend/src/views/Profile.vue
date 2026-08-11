@@ -576,10 +576,10 @@ async function handleRevokeProjectionGrant() {
 
 .stat-card,
 .snapshot-item {
-  padding: 12px 14px;
-  border-radius: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
   border: 1px solid var(--line, #e3e9f4);
-  background: #f7faff;
+  background: var(--canvas, #f3f6fb);
 }
 
 .stat-card span,
@@ -587,7 +587,7 @@ async function handleRevokeProjectionGrant() {
   display: block;
   font-size: 12px;
   font-weight: 700;
-  color: var(--faint, #8492ab);
+  color: var(--faint, #67758f);
 }
 
 .stat-card strong,
@@ -596,7 +596,9 @@ async function handleRevokeProjectionGrant() {
   margin-top: 6px;
   color: var(--ink, #172033);
   line-height: 1.45;
-  font-size: 14px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .status-chip {

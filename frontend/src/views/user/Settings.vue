@@ -292,16 +292,10 @@ const handleEnabledChange = async (enabled: boolean) => {
 }
 
 .settings-card {
-  border-radius: 18px;
-  border: 1px solid rgba(52, 120, 246, 0.1);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(248, 252, 255, 0.76) 100%);
-  box-shadow: 0 20px 38px rgba(31, 87, 204, 0.08);
-}
-
-[data-theme='dark'] .settings-card {
-  background: linear-gradient(180deg, rgba(26, 37, 47, 0.84), rgba(15, 24, 32, 0.76));
-  border-color: rgba(96, 165, 250, 0.1);
-  box-shadow: 0 20px 38px rgba(0, 0, 0, 0.22);
+  border-radius: 16px;
+  border: 1px solid var(--line, #e3e9f4);
+  background: var(--surface, #fff);
+  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
 }
 
 .card-header {
@@ -313,13 +307,13 @@ const handleEnabledChange = async (enabled: boolean) => {
   h3 {
     margin: 0;
     font-size: 18px;
-    color: #184a69;
+    color: var(--ink, #172033);
   }
 
   p {
     margin: 6px 0 0;
     font-size: 13px;
-    color: #567082;
+    color: var(--muted, #5b6577);
   }
 }
 
@@ -359,13 +353,13 @@ const handleEnabledChange = async (enabled: boolean) => {
     margin: 0 0 6px;
     font-size: 18px;
     font-weight: 700;
-    color: #1a2b3c;
+    color: var(--ink, #172033);
   }
 
   p {
     margin: 0;
     font-size: 13px;
-    color: #5f7b8e;
+    color: var(--muted, #5b6577);
   }
 }
 

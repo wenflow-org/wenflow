@@ -252,34 +252,27 @@ onMounted(() => {
 .agent-model-settings__intro,
 .agent-model-settings__panel {
   padding: 22px;
-  border-radius: 24px;
+  border-radius: 16px;
 }
 
 .agent-model-settings__intro {
   display: grid;
   gap: 16px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.84), rgba(246, 250, 255, 0.74));
-  border: 1px solid rgba(52, 120, 246, 0.1);
-  box-shadow: 0 20px 38px rgba(31, 87, 204, 0.08);
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e3e9f4);
+  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
 }
 
 .agent-model-settings__panel {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(248, 250, 255, 0.72));
-  border: 1px solid rgba(52, 120, 246, 0.08);
-  box-shadow: 0 18px 32px rgba(31, 87, 204, 0.07);
-}
-
-[data-theme='dark'] .agent-model-settings__intro,
-[data-theme='dark'] .agent-model-settings__panel {
-  background: linear-gradient(180deg, rgba(26, 37, 47, 0.84), rgba(15, 24, 32, 0.76));
-  border-color: rgba(96, 165, 250, 0.1);
-  box-shadow: 0 20px 38px rgba(0, 0, 0, 0.22);
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e3e9f4);
+  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
 }
 
 .agent-model-settings__intro h2,
 .agent-model-settings__header h3 {
   margin: 0;
-  color: var(--text-primary);
+  color: var(--ink, #172033);
 }
 
 .agent-model-settings__header {
@@ -288,13 +281,13 @@ onMounted(() => {
 
 .agent-model-settings__header p {
   margin: 8px 0 0;
-  color: var(--text-secondary);
+  color: var(--muted, #5b6577);
   line-height: 1.6;
 }
 
 .agent-model-settings__intro :deep(.el-alert) {
   border: 1px solid rgba(67, 176, 216, 0.16);
-  background: rgba(255, 255, 255, 0.52);
+  background: var(--surface, #fff);
 }
 
 .agent-model-settings__table {

@@ -765,15 +765,15 @@ const copyText = async (text: string, successMessage: string) => {
     padding: 14px 16px;
     border-radius: 14px;
     border: 1px solid var(--line, #e3e9f4);
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
+    background: var(--canvas, #f3f6fb);
+    box-shadow: none;
     display: grid;
     gap: 6px;
 
     span {
       font-size: 12px;
       font-weight: 700;
-      color: var(--muted, #5b6577);
+      color: var(--faint, #67758f);
     }
 
     strong {
@@ -788,8 +788,8 @@ const copyText = async (text: string, successMessage: string) => {
     padding: 16px;
     border: 1px solid var(--line, #e3e9f4);
     border-radius: 16px;
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
+    background: var(--surface, #fff);
+    box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
     min-width: 0;
     overflow: hidden;
 
@@ -912,8 +912,8 @@ const copyText = async (text: string, successMessage: string) => {
   }
 
   .code-block {
-    background: var(--bg-muted);
-    border: 1px solid var(--border-light);
+    background: var(--canvas, #f3f6fb);
+    border: 1px solid var(--line, #e3e9f4);
     padding: 10px;
     border-radius: 8px;
     max-height: 300px;
@@ -921,9 +921,9 @@ const copyText = async (text: string, successMessage: string) => {
     white-space: pre-wrap;
     word-break: break-word;
     overflow-wrap: anywhere;
-    font-family: 'Courier New', monospace;
+    font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
     font-size: 12px;
-    color: var(--text-primary);
+    color: var(--ink, #172033);
   }
 
   .detail-alert {
@@ -944,8 +944,8 @@ const copyText = async (text: string, successMessage: string) => {
   .detail-collapse {
     :deep(.el-collapse-item__header) {
       font-weight: 700;
-      color: #1c4a67;
-      background: #f3f9fe;
+      color: var(--ink, #172033);
+      background: var(--canvas, #f3f6fb);
       border-radius: 8px;
       padding: 0 12px;
     }
@@ -956,9 +956,9 @@ const copyText = async (text: string, successMessage: string) => {
   }
 
   .detail-error-box {
-    background: #fff3f2;
-    border: 1px solid #f0c7c2;
-    color: #9d3f3a;
+    background: rgba(239, 117, 120, 0.08);
+    border: 1px solid rgba(239, 117, 120, 0.3);
+    color: #c0454a;
     border-radius: 10px;
     padding: 12px;
     line-height: 1.6;
@@ -973,20 +973,21 @@ const copyText = async (text: string, successMessage: string) => {
   }
 
   .dialog-btn--close {
-    border-color: #d6e0e8;
-    color: #4e6475;
-    background: #f7fafc;
+    border-color: var(--line, #e3e9f4);
+    color: var(--muted, #5b6577);
+    background: var(--canvas, #f3f6fb);
   }
 
+  /* 对齐 v2 蓝渐变主按钮（原青绿渐变与品牌体系无关） */
   .dialog-btn--copy {
     border: none;
     color: #fff;
-    background: linear-gradient(135deg, #1f7aa8 0%, #0f766e 100%);
+    background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
   }
 
   .dialog-btn--copy:hover {
     filter: brightness(1.03);
-    box-shadow: 0 6px 14px rgba(20, 96, 132, 0.3);
+    box-shadow: 0 6px 14px rgba(31, 87, 204, 0.3);
   }
 
   :deep(.el-dialog) {
@@ -1022,23 +1023,23 @@ const copyText = async (text: string, successMessage: string) => {
 
 [data-theme="dark"] .agent-logs-page .filters,
 [data-theme="dark"] .agent-logs-page .logs-list {
-  background: rgba(26, 37, 47, 0.72);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--surface, #182230);
+  border-color: var(--line, #2a3648);
 }
 
 [data-theme="dark"] .agent-logs-page .detail-panel {
-  background: rgba(22, 34, 46, 0.85);
-  border-color: rgba(138, 173, 197, 0.3);
+  background: var(--surface, #182230);
+  border-color: var(--line, #2a3648);
 }
 
 [data-theme="dark"] .agent-logs-page .dialog-btn--close {
-  background: rgba(18, 30, 41, 0.8);
-  border-color: rgba(138, 173, 197, 0.3);
-  color: #b8d6ea;
+  background: var(--canvas, #0f1620);
+  border-color: var(--line, #2a3648);
+  color: var(--muted, #9aa8bf);
 }
 
 [data-theme="dark"] .agent-logs-page .log-card {
-  border-color: rgba(138, 173, 197, 0.25);
-  background: linear-gradient(180deg, rgba(24, 39, 52, 0.9) 0%, rgba(20, 33, 45, 0.86) 100%);
+  border-color: var(--line, #2a3648);
+  background: var(--surface, #182230);
 }
 </style>
