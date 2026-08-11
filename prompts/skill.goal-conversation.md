@@ -1,6 +1,6 @@
 ---
 agentId: skill:goal-conversation
-coreHash: 696963342a9317face6a351fead44933097ddc9e2a3e280b6dc4a977fc548129
+coreHash: 2c146fc41cd5867bbf6aab6b0bd99e1b6d3468319665f1dd6302e136c2c4b649
 coreVersion: 1
 temperature: 0.7
 maxTokens: 8000
@@ -22,7 +22,7 @@ deltaOutput: true
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
 - 「userInput（string）」`user:latestMessage`（用户/平台） — 用户当轮的输入内容（对话消息，运行时由执行信封承载）
 - 「state（object）」`sandbox:goal.collectedData.state`（编排注入） — 当前理解状态、置信度与阶段（本 Agent 状态池，来自上一轮合并结果）
-- 「conversationContext（array）」`sandbox:goal.collectedData.history`（编排注入） — 完整可见历史消息（核对原话、补足细节）
+- 「conversationContext（object[]）」`sandbox:goal.collectedData.history`（编排注入） — 完整可见历史消息（核对原话、补足细节）
 
 ## 执行规则
 

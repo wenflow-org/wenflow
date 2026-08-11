@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-scenario-designer
-coreHash: cb92855b3b857e99fea9125cc9437403aad3a516e4dc2456ae021e44396c3c78
+coreHash: 27ccd69c723ac16fabb109904fb12707082488def0016ddcf31e2734b59aae46
 coreVersion: 1
 temperature: 0.9
 maxTokens: 8000
@@ -20,14 +20,14 @@ failurePolicy: retry
 - learner：学习者画像投影（长期特征）
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
-- 「preferredDomains（array）」`sandbox:simulation.preferredDomains`（编排注入） — 偏好领域（管理端实验配置注入）
-- 「preferredGoalTypes（array）」`sandbox:simulation.preferredGoalTypes`（编排注入） — 偏好目标类型
-- 「preferredLevels（array）」`sandbox:simulation.preferredLevels`（编排注入） — 偏好水平档位
-- 「preferredMotivations（array）」`sandbox:simulation.preferredMotivations`（编排注入） — 偏好动机类型
-- 「avoidDomains（array）」`sandbox:simulation.avoidDomains`（编排注入） — 需避开的领域
-- 「candidateDomains（array）」`sandbox:simulation.candidateDomains`（编排注入） — 候选领域池
-- 「candidatePersonas（array）」`sandbox:simulation.candidatePersonas`（编排注入） — 候选画像池（与 personaSeed 配对）
-- 「recentScenarioHints（array）」`sandbox:simulation.recentScenarioHints`（编排注入） — 最近一次样本提示（连续性参考）
+- 「preferredDomains（string[]）」`sandbox:simulation.preferredDomains`（编排注入） — 偏好领域（管理端实验配置注入）
+- 「preferredGoalTypes（string[]）」`sandbox:simulation.preferredGoalTypes`（编排注入） — 偏好目标类型
+- 「preferredLevels（string[]）」`sandbox:simulation.preferredLevels`（编排注入） — 偏好水平档位
+- 「preferredMotivations（string[]）」`sandbox:simulation.preferredMotivations`（编排注入） — 偏好动机类型
+- 「avoidDomains（string[]）」`sandbox:simulation.avoidDomains`（编排注入） — 需避开的领域
+- 「candidateDomains（string[]）」`sandbox:simulation.candidateDomains`（编排注入） — 候选领域池
+- 「candidatePersonas（string[]）」`sandbox:simulation.candidatePersonas`（编排注入） — 候选画像池（与 personaSeed 配对）
+- 「recentScenarioHints（string[]）」`sandbox:simulation.recentScenarioHints`（编排注入） — 最近一次样本提示（连续性参考）
 
 ## 执行规则
 

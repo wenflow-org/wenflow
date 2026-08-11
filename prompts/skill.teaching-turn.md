@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-turn
-coreHash: 1e0ff2581d07062d009b9f52a4ab5fe791e49ce004233640a2e50101cd6cf4a6
+coreHash: 0ad63257e408fc67f128fe7b4a8c4e788e8d68906aa9fbb6fec6a179b4eeb25b
 coreVersion: 1
 temperature: 0.7
 maxTokens: 4000
@@ -20,11 +20,11 @@ failurePolicy: retry
 - evidence：客观事实轨迹：课堂证据、知识变化、课后总结、运行统计（只读追加）
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
-- 「messages（array）」`sandbox:teaching.session.messages`（编排注入） — 当前回合可见消息（压缩切片，含学生最新输入）
+- 「messages（object[]）」`sandbox:teaching.session.messages`（编排注入） — 当前回合可见消息（压缩切片，含学生最新输入）
 - 「learner（object）」`sandbox:teaching.learner.learnerProjection`（编排注入） — 学习者教学投影（画像叙述/困惑点/教学提示）
 - 「knowledge（object）」`sandbox:teaching.knowledge.state`（编排注入） — 知识看板当前状态（points/currentPoint）
 - 「classroomContext（object）」`sandbox:teaching.classroomContext`（编排注入） — 课堂上下文（阶段/焦点，上轮持久化）
-- 「visibleDialogueContext（array）」`sandbox:teaching.visibleDialogueContext`（编排注入） — 最近可见对话（role/content）
+- 「visibleDialogueContext（object[]）」`sandbox:teaching.visibleDialogueContext`（编排注入） — 最近可见对话（role/content）
 - 「controls（object）」`sandbox:teaching.controls.teachingControlContext`（编排注入） — 教学控制上下文（priority/allow* 标志）+ 回合模式
 - 「scenario（object）」`sandbox:teaching.scenario`（编排注入） — 任务与路径上下文（taskProfile/cognitiveFrame/pathProgress 等，编排层组装）
 - 「interactionProfile（object）」`sandbox:teaching.scenario.interactionProfile`（编排注入） — 本轮学生输入的前端交互特征情报（认知负荷量测）：current（本轮统计值）+ history（近 6 条消息含 timestamps 的特征对比）。 字段含义：draftMs 输入总时长、idleMsBefore 上条回复到首次输入的间隔、lastIdleMs 输入中最大停顿、editingCount 编辑次数、 deleteCount 回退字符数、charsPerSentence 每句平均字符数。缺失字段/whole profile 为 absent（旧客户端/虚拟学习者）， 仅作为辅助情报，与 messages 同权、低于 classroomContext 的语义真相优先级。

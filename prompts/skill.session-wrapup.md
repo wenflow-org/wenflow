@@ -1,6 +1,6 @@
 ---
 agentId: skill:session-wrapup
-coreHash: 347a2aa997cd462f89957e2094874223fb08e392933294393821120c186318ed
+coreHash: 884453dfa2111cc5e1f021bd1acd379b86314755d8fb205de7079917f58edd7f
 coreVersion: 1
 temperature: 0.7
 maxTokens: 4000
@@ -20,8 +20,8 @@ failurePolicy: fallback
 - path：路径与确认方案上下文
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
-- 「messages（array）」`sandbox:teaching.session.messages`（编排注入） — 会话消息（含 analysis 标注）
-- 「knowledgePoints（array）」`sandbox:teaching.knowledge.state`（编排注入） — 会话结束时知识看板状态
+- 「messages（object[]）」`sandbox:teaching.session.messages`（编排注入） — 会话消息（含 analysis 标注）
+- 「knowledgePoints（object[]）」`sandbox:teaching.knowledge.state`（编排注入） — 会话结束时知识看板状态
 - 「sessionInfo（object）」`sandbox:teaching.session.info`（编排注入） — 会话信息（主题/任务/路径/时长）
 - 「learningState（object）」`sandbox:teaching.learningState`（编排注入） — 学习状态与运行时信号
 - 「sessionEvidence（object）」`sandbox:teaching.session.evidence`（编排注入） — 会话证据（回合数/理解均值/困惑点/情绪信号/loadIndex 均值与峰值——若输入提供，用于判定"高负荷"而非猜测）

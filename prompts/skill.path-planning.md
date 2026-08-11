@@ -1,6 +1,6 @@
 ---
 agentId: skill:path-planning
-coreHash: 7f4bd4d53e3858ae6f4ef6a1ca7658b451e99b5104857a46d739e73ed1ad6958
+coreHash: 5cda13e88a3250b9fae755d5dd4b14d93f0df0b5ec5218d0b69a11c776382104
 coreVersion: 1
 temperature: 0.5
 maxTokens: 12000
@@ -24,7 +24,7 @@ failurePolicy: retry
 - 「rawGoal（string）」`sandbox:path.normalizedInput.learnerProfile.surfaceGoal`（编排注入） — 原始学习目标（用户原话，经定帧进入 normalizedInput）
 - 「normalizedInput（object）」`sandbox:path.normalizedInput`（编排注入） — 路径定帧主真相源（编排层 buildFramedNormalizedInput 确定性产出）
 - 「confirmedProposal（object）」`sandbox:path.normalizedInput.confirmedProposal`（编排注入） — 用户确认的方向（learningDirection/firstDeliverable/keyStages/outOfScope）
-- 「conversationHistory（array）」`sandbox:goal.collectedData.history`（编排注入） — 完整对话历史（验证关键信息）
+- 「conversationHistory（object[]）」`sandbox:goal.collectedData.history`（编排注入） — 完整对话历史（验证关键信息）
 - 「replan（object?）」`sandbox:path.replan`（编排注入） — 路径重调上下文（模式/触发来源/冻结任务/学习者投影）
 
 ## 执行规则

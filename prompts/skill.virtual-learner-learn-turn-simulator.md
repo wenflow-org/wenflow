@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-learn-turn-simulator
-coreHash: 99c0a748935ca2b07c879b71a0a4860b719551f678da92217714565319e26a1a
+coreHash: 245a54930df1382e4966e3c776e081997a707920e47d814031a6346e9f4ee1b3
 coreVersion: 1
 temperature: 0.7
 maxTokens: 800
@@ -27,7 +27,7 @@ failurePolicy: fallback
 - 「currentPhase（string）」`sandbox:simulation.currentPhase`（编排注入） — trying|blocked|verifying|ready_to_close
 - 「previousLearnerState（object）」`sandbox:simulation.previousLearnerState`（编排注入） — 上一轮学习者主观状态
 - 「currentTask（object）」`sandbox:simulation.currentTask`（编排注入） — 当前 task 信息（学习者视角的任务描述）
-- 「knowledgeSnapshot（array）」`sandbox:simulation.knowledgeSnapshot`（编排注入） — 当前任务知识看板（服务端注入）
+- 「knowledgeSnapshot（object[]）」`sandbox:simulation.knowledgeSnapshot`（编排注入） — 当前任务知识看板（服务端注入）
 
 ## 执行规则
 

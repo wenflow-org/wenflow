@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-actor-auditor
-coreHash: a209a114b539318fa4b4c466b9cc3ee422bf45464006d7d7c1546b9f6523f8a5
+coreHash: 0b3399616062f95bf0d8dc3174189672f1cc28a288d3aabe4691fda7a9c4a75f
 coreVersion: 1
 temperature: 0.2
 maxTokens: 5000
@@ -23,7 +23,7 @@ failurePolicy: retry
 - 「story（object）」`sandbox:simulation.story`（编排注入） — 本次运行的故事设定（hiddenDetails/disclosurePlan 为审计基准）
 - 「frictionBudget（string）」`sandbox:simulation.frictionBudget`（编排注入） — 行为摩擦预算，控制学习者配合/对抗程度
 - 「learnerPrivateState（object）」`sandbox:simulation.learnerPrivateState`（编排注入） — 模拟器私有状态轨迹（旁路通道，不回流学习者）
-- 「publicTrace（array）」`sandbox:simulation.publicTrace`（编排注入） — 学习者实际公开行为轨迹
+- 「publicTrace（object[]）」`sandbox:simulation.publicTrace`（编排注入） — 学习者实际公开行为轨迹
 - 「experimentSummary（object）」`sandbox:simulation.experimentSummary`（编排注入） — 实验覆盖与终态摘要
 
 ## 执行规则

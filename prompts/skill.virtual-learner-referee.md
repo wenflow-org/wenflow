@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-referee
-coreHash: 646f95d94b3e2ff7fc0493772197d38b5021191fb53646d95091f379ae88528e
+coreHash: eea2d4d23251b082ea0a1ebd5f6740d3bfbcd628992b4d08eda80bf4a993c93b
 coreVersion: 1
 temperature: 0.2
 maxTokens: 2400
@@ -17,8 +17,8 @@ failurePolicy: retry
 - task：当前任务 / 场景 / 控制指令
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
-- 「publicTrace（array）」`sandbox:simulation.publicTrace`（编排注入） — 学习者实际可见的公开轨迹
-- 「refereeTrace（array）」`sandbox:simulation.refereeTrace`（编排注入） — 不回流学习者的旁路诊断轨迹
+- 「publicTrace（object[]）」`sandbox:simulation.publicTrace`（编排注入） — 学习者实际可见的公开轨迹
+- 「refereeTrace（object[]）」`sandbox:simulation.refereeTrace`（编排注入） — 不回流学习者的旁路诊断轨迹
 - 「control（object）」`sandbox:simulation.control`（编排注入） — 实验最终控制回执
 - 「experimentSummary（object）」`sandbox:simulation.experimentSummary`（编排注入） — 服务端生成的实验摘要
 - 「storyMeta（object）」`sandbox:simulation.storyMeta`（编排注入） — 平行通道：故事元数据与当次诉求（surfaceGoal/realProblem/demandText），不进入主链
