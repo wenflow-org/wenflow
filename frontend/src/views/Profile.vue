@@ -518,12 +518,26 @@ async function handleDeactivate() {
   flex: none;
 }
 
-/* 两栏布局：改密 + 协助排查 */
+/* 两栏布局：改密 + 协助排查（等高卡片，内容顶部对齐，按钮贴底） */
 .profile-cols {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
-  align-items: start;
+}
+
+.profile-cols .uc-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.profile-cols .uc-card__foot {
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.profile-cols .uc-card .pwd-grid {
+  flex: 1;
 }
 
 @media (max-width: 900px) {
