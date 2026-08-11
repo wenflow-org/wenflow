@@ -83,6 +83,7 @@ router.post('/review/sessions', async (req: any, res) => {
         opening: session.opening,
         mode: session.mode,
         revision: session.revision,
+        knowledgePoints: session.knowledgePoints,
       },
     });
   } catch (error: any) {
@@ -355,6 +356,7 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
           opening: req.user?.projection?.grantSource === 'synthetic' ? undefined : session.opening,
           mode: session.mode,
           revision: session.revision,
+          knowledgePoints: session.knowledgePoints,
           ...(req.user?.projection?.grantSource === 'synthetic' ? { schemaVersion: 'synthetic-user-v1' } : {}),
         };
       });
@@ -376,6 +378,7 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
         opening: req.user?.projection?.grantSource === 'synthetic' ? undefined : session.opening,
         mode: session.mode,
         revision: session.revision,
+        knowledgePoints: session.knowledgePoints,
         ...(req.user?.projection?.grantSource === 'synthetic' ? { schemaVersion: 'synthetic-user-v1' } : {}),
       },
     });

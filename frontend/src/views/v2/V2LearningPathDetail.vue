@@ -60,7 +60,7 @@
             </div>
             <div class="hero__actions">
               <span
-                v-if="currentTask"
+                v-if="currentTask && canLearn"
                 class="btn-primary"
                 @click="goLearn(currentTask.id)"
               >
@@ -150,7 +150,7 @@
                 <span class="tag tag--blue">约 {{ currentTask.estimatedMinutes || '—' }} 分钟</span>
                 <span class="tag">{{ taskKindText(currentTask) }}</span>
               </div>
-              <span class="btn-primary btn-primary--block" @click="goLearn(currentTask.id)">开始学习</span>
+              <span v-if="canLearn" class="btn-primary btn-primary--block" @click="goLearn(currentTask.id)">开始学习</span>
             </section>
 
             <section v-if="nextTasks.length" class="card sidecard">

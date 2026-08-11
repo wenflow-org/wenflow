@@ -32,6 +32,11 @@
         <span class="spinner"></span>
       </div>
 
+      <!-- 整页加载失败 -->
+      <div v-else-if="loadError" class="errorbar">
+        首页数据加载失败。<span class="errorbar__retry" @click="loadAll">重试</span>
+      </div>
+
       <template v-else>
         <!-- 主区：今日行动 + 路径进度 -->
         <div class="dash__grid-main">
@@ -104,6 +109,28 @@
               </span>
               <router-link :to="`/learning-path/${primaryPath?.id}`" class="btn-ghost">查看详情</router-link>
               <router-link to="/goal-conversation" class="link-muted">先修改目标</router-link>
+            </div>
+          </section>
+
+          <!-- 生成中：等待态（区别于失败红卡，禁用重试） -->
+          <section v-else-if="pageState === 'generating'" class="card action action--gen">
+            <div class="action__eyebrow">
+              <span>路径生成中</span>
+              <span class="action__from">来自路径「{{ primaryPath?.title }}」</span>
+            </div>
+            <h1 class="action__title">路径正在生成，稍等一下</h1>
+            <p class="action__desc">生成一般需要几十秒，完成后页面会自动刷新，这里会出现今日行动。你也可以先去别的页面看看。</p>
+            <div class="action__meta">
+              <span class="tag tag--cyan">正在生成</span>
+              <span class="tag">信息已保留</span>
+            </div>
+            <div class="action__footer">
+              <span class="btn-primary btn-primary--off" title="路径生成中，暂不可重试">
+                <span class="spinner spinner--sm"></span>
+                正在生成…
+              </span>
+              <router-link :to="`/learning-path/${primaryPath?.id}`" class="btn-ghost">查看详情</router-link>
+              <router-link to="/learning-paths" class="link-muted">查看全部路径</router-link>
             </div>
           </section>
 
@@ -463,9 +490,11 @@ const examples = ['用 Python 自动化处理 Excel 报表', '提升职场沟通
 /* ================= 数据加载 ================= */
 const reviewDue = ref<Array<{ conceptKey: string; label: string; retention: number; reason: string; estimatedMinutes: number }>>([]);
 const todaySchedule = ref<Record<string, any> | null>(null);
+const loadError = ref(false);
 async function loadAll() {
   loading.value = true;
-  const [statsR, pathsR, guidanceR, sessionsR, achR, dueR, scheduleR] = await Promise.allSettled([
+  loadError.value = false;
+  const results = await Promise.allSettled([
     learningAPI.getStats(),
     learningAPI.getPaths(),
     learningAPI.getAdaptiveGuidance(),
@@ -474,6 +503,13 @@ async function loadAll() {
     request.get('/ai-teaching/review/due'),
     request.get('/learning/schedule/today')
   ]);
+  // 所有数据源全部失败 → 整页加载失败态（避免误渲染成新手空态）
+  if (results.every((r) => r.status === 'rejected')) {
+    loading.value = false;
+    loadError.value = true;
+    return;
+  }
+  const [statsR, pathsR, guidanceR, sessionsR, achR, dueR, scheduleR] = results;
   if (statsR.status === 'fulfilled') stats.value = statsR.value as Record<string, any>;
   if (pathsR.status === 'fulfilled') paths.value = pathsR.value as unknown as Array<Record<string, any>>;
   if (guidanceR.status === 'fulfilled') guidance.value = guidanceR.value as Record<string, any> | null;
@@ -550,9 +586,10 @@ function toPathView(p: Record<string, any>): PathView {
   };
 }
 
-const pageState = computed<'active' | 'attention' | 'empty'>(() => {
+const pageState = computed<'active' | 'attention' | 'generating' | 'empty'>(() => {
   if (!primaryPath.value) return 'empty';
-  if (primaryPath.value.failed || primaryPath.value.generating) return 'attention';
+  if (primaryPath.value.failed) return 'attention';
+  if (primaryPath.value.generating) return 'generating';
   return 'active';
 });
 
@@ -668,6 +705,7 @@ const greetSub = computed(() => guidanceCopy.value?.subtitle || '');
 
 const tipTone = computed(() => {
   if (pageState.value === 'attention') return 'attention';
+  if (pageState.value === 'generating') return 'normal';
   const level = guidanceSummary.value?.global?.stateLevel;
   if (level === 'recover') return 'recover';
   if (guidanceSummary.value?.global?.hasWarnings || guidanceSummary.value?.global?.warningLevel === 'critical') return 'warn';
@@ -676,6 +714,7 @@ const tipTone = computed(() => {
 
 const tipText = computed(() => {
   if (pageState.value === 'attention') return '路径生成失败通常是暂时的。重新生成约 30 秒，已确认的信息都会保留。';
+  if (pageState.value === 'generating') return '路径正在生成中，页面会自动刷新，你也可以先去别的页面看看。';
   const copy = guidanceCopy.value;
   const warning = copy?.warningCopy;
   if (warning && warning !== '当前没有明显风险。') return warning;
@@ -686,7 +725,7 @@ const tipText = computed(() => {
 
 /* ================= 重试 ================= */
 async function doRetry() {
-  if (retrying.value || !primaryPath.value) return;
+  if (retrying.value || !primaryPath.value || primaryPath.value.generating) return;
   retrying.value = true;
   try {
     if (primaryPath.value.retryType === 'stage_design') {
@@ -1181,6 +1220,7 @@ onMounted(loadAll);
   font-size: 12px; font-weight: 600; color: var(--muted);
 }
 .tag--blue { background: rgba(52, 120, 246, 0.09); border-color: rgba(52, 120, 246, 0.3); color: var(--blue-deep); }
+.tag--cyan { background: rgba(67, 176, 216, 0.12); border-color: rgba(67, 176, 216, 0.35); color: #2b7a99; }
 .tag--red { background: rgba(239, 117, 120, 0.1); border-color: rgba(239, 117, 120, 0.35); color: #c0454a; }
 .action__footer { display: flex; align-items: center; gap: 12px; margin-top: auto; flex-wrap: wrap; }
 .btn-primary {

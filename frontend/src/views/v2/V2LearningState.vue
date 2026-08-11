@@ -45,6 +45,11 @@
             </div>
 
             <div v-if="trendLoading" class="chart__loading"><span class="spinner"></span></div>
+            <div v-else-if="trendError" class="chart__empty">
+              <strong>学习负荷数据加载失败</strong>
+              <p>网络或服务暂时不可用，稍后再试。</p>
+              <button type="button" class="chart__retry" @click="loadTrends">重试</button>
+            </div>
             <div v-else-if="!hasAnyLoad" class="chart__empty">
               <strong>还没有学习负荷数据</strong>
               <p>完成学习后，这里会出现健康度、疲劳度与状态值曲线。</p>
@@ -206,6 +211,7 @@ type MetricKey = 'lsb' | 'lss' | 'ktl' | 'lf';
 const current = ref<Record<string, any> | null>(null);
 const warnings = ref<Array<Record<string, any>>>([]);
 const trendLoading = ref(true);
+const trendError = ref(false);
 const range = ref<42 | 90>(42);
 
 const metricOptions: Array<{ key: MetricKey; label: string }> = [
@@ -218,10 +224,11 @@ const metricOptions: Array<{ key: MetricKey; label: string }> = [
 function toneOf(key: MetricKey, v: number): { tone: string; color: string; note: string } {
   if (v === null || v === undefined || Number.isNaN(v)) return { tone: 'blue', color: '#5b6577', note: '暂无数据' };
   if (key === 'lsb') {
-    // LSB = KTL - LF（-100 ~ +100），档位与趋势图状态区一致
-    if (v >= -5) return { tone: 'green', color: '#31b16f', note: '精力充沛' };
-    if (v >= -25) return { tone: 'blue', color: '#3478f6', note: '最优训练区' };
-    return { tone: 'amber', color: '#d9932e', note: '需要安排休息' };
+    // LSB = KTL - LF（-100 ~ +100），分档对齐后端 <0/<20/<40/≥40 与 heroTitle 文案
+    if (v < 0) return { tone: 'red', color: '#ef7578', note: '严重疲劳，优先休息' };
+    if (v >= 40) return { tone: 'green', color: '#31b16f', note: '精力充沛' };
+    if (v >= 20) return { tone: 'blue', color: '#3478f6', note: '最优训练区' };
+    return { tone: 'amber', color: '#d9932e', note: '需要休息' };
   }
   if (key === 'ktl') {
     if (v > 0) return { tone: 'purple', color: '#8d6bff', note: '上升' };
@@ -409,7 +416,9 @@ function onChartHover(e: MouseEvent) {
   hoverDay.value = best;
 }
 
+let trendSeq = 0;
 async function loadTrends() {
+  const seq = ++trendSeq;
   trendLoading.value = true;
   try {
     const start = new Date();
@@ -418,6 +427,7 @@ async function loadTrends() {
     const end = new Date();
     const endDate = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
     const response = await request.get('/users/me/sessions', { params: { startDate, endDate, limit: 500 } });
+    if (seq !== trendSeq) return;
     const list = unwrapArray(response);
     const map = new Map<string, number>();
     for (const s of list) {
@@ -427,10 +437,14 @@ async function loadTrends() {
       map.set(key, (map.get(key) ?? 0) + duration);
     }
     dailyLoad.value = [...map.entries()].map(([date, minutes]) => ({ date, minutes }));
+    trendError.value = false;
   } catch {
+    // 只有最新一次请求的失败才展示错误态（旧请求的失败不覆盖新结果）
+    if (seq !== trendSeq) return;
+    trendError.value = true;
     dailyLoad.value = [];
   } finally {
-    trendLoading.value = false;
+    if (seq === trendSeq) trendLoading.value = false;
   }
 }
 
@@ -748,6 +762,14 @@ onMounted(() => {
 .metric__note--red { color: #c0454a; background: rgba(239, 117, 120, 0.12); }
 .chart__controls { display: flex; gap: 8px; flex-wrap: wrap; }
 .chart__loading { display: grid; justify-items: center; padding: 40px 0; }
+.chart__retry {
+  margin-top: 10px;
+  font: inherit; font-size: 12px; font-weight: 800; color: var(--blue-deep);
+  border: 1px solid rgba(52, 120, 246, 0.4);
+  background: rgba(52, 120, 246, 0.06);
+  padding: 7px 16px; border-radius: 999px; cursor: pointer;
+}
+.chart__retry:hover { background: rgba(52, 120, 246, 0.12); }
 .chart__empty {
   padding: 30px 0; text-align: center; color: var(--faint); font-size: 13px;
   border: 1px dashed var(--line); border-radius: 12px; background: #fafcff;
