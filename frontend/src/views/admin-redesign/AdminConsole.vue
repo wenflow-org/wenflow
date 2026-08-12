@@ -48,6 +48,7 @@ import Addons from './Addons.vue';
 import Announcements from './Announcements.vue';
 import SessionSecurity from './SessionSecurity.vue';
 import PromptWorkbench from './PromptWorkbench.vue';
+import HealthCenter from './HealthCenter.vue';
 import LearnerDetail from './LearnerDetail.vue';
 import TeachingSessions from './TeachingSessions.vue';
 import GoalConversations from './GoalConversations.vue';
@@ -74,7 +75,8 @@ const components: Record<string, unknown> = {
   'addons': Addons,
   'announcements': Announcements,
   'session-security': SessionSecurity,
-  'prompt-workbench': PromptWorkbench
+  'skill-workbench': PromptWorkbench,
+  'health-center': HealthCenter
 };
 
 const detailComponents: Record<string, unknown> = {

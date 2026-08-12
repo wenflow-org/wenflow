@@ -1,5 +1,12 @@
 <template>
-  <div class="hc">
+  <div class="hc mk-page">
+    <!-- 独立页壳（阶段 2B N4：健康中心独立成页） -->
+    <div class="mk-status">
+      <span class="mk-status__dot"></span>
+      <strong class="mk-status__title">{{ TERMS.healthCenter }}</strong>
+      <span class="mk-status__sep"></span>
+      <span class="mk-status__meta">漂移 / 一致性 / 覆盖记录 / 运行时观测</span>
+    </div>
     <!-- 摘要条 -->
     <div class="hc-bar" :class="`hc-bar--${barTone}`">
       <span class="hc-bar__dot"></span>
@@ -77,6 +84,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { errMsg } from './live'
 import { askConfirm } from './useConfirm'
@@ -88,7 +96,7 @@ import {
 } from '@/api/adminApi'
 import { TERMS } from './terms'
 
-const emit = defineEmits<{ (e: 'jump', target: 'drift' | 'skills' | 'workbench'): void }>()
+const router = useRouter()
 
 const report = ref<HealthCenterReport | null>(null)
 const loading = ref(false)
@@ -156,11 +164,11 @@ async function refresh(force = false) {
   }
 }
 
-/** manual 项跳对应面板：字段路由/契约维度 → drift tab；参数/契约/对账类 → Skills；yaml → Prompt 工作台 */
+/** manual 项跳对应面板：字段路由/契约维度 → 编排结构漂移 tab；参数/契约/对账类 → Skills；yaml → Skill 工作台 */
 function jump(id: HealthCenterItemId) {
-  if (id === 'field-routing' || id === 'field-routing-contract' || id === 'fields-sync') emit('jump', 'drift')
-  else if (id === 'yaml-crosscheck' || id === 'params-consistency') emit('jump', 'workbench')
-  else emit('jump', 'skills')
+  if (id === 'field-routing' || id === 'field-routing-contract' || id === 'fields-sync') void router.push('/admin/orchestrator?tab=drift')
+  else if (id === 'yaml-crosscheck' || id === 'params-consistency') void router.push('/admin/skill-workbench')
+  else void router.push('/admin/skills')
 }
 
 async function fix(id: HealthCenterItemId) {
@@ -193,7 +201,7 @@ defineExpose({ refresh })
 </script>
 
 <style scoped>
-.hc { display: grid; gap: 8px; margin-top: 10px; }
+.hc { display: grid; gap: 8px; }
 .hc-bar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 9px 12px; border-radius: 10px;

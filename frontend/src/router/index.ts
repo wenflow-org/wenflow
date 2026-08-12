@@ -211,8 +211,13 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/topology'
   },
   {
-    path: '/admin/skill-workbench/:agentId?',
-    redirect: (to) => ({ path: to.params.agentId ? `/admin/skills/${to.params.agentId}` : '/admin/skills' })
+    path: '/admin/skill-workbench/:agentId',
+    redirect: (to) => ({ path: `/admin/skills/${to.params.agentId as string}` })
+  },
+  {
+    // 阶段 2B N1：prompt-workbench 改名「Skill 工作台」（场景 id skill-workbench），旧 URL 重定向兼容（深链/书签）
+    path: '/admin/prompt-workbench',
+    redirect: '/admin/skill-workbench'
   },
   {
     path: '/admin/virtual-session/:sessionId',

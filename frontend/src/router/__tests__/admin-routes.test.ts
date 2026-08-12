@@ -51,6 +51,17 @@ describe('Admin 路由重定向', () => {
     await router.push('/admin/prompt-call-logs');
     expect(router.currentRoute.value.path).toBe('/admin/execution-logs');
   });
+
+  it('/admin/prompt-workbench → /admin/skill-workbench（阶段 2B N1 改名兼容重定向）', async () => {
+    await router.push('/admin/prompt-workbench');
+    expect(router.currentRoute.value.path).toBe('/admin/skill-workbench');
+  });
+
+  it('/admin/skill-workbench/:agentId → 设计页（旧工作台详情深链兼容）', async () => {
+    await router.push('/admin/skill-workbench/goal-agent');
+    expect(router.currentRoute.value.name).toBe('AdminSkillEditor');
+    expect(router.currentRoute.value.params.agentId).toEqual(['goal-agent']);
+  });
 });
 
 describe('Admin 主路由解析', () => {
@@ -64,6 +75,18 @@ describe('Admin 主路由解析', () => {
     await router.push('/admin/skills/goal-agent');
     expect(router.currentRoute.value.name).toBe('AdminSkillEditor');
     expect(router.currentRoute.value.params.agentId).toEqual(['goal-agent']);
+  });
+
+  it('/admin/skill-workbench → AdminConsole 场景（Skill 工作台，旧 :agentId? 路由不再吞单段路径）', async () => {
+    await router.push('/admin/skill-workbench');
+    expect(router.currentRoute.value.name).toBe('AdminConsole');
+    expect(router.currentRoute.value.params.page).toBe('skill-workbench');
+  });
+
+  it('/admin/health-center → AdminConsole 场景（健康中心独立页）', async () => {
+    await router.push('/admin/health-center');
+    expect(router.currentRoute.value.name).toBe('AdminConsole');
+    expect(router.currentRoute.value.params.page).toBe('health-center');
   });
 
   it('未知 page 仍解析到 AdminConsole（组件内回退 overview）', async () => {

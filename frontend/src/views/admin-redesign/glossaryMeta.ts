@@ -89,7 +89,7 @@ export const DEMO_GLOSSARY_TERMS: GlossaryTerm[] = [
   { term: '幽灵注册', category: 'status', def: '系统里有注册行，但户口簿（skills.yaml）里已经没有这个技能' },
   { term: '缺 ACTIVE', category: 'status', def: '技能有文件/注册，但数据库里没有"当前生效"的 prompt 版本，运行时无法执行' },
   { term: '未解析节点', category: 'status', def: '编排定义引用了尚未落位的节点，需要人工补接线' },
-  { term: '健康中心', category: 'health', def: '13 项系统健康检查的聚合清单，位于编排结构页顶部"健康区"；每项带严重度与修复动作' },
+  { term: '健康中心', category: 'health', def: '13 项系统健康检查的聚合清单（独立页面，原内嵌于编排结构页顶部「健康区」）；每项带严重度与修复动作' },
   { term: '健康分', category: 'health', def: '总览页的"今日调用成功率"评分（0-100），与"健康区"（13 项系统检查）是两套不同口径；页面已改名为「今日成功率」' },
   { term: '检查项', category: 'health', def: '健康区里的每一项系统检查（共 13 项），每项带严重度、状态与修复动作' },
   { term: 'W4 coreHash', category: 'health', def: '核心文件 ↔ 编译产物 ↔ DB 三方哈希对账：文件改了但没"编译+同步"，线上就跑旧版' },

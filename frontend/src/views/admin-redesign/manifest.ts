@@ -23,12 +23,13 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'skills', label: 'Skill 目录', group: '运行', glyph: '能' },
   { id: 'topology', label: 'Agent 拓扑', group: '运行', glyph: '络' },
   { id: 'orchestrator', label: '编排结构', group: '运行', glyph: '流' },
+  { id: 'skill-workbench', label: 'Skill 工作台', group: 'Skill', glyph: '台' },
+  { id: 'health-center', label: '健康中心', group: '数据健康', glyph: '健' },
   { id: 'execution-logs', label: '执行日志', group: '观测', glyph: '志' },
   { id: 'trace-waterfall', label: 'Trace 瀑布', group: '观测', glyph: '溯' },
   { id: 'audit-logs', label: '审计日志', group: '观测', glyph: '审' },
   { id: 'api-config', label: '模型与接入', group: '配置', glyph: '安' },
-  { id: 'announcements', label: '公告', group: '配置', glyph: '告' },
   { id: 'addons', label: '外挂能力', group: '配置', glyph: '件' },
   { id: 'session-security', label: '会话安全', group: '配置', glyph: '锁' },
-  { id: 'prompt-workbench', label: '核心文件同步', group: '配置', glyph: '台' }
+  { id: 'announcements', label: '公告', group: '运营', glyph: '告' }
 ]

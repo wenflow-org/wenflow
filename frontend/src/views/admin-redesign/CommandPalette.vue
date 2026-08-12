@@ -125,6 +125,22 @@ const items = computed<Item[]>(() => {
       hint: '虚拟学习者',
       group: '操作',
       run: () => queueQuickAction('virtual-learners', 'create-virtual')
+    },
+    {
+      key: 'action:create-skill',
+      icon: '＋',
+      label: '新建 Skill',
+      hint: 'Skill 工作台',
+      group: '操作',
+      run: () => queueQuickAction('skill-workbench', 'create-skill')
+    },
+    {
+      key: 'action:open-health-center',
+      icon: '♥',
+      label: '打开健康中心',
+      hint: '数据健康',
+      group: '操作',
+      run: () => emit('navigate', 'health-center')
     }
   )
   // Trace ID 直接跳转

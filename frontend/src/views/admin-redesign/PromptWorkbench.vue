@@ -3,7 +3,7 @@
     <!-- 状态条 -->
     <div class="mk-status">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">Prompt 核心文件目录（v4）</strong>
+      <strong class="mk-status__title">Skill 工作台</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">核心文件 {{ cores.length }}</span>
       <span class="mk-status__meta pw-ok">同步 {{ countBy('synced') }}</span>
@@ -179,12 +179,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { adminPromptWorkbenchApi, adminSkillsApi, type SkillScaffoldMeta, type SkillScaffoldResult } from '@/api/adminApi';
 import { useEscape } from './useEscape';
 import { useOverlay, useMaskClose } from './useOverlay';
 import { useLoadMore } from './useLoadMore';
+import { intent } from './store'
 import { toast } from '@/utils/toast'
 
 interface CoreListItem {
@@ -262,6 +263,18 @@ const scaffoldMaskRef = ref<HTMLElement | null>(null);
 useEscape(() => scaffoldOpen.value, () => { closeScaffold(); });
 useOverlay(scaffoldOpen, scaffoldPanelRef);
 useMaskClose(scaffoldMaskRef, () => { closeScaffold(); });
+
+/* 命令面板快捷动作「新建 Skill」：直达并打开 scaffold 弹窗 */
+watch(
+  () => intent.quickAction,
+  (a) => {
+    if (a === 'create-skill') {
+      intent.quickAction = ''
+      void openScaffold()
+    }
+  },
+  { immediate: true }
+)
 
 function errOf(e: any) {
   return e?.response?.data?.error?.message || e?.message || '操作失败';

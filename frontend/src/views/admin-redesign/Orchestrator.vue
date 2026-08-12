@@ -13,8 +13,8 @@
       <span v-if="isLive && recSummary && recSummary.activeMissing" class="mk-status__meta mk-status__meta--warn">缺 ACTIVE {{ recSummary.activeMissing }}</span>
       <span v-if="isLive && recSummary && recSummary.orphanRegistrations" class="mk-status__meta mk-status__meta--bad">幽灵注册 {{ recSummary.orphanRegistrations }}</span>
       <span v-if="isLive && w4Drifted.length" class="mk-status__meta mk-status__meta--bad" :title="`${TERMS.driftHashQualified}（W4）：核心文件 ↔ 编译产物 ↔ DB 三方哈希不一致，需重新编译 + 同步`">W4 漂移 {{ w4Drifted.length }}</span>
-      <button v-if="isLive" type="button" class="mk-status__action" :class="{ 'mk-status__action--on': healthOpen }" @click="healthOpen = !healthOpen">
-        {{ healthOpen ? '收起健康区' : TERMS.healthZone }}
+      <button v-if="isLive" type="button" class="mk-status__action" @click="openHealthCenter">
+        {{ TERMS.healthCenter }} →
       </button>
       <button v-if="isLive" type="button" class="mk-status__action" :disabled="defsLoading" @click="loadDefinitions">
         {{ defsLoading ? '拉取中…' : '刷新定义' }}
@@ -26,9 +26,6 @@
         @click="unresolvedOpen = !unresolvedOpen"
       >{{ unresolvedOpen ? '收起明细' : `未解析明细 ${unresolvedNodes.length}` }}</button>
     </div>
-
-    <!-- 健康区（漂移/健康提醒聚合；demo 模式隐藏） -->
-    <HealthCenter v-if="isLive && healthOpen" @jump="jumpTo" />
 
     <div v-if="unresolvedOpen && unresolvedNodes.length" class="orch-unresolved">
       <span class="orch-unresolved__label">未解析节点（运行时定义引用但拓扑未落位）：</span>
@@ -187,7 +184,6 @@ import { COMPLETION_META } from './glossaryMeta'
 import FieldRoutingTable from './FieldRoutingTable.vue'
 import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
-import HealthCenter from './HealthCenter.vue'
 import { TERMS } from './terms'
 
 const tabs = [
@@ -198,9 +194,13 @@ const tabs = [
 ]
 const activeTab = ref('definition')
 
-/* ================= 健康区（顶部展开；manual 项跳对应面板） ================= */
+/* ================= 健康中心入口（阶段 2B N4：独立成页，编排页只留跳转入口，避免重复渲染） ================= */
 const router = useRouter()
 const route = useRoute()
+
+function openHealthCenter() {
+  void router.push('/admin/health-center')
+}
 
 /** ?stage=&tab= 直达（Skill 设计页字段路由 tab → 编排结构页跳转闭环） */
 function applyStageQuery() {
@@ -211,17 +211,6 @@ function applyStageQuery() {
     activeTab.value = qTab
   }
 }
-const healthOpen = ref(false)
-
-function jumpTo(target: 'drift' | 'skills' | 'workbench') {
-  if (target === 'drift') {
-    if (!current.value) return
-    activeTab.value = 'drift'
-    return
-  }
-  void router.push(target === 'skills' ? '/admin/skills' : '/admin/prompt-workbench')
-}
-
 const defsLoading = ref(false)
 const defsLoaded = ref(false)
 const orchCount = ref(0)
@@ -514,12 +503,6 @@ const stageTitle = computed(() => {
 .mk-status__meta--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
 .mk-status__num { font-variant-numeric: tabular-nums; }
 .mk-status__num--live { color: var(--mk-green, #15803d); }
-.mk-status__action--on {
-  border-color: rgba(44, 99, 208, 0.5);
-  background: #eef4ff;
-  color: var(--mk-blue, #2c63d0);
-  font-weight: 800;
-}
 .orch-unresolved {
   display: flex;
   align-items: center;

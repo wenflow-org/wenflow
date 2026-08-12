@@ -26,7 +26,7 @@ function mountShell(props: { current: string; crumb?: string; release?: boolean 
 }
 
 describe('Shell 导航', () => {
-  it('渲染 manifest 全部 18 个菜单项（label 齐全）', () => {
+  it('渲染 manifest 全部菜单项（label 齐全）', () => {
     const wrapper = mountShell();
     const labels = wrapper.findAll('.mshell__item-label').map((n) => n.text());
     expect(labels).toHaveLength(MOCK_SCENES.length);
@@ -35,10 +35,10 @@ describe('Shell 导航', () => {
     }
   });
 
-  it('五个导航分组齐全且顺序稳定', () => {
+  it('八个导航分组齐全且顺序稳定', () => {
     const wrapper = mountShell();
     const groups = wrapper.findAll('.mshell__group-title').map((n) => n.text());
-    expect(groups).toEqual(['总览', '学习者', '运行', '观测', '配置']);
+    expect(groups).toEqual(['总览', '学习者', '运行', 'Skill', '数据健康', '观测', '配置', '运营']);
   });
 
   it('当前页菜单高亮（active class）', () => {

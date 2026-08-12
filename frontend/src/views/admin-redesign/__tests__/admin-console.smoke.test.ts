@@ -2,7 +2,7 @@
  * AdminConsole 导航冒烟（J P0）：
  * 真实挂载 AdminConsole（mock 掉 API 层），验证
  * 1. boot 流程完成（loadLiveData 对 mock API 容错 → 不整页报错）
- * 2. manifest 全部 18 个菜单项逐一点击 → 路由跳转 /admin/:id + 对应页面组件真正渲染
+ * 2. manifest 全部菜单项（19 项）逐一点击 → 路由跳转 /admin/:id + 对应页面组件真正渲染
  * 3. 深链直达 /admin/:page 渲染对应页面；非法 page 回退 /admin/overview 并修正 URL
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -42,6 +42,7 @@ vi.mock('@/api/adminApi', () => ({
   adminGoalConversationsApi: apiObject(),
   adminRuntimeDefinitionsApi: apiObject(),
   adminPromptOpsApi: apiObject(),
+  adminHealthCenterApi: apiObject(),
   adminVirtualLearnersApi: apiObject(),
   adminSessionsApi: apiObject(),
   adminSkillWorkbenchApi: apiObject(),
