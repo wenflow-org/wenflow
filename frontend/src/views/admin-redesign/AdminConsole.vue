@@ -27,15 +27,12 @@
   </section>
 </template>
 
-<script setup lang="ts">
+<script lang="ts">
 /**
- * WenFlow Admin 控制台（新版，已上线）
- * 原实验稿 /admin-redesign-lab 已废除，本组件为唯一管理后台入口。
- * 特点：
+ * 页面注册表（测试只读视图 + 模块级单源）：
+ * AdminConsole 是唯一注册点，SCENE_COMPONENTS/DETAIL_COMPONENTS 供冒烟测试断言
+ * 「manifest 每项 → 注册组件」一一对应，防止加菜单忘注册 / 删菜单留死组件
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import Shell from './Shell.vue';
 import Overview from './Overview.vue';
 import Users from './Users.vue';
 import LearnerCenter from './LearnerCenter.vue';
@@ -51,19 +48,13 @@ import Addons from './Addons.vue';
 import Announcements from './Announcements.vue';
 import SessionSecurity from './SessionSecurity.vue';
 import PromptWorkbench from './PromptWorkbench.vue';
-import SkillDrawer from './SkillDrawer.vue';
-import AdminGlossaryDrawer from './AdminGlossaryDrawer.vue';
 import LearnerDetail from './LearnerDetail.vue';
 import TeachingSessions from './TeachingSessions.vue';
 import GoalConversations from './GoalConversations.vue';
 import Feedback from './Feedback.vue';
 import SessionCockpit from './SessionCockpit.vue';
-import CommandPalette from './CommandPalette.vue';
 import VirtualProfile from './VirtualProfile.vue';
 import UserDetail from './UserDetail.vue';
-import { intent, subPage, closeSkillDrawer } from './store';
-import { loadLiveData } from './live';
-import './shared.css';
 
 const components: Record<string, unknown> = {
   'overview': Overview,
@@ -92,6 +83,26 @@ const detailComponents: Record<string, unknown> = {
   user: UserDetail,
   session: SessionCockpit
 };
+
+export const SCENE_COMPONENTS: Readonly<Record<string, unknown>> = components;
+export const DETAIL_COMPONENTS: Readonly<Record<string, unknown>> = detailComponents;
+</script>
+
+<script setup lang="ts">
+/**
+ * WenFlow Admin 控制台（新版，已上线）
+ * 原实验稿 /admin-redesign-lab 已废除，本组件为唯一管理后台入口。
+ * 特点：
+ */
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import Shell from './Shell.vue';
+import SkillDrawer from './SkillDrawer.vue';
+import AdminGlossaryDrawer from './AdminGlossaryDrawer.vue';
+import CommandPalette from './CommandPalette.vue';
+import { intent, subPage, closeSkillDrawer } from './store';
+import { loadLiveData } from './live';
+import './shared.css';
 
 const scene = ref('overview');
 const paletteOpen = ref(false);

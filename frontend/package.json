@@ -7,6 +7,9 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit -p tsconfig.json && vite build",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint src vite.config.ts --ext .vue,.js,.jsx,.ts,.tsx --ignore-path .gitignore",
     "lint:fix": "npm run lint -- --fix",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
@@ -37,12 +40,16 @@
     "@typescript-eslint/eslint-plugin": "^8.67.0",
     "@typescript-eslint/parser": "^8.67.0",
     "@vitejs/plugin-vue": "^5.2.4",
+    "@vitest/coverage-v8": "^3.2.7",
+    "@vue/test-utils": "^2.4.11",
     "eslint": "^8.56.0",
     "eslint-plugin-vue": "^9.20.1",
+    "jsdom": "^26.1.0",
     "prettier": "^3.2.4",
     "typescript": "5.3.3",
     "unplugin-vue-components": "^32.1.0",
     "vite": "^6.4.3",
+    "vitest": "^3.2.7",
     "vue-tsc": "^2.2.12"
   }
 }
