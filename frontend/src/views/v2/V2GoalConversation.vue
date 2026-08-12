@@ -31,7 +31,7 @@
       </div>
 
       <div v-if="live.failed === 'start'" class="errorbar">
-        连接失败，没能开始对话。<span class="errorbar__retry" @click="doRetry">重试</span>
+        连接失败，没能开始对话。<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
       </div>
 
       <div class="entry__cards">
@@ -42,7 +42,7 @@
             </button>
           </div>
         <button v-for="c in displayScenes" :key="c.title" type="button" class="scene-card" :disabled="live.sending" :title="c.desc" @click="startWith(c.seed)">
-          <span class="scene-card__icon" :style="{ background: c.bg, color: c.ink }" v-html="c.icon"></span>
+          <span class="scene-card__icon" aria-hidden="true" :style="{ background: c.bg, color: c.ink }" v-html="c.icon"></span>
           <span class="scene-card__body">
             <strong>{{ c.title }}</strong>
           </span>
@@ -51,8 +51,10 @@
       </div>
 
       <div class="composer composer--entry">
+        <label class="visually-hidden" for="goal-entry-input">你想解决什么</label>
         <div class="composer__box" :class="{ 'composer__box--active': input.trim() }">
           <textarea
+            id="goal-entry-input"
             v-model="input"
             class="composer__textarea"
             rows="1"
@@ -61,9 +63,16 @@
             @input="live.meta.onInput(input.length)"
             @keydown.enter.exact.prevent="doSend"
           ></textarea>
-          <span class="composer__send" :class="{ 'composer__send--off': !input.trim() || live.sending }" @click="doSend">
-            <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
-          </span>
+          <button
+            type="button"
+            class="composer__send"
+            :class="{ 'composer__send--off': !input.trim() || live.sending }"
+            :disabled="!input.trim() || live.sending"
+            aria-label="发送"
+            @click="doSend"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
+          </button>
         </div>
       </div>
     </main>
@@ -105,27 +114,27 @@
             <li class="stage-nav__item" :class="stageCls(2)"><i>2</i>确认方案</li>
             <li class="stage-nav__item" :class="stageCls(3)"><i>3</i>生成路径</li>
           </ol>
-          <span class="chat__clear" @click="doReset">清空重聊</span>
+          <button type="button" class="chat__clear" @click="doReset">清空重聊</button>
         </div>
 
         <!-- 会话态内 start 失败：错误条 + 重试（初始态 errorbar 在此视图不渲染） -->
         <div v-if="live.failed === 'start'" class="errorbar chat__errorbar">
-          连接失败，没能开始对话。<span class="errorbar__retry" @click="doRetry">重试</span>
+          连接失败，没能开始对话。<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
         </div>
 
-        <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal }">
-          <template v-for="(m, i) in live.messages" :key="i">
-            <div v-if="m.role === 'user'" class="msg msg--user">
-              <div class="msg__bubble">{{ m.content }}</div>
-              <div class="msg__meta">你 · {{ m.time }}</div>
+        <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal }" aria-live="polite">
+          <template v-for="km in keyedMessages" :key="km.key">
+            <div v-if="km.msg.role === 'user'" class="msg msg--user">
+              <div class="msg__bubble">{{ km.msg.content }}</div>
+              <div class="msg__meta">你 · {{ km.msg.time }}</div>
             </div>
             <div v-else class="msg msg--ai">
               <span class="msg__avatar"><img src="/favicon.png" alt="问流" /></span>
               <div class="msg__content">
-                <div class="msg__bubble msg__bubble--html" v-html="formatMessage(m.content)"></div>
+                <div class="msg__bubble msg__bubble--html" v-html="formatMessage(km.msg.content)"></div>
                 <div class="msg__meta">
-                  问流 · {{ m.time }}
-                  <span v-if="m.failed" class="msg__retry" @click="doRetry">重试</span>
+                  问流 · {{ km.msg.time }}
+                  <button v-if="km.msg.failed" type="button" class="msg__retry" @click="doRetry">重试</button>
                 </div>
               </div>
             </div>
@@ -141,18 +150,20 @@
           <div v-if="!live.sending && live.quickReplies.length && live.stageIndex < 3" class="replies">
             <div v-if="!live.quickReplyHintShown" class="replies__hint">点一下直接发送，点 ＋ 先放进输入框</div>
             <div class="replies__row">
-              <button v-for="q in live.quickReplies" :key="q.text" type="button" class="reply" @click="sendDirect(q.text)">
-                {{ q.text }}
-                <span class="reply__plus" title="放进输入框" @click.stop="appendToInput(q.text)">＋</span>
-              </button>
+              <div v-for="q in live.quickReplies" :key="q.text" class="reply">
+                <button type="button" class="reply__send" @click="sendDirect(q.text)">{{ q.text }}</button>
+                <button type="button" class="reply__plus" title="放进输入框" aria-label="放进输入框" @click="appendToInput(q.text)">＋</button>
+              </div>
             </div>
           </div>
         </div>
 
         <!-- 输入区 -->
         <div class="composer">
+          <label class="visually-hidden" for="goal-chat-input">回答上面的问题，或补充你的基础、时间和限制</label>
           <div class="composer__box" :class="{ 'composer__box--active': input.trim() }">
             <textarea
+              id="goal-chat-input"
               v-model="input"
               class="composer__textarea"
               rows="1"
@@ -161,9 +172,16 @@
               @keydown.enter.exact.prevent="doSend"
             ></textarea>
             <span class="composer__count">{{ input.length }} / 500</span>
-            <span class="composer__send" :class="{ 'composer__send--off': !input.trim() || live.sending }" @click="doSend">
-              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
-            </span>
+            <button
+              type="button"
+              class="composer__send"
+              :class="{ 'composer__send--off': !input.trim() || live.sending }"
+              :disabled="!input.trim() || live.sending"
+              aria-label="发送"
+              @click="doSend"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
+            </button>
           </div>
           <div class="composer__hint">
             <span>Enter 发送 · Shift+Enter 换行</span>
@@ -277,6 +295,11 @@ const route = useRoute();
 const router = useRouter();
 const live = useGoalLive();
 const loggedIn = hasUserSession();
+
+// 稳定 key 渲染消息列表（失败气泡移除/追加时避免 DOM 复用错乱）
+const keyedMessages = computed(() =>
+  live.messages.map((m, i) => ({ key: m.id ?? `i_${i}`, msg: m }))
+);
 
 onMounted(() => {
   window.addEventListener('v2:new-goal', onNewGoalEvent);

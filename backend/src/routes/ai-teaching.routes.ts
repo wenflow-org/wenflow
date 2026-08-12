@@ -8,6 +8,7 @@
  */
 
 import { Router } from 'express';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import aiTeachingCoordinator from '../services/ai-teaching/AITeachingCoordinator';
 import learningStateService from '../services/learning/learning-state.service';
 import aiService from '../services/ai/ai.service';
@@ -26,6 +27,23 @@ import type { InteractionMetaRecord } from '../services/ai-teaching/TeachingCont
 
 const router = Router();
 
+const parseRateLimitEnvValue = (value: string | undefined, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+/**
+ * 授课消息用户级限流（每消息触发 1-2 次 LLM 调用，按 userId 键控，未登录按 IP 兜底）
+ */
+const teachingMessagesUserLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: parseRateLimitEnvValue(process.env.TEACHING_MESSAGES_MAX_PER_HOUR, 60),
+  message: { success: false, error: { message: '消息发送过于频繁，请稍后重试', code: 'RATE_LIMITED', status: 429 } },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.user?.userId || ipKeyGenerator(req.ip, 56),
+});
+
 /**
  * 到期复习清单（复习闭环 · learn agent 出口）
  * GET /api/ai-teaching/review/due
@@ -34,7 +52,7 @@ router.get('/review/due', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
     const due = await learnerExitService.getDueReview(userId, 20);
     res.json({
@@ -52,7 +70,7 @@ router.get('/review/due', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('[review] 到期复习清单获取失败:', error);
-    res.status(500).json({ success: false, error: error?.message || '获取复习清单失败' });
+    return sendTeachingError(res, error, '获取复习清单失败');
   }
 });
 
@@ -64,11 +82,11 @@ router.post('/review/sessions', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
     const taskId = req.body?.taskId;
     if (!taskId || typeof taskId !== 'string') {
-      return res.status(400).json({ success: false, error: '缺少 taskId' });
+      return sendValidationError(res, '缺少 taskId');
     }
     await learningService.assertTaskReadyForLearning(taskId, userId);
     const session = await aiTeachingCoordinator.startSession({ userId, taskId, mode: 'review' });
@@ -183,6 +201,12 @@ const sendTeachingError = (res: any, error: any, fallbackMessage: string) => {
     }
   });
 };
+
+const sendUnauthorized = (res: any) =>
+  res.status(401).json({ success: false, error: { message: '未登录', code: 'UNAUTHORIZED', status: 401 } });
+
+const sendValidationError = (res: any, message: string) =>
+  res.status(400).json({ success: false, error: { message, code: 'VALIDATION_ERROR', status: 400 } });
 
 /**
  * 写一条 SSE 事件。HTTP 200 已提交后无法再改状态码，
@@ -335,7 +359,7 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { taskId } = req.params;
@@ -396,7 +420,7 @@ router.post('/sessions/:sessionId/pause', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { sessionId } = req.params;
@@ -426,7 +450,7 @@ router.post('/sessions/:sessionId/resume', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { sessionId } = req.params;
@@ -453,7 +477,7 @@ router.post('/sessions/:sessionId/reset', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { sessionId } = req.params;
@@ -480,7 +504,7 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { sessionId } = req.params;
@@ -491,10 +515,7 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
     const interactionMeta = sanitizeInteractionMeta(req.body?.meta);
 
     if (!message) {
-      return res.status(400).json({
-        success: false,
-        error: '缺少消息内容',
-      });
+      return sendValidationError(res, '缺少消息内容');
     }
 
     const expectedRevision = requireExpectedRevision(req.body?.revision);
@@ -526,7 +547,7 @@ router.post('/sessions/:sessionId/checkpoints/:checkpointId/submit', async (req:
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { sessionId, checkpointId } = req.params;
@@ -536,7 +557,7 @@ router.post('/sessions/:sessionId/checkpoints/:checkpointId/submit', async (req:
     const answerText = typeof req.body?.answerText === 'string' ? req.body.answerText.trim() : undefined;
 
     if ((!selectedOptionIds || selectedOptionIds.length === 0) && !answerText) {
-      return res.status(400).json({ success: false, error: '缺少作答内容' });
+      return sendValidationError(res, '缺少作答内容');
     }
 
     await teachingSessionRepository.assertOwnership(sessionId, userId);
@@ -561,7 +582,7 @@ router.post('/sessions/:sessionId/end', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { sessionId } = req.params;
@@ -599,7 +620,7 @@ router.post('/sessions/:sessionId/end', async (req: any, res) => {
 router.post('/sessions/:sessionId/finalize', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
-    if (!userId) return res.status(401).json({ success: false, error: { message: '未登录' } });
+    if (!userId) return sendUnauthorized(res);
 
     const action = req.body?.action;
     if (!['end_only', 'complete_task', 'complete_review'].includes(action)) {
@@ -645,7 +666,7 @@ router.post('/sessions/:sessionId/finalize', async (req: any, res) => {
 router.get('/sessions/:sessionId/finalization', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
-    if (!userId) return res.status(401).json({ success: false, error: { message: '未登录' } });
+    if (!userId) return sendUnauthorized(res);
     const result = await sessionFinalizationService.getStatus(req.params.sessionId, userId);
     return res.json({ success: true, data: result });
   } catch (error: any) {
@@ -662,7 +683,7 @@ router.get('/state', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const state = await learningStateService.getCurrentState(userId);
@@ -692,10 +713,7 @@ router.get('/state', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('获取学习状态失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '获取状态失败',
-    });
+    return sendTeachingError(res, error, '获取状态失败');
   }
 });
 
@@ -707,7 +725,7 @@ router.get('/trends', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const days = parseInt(req.query.days as string) || 7;
@@ -725,10 +743,7 @@ router.get('/trends', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('获取趋势失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '获取趋势失败',
-    });
+    return sendTeachingError(res, error, '获取趋势失败');
   }
 });
 
@@ -740,7 +755,7 @@ router.post('/sessions/:sessionId/peer/messages', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { sessionId } = req.params;
@@ -750,10 +765,7 @@ router.post('/sessions/:sessionId/peer/messages', async (req: any, res) => {
     const { message } = req.body;
 
     if (!message) {
-      return res.status(400).json({
-        success: false,
-        error: '缺少消息内容',
-      });
+      return sendValidationError(res, '缺少消息内容');
     }
 
     if (String(req.headers?.accept || '').includes('text/event-stream')) {
@@ -776,10 +788,7 @@ router.post('/sessions/:sessionId/peer/messages', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('处理学习伙伴消息失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '处理消息失败',
-    });
+    return sendTeachingError(res, error, '伴学消息处理失败，请稍后重试');
   }
 });
 
@@ -792,7 +801,7 @@ router.get('/sessions/active', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { taskId } = req.query;
@@ -825,10 +834,7 @@ router.get('/sessions/active', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('获取活跃会话失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '获取会话失败',
-    });
+    return sendTeachingError(res, error, '获取会话失败');
   }
 });
 
@@ -840,7 +846,7 @@ router.get('/sessions/history', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const sessions = await aiTeachingCoordinator.getSessionHistory(userId);
@@ -851,10 +857,7 @@ router.get('/sessions/history', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('获取历史会话失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '获取历史会话失败',
-    });
+    return sendTeachingError(res, error, '获取历史会话失败');
   }
 });
 
@@ -866,7 +869,7 @@ router.get('/sessions/:sessionId/detail', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { sessionId } = req.params;
@@ -876,7 +879,7 @@ router.get('/sessions/:sessionId/detail', async (req: any, res) => {
     const session = await aiTeachingCoordinator.getSessionDetail(sessionId, userId);
 
     if (!session) {
-      return res.status(404).json({ success: false, error: '会话不存在' });
+      return sendTeachingError(res, new Error('会话不存在'), '获取会话详情失败');
     }
 
     res.json({
@@ -885,10 +888,7 @@ router.get('/sessions/:sessionId/detail', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('获取会话详情失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '获取会话详情失败',
-    });
+    return sendTeachingError(res, error, '获取会话详情失败');
   }
 });
 
@@ -900,7 +900,7 @@ router.get('/tasks/:taskId/evaluation/latest', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { taskId } = req.params;
@@ -916,10 +916,7 @@ router.get('/tasks/:taskId/evaluation/latest', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('获取任务评估失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '获取任务评估失败',
-    });
+    return sendTeachingError(res, error, '获取任务评估失败');
   }
 });
 

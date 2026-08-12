@@ -21,6 +21,7 @@ export interface LiveMessage {
   content: string;
   time: string;
   failed?: boolean;
+  id?: string;
 }
 
 export interface LiveField {
@@ -89,6 +90,12 @@ function formatMsgTime(raw?: string): string {
 
 const conversationId = ref('');
 const messages = ref<LiveMessage[]>([]);
+let messageSeq = 0;
+const pushMessage = (m: LiveMessage): LiveMessage => {
+  const withId: LiveMessage = { ...m, id: m.id ?? `m_${Date.now().toString(36)}_${++messageSeq}` };
+  messages.value.push(withId);
+  return withId;
+};
 /** 交互特征采集器（认知负荷量测 · 前端情报层），暴露给页面做输入埋点 */
 const metaTracker = useInteractionMeta();
 const stage = ref<'understanding' | 'proposing' | 'ready' | 'completed' | ''>('');
@@ -192,17 +199,18 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
     messages.value = env.meta.messages.map((m) => ({
       role: m.role,
       content: m.content,
-      time: formatMsgTime(m.time)
+      time: formatMsgTime(m.time),
+      id: `h_${Math.random().toString(36).slice(2, 10)}`
     }));
   } else {
     // 乐观插入后可能已有用户气泡，避免重复
     if (opts.userText) {
       const last = messages.value[messages.value.length - 1];
       if (!(last?.role === 'user' && last.content === opts.userText)) {
-        messages.value.push({ role: 'user', content: opts.userText, time: nowTime() });
+        pushMessage({ role: 'user', content: opts.userText, time: nowTime() });
       }
     }
-    if (env.userVisible) messages.value.push({ role: 'ai', content: env.userVisible, time: nowTime() });
+    if (env.userVisible) pushMessage({ role: 'ai', content: env.userVisible, time: nowTime() });
   }
   localStorage.setItem(MSG_KEY, JSON.stringify(messages.value.slice(-60)));
   started.value = true;
@@ -265,7 +273,7 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
     }
     failed.value = action;
     if (action !== 'start' && action !== 'supplement') {
-      messages.value.push({ role: 'ai', content: '这次没有成功处理你的回答，点下方「重试」继续。', time: nowTime(), failed: true });
+      pushMessage({ role: 'ai', content: '这次没有成功处理你的回答，点下方「重试」继续。', time: nowTime(), failed: true });
     }
     throw e;
   } finally {
@@ -278,7 +286,7 @@ async function send(text: string) {
   const t = text.trim();
   if (!t || sending.value) return;
   // 先上屏，再等 AI（与 supplement 一致）
-  messages.value.push({ role: 'user', content: t, time: nowTime() });
+  pushMessage({ role: 'user', content: t, time: nowTime() });
   started.value = true;
   localStorage.setItem(MSG_KEY, JSON.stringify(messages.value.slice(-60)));
   const meta = metaTracker.collect(t);
@@ -292,7 +300,7 @@ async function send(text: string) {
 async function confirm() {
   if (!conversationId.value || sending.value) return;
   const label = '确认并生成路径';
-  messages.value.push({ role: 'user', content: label, time: nowTime() });
+  pushMessage({ role: 'user', content: label, time: nowTime() });
   localStorage.setItem(MSG_KEY, JSON.stringify(messages.value.slice(-60)));
   await run('confirm', label);
 }
@@ -300,7 +308,7 @@ async function confirm() {
 async function supplement(text: string) {
   const t = text.trim();
   if (!conversationId.value || !t || sending.value) return;
-  messages.value.push({ role: 'user', content: t, time: nowTime() });
+  pushMessage({ role: 'user', content: t, time: nowTime() });
   await run('supplement', t);
 }
 
