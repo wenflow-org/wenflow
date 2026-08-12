@@ -464,17 +464,18 @@ async function handleDeactivate() {
 }
 
 .profile-avatar {
-  width: 72px;
-  height: 72px;
+  width: 96px;
+  height: 96px;
   border-radius: 999px;
   background: linear-gradient(135deg, var(--blue, #3478f6), var(--accent, #8d6bff));
   color: #fff;
-  font-size: 28px;
+  font-size: 34px;
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
   flex: none;
+  box-shadow: 0 0 0 5px rgba(52, 120, 246, 0.12), 0 12px 28px rgba(52, 120, 246, 0.25);
 }
 
 .profile-identity__main {
@@ -565,7 +566,7 @@ async function handleDeactivate() {
   background: var(--canvas, #f3f6fb);
   display: grid;
   gap: 6px;
-  min-width: 0;
+  min-width: 132px;
   overflow: hidden;
 }
 
