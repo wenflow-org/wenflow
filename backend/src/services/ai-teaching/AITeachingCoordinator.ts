@@ -1022,6 +1022,8 @@ export class AITeachingOrchestrator {
   private idleTimeoutMs = 120 * 60 * 1000;
   /** 长时间未恢复的 paused 会话视为放弃：超过该阈值按超时兜底处理（用户可随时通过下一轮教学回合恢复） */
   private pausedSessionTimeoutMs = 24 * 60 * 60 * 1000;
+  /** 终态脏数据保留期：failed/superseded/discarded 行超过该时长后由 idle 巡检清理 */
+  private terminalSessionRetentionMs = 30 * 24 * 60 * 60 * 1000;
   private idleTimer: NodeJS.Timeout | null = null;
   private idleCheckInFlight: Promise<void> | null = null;
   private stopping = false;
@@ -2631,6 +2633,28 @@ export class AITeachingOrchestrator {
         await this.syncVirtualSessionTimeout(session.id);
         await this.applyTimeoutWrapupFallback(session.id);
       }
+    }
+
+    // 终态脏数据治理：failed/superseded/discarded 行无业务价值（开课失败已改为复用 openKey），
+    // 超过保留期后删除，避免会话表无限累积
+    try {
+      const terminalCutoff = new Date(Date.now() - this.terminalSessionRetentionMs);
+      const cleaned = await prisma.teaching_sessions.deleteMany({
+        where: {
+          status: { in: ['failed', 'superseded', 'discarded'] },
+          updatedAt: { lte: terminalCutoff }
+        }
+      });
+      if (cleaned.count > 0) {
+        logger.info('[AITeaching] 清理过期终态会话行', {
+          count: cleaned.count,
+          cutoff: terminalCutoff.toISOString(),
+        });
+      }
+    } catch (error) {
+      logger.warn('[AITeaching] 终态会话清理失败（不影响巡检）', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

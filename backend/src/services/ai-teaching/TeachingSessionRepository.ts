@@ -244,8 +244,11 @@ export class TeachingSessionRepository {
           // finalization_failed：最终化失败且无活跃 lease 时允许回收重开，避免 openKey 被永久锁死
           const finalizationFailedRecoverable = existing.status === 'finalization_failed'
             && (!existing.operationLeaseExpiresAt || existing.operationLeaseExpiresAt <= now);
+          // failed：开课失败的行保留 openKey，允许直接回收重开（复用行而非累积脏数据）
+          const failedRecoverable = existing.status === 'failed'
+            && (!existing.operationLeaseExpiresAt || existing.operationLeaseExpiresAt <= now);
           const canSupersede = existing.status !== 'finalizing'
-            && (recoveryExpired || initializingLeaseExpired || finalizationFailedRecoverable);
+            && (recoveryExpired || initializingLeaseExpired || finalizationFailedRecoverable || failedRecoverable);
 
           if (!canSupersede) {
             return { session: mapRecord(existing), created: false, operationId: null };
@@ -344,11 +347,11 @@ export class TeachingSessionRepository {
   }
 
   async failInitialization(sessionId: string, operationId: string): Promise<void> {
+    // 保留 openKey：failed 行可被下次 reserve 回收复用（supersede），避免每次失败累积新行
     await prisma.teaching_sessions.updateMany({
       where: { id: sessionId, status: 'initializing', operationId },
       data: {
         status: 'failed',
-        openKey: null,
         operationId: null,
         operationKind: null,
         operationLeaseExpiresAt: null,
