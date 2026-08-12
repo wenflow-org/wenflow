@@ -204,23 +204,23 @@ export function computeCompletionState(input: ComputeCompletionInput): SkillComp
       id: 'manifest',
       label: 'manifest 条目',
       ok: entry.kind === 'aux' ? true : (input.inManifest ?? false),
-      hint: entry.kind === 'aux' ? 'aux 合法不登 manifest（F12 豁免）' : '登记在 agent-manifest（kind=skill）',
+      hint: entry.kind === 'aux' ? '辅助 Skill 合法不登 manifest（豁免）' : '登记在 agent-manifest（kind=skill）',
     },
     { id: 'handler', label: 'handler 存在', ok: input.handlerFileExists, hint: `创建 ${entry.handlerRef}` },
-    { id: 'registered', label: '注册存在', ok: input.registered, hint: `${REGISTERED_ITEM_HINT}（F11 仅展示，不阻断状态推进）` },
+    { id: 'registered', label: '注册存在', ok: input.registered, hint: `${REGISTERED_ITEM_HINT}（仅展示，不阻断状态推进）` },
     { id: 'core', label: 'core.yaml 合法', ok: coreItemOk, hint: CORE_ITEM_HINT },
-    { id: 'fieldsSynced', label: '字段路由回填', ok: fieldsSyncedOk, hint: 'npm run prompts:fields-sync:check' },
+    { id: 'fieldsSynced', label: '字段路由回填', ok: fieldsSyncedOk, hint: '核对 core 声明 ↔ 编排路由（字段同步检查）' },
     {
       id: 'promptActive',
       label: 'ACTIVE prompt',
       ok: liveExempt ? true : input.activePromptExists,
-      hint: 'npm run prompts:compile-all && prompts:sync',
+      hint: '编译核心文件并同步数据库后生效',
     },
     {
       id: 'checksGreen',
       label: 'skills:check 全绿',
       ok: input.checksGreen ?? null,
-      hint: 'npm run prompts:skills:check',
+      hint: '运行全量技能检查脚本',
     },
     { id: 'wired', label: '接线引用', ok: input.wired ?? false, hint: 'coordinator steps 或业务调用点' },
     { id: 'recentCalls', label: '最近调用', ok: null },
@@ -237,10 +237,10 @@ export function computeCompletionState(input: ComputeCompletionInput): SkillComp
         ? {
             ok: true,
             detail: input.registered
-              ? `handler 文件存在（F5：${entry.handlerRef}）且注册已就绪`
-              : `handler 文件存在（F5：${entry.handlerRef}）；注册未就绪（F11 仅展示项，不阻断状态推进）`,
+              ? `handler 文件存在（${entry.handlerRef}）且注册已就绪`
+              : `handler 文件存在（${entry.handlerRef}）；注册未就绪（仅展示项，不阻断状态推进）`,
           }
-        : { ok: false, detail: `handler 文件不存在（F5：${entry.handlerRef}）` },
+        : { ok: false, detail: `handler 文件不存在（${entry.handlerRef}）` },
       coreReady: { ok: coreReadyOk, detail: coreReadyDetail },
       fieldsSynced: { ok: fieldsSyncedOk, detail: fieldsSyncedDetail },
       live: { ok: liveOk, detail: liveDetail },

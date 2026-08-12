@@ -107,7 +107,7 @@ describe('skill-completion：五档状态推进（正例）', () => {
     expect(report.status).toBe('draft');
     expect(report.gates.draft.ok).toBe(true);
     expect(report.gates.handlerReady.ok).toBe(false);
-    expect(report.gates.handlerReady.detail).toContain('F5');
+    expect(report.gates.handlerReady.detail).toContain('文件不存在');
   });
 
   it('占位 handler 场景：handler 文件存在但未注册 → handler-ready（F11 仅展示项，不阻断状态推进）', () => {
@@ -118,7 +118,7 @@ describe('skill-completion：五档状态推进（正例）', () => {
     });
     expect(report.status).toBe('handler-ready');
     expect(report.gates.handlerReady.ok).toBe(true);
-    expect(report.gates.handlerReady.detail).toContain('F5');
+    expect(report.gates.handlerReady.detail).toContain('handler 文件');
     expect(report.gates.handlerReady.detail).toContain('注册未就绪');
     // F11 注册存在性移入 items 展示（checksGreen 语义），不参与状态推进
     expect(report.items.find((item) => item.id === 'registered')?.ok).toBe(false);
@@ -133,7 +133,7 @@ describe('skill-completion：五档状态推进（正例）', () => {
     expect(report.status).toBe('handler-ready');
     expect(report.gates.handlerReady.ok).toBe(true);
     expect(report.gates.coreReady.ok).toBe(false);
-    expect(report.gates.coreReady.detail).toContain('F6');
+    expect(report.gates.coreReady.detail).toContain('文件不存在');
   });
 
   it('core-ready：core 合法但 fields-sync 缺项 → 停在 core-ready', () => {
@@ -167,7 +167,7 @@ describe('skill-completion：五档状态推进（正例）', () => {
       activePromptExists: false,
     });
     expect(report.status).toBe('core-ready');
-    expect(report.gates.fieldsSynced.detail).toContain('F3 铁律');
+    expect(report.gates.fieldsSynced.detail).toContain('编排契约缺 skill:goal-conversation');
   });
 
   it('fields-synced：字段路由无缺项但无 ACTIVE prompt → 停在 fields-synced', () => {
@@ -218,7 +218,7 @@ describe('skill-completion：豁免链（handler-only / aux）', () => {
     expect(report.status).toBe('live');
     expect(report.gates.coreReady.detail).toContain('handler-only 豁免');
     expect(report.gates.fieldsSynced.detail).toContain('豁免');
-    expect(report.gates.live.detail).toContain('noPromptFile=true 豁免');
+    expect(report.gates.live.detail).toContain('豁免：无 prompt 文件');
   });
 
   it('aux：fields-synced 豁免但 live 不豁免（runAux requireActivePrompt）', () => {
@@ -231,7 +231,7 @@ describe('skill-completion：豁免链（handler-only / aux）', () => {
     expect(report.status).toBe('fields-synced');
     expect(report.gates.fieldsSynced.ok).toBe(true);
     expect(report.gates.live.ok).toBe(false);
-    expect(report.gates.live.detail).toContain('aux 不豁免');
+    expect(report.gates.live.detail).toContain('辅助 Skill 不豁免');
   });
 
   it('aux：有 ACTIVE → live（manifest 分项对 aux 恒绿，F12 豁免）', () => {
@@ -259,7 +259,7 @@ describe('skill-completion：阻断与回退（反例）', () => {
       core: { loaded: true, valid: false, fields: [], hasTodo: false },
     });
     expect(report.status).toBe('handler-ready');
-    expect(report.gates.coreReady.detail).toContain('schema');
+    expect(report.gates.coreReady.detail).toContain('格式校验失败');
   });
 
   it('core fields 为空 → 阻断 core-ready', () => {

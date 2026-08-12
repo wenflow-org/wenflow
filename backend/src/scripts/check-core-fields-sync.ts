@@ -231,7 +231,7 @@ export function analyzeCoreFieldsSync(
       if (CORE_ALIAS_TO_EXEMPT_ROOT.has(field.name)) continue;
       orphan.push({
         coreField: field.name,
-        detail: `core 字段未出现在任何产出路由行首段；如需豁免请登记 EXEMPT_PLATFORM_ROOTS（含 coreAliases）或补编排路由`,
+        detail: `core 字段未出现在任何产出路由行首段；如需豁免请在平台保留根列表中登记（含别名）或补编排路由`,
       });
     }
 

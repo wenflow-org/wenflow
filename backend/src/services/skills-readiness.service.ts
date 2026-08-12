@@ -164,19 +164,19 @@ export function analyzeW1(book: SkillsBook, activeRows: CoreHashParityActiveRow[
     ...missingActive.map((skillId) => ({
       code: 'W1' as const,
       skillId,
-      message: '户口簿登记但无 ACTIVE prompt（noPromptFile=false）',
-      hint: 'npm run prompts:compile-all && prompts:sync',
+      message: '户口簿登记但缺"当前生效"的 prompt 版本（有文件未同步）',
+      hint: '执行编译 + 同步（prompts:compile-all + prompts:sync）',
     })),
     ...zombieActive.map((skillId) => ({
       code: 'W1' as const,
       skillId,
-      message: 'agent_prompts 存在 ACTIVE 行但不在户口簿活跃集（僵尸残留）',
-      hint: '登记回户口簿或清理（purgeRetiredSkills 只清 PURGED 名单，名单外残留为持久态）',
+      message: '数据库有"当前生效"版本但户口簿活跃集已无此技能（幽灵残留）',
+      hint: '登记回户口簿或清理残留',
     })),
     ...zombieSkillActive.map((skillId) => ({
       code: 'W1' as const,
       skillId,
-      message: '僵尸技能（保留注册但零生产调用，RETIRED_SKILLS_FIX_PLAN §4.3）存在 ACTIVE 残留',
+      message: '保留注册但长期零生产调用的技能存在"当前生效"残留',
       hint: '零调用保留注册；如需下线确认无调用后移除 prompt 或纳入退役流程',
     })),
   ];
@@ -212,13 +212,13 @@ export function analyzeW2(book: SkillsBook, registrations: Array<{ name: string 
     ...missingRegistration.map((skillId) => ({
       code: 'W2' as const,
       skillId,
-      message: '户口簿登记但 skill_registrations 无行（启动注册静默跳过，index.ts:448-454）',
+      message: '户口簿登记但系统注册表无行（启动注册静默跳过）',
       hint: '注册片段未落 skills/index.ts：补充注册后重启',
     })),
     ...zombieRegistration.map((name) => ({
       code: 'W2' as const,
       skillId: name,
-      message: 'skill_registrations 行不在户口簿活跃集（幽灵残留，loadFromDatabase 会重载）',
+      message: '系统注册表行不在户口簿活跃集（幽灵残留，启动时会重载）',
       hint: '手工清理或纳入退役名单',
     })),
   ];
@@ -315,8 +315,8 @@ export function analyzeW4(book: SkillsBook, parityReport: CoreHashParityReport):
   const items: ReadinessWarningItem[] = drifted.map((agentId) => ({
     code: 'W4' as const,
     skillId: skillIdOf(agentId),
-    message: 'core 漂移（文件 frontmatter coreHash / 核心文件哈希 / DB ACTIVE 锚点 不一致）',
-    hint: '回补 prompts/core/<id>.yaml 后重新 compile-core-files + sync（check-core-hash-parity 明细）',
+    message: '哈希漂移（W4）：核心文件与编译产物、DB ACTIVE 版本三方哈希不一致，文件改了但没"编译+同步"',
+    hint: '回补 prompts/core/<id>.yaml 后重新编译核心文件并同步数据库（详见哈希漂移对账明细）',
   }));
 
   return { ok: items.length === 0, scanned: inScope.length, drifted, items };

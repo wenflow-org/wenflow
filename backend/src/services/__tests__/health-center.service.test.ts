@@ -169,13 +169,13 @@ describe('健康中心聚合（基准体系版）', () => {
       .toEqual(['fixable', 'fixable', 'fixable', 'fixable', 'manual', 'manual', 'manual']);
   });
 
-  it('文案运营语守卫：cause/fixHint 不再包含源码内部锚点（file:line / 表名 / 内部编号）', async () => {
+  it('文案运营语守卫：label/cause/fixHint 不再包含源码内部锚点（file:line / 表名 / 内部编号）', async () => {
     const report = await buildHealthCenterReport(EMPTY_DB);
-    const sourceAnchors = ['deriveContract(', 'managedByCode', 'prompt_call_logs', 'B3', 'B5', 'P4 ', 'P5', 'zombie', 'file:line', 'diff', 'EXEMPT_PLATFORM_ROOTS', 'W3_STEPS_EMPTY_EXEMPT', 'registrationPoint'];
+    const sourceAnchors = ['deriveContract(', 'managedByCode', 'prompt_call_logs', 'B3', 'B5', 'P4 ', 'P5', 'zombie', 'file:line', 'diff', 'EXEMPT_PLATFORM_ROOTS', 'W3_STEPS_EMPTY_EXEMPT', 'registrationPoint', 'base='];
     // file:line 锚点（如 orchestration-file.ts:182）；纯文件路径（如 definition.ts / skills/index.ts）是"调整 xx 文件"的合法操作语，不禁
     const anchorPattern = /\.(ts|js):\d+/;
     for (const item of report.items) {
-      for (const text of [item.cause, item.fixHint]) {
+      for (const text of [item.label, item.cause, item.fixHint, item.detail.join('\n')]) {
         expect(text.match(anchorPattern)).toBeNull();
         for (const anchor of sourceAnchors) {
           expect(text).not.toContain(anchor);
@@ -186,13 +186,25 @@ describe('健康中心聚合（基准体系版）', () => {
     }
   });
 
-  it('P4 名实不符：字段路由 contract 维度 base=file:manifest 且 label 注明 deriveContract', async () => {
+  it('术语统一：漂移三义在健康区 label 上区分（契约漂移 / W4 漂移 / 运行时漂移）', async () => {
     const report = await buildHealthCenterReport(EMPTY_DB);
-    const contractItem = report.items.find((item) => item.id === 'field-routing-contract')!;
+    const byId = new Map(report.items.map((item) => [item.id, item]));
+    const contractItem = byId.get('field-routing-contract')!;
     expect(contractItem.base).toBe('file:manifest');
-    expect(contractItem.label).toContain('deriveContract');
-    const fieldItem = report.items.find((item) => item.id === 'field-routing')!;
+    // label 为人话「契约漂移」，不再是黑话「P4：declared 来自 deriveContract(manifest)」
+    expect(contractItem.label).toContain('契约漂移');
+    expect(contractItem.label).not.toContain('deriveContract');
+    expect(contractItem.label).not.toContain('P4');
+    expect(contractItem.label).not.toContain('合同');
+    const fieldItem = byId.get('field-routing')!;
     expect(fieldItem.base).toBe('file:orchestration');
+    const w4 = byId.get('w4-corehash')!;
+    expect(w4.label).toContain('W4 漂移');
+    const runtime = byId.get('runtime-prompt')!;
+    expect(runtime.label).toContain('运行时漂移');
+    // 三个漂移语义各自有独立 label，不合并
+    const labels = new Set([contractItem.label, w4.label, runtime.label]);
+    expect(labels.size).toBe(3);
   });
 
   it('缓存：60s 内复用，refresh 强制重算', async () => {
