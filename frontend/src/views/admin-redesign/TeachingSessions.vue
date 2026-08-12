@@ -577,7 +577,7 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} åˆ†é’
   justify-self: start;
   border: 0;
   background: transparent;
-  color: #2c63d0;
+  color: var(--mk-blue, #2c63d0);
   font: inherit;
   font-size: 11.5px;
   font-weight: 700;

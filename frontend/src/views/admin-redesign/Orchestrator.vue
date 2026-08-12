@@ -570,7 +570,7 @@ const stageTitle = computed(() => {
   font-weight: 800;
   letter-spacing: 0.04em;
 }
-.orch-defs__tag--orch { background: #e5f0ff; color: #2563eb; }
+.orch-defs__tag--orch { background: #e5f0ff; color: var(--mk-blue, #2c63d0); }
 .orch-defs__tag--skill { background: #e8f7ef; color: var(--mk-green); }
 .orch-defs__text {
   color: var(--mk-muted);
@@ -671,7 +671,7 @@ const stageTitle = computed(() => {
 }
 .orch-stage__comp-item--draft { background: #9aa4b2; }
 .orch-stage__comp-item--handler-ready { background: #d97706; }
-.orch-stage__comp-item--core-ready { background: #2c63d0; }
+.orch-stage__comp-item--core-ready { background: var(--mk-blue, #2c63d0); }
 .orch-stage__comp-item--fields-synced { background: #0d9488; }
 .orch-stage__comp-item--live { background: #16a34a; }
 

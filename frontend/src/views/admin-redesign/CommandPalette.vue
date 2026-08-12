@@ -278,7 +278,7 @@ function close() {
   text-align: left;
 }
 .pal__item--active { background: #eef5ff; }
-.pal__item-icon { color: #2c63d0; font-size: 12px; width: 16px; text-align: center; }
+.pal__item-icon { color: var(--mk-blue, #2c63d0); font-size: 12px; width: 16px; text-align: center; }
 .pal__item-label { flex: 1; }
 .pal__item-hint { font-size: 11px; color: var(--mk-faint); }
 .pal__empty { padding: 20px; text-align: center; color: var(--mk-faint); font-size: 13px; margin: 0; }

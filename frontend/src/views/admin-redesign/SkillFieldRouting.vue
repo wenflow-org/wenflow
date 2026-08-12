@@ -7,7 +7,7 @@
       <button type="button" class="mk-empty__action" @click="load">重试</button>
     </div>
     <template v-else-if="data">
-      <!-- 状态条（统一 mk-status 白底样式） -->
+      <!-- 状态条（mk-status 白底统一形态） -->
       <div class="mk-status" :class="syncToneTone">
         <span class="mk-status__dot"></span>
         <strong>契约 · 阶段 {{ data.stage }}</strong>
@@ -81,12 +81,12 @@
             </ul>
             <h5 class="sfr__legend-title">锁定 / core 状态</h5>
             <ul class="sfr__legend-list">
-              <li class="sfr__legend-item"><span class="sfr__lock sfr__lock--system-locked">系统锁</span><span class="sfr__legend-hint">平台派生 / 代码消费，admin 不可直接改（需改编排文件）</span></li>
-              <li class="sfr__legend-item"><span class="sfr__lock sfr__lock--structure-locked">结构锁</span><span class="sfr__legend-hint">结构约束锁定，修改需谨慎</span></li>
-              <li class="sfr__legend-item"><span class="sfr__core sfr__core--declared">✓ 已声明</span><span class="sfr__legend-hint">编排路由首段在 core fields 中且有声明</span></li>
-              <li class="sfr__legend-item"><span class="sfr__core sfr__core--missing">⚠ {{ TERMS.statusMissing }}</span><span class="sfr__legend-hint">编排路由首段不在 core fields（error 级，阻断字段同步）</span></li>
-              <li class="sfr__legend-item"><span class="sfr__core sfr__core--mismatch">⚠ 类型不一致</span><span class="sfr__legend-hint">core type ↔ 编排 valueType 不一致（warn）</span></li>
-              <li class="sfr__legend-item"><span class="sfr__core sfr__core--orphan">{{ TERMS.statusOrphan }}</span><span class="sfr__legend-hint">core 字段未出现在任何产出路由行首段（warn，见上方对账条）</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--lock-system">系统锁</span><span class="sfr__legend-hint">平台派生 / 代码消费，admin 不可直接改（需改编排文件）</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--lock-structure">结构锁</span><span class="sfr__legend-hint">结构约束锁定，修改需谨慎</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--core-declared">✓ 已声明</span><span class="sfr__legend-hint">编排路由首段在 core fields 中且有声明</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--core-missing">⚠ {{ TERMS.statusMissing }}</span><span class="sfr__legend-hint">编排路由首段不在 core fields（error 级，阻断字段同步）</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--core-mismatch">⚠ 类型不一致</span><span class="sfr__legend-hint">core type ↔ 编排 valueType 不一致（warn）</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--core-orphan">{{ TERMS.statusOrphan }}</span><span class="sfr__legend-hint">core 字段未出现在任何产出路由行首段（warn，见上方对账条）</span></li>
             </ul>
           </div>
         </div>
@@ -132,11 +132,11 @@
               </td>
               <td class="mono">{{ row.valueType }}</td>
               <td>
-                <span v-if="row.role" class="sfr__role" :class="`sfr__role--${row.role}`" :title="roleHintOf(row.role)">{{ roleLabelOf(row.role) }}</span>
+                <span v-if="row.role" class="mk-badge" :class="`mk-badge--role-${row.role}`" :title="roleHintOf(row.role)">{{ roleLabelOf(row.role) }}</span>
                 <span v-else class="mk-na">—</span>
               </td>
               <td>
-                <span class="sfr__render" :class="`sfr__render--${row.render}`" :title="renderHintOf(row)">{{ row.render }}</span>
+                <span class="mk-badge" :class="`mk-badge--render-${row.render}`" :title="renderHintOf(row)">{{ row.render }}</span>
               </td>
               <td><span class="mono sfr__handoff" :title="handoffTitleOf(row)">{{ formatHandoff(row.handoff) }}</span></td>
               <td>{{ row.internal ? '是' : '否' }}</td>
@@ -144,11 +144,11 @@
               <td>
                 <span class="mono sfr__persist" :class="{ 'sfr__persist--alias': row.persistKey !== row.fieldId }" :title="row.persistKey === row.fieldId ? '落库键与字段名一致' : `落库键与字段名不一致：值实际写入 ${row.persistKey}（见编排文件 persistKey 声明）`">{{ row.persistKey }}</span>
               </td>
-              <td><span class="sfr__lock" :class="`sfr__lock--${row.lockLevel}`" :title="lockHintOf(row.lockLevel)">{{ lockLabelOf(row.lockLevel) }}</span></td>
+              <td><span class="mk-badge" :class="`mk-badge--lock-${row.lockLevel}`" :title="lockHintOf(row.lockLevel)">{{ lockLabelOf(row.lockLevel) }}</span></td>
               <td>
-                <span v-if="row.coreState === 'missing'" class="sfr__core sfr__core--missing" :title="row.coreStateTitle">⚠ {{ TERMS.statusMissing }}</span>
-                <span v-else-if="row.coreState === 'mismatch'" class="sfr__core sfr__core--mismatch" :title="row.coreStateTitle">⚠ 类型不一致</span>
-                <span v-else class="sfr__core sfr__core--declared" :title="row.coreStateTitle">✓ 已声明</span>
+                <span v-if="row.coreState === 'missing'" class="mk-badge mk-badge--core-missing" :title="row.coreStateTitle">⚠ {{ TERMS.statusMissing }}</span>
+                <span v-else-if="row.coreState === 'mismatch'" class="mk-badge mk-badge--core-mismatch" :title="row.coreStateTitle">⚠ 类型不一致</span>
+                <span v-else class="mk-badge mk-badge--core-declared" :title="row.coreStateTitle">✓ 已声明</span>
               </td>
               <td class="sfr__ops">
                 <button type="button" class="mk-btn mk-btn--sm" :disabled="!canEditRow(row)" :title="editTitleOf(row)" @click="openEdit(row)">编辑</button>
@@ -263,12 +263,12 @@ const coreFieldNames = computed(() => new Set((data.value?.core.fields || []).ma
 const syncReport = computed(() => data.value?.core.sync ?? null)
 const roleMeta = computed(() => data.value?.promptRoleMeta || [])
 
-const syncToneDot = computed(() => {
+const syncToneTone = computed(() => {
   const s = syncReport.value
-  if (!s || s.state === 'no-routings' || s.state === 'no-core') return 'sfr__dot--muted'
-  if (s.missing.length) return 'sfr__dot--err'
-  if (s.orphan.length || s.typeMismatch.length) return 'sfr__dot--warn'
-  return 'sfr__dot--ok'
+  if (!s || s.state === 'no-routings' || s.state === 'no-core') return 'mk-status--muted'
+  if (s.missing.length) return 'mk-status--bad'
+  if (s.orphan.length || s.typeMismatch.length) return 'mk-status--warn'
+  return 'mk-status--ok'
 })
 
 const existingNames = computed(() => {
@@ -541,7 +541,7 @@ async function onDelete(row: Record<string, any>) {
     const d = res.data?.data
     toast.success(`已删除字段 ${row.fieldId}（双文件与 DB 均已清理）`)
     if (d?.protectedRows?.length) {
-      toast.warning(`受保护行未删：${d.protectedRows.map((p: any) => p.key).join('，')}（managedByCode=false，需走编排弹窗处理）`)
+      toast.warning(`受保护行未删：${d.protectedRows.map((p: any) => p.key).join('，')}（admin 覆盖行需走编排弹窗处理）`)
     }
     await load()
   } catch (e: any) {
@@ -560,30 +560,7 @@ onMounted(() => void load())
 </script>
 
 <style scoped>
-.sfr__status {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 9px 14px;
-  border-radius: 10px;
-  background: #f0f7f1;
-  border: 1px solid rgba(21, 128, 61, 0.25);
-  font-size: 12.5px;
-  margin-bottom: 12px;
-}
-.sfr__dot--ok { background: var(--mk-green, #15803d); width: 8px; height: 8px; border-radius: 50%; }
-.sfr__dot--warn { background: var(--mk-amber, #b45309); width: 8px; height: 8px; border-radius: 50%; }
-.sfr__dot--err { background: var(--mk-red, #dc2626); width: 8px; height: 8px; border-radius: 50%; }
-.sfr__dot--muted { background: var(--mk-faint, #71809a); width: 8px; height: 8px; border-radius: 50%; }
-.sfr__status strong { color: var(--mk-ink, #1a2a44); }
 .sfr__status-actions { margin-left: auto; display: inline-flex; gap: 8px; }
-.sfr__badge { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
-.sfr__badge--ok { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #15803d); }
-.sfr__badge--warn { background: var(--mk-amber-bg, #fffbeb); color: var(--mk-amber, #b45309); }
-.sfr__badge--err { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
-.sfr__badge--muted { background: #eef2fa; color: var(--mk-muted, #5b6577); }
-
 .sfr__sync {
   display: flex;
   align-items: baseline;
@@ -679,38 +656,10 @@ onMounted(() => void load())
 .sfr__ops .mk-btn { padding: 3px 10px; font-size: 11.5px; }
 
 /* 角色徽章（与编排结构页同款 7 类着色） */
-.sfr__role { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-.sfr__role--hard-required { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red-strong, #b91c1c); }
-.sfr__role--soft-info { background: #eff6ff; color: #2563eb; }
-.sfr__role--hidden-inference { background: #f4f0ff; color: #7c3aed; }
-.sfr__role--public-reply { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #15803d); }
-.sfr__role--proposal-output { background: #effcf9; color: #0d9488; }
-.sfr__role--derived-presentation { background: var(--mk-amber-bg, #fffbeb); color: var(--mk-amber, #b45309); }
-.sfr__role--control-signal { background: #f0f2f5; color: #5b6577; }
-
-.sfr__render { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-.sfr__render--visible { background: #e8f7ef; color: #15803d; }
-.sfr__render--hidden { background: #f0f2f5; color: #5b6577; }
-
-.sfr__flow { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
-.sfr__flow--handoff { background: #eef2ff; color: #4f46e5; }
-.sfr__flow--internal { background: #fdf2f8; color: #be185d; }
-.sfr__flow--accumulate { background: #f0fdf4; color: #15803d; }
-
 .sfr__persist { display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted, #5b6577); font-size: 11px; }
 .sfr__persist--alias { color: var(--mk-amber, #b45309); background: #fffbeb; border-radius: 5px; padding: 0 5px; }
 
-.sfr__lock { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-.sfr__lock--system-locked { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
-.sfr__lock--structure-locked { background: var(--mk-amber-bg, #fffbeb); color: var(--mk-amber, #b45309); border: 1px dashed rgba(180, 83, 9, 0.45); }
-.sfr__lock--editable, .sfr__lock--fully-editable { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #15803d); }
-
 /* core 状态列 */
-.sfr__core { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-.sfr__core--declared { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #15803d); }
-.sfr__core--missing { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
-.sfr__core--mismatch, .sfr__core--orphan { background: var(--mk-amber-bg, #fffbeb); color: var(--mk-amber, #b45309); }
-
 .sfr__empty { padding: 30px; color: var(--mk-faint, #71809a); text-align: center; }
 .sfr__emptyrow { color: var(--mk-faint, #71809a); text-align: center; padding: 14px; }
 .sfr__error-text { margin: 0 0 10px; font-size: 12.5px; line-height: 1.6; }

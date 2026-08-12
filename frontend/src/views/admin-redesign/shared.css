@@ -661,6 +661,23 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   .mk-drawer__body { padding: 22px 28px 30px; }
 }
 
+/* 3600 镜像档：Teleport 到 body 的覆盖层不受壳层 zoom 影响，需独立放大（与各文件 4K 镜像一致） */
+@media (min-width: 3600px) {
+  .mk-badge { font-size: 19px; padding: 5px 15px; }
+  .mk-pill { font-size: 19px; padding: 8px 20px; }
+  .mk-field__input, .mk-field__select, .mk-field__textarea, .mk-input { font-size: 19px; padding: 14px 19px; }
+  .mk-modal__panel { width: min(900px, 100%); }
+  .mk-modal__title { font-size: 23px; }
+  .mk-modal__close { width: 46px; height: 46px; font-size: 22px; }
+  .mk-btn { font-size: 19px; padding: 14px 26px; }
+  .mk-link { font-size: 19px; }
+  .mk-drawer__panel { width: var(--mk-drawer-w-xxl, 1040px); }
+  .mk-drawer__head { padding: 28px 36px 18px; }
+  .mk-drawer__title { font-size: 23px; }
+  .mk-drawer__close { width: 46px; height: 46px; font-size: 20px; }
+  .mk-drawer__body { padding: 26px 36px 36px; }
+}
+
 /* ----- 回到顶部浮动按钮（滚动规范 #9：页面 >2 屏时出现；Shell 挂载，全局可用） ----- */
 .mk-backtop {
   position: fixed;

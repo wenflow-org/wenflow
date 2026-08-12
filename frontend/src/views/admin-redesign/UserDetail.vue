@@ -433,7 +433,7 @@ const d = computed<Detail | undefined>(() => {
 .ud-path__main strong { font-size: 13px; }
 .ud-path__main span { font-size: 11.5px; color: var(--mk-faint); }
 .ud-path__bar { height: 6px; border-radius: 3px; background: #eef2fa; overflow: hidden; }
-.ud-path__bar i { display: block; height: 100%; background: linear-gradient(90deg, #6aa0ff, #2c63d0); }
+.ud-path__bar i { display: block; height: 100%; background: linear-gradient(90deg, #6aa0ff, var(--mk-blue, #2c63d0)); }
 .ud-path__bar i.warn { background: linear-gradient(90deg, #fcd34d, #f59e0b); }
 .ud-path__pct { font-size: 12px; color: var(--mk-muted); text-align: right; font-variant-numeric: tabular-nums; }
 .ud-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: 12.5px; }

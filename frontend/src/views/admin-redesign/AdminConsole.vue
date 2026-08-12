@@ -11,7 +11,7 @@
 
     <Shell :current="scene" :crumb="crumbLabel" release @navigate="navigate" @palette="paletteOpen = true" @glossary="glossaryOpen = true">
       <div v-if="booting" class="ac-boot">
-        <span class="ac-boot__spinner"></span>
+        <span class="mk-spinner mk-spinner--lg"></span>
         加载中…
       </div>
       <component v-else :is="detailComponent || currentComponent" />
@@ -206,7 +206,7 @@ function onGlobalKey(e: KeyboardEvent) {
 .ac {
   --ink: var(--mk-ink);
   min-height: 100vh;
-  background: #f6f8fc;
+  background: var(--mk-bg, #f7f8fa);
   font-family: var(--mk-sans);
 }
 .ac :deep(.mshell) {
@@ -222,21 +222,13 @@ function onGlobalKey(e: KeyboardEvent) {
   color: #5b6577;
   font-size: 14px;
 }
-.ac-boot__spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(44, 99, 208, 0.25);
-  border-top-color: #2c63d0;
-  border-radius: 50%;
-  animation: ac-spin 0.7s linear infinite;
-}
-@keyframes ac-spin { to { transform: rotate(360deg); } }
+.ac-boot .mk-spinner { width: 16px; height: 16px; border-width: 2px; }
 
 .ac-error {
   position: fixed;
   inset: 0;
   z-index: 400;
-  background: #f6f8fc;
+  background: var(--mk-bg, #f7f8fa);
   display: grid;
   place-content: center;
 }
@@ -257,7 +249,7 @@ function onGlobalKey(e: KeyboardEvent) {
   padding: 8px 20px;
   border: 0;
   border-radius: 9px;
-  background: #2c63d0;
+  background: var(--mk-blue, #2c63d0);
   color: #fff;
   font: inherit;
   font-size: 13px;
@@ -268,7 +260,7 @@ function onGlobalKey(e: KeyboardEvent) {
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15） ========== */
 @media (min-width: 2000px) {
   .ac-boot { font-size: 16px; gap: 12px; }
-  .ac-boot__spinner { width: 19px; height: 19px; border-width: 2.5px; }
+  .ac-boot .mk-spinner { width: 19px; height: 19px; border-width: 2.5px; }
   .ac-error__card { gap: 12px; padding: 38px 48px; border-radius: 19px; }
   .ac-error__card strong { font-size: 18.5px; }
   .ac-error__card span { font-size: 15px; }
@@ -276,7 +268,7 @@ function onGlobalKey(e: KeyboardEvent) {
 }
 @media (min-width: 2800px) {
   .ac-boot { font-size: 19px; gap: 14px; }
-  .ac-boot__spinner { width: 22px; height: 22px; border-width: 3px; }
+  .ac-boot .mk-spinner { width: 22px; height: 22px; border-width: 3px; }
   .ac-error__card { gap: 14px; padding: 46px 58px; border-radius: 22px; }
   .ac-error__card strong { font-size: 21.5px; }
   .ac-error__card span { font-size: 17.5px; }

@@ -1161,7 +1161,7 @@ function formatRunResult(result: string) {
   margin-top: 6px;
   padding: 7px 10px;
   border-radius: 10px;
-  background: #f6f8fc;
+  background: var(--mk-bg, #f7f8fa);
   border: 1px solid #eef1f6;
   font-size: 11.5px;
   color: var(--mk-faint);
@@ -1288,7 +1288,7 @@ function formatRunResult(result: string) {
   border-radius: 12px;
   background: #eef5ff;
   border: 1px solid rgba(44, 99, 208, 0.18);
-  color: #1f57cc;
+  color: var(--mk-accent-deep, #1f57cc);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -1331,7 +1331,7 @@ function formatRunResult(result: string) {
 .vp-tool:disabled { opacity: 0.55; cursor: default; }
 .vp-tool--primary {
   grid-column: 1 / -1;
-  background: linear-gradient(135deg, #2c63d0, #1f57cc);
+  background: linear-gradient(135deg, var(--mk-blue, #2c63d0), var(--mk-accent-deep, #1f57cc));
   border-color: transparent;
   color: #fff;
 }

@@ -12,13 +12,13 @@
         <span class="topo-toolbar__hint">点 Skill 看详情 · 点 Agent 查日志</span>
       </div>
       <div class="topo-toolbar__controls">
-        <span v-if="isLive" class="topo-range">
+        <span v-if="isLive" class="mk-pills topo-range">
           <button
             v-for="r in rangeOptions"
             :key="r.id"
             type="button"
-            class="topo-range__btn"
-            :class="{ 'topo-range__btn--active': liveTopoRange === r.id }"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': liveTopoRange === r.id }"
             :disabled="rangeLoading"
             @click="switchRange(r.id)"
           >
@@ -756,7 +756,7 @@ const flows = computed(() => {
   cursor: pointer;
   transition: color 0.15s ease, border-color 0.15s ease;
 }
-.topo-ctrl:hover { color: #2c63d0; border-color: #2c63d0; }
+.topo-ctrl:hover { color: var(--mk-blue, #2c63d0); border-color: var(--mk-blue, #2c63d0); }
 .topo-ctrl--zoom {
   width: auto;
   min-width: 48px;
@@ -904,28 +904,8 @@ const flows = computed(() => {
 
 /* 时间范围切换 */
 .topo-range {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  background: #eef2fa;
-  border-radius: 8px;
-}
-.topo-range__btn {
-  border: 0;
-  background: transparent;
-  padding: 3px 9px;
-  border-radius: 6px;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  font-family: var(--mk-mono);
-  color: var(--mk-muted);
-  cursor: pointer;
-}
-.topo-range__btn--active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 2px rgba(23, 32, 51, 0.1); }
-.topo-range__btn:disabled { opacity: 0.55; cursor: not-allowed; }
-
-/* ========== Agent 阶段头卡片 ========== */
+  margin-left: 8px;
+}/* ========== Agent 阶段头卡片 ========== */
 .agent-card {
   position: absolute;
   width: 208px;

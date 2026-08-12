@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="mk-page">
     <!-- 状态条 -->
     <div class="mk-status" :class="pendingCount > 0 ? 'mk-status--warn' : 'mk-status--ok'">

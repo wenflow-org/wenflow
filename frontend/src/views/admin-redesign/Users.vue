@@ -593,7 +593,7 @@ function clearFilters() {
   font-weight: 700;
   letter-spacing: 0.03em;
 }
-.ul-tag--self { background: #dbeafe; color: #1f57cc; }
+.ul-tag--self { background: #dbeafe; color: var(--mk-accent-deep, #1f57cc); }
 .ul-tag--test { background: #fef3c7; color: #b45309; }
 .ul-more {
   display: flex;

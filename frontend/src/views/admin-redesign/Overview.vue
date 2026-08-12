@@ -468,7 +468,7 @@ watch(liveLoading, (loading) => {
   padding: 20px;
   display: grid;
   gap: 16px;
-  background: #f6f8fc;
+  background: var(--mk-bg, #f7f8fa);
   font-size: 14px;
   color: var(--mk-ink);
 }
@@ -686,7 +686,7 @@ watch(liveLoading, (loading) => {
 }
 .feed-filter input {
   margin: 0;
-  accent-color: #2c63d0;
+  accent-color: var(--mk-blue, #2c63d0);
 }
 
 /* 总结产出质量 */

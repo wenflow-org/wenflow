@@ -17,18 +17,18 @@
         {{ failedTraceIds.length }} 条链路含失败，定位 →
       </button>
       <div class="wf-tracepick">
-        <span v-if="sessionIds.length" class="wf-mode">
+        <span v-if="sessionIds.length" class="mk-pills wf-mode">
           <button
             type="button"
-            class="wf-mode__btn"
-            :class="{ 'wf-mode__btn--on': viewMode === 'trace' }"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': viewMode === 'trace' }"
             :aria-pressed="viewMode === 'trace'"
             @click="viewMode = 'trace'"
           >链路</button>
           <button
             type="button"
-            class="wf-mode__btn"
-            :class="{ 'wf-mode__btn--on': viewMode === 'session' }"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': viewMode === 'session' }"
             :aria-pressed="viewMode === 'session'"
             @click="viewMode = 'session'"
           >会话</button>
@@ -509,25 +509,8 @@ const verdictText = computed(() => {
 
 /* 链路 / 会话视图切换 */
 .wf-mode {
-  display: inline-flex;
-  border: 1px solid var(--mk-line);
-  border-radius: 8px;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-.wf-mode__btn {
-  padding: 5px 12px;
-  background: var(--mk-surface);
-  border: none;
-  border-right: 1px solid var(--mk-line);
-  font-size: 11.5px;
-  color: var(--mk-faint);
-  cursor: pointer;
-}
-.wf-mode__btn:last-child { border-right: none; }
-.wf-mode__btn--on { background: #eef3fd; color: #2c63d0; font-weight: 600; }
-
-/* 链路概要卡 */
+  margin-bottom: 10px;
+}/* 链路概要卡 */
 .wf-summary {
   display: flex;
   align-items: stretch;

@@ -382,7 +382,7 @@ const entity = computed(() => skillProfile.value || agentProfile.value)
 /* 身份色：与 Agent 拓扑同套阶段色（按所属 Agent 取色） */
 const tone = computed(() => {
   const key = skillProfile.value ? skillProfile.value.agentId : intent.skillDrawerId
-  return AGENT_TONES[key || ''] || { hue: '#2c63d0', soft: 'rgba(44, 99, 208, 0.1)' }
+  return AGENT_TONES[key || ''] || { hue: 'var(--mk-blue, #2c63d0)', soft: 'rgba(44, 99, 208, 0.1)' }
 })
 
 /** 头部图标：skill 按类别，agent 用层叠形 */
@@ -1038,7 +1038,7 @@ function goFullEditor() {
   border-radius: 999px;
   background: #f0f2f5;
 }
-.msk__src-chip--custom { color: #1f57cc; background: #eff6ff; }
+.msk__src-chip--custom { color: var(--mk-accent-deep, #1f57cc); background: #eff6ff; }
 
 /* 行列表（下辖 Skill / 最近调用） */
 .msk__list { display: grid; gap: 4px; }
@@ -1111,7 +1111,7 @@ function goFullEditor() {
   gap: 8px;
 }
 .msk__field--check span { font-size: 12px; color: #5b6577; font-weight: 600; }
-.msk__field--check input { width: 15px; height: 15px; accent-color: #2c63d0; }
+.msk__field--check input { width: 15px; height: 15px; accent-color: var(--mk-blue, #2c63d0); }
 .msk__field-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1127,7 +1127,7 @@ function goFullEditor() {
   background: #fff;
   width: 100%;
 }
-.msk__input:focus { outline: none; border-color: #2c63d0; }
+.msk__input:focus { outline: none; border-color: var(--mk-blue, #2c63d0); }
 .msk__effective {
   margin: 0;
   padding: 8px 10px;
@@ -1166,7 +1166,7 @@ function goFullEditor() {
   resize: vertical;
   line-height: 1.55;
 }
-.msk__test-input:focus { outline: none; border-color: #2c63d0; }
+.msk__test-input:focus { outline: none; border-color: var(--mk-blue, #2c63d0); }
 
 /* 代码井（Prompt 预览 / 试跑输出） */
 .msk__code {
@@ -1236,7 +1236,7 @@ function goFullEditor() {
 .mk-link {
   border: 0;
   background: transparent;
-  color: #2c63d0;
+  color: var(--mk-blue, #2c63d0);
   font: inherit;
   font-weight: 700;
   font-size: 12px;
@@ -1283,7 +1283,7 @@ function goFullEditor() {
 .msk__op {
   border: 0;
   background: transparent;
-  color: #2c63d0;
+  color: var(--mk-blue, #2c63d0);
   font: inherit;
   font-size: 12px;
   font-weight: 700;
@@ -1354,7 +1354,7 @@ function goFullEditor() {
 .msk__primary-link {
   border: 1px solid rgba(44, 99, 208, 0.35);
   background: #eef5ff;
-  color: #2c63d0;
+  color: var(--mk-blue, #2c63d0);
   font: inherit;
   font-weight: 700;
   font-size: 12.5px;

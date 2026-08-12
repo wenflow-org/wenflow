@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="mk-page">
     <!-- 状态条 -->
     <div class="mk-status" :class="stats && stats.active > 0 ? 'mk-status--ok' : 'mk-status--muted'">

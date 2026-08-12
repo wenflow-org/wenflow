@@ -712,7 +712,7 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
   width: 46px;
   height: 46px;
   border-radius: 14px;
-  background: linear-gradient(135deg, #2c63d0, var(--mk-purple));
+  background: linear-gradient(135deg, var(--mk-blue, #2c63d0), var(--mk-purple));
   color: #fff;
   display: grid;
   place-content: center;
@@ -747,7 +747,7 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
   overflow: hidden;
   margin: 4px 0;
 }
-.ld-progress__bar i { display: block; height: 100%; background: linear-gradient(90deg, #6aa0ff, #2c63d0); }
+.ld-progress__bar i { display: block; height: 100%; background: linear-gradient(90deg, #6aa0ff, var(--mk-blue, #2c63d0)); }
 .ld-progress__task { margin: 0; font-size: 12.5px; color: var(--mk-muted); }
 
 .ld-concepts { padding: 16px; display: grid; gap: 14px; }
