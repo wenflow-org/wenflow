@@ -44,6 +44,24 @@
   outline-offset: 2px;
 }
 
+/* 按钮基础归零：v2 页 button 去掉浏览器默认样式（边框/背景/内边距/字体），
+   外观统一由各 class（btn-primary/link-muted 等）定义，避免「今天休息」类文本按钮
+   残留默认边框与灰底 */
+/* 按钮基础归零：v2 页 button 去掉浏览器默认样式（边框/背景/内边距/字体），
+   外观统一由各 class（btn-primary/link-muted 等）定义，避免「今天休息」类文本按钮
+   残留默认边框与灰底。:where() 使本规则特异性与元素选择器同级，不会压过组件 class */
+.v2-page button:where(:not(.el-button)) {
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
 .v2-page > main {
   flex: 1;
   width: 100%;

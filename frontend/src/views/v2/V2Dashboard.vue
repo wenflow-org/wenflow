@@ -1161,7 +1161,7 @@ onMounted(loadAll);
   box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
 }
 .card-head { display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
-.link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; }
+.link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; transition: color 0.15s ease; }
 .link-muted:hover { color: var(--blue-deep); }
 
 /* ---------- 今日预算（多目标调度台账） ---------- */

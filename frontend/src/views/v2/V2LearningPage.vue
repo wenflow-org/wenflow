@@ -1320,6 +1320,8 @@ onBeforeUnmount(() => {
   padding: 9px 12px; border-radius: 8px;
   font-size: 13px; font-weight: 600; color: var(--muted);
   cursor: pointer; white-space: nowrap;
+  text-align: left;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 .learn__menu-item:hover { background: #f1f5fb; color: var(--ink); }
 .learn__head-right { position: relative; }

@@ -587,6 +587,8 @@ onBeforeUnmount(() => {
   padding: 8px 11px; border-radius: 8px;
   font-size: 12.5px; font-weight: 600; color: var(--muted);
   cursor: pointer; white-space: nowrap;
+  text-align: left;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 .pcard__menu-item:hover { background: #f1f5fb; color: var(--ink); }
 .pcard__menu-item--danger { color: #c0454a; }
