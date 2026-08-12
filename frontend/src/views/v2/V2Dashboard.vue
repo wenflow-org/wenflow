@@ -448,7 +448,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import request from '@/utils/api';
 import { learningAPI } from '@/api/learning';
@@ -922,6 +922,15 @@ const selectedInfo = computed(() => {
 /* ================= 当天学习复盘抽屉 ================= */
 const daySheetOpen = ref(false);
 const openSessionEvents = ref<Set<string>>(new Set());
+
+function onSheetKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') daySheetOpen.value = false;
+}
+watch(daySheetOpen, (open) => {
+  if (open) window.addEventListener('keydown', onSheetKey);
+  else window.removeEventListener('keydown', onSheetKey);
+});
+onBeforeUnmount(() => window.removeEventListener('keydown', onSheetKey));
 
 function toggleSessionEvents(id: string) {
   const next = new Set(openSessionEvents.value);
@@ -1439,20 +1448,6 @@ a.btn-primary { text-decoration: none; }
 .action__eyebrow--rest { color: var(--faint); }
 .action__eyebrow--ok { color: var(--green); }
 
-.task-fade-enter-active, .task-fade-leave-active { transition: opacity .18s ease, transform .18s ease; }
-.task-fade-enter-from { opacity: 0; transform: translateY(6px); }
-.task-fade-leave-to { opacity: 0; transform: translateY(-6px); }
-.action__task { display: grid; gap: 12px; }
-
-.mini-spinner {
-  width: 14px; height: 14px; border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
-  animation: dash-spin .8s linear infinite;
-  display: inline-block;
-}
-.btn-primary--busy { opacity: .85; cursor: default; }
-@keyframes dash-spin { to { transform: rotate(360deg); } }
 </style>
 
 <style scoped>

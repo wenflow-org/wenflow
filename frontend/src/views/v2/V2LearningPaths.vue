@@ -136,16 +136,6 @@
     </div>
 
     <V2Footer />
-
-    <!-- toast -->
-    <transition name="toast">
-      <div v-if="toast" class="toast">
-        <span class="toast__icon">
-          <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
-        </span>
-        {{ toast }}
-      </div>
-    </transition>
   </div>
 </template>
 
@@ -153,6 +143,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import request, { AI_REQUEST_TIMEOUT } from '@/utils/api';
+import { toast } from '@/utils/toast';
 import { learningAPI } from '@/api/learning';
 import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
@@ -185,17 +176,11 @@ const filter = ref<'all' | 'ready' | 'completed' | 'generating' | 'failed'>('all
 const retrying = ref('');
 const menuFor = ref('');
 const deleting = ref('');
-const toast = ref('');
 const goalBanner = ref(route.query.from === 'goal');
 /** 生成状态轮询连续失败计数（超过阈值停止空转） */
 const pollFailCount = ref(0);
 
-let toastTimer = 0;
-function showToast(text: string) {
-  toast.value = text;
-  window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => (toast.value = ''), 3600);
-}
+const deleteBusy = ref(false);
 
 function normalize(p: Record<string, any>): PathCard {
   const lc = p.generationLifecycle;
@@ -275,12 +260,12 @@ async function pollOnce() {
     try {
       const lc = await learningAPI.getPathGenerationStatus(c.id);
       if (lc.phase === 'ready') {
-        showToast(`「${c.title}」已生成，可以开始了`);
+        toast.success(`「${c.title}」已生成，可以开始了`);
         await load();
         return;
       }
       if (lc.status === 'failed' || lc.status === 'stale') {
-        showToast(`「${c.title}」生成失败，可重试`);
+        toast.error(`「${c.title}」生成失败，可重试`);
         await load();
         return;
       }
@@ -291,7 +276,7 @@ async function pollOnce() {
     }
   }
   if (failCount > 0 && failCount >= generating.length && pollFailCount.value >= 6) {
-    showToast('生成状态查询失败，请手动刷新');
+    toast.warning('生成状态查询失败，请手动刷新');
     return;
   }
   if (failCount >= generating.length) {
@@ -306,16 +291,16 @@ async function refreshStatus(card: PathCard) {
   try {
     const lc = await learningAPI.getPathGenerationStatus(card.id);
     if (lc.phase === 'ready') {
-      showToast(`「${card.title}」已生成，可以开始了`);
+      toast.success(`「${card.title}」已生成，可以开始了`);
       await load();
     } else if (lc.status === 'failed' || lc.status === 'stale') {
-      showToast(`「${card.title}」生成失败，可重试`);
+      toast.error(`「${card.title}」生成失败，可重试`);
       await load();
     } else {
-      showToast('仍在生成中…');
+      toast.info('仍在生成中…');
     }
   } catch {
-    showToast('刷新失败，稍后再试');
+    toast.error('刷新失败，稍后再试');
   }
 }
 
@@ -329,12 +314,12 @@ async function doRetry(card: PathCard) {
     } else {
       await learningAPI.retryPathGeneration(card.id);
     }
-    showToast('已提交重新生成，正在处理…');
+    toast.info('已提交重新生成，正在处理…');
     const idx = cards.value.findIndex((c) => c.id === card.id);
     if (idx >= 0) cards.value[idx] = { ...cards.value[idx], kind: 'generating', phaseText: '已提交，正在重新生成…' };
     schedulePolling();
   } catch {
-    showToast('重试失败，请稍后再试');
+    toast.error('重试失败，请稍后再试');
   } finally {
     retrying.value = '';
   }
@@ -346,13 +331,16 @@ function askDelete(card: PathCard) {
 }
 
 async function doDelete(card: PathCard) {
+  if (deleteBusy.value) return;
+  deleteBusy.value = true;
   try {
     await request.delete(`/learning/paths/${card.id}`, { timeout: AI_REQUEST_TIMEOUT });
     cards.value = cards.value.filter((c) => c.id !== card.id);
-    showToast(`已删除「${card.title}」`);
+    toast.success(`已删除「${card.title}」`);
   } catch {
-    showToast('删除失败，请稍后再试');
+    toast.error('删除失败，请稍后再试');
   } finally {
+    deleteBusy.value = false;
     deleting.value = '';
   }
 }
@@ -394,16 +382,26 @@ function badgeCls(card: PathCard) {
   return 'pcard__badge--red';
 }
 
+function onMenuKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') menuFor.value = '';
+}
+function onWindowClick() {
+  menuFor.value = '';
+}
+
 onMounted(() => {
   load();
   if (goalBanner.value) {
     window.setTimeout(() => (goalBanner.value = false), 9000);
   }
+  window.addEventListener('keydown', onMenuKey);
+  window.addEventListener('click', onWindowClick);
 });
 
 onBeforeUnmount(() => {
   window.clearTimeout(pollTimer);
-  window.clearTimeout(toastTimer);
+  window.removeEventListener('keydown', onMenuKey);
+  window.removeEventListener('click', onWindowClick);
 });
 </script>
 
@@ -435,7 +433,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 10px 22px rgba(52, 120, 246, 0.3);
   cursor: pointer; text-decoration: none;
 }
-.btn-primary--busy { opacity: .85; cursor: default; }
 .btn-ghost {
   padding: 10px 18px; border-radius: 12px;
   border: 1px solid var(--line); background: #fff;
@@ -545,16 +542,6 @@ onBeforeUnmount(() => {
   border-radius: 10px; padding: 9px 12px;
 }
 
-.mini-spinner {
-  width: 14px; height: 14px; border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
-  animation: paths-spin .8s linear infinite;
-  display: inline-block; flex: 0 0 auto;
-}
-.mini-spinner--blue { border-color: rgba(67, 176, 216, 0.3); border-top-color: var(--cyan); }
-@keyframes paths-spin { to { transform: rotate(360deg); } }
-
 .empty {
   display: grid; justify-items: center; gap: 12px;
   padding: 56px 0; color: var(--faint); font-size: 14px;
@@ -643,3 +630,4 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 </style>
+

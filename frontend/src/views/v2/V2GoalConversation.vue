@@ -217,7 +217,7 @@
             <div v-if="live.proposal.skip.length" class="proposal__skip">先不学：{{ live.proposal.skip.join('、') }}</div>
 
             <div v-if="confirmError" class="errorbar">
-              确认失败，请重试。<span class="errorbar__retry" @click="doConfirm">重试</span>
+              确认失败，请重试。<button type="button" class="errorbar__retry" @click="doConfirm">重试</button>
             </div>
 
             <div v-if="!supplementMode" class="proposal__actions">
@@ -303,6 +303,7 @@ const keyedMessages = computed(() =>
 
 onMounted(() => {
   window.addEventListener('v2:new-goal', onNewGoalEvent);
+  window.addEventListener('keydown', onProposalKey);
   // 每次进入页面随机展示一批场景
   shuffleScenes();
   const cid = typeof route.params.conversationId === 'string' ? route.params.conversationId : '';
@@ -317,6 +318,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('v2:new-goal', onNewGoalEvent);
+  window.removeEventListener('keydown', onProposalKey);
 });
 
 /** 清回初始态（内存 + 组件局部状态；live.resetView 保留 localStorage 恢复入口） */
@@ -383,8 +385,16 @@ const stageLabel = computed(() => {
 });
 
 const showProposal = computed(
-  () => (live.stage === 'proposing' && !!live.proposal) || phase.value === 'generating' || phase.value === 'done'
+  () => !proposalDismissed.value && ((live.stage === 'proposing' && !!live.proposal) || phase.value === 'generating' || phase.value === 'done')
 );
+/** Escape 关闭方案浮层（状态保留，对话可继续）；新提案到达时重新显示 */
+const proposalDismissed = ref(false);
+function onProposalKey(e: KeyboardEvent) {
+  if (e.key === 'Escape' && showProposal.value && !live.sending) {
+    proposalDismissed.value = true;
+  }
+}
+watch(() => live.proposal, () => { proposalDismissed.value = false; });
 
 function stageCls(i: number) {
   return {

@@ -708,28 +708,6 @@ onMounted(() => {
   font: inherit; font-size: 12px; font-weight: 700; color: var(--muted); cursor: pointer;
 }
 .seg__item--on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(23, 32, 51, 0.12); }
-.chart__plot {
-  display: grid;
-  grid-auto-flow: column;
-  align-items: end;
-  gap: 8px;
-  height: 160px;
-  padding-top: 10px;
-}
-.chart__plot--30 { gap: 3px; }
-.chart__col { display: grid; gap: 6px; justify-items: center; align-content: end; height: 100%; }
-.chart__bar {
-  width: 100%; max-width: 34px;
-  border-radius: 7px 7px 3px 3px;
-  background: linear-gradient(180deg, var(--blue), rgba(52, 120, 246, 0.55));
-  transition: height .3s ease;
-}
-.chart__bar--zero { background: #edf1f8; }
-.chart__col:hover .chart__bar { filter: brightness(1.12); }
-.chart__label { font-size: 10.5px; color: var(--faint); }
-.chart__plot--30 .chart__label:nth-child(even) { visibility: hidden; }
-.chart__summary { display: flex; gap: 18px; font-size: 12px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 12px; }
-.chart__summary b { color: var(--ink); }
 
 /* ---------- AI 建议 ---------- */
 .suggest { padding: 20px 22px; display: grid; gap: 14px; }
@@ -799,11 +777,6 @@ onMounted(() => {
   padding: 30px 0; text-align: center; color: var(--faint); font-size: 13px;
   border: 1px dashed var(--line); border-radius: 12px; background: #fafcff;
 }
-.chart__plot { display: grid; grid-auto-flow: column; align-items: end; gap: 6px; height: 170px; padding-top: 10px; }
-.chart__col { display: grid; gap: 6px; justify-items: center; align-content: end; height: 100%; }
-.chart__bar { width: 100%; max-width: 30px; border-radius: 7px 7px 3px 3px; transition: height .3s ease; }
-.chart__bar--zero { background: #edf1f8 !important; }
-.chart__label { font-size: 10.5px; color: var(--faint); white-space: nowrap; }
 .sug--critical { border-color: rgba(239, 117, 120, 0.35); }
 .sug--warning { border-color: rgba(244, 170, 70, 0.35); }
 .state__main { width: 100%; }

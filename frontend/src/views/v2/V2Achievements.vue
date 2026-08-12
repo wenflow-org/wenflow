@@ -226,41 +226,17 @@ onMounted(load);
 .ach-card__icon--off { color: var(--faint); background: #eef2f8; }
 .ach-card__badge { font-size: 10.5px; font-weight: 800; padding: 3px 9px; border-radius: 999px; }
 .ach-card__badge--on { color: #1d7a4c; background: rgba(49, 177, 111, 0.12); }
-.ach-card__badge--off { color: var(--faint); background: #eef2f8; }
+.ach-card__badge--off { color: var(--muted); background: #e8edf5; }
 .ach-card__name { font-size: 15px; }
 .ach-card__desc { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.55; flex: 1; }
 .ach-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
-.ach-card__xp { font-size: 12px; font-weight: 800; color: var(--accent); }
+.ach-card__xp { font-size: 12px; font-weight: 800; color: #6a4de0; }
 .ach-card__xp--off { color: var(--faint); }
 .ach-card__date { font-size: 11.5px; color: var(--faint); }
 .ach-card__prog { display: flex; align-items: center; gap: 8px; flex: 1; }
 .ach-card__prog-bar { flex: 1; height: 6px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
 .ach-card__prog-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 .ach-card__prog span { font-size: 11px; color: var(--faint); white-space: nowrap; }
-.ach-card__claim {
-  font-size: 12px; font-weight: 800; color: #fff;
-  background: linear-gradient(135deg, var(--amber), #ef8f3a);
-  padding: 6px 13px; border-radius: 9px; cursor: pointer;
-  box-shadow: 0 6px 14px rgba(244, 170, 70, 0.35);
-  animation: ach-pulse 1.6s ease-in-out infinite;
-}
-@keyframes ach-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
-
-.toast {
-  position: fixed; top: 76px; right: 24px; z-index: 50;
-  display: flex; align-items: center; gap: 9px;
-  background: var(--ink); color: #fff;
-  font-size: 13px; font-weight: 600;
-  padding: 11px 16px; border-radius: 12px;
-  box-shadow: 0 16px 40px rgba(23, 32, 51, 0.3);
-}
-.toast__icon {
-  width: 20px; height: 20px; border-radius: 50%;
-  background: var(--amber); color: #fff;
-  display: grid; place-items: center; flex: 0 0 auto;
-}
-.toast-enter-active, .toast-leave-active { transition: .25s ease; }
-.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-8px); }
 
 @media (max-width: 900px) {
   .ach__main { padding: 16px 14px 32px; }
