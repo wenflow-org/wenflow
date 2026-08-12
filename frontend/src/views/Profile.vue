@@ -515,7 +515,8 @@ async function handleDeactivate() {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 /* 两栏布局：改密 + 协助排查（等高卡片，内容顶部对齐，按钮贴底） */
@@ -563,12 +564,18 @@ async function handleDeactivate() {
   background: var(--canvas, #f3f6fb);
   display: grid;
   gap: 6px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .stat-card span {
   font-size: 12px;
   font-weight: 700;
   color: var(--faint, #67758f);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stat-card strong {
@@ -576,6 +583,7 @@ async function handleDeactivate() {
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--ink, #172033);
+  overflow-wrap: anywhere;
 }
 
 .pwd-grid {

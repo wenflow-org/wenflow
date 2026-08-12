@@ -93,6 +93,11 @@
         <div class="detail__grid">
           <!-- 阶段列表 -->
           <div class="stages">
+            <section v-if="!stages.length" class="stages__empty card">
+              <span class="kicker">路径准备中</span>
+              <strong>还没有阶段与任务</strong>
+              <p>阶段与任务生成后，会在这里展示学习计划。请稍后刷新页面查看。</p>
+            </section>
             <section v-for="(stage, si) in stages" :key="stage.id || si" class="stage card" :class="`stage--${stageStatus(stage, si)}`">
               <button type="button" class="stage__head" @click="toggleStage(si)">
                 <span class="stage__no" :class="`stage__no--${stageStatus(stage, si)}`">
@@ -142,6 +147,11 @@
 
           <!-- 侧栏 -->
           <aside class="side">
+            <section v-if="!stages.length" class="card sidecard">
+              <span class="kicker">路径状态</span>
+              <p class="chart__empty">暂无任务安排</p>
+            </section>
+
             <section v-if="currentTask" class="card sidecard sidecard--current">
               <span class="kicker">当前任务</span>
               <strong>{{ currentTask.title || currentTask.displayLabel }}</strong>
@@ -497,6 +507,25 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
 
 .detail__grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
 .stages { display: grid; gap: 12px; }
+
+.stages__empty {
+  padding: 28px 24px;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.stages__empty strong {
+  font-size: 15px;
+  color: var(--ink, #172033);
+}
+
+.stages__empty p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted, #5b6577);
+}
 
 .stage { overflow: hidden; }
 .stage__head {
