@@ -44,6 +44,9 @@ export const TERMS = {
   healthCenter: '健康中心',
   healthScore: '今日成功率',
   healthScoreTitle: '今日调用成功率',
+
+  // ---- 生命周期族 ----
+  completion: '完成度',
 } as const
 
 export type TermsKey = keyof typeof TERMS

@@ -649,6 +649,73 @@ export interface HealthCenterFixResult {
   auditId?: string;
 }
 
+// ============================================================
+// 巡检工作台聚合（G1：GET /api/admin/health-center/summary）
+// 一次请求返回五分组：健康 13 项 / 漂移三义 / 对账 W1-W5 / 完成度五档 / 全局统计
+// ============================================================
+
+export type HealthCompletionState = 'draft' | 'handler-ready' | 'core-ready' | 'fields-synced' | 'live';
+
+/** 漂移摘要：三种漂移语义各自独立计数（术语统一，ADMIN_IA_AUDIT §3.2） */
+export interface HealthDriftSummary {
+  /** 契约漂移（编排契约声明 vs DB，health item field-routing-contract） */
+  contract: number;
+  /** W4 哈希漂移（core → 产物 → DB 哈希，health item w4-corehash） */
+  hash: number;
+  /** 运行时漂移（遥测 promptDrift 观测，health item runtime-prompt） */
+  runtime: number;
+}
+
+/** 对账摘要：W1-W5 简版计数（与 skills-readiness 同一报告派生） */
+export interface HealthReconciliationSummary {
+  /** 户口簿活跃 skill 总数（对账对象） */
+  total: number;
+  /** W2 缺注册：户口簿登记但 skill_registrations 无行 */
+  missingRegistration: number;
+  /** W2 幽灵注册：注册表行不在户口簿活跃集 */
+  zombieRegistration: number;
+  /** W1 缺 ACTIVE：户口簿登记（有 prompt 文件）但无 ACTIVE prompt */
+  missingActive: number;
+  /** W1 幽灵 ACTIVE：agent_prompts ACTIVE 的 skill 不在户口簿活跃集 */
+  zombieActive: number;
+  /** W1 僵尸技能 ACTIVE 残留（保留注册零调用） */
+  zombieSkillActive: number;
+  /** W3 接线差集：steps 引用缺户口簿登记 + 户口簿登记缺 steps 引用 */
+  unwired: number;
+}
+
+/** 完成度摘要：五档分布计数（明细仍走 /skills/reconciliation） */
+export interface HealthCompletionSummary {
+  distribution: Record<HealthCompletionState, number>;
+  /** 已达 live 档的 skill 数 */
+  live: number;
+}
+
+/** 全局统计 */
+export interface HealthGlobalSummary {
+  /** skill 总数（户口簿活跃集） */
+  total: number;
+  aux: number;
+  mainline: number;
+  handlerOnly: number;
+  /** 异常 skill 数：任一已评估的完成度检查项不过 */
+  abnormalSkills: number;
+}
+
+export interface HealthCenterSummaryReport {
+  generatedAt: string;
+  health: {
+    summary: HealthCenterSummary;
+    items: HealthCenterItem[];
+    /** 异常检查项数（severity=error/warn，不含 info 观测项） */
+    abnormal: number;
+  };
+  drift: HealthDriftSummary;
+  reconciliation: HealthReconciliationSummary;
+  completion: HealthCompletionSummary;
+  global: HealthGlobalSummary;
+}
+
 export const adminHealthCenterApi = {
   /**
    * 统一健康清单；refresh=true 时绕过 60s 缓存强制重算。
@@ -657,6 +724,17 @@ export const adminHealthCenterApi = {
     return adminAxios.get<{ success: boolean; data: HealthCenterReport }>('/admin/health-center', {
       params: refresh ? { refresh: 1 } : {},
     });
+  },
+
+  /**
+   * 巡检聚合（G1 一页式巡检工作台）：健康 13 项 + 漂移 + 对账 + 完成度 + 全局统计；
+   * refresh=true 时绕过 60s 缓存强制重算（?refresh=1）。
+   */
+  getSummary: async (refresh = false) => {
+    return adminAxios.get<{ success: boolean; data: HealthCenterSummaryReport }>(
+      '/admin/health-center/summary',
+      { params: refresh ? { refresh: 1 } : {} },
+    );
   },
 
   /**
