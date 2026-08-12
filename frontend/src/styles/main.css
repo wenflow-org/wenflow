@@ -1,6 +1,20 @@
 ﻿/* 现代化增强包 */
 @import './modern-enhancements.css';
 
+/* 无障碍工具类：视觉隐藏但保留给读屏器（sr-only 标准实现）。
+   注意：此前 .visually-hidden 在全库无定义导致 label 泄漏渲染成可见文字 */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
 /* ========================================
    AI学习平台 - 主样式入口
    引入设计系统和组件样式
