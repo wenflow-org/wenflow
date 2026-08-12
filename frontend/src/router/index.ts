@@ -75,6 +75,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '学习路径', requiresAuth: true }
   },
   {
+    path: '/learning-history',
+    name: 'V2LearningHistory',
+    component: () => import('@/views/v2/V2LearningHistory.vue'),
+    meta: { title: '学习历史', requiresAuth: true }
+  },
+  {
     path: '/learning-state',
     name: 'V2LearningState',
     component: () => import('@/views/v2/V2LearningState.vue'),

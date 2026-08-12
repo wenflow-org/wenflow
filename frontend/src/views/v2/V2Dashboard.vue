@@ -333,7 +333,10 @@
                 <p class="day-detail__note">{{ selectedInfo.note }}</p>
               </template>
               <p v-else class="day-detail__empty">{{ selectedInfo.note }}</p>
-              <button type="button" class="day-detail__more" @click="daySheetOpen = true">查看当天明细 ›</button>
+              <div class="day-detail__actions">
+                <button type="button" class="day-detail__more" @click="daySheetOpen = true">查看当天明细 ›</button>
+                <router-link to="/learning-history" class="day-detail__more">全部历史 ›</router-link>
+              </div>
             </aside>
           </div>
         </section>
@@ -1505,12 +1508,18 @@ a.btn-primary { text-decoration: none; }
 
 <style scoped>
 /* ---------- 当天明细入口 ---------- */
+.day-detail__actions {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
 .day-detail__more {
   border: 0; background: transparent;
   color: var(--blue-deep);
   font: inherit; font-size: 12.5px; font-weight: 800;
   cursor: pointer; text-align: left;
   padding: 8px 0 0;
+  text-decoration: none;
 }
 .day-detail__more:hover { text-decoration: underline; }
 

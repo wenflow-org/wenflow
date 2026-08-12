@@ -192,6 +192,10 @@
             </ul>
           </section>
           <section class="card sidecard">
+            <span class="kicker">学习记录</span>
+            <router-link to="/learning-history" class="btn-ghost btn-ghost--block">查看学习历史</router-link>
+          </section>
+          <section class="card sidecard">
             <span class="kicker">指标说明</span>
             <ul class="legend">
               <li><b class="dot dot--blue"></b>健康度（fitness）：学习负荷的 42 天指数加权移动平均，代表你的学习"体能"</li>
