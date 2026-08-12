@@ -1,10 +1,10 @@
 ---
 agentId: skill:learner-progress-report
-coreHash: 3831842944cb5643e9eafa64a388e8eccd47a424492aebaa491405a3a30e5c52
+coreHash: 7b892b3f89439291f9ec6378f8a4adf582e03bef845cc2cb2b992755ce161508
 coreVersion: 1
 temperature: 0.4
 maxTokens: 1200
-failurePolicy: fallback
+failurePolicy: propagate
 ---
 
 ## 身份

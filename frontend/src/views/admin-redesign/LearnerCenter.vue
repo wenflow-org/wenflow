@@ -292,4 +292,13 @@ async function recomputeAll() {
   padding: 10px 0 12px;
   border-top: 1px dashed var(--mk-line);
 }
+
+@media (min-width: 2000px) {
+  .risk-text { font-size: 14px; }
+  .lc-more { padding: 12px 0 14px; }
+}
+@media (min-width: 2800px) {
+  .risk-text { font-size: 16.5px; }
+  .lc-more { padding: 14px 0 17px; }
+}
 </style>

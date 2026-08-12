@@ -111,7 +111,7 @@ describe('Admin 登录安全边界', () => {
       }
     })
     expect(bcryptCompare).toHaveBeenCalledTimes(1)
-    expect(recordLoginAttempt).toHaveBeenCalledWith('admin', '127.0.0.1', false, 'admin')
+    expect(recordLoginAttempt).toHaveBeenCalledWith('admin', '127.0.0.1', false, 'admin', 'invalid_credentials')
   })
 
   it('软删管理员视为不存在：登录查询过滤 deletedAt: null', async () => {
@@ -129,7 +129,7 @@ describe('Admin 登录安全边界', () => {
         deletedAt: null
       }
     })
-    expect(recordLoginAttempt).toHaveBeenCalledWith('ghost-admin', '127.0.0.1', false, 'admin')
+    expect(recordLoginAttempt).toHaveBeenCalledWith('ghost-admin', '127.0.0.1', false, 'admin', 'invalid_credentials')
   })
 
   it('软删管理员即使密码正确也按普通凭据错误拒绝，不泄露删除状态', async () => {
@@ -141,7 +141,7 @@ describe('Admin 登录安全边界', () => {
 
     expect(res.statusCode).toBe(401)
     expect(res.body.error.code).toBe('INVALID_CREDENTIALS')
-    expect(recordLoginAttempt).toHaveBeenCalledWith('admin', '127.0.0.1', false, 'admin')
+    expect(recordLoginAttempt).toHaveBeenCalledWith('admin', '127.0.0.1', false, 'admin', 'invalid_credentials')
   })
 
   it('登录成功时仅在 HttpOnly Cookie 中下发 token，响应不包含 token', async () => {

@@ -71,7 +71,7 @@
       </div>
     </div>
 
-    <div v-else-if="failed" class="hc-failed">健康区加载失败：{{ errMsg }}</div>
+    <div v-else-if="failed" class="hc-failed">健康区加载失败：{{ errorText }}</div>
   </div>
 </template>
 
@@ -270,5 +270,12 @@ defineExpose({ refresh })
   .hc-item__detail { font-size: 12.5px; }
   .hc-item__hint, .mono { font-size: 12px; }
   .hc-bar__title { font-size: 15px; }
+  .hc-bar__meta, .hc-bar__fixable { font-size: 12.5px; }
+  .hc-bar__seg { font-size: 13px; }
+  .hc-bar__seg--dim { font-size: 12px; }
+  .hc-bar__action, .hc-btn { font-size: 13px; }
+  .hc-item__status, .hc-item__sem, .hc-item__action-tag { font-size: 12.5px; }
+  .hc-item__count { font-size: 13px; }
+  .hc-failed { font-size: 13px; }
 }
 </style>

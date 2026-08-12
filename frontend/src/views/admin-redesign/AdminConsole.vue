@@ -240,7 +240,7 @@ function onGlobalKey(e: KeyboardEvent) {
   box-shadow: var(--mk-shadow-modal);
 }
 .ac-error__card strong { font-size: 16px; color: #1a2a44; }
-.ac-error__card span { font-size: 13px; color: #8492ab; }
+.ac-error__card span { font-size: 13px; color: #5b6577; }
 .ac-error__retry {
   margin-top: 6px;
   padding: 8px 20px;
@@ -252,5 +252,23 @@ function onGlobalKey(e: KeyboardEvent) {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+}
+
+/* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15） ========== */
+@media (min-width: 2000px) {
+  .ac-boot { font-size: 16px; gap: 12px; }
+  .ac-boot__spinner { width: 19px; height: 19px; border-width: 2.5px; }
+  .ac-error__card { gap: 12px; padding: 38px 48px; border-radius: 19px; }
+  .ac-error__card strong { font-size: 18.5px; }
+  .ac-error__card span { font-size: 15px; }
+  .ac-error__retry { margin-top: 7px; padding: 9px 24px; border-radius: 10px; font-size: 15px; }
+}
+@media (min-width: 2800px) {
+  .ac-boot { font-size: 19px; gap: 14px; }
+  .ac-boot__spinner { width: 22px; height: 22px; border-width: 3px; }
+  .ac-error__card { gap: 14px; padding: 46px 58px; border-radius: 22px; }
+  .ac-error__card strong { font-size: 21.5px; }
+  .ac-error__card span { font-size: 17.5px; }
+  .ac-error__retry { margin-top: 8px; padding: 11px 28px; border-radius: 12px; font-size: 17.5px; }
 }
 </style>

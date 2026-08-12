@@ -14,7 +14,7 @@ promptContract:
   input: { transport: json, schemaSource: skill-definition }
   output: { media: json, schemaSource: runtime-validator, envelope: adapter }
   context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
-  failurePolicy: deterministic-fallback
+  failurePolicy: blocking
 runtimeContract:
   version: prompt-runtime-contract/v1
   contextMode: snapshot-context

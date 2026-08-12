@@ -59,6 +59,7 @@
         <span class="tline-head__target">目标</span>
         <span class="tline-head__badge">结果</span>
         <span class="tline-head__ip">IP</span>
+        <span class="tline-head__arrow" aria-hidden="true"></span>
       </div>
       <div
         v-for="log in shownOp"
@@ -66,7 +67,12 @@
         class="tline"
         :class="[log.success ? 'tline--ok' : 'tline--err', { 'tline--open': openId === log.id }]"
       >
-        <button type="button" class="tline__main" @click="openId = openId === log.id ? '' : log.id">
+        <button
+          type="button"
+          class="tline__main"
+          :aria-expanded="openId === log.id"
+          @click="openId = openId === log.id ? '' : log.id"
+        >
           <span class="tline__time mono" :title="fmtFull(log.createdAt)">{{ fmtTime(log.createdAt) }}</span>
           <span class="tline__admin" :title="log.adminName || log.adminId || ''">
             {{ log.adminName || (log.adminId ? shortId(log.adminId) : '—') }}
@@ -78,6 +84,7 @@
             {{ log.success ? '成功' : '失败' }}
           </span>
           <span class="tline__ip mono" :title="log.ip || ''">{{ log.ip || '—' }}</span>
+          <span class="tline__arrow" aria-hidden="true">▸</span>
         </button>
         <div v-if="openId === log.id" class="tline__payload">
           <div class="tline__payload-meta">
@@ -140,7 +147,7 @@
 
     <!-- 空态 -->
     <div v-else class="mk-empty">
-      <div class="mk-empty__icon">{{ tab === 'login' ? '🔑' : '🕵️' }}</div>
+      <div class="mk-empty__icon" aria-hidden="true">{{ tab === 'login' ? '🔑' : '🕵️' }}</div>
       <strong>{{ isFiltered ? '当前筛选无审计记录' : tab === 'login' ? '暂无登录审计' : '暂无审计记录' }}</strong>
       <span>{{ tab === 'login' ? '管理员登录成功/失败都会在此留痕' : '管理员的增删改操作会自动记录留痕' }}</span>
       <button v-if="isFiltered" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
@@ -428,6 +435,7 @@ onMounted(() => {
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   background: var(--mk-surface);
+  overflow-x: auto;
 }
 
 /* 表头：与全站表格页同规范（sticky 顶部、uppercase 小号标签） */
@@ -436,7 +444,8 @@ onMounted(() => {
   top: 0;
   z-index: 2;
   display: grid;
-  grid-template-columns: 72px 130px 140px 80px minmax(100px, 200px) 56px 130px;
+  min-width: max-content;
+  grid-template-columns: 72px 130px 140px 80px minmax(100px, 1fr) 56px 130px 18px;
   gap: 10px;
   align-items: baseline;
   padding: 9px 14px;
@@ -451,7 +460,7 @@ onMounted(() => {
   white-space: nowrap;
 }
 .tline-head--login {
-  grid-template-columns: 72px 160px 130px 56px minmax(160px, 280px);
+  grid-template-columns: 72px 160px 130px 56px minmax(160px, 1fr);
 }
 .tline-more {
   display: flex;
@@ -460,14 +469,15 @@ onMounted(() => {
   border-top: 1px dashed var(--mk-line);
 }
 
-.tline { border-left: 3px solid transparent; border-bottom: 1px solid #f0f2f5; }
+.tline { border-bottom: 1px solid #f0f2f5; box-shadow: inset 3px 0 0 0 transparent; }
 .tline:last-child { border-bottom: none; }
-.tline--ok { border-left-color: var(--mk-green); }
-.tline--err { border-left-color: var(--mk-red); background: rgba(220, 38, 38, 0.04); }
+.tline--ok { box-shadow: inset 3px 0 0 0 var(--mk-green); }
+.tline--err { box-shadow: inset 3px 0 0 0 var(--mk-red); background: rgba(220, 38, 38, 0.04); }
 
 .tline__main {
   display: grid;
-  grid-template-columns: 72px 130px 140px 80px minmax(100px, 200px) 56px 130px;
+  min-width: max-content;
+  grid-template-columns: 72px 130px 140px 80px minmax(100px, 1fr) 56px 130px 18px;
   gap: 10px;
   align-items: baseline;
   width: 100%;
@@ -482,7 +492,7 @@ onMounted(() => {
 .tline__main--static { cursor: default; }
 .tline__main--static:hover { background: transparent; }
 .tline--login .tline__main {
-  grid-template-columns: 72px 160px 130px 56px minmax(160px, 280px);
+  grid-template-columns: 72px 160px 130px 56px minmax(160px, 1fr);
 }
 
 .tline__time {
@@ -532,6 +542,14 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 展开指示：行按钮末列箭头，展开时旋转 90° */
+.tline__arrow {
+  font-size: 11px;
+  color: var(--mk-faint);
+  text-align: right;
+  transition: transform 0.15s ease;
+}
+.tline--open .tline__arrow { transform: rotate(90deg); }
 .tline__reason {
   font-size: 11.5px;
   color: var(--mk-muted);
@@ -550,7 +568,7 @@ onMounted(() => {
   white-space: nowrap;
 }
 .tline__badge--ok { background: var(--mk-green-bg); color: var(--mk-green); }
-.tline__badge--err { background: rgba(220, 38, 38, 0.1); color: #dc2626; }
+.tline__badge--err { background: var(--mk-red-bg); color: var(--mk-red); }
 
 .tline__payload { padding: 2px 14px 12px 66px; display: grid; gap: 8px; }
 .tline__payload-meta {
@@ -574,7 +592,7 @@ onMounted(() => {
   border-radius: 8px;
   background: #0d1420;
   color: #8ba3c7;
-  font: 11px/1.6 'JetBrains Mono', monospace;
+  font: 11px/1.6 var(--mk-mono);
   overflow: auto;
   max-height: 240px;
   white-space: pre-wrap;
@@ -589,17 +607,26 @@ onMounted(() => {
   .log-status { padding: 10px 16px; }
   .log-status strong { font-size: 15.5px; }
   .log-status__meta { font-size: 13px; }
+  .log-keyword { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 180px; }
+  .log-agent { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 100px; }
   .tline-head,
-  .tline__main { grid-template-columns: 84px 160px 170px 95px minmax(120px, 240px) 66px 160px; gap: 12px; padding: 11px 18px; }
+  .tline__main { grid-template-columns: 84px 160px 170px 95px minmax(120px, 1fr) 66px 160px 22px; gap: 12px; padding: 11px 18px; }
   .tline-head--login,
-  .tline--login .tline__main { grid-template-columns: 84px 195px 160px 66px minmax(190px, 340px); }
+  .tline--login .tline__main { grid-template-columns: 84px 195px 160px 66px minmax(190px, 1fr); }
   .tline-head { font-size: 12.5px; }
   .tline__time,
   .tline__target,
   .tline__ip { font-size: 13px; }
   .tline__admin { font-size: 14px; }
   .tline__action { font-size: 13px; }
+  .tline__target-type,
+  .tline__reason,
+  .tline__none { font-size: 13px; }
+  .tline__payload-meta,
+  .tline__ua { font-size: 13px; }
+  .tline__label { font-size: 13px; }
   .tline__badge { font-size: 12px; }
+  .tline__arrow { font-size: 13px; }
   .tline__payload { padding-left: 84px; }
   .tline__payload pre { font-size: 13px; }
 }
@@ -610,17 +637,26 @@ onMounted(() => {
   .log-status { padding: 14px 22px; }
   .log-status strong { font-size: 18px; }
   .log-status__meta { font-size: 15px; }
+  .log-keyword { font-size: 15.5px; padding: 9px 14px; width: 215px; }
+  .log-agent { font-size: 15.5px; padding: 9px 14px; width: 115px; }
   .tline-head,
-  .tline__main { grid-template-columns: 100px 190px 200px 110px minmax(140px, 280px) 78px 190px; gap: 14px; padding: 13px 22px; }
+  .tline__main { grid-template-columns: 100px 190px 200px 110px minmax(140px, 1fr) 78px 190px 26px; gap: 14px; padding: 13px 22px; }
   .tline-head--login,
-  .tline--login .tline__main { grid-template-columns: 100px 235px 190px 78px minmax(220px, 400px); }
+  .tline--login .tline__main { grid-template-columns: 100px 235px 190px 78px minmax(220px, 1fr); }
   .tline-head { font-size: 14.5px; }
   .tline__time,
   .tline__target,
   .tline__ip { font-size: 15.5px; }
   .tline__admin { font-size: 16.5px; }
   .tline__action { font-size: 15.5px; }
+  .tline__target-type,
+  .tline__reason,
+  .tline__none { font-size: 15.5px; }
+  .tline__payload-meta,
+  .tline__ua { font-size: 15.5px; }
+  .tline__label { font-size: 15.5px; }
   .tline__badge { font-size: 14px; }
+  .tline__arrow { font-size: 15.5px; }
   .tline__payload { padding-left: 100px; }
   .tline__payload pre { font-size: 15.5px; }
 }

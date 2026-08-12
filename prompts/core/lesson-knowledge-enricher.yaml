@@ -43,5 +43,5 @@ fields:
 constraints:
   - 结论必须稳健，不夸大，不凭空发明输入里没有的知识点或混淆
   - 证据不足时保守输出，不脑补
-params: { temperature: 0.4, maxTokens: 4000, failurePolicy: fallback }
+params: { temperature: 0.4, maxTokens: 4000, failurePolicy: propagate }
 deltaOutput: false

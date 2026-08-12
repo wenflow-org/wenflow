@@ -5,16 +5,24 @@ const MENU_GAP = 4
 const VIEWPORT_MARGIN = 8
 
 /**
- * 行内 �?菜单：危�?低频操作收进菜单，避免与高频操作同权平铺�? * - 点击 �?按钮切换（stopPropagation�? * - 点击页面其他位置自动关闭（document click�? * - Esc 关闭；ArrowDown/ArrowUp 循环导航 + Home/End + Enter 触发
- * - 打开时焦点移入菜单内第一个可聚焦�? * - window scroll/resize 时关闭（避免错位残留�? * - fixed 定位裁切修复：菜�?pop 处于 .mk-table-scroll（overflow-x:auto）内会被裁切�? *   打开时按触发按钮 getBoundingClientRect 计算 fixed 坐标，超出视口右/下边界自动回�? *
- * 页面绑定方式（举例，触发按钮�?.mk-menu__btn、弹层为 .mk-menu__pop）：
- *   触发按钮�?aria-expanded="menuOpen"
- *   弹层     �?style="popStyle"（fixed 定位；菜单未打开时为空对象，保持默认 CSS�? */
+ * 行内 ⋯ 菜单：危险/低频操作收进菜单，避免与高频操作同权平铺。
+ * - 点击 ⋯ 按钮切换（stopPropagation）
+ * - 点击页面其他位置自动关闭（document click）
+ * - Esc 关闭；ArrowDown/ArrowUp 循环导航 + Home/End + Enter 触发
+ * - 打开时焦点移入菜单内第一个可聚焦项
+ * - window scroll/resize 时关闭（避免错位残留）
+ * - fixed 定位裁切修复：菜单 pop 处于 .mk-table-scroll（overflow-x:auto）内会被裁切，
+ *   打开时按触发按钮 getBoundingClientRect 计算 fixed 坐标，超出视口右/下边界自动回移
+ *
+ * 页面绑定方式（举例，触发按钮为 .mk-menu__btn、弹层为 .mk-menu__pop）：
+ *   触发按钮：:aria-expanded="menuOpen"
+ *   弹层     ：:style="popStyle"（fixed 定位；菜单未打开时为空对象，保持默认 CSS）
+ */
 export function useRowMenu() {
   const openMenu = ref('')
-  /** 是否有菜单处于打开状态，供触发按钮绑�?aria-expanded */
+  /** 是否有菜单处于打开状态，供触发按钮绑定 aria-expanded */
   const menuOpen = ref(false)
-  /** 弹层 fixed 定位样式 { position: 'fixed', left, top, zIndex: 120 }，未打开时为空对�?*/
+  /** 弹层 fixed 定位样式 { position: 'fixed', left, top, zIndex: 120 }，未打开时为空对象 */
   const popStyle = ref<Record<string, number | string>>({})
 
   let popEl: HTMLElement | null = null
@@ -22,7 +30,7 @@ export function useRowMenu() {
   let lastClickTarget: EventTarget | null = null
   let popKeydown: ((e: KeyboardEvent) => void) | null = null
 
-  /** 收集弹层内可聚焦项（跳过 disabled / 隐藏�?*/
+  /** 收集弹层内可聚焦项（跳过 disabled / 隐藏） */
   function getItems(el: HTMLElement): HTMLElement[] {
     const list: HTMLElement[] = []
     el.querySelectorAll<HTMLElement>(
@@ -48,7 +56,7 @@ export function useRowMenu() {
     popEl.focus()
   }
 
-  /** 弹层内方向键/Home/End/Enter 导航（listener 绑定在弹层容�?keydown 上） */
+  /** 弹层内方向键/Home/End/Enter 导航（listener 绑定在弹层容器 keydown 上） */
   function onPopKeydown(e: KeyboardEvent) {
     if (!popEl) return
     const items = getItems(popEl)
@@ -87,21 +95,20 @@ export function useRowMenu() {
     if (next) next.focus()
   }
 
-  /** 按触发按�?rect 计算 fixed 坐标，超出视口右/下边界时回移 */
+  /** 按触发按钮 rect 计算 fixed 坐标，超出视口右/下边界时回移 */
   function positionPop() {
     if (!openMenu.value || !popEl || !triggerEl) return
     const ac = document.querySelector('.ac')
     const zoom = ac ? parseFloat((getComputedStyle(ac) as any).zoom || '') || 1 : 1
     const triggerRect = triggerEl.getBoundingClientRect()
     const height = popEl.offsetHeight || 132
-    // getBoundingClientRect �����������꣨4K �� .ac �� zoom 1.15/1.3����������߼�����ͳһ����
+    // getBoundingClientRect 返回物理像素坐标（4K 时 .ac 有 zoom 1.15/1.3），需按逻辑像素换算统一处理
     let left = triggerRect.left / zoom
     let top = triggerRect.bottom / zoom + MENU_GAP
     if (top * zoom + height * zoom > window.innerHeight - VIEWPORT_MARGIN) {
-      top = (triggerRect.top / zoom) - height - MENU_GAP
+      top = triggerRect.top / zoom - height - MENU_GAP
     }
-    // zoom ����4K 1.15/1.3���� fixed �� left/top ���� zoom �Ŵ�����Ȳ��Ŵ�
-    // �����ж��谴�������ػ��㣨left��zoom + �˵������� �� �����ӿڣ�
+    // zoom 档（4K 1.15/1.3）下 fixed 的 left/top 不受 zoom 放大，需按物理像素回推（left×zoom + 菜单物理宽 ≤ 视口）
     const popPhysicalW = (popEl.offsetWidth || MENU_WIDTH) * zoom
     if (left * zoom + popPhysicalW > window.innerWidth - VIEWPORT_MARGIN) {
       left = (window.innerWidth - popPhysicalW - VIEWPORT_MARGIN) / zoom

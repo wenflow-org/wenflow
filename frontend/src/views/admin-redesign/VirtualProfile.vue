@@ -150,24 +150,24 @@
                 <span class="vp-pipe__stage" :class="{ 'is-on': (s.goalCount || 0) > 0 }">
                   Goal <b>{{ s.goalCount || 0 }}</b>
                   <span v-if="s.projection?.formal?.goal" class="vp-pipe__links">
-                    <a @click="openLink(s.projection.formal.goal)">前台</a>
-                    <a v-if="s.projection?.test?.goal" @click="openLink(s.projection.test.goal)">调试</a>
+                    <button type="button" @click="openLink(s.projection.formal.goal)">前台</button>
+                    <button v-if="s.projection?.test?.goal" type="button" @click="openLink(s.projection.test.goal)">调试</button>
                   </span>
                 </span>
                 <i class="vp-pipe__arrow">→</i>
                 <span class="vp-pipe__stage" :class="{ 'is-on': (s.pathCount || 0) > 0 }">
                   Path <b>{{ s.pathCount || 0 }}</b>
                   <span v-if="s.projection?.formal?.path" class="vp-pipe__links">
-                    <a @click="openLink(s.projection.formal.path)">前台</a>
-                    <a v-if="s.projection?.test?.path" @click="openLink(s.projection.test.path)">调试</a>
+                    <button type="button" @click="openLink(s.projection.formal.path)">前台</button>
+                    <button v-if="s.projection?.test?.path" type="button" @click="openLink(s.projection.test.path)">调试</button>
                   </span>
                 </span>
                 <i class="vp-pipe__arrow">→</i>
                 <span class="vp-pipe__stage" :class="{ 'is-on': (s.learnCount || 0) > 0 }">
                   Learn <b>{{ s.learnCount || 0 }}</b>
                   <span v-if="s.projection?.formal?.learn" class="vp-pipe__links">
-                    <a @click="openLink(s.projection.formal.learn)">前台</a>
-                    <a v-if="s.projection?.test?.learn" @click="openLink(s.projection.test.learn)">调试</a>
+                    <button type="button" @click="openLink(s.projection.formal.learn)">前台</button>
+                    <button v-if="s.projection?.test?.learn" type="button" @click="openLink(s.projection.test.learn)">调试</button>
                   </span>
                 </span>
                 <span v-if="(s.runningCount || 0) > 0" class="vp-pipe__running">● {{ s.runningCount }} 运行中</span>
@@ -942,8 +942,14 @@ function formatRunResult(result: string) {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  padding: 0;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border-radius: 6px;
+  width: fit-content;
+  transition: background 0.14s ease, transform 0.1s ease;
 }
+.vp-back:hover { background: #eff6ff; }
+.vp-back:active { transform: translateY(1px); }
 .vp-top__meta {
   display: flex;
   flex-wrap: wrap;
@@ -1178,14 +1184,20 @@ function formatRunResult(result: string) {
   display: inline-flex;
   gap: 4px;
 }
-.vp-pipe__links a {
+.vp-pipe__links a,
+.vp-pipe__links button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
   color: var(--mk-blue, #3478f6);
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
   text-decoration: none;
 }
-.vp-pipe__links a:hover { text-decoration: underline; }
+.vp-pipe__links a:hover,
+.vp-pipe__links button:hover { text-decoration: underline; }
 .vp-pipe__running {
   margin-left: auto;
   color: var(--mk-amber, #b7791f);
@@ -1293,8 +1305,6 @@ function formatRunResult(result: string) {
   font-size: 12.5px;
   font-weight: 600;
 }
-.mk-link--danger { color: var(--mk-red, #dc2626); }
-
 .vp-tools {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1404,7 +1414,7 @@ function formatRunResult(result: string) {
   .vp-profile__row { font-size: 15px; }
   .vp-pipe { font-size: 13.5px; }
   .vp-pipe__stage b { font-size: 13.5px; }
-  .vp-pipe__links a { font-size: 13px; }
+  .vp-pipe__links a, .vp-pipe__links button { font-size: 13px; }
   .vp-pipe__running, .vp-pipe__latest { font-size: 13px; }
   .vp-story-item__title strong { font-size: 16px; }
   .vp-story-item__outline { font-size: 14.5px; }
@@ -1421,6 +1431,25 @@ function formatRunResult(result: string) {
   .vp-story-item__advanced > summary::before { font-size: 12px; }
   .vp-adv-row { font-size: 13.5px; }
   .vp-adv-row--object pre { font-size: 12.5px; }
+  .vp-tab__count { font-size: 13px; margin-left: 4px; }
+  .vp-fallback { font-size: 14.5px; padding: 12px 16px; }
+  .vp-overview { gap: 12px; }
+  .vp-overview__item { padding: 12px 16px; }
+  .vp-trait { padding: 5px 13px; }
+  .vp-goal { padding: 14px 16px; }
+  .vp-profile__row { grid-template-columns: 126px minmax(0, 1fr); padding: 14px 21px; }
+  .vp-stories { gap: 12px; padding: 14px; }
+  .vp-story-item { padding: 16px 19px; }
+  .vp-story-item__mark { width: 16px; height: 16px; }
+  .vp-pipe { padding: 8px 12px; }
+  .vp-run { padding: 16px 19px; }
+  .vp-run__dot { width: 9px; height: 9px; margin-top: 7px; }
+  .vp-none { padding: 21px; }
+  .vp-next { padding: 14px 16px; }
+  .vp-tools { padding: 5px 19px 14px; }
+  .vp-tool { padding: 12px 14px; }
+  .vp-adv-row { grid-template-columns: 88px 1fr; }
+  .vp-adv-row--object pre { padding: 7px 10px; max-height: 210px; }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号升到 2800 级（17px 级） */
@@ -1438,7 +1467,7 @@ function formatRunResult(result: string) {
   .vp-profile__row { font-size: 17.5px; }
   .vp-pipe { font-size: 16px; }
   .vp-pipe__stage b { font-size: 16px; }
-  .vp-pipe__links a { font-size: 15.5px; }
+  .vp-pipe__links a, .vp-pipe__links button { font-size: 15.5px; }
   .vp-pipe__running, .vp-pipe__latest { font-size: 15.5px; }
   .vp-story-item__title strong { font-size: 18.5px; }
   .vp-story-item__outline { font-size: 17px; }
@@ -1455,6 +1484,25 @@ function formatRunResult(result: string) {
   .vp-story-item__advanced > summary::before { font-size: 14px; }
   .vp-adv-row { font-size: 16px; }
   .vp-adv-row--object pre { font-size: 14.5px; }
+  .vp-tab__count { font-size: 15.5px; margin-left: 5px; }
+  .vp-fallback { font-size: 17px; padding: 14px 19px; }
+  .vp-overview { gap: 14px; }
+  .vp-overview__item { padding: 14px 19px; }
+  .vp-trait { padding: 6px 15px; }
+  .vp-goal { padding: 16px 19px; }
+  .vp-profile__row { grid-template-columns: 148px minmax(0, 1fr); padding: 16px 24px; }
+  .vp-stories { gap: 14px; padding: 16px; }
+  .vp-story-item { padding: 19px 22px; }
+  .vp-story-item__mark { width: 19px; height: 19px; }
+  .vp-pipe { padding: 9px 14px; }
+  .vp-run { padding: 19px 22px; }
+  .vp-run__dot { width: 11px; height: 11px; margin-top: 8px; }
+  .vp-none { padding: 24px; }
+  .vp-next { padding: 16px 19px; }
+  .vp-tools { padding: 6px 22px 16px; }
+  .vp-tool { padding: 14px 16px; }
+  .vp-adv-row { grid-template-columns: 103px 1fr; }
+  .vp-adv-row--object pre { padding: 8px 12px; max-height: 245px; }
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
@@ -1472,7 +1520,7 @@ function formatRunResult(result: string) {
   .vp-profile__row { font-size: 20.5px; }
   .vp-pipe { font-size: 18.5px; }
   .vp-pipe__stage b { font-size: 18.5px; }
-  .vp-pipe__links a { font-size: 18px; }
+  .vp-pipe__links a, .vp-pipe__links button { font-size: 18px; }
   .vp-pipe__running, .vp-pipe__latest { font-size: 18px; }
   .vp-story-item__title strong { font-size: 21.5px; }
   .vp-story-item__outline { font-size: 20px; }
@@ -1489,5 +1537,24 @@ function formatRunResult(result: string) {
   .vp-story-item__advanced > summary::before { font-size: 16px; }
   .vp-adv-row { font-size: 18.5px; }
   .vp-adv-row--object pre { font-size: 17px; }
+  .vp-tab__count { font-size: 18px; margin-left: 6px; }
+  .vp-fallback { font-size: 20px; padding: 16px 22px; }
+  .vp-overview { gap: 16px; }
+  .vp-overview__item { padding: 16px 22px; }
+  .vp-trait { padding: 7px 18px; }
+  .vp-goal { padding: 19px 22px; }
+  .vp-profile__row { grid-template-columns: 174px minmax(0, 1fr); padding: 19px 28px; }
+  .vp-stories { gap: 16px; padding: 19px; }
+  .vp-story-item { padding: 22px 26px; }
+  .vp-story-item__mark { width: 22px; height: 22px; }
+  .vp-pipe { padding: 11px 16px; }
+  .vp-run { padding: 22px 26px; }
+  .vp-run__dot { width: 13px; height: 13px; margin-top: 9px; }
+  .vp-none { padding: 28px; }
+  .vp-next { padding: 19px 22px; }
+  .vp-tools { padding: 7px 26px 19px; }
+  .vp-tool { padding: 16px 19px; }
+  .vp-adv-row { grid-template-columns: 120px 1fr; }
+  .vp-adv-row--object pre { padding: 10px 14px; max-height: 285px; }
 }
 </style>

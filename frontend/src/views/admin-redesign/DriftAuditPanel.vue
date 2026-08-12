@@ -17,7 +17,7 @@
     <details class="fdp__box" open>
       <summary class="fdp__box-summary">漂移报告（编排文件 vs DB，admin 编辑行豁免）</summary>
       <div v-if="driftLoading" class="fdp__empty">检测中…</div>
-      <div v-else-if="driftFailed" class="fdp__empty fdp__empty--error">漂移检测失败：无法连接字段路由服务，请稍后重试。</div>
+      <div v-else-if="driftFailed" class="fdp__empty fdp__empty--error">漂移检测失败：无法连接字段路由服务，请稍后重试。<button type="button" class="mk-empty__action" @click="loadDrift">重试</button></div>
       <div v-else-if="drift.items.length === 0" class="fdp__empty">✅ 无漂移（编排文件与 DB 一致）</div>
       <ul v-else class="fdp__drift-list">
         <li v-for="(d, i) in drift.items" :key="i" class="fdp__drift-item">
@@ -41,7 +41,7 @@
           <span class="mono">{{ String(c.targetId || '') }}</span>
         </li>
       </ul>
-      <p v-else-if="changesFailed" class="fdp__empty fdp__empty--error">变更记录加载失败：无法连接审计服务，请稍后重试。</p>
+      <p v-else-if="changesFailed" class="fdp__empty fdp__empty--error">变更记录加载失败：无法连接审计服务，请稍后重试。<button type="button" class="mk-empty__action" @click="loadChanges">重试</button></p>
       <p v-else class="fdp__empty">暂无变更记录</p>
     </details>
   </div>
@@ -210,4 +210,34 @@ watch(() => props.stage, () => {
 .fdp__change-target { color: var(--mk-muted, #5b6577); }
 .fdp__empty { padding: 20px; color: var(--mk-faint, #71809a); text-align: center; }
 .fdp__empty--error { color: var(--mk-red, #dc2626); font-weight: 600; }
+
+@media (min-width: 2000px) {
+  .fdp__box-summary { font-size: 14px; padding: 13px 17px; }
+  .fdp__guide { padding: 14px 17px; }
+  .fdp__guide-text { font-size: 14px; }
+  .fdp__guide-file { font-size: 14px; padding: 9px 14px; }
+  .fdp__guide-file .mono { font-size: 13.5px; }
+  .fdp__guide-text code { font-size: 13px; }
+  .fdp__drift-item { font-size: 13.5px; padding: 8px 12px; }
+  .fdp__drift-kind { font-size: 12px; padding: 1px 10px; }
+  .fdp__drift-val { font-size: 13px; }
+  .fdp__change { font-size: 13.5px; padding: 8px 12px; }
+  .fdp__change-kind { font-size: 12px; padding: 1px 10px; }
+  .fdp__empty { padding: 24px; }
+}
+
+@media (min-width: 2800px) {
+  .fdp__box-summary { font-size: 16.5px; padding: 15px 21px; }
+  .fdp__guide { padding: 17px 21px; }
+  .fdp__guide-text { font-size: 16.5px; }
+  .fdp__guide-file { font-size: 16.5px; padding: 11px 17px; }
+  .fdp__guide-file .mono { font-size: 16px; }
+  .fdp__guide-text code { font-size: 15.5px; }
+  .fdp__drift-item { font-size: 16px; padding: 10px 15px; }
+  .fdp__drift-kind { font-size: 14px; padding: 2px 12px; }
+  .fdp__drift-val { font-size: 15.5px; }
+  .fdp__change { font-size: 16px; padding: 10px 15px; }
+  .fdp__change-kind { font-size: 14px; padding: 2px 12px; }
+  .fdp__empty { padding: 28px; }
+}
 </style>

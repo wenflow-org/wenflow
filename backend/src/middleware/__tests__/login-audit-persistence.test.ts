@@ -45,7 +45,7 @@ describe('login_attempts 落库（登录审计）', () => {
   });
 
   it('失败登录落库（user scope）', () => {
-    recordLoginAttempt('alice', '127.0.0.1', false);
+    recordLoginAttempt('alice', '127.0.0.1', false, 'user', 'invalid_credentials');
 
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0][0].data).toEqual({
@@ -53,16 +53,23 @@ describe('login_attempts 落库（登录审计）', () => {
       username: 'alice',
       ip: '127.0.0.1',
       success: false,
-      reason: null,
+      reason: 'invalid_credentials',
       userId: null
     });
   });
 
-  it('成功登录同样落库', () => {
-    recordLoginAttempt('alice', '127.0.0.1', true);
+  it('成功登录落库（reason=ok）', () => {
+    recordLoginAttempt('alice', '127.0.0.1', true, 'user', 'ok');
 
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0][0].data.success).toBe(true);
+    expect(create.mock.calls[0][0].data.reason).toBe('ok');
+  });
+
+  it('不传 reason 时默认 null', () => {
+    recordLoginAttempt('alice', '127.0.0.1', false);
+
+    expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0][0].data.reason).toBeNull();
   });
 

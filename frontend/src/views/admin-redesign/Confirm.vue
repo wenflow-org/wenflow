@@ -58,7 +58,7 @@ function confirm() {
   padding: 18px 20px 16px;
   border-radius: 16px;
   background: var(--mk-surface);
-  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
+  box-shadow: var(--mk-shadow-modal);
   display: grid;
   gap: 12px;
 }

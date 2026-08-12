@@ -1,6 +1,6 @@
 <template>
   <div class="sbx">
-    <div v-if="sandboxError" class="sbx__empty sbx__empty--error">{{ sandboxError }}</div>
+    <div v-if="sandboxError" class="sbx__empty sbx__empty--error">{{ sandboxError }}<button type="button" class="mk-empty__action" @click="loadSandboxView">重试</button></div>
     <template v-else-if="sandboxAgents.length">
       <div v-for="agent in sandboxAgents" :key="agent.agentId" class="sbx__agent">
         <div class="sbx__agenthead">
@@ -109,4 +109,26 @@ onMounted(() => void loadSandboxView());
 .sbx__handoff { min-width: 0; padding: 0 8px; border-radius: 999px; background: #eef5ff; color: var(--mk-blue, #3478f6); font-size: 10.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sbx__empty { padding: 20px; color: var(--mk-faint, #71809a); text-align: center; }
 .sbx__empty--error { color: var(--mk-red, #dc2626); font-weight: 600; }
+
+@media (min-width: 2000px) {
+  .sbx__agentdesc { font-size: 13.5px; }
+  .sbx__agentcount { font-size: 12px; padding: 2px 11px; }
+  .sbx__label { font-size: 12px; }
+  .sbx__list { padding: 9px 14px; }
+  .sbx__li { font-size: 13.5px; }
+  .sbx__src { font-size: 12px; padding: 1px 10px; }
+  .sbx__handoff { font-size: 12px; padding: 1px 10px; }
+  .sbx__empty { padding: 24px; }
+}
+
+@media (min-width: 2800px) {
+  .sbx__agentdesc { font-size: 16px; }
+  .sbx__agentcount { font-size: 14px; padding: 3px 13px; }
+  .sbx__label { font-size: 14px; }
+  .sbx__list { padding: 11px 17px; }
+  .sbx__li { font-size: 16px; }
+  .sbx__src { font-size: 14px; padding: 2px 12px; }
+  .sbx__handoff { font-size: 14px; padding: 2px 12px; }
+  .sbx__empty { padding: 28px; }
+}
 </style>

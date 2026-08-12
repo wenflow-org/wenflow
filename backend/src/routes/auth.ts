@@ -211,7 +211,7 @@ router.post('/login', loginRateLimitMiddleware, async (req, res, next) => {
     // 调用服务
     const result = await authService.login(data);
 
-    recordLoginAttempt(data.name, clientIP.toString(), true);
+    recordLoginAttempt(data.name, clientIP.toString(), true, 'user', 'ok');
 
     // 同步写入 HttpOnly Cookie；token 仅经 Cookie 下发，响应体不再返回
     const { token, ...safeResult } = result;
@@ -234,7 +234,7 @@ router.post('/login', loginRateLimitMiddleware, async (req, res, next) => {
 
     if (error instanceof InvalidCredentialsError && loginName) {
       const clientIP = req.ip || req.headers['x-forwarded-for'] || 'unknown';
-      recordLoginAttempt(loginName, clientIP.toString(), false);
+      recordLoginAttempt(loginName, clientIP.toString(), false, 'user', 'invalid_credentials');
       return res.status(401).json({
         success: false,
         error: {

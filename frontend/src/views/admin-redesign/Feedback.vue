@@ -396,7 +396,7 @@ onMounted(() => {
   width: min(560px, 100vw);
   height: 100%;
   background: #fff;
-  box-shadow: -16px 0 48px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--mk-shadow-drawer);
   display: grid;
   grid-template-rows: auto 1fr;
   animation: fb-in 0.2s ease;

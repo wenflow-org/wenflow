@@ -29,6 +29,7 @@
   --mk-amber-bg: #fffbeb;
   --mk-red: #dc2626;
   --mk-red-bg: #fef2f2;
+  --mk-blue-bg: #eff6ff;
   --mk-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
   --mk-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
 
@@ -67,7 +68,7 @@
 
 /* 键盘焦点可见环（无障碍底线）：覆盖按钮/输入/选择/链接；:root 级使 Teleport 到 body 的抽屉/弹窗同样生效 */
 :root :focus-visible {
-  outline: 2px solid rgba(52, 120, 246, 0.85);
+  outline: 2px solid rgba(44, 99, 208, 0.85);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -107,7 +108,7 @@
   cursor: pointer;
   white-space: nowrap;
 }
-.mk-status__action:hover { border-color: rgba(52, 120, 246, 0.4); }
+.mk-status__action:hover { border-color: rgba(44, 99, 208, 0.4); }
 .mk-status__action--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
 
 /* ----- 卡片 ----- */
@@ -182,7 +183,7 @@
   background: var(--mk-surface);
   border: 1px solid var(--mk-line);
   border-radius: 10px;
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+  box-shadow: var(--mk-shadow-pop);
 }
 .mk-menu__item {
   display: flex;
@@ -308,6 +309,8 @@
   white-space: nowrap;
 }
 .mk-link:hover { background: #eff6ff; }
+.mk-link--danger { color: var(--mk-red, #dc2626); }
+.mk-link--danger:hover { background: var(--mk-red-bg, #fef2f2); }
 
 /* ----- 通用工具类 ----- */
 .mono { font-family: var(--mk-mono); }
@@ -366,8 +369,8 @@
   max-height: calc(100vh - 60px);
   overflow-y: auto;
   background: var(--mk-surface, #fff);
-  border-radius: 16px;
-  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
+  border-radius: var(--mk-radius-modal);
+  box-shadow: var(--mk-shadow-modal);
   display: grid;
 }
 .mk-modal__head {
@@ -516,8 +519,7 @@
    - 2000/2800px 两档为「字号档」：内容区字号/间距直接放大。
    - ≥2800px 起壳层另叠加全局 zoom（admin-theme.css：2800→1.15、3600→1.3），
      zoom 是纯等比，会连同本档字号一起缩放（如 2800 档 17px × 1.3 = 22.1px 实际渲染）。
-     因此 3600+ 无需再设第三档字号——zoom 1.15→1.3 已按同一比例把 2800 档整体放大，
-     再叠字号档会造成双重放大、与 2800 边界（仅 zoom 变化）不一致。
+     页面本体 ≥2800 由 zoom 覆盖；Teleport 到 body 的覆盖层不受 zoom 影响，需在文件内补 3600 镜像档。
    - 覆盖层（抽屉/弹窗，Teleport 到 body、不受 .ac zoom 影响）在各文件内补镜像断点。
    本档位覆盖：mk-page/status/table/badge/menu/filter/pill/link/empty/card/num/
    modal/field/btn/toast/actions 及常用子元素。 */
@@ -532,6 +534,7 @@
   .mk-table td { font-size: 13.5px; padding: 12px 16px; }
   .mk-cell-sub { font-size: 12.5px; }
   .mk-badge { font-size: 13px; padding: 3px 10px; }
+  .mk-badge--warn { padding: 2px 9px; }
   .mk-menu__item { font-size: 14px; }
   .mk-menu__btn { width: 30px; height: 30px; font-size: 15px; }
   .mk-filter__input,
@@ -567,6 +570,7 @@
   .mk-table td { font-size: 16px; padding: 14px 20px; }
   .mk-cell-sub { font-size: 15px; }
   .mk-badge { font-size: 15.5px; padding: 4px 12px; }
+  .mk-badge--warn { padding: 3px 11px; }
   .mk-menu__item { font-size: 16.5px; }
   .mk-menu__btn { width: 36px; height: 36px; font-size: 18px; }
   .mk-filter__input,

@@ -485,7 +485,7 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} åˆ†é’
   width: min(560px, 100vw);
   height: 100%;
   background: #fff;
-  box-shadow: -16px 0 48px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--mk-shadow-drawer);
   display: grid;
   grid-template-rows: auto 1fr;
   animation: ts-in 0.2s ease;
@@ -576,9 +576,9 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} åˆ†é’
   margin: 0;
   padding: 10px 12px;
   border-radius: 8px;
-  background: #0d1420;
-  color: #8ba3c7;
-  font: 10.5px/1.6 'JetBrains Mono', monospace;
+  background: var(--mk-code-bg);
+  color: var(--mk-code-fg);
+  font: 10.5px/1.6 var(--mk-mono);
   max-height: 220px;
   overflow: auto;
   white-space: pre-wrap;

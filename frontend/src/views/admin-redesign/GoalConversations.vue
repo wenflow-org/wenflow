@@ -554,7 +554,7 @@ onMounted(() => {
   width: min(560px, 100vw);
   height: 100%;
   background: #fff;
-  box-shadow: -16px 0 48px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--mk-shadow-drawer);
   display: grid;
   grid-template-rows: auto 1fr;
   animation: gc-in 0.2s ease;
@@ -715,9 +715,9 @@ onMounted(() => {
   margin: 6px 0 0;
   padding: 10px 12px;
   border-radius: 8px;
-  background: #101826;
-  border: 1px solid #1c2a40;
-  color: #9db8dc;
+  background: var(--mk-code-bg, #101826);
+  border: 1px solid var(--mk-code-border, #1c2a40);
+  color: var(--mk-code-fg, #9db8dc);
   font-size: 10.5px;
   line-height: 1.6;
   max-height: 220px;

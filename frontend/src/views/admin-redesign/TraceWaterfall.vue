@@ -111,6 +111,7 @@
             <span v-if="promptOf(span)?.drift" class="wf-row__drift">漂移</span>
             <span v-if="span.gatewayDurMs" class="wf-row__gw mono" :title="`网关层 ${fmtMs(span.gatewayDurMs)}（已合并同一调用记录）`">网关 {{ fmtMs(span.gatewayDurMs) }}</span>
             <span class="wf-row__dur mono">{{ fmtMs(span.durationMs) }}</span>
+            <span class="wf-row__arrow" aria-hidden="true">▸</span>
           </span>
         </button>
         <div v-if="openSpanId === span.id" class="wf-row__detail">
@@ -694,6 +695,8 @@ const verdictText = computed(() => {
 .wf-row__bar--err { background: linear-gradient(90deg, #f87171, #dc2626); }
 
 .wf-row__dur { font-size: 11px; color: var(--mk-muted); text-align: right; }
+.wf-row__arrow { font-size: 11px; color: var(--mk-faint); transition: transform 0.15s ease; }
+.wf-row--open .wf-row__arrow { transform: rotate(90deg); }
 .wf-row__gw {
   font-size: 10.5px;
   color: var(--mk-faint);
@@ -779,9 +782,9 @@ const verdictText = computed(() => {
   margin: 0;
   padding: 10px 12px;
   border-radius: 8px;
-  background: #0d1420;
-  color: #8ba3c7;
-  font: 11px/1.6 'JetBrains Mono', monospace;
+  background: var(--mk-code-bg);
+  color: var(--mk-code-fg);
+  font: 11px/1.6 var(--mk-mono);
   overflow: auto;
   max-height: 200px;
   white-space: pre-wrap;

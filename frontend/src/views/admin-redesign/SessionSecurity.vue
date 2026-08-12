@@ -21,7 +21,7 @@
             {{ p.label }}
           </button>
         </div>
-        <button type="button" class="ss-refresh" @click="applyFilters">刷新</button>
+        <button type="button" class="ss-refresh" :disabled="loading" @click="applyFilters">刷新</button>
       </div>
     </div>
 
@@ -96,7 +96,7 @@
 
     <!-- 空态 -->
     <div v-else class="mk-empty">
-      <div class="mk-empty__icon">🔐</div>
+      <div class="mk-empty__icon" aria-hidden="true">🔐</div>
       <strong>{{ statusFilter ? '当前筛选无会话' : '暂无会话记录' }}</strong>
       <span>管理员登录后会话会显示在这里，可随时强制下线</span>
     </div>
@@ -334,6 +334,7 @@ onMounted(async () => {
   white-space: nowrap;
 }
 .ss-refresh:hover { border-color: rgba(52, 120, 246, 0.4); color: var(--mk-ink); }
+.ss-refresh:disabled { opacity: 0.65; cursor: not-allowed; }
 
 /* 加载失败错误态 */
 .ss-error { padding: 40px 20px; }
@@ -359,7 +360,7 @@ onMounted(async () => {
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   background: var(--mk-surface);
-  overflow: hidden;
+  overflow-x: auto;
 }
 .ss-group__head {
   display: flex;
@@ -435,7 +436,7 @@ onMounted(async () => {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.ss-time--soon { color: var(--mk-amber, #d97706); font-weight: 700; }
+.ss-time--soon { color: var(--mk-amber, #b45309); font-weight: 700; }
 .ss-ops { text-align: right; white-space: nowrap; }
 .ss-current {
   display: inline-flex;
@@ -445,7 +446,7 @@ onMounted(async () => {
   border-radius: 999px;
   padding: 2px 9px;
   background: #eff6ff;
-  color: var(--mk-blue, #3478f6);
+  color: var(--mk-accent-deep, #1f57cc);
 }
 .ss-na { color: var(--mk-faint); font-size: 12px; }
 
@@ -460,9 +461,26 @@ onMounted(async () => {
   .ss-group__head { padding: 12px 18px; }
   .ss-device { font-size: 14px; }
   .ss-time { font-size: 13px; }
+  .ss-refresh { font-size: 13.5px; }
+  .ss-group__who strong { font-size: 14.5px; }
+  .ss-group__email { font-size: 12.5px; }
+  .ss-group__count { font-size: 13px; }
+  .ss-group__revokeall { font-size: 13px; }
+  .ss-current { font-size: 12px; }
+  .ss-na { font-size: 13.5px; }
+  .ss-time--soon { font-size: 13px; }
 }
 @media (min-width: 2800px) {
   .ss-status { padding: 12px 18px; border-radius: 14px; }
+  .ss-refresh { font-size: 16px; }
+  .ss-group__who strong { font-size: 16.5px; }
+  .ss-group__email { font-size: 14px; }
+  .ss-group__count { font-size: 15px; }
+  .ss-group__revokeall { font-size: 15px; }
+  .ss-current { font-size: 13.5px; }
+  .ss-na { font-size: 15.5px; }
+  .ss-time,
+  .ss-time--soon { font-size: 15px; }
 }
 @media (min-width: 3600px) {
   .ss-status { padding: 14px 22px; }
@@ -473,5 +491,13 @@ onMounted(async () => {
   .ss-head { font-size: 14.5px; }
   .ss-device { font-size: 16.5px; }
   .ss-time { font-size: 15.5px; }
+  .ss-refresh { font-size: 18.5px; }
+  .ss-group__who strong { font-size: 18.5px; }
+  .ss-group__email { font-size: 16px; }
+  .ss-group__count { font-size: 17px; }
+  .ss-group__revokeall { font-size: 17px; }
+  .ss-current { font-size: 15.5px; }
+  .ss-na { font-size: 18px; }
+  .ss-time--soon { font-size: 15.5px; }
 }
 </style>

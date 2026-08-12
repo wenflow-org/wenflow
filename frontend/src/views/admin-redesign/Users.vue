@@ -79,7 +79,7 @@
             <td><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
             <td>
               <div class="mk-actions">
-                <button type="button" class="mk-link" @click="openSubPage('user', u.id)">详情</button>
+                <button type="button" class="mk-link" @click.stop="openSubPage('user', u.id)">详情</button>
                 <div v-if="isLive" class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(u.id)">⋯</button>
                   <div v-if="openMenu === u.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -545,7 +545,7 @@ const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
 <style scoped>
 .ul-row { cursor: pointer; }
 .ul-row--deleted { opacity: 0.62; filter: saturate(0.2); }
-.ul-tag--deleted { background: #e5e7eb; color: #6b7280; }
+.ul-tag--deleted { background: #e5e7eb; color: #4b5563; }
 .ul-batch {
   position: sticky;
   bottom: 12px;
@@ -558,7 +558,7 @@ const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
   border-radius: 999px;
   border: 1px solid rgba(220, 38, 38, 0.25);
   background: var(--mk-surface);
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+  box-shadow: var(--mk-shadow-pop);
   font-weight: 600;
   font-size: 12.5px;
 }
@@ -572,7 +572,9 @@ const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  transition: background 0.12s ease;
 }
+.ul-batch__danger:hover:not(:disabled) { background: var(--mk-red-strong, #b91c1c); }
 .ul-batch__danger:disabled { opacity: 0.6; }
 .ul-reg--closed { color: var(--mk-amber); font-weight: 700; }
 .ul-truncated { color: var(--mk-amber); font-weight: 700; }
@@ -591,5 +593,20 @@ const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
   justify-content: center;
   padding: 10px 0 12px;
   border-top: 1px dashed var(--mk-line);
+}
+
+@media (min-width: 2000px) {
+  .ul-tags { gap: 7px; margin-top: 3px; }
+  .ul-tag { font-size: 12px; padding: 2px 10px; }
+  .ul-batch { gap: 11px; padding: 10px 14px 10px 18px; font-size: 14px; }
+  .ul-batch__danger { font-size: 14px; padding: 7px 16px; }
+  .ul-more { padding: 12px 0 14px; }
+}
+@media (min-width: 2800px) {
+  .ul-tags { gap: 8px; margin-top: 4px; }
+  .ul-tag { font-size: 14px; padding: 3px 12px; }
+  .ul-batch { gap: 13px; padding: 12px 17px 12px 21px; font-size: 16.5px; }
+  .ul-batch__danger { font-size: 16.5px; padding: 8px 19px; }
+  .ul-more { padding: 14px 0 17px; }
 }
 </style>

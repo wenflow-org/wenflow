@@ -826,7 +826,7 @@ function goFullEditor() {
   width: min(520px, 100vw);
   height: 100%;
   background: #fff;
-  box-shadow: -16px 0 48px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--mk-shadow-drawer);
   display: grid;
   grid-template-rows: auto auto 1fr;
   animation: msk-in 0.2s ease;
@@ -856,7 +856,7 @@ function goFullEditor() {
   color: var(--mk-faint);
   margin-left: 3px;
 }
-.msk__tab-badge.is-bad { background: #fef2f2; color: #dc2626; }
+.msk__tab-badge.is-bad { background: var(--mk-red-bg); color: var(--mk-red); }
 .mk-pill--active .msk__tab-badge { background: #dbe9ff; color: var(--mk-accent-deep); }
 
 /* ========== 头部身份区 ========== */
@@ -964,9 +964,9 @@ function goFullEditor() {
   color: #1a2a44;
   font-variant-numeric: tabular-nums;
 }
-.msk__stat strong.is-bad { color: #dc2626; }
-.msk__stat strong.is-ok { color: #15803d; }
-.msk__stat strong.is-warn { color: #b45309; }
+.msk__stat strong.is-bad { color: var(--mk-red); }
+.msk__stat strong.is-ok { color: var(--mk-green); }
+.msk__stat strong.is-warn { color: var(--mk-amber); }
 .msk__stat strong.is-na { color: var(--mk-faint); }
 .msk__note { margin: -8px 0 0; font-size: 12.5px; color: var(--mk-faint); }
 
@@ -1038,7 +1038,7 @@ function goFullEditor() {
   border-radius: 999px;
   background: #f0f2f5;
 }
-.msk__src-chip--custom { color: #3478f6; background: #eff6ff; }
+.msk__src-chip--custom { color: #1f57cc; background: #eff6ff; }
 
 /* 行列表（下辖 Skill / 最近调用） */
 .msk__list { display: grid; gap: 4px; }
@@ -1059,9 +1059,9 @@ function goFullEditor() {
 }
 .msk__row:hover { border-color: rgba(52, 120, 246, 0.35); background: #f8fbff; }
 .msk__dot { width: 7px; height: 7px; border-radius: 50%; }
-.msk__dot.is-ok { background: #15803d; }
-.msk__dot.is-warn { background: #b45309; }
-.msk__dot.is-err { background: #dc2626; }
+.msk__dot.is-ok { background: var(--mk-green); }
+.msk__dot.is-warn { background: var(--mk-amber); }
+.msk__dot.is-err { background: var(--mk-red); }
 .msk__dot.is-idle { background: #c3cede; }
 .msk__row-title {
   font-weight: 500;
@@ -1152,9 +1152,9 @@ function goFullEditor() {
   background: var(--mk-red);
   color: #fff;
 }
-.msk__btn-danger:hover { background: #b91c1c; border-color: #b91c1c; }
-.msk__msg { margin: 0; font-size: 12.5px; color: #15803d; font-weight: 600; }
-.msk__msg--err { color: #dc2626; }
+.msk__btn-danger:hover { background: var(--mk-red-strong); border-color: var(--mk-red-strong); }
+.msk__msg { margin: 0; font-size: 12.5px; color: var(--mk-green); font-weight: 600; }
+.msk__msg--err { color: var(--mk-red); }
 
 /* 试跑 */
 .msk__test-input {
@@ -1176,7 +1176,7 @@ function goFullEditor() {
   background: var(--mk-code-bg, #101826);
   border: 1px solid var(--mk-code-border, #1c2a40);
   color: var(--mk-code-fg, #9db8dc);
-  font: 12px/1.65 'JetBrains Mono', monospace;
+  font: 12px/1.65 var(--mk-mono);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 180px;
@@ -1196,7 +1196,7 @@ function goFullEditor() {
   border-radius: 0 8px 8px 0;
   font-size: 12px;
 }
-.msk__rule-id { color: #8d6bff; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.msk__rule-id { color: #7c3aed; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
 .msk__rule-text { color: #263950; line-height: 1.55; }
 .msk__conflict {
   margin: 0;
@@ -1204,7 +1204,7 @@ function goFullEditor() {
   border-radius: 8px;
   background: #fff7ed;
   border: 1px solid rgba(180, 83, 9, 0.3);
-  color: #b45309;
+  color: var(--mk-amber);
   font-size: 12.5px;
   font-weight: 600;
 }
@@ -1294,10 +1294,10 @@ function goFullEditor() {
 }
 .msk__op:hover { background: #eff6ff; }
 .msk__op:disabled { opacity: 0.5; cursor: not-allowed; }
-.msk__op.is-active { color: #15803d; cursor: default; }
+.msk__op.is-active { color: var(--mk-green); cursor: default; }
 .msk__op.is-active:hover { background: transparent; }
-.msk__op--danger { color: #dc2626; }
-.msk__op--danger:hover { background: #fef2f2; }
+.msk__op--danger { color: var(--mk-red); }
+.msk__op--danger:hover { background: var(--mk-red-bg); }
 .msk__versions-msg { margin: 0; font-size: 12px; color: var(--mk-green); font-weight: 600; }
 .msk__versions-msg.is-err { color: var(--mk-red); }
 
@@ -1319,8 +1319,8 @@ function goFullEditor() {
   color: #5b6577;
 }
 .msk__diff-head .mono { font-size: 12.5px; }
-.msk__diff-count { font-weight: 700; color: #b45309; }
-.msk__diff-count.is-clean { color: #15803d; }
+.msk__diff-count { font-weight: 700; color: var(--mk-amber); }
+.msk__diff-count.is-clean { color: var(--mk-green); }
 .msk__diff-head .msk__op { margin-left: auto; }
 .msk__diff-body {
   max-height: 260px;
@@ -1335,12 +1335,12 @@ function goFullEditor() {
   gap: 8px;
   padding: 1px 10px;
 }
-.msk__diff-line.is-added { background: #ecfdf5; }
-.msk__diff-line.is-added .msk__diff-text { color: #15803d; }
-.msk__diff-line.is-added .msk__diff-no::after { content: '+'; color: #15803d; margin-left: 3px; }
-.msk__diff-line.is-removed { background: #fef2f2; }
-.msk__diff-line.is-removed .msk__diff-text { color: #b91c1c; }
-.msk__diff-line.is-removed .msk__diff-no::after { content: '−'; color: #b91c1c; margin-left: 3px; }
+.msk__diff-line.is-added { background: var(--mk-green-bg); }
+.msk__diff-line.is-added .msk__diff-text { color: var(--mk-green); }
+.msk__diff-line.is-added .msk__diff-no::after { content: '+'; color: var(--mk-green); margin-left: 3px; }
+.msk__diff-line.is-removed { background: var(--mk-red-bg); }
+.msk__diff-line.is-removed .msk__diff-text { color: var(--mk-red-strong); }
+.msk__diff-line.is-removed .msk__diff-no::after { content: '−'; color: var(--mk-red-strong); margin-left: 3px; }
 .msk__diff-no { color: var(--mk-faint); text-align: right; user-select: none; }
 .msk__diff-text { white-space: pre-wrap; word-break: break-word; color: #41516e; }
 .msk__diff-gap {

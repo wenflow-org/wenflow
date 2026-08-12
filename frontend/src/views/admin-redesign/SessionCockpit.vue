@@ -1781,9 +1781,13 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
-  padding: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
   width: fit-content;
+  transition: background-color 0.1s ease, transform 0.1s ease;
 }
+.cp-back:hover { background: #eff6ff; }
+.cp-back:active { transform: translateY(1px); }
 .cp-danger { background: var(--mk-red-strong, var(--mk-red)); border-color: var(--mk-red-strong, var(--mk-red)); color: #fff; }
 .cp-danger:hover:not(:disabled) { opacity: 0.9; }
 
@@ -2041,7 +2045,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-wrapup { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: 9px; }
 .cp-wrapup__label { font-size: 11px; font-weight: 800; color: var(--mk-faint); }
 .cp-wrapup p { margin: 0; font-size: 12.5px; line-height: 1.65; white-space: pre-wrap; }
-.cp-wrapup__json { margin: 0; font-size: 11px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; font-family: var(--mk-mono); color: var(--mk-muted); }
+.cp-wrapup__json { margin: 0; font-size: 11px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; font-family: var(--mk-mono); color: var(--mk-muted); max-height: 240px; overflow: auto; }
 
 .cp-raw { font-size: 12px; color: var(--mk-faint); }
 .cp-raw summary { cursor: pointer; padding: 4px 2px; }
@@ -2049,9 +2053,9 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   margin: 8px 0 0;
   padding: 12px;
   border-radius: 10px;
-  background: #0d1420;
-  color: #8ba3c7;
-  font: 10.5px/1.6 'JetBrains Mono', monospace;
+  background: var(--mk-code-bg);
+  color: var(--mk-code-fg);
+  font: 10.5px/1.6 var(--mk-mono);
   max-height: 300px;
   overflow: auto;
   white-space: pre-wrap;
@@ -2210,5 +2214,169 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   border-radius: 4px; font-size: 10.5px; line-height: 1.5;
   color: var(--mk-muted); white-space: pre-wrap;
   word-break: break-word; max-height: 200px; overflow-y: auto;
+}
+
+@media (min-width: 2000px) {
+  .cp-title { font-size: 18px; }
+  .cp-title__id { font-size: 13px; }
+  .cp-back { font-size: 14px; }
+  .cp-btn { font-size: 14px; padding: 10px 18px; }
+  .cp-config { font-size: 13.5px; }
+  .cp-controls__hint { font-size: 12.5px; }
+  .cp-stage__order { font-size: 11.5px; }
+  .cp-stage strong { font-size: 15px; }
+  .cp-stage__state { font-size: 12.5px; }
+  .cp-summary__item span { font-size: 12.5px; }
+  .cp-summary__item p { font-size: 14px; }
+  .cp-none { font-size: 14px; }
+  .cp-path-readiness span { font-size: 12.5px; }
+  .cp-path-readiness p { font-size: 13px; }
+  .cp-log { font-size: 13.5px; }
+  .cp-log__time { font-size: 12px; }
+  .cp-degrade { font-size: 13.5px; }
+  .cp-degrade .mk-link { font-size: 13.5px; }
+  .cp-transcript summary { font-size: 13.5px; }
+  .cp-transcript__message span { font-size: 12px; }
+  .cp-transcript__message p { font-size: 13.5px; }
+  .cp-history-btn { font-size: 12.5px; padding: 5px 8px; }
+  .cp-lesson-head__main strong { font-size: 15px; }
+  .cp-lesson-head__ms { font-size: 12.5px; }
+  .cp-lesson-head__state { font-size: 12px; }
+  .cp-lesson-head__select { font-size: 12.5px; padding: 5px 8px; }
+  .cp-review-panel__head span { font-size: 14px; }
+  .cp-review-panel__head em { font-size: 12px; }
+  .cp-path-detail__head strong { font-size: 15.5px; }
+  .cp-path-detail__meta { font-size: 12.5px; }
+  .cp-path-detail__summary { font-size: 13.5px; }
+  .cp-milestone__head strong { font-size: 14px; }
+  .cp-milestone__order { font-size: 12px; }
+  .cp-milestone__meta { font-size: 12px; }
+  .cp-milestone__desc { font-size: 13px; }
+  .cp-task-list li { font-size: 13px; }
+  .cp-review__badge { font-size: 12.5px; }
+  .cp-review__meta { font-size: 12px; }
+  .cp-review__reaction { font-size: 13.5px; }
+  .cp-review__concern { font-size: 13px; }
+  .cp-review__changes { font-size: 13px; }
+  .cp-review__replan { font-size: 12.5px; }
+  .cp-wrapup__label { font-size: 12.5px; }
+  .cp-wrapup p { font-size: 14px; }
+  .cp-wrapup__json { font-size: 12.5px; }
+  .cp-raw { font-size: 13.5px; }
+  .cp-raw pre { font-size: 12px; }
+  .cp-eval-group__title { font-size: 13.5px; }
+  .cp-eval__head strong { font-size: 15px; }
+  .cp-eval__time { font-size: 12.5px; }
+  .cp-eval__scores span { font-size: 12.5px; }
+  .cp-eval__scores code { font-size: 12.5px; }
+  .cp-eval__section h5 { font-size: 13px; }
+  .cp-finding strong { font-size: 14px; }
+  .cp-finding p { font-size: 13.5px; }
+  .cp-finding__sev { font-size: 12px; }
+  .cp-evidence { font-size: 13px; }
+  .cp-evidence code { font-size: 12px; }
+  .cp-evidence p { font-size: 13px; }
+  .cp-rec strong { font-size: 13.5px; }
+  .cp-rec__codes code { font-size: 11.5px; }
+  .cp-rec p { font-size: 14px; }
+  .cp-rec__rationale { font-size: 13px; }
+  .cp-trace-panel > summary { font-size: 14px; }
+  .cp-trace-panel > summary code { font-size: 12.5px; }
+  .cp-trace-list__head { font-size: 13px; }
+  .cp-trace-list__id { font-size: 12px; }
+  .cp-trace-list__stage { font-size: 12px; }
+  .cp-trace-list__emotion,
+  .cp-trace-list__transition { font-size: 12px; }
+  .cp-trace-list__degraded { font-size: 12px; }
+  .cp-trace-list__focus,
+  .cp-trace-list__reason { font-size: 13px; }
+  .cp-trace-list__signal { font-size: 13px; }
+  .cp-trace-list__metrics > span { font-size: 12px; }
+  .cp-trace-list__metrics code { font-size: 12px; }
+  .cp-trace-list__flags > span { font-size: 12px; }
+  .cp-trace-list__blockers { font-size: 13px; }
+  .cp-trace-list__body { font-size: 12px; }
+}
+
+@media (min-width: 2800px) {
+  .cp-title { font-size: 21px; }
+  .cp-title__id { font-size: 15.5px; }
+  .cp-back { font-size: 16.5px; }
+  .cp-btn { font-size: 16.5px; padding: 12px 22px; }
+  .cp-config { font-size: 16px; }
+  .cp-controls__hint { font-size: 14.5px; }
+  .cp-stage__order { font-size: 13.5px; }
+  .cp-stage strong { font-size: 17.5px; }
+  .cp-stage__state { font-size: 14.5px; }
+  .cp-summary__item span { font-size: 14.5px; }
+  .cp-summary__item p { font-size: 16.5px; }
+  .cp-none { font-size: 16.5px; }
+  .cp-path-readiness span { font-size: 14.5px; }
+  .cp-path-readiness p { font-size: 15.5px; }
+  .cp-log { font-size: 16px; }
+  .cp-log__time { font-size: 14px; }
+  .cp-degrade { font-size: 16px; }
+  .cp-degrade .mk-link { font-size: 16px; }
+  .cp-transcript summary { font-size: 16px; }
+  .cp-transcript__message span { font-size: 14px; }
+  .cp-transcript__message p { font-size: 16px; }
+  .cp-history-btn { font-size: 14.5px; padding: 6px 10px; }
+  .cp-lesson-head__main strong { font-size: 17.5px; }
+  .cp-lesson-head__ms { font-size: 14.5px; }
+  .cp-lesson-head__state { font-size: 14px; }
+  .cp-lesson-head__select { font-size: 14.5px; padding: 6px 10px; }
+  .cp-review-panel__head span { font-size: 16.5px; }
+  .cp-review-panel__head em { font-size: 14px; }
+  .cp-path-detail__head strong { font-size: 18px; }
+  .cp-path-detail__meta { font-size: 14.5px; }
+  .cp-path-detail__summary { font-size: 16px; }
+  .cp-milestone__head strong { font-size: 16.5px; }
+  .cp-milestone__order { font-size: 14px; }
+  .cp-milestone__meta { font-size: 14px; }
+  .cp-milestone__desc { font-size: 15.5px; }
+  .cp-task-list li { font-size: 15.5px; }
+  .cp-review__badge { font-size: 14.5px; }
+  .cp-review__meta { font-size: 14px; }
+  .cp-review__reaction { font-size: 16px; }
+  .cp-review__concern { font-size: 15.5px; }
+  .cp-review__changes { font-size: 15.5px; }
+  .cp-review__replan { font-size: 14.5px; }
+  .cp-wrapup__label { font-size: 14.5px; }
+  .cp-wrapup p { font-size: 16.5px; }
+  .cp-wrapup__json { font-size: 14.5px; }
+  .cp-raw { font-size: 16px; }
+  .cp-raw pre { font-size: 14px; }
+  .cp-eval-group__title { font-size: 16px; }
+  .cp-eval__head strong { font-size: 17.5px; }
+  .cp-eval__time { font-size: 14.5px; }
+  .cp-eval__scores span { font-size: 14.5px; }
+  .cp-eval__scores code { font-size: 14.5px; }
+  .cp-eval__section h5 { font-size: 15.5px; }
+  .cp-finding strong { font-size: 16.5px; }
+  .cp-finding p { font-size: 16px; }
+  .cp-finding__sev { font-size: 14px; }
+  .cp-evidence { font-size: 15.5px; }
+  .cp-evidence code { font-size: 14px; }
+  .cp-evidence p { font-size: 15.5px; }
+  .cp-rec strong { font-size: 16px; }
+  .cp-rec__codes code { font-size: 13.5px; }
+  .cp-rec p { font-size: 16.5px; }
+  .cp-rec__rationale { font-size: 15.5px; }
+  .cp-trace-panel > summary { font-size: 16.5px; }
+  .cp-trace-panel > summary code { font-size: 14.5px; }
+  .cp-trace-list__head { font-size: 15.5px; }
+  .cp-trace-list__id { font-size: 14px; }
+  .cp-trace-list__stage { font-size: 14px; }
+  .cp-trace-list__emotion,
+  .cp-trace-list__transition { font-size: 14px; }
+  .cp-trace-list__degraded { font-size: 14px; }
+  .cp-trace-list__focus,
+  .cp-trace-list__reason { font-size: 15.5px; }
+  .cp-trace-list__signal { font-size: 15.5px; }
+  .cp-trace-list__metrics > span { font-size: 14px; }
+  .cp-trace-list__metrics code { font-size: 14px; }
+  .cp-trace-list__flags > span { font-size: 14px; }
+  .cp-trace-list__blockers { font-size: 15.5px; }
+  .cp-trace-list__body { font-size: 14px; }
 }
 </style>

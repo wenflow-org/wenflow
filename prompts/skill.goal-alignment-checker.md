@@ -1,10 +1,10 @@
 ---
 agentId: skill:goal-alignment-checker
-coreHash: db4aa10280bc8a2ef340edee2c23b8ce1c966ab2f7ef52c16f5629780c152c6b
+coreHash: c52a16099160b3438139b9b6a97145961341d983a20fb6ade3f18b0649b15e31
 coreVersion: 1
 temperature: 0.3
 maxTokens: 3000
-failurePolicy: fallback
+failurePolicy: propagate
 ---
 
 ## 身份

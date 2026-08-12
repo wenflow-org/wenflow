@@ -981,7 +981,7 @@ async function toggleRegistration() {
   border-radius: 999px;
   border: 1px solid rgba(52, 120, 246, 0.24);
   background: var(--mk-surface);
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+  box-shadow: var(--mk-shadow-pop);
   font-weight: 600;
 }
 .ac-save__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-amber); }

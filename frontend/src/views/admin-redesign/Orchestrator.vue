@@ -557,7 +557,7 @@ const stageTitle = computed(() => {
   letter-spacing: 0.04em;
 }
 .orch-defs__tag--orch { background: #e5f0ff; color: #2563eb; }
-.orch-defs__tag--skill { background: #e8f7ef; color: #15803d; }
+.orch-defs__tag--skill { background: #e8f7ef; color: var(--mk-green); }
 .orch-defs__text {
   color: var(--mk-muted);
   overflow: hidden;
@@ -732,7 +732,7 @@ const stageTitle = computed(() => {
   letter-spacing: 0.06em;
 }
 .orch-vars__label--in { background: #e8edf7; color: #4a5568; }
-.orch-vars__label--out { background: #e0f6ec; color: #15803d; }
+.orch-vars__label--out { background: #e0f6ec; color: var(--mk-green); }
 .orch-vars__arrow {
   font-family: var(--mk-mono);
   font-weight: 800;
@@ -747,7 +747,7 @@ const stageTitle = computed(() => {
   font-weight: 600;
 }
 .orch-var--in { background: #eef2fa; color: #5b6577; }
-.orch-var--out { background: #ecfdf5; color: #15803d; }
+.orch-var--out { background: var(--mk-green-bg); color: var(--mk-green); }
 
 /* 定义步骤（时间线） */
 .orch-defsteps { display: grid; gap: 8px; }
@@ -804,7 +804,7 @@ const stageTitle = computed(() => {
   font-size: 10px;
   font-weight: 800;
 }
-.orch-defstep__badge--warn { background: #fee2e2; color: #b91c1c; }
+.orch-defstep__badge--warn { background: #fee2e2; color: var(--mk-red-strong); }
 
 /* Skill 节点（网格卡片） */
 .orch-skills {

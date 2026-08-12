@@ -51,7 +51,7 @@ router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: R
     );
 
     if (!admin || !isValidPassword) {
-      recordLoginAttempt(name, clientIP, false, 'admin');
+      recordLoginAttempt(name, clientIP, false, 'admin', 'invalid_credentials');
       return res.status(401).json({
         success: false,
         error: {
@@ -77,7 +77,7 @@ router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: R
       remember ? '7d' : '24h'
     );
 
-    recordLoginAttempt(name, clientIP, true, 'admin');
+    recordLoginAttempt(name, clientIP, true, 'admin', 'ok');
 
     // 写入会话表（fail-open：写库失败不阻塞登录，仅告警；登出/吊销能力随之下线）
     try {

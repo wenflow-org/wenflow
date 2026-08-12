@@ -248,7 +248,7 @@ doc/design/*
 !doc/design/platform-capabilities-design.md
 doc/archive/
 
-# Playwright MCP �Ự��ʱ�ļ�
+# Playwright MCP 会话临时文件
 .playwright-mcp/
 page-*.md
 

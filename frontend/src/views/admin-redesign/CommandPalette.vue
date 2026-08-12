@@ -1,9 +1,9 @@
 <template>
   <Teleport to="body">
     <div v-if="open" ref="maskRef" class="pal">
-      <div ref="panelRef" class="pal__panel" role="dialog" aria-label="ÃüÁîÃæ°å">
+      <div ref="panelRef" class="pal__panel" role="dialog" aria-label="å‘½ä»¤é¢æ¿">
         <div class="pal__input-row">
-          <span class="pal__icon">?</span>
+          <span class="pal__icon">âŒ•</span>
           <input
             ref="inputEl"
             v-model="query"
@@ -12,7 +12,7 @@
             aria-expanded="true"
             aria-controls="pal-listbox"
             :aria-activedescendant="flat[active] ? `pal-opt-${flat[active].key}` : undefined"
-            placeholder="ËÑË÷Ò³Ãæ»ò²Ù×÷¡­£¨¡ü¡ı Ñ¡Ôñ£¬Enter Ö´ĞĞ£©"
+            placeholder="æœç´¢é¡µé¢æˆ–æ“ä½œâ€¦ï¼ˆâ†‘â†“ é€‰æ‹©ï¼ŒEnter æ‰§è¡Œï¼‰"
             @keydown.down.prevent="move(1)"
             @keydown.up.prevent="move(-1)"
             @keydown.enter.prevent="run(active)"
@@ -40,7 +40,7 @@
               <span v-if="item.hint" class="pal__item-hint">{{ item.hint }}</span>
             </button>
           </template>
-          <p v-if="!flat.length" class="pal__empty">Ã»ÓĞÆ¥ÅäµÄÒ³Ãæ»ò²Ù×÷</p>
+          <p v-if="!flat.length" class="pal__empty">æ²¡æœ‰åŒ¹é…çš„é¡µé¢æˆ–æ“ä½œ</p>
         </div>
       </div>
     </div>
@@ -76,63 +76,63 @@ const inputEl = ref<HTMLInputElement | null>(null)
 const items = computed<Item[]>(() => {
   const list: Item[] = MOCK_SCENES.map((s) => ({
     key: `scene:${s.id}`,
-    icon: '?',
+    icon: 'â–¸',
     label: s.label,
     hint: s.group,
-    group: 'Ò³Ãæ',
+    group: 'é¡µé¢',
     run: () => emit('navigate', s.id)
   }))
   list.push(
     {
       key: 'action:live',
-      icon: '¡ñ',
-      label: dataSource.value === 'live' ? 'Ë¢ĞÂÕæÊµÊı¾İ' : 'ÇĞ»»µ½ÕæÊµÊı¾İ',
-      hint: 'Êı¾İÔ´',
-      group: '²Ù×÷',
+      icon: 'â—',
+      label: dataSource.value === 'live' ? 'åˆ·æ–°çœŸå®æ•°æ®' : 'åˆ‡æ¢åˆ°çœŸå®æ•°æ®',
+      hint: 'æ•°æ®æº',
+      group: 'æ“ä½œ',
       run: () => void loadLiveData(true)
     },
     {
       key: 'action:demo',
-      icon: '¡ğ',
-      label: 'ÇĞ»»µ½ÑİÊ¾Êı¾İ',
-      hint: 'Êı¾İÔ´',
-      group: '²Ù×÷',
+      icon: 'â—‹',
+      label: 'åˆ‡æ¢åˆ°æ¼”ç¤ºæ•°æ®',
+      hint: 'æ•°æ®æº',
+      group: 'æ“ä½œ',
       run: () => backToDemo()
     },
     {
       key: 'action:create-user',
-      icon: '£«',
-      label: 'ĞÂ½¨ÓÃ»§',
-      hint: 'ÓÃ»§',
-      group: '²Ù×÷',
+      icon: 'ï¼‹',
+      label: 'æ–°å»ºç”¨æˆ·',
+      hint: 'ç”¨æˆ·',
+      group: 'æ“ä½œ',
       run: () => queueQuickAction('users', 'create-user')
     },
     {
       key: 'action:create-announcement',
-      icon: '£«',
-      label: 'ĞÂ½¨¹«¸æ',
-      hint: '¹«¸æ',
-      group: '²Ù×÷',
+      icon: 'ï¼‹',
+      label: 'æ–°å»ºå…¬å‘Š',
+      hint: 'å…¬å‘Š',
+      group: 'æ“ä½œ',
       run: () => queueQuickAction('announcements', 'create-announcement')
     },
     {
       key: 'action:create-virtual',
-      icon: '£«',
-      label: 'ĞÂ½¨ĞéÄâÑ§Ï°ÕßÑù±¾',
-      hint: 'ĞéÄâÑ§Ï°Õß',
-      group: '²Ù×÷',
+      icon: 'ï¼‹',
+      label: 'æ–°å»ºè™šæ‹Ÿå­¦ä¹ è€…æ ·æœ¬',
+      hint: 'è™šæ‹Ÿå­¦ä¹ è€…',
+      group: 'æ“ä½œ',
       run: () => queueQuickAction('virtual-learners', 'create-virtual')
     }
   )
-  // Trace ID Ö±½ÓÌø×ª
+  // Trace ID ç›´æ¥è·³è½¬
   const q = query.value.trim()
   if (/^(tr:|gw[-_]|log:)/i.test(q)) {
     list.unshift({
       key: `trace:${q}`,
-      icon: '?',
-      label: `ÔÚ Trace ÆÙ²¼´ò¿ª ${q.slice(0, 24)}`,
-      hint: 'ÅÅ²é',
-      group: 'Ö±´ï',
+      icon: 'âŒ',
+      label: `åœ¨ Trace ç€‘å¸ƒæ‰“å¼€ ${q.slice(0, 24)}`,
+      hint: 'æ’æŸ¥',
+      group: 'ç›´è¾¾',
       run: () => openTrace(q)
     })
   }
@@ -160,7 +160,7 @@ const grouped = computed(() => {
 
 const flat = computed(() => filtered.value)
 
-/* ¸²¸Ç²ãÍ³Ò»ĞĞÎª£º¹ö¶¯Ëø¶¨ + ½¹µã£¨ÊäÈë¿ò×Ô¶¯¾Û½¹£©+ ÕÚÕÖ°²È«¹Ø±Õ */
+/* è¦†ç›–å±‚ç»Ÿä¸€è¡Œä¸ºï¼šæ»šåŠ¨é”å®š + ç„¦ç‚¹ï¼ˆè¾“å…¥æ¡†è‡ªåŠ¨èšç„¦ï¼‰+ é®ç½©å®‰å…¨å…³é—­ */
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => props.open), panelRef)
@@ -240,7 +240,7 @@ function close() {
 }
 .pal__input:focus {
   border-color: var(--mk-blue);
-  box-shadow: 0 0 0 3px rgba(44, 99, 208, 0.15);
+  box-shadow: 0 0 0 3px rgba(44, 99, 208, 0.25);
 }
 .pal__esc {
   font-size: 10px;
@@ -281,7 +281,7 @@ function close() {
 .pal__empty { padding: 20px; text-align: center; color: var(--mk-faint); font-size: 13px; margin: 0; }
 
 
-/* 4K£ºÃüÁîÃæ°å¼Ó¿í + ×ÖºÅ¸úËæ¿Ç²ã·Å´ó */
+/* 4Kï¼šå‘½ä»¤é¢æ¿åŠ å®½ + å­—å·è·Ÿéšå£³å±‚æ”¾å¤§ */
 @media (min-width: 2000px) {
   .pal__panel { width: min(640px, 92vw); }
   .pal__input-row { padding: 16px 20px; }
@@ -301,7 +301,7 @@ function close() {
   .pal__esc { font-size: 14px; }
 }
 @media (min-width: 3600px) {
-  /* 4K£¨ÃüÁîÃæ°å Teleport µ½ body£¬ÎŞ zoom£©£ºÃæ°åÔÙ¼Ó¿í¡¢×ÖºÅ¼ÌĞø·Å´ó */
+  /* 4Kï¼ˆå‘½ä»¤é¢æ¿ Teleport åˆ° bodyï¼Œæ—  zoomï¼‰ï¼šé¢æ¿å†åŠ å®½ã€å­—å·ç»§ç»­æ”¾å¤§ */
   .pal__panel { width: min(900px, 92vw); }
   .pal__input-row { padding: 24px 30px; }
   .pal__input { font-size: 23.5px; }

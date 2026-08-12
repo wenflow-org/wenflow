@@ -95,7 +95,7 @@ if (result.warnings.length > 0) {
 ---
 
 ### Stage 4: ä¼˜åŒ–å±‚ âœ…ï¼ˆæ–°å¢ï¼‰
-**æ–‡ä»¶**: `frontend/src/utils/blueprintOptimizer.ts`
+**æ–‡ä»¶**: `frontend/src/utils/b`blueprintOptimizer.ts``
 
 **èŒè´£**: ç¼–è¯‘å‰çš„è‡ªåŠ¨ä¼˜åŒ–
 
@@ -511,65 +511,65 @@ npm run dev
 
 ---
 
-## ?? Stage 4: ÓÅ»¯²ãÒÑÊµÏÖ£¡
+## âœ… Stage 4: ä¼˜åŒ–å±‚å·²å®ç°ï¼
 
-### ĞÂÔö¹¦ÄÜ
+### æ–°å¢åŠŸèƒ½
 
-**ÎÄ¼ş**: lueprintOptimizer.ts
+**æ–‡ä»¶**: `blueprintOptimizer.ts`
 
-**ÓÅ»¯ÀàĞÍ**:
-1. ? È¥ÖØÔ¼Êø
-2. ? ×Ô¶¯ÍÆ¶Ï JSON ¸ñÊ½ÅäÖÃ
-3. ? ¸ù¾İ Archetype ²¹È«¹æÔò
-4. ? ÓÅ»¯¹æÔòË³Ğò
+**ä¼˜åŒ–ç±»å‹**:
+1. âœ“ å»é‡çº¦æŸ
+2. âœ“ è‡ªåŠ¨æ¨æ–­ JSON æ ¼å¼é…ç½®
+3. âœ“ æ ¹æ® Archetype è¡¥å…¨è§„åˆ™
+4. âœ“ ä¼˜åŒ–è§„åˆ™é¡ºåº
 
-### ÍêÕû±àÒëÁ÷³Ì£¨4 ½×¶Î£©
+### å®Œæ•´ç¼–è¯‘æµç¨‹ï¼ˆ4 é˜¶æ®µï¼‰
 
-\\\	ypescript
+```typescript
 async function fullCompile(blueprintId: string): Promise<string> {
-  // Stage 2: ¼ÓÔØÀ¶Í¼
+  // Stage 2: åŠ è½½è“å›¾
   const blueprint = await loadBlueprint(blueprintId)
   
-  // Stage 3: ÑéÖ¤
+  // Stage 3: éªŒè¯
   const validation = validateBlueprint(blueprint)
   if (!validation.valid) {
     throw new ValidationError(validation.errors)
   }
   
-  // Stage 4: ÓÅ»¯ ? ĞÂÔö
+  // Stage 4: ä¼˜åŒ–ï¼ˆæ–°å¢ï¼‰
   const optimization = optimizeBlueprint(blueprint)
-  console.log('ÓÅ»¯:', optimization.changes)
+  console.log('ä¼˜åŒ–:', optimization.changes)
   
-  // Stage 5: ±àÒë
+  // Stage 5: ç¼–è¯‘
   const rawMarkdown = compileBlueprint(optimization.optimized)
   
-  // Stage 6: ºó´¦Àí
+  // Stage 6: åå¤„ç†
   const finalMarkdown = postProcessPrompt(rawMarkdown)
   
   return finalMarkdown
 }
-\\\
+```
 
-### ¼Ü¹¹Ñİ½ø
+### æ¶æ„æ¼”è¿›
 
-**Ö®Ç°£¨3 ½×¶Î£©**:
-\\\
-À¶Í¼ ¡ú ÑéÖ¤ ¡ú ±àÒë ¡ú ºó´¦Àí
-\\\
+**ä¹‹å‰ï¼ˆ3 é˜¶æ®µï¼‰**:
+```
+è“å›¾ â†’ éªŒè¯ â†’ ç¼–è¯‘ â†’ åå¤„ç†
+```
 
-**ÏÖÔÚ£¨4 ½×¶Î£©**:
-\\\
-À¶Í¼ ¡ú ÑéÖ¤ ¡ú ÓÅ»¯ ? ¡ú ±àÒë ¡ú ºó´¦Àí
-\\\
+**ç°åœ¨ï¼ˆ4 é˜¶æ®µï¼‰**:
+```
+è“å›¾ â†’ éªŒè¯ â†’ ä¼˜åŒ– â†’ ç¼–è¯‘ â†’ åå¤„ç†
+```
 
-**Î´À´£¨6 ½×¶Î£©**:
-\\\
-Ô­×Ó ¡ú ×éºÏ ¡ú À¶Í¼ ¡ú ÑéÖ¤ ¡ú ÓÅ»¯ ¡ú ±àÒë ¡ú ºó´¦Àí
-\\\
+**æœªæ¥ï¼ˆ6 é˜¶æ®µï¼‰**:
+```
+åŸå­ â†’ ç»„åˆ â†’ è“å›¾ â†’ éªŒè¯ â†’ ä¼˜åŒ– â†’ ç¼–è¯‘ â†’ åå¤„ç†
+```
 
 ---
 
-## ²âÊÔ
+## æµ‹è¯•
 
-Ïê¼û [OPTIMIZER_TEST_CASES.md](./OPTIMIZER_TEST_CASES.md)
+è¯¦è§ [OPTIMIZER_TEST_CASES.md](./OPTIMIZER_TEST_CASES.md)
 

@@ -18,5 +18,5 @@ fields:
     desc: 1 到 2 句话给出可执行的下一步建议
 constraints:
   - 不承诺任务已完成或知识点已掌握，除非输入证据明确给出
-params: { temperature: 0.4, maxTokens: 1200, failurePolicy: fallback }
+params: { temperature: 0.4, maxTokens: 1200, failurePolicy: propagate }
 deltaOutput: false

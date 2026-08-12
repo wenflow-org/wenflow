@@ -275,4 +275,59 @@ function close() { emit('close') }
 .agd__term-where { font-style: normal; color: var(--mk-blue, #3478f6); }
 .agd__empty { padding: 8px 0; color: var(--mk-faint, #71809a); font-size: 12px; }
 .agd__demo-note { margin-top: 16px; padding: 8px 12px; border: 1px dashed rgba(52, 120, 246, 0.4); border-radius: 9px; background: #f0f5ff; color: var(--mk-blue, #3478f6); font-size: 11.5px; }
+
+@media (min-width: 2000px) {
+  .agd__panel { width: 560px; }
+  .agd__head { padding: 20px 24px 12px; }
+  .agd__title strong { font-size: 17px; }
+  .agd__subtitle { font-size: 13.5px; }
+  .agd__close { width: 30px; height: 30px; font-size: 14px; }
+  .agd__search { padding: 8px 24px 14px; }
+  .agd__input { padding: 9px 14px; font-size: 14px; }
+  .agd__cat { font-size: 13.5px; }
+  .agd__body { padding: 8px 24px 24px; }
+  .agd__loading { font-size: 14.5px; }
+  .agd__section-title { font-size: 13px; }
+  .agd__term-name { font-size: 15px; }
+  .agd__term-en { font-size: 12.5px; }
+  .agd__term-def { font-size: 13.5px; }
+  .agd__empty { font-size: 14px; }
+  .agd__demo-note { font-size: 13.5px; }
+}
+@media (min-width: 2800px) {
+  .agd__panel { width: 700px; }
+  .agd__head { padding: 24px 30px 14px; }
+  .agd__title strong { font-size: 19px; }
+  .agd__subtitle { font-size: 16px; }
+  .agd__close { width: 36px; height: 36px; font-size: 16.5px; }
+  .agd__search { padding: 10px 30px 16px; }
+  .agd__input { padding: 11px 16px; font-size: 16.5px; }
+  .agd__cat { font-size: 16px; }
+  .agd__body { padding: 10px 30px 30px; }
+  .agd__loading { font-size: 17px; }
+  .agd__section-title { font-size: 15.5px; }
+  .agd__term-name { font-size: 18px; }
+  .agd__term-en { font-size: 15px; }
+  .agd__term-def { font-size: 16px; }
+  .agd__empty { font-size: 16.5px; }
+  .agd__demo-note { font-size: 16px; }
+}
+@media (min-width: 3600px) {
+  .agd__panel { width: 880px; }
+  .agd__head { padding: 28px 36px 16px; }
+  .agd__title strong { font-size: 22px; }
+  .agd__subtitle { font-size: 19px; }
+  .agd__close { width: 42px; height: 42px; font-size: 19.5px; }
+  .agd__search { padding: 12px 36px 18px; }
+  .agd__input { padding: 13px 19px; font-size: 19px; }
+  .agd__cat { font-size: 19px; }
+  .agd__body { padding: 12px 36px 36px; }
+  .agd__loading { font-size: 20px; }
+  .agd__section-title { font-size: 18.5px; }
+  .agd__term-name { font-size: 21.5px; }
+  .agd__term-en { font-size: 17.5px; }
+  .agd__term-def { font-size: 19px; }
+  .agd__empty { font-size: 19.5px; }
+  .agd__demo-note { font-size: 19px; }
+}
 </style>

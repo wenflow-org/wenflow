@@ -90,7 +90,7 @@
     </div>
 
     <div v-if="loading" class="frt__empty">加载中…</div>
-    <div v-else-if="error" class="frt__empty">{{ error }}</div>
+    <div v-else-if="error" class="frt__empty">{{ error }}<button type="button" class="mk-empty__action" @click="loadStage">重试</button></div>
     <template v-else>
       <div v-for="agent in agents" :key="agent.agentId" class="frt__agent">
         <div class="frt__agenthead">
@@ -668,8 +668,8 @@ watch(() => props.stage, () => void loadStage());
   color: #fff;
 }
 .frt__prune--danger:hover {
-  background: #b91c1c;
-  border-color: #b91c1c;
+  background: var(--mk-red-strong);
+  border-color: var(--mk-red-strong);
 }
 .frt__agent { margin-bottom: 18px; border: 1px solid var(--mk-line, #e6ebf4); border-radius: 12px; overflow: hidden; background: var(--mk-surface, #fff); box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06)); }
 .frt__agenthead { padding: 10px 14px; background: #fafbfd; border-bottom: 1px solid var(--mk-line, #e6ebf4); display: flex; align-items: baseline; gap: 10px; }
@@ -770,4 +770,60 @@ watch(() => props.stage, () => void loadStage());
 .frt__lock--editable, .frt__lock--fully-editable { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #15803d); }
 .frt__empty { padding: 30px; color: var(--mk-faint, #71809a); text-align: center; }
 .frt__emptyrow { color: var(--mk-faint, #71809a); text-align: center; padding: 14px; }
+
+@media (min-width: 2000px) {
+  .frt__toolbar-btn { font-size: 14px; padding: 10px 20px; }
+  .frt__toolbar-hint { font-size: 13.5px; }
+  .frt__notice { font-size: 13.5px; padding: 9px 14px; }
+  .frt__legend-summary { font-size: 14px; padding: 11px 17px; }
+  .frt__legend-title { font-size: 12px; }
+  .frt__legend-loading { font-size: 13px; }
+  .frt__legend-en { font-size: 12px; }
+  .frt__legend-hint { font-size: 13.5px; }
+  .frt__legend-foot { font-size: 12px; }
+  .frt__legend-foot .mono { font-size: 12px; }
+  .frt__filter-count { font-size: 13px; }
+  .frt__orch-summary { font-size: 13.5px; }
+  .frt__orch-textarea { font-size: 13.5px; padding: 14px; }
+  .frt__orch-msg { font-size: 13.5px; }
+  .frt__orch-quick { font-size: 13px; }
+  .frt__agentdesc { font-size: 13.5px; }
+  .frt__agentcount { font-size: 12px; padding: 2px 11px; }
+  .frt__table th { font-size: 12.5px; padding: 10px 15px; }
+  .frt__table td { font-size: 14px; padding: 10px 15px; }
+  .frt__fieldpath { font-size: 12px; }
+  .frt__role { font-size: 12px; padding: 2px 10px; }
+  .frt__render-badge { font-size: 12px; padding: 2px 10px; }
+  .frt__flow-badge { font-size: 12px; padding: 2px 10px; }
+  .frt__persist { font-size: 12px; }
+  .frt__lock { font-size: 12px; padding: 2px 11px; }
+}
+
+@media (min-width: 2800px) {
+  .frt__toolbar-btn { font-size: 16.5px; padding: 12px 24px; }
+  .frt__toolbar-hint { font-size: 16px; }
+  .frt__notice { font-size: 16px; padding: 11px 17px; }
+  .frt__legend-summary { font-size: 16.5px; padding: 13px 21px; }
+  .frt__legend-title { font-size: 14px; }
+  .frt__legend-loading { font-size: 15.5px; }
+  .frt__legend-en { font-size: 14px; }
+  .frt__legend-hint { font-size: 16px; }
+  .frt__legend-foot { font-size: 14px; }
+  .frt__legend-foot .mono { font-size: 14px; }
+  .frt__filter-count { font-size: 15.5px; }
+  .frt__orch-summary { font-size: 16px; }
+  .frt__orch-textarea { font-size: 16px; padding: 17px; }
+  .frt__orch-msg { font-size: 16px; }
+  .frt__orch-quick { font-size: 15.5px; }
+  .frt__agentdesc { font-size: 16px; }
+  .frt__agentcount { font-size: 14px; padding: 3px 13px; }
+  .frt__table th { font-size: 15px; padding: 12px 19px; }
+  .frt__table td { font-size: 16.5px; padding: 12px 19px; }
+  .frt__fieldpath { font-size: 14px; }
+  .frt__role { font-size: 14px; padding: 3px 12px; }
+  .frt__render-badge { font-size: 14px; padding: 3px 12px; }
+  .frt__flow-badge { font-size: 14px; padding: 3px 12px; }
+  .frt__persist { font-size: 14px; }
+  .frt__lock { font-size: 14px; padding: 3px 13px; }
+}
 </style>

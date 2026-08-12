@@ -693,9 +693,14 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
-  padding: 0;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border-radius: 6px;
   width: fit-content;
+  transition: background 0.14s ease, transform 0.1s ease;
 }
+.ld-back:hover { background: #eff6ff; }
+.ld-back:active { transform: translateY(1px); }
 .ld-head { display: grid; gap: 12px; }
 .ld-id {
   display: flex;
@@ -878,6 +883,23 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
   .ld-ev__main strong { font-size: 14.5px; }
   .ld-ev__main span { font-size: 13.5px; }
   .ld-ev__time { font-size: 13px; }
+  .ld-none { padding: 21px 19px; }
+  .ld-none__hint { font-size: 13.5px; }
+  .ld-progress { padding: 18px; gap: 9px; }
+  .ld-progress__bar { height: 9px; }
+  .ld-concepts { padding: 18px; }
+  .ld-concept { padding: 4px 12px; }
+  .ld-trend { height: 104px; padding: 18px; }
+  .ld-session { padding: 13px 18px; gap: 14px; }
+  .ld-session__dot { width: 9px; height: 9px; }
+  .ld-kv__row { grid-template-columns: 140px 1fr; gap: 14px; padding: 12px 18px; }
+  .ld-metrics { gap: 14px; }
+  .ld-metric { padding: 15px 18px; }
+  .ld-flags { padding: 16px 18px; }
+  .ld-insights { padding: 14px 18px; }
+  .ld-two { padding: 16px 18px; }
+  .ld-ev { padding: 12px 18px; gap: 14px; }
+  .ld-ev__dot { width: 9px; height: 9px; }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号沿用 2000 档的基础上再升一档，对齐 mk 体系 2800（17px 级） */
@@ -900,6 +922,23 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
   .ld-ev__main strong { font-size: 17px; }
   .ld-ev__main span { font-size: 16px; }
   .ld-ev__time { font-size: 15px; }
+  .ld-none { padding: 25px 22px; }
+  .ld-none__hint { font-size: 16px; }
+  .ld-progress { padding: 21px; gap: 10px; }
+  .ld-progress__bar { height: 11px; }
+  .ld-concepts { padding: 21px; }
+  .ld-concept { padding: 4px 14px; }
+  .ld-trend { height: 122px; padding: 21px; }
+  .ld-session { padding: 15px 21px; gap: 16px; }
+  .ld-session__dot { width: 11px; height: 11px; }
+  .ld-kv__row { grid-template-columns: 164px 1fr; gap: 16px; padding: 14px 21px; }
+  .ld-metrics { gap: 16px; }
+  .ld-metric { padding: 17px 21px; }
+  .ld-flags { padding: 19px 21px; }
+  .ld-insights { padding: 16px 21px; }
+  .ld-two { padding: 19px 21px; }
+  .ld-ev { padding: 14px 21px; gap: 16px; }
+  .ld-ev__dot { width: 11px; height: 11px; }
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
@@ -922,5 +961,22 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
   .ld-ev__main strong { font-size: 20px; }
   .ld-ev__main span { font-size: 18.5px; }
   .ld-ev__time { font-size: 17.5px; }
+  .ld-none { padding: 29px 26px; }
+  .ld-none__hint { font-size: 18.5px; }
+  .ld-progress { padding: 25px; gap: 12px; }
+  .ld-progress__bar { height: 13px; }
+  .ld-concepts { padding: 25px; }
+  .ld-concept { padding: 5px 16px; }
+  .ld-trend { height: 143px; padding: 25px; }
+  .ld-session { padding: 17px 25px; gap: 19px; }
+  .ld-session__dot { width: 13px; height: 13px; }
+  .ld-kv__row { grid-template-columns: 192px 1fr; gap: 19px; padding: 16px 25px; }
+  .ld-metrics { gap: 19px; }
+  .ld-metric { padding: 20px 25px; }
+  .ld-flags { padding: 22px 25px; }
+  .ld-insights { padding: 19px 25px; }
+  .ld-two { padding: 22px 25px; }
+  .ld-ev { padding: 16px 25px; gap: 19px; }
+  .ld-ev__dot { width: 13px; height: 13px; }
 }
 </style>

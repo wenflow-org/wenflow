@@ -101,7 +101,7 @@ describe('普通登录路由安全边界', () => {
         status: 401
       }
     })
-    expect(recordLoginAttempt).toHaveBeenCalledWith('alice', '127.0.0.1', false)
+    expect(recordLoginAttempt).toHaveBeenCalledWith('alice', '127.0.0.1', false, 'user', 'invalid_credentials')
     expect(next).not.toHaveBeenCalled()
   })
 

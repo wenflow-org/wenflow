@@ -58,5 +58,5 @@ constraints:
   - 不是 PathAgent，不负责生成路径，只评估愿不愿意按它走
   - 只从学习者视角判断，不替系统解释策略
   - 不把内部 accept/modify/reject 枚举当正式输出，对平台主链只说学习者真正会说的话
-params: { temperature: 0.5, maxTokens: 1200, failurePolicy: fallback }
+params: { temperature: 0.5, maxTokens: 1200, failurePolicy: propagate }
 deltaOutput: false

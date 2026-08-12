@@ -50,8 +50,16 @@
       <i class="tk tk--bl"></i>
       <i class="tk tk--br"></i>
 
-      <!-- 空态 -->
-      <div v-if="isEmpty" class="topo-empty">
+      <!-- 空态 / 加载失败态 -->
+      <div v-if="topoFailed" class="topo-empty is-error">
+        <div class="topo-empty__icon" aria-hidden="true">!</div>
+        <p>拓扑加载失败</p>
+        <p class="topo-empty__sub">{{ liveFailures.topology }}</p>
+        <button type="button" class="mk-empty__action" :disabled="rangeLoading" @click="retryTopology">
+          {{ rangeLoading ? '加载中…' : '重试' }}
+        </button>
+      </div>
+      <div v-else-if="isEmpty" class="topo-empty">
         <div class="topo-empty__icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="6" cy="6" r="2.6" />
@@ -265,7 +273,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { skillProfiles, skillStatOf, openSkillDrawer, investigateAgent, spans, dataSource } from './store'
-import { liveTopoNodes, liveTopoRange, reloadLiveTopology } from './live'
+import { liveTopoNodes, liveTopoRange, reloadLiveTopology, liveFailures } from './live'
 
 /* ========== 布局常量 ========== */
 const COL_W = 208
@@ -504,6 +512,27 @@ async function switchRange(r: '24h' | '7d' | '30d' | 'all') {
   try {
     await reloadLiveTopology(r)
     // 内容尺寸（节点数/技能数）变化后重新适配视图
+    await nextTick()
+    fitView()
+  } finally {
+    rangeLoading.value = false
+  }
+}
+
+/** live 拓扑域拉取失败（且无节点可展示）→ 错误态；空态只在真正无数据时展示 */
+const topoFailed = computed(
+  () => isLive.value && !!liveFailures.value.topology && !liveTopoNodes.value.length
+)
+
+/** 重试拓扑拉取：成功后清除失败标记（liveFailures 由 loadLiveData 填充，需就地复位） */
+async function retryTopology() {
+  if (rangeLoading.value) return
+  rangeLoading.value = true
+  try {
+    await reloadLiveTopology(liveTopoRange.value)
+    const next = { ...liveFailures.value }
+    delete next.topology
+    liveFailures.value = next
     await nextTick()
     fitView()
   } finally {
@@ -833,6 +862,15 @@ const flows = computed(() => {
 .topo-empty__icon svg { width: 26px; height: 26px; }
 .topo-empty p { font-size: 13px; font-weight: 600; color: var(--mk-muted); }
 .topo-empty__sub { font-weight: 400 !important; font-size: 11.5px !important; color: var(--mk-faint) !important; margin-top: 4px; }
+
+/* 加载失败态：复用空态容器；按钮需可点击（父容器 pointer-events: none） */
+.topo-empty.is-error .topo-empty__icon { color: #dc2626; font-size: 22px; font-weight: 800; }
+.topo-empty.is-error p { color: #dc2626; }
+.topo-empty .mk-empty__action {
+  pointer-events: auto;
+  margin-top: 10px;
+}
+.topo-empty .mk-empty__action:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .topo-viewport {
   position: absolute;

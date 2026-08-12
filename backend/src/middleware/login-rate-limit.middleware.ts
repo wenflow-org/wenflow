@@ -179,13 +179,14 @@ export const recordLoginAttempt = (
   username: string,
   ip: string,
   success: boolean,
-  scope: LoginRateLimitScope = 'user'
+  scope: LoginRateLimitScope = 'user',
+  reason: string | null = null
 ) => {
   // G3：用户名作为 Map key 使用，截断超长输入防止内存滥用
   const safeUsername = username.slice(0, 64);
 
   // 登录审计：成功与失败均落库（schema 层用户名上限 64，与 Map key 截断一致）
-  persistLoginAttempt(safeUsername, ip, success, scope);
+  persistLoginAttempt(safeUsername, ip, success, scope, reason ?? undefined);
 
   const key = buildLoginAttemptKey(scope, safeUsername, ip);
   const ipKey = `${scope}:ip:${ip}`;

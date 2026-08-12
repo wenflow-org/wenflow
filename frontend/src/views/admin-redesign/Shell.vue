@@ -295,7 +295,7 @@ const groupedScenes = computed(() => {
 .mshell__item--active .mshell__item-badge { background: #dbe9ff; color: #1f57cc; }
 .mshell__item-badge--alarm {
   background: #fee2e2;
-  color: #dc2626;
+  color: #b91c1c;
   animation: mshell-alarm-pulse 1.6s ease-in-out infinite;
 }
 @keyframes mshell-alarm-pulse {
@@ -338,7 +338,7 @@ const groupedScenes = computed(() => {
 .mshell__crumb-group { color: var(--mk-faint); font-size: 12px; font-weight: 600; }
 .mshell__crumb-sep { color: #c3cede; margin: 0 2px; }
 .mshell__crumb-sub {
-  color: #3478f6;
+  color: var(--mk-accent-deep);
   font-size: 12px;
   font-weight: 700;
   font-family: var(--mk-mono);
@@ -451,7 +451,7 @@ const groupedScenes = computed(() => {
 .mshell__footer-logo { height: 18px; width: 18px; border-radius: 5px; object-fit: contain; }
 .mshell__footer-name { font-weight: 700; color: #5b6577; }
 .mshell__footer-ver {
-  font-size: 11px; color: #71809a;
+  font-size: 11px; color: var(--mk-muted);
   font-variant-numeric: tabular-nums;
   padding: 1px 7px; border-radius: 999px;
   background: #f1f5fb; border: 1px solid #e3e9f4;
@@ -461,7 +461,7 @@ const groupedScenes = computed(() => {
   width: 7px; height: 7px; border-radius: 50%;
   background: #c3cede;
 }
-.mshell__footer-source--live { color: #218a56; }
+.mshell__footer-source--live { color: var(--mk-green); }
 .mshell__footer-source--live .mshell__footer-dot { background: var(--green, #31b16f); }
 .mshell__footer-sep { color: #c3cede; }
 

@@ -333,9 +333,14 @@ const d = computed<Detail | undefined>(() => {
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
-  padding: 0;
+  padding: 4px 8px;
+  margin-left: -8px;
+  border-radius: 6px;
   width: fit-content;
+  transition: background 0.12s ease, transform 0.1s ease;
 }
+.ud-back:hover { background: #eff6ff; }
+.ud-back:active { transform: translateY(1px); }
 .ud-id { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .ud-learner-link {
   margin-left: auto;
@@ -512,6 +517,9 @@ const d = computed<Detail | undefined>(() => {
   .ud-grant__notice { font-size: 14px; }
   .ud-grant__grid div { font-size: 14px; }
   .ud-grant__grid span { font-size: 13px; }
+  .ud-badge { font-size: 12px; padding: 2px 10px; }
+  .ud-learner-link, .ud-restore { padding: 7px 16px; }
+  .ud-restore { font-size: 14px; }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号升到 2800 级（17px 级） */
@@ -532,6 +540,9 @@ const d = computed<Detail | undefined>(() => {
   .ud-grant__notice { font-size: 16.5px; }
   .ud-grant__grid div { font-size: 16.5px; }
   .ud-grant__grid span { font-size: 15px; }
+  .ud-badge { font-size: 14px; padding: 3px 12px; }
+  .ud-learner-link, .ud-restore { padding: 8px 19px; }
+  .ud-restore { font-size: 16.5px; }
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */

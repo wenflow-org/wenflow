@@ -441,7 +441,6 @@ function goConfig() {
 
 <style scoped>
 .mono { font-family: var(--mk-mono); font-size: 12px; }
-.mk-link--danger { color: var(--mk-red, #dc2626); }
 
 /* 能力配置加载失败错误条 */
 .ac-error {

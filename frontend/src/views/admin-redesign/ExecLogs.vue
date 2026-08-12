@@ -73,6 +73,7 @@
         <span class="tline-head__dur">耗时</span>
         <span class="tline-head__badge">状态</span>
         <span class="tline-head__trace">Trace</span>
+        <span class="tline-head__arrow" aria-hidden="true"></span>
       </div>
       <div
         v-for="log in shown"
@@ -80,8 +81,13 @@
         class="tline"
         :class="[`tline--${log.status}`, { 'tline--open': openId === log.id }]"
       >
-        <button type="button" class="tline__main" @click="openId = openId === log.id ? '' : log.id">
-          <span class="tline__time mono" :title="log.ts ? new Date(log.ts).toLocaleString() : ''">{{ fmtTime(log.ts) }}</span>
+        <button
+          type="button"
+          class="tline__main"
+          :aria-expanded="openId === log.id"
+          @click="openId = openId === log.id ? '' : log.id"
+        >
+          <span class="tline__time mono" :title="fmtFull(log.ts)">{{ fmtTime(log.ts) }}</span>
           <span class="tline__kind" :class="`tline__kind--${kindTone(log)}`">{{ kindText(log) }}</span>
           <span class="tline__agent mono" @click.stop="openSkillDrawer(log.agent)">{{ log.stage }}</span>
           <span class="tline__msg" :title="[log.title, log.detail].filter(Boolean).join(' · ')">
@@ -100,9 +106,10 @@
               @click.stop="openSession(log.sessionId)"
             >会话 {{ shortTrace(log.sessionId) }}</span>
           </span>
-          <span class="tline__dur mono" :title="`${log.durationMs}ms`">{{ fmtMs(log.durationMs) }}</span>
+          <span class="tline__dur mono" :title="fmtMs(log.durationMs)">{{ fmtMs(log.durationMs) }}</span>
           <span class="tline__badge" :class="`tline__badge--${log.status}`">{{ statusBadge[log.status] }}</span>
           <span class="tline__trace mono" title="在瀑布中查看完整链路" @click.stop="openTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span>
+          <span class="tline__arrow" aria-hidden="true">▸</span>
         </button>
         <div v-if="openId === log.id" class="tline__payload">
           <div class="tline__payload-meta">
@@ -411,7 +418,15 @@ function shortTrace(id: string): string {
   const body = m[2] || id
   return body.length > 14 ? `${m[1]}:…${body.slice(-6)}` : id
 }
-const statusBadge = { ok: '成功', warn: '超时', err: '失败' } as const
+/* 绝对时间 tooltip：YYYY-MM-DD HH:MM:SS（与审计页同格式）；ts 为 epoch 毫秒 */
+function fmtFull(ts?: number | null): string {
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (Number.isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+const statusBadge = { ok: '成功', warn: '降级', err: '失败' } as const
 /* 类型列：demo 按 flow/call；live 按执行层（api-gateway→网关 / skill→Skill） */
 function kindText(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   if (log.kind === 'flow') return '流程'
@@ -519,7 +534,7 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
 /* 窄屏：压缩时间/节点固定列，给消息列腾空间（时间 72→56、节点 240→160） */
 @media (max-width: 860px) {
   .tline-head,
-  .tline__main { grid-template-columns: 56px 40px 160px minmax(200px, 480px) 44px 44px 56px; gap: 8px; }
+  .tline__main { grid-template-columns: 56px 40px 160px minmax(200px, 480px) 44px 44px 56px 18px; gap: 8px; }
   .tline__payload { padding-left: 56px; }
 }
 .log-agent {
@@ -554,6 +569,7 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   background: var(--mk-surface);
+  overflow-x: auto;
 }
 
 /* P0 修复：执行日志加载失败横幅（对齐 ts-error 规范） */
@@ -592,7 +608,7 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   top: 0;
   z-index: 2;
   display: grid;
-  grid-template-columns: 72px 40px 240px minmax(200px, 480px) 44px 44px 72px;
+  grid-template-columns: 72px 40px 240px minmax(200px, 1fr) 44px 44px 72px 18px;
   gap: 10px;
   align-items: baseline;
   padding: 9px 14px;
@@ -613,14 +629,14 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   border-top: 1px dashed var(--mk-line);
 }
 
-.tline { border-left: 3px solid transparent; border-bottom: 1px solid #f0f2f5; }
-.tline:last-child { border-bottom: none; }.tline--ok { border-left-color: var(--mk-green); }
-.tline--err { border-left-color: var(--mk-red); background: rgba(220, 38, 38, 0.04); }
-.tline--warn { border-left-color: var(--mk-amber); }
+.tline { border-bottom: 1px solid #f0f2f5; box-shadow: inset 3px 0 0 0 transparent; }
+.tline:last-child { border-bottom: none; }.tline--ok { box-shadow: inset 3px 0 0 0 var(--mk-green); }
+.tline--err { box-shadow: inset 3px 0 0 0 var(--mk-red); background: rgba(220, 38, 38, 0.04); }
+.tline--warn { box-shadow: inset 3px 0 0 0 var(--mk-amber); }
 
 .tline__main {
   display: grid;
-  grid-template-columns: 72px 40px 240px minmax(200px, 480px) 44px 44px 72px;
+  grid-template-columns: 72px 40px 240px minmax(200px, 1fr) 44px 44px 72px 18px;
   gap: 10px;
   align-items: baseline;
   width: 100%;
@@ -749,8 +765,10 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
 }
 .tline__badge--ok { background: var(--mk-green-bg); color: var(--mk-green); }
 .tline__badge--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
-.tline__badge--err { background: rgba(220, 38, 38, 0.1); color: #dc2626; }
+.tline__badge--err { background: var(--mk-red-bg); color: var(--mk-red); }
 .tline__trace { font-size: 11px; color: var(--mk-faint); text-align: right; }
+.tline__arrow { font-size: 11px; color: var(--mk-faint); text-align: right; transition: transform 0.15s ease; }
+.tline--open .tline__arrow { transform: rotate(90deg); }
 .tline__session { font-size: 11px; color: #3478f6; cursor: pointer; }
 .tline__session:hover { text-decoration: underline; }
 .tline__trace:hover { color: var(--mk-amber); text-decoration: underline; }
@@ -768,9 +786,9 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   margin: 0;
   padding: 10px 12px;
   border-radius: 8px;
-  background: #0d1420;
-  color: #8ba3c7;
-  font: 11px/1.6 'JetBrains Mono', monospace;
+  background: var(--mk-code-bg);
+  color: var(--mk-code-fg);
+  font: 11px/1.6 var(--mk-mono);
   overflow: auto;
   max-height: 240px;
   white-space: pre-wrap;
@@ -808,17 +826,38 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   .log-status { padding: 10px 16px; }
   .log-status strong { font-size: 15.5px; }
   .log-status__meta { font-size: 13px; }
+  .log-keyword { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 180px; }
+  .log-agent { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 100px; }
+  .log-auto { font-size: 13px; }
+  .log-adv { font-size: 13px; }
+  .log-status__filter { font-size: 13px; }
+  .log-status__clear { font-size: 14.5px; }
   .tline-head,
-  .tline__main { grid-template-columns: 84px 48px 285px minmax(240px, 560px) 52px 52px 84px; gap: 12px; padding: 11px 18px; }
+  .tline__main { grid-template-columns: 84px 48px 285px minmax(240px, 1fr) 52px 52px 84px 22px; gap: 12px; padding: 11px 18px; }
   .tline-head { font-size: 12.5px; }
   .tline__time,
   .tline__agent,
   .tline__dur,
   .tline__trace { font-size: 13px; }
+  .tline__arrow { font-size: 13px; }
   .tline__msg { font-size: 14.5px; }
   .tline__msg em { font-size: 13px; }
   .tline__kind { font-size: 11.5px; }
   .tline__badge { font-size: 12px; }
+  .tline__errcode,
+  .tline__http,
+  .tline__recovered,
+  .tline__drift,
+  .tline__tokens,
+  .tline__model { font-size: 12px; }
+  .tline__session,
+  .tline__prompt-meta,
+  .tline__payload-meta { font-size: 13px; }
+  .tline__none,
+  .tline__label { font-size: 13px; }
+  .tline-attempt__retry,
+  .tline-attempt__dur { font-size: 12px; }
+  .tline-attempt__err { font-size: 13px; }
   .tline__payload { padding-left: 84px; }
   .tline__payload pre { font-size: 13px; }
   .tline-attempt__no { font-size: 12px; }
@@ -833,17 +872,38 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   .log-status { padding: 14px 22px; }
   .log-status strong { font-size: 18px; }
   .log-status__meta { font-size: 15px; }
+  .log-keyword { font-size: 15.5px; padding: 9px 14px; width: 215px; }
+  .log-agent { font-size: 15.5px; padding: 9px 14px; width: 115px; }
+  .log-auto { font-size: 15.5px; }
+  .log-adv { font-size: 15.5px; }
+  .log-status__filter { font-size: 15.5px; }
+  .log-status__clear { font-size: 17px; }
   .tline-head,
-  .tline__main { grid-template-columns: 100px 56px 340px minmax(260px, 640px) 62px 62px 100px; gap: 14px; padding: 13px 22px; }
+  .tline__main { grid-template-columns: 100px 56px 340px minmax(260px, 1fr) 62px 62px 100px 26px; gap: 14px; padding: 13px 22px; }
   .tline-head { font-size: 14.5px; }
   .tline__time,
   .tline__agent,
   .tline__dur,
   .tline__trace { font-size: 15.5px; }
+  .tline__arrow { font-size: 15.5px; }
   .tline__msg { font-size: 17px; }
   .tline__msg em { font-size: 15px; }
   .tline__kind { font-size: 13.5px; }
   .tline__badge { font-size: 14px; }
+  .tline__errcode,
+  .tline__http,
+  .tline__recovered,
+  .tline__drift,
+  .tline__tokens,
+  .tline__model { font-size: 14px; }
+  .tline__session,
+  .tline__prompt-meta,
+  .tline__payload-meta { font-size: 15.5px; }
+  .tline__none,
+  .tline__label { font-size: 15.5px; }
+  .tline-attempt__retry,
+  .tline-attempt__dur { font-size: 14px; }
+  .tline-attempt__err { font-size: 15.5px; }
   .tline__payload { padding-left: 100px; }
   .tline__payload pre { font-size: 15.5px; }
   .tline-attempt__no { font-size: 14px; }

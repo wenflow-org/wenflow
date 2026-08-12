@@ -1,4 +1,4 @@
-export type SessionEvaluationSource = 'model' | 'ai-fallback' | 'failed';
+export type SessionEvaluationSource = 'model' | 'ai-fallback' | 'failed' | 'unavailable';
 export type FinalizeAction = 'end_only' | 'complete_task' | 'complete_review';
 export type FinalizationStepStatus = 'not_started' | 'processing' | 'completed' | 'failed' | 'skipped';
 
@@ -53,7 +53,7 @@ export function hasReliableSessionEvaluation(
   evaluation: unknown,
   source: SessionEvaluationSource
 ): boolean {
-  return source !== 'failed' && evaluation !== null && evaluation !== undefined;
+  return source !== 'failed' && source !== 'unavailable' && evaluation !== null && evaluation !== undefined;
 }
 
 export function mergeFinalTeachingState(

@@ -1291,8 +1291,8 @@ export async function liveDeleteAnnouncement(id: string): Promise<void> {
   liveAnnouncements.value = liveAnnouncements.value.filter((a) => a.id !== id)
 }
 
-export async function refreshLiveOverview() {
-  if (liveLoading.value) return
+export async function refreshLiveOverview(force = false) {
+  if (liveLoading.value && !force) return
   liveOverview.value = await fetchLiveOverview()
 }
 

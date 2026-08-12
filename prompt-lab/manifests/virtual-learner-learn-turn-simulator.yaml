@@ -26,7 +26,7 @@ promptContract:
     envelope: context-envelope/v1
     delivery: sidecar
     modelExposure: projected
-  failurePolicy: deterministic-fallback
+  failurePolicy: blocking
 runtimeContract:
   version: prompt-runtime-contract/v1
   contextMode: simulation-refresh

@@ -2,18 +2,18 @@
   <div class="mk-page">
     <div class="mk-status" :class="samples.length ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ samples.length ? `${samples.length} 个样本就绪` : '还没有虚拟学习者' }}</strong>
+      <strong class="mk-status__title">{{ samples.length ? `${samples.length} 个虚拟学习者就绪` : '还没有虚拟学习者' }}</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">样本 {{ samples.length }}</span>
+      <span class="mk-status__meta">虚拟学习者 {{ samples.length }}</span>
       <span class="mk-status__meta">有故事 {{ withStory }}</span>
       <span class="mk-status__meta">会话 {{ totalSessions }}</span>
-      <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建样本</button>
+      <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建虚拟学习者</button>
     </div>
 
 
     <div class="mk-card">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">样本列表</h3>
+        <h3 class="mk-card__title">虚拟学习者列表</h3>
         <input class="mk-filter__input" v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
       </div>
 
@@ -22,7 +22,7 @@
       <table class="mk-table mk-table--click">
         <thead>
           <tr>
-            <th>样本</th>
+            <th>虚拟学习者</th>
             <th>长期倾向</th>
             <th>故事池</th>
             <th class="mk-th--right">会话</th>
@@ -75,12 +75,12 @@
       <div v-else-if="loadFailed" class="mk-empty">
         <span class="mk-empty__icon" aria-hidden="true">◌</span>
         <strong>虚拟学习者加载失败</strong>
-        <span>无法从后端拉取样本列表。</span>
+        <span>无法从后端拉取虚拟学习者列表。</span>
         <button type="button" class="mk-empty__action" @click="retryLoad">重试</button>
       </div>
       <div v-else class="mk-empty">
-        <strong>{{ samples.length ? '没有匹配的样本' : '暂无虚拟学习者' }}</strong>
-        <span>新建虚拟人后，在画像页生成故事即可运行。</span>
+        <strong>{{ samples.length ? '没有匹配的虚拟学习者' : '暂无虚拟学习者' }}</strong>
+        <span>新建虚拟学习者后，在画像页生成故事即可运行。</span>
       </div>
     </div>
 
@@ -133,7 +133,7 @@
         <div class="mk-modal__foot">
           <button type="button" class="mk-btn" @click="createOpen = false">取消</button>
           <button type="button" class="mk-btn mk-btn--primary" :disabled="creating" @click="createSample">
-            {{ creating ? '创建中…' : '创建虚拟人' }}
+            {{ creating ? '创建中…' : '创建虚拟学习者' }}
           </button>
         </div>
       </div>
@@ -311,7 +311,7 @@ async function createSample() {
 async function removeSample(s: Sample) {
   const ok = await askConfirm({
     title: '删除虚拟学习者',
-    message: `确认删除样本「${s.name}」？\n其会话记录将一并清理，该操作不可撤销。`,
+    message: `确认删除虚拟学习者「${s.name}」？\n其会话记录将一并清理，该操作不可撤销。`,
     confirmText: '删除'
   })
   if (!ok) return
@@ -354,7 +354,7 @@ async function generatePersona() {
     if (nameFromSeed) form.value.name = nameFromSeed
     const background = String(seed.background || seed.corePersonality || seed.behavioralProfileSummary || '').trim()
     if (background) form.value.story = background
-    toast.success('人设已回填，可改后点「创建虚拟人」')
+    toast.success('人设已回填，可改后点「创建虚拟学习者」')
   } catch (e) {
     toast.error(`生成失败：${errMsg(e)}`)
   } finally {
@@ -553,4 +553,24 @@ const totalSessions = computed(() => samples.value.reduce((a, s) => a + s.sessio
 .vl-advanced[open] summary { margin-bottom: 8px; }
 .vl-advanced .mk-field { margin-bottom: 0; }
 
+@media (min-width: 2000px) {
+  .vl-steps { font-size: 13px; padding: 9px 12px; }
+  .vl-req { font-size: 12px; }
+  .vl-ai-row { gap: 12px; }
+  .vl-ai-hint { font-size: 12.5px; }
+  .vl-persona-ok { font-size: 14px; padding: 7px 12px; }
+  .vl-advanced { padding: 10px 14px; }
+  .vl-advanced summary { font-size: 14px; }
+  .vl-advanced[open] summary { margin-bottom: 9px; }
+}
+@media (min-width: 2800px) {
+  .vl-steps { font-size: 15.5px; padding: 11px 14px; }
+  .vl-req { font-size: 14px; }
+  .vl-ai-row { gap: 14px; }
+  .vl-ai-hint { font-size: 15px; }
+  .vl-persona-ok { font-size: 16.5px; padding: 8px 14px; }
+  .vl-advanced { padding: 12px 17px; }
+  .vl-advanced summary { font-size: 16.5px; }
+  .vl-advanced[open] summary { margin-bottom: 11px; }
+}
 </style>

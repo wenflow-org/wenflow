@@ -644,7 +644,7 @@ function recGateDetail(completion: SkillCompletion): string {
 .sk-rec__title strong { font-size: 14px; }
 .sk-rec__loading { color: var(--mk-faint); font-size: 12px; margin-left: auto; }
 .sk-rec__pills { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
-.sk-pill--bad { color: var(--mk-red, #dc2626); background: #fdecec; }
+.sk-pill--bad { color: var(--mk-red-strong, #b91c1c); background: #fdecec; }
 .sk-pill--warn { color: var(--mk-amber, #d97706); background: #fdf3e3; }
 .sk-rec__refresh {
   border: 1px solid var(--mk-line);
@@ -678,7 +678,7 @@ function recGateDetail(completion: SkillCompletion): string {
   font-weight: 600;
   vertical-align: 1px;
 }
-.sk-rec-tag--bad { background: #fdecec; color: var(--mk-red, #dc2626); }
+.sk-rec-tag--bad { background: #fdecec; color: var(--mk-red-strong, #b91c1c); }
 
 /* 完成度五档色标：draft → live */
 .sk-rec-badge {
@@ -690,11 +690,11 @@ function recGateDetail(completion: SkillCompletion): string {
   white-space: nowrap;
   color: #fff;
 }
-.sk-rec-badge--draft { background: #9aa4b2; }
-.sk-rec-badge--handler-ready { background: #d97706; }
-.sk-rec-badge--core-ready { background: #3478f6; }
-.sk-rec-badge--fields-synced { background: #0d9488; }
-.sk-rec-badge--live { background: #16a34a; }
+.sk-rec-badge--draft { background: #6b7280; }
+.sk-rec-badge--handler-ready { background: #b45309; }
+.sk-rec-badge--core-ready { background: #1f57cc; }
+.sk-rec-badge--fields-synced { background: #0f766e; }
+.sk-rec-badge--live { background: #15803d; }
 
 .sk-rec-diff { font-size: 11px; font-weight: 700; }
 .sk-rec-diff--bad { color: var(--mk-red, #dc2626); }

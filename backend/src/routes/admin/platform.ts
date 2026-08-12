@@ -764,7 +764,7 @@ async function computeOverviewStats(): Promise<unknown> {
         if (summarySource === 'fallback') wrapupSourceStats.summaryFallback += 1;
         if (evaluationSource === 'model') wrapupSourceStats.evaluationModel += 1;
         if (evaluationSource === 'ai-fallback') wrapupSourceStats.evaluationAiFallback += 1;
-        if (evaluationSource === 'failed') wrapupSourceStats.evaluationFailed += 1;
+        if (evaluationSource === 'failed' || evaluationSource === 'unavailable') wrapupSourceStats.evaluationFailed += 1;
       } catch {
         continue;
       }

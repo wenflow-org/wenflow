@@ -210,6 +210,9 @@
       </section>
     </div>
   </div>
+  <div v-else-if="liveLoading" class="brief brief--loading">
+    <p class="brief-card__note"><span class="mk-spinner"></span> 正在加载真实数据…</p>
+  </div>
   <div v-else class="brief brief--empty">
     <p class="brief-card__note">真实数据暂不可用，请刷新或稍后重试。</p>
     <button type="button" class="brief-empty__retry" @click="retryOverview">重试</button>
@@ -408,10 +411,10 @@ const rateHint = (i: number) => {
   return pairs[i] || ''
 };
 
-// 重试按钮：仅 live 模式会出现空态（demo 恒有数据），refreshLiveOverview 自带 liveLoading 守卫
+// 重试按钮：仅 live 模式会出现空态（demo 恒有数据），force 跳过 liveLoading 守卫保证点击必重拉
 async function retryOverview() {
   if (dataSource.value !== 'live') return
-  await refreshLiveOverview()
+  await refreshLiveOverview(true)
 }
 
 // 动态筛选：默认隐藏虚拟学习者与测试/审计账号（后端 excludeTest 已按此过滤并重新拉取），
@@ -470,6 +473,14 @@ watch(liveLoading, (loading) => {
 }
 /* live 数据不可用时的空态 */
 .brief--empty {
+  min-height: 50vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+.brief--loading {
   min-height: 50vh;
   display: grid;
   place-content: center;
@@ -868,6 +879,35 @@ watch(liveLoading, (loading) => {
   .brief-score { width: 64px; height: 64px; }
   .brief-score strong { font-size: 17px; }
   .brief-score__cap { font-size: 10.5px; }
+  .brief-head__verdict h3 { font-size: 20px; }
+  .brief-head__verdict p { font-size: 15px; }
+  .brief-actions li { font-size: 15px; }
+  .brief-actions__btn { font-size: 14px; }
+  .brief-actions__clear { font-size: 15px; }
+  .brief-card__note { font-size: 14.5px; }
+  .feed-filter { font-size: 13.5px; }
+  .feed__empty { font-size: 15px; }
+  .feed li strong { font-size: 15px; }
+  .feed li span { font-size: 13.5px; }
+  .feed--full li strong { font-size: 14.5px; }
+  .wq__label { font-size: 14px; }
+  .wq__nums { font-size: 13.5px; }
+  .wq__note { font-size: 14px; }
+  .usage__big strong { font-size: 30px; }
+  .usage__big span { font-size: 13.5px; }
+  .usage__big em { font-size: 14.5px; }
+  .usage__label { font-size: 13px; }
+  .usage__row { font-size: 14px; }
+  .usage__fails li { font-size: 14px; }
+  .trend__legend { font-size: 13px; }
+  .trend__num { font-size: 13px; }
+  .trend__day { font-size: 12.5px; }
+  .trend__sum { font-size: 14px; }
+  .funnel__node span { font-size: 13.5px; }
+  .funnel__node strong { font-size: 22px; }
+  .funnel__rate { font-size: 12.5px; }
+  .pulse__meta { font-size: 14.5px; }
+  .pulse__axis { font-size: 11px; }
 }
 @media (min-width: 2800px) {
   .brief { max-width: 2300px; padding: 32px; }
@@ -879,6 +919,35 @@ watch(liveLoading, (loading) => {
   .brief-score { width: 76px; height: 76px; }
   .brief-score strong { font-size: 20px; }
   .brief-score__cap { font-size: 12.5px; }
+  .brief-head__verdict h3 { font-size: 24px; }
+  .brief-head__verdict p { font-size: 17px; }
+  .brief-actions li { font-size: 17px; }
+  .brief-actions__btn { font-size: 16px; }
+  .brief-actions__clear { font-size: 17px; }
+  .brief-card__note { font-size: 16.5px; }
+  .feed-filter { font-size: 15.5px; }
+  .feed__empty { font-size: 17px; }
+  .feed li strong { font-size: 17px; }
+  .feed li span { font-size: 15.5px; }
+  .feed--full li strong { font-size: 16.5px; }
+  .wq__label { font-size: 16px; }
+  .wq__nums { font-size: 15.5px; }
+  .wq__note { font-size: 16px; }
+  .usage__big strong { font-size: 34px; }
+  .usage__big span { font-size: 15.5px; }
+  .usage__big em { font-size: 16.5px; }
+  .usage__label { font-size: 15px; }
+  .usage__row { font-size: 16px; }
+  .usage__fails li { font-size: 16px; }
+  .trend__legend { font-size: 15px; }
+  .trend__num { font-size: 15px; }
+  .trend__day { font-size: 14.5px; }
+  .trend__sum { font-size: 16px; }
+  .funnel__node span { font-size: 15.5px; }
+  .funnel__node strong { font-size: 26px; }
+  .funnel__rate { font-size: 14.5px; }
+  .pulse__meta { font-size: 16.5px; }
+  .pulse__axis { font-size: 12.5px; }
 }
 /* 3600+（zoom 1.3 档）：KPI/卡片延续 2800 放大节奏（约 1.17×），并补齐 2000/2800 未覆盖的卡片内文字（feed/pulse/trend/wq/usage/funnel） */
 @media (min-width: 3600px) {
