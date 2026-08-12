@@ -34,7 +34,6 @@ import { EXTRA_COMPONENT_VISIBLE_SKILLS } from '@/views/admin/capabilityCatalog'
 const isExtraSkill = (id: string) => EXTRA_COMPONENT_VISIBLE_SKILLS.has(id.replace(/^skill:/, ''))
 
 export const liveLoading = ref(false)
-export const liveError = ref('')
 /** 各域拉取失败记录（页面据此局部降级） */
 export const liveFailures = ref<Record<string, string>>({})
 
@@ -1028,8 +1027,6 @@ export async function liveSaveNetworkPolicy(p: LiveApiConfig['networkPolicy']): 
   await fetchLiveApiConfig()
 }
 
-/* ================= Prompt Lab（v2 已退役，改由 Prompt 工作台 core-* 端点承接） ================= */
-
 /* ================= 协议视图 / 规则总览（懒加载缓存） ================= */
 export interface LiveProtocol {
   id: string
@@ -1342,7 +1339,6 @@ const liveDomainSkippable = (key: string, force: boolean): boolean =>
 export async function loadLiveData(force = false) {
   if (liveLoading.value) return
   liveLoading.value = true
-  liveError.value = ''
   liveFailures.value = {}
 
   const jobs: Record<string, () => Promise<unknown>> = {
@@ -1378,10 +1374,10 @@ export async function loadLiveData(force = false) {
     liveFailures.value.overview = errMsg(e)
   }
 
-  // 核心域（日志）失败才算整体失败；其余局部降级
+  // 核心域（日志）失败才算整体失败；其余局部降级。
+  // 阶段 0 R1：后端不可用不再自动降级 demo（杜绝假数据静默展示），
+  // 由 AdminConsole 全屏错误页承接（可重试）；dev 离线预览走命令面板手动切换。
   if (liveFailures.value.spans && !liveSpans.value?.length) {
-    liveError.value = `真实数据拉取失败：${liveFailures.value.spans}`
-    dataSource.value = 'demo'
     liveLoading.value = false
     return
   }
@@ -1400,16 +1396,12 @@ export async function loadLiveData(force = false) {
       }
     })
   ).then(() => {
-    const failedKeys = Object.keys(liveFailures.value)
-    liveError.value = failedKeys.length ? `部分数据不可用：${failedKeys.join('、')}` : ''
     liveLoading.value = false
   })
 }
 
 export function backToDemo() {
+  // 生产构建禁止回退演示数据（阶段 0 R1）：demo 仅保留为开发态离线预览
+  if (import.meta.env.PROD) return
   dataSource.value = 'demo'
-  liveError.value = ''
 }
-
-/** live 模式是否可用（页面用于分支） */
-export const isLive = computed(() => dataSource.value === 'live')

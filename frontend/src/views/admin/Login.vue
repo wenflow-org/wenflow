@@ -178,24 +178,22 @@ function touch(key: 'name' | 'password') {
 
 const safeRedirect = () => {
   const value = Array.isArray(route.query.redirect) ? route.query.redirect[0] : route.query.redirect
-  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return '/admin/console'
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return '/admin/overview'
   try {
     const target = new URL(value, window.location.origin)
     if (target.origin !== window.location.origin || !target.pathname.startsWith('/admin/')) {
-      return '/admin/console'
+      return '/admin/overview'
     }
-    // 旧运营后台书签 → 新控制台；测试台路径保留
+    // 旧运营后台书签 /admin/console → 新总览（router 亦有 /admin/console 兼容重定向）
     if (
-      target.pathname.startsWith('/admin/test/') ||
-      target.pathname === '/admin/test' ||
       target.pathname === '/admin/console' ||
       target.pathname === '/admin/login'
     ) {
-      return `${target.pathname}${target.search}${target.hash}`
+      return '/admin/overview'
     }
-    return '/admin/console'
+    return '/admin/overview'
   } catch {
-    return '/admin/console'
+    return '/admin/overview'
   }
 }
 

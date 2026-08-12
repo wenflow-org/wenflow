@@ -101,6 +101,7 @@
           <span v-if="!loading" class="mk-empty__icon" aria-hidden="true">◌</span>
           <strong>{{ loading ? '加载中…' : (keyword || statusFilter ? '当前筛选无匹配' : '暂无会话') }}</strong>
           <span v-if="!loading">{{ keyword || statusFilter ? '放宽筛选条件试试。' : '虚拟学习者发起目标对话后，会话记录会出现在这里。' }}</span>
+          <button v-if="isFiltered && !loading" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
         </div>        <div v-if="canMore" class="gc-more">
           <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
         </div>
@@ -230,8 +231,6 @@ import { adminGoalConversationsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
 
-defineProps<{ state: string }>()
-
 interface Row {
   id: string
   userName: string
@@ -339,6 +338,12 @@ const filtered = computed(() => {
     return `${r.userName} ${r.userEmail} ${r.summary}`.toLowerCase().includes(k)
   })
 })
+
+const isFiltered = computed(() => !!keyword.value.trim() || !!statusFilter.value)
+function clearFilters() {
+  keyword.value = ''
+  statusFilter.value = ''
+}
 
 /* 长列表分批渲染：每批 20 行 */
 const { shown, canMore, loadMore } = useLoadMore(filtered, 20)

@@ -108,12 +108,12 @@ const crumbLabel = computed(() => {
   return `${id.slice(0, 8)}…${id.slice(-4)}`
 })
 
-/* —— 真路由化：scene ↔ URL /admin/console/:page 双向同步 —— */
+/* —— 真路由化：scene ↔ URL /admin/:page 双向同步 —— */
 const route = useRoute()
 const router = useRouter()
 
 // URL → scene（浏览器前进/后退、深链直达）；非法 page 回退 overview 并修正 URL
-// immediate：整页直达 /admin/console/:page 时初始值也需校验（否则 URL 与 scene 脱节）
+// immediate：整页直达 /admin/:page 时初始值也需校验（否则 URL 与 scene 脱节）
 watch(
   () => route.params.page,
   (p) => {
@@ -121,7 +121,7 @@ watch(
     if (id && components[id]) {
       if (id !== scene.value) scene.value = id
     } else if (id) {
-      void router.replace('/admin/console')
+      void router.replace('/admin/overview')
     }
   },
   { immediate: true }
@@ -214,8 +214,8 @@ function onGlobalKey(e: KeyboardEvent) {
 .ac-boot__spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(52, 120, 246, 0.25);
-  border-top-color: #3478f6;
+  border: 2px solid rgba(44, 99, 208, 0.25);
+  border-top-color: #2c63d0;
   border-radius: 50%;
   animation: ac-spin 0.7s linear infinite;
 }
@@ -246,7 +246,7 @@ function onGlobalKey(e: KeyboardEvent) {
   padding: 8px 20px;
   border: 0;
   border-radius: 9px;
-  background: #3478f6;
+  background: #2c63d0;
   color: #fff;
   font: inherit;
   font-size: 13px;

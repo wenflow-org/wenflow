@@ -17,9 +17,7 @@ function isProtectedAdminPathname(pathname: string): boolean {
   const normalizedPath = pathname.toLowerCase().replace(/\/+$/, '') || '/';
   if (normalizedPath !== '/admin' && !normalizedPath.startsWith('/admin/')) return false;
 
-  return normalizedPath !== '/admin/login'
-    && normalizedPath !== '/admin/test'
-    && !normalizedPath.startsWith('/admin/test/');
+  return normalizedPath !== '/admin/login';
 }
 
 let adminProtectedLocationResolver = () => isProtectedAdminPathname(window.location.pathname);
@@ -223,10 +221,6 @@ export const adminPlatformSettingsApi = {
   }
 };
 
-
-/**
- * 测试工具 API
- */
 /**
  * 用户管理 API
  */
@@ -235,13 +229,6 @@ export const adminUsersApi = {
    * 获取用户列表
    */
   getUsers: async (params?: { page?: number; limit?: number; search?: string; role?: string }) => {
-    return adminAxios.get('/admin/users', { params });
-  },
-
-  /**
-   * 获取用户列表（兼容旧版）
-   */
-  users: async (params?: { page?: number; limit?: number; search?: string }) => {
     return adminAxios.get('/admin/users', { params });
   },
 
@@ -357,56 +344,7 @@ export const adminTeachingSessionsApi = {
   }
 };
 
-/**
- * Agent 管理 API
- */
-export interface AdminRegistryAgent {
-  agentId: string;
-  name: string;
-  type: string;
-  role?: string;
-   kind?: 'agent' | 'skill' | 'orchestrator' | 'alias';
-  aliases?: string[];
-  runtimeEnabled?: boolean;
-  lifecycleStatus: 'draft' | 'staging' | 'published';
-  status: 'healthy' | 'warning' | 'error' | 'idle';
-  callCount: number;
-  successRate: number;
-  avgDuration: number;
-  lastActivity: string | null;
-  version: string;
-}
-
-export interface AdminRegistryResponse {
-  data: {
-    summary: {
-      total: number;
-      active24h: number;
-      neverCalled: number;
-      unhealthy: number;
-    };
-    agents: AdminRegistryAgent[];
-  };
-}
-
-
-
-
-
-
-
-export interface PathAgentSupportingEvidencePreview {
-  usagePolicy: 'reference_only';
-  conversationHistory: Array<{ role: string; content: string }>;
-  learnerQA: Array<Record<string, unknown>>;
-  behaviorLog: Array<Record<string, unknown>>;
-  notes: string[];
-}
-
-
 export const adminAgentsApi = {
-
-
   /**
    * 获取 Agent 日志
    */
@@ -430,19 +368,6 @@ export const adminAgentsApi = {
   getLogDetail: async (id: string) => {
     return adminAxios.get(`/admin/agents/logs/${encodeURIComponent(id)}`);
   },
-
-
-
-
-
-
-
-
-
-
-
-
-
 };
 
 export const adminRuntimeDefinitionsApi = {
@@ -879,24 +804,6 @@ export const adminAgentPromptsApi = {
     return adminAxios.get('/admin/agent-prompts', { params });
   },
 
-
-
-
-  /**
-   * 发布 Prompt 版本
-   */
-  publishPrompt: async (id: string) => {
-    return adminAxios.put(`/admin/agent-prompts/${id}/publish`);
-  },
-
-
-  /**
-   * 删除 Prompt 草稿
-   */
-  deletePrompt: async (id: string) => {
-    return adminAxios.delete(`/admin/agent-prompts/${id}`);
-  },
-
   /**
    * 对比两个 Prompt 版本
    */
@@ -926,19 +833,11 @@ export const adminSkillsApi = {
     model?: string | null;
     thinkingMode?: string;
     reasoningEffort?: string;
-    /** @deprecated 生成参数已收敛到 ACTIVE Prompt，后端会忽略 */
-    temperature?: number;
-    /** @deprecated 生成参数已收敛到 ACTIVE Prompt，后端会忽略 */
-    maxTokens?: number;
     requestTimeoutMs?: number | null;
     maxLogicalRetries?: number | null;
     enabled?: boolean;
   }) => {
-    // Phase 2：不提交 temperature/maxTokens，避免旧调用方误写
-    const { temperature, maxTokens, ...routingOnly } = data;
-    void temperature;
-    void maxTokens;
-    return adminAxios.put(`/admin/skill-model-configs/${skillId}`, routingOnly);
+    return adminAxios.put(`/admin/skill-model-configs/${skillId}`, data);
   },
 
   deleteSkillModelConfig: async (skillId: string) => {
@@ -1145,10 +1044,6 @@ export const adminVirtualLearnersApi = {
 
   virtualSessionStep: async (sessionId: string) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/step`);
-  },
-
-  blackboxVirtualSessionStep: async (sessionId: string, expectedTraceCount: number) => {
-    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-step`, {}, blackboxCommandConfig(expectedTraceCount));
   },
 
   executeBlackboxVirtualAction: async (sessionId: string, action: Record<string, unknown>, expectedTraceCount: number) => {
@@ -1465,9 +1360,6 @@ export const adminApi = {
   ...adminPromptOpsApi,
 
   // ---- 同名冲突显式解决（与展开顺序的最终生效结果一致）----
-  // users: adminDashboardApi.users（宽松签名）被 adminUsersApi.users 覆盖；两者同端点
-  // GET /admin/users，保留类型更精确的 adminUsersApi 版本
-  users: adminUsersApi.users,
   // getPromptVersions: 绑定语义更通用的 prompts 版本
   getPromptVersions: adminAgentPromptsApi.getPromptVersions,
 };

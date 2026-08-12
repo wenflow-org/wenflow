@@ -1,5 +1,5 @@
 ﻿// Axios API 客户端
-import axios, { type AxiosRequestConfig } from 'axios';
+import axios from 'axios';
 import { getProjectionToken } from './projection';
 import { setAuthFlashMessage } from './authFlash';
 import { clearUserLocalState } from './sessionCleanup';
@@ -16,8 +16,6 @@ export const API_BASE_URL = isDev
  */
 export const AI_REQUEST_TIMEOUT = 300000;
 
-const pendingRequests = new Map<string, AbortController>();
-let nextRequestId = 0;
 let unauthorizedRedirect: Promise<void> | null = null;
 
 /**
@@ -46,15 +44,6 @@ const redirectToLoginOnce = () => {
 // 认证类端点自身返回 401 表示"凭证错误"，不应被误判为会话失效
 const AUTH_ENDPOINT_PATTERN = /^\/auth\/(login|register|verify)(\?|$)/;
 
-interface RequestKeyCarrier {
-  __wenflowRequestKey?: string;
-}
-
-const generateRequestKey = (config: AxiosRequestConfig): string => {
-  const { method, url, params, data } = config;
-  return `${method?.toUpperCase() || 'GET'}_${url}_${JSON.stringify(params || {})}_${JSON.stringify(data || {})}`;
-};
-
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000,
@@ -77,15 +66,6 @@ api.interceptors.request.use(
       config.headers['X-Projection-Token'] = projectionToken;
     }
 
-    if (!config.signal) {
-      const controller = new AbortController();
-      config.signal = controller.signal;
-
-      const requestKey = `${generateRequestKey(config)}#${++nextRequestId}`;
-      (config as RequestKeyCarrier).__wenflowRequestKey = requestKey;
-      pendingRequests.set(requestKey, controller);
-    }
-
     return config;
   },
   (error) => {
@@ -96,19 +76,9 @@ api.interceptors.request.use(
 // 响应拦截器 - 统一错误处理和清理
 api.interceptors.response.use(
   (response) => {
-    // 清理已完成的请求
-    const requestKey = (response.config as RequestKeyCarrier).__wenflowRequestKey;
-    if (requestKey) pendingRequests.delete(requestKey);
-
     return response.data;
   },
   (error) => {
-    // 清理失败的请求
-    if (error.config) {
-      const requestKey = error.config.__wenflowRequestKey;
-      if (requestKey) pendingRequests.delete(requestKey);
-    }
-
     // 如果是取消错误，直接返回
     if (axios.isCancel(error) || error.name === 'CanceledError' || error.name === 'AbortError') {
       return Promise.reject({ message: '请求已取消', cancelled: true });
@@ -147,52 +117,6 @@ api.interceptors.response.use(
     return Promise.reject({ message: '网络错误，请检查连接' });
   }
 );
-
-/**
- * 取消指定请求
- * @param requestKey 请求标识（method_url_params_data）
- */
-export const cancelRequest = (requestKey: string): boolean => {
-  let cancelled = false;
-  pendingRequests.forEach((controller, key) => {
-    if (key === requestKey || key.startsWith(`${requestKey}#`)) {
-      controller.abort();
-      pendingRequests.delete(key);
-      cancelled = true;
-    }
-  });
-  return cancelled;
-};
-
-/**
- * 取消所有 pending 的请求
- * @param filter 可选的过滤函数，返回 true 的请求会被取消
- */
-export const cancelAllRequests = (filter?: (key: string) => boolean): number => {
-  let cancelledCount = 0;
-  pendingRequests.forEach((controller, key) => {
-    if (!filter || filter(key)) {
-      controller.abort();
-      pendingRequests.delete(key);
-      cancelledCount++;
-    }
-  });
-  return cancelledCount;
-};
-
-/**
- * 取消 Agent 相关的请求
- */
-export const cancelAgentRequests = (): number => {
-  return cancelAllRequests((key) => key.includes('/agents/'));
-};
-
-/**
- * 获取当前 pending 请求数量
- */
-export const getPendingRequestCount = (): number => {
-  return pendingRequests.size;
-};
 
 export default api;
 
