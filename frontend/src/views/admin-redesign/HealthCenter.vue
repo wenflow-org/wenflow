@@ -79,6 +79,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { toast } from '@/utils/toast'
 import { errMsg } from './live'
+import { askConfirm } from './useConfirm'
 import {
   adminHealthCenterApi,
   type HealthCenterItem,
@@ -162,6 +163,14 @@ function jump(id: HealthCenterItemId) {
 }
 
 async function fix(id: HealthCenterItemId) {
+  const item = report.value?.items.find((i) => i.id === id)
+  // 安全审计 K-M1：一键修复（编译 core + DB 对账 + 重写 snapshots）执行前二次确认，注明检查项与影响范围
+  const ok = await askConfirm({
+    title: '一键修复',
+    message: `将执行「${item?.label || id}」的自动修复：编译相关 core 文件、执行 DB 对账并重写 agent-snapshots。执行前自动备份、结果写入审计日志。`,
+    confirmText: '执行修复',
+  })
+  if (!ok) return
   fixingId.value = id
   try {
     const res = await adminHealthCenterApi.fix(id)
@@ -195,7 +204,7 @@ defineExpose({ refresh })
 .hc-bar--muted { opacity: 0.7; }
 .hc-bar__dot {
   width: 9px; height: 9px; border-radius: 50%;
-  background: var(--mk-blue); box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.15);
+  background: var(--mk-blue); box-shadow: 0 0 0 3px rgba(44, 99, 208, 0.15);
 }
 .hc-bar--ok .hc-bar__dot { background: var(--mk-green, #16a34a); }
 .hc-bar--warn .hc-bar__dot { background: var(--mk-amber, #d97706); }
@@ -215,7 +224,7 @@ defineExpose({ refresh })
   border: 1px solid var(--mk-line); background: #fff; cursor: pointer;
   font: inherit; font-size: 11.5px; font-weight: 600; color: var(--mk-muted);
 }
-.hc-bar__action:hover { color: var(--mk-blue); border-color: rgba(52, 120, 246, 0.4); }
+.hc-bar__action:hover { color: var(--mk-blue); border-color: rgba(44, 99, 208, 0.4); }
 .hc-bar__action:disabled { opacity: 0.55; cursor: wait; }
 
 .hc-list { display: grid; gap: 6px; }
@@ -260,7 +269,7 @@ defineExpose({ refresh })
 .hc-btn--fix:hover { filter: brightness(1.08); }
 .hc-btn--fix:disabled { opacity: 0.55; cursor: wait; }
 .hc-btn--ghost { background: #fff; border-color: var(--mk-line); color: var(--mk-muted); }
-.hc-btn--ghost:hover { color: var(--mk-blue); border-color: rgba(52, 120, 246, 0.4); }
+.hc-btn--ghost:hover { color: var(--mk-blue); border-color: rgba(44, 99, 208, 0.4); }
 .hc-failed { padding: 8px 12px; border: 1px dashed rgba(220, 38, 38, 0.4); border-radius: 10px; font-size: 12px; color: var(--mk-red, #dc2626); }
 .mono { font-family: var(--mk-mono); font-size: 10.5px; }
 

@@ -82,23 +82,26 @@ const items = computed<Item[]>(() => {
     group: '页面',
     run: () => emit('navigate', s.id)
   }))
-  list.push(
-    {
-      key: 'action:live',
-      icon: '●',
-      label: dataSource.value === 'live' ? '刷新真实数据' : '切换到真实数据',
-      hint: '数据源',
-      group: '操作',
-      run: () => void loadLiveData(true)
-    },
-    {
+  list.push({
+    key: 'action:live',
+    icon: '●',
+    label: dataSource.value === 'live' ? '刷新真实数据' : '切换到真实数据',
+    hint: '数据源',
+    group: '操作',
+    run: () => void loadLiveData(true)
+  })
+  // 生产构建隐藏「切换到演示数据」（阶段 0 R1）：demo 仅保留为开发态离线预览
+  if (!import.meta.env.PROD) {
+    list.push({
       key: 'action:demo',
       icon: '○',
       label: '切换到演示数据',
       hint: '数据源',
       group: '操作',
       run: () => backToDemo()
-    },
+    })
+  }
+  list.push(
     {
       key: 'action:create-user',
       icon: '＋',
@@ -275,7 +278,7 @@ function close() {
   text-align: left;
 }
 .pal__item--active { background: #eef5ff; }
-.pal__item-icon { color: #3478f6; font-size: 12px; width: 16px; text-align: center; }
+.pal__item-icon { color: #2c63d0; font-size: 12px; width: 16px; text-align: center; }
 .pal__item-label { flex: 1; }
 .pal__item-hint { font-size: 11px; color: var(--mk-faint); }
 .pal__empty { padding: 20px; text-align: center; color: var(--mk-faint); font-size: 13px; margin: 0; }

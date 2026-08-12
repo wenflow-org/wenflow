@@ -255,6 +255,7 @@ import { adminFieldRoutingsApi } from '@/api/adminApi';
 import { useEscape } from './useEscape';
 import { useOverlay, useMaskClose } from './useOverlay';
 import { toast } from '@/utils/toast';
+import { askConfirm } from './useConfirm';
 
 interface FieldItem {
   fieldId: string;
@@ -588,6 +589,13 @@ async function saveOrchestration() {
 }
 
 async function forceSync() {
+  // 安全审计 K-M1：强制同步（全量对账覆写三表）执行前二次确认，注明影响范围
+  const ok = await askConfirm({
+    title: '强制同步 DB',
+    message: `将对「${props.stage}」阶段执行全量对账：以编排 YAML 为唯一声明源，覆写 agent_contracts / field_definitions / agent_field_routings 三表；managedByCode=false 的 admin 覆盖行跳过（只报告不改）。`,
+    confirmText: '执行同步',
+  })
+  if (!ok) return
   orchMsg.value = '';
   orchSyncing.value = true;
   try {
