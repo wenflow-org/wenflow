@@ -23,6 +23,7 @@ import {
   type PromptRole,
   type RenderValue,
 } from '../yaml-vocabulary';
+import { cachedFileParse } from '../yaml-file-cache';
 
 /** 兼容 re-export：定义单一源为 yaml-vocabulary（rewrite-output-section / field-routings 既有 import 不变） */
 export { PROMPT_ROLES, RENDER_VALUES } from '../yaml-vocabulary';
@@ -221,14 +222,21 @@ function parseOrchestrationText(rawText: string, sourceLabel: string): Orchestra
   };
 }
 
+/**
+ * 解析编排文件（读盘 + 纯内存解析）。结果按文件 mtime 缓存（yaml-file-cache）：
+ * admin N+1 场景（field-routings 逐 skill 请求）不再对同一文件重复解析；
+ * 文件变化即失效，测试用临时路径可绕过旧缓存。
+ */
 export function parseOrchestrationFile(filePath: string): OrchestrationStage {
-  let rawText: string;
-  try {
-    rawText = fs.readFileSync(filePath, 'utf-8');
-  } catch (error) {
-    throw new Error(`[orchestration] 读取失败：${filePath}（${error instanceof Error ? error.message : String(error)}）`);
-  }
-  return parseOrchestrationText(rawText, filePath);
+  return cachedFileParse(filePath, () => {
+    let rawText: string;
+    try {
+      rawText = fs.readFileSync(filePath, 'utf-8');
+    } catch (error) {
+      throw new Error(`[orchestration] 读取失败：${filePath}（${error instanceof Error ? error.message : String(error)}）`);
+    }
+    return parseOrchestrationText(rawText, filePath);
+  });
 }
 
 /**

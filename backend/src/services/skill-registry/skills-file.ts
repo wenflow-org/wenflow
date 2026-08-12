@@ -27,6 +27,7 @@ import yaml from 'js-yaml';
 import { loadOrchestrationFiles } from '../field-routing/orchestration-file';
 import { listRawManifestEntries } from '../agent-manifest.service';
 import { PURGED_SKILLS, ALL_RETIRED_SKILLS } from '../../skills/retired-skills';
+import { cachedFileParse, clearYamlFileCache } from '../yaml-file-cache';
 
 /** 仓库根目录（backend/src/services/skill-registry 上溯 4 级），用于解析 handlerRef/coreFile */
 export const REPO_ROOT = path.resolve(__dirname, '../../../../');
@@ -564,15 +565,9 @@ export function validateSkillsContent(content: string): SkillsBook {
   return parseSkillsText(content, '<content>', getTopLevelAgentIds());
 }
 
-let cachedValidatedBook: SkillsBook | null = null;
-let cachedRawBook: SkillsBook | null = null;
-
-/** 启动入口：parseSkillsFile(SKILLS_FILE_PATH)，结果进程级缓存 */
+/** 启动入口：parseSkillsFile(SKILLS_FILE_PATH)，结果按文件 mtime 缓存（yaml-file-cache） */
 export function loadSkillsFile(): SkillsBook {
-  if (!cachedValidatedBook) {
-    cachedValidatedBook = parseSkillsFile(SKILLS_FILE_PATH);
-  }
-  return cachedValidatedBook;
+  return cachedFileParse(SKILLS_FILE_PATH, () => parseSkillsFile(SKILLS_FILE_PATH));
 }
 
 /**
@@ -580,26 +575,25 @@ export function loadSkillsFile(): SkillsBook {
  * 重新读取磁盘文件，保证新条目立即可见（幂等判定与完成度状态机以磁盘为事实）。
  */
 export function invalidateSkillsFileCache(): void {
-  cachedValidatedBook = null;
-  cachedRawBook = null;
+  clearYamlFileCache();
 }
 
 /**
  * 轻量加载（解析 + F1/F2/F3-enum/F7/F8/F9，不跑 fs 存在性与交叉校验）：
  * 供 agent-manifest.service 惰性派生使用（P1）。启动时 loadSkillsFile 已 fail-fast
- * 保证文件合法，运行时只需确定性数据。结果进程级缓存。
+ * 保证文件合法，运行时只需确定性数据。结果按文件 mtime 缓存（yaml-file-cache），
+ * 文件变化即失效，测试用临时 SKILLS_FILE 可绕过旧缓存。
  */
 export function loadSkillsBookRaw(): SkillsBook {
-  if (!cachedRawBook) {
+  return cachedFileParse(SKILLS_FILE_PATH, () => {
     let rawText: string;
     try {
       rawText = fs.readFileSync(SKILLS_FILE_PATH, 'utf-8');
     } catch (error) {
       throw new Error(`[skills.yaml] 读取失败：${SKILLS_FILE_PATH}（${error instanceof Error ? error.message : String(error)}）`);
     }
-    cachedRawBook = parseSkillsText(rawText, SKILLS_FILE_PATH, getTopLevelAgentIds());
-  }
-  return cachedRawBook;
+    return parseSkillsText(rawText, SKILLS_FILE_PATH, getTopLevelAgentIds());
+  });
 }
 
 /** 活跃集（F8/F9/F12 对账基准） */

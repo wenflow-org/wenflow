@@ -19,10 +19,50 @@ import {
 import { PROMPT_ROLE_META } from '../../services/yaml-vocabulary';
 import { writeNodeConfigChange, summarizeTextDigest } from '../../services/node-config-change-audit';
 import { loadSkillsBookRaw } from '../../services/skill-registry/skills-file';
-import { analyzeCoreFieldsSync } from '../../scripts/check-core-fields-sync';
+import { analyzeCoreFieldsSync, type CoreFieldsSyncSkillReport } from '../../scripts/check-core-fields-sync';
 import { loadCoreFile } from '../../services/prompt-lab/core-file-loader';
 
 const router = Router();
+
+// ============================================================
+// skill 维度投影共享实现（GET /skill/:skillId 单 skill 端点与
+// GET /skill-batch 批量端点共用，保证批量条目与单 skill 响应逐字段一致）
+// ============================================================
+function locksOf(field: { systemLocked?: boolean; structureLocked?: boolean }) {
+  const systemLocked = Boolean(field?.systemLocked);
+  const structureLocked = systemLocked || Boolean(field?.structureLocked);
+  return {
+    systemLocked,
+    structureLocked,
+    level: systemLocked ? 'system-locked' : structureLocked ? 'structure-locked' : 'fully-editable',
+  } as const;
+}
+
+function projectSkillSync(
+  skillId: string,
+  stageName: string,
+  stage: OrchestrationStage,
+  core: ReturnType<typeof loadCoreFile>,
+  sync: CoreFieldsSyncSkillReport | null,
+) {
+  const agentId = `skill:${skillId}`;
+  const routings = stage.routings.filter((routing) => routing.agentId === agentId);
+  const routedFieldIds = new Set(routings.map((routing) => routing.fieldId));
+  const fields = stage.fields.filter((field) => routedFieldIds.has(field.fieldId));
+  return {
+    skillId,
+    stage: stageName,
+    agentId,
+    routings,
+    fields: fields.map((field) => ({ ...field, locks: locksOf(field) })),
+    core: {
+      exists: Boolean(core?.core),
+      fields: core?.core?.fields ?? [],
+      diagnostics: core?.diagnostics ?? [],
+      sync,
+    },
+  };
+}
 
 function parseJson<T = any>(value: string | null | undefined): T | null {
   if (!value) return null;
@@ -189,6 +229,61 @@ router.get('/stages/:stage', async (req: Request, res: Response) => {
 });
 
 // ============================================================
+// GET /api/admin/field-routings/skill-batch?stage=X
+// 阶段级批量 skill 字段路由 + core 状态投影（消灭 FieldRoutingTable 的 N+1，
+// ADMIN_PERFORMANCE_AUDIT P4）：一次加载 skills.yaml + 编排文件（各解析一次，
+// 经 yaml-file-cache 按 mtime 缓存，跨请求亦复用），对该 stage 下全部 skill
+// 循环投影。每条数据结构与 GET /skill/:skillId 单 skill 响应一致
+// （不含 promptRoleMeta——该元信息在顶层下发一次，promptRoleMeta 不随 skill 变化）。
+// 注意：必须注册在 /skill/:skillId 之前（否则 /skill-batch 会被 skillId='batch'
+// 的单 skill 路由吞掉）。
+// ============================================================
+router.get('/skill-batch', async (req: Request, res: Response) => {
+  const stage = String(req.query.stage || '').trim();
+  if (!stage) {
+    return res.status(400).json({ success: false, error: { message: 'stage 参数缺失' } });
+  }
+
+  const filePath = resolveOrchestrationFile(stage);
+  if (!filePath) {
+    return res.status(404).json({ success: false, error: { message: `编排文件不存在：${stage}` } });
+  }
+
+  let stageParsed: OrchestrationStage;
+  try {
+    stageParsed = parseOrchestrationFile(filePath);
+  } catch (error) {
+    return res.status(422).json({
+      success: false,
+      error: { message: `编排文件解析失败（文件本身损坏，需先修复）：${error instanceof Error ? error.message : String(error)}` },
+    });
+  }
+
+  const book = loadSkillsBookRaw();
+  const entries = book.skills.filter((entry) => entry.stage === stage);
+
+  // 全 stage 一次分析：core 加载按 skillId 复用（每 skill 只读盘一次）
+  const coreBySkill = new Map<string, ReturnType<typeof loadCoreFile>>();
+  const loadCore = (skillId: string): ReturnType<typeof loadCoreFile> => {
+    if (!coreBySkill.has(skillId)) coreBySkill.set(skillId, loadCoreFile(skillId));
+    return coreBySkill.get(skillId) ?? null;
+  };
+  const reports = analyzeCoreFieldsSync([stageParsed], entries, loadCore);
+  const reportBySkill = new Map(reports.map((report) => [report.skillId, report]));
+
+  res.json({
+    success: true,
+    data: {
+      stage,
+      promptRoleMeta: PROMPT_ROLE_META,
+      skills: entries.map((entry) =>
+        projectSkillSync(entry.skillId, stage, stageParsed, loadCore(entry.skillId), reportBySkill.get(entry.skillId) ?? null),
+      ),
+    },
+  });
+});
+
+// ============================================================
 // GET /api/admin/field-routings/skill/:skillId
 // skill 维度字段路由读取（M1 统一编辑，供「字段路由 tab」消费）：
 //   - 该 skill 的产出路由（编排文件 agentId=skill:<id> 的 routings）
@@ -226,41 +321,16 @@ router.get('/skill/:skillId', async (req: Request, res: Response) => {
     });
   }
 
-  const agentId = `skill:${skillId}`;
-  const routings = stage.routings.filter((routing) => routing.agentId === agentId);
-  const routedFieldIds = new Set(routings.map((routing) => routing.fieldId));
-  const fields = stage.fields.filter((field) => routedFieldIds.has(field.fieldId));
-
   // core 状态投影（analyzeCoreFieldsSync 单 skill；mainline 才产报告）
   const core = loadCoreFile(skillId);
   const syncReports = analyzeCoreFieldsSync([stage], [entry], () => core);
   const sync = syncReports.find((report) => report.skillId === skillId) ?? null;
 
-  const locksOf = (field: { systemLocked?: boolean; structureLocked?: boolean }) => {
-    const systemLocked = Boolean(field?.systemLocked);
-    const structureLocked = systemLocked || Boolean(field?.structureLocked);
-    return {
-      systemLocked,
-      structureLocked,
-      level: systemLocked ? 'system-locked' : structureLocked ? 'structure-locked' : 'fully-editable',
-    } as const;
-  };
-
   res.json({
     success: true,
     data: {
-      skillId,
-      stage: stageName,
-      agentId,
-      routings,
-      fields: fields.map((field) => ({ ...field, locks: locksOf(field) })),
+      ...projectSkillSync(skillId, stageName, stage, core, sync),
       promptRoleMeta: PROMPT_ROLE_META,
-      core: {
-        exists: Boolean(core?.core),
-        fields: core?.core?.fields ?? [],
-        diagnostics: core?.diagnostics ?? [],
-        sync,
-      },
     },
   });
 });
@@ -404,10 +474,10 @@ router.put('/orchestration/:stage', async (req: Request, res: Response) => {
     await ensureStageFieldRoutings(systemPrisma, validated);
   } catch (error) {
     synced = false;
-    syncHint = `DB 同步失败：${error instanceof Error ? error.message : String(error)}（新建行未入库，可在「漂移与审计」复查）`;
+    syncHint = `DB 同步失败：${error instanceof Error ? error.message : String(error)}（新建行未入库，请复查漂移明细）`;
   }
   if (synced) {
-    syncHint = '新建字段/路由已生效；已有行属性修改需「强制同步 DB」或重启后由 bootstrap 覆盖生效';
+    syncHint = '新建字段/路由已生效；已有行属性修改需执行同步后生效（或重启后由启动对账覆盖）';
   }
 
   clearRoutingCache();

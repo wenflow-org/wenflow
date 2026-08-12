@@ -12,6 +12,19 @@ import {
 
 const router = Router();
 
+/**
+ * prompt-call-logs 大文本列裁剪上限（ADMIN_PERFORMANCE_AUDIT P7）：
+ * userPayload/rawModelOutput/extractedJson/normalizedOutput 可能数 MB，
+ * 200 行列表响应可达数 MB。前端展示侧本就按 6000 字符截断（live.ts capText），
+ * 服务端先裁一次，响应体从数 MB 降到有界，展示语义不变。
+ */
+const PROMPT_CALL_LOG_TEXT_CAP = 6000;
+
+function capPayloadText(value: string | null | undefined): string | null | undefined {
+  if (value == null || value === '') return value;
+  return value.length > PROMPT_CALL_LOG_TEXT_CAP ? value.slice(0, PROMPT_CALL_LOG_TEXT_CAP) : value;
+}
+
 function parseJson(value: string | null | undefined) {
   if (!value) return null;
   try {
@@ -146,37 +159,45 @@ router.get('/prompt-call-logs', async (req: Request, res: Response) => {
 
   res.json({
     success: true,
-    data: rows.map((row) => ({
-      id: row.id,
-      agentId: row.agentId,
-      systemPromptVersion: row.systemPromptVersion,
-      systemPromptHash: row.systemPromptHash,
-      userPayload: row.userPayload,
-      rawModelOutput: row.rawModelOutput,
-      extractedJson: row.extractedJson,
-      normalizedOutput: parseJson(row.normalizedOutput),
-      success: row.success,
-      errorCode: row.errorCode,
-      errorMessage: row.errorMessage,
-      promptDrift: row.promptDrift,
-      durationMs: row.durationMs,
-      tokenUsage: parseJson(row.tokenUsage),
-      pathId: row.pathId,
-      userId: row.userId,
-      conversationId: row.conversationId,
-      pipelineRunId: row.pipelineRunId,
-      pipelineStepIndex: row.pipelineStepIndex,
-      traceId: (row as any).traceId,
-      parentExecutionId: (row as any).parentExecutionId,
-      promptAttemptCount: row.promptAttemptCount,
-      llmRequestCount: row.llmRequestCount,
-      finalLlmRequestId: row.finalLlmRequestId,
-      failureStage: row.failureStage,
-      attempts: parseJson(row.attemptTrace) || [],
-      providerId: row.providerId,
-      model: row.model,
-      createdAt: row.createdAt,
-    })),
+    data: rows.map((row) => {
+      // 大文本列服务端截断（超长时仅返回前 N 字符；normalizedOutput 截断后
+      // parseJson 失败 → 回退返回截断文本预览，保证可展示）
+      const userPayload = capPayloadText(row.userPayload);
+      const rawModelOutput = capPayloadText(row.rawModelOutput);
+      const extractedJson = capPayloadText(row.extractedJson);
+      const normalizedRaw = capPayloadText(row.normalizedOutput);
+      return {
+        id: row.id,
+        agentId: row.agentId,
+        systemPromptVersion: row.systemPromptVersion,
+        systemPromptHash: row.systemPromptHash,
+        userPayload,
+        rawModelOutput,
+        extractedJson,
+        normalizedOutput: parseJson(normalizedRaw) ?? normalizedRaw,
+        success: row.success,
+        errorCode: row.errorCode,
+        errorMessage: row.errorMessage,
+        promptDrift: row.promptDrift,
+        durationMs: row.durationMs,
+        tokenUsage: parseJson(row.tokenUsage),
+        pathId: row.pathId,
+        userId: row.userId,
+        conversationId: row.conversationId,
+        pipelineRunId: row.pipelineRunId,
+        pipelineStepIndex: row.pipelineStepIndex,
+        traceId: (row as any).traceId,
+        parentExecutionId: (row as any).parentExecutionId,
+        promptAttemptCount: row.promptAttemptCount,
+        llmRequestCount: row.llmRequestCount,
+        finalLlmRequestId: row.finalLlmRequestId,
+        failureStage: row.failureStage,
+        attempts: parseJson(row.attemptTrace) || [],
+        providerId: row.providerId,
+        model: row.model,
+        createdAt: row.createdAt,
+      };
+    }),
   });
 });
 

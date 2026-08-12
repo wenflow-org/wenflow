@@ -135,7 +135,7 @@ describe('编排文件 PUT 保存（P2 审计补强）', () => {
     const res = createResponse();
     await handler({ params: { stage: 'goal' }, body: { content: MINIMAL_GOAL_YAML }, user: {} }, res);
     expect(mockEnsureStageFieldRoutings).toHaveBeenCalled();
-    expect(res.json.mock.calls[0][0].data.syncHint).toContain('已有行属性修改需「强制同步 DB」');
+    expect(res.json.mock.calls[0][0].data.syncHint).toContain('已有行属性修改需执行同步后生效');
   });
 });
 
