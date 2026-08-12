@@ -13,10 +13,14 @@ import {
   PROMPT_ROLES,
   RENDER_VALUES,
   validateOrchestrationContent,
+  parseOrchestrationFile,
   type OrchestrationStage,
 } from '../../services/field-routing/orchestration-file';
 import { PROMPT_ROLE_META } from '../../services/yaml-vocabulary';
 import { writeNodeConfigChange, summarizeTextDigest } from '../../services/node-config-change-audit';
+import { loadSkillsBookRaw } from '../../services/skill-registry/skills-file';
+import { analyzeCoreFieldsSync } from '../../scripts/check-core-fields-sync';
+import { loadCoreFile } from '../../services/prompt-lab/core-file-loader';
 
 const router = Router();
 
@@ -180,6 +184,83 @@ router.get('/stages/:stage', async (req: Request, res: Response) => {
       routings: routingsWithLocks,
       // promptRole 人话单源：后端 yaml-vocabulary 派生下发，前端图例/徽章只消费（不再各写一份）
       promptRoleMeta: PROMPT_ROLE_META,
+    },
+  });
+});
+
+// ============================================================
+// GET /api/admin/field-routings/skill/:skillId
+// skill 维度字段路由读取（M1 统一编辑，供「字段路由 tab」消费）：
+//   - 该 skill 的产出路由（编排文件 agentId=skill:<id> 的 routings）
+//   - 对应 fields 定义（fieldId 从 routings 反查）
+//   - core.yaml 对应字段状态投影（analyzeCoreFieldsSync 单 skill：缺项/孤儿/类型不一致）
+// 数据源 = 编排文件 + core.yaml（File-as-Truth，与 GET /stages/:stage 的 DB 视图互补）
+// ============================================================
+router.get('/skill/:skillId', async (req: Request, res: Response) => {
+  const skillId = String(req.params.skillId || '').trim();
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(skillId)) {
+    return res.status(400).json({ success: false, error: { message: `非法 skillId：${skillId}` } });
+  }
+
+  const book = loadSkillsBookRaw();
+  const entry = book.skills.find((item) => item.skillId === skillId);
+  if (!entry) {
+    return res.status(404).json({ success: false, error: { message: `skills.yaml 无该 skill 登记：${skillId}` } });
+  }
+  if (!entry.stage) {
+    return res.status(422).json({ success: false, error: { message: `skill ${skillId} 无编排阶段归属（kind=${entry.kind}）` } });
+  }
+  const stageName = entry.stage;
+  const filePath = resolveOrchestrationFile(stageName);
+  if (!filePath) {
+    return res.status(404).json({ success: false, error: { message: `编排文件不存在：${stageName}` } });
+  }
+
+  let stage: OrchestrationStage;
+  try {
+    stage = parseOrchestrationFile(filePath);
+  } catch (error) {
+    return res.status(422).json({
+      success: false,
+      error: { message: `编排文件解析失败（文件本身损坏，需先修复）：${error instanceof Error ? error.message : String(error)}` },
+    });
+  }
+
+  const agentId = `skill:${skillId}`;
+  const routings = stage.routings.filter((routing) => routing.agentId === agentId);
+  const routedFieldIds = new Set(routings.map((routing) => routing.fieldId));
+  const fields = stage.fields.filter((field) => routedFieldIds.has(field.fieldId));
+
+  // core 状态投影（analyzeCoreFieldsSync 单 skill；mainline 才产报告）
+  const core = loadCoreFile(skillId);
+  const syncReports = analyzeCoreFieldsSync([stage], [entry], () => core);
+  const sync = syncReports.find((report) => report.skillId === skillId) ?? null;
+
+  const locksOf = (field: { systemLocked?: boolean; structureLocked?: boolean }) => {
+    const systemLocked = Boolean(field?.systemLocked);
+    const structureLocked = systemLocked || Boolean(field?.structureLocked);
+    return {
+      systemLocked,
+      structureLocked,
+      level: systemLocked ? 'system-locked' : structureLocked ? 'structure-locked' : 'fully-editable',
+    } as const;
+  };
+
+  res.json({
+    success: true,
+    data: {
+      skillId,
+      stage: stageName,
+      agentId,
+      routings,
+      fields: fields.map((field) => ({ ...field, locks: locksOf(field) })),
+      promptRoleMeta: PROMPT_ROLE_META,
+      core: {
+        exists: Boolean(core?.core),
+        fields: core?.core?.fields ?? [],
+        diagnostics: core?.diagnostics ?? [],
+        sync,
+      },
     },
   });
 });

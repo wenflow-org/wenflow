@@ -235,6 +235,220 @@ export function appendContractEntry(orchestrationText: string, skillId: string):
 }
 
 /* ------------------------------------------------------------------ */
+/* 字段级追加（M1 统一编辑：加字段向导双文件生成）                        */
+/* appendFieldToCore / appendFieldToOrchestration 为纯文本级插入，        */
+/* 保留原文件注释与排版（与 appendContractEntry 同源；追加后由调用方       */
+/* parseCoreFile / validateOrchestrationContent 硬性校验）。              */
+/* ------------------------------------------------------------------ */
+
+/** 定位 YAML 顶层块（`<header>:` 起始；endIdx = 块后第一个列 0 非注释行，EOF 用 lines.length） */
+function findTopLevelBlock(lines: string[], header: string): { startIdx: number; endIdx: number } | null {
+  const startIdx = lines.findIndex((line) => new RegExp(`^${header}:\\s*(#.*)?$`).test(line));
+  if (startIdx === -1) return null;
+  let endIdx = lines.length;
+  for (let i = startIdx + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (line.length === 0) continue;
+    if (line.startsWith('#')) continue;
+    if (!line.startsWith(' ')) {
+      endIdx = i;
+      break;
+    }
+  }
+  return { startIdx, endIdx };
+}
+
+/** 标量 → 确定性 YAML 文本（多行字符串产出块标量；特殊字符自动加引号） */
+function scalarDumpLines(value: string): string[] {
+  return yaml.dump(value, { lineWidth: -1, noRefs: true, noCompatMode: true }).trimEnd().split('\n');
+}
+
+/** core.yaml fields 追加条目（key 序对齐 serializeCoreFile：name/type/desc/turn） */
+function buildCoreFieldEntryLines(spec: CoreFieldAppendSpec): string[] {
+  const lines: string[] = [`  - name: ${spec.name}`, `    type: ${spec.type}`];
+  const descLines = scalarDumpLines(spec.desc);
+  lines.push(`    desc: ${descLines[0]}`);
+  for (const line of descLines.slice(1)) lines.push(`      ${line}`);
+  if (spec.turn) lines.push('    turn: true');
+  return lines;
+}
+
+/** 编排文件 fields 追加条目（key 序对齐存量惯例：fieldId/promptRole/valueType/path/persistKey/description/锁） */
+function buildOrchestrationFieldEntryLines(field: OrchestrationFieldAppendSpec): string[] {
+  const lines: string[] = [
+    `  - fieldId: ${field.fieldId}`,
+    `    promptRole: ${field.promptRole}`,
+    `    valueType: ${field.valueType}`,
+  ];
+  if (field.pathInRawOutput) lines.push(`    pathInRawOutput: ${scalarDumpLines(field.pathInRawOutput)[0]}`);
+  if (field.persistKey) lines.push(`    persistKey: ${scalarDumpLines(field.persistKey)[0]}`);
+  const descLines = scalarDumpLines(field.description);
+  lines.push(`    description: ${descLines[0]}`);
+  for (const line of descLines.slice(1)) lines.push(`      ${line}`);
+  if (field.systemLocked) lines.push('    systemLocked: true');
+  if (field.structureLocked) lines.push('    structureLocked: true');
+  return lines;
+}
+
+/** 编排文件 routings 追加条目（handoff 用流式数组对齐存量惯例） */
+function buildOrchestrationRoutingEntryLines(routing: OrchestrationRoutingAppendSpec): string[] {
+  const lines: string[] = [
+    `  - agentId: ${routing.agentId}`,
+    `    fieldId: ${routing.fieldId}`,
+    `    render: ${routing.render}`,
+    `    handoff: [${routing.handoff.join(', ')}]`,
+    `    internal: ${routing.internal ? 'true' : 'false'}`,
+    `    accumulate: ${routing.accumulate ? 'true' : 'false'}`,
+  ];
+  if (routing.visibilityPreset) lines.push(`    visibilityPreset: ${routing.visibilityPreset}`);
+  return lines;
+}
+
+export interface CoreFieldAppendSpec {
+  /** core 字段名（顶层直配 = 字段名；嵌套形态 = 顶层 object 名） */
+  name: string;
+  /** core 类型（受控词表，可带 ? 后缀） */
+  type: string;
+  desc: string;
+  /** 当轮消费即弃（仅顶层直配生效） */
+  turn?: boolean;
+  /** 嵌套子字段说明（name 含点分时追加到顶层 object 的 desc；顶层直配忽略） */
+  children?: Array<{ path: string; type: string; desc: string }>;
+}
+
+export interface OrchestrationFieldAppendSpec {
+  fieldId: string;
+  promptRole: string;
+  valueType: string;
+  pathInRawOutput?: string;
+  persistKey?: string;
+  description: string;
+  systemLocked?: boolean;
+  structureLocked?: boolean;
+}
+
+export interface OrchestrationRoutingAppendSpec {
+  agentId: string;
+  fieldId: string;
+  render: string;
+  handoff: string[];
+  internal: boolean;
+  accumulate: boolean;
+  visibilityPreset?: string;
+}
+
+/** 嵌套字段追加到顶层 object 的 desc 说明（对齐 goal-conversation.yaml 子字段列表惯例） */
+export function buildNestedChildNotes(children: Array<{ path: string; type: string; desc: string }>): string {
+  return children.map((child) => `· ${child.path}（${child.type}）${child.desc}`).join('\n');
+}
+
+/**
+ * core.yaml 文本级字段追加（保留原文件注释/排版）：
+ * - 顶层直配（name 无点分）：fields 段末尾追加 `- name: …/type/desc(/turn)`
+ * - 嵌套形态（name 含点分）：顶层 object 存在则仅补 desc 子字段说明（保留原块标量；
+ *   无则追加 object 顶层 + desc 列子字段）
+ */
+export function appendFieldToCore(coreText: string, spec: CoreFieldAppendSpec): string {
+  const lines = coreText.replace(/\r\n/g, '\n').split('\n');
+  const block = findTopLevelBlock(lines, 'fields');
+  if (!block) throw new Error('[field-append] core.yaml 缺少 fields 段');
+
+  const segments = spec.name.split('.');
+  if (segments.length === 1) {
+    // 顶层直配：fields 块末尾追加（endIdx 前补空白行，保持块间分隔）
+    const entryLines = buildCoreFieldEntryLines(spec);
+    const insertAt = block.endIdx;
+    const needBlank = insertAt > 0 && lines[insertAt - 1].trim() !== '';
+    lines.splice(insertAt, 0, ...(needBlank ? [''] : []), ...entryLines);
+    return lines.join('\n') + '\n';
+  }
+
+  // 嵌套形态
+  const root = segments[0];
+  const children = spec.children?.length
+    ? spec.children
+    : [{ path: segments.slice(1).join('.'), type: spec.type, desc: spec.desc }];
+  const entryStart = lines.findIndex((line) => new RegExp(`^  - name:\\s*${root}\\s*$`).test(line));
+  if (entryStart === -1) {
+    // 顶层 object 不存在：追加 object 字段，desc 列子字段
+    const note = buildNestedChildNotes(children);
+    const objectSpec: CoreFieldAppendSpec = {
+      name: root,
+      type: 'object',
+      desc: `包含子字段：\n${note}`,
+    };
+    const entryLines = buildCoreFieldEntryLines(objectSpec);
+    const insertAt = block.endIdx;
+    const needBlank = insertAt > 0 && lines[insertAt - 1].trim() !== '';
+    lines.splice(insertAt, 0, ...(needBlank ? [''] : []), ...entryLines);
+    return lines.join('\n') + '\n';
+  }
+
+  // 顶层 object 存在：定位该条目内 desc 标量跨度，追加子字段说明
+  let entryEnd = block.endIdx;
+  for (let i = entryStart + 1; i < block.endIdx; i += 1) {
+    if (/^  - /.test(lines[i])) {
+      entryEnd = i;
+      break;
+    }
+  }
+  let descIdx = -1;
+  for (let i = entryStart + 1; i < entryEnd; i += 1) {
+    if (/^ {4}desc:/.test(lines[i])) {
+      descIdx = i;
+      break;
+    }
+  }
+  if (descIdx === -1) throw new Error(`[field-append] core.yaml 顶层字段 "${root}" 缺少 desc 键`);
+  // desc 标量跨度 = desc 行起，至下一同级键（缩进 ≤ 4）或下一条目/块尾
+  let spanEnd = entryEnd;
+  for (let i = descIdx + 1; i < entryEnd; i += 1) {
+    if (/^ {4}[A-Za-z0-9_-]+:/.test(lines[i]) || /^ {2}- /.test(lines[i]) || !lines[i].startsWith(' ')) {
+      spanEnd = i;
+      break;
+    }
+  }
+  const parsed = yaml.load(coreText) as { fields?: Array<Record<string, unknown>> };
+  const existingField = (parsed?.fields || []).find((field) => String(field.name).trim() === root);
+  const existingDesc = existingField && typeof existingField.desc === 'string' ? existingField.desc : '';
+  const note = buildNestedChildNotes(children);
+  const newDesc = existingDesc.trim() ? `${existingDesc.trimEnd()}\n${note}` : note;
+  const newScalar = scalarDumpLines(newDesc);
+  const replacement = [`    desc: ${newScalar[0]}`, ...newScalar.slice(1).map((line) => `      ${line}`)];
+  lines.splice(descIdx, spanEnd - descIdx, ...replacement);
+  return lines.join('\n') + '\n';
+}
+
+/**
+ * 编排文件文本级字段追加：fields 段末尾（routings 段前）追加 1 行字段定义，
+ * routings 段末尾追加 1 行路由（agentId=skill:<id>）。保留原文件注释/排版。
+ */
+export function appendFieldToOrchestration(
+  orchestrationText: string,
+  field: OrchestrationFieldAppendSpec,
+  routing: OrchestrationRoutingAppendSpec,
+): string {
+  const lines = orchestrationText.replace(/\r\n/g, '\n').split('\n');
+  const fieldsBlock = findTopLevelBlock(lines, 'fields');
+  const routingsBlock = findTopLevelBlock(lines, 'routings');
+  if (!fieldsBlock || !routingsBlock) throw new Error('[field-append] 编排文件缺少 fields/routings 段');
+
+  const fieldEntryLines = buildOrchestrationFieldEntryLines(field);
+  const routingEntryLines = buildOrchestrationRoutingEntryLines(routing);
+
+  // fields：插到 routings 段之前（保留块内尾部注释）
+  const fieldInsertAt = routingsBlock.startIdx;
+  const needFieldBlank = fieldInsertAt > 0 && lines[fieldInsertAt - 1].trim() !== '';
+  lines.splice(fieldInsertAt, 0, ...(needFieldBlank ? [''] : []), ...fieldEntryLines);
+
+  // routings：追加到文件末尾
+  if (lines.length > 0 && lines[lines.length - 1].trim() !== '') lines.push('');
+  lines.push(...routingEntryLines);
+
+  return lines.join('\n').trimEnd() + '\n';
+}
+
+/* ------------------------------------------------------------------ */
 /* 注册/接线片段（文本返回，不落盘 —— SKILLS_YAML_SPEC:210-215 决策）      */
 /* ------------------------------------------------------------------ */
 
