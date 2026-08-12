@@ -31,7 +31,7 @@
       <!-- 错误 -->
       <div v-if="loadError" class="errorbar" role="alert">
         {{ loadError }}
-        <span class="errorbar__retry" @click="load(true)">重新加载</span>
+        <button type="button" class="errorbar__retry" @click="load(true)">重新加载</button>
       </div>
 
       <!-- 加载 -->

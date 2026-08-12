@@ -18,7 +18,7 @@
 
       <!-- 失败 -->
       <div v-else-if="loadError" class="errorbar">
-        路径详情加载失败。<span class="errorbar__retry" @click="load()">重试</span>
+        路径详情加载失败。<button type="button" class="errorbar__retry" @click="load()">重试</button>
       </div>
 
       <template v-else-if="path">
@@ -29,10 +29,10 @@
               <strong>{{ lifecycle.retryType === 'stage_design' ? '阶段任务准备失败' : '路径主结构生成失败' }}</strong>
               <p>{{ lifecycle.errorMessage || '目标和已确认信息已保留，重试一般能成功。' }}</p>
             </div>
-            <span class="btn-primary" :class="{ 'btn-primary--off': retrying }" @click="doRetry">
+            <button type="button" class="btn-primary" :class="{ 'btn-primary--off': retrying }" @click="doRetry">
               <span v-if="retrying" class="spinner spinner--sm"></span>
               {{ retrying ? '正在重新生成…' : (lifecycle.retryType === 'stage_design' ? '重新准备阶段任务' : '重新生成主结构') }}
-            </span>
+            </button>
           </template>
           <template v-else>
             <span class="spinner"></span>
@@ -132,12 +132,12 @@
                     <strong>{{ task.title || task.displayLabel }}</strong>
                     <small>{{ taskKindText(task) }} · 约 {{ task.estimatedMinutes || '—' }} 分钟</small>
                   </div>
-                  <span v-if="task.id === currentTask?.id && canLearn" class="task__cta" @click="goLearn(task.id)">
+                  <button type="button" v-if="task.id === currentTask?.id && canLearn" class="task__cta" @click="goLearn(task.id)">
                     {{ task.status === 'in_progress' ? '继续学习' : '开始学习' }}
-                  </span>
-                  <span v-else-if="task.status === 'completed'" class="task__done-label" @click="viewFeedback(task)">查看反馈</span>
+                  </button>
+                  <button type="button" v-else-if="task.status === 'completed'" class="task__done-label" @click="viewFeedback(task)">查看反馈</button>
                   <span v-else-if="taskCls(task) === 'locked'" class="task__lock-label">待解锁</span>
-                  <span v-else-if="task.status === 'in_progress'" class="task__cta" @click="goLearn(task.id)">继续学习</span>
+                  <button type="button" v-else-if="task.status === 'in_progress'" class="task__cta" @click="goLearn(task.id)">继续学习</button>
                   <span v-else class="task__todo-label">待开始</span>
                   </div>
                 </div>
@@ -160,7 +160,7 @@
                 <span class="tag tag--blue">约 {{ currentTask.estimatedMinutes || '—' }} 分钟</span>
                 <span class="tag">{{ taskKindText(currentTask) }}</span>
               </div>
-              <span v-if="canLearn" class="btn-primary btn-primary--block" @click="goLearn(currentTask.id)">开始学习</span>
+              <button type="button" v-if="canLearn" class="btn-primary btn-primary--block" @click="goLearn(currentTask.id)">开始学习</button>
             </section>
 
             <section v-if="nextTasks.length" class="card sidecard">
@@ -433,7 +433,8 @@ async function viewFeedback(task: Record<string, any>) {
   try {
     const detail = await aiTeachingAPI.getLatestTaskEvaluation(task.id);
     if (detail?.sessionId) {
-      router.push(`/learn/${task.id}/evaluation/${detail.sessionId}`);
+      const pathQuery = pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : '';
+      router.push(`/learn/${task.id}/evaluation/${detail.sessionId}${pathQuery}`);
     } else {
       toast.warning('暂无当堂评估记录');
     }

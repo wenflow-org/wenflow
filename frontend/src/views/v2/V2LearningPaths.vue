@@ -8,7 +8,7 @@
         <div v-if="goalBanner" class="goal-banner">
           <span class="goal-banner__dot"></span>
           这版路径正在生成，一般 1-3 分钟。页面会自动刷新状态。
-          <span class="goal-banner__close" @click="goalBanner = false">×</span>
+          <button type="button" class="goal-banner__close" @click="goalBanner = false">×</button>
         </div>
       </transition>
 
@@ -28,7 +28,7 @@
 
       <!-- 失败 -->
       <div v-else-if="loadError" class="errorbar">
-        路径加载失败。<span class="errorbar__retry" @click="load">重试</span>
+        路径加载失败。<button type="button" class="errorbar__retry" @click="load">重试</button>
       </div>
 
       <template v-else>
@@ -58,11 +58,11 @@
               <div class="pcard__head-right">
                 <span v-if="card.kind === 'generating' || card.kind === 'failed'" class="pcard__badge" :class="badgeCls(card)">{{ statusLabel(card) }}</span>
                 <span class="pcard__more-wrap">
-                  <span class="pcard__more" title="更多操作" @click.stop="menuFor = menuFor === card.id ? '' : card.id">⋯</span>
-                  <span v-if="menuFor === card.id" class="pcard__menu" @click.stop>
-                    <span v-if="card.kind === 'failed'" class="pcard__menu-item" @click="doRetry(card)">重新生成</span>
-                    <span class="pcard__menu-item pcard__menu-item--danger" @click="askDelete(card)">删除路径</span>
-                  </span>
+                  <button type="button" class="pcard__more" title="更多操作" @click.stop="menuFor = menuFor === card.id ? '' : card.id">⋯</button>
+                  <div v-if="menuFor === card.id" class="pcard__menu" @click.stop>
+                    <button type="button" v-if="card.kind === 'failed'" class="pcard__menu-item" @click="doRetry(card)">重新生成</button>
+                    <button type="button" class="pcard__menu-item pcard__menu-item--danger" @click="askDelete(card)">删除路径</button>
+                  </div>
                 </span>
               </div>
             </div>
@@ -85,8 +85,8 @@
               </div>
               <div v-if="deleting === card.id" class="pcard__confirm" @click.stop>
                 确认删除这条路径？
-                <span class="pcard__confirm-yes" @click="doDelete(card)">删除</span>
-                <span class="pcard__confirm-no" @click="deleting = ''">取消</span>
+                <button type="button" class="pcard__confirm-yes" @click="doDelete(card)">删除</button>
+                <button type="button" class="pcard__confirm-no" @click="deleting = ''">取消</button>
               </div>
             </template>
 
@@ -98,7 +98,7 @@
               </div>
               <div class="pcard__skeleton"><i style="width: 76%"></i><i style="width: 52%"></i><i style="width: 64%"></i></div>
               <div class="pcard__actions">
-                <span class="btn-ghost" @click.stop="refreshStatus(card)">刷新状态</span>
+                <button type="button" class="btn-ghost" @click.stop="refreshStatus(card)">刷新状态</button>
               </div>
             </template>
 
@@ -107,14 +107,14 @@
               <div class="pcard__fail-reason">{{ card.errorText || '生成失败，目标和已确认信息已保留。' }}</div>
               <div v-if="deleting === card.id" class="pcard__confirm" @click.stop>
                 确认删除这条路径？
-                <span class="pcard__confirm-yes" @click="doDelete(card)">删除</span>
-                <span class="pcard__confirm-no" @click="deleting = ''">取消</span>
+                <button type="button" class="pcard__confirm-yes" @click="doDelete(card)">删除</button>
+                <button type="button" class="pcard__confirm-no" @click="deleting = ''">取消</button>
               </div>
               <div class="pcard__actions">
-                <span class="btn-primary" :class="{ 'btn-primary--off': retrying === card.id }" @click.stop="doRetry(card)">
+                <button type="button" class="btn-primary" :class="{ 'btn-primary--off': retrying === card.id }" @click.stop="doRetry(card)">
                   <span v-if="retrying === card.id" class="spinner spinner--sm"></span>
                   {{ retrying === card.id ? '正在重新生成…' : card.retryLabel }}
-                </span>
+                </button>
               </div>
             </template>
           </article>
@@ -125,7 +125,7 @@
           <div class="empty__illus"><span></span><span></span><span></span></div>
           <p>{{ filter === 'all' ? '还没有学习路径，从规划一个目标开始' : '这个分类下还没有路径' }}</p>
           <router-link v-if="filter === 'all'" to="/goal-conversation" class="btn-primary">规划第一个目标</router-link>
-          <span v-else class="btn-ghost" @click="filter = 'all'">查看全部</span>
+          <button type="button" v-else class="btn-ghost" @click="filter = 'all'">查看全部</button>
         </div>
       </template>
     </main>

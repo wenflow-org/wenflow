@@ -17,7 +17,7 @@
 
       <!-- 失败 -->
       <div v-else-if="loadError" class="errorbar">
-        成就加载失败。<span class="errorbar__retry" @click="load">重试</span>
+        成就加载失败。<button type="button" class="errorbar__retry" @click="load">重试</button>
       </div>
 
       <template v-else>
@@ -78,7 +78,7 @@
         </div>
         <div v-else class="empty">
           <p>这个分类下还没有成就</p>
-          <span class="btn-ghost" @click="statusFilter = 'all'; typeFilter = ''">查看全部</span>
+          <button type="button" class="btn-ghost" @click="statusFilter = 'all'; typeFilter = ''">查看全部</button>
         </div>
       </template>
     </main>

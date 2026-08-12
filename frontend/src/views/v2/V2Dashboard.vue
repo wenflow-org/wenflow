@@ -24,7 +24,7 @@
         </span>
         <p>{{ tipText }}</p>
         <span class="tip__ai" title="内容由 AI 生成，仅供参考">AI</span>
-        <span class="tip__close" title="知道了" @click="tipDismissed = true">×</span>
+        <button type="button" class="tip__close" title="知道了" @click="tipDismissed = true">×</button>
       </div>
 
       <!-- 加载 -->
@@ -34,7 +34,7 @@
 
       <!-- 整页加载失败 -->
       <div v-else-if="loadError" class="errorbar">
-        首页数据加载失败。<span class="errorbar__retry" @click="loadAll">重试</span>
+        首页数据加载失败。<button type="button" class="errorbar__retry" @click="loadAll">重试</button>
       </div>
 
       <template v-else>
@@ -47,7 +47,7 @@
               <h1 class="action__title">给自己放个小假</h1>
               <p class="action__desc">想回来的时候，任务还在这里等你。</p>
               <div class="action__footer">
-                <span class="btn-primary" @click="resting = false">恢复学习</span>
+                <button type="button" class="btn-primary" @click="resting = false">恢复学习</button>
               </div>
             </template>
             <template v-else>
@@ -76,13 +76,13 @@
                   <router-link v-for="a in skillActions.slice(1)" :key="a.label" :to="a.to" class="btn-ghost">{{ a.label }}</router-link>
                 </template>
                 <template v-else>
-                  <span v-if="todayTask" class="btn-primary" @click="goLearn">
+                  <button type="button" v-if="todayTask" class="btn-primary" @click="goLearn">
                     <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
                     开始学习
-                  </span>
+                  </button>
                   <router-link to="/learning-paths" class="link-muted">查看全部路径</router-link>
                 </template>
-                <span class="link-muted" @click="resting = true">今天休息</span>
+                <button type="button" class="link-muted" @click="resting = true">今天休息</button>
               </div>
               <div class="action__today">
                 <div class="action__today-bar"><i :style="{ width: todayBarPct + '%' }"></i></div>
@@ -103,10 +103,10 @@
               <span class="tag">信息已保留</span>
             </div>
             <div class="action__footer">
-              <span class="btn-primary" :class="{ 'btn-primary--off': retrying }" @click="doRetry">
+              <button type="button" class="btn-primary" :class="{ 'btn-primary--off': retrying }" @click="doRetry">
                 <span v-if="retrying" class="spinner spinner--sm"></span>
                 {{ retrying ? '正在重新生成…' : '重新生成路径' }}
-              </span>
+              </button>
               <router-link :to="`/learning-path/${primaryPath?.id}`" class="btn-ghost">查看详情</router-link>
               <router-link to="/goal-conversation" class="link-muted">先修改目标</router-link>
             </div>
@@ -233,7 +233,7 @@
           <section class="card week">
             <div class="card-head">
               <strong>本周节奏</strong>
-              <span v-if="hasAnyMinutes" class="link-muted" @click="monthOpen = !monthOpen">{{ monthOpen ? '收起整月' : '展开整月 ›' }}</span>
+              <button type="button" v-if="hasAnyMinutes" class="link-muted" @click="monthOpen = !monthOpen">{{ monthOpen ? '收起整月' : '展开整月 ›' }}</button>
             </div>
             <div v-if="hasAnyMinutes" class="week__grid">
               <button
@@ -281,11 +281,11 @@
           <div class="card-head">
             <strong>整月节奏</strong>
             <div class="month__nav">
-              <span class="month__arrow" @click="shiftMonth(-1)">‹</span>
+              <button type="button" class="month__arrow" @click="shiftMonth(-1)">‹</button>
               <span>{{ monthLabel }}</span>
-              <span class="month__arrow" :class="{ 'month__arrow--off': isCurrentMonth }" @click="shiftMonth(1)">›</span>
+              <button type="button" class="month__arrow" :class="{ 'month__arrow--off': isCurrentMonth }" @click="shiftMonth(1)">›</button>
             </div>
-            <span class="link-muted" @click="monthOpen = false">收起</span>
+            <button type="button" class="link-muted" @click="monthOpen = false">收起</button>
           </div>
           <div class="month__meta">
             <span>本月 <b>{{ monthTotals.minutes }}</b> 分钟</span>
@@ -379,7 +379,7 @@
             </div>
             <div class="sheet__head-right">
               <span class="sheet__zone" :class="`sheet__zone--${daySheet.zoneCls}`">{{ daySheet.zone }}</span>
-              <span class="sheet__close" title="关闭" @click="daySheetOpen = false">×</span>
+              <button type="button" class="sheet__close" title="关闭" @click="daySheetOpen = false">×</button>
             </div>
           </header>
 
@@ -497,25 +497,23 @@ const loadError = ref(false);
 async function loadAll() {
   loading.value = true;
   loadError.value = false;
-  const results = await Promise.allSettled([
+  const fastGroup = await Promise.allSettled([
     learningAPI.getStats(),
     learningAPI.getPaths(),
-    learningAPI.getAdaptiveGuidance(),
     fetchSessions(monthCursor.value),
     request.get('/achievements/all'),
     request.get('/ai-teaching/review/due'),
     request.get('/learning/schedule/today')
   ]);
   // 所有数据源全部失败 → 整页加载失败态（避免误渲染成新手空态）
-  if (results.every((r) => r.status === 'rejected')) {
+  if (fastGroup.every((r) => r.status === 'rejected')) {
     loading.value = false;
     loadError.value = true;
     return;
   }
-  const [statsR, pathsR, guidanceR, sessionsR, achR, dueR, scheduleR] = results;
+  const [statsR, pathsR, sessionsR, achR, dueR, scheduleR] = fastGroup;
   if (statsR.status === 'fulfilled') stats.value = statsR.value as Record<string, any>;
   if (pathsR.status === 'fulfilled') paths.value = pathsR.value as unknown as Array<Record<string, any>>;
-  if (guidanceR.status === 'fulfilled') guidance.value = guidanceR.value as Record<string, any> | null;
   if (sessionsR.status === 'fulfilled') sessions.value = sessionsR.value;
   if (achR.status === 'fulfilled') achievements.value = unwrapArray(achR.value);
   if (dueR.status === 'fulfilled') {
@@ -527,6 +525,10 @@ async function loadAll() {
     todaySchedule.value = body;
   }
   loading.value = false;
+  // AI 引导文案独立异步：慢（模型生成可达数秒）也不阻塞首屏，失败静默降级
+  learningAPI.getAdaptiveGuidance()
+    .then((body) => { guidance.value = body as Record<string, any> | null; })
+    .catch(() => { /* 引导缺失不影响首屏 */ });
 }
 
 async function fetchSessions(cursor: { year: number; month: number }) {
