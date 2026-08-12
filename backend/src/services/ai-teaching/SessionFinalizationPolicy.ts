@@ -61,9 +61,16 @@ export function mergeFinalTeachingState(
   finalMetrics: Record<string, any> | null,
   sessionArtifacts: Record<string, any>
 ): Record<string, any> {
-  return {
+  const next: Record<string, any> = {
     ...(currentState || {}),
     ...(finalMetrics || {}),
     sessionArtifacts
   };
+  // 结束态清理：不再需要待处理检查点（避免详情接口残留 + 阻断后续新会话状态回读）
+  delete next.pendingCheckpoint;
+  delete next.lastCheckpointTurn;
+  if (next.sessionArtifacts && typeof next.sessionArtifacts === 'object') {
+    delete next.sessionArtifacts.pendingCheckpoint;
+  }
+  return next;
 }

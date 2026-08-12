@@ -911,6 +911,27 @@ export class TeachingSessionRepository {
     });
   }
 
+  /**
+   * 复习课收束标记：complete_review 走 end_only 收束（wrapup 已落库）后，
+   * 幂等补记 reviewCompletion=completed，供前端 finalizationStepCompleted 判定收束完成。
+   */
+  async markReviewCompleted(sessionId: string): Promise<void> {
+    const session = await this.getById(sessionId);
+    if (!session) return;
+    const teachingState = updateSessionFinalizationState(
+      session.teachingState,
+      'complete_review',
+      `review-${sessionId}`,
+      'reviewCompletion',
+      'completed',
+      { completedAt: new Date().toISOString() }
+    );
+    await prisma.teaching_sessions.updateMany({
+      where: { id: sessionId },
+      data: { teachingState: JSON.stringify(teachingState) }
+    });
+  }
+
   async completeFinalizationStep(
     sessionId: string,
     idempotencyKey: string,

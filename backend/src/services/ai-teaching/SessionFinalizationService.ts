@@ -84,6 +84,12 @@ export class SessionFinalizationService {
         };
       }
       const completedSession = await teachingSessionRepository.assertOwnership(input.sessionId, input.userId);
+      // 复习课完成标记：前端以 reviewCompletion==='completed' 判定收束完成（否则永远走兜底文案）
+      if (completedSession.status === 'completed' && completedSession.wrapup) {
+        await teachingSessionRepository.markReviewCompleted(input.sessionId).catch((error) => {
+          logger.warn('[finalize] 复习课完成标记写入失败（不影响收束）:', error);
+        });
+      }
       await this.applyReviewExtraction(completedSession);
       return this.completedResponse(completedSession, result.operationId, {
         status: 'skipped',

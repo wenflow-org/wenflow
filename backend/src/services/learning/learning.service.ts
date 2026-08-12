@@ -2142,21 +2142,20 @@ class LearningService {
     startTime: Date;
     endTime: Date | null;
   }): number {
-    const derivedMinutes = session.endTime
-      ? Math.max(1, Math.round((session.endTime.getTime() - session.startTime.getTime()) / 60000))
-      : null;
-
-    if (derivedMinutes !== null) {
-      return derivedMinutes;
-    }
-
+    // 优先使用 duration 列：收束时已扣除暂停/按消息时间戳封顶（computeEffectiveDurationMinutes），
+    // endTime−startTime 裸算会把暂停/idle 时间计入，与授课页/总结页/EWMA 口径不一致
     const rawDuration = session.duration ?? 0;
-    if (rawDuration <= 0) {
-      return 0;
+    if (rawDuration > 0) {
+      // 历史兼容：部分会话把秒写入 duration，这里兜底转分钟
+      return rawDuration > 24 * 60 ? Math.round(rawDuration / 60) : rawDuration;
     }
 
-    // 历史兼容：部分会话把秒写入 duration，这里兜底转分钟
-    return rawDuration > 24 * 60 ? Math.round(rawDuration / 60) : rawDuration;
+    // 无 duration 的历史会话：用 endTime−startTime 推导，间隔按 30 分钟封顶（与收束口径对齐）
+    if (session.endTime) {
+      return Math.max(1, Math.min(30, Math.round((session.endTime.getTime() - session.startTime.getTime()) / 60000)));
+    }
+
+    return 0;
   }
 
   private async attachActualMinutesToPath(path: any): Promise<any> {
@@ -4633,7 +4632,7 @@ const learningPath = await prisma.learning_paths.findUnique({
       try {
         const progressResult = await learnerProgressService.evaluateTaskCompletion(data.userId, {
           taskTitle: subtask.title,
-          timeSpent: data.actualMinutes || 30,
+          timeSpent: data.actualMinutes && data.actualMinutes > 0 ? data.actualMinutes : 1,
           subjectiveDifficulty: data.subjectiveDifficulty,
           difficulty: subtask.estimatedMinutes ? Math.min(subtask.estimatedMinutes / 30, 10) : 5
         });

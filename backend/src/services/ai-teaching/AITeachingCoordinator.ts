@@ -466,14 +466,38 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: str
 }
 
 function computeEffectiveDurationMinutes(session: TeachingSessionRecord) {
-  const rawDuration = Math.max(1, Math.round((Date.now() - session.startTime.getTime()) / 60000));
   const sessionArtifacts = parseSessionArtifacts(session.teachingState);
-  const pausedDurationMs = Number(sessionArtifacts.pausedDurationMs || 0);
-  if (!Number.isFinite(pausedDurationMs) || pausedDurationMs <= 0) {
-    return rawDuration;
+  let pausedDurationMs = Number(sessionArtifacts.pausedDurationMs || 0);
+  if (!Number.isFinite(pausedDurationMs) || pausedDurationMs < 0) pausedDurationMs = 0;
+
+  // 暂停中直接收束：当前暂停段（pausedAt → now）一并计入暂停，避免把切走时间算入
+  if (session.status === 'paused' && typeof sessionArtifacts.pausedAt === 'string') {
+    const pausedAtMs = new Date(sessionArtifacts.pausedAt).getTime();
+    if (Number.isFinite(pausedAtMs)) {
+      pausedDurationMs += Math.max(0, Date.now() - pausedAtMs);
+    }
   }
 
-  return Math.max(1, Math.round((Date.now() - session.startTime.getTime() - pausedDurationMs) / 60000));
+  const rawDuration = Math.max(1, Math.round((Date.now() - session.startTime.getTime() - pausedDurationMs) / 60000));
+
+  // idle 封顶：按消息时间戳间隔估算活跃时长（间隔 > 30 分钟视为暂停，与 timeout-fallback 规则一致），
+  // 防止合盖睡眠/进程被杀等无 pagehide 场景把 idle 时间算入学习时长
+  const messages = Array.isArray(session.messages) ? session.messages : [];
+  const times = messages
+    .map((m) => (m.timestamp ? new Date(m.timestamp).getTime() : NaN))
+    .filter((t) => Number.isFinite(t))
+    .sort((a, b) => a - b);
+  if (times.length > 0) {
+    let activeMinutes = 0;
+    for (let i = 1; i < times.length; i++) {
+      activeMinutes += Math.min((times[i] - times[i - 1]) / 60000, 30);
+    }
+    // 首条消息前引导段 + 最后活动后的收尾窗各按最多 30 分钟计
+    const capped = Math.round(activeMinutes + 60);
+    return Math.max(1, Math.min(rawDuration, capped));
+  }
+
+  return rawDuration;
 }
 
 function buildRecoveredOpening(session: TeachingSessionRecord): TeachingOpening {
@@ -482,6 +506,20 @@ function buildRecoveredOpening(session: TeachingSessionRecord): TeachingOpening 
     question: '准备好了的话，我们继续刚才的内容。',
     quickReplies: [{ text: '继续上次进度' }, { text: '先回顾一下' }, { text: '从当前焦点继续' }],
     mode: 'self-assess',
+  };
+}
+
+/**
+ * 确定性开场兜底：generateOpening（LLM）失败/无有效结构时使用，
+ * 保证开课链路在模型不可用时仍可用（此前直接抛错导致开课整体不可用）。
+ * 结构对齐 TeachingOpening 契约（message/question/quickReplies/mode）。
+ */
+function buildDeterministicOpening(context: TeachingScenarioContext): TeachingOpening {
+  return {
+    message: `我们先从 **${context.topic || context.taskTitle}** 开始这节课。目标是把关键知识点讲清楚，并在过程中检查你的掌握情况。`,
+    question: '准备好了的话，我们直接开始。',
+    quickReplies: [{ text: '准备好了，开始' }, { text: '先讲讲目标' }, { text: '换种方式讲解' }],
+    mode: 'example-first',
   };
 }
 
@@ -1301,31 +1339,26 @@ export class AITeachingOrchestrator {
       }), 15000, 'OPENING_GENERATION_TIMEOUT');
       parsed = result.success && result.output ? result.output : null;
     } catch (error) {
-      // 纯重试+明确失败：开场生成失败不再降级为确定性 fallback opening，
-      // 直接抛错（带错误码），由 startSession catch → failInitialization 清理会话，前端收到错误。
-      logger.warn('[AITeaching] 开场交互块生成失败', {
+      // 开场生成失败：降级为确定性开场兜底，保证开课链路在模型不可用时仍可用。
+      logger.warn('[AITeaching] 开场交互块生成失败，降级为确定性开场', {
         error: error instanceof Error ? error.message : String(error),
         userId: context.userId,
         taskId: context.taskId,
         topic: context.topic,
       });
-      throw Object.assign(new Error(`开场交互块生成失败：${error instanceof Error ? error.message : String(error)}`), {
-        code: 'OPENING_GENERATION_FAILED',
-      });
+      return buildDeterministicOpening(context);
     }
 
     if (parsed) {
       return parsed as TeachingOpening;
     }
 
-    logger.warn('[AITeaching] 开场交互块缺少有效结构', {
+    logger.warn('[AITeaching] 开场交互块缺少有效结构，降级为确定性开场', {
       userId: context.userId,
       taskId: context.taskId,
       topic: context.topic,
     });
-    throw Object.assign(new Error('开场交互块缺少有效结构（OPENING_GENERATION_FAILED）'), {
-      code: 'OPENING_GENERATION_FAILED',
-    });
+    return buildDeterministicOpening(context);
   }
 
   async processStudentMessage(
@@ -1709,8 +1742,8 @@ export class AITeachingOrchestrator {
         && !endIntent.isEndIntent
         && checkpointCandidate
         && !previousTeachingState.pendingCheckpoint
-        && (teachingState.lastCheckpointTurn === undefined
-          || updatedMessages.length - teachingState.lastCheckpointTurn >= 4)
+        && (previousTeachingState.lastCheckpointTurn === undefined
+          || updatedMessages.length - previousTeachingState.lastCheckpointTurn >= 4)
       ) {
         const checkpointTitle = checkpointCandidate.question.length > 20
           ? `${checkpointCandidate.question.slice(0, 20)}…`
@@ -1744,10 +1777,14 @@ export class AITeachingOrchestrator {
           understanding,
         });
 
-        delete teachingState.pendingCheckpoint;
-        const nextSessionArtifacts = { ...parseSessionArtifacts(teachingState) };
-        delete nextSessionArtifacts.pendingCheckpoint;
-        teachingState.sessionArtifacts = nextSessionArtifacts;
+        // 仅答对时消费检查点；答错保留 pendingCheckpoint（同一 cpId 可重答，
+        // 前端答错反馈后再次提交不会落入「理解检查不存在或已处理」）
+        if (passed) {
+          delete teachingState.pendingCheckpoint;
+          const nextSessionArtifacts = { ...parseSessionArtifacts(teachingState) };
+          delete nextSessionArtifacts.pendingCheckpoint;
+          teachingState.sessionArtifacts = nextSessionArtifacts;
+        }
         teachingState.checkpointHistory = checkpointHistory.slice(-20);
         checkpointResolution = { passed, understanding };
       }
@@ -2632,7 +2669,22 @@ export class AITeachingOrchestrator {
 
       const guarded = await prisma.teaching_sessions.updateMany({
         where: { id: sessionId, status: 'timeout', wrapup: null },
-        data: { wrapup: JSON.stringify(wrapup) }
+        data: {
+          wrapup: JSON.stringify(wrapup),
+          ...(() => {
+            // 终态清理：移除待处理检查点，避免详情接口残留
+            const state = session.teachingState && typeof session.teachingState === 'object'
+              ? { ...session.teachingState }
+              : {};
+            delete (state as Record<string, any>).pendingCheckpoint;
+            const artifacts = state.sessionArtifacts && typeof state.sessionArtifacts === 'object'
+              ? { ...state.sessionArtifacts }
+              : {};
+            delete (artifacts as Record<string, any>).pendingCheckpoint;
+            state.sessionArtifacts = artifacts;
+            return { teachingState: JSON.stringify(state) };
+          })()
+        }
       });
       if (guarded.count !== 1) {
         logger.info('[AITeaching] 兜底 wrapup 被跳过（会话已离开 timeout 或已有正式总结）', { sessionId });
