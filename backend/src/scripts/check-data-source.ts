@@ -98,13 +98,11 @@ const CALL_SITE_MANIFEST: Record<string, CallSite[]> = {
     { file: 'backend/src/services/learner/LessonKnowledgeEnrichmentConsumer.ts', line: 27 },
   ],
   'virtual-learner-persona-designer': [
-    { file: 'backend/src/routes/admin/virtual-learners.ts', line: 927 },
-    { file: 'backend/src/routes/admin/virtual-learners.ts', line: 1237 },
-    { file: 'backend/src/routes/admin/virtual-learners.ts', line: 1268 },
+    { file: 'backend/src/routes/admin/virtual-learners.ts', line: 837 },
+    { file: 'backend/src/routes/admin/virtual-learners.ts', line: 868 },
   ],
   'virtual-learner-scenario-designer': [
-    { file: 'backend/src/routes/admin/virtual-learners.ts', line: 1208 },
-    { file: 'backend/src/routes/admin/virtual-learners.ts', line: 1315 },
+    { file: 'backend/src/routes/admin/virtual-learners.ts', line: 915 },
   ],
   'virtual-learner-goal-dialogue-simulator': [
     { file: 'backend/src/coordinators/simulation.coordinator.ts', line: 811 },

@@ -18,7 +18,7 @@ import { executeSkill } from '../../skills';
 import learningService from '../../services/learning/learning.service';
 import { assertPathMutationSafe } from '../../services/learning/path-mutation-safety';
 import { teachingSessionRepository } from '../../services/ai-teaching/TeachingSessionRepository';
-import { signProjectionToken, SyntheticCapability, verifyProjectionToken } from '../../utils/projection-token';
+import { signProjectionToken } from '../../utils/projection-token';
 import blackboxVirtualLearnerRunner from '../../virtual-lab/blackbox-runner';
 import type { LearnerAction } from '../../virtual-lab/contracts';
 import { assertAssistedSessionMode } from '../../virtual-lab/session-mode';
@@ -28,8 +28,6 @@ import {
   normalizeStoryPoolData,
   ensureProfileStoryPool,
   isSameStory,
-  getStoryPool,
-  pickStoryFromPool,
   createSessionForProfile,
   SIMULATION_FRICTION_BUDGETS,
 } from '../../virtual-lab/session-factory';
@@ -549,82 +547,6 @@ function buildSessionRuntime(session: any, teachingSession?: any) {
         currentState: knowledgeState.learning.currentState,
         latestKnowledgePoint: knowledgeState.learning.latestKnowledgePoint,
         manualStop: !!learningState.manualStop,
-      }
-    }
-  };
-}
-
-function buildVirtualLearnerTestProjection(profile: any) {
-  const storyPool = getStoryPool(profile);
-  const sessions = Array.isArray(profile?.sessions)
-    ? [...profile.sessions].sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    : [];
-  const latestSession = sessions[0] || null;
-  const latestStoryContext = latestSession ? parseStoryContext(latestSession) : null;
-  const latestBindings = latestSession ? buildSessionBindings(latestSession) : null;
-  const activeStory = latestStoryContext?.storyId
-    ? storyPool.find((story: any) => story?.id === latestStoryContext.storyId) || latestStoryContext
-    : latestStoryContext || storyPool[0] || null;
-
-  let recommendedEntry: 'dashboard' | 'goal' | 'path' | 'teaching' = 'dashboard';
-  let recommendedReason = '当前还没有运行记录，先进入前台总览。';
-
-  if (latestSession && latestBindings?.currentTaskId) {
-    recommendedEntry = 'teaching';
-    recommendedReason = '最近一次运行已经进入学习阶段，直接查看当前学习任务最贴近真实状态。';
-  } else if (latestSession && latestBindings?.learningPathId) {
-    recommendedEntry = 'path';
-    recommendedReason = '最近一次运行已经生成 Path，先查看路径内容与阶段承接。';
-  } else if (latestSession && latestBindings?.goalConversationId) {
-    recommendedEntry = 'goal';
-    recommendedReason = '最近一次运行停留在 Goal，对话上下文最值得优先查看。';
-  }
-
-  return {
-    profile: {
-      id: profile.id,
-      userId: profile.userId,
-      userName: profile.users?.name || '',
-      email: profile.users?.email || '',
-    },
-    latestSession: latestSession ? {
-      id: latestSession.id,
-      status: latestSession.status,
-      currentStage: latestSession.currentStage,
-      updatedAt: latestSession.updatedAt,
-      storyContext: latestStoryContext,
-      bindings: latestBindings,
-    } : null,
-    activeStory: activeStory ? {
-      storyId: activeStory.id || activeStory.storyId || null,
-      title: activeStory.title || activeStory.storyTitle || null,
-      triggerEvent: activeStory.storyTriggerEvent || activeStory.triggerEvent || null,
-    } : null,
-    recommendedEntry,
-    recommendedReason,
-    entries: {
-      formal: {
-        dashboard: '/dashboard?projection=1',
-        goal: latestBindings?.goalConversationId
-          ? `/goal-conversation/${latestBindings.goalConversationId}?virtualSessionId=${latestSession.id}&viewMode=formal&projection=1`
-          : null,
-        path: latestBindings?.learningPathId
-          ? `/learning-path/${latestBindings.learningPathId}?virtualSessionId=${latestSession.id}&viewMode=formal&projection=1`
-          : null,
-        learning: latestBindings?.currentTaskId
-          ? `/learn/${latestBindings.currentTaskId}?virtualSessionId=${latestSession.id}&viewMode=formal&projection=1`
-          : null,
-      },
-      test: {
-        goal: latestBindings?.goalConversationId
-          ? `/admin/test/goal-full/${latestBindings.goalConversationId}?virtualSessionId=${latestSession.id}&viewMode=debug`
-          : null,
-        path: latestBindings?.learningPathId
-          ? `/admin/test/learning-path/${latestBindings.learningPathId}?virtualSessionId=${latestSession.id}&viewMode=debug`
-          : null,
-        learning: latestBindings?.currentTaskId
-          ? `/admin/test/learn/${latestBindings.currentTaskId}?virtualSessionId=${latestSession.id}&viewMode=debug`
-          : null,
       }
     }
   };
@@ -1188,47 +1110,9 @@ router.get('/sessions/:sessionId/teaching-detail', async (req: any, res) => {
 });
 
 /**
- * AI生成虚拟学习者实验场景
- * POST /api/admin/virtual-learners/generate-scenario
+ * AI生成虚拟学习者身份
+ * POST /api/admin/virtual-learners/generate-persona
  */
-router.post('/generate-scenario', async (req: any, res) => {
-  try {
-    const {
-      preferredDomains,
-      preferredGoalTypes,
-      preferredLevels,
-      preferredMotivations,
-      avoidDomains,
-      candidateDomains,
-      candidatePersonas,
-    } = req.body || {};
-
-    const recentScenarioHints = await buildRecentScenarioHints();
-
-    const result = await executeSkill(virtualLearnerScenarioDesignerDefinition, {
-      preferredDomains,
-      preferredGoalTypes,
-      preferredLevels,
-      preferredMotivations,
-      avoidDomains,
-      candidateDomains: Array.isArray(candidateDomains) && candidateDomains.length ? candidateDomains : DEFAULT_SCENARIO_CANDIDATE_DOMAINS,
-      candidatePersonas: Array.isArray(candidatePersonas) && candidatePersonas.length ? candidatePersonas : DEFAULT_SCENARIO_CANDIDATE_PERSONAS,
-      recentScenarioHints,
-    });
-
-    res.json({
-      success: true,
-      data: result,
-    });
-  } catch (error: any) {
-    logger.error('AI生成虚拟学习者场景失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'AI生成虚拟学习者场景失败',
-    });
-  }
-});
-
 router.post('/generate-persona', async (req: any, res) => {
   try {
     const { preferredLevels, candidatePersonas, existingPersonaSeed } = req.body || {};
@@ -2039,172 +1923,11 @@ router.post('/:id/projection-token', async (req: any, res) => {
   }
 })
 
-router.get('/:id/test-projection', async (req: any, res) => {
-  try {
-    const { id } = req.params;
-
-    const profile = await prisma.virtual_learner_profiles.findUnique({
-      where: { id },
-      include: {
-        users: {
-          select: { id: true, email: true, name: true }
-        },
-        sessions: {
-          orderBy: { updatedAt: 'desc' },
-          take: 200,
-        },
-      },
-    });
-
-    if (!profile) {
-      return res.status(404).json({ success: false, error: '虚拟用户不存在' });
-    }
-
-    res.json({
-      success: true,
-      data: buildVirtualLearnerTestProjection(profile)
-    });
-  } catch (error: any) {
-    logger.error('获取虚拟学习者 test 投影失败:', error)
-    res.status(500).json({ success: false, error: error.message || '获取虚拟学习者 test 投影失败' })
-  }
-})
-
-router.post('/projection/resolve', async (req: any, res) => {
-  try {
-    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : ''
-    if (!token) {
-      return res.status(400).json({ success: false, error: '缺少投影 token' })
-    }
-
-    const payload = verifyProjectionToken(token)
-
-    if ((payload.grantSource || 'virtual-learner') !== 'virtual-learner' || !payload.sourceProfileId) {
-      return res.status(400).json({ success: false, error: '该投影 token 不属于虚拟学习者投影' })
-    }
-
-    const profile = await prisma.virtual_learner_profiles.findUnique({
-      where: { id: payload.sourceProfileId },
-      include: {
-        users: {
-          select: { id: true, email: true, name: true }
-        }
-      }
-    })
-
-    if (!profile) {
-      return res.status(404).json({ success: false, error: '投影用户不存在' })
-    }
-
-    res.json({
-      success: true,
-      data: {
-        targetUserId: payload.targetUserId,
-        sourceProfileId: payload.sourceProfileId,
-        issuedByAdminId: payload.issuedByAdminId,
-        grantSource: payload.grantSource || 'virtual-learner',
-        grantId: payload.grantId || null,
-        storyId: payload.storyId || null,
-        virtualSessionId: payload.virtualSessionId || null,
-        scope: payload.scope,
-        scopeDefinition: payload.scopeDefinition || null,
-        profile: {
-          id: profile.id,
-          userId: profile.userId,
-          userName: profile.users.name,
-          email: profile.users.email
-        }
-      }
-    })
-  } catch (error: any) {
-    logger.error('解析前台投影 token 失败:', error)
-    res.status(401).json({ success: false, error: error.message || '解析前台投影 token 失败' })
-  }
-})
-
 /**
  * 获取模拟会话上下文
- * GET /api/admin/virtual-learners/sessions/:sessionId/context
+ * GET /api/admin/virtual-learners/sessions/:sessionId/context 已删
+ * （SessionCockpit 用 session 详情 + logs + path-status + teaching-detail 四请求替代）
  */
-router.get('/sessions/:sessionId/context', async (req: any, res) => {
-  try {
-    const { sessionId } = req.params;
-
-    const session = await prisma.virtual_sessions.findUnique({
-      where: { id: sessionId },
-      include: {
-        virtual_learner_profiles: {
-          include: {
-            users: {
-              select: {
-                id: true,
-                email: true,
-                name: true
-              }
-            }
-          }
-        }
-      }
-    });
-
-    if (!session) {
-      return res.status(404).json({
-        success: false,
-        error: '模拟会话不存在'
-      });
-    }
-
-    const storyContext = parseStoryContext(session);
-    const bindings = buildSessionBindings(session);
-    const stageResults = parseStageResults(session);
-    const logs = parseLogs(session);
-    let goalConversation: any = null;
-    let teachingSession: any = null;
-
-    if (session.goalConversationId) {
-      goalConversation = await prisma.goal_conversations.findFirst({
-        where: { id: session.goalConversationId }
-      });
-    }
-
-    const teachingSessionId = stageResults?.teaching?.teachingSessionId;
-    if (typeof teachingSessionId === 'string' && teachingSessionId.trim()) {
-      teachingSession = await teachingSessionRepository.getById(teachingSessionId.trim());
-    }
-
-    const conversations = buildSessionConversations(session, logs, goalConversation);
-    const runtime = buildSessionRuntime(session, teachingSession);
-
-    res.json({
-      success: true,
-      data: {
-        virtualSession: buildSessionSummary(session),
-        profile: {
-          id: session.virtual_learner_profiles.id,
-          userId: session.virtual_learner_profiles.userId,
-          email: session.virtual_learner_profiles.users.email,
-          userName: session.virtual_learner_profiles.users.name,
-          learningGoal: session.virtual_learner_profiles.learningGoal,
-          knowledgeLevel: session.virtual_learner_profiles.knowledgeLevel,
-          profile: parseJson<any>(session.virtual_learner_profiles.profile, {}),
-        },
-        storyContext,
-        bindings,
-        currentStage: session.currentStage,
-        status: session.status,
-        stageResults,
-        runtime,
-        conversations,
-      }
-    });
-  } catch (error: any) {
-    logger.error('获取模拟会话上下文失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '获取模拟会话上下文失败'
-    });
-  }
-});
 
 /**
  * 单步模拟（手动模式）
@@ -2501,29 +2224,6 @@ router.post('/sessions/:sessionId/blackbox-observe', async (req: any, res) => {
   }
 });
 
-router.get('/sessions/:sessionId/blackbox-snapshot', async (req: any, res) => {
-  try {
-    const result = await blackboxVirtualLearnerRunner.getSnapshot(req.params.sessionId);
-    res.json({ success: true, data: result });
-  } catch (error: any) {
-    logger.error('获取黑盒实验快照失败:', error);
-    sendVirtualSessionError(res, error, '获取黑盒实验快照失败');
-  }
-});
-
-router.post('/sessions/:sessionId/blackbox-referee', async (req: any, res) => {
-  try {
-    const result = await blackboxVirtualLearnerRunner.runLeasedExclusive(
-      req.params.sessionId,
-      () => blackboxVirtualLearnerRunner.referee(req.params.sessionId, req.user.userId)
-    );
-    res.json({ success: true, data: result });
-  } catch (error: any) {
-    logger.error('生成黑盒裁判报告失败:', error);
-    sendVirtualSessionError(res, error, '生成黑盒裁判报告失败', 502);
-  }
-});
-
 router.post('/sessions/:sessionId/blackbox-evaluations', async (req: any, res) => {
   try {
     const result = await blackboxVirtualLearnerRunner.runLeasedExclusive(
@@ -2537,54 +2237,6 @@ router.post('/sessions/:sessionId/blackbox-evaluations', async (req: any, res) =
   } catch (error: any) {
     logger.error('生成黑盒双评估报告失败:', error);
     sendVirtualSessionError(res, error, '生成黑盒双评估报告失败', 502);
-  }
-});
-
-router.post('/sessions/:sessionId/synthetic-token', async (req: any, res) => {
-  try {
-    const session = await prisma.virtual_sessions.findUnique({ where: { id: req.params.sessionId } });
-    if (!session) return res.status(404).json({ success: false, error: '模拟会话不存在' });
-
-    const stageResults = parseJson<any>(session.stageResults, {});
-    if (stageResults.experiment?.mode !== 'blackbox-api' || !stageResults.experiment?.experimentId || !stageResults.experiment?.runId) {
-      return res.status(400).json({ success: false, error: '当前会话不是 blackbox-api 实验' });
-    }
-
-    const externallyAllowedCapabilities: SyntheticCapability[] = ['goal:read', 'path:read'];
-    const allowed = new Set<string>(externallyAllowedCapabilities);
-    const requested = Array.isArray(req.body?.capabilities) ? req.body.capabilities : externallyAllowedCapabilities;
-    if (!requested.length || requested.some((item: unknown) => typeof item !== 'string' || !allowed.has(item))) {
-      return res.status(400).json({ success: false, error: '外部 synthetic token 仅允许只读 capability' });
-    }
-    const capabilities = Array.from(new Set(requested)) as SyntheticCapability[];
-    const token = signProjectionToken({
-      targetUserId: session.userId,
-      sourceProfileId: session.virtualProfileId,
-      issuedByAdminId: req.user.userId,
-      grantSource: 'synthetic',
-      virtualSessionId: session.id,
-      scope: 'full',
-      capabilities,
-      experimentId: stageResults.experiment.experimentId,
-      runId: stageResults.experiment.runId,
-      type: 'projection'
-    });
-
-    res.json({
-      success: true,
-      data: {
-        token,
-        expiresIn: '30m',
-        capabilities,
-        experimentId: stageResults.experiment.experimentId,
-        runId: stageResults.experiment.runId,
-        targetUserId: session.userId,
-        virtualSessionId: session.id
-      }
-    });
-  } catch (error: any) {
-    logger.error('签发合成用户 token 失败:', error);
-    res.status(500).json({ success: false, error: error.message || '签发合成用户 token 失败' });
   }
 });
 

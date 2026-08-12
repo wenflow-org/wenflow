@@ -1107,13 +1107,6 @@ router.put('/agents/:agentId/config', async (req: Request, res: Response) => {
   }
 });
 
-
-
-/**
- * 获取 Agent 运行状态
- * GET /api/admin/agents/status
- */
-
 /**
  * 获取 Agent 执行日志列表
  * GET /api/admin/agents/logs
@@ -1789,25 +1782,6 @@ router.get('/agents/logs/:id', async (req: Request, res: Response) => {
   }
 });
 
-
-/**
- * 获取目标对话列表
- * GET /api/admin/conversations
- */
-
-/**
- * 获取对话详情
- * GET /api/admin/conversations/:id
- */
-
-/**
- * GET /api/admin/stats
- * 平台统计数据的别名端点（兼容旧版）
- */
-router.get('/stats', async (req: Request, res: Response) => {
-  // 重定向到 /overview/stats - 直接调用逻辑
-  res.redirect('/api/admin/overview/stats');
-});
 
 /**
  * GET /api/admin/activity

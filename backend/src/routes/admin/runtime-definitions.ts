@@ -4,9 +4,6 @@ import systemPrisma from '../../config/system-database';
 import {
   listAgentManifest,
   getAgentManifest,
-  listTopLevelAgents,
-  listSkillsOfAgent,
-  validateManifest,
 } from '../../services/agent-manifest.service';
 import {
   SKILL_RUNTIME_DEFINITIONS,
@@ -114,138 +111,10 @@ router.get('/agents', async (_req: Request, res: Response) => {
   });
 });
 
-router.get('/agents/:id', async (req: Request, res: Response) => {
-  const id = req.params.id;
-  const entry = getAgentManifest(id);
-  const def = skillDefMap.get(id);
-
-  if (!entry && !def) {
-    return res.status(404).json({ success: false, error: { message: 'Definition 不存在' } });
-  }
-
-  const activePrompt = await systemPrisma.agent_prompts.findFirst({
-    where: {
-      agentId: id,
-      status: 'ACTIVE',
-    },
-    select: {
-      id: true,
-      version: true,
-      name: true,
-      description: true,
-      systemPrompt: true,
-      temperature: true,
-      maxTokens: true,
-      model: true,
-      updatedAt: true,
-      publishedAt: true,
-    },
-  });
-
-  const recentPromptCalls = await prisma.prompt_call_logs.findMany({
-    where: { agentId: id },
-    orderBy: { createdAt: 'desc' },
-    take: 5,
-  });
-
-  return res.json({
-    success: true,
-    data: {
-      activePrompt,
-      recentPromptCalls: recentPromptCalls.map((item) => ({
-        id: item.id,
-        success: item.success,
-        durationMs: item.durationMs,
-        promptDrift: item.promptDrift,
-        pathId: item.pathId,
-        pipelineRunId: item.pipelineRunId,
-        pipelineStepIndex: item.pipelineStepIndex,
-        createdAt: item.createdAt,
-        userPayload: item.userPayload,
-        extractedJson: item.extractedJson,
-        normalizedOutput: parseJson(item.normalizedOutput),
-      })),
-      id,
-      displayName: def?.displayName || entry!.name,
-      description: def?.description || entry!.description,
-      category: entry!.category,
-      inputSchema: def?.inputSchema || null,
-      outputSchema: def?.outputSchema || null,
-      variableBindings: def?.variableBindings || null,
-      capabilities: def?.capabilities || [],
-      defaultMaxTokens: def?.defaultMaxTokens ?? entry!.defaultModelConfig?.maxTokens ?? null,
-      defaultTemperature: def?.defaultTemperature ?? entry!.defaultModelConfig?.temperature ?? null,
-      schemaVersion: (def as any)?.schemaVersion ?? 1,
-      source: def?.source || 'code',
-      managedByCode: def?.managedByCode ?? true,
-    },
-  });
-});
-
 router.get('/orchestrators', (_req: Request, res: Response) => {
   res.json({
     success: true,
     data: ORCHESTRATOR_RUNTIME_DEFINITIONS.map(compileOrchestrator),
-  });
-});
-
-router.get('/orchestrators/:id', (req: Request, res: Response) => {
-  const def = ORCHESTRATOR_RUNTIME_DEFINITIONS.find((item) => item.id === req.params.id);
-  if (!def) {
-    return res.status(404).json({ success: false, error: { message: 'Orchestrator definition 不存在' } });
-  }
-  return res.json({
-    success: true,
-    data: compileOrchestrator(def),
-  });
-});
-
-/**
- * 定义-运行时一致性校验：steps.agentId 可解析性 + 成员数对账
- */
-router.get('/consistency', (_req: Request, res: Response) => {
-  const manifestValidation = validateManifest();
-
-  const orchestrators = ORCHESTRATOR_RUNTIME_DEFINITIONS.map((def) => {
-    const missing: Array<{ step: number; agentId: string }> = [];
-    const aliasResolved: Array<{ step: number; agentId: string; resolvedTo: string }> = [];
-    for (const step of (def.steps || []) as any[]) {
-      if (step.kind === 'service') continue; // 服务节点白名单（TeachingContextBuilder 等）
-      const entry = getAgentManifest(step.agentId);
-      if (!entry) {
-        missing.push({ step: step.step, agentId: step.agentId });
-      } else if (entry.id !== step.agentId) {
-        aliasResolved.push({ step: step.step, agentId: step.agentId, resolvedTo: entry.id });
-      }
-    }
-    const memberCount = listSkillsOfAgent(def.id).length;
-    const stepCount = (def.steps || []).length;
-    return {
-      orchestratorId: def.id,
-      displayName: def.displayName,
-      stepCount,
-      memberCount,
-      missing,
-      aliasResolved,
-      ok: missing.length === 0,
-    };
-  });
-
-  const manifestSkills = listAgentManifest().filter((entry) => entry.kind === 'skill').length;
-  const registeredSkills = SKILL_RUNTIME_DEFINITIONS.length;
-
-  res.json({
-    success: true,
-    data: {
-      manifestOk: manifestValidation.ok,
-      manifestErrors: manifestValidation.ok ? [] : (manifestValidation as any).errors,
-      orchestrators,
-      counts: {
-        manifestSkills,
-        registeredSkills,
-        topLevelAgents: listTopLevelAgents().length,
-      },
-    },
   });
 });
 

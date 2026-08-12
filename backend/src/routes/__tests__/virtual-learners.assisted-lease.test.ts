@@ -289,7 +289,6 @@ describe('assisted virtual learner route leases', () => {
   })
 
   it.each([
-    ['/sessions/:sessionId/blackbox-referee', '生成黑盒裁判报告失败'],
     ['/sessions/:sessionId/blackbox-evaluations', '生成黑盒双评估报告失败']
   ])('uses the shared typed response for %s', async (path) => {
     mockBlackboxRunLeasedExclusive.mockRejectedValue(Object.assign(

@@ -97,7 +97,7 @@ Wenflow 当前存在两类问题：
 **1b. 废弃镜像层（方案 B）**
 - 删除 `orchestrator_definitions` / `agent_definitions` 表（schema + 迁移）+ `scripts/sync-runtime-definitions.ts` 孤儿脚本
 - 新增/修改 admin API：`routes/admin/runtime-definitions.ts` 的 `/orchestrators` 改实时 import 5 个 definition.ts + manifest 编译，响应含 `stepsResolved`（step.agentId → `{displayName, kind}`）；`/agents` 改读 manifest + skills/*/definition.ts
-- 新增 `GET /admin/runtime-definitions/consistency`（steps 可解析性校验结果）
+- 注：`GET /admin/runtime-definitions/consistency` 已于 2026-08 清债删除（steps 解析性由编译期保证，W3 wiring 由 health-center 覆盖）
 - 前端 `Orchestrator.vue` 依赖同步调整（见阶段 3）
 
 **1c. 参数单源化**

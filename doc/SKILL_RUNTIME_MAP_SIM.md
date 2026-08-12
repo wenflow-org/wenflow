@@ -26,11 +26,11 @@
 - **声明**：`prompts/core/virtual-learner-persona-designer.yaml`。fields 顶层名：`personaSeed`（object，含 20+ 子字段）。编排字段：`personaSeed`（simulation.yaml:100-105，render=visible，handoff=[simulation-agent]，internal=false，accumulate=false）。
 - **agent 归属**：manifest kind=skill、category=simulation、`agentMembers` 在 `simulation-agent` 下（agent-manifest.service.ts:125-126）；`simulation.yaml` contracts 第 17 行。
 - **调用链**：无主链/黑盒调用，全部在管理端路由手拼输入后直调：
-  - `backend/src/routes/admin/virtual-learners.ts:927`（POST /generate-profile）：输入 `preferredLevels`/`existingPersonaSeed`；
-  - `:1237`（POST /generate-persona）：输入 `preferredLevels`/`candidatePersonas`/`recentPersonaHints`（来自 buildRecentScenarioHints）/`existingPersonaSeed`；
-  - `:1268`（POST /:id/draft-profile）：增量增强，输入 `preferredLevels` + 现库 personaSeed；
+  - `backend/src/routes/admin/virtual-learners.ts:828`（POST /generate-persona）：输入 `preferredLevels`/`candidatePersonas`/`recentPersonaHints`（来自 buildRecentScenarioHints）/`existingPersonaSeed`；
+  - `:853`（POST /:id/draft-profile）：增量增强，输入 `preferredLevels` + 现库 personaSeed；
   - 均经 `executeSkill`（skills/index.ts:227-234 → executor.ts:149），无 `runWithContext` 注入、无 sandbox 对账（对比 blackbox-runner.ts:2130-2139）。
-  - 输出收取：skill 内 `normalizePersonaOutput`（skills/virtual-learner-persona-designer/index.ts:171）读取 `personaSeed` 并补 canonical 字段；路由读 `result.personaSeed`（:938/:1277）。
+  - 输出收取：skill 内 `normalizePersonaOutput`（skills/virtual-learner-persona-designer/index.ts:171）读取 `personaSeed` 并补 canonical 字段；路由读 `result.personaSeed`（:844/:879）。
+  - （POST /generate-profile 旧签名端点已于 2026-08 清债删除，画像生成唯一入口为 generate-persona）
 - **流转**：handoff=[simulation-agent]（声明层）。落库去向：`virtual_learner_profiles` 由 admin 手工保存（POST / 路由 :1554-1571 手写 profile JSON；draft 结果仅回给前端，由前端保存）。下游消费：`parseProfileData`（simulation.coordinator.ts:609-643）、`captureCurrentExperimentSnapshot`（blackbox-runner.ts:1952-1972）、quick-learn `learnerPersona`（quick-learn.service.ts:330-336）。
 - **运行环境**：**管理工具**。触发方式：admin 路由显式点击（生成/增强画像）。失败语义：core `failurePolicy: retry`（yaml:69）；LLM 失败抛错 → 路由 500；无 fallback 降级。validation 排除名单内（skill-output-validator.ts:160）。
 
@@ -39,9 +39,9 @@
 - **声明**：`prompts/core/virtual-learner-scenario-designer.yaml`。fields：`personaSeed`、`story`、`consistencyNotes`（yaml:67-107）。编排字段：仅 `consistencyNotes`（simulation.yaml:108-113，render=visible，handoff=[simulation-agent]）；`personaSeed`/`story` 未登记路由（注释见 simulation.yaml:34：goalSeed/situationSeed/stories 已退役，语义由 story.goalSeed 与 profileData.storyPool 承接）。
 - **agent 归属**：manifest kind=skill、category=simulation、simulation-agent 成员（agent-manifest.service.ts:126-127、273-283）；simulation.yaml contracts 第 18 行。
 - **调用链**：管理端路由直调：
-  - `virtual-learners.ts:1208`（POST /generate-scenario）：输入 preferredDomains/preferredGoalTypes/preferredLevels/preferredMotivations/avoidDomains/candidateDomains/candidatePersonas/recentScenarioHints；
-  - `:1315`（POST /:id/draft-stories）：输入 preferredMotivations/existingPersonaSeed/existingStoryPool/targetStoryCount=1。
-  - 输出收取：`normalizeScenarioOutput`（skills/virtual-learner-scenario-designer/index.ts:175）读取 `personaSeed`/`story`/`consistencyNotes`；draft-stories 路由读 `result.story`（:1331）。
+  - `virtual-learners.ts:894`（POST /:id/draft-stories）：输入 preferredMotivations/existingPersonaSeed/existingStoryPool/targetStoryCount=1。
+  - 输出收取：`normalizeScenarioOutput`（skills/virtual-learner-scenario-designer/index.ts:175）读取 `personaSeed`/`story`/`consistencyNotes`；draft-stories 路由读 `result.story`（:935）。
+  - （POST /generate-scenario 无持久化旧变体已于 2026-08 清债删除，场景生成唯一入口为 draft-stories）
 - **流转**：handoff=[simulation-agent]（声明层）。落库去向：draft-stories 自动持久化到 `virtual_learner_profiles.profile.storyPool`（:1337-1347，`normalizeStoryPoolData` 见 session-factory.ts:32-67）。下游消费：`createSessionForProfile` 选故事（session-factory.ts:118-133、195-220）、`resolveStorySessionDemand`（story-demand.ts，blackbox-runner.ts:704-711、simulation.coordinator.ts:1404-1411）。
 - **运行环境**：**管理工具**。失败语义：core `failurePolicy: retry`（yaml:109）；无 fallback。validation 排除（skill-output-validator.ts:163）。
 
@@ -82,8 +82,8 @@
 - **声明**：`prompts/core/virtual-learner-referee.yaml`。fields：`verdict`/`scores`/`findings`/`recommendations`/`evidence`（yaml:45-68）。编排字段：5 个全 visible、handoff=[simulation-agent]（simulation.yaml:197-226）。
 - **agent 归属**：manifest kind=skill、category=simulation、simulation-agent 成员（agent-manifest.service.ts:131、321-331）；simulation.yaml contracts 第 22 行。
 - **调用链**：**仅 blackbox 旁路**。`referee()`（blackbox-runner.ts:511-574，executeSkill :540）。前置：会话必须终态（completed/abandoned/failed，:515-517）。输入服务端组装 `buildRefereeInput`（:1641-1662，含 buildRefereeStoryMeta :1665-1687、buildRefereeMetricCompleteness :1690-1713）。输出收取：`normalizeRefereeOutput`（skills/virtual-learner-referee/index.ts:63-142）——scores 按 stageCoverage 置 null、overall 固定权重重算、verdict 由分数派生（LLM 的 verdict 不作为最终值，仅 normalizedFallback 语义）、evidenceSufficiency<50 → inconclusive（:133-139）。报告写入 `stageResults.blackbox.refereeReports`（去重：inputFingerprint :520-530、:1833-1835）。
-- **流转**：handoff=[simulation-agent]（声明层）。落库：`stageResults.blackbox.refereeReports[].report`（最多 10 份，:559-567）。下游：`getSnapshot`（:446-509）→ admin GET /sessions/:sessionId/blackbox-snapshot（virtual-learners.ts:2504-2512）→ SessionCockpit 裁判评估卡片（SessionCockpit.vue:339-401）。
-- **运行环境**：**仿真黑盒（终局旁路审计）**。触发：admin 手动（POST /blackbox-referee :2514 或 /blackbox-evaluations :2527）；非自动。失败语义：core `failurePolicy: retry`（yaml:76）；skill 层 LLM 失败返回 success=false（referee/index.ts:211-217）→ 路由 502（:2523）；幂等去重（同 runId+inputFingerprint 复用）。validation 排除（skill-output-validator.ts:161）。
+- **流转**：handoff=[simulation-agent]（声明层）。落库：`stageResults.blackbox.refereeReports[].report`（最多 10 份，:559-567）。下游：SessionCockpit 裁判评估卡片（SessionCockpit.vue:339-401，从 session 详情 stageResults.blackbox 渲染；GET /blackbox-snapshot 重复读端点已于 2026-08 清债删除）。
+- **运行环境**：**仿真黑盒（终局旁路审计）**。触发：admin 手动（POST /blackbox-evaluations，virtual-learners.ts:1939）；非自动。失败语义：core `failurePolicy: retry`（yaml:76）；skill 层 LLM 失败返回 success=false（referee/index.ts:211-217）→ 路由 502（:1951）；幂等去重（同 runId+inputFingerprint 复用）。validation 排除（skill-output-validator.ts:161）。（单裁判 POST /blackbox-referee 已删，由 evaluations 双评估覆盖）
 
 ## 1.7 skill:virtual-learner-actor-auditor（角色保真审计）
 
@@ -98,8 +98,8 @@
 - **声明**：无 core.yaml（编排器无 prompt）。编排字段：全部 28 行路由 handoff 均指向它（simulation.yaml:98-258）。
 - **agent 归属**：manifest kind=agent、category=agent、runtimeEnabled、userVisible=false、monitoringGroup=Simulation（agent-manifest.service.ts:117-134）；7 个成员即 simulation 家族。
 - **调用链**：两套运行时 + 三个定义文件：
-  - `simulation.coordinator.ts`（assisted 编排器，COORDINATOR_ID='simulation-agent' :40）；调用入口：admin 路由 step/auto/advance-path/review/accept/replan/start-learning/teaching-step/auto-learning/run-full/restart-*/stop/wrapup（virtual-learners.ts:2213-3009）+ regression-run（:3163）。
-  - `blackbox-runner.ts`（blackbox-api 编排器）；入口：start-blackbox-session（:2292）/blackbox-rerun（:2317）/blackbox-action/step/observe/snapshot/referee/evaluations（:2452-2533）。
+  - `simulation.coordinator.ts`（assisted 编排器，COORDINATOR_ID='simulation-agent' :40）；调用入口：admin 路由 step/auto/advance-path/review/accept/replan/start-learning/teaching-step/auto-learning/run-full/restart-*/stop/wrapup（virtual-learners.ts:1652-2410）+ regression-run（:2531）。
+  - `blackbox-runner.ts`（blackbox-api 编排器）；入口：start-blackbox-session（:1731）/blackbox-rerun（:1756）/blackbox-action/step/observe/evaluations（:1891-1953）。
   - 定义视图：`simulation.definition.ts:6-15`（8 步链，step 7/8 = referee/actor-auditor 终态旁路）；`agent-contract-view.ts` SANDBOX_EXTRA_KEYS['simulation-agent']（:104-136）声明输入通道为服务端注入（simulation.yaml:8）。
 - **流转**：手写状态机（非 LLM）。落库：`virtual_sessions.stageResults`（updateStageResults :1020-1042）/`virtual_experiment_commands`（blackbox :304-315）/`virtual_experiment_leases`（:248-267）。
 - **运行环境**：**仿真黑盒 + 辅助模式**。失败语义：assisted 租约 409/503（VirtualSessionLeaseBusyError :63-94）、Learn 上游重试 3 次、课时预算 30；blackbox 幂等命令 + 对账（BlackboxReconciliationPendingError :109-118）。
@@ -210,11 +210,11 @@
 ```
 [配置阶段·管理工具]                        [正式黑盒 blackbox-api]                    [旁路审计·终局]
 persona-designer ─┐
-  (generate-profile/generate-persona/       start-blackbox-session
-   draft-profile :927/:1237/:1268)          (session-factory.ts:142-264：
+  (generate-persona/                       start-blackbox-session
+   draft-profile :828/:853)                (session-factory.ts:142-264：
 scenario-designer ┘                          选故事→storyContext→experimentSnapshot)
-  (generate-scenario/draft-stories             │
-   :1208/:1315 → storyPool 持久化 :1337)       ▼
+  (draft-stories :894 → storyPool             │
+   持久化 :940)                               ▼
                                     ┌─ blackbox-runner.autoStep（:689，链式状态机）────┐
                                     │ 首轮: storyDemand.text 开场（:704-711）           │
                                     │ goal:   goal-dialogue-simulator（:717-733）      │
@@ -226,7 +226,7 @@ scenario-designer ┘                          选故事→storyContext→experi
                                     └──────────────┬──────────────────────────────────┘
                                                   ▼ 终态(completed/abandoned/failed)
                                      referee（:511）／ actor-auditor（:576）
-                                     admin 手动触发 /blackbox-referee|evaluations
+                                     admin 手动触发 /blackbox-evaluations
                                      → stageResults.blackbox.refereeReports/
                                        actorAuditReports → SessionCockpit
 
@@ -249,8 +249,8 @@ quick-learn.service.startRun :98 → executeRunInContext :258
 
 要点：
 - **blackbox 链式执行顺序**：`autoStep`（blackbox-runner.ts:689-805）为单步状态机（goal→path→teaching→terminal），与 `act`（:638-687）配对；动作经 `runCommand` 幂等命令层（:173-339）+ 平台投影对账（journalProjectionReceipt :945-979、persist :830-926）。path 阶段不评审直接 start_learning。
-- **referee/actor-auditor 不自动跑**：仅在实验终态后由 admin 手动触发（virtual-learners.ts:2514/:2527），且 referee 需 `status ∈ {completed,abandoned,failed}`（blackbox-runner.ts:515-517）。
-- **assisted 链与 blackbox 链互斥**：session-mode.ts 区分 `blackbox-api` 与 assisted（assertBlackboxSessionMode/assertAssistedSessionMode，virtual-learners.ts:2398-2417）；run-full（:2847）与 regression-run（:3163）走 assisted。
+- **referee/actor-auditor 不自动跑**：仅在实验终态后由 admin 手动触发（POST /blackbox-evaluations，virtual-learners.ts:1939），且 referee 需 `status ∈ {completed,abandoned,failed}`（blackbox-runner.ts:515-517）。
+- **assisted 链与 blackbox 链互斥**：session-mode.ts 区分 `blackbox-api` 与 assisted（assertBlackboxSessionMode/assertAssistedSessionMode，virtual-learners.ts:1836-1845）；run-full（:2215）与 regression-run（:2531）走 assisted。
 - **quick-learn 与黑盒的关系**：独立形态。黑盒 = 合成会话（projection token 驱动平台 API，blackbox-runner.ts:807-828）；quick-learn = 真实虚拟账号沿生产链学习（frictionBudget 恒 'none'，只验证链路）；两者共用 learn-turn-simulator 与 virtual_learner_profiles，但落库不同（stageResults.blackbox.* vs virtual_quick_learn_runs）。
 
 ## 4.2 aux skill 调用矩阵
@@ -278,11 +278,11 @@ quick-learn.service.startRun :98 → executeRunInContext :258
 
 | 分类 | skill | 触发源 | 失败语义 |
 |---|---|---|---|
-| 仿真黑盒（blackbox-api） | goal-dialogue-simulator / learn-turn-simulator | admin 黑盒动作/autoStep（virtual-learners.ts:2452/:2470） | skill fallback（degraded）→ 黑盒抛 BLACKBOX_*；命令对账可重试 |
-| 仿真黑盒·终局旁路 | referee / actor-auditor | admin 手动（:2514/:2527） | core retry；失败 502；inputFingerprint 幂等去重 |
-| 辅助模式（assisted，legacy 调试） | goal-dialogue / path-evaluator / learn-turn | admin step/auto/run-full/regression-run（:2213/:2239/:2847/:3163） | retryLearnUpstream×3；turn 预算 30；path-evaluator fallback |
+| 仿真黑盒（blackbox-api） | goal-dialogue-simulator / learn-turn-simulator | admin 黑盒动作/autoStep（virtual-learners.ts:1891/:1909） | skill fallback（degraded）→ 黑盒抛 BLACKBOX_*；命令对账可重试 |
+| 仿真黑盒·终局旁路 | referee / actor-auditor | admin 手动（/blackbox-evaluations :1939） | core retry；失败 502；inputFingerprint 幂等去重 |
+| 辅助模式（assisted，legacy 调试） | goal-dialogue / path-evaluator / learn-turn | admin step/auto/run-full/regression-run（:1652/:1678/:2215/:2531） | retryLearnUpstream×3；turn 预算 30；path-evaluator fallback |
 | 快速学习 | learn-turn-simulator（friction='none'） | admin quick-learn/runs（virtual-quick-learn.ts:119） | 连续 3 次 degraded 终止；teacherReady streak>4 收束；不续跑（interrupted 标记 :218-228） |
-| 管理工具 | persona-designer / scenario-designer / skill-author / skill-compiler | admin 路由（virtual-learners.ts:914-1355；skill-author.ts:33/:89） | core retry/propagate；无 fallback；500 报错 |
+| 管理工具 | persona-designer / scenario-designer / skill-author / skill-compiler | admin 路由（virtual-learners.ts:763-971；skill-author.ts:33/:89） | core retry/propagate；无 fallback；500 报错 |
 | 平台直调（主链/服务） | teaching-opening-generator / ~~session-evaluation-fallback~~（已退役 2026-08-11）/ learner-progress-report / generic-chat / learner-model（handler-only） | 教学主链 startSession、wrapup fallback 分支、LearnerProgressService、AIService.chat、snapshot 服务 | fallback（前三者）/ propagate（generic-chat）/ 纯函数 |
 | 已退役（死注册） | basic-evaluator / goal-alignment-checker | 无 | 不生效；每次启动被重新注册 |
 

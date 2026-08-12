@@ -5,7 +5,9 @@
  * - prompts/*.md 文件是唯一权威源，进 git
  * - 写端点（POST create、PUT update、DELETE、PUT publish、POST seed-core）已整体移除；
  *   路由级 rejectAgentPromptMutation 仍挂载，防止未来误加写端点
- * - 只保留只读查看：GET list、GET active、GET detail、GET stats、GET history、GET compare
+ * - 只保留只读查看：GET list、GET compare
+ *   （只读 4 端点 active/detail/stats-overview/history 已删：列表已含全量状态与按 agentId 过滤，
+ *   版本详情/统计/历史分别由 workbench-meta、overview/stats、prompt-lab 覆盖）
  * - 修改 prompt 的唯一方式：编辑 prompts/*.md 文件 + git commit + 启动/手动 sync
  */
 
@@ -95,146 +97,7 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/admin/agent-prompts/:agentId/active
-// 获取指定 Agent 当前活跃的 Prompt
-router.get('/:agentId/active', async (req: Request, res: Response) => {
-  try {
-    const { agentId } = req.params;
-    const agentIds = resolveAgentPromptIds(agentId);
-
-    const prompt = await systemPrisma.agent_prompts.findFirst({
-      where: {
-        agentId: { in: agentIds },
-        status: 'ACTIVE',
-      },
-      orderBy: [
-        { publishedAt: 'desc' },
-        { updatedAt: 'desc' },
-        { version: 'desc' },
-      ],
-    });
-
-    if (!prompt) {
-      return res.status(404).json({
-        success: false,
-        error: { message: '未找到活跃的 Prompt 版本' },
-      });
-    }
-
-    res.json({
-      success: true,
-      data: prompt,
-    });
-  } catch (error) {
-    logger.error('获取活跃 Prompt 失败:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: '获取活跃 Prompt 失败' },
-    });
-  }
-});
-
-// GET /api/admin/agent-prompts/:id
-// 获取特定版本详情
-router.get('/detail/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-
-    const prompt = await systemPrisma.agent_prompts.findUnique({
-      where: { id },
-    });
-
-    if (!prompt) {
-      return res.status(404).json({
-        success: false,
-        error: { message: 'Prompt 版本不存在' },
-      });
-    }
-
-    res.json({
-      success: true,
-      data: prompt,
-    });
-  } catch (error) {
-    logger.error('获取 Prompt 详情失败:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: '获取 Prompt 详情失败' },
-    });
-  }
-});
-
-// GET /api/admin/agent-prompts/stats/overview
-// 获取 Prompt 使用统计概览
-router.get('/stats/overview', async (req: Request, res: Response) => {
-  try {
-    const stats = await systemPrisma.agent_prompts.groupBy({
-      by: ['agentId', 'status'],
-      _count: {
-        id: true,
-      },
-      _sum: {
-        useCount: true,
-      },
-    });
-
-    // 获取总体统计
-    const totalStats = await systemPrisma.agent_prompts.aggregate({
-      _count: { id: true },
-      _sum: { useCount: true },
-    });
-
-    res.json({
-      success: true,
-      data: {
-        byAgent: stats,
-        total: totalStats,
-      },
-    });
-  } catch (error) {
-    logger.error('获取 Prompt 统计失败:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: '获取 Prompt 统计失败' },
-    });
-  }
-});
-
-/**
- * 获取指定 agent 的 prompt 版本历史（含已归档版本）
- * GET /api/admin/agent-prompts/:agentId/history
- */
-router.get('/:agentId/history', async (req: Request, res: Response) => {
-  try {
-    const { agentId } = req.params;
-    const prompts = await systemPrisma.agent_prompts.findMany({
-      where: { agentId },
-      orderBy: { version: 'desc' },
-      select: {
-        id: true,
-        version: true,
-        status: true,
-        name: true,
-        description: true,
-        temperature: true,
-        maxTokens: true,
-        useCount: true,
-        avgLatency: true,
-        successRate: true,
-        publishedAt: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-    res.json({ success: true, data: prompts });
-  } catch (error) {
-    logger.error('获取 Prompt 历史失败:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: '获取 Prompt 历史失败' },
-    });
-  }
-});
+// GET /api/admin/agent-prompts/detail/:id 已删（列表含 status，详情由 workbench-meta / prompt-lab core-list 覆盖）
 
 /**
  * 对比两个 Prompt 版本

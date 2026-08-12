@@ -262,7 +262,7 @@ prompts/                     # 仓库根，与 backend/ 同级
               <span class="steps__no">4</span>
               <div>
                 <strong>同步 Prompt 到 DB</strong>
-                <p>通过部署同步或 <code>POST /api/admin/agent-prompts/seed-core</code> 让源文件成为 ACTIVE 版本。</p>
+                <p>通过部署同步（启动时自动执行 seed-core / 手动 sync）让源文件成为 ACTIVE 版本。</p>
               </div>
             </li>
             <li>
@@ -320,7 +320,6 @@ prompts/                     # 仓库根，与 backend/ 同级
             <div class="api__row"><span class="api__m api__m--get">GET</span><code class="mono">/skills · /skills/:name/effective-prompt</code><span>Skill 注册表与生效 Prompt</span></div>
             <div class="api__row"><span class="api__m api__m--post">POST</span><code class="mono">/skills/:name/test</code><span>Skill 在线试跑</span></div>
             <div class="api__row"><span class="api__m api__m--get">GET</span><code class="mono">/agent-prompts · /agent-prompts/compare</code><span>Prompt 版本与对比</span></div>
-            <div class="api__row"><span class="api__m api__m--put">PUT</span><code class="mono">/agent-prompts/:id/publish</code><span>发布版本为 ACTIVE</span></div>
             <div class="api__row"><span class="api__m api__m--get">GET</span><code class="mono">/system/capabilities</code><span>AI 能力健康快照</span></div>
           </div>
 
