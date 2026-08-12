@@ -78,7 +78,7 @@
             </label>
           </div>
           <div class="uc-card__foot">
-            <button type="button" class="uc-btn uc-btn--primary" :disabled="!pwdCanSubmit" @click="handleChangePassword">
+            <button type="button" class="uc-btn uc-btn--primary" :disabled="!pwdCanSubmit || pwdSubmitting" @click="handleChangePassword">
               {{ pwdSubmitting ? '更新中…' : '更新密码' }}
             </button>
           </div>
@@ -190,6 +190,7 @@ const pwdCanSubmit = computed(() =>
 )
 
 async function handleChangePassword() {
+  if (pwdSubmitting.value) return
   if (pwdForm.newPassword !== pwdForm.confirmPassword) {
     toast.error('两次输入的新密码不一致')
     return
@@ -209,7 +210,7 @@ async function handleChangePassword() {
     pwdForm.newPassword = ''
     pwdForm.confirmPassword = ''
   } catch (e: any) {
-    toast.error(e?.response?.data?.error?.message || e?.message || '修改失败，请稍后再试')
+    toast.error(e?.message || e?.response?.data?.error?.message || '修改失败，请稍后再试')
   } finally {
     pwdSubmitting.value = false
   }

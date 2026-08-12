@@ -1,12 +1,15 @@
 <template>
   <el-config-provider :locale="zhCn">
     <div id="app">
+      <a href="#app-main" class="skip-link">跳到主要内容</a>
       <AnnouncementBanner />
-      <RouterView v-slot="{ Component }">
-        <transition name="route-fade" mode="out-in">
-          <component :is="Component" />
-        </transition>
-      </RouterView>
+      <div id="app-main" tabindex="-1">
+        <RouterView v-slot="{ Component }">
+          <transition name="route-fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </RouterView>
+      </div>
       <ToastHost />
       <MockConfirm />
     </div>
@@ -29,6 +32,27 @@ userStore.initFromStorage();
 #app {
   min-height: 100vh;
   min-height: 100dvh;
+}
+
+/* 无障碍：跳到主要内容（仅键盘聚焦时可见） */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 9999;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--blue, #3478f6);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform 0.2s ease;
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
 }
 </style>
 

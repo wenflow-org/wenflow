@@ -1,7 +1,10 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import { ElLoading } from 'element-plus';
-import 'element-plus/dist/index.css';
+// 组件样式由 unplugin-vue-components 按需注入；仅函数式服务需显式引入
+import 'element-plus/es/components/loading/style/css';
+import 'element-plus/es/components/message/style/css';
+import 'element-plus/es/components/message-box/style/css';
 
 import App from './App.vue';
 import router from './router';

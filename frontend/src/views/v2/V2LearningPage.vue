@@ -137,6 +137,7 @@
             <span class="btn-primary" @click="submitCheckpoint">提交</span>
             <span v-if="checkpoint.allowSkip !== false" class="btn-ghost" @click="skipCheckpoint">跳过</span>
           </div>
+          </div>
         </Transition>
 
         <!-- 输入区 -->
@@ -429,7 +430,7 @@ async function boot() {
     }
     initing.value = false;
   } catch (e: any) {
-    initError.value = e?.response?.data?.error?.message || '开课失败，请重试';
+    initError.value = e?.message || e?.response?.data?.error?.message || '开课失败，请重试';
     initing.value = false;
   }
 }
@@ -614,7 +615,7 @@ async function skipCheckpoint() {
     const r = await aiTeachingAPI.submitCheckpoint(session.value.sessionId, cp.id, { skip: true }, session.value.revision) as unknown as Record<string, any>;
     session.value.revision = typeof r?.revision === 'number' ? r.revision : session.value.revision + 1;
   } catch (e: any) {
-    toast.error(e?.response?.data?.error?.message || '跳过检查点失败');
+    toast.error(e?.message || e?.response?.data?.error?.message || '跳过检查点失败');
     // 失败恢复检查点，允许用户重试或改作答
     checkpoint.value = cp;
   }
@@ -640,7 +641,7 @@ async function finish(action: 'complete_task' | 'end_only' | 'complete_review') 
     evaluationUrl.value = `/learn/${taskId}/evaluation/${session.value.sessionId}${pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : ''}`;
   } catch (e: any) {
     // 结算失败不冒充完成：保留重试入口，用户仍可去学习反馈页查看
-    const msg = e?.response?.data?.error?.message || e?.message || '结算失败';
+    const msg = e?.message || e?.response?.data?.error?.message || '结算失败';
     toast.error(`课堂收束未完成：${msg}`);
     evaluationUrl.value = `/learn/${taskId}/evaluation/${session.value.sessionId}${pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : ''}`;
     // 会话可能已收束但轮询异常：提供进入反馈页的途径（via 完成浮层不弹，用 toast 引导）
@@ -724,7 +725,7 @@ async function restart() {
     completed.value = false;
     await boot();
   } catch (e: any) {
-    toast.error(e?.response?.data?.error?.message || '重新开始失败，请稍后重试');
+    toast.error(e?.message || e?.response?.data?.error?.message || '重新开始失败，请稍后重试');
   } finally {
     actionBusy.value = false;
   }

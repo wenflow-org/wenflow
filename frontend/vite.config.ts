@@ -14,7 +14,7 @@ export default defineConfig({
     vue(),
     Components({
       resolvers: [
-        ElementPlusResolver(),
+        ElementPlusResolver({ importStyle: 'css' }),
         // 模板中使用的 EP 图标组件按需自动引入（替代 main.ts 的全量注册）
         (name) => {
           if (iconNames.has(name)) {

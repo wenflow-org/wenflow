@@ -125,11 +125,16 @@ api.interceptors.response.use(
         void redirectToLoginOnce();
       }
 
-      // 返回错误信息，保留完整 response 以便上层读取 422 恢复信封等结构化数据
+      // 返回错误信息，保留完整 response 以便上层读取 422 恢复信封等结构化数据。
+      // 兼容后端两种错误形态：{ error: { message } } 与 { error: "字符串" }（约 209 处历史端点）
+      const errBody = data?.error;
+      const errMessage = typeof errBody === 'string'
+        ? errBody
+        : errBody?.message || data?.message || '请求失败';
       return Promise.reject({
-        message: data?.error?.message || '请求失败',
+        message: errMessage,
         status,
-        details: data?.error?.details,
+        details: typeof errBody === 'object' ? errBody?.details : undefined,
         response: error.response
       });
     }
