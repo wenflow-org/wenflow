@@ -43,6 +43,8 @@ export interface Checkpoint {
 export interface CheckpointSubmitPayload {
   selectedOptionIds?: string[];
   answerText?: string;
+  /** 跳过检查点：清除待处理检查点并记录历史，不触发教学回合 */
+  skip?: boolean;
 }
 
 export interface CheckpointSubmitResult {

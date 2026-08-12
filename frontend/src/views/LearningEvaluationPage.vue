@@ -72,6 +72,7 @@
               :key="`${message.timestamp || 'message'}-${index}`"
               class="evaluation-transcript-item"
               :class="`evaluation-transcript-item--${message.role}`"
+              :style="{ animationDelay: Math.min(index * 40, 500) + 'ms' }"
             >
               <div class="evaluation-transcript-item__meta">
                 <strong>{{ getMessageRoleLabel(message.role) }}</strong>
@@ -226,6 +227,22 @@ const stopPolling = () => {
 
 const shouldContinuePolling = (detail: SessionDetail | null) => {
   if (!detail) return true;
+  // 终态/不可恢复状态：停止轮询，展示明确状态（不再空等 60s）
+  if (['failed', 'discarded', 'superseded'].includes(detail.status)) {
+    stopPolling();
+    error.value = '课堂未能正常完成，暂无可展示的学习反馈。';
+    return false;
+  }
+  if (detail.status === 'finalization_failed') {
+    stopPolling();
+    error.value = '课堂结算未完成，可稍后重新进入查看。';
+    return false;
+  }
+  if (['active', 'paused', 'initializing'].includes(detail.status)) {
+    stopPolling();
+    error.value = '课堂还在进行中，结束后才会生成学习反馈。';
+    return false;
+  }
   if (!detail.wrapup) return true;
   if (!detail.wrapup.summary?.topicSummary) return true;
   return false;
@@ -514,6 +531,10 @@ onUnmounted(() => {
   }
   .evaluation-degraded { animation-delay: 0.06s; }
   .evaluation-shell .completion-card { animation-delay: 0.1s; }
+  /* 对话转录：逐条上浮（动画延迟由行内 style 提供，最多 500ms） */
+  .evaluation-transcript-item {
+    animation: eval-rise 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
   .evaluation-shell .session-feedback { animation-delay: 0.2s; }
   .evaluation-transcript-card { animation-delay: 0.28s; }
 }

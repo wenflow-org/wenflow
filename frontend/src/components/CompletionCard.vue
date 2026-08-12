@@ -27,9 +27,9 @@
 
       <div class="completion-summary">
         <div class="summary-item"><span class="summary-label">主题</span><span class="summary-value">{{ topic }}</span></div>
-        <div class="summary-item"><span class="summary-label">知识点</span><span class="summary-value">{{ masteredCount }}/{{ totalCount }} 已学会</span></div>
+        <div class="summary-item"><span class="summary-label">知识点</span><span class="summary-value">{{ summaryCounters.display.mastered ?? masteredCount }}/{{ totalCount }} 已学会</span></div>
         <div class="summary-item"><span class="summary-label">用时</span><span class="summary-value">{{ duration }}</span></div>
-        <div class="summary-item"><span class="summary-label">学习消息</span><span class="summary-value">{{ messageCount }} 条</span></div>
+        <div class="summary-item"><span class="summary-label">学习消息</span><span class="summary-value">{{ summaryCounters.display.messages ?? messageCount }} 条</span></div>
       </div>
 
       <div class="completion-section">
@@ -61,7 +61,7 @@
         <div class="metrics-grid metrics-grid--three">
           <div v-for="item in sessionMetricCards" :key="item.key" class="metric-card" :class="`metric-card--${item.tone}`">
             <div class="metric-head"><span class="metric-label">{{ item.label }}</span><span class="metric-badge">{{ item.level }}</span></div>
-            <div class="metric-value">{{ item.value }}</div>
+            <div class="metric-value">{{ sessionCounters.display[item.key] ?? item.value }}</div>
             <p class="metric-desc">{{ item.desc }}</p>
           </div>
         </div>
@@ -73,7 +73,7 @@
         <div class="metrics-grid">
           <div v-for="item in longTermMetricCards" :key="item.key" class="metric-card" :class="`metric-card--${item.tone}`">
             <div class="metric-head"><span class="metric-label">{{ item.label }}</span><span class="metric-badge">{{ item.level }}</span></div>
-            <div class="metric-value">{{ item.value }}</div>
+            <div class="metric-value">{{ longTermCounters.display[item.key] ?? item.value }}</div>
             <p class="metric-desc">{{ item.desc }}</p>
           </div>
         </div>
@@ -123,7 +123,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, watch } from 'vue';
 import { CircleCheckFilled, VideoPause, Compass, Document, Collection, TrendCharts, DataAnalysis, MagicStick, Opportunity } from '@element-plus/icons-vue';
 import MarkdownRenderer from './MarkdownRenderer.vue';
 import type { ReplanAdvisory, WrapupArtifact } from '@/api/aiTeaching';
@@ -154,6 +154,62 @@ const getSimpleLevel = (v: number, h: number, m: number) => (v >= h ? { level: '
 const getStress = (v: number) => (v >= 70 ? { level: '高', tone: 'warn' } : v >= 40 ? { level: '中', tone: 'normal' } : { level: '低', tone: 'good' });
 const getBalance = (v: number) => (v >= 1 ? { level: '平衡', tone: 'good' } : v >= -2 ? { level: '轻微失衡', tone: 'normal' } : { level: '失衡', tone: 'warn' });
 
+/* 数字计数动画：0 → 终值（rAF，reduced-motion 直接终值） */
+const prefersReducedMotion = typeof window !== 'undefined'
+  && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function useCountUpMap(source: () => Record<string, number>, durationMs = 800): { display: Record<string, string> } {
+  const display = reactive<Record<string, string>>({});
+  let raf = 0;
+  const render = () => {
+    const targets = source();
+    if (prefersReducedMotion) {
+      Object.assign(display, Object.fromEntries(Object.entries(targets).map(([k, v]) => [k, String(v)])));
+      return;
+    }
+    const start = performance.now();
+    const fromMap = { ...display };
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const next: Record<string, string> = {};
+      for (const [k, v] of Object.entries(targets)) {
+        const from = Number(fromMap[k]) || 0;
+        next[k] = String(Math.round(from + (v - from) * eased));
+      }
+      Object.assign(display, next);
+      if (t < 1) raf = requestAnimationFrame(step);
+    };
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(step);
+  };
+  onMounted(() => {
+    render();
+    if (!prefersReducedMotion) {
+      watch(source, () => {
+        if (document.visibilityState === 'visible') render();
+      });
+    }
+  });
+  onUnmounted(() => cancelAnimationFrame(raf));
+  return { display };
+}
+
+const summaryCounters = useCountUpMap(() => ({
+  mastered: props.masteredCount,
+  messages: props.messageCount,
+}));
+const sessionCounters = useCountUpMap(() => {
+  const out: Record<string, number> = {};
+  for (const card of sessionMetricCards.value) out[card.key] = Number(card.raw);
+  return out;
+});
+const longTermCounters = useCountUpMap(() => {
+  const out: Record<string, number> = {};
+  for (const card of longTermMetricCards.value) out[card.key] = Number(card.raw);
+  return out;
+});
+
 const sessionMetricCards = computed(() => {
   if (!evaluation.value) return [];
   const k = Number(evaluation.value.sessionKtl ?? evaluation.value.ktl);
@@ -163,9 +219,9 @@ const sessionMetricCards = computed(() => {
   const sl = getStress(s * 10);
   const fl = getStress(f * 10);
   return [
-    { key: 'k', label: '本节掌握增量', value: toFixed(k), level: kl.level, tone: kl.tone, desc: '即时学习产出，越高说明本节吸收越充分。' },
-    { key: 's', label: '本节学习压力', value: toFixed(s), level: sl.level, tone: sl.tone, desc: '当前课程负荷强度，偏高时建议先复盘。' },
-    { key: 'f', label: '本节疲劳累积', value: toFixed(f), level: fl.level, tone: fl.tone, desc: '即时疲劳变化，偏高时适合切换轻任务。' },
+    { key: 'k', label: '本节掌握增量', value: toFixed(k), raw: k, level: kl.level, tone: kl.tone, desc: '即时学习产出，越高说明本节吸收越充分。' },
+    { key: 's', label: '本节学习压力', value: toFixed(s), raw: s, level: sl.level, tone: sl.tone, desc: '当前课程负荷强度，偏高时建议先复盘。' },
+    { key: 'f', label: '本节疲劳累积', value: toFixed(f), raw: f, level: fl.level, tone: fl.tone, desc: '即时疲劳变化，偏高时适合切换轻任务。' },
   ];
 });
 
@@ -177,10 +233,10 @@ const longTermMetricCards = computed(() => {
   const fl = getStress(Number(lf || 0) * 10);
   const sl = getStress(Number(lss || 0) * 10);
   return [
-    { key: 'ktl', label: 'KTL 知识掌握', value: toFixed(ktl), level: kl.level, tone: kl.tone, desc: '长期累计学习收益，反映稳定掌握趋势。' },
-    { key: 'lsb', label: 'LSB 状态平衡', value: toFixed(lsb), level: bl.level, tone: bl.tone, desc: '掌握与疲劳差值，越接近正值越理想。' },
-    { key: 'lf', label: 'LF 学习疲劳', value: toFixed(lf), level: fl.level, tone: fl.tone, desc: '短期疲劳累计，偏高时建议降强度。' },
-    { key: 'lss', label: 'LSS 学习压力', value: toFixed(lss), level: sl.level, tone: sl.tone, desc: '整体学习压力水平，持续偏高需节奏调整。' },
+    { key: 'ktl', label: 'KTL 知识掌握', value: toFixed(ktl), raw: Number(ktl || 0), level: kl.level, tone: kl.tone, desc: '长期累计学习收益，反映稳定掌握趋势。' },
+    { key: 'lsb', label: 'LSB 状态平衡', value: toFixed(lsb), raw: Number(lsb || 0), level: bl.level, tone: bl.tone, desc: '掌握与疲劳差值，越接近正值越理想。' },
+    { key: 'lf', label: 'LF 学习疲劳', value: toFixed(lf), raw: Number(lf || 0), level: fl.level, tone: fl.tone, desc: '短期疲劳累计，偏高时建议降强度。' },
+    { key: 'lss', label: 'LSS 学习压力', value: toFixed(lss), raw: Number(lss || 0), level: sl.level, tone: sl.tone, desc: '整体学习压力水平，持续偏高需节奏调整。' },
   ];
 });
 

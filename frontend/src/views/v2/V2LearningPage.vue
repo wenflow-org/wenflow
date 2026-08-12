@@ -11,16 +11,19 @@
       <div class="learn__head-right">
         <span class="learn__live">{{ session ? '学习中' : '连接中' }}</span>
         <span class="learn__menu" title="更多" @click="menuOpen = !menuOpen">⋯</span>
-        <div v-if="menuOpen" class="learn__menu-pop">
-          <span class="learn__menu-item" @click="pauseAndLeave">暂停并离开</span>
-          <span class="learn__menu-item" @click="restart">重新开始</span>
-          <span class="learn__menu-item" @click="endSession">结束本次学习</span>
-        </div>
+        <Transition name="pop">
+          <div v-if="menuOpen" class="learn__menu-pop">
+            <button type="button" class="learn__menu-item" @click="pauseAndLeave">暂停并离开</button>
+            <button type="button" class="learn__menu-item" @click="restart">重新开始</button>
+            <button type="button" class="learn__menu-item" @click="endSession">结束本次学习</button>
+          </div>
+        </Transition>
       </div>
     </header>
 
     <!-- 初始化中 -->
-    <div v-if="initing" class="learn__stage">
+    <Transition name="stage-switch" mode="out-in">
+      <div v-if="initing" key="init" class="learn__stage">
       <div class="stage-card">
         <span class="spinner"></span>
         <h2>正在准备本节内容…</h2>
@@ -30,20 +33,20 @@
     </div>
 
     <!-- 初始化失败 -->
-    <div v-else-if="initError" class="learn__stage">
+    <div v-else-if="initError" key="err" class="learn__stage">
       <div class="stage-card">
         <span class="stage-card__warn">!</span>
         <h2>本节暂时开不了课</h2>
         <p>{{ friendlyError }}</p>
         <div class="stage-card__actions">
-          <span class="btn-primary" @click="boot">重新尝试</span>
-          <span class="btn-ghost" @click="goBack">返回路径详情</span>
+          <button type="button" class="btn-primary" @click="boot">重新尝试</button>
+          <button type="button" class="btn-ghost" @click="goBack">返回路径详情</button>
           <router-link to="/learning-paths" class="btn-ghost">查看路径列表</router-link>
         </div>
       </div>
     </div>
 
-    <div v-else class="learn__body" :class="{ 'learn__body--no-kp': !knowledgePoints.length }">
+    <div v-else key="body" class="learn__body" :class="{ 'learn__body--no-kp': !knowledgePoints.length }">
       <!-- 左：知识点面板 -->
       <aside v-if="knowledgePoints.length" class="kp">
         <div class="kp__head">
@@ -68,7 +71,7 @@
       <!-- 中：导师对话 -->
       <section class="tutor">
         <div ref="scrollEl" class="tutor__scroll">
-          <template v-for="(m, i) in msgs" :key="i">
+          <template v-for="m in msgs" :key="m.id">
             <div v-if="m.role === 'user'" class="msg msg--user">
               <div class="msg__bubble">{{ m.text }}</div>
               <div class="msg__meta">你 · {{ m.time }}</div>
@@ -108,7 +111,8 @@
         </div>
 
         <!-- 检查点 -->
-        <div v-if="checkpoint && !completed" class="checkpoint">
+        <Transition name="cp">
+          <div v-if="checkpoint && !completed" class="checkpoint">
           <div class="checkpoint__head">
             <span class="checkpoint__badge">检查点</span>
             <strong>{{ checkpoint.title || checkpoint.question }}</strong>
@@ -133,7 +137,7 @@
             <span class="btn-primary" @click="submitCheckpoint">提交</span>
             <span v-if="checkpoint.allowSkip !== false" class="btn-ghost" @click="skipCheckpoint">跳过</span>
           </div>
-        </div>
+        </Transition>
 
         <!-- 输入区 -->
         <div class="composer">
@@ -159,7 +163,8 @@
         </div>
 
         <!-- 完成浮层 -->
-        <div v-if="completed" class="finish">
+        <Transition name="finish-pop">
+          <div v-if="completed" class="finish">
           <div class="finish__card">
             <span class="finish__ring">
               <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
@@ -175,8 +180,10 @@
             </div>
           </div>
         </div>
+        </Transition>
       </section>
     </div>
+    </Transition>
 
     <!-- 伴学浮动窗：不占主对话区，可回复、可收起成悬浮球 -->
     <Transition name="peer-pop">
@@ -265,8 +272,14 @@ const friendlyError = computed(() => {
   return raw || '开课失败，请重试。';
 });
 
-interface ChatMsg { role: 'ai' | 'user'; text: string; time: string; failed?: boolean; confusion?: string[] }
+interface ChatMsg { role: 'ai' | 'user'; text: string; time: string; failed?: boolean; confusion?: string[]; id?: string }
 const msgs = ref<ChatMsg[]>([]);
+let msgSeq = 0;
+function pushMsg(m: ChatMsg): ChatMsg {
+  const withId: ChatMsg = { ...m, id: m.id ?? `lm_${Date.now().toString(36)}_${++msgSeq}` };
+  msgs.value.push(withId);
+  return withId;
+}
 const quickReplies = ref<string[]>([]);
 const knowledgePoints = ref<Array<Record<string, any>>>([]);
 const showKpActions = ref(false);
@@ -370,8 +383,8 @@ async function boot() {
       : await aiTeachingAPI.startSession(taskId)) as unknown as Record<string, any>;
     session.value = { sessionId: s.sessionId, revision: s.revision ?? 0 };
     const openingText = s.opening?.message || s.welcomeMessage;
-    if (openingText) msgs.value.push({ role: 'ai', text: openingText, time: nowTime() });
-    if (s.opening?.question) msgs.value.push({ role: 'ai', text: s.opening.question, time: nowTime() });
+    if (openingText) pushMsg({ role: 'ai', text: openingText, time: nowTime() });
+    if (s.opening?.question) pushMsg({ role: 'ai', text: s.opening.question, time: nowTime() });
     quickReplies.value = (s.opening?.quickReplies || []).map((q: Record<string, any>) => q.text || q).filter(Boolean);
     if (Array.isArray(s.knowledgePoints) && s.knowledgePoints.length) {
       knowledgePoints.value = s.knowledgePoints;
@@ -380,6 +393,33 @@ async function boot() {
     // 会话来源提示：恢复上次课堂 / 已学完重开（避免「从头开始」困惑）
     if (s.mode === 'resumed') {
       toast.info('已恢复上次课堂');
+      // 恢复上下文：回填历史对话与待处理检查点，避免刷新后课堂记忆断裂
+      try {
+        const detail = await aiTeachingAPI.getSessionDetail(s.sessionId);
+        if (detail) {
+          if (Array.isArray(detail.messages)) {
+            const restored = detail.messages
+              .filter((m) => m.role === 'user' || m.role === 'assistant')
+              .map((m) => pushMsg({
+                role: m.role === 'user' ? 'user' : 'ai',
+                text: String(m.content || ''),
+                time: nowTime(),
+              }));
+            if (restored.length) scrollDown();
+          }
+          if (detail.pendingCheckpoint) {
+            checkpoint.value = detail.pendingCheckpoint;
+            checkpointFeedback.value = '';
+            selectedOptions.value = [];
+            answerText.value = '';
+          }
+          if (Array.isArray(detail.knowledgePoints) && detail.knowledgePoints.length) {
+            knowledgePoints.value = detail.knowledgePoints;
+            showKpActions.value = true;
+          }
+          session.value.revision = typeof detail.revision === 'number' ? detail.revision : session.value.revision;
+        }
+      } catch { /* 历史回填失败不阻断上课 */ }
     } else if (s.mode === 'new') {
       aiTeachingAPI.getLatestTaskEvaluation(taskId)
         .then((latest) => {
@@ -421,10 +461,10 @@ async function sendDirect(text: string) {
   await doSend(text);
 }
 
-async function doSend(text: string) {
+async function doSend(text: string, allowStaleRetry = true) {
   if (!session.value) return;
   lastUserText = text;
-  msgs.value.push({ role: 'user', text, time: nowTime() });
+  pushMsg({ role: 'user', text, time: nowTime() });
   quickReplies.value = [];
   typing.value = true;
   scrollDown();
@@ -439,7 +479,7 @@ async function doSend(text: string) {
           // 首个 delta 到达时才建 AI 气泡，避免 JSON 输出（无 delta）产生空气泡
           let m = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
           if (!m || m.role !== 'ai') {
-            msgs.value.push({ role: 'ai', text: '', time: nowTime() });
+            pushMsg({ role: 'ai', text: '', time: nowTime() });
             streamingBubbleIndex.value = msgs.value.length - 1;
             m = msgs.value[streamingBubbleIndex.value];
           }
@@ -475,7 +515,7 @@ async function doSend(text: string) {
       aiMsg.text = r.aiResponse || aiMsg.text;
       aiMsg.confusion = confusion;
     } else if (r.aiResponse) {
-      msgs.value.push({ role: 'ai', text: r.aiResponse, time: nowTime(), confusion });
+      pushMsg({ role: 'ai', text: r.aiResponse, time: nowTime(), confusion });
     }
     // 伴学触发：进独立浮动窗，不占主对话区
     if (r.peerTriggered && r.peerMessage) {
@@ -502,7 +542,20 @@ async function doSend(text: string) {
     if ((e as { cancelled?: boolean })?.cancelled) return;
     // 流式气泡可能已有部分内容：移除后展示统一失败气泡
     if (streamingBubbleIndex.value >= 0) msgs.value.splice(streamingBubbleIndex.value, 1);
-    msgs.value.push({ role: 'ai', text: '这次回复失败了，点下方「重试」。', time: nowTime(), failed: true });
+    // 陈旧 revision（多标签页/刷新竞态）：同步最新 revision 后重发一次，避免重试死循环
+    const raw = e as any;
+    const staleCode = raw?.response?.data?.error?.code || raw?.response?.data?.error || raw?.code || '';
+    if (String(staleCode).includes('TEACHING_SESSION_STALE') && session.value && allowStaleRetry) {
+      try {
+        const fresh = (isReviewMode.value
+          ? await aiTeachingAPI.startReviewSession(taskId)
+          : await aiTeachingAPI.startSession(taskId)) as unknown as Record<string, any>;
+        if (typeof fresh?.revision === 'number') session.value.revision = fresh.revision;
+      } catch { /* 同步失败则直接展示失败气泡 */ }
+      await doSend(text, false);
+      return;
+    }
+    pushMsg({ role: 'ai', text: '这次回复失败了，点下方「重试」。', time: nowTime(), failed: true });
   } finally {
     streamingBubbleIndex.value = -1;
     typing.value = false;
@@ -553,9 +606,18 @@ async function submitCheckpoint() {
   }
 }
 
-function skipCheckpoint() {
+async function skipCheckpoint() {
+  if (!checkpoint.value || !session.value || typing.value) return;
+  const cp = checkpoint.value;
   checkpoint.value = null;
-  sendDirect('跳过这个检查点，继续');
+  try {
+    const r = await aiTeachingAPI.submitCheckpoint(session.value.sessionId, cp.id, { skip: true }, session.value.revision) as unknown as Record<string, any>;
+    session.value.revision = typeof r?.revision === 'number' ? r.revision : session.value.revision + 1;
+  } catch (e: any) {
+    toast.error(e?.response?.data?.error?.message || '跳过检查点失败');
+    // 失败恢复检查点，允许用户重试或改作答
+    checkpoint.value = cp;
+  }
 }
 
 /* ---------- 结束 ---------- */
@@ -575,11 +637,26 @@ async function finish(action: 'complete_task' | 'end_only' | 'complete_review') 
     if (wrapup?.evaluation?.duration) stats.push({ label: '分钟', value: Math.round(wrapup.evaluation.duration) });
     if (wrapup?.evaluation?.messageCount) stats.push({ label: '次对话', value: wrapup.evaluation.messageCount });
     finishStats.value = stats;
-    evaluationUrl.value = `/learn/${taskId}/evaluation/${session.value.sessionId}`;
-  } catch {
-    completed.value = true;
-    wrapupText.value = '本次学习已结束（结算信息稍后可在学习反馈中查看）。';
-    evaluationUrl.value = `/learn/${taskId}/evaluation/${session.value.sessionId}`;
+    evaluationUrl.value = `/learn/${taskId}/evaluation/${session.value.sessionId}${pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : ''}`;
+  } catch (e: any) {
+    // 结算失败不冒充完成：保留重试入口，用户仍可去学习反馈页查看
+    const msg = e?.response?.data?.error?.message || e?.message || '结算失败';
+    toast.error(`课堂收束未完成：${msg}`);
+    evaluationUrl.value = `/learn/${taskId}/evaluation/${session.value.sessionId}${pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : ''}`;
+    // 会话可能已收束但轮询异常：提供进入反馈页的途径（via 完成浮层不弹，用 toast 引导）
+    if (session.value) {
+      window.setTimeout(() => {
+        if (!completed.value) {
+          ElMessageBox.confirm(
+            '课堂收束遇到问题。你可以稍后重试，或直接查看学习反馈（反馈可能仍在生成中）。',
+            '收束未完成',
+            { confirmButtonText: '查看学习反馈', cancelButtonText: '稍后重试', type: 'warning' }
+          ).then(() => {
+            if (evaluationUrl.value) router.push(evaluationUrl.value);
+          }).catch(() => {});
+        }
+      }, 300);
+    }
   }
 }
 
@@ -597,6 +674,14 @@ async function endSession() {
   }
   actionBusy.value = true;
   try {
+    // 流式回复进行中：先中止在途请求并等待收尾，避免「完成浮层已弹但会话实际未结束」的假完成
+    if (typing.value) {
+      streamAbort?.abort();
+      streamAbort = null;
+      for (let i = 0; i < 20 && typing.value; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
     await finish('end_only');
   } finally {
     actionBusy.value = false;
@@ -638,7 +723,9 @@ async function restart() {
     checkpoint.value = null;
     completed.value = false;
     await boot();
-  } catch { /* ignore */ } finally {
+  } catch (e: any) {
+    toast.error(e?.response?.data?.error?.message || '重新开始失败，请稍后重试');
+  } finally {
     actionBusy.value = false;
   }
 }
@@ -888,10 +975,55 @@ onBeforeUnmount(() => {
 /* 消息入场：新气泡浮出（typing 圆点除外） */
 @media (prefers-reduced-motion: no-preference) {
   .msg { animation: msg-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+  /* 更多菜单：弹出 */
+  .pop-enter-active, .pop-leave-active { transition: opacity .18s ease, transform .18s cubic-bezier(0.16, 1, 0.3, 1); }
+  .pop-enter-from { opacity: 0; transform: scale(.96) translateY(4px); }
+  .pop-leave-to { opacity: 0; transform: scale(.97) translateY(-2px); }
+
+  /* 初始化/错误/课堂 三态切换：淡入淡出 */
+  .stage-switch-enter-active, .stage-switch-leave-active { transition: opacity .2s ease; }
+  .stage-switch-enter-from, .stage-switch-leave-to { opacity: 0; }
+
+  /* 检查点：上浮淡入 / 收缩淡出 */
+  .cp-enter-active { transition: opacity .25s ease, transform .25s cubic-bezier(0.16, 1, 0.3, 1); }
+  .cp-leave-active { transition: opacity .2s ease, transform .2s ease; }
+  .cp-enter-from { opacity: 0; transform: translateY(10px); }
+  .cp-leave-to { opacity: 0; transform: scale(.98) translateY(-4px); }
+
+  /* 完成浮层：遮罩淡入 + 卡片弹簧弹入 + 对勾弹性 pop */
+  .finish-pop-enter-active { transition: opacity .2s ease; }
+  .finish-pop-leave-active { transition: opacity .15s ease; }
+  .finish-pop-enter-from, .finish-pop-leave-to { opacity: 0; }
+  .finish-pop-enter-active .finish__card { animation: finish-card-in .35s cubic-bezier(0.34, 1.56, 0.64, 1) .05s both; }
+  .finish-pop-enter-active .finish__ring svg { animation: finish-check-pop .4s cubic-bezier(0.34, 1.56, 0.64, 1) .2s both; }
+
+  /* 知识点状态过渡：标记底色渐变 + 勾号弹性 pop */
+  .kp__mark { transition: background .2s ease, border-color .2s ease; }
+  .kp__mark svg { animation: kp-check-pop .25s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+  /* 检查点反馈条：淡入上浮 */
+  .checkpoint__feedback { animation: cp-fb-in .2s ease both; }
 }
 @keyframes msg-in {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+@keyframes finish-card-in {
+  from { opacity: 0; transform: scale(.92) translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes finish-check-pop {
+  from { transform: scale(.4) rotate(-30deg); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes kp-check-pop {
+  from { transform: scale(.4); }
+  to { transform: none; }
+}
+@keyframes cp-fb-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
 }
 
 /* 卡点依据 chip */

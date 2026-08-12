@@ -52,6 +52,8 @@ export interface TeachingCheckpoint {
 export interface CheckpointSubmitPayload {
   selectedOptionIds?: string[];
   answerText?: string;
+  /** 跳过检查点：清除待处理检查点并记录历史，不触发教学回合 */
+  skip?: boolean;
 }
 
 export interface CheckpointSubmitResult {
@@ -2246,6 +2248,38 @@ export class AITeachingOrchestrator {
     }
 
     try {
+      // 跳过检查点：清除待处理检查点（记录历史，允许后续生成新检查点），不触发教学回合
+      if (payload?.skip === true) {
+        const teachingState: Record<string, any> = { ...(session.teachingState || {}) };
+        delete teachingState.pendingCheckpoint;
+        const nextArtifacts = { ...parseSessionArtifacts(teachingState) };
+        delete nextArtifacts.pendingCheckpoint;
+        teachingState.sessionArtifacts = nextArtifacts;
+        const history = Array.isArray(teachingState.checkpointHistory)
+          ? [...teachingState.checkpointHistory]
+          : [];
+        history.push({
+          checkpointId,
+          submittedAt: new Date().toISOString(),
+          passed: false,
+          skipped: true,
+        });
+        teachingState.checkpointHistory = history.slice(-20);
+        await teachingSessionRepository.commitTurnState(sessionId, operationClaim.operationId, {
+          messages: session.messages,
+          knowledgeState: session.knowledgeState,
+          teachingState,
+          taskId: session.taskId,
+          userId: session.userId,
+        });
+        return {
+          passed: false,
+          feedback: '已跳过这个检查点，我们继续。',
+          nextAction: 'continue',
+          revision: (operationClaim.session.revision ?? 0) + 1,
+        };
+      }
+
       let answer: string;
       if (checkpoint.type === 'short_answer') {
         answer = payload.answerText?.trim() || '';
