@@ -50,7 +50,7 @@
           <p v-if="entity.description" class="msk__desc" :title="entity.description">{{ entity.description }}</p>
         </header>
 
-        <!-- 页签：概览 / 运行 / Prompt / 协议（统一 mk-pills） -->
+        <!-- 页签：概览 / Prompt（只读速览；编辑统一在 Prompt 设计页） -->
         <nav class="mk-pills msk__tabs" aria-label="详情页签">
           <button
             v-for="t in visibleTabs"
@@ -58,7 +58,7 @@
             type="button"
             class="mk-pill"
             :class="{ 'mk-pill--active': activeTab === t.key }"
-            @click="activateTab(t.key)"
+            @click="activeTab = t.key"
           >
             {{ t.label }}
             <span v-if="t.badge" class="msk__tab-badge" :class="t.badgeCls">{{ t.badge }}</span>
@@ -66,7 +66,7 @@
         </nav>
 
         <div class="msk__body">
-          <!-- ========== 概览 ========== -->
+          <!-- ========== 概览（只读） ========== -->
           <template v-if="activeTab === 'overview'">
           <!-- 指标条 -->
           <div class="msk__stats">
@@ -146,76 +146,7 @@
           </section>
           </template>
 
-          <!-- ========== 运行（配置 + 试跑） ========== -->
-          <template v-if="activeTab === 'run'">
-          <!-- 运行配置（live 可编辑：对齐生产 AgentEditor 运行时 tab） -->
-          <section v-if="skillProfile && isLive" class="msk__section">
-            <header class="msk__sec-head">
-              <h4>运行配置</h4>
-              <span class="msk__src-chip" :class="{ 'msk__src-chip--custom': runtimeCfg?.hasSkillOverride }">
-                {{ runtimeCfg?.hasSkillOverride ? '独立配置' : '继承 Agent/平台' }}
-              </span>
-            </header>
-            <div v-if="runtimeCfg" class="msk__card">
-              <label class="msk__field">
-                <span>模型（留空 = 继承）</span>
-                <input v-model="runtimeCfg.model" class="msk__input mono" list="msk-models" placeholder="继承" />
-                <datalist id="msk-models">
-                  <option v-for="m in modelOptions" :key="m" :value="m" />
-                </datalist>
-              </label>
-              <label class="msk__field msk__field--check">
-                <input v-model="runtimeCfg.enabled" type="checkbox" />
-                <span>启用路由覆盖</span>
-              </label>
-              <p v-if="effectiveLlmNote" class="msk__effective">{{ effectiveLlmNote }}</p>
-              <!-- 重试与超时（网关三层预算的 Skill 级覆盖） -->
-              <div class="msk__field-grid">
-                <label class="msk__field">
-                  <span>逻辑重试（0-2）</span>
-                  <input v-model.number="runtimeCfg.maxLogicalRetries" type="number" min="0" max="2" step="1" class="msk__input" placeholder="继承平台" />
-                </label>
-                <label class="msk__field">
-                  <span>超时秒（10-300）</span>
-                  <input v-model.number="runtimeCfg.timeoutSec" type="number" min="10" max="300" step="10" class="msk__input" placeholder="继承平台" />
-                </label>
-              </div>
-              <p class="msk__budget">平台预算 <em class="mono">{{ platformBudget }}</em></p>
-              <div class="msk__actions">
-                <button type="button" class="mk-btn mk-btn--primary" :disabled="cfgBusy" @click="saveCfg">
-                  {{ cfgBusy ? '保存中…' : '保存配置' }}
-                </button>
-                <button
-                  v-if="runtimeCfg.hasSkillOverride"
-                  type="button"
-                  class="mk-btn msk__btn-danger"
-                  :disabled="cfgBusy"
-                  @click="deleteCfg"
-                >
-                  删除独立配置
-                </button>
-              </div>
-              <p v-if="cfgMsg" class="msk__msg" :class="{ 'msk__msg--err': cfgErr }">{{ cfgMsg }}</p>
-            </div>
-            <p v-else class="msk__none">{{ cfgErr ? cfgMsg : '配置加载中…' }}</p>
-          </section>
-
-          <!-- 试跑（live：对齐生产 testSkill 预览） -->
-          <section v-if="skillProfile && isLive" class="msk__section">
-            <header class="msk__sec-head">
-              <h4>试跑</h4>
-            </header>
-            <textarea v-model="testInput" class="msk__test-input mono" rows="3" placeholder='{"input": "测试输入"}'></textarea>
-            <div class="msk__actions">
-              <button type="button" class="mk-btn mk-btn--primary" :disabled="testBusy" @click="runTest">
-                {{ testBusy ? '运行中…' : '运行测试' }}
-              </button>
-            </div>
-            <pre v-if="testResult" class="msk__code" :class="{ 'msk__code--err': testError }">{{ testResult }}</pre>
-          </section>
-          </template>
-
-          <!-- ========== Prompt ========== -->
+          <!-- ========== Prompt（只读：生效内容 + 设计页跳转） ========== -->
           <template v-if="activeTab === 'prompt'">
           <section v-if="skillProfile" class="msk__section">
             <header class="msk__sec-head">
@@ -229,94 +160,11 @@
               <span class="mono">{{ liveMeta?.promptVersion || skillProfile.promptVersion || '默认' }}</span>
               <button type="button" class="mk-link" @click="goPromptLab">编辑协议 / 发布 →</button>
             </div>
-            <div v-if="isLive && promptVersions.length" class="msk__versions">
-              <span class="msk__versions-label">历史版本（可与生效版对比）</span>
-              <p v-if="versionMsg" class="msk__versions-msg" :class="{ 'is-err': versionErr }">{{ versionMsg }}</p>
-              <div v-for="v in promptVersions" :key="v.id" class="msk__version-row">
-                <span class="msk__version-tag mono">v{{ v.version }}</span>
-                <span class="msk__version-status">
-                  <span class="mk-badge" :class="v.status === 'ACTIVE' ? 'mk-badge--ok' : 'mk-badge--muted'">
-                    {{ v.status }}
-                  </span>
-                </span>
-                <span class="msk__version-name" :title="v.name">{{ v.name }}</span>
-                <span class="msk__version-ops">
-                  <button
-                    v-if="v.status !== 'ACTIVE'"
-                    type="button"
-                    class="msk__op"
-                    :disabled="versionBusy === v.id"
-                    @click="compareWithActive(v)"
-                  >
-                    {{ compareLoading === v.id ? '…' : '对比' }}
-                  </button>
-                  <span v-if="v.status === 'ACTIVE'" class="msk__op is-active">当前生效</span>
-                </span>
-              </div>
-
-              <!-- 与生效版对比结果 -->
-              <div v-if="compareResult" class="msk__diff">
-                <div class="msk__diff-head">
-                  <span class="mono">{{ compareResult.aLabel }} ↔ {{ compareResult.bLabel }}</span>
-                  <span class="msk__diff-count" :class="{ 'is-clean': compareResult.changedLines === 0 }">
-                    {{ compareResult.changedLines ? `${compareResult.changedLines} 行变更` : '内容一致' }}
-                  </span>
-                  <button type="button" class="msk__op" @click="compareResult = null">收起</button>
-                </div>
-                <div class="msk__diff-body mono">
-                  <template v-for="(grp, gi) in compareResult.groups" :key="gi">
-                    <div v-if="grp.gap" class="msk__diff-gap">…</div>
-                    <div
-                      v-for="(line, li) in grp.lines"
-                      :key="li"
-                      class="msk__diff-line"
-                      :class="`is-${line.type}`"
-                    >
-                      <span class="msk__diff-no">{{ line.no }}</span>
-                      <span class="msk__diff-text">{{ line.text }}</span>
-                    </div>
-                  </template>
-                </div>
-              </div>
-            </div>
           </section>
 
           <section v-if="skillProfile && isLive" class="msk__section msk__section--actions">
             <button type="button" class="msk__primary-link" @click="goFullEditor">打开 Prompt 设计页 →</button>
-            <p class="msk__none">设计页统一承接：协议（core 编辑/发布）、Prompt 检视、试跑、运行时与工程视图；抽屉保留只读速览。</p>
-          </section>
-          </template>
-
-          <!-- ========== 协议 ========== -->
-          <template v-if="activeTab === 'rules'">
-          <section class="msk__section">
-            <header class="msk__sec-head">
-              <h4>协议规则</h4>
-              <span v-if="agentRules.length" class="msk__sec-meta mono">{{ agentRules.length }} 条</span>
-            </header>
-            <p v-if="protocolLoading" class="msk__none">加载协议与规则…</p>
-            <template v-else>
-              <!-- 本节点规则 -->
-              <div v-if="agentRules.length" class="msk__rules">
-                <div v-for="r in agentRules" :key="r.ruleId + r.text.slice(0, 8)" class="msk__rule">
-                  <span class="msk__rule-id mono">{{ r.ruleId }}</span>
-                  <span class="msk__rule-text">{{ r.text }}</span>
-                </div>
-              </div>
-              <p v-else class="msk__none">本节点没有登记规则。</p>
-              <p v-if="conflictNote" class="msk__conflict">⚠ {{ conflictNote }}</p>
-              <!-- 协议视图 -->
-              <div v-if="protocols.length" class="msk__protocols">
-                <div v-for="p in protocols" :key="p.id" class="msk__protocol">
-                  <div class="msk__protocol-head">
-                    <strong>{{ p.title }}</strong>
-                    <span class="mk-badge mk-badge--muted">{{ p.statusLabel }}</span>
-                  </div>
-                  <p>{{ p.summary }}</p>
-                  <span class="msk__protocol-sites mono">{{ p.callSites }}</span>
-                </div>
-              </div>
-            </template>
+            <p class="msk__none">设计页统一承接：协议（core 编辑/发布）、版本、试跑、运行时与工程视图；抽屉仅保留只读速览。</p>
           </section>
           </template>
         </div>
@@ -345,9 +193,8 @@ import {
   dataSource,
   AGENT_TONES
 } from './store'
-import { liveSkillProfiles, liveExtraProfiles, liveApiConfig, errMsg, fetchProtocolView, fetchRulesOverview, type LiveProtocol, type LiveRulesOverview, type LiveRule } from './live'
-import { adminSkillWorkbenchApi, adminSkillsApi, adminAgentPromptsApi } from '@/api/adminApi'
-import { askConfirm } from './useConfirm'
+import { liveSkillProfiles, liveExtraProfiles } from './live'
+import { adminSkillWorkbenchApi, adminSkillsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 
@@ -402,110 +249,8 @@ const rateTone = computed(() => {
   return r >= 95 ? 'warn' : 'bad'
 })
 
-/* live：运行配置（读写，对齐生产 SkillRuntimeConfigPane） */
-interface RuntimeCfg {
-  model: string
-  enabled: boolean
-  hasSkillOverride: boolean
-  maxLogicalRetries: number | null
-  timeoutSec: number | null
-}
-const runtimeCfg = ref<RuntimeCfg | null>(null)
-const cfgBusy = ref(false)
-const cfgMsg = ref('')
-const cfgErr = ref(false)
-
-/** 平台预算（来自 workbench meta 的 reliability，只读展示） */
-const platformReliability = ref<{ maxUpstreamAttempts?: number; maxTransportRetries?: number; maxLogicalRetries?: number; timeoutMs?: number } | null>(null)
-const platformBudget = computed(() => {
-  const r = platformReliability.value
-  if (!r) return '—'
-  const timeoutSec = r.timeoutMs ? Math.round(r.timeoutMs / 1000) : null
-  return `上游 ×${r.maxUpstreamAttempts ?? '—'} · 传输 ×${r.maxTransportRetries ?? '—'} · 逻辑 ×${r.maxLogicalRetries ?? '—'}${timeoutSec ? ` · ${timeoutSec}s` : ''}`
-})
-
-const modelOptions = computed(() => liveApiConfig.value?.availableModels || [])
-
-async function loadRuntimeCfg(id: string) {
-  runtimeCfg.value = null
-  try {
-    const res = await adminSkillsApi.getSkillModelConfig(id)
-    const c = res.data?.data ?? res.data ?? {}
-    runtimeCfg.value = {
-      model: c.model || '',
-      enabled: c.enabled !== false,
-      hasSkillOverride: !!(c.hasSkillOverride ?? c.id),
-      maxLogicalRetries: c.maxLogicalRetries != null ? Number(c.maxLogicalRetries) : null,
-      timeoutSec: c.requestTimeoutMs != null ? Math.round(Number(c.requestTimeoutMs) / 1000) : null
-    }
-  } catch (e) {
-    const status = (e as { response?: { status?: number } })?.response?.status
-    if (status === 404) {
-      // 无独立配置：以继承默认值起步，保存即创建覆盖
-      runtimeCfg.value = { model: '', enabled: true, hasSkillOverride: false, maxLogicalRetries: null, timeoutSec: null }
-    } else {
-      // 其他错误：提示用户，保持空态
-      cfgErr.value = true
-      cfgMsg.value = `配置加载失败：${errMsg(e)}`
-    }
-  }
-}
-
-async function saveCfg() {
-  const id = intent.skillDrawerId
-  if (!id || !runtimeCfg.value || cfgBusy.value) return
-  cfgBusy.value = true
-  cfgMsg.value = ''
-  try {
-    await adminSkillsApi.updateSkillModelConfig(id, {
-      model: runtimeCfg.value.model || null,
-      enabled: runtimeCfg.value.enabled,
-      maxLogicalRetries: runtimeCfg.value.maxLogicalRetries,
-      requestTimeoutMs: runtimeCfg.value.timeoutSec != null ? runtimeCfg.value.timeoutSec * 1000 : null
-    })
-    runtimeCfg.value.hasSkillOverride = true
-    cfgErr.value = false
-    cfgMsg.value = '已保存路由/可靠性（T/maxTokens 由 ACTIVE Prompt 管理）'
-  } catch (e) {
-    cfgErr.value = true
-    cfgMsg.value = `保存失败：${errMsg(e)}`
-  } finally {
-    cfgBusy.value = false
-  }
-}
-
-async function deleteCfg() {
-  const id = intent.skillDrawerId
-  if (!id || cfgBusy.value) return
-  const ok = await askConfirm({
-    title: '删除独立配置',
-    message: '确定删除该 Skill 的独立运行配置吗？\n删除后将回退为继承 Agent / 平台默认。',
-    confirmText: '删除'
-  })
-  if (!ok) return
-  cfgBusy.value = true
-  cfgMsg.value = ''
-  try {
-    await adminSkillsApi.deleteSkillModelConfig(id)
-    await loadRuntimeCfg(id)
-    cfgErr.value = false
-    cfgMsg.value = '已删除独立配置，回退为继承'
-  } catch (e) {
-    cfgErr.value = true
-    cfgMsg.value = `删除失败：${errMsg(e)}`
-  } finally {
-    cfgBusy.value = false
-  }
-}
-
-/* live：试跑（对齐生产 testSkill） */
-const testInput = ref('{\n  "input": "用一句话介绍你自己"\n}')
-const testBusy = ref(false)
-const testResult = ref('')
-const testError = ref(false)
-
-/* 页签：概览（健康）/ 运行（配置+试跑）/ Prompt（版本与生效内容）/ 协议 */
-type DrawerTab = 'overview' | 'run' | 'prompt' | 'rules'
+/* 页签：概览（只读）/ Prompt（只读 + 设计页跳转）；编辑能力已收敛到设计页 */
+type DrawerTab = 'overview' | 'prompt'
 const activeTab = ref<DrawerTab>('overview')
 const visibleTabs = computed<Array<{ key: DrawerTab; label: string; badge?: string; badgeCls?: string }>>(() => {
   const tabs: Array<{ key: DrawerTab; label: string; badge?: string; badgeCls?: string }> = [
@@ -517,74 +262,10 @@ const visibleTabs = computed<Array<{ key: DrawerTab; label: string; badge?: stri
       badgeCls: undefined
     }
   ]
-  if (skillProfile.value && isLive.value) tabs.push({ key: 'run', label: '运行' })
   if (skillProfile.value) tabs.push({ key: 'prompt', label: 'Prompt' })
-  if (isLive.value) tabs.push({ key: 'rules', label: '协议' })
   return tabs
 })
 
-function activateTab(key: DrawerTab) {
-  activeTab.value = key
-  if (key === 'rules') void ensureProtocolLoaded()
-}
-
-/* 协议规则：rules 页签首次激活时懒加载 */
-const protocolLoading = ref(false)
-const protocols = ref<LiveProtocol[]>([])
-const rulesOverview = ref<LiveRulesOverview | null>(null)
-
-const agentRules = computed(() => {
-  if (!rulesOverview.value || !intent.skillDrawerId) return [] as LiveRule[]
-  const full = `skill:${intent.skillDrawerId}`
-  return rulesOverview.value.rules.filter((r) => r.agentId === full || r.agentId === intent.skillDrawerId)
-})
-
-const conflictNote = computed(() => {
-  if (!rulesOverview.value) return ''
-  // live.ts 的 conflictPrefixes 为 { prefix, agentIds }[]（每项带归属 Agent 列表）
-  const prefixes = new Set(agentRules.value.map((r) => r.prefix))
-  const hit = rulesOverview.value.conflictPrefixes.filter((p) => prefixes.has(p.prefix))
-  if (!hit.length) return ''
-  return `前缀冲突：${hit.map((p) => p.prefix).join('、')} 与其他节点的规则撞号，建议改名归并`
-})
-
-async function ensureProtocolLoaded() {
-  if (protocols.value.length || protocolLoading.value) return
-  protocolLoading.value = true
-  try {
-    const [pv, ro] = await Promise.all([fetchProtocolView(), fetchRulesOverview()])
-    protocols.value = pv
-    rulesOverview.value = ro
-  } catch {
-    protocols.value = []
-  } finally {
-    protocolLoading.value = false
-  }
-}
-
-async function runTest() {
-  const id = intent.skillDrawerId
-  if (!id || testBusy.value) return
-  testBusy.value = true
-  testResult.value = ''
-  testError.value = false
-  try {
-    let payload: unknown = {}
-    try {
-      payload = JSON.parse(testInput.value || '{}')
-    } catch {
-      payload = { input: testInput.value }
-    }
-    const res = await adminSkillsApi.testSkill(id, payload)
-    const d = res.data?.data ?? res.data ?? {}
-    testResult.value = typeof d === 'string' ? d : JSON.stringify(d.output ?? d.result ?? d, null, 2).slice(0, 2000)
-  } catch (e) {
-    testError.value = true
-    testResult.value = `运行失败：${errMsg(e)}`
-  } finally {
-    testBusy.value = false
-  }
-}
 interface LiveMeta {
   agentName: string
   category: string
@@ -598,74 +279,6 @@ interface LiveMeta {
   statsRange: string
 }
 const liveMeta = ref<LiveMeta | null>(null)
-const promptVersions = ref<Array<{ id: string; version: string | number; status: string; name: string }>>([])
-
-/* Prompt 版本管理（发布/删除/与生效版对比） */
-const versionBusy = ref('')
-const compareLoading = ref('')
-const versionMsg = ref('')
-const versionErr = ref(false)
-interface DiffLine { type: 'added' | 'removed'; no: number | string; text: string }
-interface DiffGroup { gap: boolean; lines: DiffLine[] }
-const compareResult = ref<{ aLabel: string; bLabel: string; changedLines: number; groups: DiffGroup[] } | null>(null)
-
-/** 与当前 ACTIVE 版本做行级对比：modified 拆成删+增两行，连续变更分组，长同文段折叠为 … */
-async function compareWithActive(v: { id: string; version: string | number; name: string }) {
-  const active = promptVersions.value.find((x) => x.status === 'ACTIVE')
-  if (!active) {
-    versionMsg.value = '当前没有生效版本可作对比基准'
-    versionErr.value = true
-    return
-  }
-  if (compareLoading.value) return
-  compareLoading.value = v.id
-  versionMsg.value = ''
-  versionErr.value = false
-  try {
-    const res = await adminAgentPromptsApi.comparePrompts(active.id, v.id)
-    const d = res.data?.data ?? res.data ?? {}
-    const diffs = (d.diffs || []) as Array<Record<string, unknown>>
-    const groups: DiffGroup[] = []
-    let current: DiffLine[] = []
-    const flush = () => {
-      if (current.length) {
-        groups.push({ gap: groups.length > 0, lines: current })
-        current = []
-      }
-    }
-    for (const row of diffs) {
-      const type = String(row.type)
-      if (type === 'same') {
-        flush()
-        continue
-      }
-      if (type === 'added') {
-        current.push({ type: 'added', no: Number(row.bLine || 0), text: String(row.bText ?? '') })
-      } else if (type === 'removed') {
-        current.push({ type: 'removed', no: Number(row.aLine || 0), text: String(row.aText ?? '') })
-      } else if (type === 'modified') {
-        current.push({ type: 'removed', no: Number(row.aLine || 0), text: String(row.aText ?? '') })
-        current.push({ type: 'added', no: Number(row.bLine || 0), text: String(row.bText ?? '') })
-      }
-      if (current.length >= 240) {
-        flush()
-        break
-      }
-    }
-    flush()
-    compareResult.value = {
-      aLabel: `v${active.version}（生效）`,
-      bLabel: `v${v.version}`,
-      changedLines: Number(d.changedLines || 0),
-      groups
-    }
-  } catch (e) {
-    versionMsg.value = `对比失败：${errMsg(e)}`
-    versionErr.value = true
-  } finally {
-    compareLoading.value = ''
-  }
-}
 
 const statsSourceNote = computed(() => {
   if (!liveMeta.value?.statsSource) return ''
@@ -679,41 +292,16 @@ const statsSourceNote = computed(() => {
   return `统计口径：${src} · ${range}（与列表/拓扑统一）`
 })
 
-const effectiveLlmNote = computed(() => {
-  const m = liveMeta.value
-  if (!m) return ''
-  const t = m.llmTemperature != null ? m.llmTemperature : '—'
-  const tok = m.llmMaxTokens != null ? m.llmMaxTokens : '—'
-  const src =
-    m.modelSource === 'active-prompt'
-      ? 'ACTIVE Prompt（File-as-Truth）'
-      : m.modelSource === 'route'
-        ? '路由回退'
-        : '未解析'
-  return `生成参数（只读）：model=${m.model || '—'} · T=${t} · maxTokens=${tok} · 来源=${src}。改 T/maxTokens 请编辑 prompts/*.md 后同步，不在此表写入。`
-})
-
 watch(
   () => intent.skillDrawerId,
   async (id) => {
     liveMeta.value = null
-    runtimeCfg.value = null
-    platformReliability.value = null
-    cfgMsg.value = ''
-    testResult.value = ''
     activeTab.value = 'overview'
-    promptVersions.value = []
-    compareResult.value = null
-    versionMsg.value = ''
-    versionErr.value = false
-    versionBusy.value = ''
     if (!id || !isLive.value || !skillProfile.value) return
-    void loadRuntimeCfg(id)
     try {
-      const [metaRes, promptRes, versionsRes] = await Promise.all([
+      const [metaRes, promptRes] = await Promise.all([
         adminSkillWorkbenchApi.getMeta(id).catch(() => null),
-        adminSkillsApi.getEffectiveSkillPrompt(id).catch(() => null),
-        adminAgentPromptsApi.getPromptVersions({ agentId: id }).catch(() => null)
+        adminSkillsApi.getEffectiveSkillPrompt(id).catch(() => null)
       ])
       const meta = metaRes?.data?.data ?? metaRes?.data ?? {}
       const promptBody = promptRes?.data?.data ?? promptRes?.data ?? {}
@@ -722,14 +310,6 @@ watch(
       const parent = (meta.parentAgent || {}) as Record<string, unknown>
       const skill = (meta.skill || {}) as Record<string, unknown>
       const stats = (meta.stats || {}) as Record<string, unknown>
-      // 平台重试预算（workbench meta reliability，只读展示）
-      const rel = (modelCfg.reliability || {}) as Record<string, unknown>
-      platformReliability.value = {
-        maxUpstreamAttempts: rel.maxUpstreamAttempts != null ? Number(rel.maxUpstreamAttempts) : undefined,
-        maxTransportRetries: rel.maxTransportRetries != null ? Number(rel.maxTransportRetries) : undefined,
-        maxLogicalRetries: rel.maxLogicalRetries != null ? Number(rel.maxLogicalRetries) : undefined,
-        timeoutMs: modelCfg.timeoutMs != null ? Number(modelCfg.timeoutMs) : undefined
-      }
       // effective-prompt 的 prompt 是对象：{id, version, name, systemPrompt}
       const prompt = (promptBody.prompt || {}) as Record<string, unknown>
       const version = prompt.version ? `v${String(prompt.version)}` : ''
@@ -747,14 +327,6 @@ watch(
         statsSource: String(stats.source || ''),
         statsRange: String(stats.range || 'all')
       }
-      const vBody = versionsRes?.data?.data ?? versionsRes?.data ?? []
-      const vItems = Array.isArray(vBody) ? vBody : vBody.list || vBody.items || vBody.versions || []
-      promptVersions.value = vItems.slice(0, 8).map((v: Record<string, unknown>) => ({
-        id: String(v.id || ''),
-        version: (v.version as string | number) ?? '—',
-        status: String(v.status || '—'),
-        name: String(v.name || '')
-      }))
     } catch {
       liveMeta.value = null
     }
@@ -1005,17 +577,6 @@ function goFullEditor() {
   text-transform: uppercase;
   color: var(--mk-faint);
 }
-.msk__sec-head--btn {
-  width: 100%;
-  border: 0;
-  background: transparent;
-  padding: 2px 0;
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
-  border-radius: 6px;
-}
-.msk__sec-head--btn:hover h4 { color: #5b6577; }
 .msk__sec-meta {
   display: inline-flex;
   align-items: center;
@@ -1024,21 +585,6 @@ function goFullEditor() {
   color: var(--mk-faint);
   font-weight: 600;
 }
-.msk__chev {
-  width: 9px;
-  height: 9px;
-  transition: transform 0.15s ease;
-}
-.msk__chev.is-open { transform: rotate(90deg); }
-.msk__src-chip {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--mk-faint);
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: #f0f2f5;
-}
-.msk__src-chip--custom { color: var(--mk-accent-deep, #1f57cc); background: #eff6ff; }
 
 /* 行列表（下辖 Skill / 最近调用） */
 .msk__list { display: grid; gap: 4px; }
@@ -1094,81 +640,7 @@ function goFullEditor() {
 .msk__notfound strong { font-size: 14px; color: #223252; }
 .msk__notfound span { font-size: 12.5px; color: var(--mk-faint); }
 
-/* 运行配置卡片 */
-.msk__card {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: 12px;
-  background: #f8fafd;
-}
-.msk__field { display: grid; gap: 4px; }
-.msk__field > span { font-size: 12px; color: var(--mk-faint); font-weight: 600; }
-.msk__field--check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.msk__field--check span { font-size: 12px; color: #5b6577; font-weight: 600; }
-.msk__field--check input { width: 15px; height: 15px; accent-color: var(--mk-blue, #2c63d0); }
-.msk__field-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-.msk__input {
-  padding: 7px 10px;
-  border: 1px solid #dbe3ef;
-  border-radius: 8px;
-  font: inherit;
-  font-size: 12px;
-  color: #1a2a44;
-  background: #fff;
-  width: 100%;
-}
-.msk__input:focus { outline: none; border-color: var(--mk-blue, #2c63d0); }
-.msk__effective {
-  margin: 0;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: #eef4fc;
-  border: 1px solid #dbe7f6;
-  font-size: 12px;
-  color: #5b6577;
-  line-height: 1.5;
-}
-.msk__budget {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--mk-faint);
-  font-weight: 600;
-}
-.msk__budget em { font-style: normal; font-weight: 400; color: #5b6577; }
-.msk__actions { display: flex; gap: 8px; align-items: center; }
-/* 危险色修饰（复用 mk-btn 基础；实心红与确认对话框 danger 一致） */
-.msk__btn-danger {
-  border: 1px solid var(--mk-red);
-  background: var(--mk-red);
-  color: #fff;
-}
-.msk__btn-danger:hover { background: var(--mk-red-strong); border-color: var(--mk-red-strong); }
-.msk__msg { margin: 0; font-size: 12.5px; color: var(--mk-green); font-weight: 600; }
-.msk__msg--err { color: var(--mk-red); }
-
-/* 试跑 */
-.msk__test-input {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--mk-line);
-  border-radius: 9px;
-  font-size: 12px;
-  resize: vertical;
-  line-height: 1.55;
-}
-.msk__test-input:focus { outline: none; border-color: var(--mk-blue, #2c63d0); }
-
-/* 代码井（Prompt 预览 / 试跑输出） */
+/* 代码井（Prompt 预览） */
 .msk__code {
   margin: 0;
   padding: 10px 12px;
@@ -1183,45 +655,8 @@ function goFullEditor() {
   overflow-y: auto;
 }
 .msk__code--cap { max-height: 140px; }
-.msk__code--err { color: #fca5a5; border-color: rgba(220, 38, 38, 0.4); }
 
-/* 协议规则 */
-.msk__rules { display: grid; gap: 6px; }
-.msk__rule {
-  display: grid;
-  gap: 3px;
-  padding: 7px 10px 7px 12px;
-  border-left: 2px solid color-mix(in srgb, var(--mk-purple, #8d6bff) 45%, transparent);
-  background: #faf9ff;
-  border-radius: 0 8px 8px 0;
-  font-size: 12px;
-}
-.msk__rule-id { color: #7c3aed; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
-.msk__rule-text { color: #263950; line-height: 1.55; }
-.msk__conflict {
-  margin: 0;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: #fff7ed;
-  border: 1px solid rgba(180, 83, 9, 0.3);
-  color: var(--mk-amber);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-.msk__protocols { display: grid; gap: 6px; margin-top: 4px; }
-.msk__protocol {
-  border: 1px solid #e6ecf6;
-  border-radius: 10px;
-  padding: 9px 12px;
-  display: grid;
-  gap: 4px;
-}
-.msk__protocol-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.msk__protocol-head strong { font-size: 12px; font-weight: 600; color: #223252; }
-.msk__protocol p { margin: 0; font-size: 12.5px; color: #5b6577; line-height: 1.6; }
-.msk__protocol-sites { font-size: 12.5px; color: var(--mk-faint); word-break: break-all; }
-
-/* Prompt 版本 */
+/* Prompt 版本行 + 设计页跳转 */
 .msk__prompt {
   display: flex;
   align-items: center;
@@ -1242,111 +677,6 @@ function goFullEditor() {
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
-}
-.msk__versions {
-  display: grid;
-  gap: 2px;
-  margin-top: 4px;
-}
-.msk__versions-label {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--mk-faint);
-  padding-bottom: 2px;
-}
-.msk__version-row {
-  display: grid;
-  grid-template-columns: 44px 64px 1fr auto;
-  gap: 8px;
-  align-items: center;
-  font-size: 12px;
-  color: #5b6577;
-  padding: 4px 0;
-  border-bottom: 1px solid #f0f2f5;
-}
-.msk__version-row:last-child { border-bottom: none; }
-.msk__version-tag {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: 5px;
-  background: #eef2fa;
-  color: #41516e;
-  font-size: 12.5px;
-  width: fit-content;
-}
-.msk__version-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.msk__version-ops { display: flex; gap: 4px; }
-.msk__op {
-  border: 0;
-  background: transparent;
-  color: var(--mk-blue, #2c63d0);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  padding: 2px 5px;
-  border-radius: 5px;
-  white-space: nowrap;
-}
-.msk__op:hover { background: #eff6ff; }
-.msk__op:disabled { opacity: 0.5; cursor: not-allowed; }
-.msk__op.is-active { color: var(--mk-green); cursor: default; }
-.msk__op.is-active:hover { background: transparent; }
-.msk__op--danger { color: var(--mk-red); }
-.msk__op--danger:hover { background: var(--mk-red-bg); }
-.msk__versions-msg { margin: 0; font-size: 12px; color: var(--mk-green); font-weight: 600; }
-.msk__versions-msg.is-err { color: var(--mk-red); }
-
-/* 版本对比 */
-.msk__diff {
-  margin-top: 8px;
-  border: 1px solid var(--mk-line);
-  border-radius: 10px;
-  overflow: hidden;
-}
-.msk__diff-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  background: #f8fafd;
-  border-bottom: 1px solid #eef2f8;
-  font-size: 12.5px;
-  color: #5b6577;
-}
-.msk__diff-head .mono { font-size: 12.5px; }
-.msk__diff-count { font-weight: 700; color: var(--mk-amber); }
-.msk__diff-count.is-clean { color: var(--mk-green); }
-.msk__diff-head .msk__op { margin-left: auto; }
-.msk__diff-body {
-  max-height: 260px;
-  overflow-y: auto;
-  padding: 6px 0;
-  font-size: 12.5px;
-  line-height: 1.6;
-}
-.msk__diff-line {
-  display: grid;
-  grid-template-columns: 34px 1fr;
-  gap: 8px;
-  padding: 1px 10px;
-}
-.msk__diff-line.is-added { background: var(--mk-green-bg); }
-.msk__diff-line.is-added .msk__diff-text { color: var(--mk-green); }
-.msk__diff-line.is-added .msk__diff-no::after { content: '+'; color: var(--mk-green); margin-left: 3px; }
-.msk__diff-line.is-removed { background: var(--mk-red-bg); }
-.msk__diff-line.is-removed .msk__diff-text { color: var(--mk-red-strong); }
-.msk__diff-line.is-removed .msk__diff-no::after { content: '−'; color: var(--mk-red-strong); margin-left: 3px; }
-.msk__diff-no { color: var(--mk-faint); text-align: right; user-select: none; }
-.msk__diff-text { white-space: pre-wrap; word-break: break-word; color: #41516e; }
-.msk__diff-gap {
-  padding: 2px 10px;
-  color: #c3cede;
-  user-select: none;
 }
 
 /* 底部主操作 */
@@ -1386,24 +716,8 @@ function goFullEditor() {
   .msk__sec-head h4 { font-size: 13px; }
   .msk__sec-meta { font-size: 12.5px; }
   .msk__kv span { font-size: 13px; }
-  .msk__field > span { font-size: 13px; }
-  .msk__input { font-size: 14px; }
   .msk__code { font-size: 12.5px; }
-  .msk__msg { font-size: 13.5px; }
-  .msk__rule { font-size: 14px; }
-  .msk__rule-id { font-size: 12.5px; }
-  .msk__conflict { font-size: 13.5px; }
-  .msk__protocol p { font-size: 13.5px; }
-  .msk__protocol-sites { font-size: 12.5px; }
   .msk__prompt { font-size: 13.5px; }
-  .msk__budget { font-size: 12.5px; }
-  .msk__version-tag { font-size: 12px; }
-  .msk__version-row { font-size: 13px; }
-  .msk__versions-label { font-size: 12.5px; }
-  .msk__versions-msg { font-size: 13px; }
-  .msk__op { font-size: 13px; }
-  .msk__diff-head { font-size: 12.5px; }
-  .msk__diff-body { font-size: 12.5px; }
 }
 @media (min-width: 2800px) {
   .msk__panel { width: min(760px, 100vw); }
@@ -1423,24 +737,8 @@ function goFullEditor() {
   .msk__sec-head h4 { font-size: 15.5px; }
   .msk__sec-meta { font-size: 15px; }
   .msk__kv span { font-size: 15.5px; }
-  .msk__field > span { font-size: 15.5px; }
-  .msk__input { font-size: 16.5px; }
   .msk__code { font-size: 15px; }
-  .msk__msg { font-size: 16px; }
-  .msk__rule { font-size: 16.5px; }
-  .msk__rule-id { font-size: 15px; }
-  .msk__conflict { font-size: 16px; }
-  .msk__protocol p { font-size: 16px; }
-  .msk__protocol-sites { font-size: 15px; }
   .msk__prompt { font-size: 16px; }
-  .msk__budget { font-size: 15px; }
-  .msk__version-tag { font-size: 14px; }
-  .msk__version-row { font-size: 15.5px; }
-  .msk__versions-label { font-size: 15px; }
-  .msk__versions-msg { font-size: 15.5px; }
-  .msk__op { font-size: 15.5px; }
-  .msk__diff-head { font-size: 15px; }
-  .msk__diff-body { font-size: 15px; }
 }
 @media (min-width: 3600px) {
   /* 4K（抽屉 Teleport 到 body，无 zoom）：面板再加宽、字号继续放大 */
@@ -1461,23 +759,7 @@ function goFullEditor() {
   .msk__sec-head h4 { font-size: 18px; }
   .msk__sec-meta { font-size: 17.5px; }
   .msk__kv span { font-size: 18px; }
-  .msk__field > span { font-size: 18px; }
-  .msk__input { font-size: 19.5px; }
   .msk__code { font-size: 17.5px; }
-  .msk__msg { font-size: 18.5px; }
-  .msk__rule { font-size: 19.5px; }
-  .msk__rule-id { font-size: 17.5px; }
-  .msk__conflict { font-size: 18.5px; }
-  .msk__protocol p { font-size: 18.5px; }
-  .msk__protocol-sites { font-size: 17.5px; }
   .msk__prompt { font-size: 18.5px; }
-  .msk__budget { font-size: 17.5px; }
-  .msk__version-tag { font-size: 16.5px; }
-  .msk__version-row { font-size: 18px; }
-  .msk__versions-label { font-size: 17.5px; }
-  .msk__versions-msg { font-size: 18px; }
-  .msk__op { font-size: 18px; }
-  .msk__diff-head { font-size: 17.5px; }
-  .msk__diff-body { font-size: 17.5px; }
 }
 </style>

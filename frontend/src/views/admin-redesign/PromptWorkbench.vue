@@ -94,21 +94,6 @@
                 <li v-for="file in result.generated" :key="file"><code class="mono">{{ file }}</code></li>
               </ul>
             </div>
-            <div class="sc-result__section">
-              <strong class="sc-result__title">完成度（completion）</strong>
-              <span class="mk-badge" :class="completionBadge(result.completion.status)">{{ completionLabel(result.completion.status) }}</span>
-              <!-- 滚动修复 #8（顺带）：完成度清单默认折叠，不纵向平铺撑长弹窗 -->
-              <details class="sc-result__completion">
-                <summary>明细（{{ result.completion.items.length }} 项）</summary>
-                <ul class="sc-result__items">
-                  <li v-for="item in result.completion.items" :key="item.id" class="sc-result__item">
-                    <span :class="`sc-dot sc-dot--${itemOk(item.ok)}`"></span>
-                    <span>{{ item.label }}</span>
-                    <span v-if="item.hint" class="sc-result__hint">{{ item.hint }}</span>
-                  </li>
-                </ul>
-              </details>
-            </div>
             <details class="sc-result__snippets" v-if="result.snippets.length">
               <summary>注册片段（复制后手工粘贴，scaffold 不自动改写 TS）</summary>
               <div v-for="snippet in result.snippets" :key="snippet.title" class="sc-result__snippet">
@@ -286,29 +271,6 @@ function kindLabel(kind: string) {
   return 'handler-only';
 }
 
-function completionLabel(status: string) {
-  const labels: Record<string, string> = {
-    draft: 'draft',
-    'handler-ready': 'handler-ready',
-    'core-ready': 'core-ready',
-    'fields-synced': 'fields-synced',
-    live: 'live',
-  };
-  return labels[status] || status;
-}
-
-function completionBadge(status: string) {
-  if (status === 'live') return 'mk-badge--ok';
-  if (status === 'fields-synced' || status === 'core-ready') return 'mk-badge--warn';
-  return 'mk-badge--muted';
-}
-
-function itemOk(ok: boolean | null) {
-  if (ok === true) return 'ok';
-  if (ok === false) return 'bad';
-  return 'na';
-}
-
 function resetForm() {
   form.value = { skillId: '', kind: 'mainline', stage: '', parentAgent: '', displayName: '', description: '' };
   result.value = null;
@@ -401,11 +363,10 @@ onMounted(async () => {
   padding: 10px 0 12px;
   border-top: 1px dashed var(--mk-line);
 }
-.sc-result__completion { margin-top: 8px; }
-.sc-result__completion summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--mk-muted, #5b6577); }
-.sc-result__completion .sc-result__items { margin-top: 8px; }
-
-/* ========== scaffold 弹窗 ========== */
+.sc-result__section { margin-top: 14px; }.sc-result__title { display: block; font-size: 12px; font-weight: 700; color: var(--mk-muted, #5b6577); margin-bottom: 6px; }
+.sc-result__files { margin: 0; padding-left: 18px; }
+.sc-result__files li { font-size: 12px; color: var(--mk-blue, #2c63d0); line-height: 1.8; }
+.sc-result__snippets { margin-top: 14px; border-top: 1px solid var(--mk-line, #e6ebf4); padding-top: 10px; }
 .sc-panel { width: min(680px, 100%); }
 .sc-form { display: flex; flex-direction: column; gap: 12px; }
 .sc-field { display: flex; flex-direction: column; gap: 5px; }
@@ -454,13 +415,6 @@ onMounted(async () => {
 .sc-result__title { display: block; font-size: 12px; font-weight: 700; color: var(--mk-muted, #5b6577); margin-bottom: 6px; }
 .sc-result__files { margin: 0; padding-left: 18px; }
 .sc-result__files li { font-size: 12px; color: var(--mk-blue, #2c63d0); line-height: 1.8; }
-.sc-result__items { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.sc-result__item { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--mk-ink, #1a2a44); }
-.sc-result__hint { color: var(--mk-faint, #8492ab); font-size: 11.5px; }
-.sc-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.sc-dot--ok { background: var(--mk-green, #15803d); }
-.sc-dot--bad { background: var(--mk-red, #dc2626); }
-.sc-dot--na { background: #cbd5e1; }
 .sc-result__snippets { margin-top: 14px; border-top: 1px solid var(--mk-line, #e6ebf4); padding-top: 10px; }
 .sc-result__snippets summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--mk-muted, #5b6577); }
 .sc-result__snippet { margin-top: 8px; }
