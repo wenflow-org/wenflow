@@ -1,5 +1,5 @@
 <template>
-  <div class="mk-page">
+  <div class="mk-page topo-page">
     <!-- 工具栏：状态 + 统计 + 图例 + 视图控制 -->
     <div class="topo-toolbar">
       <div class="topo-toolbar__status">

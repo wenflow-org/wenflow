@@ -57,6 +57,18 @@ describe('Admin 路由重定向', () => {
     expect(router.currentRoute.value.path).toBe('/admin/skill-workbench');
   });
 
+  it('/admin/topology → /admin/orchestrator?tab=topology（阶段 2D 拓扑降级并入编排页兼容重定向）', async () => {
+    await router.push('/admin/topology');
+    expect(router.currentRoute.value.path).toBe('/admin/orchestrator');
+    expect(router.currentRoute.value.query.tab).toBe('topology');
+  });
+
+  it('/admin/agent-registry/:id → /admin/orchestrator?tab=topology（旧注册表路由兼容）', async () => {
+    await router.push('/admin/agent-registry/goal-agent');
+    expect(router.currentRoute.value.path).toBe('/admin/orchestrator');
+    expect(router.currentRoute.value.query.tab).toBe('topology');
+  });
+
   it('/admin/skill-workbench/:agentId → 设计页（旧工作台详情深链兼容）', async () => {
     await router.push('/admin/skill-workbench/goal-agent');
     expect(router.currentRoute.value.name).toBe('AdminSkillEditor');

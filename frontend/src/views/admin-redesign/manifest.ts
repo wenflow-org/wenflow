@@ -21,7 +21,6 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'feedback', label: '反馈中心', group: '学习者', glyph: '馈' },
   { id: 'virtual-learners', label: '虚拟学习者', group: '学习者', glyph: '拟' },
   { id: 'skills', label: 'Skill 目录', group: '运行', glyph: '能' },
-  { id: 'topology', label: 'Agent 拓扑', group: '运行', glyph: '络' },
   { id: 'orchestrator', label: '编排结构', group: '运行', glyph: '流' },
   { id: 'skill-workbench', label: 'Skill 工作台', group: 'Skill', glyph: '台' },
   { id: 'health-center', label: '健康中心', group: '数据健康', glyph: '健' },

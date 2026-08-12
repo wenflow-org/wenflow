@@ -8,10 +8,6 @@
       <span class="mk-status__meta">{{ totalSkills }} Skills</span>
       <span class="mk-status__meta">接力 {{ Math.max(stages.length - 1, 0) }} 处</span>
       <span v-if="defsLoaded" class="mk-status__meta">定义源 {{ orchCount }} 编排 / {{ skillDefCount }} Skill</span>
-      <span v-if="isLive && recSummary" class="mk-status__meta">完成度 <b class="mk-status__num mk-status__num--live">{{ recSummary.byStatus.live || 0 }}</b> / {{ recSummary.total }}</span>
-      <span v-if="isLive && recSummary && recSummary.unregistered" class="mk-status__meta mk-status__meta--warn">未注册 {{ recSummary.unregistered }}</span>
-      <span v-if="isLive && recSummary && recSummary.activeMissing" class="mk-status__meta mk-status__meta--warn">缺 ACTIVE {{ recSummary.activeMissing }}</span>
-      <span v-if="isLive && recSummary && recSummary.orphanRegistrations" class="mk-status__meta mk-status__meta--bad">幽灵注册 {{ recSummary.orphanRegistrations }}</span>
       <span v-if="isLive && w4Drifted.length" class="mk-status__meta mk-status__meta--bad" :title="`${TERMS.driftHashQualified}（W4）：核心文件 ↔ 编译产物 ↔ DB 三方哈希不一致，需重新编译 + 同步`">W4 漂移 {{ w4Drifted.length }}</span>
       <button v-if="isLive" type="button" class="mk-status__action" @click="openHealthCenter">
         {{ TERMS.healthCenter }} →
@@ -31,6 +27,28 @@
       <span class="orch-unresolved__label">未解析节点（运行时定义引用但拓扑未落位）：</span>
       <span v-for="n in unresolvedNodes" :key="n" class="orch-unresolved__item mono">{{ n }}</span>
     </div>
+
+    <!-- 治理入口卡（阶段 2D N8：完成度/对账计数不再内嵌，改入口卡跳 Skill 目录对账面板；2C 巡检工作台就绪后改指向巡检台） -->
+    <section v-if="isLive" class="orch-gov">
+      <button type="button" class="orch-gov__card" @click="openReconciliation">
+        <span class="orch-gov__name">{{ TERMS.completion }}</span>
+        <span class="orch-gov__value">
+          <template v-if="recSummary"><b class="orch-gov__num orch-gov__num--live">{{ recSummary.byStatus.live || 0 }}</b> / {{ recSummary.total }} 已上线</template>
+          <template v-else>…</template>
+        </span>
+        <span class="orch-gov__sub">五档分布 · 未上线明细 →</span>
+      </button>
+      <button type="button" class="orch-gov__card" @click="openReconciliation">
+        <span class="orch-gov__name">{{ TERMS.reconcile }}</span>
+        <span class="orch-gov__value" v-if="recSummary">
+          未注册 <b class="orch-gov__num" :class="{ 'orch-gov__num--warn': recSummary.unregistered }">{{ recSummary.unregistered }}</b>
+          · 缺 ACTIVE <b class="orch-gov__num" :class="{ 'orch-gov__num--warn': recSummary.activeMissing }">{{ recSummary.activeMissing }}</b>
+          · 幽灵注册 <b class="orch-gov__num" :class="{ 'orch-gov__num--bad': recSummary.orphanRegistrations }">{{ recSummary.orphanRegistrations }}</b>
+        </span>
+        <span class="orch-gov__value" v-else>…</span>
+        <span class="orch-gov__sub">户口簿 × manifest × 注册 × ACTIVE →</span>
+      </button>
+    </section>
 
     <section v-if="isLive && definitionNotes.length" class="mk-card orch-defs">
       <div class="mk-card__head">
@@ -62,14 +80,6 @@
           <span class="orch-stage__body">
             <strong class="orch-stage__name">{{ st.name }}</strong>
             <span class="orch-stage__meta">{{ st.skills.length }} Skills · {{ stageCalls(st) }} 次调用</span>
-            <span v-if="stageComp(st.id).length" class="orch-stage__comp" :title="stageCompTitle(st.id)">
-              <span
-                v-for="c in stageComp(st.id)"
-                :key="c.status"
-                class="orch-stage__comp-item"
-                :class="`orch-stage__comp-item--${c.status}`"
-              >{{ c.short }} {{ c.count }}</span>
-            </span>
           </span>
         </button>
         <span v-if="i < stages.length - 1" class="orch-link" :class="{ 'orch-link--on': i >= activeIdx }">
@@ -81,11 +91,11 @@
     <!-- 当前阶段详情 -->
     <div v-if="current" class="mk-card">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">{{ stageTitle }} · 节点与配置</h3>
-        <span class="mk-card__meta">节点 ID <span class="mono">{{ current?.agentId }}</span></span>
+        <h3 class="mk-card__title">{{ cardTitle }}</h3>
+        <span v-if="activeTab !== 'topology'" class="mk-card__meta">节点 ID <span class="mono">{{ current?.agentId }}</span></span>
       </div>
 
-      <!-- tab 切换（定义 / 字段路由 / 沙盘 / 漂移与审计） -->
+      <!-- tab 切换（定义 / 字段路由 / 沙盘 / 漂移与审计 / 拓扑） -->
       <div class="orch-tabs">
         <button
           v-for="t in tabs"
@@ -170,6 +180,11 @@
       <div v-else-if="activeTab === 'drift'" class="orch-tabpane">
         <DriftAuditPanel :stage="current.id" />
       </div>
+
+      <!-- Tab：Agent 拓扑（阶段 2D：拓扑降级并入编排页，技能拓扑图保留完整画布） -->
+      <div v-else-if="activeTab === 'topology'" class="orch-tabpane">
+        <Topology />
+      </div>
     </div>
   </div>
 </template>
@@ -180,10 +195,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { openSkillDrawer, dataSource, isLive } from './store'
 import { liveTopoNodes, liveSkillCatalog, errMsg } from './live'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
-import { COMPLETION_META } from './glossaryMeta'
 import FieldRoutingTable from './FieldRoutingTable.vue'
 import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
+import Topology from './Topology.vue'
 import { TERMS } from './terms'
 
 const tabs = [
@@ -191,6 +206,7 @@ const tabs = [
   { id: 'field-routings', label: '字段路由' },
   { id: 'sandbox', label: '沙盘' },
   { id: 'drift', label: TERMS.driftTab },
+  { id: 'topology', label: '拓扑' },
 ]
 const activeTab = ref('definition')
 
@@ -202,12 +218,17 @@ function openHealthCenter() {
   void router.push('/admin/health-center')
 }
 
-/** ?stage=&tab= 直达（Skill 设计页字段路由 tab → 编排结构页跳转闭环） */
+/** 治理入口卡 → Skill 目录对账面板（完成度五档 + 户口簿对账主出口；2C 巡检工作台就绪后改指向巡检台） */
+function openReconciliation() {
+  void router.push('/admin/skills')
+}
+
+/** ?stage=&tab= 直达（Skill 设计页字段路由 tab → 编排结构页跳转闭环；旧 /admin/topology 重定向落位拓扑 tab） */
 function applyStageQuery() {
   const qStage = typeof route.query.stage === 'string' && route.query.stage.trim() ? route.query.stage.trim() : ''
   const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
   if (qStage) active.value = qStage
-  if (qTab === 'definition' || qTab === 'field-routings' || qTab === 'sandbox' || qTab === 'drift') {
+  if (qTab === 'definition' || qTab === 'field-routings' || qTab === 'sandbox' || qTab === 'drift' || qTab === 'topology') {
     activeTab.value = qTab
   }
 }
@@ -235,34 +256,6 @@ async function loadReconciliation() {
 }
 
 const recSummary = computed(() => recReport.value?.summary || null)
-
-/** 按 stage 聚合完成度分布（reconciliation items 自带 stage） */
-const recByStage = computed(() => {
-  const map = new Map<string, Record<string, number>>()
-  for (const row of recReport.value?.items || []) {
-    if (!row.stage) continue
-    const bucket = map.get(row.stage) || {}
-    bucket[row.completion.status] = (bucket[row.completion.status] || 0) + 1
-    map.set(row.stage, bucket)
-  }
-  return map
-})
-
-const recStatusOrder = ['draft', 'handler-ready', 'core-ready', 'fields-synced', 'live'] as const
-const recStatusShort: Record<string, string> = Object.fromEntries(
-  COMPLETION_META.map((m) => [m.status, m.short]),
-) as Record<string, string>
-
-function stageComp(stageId: string) {
-  const bucket = recByStage.value.get(stageId)
-  if (!bucket) return []
-  return recStatusOrder
-    .filter((s) => (bucket[s] || 0) > 0)
-    .map((s) => ({ status: s, short: recStatusShort[s] || s, count: bucket[s] }))
-}
-function stageCompTitle(stageId: string) {
-  return stageComp(stageId).map((c) => `${c.short} ${c.count}`).join(' · ')
-}
 
 /** 未解析节点清单（来自运行时定义 steps 的 resolved.unresolved） */
 const unresolvedNodes = computed(() => {
@@ -495,14 +488,15 @@ const stageTitle = computed(() => {
   const name = current.value?.name || ''
   return name.endsWith('阶段') ? name : `${name}阶段`
 })
+// 拓扑 tab 为全局视图（不受当前阶段约束），卡片标题随之切换
+const cardTitle = computed(() =>
+  activeTab.value === 'topology' ? 'Agent 拓扑 · 架构全貌' : `${stageTitle.value} · 节点与配置`
+)
 </script>
 
 <style scoped>
-/* ========== 状态条元数据扩展（完成度对账） ========== */
-.mk-status__meta--warn { color: var(--mk-amber, #b45309); font-weight: 700; }
+/* ========== 状态条元数据扩展（W4 漂移信号） ========== */
 .mk-status__meta--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
-.mk-status__num { font-variant-numeric: tabular-nums; }
-.mk-status__num--live { color: var(--mk-green, #15803d); }
 .orch-unresolved {
   display: flex;
   align-items: center;
@@ -522,6 +516,50 @@ const stageTitle = computed(() => {
   background: #fff;
   color: var(--mk-ink, #1a2a44);
   font-size: 11px;
+}
+
+/* ========== 治理入口卡（阶段 2D N8：完成度/对账计数收敛为跳转入口） ========== */
+.orch-gov {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 8px;
+}
+.orch-gov__card {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 14px;
+  border: 1px solid var(--mk-line);
+  border-radius: 12px;
+  background: var(--mk-surface);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease;
+}
+.orch-gov__card:hover {
+  border-color: rgba(44, 99, 208, 0.4);
+  box-shadow: 0 4px 14px rgba(44, 99, 208, 0.08);
+  transform: translateY(-1px);
+}
+.orch-gov__name {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--mk-faint);
+}
+.orch-gov__value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mk-ink);
+  font-variant-numeric: tabular-nums;
+}
+.orch-gov__num { font-variant-numeric: tabular-nums; font-weight: 800; }
+.orch-gov__num--live { color: var(--mk-green, #15803d); }
+.orch-gov__num--warn { color: var(--mk-amber, #b45309); }
+.orch-gov__num--bad { color: var(--mk-red, #dc2626); }
+.orch-gov__sub {
+  font-size: 11px;
+  color: var(--mk-muted);
 }
 
 /* ========== 运行时定义 ========== */
@@ -633,30 +671,6 @@ const stageTitle = computed(() => {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-/* 阶段完成度分布徽章（reconciliation 按 stage 聚合） */
-.orch-stage__comp {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-  white-space: nowrap;
-}
-.orch-stage__comp-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 0 6px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 15px;
-  color: #fff;
-}
-.orch-stage__comp-item--draft { background: #9aa4b2; }
-.orch-stage__comp-item--handler-ready { background: #d97706; }
-.orch-stage__comp-item--core-ready { background: var(--mk-blue, #2c63d0); }
-.orch-stage__comp-item--fields-synced { background: #0d9488; }
-.orch-stage__comp-item--live { background: #16a34a; }
 
 /* 接力连接器：后续链路点亮 */
 .orch-link {
@@ -705,6 +719,14 @@ const stageTitle = computed(() => {
   box-shadow: 0 2px 8px rgba(44, 99, 208, 0.3);
 }
 .orch-tabpane { padding: 14px 16px 16px; }
+
+/* 拓扑 tab：内嵌画布去除 mk-page 外衬，避免双重留白 */
+.orch-tabpane :deep(.topo-page) {
+  padding: 0;
+  gap: 10px;
+  min-height: 0;
+  background: transparent;
+}
 
 /* ========== 定义 tab ========== */
 .orch-detail { display: grid; gap: 14px; padding: 14px 16px 16px; }
@@ -845,7 +867,9 @@ const stageTitle = computed(() => {
 @media (min-width: 2000px) {
   .orch-unresolved { font-size: 13.5px; }
   .orch-unresolved__item { font-size: 12.5px; }
-  .orch-stage__comp-item { font-size: 11.5px; line-height: 17px; }
+  .orch-gov__name { font-size: 12.5px; }
+  .orch-gov__value { font-size: 14.5px; }
+  .orch-gov__sub { font-size: 12.5px; }
   .orch-defs__list { font-size: 14px; padding: 14px 16px 16px; gap: 10px; }
   .orch-defs__tag { font-size: 12px; padding: 2px 10px; }
   .orch-stage { min-width: 170px; padding: 14px 16px; border-radius: 14px; }
@@ -870,7 +894,9 @@ const stageTitle = computed(() => {
   /* zoom 1.15 档：字号继续放大 */
   .orch-unresolved { font-size: 15.5px; }
   .orch-unresolved__item { font-size: 14px; }
-  .orch-stage__comp-item { font-size: 13px; line-height: 19px; }
+  .orch-gov__name { font-size: 14.5px; }
+  .orch-gov__value { font-size: 17px; }
+  .orch-gov__sub { font-size: 14.5px; }
   .orch-defs__list { font-size: 15.5px; }
   .orch-defs__tag { font-size: 13.5px; }
   .orch-stage { min-width: 200px; padding: 16px 18px; }
@@ -895,7 +921,9 @@ const stageTitle = computed(() => {
   /* 4K（zoom 1.3 档）：字号继续放大，与页面基线对齐 */
   .orch-unresolved { font-size: 18px; }
   .orch-unresolved__item { font-size: 16px; }
-  .orch-stage__comp-item { font-size: 15px; line-height: 22px; }
+  .orch-gov__name { font-size: 17px; }
+  .orch-gov__value { font-size: 20px; }
+  .orch-gov__sub { font-size: 17px; }
   .orch-defs__list { font-size: 18px; }
   .orch-defs__tag { font-size: 15.5px; }
   .orch-stage { min-width: 235px; padding: 18px 22px; }

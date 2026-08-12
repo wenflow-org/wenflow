@@ -208,11 +208,16 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/admin/agent-registry/:agentId?',
-    redirect: '/admin/topology'
+    redirect: () => ({ path: '/admin/orchestrator', query: { tab: 'topology' } })
   },
   {
     path: '/admin/skill-workbench/:agentId',
     redirect: (to) => ({ path: `/admin/skills/${to.params.agentId as string}` })
+  },
+  {
+    // 阶段 2D：Agent 拓扑降级并入编排结构页（第 5 个 tab），旧 URL 重定向兼容（深链/书签）
+    path: '/admin/topology',
+    redirect: () => ({ path: '/admin/orchestrator', query: { tab: 'topology' } })
   },
   {
     // 阶段 2B N1：prompt-workbench 改名「Skill 工作台」（场景 id skill-workbench），旧 URL 重定向兼容（深链/书签）

@@ -38,7 +38,6 @@ import Users from './Users.vue';
 import LearnerCenter from './LearnerCenter.vue';
 import VirtualLearners from './VirtualLearners.vue';
 import Skills from './Skills.vue';
-import Topology from './Topology.vue';
 import Orchestrator from './Orchestrator.vue';
 import ExecLogs from './ExecLogs.vue';
 import TraceWaterfall from './TraceWaterfall.vue';
@@ -66,7 +65,6 @@ const components: Record<string, unknown> = {
   feedback: Feedback,
   'virtual-learners': VirtualLearners,
   'skills': Skills,
-  'topology': Topology,
   'orchestrator': Orchestrator,
   'execution-logs': ExecLogs,
   'trace-waterfall': TraceWaterfall,

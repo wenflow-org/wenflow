@@ -54,7 +54,7 @@ export interface GlossaryTerm {
 }
 
 export const DEMO_GLOSSARY_TERMS: GlossaryTerm[] = [
-  { term: 'Agent', category: 'concept', def: '编排里的角色节点（如 goal-agent），负责一个阶段的产出', where: 'Agent 拓扑页' },
+  { term: 'Agent', category: 'concept', def: '编排里的角色节点（如 goal-agent），负责一个阶段的产出', where: '编排结构 → 拓扑 tab' },
   { term: 'Skill', category: 'concept', def: '一个可被编排调用的能力单元：有核心 prompt 文件与入口处理，挂在某个 Agent 下', where: 'Skill 目录页' },
   { term: '编排文件', category: 'concept', def: 'prompts/orchestration/<阶段>.yaml：字段路由的唯一声明源，描述"谁产出什么、往哪路由"', where: '编排结构 → 字段路由 tab →「编排文件」按钮' },
   { term: '户口簿', category: 'concept', def: 'prompts/skills.yaml：全部 Skill 的登记册（注册表），Skill 目录对账面板以此为准' },
