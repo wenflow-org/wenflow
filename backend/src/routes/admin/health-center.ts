@@ -2,9 +2,11 @@
  * 健康中心（基准体系版，DRIFT_BASELINE_SURVEY.md §4/§5）
  *
  * GET  /api/admin/health-center         统一状态清单（三分语义 + 基准元数据；60s 缓存；?refresh=1 强制重算）
+ * GET  /api/admin/health-center/summary 巡检聚合（G1：健康 13 项 + 漂移摘要 + 对账摘要 + 完成度分布 + 全局统计；60s 缓存）
  * POST /api/admin/health-center/fix     一键修复（body: { id }；仅 semantics='baseline-drift' 且 action='fixable'）
  *
- * 实现全部在 services/health-center.service.ts（复用既有纯函数，禁止复制逻辑）。
+ * 实现全部在 services/health-center.service.ts 与 services/health-center-summary.service.ts
+ * （复用既有纯函数，禁止复制逻辑；两聚合端点共用同一单次扫描层）。
  */
 
 import { Router, Request, Response } from 'express';
@@ -16,6 +18,7 @@ import {
   type HealthCenterDbAdapter,
   type HealthCenterFixDeps,
 } from '../../services/health-center.service';
+import { getHealthCenterSummaryReport } from '../../services/health-center-summary.service';
 import { compileAllCorePromptFiles } from '../../scripts/compile-core-files';
 import { ensureCoreAgentPrompts } from '../../scripts/seed-core-agent-prompts';
 import { syncStageFieldRoutingsFromFile } from '../../services/field-routing-bootstrap.service';
@@ -49,6 +52,24 @@ router.get('/', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: { message: error?.message || 'health center check failed' },
+    });
+  }
+});
+
+// ============================================================
+// GET /api/admin/health-center/summary
+// 巡检聚合（G1 一页式工作台）：一次请求返回健康 13 项 + 漂移摘要 + 对账摘要 +
+// 完成度分布 + 全局统计。与 /health-center 共用同一单次扫描与 60s 缓存策略。
+// ============================================================
+router.get('/summary', async (req: Request, res: Response) => {
+  try {
+    const refresh = req.query.refresh === '1' || req.query.refresh === 'true';
+    const report = await getHealthCenterSummaryReport(db, { skipCache: refresh });
+    res.json({ success: true, data: report });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: { message: error?.message || 'health center summary failed' },
     });
   }
 });

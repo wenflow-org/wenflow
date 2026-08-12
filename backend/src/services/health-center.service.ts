@@ -29,28 +29,45 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { loadSkillsBookRaw } from './skill-registry/skills-file';
-import { scanPromptFiles } from '../composers/prompt-files/loader';
+import { loadSkillsBookRaw, type SkillsBook } from './skill-registry/skills-file';
+import { scanPromptFiles, type PromptFileScanResult } from '../composers/prompt-files/loader';
 import { scanCoreFiles, loadCoreFile, CORE_FILES_DIR } from './prompt-lab/core-file-loader';
-import { analyzeCoreHashParity } from '../scripts/check-core-hash-parity';
-import { analyzeSkillReadiness } from './skills-readiness.service';
-import { analyzeCoreFieldsSync } from '../scripts/check-core-fields-sync';
-import { detectFieldRoutingDrift } from './field-routing-bootstrap.service';
+import {
+  analyzeCoreHashParity,
+  type CoreHashParityActiveRow,
+  type CoreHashParityReport,
+} from '../scripts/check-core-hash-parity';
+import { analyzeSkillReadiness, type SkillsReadinessReport } from './skills-readiness.service';
+import {
+  analyzeCoreFieldsSync,
+  type CoreFieldsSyncSkillReport,
+} from '../scripts/check-core-fields-sync';
+import {
+  detectFieldRoutingDrift,
+  type FieldRoutingDriftReport,
+  type FieldRoutingFullSyncReport,
+} from './field-routing-bootstrap.service';
 import {
   analyzePromptRuntimeContractMetadataParity,
   collectDeclaredPromptRuntimeContractAgentIdCandidates,
   queryActivePromptRuntimeContractMetadataRows,
+  type PromptRuntimeContractMetadataParityReport,
 } from '../scripts/check-prompt-runtime-contract-metadata-parity';
-import { runYamlVocabularyCheck } from '../scripts/check-yaml-vocabulary';
+import {
+  runYamlVocabularyCheck,
+  type YamlVocabularyCheckReport,
+} from '../scripts/check-yaml-vocabulary';
 import {
   AGENT_SNAPSHOTS_TARGET,
   checkAgentSnapshotsDrift,
   generateAgentSnapshotsContent,
 } from '../scripts/generate-agent-snapshots';
-import { loadOrchestrationFiles } from './field-routing/orchestration-file';
+import {
+  loadOrchestrationFiles,
+  type OrchestrationStage,
+} from './field-routing/orchestration-file';
 import { SKILL_RUNTIME_DEFINITIONS } from '../coordinators/definitions-registry';
 import type { CoreAgentPromptEnsureResult } from '../scripts/seed-core-agent-prompts';
-import type { FieldRoutingFullSyncReport } from './field-routing-bootstrap.service';
 
 // ============================================================
 // 类型（基准元数据 schema，DRIFT_BASELINE_SURVEY §4.1）
@@ -213,7 +230,7 @@ export function buildParamsConsistencyCheck(): ParamsConsistencyResult {
 }
 
 // ============================================================
-// 聚合（GET /api/admin/health-center）
+// 聚合（GET /api/admin/health-center）与巡检聚合（GET /health-center/summary）共享扫描层
 // ============================================================
 
 function buildItem(
@@ -223,9 +240,48 @@ function buildItem(
   return { id, ...fields };
 }
 
-export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promise<HealthCenterReport> {
+/**
+ * 单次扫描的中间产物：健康中心 13 项报告与巡检聚合报告共用的数据底座。
+ * 一次请求只做一次 fs 扫描 + 一次 DB 查询 + 一轮纯函数分析（YAML 解析走 yaml-file-cache）。
+ */
+export interface HealthCenterScanData {
+  scan: PromptFileScanResult;
+  book: SkillsBook;
+  orchestrationStages: OrchestrationStage[];
+  activeRows: CoreHashParityActiveRow[];
+  registrations: Array<{ name: string; updatedAt?: Date | string | null }>;
+  driftReport: FieldRoutingDriftReport;
+  parityActiveRows: Array<Record<string, any>>;
+  overrideRows: [
+    Array<Record<string, any>>,
+    Array<Record<string, any>>,
+    Array<Record<string, any>>,
+  ];
+  runtimeDriftRows: {
+    rows: Array<{ agentId: string; createdAt?: Date | string | null }>;
+    note: string | null;
+  };
+  parityReport: CoreHashParityReport;
+  readiness: SkillsReadinessReport;
+  fieldsSyncReports: CoreFieldsSyncSkillReport[];
+  contractParity: PromptRuntimeContractMetadataParityReport;
+  snapshotCheck: { drifted: boolean; detail: string };
+  yamlCheck: YamlVocabularyCheckReport;
+  paramsCheck: ParamsConsistencyResult;
+}
+
+/**
+ * 单次扫描层：fs 目录扫描 + DB 查询 + 复用既有纯函数分析，一次取齐全部中间产物。
+ * buildHealthCenterReport 与 buildHealthCenterSummaryReport 共用本层，
+ * 两个端点不重复扫描/重复查询。options.book 仅供测试注入（无 skill 空态）。
+ */
+export async function collectHealthCenterScan(
+  db: HealthCenterDbAdapter,
+  options?: { book?: SkillsBook },
+): Promise<HealthCenterScanData> {
   const scan = scanPromptFiles();
-  const book = loadSkillsBookRaw();
+  const book = options?.book ?? loadSkillsBookRaw();
+  const orchestrationStages = loadOrchestrationFiles();
 
   const [activeRows, registrations, driftReport, parityActiveRows, overrideRows, runtimeDriftRows] = await Promise.all([
     db.agent_prompts.findMany({
@@ -276,7 +332,7 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
   const readiness = analyzeSkillReadiness({ book, activeRows, registrations, parityReport });
 
   // fields-sync：复用 analyzeCoreFieldsSync 纯函数
-  const fieldsSyncReports = analyzeCoreFieldsSync(loadOrchestrationFiles(), book.skills);
+  const fieldsSyncReports = analyzeCoreFieldsSync(orchestrationStages, book.skills);
 
   // 契约 parity：复用 analyzePromptRuntimeContractMetadataParity 纯函数
   const contractParity = analyzePromptRuntimeContractMetadataParity({
@@ -291,6 +347,41 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
     Promise.resolve(runYamlVocabularyCheck()),
     Promise.resolve(buildParamsConsistencyCheck()),
   ]);
+
+  return {
+    scan,
+    book,
+    orchestrationStages,
+    activeRows,
+    registrations,
+    driftReport,
+    parityActiveRows,
+    overrideRows,
+    runtimeDriftRows,
+    parityReport,
+    readiness,
+    fieldsSyncReports,
+    contractParity,
+    snapshotCheck,
+    yamlCheck,
+    paramsCheck,
+  };
+}
+
+/** 纯组装：由单次扫描中间产物装配 13 项健康清单（健康中心与巡检聚合共用同一实现） */
+export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCenterItem[] {
+  const {
+    driftReport,
+    readiness,
+    parityReport,
+    fieldsSyncReports,
+    contractParity,
+    snapshotCheck,
+    yamlCheck,
+    paramsCheck,
+    overrideRows,
+    runtimeDriftRows,
+  } = data;
 
   // ---- 字段路由漂移拆两维度（P4 名实不符：contract 维度真实基准为 manifest） ----
   const contractDrift = driftReport.items.filter((item) => item.kind === 'contract');
@@ -537,6 +628,13 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       source: 'prompt-composer.ts（detectPromptDrift）+ prompt_call_logs',
     }),
   ];
+
+  return items;
+}
+
+export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promise<HealthCenterReport> {
+  const data = await collectHealthCenterScan(db);
+  const items = assembleHealthCenterItems(data);
 
   const summary: HealthCenterSummary = {
     total: items.length,

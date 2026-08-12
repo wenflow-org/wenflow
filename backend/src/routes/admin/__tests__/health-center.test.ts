@@ -1,14 +1,19 @@
 /**
- * 健康中心路由测试（GET /、POST /fix）
- * service 层 mock（结构/分支已在 health-center.service.test.ts 覆盖）。
+ * 健康中心路由测试（GET /、GET /summary、POST /fix）
+ * service 层 mock（结构/分支已在 health-center.service.test.ts / health-center-summary.service.test.ts 覆盖）。
  */
 
 const mockGetReport = jest.fn();
 const mockRunFix = jest.fn();
+const mockGetSummary = jest.fn();
 
 jest.mock('../../../services/health-center.service', () => ({
   getHealthCenterReport: (...args: unknown[]) => mockGetReport(...args),
   runHealthCenterFix: (...args: unknown[]) => mockRunFix(...args),
+}));
+
+jest.mock('../../../services/health-center-summary.service', () => ({
+  getHealthCenterSummaryReport: (...args: unknown[]) => mockGetSummary(...args),
 }));
 
 import router from '../health-center';
@@ -46,6 +51,35 @@ describe('admin health-center routes', () => {
   it('GET / 失败 → 500', async () => {
     mockGetReport.mockRejectedValue(new Error('boom'));
     const handler = getRouteHandler('/', 'get');
+    const res = createResponse();
+    await handler({ query: {} }, res);
+    expect(res.status).toHaveBeenCalledWith(500);
+  });
+
+  it('GET /summary 返回巡检聚合（默认走缓存；?refresh=1 强制重算）', async () => {
+    const summary = {
+      generatedAt: 'x',
+      health: { summary: { total: 13 }, items: [], abnormal: 0 },
+      drift: { contract: 0, hash: 0, runtime: 0 },
+      reconciliation: { total: 0 },
+      completion: { distribution: {}, live: 0 },
+      global: { total: 0, aux: 0, mainline: 0, handlerOnly: 0, abnormalSkills: 0 },
+    };
+    mockGetSummary.mockResolvedValue(summary);
+
+    const handler = getRouteHandler('/summary', 'get');
+    const res = createResponse();
+    await handler({ query: {} }, res);
+    expect(mockGetSummary).toHaveBeenCalledWith(expect.anything(), { skipCache: false });
+    expect(res.json).toHaveBeenCalledWith({ success: true, data: summary });
+
+    await handler({ query: { refresh: '1' } }, res);
+    expect(mockGetSummary).toHaveBeenLastCalledWith(expect.anything(), { skipCache: true });
+  });
+
+  it('GET /summary 失败 → 500', async () => {
+    mockGetSummary.mockRejectedValue(new Error('summary boom'));
+    const handler = getRouteHandler('/summary', 'get');
     const res = createResponse();
     await handler({ query: {} }, res);
     expect(res.status).toHaveBeenCalledWith(500);
