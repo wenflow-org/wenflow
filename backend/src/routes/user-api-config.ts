@@ -175,6 +175,70 @@ router.delete('/', async (req, res, next) => {
   }
 });
 
+// 获取第三方端点可用模型列表（OpenAI 兼容 /models；避免手填模型名）
+router.post('/models', async (req, res, next) => {
+  try {
+    const { endpoint, apiKey } = req.body;
+    const userId = req.user.userId;
+    const existing = await prisma.user_api_configs.findUnique({ where: { userId } });
+    const requestedEndpoint = typeof endpoint === 'string' ? endpoint.trim() : '';
+    const resolvedApiKey = typeof apiKey === 'string' && apiKey.trim()
+      ? apiKey.trim()
+      : endpointsMatch(requestedEndpoint, existing?.endpoint)
+        ? decryptSecret(existing?.apiKey, SECRET_CONTEXT)
+        : null;
+
+    if (!requestedEndpoint || !resolvedApiKey) {
+      return res.status(400).json({
+        success: false,
+        error: { message: '需要提供 endpoint 和 apiKey' }
+      });
+    }
+
+    const normalizedEndpoint = requestedEndpoint.replace(/\/+$/, '').replace(/\/v1$/, '');
+
+    try {
+      const response = await safeHttpRequest<any>(`${normalizedEndpoint}/v1/models`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${resolvedApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeoutMs: 10000,
+        privateNetworkPolicy: 'public-only',
+        signal: getRequestContext().abortSignal
+      });
+
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const raw = response.data?.data;
+      const models: string[] = Array.isArray(raw)
+        ? raw.map((m: any) => (typeof m === 'string' ? m : m?.id)).filter(Boolean)
+        : [];
+      if (!models.length) {
+        return res.status(400).json({
+          success: false,
+          error: { message: '端点未返回可用模型列表' }
+        });
+      }
+
+      res.json({ success: true, data: { models } });
+    } catch (error: any) {
+      console.error('[user-api-config] 获取模型列表失败:', error);
+      res.status(400).json({
+        success: false,
+        error: {
+          message: '获取模型列表失败，请检查端点与密钥配置'
+        }
+      });
+    }
+  } catch (error) {
+    next(error);
+  }
+});
+
 // 测试连接
 router.post('/test', async (req, res, next) => {
   try {

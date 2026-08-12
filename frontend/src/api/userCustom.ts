@@ -193,6 +193,14 @@ export const testApiConnection = async (data: {
   return await api.post(`${API_BASE}/api-config/test`, data, { timeout: AI_REQUEST_TIMEOUT });
 };
 
+// 获取第三方端点可用模型列表
+export const fetchApiModels = async (data: {
+  endpoint: string;
+  apiKey?: string;
+}) => {
+  return await api.post(`${API_BASE}/api-config/models`, data, { timeout: AI_REQUEST_TIMEOUT });
+};
+
 // ==================== MCP 配置 ====================
 
 export interface UserMcpToolConfig {

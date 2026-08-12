@@ -71,17 +71,27 @@
             <div class="api-form__grid">
               <label class="uc-field">
                 <span class="uc-field__label">对话模型</span>
-                <input v-model="apiConfig.chatModel" class="uc-field__input" placeholder="deepseek-v4-flash" :disabled="busy" />
+                <input v-model="apiConfig.chatModel" class="uc-field__input" list="api-model-options" placeholder="deepseek-v4-flash" :disabled="busy" />
               </label>
               <label class="uc-field">
                 <span class="uc-field__label">推理模型</span>
-                <input v-model="apiConfig.reasoningModel" class="uc-field__input" placeholder="deepseek-v4-pro" :disabled="busy" />
+                <input v-model="apiConfig.reasoningModel" class="uc-field__input" list="api-model-options" placeholder="deepseek-v4-pro" :disabled="busy" />
               </label>
+              <datalist id="api-model-options">
+                <option v-for="m in modelOptions" :key="m" :value="m" />
+              </datalist>
+            </div>
+            <div v-if="modelOptions.length" class="model-options-hint">
+              来自端点的可用模型：<span v-for="m in modelOptions.slice(0, 6)" :key="m" class="model-chip">{{ m }}</span>
+              <span v-if="modelOptions.length > 6" class="model-more">等 {{ modelOptions.length }} 个</span>
             </div>
 
             <div class="action-buttons">
               <button type="button" class="uc-btn" :disabled="busy" @click="testConnection">
                 {{ testing ? '测试中…' : '测试连接' }}
+              </button>
+              <button type="button" class="uc-btn" :disabled="busy" @click="loadModels">
+                {{ loadingModels ? '获取中…' : '获取模型' }}
               </button>
               <button type="button" class="uc-btn uc-btn--primary" :disabled="busy" @click="saveApiConfig">
                 {{ saving ? '保存中…' : '保存配置' }}
@@ -124,7 +134,7 @@ import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import UcConfirm from '@/components/user/UcConfirm.vue';
 import { useUcConfirm } from '@/components/user/useUcConfirm';
 import { toast } from '../../utils/toast';
-import { disableUserApiConfig, getUserApiConfig, testApiConnection, updateUserApiConfig } from '@/api/userCustom';
+import { disableUserApiConfig, fetchApiModels, getUserApiConfig, testApiConnection, updateUserApiConfig } from '@/api/userCustom';
 import '@/components/user/uc.css';
 
 const saving = ref(false);
@@ -134,7 +144,9 @@ const loadError = ref('');
 const disabling = ref(false);
 const hasSavedApiKey = ref(false);
 const showKey = ref(false);
-const busy = computed(() => loading.value || saving.value || testing.value || disabling.value);
+const loadingModels = ref(false);
+const modelOptions = ref<string[]>([]);
+const busy = computed(() => loading.value || saving.value || testing.value || disabling.value || loadingModels.value);
 const { state: confirmState, openConfirm } = useUcConfirm();
 
 // 单配置模式
@@ -208,6 +220,41 @@ const testConnection = async () => {
     toast.error(`连接失败：${error.message}`);
   } finally {
     testing.value = false;
+  }
+};
+
+// 获取端点可用模型列表（避免手填模型名）
+const loadModels = async () => {
+  if (!apiConfig.endpoint) {
+    toast.warning('请先填写模型端点');
+    return;
+  }
+  if (!isValidEndpoint(apiConfig.endpoint)) {
+    toast.warning('模型端点格式不正确');
+    return;
+  }
+  if (!apiConfig.apiKey && !hasSavedApiKey.value) {
+    toast.warning('请先填写 API Key');
+    return;
+  }
+
+  loadingModels.value = true;
+  try {
+    const res = await fetchApiModels({
+      endpoint: apiConfig.endpoint,
+      apiKey: apiConfig.apiKey || undefined
+    });
+    const models = res.data?.models || [];
+    modelOptions.value = models;
+    // 未填模型时自动填充第一个可用模型，减少手填
+    if (!apiConfig.chatModel && models.length) apiConfig.chatModel = models[0];
+    if (!apiConfig.reasoningModel && models.length) apiConfig.reasoningModel = models[0];
+    toast.success(`获取到 ${models.length} 个可用模型`);
+  } catch (error: any) {
+    modelOptions.value = [];
+    toast.error(error?.message || '获取模型列表失败');
+  } finally {
+    loadingModels.value = false;
   }
 };
 
@@ -450,5 +497,27 @@ const handleEnabledChange = () => {
 
 .uc-switch--off .uc-switch__label {
   color: var(--faint, #67758f);
+}
+
+.model-options-hint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--faint, #67758f);
+}
+
+.model-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+  color: var(--blue-deep, #1f57cc);
+  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-size: 11.5px;
+}
+
+.model-more {
+  color: var(--muted, #5b6577);
 }
 </style>
