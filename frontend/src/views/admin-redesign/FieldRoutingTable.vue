@@ -1,11 +1,14 @@
 <template>
   <div class="frt">
-    <div class="frt__toolbar">
-      <button type="button" class="frt__toolbar-btn" :disabled="!stage" @click="openOrchestration">编排文件</button>
-      <span class="frt__toolbar-hint">编辑 prompts/orchestration/{{ stage }}.yaml（字段路由唯一声明源）</span>
+    <!-- 吸顶操作条（滚动修复 #1：长表关键操作常驻顶部） -->
+    <div class="frt__stickybar">
+      <div class="frt__toolbar">
+        <button type="button" class="frt__toolbar-btn" :disabled="!stage" @click="openOrchestration">编排文件</button>
+        <span class="frt__toolbar-hint">编辑 prompts/orchestration/{{ stage }}.yaml（字段路由唯一声明源）</span>
+      </div>
     </div>
     <p class="frt__notice">
-      行级编辑已收敛：修改字段路由请使用右上角「编排文件」按钮，保存后新建行即时生效，已有行修改后点「强制同步 DB」
+      行级编辑已收敛：修改字段路由请使用右上角「编排文件」按钮，保存后新建行即时生效，已有行修改后点「{{ TERMS.syncToDb }}」
     </p>
 
     <!-- core 联动提示条（M3 轻量：当前 stage 各 skill 的 fields-sync 状态角标） -->
@@ -22,12 +25,12 @@
       >
         <code class="mono">{{ s.skillId }}</code>
         <template v-if="s.sync">
-          <span v-if="s.sync.missing.length" class="frt-syncbar__count">缺声明 {{ s.sync.missing.length }}</span>
-          <span v-else-if="s.sync.state === 'ok'">✓ fields-synced</span>
+          <span v-if="s.sync.missing.length" class="frt-syncbar__count">{{ TERMS.statusMissing }} {{ s.sync.missing.length }}</span>
+          <span v-else-if="s.sync.state === 'ok'">✓ {{ TERMS.fieldsSynced }}</span>
           <span v-else-if="s.sync.state === 'no-core'">core 缺失</span>
           <span v-else-if="s.sync.state === 'no-routings'">无产出行</span>
           <span v-else>✓ 已声明</span>
-          <span v-if="s.sync.orphan.length" class="frt-syncbar__count">未路由 {{ s.sync.orphan.length }}</span>
+          <span v-if="s.sync.orphan.length" class="frt-syncbar__count">{{ TERMS.statusOrphan }} {{ s.sync.orphan.length }}</span>
           <span v-if="s.sync.typeMismatch.length" class="frt-syncbar__count">类型不一致 {{ s.sync.typeMismatch.length }}</span>
         </template>
         <span v-else class="frt-syncbar__count">未核对</span>
@@ -47,7 +50,7 @@
           <h5 class="frt__legend-title">字段角色（promptRole）</h5>
           <ul v-if="roleMeta.length" class="frt__legend-list">
             <li v-for="m in roleMeta" :key="m.id" class="frt__legend-item">
-              <span class="frt__role" :class="`frt__role--${m.id}`">{{ m.label }}</span>
+              <span class="mk-badge" :class="`mk-badge--role-${m.id}`">{{ m.label }}</span>
               <span class="frt__legend-en mono">{{ m.id }}</span>
               <span class="frt__legend-hint">{{ m.hint }}</span>
             </li>
@@ -58,26 +61,26 @@
           <h5 class="frt__legend-title">render（是否对外可见）</h5>
           <ul class="frt__legend-list">
             <li class="frt__legend-item">
-              <span class="frt__render-badge frt__render-badge--visible">visible</span>
+              <span class="mk-badge mk-badge--render-visible">visible</span>
               <span class="frt__legend-hint">可见：会出现在对外交付（用户 / 界面）</span>
             </li>
             <li class="frt__legend-item">
-              <span class="frt__render-badge frt__render-badge--hidden">hidden</span>
+              <span class="mk-badge mk-badge--render-hidden">hidden</span>
               <span class="frt__legend-hint">隐藏：仅内部流转，不对外展示</span>
             </li>
           </ul>
           <h5 class="frt__legend-title">流转（handoff / internal / accumulate）</h5>
           <ul class="frt__legend-list">
             <li class="frt__legend-item">
-              <span class="frt__flow-badge frt__flow-badge--handoff">handoff</span>
+              <span class="mk-badge mk-badge--flow-handoff">handoff</span>
               <span class="frt__legend-hint">移交：字段产完后交给谁——下一阶段名（如 path）/ agent / skill；空 = 不转交</span>
             </li>
             <li class="frt__legend-item">
-              <span class="frt__flow-badge frt__flow-badge--internal">internal</span>
+              <span class="mk-badge mk-badge--flow-internal">internal</span>
               <span class="frt__legend-hint">内部信令：仅供平台内部 / UI 控制使用，不进业务状态</span>
             </li>
             <li class="frt__legend-item">
-              <span class="frt__flow-badge frt__flow-badge--accumulate">accumulate</span>
+              <span class="mk-badge mk-badge--flow-accumulate">accumulate</span>
               <span class="frt__legend-hint">累积：值会累积进学习者状态（画像 / 上下文），供后续阶段持续使用</span>
             </li>
           </ul>
@@ -90,15 +93,15 @@
           <h5 class="frt__legend-title">锁定</h5>
           <ul class="frt__legend-list">
             <li class="frt__legend-item">
-              <span class="frt__lock frt__lock--system-locked">系统锁</span>
+              <span class="mk-badge mk-badge--lock-system">系统锁</span>
               <span class="frt__legend-hint">平台派生 / 代码消费，admin 不可直接改（需改编排文件）</span>
             </li>
             <li class="frt__legend-item">
-              <span class="frt__lock frt__lock--structure-locked">结构锁</span>
+              <span class="mk-badge mk-badge--lock-structure">结构锁</span>
               <span class="frt__legend-hint">结构约束锁定，修改需谨慎</span>
             </li>
             <li class="frt__legend-item">
-              <span class="frt__lock frt__lock--editable">可编辑</span>
+              <span class="mk-badge mk-badge--lock-editable">可编辑</span>
               <span class="frt__legend-hint">可自由调整（仍走编排文件入口）</span>
             </li>
           </ul>
@@ -146,7 +149,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in filteredOf(agent.agentId)" :key="row.id">
+              <tr v-for="row in rowsOf(agent.agentId)" :key="row.id">
                 <td class="frt__fieldcell">
                   <span class="mono frt__field">{{ row.fieldId }}</span>
                   <span v-if="pathParts(row.fieldId).length > 1" class="frt__fieldpath" :title="row.fieldId">{{ pathParts(row.fieldId).join(' · ') }}</span>
@@ -159,16 +162,16 @@
                 <td>
                   <span
                     v-if="roleMetaOf(row.fieldId)"
-                    class="frt__role"
-                    :class="`frt__role--${roleMetaOf(row.fieldId)!.id}`"
+                    class="mk-badge"
+                    :class="`mk-badge--role-${roleMetaOf(row.fieldId)!.id}`"
                     :title="roleMetaOf(row.fieldId)!.hint"
                   >{{ roleMetaOf(row.fieldId)!.label }}</span>
                   <span v-else class="mk-na">—</span>
                 </td>
                 <td>
                   <span
-                    class="frt__render-badge"
-                    :class="`frt__render-badge--${row.render}`"
+                    class="mk-badge"
+                    :class="`mk-badge--render-${row.render}`"
                     :title="renderHint(row)"
                   >{{ row.render }}</span>
                 </td>
@@ -184,15 +187,31 @@
                       : `落库键与字段名不一致：值实际写入 ${persistKeyOf(row)}（见编排文件 persistKey 声明）`"
                   >{{ persistKeyOf(row) }}</span>
                 </td>
-                <td><span class="frt__lock" :class="`frt__lock--${row.locks?.level || 'editable'}`" :title="lockHint(row.locks?.level)">{{ lockLabel(row.locks?.level) }}</span></td>
+                <td><span class="mk-badge" :class="`mk-badge--lock-${row.locks?.level || 'editable'}`" :title="lockHint(row.locks?.level)">{{ lockLabel(row.locks?.level) }}</span></td>
               </tr>
-              <tr v-if="filteredOf(agent.agentId).length === 0">
+              <tr v-if="rowsOf(agent.agentId).length === 0">
                 <td colspan="10" class="frt__emptyrow">
                   {{ routingsOf(agent.agentId).length ? '无匹配行，试试调整搜索或角色过滤' : '该 Agent 无字段路由行' }}
                 </td>
               </tr>
             </tbody>
           </table>
+        </div>
+        <!-- 每 agent 组分页（滚动修复 #1：24+31 行全量堆叠 → 15 行/页，翻页不丢数据） -->
+        <div class="frt__pager">
+          <button
+            type="button"
+            class="frt__pager-btn"
+            :disabled="pageOf(agent.agentId) === 0"
+            @click="setPage(agent.agentId, pageOf(agent.agentId) - 1)"
+          >‹ 上一页</button>
+          <span class="frt__pager-info">第 {{ pageOf(agent.agentId) + 1 }} / {{ pagesOf(agent.agentId) }} 页 · 共 {{ filteredOf(agent.agentId).length }} 行</span>
+          <button
+            type="button"
+            class="frt__pager-btn"
+            :disabled="pageOf(agent.agentId) >= pagesOf(agent.agentId) - 1"
+            @click="setPage(agent.agentId, pageOf(agent.agentId) + 1)"
+          >下一页 ›</button>
         </div>
       </div>
     </template>
@@ -238,9 +257,9 @@
             :disabled="orchSaving || orchSyncing || orchPruning"
             @click="runPrune(true)"
           >确认清理（删除 DB 行）</button>
-          <button type="button" class="mk-btn" :disabled="orchSaving || orchSyncing || orchPruning" @click="forceSync">强制同步 DB</button>
+          <button type="button" class="mk-btn" :disabled="orchSaving || orchSyncing || orchPruning" @click="forceSync">{{ TERMS.syncToDb }}</button>
           <button type="button" class="mk-btn mk-btn--primary" :disabled="orchSaving || orchSyncing || orchPruning" @click="saveOrchestration">
-            {{ orchSaving ? '保存中…' : '保存到编排文件' }}
+            {{ orchSaving ? '保存中…' : TERMS.saveToFile }}
           </button>
         </div>
       </div>
@@ -256,6 +275,7 @@ import { useEscape } from './useEscape';
 import { useOverlay, useMaskClose } from './useOverlay';
 import { toast } from '@/utils/toast';
 import { askConfirm } from './useConfirm';
+import { TERMS } from './terms';
 
 interface FieldItem {
   fieldId: string;
@@ -297,6 +317,28 @@ const error = ref('');
 const keyword = ref('');
 const roleFilter = ref('');
 const legendOpen = ref(false);
+
+/* ============ 每 agent 组分页（滚动修复 #1） ============ */
+const AGENT_PAGE_SIZE = 15;
+const agentPages = ref<Record<string, number>>({});
+
+function pagesOf(agentId: string) {
+  return Math.max(1, Math.ceil(filteredOf(agentId).length / AGENT_PAGE_SIZE));
+}
+function pageOf(agentId: string) {
+  const p = agentPages.value[agentId] || 0;
+  return Math.min(p, pagesOf(agentId) - 1);
+}
+function setPage(agentId: string, p: number) {
+  agentPages.value = { ...agentPages.value, [agentId]: Math.min(Math.max(p, 0), pagesOf(agentId) - 1) };
+}
+function rowsOf(agentId: string) {
+  const list = filteredOf(agentId);
+  const p = pageOf(agentId);
+  return list.slice(p * AGENT_PAGE_SIZE, (p + 1) * AGENT_PAGE_SIZE);
+}
+/* 筛选/搜索变化 → 页码回到第 1 页（与 useLoadMore 同语义） */
+watch([keyword, roleFilter], () => { agentPages.value = {}; });
 
 const fieldMap = () => new Map(fields.value.map((f) => [f.fieldId, f]));
 
@@ -409,6 +451,7 @@ async function loadStage() {
     agents.value = res.data?.data?.agents || [];
     routings.value = res.data?.data?.routings || [];
     roleMeta.value = res.data?.data?.promptRoleMeta || [];
+    agentPages.value = {};
     await loadSkillSyncs();
   } catch (e: any) {
     error.value = e?.message || '加载失败';
@@ -461,7 +504,7 @@ async function loadSkillSyncs() {
               : 'ok';
         const title = [
           sync?.state === 'no-core' ? 'core 文件缺失（协议 tab 未建核心声明）' : '',
-          sync ? `缺声明 ${sync.missing.length} · 未路由 ${sync.orphan.length} · 类型不一致 ${sync.typeMismatch.length}` : 'core 投影不可用'
+          sync ? `${TERMS.statusMissing} ${sync.missing.length} · ${TERMS.statusOrphan} ${sync.orphan.length} · 类型不一致 ${sync.typeMismatch.length}` : 'core 投影不可用'
         ].filter(Boolean).join('\n');
         return { skillId, sync, tone, title };
       } catch {
@@ -514,8 +557,8 @@ async function openOrchestration() {
 
 /**
  * 清理孤儿行（P2 补全，变更路径审计 C 缺口）：编排文件为唯一声明源，
- * 声明删除 → DB 孤儿行清理。流程：先 dry-run 展示候选清单 → 确认后执行
- * （执行前逐行写 node_config_changes 审计；managedByCode=false 覆盖行只报告不删）。
+ * 声明删除 → DB 孤儿行清理。流程：先预检展示候选清单 → 确认后执行
+ * （执行前逐行写配置变更审计；admin 覆盖行只报告不删）。
  */
 async function runPrune(apply: boolean) {
   orchMsg.value = '';
@@ -529,7 +572,7 @@ async function runPrune(apply: boolean) {
 
     let msg = '';
     if (data.dryRun) {
-      msg = `dry-run：孤儿行 ${candidates.length} 条（契约 ${byTable('agent_contracts')} · 字段 ${byTable('field_definitions')} · 路由 ${byTable('agent_field_routings')}）`;
+      msg = `预检：孤儿行 ${candidates.length} 条（契约 ${byTable('agent_contracts')} · 字段 ${byTable('field_definitions')} · 路由 ${byTable('agent_field_routings')}）`;
       if (candidates.length) {
         msg += '；确认无误后点「确认清理（删除 DB 行）」执行';
         pruneConfirming.value = true;
@@ -540,12 +583,12 @@ async function runPrune(apply: boolean) {
     } else {
       msg = `已清理 ${data.deletedCount ?? 0} 行孤儿数据（契约 ${byTable('agent_contracts')} · 字段 ${byTable('field_definitions')} · 路由 ${byTable('agent_field_routings')}）`;
       if (Array.isArray(data.auditIds) && data.auditIds.length) {
-        msg += `；审计留痕 ${data.auditIds.length} 条（node_config_changes / orchestration-prune）`;
+        msg += `；审计留痕 ${data.auditIds.length} 条（孤儿清理）`;
       }
       pruneConfirming.value = false;
     }
     if (protectedCount) {
-      msg += `；admin 覆盖行（managedByCode=false）跳过 ${protectedCount} 条（只报告不删）`;
+      msg += `；admin 覆盖行跳过 ${protectedCount} 条（只报告不删）`;
     }
     orchMsg.value = msg;
 
@@ -589,10 +632,10 @@ async function saveOrchestration() {
 }
 
 async function forceSync() {
-  // 安全审计 K-M1：强制同步（全量对账覆写三表）执行前二次确认，注明影响范围
+  // 安全审计 K-M1：同步（全量对账覆写三表）执行前二次确认，注明影响范围
   const ok = await askConfirm({
-    title: '强制同步 DB',
-    message: `将对「${props.stage}」阶段执行全量对账：以编排 YAML 为唯一声明源，覆写 agent_contracts / field_definitions / agent_field_routings 三表；managedByCode=false 的 admin 覆盖行跳过（只报告不改）。`,
+    title: TERMS.syncToDb,
+    message: `将对「${props.stage}」阶段执行全量对账：以编排 YAML 为唯一声明源，覆写 agent_contracts / field_definitions / agent_field_routings 三表；admin 覆盖行跳过（只报告不改）。`,
     confirmText: '执行同步',
   })
   if (!ok) return
@@ -602,7 +645,7 @@ async function forceSync() {
     const res = await adminFieldRoutingsApi.syncOrchestrationFile(props.stage);
     const data = res.data?.data || {};
     const skipped: Array<{ table: string; key: string }> = Array.isArray(data.skippedAdminRows) ? data.skippedAdminRows : [];
-    let msg = `已对账：契约 ${data.contractsUpdated ?? 0} · 字段 ${data.fieldsUpdated ?? 0} · 路由 ${data.routingsUpdated ?? 0} · 新建 ${data.createdCount ?? 0}`;
+    let msg = `${TERMS.reconcile}完成：契约 ${data.contractsUpdated ?? 0} · 字段 ${data.fieldsUpdated ?? 0} · 路由 ${data.routingsUpdated ?? 0} · 新建 ${data.createdCount ?? 0}`;
     if (skipped.length) {
       const sample = skipped.slice(0, 5).map((s) => `${s.table}:${s.key}`).join('、');
       msg += `；跳过 admin 覆盖行 ${skipped.length} 条（${sample}${skipped.length > 5 ? '…' : ''}）`;
@@ -610,7 +653,7 @@ async function forceSync() {
       msg += '；无 admin 覆盖行被跳过';
     }
     orchMsg.value = msg;
-    toast.success('强制同步完成');
+    toast.success(TERMS.syncDone);
     await loadStage();
     emit('changed');
   } catch (e: any) {
@@ -626,6 +669,19 @@ watch(() => props.stage, () => void loadStage());
 
 <style scoped>
 .frt__toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+/* 吸顶操作条（滚动修复 #1）：长表关键操作常驻顶部，负 margin 满宽于 tab 面板 */
+.frt__stickybar {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  margin: -14px -16px 14px;
+  padding: 10px 16px 8px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(230, 235, 244, 0.9);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+}
+.frt__stickybar .frt__toolbar { margin-bottom: 0; }
 .frt__notice {
   margin: 0 0 14px;
   padding: 8px 12px;
@@ -794,7 +850,7 @@ watch(() => props.stage, () => void loadStage());
   line-height: 1.5;
 }
 
-/* 清理孤儿行按钮（P2：dry-run 只报告；确认态红色危险按钮） */
+/* 清理孤儿行按钮（P2：预检只报告；确认态红色危险按钮） */
 .frt__prune {
   border-color: rgba(180, 83, 9, 0.35);
   color: var(--mk-amber, #b45309);
@@ -814,14 +870,17 @@ watch(() => props.stage, () => void loadStage());
 .frt__agentdesc { color: var(--mk-faint, #71809a); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .frt__agentcount { margin-left: auto; padding: 1px 9px; border-radius: 999px; background: #eef2fa; color: var(--mk-muted, #5b6577); font-size: 11px; font-weight: 700; white-space: nowrap; }
 .frt__table { width: 100%; border-collapse: collapse; }
-/* 9 列表格：窄屏横向滚动（≤860px 设最小宽度，列不被挤压） */
-.frt__scroll { overflow-x: auto; }
+/* 横向+纵向滚动容器（滚动修复 #1）：表头 sticky 吸顶，容器限高内部滚动，页面本体不被撑长 */
+.frt__scroll { overflow: auto; max-height: 62vh; }
 @media (max-width: 860px) {
   .frt__table { min-width: 1060px; }
   .frt__table th, .frt__table td { padding: 7px 9px; }
 }
 .frt__table th, .frt__table td { padding: 8px 12px; text-align: left; }
 .frt__table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   background: #fafbfc;
   border-bottom: 1px solid var(--mk-line, #e6ebf4);
   font-size: 11px;
@@ -835,6 +894,31 @@ watch(() => props.stage, () => void loadStage());
 .frt__table tr:last-child td { border-bottom: none; }
 .frt__table tbody tr { transition: background 0.12s; }
 .frt__table tbody tr:hover { background: #f6f9ff; }
+
+/* 每 agent 组分页条（滚动修复 #1） */
+.frt__pager {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--mk-line, #e6ebf4);
+  background: #fafbfd;
+}
+.frt__pager-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--mk-line, #e6ebf4);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--mk-blue, #2c63d0);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.frt__pager-btn:hover:not(:disabled) { border-color: rgba(44, 99, 208, 0.4); }
+.frt__pager-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.frt__pager-info { font-size: 11.5px; color: var(--mk-faint, #71809a); font-variant-numeric: tabular-nums; }
 
 /* 字段列：点分名 + 层级分段小字 */
 .frt__fieldcell { max-width: 300px; display: grid; gap: 2px; min-width: 0; }
@@ -858,26 +942,8 @@ watch(() => props.stage, () => void loadStage());
 }
 
 /* 角色徽章（7 类着色，与图例共用） */
-.frt__role { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-.frt__role--hard-required { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red-strong, #b91c1c); }
-.frt__role--soft-info { background: #eff6ff; color: #2563eb; }
-.frt__role--hidden-inference { background: #f4f0ff; color: #7c3aed; }
-.frt__role--public-reply { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #15803d); }
-.frt__role--proposal-output { background: #effcf9; color: #0d9488; }
-.frt__role--derived-presentation { background: var(--mk-amber-bg, #fffbeb); color: var(--mk-amber, #b45309); }
-.frt__role--control-signal { background: #f0f2f5; color: #5b6577; }
-
 /* render 徽章 */
-.frt__render-badge { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-.frt__render-badge--visible { background: #e8f7ef; color: #15803d; }
-.frt__render-badge--hidden { background: #f0f2f5; color: #5b6577; }
-
 /* 流转徽章（图例） */
-.frt__flow-badge { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
-.frt__flow-badge--handoff { background: #eef2ff; color: #4f46e5; }
-.frt__flow-badge--internal { background: #fdf2f8; color: #be185d; }
-.frt__flow-badge--accumulate { background: #f0fdf4; color: #15803d; }
-
 /* 落库键列 */
 .frt__persist { display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted, #5b6577); font-size: 11px; }
 .frt__persist--alias { color: var(--mk-amber, #b45309); background: #fffbeb; border-radius: 5px; padding: 0 5px; }
@@ -901,10 +967,6 @@ watch(() => props.stage, () => void loadStage());
 .frt__orch-quick-item b { margin-right: 4px; color: var(--mk-ink, #1a2a44); }
 
 .frt__handoff { max-width: 220px; color: var(--mk-faint, #71809a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.frt__lock { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-.frt__lock--system-locked { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
-.frt__lock--structure-locked { background: var(--mk-amber-bg, #fffbeb); color: var(--mk-amber, #b45309); border: 1px dashed rgba(180, 83, 9, 0.45); }
-.frt__lock--editable, .frt__lock--fully-editable { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #15803d); }
 .frt__empty { padding: 30px; color: var(--mk-faint, #71809a); text-align: center; }
 .frt__emptyrow { color: var(--mk-faint, #71809a); text-align: center; padding: 14px; }
 
@@ -929,12 +991,8 @@ watch(() => props.stage, () => void loadStage());
   .frt__table th { font-size: 12.5px; padding: 10px 15px; }
   .frt__table td { font-size: 14px; padding: 10px 15px; }
   .frt__fieldpath { font-size: 12px; }
-  .frt__role { font-size: 12px; padding: 2px 10px; }
-  .frt__render-badge { font-size: 12px; padding: 2px 10px; }
-  .frt__flow-badge { font-size: 12px; padding: 2px 10px; }
   .frt__persist { font-size: 12px; }
-  .frt__lock { font-size: 12px; padding: 2px 11px; }
-}
+  }
 
 @media (min-width: 2800px) {
   .frt__toolbar-btn { font-size: 16.5px; padding: 12px 24px; }
@@ -957,10 +1015,6 @@ watch(() => props.stage, () => void loadStage());
   .frt__table th { font-size: 15px; padding: 12px 19px; }
   .frt__table td { font-size: 16.5px; padding: 12px 19px; }
   .frt__fieldpath { font-size: 14px; }
-  .frt__role { font-size: 14px; padding: 3px 12px; }
-  .frt__render-badge { font-size: 14px; padding: 3px 12px; }
-  .frt__flow-badge { font-size: 14px; padding: 3px 12px; }
   .frt__persist { font-size: 14px; }
-  .frt__lock { font-size: 14px; padding: 3px 13px; }
-}
+  }
 </style>

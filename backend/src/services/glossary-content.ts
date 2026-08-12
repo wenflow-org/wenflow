@@ -104,10 +104,19 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   { term: 'accumulate（累积）', category: 'flow', def: '值会累积进学习者状态（画像/上下文），供后续阶段持续使用' },
   { term: '系统锁 / 结构锁', category: 'flow', def: '系统锁=平台派生/代码消费，admin 不可直接改；结构锁=结构约束锁定，修改需谨慎；其余可编辑' },
   { term: '完成度', category: 'flow', def: 'Skill 从登记到上线的五档进度：草稿 → handler 就绪 → core 就绪 → 字段已同步 → 已上线' },
+  { term: '对账', category: 'flow', def: '把两份记录逐条比对找出差异（如编排文件 ↔ DB、户口簿 ↔ 注册表）；健康检查与同步都以对账结果为准' },
+  { term: '同步（同步到 DB）', category: 'flow', def: '让数据库跟上声明文件的动作：以文件为唯一真源，把差异写进 DB；「同步到 DB」按钮执行全量对账（原叫法「强制同步 DB」「落库」已统一为「同步」）' },
+  { term: '保存到编排文件', category: 'flow', def: '把编排 YAML 改动写盘：新行/新路由立即生效；已有行属性修改需再执行「同步到 DB」才生效' },
+  { term: '发布', category: 'flow', def: '让改动真正生效的动作：core 文件 → 编译产物 → DB ACTIVE，发布后运行时立即使用新版本' },
+  { term: '落库', category: 'flow', def: '旧叫法：把字段/路由写入数据库，现已统一为「同步」；「落库键（persistKey）」中的落库保留指写入主库' },
 
   // ---- 状态（status） ----
   { term: '干净', category: 'status', def: '健康检查通过：声明与库一致，无问题' },
   { term: '漂移', category: 'status', def: '声明文件与数据库台账对不上：改了文件但没同步（详见 DRIFT_EXPLAINED.md §5 通俗解释）' },
+  { term: '契约漂移', category: 'status', def: '漂移的限定叫法（编排契约维度）：编排文件声明与数据库登记不一致；编排页「漂移与审计」面板展示的就是它' },
+  { term: '哈希漂移（W4 漂移）', category: 'status', def: '核心文件 ↔ 编译产物 ↔ DB 三方哈希不一致：文件改了但没"编译+同步"，线上仍在跑旧版' },
+  { term: '遥测漂移（运行时漂移）', category: 'status', def: '运行时每次 LLM 调用比对"代码侧 prompt 与 DB ACTIVE"发现不一致的记录；只读观测，修复=重新同步数据库' },
+  { term: '版本不一致', category: 'status', def: '「漂移」的旧叫法（源文件与运行 Prompt 不一致），现已统一叫「漂移」' },
   { term: '孤儿', category: 'status', def: '一边有、另一边没有：如 core 声明的字段在编排里没有对应路由' },
   { term: '缺项', category: 'status', def: '该有而没有：如编排缺了 core 声明的字段' },
   { term: '未注册', category: 'status', def: '户口簿（skills.yaml）里有，但系统注册表/ACTIVE 里没有' },
@@ -119,6 +128,8 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
 
   // ---- 健康中心（health） ----
   { term: '健康中心', category: 'health', def: '13 项系统健康检查的聚合清单，位于编排结构页顶部"健康区"；每项带严重度与修复动作', where: '编排结构页顶部' },
+  { term: '健康分', category: 'health', def: '总览页的"今日调用成功率"评分（0-100），与"健康区"（13 项系统检查）是两套不同口径；页面已改名为「今日成功率」' },
+  { term: '检查项', category: 'health', def: '健康区里的每一项系统检查（共 13 项），每项带严重度、状态与修复动作' },
   { term: 'W1 注册对账', category: 'health', def: '户口簿活跃技能 ↔ ACTIVE prompt 的双向核对：谁缺 ACTIVE、谁是多出来的残留' },
   { term: 'W2 注册表对账', category: 'health', def: '户口簿 ↔ 系统注册表（skill_registrations）的双向核对：谁没注册、谁是多出来的幽灵' },
   { term: 'W3 接线对账', category: 'health', def: '运行时定义的执行步骤 ↔ 户口簿 coordinator 声明是否一致' },

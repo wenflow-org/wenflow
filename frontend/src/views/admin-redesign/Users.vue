@@ -111,6 +111,7 @@
       <div v-else class="mk-empty">
         <strong>没有匹配的用户</strong>
         <span>放宽筛选条件，或邀请第一位真实用户。</span>
+        <button v-if="isFiltered" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
       </div>
       <div v-if="canMore" class="ul-more">
         <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }} 人）</button>
@@ -540,6 +541,12 @@ const filtered = computed(() =>
 
 /* 长列表分批渲染：每批 15 行 */
 const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
+
+const isFiltered = computed(() => pill.value !== 'all' || !!keyword.value.trim())
+function clearFilters() {
+  pill.value = 'all'
+  keyword.value = ''
+}
 </script>
 
 <style scoped>

@@ -3,16 +3,16 @@
     <!-- 摘要条 -->
     <div class="hc-bar" :class="`hc-bar--${barTone}`">
       <span class="hc-bar__dot"></span>
-      <strong class="hc-bar__title">健康区</strong>
+      <strong class="hc-bar__title">{{ TERMS.healthZone }}</strong>
       <span class="hc-bar__meta">{{ summary.total }} 项检查</span>
       <span v-if="report" class="hc-bar__seg">
-        <span class="hc-dot hc-dot--error"></span>{{ counts.error }} error
-        <span class="hc-dot hc-dot--warn"></span>{{ counts.warn }} warn
-        <span class="hc-dot hc-dot--ok"></span>{{ counts.ok }} ok
-        <span class="hc-dot hc-dot--info"></span>{{ counts.info }} info
+        <span class="hc-dot hc-dot--error"></span>{{ counts.error }} 异常
+        <span class="hc-dot hc-dot--warn"></span>{{ counts.warn }} 警告
+        <span class="hc-dot hc-dot--ok"></span>{{ counts.ok }} 正常
+        <span class="hc-dot hc-dot--info"></span>{{ counts.info }} 提示
       </span>
       <span v-if="report" class="hc-bar__seg hc-bar__seg--dim">
-        基准漂移 {{ summary.baselineDrift }} · 一致性 {{ summary.consistency }} · 覆盖记录 {{ summary.overrideRecord }}
+        基准漂移 {{ summary.baselineDrift }} · 一致性偏差 {{ summary.consistency }} · 覆盖记录 {{ summary.overrideRecord }}
       </span>
       <span v-if="report && summary.fixable > 0" class="hc-bar__fixable">可一键修复 {{ summary.fixable }} 项</span>
       <button type="button" class="hc-bar__action" :disabled="loading" @click="refresh(true)">
@@ -86,6 +86,7 @@ import {
   type HealthCenterItemId,
   type HealthCenterReport,
 } from '@/api/adminApi'
+import { TERMS } from './terms'
 
 const emit = defineEmits<{ (e: 'jump', target: 'drift' | 'skills' | 'workbench'): void }>()
 
@@ -119,7 +120,7 @@ const statusLabelMap: Record<string, string> = {
   unregistered: '未注册',
   unwired: '未接线',
   'type-mismatch': '类型不一致',
-  'missing-declarations': '缺声明',
+  'missing-declarations': TERMS.statusMissing,
   active: '存在',
   none: '无',
   observed: '观测到',
@@ -155,7 +156,7 @@ async function refresh(force = false) {
   }
 }
 
-/** manual 项跳对应面板：字段路由/合同维度 → drift tab；参数/契约/对账类 → Skills；yaml → Prompt 工作台 */
+/** manual 项跳对应面板：字段路由/契约维度 → drift tab；参数/契约/对账类 → Skills；yaml → Prompt 工作台 */
 function jump(id: HealthCenterItemId) {
   if (id === 'field-routing' || id === 'field-routing-contract' || id === 'fields-sync') emit('jump', 'drift')
   else if (id === 'yaml-crosscheck' || id === 'params-consistency') emit('jump', 'workbench')
@@ -227,7 +228,8 @@ defineExpose({ refresh })
 .hc-bar__action:hover { color: var(--mk-blue); border-color: rgba(44, 99, 208, 0.4); }
 .hc-bar__action:disabled { opacity: 0.55; cursor: wait; }
 
-.hc-list { display: grid; gap: 6px; }
+/* 滚动修复 #2：13 项检查限高内部滚动，展开健康区不再把页面撑长 5.3 屏 */
+.hc-list { display: grid; gap: 6px; max-height: 58vh; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
 .hc-item {
   display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start;
   padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: 10px; background: var(--mk-surface);

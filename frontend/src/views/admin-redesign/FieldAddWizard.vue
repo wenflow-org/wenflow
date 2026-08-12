@@ -21,15 +21,15 @@
         <div v-if="result" class="faw__result">
           <strong class="faw__result-title">{{ resultTitle }}</strong>
           <ul class="faw__result-list">
-            <li v-if="result.changed === false">无变化（字段现状与提交内容一致，未写盘未落库）</li>
+            <li v-if="result.changed === false">无变化（字段现状与提交内容一致，未写盘未同步）</li>
             <template v-else>
               <li>core.yaml <b>{{ result.coreWritten ? '已写入' : '未写入' }}</b> · 编排文件 <b>{{ result.orchestrationWritten ? '已写入' : '未写入' }}</b></li>
-              <li v-if="mode === 'add'">落库 <b :class="result.synced ? 'faw__ok' : 'faw__err'">{{ result.synced ? '已同步' : '失败' }}</b>
+              <li v-if="mode === 'add'">{{ TERMS.syncToDb }} <b :class="result.synced ? 'faw__ok' : 'faw__err'">{{ result.synced ? '已同步' : '失败' }}</b>
                 <span class="faw__result-hint">{{ result.syncHint }}</span></li>
-              <li v-else>落库对账：fields 更新 <b>{{ result.dbSync?.fieldsUpdated ?? 0 }}</b> · routings 更新 <b>{{ result.dbSync?.routingsUpdated ?? 0 }}</b>
+              <li v-else>同步对账：fields 更新 <b>{{ result.dbSync?.fieldsUpdated ?? 0 }}</b> · routings 更新 <b>{{ result.dbSync?.routingsUpdated ?? 0 }}</b>
                 <span v-if="result.dbSync?.skippedAdminRows?.length" class="faw__result-hint">
-                  跳过受保护行 {{ result.dbSync.skippedAdminRows.length }}（{{ result.dbSync.skippedAdminRows.map((r) => r.key).join('，') }}；managedByCode=false 需在编排弹窗手动改）</span></li>
-              <li v-if="result.syncCheck">fields-sync 复检：缺项 <b>{{ result.syncCheck.missing.length }}</b> · 孤儿 <b>{{ result.syncCheck.orphan.length }}</b> · 类型不一致 <b>{{ result.syncCheck.typeMismatch.length }}</b></li>
+                  跳过受保护行 {{ result.dbSync.skippedAdminRows.length }}（{{ result.dbSync.skippedAdminRows.map((r) => r.key).join('，') }}；admin 覆盖行需在编排弹窗手动改）</span></li>
+              <li v-if="result.syncCheck">字段同步复检：缺项 <b>{{ result.syncCheck.missing.length }}</b> · 孤儿 <b>{{ result.syncCheck.orphan.length }}</b> · 类型不一致 <b>{{ result.syncCheck.typeMismatch.length }}</b></li>
             </template>
           </ul>
           <p class="faw__result-note">{{ resultNote }}</p>
@@ -40,14 +40,14 @@
           <div class="faw__grid">
             <label class="faw__field faw__field--full">
               <span>字段名 <em class="faw__req">*</em>（kebab-case 或点分路径；首段 = core 顶层字段）</span>
-              <input v-model="form.name" type="text" class="sdp-input mono" placeholder="如 summary / understanding.motivation" spellcheck="false" :disabled="mode === 'edit'" @input="checkName" />
+              <input v-model="form.name" type="text" class="mk-input mono" placeholder="如 summary / understanding.motivation" spellcheck="false" :disabled="mode === 'edit'" @input="checkName" />
               <span v-if="mode === 'edit'" class="faw__hint">编辑模式：字段名即身份标识，不可修改</span>
               <span v-else class="faw__hint" :class="nameHintCls">{{ nameHint }}</span>
             </label>
 
             <label class="faw__field">
               <span>类型（core 侧） <em class="faw__req">*</em></span>
-              <select v-model="form.type" class="sdp-input">
+              <select v-model="form.type" class="mk-input">
                 <option v-for="t in CORE_TYPES" :key="t" :value="t">{{ t }}</option>
               </select>
               <span class="faw__hint" :class="typeHintCls">{{ typeHint }}</span>
@@ -55,7 +55,7 @@
 
             <label class="faw__field">
               <span>promptRole（角色） <em class="faw__req">*</em></span>
-              <select v-model="form.role" class="sdp-input">
+              <select v-model="form.role" class="mk-input">
                 <option v-for="m in roleMeta" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>
               </select>
               <span class="faw__hint">{{ roleHint }}</span>
@@ -63,7 +63,7 @@
 
             <label class="faw__field">
               <span>render（可见性）</span>
-              <select v-model="form.render" class="sdp-input">
+              <select v-model="form.render" class="mk-input">
                 <option value="visible">visible 可见（对外交付）</option>
                 <option value="hidden">hidden 隐藏（仅内部流转）</option>
               </select>
@@ -71,13 +71,13 @@
 
             <label class="faw__field">
               <span>handoff（流转目标）</span>
-              <input v-model="form.handoff" type="text" class="sdp-input mono" placeholder="goal-agent, path, skill:xxx" spellcheck="false" />
+              <input v-model="form.handoff" type="text" class="mk-input mono" placeholder="goal-agent, path, skill:xxx" spellcheck="false" />
               <span class="faw__hint">合法目标：阶段名（{{ STAGE_NAMES.join('/') }}）/ agent / skill:；逗号分隔</span>
             </label>
 
             <label class="faw__field">
               <span>visibilityPreset（可见性预设）</span>
-              <select v-model="form.visibilityPreset" class="sdp-input">
+              <select v-model="form.visibilityPreset" class="mk-input">
                 <option value="">缺省（不声明）</option>
                 <option value="user-clarification">user-clarification</option>
                 <option value="agent-internal">agent-internal</option>
@@ -86,7 +86,7 @@
 
             <label class="faw__field">
               <span>locked（锁定）</span>
-              <select v-model="form.locked" class="sdp-input">
+              <select v-model="form.locked" class="mk-input">
                 <option value="">不锁定</option>
                 <option value="system">system 系统锁（平台派生/代码消费）</option>
                 <option value="structure">structure 结构锁（结构约束锁定）</option>
@@ -95,18 +95,18 @@
 
             <label class="faw__field">
               <span>persistKey（落库键，别名时填）</span>
-              <input v-model="form.persistKey" type="text" class="sdp-input mono" placeholder="缺省 = 与字段名一致" spellcheck="false" />
+              <input v-model="form.persistKey" type="text" class="mk-input mono" placeholder="缺省 = 与字段名一致" spellcheck="false" />
             </label>
 
             <label class="faw__field">
               <span>pathInRawOutput（抽取路径）</span>
-              <input v-model="form.pathInRawOutput" type="text" class="sdp-input mono" placeholder="internal.ext.xxx.…" spellcheck="false" />
+              <input v-model="form.pathInRawOutput" type="text" class="mk-input mono" placeholder="internal.ext.xxx.…" spellcheck="false" />
               <span class="faw__hint">嵌套字段建议填；声明字段在产出原始输出里的物理路径</span>
             </label>
 
             <label class="faw__field faw__field--full">
               <span>desc（生成指令 / 含义） <em class="faw__req">*</em></span>
-              <textarea v-model="form.desc" class="sdp-input faw__desc" rows="3" placeholder="说明字段语义与生成要求（core 与编排共用）"></textarea>
+              <textarea v-model="form.desc" class="mk-input faw__desc" rows="3" placeholder="说明字段语义与生成要求（core 与编排共用）"></textarea>
             </label>
           </div>
 
@@ -151,6 +151,7 @@ import { adminPromptWorkbenchApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
+import { TERMS } from './terms'
 
 interface RoleMeta { id: string; label: string; hint: string }
 interface SyncCheck {
@@ -261,8 +262,8 @@ const isEdit = computed(() => props.mode === 'edit')
 const dialogTitle = computed(() => (isEdit.value ? `编辑字段 · ${props.fieldName}` : `加字段 · ${props.skillId}`))
 const subText = computed(() =>
   isEdit.value
-    ? '一次保存 → 双文件联动修改（core.yaml fields + 编排 fields/routings）→ 原子保存（写盘 / 全量对账落库 / 复检）；字段名不可改'
-    : '一次填写 → 双文件生成（core.yaml fields + 编排 fields/routings）→ 原子保存（写入/落库/复检）'
+    ? '一次保存 → 双文件联动修改（core.yaml fields + 编排 fields/routings）→ 原子保存（写盘 / 全量对账同步 / 复检）；字段名不可改'
+    : '一次填写 → 双文件生成（core.yaml fields + 编排 fields/routings）→ 原子保存（写入/同步/复检）'
 )
 const resultTitle = computed(() =>
   result.value?.changed === false
@@ -272,11 +273,11 @@ const resultTitle = computed(() =>
       : '已保存并回填路由 ✓'
 )
 const resultNote = computed(() => {
-  if (result.value?.changed === false) return '字段现状与提交内容一致，未写盘 / 未落库 / 未记审计。'
+  if (result.value?.changed === false) return '字段现状与提交内容一致，未写盘 / 未同步 / 未记审计。'
   if (isEdit.value) {
     return '字段修改已生效（core 声明 + 编排路由 + DB 对账）；记得去「协议」tab 编译预览 → 发布 core 变更（发布需 developerApproval 治理，不并入本次保存）。'
   }
-  return '新字段已登记路由并落库；记得去「协议」tab 编译预览 → 发布 core 变更（发布需 developerApproval 治理，不并入本次保存）。'
+  return '新字段已登记路由并同步；记得去「协议」tab 编译预览 → 发布 core 变更（发布需 developerApproval 治理，不并入本次保存）。'
 })
 const previewMeta = computed(() => (isEdit.value ? 'core.yaml fields + 编排 fields/routings 将更新为' : 'core.yaml fields + 编排 fields/routings 各追加 1 行'))
 
@@ -496,7 +497,7 @@ async function submit() {
       const payload = { name: form.value.name.trim(), ...buildPayload() }
       const res = await adminPromptWorkbenchApi.addSkillField(props.skillId, payload)
       result.value = (res.data?.data || {}) as SaveResult
-      toast.success('新字段已登记路由并落库')
+      toast.success('新字段已登记路由并同步')
     }
     emit('saved')
   } catch (e: any) {

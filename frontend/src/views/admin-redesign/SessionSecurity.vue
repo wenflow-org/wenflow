@@ -65,7 +65,7 @@
             <span class="ss-head__ops">操作</span>
           </div>
           <div
-            v-for="s in g.sessions"
+            v-for="s in g.active"
             :key="s.id"
             class="ss-row"
             :class="{ 'ss-row--current': s.id === currentId }"
@@ -90,6 +90,39 @@
               <span v-else class="ss-na">—</span>
             </span>
           </div>
+          <!-- 滚动修复 #3：过期/已撤销历史收进折叠组（默认收起；「已撤销」筛选时自动展开） -->
+          <details v-if="g.historical.length" class="ss-hist" :open="statusFilter === 'revoked'">
+            <summary class="ss-hist__summary">
+              <span class="ss-hist__title">已过期 / 已撤销（{{ g.historical.length }}）</span>
+              <span class="ss-hist__meta">过期 {{ g.expiredCount }} · 已撤销 {{ g.revokedCount }}</span>
+            </summary>
+            <div
+              v-for="s in g.historical"
+              :key="s.id"
+              class="ss-row"
+              :class="{ 'ss-row--current': s.id === currentId }"
+            >
+              <span class="ss-device" :title="uaOf(s)">{{ uaOf(s) }}</span>
+              <span class="ss-time mono" :title="fmtFull(s.issuedAt)">{{ fmtDateTime(s.issuedAt) }}</span>
+              <span class="ss-time mono" :title="s.lastSeenAt ? fmtFull(s.lastSeenAt) : ''">
+                {{ s.lastSeenAt ? fmtDateTime(s.lastSeenAt) : '—' }}
+              </span>
+              <span class="ss-time mono" :class="{ 'ss-time--soon': expiringSoon(s) }" :title="fmtFull(s.expiresAt)">
+                {{ fmtDateTime(s.expiresAt) }}
+              </span>
+              <span class="mk-badge" :class="statusClass(s)">{{ statusTextOf(s) }}</span>
+              <span class="ss-ops">
+                <span v-if="s.id === currentId" class="ss-current" title="当前登录标签页的会话，不可下线">当前</span>
+                <button
+                  v-else-if="statusOf(s) === 'active'"
+                  type="button"
+                  class="mk-btn mk-btn--danger mk-btn--sm"
+                  @click="revoke(s)"
+                >强制下线</button>
+                <span v-else class="ss-na">—</span>
+              </span>
+            </div>
+          </details>
         </div>
       </div>
     </div>
@@ -178,6 +211,9 @@ interface SessionGroup {
   adminEmail: string
   sessions: AdminSessionRow[]
   active: AdminSessionRow[]
+  historical: AdminSessionRow[]
+  expiredCount: number
+  revokedCount: number
 }
 const groups = computed<SessionGroup[]>(() => {
   const map = new Map<string, AdminSessionRow[]>()
@@ -194,6 +230,9 @@ const groups = computed<SessionGroup[]>(() => {
       adminEmail: first.adminEmail || '',
       sessions: list,
       active: list.filter((s) => statusOf(s) === 'active'),
+      historical: list.filter((s) => statusOf(s) !== 'active'),
+      expiredCount: list.filter((s) => statusOf(s) === 'expired').length,
+      revokedCount: list.filter((s) => statusOf(s) === 'revoked').length,
     }
   })
 })
@@ -333,7 +372,7 @@ onMounted(async () => {
   cursor: pointer;
   white-space: nowrap;
 }
-.ss-refresh:hover { border-color: rgba(52, 120, 246, 0.4); color: var(--mk-ink); }
+.ss-refresh:hover { border-color: rgba(44, 99, 208, 0.4); color: var(--mk-ink); }
 .ss-refresh:disabled { opacity: 0.65; cursor: not-allowed; }
 
 /* 加载失败错误态 */
@@ -421,6 +460,33 @@ onMounted(async () => {
 }
 .ss-row:last-child { border-bottom: none; }
 .ss-row--current { background: #f0f7ff; }
+
+/* 滚动修复 #3：过期/已撤销折叠组（默认收起，summary 行可点击展开） */
+.ss-hist { border-top: 1px solid #f0f2f5; }
+.ss-hist__summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  background: #f8fafc;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--mk-muted);
+}
+.ss-hist__summary::-webkit-details-marker { display: none; }
+.ss-hist__summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 2px;
+  color: var(--mk-blue);
+  transition: transform 0.14s ease;
+}
+.ss-hist[open] .ss-hist__summary::before { transform: rotate(90deg); }
+.ss-hist__summary:hover { background: #f4f7fc; }
+.ss-hist__meta { color: var(--mk-faint); font-weight: 600; font-size: 11px; }
 
 .ss-device {
   font-size: 12px;

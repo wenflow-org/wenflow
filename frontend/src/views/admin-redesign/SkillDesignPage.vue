@@ -22,7 +22,7 @@
           · 均耗 <b class="mono">{{ fmtMs(workbenchMeta.stats.avgDuration || 0) }}</b>
         </span>
         <span v-if="recentFailures > 0" class="mk-status__meta sdp-bad-text">近 8 条 {{ recentFailures }} 失败</span>
-        <span v-if="overview.drift === 'file-vs-db-mismatch'" class="mk-badge mk-badge--warn">版本不一致</span>
+        <span v-if="overview.drift === 'file-vs-db-mismatch'" class="mk-badge mk-badge--warn">{{ TERMS.driftContract }}</span>
         <button type="button" class="mk-status__action" :disabled="loading" @click="loadAll">
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
@@ -39,7 +39,8 @@
 
     <!-- 漂移警告 -->
     <div v-if="overview?.drift === 'file-vs-db-mismatch'" class="sdp-drift">
-      <strong>源文件与运行 Prompt 不一致</strong>
+      <strong>{{ TERMS.driftContractQualified }}</strong>
+      <span>源文件与运行中的 Prompt 不一致</span>
       <code class="mono">{{ overview.file?.path || 'prompts/skill.*.md' }}</code>
       <span>DB ACTIVE v{{ overview.db?.version || '?' }}</span>
       <span>请修改文件并通过部署同步处理</span>
@@ -52,13 +53,13 @@
 
     <template v-if="overview">
       <!-- Tabs -->
-      <nav class="sdp-tabs">
+      <nav class="mk-pills">
         <button
           v-for="t in tabs"
           :key="t.key"
           type="button"
-          class="sdp-tab"
-          :class="{ 'sdp-tab--active': tab === t.key }"
+          class="mk-pill"
+          :class="{ 'mk-pill--active': tab === t.key }"
           @click="tab = t.key"
         >
           {{ t.label }}
@@ -109,19 +110,19 @@
           <!-- 右：ACTIVE Prompt 只读参照 -->
           <section class="sdp-prompt">
             <header class="sdp-block__head">
-              <div class="sdp-viewswitch">
+              <div class="mk-pills">
                 <button
                   type="button"
-                  class="sdp-viewswitch__btn"
-                  :class="{ 'sdp-viewswitch__btn--active': promptView === 'source' }"
+                  class="mk-pill"
+                  :class="{ 'mk-pill--active': promptView === 'source' }"
                   @click="promptView = 'source'"
                 >
                   源内容
                 </button>
                 <button
                   type="button"
-                  class="sdp-viewswitch__btn"
-                  :class="{ 'sdp-viewswitch__btn--active': promptView === 'compiled' }"
+                  class="mk-pill"
+                  :class="{ 'mk-pill--active': promptView === 'compiled' }"
                   @click="promptView = 'compiled'"
                 >
                   编译产物
@@ -259,7 +260,7 @@
                   <div v-show="openFormSections.has('identity')" class="sdp-pwform__cardbody">
                   <label class="sdp-pwform__field">
                     <span>identity（角色定位）</span>
-                    <textarea v-model="coreForm.identity" rows="3" class="sdp-input" @input="coreDirty = true"></textarea>
+                    <textarea v-model="coreForm.identity" rows="3" class="mk-input" @input="coreDirty = true"></textarea>
                   </label>
                   <div class="sdp-pwform__field">
                     <span>channels（材料池，至少一个）</span>
@@ -281,7 +282,7 @@
                     </label>
                     <label class="sdp-pwform__field">
                       <span>outputMedia</span>
-                      <select v-model="coreForm.outputMedia" class="sdp-input" @change="coreDirty = true">
+                      <select v-model="coreForm.outputMedia" class="mk-input" @change="coreDirty = true">
                         <option v-for="m in CORE_OUTPUT_MEDIA" :key="m" :value="m">{{ m }}</option>
                       </select>
                     </label>
@@ -301,10 +302,10 @@
                     <code class="mono">user:path</code>（用户/平台，绿灯）。保存/发布时对账（skill→handoff、sandbox→沙盘注册表、user→通过）。
                   </p>
                   <div v-for="(input, i) in coreForm.inputs" :key="i" class="sdp-pwform__inputrow">
-                    <input v-model="input.name" class="sdp-input" placeholder="别名 name（可选）" @input="coreDirty = true" />
-                    <input v-model="input.type" class="sdp-input" placeholder="类型 type（可选）" @input="coreDirty = true" />
-                    <input v-model="input.ref" class="sdp-input mono" placeholder="skill:path-planning.milestones | sandbox:path.normalizedInput | user:latestMessage" @input="coreDirty = true" />
-                    <input v-model="input.desc" class="sdp-input" placeholder="用途说明 desc（可选）" @input="coreDirty = true" />
+                    <input v-model="input.name" class="mk-input" placeholder="别名 name（可选）" @input="coreDirty = true" />
+                    <input v-model="input.type" class="mk-input" placeholder="类型 type（可选）" @input="coreDirty = true" />
+                    <input v-model="input.ref" class="mk-input mono" placeholder="skill:path-planning.milestones | sandbox:path.normalizedInput | user:latestMessage" @input="coreDirty = true" />
+                    <input v-model="input.desc" class="mk-input" placeholder="用途说明 desc（可选）" @input="coreDirty = true" />
                     <button type="button" class="mk-link mk-link--danger" @click="removeInput(i)">删除</button>
                   </div>
                   <button type="button" class="mk-link" @click="addInput">+ 添加输入声明</button>
@@ -319,7 +320,7 @@
                   <div v-show="openFormSections.has('rules')" class="sdp-pwform__cardbody">
                   <div v-for="i in coreForm.rules.length" :key="i - 1" class="sdp-pwform__listitem">
                     <span class="sdp-pwform__idx mono">{{ i }}</span>
-                    <textarea v-model="coreForm.rules[i - 1]" rows="2" class="sdp-input" @input="coreDirty = true"></textarea>
+                    <textarea v-model="coreForm.rules[i - 1]" rows="2" class="mk-input" @input="coreDirty = true"></textarea>
                     <span class="sdp-pwform__itemops">
                       <button type="button" class="mk-link" :disabled="i === 1" @click="moveItem(coreForm.rules, i - 1, -1)">↑</button>
                       <button type="button" class="mk-link" :disabled="i === coreForm.rules.length" @click="moveItem(coreForm.rules, i - 1, 1)">↓</button>
@@ -342,12 +343,12 @@
                       <span>name</span><span>type</span><span>可选</span><span>desc（生成指令）</span><span>turn</span><span></span>
                     </div>
                     <div v-for="(f, i) in coreForm.fields" :key="i" class="sdp-pwform__fieldrow">
-                      <input v-model="f.name" class="sdp-input mono" placeholder="fieldName" @input="coreDirty = true" />
-                      <select v-model="f.baseType" class="sdp-input" @change="coreDirty = true">
+                      <input v-model="f.name" class="mk-input mono" placeholder="fieldName" @input="coreDirty = true" />
+                      <select v-model="f.baseType" class="mk-input" @change="coreDirty = true">
                         <option v-for="t in CORE_FIELD_TYPES" :key="t" :value="t">{{ t }}</option>
                       </select>
                       <input v-model="f.optional" type="checkbox" aria-label="可选" @change="coreDirty = true" />
-                      <input v-model="f.desc" class="sdp-input" placeholder="功能描述" @input="coreDirty = true" />
+                      <input v-model="f.desc" class="mk-input" placeholder="功能描述" @input="coreDirty = true" />
                       <input v-model="f.turn" type="checkbox" aria-label="turn（回合输出）" @change="coreDirty = true" />
                       <button type="button" class="mk-link mk-link--danger" @click="removeField(i)">删除</button>
                     </div>
@@ -364,7 +365,7 @@
                   <div v-show="openFormSections.has('constraints')" class="sdp-pwform__cardbody">
                   <div v-for="i in coreForm.constraints.length" :key="i - 1" class="sdp-pwform__listitem">
                     <span class="sdp-pwform__idx mono">-</span>
-                    <textarea v-model="coreForm.constraints[i - 1]" rows="2" class="sdp-input" @input="coreDirty = true"></textarea>
+                    <textarea v-model="coreForm.constraints[i - 1]" rows="2" class="mk-input" @input="coreDirty = true"></textarea>
                     <span class="sdp-pwform__itemops">
                       <button type="button" class="mk-link" :disabled="i === 1" @click="moveItem(coreForm.constraints, i - 1, -1)">↑</button>
                       <button type="button" class="mk-link" :disabled="i === coreForm.constraints.length" @click="moveItem(coreForm.constraints, i - 1, 1)">↓</button>
@@ -384,15 +385,15 @@
                   <div class="sdp-pwform__row3">
                     <label class="sdp-pwform__field">
                       <span>temperature</span>
-                      <input v-model.number="coreForm.params.temperature" type="number" step="0.1" min="0" max="2" class="sdp-input" @input="coreDirty = true" />
+                      <input v-model.number="coreForm.params.temperature" type="number" step="0.1" min="0" max="2" class="mk-input" @input="coreDirty = true" />
                     </label>
                     <label class="sdp-pwform__field">
                       <span>maxTokens</span>
-                      <input v-model.number="coreForm.params.maxTokens" type="number" step="100" min="1" class="sdp-input" @input="coreDirty = true" />
+                      <input v-model.number="coreForm.params.maxTokens" type="number" step="100" min="1" class="mk-input" @input="coreDirty = true" />
                     </label>
                     <label class="sdp-pwform__field">
                       <span>failurePolicy</span>
-                      <select v-model="coreForm.params.failurePolicy" class="sdp-input" @change="coreDirty = true">
+                      <select v-model="coreForm.params.failurePolicy" class="mk-input" @change="coreDirty = true">
                         <option v-for="p in CORE_FAILURE_POLICIES" :key="p" :value="p">{{ p }}</option>
                       </select>
                     </label>
@@ -633,18 +634,18 @@
           <div class="sdp-form__grid">
             <label class="sdp-field">
               <span>模型层级</span>
-              <select v-model="rtForm.tier" class="sdp-input" :disabled="!rtForm.enabled">
+              <select v-model="rtForm.tier" class="mk-input" :disabled="!rtForm.enabled">
                 <option value="chat">chat</option>
                 <option value="reasoning">reasoning</option>
               </select>
             </label>
             <label class="sdp-field">
               <span>模型（留空继承）</span>
-              <input v-model="rtForm.model" class="sdp-input mono" :disabled="!rtForm.enabled" placeholder="继承 Agent / 平台默认" />
+              <input v-model="rtForm.model" class="mk-input mono" :disabled="!rtForm.enabled" placeholder="继承 Agent / 平台默认" />
             </label>
             <label class="sdp-field">
               <span>思考模式</span>
-              <select v-model="rtForm.thinkingMode" class="sdp-input" :disabled="!rtForm.enabled">
+              <select v-model="rtForm.thinkingMode" class="mk-input" :disabled="!rtForm.enabled">
                 <option value="default">跟随继承值 / 模型默认</option>
                 <option value="enabled">开启</option>
                 <option value="disabled">关闭</option>
@@ -652,7 +653,7 @@
             </label>
             <label class="sdp-field">
               <span>思考强度</span>
-              <select v-model="rtForm.reasoningEffort" class="sdp-input" :disabled="!rtForm.enabled || rtForm.thinkingMode === 'disabled'">
+              <select v-model="rtForm.reasoningEffort" class="mk-input" :disabled="!rtForm.enabled || rtForm.thinkingMode === 'disabled'">
                 <option value="default">跟随继承值 / 模型默认</option>
                 <option value="high">high</option>
                 <option value="max">max</option>
@@ -660,7 +661,7 @@
             </label>
             <label class="sdp-field">
               <span>请求超时（ms）</span>
-              <input v-model.number="rtForm.requestTimeoutMs" type="number" min="10000" max="300000" step="10000" class="sdp-input" :disabled="!rtForm.enabled" placeholder="继承" />
+              <input v-model.number="rtForm.requestTimeoutMs" type="number" min="10000" max="300000" step="10000" class="mk-input" :disabled="!rtForm.enabled" placeholder="继承" />
             </label>
           </div>
 
@@ -672,7 +673,7 @@
           <div class="sdp-form__grid">
             <label class="sdp-field">
               <span>Logical Retry（平台默认 {{ platformLogicalRetries }} 次）</span>
-              <select v-model="logicalRetryMode" class="sdp-input">
+              <select v-model="logicalRetryMode" class="mk-input">
                 <option value="inherit">继承平台默认</option>
                 <option value="disabled">禁用</option>
                 <option value="custom" :disabled="platformLogicalRetries <= 0">自定义</option>
@@ -680,11 +681,11 @@
             </label>
             <label v-if="logicalRetryMode === 'custom'" class="sdp-field">
               <span>最大逻辑重试次数</span>
-              <input v-model.number="customLogicalRetries" type="number" :min="1" :max="platformLogicalRetries" step="1" class="sdp-input" />
+              <input v-model.number="customLogicalRetries" type="number" :min="1" :max="platformLogicalRetries" step="1" class="mk-input" />
             </label>
             <label class="sdp-field">
               <span>业务回退</span>
-              <input class="sdp-input" model-value="由 Skill 代码定义" disabled />
+              <input class="mk-input" model-value="由 Skill 代码定义" disabled />
             </label>
           </div>
 
@@ -716,7 +717,9 @@
               <tr v-if="overview.db?.publishedAt"><th>发布时间</th><td>{{ fmtTime(String(overview.db.publishedAt)) }}</td></tr>
               <tr v-if="overview.drift">
                 <th>漂移状态</th>
-                <td><code class="mono" :class="overview.drift === 'in-sync' ? 'sdp-ok' : 'sdp-warn'">{{ overview.drift }}</code></td>
+                <td>
+                  <code class="mono" :class="overview.drift === 'in-sync' ? 'sdp-ok' : 'sdp-warn'">{{ driftLabel(overview.drift) }}</code>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -827,6 +830,7 @@ import { AGENT_TONES } from './store'
 import SkillFieldRouting from './SkillFieldRouting.vue'
 import './shared.css'
 import { toast } from '@/utils/toast'
+import { TERMS } from './terms'
 
 /* ---------- 路由与基础 ---------- */
 const route = useRoute()
@@ -850,7 +854,7 @@ function goDryRun() {
 /* ---------- 阶段色（与拓扑/抽屉同套，单源 store.AGENT_TONES） ---------- */
 const tone = computed(() => {
   const pid = workbenchMeta.value?.parentAgent?.id || ''
-  return AGENT_TONES[pid] || { hue: '#3478f6', soft: 'rgba(52, 120, 246, 0.1)' }
+  return AGENT_TONES[pid] || { hue: '#2c63d0', soft: 'rgba(44, 99, 208, 0.1)' }
 })
 
 /* ---------- Toast ---------- */
@@ -895,7 +899,7 @@ const statusToneCls = computed(() =>
 )
 
 /* ---------- Tabs ---------- */
-type TabKey = 'protocol' | 'trial' | 'versions' | 'runtime' | 'engineering'
+type TabKey = 'protocol' | 'trial' | 'versions' | 'runtime' | 'engineering' | 'routing'
 /* 页签按任务流：协议(改) → 试跑(验) → 版本(看线上) → 运行时(调) → 工程(查)；默认落协议 */
 const tab = ref<TabKey>('protocol')
 const tabs: Array<{ key: TabKey; label: string }> = [
@@ -1851,6 +1855,10 @@ function shortFilePath(p?: string) {
   const parts = p.split('/')
   return parts.length > 2 ? `…/${parts.slice(-2).join('/')}` : p
 }
+/** 漂移状态值人话（in-sync / file-vs-db-mismatch → 中文） */
+function driftLabel(value: string) {
+  return value === 'in-sync' ? TERMS.driftInSync : TERMS.driftValueMismatch
+}
 const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12: false }) : '—')
 const errText = (e: unknown) => {
   const r = e as { response?: { data?: { error?: { message?: string } | string } }; message?: string }
@@ -1996,20 +2004,6 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
 
 <style scoped>
 .sdp {
-  --mk-ink: #1a2a44;
-  --mk-muted: #5b6577;
-  --mk-faint: #8492ab;
-  --mk-line: #e1e8f2;
-  --mk-bg: #f6f8fc;
-  --mk-surface: #ffffff;
-  --mk-blue: #3478f6;
-  --mk-green: #15803d;
-  --mk-green-bg: #ecfdf5;
-  --mk-amber: #b45309;
-  --mk-amber-bg: #fffbeb;
-  --mk-red: #dc2626;
-  --mk-red-bg: #fef2f2;
-  --mk-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
   /* #app 是 flex 列容器：margin auto 会让本页收缩到内容宽，必须显式 width:100% */
   width: 100%;
   /* 全页签统一宽度：避免协议/工作台等页签切换时页面宽度跳动 */
@@ -2087,27 +2081,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
 }
 .sdp-drift code { font-size: 11px; }
 
-/* ---------- Tabs ---------- */
-.sdp-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 3px;
-  background: #eef2fa;
-  border-radius: 10px;
-  width: fit-content;
-}
-.sdp-tab {
-  border: 0;
-  background: transparent;
-  padding: 6px 16px;
-  border-radius: 10px;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--mk-muted);
-  cursor: pointer;
-}
-.sdp-tab--active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 2px rgba(23, 32, 51, 0.1); }
+/* ---------- Tabs（收敛为全局 mk-pills / mk-pill） ---------- */
 
 /* ---------- 通用 pane 元素 ---------- */
 .sdp-pane { display: grid; gap: 14px; align-content: start; }
@@ -2174,26 +2148,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
 .sdp-block__meta { display: inline-flex; align-items: center; gap: 10px; font-size: 11px; color: var(--mk-faint); }
 .sdp-side { display: grid; gap: 14px; min-width: 0; }
 
-/* Prompt 面板 */
-.sdp-viewswitch {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  background: #eef2fa;
-  border-radius: 10px;
-}
-.sdp-viewswitch__btn {
-  border: 0;
-  background: transparent;
-  padding: 4px 12px;
-  border-radius: 6px;
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--mk-muted);
-  cursor: pointer;
-}
-.sdp-viewswitch__btn--active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 2px rgba(23, 32, 51, 0.1); }
+/* Prompt 面板（视图切换已收敛为全局 mk-pills） */
 .sdp-prompt__facts {
   display: flex;
   gap: 14px;
@@ -2280,7 +2235,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   background: #fff;
   overflow: hidden;
 }
-.sdp-log.is-open { border-color: rgba(52, 120, 246, 0.35); }
+.sdp-log.is-open { border-color: rgba(44, 99, 208, 0.35); }
 .sdp-log__main {
   display: grid;
   grid-template-columns: 8px 64px 46px 1fr;
@@ -2438,19 +2393,6 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   gap: 8px;
 }
 .sdp-field--check input { width: 15px; height: 15px; accent-color: var(--mk-blue); }
-.sdp-input {
-  width: 100%;
-  padding: 8px 11px;
-  border-radius: 8px;
-  border: 1px solid #dbe3ef;
-  background: #fff;
-  color: var(--mk-ink);
-  font: inherit;
-  font-size: 12.5px;
-  outline: none;
-}
-.sdp-input:focus { border-color: var(--mk-blue); }
-.sdp-input:disabled { background: #f4f6fa; color: var(--mk-faint); }
 .sdp-divider {
   display: grid;
   gap: 3px;
@@ -2831,8 +2773,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   padding-bottom: 0;
 }
 .sdp-pwform__fieldrow input[type='checkbox'] { width: 15px; height: 15px; accent-color: var(--mk-blue); justify-self: center; }
-.sdp-pwform .sdp-input { min-height: 36px; padding: 8px 12px; font-size: 13px; }
-.sdp-pwform textarea.sdp-input { line-height: 1.65; }
+.sdp-pwform .mk-input { min-height: 36px; padding: 8px 12px; font-size: 13px; }
+.sdp-pwform textarea.mk-input { line-height: 1.65; }
 @media (max-width: 860px) {
   .sdp-pwform__fieldrow { grid-template-columns: 1fr 96px 52px; }
   .sdp-pwform__fieldrow--head { display: none; }
@@ -2849,7 +2791,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   .sdp-json,
   .sdp-output,
   .sdp-prompt__code { font-size: 13.5px; }
-  .sdp-pwform .sdp-input { font-size: 14px; }
+  .sdp-pwform .mk-input { font-size: 14px; }
   .sdp-eng__kvs code,
   .sdp-pw__pre { font-size: 13px; }
 }
@@ -2860,7 +2802,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   .sdp-json,
   .sdp-output,
   .sdp-prompt__code { font-size: 16px; }
-  .sdp-pwform .sdp-input { font-size: 16.5px; }
+  .sdp-pwform .mk-input { font-size: 16.5px; }
   .sdp-eng__kvs code,
   .sdp-pw__pre { font-size: 15.5px; }
 }
@@ -2872,8 +2814,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   .sdp-chip { font-size: 16.5px; padding: 4px 12px; }
   .sdp-drift { font-size: 18px; padding: 14px 18px; }
   .sdp-drift code { font-size: 17px; }
-  .sdp-tabs { padding: 6px; }
-  .sdp-tab { font-size: 19px; padding: 10px 24px; }
+  .sdp .mk-pills { padding: 6px; }
+  .sdp .mk-pill { font-size: 19px; padding: 10px 24px; }
   .sdp-notice { font-size: 18px; padding: 14px 18px; }
   .sdp-notice code { font-size: 17px; }
   .sdp-sec-head h4 { font-size: 17.5px; }
@@ -2881,8 +2823,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   .sdp-block, .sdp-prompt { padding: 16px 18px; gap: 12px; }
   .sdp-block__head h4 { font-size: 17.5px; }
   .sdp-block__meta { font-size: 17.5px; }
-  .sdp-viewswitch { border-radius: 10px; }
-  .sdp-viewswitch__btn { font-size: 18px; padding: 7px 18px; }
+  .sdp .mk-pills { border-radius: 10px; }
+  .sdp .mk-pill { font-size: 18px; padding: 7px 18px; }
   .sdp-prompt__facts { font-size: 17.5px; gap: 18px; }
   .sdp-prompt__facts code { font-size: 16.5px; }
   .sdp-prompt__code { font-size: 19px; padding: 18px; }
@@ -2909,7 +2851,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   .sdp-chiprow__label { font-size: 18px; }
   .sdp-form { padding: 18px 20px; gap: 14px; }
   .sdp-field > span { font-size: 18px; }
-  .sdp-input { font-size: 19px; padding: 12px 15px; }
+  .sdp .mk-input { font-size: 19px; padding: 12px 15px; }
   .sdp-divider strong { font-size: 19px; }
   .sdp-divider span { font-size: 18px; }
   .sdp-form__msg { font-size: 18px; }
@@ -2930,7 +2872,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   .sdp-pw__hint code { font-size: 16.5px; }
   .sdp-pw__textarea,
   .sdp-codehl__pre { font-size: 19px; }
-  .sdp-pwform .sdp-input { font-size: 19.5px; min-height: 46px; }
+  .sdp-pwform .mk-input { font-size: 19.5px; min-height: 46px; }
   .sdp-eng__kvs code,
   .sdp-pw__pre { font-size: 18px; }
   .sdp-pw__classify { font-size: 18px; }

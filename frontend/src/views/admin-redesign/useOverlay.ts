@@ -53,7 +53,6 @@ export function useOverlay(open: Ref<boolean>, panel: Ref<HTMLElement | null>, l
   let keydownHandler: ((e: KeyboardEvent) => void) | null = null
 
   watch(open, async (isOpen) => {
-    const el = panel.value
     if (isOpen) {
       prevFocus = document.activeElement as HTMLElement | null
       if (lockScroll) {
@@ -61,21 +60,21 @@ export function useOverlay(open: Ref<boolean>, panel: Ref<HTMLElement | null>, l
         document.body.style.overflow = 'hidden'
       }
       await nextTick()
-      if (el) {
-        // 仅当面板原本没有 aria-modal 时才由本 hook 设置，关闭时移除，避免误删模板静态属性
-        modalBefore = el.getAttribute('aria-modal')
-        if (modalBefore == null) el.setAttribute('aria-modal', 'true')
-        if (!el.contains(document.activeElement)) {
-          const focusable = el.querySelector<HTMLElement>(
-            'input, textarea, select, button, [tabindex]:not([tabindex="-1"])'
-          )
-          const target = focusable || el
-          target?.focus()
-        }
-        keydownHandler = onPanelKeydown(el)
-        el.addEventListener('keydown', keydownHandler)
+      const el = panel.value
+      if (!el) return
+      // 仅当面板原本没有 aria-modal 时才由本 hook 设置，关闭时移除，避免误删模板静态属性
+      modalBefore = el.getAttribute('aria-modal')
+      if (modalBefore == null) el.setAttribute('aria-modal', 'true')
+      if (!el.contains(document.activeElement)) {
+        const input = el.querySelector<HTMLElement>('input, textarea, select')
+        const focusable = el.querySelector<HTMLElement>('button, [tabindex]:not([tabindex="-1"])')
+        const target = input || focusable || el
+        target?.focus()
       }
+      keydownHandler = onPanelKeydown(el)
+      el.addEventListener('keydown', keydownHandler)
     } else {
+      const el = panel.value
       if (el) {
         if (keydownHandler) {
           el.removeEventListener('keydown', keydownHandler)

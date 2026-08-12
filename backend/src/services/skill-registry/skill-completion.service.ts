@@ -135,16 +135,16 @@ export function computeCompletionState(input: ComputeCompletionInput): SkillComp
     coreReadyDetail = 'handler-only 豁免（无 coreFile，档位恒真）';
   } else if (!input.core || !input.core.loaded) {
     coreReadyOk = false;
-    coreReadyDetail = `core.yaml 文件不存在（F6：${entry.coreFile || '<未声明>'}）`;
+    coreReadyDetail = `core.yaml 文件不存在（${entry.coreFile || '未声明路径'}）`;
   } else if (!input.core.valid) {
     coreReadyOk = false;
-    coreReadyDetail = 'core.yaml schema 校验失败（loadCoreFile schema-error）';
+    coreReadyDetail = 'core.yaml 格式校验失败（schema 错误）';
   } else if (input.core.fields.length < 1) {
     coreReadyOk = false;
     coreReadyDetail = 'core.yaml fields 为空（须 ≥1 行）';
   } else if (input.core.hasTodo) {
     coreReadyOk = false;
-    coreReadyDetail = 'core.yaml 存在 scaffold TODO 占位（identity/rules 含 "TODO"）';
+    coreReadyDetail = 'core.yaml 存在脚手架 TODO 占位（identity/rules 含 "TODO"）';
   } else {
     coreReadyOk = true;
     coreReadyDetail = `core.yaml 合法（fields=${input.core.fields.length} 行，无 TODO 占位）`;
@@ -157,19 +157,19 @@ export function computeCompletionState(input: ComputeCompletionInput): SkillComp
     fieldsSyncedDetail = `${entry.kind} 豁免（不进字段路由，档位恒真）`;
   } else if (!input.fieldsSync) {
     fieldsSyncedOk = false;
-    fieldsSyncedDetail = 'fields-sync 摘要缺失（mainline 必须参与对账）';
+    fieldsSyncedDetail = '字段同步摘要缺失（主线 Skill 必须参与对账）';
   } else if (!input.fieldsSync.contractWired) {
     fieldsSyncedOk = false;
-    fieldsSyncedDetail = `编排 contracts 缺 skill:${entry.skillId}（F3 铁律，stage=${entry.stage}）`;
+    fieldsSyncedDetail = `编排契约缺 skill:${entry.skillId} 的声明（主线 Skill 必须在编排契约中接线，阶段：${entry.stage}）`;
   } else if (input.fieldsSync.missingCount > 0) {
     fieldsSyncedOk = false;
-    fieldsSyncedDetail = `fields-sync 存在 ${input.fieldsSync.missingCount} 个缺项（check-core-fields-sync）`;
+    fieldsSyncedDetail = `字段同步存在 ${input.fieldsSync.missingCount} 个缺项（core 声明 ↔ 编排路由核对）`;
   } else {
     fieldsSyncedOk = true;
     const warnParts: string[] = [];
     if (input.fieldsSync.orphanCount > 0) warnParts.push(`孤儿 ${input.fieldsSync.orphanCount} 条`);
     if (input.fieldsSync.typeMismatchCount > 0) warnParts.push(`类型不一致 ${input.fieldsSync.typeMismatchCount} 条`);
-    fieldsSyncedDetail = `fields-sync 无缺项（state=${input.fieldsSync.state}${warnParts.length ? `；${warnParts.join(' / ')} 仅 warn 不阻断` : ''}）`;
+    fieldsSyncedDetail = `字段同步无缺项（状态：${input.fieldsSync.state}${warnParts.length ? `；${warnParts.join(' / ')} 仅警告不阻断` : ''}）`;
   }
 
   const liveExempt = entry.noPromptFile === true;
@@ -177,13 +177,13 @@ export function computeCompletionState(input: ComputeCompletionInput): SkillComp
   let liveDetail: string;
   if (liveExempt) {
     liveOk = true;
-    liveDetail = 'noPromptFile=true 豁免（无 prompt 文件，档位恒真）';
+    liveDetail = '豁免：无 prompt 文件（档位恒真）';
   } else if (input.activePromptExists) {
     liveOk = true;
-    liveDetail = `agent_prompts 存在 ACTIVE 行（agentId=skill:${entry.skillId}）`;
+    liveDetail = `数据库存在 ACTIVE 行（agentId=skill:${entry.skillId}）`;
   } else {
     liveOk = false;
-    liveDetail = `agent_prompts 无 ACTIVE 行（agentId=skill:${entry.skillId}；aux 不豁免）`;
+    liveDetail = `数据库无 ACTIVE 行（agentId=skill:${entry.skillId}；辅助 Skill 不豁免）`;
   }
 
   // ---- state = 最大连续满足前缀（draft 恒满足） ----

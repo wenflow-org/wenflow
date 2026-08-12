@@ -12,14 +12,15 @@ const bcrypt = require('bcrypt');
 const prisma = new PrismaClient();
 
 async function createAdmin() {
-  // 从环境变量读取配置
+  // 从环境变量读取配置；未配置时开发环境回退内置默认密码，生产环境强制显式配置
   const email = process.env.INIT_ADMIN_EMAIL || 'admin@wenflow.local';
-  const password = (process.env.INIT_ADMIN_PASSWORD || '').trim();
+  const configured = (process.env.INIT_ADMIN_PASSWORD || '').trim();
+  const password = configured || (process.env.NODE_ENV === 'production' ? '' : 'ChangeMe_2026_Admin');
   const name = process.env.INIT_ADMIN_NAME || 'admin';
 
   try {
     if (password.length < 12 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
-      throw new Error('INIT_ADMIN_PASSWORD 必须显式设置，且至少 12 位并包含大小写字母和数字');
+      throw new Error('INIT_ADMIN_PASSWORD 必须显式设置（生产环境不允许默认口令），且至少 12 位并包含大小写字母和数字');
     }
     if (/^(admin123|password|yourstrongpassword123)$/i.test(password)) {
       throw new Error('INIT_ADMIN_PASSWORD 不能使用默认或示例密码');

@@ -236,6 +236,10 @@
             '--d': `${s.delay}ms`
           }"
           @click="guardedOpenSkill(s.skillId)"
+          role="button"
+          tabindex="0"
+          @keydown.enter.prevent="guardedOpenSkill(s.skillId)"
+          @keydown.space.prevent="guardedOpenSkill(s.skillId)"
         >
           <span
             class="skill-card__tick"
@@ -292,7 +296,7 @@ interface StageTone { hue: string; soft: string }
 const STAGES: StageTone[] = [
   { hue: 'var(--mk-purple)', soft: 'rgba(79, 70, 229, 0.1)' }, // 目标 · 紫
   { hue: 'var(--mk-teal)', soft: 'rgba(13, 148, 136, 0.1)' }, // 路径 · 青
-  { hue: 'var(--mk-blue)', soft: 'rgba(52, 120, 246, 0.1)' }, // 教学 · 品牌蓝
+  { hue: 'var(--mk-blue)', soft: 'rgba(44, 99, 208, 0.1)' }, // 教学 · 品牌蓝
   { hue: 'var(--mk-amber)', soft: 'rgba(217, 119, 6, 0.1)' }, // 学习者 · 琥珀
   { hue: 'var(--mk-purple)', soft: 'rgba(124, 58, 237, 0.1)' } // 虚拟 · 紫（与目标合并同色系）
 ]
@@ -752,7 +756,7 @@ const flows = computed(() => {
   cursor: pointer;
   transition: color 0.15s ease, border-color 0.15s ease;
 }
-.topo-ctrl:hover { color: #3478f6; border-color: #3478f6; }
+.topo-ctrl:hover { color: #2c63d0; border-color: #2c63d0; }
 .topo-ctrl--zoom {
   width: auto;
   min-width: 48px;
@@ -768,7 +772,7 @@ const flows = computed(() => {
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   background:
-    radial-gradient(640px 320px at 14% 0%, rgba(52, 120, 246, 0.06), transparent 70%),
+    radial-gradient(640px 320px at 14% 0%, rgba(44, 99, 208, 0.06), transparent 70%),
     linear-gradient(90deg, rgba(214, 223, 238, 0.55) 1px, transparent 1px) 0 0 / 24px 24px,
     linear-gradient(180deg, rgba(214, 223, 238, 0.55) 1px, transparent 1px) 0 0 / 24px 24px,
     linear-gradient(180deg, #fbfcff, #f2f5fa);
@@ -1171,5 +1175,29 @@ const flows = computed(() => {
 
 @keyframes tk-rise {
   from { opacity: 0; transform: translateY(12px); }
+}
+
+/* 大屏档位（mk 体系：2000 ≈×1.15，2800 ≈×1.17） */
+@media (min-width: 2000px) {
+  .topo-toolbar__title { font-size: 16px; }
+  .topo-toolbar__meta,
+  .topo-toolbar__hint { font-size: 13.5px; }
+  .topo-legend { font-size: 12.5px; }
+  .topo-ctrl { width: 30px; height: 30px; font-size: 14px; }
+  .topo-zoom .topo-ctrl { font-size: 15px; }
+  .skill-card { width: 236px; height: 62px; border-radius: 13px; }
+  .skill-card__name { font-size: 13px; }
+  .skill-card__meta { font-size: 12px; }
+}
+@media (min-width: 2800px) {
+  .topo-toolbar__title { font-size: 19px; }
+  .topo-toolbar__meta,
+  .topo-toolbar__hint { font-size: 16px; }
+  .topo-legend { font-size: 15px; }
+  .topo-ctrl { width: 36px; height: 36px; font-size: 17px; }
+  .topo-zoom .topo-ctrl { font-size: 18px; }
+  .skill-card { width: 276px; height: 72px; border-radius: 15px; }
+  .skill-card__name { font-size: 15.5px; }
+  .skill-card__meta { font-size: 14px; }
 }
 </style>

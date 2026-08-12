@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="mk-page">
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
@@ -57,7 +57,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in filtered" :key="r.id" class="ts-row" @click="openDetail(r)">
+            <tr v-for="r in shown" :key="r.id" class="ts-row" @click="openDetail(r)">
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ r.topic }}</strong>
@@ -87,7 +87,11 @@
         <div v-else-if="!loadFailed" class="mk-empty">
           <strong>{{ rows.length ? '当前筛选无会话' : '还没有教学会话' }}</strong>
           <span>{{ rows.length ? '放宽筛选条件。' : '真实学习者开始上课后出现在这里。' }}</span>
+          <button v-if="isFiltered && rows.length" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
         </div>
+      </div>
+      <div v-if="canMore" class="ts-more">
+        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
       </div>
     </div>
 
@@ -168,6 +172,7 @@ import { statusText } from './statusText'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
+import { useLoadMore } from './useLoadMore'
 import MockSkeletonTable from './SkeletonTable.vue'
 
 interface WrapupSummary {
@@ -400,6 +405,16 @@ const filtered = computed(() => {
   return list
 })
 
+const isFiltered = computed(() => pill.value !== 'all' || !!statusFilter.value || !!keyword.value.trim())
+function clearFilters() {
+  pill.value = 'all'
+  statusFilter.value = ''
+  keyword.value = ''
+}
+
+/* 长列表分批渲染：每批 15 行 */
+const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
+
 const inProgressCount = computed(() => rows.value.filter((r) => r.status === 'active').length)
 const advisoryCount = computed(() => rows.value.filter((r) => r.hasAdvisory).length)
 const missingWrapupCount = computed(() => rows.value.filter((r) => r.wrapupStatus === 'missing').length)
@@ -454,6 +469,12 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
 
 <style scoped>
 .ts-row { cursor: pointer; }
+.ts-more {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 12px;
+  border-top: 1px dashed var(--mk-line);
+}
 /* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字） */
 .ts-row td:nth-child(3) .mk-badge { min-width: 60px; justify-content: center; }
 .ts-go { color: var(--mk-faint); font-weight: 700; }
@@ -556,7 +577,7 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
   justify-self: start;
   border: 0;
   background: transparent;
-  color: #3478f6;
+  color: #2c63d0;
   font: inherit;
   font-size: 11.5px;
   font-weight: 700;

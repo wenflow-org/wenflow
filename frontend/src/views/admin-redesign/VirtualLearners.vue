@@ -31,7 +31,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="s in filtered" :key="s.id" class="vl-row" @click="openSubPage('virtual', s.id)">
+          <tr v-for="s in shown" :key="s.id" class="vl-row" @click="openSubPage('virtual', s.id)">
             <td>
               <div class="mk-cell-main">
                 <strong>{{ s.name }}</strong>
@@ -81,6 +81,10 @@
       <div v-else class="mk-empty">
         <strong>{{ samples.length ? '没有匹配的虚拟学习者' : '暂无虚拟学习者' }}</strong>
         <span>新建虚拟学习者后，在画像页生成故事即可运行。</span>
+        <button v-if="isFiltered && samples.length" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
+      </div>
+      <div v-if="canMore" class="vl-more">
+        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
       </div>
     </div>
 
@@ -199,6 +203,7 @@ import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, liveCreateVirtual, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
+import { useLoadMore } from './useLoadMore'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
@@ -251,6 +256,14 @@ const filtered = computed(() => {
   if (!q) return samples.value
   return samples.value.filter((s) => `${s.name} ${s.goal} ${s.id}`.toLowerCase().includes(q))
 })
+
+const isFiltered = computed(() => !!keyword.value.trim())
+function clearFilters() {
+  keyword.value = ''
+}
+
+/* 长列表分批渲染：每批 15 行 */
+const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
 
 /* 新建：人设优先（学习需求由故事产生，不在创建时必填） */
 const createOpen = ref(false)
@@ -496,6 +509,12 @@ const totalSessions = computed(() => samples.value.reduce((a, s) => a + s.sessio
 <style scoped>
 .mk-link--muted { opacity: 0.55; }
 .vl-row { cursor: pointer; }
+.vl-more {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 12px;
+  border-top: 1px dashed var(--mk-line);
+}
 .vl-steps {
   margin: 0 0 4px;
   padding: 8px 10px;
@@ -509,7 +528,7 @@ const totalSessions = computed(() => samples.value.reduce((a, s) => a + s.sessio
   font-style: normal;
   font-size: 10.5px;
   font-weight: 700;
-  color: var(--mk-blue, #3478f6);
+  color: var(--mk-blue, #2c63d0);
   margin-left: 4px;
 }
 .vl-ai-row {

@@ -39,7 +39,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in cores" :key="item.skillId" @click="openDesign(item.skillId)">
+          <tr v-for="item in shownCores" :key="item.skillId" @click="openDesign(item.skillId)">
             <td><code class="mono">{{ item.skillId }}</code></td>
             <td class="mk-na">{{ item.fields }} 字段 · {{ item.channels.length }} 通道</td>
             <td class="mk-na">{{ item.outputMedia }}<template v-if="item.deltaOutput"> · delta</template></td>
@@ -55,6 +55,11 @@
           </tr>
         </tbody>
       </table>
+      </div>
+      <div v-if="canMoreCores" class="pw-more">
+        <button type="button" class="mk-link" @click="loadMoreCores">
+          加载更多（已显示 {{ shownCores.length }} / {{ cores.length }}）
+        </button>
       </div>
       <div v-if="!cores.length && !loading" class="mk-empty">
         <span v-if="!loadError" class="mk-empty__icon" aria-hidden="true">◌</span>
@@ -92,13 +97,17 @@
             <div class="sc-result__section">
               <strong class="sc-result__title">完成度（completion）</strong>
               <span class="mk-badge" :class="completionBadge(result.completion.status)">{{ completionLabel(result.completion.status) }}</span>
-              <ul class="sc-result__items">
-                <li v-for="item in result.completion.items" :key="item.id" class="sc-result__item">
-                  <span :class="`sc-dot sc-dot--${itemOk(item.ok)}`"></span>
-                  <span>{{ item.label }}</span>
-                  <span v-if="item.hint" class="sc-result__hint">{{ item.hint }}</span>
-                </li>
-              </ul>
+              <!-- 滚动修复 #8（顺带）：完成度清单默认折叠，不纵向平铺撑长弹窗 -->
+              <details class="sc-result__completion">
+                <summary>明细（{{ result.completion.items.length }} 项）</summary>
+                <ul class="sc-result__items">
+                  <li v-for="item in result.completion.items" :key="item.id" class="sc-result__item">
+                    <span :class="`sc-dot sc-dot--${itemOk(item.ok)}`"></span>
+                    <span>{{ item.label }}</span>
+                    <span v-if="item.hint" class="sc-result__hint">{{ item.hint }}</span>
+                  </li>
+                </ul>
+              </details>
             </div>
             <details class="sc-result__snippets" v-if="result.snippets.length">
               <summary>注册片段（复制后手工粘贴，scaffold 不自动改写 TS）</summary>
@@ -170,11 +179,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { adminPromptWorkbenchApi, adminSkillsApi, type SkillScaffoldMeta, type SkillScaffoldResult } from '@/api/adminApi';
 import { useEscape } from './useEscape';
 import { useOverlay, useMaskClose } from './useOverlay';
+import { useLoadMore } from './useLoadMore';
 import { toast } from '@/utils/toast'
 
 interface CoreListItem {
@@ -193,6 +203,9 @@ const router = useRouter();
 const cores = ref<CoreListItem[]>([]);
 const loading = ref(false);
 const loadError = ref('');
+
+/* 滚动修复 #8：核心文件表 15 行/页（客户端切片，加载更多翻页） */
+const { shown: shownCores, canMore: canMoreCores, loadMore: loadMoreCores } = useLoadMore(computed(() => cores.value), 15);
 
 function countBy(status: string) {
   return cores.value.filter((c) => c.status === status).length;
@@ -368,6 +381,16 @@ onMounted(async () => {
 .pw-hash { font-size: 11px; }
 .pl-actions { margin-left: auto; display: flex; gap: 8px; }
 .mk-table--click tbody tr { cursor: pointer; }
+/* 滚动修复 #8：分页加载更多按钮行 */
+.pw-more {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 12px;
+  border-top: 1px dashed var(--mk-line);
+}
+.sc-result__completion { margin-top: 8px; }
+.sc-result__completion summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--mk-muted, #5b6577); }
+.sc-result__completion .sc-result__items { margin-top: 8px; }
 
 /* ========== scaffold 弹窗 ========== */
 .sc-panel { width: min(680px, 100%); }
@@ -385,15 +408,15 @@ onMounted(async () => {
   font-size: 12.5px;
   outline: none;
 }
-.sc-field__input:focus { border-color: var(--mk-blue, #3478f6); }
+.sc-field__input:focus { border-color: var(--mk-blue, #2c63d0); }
 .sc-field__textarea { resize: vertical; min-height: 44px; line-height: 1.55; }
 .sc-msg {
   margin: 10px 0 0;
   padding: 9px 12px;
-  border: 1px solid rgba(52, 120, 246, 0.35);
+  border: 1px solid rgba(44, 99, 208, 0.35);
   border-radius: 9px;
   background: #f0f5ff;
-  color: var(--mk-blue, #3478f6);
+  color: var(--mk-blue, #2c63d0);
   font-size: 12px;
   font-weight: 600;
   line-height: 1.5;
@@ -417,7 +440,7 @@ onMounted(async () => {
 .sc-result__section { margin-top: 14px; }
 .sc-result__title { display: block; font-size: 12px; font-weight: 700; color: var(--mk-muted, #5b6577); margin-bottom: 6px; }
 .sc-result__files { margin: 0; padding-left: 18px; }
-.sc-result__files li { font-size: 12px; color: var(--mk-blue, #3478f6); line-height: 1.8; }
+.sc-result__files li { font-size: 12px; color: var(--mk-blue, #2c63d0); line-height: 1.8; }
 .sc-result__items { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .sc-result__item { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--mk-ink, #1a2a44); }
 .sc-result__hint { color: var(--mk-faint, #8492ab); font-size: 11.5px; }
@@ -428,7 +451,7 @@ onMounted(async () => {
 .sc-result__snippets { margin-top: 14px; border-top: 1px solid var(--mk-line, #e6ebf4); padding-top: 10px; }
 .sc-result__snippets summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--mk-muted, #5b6577); }
 .sc-result__snippet { margin-top: 8px; }
-.sc-result__snippet-title { display: block; font-size: 11.5px; color: var(--mk-blue, #3478f6); margin-bottom: 4px; }
+.sc-result__snippet-title { display: block; font-size: 11.5px; color: var(--mk-blue, #2c63d0); margin-bottom: 4px; }
 .sc-result__pre {
   margin: 0;
   padding: 10px 12px;

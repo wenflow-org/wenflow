@@ -330,7 +330,7 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
   const items: HealthCenterItem[] = [
     // ============ baseline-drift（基准漂移，单向，可一键修复或人工） ============
     buildItem('w4-corehash', {
-      label: 'W4 coreHash（core → 产物 → DB）',
+      label: 'W4 漂移（core → 产物 → DB 哈希）',
       base: 'file:core.yaml',
       semantics: 'baseline-drift',
       severity: w4.drifted.length > 0 ? 'error' : 'ok',
@@ -343,20 +343,20 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       source: 'check-core-hash-parity.ts + compile-core-files.ts + seed-core-agent-prompts.ts',
     }),
     buildItem('field-routing-contract', {
-      label: '字段路由合同维度（P4：declared 来自 deriveContract(manifest)）',
+      label: '契约漂移（编排契约 vs DB）',
       base: 'file:manifest',
       semantics: 'baseline-drift',
       severity: contractDrift.length > 0 ? 'error' : 'ok',
       status: contractDrift.length > 0 ? 'drifted' : 'clean',
       count: contractDrift.length,
       detail: formatDrift(contractDrift),
-      cause: '契约名称来源标注有误：该检查名义是"编排文件 vs 数据库"，实际以 manifest（契约文件）为基准比对',
+      cause: '编排契约声明与数据库登记的契约不一致：声明改了但库里没同步（以 manifest 契约文件为唯一基准）',
       action: 'fixable',
-      fixHint: '点此一键修复：按 manifest 契约基准全量对账数据库（admin 手工改过的行自动跳过保护）',
+      fixHint: '点此一键修复：按编排契约基准全量对账数据库（admin 手工改过的行自动跳过保护）',
       source: 'field-routing-bootstrap.service.ts（detectFieldRoutingDrift kind=contract）',
     }),
     buildItem('field-routing', {
-      label: '字段路由（field/routing 维度）',
+      label: '字段路由（字段/路由维度）',
       base: 'file:orchestration',
       semantics: 'baseline-drift',
       severity: fieldRoutingDrift.length > 0 ? 'error' : 'ok',
@@ -369,7 +369,7 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       source: 'field-routing-bootstrap.service.ts（detectFieldRoutingDrift kind=field/routing）',
     }),
     buildItem('contract-parity', {
-      label: '契约 parity（manifest ↔ DB metadata.promptLab）',
+      label: '契约一致性（manifest ↔ DB 契约元数据）',
       base: 'file:manifest',
       semantics: 'baseline-drift',
       severity: contractParity.hasErrors ? 'error' : 'ok',
@@ -385,7 +385,7 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       source: 'check-prompt-runtime-contract-metadata-parity.ts',
     }),
     buildItem('snapshots', {
-      label: '快照（agent-snapshots.md，base=file:orchestration+core）',
+      label: '沙盘说明书（agent-snapshots.md）',
       base: 'file:orchestration',
       semantics: 'baseline-drift',
       severity: snapshotCheck.drifted ? 'error' : 'ok',
@@ -398,7 +398,7 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       source: 'generate-agent-snapshots.ts',
     }),
     buildItem('yaml-crosscheck', {
-      label: 'YAML 交叉校验（C1 failurePolicy / C2 参数单写）',
+      label: 'YAML 交叉校验（参数双写检查）',
       base: 'file:core.yaml',
       semantics: 'baseline-drift',
       severity: yamlCheck.ok ? 'ok' : 'error',
@@ -411,7 +411,7 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       source: 'check-yaml-vocabulary.ts',
     }),
     buildItem('params-consistency', {
-      label: '参数一致性（P1 两写：core / definition.ts）',
+      label: '参数一致性（core 与代码声明）',
       base: 'file:core.yaml',
       semantics: 'baseline-drift',
       severity: paramsCheck.mismatches.length > 0 ? 'error' : paramsCheck.missingDeclarations.length > 0 ? 'warn' : 'ok',
@@ -425,7 +425,7 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
         ...paramsCheck.mismatches.slice(0, 20).map((m) =>
           `${m.skillId} ${m.field}：core=${m.core} definition.ts=${m.definition ?? '—'}`,
         ),
-        ...paramsCheck.missingDeclarations.slice(0, 20).map((n) => `[注明] ${n}`),
+        ...paramsCheck.missingDeclarations.slice(0, 20).map((n) => `[提示] ${n}`),
       ],
       cause: '模型参数（temperature/maxTokens）在核心文件与代码声明（definition.ts）两处不一致：同一条参数有两个值',
       action: 'manual',
@@ -434,7 +434,7 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
     }),
     // ============ consistency（一致性偏差，双向对等，人工决策） ============
     buildItem('fields-sync', {
-      label: 'Core↔编排字段同步',
+      label: '字段同步（core 声明 ↔ 编排路由）',
       base: 'bidirectional',
       semantics: 'consistency',
       severity: fieldsSyncMissing.length > 0
@@ -451,9 +451,9 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
             : 'clean',
       count: fieldsSyncMissing.length + fieldsSyncOrphans.length + fieldsSyncTypeMismatch.length,
       detail: [
-        ...fieldsSyncMissing.map((m) => `[error] 缺项 ${m.fieldId}：${m.detail}`),
-        ...fieldsSyncOrphans.map((o) => `[warn] 孤儿 ${o.coreField}：${o.detail}`),
-        ...fieldsSyncTypeMismatch.map((t) => `[warn] 类型不一致 ${t.fieldId}：core=${t.coreType} → 期望 ${t.expectedValueType}，编排=${t.routingValueType}`),
+        ...fieldsSyncMissing.map((m) => `[错误] 缺项 ${m.fieldId}：${m.detail}`),
+        ...fieldsSyncOrphans.map((o) => `[警告] 孤儿 ${o.coreField}：${o.detail}`),
+        ...fieldsSyncTypeMismatch.map((t) => `[警告] 类型不一致 ${t.fieldId}：core=${t.coreType} → 期望 ${t.expectedValueType}，编排=${t.routingValueType}`),
       ].slice(0, 30),
       cause: 'core 声明的字段与编排产出的字段对不上（缺项/孤儿/类型不一致）：两边分别维护，漏改了一方',
       action: 'manual',
@@ -461,7 +461,7 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       source: 'check-core-fields-sync.ts',
     }),
     buildItem('w1-active', {
-      label: 'ACTIVE 覆盖（W1，双向差集偏户口簿）',
+      label: 'ACTIVE 检查（W1，双向差集偏户口簿）',
       base: 'file:skills.yaml',
       semantics: 'consistency',
       severity: w1.items.length > 0 ? 'warn' : 'ok',
@@ -470,7 +470,7 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       detail: w1.items.map((i) => `W1 ${i.skillId || ''}：${i.message}`),
       cause: '户口簿里的活跃技能与数据库 ACTIVE 版本对不上：有技能缺"当前生效版"，或数据库残留已下架技能',
       action: 'manual',
-      fixHint: '需开发处理：执行"编译+同步"补缺侧（npm run prompts:compile-all && prompts:sync），或登记/清理残留侧',
+      fixHint: '需开发处理：执行"编译+同步"补缺侧，或登记/清理残留侧',
       source: 'skills-readiness.service.ts',
     }),
     buildItem('w2-registration', {
@@ -501,7 +501,7 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
     }),
     // ============ override-record（覆盖层，info 只读） ============
     buildItem('override-record', {
-      label: '覆盖行（managedByCode=false，覆盖权高于基准）',
+      label: '覆盖行（覆盖权高于文件基准）',
       base: 'db:managed',
       semantics: 'override-record',
       severity: 'info',
@@ -510,9 +510,9 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
       detail: overrideDetail.length > 0
         ? [
             ...overrideDetail,
-            '覆盖行跳过对账与强制同步是有意设计（保留人工微调）；覆盖是隐式的：无 owner/reason 元数据，与文件背离不可见',
+            '覆盖行跳过对账与同步是有意设计（保留人工微调）；覆盖是隐式的：无负责人/原因元数据，与文件背离不可见',
           ]
-        : ['当前无覆盖行（三表 managedByCode=false 均为 0）——漂移计数不为零即真实文件/DB 背离，与覆盖无关'],
+        : ['当前无覆盖行（三表均为代码托管）——漂移计数不为零即真实文件/DB 背离，与覆盖无关'],
       cause: 'admin 在后台手工改过的配置行清单：覆盖权高于文件基准，对账时自动跳过',
       action: 'none',
       fixHint: '只读展示：当前 0 条覆盖行；如需撤销覆盖，需开发将行恢复为代码托管后重新对账',
@@ -520,7 +520,7 @@ export async function buildHealthCenterReport(db: HealthCenterDbAdapter): Promis
     }),
     // ============ runtime-info（运行时观测，info 只读） ============
     buildItem('runtime-prompt', {
-      label: '运行时 prompt 漂移（prompt_call_logs.promptDrift）',
+      label: '运行时漂移（遥测：代码侧 prompt vs DB ACTIVE）',
       base: 'runtime',
       semantics: 'runtime-info',
       severity: 'info',
@@ -592,7 +592,7 @@ export const HEALTH_CENTER_MANUAL_GUIDANCE: Record<string, string> = {
   'yaml-crosscheck': '需开发处理：以核心文件为准对齐契约文件后重新生成（manifest 为手写镜像，改 core 需同批改 manifest）',
   'params-consistency': '需开发处理：definition.ts 是代码声明，不可一键修——人工统一核心文件参数 ↔ skills/<skill>/definition.ts 两处后重新生成',
   'fields-sync': 'fields-sync 属一致性偏差（无单方基准）：需开发决策——补编排路由、登记豁免，或明确接受存量孤儿',
-  'w1-active': 'W1 属一致性偏差：执行"编译+同步"补缺侧（npm run prompts:compile-all && prompts:sync），或登记/清理残留侧',
+  'w1-active': 'W1 属一致性偏差：执行"编译+同步"补缺侧，或登记/清理残留侧',
   'w2-registration': 'W2 属一致性偏差：在 skills/index.ts 补注册片段后重启，或清理幽灵行',
   'w3-wiring': 'W3 属一致性偏差（两边各维护一份）：在 coordinator 定义里补 steps，或登记豁免、移除引用',
 };

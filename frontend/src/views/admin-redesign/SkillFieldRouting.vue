@@ -7,22 +7,22 @@
       <button type="button" class="mk-empty__action" @click="load">重试</button>
     </div>
     <template v-else-if="data">
-      <!-- 状态条 -->
-      <div class="sfr__status">
-        <span class="mk-status__dot" :class="syncToneDot"></span>
-        <strong>契约 stage={{ data.stage }}</strong>
-        <span class="sfr__badge sfr__badge--muted">产出行 {{ data.routings.length }} 行</span>
+      <!-- 状态条（统一 mk-status 白底样式） -->
+      <div class="mk-status" :class="syncToneTone">
+        <span class="mk-status__dot"></span>
+        <strong>契约 · 阶段 {{ data.stage }}</strong>
+        <span class="mk-badge mk-badge--muted">产出行 {{ data.routings.length }} 行</span>
         <template v-if="syncReport">
-          <span v-if="syncReport.state === 'ok'" class="sfr__badge sfr__badge--ok">fields-synced ✓</span>
-          <span v-else-if="syncReport.state === 'no-core'" class="sfr__badge sfr__badge--err">core 缺失</span>
-          <span v-else-if="syncReport.state === 'no-routings'" class="sfr__badge sfr__badge--muted">无产出行</span>
+          <span v-if="syncReport.state === 'ok'" class="mk-badge mk-badge--ok">{{ TERMS.fieldsSynced }} ✓</span>
+          <span v-else-if="syncReport.state === 'no-core'" class="mk-badge mk-badge--bad">core 缺失</span>
+          <span v-else-if="syncReport.state === 'no-routings'" class="mk-badge mk-badge--muted">无产出行</span>
           <template v-else>
-            <span v-if="syncReport.missing.length" class="sfr__badge sfr__badge--err">缺声明 {{ syncReport.missing.length }}</span>
-            <span v-if="syncReport.orphan.length" class="sfr__badge sfr__badge--warn">未路由 {{ syncReport.orphan.length }}</span>
-            <span v-if="syncReport.typeMismatch.length" class="sfr__badge sfr__badge--warn">类型不一致 {{ syncReport.typeMismatch.length }}</span>
+            <span v-if="syncReport.missing.length" class="mk-badge mk-badge--bad">{{ TERMS.statusMissing }} {{ syncReport.missing.length }}</span>
+            <span v-if="syncReport.orphan.length" class="mk-badge mk-badge--warn">{{ TERMS.statusOrphan }} {{ syncReport.orphan.length }}</span>
+            <span v-if="syncReport.typeMismatch.length" class="mk-badge mk-badge--warn">类型不一致 {{ syncReport.typeMismatch.length }}</span>
           </template>
         </template>
-        <span v-else class="sfr__badge sfr__badge--muted">无 core 声明（core 缺失）</span>
+        <span v-else class="mk-badge mk-badge--muted">无 core 声明（core 缺失）</span>
         <span class="sfr__status-actions">
           <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="!canAdd" @click="openWizard">＋ 加字段</button>
           <button type="button" class="mk-btn mk-btn--sm" @click="goOrchestration">→ 编排结构页（{{ data.stage }}）</button>
@@ -33,7 +33,7 @@
       <div v-if="syncReport && (syncReport.missing.length || syncReport.orphan.length || syncReport.typeMismatch.length)" class="sfr__sync">
         <strong class="sfr__sync-title">与协议 tab 的 core 对账</strong>
         <span v-for="m in syncReport.missing" :key="'m' + m.fieldId" class="sfr__sync-item sfr__sync-item--err" :title="m.detail">
-          缺声明：<code class="mono">{{ m.fieldId }}</code>
+          {{ TERMS.statusMissing }}：<code class="mono">{{ m.fieldId }}</code>
         </span>
         <span v-for="t in syncReport.typeMismatch" :key="'t' + t.fieldId" class="sfr__sync-item sfr__sync-item--warn" :title="`core ${t.coreType} ↔ 编排 ${t.routingValueType}（应为 ${t.expectedValueType}）`">
           类型不一致：<code class="mono">{{ t.fieldId }}</code>（core {{ t.coreType }} ↔ 编排 {{ t.routingValueType }}）
@@ -42,7 +42,7 @@
 
       <!-- core 有但未路由（孤儿） -->
       <div v-if="syncReport?.orphan?.length" class="sfr__orphan">
-        <strong class="sfr__orphan-title">core 有但未路由（未路由）</strong>
+        <strong class="sfr__orphan-title">core 有但未路由（{{ TERMS.statusOrphan }}）</strong>
         <span v-for="o in syncReport.orphan" :key="o.coreField" class="sfr__orphan-item" :title="o.detail">
           <code class="mono">{{ o.coreField }}</code> 未出现在产出行首段
         </span>
@@ -56,7 +56,7 @@
             <h5 class="sfr__legend-title">字段角色（promptRole）</h5>
             <ul v-if="roleMeta.length" class="sfr__legend-list">
               <li v-for="m in roleMeta" :key="m.id" class="sfr__legend-item">
-                <span class="sfr__role" :class="`sfr__role--${m.id}`">{{ m.label }}</span>
+                <span class="mk-badge" :class="`mk-badge--role-${m.id}`">{{ m.label }}</span>
                 <span class="sfr__legend-en mono">{{ m.id }}</span>
                 <span class="sfr__legend-hint">{{ m.hint }}</span>
               </li>
@@ -66,14 +66,14 @@
           <div class="sfr__legend-group">
             <h5 class="sfr__legend-title">render（是否对外可见）</h5>
             <ul class="sfr__legend-list">
-              <li class="sfr__legend-item"><span class="sfr__render sfr__render--visible">visible</span><span class="sfr__legend-hint">可见：会出现在对外交付（用户 / 界面）</span></li>
-              <li class="sfr__legend-item"><span class="sfr__render sfr__render--hidden">hidden</span><span class="sfr__legend-hint">隐藏：仅内部流转，不对外展示</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--render-visible">visible</span><span class="sfr__legend-hint">可见：会出现在对外交付（用户 / 界面）</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--render-hidden">hidden</span><span class="sfr__legend-hint">隐藏：仅内部流转，不对外展示</span></li>
             </ul>
             <h5 class="sfr__legend-title">流转（handoff / internal / accumulate）</h5>
             <ul class="sfr__legend-list">
-              <li class="sfr__legend-item"><span class="sfr__flow sfr__flow--handoff">handoff</span><span class="sfr__legend-hint">移交：字段产完后交给谁——下一阶段名（如 path）/ agent / skill；空 = 不转交</span></li>
-              <li class="sfr__legend-item"><span class="sfr__flow sfr__flow--internal">internal</span><span class="sfr__legend-hint">内部信令：仅供平台内部 / UI 控制使用，不进业务状态</span></li>
-              <li class="sfr__legend-item"><span class="sfr__flow sfr__flow--accumulate">accumulate</span><span class="sfr__legend-hint">累积：值会累积进学习者状态（画像 / 上下文），供后续阶段持续使用</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--flow-handoff">handoff</span><span class="sfr__legend-hint">移交：字段产完后交给谁——下一阶段名（如 path）/ agent / skill；空 = 不转交</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--flow-internal">internal</span><span class="sfr__legend-hint">内部信令：仅供平台内部 / UI 控制使用，不进业务状态</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--flow-accumulate">accumulate</span><span class="sfr__legend-hint">累积：值会累积进学习者状态（画像 / 上下文），供后续阶段持续使用</span></li>
             </ul>
             <h5 class="sfr__legend-title">落库键（persistKey）</h5>
             <ul class="sfr__legend-list">
@@ -84,9 +84,9 @@
               <li class="sfr__legend-item"><span class="sfr__lock sfr__lock--system-locked">系统锁</span><span class="sfr__legend-hint">平台派生 / 代码消费，admin 不可直接改（需改编排文件）</span></li>
               <li class="sfr__legend-item"><span class="sfr__lock sfr__lock--structure-locked">结构锁</span><span class="sfr__legend-hint">结构约束锁定，修改需谨慎</span></li>
               <li class="sfr__legend-item"><span class="sfr__core sfr__core--declared">✓ 已声明</span><span class="sfr__legend-hint">编排路由首段在 core fields 中且有声明</span></li>
-              <li class="sfr__legend-item"><span class="sfr__core sfr__core--missing">⚠ 缺声明</span><span class="sfr__legend-hint">编排路由首段不在 core fields（error 级，阻断 fields-synced）</span></li>
+              <li class="sfr__legend-item"><span class="sfr__core sfr__core--missing">⚠ {{ TERMS.statusMissing }}</span><span class="sfr__legend-hint">编排路由首段不在 core fields（error 级，阻断字段同步）</span></li>
               <li class="sfr__legend-item"><span class="sfr__core sfr__core--mismatch">⚠ 类型不一致</span><span class="sfr__legend-hint">core type ↔ 编排 valueType 不一致（warn）</span></li>
-              <li class="sfr__legend-item"><span class="sfr__core sfr__core--orphan">未路由</span><span class="sfr__legend-hint">core 字段未出现在任何产出路由行首段（warn，见上方对账条）</span></li>
+              <li class="sfr__legend-item"><span class="sfr__core sfr__core--orphan">{{ TERMS.statusOrphan }}</span><span class="sfr__legend-hint">core 字段未出现在任何产出路由行首段（warn，见上方对账条）</span></li>
             </ul>
           </div>
         </div>
@@ -146,7 +146,7 @@
               </td>
               <td><span class="sfr__lock" :class="`sfr__lock--${row.lockLevel}`" :title="lockHintOf(row.lockLevel)">{{ lockLabelOf(row.lockLevel) }}</span></td>
               <td>
-                <span v-if="row.coreState === 'missing'" class="sfr__core sfr__core--missing" :title="row.coreStateTitle">⚠ 缺声明</span>
+                <span v-if="row.coreState === 'missing'" class="sfr__core sfr__core--missing" :title="row.coreStateTitle">⚠ {{ TERMS.statusMissing }}</span>
                 <span v-else-if="row.coreState === 'mismatch'" class="sfr__core sfr__core--mismatch" :title="row.coreStateTitle">⚠ 类型不一致</span>
                 <span v-else class="sfr__core sfr__core--declared" :title="row.coreStateTitle">✓ 已声明</span>
               </td>
@@ -197,6 +197,7 @@ import { adminFieldRoutingsApi, adminPromptWorkbenchApi } from '@/api/adminApi'
 import FieldAddWizard from './FieldAddWizard.vue'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
+import { TERMS } from './terms'
 
 interface RoleMeta { id: string; label: string; hint: string }
 interface CoreField { name: string; type: string; turn?: boolean; desc?: string }
@@ -500,7 +501,7 @@ function canEditRow(row: Record<string, any>): boolean {
 }
 function editTitleOf(row: Record<string, any>): string {
   if (row.lockLevel === 'system-locked') return 'systemLocked 只读：平台派生 / 代码消费，需走编排文件编辑'
-  if (row.coreState === 'missing') return 'core 缺声明：无法编辑 core 侧（先在协议 tab 补声明，或走编排弹窗）'
+  if (row.coreState === 'missing') return 'core 缺项：无法编辑 core 侧（先在协议 tab 补声明，或走编排弹窗）'
   return '编辑字段（core 声明 + 编排路由 + DB 对账原子修改）'
 }
 function canDeleteRow(row: Record<string, any>): boolean {

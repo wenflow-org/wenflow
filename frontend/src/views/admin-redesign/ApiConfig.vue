@@ -939,7 +939,7 @@ async function toggleRegistration() {
 .ac-switch input:checked + i { background: var(--mk-blue); }
 .ac-switch input:checked + i::after { left: 18px; }
 .ac-switch input:disabled + i { opacity: 0.5; }
-.ac-switch input:focus-visible + i { box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.25); }
+.ac-switch input:focus-visible + i { box-shadow: 0 0 0 3px rgba(44, 99, 208, 0.25); }
 
 .ac-rel__note {
   margin: 0;
@@ -979,7 +979,7 @@ async function toggleRegistration() {
   margin: 4px auto 0;
   padding: 9px 12px 9px 16px;
   border-radius: 999px;
-  border: 1px solid rgba(52, 120, 246, 0.24);
+  border: 1px solid rgba(44, 99, 208, 0.24);
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-pop);
   font-weight: 600;

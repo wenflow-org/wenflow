@@ -66,7 +66,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in filtered" :key="r.id" class="fb-row" @click="openDetail(r)">
+            <tr v-for="r in shown" :key="r.id" class="fb-row" @click="openDetail(r)">
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ r.userName }}</strong>
@@ -102,7 +102,11 @@
           <span v-if="!loading" class="mk-empty__icon" aria-hidden="true">◌</span>
           <strong>{{ loading ? '加载中…' : (keyword || statusFilter || lowOnly ? '当前筛选无匹配' : '暂无反馈') }}</strong>
           <span v-if="!loading">{{ keyword || statusFilter || lowOnly ? '放宽筛选条件试试。' : '学习者评分与评论出现后会在这里汇总，低分反馈会自动标记「待处理」。' }}</span>
+          <button v-if="isFiltered && !loading" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
         </div>
+      </div>
+      <div v-if="canMore" class="fb-more">
+        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
       </div>
     </template>
 
@@ -179,6 +183,7 @@ import { isLive } from './store'
 import { errMsg, timeAgo } from './live'
 import { adminFeedbackApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
+import { useLoadMore } from './useLoadMore'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 
@@ -270,6 +275,16 @@ const filtered = computed(() => {
   })
 })
 
+const isFiltered = computed(() => !!keyword.value.trim() || !!statusFilter.value || lowOnly.value)
+function clearFilters() {
+  keyword.value = ''
+  statusFilter.value = ''
+  lowOnly.value = false
+}
+
+/* 长列表分批渲染：每批 15 行 */
+const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
+
 async function load() {
   if (!isLive.value || loading.value) return
   loading.value = true
@@ -359,6 +374,12 @@ onMounted(() => {
 
 <style scoped>
 .fb-row { cursor: pointer; }
+.fb-more {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 12px;
+  border-top: 1px dashed var(--mk-line);
+}
 .fb-rating { font-size: 12px; color: var(--mk-muted); }
 .fb-rating b { font-size: 12.5px; color: var(--mk-ink); }
 .fb-rating--low, .fb-rating--low b { color: var(--mk-red); }

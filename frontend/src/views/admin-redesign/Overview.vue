@@ -11,7 +11,7 @@
             </svg>
             <strong>{{ data.score }}</strong>
           </div>
-          <span class="brief-score__cap">健康分</span>
+          <span class="brief-score__cap">{{ TERMS.healthScore }}</span>
         </div>
         <div>
           <h3>{{ health.headline }}</h3>
@@ -223,6 +223,7 @@
 import { computed, watch } from 'vue';
 import { overviewHealth, investigateAgent, intent, dataSource } from './store';
 import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading } from './live';
+import { TERMS } from './terms';
 
 type Tone = 'ok' | 'warn' | 'bad' | 'muted';
 
@@ -354,7 +355,7 @@ const maxCalls = computed(() => Math.max(1, ...(data.value?.pulse.map((b) => b.c
 const barHeight = (calls: number) => `${calls > 0 ? Math.max((calls / maxCalls.value) * 100, 8) : 4}%`;
 const scoreDash = computed(() => `${(data.value?.score ?? 0) * 1.194} 119.4`);
 const scoreTitle = computed(() =>
-  data.value ? `健康分 = 今日调用成功率（${data.value.score} 分）\n${health.value.subline}` : ''
+  data.value ? `${TERMS.healthScoreTitle}（${data.value.score} 分）\n${health.value.subline}` : ''
 );
 // 后端滚动窗口桶带 label（'HH:00'），柱图 title 直接用它；demo 数据无 label 时按下标兜底
 const barTitle = (hour: number, b: { calls: number; issue: number; label?: string }) =>
@@ -500,7 +501,7 @@ watch(liveLoading, (loading) => {
   cursor: pointer;
   transition: border-color 0.12s ease, color 0.12s ease;
 }
-.brief-empty__retry:hover { border-color: rgba(52, 120, 246, 0.45); color: var(--mk-blue); }
+.brief-empty__retry:hover { border-color: rgba(44, 99, 208, 0.45); color: var(--mk-blue); }
 
 /* 简报头 */
 .brief-head {
@@ -590,7 +591,7 @@ watch(liveLoading, (loading) => {
   flex: 0 0 auto;
   margin-left: auto;
   padding: 5px 12px;
-  border: 1px solid rgba(52, 120, 246, 0.28);
+  border: 1px solid rgba(44, 99, 208, 0.28);
   border-radius: 999px;
   background: #eef5ff;
   color: var(--mk-blue);
@@ -603,7 +604,7 @@ watch(liveLoading, (loading) => {
 }
 .brief-actions__btn:hover {
   background: #dbeafe;
-  border-color: rgba(52, 120, 246, 0.45);
+  border-color: rgba(44, 99, 208, 0.45);
 }
 .brief-actions__clear {
   margin: 0;
@@ -644,7 +645,7 @@ watch(liveLoading, (loading) => {
 }
 .kpi__hint { font-size: 11px; color: var(--mk-faint); }
 .kpi--clickable { cursor: pointer; transition: border-color 0.12s ease, transform 0.12s ease; }
-.kpi--clickable:hover { border-color: rgba(52, 120, 246, 0.5); transform: translateY(-1px); }
+.kpi--clickable:hover { border-color: rgba(44, 99, 208, 0.5); transform: translateY(-1px); }
 .brief-card {
   padding: 16px 18px;
   border-radius: 12px;
@@ -685,7 +686,7 @@ watch(liveLoading, (loading) => {
 }
 .feed-filter input {
   margin: 0;
-  accent-color: #3478f6;
+  accent-color: #2c63d0;
 }
 
 /* 总结产出质量 */
@@ -738,7 +739,7 @@ watch(liveLoading, (loading) => {
 .trend__dot--done { background: linear-gradient(180deg, #34d399, #15803d); }
 .trend { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
 .trend__col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; min-height: 0; border-radius: 8px; }
-.trend__col--today { background: #f0f6ff; box-shadow: inset 0 0 0 1px rgba(52, 120, 246, 0.25); }
+.trend__col--today { background: #f0f6ff; box-shadow: inset 0 0 0 1px rgba(44, 99, 208, 0.25); }
 .trend__bars { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 3px; width: 100%; min-height: 56px; }
 .trend__day--today { color: var(--mk-blue); font-weight: 800; }
 .trend__sum { margin: 0; padding-top: 8px; border-top: 1px dashed var(--mk-line); font-size: 12px; color: var(--mk-muted); font-variant-numeric: tabular-nums; }
@@ -771,7 +772,7 @@ watch(liveLoading, (loading) => {
 .funnel__node--idle { border-style: dashed; background: transparent; }
 .funnel__node--idle strong { color: var(--mk-faint); }
 .funnel__node--clickable { cursor: pointer; transition: border-color 0.12s ease; }
-.funnel__node--clickable:hover { border-color: rgba(52, 120, 246, 0.5); }
+.funnel__node--clickable:hover { border-color: rgba(44, 99, 208, 0.5); }
 .funnel__rate { font-size: 10.5px; font-weight: 800; color: var(--mk-faint); }
 
 /* 脉搏 */

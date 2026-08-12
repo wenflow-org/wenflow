@@ -2,20 +2,20 @@
   <div class="fdp">
     <!-- 新建字段引导 -->
     <details class="fdp__box">
-      <summary class="fdp__box-summary">新建字段（已改为编排文件编辑）</summary>
+      <summary class="fdp__box-summary">新建字段（编辑编排文件）</summary>
       <div class="fdp__guide">
         <p class="fdp__guide-text">
           新建字段请直接编辑编排文件，保存后新字段/新路由立即进入 DB（已有行修改见下方漂移报告）。
         </p>
         <p class="fdp__guide-file"><span class="mono">prompts/orchestration/{{ stage }}.yaml</span></p>
         <p class="fdp__guide-text">入口：<strong>「字段路由」页顶部「编排文件」按钮</strong>，在文本框中按现有结构追加
-          <code class="mono">fields:</code> / <code class="mono">routings:</code> 条目后点击「保存到编排文件」。</p>
+          <code class="mono">fields:</code> / <code class="mono">routings:</code> 条目后点击「{{ TERMS.saveToFile }}」。</p>
       </div>
     </details>
 
     <!-- 漂移报告 -->
     <details class="fdp__box" open>
-      <summary class="fdp__box-summary">漂移报告（编排文件 vs DB，admin 编辑行豁免）</summary>
+      <summary class="fdp__box-summary">漂移报告（{{ TERMS.driftContractQualified }}：编排文件 vs DB，admin 编辑行豁免）</summary>
       <div v-if="driftLoading" class="fdp__empty">检测中…</div>
       <div v-else-if="driftFailed" class="fdp__empty fdp__empty--error">漂移检测失败：无法连接字段路由服务，请稍后重试。<button type="button" class="mk-empty__action" @click="loadDrift">重试</button></div>
       <div v-else-if="drift.items.length === 0" class="fdp__empty">✅ 无漂移（编排文件与 DB 一致）</div>
@@ -50,6 +50,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
 import { adminFieldRoutingsApi } from '@/api/adminApi';
+import { TERMS } from './terms';
 
 const props = defineProps<{ stage: string }>();
 
@@ -146,14 +147,14 @@ watch(() => props.stage, () => {
 .fdp__guide-file {
   margin: 0;
   padding: 8px 12px;
-  border: 1px solid rgba(52, 120, 246, 0.35);
+  border: 1px solid rgba(44, 99, 208, 0.35);
   border-radius: 9px;
   background: var(--mk-blue-bg, #eff6ff);
-  color: var(--mk-blue, #3478f6);
+  color: var(--mk-blue, #2c63d0);
   font-size: 12.5px;
   font-weight: 700;
 }
-.fdp__guide-file .mono { font-size: 12px; font-weight: 700; color: var(--mk-blue, #3478f6); }
+.fdp__guide-file .mono { font-size: 12px; font-weight: 700; color: var(--mk-blue, #2c63d0); }
 .fdp__guide-text code { font-family: var(--mk-mono, ui-monospace, monospace); font-size: 11.5px; background: #f0f2f5; padding: 1px 6px; border-radius: 5px; }
 .fdp__drift-list { margin: 0; padding: 6px 14px 12px; list-style: none; }
 .fdp__drift-item {
@@ -183,7 +184,7 @@ watch(() => props.stage, () => {
 .fdp__drift-field { color: var(--mk-faint, #71809a); }
 .fdp__drift-val { font-size: 11.5px; }
 .fdp__drift-val--seed { color: var(--mk-muted, #5b6577); }
-.fdp__drift-val--db { color: var(--mk-blue, #3478f6); font-weight: 600; }
+.fdp__drift-val--db { color: var(--mk-blue, #2c63d0); font-weight: 600; }
 .fdp__changes-list { margin: 0; padding: 8px 14px 12px; list-style: none; }
 .fdp__change {
   display: flex;

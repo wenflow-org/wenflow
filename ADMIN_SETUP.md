@@ -5,7 +5,7 @@
 系统在后端启动时会尝试根据 `backend/.env` 自动创建初始管理员账户。
 
 - 如果数据库中已存在管理员，系统会自动跳过创建。
-- 未配置 `INIT_ADMIN_PASSWORD` 时系统会跳过创建；`INIT_ADMIN_NAME` 未配置时使用 `admin`。
+- 未配置 `INIT_ADMIN_PASSWORD` 时，开发环境使用内置默认密码 `ChangeMe_2026_Admin`（仅首次启动创建时生效）；**生产环境必须显式配置**，否则跳过创建并告警。`INIT_ADMIN_NAME` 未配置时使用 `admin`。
 - 显式配置弱密码、初始用户名或邮箱被普通用户占用、或数据库写入失败时，后端会拒绝启动，不会静默继续。
 
 ## 配置方法
@@ -14,6 +14,7 @@
 
 ```env
 # 初始管理员配置（仅首次启动时使用）
+# 开发环境不配置则使用内置默认密码 ChangeMe_2026_Admin；生产环境必须显式设置
 INIT_ADMIN_NAME=admin
 INIT_ADMIN_PASSWORD=YourStrongPassword123
 ```

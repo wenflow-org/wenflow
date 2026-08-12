@@ -1,10 +1,10 @@
 # 管理员登录安全配置
 
-WenFlow 不提供默认管理员密码。只有显式配置满足强度要求的 `INIT_ADMIN_PASSWORD` 时，首次启动才会创建管理员。
+开发环境未配置 `INIT_ADMIN_PASSWORD` 时，系统使用内置默认初始密码 `ChangeMe_2026_Admin`（仅首次启动创建管理员时生效）。**生产环境（`NODE_ENV=production`）拒绝默认口令，必须显式配置**满足强度要求的 `INIT_ADMIN_PASSWORD` 才会创建管理员。首次登录后应立即修改密码。
 
 ## 初始化管理员
 
-在 `backend/.env` 中配置：
+在 `backend/.env` 中配置（可选，不配置则开发环境使用默认密码）：
 
 ```env
 INIT_ADMIN_NAME=admin
@@ -12,7 +12,7 @@ INIT_ADMIN_EMAIL=admin@wenflow.local
 INIT_ADMIN_PASSWORD=<set-a-unique-strong-password>
 ```
 
-密码至少 12 位，并包含大写字母、小写字母和数字。不要把填写后的 `.env` 提交到 Git。
+密码至少 12 位，并包含大写字母、小写字母和数字（生产环境必须显式设置，不允许使用默认口令）。不要把填写后的 `.env` 提交到 Git。
 
 启动后端：
 
@@ -20,7 +20,7 @@ INIT_ADMIN_PASSWORD=<set-a-unique-strong-password>
 ./start-dev.ps1
 ```
 
-如果数据库中已经存在管理员，初始化会自动跳过。也可以在 `backend/` 下运行 `node create-admin.js`，该脚本同样读取环境变量并执行强度校验，不会输出密码。
+如果数据库中已经存在管理员，初始化会自动跳过（**修改 `INIT_ADMIN_PASSWORD` 后重启不会更新已有管理员密码**）。也可以在 `backend/` 下运行 `node create-admin.js`，该脚本同样读取环境变量并执行强度校验，不会输出密码。
 
 ## Admin 来源策略
 

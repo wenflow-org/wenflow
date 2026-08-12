@@ -1,58 +1,7 @@
 /* Admin 重设计实验室：共享样式（mk- 前缀，全局可用）。统一“运维简报式 Admin”语言：状态条 / 紧凑表格 / mono 点缀 */
 
-/* 层级 token：抽屉/弹窗/菜单统一 z-index，避免散落硬编码 */
-:root {
-  --mk-z-menu: 60;
-  --mk-z-drawer: 200;
-  --mk-z-sidebar: 220;
-  --mk-z-modal: 300;
-  --mk-z-toast: 400;
-
-  /* 抽屉宽度档 token：供各详情抽屉 4K 镜像断点复用（base 560 → lg 700 → xl 880 → xxl 1040）。
-     例外：SkillDrawer 有意更窄（520/600/760/890，需容纳两侧并排的版本对比等密集区），保持自身档位 */
-  --mk-drawer-w: 560px;
-  --mk-drawer-w-lg: 700px;
-  --mk-drawer-w-xl: 880px;
-  --mk-drawer-w-xxl: 1040px;
-
-  /* 颜色/字体 token 全局定义：抽屉/弹窗 Teleport 到 body 后不在 .mk-page 内，必须全局可用 */
-  --mk-ink: #1a2a44;
-  --mk-muted: #5b6577;
-  --mk-faint: #5f6f8c;
-  --mk-line: #e6ebf4;
-  --mk-bg: #f7f8fa;
-  --mk-surface: #ffffff;
-  --mk-blue: #2c63d0;
-  --mk-green: #15803d;
-  --mk-green-bg: #ecfdf5;
-  --mk-amber: #b45309;
-  --mk-amber-bg: #fffbeb;
-  --mk-red: #dc2626;
-  --mk-red-bg: #fef2f2;
-  --mk-blue-bg: #eff6ff;
-  --mk-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
-  --mk-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
-
-  /* 设计 token（审计收敛）：字体栈 / 强调色 / 代码块 / 圆角 / 阴影 */
-  --mk-sans: Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  --mk-accent-deep: #1f57cc;
-  --mk-purple: #8d6bff;
-  --mk-teal: #0d9488;
-  --mk-red-strong: #b91c1c;
-  --mk-code-bg: #0d1420;
-  --mk-code-fg: #8ba3c7;
-  --mk-code-border: #1c2a40;
-  --mk-radius-xs: 4px;
-  --mk-radius-sm: 6px;
-  --mk-radius-md: 8px;
-  --mk-radius-lg: 10px;
-  --mk-radius-xl: 12px;
-  --mk-radius-modal: 16px;
-  --mk-radius-pill: 999px;
-  --mk-shadow-pop: 0 12px 32px rgba(15, 23, 42, 0.16);
-  --mk-shadow-drawer: -16px 0 48px rgba(15, 23, 42, 0.18);
-  --mk-shadow-modal: 0 24px 64px rgba(15, 23, 42, 0.22);
-}
+/* --mk-* token 全局定义已上移至 src/styles/main.css（:root）：保证 admin-surface 兼容映射、
+   admin-theme EP 覆写与 Teleport 到 body 的覆盖层全局可用。本文件只保留组件类。 */
 
 .mk-page {
   background: var(--mk-bg);
@@ -117,7 +66,9 @@
   border-radius: 12px;
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-sm);
-  overflow: hidden;
+  /* overflow: clip（而非 hidden）：同样裁圆角溢出，但不产生滚动容器，
+     卡内 sticky 表头/操作条才能相对视口吸顶（滚动修复 #1/#9 依赖） */
+  overflow: clip;
 }
 .mk-card__head {
   display: flex;
@@ -246,6 +197,33 @@
 /* 直角徽章：需要与文字/表格行对齐的紧凑场景 */
 .mk-badge--chip { border-radius: 4px; }
 
+/* ----- 业务徽章档位（mk-badge 扩展：字段路由角色 / render / 流转 / 锁定 / core / 完成度五档） -----
+   SkillFieldRouting / FieldRoutingTable / Skills 三处收敛共用；色值全部走 token */
+.mk-badge--role-hard-required { background: var(--mk-red-bg); color: var(--mk-red-strong); }
+.mk-badge--role-soft-info { background: var(--mk-blue-bg); color: var(--mk-blue); }
+.mk-badge--role-hidden-inference { background: #f4f0ff; color: #7c3aed; }
+.mk-badge--role-public-reply { background: var(--mk-green-bg); color: var(--mk-green); }
+.mk-badge--role-proposal-output { background: #effcf9; color: var(--mk-teal); }
+.mk-badge--role-derived-presentation { background: var(--mk-amber-bg); color: var(--mk-amber); }
+.mk-badge--role-control-signal { background: #f0f2f5; color: var(--mk-muted); }
+.mk-badge--render-visible { background: #e8f7ef; color: var(--mk-green); }
+.mk-badge--render-hidden { background: #f0f2f5; color: var(--mk-muted); }
+.mk-badge--flow-handoff { background: #eef2ff; color: var(--mk-blue); }
+.mk-badge--flow-internal { background: #fdf2f8; color: #be185d; }
+.mk-badge--flow-accumulate { background: #f0fdf4; color: var(--mk-green); }
+.mk-badge--lock-system { background: var(--mk-red-bg); color: var(--mk-red); }
+.mk-badge--lock-structure { background: var(--mk-amber-bg); color: var(--mk-amber); border: 1px dashed rgba(180, 83, 9, 0.45); padding: 1px 8px; }
+.mk-badge--lock-editable { background: var(--mk-green-bg); color: var(--mk-green); }
+.mk-badge--core-declared { background: var(--mk-green-bg); color: var(--mk-green); }
+.mk-badge--core-missing { background: var(--mk-red-bg); color: var(--mk-red); }
+.mk-badge--core-mismatch, .mk-badge--core-orphan { background: var(--mk-amber-bg); color: var(--mk-amber); }
+/* 完成度五档（draft → live）：实心白字徽章 */
+.mk-badge--rec-draft { background: var(--mk-rec-draft); color: #fff; }
+.mk-badge--rec-handler-ready { background: var(--mk-rec-handler); color: #fff; }
+.mk-badge--rec-core-ready { background: var(--mk-rec-core); color: #fff; }
+.mk-badge--rec-fields-synced { background: var(--mk-rec-synced); color: #fff; }
+.mk-badge--rec-live { background: var(--mk-rec-live); color: #fff; }
+
 /* ----- 筛选行 ----- */
 .mk-filter {
   display: flex;
@@ -292,7 +270,7 @@
   background: #fff;
   color: var(--mk-blue);
   font-weight: 700;
-  box-shadow: 0 0 0 1px rgba(52, 120, 246, 0.4), 0 1px 2px rgba(23, 32, 51, 0.08);
+  box-shadow: 0 0 0 1px rgba(44, 99, 208, 0.4), 0 1px 2px rgba(23, 32, 51, 0.08);
 }
 
 /* ----- 链接按钮 ----- */
@@ -344,7 +322,7 @@
   margin-top: 8px;
   padding: 7px 16px;
   border-radius: 8px;
-  border: 1px solid rgba(52, 120, 246, 0.3);
+  border: 1px solid rgba(44, 99, 208, 0.3);
   background: #eef5ff;
   color: var(--mk-blue);
   font: inherit;
@@ -419,11 +397,29 @@
 }
 .mk-field__input:focus,
 .mk-field__select:focus,
-.mk-field__textarea:focus { border-color: var(--mk-blue, #3478f6); }
+.mk-field__textarea:focus { border-color: var(--mk-blue, #2c63d0); }
 .mk-field__textarea { min-height: 96px; resize: vertical; line-height: 1.6; }
 .mk-field--error .mk-field__input,
 .mk-field--error .mk-field__textarea { border-color: var(--mk-red, #dc2626); }
 .mk-field__err { font-size: 11px; color: var(--mk-red, #dc2626); font-weight: 600; }
+
+/* 通用输入框（input/select/textarea 三合一）：FieldAddWizard 等 Teleport/子组件场景必须用全局类，
+   页面级 scoped 输入类不作用于子组件内部元素（原 sdp-input 缺陷的替代方案） */
+.mk-input {
+  width: 100%;
+  padding: 8px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--mk-line, #e6ebf4);
+  background: var(--mk-surface, #fff);
+  color: var(--mk-ink, #1a2a44);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+  box-sizing: border-box;
+}
+.mk-input:focus { border-color: var(--mk-blue, #2c63d0); }
+.mk-input:disabled { background: #f4f6fa; color: var(--mk-faint, #5f6f8c); cursor: not-allowed; }
+textarea.mk-input { line-height: 1.6; resize: vertical; }
 
 /* 按钮 */
 .mk-btn {
@@ -439,8 +435,8 @@
 }
 .mk-btn:hover { background: #f6f9ff; }
 .mk-btn--primary {
-  background: var(--mk-blue, #3478f6);
-  border-color: var(--mk-blue, #3478f6);
+  background: var(--mk-blue, #2c63d0);
+  border-color: var(--mk-blue, #2c63d0);
   color: #fff;
 }
 .mk-btn--primary:hover { background: #2b64d8; }
@@ -499,20 +495,79 @@
 }
 .mk-toast--ok { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #15803d); }
 .mk-toast--bad { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
-.mk-toast--info { background: #eff6ff; color: var(--mk-blue, #3478f6); }
+.mk-toast--info { background: #eff6ff; color: var(--mk-blue, #2c63d0); }
 
 /* 加载点 */
 .mk-spinner {
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 2px solid rgba(52, 120, 246, 0.25);
-  border-top-color: var(--mk-blue, #3478f6);
+  border: 2px solid rgba(44, 99, 208, 0.25);
+  border-top-color: var(--mk-blue, #2c63d0);
   border-radius: 50%;
   animation: mk-spin 0.7s linear infinite;
   vertical-align: -2px;
 }
+/* 大号 spinner：启动屏等独立占位场景（AdminConsole 启动屏收敛于此） */
+.mk-spinner--lg {
+  width: 18px;
+  height: 18px;
+  border-width: 2.5px;
+  vertical-align: -4px;
+}
 @keyframes mk-spin { to { transform: rotate(360deg); } }
+
+/* ----- 抽屉（mk-drawer：覆盖层通用骨架，AdminGlossaryDrawer / CommandPalette 迁入目标；
+   SkillDrawer 因密集内容保持自身 msk- 档位，属登记在案的例外） ----- */
+.mk-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--mk-z-drawer);
+  display: flex;
+  justify-content: flex-end;
+}
+.mk-drawer__mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.36);
+}
+.mk-drawer__panel {
+  position: relative;
+  width: var(--mk-drawer-w, 560px);
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  background: var(--mk-surface, #fff);
+  box-shadow: var(--mk-shadow-drawer);
+  animation: mk-drawer-in 0.18s ease;
+}
+@keyframes mk-drawer-in {
+  from { transform: translateX(28px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.mk-drawer__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--mk-line, #e6ebf4);
+}
+.mk-drawer__title { margin: 0; font-size: 15px; font-weight: 700; color: var(--mk-ink, #1a2a44); }
+.mk-drawer__sub { font-size: 11.5px; color: var(--mk-faint, #5f6f8c); }
+.mk-drawer__close {
+  border: 0;
+  background: #f1f5fb;
+  color: var(--mk-muted, #5b6577);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.mk-drawer__close:hover { background: #e2eaf7; color: var(--mk-ink, #1a2a44); }
+.mk-drawer__body { overflow-y: auto; padding: 14px 18px 20px; min-width: 0; }
 
 /* ================= 超大屏（4K）适配 =================
    机制说明：
@@ -552,12 +607,17 @@
   .mk-field__label { font-size: 13.5px; }
   .mk-field__hint { font-size: 12.5px; }
   .mk-field__err { font-size: 12.5px; }
-  .mk-field__input, .mk-field__select, .mk-field__textarea { font-size: 14px; padding: 10px 13px; }
+  .mk-field__input, .mk-field__select, .mk-field__textarea, .mk-input { font-size: 14px; padding: 10px 13px; }
   .mk-btn { font-size: 14px; padding: 10px 18px; }
   .mk-btn--sm { font-size: 12.5px; padding: 6px 13px; }
   .mk-toast { font-size: 13.5px; }
   .mk-link { font-size: 14px; }
   .mk-actions { min-width: 84px; }
+  .mk-drawer__panel { width: var(--mk-drawer-w-lg, 700px); }
+  .mk-drawer__head { padding: 20px 24px 14px; }
+  .mk-drawer__title { font-size: 17px; }
+  .mk-drawer__close { width: 32px; height: 32px; font-size: 14px; }
+  .mk-drawer__body { padding: 18px 24px 26px; }
 }
 
 @media (min-width: 2800px) {
@@ -588,12 +648,49 @@
   .mk-field__label { font-size: 16px; }
   .mk-field__hint { font-size: 15px; }
   .mk-field__err { font-size: 15px; }
-  .mk-field__input, .mk-field__select, .mk-field__textarea { font-size: 16.5px; padding: 12px 16px; }
+  .mk-field__input, .mk-field__select, .mk-field__textarea, .mk-input { font-size: 16.5px; padding: 12px 16px; }
   .mk-btn { font-size: 16.5px; padding: 12px 22px; }
   .mk-btn--sm { font-size: 14.5px; padding: 8px 16px; }
   .mk-toast { font-size: 16px; }
   .mk-link { font-size: 16.5px; }
   .mk-actions { min-width: 100px; }
+  .mk-drawer__panel { width: var(--mk-drawer-w-xl, 880px); }
+  .mk-drawer__head { padding: 24px 28px 16px; }
+  .mk-drawer__title { font-size: 20px; }
+  .mk-drawer__close { width: 38px; height: 38px; font-size: 16px; }
+  .mk-drawer__body { padding: 22px 28px 30px; }
+}
+
+/* ----- 回到顶部浮动按钮（滚动规范 #9：页面 >2 屏时出现；Shell 挂载，全局可用） ----- */
+.mk-backtop {
+  position: fixed;
+  right: 22px;
+  bottom: 26px;
+  z-index: 90;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--mk-line, #e6ebf4);
+  border-radius: 999px;
+  background: var(--mk-surface, #fff);
+  color: var(--mk-muted, #5b6577);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: var(--mk-shadow-pop, 0 12px 32px rgba(15, 23, 42, 0.16));
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.mk-backtop--show { opacity: 1; pointer-events: auto; transform: none; }
+.mk-backtop:hover { color: var(--mk-blue, #2c63d0); border-color: rgba(44, 99, 208, 0.4); }
+.mk-backtop__icon { font-size: 13px; line-height: 1; }
+@media (min-width: 2000px) {
+  .mk-backtop { font-size: 13.5px; padding: 10px 16px; right: 28px; bottom: 32px; }
+  .mk-backtop__icon { font-size: 14.5px; }
 }
 
 /* 减少动态偏好：全局关闭动画/过渡（无障碍底线，抽屉/弹窗等覆盖层同样生效） */

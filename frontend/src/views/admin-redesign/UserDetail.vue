@@ -345,17 +345,17 @@ const d = computed<Detail | undefined>(() => {
 .ud-learner-link {
   margin-left: auto;
   padding: 6px 14px;
-  border: 1px solid rgba(52, 120, 246, 0.28);
+  border: 1px solid rgba(44, 99, 208, 0.28);
   border-radius: 999px;
   background: #eef5ff;
-  color: var(--mk-blue, #3478f6);
+  color: var(--mk-blue, #2c63d0);
   font: inherit;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   transition: 0.12s ease;
 }
-.ud-learner-link:hover { background: #dbeafe; border-color: rgba(52, 120, 246, 0.45); }
+.ud-learner-link:hover { background: #dbeafe; border-color: rgba(44, 99, 208, 0.45); }
 .ud-avatar {
   width: 46px;
   height: 46px;
@@ -384,17 +384,17 @@ const d = computed<Detail | undefined>(() => {
 .ud-restore {
   margin-left: auto;
   padding: 6px 14px;
-  border: 1px solid rgba(52, 120, 246, 0.28);
+  border: 1px solid rgba(44, 99, 208, 0.28);
   border-radius: 999px;
   background: #eef5ff;
-  color: var(--mk-blue, #3478f6);
+  color: var(--mk-blue, #2c63d0);
   font: inherit;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   transition: 0.12s ease;
 }
-.ud-restore:hover { background: #dbeafe; border-color: rgba(52, 120, 246, 0.45); }
+.ud-restore:hover { background: #dbeafe; border-color: rgba(44, 99, 208, 0.45); }
 .ud-restore:disabled { opacity: 0.6; cursor: default; }
 
 .ud-stats {
@@ -433,7 +433,7 @@ const d = computed<Detail | undefined>(() => {
 .ud-path__main strong { font-size: 13px; }
 .ud-path__main span { font-size: 11.5px; color: var(--mk-faint); }
 .ud-path__bar { height: 6px; border-radius: 3px; background: #eef2fa; overflow: hidden; }
-.ud-path__bar i { display: block; height: 100%; background: linear-gradient(90deg, #6aa0ff, #3478f6); }
+.ud-path__bar i { display: block; height: 100%; background: linear-gradient(90deg, #6aa0ff, #2c63d0); }
 .ud-path__bar i.warn { background: linear-gradient(90deg, #fcd34d, #f59e0b); }
 .ud-path__pct { font-size: 12px; color: var(--mk-muted); text-align: right; font-variant-numeric: tabular-nums; }
 .ud-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: 12.5px; }

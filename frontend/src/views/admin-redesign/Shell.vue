@@ -33,6 +33,12 @@
 
     <!-- 主区 -->
     <div class="mshell__main">
+      <!-- 阶段 0 R1：demo 数据源存在时（开发态手动切换/后端不可用残留）置顶横幅，防止真假混淆 -->
+      <div v-if="dataSource === 'demo' && !liveLoading" class="mshell__demo" role="alert">
+        <strong class="mshell__demo-title">演示数据</strong>
+        <span class="mshell__demo-text">当前展示内置演示数据（离线预览），非真实平台数据，操作不会写入系统</span>
+        <button type="button" class="mshell__demo-btn" @click="refreshData">连接真实数据</button>
+      </div>
       <header class="mshell__topbar">
         <div class="mshell__crumbs">
           <span class="mshell__crumb-group">{{ currentScene?.group }}</span>
@@ -73,6 +79,17 @@
       <main class="mshell__content">
         <slot />
       </main>
+      <!-- 滚动修复 #9：回到顶部（>2 屏长页出现，全站统一由 Shell 挂载） -->
+      <button
+        type="button"
+        class="mk-backtop"
+        :class="{ 'mk-backtop--show': backtopVisible }"
+        aria-label="回到顶部"
+        @click="backToTop"
+      >
+        <span class="mk-backtop__icon" aria-hidden="true">↑</span>
+        <span>回到顶部</span>
+      </button>
       <footer class="mshell__footer">
         <div class="mshell__footer-left">
           <img src="/favicon.png" alt="" class="mshell__footer-logo" />
@@ -92,7 +109,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { MOCK_SCENES, type MockSceneDef } from './manifest'
 import { dataSource } from './store'
 import { liveNavBadges, alarmNavBadges, loadLiveData, liveLoading } from './live'
@@ -101,6 +118,20 @@ import { version as appVersion } from '../../../package.json'
 
 const props = defineProps<{ current: string; crumb?: string; release?: boolean }>()
 const emit = defineEmits<{ (e: 'navigate', id: string): void; (e: 'palette'): void; (e: 'glossary'): void }>()
+
+/* 滚动修复 #9：回到顶部按钮（页面 >2 屏且已滚动至少一屏时出现） */
+const backtopVisible = ref(false)
+function onScroll() {
+  backtopVisible.value = window.scrollY > window.innerHeight
+}
+function backToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+onMounted(() => {
+  window.addEventListener('scroll', onScroll, { passive: true })
+  onScroll()
+})
+onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 
 const version = appVersion
 const year = new Date().getFullYear()
@@ -199,7 +230,7 @@ const groupedScenes = computed(() => {
   display: grid;
   grid-template-columns: 208px minmax(0, 1fr);
   min-height: max(720px, 100dvh);
-  background: #f6f8fc;
+  background: var(--mk-bg, #f7f8fa);
   color: #1a2a44;
   font-size: 13px;
 }
@@ -264,8 +295,8 @@ const groupedScenes = computed(() => {
 .mshell__item:hover { background: #f6f9ff; color: #1a2a44; }
 .mshell__item--active {
   background: #eef5ff;
-  color: #1f57cc;
-  box-shadow: inset 3px 0 0 #3478f6;
+  color: var(--mk-accent-deep, #1f57cc);
+  box-shadow: inset 3px 0 0 var(--mk-blue, #2c63d0);
 }
 .mshell__item-label { flex: 1; }
 .mshell__item-glyph {
@@ -282,7 +313,7 @@ const groupedScenes = computed(() => {
   flex-shrink: 0;
   transition: background 0.12s ease, color 0.12s ease;
 }
-.mshell__item--active .mshell__item-glyph { background: #dbe9ff; color: #1f57cc; }
+.mshell__item--active .mshell__item-glyph { background: #dbe9ff; color: var(--mk-accent-deep, #1f57cc); }
 .mshell__item-badge {
   padding: 1px 7px;
   border-radius: 999px;
@@ -292,7 +323,7 @@ const groupedScenes = computed(() => {
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
-.mshell__item--active .mshell__item-badge { background: #dbe9ff; color: #1f57cc; }
+.mshell__item--active .mshell__item-badge { background: #dbe9ff; color: var(--mk-accent-deep, #1f57cc); }
 .mshell__item-badge--alarm {
   background: #fee2e2;
   color: #b91c1c;
@@ -352,17 +383,17 @@ const groupedScenes = computed(() => {
   align-items: center;
   gap: 7px;
   padding: 6px 12px;
-  border: 1px solid var(--mk-blue, #3478f6);
+  border: 1px solid var(--mk-blue, #2c63d0);
   border-radius: 8px;
   background: #eef5ff;
-  color: var(--mk-blue, #3478f6);
+  color: var(--mk-blue, #2c63d0);
   font: inherit;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
-.mshell__help:hover { background: #dce9ff; border-color: rgba(52, 120, 246, 0.55); }
+.mshell__help:hover { background: #dce9ff; border-color: rgba(44, 99, 208, 0.55); }
 .mshell__help-icon {
   display: inline-flex;
   align-items: center;
@@ -370,7 +401,7 @@ const groupedScenes = computed(() => {
   width: 15px;
   height: 15px;
   border-radius: 50%;
-  background: #3478f6;
+  background: var(--mk-blue, #2c63d0);
   color: #fff;
   font-size: 11px;
   font-weight: 800;
@@ -393,6 +424,46 @@ const groupedScenes = computed(() => {
 .mshell__search-hint { white-space: nowrap; }
 .mshell__content { min-width: 0; }
 
+/* 演示数据置顶横幅（阶段 0 R1）：demo 态常驻警示，防止真假混淆 */
+.mshell__demo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 20px;
+  background: #fffbeb;
+  border-bottom: 1px solid rgba(217, 119, 6, 0.35);
+  color: #92400e;
+  font-size: 12px;
+  position: sticky;
+  top: 0;
+  z-index: var(--mk-z-menu);
+}
+.mshell__demo-title {
+  flex-shrink: 0;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.mshell__demo-text { flex: 1; min-width: 0; line-height: 1.5; }
+.mshell__demo-btn {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border: 1px solid rgba(217, 119, 6, 0.5);
+  border-radius: 999px;
+  background: #fff;
+  color: #92400e;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.mshell__demo-btn:hover { background: #fef3c7; border-color: rgba(217, 119, 6, 0.75); }
+
 /* release 模式：顶栏右侧管理员区 */
 .mshell__topbar-right { display: flex; align-items: center; gap: 12px; }
 .mshell__refresh {
@@ -410,7 +481,7 @@ const groupedScenes = computed(() => {
   cursor: pointer;
   transition: color 0.15s ease, border-color 0.15s ease;
 }
-.mshell__refresh:hover:not(:disabled) { color: #3478f6; border-color: rgba(52, 120, 246, 0.4); }
+.mshell__refresh:hover:not(:disabled) { color: var(--mk-blue, #2c63d0); border-color: rgba(44, 99, 208, 0.4); }
 .mshell__refresh:disabled { cursor: default; color: var(--mk-faint); }
 .mshell__refresh-icon { display: inline-block; font-size: 13px; line-height: 1; }
 .mshell__refresh-icon.is-spinning { animation: mshell-spin 0.9s linear infinite; }

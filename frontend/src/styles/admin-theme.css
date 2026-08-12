@@ -1,5 +1,11 @@
-﻿/* Admin Element Plus theme overrides.
-   Loaded after the shared Tremor theme so admin semantics remain authoritative. */
+﻿/* Admin Element Plus theme overrides（收敛自原 admin-theme.css，阶段 1B）。
+   保留三块：
+   1. 会话验证遮罩（main.ts 动态创建，独立于 mk 体系）；
+   2. body.admin-route 下 EP 覆写的最小集——唯一消费方是 QuickLearnPanel.vue
+      （el-dialog/el-button/el-tag/el-input/el-select/el-textarea），全部改用 --mk-* token、
+      品牌蓝统一 #2c63d0；原 el-table/el-drawer/el-pagination/el-tabs/el-form-item 等覆写
+      无消费方，已随 admin-list.css/admin-surface.css 一并删除；
+   3. 4K 超大屏 zoom（壳层全局等比放大）。 */
 
 html.admin-session-concealed,
 html.admin-session-concealed body,
@@ -30,7 +36,7 @@ body.admin-session-concealed > #admin-session-validation-shell {
   min-height: 100dvh;
   padding: 24px;
   background:
-    radial-gradient(circle at 50% 0%, rgba(39, 100, 217, 0.09), transparent 38%),
+    radial-gradient(circle at 50% 0%, rgba(44, 99, 208, 0.09), transparent 38%),
     #f3f6fa;
   color: #172033;
 }
@@ -46,7 +52,7 @@ body.admin-session-concealed > #admin-session-validation-shell {
 
 .admin-session-validation-eyebrow {
   margin: 0 0 12px;
-  color: #2764d9;
+  color: var(--mk-blue, #2c63d0);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -93,18 +99,18 @@ body.admin-session-concealed > #admin-session-validation-shell {
 }
 
 .admin-session-validation-button--primary {
-  border-color: #2764d9;
-  background: #2764d9;
+  border-color: var(--mk-blue, #2c63d0);
+  background: var(--mk-blue, #2c63d0);
   color: #fff;
 }
 
 .admin-session-validation-button--primary:hover:not(:disabled) {
-  border-color: #1f56c3;
-  background: #1f56c3;
+  border-color: #2b64d8;
+  background: #2b64d8;
 }
 
 .admin-session-validation-button:focus-visible {
-  outline: 3px solid rgba(39, 100, 217, 0.24);
+  outline: 3px solid rgba(44, 99, 208, 0.24);
   outline-offset: 2px;
 }
 
@@ -124,38 +130,44 @@ body.admin-session-concealed > #admin-session-validation-shell {
   }
 }
 
+/* ================= 最小 EP 覆写（唯一消费方：QuickLearnPanel.vue） ================= */
+
 body.admin-route {
-  --admin-button-primary: #2764d9;
-  --admin-button-primary-hover: #1f56c3;
-  --admin-button-primary-active: #1948a8;
-  --admin-button-border: #d5deea;
-  --admin-button-border-hover: #b9c6d8;
-  --admin-button-text: #34445b;
-  --admin-button-bg-hover: #f6f8fb;
-  --el-color-primary: var(--admin-text-brand);
-  --el-color-success: var(--admin-color-success);
-  --el-color-warning: var(--admin-color-warning);
-  --el-color-danger: var(--admin-color-error);
-  --el-border-color: var(--admin-border-color);
-  --el-border-color-light: rgba(225, 232, 242, 0.72);
-  --el-fill-color-blank: var(--admin-bg-surface);
-  --el-bg-color: var(--admin-bg-surface);
-  --el-text-color-primary: var(--admin-text-primary);
-  --el-text-color-regular: var(--admin-text-secondary);
-  --el-text-color-secondary: var(--admin-text-muted);
+  /* EP 全局变量 → mk token（品牌蓝统一 #2c63d0；派生 light 档为 #2c63d0 混白计算值） */
+  --el-color-primary: var(--mk-blue, #2c63d0);
+  --el-color-primary-light-3: #6b92de;
+  --el-color-primary-light-5: #96b1e8;
+  --el-color-primary-light-7: #c0d0f1;
+  --el-color-primary-light-8: #d5e0f6;
+  --el-color-primary-light-9: #eaeffa;
+  --el-color-success: var(--mk-green, #15803d);
+  --el-color-success-light-7: #b9d9c5;
+  --el-color-success-light-9: #e8f2ec;
+  --el-color-warning: var(--mk-amber, #b45309);
+  --el-color-danger: var(--mk-red, #dc2626);
+  --el-border-color: var(--mk-line, #e6ebf4);
+  --el-border-color-light: var(--mk-line, #e6ebf4);
+  --el-border-color-lighter: var(--mk-line, #e6ebf4);
+  --el-fill-color-blank: var(--mk-surface, #fff);
+  --el-bg-color: var(--mk-surface, #fff);
+  --el-fill-color-light: #f0f2f5;
+  --el-fill-color-extra-light: #f7f8fa;
+  --el-text-color-primary: var(--mk-ink, #1a2a44);
+  --el-text-color-regular: var(--mk-muted, #5b6577);
+  --el-text-color-secondary: var(--mk-faint, #5f6f8c);
   /* EP 默认 placeholder #a8abb2 在白底仅 2.3:1，提升至阶内灰 */
-  --el-text-color-placeholder: var(--admin-text-muted);
+  --el-text-color-placeholder: var(--mk-faint, #5f6f8c);
 }
 
 body.admin-route .el-button {
   min-height: 34px;
   padding: 0 13px;
-  border: 1px solid var(--admin-button-border) !important;
-  border-radius: var(--admin-radius-sm) !important;
-  background: var(--admin-bg-surface) !important;
-  color: var(--admin-button-text) !important;
-  font-size: var(--admin-text-body-sm);
-  font-weight: 550 !important;
+  border: 1px solid var(--mk-line, #e6ebf4) !important;
+  border-radius: 8px !important;
+  background: var(--mk-surface, #fff) !important;
+  color: var(--mk-muted, #5b6577) !important;
+  font-size: 13px;
+  font-weight: 600 !important;
   letter-spacing: 0;
   box-shadow: 0 1px 1px rgba(15, 23, 42, 0.025) !important;
   transform: none !important;
@@ -167,9 +179,9 @@ body.admin-route .el-button + .el-button {
 }
 
 body.admin-route .el-button:hover:not(.is-disabled) {
-  border-color: var(--admin-button-border-hover) !important;
-  background: var(--admin-button-bg-hover) !important;
-  color: var(--admin-text-primary) !important;
+  border-color: #b9c6d8 !important;
+  background: #f6f9ff !important;
+  color: var(--mk-ink, #1a2a44) !important;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
 }
 
@@ -182,17 +194,11 @@ body.admin-route .el-button:active:not(.is-disabled) {
 body.admin-route .el-button--small {
   min-height: 30px;
   padding: 0 10px;
-  font-size: var(--admin-text-caption);
-}
-
-body.admin-route .el-button--large {
-  min-height: 40px;
-  padding: 0 16px;
-  font-size: var(--admin-text-body);
+  font-size: 12px;
 }
 
 body.admin-route .el-button .el-icon {
-  font-size: var(--admin-text-body);
+  font-size: 13px;
 }
 
 body.admin-route .el-button.is-disabled,
@@ -205,69 +211,39 @@ body.admin-route .el-button.is-disabled:hover {
 }
 
 body.admin-route .el-button--primary:not(.is-plain):not(.is-text):not(.is-link) {
-  background: var(--admin-button-primary) !important;
-  border-color: var(--admin-button-primary) !important;
+  background: var(--mk-blue, #2c63d0) !important;
+  border-color: var(--mk-blue, #2c63d0) !important;
   color: #fff !important;
-  box-shadow: 0 1px 2px rgba(24, 72, 168, 0.18) !important;
+  box-shadow: 0 1px 2px rgba(44, 99, 208, 0.18) !important;
 }
 
 body.admin-route .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):hover:not(.is-disabled) {
-  background: var(--admin-button-primary-hover) !important;
-  border-color: var(--admin-button-primary-hover) !important;
+  background: #2b64d8 !important;
+  border-color: #2b64d8 !important;
   color: #fff !important;
-  box-shadow: 0 2px 5px rgba(24, 72, 168, 0.2) !important;
+  box-shadow: 0 2px 5px rgba(44, 99, 208, 0.2) !important;
 }
 
 body.admin-route .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):active:not(.is-disabled) {
-  background: var(--admin-button-primary-active) !important;
-  border-color: var(--admin-button-primary-active) !important;
+  background: var(--mk-accent-deep, #1f57cc) !important;
+  border-color: var(--mk-accent-deep, #1f57cc) !important;
   box-shadow: none !important;
 }
 
-body.admin-route .el-button--primary.is-plain {
-  background: var(--admin-bg-surface) !important;
+body.admin-route .el-button.is-plain {
+  background: var(--mk-surface, #fff) !important;
   border-color: #c6d4ea !important;
-  color: #315eaa !important;
+  color: var(--mk-blue, #2c63d0) !important;
 }
 
-body.admin-route .el-button--primary.is-plain:hover:not(.is-disabled) {
+body.admin-route .el-button.is-plain:hover:not(.is-disabled) {
   background: #f3f7fd !important;
   border-color: #9eb8df !important;
-  color: #224f9e !important;
-}
-
-body.admin-route .el-button--success:not(.is-plain):not(.is-text):not(.is-link) {
-  background: #18794e !important;
-  border-color: #18794e !important;
-  color: #fff !important;
-}
-
-body.admin-route .el-button--success.is-plain {
-  background: var(--admin-bg-surface) !important;
-  border-color: #b8d8c7 !important;
-  color: #18794e !important;
-}
-
-body.admin-route .el-button--warning:not(.is-plain):not(.is-text):not(.is-link) {
-  background: #b86112 !important;
-  border-color: #b86112 !important;
-  color: #fff !important;
-}
-
-body.admin-route .el-button--warning.is-plain {
-  background: var(--admin-bg-surface) !important;
-  border-color: #e4c59f !important;
-  color: #9a4f0d !important;
-}
-
-body.admin-route .el-button--danger:not(.is-plain):not(.is-text):not(.is-link) {
-  background: #c83c3c !important;
-  border-color: #c83c3c !important;
-  color: #fff !important;
+  color: var(--mk-accent-deep, #1f57cc) !important;
 }
 
 body.admin-route .el-button--danger.is-plain {
-  background: var(--admin-bg-surface) !important;
+  background: var(--mk-surface, #fff) !important;
   border-color: #e7bcbc !important;
   color: #b83232 !important;
 }
@@ -283,7 +259,7 @@ body.admin-route .el-button.is-link {
   min-height: 30px;
   padding: 0 7px;
   border-color: transparent !important;
-  border-radius: var(--admin-radius-sm) !important;
+  border-radius: 6px !important;
   background: transparent !important;
   box-shadow: none !important;
 }
@@ -297,155 +273,88 @@ body.admin-route .el-button.is-link:hover:not(.is-disabled) {
 
 body.admin-route .el-button--primary.is-text,
 body.admin-route .el-button--primary.is-link {
-  color: #2b5ea9 !important;
-}
-
-body.admin-route .el-button--success.is-text,
-body.admin-route .el-button--success.is-link {
-  color: #18794e !important;
-}
-
-body.admin-route .el-button--warning.is-text,
-body.admin-route .el-button--warning.is-link {
-  color: #9a4f0d !important;
-}
-
-body.admin-route .el-button--danger.is-text,
-body.admin-route .el-button--danger.is-link {
-  color: #b83232 !important;
-}
-
-body.admin-route .el-button--danger.is-text:hover:not(.is-disabled),
-body.admin-route .el-button--danger.is-link:hover:not(.is-disabled) {
-  background: #fff1f1 !important;
-  color: #a52a2a !important;
-}
-
-body.admin-route .el-button.is-circle,
-body.admin-route .admin-icon-button {
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
-  min-height: 32px;
-  padding: 0;
-  border-radius: var(--admin-radius-sm) !important;
+  color: var(--mk-blue, #2c63d0) !important;
 }
 
 body.admin-route .el-tag {
-  border-radius: var(--admin-radius-xs) !important;
+  border-radius: 4px !important;
   font-weight: 600 !important;
 }
 
 body.admin-route .el-tag--success {
-  background: var(--admin-color-success-bg) !important;
+  background: var(--mk-green-bg, #ecfdf5) !important;
   border-color: rgba(22, 163, 74, 0.24) !important;
-  color: var(--admin-color-success) !important;
+  color: var(--mk-green, #15803d) !important;
 }
 
 body.admin-route .el-tag--warning {
-  background: var(--admin-color-warning-bg) !important;
+  background: var(--mk-amber-bg, #fffbeb) !important;
   border-color: rgba(217, 119, 6, 0.24) !important;
-  color: var(--admin-color-warning) !important;
+  color: var(--mk-amber, #b45309) !important;
 }
 
 body.admin-route .el-tag--danger {
-  background: var(--admin-color-error-bg) !important;
+  background: var(--mk-red-bg, #fef2f2) !important;
   border-color: rgba(220, 38, 38, 0.24) !important;
-  color: var(--admin-color-error) !important;
+  color: var(--mk-red, #dc2626) !important;
 }
 
 body.admin-route .el-tag--info {
-  background: var(--admin-color-neutral-bg) !important;
+  background: #f0f2f5 !important;
   border-color: rgba(100, 116, 139, 0.2) !important;
-  color: var(--admin-color-neutral) !important;
+  color: var(--mk-muted, #5b6577) !important;
 }
 
 body.admin-route .el-input__wrapper,
 body.admin-route .el-select__wrapper,
 body.admin-route .el-textarea__inner {
-  border-radius: var(--admin-radius-sm) !important;
-  border-color: var(--admin-border-color) !important;
-  box-shadow: 0 0 0 1px var(--admin-border-color) inset !important;
+  border-radius: 8px !important;
+  border-color: var(--mk-line, #e6ebf4) !important;
+  box-shadow: 0 0 0 1px var(--mk-line, #e6ebf4) inset !important;
+}
+
+body.admin-route .el-input__wrapper:hover,
+body.admin-route .el-select__wrapper:hover {
+  box-shadow: 0 0 0 1px #c6d4ea inset !important;
 }
 
 body.admin-route .el-input__wrapper.is-focus,
 body.admin-route .el-select__wrapper.is-focused,
 body.admin-route .el-textarea__inner:focus {
-  box-shadow: 0 0 0 1px var(--admin-text-brand) inset, 0 0 0 3px rgba(52, 120, 246, 0.12) !important;
-}
-
-body.admin-route .el-table {
-  border-color: var(--admin-border-color) !important;
-  border-radius: var(--admin-radius-md) !important;
-}
-
-body.admin-route .el-table th.el-table__cell {
-  background: var(--admin-bg-surface-alt) !important;
-  color: var(--admin-text-secondary) !important;
-  font-size: var(--admin-text-caption);
-}
-
-body.admin-route .el-dialog,
-body.admin-route .el-drawer {
-  background: var(--admin-bg-surface) !important;
-  border: var(--admin-border) !important;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.18) !important;
+  box-shadow: 0 0 0 1px var(--mk-blue, #2c63d0) inset, 0 0 0 3px rgba(44, 99, 208, 0.12) !important;
 }
 
 body.admin-route .el-dialog {
+  border: 1px solid var(--mk-line, #e6ebf4);
+  background: var(--mk-surface, #fff);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.18);
+  border-radius: 16px !important;
   max-width: calc(100vw - 24px);
-  border-radius: var(--admin-radius-lg) !important;
 }
 
-body.admin-route .el-drawer__header,
 body.admin-route .el-dialog__header {
   padding: 16px 20px 14px;
   margin: 0;
-  border-bottom: var(--admin-border);
+  border-bottom: 1px solid var(--mk-line, #e6ebf4);
 }
 
-body.admin-route .el-drawer__body,
+body.admin-route .el-dialog__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--mk-ink, #1a2a44);
+}
+
 body.admin-route .el-dialog__body {
   padding: 16px 20px;
-  background: var(--admin-bg-surface);
+  background: var(--mk-surface, #fff);
 }
 
-body.admin-route .el-drawer__body {
-  min-width: 0;
-  overflow-x: hidden;
-}
-
-body.admin-route .el-drawer__body > *,
-body.admin-route .el-drawer .el-tabs,
-body.admin-route .el-drawer .el-tabs__content,
-body.admin-route .el-drawer .el-tab-pane {
-  min-width: 0;
-  max-width: 100%;
-}
-
-body.admin-route .el-drawer__footer,
 body.admin-route .el-dialog__footer {
   padding: 12px 20px 16px;
-  border-top: var(--admin-border-subtle);
-}
-
-body.admin-route .el-pagination button,
-body.admin-route .el-pagination .el-pager li {
-  border-radius: var(--admin-radius-sm) !important;
-}
-
-body.admin-route :is(button, a, [role='button'], input, textarea, select):focus-visible {
-  outline: 2px solid var(--admin-text-brand);
-  outline-offset: 2px;
+  border-top: 1px solid rgba(209, 218, 235, 0.7);
 }
 
 @media (max-width: 768px) {
-  body.admin-route .el-drawer.rtl,
-  body.admin-route .el-drawer.ltr {
-    width: 100vw !important;
-    max-width: 100vw !important;
-  }
-
   body.admin-route .el-dialog {
     width: calc(100vw - 24px) !important;
     margin-top: 12px !important;
@@ -456,68 +365,11 @@ body.admin-route :is(button, a, [role='button'], input, textarea, select):focus-
     max-height: calc(100dvh - 150px);
     overflow-y: auto;
   }
-
-  body.admin-route .el-form-item {
-    display: block;
-  }
-
-  body.admin-route .el-form-item__label {
-    width: auto !important;
-    height: auto;
-    padding: 0 0 6px;
-    justify-content: flex-start;
-  }
-
-  body.admin-route .el-form-item__content {
-    margin-left: 0 !important;
-  }
-
-  body.admin-route .el-pagination__total,
-  body.admin-route .el-pagination__sizes,
-  body.admin-route .el-pagination__jump {
-    display: none !important;
-  }
-
-  body.admin-route .admin-filter-panel,
-  body.admin-route .admin-list-toolbar,
-  body.admin-route .admin-list-card,
-  body.admin-route .admin-page-header {
-    min-width: 0;
-    max-width: 100%;
-  }
-
-  body.admin-route .admin-filter-field .el-input,
-  body.admin-route .admin-filter-field .el-select,
-  body.admin-route .admin-filter-field .el-date-editor {
-    width: 100% !important;
-  }
 }
 
 @media (max-width: 768px), (pointer: coarse) {
-  body.admin-route .el-button,
-  body.admin-route .el-checkbox,
-  body.admin-route .el-radio,
-  body.admin-route .el-tabs__item {
+  body.admin-route .el-button {
     min-height: 44px;
-  }
-
-  body.admin-route .el-button.is-circle,
-  body.admin-route .admin-icon-button {
-    min-width: 44px;
-    width: 44px;
-    min-height: 44px;
-    height: 44px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  body.admin-route *,
-  body.admin-route *::before,
-  body.admin-route *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
   }
 }
 

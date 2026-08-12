@@ -300,8 +300,8 @@ export const liveLogsPage = ref(1)
 /** 后端是否还有更多页：最近一次响应条数达到分页上限视为有（空页会自动翻转为 false） */
 export const liveLogsHasMore = ref(false)
 
-/** 执行日志服务端分页条数（后端默认 20，前端固定 100） */
-const LOGS_PAGE_SIZE = 100
+/** 执行日志服务端分页条数（滚动修复 #5：100 → 30，首屏不再 4.7 屏；后端默认 20） */
+const LOGS_PAGE_SIZE = 30
 
 /* 服务端查询串行化：同一时刻只发一个请求，期间的更新以最新参数重拉（last-wins），
    保证「加载更多（追加第 N 页）」与「筛选重查（回第 1 页）」并发时状态一致 */

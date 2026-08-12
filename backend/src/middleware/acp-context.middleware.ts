@@ -16,7 +16,7 @@ import { RequestContext, SourceEntry, requestContextStorage } from '../gateway/a
  * 
  * 分类说明：
  * - user: 用户侧调用（用户界面发起）
- * - test: 测试站点调用（admin/test 路由或 X-Source-Entry header）
+ * - test: 测试站点调用（X-Source-Entry header）
  * - admin: Admin 后台调用
  * - platform: 平台内部服务调用
  */

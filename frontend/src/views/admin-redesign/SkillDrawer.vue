@@ -382,7 +382,7 @@ const entity = computed(() => skillProfile.value || agentProfile.value)
 /* 身份色：与 Agent 拓扑同套阶段色（按所属 Agent 取色） */
 const tone = computed(() => {
   const key = skillProfile.value ? skillProfile.value.agentId : intent.skillDrawerId
-  return AGENT_TONES[key || ''] || { hue: '#3478f6', soft: 'rgba(52, 120, 246, 0.1)' }
+  return AGENT_TONES[key || ''] || { hue: '#2c63d0', soft: 'rgba(44, 99, 208, 0.1)' }
 })
 
 /** 头部图标：skill 按类别，agent 用层叠形 */
@@ -863,7 +863,7 @@ function goFullEditor() {
 .msk__head {
   padding: 16px 18px 14px;
   border-bottom: 1px solid var(--mk-line);
-  background: linear-gradient(180deg, var(--soft, rgba(52, 120, 246, 0.06)), rgba(255, 255, 255, 0) 90%);
+  background: linear-gradient(180deg, var(--soft, rgba(44, 99, 208, 0.06)), rgba(255, 255, 255, 0) 90%);
   display: grid;
   gap: 10px;
 }
@@ -1057,7 +1057,7 @@ function goFullEditor() {
   cursor: pointer;
   transition: border-color 0.12s ease, background 0.12s ease;
 }
-.msk__row:hover { border-color: rgba(52, 120, 246, 0.35); background: #f8fbff; }
+.msk__row:hover { border-color: rgba(44, 99, 208, 0.35); background: #f8fbff; }
 .msk__dot { width: 7px; height: 7px; border-radius: 50%; }
 .msk__dot.is-ok { background: var(--mk-green); }
 .msk__dot.is-warn { background: var(--mk-amber); }
@@ -1111,7 +1111,7 @@ function goFullEditor() {
   gap: 8px;
 }
 .msk__field--check span { font-size: 12px; color: #5b6577; font-weight: 600; }
-.msk__field--check input { width: 15px; height: 15px; accent-color: #3478f6; }
+.msk__field--check input { width: 15px; height: 15px; accent-color: #2c63d0; }
 .msk__field-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1127,7 +1127,7 @@ function goFullEditor() {
   background: #fff;
   width: 100%;
 }
-.msk__input:focus { outline: none; border-color: #3478f6; }
+.msk__input:focus { outline: none; border-color: #2c63d0; }
 .msk__effective {
   margin: 0;
   padding: 8px 10px;
@@ -1166,7 +1166,7 @@ function goFullEditor() {
   resize: vertical;
   line-height: 1.55;
 }
-.msk__test-input:focus { outline: none; border-color: #3478f6; }
+.msk__test-input:focus { outline: none; border-color: #2c63d0; }
 
 /* 代码井（Prompt 预览 / 试跑输出） */
 .msk__code {
@@ -1236,7 +1236,7 @@ function goFullEditor() {
 .mk-link {
   border: 0;
   background: transparent;
-  color: #3478f6;
+  color: #2c63d0;
   font: inherit;
   font-weight: 700;
   font-size: 12px;
@@ -1283,7 +1283,7 @@ function goFullEditor() {
 .msk__op {
   border: 0;
   background: transparent;
-  color: #3478f6;
+  color: #2c63d0;
   font: inherit;
   font-size: 12px;
   font-weight: 700;
@@ -1352,9 +1352,9 @@ function goFullEditor() {
 /* 底部主操作 */
 .msk__section--actions { padding-top: 2px; }
 .msk__primary-link {
-  border: 1px solid rgba(52, 120, 246, 0.35);
+  border: 1px solid rgba(44, 99, 208, 0.35);
   background: #eef5ff;
-  color: #3478f6;
+  color: #2c63d0;
   font: inherit;
   font-weight: 700;
   font-size: 12.5px;

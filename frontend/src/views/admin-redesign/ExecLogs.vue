@@ -64,7 +64,7 @@
       <button type="button" @click="retryLiveLogs">重试</button>
     </div>
     <MockSkeletonTable v-else-if="(liveLoading || liveLogsLoading) && !logs.length" :cols="4" :rows="6" />
-    <div v-else-if="filtered.length" class="log-body" role="log">
+    <div v-else-if="filtered.length" class="log-body">
       <div class="tline-head" aria-hidden="true">
         <span class="tline-head__time">时间</span>
         <span class="tline-head__kind">类型</span>
@@ -92,11 +92,11 @@
           <span class="tline__agent mono" @click.stop="openSkillDrawer(log.agent)">{{ log.stage }}</span>
           <span class="tline__msg" :title="[log.title, log.detail].filter(Boolean).join(' · ')">
             <b>{{ log.title }}</b>
-            <span v-if="log.errorCode" class="tline__errcode mono">[{{ log.errorCategory || 'err' }}] {{ log.errorCode }}</span>
+            <span v-if="log.errorCode" class="tline__errcode mono">{{ errorCodeLabel(log.errorCode) ?? `[${log.errorCategory || 'err'}] ${log.errorCode}` }}</span>
             <span v-if="log.statusCode && log.statusCode >= 400" class="tline__http mono">HTTP {{ log.statusCode }}</span>
             <em v-if="log.detail">{{ log.detail }}</em>
             <span v-if="log.recoveredByRetry" class="tline__recovered">重试 {{ (log.attempts || 1) - 1 }} 次后成功</span>
-            <span v-if="promptOf(log)?.drift" class="tline__drift">漂移</span>
+            <span v-if="promptOf(log)?.drift" class="tline__drift">{{ TERMS.driftRuntime }}</span>
             <span v-if="promptOf(log)?.tokens" class="tline__tokens mono">{{ promptOf(log)!.tokens }}</span>
             <span v-if="log.model" class="tline__model mono">{{ log.model }}</span>
             <span
@@ -146,7 +146,7 @@
                       <span v-if="a.routeSource">路由 {{ a.routeSource }}</span>
                       <span v-if="a.endpointHost">{{ a.endpointHost }}</span>
                     </div>
-                    <p v-if="a.errorMessage" class="tline-attempt__err">{{ a.errorCategory ? `[${a.errorCategory}] ` : '' }}{{ a.errorCode ? `${a.errorCode} · ` : '' }}{{ a.errorMessage }}</p>
+                    <p v-if="a.errorMessage" class="tline-attempt__err">{{ a.errorCode ? `${errorCodeLabel(a.errorCode) ?? a.errorCode} · ` : '' }}{{ a.errorMessage }}</p>
                   </div>
                 </div>
               </div>
@@ -171,9 +171,9 @@
                 <span class="tline__label">Prompt 契约</span>
                 <div class="tline__prompt-meta mono">
                   <span>版本 v{{ promptOf(log)!.version || '—' }}</span>
-                  <span v-if="promptOf(log)!.drift" class="tline__prompt-drift">漂移</span>
+                  <span v-if="promptOf(log)!.drift" class="tline__prompt-drift">{{ TERMS.driftRuntime }}</span>
                   <span v-if="promptOf(log)!.tokens">{{ promptOf(log)!.tokens }}</span>
-                  <span v-if="promptOf(log)!.errorCode">[{{ promptOf(log)!.errorCode }}] {{ promptOf(log)!.errorMessage }}</span>
+                  <span v-if="promptOf(log)!.errorCode">{{ errorCodeLabel(promptOf(log)!.errorCode) ?? `[${promptOf(log)!.errorCode}]` }} {{ promptOf(log)!.errorMessage }}</span>
                 </div>
                 <pre v-if="promptOf(log)!.userPayload">{{ promptOf(log)!.userPayload }}</pre>
                 <pre v-if="promptOf(log)!.rawModelOutput">{{ promptOf(log)!.rawModelOutput }}</pre>
@@ -209,6 +209,7 @@ import { spans, intent, openTrace, openSession, openSkillDrawer, clearInvestigat
 import { fetchLogDetail, reloadLiveSpans, loadMoreLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsHasMore, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow } from './live'
 import { useLoadMore } from './useLoadMore'
 import MockSkeletonTable from './SkeletonTable.vue'
+import { TERMS, errorCodeLabel } from './terms'
 
 const openId = ref('')
 const statusFilter = ref('')
@@ -339,9 +340,9 @@ const filtered = computed(() =>
   })
 )
 
-/* 长列表分批渲染：每批 50 行（demo）；live 模式展示服务端已加载的全部行，
+/* 长列表分批渲染：每批 30 行（demo，滚动修复 #5 与 live 对齐）；live 模式展示服务端已加载的全部行，
    「加载更多」改为拉取后端下一页（liveLogsHasMore 驱动按钮显隐） */
-const { shown: demoShown, canMore: demoCanMore, loadMore: demoLoadMore } = useLoadMore(filtered, 50)
+const { shown: demoShown, canMore: demoCanMore, loadMore: demoLoadMore } = useLoadMore(filtered, 30)
 const shown = computed(() => (isLive.value ? filtered.value : demoShown.value))
 const canMore = computed(() => (isLive.value ? liveLogsHasMore.value : demoCanMore.value))
 function loadMore() {
@@ -507,8 +508,8 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   cursor: pointer;
   white-space: nowrap;
 }
-.log-adv:hover { border-color: rgba(52, 120, 246, 0.4); color: var(--mk-ink); }
-.log-adv--on { border-color: rgba(52, 120, 246, 0.5); color: var(--mk-blue); background: #eef5ff; }
+.log-adv:hover { border-color: rgba(44, 99, 208, 0.4); color: var(--mk-ink); }
+.log-adv--on { border-color: rgba(44, 99, 208, 0.5); color: var(--mk-blue); background: #eef5ff; }
 .log-adv__caret { font-style: normal; font-size: 10px; transition: transform 0.15s ease; }
 .log-adv__caret.is-open { transform: rotate(180deg); }
 .log-advpanel {
@@ -769,7 +770,7 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
 .tline__trace { font-size: 11px; color: var(--mk-faint); text-align: right; }
 .tline__arrow { font-size: 11px; color: var(--mk-faint); text-align: right; transition: transform 0.15s ease; }
 .tline--open .tline__arrow { transform: rotate(90deg); }
-.tline__session { font-size: 11px; color: #3478f6; cursor: pointer; }
+.tline__session { font-size: 11px; color: var(--mk-blue, #2c63d0); cursor: pointer; }
 .tline__session:hover { text-decoration: underline; }
 .tline__trace:hover { color: var(--mk-amber); text-decoration: underline; }
 

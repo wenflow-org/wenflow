@@ -1098,14 +1098,14 @@ function formatRunResult(result: string) {
   transition: border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
 }
 .vp-story-item:focus-visible {
-  outline: 2px solid rgba(52, 120, 246, 0.85);
+  outline: 2px solid rgba(44, 99, 208, 0.85);
   outline-offset: -2px;
 }
-.vp-story-item:hover { border-color: rgba(52, 120, 246, 0.35); }
+.vp-story-item:hover { border-color: rgba(44, 99, 208, 0.35); }
 .vp-story-item.is-selected {
   background: #f6faff;
-  border-color: rgba(52, 120, 246, 0.5);
-  box-shadow: 0 0 0 1px rgba(52, 120, 246, 0.15), var(--mk-shadow-sm);
+  border-color: rgba(44, 99, 208, 0.5);
+  box-shadow: 0 0 0 1px rgba(44, 99, 208, 0.15), var(--mk-shadow-sm);
 }
 .vp-story-item__head {
   display: flex;
@@ -1178,7 +1178,7 @@ function formatRunResult(result: string) {
   color: var(--mk-muted);
 }
 .vp-pipe__stage.is-on { color: var(--mk-muted); }
-.vp-pipe__stage.is-on b { color: var(--mk-blue, #3478f6); }
+.vp-pipe__stage.is-on b { color: var(--mk-blue, #2c63d0); }
 .vp-pipe__arrow { font-style: normal; color: #c4ccd9; }
 .vp-pipe__links {
   display: inline-flex;
@@ -1190,7 +1190,7 @@ function formatRunResult(result: string) {
   background: none;
   padding: 0;
   font: inherit;
-  color: var(--mk-blue, #3478f6);
+  color: var(--mk-blue, #2c63d0);
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
@@ -1287,7 +1287,7 @@ function formatRunResult(result: string) {
   padding: 12px 14px;
   border-radius: 12px;
   background: #eef5ff;
-  border: 1px solid rgba(52, 120, 246, 0.18);
+  border: 1px solid rgba(44, 99, 208, 0.18);
   color: #1f57cc;
   font-size: 13px;
   line-height: 1.6;
@@ -1324,14 +1324,14 @@ function formatRunResult(result: string) {
   text-align: center;
 }
 .vp-tool:hover:not(:disabled) {
-  border-color: rgba(52, 120, 246, 0.35);
+  border-color: rgba(44, 99, 208, 0.35);
   color: var(--mk-blue);
   background: #f7faff;
 }
 .vp-tool:disabled { opacity: 0.55; cursor: default; }
 .vp-tool--primary {
   grid-column: 1 / -1;
-  background: linear-gradient(135deg, #3478f6, #1f57cc);
+  background: linear-gradient(135deg, #2c63d0, #1f57cc);
   border-color: transparent;
   color: #fff;
 }

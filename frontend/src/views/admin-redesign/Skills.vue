@@ -20,9 +20,9 @@
           <option value="all">全部</option>
         </select>
       </label>
-      <div class="sk-view">
-        <button type="button" class="sk-view__btn" :class="{ 'sk-view__btn--active': view === 'list' }" @click="view = 'list'">列表</button>
-        <button type="button" class="sk-view__btn" :class="{ 'sk-view__btn--active': view === 'grid' }" @click="view = 'grid'">网格</button>
+      <div class="mk-pills">
+        <button type="button" class="mk-pill" :class="{ 'mk-pill--active': view === 'list' }" @click="view = 'list'">列表</button>
+        <button type="button" class="mk-pill" :class="{ 'mk-pill--active': view === 'grid' }" @click="view = 'grid'">网格</button>
       </div>
     </div>
 
@@ -72,7 +72,7 @@
             <tr v-for="s in shown" :key="s.id" class="sk-row" @click="openSkillDrawer(s.id)">
               <td>
                 <div class="sk-cell">
-                  <span class="sk-dot" :class="`sk-dot--${s.health}`"></span>
+                  <span class="sk-dot" :class="`sk-dot--${s.health}`" :title="s.health === 'ok' ? '健康' : s.health === 'error' ? '异常' : '空闲'"></span>
                   <div class="mk-cell-main">
                     <strong class="sk-id-main" :title="s.name">{{ s.id }}</strong>
                     <span class="sk-name-desc" :title="s.name">{{ s.name }}</span>
@@ -129,6 +129,7 @@
         <strong>{{ onlyAttention ? '没有需关注的 Skill' : keyword ? '没有匹配的 Skill' : '暂无运行数据' }}</strong>
         <span v-if="onlyAttention">一切健康。</span>
         <span v-else-if="keyword">换个关键词试试。</span>
+        <button v-if="isFiltered" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
       </div>
       </template>
       <div v-if="canMore" class="sk-more">
@@ -136,9 +137,10 @@
       </div>
     </div>
 
-    <!-- 技能对账面板（SKILL_READINESS_SPEC §4.2）：户口簿 × manifest × 注册 × ACTIVE + 完成度 -->
-    <div class="mk-card sk-rec">
-      <div class="mk-card__head">
+    <!-- 技能对账面板（SKILL_READINESS_SPEC §4.2）：户口簿 × manifest × 注册 × ACTIVE + 完成度
+         滚动修复 #4：整卡默认折叠（details），展开后表内 10 行/页，不再把页面撑到 3.5 屏 -->
+    <details class="mk-card sk-rec" :open="recOpen">
+      <summary class="mk-card__head sk-rec__summary">
         <div class="sk-rec__title">
           <strong>技能对账</strong>
           <span class="mk-card__meta">户口簿 × manifest × gateway 注册 × ACTIVE prompt</span>
@@ -152,9 +154,9 @@
             <span v-if="recReport.summary.orphanRegistrations" class="mk-pill sk-pill--bad">幽灵注册 {{ recReport.summary.orphanRegistrations }}</span>
             <span v-else class="mk-pill">幽灵注册 0</span>
           </div>
-          <button type="button" class="sk-rec__refresh" :disabled="recLoading" @click="refreshReconciliation">刷新</button>
+          <button type="button" class="sk-rec__refresh" :disabled="recLoading" @click.stop="refreshReconciliation">刷新</button>
         </template>
-      </div>
+      </summary>
 
       <div v-if="recError" class="mk-empty">
         <strong>对账数据加载失败</strong>
@@ -179,45 +181,45 @@
               </tr>
             </thead>
             <tbody>
-              <template v-for="group in recGroups" :key="group.parentAgent">
-                <tr class="sk-rec-group">
+              <template v-for="(e, i) in recPageRows" :key="e.kind === 'group' ? `g-${e.group.parentAgent}-${i}` : e.row.skillId">
+                <tr v-if="e.kind === 'group'" class="sk-rec-group">
                   <td colspan="7">
-                    <span class="sk-rec-group__name">{{ group.parentAgent }}</span>
-                    <span class="sk-rec-group__meta">下辖 {{ group.items.length }} 条</span>
-                    <span class="sk-rec-group__meta">live {{ group.liveCount }} / {{ group.items.length }}</span>
+                    <span class="sk-rec-group__name">{{ e.group.parentAgent }}</span>
+                    <span class="sk-rec-group__meta">下辖 {{ e.group.items.length }} 条</span>
+                    <span class="sk-rec-group__meta">live {{ e.group.liveCount }} / {{ e.group.items.length }}</span>
                   </td>
                 </tr>
-                <tr v-for="row in group.items" :key="row.skillId" class="sk-row" @click="openSkillDrawer(row.skillId)">
+                <tr v-else class="sk-row" @click="openSkillDrawer(e.row.skillId)">
                   <td>
                     <div class="sk-cell">
-                      <span class="sk-dot" :class="`sk-dot--${recDotTone(row)}`"></span>
+                      <span class="sk-dot" :class="`sk-dot--${recDotTone(e.row)}`" :title="recDotTone(e.row) === 'ok' ? '健康' : recDotTone(e.row) === 'error' ? '异常' : '空闲'"></span>
                       <div class="mk-cell-main">
-                        <strong class="sk-id-main" style="max-width:340px">{{ row.skillId }}</strong>
-                        <span class="sk-name-desc" style="max-width:340px">{{ row.displayName || recKindText(row.kind) }}<template v-if="row.stage"> · {{ row.stage }}</template></span>
+                        <strong class="sk-id-main" style="max-width:340px">{{ e.row.skillId }}</strong>
+                        <span class="sk-name-desc" style="max-width:340px">{{ e.row.displayName || recKindText(e.row.kind) }}<template v-if="e.row.stage"> · {{ e.row.stage }}</template></span>
                       </div>
                     </div>
                   </td>
                   <td><span class="sk-rec-yn sk-rec-yn--ok">✓</span></td>
                   <td>
-                    <span :class="['sk-rec-yn', row.manifest ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ row.manifest ? '✓' : '✗' }}</span>
-                    <span v-if="row.kind === 'aux' && !row.manifest" class="sk-rec-tag">F12 豁免</span>
+                    <span :class="['sk-rec-yn', e.row.manifest ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ e.row.manifest ? '✓' : '✗' }}</span>
+                    <span v-if="e.row.kind === 'aux' && !e.row.manifest" class="sk-rec-tag">F12 豁免</span>
                   </td>
                   <td>
-                    <span :class="['sk-rec-yn', row.registered ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ row.registered ? '✓' : '✗' }}</span>
-                    <span v-if="row.registrationExempt" class="sk-rec-tag">豁免</span>
+                    <span :class="['sk-rec-yn', e.row.registered ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ e.row.registered ? '✓' : '✗' }}</span>
+                    <span v-if="e.row.registrationExempt" class="sk-rec-tag">豁免</span>
                   </td>
                   <td>
-                    <span :class="['sk-rec-yn', row.active ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ row.active ? '✓' : '✗' }}</span>
-                    <span v-if="row.noPromptFile" class="sk-rec-tag">handler-only</span>
+                    <span :class="['sk-rec-yn', e.row.active ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ e.row.active ? '✓' : '✗' }}</span>
+                    <span v-if="e.row.noPromptFile" class="sk-rec-tag">handler-only</span>
                   </td>
                   <td>
-                    <span class="sk-rec-badge" :class="`sk-rec-badge--${row.completion.status}`" :title="recGateDetail(row.completion)">
-                      {{ recStatusText(row.completion.status) }}
+                    <span class="mk-badge" :class="`mk-badge--rec-${e.row.completion.status}`" :title="recGateDetail(e.row.completion)">
+                      {{ recStatusText(e.row.completion.status) }}
                     </span>
                   </td>
                   <td>
-                    <span v-if="row.diff === 'unregistered'" class="sk-rec-diff sk-rec-diff--bad">未注册</span>
-                    <span v-else-if="row.diff === 'active-missing'" class="sk-rec-diff sk-rec-diff--warn">缺 ACTIVE</span>
+                    <span v-if="e.row.diff === 'unregistered'" class="sk-rec-diff sk-rec-diff--bad">未注册</span>
+                    <span v-else-if="e.row.diff === 'active-missing'" class="sk-rec-diff sk-rec-diff--warn">缺 ACTIVE</span>
                     <span v-else class="mk-na">—</span>
                   </td>
                 </tr>
@@ -225,13 +227,18 @@
             </tbody>
           </table>
         </div>
+        <div v-if="recCanMore" class="sk-rec__more">
+          <button type="button" class="mk-link" @click="recLoadMore">
+            加载更多对账行（已显示 {{ recShown.length }} / {{ recFlat.length }}）
+          </button>
+        </div>
         <div v-if="recReport.orphanRegistrations.length" class="sk-rec-orphans">
           <strong>幽灵注册残留（注册表有、户口簿无）</strong>
           <span v-for="orphan in recReport.orphanRegistrations" :key="orphan.name" class="sk-rec-tag sk-rec-tag--bad">{{ orphan.name }}</span>
         </div>
         <div class="sk-rec-legend">
           <span v-for="s in recStatusOrder" :key="s" class="sk-rec-legend__item">
-            <i class="sk-rec-badge" :class="`sk-rec-badge--${s}`"></i>{{ recStatusText(s) }}
+            <i class="mk-badge" :class="`mk-badge--rec-${s}`"></i>{{ recStatusText(s) }}
           </span>
           <span class="mk-card__meta" style="margin-left:auto">点击行进入设计页 · {{ recReport.generatedAt ? '对账于 ' + new Date(recReport.generatedAt).toLocaleString() : '' }}</span>
         </div>
@@ -240,7 +247,7 @@
         <strong>对账面板需要真实数据</strong>
         <span>请切换到「真实数据」模式后查看（户口簿/manifest/注册表/ACTIVE 为后端快照）。</span>
       </div>
-    </div>
+    </details>
   </div>
 </template>
 
@@ -357,6 +364,13 @@ const filtered = computed(() => {
 const activeCount = computed(() => cards.value.filter((c) => c.calls > 0).length)
 const errorCount = computed(() => cards.value.filter((c) => c.errors > 0).length)
 
+const isFiltered = computed(() => onlyAttention.value || !!keyword.value.trim() || !!categoryFilter.value)
+function clearFilters() {
+  onlyAttention.value = false
+  keyword.value = ''
+  categoryFilter.value = ''
+}
+
 /* 长列表分批渲染：每批 15 行 */
 const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
 
@@ -373,6 +387,8 @@ const successRate = (s: { calls: number; errors: number }) =>
 const recReport = ref<SkillReconciliationReport | null>(null)
 const recLoading = ref(false)
 const recError = ref('')
+/** 滚动修复 #4：对账卡默认折叠（32 行分组表不再默认撑长页面） */
+const recOpen = ref(false)
 
 async function refreshReconciliation() {
   if (!isLive.value) return
@@ -404,9 +420,13 @@ const recStatusText = (status: string) =>
 
 /** 对账面板按 parentAgent 分组（P2：goal-agent 下辖 N 条 节头）；无 parentAgent 归"未归属" */
 const REC_AGENT_ORDER = ['goal-agent', 'path-agent', 'teaching-agent', 'profile-agent', 'simulation-agent']
-const recGroups = computed(() => {
+type RecRow = SkillReconciliationReport['items'][number]
+interface RecGroup { parentAgent: string; items: RecRow[]; liveCount: number }
+type RecEntry = { kind: 'group'; group: RecGroup } | { kind: 'row'; row: RecRow }
+
+const recGroups = computed<RecGroup[]>(() => {
   if (!recReport.value) return []
-  const groups = new Map<string, SkillReconciliationReport['items']>()
+  const groups = new Map<string, RecRow[]>()
   for (const row of recReport.value.items) {
     const key = row.parentAgent || '未归属'
     const list = groups.get(key) || []
@@ -429,6 +449,40 @@ const recGroups = computed(() => {
       liveCount: items.filter((row) => row.completion.status === 'live').length,
     }
   })
+})
+
+/** 滚动修复 #4：对账行展平（组头 + 行）→ 10 行/页分页 */
+const recFlat = computed<RecEntry[]>(() => {
+  const out: RecEntry[] = []
+  for (const g of recGroups.value) {
+    out.push({ kind: 'group', group: g })
+    for (const row of g.items) out.push({ kind: 'row', row })
+  }
+  return out
+})
+const { shown: recShown, canMore: recCanMore, loadMore: recLoadMore } = useLoadMore(recFlat, 10)
+
+/** 分页切片跨组时自动补组头（组头仅在当前页首现时渲染，重复组头 = 分页边界标识，数据不丢） */
+const recPageRows = computed<RecEntry[]>(() => {
+  const seen = new Set<string>()
+  const out: RecEntry[] = []
+  for (const e of recShown.value) {
+    if (e.kind === 'group') {
+      seen.add(e.group.parentAgent)
+      out.push(e)
+    } else {
+      const key = e.row.parentAgent || '未归属'
+      if (!seen.has(key)) {
+        const g = recGroups.value.find((x) => x.parentAgent === key)
+        if (g) {
+          out.push({ kind: 'group', group: g })
+          seen.add(key)
+        }
+      }
+      out.push(e)
+    }
+  }
+  return out
 })
 
 const recKindText = (kind: string) =>
@@ -460,13 +514,6 @@ function recGateDetail(completion: SkillCompletion): string {
 
 <style scoped>
 /* 视图切换 */
-.sk-view {
-  display: inline-flex;
-  gap: 3px;
-  padding: 2px;
-  background: #eef2fa;
-  border-radius: 10px;
-}
 .sk-range-wrap {
   display: inline-flex;
   align-items: center;
@@ -483,19 +530,6 @@ function recGateDetail(completion: SkillCompletion): string {
   color: var(--mk-muted, #5a6a85);
   background: #fff;
 }
-.sk-view__btn {
-  border: 0;
-  background: transparent;
-  padding: 4px 10px;
-  border-radius: 6px;
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--mk-muted);
-  cursor: pointer;
-}
-.sk-view__btn--active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 2px rgba(23, 32, 51, 0.1); }
-
 /* 列表视图 */
 /* 可排序表头：button 包裹表头文字，样式重置为继承 th 外观 */
 .sk-sort {
@@ -574,7 +608,7 @@ function recGateDetail(completion: SkillCompletion): string {
   cursor: pointer;
   transition: 0.14s ease;
 }
-.sk-card:hover { border-color: rgba(52, 120, 246, 0.35); transform: translateY(-1px); }
+.sk-card:hover { border-color: rgba(44, 99, 208, 0.35); transform: translateY(-1px); }
 .sk-card--error { border-color: rgba(220, 38, 38, 0.4); background: linear-gradient(180deg, #fff7f7, #fff); }
 
 .sk-card__head { display: flex; align-items: center; gap: 7px; }
@@ -633,13 +667,30 @@ function recGateDetail(completion: SkillCompletion): string {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--mk-blue, #3478f6);
+  background: var(--mk-blue, #2c63d0);
   margin-right: 6px;
   flex-shrink: 0;
 }
 
 /* ================= 技能对账面板（SKILL_READINESS_SPEC §4.2） ================= */
 .sk-rec { margin-top: 14px; }
+/* 滚动修复 #4：对账卡 details 折叠（summary = 卡头） */
+.sk-rec__summary { cursor: pointer; user-select: none; list-style: none; }
+.sk-rec__summary::-webkit-details-marker { display: none; }
+.sk-rec__summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--mk-blue, #2c63d0);
+  transition: transform 0.14s ease;
+}
+.sk-rec[open] > .sk-rec__summary::before { transform: rotate(90deg); }
+.sk-rec__more {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 10px;
+  border-top: 1px dashed var(--mk-line);
+}
 .sk-rec__title { display: flex; flex-direction: column; gap: 2px; }
 .sk-rec__title strong { font-size: 14px; }
 .sk-rec__loading { color: var(--mk-faint); font-size: 12px; margin-left: auto; }
@@ -657,7 +708,7 @@ function recGateDetail(completion: SkillCompletion): string {
   cursor: pointer;
   white-space: nowrap;
 }
-.sk-rec__refresh:hover { border-color: rgba(52, 120, 246, 0.4); color: var(--mk-blue); }
+.sk-rec__refresh:hover { border-color: rgba(44, 99, 208, 0.4); color: var(--mk-blue); }
 .sk-rec__refresh:disabled { opacity: 0.5; cursor: default; }
 .sk-rec__skeleton { display: grid; gap: 8px; padding: 12px; }
 .sk-rec__skeleton span { height: 26px; border-radius: 8px; background: linear-gradient(90deg, #eef2fa, #f7f9fc, #eef2fa); background-size: 200% 100%; animation: sk-rec-shimmer 1.2s infinite; }
@@ -681,21 +732,6 @@ function recGateDetail(completion: SkillCompletion): string {
 .sk-rec-tag--bad { background: #fdecec; color: var(--mk-red-strong, #b91c1c); }
 
 /* 完成度五档色标：draft → live */
-.sk-rec-badge {
-  display: inline-block;
-  padding: 2px 9px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-  color: #fff;
-}
-.sk-rec-badge--draft { background: #6b7280; }
-.sk-rec-badge--handler-ready { background: #b45309; }
-.sk-rec-badge--core-ready { background: #1f57cc; }
-.sk-rec-badge--fields-synced { background: #0f766e; }
-.sk-rec-badge--live { background: #15803d; }
-
 .sk-rec-diff { font-size: 11px; font-weight: 700; }
 .sk-rec-diff--bad { color: var(--mk-red, #dc2626); }
 .sk-rec-diff--warn { color: var(--mk-amber, #d97706); }
@@ -722,7 +758,7 @@ function recGateDetail(completion: SkillCompletion): string {
   font-family: var(--mk-mono);
   font-size: 11.5px;
   font-weight: 700;
-  color: var(--mk-blue, #3478f6);
+  color: var(--mk-blue, #2c63d0);
 }
 .sk-rec-group__meta {
   margin-left: 8px;
@@ -742,5 +778,27 @@ function recGateDetail(completion: SkillCompletion): string {
   color: var(--mk-muted);
 }
 .sk-rec-legend__item { display: inline-flex; align-items: center; gap: 5px; }
-.sk-rec-legend__item .sk-rec-badge { padding: 2px 8px; font-size: 10px; }
+.sk-rec-legend__item .mk-badge { padding: 2px 8px; font-size: 10px; }
+
+/* 大屏档位（mk 体系：2000 ≈×1.15，2800 ≈×1.17） */
+@media (min-width: 2000px) {
+  .sk-range-wrap { font-size: 13px; }
+  .sk-range { font-size: 13.5px; padding: 5px 10px; }
+  .sk-card__cat,
+  .sk-card__flag { font-size: 12px; }
+  .sk-rec__loading { font-size: 13.5px; }
+  .sk-rec-diff { font-size: 12.5px; }
+  .sk-rec-legend__item .mk-badge { font-size: 11.5px; }
+  .sk-dot { width: 10px; height: 10px; }
+}
+@media (min-width: 2800px) {
+  .sk-range-wrap { font-size: 15px; }
+  .sk-range { font-size: 16px; padding: 6px 12px; }
+  .sk-card__cat,
+  .sk-card__flag { font-size: 14px; }
+  .sk-rec__loading { font-size: 16px; }
+  .sk-rec-diff { font-size: 15px; }
+  .sk-rec-legend__item .mk-badge { font-size: 14px; }
+  .sk-dot { width: 12px; height: 12px; }
+}
 </style>

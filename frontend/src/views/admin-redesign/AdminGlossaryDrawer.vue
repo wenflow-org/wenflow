@@ -1,37 +1,48 @@
 <template>
   <Teleport to="body">
-    <div v-if="open" class="agd" @keydown.esc="close">
-      <div class="agd__mask" @click="close"></div>
-      <aside class="agd__panel" role="dialog" aria-label="运营术语表">
-        <div class="agd__head">
+    <div v-if="open" class="mk-drawer agd">
+      <div ref="maskRef" class="mk-drawer__mask"></div>
+      <aside ref="panelRef" class="mk-drawer__panel agd__panel" role="dialog" aria-label="运营术语表">
+        <div class="mk-drawer__head">
           <div class="agd__title">
             <strong>这是什么 · 运营术语表</strong>
             <span class="agd__subtitle">不懂的词在这里查一句话人话</span>
           </div>
-          <button type="button" class="agd__close" aria-label="关闭" @click="close">✕</button>
+          <button type="button" class="mk-drawer__close" aria-label="关闭" @click="close">✕</button>
         </div>
 
         <div class="agd__search">
-          <input v-model="keyword" type="search" class="agd__input" placeholder="搜索术语 / 定义…" />
-          <div class="agd__cats">
+          <input v-model="keyword" type="search" class="mk-input" placeholder="搜索术语 / 定义…" />
+          <div class="mk-pills">
             <button
               v-for="c in categories"
               :key="c.id"
               type="button"
-              class="agd__cat"
-              :class="{ 'is-active': category === c.id }"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': category === c.id }"
               @click="category = c.id"
             >{{ c.label }}（{{ countOf(c.id) }}）</button>
           </div>
+          <!-- 滚动修复 #10：分类锚点快速跳转（全部视图下显示；点击滚到对应分区） -->
+          <div v-if="category === 'all'" class="agd__nav">
+            <button
+              v-for="s in NAV"
+              :key="s.id"
+              type="button"
+              class="agd__nav-item"
+              :class="{ 'is-active': activeSection === s.id }"
+              @click="jumpToSection(s.id)"
+            >{{ s.label }}</button>
+          </div>
         </div>
 
-        <div class="agd__body">
+        <div ref="bodyRef" class="mk-drawer__body agd__body" @scroll.passive="onBodyScroll">
           <template v-if="dataSource === 'live' && !loaded">
             <div class="agd__loading">加载术语表中…</div>
           </template>
           <template v-else>
             <!-- 角色与流转 -->
-            <section v-if="showCategory('flow')" class="agd__section">
+            <section id="agd-sec-flow" v-if="showCategory('flow')" class="agd__section">
               <h4 class="agd__section-title">角色与流转</h4>
               <ul class="agd__list">
                 <li v-for="m in filteredRoles" :key="m.id" class="agd__term">
@@ -61,7 +72,7 @@
             </section>
 
             <!-- 状态：完成度五档 + 三分语义 -->
-            <section v-if="showCategory('status')" class="agd__section">
+            <section id="agd-sec-status" v-if="showCategory('status')" class="agd__section">
               <h4 class="agd__section-title">状态：完成度五档</h4>
               <ul class="agd__list">
                 <li v-for="m in filteredCompletion" :key="m.status" class="agd__term">
@@ -79,7 +90,7 @@
             </section>
 
             <!-- 阶段 -->
-            <section v-if="showCategory('stage')" class="agd__section">
+            <section id="agd-sec-stage" v-if="showCategory('stage')" class="agd__section">
               <h4 class="agd__section-title">五个阶段</h4>
               <ul class="agd__list">
                 <li v-for="s in filteredStages" :key="s.id" class="agd__term">
@@ -90,7 +101,7 @@
             </section>
 
             <!-- 概念 / 健康词条 -->
-            <section v-for="c in CATEGORY_SECTIONS" :key="c.id" v-show="showCategory(c.id)" class="agd__section">
+            <section v-for="c in CATEGORY_SECTIONS" :key="c.id" v-show="showCategory(c.id)" class="agd__section" :id="`agd-sec-${c.id}`">
               <h4 class="agd__section-title">{{ c.label }}</h4>
               <ul class="agd__list">
                 <li v-for="t in termsOf(c.id)" :key="t.term" class="agd__term">
@@ -102,7 +113,7 @@
             </section>
 
             <!-- 文档链接 -->
-            <section v-if="filteredDocs.length" class="agd__section">
+            <section id="agd-sec-docs" v-if="filteredDocs.length" class="agd__section">
               <h4 class="agd__section-title">文档链接</h4>
               <ul class="agd__list">
                 <li v-for="d in filteredDocs" :key="d.path" class="agd__term">
@@ -128,6 +139,8 @@ import { adminGlossaryApi } from '@/api/adminApi'
 import { dataSource } from './store'
 import { COMPLETION_META, SEMANTICS_META, DEMO_GLOSSARY_TERMS, DEMO_GLOSSARY_DOCS } from './glossaryMeta'
 import { errMsg } from './live'
+import { useEscape } from './useEscape'
+import { useOverlay, useMaskClose } from './useOverlay'
 
 interface PromptRoleMeta { id: string; label: string; hint: string }
 interface StageMeta { id: string; label: string; hint: string }
@@ -138,6 +151,12 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 const keyword = ref('')
 const category = ref<CategoryId>('all')
 const loaded = ref(false)
+const panelRef = ref<HTMLElement | null>(null)
+const maskRef = ref<HTMLElement | null>(null)
+
+useEscape(() => props.open, close)
+useOverlay(computed(() => props.open), panelRef)
+useMaskClose(maskRef, close)
 
 const promptRoles = ref<PromptRoleMeta[]>([])
 const completionStates = ref(COMPLETION_META)
@@ -161,6 +180,33 @@ const categories: Array<{ id: CategoryId; label: string }> = [
   { id: 'health', label: '健康' },
   { id: 'stage', label: '阶段' },
 ]
+
+/* 滚动修复 #10：分类锚点（全部视图下分区跳转 + 滚动高亮） */
+const NAV: Array<{ id: string; label: string }> = [
+  { id: 'flow', label: '角色流转' },
+  { id: 'status', label: '状态' },
+  { id: 'stage', label: '阶段' },
+  { id: 'concept', label: '概念' },
+  { id: 'health', label: '健康' },
+  { id: 'docs', label: '文档' },
+]
+const bodyRef = ref<HTMLElement | null>(null)
+const activeSection = ref('flow')
+
+function jumpToSection(id: string) {
+  const el = bodyRef.value?.querySelector<HTMLElement>(`#agd-sec-${id}`)
+  el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+function onBodyScroll() {
+  const body = bodyRef.value
+  if (!body) return
+  let current = NAV[0].id
+  for (const s of NAV) {
+    const el = body.querySelector<HTMLElement>(`#agd-sec-${s.id}`)
+    if (el && el.offsetTop <= body.scrollTop + 240) current = s.id
+  }
+  activeSection.value = current
+}
 
 function showCategory(id: string) {
   if (category.value !== 'all' && category.value !== id) return false
@@ -219,6 +265,7 @@ watch(() => props.open, (o) => {
   if (o) {
     loaded.value = false
     keyword.value = ''
+    activeSection.value = 'flow'
     void load()
   }
 })
@@ -229,52 +276,54 @@ function close() { emit('close') }
 
 <style scoped>
 .agd { position: fixed; inset: 0; z-index: var(--mk-z-modal, 900); }
-.agd__mask { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.35); backdrop-filter: blur(2px); }
 .agd__panel {
   position: absolute;
   top: 0; right: 0; bottom: 0;
   width: min(460px, 92vw);
-  display: grid;
   grid-template-rows: auto auto 1fr;
   background: #fff;
   box-shadow: -12px 0 32px rgba(15, 23, 42, 0.16);
   animation: agd-in 0.18s ease;
 }
 @keyframes agd-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
-.agd__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 16px 18px 10px; }
 .agd__title { display: grid; gap: 2px; }
 .agd__title strong { font-size: 15px; color: var(--mk-ink, #1a2a44); }
 .agd__subtitle { font-size: 11.5px; color: var(--mk-faint, #71809a); }
-.agd__close { border: 0; background: #f1f5fb; color: #5b6577; width: 26px; height: 26px; border-radius: 8px; cursor: pointer; font-size: 12px; }
-.agd__close:hover { background: #e2eaf7; color: #1a2a44; }
 .agd__search { display: grid; gap: 8px; padding: 6px 18px 12px; border-bottom: 1px solid var(--mk-line, #e6ebf4); }
-.agd__input {
-  width: 100%; box-sizing: border-box;
-  padding: 8px 12px; border: 1px solid var(--mk-line, #e6ebf4); border-radius: 9px;
-  font: inherit; font-size: 12.5px; outline: none;
+/* 滚动修复 #10：分类锚点导航条（横向滚动小胶囊） */
+.agd__nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.agd__nav-item {
+  flex-shrink: 0;
+  padding: 2px 10px; border: 1px solid transparent; border-radius: 999px;
+  background: #f1f5fb; color: var(--mk-muted, #5b6577); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer;
 }
-.agd__input:focus { border-color: var(--mk-blue, #3478f6); }
-.agd__cats { display: flex; flex-wrap: wrap; gap: 6px; }
-.agd__cat {
-  padding: 3px 10px; border: 1px solid var(--mk-line, #e6ebf4); border-radius: 999px;
-  background: #fff; color: var(--mk-muted, #5b6577); font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer;
-}
-.agd__cat.is-active { background: #eef5ff; color: #1f57cc; border-color: rgba(52, 120, 246, 0.4); }
+.agd__nav-item:hover { color: var(--mk-blue, #2c63d0); }
+.agd__nav-item.is-active { background: #dbe9ff; color: var(--mk-accent-deep, #1f57cc); border-color: rgba(44, 99, 208, 0.35); }
 .agd__body { overflow-y: auto; padding: 6px 18px 20px; }
 .agd__loading { padding: 30px 0; text-align: center; color: var(--mk-faint, #71809a); font-size: 12.5px; }
 .agd__section { margin-top: 14px; }
+/* 滚动修复 #10：分类标题吸顶（抽屉内部滚动时分区标题常驻顶部） */
 .agd__section-title {
-  margin: 0 0 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--mk-faint, #71809a);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0 0 6px;
+  padding: 4px 0 6px;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mk-faint, #71809a);
 }
 .agd__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
 .agd__term { display: grid; gap: 1px; padding: 7px 10px; border-radius: 9px; background: #f8fafd; }
 .agd__term-name { font-size: 12.5px; font-weight: 700; color: var(--mk-ink, #1a2a44); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 .agd__term-en { font-size: 10.5px; color: var(--mk-faint, #71809a); font-weight: 600; }
 .agd__term-def { font-size: 11.5px; color: var(--mk-muted, #5b6577); line-height: 1.5; }
-.agd__term-where { font-style: normal; color: var(--mk-blue, #3478f6); }
+.agd__term-where { font-style: normal; color: var(--mk-blue, #2c63d0); }
 .agd__empty { padding: 8px 0; color: var(--mk-faint, #71809a); font-size: 12px; }
-.agd__demo-note { margin-top: 16px; padding: 8px 12px; border: 1px dashed rgba(52, 120, 246, 0.4); border-radius: 9px; background: #f0f5ff; color: var(--mk-blue, #3478f6); font-size: 11.5px; }
+.agd__demo-note { margin-top: 16px; padding: 8px 12px; border: 1px dashed rgba(44, 99, 208, 0.4); border-radius: 9px; background: #f0f5ff; color: var(--mk-blue, #2c63d0); font-size: 11.5px; }
 
 @media (min-width: 2000px) {
   .agd__panel { width: 560px; }
@@ -285,6 +334,7 @@ function close() { emit('close') }
   .agd__search { padding: 8px 24px 14px; }
   .agd__input { padding: 9px 14px; font-size: 14px; }
   .agd__cat { font-size: 13.5px; }
+  .agd__nav-item { font-size: 12.5px; }
   .agd__body { padding: 8px 24px 24px; }
   .agd__loading { font-size: 14.5px; }
   .agd__section-title { font-size: 13px; }
@@ -303,6 +353,7 @@ function close() { emit('close') }
   .agd__search { padding: 10px 30px 16px; }
   .agd__input { padding: 11px 16px; font-size: 16.5px; }
   .agd__cat { font-size: 16px; }
+  .agd__nav-item { font-size: 14.5px; }
   .agd__body { padding: 10px 30px 30px; }
   .agd__loading { font-size: 17px; }
   .agd__section-title { font-size: 15.5px; }
@@ -321,6 +372,7 @@ function close() { emit('close') }
   .agd__search { padding: 12px 36px 18px; }
   .agd__input { padding: 13px 19px; font-size: 19px; }
   .agd__cat { font-size: 19px; }
+  .agd__nav-item { font-size: 17px; }
   .agd__body { padding: 12px 36px 36px; }
   .agd__loading { font-size: 20px; }
   .agd__section-title { font-size: 18.5px; }

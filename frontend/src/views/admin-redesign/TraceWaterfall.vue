@@ -107,8 +107,8 @@
             ></span>
           </span>
           <span class="wf-row__tail">
-            <span v-if="span.errorCode" class="wf-row__errcode mono" :title="span.errorMessage">[{{ span.errorCategory || 'err' }}] {{ span.errorCode }}</span>
-            <span v-if="promptOf(span)?.drift" class="wf-row__drift">漂移</span>
+            <span v-if="span.errorCode" class="wf-row__errcode mono" :title="span.errorMessage">{{ errorCodeLabel(span.errorCode) ?? `[${span.errorCategory || 'err'}] ${span.errorCode}` }}</span>
+            <span v-if="promptOf(span)?.drift" class="wf-row__drift">{{ TERMS.driftRuntime }}</span>
             <span v-if="span.gatewayDurMs" class="wf-row__gw mono" :title="`网关层 ${fmtMs(span.gatewayDurMs)}（已合并同一调用记录）`">网关 {{ fmtMs(span.gatewayDurMs) }}</span>
             <span class="wf-row__dur mono">{{ fmtMs(span.durationMs) }}</span>
             <span class="wf-row__arrow" aria-hidden="true">▸</span>
@@ -141,9 +141,9 @@
             <span class="wf-detail-label">Prompt 契约</span>
             <div class="wf-prompt__meta mono">
               <span>版本 v{{ promptOf(span)!.version || '—' }}</span>
-              <span v-if="promptOf(span)!.drift" class="wf-prompt__drift">漂移</span>
+              <span v-if="promptOf(span)!.drift" class="wf-prompt__drift">{{ TERMS.driftRuntime }}</span>
               <span v-if="promptOf(span)!.tokens">{{ promptOf(span)!.tokens }}</span>
-              <span v-if="promptOf(span)!.errorCode">[{{ promptOf(span)!.errorCode }}] {{ promptOf(span)!.errorMessage }}</span>
+              <span v-if="promptOf(span)!.errorCode">{{ errorCodeLabel(promptOf(span)!.errorCode) ?? `[${promptOf(span)!.errorCode}]` }} {{ promptOf(span)!.errorMessage }}</span>
             </div>
             <pre v-if="promptOf(span)!.userPayload" class="wf-payload">{{ promptOf(span)!.userPayload }}</pre>
             <pre v-if="promptOf(span)!.rawModelOutput" class="wf-payload">{{ promptOf(span)!.rawModelOutput }}</pre>
@@ -206,6 +206,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { spans, intent, openSkillDrawer, dataSource, type TraceSpan } from './store'
 import { livePromptIndex, loadPromptIndex, fetchLogDetail, type LogDetail, type PromptMetaRow } from './live'
 import { statusText } from './statusText'
+import { TERMS, errorCodeLabel } from './terms'
 
 const activeTrace = ref('')
 const openSpanId = ref('')
@@ -524,7 +525,7 @@ const verdictText = computed(() => {
   cursor: pointer;
 }
 .wf-mode__btn:last-child { border-right: none; }
-.wf-mode__btn--on { background: #eef3fd; color: #3478f6; font-weight: 600; }
+.wf-mode__btn--on { background: #eef3fd; color: #2c63d0; font-weight: 600; }
 
 /* 链路概要卡 */
 .wf-summary {
@@ -570,7 +571,7 @@ const verdictText = computed(() => {
   color: var(--mk-ink);
   outline: none;
 }
-.wf-tracepick__search:focus { border-color: rgba(52, 120, 246, 0.5); }
+.wf-tracepick__search:focus { border-color: rgba(44, 99, 208, 0.5); }
 .wf-tracepick__select {
   max-width: 320px;
   padding: 6px 10px;

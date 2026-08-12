@@ -50,7 +50,7 @@
     <MockSkeletonTable v-else-if="loading && !rows.length" :cols="tab === 'login' ? 5 : 7" :rows="6" />
 
     <!-- 操作审计列表 -->
-    <div v-else-if="tab === 'operation' && shownOp.length" class="log-body" role="log">
+    <div v-else-if="tab === 'operation' && shownOp.length" class="log-body">
       <div class="tline-head" aria-hidden="true">
         <span class="tline-head__time">时间</span>
         <span class="tline-head__admin">操作者</span>
@@ -114,7 +114,7 @@
     </div>
 
     <!-- 登录审计列表 -->
-    <div v-else-if="tab === 'login' && shownLogin.length" class="log-body" role="log">
+    <div v-else-if="tab === 'login' && shownLogin.length" class="log-body">
       <div class="tline-head tline-head--login" aria-hidden="true">
         <span class="tline-head__time">时间</span>
         <span class="tline-head__admin">用户名</span>
@@ -195,7 +195,7 @@ interface LoginAttemptRow {
   createdAt: string
 }
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 20
 
 const tabs = [
   { id: 'operation', label: '操作审计' },
@@ -219,9 +219,9 @@ let fetching = false
 
 const rows = computed(() => (tab.value === 'operation' ? logs.value : attempts.value))
 
-/* 长列表分批渲染：每批 50 行；服务端还有下一页时「加载更多」拉取后端下一页 */
-const { shown: shownOp, canMore: canMoreOp, loadMore: loadMoreOp } = useLoadMore(computed(() => logs.value), 50)
-const { shown: shownLogin, canMore: canMoreLogin, loadMore: loadMoreLogin } = useLoadMore(computed(() => attempts.value), 50)
+/* 长列表分批渲染：每批 20 行（滚动修复 #6：50 → 20）；服务端还有下一页时「加载更多」拉取后端下一页 */
+const { shown: shownOp, canMore: canMoreOp, loadMore: loadMoreOp } = useLoadMore(computed(() => logs.value), 20)
+const { shown: shownLogin, canMore: canMoreLogin, loadMore: loadMoreLogin } = useLoadMore(computed(() => attempts.value), 20)
 const serverHasMore = computed(() => rows.value.length < total.value)
 const canMore = computed(() =>
   tab.value === 'operation' ? serverHasMore.value || canMoreOp.value : serverHasMore.value || canMoreLogin.value

@@ -1814,7 +1814,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-stage--locked:hover { background: transparent; }
 .cp-stage--active { border-color: var(--mk-blue); background: #eef5ff; }
 .cp-stage--active .cp-stage__state { color: var(--mk-blue); font-weight: 700; }
-.cp-stage--tab { box-shadow: 0 0 0 2px rgba(52, 120, 246, 0.35); }
+.cp-stage--tab { box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.35); }
 .cp-stage--done { border-color: rgba(21, 128, 61, 0.3); }
 .cp-stage--done .cp-stage__state { color: var(--mk-green); }
 .cp-stage__arrow { color: var(--mk-faint); }
@@ -1843,7 +1843,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   font-weight: 700;
   cursor: pointer;
 }
-.cp-btn:hover:not(:disabled) { border-color: rgba(52, 120, 246, 0.4); color: var(--mk-blue); }
+.cp-btn:hover:not(:disabled) { border-color: rgba(44, 99, 208, 0.4); color: var(--mk-blue); }
 .cp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .cp-btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
 .cp-btn--primary:hover:not(:disabled) { color: #fff; opacity: 0.9; }

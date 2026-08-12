@@ -12,9 +12,9 @@
       <span v-if="isLive && recSummary && recSummary.unregistered" class="mk-status__meta mk-status__meta--warn">未注册 {{ recSummary.unregistered }}</span>
       <span v-if="isLive && recSummary && recSummary.activeMissing" class="mk-status__meta mk-status__meta--warn">缺 ACTIVE {{ recSummary.activeMissing }}</span>
       <span v-if="isLive && recSummary && recSummary.orphanRegistrations" class="mk-status__meta mk-status__meta--bad">幽灵注册 {{ recSummary.orphanRegistrations }}</span>
-      <span v-if="isLive && w4Drifted.length" class="mk-status__meta mk-status__meta--bad">W4 漂移 {{ w4Drifted.length }}</span>
+      <span v-if="isLive && w4Drifted.length" class="mk-status__meta mk-status__meta--bad" :title="`${TERMS.driftHashQualified}（W4）：核心文件 ↔ 编译产物 ↔ DB 三方哈希不一致，需重新编译 + 同步`">W4 漂移 {{ w4Drifted.length }}</span>
       <button v-if="isLive" type="button" class="mk-status__action" :class="{ 'mk-status__action--on': healthOpen }" @click="healthOpen = !healthOpen">
-        {{ healthOpen ? '收起健康区' : '健康区' }}
+        {{ healthOpen ? '收起健康区' : TERMS.healthZone }}
       </button>
       <button v-if="isLive" type="button" class="mk-status__action" :disabled="defsLoading" @click="loadDefinitions">
         {{ defsLoading ? '拉取中…' : '刷新定义' }}
@@ -188,12 +188,13 @@ import FieldRoutingTable from './FieldRoutingTable.vue'
 import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
 import HealthCenter from './HealthCenter.vue'
+import { TERMS } from './terms'
 
 const tabs = [
   { id: 'definition', label: '定义' },
   { id: 'field-routings', label: '字段路由' },
   { id: 'sandbox', label: '沙盘' },
-  { id: 'drift', label: '漂移与审计' },
+  { id: 'drift', label: TERMS.driftTab },
 ]
 const activeTab = ref('definition')
 
@@ -514,9 +515,9 @@ const stageTitle = computed(() => {
 .mk-status__num { font-variant-numeric: tabular-nums; }
 .mk-status__num--live { color: var(--mk-green, #15803d); }
 .mk-status__action--on {
-  border-color: rgba(52, 120, 246, 0.5);
+  border-color: rgba(44, 99, 208, 0.5);
   background: #eef4ff;
-  color: var(--mk-blue, #3478f6);
+  color: var(--mk-blue, #2c63d0);
   font-weight: 800;
 }
 .orch-unresolved {
@@ -613,10 +614,10 @@ const stageTitle = computed(() => {
   background: transparent;
   transition: background 0.16s ease;
 }
-.orch-stage:hover { border-color: rgba(52, 120, 246, 0.35); transform: translateY(-1px); }
+.orch-stage:hover { border-color: rgba(44, 99, 208, 0.35); transform: translateY(-1px); }
 .orch-stage--active {
   border-color: var(--mk-blue);
-  box-shadow: 0 0 0 1px rgba(52, 120, 246, 0.25), 0 6px 18px rgba(52, 120, 246, 0.1);
+  box-shadow: 0 0 0 1px rgba(44, 99, 208, 0.25), 0 6px 18px rgba(44, 99, 208, 0.1);
   transform: translateY(-1px);
 }
 .orch-stage--active .orch-stage__bar { background: var(--mk-blue); }
@@ -670,7 +671,7 @@ const stageTitle = computed(() => {
 }
 .orch-stage__comp-item--draft { background: #9aa4b2; }
 .orch-stage__comp-item--handler-ready { background: #d97706; }
-.orch-stage__comp-item--core-ready { background: #3478f6; }
+.orch-stage__comp-item--core-ready { background: #2c63d0; }
 .orch-stage__comp-item--fields-synced { background: #0d9488; }
 .orch-stage__comp-item--live { background: #16a34a; }
 
@@ -691,7 +692,7 @@ const stageTitle = computed(() => {
   border-radius: 2px;
   transition: background 0.16s ease;
 }
-.orch-link--on i { background: linear-gradient(90deg, rgba(52, 120, 246, 0.9), rgba(52, 120, 246, 0.55)); }
+.orch-link--on i { background: linear-gradient(90deg, rgba(44, 99, 208, 0.9), rgba(44, 99, 208, 0.55)); }
 .orch-link b { font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; }
 .orch-link--on b { color: var(--mk-blue); }
 
@@ -718,7 +719,7 @@ const stageTitle = computed(() => {
   background: var(--mk-blue);
   border-color: var(--mk-blue);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(52, 120, 246, 0.3);
+  box-shadow: 0 2px 8px rgba(44, 99, 208, 0.3);
 }
 .orch-tabpane { padding: 14px 16px 16px; }
 
@@ -838,8 +839,8 @@ const stageTitle = computed(() => {
   transition: border-color 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease;
 }
 .orch-skill:hover {
-  border-color: rgba(52, 120, 246, 0.4);
-  box-shadow: 0 4px 14px rgba(52, 120, 246, 0.08);
+  border-color: rgba(44, 99, 208, 0.4);
+  box-shadow: 0 4px 14px rgba(44, 99, 208, 0.08);
   transform: translateY(-1px);
 }
 .orch-skill__dot {
