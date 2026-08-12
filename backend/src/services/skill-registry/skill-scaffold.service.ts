@@ -449,6 +449,400 @@ export function appendFieldToOrchestration(
 }
 
 /* ------------------------------------------------------------------ */
+/* 字段级修改 / 删除（M3 统一编辑：改/删字段原子 API 的双文件文本级操作）    */
+/* updateFieldInCore / updateFieldInOrchestration / deleteFieldFromCore / */
+/* deleteFieldFromOrchestration 为纯文本级操作，保留原文件注释与排版；      */
+/* 追加后由调用方 parseCoreFile / validateOrchestrationContent 硬性校验。  */
+/* ------------------------------------------------------------------ */
+
+export interface CoreFieldUpdateSpec {
+  /** 字段名（顶层直配 = 顶层字段名；嵌套 = root.sub 点分） */
+  name: string;
+  /** 顶层直配：core 类型（受控词表，可带 ? 后缀） */
+  type?: string;
+  /** 顶层直配：desc 替换 */
+  desc?: string;
+  /** 顶层直配：turn 显式设置（true = 加行；false = 删行） */
+  turn?: boolean;
+  /** 嵌套：子字段说明（path 相对 root；替换 desc 中的 `· path（type）desc` 块） */
+  child?: { path: string; type: string; desc: string };
+}
+
+export interface OrchestrationFieldUpdateSpec {
+  fieldId: string;
+  promptRole?: string;
+  valueType?: string;
+  /** null = 移除声明行 */
+  pathInRawOutput?: string | null;
+  /** null = 移除声明行 */
+  persistKey?: string | null;
+  description?: string;
+  /** false/null = 移除 systemLocked 行 */
+  systemLocked?: boolean | null;
+  /** false/null = 移除 structureLocked 行 */
+  structureLocked?: boolean | null;
+}
+
+export interface OrchestrationRoutingUpdateSpec {
+  agentId: string;
+  fieldId: string;
+  render?: string;
+  handoff?: string[];
+  internal?: boolean;
+  accumulate?: boolean;
+  /** null = 移除声明行 */
+  visibilityPreset?: string | null;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** 拆行并剥离尾部空行（文本级操作统一收尾：join('\n') + '\n' 精确还原单换行结尾，防链式编辑累积空行） */
+function splitLinesPreserving(text: string): string[] {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+  return lines;
+}
+
+/** 顶层字段条目块：定位 `- name: X` 起始与条目结束（下一 `- name:` 或块尾） */
+function findCoreFieldEntryBlock(lines: string[], name: string): { startIdx: number; endIdx: number } | null {
+  const block = findTopLevelBlock(lines, 'fields');
+  if (!block) return null;
+  const startIdx = lines.findIndex((line) => new RegExp(`^  - name:\\s*${escapeRegExp(name)}\\s*$`).test(line));
+  if (startIdx === -1) return null;
+  let endIdx = block.endIdx;
+  for (let i = startIdx + 1; i < block.endIdx; i += 1) {
+    if (/^  - /.test(lines[i])) {
+      endIdx = i;
+      break;
+    }
+  }
+  return { startIdx, endIdx };
+}
+
+/** 定位顶层字段条目内 desc 标量跨度（desc 行起，至下一 4 缩进键 / 条目 / 块尾） */
+function findDescScalarSpan(lines: string[], entryStart: number, entryEnd: number): { descIdx: number; spanEnd: number } | null {
+  let descIdx = -1;
+  for (let i = entryStart; i < entryEnd; i += 1) {
+    if (/^ {4}desc:/.test(lines[i])) {
+      descIdx = i;
+      break;
+    }
+  }
+  if (descIdx === -1) return null;
+  let spanEnd = entryEnd;
+  for (let i = descIdx + 1; i < entryEnd; i += 1) {
+    if (/^ {4}[A-Za-z0-9_-]+:/.test(lines[i]) || /^ {2}- /.test(lines[i]) || !lines[i].startsWith(' ')) {
+      spanEnd = i;
+      break;
+    }
+  }
+  return { descIdx, spanEnd };
+}
+
+/**
+ * core.yaml 文本级字段修改（保留原文件注释/排版）：
+ * - 顶层直配：替换 type 行 / desc 标量 / turn 行（按需增删）
+ * - 嵌套形态：替换顶层 object 的 desc 中 `· <path>（<type>）<desc>` 子字段说明块
+ */
+export function updateFieldInCore(coreText: string, spec: CoreFieldUpdateSpec): string {
+  const lines = splitLinesPreserving(coreText);
+  const segments = spec.name.split('.');
+  const block = findTopLevelBlock(lines, 'fields');
+  if (!block) throw new Error('[field-update] core.yaml 缺少 fields 段');
+
+  if (segments.length === 1) {
+    const entry = findCoreFieldEntryBlock(lines, spec.name);
+    if (!entry) throw new Error(`[field-update] core.yaml 未找到顶层字段 "${spec.name}"`);
+    let entryLines = lines.slice(entry.startIdx, entry.endIdx);
+
+    const replaceScalar = (key: string, value: string): void => {
+      const idx = entryLines.findIndex((line) => new RegExp(`^ {4}${key}:`).test(line));
+      if (idx === -1) throw new Error(`[field-update] core.yaml 顶层字段 "${spec.name}" 缺少 ${key} 键`);
+      let spanEnd = idx + 1;
+      while (
+        spanEnd < entryLines.length
+        && entryLines[spanEnd].startsWith('      ')
+        && !/^ {4}[A-Za-z0-9_-]+:/.test(entryLines[spanEnd])
+      ) {
+        spanEnd += 1;
+      }
+      const scalar = scalarDumpLines(value);
+      const replacement = [`    ${key}: ${scalar[0]}`, ...scalar.slice(1).map((line) => `      ${line}`)];
+      entryLines = [...entryLines.slice(0, idx), ...replacement, ...entryLines.slice(spanEnd)];
+    };
+
+    if (spec.type !== undefined) {
+      const idx = entryLines.findIndex((line) => /^ {4}type:/.test(line));
+      if (idx === -1) throw new Error(`[field-update] core.yaml 顶层字段 "${spec.name}" 缺少 type 键`);
+      entryLines[idx] = `    type: ${spec.type}`;
+    }
+    if (spec.desc !== undefined) replaceScalar('desc', spec.desc);
+    if (spec.turn !== undefined) {
+      const idx = entryLines.findIndex((line) => /^ {4}turn:/.test(line));
+      if (spec.turn) {
+        if (idx === -1) {
+          const span = findDescScalarSpan(entryLines, 0, entryLines.length);
+          const insertAt = span ? span.spanEnd : entryLines.length;
+          entryLines = [...entryLines.slice(0, insertAt), '    turn: true', ...entryLines.slice(insertAt)];
+        }
+      } else if (idx !== -1) {
+        entryLines.splice(idx, 1);
+      }
+    }
+
+    lines.splice(entry.startIdx, entry.endIdx - entry.startIdx, ...entryLines);
+    return lines.join('\n') + '\n';
+  }
+
+  // ---- 嵌套形态：替换顶层 object desc 中的子字段说明块 ----
+  const root = segments[0];
+  const entry = findCoreFieldEntryBlock(lines, root);
+  if (!entry) throw new Error(`[field-update] core.yaml 未找到顶层字段 "${root}"（嵌套字段 "${spec.name}" 的承载）`);
+  const span = findDescScalarSpan(lines, entry.startIdx, entry.endIdx);
+  if (!span) throw new Error(`[field-update] core.yaml 顶层字段 "${root}" 缺少 desc 键`);
+  if (!spec.child) throw new Error(`[field-update] 嵌套字段 "${spec.name}" 必须提供 child 子字段说明`);
+  const noteRe = new RegExp(`^\\s*·\\s*${escapeRegExp(spec.child.path)}\\s*（`);
+  const spanLines = lines.slice(span.descIdx, span.spanEnd);
+  const noteIdx = spanLines.findIndex((line) => noteRe.test(line));
+  if (noteIdx === -1) {
+    throw new Error(`[field-update] core.yaml 顶层字段 "${root}" 的 desc 未找到子字段说明 "${spec.child.path}"`);
+  }
+  let noteEnd = noteIdx + 1;
+  while (noteEnd < spanLines.length && !/^\s*·\s/.test(spanLines[noteEnd])) {
+    noteEnd += 1;
+  }
+  const indent = (spanLines[noteIdx].match(/^\s*/) || [''])[0];
+  lines.splice(span.descIdx + noteIdx, noteEnd - noteIdx, `${indent}· ${spec.child.path}（${spec.child.type}）${spec.child.desc}`);
+  return lines.join('\n') + '\n';
+}
+
+export interface CoreFieldDeleteResult {
+  text: string;
+  /** 被整体移除的顶层条目名（顶层删除或嵌套级联删除 root 时） */
+  removedEntry: string | null;
+  /** 仅移除子字段说明块（嵌套，root 条目保留） */
+  removedChildNote: boolean;
+}
+
+/**
+ * core.yaml 文本级字段删除：
+ * - 顶层直配：整块移除 `- name: X` 条目（含前置空行）
+ * - 嵌套形态：移除顶层 object desc 中的 `· <path>…` 子字段说明块（root 条目保留，由调用方决定级联）
+ */
+export function deleteFieldFromCore(coreText: string, name: string): CoreFieldDeleteResult {
+  const lines = splitLinesPreserving(coreText);
+  const segments = name.split('.');
+  const block = findTopLevelBlock(lines, 'fields');
+  if (!block) throw new Error('[field-delete] core.yaml 缺少 fields 段');
+
+  if (segments.length === 1) {
+    const entry = findCoreFieldEntryBlock(lines, name);
+    if (!entry) throw new Error(`[field-delete] core.yaml 未找到顶层字段 "${name}"`);
+    const before = entry.startIdx > 0 && lines[entry.startIdx - 1].trim() === '' ? entry.startIdx - 1 : entry.startIdx;
+    lines.splice(before, entry.endIdx - before);
+    return { text: lines.join('\n') + '\n', removedEntry: name, removedChildNote: false };
+  }
+
+  const root = segments[0];
+  const entry = findCoreFieldEntryBlock(lines, root);
+  if (!entry) throw new Error(`[field-delete] core.yaml 未找到顶层字段 "${root}"（嵌套字段 "${name}" 的承载）`);
+  const span = findDescScalarSpan(lines, entry.startIdx, entry.endIdx);
+  if (!span) throw new Error(`[field-delete] core.yaml 顶层字段 "${root}" 缺少 desc 键`);
+  const childPath = segments.slice(1).join('.');
+  const noteRe = new RegExp(`^\\s*·\\s*${escapeRegExp(childPath)}\\s*（`);
+  const spanLines = lines.slice(span.descIdx, span.spanEnd);
+  const noteIdx = spanLines.findIndex((line) => noteRe.test(line));
+  if (noteIdx === -1) {
+    throw new Error(`[field-delete] core.yaml 顶层字段 "${root}" 的 desc 未找到子字段说明 "${childPath}"`);
+  }
+  let noteEnd = noteIdx + 1;
+  while (noteEnd < spanLines.length && !/^\s*·\s/.test(spanLines[noteEnd])) {
+    noteEnd += 1;
+  }
+  lines.splice(span.descIdx + noteIdx, noteEnd - noteIdx);
+  return { text: lines.join('\n') + '\n', removedEntry: null, removedChildNote: true };
+}
+
+/** 条目块内定位键行并设置（value 为 null 时移除该行；缺行时追加到条目末尾） */
+function setEntryKey(entryLines: string[], key: string, value: string | null, indent = '    '): string[] {
+  const re = new RegExp(`^${indent}${key}:`);
+  const idx = entryLines.findIndex((line) => re.test(line));
+  if (idx === -1) {
+    if (value === null) return entryLines;
+    return [...entryLines, `${indent}${key}: ${value}`];
+  }
+  if (value === null) {
+    return [...entryLines.slice(0, idx), ...entryLines.slice(idx + 1)];
+  }
+  const next = [...entryLines];
+  next[idx] = `${indent}${key}: ${value}`;
+  return next;
+}
+
+/** 替换条目内 desc 标量（多行 desc 走块标量行内替换） */
+function replaceEntryDesc(entryLines: string[], value: string, indent = '    '): string[] {
+  const idx = entryLines.findIndex((line) => new RegExp(`^${indent}desc(ription)?:`).test(line));
+  if (idx === -1) throw new Error('[field-update] 条目缺少 desc/description 键');
+  let spanEnd = idx + 1;
+  while (
+    spanEnd < entryLines.length
+    && entryLines[spanEnd].startsWith(`${indent}  `)
+    && !new RegExp(`^${indent}[A-Za-z0-9_-]+:`).test(entryLines[spanEnd])
+  ) {
+    spanEnd += 1;
+  }
+  const scalar = scalarDumpLines(value);
+  const replacement = [`${indent}description: ${scalar[0]}`, ...scalar.slice(1).map((line) => `${indent}  ${line}`)];
+  return [...entryLines.slice(0, idx), ...replacement, ...entryLines.slice(spanEnd)];
+}
+
+/**
+ * 编排文件文本级字段修改（保留原文件注释/排版）：
+ * fields 段条目（fieldId）键级修改 + routings 段条目（agentId+fieldId）键级修改。
+ */
+export function updateFieldInOrchestration(
+  orchestrationText: string,
+  field: OrchestrationFieldUpdateSpec,
+  routing: OrchestrationRoutingUpdateSpec,
+): string {
+  const lines = splitLinesPreserving(orchestrationText);
+  const fieldsBlock = findTopLevelBlock(lines, 'fields');
+  const routingsBlock = findTopLevelBlock(lines, 'routings');
+  if (!fieldsBlock || !routingsBlock) throw new Error('[field-update] 编排文件缺少 fields/routings 段');
+
+  // ---- fields 条目 ----
+  const fieldEntryStart = lines.findIndex(
+    (line) => new RegExp(`^  - fieldId:\\s*${escapeRegExp(field.fieldId)}\\s*$`).test(line),
+  );
+  if (fieldEntryStart === -1 || fieldEntryStart >= routingsBlock.startIdx) {
+    throw new Error(`[field-update] 编排文件未找到字段定义 "${field.fieldId}"`);
+  }
+  let fieldEntryEnd = routingsBlock.startIdx;
+  for (let i = fieldEntryStart + 1; i < routingsBlock.startIdx; i += 1) {
+    if (/^  - /.test(lines[i])) {
+      fieldEntryEnd = i;
+      break;
+    }
+  }
+  let fieldLines = lines.slice(fieldEntryStart, fieldEntryEnd);
+  if (field.promptRole !== undefined) fieldLines = setEntryKey(fieldLines, 'promptRole', field.promptRole);
+  if (field.valueType !== undefined) fieldLines = setEntryKey(fieldLines, 'valueType', field.valueType);
+  if (field.pathInRawOutput !== undefined) {
+    fieldLines = setEntryKey(fieldLines, 'pathInRawOutput', field.pathInRawOutput === null ? null : scalarDumpLines(field.pathInRawOutput)[0]);
+  }
+  if (field.persistKey !== undefined) {
+    fieldLines = setEntryKey(fieldLines, 'persistKey', field.persistKey === null ? null : scalarDumpLines(field.persistKey)[0]);
+  }
+  if (field.description !== undefined) fieldLines = replaceEntryDesc(fieldLines, field.description);
+  if (field.systemLocked !== undefined) fieldLines = setEntryKey(fieldLines, 'systemLocked', field.systemLocked ? 'true' : null);
+  if (field.structureLocked !== undefined) {
+    fieldLines = setEntryKey(fieldLines, 'structureLocked', field.structureLocked ? 'true' : null);
+  }
+  lines.splice(fieldEntryStart, fieldEntryEnd - fieldEntryStart, ...fieldLines);
+
+  // ---- routings 条目（agentId + fieldId 双键定位） ----
+  let routingEntryStart = -1;
+  let routingEntryEnd = lines.length;
+  for (let i = routingsBlock.startIdx; i < lines.length; i += 1) {
+    if (!/^  - agentId:/.test(lines[i])) continue;
+    let end = i + 1;
+    while (end < lines.length && !/^  - agentId:/.test(lines[end]) && !/^[^ #]/.test(lines[end])) end += 1;
+    const entry = lines.slice(i, end);
+    if (entry.some((line) => new RegExp(`^ {4}fieldId:\\s*${escapeRegExp(routing.fieldId)}\\s*$`).test(line))) {
+      routingEntryStart = i;
+      routingEntryEnd = end;
+      break;
+    }
+  }
+  if (routingEntryStart === -1) {
+    throw new Error(`[field-update] 编排文件未找到路由条目 ${routing.agentId}/${routing.fieldId}`);
+  }
+  let routingLines = lines.slice(routingEntryStart, routingEntryEnd);
+  if (routing.render !== undefined) routingLines = setEntryKey(routingLines, 'render', routing.render);
+  if (routing.handoff !== undefined) routingLines = setEntryKey(routingLines, 'handoff', `[${routing.handoff.join(', ')}]`);
+  if (routing.internal !== undefined) routingLines = setEntryKey(routingLines, 'internal', routing.internal ? 'true' : 'false');
+  if (routing.accumulate !== undefined) routingLines = setEntryKey(routingLines, 'accumulate', routing.accumulate ? 'true' : 'false');
+  if (routing.visibilityPreset !== undefined) {
+    routingLines = setEntryKey(routingLines, 'visibilityPreset', routing.visibilityPreset === null ? null : routing.visibilityPreset);
+  }
+  lines.splice(routingEntryStart, routingEntryEnd - routingEntryStart, ...routingLines);
+
+  return lines.join('\n') + '\n';
+}
+
+export interface OrchestrationFieldDeleteResult {
+  text: string;
+  routingRemoved: boolean;
+  fieldRemoved: boolean;
+}
+
+/**
+ * 编排文件文本级字段删除：
+ * - 移除 routings 段中（agentId, fieldId）路由条目
+ * - removeFieldEntry=true 时同时移除 fields 段 fieldId 字段定义条目（调用方保证无其他 agent 引用）
+ */
+export function deleteFieldFromOrchestration(
+  orchestrationText: string,
+  fieldId: string,
+  agentId: string,
+  opts: { removeFieldEntry?: boolean } = {},
+): OrchestrationFieldDeleteResult {
+  const lines = splitLinesPreserving(orchestrationText);
+  const escapedFieldId = escapeRegExp(fieldId);
+  const result: OrchestrationFieldDeleteResult = { text: orchestrationText, routingRemoved: false, fieldRemoved: false };
+
+  // ---- 移除路由条目 ----
+  let routingStart = -1;
+  let routingEnd = lines.length;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!/^  - agentId:/.test(lines[i])) continue;
+    let end = i + 1;
+    while (end < lines.length && !/^  - agentId:/.test(lines[end]) && !/^[^ #]/.test(lines[end])) end += 1;
+    const entry = lines.slice(i, end);
+    const isAgent = new RegExp(`^  - agentId:\\s*${escapeRegExp(agentId)}\\s*$`).test(entry[0] || '');
+    if (isAgent && entry.some((line) => new RegExp(`^ {4}fieldId:\\s*${escapedFieldId}\\s*$`).test(line))) {
+      routingStart = i;
+      routingEnd = end;
+      break;
+    }
+  }
+  if (routingStart === -1) throw new Error(`[field-delete] 编排文件未找到路由条目 ${agentId}/${fieldId}`);
+  const before = routingStart > 0 && lines[routingStart - 1].trim() === '' ? routingStart - 1 : routingStart;
+  lines.splice(before, routingEnd - before);
+  result.routingRemoved = true;
+
+  // ---- 移除字段定义条目 ----
+  if (opts.removeFieldEntry) {
+    const fieldsBlock = findTopLevelBlock(lines, 'fields');
+    const routingsBlock = findTopLevelBlock(lines, 'routings');
+    if (!fieldsBlock || !routingsBlock) throw new Error('[field-delete] 编排文件缺少 fields/routings 段');
+    const fieldStart = lines.findIndex((line) => new RegExp(`^  - fieldId:\\s*${escapedFieldId}\\s*$`).test(line));
+    if (fieldStart === -1 || fieldStart >= routingsBlock.startIdx) {
+      throw new Error(`[field-delete] 编排文件未找到字段定义 "${fieldId}"`);
+    }
+    let fieldEnd = routingsBlock.startIdx;
+    for (let i = fieldStart + 1; i < routingsBlock.startIdx; i += 1) {
+      if (/^  - /.test(lines[i])) {
+        fieldEnd = i;
+        break;
+      }
+    }
+    // 前置空行处理：向导追加的字段条目插在 routings 边界，其前置空行即 fields/routings 块
+    // 分隔符（ADD 的 needBlank 在前置行已为空时不新增空行）——删除时必须保留，避免吃掉原分隔符；
+    // 块内条目（fieldEnd < routings 头）的前置空行是 ADD 新增的（前置行非空），删除时一并移除。
+    const isLastFieldEntry = fieldEnd >= routingsBlock.startIdx;
+    const fieldBefore = fieldStart > 0 && lines[fieldStart - 1].trim() === '' && !isLastFieldEntry ? fieldStart - 1 : fieldStart;
+    lines.splice(fieldBefore, fieldEnd - fieldBefore);
+    result.fieldRemoved = true;
+  }
+
+  result.text = lines.join('\n') + '\n';
+  return result;
+}
+
+/* ------------------------------------------------------------------ */
 /* 注册/接线片段（文本返回，不落盘 —— SKILLS_YAML_SPEC:210-215 决策）      */
 /* ------------------------------------------------------------------ */
 

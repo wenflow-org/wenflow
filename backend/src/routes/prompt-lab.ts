@@ -45,9 +45,16 @@ import { setAuditAction, setAuditBefore, setAuditAfter } from '../middleware/aud
 import {
   appendFieldToCore,
   appendFieldToOrchestration,
+  updateFieldInCore,
+  updateFieldInOrchestration,
+  deleteFieldFromCore,
+  deleteFieldFromOrchestration,
   type CoreFieldAppendSpec,
+  type CoreFieldUpdateSpec,
   type OrchestrationFieldAppendSpec,
   type OrchestrationRoutingAppendSpec,
+  type OrchestrationFieldUpdateSpec,
+  type OrchestrationRoutingUpdateSpec,
 } from '../services/skill-registry/skill-scaffold.service';
 import { loadSkillsBookRaw, SKILL_STAGES, type SkillEntry } from '../services/skill-registry/skills-file';
 import {
@@ -55,8 +62,14 @@ import {
   parseOrchestrationFile,
   validateOrchestrationContent,
   type OrchestrationStage,
+  type OrchestrationField,
+  type OrchestrationRouting,
 } from '../services/field-routing/orchestration-file';
-import { ensureStageFieldRoutings } from '../services/field-routing-bootstrap.service';
+import {
+  ensureStageFieldRoutings,
+  syncStageFieldRoutingsFromFile,
+  deleteStageFieldRows,
+} from '../services/field-routing-bootstrap.service';
 import { clearRoutingCache } from '../services/field-dispatcher';
 import { clearSupplementRenderCache } from '../services/prompt-composer';
 import { analyzeCoreFieldsSync, type CoreFieldsSyncSkillReport } from '../scripts/check-core-fields-sync';
@@ -69,8 +82,7 @@ import {
   stripOptionalSuffix,
   type PromptRole,
   type RenderValue,
-} from '../services/yaml-vocabulary';
-import { getAgentManifest, getCanonicalAgentId } from '../services/agent-manifest.service';
+} from '../services/yaml-vocabulary';import { getAgentManifest, getCanonicalAgentId } from '../services/agent-manifest.service';
 import { writeNodeConfigChange } from '../services/node-config-change-audit';
 import type { CoreFile } from '../services/prompt-lab/core-file-loader';
 
@@ -1347,6 +1359,882 @@ router.post('/core/:skillId/field', async (req, res) => {
       }
       console.error('Skill field add error:', error);
       res.status(500).json({ success: false, error: { message: '加字段失败', details: (error as Error).message } });
+    }
+  });
+});
+
+/**
+ * PATCH /api/admin/prompt-lab/core/:skillId/field/:name
+ * 改字段原子 API（M3，与 M1 加字段同模式）：双文件联动 + 回滚 + 落库 update 语义 + 审计 + 复检。
+ *
+ * 契约（payload 全部可选；undefined = 保持现状，''/null = 清除可选声明）：
+ *   type/desc/turn（core 侧）；role/render/handoff/internal/accumulate/visibilityPreset/
+ *   locked/persistKey/pathInRawOutput（编排侧；type 映射 valueType）
+ *
+ * 原子性：内存修改 + parse 双校验 → 备份 → 写 core → 写编排（失败回滚 core）→
+ * fields-sync 复检（违规双文件回滚）→ 落库（复用 sync 全量对账：managedByCode=true
+ * 行更新、false 行跳过并报告 protected）→ 审计（changeType='skill-field-update'）。
+ * 幂等：与现状无差异 → 200 changed=false（不写盘不落库不审计）。
+ */
+export class SkillFieldEditError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message: string,
+    public readonly extra?: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = 'SkillFieldEditError';
+  }
+}
+
+export interface SkillFieldUpdateRequest {
+  type?: unknown;
+  role?: unknown;
+  render?: unknown;
+  handoff?: unknown;
+  internal?: unknown;
+  accumulate?: unknown;
+  visibilityPreset?: unknown;
+  locked?: unknown;
+  desc?: unknown;
+  persistKey?: unknown;
+  pathInRawOutput?: unknown;
+  turn?: unknown;
+}
+
+export interface SkillFieldSnapshot {
+  name: string;
+  root: string;
+  isNested: boolean;
+  coreType: string;
+  turn: boolean;
+  promptRole: string;
+  valueType: string;
+  persistKey: string | null;
+  pathInRawOutput: string | null;
+  render: string;
+  handoff: string[];
+  internal: boolean;
+  accumulate: boolean;
+  visibilityPreset: string | null;
+  locked: 'system' | 'structure' | null;
+  desc: string;
+}
+
+export interface SkillFieldUpdateResult {
+  skillId: string;
+  stage: string;
+  name: string;
+  changed: boolean;
+  coreWritten: boolean;
+  orchestrationWritten: boolean;
+  /** 落库全量对账报告（syncStageFieldRoutingsFromFile；managedByCode=false 行跳过） */
+  dbSync: {
+    fieldsUpdated: number;
+    routingsUpdated: number;
+    contractsUpdated: number;
+    createdCount: number;
+    skippedAdminRows: Array<{ table: string; key: string }>;
+  };
+  syncCheck: CoreFieldsSyncSkillReport | null;
+  auditId: string;
+}
+
+/** 解析 core 顶层字段 desc 中的子字段说明（`· path（type）desc`），供嵌套字段定位/摘要 */
+function parseCoreChildNote(desc: string, childPath: string): { type: string; desc: string } | null {
+  const escaped = childPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(?:^|\\n)\\s*·\\s*${escaped}\\s*（([^）]*)）\\s*([^\\n]*)`);
+  const match = desc.match(re);
+  if (!match) return null;
+  const typeToken = match[1].trim().split(/[，,（]/)[0].trim();
+  return { type: typeToken, desc: match[2].trim() };
+}
+
+/** 读取双文件并定位字段（改/删共用）；任一缺失 → 404 */
+async function loadSkillFieldContext(skillId: string, name: string): Promise<{
+  entry: SkillEntry;
+  stageName: string;
+  agentId: string;
+  isNested: boolean;
+  root: string;
+  corePath: string;
+  orchestrationPath: string;
+  coreText: string;
+  core: CoreFile;
+  coreField: CoreFile['fields'][number];
+  orchestrationText: string;
+  stage: OrchestrationStage;
+  orchField: OrchestrationField;
+  orchRouting: OrchestrationRouting;
+  childNote: { type: string; desc: string } | null;
+}> {
+  const nameSegments = name.split('.');
+  if (!nameSegments.every((seg) => CORE_FIELD_NAME_SEGMENT.test(seg))) {
+    throw new SkillFieldEditError(
+      400,
+      'FIELD_NAME_INVALID',
+      `字段名 "${name}" 非法（每段须小写字母开头，仅含字母/数字/下划线，可点分嵌套）`,
+    );
+  }
+  const isNested = nameSegments.length > 1;
+  const root = nameSegments[0];
+
+  const book = loadSkillsBookRaw();
+  const entry = book.skills.find((item) => item.skillId === skillId);
+  if (!entry) throw new SkillFieldEditError(404, 'SKILL_NOT_FOUND', `skills.yaml 无该 skill 登记：${skillId}`);
+  if (!entry.stage) throw new SkillFieldEditError(422, 'SKILL_NO_STAGE', `skill ${skillId} 无编排阶段归属（kind=${entry.kind}）`);
+  const stageName = entry.stage;
+  const agentId = `skill:${skillId}`;
+  const corePath = path.join(CORE_FILES_DIR, `${skillId}.yaml`);
+  const orchestrationPath = path.join(ORCHESTRATION_DIR, `${stageName}.yaml`);
+
+  let coreText: string;
+  try {
+    coreText = await fs.readFile(corePath, 'utf-8');
+  } catch {
+    throw new SkillFieldEditError(404, 'CORE_FILE_MISSING', `核心文件不存在: prompts/core/${skillId}.yaml`);
+  }
+  const parsedCore = parseCoreFile(corePath, coreText);
+  if (!parsedCore.core) {
+    throw new SkillFieldEditError(
+      422,
+      'CORE_FILE_INVALID',
+      `核心文件 schema 不合法：${parsedCore.diagnostics.map((d) => d.message).join('；')}`,
+    );
+  }
+  const core = parsedCore.core;
+
+  let orchestrationText: string;
+  try {
+    orchestrationText = await fs.readFile(orchestrationPath, 'utf-8');
+  } catch {
+    throw new SkillFieldEditError(404, 'ORCHESTRATION_FILE_MISSING', `编排文件不存在: prompts/orchestration/${stageName}.yaml`);
+  }
+  let stage: OrchestrationStage;
+  try {
+    stage = parseOrchestrationFile(orchestrationPath);
+  } catch (error) {
+    throw new SkillFieldEditError(422, 'ORCHESTRATION_FILE_INVALID', `编排文件解析失败：${(error as Error).message}`);
+  }
+
+  const coreField = core.fields.find((f) => f.name === root);
+  const orchField = stage.fields.find((f) => f.fieldId === name);
+  const orchRouting = stage.routings.find((r) => r.agentId === agentId && r.fieldId === name);
+
+  let childNote: { type: string; desc: string } | null = null;
+  if (isNested) {
+    childNote = coreField ? parseCoreChildNote(coreField.desc, nameSegments.slice(1).join('.')) : null;
+  }
+  const corePresent = coreField !== undefined && (!isNested || childNote !== null);
+  if (!corePresent || !orchField || !orchRouting) {
+    throw new SkillFieldEditError(
+      404,
+      'FIELD_NOT_FOUND',
+      `字段 ${name} 不存在（core fields / 编排 fields / 编排 routings 三处需同名登记）`,
+    );
+  }
+  return {
+    entry,
+    stageName,
+    agentId,
+    isNested,
+    root,
+    corePath,
+    orchestrationPath,
+    coreText,
+    core,
+    coreField,
+    orchestrationText,
+    stage,
+    orchField,
+    orchRouting,
+    childNote,
+  };
+}
+
+/** 字段现状摘要（before 审计 / 幂等比对 / 编辑预填共用的归一视图） */
+function buildSkillFieldSnapshot(
+  ctx: {
+    isNested: boolean;
+    coreField: CoreFile['fields'][number];
+    orchField: OrchestrationField;
+    orchRouting: OrchestrationRouting;
+    childNote: { type: string; desc: string } | null;
+  },
+  name: string,
+): SkillFieldSnapshot {
+  const { isNested, coreField, orchField, orchRouting, childNote } = ctx;
+  let coreType = coreField.type;
+  let turn = Boolean(coreField.turn);
+  let desc = coreField.desc;
+  if (isNested && childNote) {
+    coreType = childNote.type;
+    turn = false;
+    desc = childNote.desc;
+  }
+  const locked = orchField.systemLocked ? 'system' : orchField.structureLocked ? 'structure' : null;
+  return {
+    name,
+    root: name.split('.')[0],
+    isNested,
+    coreType,
+    turn,
+    promptRole: orchField.promptRole,
+    valueType: orchField.valueType,
+    persistKey: orchField.persistKey ?? null,
+    pathInRawOutput: orchField.pathInRawOutput ?? null,
+    render: orchRouting.render,
+    handoff: [...orchRouting.handoff],
+    internal: orchRouting.internal,
+    accumulate: orchRouting.accumulate,
+    visibilityPreset: orchRouting.visibilityPreset ?? null,
+    locked,
+    desc,
+  };
+}
+
+/** PATCH 载荷校验 → 完整"目标快照"（undefined 保持现状；''/null 清除可选声明） */
+function resolveFieldUpdateTarget(
+  before: SkillFieldSnapshot,
+  payload: SkillFieldUpdateRequest,
+): SkillFieldSnapshot {
+  const isNested = before.isNested;
+
+  let rawType = before.coreType;
+  if (payload.type !== undefined) {
+    const t = fieldAddTrimmedString(payload.type);
+    if (!t) throw new SkillFieldEditError(400, 'FIELD_TYPE_REQUIRED', 'type（core 类型）不能为空');
+    const baseType = stripOptionalSuffix(t);
+    if (!(CORE_FIELD_TYPES as readonly string[]).includes(baseType)) {
+      throw new SkillFieldEditError(
+        400,
+        'FIELD_TYPE_UNKNOWN',
+        `type "${t}" 不在受控词表（${CORE_FIELD_TYPES.join(' | ')}，可带 ? 后缀）`,
+      );
+    }
+    if (!t.endsWith('?') && t !== baseType) {
+      throw new SkillFieldEditError(400, 'FIELD_TYPE_INVALID', `type "${t}" 非法（? 只能作后缀）`);
+    }
+    rawType = isNested ? baseType : t;
+  }
+  const valueType = coreTypeToValueType(rawType);
+  if (valueType === undefined) {
+    throw new SkillFieldEditError(
+      422,
+      'VALUE_TYPE_UNMAPPABLE',
+      `type "${rawType}"（enum）为 core-only，编排侧无对应 valueType，请人工登记编排侧或选用其它类型`,
+    );
+  }
+
+  const role = payload.role !== undefined ? (fieldAddTrimmedString(payload.role) ?? '') : before.promptRole;
+  if (!role) throw new SkillFieldEditError(400, 'FIELD_DESC_REQUIRED', 'role 不能为空');
+  if (!(PROMPT_ROLES as readonly string[]).includes(role)) {
+    throw new SkillFieldEditError(400, 'ROLE_UNKNOWN', `role "${role}" 非法（须在 ${PROMPT_ROLES.join(',')} 中）`);
+  }
+
+  const render = payload.render !== undefined ? (fieldAddTrimmedString(payload.render) ?? '') : before.render;
+  if (!render) throw new SkillFieldEditError(400, 'RENDER_UNKNOWN', 'render 不能为空');
+  if (!(RENDER_VALUES as readonly string[]).includes(render)) {
+    throw new SkillFieldEditError(400, 'RENDER_UNKNOWN', `render "${render}" 非法（须在 ${RENDER_VALUES.join(',')} 中）`);
+  }
+
+  const handoff = payload.handoff !== undefined
+    ? Array.isArray(payload.handoff)
+      ? payload.handoff.map((item) => fieldAddTrimmedString(item)).filter((item): item is string => item !== null)
+      : before.handoff
+    : [...before.handoff];
+
+  const internal = payload.internal !== undefined ? fieldAddBooleanFlag(payload.internal, before.internal) : before.internal;
+  const accumulate = payload.accumulate !== undefined
+    ? fieldAddBooleanFlag(payload.accumulate, before.accumulate)
+    : before.accumulate;
+
+  const visibilityPreset = payload.visibilityPreset !== undefined
+    ? (fieldAddTrimmedString(payload.visibilityPreset) ?? null)
+    : before.visibilityPreset;
+  if (visibilityPreset !== null && !(VISIBILITY_PRESETS as readonly string[]).includes(visibilityPreset)) {
+    throw new SkillFieldEditError(
+      400,
+      'VISIBILITY_PRESET_UNKNOWN',
+      `visibilityPreset "${visibilityPreset}" 非法（须在 ${VISIBILITY_PRESETS.join(',')} 中）`,
+    );
+  }
+
+  let locked = before.locked;
+  if (payload.locked !== undefined) {
+    const raw = payload.locked === null ? null : fieldAddTrimmedString(payload.locked);
+    if (raw === null || raw === '') locked = null;
+    else if (raw === 'system' || raw === 'structure') locked = raw;
+    else throw new SkillFieldEditError(400, 'LOCKED_UNKNOWN', 'locked 非法（可选 system | structure，空串清除）');
+  }
+  if (locked === 'system') {
+    throw new SkillFieldEditError(409, 'FIELD_SYSTEM_LOCKED', 'systemLocked 字段为平台派生/代码消费，禁止通过字段编辑 API 修改（需走编排文件）');
+  }
+
+  const desc = payload.desc !== undefined ? (fieldAddTrimmedString(payload.desc) ?? '') : before.desc;
+  if (!desc) throw new SkillFieldEditError(400, 'FIELD_DESC_REQUIRED', 'desc（功能描述/生成指令）必填');
+
+  const persistKey = payload.persistKey !== undefined
+    ? (fieldAddTrimmedString(payload.persistKey) ?? null)
+    : before.persistKey;
+  const pathInRawOutput = payload.pathInRawOutput !== undefined
+    ? (fieldAddTrimmedString(payload.pathInRawOutput) ?? null)
+    : before.pathInRawOutput;
+
+  const turn = isNested ? false : payload.turn !== undefined ? fieldAddBooleanFlag(payload.turn, before.turn) : before.turn;
+
+  return {
+    ...before,
+    coreType: rawType,
+    turn,
+    promptRole: role,
+    valueType,
+    persistKey,
+    pathInRawOutput,
+    render,
+    handoff,
+    internal,
+    accumulate,
+    visibilityPreset,
+    locked,
+    desc,
+  };
+}
+
+/** 路由语义校验（镜像 POST/seed：自环 / 目标存在性 / render+internal / 无流转去向） */
+function validateRoutingSemantics(agentId: string, target: SkillFieldSnapshot): void {
+  if (target.handoff.includes(agentId)) {
+    throw new SkillFieldEditError(422, 'HANDOFF_SELF_LOOP', `handoff 自环（指向自身 ${agentId}）`);
+  }
+  for (const handoffTarget of target.handoff) {
+    const canonical = getCanonicalAgentId(handoffTarget);
+    if (handoffTarget === canonical && (SKILL_STAGES as readonly string[]).includes(canonical as never)) continue;
+    if (getAgentManifest(canonical)) continue;
+    throw new SkillFieldEditError(
+      422,
+      'HANDOFF_TARGET_UNKNOWN',
+      `handoff 目标 "${handoffTarget}" 不在 manifest（也不是阶段名 ${SKILL_STAGES.join('/')}）`,
+    );
+  }
+  if (target.render === 'visible' && target.internal && target.promptRole !== 'control-signal') {
+    throw new SkillFieldEditError(422, 'RENDER_INTERNAL_CONFLICT', 'render=visible 与 internal=true 组合仅允许 control-signal 字段');
+  }
+  if (target.handoff.length === 0 && !target.internal && !target.accumulate && target.render === 'visible' && target.promptRole !== 'public-reply') {
+    throw new SkillFieldEditError(
+      422,
+      'ROUTING_NO_FLOW',
+      'handoff 为空且非 public-reply/画像终点（internal+accumulate），缺少流转去向',
+    );
+  }
+}
+
+/** 幂等比对：目标快照与现状快照逐属性一致 → true */
+function snapshotsEqual(a: SkillFieldSnapshot, b: SkillFieldSnapshot): boolean {
+  const keys: Array<keyof SkillFieldSnapshot> = [
+    'coreType', 'turn', 'promptRole', 'valueType', 'persistKey', 'pathInRawOutput',
+    'render', 'handoff', 'internal', 'accumulate', 'visibilityPreset', 'locked', 'desc',
+  ];
+  return keys.every((key) => {
+    const va = a[key];
+    const vb = b[key];
+    if (Array.isArray(va) || Array.isArray(vb)) return JSON.stringify(va) === JSON.stringify(vb);
+    return va === vb;
+  });
+}
+
+/**
+ * 原子改字段主流程（导出于单测直接调用；路由侧薄封装）。
+ * 落库采用 sync 全量对账（update 语义）：managedByCode=true 行更新、false 行跳过并报告。
+ */
+export async function updateSkillFieldInCoreAndOrchestration(
+  skillId: string,
+  name: string,
+  payload: SkillFieldUpdateRequest,
+  opts: { actorId?: string } = {},
+): Promise<SkillFieldUpdateResult> {
+  const ctx = await loadSkillFieldContext(skillId, name);
+  const { entry, stageName, agentId, isNested, corePath, orchestrationPath, coreText, core, coreField, orchestrationText, stage, orchField, orchRouting } = ctx;
+
+  // 系统锁保护（409）：platform 派生/代码消费字段只读
+  if (orchField.systemLocked) {
+    throw new SkillFieldEditError(
+      409,
+      'FIELD_SYSTEM_LOCKED',
+      `字段 ${name} 为 systemLocked（平台派生/代码消费），禁止通过字段编辑 API 修改（只读，需走编排文件）`,
+      { lockReason: 'systemLocked' },
+    );
+  }
+
+  const before = buildSkillFieldSnapshot(ctx, name);
+  const after = resolveFieldUpdateTarget(before, payload);
+  validateRoutingSemantics(agentId, after);
+
+  // 幂等：无变化 → 不写盘 / 不落库 / 不审计
+  const changed = !snapshotsEqual(before, after);
+  const syncCheck = analyzeCoreFieldsSync([stage], [entry], () => ({ core })).find((r) => r.skillId === skillId) ?? null;
+  if (!changed) {
+    return {
+      skillId,
+      stage: stageName,
+      name,
+      changed: false,
+      coreWritten: false,
+      orchestrationWritten: false,
+      dbSync: { fieldsUpdated: 0, routingsUpdated: 0, contractsUpdated: 0, createdCount: 0, skippedAdminRows: [] },
+      syncCheck,
+      auditId: '',
+    };
+  }
+
+  // 内存修改 + parse 双校验（任一失败 → 不落任何文件）
+  const coreSpec: CoreFieldUpdateSpec = isNested
+    ? { name, child: { path: name.split('.').slice(1).join('.'), type: after.coreType, desc: after.desc } }
+    : { name, type: after.coreType, desc: after.desc, turn: after.turn };
+  const newCoreText = updateFieldInCore(coreText, coreSpec);
+  const coreChecked = parseCoreFile(corePath, newCoreText);
+  if (!coreChecked.core) {
+    throw new SkillFieldEditError(
+      422,
+      'CORE_VALIDATION_FAILED',
+      `修改后核心文件未通过 parseCoreFile：${coreChecked.diagnostics.map((d) => d.message).join('；')}`,
+    );
+  }
+  const newCore = coreChecked.core;
+
+  const fieldSpec: OrchestrationFieldUpdateSpec = {
+    fieldId: name,
+    promptRole: after.promptRole,
+    valueType: after.valueType,
+    pathInRawOutput: after.pathInRawOutput,
+    persistKey: after.persistKey,
+    description: after.desc,
+    systemLocked: after.locked === 'system' ? true : null,
+    structureLocked: after.locked === 'structure' ? true : null,
+  };
+  const routingSpec: OrchestrationRoutingUpdateSpec = {
+    agentId,
+    fieldId: name,
+    render: after.render,
+    handoff: after.handoff,
+    internal: after.internal,
+    accumulate: after.accumulate,
+    visibilityPreset: after.visibilityPreset,
+  };
+  const newOrchestrationText = updateFieldInOrchestration(orchestrationText, fieldSpec, routingSpec);
+  let newStage: OrchestrationStage;
+  try {
+    newStage = validateOrchestrationContent(newOrchestrationText);
+  } catch (error) {
+    throw new SkillFieldEditError(
+      422,
+      'ORCHESTRATION_VALIDATION_FAILED',
+      `修改后编排文件未通过 validateOrchestrationContent：${(error as Error).message}`,
+    );
+  }
+
+  // 备份 + 写盘（编排写失败 → 回滚 core）
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupDir = path.join(FIELD_ADD_BACKUPS_DIR, ts);
+  try {
+    await fs.mkdir(backupDir, { recursive: true });
+    await fs.copyFile(corePath, path.join(backupDir, `core-${skillId}.yaml`));
+    await fs.copyFile(orchestrationPath, path.join(backupDir, `orchestration-${stageName}.yaml`));
+  } catch {
+    // 备份失败不阻断（与既有备份模式一致）
+  }
+  await fs.writeFile(corePath, newCoreText, 'utf-8');
+  try {
+    await fs.writeFile(orchestrationPath, newOrchestrationText, 'utf-8');
+  } catch (error) {
+    await fs.writeFile(corePath, coreText, 'utf-8').catch(() => undefined);
+    throw new SkillFieldEditError(
+      500,
+      'ORCHESTRATION_WRITE_FAILED',
+      `编排文件写盘失败（core 已回滚原内容）：${(error as Error).message}；恢复备份参考：${backupDir}`,
+    );
+  }
+
+  // fields-sync 复检（违规 → 双文件回滚）
+  const recheckReport = analyzeCoreFieldsSync([newStage], [entry], () => ({ core: newCore })).find((r) => r.skillId === skillId) ?? null;
+  const recheckFailed = recheckReport !== null
+    && (recheckReport.missing.some((item) => item.fieldId === name || item.root === ctx.root)
+      || recheckReport.typeMismatch.some((item) => item.fieldId === name));
+  if (recheckFailed) {
+    await fs.writeFile(corePath, coreText, 'utf-8').catch(() => undefined);
+    await fs.writeFile(orchestrationPath, orchestrationText, 'utf-8').catch(() => undefined);
+    throw new SkillFieldEditError(
+      422,
+      'FIELDS_SYNC_RECHECK_FAILED',
+      'fields-sync 复检未通过（缺项/类型不一致），已回滚双文件（恢复原内容）',
+      { syncCheck: recheckReport },
+    );
+  }
+
+  // 落库：sync 全量对账（update 语义；managedByCode=false 行跳过并报告）
+  let dbSync: SkillFieldUpdateResult['dbSync'] = {
+    fieldsUpdated: 0, routingsUpdated: 0, contractsUpdated: 0, createdCount: 0, skippedAdminRows: [],
+  };
+  try {
+    const report = await syncStageFieldRoutingsFromFile(systemPrisma, newStage);
+    dbSync = {
+      fieldsUpdated: report.fieldsUpdated,
+      routingsUpdated: report.routingsUpdated,
+      contractsUpdated: report.contractsUpdated,
+      createdCount: report.createdCount,
+      skippedAdminRows: report.skippedAdminRows,
+    };
+  } catch (error) {
+    logger.warn('[prompt-lab] skill-field-update db sync failed（不阻断写盘结果）', {
+      skillId,
+      name,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  // 审计（changeType='skill-field-update'；before=原摘要，after=新摘要）
+  let auditId = '';
+  try {
+    auditId = await writeNodeConfigChange(systemPrisma, {
+      changeType: 'skill-field-update',
+      targetTable: 'core.yaml+orchestration',
+      targetId: skillId,
+      agentId,
+      fieldId: name,
+      before,
+      after,
+      actorId: opts.actorId ?? 'admin',
+      reason: '改字段原子编辑（core.yaml + 编排文件双写 + sync 全量对账落库）',
+    });
+  } catch (auditError) {
+    logger.warn('[prompt-lab] skill-field-update audit write failed（不阻断）', {
+      skillId,
+      error: auditError instanceof Error ? auditError.message : String(auditError),
+    });
+  }
+
+  try {
+    clearRoutingCache();
+    clearSupplementRenderCache();
+  } catch {
+    // 缓存清理失败不阻断
+  }
+
+  return {
+    skillId,
+    stage: stageName,
+    name,
+    changed: true,
+    coreWritten: true,
+    orchestrationWritten: true,
+    dbSync,
+    syncCheck: recheckReport,
+    auditId,
+  };
+}
+
+/**
+ * PATCH /api/admin/prompt-lab/core/:skillId/field/:name
+ * 原子改字段：双文件联动 + 回滚 + 落库 update 语义 + 审计 + 复检。
+ */
+router.patch('/core/:skillId/field/:name', async (req, res) => {
+  const skillId = assertValidSkillId(req.params.skillId);
+  await serializeFieldAdd(skillId, async () => {
+    try {
+      const result = await updateSkillFieldInCoreAndOrchestration(skillId, String(req.params.name), req.body ?? {}, {
+        actorId: (req as Request & { user?: { userId?: string } }).user?.userId || 'admin',
+      });
+      res.json({ success: true, data: result });
+    } catch (error) {
+      if (error instanceof SkillFieldEditError) {
+        return res.status(error.status).json({
+          success: false,
+          code: error.code,
+          error: { message: error.message },
+          ...(error.extra ?? {}),
+        });
+      }
+      console.error('Skill field update error:', error);
+      res.status(500).json({ success: false, error: { message: '改字段失败', details: (error as Error).message } });
+    }
+  });
+});
+
+/**
+ * DELETE /api/admin/prompt-lab/core/:skillId/field/:name
+ * 删字段原子 API（M3）：双文件联动删除 + 回滚 + 落库删除 + 审计 + 复检。
+ *
+ * 保护检查（任一不满足 → 409）：
+ *   - systemLocked 字段禁删；
+ *   - 消费检查：编排文件内其他 agent 的 routings 仍引用该 fieldId、或
+ *     其他 skill 的 core inputs（ref: skill:<skillId>.<field>）消费该字段 → 409
+ *     FIELD_CONSUMED（列出消费方；无消费时提示"删除前确认无下游消费"）。
+ *
+ * 删除范围：core fields 条目 + 编排 fields 条目 + 编排 routings 中该 skill 名下的行
+ * （其他 agent 行不删，消费检查已 409 说明）。落库删除 field_definitions 行 +
+ * 该 skill 名下 routings 行（managedByCode=false 行跳过并报告 protected）。
+ */
+export interface SkillFieldDeleteResult {
+  skillId: string;
+  stage: string;
+  name: string;
+  coreWritten: boolean;
+  orchestrationWritten: boolean;
+  /** 文件侧删除清单（core fields / 编排 fields / 编排 routings / core 级联条目） */
+  deleted: Array<{ table: string; key: string }>;
+  /** 文件侧无新孤儿断言 */
+  syncCheck: CoreFieldsSyncSkillReport | null;
+  /** DB 侧删除清单（field_definitions / agent_field_routings） */
+  dbDeleted: Array<{ table: string; key: string }>;
+  /** managedByCode=false 覆盖行（跳过，仅报告） */
+  protectedRows: Array<{ table: string; key: string }>;
+  auditId: string;
+}
+
+/** 扫描全部 core 文件 inputs：其他 skill 的 `ref: skill:<skillId>.<field>` 消费引用 */
+async function findCoreInputConsumers(skillId: string, fieldName: string): Promise<Array<{ skillId: string; refs: string[] }>> {
+  const refPrefix = `skill:${skillId}.`;
+  const root = fieldName.split('.')[0];
+  const consumers: Array<{ skillId: string; refs: string[] }> = [];
+  let files: string[];
+  try {
+    files = await fs.readdir(CORE_FILES_DIR);
+  } catch {
+    return consumers;
+  }
+  for (const file of files.filter((f) => f.endsWith('.yaml'))) {
+    let raw: string;
+    try {
+      raw = await fs.readFile(path.join(CORE_FILES_DIR, file), 'utf-8');
+    } catch {
+      continue;
+    }
+    let parsed: Record<string, unknown> | null;
+    try {
+      parsed = (yaml.load(raw) as Record<string, unknown>) ?? null;
+    } catch {
+      continue;
+    }
+    if (!parsed || typeof parsed.skillId !== 'string') continue;
+    const consumerSkillId = parsed.skillId;
+    if (consumerSkillId === skillId) continue; // 自身 inputs 不算下游消费
+    const inputs = Array.isArray(parsed.inputs) ? (parsed.inputs as Array<Record<string, unknown>>) : [];
+    const refs: string[] = [];
+    for (const input of inputs) {
+      const ref = typeof input?.ref === 'string' ? input.ref : '';
+      if (!ref.startsWith(refPrefix)) continue;
+      const rest = ref.slice(refPrefix.length);
+      if (rest === root || rest === fieldName || rest.startsWith(`${root}.`) || rest.startsWith(`${fieldName}.`)) {
+        refs.push(ref);
+      }
+    }
+    if (refs.length > 0) consumers.push({ skillId: consumerSkillId, refs });
+  }
+  return consumers;
+}
+
+/**
+ * 原子删字段主流程（导出于单测直接调用；路由侧薄封装）。
+ */
+export async function deleteSkillFieldFromCoreAndOrchestration(
+  skillId: string,
+  name: string,
+  opts: { actorId?: string } = {},
+): Promise<SkillFieldDeleteResult> {
+  const ctx = await loadSkillFieldContext(skillId, name);
+  const { entry, stageName, agentId, isNested, root, corePath, orchestrationPath, coreText, core, orchestrationText, stage, orchField, orchRouting } = ctx;
+
+  // ---- 保护检查 1：systemLocked 禁删 ----
+  if (orchField.systemLocked) {
+    throw new SkillFieldEditError(
+      409,
+      'FIELD_SYSTEM_LOCKED',
+      `字段 ${name} 为 systemLocked（平台派生/代码消费），禁止删除；锁原因见编排文件 systemLocked 声明`,
+      { lockReason: 'systemLocked' },
+    );
+  }
+
+  // ---- 保护检查 2：消费检查（编排内其他 agent 引用 + 其他 skill core inputs 消费） ----
+  const otherAgents = stage.routings
+    .filter((r) => r.fieldId === name && r.agentId !== agentId)
+    .map((r) => r.agentId);
+  const inputConsumers = await findCoreInputConsumers(skillId, name);
+  if (otherAgents.length > 0 || inputConsumers.length > 0) {
+    const consumers: Record<string, unknown> = {
+      agents: otherAgents,
+      skills: inputConsumers,
+    };
+    const parts: string[] = [];
+    if (otherAgents.length > 0) parts.push(`编排文件内其他 agent 的 routings 仍引用：${otherAgents.join(', ')}`);
+    if (inputConsumers.length > 0) {
+      parts.push(`其他 skill 的 core inputs 消费：${inputConsumers.map((c) => `${c.skillId}（${c.refs.join('，')}）`).join('；')}`);
+    }
+    throw new SkillFieldEditError(
+      409,
+      'FIELD_CONSUMED',
+      `字段 ${name} 仍被下游引用，禁止删除：${parts.join('；')}（如需删除请先解除下游消费）`,
+      { consumers },
+    );
+  }
+
+  // ---- 删除前快照（审计 before = 被删字段全量摘要） ----
+  const before = buildSkillFieldSnapshot(ctx, name);
+
+  // ---- 内存删除 + parse 双校验 ----
+  const deleted: Array<{ table: string; key: string }> = [];
+  let newCoreText = deleteFieldFromCore(coreText, name).text;
+  deleted.push({ table: 'core-fields', key: name });
+  if (isNested) {
+    // 级联：该 skill 名下 root 已无任何路由行 → 移除 core root 顶层条目（防新孤儿）
+    const remainingRootRows = stage.routings.filter((r) => r.agentId === agentId && r.fieldId.split('.')[0] === root && r.fieldId !== name);
+    if (remainingRootRows.length === 0) {
+      newCoreText = deleteFieldFromCore(newCoreText, root).text;
+      deleted.push({ table: 'core-fields', key: root });
+    }
+  }
+  const coreChecked = parseCoreFile(corePath, newCoreText);
+  if (!coreChecked.core) {
+    throw new SkillFieldEditError(
+      422,
+      'CORE_VALIDATION_FAILED',
+      `删除后核心文件未通过 parseCoreFile：${coreChecked.diagnostics.map((d) => d.message).join('；')}`,
+    );
+  }
+  const newCore = coreChecked.core;
+
+  const orchResult = deleteFieldFromOrchestration(orchestrationText, name, agentId, { removeFieldEntry: true });
+  deleted.push({ table: 'orchestration-routings', key: `${agentId}/${name}` });
+  if (orchResult.fieldRemoved) deleted.push({ table: 'orchestration-fields', key: name });
+  let newStage: OrchestrationStage;
+  try {
+    newStage = validateOrchestrationContent(orchResult.text);
+  } catch (error) {
+    throw new SkillFieldEditError(
+      422,
+      'ORCHESTRATION_VALIDATION_FAILED',
+      `删除后编排文件未通过 validateOrchestrationContent：${(error as Error).message}`,
+    );
+  }
+
+  // ---- 备份 + 双文件写（编排写失败 → 回滚 core） ----
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupDir = path.join(FIELD_ADD_BACKUPS_DIR, ts);
+  try {
+    await fs.mkdir(backupDir, { recursive: true });
+    await fs.copyFile(corePath, path.join(backupDir, `core-${skillId}.yaml`));
+    await fs.copyFile(orchestrationPath, path.join(backupDir, `orchestration-${stageName}.yaml`));
+  } catch {
+    // 备份失败不阻断（与既有备份模式一致）
+  }
+  await fs.writeFile(corePath, newCoreText, 'utf-8');
+  try {
+    await fs.writeFile(orchestrationPath, orchResult.text, 'utf-8');
+  } catch (error) {
+    await fs.writeFile(corePath, coreText, 'utf-8').catch(() => undefined);
+    throw new SkillFieldEditError(
+      500,
+      'ORCHESTRATION_WRITE_FAILED',
+      `编排文件写盘失败（core 已回滚原内容）：${(error as Error).message}；恢复备份参考：${backupDir}`,
+    );
+  }
+
+  // ---- fields-sync 复检（删后 core 与编排同时少 → 应无新缺项/新孤儿） ----
+  const recheckReport = analyzeCoreFieldsSync([newStage], [entry], () => ({ core: newCore })).find((r) => r.skillId === skillId) ?? null;
+  const recheckFailed = recheckReport !== null
+    && (recheckReport.missing.some((item) => item.fieldId === name || item.root === root)
+      || recheckReport.typeMismatch.some((item) => item.fieldId === name)
+      || recheckReport.orphan.some((item) => deleted.some((d) => d.key === item.coreField)));
+  if (recheckFailed) {
+    await fs.writeFile(corePath, coreText, 'utf-8').catch(() => undefined);
+    await fs.writeFile(orchestrationPath, orchestrationText, 'utf-8').catch(() => undefined);
+    throw new SkillFieldEditError(
+      422,
+      'FIELDS_SYNC_RECHECK_FAILED',
+      'fields-sync 复检未通过（删除产生新缺项/孤儿/类型不一致），已回滚双文件（恢复原内容）',
+      { syncCheck: recheckReport },
+    );
+  }
+
+  // ---- 落库：删除 field_definitions 行 + 该 skill 名下 routings 行（跳过 managedByCode=false 并报告） ----
+  const dbDeleted: Array<{ table: string; key: string }> = [];
+  const protectedRows: Array<{ table: string; key: string }> = [];
+  try {
+    const report = await deleteStageFieldRows(systemPrisma, { stage: stageName, fieldId: name, agentId });
+    for (const row of report.deletedRows) dbDeleted.push({ table: row.table, key: row.key });
+    for (const row of report.protectedRows) protectedRows.push(row);
+  } catch (error) {
+    logger.warn('[prompt-lab] skill-field-delete db delete failed（不阻断写盘结果）', {
+      skillId,
+      name,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  // ---- 审计（changeType='skill-field-delete'；before=被删字段全量摘要） ----
+  let auditId = '';
+  try {
+    auditId = await writeNodeConfigChange(systemPrisma, {
+      changeType: 'skill-field-delete',
+      targetTable: 'core.yaml+orchestration',
+      targetId: skillId,
+      agentId,
+      fieldId: name,
+      before: { ...before, routing: { render: orchRouting.render, handoff: orchRouting.handoff, internal: orchRouting.internal, accumulate: orchRouting.accumulate } },
+      after: null,
+      actorId: opts.actorId ?? 'admin',
+      reason: '删字段原子删除（core.yaml + 编排文件双写 + DB 行清理）',
+    });
+  } catch (auditError) {
+    logger.warn('[prompt-lab] skill-field-delete audit write failed（不阻断）', {
+      skillId,
+      error: auditError instanceof Error ? auditError.message : String(auditError),
+    });
+  }
+
+  try {
+    clearRoutingCache();
+    clearSupplementRenderCache();
+  } catch {
+    // 缓存清理失败不阻断
+  }
+
+  return {
+    skillId,
+    stage: stageName,
+    name,
+    coreWritten: true,
+    orchestrationWritten: true,
+    deleted,
+    syncCheck: recheckReport,
+    dbDeleted,
+    protectedRows,
+    auditId,
+  };
+}
+
+/**
+ * DELETE /api/admin/prompt-lab/core/:skillId/field/:name
+ * 原子删字段：双文件联动删除 + 回滚 + 落库删除 + 审计 + 复检。
+ */
+router.delete('/core/:skillId/field/:name', async (req, res) => {
+  const skillId = assertValidSkillId(req.params.skillId);
+  await serializeFieldAdd(skillId, async () => {
+    try {
+      const result = await deleteSkillFieldFromCoreAndOrchestration(skillId, String(req.params.name), {
+        actorId: (req as Request & { user?: { userId?: string } }).user?.userId || 'admin',
+      });
+      res.json({ success: true, data: result });
+    } catch (error) {
+      if (error instanceof SkillFieldEditError) {
+        return res.status(error.status).json({
+          success: false,
+          code: error.code,
+          error: { message: error.message },
+          ...(error.extra ?? {}),
+        });
+      }
+      console.error('Skill field delete error:', error);
+      res.status(500).json({ success: false, error: { message: '删字段失败', details: (error as Error).message } });
     }
   });
 });

@@ -1389,6 +1389,36 @@ export const adminPromptWorkbenchApi = {
     pathInRawOutput?: string;
   }) => {
     return adminAxios.post(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}/field`, payload);
+  },
+
+  /**
+   * 改字段原子 API（M3）：PATCH /core/:skillId/field/:name。
+   * 双文件联动修改 + sync 全量对账落库（managedByCode=false 行跳过报告）+ 审计 + 复检。
+   * 幂等：无变化 → changed=false。404 = 字段不存在；409 = systemLocked / 消费中。
+   */
+  updateSkillField: async (skillId: string, name: string, payload: {
+    type?: string;
+    role?: string;
+    render?: string;
+    handoff?: string[];
+    internal?: boolean;
+    accumulate?: boolean;
+    turn?: boolean;
+    visibilityPreset?: string;
+    locked?: 'system' | 'structure' | '';
+    desc?: string;
+    persistKey?: string;
+    pathInRawOutput?: string;
+  }) => {
+    return adminAxios.patch(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}/field/${encodeURIComponent(name)}`, payload);
+  },
+
+  /**
+   * 删字段原子 API（M3）：DELETE /core/:skillId/field/:name。
+   * 双文件联动删除 + DB 行清理 + 审计 + 复检。409 = systemLocked / 仍被下游消费。
+   */
+  deleteSkillField: async (skillId: string, name: string) => {
+    return adminAxios.delete(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}/field/${encodeURIComponent(name)}`);
   }
 };
 

@@ -217,6 +217,66 @@ export async function ensureStageFieldRoutings(
   return result;
 }
 
+// ============================================================
+// 字段级删除落库（M3 统一编辑：删字段原子 API 的 DB 侧清理）
+//
+// 语义（与 prune 对齐的硬性约束）：
+//   - 只删 managedByCode=true 的行；managedByCode=false（admin 覆盖行）跳过并记入
+//     protectedRows 报告。
+//   - 删除前逐行写 node_config_changes 审计（changeType='skill-field-delete' 由调用方
+//     写主审计；本函数不重复写审计，仅返回被删行全量供调用方并入 before 摘要）。
+//   - 不删 agent_contracts（skill 契约仍存在）；调用方保证无其他 agent 引用该 fieldId
+//     （消费检查在 API 层 409），因此删除 field_definitions 行不会产生悬空路由引用。
+// ============================================================
+
+export interface FieldRoutingRowDeleteReport {
+  /** 实际删除的 DB 行（全量快照，供审计 before） */
+  deletedRows: Array<{ table: 'field_definitions' | 'agent_field_routings'; key: string; row: Record<string, any> }>;
+  /** managedByCode=false 覆盖行（受保护，仅报告不删） */
+  protectedRows: Array<{ table: string; key: string }>;
+  /** 文件声明存在但 DB 无行（无需删除） */
+  missingRows: Array<{ table: string; key: string }>;
+}
+
+export async function deleteStageFieldRows(
+  prisma: PrismaClient,
+  args: { stage: string; fieldId: string; agentId: string },
+): Promise<FieldRoutingRowDeleteReport> {
+  const report: FieldRoutingRowDeleteReport = { deletedRows: [], protectedRows: [], missingRows: [] };
+
+  // 1) field_definitions：(stage, fieldId) 复合键
+  const fieldRow = await prisma.field_definitions.findFirst({
+    where: { stage: args.stage, fieldId: args.fieldId },
+  });
+  if (!fieldRow) {
+    report.missingRows.push({ table: 'field_definitions', key: `${args.stage}/${args.fieldId}` });
+  } else if (fieldRow.managedByCode === false) {
+    report.protectedRows.push({ table: 'field_definitions', key: `${args.stage}/${args.fieldId}` });
+  } else {
+    await prisma.field_definitions.delete({
+      where: { stage_fieldId: { stage: args.stage, fieldId: args.fieldId } },
+    });
+    report.deletedRows.push({ table: 'field_definitions', key: `${args.stage}/${args.fieldId}`, row: { ...fieldRow } });
+  }
+
+  // 2) agent_field_routings：(agentId, fieldId) 复合键（仅本 skill 名下）
+  const routingRow = await prisma.agent_field_routings.findUnique({
+    where: { agentId_fieldId: { agentId: args.agentId, fieldId: args.fieldId } },
+  });
+  if (!routingRow) {
+    report.missingRows.push({ table: 'agent_field_routings', key: `${args.agentId}/${args.fieldId}` });
+  } else if (routingRow.managedByCode === false) {
+    report.protectedRows.push({ table: 'agent_field_routings', key: `${args.agentId}/${args.fieldId}` });
+  } else {
+    await prisma.agent_field_routings.delete({
+      where: { agentId_fieldId: { agentId: args.agentId, fieldId: args.fieldId } },
+    });
+    report.deletedRows.push({ table: 'agent_field_routings', key: `${args.agentId}/${args.fieldId}`, row: { ...routingRow } });
+  }
+
+  return report;
+}
+
 export async function bootstrapFieldRoutings(dependencies: FieldRoutingBootstrapDependencies) {
   const stages = dependencies.stagesOverride || ORCHESTRATION_STAGES;
   const results: Record<string, FieldRoutingBootstrapResult> = {};

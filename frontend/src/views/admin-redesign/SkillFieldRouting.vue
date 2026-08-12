@@ -118,6 +118,7 @@
               <th scope="col">落库键</th>
               <th scope="col">锁定</th>
               <th scope="col">core 状态</th>
+              <th scope="col">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -149,9 +150,13 @@
                 <span v-else-if="row.coreState === 'mismatch'" class="sfr__core sfr__core--mismatch" :title="row.coreStateTitle">⚠ 类型不一致</span>
                 <span v-else class="sfr__core sfr__core--declared" :title="row.coreStateTitle">✓ 已声明</span>
               </td>
+              <td class="sfr__ops">
+                <button type="button" class="mk-btn mk-btn--sm" :disabled="!canEditRow(row)" :title="editTitleOf(row)" @click="openEdit(row)">编辑</button>
+                <button type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="!canDeleteRow(row)" :title="deleteTitleOf(row)" @click="onDelete(row)">删除</button>
+              </td>
             </tr>
             <tr v-if="!rows.length">
-              <td colspan="11" class="sfr__emptyrow">{{ data.routings.length ? '无匹配行，试试调整搜索或角色过滤' : '该 skill 暂无产出行（无编排路由声明）' }}</td>
+              <td colspan="12" class="sfr__emptyrow">{{ data.routings.length ? '无匹配行，试试调整搜索或角色过滤' : '该 skill 暂无产出行（无编排路由声明）' }}</td>
             </tr>
           </tbody>
         </table>
@@ -167,6 +172,20 @@
         @saved="load"
         @close="wizardOpen = false"
       />
+
+      <!-- 编辑字段向导（双模式：预填当前值 → PATCH 原子改） -->
+      <FieldAddWizard
+        v-if="editingRow"
+        :skill-id="skillId"
+        :stage="data.stage"
+        :existing-names="existingNames"
+        :role-meta="roleMeta"
+        mode="edit"
+        :field-name="editingRow.fieldId"
+        :initial="editInitialOf(editingRow)"
+        @saved="load"
+        @close="editingRow = null"
+      />
     </template>
   </div>
 </template>
@@ -174,8 +193,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { adminFieldRoutingsApi } from '@/api/adminApi'
+import { adminFieldRoutingsApi, adminPromptWorkbenchApi } from '@/api/adminApi'
 import FieldAddWizard from './FieldAddWizard.vue'
+import { askConfirm } from './useConfirm'
+import { toast } from '@/utils/toast'
 
 interface RoleMeta { id: string; label: string; hint: string }
 interface CoreField { name: string; type: string; turn?: boolean; desc?: string }
@@ -233,6 +254,8 @@ const keyword = ref('')
 const roleFilter = ref('')
 const legendOpen = ref(false)
 const wizardOpen = ref(false)
+const editingRow = ref<Record<string, any> | null>(null)
+const deleting = ref(false)
 
 const fieldMap = computed(() => new Map((data.value?.fields || []).map((f) => [f.fieldId, f])))
 const coreFieldNames = computed(() => new Set((data.value?.core.fields || []).map((f) => f.name)))
@@ -396,6 +419,137 @@ function openWizard() {
   wizardOpen.value = true
 }
 
+/** 编排 valueType → core 类型（反向归一，与后端 valueTypeToCoreType 同源） */
+function coreTypeOfValueType(vt: string): string {
+  if (vt === 'array<string>') return 'string[]'
+  if (vt === 'array<object>') return 'object[]'
+  if (['string', 'number', 'boolean', 'object'].includes(vt)) return vt
+  return 'string'
+}
+
+interface EditInitialShape {
+  type: string
+  optional: boolean
+  turn: boolean
+  role: string
+  render: string
+  handoff: string[]
+  internal: boolean
+  accumulate: boolean
+  visibilityPreset: string
+  locked: '' | 'system' | 'structure'
+  desc: string
+  persistKey: string
+  pathInRawOutput: string
+  systemLocked: boolean
+  structureLocked: boolean
+}
+
+/** 编辑预填：行数据 + core 声明组装（core 类型优先 core 侧；嵌套从 desc 子字段说明解析） */
+function editInitialOf(row: Record<string, any>): EditInitialShape {
+  const isNested = row.fieldId.includes('.')
+  const root = row.fieldId.split('.')[0]
+  const coreField = data.value?.core.fields.find((f) => f.name === root)
+  let type = coreTypeOfValueType(row.valueType || '')
+  let desc = row.desc || ''
+  let turn = false
+  if (coreField) {
+    if (isNested) {
+      const childPath = row.fieldId.slice(root.length + 1)
+      const noteRe = new RegExp(`(?:^|\\n)\\s*·\\s*${childPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*（([^），）]*)）\\s*([^\\n]*)`)
+      const m = coreField.desc?.match(noteRe)
+      if (m) {
+        type = m[1].trim() || type
+        desc = m[2].trim() || desc
+      }
+    } else {
+      type = coreField.type || type
+      turn = Boolean(coreField.turn)
+      desc = coreField.desc || desc
+    }
+  }
+  const optional = type.endsWith('?')
+  return {
+    type: optional ? type.slice(0, -1) : type,
+    optional,
+    turn,
+    role: row.role || 'soft-info',
+    render: row.render || 'visible',
+    handoff: Array.isArray(row.handoff) ? [...row.handoff] : [],
+    internal: Boolean(row.internal),
+    accumulate: Boolean(row.accumulate),
+    visibilityPreset: row.visibilityPreset || '',
+    locked: row.lockLevel === 'system-locked' ? 'system' : row.lockLevel === 'structure-locked' ? 'structure' : '',
+    desc,
+    persistKey: row.persistKey && row.persistKey !== row.fieldId ? row.persistKey : '',
+    pathInRawOutput: row.pathInRawOutput || '',
+    systemLocked: row.lockLevel === 'system-locked',
+    structureLocked: row.lockLevel === 'structure-locked'
+  }
+}
+
+function openEdit(row: Record<string, any>) {
+  editingRow.value = row
+}
+
+/** systemLocked 只读 / core 缺声明不可编辑；structureLocked 可编辑（向导内提示） */
+function canEditRow(row: Record<string, any>): boolean {
+  if (row.lockLevel === 'system-locked') return false
+  if (row.coreState === 'missing') return false
+  return true
+}
+function editTitleOf(row: Record<string, any>): string {
+  if (row.lockLevel === 'system-locked') return 'systemLocked 只读：平台派生 / 代码消费，需走编排文件编辑'
+  if (row.coreState === 'missing') return 'core 缺声明：无法编辑 core 侧（先在协议 tab 补声明，或走编排弹窗）'
+  return '编辑字段（core 声明 + 编排路由 + DB 对账原子修改）'
+}
+function canDeleteRow(row: Record<string, any>): boolean {
+  return row.lockLevel !== 'system-locked'
+}
+function deleteTitleOf(row: Record<string, any>): string {
+  if (row.lockLevel === 'system-locked') return 'systemLocked 字段禁止删除（平台派生 / 代码消费，锁原因见编排文件）'
+  return '删除字段（移除 core 声明 + 编排字段/路由 + DB 行；下游消费会被后端 409 拦截）'
+}
+
+/** 404 / 409 删除错误码 → 中文 */
+function deleteErrText(e: unknown): string {
+  const r = e as { response?: { data?: { code?: string; error?: { message?: string } | string } }; message?: string }
+  const d = r?.response?.data
+  const raw = d?.error ? (typeof d.error === 'string' ? d.error : d.error.message) : r?.message
+  const code = d?.code || ''
+  const map: Record<string, string> = {
+    FIELD_NOT_FOUND: '字段不存在（可能已被删除，或仅声明于一侧）',
+    FIELD_SYSTEM_LOCKED: '字段为 systemLocked，禁止删除（平台派生 / 代码消费）',
+    FIELD_CONSUMED: '字段仍被下游消费（其他 agent 路由 / 其他 skill 的 core inputs），已拒绝删除'
+  }
+  const title = code ? (map[code] || '删除被拒绝') : '删除失败'
+  return raw ? `${title}：${raw}` : title
+}
+
+async function onDelete(row: Record<string, any>) {
+  if (deleting.value) return
+  const ok = await askConfirm({
+    title: `删除字段 ${row.fieldId}？`,
+    message: `将同时移除 core.yaml 声明、编排 fields 定义与 skill:${props.skillId} 名下的路由行，并清理 DB 落库行（文件备份保留在 prompts/backups/unified-edit）。\n\n删除前请确认下游无消费：其他 agent 的路由引用、其他 skill 的 core inputs 引用会被后端 409 拦截并列出。`,
+    confirmText: '确认删除（不可恢复）'
+  })
+  if (!ok) return
+  deleting.value = true
+  try {
+    const res = await adminPromptWorkbenchApi.deleteSkillField(props.skillId, row.fieldId)
+    const d = res.data?.data
+    toast.success(`已删除字段 ${row.fieldId}（双文件与 DB 均已清理）`)
+    if (d?.protectedRows?.length) {
+      toast.warning(`受保护行未删：${d.protectedRows.map((p: any) => p.key).join('，')}（managedByCode=false，需走编排弹窗处理）`)
+    }
+    await load()
+  } catch (e: any) {
+    toast.error(deleteErrText(e))
+  } finally {
+    deleting.value = false
+  }
+}
+
 function goOrchestration() {
   if (!data.value) return
   void router.push({ path: '/admin/orchestrator', query: { stage: data.value.stage, tab: 'field-routings' } })
@@ -520,6 +674,8 @@ onMounted(() => void load())
 .sfr__meaning { min-width: 200px; max-width: 340px; }
 .sfr__meaning-text { display: block; color: var(--mk-muted, #5b6577); line-height: 1.5; max-height: 3em; overflow: hidden; }
 .sfr__handoff { max-width: 220px; color: var(--mk-faint, #71809a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sfr__ops { display: flex; gap: 6px; white-space: nowrap; }
+.sfr__ops .mk-btn { padding: 3px 10px; font-size: 11.5px; }
 
 /* 角色徽章（与编排结构页同款 7 类着色） */
 .sfr__role { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
