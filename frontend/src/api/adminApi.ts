@@ -544,6 +544,10 @@ export const adminFieldRoutingsApi = {
   getStageDetail: async (stage: string) =>
     adminAxios.get(`/admin/field-routings/stages/${encodeURIComponent(stage)}`),
 
+  /** skill 维度字段路由读取（M1 统一编辑）：产出行 + fields + core 状态投影（analyzeCoreFieldsSync 单 skill） */
+  getSkillRoutings: async (skillId: string) =>
+    adminAxios.get(`/admin/field-routings/skill/${encodeURIComponent(skillId)}`),
+
   getChanges: async (params?: { stage?: string; fieldId?: string; limit?: number }) =>
     adminAxios.get('/admin/field-routings/changes', { params }),
 
@@ -1362,6 +1366,29 @@ export const adminPromptWorkbenchApi = {
 
   getCoreLineage: async (skillId: string) => {
     return adminAxios.get(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}/lineage`);
+  },
+
+  /**
+   * 加字段向导原子追加（M1 统一编辑，UNIFIED_EDITING_DESIGN §4.3）：
+   * core.yaml fields + 编排 fields/routings 双写 + 落库 + fields-sync 复检 + 审计。
+   * 409 = 重名（去既有编辑面）；422 = 校验/复检违规（后端中文 message 直接展示）。
+   */
+  addSkillField: async (skillId: string, payload: {
+    name: string;
+    type: string;
+    role?: string;
+    render?: string;
+    handoff?: string[];
+    internal?: boolean;
+    accumulate?: boolean;
+    turn?: boolean;
+    visibilityPreset?: string;
+    locked?: 'system' | 'structure';
+    desc: string;
+    persistKey?: string;
+    pathInRawOutput?: string;
+  }) => {
+    return adminAxios.post(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}/field`, payload);
   }
 };
 

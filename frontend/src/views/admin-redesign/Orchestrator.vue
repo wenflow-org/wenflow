@@ -179,7 +179,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { openSkillDrawer, dataSource, isLive } from './store'
 import { liveTopoNodes, liveSkillCatalog, errMsg } from './live'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
@@ -199,6 +199,17 @@ const activeTab = ref('definition')
 
 /* ================= 健康区（顶部展开；manual 项跳对应面板） ================= */
 const router = useRouter()
+const route = useRoute()
+
+/** ?stage=&tab= 直达（Skill 设计页字段路由 tab → 编排结构页跳转闭环） */
+function applyStageQuery() {
+  const qStage = typeof route.query.stage === 'string' && route.query.stage.trim() ? route.query.stage.trim() : ''
+  const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
+  if (qStage) active.value = qStage
+  if (qTab === 'definition' || qTab === 'field-routings' || qTab === 'sandbox' || qTab === 'drift') {
+    activeTab.value = qTab
+  }
+}
 const healthOpen = ref(false)
 
 function jumpTo(target: 'drift' | 'skills' | 'workbench') {
@@ -397,6 +408,8 @@ const demoStages: Stage[] = [
 ]
 
 const active = ref('goal')
+applyStageQuery()
+watch(() => route.query, applyStageQuery)
 const defById = computed(() => new Map(orchDefs.value.map((d) => [d.id, d])))
 // 阶段清单统一后端源：GET /admin/field-routings/stages（派生自编排文件），
 // 全量消费、不过滤后端结果；demo 模式回退 demoStages 骨架

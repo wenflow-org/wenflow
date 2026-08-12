@@ -8,6 +8,37 @@
       行级编辑已收敛：修改字段路由请使用右上角「编排文件」按钮，保存后新建行即时生效，已有行修改后点「强制同步 DB」
     </p>
 
+    <!-- core 联动提示条（M3 轻量：当前 stage 各 skill 的 fields-sync 状态角标） -->
+    <div v-if="skillSyncs.length" class="frt-syncbar">
+      <span class="frt-syncbar__title">core 联动</span>
+      <a
+        v-for="s in skillSyncs"
+        :key="s.skillId"
+        class="frt-syncbar__badge"
+        :class="`frt-syncbar__badge--${s.tone}`"
+        :title="s.title"
+        href="#"
+        @click.prevent="goSkill(s.skillId)"
+      >
+        <code class="mono">{{ s.skillId }}</code>
+        <template v-if="s.sync">
+          <span v-if="s.sync.missing.length" class="frt-syncbar__count">缺声明 {{ s.sync.missing.length }}</span>
+          <span v-else-if="s.sync.state === 'ok'">✓ fields-synced</span>
+          <span v-else-if="s.sync.state === 'no-core'">core 缺失</span>
+          <span v-else-if="s.sync.state === 'no-routings'">无产出行</span>
+          <span v-else>✓ 已声明</span>
+          <span v-if="s.sync.orphan.length" class="frt-syncbar__count">未路由 {{ s.sync.orphan.length }}</span>
+          <span v-if="s.sync.typeMismatch.length" class="frt-syncbar__count">类型不一致 {{ s.sync.typeMismatch.length }}</span>
+        </template>
+        <span v-else class="frt-syncbar__count">未核对</span>
+      </a>
+      <span class="frt-syncbar__hint">该字段未登记 core 声明 / 未登记路由 → 去 Skill 设计页补全（字段路由 tab）</span>
+    </div>
+    <div v-else-if="skillSyncLoading" class="frt-syncbar frt-syncbar--muted">
+      <span class="frt-syncbar__title">core 联动</span>
+      <span class="frt-syncbar__hint">逐 skill 核对 core 声明状态…</span>
+    </div>
+
     <!-- 图例：角色 / render / 锁定 / 流转 一句话人话表（可折叠） -->
     <details class="frt__legend" :open="legendOpen" @toggle="legendOpen = ($event.target as HTMLDetailsElement).open">
       <summary class="frt__legend-summary">图例：字段角色 / render / 锁定 / 流转 —— 不懂就看这里</summary>
@@ -219,6 +250,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { adminFieldRoutingsApi } from '@/api/adminApi';
 import { useEscape } from './useEscape';
 import { useOverlay, useMaskClose } from './useOverlay';
@@ -376,11 +408,72 @@ async function loadStage() {
     agents.value = res.data?.data?.agents || [];
     routings.value = res.data?.data?.routings || [];
     roleMeta.value = res.data?.data?.promptRoleMeta || [];
+    await loadSkillSyncs();
   } catch (e: any) {
     error.value = e?.message || '加载失败';
   } finally {
     loading.value = false;
   }
+}
+
+/* ============ core 联动（M3 轻量）：当前 stage 各 skill 的 fields-sync 状态角标 ============ */
+
+interface SkillSyncBadge {
+  skillId: string;
+  sync: {
+    state?: string;
+    missing: Array<unknown>;
+    orphan: Array<unknown>;
+    typeMismatch: Array<unknown>;
+  } | null;
+  tone: 'ok' | 'warn' | 'err' | 'muted';
+  title: string;
+}
+
+const router = useRouter();
+const skillSyncs = ref<SkillSyncBadge[]>([]);
+const skillSyncLoading = ref(false);
+
+/** 逐 skill 拉 M1 单 skill 投影（GET /field-routings/skill/:skillId），失败静默降级（角标不显示） */
+async function loadSkillSyncs() {
+  const skillAgents = agents.value
+    .map((a) => a.agentId)
+    .filter((id) => id.startsWith('skill:'));
+  if (!skillAgents.length) {
+    skillSyncs.value = [];
+    skillSyncLoading.value = false;
+    return;
+  }
+  skillSyncLoading.value = true;
+  const results = await Promise.all(
+    skillAgents.map(async (agentId) => {
+      const skillId = agentId.replace(/^skill:/, '');
+      try {
+        const res = await adminFieldRoutingsApi.getSkillRoutings(skillId);
+        const sync = res.data?.data?.core?.sync ?? null;
+        const tone = !sync
+          ? 'muted'
+          : sync.missing.length
+            ? 'err'
+            : sync.orphan.length || sync.typeMismatch.length
+              ? 'warn'
+              : 'ok';
+        const title = [
+          sync?.state === 'no-core' ? 'core 文件缺失（协议 tab 未建核心声明）' : '',
+          sync ? `缺声明 ${sync.missing.length} · 未路由 ${sync.orphan.length} · 类型不一致 ${sync.typeMismatch.length}` : 'core 投影不可用'
+        ].filter(Boolean).join('\n');
+        return { skillId, sync, tone, title };
+      } catch {
+        return null;
+      }
+    })
+  );
+  skillSyncLoading.value = false;
+  skillSyncs.value = results.filter((r): r is SkillSyncBadge => r !== null);
+}
+
+function goSkill(skillId: string) {
+  void router.push({ path: `/admin/skills/${skillId}`, query: { tab: 'routing' } });
 }
 
 // ============ 编排文件编辑（单源化批次 C） ============
@@ -528,10 +621,10 @@ watch(() => props.stage, () => void loadStage());
 .frt__notice {
   margin: 0 0 14px;
   padding: 8px 12px;
-  border: 1px dashed rgba(52, 120, 246, 0.45);
+  border: 1px dashed rgba(44, 99, 208, 0.45);
   border-radius: 9px;
   background: #f0f5ff;
-  color: var(--mk-blue, #3478f6);
+  color: var(--mk-blue, #2c63d0);
   font-size: 12px;
   font-weight: 600;
   line-height: 1.55;
@@ -541,16 +634,52 @@ watch(() => props.stage, () => void loadStage());
   border: 1px solid var(--mk-line, #e6ebf4);
   border-radius: 8px;
   background: var(--mk-surface, #fff);
-  color: var(--mk-blue, #3478f6);
+  color: var(--mk-blue, #2c63d0);
   font: inherit;
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.14s ease, border-color 0.14s ease;
 }
-.frt__toolbar-btn:hover { background: #f6f9ff; border-color: rgba(52, 120, 246, 0.4); }
+.frt__toolbar-btn:hover { background: #f6f9ff; border-color: rgba(44, 99, 208, 0.4); }
 .frt__toolbar-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .frt__toolbar-hint { color: var(--mk-faint, #71809a); font-size: 12px; }
+
+/* ========== core 联动提示条（M3） ========== */
+.frt-syncbar {
+  display: flex;
+  align-items: center;
+  gap: 6px 12px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px dashed rgba(44, 99, 208, 0.4);
+  border-radius: 9px;
+  background: #f0f5ff;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.frt-syncbar--muted { border-color: var(--mk-line, #e6ebf4); background: #fafbfd; }
+.frt-syncbar__title { font-weight: 800; color: var(--mk-blue, #2c63d0); }
+.frt-syncbar__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 11px;
+  text-decoration: none;
+  transition: filter 0.12s ease;
+}
+.frt-syncbar__badge:hover { filter: brightness(0.97); }
+.frt-syncbar__badge code { font-size: 10.5px; }
+.frt-syncbar__badge--ok { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #15803d); }
+.frt-syncbar__badge--warn { background: var(--mk-amber-bg, #fffbeb); color: var(--mk-amber, #b45309); }
+.frt-syncbar__badge--err { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
+.frt-syncbar__badge--muted { background: #eef2fa; color: var(--mk-muted, #5b6577); }
+.frt-syncbar__count { font-size: 10.5px; }
+.frt-syncbar__hint { color: var(--mk-muted, #5b6577); }
 
 /* ========== 图例（可折叠） ========== */
 .frt__legend {
@@ -575,7 +704,7 @@ watch(() => props.stage, () => void loadStage());
   content: '▸';
   display: inline-block;
   margin-right: 7px;
-  color: var(--mk-blue, #3478f6);
+  color: var(--mk-blue, #2c63d0);
   transition: transform 0.14s ease;
 }
 .frt__legend[open] .frt__legend-summary::before { transform: rotate(90deg); }
@@ -609,7 +738,7 @@ watch(() => props.stage, () => void loadStage());
   font-size: 11px;
   color: var(--mk-faint, #71809a);
 }
-.frt__legend-foot .mono { font-size: 11px; color: var(--mk-blue, #3478f6); }
+.frt__legend-foot .mono { font-size: 11px; color: var(--mk-blue, #2c63d0); }
 
 /* ========== 搜索 / 过滤 ========== */
 .frt__filter { margin-bottom: 12px; }
@@ -629,7 +758,7 @@ watch(() => props.stage, () => void loadStage());
   color: var(--mk-muted, #5b6577);
   font-size: 12px;
 }
-.frt__orch-summary .mono { color: var(--mk-blue, #3478f6); font-weight: 600; }
+.frt__orch-summary .mono { color: var(--mk-blue, #2c63d0); font-weight: 600; }
 .frt__orch-textarea {
   width: 100%;
   min-height: 420px;
@@ -644,14 +773,14 @@ watch(() => props.stage, () => void loadStage());
   resize: vertical;
   outline: none;
 }
-.frt__orch-textarea:focus { border-color: var(--mk-blue, #3478f6); }
+.frt__orch-textarea:focus { border-color: var(--mk-blue, #2c63d0); }
 .frt__orch-msg {
   margin: 0;
   padding: 9px 12px;
-  border: 1px solid rgba(52, 120, 246, 0.35);
+  border: 1px solid rgba(44, 99, 208, 0.35);
   border-radius: 9px;
   background: #f0f5ff;
-  color: var(--mk-blue, #3478f6);
+  color: var(--mk-blue, #2c63d0);
   font-size: 12px;
   font-weight: 600;
   line-height: 1.5;
@@ -753,14 +882,14 @@ watch(() => props.stage, () => void loadStage());
   gap: 4px 14px;
   padding: 7px 12px;
   margin-top: 8px;
-  border: 1px dashed rgba(52, 120, 246, 0.4);
+  border: 1px dashed rgba(44, 99, 208, 0.4);
   border-radius: 9px;
   background: #f0f5ff;
   font-size: 11.5px;
   color: var(--mk-muted, #5b6577);
   line-height: 1.5;
 }
-.frt__orch-quick-title { font-weight: 800; color: var(--mk-blue, #3478f6); }
+.frt__orch-quick-title { font-weight: 800; color: var(--mk-blue, #2c63d0); }
 .frt__orch-quick-item b { margin-right: 4px; color: var(--mk-ink, #1a2a44); }
 
 .frt__handoff { max-width: 220px; color: var(--mk-faint, #71809a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

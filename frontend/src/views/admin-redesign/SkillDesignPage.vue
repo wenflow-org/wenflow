@@ -786,6 +786,11 @@
           <p v-else class="sdp-none">本节点没有登记规则。</p>
         </section>
       </div>
+
+      <!-- ========== 字段路由（skill 维度 · 加字段向导闭环） ========== -->
+      <div v-show="tab === 'routing'" class="sdp-pane">
+        <SkillFieldRouting v-if="tab === 'routing'" :key="skillId" :skill-id="skillId" />
+      </div>
     </template>
   </div>
 </template>
@@ -819,6 +824,7 @@ import {
 } from '@/api/adminApi'
 import { askConfirm } from './useConfirm'
 import { AGENT_TONES } from './store'
+import SkillFieldRouting from './SkillFieldRouting.vue'
 import './shared.css'
 import { toast } from '@/utils/toast'
 
@@ -897,12 +903,13 @@ const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'trial', label: '试跑' },
   { key: 'versions', label: '版本' },
   { key: 'runtime', label: '运行时' },
-  { key: 'engineering', label: '工程' }
+  { key: 'engineering', label: '工程' },
+  { key: 'routing', label: '字段路由' }
 ]
 // ?tab= 直达 + 旧链接兼容（workbench 已拆入试跑）
 function applyQTab() {
   const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
-  if (['protocol', 'trial', 'versions', 'runtime', 'engineering'].includes(qTab)) tab.value = qTab as TabKey
+  if (['protocol', 'trial', 'versions', 'runtime', 'engineering', 'routing'].includes(qTab)) tab.value = qTab as TabKey
   if (qTab === 'workbench' || qTab === 'inspect' || qTab === 'preview' || qTab === 'trial') tab.value = 'trial'
   if (qTab === 'edit') tab.value = 'protocol'
 }
