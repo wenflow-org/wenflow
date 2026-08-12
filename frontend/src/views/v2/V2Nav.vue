@@ -179,22 +179,25 @@ onUnmounted(() => {
 }
 .v2nav__user { position: relative; }
 .v2nav__avatar {
-  display: flex; align-items: center; gap: 7px;
-  font-size: 13px; font-weight: 700;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13.5px; font-weight: 700;
   color: var(--ink, #172033);
   background: transparent;
   border: 0;
-  padding: 4px 6px 4px 4px;
+  padding: 5px 10px 5px 5px;
   border-radius: 999px;
   cursor: pointer;
   font: inherit;
+  transition: background 0.15s ease;
 }
 .v2nav__avatar:hover { background: #f1f5fb; }
 .v2nav__avatar i {
-  width: 26px; height: 26px; border-radius: 50%;
-  background: var(--blue-deep, #1f57cc); color: #fff;
-  font-style: normal; font-size: 12px;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--blue, #3478f6), var(--accent, #8d6bff));
+  color: #fff;
+  font-style: normal; font-size: 15px;
   display: grid; place-items: center;
+  box-shadow: 0 4px 10px rgba(52, 120, 246, 0.25);
 }
 .v2nav__caret {
   font-size: 10px;
