@@ -4,12 +4,12 @@
     <header class="brief-head" :class="`brief-head--${data.tone}`">
       <div class="brief-head__verdict">
         <div class="brief-score-wrap">
-          <div class="brief-score" :style="{ '--pct': data.score }" :title="scoreTitle">
+          <div class="brief-score" :style="{ '--pct': data.score ?? 0 }" :title="scoreTitle">
             <svg viewBox="0 0 44 44">
               <circle class="brief-score__track" cx="22" cy="22" r="19" />
               <circle class="brief-score__bar" cx="22" cy="22" r="19" :stroke-dasharray="scoreDash" />
             </svg>
-            <strong>{{ data.score }}</strong>
+            <strong>{{ data.score ?? '—' }}</strong>
           </div>
           <span class="brief-score__cap">{{ TERMS.healthScore }}</span>
         </div>
@@ -229,7 +229,7 @@ type Tone = 'ok' | 'warn' | 'bad' | 'muted';
 
 interface BriefData {
   tone: Tone;
-  score: number;
+  score: number | null;
   headline: string;
   subline: string;
   actions: { text: string; link: string; tone: Tone; agentId: string }[];
@@ -354,9 +354,12 @@ const data = computed<BriefData | null>(() => {
 const maxCalls = computed(() => Math.max(1, ...(data.value?.pulse.map((b) => b.calls) || [])));
 const barHeight = (calls: number) => `${calls > 0 ? Math.max((calls / maxCalls.value) * 100, 8) : 4}%`;
 const scoreDash = computed(() => `${(data.value?.score ?? 0) * 1.194} 119.4`);
-const scoreTitle = computed(() =>
-  data.value ? `${TERMS.healthScoreTitle}（${data.value.score} 分）\n${health.value.subline}` : ''
-);
+const scoreTitle = computed(() => {
+  if (!data.value) return ''
+  const score = data.value.score
+  const label = score == null ? '—' : `${score}%`
+  return `${TERMS.healthScoreTitle}（${label}）\n${health.value.subline}`
+});
 // 后端滚动窗口桶带 label（'HH:00'），柱图 title 直接用它；demo 数据无 label 时按下标兜底
 const barTitle = (hour: number, b: { calls: number; issue: number; label?: string }) =>
   `${b.label || `${String(hour).padStart(2, '0')}:00`} · ${b.calls} 次调用 · ${b.issue} 异常`;
@@ -477,6 +480,7 @@ watch(liveLoading, (loading) => {
   background: #fff;
 }
 .brief-head--warn { border-color: rgba(180, 83, 9, 0.3); background: linear-gradient(180deg, #fffdf7, #fff); }
+.brief-head--bad { border-color: rgba(220, 38, 38, 0.35); background: linear-gradient(180deg, #fff7f7, #fff); }
 .brief-head--muted { background: #fafbfd; }
 
 .brief-head__verdict {
@@ -509,6 +513,7 @@ watch(liveLoading, (loading) => {
   transition: stroke-dasharray 0.5s ease;
 }
 .brief-head--warn .brief-score__bar { stroke: var(--mk-amber); }
+.brief-head--bad .brief-score__bar { stroke: var(--mk-red); }
 .brief-head--muted .brief-score__bar { stroke: #c3cede; }
 .brief-score strong {
   position: absolute;

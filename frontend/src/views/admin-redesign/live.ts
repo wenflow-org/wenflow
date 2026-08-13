@@ -529,8 +529,8 @@ async function fetchLiveSkills(): Promise<Record<string, SkillStat>> {
 
 /* ================= 总览 ================= */
 export interface LiveOverviewFull {
-  tone: 'ok' | 'warn' | 'muted'
-  score: number
+  tone: 'ok' | 'warn' | 'bad' | 'muted'
+  score: number | null
   headline: string
   subline: string
   kpis: { label: string; value: string; hint: string }[]
@@ -565,7 +565,54 @@ export const liveOverviewFull = ref<LiveOverviewFull | null>(null)
 /** 总览动态是否隐藏虚拟/测试账号（前端开关，直接传给后端 activity 端点） */
 export const overviewHideTest = ref(true)
 
-async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; score: number; headline: string; subline: string }> {
+export interface OverviewHead {
+  tone: 'ok' | 'warn' | 'bad' | 'muted'
+  score: number | null
+  headline: string
+  subline: string
+}
+
+/**
+ * 头部结论（P0-2：健康环口径修复）。
+ * - score = 今日真实成功率，无下限钳制（5.3% 就显示 5.3%）；
+ * - 今日 0 调用 → score null（环显示「—」，与 KPI 卡一致），不再显示 100；
+ * - 成功率 <80% 且失败 >=3 次 → tone 'bad'（红色环高亮）。
+ */
+export function buildOverviewHead(input: {
+  todayCalls: number
+  todaySuccessRate: number
+  todayFailed: number
+  activeUsers: number
+}): OverviewHead {
+  const { todayCalls, todaySuccessRate, todayFailed, activeUsers } = input
+  const warnByRate = todayCalls >= 20 && todaySuccessRate < 90
+  const warnByFailures = todayFailed > 0 && todayFailed >= 3
+  const badByRate = todaySuccessRate < 80 && todayFailed >= 3
+  if (todayCalls === 0) {
+    return activeUsers === 0
+      ? { tone: 'muted', score: null, headline: '系统空闲', subline: '今日尚无调用，等待学习者开始。' }
+      : { tone: 'muted', score: null, headline: '今日暂无调用', subline: `今日 ${activeUsers} 人活跃，尚无 Agent 调用。` }
+  }
+  if (badByRate) {
+    return {
+      tone: 'bad',
+      score: todaySuccessRate,
+      headline: `需要关注：今日成功率 ${todaySuccessRate}%`,
+      subline: `今日 ${todayCalls} 次调用 · ${todayFailed} 次失败。`
+    }
+  }
+  if (warnByRate || warnByFailures) {
+    return {
+      tone: 'warn',
+      score: todaySuccessRate,
+      headline: `需要关注：今日成功率 ${todaySuccessRate}%`,
+      subline: `今日 ${todayCalls} 次调用 · ${todayFailed} 次失败。`
+    }
+  }
+  return { tone: 'ok', score: todaySuccessRate, headline: '运行平稳', subline: `今日 ${todayCalls} 次调用 · ${activeUsers} 人活跃。` }
+}
+
+async function fetchLiveOverview(): Promise<OverviewHead> {
   const [statsRes, activityRes, trendRes] = await Promise.all([
     adminDashboardApi.getStats(),
     adminDashboardApi.getActivity(30, overviewHideTest.value).catch(() => null),
@@ -586,21 +633,7 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
 
   /* 头部结论：基于今日窗口 + 样本量门槛（今日调用 <20 时只看失败绝对数），
      避免历史失败永久粘住"需要关注"，也避免低流量单次失败误报 */
-  let head: { tone: 'ok' | 'warn' | 'muted'; score: number; headline: string; subline: string }
-  const warnByRate = todayCalls >= 20 && todaySuccessRate < 90
-  const warnByFailures = todayFailed > 0 && todayFailed >= 3
-  if (todayCalls === 0 && activeUsers === 0) {
-    head = { tone: 'muted', score: 100, headline: '系统空闲', subline: '今日尚无调用，等待学习者开始。' }
-  } else if (warnByRate || warnByFailures) {
-    head = {
-      tone: 'warn',
-      score: Math.max(50, Math.round(todaySuccessRate)),
-      headline: `需要关注：今日成功率 ${todaySuccessRate}%`,
-      subline: `今日 ${todayCalls} 次调用 · ${todayFailed} 次失败。`
-    }
-  } else {
-    head = { tone: 'ok', score: Math.round(todaySuccessRate), headline: '运行平稳', subline: `今日 ${todayCalls} 次调用 · ${activeUsers} 人活跃。` }
-  }
+  const head = buildOverviewHead({ todayCalls, todaySuccessRate, todayFailed, activeUsers })
 
   /* 漏斗：目标=完成澄清的对话数（非记录数）；路径保留总量、失败数单列用于断点归因 */
   const completedConversations = Number(conv.completed || 0)
@@ -629,10 +662,13 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
   const totalIssues = pulse.reduce((a, b) => a + b.issue, 0)
   const peakIdx = pulse.reduce((mi, b, i) => (b.calls > (pulse[mi]?.calls || 0) ? i : mi), 0)
   // 高峰小时直接用后端 label（滚动窗口下标 ≠ 壁钟小时）；兜底下标仅用于无 label 的桶
-  const peak = pulse[peakIdx]?.calls
+  const peakFallback = pulse[peakIdx]?.calls
     ? pulse[peakIdx].label || `${String(peakIdx).padStart(2, '0')}:00`
     : '—'
-  const pulseCalls24h = pulse.reduce((a, b) => a + b.calls, 0)
+  // P0-1：后端已全量聚合（last24hTotal/last24hPeak 为权威值），前端求和/推断仅作旧缓存兜底
+  const pulseCalls24hRaw = Number(agents.last24hTotal)
+  const pulseCalls24h = Number.isFinite(pulseCalls24hRaw) ? pulseCalls24hRaw : pulse.reduce((a, b) => a + b.calls, 0)
+  const peak = pulseCalls24h > 0 ? String(agents.last24hPeak || '') || peakFallback : '—'
 
   /* 动态（excludeTest 已由后端过滤虚拟/测试账号；三类事件按时间戳统一归并排序） */
   const act = activityRes?.data?.data ?? {}

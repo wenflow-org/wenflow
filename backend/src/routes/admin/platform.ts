@@ -80,6 +80,24 @@ const REAL_USER_WHERE = {
   ],
 };
 
+const timeoutErrorSignals = [
+  'timeout',
+  'timed out',
+  'etimedout',
+  'deadline exceeded',
+  'request timeout',
+  'socket hang up'
+];
+
+// 超时识别：优先 errorCode/errorCategory（现代 gateway 行写 errorCode=ATTEMPT_TIMEOUT、errorCategory=provider_timeout），
+// 兼容旧行 errorCode 中直接含 timeout 字样（ETIMEDOUT 等）。
+const isTimeoutLog = (log: { errorCode: string | null; errorCategory?: string | null }) => {
+  const errorCode = String(log.errorCode || '').toLowerCase();
+  const errorCategory = String(log.errorCategory || '').toLowerCase();
+  return errorCategory.includes('timeout')
+    || timeoutErrorSignals.some(signal => errorCode.includes(signal));
+};
+
 const inferRuntimeRole = (agentId: string, type?: string | null) => {
   const typeText = String(type || '').toLowerCase();
   if (agentId.startsWith('skill:')) return 'skill';
@@ -470,6 +488,73 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
 const OVERVIEW_CACHE_TTL_MS = 45 * 1000;
 const overviewStatsCache = new Map<string, { payload: unknown; cachedAt: number }>();
 
+export interface HourlyTrendBucket {
+  time: string;
+  label: string;
+  total: number;
+  error: number;
+  timeout: number;
+}
+
+/**
+ * 24h 脉搏全量聚合（P0-1：替代 take:50 抽样）。
+ * 桶窗口与查询窗口同源：windowStart = 当前整点 - 23h，覆盖 [windowStart, now] 恰好 24 个整点桶，
+ * 「总数 = 各小时之和」恒成立；窗口外（含未来时间戳）的日志一律不计入。
+ * 所有键用本地时间生成，与查询 where（gte windowStart）对齐，避免抽样/错位导致的静默失真。
+ */
+export function buildHourlyTrend(
+  logs: Array<{
+    calledAt: Date | string;
+    success: boolean;
+    errorCode: string | null;
+    errorCategory?: string | null;
+  }>,
+  windowStart: Date,
+  now: Date = new Date()
+): HourlyTrendBucket[] {
+  const hourKeys: string[] = [];
+  const hourlyTrendMap: Record<string, { total: number; error: number; timeout: number }> = {};
+
+  for (let i = 23; i >= 0; i -= 1) {
+    const d = new Date(now);
+    d.setMinutes(0, 0, 0);
+    d.setHours(d.getHours() - i);
+    const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}-${d.getHours()}`;
+    hourKeys.push(key);
+    hourlyTrendMap[key] = { total: 0, error: 0, timeout: 0 };
+  }
+
+  for (const log of logs) {
+    const d = new Date(log.calledAt);
+    if (d.getTime() < windowStart.getTime() || d.getTime() > now.getTime()) continue;
+
+    const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}-${d.getHours()}`;
+    if (!hourlyTrendMap[key]) continue;
+
+    hourlyTrendMap[key].total += 1;
+    if (!log.success) {
+      if (isTimeoutLog(log)) {
+        hourlyTrendMap[key].timeout += 1;
+      } else {
+        hourlyTrendMap[key].error += 1;
+      }
+    }
+  }
+
+  return hourKeys.map(key => {
+    const [year, month, day, hour] = key.split('-').map(Number);
+    const d = new Date(year, month - 1, day, hour);
+    const point = hourlyTrendMap[key];
+    return {
+      time: d.toISOString(),
+      label: `${String(hour).padStart(2, '0')}:00`,
+      total: point.total,
+      error: point.error,
+      timeout: point.timeout
+    };
+  });
+}
+
 async function computeOverviewStats(): Promise<unknown> {
     // 获取今日统计
     const today = new Date();
@@ -483,14 +568,12 @@ async function computeOverviewStats(): Promise<unknown> {
     yesterday.setDate(yesterday.getDate() - 1);
     const last24HoursStart = new Date(Date.now() - 24 * 3600000);
 
-    const timeoutErrorSignals = [
-      'timeout',
-      'timed out',
-      'etimedout',
-      'deadline exceeded',
-      'request timeout',
-      'socket hang up'
-    ];
+    // 脉搏窗口与桶窗口同源：当前整点 - 23h（[start, now] 恰好 24 个整点桶），
+    // 保证「24h 总数 = 各小时之和」恒成立；活跃 Agent 统计仍用严格 24h 滚动窗口。
+    const trendWindowStart = new Date();
+    trendWindowStart.setMinutes(0, 0, 0);
+    trendWindowStart.setHours(trendWindowStart.getHours() - 23);
+
     const businessExecutionWhere = {
       OR: [
         { executionLayer: null },
@@ -498,14 +581,6 @@ async function computeOverviewStats(): Promise<unknown> {
       ]
     };
     // 生产统计排除虚拟学习者与测试/审计账号：见模块级 REAL_USER_WHERE
-    // 超时识别：优先 errorCode/errorCategory（现代 gateway 行写 errorCode=ATTEMPT_TIMEOUT、errorCategory=provider_timeout），
-    // 兼容旧行 errorCode 中直接含 timeout 字样（ETIMEDOUT 等）。
-    const isTimeoutLog = (log: { errorCode: string | null; errorCategory?: string | null }) => {
-      const errorCode = String(log.errorCode || '').toLowerCase();
-      const errorCategory = String(log.errorCategory || '').toLowerCase();
-      return errorCategory.includes('timeout')
-        || timeoutErrorSignals.some(signal => errorCode.includes(signal));
-    };
 
     // 并行查询所有统计数据
     const [
@@ -684,13 +759,14 @@ async function computeOverviewStats(): Promise<unknown> {
         }
       }),
 
-      // 最近 24h 调用趋势（抽样 50 条计算小时分布；select 裁剪避免拉取 error 全文）
+      // 最近 24h 调用趋势（P0-1：全量聚合，无 take 截断；时间窗 where 限定 [trendWindowStart, now]，
+      // calledAt 已有索引 @@index([calledAt])；窄 select 避免拉取 error 全文，orderBy 保证聚合顺序稳定）
       prisma.agent_call_logs.findMany({
         where: {
           ...businessExecutionWhere,
-          calledAt: { gte: last24HoursStart }
+          calledAt: { gte: trendWindowStart }
         },
-        take: 50,
+        orderBy: { calledAt: 'asc' },
         select: {
           calledAt: true,
           success: true,
@@ -791,45 +867,14 @@ async function computeOverviewStats(): Promise<unknown> {
       ? ((agentSuccessToday / agentCallsToday) * 100).toFixed(1)
       : null;
 
-    const hourKeys: string[] = [];
-    const hourlyTrendMap: Record<string, { total: number; error: number; timeout: number }> = {};
-
-    for (let i = 23; i >= 0; i -= 1) {
-      const d = new Date();
-      d.setMinutes(0, 0, 0);
-      d.setHours(d.getHours() - i);
-      const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}-${d.getHours()}`;
-      hourKeys.push(key);
-      hourlyTrendMap[key] = { total: 0, error: 0, timeout: 0 };
-    }
-
-    for (const log of recentAgentLogs24h) {
-      const d = new Date(log.calledAt);
-      const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}-${d.getHours()}`;
-      if (!hourlyTrendMap[key]) continue;
-
-      hourlyTrendMap[key].total += 1;
-      if (!log.success) {
-        if (isTimeoutLog(log)) {
-          hourlyTrendMap[key].timeout += 1;
-        } else {
-          hourlyTrendMap[key].error += 1;
-        }
-      }
-    }
-
-    const hourlyTrend = hourKeys.map(key => {
-      const [year, month, day, hour] = key.split('-').map(Number);
-      const d = new Date(year, month - 1, day, hour);
-      const point = hourlyTrendMap[key];
-      return {
-        time: d.toISOString(),
-        label: `${String(hour).padStart(2, '0')}:00`,
-        total: point.total,
-        error: point.error,
-        timeout: point.timeout
-      };
-    });
+    // 全量聚合：每行必落 24 桶之一，总数=各小时和；高峰小时在聚合内直接给出（不再前端从抽样推断）
+    const hourlyTrend = buildHourlyTrend(recentAgentLogs24h, trendWindowStart);
+    const last24hTotal = hourlyTrend.reduce((sum, b) => sum + b.total, 0);
+    const peakBucket = hourlyTrend.reduce(
+      (best, b) => (b.total > (best?.total || 0) ? b : best),
+      undefined as HourlyTrendBucket | undefined
+    );
+    const last24hPeak = last24hTotal > 0 && peakBucket ? peakBucket.label : '—';
 
     /* 近 7 天 LLM 用量与失败归因 */
     const sum7d = (usageTokens7d as { _sum?: { totalTokens?: number | null } })._sum || {};
@@ -886,6 +931,8 @@ async function computeOverviewStats(): Promise<unknown> {
           todaySuccessRate: agentTodaySuccessRate,
           todayTimeouts: agentTimeoutToday,
           last24h: hourlyTrend,
+          last24hTotal,
+          last24hPeak,
           wrapup: wrapupSourceStats,
         },
         usage,

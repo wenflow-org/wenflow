@@ -14,7 +14,7 @@ export const dataSource = ref<'demo' | 'live'>('demo')
 export const isLive = computed(() => dataSource.value === 'live')
 export const liveSpans = ref<TraceSpan[] | null>(null)
 export const liveSkillStatsMap = ref<Record<string, SkillStat> | null>(null)
-export const liveOverview = ref<{ tone: 'ok' | 'warn' | 'muted'; score: number; headline: string; subline: string } | null>(null)
+export const liveOverview = ref<{ tone: 'ok' | 'warn' | 'bad' | 'muted'; score: number | null; headline: string; subline: string } | null>(null)
 
 /* ---------- Trace Span（全站最小事实单元） ---------- */
 export interface TraceSpan {
