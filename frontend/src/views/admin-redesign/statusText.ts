@@ -58,6 +58,16 @@ export function stageText(s: string | null | undefined): string {
   return STAGE_TEXT[key] || String(s || '')
 }
 
+/** Goal 会话阶段 → mk-badge 档位（G1：阶段列由纯灰字升级徽章；会话域三页统一单源，ADMIN_DEEP_SESSION_AUDIT 4.3） */
+export function stageBadgeCls(s: string | null | undefined): string {
+  const key = String(s || '').toLowerCase()
+  if (key === 'completed') return 'mk-badge--ok'
+  if (key === 'failed') return 'mk-badge--bad'
+  if (key === 'cancelled' || key === 'proposal') return 'mk-badge--warn'
+  if (key === 'understanding' || key === 'planning' || key === 'initial' || key === 'in_progress') return 'mk-badge--info'
+  return 'mk-badge--muted'
+}
+
 /** Skill 类别 → 中文 */
 const CATEGORY_TEXT: Record<string, string> = {
   analysis: '分析',

@@ -71,7 +71,10 @@
                 </div>
               </td>
               <td><span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span></td>
-              <td class="mk-num">{{ r.duration ? fmtDuration(r.duration) : '—' }} · {{ r.messageCount }} 条</td>
+              <td>
+                <span class="mk-num">{{ r.duration ? fmtDuration(r.duration) : '—' }} · {{ r.messageCount }} 条</span>
+                <span v-if="r.knowledgePointCount" class="mk-cell-sub">知识 {{ r.knowledgePointCount }} 点</span>
+              </td>
               <td>
                 <span class="mk-badge" :class="r.wrapupStatus === 'complete' ? 'mk-badge--ok' : 'mk-badge--muted'">
                   {{ r.wrapupStatus === 'complete' ? '有总结' : '缺总结' }}
@@ -79,7 +82,12 @@
                 <span v-if="r.hasAdvisory" class="mk-badge mk-badge--info" style="margin-left:4px">建议</span>
               </td>
               <td><span class="mk-badge" :class="attentionBadge(r.attention)">{{ r.attention === 'high' ? '高' : r.attention === 'medium' ? '中' : '低' }}</span></td>
-              <td><span class="ts-go">→</span></td>
+              <td>
+                <div class="ts-actions">
+                  <button type="button" class="mk-link" @click.stop="goTrace(r)">瀑布</button>
+                  <span class="ts-go">→</span>
+                </div>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -157,6 +165,11 @@
               <summary>原始数据</summary>
               <pre class="ts-json">{{ detail.rawJson }}</pre>
             </details>
+
+            <div class="ts-actions">
+              <button v-if="detail.userId" type="button" class="mk-link" @click="goLearner(detail)">学习者详情 →</button>
+              <button type="button" class="mk-link" @click="goTrace(detail)">Trace 瀑布 →</button>
+            </div>
           </div>
         </aside>
       </div>
@@ -166,7 +179,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { dataSource } from './store'
+import { dataSource, openSession, openSubPage } from './store'
 import { timeAgo } from './live'
 import { statusText } from './statusText'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -184,6 +197,7 @@ interface WrapupSummary {
 
 interface Row {
   id: string
+  userId: string
   topic: string
   subject: string
   taskType: string
@@ -192,6 +206,7 @@ interface Row {
   status: string
   duration: number
   messageCount: number
+  knowledgePointCount: number
   wrapupStatus: string
   hasAdvisory: boolean
   attention: 'high' | 'medium' | 'low'
@@ -206,7 +221,7 @@ interface Row {
 const demoRows: Row[] = [
   {
     id: 'ts-demo-1', topic: '数据清洗练习：缺失值处理', subject: 'Excel 自动化', taskType: 'practice',
-    userName: '陈晓', email: 'chenxiao@…', status: 'completed', duration: 1840, messageCount: 12,
+    userName: '陈晓', email: 'chenxiao@…', userId: '', status: 'completed', duration: 1840, messageCount: 12, knowledgePointCount: 4,
     wrapupStatus: 'complete', hasAdvisory: true, attention: 'low', startAt: '32 分钟前',
     wrapup: {
       topicSummary: '围绕缺失值识别与填充策略展开，从 ISBLANK 判断到 IF 嵌套填充，最后落到真实周报的清洗演练。',
@@ -219,14 +234,14 @@ const demoRows: Row[] = [
   },
   {
     id: 'ts-demo-2', topic: 'JOIN 实战 3/4', subject: 'SQL 基础', taskType: 'practice',
-    userName: '赵敏', email: 'zhaomin@…', status: 'failed', duration: 620, messageCount: 4,
+    userName: '赵敏', email: 'zhaomin@…', userId: '', status: 'failed', duration: 620, messageCount: 4, knowledgePointCount: 2,
     wrapupStatus: 'missing', hasAdvisory: true, attention: 'high', startAt: '4 分钟前',
     wrapup: null, wrapupSource: '—', advisory: { priority: 'high', title: '', text: '连续 3 次任务失败且本次会话异常中断：建议伴学介入，把 JOIN 去重拆成「先 DISTINCT 再 JOIN」两步，并临时降低练习难度。' },
     rawJson: '{\n  "demo": true\n}'
   },
   {
     id: 'ts-demo-3', topic: '提问训练：把模糊问题拆成假设', subject: '数据分析思维', taskType: 'acquire',
-    userName: '刘一帆', email: 'liu**@…', status: 'completed', duration: 1500, messageCount: 9,
+    userName: '刘一帆', email: 'liu**@…', userId: '', status: 'completed', duration: 1500, messageCount: 9, knowledgePointCount: 3,
     wrapupStatus: 'complete', hasAdvisory: true, attention: 'medium', startAt: '22 分钟前',
     wrapup: {
       topicSummary: '练习把「为什么转化率低」拆成可验证的子假设。',
@@ -239,7 +254,7 @@ const demoRows: Row[] = [
   },
   {
     id: 'ts-demo-4', topic: '函数练习 2/5：参数与返回值', subject: 'Python 入门', taskType: 'practice',
-    userName: '孙可', email: 'sunke@…', status: 'completed', duration: 2100, messageCount: 15,
+    userName: '孙可', email: 'sunke@…', userId: '', status: 'completed', duration: 2100, messageCount: 15, knowledgePointCount: 5,
     wrapupStatus: 'complete', hasAdvisory: false, attention: 'low', startAt: '2 小时前',
     wrapup: {
       topicSummary: '默认参数与返回值的基础训练。',
@@ -252,14 +267,14 @@ const demoRows: Row[] = [
   },
   {
     id: 'ts-demo-5', topic: '邮件表达：开场与诉求句', subject: '职场英语', taskType: 'reading',
-    userName: '周洁', email: 'zhoujie@…', status: 'active', duration: 480, messageCount: 3,
+    userName: '周洁', email: 'zhoujie@…', userId: '', status: 'active', duration: 480, messageCount: 3, knowledgePointCount: 1,
     wrapupStatus: 'missing', hasAdvisory: false, attention: 'low', startAt: '18 分钟前',
     wrapup: null, wrapupSource: '—', advisory: null,
     rawJson: '{\n  "demo": true\n}'
   },
   {
     id: 'ts-demo-6', topic: '五十音图：か行・さ行', subject: '日语 N5', taskType: 'quiz',
-    userName: '冯远', email: 'fengyuan@…', status: 'timeout', duration: 360, messageCount: 2,
+    userName: '冯远', email: 'fengyuan@…', userId: '', status: 'timeout', duration: 360, messageCount: 2, knowledgePointCount: 0,
     wrapupStatus: 'missing', hasAdvisory: true, attention: 'high', startAt: '1 小时前',
     wrapup: null, wrapupSource: '—', advisory: { priority: 'high', title: '', text: '测验超时且中途离开：近 5 天活跃度持续下降，建议触发挽留流程并下调每日任务量。' },
     rawJson: '{\n  "demo": true\n}'
@@ -351,6 +366,7 @@ function mapRow(s: Record<string, unknown>): Row {
           : 'low'
   return {
     id: String(s.id),
+    userId: String(s.userId || ''),
     topic: String(s.topic || s.taskId || '未命名会话'),
     subject: String(s.subject || '—'),
     taskType: String(s.taskType || ''),
@@ -359,6 +375,7 @@ function mapRow(s: Record<string, unknown>): Row {
     status: String(s.status || ''),
     duration: Number(s.duration || 0),
     messageCount: Number(s.messageCount || 0),
+    knowledgePointCount: Number(s.knowledgePointCount || 0),
     wrapupStatus,
     hasAdvisory: advisoryRelevant,
     attention,
@@ -439,6 +456,18 @@ function openDetail(r: Row) {
   openCards.value = new Set()
 }
 
+/** 真实教学会话与座舱数据契约不兼容（座舱仅服务虚拟会话）：轻量深链 = 学习者详情 / Trace 瀑布按 sessionId 归组 */
+function goLearner(r: Row) {
+  if (!r.userId) return
+  detail.value = null
+  openSubPage('learner', r.userId)
+}
+
+function goTrace(r: Row) {
+  detail.value = null
+  openSession(r.id)
+}
+
 function toggleCard(key: string) {
   const next = new Set(openCards.value)
   if (next.has(key)) next.delete(key)
@@ -469,6 +498,8 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
 
 <style scoped>
 .ts-row { cursor: pointer; }
+.ts-actions { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.ts-actions .mk-link { padding: 0; }
 .ts-more {
   display: flex;
   justify-content: center;

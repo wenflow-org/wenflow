@@ -3,7 +3,7 @@
  * 已知枚举必须命中中文映射；未知值原样回退；空值不崩溃
  */
 import { describe, expect, it } from 'vitest';
-import { statusText, stageText, categoryText, actionText, targetTypeText } from '../statusText';
+import { statusText, stageText, stageBadgeCls, categoryText, actionText, targetTypeText } from '../statusText';
 
 describe('statusText', () => {
   it('核心状态映射', () => {
@@ -43,6 +43,29 @@ describe('stageText（Goal 会话阶段）', () => {
 
   it('未知值回退原文', () => {
     expect(stageText('archived')).toBe('archived');
+  });
+});
+
+describe('stageBadgeCls（G1：会话域阶段列徽章单源档位）', () => {
+  it('已完成 → ok；失败 → bad', () => {
+    expect(stageBadgeCls('completed')).toBe('mk-badge--ok');
+    expect(stageBadgeCls('failed')).toBe('mk-badge--bad');
+  });
+
+  it('方案收敛中 / 已取消 → warn', () => {
+    expect(stageBadgeCls('proposal')).toBe('mk-badge--warn');
+    expect(stageBadgeCls('cancelled')).toBe('mk-badge--warn');
+  });
+
+  it('澄清中 / 规划中 / initial → info', () => {
+    expect(stageBadgeCls('understanding')).toBe('mk-badge--info');
+    expect(stageBadgeCls('planning')).toBe('mk-badge--info');
+    expect(stageBadgeCls('initial')).toBe('mk-badge--info');
+  });
+
+  it('未知阶段 → muted，空值不崩溃', () => {
+    expect(stageBadgeCls('mystery')).toBe('mk-badge--muted');
+    expect(stageBadgeCls(null)).toBe('mk-badge--muted');
   });
 });
 

@@ -258,7 +258,15 @@ watch(openSpanId, async (id) => {
   }
 })
 
+/* 长 trace ID 在下拉与标题中截断显示 */
+/* TDZ 修复：intent.sessionId / intentTraceMiss 的 immediate watch 会引用本函数，必须先于 watch 声明 */
+const shortTrace = (t: string) => (t.length > 20 ? `…${t.slice(-16)}` : t)
+
+const allTraceIds = computed(() => [...new Set(spans.value.map((s) => s.traceId))])
+
 // intent.traceId 驱动（从日志/总览跳进来时预填）
+// TDZ 修复：必须声明在 allTraceIds 之后（immediate watch 在 const 初始化前执行会抛
+// ReferenceError: Cannot access 'allTraceIds' before initialization，见 ADMIN_DEEP_VLAB_TRACE_AUDIT W6）
 watch(
   () => intent.traceId,
   (t) => {
@@ -270,7 +278,6 @@ watch(
   { immediate: true }
 )
 
-const allTraceIds = computed(() => [...new Set(spans.value.map((s) => s.traceId))])
 const traceIds = computed(() => {
   const q = traceKeyword.value.trim().toLowerCase()
   if (!q) return allTraceIds.value
@@ -383,7 +390,6 @@ watch(
   },
   { immediate: true }
 )
-
 function sessionLabel(id: string) {
   const m = sessionOf(id)
   return `${shortTrace(id)} · ${m.spanCount} span · ${m.traceCount} trace${m.errs ? ` · ${m.errs} 失败` : ''}`
@@ -433,8 +439,7 @@ const barWidth = (s: TraceSpan) => `${Math.max((s.durationMs / maxEnd.value) * 1
 const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
 const badgeOf = (s: string) => (s === 'err' ? 'mk-badge--bad' : s === 'warn' ? 'mk-badge--warn' : 'mk-badge--ok')
 
-/* 长 trace ID 在下拉与标题中截断显示 */
-const shortTrace = (t: string) => (t.length > 20 ? `…${t.slice(-16)}` : t)
+/* 长 trace ID 在下拉与标题中截断显示（shortTrace 已上移至 watch 之前，见文件上方声明） */
 function traceLabel(t: string) {
   const mine = spans.value.filter((s) => s.traceId === t)
   const errs = mine.filter((s) => s.status === 'err').length

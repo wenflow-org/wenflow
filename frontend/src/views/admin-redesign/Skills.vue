@@ -138,12 +138,14 @@
     </div>
 
     <!-- 技能对账面板（SKILL_READINESS_SPEC §4.2）：户口簿 × manifest × 注册 × ACTIVE + 完成度
-         滚动修复 #4：整卡默认折叠（details），展开后表内 10 行/页，不再把页面撑到 3.5 屏 -->
-    <details class="mk-card sk-rec" :open="recOpen">
+         滚动修复 #4：整卡默认折叠（details），展开后表内 10 行/页，不再把页面撑到 3.5 屏
+         深链 ?recon=1[&diff=unregistered|active-missing|live]：落地自动展开并滚动定位（ADMIN_DEEP_SKILLS_APICONFIG_AUDIT §4.2） -->
+    <details ref="recPanelRef" class="mk-card sk-rec" :open="recOpen">
       <summary class="mk-card__head sk-rec__summary">
         <div class="sk-rec__title">
           <strong>技能对账</strong>
           <span class="mk-card__meta">户口簿 × manifest × gateway 注册 × ACTIVE prompt</span>
+          <button v-if="recDiff" type="button" class="mk-link sk-rec__clear" @click.stop="clearRecDiff">✕ 清除差集定位</button>
         </div>
         <div v-if="recLoading" class="sk-rec__loading">加载中…</div>
         <template v-else-if="recReport">
@@ -189,7 +191,7 @@
                     <span class="sk-rec-group__meta">live {{ e.group.liveCount }} / {{ e.group.items.length }}</span>
                   </td>
                 </tr>
-                <tr v-else class="sk-row" @click="openSkillDrawer(e.row.skillId)">
+                <tr v-else class="sk-row" :class="{ 'sk-rec-flash': recDiff && e.row.diff === recDiff }" @click="openSkillDrawer(e.row.skillId)">
                   <td>
                     <div class="sk-cell">
                       <span class="sk-dot" :class="`sk-dot--${recDotTone(e.row)}`" :title="recDotTone(e.row) === 'ok' ? '健康' : recDotTone(e.row) === 'error' ? '异常' : '空闲'"></span>
@@ -252,7 +254,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { skillProfiles, skillStatOf, openSkillDrawer, dataSource, isLive } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
@@ -389,6 +392,31 @@ const recLoading = ref(false)
 const recError = ref('')
 /** 滚动修复 #4：对账卡默认折叠（32 行分组表不再默认撑长页面） */
 const recOpen = ref(false)
+/** 深链定位：?recon=1 展开 + 滚动；?diff=unregistered|active-missing|live 过滤差集行（巡检工作台计数卡 → 目录对账闭环） */
+const route = useRoute()
+const recDiff = ref('')
+const recPanelRef = ref<HTMLElement | null>(null)
+let recDeepLinked = false
+
+function applyRecQuery() {
+  const recon = String(route.query.recon || '')
+  const diff = typeof route.query.diff === 'string' ? route.query.diff : ''
+  recDeepLinked = recon === '1' || recon === 'true'
+  recOpen.value = recDeepLinked
+  recDiff.value = diff === 'unregistered' || diff === 'active-missing' || diff === 'live' ? diff : ''
+}
+
+function clearRecDiff() {
+  recDiff.value = ''
+  recOpen.value = false
+}
+
+/** 深链落地：数据到达后滚动定位到对账面板（避免折叠态下 scrollIntoView 落空） */
+watch(recReport, async (report) => {
+  if (!report || !recDeepLinked || !recOpen.value) return
+  await nextTick()
+  recPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+})
 
 async function refreshReconciliation() {
   if (!isLive.value) return
@@ -410,6 +438,7 @@ watch(isLive, (live) => {
 })
 
 onMounted(() => {
+  applyRecQuery()
   if (isLive.value) refreshReconciliation()
 })
 
@@ -451,12 +480,22 @@ const recGroups = computed<RecGroup[]>(() => {
   })
 })
 
+/** 差集过滤：深链 ?diff= 时仅保留匹配行，组头随行过滤（空组不显示） */
+function matchesRecDiff(row: RecRow): boolean {
+  if (recDiff.value === 'unregistered') return row.diff === 'unregistered'
+  if (recDiff.value === 'active-missing') return row.diff === 'active-missing'
+  if (recDiff.value === 'live') return row.completion.status === 'live'
+  return true
+}
+
 /** 滚动修复 #4：对账行展平（组头 + 行）→ 10 行/页分页 */
 const recFlat = computed<RecEntry[]>(() => {
   const out: RecEntry[] = []
   for (const g of recGroups.value) {
-    out.push({ kind: 'group', group: g })
-    for (const row of g.items) out.push({ kind: 'row', row })
+    const items = recDiff.value ? g.items.filter(matchesRecDiff) : g.items
+    if (recDiff.value && !items.length) continue
+    out.push({ kind: 'group', group: { ...g, items, liveCount: items.filter((row) => row.completion.status === 'live').length } })
+    for (const row of items) out.push({ kind: 'row', row })
   }
   return out
 })
@@ -473,7 +512,8 @@ const recPageRows = computed<RecEntry[]>(() => {
     } else {
       const key = e.row.parentAgent || '未归属'
       if (!seen.has(key)) {
-        const g = recGroups.value.find((x) => x.parentAgent === key)
+        const found = recFlat.value.find((x) => x.kind === 'group' && x.group.parentAgent === key)
+        const g = found?.kind === 'group' ? found.group : undefined
         if (g) {
           out.push({ kind: 'group', group: g })
           seen.add(key)
@@ -693,6 +733,12 @@ function recGateDetail(completion: SkillCompletion): string {
 }
 .sk-rec__title { display: flex; flex-direction: column; gap: 2px; }
 .sk-rec__title strong { font-size: 14px; }
+.sk-rec__clear { width: fit-content; }
+.sk-rec-flash { animation: sk-rec-flash 1.4s ease 2; }
+@keyframes sk-rec-flash {
+  0%, 100% { background: transparent; }
+  50% { background: #fdf3e3; }
+}
 .sk-rec__loading { color: var(--mk-faint); font-size: 12px; margin-left: auto; }
 .sk-rec__pills { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
 .sk-pill--bad { color: var(--mk-red-strong, #b91c1c); background: #fdecec; }

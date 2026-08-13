@@ -275,11 +275,16 @@
         </div>
         <div v-if="evidence.length" class="ld-evidence">
           <div v-for="(e, i) in evidence" :key="i" class="ld-ev">
-            <span class="ld-ev__dot" :class="e.score >= 0.8 ? 'is-bad' : 'is-ok'"></span>
+            <span
+              class="ld-ev__dot"
+              :class="`is-${evidenceDotTone(e.signal, e.score)}`"
+              :title="evidenceTooltip(e.signal, e.score)"
+            ></span>
             <div class="ld-ev__main">
               <strong>{{ e.title }}</strong>
-              <span>{{ e.detail }}</span>
+              <span>{{ e.detail || evidenceSignalZh(e.signal) || '—' }}</span>
             </div>
+            <span v-if="evidenceLowConfidence(e.score)" class="ld-ev__lack" title="置信度低于 50%，结论仅供参考">证据不足</span>
             <span class="ld-ev__time">{{ e.time }}</span>
           </div>
         </div>
@@ -296,6 +301,7 @@
 import { computed, ref, watch } from 'vue'
 import { subPage, closeSubPage, learnerDetails, isLive } from './store'
 import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveRecomputeLearner, timeAgo, errMsg } from './live'
+import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTooltip } from './evidence'
 import { toast } from '@/utils/toast'
 
 interface Detail {
@@ -310,13 +316,13 @@ interface Detail {
   pct: number
   concepts: { mastered: string[]; struggling: string[]; fragile: string[] }
   trend7d: number[]
-  sessions: { time: string; title: string; result: string; tone: 'ok' | 'warn' | 'bad' }[]
+  sessions: { time: string; title: string; result: string; tone: 'ok' | 'warn' | 'bad' | 'muted' }[]
   snapshot: { version: string; generatedAt: string }
 }
 
 const liveDetail = ref<Detail | null>(null)
 const rawDetail = ref<Record<string, unknown> | null>(null)
-const liveEvidence = ref<{ title: string; detail: string; time: string; score: number }[]>([])
+const liveEvidence = ref<{ title: string; detail: string; time: string; score: number; signal: string }[]>([])
 const recomputing = ref(false)
 const tab = ref('overview')
 
@@ -377,6 +383,7 @@ async function loadDetail(id: string | undefined, live: boolean) {
       title: String(e.type || e.kind || '学习事件'),
       detail: String(e.signal || ''),
       time: timeAgo(String(e.happenedAt || e.createdAt || '')),
+      signal: String(e.signal || ''),
       score: Number(e.score || 0)
     }))
     liveDetail.value = {
@@ -398,8 +405,8 @@ async function loadDetail(id: string | undefined, live: boolean) {
       sessions: liveEvidence.value.slice(0, 6).map((e) => ({
         time: e.time,
         title: e.title,
-        result: e.detail,
-        tone: e.score >= 0.8 ? 'bad' : 'ok' as const
+        result: e.detail || evidenceSignalZh(e.signal) || '—',
+        tone: evidenceDotTone(e.signal, e.score)
       })),
       snapshot: { version: base ? `置信 ${(base.confidence * 100).toFixed(0)}%` : '—', generatedAt: timeAgo(base?.generatedAt) }
     }
@@ -511,11 +518,11 @@ const DEMO_RAW: Record<string, unknown> = {
 }
 
 const DEMO_EVIDENCE = [
-  { title: '练习通过', detail: '数据清洗练习 2/3 · 掌握 +0.12', time: '6 分钟前', score: 0.4 },
-  { title: '概念挣扎', detail: '「数据透视表」连续 2 次未达标', time: '3 天前', score: 0.83 },
-  { title: '快照重算', detail: '置信 0.82 · v14', time: '昨天 21:14', score: 0.2 },
-  { title: '任务完成', detail: 'SUMIF 实战 · 一次通过', time: '昨天', score: 0.3 },
-  { title: '中途退出', detail: '数据透视表入门 · 标记复习', time: '3 天前', score: 0.68 }
+  { title: '练习通过', detail: '数据清洗练习 2/3 · 掌握 +0.12', time: '6 分钟前', score: 0.92, signal: 'mastery' },
+  { title: '概念挣扎', detail: '「数据透视表」连续 2 次未达标', time: '3 天前', score: 0.86, signal: 'struggle' },
+  { title: '疲劳信号', detail: '会话后段认知负荷偏高', time: '昨天 21:14', score: 0.7, signal: 'fatigue' },
+  { title: '任务完成', detail: 'SUMIF 实战 · 一次通过', time: '昨天', score: 0.95, signal: 'mastery' },
+  { title: '中途退出', detail: '数据透视表入门 · 标记复习', time: '3 天前', score: 0.32, signal: 'incomplete' }
 ]
 
 const profile = computed(() => {
@@ -795,6 +802,7 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
 .ld-session__dot.is-ok { background: var(--mk-green); }
 .ld-session__dot.is-warn { background: var(--mk-amber); }
 .ld-session__dot.is-bad { background: var(--mk-red); }
+.ld-session__dot.is-muted { background: var(--mk-muted); }
 .ld-session__main { flex: 1; display: grid; min-width: 0; }
 .ld-session__main strong { font-size: 13px; }
 .ld-session__main span { font-size: 11.5px; color: var(--mk-faint); }
@@ -850,7 +858,18 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
 .ld-ev:last-child { border-bottom: none; }
 .ld-ev__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .ld-ev__dot.is-ok { background: var(--mk-green); }
+.ld-ev__dot.is-warn { background: var(--mk-amber); }
 .ld-ev__dot.is-bad { background: var(--mk-red); }
+.ld-ev__dot.is-muted { background: var(--mk-muted); }
+.ld-ev__lack {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--mk-amber);
+  background: var(--mk-amber-bg);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
 .ld-ev__main { flex: 1; display: grid; min-width: 0; }
 .ld-ev__main strong { font-size: 12.5px; }
 .ld-ev__main span { font-size: 11.5px; color: var(--mk-faint); }

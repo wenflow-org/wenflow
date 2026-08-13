@@ -218,9 +218,9 @@ function openHealthCenter() {
   void router.push('/admin/health-center')
 }
 
-/** 治理入口卡 → Skill 目录对账面板（完成度五档 + 户口簿对账主出口；2C 巡检工作台就绪后改指向巡检台） */
+/** 治理入口卡 → Skill 目录对账面板（完成度五档 + 户口簿对账主出口；深链自动展开 + 滚动定位） */
 function openReconciliation() {
-  void router.push('/admin/skills')
+  void router.push({ path: '/admin/skills', query: { recon: '1' } })
 }
 
 /** ?stage=&tab= 直达（Skill 设计页字段路由 tab → 编排结构页跳转闭环；旧 /admin/topology 重定向落位拓扑 tab） */

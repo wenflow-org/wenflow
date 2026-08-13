@@ -74,7 +74,9 @@
               </td>
               <td><span class="gc-summary" :title="r.summary">{{ r.summary }}</span></td>
               <td><span class="mk-badge" :class="statusBadge(r.status)">{{ statusLabel(r.status) }}</span></td>
-              <td><span class="gc-stage" :title="`阶段：${r.stage || '—'}`">{{ stageText(r.stage) || '—' }}</span></td>
+              <td>
+                <span class="mk-badge" :class="stageBadgeCls(r.stage)" :title="`阶段：${r.stage || '—'}`">{{ stageText(r.stage) || '—' }}</span>
+              </td>
               <td>
                 <span v-if="r.hasPath" class="mk-badge mk-badge--info">已生成</span>
                 <span v-else class="mk-na">—</span>
@@ -82,6 +84,7 @@
               <td><span class="mk-cell-sub">{{ r.createdAt }}</span></td>
               <td>
                 <div class="mk-actions">
+                  <button type="button" class="mk-link" @click.stop="goTrace(r)">瀑布</button>
                   <button type="button" class="mk-link" @click.stop="regenerate(r)">
                     {{ r.regenerating ? '生成中…' : '重建路径' }}
                   </button>
@@ -203,6 +206,8 @@
             </details>
 
             <div class="gc-actions">
+              <button type="button" class="gc-btn-link" @click="goLearner(detail)">学习者画像 →</button>
+              <button type="button" class="gc-btn-link" @click="goTrace(detail)">Trace 瀑布 →</button>
               <button type="button" class="gc-btn-primary" :disabled="detail.regenerating" @click="regenerate(detail)">
                 {{ detail.regenerating ? '生成中…' : '重新生成学习路径' }}
               </button>
@@ -219,9 +224,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { isLive } from './store'
+import { isLive, openSession, openSubPage } from './store'
 import { errMsg, timeAgo } from './live'
-import { stageText } from './statusText'
+import { stageText, stageBadgeCls } from './statusText'
 import { useLoadMore } from './useLoadMore'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
@@ -233,6 +238,7 @@ import { toast } from '@/utils/toast'
 
 interface Row {
   id: string
+  userId: string
   userName: string
   userEmail: string
   status: string
@@ -303,7 +309,7 @@ const statusPills = [
 
 const statusLabel = (s: string) => ({ active: '进行中', completed: '已完成', cancelled: '已取消' })[s] || s || '—'
 const statusBadge = (s: string) =>
-  s === 'completed' ? 'mk-badge--ok' : s === 'active' ? 'mk-badge--info' : 'mk-badge--muted'
+  s === 'completed' ? 'mk-badge--ok' : s === 'active' ? 'mk-badge--info' : s === 'cancelled' ? 'mk-badge--warn' : 'mk-badge--muted'
 
 /** 目标摘要：description 优先，其次 collectedData 里的 goal 字段 */
 function summaryOf(c: Record<string, unknown>): string {
@@ -320,6 +326,7 @@ function mapRow(c: Record<string, unknown>): Row {
   const u = (c.users as Record<string, unknown>) || {}
   return {
     id: String(c.id),
+    userId: String(c.userId || ''),
     userName: String(u.name || c.userId || '—'),
     userEmail: String(u.email || ''),
     status: String(c.status || ''),
@@ -412,6 +419,18 @@ let detailReqSeq = 0
 function closeDetail() {
   detailReqSeq += 1
   detail.value = null
+}
+
+/** 真实会话与控制台数据契约不兼容（座舱仅服务虚拟会话）：先提供轻量深链——学习者画像 + Trace 瀑布按 sessionId 归组 */
+function goLearner(r: Row) {
+  if (!r.userId) return
+  closeDetail()
+  openSubPage('learner', r.userId)
+}
+
+function goTrace(r: Row) {
+  closeDetail()
+  openSession(r.id)
 }
 
 /** 归一化消息角色：后端用 ai/assistant，统一为 assistant */
@@ -538,7 +557,6 @@ onMounted(() => {
   white-space: nowrap;
   vertical-align: bottom;
 }
-.gc-stage { font-size: 11px; color: var(--mk-muted); }
 .gc-more {
   display: flex;
   justify-content: center;
@@ -731,7 +749,18 @@ onMounted(() => {
   word-break: break-all;
 }
 
-.gc-actions { display: flex; gap: 8px; }
+.gc-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.gc-btn-link {
+  border: 0;
+  background: transparent;
+  color: var(--mk-blue);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 8px 4px;
+}
+.gc-btn-link:hover { text-decoration: underline; }
 /* 按钮规格对齐 .mk-btn（8x16 / 12.5px）；危险操作实心红（与 .mk-btn--danger 一致） */
 .gc-btn-primary {
   padding: 8px 16px;
