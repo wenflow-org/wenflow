@@ -201,6 +201,27 @@
 /* 直角徽章：需要与文字/表格行对齐的紧凑场景 */
 .mk-badge--chip { border-radius: 4px; }
 
+/* ----- 迷你进度条（进度量化统一表达：控制台评估维度条 / Goal 置信度条共用，ADMIN_DEEP_SESSION_AUDIT 4.3） ----- */
+.mk-minibar {
+  display: block;
+  width: 100%;
+  height: 6px;
+  border-radius: 99px;
+  background: #eef2fa;
+  overflow: hidden;
+}
+.mk-minibar__fill {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--mk-blue);
+  transition: width 0.15s ease;
+}
+.mk-minibar__fill[data-tone='ok'] { background: var(--mk-green); }
+.mk-minibar__fill[data-tone='warn'] { background: var(--mk-amber); }
+.mk-minibar__fill[data-tone='bad'] { background: var(--mk-red); }
+
+
 /* ----- 业务徽章档位（mk-badge 扩展：字段路由角色 / render / 流转 / 锁定 / core / 完成度五档） -----
    SkillFieldRouting / FieldRoutingTable / Skills 三处收敛共用；色值全部走 token */
 .mk-badge--role-hard-required { background: var(--mk-red-bg); color: var(--mk-red-strong); }

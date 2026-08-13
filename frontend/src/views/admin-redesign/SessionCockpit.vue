@@ -112,9 +112,15 @@
             <div v-for="n in 4" :key="n" class="cp-log-skel" aria-hidden="true"></div>
           </template>
           <template v-else>
-            <div v-for="(l, i) in logs" :key="i" class="cp-log">
+            <div v-for="(l, i) in logs" :key="i" class="cp-log" :class="{ 'cp-log--error': l.view.isError }">
               <span class="cp-log__time">{{ l.time }}</span>
-              <span class="cp-log__text">{{ l.text }}</span>
+              <span v-if="l.view.phase" class="cp-log__phase" :class="{ 'cp-log__phase--error': l.view.isError }">{{ l.view.phase }}</span>
+              <span class="cp-log__text">{{ l.view.text }}</span>
+              <span v-if="l.view.durationText" class="cp-log__dur">{{ l.view.durationText }}</span>
+              <details v-if="l.view.rawJson" class="cp-log__raw">
+                <summary>原文</summary>
+                <pre>{{ l.view.rawJson }}</pre>
+              </details>
             </div>
             <p v-if="logsFailed" class="cp-degrade">
               日志获取失败
@@ -385,14 +391,22 @@
                 <strong>{{ verdictLabel(r.report.verdict) }}</strong>
                 <span class="cp-eval__time">{{ formatTime(r.evaluatedAt) }}</span>
               </div>
-              <span class="mk-badge" :class="verdictBadgeCls(r.report.verdict)">
-                {{ formatScore(r.report.scores?.overall) }}
-              </span>
+              <div class="cp-eval__overall">
+                <span class="mk-badge" :class="scoreBadgeCls(r.report.scores?.overall)">
+                  {{ scoreToPct(r.report.scores?.overall) }}
+                </span>
+                <span class="mk-minibar cp-eval__overall-bar">
+                  <i class="mk-minibar__fill" :data-tone="scoreTone(r.report.scores?.overall)" :style="{ width: scoreFillPct(r.report.scores?.overall) + '%' }"></i>
+                </span>
+              </div>
             </div>
             <div v-if="r.report.scores" class="cp-eval__scores">
-              <span v-for="item in scoreItems(r.report.scores, 'referee')" :key="item.label">
+              <span v-for="item in scoreItems(r.report.scores, 'referee')" :key="item.label" class="cp-eval__score">
                 <code>{{ item.label }}</code>
-                <strong>{{ item.value ?? '—' }}</strong>
+                <strong>{{ scoreToPct(item.value) }}</strong>
+                <span class="mk-minibar">
+                  <i class="mk-minibar__fill" :data-tone="scoreTone(item.value)" :style="{ width: scoreFillPct(item.value) + '%' }"></i>
+                </span>
               </span>
             </div>
             <div v-if="r.report.findings?.length" class="cp-eval__section">
@@ -441,14 +455,22 @@
                 <strong>{{ verdictLabel(r.report.verdict) }}</strong>
                 <span class="cp-eval__time">{{ formatTime(r.evaluatedAt) }}</span>
               </div>
-              <span class="mk-badge" :class="verdictBadgeCls(r.report.verdict)">
-                {{ formatScore(r.report.scores?.overall) }}
-              </span>
+              <div class="cp-eval__overall">
+                <span class="mk-badge" :class="scoreBadgeCls(r.report.scores?.overall)">
+                  {{ scoreToPct(r.report.scores?.overall) }}
+                </span>
+                <span class="mk-minibar cp-eval__overall-bar">
+                  <i class="mk-minibar__fill" :data-tone="scoreTone(r.report.scores?.overall)" :style="{ width: scoreFillPct(r.report.scores?.overall) + '%' }"></i>
+                </span>
+              </div>
             </div>
             <div v-if="r.report.scores" class="cp-eval__scores cp-eval__scores--actor">
-              <span v-for="item in scoreItems(r.report.scores, 'actor')" :key="item.label">
+              <span v-for="item in scoreItems(r.report.scores, 'actor')" :key="item.label" class="cp-eval__score">
                 <code>{{ item.label }}</code>
-                <strong>{{ item.value ?? '—' }}</strong>
+                <strong>{{ scoreToPct(item.value) }}</strong>
+                <span class="mk-minibar">
+                  <i class="mk-minibar__fill" :data-tone="scoreTone(item.value)" :style="{ width: scoreFillPct(item.value) + '%' }"></i>
+                </span>
               </span>
             </div>
             <div v-if="r.report.findings?.length" class="cp-eval__section">
@@ -496,13 +518,21 @@
         <code>{{ refereeTrace.length }} 条 · trace={{ refereeTraceCount }}</code>
       </summary>
       <ol class="cp-trace-list">
-        <li v-for="(item, idx) in refereeTrace" :key="(item.traceId || '') + idx">
+        <li v-for="(tv, idx) in refereeTraceViews" :key="(tv.item.traceId || '') + idx">
           <div class="cp-trace-list__head">
             <span class="cp-trace-list__seq">#{{ idx + 1 }}</span>
-            <time>{{ formatTime(item.timestamp) }}</time>
-            <code v-if="item.traceId" class="cp-trace-list__id">{{ item.traceId }}</code>
+            <time>{{ formatTime(tv.item.timestamp) }}</time>
+            <code v-if="tv.item.traceId" class="cp-trace-list__id">{{ tv.item.traceId }}</code>
           </div>
-          <pre v-if="item.diagnostic" class="cp-trace-list__body">{{ summarizeDiagnostic(item.diagnostic) }}</pre>
+          <div v-if="tv.rows.length" class="cp-trace-list__kv">
+            <span v-for="row in tv.rows" :key="row.label">
+              <code>{{ row.label }}</code><strong>{{ row.value }}</strong>
+            </span>
+          </div>
+          <details v-if="tv.rawJson" class="cp-trace-list__raw">
+            <summary>原文 JSON</summary>
+            <pre class="cp-trace-list__body">{{ tv.rawJson }}</pre>
+          </details>
         </li>
       </ol>
     </details>
@@ -559,12 +589,15 @@ import { askConfirm } from './useConfirm'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 import { statusText } from './statusText'
+import { parseLogEntry, type LogEntryView } from './sessionLog'
+import { scoreBadgeCls, scoreFillPct, scoreToPct, scoreTone } from './evalScore'
+import { traceSummaryRows, traceRawJson, type TraceKeyValue } from './traceSummary'
 
 const sessionId = computed(() => subPage.value?.id || '')
 const shortId = computed(() => (sessionId.value.length > 20 ? `…${sessionId.value.slice(-16)}` : sessionId.value))
 
 const session = ref<Record<string, unknown> | null>(null)
-const logs = ref<{ id: string; time: string; text: string }[]>([])
+const logs = ref<{ id: string; time: string; text: string; view: LogEntryView }[]>([])
 const logsFailed = ref(false)
 const logBox = ref<HTMLElement | null>(null)
 const LOG_WINDOW = 60
@@ -583,12 +616,12 @@ function scrollLogsIfFollowing() {
   })
 }
 /* 按消息 id 去重追加，保留窗口上限 */
-function appendLogs(entries: Array<{ id: string; time: string; text: string }>) {
+function appendLogs(entries: Array<{ id: string; time: string; text: string; view: LogEntryView }>) {
   if (!entries.length) return
-  const seen = new Set(logs.value.map((l) => l.id || `${l.time}|${l.text}`))
-  const added: Array<{ id: string; time: string; text: string }> = []
+  const seen = new Set(logs.value.map((l) => l.id || `${l.time}|${l.view.phase}|${l.text}`))
+  const added: Array<{ id: string; time: string; text: string; view: LogEntryView }> = []
   for (const entry of entries) {
-    const key = entry.id || `${entry.time}|${entry.text}`
+    const key = entry.id || `${entry.time}|${entry.view.phase}|${entry.text}`
     if (seen.has(key)) continue
     seen.add(key)
     added.push(entry)
@@ -1412,11 +1445,15 @@ async function loadLogs() {
     if (!items.length && Array.isArray(session.value?.logs)) {
       items = session.value.logs as Record<string, unknown>[]
     }
-    appendLogs(items.slice(-LOG_WINDOW).map((l: Record<string, unknown>) => ({
-      id: String(l.id ?? l.messageId ?? ''),
-      time: l.createdAt ? new Date(String(l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
-      text: String(l.message || l.text || l.type || JSON.stringify(l)).slice(0, 160)
-    })))
+    appendLogs(items.slice(-LOG_WINDOW).map((l: Record<string, unknown>) => {
+      const view = parseLogEntry(l)
+      return {
+        id: String(l.id ?? l.messageId ?? ''),
+        time: l.createdAt ? new Date(String(l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
+        text: view.text || view.phase,
+        view
+      }
+    }))
     logsFailed.value = false
   } catch {
     // 失败保留旧日志，标记降级并给出重试入口（不把「无日志」误读为空）
@@ -1497,6 +1534,20 @@ function parseBlackbox() {
   privateStateTraceCount.value = rawPrivateTrace.length
 }
 
+/* 裁判轨迹视图：键值摘要行 + 原文 JSON（C3，展开不丢原始数据） */
+interface RefereeTraceView {
+  item: RefereeTraceItem
+  rows: TraceKeyValue[]
+  rawJson: string
+}
+const refereeTraceViews = computed<RefereeTraceView[]>(() =>
+  refereeTrace.value.map((item) => ({
+    item,
+    rows: traceSummaryRows(item.diagnostic),
+    rawJson: traceRawJson(item.diagnostic)
+  }))
+)
+
 /* 评估报告展示助手 */
 function verdictLabel(verdict?: string) {
   if (!verdict) return '未生成'
@@ -1507,16 +1558,6 @@ function verdictLabel(verdict?: string) {
     invalid: '无效'
   }
   return map[verdict] || verdict
-}
-function verdictBadgeCls(verdict?: string) {
-  if (verdict === 'pass' || verdict === 'credible') return 'mk-badge--ok'
-  if (verdict === 'pass_with_concerns' || verdict === 'credible_with_concerns') return 'mk-badge--warn'
-  if (verdict === 'fail' || verdict === 'invalid') return 'mk-badge--bad'
-  return 'mk-badge--muted'
-}
-function formatScore(v?: number | null) {
-  if (typeof v !== 'number') return '—'
-  return String(v)
 }
 function formatTime(value?: string | null) {
   if (!value) return ''
@@ -1532,15 +1573,6 @@ function scoreItems(scores: Record<string, number | null>, kind: 'referee' | 'ac
 function findingEvidence(report: EvaluationReport, finding: { evidenceIds?: Array<string | number> }) {
   const ids = new Set(Array.isArray(finding.evidenceIds) ? finding.evidenceIds : [])
   return (Array.isArray(report.report?.evidence) ? report.report.evidence : []).filter((e) => ids.has(e.id as never))
-}
-function summarizeDiagnostic(value: Record<string, unknown> | null): string {
-  if (!value || typeof value !== 'object') return ''
-  try {
-    const t = JSON.stringify(value, null, 2)
-    return t.length > 800 ? `${t.slice(0, 800)}…` : t
-  } catch {
-    return ''
-  }
 }
 
 const frictionBudget = ref<'none' | 'low' | 'normal' | 'high' | 'stress_test'>('normal')
@@ -1904,9 +1936,42 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   display: grid;
   gap: 6px;
 }
-.cp-log { display: flex; gap: 10px; font-size: 12px; }
+.cp-log { display: flex; align-items: baseline; gap: 8px; font-size: 12px; flex-wrap: wrap; }
+.cp-log--error { padding: 6px 10px; border-radius: 8px; background: var(--mk-red-bg); }
 .cp-log__time { color: var(--mk-faint); font-family: var(--mk-mono); font-size: 10.5px; white-space: nowrap; padding-top: 1px; }
-.cp-log__text { color: var(--mk-muted); word-break: break-all; }
+.cp-log__phase {
+  padding: 0 7px;
+  border-radius: 99px;
+  font-size: 10.5px;
+  font-weight: 700;
+  background: #eef2ff;
+  color: #4453a1;
+  white-space: nowrap;
+}
+.cp-log__phase--error { background: var(--mk-red); color: #fff; }
+.cp-log__text { color: var(--mk-muted); word-break: break-all; min-width: 0; flex: 1 1 auto; }
+.cp-log--error .cp-log__text { color: var(--mk-red); font-weight: 600; }
+.cp-log__dur {
+  color: var(--mk-faint);
+  font-family: var(--mk-mono);
+  font-size: 10.5px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.cp-log__raw { font-size: 11px; flex-basis: 100%; }
+.cp-log__raw summary { cursor: pointer; color: var(--mk-faint); font-weight: 600; user-select: none; }
+.cp-log__raw pre {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--mk-code-bg);
+  color: var(--mk-code-fg);
+  font: 10.5px/1.5 var(--mk-mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 160px;
+  overflow: auto;
+}
 
 /* 初始加载占位（session 未就绪时不显示假空态） */
 .cp-log-skel { height: 13px; border-radius: 4px; background: linear-gradient(90deg, #eef2fa, #f7f9fc 55%, #eef2fa); background-size: 220% 100%; animation: cp-skel 1.4s ease infinite; }
@@ -2082,19 +2147,21 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-eval__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .cp-eval__head strong { font-size: 13px; }
 .cp-eval__time { display: block; font-size: 11px; color: var(--mk-faint); margin-top: 2px; }
+.cp-eval__overall { display: grid; gap: 4px; justify-items: end; }
+.cp-eval__overall-bar { width: 110px; }
 
 .cp-eval__scores { display: flex; flex-wrap: wrap; gap: 8px; }
-.cp-eval__scores span {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: 5px;
+.cp-eval__score {
+  display: grid;
+  gap: 3px;
+  min-width: 104px;
+  padding: 6px 9px;
+  border-radius: 6px;
   background: #f6f8fb;
   font-size: 11px;
 }
-.cp-eval__scores code { font-size: 11px; color: var(--mk-faint); }
-.cp-eval__scores strong { font-variant-numeric: tabular-nums; color: var(--mk-ink); }
+.cp-eval__score code { font-size: 10.5px; color: var(--mk-faint); }
+.cp-eval__score strong { font-variant-numeric: tabular-nums; color: var(--mk-ink); font-size: 12px; }
 
 .cp-eval__section { display: grid; gap: 6px; }
 .cp-eval__section h5 { margin: 0; font-size: 11.5px; font-weight: 700; color: var(--mk-muted); }
@@ -2204,6 +2271,22 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-trace-list__metrics > span { display: inline-flex; align-items: baseline; gap: 4px; padding: 2px 6px; background: #f6f8fb; border-radius: 4px; font-size: 10.5px; }
 .cp-trace-list__metrics code { font-size: 10.5px; color: var(--mk-faint); }
 .cp-trace-list__metrics strong { font-variant-numeric: tabular-nums; color: var(--mk-ink); }
+.cp-trace-list__kv { display: flex; flex-wrap: wrap; gap: 6px; }
+.cp-trace-list__kv > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: #f6f8fb;
+  font-size: 10.5px;
+  max-width: 100%;
+}
+.cp-trace-list__kv code { flex: 0 0 auto; color: var(--mk-faint); }
+.cp-trace-list__kv strong { color: var(--mk-ink); font-weight: 600; word-break: break-all; }
+.cp-trace-list__raw { font-size: 11px; }
+.cp-trace-list__raw summary { cursor: pointer; color: var(--mk-faint); font-weight: 600; user-select: none; }
+.cp-trace-list__raw .cp-trace-list__body { margin-top: 4px; }
 .cp-trace-list__flags { display: flex; flex-wrap: wrap; gap: 5px; }
 .cp-trace-list__flags > span { padding: 2px 7px; border-radius: 4px; font-size: 10.5px; background: #f3f5f9; color: var(--mk-faint); border: 1px solid transparent; }
 .cp-trace-list__flags > span.active { background: #e6f4ff; color: #0958d9; border-color: #91caff; }
@@ -2233,6 +2316,9 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-path-readiness p { font-size: 13px; }
   .cp-log { font-size: 13.5px; }
   .cp-log__time { font-size: 12px; }
+  .cp-log__phase { font-size: 12px; }
+  .cp-log__dur { font-size: 12px; }
+  .cp-log__raw { font-size: 12.5px; }
   .cp-degrade { font-size: 13.5px; }
   .cp-degrade .mk-link { font-size: 13.5px; }
   .cp-transcript summary { font-size: 13.5px; }
@@ -2267,8 +2353,9 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-eval-group__title { font-size: 13.5px; }
   .cp-eval__head strong { font-size: 15px; }
   .cp-eval__time { font-size: 12.5px; }
-  .cp-eval__scores span { font-size: 12.5px; }
-  .cp-eval__scores code { font-size: 12.5px; }
+  .cp-eval__score { font-size: 12.5px; }
+  .cp-eval__score code { font-size: 12.5px; }
+  .cp-eval__score strong { font-size: 13.5px; }
   .cp-eval__section h5 { font-size: 13px; }
   .cp-finding strong { font-size: 14px; }
   .cp-finding p { font-size: 13.5px; }
@@ -2315,6 +2402,9 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-path-readiness p { font-size: 15.5px; }
   .cp-log { font-size: 16px; }
   .cp-log__time { font-size: 14px; }
+  .cp-log__phase { font-size: 14px; }
+  .cp-log__dur { font-size: 14px; }
+  .cp-log__raw { font-size: 15px; }
   .cp-degrade { font-size: 16px; }
   .cp-degrade .mk-link { font-size: 16px; }
   .cp-transcript summary { font-size: 16px; }
@@ -2349,8 +2439,9 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-eval-group__title { font-size: 16px; }
   .cp-eval__head strong { font-size: 17.5px; }
   .cp-eval__time { font-size: 14.5px; }
-  .cp-eval__scores span { font-size: 14.5px; }
-  .cp-eval__scores code { font-size: 14.5px; }
+  .cp-eval__score { font-size: 14.5px; }
+  .cp-eval__score code { font-size: 14.5px; }
+  .cp-eval__score strong { font-size: 16px; }
   .cp-eval__section h5 { font-size: 15.5px; }
   .cp-finding strong { font-size: 16.5px; }
   .cp-finding p { font-size: 16px; }

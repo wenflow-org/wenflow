@@ -10,6 +10,18 @@
         <span class="mk-status__meta">进行中 {{ stats.active }}</span>
         <span class="mk-status__meta">已完成 {{ stats.completed }}</span>
         <span class="mk-status__meta">完成率 {{ stats.completionRate }}%</span>
+        <span
+          v-if="stats.total > 0"
+          class="gc-stack"
+          :title="`进行中 ${stats.active} · 已完成 ${stats.completed} · 其他 ${stackOther}`"
+        >
+          <span class="gc-stack__bar">
+            <i class="gc-stack__seg gc-stack__seg--active" :style="{ width: stackPct('active') }"></i>
+            <i class="gc-stack__seg gc-stack__seg--completed" :style="{ width: stackPct('completed') }"></i>
+            <i class="gc-stack__seg gc-stack__seg--cancelled" :style="{ width: stackPct('other') }"></i>
+          </span>
+          <em>进行中 / 已完成 / 其他</em>
+        </span>
       </template>
       <button type="button" class="mk-status__action" :disabled="loading" @click="load">
         {{ loading ? '刷新中…' : '刷新' }}
@@ -128,10 +140,13 @@
               <div><span>邮箱</span><strong :title="detail.userEmail">{{ detail.userEmail || '—' }}</strong></div>
               <div>
                 <span>置信度</span>
-                <strong>
-                  <span v-if="detailConfidence !== null" class="gc-conf" :class="{ 'gc-conf--low': detailConfidence < 50 }">{{ detailConfidence }}%</span>
-                  <span v-else>—</span>
+                <strong v-if="detailConfidence !== null" class="gc-conf-row">
+                  <span class="gc-conf" :class="confToneCls(detailConfidence)">{{ detailConfidence }}%</span>
+                  <span class="mk-minibar gc-conf__bar">
+                    <i class="mk-minibar__fill" :data-tone="confTone(detailConfidence)" :style="{ width: detailConfidence + '%' }"></i>
+                  </span>
                 </strong>
+                <strong v-else>—</strong>
               </div>
               <div><span>关联路径</span><strong>{{ detail.hasPath ? '已生成' : '未生成' }}</strong></div>
               <div><span>创建</span><strong>{{ detail.createdAt }}</strong></div>
@@ -287,6 +302,26 @@ const detailConfidence = computed(() => {
   const v = Number(detail.value?.collectedRaw?.confidence ?? 0)
   return Number.isFinite(v) && v > 0 ? Math.round(v * 100) : null
 })
+
+/* 置信度色阶（G2）：<50 红 / 50-80 琥珀 / >80 绿；数字保留，配 6px 迷你条 */
+function confTone(pct: number): 'ok' | 'warn' | 'bad' {
+  return pct < 50 ? 'bad' : pct < 80 ? 'warn' : 'ok'
+}
+function confToneCls(pct: number): string {
+  return confTone(pct) === 'bad' ? 'gc-conf--low' : confTone(pct) === 'warn' ? 'gc-conf--warn' : ''
+}
+
+/* 状态条完成率堆叠条（G3）：进行中/已完成/其他 三色比例条 */
+const stackOther = computed(() => {
+  const t = stats.value?.total || 0
+  return Math.max(0, t - (stats.value?.active || 0) - (stats.value?.completed || 0))
+})
+function stackPct(seg: 'active' | 'completed' | 'other'): string {
+  const t = stats.value?.total || 0
+  if (t <= 0) return '0%'
+  const n = seg === 'active' ? (stats.value?.active || 0) : seg === 'completed' ? (stats.value?.completed || 0) : stackOther.value
+  return `${Math.max(0, Math.min(100, Math.round((n / t) * 100)))}%`
+}
 
 useEscape(() => !!detail.value, closeDetail)
 const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
@@ -627,6 +662,25 @@ onMounted(() => {
   color: var(--mk-green);
 }
 .gc-conf--low { color: var(--mk-red); }
+.gc-conf--warn { color: var(--mk-amber); }
+.gc-conf-row { display: grid; gap: 4px; align-items: start; }
+.gc-conf__bar { width: 72px; }
+
+/* 状态条完成率堆叠条（G3） */
+.gc-stack { display: inline-flex; align-items: center; gap: 6px; }
+.gc-stack__bar {
+  display: inline-flex;
+  width: 120px;
+  height: 6px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: #f0f3f9;
+}
+.gc-stack__seg { height: 100%; min-width: 0; }
+.gc-stack__seg--active { background: var(--mk-blue); }
+.gc-stack__seg--completed { background: var(--mk-green); }
+.gc-stack__seg--cancelled { background: var(--mk-amber); }
+.gc-stack em { font-style: normal; font-size: 10.5px; color: var(--mk-faint); white-space: nowrap; }
 
 /* 理解与方案卡片 */
 .gc-insight {

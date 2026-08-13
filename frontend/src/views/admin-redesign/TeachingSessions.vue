@@ -79,7 +79,7 @@
                 <span class="mk-badge" :class="r.wrapupStatus === 'complete' ? 'mk-badge--ok' : 'mk-badge--muted'">
                   {{ r.wrapupStatus === 'complete' ? '有总结' : '缺总结' }}
                 </span>
-                <span v-if="r.hasAdvisory" class="mk-badge mk-badge--info" style="margin-left:4px">建议</span>
+                <span v-if="r.hasAdvisory" class="mk-badge" :class="advisoryBadge(r.advisory?.priority)" style="margin-left:4px">建议</span>
               </td>
               <td><span class="mk-badge" :class="attentionBadge(r.attention)">{{ r.attention === 'high' ? '高' : r.attention === 'medium' ? '中' : '低' }}</span></td>
               <td>
@@ -129,7 +129,7 @@
             </div>
 
             <section v-if="detail.wrapup" class="ts-section">
-              <h4>会话总结 <span class="ts-src">来源：{{ detail.wrapupSource }}</span></h4>
+              <h4>会话总结 <span class="ts-src">来源：<span class="mk-badge" :class="detail.wrapupSource === '模型生成' ? 'mk-badge--info' : 'mk-badge--muted'">{{ detail.wrapupSource }}</span></span></h4>
               <div class="ts-card" v-if="detail.wrapup.topicSummary">
                 <span>主题摘要</span>
                 <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('topic') }">{{ detail.wrapup.topicSummary }}</p>
@@ -491,6 +491,8 @@ const statusBadge = (s: string) =>
             ? 'mk-badge--info'
             : 'mk-badge--info'
 const attentionBadge = (a: string) => (a === 'high' ? 'mk-badge--bad' : a === 'medium' ? 'mk-badge--warn' : 'mk-badge--ok')
+/* 建议徽章带优先级色（T3）：high=bad / medium=warn / 其余 info */
+const advisoryBadge = (p?: string) => (p === 'high' ? 'mk-badge--bad' : p === 'medium' ? 'mk-badge--warn' : 'mk-badge--info')
 const taskTypeText = (t: string) =>
   ({ reading: '阅读', practice: '练习', project: '项目', quiz: '测验', acquire: '获取', deconstruct: '拆解', model: '建模', execute: '执行', diagnose: '诊断', refine: '打磨', consolidate: '巩固' }[t] || t || '任务')
 const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分钟` : `${sec} 秒`)
