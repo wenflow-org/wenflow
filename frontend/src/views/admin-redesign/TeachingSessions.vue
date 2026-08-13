@@ -535,6 +535,8 @@ function progressTitle(r: Row): string {
 
 <style scoped>
 .ts-row { cursor: pointer; }
+/* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
+.ts-row td:first-child .mk-cell-sub { max-width: 300px; }
 /* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */
 .ts-prog { display: grid; gap: 4px; max-width: 96px; }
 .ts-prog__num { font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 700; white-space: nowrap; }

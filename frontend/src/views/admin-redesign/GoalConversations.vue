@@ -72,7 +72,7 @@
               <th>状态</th>
               <th>阶段</th>
               <th>路径</th>
-              <th>创建时间</th>
+              <th class="mk-col--time-full">创建时间</th>
               <th class="mk-th--right">操作</th>
             </tr>
           </thead>
@@ -102,7 +102,7 @@
                 <span v-if="r.hasPath" class="mk-badge mk-badge--info">已生成</span>
                 <span v-else class="mk-na">—</span>
               </td>
-              <td><span class="mk-cell-sub">{{ r.createdAt }}</span></td>
+              <td><span class="mk-cell-sub" :title="r.createdAt">{{ r.createdAt }}</span></td>
               <td>
                 <div class="mk-actions">
                   <button type="button" class="mk-link" @click.stop="goTrace(r)">瀑布</button>

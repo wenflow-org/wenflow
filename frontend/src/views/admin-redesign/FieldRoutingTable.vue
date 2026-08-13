@@ -151,7 +151,7 @@
             <tbody>
               <tr v-for="row in rowsOf(agent.agentId)" :key="row.id">
                 <td class="frt__fieldcell">
-                  <span class="mono frt__field">{{ row.fieldId }}</span>
+                  <span class="mono frt__field" :title="row.fieldId">{{ row.fieldId }}</span>
                   <span v-if="pathParts(row.fieldId).length > 1" class="frt__fieldpath" :title="row.fieldId">{{ pathParts(row.fieldId).join(' · ') }}</span>
                   <span v-if="pathOf(row.fieldId)" class="frt__fieldpath" :title="`抽取路径（pathInRawOutput）：${pathOf(row.fieldId)}`">抽取 → {{ pathOf(row.fieldId) }}</span>
                 </td>
@@ -901,9 +901,10 @@ watch(() => props.stage, () => void loadStage());
 .frt__pager-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .frt__pager-info { font-size: 11.5px; color: var(--mk-faint, #71809a); font-variant-numeric: tabular-nums; }
 
-/* 字段列：点分名 + 层级分段小字 */
+/* 字段列：点分名 + 层级分段小字。
+   行高统一修复：fieldId 由 word-break:break-all 改单行 ellipsis（不再折行撑高） */
 .frt__fieldcell { max-width: 300px; display: grid; gap: 2px; min-width: 0; }
-.frt__field { word-break: break-all; color: var(--mk-ink, #1a2a44); }
+.frt__field { display: block; min-width: 0; color: var(--mk-ink, #1a2a44); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .frt__fieldpath {
   font-size: 10.5px;
   color: var(--mk-faint, #71809a);
@@ -912,21 +913,23 @@ watch(() => props.stage, () => void loadStage());
   text-overflow: ellipsis;
 }
 
-/* 含义列 */
+/* 含义列：3 行 clamp → 2 行（-webkit-box 精确行数，替代 max-height:3em 裁半行），
+   行高上限 119px → ~85px，与字段列单行化叠加后行高统一 */
 .frt__meaning { min-width: 200px; max-width: 340px; }
 .frt__meaning-text {
-  display: block;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   color: var(--mk-muted, #5b6577);
   line-height: 1.5;
-  max-height: 3em;
-  overflow: hidden;
 }
 
 /* 角色徽章（7 类着色，与图例共用） */
 /* render 徽章 */
 /* 流转徽章（图例） */
-/* 落库键列 */
-.frt__persist { display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted, #5b6577); font-size: 11px; }
+/* 落库键列：截断上限统一引用 token（原散落 180px） */
+.frt__persist { display: inline-block; max-width: var(--mk-col-id); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted, #5b6577); font-size: 11px; }
 .frt__persist--alias { color: var(--mk-amber, #b45309); background: #fffbeb; border-radius: 5px; padding: 0 5px; }
 
 /* 编排弹窗值域速查条 */
@@ -947,7 +950,7 @@ watch(() => props.stage, () => void loadStage());
 .frt__orch-quick-title { font-weight: 800; color: var(--mk-blue, #2c63d0); }
 .frt__orch-quick-item b { margin-right: 4px; color: var(--mk-ink, #1a2a44); }
 
-.frt__handoff { max-width: 220px; color: var(--mk-faint, #71809a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frt__handoff { max-width: var(--mk-col-id); color: var(--mk-faint, #71809a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .frt__empty { padding: 30px; color: var(--mk-faint, #71809a); text-align: center; }
 .frt__emptyrow { color: var(--mk-faint, #71809a); text-align: center; padding: 14px; }
 

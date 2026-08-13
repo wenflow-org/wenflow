@@ -28,7 +28,7 @@
             <th>故事池</th>
             <th class="mk-th--right">会话</th>
             <th title="当前会话状态：运行中会话数 + 最近阶段；会话数为累计口径">运行中</th>
-            <th>创建</th>
+            <th class="mk-col--time-full">创建</th>
             <th class="mk-th--right">操作</th>
           </tr>
         </thead>
@@ -40,7 +40,7 @@
                 <span class="mk-cell-sub">{{ s.id }}</span>
               </div>
             </td>
-            <td>{{ s.goal || '—' }}</td>
+            <td><span class="vl-goal" :title="s.goal || undefined">{{ s.goal || '—' }}</span></td>
             <td>
               <span class="mk-badge" :class="s.storyCount > 0 ? 'mk-badge--ok' : 'mk-badge--muted'">
                 {{ s.storyCount > 0 ? `${s.storyCount} 条` : '未生成' }}
@@ -536,6 +536,14 @@ function stageLabel(stage: string | null | undefined): string {
 <style scoped>
 .mk-link--muted { opacity: 0.55; }
 .vl-row { cursor: pointer; }
+/* 长期倾向列：单行截断 + title（原可换行撑高行，ADMIN_COLUMN_WIDTH_AUDIT ⑤） */
+.vl-goal {
+  display: block;
+  max-width: var(--mk-cell-main-max);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .vl-run {
   display: inline-flex;
   align-items: center;

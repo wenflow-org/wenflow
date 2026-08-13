@@ -75,7 +75,7 @@
                 <div class="sk-cell">
                   <span class="sk-dot" :class="`sk-dot--${s.health}`" :title="s.health === 'ok' ? '健康' : s.health === 'error' ? '异常' : '空闲'"></span>
                   <div class="mk-cell-main">
-                    <strong class="sk-id-main" :title="s.name">{{ s.id }}</strong>
+                    <strong class="sk-id-main" :title="s.id">{{ s.id }}</strong>
                     <span class="sk-name-desc" :title="s.name">{{ s.name }}</span>
                   </div>
                 </div>
@@ -216,8 +216,8 @@
                     <div class="sk-cell">
                       <span class="sk-dot" :class="`sk-dot--${recDotTone(e.row)}`" :title="recDotTone(e.row) === 'ok' ? '健康' : recDotTone(e.row) === 'error' ? '异常' : '空闲'"></span>
                       <div class="mk-cell-main">
-                        <strong class="sk-id-main" style="max-width:340px">{{ e.row.skillId }}</strong>
-                        <span class="sk-name-desc" style="max-width:340px">{{ e.row.displayName || recKindText(e.row.kind) }}<template v-if="e.row.stage"> · {{ e.row.stage }}</template></span>
+                        <strong class="sk-id-main" :title="e.row.skillId">{{ e.row.skillId }}</strong>
+                        <span class="sk-name-desc">{{ e.row.displayName || recKindText(e.row.kind) }}<template v-if="e.row.stage"> · {{ e.row.stage }}</template></span>
                       </div>
                     </div>
                   </td>
@@ -629,11 +629,25 @@ function recGateDetail(completion: SkillCompletion): string {
 .sk-sort--on { color: var(--mk-blue); }
 .sk-row { cursor: pointer; }
 .sk-cell { display: flex; align-items: center; gap: 10px; }
-/* 英文原名（id）主行：等宽突出；中文描述副行：灰色正文（非 mono） */
+/* 目录表列宽防抖（ADMIN_COLUMN_WIDTH_AUDIT ④）：全部固定宽，杜绝内容撑宽抖动；
+   Skill 列 = 吸收列（剩余宽度主要进它，1920 不再全列等比放大 42%）。
+   用 :not(.sk-rec-table) 排除下方对账表（7 列结构不同） */
+.sk-table:not(.sk-rec-table) th:nth-child(1), .sk-table:not(.sk-rec-table) td:nth-child(1) { width: 380px; }
+.sk-table:not(.sk-rec-table) th:nth-child(2), .sk-table:not(.sk-rec-table) td:nth-child(2) { width: 170px; }
+.sk-table:not(.sk-rec-table) th:nth-child(3), .sk-table:not(.sk-rec-table) td:nth-child(3) { width: var(--mk-col-badge); }
+.sk-table:not(.sk-rec-table) th:nth-child(4), .sk-table:not(.sk-rec-table) td:nth-child(4) { width: 96px; }
+.sk-table:not(.sk-rec-table) th:nth-child(5), .sk-table:not(.sk-rec-table) td:nth-child(5),
+.sk-table:not(.sk-rec-table) th:nth-child(6), .sk-table:not(.sk-rec-table) td:nth-child(6),
+.sk-table:not(.sk-rec-table) th:nth-child(7), .sk-table:not(.sk-rec-table) td:nth-child(7) { width: 64px; }
+.sk-table:not(.sk-rec-table) th:nth-child(8), .sk-table:not(.sk-rec-table) td:nth-child(8) { width: 72px; }
+.sk-table:not(.sk-rec-table) th:nth-child(9), .sk-table:not(.sk-rec-table) td:nth-child(9) { width: 88px; }
+.sk-table:not(.sk-rec-table) th:nth-child(10), .sk-table:not(.sk-rec-table) td:nth-child(10) { width: 60px; }
+/* 英文原名（id）主行：等宽突出；中文描述副行：灰色正文（非 mono）。
+   截断上限统一引用 token（原散落 460px） */
 .sk-id-main {
   font-family: var(--mk-mono);
   font-weight: 700;
-  max-width: 460px;
+  max-width: var(--mk-cell-main-max);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -647,7 +661,7 @@ function recGateDetail(completion: SkillCompletion): string {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  max-width: 460px;
+  max-width: var(--mk-cell-main-max);
 }
 .sk-more {
   display: flex;

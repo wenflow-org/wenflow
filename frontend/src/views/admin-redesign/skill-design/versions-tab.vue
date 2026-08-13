@@ -278,7 +278,16 @@ watch(
   color: #41516e;
   font-size: 10.5px;
 }
-.sdp-vname { color: var(--mk-muted); }
+/* Prompt 版本名称列：上限 420px（原 656px 占半屏无上限）+ ellipsis + title 全值 */
+.sdp-vname {
+  display: inline-block;
+  max-width: 420px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  color: var(--mk-muted);
+}
 .sdp-diff {
   border: 1px solid var(--mk-line);
   border-radius: 12px;

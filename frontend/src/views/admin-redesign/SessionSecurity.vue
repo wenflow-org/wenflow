@@ -454,13 +454,15 @@ onMounted(async () => {
 }
 .ss-group__revokeall:hover { background: var(--mk-red-bg, #fef2f2); text-decoration: underline; }
 
-/* 表头：与全站表格页同规范 */
+/* 表头：与全站表格页同规范。
+   6 列模板（会话(弹性)/登录时间/最后活跃/过期时间/状态/操作）：
+   三列时间 120→--mk-col-time-full（110px，含日期时间戳）；4K 档由 shared.css token 覆盖 */
 .ss-head {
   position: sticky;
   top: 0;
   z-index: 2;
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 120px 120px 120px 64px 96px;
+  grid-template-columns: minmax(var(--mk-col-flex-min), var(--mk-col-flex-max)) var(--mk-col-time-full) var(--mk-col-time-full) var(--mk-col-time-full) var(--mk-col-badge) 96px;
   gap: 10px;
   align-items: baseline;
   padding: 8px 14px;
@@ -477,7 +479,7 @@ onMounted(async () => {
 
 .ss-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 120px 120px 120px 64px 96px;
+  grid-template-columns: minmax(var(--mk-col-flex-min), var(--mk-col-flex-max)) var(--mk-col-time-full) var(--mk-col-time-full) var(--mk-col-time-full) var(--mk-col-badge) 96px;
   gap: 10px;
   align-items: center;
   padding: 9px 14px;
@@ -547,7 +549,7 @@ onMounted(async () => {
   .ss-status strong { font-size: 15.5px; }
   .ss-status__meta { font-size: 13px; }
   .ss-head,
-  .ss-row { grid-template-columns: minmax(220px, 1fr) 140px 140px 140px 76px 110px; gap: 12px; padding: 11px 18px; }
+  .ss-row { gap: 12px; padding: 11px 18px; }
   .ss-head { font-size: 12.5px; }
   .ss-group__head { padding: 12px 18px; }
   .ss-device { font-size: 14px; }
@@ -578,7 +580,7 @@ onMounted(async () => {
   .ss-status strong { font-size: 18px; }
   .ss-status__meta { font-size: 15px; }
   .ss-head,
-  .ss-row { grid-template-columns: minmax(260px, 1fr) 165px 165px 165px 90px 130px; gap: 14px; padding: 13px 22px; }
+  .ss-row { gap: 14px; padding: 13px 22px; }
   .ss-head { font-size: 14.5px; }
   .ss-device { font-size: 16.5px; }
   .ss-time { font-size: 15.5px; }

@@ -124,7 +124,7 @@
           <tbody>
             <tr v-for="row in rows" :key="row.fieldId">
               <td class="sfr__fieldcell">
-                <span class="mono sfr__field">{{ row.fieldId }}</span>
+                <span class="mono sfr__field" :title="row.fieldId">{{ row.fieldId }}</span>
                 <span v-if="row.pathInRawOutput" class="sfr__fieldpath" :title="`抽取路径（pathInRawOutput）：${row.pathInRawOutput}`">抽取 → {{ row.pathInRawOutput }}</span>
               </td>
               <td class="sfr__meaning">
@@ -632,16 +632,16 @@ onMounted(() => void load())
 .sfr__scroll { overflow-x: auto; border: 1px solid var(--mk-line, #e6ebf4); border-radius: 12px; background: var(--mk-surface, #fff); box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06)); }
 @media (max-width: 860px) { .mk-table--dense { min-width: 1180px; } }
 .sfr__fieldcell { max-width: 300px; display: grid; gap: 2px; min-width: 0; }
-.sfr__field { word-break: break-all; color: var(--mk-ink, #1a2a44); }
+.sfr__field { display: block; min-width: 0; color: var(--mk-ink, #1a2a44); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sfr__fieldpath { font-size: 10.5px; color: var(--mk-faint, #71809a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sfr__meaning { min-width: 200px; max-width: 340px; }
-.sfr__meaning-text { display: block; color: var(--mk-muted, #5b6577); line-height: 1.5; max-height: 3em; overflow: hidden; }
-.sfr__handoff { max-width: 220px; color: var(--mk-faint, #71809a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sfr__meaning-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--mk-muted, #5b6577); line-height: 1.5; }
+.sfr__handoff { max-width: var(--mk-col-id); color: var(--mk-faint, #71809a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sfr__ops { display: flex; gap: 6px; white-space: nowrap; }
 .sfr__ops .mk-btn { padding: 3px 10px; font-size: 11.5px; }
 
 /* 角色徽章（与编排结构页同款 7 类着色） */
-.sfr__persist { display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted, #5b6577); font-size: 11px; }
+.sfr__persist { display: inline-block; max-width: var(--mk-col-id); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted, #5b6577); font-size: 11px; }
 .sfr__persist--alias { color: var(--mk-amber, #b45309); background: #fffbeb; border-radius: 5px; padding: 0 5px; }
 
 /* core 状态列 */

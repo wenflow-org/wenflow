@@ -46,7 +46,7 @@
                 </div>
               </td>
               <td><span class="mk-badge" :class="r.id === 'mcp-tool' ? 'mk-badge--info' : 'mk-badge--muted'">{{ r.id === 'mcp-tool' ? 'MCP' : '能力 Skill' }}</span></td>
-              <td class="mono">{{ r.ready ? r.model : '—' }}</td>
+              <td class="mono ac-model" :title="r.ready ? r.model : ''">{{ r.ready ? r.model : '—' }}</td>
               <td class="mk-num">{{ r.ready ? r.timeout : '—' }}</td>
               <td><span class="mk-badge" :class="r.ready ? 'mk-badge--ok' : 'mk-badge--warn'">{{ r.ready ? '已接入' : '待配置' }}</span></td>
               <td :class="{ 'mk-na': !r.ready }">{{ r.ready ? r.last : '—' }}</td>
@@ -498,6 +498,13 @@ function goConfig() {
 .ac-mcp__test { font-size: 11px; font-weight: 700; white-space: nowrap; }
 .ac-mcp__test.is-ok { color: var(--mk-green); }
 .ac-mcp__test.is-bad { color: var(--mk-red); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+/* 模型列：长模型名单行截断（上限 --mk-col-model-wide 140px + title 全值；原 57px 无截断越界源） */
+.ac-model {
+  max-width: var(--mk-col-model-wide);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .ac-mcp__endpoint {
   font-size: 11px;
   color: var(--mk-faint);

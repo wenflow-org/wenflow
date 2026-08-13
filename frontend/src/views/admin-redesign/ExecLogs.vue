@@ -135,7 +135,7 @@
           <span class="tline__tokens mono" :title="promptOf(log)?.tokens || undefined">{{ promptOf(log)?.tokens || '—' }}</span>
           <span class="tline__dur mono" :title="fmtMs(log.durationMs)">{{ fmtMs(log.durationMs) }}</span>
           <span class="tline__badge" :class="`tline__badge--${log.status}`">{{ statusBadge[log.status] }}</span>
-          <span class="tline__trace mono" title="在瀑布中查看完整链路" @click.stop="openTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span>
+          <span class="tline__trace mono" :title="`${log.traceId} · 在瀑布中查看完整链路`" @click.stop="openTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span>
           <span class="tline__arrow" aria-hidden="true">▸</span>
         </button>
         <div v-if="openId === log.id" class="tline__payload">
@@ -647,12 +647,6 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   }
   .log-keyword { flex: 1 1 140px; min-width: 0; }
 }
-/* 窄屏：压缩时间/节点固定列，给消息列腾空间（时间 72→56、节点 240→160） */
-@media (max-width: 860px) {
-  .tline-head,
-  .tline__main { grid-template-columns: 56px 40px 150px minmax(140px, 480px) 100px 94px 44px 44px 56px 16px; gap: 6px; }
-  .tline__payload { padding-left: 56px; }
-}
 .log-agent {
   padding: 6px 10px;
   border: 1px solid var(--mk-line);
@@ -720,13 +714,15 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   background: rgba(239, 117, 120, 0.12);
 }
 
-/* 表头：与全站表格页同规范（sticky 顶部、uppercase 小号标签） */
+/* 表头：与全站表格页同规范（sticky 顶部、uppercase 小号标签）。
+   10 列模板（时间/类型/节点/消息(弹性)/模型/Tokens/耗时/状态/Trace/箭头）：
+   列宽全部引用 --mk-col-* token（main.css + shared.css 4K 档覆盖，一处变量全站同步） */
 .tline-head {
   position: sticky;
   top: 0;
   z-index: 2;
   display: grid;
-  grid-template-columns: 72px 40px 220px minmax(180px, 1fr) 116px 108px 44px 44px 64px 18px;
+  grid-template-columns: var(--mk-col-time) 40px 200px minmax(var(--mk-col-flex-min), var(--mk-col-flex-max)) var(--mk-col-model) var(--mk-col-num-wide) 44px var(--mk-col-badge) 88px 18px;
   gap: 8px;
   align-items: baseline;
   padding: 9px 14px;
@@ -754,7 +750,7 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
 
 .tline__main {
   display: grid;
-  grid-template-columns: 72px 40px 220px minmax(180px, 1fr) 116px 108px 44px 44px 64px 18px;
+  grid-template-columns: var(--mk-col-time) 40px 200px minmax(var(--mk-col-flex-min), var(--mk-col-flex-max)) var(--mk-col-model) var(--mk-col-num-wide) 44px var(--mk-col-badge) 88px 18px;
   gap: 8px;
   align-items: baseline;
   width: 100%;
@@ -766,6 +762,16 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   cursor: pointer;
 }
 .tline__main:hover { background: #f6f9ff; }
+
+/* 窄屏压缩档（<860px）：时间/节点固定列再压缩，给消息列腾空间（时间 72→56、节点 200→150）。
+   断点 Bug 修复：本块必须声明在 .tline-head/.tline__main 基础规则之后——
+   级联按源顺序后声明者胜，旧位置（基础规则之前）的媒体块从未生效，窄屏横向滚动溢出 243px。
+   列宽合计（682px）+ gap 4×9 + padding 28 ≈ 746px ≤ 860 容器 747px：压缩后不再横向溢出 */
+@media (max-width: 860px) {
+  .tline-head,
+  .tline__main { grid-template-columns: 56px 40px 150px minmax(110px, 480px) 90px 84px 44px 44px 52px 12px; gap: 4px; }
+  .tline__payload { padding-left: 56px; }
+}
 
 .tline__time {
   font-size: 11px;
@@ -883,7 +889,8 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
 .tline__badge--ok { background: var(--mk-green-bg); color: var(--mk-green); }
 .tline__badge--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .tline__badge--err { background: var(--mk-red-bg); color: var(--mk-red); }
-.tline__trace { font-size: 11px; color: var(--mk-faint); text-align: right; }
+/* Trace 列：单行 ellipsis（修复 30/30 行折行、行高 56px；列宽 64→88px 容纳 shortTrace「gw:…8y4tm4」） */
+.tline__trace { font-size: 11px; color: var(--mk-faint); text-align: right; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tline__arrow { font-size: 11px; color: var(--mk-faint); text-align: right; transition: transform 0.15s ease; }
 .tline--open .tline__arrow { transform: rotate(90deg); }
 .tline__session { font-size: 11px; color: var(--mk-blue, #2c63d0); cursor: pointer; }
@@ -950,8 +957,9 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   .log-adv { font-size: 13px; }
   .log-status__filter { font-size: 13px; }
   .log-status__clear { font-size: 14.5px; }
+  /* 4K 档列宽由 shared.css 4K 段 token 覆盖（--mk-col-*），此处不再逐列复制模板 */
   .tline-head,
-  .tline__main { grid-template-columns: 84px 48px 260px minmax(220px, 1fr) 140px 130px 52px 52px 80px 22px; gap: 12px; padding: 11px 18px; }
+  .tline__main { gap: 12px; padding: 11px 18px; }
   .tline-head { font-size: 12.5px; }
   .tline__time,
   .tline__agent,
@@ -997,8 +1005,9 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   .log-adv { font-size: 15.5px; }
   .log-status__filter { font-size: 15.5px; }
   .log-status__clear { font-size: 17px; }
+  /* 4K 档列宽由 shared.css 4K 段 token 覆盖 */
   .tline-head,
-  .tline__main { grid-template-columns: 100px 56px 310px minmax(240px, 1fr) 168px 156px 62px 62px 96px 26px; gap: 14px; padding: 13px 22px; }
+  .tline__main { gap: 14px; padding: 13px 22px; }
   .tline-head { font-size: 14.5px; }
   .tline__time,
   .tline__agent,

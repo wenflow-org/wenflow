@@ -167,7 +167,7 @@
 .mk-table-scroll .mk-table th { position: sticky; top: 0; z-index: 1; }
 
 .mk-cell-main { display: grid; gap: 1px; min-width: 0; }
-.mk-cell-main strong { display: block; max-width: 260px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-cell-main strong { display: block; max-width: var(--mk-cell-main-max); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mk-cell-sub { color: var(--mk-faint); font-size: 11.5px; font-family: var(--mk-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 数字列：不换行、右对齐、不被挤压（固定列宽规范） */
 .mk-num { font-family: var(--mk-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; min-width: 48px; }
@@ -175,6 +175,25 @@
 /* 操作列：不换行、不被挤压 */
 .mk-actions { display: flex; gap: 4px; justify-content: flex-end; white-space: nowrap; min-width: 72px; }
 .mk-actions .mk-menu__btn { flex-shrink: 0; }
+
+/* ----- 列宽工具类（ADMIN_COLUMN_WIDTH_SPEC §3.1） -----
+   只写宽度 + 截断行为；字体/对齐仍归 .mono/.mk-num/.mk-badge，职责不重叠。
+   th/td 同生效（HTML auto 表设 th 即可；grid 行式表直接在 grid-template-columns 引用 token）。
+   4K 三档覆盖值见本文件底部 4K 段（一处变量覆盖，杜绝逐页复制）。 */
+.mk-col--id { width: var(--mk-col-id); }
+.mk-col--time { width: var(--mk-col-time); }
+.mk-col--time-full { width: var(--mk-col-time-full); }
+.mk-col--badge { width: var(--mk-col-badge); }
+.mk-col--num { width: var(--mk-col-num); }
+.mk-col--num-wide { width: var(--mk-col-num-wide); }
+.mk-col--model { width: var(--mk-col-model); }
+.mk-col--model-wide { width: var(--mk-col-model-wide); }
+.mk-col--actions { width: var(--mk-col-actions); }
+.mk-col--actions-wide { width: var(--mk-col-actions-wide); }
+/* 弹性列：只设 min/max（auto 布局下保留 1fr 语义；宽屏上限 --mk-col-flex-max 防白区） */
+.mk-col--flex { min-width: var(--mk-col-flex-min); max-width: var(--mk-col-flex-max); }
+/* 截断三件套：全站截断上限统一引用 token（消灭散落 260/340/460/180/220px 五处硬编码） */
+.mk-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ----- 徽标 ----- */
 .mk-badge {
@@ -613,6 +632,22 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
    modal/field/btn/toast/actions 及常用子元素。 */
 
 @media (min-width: 2000px) {
+  /* 列宽 token 4K 档（×≈1.16，比例对齐 ExecLogs 原 72→84→100 档位；ADMIN_COLUMN_WIDTH_SPEC §2.8） */
+  :root {
+    --mk-col-id: 148px;
+    --mk-col-time: 84px;
+    --mk-col-time-full: 128px;
+    --mk-col-badge: 76px;
+    --mk-col-num: 64px;
+    --mk-col-num-wide: 130px;
+    --mk-col-model: 140px;
+    --mk-col-model-wide: 165px;
+    --mk-col-actions: 84px;
+    --mk-col-actions-wide: 140px;
+    --mk-col-flex-min: 220px;
+    --mk-col-flex-max: 840px;
+    --mk-cell-main-max: 300px;
+  }
   .mk-page { font-size: 14.5px; padding: 18px 22px 26px; gap: 14px; }
   .mk-status { padding: 8px 14px; border-radius: 12px; }
   .mk-status__title { font-size: 16px; }
@@ -702,6 +737,22 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 
 /* 3600 镜像档：Teleport 到 body 的覆盖层不受壳层 zoom 影响，需独立放大（与各文件 4K 镜像一致） */
 @media (min-width: 3600px) {
+  /* 列宽 token 3600 镜像档（×≈1.4；壳层 zoom 1.3 下实际渲染再等比放大） */
+  :root {
+    --mk-col-id: 180px;
+    --mk-col-time: 100px;
+    --mk-col-time-full: 154px;
+    --mk-col-badge: 90px;
+    --mk-col-num: 78px;
+    --mk-col-num-wide: 156px;
+    --mk-col-model: 168px;
+    --mk-col-model-wide: 195px;
+    --mk-col-actions: 100px;
+    --mk-col-actions-wide: 168px;
+    --mk-col-flex-min: 240px;
+    --mk-col-flex-max: 1000px;
+    --mk-cell-main-max: 360px;
+  }
   .mk-badge { font-size: 19px; padding: 5px 15px; }
   .mk-pill { font-size: 19px; padding: 8px 20px; }
   .mk-field__input, .mk-field__select, .mk-field__textarea, .mk-input { font-size: 19px; padding: 14px 19px; }

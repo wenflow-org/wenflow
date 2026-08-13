@@ -55,8 +55,9 @@
               <th scope="col">角色</th>
               <th scope="col">等级 / XP</th>
               <th scope="col" class="mk-th--right">路径 / 会话</th>
-              <th scope="col">注册时间</th>
-              <th scope="col">最后登录</th>
+              <!-- 相对时间列固定宽（--mk-col-time-full 110px，防 1920 全列等比放大 42% 与刷新跳动） -->
+              <th scope="col" class="mk-col--time-full">注册时间</th>
+              <th scope="col" class="mk-col--time-full">最后登录</th>
               <th scope="col" class="mk-th--right">操作</th>
             </tr>
           </thead>

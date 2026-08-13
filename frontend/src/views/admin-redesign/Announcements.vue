@@ -20,8 +20,8 @@
             <th>公告</th>
             <th>级别</th>
             <th>状态</th>
-            <th>发布</th>
-            <th>过期</th>
+            <th class="mk-col--time-full">发布</th>
+            <th class="mk-col--time-full">过期</th>
             <th class="mk-th--right">操作</th>
           </tr>
         </thead>

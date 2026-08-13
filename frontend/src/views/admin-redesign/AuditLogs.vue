@@ -450,14 +450,17 @@ onMounted(() => {
   overflow-x: auto;
 }
 
-/* 表头：与全站表格页同规范（sticky 顶部、uppercase 小号标签） */
+/* 表头：与全站表格页同规范（sticky 顶部、uppercase 小号标签）。
+   8 列模板（时间/操作者/动作/目标类型/目标/结果/IP/箭头）：
+   目标列由弹性 minmax(100px,1fr)（28/30 行是"—"、459px 白区）改固定窄列 --mk-col-id；
+   末列箭头改 minmax(18px,1fr) 吸收剩余宽度（text-align:right 保持贴右缘，消灭断尾） */
 .tline-head {
   position: sticky;
   top: 0;
   z-index: 2;
   display: grid;
   min-width: max-content;
-  grid-template-columns: 72px 130px 140px 80px minmax(100px, 1fr) 56px 130px 18px;
+  grid-template-columns: var(--mk-col-time) 130px 180px 80px var(--mk-col-id) var(--mk-col-badge) 110px minmax(18px, 1fr);
   gap: 10px;
   align-items: baseline;
   padding: 9px 14px;
@@ -472,7 +475,7 @@ onMounted(() => {
   white-space: nowrap;
 }
 .tline-head--login {
-  grid-template-columns: 72px 160px 130px 56px minmax(160px, 1fr);
+  grid-template-columns: var(--mk-col-time) 160px 110px var(--mk-col-badge) 200px minmax(18px, 1fr);
 }
 .tline-more {
   display: flex;
@@ -489,7 +492,7 @@ onMounted(() => {
 .tline__main {
   display: grid;
   min-width: max-content;
-  grid-template-columns: 72px 130px 140px 80px minmax(100px, 1fr) 56px 130px 18px;
+  grid-template-columns: var(--mk-col-time) 130px 180px 80px var(--mk-col-id) var(--mk-col-badge) 110px minmax(18px, 1fr);
   gap: 10px;
   align-items: baseline;
   width: 100%;
@@ -504,7 +507,7 @@ onMounted(() => {
 .tline__main--static { cursor: default; }
 .tline__main--static:hover { background: transparent; }
 .tline--login .tline__main {
-  grid-template-columns: 72px 160px 130px 56px minmax(160px, 1fr);
+  grid-template-columns: var(--mk-col-time) 160px 110px var(--mk-col-badge) 200px minmax(18px, 1fr);
 }
 
 .tline__time {
@@ -521,9 +524,9 @@ onMounted(() => {
   text-overflow: ellipsis;
 }
 .tline__action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  /* inline-block（非 inline-flex）：text-overflow:ellipsis 只对块容器生效，
+     原 inline-flex 下省略号被浏览器忽略 → 文本直接裁切，补上 ellipsis 语义 */
+  display: inline-block;
   font-size: 11px;
   font-weight: 700;
   border-radius: 5px;
@@ -622,9 +625,7 @@ onMounted(() => {
   .log-keyword { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 180px; }
   .log-agent { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 100px; }
   .tline-head,
-  .tline__main { grid-template-columns: 84px 160px 170px 95px minmax(120px, 1fr) 66px 160px 22px; gap: 12px; padding: 11px 18px; }
-  .tline-head--login,
-  .tline--login .tline__main { grid-template-columns: 84px 195px 160px 66px minmax(190px, 1fr); }
+  .tline__main { gap: 12px; padding: 11px 18px; }
   .tline-head { font-size: 12.5px; }
   .tline__time,
   .tline__target,
@@ -652,9 +653,7 @@ onMounted(() => {
   .log-keyword { font-size: 15.5px; padding: 9px 14px; width: 215px; }
   .log-agent { font-size: 15.5px; padding: 9px 14px; width: 115px; }
   .tline-head,
-  .tline__main { grid-template-columns: 100px 190px 200px 110px minmax(140px, 1fr) 78px 190px 26px; gap: 14px; padding: 13px 22px; }
-  .tline-head--login,
-  .tline--login .tline__main { grid-template-columns: 100px 235px 190px 78px minmax(220px, 1fr); }
+  .tline__main { gap: 14px; padding: 13px 22px; }
   .tline-head { font-size: 14.5px; }
   .tline__time,
   .tline__target,

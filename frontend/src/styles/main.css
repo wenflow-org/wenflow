@@ -62,6 +62,23 @@
   --mk-rec-core: #1f57cc;
   --mk-rec-synced: #0f766e;
   --mk-rec-live: #15803d;
+
+  /* 列宽 token（ADMIN_COLUMN_WIDTH_SPEC §2/§3 落地）：全站表格列宽单一来源。
+     工具类 mk-col--*（shared.css）与三张 grid 行式表（ExecLogs/AuditLogs/SessionSecurity）
+     共同引用；4K 三档覆盖值集中在 shared.css 4K 段（一处变量、全站同步）。 */
+  --mk-col-id: 128px;            /* ID/短码：展示 8-12 字符 + …，长 ID 入库前 shortId() 截段 */
+  --mk-col-time: 72px;           /* 纯时刻 HH:mm:ss */
+  --mk-col-time-full: 110px;     /* 相对时间 / 含日期时间戳 */
+  --mk-col-badge: 64px;          /* 状态徽章（最长词 3 字 ≈ 64px 预算） */
+  --mk-col-num: 56px;            /* 纯数字右对齐 */
+  --mk-col-num-wide: 108px;      /* 组合数字（12,345 · 6,789） */
+  --mk-col-model: 116px;         /* 模型名/技能名 */
+  --mk-col-model-wide: 140px;    /* 长模型名（含别名标注） */
+  --mk-col-actions: 72px;        /* 操作列：1 按钮 */
+  --mk-col-actions-wide: 120px;  /* 操作列：2-3 按钮 / 含 ⋯ 菜单 */
+  --mk-col-flex-min: 180px;      /* 弹性列 min（≈12-16 个中文字符） */
+  --mk-col-flex-max: 720px;      /* 弹性列 max（宽屏防白区，超出即 ellipsis） */
+  --mk-cell-main-max: 260px;     /* mk-cell-main 主行截断上限（原散落 260px 上移为 token） */
 }
 
 /* 现代化增强包 */
