@@ -82,3 +82,8 @@ bffdd34a 会话 P1：日志格式化、终局评估图形化、轨迹摘要视�
 
 ## 遗留（后续项）
 SessionCockpit 适配真实会话（需后端同构端点）、教学会话进度列（后端补字段）、阶段条副标/三流合一时间线（中成本）
+
+## 遗留项清零（2026-08-13 追加）
+3ba023a 教学会话进度列（后端 milestones/subtasks 推导 progress，批量聚合防 N+1）+ 目标对话四步过程点条与时间线（statusText 单源）
+c8341f6 真实教学会话接入 SessionCockpit 双模式（新映射端点 session-console：goal/path/teaching/evaluation/timeline 五源同构、黑盒字段 null 前端隐藏、只读降级空态）+ 阶段条副标/三流统一时间线/wrapup 字段卡（顺带修复 Date 本地时间字典序 bug）
+验证：后端 1386 / 前端 225 测试全绿；遗留清单归零（唯一后续项：真实课堂跨课节回看需后端逐课节端点，已记录）
