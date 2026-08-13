@@ -132,8 +132,8 @@
           <span class="frt__agentdesc">{{ agent.description }}</span>
           <span class="frt__agentcount">{{ filteredOf(agent.agentId).length }}<template v-if="filterActive"> / {{ routingsOf(agent.agentId).length }}</template> 行</span>
         </div>
-        <div class="frt__scroll">
-          <table class="frt__table">
+        <div class="frt__scroll mk-table-scroll">
+          <table class="mk-table mk-table--dense">
             <thead>
               <tr>
                 <th scope="col">字段</th>
@@ -869,31 +869,12 @@ watch(() => props.stage, () => void loadStage());
 .frt__agentname { font-weight: 700; color: var(--mk-ink, #1a2a44); }
 .frt__agentdesc { color: var(--mk-faint, #71809a); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .frt__agentcount { margin-left: auto; padding: 1px 9px; border-radius: 999px; background: #eef2fa; color: var(--mk-muted, #5b6577); font-size: 11px; font-weight: 700; white-space: nowrap; }
-.frt__table { width: 100%; border-collapse: collapse; }
+/* 表格本体已并入 mk-table mk-table--dense（shared.css）：仅保留滚动容器（限高 + 粘性表头生效） */
 /* 横向+纵向滚动容器（滚动修复 #1）：表头 sticky 吸顶，容器限高内部滚动，页面本体不被撑长 */
 .frt__scroll { overflow: auto; max-height: 62vh; }
 @media (max-width: 860px) {
-  .frt__table { min-width: 1060px; }
-  .frt__table th, .frt__table td { padding: 7px 9px; }
+  .mk-table--dense { min-width: 1060px; }
 }
-.frt__table th, .frt__table td { padding: 8px 12px; text-align: left; }
-.frt__table th {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: #fafbfc;
-  border-bottom: 1px solid var(--mk-line, #e6ebf4);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--mk-faint, #71809a);
-  white-space: nowrap;
-}
-.frt__table td { border-bottom: 1px solid #f6f7f9; font-size: 12.5px; vertical-align: middle; }
-.frt__table tr:last-child td { border-bottom: none; }
-.frt__table tbody tr { transition: background 0.12s; }
-.frt__table tbody tr:hover { background: #f6f9ff; }
 
 /* 每 agent 组分页条（滚动修复 #1） */
 .frt__pager {
@@ -988,8 +969,6 @@ watch(() => props.stage, () => void loadStage());
   .frt__orch-quick { font-size: 13px; }
   .frt__agentdesc { font-size: 13.5px; }
   .frt__agentcount { font-size: 12px; padding: 2px 11px; }
-  .frt__table th { font-size: 12.5px; padding: 10px 15px; }
-  .frt__table td { font-size: 14px; padding: 10px 15px; }
   .frt__fieldpath { font-size: 12px; }
   .frt__persist { font-size: 12px; }
   }
@@ -1012,8 +991,6 @@ watch(() => props.stage, () => void loadStage());
   .frt__orch-quick { font-size: 15.5px; }
   .frt__agentdesc { font-size: 16px; }
   .frt__agentcount { font-size: 14px; padding: 3px 13px; }
-  .frt__table th { font-size: 15px; padding: 12px 19px; }
-  .frt__table td { font-size: 16.5px; padding: 12px 19px; }
   .frt__fieldpath { font-size: 14px; }
   .frt__persist { font-size: 14px; }
   }

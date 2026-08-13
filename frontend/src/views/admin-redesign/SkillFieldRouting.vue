@@ -103,8 +103,8 @@
       </div>
 
       <!-- 产出字段表 -->
-      <div class="sfr__scroll">
-        <table class="sfr__table">
+      <div class="sfr__scroll mk-table-scroll">
+        <table class="mk-table mk-table--dense">
           <thead>
             <tr>
               <th scope="col">字段</th>
@@ -628,24 +628,9 @@ onMounted(() => void load())
 .sfr__filter-count { font-size: 11.5px; color: var(--mk-faint, #71809a); font-weight: 600; }
 
 /* ========== 表格 ========== */
+/* 表格本体已并入 mk-table mk-table--dense（shared.css）：仅保留容器与表内单元格辅助样式 */
 .sfr__scroll { overflow-x: auto; border: 1px solid var(--mk-line, #e6ebf4); border-radius: 12px; background: var(--mk-surface, #fff); box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06)); }
-@media (max-width: 860px) { .sfr__table { min-width: 1180px; } }
-.sfr__table { width: 100%; border-collapse: collapse; }
-.sfr__table th, .sfr__table td { padding: 8px 12px; text-align: left; }
-.sfr__table th {
-  background: #fafbfc;
-  border-bottom: 1px solid var(--mk-line, #e6ebf4);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--mk-faint, #71809a);
-  white-space: nowrap;
-}
-.sfr__table td { border-bottom: 1px solid #f6f7f9; font-size: 12.5px; vertical-align: middle; }
-.sfr__table tr:last-child td { border-bottom: none; }
-.sfr__table tbody tr { transition: background 0.12s; }
-.sfr__table tbody tr:hover { background: #f6f9ff; }
+@media (max-width: 860px) { .mk-table--dense { min-width: 1180px; } }
 .sfr__fieldcell { max-width: 300px; display: grid; gap: 2px; min-width: 0; }
 .sfr__field { word-break: break-all; color: var(--mk-ink, #1a2a44); }
 .sfr__fieldpath { font-size: 10.5px; color: var(--mk-faint, #71809a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

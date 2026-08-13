@@ -5,7 +5,7 @@
       <span class="log-status__dot"></span>
       <strong>{{ statusTitle }}</strong>
       <span class="log-status__sep"></span>
-      <span class="log-status__meta mono">{{ filtered.length }} / {{ totalCount }} 条</span>
+      <span class="log-status__meta mono">{{ isLive ? liveLogsLoaded : filtered.length }} / {{ totalCount }} 条</span>
       <span v-if="logs.length" class="log-status__meta mono">
         失败 {{ errCount }} · 成功率 {{ successRate }}%
       </span>
@@ -33,6 +33,14 @@
           placeholder="关键词，回车查询"
           @keydown.enter="applyServerQuery"
         />
+        <input
+          v-if="isLive"
+          v-model="traceId"
+          class="log-keyword log-trace"
+          placeholder="traceId 直达，回车查询"
+          title="按 traceId 服务端查询：直达该链路日志（不受 200 条样本截断影响）"
+          @keydown.enter="applyServerQuery"
+        />
         <button type="button" class="log-adv" :class="{ 'log-adv--on': advOpen }" @click="advOpen = !advOpen">
           高级筛选 <i class="log-adv__caret" :class="{ 'is-open': advOpen }">▾</i>
         </button>
@@ -43,6 +51,14 @@
           <option value="">全部节点</option>
           <option v-for="a in agentOptions" :key="a" :value="a">{{ a }}</option>
         </select>
+        <input
+          v-if="isLive"
+          v-model="sessionId"
+          class="log-keyword log-trace"
+          placeholder="sessionId 搜索，回车查询"
+          title="按业务会话 ID 服务端查询（跨 trace 归组查看前置）"
+          @keydown.enter="applyServerQuery"
+        />
         <select v-if="isLive" v-model="timeRange" class="log-agent" @change="applyServerQuery">
           <option value="today">今天</option>
           <option value="yesterday">昨天</option>
@@ -70,6 +86,8 @@
         <span class="tline-head__kind">类型</span>
         <span class="tline-head__agent">节点</span>
         <span class="tline-head__msg">消息</span>
+        <span class="tline-head__model">模型</span>
+        <span class="tline-head__tokens">Tokens</span>
         <span class="tline-head__dur">耗时</span>
         <span class="tline-head__badge">状态</span>
         <span class="tline-head__trace">Trace</span>
@@ -90,22 +108,22 @@
           <span class="tline__time mono" :title="fmtFull(log.ts)">{{ fmtTime(log.ts) }}</span>
           <span class="tline__kind" :class="`tline__kind--${kindTone(log)}`">{{ kindText(log) }}</span>
           <span class="tline__agent mono" @click.stop="openSkillDrawer(log.agent)">{{ log.stage }}</span>
-          <span class="tline__msg" :title="[log.title, log.detail].filter(Boolean).join(' · ')">
+          <span class="tline__msg" :title="[log.title, !isLive && log.detail ? log.detail : ''].filter(Boolean).join(' · ')">
             <b>{{ log.title }}</b>
             <span v-if="log.errorCode" class="tline__errcode mono">{{ errorCodeLabel(log.errorCode) ?? `[${log.errorCategory || 'err'}] ${log.errorCode}` }}</span>
             <span v-if="log.statusCode && log.statusCode >= 400" class="tline__http mono">HTTP {{ log.statusCode }}</span>
-            <em v-if="log.detail">{{ log.detail }}</em>
+            <em v-if="log.detail && !isLive">{{ log.detail }}</em>
             <span v-if="log.recoveredByRetry" class="tline__recovered">重试 {{ (log.attempts || 1) - 1 }} 次后成功</span>
             <span v-if="promptOf(log)?.drift" class="tline__drift">{{ TERMS.driftRuntime }}</span>
-            <span v-if="promptOf(log)?.tokens" class="tline__tokens mono">{{ promptOf(log)!.tokens }}</span>
-            <span v-if="log.model" class="tline__model mono">{{ log.model }}</span>
             <span
               v-if="log.sessionId"
               class="tline__session mono"
-              title="按业务会话在瀑布中归组查看"
+              :title="`按业务会话在瀑布中归组查看：${log.sessionId}`"
               @click.stop="openSession(log.sessionId)"
             >会话 {{ shortTrace(log.sessionId) }}</span>
           </span>
+          <span class="tline__model mono" :title="log.model || undefined">{{ log.model || '—' }}</span>
+          <span class="tline__tokens mono" :title="promptOf(log)?.tokens || undefined">{{ promptOf(log)?.tokens || '—' }}</span>
           <span class="tline__dur mono" :title="fmtMs(log.durationMs)">{{ fmtMs(log.durationMs) }}</span>
           <span class="tline__badge" :class="`tline__badge--${log.status}`">{{ statusBadge[log.status] }}</span>
           <span class="tline__trace mono" title="在瀑布中查看完整链路" @click.stop="openTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span>
@@ -192,12 +210,13 @@
         </div>
       </div>
       <div v-if="canMore" class="tline-more">
-        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ isLive ? liveLogsTotal || filtered.length : filtered.length }}）</button>
+        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ isLive ? liveLogsLoaded : shown.length }} / {{ isLive ? liveLogsTotal || liveLogsLoaded : filtered.length }}）</button>
       </div>
     </div>
 
     <div v-else class="mk-empty">
-      <strong>{{ isFiltered ? '当前筛选无日志' : '暂无日志' }}</strong>
+      <strong v-if="traceMiss">未找到「{{ traceMiss }}」的日志（可能超出保留期或 ID 不完整）</strong>
+      <strong v-else>{{ isFiltered ? '当前筛选无日志' : '暂无日志' }}</strong>
       <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
     </div>
   </div>
@@ -206,7 +225,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { spans, intent, openTrace, openSession, openSkillDrawer, clearInvestigation, dataSource, isLive } from './store'
-import { fetchLogDetail, reloadLiveSpans, loadMoreLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsHasMore, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow } from './live'
+import { fetchLogDetail, reloadLiveSpans, loadMoreLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsLoaded, liveLogsHasMore, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
 import { useLoadMore } from './useLoadMore'
 import MockSkeletonTable from './SkeletonTable.vue'
 import { TERMS, errorCodeLabel } from './terms'
@@ -216,6 +235,8 @@ const statusFilter = ref('')
 const agentFilter = ref('')
 const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('week')
 const keyword = ref('')
+const traceId = ref('')
+const sessionId = ref('')
 const autoRefresh = ref(false)
 const advOpen = ref(false)
 
@@ -240,16 +261,32 @@ function promptOf(log: { traceId: string; agent: string }): PromptMetaRow | unde
   return list.find((p) => p.agentId === agentId || p.agentId.replace(/^skill:/, '') === log.agent)
 }
 
-/* live 模式：服务端筛选（时间范围/关键词）。
+/* live 模式：服务端筛选（时间范围/关键词/状态/节点/traceId/sessionId）。
    reloadLiveSpans 写入独立的 liveLogsFiltered（不污染全局 liveSpans）；
    并发与 last-wins 由 live.ts 串行化保证（loading 反馈见 liveLogsLoading） */
+function currentQuery(): SpanQuery {
+  const status = statusFilter.value === 'err' ? 'error' : statusFilter.value === 'warn' ? 'timeout' : statusFilter.value === 'ok' ? 'success' : undefined
+  return {
+    timeRange: timeRange.value,
+    keyword: keyword.value.trim() || undefined,
+    status,
+    agentId: agentFilter.value || undefined,
+    traceId: traceId.value.trim() || undefined,
+    sessionId: sessionId.value.trim() || undefined
+  }
+}
+
 async function applyServerQuery() {
   if (!isLive.value) return
-  await reloadLiveSpans({
-    timeRange: timeRange.value,
-    keyword: keyword.value.trim() || undefined
-  })
+  await reloadLiveSpans(currentQuery())
 }
+
+/* P0 分页正确性：状态/节点过滤上移服务端（status/agentId 参数，API 已支持），
+   消除「本地过滤 × 服务端分页」组合缺陷（旧实现下第 2 页整页被滤掉时，
+   「加载更多」空转无感知变化）；demo 模式仍走本地 filtered 过滤 */
+watch([statusFilter, agentFilter], () => {
+  if (isLive.value) void applyServerQuery()
+})
 
 /* P0 修复：错误横幅重试 */
 function retryLiveLogs() {
@@ -347,16 +384,21 @@ const shown = computed(() => (isLive.value ? filtered.value : demoShown.value))
 const canMore = computed(() => (isLive.value ? liveLogsHasMore.value : demoCanMore.value))
 function loadMore() {
   if (isLive.value) {
-    void loadMoreLiveSpans({
-      timeRange: timeRange.value,
-      keyword: keyword.value.trim() || undefined
-    })
+    void loadMoreLiveSpans(currentQuery())
     return
   }
   demoLoadMore()
 }
 
-const isFiltered = computed(() => !!(agentFilter.value || statusFilter.value || keyword.value.trim()))
+const isFiltered = computed(() => !!(agentFilter.value || statusFilter.value || keyword.value.trim() || traceId.value.trim() || sessionId.value.trim()))
+/* traceId/sessionId 服务端查询未命中时的空态提示（与 TraceWaterfall 的 wf-notice「样本截断」兜底互补：
+   此处是服务端精确查询的直接未命中） */
+const traceMiss = computed(() => {
+  if (!isLive.value || filtered.value.length) return ''
+  if (traceId.value.trim()) return `traceId ${traceId.value.trim()}`
+  if (sessionId.value.trim()) return `sessionId ${sessionId.value.trim()}`
+  return ''
+})
 /* live：全量统计来自后端 stats（非 200 行样本）；demo 回退样本计算 */
 const liveStats = computed(() => (isLive.value ? liveLogStats.value : null))
 const totalCount = computed(() => liveStats.value?.total ?? logs.value.length)
@@ -376,14 +418,16 @@ const statusTitle = computed(() => {
   if (errCount.value) return `执行日志 · ${errCount.value} 次失败`
   return '执行日志 · 运行平稳'
 })
-/* 排查徽章：读本地筛选（修复此前读 intent 导致的空值）；live 下补充关键词与时间范围 */
+/* 排查徽章：读本地筛选（修复此前读 intent 导致的空值）；live 下补充关键词/时间范围/trace/会话 */
 const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部' } as const
 const filterLabel = computed(() =>
   [
     isLive.value && timeRange.value !== 'week' ? timeRangeLabels[timeRange.value] : '',
     agentFilter.value || '',
     statusFilter.value === 'err' ? '仅失败' : statusFilter.value === 'warn' ? '仅超时' : statusFilter.value === 'ok' ? '仅成功' : '',
-    keyword.value.trim() ? `关键词「${keyword.value.trim()}」` : ''
+    keyword.value.trim() ? `关键词「${keyword.value.trim()}」` : '',
+    traceId.value.trim() ? `trace「${traceId.value.trim()}」` : '',
+    sessionId.value.trim() ? `会话「${sessionId.value.trim()}」` : ''
   ]
     .filter(Boolean)
     .join(' · ')
@@ -399,7 +443,12 @@ function clearFilter() {
   agentFilter.value = ''
   statusFilter.value = ''
   keyword.value = ''
+  traceId.value = ''
+  sessionId.value = ''
   clearInvestigation()
+  /* 服务端筛选下必须重查：仅清本地值不会刷新列表（traceId/sessionId 不在 watch 内，
+     避免输入即查询；状态/节点变化由 watch 触发，此处兜底全清场景） */
+  if (isLive.value) void applyServerQuery()
 }
 
 const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
@@ -535,7 +584,7 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
 /* 窄屏：压缩时间/节点固定列，给消息列腾空间（时间 72→56、节点 240→160） */
 @media (max-width: 860px) {
   .tline-head,
-  .tline__main { grid-template-columns: 56px 40px 160px minmax(200px, 480px) 44px 44px 56px 18px; gap: 8px; }
+  .tline__main { grid-template-columns: 56px 40px 150px minmax(140px, 480px) 100px 94px 44px 44px 56px 16px; gap: 6px; }
   .tline__payload { padding-left: 56px; }
 }
 .log-agent {
@@ -556,6 +605,8 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   color: var(--mk-ink);
   width: 150px;
 }
+/* traceId/sessionId 直达输入：稍窄的等宽输入，与关键词输入同规格 */
+.log-trace { width: 172px; font-family: var(--mk-mono); font-size: 11px; }
 .log-auto {
   display: inline-flex;
   align-items: center;
@@ -609,8 +660,8 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   top: 0;
   z-index: 2;
   display: grid;
-  grid-template-columns: 72px 40px 240px minmax(200px, 1fr) 44px 44px 72px 18px;
-  gap: 10px;
+  grid-template-columns: 72px 40px 220px minmax(180px, 1fr) 116px 108px 44px 44px 64px 18px;
+  gap: 8px;
   align-items: baseline;
   padding: 9px 14px;
   background: #fafbfc;
@@ -637,8 +688,8 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
 
 .tline__main {
   display: grid;
-  grid-template-columns: 72px 40px 240px minmax(200px, 1fr) 44px 44px 72px 18px;
-  gap: 10px;
+  grid-template-columns: 72px 40px 220px minmax(180px, 1fr) 116px 108px 44px 44px 64px 18px;
+  gap: 8px;
   align-items: baseline;
   width: 100%;
   padding: 9px 14px;
@@ -727,18 +778,17 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   padding: 1px 6px;
   white-space: nowrap;
 }
-.tline__tokens {
-  flex-shrink: 0;
-  font-size: 10.5px;
-  color: var(--mk-muted);
-  white-space: nowrap;
-}
+/* 模型 / Tokens 独立列（P2：从消息列 chip 提出；单行截断 + title 全值，避免行宽爆炸） */
+.tline__tokens,
 .tline__model {
-  flex-shrink: 0;
+  min-width: 0;
   font-size: 10.5px;
-  color: var(--mk-faint);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.tline__tokens { color: var(--mk-muted); }
+.tline__model { color: var(--mk-faint); }
 /* Prompt 契约展开区 */
 .tline__prompt { border-left: 3px solid rgba(217, 119, 6, 0.4); padding-left: 10px; }
 .tline__prompt-meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--mk-faint); }
@@ -828,13 +878,14 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   .log-status strong { font-size: 15.5px; }
   .log-status__meta { font-size: 13px; }
   .log-keyword { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 180px; }
+  .log-trace { width: 210px; font-size: 12.5px; }
   .log-agent { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 100px; }
   .log-auto { font-size: 13px; }
   .log-adv { font-size: 13px; }
   .log-status__filter { font-size: 13px; }
   .log-status__clear { font-size: 14.5px; }
   .tline-head,
-  .tline__main { grid-template-columns: 84px 48px 285px minmax(240px, 1fr) 52px 52px 84px 22px; gap: 12px; padding: 11px 18px; }
+  .tline__main { grid-template-columns: 84px 48px 260px minmax(220px, 1fr) 140px 130px 52px 52px 80px 22px; gap: 12px; padding: 11px 18px; }
   .tline-head { font-size: 12.5px; }
   .tline__time,
   .tline__agent,
@@ -874,13 +925,14 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   .log-status strong { font-size: 18px; }
   .log-status__meta { font-size: 15px; }
   .log-keyword { font-size: 15.5px; padding: 9px 14px; width: 215px; }
+  .log-trace { width: 250px; font-size: 15px; }
   .log-agent { font-size: 15.5px; padding: 9px 14px; width: 115px; }
   .log-auto { font-size: 15.5px; }
   .log-adv { font-size: 15.5px; }
   .log-status__filter { font-size: 15.5px; }
   .log-status__clear { font-size: 17px; }
   .tline-head,
-  .tline__main { grid-template-columns: 100px 56px 340px minmax(260px, 1fr) 62px 62px 100px 26px; gap: 14px; padding: 13px 22px; }
+  .tline__main { grid-template-columns: 100px 56px 310px minmax(240px, 1fr) 168px 156px 62px 62px 96px 26px; gap: 14px; padding: 13px 22px; }
   .tline-head { font-size: 14.5px; }
   .tline__time,
   .tline__agent,

@@ -73,7 +73,7 @@ export function shortId(s: string, head = 12, tail = 6): string {
 }
 
 /* ================= 执行日志 → TraceSpan ================= */
-interface RawLog {
+export interface RawLog {
   id?: string | number
   agentName?: string
   agentId?: string
@@ -106,7 +106,7 @@ function mapStatus(s?: string): TraceSpan['status'] {
 /** 网关行与 skill 行配对的最大时间差（同一次调用的两条记录） */
 const GATEWAY_PAIR_WINDOW_MS = 1500
 
-function mapLogsToSpans(items: RawLog[]): TraceSpan[] {
+export function mapLogsToSpans(items: RawLog[]): TraceSpan[] {
   const byTrace = new Map<string, number>()
   for (const log of items) {
     const t = log.traceId || `log:${log.id}`
@@ -166,7 +166,9 @@ function mapLogsToSpans(items: RawLog[]): TraceSpan[] {
       startMs: Math.max(0, ts - (byTrace.get(traceId) || ts)),
       durationMs: Number(log.durationMs || 0),
       status: mapStatus(log.status),
-      detail: timeAgo(log.createdAt),
+      /* P1 语义修复：detail 不再塞 timeAgo(createdAt) 相对时间（消息列/瀑布「摘要」显示相对时间属语义错位，
+         时间语义收敛到时间列）；改为错误摘要，无错误时留空（展开区/标题已承载其余信息） */
+      detail: errText ? errText.slice(0, 60) : '',
       payload: errText || undefined,
       execLayer: log.executionLayer,
       model: log.model,
@@ -274,12 +276,16 @@ async function fetchLiveSpans(): Promise<TraceSpan[]> {
   return mapLogsToSpans(items)
 }
 
-/** 带筛选的服务端重查（执行日志页：时间范围 / 关键词 / 节点 / 状态） */
+/** 带筛选的服务端重查（执行日志页：时间范围 / 关键词 / 节点 / 状态 / trace / 会话） */
 export interface SpanQuery {
   timeRange?: 'today' | 'yesterday' | 'week' | 'month' | 'all'
   keyword?: string
   agentName?: string
+  /** 节点过滤走 agentId（服务端做 skill:/agent: 前缀规范化，兼容裸名）；agentName 保留给分组名场景 */
+  agentId?: string
   status?: 'success' | 'error' | 'timeout'
+  traceId?: string
+  sessionId?: string
   limit?: number
 }
 
@@ -297,8 +303,24 @@ export const liveLogsError = ref('')
 export const liveLogsTotal = ref(0)
 /** 服务端分页当前页；筛选/查询变化时回到第 1 页 */
 export const liveLogsPage = ref(1)
-/** 后端是否还有更多页：最近一次响应条数达到分页上限视为有（空页会自动翻转为 false） */
+/** 已加载的原始日志行数（与后端 total 同口径累计：网关/skill 配对合并会减少展示行数，
+    以原始行数判定剩余页避免「已显示 X / 总数」口径混用，与 AuditLogs rows<total 对齐） */
+export const liveLogsLoaded = ref(0)
+/**
+ * 后端是否还有更多页（P0 分页正确性，对齐 AuditLogs rows<total 判定）：
+ * 已加载原始行数 < 筛选口径 total 且本页取满页大小。
+ * 注意：status/agent 过滤必须上移服务端（ExecLogs 传参），否则本地过滤掉整页时
+ * 会出现「点加载更多无感知变化」的空转（旧实现 items.length>=30 的缺陷）。
+ */
 export const liveLogsHasMore = ref(false)
+
+/**
+ * 分页判定纯函数：剩余页 = 已加载原始行数 + 本页条数 < 筛选口径 total，且本页取满。
+ * 纯函数化便于单元测试「仅失败/按 agent 过滤」场景。
+ */
+export function hasMorePages(prevLoaded: number, pageItems: number, total: number, pageSize: number): boolean {
+  return prevLoaded + pageItems < total && pageItems >= pageSize
+}
 
 /** 执行日志服务端分页条数（滚动修复 #5：100 → 30，首屏不再 4.7 屏；后端默认 20） */
 const LOGS_PAGE_SIZE = 30
@@ -329,7 +351,11 @@ export async function reloadLiveSpans(query: SpanQuery, page = 1): Promise<void>
     const rawTotal = body.pagination?.total ?? stats?.total ?? items.length
     const total = Number(rawTotal)
     if (Number.isFinite(total)) liveLogsTotal.value = total
-    liveLogsHasMore.value = items.length >= LOGS_PAGE_SIZE
+    /* P0 分页正确性：以「已加载原始行数 < 筛选口径 total」判定剩余页（AuditLogs rows<total 同口径），
+       替代旧 items.length>=PAGE_SIZE 判定——旧判定在「仅失败/按节点」本地过滤下，
+       第 2 页整页被滤掉时按钮仍显示，点了无新增 = 空转 */
+    liveLogsLoaded.value = page <= 1 ? items.length : liveLogsLoaded.value + items.length
+    liveLogsHasMore.value = hasMorePages(liveLogsLoaded.value - items.length, items.length, total, LOGS_PAGE_SIZE)
     const mapped = mapLogsToSpans(items)
     liveLogsPage.value = page
     if (page <= 1) {
@@ -345,6 +371,7 @@ export async function reloadLiveSpans(query: SpanQuery, page = 1): Promise<void>
     if (page <= 1) {
       liveLogsFiltered.value = []
       liveLogsTotal.value = 0
+      liveLogsLoaded.value = 0
       liveLogsHasMore.value = false
     }
   } finally {

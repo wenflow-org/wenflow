@@ -3,7 +3,7 @@
  * （数据拉取链路已被 AdminConsole 冒烟覆盖，此处只测纯函数与可推导 computed）
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { timeAgo, errMsg, shortId, liveNavBadges, alarmNavBadges, liveVirtuals, liveSkillProfiles, liveExtraProfiles, liveAnnouncements } from '../live';
+import { timeAgo, errMsg, shortId, liveNavBadges, alarmNavBadges, liveVirtuals, liveSkillProfiles, liveExtraProfiles, liveAnnouncements, hasMorePages, mapLogsToSpans } from '../live';
 import { liveSpans } from '../store';
 import type { TraceSpan } from '../store';
 
@@ -108,5 +108,72 @@ describe('live.liveNavBadges（侧栏徽章推导）', () => {
 
   it('执行日志是报警徽章场景', () => {
     expect(alarmNavBadges.has('execution-logs')).toBe(true);
+  });
+});
+
+describe('live.hasMorePages（P0 分页正确性：已加载原始行 < 筛选 total 且本页取满）', () => {
+  const PAGE_SIZE = 30;
+
+  it('「仅失败」服务端过滤：第一页取满且有剩余 → true（继续加载）', () => {
+    expect(hasMorePages(0, 30, 45, PAGE_SIZE)).toBe(true);
+  });
+
+  it('「仅失败」服务端过滤：末页不足一页 → false（不再空转）', () => {
+    expect(hasMorePages(30, 15, 45, PAGE_SIZE)).toBe(false);
+  });
+
+  it('筛选结果总数 < 页大小：第一页即 false（旧 items.length>=30 判定的空转场景，已消除）', () => {
+    expect(hasMorePages(0, 12, 12, PAGE_SIZE)).toBe(false);
+  });
+
+  it('空页（服务端无更多数据）→ false，按钮消失', () => {
+    expect(hasMorePages(60, 0, 60, PAGE_SIZE)).toBe(false);
+  });
+
+  it('网关/skill 配对合并不干扰判定：按原始行数累计，末页取满且已加载 == total → false', () => {
+    expect(hasMorePages(0, 30, 90, PAGE_SIZE)).toBe(true);
+    expect(hasMorePages(30, 30, 90, PAGE_SIZE)).toBe(true);
+    expect(hasMorePages(60, 30, 90, PAGE_SIZE)).toBe(false);
+  });
+});
+
+describe('live.mapLogsToSpans（P1 消息列语义 + 网关配对 + 状态映射）', () => {
+  it('detail 为错误摘要而非 timeAgo 相对时间（时间语义收敛到时间列）', () => {
+    const spans1 = mapLogsToSpans([
+      { id: '1', createdAt: '2026-08-13T11:55:00', status: 'error', errorMessage: 'RATE_LIMITED：请求过于频繁' }
+    ]);
+    expect(spans1[0].detail).toBe('RATE_LIMITED：请求过于频繁');
+    expect(spans1[0].detail).not.toMatch(/前|昨天/);
+    expect(spans1[0].status).toBe('err');
+  });
+
+  it('成功行 detail 为空串（不再出现「3 分钟前」这类相对时间）', () => {
+    const spans1 = mapLogsToSpans([{ id: '2', createdAt: '2026-08-13T11:55:00', status: 'success' }]);
+    expect(spans1[0].detail).toBe('');
+    expect(spans1[0].status).toBe('ok');
+  });
+
+  it('timeout → warn 映射', () => {
+    const spans1 = mapLogsToSpans([{ id: '3', status: 'timeout' }]);
+    expect(spans1[0].status).toBe('warn');
+  });
+
+  it('skill 行 + 同 trace 时间相近的网关行 → 合并为一行且携带 gatewayDurMs', () => {
+    const spans1 = mapLogsToSpans([
+      { id: 'g1', traceId: 'tr:abc', createdAt: '2026-08-13T10:00:00.000', executionLayer: 'api-gateway', durationMs: 80, status: 'success' },
+      { id: 's1', traceId: 'tr:abc', createdAt: '2026-08-13T10:00:00.300', executionLayer: 'skill', durationMs: 1200, status: 'success', agentId: 'skill:teaching-turn', model: 'deepseek-v4-pro' }
+    ]);
+    expect(spans1).toHaveLength(1);
+    expect(spans1[0].gatewayDurMs).toBe(80);
+    expect(spans1[0].agent).toBe('teaching-turn');
+    expect(spans1[0].model).toBe('deepseek-v4-pro');
+  });
+
+  it('model / sessionId 透传到 span（供模型独立列展示）', () => {
+    const spans1 = mapLogsToSpans([
+      { id: 'm1', status: 'success', model: 'deepseek-v4-flash', sessionId: 'sess_1', agentId: 'skill:goal-conversation' }
+    ]);
+    expect(spans1[0].model).toBe('deepseek-v4-flash');
+    expect(spans1[0].sessionId).toBe('sess_1');
   });
 });
