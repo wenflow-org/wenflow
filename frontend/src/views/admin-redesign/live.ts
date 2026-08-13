@@ -103,8 +103,20 @@ function mapStatus(s?: string): TraceSpan['status'] {
   return 'ok'
 }
 
-/** 网关行与 skill 行配对的最大时间差（同一次调用的两条记录） */
+/** 网关行与 skill 行配对的最小时间差下限（短调用的兜底窗口） */
 const GATEWAY_PAIR_WINDOW_MS = 1500
+
+/**
+ * 网关行与 skill 行的配对时间差上限。
+ * W2 修窗（ADMIN_DEEP_VLAB_TRACE_AUDIT §4.2 W2）：固定 1500ms 窗口对长调用失效——
+ * 长调用下网关记录与 skill 记录的写出时间差可远超 1.5s（实测 11.4s 网关行与 25.6s
+ * skill 行并列两行）。窗口改为随调用时长缩放：至少 1500ms，且不小于两条记录
+ * 各自 durationMs 的较小值——长调用给足窗口，短调用保持原有防误配能力；
+ * 仍限同 traceId，且取时间最接近的未用网关行。
+ */
+export function gatewayPairWindowMs(skillDurMs: number, gatewayDurMs: number): number {
+  return Math.max(GATEWAY_PAIR_WINDOW_MS, Math.min(skillDurMs, gatewayDurMs))
+}
 
 export function mapLogsToSpans(items: RawLog[]): TraceSpan[] {
   const byTrace = new Map<string, number>()
@@ -131,14 +143,14 @@ export function mapLogsToSpans(items: RawLog[]): TraceSpan[] {
   for (const { l: skill, i: si } of skillRows) {
     const t = tsOf(skill)
     let bestGi = -1
-    let bestDiff = GATEWAY_PAIR_WINDOW_MS
+    let bestDiff = Infinity
     for (const { l: g, i: gi } of gatewayRows) {
       if (usedGateway.has(gi) || g.traceId !== skill.traceId) continue
       const d = Math.abs(tsOf(g) - t)
-      if (d < bestDiff) {
-        bestDiff = d
-        bestGi = gi
-      }
+      if (d >= bestDiff) continue
+      if (d >= gatewayPairWindowMs(Number(skill.durationMs || 0), Number(g.durationMs || 0))) continue
+      bestDiff = d
+      bestGi = gi
     }
     if (bestGi >= 0) {
       usedGateway.add(bestGi)
@@ -197,6 +209,136 @@ export function mapLogsToSpans(items: RawLog[]): TraceSpan[] {
     out.push(spanOf(log, i))
   }
   return out.sort((a, b) => (a.ts || 0) - (b.ts || 0))
+}
+
+/* ================= 瀑布：服务端分页 / traceId 直达（W1） =================
+ * 瀑布不再只依赖 200 条 boot 快照（实测多为 1-span 截断链路）：
+ * - 初始样本 = 全局 boot 快照（liveSpans），零额外请求；
+ * - 「加载更多样本」= 服务端 page 追加（按 id 去重 + 重算 trace 内 startMs，
+ *   保证跨页同一条链路的相对起点一致）；
+ * - traceId / sessionId 直达 = 服务端查询整条链路，本地替换该 trace/session 的 span。
+ * 独立于 ExecLogs 的 liveLogsFiltered / reloadLiveSpans（不污染执行日志的分页状态）。
+ */
+export const waterfallSpans = ref<TraceSpan[] | null>(null)
+/** 服务端全量口径（pagination.total），状态条展示「样本 N / 全量 M」 */
+export const waterfallTotal = ref(0)
+/** 已加载的服务端页数（boot 快照视为第 1 页；追加从第 2 页起） */
+export const waterfallPage = ref(1)
+export const waterfallLoading = ref(false)
+export const waterfallError = ref('')
+
+const WATERFALL_PAGE_SIZE = 200
+
+/** 同 trace 内按绝对时间戳重算 startMs（页追加后跨页同 trace 行的相对起点保持一致） */
+export function rebaseTraceStartMs(spans: TraceSpan[]): TraceSpan[] {
+  const byTrace = new Map<string, number>()
+  for (const s of spans) {
+    const ts = s.ts ?? 0
+    const cur = byTrace.get(s.traceId)
+    if (cur === undefined || ts < cur) byTrace.set(s.traceId, ts)
+  }
+  return spans.map((s) => ({
+    ...s,
+    startMs: Math.max(0, (s.ts ?? 0) - (byTrace.get(s.traceId) ?? 0))
+  }))
+}
+
+/** 服务端页追加合并：按 span id 去重（新页覆盖旧行），重算 startMs 保持跨页同 trace 一致 */
+export function mergeSpanPages(existing: TraceSpan[], incoming: TraceSpan[]): TraceSpan[] {
+  const byId = new Map<string, TraceSpan>()
+  for (const s of existing) byId.set(s.id, s)
+  for (const s of incoming) byId.set(s.id, s)
+  const merged = [...byId.values()].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0))
+  return rebaseTraceStartMs(merged)
+}
+
+interface WaterfallPageResult {
+  items: RawLog[]
+  total: number
+}
+
+async function fetchWaterfallPage(query: SpanQuery, page: number): Promise<WaterfallPageResult> {
+  const res = await adminAgentsApi.getLogs({ limit: WATERFALL_PAGE_SIZE, page, ...query })
+  const body = res.data?.data ?? res.data ?? {}
+  const items: RawLog[] = Array.isArray(body) ? body : body.items || body.logs || []
+  const stats = body.stats as LiveLogStats | undefined
+  const total = Number(body.pagination?.total ?? stats?.total ?? items.length)
+  return { items, total: Number.isFinite(total) ? total : items.length }
+}
+
+/** 初始样本对齐全局 boot 快照（live 模式瀑布挂载时调用；已对齐则跳过） */
+export function waterfallSyncFromBoot(): void {
+  if (waterfallSpans.value !== null) return
+  waterfallSpans.value = liveSpans.value ? [...liveSpans.value] : []
+  waterfallPage.value = 1
+  if (liveLogStats.value?.total) waterfallTotal.value = liveLogStats.value.total
+}
+
+/** 「加载更多样本」：服务端追加下一页（week 窗口与 boot 同口径） */
+export async function waterfallLoadMore(): Promise<void> {
+  if (waterfallLoading.value) return
+  const base = waterfallSpans.value ?? []
+  waterfallLoading.value = true
+  waterfallError.value = ''
+  try {
+    const nextPage = waterfallPage.value + 1
+    const { items, total } = await fetchWaterfallPage({ timeRange: 'week' }, nextPage)
+    if (items.length) {
+      waterfallSpans.value = mergeSpanPages(base, mapLogsToSpans(items))
+      waterfallPage.value = nextPage
+    }
+    if (total) waterfallTotal.value = total
+  } catch (e) {
+    waterfallError.value = errMsg(e)
+  } finally {
+    waterfallLoading.value = false
+  }
+}
+
+/** 服务端整链路重查：traceId 直达（与执行日志直达同模式），本地替换该 trace 的 span */
+export async function waterfallFetchTrace(traceId: string): Promise<boolean> {
+  const base = waterfallSpans.value ?? []
+  waterfallLoading.value = true
+  waterfallError.value = ''
+  try {
+    const { items, total } = await fetchWaterfallPage({ traceId, timeRange: 'week' }, 1)
+    const incoming = mapLogsToSpans(items)
+    if (total) waterfallTotal.value = total
+    if (!incoming.length) return false
+    waterfallSpans.value = mergeSpanPages(
+      base.filter((s) => s.traceId !== traceId),
+      incoming
+    )
+    return true
+  } catch (e) {
+    waterfallError.value = errMsg(e)
+    return false
+  } finally {
+    waterfallLoading.value = false
+  }
+}
+
+/** 服务端按业务会话重查：会话视图直达（metadata 命中 sessionId），本地替换该会话的 span */
+export async function waterfallFetchSession(sessionId: string): Promise<boolean> {
+  const base = waterfallSpans.value ?? []
+  waterfallLoading.value = true
+  waterfallError.value = ''
+  try {
+    const { items, total } = await fetchWaterfallPage({ sessionId, timeRange: 'week' }, 1)
+    const incoming = mapLogsToSpans(items)
+    if (total) waterfallTotal.value = total
+    if (!incoming.length) return false
+    waterfallSpans.value = mergeSpanPages(
+      base.filter((s) => s.sessionId !== sessionId),
+      incoming
+    )
+    return true
+  } catch (e) {
+    waterfallError.value = errMsg(e)
+    return false
+  } finally {
+    waterfallLoading.value = false
+  }
 }
 
 /** 日志全量统计（后端 /agents/logs stats：全量口径，非前端样本） */
@@ -286,6 +428,8 @@ export interface SpanQuery {
   status?: 'success' | 'error' | 'timeout'
   traceId?: string
   sessionId?: string
+  /** 错误类别筛选（失败归因/异常流跳转；后端按列值 + 空类别启发式归并） */
+  errorCategory?: string
   limit?: number
 }
 
@@ -556,7 +700,7 @@ export interface LiveOverviewFull {
     failures7d: { category: string; count: number }[]
   }
   trend: { date: string; total: number; completed: number }[]
-  feed: { text: string; time: string; tone: 'ok' | 'warn' | 'bad' | 'muted'; ts?: number }[]
+  feed: { text: string; time: string; tone: 'ok' | 'warn' | 'bad' | 'muted'; ts?: number; errorCategory?: string; agentId?: string }[]
   actions: { text: string; link: string; tone: 'bad' | 'warn'; agentId: string }[]
 }
 
@@ -670,9 +814,22 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
   const pulseCalls24h = Number.isFinite(pulseCalls24hRaw) ? pulseCalls24hRaw : pulse.reduce((a, b) => a + b.calls, 0)
   const peak = pulseCalls24h > 0 ? String(agents.last24hPeak || '') || peakFallback : '—'
 
-  /* 动态（excludeTest 已由后端过滤虚拟/测试账号；三类事件按时间戳统一归并排序） */
+  /* 动态（excludeTest 已由后端过滤虚拟/测试账号；异常事件优先置顶，
+     普通事件在后；时间窗 = 后端近 24h） */
   const act = activityRes?.data?.data ?? {}
   const feed: LiveOverviewFull['feed'] = []
+  for (const f of act.recentFailures || []) {
+    const cat = String(f.errorCategory || f.errorCode || 'error')
+    const agent = String(f.agentId || '未知节点').replace(/^skill:/, '')
+    feed.push({
+      text: `执行失败：${agent}（${cat}）`,
+      time: timeAgo(f.calledAt),
+      ts: new Date(f.calledAt).getTime(),
+      tone: 'bad',
+      errorCategory: cat,
+      agentId: f.agentId
+    })
+  }
   for (const u of act.recentUsers || []) {
     feed.push({ text: `新用户注册：${u.email || u.name}`, time: timeAgo(u.createdAt), ts: new Date(u.createdAt).getTime(), tone: 'muted' })
   }
@@ -684,7 +841,13 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
   for (const t of act.completedTasks || []) {
     feed.push({ text: `任务完成：${t.title || t.id}`, time: timeAgo(t.completedAt || t.updatedAt), ts: new Date(t.completedAt || t.updatedAt).getTime(), tone: 'ok' })
   }
-  feed.sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0))
+  // 异常（bad/warn）置顶，组内按时间倒序；普通事件随后（前端折叠展示）
+  const toneRank = (t: string) => (t === 'bad' ? 0 : t === 'warn' ? 1 : 2)
+  feed.sort((a, b) => {
+    const r = toneRank(a.tone) - toneRank(b.tone)
+    if (r !== 0) return r
+    return (b.ts ?? 0) - (a.ts ?? 0)
+  })
 
   /* 待办：失败最多的节点（近 7 天日志，放宽样本到 200 条减少截断偏差） */
   const byAgent = new Map<string, number>()
@@ -759,7 +922,7 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     peak,
     usage,
     trend,
-    feed: feed.slice(0, 6),
+    feed: feed.slice(0, 12),
     actions
   }
   return head
@@ -835,6 +998,8 @@ export interface LiveLearner {
   userId: string
   name: string
   email: string
+  /** 测试/虚拟账号标记（后端命名约定识别；excludeTest=true 时恒为 false） */
+  isTestAccount?: boolean
   pathId?: string
   pathTitle: string | null
   currentTask: string | null
@@ -860,13 +1025,14 @@ function mapFatigue(f?: string): string {
 }
 
 async function fetchLiveLearners(): Promise<void> {
-  const res = await adminLearnerModelsApi.list({ limit: 50 })
+  const res = await adminLearnerModelsApi.list({ limit: 50, excludeTest: true })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.items || []
   liveLearners.value = items.map((m: Record<string, unknown>) => ({
     userId: String(m.userId),
     name: String(m.userName || m.userId),
     email: String(m.email || ''),
+    isTestAccount: !!m.isTestAccount,
     pathId: (m.pathId as string) || undefined,
     pathTitle: (m.pathTitle as string) || null,
     currentTask: (m.currentTask as string) || null,
@@ -906,6 +1072,10 @@ export interface LiveVirtual {
   sessions: number
   /** 故事池条数（会话故事，不是人物背景字数） */
   storyCount: number
+  /** 当前运行中的会话数（列表接口 runningCount） */
+  runningCount: number
+  /** 最近一个运行中会话的阶段（无运行中会话时回退最近会话阶段） */
+  currentStage: string | null
   createdAt: string
   raw: Record<string, unknown>
 }
@@ -920,6 +1090,9 @@ async function fetchLiveVirtuals(): Promise<void> {
     const profile = (p.profile as Record<string, unknown>) || {}
     const pool = Array.isArray(profile.storyPool) ? profile.storyPool : []
     const storyCount = Number(p.storyCount ?? pool.length ?? 0)
+    // 运行中信号：后端列表接口已补 runningCount/currentStage；旧缓存（无字段）时由 raw.sessions 兜底推导
+    const sessionSample = Array.isArray(p.sessions) ? p.sessions as Record<string, unknown>[] : []
+    const runningSessions = sessionSample.filter((s) => String(s.status || '') === 'running')
     return {
       id: String(p.id),
       name: String(profile.name || profile.nameHint || p.userName || p.id),
@@ -928,6 +1101,8 @@ async function fetchLiveVirtuals(): Promise<void> {
       story: String(profile.background || profile.corePersonality || p.notes || ''),
       sessions: Number(p.sessionCount || (p._count as Record<string, number>)?.sessions || 0),
       storyCount,
+      runningCount: Number(p.runningCount ?? runningSessions.length ?? 0),
+      currentStage: String(p.currentStage ?? runningSessions[0]?.currentStage ?? sessionSample[0]?.currentStage ?? '') || null,
       createdAt: String(p.createdAt || ''),
       raw: p
     }

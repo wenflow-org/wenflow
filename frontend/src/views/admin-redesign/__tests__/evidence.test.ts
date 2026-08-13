@@ -9,6 +9,7 @@ import {
   evidenceDotTone,
   evidenceLowConfidence,
   evidenceSignalZh,
+  evidenceTypeZh,
   evidenceConfidenceText,
   evidenceTooltip,
   EVIDENCE_LOW_CONFIDENCE,
@@ -56,6 +57,16 @@ describe('evidenceSignalZh / evidenceConfidenceText / evidenceTooltip', () => {
     expect(evidenceSignalZh('fatigue')).toBe('疲劳');
     expect(evidenceSignalZh('incomplete')).toBe('未完成');
     expect(evidenceSignalZh('unknown-signal')).toBe('');
+  });
+
+  it('类型中文映射（时间线人类化，A3）', () => {
+    expect(evidenceTypeZh('task-completed')).toBe('任务完成');
+    expect(evidenceTypeZh('teaching-session')).toBe('教学会话');
+    expect(evidenceTypeZh('summary')).toBe('总结');
+    expect(evidenceTypeZh('evaluation')).toBe('评估');
+    expect(evidenceTypeZh('TASK-COMPLETED')).toBe('任务完成');
+    expect(evidenceTypeZh('unknown')).toBe('unknown');
+    expect(evidenceTypeZh('')).toBe('学习事件');
   });
 
   it('置信度文案为百分比', () => {

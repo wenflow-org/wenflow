@@ -303,6 +303,7 @@ export const adminLearnerModelsApi = {
     pathId?: string;
     staleOnly?: boolean;
     riskOnly?: boolean;
+    excludeTest?: boolean;
     page?: number;
     limit?: number;
   }) => {
@@ -361,6 +362,7 @@ export const adminAgentsApi = {
     sourceEntry?: string;
     startTime?: string;
     endTime?: string;
+    errorCategory?: string;
   }) => {
     return adminAxios.get('/admin/agents/logs', { params });
   },

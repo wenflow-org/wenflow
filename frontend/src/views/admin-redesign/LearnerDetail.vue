@@ -28,7 +28,7 @@
         <div class="ld-badges">
           <span class="mk-badge" :class="trendBadge">趋势：{{ trendText }}</span>
           <span class="mk-badge" :class="fatigueBadge">疲劳：{{ d.fatigue }}</span>
-          <span class="mk-badge mk-badge--muted">快照 {{ d.snapshot.version }} · {{ d.snapshot.generatedAt }}</span>
+          <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">快照 {{ d.snapshot.version }} · {{ d.snapshot.generatedAt }}</span>
         </div>
         <button type="button" class="mk-status__action" :disabled="recomputing" @click="recompute">
           {{ recomputing ? '重算中…' : '重算快照' }}
@@ -36,7 +36,7 @@
       </div>
     </div>
 
-    <!-- Tab 栏 -->
+    <!-- Tab 栏（6 → 3 合并：总览 / 画像 / 证据；旧 tab 名由 normalizeLearnerTab 重定向） -->
     <div class="ld-tabs">
       <button
         v-for="t in tabs"
@@ -44,13 +44,13 @@
         type="button"
         class="mk-pill"
         :class="{ 'mk-pill--active': tab === t.id }"
-        @click="tab = t.id"
+        @click="switchTab(t.id)"
       >
         {{ t.label }}
       </button>
     </div>
 
-    <!-- 总览 -->
+    <!-- ============ 总览：进度 + 概念掌握图形 + 活跃 + 会话 + 建议行动 ============ -->
     <div v-if="tab === 'overview'" class="ld-grid">
       <div class="ld-col">
         <section class="mk-card">
@@ -63,33 +63,34 @@
             <span class="ld-progress__stage">{{ d.stage }}</span>
             <div class="ld-progress__bar"><i :style="{ width: d.pct + '%' }"></i></div>
             <p class="ld-progress__task">正在做：{{ d.task }}</p>
+            <p v-if="milestoneTasks" class="ld-progress__task">当前里程碑：已完成 {{ milestoneTasks.done }}/{{ milestoneTasks.total }} 个任务</p>
           </div>
         </section>
 
         <section class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">知识点状态</h3>
+            <h3 class="mk-card__title">概念掌握</h3>
+            <span class="mk-card__meta">{{ conceptBars.length }} 个概念</span>
           </div>
-          <div class="ld-concepts">
-            <div class="ld-concept-group">
-              <span class="ld-concept-label ld-concept-label--ok">已掌握 {{ d.concepts.mastered.length }}</span>
-              <div class="ld-concept-list">
-                <span v-for="c in d.concepts.mastered" :key="c" class="ld-concept ld-concept--ok">{{ c }}</span>
+          <div v-if="conceptBars.length" class="ld-bars">
+            <div v-for="c in conceptBars" :key="c.label" class="ld-bar">
+              <div class="ld-bar__head">
+                <strong :title="`转移就绪：${c.readiness} · 误解风险：${c.risk}`">{{ c.label }}</strong>
+                <span class="ld-bar__badges">
+                  <span class="mk-badge" :class="barToneBadge(c.tone)">{{ c.readiness }}</span>
+                  <span class="ld-bar__risk" :class="`ld-bar__risk--${c.riskTone}`">误解 {{ c.risk }}</span>
+                  <span v-if="c.evidenceCount > 0" class="ld-bar__ev" :title="`证据 ${c.evidenceCount} 条`">{{ c.evidenceCount }} 证据</span>
+                </span>
               </div>
-            </div>
-            <div class="ld-concept-group">
-              <span class="ld-concept-label ld-concept-label--warn">挣扎 {{ d.concepts.struggling.length }}</span>
-              <div class="ld-concept-list">
-                <span v-for="c in d.concepts.struggling" :key="c" class="ld-concept ld-concept--warn">{{ c }}</span>
-              </div>
-            </div>
-            <div class="ld-concept-group">
-              <span class="ld-concept-label ld-concept-label--bad">脆弱 {{ d.concepts.fragile.length }}</span>
-              <div class="ld-concept-list">
-                <span v-for="c in d.concepts.fragile" :key="c" class="ld-concept ld-concept--bad">{{ c }}</span>
+              <div class="ld-bar__track">
+                <i :class="`ld-bar__fill is-${c.tone}`" :style="{ width: c.width + '%' }"></i>
               </div>
             </div>
           </div>
+          <p v-else class="ld-none">
+            {{ isLive ? '暂无概念账本数据' : '演示模式下无数据' }}
+            <span v-if="isLive" class="ld-none__hint">重算快照后由知识记忆服务生成。</span>
+          </p>
         </section>
       </div>
 
@@ -115,24 +116,43 @@
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">最近会话</h3>
+            <span class="mk-card__meta">人类化证据</span>
           </div>
           <div class="ld-sessions">
             <div v-for="(s, i) in d.sessions" :key="i" class="ld-session">
               <span class="ld-session__dot" :class="`is-${s.tone}`"></span>
               <div class="ld-session__main">
-                <strong>{{ s.title }}</strong>
+                <strong>{{ evidenceTypeZh(s.title) }}</strong>
                 <span>{{ s.result }}</span>
+                <span v-if="s.concepts && s.concepts.length" class="ld-chips">
+                  <span v-for="c in s.concepts.slice(0, 3)" :key="c" class="ld-chip">{{ c }}</span>
+                </span>
               </div>
               <span class="ld-session__time">{{ s.time }}</span>
             </div>
             <p v-if="!d.sessions.length" class="ld-none">暂无会话记录</p>
           </div>
         </section>
+
+        <section v-if="teachingHints" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">建议行动</h3>
+            <span class="mk-card__meta">教学建议摘要</span>
+          </div>
+          <div class="ld-actions">
+            <p v-if="teachingHints.recommendedApproach"><span class="ld-actions__k">方式</span>{{ teachingHints.recommendedApproach }}</p>
+            <p v-if="teachingHints.promptEnhancement"><span class="ld-actions__k">Prompt</span>{{ teachingHints.promptEnhancement }}</p>
+            <p v-if="riskFactors.length"><span class="ld-actions__k ld-actions__k--warn">风险</span>{{ riskFactors.join('；') }}</p>
+            <button type="button" class="mk-status__action" :disabled="recomputing" @click="recompute">
+              {{ recomputing ? '重算中…' : '重算快照' }}
+            </button>
+          </div>
+        </section>
       </div>
     </div>
 
-    <!-- 认知画像 -->
-    <div v-else-if="tab === 'cognitive'" class="ld-tabpage">
+    <!-- ============ 画像：认知 + 偏好情绪 + 行为历史 + 课程控制 + 派生 + 记忆 + 教学建议 ============ -->
+    <div v-else-if="tab === 'profile'" class="ld-tabpage">
       <template v-if="profile">
         <section class="mk-card">
           <div class="mk-card__head"><h3 class="mk-card__title">认知特征</h3></div>
@@ -152,35 +172,70 @@
             </div>
           </div>
         </section>
+        <section v-if="behaviorRows.length" class="mk-card">
+          <div class="mk-card__head"><h3 class="mk-card__title">学习行为基线</h3></div>
+          <div class="ld-kv">
+            <div v-for="kv in behaviorRows" :key="kv.label" class="ld-kv__row">
+              <span>{{ kv.label }}</span>
+              <strong>{{ kv.value }}</strong>
+            </div>
+          </div>
+        </section>
+        <section v-if="historyRows.length" class="mk-card">
+          <div class="mk-card__head"><h3 class="mk-card__title">互动历史</h3></div>
+          <div class="ld-kv">
+            <div v-for="kv in historyRows" :key="kv.label" class="ld-kv__row">
+              <span>{{ kv.label }}</span>
+              <strong>{{ kv.value }}</strong>
+            </div>
+          </div>
+        </section>
+        <section v-if="curriculumRows.length" class="mk-card">
+          <div class="mk-card__head"><h3 class="mk-card__title">课程控制</h3></div>
+          <div class="ld-kv">
+            <div v-for="kv in curriculumRows" :key="kv.label" class="ld-kv__row">
+              <span>{{ kv.label }}</span>
+              <strong>{{ kv.value }}</strong>
+            </div>
+          </div>
+        </section>
+        <section v-if="derivedRows.length" class="mk-card">
+          <div class="mk-card__head"><h3 class="mk-card__title">派生洞察</h3></div>
+          <div class="ld-kv">
+            <div v-for="kv in derivedRows" :key="kv.label" class="ld-kv__row">
+              <span>{{ kv.label }}</span>
+              <strong>{{ kv.value }}</strong>
+            </div>
+          </div>
+        </section>
         <section v-if="narrativeInsights.length" class="mk-card">
           <div class="mk-card__head"><h3 class="mk-card__title">叙述洞察</h3></div>
           <div class="ld-insights">
             <p v-for="(n, i) in narrativeInsights" :key="i">{{ n }}</p>
           </div>
         </section>
-      </template>
-      <p v-else class="ld-none">
-        {{ isLive ? '暂无认知画像数据' : '演示模式下无数据' }}
-        <span v-if="isLive" class="ld-none__hint">重算快照后生成。</span>
-      </p>
-    </div>
-
-    <!-- 动态状态 -->
-    <div v-else-if="tab === 'dynamic'" class="ld-tabpage">
-      <template v-if="dynamicState">
-        <div class="ld-metrics">
-          <div v-for="m in metricCards" :key="m.label" class="ld-metric">
-            <span>{{ m.label }}</span>
-            <strong :class="m.cls">{{ m.value }}</strong>
-            <em>{{ m.hint }}</em>
-          </div>
-        </div>
-        <section class="mk-card">
-          <div class="mk-card__head"><h3 class="mk-card__title">趋势与建议</h3></div>
+        <section v-if="memoryRows.length || foundations.reusable.length || foundations.blocked.length" class="mk-card">
+          <div class="mk-card__head"><h3 class="mk-card__title">全局信号与背景</h3></div>
           <div class="ld-kv">
-            <div v-for="kv in dynamicRows" :key="kv.label" class="ld-kv__row">
+            <div v-for="kv in memoryRows" :key="kv.label" class="ld-kv__row">
               <span>{{ kv.label }}</span>
               <strong>{{ kv.value }}</strong>
+            </div>
+          </div>
+          <div class="ld-found">
+            <div>
+              <span class="ld-concept-label ld-concept-label--ok">可复用基础 {{ foundations.reusable.length }}</span>
+              <div class="ld-concept-list">
+                <span v-for="c in foundations.reusable" :key="c" class="ld-concept ld-concept--ok">{{ c }}</span>
+                <span v-if="!foundations.reusable.length" class="ld-none">—</span>
+              </div>
+            </div>
+            <div>
+              <span class="ld-concept-label ld-concept-label--bad">被阻塞基础 {{ foundations.blocked.length }}</span>
+              <div class="ld-concept-list">
+                <span v-for="c in foundations.blocked" :key="c" class="ld-concept ld-concept--bad">{{ c }}</span>
+                <span v-if="!foundations.blocked.length" class="ld-none">—</span>
+              </div>
             </div>
           </div>
         </section>
@@ -192,49 +247,7 @@
             </span>
           </div>
         </section>
-      </template>
-      <p v-else class="ld-none">
-        {{ isLive ? '暂无动态状态数据' : '演示模式下无数据' }}
-        <span v-if="isLive" class="ld-none__hint">重算快照后生成。</span>
-      </p>
-    </div>
-
-    <!-- 知识记忆 -->
-    <div v-else-if="tab === 'memory'" class="ld-tabpage">
-      <template v-if="memoryRows.length">
-        <section class="mk-card">
-          <div class="mk-card__head"><h3 class="mk-card__title">全局信号与背景</h3></div>
-          <div class="ld-kv">
-            <div v-for="kv in memoryRows" :key="kv.label" class="ld-kv__row">
-              <span>{{ kv.label }}</span>
-              <strong>{{ kv.value }}</strong>
-            </div>
-          </div>
-        </section>
-      </template>
-      <p v-else class="ld-none">
-        {{ isLive ? '暂无知识记忆数据' : '演示模式下无数据' }}
-        <span v-if="isLive" class="ld-none__hint">重算快照后生成。</span>
-      </p>
-    </div>
-
-    <!-- 教学建议 -->
-    <div v-else-if="tab === 'teaching'" class="ld-tabpage">
-      <template v-if="teachingHints">
-        <section class="mk-card">
-          <div class="mk-card__head"><h3 class="mk-card__title">推荐教学策略</h3></div>
-          <div class="ld-kv">
-            <div class="ld-kv__row">
-              <span>推荐方式</span>
-              <strong>{{ teachingHints.recommendedApproach || '—' }}</strong>
-            </div>
-            <div class="ld-kv__row">
-              <span>Prompt 增强</span>
-              <strong>{{ teachingHints.promptEnhancement || '—' }}</strong>
-            </div>
-          </div>
-        </section>
-        <section class="mk-card">
+        <section v-if="teachingHints" class="mk-card">
           <div class="mk-card__head"><h3 class="mk-card__title">强调 / 避免</h3></div>
           <div class="ld-two">
             <div>
@@ -253,25 +266,37 @@
             </div>
           </div>
         </section>
-        <section v-if="(teachingHints.riskFactors || []).length" class="mk-card">
-          <div class="mk-card__head"><h3 class="mk-card__title">风险因素</h3></div>
-          <div class="ld-insights">
-            <p v-for="(r, i) in teachingHints.riskFactors" :key="i">{{ r }}</p>
-          </div>
-        </section>
       </template>
       <p v-else class="ld-none">
-        {{ isLive ? '暂无教学建议数据' : '演示模式下无数据' }}
+        {{ isLive ? '暂无认知画像数据' : '演示模式下无数据' }}
         <span v-if="isLive" class="ld-none__hint">重算快照后生成。</span>
       </p>
     </div>
 
-    <!-- 证据记录 -->
+    <!-- ============ 证据：指标卡常驻 + 动态状态 + 人类化时间线 + 概念证据密度 ============ -->
     <div v-else-if="tab === 'evidence'" class="ld-tabpage">
+      <template v-if="dynamicState">
+        <div class="ld-metrics">
+          <div v-for="m in metricCards" :key="m.label" class="ld-metric">
+            <span>{{ m.label }}</span>
+            <strong :class="m.cls">{{ m.value }}</strong>
+            <em>{{ m.hint }}</em>
+          </div>
+        </div>
+        <section class="mk-card">
+          <div class="mk-card__head"><h3 class="mk-card__title">趋势与建议</h3></div>
+          <div class="ld-kv">
+            <div v-for="kv in dynamicRows" :key="kv.label" class="ld-kv__row">
+              <span>{{ kv.label }}</span>
+              <strong>{{ kv.value }}</strong>
+            </div>
+          </div>
+        </section>
+      </template>
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">证据时间线</h3>
-          <span class="mk-card__meta">{{ evidence.length }} 条</span>
+          <span class="mk-card__meta">{{ evidence.length }} 条 · 点色=事件语义，置信=把握度</span>
         </div>
         <div v-if="evidence.length" class="ld-evidence">
           <div v-for="(e, i) in evidence" :key="i" class="ld-ev">
@@ -281,8 +306,11 @@
               :title="evidenceTooltip(e.signal, e.score)"
             ></span>
             <div class="ld-ev__main">
-              <strong>{{ e.title }}</strong>
+              <strong>{{ evidenceTypeZh(e.title) }}</strong>
               <span>{{ e.detail || evidenceSignalZh(e.signal) || '—' }}</span>
+              <span v-if="e.concepts.length" class="ld-chips">
+                <span v-for="c in e.concepts.slice(0, 4)" :key="c" class="ld-chip">{{ c }}</span>
+              </span>
             </div>
             <span v-if="evidenceLowConfidence(e.score)" class="ld-ev__lack" title="置信度低于 50%，结论仅供参考">证据不足</span>
             <span class="ld-ev__time">{{ e.time }}</span>
@@ -293,6 +321,25 @@
           <span v-if="isLive" class="ld-none__hint">学习事件累积后自动生成。</span>
         </p>
       </section>
+      <section v-if="conceptStats.length" class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">概念证据密度</h3>
+          <span class="mk-card__meta">证据条数（conceptLedger）</span>
+        </div>
+        <div class="ld-bars ld-bars--dense">
+          <div v-for="c in conceptStats" :key="c.label" class="ld-bar">
+            <div class="ld-bar__head">
+              <strong>{{ c.label }}</strong>
+              <span class="ld-bar__badges">
+                <span class="ld-bar__ev">{{ c.count }} 证据</span>
+              </span>
+            </div>
+            <div class="ld-bar__track">
+              <i :class="`ld-bar__fill is-${c.tone}`" :style="{ width: c.width + '%' }"></i>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -301,7 +348,9 @@
 import { computed, ref, watch } from 'vue'
 import { subPage, closeSubPage, learnerDetails, isLive } from './store'
 import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveRecomputeLearner, timeAgo, errMsg } from './live'
-import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTooltip } from './evidence'
+import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTooltip, evidenceTypeZh } from './evidence'
+import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab } from './learner-profile'
+import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
 import { toast } from '@/utils/toast'
 
 interface Detail {
@@ -316,24 +365,36 @@ interface Detail {
   pct: number
   concepts: { mastered: string[]; struggling: string[]; fragile: string[] }
   trend7d: number[]
-  sessions: { time: string; title: string; result: string; tone: 'ok' | 'warn' | 'bad' | 'muted' }[]
+  sessions: { time: string; title: string; result: string; tone: 'ok' | 'warn' | 'bad' | 'muted'; concepts?: string[] }[]
   snapshot: { version: string; generatedAt: string }
+}
+
+interface EvidenceItem {
+  title: string
+  detail: string
+  time: string
+  score: number
+  signal: string
+  concepts: string[]
 }
 
 const liveDetail = ref<Detail | null>(null)
 const rawDetail = ref<Record<string, unknown> | null>(null)
-const liveEvidence = ref<{ title: string; detail: string; time: string; score: number; signal: string }[]>([])
+const liveEvidence = ref<EvidenceItem[]>([])
 const recomputing = ref(false)
-const tab = ref('overview')
+const tab = ref<LearnerTab>('overview')
 
 const tabs = [
-  { id: 'overview', label: '总览' },
-  { id: 'cognitive', label: '认知画像' },
-  { id: 'dynamic', label: '动态状态' },
-  { id: 'memory', label: '知识记忆' },
-  { id: 'teaching', label: '教学建议' },
-  { id: 'evidence', label: '证据记录' }
+  { id: 'overview' as const, label: '总览' },
+  { id: 'profile' as const, label: '画像' },
+  { id: 'evidence' as const, label: '证据' }
 ]
+
+/** 深链兼容：旧 6-tab 名（cognitive/dynamic/memory/teaching）重定向到新 3-tab */
+function switchTab(id: string) {
+  tab.value = normalizeLearnerTab(id)
+}
+
 /** 详情加载：成功全量数据；失败但有列表兜底 → 显示兜底；失败且无兜底 → 明确错误态 */
 const detailError = ref(false)
 /** 请求超时保护：详情接口挂起时不再无限「加载中…」，超时后走兜底/错误态 */
@@ -384,7 +445,8 @@ async function loadDetail(id: string | undefined, live: boolean) {
       detail: String(e.signal || ''),
       time: timeAgo(String(e.happenedAt || e.createdAt || '')),
       signal: String(e.signal || ''),
-      score: Number(e.score || 0)
+      score: Number(e.score || 0),
+      concepts: Array.isArray(e.conceptKeys) ? e.conceptKeys.map(String) : []
     }))
     liveDetail.value = {
       name: base?.name || String(model.userName || id),
@@ -405,10 +467,14 @@ async function loadDetail(id: string | undefined, live: boolean) {
       sessions: liveEvidence.value.slice(0, 6).map((e) => ({
         time: e.time,
         title: e.title,
-        result: e.detail || evidenceSignalZh(e.signal) || '—',
-        tone: evidenceDotTone(e.signal, e.score)
+        result: evidenceSignalZh(e.signal) || e.detail || '—',
+        tone: evidenceDotTone(e.signal, e.score),
+        concepts: e.concepts
       })),
-      snapshot: { version: base ? `置信 ${(base.confidence * 100).toFixed(0)}%` : '—', generatedAt: timeAgo(base?.generatedAt) }
+      snapshot: {
+        version: base ? `置信 ${(base.confidence * 100).toFixed(0)}%${evidenceLowConfidence(base.confidence) ? ' · 证据不足' : ''}` : '—',
+        generatedAt: timeAgo(base?.generatedAt)
+      }
     }
   } catch (e) {
     if (base) {
@@ -426,7 +492,10 @@ async function loadDetail(id: string | undefined, live: boolean) {
         concepts: { mastered: [], struggling: base.struggling, fragile: base.fragile },
         trend7d: [0, 0, 0, 0, 0, 0, 0],
         sessions: [],
-        snapshot: { version: `置信 ${(base.confidence * 100).toFixed(0)}%`, generatedAt: timeAgo(base.generatedAt) }
+        snapshot: {
+          version: `置信 ${(base.confidence * 100).toFixed(0)}%${evidenceLowConfidence(base.confidence) ? ' · 证据不足' : ''}`,
+          generatedAt: timeAgo(base.generatedAt)
+        }
       }
       toast.error(`详情接口暂时不可用，已显示列表快照：${errMsg(e)}`)
     } else {
@@ -488,7 +557,43 @@ const DEMO_RAW: Record<string, unknown> = {
       selfAssessmentAccuracy: '偏低（自评掌握的模块实测正确率 62%）'
     },
     preferences: { learningStyle: '做中学，容忍短视频，不耐长文档', pacePreference: '25 分钟小任务' },
-    emotional: { baseline: '平稳，周五下午易焦躁', motivationDriver: '解决周报这一件事' }
+    emotional: { baseline: '平稳，周五下午易焦躁', motivationDriver: '解决周报这一件事' },
+    behavioral: {
+      avgResponseTime: 42,
+      avgMessageLength: 38,
+      avgInteractionInterval: 3,
+      engagementLevel: 0.82,
+      consistencyScore: 0.76
+    },
+    learning: { ktl: 5.9, lf: 3.2, lss: 6.8, lsb: 0.71, recentProgress: 'improving', streak: 9 },
+    history: {
+      totalSessions: 23,
+      totalMessages: 412,
+      avgSessionDuration: 21,
+      topicsExplored: ['Excel 自动化', '数据清洗', '周报生成'],
+      conceptsStruggled: ['数据透视表', '数组公式'],
+      conceptsMastered: ['单元格引用', 'SUMIF', '筛选']
+    },
+    curriculumControls: {
+      taskGranularityLevel: 'small',
+      conceptDensityLevel: 'medium',
+      reviewFrequencyLevel: 'high',
+      progressionStrategyNote: '先建立可复用模板，再逐步拆解原理'
+    },
+    derivedInsights: {
+      learningVelocity: 0.62,
+      optimalSessionLength: 25,
+      recommendedDifficulty: 'medium',
+      suggestedApproach: '示例驱动 + 小步练习',
+      riskFactors: ['自评偏高导致跳练'],
+      strengths: ['真实场景迁移快', '习惯复盘']
+    },
+    narrativeInsights: [
+      '目标单一且清晰：解决周报自动化这一件事，动机强烈。',
+      '办公场景经验丰富，编程概念零散，先备知识结构偏经验型。',
+      '示例驱动型学习者：先看成品再理解原理，反感长文档。',
+      '自评偏高，容易跳过巩固环节，需要客观反馈校准。'
+    ]
   },
   dynamicState: {
     metrics: { lss: 6.8, ktl: 5.9, lf: 3.2, lsb: 0.71 },
@@ -497,7 +602,7 @@ const DEMO_RAW: Record<string, unknown> = {
     confidenceTrend: '缓升',
     recentSessionQuality: '良好（近 3 次 2 次一次通过）',
     recommendedPacing: '保持当前节奏，可尝试每周加 1 次挑战任务',
-    recommendedInteraction: '示例先行，再追问原理；避免连续理论灌输'
+    recommendedInteraction: { hintTiming: 'immediate', encouragement: 'medium', challenge: 'medium' }
   },
   learningControlState: {
     shouldAvoidNewConcepts: false,
@@ -505,8 +610,34 @@ const DEMO_RAW: Record<string, unknown> = {
     shouldOfferBreak: false
   },
   knowledgeMemory: {
-    globalSignals: '数据清洗相关概念连续 3 次正迁移；数组公式仍是跨主题薄弱点',
-    globalBackground: '运营岗，Excel 日常使用 3 年，无编程背景；目标单一：周报自动化'
+    currentPath: {
+      pathTitle: 'Excel 自动化入门',
+      progress: { totalTasks: 16, completedTasks: 7, totalMilestones: 3, completedMilestones: 1, totalTasksInMilestone: 6, completedTasksInMilestone: 4 },
+      conceptStates: [
+        { label: '单元格引用', status: 'mastered', masteryScore: 0.92 },
+        { label: 'SUMIF', status: 'mastered', masteryScore: 0.88 },
+        { label: '筛选', status: 'learning', masteryScore: 0.6 },
+        { label: '数据透视表', status: 'struggling', masteryScore: 0.35 },
+        { label: '数组公式', status: 'fragile', masteryScore: 0.4 }
+      ]
+    },
+    globalSignals: {
+      masteredConcepts: ['单元格引用', 'SUMIF', '筛选'],
+      fragileConcepts: ['数组公式'],
+      strugglingConcepts: ['数据透视表']
+    },
+    globalBackground: {
+      conceptLedger: [
+        { conceptKey: 'cell-ref', label: '单元格引用', transferReadiness: 'high', misconceptionRisk: 'low', evidenceCount: 6 },
+        { conceptKey: 'sumif', label: 'SUMIF', transferReadiness: 'high', misconceptionRisk: 'low', evidenceCount: 5 },
+        { conceptKey: 'filter', label: '筛选', transferReadiness: 'medium', misconceptionRisk: 'medium', evidenceCount: 3 },
+        { conceptKey: 'pivot', label: '数据透视表', transferReadiness: 'low', misconceptionRisk: 'high', evidenceCount: 2 },
+        { conceptKey: 'array', label: '数组公式', transferReadiness: 'low', misconceptionRisk: 'medium', evidenceCount: 1 }
+      ],
+      recurringConfusions: [{ label: '数组公式', pattern: '近期多次出现 review / fragile 信号' }],
+      reusableFoundations: ['单元格引用', 'SUMIF'],
+      blockedFoundations: ['数组公式', '数据透视表']
+    }
   },
   teachingHints: {
     recommendedApproach: '示例驱动 + 小步练习：每个概念先给可复用模板，再拆原理',
@@ -517,12 +648,12 @@ const DEMO_RAW: Record<string, unknown> = {
   }
 }
 
-const DEMO_EVIDENCE = [
-  { title: '练习通过', detail: '数据清洗练习 2/3 · 掌握 +0.12', time: '6 分钟前', score: 0.92, signal: 'mastery' },
-  { title: '概念挣扎', detail: '「数据透视表」连续 2 次未达标', time: '3 天前', score: 0.86, signal: 'struggle' },
-  { title: '疲劳信号', detail: '会话后段认知负荷偏高', time: '昨天 21:14', score: 0.7, signal: 'fatigue' },
-  { title: '任务完成', detail: 'SUMIF 实战 · 一次通过', time: '昨天', score: 0.95, signal: 'mastery' },
-  { title: '中途退出', detail: '数据透视表入门 · 标记复习', time: '3 天前', score: 0.32, signal: 'incomplete' }
+const DEMO_EVIDENCE: EvidenceItem[] = [
+  { title: 'task-completed', detail: '数据清洗练习 2/3 · 掌握 +0.12', time: '6 分钟前', score: 0.92, signal: 'mastery', concepts: ['数据清洗'] },
+  { title: 'teaching-session', detail: '「数据透视表」连续 2 次未达标', time: '3 天前', score: 0.86, signal: 'struggle', concepts: ['数据透视表'] },
+  { title: 'summary', detail: '会话后段认知负荷偏高', time: '昨天 21:14', score: 0.7, signal: 'fatigue', concepts: [] },
+  { title: 'task-completed', detail: 'SUMIF 实战 · 一次通过', time: '昨天', score: 0.95, signal: 'mastery', concepts: ['SUMIF'] },
+  { title: 'evaluation', detail: '数据透视表入门 · 标记复习', time: '3 天前', score: 0.32, signal: 'incomplete', concepts: ['数据透视表'] }
 ]
 
 const profile = computed(() => {
@@ -574,6 +705,7 @@ const EN_ZH: Record<string, string> = {
   strong: '良好', weak: '较弱',
   slow: '放缓', fast: '加快',
   immediate: '即时', delayed: '延迟', 'on-request': '按需',
+  small: '小步', large: '大步',
   true: '是', false: '否'
 }
 const zh = (v: unknown): string => {
@@ -614,6 +746,59 @@ const preferenceRows = computed(() => [
     rewardSensitivity: '奖励敏感度'
   })
 ])
+
+/** 画像补充展示：学习行为基线（behavioral）——运营价值：判断「节奏是否适合当前干预」 */
+const behaviorRows = computed(() =>
+  kvRows((profile.value?.behavioral || null) as Record<string, unknown> | null, {
+    avgResponseTime: '平均响应（秒）',
+    avgMessageLength: '平均消息长度（字）',
+    avgInteractionInterval: '互动间隔（分钟）',
+    engagementLevel: '投入度',
+    consistencyScore: '一致性'
+  })
+)
+
+/** 画像补充展示：互动历史（history）——运营价值：总盘子与主题分布，判断是否深耕单一主题 */
+const historyRows = computed(() => {
+  const h = (profile.value?.history || null) as Record<string, unknown> | null
+  if (!h) return [] as { label: string; value: string }[]
+  const rows = kvRows(h, {
+    totalSessions: '总会话数',
+    totalMessages: '总消息数',
+    avgSessionDuration: '平均会话时长（分钟）'
+  })
+  const arr = (v: unknown) => (Array.isArray(v) ? v.map(String) : [])
+  if (arr(h.topicsExplored).length) rows.push({ label: '探索主题', value: arr(h.topicsExplored).slice(0, 8).join('、') })
+  if (arr(h.conceptsStruggled).length) rows.push({ label: '挣扎过概念', value: arr(h.conceptsStruggled).slice(0, 8).join('、') })
+  if (arr(h.conceptsMastered).length) rows.push({ label: '已掌握概念', value: arr(h.conceptsMastered).slice(0, 8).join('、') })
+  return rows
+})
+
+/** 画像补充展示：课程控制（curriculumControls）——运营价值：平台侧可执行的粒度/密度/复习策略 */
+const curriculumRows = computed(() =>
+  kvRows((profile.value?.curriculumControls || null) as Record<string, unknown> | null, {
+    taskGranularityLevel: '任务粒度',
+    conceptDensityLevel: '概念密度',
+    reviewFrequencyLevel: '复习频率',
+    progressionStrategyNote: '推进策略'
+  })
+)
+
+/** 画像补充展示：派生洞察（derivedInsights）——运营价值：速度/最佳时长/建议方式直接落到干预动作 */
+const derivedRows = computed(() => {
+  const dv = (profile.value?.derivedInsights || null) as Record<string, unknown> | null
+  if (!dv) return [] as { label: string; value: string }[]
+  const rows = kvRows(dv, {
+    learningVelocity: '学习速度',
+    optimalSessionLength: '最佳单次时长（分钟）',
+    recommendedDifficulty: '推荐难度',
+    suggestedApproach: '建议方式'
+  })
+  const arr = (v: unknown) => (Array.isArray(v) ? v.map(String) : [])
+  if (arr(dv.strengths).length) rows.push({ label: '优势', value: arr(dv.strengths).slice(0, 5).join('、') })
+  if (arr(dv.riskFactors).length) rows.push({ label: '风险因素', value: arr(dv.riskFactors).slice(0, 5).join('、') })
+  return rows
+})
 
 const narrativeInsights = computed(() => {
   const n = profile.value?.narrativeInsights
@@ -672,22 +857,138 @@ const controlFlags = computed(() => {
   ]
 })
 
+/** 全局信号与背景摘要（globalBackground 对象不做全量 JSON 倾倒，出摘要 + 可复用/被阻塞 chip 区） */
 const memoryRows = computed(() => {
   const km = knowledgeMemory.value
   if (!km) return [] as { label: string; value: string }[]
   const rows: { label: string; value: string }[] = []
-  for (const [key, label] of [['globalSignals', '全局信号'], ['globalBackground', '全局背景']] as const) {
-    const v = km[key]
-    if (v == null) continue
-    rows.push({ label, value: typeof v === 'string' ? v : JSON.stringify(v).slice(0, 200) })
+  const gs = km.globalSignals
+  if (gs != null) {
+    if (typeof gs === 'string') {
+      rows.push({ label: '全局信号', value: gs })
+    } else {
+      const o = gs as Record<string, unknown>
+      const arr = (v: unknown) => (Array.isArray(v) ? v.length : 0)
+      rows.push({ label: '全局信号', value: `已掌握 ${arr(o.masteredConcepts)} · 挣扎 ${arr(o.strugglingConcepts)} · 脆弱 ${arr(o.fragileConcepts)}` })
+    }
+  }
+  const gb = km.globalBackground
+  if (gb != null && typeof gb !== 'string') {
+    const o = gb as Record<string, unknown>
+    const ledgerCount = Array.isArray(o.conceptLedger) ? o.conceptLedger.length : 0
+    const confusionCount = Array.isArray(o.recurringConfusions) ? o.recurringConfusions.length : 0
+    rows.push({
+      label: '全局背景',
+      value: `概念账本 ${ledgerCount} 项 · 反复困惑 ${confusionCount} 项 · 可复用基础 ${Array.isArray(o.reusableFoundations) ? o.reusableFoundations.length : 0} · 被阻塞基础 ${Array.isArray(o.blockedFoundations) ? o.blockedFoundations.length : 0}`
+    })
   }
   return rows
 })
 
+const foundations = computed<{ reusable: string[]; blocked: string[] }>(() => {
+  const gb = (knowledgeMemory.value as Record<string, unknown> | null)?.globalBackground
+  if (!gb || typeof gb !== 'object') return { reusable: [], blocked: [] }
+  const o = gb as Record<string, unknown>
+  return {
+    reusable: Array.isArray(o.reusableFoundations) ? o.reusableFoundations.map(String) : [],
+    blocked: Array.isArray(o.blockedFoundations) ? o.blockedFoundations.map(String) : []
+  }
+})
+
+/* ---------- 概念掌握图形化（conceptLedger 单源，旧快照回退三组列表） ---------- */
+interface ConceptBar {
+  label: string
+  tone: ConceptBarTone
+  width: number
+  readiness: string
+  risk: string
+  riskTone: 'ok' | 'warn' | 'bad'
+  evidenceCount: number
+}
+
+const conceptBars = computed<ConceptBar[]>(() => {
+  const km = knowledgeMemory.value as Record<string, unknown> | null
+  const ledger = (km?.globalBackground as Record<string, unknown> | undefined)?.conceptLedger
+  if (Array.isArray(ledger) && ledger.length) {
+    return (ledger as ConceptLedgerItem[])
+      .map((item) => ({
+        label: String(item.label || item.conceptKey || '未命名概念'),
+        tone: conceptBarTone(item),
+        width: conceptBarWidth(item.transferReadiness),
+        readiness: transferReadinessZh(item.transferReadiness),
+        risk: misconceptionRiskZh(item.misconceptionRisk),
+        riskTone: (String(item.misconceptionRisk || '').toLowerCase() === 'high' ? 'bad' : String(item.misconceptionRisk || '').toLowerCase() === 'medium' ? 'warn' : 'ok') as ConceptBar['riskTone'],
+        evidenceCount: Number(item.evidenceCount || 0)
+      }))
+      .slice(0, 24)
+  }
+  // 旧快照回退：无 ledger 时按 mastered/struggling/fragile 三组构建
+  const c = d.value?.concepts
+  if (!c) return []
+  const fallback: ConceptBar[] = []
+  for (const label of c.mastered) fallback.push({ label, tone: 'ok', width: 90, readiness: '可迁移', risk: '低', riskTone: 'ok', evidenceCount: 0 })
+  for (const label of c.fragile) fallback.push({ label, tone: 'warn', width: 55, readiness: '待巩固', risk: '中', riskTone: 'warn', evidenceCount: 0 })
+  for (const label of c.struggling) fallback.push({ label, tone: 'bad', width: 25, readiness: '不宜迁移', risk: '高', riskTone: 'bad', evidenceCount: 0 })
+  return fallback
+})
+
+/** 证据页「概念证据密度」：优先 ledger（evidenceCount），回退 conceptStates（masteryScore 归一化） */
+const conceptStats = computed<{ label: string; count: number; tone: ConceptBarTone; width: number }[]>(() => {
+  const km = knowledgeMemory.value as Record<string, unknown> | null
+  const ledger = (km?.globalBackground as Record<string, unknown> | undefined)?.conceptLedger
+  if (Array.isArray(ledger) && ledger.length) {
+    const max = Math.max(1, ...(ledger as ConceptLedgerItem[]).map((i) => Number(i.evidenceCount || 0)))
+    return (ledger as ConceptLedgerItem[])
+      .map((item) => ({
+        label: String(item.label || item.conceptKey || '未命名概念'),
+        count: Number(item.evidenceCount || 0),
+        tone: conceptBarTone(item),
+        width: Math.max(8, Math.round((Number(item.evidenceCount || 0) / max) * 100))
+      }))
+      .slice(0, 16)
+  }
+  const states = (km?.currentPath as Record<string, unknown> | undefined)?.conceptStates
+  if (Array.isArray(states) && states.length) {
+    const max = Math.max(1, ...(states as { masteryScore?: number }[]).map((s) => Number(s.masteryScore || 0) * 100))
+    return (states as { label?: string; masteryScore?: number }[])
+      .map((s) => ({
+        label: String(s.label || '未命名概念'),
+        count: Math.round(Number(s.masteryScore || 0) * 100),
+        tone: 'muted' as ConceptBarTone,
+        width: Math.max(8, Math.round((Number(s.masteryScore || 0) * 100 / max) * 100))
+      }))
+      .slice(0, 16)
+  }
+  return []
+})
+
+const milestoneTasks = computed<{ done: number; total: number } | null>(() => {
+  const km = knowledgeMemory.value as Record<string, unknown> | null
+  const p = (km?.currentPath as Record<string, unknown> | undefined)?.progress as Record<string, unknown> | undefined
+  const total = Number(p?.totalTasksInMilestone || 0)
+  const done = Number(p?.completedTasksInMilestone ?? 0)
+  return total > 0 ? { done, total } : null
+})
+
+const riskFactors = computed(() => (teachingHints.value?.riskFactors || []) as string[])
+
 const trendText = computed(() => (d.value?.trend === 'up' ? '↗ 上升' : d.value?.trend === 'down' ? '↘ 下降' : '→ 稳定'))
 const trendBadge = computed(() => (d.value?.trend === 'up' ? 'mk-badge--ok' : d.value?.trend === 'down' ? 'mk-badge--bad' : 'mk-badge--muted'))
 const fatigueBadge = computed(() => (d.value?.fatigue === '高' ? 'mk-badge--bad' : d.value?.fatigue === '中' ? 'mk-badge--warn' : 'mk-badge--ok'))
+/** 低置信不渲染成风险色：中性→琥珀「证据不足」提示（与 LearnerCenter 同阈值，见 evidence.ts） */
+const snapshotBadge = computed(() => {
+  const v = d.value?.snapshot.version || ''
+  return v.includes('证据不足') ? 'mk-badge--warn' : 'mk-badge--muted'
+})
+const snapshotHint = computed(() => {
+  const v = d.value?.snapshot.version || ''
+  return v.includes('证据不足') ? '快照置信度低于 50%，证据不足，建议重算' : '快照置信度'
+})
 const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，建议介入' : d.value?.trend === 'up' ? '稳步上升' : '平稳'))
+
+function barToneBadge(tone: ConceptBarTone): string {
+  return tone === 'ok' ? 'mk-badge--ok' : tone === 'warn' ? 'mk-badge--warn' : tone === 'bad' ? 'mk-badge--bad' : 'mk-badge--muted'
+}
 </script>
 
 <style scoped>
@@ -774,6 +1075,38 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
 .ld-concept--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .ld-concept--bad { background: var(--mk-red-bg); color: var(--mk-red); }
 
+/* 概念掌握条（conceptLedger 图形化） */
+.ld-bars { padding: 14px 16px 16px; display: grid; gap: 12px; }
+.ld-bars--dense { padding-top: 12px; }
+.ld-bar { display: grid; gap: 5px; }
+.ld-bar__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.ld-bar__head strong { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ld-bar__badges { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.ld-bar__risk { font-size: 10.5px; font-weight: 700; }
+.ld-bar__risk--ok { color: var(--mk-green); }
+.ld-bar__risk--warn { color: var(--mk-amber); }
+.ld-bar__risk--bad { color: var(--mk-red); }
+.ld-bar__ev {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--mk-muted);
+  background: #eef2fa;
+  border-radius: 6px;
+  padding: 1px 6px;
+  cursor: help;
+}
+.ld-bar__track {
+  height: 7px;
+  border-radius: 4px;
+  background: #eef2fa;
+  overflow: hidden;
+}
+.ld-bar__fill { display: block; height: 100%; border-radius: 4px; min-width: 3px; }
+.ld-bar__fill.is-ok { background: linear-gradient(90deg, #86efac, #22c55e); }
+.ld-bar__fill.is-warn { background: linear-gradient(90deg, #fcd34d, #f59e0b); }
+.ld-bar__fill.is-bad { background: linear-gradient(90deg, #fca5a5, #dc2626); }
+.ld-bar__fill.is-muted { background: linear-gradient(90deg, #d1d5db, #9ca3af); }
+
 .ld-trend {
   display: flex;
   align-items: flex-end;
@@ -808,11 +1141,42 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
 .ld-session__main span { font-size: 11.5px; color: var(--mk-faint); }
 .ld-session__time { font-size: 11.5px; color: var(--mk-faint); white-space: nowrap; }
 
+/* 建议行动卡 */
+.ld-actions { padding: 14px 16px; display: grid; gap: 9px; }
+.ld-actions p { margin: 0; font-size: 12.5px; color: var(--mk-muted); line-height: 1.7; }
+.ld-actions__k {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: var(--mk-blue);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.ld-actions__k--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
+.ld-actions .mk-status__action { justify-self: start; }
+
+/* 概念 chip（会话/证据行内） */
+.ld-chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
+.ld-chip {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--mk-faint);
+  background: #f4f6fa;
+  border-radius: 5px;
+  padding: 0 6px;
+}
+
+/* 可复用/被阻塞基础 */
+.ld-found { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px 16px; }
+.ld-found > div { display: grid; gap: 7px; align-content: start; }
+
 /* Tab 通用 */
 .ld-kv { display: grid; }
 .ld-kv__row {
   display: grid;
-  grid-template-columns: 120px 1fr;
+  grid-template-columns: 140px 1fr;
   gap: 12px;
   padding: 10px 16px;
   border-bottom: 1px solid #f0f2f5;
@@ -879,6 +1243,7 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
   .ld-grid { grid-template-columns: 1fr; }
   .ld-metrics { grid-template-columns: repeat(2, 1fr); }
   .ld-two { grid-template-columns: 1fr; }
+  .ld-found { grid-template-columns: 1fr; }
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
@@ -892,6 +1257,12 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
   .ld-progress__stage, .ld-progress__task { font-size: 14.5px; }
   .ld-concept-label { font-size: 13px; }
   .ld-concept { font-size: 14px; }
+  .ld-bar__head strong { font-size: 14.5px; }
+  .ld-bar__risk, .ld-bar__ev { font-size: 12px; }
+  .ld-bar__track { height: 8px; }
+  .ld-actions p { font-size: 14.5px; }
+  .ld-actions__k { font-size: 12px; }
+  .ld-chip { font-size: 12px; }
   .ld-session__main strong { font-size: 15px; }
   .ld-session__main span, .ld-session__time { font-size: 13.5px; }
   .ld-kv__row { font-size: 14.5px; }
@@ -908,10 +1279,13 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
   .ld-progress__bar { height: 9px; }
   .ld-concepts { padding: 18px; }
   .ld-concept { padding: 4px 12px; }
+  .ld-bars { padding: 16px 18px 18px; }
+  .ld-actions { padding: 16px 18px; }
+  .ld-found { padding: 16px 18px; }
   .ld-trend { height: 104px; padding: 18px; }
   .ld-session { padding: 13px 18px; gap: 14px; }
   .ld-session__dot { width: 9px; height: 9px; }
-  .ld-kv__row { grid-template-columns: 140px 1fr; gap: 14px; padding: 12px 18px; }
+  .ld-kv__row { grid-template-columns: 160px 1fr; gap: 14px; padding: 12px 18px; }
   .ld-metrics { gap: 14px; }
   .ld-metric { padding: 15px 18px; }
   .ld-flags { padding: 16px 18px; }
@@ -931,6 +1305,12 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
   .ld-progress__stage, .ld-progress__task { font-size: 17px; }
   .ld-concept-label { font-size: 15px; }
   .ld-concept { font-size: 16.5px; }
+  .ld-bar__head strong { font-size: 17px; }
+  .ld-bar__risk, .ld-bar__ev { font-size: 14px; }
+  .ld-bar__track { height: 10px; }
+  .ld-actions p { font-size: 17px; }
+  .ld-actions__k { font-size: 14px; }
+  .ld-chip { font-size: 14px; }
   .ld-session__main strong { font-size: 17.5px; }
   .ld-session__main span, .ld-session__time { font-size: 16px; }
   .ld-kv__row { font-size: 17px; }
@@ -947,10 +1327,13 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
   .ld-progress__bar { height: 11px; }
   .ld-concepts { padding: 21px; }
   .ld-concept { padding: 4px 14px; }
+  .ld-bars { padding: 19px 21px 21px; }
+  .ld-actions { padding: 19px 21px; }
+  .ld-found { padding: 19px 21px; }
   .ld-trend { height: 122px; padding: 21px; }
   .ld-session { padding: 15px 21px; gap: 16px; }
   .ld-session__dot { width: 11px; height: 11px; }
-  .ld-kv__row { grid-template-columns: 164px 1fr; gap: 16px; padding: 14px 21px; }
+  .ld-kv__row { grid-template-columns: 184px 1fr; gap: 16px; padding: 14px 21px; }
   .ld-metrics { gap: 16px; }
   .ld-metric { padding: 17px 21px; }
   .ld-flags { padding: 19px 21px; }
@@ -970,6 +1353,12 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
   .ld-progress__stage, .ld-progress__task { font-size: 20px; }
   .ld-concept-label { font-size: 17.5px; }
   .ld-concept { font-size: 19px; }
+  .ld-bar__head strong { font-size: 20px; }
+  .ld-bar__risk, .ld-bar__ev { font-size: 16.5px; }
+  .ld-bar__track { height: 12px; }
+  .ld-actions p { font-size: 20px; }
+  .ld-actions__k { font-size: 16.5px; }
+  .ld-chip { font-size: 16.5px; }
   .ld-session__main strong { font-size: 20.5px; }
   .ld-session__main span, .ld-session__time { font-size: 18.5px; }
   .ld-kv__row { font-size: 20px; }
@@ -986,10 +1375,13 @@ const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，�
   .ld-progress__bar { height: 13px; }
   .ld-concepts { padding: 25px; }
   .ld-concept { padding: 5px 16px; }
+  .ld-bars { padding: 22px 25px 25px; }
+  .ld-actions { padding: 22px 25px; }
+  .ld-found { padding: 22px 25px; }
   .ld-trend { height: 143px; padding: 25px; }
   .ld-session { padding: 17px 25px; gap: 19px; }
   .ld-session__dot { width: 13px; height: 13px; }
-  .ld-kv__row { grid-template-columns: 192px 1fr; gap: 19px; padding: 16px 25px; }
+  .ld-kv__row { grid-template-columns: 216px 1fr; gap: 19px; padding: 16px 25px; }
   .ld-metrics { gap: 19px; }
   .ld-metric { padding: 20px 25px; }
   .ld-flags { padding: 22px 25px; }

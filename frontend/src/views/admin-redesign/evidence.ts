@@ -18,8 +18,22 @@ const SIGNAL_ZH: Record<string, string> = {
   incomplete: '未完成'
 }
 
+const TYPE_ZH: Record<string, string> = {
+  'task-completed': '任务完成',
+  'teaching-session': '教学会话',
+  summary: '总结',
+  evaluation: '评估',
+  session: '教学会话',
+  task: '任务完成'
+}
+
 export function evidenceSignalZh(signal: unknown): string {
   return SIGNAL_ZH[String(signal || '').toLowerCase()] || ''
+}
+
+/** 证据类型 → 中文（task-completed=任务完成/teaching-session=教学会话/summary=总结/evaluation=评估） */
+export function evidenceTypeZh(type: unknown): string {
+  return TYPE_ZH[String(type || '').toLowerCase()] || String(type || '学习事件')
 }
 
 export function evidenceLowConfidence(score: number): boolean {

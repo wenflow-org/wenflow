@@ -53,6 +53,7 @@
               </th>
               <th scope="col">用户</th>
               <th scope="col">角色</th>
+              <th scope="col">等级 / XP</th>
               <th scope="col" class="mk-th--right">路径 / 会话</th>
               <th scope="col">注册时间</th>
               <th scope="col">最后登录</th>
@@ -74,6 +75,12 @@
               </div>
             </td>
             <td><span class="mk-badge" :class="u.admin ? 'mk-badge--info' : 'mk-badge--muted'">{{ u.admin ? '管理员' : '用户' }}</span></td>
+            <td>
+              <div class="ul-level">
+                <span class="ul-level__badge" :title="`等级由 XP 推导：${levelFromXp(u.xp)}（库内 currentLevel：${u.currentLevel || '—'}）`">{{ levelLabel(u.xp) }}</span>
+                <span class="ul-level__xp" :class="{ 'mk-na': u.xp === 0 }">{{ u.xp }} XP</span>
+              </div>
+            </td>
             <td class="mk-num">{{ u.paths }} / {{ u.sessions }}</td>
             <td><span :class="u.createdAt === '从未' ? 'mk-na' : ''">{{ u.createdAt }}</span></td>
             <td><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
@@ -181,6 +188,7 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
+import { isTestAccountUser, levelFromXp, levelLabel } from './learner-profile'
 
 /** 与后端 validatePasswordRule 一致：≥8 位且同时包含字母和数字 */
 const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
@@ -200,11 +208,8 @@ const isSelf = (u: UserRow) =>
   u.id === currentAdmin.value.id ||
   u.email === currentAdmin.value.email ||
   (!!currentAdmin.value.name && u.name === currentAdmin.value.name)
-/** 虚拟学习者与审计/测试账号：不参与管理员提升（无意义且有风险） */
-const isTestAccount = (u: UserRow) =>
-  /@test\.local$/.test(u.email) ||
-  /^virtual_/.test(u.id) ||
-  /^(e2e_|uxaudit_|audit_probe_|ui_check|motion_review)/i.test(u.name)
+/** 虚拟学习者与审计/测试账号：不参与管理员提升（无意义且有风险）；识别逻辑单点见 learner-profile.ts */
+const isTestAccount = isTestAccountUser
 
 interface UserRow {
   id: string
@@ -216,6 +221,9 @@ interface UserRow {
   lastLogin: string
   paths: number
   sessions: number
+  /** 学习态摘要：XP 与等级（等级由 xp 按权威公式推导，L1-L5） */
+  xp: number
+  currentLevel: string
   /** Phase 2：已软删账号（灰色标记 + 行菜单只保留「恢复」） */
   deleted?: boolean
   deletedAt?: string
@@ -223,18 +231,18 @@ interface UserRow {
 }
 
 const normalUsers: UserRow[] = [
-  { id: 'u1', name: '陈晓', email: 'chenxiao@example.com', admin: false, online: true, createdAt: '5 个月前', lastLogin: '12 分钟前', paths: 1, sessions: 8 },
-  { id: 'u2', name: '刘一帆', email: 'liu**@163.com', admin: false, online: true, createdAt: '4 个月前', lastLogin: '1 小时前', paths: 1, sessions: 3 },
-  { id: 'u3', name: '王梓', email: 'wangzi@example.com', admin: false, online: false, createdAt: '6 个月前', lastLogin: '昨天 21:14', paths: 2, sessions: 11 },
-  { id: 'u4', name: '赵敏', email: 'zhaomin@example.com', admin: false, online: false, createdAt: '3 个月前', lastLogin: '3 天前', paths: 1, sessions: 6 },
-  { id: 'u5', name: 'admin', email: 'admin@wenflow.local', admin: true, online: true, createdAt: '8 个月前', lastLogin: '刚刚', paths: 0, sessions: 0 },
-  { id: 'u6', name: '孙可', email: 'sunke@example.com', admin: false, online: false, createdAt: '2 个月前', lastLogin: '2 天前', paths: 1, sessions: 4 },
-  { id: 'u7', name: '周洁', email: 'zhoujie@example.com', admin: false, online: false, createdAt: '1 个月前', lastLogin: '1 周前', paths: 1, sessions: 2 },
-  { id: 'u8', name: '吴迪', email: 'wudi@example.com', admin: false, online: false, createdAt: '2 周前', lastLogin: '昨天 08:32', paths: 0, sessions: 1 },
-  { id: 'u9', name: '郑爽', email: 'zhengshuang@example.com', admin: false, online: true, createdAt: '5 个月前', lastLogin: '26 分钟前', paths: 2, sessions: 9 },
-  { id: 'u10', name: '冯远', email: 'fengyuan@example.com', admin: false, online: false, createdAt: '3 个月前', lastLogin: '4 小时前', paths: 1, sessions: 5 },
-  { id: 'u11', name: '褚燕', email: 'chuyan@example.com', admin: false, online: false, createdAt: '3 周前', lastLogin: '从未', paths: 0, sessions: 0 },
-  { id: 'u12', name: '测试账号', email: 'test@wenflow.local', admin: true, online: false, createdAt: '2 个月前', lastLogin: '从未', paths: 0, sessions: 0 }
+  { id: 'u1', name: '陈晓', email: 'chenxiao@example.com', admin: false, online: true, createdAt: '5 个月前', lastLogin: '12 分钟前', paths: 1, sessions: 8, xp: 860, currentLevel: 'L3' },
+  { id: 'u2', name: '刘一帆', email: 'liu**@163.com', admin: false, online: true, createdAt: '4 个月前', lastLogin: '1 小时前', paths: 1, sessions: 3, xp: 240, currentLevel: 'L2' },
+  { id: 'u3', name: '王梓', email: 'wangzi@example.com', admin: false, online: false, createdAt: '6 个月前', lastLogin: '昨天 21:14', paths: 2, sessions: 11, xp: 1520, currentLevel: 'L4' },
+  { id: 'u4', name: '赵敏', email: 'zhaomin@example.com', admin: false, online: false, createdAt: '3 个月前', lastLogin: '3 天前', paths: 1, sessions: 6, xp: 310, currentLevel: 'L2' },
+  { id: 'u5', name: 'admin', email: 'admin@wenflow.local', admin: true, online: true, createdAt: '8 个月前', lastLogin: '刚刚', paths: 0, sessions: 0, xp: 0, currentLevel: 'L1' },
+  { id: 'u6', name: '孙可', email: 'sunke@example.com', admin: false, online: false, createdAt: '2 个月前', lastLogin: '2 天前', paths: 1, sessions: 4, xp: 95, currentLevel: 'L1' },
+  { id: 'u7', name: '周洁', email: 'zhoujie@example.com', admin: false, online: false, createdAt: '1 个月前', lastLogin: '1 周前', paths: 1, sessions: 2, xp: 55, currentLevel: 'L1' },
+  { id: 'u8', name: '吴迪', email: 'wudi@example.com', admin: false, online: false, createdAt: '2 周前', lastLogin: '昨天 08:32', paths: 0, sessions: 1, xp: 0, currentLevel: 'L1' },
+  { id: 'u9', name: '郑爽', email: 'zhengshuang@example.com', admin: false, online: true, createdAt: '5 个月前', lastLogin: '26 分钟前', paths: 2, sessions: 9, xp: 2100, currentLevel: 'L5' },
+  { id: 'u10', name: '冯远', email: 'fengyuan@example.com', admin: false, online: false, createdAt: '3 个月前', lastLogin: '4 小时前', paths: 1, sessions: 5, xp: 610, currentLevel: 'L3' },
+  { id: 'u11', name: '褚燕', email: 'chuyan@example.com', admin: false, online: false, createdAt: '3 周前', lastLogin: '从未', paths: 0, sessions: 0, xp: 0, currentLevel: 'L1' },
+  { id: 'u12', name: '测试账号', email: 'test@wenflow.local', admin: true, online: false, createdAt: '2 个月前', lastLogin: '从未', paths: 0, sessions: 0, xp: 0, currentLevel: 'L1' }
 ]
 
 const demoUsers = ref<UserRow[]>([...normalUsers])
@@ -254,6 +262,8 @@ function mapDeletedRow(u: Record<string, unknown>): UserRow {
     lastLogin: timeAgo(u.lastLoginAt as string | null),
     paths: Number((u._count as Record<string, number>)?.learning_paths || 0),
     sessions: Number((u._count as Record<string, number>)?.teaching_sessions || 0),
+    xp: Number(u.xp || 0),
+    currentLevel: String(u.currentLevel || ''),
     deleted: true,
     deletedAt: (u.deletedAt as string) || undefined
   }
@@ -285,7 +295,9 @@ const users = computed<UserRow[]>(() => {
       createdAt: timeAgo(u.createdAt),
       lastLogin: timeAgo(u.lastLoginAt),
       paths: u.paths,
-      sessions: u.sessions
+      sessions: u.sessions,
+      xp: u.xp,
+      currentLevel: u.currentLevel
     }))
   }
   return demoUsers.value
@@ -415,7 +427,9 @@ async function saveUser() {
         createdAt: '刚刚',
         lastLogin: '从未',
         paths: 0,
-        sessions: 0
+        sessions: 0,
+        xp: 0,
+        currentLevel: 'L1'
       })
       toast.success('用户已创建，出现在列表顶部')
     }
@@ -595,6 +609,18 @@ function clearFilters() {
 }
 .ul-tag--self { background: #dbeafe; color: var(--mk-accent-deep, #1f57cc); }
 .ul-tag--test { background: #fef3c7; color: #b45309; }
+.ul-level { display: flex; align-items: center; gap: 6px; }
+.ul-level__badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  background: #e0f2fe;
+  color: #0369a1;
+  cursor: help;
+}
+.ul-level__xp { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--mk-muted); font-weight: 600; }
 .ul-more {
   display: flex;
   justify-content: center;

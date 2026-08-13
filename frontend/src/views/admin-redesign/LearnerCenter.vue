@@ -58,6 +58,7 @@
                 <strong>{{ r.name }}</strong>
                 <span class="mk-cell-sub">{{ r.email }}</span>
               </div>
+              <span v-if="r.isTestAccount" class="lc-tag-test" title="虚拟学习者/测试账号不参与风险队列">测试账号</span>
             </td>
             <td>
               <div class="mk-cell-main">
@@ -71,10 +72,10 @@
               <span
                 v-if="r.confidence != null && r.task"
                 class="conf"
-                :class="{ 'conf--low': r.confidence < 0.5 }"
+                :class="{ 'conf--low': evidenceLowConfidence(r.confidence) }"
                 :title="`模型对当前快照的置信度：${Math.round(r.confidence * 100)}%。低于 50% 表示证据不足，建议重算。`"
               >
-                {{ Math.round(r.confidence * 100) }}%
+                {{ Math.round(r.confidence * 100) }}%<em v-if="evidenceLowConfidence(r.confidence)" class="conf__lack">证据不足</em>
               </span>
               <span v-else class="mk-na" :title="r.task ? '' : '尚未开始学习，暂无置信度'">—</span>
             </td>
@@ -106,6 +107,7 @@
 import { computed, ref } from 'vue'
 import { openSubPage, isLive } from './store'
 import { liveLearners, liveRecomputeLearner, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg } from './live'
+import { evidenceLowConfidence } from './evidence'
 import { useLoadMore } from './useLoadMore'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
@@ -115,6 +117,7 @@ interface Row {
   id: string
   name: string
   email: string
+  isTestAccount?: boolean
   path: string
   task: string
   trend: 'up' | 'down' | 'flat'
@@ -148,6 +151,7 @@ const rows = computed<Row[]>(() => {
       id: m.userId,
       name: m.name,
       email: m.email,
+      isTestAccount: m.isTestAccount,
       path: m.pathTitle || '',
       task: m.currentTask || m.currentMilestone || '',
       trend: m.trend,
@@ -175,12 +179,12 @@ const pills = [
 
 const isRisk = (r: Row) => r.trend === 'down' || r.fatigue !== '低' || !!r.risk
 const riskCount = computed(() => rows.value.filter(isRisk).length)
-const lowConfCount = computed(() => rows.value.filter((r) => (r.confidence ?? 1) < 0.5).length)
+const lowConfCount = computed(() => rows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1)).length)
 
 const filtered = computed(() => {
   let list = rows.value
   if (pill.value === 'risk') list = rows.value.filter(isRisk)
-  if (pill.value === 'stale') list = rows.value.filter((r) => (r.confidence ?? 1) < 0.5)
+  if (pill.value === 'stale') list = rows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1))
   // 先找有问题的人：风险位优先，组内按更新时间新→旧
   return [...list].sort((a, b) => {
     const riskDiff = Number(isRisk(a)) - Number(isRisk(b))
@@ -285,7 +289,19 @@ async function recomputeAll() {
 .progress-title { font-weight: 600; }
 .risk-text { color: var(--mk-amber); font-size: 12.5px; }
 .conf { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-muted); cursor: help; }
-.conf--low { color: var(--mk-red); }
+.conf__lack { font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
+.conf--low { color: var(--mk-amber); }
+.lc-tag-test {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  background: #fef3c7;
+  color: #b45309;
+}
 .lc-more {
   display: flex;
   justify-content: center;

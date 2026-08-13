@@ -27,6 +27,7 @@ router.get('/', async (req, res) => {
       pathId: req.query.pathId as string | undefined,
       staleOnly: req.query.staleOnly === 'true',
       riskOnly: req.query.riskOnly === 'true',
+      excludeTest: req.query.excludeTest === 'true',
       page: req.query.page ? Number(req.query.page) : undefined,
       limit: req.query.limit ? Number(req.query.limit) : undefined,
     });

@@ -1,5 +1,6 @@
 import prisma from '../../config/database';
 import { learnerSnapshotService } from './LearnerSnapshotService';
+import { isTestAccountUser, REAL_USER_WHERE } from '../../utils/test-account';
 import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
 
 export interface LearnerSnapshotRefreshInput {
@@ -92,14 +93,20 @@ export class LearnerSnapshotRefreshService {
     pathId?: string;
     staleOnly?: boolean;
     riskOnly?: boolean;
+    excludeTest?: boolean;
     page?: number;
     limit?: number;
   }) {
     const page = Math.max(1, Number(params?.page || 1));
     const limit = Math.max(1, Math.min(50, Number(params?.limit || 20)));
 
-    // 软删用户不进入管理端快照列表（列表与总数口径一致）
-    const userWhere = params?.userId ? { id: params.userId, deletedAt: null } : { deletedAt: null };
+    // 软删用户不进入管理端快照列表（列表与总数口径一致）；
+    // excludeTest=true 时排除虚拟学习者与测试/审计账号（风险队列只给真实用户看）
+    const userWhere = {
+      deletedAt: null,
+      ...(params?.excludeTest ? { isVirtualLearner: false, NOT: REAL_USER_WHERE.NOT } : {}),
+      ...(params?.userId ? { id: params.userId } : {}),
+    };
     const total = await prisma.users.count({ where: userWhere });
 
     const users = await prisma.users.findMany({
@@ -198,6 +205,8 @@ export class LearnerSnapshotRefreshService {
         userId: user.id,
         userName: user.name,
         email: user.email,
+        /** 测试/虚拟账号标记（excludeTest 未开启时供前端灰标签展示；开启后恒为 false） */
+        isTestAccount: isTestAccountUser(user),
         pathId: path?.id || null,
         pathTitle: path?.title || null,
         generatedAt: snapshot.freshness.generatedAt,
