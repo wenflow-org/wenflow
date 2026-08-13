@@ -299,39 +299,35 @@ export const liveLogsFiltered = ref<TraceSpan[]>([])
 export const liveLogsLoading = ref(false)
 /** P0 修复：执行日志查询失败标记（此前 try/finally 吞错 → 失败伪装成「暂无日志」） */
 export const liveLogsError = ref('')
-/** 后端 pagination.total（筛选口径全量条数，供「加载更多」展示） */
+/** 后端 pagination.total（筛选口径全量条数，驱动状态条与页码器） */
 export const liveLogsTotal = ref(0)
-/** 服务端分页当前页；筛选/查询变化时回到第 1 页 */
+/** 服务端分页当前页；筛选/搜索/traceId 直达/每页条数变化时回到第 1 页，自动刷新保留当前页 */
 export const liveLogsPage = ref(1)
-/** 已加载的原始日志行数（与后端 total 同口径累计：网关/skill 配对合并会减少展示行数，
-    以原始行数判定剩余页避免「已显示 X / 总数」口径混用，与 AuditLogs rows<total 对齐） */
-export const liveLogsLoaded = ref(0)
-/**
- * 后端是否还有更多页（P0 分页正确性，对齐 AuditLogs rows<total 判定）：
- * 已加载原始行数 < 筛选口径 total 且本页取满页大小。
- * 注意：status/agent 过滤必须上移服务端（ExecLogs 传参），否则本地过滤掉整页时
- * 会出现「点加载更多无感知变化」的空转（旧实现 items.length>=30 的缺陷）。
- */
-export const liveLogsHasMore = ref(false)
+/** 每页条数（传统分页方案 A：15/30/50/100，默认 30 对齐旧 LOGS_PAGE_SIZE；变更回第 1 页） */
+export const liveLogsPageSize = ref(30)
 
 /**
- * 分页判定纯函数：剩余页 = 已加载原始行数 + 本页条数 < 筛选口径 total，且本页取满。
- * 纯函数化便于单元测试「仅失败/按 agent 过滤」场景。
+ * 分页纯函数：筛选口径总页数（total / pageSize 向上取整，至少 1 页）。
+ * 替代旧 hasMorePages 行式追加判定——传统分页下「下一页可用」= page < totalPages。
+ * pageSize 非法（0/负）收敛为 1，避免除零。
  */
-export function hasMorePages(prevLoaded: number, pageItems: number, total: number, pageSize: number): boolean {
-  return prevLoaded + pageItems < total && pageItems >= pageSize
+export function totalPagesOf(total: number, pageSize: number): number {
+  return Math.max(1, Math.ceil(total / Math.max(1, pageSize)))
 }
 
-/** 执行日志服务端分页条数（滚动修复 #5：100 → 30，首屏不再 4.7 屏；后端默认 20） */
-const LOGS_PAGE_SIZE = 30
-
 /* 服务端查询串行化：同一时刻只发一个请求，期间的更新以最新参数重拉（last-wins），
-   保证「加载更多（追加第 N 页）」与「筛选重查（回第 1 页）」并发时状态一致 */
+   保证「翻页（替换当前页）」与「筛选重查（回第 1 页）」并发时状态一致 */
 let logsQuerying = false
 let logsQueryPending = false
 let logsQuerySeq = 0
 let logsQueryLatest: { query: SpanQuery; page: number } | null = null
 
+/**
+ * 执行日志带筛选重查（传统分页方案 A）：
+ * - page 缺省/1 = 回第 1 页（筛选/搜索/traceId/sessionId 直达、每页条数变更的语义）
+ * - 翻页 = 请求对应 page 并整体替换列表（不再行式追加；「加载更多」已由页码器替代）
+ * - 自动刷新传 liveLogsPage 即保留当前页（10s 刷新不再把页码重置回 1）
+ */
 export async function reloadLiveSpans(query: SpanQuery, page = 1): Promise<void> {
   if (logsQuerying) {
     logsQueryLatest = { query, page }
@@ -343,7 +339,7 @@ export async function reloadLiveSpans(query: SpanQuery, page = 1): Promise<void>
   liveLogsLoading.value = true
   liveLogsError.value = ''
   try {
-    const res = await adminAgentsApi.getLogs({ limit: LOGS_PAGE_SIZE, page, ...query })
+    const res = await adminAgentsApi.getLogs({ limit: liveLogsPageSize.value, page, ...query })
     const body = res.data?.data ?? res.data ?? {}
     const items: RawLog[] = Array.isArray(body) ? body : body.items || body.logs || []
     const stats = body.stats as LiveLogStats | undefined
@@ -351,29 +347,14 @@ export async function reloadLiveSpans(query: SpanQuery, page = 1): Promise<void>
     const rawTotal = body.pagination?.total ?? stats?.total ?? items.length
     const total = Number(rawTotal)
     if (Number.isFinite(total)) liveLogsTotal.value = total
-    /* P0 分页正确性：以「已加载原始行数 < 筛选口径 total」判定剩余页（AuditLogs rows<total 同口径），
-       替代旧 items.length>=PAGE_SIZE 判定——旧判定在「仅失败/按节点」本地过滤下，
-       第 2 页整页被滤掉时按钮仍显示，点了无新增 = 空转 */
-    liveLogsLoaded.value = page <= 1 ? items.length : liveLogsLoaded.value + items.length
-    liveLogsHasMore.value = hasMorePages(liveLogsLoaded.value - items.length, items.length, total, LOGS_PAGE_SIZE)
-    const mapped = mapLogsToSpans(items)
+    /* 传统分页：整页替换（下一页可达性由页码器按 page < totalPagesOf(total, pageSize) 判定） */
+    liveLogsFiltered.value = mapLogsToSpans(items)
     liveLogsPage.value = page
-    if (page <= 1) {
-      liveLogsFiltered.value = mapped
-    } else {
-      // 追加下一页并去重（同一筛选口径下 span id 与原始日志行 id 一致）
-      const seen = new Set(liveLogsFiltered.value.map((s) => s.id))
-      liveLogsFiltered.value = [...liveLogsFiltered.value, ...mapped.filter((s) => !seen.has(s.id))]
-    }
   } catch (error) {
     // P0 修复：失败必须可见（此前吞错导致首查失败显示「暂无日志」）
     liveLogsError.value = errMsg(error) || '执行日志加载失败'
-    if (page <= 1) {
-      liveLogsFiltered.value = []
-      liveLogsTotal.value = 0
-      liveLogsLoaded.value = 0
-      liveLogsHasMore.value = false
-    }
+    liveLogsFiltered.value = []
+    liveLogsTotal.value = 0
   } finally {
     logsQuerying = false
     liveLogsLoading.value = false
@@ -385,11 +366,6 @@ export async function reloadLiveSpans(query: SpanQuery, page = 1): Promise<void>
     logsQueryLatest = null
     if (latest) void reloadLiveSpans(latest.query, latest.page)
   }
-}
-
-/** 执行日志「加载更多」：追加下一页（筛选/重查由 reloadLiveSpans 自动回到第 1 页） */
-export async function loadMoreLiveSpans(query: SpanQuery): Promise<void> {
-  await reloadLiveSpans(query, liveLogsPage.value + 1)
 }
 
 /** 日志详情（展开行时拉真实 input/output + 重试尝试时间线；超长截断） */

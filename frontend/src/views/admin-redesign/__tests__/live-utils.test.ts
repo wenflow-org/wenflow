@@ -3,7 +3,7 @@
  * （数据拉取链路已被 AdminConsole 冒烟覆盖，此处只测纯函数与可推导 computed）
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { timeAgo, errMsg, shortId, liveNavBadges, alarmNavBadges, liveVirtuals, liveSkillProfiles, liveExtraProfiles, liveAnnouncements, hasMorePages, mapLogsToSpans } from '../live';
+import { timeAgo, errMsg, shortId, liveNavBadges, alarmNavBadges, liveVirtuals, liveSkillProfiles, liveExtraProfiles, liveAnnouncements, totalPagesOf, mapLogsToSpans } from '../live';
 import { liveSpans } from '../store';
 import type { TraceSpan } from '../store';
 
@@ -111,29 +111,30 @@ describe('live.liveNavBadges（侧栏徽章推导）', () => {
   });
 });
 
-describe('live.hasMorePages（P0 分页正确性：已加载原始行 < 筛选 total 且本页取满）', () => {
-  const PAGE_SIZE = 30;
-
-  it('「仅失败」服务端过滤：第一页取满且有剩余 → true（继续加载）', () => {
-    expect(hasMorePages(0, 30, 45, PAGE_SIZE)).toBe(true);
+describe('live.totalPagesOf（传统分页总页数：筛选口径 total / 每页条数，方案 A）', () => {
+  it('整除：total 恰好是 pageSize 倍数 → total/pageSize 页', () => {
+    expect(totalPagesOf(90, 30)).toBe(3);
+    expect(totalPagesOf(378, 30)).toBe(13);
   });
 
-  it('「仅失败」服务端过滤：末页不足一页 → false（不再空转）', () => {
-    expect(hasMorePages(30, 15, 45, PAGE_SIZE)).toBe(false);
+  it('有余数向上取整：默认 7 天视图 1570/30 → 53 页（旧「加载更多 52 次」的量级根源）', () => {
+    expect(totalPagesOf(1570, 30)).toBe(53);
   });
 
-  it('筛选结果总数 < 页大小：第一页即 false（旧 items.length>=30 判定的空转场景，已消除）', () => {
-    expect(hasMorePages(0, 12, 12, PAGE_SIZE)).toBe(false);
+  it('total 为 0 或小于 pageSize → 至少 1 页（页码器永不显示「第 0 / 0 页」）', () => {
+    expect(totalPagesOf(0, 30)).toBe(1);
+    expect(totalPagesOf(12, 30)).toBe(1);
   });
 
-  it('空页（服务端无更多数据）→ false，按钮消失', () => {
-    expect(hasMorePages(60, 0, 60, PAGE_SIZE)).toBe(false);
+  it('pageSize 非法（0/负）按 1 收敛，避免除零', () => {
+    expect(totalPagesOf(30, 0)).toBe(30);
+    expect(totalPagesOf(60, -5)).toBe(60);
   });
 
-  it('网关/skill 配对合并不干扰判定：按原始行数累计，末页取满且已加载 == total → false', () => {
-    expect(hasMorePages(0, 30, 90, PAGE_SIZE)).toBe(true);
-    expect(hasMorePages(30, 30, 90, PAGE_SIZE)).toBe(true);
-    expect(hasMorePages(60, 30, 90, PAGE_SIZE)).toBe(false);
+  it('不同每页条数档位：378 条在 15/50/100 下的页数', () => {
+    expect(totalPagesOf(378, 15)).toBe(26);
+    expect(totalPagesOf(378, 50)).toBe(8);
+    expect(totalPagesOf(378, 100)).toBe(4);
   });
 });
 

@@ -50,7 +50,7 @@
     <MockSkeletonTable v-else-if="loading && !rows.length" :cols="tab === 'login' ? 5 : 7" :rows="6" />
 
     <!-- 操作审计列表 -->
-    <div v-else-if="tab === 'operation' && shownOp.length" class="log-body">
+    <div v-else-if="tab === 'operation' && logs.length" class="log-body">
       <div class="tline-head" aria-hidden="true">
         <span class="tline-head__time">时间</span>
         <span class="tline-head__admin">操作者</span>
@@ -62,7 +62,7 @@
         <span class="tline-head__arrow" aria-hidden="true"></span>
       </div>
       <div
-        v-for="log in shownOp"
+        v-for="log in logs"
         :key="log.id"
         class="tline"
         :class="[log.success ? 'tline--ok' : 'tline--err', { 'tline--open': openId === log.id }]"
@@ -106,15 +106,17 @@
           <p v-if="!log.requestJson && !log.beforeJson && !log.afterJson" class="tline__none">无 payload 记录</p>
         </div>
       </div>
-      <div v-if="canMore" class="tline-more">
-        <button type="button" class="mk-link" @click="loadMore">
-          加载更多（已显示 {{ shownOp.length }} / {{ total }}）
-        </button>
-      </div>
+      <!-- 传统分页（方案 A）：与执行日志同一分页器形态 -->
+      <Pagination
+        v-model:page="currentPage"
+        v-model:pageSize="currentPageSize"
+        :total="total"
+        :loading="loading"
+      />
     </div>
 
     <!-- 登录审计列表 -->
-    <div v-else-if="tab === 'login' && shownLogin.length" class="log-body">
+    <div v-else-if="tab === 'login' && attempts.length" class="log-body">
       <div class="tline-head tline-head--login" aria-hidden="true">
         <span class="tline-head__time">时间</span>
         <span class="tline-head__admin">用户名</span>
@@ -123,7 +125,7 @@
         <span class="tline-head__reason">原因</span>
       </div>
       <div
-        v-for="a in shownLogin"
+        v-for="a in attempts"
         :key="a.id"
         class="tline tline--login"
         :class="a.success ? 'tline--ok' : 'tline--err'"
@@ -138,11 +140,13 @@
           <span class="tline__reason" :title="a.reason || ''">{{ reasonText(a.reason) }}</span>
         </div>
       </div>
-      <div v-if="canMore" class="tline-more">
-        <button type="button" class="mk-link" @click="loadMore">
-          加载更多（已显示 {{ shownLogin.length }} / {{ total }}）
-        </button>
-      </div>
+      <!-- 传统分页（方案 A）：与执行日志同一分页器形态 -->
+      <Pagination
+        v-model:page="currentPage"
+        v-model:pageSize="currentPageSize"
+        :total="total"
+        :loading="loading"
+      />
     </div>
 
     <!-- 空态 -->
@@ -159,7 +163,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { adminAuditApi, type AuditLogQuery } from '@/api/adminApi'
 import { errMsg, shortId } from './live'
-import { useLoadMore } from './useLoadMore'
+import Pagination from './Pagination.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import { actionText, targetTypeText } from './statusText'
 
@@ -195,8 +199,6 @@ interface LoginAttemptRow {
   createdAt: string
 }
 
-const PAGE_SIZE = 20
-
 const tabs = [
   { id: 'operation', label: '操作审计' },
   { id: 'login', label: '登录审计' },
@@ -211,7 +213,10 @@ const logs = ref<AuditLogRow[]>([])
 const attempts = ref<LoginAttemptRow[]>([])
 const total = ref(0)
 const failed = ref(0)
-const page = ref(0)
+/** 当前页（1 基）；筛选/tab/每页条数变化回第 1 页 */
+const page = ref(1)
+/** 每页条数（与执行日志同一分页器形态：15/30/50/100，默认 30） */
+const pageSize = ref(30)
 const loading = ref(false)
 const loadError = ref('')
 const openId = ref('')
@@ -219,55 +224,62 @@ let fetching = false
 
 const rows = computed(() => (tab.value === 'operation' ? logs.value : attempts.value))
 
-/* 长列表分批渲染：每批 20 行（滚动修复 #6：50 → 20）；服务端还有下一页时「加载更多」拉取后端下一页 */
-const { shown: shownOp, canMore: canMoreOp, loadMore: loadMoreOp } = useLoadMore(computed(() => logs.value), 20)
-const { shown: shownLogin, canMore: canMoreLogin, loadMore: loadMoreLogin } = useLoadMore(computed(() => attempts.value), 20)
-const serverHasMore = computed(() => rows.value.length < total.value)
-const canMore = computed(() =>
-  tab.value === 'operation' ? serverHasMore.value || canMoreOp.value : serverHasMore.value || canMoreLogin.value
-)
-function loadMore() {
-  if (serverHasMore.value) {
-    void fetchPage()
-  } else if (tab.value === 'operation') {
-    loadMoreOp()
-  } else {
-    loadMoreLogin()
+/* 传统分页（方案 A）：页码器 v-model 桥接；翻页 = 整页替换（replace） */
+const currentPage = computed({
+  get: () => page.value,
+  set: (p: number) => {
+    void goPage(p)
   }
-}
+})
+const currentPageSize = computed({
+  get: () => pageSize.value,
+  set: (s: number) => {
+    if (s === pageSize.value) return
+    pageSize.value = s
+    /* 每页条数变更：回第 1 页 + 按新 pageSize 重查 */
+    void applyFilters()
+  }
+})
 
 function buildParams(nextPage: number): AuditLogQuery {
   return {
     page: nextPage,
-    limit: PAGE_SIZE,
+    limit: pageSize.value,
     scope: tab.value,
     keyword: keyword.value.trim() || undefined,
     timeRange: timeRange.value === 'all' ? undefined : timeRange.value,
   }
 }
 
-async function fetchPage() {
+/** 拉取指定页并整体替换列表（total 来自后端 pagination.total，驱动页码器） */
+async function fetchPage(nextPage: number) {
   if (fetching) return
   fetching = true
-  const next = page.value + 1
   try {
-    const res = await adminAuditApi.getAuditLogs(buildParams(next))
+    const res = await adminAuditApi.getAuditLogs(buildParams(nextPage))
     const data = res.data?.data ?? {}
     const list = (tab.value === 'operation' ? data.logs : data.attempts) ?? []
     if (tab.value === 'operation') {
-      logs.value = [...logs.value, ...list]
+      logs.value = list
     } else {
-      attempts.value = [...attempts.value, ...list]
+      attempts.value = list
     }
     const pagination = data.pagination
     if (pagination && typeof pagination.total === 'number') total.value = pagination.total
-    page.value = next
+    page.value = nextPage
     loadError.value = ''
   } catch (e) {
     loadError.value = errMsg(e)
   } finally {
     fetching = false
   }
+}
+
+async function goPage(p: number) {
+  if (p < 1 || p === page.value) return
+  await fetchPage(p)
+  /* 翻页替换列表后滚动回顶部 */
+  window.scrollTo(0, 0)
 }
 
 async function fetchStats() {
@@ -287,11 +299,11 @@ async function fetchStats() {
 async function applyFilters() {
   loadError.value = ''
   loading.value = true
-  page.value = 0
+  page.value = 1
   logs.value = []
   attempts.value = []
   openId.value = ''
-  await fetchPage()
+  await fetchPage(1)
   await fetchStats()
   loading.value = false
 }

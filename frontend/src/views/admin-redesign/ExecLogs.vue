@@ -5,7 +5,7 @@
       <span class="log-status__dot"></span>
       <strong>{{ statusTitle }}</strong>
       <span class="log-status__sep"></span>
-      <span class="log-status__meta mono">{{ isLive ? liveLogsLoaded : filtered.length }} / {{ totalCount }} 条</span>
+      <span class="log-status__meta mono">{{ isLive ? `共 ${liveLogsTotal} 条` : `${filtered.length} / ${totalCount} 条` }}</span>
       <span v-if="logs.length" class="log-status__meta mono">
         失败 {{ errCount }} · 成功率 {{ successRate }}%
       </span>
@@ -209,8 +209,16 @@
           </template>
         </div>
       </div>
-      <div v-if="canMore" class="tline-more">
-        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ isLive ? liveLogsLoaded : shown.length }} / {{ isLive ? liveLogsTotal || liveLogsLoaded : filtered.length }}）</button>
+      <!-- 传统分页（方案 A）：页码器替代「加载更多」；demo 模式保留本地分批加载 -->
+      <Pagination
+        v-if="isLive"
+        v-model:page="currentPage"
+        v-model:pageSize="currentPageSize"
+        :total="liveLogsTotal"
+        :loading="liveLogsLoading"
+      />
+      <div v-else-if="demoCanMore" class="tline-more">
+        <button type="button" class="mk-link" @click="demoLoadMore">加载更多（已显示 {{ demoShown.length }} / {{ filtered.length }}）</button>
       </div>
     </div>
 
@@ -225,9 +233,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { spans, intent, openTrace, openSession, openSkillDrawer, clearInvestigation, dataSource, isLive } from './store'
-import { fetchLogDetail, reloadLiveSpans, loadMoreLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsLoaded, liveLogsHasMore, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
+import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
 import { useLoadMore } from './useLoadMore'
 import MockSkeletonTable from './SkeletonTable.vue'
+import Pagination from './Pagination.vue'
 import { TERMS, errorCodeLabel } from './terms'
 
 const openId = ref('')
@@ -278,7 +287,37 @@ function currentQuery(): SpanQuery {
 
 async function applyServerQuery() {
   if (!isLive.value) return
+  /* 筛选/搜索/traceId/sessionId 直达/每页条数等变化：回第 1 页（传统分页语义） */
   await reloadLiveSpans(currentQuery())
+}
+
+/** 自动刷新：保留当前页码重查（区别于筛选变化回第 1 页） */
+function refreshLivePage() {
+  if (!isLive.value) return
+  void reloadLiveSpans(currentQuery(), liveLogsPage.value)
+}
+
+/* 传统分页：页码器 v-model 桥接。翻页 = reloadLiveSpans(page) 整页替换 + 滚动回顶；
+   每页条数变更 = 回第 1 页 + 按新 pageSize 重查 */
+const currentPage = computed({
+  get: () => liveLogsPage.value,
+  set: (p: number) => {
+    void goPage(p)
+  }
+})
+const currentPageSize = computed({
+  get: () => liveLogsPageSize.value,
+  set: (s: number) => {
+    if (s === liveLogsPageSize.value) return
+    liveLogsPageSize.value = s
+    if (isLive.value) void reloadLiveSpans(currentQuery())
+  }
+})
+async function goPage(p: number) {
+  if (!isLive.value || p < 1 || p === liveLogsPage.value) return
+  await reloadLiveSpans(currentQuery(), p)
+  /* 翻页替换列表后滚动回顶部（列表长于视口时保持位置感） */
+  window.scrollTo(0, 0)
 }
 
 /* P0 分页正确性：状态/节点过滤上移服务端（status/agentId 参数，API 已支持），
@@ -303,7 +342,8 @@ watch(autoRefresh, (on) => {
   if (on && isLive.value) {
     autoTimer = setInterval(() => {
       if (document.hidden) return
-      void applyServerQuery()
+      /* 自动刷新保留当前页：不再把页码重置回 1（旧「加载更多 × 10s 重查互斥」已消除） */
+      refreshLivePage()
     }, 10000)
   }
 })
@@ -377,18 +417,10 @@ const filtered = computed(() =>
   })
 )
 
-/* 长列表分批渲染：每批 30 行（demo，滚动修复 #5 与 live 对齐）；live 模式展示服务端已加载的全部行，
-   「加载更多」改为拉取后端下一页（liveLogsHasMore 驱动按钮显隐） */
+/* 长列表分批渲染：每批 30 行（仅 demo 模式，滚动修复 #5）；
+   live 模式整页替换（传统分页），不再需要「加载更多」——页码器替代 */
 const { shown: demoShown, canMore: demoCanMore, loadMore: demoLoadMore } = useLoadMore(filtered, 30)
 const shown = computed(() => (isLive.value ? filtered.value : demoShown.value))
-const canMore = computed(() => (isLive.value ? liveLogsHasMore.value : demoCanMore.value))
-function loadMore() {
-  if (isLive.value) {
-    void loadMoreLiveSpans(currentQuery())
-    return
-  }
-  demoLoadMore()
-}
 
 const isFiltered = computed(() => !!(agentFilter.value || statusFilter.value || keyword.value.trim() || traceId.value.trim() || sessionId.value.trim()))
 /* traceId/sessionId 服务端查询未命中时的空态提示（与 TraceWaterfall 的 wf-notice「样本截断」兜底互补：
