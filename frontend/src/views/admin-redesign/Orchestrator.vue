@@ -228,8 +228,9 @@ function applyStageQuery() {
   const qStage = typeof route.query.stage === 'string' && route.query.stage.trim() ? route.query.stage.trim() : ''
   const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
   if (qStage) active.value = qStage
-  if (qTab === 'definition' || qTab === 'field-routings' || qTab === 'sandbox' || qTab === 'drift' || qTab === 'topology') {
-    activeTab.value = qTab
+  const tabAlias = qTab === 'routing' ? 'field-routings' : qTab
+  if (tabAlias === 'definition' || tabAlias === 'field-routings' || tabAlias === 'sandbox' || tabAlias === 'drift' || tabAlias === 'topology') {
+    activeTab.value = tabAlias
   }
 }
 const defsLoading = ref(false)

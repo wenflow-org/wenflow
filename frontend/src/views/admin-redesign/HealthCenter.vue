@@ -14,8 +14,8 @@
         <span class="mk-status__meta">aux <b class="mk-status__num">{{ global.aux }}</b></span>
         <span class="mk-status__meta">mainline <b class="mk-status__num">{{ global.mainline }}</b></span>
         <span v-if="global.handlerOnly" class="mk-status__meta">handler-only <b class="mk-status__num">{{ global.handlerOnly }}</b></span>
-        <span class="mk-badge" :class="global.abnormalSkills > 0 ? 'mk-badge--bad' : 'mk-badge--ok'">
-          {{ global.abnormalSkills > 0 ? `异常 ${global.abnormalSkills}` : '全部健康' }}
+        <span class="mk-badge" :class="topAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'">
+          {{ topAbnormal > 0 ? `异常 ${topAbnormal}` : '全部健康' }}
         </span>
       </template>
       <button type="button" class="mk-status__action" :disabled="loading" @click="refresh(true)">
@@ -229,6 +229,7 @@ const reconciliation = computed<HealthReconciliationSummary>(
 )
 const distribution = computed(() => displayReport.value?.completion.distribution || {})
 const healthAbnormal = computed(() => displayReport.value?.health.abnormal ?? 0)
+const topAbnormal = computed(() => healthAbnormal.value + (displayReport.value?.global.abnormalSkills ?? 0))
 
 /** 客户端聚合严重度计数（服务端 summary 不输出 ok/warn/error 明细） */
 const counts = computed(() => {

@@ -199,7 +199,7 @@ const routes: RouteRecordRaw[] = [
     path: '/admin/skills/:agentId+',
     name: 'AdminSkillEditor',
     component: () => import('@/views/admin-redesign/SkillDesignPage.vue'),
-    meta: { title: 'Prompt 设计', requiresAdminAuth: true }
+    meta: { title: 'Skill 设计', requiresAdminAuth: true }
   },
   // 旧版带参数路由 → 新平级页面（参数型无法被 /admin/:page 吸收，保留重定向）
   {
