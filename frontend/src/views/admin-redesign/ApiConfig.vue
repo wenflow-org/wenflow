@@ -8,7 +8,7 @@
       <span class="mk-status__meta">密钥 {{ keySet ? '已配置' : '未配置' }}</span>
       <span class="mk-status__meta">模型 {{ models.length || '待拉取' }}</span>
       <span class="mk-status__meta">路由 {{ routeCount }}/3</span>
-      <span v-if="isLive && cfg?.lastCheckedAt" class="mk-status__meta">上次检查 {{ timeAgo(cfg.lastCheckedAt) }}</span>
+      <span v-if="isLive && lastCheckedText" class="mk-status__meta">上次探测 {{ lastCheckedText }}</span>
       <button type="button" class="mk-status__action" :disabled="fetching || !form.apiUrl" @click="fetchModels">
         <span v-if="fetching"><span class="mk-spinner"></span> 拉取中…</span>
         <span v-else>{{ models.length ? '重新拉取' : '连接并拉取' }}</span>
@@ -269,9 +269,11 @@
         <div v-if="isLive" class="ac-cols__side">
           <div class="ac-sec__title">
             能力健康
+            <span v-if="healthSummaryText" class="mk-badge" :class="healthSummaryBadge">{{ healthSummaryText }}</span>
             <span class="ac-sec__sub">
-              <span v-if="health?.stale" class="ac-health__stale">快照已过期</span>
+              <span v-if="health?.stale" class="ac-health__stale">上次探测 {{ timeAgo(health.checkedAt) }} · 快照已过期</span>
               <span v-else-if="health?.checkedAt" class="ac-health__stale">最近探测 {{ timeAgo(health.checkedAt) }}</span>
+              <span v-else-if="health" class="ac-health__stale">尚未探测</span>
             </span>
           </div>
           <div v-if="health" class="ac-health">
@@ -289,18 +291,19 @@
           </div>
           <p v-else class="ac-rel__note">健康快照加载中…</p>
           <div class="ac-health__foot">
-            <button type="button" class="mk-status__action" :disabled="healthProbing" @click="probeHealth">
+            <button type="button" class="mk-status__action" :class="{ 'ac-probe--alert': health?.stale && !probe.enabled }" :disabled="healthProbing" @click="probeHealth">
               {{ healthProbing ? '探测中…' : '立即探测' }}
             </button>
+            <span v-if="health?.stale && probe.loaded && !probe.enabled" class="ac-health__stale">定期探活未开启 · 探测后 5 分钟将再次过期</span>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- 保存条 -->
+    <!-- 保存条：脏位分域标注（连接/路由/策略/可靠性/探测） -->
     <div v-if="dirty.size > 0" class="ac-save">
       <span class="ac-save__dot"></span>
-      <span>{{ dirty.size }} 组未保存变更</span>
+      <span>{{ dirtyGroups.join(' + ') }} · {{ dirty.size }} 组未保存变更</span>
       <button type="button" class="mk-link" :disabled="saving" @click="discardAll">放弃</button>
       <button type="button" class="ac-save__primary" :disabled="saving" @click="saveAll">
         {{ saving ? '保存中…' : '保存变更' }}
@@ -344,6 +347,33 @@ const health = ref<CapSnapshot | null>(null)
 const healthFailed = ref(false)
 const healthProbing = ref(false)
 
+/** 汇总角标：「5 能力 · 1 异常」——异常 = degraded/unavailable；unknown 归「待确认」，不假装实时 */
+const healthSummaryText = computed(() => {
+  const caps = health.value?.capabilities ?? []
+  if (!caps.length) return ''
+  const abnormal = caps.filter((c) => c.status === 'unavailable' || c.status === 'degraded').length
+  const unknown = caps.filter((c) => c.status === 'unknown').length
+  if (abnormal > 0) return `${caps.length} 能力 · ${abnormal} 异常`
+  if (unknown > 0) return `${caps.length} 能力 · ${unknown} 待确认`
+  return `${caps.length} 能力 · 全部正常`
+})
+const healthSummaryBadge = computed(() => {
+  const caps = health.value?.capabilities ?? []
+  if (!caps.length) return 'mk-badge--muted'
+  if (caps.some((c) => c.status === 'unavailable')) return 'mk-badge--bad'
+  if (caps.some((c) => c.status === 'degraded')) return 'mk-badge--warn'
+  if (caps.some((c) => c.status === 'unknown')) return 'mk-badge--muted'
+  return 'mk-badge--ok'
+})
+
+/** 同页时间源统一：状态条「上次探测」与能力行「最近探测」同源（健康快照 checkedAt），
+    DB lastCheckedAt 仅在快照不可用时兜底——消除「8 分钟前 vs 9 小时前」双写分叉 */
+const lastCheckedText = computed(() => {
+  if (health.value?.checkedAt) return timeAgo(health.value.checkedAt)
+  if (cfg.value?.lastCheckedAt) return timeAgo(cfg.value.lastCheckedAt)
+  return ''
+})
+
 const healthLabel = computed(
   () =>
     ({ operational: '全部正常', degraded: '部分降级', unavailable: '存在不可用', unknown: '状态确认中' })[
@@ -361,11 +391,18 @@ const healthBadgeCls = computed(
     } as Record<string, string>)[health.value?.overall || '']
 )
 
+/** 页面进入自动探测（方案 c）：组件挂载期间快照过期时自动补一次探测，避免「已过期」常驻；
+    只自动一次（避免 deep watch 重复触发烧 LLM 调用），重新进入页面（重新挂载）再触发 */
+let autoProbeDone = false
 async function loadHealth() {
   try {
     const res = await adminSystemApi.getCapabilities()
     health.value = res.data?.data ?? res.data ?? null
     healthFailed.value = false
+    if (health.value?.stale && !autoProbeDone) {
+      autoProbeDone = true
+      void probeHealth()
+    }
   } catch {
     // 失败标记不可用（不再显示永久的「加载中…」），保留旧快照供重试后对比
     healthFailed.value = true
@@ -412,6 +449,16 @@ const dirty = ref<Set<string>>(new Set())
 function markDirty(group: string) {
   dirty.value = new Set([...dirty.value, group])
 }
+
+/** 脏位分域标注：5 组 → 保存条列出具体未保存组（连接/路由/策略/可靠性/探测） */
+const DIRTY_GROUP_LABELS: Record<string, string> = {
+  conn: '连接',
+  route: '路由',
+  policy: '策略',
+  reliability: '可靠性',
+  probe: '探测'
+}
+const dirtyGroups = computed(() => [...dirty.value].map((g) => DIRTY_GROUP_LABELS[g] || g))
 
 function splitLines(s: string): string[] {
   return s.split('\n').map((x) => x.trim()).filter(Boolean)
@@ -866,6 +913,15 @@ async function toggleRegistration() {
   padding: 10px 0 14px;
   border-top: 1px solid #f0f2f5;
   margin-top: 4px;
+}
+/* stale 时「立即探测」红色脉冲（A3：承认探活默认关闭的机制性状态，引导手动探测） */
+.ac-probe--alert {
+  border-color: var(--mk-red) !important;
+  color: var(--mk-red) !important;
+  animation: ac-probe-pulse 1.6s ease infinite;
+}
+@keyframes ac-probe-pulse {
+  50% { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.18); }
 }
 
 /* AI 调用与健康：分区标题 */

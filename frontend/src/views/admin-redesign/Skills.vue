@@ -38,7 +38,7 @@
         <span class="mk-card__meta">{{ filtered.length }} / {{ cards.length }}</span>
       </div>
 
-      <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="9" />
+      <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="10" />
       <template v-else>
       <!-- 列表视图：列对齐 + 排序，问题浮顶 -->
       <div v-if="view === 'list'" class="mk-table-scroll">
@@ -48,6 +48,7 @@
               <th>Skill</th>
               <th>所属阶段</th>
               <th>类别</th>
+              <th>完成度</th>
               <th>
                 <button type="button" class="sk-sort" :class="{ 'sk-sort--on': sortKey === 'calls' }" @click="toggleSort('calls')">
                   调用 {{ sortKey === 'calls' ? (sortDir === 'desc' ? '↓' : '↑') : '' }}
@@ -84,6 +85,15 @@
                 <span v-else class="mk-na">工具类</span>
               </td>
               <td><span class="mk-badge mk-badge--muted" :title="s.category">{{ categoryText(s.category) }}</span></td>
+              <td>
+                <span
+                  v-if="completionBadgeOf(s.id)"
+                  class="mk-badge"
+                  :class="completionBadgeOf(s.id)!.cls"
+                  :title="completionBadgeOf(s.id)!.title"
+                >{{ completionBadgeOf(s.id)!.text }}</span>
+                <span v-else class="mk-na">—</span>
+              </td>
               <td class="mk-num">{{ s.calls || '—' }}</td>
               <td class="mk-num" :class="{ 'sk-err': s.errors > 0 }">{{ s.calls ? s.errors : '—' }}</td>
               <td class="mk-num" :class="rateTone(s)">{{ successRate(s) }}</td>
@@ -150,7 +160,10 @@
         <div v-if="recLoading" class="sk-rec__loading">加载中…</div>
         <template v-else-if="recReport">
           <div class="sk-rec__pills">
-            <span class="mk-pill">完成度 live {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
+            <span
+              class="mk-pill"
+              :title="`对账口径 = 户口簿全量 ${recReport.summary.total} 条（含外挂能力）；目录 ${cards.length} 条已排除外挂能力（mcp-tool 等）`"
+            >完成度 live {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }} · 目录 {{ cards.length }}</span>
             <span v-if="recReport.summary.unregistered" class="mk-pill sk-pill--bad">未注册 {{ recReport.summary.unregistered }}</span>
             <span v-if="recReport.summary.activeMissing" class="mk-pill sk-pill--warn">缺 ACTIVE {{ recReport.summary.activeMissing }}</span>
             <span v-if="recReport.summary.orphanRegistrations" class="mk-pill sk-pill--bad">幽灵注册 {{ recReport.summary.orphanRegistrations }}</span>
@@ -169,6 +182,13 @@
         <span v-for="n in 8" :key="n"></span>
       </div>
       <template v-else-if="recReport">
+        <div class="sk-rec-tools">
+          <div class="mk-pills">
+            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !recOnlyAbnormal }" @click="recOnlyAbnormal = false">全部</button>
+            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': recOnlyAbnormal }" @click="recOnlyAbnormal = true">仅看异常</button>
+          </div>
+          <span class="mk-card__meta">异常 = 未注册 / 缺 ACTIVE / 未上线（非 live）</span>
+        </div>
         <div class="mk-table-scroll">
           <table v-if="recReport.items.length" class="mk-table sk-table sk-rec-table">
             <thead>
@@ -242,6 +262,7 @@
           <span v-for="s in recStatusOrder" :key="s" class="sk-rec-legend__item">
             <i class="mk-badge" :class="`mk-badge--rec-${s}`"></i>{{ recStatusText(s) }}
           </span>
+          <span class="mk-card__meta">户口簿口径 {{ recReport.summary.total }} 条（含外挂能力）· 目录 {{ cards.length }} 条</span>
           <span class="mk-card__meta" style="margin-left:auto">点击行进入设计页 · {{ recReport.generatedAt ? '对账于 ' + new Date(recReport.generatedAt).toLocaleString() : '' }}</span>
         </div>
       </template>
@@ -392,6 +413,8 @@ const recLoading = ref(false)
 const recError = ref('')
 /** 滚动修复 #4：对账卡默认折叠（32 行分组表不再默认撑长页面） */
 const recOpen = ref(false)
+/** 面板内「仅看异常」切换（与目录表「仅看需关注」对称；纯前端过滤） */
+const recOnlyAbnormal = ref(false)
 /** 深链定位：?recon=1 展开 + 滚动；?diff=unregistered|active-missing|live 过滤差集行（巡检工作台计数卡 → 目录对账闭环） */
 const route = useRoute()
 const recDiff = ref('')
@@ -447,6 +470,20 @@ const recStatusOrder = ['draft', 'handler-ready', 'core-ready', 'fields-synced',
 const recStatusText = (status: string) =>
   completionMetaOf(status)?.label || status
 
+/** 目录表完成度列数据源：复用对账面板 completion（live 模式一次拉取合并加载），
+    skillId → SkillCompletion；目录行不在对账口径（外挂等）时返回 null 显示 — */
+const recCompletionOf = computed(() => {
+  const m = new Map<string, SkillCompletion>()
+  for (const r of recReport.value?.items ?? []) m.set(r.skillId, r.completion)
+  return m
+})
+
+function completionBadgeOf(skillId: string): { cls: string; text: string; title: string } | null {
+  const c = recCompletionOf.value.get(skillId)
+  if (!c) return null
+  return { cls: `mk-badge--rec-${c.status}`, text: recStatusText(c.status), title: recGateDetail(c) }
+}
+
 /** 对账面板按 parentAgent 分组（P2：goal-agent 下辖 N 条 节头）；无 parentAgent 归"未归属" */
 const REC_AGENT_ORDER = ['goal-agent', 'path-agent', 'teaching-agent', 'profile-agent', 'simulation-agent']
 type RecRow = SkillReconciliationReport['items'][number]
@@ -480,20 +517,26 @@ const recGroups = computed<RecGroup[]>(() => {
   })
 })
 
-/** 差集过滤：深链 ?diff= 时仅保留匹配行，组头随行过滤（空组不显示） */
-function matchesRecDiff(row: RecRow): boolean {
+/** 差集过滤：深链 ?diff= 或「仅看异常」时仅保留匹配行，组头随行过滤（空组不显示） */
+function matchesRecFilter(row: RecRow): boolean {
+  if (recOnlyAbnormal.value && !isRecAbnormal(row)) return false
   if (recDiff.value === 'unregistered') return row.diff === 'unregistered'
   if (recDiff.value === 'active-missing') return row.diff === 'active-missing'
   if (recDiff.value === 'live') return row.completion.status === 'live'
   return true
 }
 
+/** 「仅看异常」判定：差集非空（未注册/缺 ACTIVE）或完成度未达 live */
+function isRecAbnormal(row: RecRow): boolean {
+  return row.diff !== null || row.completion.status !== 'live'
+}
+
 /** 滚动修复 #4：对账行展平（组头 + 行）→ 10 行/页分页 */
 const recFlat = computed<RecEntry[]>(() => {
   const out: RecEntry[] = []
   for (const g of recGroups.value) {
-    const items = recDiff.value ? g.items.filter(matchesRecDiff) : g.items
-    if (recDiff.value && !items.length) continue
+    const items = recDiff.value || recOnlyAbnormal.value ? g.items.filter(matchesRecFilter) : g.items
+    if ((recDiff.value || recOnlyAbnormal.value) && !items.length) continue
     out.push({ kind: 'group', group: { ...g, items, liveCount: items.filter((row) => row.completion.status === 'live').length } })
     for (const row of items) out.push({ kind: 'row', row })
   }
@@ -730,6 +773,13 @@ function recGateDetail(completion: SkillCompletion): string {
   justify-content: center;
   padding: 8px 0 10px;
   border-top: 1px dashed var(--mk-line);
+}
+.sk-rec-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px 4px;
 }
 .sk-rec__title { display: flex; flex-direction: column; gap: 2px; }
 .sk-rec__title strong { font-size: 14px; }
