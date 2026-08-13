@@ -253,3 +253,4 @@ doc/archive/
 page-*.md
 
 *.db-journal
+!doc/ADMIN_RECONSTRUCTION_SUMMARY.md
