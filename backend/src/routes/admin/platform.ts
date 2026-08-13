@@ -38,6 +38,7 @@ import {
 import { aiCapabilityHealthService } from '../../services/ai-capability-health.service';
 import { loadSkillsBookRaw, getActiveSkillIds } from '../../services/skill-registry/skills-file';
 import { analyzeW2 } from '../../services/skills-readiness.service';
+import { deriveTeachingSessionProgress } from './teaching-sessions.progress';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -2143,6 +2144,7 @@ router.get('/activity', async (req: Request, res: Response) => {
 /**
  * GET /api/admin/teaching-sessions
  * 教学会话调试视图：聚焦 wrapup / advisory
+ * 列表进度（遗留项「教学会话进度列」）：progress = 任务 x/y + 里程碑 n/m（milestones/subtasks 现表推导）
  */
 function parseJsonSafe<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw) return fallback;
@@ -2187,6 +2189,8 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
       })
     ]);
 
+    const progressById = await deriveTeachingSessionProgress(sessions);
+
     const items = sessions.map((session) => {
       const wrapup = parseJsonSafe<any>(session.wrapup, null);
       const advisory = parseJsonSafe<any>(session.advisory, null);
@@ -2210,6 +2214,7 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
         duration: session.duration,
         messageCount: Array.isArray(messages) ? messages.filter((m: any) => m?.role === 'user').length : 0,
         knowledgePointCount: Array.isArray(knowledgePoints) ? knowledgePoints.length : 0,
+        progress: progressById.get(session.id) || null,
         wrapup,
         advisory,
       };

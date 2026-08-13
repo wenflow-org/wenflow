@@ -42,7 +42,7 @@
         <button type="button" class="mk-link" :disabled="refreshing" @click="refreshNow">{{ refreshing ? '重试中…' : '重试' }}</button>
       </div>
 
-      <MockSkeletonTable v-if="refreshing && !rows.length" :cols="7" />
+      <MockSkeletonTable v-if="refreshing && !rows.length" :cols="8" />
       <div v-else class="mk-table-scroll">
         <table v-if="filtered.length" class="mk-table">
           <thead>
@@ -51,6 +51,7 @@
               <th>用户</th>
               <th>状态</th>
               <th>互动</th>
+              <th>进度</th>
               <th>产物</th>
               <th>关注</th>
               <th class="mk-th--right">详情</th>
@@ -74,6 +75,21 @@
               <td>
                 <span class="mk-num">{{ r.duration ? fmtDuration(r.duration) : '—' }} · {{ r.messageCount }} 条</span>
                 <span v-if="r.knowledgePointCount" class="mk-cell-sub">知识 {{ r.knowledgePointCount }} 点</span>
+              </td>
+              <td>
+                <template v-if="sessionProgressPct(r.progress) !== null">
+                  <span class="ts-prog" :title="progressTitle(r)">
+                    <span class="ts-prog__num">{{ sessionProgressText(r.progress, r.status) }}</span>
+                    <span class="mk-minibar ts-prog__bar">
+                      <i
+                        class="mk-minibar__fill"
+                        :data-tone="sessionProgressTone(r.status)"
+                        :style="{ width: (sessionProgressPct(r.progress) ?? 0) + '%' }"
+                      ></i>
+                    </span>
+                  </span>
+                </template>
+                <span v-else class="mk-na">—</span>
               </td>
               <td>
                 <span class="mk-badge" :class="r.wrapupStatus === 'complete' ? 'mk-badge--ok' : 'mk-badge--muted'">
@@ -181,7 +197,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { dataSource, openSession, openSubPage } from './store'
 import { timeAgo } from './live'
-import { statusText } from './statusText'
+import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone } from './statusText'
+import type { SessionProgress } from './statusText'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
@@ -215,6 +232,7 @@ interface Row {
   wrapupSource: string
   advisory: { title: string; text: string; priority: string } | null
   rawJson: string
+  progress: SessionProgress | null
 }
 
 /* ---------- demo 数据 ---------- */
@@ -230,14 +248,14 @@ const demoRows: Row[] = [
       learningEvaluation: '理解到位，练习一次通过，可以进入下一阶段「数据透视」。'
     },
     wrapupSource: '模型生成', advisory: { priority: 'medium', title: '', text: '可安排一次真实数据练习巩固：用她自己团队的周报（脱敏后）做一次完整清洗，强化迁移。' },
-    rawJson: '{\n  "demo": true\n}'
+    rawJson: '{\n  "demo": true\n}', progress: { taskIndex: 2, totalTasks: 3, milestoneIndex: 2, totalMilestones: 4 }
   },
   {
     id: 'ts-demo-2', topic: 'JOIN 实战 3/4', subject: 'SQL 基础', taskType: 'practice',
     userName: '赵敏', email: 'zhaomin@…', userId: '', status: 'failed', duration: 620, messageCount: 4, knowledgePointCount: 2,
     wrapupStatus: 'missing', hasAdvisory: true, attention: 'high', startAt: '4 分钟前',
     wrapup: null, wrapupSource: '—', advisory: { priority: 'high', title: '', text: '连续 3 次任务失败且本次会话异常中断：建议伴学介入，把 JOIN 去重拆成「先 DISTINCT 再 JOIN」两步，并临时降低练习难度。' },
-    rawJson: '{\n  "demo": true\n}'
+    rawJson: '{\n  "demo": true\n}', progress: { taskIndex: 3, totalTasks: 4, milestoneIndex: 3, totalMilestones: 4 }
   },
   {
     id: 'ts-demo-3', topic: '提问训练：把模糊问题拆成假设', subject: '数据分析思维', taskType: 'acquire',
@@ -250,7 +268,7 @@ const demoRows: Row[] = [
       learningEvaluation: '框架已有，概念「采样偏差」挣扎，建议安排一次专项复盘。'
     },
     wrapupSource: '模型生成', advisory: { priority: 'medium', title: '', text: '概念「采样偏差」连续两次未达标，建议下节课前插入 5 分钟图例复盘。' },
-    rawJson: '{\n  "demo": true\n}'
+    rawJson: '{\n  "demo": true\n}', progress: { taskIndex: 1, totalTasks: 4, milestoneIndex: 1, totalMilestones: 3 }
   },
   {
     id: 'ts-demo-4', topic: '函数练习 2/5：参数与返回值', subject: 'Python 入门', taskType: 'practice',
@@ -263,21 +281,21 @@ const demoRows: Row[] = [
       learningEvaluation: '通过但用时偏长，建议下一课前做 5 分钟热身。'
     },
     wrapupSource: '规则回退', advisory: null,
-    rawJson: '{\n  "demo": true\n}'
+    rawJson: '{\n  "demo": true\n}', progress: { taskIndex: 2, totalTasks: 5, milestoneIndex: 2, totalMilestones: 4 }
   },
   {
     id: 'ts-demo-5', topic: '邮件表达：开场与诉求句', subject: '职场英语', taskType: 'reading',
     userName: '周洁', email: 'zhoujie@…', userId: '', status: 'active', duration: 480, messageCount: 3, knowledgePointCount: 1,
     wrapupStatus: 'missing', hasAdvisory: false, attention: 'low', startAt: '18 分钟前',
     wrapup: null, wrapupSource: '—', advisory: null,
-    rawJson: '{\n  "demo": true\n}'
+    rawJson: '{\n  "demo": true\n}', progress: { taskIndex: 1, totalTasks: 3, milestoneIndex: 1, totalMilestones: 4 }
   },
   {
     id: 'ts-demo-6', topic: '五十音图：か行・さ行', subject: '日语 N5', taskType: 'quiz',
     userName: '冯远', email: 'fengyuan@…', userId: '', status: 'timeout', duration: 360, messageCount: 2, knowledgePointCount: 0,
     wrapupStatus: 'missing', hasAdvisory: true, attention: 'high', startAt: '1 小时前',
     wrapup: null, wrapupSource: '—', advisory: { priority: 'high', title: '', text: '测验超时且中途离开：近 5 天活跃度持续下降，建议触发挽留流程并下调每日任务量。' },
-    rawJson: '{\n  "demo": true\n}'
+    rawJson: '{\n  "demo": true\n}', progress: { taskIndex: 1, totalTasks: 2, milestoneIndex: 1, totalMilestones: 5 }
   }
 ]
 
@@ -383,7 +401,8 @@ function mapRow(s: Record<string, unknown>): Row {
     wrapup: summary,
     wrapupSource: (wrapup?.sources as Record<string, string>)?.summary === 'model' ? '模型生成' : '规则/其他',
     advisory,
-    rawJson: JSON.stringify({ wrapup, advisory }, null, 2)
+    rawJson: JSON.stringify({ wrapup, advisory }, null, 2),
+    progress: (s.progress as SessionProgress) || null
   }
 }
 
@@ -496,10 +515,21 @@ const advisoryBadge = (p?: string) => (p === 'high' ? 'mk-badge--bad' : p === 'm
 const taskTypeText = (t: string) =>
   ({ reading: '阅读', practice: '练习', project: '项目', quiz: '测验', acquire: '获取', deconstruct: '拆解', model: '建模', execute: '执行', diagnose: '诊断', refine: '打磨', consolidate: '巩固' }[t] || t || '任务')
 const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分钟` : `${sec} 秒`)
+/** 进度工具提示（人话）：阶段 n/m · 任务 x/y；无里程碑维度只给任务 */
+function progressTitle(r: Row): string {
+  const p = r.progress
+  if (!p) return ''
+  if (p.totalMilestones > 0 && p.milestoneIndex > 0) return `阶段 ${p.milestoneIndex}/${p.totalMilestones} · 任务 ${p.taskIndex}/${p.totalTasks}`
+  return `任务 ${p.taskIndex}/${p.totalTasks}`
+}
 </script>
 
 <style scoped>
 .ts-row { cursor: pointer; }
+/* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */
+.ts-prog { display: grid; gap: 4px; max-width: 96px; }
+.ts-prog__num { font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.ts-prog__bar { width: 88px; height: 5px; }
 .ts-actions { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .ts-actions .mk-link { padding: 0; }
 .ts-more {

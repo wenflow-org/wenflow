@@ -87,7 +87,16 @@
               <td><span class="gc-summary" :title="r.summary">{{ r.summary }}</span></td>
               <td><span class="mk-badge" :class="statusBadge(r.status)">{{ statusLabel(r.status) }}</span></td>
               <td>
-                <span class="mk-badge" :class="stageBadgeCls(r.stage)" :title="`阶段：${r.stage || '—'}`">{{ stageText(r.stage) || '—' }}</span>
+                <div class="gc-stage-cell">
+                  <div class="gc-stage-cell__head">
+                    <span class="mk-badge" :class="stageBadgeCls(r.stage)" :title="`阶段：${stageText(r.stage) || '—'}`">{{ stageText(r.stage) || '—' }}</span>
+                    <span v-if="r.timeline" class="gc-stage-cell__dots" :title="stageDotsTitle(r)" aria-label="阶段进度">
+                      <i v-for="d in GOAL_STAGE_TOTAL" :key="d" class="gc-stage-cell__dot" :class="{ 'is-on': d <= r.stageIndex + 1 }"></i>
+                    </span>
+                  </div>
+                  <span v-if="r.timeline" class="gc-stage-cell__tl" :title="r.timeline">{{ r.timeline }}</span>
+                  <span v-else class="mk-na">—</span>
+                </div>
               </td>
               <td>
                 <span v-if="r.hasPath" class="mk-badge mk-badge--info">已生成</span>
@@ -241,7 +250,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { isLive, openSession, openSubPage } from './store'
 import { errMsg, timeAgo } from './live'
-import { stageText, stageBadgeCls } from './statusText'
+import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS } from './statusText'
 import { useLoadMore } from './useLoadMore'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
@@ -261,6 +270,10 @@ interface Row {
   summary: string
   hasPath: boolean
   createdAt: string
+  /** 阶段过程步序号（0=创建 1=澄清 2=方案 3=完成，statusText 单源） */
+  stageIndex: number
+  /** 轻量阶段时间线文本（如「创建 08-12 → 澄清中 08-13」；无数据为空串） */
+  timeline: string
   regenerating?: boolean
 }
 
@@ -346,6 +359,11 @@ const statusLabel = (s: string) => ({ active: '进行中', completed: '已完成
 const statusBadge = (s: string) =>
   s === 'completed' ? 'mk-badge--ok' : s === 'active' ? 'mk-badge--info' : s === 'cancelled' ? 'mk-badge--warn' : 'mk-badge--muted'
 
+/** 阶段过程点条工具提示（人话）：当前第 n/total 步（创建→澄清→方案→完成） */
+function stageDotsTitle(r: Row): string {
+  return `${stageText(r.stage) || '—'} · 第 ${r.stageIndex + 1}/${GOAL_STAGE_TOTAL} 步（${GOAL_STAGE_STEP_LABELS.join('→')}）`
+}
+
 /** 目标摘要：description 优先，其次 collectedData 里的 goal 字段 */
 function summaryOf(c: Record<string, unknown>): string {
   if (c.description) return String(c.description)
@@ -359,16 +377,25 @@ function summaryOf(c: Record<string, unknown>): string {
 
 function mapRow(c: Record<string, unknown>): Row {
   const u = (c.users as Record<string, unknown>) || {}
+  const stage = String(c.stage || '')
   return {
     id: String(c.id),
     userId: String(c.userId || ''),
     userName: String(u.name || c.userId || '—'),
     userEmail: String(u.email || ''),
     status: String(c.status || ''),
-    stage: String(c.stage || ''),
+    stage,
     summary: summaryOf(c),
     hasPath: !!c.learningPathId,
-    createdAt: timeAgo(String(c.createdAt || ''))
+    createdAt: timeAgo(String(c.createdAt || '')),
+    stageIndex: stageProgressIndex(stage),
+    timeline: stageTimelineText({
+      stage,
+      status: String(c.status || ''),
+      createdAt: String(c.createdAt || ''),
+      updatedAt: String(c.updatedAt || ''),
+      completedAt: String(c.completedAt || '')
+    })
   }
 }
 
@@ -584,6 +611,25 @@ onMounted(() => {
 
 <style scoped>
 .gc-row { cursor: pointer; }
+/* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
+.gc-stage-cell { display: grid; gap: 4px; min-width: 148px; }
+.gc-stage-cell__head { display: flex; align-items: center; gap: 8px; }
+.gc-stage-cell__dots { display: inline-flex; gap: 3px; }
+.gc-stage-cell__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: #e2e8f2;
+}
+.gc-stage-cell__dot.is-on { background: var(--mk-blue); }
+.gc-stage-cell__dot.is-on:last-child { background: var(--mk-green); }
+.gc-stage-cell__tl {
+  font-size: 10.5px;
+  color: var(--mk-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .gc-summary {
   display: inline-block;
   max-width: 320px;

@@ -3,7 +3,22 @@
  * 已知枚举必须命中中文映射；未知值原样回退；空值不崩溃
  */
 import { describe, expect, it } from 'vitest';
-import { statusText, stageText, stageBadgeCls, categoryText, actionText, targetTypeText } from '../statusText';
+import {
+  statusText,
+  stageText,
+  stageBadgeCls,
+  categoryText,
+  actionText,
+  targetTypeText,
+  stageProgressIndex,
+  stageProgress,
+  stageTimeline,
+  stageTimelineText,
+  sessionProgressPct,
+  sessionProgressText,
+  sessionProgressTone,
+  GOAL_STAGE_TOTAL
+} from '../statusText';
 
 describe('statusText', () => {
   it('核心状态映射', () => {
@@ -103,5 +118,112 @@ describe('targetTypeText（审计目标类型）', () => {
 
   it('未知类型回退原文', () => {
     expect(targetTypeText('skill')).toBe('skill');
+  });
+});
+
+describe('stageProgress（Goal 阶段过程步，单源：创建→澄清→方案→完成）', () => {
+  it('四步序号：创建 0 / 澄清 1 / 方案 2 / 完成 3', () => {
+    expect(stageProgressIndex('initial')).toBe(0);
+    expect(stageProgressIndex('understanding')).toBe(1);
+    expect(stageProgressIndex('proposal')).toBe(2);
+    expect(stageProgressIndex('proposing')).toBe(2);
+    expect(stageProgressIndex('ready')).toBe(2);
+    expect(stageProgressIndex('planning')).toBe(2);
+    expect(stageProgressIndex('completed')).toBe(3);
+  });
+
+  it('失败/取消给中断位（2 / 1）；未知阶段回退 0；空值不崩溃', () => {
+    expect(stageProgressIndex('failed')).toBe(2);
+    expect(stageProgressIndex('cancelled')).toBe(1);
+    expect(stageProgressIndex('mystery')).toBe(0);
+    expect(stageProgressIndex(null)).toBe(0);
+    expect(stageProgress(undefined)).toEqual({ index: 0, total: GOAL_STAGE_TOTAL });
+    expect(GOAL_STAGE_TOTAL).toBe(4);
+  });
+});
+
+describe('stageTimeline（Goal 会话轻量阶段时间线，列表展示单源）', () => {
+  const base = {
+    createdAt: '2026-08-12T02:00:00.000Z',
+    updatedAt: '2026-08-13T04:00:00.000Z',
+    completedAt: '2026-08-14T06:00:00.000Z'
+  };
+
+  it('进行中：创建 → 当前阶段（跨日）', () => {
+    const tl = stageTimeline({ ...base, stage: 'understanding', status: 'active' });
+    expect(tl).toEqual([
+      { label: '创建', date: '08-12' },
+      { label: '澄清中', date: '08-13' }
+    ]);
+    expect(stageTimelineText({ ...base, stage: 'understanding', status: 'active' })).toBe('创建 08-12 → 澄清中 08-13');
+  });
+
+  it('已完成：创建 → 完成（用 completedAt）', () => {
+    const tl = stageTimeline({ ...base, stage: 'completed', status: 'completed' });
+    expect(tl.map((i) => i.label)).toEqual(['创建', '已完成']);
+    expect(tl[1].date).toBe('08-14');
+  });
+
+  it('同日收敛为最晚一条（「创建 08-12 → 澄清中 08-12」只留「澄清中 08-12」）', () => {
+    const tl = stageTimeline({
+      createdAt: '2026-08-12T02:00:00.000Z',
+      updatedAt: '2026-08-12T09:00:00.000Z',
+      stage: 'understanding',
+      status: 'active'
+    });
+    expect(tl).toEqual([{ label: '澄清中', date: '08-12' }]);
+  });
+
+  it('取消：终态标签用最近更新时间，同日与当前阶段收敛', () => {
+    const tl = stageTimeline({
+      ...base,
+      stage: 'proposal',
+      status: 'cancelled',
+      completedAt: null
+    });
+    expect(tl.map((i) => i.label)).toEqual(['创建', '已取消']);
+    expect(tl[1].date).toBe('08-13');
+  });
+
+  it('无时间戳 → 空列表（前端显示 —）', () => {
+    expect(stageTimeline({ stage: 'understanding', status: 'active' })).toEqual([]);
+    expect(stageTimelineText({})).toBe('');
+    expect(stageTimelineText(null as unknown as Record<string, never>)).toBe('');
+  });
+
+  it('非法日期不崩坏', () => {
+    expect(stageTimelineText({ createdAt: 'not-a-date', updatedAt: 'x', stage: 'understanding', status: 'active' })).toBe('');
+  });
+});
+
+describe('sessionProgress（教学会话进度列单源：任务 x/y + 迷你条档位）', () => {
+  const p = { taskIndex: 3, totalTasks: 5, milestoneIndex: 2, totalMilestones: 4 };
+
+  it('百分比 = 任务位置/总数（钳制 0-100）', () => {
+    expect(sessionProgressPct(p)).toBe(60);
+    expect(sessionProgressPct({ taskIndex: 5, totalTasks: 5, milestoneIndex: 2, totalMilestones: 4 })).toBe(100);
+    expect(sessionProgressPct({ taskIndex: 0, totalTasks: 0, milestoneIndex: 1, totalMilestones: 4 })).toBe(null);
+    expect(sessionProgressPct(null)).toBe(null);
+  });
+
+  it('文本 = 任务 x/y；中断态加「中断于」前缀；无数据 → —', () => {
+    expect(sessionProgressText(p, 'active')).toBe('任务 3/5');
+    expect(sessionProgressText(p, 'completed')).toBe('任务 3/5');
+    expect(sessionProgressText(p, 'failed')).toBe('中断于 任务 3/5');
+    expect(sessionProgressText(p, 'timeout')).toBe('中断于 任务 3/5');
+    expect(sessionProgressText(p, 'finalization_failed')).toBe('中断于 任务 3/5');
+    expect(sessionProgressText(null, 'active')).toBe('—');
+    expect(sessionProgressText({ taskIndex: 9, totalTasks: 5, milestoneIndex: 1, totalMilestones: 4 }, 'active')).toBe('任务 5/5');
+  });
+
+  it('条档位：完成 → ok；失败/超时/收尾失败/废弃 → bad；其余默认蓝条', () => {
+    expect(sessionProgressTone('completed')).toBe('ok');
+    expect(sessionProgressTone('succeeded')).toBe('ok');
+    expect(sessionProgressTone('failed')).toBe('bad');
+    expect(sessionProgressTone('timeout')).toBe('bad');
+    expect(sessionProgressTone('finalization_failed')).toBe('bad');
+    expect(sessionProgressTone('discarded')).toBe('bad');
+    expect(sessionProgressTone('active')).toBe(null);
+    expect(sessionProgressTone(null)).toBe(null);
   });
 });
