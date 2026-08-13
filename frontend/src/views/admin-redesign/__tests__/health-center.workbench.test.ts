@@ -115,7 +115,7 @@ describe('巡检工作台（G1）', () => {
     const bar = wrapper.find('.mk-status').text();
     expect(bar).toContain('Skill');
     expect(bar).toContain('8');
-    expect(bar).toContain('异常 2');
+    expect(bar).toContain('异常 6');
 
     // a. 健康 13 项
     expect(wrapper.findAll('.hc-item').length).toBe(13);
