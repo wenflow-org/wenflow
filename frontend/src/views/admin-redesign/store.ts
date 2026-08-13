@@ -272,7 +272,7 @@ export function clearInvestigation() {
 }
 
 /* ---------- 二级页面（drill-in） ---------- */
-export type SubPageView = 'learner' | 'virtual' | 'user' | 'session'
+export type SubPageView = 'learner' | 'virtual' | 'user' | 'session' | 'session-real'
 
 export const subPage = ref<{ view: SubPageView; id: string } | null>(null)
 

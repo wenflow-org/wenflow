@@ -81,7 +81,8 @@ const detailComponents: Record<string, unknown> = {
   learner: LearnerDetail,
   virtual: VirtualProfile,
   user: UserDetail,
-  session: SessionCockpit
+  session: SessionCockpit,
+  'session-real': SessionCockpit
 };
 
 export const SCENE_COMPONENTS: Readonly<Record<string, unknown>> = components;

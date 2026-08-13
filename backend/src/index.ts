@@ -221,6 +221,7 @@ import adminLearnerModelsRoutes from './routes/admin/learner-models';
 import adminAnnouncementsRoutes from './routes/admin/announcements';
 import announcementsRoutes from './routes/announcements';
 import adminVirtualLearnersRoutes from './routes/admin/virtual-learners';
+import adminSessionConsoleRoutes from './routes/admin/session-console';
 import adminVirtualQuickLearnRoutes from './routes/admin/virtual-quick-learn';
 import adminProjectionAccessGrantsRoutes from './routes/admin/projection-access-grants';
 import adminFeedbackRoutes from './routes/admin/feedback';
@@ -330,6 +331,8 @@ app.use('/api/admin/prompt-ops', ...adminRouteMiddleware, adminPromptOpsRoutes);
 app.use('/api/admin/skill-model-configs', ...adminRouteMiddleware, adminSkillModelConfigsRoutes);
 app.use('/api/admin/users', ...adminRouteMiddleware, adminUsersRoutes);
 app.use('/api/admin/sessions', ...adminRouteMiddleware, adminSessionsRoutes);
+// 真实会话控制台同构端点：只读 GET，解析 teaching_sessions / goal_conversations（挂独立路径避免与 admin_sessions 冲突）
+app.use('/api/admin/session-console', ...adminRouteMiddleware, adminSessionConsoleRoutes);
 // 审计日志查询：仅 GET 只读端点，挂载时不经过 adminAuditMiddleware（审计查询本身不入审计，
 // 中间件对 GET 同样落库），其余鉴权中间件照常
 app.use('/api/admin/audit-logs', adminAccessRestrictMiddleware, adminAuthMiddleware, adminMiddleware, acpContextMiddleware('admin'), adminAuditLogsRoutes);

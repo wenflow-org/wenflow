@@ -1116,6 +1116,11 @@ export const adminVirtualLearnersApi = {
     return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}`);
   },
 
+  /** 真实会话控制台同构端点（teaching_sessions / goal_conversations）：只读，结构对齐 stageResults 契约 */
+  getRealSessionConsole: async (sessionId: string) => {
+    return adminAxios.get(`/admin/session-console/${sessionId}`);
+  },
+
   getVirtualSessionTeachingDetail: async (sessionId: string, teachingSessionId?: string) => {
     return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/teaching-detail`, {
       params: teachingSessionId ? { teachingSessionId } : undefined,

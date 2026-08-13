@@ -1,7 +1,7 @@
 <template>
   <div class="mk-page cp">
     <div class="cp-head">
-      <button type="button" class="cp-back" @click="closeSubPage">← 虚拟学习者</button>
+      <button type="button" class="cp-back" @click="closeSubPage">← {{ backLabel }}</button>
       <h1 class="cp-title">会话座舱 <span class="cp-title__id mono">{{ shortId }}</span></h1>
     </div>
 
@@ -13,7 +13,8 @@
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta mono">{{ shortId }}</span>
       <span class="mk-status__meta">{{ modeText }}</span>
-      <span class="mk-status__meta">{{ statusText(session?.status as string | undefined) }}</span>
+      <span v-if="isRealMode" class="mk-status__meta">{{ realKindText }}</span>
+      <span class="mk-status__meta">{{ statusText(terminalStatus) }}</span>
       <template v-if="isBlackbox">
         <span class="mk-status__meta">{{ blackboxTraceCount }} 条公开轨迹</span>
         <span class="mk-status__meta">{{ refereeTraceCount }} 条裁判轨迹</span>
@@ -26,7 +27,7 @@
         <span v-if="busy"><span class="mk-spinner"></span> 执行中…</span>
         <span v-else>刷新</span>
       </button>
-      <button type="button" class="mk-status__action cp-danger" :disabled="busy" @click="removeSession">
+      <button v-if="!isRealMode" type="button" class="mk-status__action cp-danger" :disabled="busy" @click="removeSession">
         <span v-if="busy"><span class="mk-spinner"></span> 执行中…</span>
         <span v-else>删除会话</span>
       </button>
@@ -47,6 +48,7 @@
           <span class="cp-stage__order">{{ String(i + 1).padStart(2, '0') }}</span>
           <strong>{{ stageLabel(st) }}</strong>
           <span class="cp-stage__state">{{ stageState(st) }}</span>
+          <span v-if="stageProgress(st)" class="cp-stage__progress">{{ stageProgress(st) }}</span>
         </div>
         <span v-if="i < stageFlow.length - 1" class="cp-stage__arrow">→</span>
       </template>
@@ -57,16 +59,19 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">推进控制</h3>
-          <span class="mk-card__meta">{{ isBlackbox ? '黑盒 API' : '辅助模拟' }}</span>
+          <span class="mk-card__meta">{{ isRealMode ? '真实会话 · 只读' : isBlackbox ? '黑盒 API' : '辅助模拟' }}</span>
         </div>
-        <div class="cp-controls">
+        <div v-if="!isRealMode" class="cp-controls">
           <button v-if="!isBlackbox" type="button" class="cp-btn cp-btn--primary" :disabled="runFullDisabled" :title="runFullTitle" @click="act('runFull')">一键全流程</button>
           <button v-if="isBlackbox && !isTerminal" type="button" class="cp-btn cp-danger-btn" :disabled="busy" :title="busy ? '操作执行中' : '终止当前黑盒实验'" @click="act('abandon')">{{ busy ? '执行中…' : '放弃实验' }}</button>
           <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn cp-btn--primary" :disabled="busy" :title="busy ? '操作执行中' : '生成终局裁判评估'" @click="act('referee')">{{ busy ? '执行中…' : '生成裁判评估' }}</button>
           <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn" :disabled="busy" :title="busy ? '操作执行中' : '以相同输入创建新的实验会话'" @click="act('rerun')">{{ busy ? '执行中…' : '按原输入重跑' }}</button>
           <span v-if="!isBlackbox" class="cp-controls__hint">各阶段操作在下方对应分页内</span>
         </div>
-        <div v-if="!isBlackbox" class="cp-config">
+        <div v-else class="cp-controls cp-controls--readonly">
+          <span>真实教学会话为只读展示：阶段推进、模拟配置与黑盒操作不适用。</span>
+        </div>
+        <div v-if="!isBlackbox && !isRealMode" class="cp-config">
           <label>
             对抗预算
             <select v-model="frictionBudget" class="mk-filter__select" :disabled="frictionSaving" @change="saveFriction">
@@ -105,7 +110,7 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">会话日志</h3>
-          <span class="mk-card__meta">{{ isTerminal ? '已终态' : '5s 轮询' }}</span>
+          <span class="mk-card__meta">{{ isRealMode ? '会话时间线 · 只读' : isTerminal ? '已终态' : '5s 轮询' }}</span>
         </div>
         <div class="cp-logs" ref="logBox" @scroll="onLogScroll">
           <template v-if="!session">
@@ -138,7 +143,7 @@
         <h3 class="mk-card__title">Path 内容</h3>
         <span class="mk-card__meta">{{ pathDetailMeta || '等待 Path 生成' }}</span>
       </div>
-      <div class="cp-tab-actions">
+      <div v-if="!isRealMode" class="cp-tab-actions">
         <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
         <button type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
         <button type="button" class="cp-btn" :disabled="resetPathDisabled" :title="resetPathTitle" @click="act('resetPath')">重建 Path</button>
@@ -187,8 +192,8 @@
           </template>
         </div>
 
-        <!-- 旁路：评审面板（独立质量环，不阻塞 Learn） -->
-        <aside class="cp-review-panel">
+        <!-- 旁路：评审面板（独立质量环，不阻塞 Learn；虚拟会话专属） -->
+        <aside v-if="!isRealMode" class="cp-review-panel">
           <div class="cp-review-panel__head">
             <span>虚拟学习者评审</span>
             <em>独立旁路 · 不阻塞 Learn</em>
@@ -238,7 +243,7 @@
           <template v-if="goalConverged"> · 已收敛</template>
         </span>
       </div>
-      <div class="cp-tab-actions">
+      <div v-if="!isRealMode" class="cp-tab-actions">
         <button type="button" class="cp-btn" :disabled="goalStepDisabled" :title="goalStepTitle" @click="act('step')">单步推进</button>
         <button type="button" class="cp-btn" :disabled="goalAutoDisabled" :title="goalAutoTitle" @click="act('auto')">自动到 Goal 收敛</button>
         <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
@@ -251,7 +256,7 @@
           class="cp-transcript__message"
           :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'"
         >
-          <span>{{ message.role === 'assistant' ? '平台 Goal' : '虚拟学习者' }}</span>
+          <span>{{ message.role === 'assistant' ? '平台 Goal' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
           <p>{{ message.content }}</p>
         </article>
         <p v-if="!goalConversationMessages.length" class="cp-none">尚未产生 Goal 对话，点击「单步推进」开始。</p>
@@ -269,7 +274,7 @@
           <template v-if="!learnLessons.length && !displayedTeachingSessionId && !learnConversationMessages.length">暂无记录</template>
         </span>
       </div>
-      <div class="cp-tab-actions">
+      <div v-if="!isRealMode" class="cp-tab-actions">
         <button type="button" class="cp-btn" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
         <button type="button" class="cp-btn" :disabled="learnStepDisabled" :title="learnStepTitle" @click="act('step')">Learn 单步</button>
         <button type="button" class="cp-btn" :disabled="learnAutoDisabled" :title="learnAutoTitle" @click="act('auto')">自动完成本课</button>
@@ -339,7 +344,7 @@
           class="cp-transcript__message"
           :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'"
         >
-          <span>{{ message.role === 'assistant' ? '教师' : '虚拟学习者' }}</span>
+          <span>{{ message.role === 'assistant' ? '教师' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
           <p>{{ message.content }}</p>
         </article>
         <p v-else-if="teachingDetailFailed && !learnConversationMessages.length" class="cp-degrade">
@@ -358,18 +363,31 @@
         <h3 class="mk-card__title">Wrapup 总结</h3>
         <span class="mk-card__meta">{{ hasWrapup ? '已生成' : '未生成' }}</span>
       </div>
-      <div class="cp-tab-actions">
+      <div class="cp-tab-actions" v-if="!isRealMode">
         <button type="button" class="cp-btn" :disabled="wrapupDisabled" :title="wrapupTitle" @click="act('wrapup')">生成总结</button>
       </div>
       <div class="cp-transcripts">
         <template v-if="hasWrapup">
+          <div v-if="wrapupFieldCards.length" class="cp-eval-card-grid">
+            <div v-for="card in wrapupFieldCards" :key="card.label" class="cp-eval-card">
+              <span class="cp-eval-card__label">{{ card.label }}</span>
+              <p class="cp-eval-card__value">{{ card.value }}</p>
+            </div>
+            <div v-if="wrapupSourceBadge || wrapupStatusBadge" class="cp-eval-card cp-eval-card--meta">
+              <span class="cp-eval-card__label">来源 / 状态</span>
+              <p class="cp-eval-card__badges">
+                <span v-if="wrapupSourceBadge" class="mk-badge" :class="wrapupSourceBadge === '模型生成' ? 'mk-badge--info' : 'mk-badge--muted'">{{ wrapupSourceBadge }}</span>
+                <span v-if="wrapupStatusBadge" class="mk-badge" :class="wrapupStatusBadge === 'complete' ? 'mk-badge--ok' : 'mk-badge--warn'">{{ wrapupStatusBadge === 'complete' ? '总结完整' : '降级总结' }}</span>
+              </p>
+            </div>
+          </div>
           <div v-for="section in wrapupSections" :key="section.label" class="cp-wrapup">
             <span class="cp-wrapup__label">{{ section.label }}</span>
             <pre v-if="section.isJson" class="cp-wrapup__json">{{ section.text }}</pre>
             <p v-else>{{ section.text }}</p>
           </div>
         </template>
-        <p v-else class="cp-none">尚无学习总结。Learn 产生进度后点击「生成总结」。</p>
+        <p v-else class="cp-none">{{ wrapupEmptyHint }}</p>
       </div>
     </section>
 
@@ -573,6 +591,26 @@
       </ol>
     </details>
 
+    <!-- 统一时间线：三流合并（裁判诊断 / 私有状态 / 会话日志），按时间升序单轴展示；真实模式由日志卡承载 -->
+    <details v-if="!isRealMode && hasTraceFlows && unifiedTimeline.length" class="cp-trace-panel cp-timeline-panel">
+      <summary>
+        <span>统一时间线（三流合并）</span>
+        <code>{{ unifiedTimeline.length }} 条 · {{ timelineSourceSummary }}</code>
+      </summary>
+      <ol class="cp-trace-list">
+        <li v-for="(t, idx) in unifiedTimeline" :key="`tl-${idx}`">
+          <div class="cp-trace-list__head">
+            <span class="cp-trace-list__seq">#{{ idx + 1 }}</span>
+            <time>{{ formatTime(t.time) }}</time>
+            <span class="cp-timeline__kind" :data-kind="t.kind">{{ t.kindLabel }}</span>
+            <span v-if="t.stage" class="cp-timeline__stage" :data-stage="String(t.stage).toLowerCase()">{{ t.stage }}</span>
+            <strong class="cp-timeline__title">{{ t.title }}</strong>
+          </div>
+          <p v-if="t.detail" class="cp-timeline__detail">{{ t.detail }}</p>
+        </li>
+      </ol>
+    </details>
+
     <!-- 调试：原始 JSON -->
     <details class="cp-raw">
       <summary>原始会话数据</summary>
@@ -595,6 +633,15 @@ import { traceSummaryRows, traceRawJson, type TraceKeyValue } from './traceSumma
 
 const sessionId = computed(() => subPage.value?.id || '')
 const shortId = computed(() => (sessionId.value.length > 20 ? `…${sessionId.value.slice(-16)}` : sessionId.value))
+
+/* 双模式：session=虚拟会话控制台（原行为 100% 保留）；session-real=真实教学/目标会话只读控制台 */
+const isRealMode = computed(() => subPage.value?.view === 'session-real')
+const backLabel = computed(() => (isRealMode.value ? '会话列表' : '虚拟学习者'))
+const realKind = ref<'teaching' | 'goal'>('teaching')
+const realKindText = computed(() => (realKind.value === 'teaching' ? '真实教学会话' : '真实目标对话'))
+/* 真实模式时间线（后端合成）与虚拟模式日志原文（统一时间线三流合并用） */
+const timelineEntries = ref<Array<{ time: string; kind: string; title: string; detail: string }>>([])
+const rawLogs = ref<Record<string, unknown>[]>([])
 
 const session = ref<Record<string, unknown> | null>(null)
 const logs = ref<{ id: string; time: string; text: string; view: LogEntryView }[]>([])
@@ -744,7 +791,7 @@ const blackboxTraceCount = computed(() => {
   const trace = bb.publicTrace
   return Array.isArray(trace) ? trace.length : 0
 })
-const modeText = computed(() => (isBlackbox.value ? '黑盒模式' : '辅助模式'))
+const modeText = computed(() => (isRealMode.value ? '真实会话' : isBlackbox.value ? '黑盒模式' : '辅助模式'))
 const isTerminal = computed(() => {
   const st = normalized(session.value?.status || runtime.value.status)
   return ['completed', 'failed', 'abandoned'].includes(st)
@@ -889,11 +936,6 @@ function lessonMark(state: LessonState) {
 function lessonStateLabel(state: LessonState) {
   return { done: '已完成', active: '进行中', failed: '失败，可重启恢复', pending: '未开始' }[state]
 }
-const learnProgressText = computed(() => {
-  const done = learnLessons.value.filter((l) => l.state === 'done').length
-  const total = learnLessons.value.length
-  return `课程进度 ${done}/${total}`
-})
 
 /* Learn 页 = 单课视图：正在查看的课节（默认当前进行中的课），
    全量任务列表在 Path 页；这里只保留上一课/下一课/可回放课的紧凑导航。 */
@@ -940,6 +982,11 @@ function openLesson(lesson: LearnLesson) {
 
 /* Learn 空态只反映 Learn 自身状态，不写跨阶段操作引导（解耦：引导在各页操作区与按钮 tooltip） */
 const learnEmptyHint = computed(() => {
+  if (isRealMode.value) {
+    if (!hasPath.value) return '该真实会话尚未开始学习（无关联教学记录）。'
+    if (!bindings.value.teachingSessionId) return '该真实会话尚无课堂记录。'
+    return '该课堂暂未记录可展示消息。'
+  }
   if (teachingDetailFailed.value) return '教学记录获取失败，请重试。'
   if (teachingSessionHistory.value.length) return '该课堂暂未记录可展示消息。'
   if (!hasPath.value) return '尚未启动 Learn。'
@@ -996,18 +1043,29 @@ const pathMilestones = computed(() => {
     || pathStatusPath.value.stages
     || pathStatus.value?.milestones
     || pathStatus.value?.stages
+    || (stageResults.value.path as Record<string, unknown>)?.milestones
   return Array.isArray(milestones) ? milestones.map(asRecord) : []
 })
 
-/* Path 内容展示：标题/摘要/里程碑/任务（读 path-status 的完整结构） */
-const pathDetailTitle = computed(() => firstText(pathStatusPath.value.title, pathStatusPath.value.name) || '学习路径')
-const pathDetailSummary = computed(() => firstText(pathStatusPath.value.summary, pathStatusPath.value.description))
+/* Path 内容展示：标题/摘要/里程碑/任务（读 path-status 的完整结构；真实模式读 stageResults.path） */
+const pathDetailTitle = computed(() =>
+  firstText(pathStatusPath.value.title, pathStatusPath.value.name)
+  || firstText(asRecord(stageResults.value.path).title, asRecord(stageResults.value.path).name)
+  || '学习路径'
+)
+const pathDetailSummary = computed(() =>
+  firstText(pathStatusPath.value.summary, pathStatusPath.value.description)
+  || firstText(asRecord(stageResults.value.path).summary, asRecord(stageResults.value.path).description)
+)
 const pathDetailMeta = computed(() => {
   if (!hasPath.value) return ''
   const parts: string[] = []
-  const difficulty = firstText(pathStatusPath.value.difficulty)
-  const hours = numberValue(pathStatusPath.value.estimatedHours)
-  const total = numberValue(pathStatusPath.value.totalMilestones) ?? pathMilestones.value.length
+  const srPath = asRecord(stageResults.value.path)
+  const difficulty = firstText(pathStatusPath.value.difficulty, srPath.difficulty)
+  const hours = numberValue(pathStatusPath.value.estimatedHours) ?? numberValue(srPath.estimatedHours)
+  const total = numberValue(pathStatusPath.value.totalMilestones)
+    ?? numberValue(srPath.totalMilestones)
+    ?? pathMilestones.value.length
   if (difficulty) parts.push(`难度 ${difficulty}`)
   if (hours !== null) parts.push(`约 ${hours} 小时`)
   if (total) parts.push(`${total} 个里程碑`)
@@ -1066,10 +1124,11 @@ const pathReviewReplan = computed(() => {
   if (pathReviewStatus.value === 'replanned') return '已根据评审意见生成新版 Path，请再次评审。'
   return ''
 })
-/* Path 空态同样只反映状态，不写跨阶段操作引导 */
-const pathEmptyHint = computed(() =>
-  goalConverged.value ? '尚无 Path。' : '尚无 Path：Goal 未收敛。'
-)
+/* Path 空态同样只反映状态，不写跨阶段操作引导；真实模式明示数据边界 */
+const pathEmptyHint = computed(() => {
+  if (isRealMode.value) return '该真实会话尚未生成 Path（无关联学习路径）。'
+  return goalConverged.value ? '尚无 Path。' : '尚无 Path：Goal 未收敛。'
+})
 
 const currentStage = computed(() => {
   const raw = String(runtime.value.currentStage || session.value?.currentStage || 'goal').toLowerCase()
@@ -1278,7 +1337,7 @@ const resetLearningTitle = computed(() => {
   return isFailedTerminal.value ? '从当前可运行任务恢复失败的 Learn' : '以可运行任务重新启动 Learn（评审为独立旁路）'
 })
 const showPathReadiness = computed(() =>
-  !isBlackbox.value && (pathStatusFailed.value || goalConverged.value || hasPath.value || ['path', 'learning', 'wrapup'].includes(currentStage.value))
+  !isBlackbox.value && !isRealMode.value && (pathStatusFailed.value || goalConverged.value || hasPath.value || ['path', 'learning', 'wrapup'].includes(currentStage.value))
 )
 const pathReadinessTone = computed(() => {
   if (pathStatusFailed.value) return 'bad'
@@ -1316,21 +1375,66 @@ const hasWrapup = computed(() => {
   return !!(stageStatus.value.learning?.wrapup || teaching.wrapup)
 })
 
-/* Wrapup 分页内容：summary/evaluation 可能是结构化对象，按只读证据渲染 */
-const wrapupSections = computed(() => {
+/* Wrapup 分页内容：summary/evaluation 结构化对象 → 字段卡（C4/遗留项 2），字符串保持原样 */
+const wrapupObject = computed(() => {
   const learning = asRecord(stageResults.value.teaching)
-  const wrapup = asRecord(learning.wrapup || stageStatus.value.learning?.wrapup)
+  return asRecord(learning.wrapup || stageStatus.value.learning?.wrapup)
+})
+const wrapupSections = computed(() => {
+  const wrapup = wrapupObject.value
   if (!Object.keys(wrapup).length) return [] as Array<{ label: string; text: string; isJson: boolean }>
   const render = (value: unknown) => typeof value === 'string'
     ? { text: value, isJson: false }
     : { text: JSON.stringify(value, null, 2), isJson: true }
   const sections: Array<{ label: string; text: string; isJson: boolean }> = []
-  if (wrapup.summary) sections.push({ label: '学习总结', ...render(wrapup.summary) })
-  if (wrapup.evaluation) sections.push({ label: '评估', ...render(wrapup.evaluation) })
+  // 结构化对象由字段卡承载，字符串走分节卡
+  if (typeof wrapup.summary === 'string') sections.push({ label: '学习总结', ...render(wrapup.summary) })
+  if (typeof wrapup.evaluation === 'string') sections.push({ label: '评估', ...render(wrapup.evaluation) })
   const generatedAt = firstText(wrapup.generatedAt)
   if (generatedAt) sections.push({ label: '生成时间', text: formatTime(generatedAt), isJson: false })
   return sections
 })
+
+/* 终局评估区 wrapup 评价字段卡：评价/评估摘要/来源徽章 */
+const wrapupFieldCards = computed(() => {
+  const wrapup = wrapupObject.value
+  const cards: Array<{ label: string; value: string }> = []
+  const summary = wrapup.summary
+  if (summary && typeof summary === 'object' && !Array.isArray(summary)) {
+    const s = summary as Record<string, unknown>
+    const labels: Record<string, string> = {
+      topicSummary: '主题摘要',
+      knowledgeSummary: '知识总结',
+      practiceAdvice: '练习建议',
+      learningEvaluation: '学习评估'
+    }
+    for (const [key, label] of Object.entries(labels)) {
+      const v = s[key]
+      if (typeof v === 'string' && v.trim()) cards.push({ label, value: v.trim() })
+    }
+  }
+  const evaluation = wrapup.evaluation
+  if (evaluation && typeof evaluation === 'object' && !Array.isArray(evaluation)) {
+    const e = evaluation as Record<string, unknown>
+    for (const [key, value] of Object.entries(e)) {
+      if (key === 'summary') continue
+      if (typeof value === 'string' && value.trim()) cards.push({ label: `评估 · ${key}`, value: value.trim() })
+    }
+    const evaluationSummary = firstText(e.summary, e.verdict, e.conclusion)
+    if (evaluationSummary) cards.push({ label: '评估摘要', value: evaluationSummary })
+  }
+  return cards
+})
+const wrapupSourceBadge = computed(() => {
+  const sources = asRecord(wrapupObject.value.sources)
+  return sources.summary === 'model' ? '模型生成' : sources.summary === 'rule' || sources.summary ? '规则回退' : ''
+})
+const wrapupStatusBadge = computed(() => String(wrapupObject.value.status || ''))
+const wrapupEmptyHint = computed(() =>
+  isRealMode.value
+    ? '该真实会话未生成总结（无 wrapup 记录）。'
+    : '尚无学习总结。Learn 产生进度后点击「生成总结」。'
+)
 
 function stageLabel(st: string) {
   return {
@@ -1385,6 +1489,51 @@ function stageState(st: string) {
   return '未开始'
 }
 
+/* 阶段条进度副标（遗留项 2 C2）：当前阶段显示 x/y 或百分比；数据源不足给空串 */
+const goalRoundText = computed(() => {
+  const n = goalConversationMessages.value.length
+  if (n) return `对话 ${n} 轮`
+  const confidence = numberValue(stageStatus.value.goal?.confidence)
+  if (confidence !== null) return `置信度 ${Math.round(confidence * 100)}%`
+  return ''
+})
+const pathProgressText = computed(() => {
+  const srPath = asRecord(stageResults.value.path)
+  const completed = numberValue(srPath.completedMilestones)
+    ?? numberValue(pathStatusPath.value.completedMilestones)
+    ?? numberValue(stageStatus.value.path?.completedMilestones)
+  const total = numberValue(srPath.totalMilestones)
+    ?? numberValue(pathStatusPath.value.totalMilestones)
+    ?? numberValue(stageStatus.value.path?.totalMilestones)
+  if (completed !== null && total) return `${completed}/${total} 里程碑`
+  const milestones = pathMilestonesView.value
+  if (milestones.length) {
+    const done = milestones.filter((m) => m.tasks.length && m.tasks.every((t) => t.completed)).length
+    return `${done}/${milestones.length} 里程碑`
+  }
+  return ''
+})
+const learnProgressText = computed(() => {
+  const done = learnLessons.value.filter((l) => l.state === 'done').length
+  const total = learnLessons.value.length
+  return `课程进度 ${done}/${total}`
+})
+function stageProgress(st: string) {
+  const key = st as StageKey
+  switch (key) {
+    case 'goal':
+      return goalRoundText.value
+    case 'path':
+      return pathProgressText.value
+    case 'learning':
+      return learnLessons.value.length ? `课程 ${learnLessons.value.filter((l) => l.state === 'done').length}/${learnLessons.value.length}` : ''
+    case 'wrapup':
+      return hasWrapup.value ? '总结已生成' : ''
+    default:
+      return ''
+  }
+}
+
 /* 阶段摘要（读 runtime.stageStatus + bindings） */
 const goalInfo = computed(() => {
   const g = stageStatus.value.goal || {}
@@ -1412,6 +1561,20 @@ async function refresh() {
   const id = sessionId.value
   if (!id) return
   try {
+    if (isRealMode.value) {
+      const res = await adminVirtualLearnersApi.getRealSessionConsole(id)
+      if (sessionId.value !== id) return
+      session.value = res.data?.data ?? res.data ?? {}
+      const kind = String((session.value as Record<string, unknown>)?.kind || '')
+      realKind.value = kind === 'goal' ? 'goal' : 'teaching'
+      timelineEntries.value = Array.isArray((session.value as Record<string, unknown>)?.timeline)
+        ? (session.value as { timeline: Array<{ time: string; kind: string; title: string; detail: string }> }).timeline
+        : []
+      pathStatus.value = null
+      teachingDetail.value = null
+      await loadLogs()
+      return
+    }
     const res = await adminVirtualLearnersApi.getVirtualSession(id)
     if (sessionId.value !== id) return
     session.value = res.data?.data ?? res.data ?? {}
@@ -1437,6 +1600,27 @@ async function loadLogs() {
   const id = sessionId.value
   if (!id) return
   try {
+    if (isRealMode.value) {
+      const items = timelineEntries.value.map((t, i) => ({
+        id: `tl-${i}`,
+        createdAt: t.time || '',
+        timestamp: t.time || '',
+        phase: t.kind,
+        message: t.title || '',
+        details: t.detail ? { text: t.detail } : undefined
+      }))
+      appendLogs(items.slice(-LOG_WINDOW).map((l: Record<string, unknown>) => {
+        const view = parseLogEntry(l)
+        return {
+          id: String(l.id ?? ''),
+          time: l.createdAt ? new Date(String(l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
+          text: view.text || view.phase,
+          view: { ...view, phase: timelineKindLabel(String(l.phase)) }
+        }
+      }))
+      logsFailed.value = false
+      return
+    }
     const res = await adminVirtualLearnersApi.getVirtualSessionLogs(id)
     if (sessionId.value !== id) return
     const body = res.data?.data ?? res.data ?? []
@@ -1445,6 +1629,7 @@ async function loadLogs() {
     if (!items.length && Array.isArray(session.value?.logs)) {
       items = session.value.logs as Record<string, unknown>[]
     }
+    rawLogs.value = items
     appendLogs(items.slice(-LOG_WINDOW).map((l: Record<string, unknown>) => {
       const view = parseLogEntry(l)
       return {
@@ -1464,7 +1649,7 @@ async function loadLogs() {
 
 async function loadPathStatus() {
   const id = sessionId.value
-  if (!id || isBlackbox.value) {
+  if (!id || isBlackbox.value || isRealMode.value) {
     pathStatus.value = null
     return
   }
@@ -1482,7 +1667,7 @@ async function loadPathStatus() {
 
 async function loadTeachingDetail(teachingSessionId = selectedTeachingSessionId.value, options: { silent?: boolean } = {}) {
   const id = sessionId.value
-  if (!id || isBlackbox.value) {
+  if (!id || isBlackbox.value || isRealMode.value) {
     teachingDetail.value = null
     return
   }
@@ -1547,6 +1732,78 @@ const refereeTraceViews = computed<RefereeTraceView[]>(() =>
     rawJson: traceRawJson(item.diagnostic)
   }))
 )
+
+/* 统一时间线（遗留项 2）：三流合并（裁判诊断 / 私有状态 / 会话日志），按时间升序单轴 */
+interface TimelineEntry {
+  time: string
+  kind: string
+  kindLabel: string
+  stage: string
+  title: string
+  detail: string
+}
+function timelineKindLabel(kind: string): string {
+  const map: Record<string, string> = {
+    referee: '裁判',
+    private: '私有状态',
+    log: '日志',
+    goal: '目标对话',
+    path: '路径',
+    teaching: '课堂',
+    evidence: '证据'
+  }
+  return map[kind] || kind
+}
+const timelineSourceSummary = computed(() => {
+  const counts = new Map<string, number>()
+  for (const t of unifiedTimeline.value) counts.set(t.kind, (counts.get(t.kind) || 0) + 1)
+  return [...counts.entries()].map(([kind, n]) => `${timelineKindLabel(kind)} ${n}`).join(' · ')
+})
+/* 裁判/私有轨迹流任一存在才展示统一时间线（仅日志时与会话日志卡重复） */
+const hasTraceFlows = computed(() => refereeTrace.value.length > 0 || privateStateTrace.value.length > 0)
+const unifiedTimeline = computed<TimelineEntry[]>(() => {
+  // 真实模式：后端合成时间线已由日志卡承载（同屏对照简化版），此面板仅服务虚拟三流合并
+  if (isRealMode.value) return []
+  const entries: TimelineEntry[] = []
+  for (const item of refereeTrace.value) {
+    entries.push({
+      time: item.timestamp || '',
+      kind: 'referee',
+      kindLabel: timelineKindLabel('referee'),
+      stage: 'learning',
+      title: `裁判诊断${item.traceId ? ` · ${item.traceId.slice(0, 8)}` : ''}`,
+      detail: traceSummaryRows(item.diagnostic).map((r) => `${r.label}: ${r.value}`).join(' · ')
+    })
+  }
+  for (const item of privateStateTrace.value) {
+    entries.push({
+      time: item.generatedAt || '',
+      kind: 'private',
+      kindLabel: timelineKindLabel('private'),
+      stage: item.stage || '',
+      title: `${item.transition || '状态'}${item.emotion ? ` · ${item.emotion}` : ''}`,
+      detail: [item.phaseFocus, item.visibleSignal, item.stateChangeReason]
+        .filter((v): v is string => !!v && typeof v === 'string')
+        .join(' · ')
+    })
+  }
+  for (const raw of rawLogs.value) {
+    const ts = String(raw.timestamp || raw.createdAt || '')
+    const view = parseLogEntry(raw)
+    entries.push({
+      time: ts,
+      kind: 'log',
+      kindLabel: timelineKindLabel('log'),
+      stage: view.phase,
+      title: view.text || view.phase || '会话日志',
+      detail: ''
+    })
+  }
+  return entries
+    .filter((e) => !!e.time)
+    .sort((a, b) => String(a.time).localeCompare(String(b.time)))
+    .slice(-200)
+})
 
 /* 评估报告展示助手 */
 function verdictLabel(verdict?: string) {
@@ -1719,6 +1976,7 @@ async function act(kind: string) {
 }
 
 async function removeSession() {
+  if (isRealMode.value) return
   const ok = await askConfirm({
     title: '删除会话',
     message: '确认删除该会话？\n运行记录将一并清理，该操作不可撤销。',
@@ -1747,6 +2005,16 @@ function startPolling() {
     const id = sessionId.value
     if (!id) return
     void loadLogs()
+    if (isRealMode.value) {
+      void adminVirtualLearnersApi.getRealSessionConsole(id).then((res) => {
+        if (sessionId.value !== id) return
+        session.value = res.data?.data ?? res.data ?? {}
+        timelineEntries.value = Array.isArray((session.value as Record<string, unknown>)?.timeline)
+          ? (session.value as { timeline: Array<{ time: string; kind: string; title: string; detail: string }> }).timeline
+          : []
+      }).catch(() => undefined)
+      return
+    }
     void adminVirtualLearnersApi.getVirtualSession(id).then((res) => {
       if (sessionId.value !== id) return
       session.value = res.data?.data ?? res.data ?? {}
@@ -1784,6 +2052,8 @@ watch(
     privateStateTrace.value = []
     privateStateTraceCount.value = 0
     frictionBudget.value = 'normal'
+    timelineEntries.value = []
+    rawLogs.value = []
     await refresh()
     if (sessionId.value !== id) return
     const stage = currentStage.value
@@ -2299,6 +2569,93 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   word-break: break-word; max-height: 200px; overflow-y: auto;
 }
 
+/* 阶段条进度副标（遗留项 2 C2） */
+.cp-stage__progress {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--mk-faint);
+  font-variant-numeric: tabular-nums;
+  padding-top: 1px;
+}
+.cp-stage--active .cp-stage__progress { color: var(--mk-blue); }
+.cp-stage--done .cp-stage__progress { color: #15803d; }
+
+/* 真实模式只读提示（推进控制卡内） */
+.cp-controls--readonly { font-size: 12px; color: var(--mk-muted); }
+.cp-controls--readonly span { line-height: 1.6; }
+
+/* Wrapup 评价字段卡（遗留项 2：评价/评估摘要/来源徽章） */
+.cp-eval-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.cp-eval-card {
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 5px;
+  background: #fbfcfe;
+}
+.cp-eval-card--meta { background: #fffdf5; border-color: rgba(180, 83, 9, 0.25); }
+.cp-eval-card__label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mk-faint);
+}
+.cp-eval-card__value {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--mk-ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.cp-eval-card__badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.cp-eval-card__badges .mk-badge { margin: 0; }
+
+/* 统一时间线（三流合并）类型/阶段徽章 */
+.cp-timeline__kind {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: var(--mk-muted);
+  white-space: nowrap;
+}
+.cp-timeline__kind[data-kind='referee'] { background: #fef2f2; color: #b91c1c; }
+.cp-timeline__kind[data-kind='private'] { background: #f5f3ff; color: #6d28d9; }
+.cp-timeline__kind[data-kind='log'] { background: #eef2ff; color: #4453a1; }
+.cp-timeline__kind[data-kind='goal'] { background: #faf5ff; color: #7c3aed; }
+.cp-timeline__kind[data-kind='path'] { background: #fff7ed; color: #c2410c; }
+.cp-timeline__kind[data-kind='teaching'] { background: #ecfdf5; color: #0a8551; }
+.cp-timeline__kind[data-kind='evidence'] { background: #ecfeff; color: #0e7490; }
+.cp-timeline__stage {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  background: #eef2ff;
+  color: #4453a1;
+  white-space: nowrap;
+}
+.cp-timeline__stage[data-stage='learning'], .cp-timeline__stage[data-stage='teaching'] { background: #ecfdf5; color: #0a8551; }
+.cp-timeline__stage[data-stage='goal'] { background: #faf5ff; color: #7c3aed; }
+.cp-timeline__stage[data-stage='path'] { background: #fff7ed; color: #c2410c; }
+.cp-timeline__title { color: var(--mk-ink); font-weight: 600; word-break: break-word; }
+.cp-timeline__detail {
+  margin: 0;
+  font-size: 11px;
+  color: var(--mk-muted);
+  line-height: 1.6;
+  word-break: break-word;
+}
+
 @media (min-width: 2000px) {
   .cp-title { font-size: 18px; }
   .cp-title__id { font-size: 13px; }
@@ -2309,6 +2666,14 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-stage__order { font-size: 11.5px; }
   .cp-stage strong { font-size: 15px; }
   .cp-stage__state { font-size: 12.5px; }
+  .cp-stage__progress { font-size: 12px; }
+  .cp-controls--readonly { font-size: 13.5px; }
+  .cp-eval-card__label { font-size: 12px; }
+  .cp-eval-card__value { font-size: 14px; }
+  .cp-timeline__kind { font-size: 12px; }
+  .cp-timeline__stage { font-size: 12px; }
+  .cp-timeline__title { font-size: 13.5px; }
+  .cp-timeline__detail { font-size: 12.5px; }
   .cp-summary__item span { font-size: 12.5px; }
   .cp-summary__item p { font-size: 14px; }
   .cp-none { font-size: 14px; }

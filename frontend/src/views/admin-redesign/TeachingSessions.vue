@@ -101,7 +101,8 @@
               <td>
                 <div class="ts-actions">
                   <button type="button" class="mk-link" @click.stop="goTrace(r)">瀑布</button>
-                  <span class="ts-go">→</span>
+                  <span class="ts-go">·</span>
+                  <button v-if="r.id" type="button" class="mk-link" @click.stop="goConsole(r)">控制台</button>
                 </div>
               </td>
             </tr>
@@ -185,6 +186,7 @@
             <div class="ts-actions">
               <button v-if="detail.userId" type="button" class="mk-link" @click="goLearner(detail)">学习者详情 →</button>
               <button type="button" class="mk-link" @click="goTrace(detail)">Trace 瀑布 →</button>
+              <button v-if="detail.id" type="button" class="mk-link" @click="goConsole(detail)">进控制台 →</button>
             </div>
           </div>
         </aside>
@@ -475,7 +477,7 @@ function openDetail(r: Row) {
   openCards.value = new Set()
 }
 
-/** 真实教学会话与座舱数据契约不兼容（座舱仅服务虚拟会话）：轻量深链 = 学习者详情 / Trace 瀑布按 sessionId 归组 */
+/** 真实教学会话与控制台数据契约不兼容（座舱仅服务虚拟会话）：轻量深链 = 学习者详情 / Trace 瀑布按 sessionId 归组 */
 function goLearner(r: Row) {
   if (!r.userId) return
   detail.value = null
@@ -485,6 +487,13 @@ function goLearner(r: Row) {
 function goTrace(r: Row) {
   detail.value = null
   openSession(r.id)
+}
+
+/** 真实会话进控制台（双模式）：session-real 只读座舱，经 /admin/session-console 同构映射渲染 */
+function goConsole(r: Row) {
+  if (!r.id) return
+  detail.value = null
+  openSubPage('session-real', r.id)
 }
 
 function toggleCard(key: string) {
