@@ -49,3 +49,36 @@
 4. 评估中心 7 端点半成品（run-eval 仅支持 goal-conversation）——决策补完或存档
 5. P3 细节：执行日志英文+中文双排观感、会话安全 83 活跃会话分组
 6. 对账面板提级独立页/并入巡检台 tab（N7）——现以入口卡+巡检台摘要形态覆盖，全量对账仍在 Skill 目录
+
+---
+
+# 附录：全站可视化深度专项（2026-08-13）
+
+> 用户反馈"页面大小参差"+"表格/列表专项"后启动：布局一致性 + 表格专项 2 份审计 → 5 份页面域深度审计 → 实施 3 波 8 commit。
+
+## 审计（7 份）
+ADMIN_LAYOUT_CONSISTENCY_AUDIT（过空/偏长/标杆三分类、批尺寸三档、空态不撑高）
+ADMIN_TABLE_AUDIT（17 表三形态、日志 P0 分页缺陷、traceId 未暴露）
+ADMIN_DEEP_OVERVIEW_AUDIT（P0：脉搏 take:50 抽样失真、健康环 Math.max(50) 钳制）
+ADMIN_DEEP_LEARNER_AUDIT（P0：证据 score 置信度渲染全反）
+ADMIN_DEEP_SESSION_AUDIT（P0：真实会话无法进控制台、JSON 直出、评估小数）
+ADMIN_DEEP_VLAB_TRACE_AUDIT（TDZ、三处重复、配对窗失效）
+ADMIN_DEEP_SKILLS_APICONFIG_AUDIT（快照机制性过期、口径分叉）
+
+## 实施账本（8 commit）
+8b89a01 布局批：空态最小高度/批尺寸统一15/会话安全 4.07→1.23 屏/addons 双列/overview 迁 mk-page
+60e8154 表格批：sfr/frt→mk-table--dense、日志分页修复（过滤上移服务端）、traceId/sessionId 直达、模型/Tokens 独立列
+ad6046e 日志传统分页（方案 A）：mk-pagination 页码器、自动刷新保留当前页（修"加载更多×自动刷新"互斥）、审计日志同形态、后端零改动
+35e737b 总览 P0：24h 全量聚合（顺带修窗口错位隐藏 bug）、健康环去钳制
+d073e5b 前端 P0：证据色 signal 驱动、瀑布 TDZ×2、真实会话轻量跳转+阶段徽章、对账深链 ?recon/?diff=
+ec28b1d 目录接入 P1：完成度列、仅看异常、探测角标/脏位分域/快照语义（诚实方案）
+b748dda 学习者 P1：excludeTest 风险队列、conceptLedger 图形化、6→3 tab 合并、XP 列
+6331fff 总览 P1：归因同口径闭环（223=223）、异常流、趋势/REAL_USER_WHERE、chart.js 删除
+8e31932 仿真瀑布 P1：运行中列、推进条+卡顿高亮、运行历史去重、瀑布配对修窗+分页+直达
+bffdd34a 会话 P1：日志格式化、终局评估图形化、轨迹摘要视图
+
+## 验证
+后端 1372 测试 / 前端 202 测试 / check:all 全链绿 / 每批浏览器实测
+
+## 遗留（后续项）
+SessionCockpit 适配真实会话（需后端同构端点）、教学会话进度列（后端补字段）、阶段条副标/三流合一时间线（中成本）
