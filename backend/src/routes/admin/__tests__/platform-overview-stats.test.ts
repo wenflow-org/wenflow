@@ -26,7 +26,7 @@ jest.mock('../../../config/system-database', () => ({
   default: { $executeRawUnsafe: jest.fn().mockResolvedValue([]), $disconnect: jest.fn() },
 }));
 
-import { buildHourlyTrend } from '../platform';
+import { buildHourlyTrend, classifyFailureCategory, buildErrorCategoryWhere, clearOverviewStatsCache } from '../platform';
 import router from '../platform';
 
 function getRouteHandler(path: string, method: 'get' | 'post') {
@@ -127,9 +127,74 @@ describe('buildHourlyTrend（24h 脉搏全量聚合）', () => {
   });
 });
 
+describe('classifyFailureCategory（调用级失败归因分类）', () => {
+  it('有 errorCategory 列 → 直接采用（小写归一）', () => {
+    expect(classifyFailureCategory({ errorCategory: 'rate_limit', errorCode: null, error: null })).toBe('rate_limit');
+    expect(classifyFailureCategory({ errorCategory: 'PROVIDER_HTTP', errorCode: null, error: null })).toBe('provider_http');
+  });
+
+  it('空类别 + CALLER_ABORTED / cancel 文本 → caller_abort', () => {
+    expect(classifyFailureCategory({ errorCategory: null, errorCode: 'CALLER_ABORTED', error: 'request canceled' })).toBe('caller_abort');
+    expect(classifyFailureCategory({ errorCategory: null, errorCode: null, error: 'API request canceled' })).toBe('caller_abort');
+  });
+
+  it('空类别 + 超时信号 → provider_timeout', () => {
+    expect(classifyFailureCategory({ errorCategory: null, errorCode: 'ETIMEDOUT', error: null })).toBe('provider_timeout');
+    expect(classifyFailureCategory({ errorCategory: null, errorCode: null, error: 'deadline exceeded' })).toBe('provider_timeout');
+  });
+
+  it('空类别 + 限流信号 → rate_limit', () => {
+    expect(classifyFailureCategory({ errorCategory: null, errorCode: 'RATE_LIMITED', error: null })).toBe('rate_limit');
+    expect(classifyFailureCategory({ errorCategory: null, errorCode: '429', error: null })).toBe('rate_limit');
+  });
+
+  it('空类别且无已知信号 → internal', () => {
+    expect(classifyFailureCategory({ errorCategory: null, errorCode: 'SKILL_EXECUTION_FAILED', error: 'boom' })).toBe('internal');
+    expect(classifyFailureCategory({ errorCategory: null, errorCode: null, error: null })).toBe('internal');
+  });
+});
+
+describe('buildErrorCategoryWhere（/agents/logs 类别筛选，与归因同口径）', () => {
+  it('空类别 → null（不筛选）', () => {
+    expect(buildErrorCategoryWhere('')).toBeNull();
+    expect(buildErrorCategoryWhere(null as any)).toBeNull();
+  });
+
+  it('caller_abort → 列值 OR 空类别启发式', () => {
+    const where = buildErrorCategoryWhere('caller_abort');
+    expect(where!.OR).toHaveLength(2);
+    expect(where!.OR[0]).toEqual({ errorCategory: 'caller_abort' });
+    expect(where!.OR[1]).toEqual({
+      errorCategory: null,
+      OR: [{ errorCode: { contains: 'CALLER_ABORTED' } }, { error: { contains: 'cancel' } }],
+    });
+  });
+
+  it('provider_timeout → 列值 OR 超时信号', () => {
+    const where = buildErrorCategoryWhere('provider_timeout');
+    expect(where!.OR[0]).toEqual({ errorCategory: 'provider_timeout' });
+    expect(where!.OR[1]).toHaveProperty('errorCategory', null);
+    expect(where!.OR[1]).toHaveProperty('OR');
+  });
+
+  it('internal → 列值 OR 排除 abort/timeout/rate 的空类别行', () => {
+    const where = buildErrorCategoryWhere('internal');
+    expect(where!.OR[0]).toEqual({ errorCategory: 'internal' });
+    const inner = where!.OR[1] as any;
+    expect(inner.AND).toHaveLength(3);
+    expect(inner.AND[0]).toEqual({ NOT: { OR: [{ errorCode: { contains: 'CALLER_ABORTED' } }, { error: { contains: 'cancel' } }] } });
+  });
+
+  it('未知类别 → 仅精确匹配', () => {
+    const where = buildErrorCategoryWhere('quota');
+    expect(where!.OR).toEqual([{ errorCategory: 'quota' }]);
+  });
+});
+
 describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    clearOverviewStatsCache();
 
     mockPrisma.users.count.mockResolvedValue(0);
     mockPrisma.teaching_sessions.findMany.mockResolvedValue([]);
@@ -175,5 +240,39 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
     expect(current.total).toBe(120);
     expect(current.timeout).toBe(40);
     expect(current.error).toBe(0);
+
+    // 口径统一：归因之和 == failed7d（同表同源，无「234 vs 168」式分叉）
+    const attributionSum = payload.usage.failures7d.reduce((s: number, f: any) => s + f.count, 0);
+    expect(attributionSum).toBe(payload.usage.failed7d);
+  });
+
+  it('失败归因（调用级）：列值类别 + 空类别启发式归并，之和恒等于 failed7d', async () => {
+    const now = new Date();
+    const failureRows = [
+      { errorCategory: 'caller_abort', errorCode: 'CALLER_ABORTED', error: 'API request canceled' },
+      { errorCategory: 'caller_abort', errorCode: 'CALLER_ABORTED', error: 'API request canceled' },
+      { errorCategory: null, errorCode: 'CALLER_ABORTED', error: 'request canceled' },
+      { errorCategory: null, errorCode: null, error: 'request canceled' },
+      { errorCategory: 'protocol', errorCode: 'INVALID_RESPONSE_SCHEMA', error: 'bad envelope' },
+      { errorCategory: null, errorCode: 'ETIMEDOUT', error: null },
+      { errorCategory: null, errorCode: 'SKILL_EXECUTION_FAILED', error: 'boom' },
+      { errorCategory: null, errorCode: null, error: null },
+    ];
+    mockAgentCallLogs.findMany.mockImplementation((args: any) =>
+      args?.select?.output ? Promise.resolve([]) : Promise.resolve(failureRows)
+    );
+
+    const handler = getRouteHandler('/overview/stats', 'get');
+    const res = createResponse();
+    await handler({}, res);
+
+    const usage = res.json.mock.calls[0][0].data.usage;
+    expect(usage.failed7d).toBe(8);
+    const byCategory = Object.fromEntries(usage.failures7d.map((f: any) => [f.category, f.count]));
+    expect(byCategory.caller_abort).toBe(4);
+    expect(byCategory.protocol).toBe(1);
+    expect(byCategory.provider_timeout).toBe(1);
+    expect(byCategory.internal).toBe(2);
+    expect(usage.failures7d.reduce((s: number, f: any) => s + f.count, 0)).toBe(8);
   });
 });

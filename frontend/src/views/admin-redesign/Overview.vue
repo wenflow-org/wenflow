@@ -126,7 +126,7 @@
           <div class="usage__big">
             <strong>{{ fmtTokens(data.usage.totalTokens7d) }}</strong>
             <span>近 7 天 token</span>
-            <em>{{ data.usage.calls7d }} 次调用 · 失败 {{ data.usage.failed7d }}</em>
+            <em>{{ data.usage.calls7d }} 次调用 · 失败 {{ data.usage.failed7d }}（归因合计 {{ failuresSum7d }}）</em>
           </div>
           <div v-if="data.usage.models7d.length" class="usage__section">
             <span class="usage__label">模型用量</span>
@@ -141,9 +141,9 @@
             </div>
           </div>
           <div v-if="data.usage.failures7d.length" class="usage__section">
-            <span class="usage__label">失败归因（尝试级，含重试）</span>
+            <span class="usage__label">失败归因（调用级，与失败总数同口径）</span>
             <ul class="usage__fails">
-              <li v-for="f in data.usage.failures7d" :key="f.category" class="usage__fail" :title="`跳转到执行日志`" @click="jump('execution-logs')">
+              <li v-for="f in data.usage.failures7d" :key="f.category" class="usage__fail" :title="`查看 ${f.category} 类别失败日志（近 7 天）`" @click="jumpToFailures(f.category)">
                 <span class="usage__dot"></span>
                 <span>{{ f.category }}</span>
                 <strong>{{ f.count }}</strong>
@@ -160,7 +160,7 @@
           <h4>新增目标对话 · 近 7 天</h4>
           <span class="trend__legend">
             <i class="trend__dot trend__dot--new"></i>当日新增
-            <i class="trend__dot trend__dot--done"></i>其中完成
+            <i class="trend__dot trend__dot--done"></i>当日完成
           </span>
         </div>
         <div v-if="data.trend.length" class="trend">
@@ -169,7 +169,7 @@
             :key="d.date"
             class="trend__col"
             :class="{ 'trend__col--today': isToday(d.date) }"
-            :title="`${d.date} · 新增 ${d.total} · 完成 ${d.completed} · 按创建日期归集`"
+            :title="`${d.date} · 新增 ${d.total} · 完成 ${d.completed} · 新增按创建日归集，完成按完成时间归集`"
           >
             <span class="trend__num" :class="{ 'trend__num--zero': !d.total }">{{ d.total || '·' }}</span>
             <div class="trend__bars">
@@ -183,21 +183,52 @@
         </div>
         <p v-else class="brief-card__note">近 7 天还没有目标对话。</p>
         <p v-if="data.trend.length" class="trend__sum">
-          合计新增 {{ trendSum.total }} · 完成 {{ trendSum.completed }} · 完成率 {{ trendSum.rate }}
+          合计新增 {{ trendSum.total }} · 完成 {{ trendSum.completed }}（按完成时间归集，与新增非同一批对话）
         </p>
       </section>
 
-      <!-- 动态时间线（全宽） -->
+      <!-- 动态时间线（全宽；异常事件置顶，普通事件折叠，近 24h 时间窗） -->
       <section class="brief-card brief-card--feed brief-card--feed-full">
         <div class="brief-card__head brief-card__head--feed">
-          <h4>动态</h4>
+          <h4>动态 · 近 24h<span v-if="lastUpdated" class="feed-fresh">更新于 {{ lastUpdated }}</span></h4>
           <label class="feed-filter">
             <input type="checkbox" v-model="hideTestAccounts" />
             <span>隐藏虚拟/测试账号</span>
           </label>
         </div>
-        <ul v-if="visibleFeed.length" class="feed feed--full">
-          <li v-for="(f, i) in visibleFeed" :key="i">
+        <template v-if="anomalyFeed.length">
+          <ul class="feed feed--full">
+            <li
+              v-for="(f, i) in anomalyFeed"
+              :key="`a${i}`"
+              class="feed__item"
+              :class="`feed__item--${f.tone}`"
+              :title="`查看 ${f.errorCategory || '失败'} 类别日志（近 7 天）`"
+              @click="feedJump(f)"
+            >
+              <span class="feed__dot" :class="`feed__dot--${f.tone}`"></span>
+              <div class="feed__body">
+                <strong>{{ f.text }}</strong>
+                <span>{{ f.time }}</span>
+              </div>
+              <i class="feed__go">排查 →</i>
+            </li>
+          </ul>
+          <button v-if="normalFeed.length" type="button" class="feed__toggle" @click="showNormalEvents = !showNormalEvents">
+            {{ showNormalEvents ? '收起普通事件' : `普通事件 ${normalFeed.length} 条` }}
+          </button>
+          <ul v-if="showNormalEvents" class="feed feed--full">
+            <li v-for="(f, i) in normalFeed" :key="`n${i}`">
+              <span class="feed__dot" :class="`feed__dot--${f.tone}`"></span>
+              <div>
+                <strong>{{ f.text }}</strong>
+                <span>{{ f.time }}</span>
+              </div>
+            </li>
+          </ul>
+        </template>
+        <ul v-else-if="normalFeed.length" class="feed feed--full">
+          <li v-for="(f, i) in normalFeed" :key="`n${i}`">
             <span class="feed__dot" :class="`feed__dot--${f.tone}`"></span>
             <div>
               <strong>{{ f.text }}</strong>
@@ -206,7 +237,7 @@
           </li>
         </ul>
         <p v-else-if="data.feed.length" class="feed__empty">近期动态均为虚拟/测试账号，取消勾选即可查看。</p>
-        <p v-else class="feed__empty">还没有动态</p>
+        <p v-else class="feed__empty">近 24h 还没有动态</p>
       </section>
     </div>
   </div>
@@ -220,7 +251,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { overviewHealth, investigateAgent, intent, dataSource } from './store';
 import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading } from './live';
 import { TERMS } from './terms';
@@ -256,7 +287,7 @@ interface BriefData {
   totalCalls: number;
   totalIssues: number;
   peak: string;
-  feed: { text: string; time: string; tone: Tone }[];
+  feed: { text: string; time: string; tone: Tone; ts?: number; errorCategory?: string; agentId?: string }[];
 }
 
 // 结论来自 store（由 spans 推导，与日志/瀑布/Skill 同源）；funnel/pulse/feed 为演示数据
@@ -397,12 +428,10 @@ const trendSum = computed(() => {
   const trend = data.value?.trend || [];
   const total = trend.reduce((a, d) => a + d.total, 0);
   const completed = trend.reduce((a, d) => a + d.completed, 0);
-  return {
-    total,
-    completed,
-    rate: total > 0 ? `${Math.round((completed / total) * 100)}%` : '—'
-  };
+  return { total, completed };
 });
+// 归因合计（调用级，与 failed7d 同一计数源，恒等校验展示）
+const failuresSum7d = computed(() => (data.value?.usage.failures7d || []).reduce((a, f) => a + f.count, 0));
 
 // 漏斗相邻段速率说明（× 为 1:N 关系而非转化率）
 const rateHint = (i: number) => {
@@ -431,17 +460,75 @@ function jump(scene: string) {
   intent.agentFilter = ''
   intent.statusFilter = ''
   intent.traceId = ''
+  intent.errorCategory = ''
+  intent.timeRange = ''
   intent.scene = scene
 }
+
+/* R5：失败归因/异常流 → 执行日志（带错误类别 + 状态 + 近 7 天时间窗筛选）。
+   超时类别走「仅超时」态，其余走「仅失败」态（后端 status 语义一致） */
+function jumpToFailures(category: string) {
+  intent.errorCategory = category || ''
+  intent.statusFilter = category === 'provider_timeout' ? 'warn' : 'err'
+  intent.timeRange = 'week'
+  intent.agentFilter = ''
+  intent.traceId = ''
+  intent.sessionId = ''
+  intent.scene = 'execution-logs'
+}
+
+/* 异常流条目点击 → 带类别跳执行日志（普通事件不可点） */
+function feedJump(f: { tone: string; errorCategory?: string }) {
+  if (f.tone !== 'bad' && f.tone !== 'warn') return
+  jumpToFailures(f.errorCategory || '')
+}
+
+/* R6：10s 自动刷新（对齐 ExecLogs 模式：document.hidden 守卫 + 离开页面清除；
+   保留 hideTestAccounts 等当前状态不重置；后端 45s 统计缓存兜底限频） */
+let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
+const lastUpdated = ref('')
+function startAutoRefresh() {
+  stopAutoRefresh()
+  if (dataSource.value !== 'live') return
+  autoRefreshTimer = setInterval(() => {
+    if (document.hidden) return
+    void refreshLiveOverview()
+    lastUpdated.value = new Date().toTimeString().slice(0, 5)
+  }, 10000)
+}
+function stopAutoRefresh() {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer)
+    autoRefreshTimer = null
+  }
+}
+onMounted(() => {
+  if (dataSource.value !== 'live') return
+  lastUpdated.value = new Date().toTimeString().slice(0, 5)
+  startAutoRefresh()
+})
+onBeforeUnmount(stopAutoRefresh)
+watch(dataSource, (v) => {
+  if (v === 'live') {
+    lastUpdated.value = new Date().toTimeString().slice(0, 5)
+    startAutoRefresh()
+  } else {
+    stopAutoRefresh()
+  }
+})
 const isTestAccount = (text: string) => {
   const email = String(text || '').replace(/^新用户注册：/, '');
   if (email.startsWith('virtual_') || email.endsWith('@test.local')) return true;
-  return /^(audit_probe_|e2e_|ui_check|motion_review)/.test(email);
+  return /^(audit_probe_|e2e_|ui_check|motion_review|qa_audit_)/.test(email);
 };
-const visibleFeed = computed(() => {
+const testFilteredFeed = computed(() => {
   const feed = data.value?.feed || [];
   return hideTestAccounts.value ? feed.filter((f) => !isTestAccount(f.text)) : feed;
 });
+/* 异常事件置顶（后端已按 bad/warn → ok/muted 排序），普通事件折叠 */
+const anomalyFeed = computed(() => testFilteredFeed.value.filter((f) => f.tone === 'bad' || f.tone === 'warn').slice(0, 6));
+const normalFeed = computed(() => testFilteredFeed.value.filter((f) => f.tone !== 'bad' && f.tone !== 'warn').slice(0, 8));
+const showNormalEvents = ref(false)
 // 开关切换 → 后端按 excludeTest 重新拉取动态。
 // refreshLiveOverview 内部有 liveLoading 守卫（初始加载中会吞请求），这里用
 // pending 标志 + liveLoading 回落 watch 保证开关一定生效（last-wins，只重拉一次）
@@ -825,6 +912,33 @@ watch(liveLoading, (loading) => {
 .feed li strong { font-size: 13px; font-weight: 600; }
 .feed li span { font-size: 11.5px; color: var(--mk-faint); }
 .feed__empty { margin: 0; color: var(--mk-faint); font-size: 13px; }
+/* 新鲜度标注（R6：显示最近一次自动刷新的时间） */
+.feed-fresh { margin-left: 6px; font-size: 10.5px; color: var(--mk-faint); font-weight: 600; letter-spacing: 0.02em; }
+/* 异常事件条目（bad/warn 置顶可点） */
+.feed__item { cursor: pointer; border-radius: 8px; padding: 6px 8px; margin: -6px -8px; transition: background 0.12s ease; }
+.feed__item:hover { background: #f5f8ff; }
+.feed__item--bad:hover { background: #fff2f2; }
+.feed__item--warn:hover { background: #fffaed; }
+.feed__item .feed__body { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.feed__item--bad strong { color: #b91c1c; }
+.feed__item--warn strong { color: #b45309; }
+.feed__go { font-style: normal; font-size: 11px; font-weight: 700; color: var(--mk-blue); flex-shrink: 0; align-self: center; opacity: 0; transition: opacity 0.12s ease; }
+.feed__item:hover .feed__go { opacity: 1; }
+/* 普通事件折叠开关 */
+.feed__toggle {
+  align-self: flex-start;
+  padding: 4px 12px;
+  border: 1px dashed var(--mk-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mk-muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.12s ease;
+}
+.feed__toggle:hover { border-color: rgba(44, 99, 208, 0.45); color: var(--mk-blue); background: #f5f8ff; }
 
 @media (max-width: 1280px) and (min-width: 1001px) {
   /* 中等宽度：三列过渡为两列，KPI 与动态卡占整行 */

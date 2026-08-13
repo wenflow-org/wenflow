@@ -26,6 +26,15 @@
             {{ p.label }}
           </button>
         </div>
+        <button
+          v-if="isLive && errorCategory"
+          type="button"
+          class="log-cat"
+          :title="`仅看 ${errorCategory} 类别失败（含空类别启发式归并）`"
+          @click="errorCategory = ''; applyServerQuery()"
+        >
+          类别「{{ errorCategory }}」×
+        </button>
         <input
           v-if="isLive"
           v-model="keyword"
@@ -246,6 +255,7 @@ const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('week')
 const keyword = ref('')
 const traceId = ref('')
 const sessionId = ref('')
+const errorCategory = ref('')
 const autoRefresh = ref(false)
 const advOpen = ref(false)
 
@@ -270,7 +280,7 @@ function promptOf(log: { traceId: string; agent: string }): PromptMetaRow | unde
   return list.find((p) => p.agentId === agentId || p.agentId.replace(/^skill:/, '') === log.agent)
 }
 
-/* live 模式：服务端筛选（时间范围/关键词/状态/节点/traceId/sessionId）。
+/* live 模式：服务端筛选（时间范围/关键词/状态/节点/traceId/sessionId/错误类别）。
    reloadLiveSpans 写入独立的 liveLogsFiltered（不污染全局 liveSpans）；
    并发与 last-wins 由 live.ts 串行化保证（loading 反馈见 liveLogsLoading） */
 function currentQuery(): SpanQuery {
@@ -281,7 +291,8 @@ function currentQuery(): SpanQuery {
     status,
     agentId: agentFilter.value || undefined,
     traceId: traceId.value.trim() || undefined,
-    sessionId: sessionId.value.trim() || undefined
+    sessionId: sessionId.value.trim() || undefined,
+    errorCategory: errorCategory.value || undefined
   }
 }
 
@@ -396,12 +407,15 @@ watch(openId, async (id) => {
   }
 })
 
-// 从排查意图进入时应用过滤
+// 从排查意图进入时应用过滤（含失败归因跳转的错误类别与时间范围）
 watch(
-  () => [intent.agentFilter, intent.statusFilter],
+  () => [intent.agentFilter, intent.statusFilter, intent.errorCategory, intent.timeRange],
   () => {
     agentFilter.value = intent.agentFilter
     statusFilter.value = intent.statusFilter
+    if (intent.errorCategory) errorCategory.value = intent.errorCategory
+    const TR = ['today', 'yesterday', 'week', 'month', 'all'] as const
+    if ((TR as readonly string[]).includes(intent.timeRange)) timeRange.value = intent.timeRange as typeof timeRange.value
   },
   { immediate: true }
 )
@@ -422,7 +436,7 @@ const filtered = computed(() =>
 const { shown: demoShown, canMore: demoCanMore, loadMore: demoLoadMore } = useLoadMore(filtered, 30)
 const shown = computed(() => (isLive.value ? filtered.value : demoShown.value))
 
-const isFiltered = computed(() => !!(agentFilter.value || statusFilter.value || keyword.value.trim() || traceId.value.trim() || sessionId.value.trim()))
+const isFiltered = computed(() => !!(agentFilter.value || statusFilter.value || keyword.value.trim() || traceId.value.trim() || sessionId.value.trim() || errorCategory.value))
 /* traceId/sessionId 服务端查询未命中时的空态提示（与 TraceWaterfall 的 wf-notice「样本截断」兜底互补：
    此处是服务端精确查询的直接未命中） */
 const traceMiss = computed(() => {
@@ -457,6 +471,7 @@ const filterLabel = computed(() =>
     isLive.value && timeRange.value !== 'week' ? timeRangeLabels[timeRange.value] : '',
     agentFilter.value || '',
     statusFilter.value === 'err' ? '仅失败' : statusFilter.value === 'warn' ? '仅超时' : statusFilter.value === 'ok' ? '仅成功' : '',
+    errorCategory.value ? `类别「${errorCategory.value}」` : '',
     keyword.value.trim() ? `关键词「${keyword.value.trim()}」` : '',
     traceId.value.trim() ? `trace「${traceId.value.trim()}」` : '',
     sessionId.value.trim() ? `会话「${sessionId.value.trim()}」` : ''
@@ -477,6 +492,7 @@ function clearFilter() {
   keyword.value = ''
   traceId.value = ''
   sessionId.value = ''
+  errorCategory.value = ''
   clearInvestigation()
   /* 服务端筛选下必须重查：仅清本地值不会刷新列表（traceId/sessionId 不在 watch 内，
      避免输入即查询；状态/节点变化由 watch 触发，此处兜底全清场景） */
@@ -593,6 +609,24 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
 .log-adv--on { border-color: rgba(44, 99, 208, 0.5); color: var(--mk-blue); background: #eef5ff; }
 .log-adv__caret { font-style: normal; font-size: 10px; transition: transform 0.15s ease; }
 .log-adv__caret.is-open { transform: rotate(180deg); }
+/* 错误类别筛选 chip（失败归因/异常流跳转进入） */
+.log-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  border-radius: 999px;
+  background: #fff1f1;
+  color: #b91c1c;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: 0.12s ease;
+}
+.log-cat:hover { background: #fee2e2; border-color: rgba(220, 38, 38, 0.55); }
 .log-advpanel {
   flex-basis: 100%;
   display: flex;

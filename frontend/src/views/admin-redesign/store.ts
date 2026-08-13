@@ -202,6 +202,10 @@ export interface InvestigationIntent {
   sessionId: string
   /** 页面级快捷动作（命令面板「新建用户」等直达并触发页面动作） */
   quickAction: string
+  /** 失败归因/异常流跳转：执行日志错误类别筛选（'' = 不过滤） */
+  errorCategory: string
+  /** 执行日志时间范围快捷筛选（'' = 页面默认） */
+  timeRange: string
 }
 
 export const intent = reactive<InvestigationIntent>({
@@ -211,7 +215,9 @@ export const intent = reactive<InvestigationIntent>({
   traceId: '',
   skillDrawerId: '',
   sessionId: '',
-  quickAction: ''
+  quickAction: '',
+  errorCategory: '',
+  timeRange: ''
 })
 
 /** 命令面板 → 页面快捷动作（如打开新建弹窗），页面消费后需清空 */
@@ -225,6 +231,8 @@ export function investigateAgent(agentId: string) {
   intent.agentFilter = agentId
   intent.statusFilter = 'err'
   intent.traceId = ''
+  intent.errorCategory = ''
+  intent.timeRange = ''
   intent.scene = 'execution-logs'
 }
 
@@ -259,6 +267,8 @@ export function clearInvestigation() {
   intent.statusFilter = ''
   intent.traceId = ''
   intent.sessionId = ''
+  intent.errorCategory = ''
+  intent.timeRange = ''
 }
 
 /* ---------- 二级页面（drill-in） ---------- */

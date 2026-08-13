@@ -65,7 +65,9 @@ const AGENT_RELATIONS = getAgentRelations();
 
 /**
  * 生产统计用户过滤：排除虚拟学习者与测试/审计账号（合成流量），避免污染真实指标。
- * 测试账号按命名模式识别（e2e_/audit_probe_/ui_check/motion_review/@test.local/virtual_）。
+ * 测试账号按命名模式识别（e2e_/audit_probe_/ui_check/motion_review/qa_audit_/@test.local/virtual_）。
+ * 注：utils/test-account.ts 是本地未入库的单点（gitignore test-*.ts），此处内联等价条件，
+ * 保证统计口径在干净检出下可编译。
  */
 const REAL_USER_WHERE = {
   isVirtualLearner: false,
@@ -77,6 +79,7 @@ const REAL_USER_WHERE = {
     { email: { startsWith: 'audit_probe_' } },
     { email: { startsWith: 'ui_check' } },
     { email: { startsWith: 'motion_review' } },
+    { email: { startsWith: 'qa_audit_' } },
   ],
 };
 
@@ -97,6 +100,83 @@ const isTimeoutLog = (log: { errorCode: string | null; errorCategory?: string | 
   return errorCategory.includes('timeout')
     || timeoutErrorSignals.some(signal => errorCode.includes(signal));
 };
+
+/**
+ * 失败归因分类（调用级，agent_call_logs）：
+ * - 现代 gateway 行带 errorCategory 列 → 直接采用；
+ * - 老平台/skill 行 errorCategory 为空 → 由 errorCode/error 文本启发式归并
+ *   （CALLER_ABORTED/取消 → caller_abort；超时信号 → provider_timeout；限流信号 → rate_limit；其余 → internal）。
+ * 与 buildErrorCategoryWhere（/agents/logs 筛选）同源，保证「归因计数 ↔ 日志列表」闭环一致。
+ */
+export function classifyFailureCategory(row: {
+  errorCategory: string | null;
+  errorCode: string | null;
+  error: string | null;
+}): string {
+  const category = String(row.errorCategory || '').toLowerCase();
+  if (category) return category;
+  const code = String(row.errorCode || '').toUpperCase();
+  const text = String(row.error || '').toLowerCase();
+  if (code.includes('CALLER_ABORTED') || text.includes('cancel')) return 'caller_abort';
+  if (isTimeoutLog(row) || timeoutErrorSignals.some(signal => text.includes(signal))) return 'provider_timeout';
+  if (code.includes('RATE') || code.includes('429') || text.includes('rate limit') || text.includes('throttl')) {
+    return 'rate_limit';
+  }
+  return 'internal';
+}
+
+/** 限流信号条件（classifyFailureCategory 的 rate_limit 分支镜像） */
+const RATE_LIMIT_CONDITION = {
+  OR: [
+    { errorCode: { contains: 'RATE' } },
+    { errorCode: { contains: '429' } },
+    { error: { contains: 'rate limit' } },
+  ],
+};
+
+/** 取消信号条件（classifyFailureCategory 的 caller_abort 分支镜像） */
+const CALLER_ABORT_CONDITION = {
+  OR: [
+    { errorCode: { contains: 'CALLER_ABORTED' } },
+    { error: { contains: 'cancel' } },
+  ],
+};
+
+/** 超时信号条件（与 /agents/logs 状态筛选同构；provider_timeout 分支镜像） */
+const TIMEOUT_CONDITION = {
+  OR: [
+    { errorCode: { contains: 'TIMEOUT' } },
+    ...timeoutErrorSignals.map(signal => ({ error: { contains: signal } })),
+  ],
+};
+
+/**
+ * /agents/logs 的 errorCategory 筛选条件：列值精确匹配 + errorCategory 为空行的
+ * 启发式归并（与 classifyFailureCategory 同口径，纯函数便于单测）。
+ * 未知类别 → 仅精确匹配。
+ */
+export function buildErrorCategoryWhere(category: string): { OR: Record<string, unknown>[] } | null {
+  const cat = String(category || '').toLowerCase();
+  if (!cat) return null;
+  const extra: Record<string, unknown>[] = [];
+  if (cat === 'caller_abort') {
+    extra.push({ errorCategory: null, ...CALLER_ABORT_CONDITION });
+  } else if (cat === 'provider_timeout') {
+    extra.push({ errorCategory: null, ...TIMEOUT_CONDITION });
+  } else if (cat === 'rate_limit') {
+    extra.push({ errorCategory: null, ...RATE_LIMIT_CONDITION });
+  } else if (cat === 'internal') {
+    extra.push({
+      errorCategory: null,
+      AND: [
+        { NOT: CALLER_ABORT_CONDITION },
+        { NOT: TIMEOUT_CONDITION },
+        { NOT: RATE_LIMIT_CONDITION },
+      ],
+    });
+  }
+  return { OR: [{ errorCategory: cat }, ...extra] };
+}
 
 const inferRuntimeRole = (agentId: string, type?: string | null) => {
   const typeText = String(type || '').toLowerCase();
@@ -488,6 +568,11 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
 const OVERVIEW_CACHE_TTL_MS = 45 * 1000;
 const overviewStatsCache = new Map<string, { payload: unknown; cachedAt: number }>();
 
+/** 测试辅助：清空概览/动态缓存（45s TTL 会跨用例复用，污染路由级断言） */
+export function clearOverviewStatsCache(): void {
+  overviewStatsCache.clear();
+}
+
 export interface HourlyTrendBucket {
   time: string;
   label: string;
@@ -605,7 +690,7 @@ async function computeOverviewStats(): Promise<unknown> {
       usageTokens7d,
       usageCalls7d,
       usageModels7d,
-      usageFailures7d
+      usageFailuresRows
     ] = await Promise.all([
       // 总用户数（不含虚拟学习者）
       prisma.users.count({
@@ -808,15 +893,16 @@ async function computeOverviewStats(): Promise<unknown> {
         _count: true,
       }),
 
-      // 近 7 天失败归因（errorCategory 分布）
-      prisma.llm_execution_attempts.groupBy({
-        by: ['errorCategory'],
+      // 近 7 天失败归因（调用级：与「失败 N」同表同口径，分类见 classifyFailureCategory，
+      // 老行 errorCategory 为空时按 errorCode/error 启发式归并，保证归因之和恒等于失败总数）
+      prisma.agent_call_logs.findMany({
         where: {
-          startedAt: { gte: new Date(Date.now() - 7 * 86400000) },
-          errorCategory: { not: null },
+          ...businessExecutionWhere,
+          calledAt: { gte: new Date(Date.now() - 7 * 86400000) },
           success: false,
         },
-        _count: true,
+        orderBy: { calledAt: 'desc' },
+        select: { errorCategory: true, errorCode: true, error: true },
       })
     ]);
 
@@ -879,7 +965,8 @@ async function computeOverviewStats(): Promise<unknown> {
     /* 近 7 天 LLM 用量与失败归因 */
     const sum7d = (usageTokens7d as { _sum?: { totalTokens?: number | null } })._sum || {};
     const calls7dTotal = usageCalls7d.reduce((acc, g) => acc + g._count, 0);
-    const calls7dFailed = usageCalls7d.find(g => g.success === false)?._count || 0;
+    // 失败数 = 失败归因行数（同一查询源，二者恒等，消除「失败 234 vs 归因 168」双口径）
+    const calls7dFailed = usageFailuresRows.length;
     const models7d = (usageModels7d || [])
       .filter(g => g.resolvedModel && g.resolvedModel !== 'null')
       .map(g => ({
@@ -889,9 +976,13 @@ async function computeOverviewStats(): Promise<unknown> {
       }))
       .sort((a, b) => b.tokens - a.tokens)
       .slice(0, 5);
-    const failures7d = (usageFailures7d || [])
-      .filter(g => g.errorCategory)
-      .map(g => ({ category: String(g.errorCategory), count: g._count }))
+    const failureCategoryCounts = new Map<string, number>();
+    for (const row of usageFailuresRows) {
+      const cat = classifyFailureCategory(row);
+      failureCategoryCounts.set(cat, (failureCategoryCounts.get(cat) || 0) + 1);
+    }
+    const failures7d = [...failureCategoryCounts.entries()]
+      .map(([category, count]) => ({ category, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
     const usage = {
@@ -1172,7 +1263,8 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       keyword,
       timeRange,
       startTime,
-      endTime
+      endTime,
+      errorCategory
     } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
@@ -1248,6 +1340,13 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         where.AND.push({ success: false });
         where.AND.push(buildTimeoutCondition());
       }
+    }
+
+    // 失败归因/异常流跳转：错误类别筛选（列值精确匹配 + 空类别行的启发式归并，
+    // 与总览失败归因 classifyFailureCategory 同口径，保证计数 ↔ 列表一致）
+    if (errorCategory) {
+      const categoryWhere = buildErrorCategoryWhere(String(errorCategory));
+      if (categoryWhere) where.AND.push(categoryWhere);
     }
 
     // 时间范围筛选。精确时间优先，快捷范围作为默认筛选。
@@ -1848,12 +1947,17 @@ router.get('/activity', async (req: Request, res: Response) => {
     const ACTIVITY_USER_WHERE = excludeTest
       ? REAL_USER_WHERE
       : { isVirtualLearner: false };
+    // 动态时间窗：仅近 24h（前端卡片标注「近 24h」；7 天前旧条目不再混入）
+    const activityWindowStart = new Date(Date.now() - 24 * 3600000);
 
     // 最近的学习会话
     const recentSessions = await prisma.teaching_sessions.findMany({
       take: limit,
       orderBy: { startTime: 'desc' },
-      where: { users: ACTIVITY_USER_WHERE },
+      where: {
+        users: ACTIVITY_USER_WHERE,
+        startTime: { gte: activityWindowStart },
+      },
       include: {
         users: {
           select: { id: true, email: true, name: true }
@@ -1874,7 +1978,10 @@ router.get('/activity', async (req: Request, res: Response) => {
     const recentUsers = await prisma.users.findMany({
       take: 20,
       orderBy: { createdAt: 'desc' },
-      where: excludeTest ? REAL_USER_WHERE : { deletedAt: null },
+      where: {
+        ...(excludeTest ? REAL_USER_WHERE : { deletedAt: null }),
+        createdAt: { gte: activityWindowStart },
+      },
       select: {
         id: true,
         email: true,
@@ -1889,6 +1996,7 @@ router.get('/activity', async (req: Request, res: Response) => {
       where: {
         status: 'completed',
         users: ACTIVITY_USER_WHERE,
+        completedAt: { gte: activityWindowStart },
       },
       orderBy: { completedAt: 'desc' },
       include: {
@@ -1896,6 +2004,23 @@ router.get('/activity', async (req: Request, res: Response) => {
           select: { id: true, email: true, name: true }
         }
       }
+    });
+
+    // 近 24h 失败事件（异常流：动态 feed 的 bad/warn 事件源，含类别/错误码供跳转筛选）
+    const recentFailures = await prisma.agent_call_logs.findMany({
+      take: 10,
+      where: { calledAt: { gte: activityWindowStart }, success: false },
+      orderBy: { calledAt: 'desc' },
+      select: {
+        id: true,
+        agentId: true,
+        executionLayer: true,
+        errorCode: true,
+        errorCategory: true,
+        error: true,
+        calledAt: true,
+        statusCode: true,
+      },
     });
 
     const [recentProjectionGrantUses, activeProjectionGrantCount] = await Promise.all([
@@ -1952,6 +2077,21 @@ router.get('/activity', async (req: Request, res: Response) => {
         })),
         recentUsers,
         completedTasks,
+        recentFailures: recentFailures.map((log) => ({
+          id: log.id,
+          agentId: log.agentId,
+          executionLayer: log.executionLayer,
+          errorCode: log.errorCode,
+          // 归一到归因同款类别（空类别行启发式归并），保证跳转筛选计数一致
+          errorCategory: classifyFailureCategory({
+            errorCategory: log.errorCategory,
+            errorCode: log.errorCode,
+            error: log.error,
+          }),
+          error: log.error,
+          calledAt: log.calledAt,
+          statusCode: log.statusCode,
+        })),
         activeProjectionGrantCount,
         recentProjectionGrantUses: recentProjectionGrantUses.map((grant) => ({
           id: grant.id,
