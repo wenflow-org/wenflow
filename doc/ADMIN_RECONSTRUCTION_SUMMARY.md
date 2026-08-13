@@ -87,3 +87,9 @@ SessionCockpit 适配真实会话（需后端同构端点）、教学会话进�
 3ba023a 教学会话进度列（后端 milestones/subtasks 推导 progress，批量聚合防 N+1）+ 目标对话四步过程点条与时间线（statusText 单源）
 c8341f6 真实教学会话接入 SessionCockpit 双模式（新映射端点 session-console：goal/path/teaching/evaluation/timeline 五源同构、黑盒字段 null 前端隐藏、只读降级空态）+ 阶段条副标/三流统一时间线/wrapup 字段卡（顺带修复 Date 本地时间字典序 bug）
 验证：后端 1386 / 前端 225 测试全绿；遗留清单归零（唯一后续项：真实课堂跨课节回看需后端逐课节端点，已记录）
+
+## 列宽专项（2026-08-13 追加）
+ADMIN_COLUMN_WIDTH_SPEC（内容类型→宽度规范：每表 1 弹性列 minmax(180px,1fr) 上限 720px、ID 128/time 72/徽章 64/数字 48-108/操作 72-120、固定宽取最大枚举防抖动、单行 ellipsis+title 截断标准、4K 等比、窄屏横滚）
+ADMIN_COLUMN_WIDTH_AUDIT（实测：Trace 列 30/30 折行、860 断点级联 Bug、审计三列过宽、dense 行高五档、auto 表 1920 等比放大 42%、4K 白区 1207px）
+6b754fa 实施：--mk-col-* 12 token + mk-col--* 11 工具类 + 4K 三档集中覆盖（删 6 处重复）+ 截断收敛 + grid 三表变量化；实测 Trace 0 折行 39.8px、窄屏 747=747、消息列 720px 上限、审计 459→128px、dense 五档→单档、users 166→110px、Skills 396→380px 恒定
+未做（记录）：Skills 1920 等比缩放（table-layout:fixed 规范不引入）、users 操作列显式宽（风险>收益）、窄屏 861-999 基础模板（既有行为）
