@@ -39,7 +39,7 @@
 
     <!-- 按管理员分组 -->
     <div v-else-if="groups.length" class="ss-body">
-      <div v-for="g in groups" :key="g.adminId" class="ss-group">
+      <div v-for="{ g, active } in visibleGroups" :key="g.adminId" class="ss-group">
         <div class="ss-group__head">
           <div class="ss-group__who">
             <strong>{{ g.adminName }}</strong>
@@ -65,7 +65,7 @@
             <span class="ss-head__ops">操作</span>
           </div>
           <div
-            v-for="s in g.active"
+            v-for="s in active"
             :key="s.id"
             class="ss-row"
             :class="{ 'ss-row--current': s.id === currentId }"
@@ -125,6 +125,11 @@
           </details>
         </div>
       </div>
+
+      <!-- 分页：活跃会话每批 15 行（对齐全站 useLoadMore 体系） -->
+      <div v-if="canMoreActive" class="ss-more">
+        <button type="button" class="mk-link" @click="loadMoreActive">加载更多（已显示 {{ shownActive.length }} / {{ activeFlat.length }} 个活跃会话）</button>
+      </div>
     </div>
 
     <!-- 空态 -->
@@ -140,6 +145,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { adminAuthApi, adminSessionsApi } from '@/api/adminApi'
 import { errMsg } from './live'
+import { useLoadMore } from './useLoadMore'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -235,6 +241,18 @@ const groups = computed<SessionGroup[]>(() => {
       revokedCount: list.filter((s) => statusOf(s) === 'revoked').length,
     }
   })
+})
+
+/* 分页（审计 L1）：活跃会话全量平铺 → 每批 15 行；历史组保持 details 折叠不受分页影响 */
+const activeFlat = computed(() => groups.value.flatMap((g) => g.active))
+const { shown: shownActive, canMore: canMoreActive, loadMore: loadMoreActive } = useLoadMore(activeFlat, 15)
+
+/** 分页后的可见分组：表头统计 / 下线全部保持全量口径（g 为完整分组），行渲染只取当批活跃会话 */
+const visibleGroups = computed(() => {
+  const shown = new Set(shownActive.value.map((s) => s.id))
+  return groups.value
+    .map((g) => ({ g, active: g.active.filter((s) => shown.has(s.id)) }))
+    .filter((x) => x.active.length || x.g.historical.length)
 })
 
 async function applyFilters() {
@@ -394,6 +412,13 @@ onMounted(async () => {
 .ss-error__card span { font-size: 12.5px; color: var(--mk-muted); word-break: break-all; }
 
 .ss-body { display: grid; gap: 14px; }
+
+.ss-more {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 12px;
+  border-top: 1px dashed var(--mk-line);
+}
 
 .ss-group {
   border: 1px solid var(--mk-line);

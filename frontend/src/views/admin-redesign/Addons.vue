@@ -11,6 +11,9 @@
       <span v-if="isLive" class="mk-status__meta">MCP 服务 {{ mcpTools.length }}</span>
     </div>
 
+    <!-- ① 外挂能力 + ② MCP 服务：行数少时并栏（审计 E3），数据增长后回到单列全宽 -->
+    <div class="ac-cards" :class="{ 'ac-cards--side': sideBySide }">
+
     <!-- ① 外挂能力 -->
     <div class="mk-card">
       <div class="mk-card__head">
@@ -58,7 +61,7 @@
           </tbody>
         </table>
 
-        <div v-if="!capabilityRows.length && !loading" class="mk-empty">
+        <div v-if="!capabilityRows.length && !loading" class="mk-empty mk-empty--min">
           <span class="mk-empty__icon" aria-hidden="true">⌥</span>
           <strong>暂无外挂能力</strong>
           <span>后续接入生图、网页搜索等能力后会在这里列出，并进行模型与超时配置。</span>
@@ -103,10 +106,12 @@
           </div>
         </div>
       </div>
-      <div v-else class="mk-empty mk-empty--compact">
+      <div v-else class="mk-empty mk-empty--min">
         <strong>{{ mcpLoading ? '加载中…' : mcpFailed ? 'MCP 服务加载失败' : '暂无 MCP 服务' }}</strong>
         <span v-if="!mcpLoading && !mcpFailed">MCP 工具（如网页搜索、生图）在此登记，供外挂能力调用。</span>
       </div>
+    </div>
+
     </div>
 
     <!-- MCP 服务编辑弹窗 -->
@@ -251,6 +256,9 @@ const capabilityRows = computed<CapabilityRow[]>(() => {
 const mcpCount = computed(() => capabilityRows.value.filter((r) => r.type === 'mcp').length)
 const capabilityCount = computed(() => capabilityRows.value.filter((r) => r.type === 'capability').length)
 const readyCount = computed(() => capabilityRows.value.filter((r) => r.ready).length)
+
+/** E3 并栏：两张卡片行数都少时 1fr 1fr 并排利用宽幅，数据增长后回单列全宽 */
+const sideBySide = computed(() => capabilityRows.value.length <= 5 && mcpTools.value.length <= 5)
 
 /* ---------- ② MCP 服务（平台工具） ---------- */
 interface McpTool {
@@ -441,6 +449,17 @@ function goConfig() {
 
 <style scoped>
 .mono { font-family: var(--mk-mono); font-size: 12px; }
+
+/* E3 并栏容器：默认单列全宽；内容少时 1fr 1fr 并排 */
+.ac-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+@media (min-width: 1100px) {
+  .ac-cards--side { grid-template-columns: 1fr 1fr; }
+}
 
 /* 能力配置加载失败错误条 */
 .ac-error {

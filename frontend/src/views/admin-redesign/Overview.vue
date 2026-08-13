@@ -1,5 +1,5 @@
 <template>
-  <div v-if="data" class="brief">
+  <div v-if="data" class="mk-page">
     <!-- 结论先行：今日简报 -->
     <header class="brief-head" :class="`brief-head--${data.tone}`">
       <div class="brief-head__verdict">
@@ -210,12 +210,12 @@
       </section>
     </div>
   </div>
-  <div v-else-if="liveLoading" class="brief brief--loading">
+  <div v-else-if="liveLoading" class="mk-empty mk-empty--min">
     <p class="brief-card__note"><span class="mk-spinner"></span> 正在加载真实数据…</p>
   </div>
-  <div v-else class="brief brief--empty">
+  <div v-else class="mk-empty mk-empty--min">
     <p class="brief-card__note">真实数据暂不可用，请刷新或稍后重试。</p>
-    <button type="button" class="brief-empty__retry" @click="retryOverview">重试</button>
+    <button type="button" class="mk-empty__action" @click="retryOverview">重试</button>
   </div>
 </template>
 
@@ -464,44 +464,8 @@ watch(liveLoading, (loading) => {
 </script>
 
 <style scoped>
-.brief {
-  padding: 20px;
-  display: grid;
-  gap: 16px;
-  background: var(--mk-bg, #f7f8fa);
-  font-size: 14px;
-  color: var(--mk-ink);
-}
+/* 页面容器已统一走 .mk-page（shared.css）：容器级 padding/边距/超大屏 max-width 封顶随全站规范 */
 /* live 数据不可用时的空态 */
-.brief--empty {
-  min-height: 50vh;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 12px;
-  text-align: center;
-}
-.brief--loading {
-  min-height: 50vh;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 12px;
-  text-align: center;
-}
-.brief-empty__retry {
-  padding: 6px 18px;
-  border: 1px solid var(--mk-line);
-  border-radius: 8px;
-  background: var(--mk-surface);
-  color: var(--mk-muted);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: border-color 0.12s ease, color 0.12s ease;
-}
-.brief-empty__retry:hover { border-color: rgba(44, 99, 208, 0.45); color: var(--mk-blue); }
 
 /* 简报头 */
 .brief-head {
@@ -869,9 +833,8 @@ watch(liveLoading, (loading) => {
   .brief-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* 4K：内容宽度兜底 + KPI 字号放大 */
+/* 4K：KPI 字号放大（容器已随全站 mk-page 全宽，不再做 max-width 封顶） */
 @media (min-width: 2000px) {
-  .brief { max-width: 1900px; margin: 0 auto; padding: 26px; }
   .kpi__label { font-size: 13px; }
   .kpi__value { font-size: 26px; }
   .kpi__hint { font-size: 13px; }
@@ -911,7 +874,6 @@ watch(liveLoading, (loading) => {
   .pulse__axis { font-size: 11px; }
 }
 @media (min-width: 2800px) {
-  .brief { max-width: 2300px; padding: 32px; }
   .kpi__label { font-size: 15.5px; }
   .kpi__value { font-size: 30px; }
   .kpi__hint { font-size: 15.5px; }
@@ -952,7 +914,6 @@ watch(liveLoading, (loading) => {
 }
 /* 3600+（zoom 1.3 档）：KPI/卡片延续 2800 放大节奏（约 1.17×），并补齐 2000/2800 未覆盖的卡片内文字（feed/pulse/trend/wq/usage/funnel） */
 @media (min-width: 3600px) {
-  .brief { max-width: 2700px; padding: 38px; }
   .kpi__label { font-size: 18px; }
   .kpi__value { font-size: 35px; }
   .kpi__hint { font-size: 18px; }

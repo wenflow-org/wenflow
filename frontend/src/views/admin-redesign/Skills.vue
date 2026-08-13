@@ -460,7 +460,7 @@ const recFlat = computed<RecEntry[]>(() => {
   }
   return out
 })
-const { shown: recShown, canMore: recCanMore, loadMore: recLoadMore } = useLoadMore(recFlat, 10)
+const { shown: recShown, canMore: recCanMore, loadMore: recLoadMore } = useLoadMore(recFlat, 15)
 
 /** 分页切片跨组时自动补组头（组头仅在当前页首现时渲染，重复组头 = 分页边界标识，数据不丢） */
 const recPageRows = computed<RecEntry[]>(() => {

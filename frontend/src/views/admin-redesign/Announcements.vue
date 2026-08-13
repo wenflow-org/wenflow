@@ -64,9 +64,10 @@
         <button type="button" class="mk-empty__action" :disabled="liveRetrying" @click="retryLive">{{ liveRetrying ? '重试中…' : '重试' }}</button>
       </div>
 
-      <div v-else class="mk-empty">
+      <div v-else class="mk-empty mk-empty--min">
         <strong>还没有公告</strong>
         <span>维护通知、功能发布、政策变更——第一条公告从「新建公告」开始。</span>
+        <button type="button" class="mk-empty__action" @click="openCreate">新建公告</button>
       </div>
     </div>
 

@@ -346,7 +346,7 @@ function clearFilters() {
 }
 
 /* 长列表分批渲染：每批 20 行 */
-const { shown, canMore, loadMore } = useLoadMore(filtered, 20)
+const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
 
 async function load() {
   if (!isLive.value || loading.value) return

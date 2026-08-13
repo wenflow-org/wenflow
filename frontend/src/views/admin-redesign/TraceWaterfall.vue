@@ -188,7 +188,7 @@
       </div>
     </div>
 
-    <div v-else class="mk-empty">
+    <div v-else class="mk-empty mk-empty--min">
       <template v-if="viewMode === 'session' && !sessionIds.length">
         <strong>暂无会话数据</strong>
         <span>教学 / 目标对话等业务调用产生后，这里按 sessionId 自动跨链路归组。</span>

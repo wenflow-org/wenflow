@@ -105,6 +105,10 @@
 .mk-table tbody tr { transition: background 0.12s; }
 .mk-table tbody tr:hover { background: #f6f9ff; }
 .mk-table--click tbody tr { cursor: pointer; }
+/* dense 档：字段配置类密集表（12/10 列）——原 sfr__table / frt__table 独立类并入（表统一批次，行高 ≈28px） */
+.mk-table--dense th,
+.mk-table--dense td { padding: 8px 12px; }
+.mk-table--dense td { font-size: 12.5px; }
 
 /* 行内 ⋯ 菜单：低频/危险操作收进菜单，避免与高频操作平铺 */
 .mk-menu { position: relative; display: inline-flex; }
@@ -331,6 +335,14 @@
   cursor: pointer;
 }
 .mk-empty__action:hover { background: #dbeafe; }
+
+/* 稀疏页空态平衡（审计 C2/E5）：min-height + 垂直居中，消除「贴顶 + 大片空白」；
+   默认按视口扣除 顶栏52 + 状态条~53 + 页脚~40 + 页面内边距与间距 ≈ 230px 计算，
+   页面可覆盖 --mk-empty-min-h 调整 */
+.mk-empty--min {
+  min-height: var(--mk-empty-min-h, calc(100dvh - 230px));
+  place-content: center;
+}
 
 /* ----- 弹窗（表单/编辑） ----- */
 .mk-modal {
@@ -587,6 +599,9 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   .mk-status__action { font-size: 13.5px; padding: 5px 12px; }
   .mk-table th { font-size: 12.5px; padding: 11px 16px; }
   .mk-table td { font-size: 13.5px; padding: 12px 16px; }
+  /* dense 档 4K 镜像（原 frt__table 档位） */
+  .mk-table--dense th { font-size: 12.5px; padding: 10px 15px; }
+  .mk-table--dense td { font-size: 14px; padding: 10px 15px; }
   .mk-cell-sub { font-size: 12.5px; }
   .mk-badge { font-size: 13px; padding: 3px 10px; }
   .mk-badge--warn { padding: 2px 9px; }
@@ -628,6 +643,9 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   .mk-status__action { font-size: 16px; padding: 6px 14px; }
   .mk-table th { font-size: 15px; padding: 13px 20px; }
   .mk-table td { font-size: 16px; padding: 14px 20px; }
+  /* dense 档 4K 镜像（原 frt__table 档位） */
+  .mk-table--dense th { font-size: 15px; padding: 12px 19px; }
+  .mk-table--dense td { font-size: 16.5px; padding: 12px 19px; }
   .mk-cell-sub { font-size: 15px; }
   .mk-badge { font-size: 15.5px; padding: 4px 12px; }
   .mk-badge--warn { padding: 3px 11px; }
