@@ -254,3 +254,4 @@ page-*.md
 
 *.db-journal
 !doc/ADMIN_RECONSTRUCTION_SUMMARY.md
+!doc/archive/README.md
