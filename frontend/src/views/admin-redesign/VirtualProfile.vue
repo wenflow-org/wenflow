@@ -21,6 +21,14 @@
         <h1 class="vp-top__name">{{ d.name }}</h1>
         <span v-if="d.archetype" class="mk-badge mk-badge--info">{{ d.archetype }}</span>
         <span v-if="levelLabel" class="vp-top__level">{{ levelLabel }}</span>
+        <!-- 仿真质量常驻徽章：最近一次黑盒终局评估（裁判 / 保真），未评估显示灰标 -->
+        <span v-if="isLive" class="vp-quality" :class="qualityTone" :title="qualityTitle">
+          <template v-if="qualityReferee || qualityFidelity">
+            {{ qualityReferee ? `质量 ${qualityReferee}` : '质量 —' }}<template v-if="qualityFidelity"> · 保真 {{ qualityFidelity }}</template>
+            <span class="vp-quality__time">{{ qualityTime }}</span>
+          </template>
+          <template v-else>未评估</template>
+        </span>
       </div>
       <div v-if="isLive" class="vp-top__actions">
         <button type="button" class="mk-status__action" @click="quickLearnOpen = true">账号自动学习</button>
@@ -174,14 +182,41 @@
                 <span v-if="!s.runningCount && s.latestRun" class="vp-pipe__latest">{{ formatRunResult(s.latestRun.status) }} · {{ timeAgo(String(s.latestRun.updatedAt || s.latestRun.createdAt || '')) }}</span>
               </div>
 
+              <!-- 会话推进条：Goal → Path → Learn → Wrapup 四段点亮；运行中高亮当前阶段，疑似卡顿标 amber -->
+              <div v-if="progressOf(s).visible" class="vp-progress" :class="{ 'is-stalled': progressOf(s).stalled }" @click.stop>
+                <div class="vp-progress__stages">
+                  <span
+                    v-for="(label, idx) in VLAB_STAGE_LABELS_ARR"
+                    :key="label"
+                    class="vp-progress__stage"
+                    :class="{
+                      'is-on': idx <= progressOf(s).activeIndex,
+                      'is-current': progressOf(s).running && idx === progressOf(s).activeIndex
+                    }"
+                  >
+                    {{ label }}
+                  </span>
+                </div>
+                <span class="vp-progress__meta" :class="{ 'vp-progress__meta--stalled': progressOf(s).stalled }">
+                  <template v-if="progressOf(s).running">
+                    <span class="vp-progress__pulse"></span>
+                    {{ progressOf(s).stageLabel }} 进行中
+                    <template v-if="progressOf(s).stalled">· 疑似卡顿（{{ progressOf(s).idleMins }} 分钟无新事件）</template>
+                  </template>
+                  <template v-else>
+                    最近完成：{{ progressOf(s).stageLabel }}<template v-if="s.latestRun"> · {{ formatRunResult(s.latestRun.status) }}</template>
+                  </template>
+                </span>
+              </div>
+
               <template v-if="selectedStoryId === (s.id || String(i))">
                 <div class="vp-story-runs" @click.stop>
                   <div class="vp-story-runs__head">
-                    <span>运行历史</span>
+                    <span>运行历史 · 最近 {{ runsForStory(s).slice(0, STORY_RUN_RECENT_N).length }} 条摘要</span>
                     <button v-if="s.latestRun?.sessionId" type="button" class="mk-link" @click="openSubPage('session', s.latestRun.sessionId)">最新控制台 →</button>
                   </div>
                   <template v-if="runsForStory(s).length">
-                    <div v-for="(r, ri) in runsForStory(s)" :key="r.sessionId || ri" class="vp-run">
+                    <div v-for="(r, ri) in runsForStory(s).slice(0, STORY_RUN_RECENT_N)" :key="r.sessionId || ri" class="vp-run">
                       <span class="vp-run__dot" :class="`is-${r.tone}`"></span>
                       <div class="vp-run__main">
                         <strong>{{ formatRunStage(r.stage) }}</strong>
@@ -195,6 +230,10 @@
                         <button type="button" class="mk-link" @click="openSubPage('session', r.sessionId)">控制台</button>
                         <button type="button" class="mk-link mk-link--danger" :disabled="sessionBusy" @click="removeSession(r.sessionId)">删除</button>
                       </div>
+                    </div>
+                    <div class="vp-story-runs__more">
+                      <span>共 {{ runsForStory(s).length }} 条；全部运行见「运行」tab</span>
+                      <button type="button" class="mk-link" @click="goRunsTab">查看全部 →</button>
                     </div>
                   </template>
                   <p v-else class="vp-none">这个故事还没有运行记录</p>
@@ -333,7 +372,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import { subPage, closeSubPage, virtualProfiles, openSubPage, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
@@ -343,6 +382,19 @@ import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
+import {
+  sessionStageIndex,
+  stallState,
+  extractQuality,
+  STORY_RUN_RECENT_N,
+  RUNS_TAB_WINDOW,
+  VLAB_STAGES,
+  VLAB_STAGE_LABELS,
+  type QualityScore
+} from './vlab'
+
+/* 推进条四段标签（模板遍历用；VLAB_STAGES 顺序与标签一一对应） */
+const VLAB_STAGE_LABELS_ARR = VLAB_STAGES.map((s) => VLAB_STAGE_LABELS[s])
 
 interface RunItem {
   time: string
@@ -365,6 +417,8 @@ interface Detail {
   traits: string[]
   runs: RunItem[]
   aiProfile: { label: string; value: string }[]
+  /** V3：最近一次黑盒终局评估（裁判 / 保真分） */
+  quality: { referee: QualityScore | null; fidelity: QualityScore | null }
 }
 
 interface StoryLatestRun {
@@ -556,17 +610,24 @@ function parseSessionStory(session: Record<string, unknown>) {
   }
 }
 
-async function loadDetail(id?: string) {
+/** 加载序号：quiet 轮询与手动加载竞态时丢弃旧响应（last-wins） */
+let loadSeq = 0
+
+async function loadDetail(id?: string, quiet = false) {
   if (!id) return
-  liveDetail.value = null
-  stories.value = []
-  detailError.value = false
-  fallbackNotice.value = false
+  const seq = ++loadSeq
+  if (!quiet) {
+    liveDetail.value = null
+    stories.value = []
+    detailError.value = false
+    fallbackNotice.value = false
+  }
   try {
     const [raw, storiesRes] = await Promise.all([
       liveGetVirtualDetail(id) as Promise<Record<string, unknown>>,
       adminVirtualLearnersApi.getVirtualLearnerStories(id).catch(() => null)
     ])
+    if (seq !== loadSeq) return
     const p = (raw.profile as Record<string, unknown>) || {}
     const sessions = (raw.sessions || raw.virtual_sessions || []) as Record<string, unknown>[]
     const traitsRaw = (raw.personalityTraits || p.traits || {}) as Record<string, unknown>
@@ -594,7 +655,7 @@ async function loadDetail(id?: string) {
       level: String(raw.knowledgeLevel || 'beginner'),
       notes: String(raw.notes || ''),
       traits: Object.entries(traitsRaw).slice(0, 5).map(([k, v]) => `${k}: ${String(v)}`),
-      runs: sessions.slice(0, 12).map((s) => {
+      runs: sessions.slice(0, RUNS_TAB_WINDOW).map((s) => {
         const storyMeta = parseSessionStory(s)
         const sessionBindings = (s.bindings || {}) as Record<string, unknown>
         const pathId = sessionBindings.learningPathId ? String(sessionBindings.learningPathId) : s.learningPathId ? String(s.learningPathId) : null
@@ -613,6 +674,7 @@ async function loadDetail(id?: string) {
           pathId
         }
       }),
+      quality: extractQuality(sessions),
       aiProfile: [
         { label: '知识水平', value: String(raw.knowledgeLevel || '—') },
         { label: '模拟模式', value: String(raw.simulationMode || '—') },
@@ -620,6 +682,7 @@ async function loadDetail(id?: string) {
       ]
     }
   } catch {
+    if (seq !== loadSeq) return
     const base = liveVirtuals.value.find((v) => v.id === id)
     if (base) {
       fallbackNotice.value = true
@@ -632,6 +695,7 @@ async function loadDetail(id?: string) {
         notes: base.story,
         traits: [],
         runs: [],
+        quality: { referee: null, fidelity: null },
         aiProfile: [{ label: '知识水平', value: base.level || '—' }]
       }
     } else {
@@ -853,11 +917,16 @@ const d = computed<Detail | undefined>(() => {
   if (isLive.value) return liveDetail.value || undefined
   const demo = virtualProfiles.find((x) => x.id === subPage.value?.id)
   if (!demo) return undefined
-  return { ...demo, level: 'beginner', notes: '' }
+  return { ...demo, level: 'beginner', notes: '', quality: { referee: null, fidelity: null } }
 })
 
-/* 全部运行 feed（右栏，人物级） */
-const allRuns = computed<RunItem[]>(() => (d.value?.runs || []).slice(0, 12))
+/* 全部运行 feed（人物级全量运行流；故事卡只展示最近摘要，职责分离见 D1） */
+const allRuns = computed<RunItem[]>(() => (d.value?.runs || []).slice(0, RUNS_TAB_WINDOW))
+
+/* 故事卡「运行历史」→「运行」tab 全量视图 */
+function goRunsTab() {
+  activeTab.value = 'runs'
+}
 
 /* 单个故事的运行历史（故事卡内展开） */
 function runsForStory(story: StoryItem): RunItem[] {
@@ -920,6 +989,90 @@ function formatRunResult(result: string) {
   if (r === 'timeout') return '超时'
   if (r === 'paused') return '已暂停'
   return result || '—'
+}
+
+/* ---- V2：会话推进条（Goal→Path→Learn→Wrapup 点亮 + 卡顿高亮） ---- */
+interface StoryProgress {
+  visible: boolean
+  running: boolean
+  activeIndex: number
+  stageLabel: string
+  stalled: boolean
+  idleMins: number
+}
+function progressOf(s: StoryItem): StoryProgress {
+  const run = s.latestRun || null
+  const running = (s.runningCount || 0) > 0 && !!run && String(run.status || '').toLowerCase() === 'running'
+  let activeIndex = sessionStageIndex(run?.currentStage)
+  // 无明确阶段（旧数据/已完成会话）：按生命周期计数推导已走通段
+  if (activeIndex < 0 && !running) {
+    if ((s.learnCount || 0) > 0) activeIndex = 2
+    else if ((s.pathCount || 0) > 0) activeIndex = 1
+    else if ((s.goalCount || 0) > 0) activeIndex = 0
+  }
+  const stall = stallState(run ? { status: run.status, updatedAt: run.updatedAt, createdAt: run.createdAt } : null)
+  const stageLabel =
+    activeIndex >= 0
+      ? VLAB_STAGE_LABELS[VLAB_STAGES[Math.min(activeIndex, VLAB_STAGES.length - 1)]]
+      : running ? '推进中' : '已完成'
+  return {
+    visible: running || activeIndex >= 0,
+    running,
+    activeIndex,
+    stageLabel,
+    stalled: stall.stalled,
+    idleMins: stall.idleMins
+  }
+}
+
+/* ---- V3：仿真质量常驻徽章（最近一次裁判 / 保真分） ---- */
+const qualityReferee = computed<number | null>(() => d.value?.quality?.referee?.score ?? null)
+const qualityFidelity = computed<number | null>(() => d.value?.quality?.fidelity?.score ?? null)
+const qualityTime = computed(() => {
+  const at = d.value?.quality?.referee?.evaluatedAt || d.value?.quality?.fidelity?.evaluatedAt
+  return at ? timeAgo(at) : ''
+})
+const qualityTitle = computed(() => {
+  const r = d.value?.quality?.referee
+  const f = d.value?.quality?.fidelity
+  const parts: string[] = []
+  if (r) parts.push(`裁判 ${r.score}（${new Date(r.evaluatedAt).toLocaleString('zh-CN', { hour12: false })}）`)
+  if (f) parts.push(`保真 ${f.score}（${new Date(f.evaluatedAt).toLocaleString('zh-CN', { hour12: false })}）`)
+  return parts.length ? parts.join(' · ') : '尚无黑盒终局评估（裁判 / 保真）'
+})
+const qualityTone = computed(() => {
+  const scores = [qualityReferee.value, qualityFidelity.value].filter((v): v is number => v !== null)
+  if (!scores.length) return 'vp-quality--none'
+  const avg = scores.reduce((a, b) => a + b, 0) / scores.length
+  if (avg >= 80) return 'vp-quality--ok'
+  if (avg >= 60) return 'vp-quality--warn'
+  return 'vp-quality--bad'
+})
+
+/* ---- 运行中会话的静默轮询刷新（不打断当前视图；卡顿/推进实时可见） ---- */
+const VLAB_POLL_MS = 30_000
+let pollTimer: ReturnType<typeof setInterval> | null = null
+watch(
+  () => [subPage.value?.id, isLive.value] as const,
+  ([id, live]) => {
+    if (!id || !live) return
+    if (pollTimer) clearInterval(pollTimer)
+    pollTimer = setInterval(() => {
+      // 有运行中会话才静默重拉（否则零额外请求）
+      const runningTotal = displayStories.value.reduce((n, s) => n + (s.runningCount || 0), 0)
+      if (runningTotal > 0 && subPage.value?.id) void quietReload(subPage.value.id)
+    }, VLAB_POLL_MS)
+  },
+  { immediate: true }
+)
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
+  pollTimer = null
+})
+
+/** 静默重拉：走 loadDetail 的 quiet 模式（不清空视图，轮询不闪屏） */
+async function quietReload(id: string) {
+  await loadDetail(id, true)
 }
 </script>
 
@@ -1151,6 +1304,98 @@ function formatRunResult(result: string) {
   overflow: hidden;
 }
 .vp-story-item__never { color: var(--mk-faint); }
+
+/* V2：会话推进条（Goal→Path→Learn→Wrapup 四段点亮 + 运行中脉冲 + 卡顿 amber） */
+.vp-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid #eef1f6;
+  background: var(--mk-surface);
+}
+.vp-progress.is-stalled {
+  border-color: rgba(217, 119, 6, 0.45);
+  background: #fffaf0;
+}
+.vp-progress__stages {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.vp-progress__stage {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--mk-faint);
+  background: #f0f2f5;
+  white-space: nowrap;
+}
+.vp-progress__stage.is-on {
+  color: var(--mk-blue, #2c63d0);
+  background: #e3ecfb;
+}
+.vp-progress__stage.is-current {
+  color: #fff;
+  background: linear-gradient(135deg, #2f6eef, #1a4fbf);
+}
+.vp-progress.is-stalled .vp-progress__stage.is-current {
+  color: #fff;
+  background: linear-gradient(135deg, #f59e0b, #b45309);
+}
+.vp-progress__meta {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--mk-muted);
+  white-space: nowrap;
+}
+.vp-progress__meta--stalled { color: var(--mk-amber, #b7791f); }
+.vp-progress__pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mk-amber, #b7791f);
+  animation: vp-pulse 1.4s ease-in-out infinite;
+}
+@keyframes vp-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+.vp-story-runs__more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 2px 2px;
+  font-size: 11px;
+  color: var(--mk-faint);
+}
+
+/* V3：仿真质量常驻徽章 */
+.vp-quality {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.vp-quality__time { font-weight: 600; opacity: 0.75; }
+.vp-quality--ok { color: #1a7f4b; background: #e8f7ee; }
+.vp-quality--warn { color: var(--mk-amber, #b7791f); background: #fff5e6; }
+.vp-quality--bad { color: #dc2626; background: #fdecec; }
+.vp-quality--none { color: var(--mk-faint); background: #f0f2f5; }
 
 /* 平台视角生命周期条：Goal → Path → Learn */
 .vp-pipe {

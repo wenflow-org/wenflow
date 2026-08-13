@@ -7,6 +7,7 @@
       <span class="mk-status__meta">虚拟学习者 {{ samples.length }}</span>
       <span class="mk-status__meta">有故事 {{ withStory }}</span>
       <span class="mk-status__meta">会话 {{ totalSessions }}</span>
+      <span v-if="runningTotal > 0" class="mk-status__meta vl-status-run">运行中 {{ runningTotal }}</span>
       <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建虚拟学习者</button>
     </div>
 
@@ -26,6 +27,7 @@
             <th>长期倾向</th>
             <th>故事池</th>
             <th class="mk-th--right">会话</th>
+            <th title="当前会话状态：运行中会话数 + 最近阶段；会话数为累计口径">运行中</th>
             <th>创建</th>
             <th class="mk-th--right">操作</th>
           </tr>
@@ -45,6 +47,12 @@
               </span>
             </td>
             <td class="mk-num">{{ s.sessions }}</td>
+            <td>
+              <span v-if="s.runningCount > 0" class="vl-run vl-run--live" :title="`${s.runningCount} 个会话运行中 · 当前阶段 ${stageLabel(s.currentStage)}`">
+                ● {{ s.runningCount }} 运行中 · {{ stageLabel(s.currentStage) }}
+              </span>
+              <span v-else class="vl-run" title="当前没有运行中的会话">空闲</span>
+            </td>
             <td class="mk-na">{{ s.created }}</td>
             <td>
               <div class="mk-actions">
@@ -216,15 +224,19 @@ interface Sample {
   goal: string
   storyCount: number
   sessions: number
+  /** 运行中会话数（live：后端 runningCount；demo：静态演示值） */
+  runningCount: number
+  /** 最近一个运行中会话的阶段（无运行中时回退最近会话阶段） */
+  currentStage: string | null
   created: string
 }
 
 const all: Sample[] = [
-  { id: 'vl-001', name: '疲惫的运营小张', goal: '把 Excel 周报自动化', storyCount: 2, sessions: 4, created: '3 天前' },
-  { id: 'vl-002', name: '转行的前教师', goal: '系统学数据分析', storyCount: 1, sessions: 1, created: '1 天前' },
-  { id: 'vl-003', name: '拖延的研究生', goal: '30 天写完论文初稿', storyCount: 1, sessions: 2, created: '6 小时前' },
-  { id: 'vl-004', name: '焦虑的实习产品经理', goal: '两周上手需求文档', storyCount: 0, sessions: 1, created: '昨天 22:10' },
-  { id: 'vl-005', name: '退休学摄影的阿姨', goal: '学会手机修图', storyCount: 0, sessions: 0, created: '2 小时前' }
+  { id: 'vl-001', name: '疲惫的运营小张', goal: '把 Excel 周报自动化', storyCount: 2, sessions: 4, runningCount: 1, currentStage: 'goal', created: '3 天前' },
+  { id: 'vl-002', name: '转行的前教师', goal: '系统学数据分析', storyCount: 1, sessions: 1, runningCount: 0, currentStage: null, created: '1 天前' },
+  { id: 'vl-003', name: '拖延的研究生', goal: '30 天写完论文初稿', storyCount: 1, sessions: 2, runningCount: 1, currentStage: 'learn', created: '6 小时前' },
+  { id: 'vl-004', name: '焦虑的实习产品经理', goal: '两周上手需求文档', storyCount: 0, sessions: 1, runningCount: 0, currentStage: null, created: '昨天 22:10' },
+  { id: 'vl-005', name: '退休学摄影的阿姨', goal: '学会手机修图', storyCount: 0, sessions: 0, runningCount: 0, currentStage: null, created: '2 小时前' }
 ]
 
 const demoSamples = ref<Sample[]>([...all])
@@ -237,6 +249,8 @@ const samples = computed<Sample[]>(() => {
       goal: v.goal,
       storyCount: Number(v.storyCount || 0),
       sessions: v.sessions,
+      runningCount: Number(v.runningCount || 0),
+      currentStage: v.currentStage || null,
       created: timeAgo(v.createdAt)
     }))
   }
@@ -308,6 +322,8 @@ async function createSample() {
         goal: form.value.aspiration.trim() || '—',
         storyCount: 0,
         sessions: 0,
+        runningCount: 0,
+        currentStage: null,
         created: '刚刚'
       })
       createOpen.value = false
@@ -504,11 +520,37 @@ async function startLaunch() {
 
 const withStory = computed(() => samples.value.filter((s) => s.storyCount > 0).length)
 const totalSessions = computed(() => samples.value.reduce((a, s) => a + s.sessions, 0))
+const runningTotal = computed(() => samples.value.reduce((a, s) => a + s.runningCount, 0))
+
+/** 后端 currentStage 原文（goal/path/teaching/learn/wrapup 等）→ 中文阶段名 */
+function stageLabel(stage: string | null | undefined): string {
+  const s = String(stage || '').toLowerCase()
+  if (s.includes('goal')) return 'Goal'
+  if (s.includes('path')) return 'Path'
+  if (s.includes('learn') || s.includes('teach')) return 'Learn'
+  if (s.includes('wrap')) return 'Wrapup'
+  return s || '—'
+}
 </script>
 
 <style scoped>
 .mk-link--muted { opacity: 0.55; }
 .vl-row { cursor: pointer; }
+.vl-run {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--mk-faint);
+  white-space: nowrap;
+}
+.vl-run--live {
+  color: var(--mk-amber, #b7791f);
+  background: rgba(217, 119, 6, 0.1);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.vl-status-run { color: var(--mk-amber, #b7791f); font-weight: 700; }
 .vl-more {
   display: flex;
   justify-content: center;

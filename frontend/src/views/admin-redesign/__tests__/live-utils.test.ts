@@ -3,7 +3,7 @@
  * （数据拉取链路已被 AdminConsole 冒烟覆盖，此处只测纯函数与可推导 computed）
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { timeAgo, errMsg, shortId, liveNavBadges, alarmNavBadges, liveVirtuals, liveSkillProfiles, liveExtraProfiles, liveAnnouncements, totalPagesOf, mapLogsToSpans } from '../live';
+import { timeAgo, errMsg, shortId, liveNavBadges, alarmNavBadges, liveVirtuals, liveSkillProfiles, liveExtraProfiles, liveAnnouncements, totalPagesOf, mapLogsToSpans, gatewayPairWindowMs, mergeSpanPages } from '../live';
 import { liveSpans } from '../store';
 import type { TraceSpan } from '../store';
 
@@ -176,5 +176,66 @@ describe('live.mapLogsToSpans（P1 消息列语义 + 网关配对 + 状态映射
     ]);
     expect(spans1[0].model).toBe('deepseek-v4-flash');
     expect(spans1[0].sessionId).toBe('sess_1');
+  });
+
+  it('W2 修窗：长调用下网关与 skill 时间差远超 1500ms 仍合并（窗口随调用时长缩放）', () => {
+    // 实测场景：网关 11.4s / skill 25.6s，两条记录写出时间差 4.2s > 固定窗口 1500ms
+    const spans1 = mapLogsToSpans([
+      { id: 'g1', traceId: 'tr:long', createdAt: '2026-08-13T10:00:00.000', executionLayer: 'api-gateway', durationMs: 11400, status: 'success' },
+      { id: 's1', traceId: 'tr:long', createdAt: '2026-08-13T10:00:04.200', executionLayer: 'skill', durationMs: 25600, status: 'success', agentId: 'skill:virtual-learner-learn-turn-simulator' }
+    ]);
+    expect(spans1).toHaveLength(1);
+    expect(spans1[0].gatewayDurMs).toBe(11400);
+    expect(spans1[0].agent).toBe('virtual-learner-learn-turn-simulator');
+  });
+
+  it('W2 修窗：短调用仍受 1500ms 兜底窗口约束（长耗时网关行不误配短 skill 行）', () => {
+    const spans1 = mapLogsToSpans([
+      // 同 trace 两条调用：第一条网关 60s（skill 行缺失），第二条 skill 200ms 与前者时间差 3s
+      { id: 'g1', traceId: 'tr:guard', createdAt: '2026-08-13T10:00:00.000', executionLayer: 'api-gateway', durationMs: 60000, status: 'success' },
+      { id: 's1', traceId: 'tr:guard', createdAt: '2026-08-13T10:00:03.000', executionLayer: 'skill', durationMs: 200, status: 'success', agentId: 'skill:teaching-turn' }
+    ]);
+    // skill 行 200ms → 窗口 = max(1500, 200) = 1500ms < 3s → 不配对，两行独立
+    expect(spans1).toHaveLength(2);
+    expect(spans1.find((x) => x.execLayer === 'api-gateway')?.gatewayDurMs).toBeUndefined();
+  });
+
+  it('W2 修窗：window 下限 1500ms，且随两记录 durationMs 较小值缩放', () => {
+    expect(gatewayPairWindowMs(200, 100)).toBe(1500);
+    expect(gatewayPairWindowMs(25600, 11400)).toBe(11400);
+    expect(gatewayPairWindowMs(3000, 8000)).toBe(3000);
+  });
+});
+
+describe('live.mergeSpanPages（W1 瀑布服务端分页追加：去重 + 跨页同 trace 重算 startMs）', () => {
+  const span = (id: string, traceId: string, ts: number, startMs: number, durationMs: number, extra: Partial<TraceSpan> = {}): TraceSpan => ({
+    id, traceId, ts, startMs, durationMs, status: 'ok' as const,
+    kind: 'call' as const, agent: 'a', stage: 's', title: 't', detail: '', ...extra
+  });
+
+  it('按 span id 去重（新页覆盖旧行），样本内重复 id 不双列', () => {
+    const existing = [
+      span('a1', 'tr:1', 1000, 0, 100),
+      span('b1', 'tr:1', 1200, 200, 50)
+    ];
+    const incoming = [
+      span('b1', 'tr:1', 1200, 999, 55),
+      span('c1', 'tr:1', 1500, 0, 80)
+    ];
+    const merged = mergeSpanPages(existing, incoming);
+    expect(merged).toHaveLength(3);
+    expect(merged.find((x) => x.id === 'b1')?.durationMs).toBe(55);
+  });
+
+  it('跨页同 trace：新页行 startMs 以该 trace 最早 ts 为起点重算（不再按页内局部起点偏移）', () => {
+    const existing = [
+      span('a1', 'tr:x', 10_000, 0, 100)
+    ];
+    const incoming = [
+      span('d1', 'tr:x', 10_400, 0, 300)
+    ];
+    const merged = mergeSpanPages(existing, incoming);
+    expect(merged.find((x) => x.id === 'a1')?.startMs).toBe(0);
+    expect(merged.find((x) => x.id === 'd1')?.startMs).toBe(400);
   });
 });

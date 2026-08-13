@@ -8,6 +8,19 @@
       <span class="mk-status__meta">{{ activeSpans.length }} 个 span</span>
       <span class="mk-status__meta">总耗时 {{ totalDuration }}</span>
       <span class="mk-status__meta">失败 {{ errorCount }}</span>
+      <span v-if="isLive" class="mk-status__meta mono" :title="waterfallTotal ? '样本 = 本地已加载（boot 快照 + 追加页）；全量 = 服务端口径' : '全量口径待服务端返回'">
+        样本 {{ waterfallSpans?.length ?? 0 }} / 全量 {{ waterfallTotal || '—' }}
+      </span>
+      <button
+        v-if="canLoadMoreWaterfall"
+        type="button"
+        class="wf-more mk-link"
+        :disabled="waterfallLoading"
+        :title="`追加服务端下一页样本（当前 ${waterfallSpans?.length ?? 0} 条 / 全量 ${waterfallTotal} 条）`"
+        @click="loadMoreWaterfall"
+      >
+        {{ waterfallLoading ? '加载中…' : '加载更多样本' }}
+      </button>
       <button
         v-if="failedTraceIds.length"
         type="button"
@@ -33,6 +46,21 @@
             @click="viewMode = 'session'"
           >会话</button>
         </span>
+        <span class="wf-filter">
+          <button
+            type="button"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': failuresOnly }"
+            :aria-pressed="failuresOnly"
+            title="只显示失败行（err）"
+            @click="failuresOnly = !failuresOnly"
+          >仅失败{{ errorTotal > 0 ? ` ${errorTotal}` : '' }}</button>
+          <select v-model="sortMode" class="wf-sort mono" aria-label="排序方式" title="按耗时排序">
+            <option value="time">默认（时间序）</option>
+            <option value="dur-desc">耗时 ↓</option>
+            <option value="dur-asc">耗时 ↑</option>
+          </select>
+        </span>
         <template v-if="viewMode === 'session'">
           <span class="wf-tracepick__count">{{ sessionIds.length }} 个会话</span>
           <select class="wf-tracepick__select mono" v-model="activeSession" aria-label="选择会话">
@@ -47,7 +75,8 @@
             v-model="traceKeyword"
             class="wf-tracepick__search mono"
             placeholder="筛选链路 ID"
-            title="按链路 ID 片段过滤"
+            title="按链路 ID 片段过滤；输入完整 ID 后回车可服务端直达"
+            @keydown.enter.prevent="searchTrace"
           />
           <select class="wf-tracepick__select mono" v-model="activeTrace" aria-label="选择链路">
             <option v-for="t in traceIds" :key="t" :value="t">
@@ -203,8 +232,21 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { spans, intent, openSkillDrawer, dataSource, type TraceSpan } from './store'
-import { livePromptIndex, loadPromptIndex, fetchLogDetail, type LogDetail, type PromptMetaRow } from './live'
+import { spans, intent, openSkillDrawer, dataSource, isLive, type TraceSpan } from './store'
+import {
+  livePromptIndex,
+  loadPromptIndex,
+  fetchLogDetail,
+  waterfallSpans,
+  waterfallTotal,
+  waterfallLoading,
+  waterfallSyncFromBoot,
+  waterfallLoadMore,
+  waterfallFetchTrace,
+  waterfallFetchSession,
+  type LogDetail,
+  type PromptMetaRow
+} from './live'
 import { statusText } from './statusText'
 import { TERMS, errorCodeLabel } from './terms'
 
@@ -218,14 +260,26 @@ const notice = ref('')
 /* 会话视图：跨 trace 按业务会话归组（sessionId 链路已注入，数据积累后自动出现） */
 const viewMode = ref<'trace' | 'session'>('trace')
 const activeSession = ref('')
+/* W4：失败聚焦 + 耗时排序（作用于当前视图的行） */
+const failuresOnly = ref(false)
+const sortMode = ref<'time' | 'dur-desc' | 'dur-asc'>('time')
+
+/* W1：瀑布样本源 = 服务端可扩充集合（boot 快照 + 追加页 + 直达重查）；demo 模式沿用 store 演示数据 */
+const baseSpans = computed<TraceSpan[]>(() =>
+  dataSource.value === 'live' ? (waterfallSpans.value ?? spans.value) : spans.value
+)
 
 /* Prompt 契约索引（与执行日志同源：同 traceId 关联 prompt_call_logs） */
 onMounted(() => {
   if (dataSource.value === 'live') void loadPromptIndex()
+  waterfallSyncFromBoot()
 })
 // demo → live 切换后重载（与 ExecLogs 一致）
 watch(dataSource, () => {
-  if (dataSource.value === 'live') void loadPromptIndex()
+  if (dataSource.value === 'live') {
+    void loadPromptIndex()
+    waterfallSyncFromBoot()
+  }
 })
 function promptOf(span: { traceId: string; agent: string }): PromptMetaRow | undefined {
   const list = livePromptIndex.value[span.traceId]
@@ -262,18 +316,30 @@ watch(openSpanId, async (id) => {
 /* TDZ 修复：intent.sessionId / intentTraceMiss 的 immediate watch 会引用本函数，必须先于 watch 声明 */
 const shortTrace = (t: string) => (t.length > 20 ? `…${t.slice(-16)}` : t)
 
-const allTraceIds = computed(() => [...new Set(spans.value.map((s) => s.traceId))])
+const allTraceIds = computed(() => [...new Set(baseSpans.value.map((s) => s.traceId))])
 
 // intent.traceId 驱动（从日志/总览跳进来时预填）
 // TDZ 修复：必须声明在 allTraceIds 之后（immediate watch 在 const 初始化前执行会抛
 // ReferenceError: Cannot access 'allTraceIds' before initialization，见 ADMIN_DEEP_VLAB_TRACE_AUDIT W6）
 watch(
   () => intent.traceId,
-  (t) => {
+  async (t) => {
     if (!t) return
     viewMode.value = 'trace'
-    // 不在当前加载样本内时不静默选中其他链路：留待 allTraceIds 选择最相关链路，并提示用户
-    if (allTraceIds.value.includes(t)) activeTrace.value = t
+    if (allTraceIds.value.includes(t)) {
+      activeTrace.value = t
+      return
+    }
+    // W1 直达：样本外 trace 不再只给提示——服务端按 traceId 整链路重查后选中
+    if (dataSource.value === 'live') {
+      const found = await waterfallFetchTrace(t)
+      if (found && allTraceIds.value.includes(t)) {
+        activeTrace.value = t
+        notice.value = ''
+      } else if (!found) {
+        notice.value = `链路 ${shortTrace(t)} 未找到（服务端无此 traceId 记录）`
+      }
+    }
   },
   { immediate: true }
 )
@@ -287,7 +353,7 @@ const traceIds = computed(() => {
 function pickTrace(ids: string[]): string {
   if (!ids.length) return ''
   const score = (id: string) => {
-    const mine = spans.value.filter((s) => s.traceId === id)
+    const mine = baseSpans.value.filter((s) => s.traceId === id)
     const errs = mine.filter((s) => s.status === 'err').length
     const total = mine.reduce((a, s) => Math.max(a, s.startMs + s.durationMs), 0)
     return [mine.length, errs > 0 ? 1 : 0, total] as const
@@ -321,7 +387,7 @@ watch(intentTraceMiss, (t) => {
 })
 
 const spansOfTrace = computed(() =>
-  spans.value
+  baseSpans.value
     .filter((s) => s.traceId === activeTrace.value)
     .sort((a, b) => a.startMs - b.startMs)
 )
@@ -329,7 +395,7 @@ const spansOfTrace = computed(() =>
 /* ---- 会话分组视图：同一业务会话的调用跨 trace 汇总 ---- */
 const sessionIds = computed(() => {
   const order = new Map<string, number>()
-  for (const s of spans.value) {
+  for (const s of baseSpans.value) {
     if (!s.sessionId) continue
     const t = s.ts ?? Number.MAX_SAFE_INTEGER
     const cur = order.get(s.sessionId)
@@ -338,7 +404,7 @@ const sessionIds = computed(() => {
   return [...order.entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id)
 })
 function sessionOf(id: string) {
-  const mine = spans.value.filter((s) => s.sessionId === id)
+  const mine = baseSpans.value.filter((s) => s.sessionId === id)
   const start = Math.min(...mine.map((s) => s.ts ?? 0))
   const end = Math.max(...mine.map((s) => (s.ts ?? 0) + s.durationMs))
   return {
@@ -352,13 +418,20 @@ function sessionOf(id: string) {
 const spansOfSession = computed(() => {
   const id = activeSession.value
   if (!id) return []
-  const mine = spans.value.filter((s) => s.sessionId === id)
+  const mine = baseSpans.value.filter((s) => s.sessionId === id)
   const start = Math.min(...mine.map((s) => s.ts ?? 0))
   return mine
     .map((s) => ({ ...s, startMs: Math.max(0, (s.ts ?? start) - start) }))
     .sort((a, b) => a.startMs - b.startMs)
 })
-const activeSpans = computed(() => (viewMode.value === 'session' ? spansOfSession.value : spansOfTrace.value))
+const activeSpans = computed(() => {
+  const list = viewMode.value === 'session' ? spansOfSession.value : spansOfTrace.value
+  // W4：失败聚焦 + 耗时排序（排序作用于过滤后的行，不改变原视图顺序之外的口径）
+  let rows = failuresOnly.value ? list.filter((s) => s.status === 'err') : list
+  if (sortMode.value === 'dur-desc') rows = [...rows].sort((a, b) => b.durationMs - a.durationMs)
+  else if (sortMode.value === 'dur-asc') rows = [...rows].sort((a, b) => a.durationMs - b.durationMs)
+  return rows
+})
 watch(
   sessionIds,
   (ids) => {
@@ -375,15 +448,26 @@ watch(
   },
   { immediate: true }
 )
-/* 从日志/总览带 sessionId 跳入时优先会话模式；不在样本内则提示而不是静默停在别的数据上 */
+/* 从日志/总览带 sessionId 跳入时优先会话模式；不在样本内则服务端直达重查（W1），失败再提示 */
 watch(
   () => intent.sessionId,
-  (sid) => {
+  async (sid) => {
     if (!sid) return
     if (sessionIds.value.includes(sid)) {
       activeSession.value = sid
       viewMode.value = 'session'
       notice.value = ''
+      return
+    }
+    if (dataSource.value === 'live') {
+      const found = await waterfallFetchSession(sid)
+      if (found && sessionIds.value.includes(sid)) {
+        activeSession.value = sid
+        viewMode.value = 'session'
+        notice.value = ''
+      } else if (!found) {
+        notice.value = `会话 ${shortTrace(sid)} 未找到（服务端无此 sessionId 记录）`
+      }
     } else {
       notice.value = `会话 ${shortTrace(sid)} 不在当前加载范围内（样本截断），无法按会话归组`
     }
@@ -407,11 +491,36 @@ const statusTitle = computed(() => {
 })
 
 /* 全链路失败提示 + 定位 */
-const failedTraceIds = computed(() => [...new Set(spans.value.filter((s) => s.status === 'err').map((s) => s.traceId))])
+const failedTraceIds = computed(() => [...new Set(baseSpans.value.filter((s) => s.status === 'err').map((s) => s.traceId))])
 function locateFailure() {
   const ids = failedTraceIds.value
   if (!ids.length) return
   if (!ids.includes(activeTrace.value)) activeTrace.value = ids[0]
+}
+
+/* W1：加载更多样本（服务端分页追加）+ traceId 直达搜索 */
+const canLoadMoreWaterfall = computed(() =>
+  dataSource.value === 'live'
+  && waterfallSpans.value !== null
+  && waterfallTotal.value > 0
+  && (waterfallSpans.value?.length ?? 0) < waterfallTotal.value
+  && !waterfallLoading.value
+)
+async function loadMoreWaterfall() {
+  if (!isLive.value) return
+  await waterfallLoadMore()
+}
+/** 输入完整 traceId 回车 → 服务端直达重查并选中（与执行日志 traceId 直达同模式） */
+async function searchTrace() {
+  const q = traceKeyword.value.trim()
+  if (!q || !isLive.value) return
+  const found = await waterfallFetchTrace(q)
+  if (found) {
+    activeTrace.value = q
+    notice.value = ''
+  } else {
+    notice.value = `未找到链路 ${shortTrace(q)}（服务端无匹配记录）`
+  }
 }
 
 /* 链路概要卡 */
@@ -441,11 +550,14 @@ const badgeOf = (s: string) => (s === 'err' ? 'mk-badge--bad' : s === 'warn' ? '
 
 /* 长 trace ID 在下拉与标题中截断显示（shortTrace 已上移至 watch 之前，见文件上方声明） */
 function traceLabel(t: string) {
-  const mine = spans.value.filter((s) => s.traceId === t)
+  const mine = baseSpans.value.filter((s) => s.traceId === t)
   const errs = mine.filter((s) => s.status === 'err').length
   const total = mine.reduce((a, s) => Math.max(a, s.startMs + s.durationMs), 0)
   return `${shortTrace(t)} · ${mine.length} span · ${fmtMs(total)}${errs ? ` · ${errs} 失败` : ''}`
 }
+
+/* 样本内失败总数（「仅失败」按钮角标） */
+const errorTotal = computed(() => baseSpans.value.filter((s) => s.status === 'err').length)
 
 /* 结论完全由当前视图数据推导，不带预设立场 */
 const verdictText = computed(() => {
@@ -486,6 +598,22 @@ const verdictText = computed(() => {
   min-width: 0;
 }
 .wf-locate { flex-shrink: 0; font-size: 11.5px; }
+.wf-more { flex-shrink: 0; font-size: 11.5px; }
+.wf-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.wf-sort {
+  padding: 6px 8px;
+  border: 1px solid var(--mk-line);
+  border-radius: 8px;
+  background: var(--mk-surface);
+  font-size: 11px;
+  color: var(--mk-ink);
+  outline: none;
+}
+.wf-sort:focus { border-color: rgba(44, 99, 208, 0.5); }
 
 /* 跳转目标不在当前加载样本内的提示条（琥珀色，与失败/漂移徽章同族） */
 .wf-notice {

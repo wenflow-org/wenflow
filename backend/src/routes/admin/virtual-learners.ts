@@ -1228,7 +1228,7 @@ router.get('/', async (req: any, res) => {
               updatedAt: true
             },
             orderBy: { createdAt: 'desc' },
-            take: 5
+            take: 50
           },
           _count: {
             select: { sessions: true }
@@ -1241,6 +1241,9 @@ router.get('/', async (req: any, res) => {
     const formattedProfiles = profiles.map(p => {
       const profileData = JSON.parse(p.profile || '{}');
       const storyPool = Array.isArray(profileData?.storyPool) ? profileData.storyPool : [];
+      // 运行中信号：列表一屏回答「谁在跑、跑到哪个阶段」
+      const sessionSample = Array.isArray(p.sessions) ? p.sessions : [];
+      const runningSessions = sessionSample.filter((s: any) => s.status === 'running');
       return {
         ...p,
         email: p.users.email,
@@ -1250,8 +1253,10 @@ router.get('/', async (req: any, res) => {
         struggleConcepts: p.struggleConcepts ? JSON.parse(p.struggleConcepts) : [],
         personalityTraits: p.personalityTraits ? JSON.parse(p.personalityTraits) : {},
         tags: p.tags ? JSON.parse(p.tags) : [],
-        sessionCount: p._count?.sessions ?? p.sessions.length,
-        storyCount: storyPool.length
+        sessionCount: p._count?.sessions ?? sessionSample.length,
+        storyCount: storyPool.length,
+        runningCount: runningSessions.length,
+        currentStage: runningSessions[0]?.currentStage || sessionSample[0]?.currentStage || null
       };
     });
     
