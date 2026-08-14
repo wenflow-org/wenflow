@@ -447,6 +447,13 @@ main {
   }
 }
 
+/* 移动端：桌面装饰位移（translateX(18px)+rotate）会把卡片推出窄视口，归零防裁切 */
+@media (max-width: 980px) {
+  .hn-stage__desk {
+    transform: none;
+  }
+}
+
 /* Stage */
 .hn-stage {
   position: relative;
