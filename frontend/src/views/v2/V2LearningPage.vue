@@ -1037,7 +1037,9 @@ onBeforeUnmount(() => {
 
 /* ---------- 伴学浮动窗（dock 式，不占主对话区） ---------- */
 .peerdock {
-  position: fixed; right: 22px; bottom: 22px; z-index: 60;
+  position: fixed; right: 22px; bottom: 132px; z-index: 60;
+  /* bottom 抬升避开底部输入区（composer ≈104px + 间距 28px），
+     否则 dock 内容高时（长消息）覆盖发送按钮 */
   width: min(340px, calc(100vw - 32px));
   display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
   max-height: 440px;
