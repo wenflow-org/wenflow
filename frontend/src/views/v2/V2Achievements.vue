@@ -281,6 +281,6 @@ onMounted(load);
   cursor: pointer;
 }
 .empty { display: grid; justify-items: center; gap: 12px; padding: 48px 0; color: var(--faint); font-size: 13px; }
-.ach { min-height: 100vh; display: flex; flex-direction: column; background: var(--canvas); }
-.ach__main { flex: 1; width: 100%; }
+.ach { min-height: calc(100vh - 41px); display: flex; flex-direction: column; background: var(--canvas); }
+.ach__main { width: 100%; }
 </style>

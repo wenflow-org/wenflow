@@ -13,12 +13,18 @@
   --green: #1e9e58;
   --amber: #f4aa46;
   --red: #ef7578;
-  min-height: 100vh;
+  /* 公告条（AnnouncementBanner，约 41px）占流在 .v2-page 上方；
+     min-height 需扣除，否则 footer 吸底后仍被挤出视口底部 */
+  min-height: calc(100vh - 41px);
   display: flex;
   flex-direction: column;
   background: var(--canvas);
   color: var(--ink);
   font-family: Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+/* 页脚吸底：内容不足一屏时 footer 沉底可见（此前空态页 footer 被挤出折叠线外） */
+.v2-page > .v2footer {
+  margin-top: auto;
 }
 
 /* 暗色模式：全局 token 覆写（此前 v2 体系无 dark 段，导致"亮页+暗弹窗"混搭） */
@@ -63,10 +69,10 @@
 }
 
 .v2-page > main {
-  flex: 1;
   width: 100%;
-  /* flex:1 会让 main 高于内容，grid 默认 align-content:normal(=stretch)
-     会把多余空间均摊进每个轨道，导致 pill/卡片被纵向拉高；统一改为顶部对齐 */
+  /* 页脚吸底由 .v2footer margin-top:auto 承担（V2Footer.vue scoped）；
+     此处不再 flex:1，避免 main 抢占全部剩余空间把 footer 挤出折叠线。
+     grid 内容顶部对齐，防止卡片被纵向拉高 */
   align-content: start;
 }
 

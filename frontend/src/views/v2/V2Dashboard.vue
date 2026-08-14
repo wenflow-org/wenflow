@@ -1202,9 +1202,14 @@ onMounted(loadAll);
   align-items: stretch;
 }
 .action {
-  padding: 26px 28px;
-  display: flex; flex-direction: column; gap: 12px;
+  padding: 22px 26px;
+  display: flex; flex-direction: column; gap: 10px;
   position: relative; overflow: hidden;
+}
+/* 新手空态卡：紧凑化，避免空态内容把页脚挤出首屏 */
+.action--empty {
+  padding: 18px 24px;
+  gap: 9px;
 }
 .action::before {
   content: ''; position: absolute; inset: 0 auto 0 0; width: 4px;
@@ -1306,7 +1311,7 @@ onMounted(loadAll);
 <style scoped>
 /* ---------- 本周节奏 ---------- */
 .dash__grid-week { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 16px; }
-.week { padding: 20px 22px; display: grid; gap: 14px; align-content: start; }
+.week { padding: 16px 20px; display: grid; gap: 12px; align-content: start; }
 .week__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
 .day {
   display: grid; gap: 6px; justify-items: center;

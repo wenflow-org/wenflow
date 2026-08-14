@@ -32,7 +32,7 @@ const version = appVersion;
 
 <style scoped>
 .v2footer {
-  margin-top: 4px;
+  margin-top: auto;
   /* 顶部柔和渐变分隔线：白底向浅灰过渡 */
   border-top: 1px solid rgba(227, 233, 244, 0.55);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.75));
