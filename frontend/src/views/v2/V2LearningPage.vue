@@ -193,7 +193,7 @@
           <span class="peerdock__avatar"><img src="/favicon.png" alt="" /></span>
           <div class="peerdock__title">
             <strong>伴学伙伴</strong>
-            <small>看到你在当前知识点卡了一下，来帮一把 · 内容由 AI 生成</small>
+            <small>看到你在当前知识点卡了一下，来帮一把 · <AiContentNote /></small>
           </div>
           <span class="peerdock__min" title="收起" @click="peerOpen = false">−</span>
         </div>

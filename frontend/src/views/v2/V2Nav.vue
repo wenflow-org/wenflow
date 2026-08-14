@@ -103,8 +103,8 @@ function onNewGoalClick() {
   }
 }
 
-const userName = computed(() => userStore.user?.name || '同学');
-const avatarLetter = computed(() => (userStore.user?.name || '同').charAt(0));
+const userName = computed(() => userStore.user?.name || '学习者');
+const avatarLetter = computed(() => (userStore.user?.name || '学').charAt(0));
 
 async function handleLogout() {
   menuOpen.value = false;

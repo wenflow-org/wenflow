@@ -15,8 +15,28 @@
       </header>
 
       <section v-if="loading" class="evaluation-loading">
-        <el-icon class="spin"><Loading /></el-icon>
-          <p>正在整理本次学习反馈，请稍候…</p>
+        <div class="evaluation-loading__inner">
+          <div class="evaluation-loading__head">
+            <span class="sk-bar" style="width: 32%"></span>
+            <span class="sk-bar sk-bar--btn"></span>
+            <span class="sk-bar sk-bar--btn"></span>
+          </div>
+          <div class="evaluation-loading__summary">
+            <i v-for="n in 4" :key="n"></i>
+          </div>
+          <div class="evaluation-loading__card">
+            <span class="sk-bar" style="width: 26%"></span>
+            <i v-for="n in 3" :key="'a' + n"></i>
+          </div>
+          <div class="evaluation-loading__card">
+            <span class="sk-bar" style="width: 18%"></span>
+            <i v-for="n in 3" :key="'b' + n"></i>
+          </div>
+          <p class="evaluation-loading__text">
+            <el-icon class="spin"><Loading /></el-icon>
+            正在整理本次学习反馈，请稍候…
+          </p>
+        </div>
       </section>
 
       <section v-else-if="error" class="evaluation-error">
@@ -632,6 +652,33 @@ onUnmounted(() => {
   animation: spin 1s linear infinite;
   font-size: 36px;
   color: var(--accent, #3478f6);
+}
+
+/* 加载骨架：仿报告版式（头部 + 指标卡 + 内容卡），避免加载期白板 */
+.evaluation-loading__inner { width: 100%; display: grid; gap: 14px; justify-items: stretch; }
+.evaluation-loading__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.evaluation-loading__summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.evaluation-loading__card { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid rgba(23, 32, 51, 0.06); border-radius: 12px; background: #fbfcfe; }
+.evaluation-loading__text { display: inline-flex; align-items: center; gap: 8px; justify-content: center; margin: 4px 0 0; }
+.evaluation-loading .sk-bar,
+.evaluation-loading__summary i,
+.evaluation-loading__card i {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #edf1f8 25%, #f7faff 50%, #edf1f8 75%);
+  background-size: 200% 100%;
+  animation: eval-shimmer 1.4s ease infinite;
+}
+.evaluation-loading .sk-bar { display: block; height: 14px; }
+.evaluation-loading__head .sk-bar--btn { width: 84px; height: 34px; border-radius: 10px; }
+.evaluation-loading__summary i { height: 64px; border-radius: 12px; }
+@keyframes eval-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (max-width: 640px) {
+  .evaluation-loading__summary { grid-template-columns: repeat(2, 1fr); }
 }
 
 @keyframes spin {

@@ -60,7 +60,7 @@
               </span>
             </div>
             <strong class="ach-card__name">{{ a.name }}</strong>
-            <p class="ach-card__desc">{{ a.description }}</p>
+            <p class="ach-card__desc">{{ descText(a) }}</p>
             <div class="ach-card__foot">
               <template v-if="a.unlocked">
                 <span class="ach-card__xp">+{{ a.xpReward }} XP</span>
@@ -147,6 +147,11 @@ function fmtNum(n: number): string {
 function progressPct(a: Achievement) {
   const p = progressOf(a);
   return p.percentage ?? (p.total ? Math.round((p.current / p.total) * 100) : 0);
+}
+
+/* 服务端成就条件含内部缩写 KTL（知识掌握度），直出前补全中文释义 */
+function descText(a: Achievement): string {
+  return String(a.description || '').replace(/KTL/g, '知识掌握度（KTL）');
 }
 
 const visible = computed(() => {

@@ -23,7 +23,7 @@
           <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9v1zm3-19a7 7 0 0 0-4 12.74c.6.52 1 1.31 1 2.26v1h6v-1c0-.95.4-1.74 1-2.26A7 7 0 0 0 12 2z"/></svg>
         </span>
         <p>{{ tipText }}</p>
-        <span class="tip__ai" title="内容由 AI 生成，仅供参考">AI</span>
+        <span class="tip__ai" title="内容由 AI 生成，仅供参考，请仔细甄别">AI</span>
         <button type="button" class="tip__close" title="知道了" @click="tipDismissed = true">×</button>
       </div>
 
@@ -475,7 +475,7 @@ const guidance = ref<Record<string, any> | null>(null);
 const sessions = ref<Array<Record<string, any>>>([]);
 const achievements = ref<Array<Record<string, any>>>([]);
 
-const userName = computed(() => userStore.user?.name || stats.value?.user?.name || '同学');
+const userName = computed(() => userStore.user?.name || stats.value?.user?.name || '学习者');
 const greeting = computed(() => {
   const h = new Date().getHours();
   if (h < 6) return '夜深了';

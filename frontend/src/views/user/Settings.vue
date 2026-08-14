@@ -48,7 +48,7 @@
           <div class="api-form">
             <label class="uc-field">
               <span class="uc-field__label">端点</span>
-              <input v-model="apiConfig.endpoint" class="uc-field__input" placeholder="https://api.openai.com/v1" :disabled="busy" />
+              <input v-model="apiConfig.endpoint" class="uc-field__input" placeholder="例如 https://api.openai.com/v1" :disabled="busy" />
             </label>
 
             <label class="uc-field">
@@ -58,7 +58,7 @@
                   v-model="apiConfig.apiKey"
                   type="password"
                   class="uc-field__input"
-                  :placeholder="hasSavedApiKey ? '已保存，留空继续使用' : 'sk-...'"
+                  :placeholder="hasSavedApiKey ? '已保存，留空继续使用' : '例如 sk-xxxxxxxx'"
                   :disabled="busy"
                 />
                 <button type="button" class="uc-field__eye" @click="showKey = !showKey" :aria-label="showKey ? '隐藏密钥' : '显示密钥'">
