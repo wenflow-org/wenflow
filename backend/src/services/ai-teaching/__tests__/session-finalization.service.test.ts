@@ -94,6 +94,49 @@ describe('SessionFinalizationService', () => {
     )
   })
 
+  it('complete_task 在会话未结束时自动先 end 生成 wrapup 再完成任务', async () => {
+    const activeSession = { ...completedSession(), status: 'paused', wrapup: null }
+    mockRepository.assertOwnership.mockResolvedValue(activeSession)
+    mockEndSession.mockResolvedValue({ status: 'completed', operationId: 'auto-end-op', revision: 5 })
+    mockRepository.assertOwnership
+      .mockResolvedValueOnce(activeSession)
+      .mockResolvedValueOnce({ ...activeSession, status: 'completed', wrapup: { status: 'complete' }, revision: 5 })
+    mockRepository.claimFinalization.mockResolvedValue({
+      status: 'claimed',
+      operationId: 'task-op',
+      leaseOwner: 'lease-1',
+      session: { ...activeSession, status: 'completed', wrapup: { status: 'complete' }, revision: 5 }
+    })
+    mockCompleteTask.mockResolvedValue({ alreadyCompleted: false })
+    mockRepository.completeFinalizationStep.mockResolvedValue({
+      ...activeSession,
+      status: 'completed',
+      wrapup: { status: 'complete' },
+      revision: 5,
+      teachingState: { finalization: { taskCompletion: 'completed' } }
+    })
+
+    const result = await service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'complete_task',
+      operationId: 'task-op',
+      revision: 4
+    })
+
+    expect(mockEndSession).toHaveBeenCalledWith(
+      'session-1',
+      'task-completed',
+      4,
+      'task-op',
+      expect.any(String),
+      expect.any(String)
+    )
+    expect(mockCompleteTask).toHaveBeenCalled()
+    expect(result.status).toBe('completed')
+    expect((result as any).taskCompletion).toEqual({ status: 'completed', alreadyCompleted: false })
+  })
+
   it('任务完成重试成功后只提交任务步骤并保留 Wrapup', async () => {
     mockRepository.claimFinalization.mockResolvedValue({
       status: 'claimed',

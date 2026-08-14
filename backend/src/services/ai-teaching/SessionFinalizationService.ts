@@ -132,10 +132,32 @@ export class SessionFinalizationService {
       && session.operationLeaseExpiresAt
       && session.operationLeaseExpiresAt > new Date();
     if ((session.status !== 'completed' || !session.wrapup) && !activeFinalization) {
-      const error = new Error('请先结束课堂并生成学习反馈');
-      (error as any).code = 'FINALIZATION_SESSION_NOT_CLOSED';
-      (error as any).status = 409;
-      throw error;
+      // complete_task 前置要求会话已结束（completed + wrapup），但前端 finish('complete_task')
+      // 不会先调 end——这里与 end_only/complete_review 一致，自动先结束课堂生成 wrapup，
+      // 否则教学完成后的自动收束必然 409 FINALIZATION_SESSION_NOT_CLOSED（真实用户高频场景）
+      const endResult = await aiTeachingCoordinator.endSession(
+        input.sessionId,
+        input.endReason || 'task-completed',
+        input.revision,
+        operationId,
+        requestIdentity.requestHash,
+        requestIdentity.requestJson
+      );
+      if (endResult.status === 'processing') {
+        return {
+          operationId: endResult.operationId,
+          status: 'processing' as const,
+          pollAfterMs: 1500,
+          revision: endResult.revision
+        };
+      }
+      const ended = await teachingSessionRepository.assertOwnership(input.sessionId, input.userId);
+      if (ended.status !== 'completed' || !ended.wrapup) {
+        const error = new Error('请先结束课堂并生成学习反馈');
+        (error as any).code = 'FINALIZATION_SESSION_NOT_CLOSED';
+        (error as any).status = 409;
+        throw error;
+      }
     }
 
     const claim = await teachingSessionRepository.claimFinalization(
