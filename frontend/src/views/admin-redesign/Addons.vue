@@ -41,8 +41,8 @@
             <tr v-for="r in capabilityRows" :key="r.id">
               <td>
                 <div class="mk-cell-main">
-                  <strong>{{ r.name }}</strong>
-                  <span class="mk-cell-sub">{{ r.id }}</span>
+                  <strong :title="r.name">{{ r.name }}</strong>
+                  <span class="mk-cell-sub" :title="r.id">{{ r.id }}</span>
                 </div>
               </td>
               <td><span class="mk-badge" :class="r.id === 'mcp-tool' ? 'mk-badge--info' : 'mk-badge--muted'">{{ r.id === 'mcp-tool' ? 'MCP' : '能力 Skill' }}</span></td>
@@ -86,7 +86,7 @@
             <span class="ac-mcp__id mono">{{ t.id }}</span>
           </div>
           <span class="ac-mcp__type mono">{{ t.type }}</span>
-          <span class="ac-mcp__endpoint mono" :title="t.endpoint">{{ t.endpoint }}</span>
+          <span class="ac-mcp__endpoint mono" :title="endpointTitle(t.endpoint)">{{ endpointLabel(t.endpoint) }}</span>
           <span class="mk-badge" :class="t.enabled ? 'mk-badge--ok' : 'mk-badge--muted'">{{ t.enabled ? '启用' : '停用' }}</span>
           <div class="mk-actions">
             <button type="button" class="mk-link" :disabled="testingId === t.id" @click="testTool(t)">
@@ -203,6 +203,17 @@ function formatTimeout(ms: unknown): string {
   const n = Number(ms)
   if (!ms || Number.isNaN(n)) return '继承'
   return `${Math.round(n / 1000)}s`
+}
+
+/** 环境变量占位符（${ENV_VAR} 未替换）判定：直出原文会误导为真实地址，统一显示「未配置」 */
+const ENV_PLACEHOLDER = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/
+function endpointLabel(endpoint: string): string {
+  return ENV_PLACEHOLDER.test(endpoint) ? '未配置' : endpoint || '—'
+}
+function endpointTitle(endpoint: string): string {
+  return ENV_PLACEHOLDER.test(endpoint)
+    ? `环境变量 ${endpoint} 未替换（未在服务端配置），该工具当前不可用`
+    : endpoint
 }
 
 const configMap = ref<Record<string, Record<string, unknown>>>({})
@@ -449,6 +460,11 @@ function goConfig() {
 
 <style scoped>
 .mono { font-family: var(--mk-mono); font-size: 12px; }
+
+/* 能力列：主名 + ID 双行，最小宽度兜底（原 51px 截断至 1-2 字符；并栏/窄卡下不被其余列挤压，
+   超宽时由 .mk-table-scroll 横向滚动承接） */
+.mk-table th:first-child,
+.mk-table td:first-child { min-width: 160px; }
 
 /* E3 并栏容器：默认单列全宽；内容少时 1fr 1fr 并排 */
 .ac-cards {

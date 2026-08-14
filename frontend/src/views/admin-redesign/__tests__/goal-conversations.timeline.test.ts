@@ -145,4 +145,31 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     expect(cell.find('.mk-na').exists()).toBe(true);
     wrapper.unmount();
   });
+
+  it('live：任意状态都渲染 4 步点条（创建→澄清→方案→完成；进行中点亮当前步）', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          conversations: [
+            makeConv('init', { stage: 'initial', status: 'active' }),
+            makeConv('und', { stage: 'understanding', status: 'active' }),
+            makeConv('prop', { stage: 'proposal', status: 'active' }),
+            makeConv('done', { stage: 'completed', status: 'completed', completedAt: '2026-08-14T06:00:00.000Z' }),
+            makeConv('fail', { stage: 'proposal', status: 'failed', completedAt: null }),
+            makeConv('cancel', { stage: 'understanding', status: 'cancelled', completedAt: null })
+          ]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const cells = wrapper.findAll('.gc-stage-cell');
+    expect(cells).toHaveLength(6);
+    for (const cell of cells) {
+      expect(cell.findAll('.gc-stage-cell__dot')).toHaveLength(4);
+    }
+    const onCounts = cells.map((c) => c.findAll('.gc-stage-cell__dot.is-on').length);
+    expect(onCounts).toEqual([1, 2, 3, 4, 3, 2]);
+    wrapper.unmount();
+  });
 });

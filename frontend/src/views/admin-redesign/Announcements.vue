@@ -13,7 +13,7 @@
 
     <div class="mk-card">
       <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="6" />
-      <div v-else-if="rows.length" class="mk-table-scroll">
+      <div v-else-if="rows.length" class="mk-table-scroll an-list">
       <table class="mk-table">
         <thead>
           <tr>
@@ -473,6 +473,10 @@ function expiresLabel(iso: string): string {
 </script>
 
 <style scoped>
+/* 列表区兜底高度：行数少时卡片铺满页面，消除表格下方 760px 全宽灰区（复用空态 --mk-empty-min-h 同款口径） */
+.an-list {
+  min-height: var(--mk-empty-min-h, calc(100dvh - 230px));
+}
 .an-body {
   max-width: 380px;
   display: -webkit-box;

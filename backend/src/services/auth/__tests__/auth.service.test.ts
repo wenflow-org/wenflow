@@ -84,6 +84,54 @@ describe('AuthService 登录安全边界', () => {
     )
     expect(userMocks.update).not.toHaveBeenCalled()
   })
+
+  it('测试/审计账号（qa_audit_ 命名）拒绝登录用户侧，返回与凭据错误一致的 401', async () => {
+    userMocks.findFirst.mockResolvedValue({
+      id: 'qa-1',
+      name: 'qa_audit_0821',
+      email: 'qa_audit_0821@wenflow.local',
+      password: 'test-hash'
+    })
+    bcryptCompare.mockResolvedValue(true)
+
+    await expect(authService.login({ name: 'qa_audit_0821', password: 'right-password' }))
+      .rejects.toBeInstanceOf(InvalidCredentialsError)
+
+    // 仍执行同等成本比较（时序一致），但不写库、不签发令牌
+    expect(bcryptCompare).toHaveBeenCalledWith('right-password', 'test-hash')
+    expect(userMocks.update).not.toHaveBeenCalled()
+  })
+
+  it('测试/审计账号（@test.local 邮箱）拒绝登录用户侧', async () => {
+    userMocks.findFirst.mockResolvedValue({
+      id: 't-1',
+      name: 'probe-user',
+      email: 'audit_probe_01@test.local',
+      password: 'test-hash'
+    })
+    bcryptCompare.mockResolvedValue(true)
+
+    await expect(authService.login({ name: 'probe-user', password: 'right-password' }))
+      .rejects.toBeInstanceOf(InvalidCredentialsError)
+    expect(userMocks.update).not.toHaveBeenCalled()
+  })
+
+  it('真实用户登录不受影响（令牌正常签发）', async () => {
+    userMocks.findFirst.mockResolvedValue({
+      id: 'u-real',
+      name: 'real-user',
+      email: 'real@example.com',
+      password: 'hash',
+      tokenVersion: 2
+    })
+    bcryptCompare.mockResolvedValue(true)
+    userMocks.update.mockResolvedValue({ id: 'u-real' })
+
+    const result = await authService.login({ name: 'real-user', password: 'right-password' })
+
+    expect(result.user.name).toBe('real-user')
+    expect(userMocks.update).toHaveBeenCalled()
+  })
 })
 
 describe('AuthService 软删除账号', () => {
@@ -116,6 +164,29 @@ describe('AuthService 软删除账号', () => {
     expect(userMocks.findFirst).toHaveBeenCalledWith({
       where: { id: 'u1', deletedAt: null }
     })
+  })
+
+  it('verifyToken 对测试/审计账号存量会话拒绝（用户侧不再展示测试账号）', async () => {
+    mockSessionTokenVerify.mockReturnValue({ userId: 'qa-1', name: 'qa_audit_0821' })
+    userMocks.findFirst.mockResolvedValue({
+      id: 'qa-1',
+      name: 'qa_audit_0821',
+      email: 'qa_audit_0821@wenflow.local'
+    })
+
+    await expect(authService.verifyToken('stale-token')).rejects.toThrow('无效的 Token')
+  })
+
+  it('verifyToken 对真实用户正常放行', async () => {
+    mockSessionTokenVerify.mockReturnValue({ userId: 'u-real', name: 'real-user' })
+    userMocks.findFirst.mockResolvedValue({
+      id: 'u-real',
+      name: 'real-user',
+      email: 'real@example.com'
+    })
+
+    const user = await authService.verifyToken('valid-token')
+    expect(user.name).toBe('real-user')
   })
 })
 

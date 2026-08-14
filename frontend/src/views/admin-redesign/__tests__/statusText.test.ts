@@ -17,6 +17,7 @@ import {
   sessionProgressPct,
   sessionProgressText,
   sessionProgressTone,
+  sessionProgressDone,
   GOAL_STAGE_TOTAL
 } from '../statusText';
 
@@ -225,5 +226,16 @@ describe('sessionProgress（教学会话进度列单源：任务 x/y + 迷你条
     expect(sessionProgressTone('discarded')).toBe('bad');
     expect(sessionProgressTone('active')).toBe(null);
     expect(sessionProgressTone(null)).toBe(null);
+  });
+
+  it('终态完成判定：completed/succeeded 为终态完成，其余非终态完成', () => {
+    expect(sessionProgressDone('completed')).toBe(true);
+    expect(sessionProgressDone('succeeded')).toBe(true);
+    expect(sessionProgressDone('Completed')).toBe(true);
+    expect(sessionProgressDone('active')).toBe(false);
+    expect(sessionProgressDone('failed')).toBe(false);
+    expect(sessionProgressDone('timeout')).toBe(false);
+    expect(sessionProgressDone('')).toBe(false);
+    expect(sessionProgressDone(null)).toBe(false);
   });
 });

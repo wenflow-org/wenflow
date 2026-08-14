@@ -201,6 +201,12 @@ export function sessionProgressTone(status?: string | null): 'ok' | 'bad' | null
   return null
 }
 
+/** 教学会话终态完成判定（P1 语义修复：已完成会话不再展示「任务 x/y」进度，改显「已完成」） */
+export function sessionProgressDone(status?: string | null): boolean {
+  const st = String(status || '').toLowerCase()
+  return st === 'completed' || st === 'succeeded'
+}
+
 /** Skill 类别 → 中文 */
 const CATEGORY_TEXT: Record<string, string> = {
   analysis: '分析',

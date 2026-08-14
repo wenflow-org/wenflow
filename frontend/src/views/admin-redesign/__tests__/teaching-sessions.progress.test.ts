@@ -67,7 +67,7 @@ afterEach(() => {
 });
 
 describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）', () => {
-  it('live：任务 x/y + 迷你条渲染；完成态条档 ok', async () => {
+  it('live：已完成会话 → 进度列只显「已完成」（不渲染任务 x/y 与进度条，语义一致），title 保留历史进度', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -85,11 +85,12 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     const headers = wrapper.findAll('th').map((th) => th.text());
     expect(headers).toContain('进度');
     const row = wrapper.find('tbody tr');
-    expect(row.text()).toContain('任务 2/5');
-    const fill = row.find('.ts-prog .mk-minibar__fill');
-    expect(fill.attributes('data-tone')).toBe('ok');
-    expect(fill.attributes('style')).toContain('width: 40%');
-    expect(row.find('.ts-prog').attributes('title')).toContain('阶段 2/4 · 任务 2/5');
+    const prog = row.find('.ts-prog--done');
+    expect(prog.exists()).toBe(true);
+    expect(prog.text()).toBe('已完成');
+    expect(row.find('.mk-minibar').exists()).toBe(false);
+    expect(row.text()).not.toContain('任务 2/5');
+    expect(prog.attributes('title')).toContain('阶段 2/4 · 任务 2/5');
     wrapper.unmount();
   });
 
@@ -133,12 +134,13 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     wrapper.unmount();
   });
 
-  it('demo 模式：演示行带进度渲染', async () => {
+  it('demo 模式：演示行带进度渲染（终态已完成行只显「已完成」，进行中/中断态仍显任务进度）', async () => {
     dataSource.value = 'demo';
     const wrapper = mount(TeachingSessions);
     await flushPromises();
     expect(listMock).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('任务 2/3');
+    expect(wrapper.text()).toContain('已完成');
+    expect(wrapper.findAll('.ts-prog--done').length).toBeGreaterThan(0);
     expect(wrapper.text()).toContain('中断于 任务 3/4');
     wrapper.unmount();
   });

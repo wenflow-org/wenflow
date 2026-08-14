@@ -77,7 +77,10 @@
                 <span v-if="r.knowledgePointCount" class="mk-cell-sub">知识 {{ r.knowledgePointCount }} 点</span>
               </td>
               <td>
-                <template v-if="sessionProgressPct(r.progress) !== null">
+                <template v-if="sessionProgressDone(r.status)">
+                  <span class="ts-prog ts-prog--done" :title="progressTitle(r)">已完成</span>
+                </template>
+                <template v-else-if="sessionProgressPct(r.progress) !== null">
                   <span class="ts-prog" :title="progressTitle(r)">
                     <span class="ts-prog__num">{{ sessionProgressText(r.progress, r.status) }}</span>
                     <span class="mk-minibar ts-prog__bar">
@@ -199,7 +202,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { dataSource, openSession, openSubPage } from './store'
 import { timeAgo } from './live'
-import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone } from './statusText'
+import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone } from './statusText'
 import type { SessionProgress } from './statusText'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
@@ -541,6 +544,15 @@ function progressTitle(r: Row): string {
 .ts-prog { display: grid; gap: 4px; max-width: 96px; }
 .ts-prog__num { font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .ts-prog__bar { width: 88px; height: 5px; }
+/* 终态完成列（P1 语义修复）：只显「已完成」文字，不再与进度条并存；title 保留历史进度 */
+.ts-prog--done {
+  display: inline-flex;
+  align-items: center;
+  color: var(--mk-green);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
 .ts-actions { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .ts-actions .mk-link { padding: 0; }
 .ts-more {
