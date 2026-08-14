@@ -427,6 +427,49 @@ main {
   margin-top: 6px;
 }
 
+/* 按钮基础样式（此前缺失导致 .hn-btn 全部渲染为裸文字链接；档位参照 vn-btn 体系） */
+.hn-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 800;
+  text-decoration: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  width: fit-content;
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.hn-btn:hover {
+  transform: translateY(-2px);
+}
+.hn-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+.hn-btn--primary {
+  color: #fff;
+  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  box-shadow: 0 16px 34px rgba(52, 120, 246, 0.22);
+}
+.hn-btn--ghost {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.74);
+  border-color: var(--line);
+}
+.hn-btn--light {
+  color: var(--blue-deep);
+  background: #fff;
+  border-color: var(--line);
+}
+.hn-btn--lg {
+  min-height: 60px;
+  padding: 0 32px;
+  font-size: 17px;
+}
+
 /* Hero 入场编排：依次上浮，舞台卡从更大倾角回正 */
 @media (prefers-reduced-motion: no-preference) {
   .hn-hero .hn-pill { animation: hn-rise 0.7s var(--ease) 0.05s both; }
