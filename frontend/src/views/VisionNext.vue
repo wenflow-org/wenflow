@@ -300,7 +300,7 @@ main {
   grid-template-columns: minmax(0, 1.15fr) minmax(280px, 360px);
   gap: 48px;
   align-items: center;
-  padding: 120px 0 72px;
+  padding: 96px 0 64px;
 }
 .vn-hero__copy {
   display: grid;
@@ -308,7 +308,7 @@ main {
 }
 .vn-hero h1 {
   margin: 0;
-  font-size: clamp(34px, 5vw, 54px);
+  font-size: clamp(38px, 5.5vw, 64px);
   line-height: 1.1;
   letter-spacing: -0.045em;
   max-width: 14em;
@@ -391,7 +391,7 @@ main {
 }
 
 .vn-stand {
-  padding: 24px 0 72px;
+  padding: 16px 0 56px;
 }
 .vn-stand__head {
   max-width: 36em;
@@ -401,7 +401,7 @@ main {
 }
 .vn-stand__head h2 {
   margin: 0;
-  font-size: clamp(28px, 3.8vw, 40px);
+  font-size: clamp(26px, 3.2vw, 34px);
   letter-spacing: -0.04em;
   line-height: 1.12;
 }
@@ -446,7 +446,7 @@ main {
 }
 
 .vn-cap {
-  padding: 40px 0 72px;
+  padding: 24px 0 56px;
 }
 .vn-cap__head {
   margin-bottom: 28px;
@@ -455,7 +455,7 @@ main {
 }
 .vn-cap__head h2 {
   margin: 0;
-  font-size: clamp(28px, 3.8vw, 40px);
+  font-size: clamp(26px, 3.2vw, 34px);
   letter-spacing: -0.04em;
 }
 .vn-cap__head p {

@@ -488,9 +488,9 @@ main {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
-  color: var(--muted);
+  color: var(--ink);
 }
 .hn-chip {
   font-size: 11px;
