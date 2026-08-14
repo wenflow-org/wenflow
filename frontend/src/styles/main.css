@@ -3,6 +3,20 @@
    --mk-* 全局定义（不限于 admin 页）：admin-surface 兼容映射 /
    admin-theme EP 覆写 / FieldAddWizard 等 Teleport 组件均依赖全局可用
    ======================================== */
+
+/* ---- @import 集中置于文件顶部（CSS 规范要求先于其他规则） ---- */
+/* 现代化增强包 */
+@import './modern-enhancements.css';
+
+/* 核心设计系统 */
+@import './design-system.css';
+
+/* Admin 体系 B 兼容映射（admin-surface.css 收敛为 :root 映射，见该文件） */
+@import './admin-surface.css';
+
+/* 学习平台组件样式 */
+@import './learning-components.css';
+
 :root {
   /* 层级 token：抽屉/弹窗/菜单统一 z-index，避免散落硬编码 */
   --mk-z-menu: 60;
@@ -82,7 +96,7 @@
 }
 
 /* 现代化增强包 */
-@import './modern-enhancements.css';
+/*（@import 已统一上移至文件顶部）*/
 
 /* 无障碍工具类：视觉隐藏但保留给读屏器（sr-only 标准实现）。
    注意：此前 .visually-hidden 在全库无定义导致 label 泄漏渲染成可见文字 */
@@ -103,14 +117,7 @@
    引入设计系统和组件样式
    ======================================== */
 
-/* 核心设计系统 */
-@import './design-system.css';
-
-/* Admin 体系 B 兼容映射（admin-surface.css 收敛为 :root 映射，见该文件） */
-@import './admin-surface.css';
-
-/* 学习平台组件样式 */
-@import './learning-components.css';
+/*（@import 已统一上移至文件顶部）*/
 
 /* ==========================================
    全局重置与基础样式
