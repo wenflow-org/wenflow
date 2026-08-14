@@ -102,11 +102,15 @@
           </div>
         </div>
 
-        <!-- 知识点操作 -->
-        <div v-if="!checkpoint && !completed && showKpActions && !typing" class="kp-actions">
+        <!-- 知识点操作：自我评估二选一（掌握 ✓ 绿 / 未理解 ✗ 琥珀）；有上下文快选时隐藏避免双条拥挤 -->
+        <div v-if="!checkpoint && !completed && showKpActions && !typing && !quickReplies.length" class="kp-actions">
           <div class="kp-actions__row">
-            <span class="btn-primary" @click="sendDirect('我掌握了，继续')">我掌握了，继续</span>
-            <span class="btn-ghost" @click="sendDirect('没完全理解，换种方式再讲')">没完全理解，换种方式再讲</span>
+            <button type="button" class="kp-btn kp-btn--mastered" @click="sendDirect('我掌握了，继续')">
+              <span class="kp-btn__icon" aria-hidden="true">✓</span>我掌握了，继续
+            </button>
+            <button type="button" class="kp-btn kp-btn--retry" @click="sendDirect('没完全理解，换种方式再讲')">
+              <span class="kp-btn__icon" aria-hidden="true">✗</span>没完全理解，换种方式再讲
+            </button>
           </div>
         </div>
 
@@ -1172,6 +1176,29 @@ onBeforeUnmount(() => {
 }
 .kp-actions__label { font-size: 11.5px; font-weight: 700; color: var(--faint); }
 .kp-actions__row { display: flex; gap: 10px; flex-wrap: wrap; }
+/* 自我评估二选一：掌握 ✓ 绿实心 / 未理解 ✗ 琥珀描边——语义色一眼可辨 */
+.kp-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 40px; padding: 0 16px;
+  border-radius: 999px; border: 1px solid transparent;
+  font: inherit; font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.kp-btn:hover { transform: translateY(-1px); }
+.kp-btn:active { transform: translateY(0) scale(0.98); }
+.kp-btn__icon { font-size: 14px; line-height: 1; }
+.kp-btn--mastered {
+  color: #fff;
+  background: linear-gradient(135deg, #1e9e58, #15803d);
+  box-shadow: 0 10px 22px rgba(30, 158, 88, 0.22);
+}
+.kp-btn--mastered:hover { box-shadow: 0 12px 26px rgba(30, 158, 88, 0.3); }
+.kp-btn--retry {
+  color: #b45309;
+  background: #fffbeb;
+  border-color: rgba(180, 83, 9, 0.32);
+}
+.kp-btn--retry:hover { background: #fef3c7; }
 
 /* ---------- 检查点 ---------- */
 .checkpoint {
