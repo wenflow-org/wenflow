@@ -1139,6 +1139,10 @@ onBeforeUnmount(() => {
   .peerdock { right: 12px; left: 12px; bottom: 12px; width: auto; max-height: 60dvh; }
   .peerfab { right: 14px; bottom: 14px; width: 46px; height: 46px; }
 }
+/* 窄屏（平板/小窗）：dock 收窄并抬高，避免与底部输入区重叠（长消息上探场景） */
+@media (min-width: 641px) and (max-width: 1100px) {
+  .peerdock { width: min(300px, calc(100vw - 24px)); right: 12px; bottom: 140px; max-height: 380px; }
+}
 .msg__code {
   margin: 8px 0 0;
   background: #182338;
