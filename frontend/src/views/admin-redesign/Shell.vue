@@ -21,7 +21,12 @@
           >
             <span class="mshell__item-glyph">{{ item.glyph }}</span>
             <span class="mshell__item-label">{{ item.label }}</span>
-            <span v-if="badgeOf(item)" class="mshell__item-badge" :class="{ 'mshell__item-badge--alarm': isAlarmBadge(item) }">{{ badgeOf(item) }}</span>
+            <span
+              v-if="badgeOf(item)"
+              class="mshell__item-badge"
+              :class="{ 'mshell__item-badge--alarm': isAlarmBadge(item) }"
+              :title="badgeTitle(item)"
+            >{{ badgeOf(item) }}</span>
           </button>
         </section>
       </nav>
@@ -47,7 +52,7 @@
           <span v-if="dataSource === 'demo'" class="mk-badge mk-badge--warn mshell__demo-badge">演示模式</span>
           <template v-if="crumb">
             <span class="mshell__crumb-sep">/</span>
-            <span class="mshell__crumb-sub">{{ crumb }}</span>
+            <span class="mshell__crumb-sub" :title="crumbTitle || crumb">{{ crumb }}</span>
           </template>
         </div>
         <div class="mshell__topbar-right">
@@ -116,7 +121,7 @@ import { liveNavBadges, alarmNavBadges, loadLiveData, liveLoading } from './live
 import { adminAuthApi, clearAdminSession } from '@/api/adminApi'
 import { version as appVersion } from '../../../package.json'
 
-const props = defineProps<{ current: string; crumb?: string; release?: boolean }>()
+const props = defineProps<{ current: string; crumb?: string; crumbTitle?: string; release?: boolean }>()
 const emit = defineEmits<{ (e: 'navigate', id: string): void; (e: 'palette'): void; (e: 'glossary'): void }>()
 
 /* 滚动修复 #9：回到顶部按钮（页面 >2 屏且已滚动至少一屏时出现） */
@@ -148,6 +153,17 @@ function badgeOf(item: MockSceneDef): string {
     return liveNavBadges.value[item.id] || ''
   }
   return item.badge || ''
+}
+
+/* 徽章语义说明：红色=告警（近 7 天执行失败数，点击进入执行日志后自动平息）；
+   其余浅蓝/中性=普通计数徽章。统一在 title 注明，避免红/蓝无解释并存 */
+function badgeTitle(item: MockSceneDef): string {
+  const count = badgeOf(item)
+  if (!count) return ''
+  if (dataSource.value === 'live' && alarmNavBadges.has(item.id)) {
+    return `近 7 天执行失败 ${count} 次（告警徽章：红色；进入执行日志页后自动平息）`
+  }
+  return `${item.label}：${count}`
 }
 
 /* 报警徽章可平息：已读数存 localStorage，只有失败数超过已读数才脉冲 */

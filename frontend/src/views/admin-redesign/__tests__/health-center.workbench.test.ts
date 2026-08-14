@@ -122,6 +122,13 @@ describe('巡检工作台（G1）', () => {
     expect(wrapper.findAll('.hc-item--error').length).toBe(2);
     expect(wrapper.findAll('.hc-item--warn').length).toBe(2);
 
+    // a2. 健康检查分类计数（P3 对账）：客户端按 semantics 实计，分类之和恒等于总项数
+    const hcHead = wrapper.findAll('.wb-card')[0].find('.mk-card__head');
+    expect(hcHead!.text()).toContain('13 项检查');
+    const catMeta = hcHead!.findAll('.mk-card__meta')[1].text();
+    const catNums = catMeta.match(/\d+/g)?.map(Number) ?? [];
+    expect(catNums.reduce((a, b) => a + b, 0)).toBe(13);
+
     // b. 漂移三卡：计数>0 → 红色/琥珀显眼标注
     const driftStats = wrapper.findAll('.wb-stats')[0].findAll('.wb-stat');
     expect(driftStats.length).toBe(3);

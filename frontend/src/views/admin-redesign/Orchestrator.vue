@@ -5,7 +5,7 @@
       <strong class="mk-status__title">{{ statusTitle }}</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ stages.length }} 阶段</span>
-      <span class="mk-status__meta">{{ totalSkills }} Skills</span>
+      <span class="mk-status__meta">{{ totalSkills }} 个 Skill</span>
       <span class="mk-status__meta">接力 {{ Math.max(stages.length - 1, 0) }} 处</span>
       <span v-if="defsLoaded" class="mk-status__meta">定义源 {{ orchCount }} 编排 / {{ skillDefCount }} Skill</span>
       <span v-if="isLive && w4Drifted.length" class="mk-status__meta mk-status__meta--bad" :title="`${TERMS.driftHashQualified}（W4）：核心文件 ↔ 编译产物 ↔ DB 三方哈希不一致，需重新编译 + 同步`">W4 漂移 {{ w4Drifted.length }}</span>
@@ -53,7 +53,7 @@
     <section v-if="isLive && definitionNotes.length" class="mk-card orch-defs">
       <div class="mk-card__head">
         <h3 class="mk-card__title">运行时定义（API 真源）</h3>
-        <span class="mk-card__meta">orchestrators + agents</span>
+        <span class="mk-card__meta" title="编排文件定义（orchestrator definitions）+ 运行时 Skill 定义（agent definitions）">编排定义 + Skill 定义</span>
       </div>
       <ul class="orch-defs__list">
         <li v-for="(n, i) in definitionNotes" :key="i" class="orch-defs__item">
@@ -79,7 +79,7 @@
           <span class="orch-stage__num">{{ String(i + 1).padStart(2, '0') }}</span>
           <span class="orch-stage__body">
             <strong class="orch-stage__name">{{ st.name }}</strong>
-            <span class="orch-stage__meta">{{ st.skills.length }} Skills · {{ stageCalls(st) }} 次调用</span>
+            <span class="orch-stage__meta">{{ st.skills.length }} 个 Skill · {{ stageCalls(st) }} 次调用</span>
           </span>
         </button>
         <span v-if="i < stages.length - 1" class="orch-link" :class="{ 'orch-link--on': i >= activeIdx }">
@@ -611,10 +611,13 @@ const cardTitle = computed(() =>
 }
 .orch-stage {
   flex: 1 1 0;
-  min-width: 148px;
+  /* 视觉修复（P3）：min-width 148px 导致窄容器内条卡横向滚动，
+     改为 0 后卡片随容器等比压缩（名称/元数据已有 ellipsis 兜底），宽度充足时视觉不变 */
+  min-width: 0;
   position: relative;
   display: grid;
-  grid-template-columns: auto 1fr;
+  /* 1fr 轨道加 minmax(0,1fr)：名称列可压到 0（配合 ellipsis），消灭窄容器残余横滚 */
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 10px;
   align-items: center;
   padding: 12px 14px;
@@ -671,6 +674,8 @@ const cardTitle = computed(() =>
   color: var(--mk-faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* 接力连接器：后续链路点亮 */

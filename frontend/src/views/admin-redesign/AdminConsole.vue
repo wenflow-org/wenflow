@@ -9,7 +9,7 @@
       </div>
     </div>
 
-    <Shell :current="scene" :crumb="crumbLabel" release @navigate="navigate" @palette="paletteOpen = true" @glossary="glossaryOpen = true">
+    <Shell :current="scene" :crumb="crumbLabel" :crumb-title="crumbTitle" release @navigate="navigate" @palette="paletteOpen = true" @glossary="glossaryOpen = true">
       <div v-if="booting" class="ac-boot">
         <span class="mk-spinner mk-spinner--lg"></span>
         加载中…
@@ -113,12 +113,15 @@ const bootError = ref('');
 
 const currentComponent = computed(() => components[scene.value]);
 const detailComponent = computed(() => (subPage.value ? detailComponents[subPage.value.view] : null));
+/* 面包屑：二级页优先显示中文名/短标识（label），未设置时回退 ID 截断；title 始终给全 ID */
 const crumbLabel = computed(() => {
-  const id = subPage.value?.id
-  if (!id) return ''
-  if (id.length <= 12) return id
-  return `${id.slice(0, 8)}…${id.slice(-4)}`
+  const sp = subPage.value
+  if (!sp) return ''
+  const text = sp.label || sp.id
+  if (text.length <= 12) return text
+  return `${text.slice(0, 8)}…${text.slice(-4)}`
 })
+const crumbTitle = computed(() => subPage.value?.id || '')
 
 /* —— 真路由化：scene ↔ URL /admin/:page 双向同步 —— */
 const route = useRoute()

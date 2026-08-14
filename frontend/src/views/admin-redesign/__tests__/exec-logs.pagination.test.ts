@@ -188,4 +188,27 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     expect(last[0]).toMatchObject({ traceId: 'tr:abc' });
     expect(liveLogsPage.value).toBe(1);
   });
+
+  it('P2 Tokens 列：有传输层统计（agent_call_logs）→ 展示 P x / C y 实际值', async () => {
+    liveLogsTotal.value = 1;
+    liveLogsFiltered.value = [
+      { ...fakeSpan(1), promptTokens: 860, completionTokens: 204 }
+    ];
+    const w = await mountExec();
+    await nextTick();
+    const cell = w.find('.tline__tokens');
+    expect(cell.text()).toBe('P 860 / C 204');
+    expect(cell.attributes('title')).toContain('agent_call_logs');
+    expect(cell.text()).not.toBe('未统计');
+  });
+
+  it('P2 Tokens 列：无 token 数据 → 「未统计」+ tooltip 说明（不再与 0 混淆）', async () => {
+    liveLogsTotal.value = 1;
+    liveLogsFiltered.value = [fakeSpan(1)];
+    const w = await mountExec();
+    await nextTick();
+    const cell = w.find('.tline__tokens');
+    expect(cell.text()).toBe('未统计');
+    expect(cell.attributes('title')).toContain('未记录 token 用量');
+  });
 });

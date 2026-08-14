@@ -117,6 +117,41 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     expect(w.text()).toContain('10.0.0.1');
   });
 
+  it('登录审计时间（P3）：当天记录也带日期（MM-DD HH:MM:SS）', async () => {
+    h.getLogs.mockImplementation(async () => ({
+      data: {
+        data: {
+          logs: [],
+          attempts: [{ id: 'l1', scope: 'admin', username: 'admin', ip: '10.0.0.1', success: true, createdAt: '2026-08-14T09:05:07' }],
+          pagination: { total: 1, page: 1, limit: 30 }
+        }
+      }
+    }));
+    const w = await mountAudit();
+    await w.findAll('.mk-pill').find((x) => x.text() === '登录审计')!.trigger('click');
+    await flushPromises();
+    await nextTick();
+    expect(w.text()).toContain('08-14 09:05:07');
+  });
+
+  it('目标类型列（P3）：当前页记录全部未写入 targetType 时隐藏该列', async () => {
+    h.getLogs.mockImplementation(async () => ({
+      data: {
+        data: {
+          logs: [{ id: 'op-1-1', adminName: 'admin', action: 'user.update', targetType: null, targetId: 'user-op-1-1', method: 'POST', path: '/x', statusCode: 200, success: true, createdAt: '2026-08-13T10:00:00' }],
+          attempts: [],
+          pagination: { total: 1, page: 1, limit: 30 }
+        }
+      }
+    }));
+    const w = await mountAudit();
+    await nextTick();
+    expect(w.find('.tline-head__target-type').exists()).toBe(false);
+    expect(w.find('.tline-head--no-tt').exists()).toBe(true);
+    expect(w.find('.tline__main--no-tt').exists()).toBe(true);
+    expect(w.text()).toContain('user-op-1-1');
+  });
+
   it('关键词回车筛选：回第 1 页并携带 keyword', async () => {
     const w = await mountAudit();
     await findBtn(w, '下一页').trigger('click');

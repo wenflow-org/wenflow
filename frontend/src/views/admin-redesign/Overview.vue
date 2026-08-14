@@ -37,7 +37,7 @@
           v-for="(k, i) in data.kpis"
           :key="k.label"
           class="kpi kpi--clickable"
-          :title="`跳转到${kpiTargets[i] === 'execution-logs' ? '执行日志' : kpiTargets[i] === 'users' ? '用户' : kpiTargets[i] === 'goal-conversations' ? '目标对话' : 'Skill 目录'}`"
+          :title="kpiTitle(i)"
           @click="jump(kpiTargets[i])"
         >
           <span class="kpi__label">{{ k.label }}</span>
@@ -83,9 +83,9 @@
           ></div>
         </div>
         <div class="pulse__meta">
-          <span>24h 调用 <strong>{{ data.totalCalls }}</strong></span>
-          <span>异常 <strong :class="{ 'is-bad': data.totalIssues > 0 }">{{ data.totalIssues }}</strong></span>
-          <span>高峰 {{ data.peak }}</span>
+          <span title="窗口：近 24h（滚动窗口，非自然日）">24h 调用 <strong>{{ data.totalCalls }}</strong></span>
+          <span title="窗口：近 24h，失败 + 超时合计">异常 <strong :class="{ 'is-bad': data.totalIssues > 0 }">{{ data.totalIssues }}</strong></span>
+          <span title="窗口：近 24h 调用高峰所在小时">高峰 {{ data.peak }}</span>
         </div>
         <div class="pulse__axis">
           <i v-for="a in pulseAxis" :key="a">{{ a }}</i>
@@ -94,7 +94,7 @@
 
       <!-- 总结产出质量 -->
       <section class="brief-card">
-        <h4>总结产出质量</h4>
+        <h4 title="窗口：最近 50 次课后总结样本（session-wrapup 抽样）">总结产出质量</h4>
         <div v-if="data.wrapup.sampleSize > 0 && hasWrapupStats" class="wq">
           <div class="wq__row">
             <span class="wq__label">主题总结</span>
@@ -343,7 +343,7 @@ const datasets: BriefData = {
     { label: '今日调用', value: '273', hint: '超时 2' },
     { label: '今日成功率', value: '99.3%', hint: '2 次失败' },
     { label: '今日新增', value: '6', hint: '新用户' },
-    { label: '今日活跃', value: '18', hint: '总 32 名用户' },
+    { label: '今日活跃', value: '18', hint: '总 32 名用户（真实）' },
     { label: '进行中对话', value: '12', hint: '目标规划' },
     { label: '活跃 Skill', value: '16', hint: '近 24h' }
   ],
@@ -455,6 +455,21 @@ async function retryOverview() {
 const hideTestAccounts = overviewHideTest
 const kpiTargets = ['execution-logs', 'execution-logs', 'users', 'users', 'goal-conversations', 'skills']
 const funnelTargets = ['users', 'goal-conversations', 'goal-conversations', 'learner-center', 'learner-center']
+
+/* 窗口口径标注：KPI 行统一「今日」自然日窗口，个别指标另有细分口径，tooltip 注明消除歧义 */
+const KPI_WINDOWS: string[] = [
+  '窗口：今日（自然日 00:00 起）',
+  '窗口：今日（自然日 00:00 起）',
+  '窗口：今日新增注册（真实账号，不含测试/虚拟）',
+  '窗口：今日有学习会话的用户（真实账号口径）',
+  '窗口：今日进行中的目标澄清对话（真实用户）',
+  '窗口：近 24h 有调用的 Skill'
+]
+function kpiTitle(i: number): string {
+  const windowText = KPI_WINDOWS[i] || ''
+  const target = kpiTargets[i] === 'execution-logs' ? '执行日志' : kpiTargets[i] === 'users' ? '用户' : kpiTargets[i] === 'goal-conversations' ? '目标对话' : 'Skill 目录'
+  return [windowText, `点击跳转${target}`].filter(Boolean).join(' · ')
+}
 function jump(scene: string) {
   if (!scene) return
   intent.agentFilter = ''

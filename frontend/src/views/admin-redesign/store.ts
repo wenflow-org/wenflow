@@ -46,6 +46,9 @@ export interface TraceSpan {
   gatewayDurMs?: number
   /** 业务会话 ID（教学/目标对话等业务链路，用于会话归组） */
   sessionId?: string
+  /** agent_call_logs 传输层 token 统计（无数据 = 未统计） */
+  promptTokens?: number | null
+  completionTokens?: number | null
 }
 
 /** 成功链路：一次完整的路径生成（Goal → Path） */
@@ -274,10 +277,15 @@ export function clearInvestigation() {
 /* ---------- 二级页面（drill-in） ---------- */
 export type SubPageView = 'learner' | 'virtual' | 'user' | 'session' | 'session-real'
 
-export const subPage = ref<{ view: SubPageView; id: string } | null>(null)
+export const subPage = ref<{ view: SubPageView; id: string; label?: string } | null>(null)
 
 export function openSubPage(view: SubPageView, id: string) {
   subPage.value = { view, id }
+}
+
+/** 二级页加载出名称后回写（面包屑显示中文名/短标识；未设置时回退 ID 截断） */
+export function setSubPageLabel(label: string) {
+  if (subPage.value && label) subPage.value = { ...subPage.value, label }
 }
 
 export function closeSubPage() {

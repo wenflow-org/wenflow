@@ -222,7 +222,7 @@
       <div v-if="corePublishResult" class="sdp-pw__publish" :class="`sdp-pw__publish--${corePublishResult.ok ? 'ok' : 'bad'}`">
         <template v-if="corePublishResult.ok">
           已发布：{{ corePublishResult.agentId }} v{{ corePublishResult.version }} · coreHash
-          <span class="mono">{{ coreShortHash(corePublishResult.coreHash) }}</span>
+          <span class="mono" :title="corePublishResult.coreHash">{{ coreShortHash(corePublishResult.coreHash) }}</span>
         </template>
         <template v-else>{{ corePublishResult.message }}</template>
       </div>
@@ -278,7 +278,7 @@
           </div>
         </div>
         <div v-if="coreCompiledMeta" class="sdp-pw__meta mono">
-          coreHash {{ coreShortHash(coreCompiledMeta.coreHash) }} · coreVersion {{ coreCompiledMeta.coreVersion }}
+          coreHash <span :title="coreCompiledMeta.coreHash">{{ coreShortHash(coreCompiledMeta.coreHash) }}</span> · coreVersion {{ coreCompiledMeta.coreVersion }}
         </div>
         <pre class="sdp-pw__pre">{{ coreCompiledPrompt || '点击「保存并编译」查看五块产物（dry run，不写入）。' }}</pre>
       </div>

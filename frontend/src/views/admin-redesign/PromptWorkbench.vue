@@ -43,7 +43,7 @@
             <td><code class="mono">{{ item.skillId }}</code></td>
             <td class="mk-na">{{ item.fields }} 字段 · {{ item.channels.length }} 通道</td>
             <td class="mk-na">{{ item.outputMedia }}<template v-if="item.deltaOutput"> · delta</template></td>
-            <td><code class="mono pw-hash">{{ shortHash(item.coreHash) }}</code></td>
+            <td><code class="mono pw-hash" :title="item.coreHash">{{ shortHash(item.coreHash) }}</code></td>
             <td>
               <span class="mk-badge" :class="statusBadge(item.status)">{{ statusLabel(item.status) }}</span>
             </td>

@@ -45,6 +45,18 @@ export const TERMS = {
   healthScore: '今日成功率',
   healthScoreTitle: '今日调用成功率',
 
+  // ---- 对账族（W1-W5 编码人话；与 backend glossary-content.ts 词条同语义） ----
+  /** W1：户口簿活跃技能 ↔ ACTIVE prompt 双向核对 */
+  reconActive: 'ACTIVE 对账',
+  /** W2：户口簿 ↔ 系统注册表（skill_registrations）双向核对 */
+  reconRegistration: '注册对账',
+  /** W3：运行时定义执行步骤 ↔ 户口簿 coordinator 声明 */
+  reconWiring: '接线对账',
+  /** W4：核心文件 ↔ 编译产物 ↔ DB 三方哈希对账 */
+  reconHash: '哈希对账',
+  /** W5：dataSource 声明三通道校验（db 声明 / sandbox / 例外账） */
+  reconDataSource: '数据源声明对账',
+
   // ---- 生命周期族 ----
   completion: '完成度',
 } as const
@@ -80,4 +92,23 @@ export function errorCodeLabel(code?: string): string | undefined {
   if (!code) return undefined
   if (code.startsWith('UPSTREAM_')) return `上游服务异常（HTTP ${code.slice('UPSTREAM_'.length)}）`
   return ERROR_CODE_LABELS[code]
+}
+
+// ============================================================
+// 网关错误消息人话化（试跑/执行日志/全局 toast 黑话治理单源）
+// ============================================================
+
+/**
+ * 传输层错误消息 → 中文人话；不匹配返回 undefined（调用方回退原文）。
+ * - HTTP 429：一律「请求过于频繁，请稍后重试」（axios 默认 message 与后端限流同义）
+ * - "API request failed with status NNN"（网关 executor 原文）→ 上游服务异常（HTTP NNN），
+ *   与 errorCodeLabel 的 UPSTREAM_NNN 映射同语义
+ */
+export function humanizeHttpError(message: string, status?: number): string | undefined {
+  if (status === 429) return '请求过于频繁，请稍后重试'
+  // axios 默认错误消息（无 response 体时 status 可能缺失）：按文案模式兜底
+  if (/^Request failed with status code 429$/.test(String(message || ''))) return '请求过于频繁，请稍后重试'
+  const m = /^API request failed with status (\d+)(?::\s|$)/.exec(String(message || ''))
+  if (m) return `上游服务异常（HTTP ${m[1]}）`
+  return undefined
 }

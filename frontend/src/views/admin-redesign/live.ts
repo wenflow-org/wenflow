@@ -29,6 +29,7 @@ import {
   type SkillStat
 } from './store'
 import { EXTRA_COMPONENT_VISIBLE_SKILLS } from '@/views/admin/capabilityCatalog'
+import { humanizeHttpError } from './terms'
 
 /** 与生产 Skill 目录同口径：外挂能力 Skill 不在主目录展示（归外挂组件页） */
 const isExtraSkill = (id: string) => EXTRA_COMPONENT_VISIBLE_SKILLS.has(id.replace(/^skill:/, ''))
@@ -60,10 +61,18 @@ export function timeAgo(iso?: string | null): string {
 export function errMsg(e: unknown): string {
   const err = e as { response?: { data?: { error?: { message?: unknown } | string }; status?: number }; message?: string }
   const raw = err?.response?.data?.error
-  if (typeof raw === 'string') return raw
-  if (raw && typeof raw.message === 'string') return raw.message
-  if (err?.response?.status === 401) return '需要 admin 登录'
-  return err?.message || '网络错误'
+  const status = err?.response?.status
+  const message =
+    typeof raw === 'string'
+      ? raw
+      : raw && typeof raw.message === 'string'
+        ? raw.message
+        : err?.message || ''
+  // 网关黑话/限流人话（terms.ts 单源）：429 →「请求过于频繁」；"API request failed with status N" →「上游服务异常（HTTP N）」
+  const human = humanizeHttpError(message, status)
+  if (human) return human
+  if (status === 401) return '需要 admin 登录'
+  return message || '网络错误'
 }
 
 /** 长 ID（UUID / traceId）在动态、列表等紧凑场景的截断显示 */
@@ -95,6 +104,8 @@ export interface RawLog {
   recoveredByRetry?: boolean
   errorCategory?: string
   errorCode?: string
+  promptTokens?: number | null
+  completionTokens?: number | null
 }
 
 function mapStatus(s?: string): TraceSpan['status'] {
@@ -192,7 +203,9 @@ export function mapLogsToSpans(items: RawLog[]): TraceSpan[] {
       errorCode: log.errorCode,
       errorMessage: log.errorMessage,
       gatewayDurMs: gatewayLog ? Number(gatewayLog.durationMs || 0) : undefined,
-      sessionId: log.sessionId || undefined
+      sessionId: log.sessionId || undefined,
+      promptTokens: log.promptTokens != null ? Number(log.promptTokens) : null,
+      completionTokens: log.completionTokens != null ? Number(log.completionTokens) : null
     }
   }
 
@@ -848,6 +861,12 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     if (r !== 0) return r
     return (b.ts ?? 0) - (a.ts ?? 0)
   })
+  // 动态去重：同文案事件（如同一失败调用重复上报的 generic-chat/caller_abort）只保留最新一条，
+  // 避免"3 张相同卡"占满动态流（排序已在上面完成，此处按首现即最新）
+  const feedDeduped = new Map<string, LiveOverviewFull['feed'][number]>()
+  for (const f of feed) {
+    if (!feedDeduped.has(f.text)) feedDeduped.set(f.text, f)
+  }
 
   /* 待办：失败最多的节点（近 7 天日志，放宽样本到 200 条减少截断偏差） */
   const byAgent = new Map<string, number>()
@@ -869,9 +888,9 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
   const kpis = [
     { label: '今日调用', value: fmt(todayCalls), hint: todayCalls > 0 ? `超时 ${Number(agents.todayTimeouts || 0)}` : '等待学习者开始' },
     { label: '今日成功率', value: todayCalls > 0 ? `${todaySuccessRate}%` : '—', hint: todayFailed > 0 ? `${todayFailed} 次失败` : '无失败' },
-    { label: '今日新增', value: fmt(Number(users.newToday || 0)), hint: '新用户' },
-    { label: '今日活跃', value: fmt(activeUsers), hint: `总用户 ${users.total ?? 0}` },
-    { label: '进行中对话', value: fmt(Number(conv.active || 0)), hint: '目标澄清阶段' },
+    { label: '今日新增', value: fmt(Number(users.newToday || 0)), hint: '新用户（真实账号）' },
+    { label: '今日活跃', value: fmt(activeUsers), hint: `总用户 ${users.total ?? 0}（真实，不含测试/虚拟）` },
+    { label: '进行中对话', value: fmt(Number(conv.active || 0)), hint: '目标澄清阶段（真实用户）' },
     { label: '活跃 Skill', value: fmt(Number(agents.activeAgents24h || 0)), hint: '近 24h 有调用' },
   ]
 
@@ -922,7 +941,7 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     peak,
     usage,
     trend,
-    feed: feed.slice(0, 12),
+    feed: [...feedDeduped.values()].slice(0, 12),
     actions
   }
   return head

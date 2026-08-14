@@ -8,7 +8,7 @@
           <tr><th>kind</th><td><code class="mono">{{ overview.kind }}</code></td></tr>
           <tr><th>agentId</th><td><code class="mono">{{ overview.agentId }}</code></td></tr>
           <tr v-if="overview.file"><th>file path</th><td><code class="mono">{{ overview.file.path }}</code></td></tr>
-          <tr v-if="overview.file?.hash"><th>file hash</th><td><code class="mono">{{ shortHash(overview.file.hash) }}</code></td></tr>
+          <tr v-if="overview.file?.hash"><th>file hash</th><td><code class="mono" :title="overview.file.hash">{{ shortHash(overview.file.hash) }}</code></td></tr>
           <tr v-if="overview.db?.id"><th>DB ACTIVE id</th><td><code class="mono">{{ overview.db.id }}</code></td></tr>
           <tr v-if="overview.db?.version"><th>DB ACTIVE version</th><td><code class="mono">v{{ overview.db.version }}</code></td></tr>
           <tr v-if="overview.db?.useCount !== undefined"><th>调用次数</th><td>{{ overview.db.useCount }}</td></tr>

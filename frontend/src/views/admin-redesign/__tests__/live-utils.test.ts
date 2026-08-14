@@ -52,6 +52,22 @@ describe('live.errMsg', () => {
     expect(errMsg({ response: { status: 401 } })).toBe('需要 admin 登录');
   });
 
+  it('429 → 限流人话（axios 默认 message 也映射）', () => {
+    expect(errMsg({ response: { status: 429, data: { error: { message: 'Request failed with status code 429' } } } })).toBe('请求过于频繁，请稍后重试');
+    expect(errMsg({ message: 'Request failed with status code 429' })).toBe('请求过于频繁，请稍后重试');
+  });
+
+  it('网关黑话 → 上游服务异常（HTTP N）', () => {
+    expect(
+      errMsg({ response: { status: 404, data: { error: { message: 'API request failed with status 404: not found' } } } })
+    ).toBe('上游服务异常（HTTP 404）');
+    expect(errMsg({ message: 'API request failed with status 403' })).toBe('上游服务异常（HTTP 403）');
+  });
+
+  it('非网关消息不误伤（原文保留）', () => {
+    expect(errMsg({ response: { status: 500, data: { error: { message: '数据库连接失败' } } } })).toBe('数据库连接失败');
+  });
+
   it('普通 message / 未知 → 兜底', () => {
     expect(errMsg({ message: 'boom' })).toBe('boom');
     expect(errMsg(undefined)).toBe('网络错误');
@@ -176,6 +192,20 @@ describe('live.mapLogsToSpans（P1 消息列语义 + 网关配对 + 状态映射
     ]);
     expect(spans1[0].model).toBe('deepseek-v4-flash');
     expect(spans1[0].sessionId).toBe('sess_1');
+  });
+
+  it('P2 token 透传：agent_call_logs.promptTokens/completionTokens 映射到 span（Tokens 列实际值）', () => {
+    const spans1 = mapLogsToSpans([
+      { id: 't1', status: 'success', promptTokens: 860, completionTokens: 204, agentId: 'skill:goal-conversation' }
+    ]);
+    expect(spans1[0].promptTokens).toBe(860);
+    expect(spans1[0].completionTokens).toBe(204);
+  });
+
+  it('P2 token 缺省：无 token 字段 → span 为 null（Tokens 列显示「未统计」而非 0）', () => {
+    const spans1 = mapLogsToSpans([{ id: 't2', status: 'success' }]);
+    expect(spans1[0].promptTokens).toBeNull();
+    expect(spans1[0].completionTokens).toBeNull();
   });
 
   it('W2 修窗：长调用下网关与 skill 时间差远超 1500ms 仍合并（窗口随调用时长缩放）', () => {

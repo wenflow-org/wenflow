@@ -277,6 +277,13 @@
             </span>
           </div>
           <div v-if="health" class="ac-health">
+            <div class="ac-health__head" aria-hidden="true">
+              <span></span>
+              <span>能力</span>
+              <span>信息</span>
+              <span>响应</span>
+              <span>最近探测</span>
+            </div>
             <div v-for="c in health.capabilities" :key="c.id" class="ac-health__row">
               <span class="ac-health__dot" :class="`is-${c.status}`"></span>
               <span class="ac-health__id mono">{{ c.id }}</span>
@@ -886,6 +893,21 @@ async function toggleRegistration() {
 
 /* 能力健康 */
 .ac-health { display: grid; padding: 2px 0 8px; }
+/* 列头（P3）：能力行各列为无标注数字（响应 ms / 相对时间），补一行表头说明语义 */
+.ac-health__head {
+  display: grid;
+  grid-template-columns: 10px 200px 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 4px 0 2px;
+  border-bottom: 1px solid #f0f2f5;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mk-faint);
+}
+.ac-health__head span:last-child { white-space: nowrap; }
 .ac-health__row {
   display: grid;
   grid-template-columns: 10px 200px 1fr auto auto;
@@ -1064,7 +1086,9 @@ async function toggleRegistration() {
 @media (max-width: 800px) {
   .ac-group__fields { grid-template-columns: 1fr; }
   .ac-health__row { grid-template-columns: 10px minmax(0, 1fr) auto; }
+  .ac-health__head { grid-template-columns: 10px minmax(0, 1fr) auto; }
   .ac-health__msg { display: none; }
+  .ac-health__head span:nth-child(3) { display: none; }
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
@@ -1088,6 +1112,7 @@ async function toggleRegistration() {
   .ac-groups { gap: 20px; padding: 14px 0 8px; }
   .ac-rel__note { font-size: 13px; }
   .ac-health__row { grid-template-columns: 12px 210px 1fr auto auto; gap: 12px; padding: 9px 0; font-size: 13.5px; }
+  .ac-health__head { grid-template-columns: 12px 210px 1fr auto auto; gap: 12px; padding: 5px 0 3px; font-size: 12.5px; }
   .ac-health__id,
   .ac-health__lat,
   .ac-health__time { font-size: 12.5px; }
@@ -1114,6 +1139,7 @@ async function toggleRegistration() {
   .ac-groups { gap: 22px; padding: 16px 0 8px; }
   .ac-rel__note { font-size: 15px; }
   .ac-health__row { grid-template-columns: 14px 260px 1fr auto auto; gap: 14px; padding: 11px 0; font-size: 15.5px; }
+  .ac-health__head { grid-template-columns: 14px 260px 1fr auto auto; gap: 14px; padding: 6px 0 3px; font-size: 14.5px; }
   .ac-health__id,
   .ac-health__lat,
   .ac-health__time { font-size: 14.5px; }
@@ -1140,6 +1166,7 @@ async function toggleRegistration() {
   .ac-groups { gap: 26px; padding: 18px 0 10px; }
   .ac-rel__note { font-size: 17.5px; }
   .ac-health__row { grid-template-columns: 16px 310px 1fr auto auto; gap: 16px; padding: 13px 0; font-size: 18px; }
+  .ac-health__head { grid-template-columns: 16px 310px 1fr auto auto; gap: 16px; padding: 7px 0 4px; font-size: 17px; }
   .ac-health__id,
   .ac-health__lat,
   .ac-health__time { font-size: 17px; }

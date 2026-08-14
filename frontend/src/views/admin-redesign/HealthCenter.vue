@@ -10,10 +10,10 @@
         <span class="mk-status__sep"></span>
         <span class="mk-status__meta" :title="displayReport.generatedAt">生成 {{ timeAgo(displayReport.generatedAt) }}</span>
         <span class="mk-status__sep"></span>
-        <span class="mk-status__meta">Skill <b class="mk-status__num">{{ global.total }}</b></span>
-        <span class="mk-status__meta">aux <b class="mk-status__num">{{ global.aux }}</b></span>
-        <span class="mk-status__meta">mainline <b class="mk-status__num">{{ global.mainline }}</b></span>
-        <span v-if="global.handlerOnly" class="mk-status__meta">handler-only <b class="mk-status__num">{{ global.handlerOnly }}</b></span>
+        <span class="mk-status__meta" title="Skill 总数（户口簿登记口径）">Skill <b class="mk-status__num">{{ global.total }}</b></span>
+        <span class="mk-status__meta" title="辅助 Skill：runAux 框架挂载，不进字段路由">辅助 <b class="mk-status__num">{{ global.aux }}</b></span>
+        <span class="mk-status__meta" title="主链 Skill：进入字段路由，参与编排">主链 <b class="mk-status__num">{{ global.mainline }}</b></span>
+        <span v-if="global.handlerOnly" class="mk-status__meta" title="handler-only：无 LLM prompt 的纯函数 Skill">纯函数 <b class="mk-status__num">{{ global.handlerOnly }}</b></span>
         <span class="mk-badge" :class="topAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'">
           {{ topAbnormal > 0 ? `异常 ${topAbnormal}` : '全部健康' }}
         </span>
@@ -36,7 +36,7 @@
           <h3 class="mk-card__title">健康检查</h3>
           <span class="mk-card__meta">{{ displayReport.health.summary.total }} 项检查</span>
           <span class="mk-card__meta">
-            基准漂移 {{ displayReport.health.summary.baselineDrift }} · 一致性 {{ displayReport.health.summary.consistency }} · 覆盖记录 {{ displayReport.health.summary.overrideRecord }}
+            <template v-for="(n, key) in semanticsCounts" :key="key">{{ key }} {{ n }}<template v-if="key !== lastSemanticsKey"> · </template></template>
           </span>
           <span class="mk-badge" :class="healthAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'">
             {{ healthAbnormal > 0 ? `${healthAbnormal} 项异常` : '无异常' }}
@@ -125,37 +125,37 @@
       <section class="mk-card wb-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">对账摘要</h3>
-          <span class="mk-card__meta">户口簿 {{ reconciliation.total }} · 缺注册 / 幽灵注册 / 缺 ACTIVE / 接线差集</span>
+          <span class="mk-card__meta">户口簿 {{ reconciliation.total }} · 缺注册 / 幽灵注册 / 缺 ACTIVE / 幽灵 ACTIVE / 僵尸 ACTIVE / 接线差集</span>
           <button type="button" class="mk-status__action" @click="goSkills()">→ Skill 目录对账面板</button>
         </div>
         <div class="wb-stats wb-stats--recon">
-          <button type="button" class="wb-stat" :class="reconTone('missingRegistration')" @click="goSkills('unregistered')">
-            <span class="wb-stat__label">缺注册（W2）</span>
+          <button type="button" class="wb-stat" :class="reconTone('missingRegistration')" @click="goSkills('unregistered')" :title="`W2 ${TERMS.reconRegistration}：户口簿有、系统注册表无`">
+            <span class="wb-stat__label">缺注册（W2 {{ TERMS.reconRegistration }}）</span>
             <span class="wb-stat__num">{{ reconciliation.missingRegistration }}</span>
             <span class="mk-badge" :class="badgeCls(reconciliation.missingRegistration, 'bad')">{{ reconciliation.missingRegistration > 0 ? '异常' : '正常' }}</span>
           </button>
-          <button type="button" class="wb-stat" :class="reconTone('zombieRegistration')" @click="goSkills()">
-            <span class="wb-stat__label">幽灵注册（W2）</span>
+          <button type="button" class="wb-stat" :class="reconTone('zombieRegistration')" @click="goSkills()" :title="`W2 ${TERMS.reconRegistration}：系统注册表有行、户口簿已无此技能`">
+            <span class="wb-stat__label">幽灵注册（W2 {{ TERMS.reconRegistration }}）</span>
             <span class="wb-stat__num">{{ reconciliation.zombieRegistration }}</span>
             <span class="mk-badge" :class="badgeCls(reconciliation.zombieRegistration, 'bad')">{{ reconciliation.zombieRegistration > 0 ? '异常' : '正常' }}</span>
           </button>
-          <button type="button" class="wb-stat" :class="reconTone('missingActive')" @click="goSkills('active-missing')">
-            <span class="wb-stat__label">缺 ACTIVE（W1）</span>
+          <button type="button" class="wb-stat" :class="reconTone('missingActive')" @click="goSkills('active-missing')" :title="`W1 ${TERMS.reconActive}：有文件/注册，但 DB 无「当前生效」prompt，运行时无法执行`">
+            <span class="wb-stat__label">缺 ACTIVE（W1 {{ TERMS.reconActive }}）</span>
             <span class="wb-stat__num">{{ reconciliation.missingActive }}</span>
             <span class="mk-badge" :class="badgeCls(reconciliation.missingActive, 'warn')">{{ reconciliation.missingActive > 0 ? '异常' : '正常' }}</span>
           </button>
-          <button type="button" class="wb-stat" :class="reconTone('zombieActive')" @click="goSkills()">
-            <span class="wb-stat__label">幽灵 ACTIVE（W1）</span>
+          <button type="button" class="wb-stat" :class="reconTone('zombieActive')" @click="goSkills()" :title="`W1 ${TERMS.reconActive}：DB ACTIVE 有、户口簿活跃集无`">
+            <span class="wb-stat__label">幽灵 ACTIVE（W1 {{ TERMS.reconActive }}）</span>
             <span class="wb-stat__num">{{ reconciliation.zombieActive }}</span>
             <span class="mk-badge" :class="badgeCls(reconciliation.zombieActive, 'bad')">{{ reconciliation.zombieActive > 0 ? '异常' : '正常' }}</span>
           </button>
-          <button type="button" class="wb-stat" :class="reconTone('zombieSkillActive')" @click="goSkills()">
-            <span class="wb-stat__label">僵尸 ACTIVE（W1）</span>
+          <button type="button" class="wb-stat" :class="reconTone('zombieSkillActive')" @click="goSkills()" :title="`W1 ${TERMS.reconActive}：已退役 Skill 的 ACTIVE 残留`">
+            <span class="wb-stat__label">僵尸 ACTIVE（W1 {{ TERMS.reconActive }}）</span>
             <span class="wb-stat__num">{{ reconciliation.zombieSkillActive }}</span>
             <span class="mk-badge" :class="badgeCls(reconciliation.zombieSkillActive, 'warn')">{{ reconciliation.zombieSkillActive > 0 ? '残留' : '正常' }}</span>
           </button>
-          <button type="button" class="wb-stat" :class="reconTone('unwired')" @click="goSkills()">
-            <span class="wb-stat__label">接线差集（W3）</span>
+          <button type="button" class="wb-stat" :class="reconTone('unwired')" @click="goSkills()" :title="`W3 ${TERMS.reconWiring}：运行时定义执行步骤 ↔ 户口簿 coordinator 声明不一致`">
+            <span class="wb-stat__label">接线差集（W3 {{ TERMS.reconWiring }}）</span>
             <span class="wb-stat__num">{{ reconciliation.unwired }}</span>
             <span class="mk-badge" :class="badgeCls(reconciliation.unwired, 'warn')">{{ reconciliation.unwired > 0 ? '异常' : '正常' }}</span>
           </button>
@@ -166,7 +166,7 @@
       <section class="mk-card wb-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">完成度分布</h3>
-          <span class="mk-card__meta">draft → live 五档 · 明细见 Skill 目录对账面板</span>
+          <span class="mk-card__meta">草稿 → 已上线 五档 · 明细见 Skill 目录对账面板</span>
           <button type="button" class="mk-status__action" @click="goSkills()">→ Skill 目录</button>
         </div>
         <div class="wb-stats wb-stats--rec">
@@ -237,6 +237,18 @@ const counts = computed(() => {
   for (const item of displayReport.value?.health.items || []) c[item.severity] = (c[item.severity] || 0) + 1
   return c
 })
+
+/** 分类计数（P3 对账）：按检查项 semantics 客户端实计，分类之和恒等于「N 项检查」总数，
+    修复服务端 summary 分类漏计第 13 项（运行时观测）导致 12 ≠ 13 的口径差 */
+const semanticsCounts = computed(() => {
+  const c: Record<string, number> = {}
+  for (const item of displayReport.value?.health.items || []) {
+    const label = semanticsLabel(item.semantics)
+    c[label] = (c[label] || 0) + 1
+  }
+  return c
+})
+const lastSemanticsKey = computed(() => Object.keys(semanticsCounts.value).slice(-1)[0] || '')
 
 const barTone = computed(() => {
   if (!displayReport.value) return 'muted'

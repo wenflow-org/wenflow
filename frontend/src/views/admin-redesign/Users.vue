@@ -5,6 +5,9 @@
       <strong class="mk-status__title">{{ users.length ? '用户体系正常' : pill === 'deleted' ? '暂无已删除用户' : '还没有真实用户' }}</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ users.length }} 人</span>
+      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="'用户页为全量口径（含测试/虚拟账号）；总览「总用户」仅计真实用户（不含虚拟学习者与测试账号），两端差异即此处差值'">
+        真实 {{ realUsers }} · 测试/虚拟 {{ users.length - realUsers }}
+      </span>
       <span class="mk-status__meta">管理员 {{ adminCount }}</span>
       <span class="mk-status__meta">当前在线 {{ activeToday }}</span>
       <span v-if="isLive && registrationEnabled !== null" class="mk-status__meta" :class="registrationEnabled ? '' : 'ul-reg--closed'">
@@ -62,7 +65,7 @@
             </tr>
           </thead>
         <tbody>
-          <tr v-for="u in shown" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" @click="openSubPage('user', u.id)">
+          <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" @click="openSubPage('user', u.id)">
             <td v-if="isLive"><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted" :aria-label="`选择 ${u.name}`" @click.stop /></td>
             <td>
               <div class="mk-cell-main">
@@ -121,9 +124,14 @@
         <span>放宽筛选条件，或邀请第一位真实用户。</span>
         <button v-if="isFiltered" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
       </div>
-      <div v-if="canMore" class="ul-more">
-        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }} 人）</button>
-      </div>
+      <!-- 客户端分页（P2：37 行长表单页直排 → mk-pagination 统一分页器，15-30-50-100 条/页） -->
+      <Pagination
+        v-if="filtered.length"
+        v-model:page="page"
+        v-model:pageSize="pageSize"
+        :total="filtered.length"
+        :showTotal="true"
+      />
     </div>
 
     <!-- 批量操作条 -->
@@ -181,11 +189,11 @@
 import { computed, ref, watch } from 'vue'
 import { openSubPage, intent, isLive } from './store'
 import { liveUsers, liveCreateUser, liveDeleteUser, liveSetUserRole, liveUsersTotal, timeAgo, errMsg, registrationEnabled, liveLoading, liveFailures, loadLiveData } from './live'
-import { useLoadMore } from './useLoadMore'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
+import Pagination from './Pagination.vue'
 import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
@@ -306,6 +314,9 @@ const users = computed<UserRow[]>(() => {
 
 const pill = ref('all')
 const keyword = ref('')
+
+/** 真实用户数（排除测试/虚拟账号；口径标注用，与总览「总用户」对齐的近似值——列表为前 50 行样本） */
+const realUsers = computed(() => users.value.filter((u) => !u.deleted && !isTestAccountUser(u)).length)
 
 /** live 用户域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
 const loadFailed = computed(
@@ -554,8 +565,18 @@ const filtered = computed(() =>
   })
 )
 
-/* 长列表分批渲染：每批 15 行 */
-const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
+/* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
+   数据全量在客户端（live 拉取 / demo 本地），筛选后按页切片；
+   筛选/数据源变化自动回第 1 页（watch filtered） */
+const page = ref(1)
+const pageSize = ref(15)
+const paged = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filtered.value.slice(start, start + pageSize.value)
+})
+watch(filtered, () => {
+  page.value = 1
+})
 
 const isFiltered = computed(() => pill.value !== 'all' || !!keyword.value.trim())
 function clearFilters() {
@@ -622,25 +643,17 @@ function clearFilters() {
   cursor: help;
 }
 .ul-level__xp { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--mk-muted); font-weight: 600; }
-.ul-more {
-  display: flex;
-  justify-content: center;
-  padding: 10px 0 12px;
-  border-top: 1px dashed var(--mk-line);
-}
 
 @media (min-width: 2000px) {
   .ul-tags { gap: 7px; margin-top: 3px; }
   .ul-tag { font-size: 12px; padding: 2px 10px; }
   .ul-batch { gap: 11px; padding: 10px 14px 10px 18px; font-size: 14px; }
   .ul-batch__danger { font-size: 14px; padding: 7px 16px; }
-  .ul-more { padding: 12px 0 14px; }
 }
 @media (min-width: 2800px) {
   .ul-tags { gap: 8px; margin-top: 4px; }
   .ul-tag { font-size: 14px; padding: 3px 12px; }
   .ul-batch { gap: 13px; padding: 12px 17px 12px 21px; font-size: 16.5px; }
   .ul-batch__danger { font-size: 16.5px; padding: 8px 19px; }
-  .ul-more { padding: 14px 0 17px; }
 }
 </style>

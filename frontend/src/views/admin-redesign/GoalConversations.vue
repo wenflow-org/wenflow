@@ -6,7 +6,7 @@
       <strong class="mk-status__title">Goal 会话</strong>
       <span class="mk-status__sep"></span>
       <template v-if="isLive && stats">
-        <span class="mk-status__meta">总数 {{ stats.total }}</span>
+        <span class="mk-status__meta" title="口径：仅真实用户（不含虚拟/测试账号）；下方列表为全量口径（含虚拟学习者），故两处数字可能不同">总数 {{ stats.total }}（真实用户）</span>
         <span class="mk-status__meta">进行中 {{ stats.active }}</span>
         <span class="mk-status__meta">已完成 {{ stats.completed }}</span>
         <span class="mk-status__meta">完成率 {{ stats.completionRate }}%</span>
@@ -54,7 +54,7 @@
               </button>
             </div>
           </div>
-          <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}</span>
+          <span class="mk-card__meta" :title="`当前筛选 ${filtered.length} / 全量 ${rows.length} 条（列表为全量口径，含虚拟学习者；状态条「总数」仅计真实用户）`">{{ filtered.length }} / {{ rows.length }} 条（全量）</span>
         </div>
 
         <MockSkeletonTable v-if="loading && !rows.length" :cols="6" />
@@ -77,7 +77,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in shown" :key="r.id" class="gc-row" @click="openDetail(r)">
+            <tr v-for="r in paged" :key="r.id" class="gc-row" @click="openDetail(r)">
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ r.userName }}</strong>
@@ -127,9 +127,15 @@
           <strong>{{ loading ? '加载中…' : (keyword || statusFilter ? '当前筛选无匹配' : '暂无会话') }}</strong>
           <span v-if="!loading">{{ keyword || statusFilter ? '放宽筛选条件试试。' : '虚拟学习者发起目标对话后，会话记录会出现在这里。' }}</span>
           <button v-if="isFiltered && !loading" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
-        </div>        <div v-if="canMore" class="gc-more">
-          <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
         </div>
+        <!-- 客户端分页（P2：76 行单页直排 → mk-pagination 统一分页器，15-30-50-100 条/页） -->
+        <Pagination
+          v-if="filtered.length"
+          v-model:page="page"
+          v-model:pageSize="pageSize"
+          :total="filtered.length"
+          :showTotal="true"
+        />
       </div>
     </template>
 
@@ -253,11 +259,11 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { isLive, openSession, openSubPage } from './store'
 import { errMsg, timeAgo } from './live'
 import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS } from './statusText'
-import { useLoadMore } from './useLoadMore'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
+import Pagination from './Pagination.vue'
 import { adminGoalConversationsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
@@ -416,8 +422,18 @@ function clearFilters() {
   statusFilter.value = ''
 }
 
-/* 长列表分批渲染：每批 20 行 */
-const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
+/* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
+   列表为客户端全量数据（limit:100 拉取后本地筛选），按页切片；
+   筛选/数据变化自动回第 1 页（watch filtered） */
+const page = ref(1)
+const pageSize = ref(15)
+const paged = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filtered.value.slice(start, start + pageSize.value)
+})
+watch(filtered, () => {
+  page.value = 1
+})
 
 async function load() {
   if (!isLive.value || loading.value) return
@@ -646,12 +662,6 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   vertical-align: bottom;
-}
-.gc-more {
-  display: flex;
-  justify-content: center;
-  padding: 10px 0 12px;
-  border-top: 1px dashed var(--mk-line);
 }
 
 /* 详情面板（与 ts/pcl 面板同构） */

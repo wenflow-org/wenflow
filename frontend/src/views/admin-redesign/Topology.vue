@@ -4,7 +4,7 @@
     <div class="topo-toolbar">
       <div class="topo-toolbar__status">
         <span class="topo-status-dot" :class="hasError ? 'is-error' : 'is-ok'"></span>
-        <strong class="topo-toolbar__title">{{ hasError ? '拓扑存在异常节点' : '拓扑运行正常' }}</strong>
+        <strong class="topo-toolbar__title" :title="statusTitleHint">{{ statusTitle }}</strong>
         <span class="topo-toolbar__sep"></span>
         <span class="topo-toolbar__meta"><b>{{ agentNodes.length }}</b> 个 Agent</span>
         <span class="topo-toolbar__meta"><b>{{ skillNodes.length }}</b> 个 Skill</span>
@@ -199,7 +199,7 @@
               <div class="agent-card__name" :title="a.id">{{ a.name }}</div>
               <div class="agent-card__sub">{{ a.id }}</div>
             </div>
-            <span v-if="a.errorCount > 0" class="agent-card__dot is-error">{{ a.errorCount > 9 ? '9+' : a.errorCount }}</span>
+            <span v-if="a.errorCount > 0" class="agent-card__dot is-error" :title="`${a.errorCount} 个 Skill 存在失败（${rangeLabel}）；角标=该 Agent 下失败 Skill 数，非失败调用数`">{{ a.errorCount > 9 ? '9+' : a.errorCount }}</span>
             <span v-else class="agent-card__dot is-ok" title="状态正常" aria-label="状态正常"></span>
           </div>
           <div class="agent-card__meta">
@@ -547,6 +547,26 @@ async function retryTopology() {
 const hasError = computed(() =>
   isLive.value ? liveSkills.value.some((s) => s.errors > 0) : spans.value.some((s) => s.status === 'err')
 )
+
+/* 角标/横幅口径统一：角标合计 = 存在失败的 Skill 节点数（Skill 级），横幅 = 异常 Agent 数 + 异常 Skill 数，
+   二者同源（Skill 失败计数），避免「角标合计 11 vs 横幅 5」双口径歧义 */
+const abnormalAgents = computed(() => agentCards.value.filter((a) => a.errorCount > 0).length)
+const abnormalSkills = computed(() => skillCards.value.filter((s) => s.error).length)
+const statusTitle = computed(() => {
+  if (!hasError.value) return '拓扑运行正常'
+  return `异常节点 ${abnormalAgents.value} 个 Agent · ${abnormalSkills.value} 个 Skill`
+})
+const statusTitleHint = computed(() =>
+  hasError.value
+    ? `口径：${abnormalSkills.value} 个 Skill 存在失败调用（${rangeLabel.value}），分布在 ${abnormalAgents.value} 个 Agent 下；角标数字=该 Agent 下失败 Skill 数`
+    : `口径：${rangeLabel.value} 内所有 Skill 调用均无失败`
+)
+/** 统计范围人话（角标/横幅 tooltip 用；demo 模式回退全部样本口径） */
+const rangeLabel = computed(() => {
+  if (!isLive.value) return '全部样本'
+  const map: Record<string, string> = { '24h': '近 24h', '7d': '近 7 天', '30d': '近 30 天', all: '全部' }
+  return map[liveTopoRange.value] || '全部'
+})
 
 /* ========== 布局计算 ========== */
 const agentCards = computed(() =>

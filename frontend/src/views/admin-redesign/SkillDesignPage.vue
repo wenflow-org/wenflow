@@ -115,7 +115,7 @@ import {
 } from '@/api/adminApi'
 import { askConfirm } from './useConfirm'
 import { AGENT_TONES } from './store'
-import { coreEditorState, fmtMs } from './skill-design/sdp-shared'
+import { coreEditorState, fmtMs, errText } from './skill-design/sdp-shared'
 import ProtocolTab from './skill-design/protocol-tab.vue'
 import TrialTab from './skill-design/trial-tab.vue'
 import VersionsTab from './skill-design/versions-tab.vue'
@@ -280,9 +280,7 @@ async function loadAll() {
   } catch (e) {
     if (id !== skillId.value) return
     loadFailed.value = true
-    const r = e as { response?: { data?: { error?: { message?: string } | string } }; message?: string }
-    const d = r?.response?.data?.error
-    toast.error(`加载失败：${typeof d === 'string' ? d : d?.message || r?.message || '未知错误'}`)
+    toast.error(`加载失败：${errText(e)}`)
   } finally {
     if (id === skillId.value) loading.value = false
   }

@@ -125,7 +125,7 @@
             <span class="wf-row__kind" :class="`wf-row__kind--${span.kind}`">{{ span.kind === 'flow' ? '流程' : '调用' }}</span>
             <span class="wf-row__stage-body">
               <span class="wf-row__stage-name" :title="`${span.stage} · ${span.agent}`">{{ span.stage }}</span>
-              <span class="wf-row__stage-id mono">{{ span.agent }}</span>
+              <span class="wf-row__stage-id mono" :title="span.agent">{{ span.agent }}</span>
             </span>
           </span>
           <span class="wf-row__track">

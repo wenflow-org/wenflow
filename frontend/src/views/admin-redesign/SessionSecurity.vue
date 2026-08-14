@@ -126,7 +126,7 @@
         </div>
       </div>
 
-      <!-- 分页：活跃会话每批 15 行（对齐全站 useLoadMore 体系） -->
+      <!-- 分页：活跃会话每批 12 行（首屏可见，见脚本注释） -->
       <div v-if="canMoreActive" class="ss-more">
         <button type="button" class="mk-link" @click="loadMoreActive">加载更多（已显示 {{ shownActive.length }} / {{ activeFlat.length }} 个活跃会话）</button>
       </div>
@@ -243,9 +243,11 @@ const groups = computed<SessionGroup[]>(() => {
   })
 })
 
-/* 分页（审计 L1）：活跃会话全量平铺 → 每批 15 行；历史组保持 details 折叠不受分页影响 */
+/* 分页（审计 L1）：活跃会话全量平铺 → 每批 12 行（视觉修复 P3：15 行 + 组头/表头总高约 1030px，
+   1440×900 视口下分页器落在首屏之外；12 行 ≈ 838px，加载更多首屏可见）；
+   历史组保持 details 折叠不受分页影响 */
 const activeFlat = computed(() => groups.value.flatMap((g) => g.active))
-const { shown: shownActive, canMore: canMoreActive, loadMore: loadMoreActive } = useLoadMore(activeFlat, 15)
+const { shown: shownActive, canMore: canMoreActive, loadMore: loadMoreActive } = useLoadMore(activeFlat, 12)
 
 /** 分页后的可见分组：表头统计 / 下线全部保持全量口径（g 为完整分组），行渲染只取当批活跃会话 */
 const visibleGroups = computed(() => {

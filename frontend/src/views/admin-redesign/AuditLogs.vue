@@ -51,11 +51,11 @@
 
     <!-- 操作审计列表 -->
     <div v-else-if="tab === 'operation' && logs.length" class="log-body">
-      <div class="tline-head" aria-hidden="true">
+      <div class="tline-head" :class="{ 'tline-head--no-tt': noTargetTypes }" aria-hidden="true">
         <span class="tline-head__time">时间</span>
         <span class="tline-head__admin">操作者</span>
         <span class="tline-head__action">动作</span>
-        <span class="tline-head__target-type">目标类型</span>
+        <span v-if="!noTargetTypes" class="tline-head__target-type" title="操作对象类别（如 用户 / 公告 / 会话）">目标类型</span>
         <span class="tline-head__target">目标</span>
         <span class="tline-head__badge">结果</span>
         <span class="tline-head__ip">IP</span>
@@ -70,6 +70,7 @@
         <button
           type="button"
           class="tline__main"
+          :class="{ 'tline__main--no-tt': noTargetTypes }"
           :aria-expanded="openId === log.id"
           @click="openId = openId === log.id ? '' : log.id"
         >
@@ -78,7 +79,7 @@
             {{ log.adminName || (log.adminId ? shortId(log.adminId) : '—') }}
           </span>
           <span class="tline__action" :title="log.action">{{ actionText(log.action) }}</span>
-          <span class="tline__target-type">{{ targetTypeText(log.targetType) }}</span>
+          <span v-if="!noTargetTypes" class="tline__target-type" :title="log.targetType || '当前记录未写入目标类型'">{{ targetTypeText(log.targetType) }}</span>
           <span class="tline__target mono" :title="log.targetId || ''">{{ log.targetId ? shortId(log.targetId) : '—' }}</span>
           <span class="tline__badge" :class="log.success ? 'tline__badge--ok' : 'tline__badge--err'">
             {{ log.success ? '成功' : '失败' }}
@@ -131,7 +132,7 @@
         :class="a.success ? 'tline--ok' : 'tline--err'"
       >
         <div class="tline__main tline__main--static">
-          <span class="tline__time mono" :title="fmtFull(a.createdAt)">{{ fmtTime(a.createdAt) }}</span>
+          <span class="tline__time mono" :title="fmtFull(a.createdAt)">{{ fmtLoginTime(a.createdAt) }}</span>
           <span class="tline__admin" :title="a.username">{{ a.username || '—' }}</span>
           <span class="tline__ip mono" :title="a.ip || ''">{{ a.ip || '—' }}</span>
           <span class="tline__badge" :class="a.success ? 'tline__badge--ok' : 'tline__badge--err'">
@@ -223,6 +224,10 @@ const openId = ref('')
 let fetching = false
 
 const rows = computed(() => (tab.value === 'operation' ? logs.value : attempts.value))
+
+/** 目标类型列语义（P3）：当前页全部记录未写入 targetType 时隐藏该列（表头/行/网格同步），
+    后端补录该字段后自动恢复显示；title 悬停说明列含义 */
+const noTargetTypes = computed(() => logs.value.length > 0 && logs.value.every((l) => !l.targetType))
 
 /* 传统分页（方案 A）：页码器 v-model 桥接；翻页 = 整页替换（replace） */
 const currentPage = computed({
@@ -363,6 +368,13 @@ function fmtFull(iso?: string | null): string {
   if (Number.isNaN(d.getTime())) return ''
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
+/* 登录审计时间（P3）：始终带日期（MM-DD HH:MM:SS），避免当天记录只有时刻、无日期可溯 */
+function fmtLoginTime(iso?: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
 
 onMounted(() => {
   void applyFilters()
@@ -452,6 +464,8 @@ onMounted(() => {
 
 /* 表头：与全站表格页同规范（sticky 顶部、uppercase 小号标签）。
    8 列模板（时间/操作者/动作/目标类型/目标/结果/IP/箭头）：
+   动作列 180→240px（P2：长端点路径如「POST /api/admin/system/config」~30 字符仍被省略，
+   加宽后 ~34 字符可读；比 --mk-col--actions-wide(120px 按钮列) 更宽，列内保留 title 全值）；
    目标列由弹性 minmax(100px,1fr)（28/30 行是"—"、459px 白区）改固定窄列 --mk-col-id；
    末列箭头改 minmax(18px,1fr) 吸收剩余宽度（text-align:right 保持贴右缘，消灭断尾） */
 .tline-head {
@@ -460,7 +474,7 @@ onMounted(() => {
   z-index: 2;
   display: grid;
   min-width: max-content;
-  grid-template-columns: var(--mk-col-time) 130px 180px 80px var(--mk-col-id) var(--mk-col-badge) 110px minmax(18px, 1fr);
+  grid-template-columns: var(--mk-col-time) 130px 240px 80px var(--mk-col-id) var(--mk-col-badge) 110px minmax(18px, 1fr);
   gap: 10px;
   align-items: baseline;
   padding: 9px 14px;
@@ -477,6 +491,10 @@ onMounted(() => {
 .tline-head--login {
   grid-template-columns: var(--mk-col-time) 160px 110px var(--mk-col-badge) 200px minmax(18px, 1fr);
 }
+/* 目标类型列缺失（P3）：隐藏该列时去掉 80px 槽位，其余列宽不变 */
+.tline-head--no-tt {
+  grid-template-columns: var(--mk-col-time) 130px 180px var(--mk-col-id) var(--mk-col-badge) 110px minmax(18px, 1fr);
+}
 .tline-more {
   display: flex;
   justify-content: center;
@@ -492,7 +510,7 @@ onMounted(() => {
 .tline__main {
   display: grid;
   min-width: max-content;
-  grid-template-columns: var(--mk-col-time) 130px 180px 80px var(--mk-col-id) var(--mk-col-badge) 110px minmax(18px, 1fr);
+  grid-template-columns: var(--mk-col-time) 130px 240px 80px var(--mk-col-id) var(--mk-col-badge) 110px minmax(18px, 1fr);
   gap: 10px;
   align-items: baseline;
   width: 100%;
@@ -508,6 +526,9 @@ onMounted(() => {
 .tline__main--static:hover { background: transparent; }
 .tline--login .tline__main {
   grid-template-columns: var(--mk-col-time) 160px 110px var(--mk-col-badge) 200px minmax(18px, 1fr);
+}
+.tline__main--no-tt {
+  grid-template-columns: var(--mk-col-time) 130px 180px var(--mk-col-id) var(--mk-col-badge) 110px minmax(18px, 1fr);
 }
 
 .tline__time {

@@ -346,7 +346,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { subPage, closeSubPage, learnerDetails, isLive } from './store'
+import { subPage, closeSubPage, learnerDetails, isLive, setSubPageLabel } from './store'
 import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveRecomputeLearner, timeAgo, errMsg } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTooltip, evidenceTypeZh } from './evidence'
 import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab } from './learner-profile'
@@ -425,6 +425,8 @@ async function loadDetail(id: string | undefined, live: boolean) {
   if (!id || !live) return
   const base = liveLearners.value.find((l) => l.userId === id)
   const pathId = base?.pathId
+  // 面包屑先以列表兜底名回写（详情加载成功后覆盖为详情名）
+  if (base?.name) setSubPageLabel(base.name)
   try {
     const raw = (await withTimeout(liveGetLearnerDetail(id, pathId), 12000)) as Record<string, unknown>
     rawDetail.value = raw
@@ -476,6 +478,8 @@ async function loadDetail(id: string | undefined, live: boolean) {
         generatedAt: timeAgo(base?.generatedAt)
       }
     }
+    // 面包屑回写详情名（内部 ID → 中文名；title 仍保留全 ID）
+    setSubPageLabel(liveDetail.value.name)
   } catch (e) {
     if (base) {
       // 列表兜底：详情接口失败时至少展示列表里已有的信息
@@ -497,6 +501,7 @@ async function loadDetail(id: string | undefined, live: boolean) {
           generatedAt: timeAgo(base.generatedAt)
         }
       }
+      setSubPageLabel(base.name)
       toast.error(`详情接口暂时不可用，已显示列表快照：${errMsg(e)}`)
     } else {
       detailError.value = true

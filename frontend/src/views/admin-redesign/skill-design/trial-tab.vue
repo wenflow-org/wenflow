@@ -142,6 +142,7 @@ import {
 } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 import { fmtMs, shortHash, errText } from './sdp-shared'
+import { humanizeHttpError } from '../terms'
 
 hljs.registerLanguage('json', json)
 
@@ -286,13 +287,15 @@ async function loadRecentLogs() {
     const items: Record<string, unknown>[] = Array.isArray(body) ? body : body.items || body.logs || []
     recentLogs.value = items.map((l) => {
       const status = mapLogStatus(l.status)
-      const errText = String(l.errorMessage || l.error || '')
+      const rawErr = String(l.errorMessage || l.error || '')
+      // 网关黑话人话（terms.ts 单源）：失败摘要与展开详情同步人话化
+      const err = humanizeHttpError(rawErr) || rawErr
       return {
         id: String(l.id),
         status,
         time: timeAgo(String(l.createdAt || '')),
         durationMs: Number(l.durationMs || 0),
-        summary: status === 'ok' ? '成功' : errText.slice(0, 60) || (status === 'timeout' ? '超时' : '失败'),
+        summary: status === 'ok' ? '成功' : err.slice(0, 60) || (status === 'timeout' ? '超时' : '失败'),
         loading: false,
         detail: null
       }

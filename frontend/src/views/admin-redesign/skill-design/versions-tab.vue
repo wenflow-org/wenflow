@@ -14,7 +14,7 @@
           <tbody>
             <tr v-for="v in coreVersions" :key="v.version" :class="{ 'sdp-pw__table-active': v.status === 'ACTIVE' }">
               <td class="mono">v{{ v.version }}</td>
-              <td class="mono">{{ coreShortHash(v.coreHash) }}</td>
+              <td class="mono" :title="v.coreHash ?? undefined">{{ coreShortHash(v.coreHash) }}</td>
               <td class="mono">{{ v.coreVersion ?? '—' }}</td>
               <td>{{ v.status }}</td>
               <td>{{ v.createdBy }}</td>

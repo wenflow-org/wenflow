@@ -193,11 +193,11 @@ export function sessionProgressText(p: SessionProgress | null | undefined, statu
   return base
 }
 
-/** 教学会话进度条档位：完成 → ok；失败/超时/收尾失败/废弃 → bad；其余默认蓝条（null） */
+/** 教学会话进度条档位：完成 → ok；失败/超时/收尾失败/废弃/已被替代 → bad；其余默认蓝条（null） */
 export function sessionProgressTone(status?: string | null): 'ok' | 'bad' | null {
   const st = String(status || '').toLowerCase()
   if (st === 'completed' || st === 'succeeded') return 'ok'
-  if (['failed', 'timeout', 'finalization_failed', 'discarded'].includes(st)) return 'bad'
+  if (['failed', 'timeout', 'finalization_failed', 'discarded', 'superseded'].includes(st)) return 'bad'
   return null
 }
 

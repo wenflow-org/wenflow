@@ -132,7 +132,7 @@
             >会话 {{ shortTrace(log.sessionId) }}</span>
           </span>
           <span class="tline__model mono" :title="log.model || undefined">{{ log.model || '—' }}</span>
-          <span class="tline__tokens mono" :title="promptOf(log)?.tokens || undefined">{{ promptOf(log)?.tokens || '—' }}</span>
+          <span class="tline__tokens mono" :title="tokensTitle(log)">{{ tokensText(log) }}</span>
           <span class="tline__dur mono" :title="fmtMs(log.durationMs)">{{ fmtMs(log.durationMs) }}</span>
           <span class="tline__badge" :class="`tline__badge--${log.status}`">{{ statusBadge[log.status] }}</span>
           <span class="tline__trace mono" :title="`${log.traceId} · 在瀑布中查看完整链路`" @click.stop="openTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span>
@@ -278,6 +278,25 @@ function promptOf(log: { traceId: string; agent: string }): PromptMetaRow | unde
   if (!list?.length) return undefined
   const agentId = `skill:${log.agent}`
   return list.find((p) => p.agentId === agentId || p.agentId.replace(/^skill:/, '') === log.agent)
+}
+
+/* Tokens 列语义（P2）：传输层（agent_call_logs.promptTokens/completionTokens）优先——
+   有真实用量展示实际值；无 token 数据的行显示「未统计」（区别于 0，工具提示说明数据来源与含义） */
+type TokenRow = { traceId: string; agent: string; promptTokens?: number | null; completionTokens?: number | null }
+function tokensText(log: TokenRow): string {
+  if (log.promptTokens != null || log.completionTokens != null) {
+    return `P ${log.promptTokens ?? 0} / C ${log.completionTokens ?? 0}`
+  }
+  const p = promptOf(log)
+  return p?.tokens || '未统计'
+}
+function tokensTitle(log: TokenRow): string {
+  if (log.promptTokens != null || log.completionTokens != null) {
+    return `Prompt ${log.promptTokens ?? 0} / Completion ${log.completionTokens ?? 0} token（agent_call_logs 传输层统计）`
+  }
+  const p = promptOf(log)
+  if (p?.tokens) return `${p.tokens}（prompt_call_logs 契约层统计）`
+  return '该日志未记录 token 用量（无传输层与契约层数据）'
 }
 
 /* live 模式：服务端筛选（时间范围/关键词/状态/节点/traceId/sessionId/错误类别）。

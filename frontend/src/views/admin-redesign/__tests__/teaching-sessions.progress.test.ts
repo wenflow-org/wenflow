@@ -120,6 +120,27 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     wrapper.unmount();
   });
 
+  it('live：P2 中断进度条颜色统一——「已被替代」与失败/超时同为 bad 红条（此前为蓝条）', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          items: [
+            makeItem('a', {
+              status: 'superseded',
+              progress: { taskIndex: 2, totalTasks: 4, milestoneIndex: 2, totalMilestones: 4 }
+            })
+          ]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const row = wrapper.find('tbody tr');
+    expect(row.text()).toContain('中断于 任务 2/4');
+    expect(row.find('.mk-minibar__fill').attributes('data-tone')).toBe('bad');
+    wrapper.unmount();
+  });
+
   it('live：老数据无 progress → 进度列显示 —', async () => {
     listMock.mockResolvedValue({
       data: {
@@ -140,8 +161,8 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     await flushPromises();
     expect(listMock).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('已完成');
-    expect(wrapper.findAll('.ts-prog--done').length).toBeGreaterThan(0);
     expect(wrapper.text()).toContain('中断于 任务 3/4');
+    expect(wrapper.findAll('.ts-prog--done').length).toBeGreaterThan(0);
     wrapper.unmount();
   });
 });
