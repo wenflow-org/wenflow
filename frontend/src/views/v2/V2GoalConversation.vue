@@ -146,14 +146,24 @@
             <div class="msg__bubble msg__bubble--typing"><i></i><i></i><i></i></div>
           </div>
 
-          <!-- 快捷回复 -->
-          <div v-if="!live.sending && live.quickReplies.length && live.stageIndex < 3" class="replies">
-            <div v-if="!live.quickReplyHintShown" class="replies__hint">点一下直接发送，点 ＋ 先放进输入框</div>
-            <div class="replies__row">
-              <div v-for="q in live.quickReplies" :key="q.text" class="reply">
-                <button type="button" class="reply__send" @click="sendDirect(q.text)">{{ q.text }}</button>
-                <button type="button" class="reply__plus" title="放进输入框" aria-label="放进输入框" @click="appendToInput(q.text)">＋</button>
-              </div>
+          <!-- 快捷补充选项面板（skill 每轮返回） -->
+          <div v-if="!live.sending && live.quickReplies.length && live.stageIndex < 3" class="replies-panel">
+            <div class="replies-panel__head">
+              <span class="replies-panel__kicker">快捷补充</span>
+              <span v-if="!live.quickReplyHintShown" class="replies-panel__hint">点选项先填入，修改后回车发送</span>
+            </div>
+            <div class="replies-panel__options">
+              <button
+                v-for="q in live.quickReplies"
+                :key="q.text"
+                type="button"
+                class="replies-panel__option"
+                :class="{ 'replies-panel__option--active': input === q.text }"
+                @click="appendToInput(q.text)"
+              >
+                <span class="replies-panel__dot" aria-hidden="true"></span>
+                <span class="replies-panel__text">{{ q.text }}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -427,15 +437,6 @@ async function doSend() {
     await live.send(t);
   } catch {
     /* 失败态由 live.failed 呈现 */
-  }
-}
-
-async function sendDirect(text: string) {
-  if (live.sending) return;
-  try {
-    await live.send(text);
-  } catch {
-    /* ignore */
   }
 }
 
@@ -1000,27 +1001,71 @@ function shuffleScenes() {
   text-decoration: underline; cursor: pointer;
 }
 
-/* ---------- 快捷回复 ---------- */
-.replies { display: grid; gap: 8px; margin-left: 40px; }
-.replies__hint { font-size: 11.5px; color: var(--faint); }
-.replies__row { display: flex; flex-wrap: wrap; gap: 8px; }
-.reply {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 9px 13px;
-  border-radius: 999px;
-  border: 1px solid rgba(52, 120, 246, 0.3);
-  background: rgba(52, 120, 246, 0.06);
-  color: var(--blue-deep);
-  font: inherit; font-size: 13px; font-weight: 600;
-  cursor: pointer; transition: .15s ease;
+/* ---------- 快捷补充选项面板（skill 每轮返回） ---------- */
+.replies-panel {
+  margin-left: 40px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+  display: grid;
+  gap: 8px;
 }
-.reply:hover { background: rgba(52, 120, 246, 0.12); }
-.reply__plus {
-  width: 18px; height: 18px; border-radius: 50%;
-  border: 1px solid rgba(52, 120, 246, 0.45);
-  font-size: 12px; line-height: 1;
-  display: grid; place-items: center;
-  color: var(--blue-deep); background: #fff;
+.replies-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.replies-panel__kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--blue-deep);
+}
+.replies-panel__hint { font-size: 11.5px; color: var(--faint); }
+.replies-panel__options { display: grid; gap: 6px; }
+.replies-panel__option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: rgba(52, 120, 246, 0.05);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.replies-panel__option:hover {
+  background: rgba(52, 120, 246, 0.11);
+  color: var(--ink);
+}
+.replies-panel__option--active {
+  border-color: rgba(52, 120, 246, 0.45);
+  background: rgba(52, 120, 246, 0.1);
+  color: var(--blue-deep);
+}
+.replies-panel__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--blue);
+  flex: none;
+  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.15);
+}
+.replies-panel__text { flex: 1; line-height: 1.5; }
+@media (prefers-reduced-motion: no-preference) {
+  .replies-panel { animation: replies-panel-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
+}
+@keyframes replies-panel-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
 }
 .chat .composer {
   padding: 12px 14px;
