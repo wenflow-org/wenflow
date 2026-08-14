@@ -96,7 +96,22 @@ export class LearnerKnowledgeMemoryService {
             },
           },
         })
-      : null;
+      : // 无 pathId（如 admin 证据端点场景）时自动定位用户最新 active 路径，
+        // 否则 currentPath 恒空、recentEvidence/conceptLedger 等画像数据前端永远看不到
+        await prisma.learning_paths.findFirst({
+          where: { userId: input.userId, status: 'active' },
+          orderBy: { updatedAt: 'desc' },
+          include: {
+            milestones: {
+              orderBy: { stageNumber: 'asc' },
+              include: {
+                subtasks: {
+                  orderBy: { order: 'asc' },
+                },
+              },
+            },
+          },
+        });
 
     if (!path || path.userId !== input.userId) {
       return {
