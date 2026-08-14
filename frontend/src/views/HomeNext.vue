@@ -237,6 +237,7 @@ const demoTimeline: Array<[number, number]> = [
 const stageEl = ref<HTMLElement | null>(null)
 let demoTimer: ReturnType<typeof setTimeout> | null = null
 let demoIndex = 0
+let demoLoops = 0
 let demoVisible = true
 let demoObserver: IntersectionObserver | null = null
 
@@ -251,6 +252,13 @@ function runDemoStep() {
   if (!demoVisible || phase.value === 99) return
   const [nextPhase, delay] = demoTimeline[demoIndex % demoTimeline.length]
   demoIndex++
+  // 循环上限：播完 2 轮后停在完成态（phase 5 高亮结果），不再重播（4K 高视口下 hero 常驻视口，
+  // 无限循环会造成持续动画干扰）
+  if (nextPhase === 0) demoLoops++
+  if (demoLoops >= 2 && nextPhase > 5) {
+    phase.value = 5
+    return
+  }
   demoTimer = setTimeout(() => {
     if (!demoVisible) return
     phase.value = nextPhase
