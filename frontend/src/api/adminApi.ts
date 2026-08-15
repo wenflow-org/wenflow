@@ -1311,6 +1311,19 @@ export const adminVirtualLearnersApi = {
   deleteVirtualSession: async (sessionId: string) => {
     return adminAxios.delete(`/admin/virtual-learners/sessions/${sessionId}`);
   },
+
+  /**
+   * A1 批量终止：非终态会话统一标记 abandoned（dryRun 默认 true 只报告）。
+   * sessionIds 与 profileIds 至少其一（profileIds = 该虚拟人全部非终态会话）。
+   */
+  terminateVirtualSessions: async (data: { sessionIds?: string[]; profileIds?: string[]; dryRun?: boolean }) => {
+    return adminAxios.post('/admin/virtual-learners/sessions/terminate', data);
+  },
+
+  /** P0-2/A2 僵尸会话回收：dryRun 默认 true（干跑确认清单）；profileIds 提供时只回收选中虚拟人 */
+  reclaimStaleVirtualSessions: async (data: { dryRun?: boolean; profileIds?: string[] }) => {
+    return adminAxios.post('/admin/virtual-learners/sessions/reclaim-stale', data);
+  },
 };
 
 // ============================================================

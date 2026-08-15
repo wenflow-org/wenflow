@@ -63,6 +63,17 @@ describe('POST /sessions/reclaim-stale（僵尸虚拟会话回收）', () => {
     expect(mockRunReclaimOnce).toHaveBeenCalledWith({ dryRun: false })
   })
 
+  it('profileIds 透传：批量清理卡死只回收选中虚拟人的会话', async () => {
+    const handler = getPostHandler('/sessions/reclaim-stale')
+    const req: any = { body: { dryRun: true, profileIds: ['p-1', 'p-2'] } }
+    const res = createResponse()
+
+    await handler(req, res)
+
+    expect(mockRunReclaimOnce).toHaveBeenCalledWith({ dryRun: true, profileIds: ['p-1', 'p-2'] })
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }))
+  })
+
   it('失败时返回 500 与错误信息', async () => {
     mockRunReclaimOnce.mockRejectedValue(new Error('reclaim failed'))
     const handler = getPostHandler('/sessions/reclaim-stale')

@@ -1,0 +1,226 @@
+/**
+ * VirtualLearners P1 批量管理与生命周期视图（A1/A2）测试：
+ * 分区计数状态条（全量口径）/ 已截断提示 / 复选框批量条 /
+ * 批量终止（profileIds → terminate 端点）/ 批量清理卡死与一键回收（reclaim-stale dryRun → 确认落地）/
+ * 运行中列直达座舱 / 卡死·失败 bad 色标注 / 批量删除标记待 2B
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushPromises, mount } from '@vue/test-utils';
+import { nextTick } from 'vue';
+import VirtualLearners from '../VirtualLearners.vue';
+import { liveVirtuals, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount } from '../live';
+import { settleConfirm } from '../useConfirm';
+
+vi.mock('../live', async () => {
+  const { ref } = await import('vue');
+  return {
+    liveVirtuals: ref([]),
+    liveVirtualsTotal: ref(0),
+    liveVirtualSessionStats: ref({ created: 0, running: 0, failed: 0, abandoned: 0, completed: 0, total: 0 }),
+    liveVirtualStaleCount: ref(0),
+    liveLoading: ref(false),
+    liveFailures: ref<Record<string, string>>({}),
+    liveCreateVirtual: vi.fn(async () => 'vl-new'),
+    liveDeleteVirtual: vi.fn(async () => {}),
+    loadLiveData: vi.fn(async () => {}),
+    timeAgo: () => 'x',
+    errMsg: (e: unknown) => String(e)
+  };
+});
+
+vi.mock('../store', async () => {
+  const { ref } = await import('vue');
+  return {
+    isLive: ref(true),
+    intent: { agentFilter: '', statusFilter: '', quickAction: '' },
+    openSubPage: openSubPageMock
+  };
+});
+
+const { terminateMock, reclaimMock, openSubPageMock } = vi.hoisted(() => ({
+  terminateMock: vi.fn(async () => ({ data: { data: { dryRun: false, terminated: 2, skippedTerminal: 1 } } })),
+  reclaimMock: vi.fn(async () => ({ data: { data: { dryRun: true, reclaimed: 0, skippedActiveLease: 0, sessions: [] as Array<Record<string, unknown>> } } })),
+  openSubPageMock: vi.fn()
+}));
+
+vi.mock('@/api/adminApi', () => ({
+  adminVirtualLearnersApi: {
+    generatePersona: vi.fn(async () => ({ data: {} })),
+    getVirtualLearnerStories: vi.fn(async () => ({ data: { data: { stories: [] } } })),
+    startVirtualSession: vi.fn(async () => ({ data: { data: { id: 's' } } })),
+    startBlackboxVirtualSession: vi.fn(async () => ({ data: { data: { id: 's' } } })),
+    terminateVirtualSessions: terminateMock,
+    reclaimStaleVirtualSessions: reclaimMock
+  }
+}));
+
+function makeVirtual(i: number, overrides: Record<string, unknown> = {}) {
+  return {
+    id: `vl-${i}`,
+    name: `虚拟学习者${i}`,
+    goal: '目标',
+    level: 'L1',
+    story: '背景',
+    sessions: 2,
+    storyCount: 1,
+    runningCount: 0,
+    failedCount: 0,
+    stalledCount: 0,
+    runningSessionIds: [],
+    currentStage: null,
+    createdAt: '2026-08-10T10:00:00',
+    raw: {},
+    ...overrides
+  };
+}
+
+function findBtn(wrapper: ReturnType<typeof mount>, text: string) {
+  const b = wrapper.findAll('button').find((x) => x.text().includes(text));
+  if (!b) throw new Error(`button not found: ${text}`);
+  return b;
+}
+
+async function mountPage() {
+  const w = mount(VirtualLearners);
+  await flushPromises();
+  await nextTick();
+  return w;
+}
+
+describe('VirtualLearners 批量管理与生命周期视图', () => {
+  beforeEach(() => {
+    liveVirtuals.value = [];
+    liveVirtualsTotal.value = 0;
+    liveVirtualSessionStats.value = { created: 0, running: 0, failed: 0, abandoned: 0, completed: 0, total: 0 };
+    liveVirtualStaleCount.value = 0;
+    terminateMock.mockReset();
+    terminateMock.mockImplementation(async () => ({ data: { data: { dryRun: false, terminated: 2, skippedTerminal: 1 } } }));
+    reclaimMock.mockReset();
+    reclaimMock.mockImplementation(async () => ({ data: { data: { dryRun: true, reclaimed: 0, skippedActiveLease: 0, sessions: [] } } }));
+    openSubPageMock.mockClear();
+  });
+
+  it('状态条分区计数：全量口径（创建中/运行中/已失败/卡死）+ 已截断提示', async () => {
+    liveVirtualSessionStats.value = { created: 3, running: 2, failed: 1, abandoned: 1, completed: 0, total: 7 };
+    liveVirtualStaleCount.value = 2;
+    liveVirtualsTotal.value = 80;
+    liveVirtuals.value = [makeVirtual(1), makeVirtual(2), makeVirtual(3)];
+    const w = await mountPage();
+    expect(w.text()).toContain('创建中 3');
+    expect(w.text()).toContain('运行中 2');
+    expect(w.text()).toContain('已失败 2');
+    expect(w.text()).toContain('卡死 2');
+    expect(w.text()).toContain('已截断 · 共 80 人');
+    expect(w.text()).toContain('一键回收卡死（2）');
+  });
+
+  it('无卡死时不出现一键回收按钮；未截断时不出现截断提示', async () => {
+    liveVirtualSessionStats.value = { created: 0, running: 0, failed: 0, abandoned: 0, completed: 5, total: 5 };
+    liveVirtualStaleCount.value = 0;
+    liveVirtualsTotal.value = 1;
+    liveVirtuals.value = [makeVirtual(1)];
+    const w = await mountPage();
+    expect(w.text()).not.toContain('一键回收卡死');
+    expect(w.text()).not.toContain('已截断');
+  });
+
+  it('复选框勾选后出现批量条：已选数量 + 取消选择', async () => {
+    liveVirtuals.value = [makeVirtual(1), makeVirtual(2)];
+    const w = await mountPage();
+    expect(w.text()).not.toContain('已选');
+    const boxes = w.findAll<HTMLInputElement>('tbody input[type="checkbox"]');
+    expect(boxes).toHaveLength(2);
+    await boxes[0].setValue(true);
+    await nextTick();
+    expect(w.text()).toContain('已选 1 人');
+    expect(w.text()).toContain('批量终止');
+    expect(w.text()).toContain('批量清理卡死');
+    const del = findBtn(w, '批量删除');
+    expect((del.element as HTMLButtonElement).disabled).toBe(true);
+    expect((del.element as HTMLButtonElement).title).toContain('待 2B');
+    await findBtn(w, '取消选择').trigger('click');
+    await nextTick();
+    expect(w.text()).not.toContain('已选');
+  });
+
+  it('批量终止：确认后调 terminate 端点（profileIds + dryRun:false），结果 toast', async () => {
+    liveVirtuals.value = [makeVirtual(1, { runningCount: 2 }), makeVirtual(2, { runningCount: 1 })];
+    const w = await mountPage();
+    const boxes = w.findAll<HTMLInputElement>('tbody input[type="checkbox"]');
+    await boxes[0].setValue(true);
+    await boxes[1].setValue(true);
+    await nextTick();
+    findBtn(w, '批量终止').trigger('click');
+    await nextTick();
+    settleConfirm(true);
+    await flushPromises();
+    expect(terminateMock).toHaveBeenCalledWith({ profileIds: ['vl-1', 'vl-2'], dryRun: false });
+  });
+
+  it('批量终止：确认取消时不调端点', async () => {
+    liveVirtuals.value = [makeVirtual(1, { runningCount: 1 })];
+    const w = await mountPage();
+    await w.find<HTMLInputElement>('tbody input[type="checkbox"]').setValue(true);
+    await nextTick();
+    findBtn(w, '批量终止').trigger('click');
+    await nextTick();
+    settleConfirm(false);
+    await flushPromises();
+    expect(terminateMock).not.toHaveBeenCalled();
+  });
+
+  it('批量清理卡死：dryRun 清单 → 确认 → dryRun:false 落地（均带选中 profileIds）', async () => {
+    liveVirtuals.value = [makeVirtual(1, { stalledCount: 1 }), makeVirtual(2)];
+    reclaimMock.mockResolvedValueOnce({
+      data: { data: { dryRun: true, reclaimed: 0, skippedActiveLease: 0, sessions: [{ id: 'stale-1', status: 'running', currentStage: 'goal', staleMs: 3 * 3600 * 1000, updatedAt: 'x' }] } }
+    });
+    reclaimMock.mockResolvedValueOnce({
+      data: { data: { dryRun: false, reclaimed: 1, skippedActiveLease: 0, sessions: [] as Array<Record<string, unknown>> } }
+    });
+    const w = await mountPage();
+    const boxes = w.findAll<HTMLInputElement>('tbody input[type="checkbox"]');
+    await boxes[0].setValue(true);
+    await nextTick();
+    findBtn(w, '批量清理卡死').trigger('click');
+    await flushPromises();
+    expect(reclaimMock).toHaveBeenNthCalledWith(1, { dryRun: true, profileIds: ['vl-1'] });
+    expect(w.text()).toContain('批量清理卡死会话');
+    expect(w.text()).toContain('stale-1');
+    expect(w.text()).toContain('3.0 小时无写入');
+    findBtn(w, '确认回收 1 个会话').trigger('click');
+    await flushPromises();
+    expect(reclaimMock).toHaveBeenNthCalledWith(2, { dryRun: false, profileIds: ['vl-1'] });
+  });
+
+  it('一键回收（全局）：dryRun 无 profileIds，确认后落地', async () => {
+    liveVirtualSessionStats.value = { created: 0, running: 3, failed: 0, abandoned: 0, completed: 0, total: 3 };
+    liveVirtualStaleCount.value = 3;
+    liveVirtuals.value = [makeVirtual(1, { runningCount: 1, stalledCount: 1 })];
+    reclaimMock.mockResolvedValueOnce({ data: { data: { dryRun: true, reclaimed: 0, skippedActiveLease: 0, sessions: [{ id: 'stale-9', status: 'running', currentStage: 'learn', staleMs: 7200000, updatedAt: 'x' }] } } });
+    reclaimMock.mockResolvedValueOnce({ data: { data: { dryRun: false, reclaimed: 1, skippedActiveLease: 0, sessions: [] as Array<Record<string, unknown>> } } });
+    const w = await mountPage();
+    findBtn(w, '一键回收卡死（3）').trigger('click');
+    await flushPromises();
+    expect(reclaimMock).toHaveBeenNthCalledWith(1, { dryRun: true });
+    expect(w.text()).toContain('一键回收卡死会话');
+    findBtn(w, '确认回收 1 个会话').trigger('click');
+    await flushPromises();
+    expect(reclaimMock).toHaveBeenNthCalledWith(2, { dryRun: false });
+  });
+
+  it('「运行中」列点击直达会话座舱（openSubPage session）', async () => {
+    liveVirtuals.value = [makeVirtual(1, { runningCount: 1, runningSessionIds: ['run-1'], currentStage: 'goal' })];
+    const w = await mountPage();
+    await w.find('.vl-run--live').trigger('click');
+    expect(openSubPageMock).toHaveBeenCalledWith('session', 'run-1');
+  });
+
+  it('卡死/失败会话 bad 色标注（卡死 N / 失败 N）', async () => {
+    liveVirtuals.value = [makeVirtual(1, { stalledCount: 1, failedCount: 2 })];
+    const w = await mountPage();
+    expect(w.text()).toContain('卡死 1');
+    expect(w.text()).toContain('失败 2');
+    const badges = w.findAll('.vl-badge--bad');
+    expect(badges).toHaveLength(2);
+  });
+});

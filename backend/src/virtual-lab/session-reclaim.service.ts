@@ -124,13 +124,19 @@ export class VirtualSessionReclaimService {
     }
   }
 
-  /** 执行一轮回收：running/created 超阈值且无活跃租约 → 标记 failed + 审计。dryRun 只报告不改状态。 */
-  async runReclaimOnce(options: { dryRun?: boolean; now?: Date } = {}): Promise<StaleSessionReclaimResult> {
+  /** 执行一轮回收：running/created 超阈值且无活跃租约 → 标记 failed + 审计。dryRun 只报告不改状态。
+   *  options.profileIds 提供时只扫描指定虚拟人的会话（管理面「批量清理卡死」按选中行过滤）。 */
+  async runReclaimOnce(options: { dryRun?: boolean; now?: Date; profileIds?: string[] } = {}): Promise<StaleSessionReclaimResult> {
     const dryRun = options.dryRun ?? false;
     const now = options.now ?? new Date();
     const threshold = new Date(now.getTime() - this.thresholdMs);
+    const profileIds = Array.isArray(options.profileIds) && options.profileIds.length ? options.profileIds : null;
     const sessions = await this.database.virtual_sessions.findMany({
-      where: { status: { in: ['running', 'created'] }, updatedAt: { lt: threshold } },
+      where: {
+        status: { in: ['running', 'created'] },
+        updatedAt: { lt: threshold },
+        ...(profileIds ? { virtualProfileId: { in: profileIds } } : {})
+      },
       orderBy: { updatedAt: 'asc' },
       take: RECLAIM_BATCH_SIZE,
       select: { id: true, status: true, currentStage: true, updatedAt: true, stageResults: true, logs: true }

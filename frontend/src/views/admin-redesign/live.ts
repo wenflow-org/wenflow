@@ -1111,8 +1111,14 @@ export interface LiveVirtual {
   sessions: number
   /** 故事池条数（会话故事，不是人物背景字数） */
   storyCount: number
-  /** 当前运行中的会话数（列表接口 runningCount） */
+  /** 当前运行中的会话数（后端 runningCount，全量聚合口径） */
   runningCount: number
+  /** 失败/放弃的会话累计数（全量聚合） */
+  failedCount: number
+  /** 卡死（running 超 reclaim 阈值无写入）会话数 */
+  stalledCount: number
+  /** 运行中会话 id（会话样本内；用于「运行中」列直达座舱） */
+  runningSessionIds: string[]
   /** 最近一个运行中会话的阶段（无运行中会话时回退最近会话阶段） */
   currentStage: string | null
   createdAt: string
@@ -1121,10 +1127,37 @@ export interface LiveVirtual {
 
 export const liveVirtuals = ref<LiveVirtual[]>([])
 
+/** 后端全量虚拟人总数（分页 total；前端只拉前 50 行，状态条「已截断」提示用） */
+export const liveVirtualsTotal = ref(0)
+
+/** 全量口径会话状态分区（A2 生命周期视图）：创建中/运行中/失败/放弃/完成 */
+export const liveVirtualSessionStats = ref({
+  created: 0,
+  running: 0,
+  failed: 0,
+  abandoned: 0,
+  completed: 0,
+  total: 0
+})
+
+/** 卡死分区：reclaim 可回收会话数（running/created 超阈值无写入，与 reclaim 端点同阈值） */
+export const liveVirtualStaleCount = ref(0)
+
 async function fetchLiveVirtuals(): Promise<void> {
   const res = await adminVirtualLearnersApi.getVirtualLearners({ limit: 50 })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.profiles || body.items || []
+  liveVirtualsTotal.value = Number(body.pagination?.total ?? items.length)
+  const stats = body.sessionStats as Record<string, number> | undefined
+  liveVirtualSessionStats.value = {
+    created: Number(stats?.created ?? 0),
+    running: Number(stats?.running ?? 0),
+    failed: Number(stats?.failed ?? 0),
+    abandoned: Number(stats?.abandoned ?? 0),
+    completed: Number(stats?.completed ?? 0),
+    total: Number(stats?.total ?? liveVirtualSessionStats.value.total)
+  }
+  liveVirtualStaleCount.value = Number(body.staleCount ?? 0)
   liveVirtuals.value = items.map((p: Record<string, unknown>) => {
     const profile = (p.profile as Record<string, unknown>) || {}
     const pool = Array.isArray(profile.storyPool) ? profile.storyPool : []
@@ -1141,6 +1174,11 @@ async function fetchLiveVirtuals(): Promise<void> {
       sessions: Number(p.sessionCount || (p._count as Record<string, number>)?.sessions || 0),
       storyCount,
       runningCount: Number(p.runningCount ?? runningSessions.length ?? 0),
+      failedCount: Number(p.failedCount ?? 0),
+      stalledCount: Number(p.stalledCount ?? 0),
+      runningSessionIds: (Array.isArray(p.runningSessionIds) ? p.runningSessionIds : runningSessions.map((s) => String(s.id)))
+        .map(String)
+        .filter(Boolean),
       currentStage: String(p.currentStage ?? runningSessions[0]?.currentStage ?? sessionSample[0]?.currentStage ?? '') || null,
       createdAt: String(p.createdAt || ''),
       raw: p

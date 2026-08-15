@@ -42,6 +42,11 @@ router.param('sessionId', (req, _res, next, sessionId) => {
   next();
 });
 
+/** 卡死判定阈值（与 reclaim 服务同源：VLAB_STALE_SESSION_HOURS，默认 24h），保证「状态条卡死数 = 可回收清单数」 */
+function staleThresholdAt(): Date {
+  return new Date(Date.now() - virtualSessionReclaimService.getThresholdMs());
+}
+
 const DEFAULT_SCENARIO_CANDIDATE_DOMAINS = [
   '番茄工作法与时间管理',
   '课堂复盘与总结',
@@ -1239,11 +1244,55 @@ router.get('/', async (req: any, res) => {
       }),
       prisma.virtual_learner_profiles.count()
     ]);
+
+    // 全量口径聚合（P1-1/D3）：运行中/失败/卡死分区与状态条不再基于 50 条会话样本
+    const profileIds = profiles.map(p => p.id);
+    const [statusAgg, perProfileAgg, staleSessions, staleTotal] = await Promise.all([
+      prisma.virtual_sessions.groupBy({
+        by: ['status'],
+        _count: { _all: true }
+      }),
+      profileIds.length
+        ? prisma.virtual_sessions.groupBy({
+            by: ['virtualProfileId', 'status'],
+            where: { virtualProfileId: { in: profileIds } },
+            _count: { _all: true }
+          })
+        : Promise.resolve([]),
+      profileIds.length
+        ? prisma.virtual_sessions.findMany({
+            where: {
+              virtualProfileId: { in: profileIds },
+              status: 'running',
+              updatedAt: { lt: staleThresholdAt() }
+            },
+            select: { id: true, virtualProfileId: true }
+          })
+        : Promise.resolve([]),
+      prisma.virtual_sessions.count({
+        where: { status: { in: ['running', 'created'] }, updatedAt: { lt: staleThresholdAt() } }
+      })
+    ]);
+    const countByStatus = (status: string) => statusAgg.find(s => s.status === status)?._count?._all ?? 0;
+    const runningByProfile = new Map<string, number>();
+    const failedByProfile = new Map<string, number>();
+    for (const agg of perProfileAgg) {
+      const n = agg._count?._all ?? 0;
+      if (agg.status === 'running') {
+        runningByProfile.set(agg.virtualProfileId, n);
+      } else if (agg.status === 'failed' || agg.status === 'abandoned') {
+        failedByProfile.set(agg.virtualProfileId, (failedByProfile.get(agg.virtualProfileId) ?? 0) + n);
+      }
+    }
+    const staleByProfile = new Map<string, number>();
+    for (const s of staleSessions) {
+      staleByProfile.set(s.virtualProfileId, (staleByProfile.get(s.virtualProfileId) ?? 0) + 1);
+    }
     
     const formattedProfiles = profiles.map(p => {
       const profileData = JSON.parse(p.profile || '{}');
       const storyPool = Array.isArray(profileData?.storyPool) ? profileData.storyPool : [];
-      // 运行中信号：列表一屏回答「谁在跑、跑到哪个阶段」
+      // 运行中信号：列表一屏回答「谁在跑、跑到哪个阶段」（阶段仍取会话样本，计数已全量聚合）
       const sessionSample = Array.isArray(p.sessions) ? p.sessions : [];
       const runningSessions = sessionSample.filter((s: any) => s.status === 'running');
       return {
@@ -1257,11 +1306,23 @@ router.get('/', async (req: any, res) => {
         tags: p.tags ? JSON.parse(p.tags) : [],
         sessionCount: p._count?.sessions ?? sessionSample.length,
         storyCount: storyPool.length,
-        runningCount: runningSessions.length,
-        currentStage: runningSessions[0]?.currentStage || sessionSample[0]?.currentStage || null
+        runningCount: runningByProfile.get(p.id) ?? 0,
+        failedCount: failedByProfile.get(p.id) ?? 0,
+        stalledCount: staleByProfile.get(p.id) ?? 0,
+        currentStage: runningSessions[0]?.currentStage || sessionSample[0]?.currentStage || null,
+        runningSessionIds: runningSessions.map((s: any) => s.id)
       };
     });
-    
+
+    const sessionStats = {
+      created: countByStatus('created'),
+      running: countByStatus('running'),
+      failed: countByStatus('failed'),
+      abandoned: countByStatus('abandoned'),
+      completed: countByStatus('completed'),
+      total: statusAgg.reduce((a, s) => a + (s._count?._all ?? 0), 0)
+    };
+
     res.json({
       success: true,
       data: {
@@ -1271,7 +1332,10 @@ router.get('/', async (req: any, res) => {
           limit,
           total,
           totalPages: Math.ceil(total / limit)
-        }
+        },
+        sessionStats,
+        staleCount: staleTotal,
+        reclaimThresholdMs: virtualSessionReclaimService.getThresholdMs()
       }
     });
   } catch (error: any) {
@@ -1950,7 +2014,8 @@ router.post('/sessions/:sessionId/blackbox-evaluations', async (req: any, res) =
 router.post('/sessions/reclaim-stale', async (req: any, res) => {
   try {
     const dryRun = req.body?.dryRun !== false;
-    const result = await virtualSessionReclaimService.runReclaimOnce({ dryRun });
+    const profileIds = Array.isArray(req.body?.profileIds) ? req.body.profileIds.map(String).filter(Boolean) : undefined;
+    const result = await virtualSessionReclaimService.runReclaimOnce({ dryRun, ...(profileIds?.length ? { profileIds } : {}) });
     res.json({ success: true, data: result });
   } catch (error: any) {
     logger.error('僵尸虚拟会话回收失败:', error);
@@ -1959,10 +2024,126 @@ router.post('/sessions/reclaim-stale', async (req: any, res) => {
 });
 
 /**
- * 以虚拟学习者视角评审当前 Path。只产出评审结论（accept/modify/reject），
- * 不自动启动 Learn、不自动重规划；后续动作由人工通过 accept-path / replan-path 触发。
- * POST /api/admin/virtual-learners/sessions/:sessionId/review-path
+ * 批量终止虚拟会话（A1）：非终态会话（running/created/learning 等）统一标记 abandoned，
+ * 与 reclaim 同源做法：只改状态 + 追加 stageResults/logs + 写审计，不删除任何数据。
+ * 支持按 sessionIds 或按 profileIds（后者 = 该虚拟人全部非终态会话）。
+ * dryRun 默认 true：只报告将终止的会话，dryRun=false 才落地标记。
+ * POST /api/admin/virtual-learners/sessions/terminate  body: { sessionIds?, profileIds?, dryRun? }
  */
+router.post('/sessions/terminate', async (req: any, res) => {
+  try {
+    const body = req.body ?? {};
+    const dryRun = body.dryRun !== false;
+    const sessionIds: string[] = Array.isArray(body.sessionIds) ? (body.sessionIds as unknown[]).map(String).filter(Boolean) : [];
+    const profileIds: string[] = Array.isArray(body.profileIds) ? (body.profileIds as unknown[]).map(String).filter(Boolean) : [];
+    if (!sessionIds.length && !profileIds.length) {
+      return res.status(400).json({ success: false, error: 'sessionIds 与 profileIds 至少提供一个' });
+    }
+    const ids: string[] = [...new Set(sessionIds)];
+    const sessions = await prisma.virtual_sessions.findMany({
+      where: {
+        OR: [
+          ...(ids.length ? [{ id: { in: ids } }] : []),
+          ...(profileIds.length ? [{ virtualProfileId: { in: profileIds } }] : [])
+        ]
+      },
+      select: {
+        id: true,
+        virtualProfileId: true,
+        status: true,
+        currentStage: true,
+        stageResults: true,
+        logs: true,
+        updatedAt: true,
+        virtual_learner_profiles: { select: { userId: true } }
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 50
+    });
+
+    const result = {
+      dryRun,
+      requested: sessions.length,
+      skippedTerminal: 0,
+      terminated: 0,
+      sessions: [] as any[]
+    };
+    for (const session of sessions) {
+      if (['completed', 'failed', 'abandoned'].includes(session.status)) {
+        result.skippedTerminal += 1;
+        continue;
+      }
+      result.sessions.push({
+        id: session.id,
+        virtualProfileId: session.virtualProfileId,
+        status: session.status,
+        currentStage: session.currentStage
+      });
+      if (!dryRun) {
+        await terminateSession(session, req.user);
+      }
+      result.terminated += 1;
+    }
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    logger.error('批量终止虚拟会话失败:', error);
+    res.status(500).json({ success: false, error: error?.message || '批量终止虚拟会话失败' });
+  }
+});
+
+/** 单个会话终态化（operator 批量终止）：与 reclaim 同模式——只标记 abandoned，不删除任何数据 */
+async function terminateSession(session: any, operator: any) {
+  const terminatedAt = new Date();
+  const reason = 'operator_batch_terminate';
+  const stageResults = parseJson<any>(session.stageResults, {});
+  stageResults.termination = {
+    reason,
+    terminatedAt: terminatedAt.toISOString(),
+    previousStatus: session.status,
+    previousStage: session.currentStage,
+    operatorId: operator?.userId ?? null
+  };
+  const logs = parseJson<any[]>(session.logs, []);
+  logs.push({
+    timestamp: terminatedAt.toISOString(),
+    phase: 'error',
+    details: { error: `管理员批量终止会话（${session.status} → abandoned）`, output: { action: 'batch-terminate', previousStatus: session.status } }
+  });
+  const before = { status: session.status, currentStage: session.currentStage, updatedAt: session.updatedAt?.toISOString?.() ?? null };
+  await prisma.virtual_sessions.update({
+    where: { id: session.id },
+    data: {
+      status: 'abandoned',
+      completedAt: terminatedAt,
+      stageResults: JSON.stringify(stageResults),
+      logs: JSON.stringify(logs),
+      updatedAt: terminatedAt
+    }
+  });
+  await prisma.admin_audit_logs.create({
+    data: {
+      adminId: operator?.userId ?? null,
+      adminName: operator?.name ?? (operator?.userId ? 'admin' : 'system'),
+      action: 'virtual-session-batch-terminate',
+      targetType: 'virtual-session',
+      targetId: session.id,
+      beforeJson: JSON.stringify(before),
+      afterJson: JSON.stringify({ status: 'abandoned', reason, terminatedAt: terminatedAt.toISOString() }),
+      method: 'POST',
+      path: '/admin/virtual-learners/sessions/terminate',
+      statusCode: 200,
+      success: true,
+      durationMs: 0
+    }
+  });
+  logger.warn('[virtual-learners] 批量终止虚拟会话', {
+    sessionId: session.id,
+    previousStatus: session.status,
+    operatorId: operator?.userId ?? null
+  });
+}
+
+
 router.post('/sessions/:sessionId/review-path', async (req: any, res) => {
   try {
     const result = await runAssistedSessionMutation(req.params.sessionId, () =>
