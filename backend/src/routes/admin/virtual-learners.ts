@@ -23,6 +23,7 @@ import blackboxVirtualLearnerRunner from '../../virtual-lab/blackbox-runner';
 import type { LearnerAction } from '../../virtual-lab/contracts';
 import { assertAssistedSessionMode } from '../../virtual-lab/session-mode';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
+import { virtualCleanupService } from '../../services/virtual-lab/virtual-cleanup.service';
 import { setRequestContext, getRequestContext } from '../../gateway/api-gateway/context';
 import {
   parseJson,
@@ -1407,71 +1408,53 @@ router.put('/:id', async (req: any, res) => {
 });
 
 /**
- * 删除虚拟用户
+ * 删除虚拟用户（R3 级联：会话/教学记录/路径/evidence/projections/日志一并清理 + 审计）
  * DELETE /api/admin/virtual-learners/:id
+ * 保护：仅 isVirtualLearner 用户可删（真实用户 409）；级联清单写 admin_audit_logs。
  */
 router.delete('/:id', async (req: any, res) => {
   try {
     const { id } = req.params;
-    
-    const profile = await prisma.virtual_learner_profiles.findUnique({
-      where: { id }
+    const manifest = await virtualCleanupService.cascadeDeleteProfile(id, {
+      adminId: req.user?.userId ?? null,
+      adminName: req.user?.email ?? null
     });
-    
-    if (!profile) {
-      return res.status(404).json({
-        success: false,
-        error: '虚拟用户不存在'
-      });
-    }
 
-    const sessionCount = await prisma.virtual_sessions.count({
-      where: { virtualProfileId: id }
-    });
-    if (sessionCount > 0) {
-      return res.status(409).json({
-        success: false,
-        error: '虚拟用户仍有模拟会话，请先逐个删除会话',
-        code: 'VIRTUAL_PROFILE_HAS_SESSIONS'
-      });
-    }
-
-    await prisma.$transaction(async tx => {
-      const currentProfile = await tx.virtual_learner_profiles.findUnique({
-        where: { id }
-      });
-      if (!currentProfile) throw new Error('虚拟用户不存在');
-
-      const currentSessionCount = await tx.virtual_sessions.count({
-        where: { virtualProfileId: id }
-      });
-      if (currentSessionCount > 0) {
-        throw Object.assign(new Error('虚拟用户仍有模拟会话，请先逐个删除会话'), {
-          code: 'VIRTUAL_PROFILE_HAS_SESSIONS',
-          statusCode: 409
-        });
-      }
-
-      await tx.virtual_learner_profiles.delete({ where: { id } });
-      await tx.users.delete({ where: { id: currentProfile.userId } });
-    });
-    
     logger.info('删除虚拟用户成功', {
       profileId: id,
-      userId: profile.userId,
+      userId: manifest.userId,
+      deletedSessions: manifest.virtualSessions.length,
+      deletedTeachingSessions: manifest.teachingSessions,
       deletedBy: req.user?.userId
     });
-    
+
     res.json({
       success: true,
-      message: '虚拟用户已删除'
+      message: '虚拟用户已删除',
+      data: { cleanup: manifest }
     });
   } catch (error: any) {
+    if (error?.code === 'VIRTUAL_PROFILE_REAL_USER_PROTECTED') {
+      logger.warn('拒绝删除非虚拟学习者', {
+        profileId: req.params.id,
+        operatorId: req.user?.userId ?? null
+      });
+      return res.status(409).json({
+        success: false,
+        error: error.message,
+        code: error.code
+      });
+    }
+    if (error?.code === 'VIRTUAL_PROFILE_NOT_FOUND') {
+      return res.status(404).json({
+        success: false,
+        error: error.message
+      });
+    }
     logger.error('删除虚拟用户失败:', error);
-    res.status(error?.statusCode || (error?.message === '虚拟用户不存在' ? 404 : 500)).json({
+    res.status(500).json({
       success: false,
-      error: error.message || '删除虚拟用户失败',
-      ...(error?.code ? { code: error.code } : {})
+      error: error.message || '删除虚拟用户失败'
     });
   }
 });
@@ -2456,6 +2439,7 @@ router.delete('/sessions/:sessionId', async (req: any, res) => {
       });
       if (!leasedSession) throw new Error('模拟会话不存在');
 
+      let deletedTeachingCount = 0;
       await assertLeaseOwned();
       await prisma.$transaction(async tx => {
         await assertLeaseOwned(tx);
@@ -2492,15 +2476,26 @@ router.delete('/sessions/:sessionId', async (req: any, res) => {
         }
 
         if (teachingSessionScopes.length > 0) {
-          const associatedTeachingSession = await tx.teaching_sessions.findFirst({
+          const associatedTeachingSessions = await tx.teaching_sessions.findMany({
             where: { OR: teachingSessionScopes },
             select: { id: true }
           });
-          if (associatedTeachingSession) {
-            throw Object.assign(new Error('模拟会话仍有关联课堂记录，不能删除'), {
-              code: 'VIRTUAL_SESSION_HAS_TEACHING_RECORDS',
-              statusCode: 409
+          if (associatedTeachingSessions.length > 0) {
+            // R3 级联：虚拟学习者会话允许级联删除关联教学记录（虚拟数据可再生成）；
+            // 真实用户会话仍保持原 409 保护，不触碰真实教学数据。
+            const owner = await tx.users.findUnique({
+              where: { id: leasedSession.userId },
+              select: { isVirtualLearner: true }
             });
+            if (!owner?.isVirtualLearner) {
+              throw Object.assign(new Error('模拟会话仍有关联课堂记录，不能删除'), {
+                code: 'VIRTUAL_SESSION_HAS_TEACHING_RECORDS',
+                statusCode: 409
+              });
+            }
+            deletedTeachingCount = (await tx.teaching_sessions.deleteMany({
+              where: { OR: teachingSessionScopes }
+            })).count;
           }
         }
 
@@ -2525,17 +2520,52 @@ router.delete('/sessions/:sessionId', async (req: any, res) => {
         });
       });
 
-      return leasedSession;
+      return { session: leasedSession, deletedTeachingCount };
     }, { skipFinalLeaseCheck: true });
+
+    if (session.deletedTeachingCount > 0) {
+      try {
+        await prisma.admin_audit_logs.create({
+          data: {
+            adminId: req.user?.userId ?? null,
+            adminName: req.user?.email ?? null,
+            action: 'virtual-cascade-delete',
+            targetType: 'virtual-session',
+            targetId: sessionId,
+            beforeJson: JSON.stringify({ userId: session.session.userId }),
+            afterJson: JSON.stringify({ deletedTeachingSessions: session.deletedTeachingCount }),
+            method: 'DELETE',
+            path: `/admin/virtual-learners/sessions/${sessionId}`,
+            statusCode: 200,
+            success: true,
+            durationMs: 0
+          }
+        }).catch((error: Error) => {
+          logger.warn('[virtual-learners] 会话级联删除审计写入失败', {
+            error: error?.message || String(error),
+            sessionId
+          });
+        });
+      } catch (error: any) {
+        logger.warn('[virtual-learners] 会话级联删除审计写入失败', {
+          error: error?.message || String(error),
+          sessionId
+        });
+      }
+    }
 
     logger.info('删除模拟会话成功', {
       sessionId,
-      userId: session.userId
+      userId: session.session.userId,
+      deletedTeachingCount: session.deletedTeachingCount
     });
     
     res.json({
       success: true,
-      message: '模拟会话已删除'
+      message: '模拟会话已删除',
+      ...(session.deletedTeachingCount > 0
+        ? { data: { cleanup: { deletedTeachingSessions: session.deletedTeachingCount } } }
+        : {})
     });
   } catch (error: any) {
     logger.error('删除模拟会话失败:', error);

@@ -8,8 +8,17 @@ import { authMiddleware } from '../middleware/auth.middleware';
 import { setAuthCookie, clearAuthCookie } from '../utils/auth-cookie';
 import { aiCapabilityHealthService } from '../services/ai-capability-health.service';
 import { logger } from '../utils/logger';
+import {
+  registerQuotaService,
+  resolveIpDailyQuota,
+  IpRegisterQuotaExceededError,
+  DEFAULT_IP_DAILY_QUOTA,
+} from '../services/auth/register-quota.service';
 
 const router = express.Router();
+
+// ---- 注册治理（R6）：每日注册数量上限（DB 持久化，默认 5 个/天/IP） ----
+const IP_DAILY_QUOTA = resolveIpDailyQuota(process.env.REGISTER_IP_DAILY_QUOTA);
 
 // ---- 注册限速（G1）：注册为公开端点，按 IP 维度限速，缓解用户名枚举扫描与批量注册 ----
 const REGISTER_WINDOW_MS = 60 * 60 * 1000;
@@ -90,7 +99,8 @@ router.get('/registration-status', async (req, res, next) => {
       data: {
         registrationEnabled: settings.registrationEnabled && !coreLearningBlocked,
         configuredRegistrationEnabled: settings.registrationEnabled,
-        temporaryUnavailable: settings.registrationEnabled && coreLearningBlocked
+        temporaryUnavailable: settings.registrationEnabled && coreLearningBlocked,
+        maxAccountsPerIpPerDay: IP_DAILY_QUOTA
       }
     });
   } catch (error: any) {
@@ -153,6 +163,24 @@ router.post('/register', async (req, res, next) => {
       });
     }
 
+    // 注册治理（R6）：单 IP 每日注册数量上限（DB 持久化累计，防慢批量注册）
+    try {
+      await registerQuotaService.assertWithinDailyQuota(clientIP, IP_DAILY_QUOTA);
+    } catch (error) {
+      if (error instanceof IpRegisterQuotaExceededError) {
+        return res.status(429).json({
+          success: false,
+          error: {
+            message: error.message,
+            code: error.code,
+            status: error.status,
+            retryAfterHours: error.retryAfterHours
+          }
+        });
+      }
+      throw error;
+    }
+
     // 验证请求数据
     const data = registerSchema.parse(req.body) as { name: string; password: string };
 
@@ -160,6 +188,9 @@ router.post('/register', async (req, res, next) => {
     const result = await authService.register(data);
 
     recordRegisterAttempt(clientIP, true);
+
+    // 落库本次成功注册（配额累计；失败仅告警不阻断）
+    await registerQuotaService.recordSuccessfulRegistration(clientIP, data.name);
 
     // 同步写入 HttpOnly Cookie（前端不再需要将 token 存入 localStorage）
     // 安全加固：token 仅经 Cookie 下发，响应体不再返回（消除 JS 内存可窃取面）

@@ -65,6 +65,10 @@
         {{ loading ? '正在创建账号…' : '创建账号' }}
       </button>
 
+      <p v-if="dailyQuota > 0" class="quota-hint">
+        同一 IP 每天最多注册 {{ dailyQuota }} 个账号（防批量注册）
+      </p>
+
       <div class="switch">
         <span>已有账号？</span>
         <button type="button" @click="goLogin">立即登录</button>
@@ -87,6 +91,7 @@ const userStore = useUserStore();
 const loading = ref(false);
 
 const status = ref<'checking' | 'enabled' | 'disabled' | 'temporaryUnavailable' | 'failed'>('checking');
+const dailyQuota = ref(0);
 
 const form = reactive({ name: '', password: '', confirm: '' });
 const errors = reactive({ name: '', password: '', confirm: '' });
@@ -134,6 +139,7 @@ async function loadStatus() {
   status.value = 'checking';
   try {
     const s = await authAPI.getRegistrationStatus();
+    dailyQuota.value = Number(s.maxAccountsPerIpPerDay) || 0;
     if (s.registrationEnabled) status.value = 'enabled';
     else status.value = s.temporaryUnavailable ? 'temporaryUnavailable' : 'disabled';
   } catch {
@@ -210,6 +216,7 @@ onMounted(loadStatus);
 .field__error { font-size: 11.5px; color: #c0454a; font-weight: 600; }
 
 .hint { margin: 0; font-size: 11.5px; color: var(--faint); }
+.quota-hint { margin: -4px 0 0; font-size: 11.5px; color: var(--faint); text-align: center; }
 .rules { list-style: none; margin: 0; padding: 0; display: flex; gap: 12px; flex-wrap: wrap; }
 .rules li { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--faint); }
 .rules li.is-ok { color: var(--green); font-weight: 700; }

@@ -4,20 +4,39 @@ const mockExecuteAutoLearning = jest.fn()
 const mockExecuteFullSession = jest.fn()
 const mockVirtualSessionFindUnique = jest.fn()
 const mockVirtualSessionCount = jest.fn()
+const mockVirtualSessionFindMany = jest.fn()
+const mockVirtualSessionDeleteMany = jest.fn()
 const mockVirtualProfileFindUnique = jest.fn()
 const mockVirtualProfileDelete = jest.fn()
 const mockUserDelete = jest.fn()
+const mockUserFindUnique = jest.fn()
 const mockGoalConversationDeleteMany = jest.fn()
 const mockLearningPathFindFirst = jest.fn()
 const mockLearningPathDeleteMany = jest.fn()
 const mockSubtaskFindMany = jest.fn()
-const mockTeachingSessionFindFirst = jest.fn()
+const mockTeachingSessionFindMany = jest.fn()
+const mockTeachingSessionDeleteMany = jest.fn()
 const mockVirtualSessionDelete = jest.fn()
 const mockAssertPathMutationSafe = jest.fn()
 const mockTransaction = jest.fn()
 const mockBlackboxRunLeasedExclusive = jest.fn()
 const mockBlackboxReferee = jest.fn()
 const mockBlackboxActorAudit = jest.fn()
+const mockAdminAuditLogCreate = jest.fn()
+const mockLearnerEvidenceDeleteMany = jest.fn()
+const mockLearnerProjectionDeleteMany = jest.fn()
+const mockMemoryTraceDeleteMany = jest.fn()
+const mockQuickLearnRunDeleteMany = jest.fn()
+const mockGoalSchedulingDeleteMany = jest.fn()
+const mockDomainEventDeleteMany = jest.fn()
+const mockAgentCallLogDeleteMany = jest.fn()
+const mockPromptCallLogDeleteMany = jest.fn()
+const mockLlmAttemptDeleteMany = jest.fn()
+const mockLearningGoalDeleteMany = jest.fn()
+const mockLearningMetricDeleteMany = jest.fn()
+const mockAchievementDeleteMany = jest.fn()
+const mockContentFeedbackDeleteMany = jest.fn()
+const mockProjectionGrantDeleteMany = jest.fn()
 
 const mockSimulationCoordinator = {
   runLeasedExclusive: mockRunLeasedExclusive,
@@ -31,9 +50,35 @@ jest.mock('../../config/database', () => ({
   default: {
     virtual_sessions: {
       findUnique: mockVirtualSessionFindUnique,
-      count: mockVirtualSessionCount
+      count: mockVirtualSessionCount,
+      findMany: mockVirtualSessionFindMany,
+      delete: mockVirtualSessionDelete,
+      deleteMany: mockVirtualSessionDeleteMany
     },
-    virtual_learner_profiles: { findUnique: mockVirtualProfileFindUnique },
+    virtual_learner_profiles: { findUnique: mockVirtualProfileFindUnique, delete: mockVirtualProfileDelete },
+    users: { delete: mockUserDelete, findUnique: mockUserFindUnique },
+    goal_conversations: { deleteMany: mockGoalConversationDeleteMany },
+    learning_paths: {
+      findFirst: mockLearningPathFindFirst,
+      deleteMany: mockLearningPathDeleteMany
+    },
+    subtasks: { findMany: mockSubtaskFindMany },
+    teaching_sessions: { findMany: mockTeachingSessionFindMany, deleteMany: mockTeachingSessionDeleteMany },
+    learner_evidence: { deleteMany: mockLearnerEvidenceDeleteMany },
+    learner_projections: { deleteMany: mockLearnerProjectionDeleteMany },
+    memory_traces: { deleteMany: mockMemoryTraceDeleteMany },
+    virtual_quick_learn_runs: { deleteMany: mockQuickLearnRunDeleteMany },
+    goal_scheduling_ledger: { deleteMany: mockGoalSchedulingDeleteMany },
+    domain_event_outbox: { deleteMany: mockDomainEventDeleteMany },
+    agent_call_logs: { deleteMany: mockAgentCallLogDeleteMany },
+    prompt_call_logs: { deleteMany: mockPromptCallLogDeleteMany },
+    llm_execution_attempts: { deleteMany: mockLlmAttemptDeleteMany },
+    learning_goals: { deleteMany: mockLearningGoalDeleteMany },
+    learning_metrics: { deleteMany: mockLearningMetricDeleteMany },
+    achievements: { deleteMany: mockAchievementDeleteMany },
+    content_feedback: { deleteMany: mockContentFeedbackDeleteMany },
+    projection_access_grants: { deleteMany: mockProjectionGrantDeleteMany },
+    admin_audit_logs: { create: mockAdminAuditLogCreate },
     $transaction: mockTransaction
   }
 }))
@@ -102,16 +147,46 @@ describe('assisted virtual learner route leases', () => {
     mockExecuteAutoLearning.mockResolvedValue({ success: true, totalSteps: 1 })
     mockExecuteFullSession.mockResolvedValue({ success: true })
     mockVirtualSessionCount.mockResolvedValue(0)
-    mockVirtualProfileFindUnique.mockResolvedValue({ id: 'profile-1', userId: 'user-1' })
+    mockVirtualSessionFindMany.mockResolvedValue([
+      { id: 'session-1' },
+      { id: 'session-2' }
+    ])
+    mockVirtualProfileFindUnique.mockResolvedValue({
+      id: 'profile-1',
+      userId: 'user-1',
+      users: { id: 'user-1', isVirtualLearner: true, name: 'virtual_a', email: 'virtual_a@test.local' }
+    })
     mockVirtualProfileDelete.mockResolvedValue({ id: 'profile-1' })
     mockUserDelete.mockResolvedValue({ id: 'user-1' })
+    mockUserFindUnique.mockResolvedValue({ id: 'user-1', isVirtualLearner: true })
     mockGoalConversationDeleteMany.mockResolvedValue({ count: 1 })
     mockLearningPathFindFirst.mockResolvedValue({ id: 'path-1' })
     mockLearningPathDeleteMany.mockResolvedValue({ count: 1 })
     mockSubtaskFindMany.mockResolvedValue([])
-    mockTeachingSessionFindFirst.mockResolvedValue(null)
+    mockTeachingSessionFindMany.mockResolvedValue([])
+    mockTeachingSessionDeleteMany.mockResolvedValue({ count: 1 })
+    mockVirtualSessionDeleteMany.mockResolvedValue({ count: 1 })
     mockVirtualSessionDelete.mockResolvedValue({ id: 'session-1' })
     mockAssertPathMutationSafe.mockResolvedValue(undefined)
+    mockAdminAuditLogCreate.mockResolvedValue({ id: 'audit-1' })
+    for (const mockDeleteMany of [
+      mockLearnerEvidenceDeleteMany,
+      mockLearnerProjectionDeleteMany,
+      mockMemoryTraceDeleteMany,
+      mockQuickLearnRunDeleteMany,
+      mockGoalSchedulingDeleteMany,
+      mockDomainEventDeleteMany,
+      mockAgentCallLogDeleteMany,
+      mockPromptCallLogDeleteMany,
+      mockLlmAttemptDeleteMany,
+      mockLearningGoalDeleteMany,
+      mockLearningMetricDeleteMany,
+      mockAchievementDeleteMany,
+      mockContentFeedbackDeleteMany,
+      mockProjectionGrantDeleteMany
+    ]) {
+      mockDeleteMany.mockResolvedValue({ count: 0 })
+    }
     mockBlackboxRunLeasedExclusive.mockImplementation(async (_sessionId: string, work: () => Promise<any>) => work())
     mockBlackboxReferee.mockResolvedValue({ id: 'report-1' })
     mockBlackboxActorAudit.mockResolvedValue({ id: 'audit-1' })
@@ -120,10 +195,12 @@ describe('assisted virtual learner route leases', () => {
         findUnique: mockVirtualProfileFindUnique,
         delete: mockVirtualProfileDelete
       },
-      users: { delete: mockUserDelete },
+      users: { delete: mockUserDelete, findUnique: mockUserFindUnique },
       virtual_sessions: {
         count: mockVirtualSessionCount,
-        delete: mockVirtualSessionDelete
+        findMany: mockVirtualSessionFindMany,
+        delete: mockVirtualSessionDelete,
+        deleteMany: mockVirtualSessionDeleteMany
       },
       goal_conversations: { deleteMany: mockGoalConversationDeleteMany },
       learning_paths: {
@@ -131,12 +208,67 @@ describe('assisted virtual learner route leases', () => {
         deleteMany: mockLearningPathDeleteMany
       },
       subtasks: { findMany: mockSubtaskFindMany },
-      teaching_sessions: { findFirst: mockTeachingSessionFindFirst }
+      teaching_sessions: { findMany: mockTeachingSessionFindMany, deleteMany: mockTeachingSessionDeleteMany },
+      learner_evidence: { deleteMany: mockLearnerEvidenceDeleteMany },
+      learner_projections: { deleteMany: mockLearnerProjectionDeleteMany },
+      memory_traces: { deleteMany: mockMemoryTraceDeleteMany },
+      virtual_quick_learn_runs: { deleteMany: mockQuickLearnRunDeleteMany },
+      goal_scheduling_ledger: { deleteMany: mockGoalSchedulingDeleteMany },
+      domain_event_outbox: { deleteMany: mockDomainEventDeleteMany },
+      agent_call_logs: { deleteMany: mockAgentCallLogDeleteMany },
+      prompt_call_logs: { deleteMany: mockPromptCallLogDeleteMany },
+      llm_execution_attempts: { deleteMany: mockLlmAttemptDeleteMany },
+      learning_goals: { deleteMany: mockLearningGoalDeleteMany },
+      learning_metrics: { deleteMany: mockLearningMetricDeleteMany },
+      achievements: { deleteMany: mockAchievementDeleteMany },
+      content_feedback: { deleteMany: mockContentFeedbackDeleteMany },
+      projection_access_grants: { deleteMany: mockProjectionGrantDeleteMany },
+      admin_audit_logs: { create: mockAdminAuditLogCreate }
     }))
   })
 
-  it('blocks profile deletion while virtual sessions still exist', async () => {
-    mockVirtualSessionCount.mockResolvedValueOnce(1)
+  it('cascades profile deletion with sessions and teaching records (R3, no more 409 deadlock)', async () => {
+    mockVirtualProfileFindUnique.mockResolvedValue({
+      id: 'profile-1',
+      userId: 'user-1',
+      users: { id: 'user-1', isVirtualLearner: true, name: 'virtual_a', email: 'virtual_a@test.local' }
+    })
+    mockVirtualSessionDeleteMany.mockResolvedValue({ count: 2 })
+    mockTeachingSessionDeleteMany.mockResolvedValue({ count: 3 })
+    mockLearnerEvidenceDeleteMany.mockResolvedValue({ count: 5 })
+    mockLearnerProjectionDeleteMany.mockResolvedValue({ count: 2 })
+    mockVirtualSessionFindMany.mockResolvedValue([{ id: 'session-1' }, { id: 'session-2' }])
+    const handler = getDeleteHandler('/:id')
+    const res = createResponse()
+
+    await handler({ params: { id: 'profile-1' }, user: { userId: 'admin-1', email: 'admin@x' } }, res)
+
+    expect(mockTransaction).toHaveBeenCalledTimes(1)
+    expect(mockVirtualSessionDeleteMany).toHaveBeenCalledWith({ where: { virtualProfileId: 'profile-1' } })
+    expect(mockTeachingSessionDeleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } })
+    expect(mockLearnerEvidenceDeleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } })
+    expect(mockLearnerProjectionDeleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } })
+    expect(mockVirtualProfileDelete).toHaveBeenCalledWith({ where: { id: 'profile-1' } })
+    expect(mockUserDelete).toHaveBeenCalledWith({ where: { id: 'user-1' } })
+    expect(mockAdminAuditLogCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
+      action: 'virtual-cascade-delete',
+      targetType: 'virtual-learner',
+      targetId: 'profile-1',
+      success: true
+    }) })
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      message: '虚拟用户已删除',
+      data: { cleanup: expect.objectContaining({ teachingSessions: 3, learnerEvidence: 5 }) }
+    })
+  })
+
+  it('blocks profile deletion for a non-virtual (real) user with 409 protection', async () => {
+    mockVirtualProfileFindUnique.mockResolvedValue({
+      id: 'profile-1',
+      userId: 'user-1',
+      users: { id: 'user-1', isVirtualLearner: false, name: 'alice', email: 'alice@x.com' }
+    })
     const handler = getDeleteHandler('/:id')
     const res = createResponse()
 
@@ -145,33 +277,12 @@ describe('assisted virtual learner route leases', () => {
     expect(res.status).toHaveBeenCalledWith(409)
     expect(res.json).toHaveBeenCalledWith({
       success: false,
-      error: '虚拟用户仍有模拟会话，请先逐个删除会话',
-      code: 'VIRTUAL_PROFILE_HAS_SESSIONS'
+      error: '该账号不是虚拟学习者，禁止级联删除',
+      code: 'VIRTUAL_PROFILE_REAL_USER_PROTECTED'
     })
     expect(mockTransaction).not.toHaveBeenCalled()
-    expect(mockVirtualProfileDelete).not.toHaveBeenCalled()
     expect(mockUserDelete).not.toHaveBeenCalled()
-  })
-
-  it('atomically rechecks sessions and deletes the profile with its user', async () => {
-    const handler = getDeleteHandler('/:id')
-    const res = createResponse()
-
-    await handler({ params: { id: 'profile-1' }, user: { userId: 'admin-1' } }, res)
-
-    expect(mockTransaction).toHaveBeenCalledTimes(1)
-    expect(mockVirtualSessionCount).toHaveBeenNthCalledWith(1, {
-      where: { virtualProfileId: 'profile-1' }
-    })
-    expect(mockVirtualSessionCount).toHaveBeenNthCalledWith(2, {
-      where: { virtualProfileId: 'profile-1' }
-    })
-    expect(mockVirtualProfileDelete).toHaveBeenCalledWith({ where: { id: 'profile-1' } })
-    expect(mockUserDelete).toHaveBeenCalledWith({ where: { id: 'user-1' } })
-    expect(res.json).toHaveBeenCalledWith({
-      success: true,
-      message: '虚拟用户已删除'
-    })
+    expect(mockAdminAuditLogCreate).not.toHaveBeenCalled()
   })
 
   it('wraps teaching-step around the assisted check and coordinator mutation', async () => {
@@ -403,7 +514,7 @@ describe('assisted virtual learner route leases', () => {
     expect(mockVirtualSessionDelete).not.toHaveBeenCalled()
   })
 
-  it('blocks deletion when the simulation still has an associated teaching record', async () => {
+  it('blocks deletion when the simulation still has an associated teaching record for a real user', async () => {
     mockVirtualSessionFindUnique.mockResolvedValue({
       id: 'session-1',
       userId: 'user-1',
@@ -411,13 +522,14 @@ describe('assisted virtual learner route leases', () => {
       learningPathId: null,
       stageResults: JSON.stringify({ teaching: { teachingSessionId: 'teaching-1' } })
     })
-    mockTeachingSessionFindFirst.mockResolvedValue({ id: 'teaching-1' })
+    mockTeachingSessionFindMany.mockResolvedValue([{ id: 'teaching-1' }])
+    mockUserFindUnique.mockResolvedValue({ id: 'user-1', isVirtualLearner: false })
     const handler = getDeleteHandler('/sessions/:sessionId')
     const res = createResponse()
 
     await handler({ params: { sessionId: 'session-1' } }, res)
 
-    expect(mockTeachingSessionFindFirst).toHaveBeenCalledWith({
+    expect(mockTeachingSessionFindMany).toHaveBeenCalledWith({
       where: { OR: [{ id: 'teaching-1' }] },
       select: { id: true }
     })
@@ -427,9 +539,46 @@ describe('assisted virtual learner route leases', () => {
       error: '模拟会话仍有关联课堂记录，不能删除',
       code: 'VIRTUAL_SESSION_HAS_TEACHING_RECORDS'
     })
+    expect(mockTeachingSessionDeleteMany).not.toHaveBeenCalled()
     expect(mockGoalConversationDeleteMany).not.toHaveBeenCalled()
     expect(mockLearningPathDeleteMany).not.toHaveBeenCalled()
     expect(mockVirtualSessionDelete).not.toHaveBeenCalled()
+  })
+
+  it('cascades associated teaching records for a virtual learner session (R3)', async () => {
+    mockVirtualSessionFindUnique.mockResolvedValue({
+      id: 'session-1',
+      userId: 'user-1',
+      goalConversationId: 'goal-1',
+      learningPathId: null,
+      stageResults: JSON.stringify({ teaching: { teachingSessionId: 'teaching-1' } })
+    })
+    mockTeachingSessionFindMany.mockResolvedValue([{ id: 'teaching-1' }])
+    mockUserFindUnique.mockResolvedValue({ id: 'user-1', isVirtualLearner: true })
+    mockTeachingSessionDeleteMany.mockResolvedValue({ count: 1 })
+    const handler = getDeleteHandler('/sessions/:sessionId')
+    const res = createResponse()
+
+    await handler({ params: { sessionId: 'session-1' } }, res)
+
+    expect(mockTeachingSessionDeleteMany).toHaveBeenCalledWith({
+      where: { OR: [{ id: 'teaching-1' }] }
+    })
+    expect(mockGoalConversationDeleteMany).toHaveBeenCalledWith({
+      where: { id: 'goal-1', userId: 'user-1' }
+    })
+    expect(mockVirtualSessionDelete).toHaveBeenCalledWith({ where: { id: 'session-1' } })
+    expect(res.status).not.toHaveBeenCalledWith(409)
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      message: '模拟会话已删除',
+      data: { cleanup: { deletedTeachingSessions: 1 } }
+    })
+    expect(mockAdminAuditLogCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
+      action: 'virtual-cascade-delete',
+      targetType: 'virtual-session',
+      targetId: 'session-1'
+    }) })
   })
 
   it('returns the stable busy response without starting the deletion transaction', async () => {

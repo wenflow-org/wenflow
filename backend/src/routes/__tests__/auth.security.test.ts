@@ -9,6 +9,8 @@ const recordLoginAttempt = jest.fn()
 const loginRateLimitMiddleware = jest.fn((_req, _res, next) => next())
 const getPlatformSettings = jest.fn()
 const isCapabilityBlocked = jest.fn()
+const assertWithinDailyQuota = jest.fn()
+const recordSuccessfulRegistration = jest.fn()
 
 class MockInvalidCredentialsError extends Error {
   readonly status = 401
@@ -55,12 +57,35 @@ jest.mock('../../services/ai-capability-health.service', () => ({
   }
 }))
 
+class MockIpRegisterQuotaExceededError extends Error {
+  readonly status = 429
+  readonly code = 'REGISTER_IP_QUOTA_EXCEEDED'
+  readonly quota = 5
+  readonly retryAfterHours = 24
+
+  constructor() {
+    super('同一 IP 每天最多注册 5 个账号，请明天再试')
+    this.name = 'IpRegisterQuotaExceededError'
+  }
+}
+
+jest.mock('../../services/auth/register-quota.service', () => ({
+  registerQuotaService: {
+    assertWithinDailyQuota,
+    recordSuccessfulRegistration
+  },
+  resolveIpDailyQuota: jest.fn(() => 5),
+  IpRegisterQuotaExceededError: MockIpRegisterQuotaExceededError,
+  DEFAULT_IP_DAILY_QUOTA: 5
+}))
+
 require('../auth')
 
 function createResponse() {
   return {
     statusCode: 200,
     body: undefined as any,
+    cookie: jest.fn(),
     status(code: number) {
       this.statusCode = code
       return this
@@ -77,6 +102,8 @@ describe('普通登录路由安全边界', () => {
     jest.clearAllMocks()
     getPlatformSettings.mockResolvedValue({ registrationEnabled: true })
     isCapabilityBlocked.mockReturnValue(false)
+    assertWithinDailyQuota.mockResolvedValue(5)
+    recordSuccessfulRegistration.mockResolvedValue(undefined)
   })
 
   it('无效凭据直接返回统一 401，而不是进入全局 500 错误处理', async () => {
@@ -119,7 +146,8 @@ describe('普通登录路由安全边界', () => {
       data: {
         registrationEnabled: false,
         configuredRegistrationEnabled: true,
-        temporaryUnavailable: true
+        temporaryUnavailable: true,
+        maxAccountsPerIpPerDay: 5
       }
     })
     expect(next).not.toHaveBeenCalled()
@@ -156,5 +184,42 @@ describe('普通登录路由安全边界', () => {
     expect(res.body.error.code).toBe('REGISTRATION_DISABLED')
     expect(register).not.toHaveBeenCalled()
     expect(next).not.toHaveBeenCalled()
+  })
+
+  it('单 IP 达到每日注册上限时返回 429 配额超限（R6），不调用注册服务', async () => {
+    assertWithinDailyQuota.mockRejectedValue(new MockIpRegisterQuotaExceededError())
+    const req: any = { body: { name: 'alice', password: 'password1' }, ip: '10.0.0.9' }
+    const res = createResponse()
+    const next = jest.fn()
+
+    await routes['POST /register'][0](req, res, next)
+
+    expect(assertWithinDailyQuota).toHaveBeenCalledWith('10.0.0.9', 5)
+    expect(res.statusCode).toBe(429)
+    expect(res.body).toEqual({
+      success: false,
+      error: {
+        message: '同一 IP 每天最多注册 5 个账号，请明天再试',
+        code: 'REGISTER_IP_QUOTA_EXCEEDED',
+        status: 429,
+        retryAfterHours: 24
+      }
+    })
+    expect(register).not.toHaveBeenCalled()
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('配额内注册成功后落库成功记录（含 IP 与用户名）', async () => {
+    register.mockResolvedValue({ token: 'token-1', user: { id: 'u-1', name: 'alice' } })
+    const req: any = { body: { name: 'alice', password: 'password1' }, ip: '10.0.0.9', headers: {} }
+    const res = createResponse()
+    const next = jest.fn()
+
+    await routes['POST /register'][0](req, res, next)
+
+    expect(assertWithinDailyQuota).toHaveBeenCalledWith('10.0.0.9', 5)
+    expect(register).toHaveBeenCalledWith({ name: 'alice', password: 'password1' })
+    expect(recordSuccessfulRegistration).toHaveBeenCalledWith('10.0.0.9', 'alice')
+    expect(res.statusCode).toBe(201)
   })
 })

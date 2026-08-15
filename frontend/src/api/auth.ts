@@ -50,12 +50,14 @@ export const authAPI = {
     registrationEnabled: boolean;
     configuredRegistrationEnabled?: boolean;
     temporaryUnavailable?: boolean;
+    maxAccountsPerIpPerDay?: number;
   }> {
     const response = await api.get('/auth/registration-status');
     return unwrapAuthPayload<{
       registrationEnabled: boolean;
       configuredRegistrationEnabled?: boolean;
       temporaryUnavailable?: boolean;
+      maxAccountsPerIpPerDay?: number;
     }>(response) || { registrationEnabled: false, temporaryUnavailable: true };
   },
 
