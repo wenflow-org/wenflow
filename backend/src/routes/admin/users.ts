@@ -6,6 +6,7 @@ import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { randomUUID as uuidv4 } from 'crypto';
 import { logger } from '../../utils/logger';
+import { isTestAccountUser, REAL_USER_WHERE } from '../../utils/test-account';
 
 const router = express.Router();
 
@@ -52,7 +53,16 @@ router.get('/', async (req, res, next) => {
 
     // Phase 2：status=deleted 反转为「仅已删账号」（恢复入口/已删列表）；其余维持默认隐藏
     const where: any = status === 'deleted' ? { deletedAt: { not: null } } : { deletedAt: null };
-    
+
+    // 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，单点 utils/test-account.ts）；
+    // includeTest=true 时显式包含（切换后前端对虚拟/测试行做灰标标记）。
+    // 已删除视图不适用（回收站需展示全量账号以恢复）
+    const includeTest = String(req.query.includeTest || '') === 'true';
+    if (!includeTest && status !== 'deleted') {
+      where.isVirtualLearner = false;
+      where.NOT = REAL_USER_WHERE.NOT;
+    }
+
     // 搜索条件
     if (search) {
       where.OR = [
@@ -78,6 +88,7 @@ router.get('/', async (req, res, next) => {
           name: true,
           email: true,
           isAdmin: true,
+          isVirtualLearner: true,
           xp: true,
           currentLevel: true,
           lastLoginAt: true,
@@ -98,7 +109,12 @@ router.get('/', async (req, res, next) => {
     res.json({
       success: true,
       data: {
-        users,
+        users: users.map((u) => ({
+          ...u,
+          /** 数据隔离标记（includeTest=true 时供前端灰标：虚拟学习者 / 测试账号） */
+          isVirtualLearner: u.isVirtualLearner,
+          isTestAccount: isTestAccountUser(u),
+        })),
         pagination: {
           total,
           page: Number(page),

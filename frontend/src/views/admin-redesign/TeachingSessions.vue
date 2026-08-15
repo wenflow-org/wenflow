@@ -34,7 +34,8 @@
           </select>
           <input class="mk-filter__input" v-model="keyword" placeholder="搜索主题 / 用户 / ID" />
         </div>
-        <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}<template v-if="dataSource === 'live'"> · 仅显示最近 100 条</template></span>
+        <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}<template v-if="dataSource === 'live'"> · {{ includeTest ? '含虚拟/测试' : '仅真实' }} · 仅显示最近 100 条</template></span>
+        <DataScopeToggle v-model="includeTest" />
       </div>
 
       <div v-if="loadFailed" class="ts-error" role="alert">
@@ -69,6 +70,10 @@
                 <div class="mk-cell-main">
                   <strong>{{ r.userName }}</strong>
                   <span class="mk-cell-sub">{{ r.email }}</span>
+                </div>
+                <div class="ts-tags">
+                  <span v-if="r.isVirtualLearner" class="ts-tag ts-tag--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
+                  <span v-else-if="r.isTestAccount" class="ts-tag ts-tag--test" title="测试/审计账号">测试</span>
                 </div>
               </td>
               <td><span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span></td>
@@ -209,6 +214,7 @@ import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useLoadMore } from './useLoadMore'
 import MockSkeletonTable from './SkeletonTable.vue'
+import DataScopeToggle from './DataScopeToggle.vue'
 
 interface WrapupSummary {
   topicSummary?: string
@@ -225,6 +231,9 @@ interface Row {
   taskType: string
   userName: string
   email: string
+  /** 数据隔离标记（includeTest=true 时后端带回，供灰标） */
+  isVirtualLearner: boolean
+  isTestAccount: boolean
   status: string
   duration: number
   messageCount: number
@@ -244,7 +253,7 @@ interface Row {
 const demoRows: Row[] = [
   {
     id: 'ts-demo-1', topic: '数据清洗练习：缺失值处理', subject: 'Excel 自动化', taskType: 'practice',
-    userName: '陈晓', email: 'chenxiao@…', userId: '', status: 'completed', duration: 1840, messageCount: 12, knowledgePointCount: 4,
+    userName: '陈晓', email: 'chenxiao@…', userId: '', isVirtualLearner: false, isTestAccount: false, status: 'completed', duration: 1840, messageCount: 12, knowledgePointCount: 4,
     wrapupStatus: 'complete', hasAdvisory: true, attention: 'low', startAt: '32 分钟前',
     wrapup: {
       topicSummary: '围绕缺失值识别与填充策略展开，从 ISBLANK 判断到 IF 嵌套填充，最后落到真实周报的清洗演练。',
@@ -257,14 +266,14 @@ const demoRows: Row[] = [
   },
   {
     id: 'ts-demo-2', topic: 'JOIN 实战 3/4', subject: 'SQL 基础', taskType: 'practice',
-    userName: '赵敏', email: 'zhaomin@…', userId: '', status: 'failed', duration: 620, messageCount: 4, knowledgePointCount: 2,
+    userName: '赵敏', email: 'zhaomin@…', userId: '', isVirtualLearner: false, isTestAccount: false, status: 'failed', duration: 620, messageCount: 4, knowledgePointCount: 2,
     wrapupStatus: 'missing', hasAdvisory: true, attention: 'high', startAt: '4 分钟前',
     wrapup: null, wrapupSource: '—', advisory: { priority: 'high', title: '', text: '连续 3 次任务失败且本次会话异常中断：建议伴学介入，把 JOIN 去重拆成「先 DISTINCT 再 JOIN」两步，并临时降低练习难度。' },
     rawJson: '{\n  "demo": true\n}', progress: { taskIndex: 3, totalTasks: 4, milestoneIndex: 3, totalMilestones: 4 }
   },
   {
     id: 'ts-demo-3', topic: '提问训练：把模糊问题拆成假设', subject: '数据分析思维', taskType: 'acquire',
-    userName: '刘一帆', email: 'liu**@…', userId: '', status: 'completed', duration: 1500, messageCount: 9, knowledgePointCount: 3,
+    userName: '刘一帆', email: 'liu**@…', userId: '', isVirtualLearner: false, isTestAccount: false, status: 'completed', duration: 1500, messageCount: 9, knowledgePointCount: 3,
     wrapupStatus: 'complete', hasAdvisory: true, attention: 'medium', startAt: '22 分钟前',
     wrapup: {
       topicSummary: '练习把「为什么转化率低」拆成可验证的子假设。',
@@ -277,7 +286,7 @@ const demoRows: Row[] = [
   },
   {
     id: 'ts-demo-4', topic: '函数练习 2/5：参数与返回值', subject: 'Python 入门', taskType: 'practice',
-    userName: '孙可', email: 'sunke@…', userId: '', status: 'completed', duration: 2100, messageCount: 15, knowledgePointCount: 5,
+    userName: '孙可', email: 'sunke@…', userId: '', isVirtualLearner: false, isTestAccount: false, status: 'completed', duration: 2100, messageCount: 15, knowledgePointCount: 5,
     wrapupStatus: 'complete', hasAdvisory: false, attention: 'low', startAt: '2 小时前',
     wrapup: {
       topicSummary: '默认参数与返回值的基础训练。',
@@ -290,14 +299,14 @@ const demoRows: Row[] = [
   },
   {
     id: 'ts-demo-5', topic: '邮件表达：开场与诉求句', subject: '职场英语', taskType: 'reading',
-    userName: '周洁', email: 'zhoujie@…', userId: '', status: 'active', duration: 480, messageCount: 3, knowledgePointCount: 1,
+    userName: '周洁', email: 'zhoujie@…', userId: '', isVirtualLearner: false, isTestAccount: false, status: 'active', duration: 480, messageCount: 3, knowledgePointCount: 1,
     wrapupStatus: 'missing', hasAdvisory: false, attention: 'low', startAt: '18 分钟前',
     wrapup: null, wrapupSource: '—', advisory: null,
     rawJson: '{\n  "demo": true\n}', progress: { taskIndex: 1, totalTasks: 3, milestoneIndex: 1, totalMilestones: 4 }
   },
   {
     id: 'ts-demo-6', topic: '五十音图：か行・さ行', subject: '日语 N5', taskType: 'quiz',
-    userName: '冯远', email: 'fengyuan@…', userId: '', status: 'timeout', duration: 360, messageCount: 2, knowledgePointCount: 0,
+    userName: '冯远', email: 'fengyuan@…', userId: '', isVirtualLearner: false, isTestAccount: false, status: 'timeout', duration: 360, messageCount: 2, knowledgePointCount: 0,
     wrapupStatus: 'missing', hasAdvisory: true, attention: 'high', startAt: '1 小时前',
     wrapup: null, wrapupSource: '—', advisory: { priority: 'high', title: '', text: '测验超时且中途离开：近 5 天活跃度持续下降，建议触发挽留流程并下调每日任务量。' },
     rawJson: '{\n  "demo": true\n}', progress: { taskIndex: 1, totalTasks: 2, milestoneIndex: 1, totalMilestones: 5 }
@@ -308,11 +317,14 @@ const rows = ref<Row[]>([])
 const refreshing = ref(false)
 const loadFailed = ref(false)
 
+/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；切换「含虚拟·测试」后重拉全量并灰标虚拟/测试行 */
+const includeTest = ref(false)
+
 /* 静默拉取：live 模式成功即整表替换；失败保留旧数据（轮询不闪空态），并标记错误条 */
 async function fetchRows(): Promise<boolean> {
   if (dataSource.value !== 'live') return false
   try {
-    const res = await adminTeachingSessionsApi.list({ limit: 100 })
+    const res = await adminTeachingSessionsApi.list({ limit: 100, includeTest: includeTest.value })
     const body = res.data?.data ?? res.data ?? {}
     const items = body.items || []
     rows.value = items.map((s: Record<string, unknown>) => mapRow(s))
@@ -351,6 +363,15 @@ watch(
   },
   { immediate: true }
 )
+
+/* 数据隔离切换：仅真实 ↔ 含虚拟/测试（切换后立即按新口径重拉） */
+watch(includeTest, () => {
+  if (dataSource.value !== 'live') return
+  refreshing.value = true
+  void fetchRows().finally(() => {
+    refreshing.value = false
+  })
+})
 
 /* G4：停留页面时静默轮询，避免状态过期 */
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -395,6 +416,8 @@ function mapRow(s: Record<string, unknown>): Row {
     taskType: String(s.taskType || ''),
     userName: String(s.userName || s.userId),
     email: String(s.email || ''),
+    isVirtualLearner: !!s.isVirtualLearner,
+    isTestAccount: !!s.isTestAccount,
     status: String(s.status || ''),
     duration: Number(s.duration || 0),
     messageCount: Number(s.messageCount || 0),
@@ -538,6 +561,17 @@ function progressTitle(r: Row): string {
 
 <style scoped>
 .ts-row { cursor: pointer; }
+/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
+.ts-tags { display: flex; gap: 6px; margin-top: 2px; }
+.ts-tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.ts-tag--virtual { background: #f1f5f9; color: #64748b; border: 1px dashed #cbd5e1; }
+.ts-tag--test { background: #fef3c7; color: #b45309; }
 /* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
 .ts-row td:first-child .mk-cell-sub { max-width: 300px; }
 /* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */

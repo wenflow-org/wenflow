@@ -25,6 +25,8 @@ function makeUser(i: number) {
     name: `用户${i}`,
     email: `user${i}@example.com`,
     isAdmin: i === 1,
+    isVirtualLearner: false,
+    isTestAccount: false,
     lastLoginAt: '2026-08-13T10:00:00',
     createdAt: '2026-07-01T10:00:00',
     paths: 1,

@@ -1,0 +1,60 @@
+<template>
+  <div class="ds-toggle" role="group" aria-label="数据范围切换">
+    <button
+      type="button"
+      class="ds-toggle__btn"
+      :class="{ 'ds-toggle__btn--on': !modelValue }"
+      :aria-pressed="!modelValue"
+      title="默认视图：仅真实用户（不含虚拟学习者与测试/审计账号）"
+      @click="emit('update:modelValue', false)"
+    >
+      仅真实
+    </button>
+    <button
+      type="button"
+      class="ds-toggle__btn"
+      :class="{ 'ds-toggle__btn--on': modelValue }"
+      :aria-pressed="modelValue"
+      title="全量视图：含虚拟学习者与测试/审计账号，行内带标记"
+      @click="emit('update:modelValue', true)"
+    >
+      含虚拟·测试
+    </button>
+  </div>
+</template>
+
+<script setup lang="ts">
+defineProps<{ modelValue: boolean }>()
+const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
+</script>
+
+<style scoped>
+.ds-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: #eef1f6;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ds-toggle__btn {
+  padding: 3px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mk-muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.ds-toggle__btn:hover { color: var(--mk-blue); }
+.ds-toggle__btn--on {
+  background: #fff;
+  color: var(--mk-blue);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+</style>

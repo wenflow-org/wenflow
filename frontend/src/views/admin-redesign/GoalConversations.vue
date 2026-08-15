@@ -6,7 +6,7 @@
       <strong class="mk-status__title">Goal 会话</strong>
       <span class="mk-status__sep"></span>
       <template v-if="isLive && stats">
-        <span class="mk-status__meta" title="口径：仅真实用户（不含虚拟/测试账号）；下方列表为全量口径（含虚拟学习者），故两处数字可能不同">总数 {{ stats.total }}（真实用户）</span>
+        <span class="mk-status__meta" title="口径：仅真实用户（不含虚拟/测试账号）；列表默认仅真实，切换「含虚拟·测试」后显示全量并灰标虚拟/测试行">总数 {{ stats.total }}（真实用户）</span>
         <span class="mk-status__meta">进行中 {{ stats.active }}</span>
         <span class="mk-status__meta">已完成 {{ stats.completed }}</span>
         <span class="mk-status__meta">完成率 {{ stats.completionRate }}%</span>
@@ -54,7 +54,8 @@
               </button>
             </div>
           </div>
-          <span class="mk-card__meta" :title="`当前筛选 ${filtered.length} / 全量 ${rows.length} 条（列表为全量口径，含虚拟学习者；状态条「总数」仅计真实用户）`">{{ filtered.length }} / {{ rows.length }} 条（全量）</span>
+          <span class="mk-card__meta" :title="includeTest ? '全量口径：含虚拟学习者与测试/审计账号，行内带标记' : '默认视图：仅真实用户（状态条「总数」同口径）'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含虚拟/测试' : '仅真实' }}）</span>
+          <DataScopeToggle v-model="includeTest" />
         </div>
 
         <MockSkeletonTable v-if="loading && !rows.length" :cols="6" />
@@ -82,6 +83,10 @@
                 <div class="mk-cell-main">
                   <strong>{{ r.userName }}</strong>
                   <span class="mk-cell-sub">{{ r.userEmail }}</span>
+                </div>
+                <div class="gc-tags">
+                  <span v-if="r.isVirtualLearner" class="gc-tag gc-tag--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
+                  <span v-else-if="r.isTestAccount" class="gc-tag gc-tag--test" title="测试/审计账号">测试</span>
                 </div>
               </td>
               <td><span class="gc-summary" :title="r.summary">{{ r.summary }}</span></td>
@@ -125,7 +130,7 @@
         <div v-else class="mk-empty">
           <span v-if="!loading" class="mk-empty__icon" aria-hidden="true">◌</span>
           <strong>{{ loading ? '加载中…' : (keyword || statusFilter ? '当前筛选无匹配' : '暂无会话') }}</strong>
-          <span v-if="!loading">{{ keyword || statusFilter ? '放宽筛选条件试试。' : '虚拟学习者发起目标对话后，会话记录会出现在这里。' }}</span>
+          <span v-if="!loading">{{ keyword || statusFilter ? '放宽筛选条件试试。' : (includeTest ? '全量口径下没有会话。' : '默认仅展示真实用户会话；切换「含虚拟·测试」可查看虚拟学习者会话。') }}</span>
           <button v-if="isFiltered && !loading" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
         </div>
         <!-- 客户端分页（P2：76 行单页直排 → mk-pagination 统一分页器，15-30-50-100 条/页） -->
@@ -264,6 +269,7 @@ import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
+import DataScopeToggle from './DataScopeToggle.vue'
 import { adminGoalConversationsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
@@ -273,6 +279,9 @@ interface Row {
   userId: string
   userName: string
   userEmail: string
+  /** 数据隔离标记（includeTest=true 时后端带回，供灰标） */
+  isVirtualLearner: boolean
+  isTestAccount: boolean
   status: string
   stage: string
   summary: string
@@ -302,6 +311,9 @@ const stats = ref<{ total: number; active: number; completed: number; completion
 const keyword = ref('')
 const statusFilter = ref('')
 const detail = ref<Detail | null>(null)
+
+/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；切换「含虚拟·测试」后重拉全量并灰标虚拟/测试行 */
+const includeTest = ref(false)
 
 /* 结构化字段（从 collectedData 提取，供详情面板卡片展示） */
 const detailUnderstanding = computed(() => {
@@ -391,6 +403,8 @@ function mapRow(c: Record<string, unknown>): Row {
     userId: String(c.userId || ''),
     userName: String(u.name || c.userId || '—'),
     userEmail: String(u.email || ''),
+    isVirtualLearner: !!c.isVirtualLearner,
+    isTestAccount: !!c.isTestAccount,
     status: String(c.status || ''),
     stage,
     summary: summaryOf(c),
@@ -441,7 +455,7 @@ async function load() {
   loadError.value = ''
   try {
     const [listRes, statsRes] = await Promise.all([
-      adminGoalConversationsApi.list({ limit: 100 }),
+      adminGoalConversationsApi.list({ limit: 100, includeTest: includeTest.value }),
       adminGoalConversationsApi.getStats().catch(() => null)
     ])
     const body = listRes.data?.data ?? listRes.data ?? {}
@@ -629,6 +643,10 @@ async function remove(r: Row) {
 watch(isLive, (v) => {
   if (v) void load()
 })
+/* 数据隔离切换：仅真实 ↔ 含虚拟/测试（切换后立即按新口径重拉） */
+watch(includeTest, () => {
+  if (isLive.value) void load()
+})
 onMounted(() => {
   if (isLive.value) void load()
 })
@@ -636,6 +654,17 @@ onMounted(() => {
 
 <style scoped>
 .gc-row { cursor: pointer; }
+/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
+.gc-tags { display: flex; gap: 6px; margin-top: 2px; }
+.gc-tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.gc-tag--virtual { background: #f1f5f9; color: #64748b; border: 1px dashed #cbd5e1; }
+.gc-tag--test { background: #fef3c7; color: #b45309; }
 /* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
 .gc-stage-cell { display: grid; gap: 4px; min-width: 148px; }
 .gc-stage-cell__head { display: flex; align-items: center; gap: 8px; }

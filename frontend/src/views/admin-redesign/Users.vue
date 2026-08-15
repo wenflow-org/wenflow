@@ -5,9 +5,10 @@
       <strong class="mk-status__title">{{ users.length ? '用户体系正常' : pill === 'deleted' ? '暂无已删除用户' : '还没有真实用户' }}</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ users.length }} 人</span>
-      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="'用户页为全量口径（含测试/虚拟账号）；总览「总用户」仅计真实用户（不含虚拟学习者与测试账号），两端差异即此处差值'">
-        真实 {{ realUsers }} · 测试/虚拟 {{ users.length - realUsers }}
+      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="'用户页默认仅真实用户（不含虚拟学习者与测试账号）；切换「含虚拟·测试」后显示全量并灰标'">
+        真实 {{ realUsers }}
       </span>
+      <span v-if="isLive && pill !== 'deleted' && includeTest" class="mk-status__meta" :title="'全量口径：含虚拟学习者与测试/审计账号（行内带标记）'">测试/虚拟 {{ users.length - realUsers }}</span>
       <span class="mk-status__meta">管理员 {{ adminCount }}</span>
       <span class="mk-status__meta">当前在线 {{ activeToday }}</span>
       <span v-if="isLive && registrationEnabled !== null" class="mk-status__meta" :class="registrationEnabled ? '' : 'ul-reg--closed'">
@@ -37,6 +38,7 @@
           </div>
           <input class="mk-filter__input" v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
         </div>
+        <DataScopeToggle v-if="isLive && pill !== 'deleted'" v-model="includeTest" />
         <span class="mk-card__meta">{{ filtered.length }} / {{ users.length }} 人</span>
       </div>
 
@@ -75,6 +77,7 @@
               <div class="ul-tags">
                 <span v-if="u.deleted" class="ul-tag ul-tag--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
                 <span v-else-if="isSelf(u)" class="ul-tag ul-tag--self">当前管理员</span>
+                <span v-else-if="u.isVirtualLearner" class="ul-tag ul-tag--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
                 <span v-else-if="isTestAccount(u)" class="ul-tag ul-tag--test">测试账号</span>
               </div>
             </td>
@@ -188,12 +191,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { openSubPage, intent, isLive } from './store'
-import { liveUsers, liveCreateUser, liveDeleteUser, liveSetUserRole, liveUsersTotal, timeAgo, errMsg, registrationEnabled, liveLoading, liveFailures, loadLiveData } from './live'
+import { liveUsers, liveCreateUser, liveDeleteUser, liveSetUserRole, liveUsersTotal, liveSetUsersIncludeTest, timeAgo, errMsg, registrationEnabled, liveLoading, liveFailures, loadLiveData } from './live'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
+import DataScopeToggle from './DataScopeToggle.vue'
 import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
@@ -226,6 +230,9 @@ interface UserRow {
   email: string
   admin: boolean
   online: boolean
+  /** 数据隔离标记（includeTest=true 时后端带回，供灰标） */
+  isVirtualLearner?: boolean
+  isTestAccount?: boolean
   createdAt: string
   lastLogin: string
   paths: number
@@ -301,6 +308,8 @@ const users = computed<UserRow[]>(() => {
       email: u.email,
       admin: u.isAdmin,
       online: !!u.lastLoginAt && Date.now() - new Date(u.lastLoginAt).getTime() < 30 * 60000,
+      isVirtualLearner: u.isVirtualLearner,
+      isTestAccount: u.isTestAccount,
       createdAt: timeAgo(u.createdAt),
       lastLogin: timeAgo(u.lastLoginAt),
       paths: u.paths,
@@ -314,6 +323,12 @@ const users = computed<UserRow[]>(() => {
 
 const pill = ref('all')
 const keyword = ref('')
+
+/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；切换「含虚拟·测试」后按新口径重拉并灰标虚拟/测试行 */
+const includeTest = ref(false)
+watch(includeTest, (v) => {
+  if (isLive.value && pill.value !== 'deleted') void liveSetUsersIncludeTest(v)
+})
 
 /** 真实用户数（排除测试/虚拟账号；口径标注用，与总览「总用户」对齐的近似值——列表为前 50 行样本） */
 const realUsers = computed(() => users.value.filter((u) => !u.deleted && !isTestAccountUser(u)).length)
@@ -631,6 +646,7 @@ function clearFilters() {
 }
 .ul-tag--self { background: #dbeafe; color: var(--mk-accent-deep, #1f57cc); }
 .ul-tag--test { background: #fef3c7; color: #b45309; }
+.ul-tag--virtual { background: #f1f5f9; color: #64748b; border: 1px dashed #cbd5e1; }
 .ul-level { display: flex; align-items: center; gap: 6px; }
 .ul-level__badge {
   padding: 1px 8px;

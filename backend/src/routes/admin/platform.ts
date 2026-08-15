@@ -12,7 +12,7 @@ import {
   isManifestAgent,
   listAgentManifest
 } from '../../services/agent-manifest.service';
-import { REAL_USER_WHERE as REAL_USER_WHERE_UTILS } from '../../utils/test-account';
+import { REAL_USER_WHERE as REAL_USER_WHERE_UTILS, isTestAccountUser } from '../../utils/test-account';
 import { getGateway } from '../../gateway';
 import {
   DEFAULT_PATH_AGENT_INPUT_CONFIG,
@@ -2223,6 +2223,9 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
     const status = (req.query.status as string) || undefined;
     const onlyWithAdvisory = String(req.query.onlyWithAdvisory || '') === 'true';
     const onlyMissingWrapup = String(req.query.onlyMissingWrapup || '') === 'true';
+    // 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，单点 REAL_USER_WHERE）；
+    // includeTest=true 时显式包含（切换后前端对虚拟/测试行做灰标标记）
+    const includeTest = String(req.query.includeTest || '') === 'true';
 
     const where: any = {
       ...(userId ? { userId } : {}),
@@ -2232,6 +2235,7 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
       ...(onlyMissingWrapup
         ? { OR: [{ wrapup: null }, { NOT: { wrapup: { contains: 'topicSummary' } } }] }
         : {}),
+      ...(includeTest ? {} : { users: REAL_USER_WHERE }),
     };
 
     const [total, sessions] = await Promise.all([
@@ -2243,7 +2247,7 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
         take: limit,
         include: {
           users: {
-            select: { id: true, name: true, email: true }
+            select: { id: true, name: true, email: true, isVirtualLearner: true }
           }
         }
       })
@@ -2262,6 +2266,9 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
         userId: session.userId,
         userName: session.users?.name || null,
         email: session.users?.email || null,
+        /** 数据隔离标记（includeTest=true 时供前端灰标：虚拟学习者 / 测试账号） */
+        isVirtualLearner: !!session.users?.isVirtualLearner,
+        isTestAccount: isTestAccountUser(session.users),
         taskId: session.taskId,
         learningPathId: session.learningPathId,
         milestoneId: session.milestoneId,

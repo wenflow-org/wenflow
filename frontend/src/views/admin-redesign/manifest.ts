@@ -19,7 +19,7 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'teaching-sessions', label: '教学会话', group: '学习者', glyph: '课' },
   { id: 'goal-conversations', label: '目标对话', group: '学习者', glyph: '标' },
   { id: 'feedback', label: '反馈中心', group: '学习者', glyph: '馈' },
-  { id: 'virtual-learners', label: '虚拟学习者', group: '学习者', glyph: '拟' },
+  { id: 'virtual-learners', label: '虚拟学习者（仿真）', group: '学习者', glyph: '拟' },
   { id: 'skills', label: 'Skill 目录', group: '运行', glyph: '能' },
   { id: 'orchestrator', label: '编排结构', group: '运行', glyph: '流' },
   { id: 'skill-workbench', label: 'Skill 工作台', group: 'Skill', glyph: '台' },

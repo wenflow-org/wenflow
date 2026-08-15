@@ -3,7 +3,7 @@ import express from 'express';
 import prisma from '../../config/database';
 import { Prisma } from '@prisma/client';
 import { generateLearningPathFromConversation } from '../../services/learning/goal-conversation.service';
-import { REAL_USER_WHERE } from '../../utils/test-account';
+import { REAL_USER_WHERE, isTestAccountUser } from '../../utils/test-account';
 import { logger } from '../../utils/logger';
 
 const router = express.Router();
@@ -26,6 +26,9 @@ router.get('/', async (req: any, res) => {
     const limit = parseInt(req.query.limit as string) || 20;
     const status = req.query.status as string;
     const userId = req.query.userId as string;
+    // 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，单点 STATS_USER_WHERE）；
+    // includeTest=true 时显式包含（切换后前端对虚拟/测试行做灰标标记）
+    const includeTest = String(req.query.includeTest || '') === 'true';
 
     const skip = (page - 1) * limit;
 
@@ -39,6 +42,10 @@ router.get('/', async (req: any, res) => {
       where.userId = userId;
     }
 
+    if (!includeTest) {
+      where.users = STATS_USER_WHERE;
+    }
+
     const [conversations, total] = await Promise.all([
       prisma.goal_conversations.findMany({
         where,
@@ -49,7 +56,8 @@ router.get('/', async (req: any, res) => {
             select: {
               id: true,
               name: true,
-              email: true
+              email: true,
+              isVirtualLearner: true
             }
           }
         },
@@ -63,7 +71,12 @@ router.get('/', async (req: any, res) => {
     res.json({
       success: true,
       data: {
-        conversations: conversations,
+        conversations: conversations.map((c) => ({
+          ...c,
+          /** 数据隔离标记（includeTest=true 时供前端灰标：虚拟学习者 / 测试账号） */
+          isVirtualLearner: !!c.users?.isVirtualLearner,
+          isTestAccount: isTestAccountUser(c.users),
+        })),
         pagination: {
           page,
           limit,
