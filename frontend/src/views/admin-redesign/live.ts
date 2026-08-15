@@ -966,6 +966,9 @@ export interface LiveUser {
   name: string
   email: string
   isAdmin: boolean
+  /** 数据隔离标记（includeTest=true 时供前端灰标） */
+  isVirtualLearner: boolean
+  isTestAccount: boolean
   xp: number
   currentLevel: string
   lastLoginAt: string | null
@@ -979,8 +982,12 @@ export const liveUsers = ref<LiveUser[]>([])
 /** 后端用户总数（分页 total；前端只拉前 50 行，用于截断提示） */
 export const liveUsersTotal = ref(0)
 
-async function fetchLiveUsers(): Promise<void> {
-  const res = await adminUsersApi.getUsers({ limit: 50 })
+/**
+ * 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，后端单点 utils/test-account.ts）；
+ * includeTest=true 时显式包含全量并带回行标记
+ */
+async function fetchLiveUsers(includeTest = false): Promise<void> {
+  const res = await adminUsersApi.getUsers({ limit: 50, ...(includeTest ? { includeTest: true } : {}) })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.users || body.items || []
   liveUsersTotal.value = Number(body.pagination?.total || items.length)
@@ -989,6 +996,8 @@ async function fetchLiveUsers(): Promise<void> {
     name: String(u.name || u.email || u.id),
     email: String(u.email || ''),
     isAdmin: !!u.isAdmin,
+    isVirtualLearner: !!u.isVirtualLearner,
+    isTestAccount: !!u.isTestAccount,
     xp: Number(u.xp || 0),
     currentLevel: String(u.currentLevel || ''),
     lastLoginAt: (u.lastLoginAt as string) || null,
@@ -996,6 +1005,11 @@ async function fetchLiveUsers(): Promise<void> {
     paths: Number((u._count as Record<string, number>)?.learning_paths || 0),
     sessions: Number((u._count as Record<string, number>)?.teaching_sessions || 0)
   }))
+}
+
+/** 用户列表数据隔离切换：切换「含虚拟/测试」后重拉列表（默认仅真实由 loadLiveData 兜底） */
+export async function liveSetUsersIncludeTest(includeTest: boolean): Promise<void> {
+  await fetchLiveUsers(includeTest)
 }
 
 export async function liveCreateUser(data: { name: string; email: string; password: string; admin: boolean }): Promise<void> {
@@ -1143,6 +1157,59 @@ export const liveVirtualSessionStats = ref({
 /** 卡死分区：reclaim 可回收会话数（running/created 超阈值无写入，与 reclaim 端点同阈值） */
 export const liveVirtualStaleCount = ref(0)
 
+/** 虚拟实验运行统计（A5）：全量口径完成率/失败率/平均时长/卡死最长分钟（来自 /virtual-learners/stats） */
+export interface LiveVirtualRunStats {
+  profileCount: number
+  totalSessions: number
+  created: number
+  running: number
+  failed: number
+  abandoned: number
+  completed: number
+  completionRate: number
+  failureRate: number
+  staleCount: number
+  maxStaleMins: number
+  avgDurationMs: number
+  reclaimThresholdMs: number
+}
+
+export const liveVirtualRunStats = ref<LiveVirtualRunStats>({
+  profileCount: 0,
+  totalSessions: 0,
+  created: 0,
+  running: 0,
+  failed: 0,
+  abandoned: 0,
+  completed: 0,
+  completionRate: 0,
+  failureRate: 0,
+  staleCount: 0,
+  maxStaleMins: 0,
+  avgDurationMs: 0,
+  reclaimThresholdMs: 0
+})
+
+async function fetchLiveVirtualStats(): Promise<void> {
+  const res = await adminVirtualLearnersApi.getVirtualLearnerStats()
+  const body = res.data?.data ?? res.data ?? {}
+  liveVirtualRunStats.value = {
+    profileCount: Number(body.profileCount ?? 0),
+    totalSessions: Number(body.totalSessions ?? 0),
+    created: Number(body.created ?? 0),
+    running: Number(body.running ?? 0),
+    failed: Number(body.failed ?? 0),
+    abandoned: Number(body.abandoned ?? 0),
+    completed: Number(body.completed ?? 0),
+    completionRate: Number(body.completionRate ?? 0),
+    failureRate: Number(body.failureRate ?? 0),
+    staleCount: Number(body.staleCount ?? 0),
+    maxStaleMins: Number(body.maxStaleMins ?? 0),
+    avgDurationMs: Number(body.avgDurationMs ?? 0),
+    reclaimThresholdMs: Number(body.reclaimThresholdMs ?? 0)
+  }
+}
+
 async function fetchLiveVirtuals(): Promise<void> {
   const res = await adminVirtualLearnersApi.getVirtualLearners({ limit: 50 })
   const body = res.data?.data ?? res.data ?? {}
@@ -1158,6 +1225,8 @@ async function fetchLiveVirtuals(): Promise<void> {
     total: Number(stats?.total ?? liveVirtualSessionStats.value.total)
   }
   liveVirtualStaleCount.value = Number(body.staleCount ?? 0)
+  // 运行统计（完成率/失败率/平均时长/卡死最长分钟）独立并行拉取，失败不影响列表
+  void fetchLiveVirtualStats().catch(() => {})
   liveVirtuals.value = items.map((p: Record<string, unknown>) => {
     const profile = (p.profile as Record<string, unknown>) || {}
     const pool = Array.isArray(profile.storyPool) ? profile.storyPool : []

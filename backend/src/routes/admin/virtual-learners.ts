@@ -1348,6 +1348,77 @@ router.get('/', async (req: any, res) => {
 });
 
 /**
+ * 虚拟实验运行统计（A5）：总会话/完成/failed/卡死/平均时长/完成率/失败率
+ * GET /api/admin/virtual-learners/stats
+ * 全量聚合口径（非列表 50 条样本）；卡死阈值与 reclaim 服务同源（VLAB_STALE_SESSION_HOURS）。
+ * 注意：必须注册在 GET /:id 之前（Express 顺序匹配，避免 'stats' 被当作 profile id）。
+ */
+router.get('/stats', async (req: any, res) => {
+  try {
+    const [statusAgg, profileCount, staleSessions, terminalSessions] = await Promise.all([
+      prisma.virtual_sessions.groupBy({
+        by: ['status'],
+        _count: { _all: true }
+      }),
+      prisma.virtual_learner_profiles.count(),
+      prisma.virtual_sessions.findMany({
+        where: { status: { in: ['running', 'created'] }, updatedAt: { lt: staleThresholdAt() } },
+        select: { updatedAt: true }
+      }),
+      prisma.virtual_sessions.findMany({
+        where: { status: { in: ['completed', 'failed', 'abandoned'] } },
+        select: { createdAt: true, updatedAt: true }
+      })
+    ]);
+
+    const countByStatus = (status: string) => statusAgg.find(s => s.status === status)?._count?._all ?? 0;
+    const total = statusAgg.reduce((a, s) => a + (s._count?._all ?? 0), 0);
+    const completed = countByStatus('completed');
+    const failed = countByStatus('failed');
+    const abandoned = countByStatus('abandoned');
+    const running = countByStatus('running');
+    const created = countByStatus('created');
+
+    const staleCount = staleSessions.length;
+    const maxStaleMins = staleSessions.length
+      ? Math.max(0, Math.round(Math.max(...staleSessions.map(s => Date.now() - new Date(s.updatedAt).getTime())) / 60000))
+      : 0;
+
+    let avgDurationMs = 0;
+    if (terminalSessions.length) {
+      const totalMs = terminalSessions.reduce((sum, s) => {
+        const end = new Date(s.updatedAt).getTime();
+        const start = new Date(s.createdAt).getTime();
+        return Number.isFinite(end) && Number.isFinite(start) && end >= start ? sum + (end - start) : sum;
+      }, 0);
+      avgDurationMs = Math.round(totalMs / terminalSessions.length);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        profileCount,
+        totalSessions: total,
+        created,
+        running,
+        failed,
+        abandoned,
+        completed,
+        completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+        failureRate: total > 0 ? Math.round(((failed + abandoned) / total) * 100) : 0,
+        staleCount,
+        maxStaleMins,
+        avgDurationMs,
+        reclaimThresholdMs: virtualSessionReclaimService.getThresholdMs()
+      }
+    });
+  } catch (error: any) {
+    logger.error('获取虚拟实验运行统计失败:', error);
+    res.status(500).json({ success: false, error: error.message || '获取虚拟实验运行统计失败' });
+  }
+});
+
+/**
  * 获取虚拟用户详情
  * GET /api/admin/virtual-learners/:id
  */

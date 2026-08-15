@@ -101,6 +101,21 @@ describe('actionText（审计动作）', () => {
     expect(actionText('session-revoke')).toBe('强制下线会话');
   });
 
+  it('虚拟学习者域动作映射（A5 审计语义化）', () => {
+    expect(actionText('virtual-create')).toBe('创建虚拟学习者');
+    expect(actionText('virtual-update')).toBe('更新虚拟画像');
+    expect(actionText('virtual-delete')).toBe('删除虚拟学习者');
+    expect(actionText('virtual-story-generate')).toBe('生成故事');
+    expect(actionText('virtual-story-update')).toBe('编辑故事');
+    expect(actionText('virtual-story-delete')).toBe('删除故事');
+    expect(actionText('virtual-session-start')).toBe('启动虚拟实验');
+    expect(actionText('virtual-session-delete')).toBe('删除虚拟会话');
+    expect(actionText('virtual-session-stale-reclaim')).toBe('回收卡死会话');
+    expect(actionText('virtual-session-batch-terminate')).toBe('批量终止虚拟会话');
+    expect(actionText('virtual-cascade-delete')).toBe('级联删除虚拟数据');
+    expect(actionText('Virtual-Session-Start')).toBe('启动虚拟实验');
+  });
+
   it('未知动作回退原文', () => {
     expect(actionText('mystery-action')).toBe('mystery-action');
   });
@@ -110,6 +125,8 @@ describe('targetTypeText（审计目标类型）', () => {
   it('已知类型映射', () => {
     expect(targetTypeText('user')).toBe('用户');
     expect(targetTypeText('session')).toBe('会话');
+    expect(targetTypeText('virtual-learner')).toBe('虚拟学习者');
+    expect(targetTypeText('virtual-session')).toBe('虚拟会话');
   });
 
   it('空值 → —', () => {

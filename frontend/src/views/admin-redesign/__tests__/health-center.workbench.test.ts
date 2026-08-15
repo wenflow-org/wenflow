@@ -157,7 +157,7 @@ describe('巡检工作台（G1）', () => {
 
   it('网络失败降级：wb-failed + 重试成功后恢复五分区', async () => {
     getSummaryMock.mockRejectedValueOnce(new Error('network down'));
-    let wrapper = await mountWorkbench(true);
+    const wrapper = await mountWorkbench(true);
     expect(wrapper.find('.wb-failed').exists()).toBe(true);
     expect(wrapper.find('.wb-failed').text()).toContain('加载失败');
 

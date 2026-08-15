@@ -337,16 +337,17 @@
           </button>
         </div>
         <p v-if="teachingDetailLoading" class="cp-none">正在读取教学会话记录…</p>
-        <article
-          v-for="(message, index) in learnConversationMessages"
-          :key="`learn-${index}`"
-          v-if="learnConversationMessages.length"
-          class="cp-transcript__message"
-          :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'"
-        >
-          <span>{{ message.role === 'assistant' ? '教师' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
-          <p>{{ message.content }}</p>
-        </article>
+        <template v-if="learnConversationMessages.length">
+          <article
+            v-for="(message, index) in learnConversationMessages"
+            :key="`learn-${index}`"
+            class="cp-transcript__message"
+            :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'"
+          >
+            <span>{{ message.role === 'assistant' ? '教师' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
+            <p>{{ message.content }}</p>
+          </article>
+        </template>
         <p v-else-if="teachingDetailFailed && !learnConversationMessages.length" class="cp-degrade">
           教学记录获取失败
           <button type="button" class="mk-link" @click="loadTeachingDetail(selectedTeachingSessionId)">重试</button>

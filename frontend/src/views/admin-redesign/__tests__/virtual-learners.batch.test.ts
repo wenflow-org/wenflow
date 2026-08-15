@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import VirtualLearners from '../VirtualLearners.vue';
-import { liveVirtuals, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount } from '../live';
+import { liveVirtuals, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats } from '../live';
 import { settleConfirm } from '../useConfirm';
 
 vi.mock('../live', async () => {
@@ -18,6 +18,21 @@ vi.mock('../live', async () => {
     liveVirtualsTotal: ref(0),
     liveVirtualSessionStats: ref({ created: 0, running: 0, failed: 0, abandoned: 0, completed: 0, total: 0 }),
     liveVirtualStaleCount: ref(0),
+    liveVirtualRunStats: ref({
+      profileCount: 0,
+      totalSessions: 0,
+      created: 0,
+      running: 0,
+      failed: 0,
+      abandoned: 0,
+      completed: 0,
+      completionRate: 0,
+      failureRate: 0,
+      staleCount: 0,
+      maxStaleMins: 0,
+      avgDurationMs: 0,
+      reclaimThresholdMs: 0
+    }),
     liveLoading: ref(false),
     liveFailures: ref<Record<string, string>>({}),
     liveCreateVirtual: vi.fn(async () => 'vl-new'),
@@ -93,6 +108,21 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     liveVirtualsTotal.value = 0;
     liveVirtualSessionStats.value = { created: 0, running: 0, failed: 0, abandoned: 0, completed: 0, total: 0 };
     liveVirtualStaleCount.value = 0;
+    liveVirtualRunStats.value = {
+      profileCount: 0,
+      totalSessions: 0,
+      created: 0,
+      running: 0,
+      failed: 0,
+      abandoned: 0,
+      completed: 0,
+      completionRate: 0,
+      failureRate: 0,
+      staleCount: 0,
+      maxStaleMins: 0,
+      avgDurationMs: 0,
+      reclaimThresholdMs: 0
+    };
     terminateMock.mockReset();
     terminateMock.mockImplementation(async () => ({ data: { data: { dryRun: false, terminated: 2, skippedTerminal: 1 } } }));
     reclaimMock.mockReset();
@@ -112,6 +142,39 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.text()).toContain('卡死 2');
     expect(w.text()).toContain('已截断 · 共 80 人');
     expect(w.text()).toContain('一键回收卡死（2）');
+  });
+
+  it('运行统计展示（A5）：完成率/失败率/平均时长/卡死最长分钟', async () => {
+    liveVirtualRunStats.value = {
+      profileCount: 3,
+      totalSessions: 10,
+      created: 0,
+      running: 0,
+      failed: 3,
+      abandoned: 1,
+      completed: 6,
+      completionRate: 60,
+      failureRate: 40,
+      staleCount: 2,
+      maxStaleMins: 1450,
+      avgDurationMs: 7200000,
+      reclaimThresholdMs: 24 * 3600 * 1000
+    };
+    liveVirtualSessionStats.value = { created: 0, running: 0, failed: 3, abandoned: 1, completed: 6, total: 10 };
+    liveVirtualStaleCount.value = 2;
+    liveVirtuals.value = [makeVirtual(1)];
+    const w = await mountPage();
+    expect(w.text()).toContain('完成率 60%');
+    expect(w.text()).toContain('失败率 40%');
+    expect(w.text()).toContain('平均时长 2 小时');
+    expect(w.text()).toContain('卡死 2（最长 24.2 小时）');
+  });
+
+  it('无会话数据时统计段不出现（完成率/平均时长等）', async () => {
+    liveVirtuals.value = [makeVirtual(1)];
+    const w = await mountPage();
+    expect(w.text()).not.toContain('完成率');
+    expect(w.text()).not.toContain('平均时长');
   });
 
   it('无卡死时不出现一键回收按钮；未截断时不出现截断提示', async () => {

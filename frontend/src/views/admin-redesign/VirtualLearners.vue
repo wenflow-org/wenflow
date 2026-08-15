@@ -7,8 +7,17 @@
       <span class="mk-status__meta" :title="'全量口径：会话处于创建中状态的数量'">创建中 {{ partition.created }}</span>
       <span class="mk-status__meta vl-status-run" :title="'全量口径：运行中会话数（含卡死）'">运行中 {{ partition.running }}</span>
       <span class="mk-status__meta vl-status-fail" :title="'全量口径：失败/放弃会话数'">已失败 {{ partition.failed }}</span>
-      <span v-if="partition.stale > 0" class="mk-status__meta vl-status-stale" :title="'超过回收阈值无写入且无活跃租约，可一键回收'">
-        卡死 {{ partition.stale }}
+      <span v-if="runStats.totalSessions > 0" class="mk-status__meta" :title="`完成率 = 已完成会话 / 总会话（${runStats.completed}/${runStats.totalSessions}）`">
+        完成率 {{ runStats.completionRate }}%
+      </span>
+      <span v-if="runStats.totalSessions > 0" class="mk-status__meta" :title="`失败率 = 失败/放弃会话 / 总会话（${runStats.failed + runStats.abandoned}/${runStats.totalSessions}）`">
+        失败率 {{ runStats.failureRate }}%
+      </span>
+      <span v-if="runStats.totalSessions > 0" class="mk-status__meta vl-status-dur" :title="'终态会话平均时长（completed/failed/abandoned 的 created→updated）'">
+        平均时长 {{ fmtDuration(runStats.avgDurationMs) }}
+      </span>
+      <span v-if="partition.stale > 0" class="mk-status__meta vl-status-stale" :title="`超过回收阈值无写入且无活跃租约，可一键回收；最长卡死 ${runStats.maxStaleMins} 分钟`">
+        卡死 {{ partition.stale }}<template v-if="runStats.maxStaleMins > 0">（最长 {{ fmtMins(runStats.maxStaleMins) }}）</template>
       </span>
       <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-status__meta vl-truncated" :title="`后端共 ${liveVirtualsTotal} 人，列表仅加载前 ${samples.length} 行`">
         已截断 · 共 {{ liveVirtualsTotal }} 人
@@ -25,6 +34,15 @@
       </button>
       <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建虚拟学习者</button>
     </div>
+
+    <!-- 定位说明（D1）：虚拟学习者是「仿真数据生成器」，不是真实用户管理面 -->
+    <p class="vl-position">
+      <strong>仿真数据生成器</strong>
+      ：虚拟学习者跑真实学习流程，产出可再生成的仿真数据；管理面操作（运行/清理/删除）不面向真实用户。
+      <span v-if="isLive" class="vl-position__stats" :title="'全量口径：虚拟会话状态分区（创建中/运行中/失败/放弃/完成）之和'">
+        当前虚拟会话 {{ liveVirtualSessionStats.total }} 个
+      </span>
+    </p>
 
 
     <div class="mk-card">
@@ -280,7 +298,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { openSubPage, intent, isLive } from './store'
-import { liveVirtuals, liveCreateVirtual, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount } from './live'
+import { liveVirtuals, liveCreateVirtual, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useLoadMore } from './useLoadMore'
@@ -631,6 +649,25 @@ const partition = computed(() => {
   }
 })
 
+/* ===== A5 运行统计：完成率/失败率/平均时长/卡死最长分钟（GET /virtual-learners/stats） ===== */
+const runStats = computed(() => liveVirtualRunStats.value)
+
+/** 毫秒 → 人类可读时长（分钟/小时） */
+function fmtDuration(ms: number) {
+  if (!ms) return '—'
+  const mins = Math.round(ms / 60000)
+  if (mins < 60) return `${mins} 分钟`
+  const hours = mins / 60
+  return `${Number.isInteger(hours) ? String(hours) : hours.toFixed(1)} 小时`
+}
+
+/** 分钟 → 人类可读（小时含 1 位小数） */
+function fmtMins(mins: number) {
+  if (mins < 60) return `${mins} 分钟`
+  const hours = mins / 60
+  return `${Number.isInteger(hours) ? String(hours) : hours.toFixed(1)} 小时`
+}
+
 /* ===== A1 批量操作：复选框 + 批量条（对齐 Users.vue 模式） ===== */
 const selected = ref<string[]>([])
 const batchBusy = ref(false)
@@ -796,7 +833,31 @@ function stageLabel(stage: string | null | undefined): string {
 .vl-status-run { color: var(--mk-amber, #b7791f); font-weight: 700; }
 .vl-status-fail { color: var(--mk-red, #dc2626); font-weight: 700; }
 .vl-status-stale { color: var(--mk-red, #dc2626); font-weight: 700; }
+.vl-status-dur { color: var(--mk-muted, #5b6577); font-weight: 700; }
 .vl-truncated { color: var(--mk-amber); font-weight: 700; }
+/* 定位说明（D1）：仿真数据生成器注记 */
+.vl-position {
+  margin: 8px 0 0;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px dashed #d6dce8;
+  background: #fafbfe;
+  color: var(--mk-muted);
+  font-size: 12.5px;
+  line-height: 1.7;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.vl-position strong { color: var(--mk-ink); font-weight: 800; white-space: nowrap; }
+.vl-position__stats {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--mk-blue);
+  white-space: nowrap;
+}
 .vl-status-reclaim {
   padding: 5px 12px;
   border-radius: 999px;

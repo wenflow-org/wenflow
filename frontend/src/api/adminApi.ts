@@ -284,7 +284,7 @@ export const adminUsersApi = {
   /**
    * 获取用户列表
    */
-  getUsers: async (params?: { page?: number; limit?: number; search?: string; role?: string }) => {
+  getUsers: async (params?: { page?: number; limit?: number; search?: string; role?: string; status?: string; includeTest?: boolean }) => {
     return adminAxios.get('/admin/users', { params });
   },
 
@@ -399,6 +399,7 @@ export const adminTeachingSessionsApi = {
     status?: string;
     onlyWithAdvisory?: boolean;
     onlyMissingWrapup?: boolean;
+    includeTest?: boolean;
   }) => {
     return adminAxios.get('/admin/teaching-sessions', { params });
   }
@@ -870,7 +871,7 @@ export const adminFeedbackApi = {
  * Goal 会话管理（目标对话 → 路径生成源头）
  */
 export const adminGoalConversationsApi = {
-  list: async (params?: { page?: number; limit?: number; status?: string; userId?: string }) => {
+  list: async (params?: { page?: number; limit?: number; status?: string; userId?: string; includeTest?: boolean }) => {
     return adminAxios.get('/admin/goal-conversations', { params });
   },
   getDetail: async (id: string) => {
@@ -1116,6 +1117,27 @@ export const adminVirtualLearnersApi = {
 
   deleteStory: async (profileId: string, storyIndex: number) => {
     return adminAxios.delete(`/admin/virtual-learners/${profileId}/stories/${storyIndex}`);
+  },
+
+  updateStory: async (profileId: string, storyIndex: number, data: {
+    title?: string;
+    storyOutline?: string;
+    storyTriggerEvent?: string;
+    visibleOpening?: string;
+    pressurePoints?: string[];
+    problemKnowledge?: {
+      domainFamiliarity?: 'low' | 'medium' | 'high';
+      knownConcepts?: string[];
+      struggleConcepts?: string[];
+      hiddenGaps?: string[];
+      selfAssessment?: string;
+    };
+  }) => {
+    return adminAxios.put(`/admin/virtual-learners/${profileId}/stories/${storyIndex}`, data);
+  },
+
+  getVirtualLearnerStats: async () => {
+    return adminAxios.get('/admin/virtual-learners/stats');
   },
 
   createVirtualLearner: async (data: {

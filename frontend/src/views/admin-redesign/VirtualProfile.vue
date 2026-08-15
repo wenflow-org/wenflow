@@ -148,6 +148,7 @@
                 </div>
                 <div v-if="isLive" class="vp-story-item__ops" @click.stop>
                   <button type="button" class="mk-link" :disabled="running" @click="runStory(s, i)">按此故事运行</button>
+                  <button type="button" class="mk-link" :disabled="storyBusy" @click="openEditStory(i)">编辑</button>
                   <button type="button" class="mk-link mk-link--danger" :disabled="storyBusy" @click="removeStory(i)">删除</button>
                 </div>
               </div>
@@ -360,6 +361,71 @@
         </div>
       </div>
     </div>
+
+    <!-- 编辑故事（P2-2 前端化：PUT /:id/stories/:storyIndex） -->
+    <div v-if="editStoryOpen" ref="storyMaskRef" class="mk-modal">
+      <div ref="storyPanelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="编辑故事">
+        <div class="mk-modal__head">
+          <h3 class="mk-modal__title">编辑故事 · {{ editStoryForm.title || `故事 ${(editStoryIndex ?? 0) + 1}` }}</h3>
+          <button type="button" class="mk-modal__close" aria-label="关闭" @click="editStoryOpen = false">✕</button>
+        </div>
+        <div class="mk-modal__body">
+          <label class="mk-field">
+            <span class="mk-field__label">标题</span>
+            <input v-model="editStoryForm.title" class="mk-field__input" placeholder="故事标题（启动实验时展示）" />
+          </label>
+          <label class="mk-field">
+            <span class="mk-field__label">场景（storyOutline）</span>
+            <textarea v-model="editStoryForm.storyOutline" class="mk-field__textarea" rows="3" placeholder="故事发生场景：时间、处境、触发的事件"></textarea>
+          </label>
+          <label class="mk-field">
+            <span class="mk-field__label">触发事件（storyTriggerEvent）</span>
+            <input v-model="editStoryForm.storyTriggerEvent" class="mk-field__input" placeholder="会话开始时描述给学习者的可见开场事件" />
+          </label>
+          <label class="mk-field">
+            <span class="mk-field__label">可见开场（visibleOpening）</span>
+            <textarea v-model="editStoryForm.visibleOpening" class="mk-field__textarea" rows="3" placeholder="学习者可见的开场白（黑盒链路使用）"></textarea>
+          </label>
+          <label class="mk-field">
+            <span class="mk-field__label">对抗点（pressurePoints，每行一条）</span>
+            <textarea v-model="editStoryForm.pressurePoints" class="mk-field__textarea" rows="3" placeholder="压力点列表：每条一行"></textarea>
+          </label>
+          <div class="vp-pk">
+            <span class="mk-field__label">问题知识（problemKnowledge）</span>
+            <label class="mk-field">
+              <span class="mk-field__label">领域熟悉度</span>
+              <select v-model="editStoryForm.problemKnowledge.domainFamiliarity" class="mk-field__select">
+                <option value="low">低（完全陌生）</option>
+                <option value="medium">中（略知一二）</option>
+                <option value="high">高（有相关经验）</option>
+              </select>
+            </label>
+            <label class="mk-field">
+              <span class="mk-field__label">已知概念（逗号分隔）</span>
+              <input v-model="editStoryForm.problemKnowledge.knownConcepts" class="mk-field__input" />
+            </label>
+            <label class="mk-field">
+              <span class="mk-field__label">易混淆概念（逗号分隔）</span>
+              <input v-model="editStoryForm.problemKnowledge.struggleConcepts" class="mk-field__input" />
+            </label>
+            <label class="mk-field">
+              <span class="mk-field__label">隐藏盲区（逗号分隔，学习者不自知）</span>
+              <input v-model="editStoryForm.problemKnowledge.hiddenGaps" class="mk-field__input" />
+            </label>
+            <label class="mk-field">
+              <span class="mk-field__label">自我评估（自评表述）</span>
+              <input v-model="editStoryForm.problemKnowledge.selfAssessment" class="mk-field__input" />
+            </label>
+          </div>
+        </div>
+        <div class="mk-modal__foot">
+          <button type="button" class="mk-btn" @click="editStoryOpen = false">取消</button>
+          <button type="button" class="mk-btn mk-btn--primary" :disabled="storySaving" @click="saveStory">
+            {{ storySaving ? '保存中…' : '保存故事' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div v-else class="mk-page">
@@ -455,6 +521,8 @@ interface StoryItem {
   misdiagnosis?: string
   goalSeed?: Record<string, unknown> | null
   disclosurePlan?: Record<string, unknown> | null
+  /** 后端故事原始对象（编辑回填：storyTriggerEvent/visibleOpening/pressurePoints/problemKnowledge） */
+  raw?: Record<string, unknown>
 }
 
 const liveDetail = ref<Detail | null>(null)
@@ -546,6 +614,106 @@ const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => editOpen.value), panelRef)
 useMaskClose(maskRef, () => { editOpen.value = false })
 
+/* ===== 故事编辑（P2-2 前端化：复用 PUT /:id/stories/:storyIndex） ===== */
+interface StoryEditForm {
+  title: string
+  storyOutline: string
+  storyTriggerEvent: string
+  visibleOpening: string
+  pressurePoints: string
+  problemKnowledge: {
+    domainFamiliarity: string
+    knownConcepts: string
+    struggleConcepts: string
+    hiddenGaps: string
+    selfAssessment: string
+  }
+}
+const editStoryOpen = ref(false)
+const editStoryIndex = ref<number | null>(null)
+const storySaving = ref(false)
+const editStoryForm = ref<StoryEditForm>({
+  title: '',
+  storyOutline: '',
+  storyTriggerEvent: '',
+  visibleOpening: '',
+  pressurePoints: '',
+  problemKnowledge: {
+    domainFamiliarity: 'low',
+    knownConcepts: '',
+    struggleConcepts: '',
+    hiddenGaps: '',
+    selfAssessment: ''
+  }
+})
+const storyPanelRef = ref<HTMLElement | null>(null)
+const storyMaskRef = ref<HTMLElement | null>(null)
+useEscape(() => editStoryOpen.value, () => { if (!storySaving.value) editStoryOpen.value = false })
+useOverlay(computed(() => editStoryOpen.value), storyPanelRef)
+useMaskClose(storyMaskRef, () => { if (!storySaving.value) editStoryOpen.value = false })
+
+function openEditStory(index: number) {
+  const s = displayStories.value[index]
+  if (!s || storySaving.value) return
+  const raw = s.raw || {}
+  const pk = (raw.problemKnowledge && typeof raw.problemKnowledge === 'object'
+    ? raw.problemKnowledge
+    : {}) as Record<string, unknown>
+  editStoryForm.value = {
+    title: String(raw.title || s.title || ''),
+    storyOutline: String(raw.storyOutline || raw.outline || s.outline || ''),
+    storyTriggerEvent: String(raw.storyTriggerEvent || raw.triggerEvent || ''),
+    visibleOpening: String(raw.visibleOpening || ''),
+    pressurePoints: Array.isArray(raw.pressurePoints)
+      ? (raw.pressurePoints as string[]).join('\n')
+      : '',
+    problemKnowledge: {
+      domainFamiliarity: String(pk.domainFamiliarity || 'low'),
+      knownConcepts: Array.isArray(pk.knownConcepts) ? (pk.knownConcepts as string[]).join('，') : '',
+      struggleConcepts: Array.isArray(pk.struggleConcepts) ? (pk.struggleConcepts as string[]).join('，') : '',
+      hiddenGaps: Array.isArray(pk.hiddenGaps) ? (pk.hiddenGaps as string[]).join('，') : '',
+      selfAssessment: String(pk.selfAssessment || '')
+    }
+  }
+  editStoryIndex.value = index
+  editStoryOpen.value = true
+}
+
+async function saveStory() {
+  const id = subPage.value?.id
+  if (!id || editStoryIndex.value === null || storySaving.value) return
+  const f = editStoryForm.value
+  const splitList = (v: string) => v.split(/[\n,，;；]/).map((x) => x.trim()).filter(Boolean)
+  const familiarities = ['low', 'medium', 'high']
+  storySaving.value = true
+  try {
+    await adminVirtualLearnersApi.updateStory(id, editStoryIndex.value, {
+      title: f.title.trim() || undefined,
+      storyOutline: f.storyOutline.trim() || undefined,
+      storyTriggerEvent: f.storyTriggerEvent.trim() || undefined,
+      visibleOpening: f.visibleOpening.trim() || undefined,
+      pressurePoints: splitList(f.pressurePoints),
+      problemKnowledge: {
+        domainFamiliarity: (familiarities.includes(f.problemKnowledge.domainFamiliarity)
+          ? f.problemKnowledge.domainFamiliarity
+          : 'low') as 'low' | 'medium' | 'high',
+        knownConcepts: splitList(f.problemKnowledge.knownConcepts),
+        struggleConcepts: splitList(f.problemKnowledge.struggleConcepts),
+        hiddenGaps: splitList(f.problemKnowledge.hiddenGaps),
+        selfAssessment: f.problemKnowledge.selfAssessment.trim()
+      }
+    })
+    editStoryOpen.value = false
+    editStoryIndex.value = null
+    await loadDetail(id)
+    toast.success('故事已更新')
+  } catch (e) {
+    toast.error(`保存失败：${errMsg(e)}`)
+  } finally {
+    storySaving.value = false
+  }
+}
+
 function mapStoryItem(s: Record<string, unknown>, index: number): StoryItem {
   const stats = (s.stats || {}) as Record<string, unknown>
   const latestRunRaw = (s.latestRun || null) as Record<string, unknown> | null
@@ -583,7 +751,8 @@ function mapStoryItem(s: Record<string, unknown>, index: number): StoryItem {
     goalSeed: s.goalSeed && typeof s.goalSeed === 'object'
       ? s.goalSeed as Record<string, unknown> : undefined,
     disclosurePlan: s.disclosurePlan && typeof s.disclosurePlan === 'object'
-      ? s.disclosurePlan as Record<string, unknown> : undefined
+      ? s.disclosurePlan as Record<string, unknown> : undefined,
+    raw: s
   }
 }
 
@@ -1077,6 +1246,19 @@ async function quietReload(id: string) {
 </script>
 
 <style scoped>
+/* 故事编辑弹窗：宽面板 + 问题知识分区（P2-2） */
+.mk-modal__panel--wide { width: min(720px, 100%); }
+.vp-pk {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #e8ecf2;
+  border-radius: 12px;
+  background: #fafbfd;
+}
+.vp-pk > .mk-field__label { font-size: 11.5px; color: var(--mk-faint); font-weight: 700; }
+.vp-pk .mk-field { margin-bottom: 0; }
+
 .vp {
   gap: 18px;
   padding: 18px 22px 28px;

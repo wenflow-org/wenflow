@@ -189,6 +189,68 @@ describe('adminAuditMiddleware', () => {
     expect(data.targetType).toBeNull();
   });
 
+  it('虚拟学习者域写操作命中 virtual 语义动作（A5 审计语义化）', () => {
+    const cases: Array<{ method: string; baseUrl: string; path: string; action: string; targetType: string }> = [
+      { method: 'POST', baseUrl: '/api/admin/virtual-learners', path: '/', action: 'virtual-create', targetType: 'virtual-learner' },
+      { method: 'PUT', baseUrl: '/api/admin/virtual-learners', path: '/p1', action: 'virtual-update', targetType: 'virtual-learner' },
+      { method: 'DELETE', baseUrl: '/api/admin/virtual-learners', path: '/p1', action: 'virtual-delete', targetType: 'virtual-learner' },
+      { method: 'POST', baseUrl: '/api/admin/virtual-learners', path: '/p1/draft-stories', action: 'virtual-story-generate', targetType: 'virtual-learner' },
+      { method: 'PUT', baseUrl: '/api/admin/virtual-learners', path: '/p1/stories/0', action: 'virtual-story-update', targetType: 'virtual-learner' },
+      { method: 'DELETE', baseUrl: '/api/admin/virtual-learners', path: '/p1/stories/0', action: 'virtual-story-delete', targetType: 'virtual-learner' },
+      { method: 'POST', baseUrl: '/api/admin/virtual-learners', path: '/p1/start-session', action: 'virtual-session-start', targetType: 'virtual-session' },
+      { method: 'POST', baseUrl: '/api/admin/virtual-learners', path: '/p1/start-blackbox-session', action: 'virtual-session-start', targetType: 'virtual-session' },
+      { method: 'DELETE', baseUrl: '/api/admin/virtual-learners', path: '/sessions/s1', action: 'virtual-session-delete', targetType: 'virtual-session' },
+      { method: 'POST', baseUrl: '/api/admin/virtual-learners', path: '/sessions/reclaim-stale', action: 'virtual-session-stale-reclaim', targetType: 'virtual-session' },
+      { method: 'POST', baseUrl: '/api/admin/virtual-learners', path: '/sessions/terminate', action: 'virtual-session-batch-terminate', targetType: 'virtual-session' }
+    ];
+
+    for (const c of cases) {
+      create.mockClear();
+      const req = createRequest({
+        method: c.method,
+        baseUrl: c.baseUrl,
+        path: c.path,
+        originalUrl: `${c.baseUrl}${c.path}`,
+        params: { id: 'p1' }
+      });
+      const res = createResponse();
+      adminAuditMiddleware(req, res, jest.fn());
+      res.emit('finish');
+
+      expect(create).toHaveBeenCalledTimes(1);
+      const data = create.mock.calls[0][0].data;
+      expect(data.action).toBe(c.action);
+      expect(data.targetType).toBe(c.targetType);
+    }
+  });
+
+  it('虚拟人删除路径不误吞会话删除（/:id 与 /sessions/:sessionId 语义区分）', () => {
+    const profileReq = createRequest({
+      method: 'DELETE',
+      baseUrl: '/api/admin/virtual-learners',
+      path: '/p1',
+      originalUrl: '/api/admin/virtual-learners/p1',
+      params: { id: 'p1' }
+    });
+    const profileRes = createResponse();
+    adminAuditMiddleware(profileReq, profileRes, jest.fn());
+    profileRes.emit('finish');
+    expect(create.mock.calls[0][0].data.action).toBe('virtual-delete');
+
+    create.mockClear();
+    const sessionReq = createRequest({
+      method: 'DELETE',
+      baseUrl: '/api/admin/virtual-learners',
+      path: '/sessions/s1',
+      originalUrl: '/api/admin/virtual-learners/sessions/s1',
+      params: { id: 's1' }
+    });
+    const sessionRes = createResponse();
+    adminAuditMiddleware(sessionReq, sessionRes, jest.fn());
+    sessionRes.emit('finish');
+    expect(create.mock.calls[0][0].data.action).toBe('virtual-session-delete');
+  });
+
   it('增强层 before/after 中的敏感字段在序列化时被脱敏', () => {
     const req = createRequest({
       method: 'PUT',

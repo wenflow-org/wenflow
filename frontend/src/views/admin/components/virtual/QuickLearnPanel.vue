@@ -1,4 +1,11 @@
 <template>
+  <!--
+    归属说明（2026-08 admin 管理面审计 A6.4）：
+    本组件位于旧版 admin 目录（views/admin/components/virtual/），但为「仍在使用的活组件」，
+    被 admin-redesign 的 VirtualProfile.vue（画像页「账号自动学习」）唯一复用，非废弃残留。
+    依赖：后端 virtual-quick-learn.ts 6 端点 + quick-learn.service.ts；frontend admin-theme.css 的
+    最小 EP 覆写块唯一消费方即本组件。请勿按残留清理；清理前需先处理画像页入口与 EP 覆写依赖。
+  -->
   <el-dialog
     :model-value="visible"
     title="账号自动学习"

@@ -239,7 +239,19 @@ const ACTION_TEXT: Record<string, string> = {
   'announcement-delete': '删除公告',
   'admin-login': '管理员登录',
   'admin-logout': '管理员登出',
-  'session-revoke': '强制下线会话'
+  'session-revoke': '强制下线会话',
+  // 虚拟学习者域（A5 审计语义化）
+  'virtual-create': '创建虚拟学习者',
+  'virtual-update': '更新虚拟画像',
+  'virtual-delete': '删除虚拟学习者',
+  'virtual-story-generate': '生成故事',
+  'virtual-story-update': '编辑故事',
+  'virtual-story-delete': '删除故事',
+  'virtual-session-start': '启动虚拟实验',
+  'virtual-session-delete': '删除虚拟会话',
+  'virtual-session-stale-reclaim': '回收卡死会话',
+  'virtual-session-batch-terminate': '批量终止虚拟会话',
+  'virtual-cascade-delete': '级联删除虚拟数据'
 }
 
 export function actionText(s: string | null | undefined): string {
@@ -251,7 +263,9 @@ export function actionText(s: string | null | undefined): string {
 const TARGET_TEXT: Record<string, string> = {
   user: '用户',
   announcement: '公告',
-  session: '会话'
+  session: '会话',
+  'virtual-learner': '虚拟学习者',
+  'virtual-session': '虚拟会话'
 }
 
 export function targetTypeText(s: string | null | undefined): string {

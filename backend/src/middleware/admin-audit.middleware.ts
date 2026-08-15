@@ -48,6 +48,18 @@ const ACTION_RULES: ActionRule[] = [
   { method: 'PUT', pattern: /^\/api\/admin\/announcements\/[^/]+\/archive$/, action: 'announcement-archive', targetType: 'announcement' },
   { method: 'PUT', pattern: /^\/api\/admin\/announcements\/[^/]+$/, action: 'announcement-update', targetType: 'announcement' },
   { method: 'DELETE', pattern: /^\/api\/admin\/announcements\/[^/]+$/, action: 'announcement-delete', targetType: 'announcement' },
+  // 虚拟学习者域（A5 审计语义化）：创建/画像/删除/故事/会话/批量终止/回收
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners$/, action: 'virtual-create', targetType: 'virtual-learner' },
+  { method: 'PUT', pattern: /^\/api\/admin\/virtual-learners\/[^/]+$/, action: 'virtual-update', targetType: 'virtual-learner' },
+  { method: 'DELETE', pattern: /^\/api\/admin\/virtual-learners\/[^/]+$/, action: 'virtual-delete', targetType: 'virtual-learner' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/[^/]+\/draft-stories$/, action: 'virtual-story-generate', targetType: 'virtual-learner' },
+  { method: 'PUT', pattern: /^\/api\/admin\/virtual-learners\/[^/]+\/stories\/[^/]+$/, action: 'virtual-story-update', targetType: 'virtual-learner' },
+  { method: 'DELETE', pattern: /^\/api\/admin\/virtual-learners\/[^/]+\/stories\/[^/]+$/, action: 'virtual-story-delete', targetType: 'virtual-learner' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/[^/]+\/start-session$/, action: 'virtual-session-start', targetType: 'virtual-session' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/[^/]+\/start-blackbox-session$/, action: 'virtual-session-start', targetType: 'virtual-session' },
+  { method: 'DELETE', pattern: /^\/api\/admin\/virtual-learners\/sessions\/[^/]+$/, action: 'virtual-session-delete', targetType: 'virtual-session' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/reclaim-stale$/, action: 'virtual-session-stale-reclaim', targetType: 'virtual-session' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/terminate$/, action: 'virtual-session-batch-terminate', targetType: 'virtual-session' },
 ];
 
 /** 去掉末尾斜杠后匹配映射表（路由注册在挂载点下时 baseUrl+path 即为完整路径） */
