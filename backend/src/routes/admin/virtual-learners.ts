@@ -22,6 +22,7 @@ import { signProjectionToken } from '../../utils/projection-token';
 import blackboxVirtualLearnerRunner from '../../virtual-lab/blackbox-runner';
 import type { LearnerAction } from '../../virtual-lab/contracts';
 import { assertAssistedSessionMode } from '../../virtual-lab/session-mode';
+import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { setRequestContext, getRequestContext } from '../../gateway/api-gateway/context';
 import {
   parseJson,
@@ -1954,6 +1955,23 @@ router.post('/sessions/:sessionId/blackbox-evaluations', async (req: any, res) =
   } catch (error: any) {
     logger.error('生成黑盒双评估报告失败:', error);
     sendVirtualSessionError(res, error, '生成黑盒双评估报告失败', 502);
+  }
+});
+
+/**
+ * 僵尸虚拟会话回收（P0-2/R4）：running/created 超阈值（默认 24h）无写入且无活跃租约
+ * 的会话标记 failed 并写审计记录。只标记状态、不删除任何数据。
+ * dryRun 默认 true：只报告符合回收条件的会话（干跑确认清单），dryRun=false 才落地标记。
+ * POST /api/admin/virtual-learners/sessions/reclaim-stale  body: { dryRun?: boolean }
+ */
+router.post('/sessions/reclaim-stale', async (req: any, res) => {
+  try {
+    const dryRun = req.body?.dryRun !== false;
+    const result = await virtualSessionReclaimService.runReclaimOnce({ dryRun });
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    logger.error('僵尸虚拟会话回收失败:', error);
+    res.status(500).json({ success: false, error: error?.message || '僵尸虚拟会话回收失败' });
   }
 });
 

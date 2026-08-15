@@ -45,13 +45,69 @@ function createCommandId() {
   return `cmd_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
-function blackboxCommandConfig(expectedTraceCount: number) {
-  return {
-    headers: {
-      'Idempotency-Key': createCommandId(),
-      'X-Expected-Trace-Count': String(expectedTraceCount)
-    }
-  };
+/**
+ * 黑盒命令 Idempotency-Key 会话级缓存（P0-1 死锁修复）：
+ * 同一 (sessionId, commandKey) 的命令在终态（成功或不可重试失败）前复用同一 key，
+ * 使后端 barrier 允许的「同 key 重试对账」路径可用；终态后清除，下一次操作使用新 key
+ * （step/observe 类每次操作都是新命令，不会误复用上一次的 key）。
+ * 仅内存缓存：页面刷新后丢失 key 时，由后端自动对账 barrier（tryResolveOrderingBarrier）兜底。
+ */
+const BLACKBOX_COMMAND_KEY_CACHE_LIMIT = 200;
+const blackboxCommandKeyCache = new Map<string, string>();
+
+export function getOrCreateBlackboxCommandKey(sessionId: string, commandKey: string): string {
+  const cacheKey = `${sessionId}::${commandKey}`;
+  let value = blackboxCommandKeyCache.get(cacheKey);
+  if (!value) {
+    if (blackboxCommandKeyCache.size >= BLACKBOX_COMMAND_KEY_CACHE_LIMIT) blackboxCommandKeyCache.clear();
+    value = createCommandId();
+    blackboxCommandKeyCache.set(cacheKey, value);
+  }
+  return value;
+}
+
+export function clearBlackboxCommandKey(sessionId: string, commandKey: string): void {
+  blackboxCommandKeyCache.delete(`${sessionId}::${commandKey}`);
+}
+
+/** 测试辅助：清空缓存，避免用例间 key 泄漏 */
+export function resetBlackboxCommandKeyCache(): void {
+  blackboxCommandKeyCache.clear();
+}
+
+/** 命令是否已达成终态判定：可重试失败（503 / retryable=true）保留 key，成功与不可重试失败清除 key */
+export function isRetryableBlackboxCommandError(error: unknown): boolean {
+  const response = (error as { response?: { status?: number; data?: { retryable?: unknown } } })?.response;
+  return response?.data?.retryable === true || response?.status === 503;
+}
+
+/** 黑盒写命令统一发送：同一逻辑命令复用同一 Idempotency-Key，直到命令终态 */
+async function sendBlackboxCommand(
+  path: string,
+  sessionId: string,
+  commandKey: string,
+  body: unknown,
+  expectedTraceCount: number
+) {
+  const idempotencyKey = getOrCreateBlackboxCommandKey(sessionId, commandKey);
+  try {
+    const response = await adminAxios.post(path, body, {
+      headers: {
+        'Idempotency-Key': idempotencyKey,
+        'X-Expected-Trace-Count': String(expectedTraceCount)
+      }
+    });
+    clearBlackboxCommandKey(sessionId, commandKey);
+    return response;
+  } catch (error) {
+    if (!isRetryableBlackboxCommandError(error)) clearBlackboxCommandKey(sessionId, commandKey);
+    throw error;
+  }
+}
+
+/** 黑盒命令标识：action 按动作内容（含会话绑定），step/observe 按类型（后端 barrier 按 key 去重） */
+function blackboxActionCommandKey(action: Record<string, unknown>): string {
+  return `action:${JSON.stringify(action)}`;
 }
 
 /**
@@ -1135,7 +1191,13 @@ export const adminVirtualLearnersApi = {
   },
 
   executeBlackboxVirtualAction: async (sessionId: string, action: Record<string, unknown>, expectedTraceCount: number) => {
-    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-action`, action, blackboxCommandConfig(expectedTraceCount));
+    return sendBlackboxCommand(
+      `/admin/virtual-learners/sessions/${sessionId}/blackbox-action`,
+      sessionId,
+      blackboxActionCommandKey(action),
+      action,
+      expectedTraceCount
+    );
   },
 
   generateBlackboxEvaluations: async (sessionId: string) => {

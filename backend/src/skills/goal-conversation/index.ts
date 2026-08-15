@@ -521,13 +521,18 @@ let _hardRequiredCache: string[] | null = null;
 let _hardRequiredLoadingAt = 0;
 const HARD_REQUIRED_CACHE_TTL_MS = 30_000;
 
+// jest 下跳过模块级异步预热：fire-and-forget 的 import() 链会在测试环境拆除后执行，
+// 触发 "import after environment torn down"（--runInBand 全量回归会以非零码退出）。
+// 该缓存为尽力而为（冷缓存回落硬编码校验），跳过不影响任何断言语义。
+const isUnderJest = process.env.JEST_WORKER_ID !== undefined;
+
 function getCachedHardRequiredFields(): string[] | null {
   // 同步访问；过期时间到了启动后台刷新（但不阻塞）
   const now = Date.now();
   if (_hardRequiredCache && now - _hardRequiredLoadingAt < HARD_REQUIRED_CACHE_TTL_MS) {
     return _hardRequiredCache;
   }
-  if (now - _hardRequiredLoadingAt > HARD_REQUIRED_CACHE_TTL_MS) {
+  if (!isUnderJest && now - _hardRequiredLoadingAt > HARD_REQUIRED_CACHE_TTL_MS) {
     _hardRequiredLoadingAt = now;
     void refreshHardRequiredCache();
   }
@@ -550,8 +555,10 @@ async function refreshHardRequiredCache(): Promise<void> {
   }
 }
 
-// 启动时预热一次（不 await）
-void refreshHardRequiredCache();
+// 启动时预热一次（不 await）；jest 下跳过（见 isUnderJest 说明）
+if (!isUnderJest) {
+  void refreshHardRequiredCache();
+}
 
 /**
  * 从 ACTIVE prompt metadata 解析 Delta 开关（§5.4）。

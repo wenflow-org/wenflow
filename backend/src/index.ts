@@ -42,6 +42,7 @@ import { aiCapabilityHealthService } from './services/ai-capability-health.servi
 import { getRuntimeCapabilityProbeEnabled } from './services/capability-probe-settings.service';
 import { logRetentionService } from './services/log-retention.service';
 import { auditCleanupService } from './services/audit-cleanup.service';
+import { virtualSessionReclaimService } from './virtual-lab/session-reclaim.service';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
 
@@ -513,6 +514,7 @@ export async function startServer() {
     logger.info('✅ Main and System databases connected successfully');
     logRetentionService.start(lifecycle);
     auditCleanupService.start(lifecycle);
+    virtualSessionReclaimService.start(lifecycle);
     assertStartupActive();
 
     const backendRoot = resolve(__dirname, '..');
@@ -698,6 +700,7 @@ export async function shutdown(signal: string) {
       enrichmentRetryTimer = null;
       await logRetentionService.stop();
       await auditCleanupService.stop();
+      await virtualSessionReclaimService.stop();
       await aiCapabilityHealthService.stop();
     },
     teaching: aiTeachingOrchestrator,

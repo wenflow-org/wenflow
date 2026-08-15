@@ -18,6 +18,13 @@ export const csrfMiddleware = (
   res: Response,
   next: NextFunction
 ) => {
+  // 无 Cookie 的写请求（服务端内部自调用，如黑盒仿真平台适配器）不携带会话，
+  // 浏览器侧无法凭表单伪造这类请求，天然无 CSRF 风险，跳过来源校验。
+  if (!req.headers.cookie) {
+    next();
+    return;
+  }
+
   const origin = normalizeOrigin(req.headers.origin);
   const referer = req.headers.referer;
   const allowedOrigins = (process.env.CORS_ORIGIN?.split(',') ||

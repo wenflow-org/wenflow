@@ -56,6 +56,9 @@ const TERMINAL_SESSION_STATUSES = new Set(['completed', 'failed', 'abandoned'])
 const COMMAND_LEASE_MS = 10 * 60 * 1000
 const COMMAND_LEASE_RENEW_MS = 2 * 60 * 1000
 const LEASE_RETRY_DELAYS_MS = [25, 50, 100]
+/** 模拟器 LLM 调用重试次数（对齐 quick-learn 3-strike 语义：瞬态失败/空回复可重试） */
+const BLACKBOX_SIMULATOR_RETRY_ATTEMPTS = 3
+const BLACKBOX_SIMULATOR_RETRY_DELAY_MS = 750
 
 function isPrismaErrorCode(error: unknown, code: string) {
   return typeof error === 'object' && error !== null && (error as any).code === code
@@ -199,6 +202,9 @@ export class BlackboxVirtualLearnerRunner {
         return this.reuseCommand<T>(existing, options.kind, options.request)
       }
       if (existing) this.assertCommandMatches(existing, options.kind, options.request)
+      if (TERMINAL_SESSION_STATUSES.has(session.status)) {
+        throw new BlackboxRunStateError('当前黑盒实验已经结束，不能继续执行命令', 'BLACKBOX_RUN_TERMINAL')
+      }
 
       const leaseOwner = `cmd_${uuidv4()}`
       const leaseExpiresAt = await this.acquireCommandLease(options.sessionId, leaseOwner)
@@ -225,9 +231,25 @@ export class BlackboxVirtualLearnerRunner {
         barriers.sort((left, right) => (left.sequence || 0) - (right.sequence || 0))
         const earliestPending = barriers[0] || null
         if (earliestPending && earliestPending.commandId !== commandId) {
-          throw new BlackboxReconciliationPendingError(
-            `较早的黑盒命令 ${earliestPending.commandId} 仍待对账，请先使用其 Idempotency-Key 重试`
-          )
+          // 死锁修复：barrier 命令已具备完整平台回执（finalProjection=true 的 result 回执）时，
+          // 自动落盘其投影并完成该命令再放行当前命令；仅重放已发生的平台副作用，不重新执行平台操作，
+          // 幂等语义不变。无完整回执（checkpoint/未终局 step）的 barrier 保持原语义要求同 key 重试。
+          if (!(await this.tryResolveOrderingBarrier(options.sessionId, earliestPending))) {
+            throw new BlackboxReconciliationPendingError(
+              `较早的黑盒命令 ${earliestPending.commandId} 仍待对账，请先使用其 Idempotency-Key 重试`
+            )
+          }
+          const remaining = await prisma.virtual_experiment_commands.findMany({
+            where: { runId, status: { in: ['processing', 'failed'] } },
+            orderBy: { sequence: 'asc' }
+          })
+          const stillBlocked = remaining.find(command => this.isCommandOrderingBarrier(command)
+            && (!afterLease || command.commandId === commandId || command.sequence < afterLease.sequence))
+          if (stillBlocked) {
+            throw new BlackboxReconciliationPendingError(
+              `较早的黑盒命令 ${stillBlocked.commandId} 仍待对账，请先使用其 Idempotency-Key 重试`
+            )
+          }
         }
 
         const freshSession = await this.getSession(options.sessionId)
@@ -714,7 +736,8 @@ export class BlackboxVirtualLearnerRunner {
           role: item.role === 'platform' ? 'goal_agent' : 'learner',
           content: item.content
         }))
-        const output = await this.executeSimulatorSkill(
+        const output = await this.executeSimulatorSkillWithRetry(
+          sessionId,
           virtualLearnerGoalDialogueSimulatorDefinition,
           {
             learner,
@@ -730,7 +753,6 @@ export class BlackboxVirtualLearnerRunner {
           snapshot,
           'goal'
         )
-        if (!output?.reply) throw new Error('虚拟学习者 Goal 动作生成失败')
         const shouldConfirm = latest.availableActions.includes('confirm_proposal') && output?.learnerState?.readyToAdvance === true
         action = { type: shouldConfirm ? 'confirm_proposal' : 'chat', text: output.reply }
         await this.persistPrivateState(session, state, 'goal', output.learnerState, {
@@ -755,7 +777,8 @@ export class BlackboxVirtualLearnerRunner {
           role: item.role === 'platform' ? 'teacher' : 'learner',
           content: item.content
         }))
-        const output = await this.executeSimulatorSkill(
+        const output = await this.executeSimulatorSkillWithRetry(
+          sessionId,
           virtualLearnerLearnTurnSimulatorDefinition,
           {
             learner,
@@ -777,7 +800,6 @@ export class BlackboxVirtualLearnerRunner {
           snapshot,
           'teaching'
         )
-        if (!output?.reply) throw new Error('虚拟学习者 Learn 动作生成失败')
         action = latest.availableActions.includes('confirm_complete')
           && output.learnerFeedback?.selfReportedTaskDone === true
           && output.learnerFeedback?.stopAsking === true
@@ -1013,6 +1035,45 @@ export class BlackboxVirtualLearnerRunner {
       `平台操作已完成，但黑盒会话持久化失败，请使用相同 Idempotency-Key 重试对账：${detail}`,
       error
     )
+  }
+
+  /**
+   * 自动对账阻塞 barrier（不同 key 的新命令请求到达时触发）：
+   * barrier 命令已持有完整平台回执（finalProjection=true 的 result 回执）时，先落盘该投影
+   * 并完成命令，再放行新命令。仅重放已发生的平台副作用（journal 回执），绝不重新执行平台
+   * 操作——与同 key 重试的对账路径完全一致，幂等语义不变。
+   * 无完整回执（checkpoint / 未终局 step）返回 false，保持「请使用原 Idempotency-Key 重试」语义。
+   */
+  private async tryResolveOrderingBarrier(sessionId: string, command: any): Promise<boolean> {
+    const receipt = this.pendingProjectionReceipt(command)
+    if (!receipt || receipt.receiptKind !== 'result' || receipt.finalProjection !== true) return false
+    try {
+      const session = await this.getSession(sessionId)
+      const state = parseJson(session.stageResults)
+      await this.persist(session, state, receipt.platformResult, receipt.projectionKey)
+      await prisma.virtual_experiment_commands.update({
+        where: { id: command.id },
+        data: {
+          status: 'completed',
+          resultJson: JSON.stringify(receipt.commandResult),
+          errorJson: null,
+          completedAt: new Date()
+        }
+      })
+      logger.warn('[Blackbox] 自动对账较早命令并放行后续命令', {
+        sessionId,
+        commandId: command.commandId,
+        projectionKey: receipt.projectionKey
+      })
+      return true
+    } catch (error: any) {
+      if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) throw error
+      const reconciliationError = error instanceof BlackboxReconciliationPendingError
+        ? error
+        : this.reconciliationPendingError(error)
+      await this.recordCommandFailure(sessionId, command.id, reconciliationError)
+      throw reconciliationError
+    }
   }
 
   private async completeCommand(sessionId: string, commandId: string, result: unknown) {
@@ -2141,6 +2202,77 @@ export class BlackboxVirtualLearnerRunner {
       ...parentContext,
       promptRuntimeOverride: this.simulatorRuntime(snapshot, stage)
     }, () => executeSkill(definition, input))
+  }
+
+  /**
+   * 模拟器 LLM 调用重试（S1，对齐 quick-learn 3-strike 语义）：
+   * 瞬态 provider 失败（网络/超时/限流/5xx）与「输出缺 reply」的语义失败最多重试
+   * BLACKBOX_SIMULATOR_RETRY_ATTEMPTS 次（指数退避）；耗尽后落 degraded 标记并明确失败
+   * （不再单次失败即报废整场实验）。
+   */
+  private async executeSimulatorSkillWithRetry(
+    sessionId: string,
+    definition: any,
+    input: any,
+    snapshot: any,
+    stage: 'goal' | 'teaching'
+  ) {
+    let lastError: unknown = new Error(`虚拟学习者${stage === 'goal' ? 'Goal' : 'Learn'}动作生成失败`)
+    for (let attempt = 1; attempt <= BLACKBOX_SIMULATOR_RETRY_ATTEMPTS; attempt += 1) {
+      try {
+        const output = await this.executeSimulatorSkill(definition, input, snapshot, stage)
+        if (output?.reply) return output
+        lastError = new Error(`虚拟学习者${stage === 'goal' ? 'Goal' : 'Learn'}动作生成失败`)
+      } catch (error: any) {
+        lastError = error
+        if (!this.isRetryableSimulatorError(error)) break
+      }
+      if (attempt < BLACKBOX_SIMULATOR_RETRY_ATTEMPTS) {
+        logger.warn('[Blackbox] 模拟器调用失败，准备重试', {
+          sessionId,
+          stage,
+          attempt,
+          error: lastError instanceof Error ? lastError.message : String(lastError)
+        })
+        await new Promise(resolve => setTimeout(resolve, BLACKBOX_SIMULATOR_RETRY_DELAY_MS * attempt))
+      }
+    }
+    await this.markSimulatorDegraded(sessionId, stage, lastError)
+    throw lastError
+  }
+
+  private isRetryableSimulatorError(error: unknown): boolean {
+    const message = String(error instanceof Error ? error.message : error || '').toLowerCase()
+    if (!message.trim()) return true
+    return /structured_output_invalid|invalid chat completion|finish_reason|empty content|api request canceled|fetch failed|timeout|timed out|econnreset|socket|network|rate.?limit|\b429\b|\b502\b|\b503\b|\b504\b/.test(message)
+  }
+
+  /** 重试耗尽时的降级标记：写入 stageResults.blackbox.simulatorDegraded（供裁判/审计降权评估），不删除任何数据 */
+  private async markSimulatorDegraded(sessionId: string, stage: 'goal' | 'teaching', error: unknown) {
+    try {
+      const session = await this.getSession(sessionId)
+      if (TERMINAL_SESSION_STATUSES.has(session.status)) return
+      const state = parseJson(session.stageResults)
+      const record = {
+        stage,
+        retryAttempts: BLACKBOX_SIMULATOR_RETRY_ATTEMPTS,
+        degradedAt: new Date().toISOString(),
+        error: String(error instanceof Error ? error.message : error).slice(0, 500)
+      }
+      const history = Array.isArray(state.blackbox?.simulatorDegradedHistory)
+        ? state.blackbox.simulatorDegradedHistory : []
+      state.blackbox = {
+        ...(state.blackbox || {}),
+        simulatorDegraded: record,
+        simulatorDegradedHistory: [...history, record].slice(-20)
+      }
+      await prisma.virtual_sessions.update({
+        where: { id: sessionId },
+        data: { stageResults: JSON.stringify(state), updatedAt: new Date() }
+      })
+    } catch {
+      // 降级标记失败不影响主流程（原始异常继续上抛）
+    }
   }
 
   private async getSession(sessionId: string) {
