@@ -22,12 +22,17 @@ router.get('/', async (req, res) => {
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
     }
 
+    // 默认排除虚拟学习者与测试/审计账号（风险队列只给真实用户看）；
+    // includeTest=true 时显式包含（管理需要可查虚拟数据，只改默认视图不删数据）
+    const includeTest = String(req.query.includeTest || '') === 'true';
+    const excludeTest = includeTest ? false : String(req.query.excludeTest || '') !== 'false';
+
     const data = await learnerSnapshotRefreshService.listForAdmin({
       userId: req.query.userId as string | undefined,
       pathId: req.query.pathId as string | undefined,
       staleOnly: req.query.staleOnly === 'true',
       riskOnly: req.query.riskOnly === 'true',
-      excludeTest: req.query.excludeTest === 'true',
+      excludeTest,
       page: req.query.page ? Number(req.query.page) : undefined,
       limit: req.query.limit ? Number(req.query.limit) : undefined,
     });
@@ -38,11 +43,29 @@ router.get('/', async (req, res) => {
   }
 });
 
+/** 详情/证据默认视图：虚拟学习者需显式 includeTest=true 才可查（默认 404，不删数据只改默认视图） */
+async function ensureVirtualVisible(userId: string, includeTest: boolean): Promise<boolean> {
+  if (includeTest) return true;
+  const target = await prisma.users.findUnique({
+    where: { id: userId },
+    select: { isVirtualLearner: true },
+  });
+  return target ? !target.isVirtualLearner : true;
+}
+
 router.get('/:userId', async (req, res) => {
   try {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) {
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+
+    const includeTest = String(req.query.includeTest || '') === 'true';
+    if (!(await ensureVirtualVisible(req.params.userId, includeTest))) {
+      return res.status(404).json({
+        success: false,
+        error: { message: '虚拟学习者数据需显式包含（includeTest=true 可查）' },
+      });
     }
 
     const pathId = req.query.pathId as string | undefined;
@@ -101,6 +124,14 @@ router.get('/:userId/evidence', async (req, res) => {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) {
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+
+    const includeTest = String(req.query.includeTest || '') === 'true';
+    if (!(await ensureVirtualVisible(req.params.userId, includeTest))) {
+      return res.status(404).json({
+        success: false,
+        error: { message: '虚拟学习者数据需显式包含（includeTest=true 可查）' },
+      });
     }
 
     const snapshot = await learnerSnapshotRefreshService.getLatest({

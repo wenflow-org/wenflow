@@ -304,6 +304,7 @@ export const adminLearnerModelsApi = {
     staleOnly?: boolean;
     riskOnly?: boolean;
     excludeTest?: boolean;
+    includeTest?: boolean;
     page?: number;
     limit?: number;
   }) => {
@@ -313,6 +314,7 @@ export const adminLearnerModelsApi = {
   getDetail: async (userId: string, params?: {
     pathId?: string;
     mode?: 'global' | 'path' | 'teaching';
+    includeTest?: boolean;
   }) => {
     return adminAxios.get(`/admin/learner-models/${userId}`, { params });
   },
@@ -327,6 +329,7 @@ export const adminLearnerModelsApi = {
   getEvidence: async (userId: string, params?: {
     pathId?: string;
     limit?: number;
+    includeTest?: boolean;
   }) => {
     return adminAxios.get(`/admin/learner-models/${userId}/evidence`, { params });
   }

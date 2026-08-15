@@ -277,10 +277,10 @@ export function clearInvestigation() {
 /* ---------- 二级页面（drill-in） ---------- */
 export type SubPageView = 'learner' | 'virtual' | 'user' | 'session' | 'session-real'
 
-export const subPage = ref<{ view: SubPageView; id: string; label?: string } | null>(null)
+export const subPage = ref<{ view: SubPageView; id: string; label?: string; includeTest?: boolean } | null>(null)
 
-export function openSubPage(view: SubPageView, id: string) {
-  subPage.value = { view, id }
+export function openSubPage(view: SubPageView, id: string, opts?: { includeTest?: boolean }) {
+  subPage.value = opts?.includeTest ? { view, id, includeTest: true } : { view, id }
 }
 
 /** 二级页加载出名称后回写（面包屑显示中文名/短标识；未设置时回退 ID 截断） */

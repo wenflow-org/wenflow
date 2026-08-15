@@ -11,7 +11,7 @@ const mockAgentCallLogs = {
 };
 
 const mockPrisma = {
-  users: { count: jest.fn(), findUnique: jest.fn() },
+  users: { count: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
   teaching_sessions: { findMany: jest.fn() },
   learning_paths: { count: jest.fn(), findMany: jest.fn() },
   subtasks: { count: jest.fn() },
@@ -197,6 +197,7 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
     clearOverviewStatsCache();
 
     mockPrisma.users.count.mockResolvedValue(0);
+    mockPrisma.users.findMany.mockResolvedValue([]);
     mockPrisma.teaching_sessions.findMany.mockResolvedValue([]);
     mockPrisma.learning_paths.count.mockResolvedValue(0);
     mockPrisma.learning_paths.findMany.mockResolvedValue([]);
@@ -274,5 +275,76 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
     expect(byCategory.provider_timeout).toBe(1);
     expect(byCategory.internal).toBe(2);
     expect(usage.failures7d.reduce((s: number, f: any) => s + f.count, 0)).toBe(8);
+  });
+
+  it('R5 口径：agent/llm 统计按真实用户 id 过滤，且全量副口径字段返回', async () => {
+    const now = new Date();
+    const rows = Array.from({ length: 12 }, (_, i) => ({
+      id: `trend-${i}`,
+      calledAt: now,
+      success: i % 3 !== 0,
+      errorCode: i % 3 === 0 ? 'ATTEMPT_TIMEOUT' : null,
+      errorCategory: null,
+    }));
+    mockAgentCallLogs.findMany.mockImplementation((args: any) =>
+      args?.select?.output ? Promise.resolve([]) : Promise.resolve(rows)
+    );
+    // 真实用户 id 集合：统计查询应带 userId in 过滤
+    mockPrisma.users.findMany.mockResolvedValue([
+      { id: 'real1' },
+      { id: 'real2' },
+    ]);
+    // 全量 groupBy（两次调用：真实 + All）
+    mockAgentCallLogs.groupBy.mockImplementation((args: any) =>
+      args?.where?.userId
+        ? Promise.resolve([
+            { success: true, _count: 8 },
+            { success: false, _count: 4 },
+          ])
+        : Promise.resolve([
+            { success: true, _count: 10 },
+            { success: false, _count: 14 },
+          ])
+    );
+    mockAgentCallLogs.count.mockImplementation((args: any) =>
+      args?.where?.userId ? Promise.resolve(12) : Promise.resolve(24)
+    );
+    mockPrisma.llm_execution_attempts.aggregate.mockImplementation((args: any) =>
+      args?.where?.userId
+        ? Promise.resolve({ _sum: { totalTokens: 300000 }, _count: 12 })
+        : Promise.resolve({ _sum: { totalTokens: 1200000 }, _count: 24 })
+    );
+    mockPrisma.llm_execution_attempts.groupBy.mockImplementation((args: any) =>
+      args?.where?.userId
+        ? Promise.resolve([{ resolvedModel: 'm1', _count: 12, _sum: { totalTokens: 300000 } }])
+        : Promise.resolve([])
+    );
+
+    const handler = getRouteHandler('/overview/stats', 'get');
+    const res = createResponse();
+    await handler({}, res);
+
+    const payload = res.json.mock.calls[0][0].data;
+
+    // 真实用户 id 集合来自 users.findMany（REAL_USER_WHERE 过滤）
+    expect(mockPrisma.users.findMany).toHaveBeenCalledWith(expect.objectContaining({ select: { id: true } }));
+
+    // 真实口径：userId in 过滤注入到 agent 与 llm 查询
+    const agentWhere = mockAgentCallLogs.groupBy.mock.calls.find((c: any) => c[0]?.where?.userId)?.[0].where;
+    expect(agentWhere.userId).toEqual({ in: ['real1', 'real2'] });
+    const llmWhere = mockPrisma.llm_execution_attempts.aggregate.mock.calls.find((c: any) => c[0]?.where?.userId)?.[0].where;
+    expect(llmWhere.userId).toEqual({ in: ['real1', 'real2'] });
+
+    // 主口径 = 真实（12 调用 / 30 万 tokens），全量副口径 = 含虚拟/测试（24 / 120 万）
+    expect(payload.agents.totalCalls).toBe(12);
+    expect(payload.agents.totalCallsAll).toBe(24);
+    expect(payload.agents.todayCalls).toBe(12);
+    expect(payload.agents.todayCallsAll).toBe(24);
+    expect(payload.usage.calls7d).toBe(12);
+    expect(payload.usage.calls7dAll).toBe(24);
+    expect(payload.usage.totalTokens7d).toBe(300000);
+    expect(payload.usage.totalTokens7dAll).toBe(1200000);
+    // 失败归因行数 = mock 返回行数（12；where 注入已由上方 agentWhere 断言覆盖）
+    expect(payload.usage.failed7d).toBe(12);
   });
 });

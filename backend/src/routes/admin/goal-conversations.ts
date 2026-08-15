@@ -3,26 +3,17 @@ import express from 'express';
 import prisma from '../../config/database';
 import { Prisma } from '@prisma/client';
 import { generateLearningPathFromConversation } from '../../services/learning/goal-conversation.service';
+import { REAL_USER_WHERE } from '../../utils/test-account';
 import { logger } from '../../utils/logger';
 
 const router = express.Router();
 
 /**
- * 统计口径与漏斗/KPI 一致：排除虚拟/测试账号（含 qa_audit_）+ 软删。
- * 与 platform.ts REAL_USER_WHERE 等价（本地单点 utils/test-account.ts 未入库，此处内联）。
+ * 统计口径与漏斗/KPI 一致：排除虚拟/测试账号（单点 utils/test-account.ts）+ 软删。
  */
 const STATS_USER_WHERE: Prisma.usersWhereInput = {
-  isVirtualLearner: false,
+  ...REAL_USER_WHERE,
   deletedAt: null,
-  NOT: [
-    { email: { startsWith: 'virtual_' } },
-    { email: { endsWith: '@test.local' } },
-    { email: { startsWith: 'e2e_' } },
-    { email: { startsWith: 'audit_probe_' } },
-    { email: { startsWith: 'ui_check' } },
-    { email: { startsWith: 'motion_review' } },
-    { email: { startsWith: 'qa_audit_' } },
-  ],
 };
 
 /**

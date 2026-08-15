@@ -703,6 +703,8 @@ export interface LiveOverviewFull {
   rates: string[]
   pulse: { label?: string; calls: number; issue: number }[]
   totalCalls: number
+  /** 全量副口径：24h 调用总数（含虚拟/测试账号） */
+  totalCallsAll?: number
   totalIssues: number
   peak: string
   usage: {
@@ -711,6 +713,9 @@ export interface LiveOverviewFull {
     totalTokens7d: number
     models7d: { model: string; calls: number; tokens: number }[]
     failures7d: { category: string; count: number }[]
+    /** 全量副口径（含虚拟/测试账号，供标注对比） */
+    calls7dAll?: number
+    totalTokens7dAll?: number
   }
   trend: { date: string; total: number; completed: number }[]
   feed: { text: string; time: string; tone: 'ok' | 'warn' | 'bad' | 'muted'; ts?: number; errorCategory?: string; agentId?: string }[]
@@ -885,6 +890,7 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
 
   /* KPI 行：今日窗口 + 活跃量；真实 0 显示 0，非数值才显示 —（避免「无数据」与「零」混淆） */
   const fmt = (n: number, suffix = '') => (Number.isFinite(n) ? `${n}${suffix}` : '—')
+  const todayCallsAll = Number(agents.todayCallsAll || 0)
   const kpis = [
     { label: '今日调用', value: fmt(todayCalls), hint: todayCalls > 0 ? `超时 ${Number(agents.todayTimeouts || 0)}` : '等待学习者开始' },
     { label: '今日成功率', value: todayCalls > 0 ? `${todaySuccessRate}%` : '—', hint: todayFailed > 0 ? `${todayFailed} 次失败` : '无失败' },
@@ -893,6 +899,9 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     { label: '进行中对话', value: fmt(Number(conv.active || 0)), hint: '目标澄清阶段（真实用户）' },
     { label: '活跃 Skill', value: fmt(Number(agents.activeAgents24h || 0)), hint: '近 24h 有调用' },
   ]
+  if (todayCallsAll > todayCalls) {
+    kpis[0] = { ...kpis[0], hint: `${kpis[0].hint} · 全量（含虚拟/测试）${todayCallsAll} 次` }
+  }
 
   /* 总结产出质量：wrapup 生成链路健康度（model / fallback / failed） */
   const wrap = (stats.agents?.wrapup || {}) as Record<string, number>
@@ -912,6 +921,8 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     totalTokens7d?: number
     models7d?: { model: string; calls: number; tokens: number }[]
     failures7d?: { category: string; count: number }[]
+    calls7dAll?: number
+    totalTokens7dAll?: number
   }
   const usage = {
     calls7d: Number(usageRaw.calls7d || 0),
@@ -919,6 +930,8 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     totalTokens7d: Number(usageRaw.totalTokens7d || 0),
     models7d: (usageRaw.models7d || []).slice(0, 5),
     failures7d: (usageRaw.failures7d || []).slice(0, 5),
+    calls7dAll: Number(usageRaw.calls7dAll || 0),
+    totalTokens7dAll: Number(usageRaw.totalTokens7dAll || 0),
   }
 
   /* 近 7 天目标对话趋势（目标澄清量，含完成数） */
@@ -1070,13 +1083,20 @@ export async function liveRecomputeLearner(userId: string, pathId?: string): Pro
   await fetchLiveLearners()
 }
 
-export async function liveGetLearnerDetail(userId: string, pathId?: string): Promise<Record<string, unknown>> {
-  const res = await adminLearnerModelsApi.getDetail(userId, pathId ? { pathId } : undefined)
+export async function liveGetLearnerDetail(userId: string, pathId?: string, includeTest?: boolean): Promise<Record<string, unknown>> {
+  const res = await adminLearnerModelsApi.getDetail(userId, {
+    ...(pathId ? { pathId } : {}),
+    ...(includeTest ? { includeTest: true } : {}),
+  })
   return res.data?.data ?? res.data ?? {}
 }
 
-export async function liveGetLearnerEvidence(userId: string, pathId?: string): Promise<Record<string, unknown>[]> {
-  const res = await adminLearnerModelsApi.getEvidence(userId, { limit: 20, ...(pathId ? { pathId } : {}) })
+export async function liveGetLearnerEvidence(userId: string, pathId?: string, includeTest?: boolean): Promise<Record<string, unknown>[]> {
+  const res = await adminLearnerModelsApi.getEvidence(userId, {
+    limit: 20,
+    ...(pathId ? { pathId } : {}),
+    ...(includeTest ? { includeTest: true } : {}),
+  })
   const body = res.data?.data ?? res.data ?? {}
   return Array.isArray(body) ? body : (body?.items || body?.evidence || [])
 }

@@ -425,10 +425,12 @@ async function loadDetail(id: string | undefined, live: boolean) {
   if (!id || !live) return
   const base = liveLearners.value.find((l) => l.userId === id)
   const pathId = base?.pathId
+  // 从用户详情显式进入学习者画像时携带 includeTest（虚拟/测试账号可查，默认视图仍排除）
+  const includeTest = subPage.value?.includeTest
   // 面包屑先以列表兜底名回写（详情加载成功后覆盖为详情名）
   if (base?.name) setSubPageLabel(base.name)
   try {
-    const raw = (await withTimeout(liveGetLearnerDetail(id, pathId), 12000)) as Record<string, unknown>
+    const raw = (await withTimeout(liveGetLearnerDetail(id, pathId, includeTest), 12000)) as Record<string, unknown>
     rawDetail.value = raw
     const model = (raw.model as Record<string, unknown>) || raw
     const km = ((model.knowledgeMemory as Record<string, unknown>) || (raw.knowledgeMemory as Record<string, unknown>) || {}) as Record<string, unknown>
@@ -441,7 +443,7 @@ async function loadDetail(id: string | undefined, live: boolean) {
     const totalTasks = Number(progress.totalTasks || 0)
     const completedTasks = Number(progress.completedTasks || 0)
     const pct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
-    const evidenceItems = await liveGetLearnerEvidence(id, pathId).catch(() => [] as Record<string, unknown>[])
+    const evidenceItems = await liveGetLearnerEvidence(id, pathId, includeTest).catch(() => [] as Record<string, unknown>[])
     liveEvidence.value = evidenceItems.map((e) => ({
       title: String(e.type || e.kind || '学习事件'),
       detail: String(e.signal || ''),

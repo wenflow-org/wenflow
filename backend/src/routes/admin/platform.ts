@@ -12,6 +12,7 @@ import {
   isManifestAgent,
   listAgentManifest
 } from '../../services/agent-manifest.service';
+import { REAL_USER_WHERE as REAL_USER_WHERE_UTILS } from '../../utils/test-account';
 import { getGateway } from '../../gateway';
 import {
   DEFAULT_PATH_AGENT_INPUT_CONFIG,
@@ -66,22 +67,11 @@ const AGENT_RELATIONS = getAgentRelations();
 
 /**
  * 生产统计用户过滤：排除虚拟学习者与测试/审计账号（合成流量），避免污染真实指标。
- * 测试账号按命名模式识别（e2e_/audit_probe_/ui_check/motion_review/qa_audit_/@test.local/virtual_）。
- * 注：utils/test-account.ts 是本地未入库的单点（gitignore test-*.ts），此处内联等价条件，
- * 保证统计口径在干净检出下可编译。
+ * 单点定义见 utils/test-account.ts（前缀清单随 dev.db 实测账号分布扩展），此处仅补 deletedAt。
  */
 const REAL_USER_WHERE = {
-  isVirtualLearner: false,
+  ...REAL_USER_WHERE_UTILS,
   deletedAt: null,
-  NOT: [
-    { email: { startsWith: 'virtual_' } },
-    { email: { endsWith: '@test.local' } },
-    { email: { startsWith: 'e2e_' } },
-    { email: { startsWith: 'audit_probe_' } },
-    { email: { startsWith: 'ui_check' } },
-    { email: { startsWith: 'motion_review' } },
-    { email: { startsWith: 'qa_audit_' } },
-  ],
 };
 
 const timeoutErrorSignals = [
@@ -668,6 +658,14 @@ async function computeOverviewStats(): Promise<unknown> {
     };
     // 生产统计排除虚拟学习者与测试/审计账号：见模块级 REAL_USER_WHERE
 
+    // 调用/token 口径（R5）：agent_call_logs / llm_execution_attempts 按 userId 归属过滤，
+    // 只统计真实用户（虚拟/测试账号 userId 不在集合内 → 自动剔除；空 userId 孤儿行同样剔除）。
+    // 全量口径保留为 *All 副指标，前端标注「含虚拟/测试」，保证诚实展示且可对比。
+    const realUserIds = (
+      await prisma.users.findMany({ where: REAL_USER_WHERE, select: { id: true } })
+    ).map((u) => u.id);
+    const realUserScope = { userId: { in: realUserIds } };
+
     // 并行查询所有统计数据
     const [
       totalUsers,
@@ -682,14 +680,18 @@ async function computeOverviewStats(): Promise<unknown> {
       completedConversations,
       activeConversations,
       totalAgentLogs,
+      totalAgentLogsAll,
       agentCallsToday,
+      agentCallsTodayAll,
       agentSuccessToday,
       agentTimeoutToday,
       activeAgents24h,
       recentAgentLogs24h,
       wrapupLogs,
       usageTokens7d,
+      usageTokens7dAll,
       usageCalls7d,
+      usageCalls7dAll,
       usageModels7d,
       usageFailuresRows
     ] = await Promise.all([
@@ -782,14 +784,33 @@ async function computeOverviewStats(): Promise<unknown> {
         },
       }),
       
-      // Agent 调用统计 (使用 agentCallLog 表)
+      // Agent 调用统计（真实用户口径：按 userId 归属过滤；全量见 totalAgentLogsAll）
+      prisma.agent_call_logs.groupBy({
+        by: ['success'],
+        where: { ...businessExecutionWhere, ...realUserScope },
+        _count: true,
+      }),
+
+      // Agent 调用统计全量（含虚拟/测试账号与孤儿行，前端副口径标注）
       prisma.agent_call_logs.groupBy({
         by: ['success'],
         where: businessExecutionWhere,
         _count: true,
       }),
 
-      // 今日 Agent 调用数
+      // 今日 Agent 调用数（真实用户口径；全量见 agentCallsTodayAll）
+      prisma.agent_call_logs.count({
+        where: {
+          ...businessExecutionWhere,
+          ...realUserScope,
+          calledAt: {
+            gte: today,
+            lt: tomorrow,
+          },
+        },
+      }),
+
+      // 今日 Agent 调用数全量（含虚拟/测试）
       prisma.agent_call_logs.count({
         where: {
           ...businessExecutionWhere,
@@ -804,6 +825,7 @@ async function computeOverviewStats(): Promise<unknown> {
       prisma.agent_call_logs.count({
         where: {
           ...businessExecutionWhere,
+          ...realUserScope,
           calledAt: {
             gte: today,
             lt: tomorrow,
@@ -820,6 +842,7 @@ async function computeOverviewStats(): Promise<unknown> {
         where: {
           AND: [
             businessExecutionWhere,
+            realUserScope,
             {
               calledAt: { gte: today, lt: tomorrow },
               success: false,
@@ -841,6 +864,7 @@ async function computeOverviewStats(): Promise<unknown> {
         by: ['agentId'],
         where: {
           ...businessExecutionWhere,
+          ...realUserScope,
           calledAt: { gte: new Date(Date.now() - 24 * 3600000) }
         }
       }),
@@ -850,6 +874,7 @@ async function computeOverviewStats(): Promise<unknown> {
       prisma.agent_call_logs.findMany({
         where: {
           ...businessExecutionWhere,
+          ...realUserScope,
           calledAt: { gte: trendWindowStart }
         },
         orderBy: { calledAt: 'asc' },
@@ -861,22 +886,40 @@ async function computeOverviewStats(): Promise<unknown> {
         }
       }),
 
-      // wrapup 来源分布抽样（200 → 50：仅用于 wrapupSourceStats 比例估算）
+      // wrapup 来源分布抽样（200 → 50：仅用于 wrapupSourceStats 比例估算；真实用户口径）
       prisma.agent_call_logs.findMany({
-        where: { agentId: 'skill:session-wrapup' },
+        where: { agentId: 'skill:session-wrapup', ...realUserScope },
         orderBy: { calledAt: 'desc' },
         take: 50,
         select: { output: true }
       }),
 
-      // 近 7 天 LLM 用量聚合（token 总量，来自执行尝试表）
+      // 近 7 天 LLM 用量聚合（真实用户口径，token 总量；全量见 usageTokens7dAll）
+      prisma.llm_execution_attempts.aggregate({
+        where: { ...realUserScope, startedAt: { gte: new Date(Date.now() - 7 * 86400000) } },
+        _sum: { totalTokens: true },
+        _count: true,
+      }),
+
+      // 近 7 天 LLM 用量全量（含虚拟/测试账号，前端副口径标注）
       prisma.llm_execution_attempts.aggregate({
         where: { startedAt: { gte: new Date(Date.now() - 7 * 86400000) } },
         _sum: { totalTokens: true },
         _count: true,
       }),
 
-      // 近 7 天调用与失败数
+      // 近 7 天调用与失败数（真实用户口径；全量见 usageCalls7dAll）
+      prisma.agent_call_logs.groupBy({
+        by: ['success'],
+        where: {
+          ...businessExecutionWhere,
+          ...realUserScope,
+          calledAt: { gte: new Date(Date.now() - 7 * 86400000) }
+        },
+        _count: true,
+      }),
+
+      // 近 7 天调用与失败数全量（含虚拟/测试）
       prisma.agent_call_logs.groupBy({
         by: ['success'],
         where: {
@@ -886,10 +929,10 @@ async function computeOverviewStats(): Promise<unknown> {
         _count: true,
       }),
 
-      // 近 7 天模型用量分布（按解析后的模型名）
+      // 近 7 天模型用量分布（按解析后的模型名，真实用户口径）
       prisma.llm_execution_attempts.groupBy({
         by: ['resolvedModel'],
-        where: { startedAt: { gte: new Date(Date.now() - 7 * 86400000) } },
+        where: { ...realUserScope, startedAt: { gte: new Date(Date.now() - 7 * 86400000) } },
         _sum: { totalTokens: true },
         _count: true,
       }),
@@ -899,6 +942,7 @@ async function computeOverviewStats(): Promise<unknown> {
       prisma.agent_call_logs.findMany({
         where: {
           ...businessExecutionWhere,
+          ...realUserScope,
           calledAt: { gte: new Date(Date.now() - 7 * 86400000) },
           success: false,
         },
@@ -945,6 +989,10 @@ async function computeOverviewStats(): Promise<unknown> {
       success: totalAgentLogs.find(s => s.success === true)?._count || 0,
       error: totalAgentLogs.find(s => s.success === false)?._count || 0,
     };
+    // 全量口径（含虚拟/测试账号）：仅作副指标，前端标注「含虚拟/测试」
+    const agentStatsAll = {
+      total: totalAgentLogsAll.reduce((sum, s) => sum + s._count, 0),
+    };
     
     const agentSuccessRate = agentStats.total > 0 
       ? agentStats.success / agentStats.total 
@@ -965,7 +1013,9 @@ async function computeOverviewStats(): Promise<unknown> {
 
     /* 近 7 天 LLM 用量与失败归因 */
     const sum7d = (usageTokens7d as { _sum?: { totalTokens?: number | null } })._sum || {};
+    const sum7dAll = (usageTokens7dAll as { _sum?: { totalTokens?: number | null } })._sum || {};
     const calls7dTotal = usageCalls7d.reduce((acc, g) => acc + g._count, 0);
+    const calls7dTotalAll = usageCalls7dAll.reduce((acc, g) => acc + g._count, 0);
     // 失败数 = 失败归因行数（同一查询源，二者恒等，消除「失败 234 vs 归因 168」双口径）
     const calls7dFailed = usageFailuresRows.length;
     const models7d = (usageModels7d || [])
@@ -992,6 +1042,9 @@ async function computeOverviewStats(): Promise<unknown> {
       totalTokens7d: Number(sum7d.totalTokens || 0),
       models7d,
       failures7d,
+      // 全量副口径（含虚拟/测试账号）：totalTokens7dAll / calls7dAll 供前端标注「含虚拟/测试」
+      totalTokens7dAll: Number(sum7dAll.totalTokens || 0),
+      calls7dAll: calls7dTotalAll,
     };
 
     return {
@@ -1026,6 +1079,9 @@ async function computeOverviewStats(): Promise<unknown> {
           last24hTotal,
           last24hPeak,
           wrapup: wrapupSourceStats,
+          // 全量副口径（含虚拟/测试账号）：前端标注「含虚拟/测试」
+          totalCallsAll: agentStatsAll.total,
+          todayCallsAll: agentCallsTodayAll,
         },
         usage,
     };

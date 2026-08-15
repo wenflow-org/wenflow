@@ -94,17 +94,20 @@ export class LearnerSnapshotRefreshService {
     staleOnly?: boolean;
     riskOnly?: boolean;
     excludeTest?: boolean;
+    includeTest?: boolean;
     page?: number;
     limit?: number;
   }) {
     const page = Math.max(1, Number(params?.page || 1));
     const limit = Math.max(1, Math.min(50, Number(params?.limit || 20)));
 
-    // 软删用户不进入管理端快照列表（列表与总数口径一致）；
-    // excludeTest=true 时排除虚拟学习者与测试/审计账号（风险队列只给真实用户看）
+    // 软删用户不进入管理端快照列表（列表与总数口径一致）。
+    // 默认排除虚拟学习者与测试/审计账号（风险队列只给真实用户看）；
+    // includeTest=true 时显式包含（管理需要查看虚拟数据，不删数据只改默认视图）。
+    const excludeTest = params?.includeTest ? false : (params?.excludeTest ?? true);
     const userWhere = {
       deletedAt: null,
-      ...(params?.excludeTest ? { isVirtualLearner: false, NOT: REAL_USER_WHERE.NOT } : {}),
+      ...(excludeTest ? { isVirtualLearner: false, NOT: REAL_USER_WHERE.NOT } : {}),
       ...(params?.userId ? { id: params.userId } : {}),
     };
     const total = await prisma.users.count({ where: userWhere });

@@ -7,7 +7,7 @@
  * - LearnerDetail tab 归一化：6 tab → 3 tab 后旧 tab 名深链重定向（cognitive→profile 等）
  */
 
-/** 测试/虚拟账号命名约定（后端 utils/test-account.ts 同源） */
+/** 测试/虚拟账号命名约定（后端 utils/test-account.ts 同源；前缀清单同步更新，勿只改一端） */
 export function isTestAccountUser(u: { id?: string; name?: string; email?: string }): boolean {
   const id = String(u.id || '')
   const name = String(u.name || '')
@@ -15,8 +15,8 @@ export function isTestAccountUser(u: { id?: string; name?: string; email?: strin
   if (/^virtual_/.test(id)) return true
   if (/@test\.local$/i.test(email)) return true
   if (/^virtual_/i.test(email)) return true
-  if (/^(e2e_|audit_probe_|uxaudit_|ui_check|motion_review)/i.test(email)) return true
-  if (/^(e2e_|audit_probe_|uxaudit_|ui_check|motion_review)/i.test(name)) return true
+  if (/^(e2e_|audit_probe_|uxaudit_|ui_check|motion_review|qa_audit_|shotsnap|verify_real_user|vcheck|vqa_audit|align_|qa_delete_test_)/i.test(email)) return true
+  if (/^(e2e_|audit_probe_|uxaudit_|ui_check|motion_review|qa_audit_|shotsnap|verify_real_user|vcheck|vqa_audit|align_|qa_delete_test_)/i.test(name)) return true
   return false
 }
 

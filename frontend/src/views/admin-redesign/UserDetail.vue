@@ -133,7 +133,8 @@ const restoring = ref(false)
 
 function toLearner() {
   const id = subPage.value?.id
-  if (id) openSubPage('learner', id)
+  // 显式包含虚拟/测试：用户详情 → 学习者画像为逐用户显式导航，不受 learner-models 默认排除影响
+  if (id) openSubPage('learner', id, { includeTest: true })
 }
 
 const projectionGrant = ref<ProjectionGrant | null>(null)

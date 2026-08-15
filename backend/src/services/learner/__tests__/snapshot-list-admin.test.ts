@@ -67,7 +67,7 @@ describe('listForAdmin excludeTest（风险队列剔除测试账号）', () => {
     expect(usersCount.mock.calls[0][0].where).toEqual(where);
   });
 
-  it('未传 excludeTest：where 不含测试账号过滤（向后兼容）', async () => {
+  it('未传参数：默认排除测试/虚拟账号（默认视图只给真实用户看）', async () => {
     usersFindMany.mockResolvedValue([baseUser({ id: 'real1' })]);
     usersCount.mockResolvedValue(1);
     projectionsFindMany.mockResolvedValue([]);
@@ -77,6 +77,34 @@ describe('listForAdmin excludeTest（风险队列剔除测试账号）', () => {
 
     const where = usersFindMany.mock.calls[0][0].where;
     expect(where.deletedAt).toBeNull();
+    expect(where.isVirtualLearner).toBe(false);
+    expect(where.NOT).toEqual(expect.any(Array));
+    expect(usersCount.mock.calls[0][0].where).toEqual(where);
+  });
+
+  it('includeTest=true：不过滤测试/虚拟账号（管理需要显式包含）', async () => {
+    usersFindMany.mockResolvedValue([baseUser({ id: 'real1' })]);
+    usersCount.mockResolvedValue(1);
+    projectionsFindMany.mockResolvedValue([]);
+    stubFreshProjections();
+
+    await learnerSnapshotRefreshService.listForAdmin({ limit: 50, includeTest: true });
+
+    const where = usersFindMany.mock.calls[0][0].where;
+    expect(where.deletedAt).toBeNull();
+    expect(where).not.toHaveProperty('isVirtualLearner');
+    expect(where).not.toHaveProperty('NOT');
+  });
+
+  it('excludeTest=false：显式不过滤（向后兼容显式声明）', async () => {
+    usersFindMany.mockResolvedValue([baseUser({ id: 'real1' })]);
+    usersCount.mockResolvedValue(1);
+    projectionsFindMany.mockResolvedValue([]);
+    stubFreshProjections();
+
+    await learnerSnapshotRefreshService.listForAdmin({ limit: 50, excludeTest: false });
+
+    const where = usersFindMany.mock.calls[0][0].where;
     expect(where).not.toHaveProperty('isVirtualLearner');
     expect(where).not.toHaveProperty('NOT');
   });
@@ -100,7 +128,7 @@ describe('listForAdmin excludeTest（风险队列剔除测试账号）', () => {
     projectionsFindMany.mockResolvedValue([]);
     stubFreshProjections();
 
-    const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50 });
+    const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50, excludeTest: false });
     expect(data.items[0].isTestAccount).toBe(true);
   });
 });

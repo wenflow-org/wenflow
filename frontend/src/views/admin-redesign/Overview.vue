@@ -83,9 +83,9 @@
           ></div>
         </div>
         <div class="pulse__meta">
-          <span title="窗口：近 24h（滚动窗口，非自然日）">24h 调用 <strong>{{ data.totalCalls }}</strong></span>
-          <span title="窗口：近 24h，失败 + 超时合计">异常 <strong :class="{ 'is-bad': data.totalIssues > 0 }">{{ data.totalIssues }}</strong></span>
-          <span title="窗口：近 24h 调用高峰所在小时">高峰 {{ data.peak }}</span>
+          <span title="窗口：近 24h（滚动窗口，非自然日）；仅真实用户，不含虚拟学习者与测试/审计账号">24h 调用 <strong>{{ data.totalCalls }}</strong></span>
+          <span title="窗口：近 24h，失败 + 超时合计（仅真实用户）">异常 <strong :class="{ 'is-bad': data.totalIssues > 0 }">{{ data.totalIssues }}</strong></span>
+          <span title="窗口：近 24h 调用高峰所在小时（仅真实用户）">高峰 {{ data.peak }}</span>
         </div>
         <div class="pulse__axis">
           <i v-for="a in pulseAxis" :key="a">{{ a }}</i>
@@ -121,13 +121,16 @@
 
       <!-- LLM 用量与失败归因 -->
       <section class="brief-card">
-        <h4>LLM 用量与失败归因</h4>
+        <h4 title="近 7 天（滚动窗口）">LLM 用量与失败归因</h4>
         <div v-if="usageHasData" class="usage">
           <div class="usage__big">
             <strong>{{ fmtTokens(data.usage.totalTokens7d) }}</strong>
-            <span>近 7 天 token</span>
+            <span>近 7 天 token（仅真实用户，不含虚拟/测试）</span>
             <em>{{ data.usage.calls7d }} 次调用 · 失败 {{ data.usage.failed7d }}（归因合计 {{ failuresSum7d }}）</em>
           </div>
+          <p v-if="usageFullDiffers" class="usage__note">
+            全量口径（含虚拟/测试账号）：{{ fmtTokens(data.usage.totalTokens7dAll ?? 0) }} tokens · {{ data.usage.calls7dAll ?? 0 }} 次调用
+          </p>
           <div v-if="data.usage.models7d.length" class="usage__section">
             <span class="usage__label">模型用量</span>
             <div class="usage__rows">
@@ -279,6 +282,9 @@ interface BriefData {
     totalTokens7d: number;
     models7d: { model: string; calls: number; tokens: number }[];
     failures7d: { category: string; count: number }[];
+    /** 全量副口径（含虚拟/测试账号，供标注对比） */
+    calls7dAll?: number;
+    totalTokens7dAll?: number;
   };
   trend: { date: string; total: number; completed: number }[];
   funnel: { label: string; value: string; idle: boolean }[];
@@ -411,6 +417,13 @@ const hasWrapupStats = computed(() => {
 const usageHasData = computed(() => {
   const u = data.value?.usage;
   return !!u && (u.totalTokens7d > 0 || u.models7d.length > 0);
+});
+
+/** 全量副口径存在且与真实口径有差异 → 展示「含虚拟/测试」注记（口径诚实：默认真实 + 注明全量） */
+const usageFullDiffers = computed(() => {
+  const u = data.value?.usage;
+  if (!u || !u.totalTokens7dAll || !u.calls7dAll) return false;
+  return u.totalTokens7dAll > u.totalTokens7d || u.calls7dAll > u.calls7d;
 });
 const fmtTokens = (n: number) => (n >= 1000000 ? `${(n / 1000000).toFixed(2)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || '—'));
 const modelMax = computed(() => Math.max(1, ...(data.value?.usage.models7d.map((m) => m.tokens) || [])));
@@ -785,6 +798,7 @@ watch(liveLoading, (loading) => {
 }
 .usage__big span { font-size: 11.5px; color: var(--mk-faint); font-weight: 600; letter-spacing: 0.04em; }
 .usage__big em { font-style: normal; font-size: 12.5px; color: var(--mk-muted); }
+.usage__note { margin: 2px 0 0; font-size: 11.5px; color: var(--mk-faint); font-weight: 600; letter-spacing: 0.03em; }
 .usage__section { display: grid; gap: 6px; }
 .usage__label { font-size: 11px; font-weight: 700; color: var(--mk-faint); letter-spacing: 0.04em; }
 .usage__rows { display: grid; gap: 5px; }
