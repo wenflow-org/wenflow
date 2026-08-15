@@ -256,5 +256,5 @@ page-*.md
 !doc/ADMIN_RECONSTRUCTION_SUMMARY.md
 !doc/archive/README.md
 
-# UI ��ƽ�ͼ��ʱĿ¼
+# UI 审计截图临时目录
 .ui-audit/
