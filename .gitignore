@@ -255,3 +255,6 @@ page-*.md
 *.db-journal
 !doc/ADMIN_RECONSTRUCTION_SUMMARY.md
 !doc/archive/README.md
+
+# UI иС╪ф╫ьм╪аый╠д©б╪
+.ui-audit/

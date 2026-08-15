@@ -4,7 +4,7 @@ const mockLlmFindMany = jest.fn()
 const mockLlmDeleteMany = jest.fn()
 const mockPromptFindMany = jest.fn()
 const mockPromptDeleteMany = jest.fn()
-const mockExecuteRawUnsafe = jest.fn()
+const mockQueryRawUnsafe = jest.fn()
 const mockLogger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
 const mockRunBackgroundTask = jest.fn()
 
@@ -14,7 +14,7 @@ jest.mock('../../config/database', () => ({
     agent_call_logs: { findMany: mockAgentFindMany, deleteMany: mockAgentDeleteMany },
     llm_execution_attempts: { findMany: mockLlmFindMany, deleteMany: mockLlmDeleteMany },
     prompt_call_logs: { findMany: mockPromptFindMany, deleteMany: mockPromptDeleteMany },
-    $executeRawUnsafe: mockExecuteRawUnsafe
+    $queryRawUnsafe: mockQueryRawUnsafe
   }
 }))
 
@@ -82,7 +82,7 @@ describe('LogRetentionService', () => {
     mockAgentFindMany.mockResolvedValue([])
     mockLlmFindMany.mockResolvedValue([])
     mockPromptFindMany.mockResolvedValue([])
-    mockExecuteRawUnsafe.mockResolvedValue(undefined)
+    mockQueryRawUnsafe.mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -257,13 +257,13 @@ describe('LogRetentionService', () => {
   it('SQLite 下收尾执行 WAL checkpoint，非 SQLite 跳过', async () => {
     const service = new LogRetentionService({ retentionDays: 90 })
     await service.run()
-    expect(mockExecuteRawUnsafe).toHaveBeenCalledWith('PRAGMA wal_checkpoint(TRUNCATE)')
+    expect(mockQueryRawUnsafe).toHaveBeenCalledWith('PRAGMA wal_checkpoint(TRUNCATE)')
 
     jest.clearAllMocks()
     process.env.DATABASE_URL = 'postgresql://user:pass@localhost:5432/wenflow'
     const postgresService = new LogRetentionService({ retentionDays: 90 })
     await postgresService.run()
-    expect(mockExecuteRawUnsafe).not.toHaveBeenCalled()
+    expect(mockQueryRawUnsafe).not.toHaveBeenCalled()
   })
 
   it('start 启动定时器：立即执行一轮 + 每 intervalMs 一轮，stop 清除定时器', async () => {

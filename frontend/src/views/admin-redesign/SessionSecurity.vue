@@ -70,7 +70,7 @@
             class="ss-row"
             :class="{ 'ss-row--current': s.id === currentId }"
           >
-            <span class="ss-device" :title="uaOf(s)">{{ uaOf(s) }}</span>
+            <span class="ss-device" :title="uaFull(s)">{{ uaOf(s) }}</span>
             <span class="ss-time mono" :title="fmtFull(s.issuedAt)">{{ fmtDateTime(s.issuedAt) }}</span>
             <span class="ss-time mono" :title="s.lastSeenAt ? fmtFull(s.lastSeenAt) : ''">
               {{ s.lastSeenAt ? fmtDateTime(s.lastSeenAt) : '—' }}
@@ -93,7 +93,7 @@
           <!-- 滚动修复 #3：过期/已撤销历史收进折叠组（默认收起；「已撤销」筛选时自动展开） -->
           <details v-if="g.historical.length" class="ss-hist" :open="statusFilter === 'revoked'">
             <summary class="ss-hist__summary">
-              <span class="ss-hist__title">已过期 / 已撤销（{{ g.historical.length }}）</span>
+              <span class="ss-hist__title">已过期 · 已撤销（{{ g.historical.length }}）</span>
               <span class="ss-hist__meta">过期 {{ g.expiredCount }} · 已撤销 {{ g.revokedCount }}</span>
             </summary>
             <div
@@ -102,7 +102,7 @@
               class="ss-row"
               :class="{ 'ss-row--current': s.id === currentId }"
             >
-              <span class="ss-device" :title="uaOf(s)">{{ uaOf(s) }}</span>
+              <span class="ss-device" :title="uaFull(s)">{{ uaOf(s) }}</span>
               <span class="ss-time mono" :title="fmtFull(s.issuedAt)">{{ fmtDateTime(s.issuedAt) }}</span>
               <span class="ss-time mono" :title="s.lastSeenAt ? fmtFull(s.lastSeenAt) : ''">
                 {{ s.lastSeenAt ? fmtDateTime(s.lastSeenAt) : '—' }}
@@ -278,6 +278,11 @@ function uaOf(s: AdminSessionRow): string {
   return ua ? (ua.length > 48 ? `${ua.slice(0, 48)}…` : ua) : '未知设备'
 }
 
+/** 设备完整 UA（title / 下线确认弹窗用，不截断） */
+function uaFull(s: AdminSessionRow): string {
+  return s.userAgent || '未知设备'
+}
+
 /** 24 小时内过期的活跃会话高亮提示 */
 function expiringSoon(s: AdminSessionRow): boolean {
   if (statusOf(s) !== 'active') return false
@@ -287,7 +292,7 @@ function expiringSoon(s: AdminSessionRow): boolean {
 async function revoke(s: AdminSessionRow) {
   const confirmed = await askConfirm({
     title: '强制下线该会话',
-    message: `确定强制下线此会话吗？\n设备：${uaOf(s)}\n登录时间：${fmtDateTime(s.issuedAt)}`,
+    message: `确定强制下线此会话吗？\n设备：${uaFull(s)}\n登录时间：${fmtDateTime(s.issuedAt)}`,
     confirmText: '强制下线',
   })
   if (!confirmed) return

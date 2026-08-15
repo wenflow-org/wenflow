@@ -878,7 +878,7 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tline__tokens { color: var(--mk-muted); }
+.tline__tokens { color: var(--mk-muted); text-align: right; }
 .tline__model { color: var(--mk-faint); }
 /* Prompt 契约展开区 */
 .tline__prompt { border-left: 3px solid rgba(217, 119, 6, 0.4); padding-left: 10px; }

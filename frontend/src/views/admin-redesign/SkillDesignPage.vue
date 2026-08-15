@@ -41,7 +41,7 @@
     <div v-if="overview?.drift === 'file-vs-db-mismatch'" class="sdp-drift">
       <strong>{{ TERMS.driftContractQualified }}</strong>
       <span>源文件与运行中的 Prompt 不一致</span>
-      <code class="mono">{{ overview.file?.path || 'prompts/skill.*.md' }}</code>
+      <code class="mono" :title="overview.file?.path || 'prompts/skill.*.md'">{{ overview.file?.path || 'prompts/skill.*.md' }}</code>
       <span>DB ACTIVE v{{ overview.db?.version || '?' }}</span>
       <span>请修改文件并通过部署同步处理</span>
     </div>

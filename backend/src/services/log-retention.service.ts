@@ -56,7 +56,7 @@ interface LogRetentionModel {
 
 type LogRetentionDatabase = Pick<
   PrismaClient,
-  'agent_call_logs' | 'llm_execution_attempts' | 'prompt_call_logs' | '$executeRawUnsafe'
+  'agent_call_logs' | 'llm_execution_attempts' | 'prompt_call_logs' | '$queryRawUnsafe'
 >;
 
 function isSqliteDatabaseUrl(value: string | undefined): boolean {
@@ -257,7 +257,7 @@ export class LogRetentionService {
   private async checkpoint(): Promise<void> {
     if (!isSqliteDatabaseUrl(process.env.DATABASE_URL)) return;
     try {
-      await this.database.$executeRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE)');
+      await this.database.$queryRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE)');
     } catch (error) {
       logger.warn('[log-retention] WAL checkpoint 失败（忽略，不影响清理结果）', {
         error: error instanceof Error ? error.message : String(error)

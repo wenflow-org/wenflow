@@ -5,10 +5,10 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">{{ statusTitle }}</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">密钥 {{ keySet ? '已配置' : '未配置' }}</span>
-      <span class="mk-status__meta">模型 {{ models.length || '待拉取' }}</span>
-      <span class="mk-status__meta">路由 {{ routeCount }}/3</span>
-      <span v-if="isLive && lastCheckedText" class="mk-status__meta">上次探测 {{ lastCheckedText }}</span>
+      <span class="mk-status__meta">密钥：{{ keySet ? '已配置' : '未配置' }}</span>
+      <span class="mk-status__meta">模型：{{ models.length || '待拉取' }}</span>
+      <span class="mk-status__meta">路由：{{ routeCount }}/3</span>
+      <span v-if="isLive && lastCheckedText" class="mk-status__meta">上次探测：{{ lastCheckedText }}</span>
       <button type="button" class="mk-status__action" :disabled="fetching || !form.apiUrl" @click="fetchModels">
         <span v-if="fetching"><span class="mk-spinner"></span> 拉取中…</span>
         <span v-else>{{ models.length ? '重新拉取' : '连接并拉取' }}</span>
