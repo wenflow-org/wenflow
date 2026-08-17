@@ -156,7 +156,8 @@ watch(
   font-size: 16px;
   cursor: pointer;
   padding: 0 4px;
-  opacity: 0.7;
+  /* 对比度修复：opacity 0.7 时 warning 色在浅黄底上约 2.8:1，低于 3:1 控件阈值；提到 0.9 约 4.5:1 */
+  opacity: 0.9;
   line-height: 1;
 }
 .anb__close:hover { opacity: 1; }

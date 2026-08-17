@@ -102,11 +102,11 @@
       <div class="wf-summary__item wf-summary__models"><span>模型</span><b class="mono">{{ traceSummary.models.length ? traceSummary.models.join(' / ') : '—' }}</b></div>
     </div>
 
-    <div v-if="activeSpans.length" class="wf">
+    <div v-if="activeSpans.length" class="wf" ref="wfRoot">
       <!-- 时间刻度 -->
       <div class="wf-ruler">
         <span class="wf-ruler__label">{{ viewMode === 'session' ? '会话内 span' : '阶段 / span' }}</span>
-        <div class="wf-ruler__track">
+        <div class="wf-ruler__track" :style="rulerTrackW ? { width: rulerTrackW } : undefined">
           <span v-for="tick in ticks" :key="tick" class="wf-ruler__tick" :style="{ left: tickLeft(tick) }">
             {{ tick >= 1000 ? `${tick / 1000}s` : `${tick}ms` }}
           </span>
@@ -224,14 +224,14 @@
       </template>
       <template v-else>
         <strong>暂无链路数据</strong>
-        <span>有真实调用发生后，这里按 Trace 展开完整瀑布。</span>
+        <span>有真实调用发生后，这里按 Trace 展开完整链路。</span>
       </template>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { spans, intent, openSkillDrawer, dataSource, isLive, type TraceSpan } from './store'
 import {
   livePromptIndex,
@@ -273,6 +273,10 @@ const baseSpans = computed<TraceSpan[]>(() =>
 onMounted(() => {
   if (dataSource.value === 'live') void loadPromptIndex()
   waterfallSyncFromBoot()
+  observeRowTrack()
+})
+onBeforeUnmount(() => {
+  trackObserver?.disconnect()
 })
 // demo → live 切换后重载（与 ExecLogs 一致）
 watch(dataSource, () => {
@@ -545,6 +549,41 @@ const tickLeft = (t: number) => `${(t / maxEnd.value) * 100}%`
 const barLeft = (s: TraceSpan) => `${(s.startMs / maxEnd.value) * 100}%`
 const barWidth = (s: TraceSpan) => `${Math.max((s.durationMs / maxEnd.value) * 100, 1.2)}%`
 
+/* 表头刻度与瀑布轨道对齐（F9）：
+   .wf-row__main 为 280px 1fr auto 三列，行尾列(auto)宽度随内容变化 → 各行 1fr 轨道宽度不一致；
+   刻度行只有两列，若宽度不同则 tick(%) 与 bar(%) 不在同一坐标系（4K 放大后肉眼可见错位）。
+   方案：刻度轨道宽度取首行实际轨道宽度。offsetWidth 是布局逻辑宽（zoom 下不受全局缩放影响，
+   getBoundingClientRect().width 是物理宽），直接设 width: offsetWidth px 即可与轨道逐像素对齐；
+   用 ResizeObserver 监听行轨道，字体加载 / 窗口缩放 / 数据切换导致行尾列宽度变化时自动重校。 */
+const wfRoot = ref<HTMLElement | null>(null)
+const rulerTrackW = ref<string | null>(null)
+let trackObserver: ResizeObserver | null = null
+function syncRulerTrack() {
+  const root = wfRoot.value
+  const track = root?.querySelector<HTMLElement>('.wf-row__track')
+  if (!root || !track) {
+    rulerTrackW.value = null
+    return
+  }
+  rulerTrackW.value = `${track.offsetWidth}px`
+}
+function observeRowTrack() {
+  trackObserver?.disconnect()
+  const root = wfRoot.value
+  const track = root?.querySelector<HTMLElement>('.wf-row__track')
+  if (!root || !track) {
+    rulerTrackW.value = null
+    return
+  }
+  syncRulerTrack()
+  trackObserver = new ResizeObserver(() => syncRulerTrack())
+  trackObserver.observe(track)
+}
+watch(activeSpans, async () => {
+  await nextTick()
+  observeRowTrack()
+})
+
 const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
 const badgeOf = (s: string) => (s === 'err' ? 'mk-badge--bad' : s === 'warn' ? 'mk-badge--warn' : 'mk-badge--ok')
 
@@ -701,19 +740,24 @@ const verdictText = computed(() => {
 .wf-ruler {
   display: grid;
   grid-template-columns: 280px 1fr;
+  /* F9：与 .wf-row__main 同 gap（12px），刻度轨道起始与瀑布轨道一致；
+     轨道宽度由 syncRulerTrack() 按首行实测值设置（行尾列 auto 宽度不定） */
+  gap: 12px;
   align-items: center;
+  /* 表头与数据行对齐：.wf-row__main 有 padding 9px 14px，表头需一致，否则时间刻度条与瀑布轨道错位（4K 放大后肉眼可见） */
+  padding: 9px 14px;
   border-bottom: 1px solid var(--mk-line);
   background: #fafbfc;
 }
 .wf-ruler__label {
-  padding: 8px 14px;
+  padding: 0;
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--mk-faint);
 }
-.wf-ruler__track { position: relative; height: 26px; margin-right: 74px; }
+.wf-ruler__track { position: relative; height: 26px; }
 .wf-ruler__tick {
   position: absolute;
   top: 4px;
@@ -923,7 +967,7 @@ const verdictText = computed(() => {
 
 /* 窄屏：左列 280 → 180，阶段名已有 ellipsis 兜底 */
 @media (max-width: 860px) {
-  .wf-ruler { grid-template-columns: 180px 1fr; }
+  .wf-ruler { grid-template-columns: 180px 1fr; gap: 8px; }
   .wf-row__main { grid-template-columns: 180px 1fr auto; gap: 8px; }
 }
 
@@ -932,8 +976,8 @@ const verdictText = computed(() => {
   .wf-tracepick__count { font-size: 13px; }
   .wf-tracepick__search { font-size: 12.5px; padding: 8px 12px; width: 150px; }
   .wf-tracepick__select { font-size: 13px; padding: 8px 12px; max-width: 380px; }
-  .wf-ruler { grid-template-columns: 340px 1fr; }
-  .wf-ruler__label { font-size: 12.5px; padding: 10px 16px; }
+  .wf-ruler { grid-template-columns: 340px 1fr; padding: 9px 14px; }
+  .wf-ruler__label { font-size: 12.5px; }
   .wf-row__main { grid-template-columns: 340px 1fr auto; }
   .wf-row__stage-name { font-size: 13.5px; }
   .wf-row__stage-id { font-size: 11.5px; }
@@ -948,8 +992,8 @@ const verdictText = computed(() => {
   .wf-tracepick__count { font-size: 15.5px; }
   .wf-tracepick__search { font-size: 15px; padding: 10px 14px; width: 180px; }
   .wf-tracepick__select { font-size: 15.5px; padding: 10px 14px; max-width: 460px; }
-  .wf-ruler { grid-template-columns: 400px 1fr; }
-  .wf-ruler__label { font-size: 15px; padding: 12px 20px; }
+  .wf-ruler { grid-template-columns: 400px 1fr; padding: 9px 14px; }
+  .wf-ruler__label { font-size: 15px; }
   .wf-row__main { grid-template-columns: 400px 1fr auto; }
   .wf-row__stage-name { font-size: 16px; }
   .wf-row__stage-id { font-size: 13.5px; }
@@ -961,8 +1005,8 @@ const verdictText = computed(() => {
 }
 @media (min-width: 3600px) {
   /* 4K 分辨率（zoom 1.3 档）：字号继续放大 */
-  .wf-ruler { grid-template-columns: 460px 1fr; }
-  .wf-ruler__label { font-size: 17.5px; padding: 14px 24px; }
+  .wf-ruler { grid-template-columns: 460px 1fr; padding: 9px 14px; }
+  .wf-ruler__label { font-size: 17.5px; }
   .wf-row__main { grid-template-columns: 460px 1fr auto; }
   .wf-row__stage-name { font-size: 18.5px; }
   .wf-row__stage-id { font-size: 16px; }

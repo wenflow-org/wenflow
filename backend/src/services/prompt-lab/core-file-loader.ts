@@ -84,9 +84,9 @@ export interface CoreInputRef {
   note?: string;
 }
 
-const INPUT_REF_PATTERN = /^skill:([a-z0-9][a-z0-9-]*)\.([A-Za-z0-9_.\[\]-]+)$/;
-const SANDBOX_REF_PATTERN = /^sandbox:([A-Za-z0-9_.\[\]-]+)$/;
-const USER_REF_PATTERN = /^user:([A-Za-z0-9_.\[\]-]+)$/;
+const INPUT_REF_PATTERN = /^skill:([a-z0-9][a-z0-9-]*)\.([A-Za-z0-9_.[\]-]+)$/;
+const SANDBOX_REF_PATTERN = /^sandbox:([A-Za-z0-9_.[\]-]+)$/;
+const USER_REF_PATTERN = /^user:([A-Za-z0-9_.[\]-]+)$/;
 
 export type ParsedInputRef =
   | { kind: 'skill'; skill: string; fieldPath: string }
@@ -438,7 +438,7 @@ export function parseCoreFile(
   filePath: string,
   raw: string
 ): { core: CoreFile | null; diagnostics: CoreFileDiagnostic[] } {
-  const normalized = raw.replace(/^﻿/, '').replace(/\r\n/g, '\n');
+  const normalized = raw.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
   let parsed: unknown;
   try {
     parsed = yaml.load(normalized);

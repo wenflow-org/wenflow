@@ -108,7 +108,7 @@
               <td><span class="mk-badge" :class="attentionBadge(r.attention)">{{ r.attention === 'high' ? '高' : r.attention === 'medium' ? '中' : '低' }}</span></td>
               <td>
                 <div class="ts-actions">
-                  <button type="button" class="mk-link" @click.stop="goTrace(r)">瀑布</button>
+                  <button type="button" class="mk-link" @click.stop="goTrace(r)">链路</button>
                   <span class="ts-go">·</span>
                   <button v-if="r.id" type="button" class="mk-link" @click.stop="goConsole(r)">控制台</button>
                 </div>
@@ -193,7 +193,7 @@
 
             <div class="ts-actions">
               <button v-if="detail.userId" type="button" class="mk-link" @click="goLearner(detail)">学习者详情 →</button>
-              <button type="button" class="mk-link" @click="goTrace(detail)">Trace 瀑布 →</button>
+              <button type="button" class="mk-link" @click="goTrace(detail)">Trace 链路 →</button>
               <button v-if="detail.id" type="button" class="mk-link" @click="goConsole(detail)">进控制台 →</button>
             </div>
           </div>

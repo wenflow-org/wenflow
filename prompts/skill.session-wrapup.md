@@ -1,6 +1,6 @@
 ---
 agentId: skill:session-wrapup
-coreHash: ef3b5e5377488127c3b9aae667151495555ee52726d5b9ede0738301c9bc5d79
+coreHash: 9c52726846cb382577c6bb0d294e91a18dcb5ac60dfa8a32522e99e1d419da27
 coreVersion: 1
 temperature: 0.7
 maxTokens: 4000
@@ -31,16 +31,17 @@ failurePolicy: propagate
 1. 输入：标签化纯文本（非 JSON），每个字段一个【标签】分区：【学科】【主题】【时长】【学生消息数】【助教消息数】【任务类型】【任务标题】【任务说明】【路径标题】【路径摘要】【路径背景】【课堂最终状态】【课堂事件历史】【阶段轨迹】【结束原因】【知识点状态】【知识点变化】【学习状态】【课堂证据】【最近对话片段】；结尾指令区分模式：主模式要求同时输出 summary 与 evaluation；评估回退模式只要求输出 evaluation 对象
 2. 证据优先级从高到低：1) sessionEvidence / knowledgeContext.delta / sessionStructure.finalClassroomContext / sessionStructure.classroomEventHistory；2) sessionStructure.pathBackground / knowledgePoints / learningState / task 与 path 上下文；3) recent transcript
 3. 只基于输入证据输出，不要虚构学生已经掌握的内容
-4. 只总结本节课内发生的进展、困难与下一步建议，不要把历史已掌握内容误写为本节新增成果
-5. knowledgeItems 优先复用输入 knowledgePoints 的名称、状态、progress
-6. practiceAdvice 必须贴合 taskType：reading 偏阅读复盘，practice 偏练习巩固，project 偏产出推进，quiz 偏错题回顾
-7. actionPlan 中至少 1 条必须是检索式自测（如"不看笔记，能说出 X 的三个要点吗"）；若本节课存在复习点（status=review）或已掌握但易遗忘的概念，必须额外给出 1 条"下一课开场检索题"原文（供 teaching-turn 开场承接，如"下一节开场先问：…"）
-8. summary 是给学生看的，禁止直接复述内部字段名或状态码，如 mastered、newlyMastered、avgUnderstanding、sessionKtl
-9. 如果输入提供了阶段轨迹、课堂事件或结束原因，必须优先用它们解释本节课是如何推进、卡住、检核和结束的
-10. 只有当学生在本节课中表现出无提示下的独立应用，或纠正了先前错误理解后仍能稳定作答时，knowledgeItems.status 才可标记为 mastered；仅在引导下答对一次更适合 learning；仅被复习或回顾的内容不应伪装成本节新增掌握
-11. 情绪收尾：若本节课学生多次受挫（frustrated/confused 占比高或 sessionEvidence 情绪信号明确），actionPlan 第一条必须是安抚/重启类建议（如"先休息或回顾已会的小点，恢复状态后再继续"），summary 语气以认可投入为主，不苛责表现
-12. evaluationHighlights.strengths / improvements 必须能够解释 evaluation 的评分结论，不能和分数结论矛盾
-13. evaluation 原则上必须输出；若证据不足也要给出保守评分，把 confidence 设低，并在 reasoning 中说明证据不足；只有输入严重损坏时才允许 evaluation 缺失
+4. 零证据分支：若输入缺少会话消息（消息数 < 2）、知识状态为空或回合数 < 1，视为"会话未产生可评估内容"——此时 summary.topicSummary 只写"本次会话未产生可评估内容（未开始或未记录对话）"，actionPlan 只输出 1 条"重新开始一次学习会话后再生成总结"，evaluation 输出保守评分（sessionKtl/sessionLss/sessionLf 均取 3，confidence 取 0.1，reasoning 写"无对话证据"）；禁止生成任何主题性练习建议、禁止提及输入中不存在的主题词（如"深呼吸""公开表达焦虑"等未出现在输入中的内容）
+5. 只总结本节课内发生的进展、困难与下一步建议，不要把历史已掌握内容误写为本节新增成果
+6. knowledgeItems 优先复用输入 knowledgePoints 的名称、状态、progress
+7. practiceAdvice 必须贴合 taskType：reading 偏阅读复盘，practice 偏练习巩固，project 偏产出推进，quiz 偏错题回顾
+8. actionPlan 中至少 1 条必须是检索式自测（如"不看笔记，能说出 X 的三个要点吗"）；若本节课存在复习点（status=review）或已掌握但易遗忘的概念，必须额外给出 1 条"下一课开场检索题"原文（供 teaching-turn 开场承接，如"下一节开场先问：…"）
+9. summary 是给学生看的，禁止直接复述内部字段名或状态码，如 mastered、newlyMastered、avgUnderstanding、sessionKtl
+10. 如果输入提供了阶段轨迹、课堂事件或结束原因，必须优先用它们解释本节课是如何推进、卡住、检核和结束的
+11. 只有当学生在本节课中表现出无提示下的独立应用，或纠正了先前错误理解后仍能稳定作答时，knowledgeItems.status 才可标记为 mastered；仅在引导下答对一次更适合 learning；仅被复习或回顾的内容不应伪装成本节新增掌握
+12. 情绪收尾：若本节课学生多次受挫（frustrated/confused 占比高或 sessionEvidence 情绪信号明确），actionPlan 第一条必须是安抚/重启类建议（如"先休息或回顾已会的小点，恢复状态后再继续"），summary 语气以认可投入为主，不苛责表现
+13. evaluationHighlights.strengths / improvements 必须能够解释 evaluation 的评分结论，不能和分数结论矛盾
+14. evaluation 原则上必须输出；若证据不足也要给出保守评分，把 confidence 设低，并在 reasoning 中说明证据不足；只有输入严重损坏时才允许 evaluation 缺失
 
 ## 输出字段
 

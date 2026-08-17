@@ -268,7 +268,7 @@ async function loadDetail() {
   const activityOf = (b: typeof base) =>
     b
       ? [
-          { text: `最后登录：${b.lastLoginAt || '—'}`, time: '' },
+          { text: `最后登录：${b.lastLoginAt ? timeAgo(String(b.lastLoginAt)) : '—'}`, time: '' },
           ...(b.sessions ? [{ text: `累计会话 ${b.sessions} 次`, time: '' }] : [])
         ]
       : []

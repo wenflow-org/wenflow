@@ -101,7 +101,7 @@ import Shell from './Shell.vue';
 import SkillDrawer from './SkillDrawer.vue';
 import AdminGlossaryDrawer from './AdminGlossaryDrawer.vue';
 import CommandPalette from './CommandPalette.vue';
-import { intent, subPage, closeSkillDrawer } from './store';
+import { intent, subPage, closeSkillDrawer, type SubPageView } from './store';
 import { loadLiveData } from './live';
 import './shared.css';
 
@@ -126,6 +126,50 @@ const crumbTitle = computed(() => subPage.value?.id || '')
 /* —— 真路由化：scene ↔ URL /admin/:page 双向同步 —— */
 const route = useRoute()
 const router = useRouter()
+
+/* —— 二级页 subPage ↔ URL query（?view=&id=）双向同步 ——
+   二级页此前只存在内存 ref，刷新/深链/前进后退均无法寻址（URL 不显示）。
+   打开：openSubPage（任意组件）→ subPage 变化 → URL 补 query；
+   恢复：整页刷新 /admin/:page?view=virtual&id=xxx → query watch → subPage 恢复 → 详情组件直接渲染。 */
+const SUBPAGE_VIEWS = ['learner', 'virtual', 'user', 'session', 'session-real']
+// URL → subPage（深链/刷新/前进后退）
+watch(
+  () => [route.query.view, route.query.id] as [unknown, unknown],
+  ([v, id]) => {
+    const view = typeof v === 'string' ? v : ''
+    const sid = typeof id === 'string' ? id : ''
+    if (sid && SUBPAGE_VIEWS.includes(view)) {
+      if (!subPage.value || subPage.value.view !== view || subPage.value.id !== sid) {
+        subPage.value = { view: view as SubPageView, id: sid }
+      }
+    }
+  },
+  { immediate: true }
+)
+// subPage → URL（打开用 push：浏览器后退可回到列表；关闭用 replace：不污染历史栈；同页互斥无回环）
+watch(
+  subPage,
+  (sp) => {
+    const curView = typeof route.query.view === 'string' ? route.query.view : ''
+    const curId = typeof route.query.id === 'string' ? route.query.id : ''
+    if (sp) {
+      if (curView !== sp.view || curId !== sp.id) {
+        void router.push({ query: { ...route.query, view: sp.view, id: sp.id } })
+      }
+    } else if (curView || curId) {
+      // 场景切换中（scene watch 已 push 新路径、route 尚未落地）时跳过：
+      // 新路径本身不含 subPage query，此时 replace 会覆盖掉待处理的场景导航
+      const curPage = typeof route.params.page === 'string' ? route.params.page : ''
+      if (curPage === scene.value) {
+        const q = { ...route.query }
+        delete q.view
+        delete q.id
+        void router.replace({ query: q })
+      }
+    }
+  },
+  { immediate: true }
+)
 
 // URL → scene（浏览器前进/后退、深链直达）；非法 page 回退 overview 并修正 URL
 // immediate：整页直达 /admin/:page 时初始值也需校验（否则 URL 与 scene 脱节）

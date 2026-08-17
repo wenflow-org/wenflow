@@ -2,6 +2,7 @@ import { randomUUID as uuidv4 } from 'crypto'
 import { createHash } from 'crypto'
 import prisma from '../config/database'
 import { signProjectionToken, SYNTHETIC_CAPABILITIES } from '../utils/projection-token'
+import type { ResolvedRoute } from '../gateway/api-gateway'
 import type {
   BlackboxExperimentSummary,
   BlackboxPublicTraceEntry,
@@ -14,7 +15,9 @@ import type {
   RefereeStoryMeta,
   TaskCompletionCheckpoint,
   VirtualLearnerActorAuditInput,
-  VirtualLearnerRefereeInput
+  VirtualLearnerActorAuditOutput,
+  VirtualLearnerRefereeInput,
+  VirtualLearnerRefereeOutput
 } from './contracts'
 import { PlatformUserAdapter } from './platform-user-adapter'
 import { assertBlackboxSessionMode, VirtualSessionModeError } from './session-mode'
@@ -44,12 +47,39 @@ import { agentConfigService } from '../services/agentConfig.service'
 import { learningStateService } from '../services/learning/learning-state.service'
 import { logger } from '../utils/logger'
 
-function parseJson(value: string | null | undefined, fallback: any = {}) {
-  try {
-    return JSON.parse(value || '') || fallback
-  } catch {
-    return fallback
+import { safeJsonParse } from '../utils/safe-json'
+import type { SkillDefinition } from '../skills/protocol'
+import { asErrorLike } from './vlab-types'
+import type {
+  ActorProfileSnapshot,
+  BlackboxRunState,
+  ErrorLike,
+  LearnerPrivateStateTraceEntry,
+  ExperimentSnapshot,
+  SimulatorConfig,
+  SimulatorRoute,
+  SimulatorSkillOutput,
+  Simulators,
+  StageResults,
+  VirtualExperimentCommandRow,
+  VirtualLearnerProfileRow,
+  VirtualSessionRow,
+  VirtualSessionWithProfile
+} from './vlab-types'
+
+/** stageResults JSON 解析（带类型参数的 safeJsonParse，fallback 缺省空对象） */
+function parseStageResults(value: string | null | undefined, fallback: StageResults = {}): StageResults {
+  return safeJsonParse<StageResults>(value, fallback)
+}
+
+/** 安全读取深层字段（unknown 中间层不报错，返回 undefined 表示路径缺失） */
+function deepValue(value: Record<string, unknown>, path: string[]): unknown {
+  let cursor: unknown = value
+  for (const key of path) {
+    if (typeof cursor !== 'object' || cursor === null) return undefined
+    cursor = (cursor as Record<string, unknown>)[key]
   }
+  return cursor
 }
 
 const TERMINAL_SESSION_STATUSES = new Set(['completed', 'failed', 'abandoned'])
@@ -61,12 +91,12 @@ const BLACKBOX_SIMULATOR_RETRY_ATTEMPTS = 3
 const BLACKBOX_SIMULATOR_RETRY_DELAY_MS = 750
 
 function isPrismaErrorCode(error: unknown, code: string) {
-  return typeof error === 'object' && error !== null && (error as any).code === code
+  return typeof error === 'object' && error !== null && asErrorLike(error).code === code
 }
 
 function isLeaseDatabaseBusyError(error: unknown) {
   if (isPrismaErrorCode(error, 'P1008')) return true
-  const code = typeof error === 'object' && error !== null ? String((error as any).code || '') : ''
+  const code = typeof error === 'object' && error !== null ? String(asErrorLike(error).code || '') : ''
   const message = error instanceof Error ? error.message : String(error || '')
   return code === 'SQLITE_BUSY'
     || /SQLITE_BUSY|database (?:is|table is) locked|timed out|timeout/i.test(message)
@@ -191,7 +221,7 @@ export class BlackboxVirtualLearnerRunner {
 
     return this.runExclusive(options.sessionId, async () => {
       const session = await this.getSession(options.sessionId)
-      const state = parseJson(session.stageResults)
+      const state = parseStageResults(session.stageResults)
       assertBlackboxSessionMode(state)
       const runId = state.experiment.runId
       const experimentId = state.experiment.experimentId
@@ -253,7 +283,7 @@ export class BlackboxVirtualLearnerRunner {
         }
 
         const freshSession = await this.getSession(options.sessionId)
-        const freshState = parseJson(freshSession.stageResults)
+        const freshState = parseStageResults(freshSession.stageResults)
         let command = afterLease
         let projectionSequence = 0
         if (command) {
@@ -298,7 +328,7 @@ export class BlackboxVirtualLearnerRunner {
               }
               projectionSequence = this.projectionSequence(receipt.projectionKey)
             }
-          } catch (error: any) {
+          } catch (error: unknown) {
             if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) {
               throw error
             }
@@ -345,7 +375,7 @@ export class BlackboxVirtualLearnerRunner {
           const result = await work()
           await this.completeCommand(options.sessionId, command.id, result)
           return { result, reused: false }
-        } catch (error: any) {
+        } catch (error: unknown) {
           await this.recordCommandFailure(options.sessionId, command.id, error)
           throw error
         } finally {
@@ -381,7 +411,7 @@ export class BlackboxVirtualLearnerRunner {
 
   async initialize(sessionId: string, operatorId: string) {
     const session = await this.getSession(sessionId)
-    const stageResults = parseJson(session.stageResults)
+    const stageResults = parseStageResults(session.stageResults)
     if (stageResults.experiment?.mode && stageResults.experiment.mode !== 'blackbox-api') {
       throw new BlackboxRunStateError('当前会话已绑定其他实验模式', 'BLACKBOX_MODE_CONFLICT')
     }
@@ -422,7 +452,7 @@ export class BlackboxVirtualLearnerRunner {
     frictionBudget: string
     experimentId?: string | null
     parentRunId?: string | null
-    experimentSnapshotOverride?: Record<string, any> | null
+    experimentSnapshotOverride?: Record<string, unknown> | null
   }) {
     const experimentId = input.experimentId || `exp_${uuidv4()}`
     const runId = `run_${uuidv4()}`
@@ -467,7 +497,7 @@ export class BlackboxVirtualLearnerRunner {
 
   async getSnapshot(sessionId: string) {
     const session = await this.getSession(sessionId)
-    const state = parseJson(session.stageResults)
+    const state = parseStageResults(session.stageResults)
     assertBlackboxSessionMode(state)
     await this.assertSyntheticUserBinding(session)
     const teachingSessionIds = this.teachingSessionIds(state)
@@ -488,7 +518,7 @@ export class BlackboxVirtualLearnerRunner {
       observation: state.blackbox?.publicTrace?.slice(-1)[0]?.observation || null,
       control: state.blackbox?.control || {},
       publicTrace: state.blackbox?.publicTrace || [],
-      refereeTrace: this.compactTrace(state.blackbox?.refereeTrace, 120).map((entry: any) => ({
+      refereeTrace: this.compactTrace(state.blackbox?.refereeTrace, 120).map((entry: BlackboxRefereeTraceEntry) => ({
         timestamp: String(entry?.timestamp || ''),
         traceId: typeof entry?.traceId === 'string' ? entry.traceId : null,
         diagnostic: this.sanitizeDiagnostic(entry?.diagnostic)
@@ -532,7 +562,7 @@ export class BlackboxVirtualLearnerRunner {
 
   async referee(sessionId: string, operatorId: string) {
     const session = await this.getSession(sessionId)
-    const state = parseJson(session.stageResults)
+    const state = parseStageResults(session.stageResults)
     if (state.experiment?.mode !== 'blackbox-api') throw new Error('当前会话不是 blackbox-api 实验')
     if (!['completed', 'abandoned', 'failed'].includes(session.status)) {
       throw new Error('黑盒实验尚未结束，不能生成终局裁判报告')
@@ -546,7 +576,7 @@ export class BlackboxVirtualLearnerRunner {
       temperature: VIRTUAL_LEARNER_REFEREE_TEMPERATURE,
       maxTokens: VIRTUAL_LEARNER_REFEREE_MAX_TOKENS
     })
-    const existing = (state.blackbox?.refereeReports || []).find((item: any) =>
+    const existing = (state.blackbox?.refereeReports || []).find((item) =>
       item.runId === input.experimentSummary.runId && item.inputFingerprint === inputFingerprint && item.status === 'completed'
     )
     if (existing) return { ...existing, reused: true }
@@ -562,7 +592,7 @@ export class BlackboxVirtualLearnerRunner {
     }, () => executeSkill(virtualLearnerRefereeDefinition, input))
 
     const fresh = await this.getSession(sessionId)
-    const latestState = parseJson(fresh.stageResults, state)
+    const latestState = parseStageResults(fresh.stageResults, state)
     const refereeRecord = {
       id: `vref_${uuidv4()}`,
       runId: input.experimentSummary.runId,
@@ -597,7 +627,7 @@ export class BlackboxVirtualLearnerRunner {
 
   async actorAudit(sessionId: string, operatorId: string) {
     const session = await this.getSession(sessionId)
-    const state = parseJson(session.stageResults)
+    const state = parseStageResults(session.stageResults)
     if (state.experiment?.mode !== 'blackbox-api') throw new Error('当前会话不是 blackbox-api 实验')
     if (!['completed', 'abandoned', 'failed'].includes(session.status)) {
       throw new Error('黑盒实验尚未结束，不能生成角色保真报告')
@@ -611,7 +641,7 @@ export class BlackboxVirtualLearnerRunner {
       temperature: VIRTUAL_LEARNER_ACTOR_AUDITOR_TEMPERATURE,
       maxTokens: VIRTUAL_LEARNER_ACTOR_AUDITOR_MAX_TOKENS
     })
-    const existing = (state.blackbox?.actorAuditReports || []).find((item: any) =>
+    const existing = (state.blackbox?.actorAuditReports || []).find((item) =>
       item.runId === input.experimentSummary.runId && item.inputFingerprint === inputFingerprint && item.status === 'completed'
     )
     if (existing) return { ...existing, reused: true }
@@ -627,7 +657,7 @@ export class BlackboxVirtualLearnerRunner {
     }, () => executeSkill(virtualLearnerActorAuditorDefinition, input))
 
     const fresh = await this.getSession(sessionId)
-    const latestState = parseJson(fresh.stageResults, state)
+    const latestState = parseStageResults(fresh.stageResults, state)
     const auditRecord = {
       id: `vaudit_${uuidv4()}`,
       runId: input.experimentSummary.runId,
@@ -727,12 +757,12 @@ export class BlackboxVirtualLearnerRunner {
         // 故事当次需求经 Goal 开场传入正式链路；不在此改 Path
         const demand = resolveStorySessionDemand({
           story,
-          profileLearningGoal: (learner as any)?.learningGoal,
+          profileLearningGoal: learner?.learningGoal,
         })
         if (!demand.text) throw new Error('虚拟学习者缺少 Goal 开场信息：请绑定故事诉求或画像长期倾向')
         action = { type: 'chat', text: demand.text }
       } else if (latest.stage === 'goal') {
-        const history = this.visibleHistory(state).map((item: any) => ({
+        const history = this.visibleHistory(state).map((item) => ({
           role: item.role === 'platform' ? 'goal_agent' : 'learner',
           content: item.content
         }))
@@ -744,7 +774,7 @@ export class BlackboxVirtualLearnerRunner {
             story,
             visibleContext: {
               history,
-              lastGoalAgentMessage: [...history].reverse().find((item: any) => item.role === 'goal_agent')?.content || ''
+              lastGoalAgentMessage: [...history].reverse().find((item) => item.role === 'goal_agent')?.content || ''
             },
             currentPhase: latest.availableActions.includes('confirm_proposal') ? 'proposal_evaluation' : 'understanding',
             previousLearnerState: state.blackbox?.learnerPrivateState?.goal || null,
@@ -773,7 +803,7 @@ export class BlackboxVirtualLearnerRunner {
         }
         action = { type: 'start_learning', taskId: latest.visibleTask?.id }
       } else if (latest.stage === 'teaching') {
-        const history = this.visibleHistory(state).map((item: any) => ({
+        const history = this.visibleHistory(state).map((item) => ({
           role: item.role === 'platform' ? 'teacher' : 'learner',
           content: item.content
         }))
@@ -785,9 +815,9 @@ export class BlackboxVirtualLearnerRunner {
             story,
             visibleContext: {
               history,
-              lastTeacherMessage: [...history].reverse().find((item: any) => item.role === 'teacher')?.content || ''
+              lastTeacherMessage: [...history].reverse().find((item) => item.role === 'teacher')?.content || ''
             },
-            currentPhase: state.blackbox?.learnerPrivateState?.teaching?.phaseFocus || 'trying',
+            currentPhase: (state.blackbox?.learnerPrivateState?.teaching as Record<string, unknown> | undefined)?.phaseFocus || 'trying',
             previousLearnerState: state.blackbox?.learnerPrivateState?.teaching || null,
             currentTask: latest.visibleTask || null,
             knowledgeSnapshot: latest.visibleTask?.linkedConcept
@@ -828,7 +858,7 @@ export class BlackboxVirtualLearnerRunner {
 
   private async context(sessionId: string, operatorId: string) {
     const session = await this.getSession(sessionId)
-    const state = parseJson(session.stageResults)
+    const state = parseStageResults(session.stageResults)
     assertBlackboxSessionMode(state)
     const token = signProjectionToken({
       targetUserId: session.userId,
@@ -850,13 +880,13 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   private async persist(
-    session: any,
-    state: any,
+    session: VirtualSessionRow,
+    state: StageResults,
     result: PlatformInteractionResult,
     projectionCommandId?: string
   ) {
     const fresh = await this.getSession(session.id)
-    const latestState = parseJson(fresh.stageResults, state)
+    const latestState = parseStageResults(fresh.stageResults, state)
     const projectedCommandIds = Array.isArray(latestState.blackbox?.projectedCommandIds)
       ? latestState.blackbox.projectedCommandIds : []
     if (projectionCommandId && projectedCommandIds.includes(projectionCommandId)) return result
@@ -864,7 +894,7 @@ export class BlackboxVirtualLearnerRunner {
     const previousControl = latestState.blackbox?.control || {}
     const control = Object.fromEntries(
       Object.entries({ ...previousControl, ...result.control }).filter(([, value]) => value !== undefined)
-    )
+    ) as PlatformControlReceipt
     if (control.terminalReason === 'completed' && control.runCompleted !== true) delete control.terminalReason
     const publicTrace = [...(latestState.blackbox?.publicTrace || []), {
       timestamp: new Date().toISOString(),
@@ -898,14 +928,14 @@ export class BlackboxVirtualLearnerRunner {
       nextState.blackbox.control = control
     }
     if (result.diagnostic?.resetLearningPrivateState === true && nextState.blackbox?.learnerPrivateState?.teaching) {
-      const completedTaskState = nextState.blackbox.learnerPrivateState.teaching
+      const completedTaskState = nextState.blackbox.learnerPrivateState.teaching as Record<string, unknown>
       const privateStateTrace = Array.isArray(nextState.blackbox.learnerPrivateStateTrace)
         ? nextState.blackbox.learnerPrivateStateTrace : []
-      const completedTaskTrace = [...privateStateTrace].reverse().find((entry: any) =>
+      const completedTaskTrace = [...privateStateTrace].reverse().find((entry) =>
         entry?.stage === 'teaching' && (!entry?.taskId || entry.taskId === previousControl.taskId)
       )
       const completedTaskId = previousControl.taskId || fresh.currentTaskId || null
-      const alreadyArchived = privateStateTrace.some((entry: any) =>
+      const alreadyArchived = privateStateTrace.some((entry) =>
         entry?.stage === 'teaching' && entry?.taskId === completedTaskId && entry?.transition === 'task_completed'
       )
       nextState.blackbox.learnerPrivateStateTrace = (alreadyArchived ? privateStateTrace : [...privateStateTrace, {
@@ -948,15 +978,15 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   private async projectPlatformResult(
-    session: any,
-    state: any,
+    session: VirtualSessionRow,
+    state: StageResults,
     result: PlatformInteractionResult,
     action?: LearnerAction
   ) {
     try {
       const projection = await this.journalProjectionReceipt(session.id, result, action)
       return await this.persist(session, state, result, projection?.projectionKey)
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof BlackboxReconciliationPendingError) throw error
       if (error instanceof BlackboxLeaseLostError) throw error
       if (error instanceof BlackboxDatabaseBusyError) throw error
@@ -994,7 +1024,7 @@ export class BlackboxVirtualLearnerRunner {
         finalProjection: receipt.finalProjection,
         commandRowId: context.commandRowId
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) throw error
       throw this.reconciliationPendingError(error)
     }
@@ -1018,7 +1048,7 @@ export class BlackboxVirtualLearnerRunner {
         data: { resultJson: JSON.stringify(receipt) }
       })
       return { commandRowId: context.commandRowId, projectionKey }
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) throw error
       throw this.reconciliationPendingError(error)
     }
@@ -1029,8 +1059,8 @@ export class BlackboxVirtualLearnerRunner {
     return Number.isInteger(suffix) && suffix > 0 ? suffix : 0
   }
 
-  private reconciliationPendingError(error: any) {
-    const detail = String(error?.message || '虚拟会话持久化失败').slice(0, 500)
+  private reconciliationPendingError(error: unknown) {
+    const detail = String(asErrorLike(error).message || '虚拟会话持久化失败').slice(0, 500)
     return new BlackboxReconciliationPendingError(
       `平台操作已完成，但黑盒会话持久化失败，请使用相同 Idempotency-Key 重试对账：${detail}`,
       error
@@ -1044,12 +1074,12 @@ export class BlackboxVirtualLearnerRunner {
    * 操作——与同 key 重试的对账路径完全一致，幂等语义不变。
    * 无完整回执（checkpoint / 未终局 step）返回 false，保持「请使用原 Idempotency-Key 重试」语义。
    */
-  private async tryResolveOrderingBarrier(sessionId: string, command: any): Promise<boolean> {
+  private async tryResolveOrderingBarrier(sessionId: string, command: VirtualExperimentCommandRow): Promise<boolean> {
     const receipt = this.pendingProjectionReceipt(command)
     if (!receipt || receipt.receiptKind !== 'result' || receipt.finalProjection !== true) return false
     try {
       const session = await this.getSession(sessionId)
-      const state = parseJson(session.stageResults)
+      const state = parseStageResults(session.stageResults)
       await this.persist(session, state, receipt.platformResult, receipt.projectionKey)
       await prisma.virtual_experiment_commands.update({
         where: { id: command.id },
@@ -1066,7 +1096,7 @@ export class BlackboxVirtualLearnerRunner {
         projectionKey: receipt.projectionKey
       })
       return true
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) throw error
       const reconciliationError = error instanceof BlackboxReconciliationPendingError
         ? error
@@ -1097,9 +1127,9 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private async recordCommandFailure(sessionId: string, commandId: string, error: any) {
+  private async recordCommandFailure(sessionId: string, commandId: string, error: unknown) {
     if (error instanceof BlackboxLeaseLostError) return
-    let current: any = null
+    let current: VirtualExperimentCommandRow | null = null
     try {
       current = await prisma.virtual_experiment_commands.findUnique({ where: { id: commandId } })
     } catch {
@@ -1116,10 +1146,10 @@ export class BlackboxVirtualLearnerRunner {
         data: {
           status: 'failed',
           errorJson: JSON.stringify({
-            name: error?.name || 'Error',
-            message: error?.message || '黑盒命令执行失败',
-            code: error?.code || null,
-            statusCode: error?.statusCode || null
+            name: asErrorLike(error).name || 'Error',
+            message: asErrorLike(error).message || '黑盒命令执行失败',
+            code: asErrorLike(error).code || null,
+            statusCode: asErrorLike(error).statusCode || null
           }),
           completedAt: new Date()
         }
@@ -1129,19 +1159,19 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private assertMutableSession(session: any) {
+  private assertMutableSession(session: VirtualSessionRow) {
     if (TERMINAL_SESSION_STATUSES.has(session.status)) {
       throw new BlackboxRunStateError('当前黑盒实验已经结束，不能继续修改', 'BLACKBOX_RUN_TERMINAL')
     }
   }
 
-  private reuseCommand<T>(command: any, kind: string, request: unknown): { result: T; reused: boolean } {
+  private reuseCommand<T>(command: VirtualExperimentCommandRow, kind: string, request: unknown): { result: T; reused: boolean } {
     this.assertCommandMatches(command, kind, request)
     if (command.status === 'completed' && command.resultJson) {
-      return { result: parseJson(command.resultJson, null) as T, reused: true }
+      return { result: safeJsonParse(command.resultJson, null) as T, reused: true }
     }
     if (command.status === 'failed') {
-      const error = parseJson(command.errorJson, {})
+      const error = safeJsonParse<{ message?: string }>(command.errorJson, {})
       throw new BlackboxRunStateError(
         `相同命令此前执行失败：${error.message || '未知错误'}`,
         'BLACKBOX_COMMAND_PREVIOUSLY_FAILED'
@@ -1150,24 +1180,24 @@ export class BlackboxVirtualLearnerRunner {
     throw new BlackboxRunStateError('相同黑盒命令正在执行或结果待对账', 'BLACKBOX_COMMAND_IN_PROGRESS')
   }
 
-  private assertCommandMatches(command: any, kind: string, request: unknown) {
+  private assertCommandMatches(command: VirtualExperimentCommandRow, kind: string, request: unknown) {
     if (command.kind !== kind || command.requestJson !== JSON.stringify(request ?? null)) {
       throw new BlackboxRunStateError('Idempotency-Key 已用于其他黑盒命令', 'BLACKBOX_COMMAND_ID_REUSED')
     }
   }
 
-  private isReconciliationPendingCommand(command: any): boolean {
+  private isReconciliationPendingCommand(command: VirtualExperimentCommandRow): boolean {
     if (this.pendingProjectionReceipt(command)) return true
     return command?.status === 'failed'
-      && parseJson(command.errorJson, {}).code === 'BLACKBOX_RECONCILIATION_PENDING'
+      && safeJsonParse<{ code?: string }>(command.errorJson, {}).code === 'BLACKBOX_RECONCILIATION_PENDING'
   }
 
-  private isCommandOrderingBarrier(command: any): boolean {
+  private isCommandOrderingBarrier(command: VirtualExperimentCommandRow): boolean {
     return command?.status === 'processing' || this.isReconciliationPendingCommand(command)
   }
 
-  private pendingProjectionReceipt(command: any): PendingProjectionReceipt | null {
-    const receipt = parseJson(command?.resultJson, null)
+  private pendingProjectionReceipt(command: VirtualExperimentCommandRow): PendingProjectionReceipt | null {
+    const receipt = safeJsonParse(command?.resultJson, null)
     if (receipt?.projectionPending !== true || typeof receipt.projectionKey !== 'string'
       || !receipt.projectionKey || typeof receipt.finalProjection !== 'boolean') return null
     if (receipt.receiptKind === 'result' && receipt.platformResult && 'commandResult' in receipt) {
@@ -1340,8 +1370,8 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   private async completeCurrentTask(
-    session: any,
-    state: any,
+    session: VirtualSessionRow,
+    state: StageResults,
     adapter: PlatformUserAdapter,
     control: PlatformControlReceipt,
     latestObservation?: LearnerObservation,
@@ -1373,8 +1403,8 @@ export class BlackboxVirtualLearnerRunner {
     if (checkpoint.status !== 'task_completed') {
       try {
         taskResult = await adapter.completeTask(taskId)
-      } catch (error: any) {
-        const lastError = String(error?.message || '任务完成同步失败').slice(0, 1000)
+      } catch (error: unknown) {
+        const lastError = String(asErrorLike(error).message || '任务完成同步失败').slice(0, 1000)
         checkpoint = {
           ...checkpoint,
           status: 'teaching_finalized',
@@ -1397,7 +1427,7 @@ export class BlackboxVirtualLearnerRunner {
     let pathResult: PlatformInteractionResult
     try {
       pathResult = await adapter.getPath(learningPathId)
-    } catch (error: any) {
+    } catch (error: unknown) {
       return this.taskCompletionRetryResult(
         control,
         checkpoint,
@@ -1426,13 +1456,13 @@ export class BlackboxVirtualLearnerRunner {
 
   private async persistTaskCompletionCheckpoint(
     sessionId: string,
-    state: any,
+    state: StageResults,
     checkpoint: TaskCompletionCheckpoint,
     projectionKey?: string
   ) {
     const fresh = await this.getSession(sessionId)
     this.assertMutableSession(fresh)
-    const latestState = parseJson(fresh.stageResults, state)
+    const latestState = parseStageResults(fresh.stageResults, state)
     const projectedCommandIds = Array.isArray(latestState.blackbox?.projectedCommandIds)
       ? latestState.blackbox.projectedCommandIds : []
     if (projectionKey && projectedCommandIds.includes(projectionKey)) return
@@ -1460,13 +1490,13 @@ export class BlackboxVirtualLearnerRunner {
 
   private async persistTaskCompletionCheckpointAfterExternal(
     sessionId: string,
-    state: any,
+    state: StageResults,
     checkpoint: TaskCompletionCheckpoint
   ) {
     try {
       const receipt = await this.journalCheckpointReceipt(sessionId, checkpoint)
       await this.persistTaskCompletionCheckpoint(sessionId, state, checkpoint, receipt?.projectionKey)
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof BlackboxReconciliationPendingError) throw error
       if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) throw error
       throw this.reconciliationPendingError(error)
@@ -1478,10 +1508,10 @@ export class BlackboxVirtualLearnerRunner {
     checkpoint: TaskCompletionCheckpoint,
     latestObservation: LearnerObservation | undefined,
     teachingEndResult: PlatformInteractionResult | null,
-    error: any,
+    error: unknown,
     taskCompleted = false
   ): PlatformInteractionResult {
-    const errorMessage = String(error?.message || '任务完成同步失败').slice(0, 300)
+    const errorMessage = String(asErrorLike(error).message || '任务完成同步失败').slice(0, 300)
     const visibleMessage = taskCompleted
       ? `任务已完成，但学习路径刷新失败：${errorMessage}。请重试刷新学习路径。`
       : `课堂已结束，但任务完成同步失败：${errorMessage}。请重试完成任务。`
@@ -1510,9 +1540,9 @@ export class BlackboxVirtualLearnerRunner {
         completedTask: {
           status: taskCompleted ? 'completed_path_refresh_pending' : 'pending_retry',
           error: {
-            name: String(error?.name || 'Error'),
+            name: String(asErrorLike(error).name || 'Error'),
             message: errorMessage,
-            status: typeof error?.status === 'number' ? error.status : null
+            status: typeof asErrorLike(error).status === 'number' ? asErrorLike(error).status : null
           }
         }
       }
@@ -1540,7 +1570,7 @@ export class BlackboxVirtualLearnerRunner {
   private async executeWithFailurePersistence<T>(sessionId: string, code: string, work: () => Promise<T>): Promise<T> {
     try {
       return await work()
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (!(error instanceof BlackboxRunStateError)
         && !(error instanceof VirtualSessionModeError)
         && !(error instanceof BlackboxReconciliationPendingError)
@@ -1553,13 +1583,13 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private async persistUnexpectedFailure(sessionId: string, code: string, error: any) {
+  private async persistUnexpectedFailure(sessionId: string, code: string, error: unknown) {
     try {
       const session = await this.getSession(sessionId)
       if (TERMINAL_SESSION_STATUSES.has(session.status)) return
-      const state = parseJson(session.stageResults)
+      const state = parseStageResults(session.stageResults)
       assertBlackboxSessionMode(state)
-      const message = String(error?.message || '黑盒实验执行失败').slice(0, 1000)
+      const message = String(asErrorLike(error).message || '黑盒实验执行失败').slice(0, 1000)
       await this.persist(session, state, {
         observation: {
           stage: 'error',
@@ -1575,9 +1605,9 @@ export class BlackboxVirtualLearnerRunner {
         },
         diagnostic: {
           error: {
-            name: String(error?.name || 'Error'),
+            name: String(asErrorLike(error).name || 'Error'),
             message,
-            status: typeof error?.status === 'number' ? error.status : null
+            status: typeof asErrorLike(error).status === 'number' ? asErrorLike(error).status : null
           }
         }
       })
@@ -1586,23 +1616,23 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private visibleHistory(state: any) {
-    return (state.blackbox?.publicTrace || []).flatMap((entry: any) => entry?.observation?.visibleMessages || [])
+  private visibleHistory(state: StageResults): Array<{ role: string; content: string }> {
+    return (state.blackbox?.publicTrace || []).flatMap((entry) => entry?.observation?.visibleMessages || [])
   }
 
-  private latestRefereeReport(state: any) {
+  private latestRefereeReport(state: StageResults) {
     const reports = Array.isArray(state.blackbox?.refereeReports) ? state.blackbox.refereeReports : []
     const latestId = state.blackbox?.latestRefereeReportId
-    return reports.find((item: any) => item.id === latestId) || reports[reports.length - 1] || null
+    return reports.find((item) => item.id === latestId) || reports[reports.length - 1] || null
   }
 
-  private latestActorAuditReport(state: any) {
+  private latestActorAuditReport(state: StageResults) {
     const reports = Array.isArray(state.blackbox?.actorAuditReports) ? state.blackbox.actorAuditReports : []
     const latestId = state.blackbox?.latestActorAuditReportId
-    return reports.find((item: any) => item.id === latestId) || reports[reports.length - 1] || null
+    return reports.find((item) => item.id === latestId) || reports[reports.length - 1] || null
   }
 
-  private teachingSessionIds(state: any): string[] {
+  private teachingSessionIds(state: StageResults): string[] {
     const ids = new Set<string>()
     const trace = Array.isArray(state.blackbox?.publicTrace) ? state.blackbox.publicTrace : []
     for (const entry of trace) {
@@ -1614,7 +1644,7 @@ export class BlackboxVirtualLearnerRunner {
     return [...ids]
   }
 
-  private async assertSyntheticUserBinding(session: any) {
+  private async assertSyntheticUserBinding(session: VirtualSessionRow) {
     const profile = await prisma.virtual_learner_profiles.findUnique({
       where: { id: session.virtualProfileId },
       select: { userId: true }
@@ -1636,14 +1666,14 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private actorStateTimeline(state: any) {
+  private actorStateTimeline(state: StageResults) {
     const trace = Array.isArray(state.blackbox?.learnerPrivateStateTrace)
       ? state.blackbox.learnerPrivateStateTrace.slice(-120) : []
-    return trace.map((entry: any, index: number) => {
+    return trace.map((entry: LearnerPrivateStateTraceEntry, index: number) => {
       const stage = entry?.stage === 'teaching' ? 'teaching' : 'goal'
-      const actorState = entry?.state && typeof entry.state === 'object' ? entry.state : {}
-      const feedback = actorState.learnerFeedback && typeof actorState.learnerFeedback === 'object'
-        ? actorState.learnerFeedback : {}
+      const actorState = (entry?.state && typeof entry.state === 'object' ? entry.state : {}) as Record<string, unknown>
+      const feedback = (actorState.learnerFeedback && typeof actorState.learnerFeedback === 'object'
+        ? actorState.learnerFeedback : {}) as Record<string, unknown>
       const metricKeys = stage === 'goal'
         ? ['feltUnderstood', 'problemClarity', 'proposalFit', 'taskRelevance', 'executionConcern', 'goalReadiness']
         : ['taskUnderstanding', 'conceptualMastery', 'proceduralMastery', 'misconceptionRisk', 'helpSeekingReadiness', 'cognitiveLoad']
@@ -1665,7 +1695,7 @@ export class BlackboxVirtualLearnerRunner {
         ? actorState.remainingUnknowns
         : Array.isArray(feedback.remainingBlockers) && feedback.remainingBlockers.length
           ? feedback.remainingBlockers : actorState.remainingBlockers
-      const visibleSignal = this.timelineText(entry?.visibleSignal || actorState?.debug?.visibleSignal, 240)
+      const visibleSignal = this.timelineText(entry?.visibleSignal || deepValue(actorState, ['debug', 'visibleSignal']), 240)
 
       return {
         sequence: Number.isInteger(entry?.sequence) ? entry.sequence : index,
@@ -1675,12 +1705,12 @@ export class BlackboxVirtualLearnerRunner {
         emotion: this.timelineText(entry?.emotion || actorState.emotion, 64),
         degraded: entry?.degraded === true || actorState.degraded === true || visibleSignal === 'fallback',
         transition: this.timelineText(entry?.transition, 64),
-        stateChangeReason: this.timelineText(entry?.stateChangeReason || actorState?.debug?.stateChangeReason, 320),
+        stateChangeReason: this.timelineText(entry?.stateChangeReason || deepValue(actorState, ['debug', 'stateChangeReason']), 320),
         visibleSignal,
         metrics,
         flags,
         blockers: Array.isArray(blockers)
-          ? blockers.map((item: any) => this.timelineText(item, 240)).filter(Boolean).slice(0, 5) : [],
+          ? blockers.map((item: unknown) => this.timelineText(item, 240)).filter(Boolean).slice(0, 5) : [],
         generatedAt: this.timelineText(entry?.generatedAt, 64)
       }
     })
@@ -1699,10 +1729,10 @@ export class BlackboxVirtualLearnerRunner {
     return normalized ? normalized.slice(0, limit) : null
   }
 
-  private async buildRefereeInput(session: any, state: any): Promise<VirtualLearnerRefereeInput> {
+  private async buildRefereeInput(session: VirtualSessionRow, state: StageResults): Promise<VirtualLearnerRefereeInput> {
     const { rawPublic, publicTrace, summary } = this.buildSharedAuditTrace(session, state)
     const rawReferee = Array.isArray(state.blackbox?.refereeTrace) ? state.blackbox.refereeTrace : []
-    const refereeTrace = this.compactTrace(rawReferee, 120).map((entry: any) => ({
+    const refereeTrace = this.compactTrace(rawReferee, 120).map((entry: BlackboxRefereeTraceEntry) => ({
       timestamp: String(entry?.timestamp || ''),
       traceId: typeof entry?.traceId === 'string' ? entry.traceId : null,
       diagnostic: this.sanitizeDiagnostic(entry?.diagnostic)
@@ -1723,20 +1753,20 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   /** 平行通道：故事元数据 + 当次诉求（不进入 Goal/Path 主链，只给裁判评估「目标理解」） */
-  private async buildRefereeStoryMeta(session: any, state: any): Promise<RefereeStoryMeta | null> {
+  private async buildRefereeStoryMeta(session: VirtualSessionRow, state: StageResults): Promise<RefereeStoryMeta | null> {
     const snapshot = await this.getExperimentSnapshot(session, state)
     const story = snapshot.story && typeof snapshot.story === 'object' ? snapshot.story : null
     const learner = snapshot.actorProfile && typeof snapshot.actorProfile === 'object' ? snapshot.actorProfile : {}
     const demand = resolveStorySessionDemand({
       story,
-      profileLearningGoal: (learner as any)?.learningGoal,
+      profileLearningGoal: learner?.learningGoal,
     })
     if (!story && !demand.text) return null
-    const goalSeed = story?.goalSeed && typeof story.goalSeed === 'object' ? story.goalSeed : {}
+    const goalSeed = (story?.goalSeed && typeof story.goalSeed === 'object' ? story.goalSeed : {}) as Record<string, unknown>
     return {
-      personaSummary: (learner as any)?.profile?.occupation
-        ? `${(learner as any)?.learningGoal || ''}｜${(learner as any).profile.occupation}`
-        : (learner as any)?.learningGoal || null,
+      personaSummary: typeof learner?.profile?.occupation === 'string'
+        ? `${learner?.learningGoal || ''}｜${learner.profile.occupation}`
+        : learner?.learningGoal || null,
       storyId: demand.storyId,
       storyTitle: this.timelineText(story?.title, 200),
       surfaceGoal: this.timelineText(goalSeed.surfaceGoal, 500),
@@ -1748,7 +1778,7 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   /** 数据完整性：平台侧教学指标 / wrapup 产出情况（供裁判 evidenceSufficiency 判断） */
-  private async buildRefereeMetricCompleteness(session: any, state: any): Promise<RefereeMetricCompleteness> {
+  private async buildRefereeMetricCompleteness(session: VirtualSessionRow, state: StageResults): Promise<RefereeMetricCompleteness> {
     const base = { available: true, teachingSessions: 0, wrapupPresent: 0, metricsPresent: 0, lssPresent: 0, degraded: false, error: null as string | null }
     try {
       const teachingSessionIds = this.teachingSessionIds(state)
@@ -1773,25 +1803,25 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private async buildActorAuditInput(session: any, state: any): Promise<VirtualLearnerActorAuditInput> {
+  private async buildActorAuditInput(session: VirtualSessionRow, state: StageResults): Promise<VirtualLearnerActorAuditInput> {
     const snapshot = await this.getExperimentSnapshot(session, state)
     const { publicTrace, summary } = this.buildSharedAuditTrace(session, state)
     return {
-      actorProfile: this.sanitizeAuditValue(snapshot.actorProfile, 0),
-      story: snapshot.story && typeof snapshot.story === 'object' ? this.sanitizeAuditValue(snapshot.story, 0) : null,
+      actorProfile: this.sanitizeAuditValue(snapshot.actorProfile, 0) as VirtualLearnerActorAuditInput['actorProfile'],
+      story: (snapshot.story && typeof snapshot.story === 'object' ? this.sanitizeAuditValue(snapshot.story, 0) : null) as Record<string, unknown> | null,
       frictionBudget: snapshot.frictionBudget as VirtualLearnerActorAuditInput['frictionBudget'],
       learnerPrivateState: this.sanitizeAuditValue({
         latest: state.blackbox?.learnerPrivateState || {},
         trace: state.blackbox?.learnerPrivateStateTrace || []
-      }, 0),
+      }, 0) as Record<string, unknown>,
       publicTrace: publicTrace.map(entry => ({ timestamp: entry.timestamp, observation: entry.observation })),
       experimentSummary: summary
     }
   }
 
-  private buildSharedAuditTrace(session: any, state: any) {
+  private buildSharedAuditTrace(session: VirtualSessionRow, state: StageResults) {
     const rawPublic = Array.isArray(state.blackbox?.publicTrace) ? state.blackbox.publicTrace : []
-    const publicTrace = this.compactTrace(rawPublic, 120).map((entry: any) => ({
+    const publicTrace = this.compactTrace(rawPublic, 120).map((entry: BlackboxPublicTraceEntry) => ({
       timestamp: String(entry?.timestamp || ''),
       observation: this.sanitizeObservation(entry?.observation),
       control: entry?.control && typeof entry.control === 'object' ? entry.control : {}
@@ -1846,13 +1876,13 @@ export class BlackboxVirtualLearnerRunner {
 
   // 私有状态轨迹（learnerPrivateStateTrace）的展示序列化：去掉 state 内部的大对象重影，
   // 只保留前端"私有状态时间线"需要的索引字段与精简 metrics/flags。
-  private compactLearnerPrivateStateTrace(raw: any): Array<Record<string, unknown>> {
-    const trace = Array.isArray(raw) ? raw.slice(-120) : []
-    return trace.map((entry: any, index: number) => {
+  private compactLearnerPrivateStateTrace(raw: unknown): Array<Record<string, unknown>> {
+    const trace = Array.isArray(raw) ? (raw as LearnerPrivateStateTraceEntry[]).slice(-120) : []
+    return trace.map((entry: LearnerPrivateStateTraceEntry, index: number) => {
       const stage = entry?.stage === 'teaching' ? 'teaching' : 'goal'
-      const actorState = entry?.state && typeof entry.state === 'object' ? entry.state : {}
-      const feedback = actorState.learnerFeedback && typeof actorState.learnerFeedback === 'object'
-        ? actorState.learnerFeedback : {}
+      const actorState = (entry?.state && typeof entry.state === 'object' ? entry.state : {}) as Record<string, unknown>
+      const feedback = (actorState.learnerFeedback && typeof actorState.learnerFeedback === 'object'
+        ? actorState.learnerFeedback : {}) as Record<string, unknown>
       const metricKeys = stage === 'goal'
         ? ['feltUnderstood', 'problemClarity', 'proposalFit', 'taskRelevance', 'executionConcern', 'goalReadiness']
         : ['taskUnderstanding', 'conceptualMastery', 'proceduralMastery', 'misconceptionRisk', 'helpSeekingReadiness', 'cognitiveLoad']
@@ -1885,7 +1915,7 @@ export class BlackboxVirtualLearnerRunner {
         stateChangeReason: this.timelineText(entry?.stateChangeReason, 320),
         metrics,
         flags,
-        blockers: Array.isArray(blockers) ? blockers.map((item: any) => this.timelineText(item, 240)).filter(Boolean).slice(0, 5) : [],
+        blockers: Array.isArray(blockers) ? blockers.map((item: unknown) => this.timelineText(item, 240)).filter(Boolean).slice(0, 5) : [],
         generatedAt: this.timelineText(entry?.generatedAt, 64)
       }
     })
@@ -1899,29 +1929,38 @@ export class BlackboxVirtualLearnerRunner {
     return createHash('sha256').update(JSON.stringify(value) ?? String(value)).digest('hex')
   }
 
-  private sanitizeObservation(value: any): LearnerObservation {
-    const stage = ['goal', 'path', 'teaching', 'completed', 'error'].includes(value?.stage) ? value.stage : 'error'
+  private sanitizeObservation(value: unknown): LearnerObservation {
+    const v = (value ?? {}) as {
+      stage?: string
+      visibleMessages?: Array<{ role?: string; content?: unknown }>
+      visibleChoices?: unknown[]
+      visiblePath?: LearnerObservation['visiblePath']
+      visibleTask?: LearnerObservation['visibleTask']
+      availableActions?: string[]
+      lastActionResult?: LearnerObservation['lastActionResult']
+    }
+    const stage = ['goal', 'path', 'teaching', 'completed', 'error'].includes(v?.stage || '') ? v.stage : 'error'
     return {
-      stage,
-      visibleMessages: (Array.isArray(value?.visibleMessages) ? value.visibleMessages : []).slice(0, 30).map((item: any) => ({
+      stage: stage as LearnerObservation['stage'],
+      visibleMessages: (Array.isArray(v?.visibleMessages) ? v.visibleMessages : []).slice(0, 30).map((item) => ({
         role: item?.role === 'learner' ? 'learner' : 'platform',
         content: String(item?.content || '').slice(0, 1200)
       })),
-      visibleChoices: Array.isArray(value?.visibleChoices) ? value.visibleChoices.map((item: any) => String(item).slice(0, 160)).slice(0, 12) : undefined,
-      visiblePath: value?.visiblePath || undefined,
-      visibleTask: value?.visibleTask || undefined,
-      availableActions: Array.isArray(value?.availableActions) ? value.availableActions : [],
-      lastActionResult: value?.lastActionResult || undefined
+      visibleChoices: Array.isArray(v?.visibleChoices) ? v.visibleChoices.map((item) => String(item).slice(0, 160)).slice(0, 12) : undefined,
+      visiblePath: v?.visiblePath || undefined,
+      visibleTask: v?.visibleTask || undefined,
+      availableActions: (Array.isArray(v?.availableActions) ? v.availableActions : []) as LearnerAction['type'][],
+      lastActionResult: v?.lastActionResult || undefined
     }
   }
 
-  private sanitizeDiagnostic(value: any): Record<string, unknown> | null {
+  private sanitizeDiagnostic(value: unknown): Record<string, unknown> | null {
     if (!value || typeof value !== 'object') return null
     const allowedKeys = [
       'schemaVersion', 'renderHints', 'generationStatus', 'canStartLearning', 'replan',
       'analysis', 'state', 'strategies', 'completionCandidate', 'endResult', 'completedTask', 'task'
     ]
-    const sanitize = (item: any, depth = 0): any => {
+    const sanitize = (item: unknown, depth = 0): unknown => {
       if (depth > 3) return '[truncated]'
       if (item === null || typeof item === 'number' || typeof item === 'boolean') return item
       if (typeof item === 'string') return item.slice(0, 1000)
@@ -1931,10 +1970,11 @@ export class BlackboxVirtualLearnerRunner {
       }
       return String(item)
     }
-    return Object.fromEntries(allowedKeys.filter(key => key in value).map(key => [key, sanitize(value[key])]))
+    const v = (value ?? {}) as Record<string, unknown>
+    return Object.fromEntries(allowedKeys.filter(key => key in v).map(key => [key, sanitize(v[key])]))
   }
 
-  private sanitizeAuditValue(value: any, depth: number): any {
+  private sanitizeAuditValue(value: unknown, depth: number): unknown {
     if (depth > 4) return '[truncated]'
     if (value === null || typeof value === 'number' || typeof value === 'boolean') return value
     if (typeof value === 'string') return value.slice(0, 1200)
@@ -1946,10 +1986,10 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   private async persistPrivateState(
-    session: any,
-    state: any,
+    session: VirtualSessionRow,
+    state: StageResults,
     stage: string,
-    privateState: any,
+    privateState: Record<string, unknown>,
     metadata: {
       emotion?: unknown
       degraded?: unknown
@@ -1958,7 +1998,7 @@ export class BlackboxVirtualLearnerRunner {
     } = {}
   ) {
     const fresh = await this.getSession(session.id)
-    const latestState = parseJson(fresh.stageResults, state)
+    const latestState = parseStageResults(fresh.stageResults, state)
     const trace = Array.isArray(latestState.blackbox?.learnerPrivateStateTrace)
       ? latestState.blackbox.learnerPrivateStateTrace : []
     latestState.blackbox = {
@@ -1986,7 +2026,7 @@ export class BlackboxVirtualLearnerRunner {
     })
   }
 
-  private async getExperimentSnapshot(session: any, state: any) {
+  private async getExperimentSnapshot(session: VirtualSessionRow, state: StageResults): Promise<ExperimentSnapshot> {
     const snapshot = state.experimentSnapshot
     if (snapshot?.actorProfile && snapshot?.frictionBudget) {
       return {
@@ -2010,16 +2050,16 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private async captureCurrentExperimentSnapshot(session: any, state: any) {
+  private async captureCurrentExperimentSnapshot(session: VirtualSessionRow, state: StageResults): Promise<ExperimentSnapshot> {
     const profileRecord = await prisma.virtual_learner_profiles.findUnique({ where: { id: session.virtualProfileId } })
     if (!profileRecord) throw new Error('虚拟学习者画像不存在')
     const capturedAt = new Date().toISOString()
-    const actorProfile = {
-      profile: parseJson(profileRecord.profile),
+    const actorProfile: ActorProfileSnapshot = {
+      profile: safeJsonParse<Record<string, unknown>>(profileRecord.profile, {}),
       learningGoal: profileRecord.learningGoal,
-      knownConcepts: parseJson(profileRecord.knownConcepts, []),
-      struggleConcepts: parseJson(profileRecord.struggleConcepts, []),
-      personalityTraits: parseJson(profileRecord.personalityTraits, {})
+      knownConcepts: safeJsonParse<unknown[]>(profileRecord.knownConcepts, []),
+      struggleConcepts: safeJsonParse<unknown[]>(profileRecord.struggleConcepts, []),
+      personalityTraits: safeJsonParse<Record<string, unknown>>(profileRecord.personalityTraits, {})
     }
     return this.captureSimulatorExperimentSnapshot(
       state.experiment?.operatorId || getRequestContext().userId,
@@ -2037,7 +2077,7 @@ export class BlackboxVirtualLearnerRunner {
     routingUserId: string | undefined,
     capturedAt: string,
     input: { actorProfile: Record<string, unknown>; story: Record<string, unknown> | null; frictionBudget: string }
-  ) {
+  ): Promise<ExperimentSnapshot> {
     const prompts = await this.resolveSimulatorPrompts()
     const gateway = getAPIGateway()
     const [goalRoute, teachingRoute] = await Promise.all([
@@ -2105,7 +2145,7 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private sanitizeSimulatorRoute(route: any) {
+  private sanitizeSimulatorRoute(route: ResolvedRoute) {
     return {
       providerType: route.providerType,
       providerId: route.providerId,
@@ -2130,7 +2170,7 @@ export class BlackboxVirtualLearnerRunner {
     return endpoint.toString()
   }
 
-  private cloneExperimentSnapshot(snapshot: Record<string, any>, capturedAt: string, input: {
+  private cloneExperimentSnapshot(snapshot: ExperimentSnapshot, capturedAt: string, input: {
     actorProfile: Record<string, unknown>
     story: Record<string, unknown> | null
     frictionBudget: string
@@ -2145,13 +2185,13 @@ export class BlackboxVirtualLearnerRunner {
     }))
   }
 
-  private assertReplayableExperimentSnapshot(snapshot: Record<string, any>) {
+  private assertReplayableExperimentSnapshot(snapshot: ExperimentSnapshot) {
     const simulators = [snapshot?.simulators?.goal, snapshot?.simulators?.teaching]
     const complete = snapshot?.actorProfile
       && snapshot?.frictionBudget
       && typeof snapshot?.simulatorPrompts?.goal === 'string'
       && typeof snapshot?.simulatorPrompts?.teaching === 'string'
-      && simulators.every((item: any) => item?.route?.providerId
+      && simulators.every((item: SimulatorConfig | undefined) => item?.route?.providerId
         && item?.route?.credentialFingerprint
         && item?.route?.endpoint
         && item?.route?.model
@@ -2162,7 +2202,7 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private simulatorRuntime(snapshot: any, stage: 'goal' | 'teaching') {
+  private simulatorRuntime(snapshot: ExperimentSnapshot, stage: 'goal' | 'teaching') {
     const simulator = snapshot.simulators?.[stage] || null
     const route = simulator?.route || null
     return {
@@ -2184,7 +2224,7 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private async executeSimulatorSkill(definition: any, input: any, snapshot: any, stage: 'goal' | 'teaching') {
+  private async executeSimulatorSkill(definition: SkillDefinition, input: Record<string, unknown>, snapshot: ExperimentSnapshot, stage: 'goal' | 'teaching'): Promise<SimulatorSkillOutput> {
     const parentContext = getRequestContext()
     // L2 声明化装配（只读对账）：仿真 skill 的输入字段即 simulation 状态池，
     // 校验对应 core yaml 声明的 sandbox refs（实验链，仅运行时可见性，不阻断）
@@ -2212,18 +2252,18 @@ export class BlackboxVirtualLearnerRunner {
    */
   private async executeSimulatorSkillWithRetry(
     sessionId: string,
-    definition: any,
-    input: any,
-    snapshot: any,
+    definition: SkillDefinition,
+    input: Record<string, unknown>,
+    snapshot: ExperimentSnapshot,
     stage: 'goal' | 'teaching'
-  ) {
+  ): Promise<SimulatorSkillOutput> {
     let lastError: unknown = new Error(`虚拟学习者${stage === 'goal' ? 'Goal' : 'Learn'}动作生成失败`)
     for (let attempt = 1; attempt <= BLACKBOX_SIMULATOR_RETRY_ATTEMPTS; attempt += 1) {
       try {
         const output = await this.executeSimulatorSkill(definition, input, snapshot, stage)
         if (output?.reply) return output
         lastError = new Error(`虚拟学习者${stage === 'goal' ? 'Goal' : 'Learn'}动作生成失败`)
-      } catch (error: any) {
+      } catch (error: unknown) {
         lastError = error
         if (!this.isRetryableSimulatorError(error)) break
       }
@@ -2252,7 +2292,7 @@ export class BlackboxVirtualLearnerRunner {
     try {
       const session = await this.getSession(sessionId)
       if (TERMINAL_SESSION_STATUSES.has(session.status)) return
-      const state = parseJson(session.stageResults)
+      const state = parseStageResults(session.stageResults)
       const record = {
         stage,
         retryAttempts: BLACKBOX_SIMULATOR_RETRY_ATTEMPTS,

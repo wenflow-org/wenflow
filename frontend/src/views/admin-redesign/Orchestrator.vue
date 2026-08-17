@@ -7,7 +7,7 @@
       <span class="mk-status__meta">{{ stages.length }} 阶段</span>
       <span class="mk-status__meta">{{ totalSkills }} 个 Skill</span>
       <span class="mk-status__meta">接力 {{ Math.max(stages.length - 1, 0) }} 处</span>
-      <span v-if="defsLoaded" class="mk-status__meta">定义源 {{ orchCount }} 编排 / {{ skillDefCount }} Skill</span>
+      <span v-if="defsLoaded" class="mk-status__meta">定义源：编排 {{ orchCount }} · Skill {{ skillDefCount }}</span>
       <span v-if="isLive && w4Drifted.length" class="mk-status__meta mk-status__meta--bad" :title="`${TERMS.driftHashQualified}（W4）：核心文件 ↔ 编译产物 ↔ DB 三方哈希不一致，需重新编译 + 同步`">W4 漂移 {{ w4Drifted.length }}</span>
       <button v-if="isLive" type="button" class="mk-status__action" @click="openHealthCenter">
         {{ TERMS.healthCenter }} →

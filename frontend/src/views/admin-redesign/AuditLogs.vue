@@ -34,6 +34,7 @@
           <option value="month">近 30 天</option>
           <option value="all">全部</option>
         </select>
+        <button type="button" class="log-refresh" :disabled="loading" @click="applyFilters">刷新</button>
       </div>
     </div>
 
@@ -51,61 +52,71 @@
 
     <!-- 操作审计列表 -->
     <div v-else-if="tab === 'operation' && logs.length" class="log-body">
-      <div class="tline-head" :class="{ 'tline-head--no-tt': noTargetTypes }" aria-hidden="true">
-        <span class="tline-head__time">时间</span>
-        <span class="tline-head__admin">操作者</span>
-        <span class="tline-head__action">动作</span>
-        <span v-if="!noTargetTypes" class="tline-head__target-type" title="操作对象类别（如 用户 / 公告 / 会话）">目标类型</span>
-        <span class="tline-head__target">目标</span>
-        <span class="tline-head__badge">结果</span>
-        <span class="tline-head__ip">IP</span>
-        <span class="tline-head__arrow" aria-hidden="true"></span>
-      </div>
-      <div
-        v-for="log in logs"
-        :key="log.id"
-        class="tline"
-        :class="[log.success ? 'tline--ok' : 'tline--err', { 'tline--open': openId === log.id }]"
-      >
-        <button
-          type="button"
-          class="tline__main"
-          :class="{ 'tline__main--no-tt': noTargetTypes }"
-          :aria-expanded="openId === log.id"
-          @click="openId = openId === log.id ? '' : log.id"
-        >
-          <span class="tline__time mono" :title="fmtFull(log.createdAt)">{{ fmtTime(log.createdAt) }}</span>
-          <span class="tline__admin" :title="log.adminName || log.adminId || ''">
-            {{ log.adminName || (log.adminId ? shortId(log.adminId) : '—') }}
-          </span>
-          <span class="tline__action" :title="log.action">{{ actionText(log.action) }}</span>
-          <span v-if="!noTargetTypes" class="tline__target-type" :title="log.targetType || '当前记录未写入目标类型'">{{ targetTypeText(log.targetType) }}</span>
-          <span class="tline__target mono" :title="log.targetId || ''">{{ log.targetId ? shortId(log.targetId) : '—' }}</span>
-          <span class="tline__badge" :class="log.success ? 'tline__badge--ok' : 'tline__badge--err'">
-            {{ log.success ? '成功' : '失败' }}
-          </span>
-          <span class="tline__ip mono" :title="log.ip || ''">{{ log.ip || '—' }}</span>
-          <span class="tline__arrow" aria-hidden="true">▸</span>
-        </button>
-        <div v-if="openId === log.id" class="tline__payload">
-          <div class="tline__payload-meta">
-            <span>{{ log.method }} {{ log.path }} · HTTP {{ log.statusCode }}<template v-if="log.durationMs != null"> · {{ fmtMs(log.durationMs) }}</template></span>
-            <span v-if="log.userAgent" class="tline__ua" :title="log.userAgent">{{ log.userAgent }}</span>
-          </div>
-          <div v-if="log.requestJson" class="tline__section">
-            <span class="tline__label">请求</span>
-            <pre>{{ log.requestJson }}</pre>
-          </div>
-          <div v-if="log.beforeJson" class="tline__section">
-            <span class="tline__label">变更前</span>
-            <pre>{{ log.beforeJson }}</pre>
-          </div>
-          <div v-if="log.afterJson" class="tline__section">
-            <span class="tline__label">变更后</span>
-            <pre>{{ log.afterJson }}</pre>
-          </div>
-          <p v-if="!log.requestJson && !log.beforeJson && !log.afterJson" class="tline__none">无 payload 记录</p>
-        </div>
+      <div class="mk-table-scroll">
+        <table class="mk-table mk-table--click">
+          <thead>
+            <tr>
+              <th>时间</th>
+              <th>操作者</th>
+              <th>动作</th>
+              <th v-if="!noTargetTypes" title="操作对象类别（如 用户 / 公告 / 会话）">目标类型</th>
+              <th>目标</th>
+              <th>结果</th>
+              <th>IP</th>
+              <th class="mk-th--right" aria-hidden="true"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="log in logs" :key="log.id">
+              <tr
+                class="log-tr"
+                :class="[log.success ? 'log-tr--ok' : 'log-tr--err', { 'log-tr--open': openId === log.id }]"
+                :aria-expanded="openId === log.id"
+                @click="openId = openId === log.id ? '' : log.id"
+              >
+                <td class="log-time mono" :title="fmtFull(log.createdAt)">{{ fmtTime(log.createdAt) }}</td>
+                <td class="log-admin" :title="log.adminName || log.adminId || ''">
+                  {{ log.adminName || (log.adminId ? shortId(log.adminId) : '—') }}
+                </td>
+                <td :title="log.action">
+                  <template v-if="methodOf(log)">
+                    <span class="log-method" :class="`log-method--${methodOf(log).toLowerCase()}`">{{ methodOf(log) }}</span>
+                    <span class="log-path mono">{{ log.path || actionText(log.action) }}</span>
+                  </template>
+                  <span v-else class="log-action">{{ actionText(log.action) }}</span>
+                </td>
+                <td v-if="!noTargetTypes" class="log-tt" :title="log.targetType || '当前记录未写入目标类型'">{{ targetTypeText(log.targetType) }}</td>
+                <td class="log-target mono" :title="log.targetId || ''">{{ log.targetId ? shortId(log.targetId) : '—' }}</td>
+                <td><span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span></td>
+                <td class="log-ip mono" :title="log.ip || ''">{{ log.ip || '—' }}</td>
+                <td class="mk-th--right log-arrow" aria-hidden="true">▸</td>
+              </tr>
+              <tr v-if="openId === log.id" class="log-payload-row">
+                <td :colspan="noTargetTypes ? 7 : 8">
+                  <div class="log-payload">
+                    <div class="log-payload-meta">
+                      <span>{{ log.method }} {{ log.path }} · HTTP {{ log.statusCode }}<template v-if="log.durationMs != null"> · {{ fmtMs(log.durationMs) }}</template></span>
+                      <span v-if="log.userAgent" class="log-ua" :title="log.userAgent">{{ log.userAgent }}</span>
+                    </div>
+                    <div v-if="log.requestJson" class="log-section">
+                      <span class="log-label">请求</span>
+                      <pre>{{ log.requestJson }}</pre>
+                    </div>
+                    <div v-if="log.beforeJson" class="log-section">
+                      <span class="log-label">变更前</span>
+                      <pre>{{ log.beforeJson }}</pre>
+                    </div>
+                    <div v-if="log.afterJson" class="log-section">
+                      <span class="log-label">变更后</span>
+                      <pre>{{ log.afterJson }}</pre>
+                    </div>
+                    <p v-if="!log.requestJson && !log.beforeJson && !log.afterJson" class="log-none">无 payload 记录</p>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
       </div>
       <!-- 传统分页（方案 A）：与执行日志同一分页器形态 -->
       <Pagination
@@ -118,28 +129,32 @@
 
     <!-- 登录审计列表 -->
     <div v-else-if="tab === 'login' && attempts.length" class="log-body">
-      <div class="tline-head tline-head--login" aria-hidden="true">
-        <span class="tline-head__time">时间</span>
-        <span class="tline-head__admin">用户名</span>
-        <span class="tline-head__ip">IP</span>
-        <span class="tline-head__badge">结果</span>
-        <span class="tline-head__reason">原因</span>
-      </div>
-      <div
-        v-for="a in attempts"
-        :key="a.id"
-        class="tline tline--login"
-        :class="a.success ? 'tline--ok' : 'tline--err'"
-      >
-        <div class="tline__main tline__main--static">
-          <span class="tline__time mono" :title="fmtFull(a.createdAt)">{{ fmtLoginTime(a.createdAt) }}</span>
-          <span class="tline__admin" :title="a.username">{{ a.username || '—' }}</span>
-          <span class="tline__ip mono" :title="a.ip || ''">{{ a.ip || '—' }}</span>
-          <span class="tline__badge" :class="a.success ? 'tline__badge--ok' : 'tline__badge--err'">
-            {{ a.success ? '成功' : '失败' }}
-          </span>
-          <span class="tline__reason" :title="a.reason || ''">{{ reasonText(a.reason) }}</span>
-        </div>
+      <div class="mk-table-scroll">
+        <table class="mk-table">
+          <thead>
+            <tr>
+              <th>时间</th>
+              <th>用户名</th>
+              <th>IP</th>
+              <th>结果</th>
+              <th>原因</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="a in attempts"
+              :key="a.id"
+              class="log-tr"
+              :class="a.success ? 'log-tr--ok' : 'log-tr--err'"
+            >
+              <td class="log-time mono" :title="fmtFull(a.createdAt)">{{ fmtLoginTime(a.createdAt) }}</td>
+              <td class="log-admin" :title="a.username">{{ a.username || '—' }}</td>
+              <td class="log-ip mono" :title="a.ip || ''">{{ a.ip || '—' }}</td>
+              <td><span class="mk-badge" :class="a.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ a.success ? '成功' : '失败' }}</span></td>
+              <td class="log-reason" :title="a.reason || ''">{{ reasonText(a.reason) }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
       <!-- 传统分页（方案 A）：与执行日志同一分页器形态 -->
       <Pagination
@@ -198,6 +213,12 @@ interface LoginAttemptRow {
   success: boolean
   reason?: string | null
   createdAt: string
+}
+
+/** HTTP 方法（API 类动作显示彩色方法徽标）；非 API 动作（如「删除虚拟学习者」）返回空串 */
+function methodOf(log: AuditLogRow): string {
+  const m = (log.method || '').trim().toUpperCase()
+  return /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)$/.test(m) ? m : ''
 }
 
 const tabs = [
@@ -436,6 +457,20 @@ onMounted(() => {
   color: var(--mk-ink);
   width: 150px;
 }
+.log-refresh {
+  padding: 6px 10px;
+  border: 1px solid var(--mk-line);
+  border-radius: 8px;
+  background: var(--mk-surface);
+  color: var(--mk-muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.log-refresh:hover { border-color: rgba(44, 99, 208, 0.4); color: var(--mk-ink); }
+.log-refresh:disabled { opacity: 0.65; cursor: not-allowed; }
 
 /* 加载失败错误态 */
 .audit-error { padding: 40px 20px; }
@@ -462,152 +497,126 @@ onMounted(() => {
   overflow-x: auto;
 }
 
-/* 表头：与全站表格页同规范（sticky 顶部、uppercase 小号标签）。
-   8 列模板（时间/操作者/动作/目标类型/目标/结果/IP/箭头）：
-   动作列 180→240px（P2：长端点路径如「POST /api/admin/system/config」~30 字符仍被省略，
-   加宽后 ~34 字符可读；比 --mk-col--actions-wide(120px 按钮列) 更宽，列内保留 title 全值）；
-   目标列由弹性 minmax(100px,1fr)（28/30 行是"—"、459px 白区）改固定窄列 --mk-col-id；
-   末列箭头改 minmax(18px,1fr) 吸收剩余宽度（text-align:right 保持贴右缘，消灭断尾） */
-.tline-head {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: grid;
-  min-width: max-content;
-  grid-template-columns: var(--mk-col-time) 130px 240px 80px var(--mk-col-id) var(--mk-col-badge) 110px minmax(18px, 1fr);
-  gap: 10px;
-  align-items: baseline;
-  padding: 9px 14px;
+/* 表格容器：全站 mk-table 标准表格（4K 由 shared.css 档位覆盖；窄屏表内横向滚动）。
+   视觉重做（F11）：tline div 网格 → 真实 <table>，天然消除 min-width:max-content + fr 轨道的
+   长文本膨胀问题（F9b 的 max-width 封顶随之移除），4K 自动铺满。 */
+.log-body .mk-table th { white-space: nowrap; }
+
+/* 行状态：左侧 3px 色条（成功绿 / 失败红）+ 失败行淡红底 + 展开行高亮 */
+.log-tr { cursor: pointer; }
+.log-tr td:first-child { border-left: 3px solid transparent; }
+.log-tr--ok td:first-child { border-left-color: var(--mk-green, #16a34a); }
+.log-tr--err { background: rgba(220, 38, 38, 0.04); }
+.log-tr--err td:first-child { border-left-color: var(--mk-red, #dc2626); }
+.log-tr--open td { background: #fafbff; }
+.log-tr--open .log-arrow { transform: rotate(90deg); }
+
+/* 展开的 payload 行：整行铺开，不参与行点击 */
+.log-payload-row { cursor: default; }
+.log-payload-row td {
+  padding: 4px 14px 14px 62px !important;
   background: #fafbfc;
-  border-bottom: 1px solid var(--mk-line);
-  border-radius: 12px 12px 0 0;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--mk-faint);
-  white-space: nowrap;
+  border-bottom: 1px solid #eef1f6;
 }
-.tline-head--login {
-  grid-template-columns: var(--mk-col-time) 160px 110px var(--mk-col-badge) 200px minmax(18px, 1fr);
-}
-/* 目标类型列缺失（P3）：隐藏该列时去掉 80px 槽位，其余列宽不变 */
-.tline-head--no-tt {
-  grid-template-columns: var(--mk-col-time) 130px 180px var(--mk-col-id) var(--mk-col-badge) 110px minmax(18px, 1fr);
-}
-.tline-more {
-  display: flex;
-  justify-content: center;
-  padding: 10px 0 12px;
-  border-top: 1px dashed var(--mk-line);
-}
+.log-payload-row:hover td { background: #fafbfc; }
 
-.tline { border-bottom: 1px solid #f0f2f5; box-shadow: inset 3px 0 0 0 transparent; }
-.tline:last-child { border-bottom: none; }
-.tline--ok { box-shadow: inset 3px 0 0 0 var(--mk-green); }
-.tline--err { box-shadow: inset 3px 0 0 0 var(--mk-red); background: rgba(220, 38, 38, 0.04); }
-
-.tline__main {
-  display: grid;
-  min-width: max-content;
-  grid-template-columns: var(--mk-col-time) 130px 240px 80px var(--mk-col-id) var(--mk-col-badge) 110px minmax(18px, 1fr);
-  gap: 10px;
-  align-items: baseline;
-  width: 100%;
-  padding: 9px 14px;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.tline__main:hover { background: #f6f9ff; }
-.tline__main--static { cursor: default; }
-.tline__main--static:hover { background: transparent; }
-.tline--login .tline__main {
-  grid-template-columns: var(--mk-col-time) 160px 110px var(--mk-col-badge) 200px minmax(18px, 1fr);
-}
-.tline__main--no-tt {
-  grid-template-columns: var(--mk-col-time) 130px 180px var(--mk-col-id) var(--mk-col-badge) 110px minmax(18px, 1fr);
-}
-
-.tline__time {
-  font-size: 11px;
+/* 单元格 */
+.log-time {
+  font-size: 12px;
   color: var(--mk-faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.tline__admin {
+.log-admin {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+/* HTTP 方法徽标：按方法着色（颜色仅作识别辅助） */
+.log-method {
+  display: inline-block;
+  font-family: var(--mk-mono);
+  font-size: 10.5px;
+  font-weight: 800;
+  border-radius: 5px;
+  padding: 1px 7px;
+  margin-right: 7px;
+  vertical-align: middle;
+}
+.log-method--get { background: #eff6ff; color: #1d4ed8; }
+.log-method--post { background: #ecfdf5; color: #047857; }
+.log-method--put { background: #fffbeb; color: #b45309; }
+.log-method--patch { background: #f5f3ff; color: #6d28d9; }
+.log-method--delete { background: #fef2f2; color: #b91c1c; }
+.log-method--options,
+.log-method--head { background: #f1f5f9; color: #475569; }
+/* API 路径：mono 省略号 + title 全值。
+   max-width 用固定值（非 100%）：表格 auto 布局按单元格 max-content 定列宽，
+   百分比 max-width 在列宽计算时视为 auto → 长路径会把整列撑宽（1440 下 654px、4K 下 1543px），
+   固定上限让列宽有界（与 .mk-cell-main strong 的 --mk-cell-main-max 同一机制），4K 档由媒体查询放大 */
+.log-path {
+  /* inline-block（非 inline）：max-width/text-overflow 只对块级盒生效 */
+  display: inline-block;
   font-size: 12px;
   color: var(--mk-ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 240px;
+  vertical-align: middle;
 }
-.tline__action {
-  /* inline-block（非 inline-flex）：text-overflow:ellipsis 只对块容器生效，
-     原 inline-flex 下省略号被浏览器忽略 → 文本直接裁切，补上 ellipsis 语义 */
+/* 非 API 动作（中文标签）：中性蓝 chip */
+.log-action {
   display: inline-block;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
   border-radius: 5px;
-  padding: 1px 7px;
+  padding: 1px 8px;
   background: #eff6ff;
   color: var(--mk-blue);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
+  max-width: 240px;
 }
-.tline__target-type {
+.log-tt {
+  font-size: 12px;
+  color: var(--mk-muted);
+  white-space: nowrap;
+}
+.log-target {
   font-size: 11.5px;
-  color: var(--mk-muted);
-  white-space: nowrap;
-}
-.tline__target {
-  font-size: 11px;
   color: var(--mk-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tline__ip {
-  font-size: 11px;
+.log-ip {
+  font-size: 12px;
   color: var(--mk-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 展开指示：行按钮末列箭头，展开时旋转 90° */
-.tline__arrow {
-  font-size: 11px;
+.log-reason {
+  font-size: 12px;
+  color: var(--mk-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+/* 展开指示：行末箭头，展开时旋转 90° */
+.log-arrow {
+  font-size: 12px;
   color: var(--mk-faint);
-  text-align: right;
   transition: transform 0.15s ease;
 }
-.tline--open .tline__arrow { transform: rotate(90deg); }
-.tline__reason {
-  font-size: 11.5px;
-  color: var(--mk-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tline__badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10.5px;
-  font-weight: 700;
-  border-radius: 999px;
-  padding: 1px 8px;
-  white-space: nowrap;
-}
-.tline__badge--ok { background: var(--mk-green-bg); color: var(--mk-green); }
-.tline__badge--err { background: var(--mk-red-bg); color: var(--mk-red); }
 
-.tline__payload { padding: 2px 14px 12px 66px; display: grid; gap: 8px; }
-.tline__payload-meta {
+.log-payload { display: grid; gap: 8px; }
+.log-payload-meta {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -616,13 +625,13 @@ onMounted(() => {
   color: var(--mk-faint);
   font-family: var(--mk-mono);
 }
-.tline__ua {
+.log-ua {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 45%;
 }
-.tline__payload pre {
+.log-payload pre {
   margin: 0;
   padding: 10px 12px;
   border-radius: 8px;
@@ -634,38 +643,52 @@ onMounted(() => {
   white-space: pre-wrap;
   word-break: break-all;
 }
-.tline__none { margin: 0; font-size: 11.5px; color: var(--mk-faint); }
-.tline__section { display: grid; gap: 4px; }
-.tline__label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
+.log-none { margin: 0; font-size: 11.5px; color: var(--mk-faint); }
+.log-section { display: grid; gap: 4px; }
+.log-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
 
-/* 大屏/4K 适配（全站 mk 体系档位） */
+/* 大屏/4K 适配（全站 mk 体系档位；表格自身由 shared.css 档位覆盖） */
 @media (min-width: 2000px) {
   .log-status { padding: 10px 16px; }
   .log-status strong { font-size: 15.5px; }
   .log-status__meta { font-size: 13px; }
   .log-keyword { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 180px; }
   .log-agent { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 100px; }
-  .tline-head,
-  .tline__main { gap: 12px; padding: 11px 18px; }
-  .tline-head { font-size: 12.5px; }
-  .tline__time,
-  .tline__target,
-  .tline__ip { font-size: 13px; }
-  .tline__admin { font-size: 14px; }
-  .tline__action { font-size: 13px; }
-  .tline__target-type,
-  .tline__reason,
-  .tline__none { font-size: 13px; }
-  .tline__payload-meta,
-  .tline__ua { font-size: 13px; }
-  .tline__label { font-size: 13px; }
-  .tline__badge { font-size: 12px; }
-  .tline__arrow { font-size: 13px; }
-  .tline__payload { padding-left: 84px; }
-  .tline__payload pre { font-size: 13px; }
+  .log-refresh { font-size: 13px; padding: 7px 12px; }
+  .log-time,
+  .log-target,
+  .log-ip { font-size: 13.5px; }
+  .log-admin { font-size: 14px; }
+  .log-method { font-size: 12px; padding: 2px 9px; }
+  .log-path { font-size: 13.5px; max-width: 320px; }
+  .log-action { font-size: 13px; max-width: 320px; }
+  .log-tt,
+  .log-reason,
+  .log-none { font-size: 13px; }
+  .log-payload-meta,
+  .log-ua { font-size: 13px; }
+  .log-label { font-size: 13px; }
+  .log-payload pre { font-size: 13px; }
+  .log-payload-row td { padding-left: 84px !important; }
+  .log-arrow { font-size: 14px; }
 }
 @media (min-width: 2800px) {
   .log-status { padding: 12px 18px; border-radius: 14px; }
+  .log-time,
+  .log-target,
+  .log-ip { font-size: 16px; }
+  .log-admin { font-size: 16.5px; }
+  .log-method { font-size: 14px; }
+  .log-path { font-size: 16px; max-width: 380px; }
+  .log-action { font-size: 15.5px; max-width: 380px; }
+  .log-tt,
+  .log-reason,
+  .log-none { font-size: 15.5px; }
+  .log-payload-meta,
+  .log-ua { font-size: 15.5px; }
+  .log-label { font-size: 15.5px; }
+  .log-payload pre { font-size: 15.5px; }
+  .log-arrow { font-size: 16.5px; }
 }
 @media (min-width: 3600px) {
   .log-status { padding: 14px 22px; }
@@ -673,23 +696,22 @@ onMounted(() => {
   .log-status__meta { font-size: 15px; }
   .log-keyword { font-size: 15.5px; padding: 9px 14px; width: 215px; }
   .log-agent { font-size: 15.5px; padding: 9px 14px; width: 115px; }
-  .tline-head,
-  .tline__main { gap: 14px; padding: 13px 22px; }
-  .tline-head { font-size: 14.5px; }
-  .tline__time,
-  .tline__target,
-  .tline__ip { font-size: 15.5px; }
-  .tline__admin { font-size: 16.5px; }
-  .tline__action { font-size: 15.5px; }
-  .tline__target-type,
-  .tline__reason,
-  .tline__none { font-size: 15.5px; }
-  .tline__payload-meta,
-  .tline__ua { font-size: 15.5px; }
-  .tline__label { font-size: 15.5px; }
-  .tline__badge { font-size: 14px; }
-  .tline__arrow { font-size: 15.5px; }
-  .tline__payload { padding-left: 100px; }
-  .tline__payload pre { font-size: 15.5px; }
+  .log-refresh { font-size: 15.5px; padding: 9px 14px; }
+  .log-time,
+  .log-target,
+  .log-ip { font-size: 18px; }
+  .log-admin { font-size: 18.5px; }
+  .log-method { font-size: 16px; padding: 3px 11px; }
+  .log-path { font-size: 18px; max-width: 460px; }
+  .log-action { font-size: 17.5px; max-width: 460px; }
+  .log-tt,
+  .log-reason,
+  .log-none { font-size: 17.5px; }
+  .log-payload-meta,
+  .log-ua { font-size: 17.5px; }
+  .log-label { font-size: 17.5px; }
+  .log-payload pre { font-size: 17.5px; }
+  .log-payload-row td { padding-left: 100px !important; }
+  .log-arrow { font-size: 18px; }
 }
 </style>

@@ -3,7 +3,9 @@ import { Request, Response, NextFunction } from 'express';
 // 延迟加载 prisma/logger：config/database 与 utils/logger 在模块求值期会触发 dotenv 加载，
 // 若静态导入，dotenv 副作用会先于下方限速配置常量求值，把 .env 中的 LOGIN_* 复活并覆盖
 // 测试注入的环境变量（jest.resetModules 后会重新求值）。运行期才加载真实依赖，互不干扰。
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const loadPrisma = () => (require('../config/database') as typeof import('../config/database')).default;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const loadLogger = () => (require('../utils/logger') as typeof import('../utils/logger')).logger;
 
 interface LoginAttempt {

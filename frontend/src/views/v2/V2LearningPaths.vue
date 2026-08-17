@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="paths v2-page">
     <V2Nav />
 
@@ -543,7 +543,9 @@ onBeforeUnmount(() => {
 }
 
 .empty {
-  display: grid; justify-items: center; gap: 12px;
+  display: grid; justify-items: center; align-content: center; gap: 12px;
+  /* 空态留白优化：占用剩余视口空间并垂直居中，避免内容缩在顶部、下方大段空白 */
+  min-height: 52vh;
   padding: 56px 0; color: var(--faint); font-size: 14px;
 }
 .empty__illus { display: flex; gap: 6px; }

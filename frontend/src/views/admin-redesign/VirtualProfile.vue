@@ -17,22 +17,25 @@
   <div v-else-if="d" class="mk-page vp">
     <header class="vp-top">
       <button type="button" class="vp-back" @click="closeSubPage">← 虚拟学习者</button>
-      <div class="vp-top__meta">
-        <h1 class="vp-top__name">{{ d.name }}</h1>
-        <span v-if="d.archetype" class="mk-badge mk-badge--info">{{ d.archetype }}</span>
-        <span v-if="levelLabel" class="vp-top__level">{{ levelLabel }}</span>
-        <!-- 仿真质量常驻徽章：最近一次黑盒终局评估（裁判 / 保真），未评估显示灰标 -->
-        <span v-if="isLive" class="vp-quality" :class="qualityTone" :title="qualityTitle">
-          <template v-if="qualityReferee || qualityFidelity">
-            {{ qualityReferee ? `质量 ${qualityReferee}` : '质量 —' }}<template v-if="qualityFidelity"> · 保真 {{ qualityFidelity }}</template>
-            <span class="vp-quality__time">{{ qualityTime }}</span>
-          </template>
-          <template v-else>未评估</template>
-        </span>
-      </div>
-      <div v-if="isLive" class="vp-top__actions">
-        <button type="button" class="mk-status__action" @click="quickLearnOpen = true">账号自动学习</button>
-        <button type="button" class="mk-status__action" @click="editOpen = true">编辑画像</button>
+      <div class="vp-top__main">
+        <span class="vp-avatar" :class="avatarClassOf(d.name)" aria-hidden="true">{{ d.name.slice(0, 1) }}</span>
+        <div class="vp-top__meta">
+          <h1 class="vp-top__name">{{ d.name }}</h1>
+          <span v-if="d.archetype" class="mk-badge mk-badge--info">{{ d.archetype }}</span>
+          <span v-if="levelLabel" class="vp-top__level">{{ levelLabel }}</span>
+          <!-- 仿真质量常驻徽章：最近一次黑盒终局评估（裁判 / 保真），未评估显示灰标 -->
+          <span v-if="isLive" class="vp-quality" :class="qualityTone" :title="qualityTitle">
+            <template v-if="qualityReferee || qualityFidelity">
+              {{ qualityReferee ? `质量 ${qualityReferee}` : '质量 —' }}<template v-if="qualityFidelity"> · 保真 {{ qualityFidelity }}</template>
+              <span class="vp-quality__time">{{ qualityTime }}</span>
+            </template>
+            <template v-else>未评估</template>
+          </span>
+        </div>
+        <div v-if="isLive" class="vp-top__actions">
+          <button type="button" class="mk-status__action" @click="quickLearnOpen = true">账号自动学习</button>
+          <button type="button" class="mk-status__action" @click="editOpen = true">编辑画像</button>
+        </div>
       </div>
     </header>
 
@@ -128,107 +131,111 @@
             <div
               v-for="(s, i) in displayStories"
               :key="s.id || i"
-              class="vp-story-item"
-              :class="{ 'is-selected': selectedStoryId === (s.id || String(i)) }"
-              role="button"
-              tabindex="0"
-              :aria-pressed="selectedStoryId === (s.id || String(i))"
-              @click="selectStory(s, i)"
-              @keydown.enter.prevent="selectStory(s, i)"
-              @keydown.space.prevent="selectStory(s, i)"
+              class="vp-story"
+              :class="{
+                'is-selected': selectedStoryId === (s.id || String(i)),
+                'is-open': openStoryId === (s.id || String(i))
+              }"
             >
-              <!-- 头部：选中标记 + 标题 + 状态 + 操作 -->
-              <div class="vp-story-item__head">
-                <span class="vp-story-item__mark" aria-hidden="true"></span>
-                <div class="vp-story-item__title">
-                  <strong>{{ s.title }}</strong>
+              <!-- 管理行：选中 + 标题/状态 + 阶段计数 + 最近结果 + 操作 -->
+              <div
+                class="vp-story__row"
+                role="button"
+                tabindex="0"
+                :aria-pressed="selectedStoryId === (s.id || String(i))"
+                :aria-expanded="openStoryId === (s.id || String(i))"
+                @click="selectStory(s, i)"
+                @keydown.enter.prevent="selectStory(s, i)"
+                @keydown.space.prevent="selectStory(s, i)"
+              >
+                <span class="vp-story__radio" aria-hidden="true"></span>
+                <div class="vp-story__meta">
+                  <strong class="vp-story__title">{{ s.title }}</strong>
                   <span class="mk-badge" :class="s.status === 'ready' ? 'mk-badge--ok' : 'mk-badge--muted'">
                     {{ storyStatusLabel(s) }}
                   </span>
+                  <span v-if="(s.runCount || 0) > 0" class="vp-story__runcount" :title="`共运行 ${s.runCount} 次`">运行 {{ s.runCount }}</span>
                 </div>
-                <div v-if="isLive" class="vp-story-item__ops" @click.stop>
-                  <button type="button" class="mk-link" :disabled="running" @click="runStory(s, i)">按此故事运行</button>
+                <span class="vp-story__stages" :title="`累计：Goal ${s.goalCount || 0} · Path ${s.pathCount || 0} · Learn ${s.learnCount || 0}`">
+                  <template v-if="stageTotal(s) > 0">G{{ s.goalCount || 0 }} · P{{ s.pathCount || 0 }} · L{{ s.learnCount || 0 }}</template>
+                  <template v-else>未开始</template>
+                </span>
+                <span class="vp-story__latest" :class="storyLatestText(s).cls">{{ storyLatestText(s).text }}</span>
+                <div class="vp-story__ops" @click.stop>
+                  <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" @click="runStory(s, i)">
+                    {{ running ? '运行中…' : '运行' }}
+                  </button>
                   <button type="button" class="mk-link" :disabled="storyBusy" @click="openEditStory(i)">编辑</button>
                   <button type="button" class="mk-link mk-link--danger" :disabled="storyBusy" @click="removeStory(i)">删除</button>
                 </div>
-              </div>
-              <p class="vp-story-item__outline">{{ s.outline }}</p>
-
-              <!-- 生命周期：Goal → Path → Learn 计数与投影链接 -->
-              <div class="vp-pipe" @click.stop>
-                <span class="vp-pipe__stage" :class="{ 'is-on': (s.goalCount || 0) > 0 }">
-                  Goal <b>{{ s.goalCount || 0 }}</b>
-                  <span v-if="s.projection?.formal?.goal" class="vp-pipe__links">
-                    <button type="button" @click="openLink(s.projection.formal.goal)">前台</button>
-                    <button v-if="s.projection?.test?.goal" type="button" @click="openLink(s.projection.test.goal)">调试</button>
-                  </span>
-                </span>
-                <i class="vp-pipe__arrow">→</i>
-                <span class="vp-pipe__stage" :class="{ 'is-on': (s.pathCount || 0) > 0 }">
-                  Path <b>{{ s.pathCount || 0 }}</b>
-                  <span v-if="s.projection?.formal?.path" class="vp-pipe__links">
-                    <button type="button" @click="openLink(s.projection.formal.path)">前台</button>
-                    <button v-if="s.projection?.test?.path" type="button" @click="openLink(s.projection.test.path)">调试</button>
-                  </span>
-                </span>
-                <i class="vp-pipe__arrow">→</i>
-                <span class="vp-pipe__stage" :class="{ 'is-on': (s.learnCount || 0) > 0 }">
-                  Learn <b>{{ s.learnCount || 0 }}</b>
-                  <span v-if="s.projection?.formal?.learn" class="vp-pipe__links">
-                    <button type="button" @click="openLink(s.projection.formal.learn)">前台</button>
-                    <button v-if="s.projection?.test?.learn" type="button" @click="openLink(s.projection.test.learn)">调试</button>
-                  </span>
-                </span>
-                <span v-if="(s.runningCount || 0) > 0" class="vp-pipe__running">● {{ s.runningCount }} 运行中</span>
-                <span v-if="!s.runningCount && s.latestRun" class="vp-pipe__latest">{{ formatRunResult(s.latestRun.status) }} · {{ timeAgo(String(s.latestRun.updatedAt || s.latestRun.createdAt || '')) }}</span>
+                <span class="vp-story__chevron" aria-hidden="true">▸</span>
               </div>
 
-              <!-- 会话推进条：Goal → Path → Learn → Wrapup 四段点亮；运行中高亮当前阶段，疑似卡顿标 amber -->
-              <div v-if="progressOf(s).visible" class="vp-progress" :class="{ 'is-stalled': progressOf(s).stalled }" @click.stop>
-                <div class="vp-progress__stages">
-                  <span
-                    v-for="(label, idx) in VLAB_STAGE_LABELS_ARR"
-                    :key="label"
-                    class="vp-progress__stage"
-                    :class="{
-                      'is-on': idx <= progressOf(s).activeIndex,
-                      'is-current': progressOf(s).running && idx === progressOf(s).activeIndex
-                    }"
-                  >
-                    {{ label }}
-                  </span>
+              <!-- 详情（展开行）：摘要 / 生命周期（累计·当前·投影）/ 运行历史 / 高级诊断 -->
+              <div v-if="openStoryId === (s.id || String(i))" class="vp-story__detail" @click.stop>
+                <p class="vp-detail__outline">{{ s.outline }}</p>
+
+                <div class="vp-lc" :class="{ 'is-stalled': progressOf(s).stalled, 'is-running': progressOf(s).running }">
+                  <div class="vp-lc__row">
+                    <span class="vp-lc__label">累计</span>
+                    <div class="vp-lc__counts">
+                      <span
+                        v-for="(st, idx) in LC_BARS"
+                        :key="st.key"
+                        class="vp-lc__count"
+                        :class="{ 'is-on': stageCount(s, idx) > 0 }"
+                      >
+                        {{ st.label }} <b>{{ stageCount(s, idx) }}</b>
+                      </span>
+                    </div>
+                  </div>
+                  <div class="vp-lc__row">
+                    <span class="vp-lc__label">当前</span>
+                    <span class="vp-lc__current" :class="{ 'vp-lc__current--stalled': progressOf(s).stalled }">
+                      <template v-if="progressOf(s).running">
+                        <span class="vp-lc__pulse" aria-hidden="true"></span>
+                        {{ progressOf(s).stageLabel }} 进行中
+                        <template v-if="progressOf(s).stalled">· 疑似卡顿（{{ progressOf(s).idleMins }} 分钟无新事件）</template>
+                      </template>
+                      <template v-else-if="s.latestRun">
+                        最近完成：{{ progressOf(s).stageLabel || '—' }} ·
+                        <b class="vp-lc__result" :class="`is-${runToneOf(s.latestRun.status)}`">{{ formatRunResult(s.latestRun.status) }}</b>
+                        · {{ timeAgo(String(s.latestRun.updatedAt || s.latestRun.createdAt || '')) }}
+                      </template>
+                      <template v-else>尚未运行</template>
+                    </span>
+                  </div>
+                  <div v-if="allStageLinks(s).length" class="vp-lc__row">
+                    <span class="vp-lc__label">投影</span>
+                    <div class="vp-lc__links">
+                      <button
+                        v-for="l in allStageLinks(s)"
+                        :key="l.label"
+                        type="button"
+                        class="vp-lc__link"
+                        @click="openLink(l.url)"
+                      >{{ l.label }}</button>
+                    </div>
+                  </div>
                 </div>
-                <span class="vp-progress__meta" :class="{ 'vp-progress__meta--stalled': progressOf(s).stalled }">
-                  <template v-if="progressOf(s).running">
-                    <span class="vp-progress__pulse"></span>
-                    {{ progressOf(s).stageLabel }} 进行中
-                    <template v-if="progressOf(s).stalled">· 疑似卡顿（{{ progressOf(s).idleMins }} 分钟无新事件）</template>
-                  </template>
-                  <template v-else>
-                    最近完成：{{ progressOf(s).stageLabel }}<template v-if="s.latestRun"> · {{ formatRunResult(s.latestRun.status) }}</template>
-                  </template>
-                </span>
-              </div>
 
-              <template v-if="selectedStoryId === (s.id || String(i))">
-                <div class="vp-story-runs" @click.stop>
-                  <div class="vp-story-runs__head">
+                <!-- 运行历史（该故事维度） -->
+                <div class="vp-runs-block">
+                  <div class="vp-runs-block__head">
                     <span>运行历史 · 最近 {{ runsForStory(s).slice(0, STORY_RUN_RECENT_N).length }} 条摘要</span>
                     <button v-if="s.latestRun?.sessionId" type="button" class="mk-link" @click="openSubPage('session', s.latestRun.sessionId)">最新控制台 →</button>
                   </div>
                   <template v-if="runsForStory(s).length">
                     <div v-for="(r, ri) in runsForStory(s).slice(0, STORY_RUN_RECENT_N)" :key="r.sessionId || ri" class="vp-run">
-                      <span class="vp-run__dot" :class="`is-${r.tone}`"></span>
-                      <div class="vp-run__main">
+                      <div class="vp-run__head">
                         <strong>{{ formatRunStage(r.stage) }}</strong>
-                        <span>
-                          {{ formatRunResult(r.result) }}
-                          <template v-if="r.pathId"> · Path</template>
-                        </span>
+                        <span class="vp-run__result" :class="`is-${r.tone}`">{{ formatRunResult(r.result) }}<template v-if="r.pathId"> · Path</template></span>
                       </div>
-                      <span class="vp-run__time">{{ r.time }}</span>
+                      <div class="vp-run__sub">
+                        <span>{{ r.time }}</span>
+                      </div>
                       <div v-if="isLive && r.sessionId" class="vp-run__ops">
-                        <button type="button" class="mk-link" @click="openSubPage('session', r.sessionId)">控制台</button>
+                        <button type="button" class="mk-link" @click="openSubPage('session', r.sessionId)">打开控制台</button>
                         <button type="button" class="mk-link mk-link--danger" :disabled="sessionBusy" @click="removeSession(r.sessionId)">删除</button>
                       </div>
                     </div>
@@ -240,8 +247,9 @@
                   <p v-else class="vp-none">这个故事还没有运行记录</p>
                 </div>
 
-                <details v-if="hasAdvancedFields(s)" class="vp-story-item__advanced" @click.stop>
-                  <summary>高级诊断</summary>
+                <!-- 高级诊断（scenario-designer 调试字段，与故事管理分区） -->
+                <details v-if="hasAdvancedFields(s)" class="vp-story-item__advanced" >
+                  <summary>高级诊断（scenario-designer 调试字段）</summary>
                   <div class="vp-adv-body">
                     <div v-if="getHiddenDetails(s).length" class="vp-adv-row">
                       <span class="vp-adv-row__label">隐藏细节</span>
@@ -269,7 +277,7 @@
                     </div>
                   </div>
                 </details>
-              </template>
+              </div>
             </div>
           </div>
           <p v-else class="vp-none">还没有故事。</p>
@@ -277,28 +285,34 @@
 
         <section v-if="activeTab === 'runs'" class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">全部运行</h3>
+            <h3 class="mk-card__title">全部运行 <span class="mk-card__meta">按故事分组</span></h3>
             <span class="mk-badge mk-badge--muted">{{ allRuns.length }} 条</span>
           </div>
-          <div class="vp-runs">
-            <div v-for="(r, i) in allRuns" :key="r.sessionId || i" class="vp-run">
-              <span class="vp-run__dot" :class="`is-${r.tone}`"></span>
-              <div class="vp-run__main">
-                <strong>{{ formatRunStage(r.stage) }}</strong>
-                <span>
-                  {{ formatRunResult(r.result) }}
-                  <template v-if="r.storyTitle"> · {{ r.storyTitle }}</template>
-                  <template v-if="r.pathId"> · Path</template>
-                </span>
+          <div v-if="runsGrouped.length" class="vp-run-groups">
+            <div v-for="g in runsGrouped" :key="g.key" class="vp-run-group">
+              <div class="vp-run-group__head">
+                <strong>{{ g.title }}</strong>
+                <span class="vp-run-group__count">{{ g.runs.length }} 条</span>
               </div>
-              <span class="vp-run__time">{{ r.time }}</span>
-              <div v-if="isLive && r.sessionId" class="vp-run__ops">
-                <button type="button" class="mk-link" @click="openSubPage('session', r.sessionId)">控制台</button>
-                <button type="button" class="mk-link mk-link--danger" :disabled="sessionBusy" @click="removeSession(r.sessionId)">删除</button>
+              <div class="vp-run-group__body">
+                <div v-for="(r, i) in g.runs" :key="r.sessionId || i" class="vp-run">
+                  <div class="vp-run__head">
+                    <strong>{{ formatRunStage(r.stage) }}</strong>
+                    <span class="vp-run__result" :class="`is-${r.tone}`">{{ formatRunResult(r.result) }}<template v-if="r.pathId"> · Path</template></span>
+                  </div>
+                  <div class="vp-run__sub">
+                    <span>{{ r.time }}</span>
+                    <template v-if="r.storyTitle && g.key !== '__orphan__' && g.title !== r.storyTitle"> · {{ r.storyTitle }}</template>
+                  </div>
+                  <div v-if="isLive && r.sessionId" class="vp-run__ops">
+                    <button type="button" class="mk-link" @click="openSubPage('session', r.sessionId)">打开控制台</button>
+                    <button type="button" class="mk-link mk-link--danger" :disabled="sessionBusy" @click="removeSession(r.sessionId)">删除</button>
+                  </div>
+                </div>
               </div>
             </div>
-            <p v-if="!allRuns.length" class="vp-none">还没有运行记录</p>
           </div>
+          <p v-else class="vp-none">还没有运行记录</p>
         </section>
 
         <section v-if="isLive && activeTab === 'verify'" class="mk-card">
@@ -569,8 +583,13 @@ const selectedStory = computed(() => {
 })
 const selectedStoryTitle = computed(() => selectedStory.value?.title || '')
 
+/* 展开控制：点击故事行 = 选中（业务语义：按此故事运行）+ 切换展开（查看详情）。
+   选中与展开解耦：openStoryId 只控制详情渲染，selectedStoryId 只控制运行目标 */
+const openStoryId = ref<string | null>(null)
 function selectStory(s: StoryItem, index: number) {
-  selectedStoryId.value = s.id || String(index)
+  const id = s.id || String(index)
+  selectedStoryId.value = id
+  openStoryId.value = openStoryId.value === id ? null : id
 }
 
 function storyPayload(s?: StoryItem | null, index?: number) {
@@ -812,8 +831,10 @@ async function loadDetail(id?: string, quiet = false) {
 
     if (stories.value.length === 1) {
       selectedStoryId.value = stories.value[0].id || '0'
+      openStoryId.value = selectedStoryId.value
     } else if (selectedStoryId.value && !stories.value.some((s, i) => (s.id || String(i)) === selectedStoryId.value)) {
       selectedStoryId.value = null
+      openStoryId.value = null
     }
 
     liveDetail.value = {
@@ -1160,6 +1181,85 @@ function formatRunResult(result: string) {
   return result || '—'
 }
 
+/* ---- 生命周期条（vp-lc）辅助：阶段计数 / 投影链接 / 结果色调 ---- */
+const STAGE_COUNT_KEYS = ['goalCount', 'pathCount', 'learnCount', null] as const
+const STAGE_PROJ_KEYS = ['goal', 'path', 'learn', null] as const
+/** 四段标签（VLAB_STAGE_LABELS_ARR 的下标 0-2 对应 goal/path/learn 计数） */
+function stageCount(s: StoryItem, idx: number): number {
+  const key = STAGE_COUNT_KEYS[idx]
+  return key ? Number((s as unknown as Record<string, unknown>)[key] || 0) : 0
+}
+function stageTotal(s: StoryItem): number {
+  return (s.goalCount || 0) + (s.pathCount || 0) + (s.learnCount || 0)
+}
+/** 某阶段的前台/调试投影链接（formal/test 并存时都展示） */
+function stageLinksOf(s: StoryItem, idx: number): Array<{ label: string; url: string }> {
+  const key = STAGE_PROJ_KEYS[idx]
+  const p = s.projection
+  if (!key || !p) return []
+  const out: Array<{ label: string; url: string }> = []
+  if (p.formal?.[key]) out.push({ label: '前台', url: p.formal[key] as string })
+  if (p.test?.[key]) out.push({ label: '调试', url: p.test[key] as string })
+  return out
+}
+function runToneOf(status: string): 'ok' | 'warn' | 'bad' {
+  const r = String(status || '').toLowerCase()
+  if (r === 'completed' || r === 'success' || r === 'succeeded') return 'ok'
+  if (r === 'running' || r === 'created' || r === 'paused') return 'warn'
+  return 'bad'
+}
+/** 全部阶段的投影链接平铺（带阶段前缀，如「Goal 前台」「Path 调试」） */
+function allStageLinks(s: StoryItem): Array<{ label: string; url: string }> {
+  const p = s.projection
+  if (!p) return []
+  const out: Array<{ label: string; url: string }> = []
+  const keys: Array<['goal' | 'path' | 'learn', string]> = [['goal', 'Goal'], ['path', 'Path'], ['learn', 'Learn']]
+  for (const [key, stage] of keys) {
+    if (p.formal?.[key]) out.push({ label: `${stage} 前台`, url: p.formal[key] as string })
+    if (p.test?.[key]) out.push({ label: `${stage} 调试`, url: p.test[key] as string })
+  }
+  return out
+}
+
+/* 生命周期累计分区：三阶段标签（与 stageCount 下标对应） */
+const LC_BARS = [
+  { key: 'goal', label: 'Goal' },
+  { key: 'path', label: 'Path' },
+  { key: 'learn', label: 'Learn' },
+] as const
+
+/** 管理行「最近」摘要：进行中 / 最近结果（色调）/ 未运行 */
+function storyLatestText(s: StoryItem): { text: string; cls: string } {
+  if ((s.runningCount || 0) > 0) return { text: `${s.runningCount} 个进行中`, cls: 'is-running' }
+  if (s.latestRun) {
+    const tone = runToneOf(s.latestRun.status)
+    return {
+      text: `${formatRunResult(s.latestRun.status)} · ${timeAgo(String(s.latestRun.updatedAt || s.latestRun.createdAt || ''))}`,
+      cls: `is-${tone}`,
+    }
+  }
+  return { text: '未运行', cls: 'is-none' }
+}
+
+/** 运行 tab：按故事分组的时间线（含「未关联故事」兜底组） */
+interface StoryRunGroup { key: string; title: string; runs: RunItem[] }
+const runsGrouped = computed<StoryRunGroup[]>(() => {
+  const all = d.value?.runs || []
+  const groups: StoryRunGroup[] = []
+  const knownStoryIds = new Set<string>()
+  for (const s of displayStories.value) {
+    if (s.id) knownStoryIds.add(s.id)
+    const runs = runsForStory(s)
+    if (runs.length) groups.push({ key: s.id || s.title, title: s.title, runs })
+  }
+  const orphanRuns = all.filter((r) =>
+    !(r.storyId && knownStoryIds.has(r.storyId))
+    && !(r.storyTitle && displayStories.value.some((s) => s.title === r.storyTitle))
+  )
+  if (orphanRuns.length) groups.push({ key: '__orphan__', title: '未关联故事', runs: orphanRuns })
+  return groups
+})
+
 /* ---- V2：会话推进条（Goal→Path→Learn→Wrapup 点亮 + 卡顿高亮） ---- */
 interface StoryProgress {
   visible: boolean
@@ -1218,6 +1318,13 @@ const qualityTone = computed(() => {
   return 'vp-quality--bad'
 })
 
+/* 首字头像配色：按名称哈希取色（与虚拟学习者列表同 8 色板） */
+function avatarClassOf(name: string): string {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  return `vp-avatar--${h % 8}`
+}
+
 /* ---- 运行中会话的静默轮询刷新（不打断当前视图；卡顿/推进实时可见） ---- */
 const VLAB_POLL_MS = 30_000
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -1264,11 +1371,37 @@ async function quietReload(id: string) {
   padding: 18px 22px 28px;
 }
 .vp-top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px 16px;
+  display: grid;
+  gap: 4px;
 }
+.vp-top__main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+/* 首字头像：与虚拟学习者列表同色板（按名称哈希取色，同一人恒定同色） */
+.vp-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+.vp-avatar--0 { background: #3b82f6; }
+.vp-avatar--1 { background: #8b5cf6; }
+.vp-avatar--2 { background: #10b981; }
+.vp-avatar--3 { background: #f59e0b; }
+.vp-avatar--4 { background: #ef4444; }
+.vp-avatar--5 { background: #06b6d4; }
+.vp-avatar--6 { background: #ec4899; }
+.vp-avatar--7 { background: #64748b; }
 .vp-back {
   border: 0;
   background: transparent;
@@ -1306,27 +1439,27 @@ async function quietReload(id: string) {
   gap: 8px;
 }
 
-/* 统计条：KPI 卡片风格 */
+/* 统计条：stat 胶囊（与列表页「运行概览」胶囊同语言；数字+标签横向排布） */
 .vp-overview {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(96px, 1fr)) minmax(0, 2fr);
-  gap: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .vp-overview__item {
-  display: grid;
-  gap: 2px;
-  padding: 10px 14px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 14px;
   border: 1px solid var(--mk-line);
-  border-radius: 12px;
+  border-radius: 999px;
   background: var(--mk-surface);
-  box-shadow: var(--mk-shadow-sm);
 }
 .vp-overview__item b {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: var(--mk-ink);
-  line-height: 1.1;
+  line-height: 1.2;
 }
 .vp-overview__item span {
   font-size: 11.5px;
@@ -1335,27 +1468,22 @@ async function quietReload(id: string) {
   letter-spacing: 0.03em;
 }
 .vp-overview__item.is-live b { color: var(--mk-amber, #b7791f); }
+.vp-overview__item.is-live { background: #fffaf0; border-color: rgba(217, 119, 6, 0.3); }
 .vp-overview__goal {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  grid-column: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 480px;
 }
-.vp-overview__goal span { font-size: 11px; }
+.vp-overview__goal span { font-size: 11px; flex-shrink: 0; }
 .vp-overview__goal strong {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--mk-muted);
-  line-height: 1.5;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-@media (max-width: 860px) {
-  .vp-overview { grid-template-columns: repeat(3, minmax(80px, 1fr)); }
-  .vp-overview__goal { grid-column: 1 / -1; }
 }
 
 /* 分页：统一 mk-pills 分段控件 */
@@ -1421,35 +1549,30 @@ async function quietReload(id: string) {
   gap: 12px;
   flex-wrap: wrap;
 }
-.vp-stories { display: grid; gap: 10px; padding: 12px; }
-.vp-story-item {
+/* ===== 故事池：管理行 + 展开详情（功能分区） ===== */
+.vp-stories { display: grid; gap: 8px; padding: 12px; }
+
+/* 管理行：radio + 标题/状态 + 阶段计数 + 最近结果 + 操作，一行扫完 */
+.vp-story {
   display: grid;
-  gap: 8px;
-  padding: 14px 16px;
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   background: var(--mk-surface);
-  cursor: pointer;
-  transition: border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
+  overflow: hidden;
 }
-.vp-story-item:focus-visible {
-  outline: 2px solid rgba(44, 99, 208, 0.85);
-  outline-offset: -2px;
-}
-.vp-story-item:hover { border-color: rgba(44, 99, 208, 0.35); }
-.vp-story-item.is-selected {
-  background: #f6faff;
-  border-color: rgba(44, 99, 208, 0.5);
-  box-shadow: 0 0 0 1px rgba(44, 99, 208, 0.15), var(--mk-shadow-sm);
-}
-.vp-story-item__head {
+.vp-story__row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
   min-width: 0;
+  transition: background 0.12s ease;
 }
-/* 选中标记：radio 圆点 */
-.vp-story-item__mark {
+.vp-story__row:hover { background: #f6f9ff; }
+.vp-story.is-selected .vp-story__row { background: #f0f7ff; }
+.vp-story.is-open .vp-story__row { border-bottom: 1px dashed #e3e9f3; }
+.vp-story__radio {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
@@ -1458,96 +1581,103 @@ async function quietReload(id: string) {
   background: #fff;
   transition: border-color 0.14s ease;
 }
-.vp-story-item.is-selected .vp-story-item__mark {
+.vp-story.is-selected .vp-story__radio {
   border-color: var(--mk-blue);
   background: radial-gradient(circle, var(--mk-blue) 0 4px, #fff 4.5px);
 }
-.vp-story-item__title {
+.vp-story__meta {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  flex: 1 1 auto;
 }
-.vp-story-item__title strong { font-size: 13.5px; line-height: 1.4; min-width: 0; }
-.vp-story-item__ops {
-  margin-left: auto;
-  display: flex;
-  gap: 10px;
-  flex-shrink: 0;
-}
-.vp-story-item__outline {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--mk-faint);
-  line-height: 1.55;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.vp-story-item__never { color: var(--mk-faint); }
-
-/* V2：会话推进条（Goal→Path→Learn→Wrapup 四段点亮 + 运行中脉冲 + 卡顿 amber） */
-.vp-progress {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin-top: 2px;
-  padding: 7px 10px;
-  border-radius: 10px;
-  border: 1px solid #eef1f6;
-  background: var(--mk-surface);
-}
-.vp-progress.is-stalled {
-  border-color: rgba(217, 119, 6, 0.45);
-  background: #fffaf0;
-}
-.vp-progress__stages {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.vp-story__title {
+  font-size: 13.5px;
+  line-height: 1.4;
   min-width: 0;
-}
-.vp-progress__stage {
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--mk-faint);
-  background: #f0f2f5;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.vp-progress__stage.is-on {
-  color: var(--mk-blue, #2c63d0);
-  background: #e3ecfb;
-}
-.vp-progress__stage.is-current {
-  color: #fff;
-  background: linear-gradient(135deg, #2f6eef, #1a4fbf);
-}
-.vp-progress.is-stalled .vp-progress__stage.is-current {
-  color: #fff;
-  background: linear-gradient(135deg, #f59e0b, #b45309);
-}
-.vp-progress__meta {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.vp-story__runcount {
+  font-family: var(--mk-mono, ui-monospace, monospace);
   font-size: 11px;
   font-weight: 700;
   color: var(--mk-muted);
-  white-space: nowrap;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f0f2f5;
+  flex-shrink: 0;
 }
-.vp-progress__meta--stalled { color: var(--mk-amber, #b7791f); }
-.vp-progress__pulse {
-  width: 8px;
-  height: 8px;
+/* 阶段计数：G5 · P2 · L1 紧凑摘要 */
+.vp-story__stages {
+  font-family: var(--mk-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--mk-faint);
+  background: #f7f8fa;
+  border: 1px solid #eef1f6;
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+/* 最近结果：色调徽标 */
+.vp-story__latest {
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 110px;
+}
+.vp-story__latest.is-ok { color: var(--mk-green, #16a34a); }
+.vp-story__latest.is-bad { color: var(--mk-red, #dc2626); }
+.vp-story__latest.is-warn { color: var(--mk-amber, #b7791f); }
+.vp-story__latest.is-running { color: var(--mk-amber, #b7791f); }
+.vp-story__latest.is-running::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--mk-amber, #b7791f);
+  background: currentColor;
+  margin-right: 5px;
   animation: vp-pulse 1.4s ease-in-out infinite;
 }
+.vp-story__latest.is-none { color: var(--mk-faint); font-weight: 600; }
+.vp-story__ops {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.vp-story__chevron {
+  color: #c4ccd9;
+  font-size: 12px;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.vp-story.is-open .vp-story__chevron { transform: rotate(90deg); }
+
+/* 详情展开行：摘要 / 生命周期 / 运行历史 / 高级诊断 分区 */
+.vp-story__detail {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px 14px 40px;
+  background: #fcfdff;
+}
+.vp-detail__outline {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--mk-muted);
+  line-height: 1.6;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+}
+
 @keyframes vp-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.35; transform: scale(0.8); }
@@ -1579,73 +1709,100 @@ async function quietReload(id: string) {
 .vp-quality--bad { color: #dc2626; background: #fdecec; }
 .vp-quality--none { color: var(--mk-faint); background: #f0f2f5; }
 
-/* 平台视角生命周期条：Goal → Path → Learn */
-.vp-pipe {
+/* ===== 生命周期分区（详情内三行）：累计 / 当前 / 投影 ===== */
+.vp-lc {
+  display: grid;
+  gap: 7px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+  color: var(--mk-muted);
+}
+.vp-lc.is-stalled { border-color: rgba(217, 119, 6, 0.45); background: #fffaf0; }
+.vp-lc__row {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.vp-lc__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #a8b3c6;
+  width: 36px;
+  flex-shrink: 0;
+}
+/* 累计：三阶段计数 pill */
+.vp-lc__counts {
+  display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 6px;
-  padding: 7px 10px;
-  border-radius: 10px;
-  background: var(--mk-bg, #f7f8fa);
-  border: 1px solid #eef1f6;
-  font-size: 11.5px;
-  color: var(--mk-faint);
+  flex-wrap: wrap;
 }
-.vp-pipe__stage {
+.vp-lc__count {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: 5px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #f4f6f9;
+  border: 1px solid #eef1f6;
+  font-size: 11px;
   font-weight: 600;
+  color: var(--mk-faint);
+  white-space: nowrap;
 }
-.vp-pipe__stage b {
+.vp-lc__count b {
   font-family: var(--mk-mono, ui-monospace, monospace);
   font-size: 11.5px;
   color: var(--mk-muted);
 }
-.vp-pipe__stage.is-on { color: var(--mk-muted); }
-.vp-pipe__stage.is-on b { color: var(--mk-blue, #2c63d0); }
-.vp-pipe__arrow { font-style: normal; color: #c4ccd9; }
-.vp-pipe__links {
+.vp-lc__count.is-on { background: #eef5ff; border-color: rgba(44, 99, 208, 0.3); }
+.vp-lc__count.is-on b { color: var(--mk-blue, #2c63d0); font-weight: 800; }
+/* 当前：运行中（脉冲）/ 最近完成（色调结果） */
+.vp-lc__current {
   display: inline-flex;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  flex-wrap: wrap;
 }
-.vp-pipe__links a,
-.vp-pipe__links button {
+.vp-lc__current--stalled { color: var(--mk-amber, #b7791f); }
+.vp-lc__pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mk-amber, #b7791f);
+  animation: vp-pulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.vp-lc__result { font-weight: 800; font-variant-numeric: tabular-nums; }
+.vp-lc__result.is-ok { color: var(--mk-green, #16a34a); }
+.vp-lc__result.is-warn { color: var(--mk-amber, #b7791f); }
+.vp-lc__result.is-bad { color: var(--mk-red, #dc2626); }
+/* 投影：集中链接 chips */
+.vp-lc__links {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.vp-lc__link {
   border: 0;
-  background: none;
-  padding: 0;
+  background: #e8f0fe;
+  padding: 2px 8px;
+  border-radius: 5px;
   font: inherit;
   color: var(--mk-blue, #2c63d0);
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
-  text-decoration: none;
+  white-space: nowrap;
 }
-.vp-pipe__links a:hover,
-.vp-pipe__links button:hover { text-decoration: underline; }
-.vp-pipe__running {
-  margin-left: auto;
-  color: var(--mk-amber, #b7791f);
-  font-weight: 700;
-  font-size: 11px;
-}
-/* 最近运行结果摘要（未选中时的紧凑提示） */
-.vp-pipe__latest {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--mk-faint);
-}
-.vp-story-item__latest {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--mk-faint);
-}
+.vp-lc__link:hover { background: #dbe8fd; }
 .vp-story-runs {
   margin-top: 4px;
   border-top: 1px dashed #e3e9f3;
@@ -1669,46 +1826,123 @@ async function quietReload(id: string) {
   letter-spacing: 0;
   font-size: 12px;
 }
-.vp-story-runs .vp-run { padding: 10px 2px; }
+.vp-story-runs .vp-run { padding: 8px 12px; }
 .vp-story-runs .vp-none { padding: 10px 2px; }
 
-.vp-runs { display: grid; }
+/* 运行历史（故事详情内分区）：标题行 + 记录列表，明显边框 */
+.vp-runs-block {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+.vp-runs-block__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mk-faint);
+}
+.vp-runs-block__head .mk-link {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+}
+.vp-runs-block .vp-run {
+  margin: 8px 10px;
+}
+.vp-runs-block .vp-run:last-child { margin-bottom: 10px; }
+.vp-runs-block .vp-none { padding: 12px; }
+
+/* 运行 tab：按故事分组 */
+.vp-run-groups { display: grid; gap: 10px; padding: 12px; }
+.vp-run-group {
+  border: 1px solid #eef1f6;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+.vp-run-group__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-bottom: 1px solid #eef1f6;
+}
+.vp-run-group__head strong {
+  font-size: 12.5px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vp-run-group__count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--mk-faint);
+  flex-shrink: 0;
+}
+.vp-run-group__body { display: grid; }
+
+
+.vp-runs { display: grid; gap: 6px; padding: 8px; }
+/* 运行记录：三行卡片（阶段+结果 / 时间 / 操作） */
 .vp-run {
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto;
-  gap: 8px 12px;
-  align-items: center;
-  padding: 14px 16px;
-  border-bottom: 1px solid #f0f2f5;
+  gap: 3px;
+  padding: 9px 12px;
+  border: 1px solid #e8edf4;
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color 0.12s ease, background 0.12s ease;
 }
-.vp-run:last-child { border-bottom: none; }
-.vp-run__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  grid-row: 1 / span 2;
-  align-self: start;
-  margin-top: 6px;
-}
-.vp-run__dot.is-ok { background: var(--mk-green); }
-.vp-run__dot.is-warn { background: var(--mk-amber); }
-.vp-run__dot.is-bad { background: var(--mk-red); }
-.vp-run__main { min-width: 0; display: grid; gap: 2px; }
-.vp-run__main strong { font-size: 13.5px; }
-.vp-run__main span { font-size: 12px; color: var(--mk-faint); }
-.vp-run__time {
-  font-size: 12px;
-  color: var(--mk-faint);
-  white-space: nowrap;
-  align-self: start;
-  padding-top: 2px;
-}
-.vp-run__ops {
-  grid-column: 2 / -1;
+.vp-run:hover { border-color: rgba(44, 99, 208, 0.35); background: #fbfdff; }
+.vp-run__head {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
+  min-width: 0;
 }
-.vp-none { margin: 0; padding: 18px; color: var(--mk-faint); font-size: 13px; }
+.vp-run__head strong { font-size: 13px; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vp-run__result {
+  font-size: 11.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.vp-run__result.is-ok { color: var(--mk-green, #16a34a); }
+.vp-run__result.is-warn { color: var(--mk-amber, #b7791f); }
+.vp-run__result.is-bad { color: var(--mk-red, #dc2626); }
+.vp-run__sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--mk-faint);
+  min-width: 0;
+}
+.vp-run__sub span { white-space: nowrap; }
+.vp-run__ops {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 2px;
+}
+.vp-run__ops .mk-link { font-size: 12px; }
+
+
 .vp-next {
   margin: 0 18px 12px;
   padding: 12px 14px;
@@ -1824,38 +2058,39 @@ async function quietReload(id: string) {
   max-height: 180px;
   overflow-y: auto;
 }
-
+
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
   .vp-back { font-size: 15px; }
   .vp-top__name { font-size: 23.5px; }
   .vp-top__level { font-size: 13.5px; }
-  .vp-overview__item b { font-size: 23.5px; }
-  .vp-overview__item span { font-size: 13.5px; }
+  .vp-avatar { width: 52px; height: 52px; font-size: 21px; }
+  .vp-overview__item b { font-size: 18px; }
+  .vp-overview__item span { font-size: 13px; }
   .vp-overview__goal span { font-size: 13px; }
-  .vp-overview__goal strong { font-size: 15px; }
+  .vp-overview__goal strong { font-size: 14.5px; }
   .vp-hero__story { font-size: 16.5px; }
   .vp-trait { font-size: 14px; }
   .vp-goal span { font-size: 13.5px; }
   .vp-goal strong { font-size: 16.5px; }
   .vp-profile__row { font-size: 15px; }
-  .vp-pipe { font-size: 13.5px; }
-  .vp-pipe__stage b { font-size: 13.5px; }
-  .vp-pipe__links a, .vp-pipe__links button { font-size: 13px; }
-  .vp-pipe__running, .vp-pipe__latest { font-size: 13px; }
-  .vp-story-item__title strong { font-size: 16px; }
-  .vp-story-item__outline { font-size: 14.5px; }
-  .vp-story-item__latest { font-size: 14px; }
+  .vp-lc { font-size: 13px; }
+  .vp-lc__label { font-size: 12px; width: 44px; }
+  .vp-lc__count { font-size: 12.5px; }
+  .vp-lc__count b { font-size: 13px; }
+  .vp-lc__link { font-size: 12.5px; }
+  .vp-story__title { font-size: 15px; }
+  .vp-detail__outline { font-size: 14px; }
+  .vp-story__stages { font-size: 12.5px; }
+  .vp-story__latest { font-size: 13px; }
+  .vp-run__head strong { font-size: 15px; }
+  .vp-run__result, .vp-run__sub { font-size: 13px; }
+  .vp-run-group__head strong { font-size: 14px; }
   .vp-story-runs__head { font-size: 13px; }
   .vp-story-runs__head .mk-link { font-size: 14px; }
-  .vp-run__main strong { font-size: 16px; }
-  .vp-run__main span, .vp-run__time { font-size: 14px; }
   .vp-none { font-size: 15px; }
   .vp-next { font-size: 15px; }
   .vp-tool { font-size: 14.5px; }
-  .vp-tools__hint { font-size: 14px; }
-  .vp-story-item__advanced { font-size: 13px; }
-  .vp-story-item__advanced > summary::before { font-size: 12px; }
   .vp-adv-row { font-size: 13.5px; }
   .vp-adv-row--object pre { font-size: 12.5px; }
   .vp-tab__count { font-size: 13px; margin-left: 4px; }
@@ -1866,49 +2101,52 @@ async function quietReload(id: string) {
   .vp-goal { padding: 14px 16px; }
   .vp-profile__row { grid-template-columns: 126px minmax(0, 1fr); padding: 14px 21px; }
   .vp-stories { gap: 12px; padding: 14px; }
-  .vp-story-item { padding: 16px 19px; }
-  .vp-story-item__mark { width: 16px; height: 16px; }
-  .vp-pipe { padding: 8px 12px; }
-  .vp-run { padding: 16px 19px; }
-  .vp-run__dot { width: 9px; height: 9px; margin-top: 7px; }
+  .vp-story__row { padding: 12px 18px; }
+  .vp-story__detail { padding: 14px 18px 16px 48px; }
+  .vp-lc { padding: 12px 14px; }
+  .vp-run { padding: 11px 14px; }
+  .vp-run-groups { padding: 14px; }
   .vp-none { padding: 21px; }
   .vp-next { padding: 14px 16px; }
   .vp-tools { padding: 5px 19px 14px; }
   .vp-tool { padding: 12px 14px; }
   .vp-adv-row { grid-template-columns: 88px 1fr; }
   .vp-adv-row--object pre { padding: 7px 10px; max-height: 210px; }
+  .vp-story-item__advanced { font-size: 13px; }
+  .vp-story-item__advanced > summary::before { font-size: 12px; }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号升到 2800 级（17px 级） */
   .vp-back { font-size: 17.5px; }
   .vp-top__name { font-size: 27.5px; }
   .vp-top__level { font-size: 16px; }
-  .vp-overview__item b { font-size: 27.5px; }
-  .vp-overview__item span { font-size: 16px; }
-  .vp-overview__goal span { font-size: 15.5px; }
-  .vp-overview__goal strong { font-size: 17.5px; }
+  .vp-avatar { width: 60px; height: 60px; font-size: 24px; }
+  .vp-overview__item b { font-size: 20px; }
+  .vp-overview__item span { font-size: 15px; }
+  .vp-overview__goal span { font-size: 15px; }
+  .vp-overview__goal strong { font-size: 16.5px; }
   .vp-hero__story { font-size: 19.5px; }
   .vp-trait { font-size: 16.5px; }
   .vp-goal span { font-size: 16px; }
   .vp-goal strong { font-size: 19.5px; }
   .vp-profile__row { font-size: 17.5px; }
-  .vp-pipe { font-size: 16px; }
-  .vp-pipe__stage b { font-size: 16px; }
-  .vp-pipe__links a, .vp-pipe__links button { font-size: 15.5px; }
-  .vp-pipe__running, .vp-pipe__latest { font-size: 15.5px; }
-  .vp-story-item__title strong { font-size: 18.5px; }
-  .vp-story-item__outline { font-size: 17px; }
-  .vp-story-item__latest { font-size: 16.5px; }
+  .vp-lc { font-size: 17px; }
+  .vp-lc__label { font-size: 14.5px; width: 52px; }
+  .vp-lc__count { font-size: 15px; }
+  .vp-lc__count b { font-size: 15.5px; }
+  .vp-lc__link { font-size: 15px; }
+  .vp-story__title { font-size: 17.5px; }
+  .vp-detail__outline { font-size: 16.5px; }
+  .vp-story__stages { font-size: 15px; }
+  .vp-story__latest { font-size: 15.5px; }
+  .vp-run__head strong { font-size: 17.5px; }
+  .vp-run__result, .vp-run__sub { font-size: 15.5px; }
+  .vp-run-group__head strong { font-size: 16.5px; }
   .vp-story-runs__head { font-size: 15px; }
   .vp-story-runs__head .mk-link { font-size: 16.5px; }
-  .vp-run__main strong { font-size: 18.5px; }
-  .vp-run__main span, .vp-run__time { font-size: 16.5px; }
   .vp-none { font-size: 17.5px; }
   .vp-next { font-size: 17.5px; }
   .vp-tool { font-size: 17px; }
-  .vp-tools__hint { font-size: 16.5px; }
-  .vp-story-item__advanced { font-size: 15px; }
-  .vp-story-item__advanced > summary::before { font-size: 14px; }
   .vp-adv-row { font-size: 16px; }
   .vp-adv-row--object pre { font-size: 14.5px; }
   .vp-tab__count { font-size: 15.5px; margin-left: 5px; }
@@ -1919,50 +2157,53 @@ async function quietReload(id: string) {
   .vp-goal { padding: 16px 19px; }
   .vp-profile__row { grid-template-columns: 148px minmax(0, 1fr); padding: 16px 24px; }
   .vp-stories { gap: 14px; padding: 16px; }
-  .vp-story-item { padding: 19px 22px; }
-  .vp-story-item__mark { width: 19px; height: 19px; }
-  .vp-pipe { padding: 9px 14px; }
-  .vp-run { padding: 19px 22px; }
-  .vp-run__dot { width: 11px; height: 11px; margin-top: 8px; }
+  .vp-story__row { padding: 14px 22px; }
+  .vp-story__detail { padding: 16px 22px 18px 58px; }
+  .vp-lc { padding: 14px 16px; }
+  .vp-run { padding: 13px 16px; }
+  .vp-run-groups { padding: 16px; }
   .vp-none { padding: 24px; }
   .vp-next { padding: 16px 19px; }
   .vp-tools { padding: 6px 22px 16px; }
   .vp-tool { padding: 14px 16px; }
   .vp-adv-row { grid-template-columns: 103px 1fr; }
   .vp-adv-row--object pre { padding: 8px 12px; max-height: 245px; }
+  .vp-story-item__advanced { font-size: 15px; }
+  .vp-story-item__advanced > summary::before { font-size: 14px; }
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
   .vp-back { font-size: 20.5px; }
   .vp-top__name { font-size: 32px; }
   .vp-top__level { font-size: 18.5px; }
-  .vp-overview__item b { font-size: 32px; }
-  .vp-overview__item span { font-size: 18.5px; }
-  .vp-overview__goal span { font-size: 18px; }
-  .vp-overview__goal strong { font-size: 20.5px; }
+  .vp-avatar { width: 68px; height: 68px; font-size: 27px; }
+  .vp-overview__item b { font-size: 22px; }
+  .vp-overview__item span { font-size: 17px; }
+  .vp-overview__goal span { font-size: 17px; }
+  .vp-overview__goal strong { font-size: 19px; }
   .vp-hero__story { font-size: 22.5px; }
   .vp-trait { font-size: 19px; }
   .vp-goal span { font-size: 18.5px; }
   .vp-goal strong { font-size: 22.5px; }
   .vp-profile__row { font-size: 20.5px; }
-  .vp-pipe { font-size: 18.5px; }
-  .vp-pipe__stage b { font-size: 18.5px; }
-  .vp-pipe__links a, .vp-pipe__links button { font-size: 18px; }
-  .vp-pipe__running, .vp-pipe__latest { font-size: 18px; }
-  .vp-story-item__title strong { font-size: 21.5px; }
-  .vp-story-item__outline { font-size: 20px; }
-  .vp-story-item__latest { font-size: 19px; }
+  .vp-lc { font-size: 20px; }
+  .vp-lc__label { font-size: 17px; width: 60px; }
+  .vp-lc__count { font-size: 17.5px; }
+  .vp-lc__count b { font-size: 18px; }
+  .vp-lc__link { font-size: 17.5px; }
+  .vp-story__title { font-size: 20.5px; }
+  .vp-detail__outline { font-size: 19.5px; }
+  .vp-story__stages { font-size: 17.5px; }
+  .vp-story__latest { font-size: 18px; }
+  .vp-run__head strong { font-size: 20.5px; }
+  .vp-run__result, .vp-run__sub { font-size: 18px; }
+  .vp-run-group__head strong { font-size: 19.5px; }
   .vp-story-runs__head { font-size: 17.5px; }
   .vp-story-runs__head .mk-link { font-size: 19px; }
-  .vp-run__main strong { font-size: 21.5px; }
-  .vp-run__main span, .vp-run__time { font-size: 19px; }
   .vp-none { font-size: 20.5px; }
   .vp-next { font-size: 20.5px; }
   .vp-tool { font-size: 20px; }
-  .vp-tools__hint { font-size: 19px; }
-  .vp-story-item__advanced { font-size: 17.5px; }
-  .vp-story-item__advanced > summary::before { font-size: 16px; }
-  .vp-adv-row { font-size: 18.5px; }
+  .vp-adv-row { font-size: 19px; }
   .vp-adv-row--object pre { font-size: 17px; }
   .vp-tab__count { font-size: 18px; margin-left: 6px; }
   .vp-fallback { font-size: 20px; padding: 16px 22px; }
@@ -1972,16 +2213,18 @@ async function quietReload(id: string) {
   .vp-goal { padding: 19px 22px; }
   .vp-profile__row { grid-template-columns: 174px minmax(0, 1fr); padding: 19px 28px; }
   .vp-stories { gap: 16px; padding: 19px; }
-  .vp-story-item { padding: 22px 26px; }
-  .vp-story-item__mark { width: 22px; height: 22px; }
-  .vp-pipe { padding: 11px 16px; }
-  .vp-run { padding: 22px 26px; }
-  .vp-run__dot { width: 13px; height: 13px; margin-top: 9px; }
+  .vp-story__row { padding: 16px 26px; }
+  .vp-story__detail { padding: 18px 26px 20px 68px; }
+  .vp-lc { padding: 16px 19px; }
+  .vp-run { padding: 15px 19px; }
+  .vp-run-groups { padding: 19px; }
   .vp-none { padding: 28px; }
   .vp-next { padding: 19px 22px; }
   .vp-tools { padding: 7px 26px 19px; }
   .vp-tool { padding: 16px 19px; }
-  .vp-adv-row { grid-template-columns: 120px 1fr; }
-  .vp-adv-row--object pre { padding: 10px 14px; max-height: 285px; }
+  .vp-adv-row { grid-template-columns: 121px 1fr; }
+  .vp-adv-row--object pre { padding: 9px 14px; max-height: 285px; }
+  .vp-story-item__advanced { font-size: 17.5px; }
+  .vp-story-item__advanced > summary::before { font-size: 16px; }
 }
 </style>

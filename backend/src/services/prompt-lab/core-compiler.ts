@@ -212,7 +212,7 @@ export function checkFiveBlockBody(systemPrompt: string): GateIssue[] {
  */
 export function checkFiveBlockStructure(prompt: string): GateIssue[] {
   const issues: GateIssue[] = [];
-  const normalized = prompt.replace(/^﻿/, '').replace(/\r\n/g, '\n');
+  const normalized = prompt.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
 
   if (!/^---\n[\s\S]*?\n---\n?/.test(normalized)) {
     issues.push({ code: 'frontmatter-missing', message: '缺少 YAML frontmatter' });

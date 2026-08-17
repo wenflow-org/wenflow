@@ -13,6 +13,12 @@
   gap: 12px;
   align-content: start;
   min-height: 100%;
+  /* 窄屏防横向溢出：grid 子项默认 min-width:auto 会被 nowrap 内容撑破，
+     显式约束为 0 让 .mk-status/.mk-card 在轨道内换行/压缩而不是撑出页面滚动 */
+  min-width: 0;
+}
+.mk-page > * {
+  min-width: 0;
 }
 
 /* 键盘焦点可见环（无障碍底线）：覆盖按钮/输入/选择/链接；:root 级使 Teleport 到 body 的抽屉/弹窗同样生效 */

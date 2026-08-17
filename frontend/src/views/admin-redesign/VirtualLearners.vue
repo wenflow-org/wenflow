@@ -4,20 +4,11 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">{{ samples.length ? `${samples.length} 个虚拟学习者` : '还没有虚拟学习者' }}</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta" :title="'全量口径：会话处于创建中状态的数量'">创建中 {{ partition.created }}</span>
-      <span class="mk-status__meta vl-status-run" :title="'全量口径：运行中会话数（含卡死）'">运行中 {{ partition.running }}</span>
-      <span class="mk-status__meta vl-status-fail" :title="'全量口径：失败/放弃会话数'">已失败 {{ partition.failed }}</span>
-      <span v-if="runStats.totalSessions > 0" class="mk-status__meta" :title="`完成率 = 已完成会话 / 总会话（${runStats.completed}/${runStats.totalSessions}）`">
-        完成率 {{ runStats.completionRate }}%
-      </span>
-      <span v-if="runStats.totalSessions > 0" class="mk-status__meta" :title="`失败率 = 失败/放弃会话 / 总会话（${runStats.failed + runStats.abandoned}/${runStats.totalSessions}）`">
-        失败率 {{ runStats.failureRate }}%
-      </span>
-      <span v-if="runStats.totalSessions > 0" class="mk-status__meta vl-status-dur" :title="'终态会话平均时长（completed/failed/abandoned 的 created→updated）'">
-        平均时长 {{ fmtDuration(runStats.avgDurationMs) }}
-      </span>
-      <span v-if="partition.stale > 0" class="mk-status__meta vl-status-stale" :title="`超过回收阈值无写入且无活跃租约，可一键回收；最长卡死 ${runStats.maxStaleMins} 分钟`">
-        卡死 {{ partition.stale }}<template v-if="runStats.maxStaleMins > 0">（最长 {{ fmtMins(runStats.maxStaleMins) }}）</template>
+      <span class="mk-status__meta vl-stat-item" :title="'全量口径：会话处于创建中状态的数量'">创建中 <b class="vl-num">{{ partition.created }}</b></span>
+      <span class="mk-status__meta vl-stat-item vl-status-run" :title="'全量口径：运行中会话数（含卡死）'">运行中 <b class="vl-num">{{ partition.running }}</b></span>
+      <span class="mk-status__meta vl-stat-item vl-status-fail" :title="'全量口径：失败/放弃会话数'">已失败 <b class="vl-num">{{ partition.failed }}</b></span>
+      <span v-if="partition.stale > 0" class="mk-status__meta vl-stat-item vl-status-stale" :title="`超过回收阈值无写入且无活跃租约，可一键回收；最长卡死 ${runStats.maxStaleMins} 分钟`">
+        卡死 <b class="vl-num">{{ partition.stale }}</b><template v-if="runStats.maxStaleMins > 0">（最长 {{ fmtMins(runStats.maxStaleMins) }}）</template>
       </span>
       <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-status__meta vl-truncated" :title="`后端共 ${liveVirtualsTotal} 人，列表仅加载前 ${samples.length} 行`">
         已截断 · 共 {{ liveVirtualsTotal }} 人
@@ -35,19 +26,27 @@
       <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建虚拟学习者</button>
     </div>
 
-    <!-- 定位说明（D1）：虚拟学习者是「仿真数据生成器」，不是真实用户管理面 -->
-    <p class="vl-position">
-      <strong>仿真数据生成器</strong>
-      ：虚拟学习者跑真实学习流程，产出可再生成的仿真数据；管理面操作（运行/清理/删除）不面向真实用户。
-      <span v-if="isLive" class="vl-position__stats" :title="'全量口径：虚拟会话状态分区（创建中/运行中/失败/放弃/完成）之和'">
-        当前虚拟会话 {{ liveVirtualSessionStats.total }} 个
-      </span>
-    </p>
+    <!-- 运行概览：仿真定位 + 派生统计（完成率/失败率/平均时长从状态条移入，避免单行过载） -->
+    <div class="vl-position">
+      <span class="vl-position__icon" aria-hidden="true">🧪</span>
+      <div class="vl-position__text">
+        <strong>仿真数据生成器</strong>
+        <span>虚拟学习者跑真实学习流程，产出可再生成的仿真数据；管理面操作不面向真实用户</span>
+      </div>
+      <div class="vl-position__stats">
+        <template v-if="runStats.totalSessions > 0">
+          <span class="vl-stat" :title="`完成率 = 已完成会话 / 总会话（${runStats.completed}/${runStats.totalSessions}）`">完成率 <b>{{ runStats.completionRate }}%</b></span>
+          <span class="vl-stat" :title="`失败率 = 失败/放弃会话 / 总会话（${runStats.failed + runStats.abandoned}/${runStats.totalSessions}）`">失败率 <b>{{ runStats.failureRate }}%</b></span>
+          <span class="vl-stat" :title="'终态会话平均时长（completed/failed/abandoned 的 created→updated）'">平均时长 <b>{{ fmtDuration(runStats.avgDurationMs) }}</b></span>
+        </template>
+        <span v-if="isLive" class="vl-stat vl-stat--live" :title="'全量口径：虚拟会话状态分区（创建中/运行中/失败/放弃/完成）之和'">当前虚拟会话 <b>{{ liveVirtualSessionStats.total }}</b> 个</span>
+      </div>
+    </div>
 
 
     <div class="mk-card">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">虚拟学习者列表</h3>
+        <h3 class="mk-card__title">虚拟学习者列表 <span class="mk-card__meta">共 {{ filtered.length }} 人<template v-if="filtered.length < samples.length">（已筛选）</template> · 点击行查看画像</span></h3>
         <input class="mk-filter__input" v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
       </div>
 
@@ -72,12 +71,17 @@
           <tr v-for="s in shown" :key="s.id" class="vl-row" @click="openSubPage('virtual', s.id)">
             <td v-if="isLive"><input v-model="selected" type="checkbox" :value="s.id" :aria-label="`选择 ${s.name}`" @click.stop /></td>
             <td>
-              <div class="mk-cell-main">
-                <strong>{{ s.name }}</strong>
-                <span class="mk-cell-sub">{{ s.id }}</span>
+              <div class="mk-cell-main vl-cell">
+                <strong class="vl-name">
+                  <span class="vl-avatar" :class="avatarClass(s)" aria-hidden="true">{{ s.name.slice(0, 1) }}</span>
+                  <span class="vl-name__text">{{ s.name }}</span>
+                </strong>
+                <span class="mk-cell-sub">{{ shortId(s.id) }}</span>
               </div>
             </td>
-            <td><span class="vl-goal" :title="s.goal || undefined">{{ s.goal || '—' }}</span></td>
+            <td>
+              <span class="vl-goal" :class="{ 'vl-goal--empty': !s.goal || s.goal === '—' }" :title="s.goal || undefined">{{ s.goal || '未设置' }}</span>
+            </td>
             <td>
               <span class="mk-badge" :class="s.storyCount > 0 ? 'mk-badge--ok' : 'mk-badge--muted'">
                 {{ s.storyCount > 0 ? `${s.storyCount} 条` : '未生成' }}
@@ -85,18 +89,20 @@
             </td>
             <td class="mk-num">{{ s.sessions }}</td>
             <td>
-              <span
-                v-if="s.runningCount > 0"
-                class="vl-run vl-run--live"
-                :class="{ 'vl-run--stalled': s.stalledCount > 0 }"
-                :title="`${s.runningCount} 个会话运行中 · 当前阶段 ${stageLabel(s.currentStage)}${s.runningSessionIds.length ? '；点击进入会话座舱' : ''}`"
-                @click.stop="openRunningSession(s)"
-              >
-                ● {{ s.runningCount }} 运行中 · {{ stageLabel(s.currentStage) }}
-              </span>
-              <span v-else class="vl-run" title="当前没有运行中的会话">空闲</span>
-              <span v-if="s.stalledCount > 0" class="vl-badge vl-badge--bad" :title="`${s.stalledCount} 个运行中会话已卡死（超过回收阈值无写入）`">卡死 {{ s.stalledCount }}</span>
-              <span v-if="s.failedCount > 0" class="vl-badge vl-badge--bad" :title="`${s.failedCount} 个会话已失败/放弃`">失败 {{ s.failedCount }}</span>
+              <div class="vl-run-cell">
+                <span
+                  v-if="s.runningCount > 0"
+                  class="vl-run vl-run--live"
+                  :class="{ 'vl-run--stalled': s.stalledCount > 0 }"
+                  :title="`${s.runningCount} 个会话运行中 · 当前阶段 ${stageLabel(s.currentStage)}${s.runningSessionIds.length ? '；点击进入会话座舱' : ''}`"
+                  @click.stop="openRunningSession(s)"
+                >
+                  <span class="vl-run__dot" aria-hidden="true"></span>{{ s.runningCount }} 运行中 · {{ stageLabel(s.currentStage) }}
+                </span>
+                <span v-else class="vl-run vl-run--idle" title="当前没有运行中的会话">空闲</span>
+                <span v-if="s.stalledCount > 0" class="vl-badge vl-badge--bad" :title="`${s.stalledCount} 个运行中会话已卡死（超过回收阈值无写入）`">卡死 {{ s.stalledCount }}</span>
+                <span v-if="s.failedCount > 0" class="vl-badge vl-badge--bad" :title="`${s.failedCount} 个会话已失败/放弃`">失败 {{ s.failedCount }}</span>
+              </div>
             </td>
             <td class="mk-na">{{ s.created }}</td>
             <td>
@@ -298,7 +304,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { openSubPage, intent, isLive } from './store'
-import { liveVirtuals, liveCreateVirtual, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats } from './live'
+import { liveVirtuals, liveCreateVirtual, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useLoadMore } from './useLoadMore'
@@ -307,6 +313,14 @@ import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
+
+/* 头像色板：按名称哈希取色，同一人恒定同色 */
+const AVATAR_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#64748b']
+function avatarClass(s: Sample): string {
+  let h = 0
+  for (let i = 0; i < s.name.length; i++) h = (h * 31 + s.name.charCodeAt(i)) >>> 0
+  return `vl-avatar--${h % AVATAR_COLORS.length}`
+}
 
 interface Sample {
   id: string
@@ -790,40 +804,48 @@ function stageLabel(stage: string | null | undefined): string {
 </script>
 
 <style scoped>
+/* 窄屏表格：8 列在 704px 内容区会被压扁操作列，设 min-width 触发 .mk-table-scroll 横向滚动（对齐 AuditLogs 模式） */
+.mk-table-scroll .mk-table { min-width: 860px; }
 .mk-link--muted { opacity: 0.55; }
 .vl-row { cursor: pointer; }
-/* 长期倾向列：单行截断 + title（原可换行撑高行，ADMIN_COLUMN_WIDTH_AUDIT ⑤） */
+/* 长期倾向列：单行截断 + title（原可换行撑高行，ADMIN_COLUMN_WIDTH_AUDIT ⑤）；空值统一「未设置」降噪 */
 .vl-goal {
-  display: block;
+  display: inline-block;
   max-width: var(--mk-cell-main-max);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  vertical-align: middle;
 }
+.vl-goal--empty { color: var(--mk-faint); font-size: 12px; }
+/* 运行中列：状态胶囊 + 失败/卡死小徽章，统一 flex 间距（原元素堆叠无留白） */
+.vl-run-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 26px; }
 .vl-run {
   display: inline-flex;
   align-items: center;
+  gap: 5px;
   font-size: 11.5px;
   font-weight: 700;
   color: var(--mk-faint);
   white-space: nowrap;
 }
+.vl-run__dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.85; flex-shrink: 0; }
+.vl-run--idle { color: var(--mk-faint); }
 .vl-run--live {
-  color: var(--mk-amber, #b7791f);
+  color: #b45309;
   background: rgba(217, 119, 6, 0.1);
   border-radius: 999px;
-  padding: 2px 10px;
+  padding: 3px 10px;
   cursor: pointer;
 }
 .vl-run--live:hover { background: rgba(217, 119, 6, 0.18); }
 .vl-run--stalled { color: var(--mk-red, #dc2626); background: rgba(220, 38, 38, 0.1); }
 .vl-run--stalled:hover { background: rgba(220, 38, 38, 0.18); }
-/* 失败/卡死状态标注：bad 色（对齐 mk-badge--bad） */
+/* 失败/卡死状态标注：bad 色（对齐 mk-badge--bad）；间距由 .vl-run-cell 统一控制 */
 .vl-badge {
   display: inline-flex;
   align-items: center;
-  margin-left: 6px;
-  padding: 1px 8px;
+  padding: 2px 8px;
   border-radius: 999px;
   font-size: 10.5px;
   font-weight: 700;
@@ -835,28 +857,86 @@ function stageLabel(stage: string | null | undefined): string {
 .vl-status-stale { color: var(--mk-red, #dc2626); font-weight: 700; }
 .vl-status-dur { color: var(--mk-muted, #5b6577); font-weight: 700; }
 .vl-truncated { color: var(--mk-amber); font-weight: 700; }
-/* 定位说明（D1）：仿真数据生成器注记 */
+/* 运行概览条：仿真定位（左）+ 派生统计胶囊（右），垂直居中对齐 */
 .vl-position {
   margin: 8px 0 0;
-  padding: 8px 14px;
+  padding: 10px 14px;
   border-radius: 10px;
-  border: 1px dashed #d6dce8;
-  background: #fafbfe;
-  color: var(--mk-muted);
-  font-size: 12.5px;
-  line-height: 1.7;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.vl-position__icon { font-size: 15px; flex-shrink: 0; }
+.vl-position__text {
   display: flex;
   align-items: baseline;
+  gap: 8px;
   flex-wrap: wrap;
-  gap: 4px 8px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--mk-muted);
 }
-.vl-position strong { color: var(--mk-ink); font-weight: 800; white-space: nowrap; }
+.vl-position__text strong { color: var(--mk-ink); font-weight: 800; white-space: nowrap; }
 .vl-position__stats {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.vl-stat {
   font-size: 11.5px;
-  font-weight: 700;
-  color: var(--mk-blue);
+  color: var(--mk-muted);
   white-space: nowrap;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--mk-line);
+}
+.vl-stat b { color: var(--mk-ink); font-weight: 800; font-variant-numeric: tabular-nums; }
+.vl-stat--live b { color: var(--mk-blue); }
+
+/* 状态条数字强调 */
+.vl-num { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--mk-ink); }
+.vl-status-run .vl-num { color: #b45309; }
+.vl-status-fail .vl-num { color: var(--mk-red, #dc2626); }
+.vl-status-stale .vl-num { color: var(--mk-red, #dc2626); }
+
+/* 名称头像：按名字哈希取色，同一人恒定同色 */
+.vl-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.vl-avatar--0 { background: #3b82f6; }
+.vl-avatar--1 { background: #8b5cf6; }
+.vl-avatar--2 { background: #10b981; }
+.vl-avatar--3 { background: #f59e0b; }
+.vl-avatar--4 { background: #ef4444; }
+.vl-avatar--5 { background: #06b6d4; }
+.vl-avatar--6 { background: #ec4899; }
+.vl-avatar--7 { background: #64748b; }
+.vl-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.vl-name__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 .vl-status-reclaim {
   padding: 5px 12px;

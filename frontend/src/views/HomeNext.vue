@@ -160,7 +160,7 @@
       <section class="hn-end">
         <div class="hn-end__glow" />
         <div class="hn-end__in" v-reveal>
-          <h2>用 2 分钟，聊出一条能执行的路径。</h2>
+          <h2>用 2 分钟，理出一条能执行的路径。</h2>
           <div class="hn-end__acts">
             <router-link :to="primaryPath" class="hn-btn hn-btn--primary hn-btn--lg">{{ primaryLabel }}</router-link>
             <router-link to="/vision" class="hn-btn hn-btn--light hn-btn--lg">为什么这样学</router-link>

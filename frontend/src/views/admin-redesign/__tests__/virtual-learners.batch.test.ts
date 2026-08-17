@@ -39,7 +39,8 @@ vi.mock('../live', async () => {
     liveDeleteVirtual: vi.fn(async () => {}),
     loadLiveData: vi.fn(async () => {}),
     timeAgo: () => 'x',
-    errMsg: (e: unknown) => String(e)
+    errMsg: (e: unknown) => String(e),
+    shortId: (id: string) => id.slice(0, 8)
   };
 });
 

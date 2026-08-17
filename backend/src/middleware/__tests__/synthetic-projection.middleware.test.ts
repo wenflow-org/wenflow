@@ -41,6 +41,7 @@ describe('synthetic projection access', () => {
   })
 
   it('仅在 token 拥有所需 capability 且实验与资源匹配时放行', async () => {
+    // eslint-disable-next-line no-extra-semi -- 行首分号是 ASI 保护
     ;(prisma.virtual_sessions.findUnique as jest.Mock).mockResolvedValue({
       id: 'vs1',
       userId: 'u1',
@@ -72,6 +73,7 @@ describe('synthetic projection access', () => {
   })
 
   it('拒绝访问当前实验控制面之外的资源', async () => {
+    // eslint-disable-next-line no-extra-semi -- 行首分号是 ASI 保护
     ;(prisma.virtual_sessions.findUnique as jest.Mock).mockResolvedValue({
       id: 'vs1',
       userId: 'u1',
@@ -99,6 +101,7 @@ describe('synthetic projection access', () => {
   })
 
   it('允许尚未创建 conversation 的 Goal start', async () => {
+    // eslint-disable-next-line no-extra-semi -- 行首分号是 ASI 保护
     ;(prisma.virtual_sessions.findUnique as jest.Mock).mockResolvedValue({
       id: 'vs1',
       userId: 'u1',

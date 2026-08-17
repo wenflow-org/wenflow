@@ -28,8 +28,7 @@ export class BackgroundTaskTracker {
       operation = Promise.reject(error);
     }
 
-    let settlement: Promise<void>;
-    settlement = operation.then(() => undefined, () => undefined).finally(() => {
+    const settlement: Promise<void> = operation.then(() => undefined, () => undefined).finally(() => {
       this.inFlight.delete(settlement);
     });
     this.inFlight.add(settlement);

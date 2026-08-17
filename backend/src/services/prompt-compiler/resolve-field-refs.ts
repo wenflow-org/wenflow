@@ -35,7 +35,7 @@ export interface FieldRefResolveResult {
 // 引用 token 语法: {{skill:<skillId>.<fieldPath>}}
 //   skillId 允许 a-z 0-9 _ - : (支持 'skill:goal-conversation' 或 'goal-conversation')
 //   fieldPath 允许 a-z A-Z 0-9 _ . [] -
-const REF_TOKEN_RE = /\{\{\s*skill:([a-zA-Z0-9_\-:]+)\.([a-zA-Z0-9_.\[\]\-]+)\s*\}\}/g;
+const REF_TOKEN_RE = /\{\{\s*skill:([a-zA-Z0-9_\-:]+)\.([a-zA-Z0-9_.[\]-]+)\s*\}\}/g;
 
 /**
  * 从一段文本里抽出所有引用 token

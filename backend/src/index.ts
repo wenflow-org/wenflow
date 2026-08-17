@@ -7,7 +7,7 @@ import { logger } from './utils/logger';
 import prisma from './config/database';
 import systemPrisma from './config/system-database';
 import { initializeAdmin } from './services/auth/init-admin.service';
-import { globalApiLimiter } from './middleware/api-rate-limit.middleware';
+import { adminApiLimiter, globalApiLimiter } from './middleware/api-rate-limit.middleware';
 
 // EduClaw Gateway
 import { createGateway, EduClawGateway } from './gateway';
@@ -156,8 +156,9 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// 应用全局限流到 API 路由
+// 应用全局限流到 API 路由（admin 路径由 globalApiLimiter 跳过，走 adminApiLimiter 专属额度）
 app.use('/api/', globalApiLimiter);
+app.use('/api/admin/', adminApiLimiter);
 
 // 应用 CSRF 保护
 app.use('/api/', csrfMiddleware);

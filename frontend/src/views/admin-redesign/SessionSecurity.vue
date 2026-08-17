@@ -1,12 +1,14 @@
 <template>
   <div class="mk-page">
-    <!-- 状态条 -->
+    <!-- 状态条：全量会话统计 + 状态筛选 -->
     <div class="ss-status" :class="`ss-status--${statusTone}`">
       <span class="ss-status__dot"></span>
-      <strong>会话安全</strong>
+      <strong class="ss-status__title">会话安全</strong>
       <span class="ss-status__sep"></span>
       <span class="ss-status__meta mono">{{ sessions.length }} 个会话</span>
       <span v-if="sessions.length" class="ss-status__meta mono">活跃 {{ activeCount }}</span>
+      <span v-if="expiredCount" class="ss-status__meta mono">已过期 {{ expiredCount }}</span>
+      <span v-if="revokedCount" class="ss-status__meta mono">已撤销 {{ revokedCount }}</span>
 
       <div class="ss-status__filters">
         <div class="mk-pills">
@@ -16,9 +18,10 @@
             type="button"
             class="mk-pill"
             :class="{ 'mk-pill--active': statusFilter === p.id }"
+            :title="`只看${p.label}会话`"
             @click="statusFilter = statusFilter === p.id ? '' : p.id"
           >
-            {{ p.label }}
+            {{ p.label }}<template v-if="countOf(p.id) > 0"> {{ countOf(p.id) }}</template>
           </button>
         </div>
         <button type="button" class="ss-refresh" :disabled="loading" @click="applyFilters">刷新</button>
@@ -35,9 +38,9 @@
     </div>
 
     <!-- 加载中骨架 -->
-    <MockSkeletonTable v-else-if="loading && !sessions.length" :cols="6" :rows="6" />
+    <MockSkeletonTable v-else-if="loading && !sessions.length" :cols="7" :rows="6" />
 
-    <!-- 按管理员分组 -->
+    <!-- 按管理员分组的标准表格 -->
     <div v-else-if="groups.length" class="ss-body">
       <div v-for="{ g, active } in visibleGroups" :key="g.adminId" class="ss-group">
         <div class="ss-group__head">
@@ -55,78 +58,125 @@
             下线全部<template v-if="g.active.length > 1">（{{ g.active.length }}）</template>
           </button>
         </div>
-        <div class="ss-table">
-          <div class="ss-head" aria-hidden="true">
-            <span class="ss-head__device">设备</span>
-            <span class="ss-head__time">登录时间</span>
-            <span class="ss-head__time">最后活跃</span>
-            <span class="ss-head__time">过期时间</span>
-            <span class="ss-head__status">状态</span>
-            <span class="ss-head__ops">操作</span>
-          </div>
-          <div
-            v-for="s in active"
-            :key="s.id"
-            class="ss-row"
-            :class="{ 'ss-row--current': s.id === currentId }"
-          >
-            <span class="ss-device" :title="uaFull(s)">{{ uaOf(s) }}</span>
-            <span class="ss-time mono" :title="fmtFull(s.issuedAt)">{{ fmtDateTime(s.issuedAt) }}</span>
-            <span class="ss-time mono" :title="s.lastSeenAt ? fmtFull(s.lastSeenAt) : ''">
-              {{ s.lastSeenAt ? fmtDateTime(s.lastSeenAt) : '—' }}
-            </span>
-            <span class="ss-time mono" :class="{ 'ss-time--soon': expiringSoon(s) }" :title="fmtFull(s.expiresAt)">
-              {{ fmtDateTime(s.expiresAt) }}
-            </span>
-            <span class="mk-badge" :class="statusClass(s)">{{ statusTextOf(s) }}</span>
-            <span class="ss-ops">
-              <span v-if="s.id === currentId" class="ss-current" title="当前登录标签页的会话，不可下线">当前</span>
-              <button
-                v-else-if="statusOf(s) === 'active'"
-                type="button"
-                class="mk-btn mk-btn--danger mk-btn--sm"
-                @click="revoke(s)"
-              >强制下线</button>
-              <span v-else class="ss-na">—</span>
-            </span>
-          </div>
-          <!-- 滚动修复 #3：过期/已撤销历史收进折叠组（默认收起；「已撤销」筛选时自动展开） -->
-          <details v-if="g.historical.length" class="ss-hist" :open="statusFilter === 'revoked'">
-            <summary class="ss-hist__summary">
-              <span class="ss-hist__title">已过期 · 已撤销（{{ g.historical.length }}）</span>
-              <span class="ss-hist__meta">过期 {{ g.expiredCount }} · 已撤销 {{ g.revokedCount }}</span>
-            </summary>
-            <div
-              v-for="s in g.historical"
-              :key="s.id"
-              class="ss-row"
-              :class="{ 'ss-row--current': s.id === currentId }"
-            >
-              <span class="ss-device" :title="uaFull(s)">{{ uaOf(s) }}</span>
-              <span class="ss-time mono" :title="fmtFull(s.issuedAt)">{{ fmtDateTime(s.issuedAt) }}</span>
-              <span class="ss-time mono" :title="s.lastSeenAt ? fmtFull(s.lastSeenAt) : ''">
-                {{ s.lastSeenAt ? fmtDateTime(s.lastSeenAt) : '—' }}
-              </span>
-              <span class="ss-time mono" :class="{ 'ss-time--soon': expiringSoon(s) }" :title="fmtFull(s.expiresAt)">
-                {{ fmtDateTime(s.expiresAt) }}
-              </span>
-              <span class="mk-badge" :class="statusClass(s)">{{ statusTextOf(s) }}</span>
-              <span class="ss-ops">
-                <span v-if="s.id === currentId" class="ss-current" title="当前登录标签页的会话，不可下线">当前</span>
-                <button
-                  v-else-if="statusOf(s) === 'active'"
-                  type="button"
-                  class="mk-btn mk-btn--danger mk-btn--sm"
-                  @click="revoke(s)"
-                >强制下线</button>
-                <span v-else class="ss-na">—</span>
-              </span>
-            </div>
-          </details>
+
+        <!-- 活跃会话表（分页：每批 12 行） -->
+        <div class="mk-table-scroll">
+          <table class="mk-table">
+            <thead>
+              <tr>
+                <th>设备</th>
+                <th class="mk-col--id">IP</th>
+                <th class="mk-col--time-full">登录时间</th>
+                <th class="mk-col--time-full">最后活跃</th>
+                <th class="mk-col--time-full">过期时间</th>
+                <th class="mk-col--badge">状态</th>
+                <th class="mk-th--right">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="!active.length" class="ss-tr--empty">
+                <td colspan="7">该管理员当前无活跃会话</td>
+              </tr>
+              <tr
+                v-for="s in active"
+                :key="s.id"
+                class="ss-tr"
+                :class="{ 'ss-tr--current': s.id === currentId }"
+              >
+                <td :title="uaFull(s)">
+                  <div class="mk-cell-main">
+                    <strong class="ss-device">
+                      <span class="ss-dot" :class="`ss-dot--${deviceOf(s).kind}`" aria-hidden="true"></span>
+                      <span class="ss-browser">{{ deviceOf(s).browser }}</span>
+                    </strong>
+                    <span class="mk-cell-sub">{{ deviceOf(s).os || '未知系统' }}<template v-if="s.remember"> · 记住我</template></span>
+                  </div>
+                </td>
+                <td class="ss-ip mono" :title="s.ip || ''">{{ s.ip || '—' }}</td>
+                <td class="ss-time mono" :title="fmtFull(s.issuedAt)">{{ fmtDateTime(s.issuedAt) }}</td>
+                <td class="ss-time mono" :title="s.lastSeenAt ? fmtFull(s.lastSeenAt) : ''">
+                  {{ s.lastSeenAt ? fmtDateTime(s.lastSeenAt) : '—' }}
+                </td>
+                <td class="ss-time mono" :class="{ 'ss-time--soon': expiringSoon(s) }" :title="fmtFull(s.expiresAt)">
+                  {{ fmtDateTime(s.expiresAt) }}
+                </td>
+                <td><span class="mk-badge" :class="statusClass(s)">{{ statusTextOf(s) }}</span></td>
+                <td class="mk-th--right">
+                  <div class="mk-actions">
+                    <span v-if="s.id === currentId" class="ss-current" title="当前登录标签页的会话，不可下线">当前</span>
+                    <button
+                      v-else-if="statusOf(s) === 'active'"
+                      type="button"
+                      class="mk-btn mk-btn--danger mk-btn--sm"
+                      @click="revoke(s)"
+                    >强制下线</button>
+                    <span v-else class="ss-na">—</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
+
+        <!-- 过期/已撤销历史（默认收起；「已撤销」筛选时自动展开） -->
+        <details v-if="g.historical.length" class="ss-hist" :open="statusFilter === 'revoked'">
+          <summary class="ss-hist__summary">
+            <span class="ss-hist__title">已过期 · 已撤销（{{ g.historical.length }}）</span>
+            <span class="ss-hist__meta">过期 {{ g.expiredCount }} · 已撤销 {{ g.revokedCount }}</span>
+          </summary>
+          <div class="mk-table-scroll">
+            <table class="mk-table">
+              <thead>
+                <tr>
+                  <th>设备</th>
+                  <th class="mk-col--id">IP</th>
+                  <th class="mk-col--time-full">登录时间</th>
+                  <th class="mk-col--time-full">最后活跃</th>
+                  <th class="mk-col--time-full">过期时间</th>
+                  <th class="mk-col--badge">状态</th>
+                  <th class="mk-th--right">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="s in g.historical" :key="s.id" class="ss-tr">
+                  <td :title="uaFull(s)">
+                    <div class="mk-cell-main">
+                      <strong class="ss-device">
+                        <span class="ss-dot" :class="`ss-dot--${deviceOf(s).kind}`" aria-hidden="true"></span>
+                        <span class="ss-browser">{{ deviceOf(s).browser }}</span>
+                      </strong>
+                      <span class="mk-cell-sub">{{ deviceOf(s).os || '未知系统' }}<template v-if="s.remember"> · 记住我</template></span>
+                    </div>
+                  </td>
+                  <td class="ss-ip mono" :title="s.ip || ''">{{ s.ip || '—' }}</td>
+                  <td class="ss-time mono" :title="fmtFull(s.issuedAt)">{{ fmtDateTime(s.issuedAt) }}</td>
+                  <td class="ss-time mono" :title="s.lastSeenAt ? fmtFull(s.lastSeenAt) : ''">
+                    {{ s.lastSeenAt ? fmtDateTime(s.lastSeenAt) : '—' }}
+                  </td>
+                  <td class="ss-time mono" :class="{ 'ss-time--soon': expiringSoon(s) }" :title="fmtFull(s.expiresAt)">
+                    {{ fmtDateTime(s.expiresAt) }}
+                  </td>
+                  <td><span class="mk-badge" :class="statusClass(s)">{{ statusTextOf(s) }}</span></td>
+                  <td class="mk-th--right">
+                    <div class="mk-actions">
+                      <span v-if="s.id === currentId" class="ss-current" title="当前登录标签页的会话，不可下线">当前</span>
+                      <button
+                        v-else-if="statusOf(s) === 'active'"
+                        type="button"
+                        class="mk-btn mk-btn--danger mk-btn--sm"
+                        @click="revoke(s)"
+                      >强制下线</button>
+                      <span v-else class="ss-na">—</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
       </div>
 
-      <!-- 分页：活跃会话每批 12 行（首屏可见，见脚本注释） -->
+      <!-- 分页：活跃会话每批 12 行（首屏可见） -->
       <div v-if="canMoreActive" class="ss-more">
         <button type="button" class="mk-link" @click="loadMoreActive">加载更多（已显示 {{ shownActive.length }} / {{ activeFlat.length }} 个活跃会话）</button>
       </div>
@@ -169,15 +219,47 @@ interface AdminSessionRow {
 
 type SessionStatus = 'active' | 'expired' | 'revoked'
 
+/** UA 解析：浏览器 / 系统 / 平台色点分类（原始 UA 完整值保留在单元格 title） */
+interface DeviceInfo {
+  browser: string
+  os: string
+  kind: 'windows' | 'mac' | 'linux' | 'android' | 'ios' | 'other'
+}
+function deviceOf(s: AdminSessionRow): DeviceInfo {
+  const ua = s.userAgent || ''
+  const out: DeviceInfo = { browser: '未知', os: '', kind: 'other' }
+  if (!ua) return out
+  let m: RegExpMatchArray | null
+  if ((m = ua.match(/Edg(?:e|A)?\/([\d.]+)/))) out.browser = `Edge ${m[1]}`
+  else if ((m = ua.match(/HeadlessChrome\/([\d.]+)/))) out.browser = `Headless Chrome ${m[1]}`
+  else if ((m = ua.match(/Chrome\/([\d.]+)/))) out.browser = `Chrome ${m[1]}`
+  else if ((m = ua.match(/Firefox\/([\d.]+)/))) out.browser = `Firefox ${m[1]}`
+  else if ((m = ua.match(/Version\/([\d.]+).*Safari/))) out.browser = `Safari ${m[1]}`
+  else if (/curl\//.test(ua)) out.browser = 'curl'
+  else if (/PostmanRuntime/.test(ua)) out.browser = 'Postman'
+  else if (/python-requests/.test(ua)) out.browser = 'Python requests'
+  else if (/axios/.test(ua)) out.browser = 'axios'
+  else if (/Playwright/.test(ua)) out.browser = 'Playwright'
+  else if (/node/i.test(ua)) out.browser = 'Node.js'
+  if (/Windows NT 10\.0/.test(ua)) { out.os = 'Windows 10/11'; out.kind = 'windows' }
+  else if (/Windows NT 6\.[13]/.test(ua)) { out.os = 'Windows 7/8'; out.kind = 'windows' }
+  else if (/Mac OS X/.test(ua)) { out.os = 'macOS'; out.kind = 'mac' }
+  else if (/Android/.test(ua)) { out.os = 'Android'; out.kind = 'android' }
+  else if (/iPhone|iPad|iPod/.test(ua)) { out.os = 'iOS'; out.kind = 'ios' }
+  else if (/Linux/.test(ua)) { out.os = 'Linux'; out.kind = 'linux' }
+  return out
+}
+
 const sessions = ref<AdminSessionRow[]>([])
 const loading = ref(false)
 const loadError = ref('')
-const statusFilter = ref<'' | 'active' | 'revoked'>('')
+const statusFilter = ref<'' | SessionStatus>('')
 const myId = ref('')
 let fetching = false
 
-const statusPills: Array<{ id: '' | 'active' | 'revoked'; label: string }> = [
+const statusPills: Array<{ id: SessionStatus; label: string }> = [
   { id: 'active', label: '活跃' },
+  { id: 'expired', label: '已过期' },
   { id: 'revoked', label: '已撤销' },
 ]
 
@@ -201,11 +283,16 @@ const currentId = computed(() => {
 })
 
 const activeCount = computed(() => sessions.value.filter((s) => statusOf(s) === 'active').length)
+const expiredCount = computed(() => sessions.value.filter((s) => statusOf(s) === 'expired').length)
+const revokedCount = computed(() => sessions.value.filter((s) => statusOf(s) === 'revoked').length)
 const statusTone = computed(() => {
   if (loadError.value) return 'bad'
   if (!sessions.value.length) return 'muted'
   return activeCount.value ? 'ok' : 'warn'
 })
+function countOf(id: SessionStatus): number {
+  return id === 'active' ? activeCount.value : id === 'expired' ? expiredCount.value : revokedCount.value
+}
 
 const filtered = computed(() =>
   sessions.value.filter((s) => !statusFilter.value || statusOf(s) === statusFilter.value)
@@ -243,8 +330,7 @@ const groups = computed<SessionGroup[]>(() => {
   })
 })
 
-/* 分页（审计 L1）：活跃会话全量平铺 → 每批 12 行（视觉修复 P3：15 行 + 组头/表头总高约 1030px，
-   1440×900 视口下分页器落在首屏之外；12 行 ≈ 838px，加载更多首屏可见）；
+/* 分页（审计 L1）：活跃会话全量平铺 → 每批 12 行；
    历史组保持 details 折叠不受分页影响 */
 const activeFlat = computed(() => groups.value.flatMap((g) => g.active))
 const { shown: shownActive, canMore: canMoreActive, loadMore: loadMoreActive } = useLoadMore(activeFlat, 12)
@@ -257,13 +343,14 @@ const visibleGroups = computed(() => {
     .filter((x) => x.active.length || x.g.historical.length)
 })
 
+/** 拉取全量会话（客户端做状态筛选，保证状态条统计恒为全量口径） */
 async function applyFilters() {
   if (fetching) return
   fetching = true
   loadError.value = ''
   loading.value = true
   try {
-    const res = await adminSessionsApi.getAdminSessions({ status: statusFilter.value || undefined })
+    const res = await adminSessionsApi.getAdminSessions()
     sessions.value = res.data?.data?.sessions ?? []
   } catch (e) {
     loadError.value = errMsg(e)
@@ -273,12 +360,7 @@ async function applyFilters() {
   }
 }
 
-function uaOf(s: AdminSessionRow): string {
-  const ua = s.userAgent || ''
-  return ua ? (ua.length > 48 ? `${ua.slice(0, 48)}…` : ua) : '未知设备'
-}
-
-/** 设备完整 UA（title / 下线确认弹窗用，不截断） */
+/** 设备完整 UA（单元格 title / 下线确认弹窗用，不截断） */
 function uaFull(s: AdminSessionRow): string {
   return s.userAgent || '未知设备'
 }
@@ -365,7 +447,7 @@ onMounted(async () => {
 .ss-status--warn .ss-status__dot { background: var(--mk-amber); }
 .ss-status--bad .ss-status__dot { background: var(--mk-red); }
 .ss-status--muted .ss-status__dot { background: var(--mk-faint); }
-.ss-status strong { font-size: 14px; }
+.ss-status__title { font-size: 14px; }
 .ss-status__sep { width: 1px; height: 14px; background: var(--mk-line); }
 .ss-status__meta { color: var(--mk-muted); font-size: 12px; }
 
@@ -461,41 +543,50 @@ onMounted(async () => {
 }
 .ss-group__revokeall:hover { background: var(--mk-red-bg, #fef2f2); text-decoration: underline; }
 
-/* 表头：与全站表格页同规范。
-   6 列模板（会话(弹性)/登录时间/最后活跃/过期时间/状态/操作）：
-   三列时间 120→--mk-col-time-full（110px，含日期时间戳）；4K 档由 shared.css token 覆盖 */
-.ss-head {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: grid;
-  grid-template-columns: minmax(var(--mk-col-flex-min), var(--mk-col-flex-max)) var(--mk-col-time-full) var(--mk-col-time-full) var(--mk-col-time-full) var(--mk-col-badge) 96px;
-  gap: 10px;
-  align-items: baseline;
-  padding: 8px 14px;
-  background: #fff;
-  border-bottom: 1px solid #f0f2f5;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+/* 表格内自定义单元格 */
+.ss-tr--current td { background: #f0f7ff; }
+.ss-tr--current:hover td { background: #e8f2ff; }
+.ss-tr--empty td {
+  padding: 26px 14px;
+  text-align: center;
   color: var(--mk-faint);
+  font-size: 12.5px;
+}
+.ss-device { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ss-browser {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 平台色点：一眼区分设备平台（颜色仅作辅助，不传达状态语义） */
+.ss-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ss-dot--windows { background: #3b82f6; }
+.ss-dot--mac { background: #94a3b8; }
+.ss-dot--linux { background: #f59e0b; }
+.ss-dot--android { background: #22c55e; }
+.ss-dot--ios { background: #64748b; }
+.ss-dot--other { background: #cbd5e1; }
+.ss-ip { color: var(--mk-muted); font-size: 12px; }
+.ss-time {
+  color: var(--mk-muted);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.ss-head__ops { text-align: right; }
-
-.ss-row {
-  display: grid;
-  grid-template-columns: minmax(var(--mk-col-flex-min), var(--mk-col-flex-max)) var(--mk-col-time-full) var(--mk-col-time-full) var(--mk-col-time-full) var(--mk-col-badge) 96px;
-  gap: 10px;
+.ss-time--soon { color: var(--mk-amber, #b45309); font-weight: 700; }
+.ss-current {
+  display: inline-flex;
   align-items: center;
-  padding: 9px 14px;
-  border-bottom: 1px solid #f0f2f5;
+  font-size: 10.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 2px 9px;
+  background: #eff6ff;
+  color: var(--mk-accent-deep, #1f57cc);
+  white-space: nowrap;
 }
-.ss-row:last-child { border-bottom: none; }
-.ss-row--current { background: #f0f7ff; }
+.ss-na { color: var(--mk-faint); font-size: 12px; }
 
-/* 滚动修复 #3：过期/已撤销折叠组（默认收起，summary 行可点击展开） */
+/* 过期/已撤销折叠组（默认收起，summary 行可点击展开） */
 .ss-hist { border-top: 1px solid #f0f2f5; }
 .ss-hist__summary {
   display: flex;
@@ -522,45 +613,12 @@ onMounted(async () => {
 .ss-hist__summary:hover { background: #f4f7fc; }
 .ss-hist__meta { color: var(--mk-faint); font-weight: 600; font-size: 11px; }
 
-.ss-device {
-  font-size: 12px;
-  color: var(--mk-ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-.ss-time {
-  font-size: 11px;
-  color: var(--mk-muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.ss-time--soon { color: var(--mk-amber, #b45309); font-weight: 700; }
-.ss-ops { text-align: right; white-space: nowrap; }
-.ss-current {
-  display: inline-flex;
-  align-items: center;
-  font-size: 10.5px;
-  font-weight: 700;
-  border-radius: 999px;
-  padding: 2px 9px;
-  background: #eff6ff;
-  color: var(--mk-accent-deep, #1f57cc);
-}
-.ss-na { color: var(--mk-faint); font-size: 12px; }
-
-/* 大屏/4K 适配（全站 mk 体系档位） */
+/* 大屏/4K 适配（全站 mk 体系档位；表格自身由 shared.css 档位覆盖） */
 @media (min-width: 2000px) {
   .ss-status { padding: 10px 16px; }
-  .ss-status strong { font-size: 15.5px; }
+  .ss-status__title { font-size: 15.5px; }
   .ss-status__meta { font-size: 13px; }
-  .ss-head,
-  .ss-row { gap: 12px; padding: 11px 18px; }
-  .ss-head { font-size: 12.5px; }
   .ss-group__head { padding: 12px 18px; }
-  .ss-device { font-size: 14px; }
-  .ss-time { font-size: 13px; }
   .ss-refresh { font-size: 13.5px; }
   .ss-group__who strong { font-size: 14.5px; }
   .ss-group__email { font-size: 12.5px; }
@@ -569,6 +627,7 @@ onMounted(async () => {
   .ss-current { font-size: 12px; }
   .ss-na { font-size: 13.5px; }
   .ss-time--soon { font-size: 13px; }
+  .ss-ip { font-size: 13.5px; }
 }
 @media (min-width: 2800px) {
   .ss-status { padding: 12px 18px; border-radius: 14px; }
@@ -581,16 +640,13 @@ onMounted(async () => {
   .ss-na { font-size: 15.5px; }
   .ss-time,
   .ss-time--soon { font-size: 15px; }
+  .ss-ip { font-size: 15.5px; }
 }
 @media (min-width: 3600px) {
   .ss-status { padding: 14px 22px; }
-  .ss-status strong { font-size: 18px; }
+  .ss-status__title { font-size: 18px; }
   .ss-status__meta { font-size: 15px; }
-  .ss-head,
-  .ss-row { gap: 14px; padding: 13px 22px; }
-  .ss-head { font-size: 14.5px; }
-  .ss-device { font-size: 16.5px; }
-  .ss-time { font-size: 15.5px; }
+  .ss-group__head { padding: 14px 22px; }
   .ss-refresh { font-size: 18.5px; }
   .ss-group__who strong { font-size: 18.5px; }
   .ss-group__email { font-size: 16px; }
@@ -599,5 +655,6 @@ onMounted(async () => {
   .ss-current { font-size: 15.5px; }
   .ss-na { font-size: 18px; }
   .ss-time--soon { font-size: 15.5px; }
+  .ss-ip { font-size: 18px; }
 }
 </style>

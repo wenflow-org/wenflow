@@ -23,7 +23,7 @@
         <span class="ld-avatar">{{ d.name.charAt(0) }}</span>
         <div>
           <h1 class="ld-name">{{ d.name }}</h1>
-          <span class="ld-sub">{{ d.email }} · 加入 {{ d.joined }}</span>
+          <span class="ld-sub">{{ d.email }} · 加入 {{ d.joined || '—' }}</span>
         </div>
         <div class="ld-badges">
           <span class="mk-badge" :class="trendBadge">趋势：{{ trendText }}</span>
@@ -62,7 +62,7 @@
             <strong>{{ d.path }}</strong>
             <span class="ld-progress__stage">{{ d.stage }}</span>
             <div class="ld-progress__bar"><i :style="{ width: d.pct + '%' }"></i></div>
-            <p class="ld-progress__task">正在做：{{ d.task }}</p>
+            <p class="ld-progress__task">正在做：{{ d.task || '—' }}</p>
             <p v-if="milestoneTasks" class="ld-progress__task">当前里程碑：已完成 {{ milestoneTasks.done }}/{{ milestoneTasks.total }} 个任务</p>
           </div>
         </section>
@@ -78,7 +78,7 @@
                 <strong :title="`转移就绪：${c.readiness} · 误解风险：${c.risk}`">{{ c.label }}</strong>
                 <span class="ld-bar__badges">
                   <span class="mk-badge" :class="barToneBadge(c.tone)">{{ c.readiness }}</span>
-                  <span class="ld-bar__risk" :class="`ld-bar__risk--${c.riskTone}`">误解 {{ c.risk }}</span>
+                  <span class="ld-bar__risk" :class="`ld-bar__risk--${c.riskTone}`">误解风险 {{ c.risk }}</span>
                   <span v-if="c.evidenceCount > 0" class="ld-bar__ev" :title="`证据 ${c.evidenceCount} 条`">{{ c.evidenceCount }} 证据</span>
                 </span>
               </div>

@@ -28,11 +28,27 @@ import {
   resolvePathRawGoalFromSession,
   resolveStorySessionDemand,
 } from '../virtual-lab/story-demand';
+import { safeJsonParse } from '../utils/safe-json';
+import { asErrorLike } from '../virtual-lab/vlab-types';
+import type { LeaseClientLike } from '../virtual-lab/vlab-types';
+import type {
+  SimulationMilestone,
+  SimulationTask,
+  SimulatorSkillOutput,
+  StageResults,
+  TeachingState,
+  VirtualLearnerProfileRow,
+  VirtualSessionWithProfile
+} from '../virtual-lab/vlab-types';
 import type { 
+  ConversationHistoryItem,
+  KnowledgePointState,
+  PersonalityTraits,
   SimulationContext,
   SimulationStepResult,
   SimulationLogEntry,
   VirtualLearnerProfile,
+  VirtualLearnerProfileData,
   GoalConcernPool,
   LearnerLatentState
 } from './simulation.types';
@@ -53,12 +69,12 @@ const WORK_SETTLE_TIMEOUT_MS = 5 * 60 * 1000;
 const STALE_RUNNING_SESSION_MS = 30 * 60 * 1000;
 
 function isPrismaErrorCode(error: unknown, code: string) {
-  return typeof error === 'object' && error !== null && (error as any).code === code;
+  return typeof error === 'object' && error !== null && asErrorLike(error).code === code;
 }
 
 function isLeaseDatabaseBusyError(error: unknown) {
   if (isPrismaErrorCode(error, 'P1008')) return true;
-  const code = typeof error === 'object' && error !== null ? String((error as any).code || '') : '';
+  const code = typeof error === 'object' && error !== null ? String(asErrorLike(error).code || '') : '';
   const message = error instanceof Error ? error.message : String(error || '');
   return code === 'SQLITE_BUSY'
     || /SQLITE_BUSY|database (?:is|table is) locked|timed out|timeout/i.test(message);
@@ -103,7 +119,7 @@ type AssistedLeaseContext = {
   expiresAt: number;
   renewal: Promise<void>;
   failureError: unknown | null;
-  assertLeaseOwned: (leaseClient?: any) => Promise<void>;
+  assertLeaseOwned: (leaseClient?: LeaseClientLike) => Promise<void>;
 };
 
 export interface SimulationOrchestratorInput {
@@ -134,7 +150,7 @@ class SimulationOrchestrator {
 
   async runLeasedExclusive<T>(
     sessionId: string,
-    work: (assertLeaseOwned: (leaseClient?: any) => Promise<void>) => Promise<T>,
+    work: (assertLeaseOwned: (leaseClient?: LeaseClientLike) => Promise<void>) => Promise<T>,
     options: { skipFinalLeaseCheck?: boolean } = {}
   ): Promise<T> {
     const previous = this.sessionLocks.get(sessionId) || Promise.resolve();
@@ -301,7 +317,7 @@ class SimulationOrchestrator {
         select: { status: true, currentStage: true, updatedAt: true }
       });
       if (!session || session.status !== 'running') return;
-      const updatedAt = session.updatedAt ? new Date(session.updatedAt as any).getTime() : 0;
+      const updatedAt = session.updatedAt ? new Date(session.updatedAt).getTime() : 0;
       if (Number.isFinite(updatedAt) && Date.now() - updatedAt > STALE_RUNNING_SESSION_MS) {
         logger.warn('[simulation-coordinator] 检测到疑似卡死的 running 会话：无活跃租约且长时间未写入，请人工确认后重启', {
           sessionId,
@@ -322,7 +338,7 @@ class SimulationOrchestrator {
     sessionId: string,
     ownerId: string,
     knownExpiresAt = Date.now() + ASSISTED_SESSION_LEASE_MS,
-    leaseClient: any = prisma
+    leaseClient: LeaseClientLike = prisma
   ) {
     for (let attempt = 0; ; attempt += 1) {
       const now = new Date();
@@ -347,7 +363,7 @@ class SimulationOrchestrator {
     }
   }
 
-  private async renewAssistedLease(context: AssistedLeaseContext, leaseClient: any = prisma) {
+  private async renewAssistedLease(context: AssistedLeaseContext, leaseClient: LeaseClientLike = prisma) {
     const renewal = context.renewal.then(async () => {
       if (context.failureError) throw context.failureError;
       const expiresAt = await this.renewSessionLease(
@@ -378,18 +394,18 @@ class SimulationOrchestrator {
       .trim();
   }
 
-  private sanitizeVisibleContextMessage(message: any, role: 'learner' | 'goal_agent') {
+  private sanitizeVisibleContextMessage(message: { content?: unknown }, role: 'learner' | 'goal_agent') {
     const content = this.sanitizeVisibleDialogue(typeof message?.content === 'string' ? message.content : '');
     if (!content) return null;
     return { role, content };
   }
 
-  private trimLearningConversationHistory(history: any[] = []) {
+  private trimLearningConversationHistory(history: Array<{ role: string; content: string }> = []): ConversationHistoryItem[] {
     if (!Array.isArray(history) || history.length === 0) return [];
-    return history.slice(-6).map((item: any) => ({
-      role: item?.role,
+    return history.slice(-6).map((item): ConversationHistoryItem => ({
+      role: item.role === 'assistant' ? 'assistant' : 'user',
       content: this.sanitizeVisibleDialogue(typeof item?.content === 'string' ? item.content : '')
-    })).filter((item: any) => item.content);
+    })).filter((item) => item.content);
   }
 
   private inferLearningPhase(learnerState: LearnerLatentState | null | undefined): 'trying' | 'blocked' | 'verifying' | 'ready_to_close' {
@@ -414,46 +430,46 @@ class SimulationOrchestrator {
     const state = learnerState || {};
     const current = state.phaseFocus;
     const VALID_PHASES: Array<'trying' | 'blocked' | 'verifying' | 'ready_to_close'> = ['trying', 'blocked', 'verifying', 'ready_to_close'];
-    if (VALID_PHASES.includes(current as any)) {
+    if (VALID_PHASES.includes(current as (typeof VALID_PHASES)[number])) {
       if (current === 'ready_to_close' && state.readyForNextTask !== true) {
         return this.inferLearningPhase(state);
       }
-      return current as any;
+      return current as (typeof VALID_PHASES)[number];
     }
     return this.inferLearningPhase(state);
   }
 
-  private getRunnableTasks(tasks: any[] = []) {
+  private getRunnableTasks(tasks: SimulationTask[] = []) {
     return tasks.filter(task => task.status !== 'completed');
   }
 
-  private countTaskProgress(milestones: any[], completedTaskId?: string | null) {
-    const tasks = milestones.flatMap((milestone: any) => milestone?.subtasks || []);
+  private countTaskProgress(milestones: SimulationMilestone[], completedTaskId?: string | null) {
+    const tasks = milestones.flatMap((milestone) => milestone?.subtasks || []);
     return {
       totalTasks: tasks.length,
-      completedTasks: tasks.filter((task: any) => task.status === 'completed' || task.id === completedTaskId).length
+      completedTasks: tasks.filter((task) => task.status === 'completed' || task.id === completedTaskId).length
     };
   }
 
-  private isRetryableLearnUpstreamError(error: any) {
-    const message = String(error?.message || error || '').toLowerCase();
+  private isRetryableLearnUpstreamError(error: unknown) {
+    const message = String(asErrorLike(error).message || error || '').toLowerCase();
     return /structured_output_invalid|invalid chat completion|finish_reason|length|empty content|reply completion mismatch|api request canceled|fetch failed|timeout|timed out|econnreset|socket|network|rate.?limit|\b429\b|\b502\b|\b503\b|\b504\b/.test(message);
   }
 
   private async retryLearnUpstream<T>(sessionId: string, operation: string, execute: () => Promise<T>): Promise<T> {
-    let lastError: any;
+    let lastError: unknown;
     for (let attempt = 1; attempt <= LEARN_UPSTREAM_RETRY_ATTEMPTS; attempt += 1) {
       try {
         await this.assertCurrentSessionLeaseOwned(sessionId);
         return await execute();
-      } catch (error: any) {
+      } catch (error: unknown) {
         lastError = error;
         if (!this.isRetryableLearnUpstreamError(error) || attempt === LEARN_UPSTREAM_RETRY_ATTEMPTS) break;
         logger.warn('[simulation-coordinator] Learn 上游调用失败，准备重试', {
           sessionId,
           operation,
           attempt,
-          error: error?.message || String(error)
+          error: asErrorLike(error).message || String(error)
         });
         await new Promise(resolve => setTimeout(resolve, LEARN_UPSTREAM_RETRY_DELAY_MS * attempt));
       }
@@ -461,17 +477,17 @@ class SimulationOrchestrator {
     throw lastError;
   }
 
-  private boundTaskCompletionError(error: any): string {
-    const message = error?.message || String(error || '任务完成失败');
+  private boundTaskCompletionError(error: unknown): string {
+    const message = asErrorLike(error).message || String(error || '任务完成失败');
     return message.length > 1000 ? `${message.slice(0, 997)}...` : message;
   }
 
-  private findTaskInPath(milestones: any[], taskId?: string | null) {
+  private findTaskInPath(milestones: SimulationMilestone[], taskId?: string | null) {
     if (!taskId) return null;
 
     for (let milestoneIdx = 0; milestoneIdx < milestones.length; milestoneIdx += 1) {
       const milestone = milestones[milestoneIdx];
-      const taskIdx = (milestone?.subtasks || []).findIndex((task: any) => task.id === taskId);
+      const taskIdx = (milestone?.subtasks || []).findIndex((task) => task.id === taskId);
       if (taskIdx >= 0) {
         return { milestone, milestoneIdx, task: milestone.subtasks[taskIdx], taskIdx };
       }
@@ -480,13 +496,13 @@ class SimulationOrchestrator {
     return null;
   }
 
-  private buildProgressAfterTaskCompletion(milestones: any[], completedTaskId: string) {
-    const flattenedTasks = milestones.flatMap((milestone: any, milestoneIdx: number) =>
-      (milestone?.subtasks || []).map((task: any) => ({ milestone, milestoneIdx, task }))
+  private buildProgressAfterTaskCompletion(milestones: SimulationMilestone[], completedTaskId: string) {
+    const flattenedTasks = milestones.flatMap((milestone: SimulationMilestone, milestoneIdx: number) =>
+      (milestone?.subtasks || []).map((task: SimulationTask) => ({ milestone, milestoneIdx, task }))
     );
-    const completedTaskIdx = flattenedTasks.findIndex((item: any) => item.task.id === completedTaskId);
-    const isRunnable = (item: any) => item.task.id !== completedTaskId && item.task.status !== 'completed';
-    const nextTask = flattenedTasks.find((item: any, index: number) => index > completedTaskIdx && isRunnable(item))
+    const completedTaskIdx = flattenedTasks.findIndex((item) => item.task.id === completedTaskId);
+    const isRunnable = (item) => item.task.id !== completedTaskId && item.task.status !== 'completed';
+    const nextTask = flattenedTasks.find((item, index: number) => index > completedTaskIdx && isRunnable(item))
       || flattenedTasks.find(isRunnable)
       || null;
 
@@ -506,14 +522,14 @@ class SimulationOrchestrator {
     }
 
     const runnableTasks = (nextTask.milestone.subtasks || [])
-      .filter((task: any) => task.id !== completedTaskId && task.status !== 'completed');
+      .filter((task) => task.id !== completedTaskId && task.status !== 'completed');
     return {
       isPathCompleted: false,
       currentTask: nextTask.task,
       progress: {
         currentMilestone: nextTask.milestoneIdx,
         currentMilestoneTitle: nextTask.milestone.title || null,
-        currentTaskIdx: Math.max(0, runnableTasks.findIndex((task: any) => task.id === nextTask.task.id)),
+        currentTaskIdx: Math.max(0, runnableTasks.findIndex((task) => task.id === nextTask.task.id)),
         currentTaskId: nextTask.task.id,
         currentTaskTitle: nextTask.task.title || null,
         totalMilestones: milestones.length
@@ -527,13 +543,13 @@ class SimulationOrchestrator {
    */
   private async transitionToNextLearningTask(
     sessionId: string,
-    session: any,
-    learningState: any,
-    completedTaskRuntime: any,
+    session: VirtualSessionWithProfile,
+    learningState: Record<string, unknown>,
+    completedTaskRuntime: Record<string, unknown>,
     nextProgress: ReturnType<SimulationOrchestrator['buildProgressAfterTaskCompletion']>,
-    milestones: any[],
+    milestones: SimulationMilestone[],
     logs: SimulationLogEntry[]
-  ) {
+  ): Promise<{ learningState: Record<string, unknown>; nextTaskStarted: boolean }> {
     if (nextProgress.isPathCompleted || !nextProgress.currentTask) {
       return { learningState, nextTaskStarted: false };
     }
@@ -590,7 +606,7 @@ class SimulationOrchestrator {
       }
     });
 
-    return { learningState: nextLearningState, nextTaskStarted: true };
+    return { learningState: nextLearningState as Record<string, unknown>, nextTaskStarted: true };
   }
 
   private async resolveTeachingRevision(
@@ -606,7 +622,7 @@ class SimulationOrchestrator {
     return detail.revision;
   }
 
-  private buildLearningProgressSnapshot(milestones: any[], milestoneIdx: number, taskIdx: number) {
+  private buildLearningProgressSnapshot(milestones: SimulationMilestone[], milestoneIdx: number, taskIdx: number) {
     const milestone = milestones[milestoneIdx];
     const tasks = this.getRunnableTasks(milestone?.subtasks || []);
     const task = tasks[taskIdx] || null;
@@ -625,7 +641,7 @@ class SimulationOrchestrator {
     return stage === 'ready' || stage === 'completed';
   }
   
-  private async getVirtualSession(sessionId: string) {
+  private async getVirtualSession(sessionId: string): Promise<VirtualSessionWithProfile> {
     const session = await prisma.virtual_sessions.findUnique({
       where: { id: sessionId },
       include: {
@@ -648,33 +664,18 @@ class SimulationOrchestrator {
     return conversation;
   }
   
-  private parseProfileData(profileRecord: any): VirtualLearnerProfile {
-    let profileData: any = {};
-    try {
-      profileData = JSON.parse(profileRecord.profile || '{}');
-    } catch {}
-    
-    let knownConcepts: string[] = [];
-    try {
-      knownConcepts = JSON.parse(profileRecord.knownConcepts || '[]');
-    } catch {}
-    
-    let struggleConcepts: string[] = [];
-    try {
-      struggleConcepts = JSON.parse(profileRecord.struggleConcepts || '[]');
-    } catch {}
-    
-    let personalityTraits: any = {};
-    try {
-      personalityTraits = JSON.parse(profileRecord.personalityTraits || '{}');
-    } catch {}
+  private parseProfileData(profileRecord: VirtualLearnerProfileRow): VirtualLearnerProfile {
+    const profileData = safeJsonParse<VirtualLearnerProfileData>(profileRecord.profile, {});
+    const knownConcepts = safeJsonParse<string[]>(profileRecord.knownConcepts, []);
+    const struggleConcepts = safeJsonParse<string[]>(profileRecord.struggleConcepts, []);
+    const personalityTraits = safeJsonParse<PersonalityTraits>(profileRecord.personalityTraits, {});
     
     return {
       id: profileRecord.id,
       userId: profileRecord.userId,
       profile: profileData,
       learningGoal: profileRecord.learningGoal,
-      knowledgeLevel: profileRecord.knowledgeLevel || 'beginner',
+      knowledgeLevel: (profileRecord.knowledgeLevel || 'beginner') as VirtualLearnerProfile['knowledgeLevel'],
       knownConcepts,
       struggleConcepts,
       personalityTraits,
@@ -689,11 +690,11 @@ class SimulationOrchestrator {
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
     lastAssistantMessage: string,
     currentStage: 'goal' | 'path' | 'teaching',
-    storyContext?: any,
-    goalState?: any,
-    learnerState?: any,
-    knowledgeState?: any,
-    learningState?: any
+    storyContext?: SimulationContext['storyContext'],
+    goalState?: SimulationContext['goalState'],
+    learnerState?: Partial<LearnerLatentState>,
+    knowledgeState?: KnowledgePointState[],
+    learningState?: SimulationContext['learningState']
   ): SimulationContext {
     return {
       profile,
@@ -708,7 +709,7 @@ class SimulationOrchestrator {
     };
   }
 
-  private buildStoryBehaviorBias(storyContext?: any): Partial<LearnerLatentState> {
+  private buildStoryBehaviorBias(storyContext?: SimulationContext['storyContext']): Partial<LearnerLatentState> {
     if (!storyContext) return {};
 
     const pressurePoints = Array.isArray(storyContext.pressurePoints) ? storyContext.pressurePoints : [];
@@ -775,9 +776,9 @@ class SimulationOrchestrator {
 
   private mergeLearnerState(
     profile: VirtualLearnerProfile,
-    learnerState: any,
+    learnerState: Partial<LearnerLatentState> | undefined,
     currentStage: 'goal' | 'path' | 'teaching',
-    storyContext?: any
+    storyContext?: SimulationContext['storyContext']
   ): LearnerLatentState {
     const merged = {
       ...this.buildDefaultLearnerState(profile, currentStage),
@@ -842,12 +843,12 @@ class SimulationOrchestrator {
 
   private async simulateGoalLearnerReply(params: {
     profile: VirtualLearnerProfile;
-    storyContext?: any;
+    storyContext?: SimulationContext['storyContext'];
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
     lastAssistantMessage: string;
     currentPhase: 'opening' | 'understanding' | 'proposal_evaluation';
-    previousLearnerState?: any;
-    goalState?: any;
+    previousLearnerState?: Partial<LearnerLatentState>;
+    goalState?: SimulationContext['goalState'];
     frictionBudget?: FrictionBudget;
   }) {
     const output = await executeSkill(virtualLearnerGoalDialogueSimulatorDefinition, {
@@ -886,8 +887,9 @@ class SimulationOrchestrator {
     };
   }
 
-  private resolveSimLearnerState(skillOutput: any, fallback: any = {}) {
-    const fromEnvelope = skillOutput?.runtimeEnvelope?.contextUpdate?.nextState;
+  private resolveSimLearnerState(skillOutput: SimulatorSkillOutput, fallback: Record<string, unknown> = {}) {
+    const envelope = skillOutput?.runtimeEnvelope as { contextUpdate?: { nextState?: Record<string, unknown> } } | undefined;
+    const fromEnvelope = envelope?.contextUpdate?.nextState;
     if (fromEnvelope && typeof fromEnvelope === 'object') return fromEnvelope;
     if (skillOutput?.learnerState && typeof skillOutput.learnerState === 'object') {
       return skillOutput.learnerState;
@@ -897,8 +899,8 @@ class SimulationOrchestrator {
 
   private finalizeGoalLearnerState(
     profile: VirtualLearnerProfile,
-    learnerState: any,
-    storyContext?: any,
+    learnerState: Partial<LearnerLatentState>,
+    storyContext?: SimulationContext['storyContext'],
     finalStage?: string | null
   ): LearnerLatentState {
     const merged = this.mergeLearnerState(profile, learnerState, 'goal', storyContext);
@@ -916,7 +918,7 @@ class SimulationOrchestrator {
     return merged;
   }
 
-  private buildGoalConcernPool(profile: VirtualLearnerProfile, goalState: any): GoalConcernPool {
+  private buildGoalConcernPool(profile: VirtualLearnerProfile, goalState: SimulationContext['goalState']): GoalConcernPool {
     const primary = new Set<string>();
     const secondary = new Set<string>();
     const hidden = new Set<string>();
@@ -1025,7 +1027,7 @@ class SimulationOrchestrator {
     let logs: SimulationLogEntry[] = [];
     try {
       logs = JSON.parse(session.logs || '[]');
-    } catch {}
+    } catch { /* 解析失败时保留默认值 */ }
     
     logs.push(log);
 
@@ -1059,18 +1061,14 @@ class SimulationOrchestrator {
     });
   }
   
-  private async updateStageResults(sessionId: string, stage: string, result: any) {
+  private async updateStageResults(sessionId: string, stage: string, result: Record<string, unknown>) {
     const session = await prisma.virtual_sessions.findUnique({
       where: { id: sessionId }
     });
     
     if (!session) return;
     
-    let stageResults: any = {};
-    try {
-      stageResults = JSON.parse(session.stageResults || '{}');
-    } catch {}
-    
+    const stageResults: StageResults = safeJsonParse<StageResults>(session.stageResults, {});
     stageResults[stage] = result;
 
     await this.assertCurrentSessionLeaseOwned(sessionId);
@@ -1084,17 +1082,17 @@ class SimulationOrchestrator {
   }
 
   /** 上游 Learn 调用耗尽重试后的终态记录；checkpoint 恢复分支不会走这里。 */
-  private async persistLearningFailure(sessionId: string, error: any, logs: SimulationLogEntry[]) {
+  private async persistLearningFailure(sessionId: string, error: unknown, logs: SimulationLogEntry[]) {
     const message = this.boundTaskCompletionError(error);
     try {
       const session = await this.getVirtualSession(sessionId);
       const stageResults = this.parseStageResultsPayload(session.stageResults);
-      const learning = stageResults.teaching || {};
+      const learning = (stageResults.teaching || {}) as Record<string, unknown>;
       const now = new Date().toISOString();
-      const failedLearning = {
+      const failedLearning: Record<string, unknown> = {
         ...learning,
         taskRuntime: {
-          ...(learning.taskRuntime || {}),
+          ...((learning.taskRuntime ?? {}) as Record<string, unknown>),
           status: 'error',
           error: message,
           failedAt: now,
@@ -1117,12 +1115,12 @@ class SimulationOrchestrator {
       };
       logs.push(failureLog);
       await this.addSessionLog(sessionId, failureLog);
-    } catch (persistError: any) {
+    } catch (persistError: unknown) {
       logger.error('[simulation-coordinator] 持久化 Learn 失败状态失败（failed 标记可能静默丢失）', {
         sessionId,
-        error: persistError?.message || String(persistError),
-        stack: persistError?.stack || undefined,
-        sourceError: error?.message || String(error)
+        error: asErrorLike(persistError).message || String(persistError),
+        stack: persistError instanceof Error ? persistError.stack : undefined,
+        sourceError: asErrorLike(error).message || String(error)
       });
     }
   }
@@ -1148,23 +1146,17 @@ class SimulationOrchestrator {
       throw new Error('模拟会话不存在')
     }
 
-    let stageResults: any = {}
-    try {
-      stageResults = JSON.parse(session.stageResults || '{}')
-    } catch {}
+    const stageResults: StageResults = safeJsonParse<StageResults>(session.stageResults, {})
 
     for (const key of options.removeStageResults || []) {
       delete stageResults[key]
     }
 
-    let logs: any[] = []
-    try {
-      logs = JSON.parse(session.logs || '[]')
-    } catch {}
+    const logs: SimulationLogEntry[] = safeJsonParse<SimulationLogEntry[]>(session.logs, [])
 
     const logPhasesToRemove = new Set(options.logPhasesToRemove || [])
     const nextLogs = logPhasesToRemove.size
-      ? logs.filter((entry: any) => !logPhasesToRemove.has(String(entry?.phase || '')))
+      ? logs.filter((entry) => !logPhasesToRemove.has(String(entry?.phase || '')))
       : logs
 
     await this.assertCurrentSessionLeaseOwned(sessionId)
@@ -1186,9 +1178,9 @@ class SimulationOrchestrator {
     })
   }
 
-  private parseStageResultsPayload(raw: string | null | undefined) {
+  private parseStageResultsPayload(raw: string | null | undefined): StageResults {
     try {
-      return JSON.parse(raw || '{}') || {}
+      return (JSON.parse(raw || '{}') || {}) as StageResults
     } catch {
       return {}
     }
@@ -1196,16 +1188,16 @@ class SimulationOrchestrator {
 
   private async completeCheckpointedSimulationTask(
     sessionId: string,
-    session: any,
-    learningState: any,
-    milestones: any[],
-    taskRuntime: any,
+    session: VirtualSessionWithProfile,
+    learningState: Record<string, unknown>,
+    milestones: SimulationMilestone[],
+    taskRuntime: Record<string, unknown>,
     logs: SimulationLogEntry[]
   ) {
-    const taskMatch = this.findTaskInPath(milestones, taskRuntime.taskId);
+    const taskMatch = this.findTaskInPath(milestones, typeof taskRuntime.taskId === 'string' ? taskRuntime.taskId : undefined);
     if (!taskMatch) return null;
 
-    let taskCompletionResult: any;
+    let taskCompletionResult: Awaited<ReturnType<typeof learningService.completeTask>> | undefined;
     try {
       await this.assertCurrentSessionLeaseOwned(sessionId);
       taskCompletionResult = await learningService.completeTask({
@@ -1215,7 +1207,7 @@ class SimulationOrchestrator {
         notes: '虚拟学习者完成当前 task 的教学会话',
         rating: 5
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       const boundedError = this.boundTaskCompletionError(error);
       const updatedAt = new Date().toISOString();
       await this.updateStageResults(sessionId, 'teaching', {
@@ -1227,10 +1219,10 @@ class SimulationOrchestrator {
           error: boundedError,
           updatedAt
         }
-      }).catch((checkpointError: any) => {
+      }).catch((checkpointError: unknown) => {
         logger.warn('[simulation-coordinator] 更新任务完成待重试错误失败，保留原 pending checkpoint', {
           sessionId,
-          error: checkpointError?.message || String(checkpointError)
+          error: asErrorLike(checkpointError).message || String(checkpointError)
         });
       });
 
@@ -1248,10 +1240,10 @@ class SimulationOrchestrator {
       };
       logs.push(errorLog);
       for (const log of logs) {
-        await this.addSessionLog(sessionId, log).catch((logError: any) => {
+        await this.addSessionLog(sessionId, log).catch((logError: unknown) => {
           logger.warn('[simulation-coordinator] 记录任务完成待重试日志失败', {
             sessionId,
-            error: logError?.message || String(logError)
+            error: asErrorLike(logError).message || String(logError)
           });
         });
       }
@@ -1275,15 +1267,15 @@ class SimulationOrchestrator {
     const nextProgress = this.buildProgressAfterTaskCompletion(milestones, taskMatch.task.id);
     const latestSession = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } });
     const latestStageResults = this.parseStageResultsPayload(latestSession?.stageResults);
-    const latestLearningState = latestStageResults.teaching || learningState;
-    const baseCompletedLearningState = {
+    const latestLearningState = (latestStageResults.teaching || learningState) as Record<string, unknown>;
+    const baseCompletedLearningState: Record<string, unknown> = {
       ...latestLearningState,
       teachingRevision: taskRuntime.teachingRevision ?? learningState.teachingRevision,
       ...nextProgress.progress,
       taskRuntime: {
         ...taskRuntime,
         status: 'completed',
-        reason: taskRuntime.closureDecision?.reason || taskRuntime.reason || '教学系统与 AI 学生共同判定当前 task 已完成',
+        reason: ((taskRuntime.closureDecision && typeof taskRuntime.closureDecision === 'object' ? taskRuntime.closureDecision : {}) as Record<string, unknown>).reason || taskRuntime.reason || '教学系统与 AI 学生共同判定当前 task 已完成',
         completedAt,
         error: null,
         updatedAt: completedAt,
@@ -1316,7 +1308,7 @@ class SimulationOrchestrator {
       }
     });
 
-    let completedLearningState = baseCompletedLearningState;
+    let completedLearningState: Record<string, unknown> = baseCompletedLearningState;
     let nextTaskStarted = false;
     if (!nextProgress.isPathCompleted) {
       try {
@@ -1324,7 +1316,7 @@ class SimulationOrchestrator {
           sessionId,
           session,
           baseCompletedLearningState,
-          baseCompletedLearningState.taskRuntime,
+          (baseCompletedLearningState.taskRuntime ?? {}) as Record<string, unknown>,
           nextProgress,
           milestones,
           logs
@@ -1336,7 +1328,7 @@ class SimulationOrchestrator {
         await prisma.virtual_sessions.update({
           where: { id: sessionId },
           data: {
-            currentTaskId: completedLearningState.currentTaskId,
+            currentTaskId: typeof completedLearningState.currentTaskId === 'string' ? completedLearningState.currentTaskId : null,
             completedTasks: currentProgress.completedTasks,
             totalTasks: currentProgress.totalTasks,
             status: 'running',
@@ -1344,12 +1336,12 @@ class SimulationOrchestrator {
             updatedAt: new Date()
           }
         });
-      } catch (error: any) {
+      } catch (error: unknown) {
         const errorMessage = this.boundTaskCompletionError(error);
         completedLearningState = {
           ...baseCompletedLearningState,
           taskRuntime: {
-            ...baseCompletedLearningState.taskRuntime,
+            ...((baseCompletedLearningState.taskRuntime ?? {}) as Record<string, unknown>),
             status: 'next_task_start_failed',
             error: errorMessage,
             updatedAt: new Date().toISOString()
@@ -1405,22 +1397,23 @@ class SimulationOrchestrator {
    * 从 session.stageResults.simulationConfig 读取本次会话的 frictionBudget
    * 默认 'normal' (真实人物常态)
    */
-  private getSessionFrictionBudget(session: any): FrictionBudget {
+  private getSessionFrictionBudget(session: VirtualSessionWithProfile): FrictionBudget {
     const stageResults = this.parseStageResultsPayload(session?.stageResults)
     return normalizeFrictionBudget(stageResults?.simulationConfig?.frictionBudget)
   }
 
-  private getSessionPromptOverrides(session: any): { goalAgent?: string; pathAgent?: string } | undefined {
+  private getSessionPromptOverrides(session: VirtualSessionWithProfile): { goalAgent?: string; pathAgent?: string } | undefined {
     const overrides = this.parseStageResultsPayload(session?.stageResults)?.systemPromptOverrides;
     if (!overrides || typeof overrides !== 'object') return undefined;
+    const overridesRecord = overrides as Record<string, unknown>;
 
-    const goalAgent = typeof overrides.goalAgent === 'string' ? overrides.goalAgent.trim() : '';
-    const pathAgent = typeof overrides.pathAgent === 'string' ? overrides.pathAgent.trim() : '';
+    const goalAgent = typeof overridesRecord.goalAgent === 'string' ? overridesRecord.goalAgent.trim() : '';
+    const pathAgent = typeof overridesRecord.pathAgent === 'string' ? overridesRecord.pathAgent.trim() : '';
     return goalAgent || pathAgent ? { goalAgent: goalAgent || undefined, pathAgent: pathAgent || undefined } : undefined;
   }
 
-  private parseStoryContextFromStageResults(stageResults: any): any {
-    return stageResults?.story || null;
+  private parseStoryContextFromStageResults(stageResults: StageResults): SimulationContext['storyContext'] {
+    return (stageResults?.story || null) as SimulationContext['storyContext'];
   }
   
   async executeSingleStep(input: SimulationOrchestratorInput): Promise<SimulationStepResult> {
@@ -1435,10 +1428,7 @@ class SimulationOrchestrator {
       
       const session = await this.getVirtualSession(input.sessionId);
       const profile = this.parseProfileData(session.virtual_learner_profiles);
-      let initialStageResults: any = {};
-      try {
-        initialStageResults = JSON.parse(session.stageResults || '{}');
-      } catch {}
+      const initialStageResults: StageResults = safeJsonParse<StageResults>(session.stageResults, {});
       const storyContext = this.parseStoryContextFromStageResults(initialStageResults);
       
       if (!session.goalConversationId) {
@@ -1551,30 +1541,24 @@ class SimulationOrchestrator {
       try {
         const collectedData = JSON.parse(conversation.collectedData || '{}');
         const rawMessages = collectedData.messages || [];
-        conversationHistory = rawMessages.map((m: any) => ({
+        conversationHistory = rawMessages.map((m: { role?: string; content?: unknown }) => ({
           role: m.role === 'user' ? 'user' : 'assistant',
           content: this.sanitizeVisibleDialogue(typeof m.content === 'string' ? m.content : '')
         })).filter((m: { role: 'user' | 'assistant'; content: string }) => !!m.content);
-      } catch {}
+      } catch { /* 解析失败时保留默认值 */ }
       
       const lastAssistantMessage = conversationHistory.length > 0
         ? conversationHistory.filter(m => m.role === 'assistant').pop()?.content || ''
         : conversationHistory.filter(m => m.role !== 'user').pop()?.content || '';
       
-      let goalState: any = {};
-      try {
-        goalState = JSON.parse(conversation.collectedData || '{}');
-      } catch {}
+      const goalState: SimulationContext['goalState'] = safeJsonParse<SimulationContext['goalState']>(conversation.collectedData, {});
 
-      let stageResults: any = {};
-      try {
-        stageResults = JSON.parse(session.stageResults || '{}');
-      } catch {}
+      const stageResults: StageResults = safeJsonParse<StageResults>(session.stageResults, {});
 
-      const existingGoalState = stageResults.goal || {};
+      const existingGoalState = (stageResults.goal || {}) as Record<string, unknown>;
       const activeStoryContext = this.parseStoryContextFromStageResults(stageResults);
-      const concernPool = existingGoalState.concernPool || this.buildGoalConcernPool(profile, goalState);
-      const disclosedConcerns = existingGoalState.disclosedConcerns || [];
+      const concernPool: GoalConcernPool = (existingGoalState.concernPool as GoalConcernPool | undefined) || this.buildGoalConcernPool(profile, goalState);
+      const disclosedConcerns = (existingGoalState.disclosedConcerns || []) as string[];
       const missingFields = [
         !goalState?.understanding?.real_problem ? '真实问题' : null,
         !goalState?.understanding?.background?.current_level ? '当前基础' : null,
@@ -1596,8 +1580,8 @@ class SimulationOrchestrator {
         'goal',
         activeStoryContext,
         enrichedGoalState,
-        stageResults.goal?.learnerState,
-        stageResults.goal?.knowledgeState,
+        stageResults.goal?.learnerState as Partial<LearnerLatentState> | undefined,
+        stageResults.goal?.knowledgeState as KnowledgePointState[] | undefined,
         undefined
       );
       
@@ -1608,7 +1592,7 @@ class SimulationOrchestrator {
           storyContext: activeStoryContext,
           conversationHistory,
           lastAssistantMessage,
-          currentPhase: this.mapGoalStageToLearnerPhase(goalState?.stage || existingGoalState.stage),
+          currentPhase: this.mapGoalStageToLearnerPhase(goalState?.stage || existingGoalState.stage as string | undefined),
           previousLearnerState: stageResults.goal?.learnerState,
           goalState,
           frictionBudget: this.getSessionFrictionBudget(session)
@@ -1626,7 +1610,7 @@ class SimulationOrchestrator {
           virtualReplyResult.learnerStateFromEnvelope || {}
         ),
         activeStoryContext,
-        existingGoalState.finalStage || existingGoalState.stage || goalState?.stage
+        (existingGoalState.finalStage as string | undefined) || (existingGoalState.stage as string | undefined) || goalState?.stage
       );
       
       logs.push({
@@ -1765,12 +1749,12 @@ class SimulationOrchestrator {
           goalReady,
           logs
         };
-    } catch (error: any) {
+    } catch (error: unknown) {
       const durationMs = Date.now() - startTime;
       
       logger.error('[simulation-coordinator] 单步模拟失败', {
         sessionId: input.sessionId,
-        error: error.message,
+        error: asErrorLike(error).message,
         durationMs
       });
       
@@ -1779,7 +1763,7 @@ class SimulationOrchestrator {
         phase: 'error',
         durationMs,
         details: {
-          error: error.message
+          error: asErrorLike(error).message
         }
       });
       
@@ -1791,7 +1775,7 @@ class SimulationOrchestrator {
         currentStage: 'goal',
         goalReady: false,
         logs,
-        error: error.message
+        error: asErrorLike(error).message
       };
     }
   }
@@ -1850,8 +1834,8 @@ class SimulationOrchestrator {
             });
             try {
               await this.resolvePathReview(input.sessionId, { startLearning: true });
-            } catch (err: any) {
-              logger.warn('[simulation-coordinator] 自动启动 Learn 失败', { error: err.message });
+            } catch (err: unknown) {
+              logger.warn('[simulation-coordinator] 自动启动 Learn 失败', { error: asErrorLike(err).message });
             }
           }
         }
@@ -1940,9 +1924,9 @@ class SimulationOrchestrator {
             summary.error = review.error || 'Path 评审失败';
             return summary;
           }
-        } catch (err: any) {
-          logger.warn('[simulation-coordinator] 启动 Learn 失败', { error: err.message });
-          summary.error = err.message || '启动 Learn 失败';
+        } catch (err: unknown) {
+          logger.warn('[simulation-coordinator] 启动 Learn 失败', { error: asErrorLike(err).message });
+          summary.error = asErrorLike(err).message || '启动 Learn 失败';
           return summary;
         }
       }
@@ -1995,9 +1979,9 @@ class SimulationOrchestrator {
       summary.learningSteps = totalLearningSteps;
       summary.success = !summary.error;
       return summary;
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('[simulation-coordinator] 一键全流程失败', { sessionId, error });
-      summary.error = error.message || 'unknown';
+      summary.error = asErrorLike(error).message || 'unknown';
       return summary;
     }
   }
@@ -2024,10 +2008,7 @@ class SimulationOrchestrator {
         throw new Error('Goal对话记录不存在');
       }
       
-      let collectedData: any = {};
-      try {
-        collectedData = JSON.parse(conversation.collectedData || '{}');
-      } catch {}
+      const collectedData: Record<string, unknown> = safeJsonParse<Record<string, unknown>>(conversation.collectedData, {});
       
       if (session.learningPathId) {
         // 会话上的 Path 指针可能因外部删除/重建而过期，校验后再复用。
@@ -2067,7 +2048,7 @@ class SimulationOrchestrator {
           confirmedProposal: collectedData.confirmedProposal || null,
           collected: collectedData.collected || {},
         }),
-        conversationHistory: collectedData.messages || [],
+        conversationHistory: (Array.isArray(collectedData.messages) ? collectedData.messages : []) as ConversationHistoryItem[],
         systemPromptOverrides: this.getSessionPromptOverrides(session)?.pathAgent
           ? { pathAgent: this.getSessionPromptOverrides(session)?.pathAgent }
           : undefined
@@ -2098,11 +2079,11 @@ class SimulationOrchestrator {
           await prisma.goal_conversations.update({
             where: { id: session.goalConversationId },
             data: { learningPathId }
-          }).catch((err: any) => {
+          }).catch((err: unknown) => {
             logger.warn('[simulation-coordinator] 回写 goal_conversations.learningPathId 失败', {
               sessionId,
               learningPathId,
-              error: err?.message || String(err)
+              error: asErrorLike(err).message || String(err)
             });
           });
         }
@@ -2123,15 +2104,15 @@ class SimulationOrchestrator {
         success: true,
         learningPathId
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('[simulation-coordinator] 路径生成失败', {
         sessionId,
-        error: error.message
+        error: asErrorLike(error).message
       });
       
       return {
         success: false,
-        error: error.message
+        error: asErrorLike(error).message
       };
     }
   }
@@ -2152,10 +2133,7 @@ class SimulationOrchestrator {
       
       const profile = this.parseProfileData(session.virtual_learner_profiles);
 
-      let stageResults: any = {};
-      try {
-        stageResults = JSON.parse(session.stageResults || '{}');
-      } catch {}
+      const stageResults: StageResults = safeJsonParse<StageResults>(session.stageResults, {});
       
       const learningPath = await prisma.learning_paths.findUnique({
         where: { id: session.learningPathId }
@@ -2189,7 +2167,7 @@ class SimulationOrchestrator {
         },
         goalState: null,
         previousReaction: stageResults.path_review || null,
-        learnerState: this.mergeLearnerState(profile, stageResults.path_review?.learnerState || stageResults.goal?.learnerState, 'path', this.parseStoryContextFromStageResults(stageResults)),
+        learnerState: this.mergeLearnerState(profile, (stageResults.path_review?.learnerState || stageResults.goal?.learnerState) as Partial<LearnerLatentState> | undefined, 'path', this.parseStoryContextFromStageResults(stageResults)),
         frictionBudget: this.getSessionFrictionBudget(session)
       });
 
@@ -2249,15 +2227,15 @@ class SimulationOrchestrator {
         reaction: reactionOutput.reaction,
         visibleRequestedChanges
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('[simulation-coordinator] 路径评审失败', {
         sessionId,
-        error: error.message
+        error: asErrorLike(error).message
       });
       
       return {
         success: false,
-        error: error.message
+        error: asErrorLike(error).message
       };
     }
   }
@@ -2267,7 +2245,7 @@ class SimulationOrchestrator {
     try {
       const session = await this.getVirtualSession(sessionId);
       const stageResults = this.parseStageResultsPayload(session.stageResults);
-      const pathReview = stageResults.path_review || {};
+      const pathReview = (stageResults.path_review || {}) as Record<string, unknown>;
 
       if (!session.learningPathId) {
         throw new Error('学习路径不存在，请先生成 Path');
@@ -2293,8 +2271,8 @@ class SimulationOrchestrator {
         }
       });
       return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+    } catch (error: unknown) {
+      return { success: false, error: asErrorLike(error).message };
     }
   }
 
@@ -2322,7 +2300,7 @@ class SimulationOrchestrator {
         throw new Error('已按上次意见重规划过，请先重新评审新版 Path');
       }
 
-      const feedback = [pathReview.reaction, ...(pathReview.visibleRequestedChanges || [])]
+      const feedback = [pathReview.reaction, ...(Array.isArray(pathReview.visibleRequestedChanges) ? pathReview.visibleRequestedChanges : [])]
         .filter(Boolean)
         .join('\n');
       if (!feedback) {
@@ -2360,14 +2338,14 @@ class SimulationOrchestrator {
         details: { output: { from: 'path-review', to: 'path', reason: 'path-replanned-awaiting-review', decision: pathReview.decision, learningPathId } }
       });
       return { success: true, learningPathId };
-    } catch (error: any) {
+    } catch (error: unknown) {
       const latest = this.parseStageResultsPayload((await this.getVirtualSession(sessionId)).stageResults);
       await this.updateStageResults(sessionId, 'path_review', {
         ...(latest.path_review || pathReview),
         status: 'failed',
-        error: error.message || '重规划失败'
+        error: asErrorLike(error).message || '重规划失败'
       });
-      return { success: false, error: error.message || '重规划失败' };
+      return { success: false, error: asErrorLike(error).message || '重规划失败' };
     }
   }
 
@@ -2422,7 +2400,7 @@ class SimulationOrchestrator {
     success: boolean;
     teachingSessionId?: string;
     welcomeMessage?: string;
-    milestones?: any[];
+    milestones?: SimulationMilestone[];
     selectedTaskId?: string;
     error?: string;
   }> {
@@ -2469,7 +2447,7 @@ class SimulationOrchestrator {
         firstMilestoneIdx = learningPath.milestones.findIndex(m => Array.isArray(m.subtasks) && m.subtasks.some(task => task.id === options.taskId));
         const selectedMilestone = firstMilestoneIdx >= 0 ? learningPath.milestones[firstMilestoneIdx] : undefined;
         runnableTasks = this.getRunnableTasks(selectedMilestone?.subtasks || []);
-        const selectedTask = selectedMilestone?.subtasks?.find((task: any) => task.id === options.taskId);
+        const selectedTask = selectedMilestone?.subtasks?.find((task) => task.id === options.taskId);
 
         if (!selectedMilestone || !selectedTask) {
           throw new Error('指定任务不存在');
@@ -2560,15 +2538,15 @@ class SimulationOrchestrator {
           subtasksCount: m.subtasks?.length || 0
         }))
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('[simulation-coordinator] 学习阶段启动失败', {
         sessionId,
-        error: error.message
+        error: asErrorLike(error).message
       });
       
       return {
         success: false,
-        error: error.message
+        error: asErrorLike(error).message
       };
     }
   }
@@ -2601,13 +2579,13 @@ class SimulationOrchestrator {
           output: { message: '已生成学习总结' }
         }
       });
-    } catch (err: any) {
-      logger.warn('[simulation-coordinator] 生成 wrapup 失败', { sessionId, error: err.message });
+    } catch (err: unknown) {
+      logger.warn('[simulation-coordinator] 生成 wrapup 失败', { sessionId, error: asErrorLike(err).message });
       logs.push({
         timestamp: new Date().toISOString(),
         phase: 'error',
         details: {
-          error: err.message || 'wrapup generation failed'
+          error: asErrorLike(err).message || 'wrapup generation failed'
         }
       });
     }
@@ -2617,7 +2595,7 @@ class SimulationOrchestrator {
     success: boolean;
     userMessage?: string;
     aiResponse?: string;
-    milestoneProgress?: any;
+    milestoneProgress?: Record<string, unknown>;
     isPathCompleted?: boolean;
     taskCompleted?: boolean;
     currentTaskStopped?: boolean;
@@ -2635,9 +2613,9 @@ class SimulationOrchestrator {
         throw new Error('学习路径不存在');
       }
       
-      const stageResults: any = this.parseStageResultsPayload(session.stageResults)
+      const stageResults: StageResults = this.parseStageResultsPayload(session.stageResults)
 
-      const learningState = stageResults.teaching || {};
+      const learningState = (stageResults.teaching || {}) as TeachingState;
       if (learningState.manualStop || session.status === 'failed') {
         return {
           success: false,
@@ -2663,9 +2641,9 @@ class SimulationOrchestrator {
         throw new Error('学习路径不存在');
       }
       
-      const milestones = learningPath.milestones;
-      const taskRuntime = learningState.taskRuntime || {};
-      const runtimeTaskMatch = this.findTaskInPath(milestones, taskRuntime.taskId);
+      const milestones = (Array.isArray(learningPath.milestones) ? learningPath.milestones : []) as SimulationMilestone[];
+      const taskRuntime = (learningState.taskRuntime || {}) as Record<string, unknown>;
+      const runtimeTaskMatch = this.findTaskInPath(milestones, typeof taskRuntime.taskId === 'string' ? taskRuntime.taskId : undefined);
 
       if (taskRuntime.status === 'task_completion_pending' && runtimeTaskMatch) {
         return await this.completeCheckpointedSimulationTask(
@@ -2685,7 +2663,7 @@ class SimulationOrchestrator {
         && taskRuntime.teachingSessionId
       ) {
         const teachingDetail = await aiTeachingOrchestrator.getSessionDetail(
-          taskRuntime.teachingSessionId,
+          taskRuntime.teachingSessionId as string,
           session.userId
         );
         if (
@@ -2732,7 +2710,7 @@ class SimulationOrchestrator {
           && learningState.currentTaskId !== taskRuntime.taskId
         ) {
           const recoveredStart = await this.startLearningPhase(sessionId, {
-            taskId: learningState.currentTaskId
+            taskId: learningState.currentTaskId || undefined
           });
           if (!recoveredStart.success) {
             return {
@@ -2758,7 +2736,7 @@ class SimulationOrchestrator {
           };
         }
         const completedProgress = taskRuntime.taskId
-          ? this.buildProgressAfterTaskCompletion(milestones, taskRuntime.taskId)
+          ? this.buildProgressAfterTaskCompletion(milestones, taskRuntime.taskId as string)
           : null;
         return {
           success: true,
@@ -2783,10 +2761,10 @@ class SimulationOrchestrator {
       if (!currentMilestone) {
         await this.finalizePathCompletion(sessionId, logs);
         for (const log of logs) {
-          await this.addSessionLog(sessionId, log).catch((logError: any) => {
+          await this.addSessionLog(sessionId, log).catch((logError: unknown) => {
             logger.warn('[simulation-coordinator] 记录学习完成日志失败', {
               sessionId,
-              error: logError?.message || String(logError)
+              error: asErrorLike(logError).message || String(logError)
             });
           });
         }
@@ -2809,10 +2787,10 @@ class SimulationOrchestrator {
         if (nextMilestoneIdx >= milestones.length) {
           await this.finalizePathCompletion(sessionId, logs);
           for (const log of logs) {
-            await this.addSessionLog(sessionId, log).catch((logError: any) => {
+            await this.addSessionLog(sessionId, log).catch((logError: unknown) => {
               logger.warn('[simulation-coordinator] 记录学习完成日志失败', {
                 sessionId,
-                error: logError?.message || String(logError)
+                error: asErrorLike(logError).message || String(logError)
               });
             });
           }
@@ -2858,9 +2836,9 @@ class SimulationOrchestrator {
       const trimmedConversationHistory = this.trimLearningConversationHistory(learningState.conversationHistory || [])
       const lastAssistantMessage = [...trimmedConversationHistory]
         .reverse()
-        .find((item: any) => item.role === 'assistant')?.content || '';
+        .find((item) => item.role === 'assistant')?.content || '';
 
-      const mergedLearnerState = this.mergeLearnerState(profile, learningState.learnerState, 'teaching', this.parseStoryContextFromStageResults(stageResults))
+      const mergedLearnerState = this.mergeLearnerState(profile, learningState.learnerState as Partial<LearnerLatentState> | undefined, 'teaching', this.parseStoryContextFromStageResults(stageResults))
       const simulationContext = {
         profile,
         conversationHistory: trimmedConversationHistory,
@@ -2901,7 +2879,7 @@ class SimulationOrchestrator {
         },
         story: this.parseStoryContextFromStageResults(stageResults),
         visibleContext: {
-          history: trimmedConversationHistory.map((item: any) => ({
+          history: trimmedConversationHistory.map((item) => ({
             role: item.role === 'assistant' ? 'teacher' : 'learner',
             content: item.content,
           })),
@@ -2957,10 +2935,10 @@ class SimulationOrchestrator {
       });
       
       let aiResponse = '';
-      let nextTaskIdx = currentTaskIdx;
-      let nextMilestoneIdx = currentMilestoneIdx;
+      const nextTaskIdx = currentTaskIdx;
+      const nextMilestoneIdx = currentMilestoneIdx;
       let learningStepError: string | null = null;
-      let closureDecision: any = null;
+      let closureDecision: Record<string, unknown> | null = null;
       let shouldStopCurrentTask = false;
 
       const teachingSessionId = learningState.teachingSessionId;
@@ -3110,23 +3088,23 @@ class SimulationOrchestrator {
                       output: { message: '已生成学习总结' }
                     }
                   });
-                } catch (err: any) {
-                  logger.warn('[simulation-coordinator] 生成 wrapup 失败', { sessionId, error: err.message });
+                } catch (err: unknown) {
+                  logger.warn('[simulation-coordinator] 生成 wrapup 失败', { sessionId, error: asErrorLike(err).message });
                   logs.push({
                     timestamp: new Date().toISOString(),
                     phase: 'error',
                     details: {
-                      error: err.message || 'wrapup generation failed'
+                      error: asErrorLike(err).message || 'wrapup generation failed'
                     }
                   });
                 }
               }
 
               for (const log of logs) {
-                await this.addSessionLog(sessionId, log).catch((logError: any) => {
+                await this.addSessionLog(sessionId, log).catch((logError: unknown) => {
                   logger.warn('[simulation-coordinator] 记录任务完成日志失败', {
                     sessionId,
-                    error: logError?.message || String(logError)
+                    error: asErrorLike(logError).message || String(logError)
                   });
                 });
               }
@@ -3141,18 +3119,18 @@ class SimulationOrchestrator {
           } else if (closureDecision.teacherReady) {
             shouldStopCurrentTask = true;
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           logger.warn('[simulation-coordinator] AI教学响应失败，已停止当前学习步骤', {
             sessionId,
-            error: err.message
+            error: asErrorLike(err).message
           });
-          learningStepError = err.message || '教学响应失败';
+          learningStepError = asErrorLike(err).message || '教学响应失败';
           aiResponse = `当前教学会话不可继续：${learningStepError}。请重新开始当前 task 或人工检查。`;
           logs.push({
             timestamp: new Date().toISOString(),
             phase: 'error',
             details: {
-              error: err.message || '教学响应失败',
+              error: asErrorLike(err).message || '教学响应失败',
               output: {
                 currentTask: currentTask.title,
                 currentMilestone: currentMilestone.title,
@@ -3193,11 +3171,11 @@ class SimulationOrchestrator {
               totalMilestones: milestones.length
             }
           : this.buildLearningProgressSnapshot(milestones, nextMilestoneIdx, nextTaskIdx)),
-        learnerState: this.mergeLearnerState(profile, virtualReplyResult.learnerState || virtualReplyResult.internal?.learnerState, 'teaching', this.parseStoryContextFromStageResults(stageResults)),
+        learnerState: this.mergeLearnerState(profile, (virtualReplyResult.learnerState || virtualReplyResult.internal?.learnerState) as Partial<LearnerLatentState> | undefined, 'teaching', this.parseStoryContextFromStageResults(stageResults)),
         latestLearnerFeedback: virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null,
         closureDecision,
         taskRuntime: {
-          ...(learningState.taskRuntime || {}),
+          ...((learningState.taskRuntime ?? {}) as Record<string, unknown>),
           status: learningStepError
             ? 'error'
             : closureDecision?.teacherReady && !closureDecision?.learnerReady
@@ -3276,12 +3254,12 @@ class SimulationOrchestrator {
         logs,
         error: learningStepError || undefined
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       const durationMs = Date.now() - startTime;
       
       logger.error('[simulation-coordinator] 学习步骤执行失败', {
         sessionId,
-        error: error.message,
+        error: asErrorLike(error).message,
         durationMs
       });
       
@@ -3290,7 +3268,7 @@ class SimulationOrchestrator {
         phase: 'error',
         durationMs,
         details: {
-          error: error.message
+          error: asErrorLike(error).message
         }
       });
 
@@ -3299,7 +3277,7 @@ class SimulationOrchestrator {
       return {
         success: false,
         logs,
-        error: error.message
+        error: asErrorLike(error).message
       };
     }
   }
@@ -3381,7 +3359,7 @@ class SimulationOrchestrator {
           };
         }
 
-        if ((stepResult as any).currentTaskStopped) {
+        if (stepResult.currentTaskStopped) {
           logger.info('[simulation-coordinator] 当前学习任务已收束或需处理，停止自动学习', {
             sessionId,
             totalSteps: steps
@@ -3404,15 +3382,15 @@ class SimulationOrchestrator {
         totalSteps: steps,
         completedMilestones: maxMilestones
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('[simulation-coordinator] 自动学习失败', {
         sessionId,
-        error: error.message
+        error: asErrorLike(error).message
       });
       
       return {
         success: false,
-        error: error.message
+        error: asErrorLike(error).message
       };
     }
   }
@@ -3424,10 +3402,7 @@ class SimulationOrchestrator {
     try {
       const session = await this.getVirtualSession(sessionId);
 
-      let stageResults: any = {};
-      try {
-        stageResults = JSON.parse(session.stageResults || '{}');
-      } catch {}
+      const stageResults: StageResults = safeJsonParse<StageResults>(session.stageResults, {});
 
       const learningState = stageResults.teaching || {};
       const teachingSessionId = learningState.teachingSessionId;
@@ -3464,15 +3439,15 @@ class SimulationOrchestrator {
       });
 
       return { success: true };
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('[simulation-coordinator] 紧急停止学习失败', {
         sessionId,
-        error: error.message
+        error: asErrorLike(error).message
       });
 
       return {
         success: false,
-        error: error.message
+        error: asErrorLike(error).message
       };
     }
   }
@@ -3485,10 +3460,7 @@ class SimulationOrchestrator {
     try {
       const session = await this.getVirtualSession(sessionId)
 
-      let stageResults: any = {}
-      try {
-        stageResults = JSON.parse(session.stageResults || '{}')
-      } catch {}
+      const stageResults: StageResults = safeJsonParse<StageResults>(session.stageResults, {});
 
       const learningState = stageResults.teaching || {}
       const teachingSessionId = learningState.teachingSessionId
@@ -3538,15 +3510,15 @@ class SimulationOrchestrator {
       })
 
       return await this.advanceToPathGeneration(sessionId)
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('[simulation-coordinator] 重建路径失败', {
         sessionId,
-        error: error.message
+        error: asErrorLike(error).message
       })
 
       return {
         success: false,
-        error: error.message
+        error: asErrorLike(error).message
       }
     }
   }
@@ -3555,7 +3527,7 @@ class SimulationOrchestrator {
     success: boolean;
     teachingSessionId?: string;
     welcomeMessage?: string;
-    milestones?: any[];
+    milestones?: SimulationMilestone[];
     selectedTaskId?: string;
     error?: string;
   }> {
@@ -3566,10 +3538,7 @@ class SimulationOrchestrator {
         throw new Error('学习会话已完成，不能重新开始学习')
       }
 
-      let stageResults: any = {}
-      try {
-        stageResults = JSON.parse(session.stageResults || '{}')
-      } catch {}
+      const stageResults: StageResults = safeJsonParse<StageResults>(session.stageResults, {});
 
       const learningState = stageResults.teaching || {}
       const teachingSessionId = learningState.teachingSessionId
@@ -3632,15 +3601,15 @@ class SimulationOrchestrator {
       }
 
       return restartResult
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('[simulation-coordinator] 重开学习失败', {
         sessionId,
-        error: error.message
+        error: asErrorLike(error).message
       })
 
       return {
         success: false,
-        error: error.message
+        error: asErrorLike(error).message
       }
     }
   }
@@ -3654,7 +3623,7 @@ class SimulationOrchestrator {
       const session = await this.getVirtualSession(sessionId);
       const stageResults = this.parseStageResultsPayload(session.stageResults);
       const learning = stageResults.teaching || {};
-      const storyContext = stageResults.story || stageResults.storyContext || null;
+      const storyContext = (stageResults.story || stageResults.storyContext || null) as SimulationContext['storyContext'];
 
       // 已经生成过就不重复
       if (learning.wrapup) {
@@ -3662,7 +3631,7 @@ class SimulationOrchestrator {
       }
 
       const conversation = Array.isArray(learning.conversationHistory) ? learning.conversationHistory : [];
-      const messages = conversation.map((m: any) => ({
+      const messages = conversation.map((m: { role?: string; isLearner?: boolean; content?: string; text?: string; timestamp?: string; createdAt?: string }) => ({
         role: m.role || (m.isLearner ? 'user' : 'assistant'),
         content: m.content || m.text || '',
         timestamp: m.timestamp || m.createdAt || undefined
@@ -3671,14 +3640,14 @@ class SimulationOrchestrator {
       const userMessageCount = messages.filter(m => m.role === 'user').length;
       const assistantMessageCount = messages.filter(m => m.role === 'assistant').length;
 
-      const createdAt = session.createdAt ? new Date(session.createdAt as any).getTime() : Date.now();
+      const createdAt = session.createdAt ? new Date(session.createdAt).getTime() : Date.now();
       const completedAt = Date.now();
       const durationMinutes = Math.max(1, Math.round((completedAt - createdAt) / 60000));
 
       // 知识点: 从 learnerState 抽取
-      const learnerState = learning.learnerState || {};
+      const learnerState = (learning.learnerState && typeof learning.learnerState === 'object' ? learning.learnerState : {}) as Record<string, unknown>;
       const knowledgePoints: SessionWrapupInput['knowledgePoints'] = Array.isArray(learnerState.knowledgePoints)
-        ? learnerState.knowledgePoints.map((kp: any) => ({
+        ? learnerState.knowledgePoints.map((kp: { name?: string; label?: string; status?: string; progress?: number }) => ({
             name: kp.name || kp.label || '未命名知识点',
             status: kp.status || 'in_progress',
             progress: typeof kp.progress === 'number' ? kp.progress : 50
@@ -3702,12 +3671,12 @@ class SimulationOrchestrator {
         },
         learningState: typeof learnerState.lss === 'number'
           ? {
-              lss: learnerState.lss || 5,
-              ktl: learnerState.ktl || 5,
-              lf: learnerState.lf || 5,
-              lsb: learnerState.lsb || 5,
-              recentTrend: learnerState.recentTrend,
-              recommendedPacing: learnerState.recommendedPacing
+              lss: Number(learnerState.lss) || 5,
+              ktl: Number(learnerState.ktl) || 5,
+              lf: Number(learnerState.lf) || 5,
+              lsb: Number(learnerState.lsb) || 5,
+              recentTrend: typeof learnerState.recentTrend === 'string' ? learnerState.recentTrend : undefined,
+              recommendedPacing: typeof learnerState.recommendedPacing === 'string' ? learnerState.recommendedPacing : undefined
             }
           : undefined
       };
@@ -3728,9 +3697,9 @@ class SimulationOrchestrator {
 
       logger.info('[simulation-coordinator] wrapup 已生成', { sessionId });
       return { success: true };
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('[simulation-coordinator] generateWrapupForSession 失败', { sessionId, error });
-      return { success: false, error: error.message || 'unknown' };
+      return { success: false, error: asErrorLike(error).message || 'unknown' };
     }
   }
 }

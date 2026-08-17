@@ -1458,6 +1458,8 @@ export class AITeachingOrchestrator {
     }, context);
     // 教学回合 wall-clock 超时兜底：LLM 挂起时避免操作租约（30min）被占导致会话内所有操作 409 BUSY；
     // 超时走 releaseOperation + 客户端重试路径（revision 未递增，重试安全）。
+    // 阈值对齐 platform_settings.aiReliability.defaultRequestTimeoutMs（300s）：
+    // 旧值 90s 会误杀正常回合——教学回合含 2 次 LLM 调用（模拟器 + teaching-turn），上游慢时单次即可超 90s。
     const turnResult = await withTimeout(
       executeSkill(teachingTurnAgentDefinition, turnInput, {
         contextEnvelope: {
@@ -1466,8 +1468,8 @@ export class AITeachingOrchestrator {
           session: { sessionId: session.id, taskId: session.taskId },
         },
       }),
-      90_000,
-      'TEACHING_TURN_TIMEOUT: 教学回合执行超过 90 秒'
+      300_000,
+      'TEACHING_TURN_TIMEOUT: 教学回合执行超过 300 秒'
     );
     if (!turnResult.success) {
       throw new Error(typeof turnResult.error === 'string' ? turnResult.error : turnResult.error?.message || 'TEACHING_TURN_FAILED');

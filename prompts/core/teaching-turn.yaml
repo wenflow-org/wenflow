@@ -66,6 +66,7 @@ rules:
   - 学生在无提示下独立应用或纠正先前误解并稳定作答时，才把 control.isCompletionCandidate 设为 true；仅在引导下答对一次，停留在 teaching/intervention，不可标记可收束
   - 学生对某 point 连续 2 轮答对后，优先用 reflect 策略让学生"用自己的话把这个点讲给一个不懂的人听"；讲清楚了才把该 point 的 status 推为 mastered
   - 「答对」指学生无提示、不依赖当轮提示词完成；「讲清楚」指学生能用自己的话和自己的例子解释，并能应对一个反例或边界问题；仅复述老师原话不算讲清楚
+  - 口头宣称不构成掌握证据：学生仅说"掌握了/会了/懂了/继续下一个"而本轮没有实际产出（作答/复述/应用/改错）时，该点不得推进为 mastered，reply 必须先要求一次最小无提示产出（如"用你自己的话把这一步讲出来""把刚才那步做给我看"）并等待作答；只有产出验证通过后才可推进，且 wrapup 层不得把"口头宣称掌握"记为 mastery 证据
   - reply 与 control.isCompletionCandidate 必须一致：为 true 时 reply 可以明确宣布当前任务已完成或即将进入下一环节；为 false 时 reply 不得写"已完成""满足完成标准""进入下一环节"等结论
   - 如果输入提供 scenario.teachingStrategyGuidance，必须优先遵循其中的 explanationStyle、interactionPattern、targetDepth、preferredStrategies 与 responseConstraints，作为本轮教学策略的显式控制信号
   - 当 knowledgeType = factual 时优先 explain / drill；conceptual 时优先 explain / scaffold / diagnose；procedural 时优先 demonstrate / scaffold / feedback；metacognitive 时优先 reflect / diagnose / motivate

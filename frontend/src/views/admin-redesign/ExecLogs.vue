@@ -127,7 +127,7 @@
             <span
               v-if="log.sessionId"
               class="tline__session mono"
-              :title="`按业务会话在瀑布中归组查看：${log.sessionId}`"
+              :title="`按业务会话在链路中归组查看：${log.sessionId}`"
               @click.stop="openSession(log.sessionId)"
             >会话 {{ shortTrace(log.sessionId) }}</span>
           </span>
@@ -135,13 +135,13 @@
           <span class="tline__tokens mono" :title="tokensTitle(log)">{{ tokensText(log) }}</span>
           <span class="tline__dur mono" :title="fmtMs(log.durationMs)">{{ fmtMs(log.durationMs) }}</span>
           <span class="tline__badge" :class="`tline__badge--${log.status}`">{{ statusBadge[log.status] }}</span>
-          <span class="tline__trace mono" :title="`${log.traceId} · 在瀑布中查看完整链路`" @click.stop="openTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span>
+          <span class="tline__trace mono" :title="`${log.traceId} · 在链路中查看完整 Trace`" @click.stop="openTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span>
           <span class="tline__arrow" aria-hidden="true">▸</span>
         </button>
         <div v-if="openId === log.id" class="tline__payload">
           <div class="tline__payload-meta">
             <span>trace {{ log.traceId }}</span>
-            <button type="button" class="mk-link" @click.stop="openTrace(log.traceId)">在瀑布中查看完整链路 →</button>
+            <button type="button" class="mk-link" @click.stop="openTrace(log.traceId)">在链路中查看完整 Trace →</button>
             <button v-if="log.sessionId" type="button" class="mk-link" @click.stop="openSession(log.sessionId)">按会话归组查看 →</button>
           </div>
           <template v-if="isLive">

@@ -146,9 +146,10 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     }));
     const w = await mountAudit();
     await nextTick();
-    expect(w.find('.tline-head__target-type').exists()).toBe(false);
-    expect(w.find('.tline-head--no-tt').exists()).toBe(true);
-    expect(w.find('.tline__main--no-tt').exists()).toBe(true);
+    // 重做（F11）：tline div 网格 → mk-table 标准表格；目标类型列隐藏 = thead 中无该 th
+    const ths = w.findAll('thead th').map((x) => x.text());
+    expect(ths.includes('目标类型')).toBe(false);
+    expect(w.find('table.mk-table').exists()).toBe(true);
     expect(w.text()).toContain('user-op-1-1');
   });
 

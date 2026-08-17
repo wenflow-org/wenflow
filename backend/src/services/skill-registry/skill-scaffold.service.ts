@@ -387,7 +387,7 @@ export function appendFieldToCore(coreText: string, spec: CoreFieldAppendSpec): 
   // 顶层 object 存在：定位该条目内 desc 标量跨度，追加子字段说明
   let entryEnd = block.endIdx;
   for (let i = entryStart + 1; i < block.endIdx; i += 1) {
-    if (/^  - /.test(lines[i])) {
+    if (/^ {2}- /.test(lines[i])) {
       entryEnd = i;
       break;
     }
@@ -513,7 +513,7 @@ function findCoreFieldEntryBlock(lines: string[], name: string): { startIdx: num
   if (startIdx === -1) return null;
   let endIdx = block.endIdx;
   for (let i = startIdx + 1; i < block.endIdx; i += 1) {
-    if (/^  - /.test(lines[i])) {
+    if (/^ {2}- /.test(lines[i])) {
       endIdx = i;
       break;
     }
@@ -721,7 +721,7 @@ export function updateFieldInOrchestration(
   }
   let fieldEntryEnd = routingsBlock.startIdx;
   for (let i = fieldEntryStart + 1; i < routingsBlock.startIdx; i += 1) {
-    if (/^  - /.test(lines[i])) {
+    if (/^ {2}- /.test(lines[i])) {
       fieldEntryEnd = i;
       break;
     }
@@ -746,9 +746,9 @@ export function updateFieldInOrchestration(
   let routingEntryStart = -1;
   let routingEntryEnd = lines.length;
   for (let i = routingsBlock.startIdx; i < lines.length; i += 1) {
-    if (!/^  - agentId:/.test(lines[i])) continue;
+    if (!/^ {2}- agentId:/.test(lines[i])) continue;
     let end = i + 1;
-    while (end < lines.length && !/^  - agentId:/.test(lines[end]) && !/^[^ #]/.test(lines[end])) end += 1;
+    while (end < lines.length && !/^ {2}- agentId:/.test(lines[end]) && !/^[^ #]/.test(lines[end])) end += 1;
     const entry = lines.slice(i, end);
     if (entry.some((line) => new RegExp(`^ {4}fieldId:\\s*${escapeRegExp(routing.fieldId)}\\s*$`).test(line))) {
       routingEntryStart = i;
@@ -797,9 +797,9 @@ export function deleteFieldFromOrchestration(
   let routingStart = -1;
   let routingEnd = lines.length;
   for (let i = 0; i < lines.length; i += 1) {
-    if (!/^  - agentId:/.test(lines[i])) continue;
+    if (!/^ {2}- agentId:/.test(lines[i])) continue;
     let end = i + 1;
-    while (end < lines.length && !/^  - agentId:/.test(lines[end]) && !/^[^ #]/.test(lines[end])) end += 1;
+    while (end < lines.length && !/^ {2}- agentId:/.test(lines[end]) && !/^[^ #]/.test(lines[end])) end += 1;
     const entry = lines.slice(i, end);
     const isAgent = new RegExp(`^  - agentId:\\s*${escapeRegExp(agentId)}\\s*$`).test(entry[0] || '');
     if (isAgent && entry.some((line) => new RegExp(`^ {4}fieldId:\\s*${escapedFieldId}\\s*$`).test(line))) {
@@ -824,7 +824,7 @@ export function deleteFieldFromOrchestration(
     }
     let fieldEnd = routingsBlock.startIdx;
     for (let i = fieldStart + 1; i < routingsBlock.startIdx; i += 1) {
-      if (/^  - /.test(lines[i])) {
+      if (/^ {2}- /.test(lines[i])) {
         fieldEnd = i;
         break;
       }

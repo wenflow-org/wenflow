@@ -82,7 +82,7 @@ describe('SessionSecurity 分批渲染（分页器首屏可见）', () => {
   it('活跃会话首屏仅渲染每批 12 行', async () => {
     const sessions = Array.from({ length: 30 }, (_, i) => fakeSession(i + 1));
     const w = await mountSS(sessions);
-    const rows = w.findAll('.ss-row');
+    const rows = w.findAll('.ss-tr');
     expect(rows.length).toBe(12);
   });
 
@@ -100,7 +100,7 @@ describe('SessionSecurity 分批渲染（分页器首屏可见）', () => {
     const w = await mountSS(sessions);
     await w.find('.ss-more button').trigger('click');
     await flushPromises();
-    expect(w.findAll('.ss-row').length).toBe(24);
+    expect(w.findAll('.ss-tr').length).toBe(24);
   });
 
   it('≤12 行时不展示分页控件（无分页出视口问题）', async () => {
@@ -127,9 +127,9 @@ describe('SessionSecurity 分批渲染（分页器首屏可见）', () => {
     ];
     const w = await mountSS(sessions);
     // 13 个会话：2 历史进折叠组，11 活跃直接展示（无分页控件）；
-    // .ss-row 同时匹配活跃行与折叠组内历史行（13 = 11 活跃 + 2 历史）
+    // .ss-tr 同时匹配活跃表行与折叠组内历史表行（13 = 11 活跃 + 2 历史）
     expect(w.find('.ss-hist').exists()).toBe(true);
     expect(w.find('.ss-more').exists()).toBe(false);
-    expect(w.findAll('.ss-row').length).toBe(13);
+    expect(w.findAll('.ss-tr').length).toBe(13);
   });
 });

@@ -120,6 +120,12 @@ export interface SimulationContext {
   storyContext?: {
     storyId?: string | null;
     title?: string;
+    /** 故事主标题（wrapup 等消费方使用） */
+    storyTitle?: string;
+    /** 故事主题词（wrapup 等消费方使用） */
+    subject?: string;
+    pathTitle?: string | null;
+    pathSummary?: string | null;
     sourceType?: string | null;
     outline?: string;
     triggerEvent?: string;

@@ -149,7 +149,7 @@ const items = computed<Item[]>(() => {
     list.unshift({
       key: `trace:${q}`,
       icon: '⌁',
-      label: `在 Trace 瀑布打开 ${q.slice(0, 24)}`,
+      label: `在 Trace 链路打开 ${q.slice(0, 24)}`,
       hint: '排查',
       group: '直达',
       run: () => openTrace(q)

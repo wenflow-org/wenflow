@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="dash v2-page">
     <V2Nav />
 
@@ -137,7 +137,7 @@
           <!-- 新手态：引导卡 -->
           <section v-else class="card action action--empty">
             <div class="action__eyebrow"><span>开始你的第一个学习计划</span></div>
-            <h1 class="action__title">用 2 分钟，聊出一条能执行的路径</h1>
+            <h1 class="action__title">用 2 分钟，理出一条能执行的路径</h1>
             <p class="action__desc">{{ guidanceEmptyText }}</p>
             <div class="action__examples">
               <router-link v-for="e in examples" :key="e" to="/goal-conversation" class="example">{{ e }}</router-link>
@@ -187,7 +187,7 @@
             </div>
             <div class="path__empty-body">
               <div class="path__empty-illus"><span></span><span></span><span></span><span></span></div>
-              <p>规划第一个目标后，这里会出现你的阶段地图。</p>
+              <p>规划第一个目标后，这里会出现你的学习路径。</p>
             </div>
           </aside>
         </div>

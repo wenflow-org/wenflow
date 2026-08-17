@@ -110,7 +110,7 @@
               <td><span class="mk-cell-sub" :title="r.createdAt">{{ r.createdAt }}</span></td>
               <td>
                 <div class="mk-actions">
-                  <button type="button" class="mk-link" @click.stop="goTrace(r)">瀑布</button>
+                  <button type="button" class="mk-link" @click.stop="goTrace(r)">链路</button>
                   <button type="button" class="mk-link" @click.stop="goConsole(r)">控制台</button>
                   <button type="button" class="mk-link" @click.stop="regenerate(r)">
                     {{ r.regenerating ? '生成中…' : '重建路径' }}
@@ -243,7 +243,7 @@
 
             <div class="gc-actions">
               <button type="button" class="gc-btn-link" @click="goLearner(detail)">学习者画像 →</button>
-              <button type="button" class="gc-btn-link" @click="goTrace(detail)">Trace 瀑布 →</button>
+              <button type="button" class="gc-btn-link" @click="goTrace(detail)">Trace 链路 →</button>
               <button v-if="detail.id" type="button" class="gc-btn-link" @click="goConsole(detail)">进控制台 →</button>
               <button type="button" class="gc-btn-primary" :disabled="detail.regenerating" @click="regenerate(detail)">
                 {{ detail.regenerating ? '生成中…' : '重新生成学习路径' }}

@@ -42,6 +42,7 @@ runIntegration('LessonKnowledgeEnrichmentConsumer 集成测试（真实数据库
   })
 
   it('消费 lesson:completed 事件后会写入 learner_evidence 和 domain_event_inbox', async () => {
+    // eslint-disable-next-line no-extra-semi -- 行首分号是 ASI 保护
     ;(executeSkill as jest.Mock).mockResolvedValue({
       conceptLedger: [{ conceptKey: 'a', label: 'A' }],
       reusableFoundations: ['a'],
@@ -116,6 +117,7 @@ runIntegration('LessonKnowledgeEnrichmentConsumer 集成测试（真实数据库
   })
 
   it('重复消费同一事件会被 inbox 幂等拦截', async () => {
+    // eslint-disable-next-line no-extra-semi -- 行首分号是 ASI 保护
     ;(executeSkill as jest.Mock).mockResolvedValue({ conceptLedger: [], recurringConfusions: [] })
 
     const { LessonKnowledgeEnrichmentConsumer } = await import('../LessonKnowledgeEnrichmentConsumer')
