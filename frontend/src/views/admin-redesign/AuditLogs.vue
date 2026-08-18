@@ -1,14 +1,14 @@
 <template>
   <div class="mk-page">
     <!-- 状态条：● 审计日志 · N 条 · 失败 M 条 + tab 切换 + 筛选 -->
-    <div class="log-status" :class="`log-status--${statusTone}`">
-      <span class="log-status__dot"></span>
+    <div class="mk-status" :class="`mk-status--${statusTone}`">
+      <span class="mk-status__dot"></span>
       <strong>{{ statusTitle }}</strong>
-      <span class="log-status__sep"></span>
-      <span class="log-status__meta mono">{{ total }} 条</span>
-      <span v-if="total" class="log-status__meta mono">失败 {{ failed }}</span>
+      <span class="mk-status__sep"></span>
+      <span class="mk-status__meta mono">{{ total }} 条</span>
+      <span v-if="total" class="mk-status__meta mono">失败 {{ failed }}</span>
 
-      <div class="log-status__filters">
+      <div class="mk-status__filters">
         <div class="mk-pills">
           <button
             v-for="t in tabs"
@@ -404,7 +404,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.log-status {
+.mk-status {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -415,15 +415,15 @@ onMounted(() => {
   box-shadow: var(--mk-shadow-sm);
   flex-wrap: wrap;
 }
-.log-status__dot { width: 9px; height: 9px; border-radius: 50%; }
-.log-status--ok .log-status__dot { background: var(--mk-green); }
-.log-status--bad .log-status__dot { background: var(--mk-red); }
-.log-status--muted .log-status__dot { background: var(--mk-faint); }
-.log-status strong { font-size: 14px; }
-.log-status__sep { width: 1px; height: 14px; background: var(--mk-line); }
-.log-status__meta { color: var(--mk-muted); font-size: 12px; }
+.mk-status__dot { width: 9px; height: 9px; border-radius: 50%; }
+.mk-status--ok .mk-status__dot { background: var(--mk-green); }
+.mk-status--bad .mk-status__dot { background: var(--mk-red); }
+.mk-status--muted .mk-status__dot { background: var(--mk-faint); }
+.mk-status strong { font-size: 14px; }
+.mk-status__sep { width: 1px; height: 14px; background: var(--mk-line); }
+.mk-status__meta { color: var(--mk-muted); font-size: 12px; }
 
-.log-status__filters {
+.mk-status__filters {
   margin-left: auto;
   display: flex;
   align-items: center;
@@ -433,7 +433,7 @@ onMounted(() => {
   min-width: 0;
 }
 @media (max-width: 1000px) {
-  .log-status__filters {
+  .mk-status__filters {
     margin-left: 0;
     width: 100%;
     justify-content: flex-start;
@@ -650,9 +650,9 @@ onMounted(() => {
 
 /* 大屏/4K 适配（全站 mk 体系档位；表格自身由 shared.css 档位覆盖） */
 @media (min-width: 2000px) {
-  .log-status { padding: 10px 16px; }
-  .log-status strong { font-size: 15.5px; }
-  .log-status__meta { font-size: 13px; }
+  .mk-status { padding: 10px 16px; }
+  .mk-status strong { font-size: 15.5px; }
+  .mk-status__meta { font-size: 13px; }
   .log-keyword { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 180px; }
   .log-agent { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 100px; }
   .log-refresh { font-size: 13px; padding: 7px 12px; }
@@ -674,7 +674,7 @@ onMounted(() => {
   .log-arrow { font-size: 14px; }
 }
 @media (min-width: 2800px) {
-  .log-status { padding: 12px 18px; border-radius: 14px; }
+  .mk-status { padding: 12px 18px; border-radius: 14px; }
   .log-time,
   .log-target,
   .log-ip { font-size: 16px; }
@@ -692,9 +692,9 @@ onMounted(() => {
   .log-arrow { font-size: 16.5px; }
 }
 @media (min-width: 3600px) {
-  .log-status { padding: 14px 22px; }
-  .log-status strong { font-size: 18px; }
-  .log-status__meta { font-size: 15px; }
+  .mk-status { padding: 14px 22px; }
+  .mk-status strong { font-size: 18px; }
+  .mk-status__meta { font-size: 15px; }
   .log-keyword { font-size: 15.5px; padding: 9px 14px; width: 215px; }
   .log-agent { font-size: 15.5px; padding: 9px 14px; width: 115px; }
   .log-refresh { font-size: 15.5px; padding: 9px 14px; }

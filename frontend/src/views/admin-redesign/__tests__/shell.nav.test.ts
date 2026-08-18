@@ -38,7 +38,7 @@ describe('Shell 导航', () => {
   it('八个导航分组齐全且顺序稳定', () => {
     const wrapper = mountShell();
     const groups = wrapper.findAll('.mshell__group-title').map((n) => n.text());
-    expect(groups).toEqual(['总览', '学习者', '运行', 'Skill', '数据健康', '观测', '配置', '运营']);
+    expect(groups).toEqual(['总览', '学习者', '仿真实验室', '运行与 Skill', '数据健康', '观测', '配置', '运营']);
   });
 
   it('当前页菜单高亮（active class）', () => {

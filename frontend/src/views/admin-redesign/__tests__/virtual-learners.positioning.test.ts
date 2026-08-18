@@ -90,9 +90,9 @@ describe('虚拟学习者定位（D1）', () => {
     wrapper.unmount();
   });
 
-  it('manifest 导航标签已标注「仿真」，提示定位（与真实用户管理区分）', () => {
+  it('manifest 导航分组已标注「仿真」，提示定位（与真实用户管理区分）', () => {
     const scene = MOCK_SCENES.find((s) => s.id === 'virtual-learners');
     expect(scene).toBeDefined();
-    expect(scene!.label).toContain('仿真');
+    expect(scene!.group).toContain('仿真');
   });
 });

@@ -1,19 +1,19 @@
 <template>
   <div class="mk-page">
     <!-- 终端状态条 -->
-    <div class="log-status" :class="`log-status--${statusTone}`">
-      <span class="log-status__dot"></span>
+    <div class="mk-status" :class="`mk-status--${statusTone}`">
+      <span class="mk-status__dot"></span>
       <strong>{{ statusTitle }}</strong>
-      <span class="log-status__sep"></span>
-      <span class="log-status__meta mono">{{ isLive ? `共 ${liveLogsTotal} 条` : `${filtered.length} / ${totalCount} 条` }}</span>
-      <span v-if="logs.length" class="log-status__meta mono">
+      <span class="mk-status__sep"></span>
+      <span class="mk-status__meta mono">{{ isLive ? `共 ${liveLogsTotal} 条` : `${filtered.length} / ${totalCount} 条` }}</span>
+      <span v-if="logs.length" class="mk-status__meta mono">
         失败 {{ errCount }} · 成功率 {{ successRate }}%
       </span>
-      <span v-if="isFiltered" class="log-status__filter">
+      <span v-if="isFiltered" class="mk-status__filter">
         排查中：{{ filterLabel }}
-        <button type="button" class="log-status__clear" aria-label="清除筛选" @click="clearFilter">×</button>
+        <button type="button" class="mk-status__clear" aria-label="清除筛选" @click="clearFilter">×</button>
       </span>
-      <div class="log-status__filters">
+      <div class="mk-status__filters">
         <div class="mk-pills">
           <button
             v-for="p in statusPills"
@@ -560,7 +560,7 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
 </script>
 
 <style scoped>
-.log-status {
+.mk-status {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -573,15 +573,15 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   /* 终端页例外：字号/圆角与 mk-status 基础规格一致，
      内边距略大是为容纳状态条内的筛选区（pills + 关键词 + 高级筛选） */
 }
-.log-status__dot { width: 9px; height: 9px; border-radius: 50%; }
-.log-status--ok .log-status__dot { background: var(--mk-green); }
-.log-status--bad .log-status__dot { background: var(--mk-red); }
-.log-status--muted .log-status__dot { background: var(--mk-faint); }
-.log-status strong { font-size: 14px; }
-.log-status__sep { width: 1px; height: 14px; background: var(--mk-line); }
-.log-status__meta { color: var(--mk-muted); font-size: 12px; }
+.mk-status__dot { width: 9px; height: 9px; border-radius: 50%; }
+.mk-status--ok .mk-status__dot { background: var(--mk-green); }
+.mk-status--bad .mk-status__dot { background: var(--mk-red); }
+.mk-status--muted .mk-status__dot { background: var(--mk-faint); }
+.mk-status strong { font-size: 14px; }
+.mk-status__sep { width: 1px; height: 14px; background: var(--mk-line); }
+.mk-status__meta { color: var(--mk-muted); font-size: 12px; }
 
-.log-status__filter {
+.mk-status__filter {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -592,7 +592,7 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   font-size: 11.5px;
   font-weight: 700;
 }
-.log-status__clear {
+.mk-status__clear {
   border: 0;
   background: transparent;
   color: inherit;
@@ -601,7 +601,7 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   padding: 0 2px;
 }
 
-.log-status__filters {
+.mk-status__filters {
   margin-left: auto;
   display: flex;
   align-items: center;
@@ -660,7 +660,7 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   from { opacity: 0; transform: translateY(-3px); }
 }
 @media (max-width: 1000px) {
-  .log-status__filters {
+  .mk-status__filters {
     margin-left: 0;
     width: 100%;
     justify-content: flex-start;
@@ -967,16 +967,16 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3，高度换算回逻辑坐标） ========== */
 @media (min-width: 2000px) {
-  .log-status { padding: 10px 16px; }
-  .log-status strong { font-size: 15.5px; }
-  .log-status__meta { font-size: 13px; }
+  .mk-status { padding: 10px 16px; }
+  .mk-status strong { font-size: 15.5px; }
+  .mk-status__meta { font-size: 13px; }
   .log-keyword { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 180px; }
   .log-trace { width: 210px; font-size: 12.5px; }
   .log-agent { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 100px; }
   .log-auto { font-size: 13px; }
   .log-adv { font-size: 13px; }
-  .log-status__filter { font-size: 13px; }
-  .log-status__clear { font-size: 14.5px; }
+  .mk-status__filter { font-size: 13px; }
+  .mk-status__clear { font-size: 14.5px; }
   /* 4K 档列宽由 shared.css 4K 段 token 覆盖（--mk-col-*），此处不再逐列复制模板 */
   .tline-head,
   .tline__main { gap: 12px; padding: 11px 18px; }
@@ -1011,20 +1011,20 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号沿用 2000px 档 */
-  .log-status { padding: 12px 18px; border-radius: 14px; }
+  .mk-status { padding: 12px 18px; border-radius: 14px; }
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：字号继续放大 */
-  .log-status { padding: 14px 22px; }
-  .log-status strong { font-size: 18px; }
-  .log-status__meta { font-size: 15px; }
+  .mk-status { padding: 14px 22px; }
+  .mk-status strong { font-size: 18px; }
+  .mk-status__meta { font-size: 15px; }
   .log-keyword { font-size: 15.5px; padding: 9px 14px; width: 215px; }
   .log-trace { width: 250px; font-size: 15px; }
   .log-agent { font-size: 15.5px; padding: 9px 14px; width: 115px; }
   .log-auto { font-size: 15.5px; }
   .log-adv { font-size: 15.5px; }
-  .log-status__filter { font-size: 15.5px; }
-  .log-status__clear { font-size: 17px; }
+  .mk-status__filter { font-size: 15.5px; }
+  .mk-status__clear { font-size: 17px; }
   /* 4K 档列宽由 shared.css 4K 段 token 覆盖 */
   .tline-head,
   .tline__main { gap: 14px; padding: 13px 22px; }

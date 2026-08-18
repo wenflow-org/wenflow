@@ -1,16 +1,16 @@
 <template>
   <div class="mk-page">
     <!-- 状态条：全量会话统计 + 状态筛选 -->
-    <div class="ss-status" :class="`ss-status--${statusTone}`">
-      <span class="ss-status__dot"></span>
-      <strong class="ss-status__title">会话安全</strong>
-      <span class="ss-status__sep"></span>
-      <span class="ss-status__meta mono">{{ sessions.length }} 个会话</span>
-      <span v-if="sessions.length" class="ss-status__meta mono">活跃 {{ activeCount }}</span>
-      <span v-if="expiredCount" class="ss-status__meta mono">已过期 {{ expiredCount }}</span>
-      <span v-if="revokedCount" class="ss-status__meta mono">已撤销 {{ revokedCount }}</span>
+    <div class="mk-status" :class="`mk-status--${statusTone}`">
+      <span class="mk-status__dot"></span>
+      <strong class="mk-status__title">会话安全</strong>
+      <span class="mk-status__sep"></span>
+      <span class="mk-status__meta mono">{{ sessions.length }} 个会话</span>
+      <span v-if="sessions.length" class="mk-status__meta mono">活跃 {{ activeCount }}</span>
+      <span v-if="expiredCount" class="mk-status__meta mono">已过期 {{ expiredCount }}</span>
+      <span v-if="revokedCount" class="mk-status__meta mono">已撤销 {{ revokedCount }}</span>
 
-      <div class="ss-status__filters">
+      <div class="mk-status__filters">
         <div class="mk-pills">
           <button
             v-for="p in statusPills"
@@ -431,7 +431,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.ss-status {
+.mk-status {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -442,16 +442,16 @@ onMounted(async () => {
   box-shadow: var(--mk-shadow-sm);
   flex-wrap: wrap;
 }
-.ss-status__dot { width: 9px; height: 9px; border-radius: 50%; }
-.ss-status--ok .ss-status__dot { background: var(--mk-green); }
-.ss-status--warn .ss-status__dot { background: var(--mk-amber); }
-.ss-status--bad .ss-status__dot { background: var(--mk-red); }
-.ss-status--muted .ss-status__dot { background: var(--mk-faint); }
-.ss-status__title { font-size: 14px; }
-.ss-status__sep { width: 1px; height: 14px; background: var(--mk-line); }
-.ss-status__meta { color: var(--mk-muted); font-size: 12px; }
+.mk-status__dot { width: 9px; height: 9px; border-radius: 50%; }
+.mk-status--ok .mk-status__dot { background: var(--mk-green); }
+.mk-status--warn .mk-status__dot { background: var(--mk-amber); }
+.mk-status--bad .mk-status__dot { background: var(--mk-red); }
+.mk-status--muted .mk-status__dot { background: var(--mk-faint); }
+.mk-status__title { font-size: 14px; }
+.mk-status__sep { width: 1px; height: 14px; background: var(--mk-line); }
+.mk-status__meta { color: var(--mk-muted); font-size: 12px; }
 
-.ss-status__filters {
+.mk-status__filters {
   margin-left: auto;
   display: flex;
   align-items: center;
@@ -461,7 +461,7 @@ onMounted(async () => {
   min-width: 0;
 }
 @media (max-width: 1000px) {
-  .ss-status__filters {
+  .mk-status__filters {
     margin-left: 0;
     width: 100%;
     justify-content: flex-start;
@@ -615,9 +615,9 @@ onMounted(async () => {
 
 /* 大屏/4K 适配（全站 mk 体系档位；表格自身由 shared.css 档位覆盖） */
 @media (min-width: 2000px) {
-  .ss-status { padding: 10px 16px; }
-  .ss-status__title { font-size: 15.5px; }
-  .ss-status__meta { font-size: 13px; }
+  .mk-status { padding: 10px 16px; }
+  .mk-status__title { font-size: 15.5px; }
+  .mk-status__meta { font-size: 13px; }
   .ss-group__head { padding: 12px 18px; }
   .ss-refresh { font-size: 13.5px; }
   .ss-group__who strong { font-size: 14.5px; }
@@ -630,7 +630,7 @@ onMounted(async () => {
   .ss-ip { font-size: 13.5px; }
 }
 @media (min-width: 2800px) {
-  .ss-status { padding: 12px 18px; border-radius: 14px; }
+  .mk-status { padding: 12px 18px; border-radius: 14px; }
   .ss-refresh { font-size: 16px; }
   .ss-group__who strong { font-size: 16.5px; }
   .ss-group__email { font-size: 14px; }
@@ -643,9 +643,9 @@ onMounted(async () => {
   .ss-ip { font-size: 15.5px; }
 }
 @media (min-width: 3600px) {
-  .ss-status { padding: 14px 22px; }
-  .ss-status__title { font-size: 18px; }
-  .ss-status__meta { font-size: 15px; }
+  .mk-status { padding: 14px 22px; }
+  .mk-status__title { font-size: 18px; }
+  .mk-status__meta { font-size: 15px; }
   .ss-group__head { padding: 14px 22px; }
   .ss-refresh { font-size: 18.5px; }
   .ss-group__who strong { font-size: 18.5px; }
