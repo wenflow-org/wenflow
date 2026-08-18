@@ -111,6 +111,8 @@
 .mk-table tbody tr { transition: background 0.12s; }
 .mk-table tbody tr:hover { background: #f6f9ff; }
 .mk-table--click tbody tr { cursor: pointer; }
+/* fixed 档：强制列宽，防止长文本撑开列（配合 th width + mk-ellipsis 使用） */
+.mk-table--fixed { table-layout: fixed; }
 /* dense 档：字段配置类密集表（12/10 列）——原 sfr__table / frt__table 独立类并入（表统一批次，行高 ≈28px） */
 .mk-table--dense th,
 .mk-table--dense td { padding: 8px 12px; }
@@ -200,6 +202,9 @@
 .mk-col--flex { min-width: var(--mk-col-flex-min); max-width: var(--mk-col-flex-max); }
 /* 截断三件套：全站截断上限统一引用 token（消灭散落 260/340/460/180/220px 五处硬编码） */
 .mk-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 表格长文本单元格：max-width 约束 + 截断 + title tooltip 配合使用 */
+.mk-cell-text { max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-cell-text--lg { max-width: 480px; }
 
 /* ----- 徽标 ----- */
 .mk-badge {
@@ -223,6 +228,14 @@
 .mk-badge--bad { background: var(--mk-red-bg); color: var(--mk-red); }
 .mk-badge--muted { background: #f0f2f5; color: var(--mk-muted); }
 .mk-badge--info { background: #eff6ff; color: var(--mk-blue); }
+/* 紧凑变体：行内小标签（10.5px / 1px 8px），替代各页面散落的 gc-tag/ts-tag/ul-tag */
+.mk-badge--sm { font-size: 10.5px; padding: 1px 8px; letter-spacing: 0.03em; }
+/* 虚拟学习者标记：slate 灰 + 虚线边框（与测试 amber 区分） */
+.mk-badge--virtual { background: #f1f5f9; color: #64748b; border: 1px dashed #cbd5e1; }
+/* 管理员自身标记：蓝色实心 */
+.mk-badge--self { background: #dbeafe; color: var(--mk-accent-deep, #1f57cc); }
+/* 已删除标记：灰色 */
+.mk-badge--deleted { background: #e5e7eb; color: #4b5563; }
 /* 直角徽章：需要与文字/表格行对齐的紧凑场景 */
 .mk-badge--chip { border-radius: 4px; }
 
@@ -324,6 +337,24 @@
 }
 
 /* ----- 链接按钮 ----- */
+/* 返回按钮：子页面顶部"← 返回"统一样式（原散落在 ud-back/ld-back/vp-back 三处局部定义） */
+.mk-back {
+  border: 0;
+  background: transparent;
+  color: var(--mk-back-color, var(--mk-blue));
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 8px;
+  margin-left: -8px;
+  border-radius: 6px;
+  width: fit-content;
+  transition: background 0.12s ease, transform 0.1s ease;
+}
+.mk-back:hover { background: #eff6ff; }
+.mk-back:active { transform: translateY(1px); }
+
 .mk-link {
   border: 0;
   background: transparent;
@@ -339,6 +370,23 @@
 .mk-link:hover { background: #eff6ff; }
 .mk-link--danger { color: var(--mk-red, #dc2626); }
 .mk-link--danger:hover { background: var(--mk-red-bg, #fef2f2); }
+/* 图标按钮：操作列高频操作改为 SVG 图标 + tooltip，节省列宽 */
+.mk-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--mk-faint);
+  cursor: pointer;
+  border-radius: 7px;
+  transition: background 0.12s, color 0.12s;
+}
+.mk-icon-btn:hover { background: #eff6ff; color: var(--mk-blue, #2c63d0); }
+.mk-icon-btn--danger:hover { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
+.mk-icon-btn svg { width: 15px; height: 15px; }
 
 /* ----- 通用工具类 ----- */
 .mono { font-family: var(--mk-mono); }
@@ -439,6 +487,8 @@
 /* 表单字段 */
 .mk-field { display: grid; gap: 6px; }
 .mk-field__label { font-size: 12px; font-weight: 700; color: var(--mk-muted, #5b6577); }
+.mk-field__req { color: var(--mk-red, #dc2626); font-style: normal; font-weight: 700; margin-left: 2px; }
+.mk-field__hint { font-size: 11px; color: var(--mk-faint, #5f6f8c); margin-top: 2px; }
 .mk-field__hint { font-size: 11px; color: var(--mk-faint, #8492ab); }
 .mk-field__input,
 .mk-field__select,
@@ -516,6 +566,13 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   color: #1f57cc;
 }
 .mk-btn--ghost:hover { background: #dbeafe; }
+/* 成功/通过按钮：绿色（解决反馈等正向操作） */
+.mk-btn--ok {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+.mk-btn--ok:hover { background: #d1fae5; border-color: #86efac; }
 .mk-btn--sm { padding: 5px 11px; font-size: 11.5px; }
 .mk-btn:disabled { opacity: 0.65; cursor: not-allowed; }
 

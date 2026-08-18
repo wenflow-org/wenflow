@@ -244,6 +244,27 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/execution-logs'
   },
   {
+    // 直链兼容：用户直觉 URL → 实际 scene ID（manifest 命名与直觉 URL 不一致时兜底）
+    path: '/admin/health',
+    redirect: '/admin/health-center'
+  },
+  {
+    path: '/admin/traces',
+    redirect: '/admin/trace-waterfall'
+  },
+  {
+    path: '/admin/models',
+    redirect: '/admin/api-config'
+  },
+  {
+    path: '/admin/external-capabilities',
+    redirect: '/admin/addons'
+  },
+  {
+    path: '/admin/orchestration',
+    redirect: '/admin/orchestrator'
+  },
+  {
     // 管理控制台：/admin/:page 反映当前页面（深链/前进后退），动态段置于静态路由之后
     path: '/admin/:page?',
     name: 'AdminConsole',

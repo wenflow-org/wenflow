@@ -80,7 +80,7 @@
         </div>
         <div class="mk-modal__body">
           <label class="mk-field" :class="{ 'mk-field--error': errors.title }">
-            <span class="mk-field__label">标题</span>
+            <span class="mk-field__label">标题 <em class="mk-field__req">*</em></span>
             <input v-model="form.title" class="mk-field__input" placeholder="例如：系统维护通知" />
             <span v-if="errors.title" class="mk-field__err">{{ errors.title }}</span>
           </label>
@@ -101,8 +101,9 @@
             <span class="mk-field__hint">{{ severityHint(form.severity) }}</span>
           </label>
           <label class="mk-field" :class="{ 'mk-field--error': errors.body }">
-            <span class="mk-field__label">正文</span>
-            <textarea v-model="form.body" class="mk-field__textarea" rows="4" placeholder="给用户看的内容，说清楚时间、影响和建议动作。"></textarea>
+            <span class="mk-field__label">正文 <em class="mk-field__req">*</em></span>
+            <textarea v-model="form.body" class="mk-field__textarea" rows="4" maxlength="3000" placeholder="给用户看的内容，说清楚时间、影响和建议动作。"></textarea>
+            <span class="mk-field__hint">{{ form.body.length }} / 3000 字</span>
             <span v-if="errors.body" class="mk-field__err">{{ errors.body }}</span>
           </label>
           <label class="mk-field">

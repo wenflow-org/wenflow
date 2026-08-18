@@ -23,7 +23,6 @@
           <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9v1zm3-19a7 7 0 0 0-4 12.74c.6.52 1 1.31 1 2.26v1h6v-1c0-.95.4-1.74 1-2.26A7 7 0 0 0 12 2z"/></svg>
         </span>
         <p>{{ tipText }}</p>
-        <span class="tip__ai" title="内容由 AI 生成，仅供参考，请仔细甄别">AI</span>
         <button type="button" class="tip__close" title="知道了" @click="tipDismissed = true">×</button>
       </div>
 
@@ -443,7 +442,14 @@
       </div>
     </transition>
 
-    <V2Footer />
+    <!-- AI 生成提示：置于页面底部、靠近页脚 -->
+    <!-- AI 生成提示：位于页脚上方，紧贴页脚（两者作为整体沉底） -->
+    <div class="dash__foot">
+      <div class="dash__ai-note">
+        <AiContentNote />
+      </div>
+      <V2Footer />
+    </div>
   </div>
 </template>
 
@@ -456,6 +462,7 @@ import { toast } from '@/utils/toast';
 import { useUserStore } from '@/stores/user';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
+import AiContentNote from '@/components/AiContentNote.vue';
 import './v2.css';
 import { unwrapArray } from './unwrap';
 
@@ -1145,13 +1152,17 @@ onMounted(loadAll);
 .tip--empty .tip__icon { color: var(--accent); }
 .tip p { margin: 0; flex: 1; font-size: 13px; line-height: 1.6; color: var(--ink); }
 .tip__close { color: var(--faint); font-size: 16px; cursor: pointer; padding: 2px 6px; }
-.tip__ai {
-  flex: 0 0 auto;
-  font-size: 10px; font-weight: 900; letter-spacing: 0.04em;
-  color: var(--faint);
-  border: 1px solid var(--line); border-radius: 6px;
-  padding: 2px 5px;
+
+/* ---------- AI 提示（页脚上方） ---------- */
+/* wrapper 用 margin-top:auto 沉底；内部是普通 block 流，footer 的 margin-top:auto 不生效 */
+.dash__foot {
+  margin-top: auto;
 }
+.dash__ai-note {
+  display: flex; justify-content: center;
+  padding: 10px 28px 4px;
+}
+.dash__ai-note :deep(.ai-note) { font-size: 11px; opacity: 0.75; }
 
 /* ---------- 卡片基座 ---------- */
 .card {

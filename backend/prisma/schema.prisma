@@ -993,3 +993,46 @@ model login_attempts {
   @@index([ip, createdAt])
   @@index([success, createdAt])
 }
+
+// 批量实验（admin 虚拟学习者页 · 系统级队列实验）
+// 由 batch-experiment.service 驱动：创建学习者 → goal → path → 学完任务 → 跨日衰减模拟，
+// 每任务快照 memory_traces/learner_evidence 供画像系统验证。
+model batch_experiments {
+  id             String    @id @default(uuid())
+  name           String
+  description    String?
+  status         String    @default("running") // running | paused | stopped | done
+  createdBy      String
+  learnersConfig String // JSON: [{name, learningGoal, frictionBudget}]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  runs           batch_experiment_runs[]
+
+  @@index([status, createdAt])
+}
+
+model batch_experiment_runs {
+  id              String   @id @default(uuid())
+  experimentId    String
+  profileId       String?
+  sessionId       String?
+  learnerName     String
+  frictionBudget  String   @default("normal")
+  phase           String   @default("setup") // setup|goal|path|learn|learn-done|decay|done|failed
+  status          String   @default("active") // active|stalled|done|failed
+  completedTasks  Int      @default(0)
+  totalTasks      Int?
+  currentTask     String?
+  stallCount      Int      @default(0)
+  lastError       String?
+  advanceCalled   Boolean  @default(false)
+  learningStarted Boolean  @default(false)
+  checkpoints     String? // JSON: [{at, task, milestone, totalMilestones, traceCount, mastered, evidence}]
+  decaySims       String? // JSON: [{days, at, traceCount, retained, snapshot}]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  experiment      batch_experiments @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+
+  @@index([experimentId])
+  @@index([status])
+}

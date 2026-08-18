@@ -50,16 +50,16 @@
         <button type="button" class="mk-empty__action" @click="retryLoad">重试</button>
       </div>
       <div v-else-if="filtered.length" class="mk-table-scroll">
-        <table class="mk-table">
+        <table class="mk-table mk-table--fixed">
           <thead>
             <tr>
               <th v-if="isLive" scope="col" style="width:32px">
                 <input type="checkbox" aria-label="全选" :checked="allChecked" @change="toggleAll" />
               </th>
-              <th scope="col">用户</th>
-              <th scope="col">角色</th>
-              <th scope="col">等级 / XP</th>
-              <th scope="col" class="mk-th--right">路径 / 会话</th>
+              <th scope="col" style="width:200px">用户</th>
+              <th scope="col" style="width:90px">角色</th>
+              <th scope="col" style="width:100px">等级 / XP</th>
+              <th scope="col" class="mk-th--right" style="width:90px">路径 / 会话</th>
               <!-- 相对时间列固定宽（--mk-col-time-full 110px，防 1920 全列等比放大 42% 与刷新跳动） -->
               <th scope="col" class="mk-col--time-full">注册时间</th>
               <th scope="col" class="mk-col--time-full">最后登录</th>
@@ -75,10 +75,10 @@
                 <span class="mk-cell-sub">{{ u.email }}</span>
               </div>
               <div class="ul-tags">
-                <span v-if="u.deleted" class="ul-tag ul-tag--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
-                <span v-else-if="isSelf(u)" class="ul-tag ul-tag--self">当前管理员</span>
-                <span v-else-if="u.isVirtualLearner" class="ul-tag ul-tag--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
-                <span v-else-if="isTestAccount(u)" class="ul-tag ul-tag--test">测试账号</span>
+                <span v-if="u.deleted" class="mk-badge mk-badge--sm mk-badge--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
+                <span v-else-if="isSelf(u)" class="mk-badge mk-badge--sm mk-badge--self">当前管理员</span>
+                <span v-else-if="u.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
+                <span v-else-if="isTestAccount(u)" class="mk-badge mk-badge--sm mk-badge--warn">测试账号</span>
               </div>
             </td>
             <td><span class="mk-badge" :class="u.admin ? 'mk-badge--info' : 'mk-badge--muted'">{{ u.admin ? '管理员' : '用户' }}</span></td>
@@ -93,7 +93,7 @@
             <td><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
             <td>
               <div class="mk-actions">
-                <button type="button" class="mk-link" @click.stop="openSubPage('user', u.id)">详情</button>
+                <button type="button" class="mk-icon-btn" title="详情" @click.stop="openSubPage('user', u.id)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg></button>
                 <div v-if="isLive" class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(u.id)">⋯</button>
                   <div v-if="openMenu === u.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -155,19 +155,24 @@
         </div>
         <div class="mk-modal__body">
           <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
-            <span class="mk-field__label">昵称</span>
+            <span class="mk-field__label">昵称 <em class="mk-field__req">*</em></span>
             <input v-model="form.name" class="mk-field__input" placeholder="例如 陈晓" />
             <span v-if="errors.name" class="mk-field__err">{{ errors.name }}</span>
           </label>
           <label class="mk-field" :class="{ 'mk-field--error': errors.email }">
-            <span class="mk-field__label">邮箱</span>
+            <span class="mk-field__label">邮箱 <em class="mk-field__req">*</em></span>
             <input v-model="form.email" class="mk-field__input" placeholder="name@example.com" />
             <span v-if="errors.email" class="mk-field__err">{{ errors.email }}</span>
           </label>
           <label v-if="isLive" class="mk-field" :class="{ 'mk-field--error': errors.password }">
-            <span class="mk-field__label">{{ editTarget ? '重置密码' : '初始密码' }}</span>
+            <span class="mk-field__label">{{ editTarget ? '重置密码' : '初始密码' }} <em class="mk-field__req">*</em></span>
             <input v-model="form.password" type="password" class="mk-field__input" :placeholder="editTarget ? '留空则不修改' : '至少 8 位，含字母和数字'" />
             <span v-if="errors.password" class="mk-field__err">{{ errors.password }}</span>
+          </label>
+          <label v-if="isLive && !editTarget" class="mk-field" :class="{ 'mk-field--error': errors.confirmPassword }">
+            <span class="mk-field__label">确认密码 <em class="mk-field__req">*</em></span>
+            <input v-model="form.confirmPassword" type="password" class="mk-field__input" placeholder="再输入一次" />
+            <span v-if="errors.confirmPassword" class="mk-field__err">{{ errors.confirmPassword }}</span>
           </label>
           <label class="mk-field">
             <span class="mk-field__label">角色</span>
@@ -392,19 +397,19 @@ watch(
 )
 const creating = ref(false)
 const editTarget = ref<UserRow | null>(null)
-const form = ref({ name: '', email: '', password: '', admin: false })
-const errors = ref<{ name?: string; email?: string; password?: string }>({})
+const form = ref({ name: '', email: '', password: '', confirmPassword: '', admin: false })
+const errors = ref<{ name?: string; email?: string; password?: string; confirmPassword?: string }>({})
 
 function openCreate() {
   editTarget.value = null
-  form.value = { name: '', email: '', password: '', admin: false }
+  form.value = { name: '', email: '', password: '', confirmPassword: '', admin: false }
   errors.value = {}
   createOpen.value = true
 }
 
 function openEdit(u: UserRow) {
   editTarget.value = u
-  form.value = { name: u.name, email: u.email, password: '', admin: u.admin }
+  form.value = { name: u.name, email: u.email, password: '', confirmPassword: '', admin: u.admin }
   errors.value = {}
   createOpen.value = true
 }
@@ -416,6 +421,10 @@ async function saveUser() {
   else if (!/^\S+@\S+\.\S+$/.test(form.value.email.trim())) errors.value.email = '邮箱格式不正确'
   if (isLive.value && !editTarget.value && !PASSWORD_RULE.test(form.value.password)) errors.value.password = '密码至少 8 位，且同时包含字母和数字'
   if (isLive.value && editTarget.value && form.value.password && !PASSWORD_RULE.test(form.value.password)) errors.value.password = '密码至少 8 位，且同时包含字母和数字'
+  // 确认密码校验（仅新建时）
+  if (isLive.value && !editTarget.value && form.value.confirmPassword !== form.value.password) {
+    errors.value.confirmPassword = '两次输入的密码不一致'
+  }
   if (Object.keys(errors.value).length) return
 
   creating.value = true

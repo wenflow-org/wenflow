@@ -279,6 +279,7 @@ interface LiveMeta {
   statsRange: string
 }
 const liveMeta = ref<LiveMeta | null>(null)
+const metaLoading = ref(false)
 
 const statsSourceNote = computed(() => {
   if (!liveMeta.value?.statsSource) return ''
@@ -296,8 +297,9 @@ watch(
   () => intent.skillDrawerId,
   async (id) => {
     liveMeta.value = null
+    metaLoading.value = true
     activeTab.value = 'overview'
-    if (!id || !isLive.value || !skillProfile.value) return
+    if (!id || !isLive.value || !skillProfile.value) { metaLoading.value = false; return }
     try {
       const [metaRes, promptRes] = await Promise.all([
         adminSkillWorkbenchApi.getMeta(id).catch(() => null),
@@ -329,6 +331,8 @@ watch(
       }
     } catch {
       liveMeta.value = null
+    } finally {
+      metaLoading.value = false
     }
   },
   { immediate: true }
@@ -473,7 +477,7 @@ function goFullEditor() {
 }
 .msk__close {
   border: 0;
-  background: rgba(240, 242, 245, 0.8);
+  background: var(--mk-close-bg, #f0f2f5);
   width: 30px;
   height: 30px;
   border-radius: 8px;

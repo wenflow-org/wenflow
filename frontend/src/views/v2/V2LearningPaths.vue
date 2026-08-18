@@ -130,12 +130,13 @@
       </template>
     </main>
 
-    <!-- AI 生成提示：独立于页脚，贴近页面底部 -->
-    <div class="paths__ai-note">
-      <AiContentNote />
+    <!-- AI 生成提示 + 页脚：一起沉底 -->
+    <div class="paths__foot">
+      <div class="paths__ai-note">
+        <AiContentNote />
+      </div>
+      <V2Footer />
     </div>
-
-    <V2Footer />
   </div>
 </template>
 
@@ -412,10 +413,11 @@ onBeforeUnmount(() => {
   display: grid; gap: 18px;
 }
 .paths__hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+/* wrapper 沉底：AI 提示与页脚一起贴近底部 */
+.paths__foot { margin-top: auto; }
 .paths__ai-note {
   display: flex; justify-content: center;
-  max-width: 1080px; margin: 0 auto;
-  padding: 4px 28px 16px;
+  padding: 10px 28px 4px;
 }
 .paths__ai-note :deep(.ai-note) { font-size: 11px; opacity: 0.75; }
 .kicker {

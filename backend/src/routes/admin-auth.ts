@@ -79,6 +79,16 @@ router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: R
 
     recordLoginAttempt(name, clientIP, true, 'admin', 'ok');
 
+    // 更新最后登录时间（修复：admin 登录成功后 users.lastLoginAt 未更新，导致用户页显示"从未"）
+    try {
+      await prisma.users.update({
+        where: { id: admin.id },
+        data: { lastLoginAt: new Date() },
+      });
+    } catch (updateError) {
+      logger.warn('管理员最后登录时间更新失败（不阻塞登录）:', updateError);
+    }
+
     // 写入会话表（fail-open：写库失败不阻塞登录，仅告警；登出/吊销能力随之下线）
     try {
       const issuedAt = new Date();

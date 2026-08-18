@@ -156,7 +156,7 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
     await flushPromises();
     expect(tsListMock).toHaveBeenCalledWith({ limit: 100, includeTest: false });
     expect(wrapper.text()).toContain('仅真实');
-    expect(wrapper.find('.ts-tag').exists()).toBe(false);
+    expect(wrapper.find('.mk-badge--virtual').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -183,7 +183,7 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
     await nextTick();
     expect(tsListMock).toHaveBeenLastCalledWith({ limit: 100, includeTest: true });
     expect(wrapper.text()).toContain('含虚拟/测试');
-    const tags = wrapper.findAll('.ts-tag');
+    const tags = wrapper.findAll('.mk-badge--sm');
     expect(tags).toHaveLength(2);
     expect(tags[0].text()).toBe('虚拟');
     expect(tags[1].text()).toBe('测试');
@@ -201,7 +201,7 @@ describe('GoalConversations 数据隔离切换（A3）', () => {
     await flushPromises();
     expect(gcListMock).toHaveBeenCalledWith({ limit: 100, includeTest: false });
     expect(wrapper.text()).toContain('仅真实');
-    expect(wrapper.find('.gc-tag').exists()).toBe(false);
+    expect(wrapper.find('.mk-badge--virtual').exists()).toBe(false);
 
     gcListMock.mockResolvedValue({
       data: {
@@ -223,7 +223,7 @@ describe('GoalConversations 数据隔离切换（A3）', () => {
     await nextTick();
     expect(gcListMock).toHaveBeenLastCalledWith({ limit: 100, includeTest: true });
     expect(wrapper.text()).toContain('含虚拟/测试');
-    const tag = wrapper.find('.gc-tag');
+    const tag = wrapper.find('.mk-badge--virtual');
     expect(tag.exists()).toBe(true);
     expect(tag.text()).toBe('虚拟');
     wrapper.unmount();
@@ -251,7 +251,7 @@ describe('Users 数据隔离切换（A3）', () => {
     ];
     const wrapper = mount(Users);
     await flushPromises();
-    expect(wrapper.find('.ul-tag--virtual').exists()).toBe(false);
+    expect(wrapper.find('.mk-badge--virtual').exists()).toBe(false);
     expect(wrapper.text()).toContain('真实 1');
 
     await findBtn(wrapper, '含虚拟·测试').trigger('click');
@@ -277,7 +277,7 @@ describe('Users 数据隔离切换（A3）', () => {
     ];
     await nextTick();
     expect(wrapper.text()).toContain('测试/虚拟 1');
-    const virtualTag = wrapper.find('.ul-tag--virtual');
+    const virtualTag = wrapper.find('.mk-badge--virtual');
     expect(virtualTag.exists()).toBe(true);
     expect(virtualTag.text()).toBe('虚拟');
     wrapper.unmount();

@@ -30,6 +30,7 @@ import {
 } from '../virtual-lab/story-demand';
 import { safeJsonParse } from '../utils/safe-json';
 import { asErrorLike } from '../virtual-lab/vlab-types';
+import { memoryTraceService } from '../services/memory/memory-trace.service';
 import type { LeaseClientLike } from '../virtual-lab/vlab-types';
 import type {
   SimulationMilestone,
@@ -2591,6 +2592,80 @@ class SimulationOrchestrator {
     }
   }
 
+  /**
+   * 记忆引擎 M2：教学回合后按知识看板状态增量写 memory_traces。
+   * best-effort——失败不阻断教学回合；修复「卡死任务期间 learner 状态零落库」。
+   */
+  private persistKnowledgeState(userId: string, knowledgePoints: Array<{ name: string; status: string; progress: number }>): void {
+    if (!userId || !Array.isArray(knowledgePoints) || !knowledgePoints.length) return;
+    const outcomes = knowledgePoints
+      .filter((kp) => kp && String(kp.name || '').trim())
+      .map((kp) => ({
+        name: String(kp.name).trim(),
+        status: (['pending', 'learning', 'mastered', 'review'].includes(kp.status)
+          ? kp.status
+          : 'learning') as 'pending' | 'learning' | 'mastered' | 'review',
+        progress: Number.isFinite(Number(kp.progress)) ? Number(kp.progress) : 0,
+      }));
+    if (!outcomes.length) return;
+    memoryTraceService.recordSessionOutcome(userId, outcomes, 'derived').catch((error) => {
+      logger.warn('[simulation-coordinator] 教学回合记忆痕迹回写失败', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
+  /**
+   * 任务完成后回写画像字段：掌握的概念 → knownConcepts，仍在学/需复习 → struggleConcepts。
+   * best-effort——失败不阻断；修复「画像字段整个学习过程不更新」。
+   */
+  private async persistProfileConcepts(sessionId: string, userId: string, knowledgePoints: Array<{ name: string; status: string }>): Promise<void> {
+    if (!userId || !Array.isArray(knowledgePoints) || !knowledgePoints.length) return;
+    try {
+      const profile = await prisma.virtual_learner_profiles.findUnique({ where: { userId } });
+      if (!profile) return;
+      const mastered = new Set<string>();
+      const struggling = new Set<string>();
+      for (const kp of knowledgePoints) {
+        const name = String(kp?.name || '').trim();
+        if (!name) continue;
+        if (kp.status === 'mastered') mastered.add(name);
+        else if (kp.status === 'review' || kp.status === 'learning' || kp.status === 'pending') struggling.add(name);
+      }
+      const profileData = safeJsonParse<Record<string, any>>(profile.profile, {});
+      const knownConcepts = [...new Set([...(profileData.knownConcepts || []), ...mastered])];
+      const struggleConcepts = [...new Set([...(profileData.struggleConcepts || []), ...struggling].filter((c) => !mastered.has(c)))];
+      if (knownConcepts.length || struggleConcepts.length) {
+        await prisma.virtual_learner_profiles.update({
+          where: { userId },
+          data: {
+            profile: JSON.stringify({
+              ...profileData,
+              knownConcepts,
+              struggleConcepts,
+            }),
+            knownConcepts: JSON.stringify(knownConcepts),
+            struggleConcepts: JSON.stringify(struggleConcepts),
+            updatedAt: new Date(),
+          },
+        });
+        logger.info('[simulation-coordinator] 画像概念字段已回写', {
+          sessionId,
+          userId,
+          known: knownConcepts.length,
+          struggle: struggleConcepts.length,
+        });
+      }
+    } catch (error) {
+      logger.warn('[simulation-coordinator] 画像字段回写失败', {
+        sessionId,
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   async executeLearningStep(sessionId: string): Promise<{
     success: boolean;
     userMessage?: string;
@@ -2960,6 +3035,11 @@ class SimulationOrchestrator {
           teachingRevision = aiResult.revision;
           
           aiResponse = aiResult.aiResponse || '';
+          
+          // 记忆引擎：教学回合后增量写 memory_traces（知识看板状态 → 内化强度）
+          this.persistKnowledgeState(session.userId, aiResult.knowledgePoints || []);
+          // 画像回写：掌握 → knownConcepts，仍在学/需复习 → struggleConcepts
+          void this.persistProfileConcepts(sessionId, session.userId, aiResult.knowledgePoints || []);
           
           const learnerFeedback = virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null;
           const teacherReady = !!(aiResult.isCompletion || aiResult.autoEnded);

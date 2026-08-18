@@ -241,13 +241,13 @@ export class AICapabilityHealthService {
       try {
         await executor.execute({
           ...group.route,
-          timeoutMs: Math.min(group.route.timeoutMs || 10_000, 10_000)
+          timeoutMs: Math.min(group.route.timeoutMs || 10_000, 10_000),
+          thinkingMode: 'disabled',
         }, {
           messages: [
             { role: 'system', content: '这是连通性检查。请只回复 OK。' },
             { role: 'user', content: 'OK' }
           ],
-          // 推理模型会先消耗 reasoning tokens，4 个 token 必然截断导致空正文（INVALID_RESPONSE_SCHEMA）
           max_tokens: 64,
           temperature: 0
         }, {

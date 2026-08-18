@@ -93,6 +93,8 @@
   --mk-col-flex-min: 180px;      /* 弹性列 min（≈12-16 个中文字符） */
   --mk-col-flex-max: 720px;      /* 弹性列 max（宽屏防白区，超出即 ellipsis） */
   --mk-cell-main-max: 260px;     /* mk-cell-main 主行截断上限（原散落 260px 上移为 token） */
+  --mk-close-bg: #f0f2f5;        /* 抽屉/弹窗关闭按钮背景（原散落在 3 个文件硬编码） */
+  --mk-back-color: var(--mk-blue); /* 返回按钮文字色 */
 }
 
 /* 现代化增强包 */

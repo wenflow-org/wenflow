@@ -83,7 +83,13 @@
       </template>
     </main>
 
-    <V2Footer />
+    <!-- AI 生成提示 + 页脚：一起沉底 -->
+    <div class="ach__foot">
+      <div class="ach__ai-note">
+        <AiContentNote />
+      </div>
+      <V2Footer />
+    </div>
   </div>
 </template>
 
@@ -92,6 +98,7 @@ import { computed, onMounted, ref } from 'vue';
 import request from '@/utils/api';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
+import AiContentNote from '@/components/AiContentNote.vue';
 import './v2.css';
 import { unwrapArray } from './unwrap';
 
@@ -186,6 +193,14 @@ onMounted(load);
 </script>
 
 <style scoped>
+/* wrapper 沉底：AI 提示与页脚一起贴近底部 */
+.ach__foot { margin-top: auto; }
+.ach__ai-note {
+  display: flex; justify-content: center;
+  padding: 10px 28px 4px;
+}
+.ach__ai-note :deep(.ai-note) { font-size: 11px; opacity: 0.75; }
+
 .ach__main {
   max-width: 1080px; margin: 0 auto;
   padding: 24px 28px 48px;

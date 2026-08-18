@@ -31,7 +31,7 @@
         </section>
       </nav>
       <div class="mshell__foot">
-        <span class="mshell__kbd">?K</span>
+        <span class="mshell__kbd">⌘K</span>
         <span>命令面板</span>
       </div>
     </aside>
@@ -63,7 +63,7 @@
             title="刷新真实数据"
             @click="refreshData"
           >
-            <span class="mshell__refresh-icon" :class="{ 'is-spinning': liveLoading }">?</span>
+            <span class="mshell__refresh-icon" :class="{ 'is-spinning': liveLoading }"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></span>
             <span class="mshell__refresh-label">{{ liveLoading ? '刷新中' : '刷新' }}</span>
           </button>
           <button type="button" class="mshell__help" title="运营术语表 / 这是什么" @click="$emit('glossary')">
@@ -71,9 +71,9 @@
             <span class="mshell__help-label">这是什么</span>
           </button>
           <button type="button" class="mshell__search" @click="$emit('palette')">
-            <span class="mshell__search-icon">?</span>
+            <span class="mshell__search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
             <span class="mshell__search-hint">命令面板</span>
-            <span class="mshell__kbd">?K</span>
+            <span class="mshell__kbd">⌘K</span>
           </button>
           <template v-if="release">
             <span class="mshell__admin">{{ adminName }}</span>
@@ -106,7 +106,7 @@
             <i class="mshell__footer-dot" aria-hidden="true"></i>{{ sourceLabel }}
           </span>
           <span class="mshell__footer-sep">·</span>
-          <span>? {{ year }}</span>
+          <span>&copy; {{ year }}</span>
         </div>
       </footer>
     </div>

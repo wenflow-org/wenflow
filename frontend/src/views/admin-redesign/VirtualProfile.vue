@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div v-if="notFound" class="mk-page vp">
     <div class="mk-empty">
       <strong>未找到该虚拟学习者</strong>
@@ -16,7 +16,7 @@
   </div>
   <div v-else-if="d" class="mk-page vp">
     <header class="vp-top">
-      <button type="button" class="vp-back" @click="closeSubPage">← 虚拟学习者</button>
+      <button type="button" class="mk-back" @click="closeSubPage">← 虚拟学习者</button>
       <div class="vp-top__main">
         <span class="vp-avatar" :class="avatarClassOf(d.name)" aria-hidden="true">{{ d.name.slice(0, 1) }}</span>
         <div class="vp-top__meta">
@@ -60,9 +60,33 @@
         <b>{{ runningCount }}</b>
         <span>进行中</span>
       </div>
+      <div v-if="failedCount > 0" class="vp-overview__item is-failed">
+        <b>{{ failedCount }}</b>
+        <span>失败</span>
+      </div>
       <div class="vp-overview__item vp-overview__goal">
         <span>长期倾向</span>
         <strong :title="d.goal || '由故事产生当次学习需求'">{{ d.goal || '由故事产生当次学习需求' }}</strong>
+      </div>
+    </div>
+
+    <!-- 工作流指引：告诉管理员这个页面是做什么的、下一步怎么走 -->
+    <div class="vp-guide">
+      <span class="vp-guide__icon" aria-hidden="true">🗺️</span>
+      <div class="vp-guide__steps">
+        <span class="vp-guide__step" :class="{ 'is-done': displayStories.length > 0 }">① 生成故事</span>
+        <span class="vp-guide__arrow">→</span>
+        <span class="vp-guide__step" :class="{ 'is-done': selectedStoryId }">② 选中故事</span>
+        <span class="vp-guide__arrow">→</span>
+        <span class="vp-guide__step" :class="{ 'is-active': runningCount > 0, 'is-done': allRuns.length > 0 && runningCount === 0 }">③ 运行</span>
+        <span class="vp-guide__arrow">→</span>
+        <span class="vp-guide__step">④ 前台验收</span>
+      </div>
+      <div class="vp-guide__hint">
+        <template v-if="!displayStories.length">先点「生成第一条故事」让 AI 设计学习场景</template>
+        <template v-else-if="!allRuns.length">选一个故事，点「运行」开始 Goal → Path → Learn 全链路</template>
+        <template v-else-if="runningCount > 0">正在运行中，可切换到「验收」tab 查看前台投影</template>
+        <template v-else>全部运行完成，切换「验收」tab 投影到前台查看效果</template>
       </div>
     </div>
 
@@ -162,9 +186,18 @@
                 </span>
                 <span class="vp-story__latest" :class="storyLatestText(s).cls">{{ storyLatestText(s).text }}</span>
                 <div class="vp-story__ops" @click.stop>
-                  <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" @click="runStory(s, i)">
+                  <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running || runFullBusy" @click="runStory(s, i)">
                     {{ running ? '运行中…' : '运行' }}
                   </button>
+                    <button
+                      type="button"
+                      class="mk-btn mk-btn--sm mk-btn--ghost"
+                      :disabled="running || runFullBusy"
+                      :title="runFullTitle"
+                      @click="runFullStory(s, i)"
+                    >
+                      {{ runFullBusy ? '一键学完中…' : '一键学完' }}
+                    </button>
                   <button type="button" class="mk-link" :disabled="storyBusy" @click="openEditStory(i)">编辑</button>
                   <button type="button" class="mk-link mk-link--danger" :disabled="storyBusy" @click="removeStory(i)">删除</button>
                 </div>
@@ -176,8 +209,16 @@
                 <p class="vp-detail__outline">{{ s.outline }}</p>
 
                 <div class="vp-lc" :class="{ 'is-stalled': progressOf(s).stalled, 'is-running': progressOf(s).running }">
-                  <div class="vp-lc__row">
-                    <span class="vp-lc__label">累计</span>
+                       <div class="vp-lc__row">
+                         <span class="vp-lc__label">阶段</span>
+                         <div class="vp-lc__stage-labels">
+                           <span class="vp-lc__stage-label" title="目标对话：AI 与学习者澄清学习目标、确定要学什么">Goal</span>
+                           <span class="vp-lc__stage-label" title="路径生成：根据学习目标生成个性化的学习路径和任务">Path</span>
+                           <span class="vp-lc__stage-label" title="教学回合：教师 Agent 与虚拟学习者进行多轮交互教学">Learn</span>
+                         </div>
+                       </div>
+                       <div class="vp-lc__row">
+                         <span class="vp-lc__label">累计</span>
                     <div class="vp-lc__counts">
                       <span
                         v-for="(st, idx) in LC_BARS"
@@ -443,7 +484,7 @@
   </div>
 
   <div v-else class="mk-page">
-    <button type="button" class="vp-back" @click="closeSubPage">← 虚拟学习者</button>
+    <button type="button" class="mk-back" @click="closeSubPage">← 虚拟学习者</button>
     <div class="mk-empty">
       <strong>{{ isLive ? '加载中…' : '该样本暂无更多演示数据' }}</strong>
       <span>{{ isLive ? '正在拉取真实画像' : '演示详情仅覆盖部分样本。' }}</span>
@@ -619,6 +660,8 @@ const hasAdvancedFields = (s: StoryItem) =>
   || !!getGoalSeed(s)
   || !!getDisclosurePlan(s)
 const running = ref(false)
+const runFullBusy = ref(false)
+const runFullTitle = '一键完成 Goal → Path → Learn 全流程，自动跑完所有教学任务'
 const saving = ref(false)
 const storyBusy = ref(false)
 const sessionBusy = ref(false)
@@ -733,6 +776,19 @@ async function saveStory() {
   }
 }
 
+/** 清洗故事标题：检测乱码（U+FFFD replacement char 或连续 ?）并 fallback 到「故事 N」 */
+function sanitizeStoryTitle(raw: unknown, index: number): string {
+  const title = String(raw || '')
+  if (!title.trim()) return `故事 ${index + 1}`
+  // 检测 replacement char（UTF-8 截断产生的 U+FFFD）
+  if (title.includes('\uFFFD')) return `故事 ${index + 1}`
+  // 检测连续 3+ 个 ? （可能是编码损坏）
+  if (/\?{3,}/.test(title)) return `故事 ${index + 1}`
+  // 检测末尾截断（标题以非标点/非汉字结尾且过短）
+  if (title.length < 4 && !/[\u4e00-\u9fffA-Za-z0-9）」】]/.test(title.slice(-1))) return `故事 ${index + 1}`
+  return title
+}
+
 function mapStoryItem(s: Record<string, unknown>, index: number): StoryItem {
   const stats = (s.stats || {}) as Record<string, unknown>
   const latestRunRaw = (s.latestRun || null) as Record<string, unknown> | null
@@ -751,7 +807,7 @@ function mapStoryItem(s: Record<string, unknown>, index: number): StoryItem {
   return {
     id: String(s.storyId || s.id || s.key || `story-${index}`),
     index: typeof s.index === 'number' ? Number(s.index) : index,
-    title: String(s.storyTitle || s.title || `故事 ${index + 1}`),
+    title: sanitizeStoryTitle(s.storyTitle || s.title, index),
     outline: String(s.storyOutline || s.outline || s.storyTriggerEvent || s.triggerEvent || ''),
     status: String(s.status || 'draft'),
     runCount: Number(stats.totalRuns ?? 0),
@@ -839,7 +895,7 @@ async function loadDetail(id?: string, quiet = false) {
 
     liveDetail.value = {
       name: String(p.name || raw.userName || id),
-      archetype: String(p.archetype || p.corePersonality || '自定义样本'),
+      archetype: String(p.occupation || p.archetype || '自定义样本'),
       story: String(p.background || raw.notes || '（未填写故事）'),
       goal: String(raw.learningGoal || '未设置目标'),
       level: String(raw.knowledgeLevel || 'beginner'),
@@ -1035,6 +1091,47 @@ async function runStory(story?: StoryItem, index?: number) {
   }
 }
 
+/* 一键学完：创建 session 后立即调用 run-full，Goal → Path → Learn 全流程自动跑完 */
+async function runFullStory(story?: StoryItem, index?: number) {
+  const id = subPage.value?.id
+  if (!id || running.value || runFullBusy.value) return
+  if (isLive.value) {
+    const target = story || selectedStory.value
+    if (!target && displayStories.value.length !== 1) {
+      toast.error('请先选择一个故事；每个故事对应一套学习任务（Path）')
+      return
+    }
+    if (target) selectStory(target, typeof index === 'number' ? index : target.index ?? 0)
+  }
+  runFullBusy.value = true
+  try {
+    if (isLive.value) {
+      const payload = storyPayload(story, index)
+      const res = await adminVirtualLearnersApi.startVirtualSession(id, payload)
+      const session = res.data?.data ?? res.data ?? {}
+      const sid = String(session.id || session.sessionId || '')
+      const storyLabel = selectedStoryTitle.value || story?.title || '故事'
+      toast.success(`已按「${storyLabel}」启动一键全流程：${sid.slice(0, 14)}…`)
+      try {
+        const fullRes = await adminVirtualLearnersApi.virtualSessionRunFull(sid, { maxRounds: 20, maxMilestones: 10, continueOnTaskComplete: true })
+        const result = fullRes.data?.data ?? {}
+        if (result.success) {
+          toast.success(`一键全流程完成！${result.goalRounds || 0} 轮 Goal · ${result.learningSteps || 0} 步 Learn`)
+        } else {
+          toast.error(`一键全流程未完成：${result.error || '未知错误'}`)
+        }
+      } catch (e) {
+        toast.error(`一键全流程执行失败：${errMsg(e)}`)
+      }
+      await loadDetail(id)
+    }
+  } catch (e) {
+    toast.error(`启动失败：${errMsg(e)}`)
+  } finally {
+    runFullBusy.value = false
+  }
+}
+
 async function removeSession(sessionId: string) {
   if (!sessionId || sessionBusy.value) return
   const ok = await askConfirm({
@@ -1083,6 +1180,9 @@ async function openProjection(entry: 'dashboard' | 'goal' | 'paths' | 'state' = 
 
 const runningCount = computed(() =>
   displayStories.value.reduce((n, s) => n + (s.runningCount || 0), 0)
+)
+const failedCount = computed(() =>
+  allRuns.value.filter((r) => r.tone === 'bad').length
 )
 const tabs = computed(() => {
   const list: Array<{ key: ProfileTab; label: string; count?: number }> = [
@@ -1467,8 +1567,10 @@ async function quietReload(id: string) {
   font-weight: 600;
   letter-spacing: 0.03em;
 }
-.vp-overview__item.is-live b { color: var(--mk-amber, #b7791f); }
-.vp-overview__item.is-live { background: #fffaf0; border-color: rgba(217, 119, 6, 0.3); }
+.vp-overview__item.is-live b { color: #047857; }
+.vp-overview__item.is-live { background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.25); }
+.vp-overview__item.is-failed b { color: var(--mk-red, #dc2626); }
+.vp-overview__item.is-failed { background: rgba(220, 38, 38, 0.06); border-color: rgba(220, 38, 38, 0.2); }
 .vp-overview__goal {
   display: inline-flex;
   align-items: center;
@@ -1484,6 +1586,36 @@ async function quietReload(id: string) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 工作流指引 */
+.vp-guide {
+  margin: 10px 0 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.vp-guide__icon { font-size: 15px; flex-shrink: 0; }
+.vp-guide__steps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.vp-guide__step {
+  font-size: 11.5px; font-weight: 700; color: var(--mk-faint);
+  padding: 3px 9px; border-radius: 999px; border: 1px solid transparent; white-space: nowrap;
+}
+.vp-guide__step.is-done { color: #047857; background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.25); }
+.vp-guide__step.is-active { color: #047857; background: rgba(16, 185, 129, 0.14); border-color: rgba(16, 185, 129, 0.4); }
+.vp-guide__arrow { font-size: 12px; color: #c4ccd9; font-weight: 700; }
+.vp-guide__hint { font-size: 12px; color: var(--mk-muted); margin-left: auto; max-width: 480px; text-align: right; }
+
+/* 生命周期阶段标签 */
+.vp-lc__stage-labels { display: flex; align-items: center; gap: 5px; }
+.vp-lc__stage-label {
+  font-size: 10.5px; font-weight: 700; color: var(--mk-faint);
+  padding: 2px 8px; border-radius: 4px; background: #f4f6f9; border: 1px solid #eef1f6; cursor: help;
 }
 
 /* 分页：统一 mk-pills 分段控件 */

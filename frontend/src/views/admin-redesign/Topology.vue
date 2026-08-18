@@ -792,9 +792,9 @@ const flows = computed(() => {
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   background:
-    radial-gradient(640px 320px at 14% 0%, rgba(44, 99, 208, 0.06), transparent 70%),
-    linear-gradient(90deg, rgba(214, 223, 238, 0.55) 1px, transparent 1px) 0 0 / 24px 24px,
-    linear-gradient(180deg, rgba(214, 223, 238, 0.55) 1px, transparent 1px) 0 0 / 24px 24px,
+    radial-gradient(640px 320px at 14% 0%, rgba(44, 99, 208, 0.04), transparent 70%),
+    linear-gradient(90deg, rgba(214, 223, 238, 0.2) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(180deg, rgba(214, 223, 238, 0.2) 1px, transparent 1px) 0 0 / 24px 24px,
     linear-gradient(180deg, #fbfcff, #f2f5fa);
   overflow: hidden;
   cursor: default;

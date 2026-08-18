@@ -78,7 +78,13 @@
       </div>
     </main>
 
-    <V2Footer />
+    <!-- AI 生成提示 + 页脚：一起沉底 -->
+    <div class="history__foot">
+      <div class="history__ai-note">
+        <AiContentNote />
+      </div>
+      <V2Footer />
+    </div>
   </div>
 </template>
 
@@ -87,6 +93,7 @@ import { computed, onMounted, ref } from 'vue';
 import request from '@/utils/api';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
+import AiContentNote from '@/components/AiContentNote.vue';
 import './v2.css';
 import { unwrap } from './unwrap';
 
@@ -216,6 +223,14 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* wrapper 沉底：AI 提示与页脚一起贴近底部 */
+.history__foot { margin-top: auto; }
+.history__ai-note {
+  display: flex; justify-content: center;
+  padding: 10px 28px 4px;
+}
+.history__ai-note :deep(.ai-note) { font-size: 11px; opacity: 0.75; }
+
 .history__main {
   flex: 1;
   width: 100%;

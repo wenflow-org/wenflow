@@ -65,16 +65,16 @@
           <button type="button" class="mk-link" @click="load">重试</button>
         </div>
         <div v-else-if="filtered.length" class="mk-table-scroll">
-        <table class="mk-table">
+        <table class="mk-table mk-table--fixed">
           <thead>
             <tr>
-              <th>用户</th>
+              <th style="width:160px">用户</th>
               <th>目标摘要</th>
-              <th>状态</th>
-              <th>阶段</th>
-              <th>路径</th>
+              <th class="mk-col--badge">状态</th>
+              <th style="width:160px">阶段</th>
+              <th class="mk-col--badge">路径</th>
               <th class="mk-col--time-full">创建时间</th>
-              <th class="mk-th--right">操作</th>
+              <th class="mk-col--actions-wide mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -85,8 +85,8 @@
                   <span class="mk-cell-sub">{{ r.userEmail }}</span>
                 </div>
                 <div class="gc-tags">
-                  <span v-if="r.isVirtualLearner" class="gc-tag gc-tag--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
-                  <span v-else-if="r.isTestAccount" class="gc-tag gc-tag--test" title="测试/审计账号">测试</span>
+                  <span v-if="r.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
+                  <span v-else-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--warn" title="测试/审计账号">测试</span>
                 </div>
               </td>
               <td><span class="gc-summary" :title="r.summary">{{ r.summary }}</span></td>
@@ -110,11 +110,9 @@
               <td><span class="mk-cell-sub" :title="r.createdAt">{{ r.createdAt }}</span></td>
               <td>
                 <div class="mk-actions">
-                  <button type="button" class="mk-link" @click.stop="goTrace(r)">链路</button>
-                  <button type="button" class="mk-link" @click.stop="goConsole(r)">控制台</button>
-                  <button type="button" class="mk-link" @click.stop="regenerate(r)">
-                    {{ r.regenerating ? '生成中…' : '重建路径' }}
-                  </button>
+                  <button type="button" class="mk-icon-btn" title="链路" @click.stop="goTrace(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></button>
+                  <button type="button" class="mk-icon-btn" title="控制台" @click.stop="goConsole(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 15h4"/></svg></button>
+                  <button type="button" class="mk-icon-btn" :disabled="r.regenerating" :title="r.regenerating ? '生成中…' : '重建路径'" @click.stop="regenerate(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
                   <div class="mk-menu">
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(r.id)">⋯</button>
                     <div v-if="openMenu === r.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -175,7 +173,7 @@
               <div><span>完成</span><strong>{{ detail.completedAt || '—' }}</strong></div>
             </div>
 
-            <p v-if="detailLoading" class="gc-none">正在加载对话详情…</p>
+            <p v-if="detailLoading" class="gc-none"><span class="mk-spinner" aria-hidden="true"></span> 正在加载对话详情…</p>
 
             <!-- P0 修复：详情加载失败行内提示 + 重试 -->
             <div v-if="detailError" class="gc-error" role="alert">
@@ -245,10 +243,10 @@
               <button type="button" class="gc-btn-link" @click="goLearner(detail)">学习者画像 →</button>
               <button type="button" class="gc-btn-link" @click="goTrace(detail)">Trace 链路 →</button>
               <button v-if="detail.id" type="button" class="gc-btn-link" @click="goConsole(detail)">进控制台 →</button>
-              <button type="button" class="gc-btn-primary" :disabled="detail.regenerating" @click="regenerate(detail)">
+              <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="detail.regenerating" @click="regenerate(detail)">
                 {{ detail.regenerating ? '生成中…' : '重新生成学习路径' }}
               </button>
-              <button type="button" class="gc-btn-danger" :disabled="detail.regenerating" @click="remove(detail)">
+              <button type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="detail.regenerating" @click="remove(detail)">
                 删除会话
               </button>
             </div>
@@ -727,7 +725,7 @@ onMounted(() => {
 .gc-panel__id { font-size: 10.5px; color: var(--mk-faint); word-break: break-all; }
 .gc-panel__close {
   border: 0;
-  background: #f0f2f5;
+  background: var(--mk-close-bg, #f0f2f5);
   width: 30px;
   height: 30px;
   border-radius: 8px;
@@ -954,7 +952,7 @@ onMounted(() => {
   .gc-msg { font-size: 14px; }
   .gc-msg__role { font-size: 12.5px; }
   .gc-json { font-size: 12.5px; }
-  .gc-btn-primary, .gc-btn-danger { font-size: 14px; }
+  .mk-btn--sm { font-size: 14px; }
 }
 @media (min-width: 2800px) {
   .gc-panel { width: min(880px, 100vw); }
@@ -969,7 +967,7 @@ onMounted(() => {
   .gc-msg { font-size: 16.5px; }
   .gc-msg__role { font-size: 15px; }
   .gc-json { font-size: 15px; }
-  .gc-btn-primary, .gc-btn-danger { font-size: 16.5px; }
+  .mk-btn--sm { font-size: 16.5px; }
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
@@ -985,6 +983,6 @@ onMounted(() => {
   .gc-msg { font-size: 19.5px; }
   .gc-msg__role { font-size: 17.5px; }
   .gc-json { font-size: 17.5px; }
-  .gc-btn-primary, .gc-btn-danger { font-size: 19.5px; }
+  .mk-btn--sm { font-size: 19.5px; }
 }
 </style>

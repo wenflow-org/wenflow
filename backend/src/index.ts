@@ -41,6 +41,7 @@ import { aiTeachingOrchestrator } from './services/ai-teaching/AITeachingCoordin
 import { aiCapabilityHealthService } from './services/ai-capability-health.service';
 import { getRuntimeCapabilityProbeEnabled } from './services/capability-probe-settings.service';
 import { logRetentionService } from './services/log-retention.service';
+import { startBatchExperimentScheduler } from './services/virtual-lab/batch-experiment.service';
 import { auditCleanupService } from './services/audit-cleanup.service';
 import { virtualSessionReclaimService } from './virtual-lab/session-reclaim.service';
 import { existsSync } from 'fs';
@@ -225,6 +226,7 @@ import announcementsRoutes from './routes/announcements';
 import adminVirtualLearnersRoutes from './routes/admin/virtual-learners';
 import adminSessionConsoleRoutes from './routes/admin/session-console';
 import adminVirtualQuickLearnRoutes from './routes/admin/virtual-quick-learn';
+import adminBatchExperimentsRoutes from './routes/admin/batch-experiments';
 import adminProjectionAccessGrantsRoutes from './routes/admin/projection-access-grants';
 import adminFeedbackRoutes from './routes/admin/feedback';
 import adminSystemStatusRoutes from './routes/admin/system-status';
@@ -344,6 +346,7 @@ app.use('/api/admin/learner-models', ...adminRouteMiddleware, adminLearnerModels
 app.use('/api/admin/goal-conversations', ...adminRouteMiddleware, adminGoalConversationsRoutes);
 app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualLearnersRoutes);
 app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualQuickLearnRoutes);
+app.use('/api/admin/batch-experiments', ...adminRouteMiddleware, adminBatchExperimentsRoutes);
 app.use('/api/admin/projection-access-grants', ...adminRouteMiddleware, adminProjectionAccessGrantsRoutes);
 app.use('/api/admin/feedback', ...adminRouteMiddleware, adminFeedbackRoutes);
 app.use('/api/admin/system', ...adminRouteMiddleware, adminSystemStatusRoutes);
@@ -516,6 +519,7 @@ export async function startServer() {
     logRetentionService.start(lifecycle);
     auditCleanupService.start(lifecycle);
     virtualSessionReclaimService.start(lifecycle);
+    startBatchExperimentScheduler();
     assertStartupActive();
 
     const backendRoot = resolve(__dirname, '..');

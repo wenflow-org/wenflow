@@ -99,7 +99,8 @@
           <button type="button" class="mk-empty__action" @click="load">重试</button>
         </div>
         <div v-else class="mk-empty mk-empty--min">
-          <span v-if="!loading" class="mk-empty__icon" aria-hidden="true">◌</span>
+          <span v-if="loading" class="mk-spinner" aria-hidden="true"></span>
+          <span v-else class="mk-empty__icon" aria-hidden="true">◌</span>
           <strong>{{ loading ? '加载中…' : (keyword || statusFilter || lowOnly ? '当前筛选无匹配' : '暂无反馈') }}</strong>
           <span v-if="!loading">{{ keyword || statusFilter || lowOnly ? '放宽筛选条件试试。' : '学习者评分与评论出现后会在这里汇总，低分反馈会自动标记「待处理」。' }}</span>
           <button v-if="isFiltered && !loading" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
@@ -160,13 +161,13 @@
             </section>
 
             <div class="fb-actions">
-              <button type="button" class="fb-btn-primary" :disabled="saving" @click="save('triaged')">
+              <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="saving" @click="save('triaged')">
                 {{ saving ? '保存中…' : '标记已分流' }}
               </button>
-              <button type="button" class="fb-btn-primary fb-btn--green" :disabled="saving" @click="save('resolved')">
+              <button type="button" class="mk-btn mk-btn--sm mk-btn--ok" :disabled="saving" @click="save('resolved')">
                 标记已解决
               </button>
-              <button type="button" class="fb-btn-muted" :disabled="saving" @click="save('dismissed')">忽略</button>
+              <button type="button" class="mk-btn mk-btn--sm mk-btn--ghost" :disabled="saving" @click="save('dismissed')">忽略</button>
             </div>
 
             <p class="fb-meta mono">task={{ detail.taskId || '—' }} · session={{ detail.sessionId || '—' }}</p>
@@ -438,7 +439,7 @@ onMounted(() => {
 .fb-panel__id { font-size: 10.5px; color: var(--mk-faint); word-break: break-all; }
 .fb-panel__close {
   border: 0;
-  background: #f0f2f5;
+  background: var(--mk-close-bg, #f0f2f5);
   width: 30px;
   height: 30px;
   border-radius: 8px;
@@ -536,7 +537,7 @@ onMounted(() => {
   .fb-note { font-size: 14px; }
   .fb-code { font-size: 12.5px; }
   .fb-meta { font-size: 12px; }
-  .fb-btn-primary, .fb-btn-muted { font-size: 14px; }
+  .mk-btn--sm { font-size: 14px; }
 }
 @media (min-width: 2800px) {
   .fb-panel { width: min(880px, 100vw); }
@@ -551,7 +552,7 @@ onMounted(() => {
   .fb-note { font-size: 16.5px; }
   .fb-code { font-size: 15px; }
   .fb-meta { font-size: 14px; }
-  .fb-btn-primary, .fb-btn-muted { font-size: 16.5px; }
+  .mk-btn--sm { font-size: 16.5px; }
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
@@ -567,6 +568,6 @@ onMounted(() => {
   .fb-note { font-size: 19.5px; }
   .fb-code { font-size: 17.5px; }
   .fb-meta { font-size: 16.5px; }
-  .fb-btn-primary, .fb-btn-muted { font-size: 19.5px; }
+  .mk-btn--sm { font-size: 19.5px; }
 }
 </style>

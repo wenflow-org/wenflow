@@ -31,13 +31,22 @@
           <label class="ac-field ac-field--row">
             <span>API Key</span>
             <span class="ac-key-wrap">
-              <input
-                class="mk-filter__input"
-                type="password"
-                v-model="form.apiKey"
-                :placeholder="keySet ? '已配置，留空沿用' : '输入 API Key'"
-                @input="markDirty('conn')"
-              />
+              <span class="ac-key-input-row">
+                <input
+                  class="mk-filter__input"
+                  :type="keyVisible ? 'text' : 'password'"
+                  v-model="form.apiKey"
+                  :placeholder="keySet ? '已配置，留空沿用' : '输入 API Key'"
+                  @input="markDirty('conn')"
+                />
+                <button
+                  v-if="keySet || form.apiKey"
+                  type="button"
+                  class="ac-key-toggle"
+                  :title="keyVisible ? '隐藏' : '显示'"
+                  @click="keyVisible = !keyVisible"
+                >{{ keyVisible ? '🙈' : '👁' }}</button>
+              </span>
               <em v-if="keyHintNeeded" class="ac-keyhint">⚠ 更换服务地址需重新输入密钥</em>
             </span>
           </label>
@@ -446,6 +455,7 @@ const policy = reactive({
 })
 const fetchedModels = ref<string[]>([])
 const keySet = ref(false)
+const keyVisible = ref(false)
 const connectionStatus = ref('unknown')
 /** 曾成功拉取过模型列表（含从已保存配置载入）：此后提交才携带 availableModels，避免空数组清空后端列表 */
 const modelsFetchedOnce = ref(false)
@@ -811,6 +821,24 @@ async function toggleRegistration() {
 }
 .ac-field--row > span { white-space: nowrap; }
 .ac-key-wrap { display: grid; gap: 4px; min-width: 0; }
+.ac-key-input-row { display: flex; align-items: center; gap: 6px; }
+.ac-key-input-row .mk-filter__input { flex: 1; min-width: 0; }
+.ac-key-toggle {
+  flex-shrink: 0;
+  border: 1px solid var(--mk-line);
+  background: #fafbfc;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.ac-key-toggle:hover { background: #eef5ff; border-color: var(--mk-blue, #2c63d0); }
 .ac-keyhint {
   font-size: 11.5px;
   color: var(--mk-amber);

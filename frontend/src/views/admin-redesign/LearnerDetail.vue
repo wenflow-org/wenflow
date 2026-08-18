@@ -14,11 +14,18 @@
       <button type="button" class="mk-empty__action" @click="loadDetail(subPage?.id, isLive)">重试</button>
     </div>
   </div>
+  <div v-else-if="loading" class="mk-page ld">
+    <button type="button" class="mk-back" @click="closeSubPage">← 学习者中心</button>
+    <div class="mk-empty mk-empty--min">
+      <span class="mk-spinner" aria-hidden="true"></span>
+      <strong>正在加载学习者详情…</strong>
+    </div>
+  </div>
   <div v-else-if="d" class="mk-page ld">
 
     <!-- 头部：身份与状态 -->
     <div class="ld-head">
-      <button type="button" class="ld-back" @click="closeSubPage">← 学习者中心</button>
+      <button type="button" class="mk-back" @click="closeSubPage">← 学习者中心</button>
       <div class="ld-id">
         <span class="ld-avatar">{{ d.name.charAt(0) }}</span>
         <div>
@@ -95,13 +102,13 @@
       </div>
 
       <div class="ld-col">
-        <!-- 活跃柱图暂无真实数据源：live 且全 0 时隐藏，避免展示假趋势 -->
-        <section v-if="!isLive || d.trend7d.some((v) => v > 0)" class="mk-card">
+        <!-- 7 天活跃趋势：有数据时展示柱图，无数据时展示空态提示 -->
+        <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">7 天活跃趋势</h3>
             <span class="mk-card__meta">{{ trendHint }}</span>
           </div>
-          <div class="ld-trend">
+          <div v-if="d.trend7d.some((v) => v > 0)" class="ld-trend">
             <span
               v-for="(v, i) in d.trend7d"
               :key="i"
@@ -111,6 +118,10 @@
               :title="`${['周一','周二','周三','周四','周五','周六','周日'][i]} · 活跃 ${v}`"
             ></span>
           </div>
+          <p v-else class="ld-none">
+            {{ isLive ? '暂无 7 天活跃数据' : '演示模式下无数据' }}
+            <span v-if="isLive" class="ld-none__hint">学习者产生会话后将自动生成。</span>
+          </p>
         </section>
 
         <section class="mk-card">
@@ -534,16 +545,12 @@ async function recompute() {
   }
 }
 
+const loading = computed(() => isLive.value && !liveDetail.value && !detailError.value)
+
 const d = computed<Detail | null>(() => {
   if (isLive.value) {
     if (detailError.value) return null
-    return liveDetail.value || {
-      name: '加载中…', email: '', joined: '', trend: 'flat', fatigue: '低',
-      path: '', stage: '', task: '', pct: 0,
-      concepts: { mastered: [], struggling: [], fragile: [] },
-      trend7d: [0, 0, 0, 0, 0, 0, 0], sessions: [],
-      snapshot: { version: '—', generatedAt: '—' }
-    }
+    return liveDetail.value || null
   }
   const found = learnerDetails.find((x) => x.id === subPage.value?.id)
   return found || null

@@ -280,12 +280,13 @@
       </section>
     </main>
 
-    <!-- AI 生成提示：置于页面底部、靠近页脚 -->
-    <div v-if="!live.started" class="goal__ai-note">
-      <AiContentNote />
+    <!-- AI 生成提示 + 页脚：一起沉底 -->
+    <div v-if="!live.started" class="goal__foot">
+      <div class="goal__ai-note">
+        <AiContentNote />
+      </div>
+      <V2Footer />
     </div>
-
-    <V2Footer v-if="!live.started" />
   </div>
 </template>
 
@@ -668,9 +669,10 @@ function shuffleScenes() {
   margin-top: 46px;
 }
 
+.goal__foot { margin-top: auto; }
 .goal__ai-note {
   display: flex; justify-content: center;
-  padding: 0 28px 14px;
+  padding: 10px 28px 4px;
 }
 .goal__ai-note :deep(.ai-note) { font-size: 11px; opacity: 0.75; }
 .login-gate {

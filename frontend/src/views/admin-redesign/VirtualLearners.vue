@@ -26,6 +26,15 @@
       <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建虚拟学习者</button>
     </div>
 
+    <!-- 正在运行：直接列出当前有活跃会话的虚拟学习者，一眼看出谁在跑 -->
+    <div v-if="runningSamples.length && isLive" class="vl-running">
+      <span class="vl-running__label">正在运行</span>
+      <button v-for="s in runningSamples" :key="s.id" type="button" class="vl-running__chip" :title="`${s.runningCount} 个会话运行中 · 点击进入会话座舱`" @click="openRunningSession(s)">
+        <span class="vl-running__dot" aria-hidden="true"></span>
+        {{ s.name }}<template v-if="s.currentStage"> · {{ stageLabel(s.currentStage) }}</template>
+      </button>
+    </div>
+
     <!-- 运行概览：仿真定位 + 派生统计（完成率/失败率/平均时长从状态条移入，避免单行过载） -->
     <div class="vl-position">
       <span class="vl-position__icon" aria-hidden="true">🧪</span>
@@ -43,6 +52,90 @@
       </div>
     </div>
 
+    <!-- 批量实验：系统级队列实验（创建学习者 → Goal → Path → 学完任务 → 跨日衰减模拟） -->
+    <div class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">批量实验 <span class="mk-card__meta">队列式全链路实验 · 自动推进 · 每任务快照画像 · 支持跨日衰减模拟</span></h3>
+        <span v-if="runningBatchCount" class="vl-running__label vl-running__label--inline">运行中 {{ runningBatchCount }}</span>
+        <button type="button" class="mk-status__action" @click="batchPanelOpen = !batchPanelOpen">{{ batchPanelOpen ? '收起面板' : '展开面板' }}</button>
+      </div>
+
+      <template v-if="batchPanelOpen">
+        <!-- 新建实验 -->
+        <div class="vl-bexp__create">
+          <div class="vl-bexp__create-row">
+            <input v-model="batchForm.name" placeholder="实验名称（必填）" style="flex: 2; min-width: 180px" />
+            <button type="button" class="mk-status__action mk-status__action--primary" :disabled="batchCreating" @click="createBatchExperiment">
+              {{ batchCreating ? '创建中…' : '创建并启动' }}
+            </button>
+            <button type="button" class="mk-status__action" :disabled="batchLoading" @click="loadBatchExperiments">刷新列表</button>
+          </div>
+          <div v-for="(l, i) in batchForm.learners" :key="i" class="vl-bexp__create-row">
+            <input v-model="l.name" placeholder="学习者名称（必填）" style="flex: 1.4" />
+            <input v-model="l.learningGoal" placeholder="学习目标（可选）" style="flex: 2" />
+            <select v-model="l.frictionBudget" style="flex: 0.7">
+              <option value="low">低摩擦</option>
+              <option value="normal">正常摩擦</option>
+              <option value="high">高摩擦</option>
+            </select>
+            <button type="button" class="mk-status__action" @click="batchForm.learners.splice(i, 1)">删除</button>
+          </div>
+          <button type="button" class="mk-status__action" @click="batchForm.learners.push({ name: '', learningGoal: '', frictionBudget: 'normal' })">+ 添加学习者</button>
+        </div>
+
+        <!-- 实验列表 -->
+        <div v-if="batchLoading && !batchExperiments.length" class="vl-bexp__hint">加载中…</div>
+        <div v-else-if="!batchExperiments.length" class="vl-bexp__hint">还没有批量实验。填写上方表单创建第一个：系统会自动创建虚拟学习者并逐个推进 Goal → Path → 学习任务，任务完成后可手动触发跨日衰减模拟（3/7/14 天）验证画像。</div>
+
+        <div v-for="exp in batchExperiments" :key="exp.id" class="vl-bexp__item">
+          <div class="vl-bexp__head">
+            <strong>{{ exp.name }}</strong>
+            <span class="vl-bexp__meta">{{ exp.status }} · {{ (exp.runs || []).length }} 人 · {{ fmtTime(exp.updatedAt) }}</span>
+            <button type="button" class="mk-status__action" @click="toggleBatchDetail(exp.id)">{{ batchDetailId === exp.id ? '收起' : '详情' }}</button>
+            <button v-if="exp.status === 'running'" type="button" class="mk-status__action" @click="stopBatchExperiment(exp.id)">停止</button>
+          </div>
+
+          <div v-if="batchDetailId === exp.id" class="vl-bexp__runs">
+            <table class="mk-table">
+              <thead>
+                <tr>
+                  <th>学习者</th>
+                  <th>摩擦</th>
+                  <th>阶段</th>
+                  <th>任务进度</th>
+                  <th>当前任务</th>
+                  <th>最近错误</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="run in exp.runs || []" :key="run.id">
+                  <td>{{ run.learnerName }}</td>
+                  <td>{{ run.frictionBudget }}</td>
+                  <td>{{ phaseLabel(run.phase) }}<template v-if="run.status !== 'active'"> / {{ run.status }}</template></td>
+                  <td>{{ run.completedTasks }}/{{ run.totalTasks ?? '?' }}</td>
+                  <td class="vl-bexp__task">{{ run.currentTask || '—' }}</td>
+                  <td class="vl-bexp__err" :title="run.lastError || ''">{{ run.lastError ? run.lastError.slice(0, 40) : '—' }}</td>
+                  <td>
+                    <button type="button" class="mk-status__action" :disabled="batchActionBusy" @click="advanceBatchRun(exp.id, run.id)">推进</button>
+                    <button type="button" class="mk-status__action" :disabled="batchActionBusy" @click="decayBatchRun(exp.id, run.id)">衰减</button>
+                    <button type="button" class="mk-status__action" :disabled="batchActionBusy" @click="snapshotBatchRun(exp.id, run.id)">快照</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-if="(exp.runs || []).some((r) => r.decaySims)" class="vl-bexp__hint">
+              <template v-for="run in exp.runs || []" :key="run.id">
+                <template v-if="run.decaySims">
+                  <span class="vl-bexp__decay">{{ run.learnerName }} 衰减：{{ decaySummary(run.decaySims) }}</span>
+                </template>
+              </template>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
 
     <div class="mk-card">
       <div class="mk-card__head">
@@ -52,17 +145,17 @@
 
       <MockSkeletonTable v-if="liveLoading && !samples.length" :cols="6" />
       <div v-else-if="filtered.length" class="mk-table-scroll">
-      <table class="mk-table mk-table--click">
+      <table class="mk-table mk-table--click mk-table--fixed">
         <thead>
           <tr>
             <th v-if="isLive" scope="col" style="width:32px">
               <input type="checkbox" aria-label="全选" :checked="allChecked" @change="toggleAll" />
             </th>
-            <th>虚拟学习者</th>
-            <th>长期倾向</th>
-            <th>故事池</th>
-            <th class="mk-th--right">会话</th>
-            <th title="当前会话状态：运行中会话数 + 最近阶段；会话数为累计口径；卡死/失败为全量聚合">运行中</th>
+            <th style="width:180px">虚拟学习者</th>
+            <th style="width:200px">长期倾向</th>
+            <th class="mk-col--badge">故事池</th>
+            <th class="mk-col--num mk-th--right">会话</th>
+            <th title="当前会话状态：运行中会话数 + 最近阶段；会话数为累计口径；卡死/失败为全量聚合" style="width:160px">运行中</th>
             <th class="mk-col--time-full">创建</th>
             <th class="mk-th--right">操作</th>
           </tr>
@@ -107,17 +200,15 @@
             <td class="mk-na">{{ s.created }}</td>
             <td>
               <div class="mk-actions">
-                <button type="button" class="mk-link" @click="openSubPage('virtual', s.id)">画像</button>
+                <button type="button" class="mk-icon-btn" title="画像" @click="openSubPage('virtual', s.id)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg></button>
                 <button
                   v-if="isLive"
                   type="button"
-                  class="mk-link"
+                  class="mk-icon-btn"
                   :class="{ 'mk-link--muted': s.storyCount === 0 }"
                   :title="s.storyCount === 0 ? '建议先在画像页生成故事' : '启动实验会话'"
                   @click.stop="openLaunch(s)"
-                >
-                  运行
-                </button>
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8V4z"/></svg></button>
                 <div v-if="isLive" class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(s.id)">⋯</button>
                   <div v-if="openMenu === s.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -151,11 +242,11 @@
     <div v-if="isLive && selected.length" class="vl-batch">
       <span>已选 {{ selected.length }} 人</span>
       <button type="button" class="mk-link" @click="selected = []">取消选择</button>
-      <button type="button" class="vl-batch__btn" :disabled="batchBusy" @click="batchTerminate">
-        {{ batchBusy ? '处理中…' : '批量终止' }}
+      <button type="button" class="vl-batch__btn" :disabled="batchActionBusy" @click="batchTerminate">
+        {{ batchActionBusy ? '处理中…' : '批量终止' }}
       </button>
-      <button type="button" class="vl-batch__btn" :disabled="batchBusy" @click="batchReclaim">
-        {{ batchBusy ? '处理中…' : '批量清理卡死' }}
+      <button type="button" class="vl-batch__btn" :disabled="batchActionBusy" @click="batchReclaim">
+        {{ batchActionBusy ? '处理中…' : '批量清理卡死' }}
       </button>
       <button type="button" class="vl-batch__danger" disabled title="待 2B 后端打通：删除当前被 409 会话/教学记录死锁阻塞">
         批量删除
@@ -302,10 +393,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, liveCreateVirtual, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats } from './live'
-import { adminVirtualLearnersApi } from '@/api/adminApi'
+import { adminVirtualLearnersApi, adminBatchExperimentsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useLoadMore } from './useLoadMore'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -649,6 +740,9 @@ async function startLaunch() {
 
 const runningTotal = computed(() => samples.value.reduce((a, s) => a + s.runningCount, 0))
 
+/** 当前有活跃会话的虚拟学习者（"正在运行"条直接列名） */
+const runningSamples = computed(() => samples.value.filter((s) => s.runningCount > 0))
+
 /* ===== A2 生命周期分区：全量聚合口径（后端 sessionStats/staleCount），替代样本口径状态条 ===== */
 const partition = computed(() => {
   if (!isLive.value) {
@@ -718,7 +812,7 @@ async function batchTerminate() {
   } catch (e) {
     toast.error(`批量终止失败：${errMsg(e)}`)
   } finally {
-    batchBusy.value = false
+    batchActionBusy.value = false
   }
 }
 
@@ -801,9 +895,139 @@ function stageLabel(stage: string | null | undefined): string {
   if (s.includes('wrap')) return 'Wrapup'
   return s || '—'
 }
+
+/* ===================== 批量实验面板 ===================== */
+const batchPanelOpen = ref(false)
+const batchLoading = ref(false)
+const batchCreating = ref(false)
+const batchActionBusy = ref(false)
+const batchExperiments = ref<import('@/api/adminApi').BatchExperiment[]>([])
+const batchDetailId = ref<string | null>(null)
+const batchForm = ref<{ name: string; learners: { name: string; learningGoal: string; frictionBudget: string }[] }>({
+  name: '',
+  learners: [
+    { name: '', learningGoal: '', frictionBudget: 'normal' },
+    { name: '', learningGoal: '', frictionBudget: 'normal' },
+    { name: '', learningGoal: '', frictionBudget: 'normal' },
+  ],
+})
+
+/** 运行中的批量实验数（面板标题旁绿标） */
+const runningBatchCount = computed(() => batchExperiments.value.filter((e) => e.status === 'running').length)
+
+async function loadBatchExperiments() {
+  batchLoading.value = true
+  try {
+    const res = await adminBatchExperimentsApi.list()
+    batchExperiments.value = (res.data?.data ?? []) as import('@/api/adminApi').BatchExperiment[]
+  } catch (e) {
+    toast.error(`批量实验列表加载失败：${errMsg(e)}`)
+  } finally {
+    batchLoading.value = false
+  }
+}
+
+async function createBatchExperiment() {
+  const name = batchForm.value.name.trim()
+  const learners = batchForm.value.learners
+    .filter((l) => l.name.trim())
+    .map((l) => ({ name: l.name.trim(), learningGoal: l.learningGoal.trim() || undefined, frictionBudget: l.frictionBudget }))
+  if (!name) { toast.error('请填写实验名称'); return }
+  if (!learners.length) { toast.error('至少需要一个学习者名称'); return }
+  batchCreating.value = true
+  try {
+    await adminBatchExperimentsApi.create({ name, learners: learners as import('@/api/adminApi').BatchLearnerInput[] })
+    toast.success(`实验「${name}」已创建并启动`)
+    batchForm.value.name = ''
+    await loadBatchExperiments()
+  } catch (e) {
+    toast.error(`创建失败：${errMsg(e)}`)
+  } finally {
+    batchCreating.value = false
+  }
+}
+
+function toggleBatchDetail(id: string) {
+  batchDetailId.value = batchDetailId.value === id ? null : id
+  if (batchDetailId.value) void loadBatchExperiments()
+}
+
+async function stopBatchExperiment(id: string) {
+  try {
+    await adminBatchExperimentsApi.stop(id)
+    toast.success('实验已停止')
+    await loadBatchExperiments()
+  } catch (e) {
+    toast.error(`停止失败：${errMsg(e)}`)
+  }
+}
+
+async function runAction(fn: () => Promise<unknown>, okMsg: string) {
+  batchActionBusy.value = true
+  try {
+    await fn()
+    toast.success(okMsg)
+    await loadBatchExperiments()
+  } catch (e) {
+    toast.error(`${errMsg(e)}`)
+  } finally {
+    batchActionBusy.value = false
+  }
+}
+
+function advanceBatchRun(expId: string, runId: string) {
+  void runAction(() => adminBatchExperimentsApi.advanceRun(expId, runId), '已请求推进一步（调度器会自动继续）')
+}
+function decayBatchRun(expId: string, runId: string) {
+  void runAction(() => adminBatchExperimentsApi.decayRun(expId, runId), '已触发跨日衰减模拟（3/7/14 天逐档）')
+}
+function snapshotBatchRun(expId: string, runId: string) {
+  void runAction(() => adminBatchExperimentsApi.snapshotRun(expId, runId), '已生成画像快照')
+}
+
+function phaseLabel(phase: string): string {
+  const map: Record<string, string> = {
+    setup: '准备', goal: 'Goal', path: 'Path', learn: 'Learn',
+    'learn-done': '学完', decay: '衰减中', done: '完成', failed: '失败',
+  }
+  return map[phase] || phase
+}
+
+function decaySummary(decaySims: string): string {
+  try {
+    const sims = JSON.parse(decaySims) as { days: number; traceCount: number }[]
+    return sims.map((s) => `${s.days}天(概念${s.traceCount})`).join(' → ')
+  } catch { return decaySims.slice(0, 60) }
+}
+
+function fmtTime(t: string): string {
+  try { return new Date(t).toLocaleString('zh-CN', { hour12: false }).slice(5, 19) } catch { return t }
+}
+
+// 轮询刷新（面板展开时）
+watch(batchPanelOpen, (open) => {
+  if (open) void loadBatchExperiments()
+})
+
+// 进页即拉取批量实验（供「运行中」绿标展示，无需先展开面板）
+onMounted(() => {
+  if (isLive.value) void loadBatchExperiments()
+})
 </script>
 
 <style scoped>
+/* ===== 批量实验面板 ===== */
+.vl-bexp__create { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px dashed var(--mk-border, #d7dce5); border-radius: 8px; margin-bottom: 12px; }
+.vl-bexp__create-row { display: flex; gap: 8px; align-items: center; }
+.vl-bexp__create-row input, .vl-bexp__create-row select { padding: 6px 10px; border: 1px solid var(--mk-border, #d7dce5); border-radius: 6px; font-size: 13.5px; background: var(--mk-bg, #fff); color: inherit; }
+.vl-bexp__item { border: 1px solid var(--mk-border, #d7dce5); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+.vl-bexp__head { display: flex; gap: 10px; align-items: center; padding: 10px 14px; background: var(--mk-card-head-bg, #f7f8fa); flex-wrap: wrap; }
+.vl-bexp__meta { font-size: 12.5px; opacity: 0.65; margin-right: auto; }
+.vl-bexp__runs { padding: 8px 14px 12px; overflow-x: auto; }
+.vl-bexp__task { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vl-bexp__err { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #dc2626; font-size: 12.5px; }
+.vl-bexp__hint { font-size: 13px; opacity: 0.7; padding: 10px 14px; }
+.vl-bexp__decay { display: inline-block; margin-right: 14px; font-size: 12.5px; color: #7c3aed; }
 /* 窄屏表格：8 列在 704px 内容区会被压扁操作列，设 min-width 触发 .mk-table-scroll 横向滚动（对齐 AuditLogs 模式） */
 .mk-table-scroll .mk-table { min-width: 860px; }
 .mk-link--muted { opacity: 0.55; }
@@ -832,15 +1056,16 @@ function stageLabel(stage: string | null | undefined): string {
 .vl-run__dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.85; flex-shrink: 0; }
 .vl-run--idle { color: var(--mk-faint); }
 .vl-run--live {
-  color: #b45309;
-  background: rgba(217, 119, 6, 0.1);
+  color: #047857;
+  background: rgba(16, 185, 129, 0.12);
   border-radius: 999px;
   padding: 3px 10px;
   cursor: pointer;
 }
-.vl-run--live:hover { background: rgba(217, 119, 6, 0.18); }
+.vl-run--live:hover { background: rgba(16, 185, 129, 0.2); }
 .vl-run--stalled { color: var(--mk-red, #dc2626); background: rgba(220, 38, 38, 0.1); }
 .vl-run--stalled:hover { background: rgba(220, 38, 38, 0.18); }
+.vl-run--live .vl-run__dot { background: #10b981; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); animation: vl-pulse 1.6s infinite; }
 /* 失败/卡死状态标注：bad 色（对齐 mk-badge--bad）；间距由 .vl-run-cell 统一控制 */
 .vl-badge {
   display: inline-flex;
@@ -852,7 +1077,7 @@ function stageLabel(stage: string | null | undefined): string {
   white-space: nowrap;
 }
 .vl-badge--bad { background: rgba(220, 38, 38, 0.1); color: var(--mk-red, #dc2626); }
-.vl-status-run { color: var(--mk-amber, #b7791f); font-weight: 700; }
+.vl-status-run { color: #047857; font-weight: 700; }
 .vl-status-fail { color: var(--mk-red, #dc2626); font-weight: 700; }
 .vl-status-stale { color: var(--mk-red, #dc2626); font-weight: 700; }
 .vl-status-dur { color: var(--mk-muted, #5b6577); font-weight: 700; }
@@ -899,9 +1124,70 @@ function stageLabel(stage: string | null | undefined): string {
 .vl-stat b { color: var(--mk-ink); font-weight: 800; font-variant-numeric: tabular-nums; }
 .vl-stat--live b { color: var(--mk-blue); }
 
+/* ===== 正在运行条：直接列名当前活跃虚拟学习者（绿点呼吸动画） ===== */
+.vl-running {
+  margin: 10px 0 0;
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.vl-running__label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #047857;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.vl-running__label::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
+  animation: vl-pulse 1.6s infinite;
+}
+.vl-running__label--inline { padding: 3px 10px; border-radius: 999px; background: rgba(16, 185, 129, 0.12); }
+.vl-running__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  background: #fff;
+  color: #065f46;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.vl-running__chip:hover { background: rgba(16, 185, 129, 0.1); }
+.vl-running__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
+  animation: vl-pulse 1.6s infinite;
+  flex-shrink: 0;
+}
+@keyframes vl-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); }
+  70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
 /* 状态条数字强调 */
 .vl-num { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--mk-ink); }
-.vl-status-run .vl-num { color: #b45309; }
+.vl-status-run .vl-num { color: #047857; }
 .vl-status-fail .vl-num { color: var(--mk-red, #dc2626); }
 .vl-status-stale .vl-num { color: var(--mk-red, #dc2626); }
 

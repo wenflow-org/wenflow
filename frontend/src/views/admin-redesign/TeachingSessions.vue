@@ -45,17 +45,17 @@
 
       <MockSkeletonTable v-if="refreshing && !rows.length" :cols="8" />
       <div v-else class="mk-table-scroll">
-        <table v-if="filtered.length" class="mk-table">
+        <table v-if="filtered.length" class="mk-table mk-table--fixed">
           <thead>
             <tr>
-              <th>会话</th>
-              <th>用户</th>
-              <th>状态</th>
-              <th>互动</th>
-              <th>进度</th>
-              <th>产物</th>
-              <th>关注</th>
-              <th class="mk-th--right">详情</th>
+              <th style="width:220px">会话</th>
+              <th style="width:140px">用户</th>
+              <th class="mk-col--badge" style="width:90px">状态</th>
+              <th style="width:140px">互动</th>
+              <th style="width:120px">进度</th>
+              <th class="mk-col--badge" style="width:90px">产物</th>
+              <th class="mk-col--badge" style="width:60px">关注</th>
+              <th class="mk-col--actions mk-th--right">详情</th>
             </tr>
           </thead>
           <tbody>
@@ -72,8 +72,8 @@
                   <span class="mk-cell-sub">{{ r.email }}</span>
                 </div>
                 <div class="ts-tags">
-                  <span v-if="r.isVirtualLearner" class="ts-tag ts-tag--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
-                  <span v-else-if="r.isTestAccount" class="ts-tag ts-tag--test" title="测试/审计账号">测试</span>
+                  <span v-if="r.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
+                  <span v-else-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--warn" title="测试/审计账号">测试</span>
                 </div>
               </td>
               <td><span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span></td>
@@ -108,9 +108,8 @@
               <td><span class="mk-badge" :class="attentionBadge(r.attention)">{{ r.attention === 'high' ? '高' : r.attention === 'medium' ? '中' : '低' }}</span></td>
               <td>
                 <div class="ts-actions">
-                  <button type="button" class="mk-link" @click.stop="goTrace(r)">链路</button>
-                  <span class="ts-go">·</span>
-                  <button v-if="r.id" type="button" class="mk-link" @click.stop="goConsole(r)">控制台</button>
+                  <button type="button" class="mk-icon-btn" title="链路" @click.stop="goTrace(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></button>
+                  <button v-if="r.id" type="button" class="mk-icon-btn" title="控制台" @click.stop="goConsole(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 15h4"/></svg></button>
                 </div>
               </td>
             </tr>

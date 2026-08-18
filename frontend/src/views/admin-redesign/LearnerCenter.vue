@@ -58,7 +58,7 @@
                 <strong>{{ r.name }}</strong>
                 <span class="mk-cell-sub">{{ r.email }}</span>
               </div>
-              <span v-if="r.isTestAccount" class="lc-tag-test" title="虚拟学习者/测试账号不参与风险队列">测试账号</span>
+              <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--warn" title="虚拟学习者/测试账号不参与风险队列">测试账号</span>
             </td>
             <td>
               <div class="mk-cell-main">
@@ -83,8 +83,8 @@
             <td class="mk-na">{{ isUpdating(r.id) ? '重算中…' : r.updated }}</td>
             <td>
               <div class="mk-actions">
-                <button type="button" class="mk-link" @click="openSubPage('learner', r.id)">详情</button>
-                <button type="button" class="mk-link" :disabled="isUpdating(r.id)" @click="recompute(r)">重算</button>
+                <button type="button" class="mk-icon-btn" title="详情" @click="openSubPage('learner', r.id)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg></button>
+                <button type="button" class="mk-icon-btn" :disabled="isUpdating(r.id)" :title="isUpdating(r.id) ? '重算中…' : '重算'" @click="recompute(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
               </div>
             </td>
           </tr>

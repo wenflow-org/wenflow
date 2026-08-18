@@ -73,15 +73,23 @@ const stripPathGenerationInternals = (path: any) => {
   }
   // 保留 generationRun 的轻量子集（含阶段进度/重试信息），供前端 normalizeGenerationLifecycle 首帧准确推断；
   // 剔除 lease/heartbeat 等运行态内部字段
-  if (safePath.generationRun && typeof safePath.generationRun === 'object') {
+  // 注：generationRun 已被解构为 _generationRun（safePath 上不存在该键），此处基于 _generationRun 重建；
+  // 仅当存在任一轻量子集字段时才输出该键（避免对无进度信息的历史路径产生空对象）
+  if (_generationRun && typeof _generationRun === 'object') {
     const {
       runId, phase, status, progress, completedItems, totalItems,
       error, errorCode, retryType, retryAllowed,
-    } = safePath.generationRun;
-    safePath.generationRun = {
+    } = _generationRun;
+    const subset: Record<string, unknown> = {
       runId, phase, status, progress, completedItems, totalItems,
       error, errorCode, retryType, retryAllowed,
     };
+    const filtered = Object.fromEntries(
+      Object.entries(subset).filter(([, v]) => v !== undefined)
+    );
+    if (Object.keys(filtered).length > 0) {
+      safePath.generationRun = filtered;
+    }
   }
   return safePath;
 };

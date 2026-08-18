@@ -1,6 +1,6 @@
 <template>
   <div v-if="d" class="mk-page ud">
-    <button type="button" class="ud-back" @click="closeSubPage">← 用户</button>
+    <button type="button" class="mk-back" @click="closeSubPage">← 用户</button>
     <div class="ud-id">
       <span class="ud-avatar">{{ d.name.charAt(0) }}</span>
       <div>
@@ -86,7 +86,7 @@
   </div>
 
   <div v-else-if="detailError" class="mk-page ud">
-    <button type="button" class="ud-back" @click="closeSubPage">← 用户</button>
+    <button type="button" class="mk-back" @click="closeSubPage">← 用户</button>
     <div class="mk-empty">
       <span class="mk-empty__icon" aria-hidden="true">◌</span>
       <strong>详情加载失败</strong>
@@ -96,7 +96,7 @@
   </div>
 
   <div v-else class="mk-page">
-    <button type="button" class="ud-back" @click="closeSubPage">← 用户</button>
+    <button type="button" class="mk-back" @click="closeSubPage">← 用户</button>
     <div class="mk-empty">
       <strong>{{ isLive ? '加载中…' : '该用户暂无更多演示数据' }}</strong>
       <span>{{ isLive ? '正在拉取真实用户详情' : '演示详情仅覆盖部分样本用户。' }}</span>
@@ -125,6 +125,12 @@ interface Detail {
 }
 
 const liveDetail = ref<Detail | null>(null)
+/** 等级英→中映射 */
+function levelLabel(level: string | null | undefined): string {
+  if (!level) return '—'
+  const map: Record<string, string> = { beginner: '初学', intermediate: '进阶', advanced: '高级' }
+  return map[level] || level
+}
 /** 详情接口失败且无列表兜底 → 明确错误态 + 重试（参照 VirtualProfile.detailError 模式） */
 const detailError = ref(false)
 /** Phase 2：目标为已软删账号（详情走 includeDeleted=1 放行）→ 头部展示恢复入口 */
@@ -290,7 +296,7 @@ async function loadDetail() {
         { label: '路径', value: String(base?.paths ?? pathCount) },
         { label: '会话', value: String(base?.sessions ?? 0) },
         { label: 'XP', value: String(user.xp ?? 0) },
-        { label: '等级', value: String(user.currentLevel || '—') }
+        { label: '等级', value: levelLabel(String(user.currentLevel)) }
       ],
       recentPaths: [],
       activity: activityOf(base)
@@ -307,7 +313,7 @@ async function loadDetail() {
           { label: '路径', value: String(base.paths) },
           { label: '会话', value: String(base.sessions) },
           { label: 'XP', value: String(base.xp) },
-          { label: '等级', value: base.currentLevel || '—' }
+          { label: '等级', value: levelLabel(base.currentLevel) }
         ],
         recentPaths: [],
         activity: activityOf(base)

@@ -72,6 +72,7 @@
                 class="log-tr"
                 :class="[log.success ? 'log-tr--ok' : 'log-tr--err', { 'log-tr--open': openId === log.id }]"
                 :aria-expanded="openId === log.id"
+                :aria-controls="`audit-payload-${log.id}`"
                 @click="openId = openId === log.id ? '' : log.id"
               >
                 <td class="log-time mono" :title="fmtFull(log.createdAt)">{{ fmtTime(log.createdAt) }}</td>
@@ -93,7 +94,7 @@
               </tr>
               <tr v-if="openId === log.id" class="log-payload-row">
                 <td :colspan="noTargetTypes ? 7 : 8">
-                  <div class="log-payload">
+                  <div :id="`audit-payload-${log.id}`" class="log-payload">
                     <div class="log-payload-meta">
                       <span>{{ log.method }} {{ log.path }} · HTTP {{ log.statusCode }}<template v-if="log.durationMs != null"> · {{ fmtMs(log.durationMs) }}</template></span>
                       <span v-if="log.userAgent" class="log-ua" :title="log.userAgent">{{ log.userAgent }}</span>

@@ -119,8 +119,8 @@
         <p v-else class="brief-card__note">还没有课后总结样本。</p>
       </section>
 
-      <!-- LLM 用量与失败归因 -->
-      <section class="brief-card">
+      <!-- LLM 用量与失败归因（跨 2 列填洞，避免 row3 col3 空白） -->
+      <section class="brief-card brief-card--wide2">
         <h4 title="近 7 天（滚动窗口）">LLM 用量与失败归因</h4>
         <div v-if="usageHasData" class="usage">
           <div class="usage__big">
@@ -711,6 +711,8 @@ watch(liveLoading, (loading) => {
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
 }
+/* 跨 2 列：LLM 用量卡填 row3 空洞 */
+.brief-card--wide2 { grid-column: span 2; }
 .kpi {
   display: grid;
   gap: 2px;

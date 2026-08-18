@@ -1627,6 +1627,73 @@ export const restoreUser = async (userId: string) => {
   return adminAxios.post(`/admin/users/${encodeURIComponent(userId)}/restore`);
 };
 
+// ============================================================
+// 批量实验（admin 虚拟学习者页 · 系统级队列实验）
+// 后端：backend/src/routes/admin/batch-experiments.ts
+// ============================================================
+
+export interface BatchLearnerInput {
+  name: string;
+  learningGoal?: string;
+  frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test';
+}
+
+export interface BatchExperimentRun {
+  id: string;
+  experimentId: string;
+  profileId?: string | null;
+  sessionId?: string | null;
+  learnerName: string;
+  frictionBudget: string;
+  phase: string;
+  status: string;
+  completedTasks: number;
+  totalTasks?: number | null;
+  currentTask?: string | null;
+  stallCount: number;
+  lastError?: string | null;
+  checkpoints?: string | null;
+  decaySims?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BatchExperiment {
+  id: string;
+  name: string;
+  description?: string | null;
+  status: string;
+  createdBy: string;
+  learnersConfig: string;
+  createdAt: string;
+  updatedAt: string;
+  runs?: BatchExperimentRun[];
+}
+
+export const adminBatchExperimentsApi = {
+  list: async () => {
+    return adminAxios.get('/admin/batch-experiments');
+  },
+  create: async (payload: { name: string; description?: string; learners: BatchLearnerInput[] }) => {
+    return adminAxios.post('/admin/batch-experiments', payload);
+  },
+  detail: async (id: string) => {
+    return adminAxios.get(`/admin/batch-experiments/${encodeURIComponent(id)}`);
+  },
+  stop: async (id: string) => {
+    return adminAxios.post(`/admin/batch-experiments/${encodeURIComponent(id)}/stop`);
+  },
+  advanceRun: async (experimentId: string, runId: string) => {
+    return adminAxios.post(`/admin/batch-experiments/${encodeURIComponent(experimentId)}/runs/${encodeURIComponent(runId)}/advance`);
+  },
+  decayRun: async (experimentId: string, runId: string) => {
+    return adminAxios.post(`/admin/batch-experiments/${encodeURIComponent(experimentId)}/runs/${encodeURIComponent(runId)}/decay`);
+  },
+  snapshotRun: async (experimentId: string, runId: string) => {
+    return adminAxios.post(`/admin/batch-experiments/${encodeURIComponent(experimentId)}/runs/${encodeURIComponent(runId)}/snapshot`);
+  },
+};
+
 /** 已删用户列表（status=deleted 反转软删筛选，供「已删除」筛选 pill 使用） */
 export const getDeletedUsers = async (params?: { page?: number; limit?: number; search?: string }) => {
   return adminAxios.get('/admin/users', { params: { ...params, status: 'deleted' } });

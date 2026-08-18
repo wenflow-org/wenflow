@@ -112,6 +112,7 @@
           type="button"
           class="tline__main"
           :aria-expanded="openId === log.id"
+          :aria-controls="`exec-payload-${log.id}`"
           @click="openId = openId === log.id ? '' : log.id"
         >
           <span class="tline__time mono" :title="fmtFull(log.ts)">{{ fmtTime(log.ts) }}</span>
@@ -138,14 +139,14 @@
           <span class="tline__trace mono" :title="`${log.traceId} · 在链路中查看完整 Trace`" @click.stop="openTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span>
           <span class="tline__arrow" aria-hidden="true">▸</span>
         </button>
-        <div v-if="openId === log.id" class="tline__payload">
+        <div v-if="openId === log.id" :id="`exec-payload-${log.id}`" class="tline__payload">
           <div class="tline__payload-meta">
             <span>trace {{ log.traceId }}</span>
             <button type="button" class="mk-link" @click.stop="openTrace(log.traceId)">在链路中查看完整 Trace →</button>
             <button v-if="log.sessionId" type="button" class="mk-link" @click.stop="openSession(log.sessionId)">按会话归组查看 →</button>
           </div>
           <template v-if="isLive">
-            <p v-if="detailLoading === log.id" class="tline__none">拉取日志详情…</p>
+            <p v-if="detailLoading === log.id" class="tline__none"><span class="mk-spinner" aria-hidden="true"></span> 拉取日志详情…</p>
             <template v-else-if="detailCache[log.id]">
               <!-- 重试时间线：网关升级后的逐次尝试遥测 -->
               <div v-if="detailCache[log.id].attempts.length" class="tline__section">
@@ -543,7 +544,7 @@ function fmtFull(ts?: number | null): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
-const statusBadge = { ok: '成功', warn: '降级', err: '失败' } as const
+const statusBadge = { ok: '✅ 成功', warn: '⚠ 降级', err: '❌ 失败' } as const
 /* 类型列：demo 按 flow/call；live 按执行层（api-gateway→网关 / skill→Skill） */
 function kindText(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   if (log.kind === 'flow') return '流程'

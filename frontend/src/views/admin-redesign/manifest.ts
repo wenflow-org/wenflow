@@ -18,11 +18,10 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'learner-center', label: '学习者中心', group: '学习者', glyph: '习' },
   { id: 'teaching-sessions', label: '教学会话', group: '学习者', glyph: '课' },
   { id: 'goal-conversations', label: '目标对话', group: '学习者', glyph: '标' },
-  { id: 'feedback', label: '反馈中心', group: '学习者', glyph: '馈' },
-  { id: 'virtual-learners', label: '虚拟学习者（仿真）', group: '学习者', glyph: '拟' },
-  { id: 'skills', label: 'Skill 目录', group: '运行', glyph: '能' },
-  { id: 'orchestrator', label: '编排结构', group: '运行', glyph: '流' },
-  { id: 'skill-workbench', label: 'Skill 工作台', group: 'Skill', glyph: '台' },
+  { id: 'virtual-learners', label: '虚拟学习者', group: '仿真实验室', glyph: '拟' },
+  { id: 'skills', label: 'Skill 目录', group: '运行与 Skill', glyph: '能' },
+  { id: 'orchestrator', label: '编排结构', group: '运行与 Skill', glyph: '流' },
+  { id: 'skill-workbench', label: 'Skill 工作台', group: '运行与 Skill', glyph: '台' },
   { id: 'health-center', label: '健康中心', group: '数据健康', glyph: '健' },
   { id: 'execution-logs', label: '执行日志', group: '观测', glyph: '志' },
   { id: 'trace-waterfall', label: 'Trace 链路', group: '观测', glyph: '溯' },
@@ -30,5 +29,6 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'api-config', label: '模型与接入', group: '配置', glyph: '安' },
   { id: 'addons', label: '外挂能力', group: '配置', glyph: '件' },
   { id: 'session-security', label: '会话安全', group: '配置', glyph: '锁' },
-  { id: 'announcements', label: '公告', group: '运营', glyph: '告' }
+  { id: 'announcements', label: '公告', group: '运营', glyph: '告' },
+  { id: 'feedback', label: '反馈中心', group: '运营', glyph: '馈' }
 ]

@@ -112,7 +112,7 @@
           <h3 class="mk-card__title">会话日志</h3>
           <span class="mk-card__meta">{{ isRealMode ? '会话时间线 · 只读' : isTerminal ? '已终态' : '5s 轮询' }}</span>
         </div>
-        <div class="cp-logs" ref="logBox" @scroll="onLogScroll">
+        <div class="cp-logs" ref="logBox" aria-live="polite" aria-label="实时日志" @scroll="onLogScroll">
           <template v-if="!session">
             <div v-for="n in 4" :key="n" class="cp-log-skel" aria-hidden="true"></div>
           </template>

@@ -42,13 +42,13 @@
       <template v-else>
       <!-- 列表视图：列对齐 + 排序，问题浮顶 -->
       <div v-if="view === 'list'" class="mk-table-scroll">
-        <table v-if="filtered.length" class="mk-table sk-table">
+        <table v-if="filtered.length" class="mk-table sk-table mk-table--fixed">
           <thead>
             <tr>
-              <th>Skill</th>
-              <th>所属阶段</th>
-              <th>类别</th>
-              <th>完成度</th>
+              <th style="width:200px">Skill</th>
+              <th style="width:110px">所属阶段</th>
+              <th style="width:80px">类别</th>
+              <th style="width:80px">完成度</th>
               <th>
                 <button type="button" class="sk-sort" :class="{ 'sk-sort--on': sortKey === 'calls' }" @click="toggleSort('calls')">
                   调用 {{ sortKey === 'calls' ? (sortDir === 'desc' ? '↓' : '↑') : '' }}
@@ -75,8 +75,8 @@
                 <div class="sk-cell">
                   <span class="sk-dot" :class="`sk-dot--${s.health}`" :title="s.health === 'ok' ? '健康' : s.health === 'error' ? '异常' : '空闲'"></span>
                   <div class="mk-cell-main">
-                    <strong class="sk-id-main" :title="s.id">{{ s.id }}</strong>
-                    <span class="sk-name-desc" :title="s.name">{{ s.name }}</span>
+                    <strong class="sk-id-main mk-ellipsis" :title="s.id">{{ s.id }}</strong>
+                    <span class="sk-name-desc mk-ellipsis" :title="s.name">{{ s.name }}</span>
                   </div>
                 </div>
               </td>
@@ -93,6 +93,7 @@
                   :title="completionBadgeOf(s.id)!.title"
                 >{{ completionBadgeOf(s.id)!.text }}</span>
                 <span v-else class="mk-na">—</span>
+                <span v-if="s.errors > 0" class="mk-badge mk-badge--sm mk-badge--bad" :title="`${s.errors} 次失败`">{{ s.errors }}</span>
               </td>
               <td class="mk-num">{{ s.calls || '—' }}</td>
               <td class="mk-num" :class="{ 'sk-err': s.errors > 0 }">{{ s.calls ? s.errors : '—' }}</td>
@@ -696,6 +697,7 @@ function recGateDetail(completion: SkillCompletion): string {
 .sk-card {
   display: grid;
   gap: 6px;
+  min-height: 110px;
   padding: 13px 14px;
   border-radius: 12px;
   border: 1px solid var(--mk-line);
