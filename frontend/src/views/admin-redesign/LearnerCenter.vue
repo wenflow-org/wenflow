@@ -28,6 +28,12 @@
           </button>
         </div>
         <span class="mk-card__meta">先找有问题的人</span>
+        <input
+          v-model="keyword"
+          class="mk-filter__input"
+          style="width: 200px;"
+          placeholder="搜索名称 / 邮箱 / ID"
+        />
       </div>
 
       <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="8" />
@@ -142,6 +148,7 @@ const normalRows: Row[] = [
 ]
 
 const pill = ref<'all' | 'risk' | 'stale'>('all')
+const keyword = ref('')
 
 const demoRows = ref<Row[]>([...normalRows])
 
@@ -185,6 +192,15 @@ const filtered = computed(() => {
   let list = rows.value
   if (pill.value === 'risk') list = rows.value.filter(isRisk)
   if (pill.value === 'stale') list = rows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1))
+  // 关键词搜索
+  const kw = keyword.value.trim().toLowerCase()
+  if (kw) {
+    list = list.filter((r) =>
+      r.name?.toLowerCase().includes(kw) ||
+      r.email?.toLowerCase().includes(kw) ||
+      r.id?.toLowerCase().includes(kw)
+    )
+  }
   // 先找有问题的人：风险位优先，组内按更新时间新→旧
   return [...list].sort((a, b) => {
     const riskDiff = Number(isRisk(a)) - Number(isRisk(b))
