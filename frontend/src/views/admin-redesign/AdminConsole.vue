@@ -193,6 +193,30 @@ watch(scene, (s) => {
   // 切换页面时自动关闭 Skill 抽屉，避免遮挡侧栏导航
   closeSkillDrawer();
 });
+// SkillDrawer ↔ URL query（?skill=xxx）双向同步：刷新后恢复抽屉状态
+watch(
+  () => intent.skillDrawerId,
+  (sid) => {
+    const cur = typeof route.query.skill === 'string' ? route.query.skill : ''
+    if (sid && sid !== cur) {
+      void router.replace({ query: { ...route.query, skill: sid } })
+    } else if (!sid && cur) {
+      const q = { ...route.query }
+      delete q.skill
+      void router.replace({ query: q })
+    }
+  }
+);
+watch(
+  () => route.query.skill,
+  (s) => {
+    const sid = typeof s === 'string' ? s : ''
+    if (sid && sid !== intent.skillDrawerId) {
+      intent.skillDrawerId = sid
+    }
+  },
+  { immediate: true }
+);
 watch(scene, (s) => {
   if (intent.scene !== s) intent.scene = s;
 });
