@@ -348,10 +348,8 @@ const datasets: BriefData = {
   kpis: [
     { label: '今日调用', value: '273', hint: '超时 2' },
     { label: '今日成功率', value: '99.3%', hint: '2 次失败' },
-    { label: '今日新增', value: '6', hint: '新用户' },
-    { label: '今日活跃', value: '18', hint: '总 32 名用户（真实）' },
-    { label: '进行中对话', value: '12', hint: '目标规划' },
-    { label: '活跃 Skill', value: '16', hint: '近 24h' }
+    { label: '用户活跃', value: '6 新增 / 18 活跃', hint: '总 32 名用户（真实）' },
+    { label: '系统活跃', value: '12 对话 / 16 Skill', hint: '目标规划 + 近 24h' }
   ],
   wrapup: {
     sampleSize: 42,
@@ -466,17 +464,15 @@ async function retryOverview() {
 // 动态筛选：默认隐藏虚拟学习者与测试/审计账号（后端 excludeTest 已按此过滤并重新拉取），
 // 前端正则仅为 demo 模式兜底
 const hideTestAccounts = overviewHideTest
-const kpiTargets = ['execution-logs', 'execution-logs', 'users', 'users', 'goal-conversations', 'skills']
+const kpiTargets = ['execution-logs', 'execution-logs', 'users', 'goal-conversations']
 const funnelTargets = ['users', 'goal-conversations', 'goal-conversations', 'learner-center', 'learner-center']
 
 /* 窗口口径标注：KPI 行统一「今日」自然日窗口，个别指标另有细分口径，tooltip 注明消除歧义 */
 const KPI_WINDOWS: string[] = [
   '窗口：今日（自然日 00:00 起）',
   '窗口：今日（自然日 00:00 起）',
-  '窗口：今日新增注册（真实账号，不含测试/虚拟）',
-  '窗口：今日有学习会话的用户（真实账号口径）',
-  '窗口：今日进行中的目标澄清对话（真实用户）',
-  '窗口：近 24h 有调用的 Skill'
+  '窗口：今日新增注册 + 今日有学习会话的用户（真实账号口径）',
+  '窗口：今日进行中的目标澄清对话 + 近 24h 有调用的 Skill',
 ]
 function kpiTitle(i: number): string {
   const windowText = KPI_WINDOWS[i] || ''
@@ -708,7 +704,7 @@ watch(liveLoading, (loading) => {
 .brief-kpis {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 /* 跨 2 列：LLM 用量卡填 row3 空洞 */
@@ -974,7 +970,7 @@ watch(liveLoading, (loading) => {
 @media (max-width: 1280px) and (min-width: 1001px) {
   /* 中等宽度：三列过渡为两列，KPI 与动态卡占整行 */
   .brief-grid { grid-template-columns: 1fr 1fr; }
-  .brief-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .brief-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .brief-card--feed { grid-column: 1 / -1; }
 }
 
