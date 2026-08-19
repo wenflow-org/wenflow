@@ -22,13 +22,13 @@
         <h3 class="mk-card__title">接入与模型</h3>
         <span class="mk-badge" :class="connBadge.cls">{{ connBadge.text }}</span>
       </div>
-      <div class="ac-form">
+      <div class="mk-card">
         <div class="ac-row ac-row--2-1">
-          <label class="ac-field ac-field--row">
+          <label class="mk-field mk-field--row">
             <span>服务地址</span>
             <input class="mk-filter__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
           </label>
-          <label class="ac-field ac-field--row">
+          <label class="mk-field mk-field--row">
             <span>API Key</span>
             <span class="ac-key-wrap">
               <span class="ac-key-input-row">
@@ -51,7 +51,7 @@
             </span>
           </label>
         </div>
-        <label class="ac-field">
+        <label class="mk-field">
           <span>可用模型</span>
           <div class="ac-models">
             <span v-for="m in models" :key="m" class="ac-model">{{ m }}</span>
@@ -59,21 +59,21 @@
           </div>
         </label>
         <div class="ac-row ac-row--3">
-          <label class="ac-field">
+          <label class="mk-field">
             <span>对话默认</span>
             <select class="mk-filter__select" v-model="form.defaultModel" :disabled="!models.length" @change="markDirty('route')">
               <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
               <option v-if="!models.length" value="">未设置</option>
             </select>
           </label>
-          <label class="ac-field">
+          <label class="mk-field">
             <span>推理默认</span>
             <select class="mk-filter__select" v-model="form.defaultReasoningModel" :disabled="!models.length" @change="markDirty('route')">
               <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
               <option v-if="!models.length" value="">未设置</option>
             </select>
           </label>
-          <label class="ac-field">
+          <label class="mk-field">
             <span>评估默认</span>
             <select class="mk-filter__select" v-model="form.defaultEvaluationModel" :disabled="!models.length" @change="markDirty('route')">
               <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
@@ -85,7 +85,7 @@
 
       <!-- 连通性验证（并入本卡，横向操作） -->
       <div class="ac-test">
-        <label class="ac-field ac-field--row ac-test__model">
+        <label class="mk-field mk-field--row ac-test__model">
           <span>测试模型</span>
           <select class="mk-filter__select" v-model="testModel" :disabled="!models.length">
             <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
@@ -128,7 +128,7 @@
             </button>
           </div>
           <span v-if="policy.adminAccessMode === 'any'" class="ac-policy__warn">⚠ 公网开放 · 入口无访问限制</span>
-          <label v-if="policy.adminAccessMode === 'private'" class="ac-field">
+          <label v-if="policy.adminAccessMode === 'private'" class="mk-field">
             <span>额外允许的客户端 IP（每行一个，可留空）</span>
             <textarea
               class="mk-filter__input ac-textarea"
@@ -159,7 +159,7 @@
               仅白名单
             </button>
           </div>
-          <label v-if="!policy.allowPrivateNetwork" class="ac-field">
+          <label v-if="!policy.allowPrivateNetwork" class="mk-field">
             <span>允许的 Host / IP（每行一个）</span>
             <textarea
               class="mk-filter__input ac-textarea"
@@ -208,27 +208,27 @@
             <div v-if="reliability" class="ac-group">
               <div class="ac-group__title">重试</div>
               <div class="ac-group__fields">
-                <label class="ac-field">
+                <label class="mk-field">
                   <span>上游最大尝试</span>
                   <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" max="10" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
-                <label class="ac-field">
+                <label class="mk-field">
                   <span>传输重试</span>
                   <input v-model.number="reliability.maxTransportRetries" type="number" min="0" max="5" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
-                <label class="ac-field">
+                <label class="mk-field">
                   <span>逻辑重试</span>
                   <input v-model.number="reliability.maxLogicalRetries" type="number" min="0" max="5" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
-                <label class="ac-field">
+                <label class="mk-field">
                   <span>退避基数 ms</span>
                   <input v-model.number="reliability.retryBaseDelayMs" type="number" min="100" step="100" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
-                <label class="ac-field">
+                <label class="mk-field">
                   <span>Retry-After 上限 ms</span>
                   <input v-model.number="reliability.maxRetryAfterMs" type="number" min="1000" step="1000" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
-                <label class="ac-field ac-field--switch">
+                <label class="mk-field mk-field--switch">
                   <span>随机抖动</span>
                   <span class="ac-switch">
                     <input type="checkbox" v-model="reliability.jitterEnabled" @change="markDirty('reliability')" />
@@ -240,7 +240,7 @@
             <div v-if="reliability" class="ac-group">
               <div class="ac-group__title">超时</div>
               <div class="ac-group__fields">
-                <label class="ac-field">
+                <label class="mk-field">
                   <span>单次超时 ms</span>
                   <input v-model.number="reliability.defaultRequestTimeoutMs" type="number" min="1000" step="1000" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
@@ -249,14 +249,14 @@
             <div v-if="probe.loaded" class="ac-group">
               <div class="ac-group__title">探测</div>
               <div class="ac-group__fields">
-                <label class="ac-field ac-field--switch">
+                <label class="mk-field mk-field--switch">
                   <span>定期探活</span>
                   <span class="ac-switch">
                     <input type="checkbox" v-model="probe.enabled" @change="markDirty('probe')" />
                     <i aria-hidden="true"></i>
                   </span>
                 </label>
-                <label class="ac-field">
+                <label class="mk-field">
                   <span>探测间隔（秒）</span>
                   <input
                     v-model.number="probe.intervalSec"
@@ -804,22 +804,13 @@ async function toggleRegistration() {
 </script>
 
 <style scoped>
-.ac-form { display: grid; gap: 14px; padding: 16px; }
+.mk-card { display: grid; gap: 14px; padding: 16px; }
 .ac-row { display: grid; gap: 12px; }
 .ac-row--2-1 { grid-template-columns: 1.6fr 1fr; }
 .ac-row--3 { grid-template-columns: repeat(3, 1fr); }
-.ac-field { display: grid; gap: 6px; }
-.ac-field > span { font-size: 12px; font-weight: 700; color: var(--mk-muted); }
-.ac-field .mk-filter__input,
-.ac-field .mk-filter__select { width: 100%; }
-/* 标签与控件同行（紧凑行） */
-.ac-field--row {
-  display: grid;
-  grid-template-columns: 84px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-}
-.ac-field--row > span { white-space: nowrap; }
+/* mk-field 已在 shared.css 定义；此处只补 mk-field 下 .mk-filter__input 的 100% 宽 */
+.mk-field .mk-filter__input,
+.mk-field .mk-filter__select { width: 100%; }
 .ac-key-wrap { display: grid; gap: 4px; min-width: 0; }
 .ac-key-input-row { display: flex; align-items: center; gap: 6px; }
 .ac-key-input-row .mk-filter__input { flex: 1; min-width: 0; }
@@ -1019,7 +1010,7 @@ async function toggleRegistration() {
   gap: 12px;
 }
 /* 开关控件 */
-.ac-field--switch { align-content: start; }
+.mk-field--switch { align-content: start; }
 .ac-switch { position: relative; width: 36px; height: 20px; justify-self: start; margin-top: 2px; }
 .ac-switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
 .ac-switch i {
@@ -1121,8 +1112,8 @@ async function toggleRegistration() {
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .ac-form { gap: 16px; padding: 18px; }
-  .ac-field > span { font-size: 13.5px; }
+  .mk-card { gap: 16px; padding: 18px; }
+  .mk-field__label { font-size: 13.5px; }
   .ac-model { font-size: 13px; padding: 5px 12px; }
   .ac-run { padding: 10px 14px; }
   .ac-policy { gap: 16px; padding: 18px; }
@@ -1149,8 +1140,8 @@ async function toggleRegistration() {
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号继续放大 */
-  .ac-form { gap: 18px; padding: 22px; }
-  .ac-field > span { font-size: 15.5px; }
+  .mk-card { gap: 18px; padding: 22px; }
+  .mk-field__label { font-size: 15.5px; }
   .ac-model { font-size: 15px; padding: 6px 14px; border-radius: 9px; }
   .ac-run { padding: 12px 16px; }
   .ac-policy { gap: 18px; padding: 22px; }
@@ -1176,8 +1167,8 @@ async function toggleRegistration() {
 }
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：字号继续放大，与页面基线对齐 */
-  .ac-form { gap: 20px; padding: 26px; }
-  .ac-field > span { font-size: 18px; }
+  .mk-card { gap: 20px; padding: 26px; }
+  .mk-field__label { font-size: 18px; }
   .ac-model { font-size: 17.5px; padding: 7px 16px; }
   .ac-run { padding: 14px 18px; }
   .ac-policy { gap: 20px; padding: 26px; }

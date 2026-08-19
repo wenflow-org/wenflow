@@ -486,6 +486,16 @@
 
 /* 表单字段 */
 .mk-field { display: grid; gap: 6px; }
+/* 横向布局：标签与控件同行（紧凑行，原 ApiConfig ac-field--row） */
+.mk-field--row {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.mk-field--row > .mk-field__label { white-space: nowrap; }
+/* 开关布局：label + 控件在同一行，左对齐 */
+.mk-field--switch { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .mk-field__label { font-size: 12px; font-weight: 700; color: var(--mk-muted, #5b6577); }
 .mk-field__req { color: var(--mk-red, #dc2626); font-style: normal; font-weight: 700; margin-left: 2px; }
 .mk-field__hint { font-size: 11px; color: var(--mk-faint, #5f6f8c); margin-top: 2px; }
