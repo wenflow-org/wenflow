@@ -154,9 +154,6 @@
             <p v-if="teachingHints.recommendedApproach"><span class="ld-actions__k">方式</span>{{ teachingHints.recommendedApproach }}</p>
             <p v-if="teachingHints.promptEnhancement"><span class="ld-actions__k">Prompt</span>{{ teachingHints.promptEnhancement }}</p>
             <p v-if="riskFactors.length"><span class="ld-actions__k ld-actions__k--warn">风险</span>{{ riskFactors.join('；') }}</p>
-            <button type="button" class="mk-status__action" :disabled="recomputing" @click="recompute">
-              {{ recomputing ? '重算中…' : '重算快照' }}
-            </button>
           </div>
         </section>
       </div>

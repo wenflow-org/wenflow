@@ -111,6 +111,9 @@
         <div class="mk-card__head">
           <h3 class="mk-card__title">会话日志</h3>
           <span class="mk-card__meta">{{ isRealMode ? '会话时间线 · 只读' : isTerminal ? '已终态' : '5s 轮询' }}</span>
+          <span class="cp-logs__follow" :class="{ 'is-paused': !logFollowsBottom }" :title="logFollowsBottom ? '自动跟随最新日志' : '已暂停跟随 — 滚动到底部恢复'" @click="scrollToBottom">
+            {{ logFollowsBottom ? '⏵ 自动跟随' : '⏸ 已暂停' }}
+          </span>
         </div>
         <div class="cp-logs" ref="logBox" aria-live="polite" aria-label="实时日志" @scroll="onLogScroll">
           <template v-if="!session">
@@ -650,18 +653,24 @@ const logsFailed = ref(false)
 const logBox = ref<HTMLElement | null>(null)
 const LOG_WINDOW = 60
 /* 日志滚动：接近底部才跟随，用户上翻时不打扰 */
-let logFollowsBottom = true
+const logFollowsBottom = ref(true)
 function onLogScroll() {
   const box = logBox.value
   if (!box) return
-  logFollowsBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80
+  logFollowsBottom.value = box.scrollHeight - box.scrollTop - box.clientHeight < 80
 }
 function scrollLogsIfFollowing() {
   void nextTick(() => {
     const box = logBox.value
-    if (!box || !logFollowsBottom) return
+    if (!box || !logFollowsBottom.value) return
     box.scrollTop = box.scrollHeight
   })
+}
+function scrollToBottom() {
+  const box = logBox.value
+  if (!box) return
+  box.scrollTop = box.scrollHeight
+  logFollowsBottom.value = true
 }
 /* 按消息 id 去重追加，保留窗口上限 */
 function appendLogs(entries: Array<{ id: string; time: string; text: string; view: LogEntryView }>) {
@@ -2040,7 +2049,7 @@ watch(
     session.value = null
     logs.value = []
     logsFailed.value = false
-    logFollowsBottom = true
+    logFollowsBottom.value = true
     pathStatus.value = null
     pathStatusFailed.value = false
     teachingDetail.value = null
@@ -2199,6 +2208,14 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-path-readiness--warn p { color: #b45309; }
 .cp-path-readiness--bad { border-left-color: var(--mk-red); background: var(--mk-red-bg); }
 .cp-path-readiness--bad p { color: var(--mk-red); }
+
+.cp-logs__follow {
+  font-size: 10.5px; font-weight: 700; color: var(--mk-green); cursor: pointer;
+  padding: 2px 8px; border-radius: 999px; background: rgba(16, 185, 129, 0.08);
+  transition: background 0.12s ease;
+}
+.cp-logs__follow:hover { background: rgba(16, 185, 129, 0.15); }
+.cp-logs__follow.is-paused { color: var(--mk-amber); background: rgba(217, 119, 6, 0.08); }
 
 .cp-logs {
   max-height: 320px;

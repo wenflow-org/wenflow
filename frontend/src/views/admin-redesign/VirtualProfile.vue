@@ -74,13 +74,13 @@
     <div class="vp-guide">
       <span class="vp-guide__icon" aria-hidden="true">🗺️</span>
       <div class="vp-guide__steps">
-        <span class="vp-guide__step" :class="{ 'is-done': displayStories.length > 0 }">① 生成故事</span>
+        <button type="button" class="vp-guide__step" :class="{ 'is-done': displayStories.length > 0, 'is-active': !displayStories.length }" @click="activeTab = 'stories'">① 生成故事</button>
         <span class="vp-guide__arrow">→</span>
-        <span class="vp-guide__step" :class="{ 'is-done': selectedStoryId }">② 选中故事</span>
+        <button type="button" class="vp-guide__step" :class="{ 'is-done': selectedStoryId }" @click="activeTab = 'stories'">② 选中故事</button>
         <span class="vp-guide__arrow">→</span>
-        <span class="vp-guide__step" :class="{ 'is-active': runningCount > 0, 'is-done': allRuns.length > 0 && runningCount === 0 }">③ 运行</span>
+        <button type="button" class="vp-guide__step" :class="{ 'is-active': runningCount > 0, 'is-done': allRuns.length > 0 && runningCount === 0 }" @click="activeTab = 'runs'">③ 运行</button>
         <span class="vp-guide__arrow">→</span>
-        <span class="vp-guide__step">④ 前台验收</span>
+        <button type="button" class="vp-guide__step" @click="activeTab = 'acceptance'">④ 前台验收</button>
       </div>
       <div class="vp-guide__hint">
         <template v-if="!displayStories.length">先点「生成第一条故事」让 AI 设计学习场景</template>
@@ -1607,9 +1607,11 @@ async function quietReload(id: string) {
 .vp-guide__icon { font-size: 15px; flex-shrink: 0; }
 .vp-guide__steps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .vp-guide__step {
-  font-size: 11.5px; font-weight: 700; color: var(--mk-faint);
+  font: inherit; font-size: 11.5px; font-weight: 700; color: var(--mk-faint);
   padding: 3px 9px; border-radius: 999px; border: 1px solid transparent; white-space: nowrap;
+  background: transparent; cursor: pointer; transition: background 0.12s ease;
 }
+.vp-guide__step:hover { background: #eef5ff; color: var(--mk-blue, #2c63d0); }
 .vp-guide__step.is-done { color: #047857; background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.25); }
 .vp-guide__step.is-active { color: #047857; background: rgba(16, 185, 129, 0.14); border-color: rgba(16, 185, 129, 0.4); }
 .vp-guide__arrow { font-size: 12px; color: #c4ccd9; font-weight: 700; }

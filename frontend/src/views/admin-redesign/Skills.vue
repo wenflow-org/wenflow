@@ -128,6 +128,10 @@
             <span v-if="s.errors" class="sk-card__err">{{ s.errors }} 失败</span>
             <span v-else :class="{ 'mk-na': !s.calls }">{{ s.calls ? '无失败' : '—' }}</span>
           </span>
+          <!-- 失败率进度条 -->
+          <span v-if="s.calls > 0" class="sk-card__rate" :title="`成功率 ${s.calls - s.errors}/${s.calls}`">
+            <i class="sk-card__rate-bar" :class="{ 'is-bad': s.errors > 0 }" :style="{ width: ((s.calls - s.errors) / s.calls * 100) + '%' }"></i>
+          </span>
         </button>
       </div>
 
@@ -748,6 +752,10 @@ function recGateDetail(completion: SkillCompletion): string {
   margin-top: 2px;
 }
 .sk-card__err { color: var(--mk-red); font-weight: 700; }
+/* 失败率进度条 */
+.sk-card__rate { display: block; width: 100%; height: 4px; border-radius: 99px; background: #eef2fa; overflow: hidden; margin-top: 2px; }
+.sk-card__rate-bar { display: block; height: 100%; border-radius: 99px; background: var(--mk-green); transition: width 0.15s ease; }
+.sk-card__rate-bar.is-bad { background: var(--mk-red); }
 
 /* 所属阶段标签 */
 .sk-agent-tag {
