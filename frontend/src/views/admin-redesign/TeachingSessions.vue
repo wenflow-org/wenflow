@@ -139,7 +139,7 @@
               <h3>{{ detail.topic }}</h3>
               <span class="ts-panel__id">{{ detail.id }}</span>
             </div>
-            <button type="button" class="ts-panel__close" aria-label="关闭" @click="detail = null">✕</button>
+            <button type="button" class="ts-panel__close" aria-label="关闭" @click="detail = null; const q = { ...route.query }; delete q.session; void router.replace({ query: q })">✕</button>
           </header>
 
           <div class="ts-panel__body">
@@ -204,6 +204,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { dataSource, openSession, openSubPage } from './store'
 import { timeAgo } from './live'
 import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone } from './statusText'
@@ -488,18 +489,41 @@ const statusTitle = computed(() =>
   !rows.value.length ? '还没有教学会话' : attentionCount.value ? `${attentionCount.value} 个会话待关注` : '会话产物完整'
 )
 
-/* 详情 */
+/* 详情 — URL 同步 ?session=id 支持深链/刷新恢复 */
 const detail = ref<Row | null>(null)
-useEscape(() => !!detail.value, () => { detail.value = null })
+const route = useRoute()
+const router = useRouter()
+watch(
+  () => route.query.session,
+  (sid) => {
+    const id = typeof sid === 'string' ? sid : ''
+    if (id && (!detail.value || detail.value.id !== id)) {
+      const r = rows.value.find((x) => x.id === id)
+      if (r) { detail.value = r; openCards.value = new Set() }
+      else detail.value = null
+    } else if (!id && detail.value) {
+      detail.value = null
+    }
+  },
+  { immediate: true }
+)
+useEscape(() => !!detail.value, () => {
+  detail.value = null
+  const q = { ...route.query }; delete q.session; void router.replace({ query: q })
+})
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => !!detail.value), panelRef)
-useMaskClose(maskRef, () => { detail.value = null })
+useMaskClose(maskRef, () => {
+  detail.value = null
+  const q = { ...route.query }; delete q.session; void router.replace({ query: q })
+})
 const openCards = ref<Set<string>>(new Set())
 
 function openDetail(r: Row) {
   detail.value = r
   openCards.value = new Set()
+  void router.push({ query: { ...route.query, session: r.id } })
 }
 
 /** 真实教学会话与控制台数据契约不兼容（座舱仅服务虚拟会话）：轻量深链 = 学习者详情 / Trace 瀑布按 sessionId 归组 */

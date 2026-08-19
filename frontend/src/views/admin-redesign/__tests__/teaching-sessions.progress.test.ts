@@ -8,8 +8,11 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
+import { createRouter, createMemoryHistory } from 'vue-router';
 import TeachingSessions from '../TeachingSessions.vue';
 import { dataSource } from '../store';
+
+const mockRouter = () => createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
 
 const { listMock } = vi.hoisted(() => ({ listMock: vi.fn() }));
 
@@ -50,7 +53,7 @@ function makeItem(id: string, overrides: Record<string, unknown> = {}): Record<s
 
 async function mountLive() {
   dataSource.value = 'live';
-  const wrapper = mount(TeachingSessions);
+  const wrapper = mount(TeachingSessions, { global: { plugins: [mockRouter()] } });
   await flushPromises();
   await nextTick();
   await flushPromises();
@@ -157,7 +160,7 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
 
   it('demo 模式：演示行带进度渲染（终态已完成行只显「已完成」，进行中/中断态仍显任务进度）', async () => {
     dataSource.value = 'demo';
-    const wrapper = mount(TeachingSessions);
+    const wrapper = mount(TeachingSessions, { global: { plugins: [mockRouter()] } });
     await flushPromises();
     expect(listMock).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('已完成');

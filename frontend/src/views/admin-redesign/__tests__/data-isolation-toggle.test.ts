@@ -153,7 +153,7 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
       data: { success: true, data: { items: [tsItem('a')] } }
     });
     dataSource.value = 'live';
-    const wrapper = mount(TeachingSessions);
+    const wrapper = mount(TeachingSessions, { global: { plugins: [mockRouter()] } });
     await flushPromises();
     await nextTick();
     await flushPromises();
@@ -166,7 +166,7 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
   it('切换「含虚拟·测试」→ 按 includeTest=true 重拉，虚拟/测试行显式灰标', async () => {
     tsListMock.mockResolvedValue({ data: { success: true, data: { items: [tsItem('a')] } } });
     dataSource.value = 'live';
-    const wrapper = mount(TeachingSessions);
+    const wrapper = mount(TeachingSessions, { global: { plugins: [mockRouter()] } });
     await flushPromises();
     await nextTick();
     await flushPromises();
