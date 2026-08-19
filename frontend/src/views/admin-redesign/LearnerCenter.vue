@@ -135,22 +135,12 @@ interface Row {
   ts?: number
 }
 
-const now = Date.now()
-const normalRows: Row[] = [
-  { id: 'l1', name: '陈晓', email: 'chenxiao@…', path: 'Excel 自动化入门', task: '阶段 2 · 数据清洗练习', trend: 'up', fatigue: '低', risk: '', updated: '6 分钟前', confidence: 0.86, ts: now - 6 * 60000 },
-  { id: 'l2', name: '刘一帆', email: 'liu**@…', path: '数据分析思维', task: '阶段 1 · 提问训练', trend: 'flat', fatigue: '中', risk: '概念「采样偏差」挣扎', updated: '22 分钟前', confidence: 0.72, ts: now - 22 * 60000 },
-  { id: 'l3', name: '赵敏', email: 'zhaomin@…', path: 'SQL 基础', task: '阶段 3 · JOIN 实战', trend: 'flat', fatigue: '低', risk: '', updated: '1 小时前', confidence: 0.9, ts: now - 60 * 60000 },
-  { id: 'l4', name: '孙可', email: 'sunke@…', path: 'Python 入门', task: '阶段 2 · 函数', trend: 'up', fatigue: '低', risk: '', updated: '2 小时前', confidence: 0.83, ts: now - 120 * 60000 },
-  { id: 'l5', name: '周洁', email: 'zhoujie@…', path: '职场英语', task: '阶段 1 · 邮件表达', trend: 'flat', fatigue: '低', risk: '', updated: '昨天 22:05', confidence: 0.68, ts: now - 20 * 3600000 },
-  { id: 'l6', name: '吴迪', email: 'wudi@…', path: '', task: '', trend: 'flat', fatigue: '低', risk: '', updated: '昨天 18:40', confidence: 0.42, ts: now - 23.5 * 3600000 },
-  { id: 'l7', name: '郑爽', email: 'zhengshuang@…', path: '产品经理入门', task: '阶段 2 · 需求文档', trend: 'up', fatigue: '中', risk: '连续学习 9 天，注意节奏', updated: '40 分钟前', confidence: 0.77, ts: now - 40 * 60000 },
-  { id: 'l8', name: '冯远', email: 'fengyuan@…', path: '日语 N5', task: '阶段 1 · 五十音', trend: 'down', fatigue: '中', risk: '近 5 天活跃下降', updated: '3 小时前', confidence: 0.59, ts: now - 180 * 60000 }
-]
+/* demo 数据已移除 — 非 live 模式返回空列表 */
 
 const pill = ref<'all' | 'risk' | 'stale'>('all')
 const keyword = ref('')
 
-const demoRows = ref<Row[]>([...normalRows])
+const demoRows = ref<Row[]>([]) // demo 数据已移除
 
 const rows = computed<Row[]>(() => {
   if (isLive.value) {

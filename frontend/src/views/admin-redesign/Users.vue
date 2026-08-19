@@ -253,22 +253,9 @@ interface UserRow {
   busy?: boolean
 }
 
-const normalUsers: UserRow[] = [
-  { id: 'u1', name: '陈晓', email: 'chenxiao@example.com', admin: false, online: true, createdAt: '5 个月前', lastLogin: '12 分钟前', paths: 1, sessions: 8, xp: 860, currentLevel: 'L3' },
-  { id: 'u2', name: '刘一帆', email: 'liu**@163.com', admin: false, online: true, createdAt: '4 个月前', lastLogin: '1 小时前', paths: 1, sessions: 3, xp: 240, currentLevel: 'L2' },
-  { id: 'u3', name: '王梓', email: 'wangzi@example.com', admin: false, online: false, createdAt: '6 个月前', lastLogin: '昨天 21:14', paths: 2, sessions: 11, xp: 1520, currentLevel: 'L4' },
-  { id: 'u4', name: '赵敏', email: 'zhaomin@example.com', admin: false, online: false, createdAt: '3 个月前', lastLogin: '3 天前', paths: 1, sessions: 6, xp: 310, currentLevel: 'L2' },
-  { id: 'u5', name: 'admin', email: 'admin@wenflow.local', admin: true, online: true, createdAt: '8 个月前', lastLogin: '刚刚', paths: 0, sessions: 0, xp: 0, currentLevel: 'L1' },
-  { id: 'u6', name: '孙可', email: 'sunke@example.com', admin: false, online: false, createdAt: '2 个月前', lastLogin: '2 天前', paths: 1, sessions: 4, xp: 95, currentLevel: 'L1' },
-  { id: 'u7', name: '周洁', email: 'zhoujie@example.com', admin: false, online: false, createdAt: '1 个月前', lastLogin: '1 周前', paths: 1, sessions: 2, xp: 55, currentLevel: 'L1' },
-  { id: 'u8', name: '吴迪', email: 'wudi@example.com', admin: false, online: false, createdAt: '2 周前', lastLogin: '昨天 08:32', paths: 0, sessions: 1, xp: 0, currentLevel: 'L1' },
-  { id: 'u9', name: '郑爽', email: 'zhengshuang@example.com', admin: false, online: true, createdAt: '5 个月前', lastLogin: '26 分钟前', paths: 2, sessions: 9, xp: 2100, currentLevel: 'L5' },
-  { id: 'u10', name: '冯远', email: 'fengyuan@example.com', admin: false, online: false, createdAt: '3 个月前', lastLogin: '4 小时前', paths: 1, sessions: 5, xp: 610, currentLevel: 'L3' },
-  { id: 'u11', name: '褚燕', email: 'chuyan@example.com', admin: false, online: false, createdAt: '3 周前', lastLogin: '从未', paths: 0, sessions: 0, xp: 0, currentLevel: 'L1' },
-  { id: 'u12', name: '测试账号', email: 'test@wenflow.local', admin: true, online: false, createdAt: '2 个月前', lastLogin: '从未', paths: 0, sessions: 0, xp: 0, currentLevel: 'L1' }
-]
+/* demo 用户数据已移除 — 非 live 模式返回空列表 */
 
-const demoUsers = ref<UserRow[]>([...normalUsers])
+const demoUsers = ref<UserRow[]>([]) // demo 数据已移除
 
 /** Phase 2：已删除筛选 pill 的独立数据源（后端 status=deleted，与活跃列表隔离） */
 const deletedUsers = ref<UserRow[]>([])
