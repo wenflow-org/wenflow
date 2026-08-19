@@ -259,6 +259,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { isLive, openSession, openSubPage } from './store'
 import { errMsg, timeAgo } from './live'
 import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS } from './statusText'
@@ -309,6 +310,34 @@ const stats = ref<{ total: number; active: number; completed: number; completion
 const keyword = ref('')
 const statusFilter = ref('')
 const detail = ref<Detail | null>(null)
+
+/* URL 同步：?goal=id 记录当前打开的详情，支持深链/刷新恢复 */
+const route = useRoute()
+const router = useRouter()
+/* URL → detail：页面加载/刷新时恢复 */
+watch(
+  () => route.query.goal,
+  async (goalId) => {
+    const gid = typeof goalId === 'string' ? goalId : ''
+    if (gid && (!detail.value || detail.value.id !== gid)) {
+      // 等列表加载完成后找到行数据再打开
+      const waitForRows = () => new Promise<void>((resolve) => {
+        const check = () => {
+          if (rows.value.length) { resolve(); return }
+          setTimeout(check, 200)
+        }
+        check()
+      })
+      await waitForRows()
+      const r = rows.value.find((x) => x.id === gid)
+      if (r) void openDetail(r)
+      else detail.value = null
+    } else if (!gid && detail.value) {
+      detail.value = null
+    }
+  },
+  { immediate: true }
+)
 
 /* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；切换「含虚拟·测试」后重拉全量并灰标虚拟/测试行 */
 const includeTest = ref(false)
@@ -511,6 +540,10 @@ let detailReqSeq = 0
 function closeDetail() {
   detailReqSeq += 1
   detail.value = null
+  // URL 同步：移除 ?goal 参数
+  const q = { ...route.query }
+  delete q.goal
+  void router.replace({ query: q })
 }
 
 /** 真实会话与控制台数据契约不兼容（座舱仅服务虚拟会话）：先提供轻量深链——学习者画像 + Trace 瀑布按 sessionId 归组 */
@@ -563,6 +596,10 @@ function parseCollected(raw: unknown): { obj: Record<string, unknown> | null; me
 
 async function openDetail(r: Row) {
   const seq = ++detailReqSeq
+  // URL 同步：记录 ?goal=id
+  if (route.query.goal !== r.id) {
+    void router.push({ query: { ...route.query, goal: r.id } })
+  }
   detail.value = {
     ...r,
     description: '',

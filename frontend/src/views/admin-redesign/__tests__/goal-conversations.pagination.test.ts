@@ -6,7 +6,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
+import { createRouter, createMemoryHistory } from 'vue-router';
 import GoalConversations from '../GoalConversations.vue';
+
+const mockRouter = () => createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
 
 const { listMock, statsMock } = vi.hoisted(() => ({
   listMock: vi.fn(),
@@ -73,7 +76,7 @@ function findBtn(wrapper: ReturnType<typeof mount>, text: string) {
 }
 
 async function mountGoals() {
-  const w = mount(GoalConversations);
+  const w = mount(GoalConversations, { global: { plugins: [mockRouter()] } });
   await flushPromises();
   await flushPromises();
   return w;

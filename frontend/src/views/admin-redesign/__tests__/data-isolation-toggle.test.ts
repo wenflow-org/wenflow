@@ -7,11 +7,14 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
+import { createRouter, createMemoryHistory } from 'vue-router';
 import TeachingSessions from '../TeachingSessions.vue';
 import GoalConversations from '../GoalConversations.vue';
 import Users from '../Users.vue';
 import { dataSource } from '../store';
 import { liveUsers, liveSetUsersIncludeTest } from '../live';
+
+const mockRouter = () => createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
 
 const { tsListMock, gcListMock, gcStatsMock } = vi.hoisted(() => ({
   tsListMock: vi.fn(),
@@ -196,7 +199,7 @@ describe('GoalConversations 数据隔离切换（A3）', () => {
     gcListMock.mockResolvedValue({
       data: { success: true, data: { conversations: [gcItem('1')] } }
     });
-    const wrapper = mount(GoalConversations);
+    const wrapper = mount(GoalConversations, { global: { plugins: [mockRouter()] } });
     await flushPromises();
     await flushPromises();
     expect(gcListMock).toHaveBeenCalledWith({ limit: 100, includeTest: false });

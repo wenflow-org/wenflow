@@ -7,7 +7,10 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
+import { createRouter, createMemoryHistory } from 'vue-router';
 import GoalConversations from '../GoalConversations.vue';
+
+const mockRouter = () => createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
 import { dataSource } from '../store';
 
 const { listMock, statsMock } = vi.hoisted(() => ({
@@ -47,7 +50,7 @@ function makeConv(id: string, overrides: Record<string, unknown> = {}): Record<s
 
 async function mountLive() {
   dataSource.value = 'live';
-  const wrapper = mount(GoalConversations);
+  const wrapper = mount(GoalConversations, { global: { plugins: [mockRouter()] } });
   await flushPromises();
   await nextTick();
   await flushPromises();
