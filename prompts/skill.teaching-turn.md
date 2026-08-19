@@ -1,9 +1,9 @@
 ---
 agentId: skill:teaching-turn
-coreHash: 43319f9b217b3d194d1dc8fd5ff1dd8279cc79cd3139ad6fc0a716a09c8db0f8
+coreHash: 486f8d4d6e17d9a073274b80c87b632a61a0c597e981d50a9aa3d6c4204c9753
 coreVersion: 1
 temperature: 0.7
-maxTokens: 4000
+maxTokens: 12000
 failurePolicy: retry
 ---
 

@@ -1,9 +1,9 @@
 ---
 agentId: skill:virtual-learner-learn-turn-simulator
-coreHash: f8c9abc84c5f9bb8a4a7a5ee22ed4f745e2a25076f3856be5c7a8fd246969524
+coreHash: 2b42571d56600201b06964fb54963d308da52e84801846d641084127951c0ecb
 coreVersion: 1
 temperature: 0.7
-maxTokens: 800
+maxTokens: 2000
 failurePolicy: propagate
 ---
 

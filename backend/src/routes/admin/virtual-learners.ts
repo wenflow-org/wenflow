@@ -2648,6 +2648,82 @@ router.post('/sessions/:sessionId/stop-learning', async (req: Request, res) => {
 });
 
 /**
+ * 暂停会话（温和暂停，非紧急停止）
+ * 设 paused: true，自动循环检测到后停止；可 resume 恢复
+ * POST /api/admin/virtual-learners/sessions/:sessionId/pause
+ */
+router.post('/sessions/:sessionId/pause', async (req: Request, res) => {
+  try {
+    const { sessionId } = req.params;
+    const session = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } });
+    if (!session) {
+      return res.status(404).json({ success: false, error: { message: '会话不存在' } });
+    }
+    if (session.status !== 'running') {
+      return res.status(409).json({ success: false, error: { message: `会话状态为 ${session.status}，仅运行中可暂停` } });
+    }
+
+    // 在 stageResults.teaching 设 paused 标志
+    const stageResults = typeof session.stageResults === 'string'
+      ? JSON.parse(session.stageResults || '{}')
+      : (session.stageResults || {});
+    if (stageResults.teaching && typeof stageResults.teaching === 'object') {
+      stageResults.teaching.paused = true;
+    } else {
+      stageResults.teaching = { ...(stageResults.teaching || {}), paused: true };
+    }
+
+    await prisma.virtual_sessions.update({
+      where: { id: sessionId },
+      data: { stageResults: JSON.stringify(stageResults), updatedAt: new Date() }
+    });
+
+    logger.info('[admin] 会话已暂停', { sessionId });
+    res.json({ success: true, data: { sessionId, status: 'running', paused: true } });
+  } catch (error) {
+    logger.error('暂停会话失败:', error);
+    sendVirtualSessionError(res, error, '暂停会话失败');
+  }
+});
+
+/**
+ * 恢复暂停的会话
+ * 清 paused 标志，可继续从当前任务执行
+ * POST /api/admin/virtual-learners/sessions/:sessionId/resume
+ */
+router.post('/sessions/:sessionId/resume', async (req: Request, res) => {
+  try {
+    const { sessionId } = req.params;
+    const session = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } });
+    if (!session) {
+      return res.status(404).json({ success: false, error: { message: '会话不存在' } });
+    }
+    if (session.status !== 'running') {
+      return res.status(409).json({ success: false, error: { message: `会话状态为 ${session.status}，仅运行中可恢复` } });
+    }
+
+    // 清 paused 标志
+    const stageResults = typeof session.stageResults === 'string'
+      ? JSON.parse(session.stageResults || '{}')
+      : (session.stageResults || {});
+    if (stageResults.teaching && typeof stageResults.teaching === 'object') {
+      stageResults.teaching.paused = false;
+    }
+
+    await prisma.virtual_sessions.update({
+      where: { id: sessionId },
+      data: { stageResults: JSON.stringify(stageResults), updatedAt: new Date() }
+    });
+
+    logger.info('[admin] 会话已恢复', { sessionId });
+    res.json({ success: true, data: { sessionId, status: 'running', paused: false } });
+  } catch (error) {
+    logger.error('恢复会话失败:', error);
+    sendVirtualSessionError(res, error, '恢复会话失败');
+  }
+});
+
+/**
  * 获取模拟会话日志
  * GET /api/admin/virtual-sessions/:sessionId/logs
  */

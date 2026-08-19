@@ -64,6 +64,16 @@ const LEARN_UPSTREAM_RETRY_DELAY_MS = 750;
 const LEARN_TASK_TURN_BUDGET = 30;
 /** 「自动完成本课」单次调用的回合上限（按课界停止，不按里程碑数估算） */
 const LEARN_AUTO_TURN_CAP = 24;
+/** Provider 不稳定时的自动重试上限（每次 executeAutoLearning 循环内） */
+const LEARN_STEP_PROVIDER_RETRIES = 3;
+
+/** 判断错误是否为 LLM Provider 可重试错误（过载/超时/JSON 解析失败） */
+function isProviderRetryable(errorMsg: string): boolean {
+  const e = errorMsg.toLowerCase();
+  return e.includes('provider') || e.includes('retry') || e.includes('timeout')
+    || e.includes('overload') || e.includes('budget') || e.includes('503')
+    || e.includes('does not contain valid json') || e.includes('response does not contain');
+}
 /** 保护工作（可能悬挂的 LLM 调用）超过该时限仍未收尾时，强制放行会话队列 */
 const WORK_SETTLE_TIMEOUT_MS = 5 * 60 * 1000;
 /** 疑似卡死 running 会话的判定阈值：无活跃租约且超过该时长未写入 */
@@ -3427,7 +3437,27 @@ class SimulationOrchestrator {
         }
 
         if (!stepResult.success) {
-          throw new Error(stepResult.error || '学习步骤失败');
+          const stepErr = stepResult.error || '学习步骤失败';
+          // Provider 不稳定时自动重试（最多 3 次，间隔递增），而非直接 throw
+          if (isProviderRetryable(stepErr) && i < maxSteps - 1) {
+            const retryDelay = 3000 * (i === 0 ? 1 : 2);
+            logger.warn('[simulation-coordinator] 教学步骤失败，自动重试', {
+              sessionId, step: i, error: stepErr.substring(0, 80), retryDelayMs: retryDelay
+            });
+            await new Promise(r => setTimeout(r, retryDelay));
+            // 重试前检查是否需要 restart-learning（会话可能变成 failed）
+            const retrySession = await this.getVirtualSession(sessionId);
+            if (retrySession.status === 'failed') {
+              try {
+                await this.restartLearningPhase(sessionId);
+                logger.info('[simulation-coordinator] restart-learning 成功，继续自动学习', { sessionId });
+              } catch {
+                return { success: false, totalSteps: steps, error: stepErr };
+              }
+            }
+            continue; // 重试当前步骤
+          }
+          throw new Error(stepErr);
         }
 
         // “自动完成本课”以课界为终点：本课完成即返回；状态机已自动开下一课，但不代跑。

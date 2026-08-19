@@ -1,9 +1,9 @@
 ---
 agentId: skill:adaptive-guidance-copy
-coreHash: 3f0464504e7c0781844c52bd9bf26e1665db65d3f341a396b4887d3edf6a0ed7
+coreHash: fd9fac4e0681dcca2aaf8b419a1afb36a205ad4cc74b722d6d3ecbf75cf3ab76
 coreVersion: 1
 temperature: 0.6
-maxTokens: 2000
+maxTokens: 4000
 failurePolicy: propagate
 ---
 

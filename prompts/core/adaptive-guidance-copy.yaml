@@ -55,5 +55,5 @@ fields:
 constraints:
   - 只负责"怎么说"，不做路径调整、课程结束或成绩判定等强决策
   - 所有文案必须和输入学习状态一致，不虚构用户已完成的内容
-params: { temperature: 0.6, maxTokens: 2000, failurePolicy: propagate }
+params: { temperature: 0.6, maxTokens: 4000, failurePolicy: propagate }
 deltaOutput: false

@@ -33,6 +33,25 @@
           </span>
         </div>
         <div v-if="isLive" class="vp-top__actions">
+          <!-- 会话控制栏：根据状态显示不同按钮 -->
+          <template v-if="sessionState === 'running'">
+            <button type="button" class="mk-status__action" :disabled="sessionBusy" @click="pauseSession">⏸ 暂停</button>
+            <button type="button" class="mk-status__action" :disabled="sessionBusy" @click="stopSession">⏹ 停止</button>
+            <button type="button" class="mk-status__action mk-status__action--primary" @click="goCockpit">座舱 →</button>
+          </template>
+          <template v-else-if="sessionState === 'paused'">
+            <button type="button" class="mk-status__action mk-status__action--primary" :disabled="sessionBusy" @click="resumeSession">▶ 继续</button>
+            <button type="button" class="mk-status__action" :disabled="sessionBusy" @click="stopSession">⏹ 停止</button>
+            <button type="button" class="mk-status__action" @click="goCockpit">座舱 →</button>
+          </template>
+          <template v-else-if="sessionState === 'failed'">
+            <button type="button" class="mk-status__action mk-status__action--primary" :disabled="sessionBusy" @click="retrySession">🔄 重试</button>
+            <button type="button" class="mk-status__action" @click="goCockpit">座舱 →</button>
+          </template>
+          <template v-else-if="sessionState === 'completed'">
+            <button type="button" class="mk-status__action" @click="activeTab = 'verify'">验收 →</button>
+            <button type="button" class="mk-status__action" @click="goCockpit">座舱 →</button>
+          </template>
           <button type="button" class="mk-status__action" @click="quickLearnOpen = true">账号自动学习</button>
           <button type="button" class="mk-status__action" @click="editOpen = true">编辑画像</button>
         </div>
@@ -80,7 +99,7 @@
         <span class="vp-guide__arrow">→</span>
         <button type="button" class="vp-guide__step" :class="{ 'is-active': runningCount > 0, 'is-done': allRuns.length > 0 && runningCount === 0 }" @click="activeTab = 'runs'">③ 运行</button>
         <span class="vp-guide__arrow">→</span>
-        <button type="button" class="vp-guide__step" @click="activeTab = 'acceptance'">④ 前台验收</button>
+        <button type="button" class="vp-guide__step" @click="activeTab = 'verify'">④ 前台验收</button>
       </div>
       <div class="vp-guide__hint">
         <template v-if="!displayStories.length">先点「生成第一条故事」让 AI 设计学习场景</template>
@@ -526,6 +545,7 @@ interface RunItem {
   stage: string
   result: string
   tone: 'ok' | 'warn' | 'bad'
+  paused?: boolean
   sessionId?: string
   storyId?: string | null
   storyTitle?: string | null
@@ -918,6 +938,12 @@ async function loadDetail(id?: string, quiet = false) {
             : s.status === 'completed' || s.status === 'succeeded'
               ? 'ok'
               : 'warn') as RunItem['tone'],
+          paused: (() => {
+            try {
+              const sr = typeof s.stageResults === 'string' ? JSON.parse(s.stageResults || '{}') : (s.stageResults || {})
+              return !!(sr?.teaching?.paused)
+            } catch { return false }
+          })(),
           sessionId: String(s.id || s.sessionId || ''),
           storyId: storyMeta.storyId,
           storyTitle: storyMeta.title,
@@ -1188,6 +1214,74 @@ const runningCount = computed(() =>
 const failedCount = computed(() =>
   allRuns.value.filter((r) => r.tone === 'bad').length
 )
+
+/* ===== 会话状态管理 ===== */
+/** 当前活跃会话 ID（运行中或最近失败的） */
+const activeSessionId = computed(() => {
+  const runs = allRuns.value
+  // 优先找 running
+  const running = runs.find(r => r.result === 'running' || r.result === 'created')
+  if (running?.sessionId) return running.sessionId
+  // 其次找最近的 failed
+  const failed = runs.find(r => r.tone === 'bad')
+  return failed?.sessionId || null
+})
+/** 会话状态：idle / running / paused / failed / completed */
+const sessionState = computed<'idle' | 'running' | 'paused' | 'failed' | 'completed'>(() => {
+  const runs = allRuns.value
+  if (!runs.length) return 'idle'
+  const pausedRun = runs.find(r => r.paused && (r.result === 'running' || r.result === 'created'))
+  if (pausedRun) return 'paused'
+  if (runs.some(r => r.result === 'running' || r.result === 'created')) return 'running'
+  if (runs.some(r => r.tone === 'bad')) return 'failed'
+  if (runs.some(r => r.tone === 'ok')) return 'completed'
+  return 'idle'
+})
+async function pauseSession() {
+  if (!activeSessionId.value) return
+  sessionBusy.value = true
+  try {
+    await adminVirtualLearnersApi.pauseVirtualSession(activeSessionId.value)
+    toast.success('会话已暂停')
+    void loadDetail(subPage.value?.id, true)
+  } catch (e) { toast.error(`暂停失败：${errMsg(e)}`) }
+  finally { sessionBusy.value = false }
+}
+async function resumeSession() {
+  if (!activeSessionId.value) return
+  sessionBusy.value = true
+  try {
+    await adminVirtualLearnersApi.resumeVirtualSession(activeSessionId.value)
+    toast.success('会话已恢复')
+    void loadDetail(subPage.value?.id, true)
+  } catch (e) { toast.error(`恢复失败：${errMsg(e)}`) }
+  finally { sessionBusy.value = false }
+}
+async function stopSession() {
+  if (!activeSessionId.value) return
+  if (!await askConfirm({ title: '停止学习', message: '紧急停止当前学习，需要重新开始。确认？', confirmText: '停止', danger: true })) return
+  sessionBusy.value = true
+  try {
+    await adminVirtualLearnersApi.stopVirtualLearning(activeSessionId.value)
+    toast.success('学习已停止')
+    void loadDetail(subPage.value?.id, true)
+  } catch (e) { toast.error(`停止失败：${errMsg(e)}`) }
+  finally { sessionBusy.value = false }
+}
+async function retrySession() {
+  if (!activeSessionId.value) return
+  sessionBusy.value = true
+  try {
+    await adminVirtualLearnersApi.restartVirtualLearning(activeSessionId.value)
+    toast.success('学习已重启')
+    void loadDetail(subPage.value?.id, true)
+  } catch (e) { toast.error(`重启失败：${errMsg(e)}`) }
+  finally { sessionBusy.value = false }
+}
+function goCockpit() {
+  if (activeSessionId.value) openSubPage('session', activeSessionId.value)
+}
+
 const tabs = computed(() => {
   const list: Array<{ key: ProfileTab; label: string; count?: number }> = [
     { key: 'stories', label: '故事池', count: displayStories.value.length },

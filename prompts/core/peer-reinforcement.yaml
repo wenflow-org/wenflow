@@ -53,5 +53,5 @@ constraints:
   - 不直接给正确答案，只引导
   - message 内容不使用 markdown 格式
   - 学生高负荷（理解度低且连续受挫）时不得用辩论/反例等高压策略
-params: { temperature: 0.7, maxTokens: 4000, failurePolicy: propagate }
+params: { temperature: 0.7, maxTokens: 8000, failurePolicy: propagate }
 deltaOutput: false

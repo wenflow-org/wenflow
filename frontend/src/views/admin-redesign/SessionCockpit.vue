@@ -27,6 +27,16 @@
         <span v-if="busy"><span class="mk-spinner"></span> 执行中…</span>
         <span v-else>刷新</span>
       </button>
+      <!-- 会话控制：暂停/恢复/重启/停止 -->
+      <template v-if="!isRealMode && session?.status === 'running'">
+        <button v-if="!isPaused" type="button" class="mk-status__action" :disabled="busy" @click="pauseSession">⏸ 暂停</button>
+        <button v-else type="button" class="mk-status__action mk-status__action--primary" :disabled="busy" @click="resumeSession">▶ 继续</button>
+        <button type="button" class="mk-status__action cp-danger" :disabled="busy" @click="stopLearning">⏹ 停止</button>
+        <button type="button" class="mk-status__action" :disabled="busy" @click="restartLearning">🔄 重启</button>
+      </template>
+      <template v-else-if="!isRealMode && session?.status === 'failed'">
+        <button type="button" class="mk-status__action mk-status__action--primary" :disabled="busy" @click="restartLearning">🔄 重启学习</button>
+      </template>
       <button v-if="!isRealMode" type="button" class="mk-status__action cp-danger" :disabled="busy" @click="removeSession">
         <span v-if="busy"><span class="mk-spinner"></span> 执行中…</span>
         <span v-else>删除会话</span>
@@ -812,6 +822,10 @@ const isFailedTerminal = computed(() => ['failed', 'abandoned'].includes(termina
 const manualStopped = computed(() =>
   learningResult.value.manualStop === true
   || stageStatus.value.learning?.manualStop === true
+)
+/* 暂停标志：pause API 设 stageResults.teaching.paused = true */
+const isPaused = computed(() =>
+  stageStatus.value.learning?.paused === true
 )
 const statusTone = computed(() =>
   !session.value
@@ -1860,6 +1874,44 @@ async function saveFriction() {
   } finally {
     frictionSaving.value = false
   }
+}
+
+/* 会话状态控制：暂停/恢复/停止/重启（独立于 act()，走专用 API） */
+async function pauseSession() {
+  if (busy.value || !sessionId.value) return
+  busy.value = true
+  try {
+    await adminVirtualLearnersApi.pauseVirtualSession(sessionId.value)
+    void refresh()
+  } catch (e) { /* act() 的 catch 统一处理 */ }
+  finally { busy.value = false }
+}
+async function resumeSession() {
+  if (busy.value || !sessionId.value) return
+  busy.value = true
+  try {
+    await adminVirtualLearnersApi.resumeVirtualSession(sessionId.value)
+    void refresh()
+  } catch (e) { /* act() 的 catch 统一处理 */ }
+  finally { busy.value = false }
+}
+async function stopLearning() {
+  if (busy.value) return
+  busy.value = true
+  try {
+    await adminVirtualLearnersApi.stopVirtualLearning(sessionId.value)
+    void refresh()
+  } catch (e) { /* */ }
+  finally { busy.value = false }
+}
+async function restartLearning() {
+  if (busy.value) return
+  busy.value = true
+  try {
+    await adminVirtualLearnersApi.restartVirtualLearning(sessionId.value)
+    void refresh()
+  } catch (e) { /* */ }
+  finally { busy.value = false }
 }
 
 /* 控制动作：按阶段路由（learning 走 learning-step / auto-learning） */

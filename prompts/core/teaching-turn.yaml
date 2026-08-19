@@ -137,5 +137,5 @@ constraints:
   - 不在 control.isCompletionCandidate 为 false 时在 reply 宣布任务完成
   - 不展开当前任务之外的无关主题
   - checkpoint 仅在满足以下全部条件时才输出：本轮是学生刚理解当前焦点概念（progress 明显上升或困惑得到解决）之后的收束轮；control.isCompletionCandidate 为 false；且上一轮已出过检查点时本轮不再出（检查点间隔至少 4 轮，以编排层 AITeachingCoordinator 的间隔为准，不得在每轮都输出）。检查点只围绕当前焦点知识点出一个简短问题
-params: { temperature: 0.7, maxTokens: 4000, failurePolicy: retry }
+params: { temperature: 0.7, maxTokens: 12000, failurePolicy: retry }
 deltaOutput: false

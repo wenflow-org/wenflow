@@ -1326,6 +1326,16 @@ export const adminVirtualLearnersApi = {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/stop-learning`);
   },
 
+  /** 暂停会话（温和暂停，非紧急停止） */
+  pauseVirtualSession: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/pause`);
+  },
+
+  /** 恢复暂停的会话 */
+  resumeVirtualSession: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/resume`);
+  },
+
   getVirtualSessionLogs: async (sessionId: string) => {
     return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/logs`);
   },

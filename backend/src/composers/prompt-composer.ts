@@ -319,7 +319,7 @@ export async function callPrompt<TInput, TOutput>(
     },
   });
   let currentMaxTokens = generationResolution.maxTokens;
-  const tokenCeiling = Math.max(currentMaxTokens || 8000, 16000);
+  const tokenCeiling = Math.max(currentMaxTokens || 8000, 32000);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {
