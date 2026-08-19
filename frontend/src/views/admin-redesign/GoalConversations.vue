@@ -261,7 +261,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { isLive, openSession, openSubPage } from './store'
-import { errMsg, timeAgo } from './live'
+import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
 import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS } from './statusText'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
@@ -478,6 +478,8 @@ watch(filtered, () => {
 
 async function load() {
   if (!isLive.value || loading.value) return
+  // 页面级 TTL 缓存
+  if (isPageCacheFresh('goal-conversations') && rows.value.length) return
   loading.value = true
   loadError.value = ''
   try {
@@ -504,6 +506,7 @@ async function load() {
     toast.error(loadError.value)
   } finally {
     loading.value = false
+    markPageFetched('goal-conversations')
   }
 }
 

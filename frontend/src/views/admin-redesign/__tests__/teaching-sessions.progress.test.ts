@@ -11,6 +11,7 @@ import { nextTick } from 'vue';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import TeachingSessions from '../TeachingSessions.vue';
 import { dataSource } from '../store';
+import { clearPageCache } from '../live';
 
 const mockRouter = () => createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
 
@@ -63,6 +64,7 @@ async function mountLive() {
 beforeEach(() => {
   listMock.mockReset();
   dataSource.value = 'demo';
+  clearPageCache();
 });
 
 afterEach(() => {

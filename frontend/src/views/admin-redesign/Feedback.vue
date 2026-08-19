@@ -181,7 +181,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { isLive } from './store'
-import { errMsg, timeAgo } from './live'
+import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
 import { adminFeedbackApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useLoadMore } from './useLoadMore'
@@ -288,6 +288,7 @@ const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
 
 async function load() {
   if (!isLive.value || loading.value) return
+  if (isPageCacheFresh('feedback') && rows.value.length) return
   loading.value = true
   loadFailed.value = false
   try {
@@ -307,6 +308,7 @@ async function load() {
     toast.error(`加载失败：${errMsg(e)}`)
   } finally {
     loading.value = false
+    markPageFetched('feedback')
   }
 }
 

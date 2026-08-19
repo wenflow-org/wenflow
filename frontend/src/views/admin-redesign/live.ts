@@ -1665,6 +1665,24 @@ export async function refreshLiveSkills() {
  */
 const LIVE_DATA_TTL = 45_000
 const liveFetchAt: Record<string, number> = {}
+
+/* ================= 页面级缓存（非 Boot 域用） =================
+ * TeachingSessions / GoalConversations / Feedback / AuditLogs / SessionSecurity 等页面
+ * 各自有 onMounted 拉取，不在 boot 域内。用此工具避免页面间切换时重复请求。
+ * 用法：fetch 前调 isPageCacheFresh()，fetch 成功后调 markPageFetched()。
+ */
+const pageFetchAt: Record<string, number> = {}
+export function isPageCacheFresh(domain: string): boolean {
+  const at = pageFetchAt[domain]
+  return !!at && Date.now() - at < LIVE_DATA_TTL
+}
+export function markPageFetched(domain: string): void {
+  pageFetchAt[domain] = Date.now()
+}
+export function clearPageCache(domain?: string): void {
+  if (domain) delete pageFetchAt[domain]
+  else Object.keys(pageFetchAt).forEach((k) => delete pageFetchAt[k])
+}
 /** 各域「已有数据」判定：null 型 ref 以非 null 为准，数组型以非空为准（空列表视为未就绪，下次重拉） */
 const liveDomainReady: Record<string, () => boolean> = {
   spans: () => liveSpans.value !== null,

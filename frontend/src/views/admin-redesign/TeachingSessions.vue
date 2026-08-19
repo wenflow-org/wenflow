@@ -206,7 +206,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dataSource, openSession, openSubPage } from './store'
-import { timeAgo } from './live'
+import { timeAgo, isPageCacheFresh, markPageFetched } from './live'
 import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone } from './statusText'
 import type { SessionProgress } from './statusText'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -323,12 +323,15 @@ const includeTest = ref(false)
 /* 静默拉取：live 模式成功即整表替换；失败保留旧数据（轮询不闪空态），并标记错误条 */
 async function fetchRows(): Promise<boolean> {
   if (dataSource.value !== 'live') return false
+  // 页面级 TTL 缓存：切换页面回来时跳过重复请求（轮询不受影响，直接调 API）
+  if (isPageCacheFresh('teaching-sessions') && rows.value.length) return true
   try {
     const res = await adminTeachingSessionsApi.list({ limit: 100, includeTest: includeTest.value })
     const body = res.data?.data ?? res.data ?? {}
     const items = body.items || []
     rows.value = items.map((s: Record<string, unknown>) => mapRow(s))
     loadFailed.value = false
+    markPageFetched('teaching-sessions')
     return true
   } catch {
     loadFailed.value = true

@@ -12,7 +12,7 @@ import TeachingSessions from '../TeachingSessions.vue';
 import GoalConversations from '../GoalConversations.vue';
 import Users from '../Users.vue';
 import { dataSource } from '../store';
-import { liveUsers, liveSetUsersIncludeTest } from '../live';
+import { liveUsers, liveSetUsersIncludeTest, clearPageCache } from '../live';
 
 const mockRouter = () => createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
 
@@ -56,7 +56,10 @@ vi.mock('../live', async () => {
     loadLiveData: vi.fn(async () => {}),
     timeAgo: () => 'x',
     errMsg: (e: unknown) => String(e),
-    totalPagesOf: (total: number, pageSize: number) => Math.max(1, Math.ceil(total / Math.max(1, pageSize)))
+    totalPagesOf: (total: number, pageSize: number) => Math.max(1, Math.ceil(total / Math.max(1, pageSize))),
+    isPageCacheFresh: () => false,
+    markPageFetched: vi.fn(),
+    clearPageCache: vi.fn()
   };
 });
 
@@ -140,6 +143,7 @@ beforeEach(() => {
     data: { success: true, data: { total: 1, active: 1, completed: 0, completionRate: '0' } }
   });
   dataSource.value = 'demo';
+  clearPageCache(); // 清除页面级 TTL 缓存，确保每次测试都重新拉取
 });
 
 afterEach(() => {
