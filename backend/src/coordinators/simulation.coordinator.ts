@@ -3419,6 +3419,11 @@ class SimulationOrchestrator {
             error: latestStageResults.teaching?.stoppedReason ? `学习已停止: ${latestStageResults.teaching.stoppedReason}` : '学习已停止'
           }
         }
+        // 暂停检查：管理员手动暂停时，停止自动循环（不标记失败，可恢复）
+        if (latestStageResults.teaching?.paused === true) {
+          logger.info('[simulation-coordinator] 检测到暂停标志，停止自动学习', { sessionId, steps });
+          return { success: true, totalSteps: steps, completedMilestones: 0 };
+        }
 
         const stepResult = await this.executeLearningStep(sessionId);
         steps++;
