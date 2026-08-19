@@ -254,6 +254,7 @@
     </div>
 
     <!-- 一键回收卡死：dryRun 先展示清单再确认执行（复用 reclaim-stale dryRun 语义） -->
+    <Teleport to="body">
     <div v-if="reclaimOpen" ref="reclaimMaskRef" class="mk-modal">
       <div ref="reclaimPanelRef" class="mk-modal__panel" role="dialog" :aria-label="reclaimProfileIds ? '批量清理卡死会话' : '一键回收卡死会话'">
         <div class="mk-modal__head">
@@ -282,8 +283,10 @@
         </div>
       </div>
     </div>
+    </Teleport>
 
     <!-- 新建虚拟学习者 -->
+    <Teleport to="body">
     <div v-if="createOpen" ref="maskRef" class="mk-modal">
       <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="新建虚拟学习者">
         <div class="mk-modal__head">
@@ -337,8 +340,10 @@
         </div>
       </div>
     </div>
+    </Teleport>
 
     <!-- 启动实验：必须选故事（一人多故事 → 一故事一 Path） -->
+    <Teleport to="body">
     <div v-if="launchTarget" ref="launchMaskRef" class="mk-modal">
       <div ref="launchPanelRef" class="mk-modal__panel" role="dialog" aria-label="启动实验">
         <div class="mk-modal__head">
@@ -389,6 +394,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
   </div>
 </template>
 

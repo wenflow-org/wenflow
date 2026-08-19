@@ -147,6 +147,7 @@
     </div>
 
     <!-- 新建/编辑用户 -->
+    <Teleport to="body">
     <div v-if="createOpen" ref="maskRef" class="mk-modal">
       <div ref="panelRef" class="mk-modal__panel" role="dialog" :aria-label="editTarget ? '编辑用户' : '新建用户'">
         <div class="mk-modal__head">
@@ -190,6 +191,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
   </div>
 </template>
 

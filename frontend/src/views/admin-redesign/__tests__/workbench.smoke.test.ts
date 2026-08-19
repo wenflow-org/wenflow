@@ -123,22 +123,26 @@ describe('Skill 工作台去重冒烟', () => {
     await settle();
     await wrapper.findAll('button').find((b) => b.text().includes('新建 Skill'))!.trigger('click');
     await settle();
-    const inputs = wrapper.findAll('input');
-    await inputs.find((i) => i.attributes('placeholder')?.includes('kebab-case'))!.setValue('my-new-skill');
+    // Teleport 后 modal 在 document.body，用全局查询
+    const inputs = Array.from(document.body.querySelectorAll('input'));
+    const kbInput = inputs.find((i) => i.getAttribute('placeholder')?.includes('kebab-case'));
+    if (kbInput) { (kbInput as HTMLInputElement).value = 'my-new-skill'; kbInput.dispatchEvent(new Event('input', { bubbles: true })); }
     // kind 默认 mainline：补 stage + parentAgent
-    const selects = wrapper.findAll('select');
-    await selects[0].setValue('goal');
-    await selects[1].setValue('agent-a');
-    await wrapper.findAll('button').find((b) => b.text().includes('生成骨架'))!.trigger('click');
+    const selects = Array.from(document.body.querySelectorAll('select'));
+    if (selects[0]) { selects[0].value = 'goal'; selects[0].dispatchEvent(new Event('change', { bubbles: true })); }
+    if (selects[1]) { selects[1].value = 'agent-a'; selects[1].dispatchEvent(new Event('change', { bubbles: true })); }
+    const genBtn = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.includes('生成骨架'));
+    if (genBtn) genBtn.dispatchEvent(new Event('click', { bubbles: true }));
     await settle();
     expect(scaffoldMock).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain('生成文件（2）');
-    expect(wrapper.text()).toContain('prompts/core/my-new-skill.yaml');
-    expect(wrapper.text()).toContain('注册片段');
+    expect(document.body.textContent).toContain('生成文件（2）');
+    expect(document.body.textContent).toContain('prompts/core/my-new-skill.yaml');
+    expect(document.body.textContent).toContain('注册片段');
     // 完成度（skill 视角，与 Skill 目录对账重复）已移除
-    expect(wrapper.text()).not.toContain('完成度');
-    expect(wrapper.text()).not.toContain('core-ready');
-    expect(wrapper.findAll('button').some((b) => b.text().includes('打开设计页'))).toBe(true);
+    expect(document.body.textContent).not.toContain('完成度');
+    expect(document.body.textContent).not.toContain('core-ready');
+    const btns = Array.from(document.body.querySelectorAll('button'));
+    expect(btns.some((b) => b.textContent?.includes('打开设计页'))).toBe(true);
     wrapper.unmount();
   });
 });

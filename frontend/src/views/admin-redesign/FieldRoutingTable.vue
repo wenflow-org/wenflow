@@ -217,6 +217,7 @@
     </template>
 
     <!-- 编排文件编辑弹窗 -->
+    <Teleport to="body">
     <div v-if="orchOpen" ref="orchMaskRef" class="mk-modal">
       <div ref="orchPanelRef" class="mk-modal__panel frt__orch-panel" role="dialog" aria-label="编排文件编辑">
         <div class="mk-modal__head">
@@ -264,6 +265,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
   </div>
 </template>
 

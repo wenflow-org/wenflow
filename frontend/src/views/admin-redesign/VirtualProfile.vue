@@ -378,6 +378,7 @@
     />
 
     <!-- 编辑画像 -->
+    <Teleport to="body">
     <div v-if="editOpen" ref="maskRef" class="mk-modal">
       <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="编辑画像">
         <div class="mk-modal__head">
@@ -416,8 +417,10 @@
         </div>
       </div>
     </div>
+    </Teleport>
 
     <!-- 编辑故事（P2-2 前端化：PUT /:id/stories/:storyIndex） -->
+    <Teleport to="body">
     <div v-if="editStoryOpen" ref="storyMaskRef" class="mk-modal">
       <div ref="storyPanelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="编辑故事">
         <div class="mk-modal__head">
@@ -481,6 +484,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
   </div>
 
   <div v-else class="mk-page">

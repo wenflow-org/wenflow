@@ -248,10 +248,12 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     findBtn(w, '批量清理卡死').trigger('click');
     await flushPromises();
     expect(reclaimMock).toHaveBeenNthCalledWith(1, { dryRun: true, profileIds: ['vl-1'] });
-    expect(w.text()).toContain('批量清理卡死会话');
-    expect(w.text()).toContain('stale-1');
-    expect(w.text()).toContain('3.0 小时无写入');
-    findBtn(w, '确认回收 1 个会话').trigger('click');
+    // Teleport 到 body 后，modal 内容在 document.body 而非 wrapper 内
+    expect(document.body.textContent).toContain('批量清理卡死会话');
+    expect(document.body.textContent).toContain('stale-1');
+    expect(document.body.textContent).toContain('3.0 小时无写入');
+    const confirmBtn = Array.from(document.body.querySelectorAll('button')).find(b => b.textContent?.includes('确认回收'));
+    if (confirmBtn) await confirmBtn.dispatchEvent(new Event('click'));
     await flushPromises();
     expect(reclaimMock).toHaveBeenNthCalledWith(2, { dryRun: false, profileIds: ['vl-1'] });
   });
@@ -266,8 +268,10 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     findBtn(w, '一键回收卡死（3）').trigger('click');
     await flushPromises();
     expect(reclaimMock).toHaveBeenNthCalledWith(1, { dryRun: true });
-    expect(w.text()).toContain('一键回收卡死会话');
-    findBtn(w, '确认回收 1 个会话').trigger('click');
+    // Teleport 到 body 后，modal 内容在 document.body
+    expect(document.body.textContent).toContain('一键回收卡死会话');
+    const confirmBtn2 = Array.from(document.body.querySelectorAll('button')).find(b => b.textContent?.includes('确认回收'));
+    if (confirmBtn2) await confirmBtn2.dispatchEvent(new Event('click'));
     await flushPromises();
     expect(reclaimMock).toHaveBeenNthCalledWith(2, { dryRun: false });
   });

@@ -115,6 +115,7 @@
     </div>
 
     <!-- MCP 服务编辑弹窗 -->
+    <Teleport to="body">
     <div v-if="toolOpen" ref="maskRef" class="mk-modal">
       <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="MCP 服务">
         <div class="mk-modal__head">
@@ -168,6 +169,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
   </div>
 </template>
 

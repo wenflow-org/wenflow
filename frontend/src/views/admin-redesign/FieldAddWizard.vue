@@ -1,4 +1,5 @@
 <template>
+  <Teleport to="body">
   <div ref="maskRef" class="mk-modal">
     <div ref="panelRef" class="mk-modal__panel faw" role="dialog" :aria-label="dialogTitle">
       <div class="mk-modal__head">
@@ -143,6 +144,7 @@
       </div>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">

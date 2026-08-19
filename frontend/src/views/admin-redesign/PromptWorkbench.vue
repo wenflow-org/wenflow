@@ -71,6 +71,7 @@
     </section>
 
     <!-- 新建 Skill 弹窗（scaffold 一条龙） -->
+    <Teleport to="body">
     <div v-if="scaffoldOpen" ref="scaffoldMaskRef" class="mk-modal">
       <div ref="scaffoldPanelRef" class="mk-modal__panel sc-panel" role="dialog" aria-label="新建 Skill">
         <div class="mk-modal__head">
@@ -160,6 +161,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
   </div>
 </template>
 
