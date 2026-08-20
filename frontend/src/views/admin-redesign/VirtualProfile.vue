@@ -427,6 +427,21 @@
             <span class="mk-field__label">故事 / 备注</span>
             <textarea v-model="editForm.notes" class="mk-field__textarea" rows="4"></textarea>
           </label>
+          <!-- 重试预算配置（以虚拟学习者为单位） -->
+          <div class="mk-field">
+            <span class="mk-field__label">LLM 重试预算</span>
+            <div class="vp-budget-row">
+              <label class="mk-field--row">
+                <span>单步最大重试</span>
+                <input v-model.number="editForm.maxRetriesPerStep" type="number" min="1" max="20" class="mk-field__input" style="width:80px" />
+              </label>
+              <label class="mk-field--row">
+                <span>全局最大重试</span>
+                <input v-model.number="editForm.maxRetriesTotal" type="number" min="1" max="500" class="mk-field__input" style="width:80px" />
+              </label>
+            </div>
+            <span class="mk-field__hint">单步：每个教学回合 LLM 失败后重试次数。全局：此学习者累计重试上限，耗尽后自动暂停。</span>
+          </div>
         </div>
         <div class="mk-modal__foot">
           <button type="button" class="mk-btn" @click="editOpen = false">取消</button>
@@ -564,6 +579,12 @@ interface Detail {
   aiProfile: { label: string; value: string }[]
   /** V3：最近一次黑盒终局评估（裁判 / 保真分） */
   quality: { referee: QualityScore | null; fidelity: QualityScore | null }
+  /** LLM 重试预算（以虚拟学习者为单位） */
+  simulationBudget?: {
+    maxRetriesPerStep: number
+    maxRetriesTotal: number
+    consumedRetries?: number
+  }
 }
 
 interface StoryLatestRun {
@@ -692,7 +713,7 @@ const sessionBusy = ref(false)
 const projecting = ref(false)
 const quickLearnOpen = ref(false)
 const editOpen = ref(false)
-const editForm = ref({ name: '', goal: '', level: 'beginner', notes: '' })
+const editForm = ref({ name: '', goal: '', level: 'beginner', notes: '', maxRetriesPerStep: 5, maxRetriesTotal: 50 })
 const editErrors = ref<{ name?: string }>({})
 useEscape(() => editOpen.value, () => { editOpen.value = false })
 const panelRef = ref<HTMLElement | null>(null)
@@ -955,7 +976,16 @@ async function loadDetail(id?: string, quiet = false) {
         { label: '知识水平', value: String(raw.knowledgeLevel || '—') },
         { label: '模拟模式', value: String(raw.simulationMode || '—') },
         { label: '性格基线', value: String(p.emotionalBaseline || p.corePersonality || '—') }
-      ]
+      ],
+      simulationBudget: (() => {
+        const b = (p.simulationBudget || {}) as Record<string, unknown>
+        if (!b.maxRetriesPerStep && !b.maxRetriesTotal) return undefined
+        return {
+          maxRetriesPerStep: Number(b.maxRetriesPerStep) || 5,
+          maxRetriesTotal: Number(b.maxRetriesTotal) || 50,
+          consumedRetries: Number(b.consumedRetries) || 0
+        }
+      })()
     }
   } catch {
     if (seq !== loadSeq) return
@@ -995,7 +1025,9 @@ function openEdit() {
     name: liveDetail.value.name,
     goal: liveDetail.value.goal,
     level: liveDetail.value.level,
-    notes: liveDetail.value.notes || liveDetail.value.story
+    notes: liveDetail.value.notes || liveDetail.value.story,
+    maxRetriesPerStep: liveDetail.value.simulationBudget?.maxRetriesPerStep ?? 5,
+    maxRetriesTotal: liveDetail.value.simulationBudget?.maxRetriesTotal ?? 50
   }
   editErrors.value = {}
   editOpen.value = true
@@ -1015,7 +1047,11 @@ async function saveProfile() {
       name: editForm.value.name.trim(),
       learningGoal: editForm.value.goal.trim(),
       knowledgeLevel: editForm.value.level,
-      notes: editForm.value.notes.trim()
+      notes: editForm.value.notes.trim(),
+      simulationBudget: {
+        maxRetriesPerStep: Number(editForm.value.maxRetriesPerStep) || 5,
+        maxRetriesTotal: Number(editForm.value.maxRetriesTotal) || 50
+      }
     })
     await loadDetail(id)
     editOpen.value = false

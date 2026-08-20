@@ -1537,6 +1537,15 @@ router.put('/:id', async (req: Request, res) => {
     if (req.body.personalityTraits) updateData.personalityTraits = JSON.stringify(req.body.personalityTraits);
     if (req.body.tags) updateData.tags = JSON.stringify(req.body.tags);
     if (req.body.notes) updateData.notes = req.body.notes;
+    // simulationBudget 写入 profile JSON（以虚拟学习者为单位的 LLM 重试预算）
+    if (req.body.simulationBudget) {
+      const existingProfile = parseJson<Record<string, unknown>>(profile.profile, {});
+      const existingBudget = (existingProfile.simulationBudget || {}) as Record<string, unknown>;
+      const newBudget = { ...existingBudget, ...req.body.simulationBudget };
+      // 保留已消耗的 consumedRetries（不能被前端覆盖）
+      newBudget.consumedRetries = existingBudget.consumedRetries || 0;
+      updateData.profile = JSON.stringify({ ...existingProfile, simulationBudget: newBudget });
+    }
     
     const updated = await prisma.virtual_learner_profiles.update({
       where: { id },

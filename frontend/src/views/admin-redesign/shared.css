@@ -494,6 +494,8 @@
   gap: 10px;
 }
 .mk-field--row > .mk-field__label { white-space: nowrap; }
+.vp-budget-row { display: flex; gap: 12px; }
+.vp-budget-row .mk-field--row { flex: 0 0 auto; }
 /* 开关布局：label + 控件在同一行，左对齐 */
 .mk-field--switch { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .mk-field__label { font-size: 12px; font-weight: 700; color: var(--mk-muted, #5b6577); }
