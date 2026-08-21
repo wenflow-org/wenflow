@@ -33,28 +33,30 @@
  * AdminConsole 是唯一注册点，SCENE_COMPONENTS/DETAIL_COMPONENTS 供冒烟测试断言
  * 「manifest 每项 → 注册组件」一一对应，防止加菜单忘注册 / 删菜单留死组件
  */
-import Overview from './Overview.vue';
-import Users from './Users.vue';
-import LearnerCenter from './LearnerCenter.vue';
-import VirtualLearners from './VirtualLearners.vue';
-import Skills from './Skills.vue';
-import Orchestrator from './Orchestrator.vue';
-import ExecLogs from './ExecLogs.vue';
-import TraceWaterfall from './TraceWaterfall.vue';
-import AuditLogs from './AuditLogs.vue';
-import ApiConfig from './ApiConfig.vue';
-import Addons from './Addons.vue';
-import Announcements from './Announcements.vue';
-import SessionSecurity from './SessionSecurity.vue';
-import PromptWorkbench from './PromptWorkbench.vue';
-import HealthCenter from './HealthCenter.vue';
-import LearnerDetail from './LearnerDetail.vue';
-import TeachingSessions from './TeachingSessions.vue';
-import GoalConversations from './GoalConversations.vue';
-import Feedback from './Feedback.vue';
-import SessionCockpit from './SessionCockpit.vue';
-import VirtualProfile from './VirtualProfile.vue';
-import UserDetail from './UserDetail.vue';
+// 子页面按需加载（拍板 2026-08-21）：静态全量引入曾把整个管理台打成单个 696KB 路由包；
+// 异步化后各 tab 首次点击时加载，显著缩小首包
+const Overview = defineAsyncComponent(() => import('./Overview.vue'));
+const Users = defineAsyncComponent(() => import('./Users.vue'));
+const LearnerCenter = defineAsyncComponent(() => import('./LearnerCenter.vue'));
+const VirtualLearners = defineAsyncComponent(() => import('./VirtualLearners.vue'));
+const Skills = defineAsyncComponent(() => import('./Skills.vue'));
+const Orchestrator = defineAsyncComponent(() => import('./Orchestrator.vue'));
+const ExecLogs = defineAsyncComponent(() => import('./ExecLogs.vue'));
+const TraceWaterfall = defineAsyncComponent(() => import('./TraceWaterfall.vue'));
+const AuditLogs = defineAsyncComponent(() => import('./AuditLogs.vue'));
+const ApiConfig = defineAsyncComponent(() => import('./ApiConfig.vue'));
+const Addons = defineAsyncComponent(() => import('./Addons.vue'));
+const Announcements = defineAsyncComponent(() => import('./Announcements.vue'));
+const SessionSecurity = defineAsyncComponent(() => import('./SessionSecurity.vue'));
+const PromptWorkbench = defineAsyncComponent(() => import('./PromptWorkbench.vue'));
+const HealthCenter = defineAsyncComponent(() => import('./HealthCenter.vue'));
+const LearnerDetail = defineAsyncComponent(() => import('./LearnerDetail.vue'));
+const TeachingSessions = defineAsyncComponent(() => import('./TeachingSessions.vue'));
+const GoalConversations = defineAsyncComponent(() => import('./GoalConversations.vue'));
+const Feedback = defineAsyncComponent(() => import('./Feedback.vue'));
+const SessionCockpit = defineAsyncComponent(() => import('./SessionCockpit.vue'));
+const VirtualProfile = defineAsyncComponent(() => import('./VirtualProfile.vue'));
+const UserDetail = defineAsyncComponent(() => import('./UserDetail.vue'));
 
 const components: Record<string, unknown> = {
   'overview': Overview,
@@ -95,7 +97,7 @@ export const DETAIL_COMPONENTS: Readonly<Record<string, unknown>> = detailCompon
  * 原实验稿 /admin-redesign-lab 已废除，本组件为唯一管理后台入口。
  * 特点：
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Shell from './Shell.vue';
 import SkillDrawer from './SkillDrawer.vue';

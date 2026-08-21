@@ -4674,6 +4674,37 @@ const learningPath = await prisma.learning_paths.findUnique({
         logger.warn('检查成就失败（不影响任务完成）:', error);
       }
 
+      // 今日调度台账（拍板 2026-08-21 中期项）：任务真实结算时按实际用时累加消耗，
+      // 消除「今日预算」恒零。幂等性由上方 alreadyCompleted 早退保证；
+      // 无 actualMinutes 时不写（不虚构消耗）。失败不阻断任务完成主流程。
+      try {
+        const actualMinutes = Number(data.actualMinutes);
+        if (Number.isFinite(actualMinutes) && actualMinutes > 0 && pathId) {
+          const linkedGoal = await prisma.learning_goals.findFirst({
+            where: { userId: data.userId, pathId },
+            select: { id: true }
+          });
+          if (linkedGoal) {
+            const nowDate = new Date();
+            const pad = (n: number) => String(n).padStart(2, '0');
+            const todayKey = `${nowDate.getFullYear()}-${pad(nowDate.getMonth() + 1)}-${pad(nowDate.getDate())}`;
+            await prisma.goal_scheduling_ledger.upsert({
+              where: { userId_goalId_date: { userId: data.userId, goalId: linkedGoal.id, date: todayKey } },
+              update: { consumedMinutes: { increment: actualMinutes }, updatedAt: nowDate },
+              create: {
+                id: `gsl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+                userId: data.userId,
+                goalId: linkedGoal.id,
+                date: todayKey,
+                consumedMinutes: actualMinutes
+              }
+            });
+          }
+        }
+      } catch (error) {
+        logger.warn('写入今日调度台账失败（不影响任务完成）:', error);
+      }
+
       // 基于学习者状态中心生成学习报告
       let learningReport: { reasoning?: string; suggestion?: string; recommendations?: string[] } | undefined;
       

@@ -37,6 +37,10 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor-vue': ['vue', 'vue-router', 'pinia'],
+          // 管理台大页此前把 EP 组件与 markdown/highlight 栈一并打进单个路由 chunk（696KB），
+          // 按库域拆分以改善缓存与加载
+          'vendor-element': ['element-plus', '@element-plus/icons-vue'],
+          'vendor-content': ['markdown-it', 'dompurify', 'highlight.js', 'markdown-it-texmath'],
           mermaid: ['mermaid'],
           katex: ['katex']
         }

@@ -133,7 +133,9 @@ function Get-EnvFileRecoveryReason {
     }
 
     $lineCount = 0
-    foreach ($line in [System.IO.File]::ReadLines($Path, (Get-Utf8NoBomEncoding))) {
+    # 用 ReadAllLines 一次性物化：ReadLines 是惰性枚举，提前 return 不 Dispose
+    # 会延迟释放句柄，导致随后的 Move-Item 备份偶发「文件被占用」
+    foreach ($line in [System.IO.File]::ReadAllLines($Path, (Get-Utf8NoBomEncoding))) {
         $lineCount++
         if ($lineCount -gt $script:EnvFileMaxLines) {
             return "line count exceeds $($script:EnvFileMaxLines)"

@@ -13,9 +13,10 @@
         <span class="learn__menu" title="更多" @click="menuOpen = !menuOpen">⋯</span>
         <Transition name="pop">
           <div v-if="menuOpen" class="learn__menu-pop">
+            <button type="button" class="learn__menu-item learn__menu-item--primary" @click="completeAndSettle">✓ 完成并结算任务</button>
+            <button type="button" class="learn__menu-item" @click="endSession">仅离开（不计入完成）</button>
             <button type="button" class="learn__menu-item" @click="pauseAndLeave">暂停并离开</button>
             <button type="button" class="learn__menu-item" @click="restart">重新开始</button>
-            <button type="button" class="learn__menu-item" @click="endSession">结束本次学习</button>
           </div>
         </Transition>
       </div>
@@ -665,14 +666,42 @@ async function finish(action: 'complete_task' | 'end_only' | 'complete_review') 
   }
 }
 
+/** 完成并结算（拍板 2026-08-21 方案 B 主路径）：计入任务/里程碑/路径完成进度 */
+async function completeAndSettle() {
+  menuOpen.value = false;
+  if (actionBusy.value) return;
+  try {
+    await ElMessageBox.confirm(
+      '确认当前任务已学完？将结算任务并计入里程碑与路径进度，同时生成本次学习总结。',
+      '完成并结算任务',
+      { confirmButtonText: '完成并结算', cancelButtonText: '取消', type: 'success' }
+    );
+  } catch {
+    return;
+  }
+  actionBusy.value = true;
+  try {
+    if (typing.value) {
+      streamAbort?.abort();
+      streamAbort = null;
+      for (let i = 0; i < 20 && typing.value; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+    await finish('complete_task');
+  } finally {
+    actionBusy.value = false;
+  }
+}
+
 async function endSession() {
   menuOpen.value = false;
   if (actionBusy.value) return;
   try {
     await ElMessageBox.confirm(
-      '结束本次学习？结束后将生成本次学习总结，未完成的对话进度会保留。',
-      '结束本次学习',
-      { confirmButtonText: '结束', cancelButtonText: '取消', type: 'warning' }
+      '仅离开本次学习？将生成本次学习总结，但当前任务不会计入完成进度（里程碑/路径进度不动）。',
+      '仅离开（不计入完成）',
+      { confirmButtonText: '仅离开', cancelButtonText: '取消', type: 'warning' }
     );
   } catch {
     return;
@@ -1357,6 +1386,8 @@ onBeforeUnmount(() => {
   transition: background 0.15s ease, color 0.15s ease;
 }
 .learn__menu-item:hover { background: #f1f5fb; color: var(--ink); }
+.learn__menu-item--primary { color: var(--blue, #2c63d0); }
+.learn__menu-item--primary:hover { background: #e8effc; color: var(--blue, #2c63d0); }
 .learn__head-right { position: relative; }
 .checkpoint__option {
   display: flex; align-items: center; gap: 9px;
