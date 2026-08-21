@@ -74,7 +74,7 @@ describe('DurableOutboxWorker task ordering', () => {
     expect(records.find(record => record.id === 'new-user-1')?.status).toBe('pending')
   })
 
-  it('keeps task events pending after the normal max attempts and continues blocking later same-user events', async () => {
+  it('marks task events dead at max attempts so later same-user events are not blocked forever', async () => {
     const base = new Date(Date.now() - 10_000)
     records.push(
       buildRecord('old-user-1', 'user-1', base, 'task:completed', 7),
@@ -91,11 +91,19 @@ describe('DurableOutboxWorker task ordering', () => {
 
     expect(registry.dispatch).toHaveBeenCalledTimes(1)
     expect(records.find(record => record.id === 'old-user-1')).toEqual(expect.objectContaining({
-      status: 'pending',
-      attemptCount: 8,
-      availableAt: expect.any(Date)
+      status: 'dead',
+      attemptCount: 8
     }))
     expect(records.find(record => record.id === 'new-user-1')?.status).toBe('pending')
+
+    // 毒事件入死信后不再计入「最老未决」，同用户后续事件解除队头阻塞；
+    // 死信可通过 POST /api/admin/devtools/outbox/requeue-dead 人工重放
+    await worker.runOnce()
+
+    expect(records.find(record => record.id === 'new-user-1')).toEqual(expect.objectContaining({
+      status: 'pending',
+      attemptCount: 1
+    }))
   })
 
   it('still marks non-task events dead at the normal max attempts', async () => {

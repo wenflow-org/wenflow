@@ -115,7 +115,10 @@ export class DurableOutboxWorker {
         });
       } catch (error) {
         const attemptCount = record.attemptCount + 1;
-        const dead = record.eventType !== 'task:completed' && attemptCount >= MAX_ATTEMPTS;
+        // 所有事件类型统一在 MAX_ATTEMPTS 后入死信（含 task:completed）：
+        // 原豁免会让一条毒事件永久阻塞同用户后续所有 task:completed（队头无限重试）。
+        // 死信不再是终点——可通过 POST /api/admin/devtools/outbox/requeue-dead 重放。
+        const dead = attemptCount >= MAX_ATTEMPTS;
         const backoffMs = Math.min(60_000, 1000 * 2 ** Math.min(attemptCount, 6));
         await prisma.domain_event_outbox.updateMany({
           where: { id: record.id, status: 'processing', lockOwner: this.owner },
