@@ -309,7 +309,7 @@ describe('assisted virtual learner route leases', () => {
 
     expect(mockRunLeasedExclusive).toHaveBeenCalledTimes(1)
     expect(mockRunLeasedExclusive).toHaveBeenCalledWith('session-1', expect.any(Function))
-    expect(mockExecuteAutoLearning).toHaveBeenCalledWith('session-1', { maxMilestones: 4 })
+    expect(mockExecuteAutoLearning).toHaveBeenCalledWith('session-1', { maxMilestones: 4, maxTurns: 24 })
   })
 
   it('performs a final lease assertion after the assisted mutation returns', async () => {

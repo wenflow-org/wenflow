@@ -228,7 +228,10 @@ export async function advanceRun(runId: string): Promise<string> {
         }
       }
       try {
-        await simulationCoordinator.executeSingleStep({ sessionId: run.sessionId!, userId: session!.userId, mode: 'single-step' });
+        // 纳入会话租约队列：与驾驶舱/其他驱动者互斥，消除 stageResults 并发交错（拍板 2026-08-21 精简方案）
+        await simulationCoordinator.runLeasedExclusive(run.sessionId!, async () => {
+          await simulationCoordinator.executeSingleStep({ sessionId: run.sessionId!, userId: session!.userId, mode: 'single-step' });
+        });
         return 'goal';
       } catch (e) {
         await bumpStall(runId, String(e));
@@ -271,7 +274,9 @@ export async function advanceRun(runId: string): Promise<string> {
       }
       if (!run.advanceCalled) {
         try {
-          await simulationCoordinator.advanceToPathGeneration(run.sessionId!);
+          await simulationCoordinator.runLeasedExclusive(run.sessionId!, async () => {
+            await simulationCoordinator.advanceToPathGeneration(run.sessionId!);
+          });
           await prisma.batch_experiment_runs.update({ where: { id: runId }, data: { advanceCalled: true } });
         } catch (e) {
           await bumpStall(runId, String(e));
@@ -285,13 +290,17 @@ export async function advanceRun(runId: string): Promise<string> {
       const session = await prisma.virtual_sessions.findUnique({ where: { id: run.sessionId! } });
       if (!run.learningStarted) {
         try {
-          const sl = await simulationCoordinator.startLearningPhase(run.sessionId!, {});
+          const sl = await simulationCoordinator.runLeasedExclusive(run.sessionId!, async () =>
+            simulationCoordinator.startLearningPhase(run.sessionId!, {})
+          );
           if (sl?.success && sl.teachingSessionId) {
             await prisma.batch_experiment_runs.update({ where: { id: runId }, data: { learningStarted: true } });
             return 'learn';
           }
           // 会话失败 → restart-learning 恢复（保留任务）
-          const rl = await simulationCoordinator.restartLearningPhase(run.sessionId!, {});
+          const rl = await simulationCoordinator.runLeasedExclusive(run.sessionId!, async () =>
+            simulationCoordinator.restartLearningPhase(run.sessionId!, {})
+          );
           if (rl?.success && rl.teachingSessionId) {
             await prisma.batch_experiment_runs.update({ where: { id: runId }, data: { learningStarted: true } });
             return 'learn';
@@ -302,7 +311,9 @@ export async function advanceRun(runId: string): Promise<string> {
           const msg = String(e);
           if (/学习会话已停止|学习已停止|重新开始学习/i.test(msg)) {
             try {
-              const rl = await simulationCoordinator.restartLearningPhase(run.sessionId!, {});
+              const rl = await simulationCoordinator.runLeasedExclusive(run.sessionId!, async () =>
+                simulationCoordinator.restartLearningPhase(run.sessionId!, {})
+              );
               if (rl?.success && rl.teachingSessionId) {
                 await prisma.batch_experiment_runs.update({ where: { id: runId }, data: { learningStarted: true, stallCount: 0 } });
                 return 'learn';
@@ -318,8 +329,10 @@ export async function advanceRun(runId: string): Promise<string> {
         }
       }
 
-      // 教学一步
-      const step = await simulationCoordinator.executeLearningStep(run.sessionId!);
+      // 教学一步（纳入租约：管理员驾驶舱操作将在此排队而非交错写入）
+      const step = await simulationCoordinator.runLeasedExclusive(run.sessionId!, async () =>
+        simulationCoordinator.executeLearningStep(run.sessionId!)
+      );
       if (step?.error) {
         if (/学习已停止|没有绑定教学会话|学习会话已停止/.test(String(step.error))) {
           await prisma.batch_experiment_runs.update({ where: { id: runId }, data: { learningStarted: false } });
@@ -330,7 +343,11 @@ export async function advanceRun(runId: string): Promise<string> {
       if (step?.isPathCompleted) {
         await prisma.batch_experiment_runs.update({ where: { id: runId }, data: { phase: 'learn-done', stallCount: 0 } });
         logger.info('[batch-experiment] ALL TASKS COMPLETED', { runId });
-        try { await simulationCoordinator.generateWrapupForSession(run.sessionId!); } catch { /* wrapup optional */ }
+        try {
+          await simulationCoordinator.runLeasedExclusive(run.sessionId!, async () => {
+            await simulationCoordinator.generateWrapupForSession(run.sessionId!);
+          });
+        } catch { /* wrapup optional */ }
         return 'learn-done';
       }
       if (step?.taskCompleted) {

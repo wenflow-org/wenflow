@@ -1175,6 +1175,10 @@ export interface LiveVirtualRunStats {
   completed: number
   completionRate: number
   failureRate: number
+  /** failed / total：只含系统/上游失败，不含人为终止（拍板 2026-08-21） */
+  systemFailureRate: number
+  /** abandoned / total：管理员止停/批量终止/僵尸回收/学习者放弃 */
+  humanTerminatedRate: number
   staleCount: number
   maxStaleMins: number
   avgDurationMs: number
@@ -1191,6 +1195,8 @@ export const liveVirtualRunStats = ref<LiveVirtualRunStats>({
   completed: 0,
   completionRate: 0,
   failureRate: 0,
+  systemFailureRate: 0,
+  humanTerminatedRate: 0,
   staleCount: 0,
   maxStaleMins: 0,
   avgDurationMs: 0,
@@ -1210,6 +1216,8 @@ async function fetchLiveVirtualStats(): Promise<void> {
     completed: Number(body.completed ?? 0),
     completionRate: Number(body.completionRate ?? 0),
     failureRate: Number(body.failureRate ?? 0),
+    systemFailureRate: Number(body.systemFailureRate ?? 0),
+    humanTerminatedRate: Number(body.humanTerminatedRate ?? 0),
     staleCount: Number(body.staleCount ?? 0),
     maxStaleMins: Number(body.maxStaleMins ?? 0),
     avgDurationMs: Number(body.avgDurationMs ?? 0),

@@ -55,7 +55,7 @@ describe('VirtualSessionReclaimService', () => {
     const updateCall = mockUpdate.mock.calls[0]
     expect(updateCall[0].where).toEqual({ id: 'vs-stale' })
     expect(updateCall[0].data).toEqual(expect.objectContaining({
-      status: 'failed',
+      status: 'abandoned',
       completedAt: NOW,
       currentStage: 'teaching'
     }))
@@ -76,7 +76,7 @@ describe('VirtualSessionReclaimService', () => {
       statusCode: 200
     }))
     expect(JSON.parse(auditCall.beforeJson).status).toBe('running')
-    expect(JSON.parse(auditCall.afterJson).status).toBe('failed')
+    expect(JSON.parse(auditCall.afterJson).status).toBe('abandoned')
     expect(logger.warn).toHaveBeenCalled()
   })
 
@@ -91,7 +91,7 @@ describe('VirtualSessionReclaimService', () => {
     expect(mockUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'vs-created' },
-        data: expect.objectContaining({ status: 'failed' })
+        data: expect.objectContaining({ status: 'abandoned' })
       })
     )
   })

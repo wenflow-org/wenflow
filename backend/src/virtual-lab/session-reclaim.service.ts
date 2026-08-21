@@ -2,7 +2,7 @@
  * 虚拟会话僵尸回收服务（P0-2/R4）
  *
  * running/created 且超过阈值（默认 24h）无任何写入、且无活跃租约的虚拟会话，
- * 自动标记为 failed（reason=stale）并写审计记录。只标记状态、不删除任何数据。
+ * 自动标记为 abandoned（reason=stale，运维清理不计入系统失败率）并写审计记录。只标记状态、不删除任何数据。
  * - 活跃租约保护：会话仍被 Blackbox/Assisted runner 执行（lease 未过期）时跳过。
  * - 触发时机：周期扫描（默认每 15 分钟），以及管理端点
  *   POST /api/admin/virtual-learners/sessions/reclaim-stale（dryRun 默认 true）。
@@ -235,10 +235,12 @@ export class VirtualSessionReclaimService {
     });
 
     const before = { status: session.status, currentStage: session.currentStage, updatedAt: session.updatedAt.toISOString(), staleMs };
+    // 终态记 abandoned（拍板 2026-08-21）：僵尸回收是运维清理而非系统失败，
+    // 不应污染 failed 口径。reason=stale 仍记录在 stageResults.staleReclaim
     await this.database.virtual_sessions.update({
       where: { id: session.id },
       data: {
-        status: 'failed',
+        status: 'abandoned',
         currentStage: session.currentStage || 'goal',
         completedAt: now,
         stageResults: JSON.stringify(stageResults),
@@ -254,7 +256,7 @@ export class VirtualSessionReclaimService {
         targetType: 'virtual-session',
         targetId: session.id,
         beforeJson: JSON.stringify(before),
-        afterJson: JSON.stringify({ status: 'failed', reclaimedAt }),
+        afterJson: JSON.stringify({ status: 'abandoned', reclaimedAt }),
         method: 'SYSTEM',
         path: '/system/virtual-session-reclaim',
         statusCode: 200,
@@ -262,7 +264,7 @@ export class VirtualSessionReclaimService {
         durationMs: 0
       }
     });
-    logger.warn('[session-reclaim] 僵尸虚拟会话已标记 failed', {
+    logger.warn('[session-reclaim] 僵尸虚拟会话已标记 abandoned', {
       sessionId: session.id,
       previousStatus: session.status,
       staleMs

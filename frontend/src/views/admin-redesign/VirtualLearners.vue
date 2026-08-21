@@ -45,7 +45,8 @@
       <div class="vl-position__stats">
         <template v-if="runStats.totalSessions > 0">
           <span class="vl-stat" :title="`完成率 = 已完成会话 / 总会话（${runStats.completed}/${runStats.totalSessions}）`">完成率 <b>{{ runStats.completionRate }}%</b></span>
-          <span class="vl-stat" :title="`失败率 = 失败/放弃会话 / 总会话（${runStats.failed + runStats.abandoned}/${runStats.totalSessions}）`">失败率 <b>{{ runStats.failureRate }}%</b></span>
+          <span class="vl-stat" :title="`系统失败率 = failed 会话 / 总会话（${runStats.failed}/${runStats.totalSessions}），不含人为终止`">系统失败率 <b>{{ runStats.systemFailureRate ?? 0 }}%</b></span>
+          <span class="vl-stat" :title="`人为终止率 = abandoned 会话 / 总会话（${runStats.abandoned}/${runStats.totalSessions}），含管理员止停/批量终止/僵尸回收`">人为终止 <b>{{ runStats.humanTerminatedRate ?? 0 }}%</b></span>
           <span class="vl-stat" :title="'终态会话平均时长（completed/failed/abandoned 的 created→updated）'">平均时长 <b>{{ fmtDuration(runStats.avgDurationMs) }}</b></span>
         </template>
         <span v-if="isLive" class="vl-stat vl-stat--live" :title="'全量口径：虚拟会话状态分区（创建中/运行中/失败/放弃/完成）之和'">当前虚拟会话 <b>{{ liveVirtualSessionStats.total }}</b> 个</span>

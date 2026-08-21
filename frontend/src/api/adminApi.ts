@@ -1286,7 +1286,7 @@ export const adminVirtualLearnersApi = {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/teaching-step`);
   },
 
-  virtualSessionAutoLearning: async (sessionId: string, data?: { maxMilestones?: number }) => {
+  virtualSessionAutoLearning: async (sessionId: string, data?: { maxMilestones?: number; maxTurns?: number }) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/auto-learning`, data);
   },
 

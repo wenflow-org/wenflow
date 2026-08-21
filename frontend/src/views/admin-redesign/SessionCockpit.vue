@@ -291,6 +291,15 @@
         <button type="button" class="cp-btn" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
         <button type="button" class="cp-btn" :disabled="learnStepDisabled" :title="learnStepTitle" @click="act('step')">Learn 单步</button>
         <button type="button" class="cp-btn" :disabled="learnAutoDisabled" :title="learnAutoTitle" @click="act('auto')">自动完成本课</button>
+        <input
+          v-model.number="learnAutoTurnCap"
+          type="number"
+          min="1"
+          max="100"
+          class="cp-turn-cap"
+          title="自动学习回合上限（1–100）：不同课的收束节奏不同，24 不够时可调高"
+          aria-label="自动学习回合上限"
+        />
         <button type="button" class="cp-btn" :disabled="resetLearningDisabled" :title="resetLearningTitle" @click="act('resetLearn')">重启 Learn</button>
         <button type="button" class="cp-btn cp-danger-btn" :disabled="stopLearningDisabled" :title="stopLearningTitle" @click="act('stop')">停止 Learn</button>
       </div>
@@ -1222,8 +1231,16 @@ const terminalPathCompleted = computed(() => {
     && isTerminal.value
     && (allMilestonesCompleted || currentStage.value === 'learning' || hasLearnHistoryOrProgress.value)
 })
+const wrapupTaskSettled = computed(() => {
+  // 与后端 generateWrapupForSession 闸门一致：任务结算或整路径完成才可生成总结
+  if (terminalStatus.value === 'completed' || terminalPathCompleted.value) return true
+  const runtimeStatus = String(
+    (learningResult.value.taskRuntime as Record<string, unknown> | undefined)?.status || ''
+  )
+  return runtimeStatus === 'completed' || runtimeStatus === 'task_completion_pending'
+})
 const wrapupAvailable = computed(() =>
-  !hasWrapup.value && (hasLearningProgress.value || terminalPathCompleted.value)
+  !hasWrapup.value && (hasLearningProgress.value || terminalPathCompleted.value) && wrapupTaskSettled.value
 )
 
 const assistedControlBlockReason = computed(() => {
@@ -1324,6 +1341,7 @@ const wrapupTitle = computed(() => {
   if (isBlackbox.value) return '黑盒模式不支持此辅助控制'
   if (isFailedTerminal.value) return '会话已失败或终止，不能生成学习总结'
   if (hasWrapup.value) return '学习总结已生成'
+  if (!wrapupAvailable.value && !wrapupTaskSettled.value && learningActive.value) return '课堂总结在课程完成后才会生成：当前任务尚未结算完成'
   if (!wrapupAvailable.value) return '请先启动 Learn 并产生消息或学习进度'
   return '根据当前 Learn 记录生成总结'
 })
@@ -1859,6 +1877,14 @@ function findingEvidence(report: EvaluationReport, finding: { evidenceIds?: Arra
 
 const frictionBudget = ref<'none' | 'low' | 'normal' | 'high' | 'stress_test'>('normal')
 const frictionSaving = ref(false)
+// 自动学习回合上限（拍板 2026-08-21：前端可配，默认 24，不同课收束节奏不同）
+const learnAutoTurnCap = ref(24)
+
+function clampLearnAutoTurnCap(): number {
+  const n = Math.round(Number(learnAutoTurnCap.value))
+  if (!Number.isFinite(n)) return 24
+  return Math.min(100, Math.max(1, n))
+}
 
 async function saveFriction() {
   if (!sessionId.value || isBlackbox.value || busy.value || frictionSaving.value) return
@@ -1958,7 +1984,7 @@ async function act(kind: string) {
         break
       case 'auto':
         if (stage === 'learning') {
-          await adminVirtualLearnersApi.virtualSessionAutoLearning(id, { maxMilestones: 1 })
+          await adminVirtualLearnersApi.virtualSessionAutoLearning(id, { maxMilestones: 1, maxTurns: clampLearnAutoTurnCap() })
         } else {
           await adminVirtualLearnersApi.virtualSessionAuto(id, { maxRounds: 10 })
         }
@@ -2227,6 +2253,17 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-btn:hover:not(:disabled) { border-color: rgba(44, 99, 208, 0.4); color: var(--mk-blue); }
 .cp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .cp-btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
+/* 自动学习回合上限输入框（与按钮同排，窄体） */
+.cp-turn-cap {
+  width: 64px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--mk-line);
+  background: var(--mk-surface);
+  color: var(--mk-ink);
+  font: inherit;
+  font-size: 12.5px;
+}
 .cp-btn--primary:hover:not(:disabled) { color: #fff; opacity: 0.9; }
 /* 危险操作：实心红（与 .mk-btn--danger 一致） */
 .cp-danger-btn { background: var(--mk-red-strong, var(--mk-red)); border-color: var(--mk-red-strong, var(--mk-red)); color: #fff; }

@@ -2779,6 +2779,14 @@ class SimulationOrchestrator {
           error: learningState.stoppedReason ? `学习已停止: ${learningState.stoppedReason}` : '学习已停止'
         }
       }
+      // 冻结语义：暂停期间手动单步同样拒绝（拍板 2026-08-21）——
+      // 「暂停」的管理员预期是会话完全静止，而非仅停自动驾驶
+      if (learningState.paused === true) {
+        return {
+          success: false,
+          error: '会话已暂停：先恢复（▶ 继续）再执行学习步骤'
+        }
+      }
 
       const learningPath = await prisma.learning_paths.findUnique({
         where: { id: session.learningPathId },
@@ -3476,9 +3484,10 @@ class SimulationOrchestrator {
         const latestStageResults = this.parseStageResultsPayload(latestSession.stageResults)
         if (latestStageResults.teaching?.manualStop || latestSession.status === 'failed') {
           // 旁路紧急停止（requestStopLearning deferred 路径）：循环退出时就地终态化——
-          // 此刻仍持有会话租约，是安全的收口点；避免会话停留在 running + manualStop 的悬挂态
-          if (latestSession.status !== 'failed') {
-            await this.updateSessionStatus(sessionId, 'failed', 'teaching').catch(() => {});
+          // 此刻仍持有会话租约，是安全的收口点；避免会话停留在 running + manualStop 的悬挂态。
+          // 人为终止记 abandoned（拍板 2026-08-21），不计入系统失败率
+          if (latestSession.status !== 'failed' && latestSession.status !== 'abandoned') {
+            await this.updateSessionStatus(sessionId, 'abandoned', 'teaching').catch(() => {});
             await this.addSessionLog(sessionId, {
               timestamp: new Date().toISOString(),
               phase: 'error',
@@ -3506,10 +3515,15 @@ class SimulationOrchestrator {
             totalSteps: steps
           });
 
+          // 真实完成数：路径完成即全部里程碑完成，取学习态中的实际总数而非请求上限
+          const doneSession = await this.getVirtualSession(sessionId);
+          const doneTeaching = this.parseStageResultsPayload(doneSession.stageResults).teaching || {};
+          const actualMilestones = Number((doneTeaching as Record<string, unknown>).totalMilestones) || maxMilestones;
+
           return {
             success: true,
             totalSteps: steps,
-            completedMilestones: maxMilestones
+            completedMilestones: actualMilestones
           };
         }
 
@@ -3564,10 +3578,12 @@ class SimulationOrchestrator {
         }
       }
       
+      // 回合上限耗尽 ≠ 完成：诚实返回失败，不再虚报 completedMilestones
       return {
-        success: true,
+        success: false,
         totalSteps: steps,
-        completedMilestones: maxMilestones
+        completedMilestones: 0,
+        error: `auto_turn_cap_exhausted：已自动推进 ${steps} 回合，本课仍未收束。可在驾驶舱调高回合上限后重试，或改用手动单步推进`
       };
     } catch (error: unknown) {
       logger.error('[simulation-coordinator] 自动学习失败', {
@@ -3615,7 +3631,9 @@ class SimulationOrchestrator {
         stoppedReason: reason
       });
 
-      await this.updateSessionStatus(sessionId, 'failed', 'teaching');
+      // 人为终止统一记 abandoned（拍板 2026-08-21）：failed 只留给系统/上游失败，
+      // 避免管理员主动停止污染失败率口径。abandoned 仍可经「重启学习」恢复
+      await this.updateSessionStatus(sessionId, 'abandoned', 'teaching');
 
       await this.addSessionLog(sessionId, {
         timestamp: new Date().toISOString(),
@@ -3882,6 +3900,18 @@ class SimulationOrchestrator {
 
       const userMessageCount = messages.filter(m => m.role === 'user').length;
       const assistantMessageCount = messages.filter(m => m.role === 'assistant').length;
+
+      // 业务闸门（拍板 2026-08-21）：课堂总结是「课程学完」的产物。
+      // 任务已结算（completed / task_completion_pending）或整路径完成才允许生成，
+      // 防止 goal/path 阶段的空对话产出假完成信号、点亮驾驶舱的 wrapup 阶段条
+      const runtimeStatus = String(((learning.taskRuntime || {}) as Record<string, unknown>).status || '');
+      const taskSettled = runtimeStatus === 'completed' || runtimeStatus === 'task_completion_pending';
+      if (session.status !== 'completed' && !taskSettled) {
+        return { success: false, error: '课堂总结在课程完成后才会生成：当前任务尚未结算完成' };
+      }
+      if (userMessageCount < 1 || assistantMessageCount < 1) {
+        return { success: false, error: '课堂对话为空，没有可总结的内容' };
+      }
 
       const createdAt = session.createdAt ? new Date(session.createdAt).getTime() : Date.now();
       const completedAt = Date.now();

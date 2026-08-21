@@ -2375,10 +2375,19 @@ class LearningService {
   /**
    * 今日预算视图（多目标调度 · learn agent 台账）：
    * active goals（含预算）+ 今日 ledger + 活跃教学会话，产出每个目标的预算/已耗/建议
+   *
+   * 口径（拍板 2026-08-21）：
+   * - 日界按服务器本地时区（此前 UTC 导致 UTC+8 用户清晨的学习记进「昨天」）
+   * - todayMinutes = 今日开课的教学会话时长（终态取 duration，进行中取已流逝分钟）
+   * - consumedMinutes：ledger 有值用 ledger；否则从今日会话经 task→milestone→path 反查到目标推导
    */
   async getTodaySchedule(userId: string) {
-    const today = new Date().toISOString().slice(0, 10);
-    const [goals, ledgers, activeSessions] = await Promise.all([
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const [goals, ledgers, activeSessions, todaySessions] = await Promise.all([
       prisma.learning_goals.findMany({
         where: { userId, status: 'active' },
         orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
@@ -2390,16 +2399,55 @@ class LearningService {
         where: { userId, status: 'active' },
         select: { id: true, taskId: true, startTime: true },
       }),
+      prisma.teaching_sessions.findMany({
+        where: { userId, startTime: { gte: dayStart } },
+        select: { taskId: true, duration: true, status: true, startTime: true },
+      }),
     ]);
 
     const ledgerByGoal = new Map(ledgers.map((l) => [l.goalId, l]));
-    const todayMinutes = activeSessions.reduce((sum, s) => sum + 0, 0);
+
+    // 今日真实学习分钟：终态会话取落库 duration；进行中的取「开课至今」流逝分钟
+    const settledMinutes = todaySessions.reduce((sum, s) => sum + (s.duration ?? 0), 0);
+    const activeElapsedMinutes = activeSessions.reduce((sum, s) => {
+      const started = new Date(s.startTime).getTime();
+      return Number.isFinite(started) ? sum + Math.max(0, Math.round((Date.now() - started) / 60000)) : sum;
+    }, 0);
+    const todayMinutes = settledMinutes + activeElapsedMinutes;
+
+    // task → milestone → path 反查，把今日会话时长归账到对应目标（ledger 缺失时的诚实推导）
+    const taskIds = [...new Set(todaySessions.map((s) => s.taskId).filter((id): id is string => !!id))];
+    const minutesByPath = new Map<string, number>();
+    if (taskIds.length) {
+      const subtaskRows = await prisma.subtasks.findMany({
+        where: { id: { in: taskIds } },
+        select: { id: true, milestoneId: true },
+      });
+      const milestoneIds = [...new Set(subtaskRows.map((s) => s.milestoneId).filter((id): id is string => !!id))];
+      const milestoneRows = milestoneIds.length
+        ? await prisma.milestones.findMany({ where: { id: { in: milestoneIds } }, select: { id: true, learningPathId: true } })
+        : [];
+      const milestoneToPath = new Map(milestoneRows.map((m) => [m.id, m.learningPathId]));
+      const durationByTask = new Map<string, number>();
+      for (const s of todaySessions) {
+        if (!s.taskId) continue;
+        durationByTask.set(s.taskId, (durationByTask.get(s.taskId) ?? 0) + (s.duration ?? 0));
+      }
+      for (const st of subtaskRows) {
+        const pathId = milestoneToPath.get(st.milestoneId);
+        if (!pathId) continue;
+        minutesByPath.set(pathId, (minutesByPath.get(pathId) ?? 0) + (durationByTask.get(st.id) ?? 0));
+      }
+    }
 
     return {
       date: today,
       totalPlanned: goals.reduce((sum, g) => sum + (g.plannedMinutesPerDay ?? 0), 0),
       activeGoals: goals.map((goal) => {
         const ledger = ledgerByGoal.get(goal.id);
+        // ledger 无记录时用今日会话推导，消除「恒 0 假进度条」
+        const derivedMinutes = goal.pathId ? minutesByPath.get(goal.pathId) ?? 0 : 0;
+        const consumedMinutes = ledger?.consumedMinutes ?? derivedMinutes;
         return {
           goalId: goal.id,
           title: goal.title,
@@ -2407,9 +2455,9 @@ class LearningService {
           priority: goal.priority,
           cognitiveBandwidth: goal.cognitiveBandwidth,
           plannedMinutes: goal.plannedMinutesPerDay ?? 30,
-          consumedMinutes: ledger?.consumedMinutes ?? 0,
+          consumedMinutes,
           loadAvg: ledger?.loadAvg ?? null,
-          remainingMinutes: Math.max((goal.plannedMinutesPerDay ?? 30) - (ledger?.consumedMinutes ?? 0), 0),
+          remainingMinutes: Math.max((goal.plannedMinutesPerDay ?? 30) - consumedMinutes, 0),
         };
       }),
       activeSessions: activeSessions.length,

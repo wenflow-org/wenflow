@@ -1433,6 +1433,10 @@ router.get('/stats', async (req: Request, res) => {
         abandoned,
         completed,
         completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+        // 拍板 2026-08-21：失败口径拆分——failed 只承载系统/上游失败，
+        // abandoned 承载人为终止（管理员止停/批量终止/僵尸回收/学习者放弃）
+        systemFailureRate: total > 0 ? Math.round((failed / total) * 100) : 0,
+        humanTerminatedRate: total > 0 ? Math.round((abandoned / total) * 100) : 0,
         failureRate: total > 0 ? Math.round(((failed + abandoned) / total) * 100) : 0,
         staleCount,
         maxStaleMins,
@@ -2488,8 +2492,10 @@ router.post('/sessions/:sessionId/auto-learning', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
     const maxMilestones = parseSimulationLimit(req.body?.maxMilestones, 10, 20, 'maxMilestones');
+    // 回合上限前端可配（默认仍为 LEARN_AUTO_TURN_CAP=24）：不同课的收束节奏差异很大
+    const maxTurns = parseSimulationLimit(req.body?.maxTurns, 24, 100, 'maxTurns');
     const result = await runAssistedSessionMutation(sessionId, () =>
-      simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones })
+      simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones, maxTurns })
     );
     
     res.json({

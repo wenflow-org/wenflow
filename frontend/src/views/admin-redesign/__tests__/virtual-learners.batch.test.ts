@@ -119,6 +119,8 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
       completed: 0,
       completionRate: 0,
       failureRate: 0,
+      systemFailureRate: 0,
+      humanTerminatedRate: 0,
       staleCount: 0,
       maxStaleMins: 0,
       avgDurationMs: 0,
@@ -156,6 +158,8 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
       completed: 6,
       completionRate: 60,
       failureRate: 40,
+      systemFailureRate: 30,
+      humanTerminatedRate: 10,
       staleCount: 2,
       maxStaleMins: 1450,
       avgDurationMs: 7200000,
@@ -166,7 +170,8 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
     expect(w.text()).toContain('完成率 60%');
-    expect(w.text()).toContain('失败率 40%');
+    expect(w.text()).toContain('系统失败率 30%');
+    expect(w.text()).toContain('人为终止 10%');
     expect(w.text()).toContain('平均时长 2 小时');
     expect(w.text()).toContain('卡死 2（最长 24.2 小时）');
   });

@@ -90,7 +90,7 @@ describe('SimulationOrchestrator requestStopLearning（旁路紧急停止）', (
     })
   })
 
-  it('租约空闲：写入 manualStop 标志并就地终态化（status=failed）', async () => {
+  it('租约空闲：写入 manualStop 标志并就地终态化（status=abandoned）', async () => {
     mockLeaseCreate.mockResolvedValue({})
 
     const result = await coordinator.requestStopLearning('simulation-1', 'admin-emergency-stop')
@@ -100,8 +100,8 @@ describe('SimulationOrchestrator requestStopLearning（旁路紧急停止）', (
     const teaching = JSON.parse(sessionRecord.stageResults).teaching
     expect(teaching.manualStop).toBe(true)
     expect(teaching.stoppedReason).toBe('admin-emergency-stop')
-    // 状态已终态化
-    expect(sessionRecord.status).toBe('failed')
+    // 状态已终态化：人为终止记 abandoned，不计入系统失败率（拍板 2026-08-21）
+    expect(sessionRecord.status).toBe('abandoned')
     // 租约已释放
     expect(mockLeaseDeleteMany).toHaveBeenCalledWith({ where: { sessionId: 'simulation-1', ownerId: expect.stringContaining('stop_') } })
   })
@@ -136,6 +136,6 @@ describe('SimulationOrchestrator requestStopLearning（旁路紧急停止）', (
     const result = await coordinator.requestStopLearning('simulation-1')
 
     expect(result).toEqual({ success: true })
-    expect(sessionRecord.status).toBe('failed')
+    expect(sessionRecord.status).toBe('abandoned')
   })
 })
