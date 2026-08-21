@@ -142,7 +142,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.text()).toContain('已失败 2');
     expect(w.text()).toContain('卡死 2');
     expect(w.text()).toContain('已截断 · 共 80 人');
-    expect(w.text()).toContain('一键回收卡死（2）');
+    expect(w.text()).toContain('回收卡死（2）');
   });
 
   it('运行统计展示（A5）：完成率/失败率/平均时长/卡死最长分钟', async () => {
@@ -184,7 +184,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     liveVirtualsTotal.value = 1;
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    expect(w.text()).not.toContain('一键回收卡死');
+    expect(w.text()).not.toContain('回收卡死');
     expect(w.text()).not.toContain('已截断');
   });
 
@@ -200,8 +200,8 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.text()).toContain('批量终止');
     expect(w.text()).toContain('批量清理卡死');
     const del = findBtn(w, '批量删除');
-    expect((del.element as HTMLButtonElement).disabled).toBe(true);
-    expect((del.element as HTMLButtonElement).title).toContain('待 2B');
+    // 批量删除已实装（2B 完成）：仅受 batchActionBusy 互斥，不再处于占位禁用态
+    expect((del.element as HTMLButtonElement).disabled).toBe(false);
     await findBtn(w, '取消选择').trigger('click');
     await nextTick();
     expect(w.text()).not.toContain('已选');
@@ -265,7 +265,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     reclaimMock.mockResolvedValueOnce({ data: { data: { dryRun: true, reclaimed: 0, skippedActiveLease: 0, sessions: [{ id: 'stale-9', status: 'running', currentStage: 'learn', staleMs: 7200000, updatedAt: 'x' }] } } });
     reclaimMock.mockResolvedValueOnce({ data: { data: { dryRun: false, reclaimed: 1, skippedActiveLease: 0, sessions: [] as Array<Record<string, unknown>> } } });
     const w = await mountPage();
-    findBtn(w, '一键回收卡死（3）').trigger('click');
+    findBtn(w, '回收卡死（3）').trigger('click');
     await flushPromises();
     expect(reclaimMock).toHaveBeenNthCalledWith(1, { dryRun: true });
     // Teleport 到 body 后，modal 内容在 document.body

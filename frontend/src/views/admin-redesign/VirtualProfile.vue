@@ -89,25 +89,8 @@
       </div>
     </div>
 
-    <!-- 工作流指引：告诉管理员这个页面是做什么的、下一步怎么走 -->
-    <div class="vp-guide">
-      <span class="vp-guide__icon" aria-hidden="true">🗺️</span>
-      <div class="vp-guide__steps">
-        <button type="button" class="vp-guide__step" :class="{ 'is-done': displayStories.length > 0, 'is-active': !displayStories.length }" @click="activeTab = 'stories'">① 生成故事</button>
-        <span class="vp-guide__arrow">→</span>
-        <button type="button" class="vp-guide__step" :class="{ 'is-done': selectedStoryId }" @click="activeTab = 'stories'">② 选中故事</button>
-        <span class="vp-guide__arrow">→</span>
-        <button type="button" class="vp-guide__step" :class="{ 'is-active': runningCount > 0, 'is-done': allRuns.length > 0 && runningCount === 0 }" @click="activeTab = 'runs'">③ 运行</button>
-        <span class="vp-guide__arrow">→</span>
-        <button type="button" class="vp-guide__step" @click="activeTab = 'verify'">④ 前台验收</button>
-      </div>
-      <div class="vp-guide__hint">
-        <template v-if="!displayStories.length">先点「生成第一条故事」让 AI 设计学习场景</template>
-        <template v-else-if="!allRuns.length">选一个故事，点「运行」开始 Goal → Path → Learn 全链路</template>
-        <template v-else-if="runningCount > 0">正在运行中，可切换到「验收」tab 查看前台投影</template>
-        <template v-else>全部运行完成，切换「验收」tab 投影到前台查看效果</template>
-      </div>
-    </div>
+    
+
 
     <!-- 分页：故事池是主工作区，画像/运行/验收各归其页 -->
     <div class="mk-pills vp-tabs">
@@ -154,7 +137,7 @@
           <div class="mk-card__head">
             <h3 class="mk-card__title">故事池 · {{ displayStories.length }}</h3>
             <div class="vp-stories-head">
-              <span class="mk-card__meta">一人多故事；选中故事运行，走 Goal → Path → Learn</span>
+              <span class="mk-card__meta">故事池</span>
               <button
                 v-if="isLive"
                 type="button"
@@ -163,12 +146,12 @@
                 :disabled="storyBusy"
                 @click="generateStory"
               >
-                {{ storyBusy ? '生成中…' : displayStories.length ? '再生成故事' : '生成第一条故事' }}
+                {{ storyBusy ? '生成中…' : '生成故事' }}
               </button>
             </div>
           </div>
           <p v-if="isLive && !displayStories.length" class="vp-next">
-            先生成故事，再进入学习链路。
+            暂无故事
           </p>
           <div v-if="displayStories.length" class="vp-stories">
             <div
@@ -205,18 +188,9 @@
                 </span>
                 <span class="vp-story__latest" :class="storyLatestText(s).cls">{{ storyLatestText(s).text }}</span>
                 <div class="vp-story__ops" @click.stop>
-                  <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running || runFullBusy" @click="runStory(s, i)">
+                  <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" @click="runStory(s, i)">
                     {{ running ? '运行中…' : '运行' }}
                   </button>
-                    <button
-                      type="button"
-                      class="mk-btn mk-btn--sm mk-btn--ghost"
-                      :disabled="running || runFullBusy"
-                      :title="runFullTitle"
-                      @click="runFullStory(s, i)"
-                    >
-                      {{ runFullBusy ? '一键学完中…' : '一键学完' }}
-                    </button>
                   <button type="button" class="mk-link" :disabled="storyBusy" @click="openEditStory(i)">编辑</button>
                   <button type="button" class="mk-link mk-link--danger" :disabled="storyBusy" @click="removeStory(i)">删除</button>
                 </div>
@@ -227,57 +201,7 @@
               <div v-if="openStoryId === (s.id || String(i))" class="vp-story__detail" @click.stop>
                 <p class="vp-detail__outline">{{ s.outline }}</p>
 
-                <div class="vp-lc" :class="{ 'is-stalled': progressOf(s).stalled, 'is-running': progressOf(s).running }">
-                       <div class="vp-lc__row">
-                         <span class="vp-lc__label">阶段</span>
-                         <div class="vp-lc__stage-labels">
-                           <span class="vp-lc__stage-label" title="目标对话：AI 与学习者澄清学习目标、确定要学什么">Goal</span>
-                           <span class="vp-lc__stage-label" title="路径生成：根据学习目标生成个性化的学习路径和任务">Path</span>
-                           <span class="vp-lc__stage-label" title="教学回合：教师 Agent 与虚拟学习者进行多轮交互教学">Learn</span>
-                         </div>
-                       </div>
-                       <div class="vp-lc__row">
-                         <span class="vp-lc__label">累计</span>
-                    <div class="vp-lc__counts">
-                      <span
-                        v-for="(st, idx) in LC_BARS"
-                        :key="st.key"
-                        class="vp-lc__count"
-                        :class="{ 'is-on': stageCount(s, idx) > 0 }"
-                      >
-                        {{ st.label }} <b>{{ stageCount(s, idx) }}</b>
-                      </span>
-                    </div>
-                  </div>
-                  <div class="vp-lc__row">
-                    <span class="vp-lc__label">当前</span>
-                    <span class="vp-lc__current" :class="{ 'vp-lc__current--stalled': progressOf(s).stalled }">
-                      <template v-if="progressOf(s).running">
-                        <span class="vp-lc__pulse" aria-hidden="true"></span>
-                        {{ progressOf(s).stageLabel }} 进行中
-                        <template v-if="progressOf(s).stalled">· 疑似卡顿（{{ progressOf(s).idleMins }} 分钟无新事件）</template>
-                      </template>
-                      <template v-else-if="s.latestRun">
-                        最近完成：{{ progressOf(s).stageLabel || '—' }} ·
-                        <b class="vp-lc__result" :class="`is-${runToneOf(s.latestRun.status)}`">{{ formatRunResult(s.latestRun.status) }}</b>
-                        · {{ timeAgo(String(s.latestRun.updatedAt || s.latestRun.createdAt || '')) }}
-                      </template>
-                      <template v-else>尚未运行</template>
-                    </span>
-                  </div>
-                  <div v-if="allStageLinks(s).length" class="vp-lc__row">
-                    <span class="vp-lc__label">投影</span>
-                    <div class="vp-lc__links">
-                      <button
-                        v-for="l in allStageLinks(s)"
-                        :key="l.label"
-                        type="button"
-                        class="vp-lc__link"
-                        @click="openLink(l.url)"
-                      >{{ l.label }}</button>
-                    </div>
-                  </div>
-                </div>
+                <div class="vp-lc" :class="{ 'is-stalled': progressOf(s).stalled, 'is-running': progressOf(s).running }"><div class="vp-lc__row"><span class="vp-lc__label">进度</span><span class="vp-lc__current" :class="{ 'vp-lc__current--stalled': progressOf(s).stalled }"><template v-if="progressOf(s).running"><span class="vp-lc__pulse" aria-hidden="true"></span>{{ progressOf(s).stageLabel }} 进行中<template v-if="progressOf(s).stalled"> · 卡顿 {{ progressOf(s).idleMins }} 分钟</template></template><template v-else-if="s.latestRun">最近 {{ progressOf(s).stageLabel || '—' }} · <b>{{ formatRunResult(s.latestRun.status) }}</b> · {{ timeAgo(String(s.latestRun.updatedAt || s.latestRun.createdAt || '')) }}</template><template v-else>尚未运行</template></span><span class="vp-lc__counts">G{{ s.goalCount || 0 }} · P{{ s.pathCount || 0 }} · L{{ s.learnCount || 0 }}</span></div></div>
 
                 <!-- 运行历史（该故事维度） -->
                 <div class="vp-runs-block">
@@ -300,16 +224,16 @@
                       </div>
                     </div>
                     <div class="vp-story-runs__more">
-                      <span>共 {{ runsForStory(s).length }} 条；全部运行见「运行」tab</span>
+                      <span>共 {{ runsForStory(s).length }} 条</span>
                       <button type="button" class="mk-link" @click="goRunsTab">查看全部 →</button>
                     </div>
                   </template>
                   <p v-else class="vp-none">这个故事还没有运行记录</p>
                 </div>
 
-                <!-- 高级诊断（scenario-designer 调试字段，与故事管理分区） -->
+                <!-- 高级诊断 -->
                 <details v-if="hasAdvancedFields(s)" class="vp-story-item__advanced" >
-                  <summary>高级诊断（scenario-designer 调试字段）</summary>
+                  <summary>高级诊断</summary>
                   <div class="vp-adv-body">
                     <div v-if="getHiddenDetails(s).length" class="vp-adv-row">
                       <span class="vp-adv-row__label">隐藏细节</span>
@@ -345,7 +269,7 @@
 
         <section v-if="activeTab === 'runs'" class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">全部运行 <span class="mk-card__meta">按故事分组</span></h3>
+            <h3 class="mk-card__title">全部运行</h3>
             <span class="mk-badge mk-badge--muted">{{ allRuns.length }} 条</span>
           </div>
           <div v-if="runsGrouped.length" class="vp-run-groups">
@@ -375,19 +299,8 @@
           <p v-else class="vp-none">还没有运行记录</p>
         </section>
 
-        <section v-if="isLive && activeTab === 'verify'" class="mk-card">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">前台投影验收</h3>
-          </div>
-          <div class="vp-tools">
-            <button type="button" class="vp-tool" :disabled="projecting" @click="openProjection('dashboard')">
-              {{ projecting ? '生成中…' : '投影首页' }}
-            </button>
-            <button type="button" class="vp-tool" :disabled="projecting" @click="openProjection('goal')">目标投影</button>
-            <button type="button" class="vp-tool" :disabled="projecting" @click="openProjection('paths')">路径</button>
-            <button type="button" class="vp-tool" :disabled="projecting" @click="openProjection('state')">状态</button>
-          </div>
-        </section>
+        
+
     </div>
 
     <QuickLearnPanel
@@ -428,7 +341,7 @@
             <textarea v-model="editForm.notes" class="mk-field__textarea" rows="4"></textarea>
           </label>
           <!-- 重试预算配置（以虚拟学习者为单位） -->
-          <div class="mk-field">
+          <div class="mk-field" :class="{ 'mk-field--error': editErrors.maxRetriesPerStep || editErrors.maxRetriesTotal }">
             <span class="mk-field__label">LLM 重试预算</span>
             <div class="vp-budget-row">
               <label class="mk-field--row">
@@ -440,7 +353,9 @@
                 <input v-model.number="editForm.maxRetriesTotal" type="number" min="1" max="500" class="mk-field__input" style="width:80px" />
               </label>
             </div>
-            <span class="mk-field__hint">单步：每个教学回合 LLM 失败后重试次数。全局：此学习者累计重试上限，耗尽后自动暂停。</span>
+            <span v-if="editErrors.maxRetriesPerStep" class="mk-field__err">{{ editErrors.maxRetriesPerStep }}</span>
+            <span v-if="editErrors.maxRetriesTotal" class="mk-field__err">{{ editErrors.maxRetriesTotal }}</span>
+            <span class="mk-field__hint">单步：每次上游 LLM 调用失败后的重试次数（一个教学回合含多次上游调用）。全局上限为预留字段，当前版本尚未在运行时累计消耗。</span>
           </div>
         </div>
         <div class="mk-modal__foot">
@@ -535,7 +450,6 @@ import { computed, ref, watch, onUnmounted } from 'vue'
 import { subPage, closeSubPage, virtualProfiles, openSubPage, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
-import { setProjectionToken } from '@/utils/projection'
 import QuickLearnPanel from '@/views/admin/components/virtual/QuickLearnPanel.vue'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -552,8 +466,7 @@ import {
   type QualityScore
 } from './vlab'
 
-/* 推进条四段标签（模板遍历用；VLAB_STAGES 顺序与标签一一对应） */
-const VLAB_STAGE_LABELS_ARR = VLAB_STAGES.map((s) => VLAB_STAGE_LABELS[s])
+/* 推进条四段标签见 vlab.ts 的 VLAB_STAGE_LABELS（模板直接遍历） */
 
 interface RunItem {
   time: string
@@ -705,16 +618,13 @@ const hasAdvancedFields = (s: StoryItem) =>
   || !!getGoalSeed(s)
   || !!getDisclosurePlan(s)
 const running = ref(false)
-const runFullBusy = ref(false)
-const runFullTitle = '一键完成 Goal → Path → Learn 全流程，自动跑完所有教学任务'
 const saving = ref(false)
 const storyBusy = ref(false)
 const sessionBusy = ref(false)
-const projecting = ref(false)
 const quickLearnOpen = ref(false)
 const editOpen = ref(false)
 const editForm = ref({ name: '', goal: '', level: 'beginner', notes: '', maxRetriesPerStep: 5, maxRetriesTotal: 50 })
-const editErrors = ref<{ name?: string }>({})
+const editErrors = ref<{ name?: string; maxRetriesPerStep?: string; maxRetriesTotal?: string }>({})
 useEscape(() => editOpen.value, () => { editOpen.value = false })
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
@@ -1041,6 +951,17 @@ async function saveProfile() {
     editErrors.value.name = '请填写画像名称'
     return
   }
+  // 输入框的 min/max 属性在按钮点击保存时不生效，这里显式校验并钳制
+  const perStep = Math.round(Number(editForm.value.maxRetriesPerStep))
+  const total = Math.round(Number(editForm.value.maxRetriesTotal))
+  if (!Number.isFinite(perStep) || perStep < 1 || perStep > 20) {
+    editErrors.value.maxRetriesPerStep = '单步重试须为 1–20 的整数'
+    return
+  }
+  if (!Number.isFinite(total) || total < 1 || total > 500) {
+    editErrors.value.maxRetriesTotal = '总重试预算须为 1–500 的整数'
+    return
+  }
   saving.value = true
   try {
     await adminVirtualLearnersApi.updateVirtualLearner(id, {
@@ -1049,8 +970,8 @@ async function saveProfile() {
       knowledgeLevel: editForm.value.level,
       notes: editForm.value.notes.trim(),
       simulationBudget: {
-        maxRetriesPerStep: Number(editForm.value.maxRetriesPerStep) || 5,
-        maxRetriesTotal: Number(editForm.value.maxRetriesTotal) || 50
+        maxRetriesPerStep: perStep,
+        maxRetriesTotal: total
       }
     })
     await loadDetail(id)
@@ -1157,47 +1078,6 @@ async function runStory(story?: StoryItem, index?: number) {
   }
 }
 
-/* 一键学完：创建 session 后立即调用 run-full，Goal → Path → Learn 全流程自动跑完 */
-async function runFullStory(story?: StoryItem, index?: number) {
-  const id = subPage.value?.id
-  if (!id || running.value || runFullBusy.value) return
-  if (isLive.value) {
-    const target = story || selectedStory.value
-    if (!target && displayStories.value.length !== 1) {
-      toast.error('请先选择一个故事；每个故事对应一套学习任务（Path）')
-      return
-    }
-    if (target) selectStory(target, typeof index === 'number' ? index : target.index ?? 0)
-  }
-  runFullBusy.value = true
-  try {
-    if (isLive.value) {
-      const payload = storyPayload(story, index)
-      const res = await adminVirtualLearnersApi.startVirtualSession(id, payload)
-      const session = res.data?.data ?? res.data ?? {}
-      const sid = String(session.id || session.sessionId || '')
-      const storyLabel = selectedStoryTitle.value || story?.title || '故事'
-      toast.success(`已按「${storyLabel}」启动一键全流程：${sid.slice(0, 14)}…`)
-      try {
-        const fullRes = await adminVirtualLearnersApi.virtualSessionRunFull(sid, { maxRounds: 20, maxMilestones: 10, continueOnTaskComplete: true })
-        const result = fullRes.data?.data ?? {}
-        if (result.success) {
-          toast.success(`一键全流程完成！${result.goalRounds || 0} 轮 Goal · ${result.learningSteps || 0} 步 Learn`)
-        } else {
-          toast.error(`一键全流程未完成：${result.error || '未知错误'}`)
-        }
-      } catch (e) {
-        toast.error(`一键全流程执行失败：${errMsg(e)}`)
-      }
-      await loadDetail(id)
-    }
-  } catch (e) {
-    toast.error(`启动失败：${errMsg(e)}`)
-  } finally {
-    runFullBusy.value = false
-  }
-}
-
 async function removeSession(sessionId: string) {
   if (!sessionId || sessionBusy.value) return
   const ok = await askConfirm({
@@ -1216,31 +1096,6 @@ async function removeSession(sessionId: string) {
     toast.error(`删除失败：${errMsg(e)}`)
   } finally {
     sessionBusy.value = false
-  }
-}
-
-/* 投影到前台（多入口） */
-async function openProjection(entry: 'dashboard' | 'goal' | 'paths' | 'state' = 'dashboard') {
-  const id = subPage.value?.id
-  if (!id || projecting.value) return
-  projecting.value = true
-  try {
-    const res = await adminVirtualLearnersApi.createProjectionToken(id, { scope: 'full' })
-    const body = res.data?.data ?? res.data ?? {}
-    const token = String(body.token || body.projectionToken || '')
-    if (!token) throw new Error('未返回投影 token')
-    setProjectionToken(token, { virtualLearnerId: id })
-    const href =
-      entry === 'goal' ? '/goal-conversation'
-        : entry === 'paths' ? '/learning-paths'
-          : entry === 'state' ? '/learning-state'
-            : '/dashboard'
-    window.open(href, '_blank')
-    toast.success(`已在新窗口打开投影：${href}`)
-  } catch (e) {
-    toast.error(`投影失败：${errMsg(e)}`)
-  } finally {
-    projecting.value = false
   }
 }
 
@@ -1366,27 +1221,6 @@ function storyStatusLabel(s: StoryItem): string {
   return s.status === 'ready' ? '就绪' : s.status || '草稿'
 }
 
-/* 打开故事 projection 深链（前台正式页 / 测试台调试页）：
-   与 QuickLearnPanel 同模式——先取投影 token 写入 localStorage，再开新窗，避免前台被登录墙拦截 */
-async function openLink(url?: string | null) {
-  if (!url) return
-  const id = subPage.value?.id
-  if (!id) {
-    window.open(url, '_blank')
-    return
-  }
-  try {
-    const res = await adminVirtualLearnersApi.createProjectionToken(id, { scope: 'full' })
-    const body = res.data?.data ?? res.data ?? {}
-    const token = String(body.token || body.projectionToken || '')
-    if (!token) throw new Error('未返回投影 token')
-    setProjectionToken(token, { virtualLearnerId: id })
-    window.open(url, '_blank')
-  } catch (e) {
-    toast.error(`打开投影失败：${errMsg(e)}`)
-  }
-}
-
 function formatRunStage(stage: string) {
   const s = String(stage || '').toLowerCase()
   if (s === 'running' || s === 'created' || s === 'completed' || s === 'failed' || s === 'error' || s === 'timeout') {
@@ -1415,26 +1249,9 @@ function formatRunResult(result: string) {
   return result || '—'
 }
 
-/* ---- 生命周期条（vp-lc）辅助：阶段计数 / 投影链接 / 结果色调 ---- */
-const STAGE_COUNT_KEYS = ['goalCount', 'pathCount', 'learnCount', null] as const
-const STAGE_PROJ_KEYS = ['goal', 'path', 'learn', null] as const
-/** 四段标签（VLAB_STAGE_LABELS_ARR 的下标 0-2 对应 goal/path/learn 计数） */
-function stageCount(s: StoryItem, idx: number): number {
-  const key = STAGE_COUNT_KEYS[idx]
-  return key ? Number((s as unknown as Record<string, unknown>)[key] || 0) : 0
-}
+/* ---- 生命周期条（vp-lc）辅助：阶段计数 / 结果色调 ---- */
 function stageTotal(s: StoryItem): number {
   return (s.goalCount || 0) + (s.pathCount || 0) + (s.learnCount || 0)
-}
-/** 某阶段的前台/调试投影链接（formal/test 并存时都展示） */
-function stageLinksOf(s: StoryItem, idx: number): Array<{ label: string; url: string }> {
-  const key = STAGE_PROJ_KEYS[idx]
-  const p = s.projection
-  if (!key || !p) return []
-  const out: Array<{ label: string; url: string }> = []
-  if (p.formal?.[key]) out.push({ label: '前台', url: p.formal[key] as string })
-  if (p.test?.[key]) out.push({ label: '调试', url: p.test[key] as string })
-  return out
 }
 function runToneOf(status: string): 'ok' | 'warn' | 'bad' {
   const r = String(status || '').toLowerCase()
@@ -1442,26 +1259,6 @@ function runToneOf(status: string): 'ok' | 'warn' | 'bad' {
   if (r === 'running' || r === 'created' || r === 'paused') return 'warn'
   return 'bad'
 }
-/** 全部阶段的投影链接平铺（带阶段前缀，如「Goal 前台」「Path 调试」） */
-function allStageLinks(s: StoryItem): Array<{ label: string; url: string }> {
-  const p = s.projection
-  if (!p) return []
-  const out: Array<{ label: string; url: string }> = []
-  const keys: Array<['goal' | 'path' | 'learn', string]> = [['goal', 'Goal'], ['path', 'Path'], ['learn', 'Learn']]
-  for (const [key, stage] of keys) {
-    if (p.formal?.[key]) out.push({ label: `${stage} 前台`, url: p.formal[key] as string })
-    if (p.test?.[key]) out.push({ label: `${stage} 调试`, url: p.test[key] as string })
-  }
-  return out
-}
-
-/* 生命周期累计分区：三阶段标签（与 stageCount 下标对应） */
-const LC_BARS = [
-  { key: 'goal', label: 'Goal' },
-  { key: 'path', label: 'Path' },
-  { key: 'learn', label: 'Learn' },
-] as const
-
 /** 管理行「最近」摘要：进行中 / 最近结果（色调）/ 未运行 */
 function storyLatestText(s: StoryItem): { text: string; cls: string } {
   if ((s.runningCount || 0) > 0) return { text: `${s.runningCount} 个进行中`, cls: 'is-running' }

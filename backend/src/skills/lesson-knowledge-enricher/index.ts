@@ -7,6 +7,10 @@
  */
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
+import { loadPromptFile } from '../../composers/prompt-files/loader';
+
+// File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
+const LESSON_KNOWLEDGE_ENRICHER_PROMPT = loadPromptFile('skill:lesson-knowledge-enricher')?.systemPrompt || '';
 
 export const lessonKnowledgeEnricherDefinition: SkillDefinition = {
   name: 'lesson-knowledge-enricher',
@@ -154,7 +158,7 @@ export async function lessonKnowledgeEnricher(input: LessonKnowledgeEnricherInpu
   const startTime = Date.now();
   const result = await callPrompt<LessonKnowledgeEnricherInput, LessonKnowledgeEnricherOutput>({
     agentId: 'skill:lesson-knowledge-enricher',
-    defaultSystemPrompt: '',
+    defaultSystemPrompt: LESSON_KNOWLEDGE_ENRICHER_PROMPT,
     requireActivePrompt: true,
     caller: { skillId: 'lesson-knowledge-enricher' },
           buildUserPayload: (payload) => payload,

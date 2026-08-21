@@ -139,7 +139,7 @@
               <h3>{{ detail.topic }}</h3>
               <span class="ts-panel__id">{{ detail.id }}</span>
             </div>
-            <button type="button" class="ts-panel__close" aria-label="关闭" @click="detail = null; const q = { ...route.query }; delete q.session; void router.replace({ query: q })">✕</button>
+            <button type="button" class="ts-panel__close" aria-label="关闭" @click="closeDetail">✕</button>
           </header>
 
           <div class="ts-panel__body">
@@ -510,18 +510,18 @@ watch(
   },
   { immediate: true }
 )
-useEscape(() => !!detail.value, () => {
-  detail.value = null
-  const q = { ...route.query }; delete q.session; void router.replace({ query: q })
-})
+useEscape(() => !!detail.value, closeDetail)
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => !!detail.value), panelRef)
-useMaskClose(maskRef, () => {
+useMaskClose(maskRef, closeDetail)
+const openCards = ref<Set<string>>(new Set())
+
+/** 关闭详情面板并同步清除 URL 中的 ?session= 深链参数 */
+function closeDetail() {
   detail.value = null
   const q = { ...route.query }; delete q.session; void router.replace({ query: q })
-})
-const openCards = ref<Set<string>>(new Set())
+}
 
 function openDetail(r: Row) {
   detail.value = r

@@ -1,5 +1,6 @@
 import { CallerInfo } from '../../gateway/api-gateway';
 import { callPrompt } from '../../composers/prompt-composer';
+import { loadPromptFile } from '../../composers/prompt-files/loader';
 import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { PromptCallSpec } from '../../composers/types';
@@ -148,6 +149,9 @@ export interface SessionWrapupArtifact {
 }
 
 const AGENT_ID = 'skill:session-wrapup';
+
+// File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
+const SESSION_WRAPUP_PROMPT = loadPromptFile(AGENT_ID)?.systemPrompt || '';
 
 export const sessionWrapupAgentDefinition: AgentDefinition = {
   id: AGENT_ID,
@@ -445,7 +449,7 @@ const SESSION_WRAPUP_FALLBACK_RUNTIME_CONTRACT = buildDefaultRuntimeContract('se
 
 const sessionWrapupPromptSpec: PromptCallSpec<SessionWrapupInput, Record<string, unknown> | null> = {
   agentId: AGENT_ID,
-  defaultSystemPrompt: '',
+  defaultSystemPrompt: SESSION_WRAPUP_PROMPT,
   requireActivePrompt: true,
   caller: {
     agentId: 'teaching-agent',

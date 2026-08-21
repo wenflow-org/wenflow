@@ -57,6 +57,13 @@ function staleThresholdAt(): Date {
   return new Date(Date.now() - virtualSessionReclaimService.getThresholdMs());
 }
 
+/** 重试预算数值钳制：非法输入回退默认值，整数化并限制在 [min, max]（与前端输入框 min/max 一致） */
+function clampBudgetValue(value: unknown, fallback: number, min: number, max: number): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(numeric)));
+}
+
 const DEFAULT_SCENARIO_CANDIDATE_DOMAINS = [
   '番茄工作法与时间管理',
   '课堂复盘与总结',
@@ -1542,6 +1549,9 @@ router.put('/:id', async (req: Request, res) => {
       const existingProfile = parseJson<Record<string, unknown>>(profile.profile, {});
       const existingBudget = (existingProfile.simulationBudget || {}) as Record<string, unknown>;
       const newBudget = { ...existingBudget, ...req.body.simulationBudget };
+      // 钳制数值范围（与前端输入框 min/max 一致），防止手误写入超大值导致近无限重试
+      newBudget.maxRetriesPerStep = clampBudgetValue(newBudget.maxRetriesPerStep, 5, 1, 20);
+      newBudget.maxRetriesTotal = clampBudgetValue(newBudget.maxRetriesTotal, 50, 1, 500);
       // 保留已消耗的 consumedRetries（不能被前端覆盖）
       newBudget.consumedRetries = existingBudget.consumedRetries || 0;
       updateData.profile = JSON.stringify({ ...existingProfile, simulationBudget: newBudget });
@@ -3071,6 +3081,58 @@ router.get('/regression/compare-sessions', async (req: Request, res) => {
       success: false,
       error: error.message || '对比 session 失败'
     });
+  }
+});
+
+/**
+ * 批量删除虚拟学习者（A3）：级联删除 profile + user + 全部虚拟数据。
+ * 后端已通过 virtualCleanupService.cascadeDeleteProfile 打通 409 死锁。
+ * POST /api/admin/virtual-learners/batch-delete  body: { profileIds: string[] }
+ */
+router.post('/batch-delete', async (req: Request, res) => {
+  try {
+    const profileIds: string[] = Array.isArray(req.body?.profileIds)
+      ? (req.body.profileIds as unknown[]).map(String).filter(Boolean)
+      : [];
+    if (!profileIds.length) {
+      return res.status(400).json({ success: false, error: 'profileIds 至少提供一个' });
+    }
+
+    const deleted: string[] = [];
+    const skipped: string[] = [];
+    const errors: Array<{ id: string; error: string }> = [];
+
+    for (const id of profileIds) {
+      try {
+        await virtualCleanupService.cascadeDeleteProfile(id, {
+          adminId: req.user?.userId ?? null,
+          adminName: req.user?.email ?? null
+        });
+        deleted.push(id);
+      } catch (error) {
+        if (error?.code === 'VIRTUAL_PROFILE_REAL_USER_PROTECTED') {
+          skipped.push(id);
+        } else {
+          errors.push({ id, error: error.message || '删除失败' });
+        }
+      }
+    }
+
+    logger.info('批量删除虚拟学习者完成', {
+      total: profileIds.length,
+      deleted: deleted.length,
+      skipped: skipped.length,
+      errors: errors.length,
+      operatorId: req.user?.userId ?? null
+    });
+
+    res.json({
+      success: errors.length === 0,
+      data: { deleted, skipped, errors }
+    });
+  } catch (error) {
+    logger.error('批量删除虚拟学习者失败:', error);
+    res.status(500).json({ success: false, error: error?.message || '批量删除失败' });
   }
 });
 

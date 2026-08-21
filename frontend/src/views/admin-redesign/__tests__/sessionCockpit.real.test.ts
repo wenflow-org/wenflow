@@ -217,8 +217,8 @@ describe('SessionCockpit 双模式', () => {
 
     const wrapper = await mountCockpit('session-real', 'ts_real_1');
 
-    // 顶栏 + 模式标识
-    expect(wrapper.text()).toContain('会话座舱');
+    // 顶栏 + 模式标识（标题已由「会话座舱」更名为「会话监控」）
+    expect(wrapper.text()).toContain('会话监控');
     expect(wrapper.text()).toContain('真实教学会话');
     expect(wrapper.find('.cp-back').text()).toContain('会话列表');
 

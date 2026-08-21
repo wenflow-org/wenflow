@@ -1,4 +1,5 @@
 import { callPrompt } from '../../composers/prompt-composer';
+import { loadPromptFile } from '../../composers/prompt-files/loader';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { PromptCallSpec, type PromptCallResult } from '../../composers/types';
 import { logger } from '../../utils/logger';
@@ -9,6 +10,9 @@ import type { TeachingLearnerProjection } from '../../agents/learner-model-agent
 import { buildSkillOutcome, type SkillOutcome } from '../outcome';
 
 const AGENT_ID = 'skill:teaching-turn';
+
+// File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
+const TEACHING_TURN_PROMPT = loadPromptFile(AGENT_ID)?.systemPrompt || '';
 
 type MessageRole = 'user' | 'assistant' | 'system';
 
@@ -535,7 +539,7 @@ function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
 
 const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutput> = {
   agentId: AGENT_ID,
-  defaultSystemPrompt: '',
+  defaultSystemPrompt: TEACHING_TURN_PROMPT,
   requireActivePrompt: true,
   caller: {
     agentId: 'teaching-agent',
@@ -576,7 +580,7 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
  */
 const teachingAnalysisPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutput> = {
   agentId: AGENT_ID,
-  defaultSystemPrompt: '',
+  defaultSystemPrompt: TEACHING_TURN_PROMPT,
   requireActivePrompt: true,
   caller: {
     agentId: 'teaching-agent',

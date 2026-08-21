@@ -12,6 +12,7 @@
  *     __onFailure: 'throw' | 'fallback'，覆盖 core 声明的默认策略（用于必须保持既有抛出契约的调用点）。
  */
 import { callPrompt } from '../../composers/prompt-composer';
+import { loadPromptFile } from '../../composers/prompt-files/loader';
 import type { PromptCallContext } from '../../composers/types';
 import type { SkillDefinition, SkillExecutionResult } from '../protocol';
 import { agentConfigService } from '../../services/agentConfig.service';
@@ -27,6 +28,18 @@ export type AuxSkillId =
   | 'skill-compiler'
   | 'basic-evaluator'
   | 'goal-alignment-checker';
+
+// File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
+const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
+  'teaching-opening-generator': loadPromptFile('skill:teaching-opening-generator')?.systemPrompt || '',
+  'learner-progress-report': loadPromptFile('skill:learner-progress-report')?.systemPrompt || '',
+  'generic-chat': loadPromptFile('skill:generic-chat')?.systemPrompt || '',
+  'course-design': loadPromptFile('skill:course-design')?.systemPrompt || '',
+  'skill-author': loadPromptFile('skill:skill-author')?.systemPrompt || '',
+  'skill-compiler': loadPromptFile('skill:skill-compiler')?.systemPrompt || '',
+  'basic-evaluator': loadPromptFile('skill:basic-evaluator')?.systemPrompt || '',
+  'goal-alignment-checker': loadPromptFile('skill:goal-alignment-checker')?.systemPrompt || '',
+};
 
 interface AuxPlumbing extends PromptCallContext {
   callerAgentId?: string;
@@ -98,7 +111,7 @@ async function runAux<TOutput>(opts: RunAuxOptions<TOutput>): Promise<SkillExecu
   try {
     const result = await callPrompt<any, TOutput>({
       agentId: `skill:${opts.meta.skillId}`,
-      defaultSystemPrompt: '',
+      defaultSystemPrompt: AUX_SKILL_PROMPTS[opts.meta.skillId] || '',
       requireActivePrompt: true,
       caller: { skillId: opts.meta.skillId, agentId: callerAgentId, action: callerAction },
       ...(opts.prepareSystemPrompt

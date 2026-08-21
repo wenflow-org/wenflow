@@ -2,7 +2,7 @@
   <div class="mk-page cp">
     <div class="cp-head">
       <button type="button" class="cp-back" @click="closeSubPage">← {{ backLabel }}</button>
-      <h1 class="cp-title">会话座舱 <span class="cp-title__id mono">{{ shortId }}</span></h1>
+      <h1 class="cp-title">会话监控 <span class="cp-title__id mono">{{ shortId }}</span></h1>
     </div>
 
 
@@ -823,9 +823,10 @@ const manualStopped = computed(() =>
   learningResult.value.manualStop === true
   || stageStatus.value.learning?.manualStop === true
 )
-/* 暂停标志：pause API 设 stageResults.teaching.paused = true */
+/* 暂停标志：pause API 设 stageResults.teaching.paused = true（与 VirtualProfile 的读取位置一致） */
 const isPaused = computed(() =>
-  stageStatus.value.learning?.paused === true
+  learningResult.value.paused === true
+  || stageStatus.value.learning?.paused === true
 )
 const statusTone = computed(() =>
   !session.value
@@ -1882,36 +1883,46 @@ async function pauseSession() {
   busy.value = true
   try {
     await adminVirtualLearnersApi.pauseVirtualSession(sessionId.value)
+    toast.success('已请求暂停：当前回合结束后生效')
     void refresh()
-  } catch (e) { /* act() 的 catch 统一处理 */ }
-  finally { busy.value = false }
+  } catch (e) {
+    toast.error(`暂停失败：${errMsg(e)}`)
+  } finally { busy.value = false }
 }
 async function resumeSession() {
   if (busy.value || !sessionId.value) return
   busy.value = true
   try {
     await adminVirtualLearnersApi.resumeVirtualSession(sessionId.value)
+    toast.success('已恢复自动学习')
     void refresh()
-  } catch (e) { /* act() 的 catch 统一处理 */ }
-  finally { busy.value = false }
+  } catch (e) {
+    toast.error(`恢复失败：${errMsg(e)}`)
+  } finally { busy.value = false }
 }
 async function stopLearning() {
   if (busy.value) return
   busy.value = true
   try {
     await adminVirtualLearnersApi.stopVirtualLearning(sessionId.value)
+    toast.success('已停止学习会话')
     void refresh()
-  } catch (e) { /* */ }
-  finally { busy.value = false }
+  } catch (e) {
+    toast.error(`停止失败：${errMsg(e)}`)
+  } finally { busy.value = false }
 }
 async function restartLearning() {
   if (busy.value) return
   busy.value = true
   try {
     await adminVirtualLearnersApi.restartVirtualLearning(sessionId.value)
+    toast.success('已重启学习阶段')
+    // 失败会话的轮询定时器此前已自毁，sessionId 未变、watch 不触发，必须显式拉起
+    if (!pollTimer && !isTerminal.value) startPolling()
     void refresh()
-  } catch (e) { /* */ }
-  finally { busy.value = false }
+  } catch (e) {
+    toast.error(`重启失败：${errMsg(e)}`)
+  } finally { busy.value = false }
 }
 
 /* 控制动作：按阶段路由（learning 走 learning-step / auto-learning） */

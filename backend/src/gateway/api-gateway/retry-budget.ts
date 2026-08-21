@@ -32,9 +32,9 @@ export interface RetryBudgetOptions {
 }
 
 export const RETRY_BUDGET_HARD_LIMITS = {
-  maxUpstreamAttempts: 5,
-  maxTransportRetries: 2,
-  maxLogicalRetries: 2,
+  maxUpstreamAttempts: 10,
+  maxTransportRetries: 5,
+  maxLogicalRetries: 5,
   minRequestTimeoutMs: 10_000,
   maxRequestTimeoutMs: 300_000,
   minRetryBaseDelayMs: 100,
@@ -53,19 +53,19 @@ export function createRetryBudget(options: RetryBudgetOptions = {}): RetryBudget
     limits: {
       maxUpstreamAttempts: clampInteger(
         options.maxUpstreamAttempts,
-        3,
+        5,
         1,
         RETRY_BUDGET_HARD_LIMITS.maxUpstreamAttempts
       ),
       maxTransportRetries: clampInteger(
         options.maxTransportRetries,
-        1,
+        3,
         0,
         RETRY_BUDGET_HARD_LIMITS.maxTransportRetries
       ),
       maxLogicalRetries: clampInteger(
         options.maxLogicalRetries,
-        2,
+        3,
         0,
         RETRY_BUDGET_HARD_LIMITS.maxLogicalRetries
       )

@@ -26,6 +26,12 @@ export interface VirtualLearnerProfileData {
   learningPreferences?: string[];
   failurePatterns?: string[];
   behavioralProfileSummary?: string;
+  /** 虚拟学习者的 LLM 重试预算（per learner 独立配置） */
+  simulationBudget?: {
+    maxRetriesPerStep: number;
+    maxRetriesTotal: number;
+    consumedRetries?: number;
+  };
 }
 
 export interface PersonalityTraits {

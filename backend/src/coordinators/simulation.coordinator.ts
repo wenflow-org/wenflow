@@ -58,8 +58,8 @@ const COORDINATOR_ID = 'simulation-agent';
 const ASSISTED_SESSION_LEASE_MS = 10 * 60 * 1000;
 const ASSISTED_SESSION_LEASE_RENEW_MS = 2 * 60 * 1000;
 const LEASE_RETRY_DELAYS_MS = [25, 50, 100];
-const LEARN_UPSTREAM_RETRY_ATTEMPTS = 3;
-const LEARN_UPSTREAM_RETRY_DELAY_MS = 750;
+const LEARN_UPSTREAM_RETRY_ATTEMPTS = 5;
+const LEARN_UPSTREAM_RETRY_DELAY_MS = 2000;
 /** 一节课的课时预算：超过仍未双方收束则显式失败（可重启恢复），不允许无限拖堂 */
 const LEARN_TASK_TURN_BUDGET = 30;
 /** 「自动完成本课」单次调用的回合上限（按课界停止，不按里程碑数估算） */
@@ -464,22 +464,38 @@ class SimulationOrchestrator {
 
   private isRetryableLearnUpstreamError(error: unknown) {
     const message = String(asErrorLike(error).message || error || '').toLowerCase();
-    return /structured_output_invalid|invalid chat completion|finish_reason|length|empty content|reply completion mismatch|api request canceled|fetch failed|timeout|timed out|econnreset|socket|network|rate.?limit|\b429\b|\b502\b|\b503\b|\b504\b/.test(message);
+    // 注意：不匹配 "retry budget" —— RETRY_BUDGET_EXHAUSTED 是网关的终止信号，
+    // 上层若将其视为可重试，等于每次重试都重新发放预算，预算形同虚设。
+    return /structured_output_invalid|invalid chat completion|finish_reason|length|empty content|reply completion mismatch|api request canceled|fetch failed|timeout|timed out|econnreset|socket|network|rate.?limit|\b429\b|\b502\b|\b503\b|\b504\b|\b529\b/.test(message);
   }
 
   private async retryLearnUpstream<T>(sessionId: string, operation: string, execute: () => Promise<T>): Promise<T> {
+    let maxRetries = LEARN_UPSTREAM_RETRY_ATTEMPTS;
+    try {
+      // 读取虚拟学习者的独立重试预算（per learner），前端「编辑画像」可调
+      const session = await this.getVirtualSession(sessionId);
+      const profileData = safeJsonParse<VirtualLearnerProfileData>(session.virtual_learner_profiles.profile, {});
+      const budget = profileData?.simulationBudget;
+      if (budget && Number.isFinite(Number(budget.maxRetriesPerStep)) && Number(budget.maxRetriesPerStep) > 0) {
+        // 上限钳制与路由层/前端输入框一致（[1,20]），防止历史脏数据触发近无限重试
+        maxRetries = Math.min(20, Math.max(1, Math.round(Number(budget.maxRetriesPerStep))));
+      }
+    } catch {
+      // 会话尚不可用或 profile 无预算配置：沿用默认值
+    }
     let lastError: unknown;
-    for (let attempt = 1; attempt <= LEARN_UPSTREAM_RETRY_ATTEMPTS; attempt += 1) {
+    for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
       try {
         await this.assertCurrentSessionLeaseOwned(sessionId);
         return await execute();
       } catch (error: unknown) {
         lastError = error;
-        if (!this.isRetryableLearnUpstreamError(error) || attempt === LEARN_UPSTREAM_RETRY_ATTEMPTS) break;
+        if (!this.isRetryableLearnUpstreamError(error) || attempt === maxRetries) break;
         logger.warn('[simulation-coordinator] Learn 上游调用失败，准备重试', {
           sessionId,
           operation,
           attempt,
+          maxRetries,
           error: asErrorLike(error).message || String(error)
         });
         await new Promise(resolve => setTimeout(resolve, LEARN_UPSTREAM_RETRY_DELAY_MS * attempt));
@@ -1073,22 +1089,23 @@ class SimulationOrchestrator {
   }
   
   private async updateStageResults(sessionId: string, stage: string, result: Record<string, unknown>) {
-    const session = await prisma.virtual_sessions.findUnique({
-      where: { id: sessionId }
-    });
-    
-    if (!session) return;
-    
-    const stageResults: StageResults = safeJsonParse<StageResults>(session.stageResults, {});
-    stageResults[stage] = result;
-
     await this.assertCurrentSessionLeaseOwned(sessionId);
-    await prisma.virtual_sessions.update({
-      where: { id: sessionId },
-      data: {
-        stageResults: JSON.stringify(stageResults),
-        updatedAt: new Date()
-      }
+    // 事务内原子读-改-写，防止并发覆盖（step 更新 goal 与 advanceToPathGeneration 更新 path 同时写入）
+    await prisma.$transaction(async (tx) => {
+      const session = await tx.virtual_sessions.findUnique({
+        where: { id: sessionId },
+        select: { stageResults: true }
+      });
+      if (!session) return;
+      const stageResults: StageResults = safeJsonParse<StageResults>(session.stageResults, {});
+      stageResults[stage] = result;
+      await tx.virtual_sessions.update({
+        where: { id: sessionId },
+        data: {
+          stageResults: JSON.stringify(stageResults),
+          updatedAt: new Date()
+        }
+      });
     });
   }
 

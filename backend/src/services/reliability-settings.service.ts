@@ -20,9 +20,9 @@ export interface PlatformReliabilitySettings {
 }
 
 export const DEFAULT_PLATFORM_RELIABILITY_SETTINGS: PlatformReliabilitySettings = {
-  maxUpstreamAttempts: 3,
-  maxTransportRetries: 1,
-  maxLogicalRetries: 2,
+  maxUpstreamAttempts: 5,
+  maxTransportRetries: 3,
+  maxLogicalRetries: 3,
   defaultRequestTimeoutMs: 300_000,
   retryBaseDelayMs: 1_000,
   maxRetryAfterMs: 10_000,

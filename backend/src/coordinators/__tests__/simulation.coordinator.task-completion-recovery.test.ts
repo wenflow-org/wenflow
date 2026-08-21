@@ -11,6 +11,12 @@ const mockStartSession = jest.fn()
 jest.mock('../../config/database', () => ({
   __esModule: true,
   default: {
+    $transaction: async (callback: (tx: any) => Promise<any>) => callback({
+      virtual_sessions: {
+        findUnique: mockVirtualSessionFindUnique,
+        update: mockVirtualSessionUpdate
+      }
+    }),
     virtual_sessions: {
       findUnique: mockVirtualSessionFindUnique,
       update: mockVirtualSessionUpdate
@@ -373,22 +379,29 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
 
   it('教学上游重试耗尽后将 Learn 标为失败并保留当前 task 供重启', async () => {
     mockProcessStudentMessage.mockRejectedValue(new Error('API request canceled'))
+    // 重试退避是真实 sleep（5 次尝试共 2+4+6+8=20s），用假时钟快进避免测试超时
+    jest.useFakeTimers()
+    try {
+      const pending = coordinator.executeLearningStep('simulation-1')
+      await jest.advanceTimersByTimeAsync(30_000)
+      const result = await pending
+      const learning = getLearningState()
 
-    const result = await coordinator.executeLearningStep('simulation-1')
-    const learning = getLearningState()
-
-    expect(result).toEqual(expect.objectContaining({
-      success: false,
-      error: 'API request canceled'
-    }))
-    expect(mockProcessStudentMessage).toHaveBeenCalledTimes(3)
-    expect(sessionRecord.status).toBe('failed')
-    expect(sessionRecord.currentStage).toBe('teaching')
-    expect(learning.taskRuntime).toEqual(expect.objectContaining({
-      status: 'error',
-      taskId: 'task-1',
-      error: 'API request canceled'
-    }))
+      expect(result).toEqual(expect.objectContaining({
+        success: false,
+        error: 'API request canceled'
+      }))
+      expect(mockProcessStudentMessage).toHaveBeenCalledTimes(5)
+      expect(sessionRecord.status).toBe('failed')
+      expect(sessionRecord.currentStage).toBe('teaching')
+      expect(learning.taskRuntime).toEqual(expect.objectContaining({
+        status: 'error',
+        taskId: 'task-1',
+        error: 'API request canceled'
+      }))
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('同一 task 达到课时预算后显式失败，不再调用 LLM，也不误标完成', async () => {

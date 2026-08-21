@@ -7,6 +7,7 @@
 
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
+import { loadPromptFile } from '../../composers/prompt-files/loader';
 
 export const adaptiveGuidanceCopyDefinition: SkillDefinition = {
   name: 'adaptive-guidance-copy',
@@ -86,40 +87,8 @@ type AdaptiveGuidanceCopyResult = SkillExecutionResult<AdaptiveGuidanceCopyOutpu
   debug?: AdaptiveGuidanceCopyDebug;
 };
 
-export const ADAPTIVE_GUIDANCE_COPY_PROMPT = `你是一个学习产品的动态引导文案生成器。
-
-目标：
-1. 根据学习者状态和路径上下文，生成适合 Dashboard / 路径页展示的动态文案。
-2. 对于 learning-state 页面，重点生成"如何解读当前状态"和"下一步怎么调节"的引导。
-3. 你只负责"怎么说"，不负责做出路径调整、课程结束或成绩判定等强决策。
-4. 文案要简洁、自然、具体，不要像机器总结。
-
-输出要求：
-1. 只输出 JSON。
-2. headline 适合作为页面主标题或主提示。
-3. subtitle 适合作为副标题或补充说明。
-
-4. todayActions 必须输出 3 条，且三条必须扮演不同角色：
-   - 第 1 条（主操作）：用户当前最该做的一步。to 应是 continue-learning 或 path-detail。
-     例：title="继续上次学习"、desc="从'系统识别日期格式变体'继续推进。"、action="继续"
-   - 第 2 条（次操作）：与学习状态/节奏相关的辅助动作。to 应是 learning-state。
-     例：title="查看当前节奏"、desc="本周已学 80 分钟，节奏稳定。"、action="查看状态"
-   - 第 3 条（弱操作）：可选的回顾/记录动作。to 应是 achievements 或 create-goal。
-     例：title="回顾最近成就"、desc="已解锁 2 个里程碑徽章。"、action="去看看"
-
-   关键约束：
-   - 三条的 title 必须互不相同（不要全部叫"继续学习"）。
-   - 三条的 action 文字必须互不相同（不要都叫"继续"）。常用：继续 / 查看状态 / 去看看 / 前往查看 / 开始规划 / 看进展 等。
-   - 每条 desc 必须是一句具体内容，不能为空字符串，不能只重复 title。
-   - to 值只能从这 5 个里选：continue-learning、learning-state、achievements、create-goal、path-detail。
-
-5. pathHint 用于解释当前路径进展。
-6. nextStep 用于告诉用户下一步最值得做什么。
-7. paceHint 用于提醒学习节奏。
-8. emptyStateCopy 用于没有路径/没有任务时的引导。
-9. warningCopy 用于疲劳、卡点、进度滞后等情况的提醒。
-10. 所有文案必须和输入中的学习状态一致，不能虚构用户已经完成了什么。
-11. learning-state 页面要避免重复解释指标公式，更聚焦"当前状态意味着什么"。`;
+// File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
+export const ADAPTIVE_GUIDANCE_COPY_PROMPT = loadPromptFile('skill:adaptive-guidance-copy')?.systemPrompt || '';
 
 function safeText(value: any): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -216,7 +185,7 @@ export async function adaptiveGuidanceCopy(
   try {
     const result = await callPrompt<AdaptiveGuidanceCopyInput, AdaptiveGuidanceCopyOutput>({
       agentId: 'skill:adaptive-guidance-copy',
-      defaultSystemPrompt: '',
+      defaultSystemPrompt: ADAPTIVE_GUIDANCE_COPY_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'adaptive-guidance-copy' },
             buildUserPayload: () => userPayload,

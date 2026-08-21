@@ -18,11 +18,16 @@ import {
 } from '../../agents/protocol';
 import { CallerInfo } from '../../gateway/api-gateway';
 import { callPrompt } from '../../composers/prompt-composer';
+import { loadPromptFile } from '../../composers/prompt-files/loader';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 
 import { logger } from '../../utils/logger';
 
+const AGENT_ID = 'skill:path-planning';
 const PATH_AGENT_MAX_TOKENS = 32000;
+
+// File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
+const PATH_PLANNING_PROMPT = loadPromptFile(AGENT_ID)?.systemPrompt || '';
 
 function normalizePromptString(value: any): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -584,7 +589,7 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
   const systemPromptOverride = (context as any)?.metadata?.pathAgentSystemPromptOverride as string | undefined;
   const result = await callPrompt<any, PathOutput>({
     agentId: 'skill:path-planning',
-    defaultSystemPrompt: '',
+    defaultSystemPrompt: PATH_PLANNING_PROMPT,
     requireActivePrompt: true,
     caller: { agentId: 'path-agent', skillId: 'path-planning' },
         buildUserPayload: () => userPayload,

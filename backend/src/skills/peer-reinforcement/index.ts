@@ -4,6 +4,7 @@
  */
 
 import { callPrompt } from '../../composers/prompt-composer';
+import { loadPromptFile } from '../../composers/prompt-files/loader';
 import { PromptCallSpec } from '../../composers/types';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition } from '../../agents/protocol';
@@ -15,6 +16,8 @@ interface ChatMessage { role: MessageRole; content: string }
 
 const AGENT_ID = 'skill:peer-reinforcement';
 
+// File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
+const PEER_REINFORCEMENT_PROMPT = loadPromptFile(AGENT_ID)?.systemPrompt || '';
 
 
 
@@ -224,7 +227,7 @@ export function normalizePeerParsedOutput(parsed: unknown): PeerModelArtifact {
 
 const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, PeerModelArtifact> = {
   agentId: AGENT_ID,
-  defaultSystemPrompt: '',
+  defaultSystemPrompt: PEER_REINFORCEMENT_PROMPT,
   requireActivePrompt: true,
   caller: {
     agentId: 'teaching-agent',

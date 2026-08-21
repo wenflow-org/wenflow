@@ -221,7 +221,7 @@ export function mapLogsToSpans(items: RawLog[]): TraceSpan[] {
   for (const { l: log, i } of otherRows) {
     out.push(spanOf(log, i))
   }
-  return out.sort((a, b) => (a.ts || 0) - (b.ts || 0))
+  return out.sort((a, b) => (b.ts || 0) - (a.ts || 0))
 }
 
 /* ================= 瀑布：服务端分页 / traceId 直达（W1） =================

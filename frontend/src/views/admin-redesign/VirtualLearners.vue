@@ -21,9 +21,9 @@
         :title="'干跑确认清单后批量标记卡死会话为失败'"
         @click="openReclaimModal()"
       >
-        {{ reclaimBusy ? '回收中…' : `一键回收卡死（${partition.stale}）` }}
+        {{ reclaimBusy ? '回收中…' : `回收卡死（${partition.stale}）` }}
       </button>
-      <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建虚拟学习者</button>
+      <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建</button>
     </div>
 
     <!-- 正在运行：直接列出当前有活跃会话的虚拟学习者，一眼看出谁在跑 -->
@@ -55,9 +55,9 @@
     <!-- 批量实验：系统级队列实验（创建学习者 → Goal → Path → 学完任务 → 跨日衰减模拟） -->
     <div class="mk-card">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">批量实验 <span class="mk-card__meta">队列式全链路实验 · 自动推进 · 每任务快照画像 · 支持跨日衰减模拟</span></h3>
+        <h3 class="mk-card__title">批量实验</h3>
         <span v-if="runningBatchCount" class="vl-running__label vl-running__label--inline">运行中 {{ runningBatchCount }}</span>
-        <button type="button" class="mk-status__action" @click="batchPanelOpen = !batchPanelOpen">{{ batchPanelOpen ? '收起面板' : '展开面板' }}</button>
+        <button type="button" class="mk-status__action" @click="batchPanelOpen = !batchPanelOpen">{{ batchPanelOpen ? '收起' : '批量实验' }}</button>
       </div>
 
       <template v-if="batchPanelOpen">
@@ -85,7 +85,7 @@
 
         <!-- 实验列表 -->
         <div v-if="batchLoading && !batchExperiments.length" class="vl-bexp__hint">加载中…</div>
-        <div v-else-if="!batchExperiments.length" class="vl-bexp__hint">还没有批量实验。填写上方表单创建第一个：系统会自动创建虚拟学习者并逐个推进 Goal → Path → 学习任务，任务完成后可手动触发跨日衰减模拟（3/7/14 天）验证画像。</div>
+        <div v-else-if="!batchExperiments.length" class="vl-bexp__hint">还没有批量实验。填写名称和至少一个学习者名，点击创建并启动。</div>
 
         <div v-for="exp in batchExperiments" :key="exp.id" class="vl-bexp__item">
           <div class="vl-bexp__head">
@@ -200,17 +200,17 @@
             <td class="mk-na">{{ s.created }}</td>
             <td>
               <div class="mk-actions">
-                <button type="button" class="mk-icon-btn" title="画像" @click="openSubPage('virtual', s.id)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg></button>
+                <button type="button" class="mk-icon-btn mk-icon-btn--text" title="画像" @click="openSubPage('virtual', s.id)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg><span>画像</span></button>
                 <button
                   v-if="isLive"
                   type="button"
-                  class="mk-icon-btn"
+                  class="mk-icon-btn mk-icon-btn--text"
                   :class="{ 'mk-link--muted': s.storyCount === 0 }"
-                  :title="s.storyCount === 0 ? '建议先在画像页生成故事' : '启动实验会话'"
+                  :title="s.storyCount === 0 ? '需先生成故事' : '运行'"
                   @click.stop="openLaunch(s)"
-                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8V4z"/></svg></button>
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8V4z"/></svg><span>{{ s.storyCount === 0 ? '需故事' : '运行' }}</span></button>
                 <div v-if="isLive" class="mk-menu">
-                  <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(s.id)">⋯</button>
+                  <button type="button" class="mk-menu__btn" aria-label="更多" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(s.id)">⋯</button>
                   <div v-if="openMenu === s.id" class="mk-menu__pop" :style="popStyle" @click.stop>
                     <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="busyId === s.id" @click="menuRemove(s)">删除</button>
                   </div>
@@ -248,7 +248,7 @@
       <button type="button" class="vl-batch__btn" :disabled="batchActionBusy" @click="batchReclaim">
         {{ batchActionBusy ? '处理中…' : '批量清理卡死' }}
       </button>
-      <button type="button" class="vl-batch__danger" disabled title="待 2B 后端打通：删除当前被 409 会话/教学记录死锁阻塞">
+      <button type="button" class="vl-batch__danger" :disabled="batchActionBusy" @click="batchDelete">
         批量删除
       </button>
     </div>
@@ -784,7 +784,7 @@ function fmtMins(mins: number) {
 
 /* ===== A1 批量操作：复选框 + 批量条（对齐 Users.vue 模式） ===== */
 const selected = ref<string[]>([])
-const batchBusy = ref(false)
+/* batchActionBusy 声明见下方「批量实验面板」区（与批量删除/清理共用同一互斥标志） */
 const selectable = computed(() => filtered.value)
 const allChecked = computed(() => selectable.value.length > 0 && selected.value.length === selectable.value.length)
 
@@ -795,7 +795,7 @@ function toggleAll() {
 /** 批量终止：对选中虚拟人全部非终态会话（运行中/创建中）标记 abandoned；只改状态不删数据 */
 async function batchTerminate() {
   const ids = [...selected.value]
-  if (!ids.length || batchBusy.value) return
+  if (!ids.length || batchActionBusy.value) return
   const runningSum = ids.reduce((a, id) => {
     const s = samples.value.find((x) => x.id === id)
     return a + (s?.runningCount ?? 0)
@@ -806,7 +806,7 @@ async function batchTerminate() {
     confirmText: `终止 ${ids.length} 人`
   })
   if (!ok) return
-  batchBusy.value = true
+  batchActionBusy.value = true
   try {
     const res = await adminVirtualLearnersApi.terminateVirtualSessions({ profileIds: ids, dryRun: false })
     const d = res.data?.data ?? {}
@@ -827,6 +827,37 @@ function batchReclaim() {
   const ids = [...selected.value]
   if (!ids.length) return
   void openReclaimModal(ids)
+}
+
+/** 批量删除虚拟学习者：级联删除 profile + 全部虚拟数据，不可撤销 */
+async function batchDelete() {
+  const ids = [...selected.value]
+  if (!ids.length || batchActionBusy.value) return
+  const ok = await askConfirm({
+    title: '批量删除虚拟学习者',
+    message: `确认删除选中的 ${ids.length} 个虚拟学习者？\n将级联删除其全部会话、教学记录、学习数据，该操作不可撤销。`,
+    confirmText: `删除 ${ids.length} 人`
+  })
+  if (!ok) return
+  batchActionBusy.value = true
+  try {
+    const res = await adminVirtualLearnersApi.batchDeleteVirtualLearners(ids)
+    const d = res.data?.data ?? {}
+    const deleted = (d.deleted || []).length
+    const skipped = (d.skipped || []).length
+    const errors = (d.errors || []).length
+    if (errors > 0) {
+      toast.error(`删除 ${deleted} 人，${skipped} 人跳过，${errors} 人失败`)
+    } else {
+      toast.success(`已删除 ${deleted} 人${skipped > 0 ? `，${skipped} 人跳过` : ''}`)
+    }
+    selected.value = []
+    void loadLiveData()
+  } catch (e) {
+    toast.error(`批量删除失败：${errMsg(e)}`)
+  } finally {
+    batchActionBusy.value = false
+  }
 }
 
 /* ===== A2 一键回收 / 批量清理卡死：dryRun 清单 → 确认 → dryRun=false 落地 ===== */
@@ -912,8 +943,6 @@ const batchDetailId = ref<string | null>(null)
 const batchForm = ref<{ name: string; learners: { name: string; learningGoal: string; frictionBudget: string }[] }>({
   name: '',
   learners: [
-    { name: '', learningGoal: '', frictionBudget: 'normal' },
-    { name: '', learningGoal: '', frictionBudget: 'normal' },
     { name: '', learningGoal: '', frictionBudget: 'normal' },
   ],
 })
@@ -1022,6 +1051,16 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 操作列：图标+文字标签按钮 */
+.mk-actions .mk-icon-btn--text {
+  width: auto;
+  padding: 0 5px;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--mk-faint);
+}
+.mk-actions .mk-icon-btn--text span { font-size: 11px; }
+.mk-actions .mk-icon-btn--text svg { width: 13px; height: 13px; }
 /* ===== 批量实验面板 ===== */
 .vl-bexp__create { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px dashed var(--mk-border, #d7dce5); border-radius: 8px; margin-bottom: 12px; }
 .vl-bexp__create-row { display: flex; gap: 8px; align-items: center; }

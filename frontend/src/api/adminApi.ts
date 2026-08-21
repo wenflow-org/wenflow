@@ -1356,6 +1356,11 @@ export const adminVirtualLearnersApi = {
   reclaimStaleVirtualSessions: async (data: { dryRun?: boolean; profileIds?: string[] }) => {
     return adminAxios.post('/admin/virtual-learners/sessions/reclaim-stale', data);
   },
+
+  /** A3 批量删除虚拟学习者：级联删除 profile + 全部虚拟数据 */
+  batchDeleteVirtualLearners: async (profileIds: string[]) => {
+    return adminAxios.post('/admin/virtual-learners/batch-delete', { profileIds });
+  },
 };
 
 // ============================================================

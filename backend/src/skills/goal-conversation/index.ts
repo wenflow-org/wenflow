@@ -6,6 +6,7 @@ import {
   isPromptSupplementEnabled,
 } from '../../services/prompt-composer';
 import { callPrompt } from '../../composers/prompt-composer';
+import { loadPromptFile } from '../../composers/prompt-files/loader';
 import type { PromptCallSpec } from '../../composers/types';
 import {
   AgentContext,
@@ -19,6 +20,10 @@ import {
   type StructuredParseResult,
   validateGoalConversationStructuredOutput
 } from './structured-validator';
+
+// File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
+const GOAL_CONVERSATION_PROMPT = loadPromptFile('skill:goal-conversation')?.systemPrompt || '';
+
 import {
   isPlaceholderValue,
   mergeUnderstanding,
@@ -799,7 +804,7 @@ function buildGoalPromptSpec(
 ): PromptCallSpec<GoalPromptInput, GoalConversationAgentResult> {
   return {
     agentId: 'skill:goal-conversation',
-    defaultSystemPrompt: '',
+    defaultSystemPrompt: GOAL_CONVERSATION_PROMPT,
     requireActivePrompt: true,
     caller: {
       agentId: 'goal-agent',

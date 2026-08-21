@@ -99,7 +99,6 @@ const feedTruncated = computed(() => feedAll.length > feed.value.length);
 const feedSummary = computed(() => {
   if (!feed.value.length) return '';
   const latest = feed.value[0];
-  const total = feedAll.length || feed.value.length;
   if (latest.subject) return `${latest.label} · ${latest.subject}`;
   return latest.label;
 });

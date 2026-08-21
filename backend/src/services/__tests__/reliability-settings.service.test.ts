@@ -35,9 +35,9 @@ describe('reliability settings service', () => {
 
   it('缺少持久化设置时返回安全默认值', async () => {
     await expect(getPlatformReliabilitySettings()).resolves.toEqual({
-      maxUpstreamAttempts: 3,
-      maxTransportRetries: 1,
-      maxLogicalRetries: 2,
+      maxUpstreamAttempts: 5,
+      maxTransportRetries: 3,
+      maxLogicalRetries: 3,
       defaultRequestTimeoutMs: 300000,
       retryBaseDelayMs: 1000,
       maxRetryAfterMs: 10000,
@@ -57,9 +57,9 @@ describe('reliability settings service', () => {
     })
 
     expect(normalized).toEqual({
-      maxUpstreamAttempts: 5,
-      maxTransportRetries: 2,
-      maxLogicalRetries: 2,
+      maxUpstreamAttempts: 10,
+      maxTransportRetries: 5,
+      maxLogicalRetries: 5,
       defaultRequestTimeoutMs: 300000,
       retryBaseDelayMs: 5000,
       maxRetryAfterMs: 10000,
