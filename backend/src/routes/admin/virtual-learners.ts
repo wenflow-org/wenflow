@@ -2682,8 +2682,11 @@ router.post('/sessions/:sessionId/pause', async (req: Request, res) => {
     if (session.status !== 'running') {
       return res.status(409).json({ success: false, error: { message: `会话状态为 ${session.status}，仅运行中可暂停` } });
     }
-
-    // 在 stageResults.teaching 设 paused 标志
+    // paused 标志只有 learn 自动循环会检查；goal/path 阶段写入是静默 no-op，
+    // 且后续 startLearningPhase 会整体覆写 teaching 键把标志抹掉——明确拒绝而非假装成功
+    if (session.currentStage !== 'teaching') {
+      return res.status(409).json({ success: false, error: { message: `当前阶段为 ${session.currentStage}，仅教学（teaching）阶段支持暂停` } });
+    }
     const stageResults = typeof session.stageResults === 'string'
       ? JSON.parse(session.stageResults || '{}')
       : (session.stageResults || {});

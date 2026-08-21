@@ -1045,18 +1045,51 @@ class SimulationOrchestrator {
   }
   
   private async addSessionLog(sessionId: string, log: SimulationLogEntry) {
+    // 只取 logs 列：整行读会连带拖回 stageResults 大字段（每条日志一次，放大明显）
     const session = await prisma.virtual_sessions.findUnique({
-      where: { id: sessionId }
+      where: { id: sessionId },
+      select: { logs: true }
     });
-    
+
     if (!session) return;
-    
+
     let logs: SimulationLogEntry[] = [];
     try {
       logs = JSON.parse(session.logs || '[]');
     } catch { /* 解析失败时保留默认值 */ }
-    
+
     logs.push(log);
+
+    await this.assertCurrentSessionLeaseOwned(sessionId);
+    await prisma.virtual_sessions.update({
+      where: { id: sessionId },
+      data: {
+        logs: JSON.stringify(logs),
+        updatedAt: new Date()
+      }
+    });
+  }
+
+  /**
+   * 批量追加日志：一次读-改-写落多条。
+   * 背景：调用方曾普遍 `for (const log of logs) await addSessionLog(...)`，
+   * 每条日志都全量 parse/stringify 整个 logs 数组，形成 O(n²) 写放大
+   * （单会话累计冗余写可达 MB 级）。批量入口把 n 次读写收敛为 1 次。
+   */
+  private async addSessionLogs(sessionId: string, entries: SimulationLogEntry[]) {
+    if (!entries.length) return;
+    const session = await prisma.virtual_sessions.findUnique({
+      where: { id: sessionId },
+      select: { logs: true }
+    });
+    if (!session) return;
+
+    let logs: SimulationLogEntry[] = [];
+    try {
+      logs = JSON.parse(session.logs || '[]');
+    } catch { /* 解析失败时保留默认值 */ }
+
+    logs.push(...entries);
 
     await this.assertCurrentSessionLeaseOwned(sessionId);
     await prisma.virtual_sessions.update({
@@ -1163,7 +1196,8 @@ class SimulationOrchestrator {
           }
         }
       };
-      logs.push(failureLog);
+      // 只写库、不推入 logs 数组：调用方随后会批量 flush logs，
+      // 若这里也 push 会导致同一条失败日志重复落库
       await this.addSessionLog(sessionId, failureLog);
     } catch (persistError: unknown) {
       logger.error('[simulation-coordinator] 持久化 Learn 失败状态失败（failed 标记可能静默丢失）', {
@@ -1289,14 +1323,12 @@ class SimulationOrchestrator {
         }
       };
       logs.push(errorLog);
-      for (const log of logs) {
-        await this.addSessionLog(sessionId, log).catch((logError: unknown) => {
-          logger.warn('[simulation-coordinator] 记录任务完成待重试日志失败', {
-            sessionId,
-            error: asErrorLike(logError).message || String(logError)
-          });
+      await this.addSessionLogs(sessionId, logs).catch((logError: unknown) => {
+        logger.warn('[simulation-coordinator] 记录任务完成待重试日志失败', {
+          sessionId,
+          error: asErrorLike(logError).message || String(logError)
         });
-      }
+      });
 
       return {
         success: false,
@@ -1774,10 +1806,8 @@ class SimulationOrchestrator {
         
       }
 
-      for (const log of logs) {
-        await this.addSessionLog(input.sessionId, log);
-      }
-      
+      await this.addSessionLogs(input.sessionId, logs);
+
       logger.info('[simulation-coordinator] 单步模拟完成', {
         sessionId: input.sessionId,
         durationMs: Date.now() - startTime,
@@ -2884,14 +2914,12 @@ class SimulationOrchestrator {
       
       if (!currentMilestone) {
         await this.finalizePathCompletion(sessionId, logs);
-        for (const log of logs) {
-          await this.addSessionLog(sessionId, log).catch((logError: unknown) => {
-            logger.warn('[simulation-coordinator] 记录学习完成日志失败', {
-              sessionId,
-              error: asErrorLike(logError).message || String(logError)
-            });
+        await this.addSessionLogs(sessionId, logs).catch((logError: unknown) => {
+          logger.warn('[simulation-coordinator] 记录学习完成日志失败', {
+            sessionId,
+            error: asErrorLike(logError).message || String(logError)
           });
-        }
+        });
         return {
           success: true,
           isPathCompleted: true,
@@ -2910,14 +2938,12 @@ class SimulationOrchestrator {
         const nextMilestoneIdx = currentMilestoneIdx + 1;
         if (nextMilestoneIdx >= milestones.length) {
           await this.finalizePathCompletion(sessionId, logs);
-          for (const log of logs) {
-            await this.addSessionLog(sessionId, log).catch((logError: unknown) => {
-              logger.warn('[simulation-coordinator] 记录学习完成日志失败', {
-                sessionId,
-                error: asErrorLike(logError).message || String(logError)
-              });
+          await this.addSessionLogs(sessionId, logs).catch((logError: unknown) => {
+            logger.warn('[simulation-coordinator] 记录学习完成日志失败', {
+              sessionId,
+              error: asErrorLike(logError).message || String(logError)
             });
-          }
+          });
           return {
             success: true,
             isPathCompleted: true,
@@ -2946,9 +2972,7 @@ class SimulationOrchestrator {
           }
         });
         await this.persistLearningFailure(sessionId, new Error(budgetError), logs);
-        for (const log of logs) {
-          await this.addSessionLog(sessionId, log).catch(() => {});
-        }
+        await this.addSessionLogs(sessionId, logs).catch(() => {});
         return {
           success: false,
           currentTaskStopped: true,
@@ -3229,14 +3253,12 @@ class SimulationOrchestrator {
                 }
               }
 
-              for (const log of logs) {
-                await this.addSessionLog(sessionId, log).catch((logError: unknown) => {
-                  logger.warn('[simulation-coordinator] 记录任务完成日志失败', {
-                    sessionId,
-                    error: asErrorLike(logError).message || String(logError)
-                  });
+              await this.addSessionLogs(sessionId, logs).catch((logError: unknown) => {
+                logger.warn('[simulation-coordinator] 记录任务完成日志失败', {
+                  sessionId,
+                  error: asErrorLike(logError).message || String(logError)
                 });
-              }
+              });
             }
 
             return {
@@ -3359,10 +3381,8 @@ class SimulationOrchestrator {
       if (isPathCompleted) {
         await this.finalizePathCompletion(sessionId, logs);
       }
-      
-      for (const log of logs) {
-        await this.addSessionLog(sessionId, log);
-      }
+
+      await this.addSessionLogs(sessionId, logs);
       
       return {
         success: !learningStepError,

@@ -33,6 +33,8 @@ export interface StaleSessionReclaimResult {
   scanned: number;
   reclaimed: number;
   skippedActiveLease: number;
+  /** 管理员主动暂停（teaching.paused=true）的会话：无写入是预期行为，跳过回收 */
+  skippedPaused: number;
   sessions: StaleSessionReclaimEntry[];
 }
 
@@ -148,6 +150,7 @@ export class VirtualSessionReclaimService {
       scanned: sessions.length,
       reclaimed: 0,
       skippedActiveLease: 0,
+      skippedPaused: 0,
       sessions: []
     };
 
@@ -167,6 +170,18 @@ export class VirtualSessionReclaimService {
       });
       if (activeLease) {
         result.skippedActiveLease += 1;
+        continue;
+      }
+      // 管理员主动暂停的会话没有写入是预期行为，不应被当作僵尸回收
+      // （否则暂停超阈值后被置 failed，resume 永远 409）。跳过并计入 skippedPaused。
+      let teachingPaused = false;
+      try {
+        teachingPaused = (JSON.parse(session.stageResults || '{}')?.teaching?.paused) === true;
+      } catch {
+        teachingPaused = false;
+      }
+      if (teachingPaused) {
+        result.skippedPaused += 1;
         continue;
       }
       result.sessions.push(entry);

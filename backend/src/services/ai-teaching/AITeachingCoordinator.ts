@@ -2494,7 +2494,9 @@ export class AITeachingOrchestrator {
 
       const nextLearningState = {
         ...learningState,
-        manualStop: true,
+        // 注意：不写 manualStop —— 这是系统自动超时而非人工停止，
+        // 写 manualStop 会让前端显示「已手动停止」并污染停止口径（数据取证证实
+        // failed 会话中大量 manualStop=true 实为超时连锁）。原因由 stoppedReason 表达。
         stoppedAt: new Date().toISOString(),
         stoppedReason: 'teaching-session-timeout',
         taskRuntime: {
