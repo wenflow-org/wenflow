@@ -242,6 +242,9 @@ model goal_conversations {
   collectedData  String?
   completedAt    DateTime?
   learningPathId String?
+  // 乐观锁：messages/collectedData 为整包 JSON 读改写，并发提交（双击/重试）时
+  // 以 revision 条件更新防止互相覆盖丢消息
+  revision       Int       @default(0)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @default(now())
   users          users     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -502,6 +505,7 @@ model teaching_sessions {
   @@index([userId])
   @@index([userId, createdAt])
   @@index([startTime])
+  @@index([learningPathId])
 }
 
 model session_finalization_operations {

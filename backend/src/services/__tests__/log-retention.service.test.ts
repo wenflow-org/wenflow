@@ -4,6 +4,8 @@ const mockLlmFindMany = jest.fn()
 const mockLlmDeleteMany = jest.fn()
 const mockPromptFindMany = jest.fn()
 const mockPromptDeleteMany = jest.fn()
+const mockLoginAttemptsFindMany = jest.fn()
+const mockLoginAttemptsDeleteMany = jest.fn()
 const mockQueryRawUnsafe = jest.fn()
 const mockLogger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
 const mockRunBackgroundTask = jest.fn()
@@ -14,6 +16,7 @@ jest.mock('../../config/database', () => ({
     agent_call_logs: { findMany: mockAgentFindMany, deleteMany: mockAgentDeleteMany },
     llm_execution_attempts: { findMany: mockLlmFindMany, deleteMany: mockLlmDeleteMany },
     prompt_call_logs: { findMany: mockPromptFindMany, deleteMany: mockPromptDeleteMany },
+    login_attempts: { findMany: mockLoginAttemptsFindMany, deleteMany: mockLoginAttemptsDeleteMany },
     $queryRawUnsafe: mockQueryRawUnsafe
   }
 }))
@@ -82,6 +85,7 @@ describe('LogRetentionService', () => {
     mockAgentFindMany.mockResolvedValue([])
     mockLlmFindMany.mockResolvedValue([])
     mockPromptFindMany.mockResolvedValue([])
+    mockLoginAttemptsFindMany.mockResolvedValue([])
     mockQueryRawUnsafe.mockResolvedValue([])
   })
 
@@ -114,6 +118,9 @@ describe('LogRetentionService', () => {
     expect(mockPromptFindMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { createdAt: { lt: cutoff } }
     }))
+    expect(mockLoginAttemptsFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { createdAt: { lt: cutoff } }
+    }))
   })
 
   it('空表立即退出：每表只查询一次，不调用 deleteMany', async () => {
@@ -125,14 +132,17 @@ describe('LogRetentionService', () => {
     expect(result!.tables.map(item => item.table)).toEqual([
       'agent_call_logs',
       'llm_execution_attempts',
-      'prompt_call_logs'
+      'prompt_call_logs',
+      'login_attempts'
     ])
     expect(mockAgentFindMany).toHaveBeenCalledTimes(1)
     expect(mockLlmFindMany).toHaveBeenCalledTimes(1)
     expect(mockPromptFindMany).toHaveBeenCalledTimes(1)
+    expect(mockLoginAttemptsFindMany).toHaveBeenCalledTimes(1)
     expect(mockAgentDeleteMany).not.toHaveBeenCalled()
     expect(mockLlmDeleteMany).not.toHaveBeenCalled()
     expect(mockPromptDeleteMany).not.toHaveBeenCalled()
+    expect(mockLoginAttemptsDeleteMany).not.toHaveBeenCalled()
   })
 
   it('分页循环删除：多批 5000 直到空批，按批独立删除', async () => {

@@ -242,6 +242,13 @@ export const waterfallError = ref('')
 
 const WATERFALL_PAGE_SIZE = 200
 
+/**
+ * 本地样本上限（性能审计：瀑布行列表无虚拟化）：
+ * 「加载更多样本」每页追加 200 条，无限追加会让行渲染与预聚合开销无界增长。
+ * 达到上限后停止追加（数据层守卫 + UI 隐藏入口并提示），全量口径仍由 waterfallTotal 展示。
+ */
+export const WATERFALL_MAX_SPANS = 2000
+
 /** 同 trace 内按绝对时间戳重算 startMs（页追加后跨页同 trace 行的相对起点保持一致） */
 export function rebaseTraceStartMs(spans: TraceSpan[]): TraceSpan[] {
   const byTrace = new Map<string, number>()
@@ -291,6 +298,8 @@ export function waterfallSyncFromBoot(): void {
 export async function waterfallLoadMore(): Promise<void> {
   if (waterfallLoading.value) return
   const base = waterfallSpans.value ?? []
+  // 本地上限保护：行列表无虚拟化，达到上限不再追加（UI 同步隐藏入口并提示）
+  if (base.length >= WATERFALL_MAX_SPANS) return
   waterfallLoading.value = true
   waterfallError.value = ''
   try {

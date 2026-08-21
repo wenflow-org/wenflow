@@ -13,14 +13,16 @@ const MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
 const MILLIS_PER_HOUR = 60 * 60 * 1000;
 
 export interface LogRetentionTableSpec {
-  table: 'agent_call_logs' | 'llm_execution_attempts' | 'prompt_call_logs';
+  table: 'agent_call_logs' | 'llm_execution_attempts' | 'prompt_call_logs' | 'login_attempts';
   timeField: 'calledAt' | 'startedAt' | 'createdAt';
 }
 
 export const LOG_RETENTION_TABLES: readonly LogRetentionTableSpec[] = [
   { table: 'agent_call_logs', timeField: 'calledAt' },
   { table: 'llm_execution_attempts', timeField: 'startedAt' },
-  { table: 'prompt_call_logs', timeField: 'createdAt' }
+  { table: 'prompt_call_logs', timeField: 'createdAt' },
+  // 登录尝试遥测：安全调查窗口 90 天足够，且该表增速高于业务表（数据实证 4.6k 行）
+  { table: 'login_attempts', timeField: 'createdAt' }
 ];
 
 export interface LogRetentionTableResult {
@@ -56,7 +58,7 @@ interface LogRetentionModel {
 
 type LogRetentionDatabase = Pick<
   PrismaClient,
-  'agent_call_logs' | 'llm_execution_attempts' | 'prompt_call_logs' | '$queryRawUnsafe'
+  'agent_call_logs' | 'llm_execution_attempts' | 'prompt_call_logs' | 'login_attempts' | '$queryRawUnsafe'
 >;
 
 function isSqliteDatabaseUrl(value: string | undefined): boolean {

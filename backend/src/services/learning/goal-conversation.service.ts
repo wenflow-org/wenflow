@@ -712,29 +712,39 @@ async continueConversation(
    * 保存消息到历史
    */
   private async saveMessage(conversationId: string, role: string, content: string, meta?: Record<string, number> | null) {
-    const conversation = await prisma.goal_conversations.findUnique({
-      where: { id: conversationId }
-    });
-
-    const data = JSON.parse(conversation.collectedData);
-    data.messages = data.messages || [];
-    const sanitizedContent = this.sanitizeVisibleContent(content);
-    data.messages.push({
-      role,
-      content: sanitizedContent,
-      time: new Date().toISOString(),
-      ...(meta && Object.keys(meta).length > 0 ? { meta } : {})
-    });
-
-    // S1 数据质量修复：messages 列与 collectedData.messages 双写（追加后整列同步为完整对话数组）。
-    // 消费方（admin 详情兜底解析）按 {role, content, time} 数组读取该列，与 collectedData 语义一致。
-    await prisma.goal_conversations.update({
-      where: { id: conversationId },
-      data: {
-        collectedData: JSON.stringify(data),
-        messages: JSON.stringify(data.messages)
+    // 乐观锁：messages/collectedData 是整包 JSON 读改写，同一会话的并发提交
+    // （双击/重试）会互相覆盖丢消息。以 revision 条件更新，冲突时重读重放。
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const conversation = await prisma.goal_conversations.findUnique({
+        where: { id: conversationId }
+      });
+      if (!conversation) {
+        throw new Error(`目标会话不存在: ${conversationId}`);
       }
-    });
+
+      const data = JSON.parse(conversation.collectedData);
+      data.messages = data.messages || [];
+      const sanitizedContent = this.sanitizeVisibleContent(content);
+      data.messages.push({
+        role,
+        content: sanitizedContent,
+        time: new Date().toISOString(),
+        ...(meta && Object.keys(meta).length > 0 ? { meta } : {})
+      });
+
+      // S1 数据质量修复：messages 列与 collectedData.messages 双写（追加后整列同步为完整对话数组）。
+      // 消费方（admin 详情兜底解析）按 {role, content, time} 数组读取该列，与 collectedData 语义一致。
+      const updated = await prisma.goal_conversations.updateMany({
+        where: { id: conversationId, revision: conversation.revision },
+        data: {
+          collectedData: JSON.stringify(data),
+          messages: JSON.stringify(data.messages),
+          revision: { increment: 1 }
+        }
+      });
+      if (updated.count === 1) return;
+    }
+    throw new Error('目标会话并发写入冲突（连续 3 次 revision 失配），请重试');
   }
 
   /**
@@ -745,9 +755,14 @@ async continueConversation(
     internal: any;
     runtimeEnvelope?: any;
   }) {
+    // 乐观锁：与 saveMessage 同理，防止并发回合互相覆盖 collectedData
+    for (let attempt = 0; attempt < 3; attempt++) {
     const conversation = await prisma.goal_conversations.findUnique({
       where: { id: conversationId }
     });
+    if (!conversation) {
+      throw new Error(`目标会话不存在: ${conversationId}`);
+    }
 
     const data = JSON.parse(conversation.collectedData);
 
@@ -798,31 +813,46 @@ async continueConversation(
       data.learningPath = core.learningPath || null;
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.goal_conversations.update({
-        where: { id: conversationId },
-        data: {
-          collectedData: JSON.stringify(data),
-          stage
+    try {
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.goal_conversations.updateMany({
+          where: { id: conversationId, revision: conversation.revision },
+          data: {
+            collectedData: JSON.stringify(data),
+            stage,
+            revision: { increment: 1 }
+          }
+        });
+        if (updated.count !== 1) {
+          // 触发事务回滚（含未发出的领域事件），外层重读重放
+          throw new Error('GOAL_REVISION_CONFLICT');
         }
+        await enqueueDomainEvent(tx, createDomainEvent({
+          type: 'goal:understanding:updated',
+          aggregateType: 'goal',
+          aggregateId: conversationId,
+          userId: conversation.userId,
+          source: 'goal-conversation-service',
+          data: {
+            conversationId,
+            stage,
+            confidence,
+            understanding: data.understanding,
+            normalizedGoalState: data.normalizedGoalState,
+            confirmedProposal: data.confirmedProposal || null,
+            structuredData: data.structuredData || null
+          }
+        }));
       });
-      await enqueueDomainEvent(tx, createDomainEvent({
-        type: 'goal:understanding:updated',
-        aggregateType: 'goal',
-        aggregateId: conversationId,
-        userId: conversation.userId,
-        source: 'goal-conversation-service',
-        data: {
-          conversationId,
-          stage,
-          confidence,
-          understanding: data.understanding,
-          normalizedGoalState: data.normalizedGoalState,
-          confirmedProposal: data.confirmedProposal || null,
-          structuredData: data.structuredData || null
-        }
-      }));
-    });
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes('GOAL_REVISION_CONFLICT') || attempt === 2) {
+        throw error;
+      }
+      // revision 冲突：重读最新状态重放
+    }
+    }
   }
 
   private async buildGoalPathRequest(

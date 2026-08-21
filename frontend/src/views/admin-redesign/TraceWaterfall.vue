@@ -21,6 +21,11 @@
       >
         {{ waterfallLoading ? '加载中…' : '加载更多样本' }}
       </button>
+      <span
+        v-if="waterfallCapReached"
+        class="mk-status__meta"
+        title="行列表未做虚拟化，为保持流畅停止继续追加；全量口径见左侧计数"
+      >已达本地样本上限 {{ WATERFALL_MAX_SPANS }} 条，停止追加</span>
       <button
         v-if="failedTraceIds.length"
         type="button"
@@ -244,6 +249,7 @@ import {
   waterfallLoadMore,
   waterfallFetchTrace,
   waterfallFetchSession,
+  WATERFALL_MAX_SPANS,
   type LogDetail,
   type PromptMetaRow
 } from './live'
@@ -268,6 +274,67 @@ const sortMode = ref<'time' | 'dur-desc' | 'dur-asc'>('time')
 const baseSpans = computed<TraceSpan[]>(() =>
   dataSource.value === 'live' ? (waterfallSpans.value ?? spans.value) : spans.value
 )
+
+/* ---- 预聚合概要（性能热点修复）----
+ * 此前 pickTrace 的排序比较器每次比较都对 baseSpans 做两次全量 filter（O(t·log t·n)），
+ * 下拉每个选项渲染时 traceLabel/sessionLabel 又各做一次全量 filter/reduce。
+ * 现改为 baseSpans 变更时单次遍历构建概要 Map，比较器与 label 均为 O(1) 查表。
+ * 口径与原实现逐字段一致（见各字段注释），排序语义不变。 */
+interface TraceAgg {
+  /** span 数 */
+  count: number
+  /** 失败 span 数 */
+  errs: number
+  /** 链路内最大 end 偏移 = max(startMs + durationMs)（原 pickTrace/traceLabel 的 total 口径） */
+  maxEndMs: number
+}
+interface SessionAgg {
+  spanCount: number
+  /** 覆盖的 traceId 集合（traceCount = size） */
+  traces: Set<string>
+  errs: number
+  /** 会话起点 = min(ts ?? 0)，与原 sessionOf 口径一致（缺 ts 记为 0） */
+  startTs: number
+  /** 会话终点 = max((ts ?? 0) + durationMs) */
+  endTs: number
+}
+
+const traceAggMap = computed<Map<string, TraceAgg>>(() => {
+  const m = new Map<string, TraceAgg>()
+  for (const s of baseSpans.value) {
+    let a = m.get(s.traceId)
+    if (!a) {
+      a = { count: 0, errs: 0, maxEndMs: 0 }
+      m.set(s.traceId, a)
+    }
+    a.count++
+    if (s.status === 'err') a.errs++
+    const end = s.startMs + s.durationMs
+    if (end > a.maxEndMs) a.maxEndMs = end
+  }
+  return m
+})
+
+const sessionAggMap = computed<Map<string, SessionAgg>>(() => {
+  const m = new Map<string, SessionAgg>()
+  for (const s of baseSpans.value) {
+    const sid = s.sessionId
+    if (!sid) continue
+    let a = m.get(sid)
+    if (!a) {
+      a = { spanCount: 0, traces: new Set(), errs: 0, startTs: Infinity, endTs: -Infinity }
+      m.set(sid, a)
+    }
+    a.spanCount++
+    a.traces.add(s.traceId)
+    if (s.status === 'err') a.errs++
+    const ts = s.ts ?? 0
+    if (ts < a.startTs) a.startTs = ts
+    const e = ts + s.durationMs
+    if (e > a.endTs) a.endTs = e
+  }
+  return m
+})
 
 /* Prompt 契约索引（与执行日志同源：同 traceId 关联 prompt_call_logs） */
 onMounted(() => {
@@ -353,14 +420,15 @@ const traceIds = computed(() => {
   if (!q) return allTraceIds.value
   return allTraceIds.value.filter((t) => t.toLowerCase().includes(q))
 })
-/** 默认链路选择：span 数多 → 含失败 → 总耗时最长（避开探测型单 span 链路） */
+/** 默认链路选择：span 数多 → 含失败 → 总耗时最长（避开探测型单 span 链路）。
+ *  排序语义不变（V8 sort 稳定，键序 count ↓ / 含失败 ↓ / maxEnd ↓）；
+ *  分数改读预聚合 traceAggMap——此前每次比较全量 filter 两次，O(t·log t·n)。 */
 function pickTrace(ids: string[]): string {
   if (!ids.length) return ''
-  const score = (id: string) => {
-    const mine = baseSpans.value.filter((s) => s.traceId === id)
-    const errs = mine.filter((s) => s.status === 'err').length
-    const total = mine.reduce((a, s) => Math.max(a, s.startMs + s.durationMs), 0)
-    return [mine.length, errs > 0 ? 1 : 0, total] as const
+  const aggs = traceAggMap.value
+  const score = (id: string): readonly [number, number, number] => {
+    const a = aggs.get(id)
+    return [a?.count ?? 0, a && a.errs > 0 ? 1 : 0, a?.maxEndMs ?? 0]
   }
   return [...ids].sort((a, b) => {
     const [sa, ea, ta] = score(a)
@@ -408,15 +476,14 @@ const sessionIds = computed(() => {
   return [...order.entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id)
 })
 function sessionOf(id: string) {
-  const mine = baseSpans.value.filter((s) => s.sessionId === id)
-  const start = Math.min(...mine.map((s) => s.ts ?? 0))
-  const end = Math.max(...mine.map((s) => (s.ts ?? 0) + s.durationMs))
+  /* 读预聚合 sessionAggMap（此前每次调用对 baseSpans 全量 filter/reduce） */
+  const a = sessionAggMap.value.get(id)
   return {
-    spanCount: mine.length,
-    traceCount: new Set(mine.map((s) => s.traceId)).size,
-    errs: mine.filter((s) => s.status === 'err').length,
-    start,
-    end
+    spanCount: a?.spanCount ?? 0,
+    traceCount: a ? a.traces.size : 0,
+    errs: a?.errs ?? 0,
+    start: a ? a.startTs : Infinity,
+    end: a ? a.endTs : -Infinity
   }
 }
 const spansOfSession = computed(() => {
@@ -503,11 +570,16 @@ function locateFailure() {
 }
 
 /* W1：加载更多样本（服务端分页追加）+ traceId 直达搜索 */
+/* 本地样本上限：行列表无虚拟化，达到 WATERFALL_MAX_SPANS 后停止追加并提示 */
+const waterfallCapReached = computed(
+  () => dataSource.value === 'live' && (waterfallSpans.value?.length ?? 0) >= WATERFALL_MAX_SPANS
+)
 const canLoadMoreWaterfall = computed(() =>
   dataSource.value === 'live'
   && waterfallSpans.value !== null
   && waterfallTotal.value > 0
   && (waterfallSpans.value?.length ?? 0) < waterfallTotal.value
+  && !waterfallCapReached.value
   && !waterfallLoading.value
 )
 async function loadMoreWaterfall() {
@@ -589,10 +661,12 @@ const badgeOf = (s: string) => (s === 'err' ? 'mk-badge--bad' : s === 'warn' ? '
 
 /* 长 trace ID 在下拉与标题中截断显示（shortTrace 已上移至 watch 之前，见文件上方声明） */
 function traceLabel(t: string) {
-  const mine = baseSpans.value.filter((s) => s.traceId === t)
-  const errs = mine.filter((s) => s.status === 'err').length
-  const total = mine.reduce((a, s) => Math.max(a, s.startMs + s.durationMs), 0)
-  return `${shortTrace(t)} · ${mine.length} span · ${fmtMs(total)}${errs ? ` · ${errs} 失败` : ''}`
+  /* 读预聚合 traceAggMap（此前每个下拉选项渲染都全量 filter/reduce 一次） */
+  const a = traceAggMap.value.get(t)
+  const count = a?.count ?? 0
+  const errs = a?.errs ?? 0
+  const total = a?.maxEndMs ?? 0
+  return `${shortTrace(t)} · ${count} span · ${fmtMs(total)}${errs ? ` · ${errs} 失败` : ''}`
 }
 
 /* 样本内失败总数（「仅失败」按钮角标） */

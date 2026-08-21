@@ -70,6 +70,9 @@ const LEARN_STEP_PROVIDER_RETRIES = 3;
 /** 判断错误是否为 LLM Provider 可重试错误（过载/超时/JSON 解析失败） */
 function isProviderRetryable(errorMsg: string): boolean {
   const e = errorMsg.toLowerCase();
+  // turn_budget_exhausted 是课时预算闸门的显式终止信号：若被当作可重试，
+  // 自动循环会静默 restartLearningPhase 把 turns 归零，预算形同虚设
+  if (e.includes('turn_budget_exhausted')) return false;
   return e.includes('provider') || e.includes('retry') || e.includes('timeout')
     || e.includes('overload') || e.includes('budget') || e.includes('503')
     || e.includes('does not contain valid json') || e.includes('response does not contain');
