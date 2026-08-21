@@ -1902,6 +1902,12 @@ async function resumeSession() {
 }
 async function stopLearning() {
   if (busy.value) return
+  const ok = await askConfirm({
+    title: '停止学习会话',
+    message: '确认停止当前学习会话？\n会话将标记为失败（可重启恢复），正在执行的回合结束后生效。',
+    confirmText: '停止'
+  })
+  if (!ok) return
   busy.value = true
   try {
     await adminVirtualLearnersApi.stopVirtualLearning(sessionId.value)

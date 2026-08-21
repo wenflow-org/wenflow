@@ -15,6 +15,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import yaml from 'js-yaml';
+import { logger } from '../../utils/logger';
 
 export interface PromptFileMeta {
   /** 权威标识，对应 agent_prompts.agentId */
@@ -243,13 +244,27 @@ export function loadAllPromptFiles(): PromptFile[] {
   return loadAllPromptFilesWithDiagnostics().files;
 }
 
-/** 按 agentId 加载单个 prompt 文件（找不到返回 null） */
+/**
+ * 按 agentId 加载单个 prompt 文件（找不到返回 null）。
+ * 容错：本函数被 20+ 个 skill 在模块顶层同步调用，文件存在但 IO 失败/frontmatter YAML
+ * 损坏时若抛异常会导致整个后端启动崩溃；此处与扫描路径（loadAllPromptFilesWithDiagnostics）
+ * 语义对齐——记日志并返回 null，由调用方的 `?.systemPrompt || ''` 兜底。
+ */
 export function loadPromptFile(agentId: string): PromptFile | null {
   const fileBase = agentIdToFileBase(agentId);
   const filePath = path.join(PROMPTS_DIR, `${fileBase}.md`);
   if (!fs.existsSync(filePath)) return null;
-  const raw = fs.readFileSync(filePath, 'utf-8');
-  return parsePromptFile(filePath, raw);
+  try {
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    return parsePromptFile(filePath, raw);
+  } catch (error) {
+    logger.warn('[prompt-files] 加载 prompt 文件失败，返回 null（DB ACTIVE prompt 仍可用）', {
+      agentId,
+      filePath,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return null;
+  }
 }
 
 /** 将 PromptFile 元数据 + 正文序列化回 .md 文本（供导出/回写脚本使用） */

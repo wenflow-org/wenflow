@@ -1109,6 +1109,28 @@ class SimulationOrchestrator {
     });
   }
 
+  /**
+   * 步骤回写专用：teaching 状态整包写回前，用 DB 最新值覆盖控制标志（paused/manualStop*）。
+   * 背景：executeLearningStep 用步骤开始时的快照整体回写，管理员在步骤执行期间经 pause/stop
+   * 旁路写入的标志会被旧快照静默抹掉（丢失更新）。此处让「最新写入的控制标志」获胜；
+   * 读取失败时退回直接写入（与旧行为一致）。非原子，但窗口从「整个步骤时长」缩到毫秒级。
+   */
+  private async updateTeachingStatePreservingControlFlags(sessionId: string, incoming: Record<string, unknown>) {
+    try {
+      const session = await this.getVirtualSession(sessionId);
+      const latestTeaching = this.parseStageResultsPayload(session.stageResults).teaching || {};
+      const merged: Record<string, unknown> = { ...incoming };
+      for (const key of ['paused', 'manualStop', 'stoppedAt', 'stoppedReason'] as const) {
+        if ((latestTeaching as Record<string, unknown>)[key] !== undefined) {
+          merged[key] = (latestTeaching as Record<string, unknown>)[key];
+        }
+      }
+      await this.updateStageResults(sessionId, 'teaching', merged);
+    } catch {
+      await this.updateStageResults(sessionId, 'teaching', incoming);
+    }
+  }
+
   /** 上游 Learn 调用耗尽重试后的终态记录；checkpoint 恢复分支不会走这里。 */
   private async persistLearningFailure(sessionId: string, error: unknown, logs: SimulationLogEntry[]) {
     const message = this.boundTaskCompletionError(error);
@@ -2903,11 +2925,11 @@ class SimulationOrchestrator {
           };
         }
         
-        await this.updateStageResults(sessionId, 'teaching', {
+        await this.updateTeachingStatePreservingControlFlags(sessionId, {
           ...learningState,
           ...this.buildLearningProgressSnapshot(milestones, nextMilestoneIdx, 0)
         });
-        
+
         return await this.executeLearningStep(sessionId);
       }
 
@@ -3159,7 +3181,7 @@ class SimulationOrchestrator {
               taskRuntime: pendingTaskRuntime,
               conversationHistory: checkpointConversationHistory
             };
-            await this.updateStageResults(sessionId, 'teaching', checkpointLearningState);
+            await this.updateTeachingStatePreservingControlFlags(sessionId, checkpointLearningState);
             const taskCompletionResult = await this.completeCheckpointedSimulationTask(
               sessionId,
               session,
@@ -3307,7 +3329,7 @@ class SimulationOrchestrator {
         ]
       };
 
-      await this.updateStageResults(sessionId, 'teaching', nextLearningState);
+      await this.updateTeachingStatePreservingControlFlags(sessionId, nextLearningState);
       await this.assertCurrentSessionLeaseOwned(sessionId);
       await prisma.virtual_sessions.update({
         where: { id: sessionId },
@@ -3430,6 +3452,16 @@ class SimulationOrchestrator {
         const latestSession = await this.getVirtualSession(sessionId)
         const latestStageResults = this.parseStageResultsPayload(latestSession.stageResults)
         if (latestStageResults.teaching?.manualStop || latestSession.status === 'failed') {
+          // 旁路紧急停止（requestStopLearning deferred 路径）：循环退出时就地终态化——
+          // 此刻仍持有会话租约，是安全的收口点；避免会话停留在 running + manualStop 的悬挂态
+          if (latestSession.status !== 'failed') {
+            await this.updateSessionStatus(sessionId, 'failed', 'teaching').catch(() => {});
+            await this.addSessionLog(sessionId, {
+              timestamp: new Date().toISOString(),
+              phase: 'error',
+              details: { error: `EMERGENCY_STOP:${latestStageResults.teaching?.stoppedReason || 'admin-emergency-stop'}` }
+            }).catch(() => {});
+          }
           return {
             success: false,
             totalSteps: steps,
@@ -3581,6 +3613,62 @@ class SimulationOrchestrator {
         success: false,
         error: asErrorLike(error).message
       };
+    }
+  }
+
+  /**
+   * 紧急停止（旁路版）：不经租约队列，避免被正在运行的 auto-learning（整循环持一次租约）
+   * 阻塞到自然结束——紧急语义要求立即生效。
+   * 流程：① 旁路合并写入 manualStop 标志（循环每轮开头检查后自行退出）；
+   * ② 尝试无排队获取 DB 租约：拿到说明没有活跃循环，就地复用 emergencyStopLearning 终态化；
+   *    拿不到说明循环在跑，返回 deferred，由循环退出时就地终态化（见 executeAutoLearning）。
+   */
+  async requestStopLearning(sessionId: string, reason = 'admin-emergency-stop'): Promise<{
+    success: boolean;
+    deferred?: boolean;
+    alreadyStopped?: boolean;
+    error?: string;
+  }> {
+    try {
+      const session = await this.getVirtualSession(sessionId);
+      if (['completed', 'failed', 'abandoned'].includes(session.status)) {
+        return { success: true, alreadyStopped: true };
+      }
+
+      // ① 旁路写停止标志（保留 teaching 其余键；已在停止流程中则不重复写）
+      const stageResults = this.parseStageResultsPayload(session.stageResults);
+      const teaching: Record<string, unknown> = { ...(stageResults.teaching || {}) };
+      if (teaching.manualStop !== true) {
+        teaching.manualStop = true;
+        teaching.stoppedAt = new Date().toISOString();
+        teaching.stoppedReason = reason;
+        await this.updateStageResults(sessionId, 'teaching', teaching);
+      }
+
+      // ② 无排队尝试获取租约
+      const ownerId = `stop_${uuidv4()}`;
+      try {
+        await this.acquireSessionLease(sessionId, ownerId);
+      } catch (error) {
+        if (error instanceof VirtualSessionLeaseBusyError) {
+          logger.info('[simulation-coordinator] 停止标志已写入，运行中的学习循环将自行退出并终态化', { sessionId });
+          return { success: true, deferred: true };
+        }
+        throw error;
+      }
+
+      try {
+        const result = await this.emergencyStopLearning(sessionId, reason);
+        return result.success ? { success: true } : result;
+      } finally {
+        await this.releaseSessionLease(sessionId, ownerId).catch(() => {});
+      }
+    } catch (error: unknown) {
+      logger.error('[simulation-coordinator] 旁路紧急停止失败', {
+        sessionId,
+        error: asErrorLike(error).message
+      });
+      return { success: false, error: asErrorLike(error).message };
     }
   }
 

@@ -2651,9 +2651,10 @@ router.post('/sessions/:sessionId/restart-learning', async (req: Request, res) =
 router.post('/sessions/:sessionId/stop-learning', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
-    const result = await runAssistedSessionMutation(sessionId, () =>
-      simulationCoordinator.emergencyStopLearning(sessionId, 'admin-emergency-stop')
-    );
+    // 旁路停止：不经租约队列——auto-learning 整循环持一次租约，排队会让「紧急」停止
+    // 挂起到循环自然结束。requestStopLearning 先落 manualStop 标志让循环自行退出，
+    // 仅在无活跃循环时才就地终态化。
+    const result = await simulationCoordinator.requestStopLearning(sessionId, 'admin-emergency-stop');
 
     res.json({
       success: result.success,
