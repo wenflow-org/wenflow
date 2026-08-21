@@ -109,7 +109,12 @@ backend/test-*.js
 backend/test-*.ts
 backend/*-test.ts
 backend/mcp-agent*.test.ts
+backend/mcp-agent*.json
 backend/user*.test.ts
+
+# 用户数据分析产物：含真实教学会话逐字记录（SECURITY.md 第 5 条禁止入库），
+# 已从索引移除；如需保留分析结论请脱敏聚合后另存
+backend/analysis_output/
 backend/scripts/query-*.ts
 backend/scripts/test-*.ts
 backend/scripts/test-*.js

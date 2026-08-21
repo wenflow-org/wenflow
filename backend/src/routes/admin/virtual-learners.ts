@@ -3101,6 +3101,10 @@ router.post('/batch-delete', async (req: Request, res) => {
     if (!profileIds.length) {
       return res.status(400).json({ success: false, error: 'profileIds 至少提供一个' });
     }
+    // 每个 id 触发一个大级联事务，串行执行；不设上限的批次会拖垮请求与数据库
+    if (profileIds.length > 100) {
+      return res.status(400).json({ success: false, error: '单批最多删除 100 个，请分批操作' });
+    }
 
     const deleted: string[] = [];
     const skipped: string[] = [];
@@ -3115,6 +3119,9 @@ router.post('/batch-delete', async (req: Request, res) => {
         deleted.push(id);
       } catch (error) {
         if (error?.code === 'VIRTUAL_PROFILE_REAL_USER_PROTECTED') {
+          skipped.push(id);
+        } else if (error?.code === 'VIRTUAL_PROFILE_NOT_FOUND') {
+          // 不存在属于「无需处理」而非失败，归入 skipped 保持语义一致
           skipped.push(id);
         } else {
           errors.push({ id, error: error.message || '删除失败' });

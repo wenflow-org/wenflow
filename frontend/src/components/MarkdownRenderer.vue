@@ -59,7 +59,9 @@ hljs.registerAliases(['c++'], { languageName: 'cpp' });
 hljs.registerAliases(['txt', 'text'], { languageName: 'plaintext' });
 import DOMPurify, { type Config as DOMPurifyConfig } from 'dompurify';
 
-// mermaid 体积大且仅在出现图表时才需要，按需动态加载（模块级单例，initialize 只执行一次）
+// mermaid 体积大且仅在出现图表时才需要，按需动态加载（模块级单例，initialize 只执行一次）。
+// 加载失败时重置 promise 允许下次重试，否则 rejected promise 会永久缓存，
+// 后续所有图表渲染全部跳过（弱网首屏失败 = 整场会话图表报废）。
 let mermaidPromise: Promise<typeof import('mermaid').default> | null = null;
 function loadMermaid() {
   if (!mermaidPromise) {
@@ -71,6 +73,9 @@ function loadMermaid() {
         securityLevel: 'strict',
       });
       return mermaid;
+    }).catch((error) => {
+      mermaidPromise = null;
+      throw error;
     });
   }
   return mermaidPromise;

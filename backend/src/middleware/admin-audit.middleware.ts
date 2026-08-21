@@ -52,6 +52,7 @@ const ACTION_RULES: ActionRule[] = [
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners$/, action: 'virtual-create', targetType: 'virtual-learner' },
   { method: 'PUT', pattern: /^\/api\/admin\/virtual-learners\/[^/]+$/, action: 'virtual-update', targetType: 'virtual-learner' },
   { method: 'DELETE', pattern: /^\/api\/admin\/virtual-learners\/[^/]+$/, action: 'virtual-delete', targetType: 'virtual-learner' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/batch-delete$/, action: 'virtual-batch-delete', targetType: 'virtual-learner' },
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/[^/]+\/draft-stories$/, action: 'virtual-story-generate', targetType: 'virtual-learner' },
   { method: 'PUT', pattern: /^\/api\/admin\/virtual-learners\/[^/]+\/stories\/[^/]+$/, action: 'virtual-story-update', targetType: 'virtual-learner' },
   { method: 'DELETE', pattern: /^\/api\/admin\/virtual-learners\/[^/]+\/stories\/[^/]+$/, action: 'virtual-story-delete', targetType: 'virtual-learner' },

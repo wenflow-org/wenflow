@@ -6,7 +6,8 @@ param(
     [switch]$SkipPrisma,
     [switch]$NoBrowser,
     [switch]$Setup,
-    [switch]$EditEnv
+    [switch]$EditEnv,
+    [switch]$Force
 )
 
 $ErrorActionPreference = 'Stop'
@@ -565,6 +566,40 @@ if (-not (Test-Path $frontendPath)) {
 }
 
 Ensure-EnvFileHealthy -Path $backendEnvPath
+
+# 局域网安全检查：development 模式下未设置 INIT_ADMIN_PASSWORD 时，后端会用内置默认口令
+# （ChangeMe_2026_Admin，见 init-admin.service.ts）创建管理员；LAN 模式把 admin 入口暴露给
+# 整个网段，同网段任意设备可用公开文档中的默认口令直接登录管理台。
+function Read-EnvValue {
+    param([string]$Path, [string]$Key)
+    if (-not (Test-Path -LiteralPath $Path)) { return '' }
+    $regex = Get-EnvLineRegex
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        if ($line -match $regex -and $Matches[1] -eq $Key) {
+            return $Matches[2].Trim().Trim('"').Trim("'")
+        }
+    }
+    return ''
+}
+
+$initAdminPassword = Read-EnvValue -Path $backendEnvPath -Key 'INIT_ADMIN_PASSWORD'
+if ([string]::IsNullOrWhiteSpace($initAdminPassword)) {
+    Write-Host ''
+    Write-Host '==============================================================' -ForegroundColor Red
+    Write-Host '  [安全警告] INIT_ADMIN_PASSWORD 未设置' -ForegroundColor Red
+    Write-Host '  LAN 模式下管理后台将对整个局域网开放，而开发环境会以' -ForegroundColor Red
+    Write-Host '  内置默认口令创建管理员（admin / ChangeMe_2026_Admin）。' -ForegroundColor Red
+    Write-Host '  同网段任意设备均可登录管理台查看全部用户数据。' -ForegroundColor Red
+    Write-Host '  建议：在 backend/.env 中设置强口令后重启，或首次登录后立即改密。' -ForegroundColor Red
+    Write-Host '==============================================================' -ForegroundColor Red
+    if (-not $Force) {
+        $answer = Read-Host '仍要以当前配置继续启动吗？(y/N)'
+        if ($answer -notmatch '^[Yy]') {
+            Write-Host '已取消启动。请先在 backend/.env 设置 INIT_ADMIN_PASSWORD。' -ForegroundColor Yellow
+            exit 1
+        }
+    }
+}
 
 if ($EditEnv) {
     if (-not (Test-Path $setupScriptPath)) {
