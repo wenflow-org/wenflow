@@ -31,6 +31,10 @@ function fingerprint(secret) {
 
 function isPlaceholder(secret) {
   const normalized = secret.toLowerCase()
+  // 结构性误报排除：
+  // 1. 含 '--' 是 BEM 修饰符命名（如 CSS 类名 sk-rec-badge--core-ready），API 密钥不含连续连字符
+  // 2. 纯小写字母+连字符（无数字/大写/下划线）是 kebab-case 标识符特征，真实密钥必有更高熵
+  if (secret.includes('--') || /^sk-[a-z]+(?:-[a-z]+)*$/.test(normalized)) return true
   return /(?:your|example|replace|redacted|placeholder|dummy|sample|fake|test|ci-only)/.test(normalized)
     || /^sk-\d+$/.test(normalized)
 }
