@@ -133,3 +133,30 @@ export class DurableOutboxWorker {
     }
   }
 }
+
+/**
+ * 死信重置：dead → pending，清零尝试计数并立即可投递。
+ * 背景：dead 是无出口终态（worker 不会再拾取），此前没有任何管理手段把
+ * 修复后的死信重新入队。运维修复根因后调用本函数重放。
+ * @param eventType 可选按事件类型过滤（如 'lesson:completed'）；缺省重置全部死信
+ * @returns 重置的事件数
+ */
+export async function requeueDeadOutboxEvents(eventType?: string): Promise<number> {
+  const result = await prisma.domain_event_outbox.updateMany({
+    where: {
+      status: 'dead',
+      ...(eventType ? { eventType } : {})
+    },
+    data: {
+      status: 'pending',
+      attemptCount: 0,
+      availableAt: new Date(),
+      lockedAt: null,
+      lockOwner: null
+    }
+  });
+  if (result.count > 0) {
+    logger.info('[outbox] 死信已重新入队', { requeued: result.count, eventType: eventType || 'all' });
+  }
+  return result.count;
+}

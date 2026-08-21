@@ -191,7 +191,8 @@ const safeRedirect = () => {
     ) {
       return '/admin/overview'
     }
-    return '/admin/overview'
+    // 深链恢复：校验通过后回到管理员原本要去的页面（含 query/hash）
+    return `${target.pathname}${target.search}${target.hash}`
   } catch {
     return '/admin/overview'
   }

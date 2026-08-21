@@ -40,7 +40,13 @@ export default defineConfig({
     testTimeout: 20000,
     coverage: {
       provider: 'v8',
-      include: ['src/views/admin-redesign/**/*.{ts,vue}', 'src/router/index.ts'],
+      include: [
+        'src/views/admin-redesign/**/*.{ts,vue}',
+        'src/router/index.ts',
+        // 安全核心（sanitize/projection/sse/toast）必须纳入覆盖率度量，
+        // 防止「零测试」被报告口径系统性掩盖
+        'src/utils/**/*.ts'
+      ],
       reporter: ['text', 'html'],
       reportsDirectory: 'coverage'
     }
