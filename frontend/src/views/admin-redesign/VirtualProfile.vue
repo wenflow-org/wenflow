@@ -45,11 +45,11 @@
             <button type="button" class="mk-status__action" @click="goCockpit">座舱 →</button>
           </template>
           <template v-else-if="sessionState === 'failed'">
+            <!-- failed/abandoned 均落入此分支（tone=bad）：重试对两种终态都可用 -->
             <button type="button" class="mk-status__action mk-status__action--primary" :disabled="sessionBusy" @click="retrySession">🔄 重试</button>
             <button type="button" class="mk-status__action" @click="goCockpit">座舱 →</button>
           </template>
           <template v-else-if="sessionState === 'completed'">
-            <button type="button" class="mk-status__action" @click="activeTab = 'verify'">验收 →</button>
             <button type="button" class="mk-status__action" @click="goCockpit">座舱 →</button>
           </template>
           <button type="button" class="mk-status__action" @click="quickLearnOpen = true">账号自动学习</button>
@@ -547,7 +547,7 @@ const detailError = ref(false)
 const fallbackNotice = ref(false)
 
 /* 分页：故事池是主工作区（默认页），画像/运行/验收各归其页 */
-type ProfileTab = 'stories' | 'runs' | 'profile' | 'verify'
+type ProfileTab = 'stories' | 'runs' | 'profile'
 const activeTab = ref<ProfileTab>('stories')
 
 /* demo 模式的故事池（按样本给出有差异的演示故事） */
@@ -1179,7 +1179,6 @@ const tabs = computed(() => {
     { key: 'runs', label: '运行', count: (d.value?.runs || []).length },
     { key: 'profile', label: '画像' }
   ]
-  if (isLive.value) list.push({ key: 'verify', label: '验收' })
   return list
 })
 const levelLabel = computed(() => ({
@@ -1244,6 +1243,7 @@ function formatRunResult(result: string) {
   if (r === 'created') return '已创建'
   if (r === 'completed' || r === 'success' || r === 'succeeded') return '已完成'
   if (r === 'failed' || r === 'error') return '失败'
+  if (r === 'abandoned') return '已终止'
   if (r === 'timeout') return '超时'
   if (r === 'paused') return '已暂停'
   return result || '—'
@@ -1257,6 +1257,7 @@ function runToneOf(status: string): 'ok' | 'warn' | 'bad' {
   const r = String(status || '').toLowerCase()
   if (r === 'completed' || r === 'success' || r === 'succeeded') return 'ok'
   if (r === 'running' || r === 'created' || r === 'paused') return 'warn'
+  // abandoned（人为终止）非成功态：标红但文案区分「已终止」而非「失败」
   return 'bad'
 }
 /** 管理行「最近」摘要：进行中 / 最近结果（色调）/ 未运行 */

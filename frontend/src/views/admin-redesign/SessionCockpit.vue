@@ -34,7 +34,8 @@
         <button type="button" class="mk-status__action cp-danger" :disabled="busy" @click="stopLearning">⏹ 停止</button>
         <button type="button" class="mk-status__action" :disabled="busy" @click="restartLearning">🔄 重启</button>
       </template>
-      <template v-else-if="!isRealMode && session?.status === 'failed'">
+      <template v-else-if="!isRealMode && isFailedTerminal">
+        <!-- failed=系统失败 / abandoned=人为终止（拍板 2026-08-21）：两者均可重启恢复 -->
         <button type="button" class="mk-status__action mk-status__action--primary" :disabled="busy" @click="restartLearning">🔄 重启学习</button>
       </template>
       <button v-if="!isRealMode" type="button" class="mk-status__action cp-danger" :disabled="busy" @click="removeSession">
