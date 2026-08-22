@@ -37,8 +37,8 @@
 
             <!-- 图例 + 当前状态 -->
             <div class="ff-legend">
-              <span><i class="ff-dot ff-dot--fitness"></i>健康度（42 天指数平均）</span>
-              <span><i class="ff-dot ff-dot--fatigue"></i>疲劳度（7 天指数平均）</span>
+              <span><i class="ff-dot ff-dot--fitness"></i>健康度（约 13.5 天指数平均）</span>
+              <span><i class="ff-dot ff-dot--fatigue"></i>疲劳度（约 2 天指数平均）</span>
               <span v-if="latestDay && hasAnyLoad" class="ff-form-chip" :class="`ff-form-chip--${latestDay.zone.cls}`">
                 状态 {{ latestDay.form }} · {{ latestDay.zone.label }}
               </span>
@@ -198,8 +198,8 @@
           <section class="card sidecard">
             <span class="kicker">指标说明</span>
             <ul class="legend">
-              <li><b class="dot dot--blue"></b>健康度（体能）：学习负荷的 42 天指数加权移动平均，代表你的学习体能储备</li>
-              <li><b class="dot dot--purple"></b>疲劳度：学习负荷的 7 天指数加权移动平均，代表近期累积的疲劳</li>
+              <li><b class="dot dot--blue"></b>健康度（体能）：学习负荷的 13.5 天指数加权移动平均，代表你的学习体能储备</li>
+              <li><b class="dot dot--purple"></b>疲劳度：学习负荷的 2 天指数加权移动平均，代表近期累积的疲劳</li>
               <li><b class="dot dot--green"></b>状态值 = 健康度 − 疲劳度；处于最优训练区时，健康度会持续提高</li>
               <li><b class="dot dot--amber"></b>通过增加负荷制造压力（疲劳度高于健康度）来进步，但要定期安排休息周，避免长期停留在高风险区</li>
             </ul>

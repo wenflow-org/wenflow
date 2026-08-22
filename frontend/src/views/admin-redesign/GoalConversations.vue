@@ -320,18 +320,25 @@ watch(
   async (goalId) => {
     const gid = typeof goalId === 'string' ? goalId : ''
     if (gid && (!detail.value || detail.value.id !== gid)) {
-      // 等列表加载完成后找到行数据再打开
-      const waitForRows = () => new Promise<void>((resolve) => {
+      // 等列表加载完成（带超时上限）：接口失败时不能无限死等泄漏定时器
+      const waitForRows = () => new Promise<boolean>((resolve) => {
+        let waited = 0
         const check = () => {
-          if (rows.value.length) { resolve(); return }
+          if (rows.value.length) { resolve(true); return }
+          if (waited >= 5000) { resolve(false); return }
+          waited += 200
           setTimeout(check, 200)
         }
         check()
       })
-      await waitForRows()
-      const r = rows.value.find((x) => x.id === gid)
+      const ok = await waitForRows()
+      const r = ok ? rows.value.find((x) => x.id === gid) : undefined
       if (r) void openDetail(r)
-      else detail.value = null
+      else {
+        detail.value = null
+        // 目标可能超出最近 100 条或已被删除：明示而非静默关闭
+        toast.warning('未找到深链指向的会话：可能不在最近 100 条内，或已被删除')
+      }
     } else if (!gid && detail.value) {
       detail.value = null
     }
@@ -671,7 +678,10 @@ async function remove(r: Row) {
   try {
     await adminGoalConversationsApi.remove(r.id)
     rows.value = rows.value.filter((x) => x.id !== r.id)
-    if (detail.value?.id === r.id) detail.value = null
+    if (detail.value?.id === r.id) {
+      // 走 closeDetail 统一清除 ?goal 深链：否则刷新会落入「深链未命中」路径
+      closeDetail()
+    }
     toast.success('会话已删除')
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)

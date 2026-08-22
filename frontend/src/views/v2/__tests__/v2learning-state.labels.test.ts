@@ -51,11 +51,11 @@ describe('V2LearningState 中文指标标签（P3-3）', () => {
     expect(labels).toEqual(['整体状态', '学习压力', '掌握趋势', '疲劳程度']);
   });
 
-  it('图例中文：健康度（42 天指数平均）/ 疲劳度（7 天指数平均）', async () => {
+  it('图例中文：健康度（约 13.5 天指数平均）/ 疲劳度（约 2 天指数平均）', async () => {
     const w = await mountState();
     const legend = w.find('.ff-legend');
-    expect(legend.text()).toContain('健康度（42 天指数平均）');
-    expect(legend.text()).toContain('疲劳度（7 天指数平均）');
+    expect(legend.text()).toContain('健康度（约 13.5 天指数平均）');
+    expect(legend.text()).toContain('疲劳度（约 2 天指数平均）');
   });
 
   it('有数据时状态图例为「状态」中文（非 form）', async () => {

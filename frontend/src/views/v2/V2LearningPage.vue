@@ -324,7 +324,10 @@ function openPeer() {
   scrollPeerDown();
 }
 
-async function sendPeer() {
+async function sendPeer(e?: unknown) {
+  // IME 组合期守卫：拼音选词回车不发送
+  const ke = e as KeyboardEvent | undefined;
+  if (ke && (ke.isComposing || ke.keyCode === 229)) return;
   const t = peerInput.value.trim();
   if (!t || peerSending.value || !session.value) return;
   peerInput.value = '';
@@ -455,7 +458,10 @@ let checkpointCloseTimer = 0;
  */
 const streamingBubbleIndex = ref(-1);
 
-async function send() {
+async function send(e?: unknown) {
+  // IME 组合期守卫：拼音选词回车不发送
+  const ke = e as KeyboardEvent | undefined;
+  if (ke && (ke.isComposing || ke.keyCode === 229)) return;
   const t = input.value.trim();
   if (!t || typing.value || !session.value) return;
   input.value = '';

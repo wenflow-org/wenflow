@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="goal v2-page">
     <!-- 应用导航（共享组件，带真实 AI 标识） -->
     <V2Nav />
@@ -114,6 +114,13 @@
             <li class="stage-nav__item" :class="stageCls(2)"><i>2</i>确认方案</li>
             <li class="stage-nav__item" :class="stageCls(3)"><i>3</i>生成路径</li>
           </ol>
+          <!-- 方案被 Esc/关闭后提供重开入口，消除「关掉就找不回」的死路 -->
+          <button
+            v-if="proposalDismissed && live.proposal && live.stage === 'proposing'"
+            type="button"
+            class="chat__show-proposal"
+            @click="proposalDismissed = false"
+          >查看方案</button>
           <button type="button" class="chat__clear" @click="doReset">清空重聊</button>
         </div>
 
@@ -430,7 +437,11 @@ watch(
   }
 );
 
-async function doSend() {
+async function doSend(e?: unknown) {
+  // IME 组合期守卫：中文拼音选词按回车（isComposing/keyCode 229）不应触发发送；
+  // 点击调用无事件载荷，自然跳过守卫
+  const ke = e as KeyboardEvent | undefined;
+  if (ke && (ke.isComposing || ke.keyCode === 229)) return;
   const t = input.value.trim();
   if (!t || live.sending) return;
   input.value = '';
@@ -918,6 +929,14 @@ function shuffleScenes() {
   background: #fbfdff;
 }
 .stage-nav { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
+.chat__show-proposal {
+  margin-left: auto;
+  border: 1px solid rgba(44, 99, 208, 0.35);
+  background: #eef4ff; color: #2c63d0;
+  border-radius: 999px; padding: 4px 12px;
+  font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.chat__show-proposal:hover { background: #e0ebfd; }
 .stage-nav__item {
   display: inline-flex; align-items: center; gap: 7px;
   font-size: 12px; font-weight: 700; color: var(--faint);

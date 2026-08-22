@@ -13,6 +13,11 @@
       </button>
     </div>
 
+    <!-- 深链未命中提示：?session= 存在但当前列表（最近 100 条）中找不到 -->
+    <div v-if="deepLinkMiss" class="errorbar" role="alert">
+      未找到深链指向的会话：它可能不在最近 {{ rows.length }} 条记录内，或已被删除。
+    </div>
+
     <div class="mk-card">
       <div class="mk-card__head">
         <div class="mk-filter">
@@ -203,7 +208,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dataSource, openSession, openSubPage } from './store'
 import { timeAgo, isPageCacheFresh, markPageFetched } from './live'
@@ -213,6 +218,7 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useLoadMore } from './useLoadMore'
+import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 
@@ -376,17 +382,16 @@ watch(includeTest, () => {
   })
 })
 
-/* G4：停留页面时静默轮询，避免状态过期 */
-let pollTimer: ReturnType<typeof setInterval> | null = null
-onMounted(() => {
-  pollTimer = setInterval(() => {
-    if (document.hidden) return
-    void fetchRows()
-  }, 20000)
-})
-onBeforeUnmount(() => {
-  if (pollTimer) clearInterval(pollTimer)
-})
+/* G4：停留页面时静默轮询，避免状态过期（setTimeout 链 + 并发守卫 + 指数退避） */
+useSafePolling(
+  async () => { await fetchRows() },
+  {
+    interval: 20000,
+    maxBackoff: 120000,
+    circuitBreakerThreshold: 5,
+    skipWhenHidden: true,
+  }
+)
 
 function mapRow(s: Record<string, unknown>): Row {
   const wrapup = (s.wrapup as Record<string, unknown>) || null
@@ -496,16 +501,23 @@ const statusTitle = computed(() =>
 const detail = ref<Row | null>(null)
 const route = useRoute()
 const router = useRouter()
+/** 深链存在但列表加载后仍未命中（超出最近 100 条 / 已删除） */
+const deepLinkMiss = ref(false)
 watch(
-  () => route.query.session,
-  (sid) => {
+  // 同时监听行数：刷新场景下 immediate 触发时 rows 尚未返回，仅监听 query 会错过恢复时机
+  [() => route.query.session, () => rows.value.length],
+  ([sid]) => {
     const id = typeof sid === 'string' ? sid : ''
     if (id && (!detail.value || detail.value.id !== id)) {
       const r = rows.value.find((x) => x.id === id)
-      if (r) { detail.value = r; openCards.value = new Set() }
-      else detail.value = null
+      if (r) { detail.value = r; openCards.value = new Set(); deepLinkMiss.value = false }
+      else {
+        detail.value = null
+        deepLinkMiss.value = rows.value.length > 0
+      }
     } else if (!id && detail.value) {
       detail.value = null
+      deepLinkMiss.value = false
     }
   },
   { immediate: true }

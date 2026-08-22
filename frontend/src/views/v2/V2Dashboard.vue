@@ -202,7 +202,7 @@
               <span class="budget__name">{{ g.title }}</span>
               <span class="budget__bar"><i :style="{ width: Math.min((g.consumedMinutes / Math.max(g.plannedMinutes, 1)) * 100, 100) + '%' }"></i></span>
               <span class="budget__num">{{ g.consumedMinutes }} / {{ g.plannedMinutes }} 分钟</span>
-              <span v-if="g.cognitiveBandwidth" class="budget__bw">{{ g.cognitiveBandwidth }}</span>
+              <span v-if="g.cognitiveBandwidth" class="budget__bw">{{ bandwidthLabel(g.cognitiveBandwidth) }}</span>
             </li>
           </ul>
         </section>
@@ -787,12 +787,30 @@ const nearestAchievement = computed(() => {
   };
 });
 
-const todayStr = new Date().toISOString().slice(0, 10);
+// 本地时区日期键（拍板 2026-08-21）：此前 toISOString() 按 UTC 切日，
+// UTC+8 用户凌晨 0-8 点的学习被记进「昨天」，与预算卡的服务端本地口径互相矛盾
+function localDateKey(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+const todayStr = localDateKey(new Date());
+
+/** 认知带宽枚举 → 中文（light/medium/heavy 等） */
+function bandwidthLabel(v: string): string {
+  const map: Record<string, string> = {
+    light: '轻度',
+    medium: '中度',
+    heavy: '重度',
+    stress_test: '压力测试'
+  };
+  return map[v] ?? v;
+}
+
 const minutesByDate = computed(() => {
   const map = new Map<string, number>();
   for (const s of sessions.value) {
-    const date = String(s.startTime || '').slice(0, 10);
-    if (!date) continue;
+    if (!s.startTime) continue;
+    const date = localDateKey(new Date(s.startTime));
     map.set(date, (map.get(date) ?? 0) + (s.durationMinutes ?? 0));
   }
   return map;
@@ -805,7 +823,7 @@ const streakDays = computed(() => {
   const d = new Date();
   if ((minutesByDate.value.get(todayStr) ?? 0) === 0) d.setDate(d.getDate() - 1);
   for (;;) {
-    const key = d.toISOString().slice(0, 10);
+    const key = localDateKey(d);
     if ((minutesByDate.value.get(key) ?? 0) > 0) {
       streak += 1;
       d.setDate(d.getDate() - 1);
