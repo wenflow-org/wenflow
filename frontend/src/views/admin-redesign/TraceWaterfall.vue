@@ -184,6 +184,10 @@
           </div>
           <!-- 重试时间线（live，展开时拉取） -->
           <div v-if="dataSource === 'live' && detailLoading === span.id" class="wf-facts"><span class="wf-fact">拉取重试时间线…</span></div>
+          <div v-else-if="detailFailed.has(span.id)" class="wf-facts">
+            <span class="wf-fact wf-fact--bad">重试时间线拉取失败</span>
+            <button type="button" class="mk-link" @click="openSpanId = ''; void nextTick().then(() => openSpanId = span.id)">重试</button>
+          </div>
           <div v-else-if="detailCache[span.id]?.attempts.length" class="wf-attempts">
             <span class="wf-detail-label">调用时间线{{ detailCache[span.id].attemptCount > 1 ? ` · 共 ${detailCache[span.id].attemptCount}/${detailCache[span.id].maxAttempts} 次尝试` : '' }}</span>
             <div
@@ -369,7 +373,11 @@ function setDetail(id: string, d: LogDetail) {
     for (const k of keys.slice(0, keys.length - DETAIL_CACHE_MAX)) delete next[k]
   }
   detailCache.value = next
+  // 详情拉取成功，清除失败标记（对齐 ExecLogs 的 detailFailed 模式）
+  detailFailed.value.delete(id)
 }
+
+const detailFailed = ref(new Set<string>())
 
 watch(openSpanId, async (id) => {
   if (!id || dataSource.value !== 'live' || detailCache.value[id]) return
@@ -378,6 +386,7 @@ watch(openSpanId, async (id) => {
     setDetail(id, await fetchLogDetail(id))
   } catch {
     setDetail(id, { attempts: [], attemptCount: 0, maxAttempts: 1 })
+    detailFailed.value.add(id)
   } finally {
     if (detailLoading.value === id) detailLoading.value = ''
   }

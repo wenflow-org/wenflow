@@ -10,7 +10,7 @@
         <span class="mk-status__meta">待处理 {{ pendingCount }}</span>
         <span v-if="recent30 != null" class="mk-status__meta">近 30 天 {{ recent30 }}</span>
       </template>
-      <button type="button" class="mk-status__action" :disabled="loading" @click="load">
+      <button type="button" class="mk-status__action" :disabled="loading" @click="load(true)">
         {{ loading ? '刷新中…' : '刷新' }}
       </button>
     </div>
@@ -286,9 +286,9 @@ function clearFilters() {
 /* 长列表分批渲染：每批 15 行 */
 const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
 
-async function load() {
+async function load(force?: boolean) {
   if (!isLive.value || loading.value) return
-  if (isPageCacheFresh('feedback') && rows.value.length) return
+  if (!force && isPageCacheFresh('feedback') && rows.value.length) return
   loading.value = true
   loadFailed.value = false
   try {
