@@ -374,15 +374,12 @@ function fmtMs(ms: number) {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`
 }
 const pad = (n: number) => String(n).padStart(2, '0')
-/* 绝对时间：今天内 HH:MM:SS，跨天 MM-DD HH:MM */
+/* 绝对时间（统一 YYYY-MM-DD HH:MM:SS，跨年可辨） */
 function fmtTime(iso?: string | null): string {
   if (!iso) return '—'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '—'
-  const now = new Date()
-  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) return hm
-  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${hm.slice(0, 5)}`
+  return fmtFull(iso)
 }
 function fmtFull(iso?: string | null): string {
   if (!iso) return ''
