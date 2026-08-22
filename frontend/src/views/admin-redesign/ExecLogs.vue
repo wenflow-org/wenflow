@@ -53,7 +53,7 @@
         <button type="button" class="log-adv" :class="{ 'log-adv--on': advOpen }" @click="advOpen = !advOpen">
           高级筛选 <i class="log-adv__caret" :class="{ 'is-open': advOpen }">▾</i>
         </button>
-        <button v-if="isLive" type="button" class="mk-link" @click="exportJson">导出</button>
+        <button v-if="isLive" type="button" class="mk-link" title="导出当前筛选结果的当前页（非全量）" @click="exportJson">导出</button>
       </div>
       <div v-if="advOpen" class="log-advpanel">
         <select v-model="agentFilter" class="log-agent mono">
@@ -241,10 +241,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { spans, intent, openTrace, openSession, openSkillDrawer, clearInvestigation, dataSource, isLive } from './store'
 import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
 import { useLoadMore } from './useLoadMore'
+import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import { TERMS, errorCodeLabel } from './terms'
@@ -324,8 +325,8 @@ async function applyServerQuery() {
 
 /** 自动刷新：保留当前页码重查（区别于筛选变化回第 1 页） */
 function refreshLivePage() {
-  if (!isLive.value) return
-  void reloadLiveSpans(currentQuery(), liveLogsPage.value)
+  if (!isLive.value) return Promise.resolve()
+  return reloadLiveSpans(currentQuery(), liveLogsPage.value)
 }
 
 /* 传统分页：页码器 v-model 桥接。翻页 = reloadLiveSpans(page) 整页替换 + 滚动回顶；
@@ -363,23 +364,26 @@ function retryLiveLogs() {
   void applyServerQuery()
 }
 
-/* 自动刷新：10s 间隔，离开页面清除 */
-let autoTimer: ReturnType<typeof setInterval> | null = null
-watch(autoRefresh, (on) => {
-  if (autoTimer) {
-    clearInterval(autoTimer)
-    autoTimer = null
+/* 自动刷新：setTimeout 链 + 并发守卫 + 指数退避 */
+const { start: startAutoRefresh, stop: stopAutoRefresh } = useSafePolling(
+  () => refreshLivePage(),
+  {
+    interval: 10000,
+    maxBackoff: 60000,
+    circuitBreakerThreshold: 5,
+    skipWhenHidden: true,
   }
+)
+watch(autoRefresh, (on) => {
   if (on && isLive.value) {
-    autoTimer = setInterval(() => {
-      if (document.hidden) return
-      /* 自动刷新保留当前页：不再把页码重置回 1（旧「加载更多 × 10s 重查互斥」已消除） */
-      refreshLivePage()
-    }, 10000)
+    startAutoRefresh()
+  } else {
+    stopAutoRefresh()
   }
 })
-onBeforeUnmount(() => {
-  if (autoTimer) clearInterval(autoTimer)
+watch(isLive, (live) => {
+  if (!live) stopAutoRefresh()
+  else if (autoRefresh.value) startAutoRefresh()
 })
 
 /* 导出当前筛选结果为 JSON */
