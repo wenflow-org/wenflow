@@ -34,29 +34,55 @@
  * 「manifest 每项 → 注册组件」一一对应，防止加菜单忘注册 / 删菜单留死组件
  */
 // 子页面按需加载（拍板 2026-08-21）：静态全量引入曾把整个管理台打成单个 696KB 路由包；
-// 异步化后各 tab 首次点击时加载，显著缩小首包
-const Overview = defineAsyncComponent(() => import('./Overview.vue'));
-const Users = defineAsyncComponent(() => import('./Users.vue'));
-const LearnerCenter = defineAsyncComponent(() => import('./LearnerCenter.vue'));
-const VirtualLearners = defineAsyncComponent(() => import('./VirtualLearners.vue'));
-const Skills = defineAsyncComponent(() => import('./Skills.vue'));
-const Orchestrator = defineAsyncComponent(() => import('./Orchestrator.vue'));
-const ExecLogs = defineAsyncComponent(() => import('./ExecLogs.vue'));
-const TraceWaterfall = defineAsyncComponent(() => import('./TraceWaterfall.vue'));
-const AuditLogs = defineAsyncComponent(() => import('./AuditLogs.vue'));
-const ApiConfig = defineAsyncComponent(() => import('./ApiConfig.vue'));
-const Addons = defineAsyncComponent(() => import('./Addons.vue'));
-const Announcements = defineAsyncComponent(() => import('./Announcements.vue'));
-const SessionSecurity = defineAsyncComponent(() => import('./SessionSecurity.vue'));
-const PromptWorkbench = defineAsyncComponent(() => import('./PromptWorkbench.vue'));
-const HealthCenter = defineAsyncComponent(() => import('./HealthCenter.vue'));
-const LearnerDetail = defineAsyncComponent(() => import('./LearnerDetail.vue'));
-const TeachingSessions = defineAsyncComponent(() => import('./TeachingSessions.vue'));
-const GoalConversations = defineAsyncComponent(() => import('./GoalConversations.vue'));
-const Feedback = defineAsyncComponent(() => import('./Feedback.vue'));
-const SessionCockpit = defineAsyncComponent(() => import('./SessionCockpit.vue'));
-const VirtualProfile = defineAsyncComponent(() => import('./VirtualProfile.vue'));
-const UserDetail = defineAsyncComponent(() => import('./UserDetail.vue'));
+// 异步化后各 tab 首次点击时加载，显著缩小首包。
+// asyncPage 封装 defineAsyncComponent 的 loading/error 兜底：
+// 200ms 延迟避免缓存命中闪烁；部署更新后旧 chunk 404 自动重试一次；
+// 不可恢复时展示「刷新页面」按钮（人工 reload 绕过 CDN 缓存）。
+function asyncPage(loader: () => Promise<any>) {
+  return defineAsyncComponent({
+    loader,
+    loadingComponent: h('div', { class: 'admin-page-loading' }, [
+      h('span', { class: 'spinner' }),
+      h('p', '加载中…')
+    ]),
+    delay: 200,
+    errorComponent: {
+      setup() {
+        return () => h('div', { class: 'errorbar admin-page-error' }, [
+          h('strong', '页面加载失败'),
+          h('p', '网络问题或部署更新导致资源不可用'),
+          h('button', { type: 'button', class: 'errorbar__retry', onClick: () => window.location.reload() }, '刷新页面')
+        ]);
+      }
+    },
+    onError(error, retry, fail, _attempts) {
+      if (String(error?.message || error || '').includes('Failed to fetch')) { retry(); } else { fail(); }
+    }
+  });
+}
+
+const Overview = asyncPage(() => import('./Overview.vue'));
+const Users = asyncPage(() => import('./Users.vue'));
+const LearnerCenter = asyncPage(() => import('./LearnerCenter.vue'));
+const VirtualLearners = asyncPage(() => import('./VirtualLearners.vue'));
+const Skills = asyncPage(() => import('./Skills.vue'));
+const Orchestrator = asyncPage(() => import('./Orchestrator.vue'));
+const ExecLogs = asyncPage(() => import('./ExecLogs.vue'));
+const TraceWaterfall = asyncPage(() => import('./TraceWaterfall.vue'));
+const AuditLogs = asyncPage(() => import('./AuditLogs.vue'));
+const ApiConfig = asyncPage(() => import('./ApiConfig.vue'));
+const Addons = asyncPage(() => import('./Addons.vue'));
+const Announcements = asyncPage(() => import('./Announcements.vue'));
+const SessionSecurity = asyncPage(() => import('./SessionSecurity.vue'));
+const PromptWorkbench = asyncPage(() => import('./PromptWorkbench.vue'));
+const HealthCenter = asyncPage(() => import('./HealthCenter.vue'));
+const LearnerDetail = asyncPage(() => import('./LearnerDetail.vue'));
+const TeachingSessions = asyncPage(() => import('./TeachingSessions.vue'));
+const GoalConversations = asyncPage(() => import('./GoalConversations.vue'));
+const Feedback = asyncPage(() => import('./Feedback.vue'));
+const SessionCockpit = asyncPage(() => import('./SessionCockpit.vue'));
+const VirtualProfile = asyncPage(() => import('./VirtualProfile.vue'));
+const UserDetail = asyncPage(() => import('./UserDetail.vue'));
 
 const components: Record<string, unknown> = {
   'overview': Overview,
@@ -97,7 +123,7 @@ export const DETAIL_COMPONENTS: Readonly<Record<string, unknown>> = detailCompon
  * 原实验稿 /admin-redesign-lab 已废除，本组件为唯一管理后台入口。
  * 特点：
  */
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Shell from './Shell.vue';
 import SkillDrawer from './SkillDrawer.vue';
@@ -347,5 +373,20 @@ function onGlobalKey(e: KeyboardEvent) {
   .ac-error__card strong { font-size: 21.5px; }
   .ac-error__card span { font-size: 17.5px; }
   .ac-error__retry { margin-top: 8px; padding: 11px 28px; border-radius: 12px; font-size: 17.5px; }
+}
+
+/* 异步 tab 过渡态：loading 骨架 + 加载失败错误卡 */
+.admin-page-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 20px;
+  color: var(--mk-muted, #8896b0);
+  font-size: 14px;
+}
+.admin-page-error {
+  margin: 24px;
 }
 </style>

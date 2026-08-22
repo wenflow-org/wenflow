@@ -20,6 +20,7 @@
           </div>
 
           <form class="form" :aria-busy="loading" @submit.prevent="handleLogin">
+            <div v-if="loginError" class="errorbar" role="alert">{{ loginError }}</div>
             <label class="field" :class="{ 'field--error': errors.name }">
               <span class="field__label">管理员账号</span>
               <input
@@ -28,9 +29,11 @@
                 class="field__input"
                 placeholder="请输入管理员账号"
                 autocomplete="username"
+                autofocus
                 :aria-invalid="!!errors.name"
                 :aria-describedby="errors.name ? 'login-err-name' : undefined"
                 @blur="touch('name')"
+                @input="loginError = ''"
               />
               <span v-if="errors.name" id="login-err-name" class="field__error">{{ errors.name }}</span>
             </label>
@@ -157,6 +160,7 @@ const errors = reactive({
   name: '',
   password: ''
 })
+const loginError = ref('')
 
 const funnel = [
   { label: '用户', value: '128' },
@@ -217,11 +221,19 @@ const handleLogin = async () => {
       toast.success('登录成功')
       await router.replace(safeRedirect())
     } else {
-      toast.error(response.data.message || '登录失败，请检查账号密码')
+      const msg = response.data.message || '登录失败，请检查账号密码'
+      loginError.value = msg
+      errors.name = msg
+      toast.error(msg)
     }
   } catch (error: any) {
-    console.debug('管理员登录请求失败:', error?.response?.status ?? error?.code ?? 'network-error')
-    toast.error(error.response?.data?.error?.message || '登录失败，请检查账号密码')
+    const status = error?.response?.status
+    const msg = status === 429 ? '登录尝试过于频繁，请稍后再试'
+      : !status || status >= 500 ? '服务暂时不可用，请稍后重试'
+      : error.response?.data?.error?.message || '登录失败，请检查账号密码'
+    loginError.value = msg
+    errors.name = msg
+    toast.error(msg)
   } finally {
     loading.value = false
   }
