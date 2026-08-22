@@ -139,8 +139,8 @@
             {{ checkpointFeedback }}
           </div>
           <div class="checkpoint__actions">
-            <span class="btn-primary" @click="submitCheckpoint">提交</span>
-            <span v-if="checkpoint.allowSkip !== false" class="btn-ghost" @click="skipCheckpoint">跳过</span>
+            <span class="btn-primary" role="button" tabindex="0" @click="submitCheckpoint" @keydown.enter="submitCheckpoint">提交</span>
+            <span v-if="checkpoint.allowSkip !== false" class="btn-ghost" role="button" tabindex="0" @click="skipCheckpoint" @keydown.enter="skipCheckpoint">跳过</span>
           </div>
           </div>
         </Transition>
@@ -181,8 +181,8 @@
               <span v-for="(s, i) in finishStats" :key="i"><b>{{ s.value }}</b>{{ s.label }}</span>
             </div>
             <div class="finish__actions">
-              <span class="btn-primary" @click="goBack">回到路径详情</span>
-              <span v-if="evaluationUrl" class="btn-ghost" @click="goEvaluation">查看学习反馈</span>
+              <span class="btn-primary" role="button" tabindex="0" @click="goBack" @keydown.enter="goBack">回到路径详情</span>
+              <span v-if="evaluationUrl" class="btn-ghost" role="button" tabindex="0" @click="goEvaluation" @keydown.enter="goEvaluation">查看学习反馈</span>
             </div>
           </div>
         </div>

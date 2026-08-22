@@ -238,8 +238,8 @@
             </div>
 
             <div v-if="!supplementMode" class="proposal__actions">
-              <span class="btn-primary btn-primary--lg" @click="doConfirm">确认，生成我的路径</span>
-              <span class="btn-ghost" @click="supplementMode = true">再补充点信息</span>
+              <span class="btn-primary btn-primary--lg" role="button" tabindex="0" @click="doConfirm" @keydown.enter="doConfirm">确认，生成我的路径</span>
+              <span class="btn-ghost" role="button" tabindex="0" @click="supplementMode = true" @keydown.enter="supplementMode = true">再补充点信息</span>
             </div>
             <div v-else class="proposal__supplement">
               <textarea
@@ -250,10 +250,10 @@
                 placeholder="比如：我只有 Windows 电脑，Excel 是 2016 版…"
               ></textarea>
               <div class="proposal__actions">
-                <span class="btn-primary" :class="{ 'btn-primary--off': !supplementText.trim() || live.sending }" @click="doSupplement">
+                <span class="btn-primary" :class="{ 'btn-primary--off': !supplementText.trim() || live.sending }" role="button" tabindex="0" @click="doSupplement" @keydown.enter="doSupplement">
                   {{ live.sending ? '提交中…' : '提交补充，更新方案' }}
                 </span>
-                <span class="btn-ghost" @click="supplementMode = false">取消</span>
+                <span class="btn-ghost" role="button" tabindex="0" @click="supplementMode = false" @keydown.enter="supplementMode = false">取消</span>
               </div>
             </div>
             <div class="proposal__note">
@@ -279,8 +279,8 @@
             <h2 class="proposal__title">路径已生成</h2>
             <p class="proposal__generating-note">阶段与任务正在后台组装，稍后即可查看。</p>
             <div class="proposal__actions proposal__actions--center">
-              <span class="btn-primary btn-primary--lg" @click="goPaths">查看我的路径</span>
-              <span class="btn-ghost" @click="phase = 'preview'">返回方案</span>
+              <span class="btn-primary btn-primary--lg" role="button" tabindex="0" @click="goPaths" @keydown.enter="goPaths">查看我的路径</span>
+              <span class="btn-ghost" role="button" tabindex="0" @click="phase = 'preview'" @keydown.enter="phase = 'preview'">返回方案</span>
             </div>
           </div>
         </div>
