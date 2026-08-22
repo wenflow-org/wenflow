@@ -37,7 +37,7 @@
     "prompts:yaml:check": "ts-node src/scripts/check-yaml-vocabulary.ts",
     "prompts:fields-sync:check": "ts-node src/scripts/check-core-fields-sync.ts --report",
     "prompts:orchestration:sync": "ts-node src/scripts/field-routing-orchestration-sync.ts",
-    "prompts:check:all": "npm run prompts:lint && npm run prompts:check-handoff:strict && npm run prompts:snapshots:check && npm run prompts:drift-check && npm run retired:check && npm run prompts:skills:check && npm run prompts:data-source:check && npm run prompts:yaml:check && npm run prompts:fields-sync:check",
+    "prompts:check:all": "npm run prompts:seed-routings && npm run prompts:lint && npm run prompts:check-handoff:strict && npm run prompts:snapshots:check && npm run prompts:drift-check && npm run retired:check && npm run prompts:skills:check && npm run prompts:data-source:check && npm run prompts:yaml:check && npm run prompts:fields-sync:check",
     "prompts:check-handoff:strict": "ts-node src/scripts/check-input-handoffs.ts --strict",
     "prompts:core:check": "npm run runtime:validate && ts-node src/scripts/check-core-hash-parity.ts",
     "prompts:runtime-contract:check": "npm run runtime:validate && ts-node src/scripts/check-prompt-runtime-contract-metadata-parity.ts",
