@@ -332,10 +332,13 @@ const sessionAggMap = computed<Map<string, SessionAgg>>(() => {
     a.spanCount++
     a.traces.add(s.traceId)
     if (s.status === 'err') a.errs++
-    const ts = s.ts ?? 0
-    if (ts < a.startTs) a.startTs = ts
-    const e = ts + s.durationMs
-    if (e > a.endTs) a.endTs = e
+    // 缺 ts 的 span 不计入时间刻度起点/终点：归零会导致 epoch 偏移使瀑布报废
+    if (s.ts != null) {
+      const ts = s.ts
+      if (ts < a.startTs) a.startTs = ts
+      const e = ts + s.durationMs
+      if (e > a.endTs) a.endTs = e
+    }
   }
   return m
 })

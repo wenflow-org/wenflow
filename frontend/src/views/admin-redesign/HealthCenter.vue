@@ -44,7 +44,7 @@
         </div>
         <div class="wb-hc-list">
           <div
-            v-for="item in displayReport.health.items"
+            v-for="item in sortedHealthItems"
             :key="item.id"
             class="hc-item"
             :class="[`hc-item--${item.severity}`]"
@@ -217,6 +217,12 @@ const demoReport = ref<HealthCenterSummaryReport>(buildDemoReport())
 
 /** 展示数据源：live 用真实聚合；demo 用降级数据 */
 const displayReport = computed(() => (isLive.value ? report.value : demoReport.value))
+/** 健康检查项按 severity 降序（error→warn→ok），异常优先视觉 */
+const severityOrder: Record<string, number> = { error: 0, warn: 1, ok: 2 }
+const sortedHealthItems = computed(() => {
+  const items = displayReport.value?.health?.items ?? []
+  return [...items].sort((a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9))
+})
 
 const global = computed<HealthGlobalSummary>(
   () => displayReport.value?.global || { total: 0, aux: 0, mainline: 0, handlerOnly: 0, abnormalSkills: 0 },
