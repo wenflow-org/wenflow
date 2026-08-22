@@ -190,9 +190,19 @@ export async function ensureStageFieldRoutings(
 
   for (const r of stage.routings) {
     const exists = await systemPrisma.agent_field_routings.findUnique({ where: { agentId_fieldId: { agentId: r.agentId, fieldId: r.fieldId } } });
+    // managedByCode=true 的行允许更新（handoff 等代码声明变更需同步到 DB）；
+    // managedByCode=false 的行由 admin 手动编辑，保留不动
+    const updateData = exists ? {} : undefined;
     await systemPrisma.agent_field_routings.upsert({
       where: { agentId_fieldId: { agentId: r.agentId, fieldId: r.fieldId } },
-      update: {},
+      update: exists && exists.managedByCode ? {
+        render: r.render,
+        handoff: r.handoff.length ? JSON.stringify(r.handoff) : null,
+        internalFlag: r.internal,
+        accumulate: r.accumulate,
+        visibilityPreset: r.visibilityPreset ?? null,
+        notes: r.notes ?? null,
+      } : {},
       create: {
         id: randomUUID(),
         agentId: r.agentId,
