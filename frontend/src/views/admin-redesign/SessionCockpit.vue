@@ -6,28 +6,24 @@
     </div>
 
 
-    <!-- 控制台状态条 -->
+    <!-- 状态条：一行讲清「现在到哪了、进度如何」，不堆砌 -->
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">{{ statusTitle }}</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta mono">{{ shortId }}</span>
       <span class="mk-status__meta">{{ modeText }}</span>
-      <span v-if="isRealMode" class="mk-status__meta">{{ realKindText }}</span>
-      <span class="mk-status__meta">{{ statusText(terminalStatus) }}</span>
-      <template v-if="isBlackbox">
-        <span class="mk-status__meta">{{ blackboxTraceCount }} 条公开轨迹</span>
-        <span class="mk-status__meta">{{ refereeTraceCount }} 条裁判轨迹</span>
-        <span class="mk-status__meta">{{ privateStateTraceCount }} 条角色私有状态</span>
-        <span v-if="refereeReports.length + actorAuditReports.length" class="mk-status__meta">
-          {{ refereeReports.length + actorAuditReports.length }} 份终局评估
-        </span>
+      <template v-if="isRealMode"><span class="mk-status__meta">{{ realKindText }}</span></template>
+      <template v-else>
+        <span class="mk-status__meta">{{ statusText(terminalStatus) }}</span>
+        <span v-if="sessionTotalTasks > 0" class="mk-status__meta">任务 {{ completedTasksText }}</span>
+        <span v-if="isBlackbox && blackboxTraceCount" class="mk-status__meta">{{ blackboxTraceCount }} 条轨迹</span>
       </template>
+      <span class="mk-status__spacer"></span>
       <button type="button" class="mk-status__action" :disabled="busy" @click="refresh">
         <span v-if="busy"><span class="mk-spinner"></span> 执行中…</span>
         <span v-else>刷新</span>
       </button>
-      <!-- 会话控制：暂停/恢复/重启/停止 -->
       <template v-if="!isRealMode && session?.status === 'running'">
         <button v-if="!isPaused" type="button" class="mk-status__action" :disabled="busy" @click="pauseSession">⏸ 暂停</button>
         <button v-else type="button" class="mk-status__action mk-status__action--primary" :disabled="busy" @click="resumeSession">▶ 继续</button>
@@ -35,7 +31,6 @@
         <button type="button" class="mk-status__action" :disabled="busy" @click="restartLearning">🔄 重启</button>
       </template>
       <template v-else-if="!isRealMode && isFailedTerminal">
-        <!-- failed=系统失败 / abandoned=人为终止（拍板 2026-08-21）：两者均可重启恢复 -->
         <button type="button" class="mk-status__action mk-status__action--primary" :disabled="busy" @click="restartLearning">🔄 重启学习</button>
       </template>
       <button v-if="!isRealMode" type="button" class="mk-status__action cp-danger" :disabled="busy" @click="removeSession">
@@ -44,75 +39,71 @@
       </button>
     </div>
 
-    <!-- 阶段进度（点击切换下方分页） -->
+    <!-- 阶段：一行胶囊，只讲阶段与进度 -->
     <div class="cp-stages">
-      <template v-for="(st, i) in stageFlow" :key="st">
-        <div
-          class="cp-stage"
-          :class="[stageCls(st), { 'cp-stage--tab': !isBlackbox && activeTab === st, 'cp-stage--locked': isBlackbox }]"
-          :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `查看${stageLabel(st)}`"
-          role="button"
-          tabindex="0"
-          @click="selectStageTab(st)"
-          @keydown.enter="selectStageTab(st)"
-        >
-          <span class="cp-stage__order">{{ String(i + 1).padStart(2, '0') }}</span>
-          <strong>{{ stageLabel(st) }}</strong>
-          <span class="cp-stage__state">{{ stageState(st) }}</span>
-          <span v-if="stageProgress(st)" class="cp-stage__progress">{{ stageProgress(st) }}</span>
-        </div>
-        <span v-if="i < stageFlow.length - 1" class="cp-stage__arrow">→</span>
-      </template>
+      <button
+        v-for="st in stageFlow"
+        :key="st"
+        type="button"
+        class="cp-stage"
+        :class="[stageCls(st), { 'cp-stage--tab': !isBlackbox && activeTab === st }]"
+        :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `查看${stageLabel(st)}`"
+        :disabled="isBlackbox"
+        @click="selectStageTab(st)"
+      >
+        <span class="cp-stage__mark">{{ stageMark(st) }}</span>
+        <span>{{ stageLabel(st) }}</span>
+        <span v-if="stageProgress(st)" class="cp-stage__progress">{{ stageProgress(st) }}</span>
+      </button>
     </div>
 
     <div class="cp-grid">
-      <!-- 控制面板 -->
+      <!-- 运行 -->
       <section class="mk-card">
         <div class="mk-card__head">
-          <h3 class="mk-card__title">推进控制</h3>
-          <span class="mk-card__meta">{{ isRealMode ? '真实会话 · 只读' : isBlackbox ? '黑盒 API' : '辅助模拟' }}</span>
+          <h3 class="mk-card__title">运行</h3>
+          <span class="mk-card__meta">{{ isRealMode ? '真实会话 · 只读' : isBlackbox ? '黑盒 API · 阶段操作在下方分页' : '辅助模拟' }}</span>
         </div>
-        <div v-if="!isRealMode" class="cp-controls">
-          <button v-if="!isBlackbox" type="button" class="cp-btn cp-btn--primary" :disabled="runFullDisabled" :title="runFullTitle" @click="act('runFull')">一键全流程</button>
-          <button v-if="isBlackbox && !isTerminal" type="button" class="cp-btn cp-danger-btn" :disabled="busy" :title="busy ? '操作执行中' : '终止当前黑盒实验'" @click="act('abandon')">{{ busy ? '执行中…' : '放弃实验' }}</button>
-          <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn cp-btn--primary" :disabled="busy" :title="busy ? '操作执行中' : '生成终局裁判评估'" @click="act('referee')">{{ busy ? '执行中…' : '生成裁判评估' }}</button>
-          <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn" :disabled="busy" :title="busy ? '操作执行中' : '以相同输入创建新的实验会话'" @click="act('rerun')">{{ busy ? '执行中…' : '按原输入重跑' }}</button>
-          <span v-if="!isBlackbox" class="cp-controls__hint">各阶段操作在下方对应分页内</span>
-        </div>
-        <div v-else class="cp-controls cp-controls--readonly">
-          <span>真实教学会话为只读展示：阶段推进、模拟配置与黑盒操作不适用。</span>
-        </div>
-        <div v-if="!isBlackbox && !isRealMode" class="cp-config">
-          <label>
-            对抗预算
-            <select v-model="frictionBudget" class="mk-filter__select" :disabled="frictionSaving" @change="saveFriction">
-              <option value="none">无</option>
-              <option value="low">低</option>
-              <option value="normal">正常</option>
-              <option value="high">高</option>
-              <option value="stress_test">压力测试</option>
-            </select>
-          </label>
-        </div>
+        <div class="cp-run">
+          <!-- 主操作：全自动（无人值守跑完）→ 一人一键 -->
+          <div v-if="!isRealMode" class="cp-run__actions">
+            <template v-if="autopilotRunning">
+              <span class="cp-autopilot__badge cp-autopilot__badge--running">▶ 自动驾驶中 · 已推进 {{ Number(autopilot.steps || 0) }} 步 · {{ autopilot.lastStage || '…' }}</span>
+              <button type="button" class="cp-btn cp-danger-btn" :disabled="busy" :title="busy ? '操作执行中' : '请求停止全自动，运行会在下一个安全点退出'" @click="act('autopilotStop')">停止全自动</button>
+            </template>
+            <template v-else>
+              <button type="button" class="cp-btn cp-btn--primary" :disabled="autopilotStartDisabled" :title="autopilotStartTitle" @click="act('autopilotStart')">全自动跑完</button>
+              <button v-if="!isBlackbox" type="button" class="cp-btn" :disabled="runFullDisabled" :title="runFullTitle" @click="act('runFull')">一键全流程</button>
+              <button v-if="isBlackbox && !isTerminal" type="button" class="cp-btn cp-danger-btn" :disabled="busy" :title="busy ? '操作执行中' : '终止当前黑盒实验'" @click="act('abandon')">{{ busy ? '执行中…' : '放弃实验' }}</button>
+              <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn cp-btn--primary" :disabled="busy" :title="busy ? '操作执行中' : '生成终局裁判评估'" @click="act('referee')">{{ busy ? '执行中…' : '生成裁判评估' }}</button>
+              <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn" :disabled="busy" :title="busy ? '操作执行中' : '以相同输入创建新的实验会话'" @click="act('rerun')">{{ busy ? '执行中…' : '按原输入重跑' }}</button>
+            </template>
+          </div>
+          <div v-else class="cp-run__actions">
+            <span>真实教学会话为只读展示。</span>
+          </div>
 
-        <!-- 阶段摘要 -->
-        <div class="cp-summary">
-          <div v-if="goalInfo" class="cp-summary__item">
-            <span>Goal 对话</span>
-            <p>{{ goalInfo }}</p>
-          </div>
-          <div v-if="pathInfo" class="cp-summary__item">
-            <span>路径</span>
-            <p>{{ pathInfo }}</p>
-          </div>
-          <div v-if="learnInfo" class="cp-summary__item">
-            <span>学习</span>
-            <p>{{ learnInfo }}</p>
-          </div>
-          <p v-if="!goalInfo && !pathInfo && !learnInfo" class="cp-none">会话刚启动，推进后这里显示各阶段摘要。</p>
-          <div v-if="showPathReadiness" class="cp-path-readiness" :class="`cp-path-readiness--${pathReadinessTone}`">
-            <span>Path 就绪状态</span>
-            <p>{{ pathReadinessText }}</p>
+          <div v-if="autopilotResultText && !autopilotRunning" class="cp-run__autopilot-result" :class="{
+            'cp-run__autopilot-result--ok': autopilot.status === 'completed',
+            'cp-run__autopilot-result--bad': autopilot.status === 'failed',
+            'cp-run__autopilot-result--muted': autopilot.status === 'stopped'
+          }">{{ autopilotResultText }}</div>
+
+          <!-- 底部一行：对抗预算 + 当前阶段摘要 -->
+          <div class="cp-run__foot">
+            <label v-if="!isBlackbox && !isRealMode" class="cp-run__budget">
+              <span>对抗预算</span>
+              <select v-model="frictionBudget" class="mk-filter__select" :disabled="frictionSaving" @change="saveFriction">
+                <option value="none">无</option>
+                <option value="low">低</option>
+                <option value="normal">正常</option>
+                <option value="high">高</option>
+                <option value="stress_test">压力测试</option>
+              </select>
+            </label>
+            <p v-if="runSummary" class="cp-run__summary">{{ runSummary }}</p>
+            <p v-else class="cp-run__summary cp-run__summary--muted">会话刚启动，推进后这里显示各阶段摘要。</p>
+            <span v-if="showPathReadiness" class="cp-run__readiness" :class="`cp-run__readiness--${pathReadinessTone}`">{{ pathReadinessText }}</span>
           </div>
         </div>
       </section>
@@ -121,9 +112,9 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">会话日志</h3>
-          <span class="mk-card__meta">{{ isRealMode ? '会话时间线 · 只读' : isTerminal ? '已终态' : '5s 轮询' }}</span>
+          <span class="mk-card__meta">{{ isRealMode ? '只读' : isTerminal ? '已终态' : '5s 轮询' }}</span>
           <span class="cp-logs__follow" :class="{ 'is-paused': !logFollowsBottom }" :title="logFollowsBottom ? '自动跟随最新日志' : '已暂停跟随 — 滚动到底部恢复'" @click="scrollToBottom">
-            {{ logFollowsBottom ? '⏵ 自动跟随' : '⏸ 已暂停' }}
+            {{ logFollowsBottom ? '⏵ 跟随' : '⏸ 已暂停' }}
           </span>
         </div>
         <div class="cp-logs" ref="logBox" aria-live="polite" aria-label="实时日志" @scroll="onLogScroll">
@@ -644,7 +635,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { subPage, closeSubPage, openSubPage } from './store'
 import { errMsg } from './live'
 import { askConfirm } from './useConfirm'
@@ -654,6 +645,7 @@ import { statusText } from './statusText'
 import { parseLogEntry, type LogEntryView } from './sessionLog'
 import { scoreBadgeCls, scoreFillPct, scoreToPct, scoreTone } from './evalScore'
 import { traceSummaryRows, traceRawJson, type TraceKeyValue } from './traceSummary'
+import { useSafePolling } from '@/composables/useSafePolling'
 
 const sessionId = computed(() => subPage.value?.id || '')
 const shortId = computed(() => (sessionId.value.length > 20 ? `…${sessionId.value.slice(-16)}` : sessionId.value))
@@ -838,6 +830,38 @@ const isPaused = computed(() =>
   learningResult.value.paused === true
   || stageStatus.value.learning?.paused === true
 )
+
+/* ===== 全自动模式：以最终目标（Path 全部完成）为终点的无人值守运行 ===== */
+const autopilot = computed(() => asRecord(stageResults.value.autopilot) as {
+  status?: string
+  mode?: string
+  steps?: number
+  lastStage?: string | null
+  lastError?: string | null
+  startedAt?: string
+  completedAt?: string
+})
+const autopilotRunning = computed(() => autopilot.value.status === 'running')
+const autopilotStartDisabled = computed(() => {
+  if (!session.value) return true
+  if (busy.value) return true
+  if (isTerminal.value) return true
+  return autopilotRunning.value
+})
+const autopilotStartTitle = computed(() => {
+  if (!session.value) return '会话仍在加载'
+  if (isTerminal.value) return '会话已终态，无需启动全自动'
+  if (autopilotRunning.value) return '全自动正在运行中'
+  return '启动后全程无人值守，直至 Path 全部任务完成'
+})
+const autopilotResultText = computed(() => {
+  const st = autopilot.value.status
+  if (st === 'completed') return '已完成：最终目标达成（Path 全部任务跑完）'
+  if (st === 'failed') return `已失败：${firstText(autopilot.value.lastError) || '未知原因'}`
+  if (st === 'stopped') return `已停止：${firstText(autopilot.value.lastError) || '手动停止'}`
+  if (st === 'running') return `运行中：已推进 ${Number(autopilot.value.steps || 0)} 步 · ${autopilot.value.lastStage || '…'}`
+  return ''
+})
 const statusTone = computed(() =>
   !session.value
     ? 'mk-status--muted'
@@ -1524,15 +1548,6 @@ function stageCls(st: string) {
   }
 }
 
-function stageState(st: string) {
-  const key = st as StageKey
-  if (isFailedTerminal.value && stageFlow.indexOf(key) === effectiveStageIndex.value) return '失败'
-  if (stageDone(key) && !stageActive(key)) return '已完成'
-  if (stageActive(key)) return isTerminal.value ? '已完成' : '进行中'
-  if (stageDone(key)) return '已完成'
-  return '未开始'
-}
-
 /* 阶段条进度副标（遗留项 2 C2）：当前阶段显示 x/y 或百分比；数据源不足给空串 */
 const goalRoundText = computed(() => {
   const n = goalConversationMessages.value.length
@@ -1598,6 +1613,24 @@ const learnInfo = computed(() => {
   if (l.currentTaskTitle) return `当前任务：${String(l.currentTaskTitle)}`
   if (bindings.value.teachingSessionId || l.teachingSessionId) return '教学会话进行中'
   return ''
+})
+
+/* 阶段胶囊状态标记：已完成 ✓ / 当前 · / 其他空 */
+function stageMark(st: string) {
+  const key = st as StageKey
+  if (stageDone(key)) return '✓'
+  if (stageActive(key)) return '·'
+  return ''
+}
+
+/* 状态条任务进度（虚拟会话行 completedTasks/totalTasks） */
+const sessionTotalTasks = computed(() => numberValue(session.value?.totalTasks) || 0)
+const completedTasksText = computed(() => `${completedTaskCount.value}/${sessionTotalTasks.value}`)
+
+/* 运行卡底部一行摘要：Goal · Path · 学习合并展示 */
+const runSummary = computed(() => {
+  const parts = [goalInfo.value, pathInfo.value, learnInfo.value].filter(Boolean)
+  return parts.join(' ｜ ')
 })
 
 /* 数据加载 */
@@ -1951,7 +1984,7 @@ async function restartLearning() {
     await adminVirtualLearnersApi.restartVirtualLearning(sessionId.value)
     toast.success('已重启学习阶段')
     // 失败会话的轮询定时器此前已自毁，sessionId 未变、watch 不触发，必须显式拉起
-    if (!pollTimer && !isTerminal.value) startPolling()
+    if (!pollingActive.value && !isTerminal.value) startPolling()
     void refresh()
   } catch (e) {
     toast.error(`重启失败：${errMsg(e)}`)
@@ -1997,6 +2030,14 @@ async function act(kind: string) {
           autoAdvanceToPath: true,
           autoAdvanceToLearning: true
         })
+        break
+      case 'autopilotStart':
+        await adminVirtualLearnersApi.autopilotStart(id)
+        toast.info('全自动模式已启动：将以最终目标（Path 全部完成）为终点持续运行')
+        break
+      case 'autopilotStop':
+        await adminVirtualLearnersApi.autopilotStop(id)
+        toast.info('已请求停止全自动')
         break
       case 'advancePath':
         await adminVirtualLearnersApi.virtualSessionAdvancePath(id)
@@ -2097,31 +2138,30 @@ async function removeSession() {
   }
 }
 
-/* 会话、日志与 Path 就绪状态共用同一轮询（非终态 5s；终态即停止，act 期间跳过） */
-let pollTimer: ReturnType<typeof setInterval> | null = null
-function startPolling() {
-  if (pollTimer) clearInterval(pollTimer)
-  pollTimer = setInterval(() => {
+/* 会话、日志与 Path 就绪状态共用同一轮询（非终态 5s；终态即停止，act 期间跳过；
+   setTimeout 链 + 并发守卫 + 指数退避，后端不可用时不会堆积请求） */
+const { start: startPolling, stop: stopPolling, isActive: pollingActive } = useSafePolling(
+  async () => {
     if (isTerminal.value) {
-      if (pollTimer) clearInterval(pollTimer)
-      pollTimer = null
+      stopPolling()
       return
     }
-    if (document.hidden || busy.value) return
     const id = sessionId.value
     if (!id) return
-    void loadLogs()
+    await loadLogs()
     if (isRealMode.value) {
-      void adminVirtualLearnersApi.getRealSessionConsole(id).then((res) => {
+      try {
+        const res = await adminVirtualLearnersApi.getRealSessionConsole(id)
         if (sessionId.value !== id) return
         session.value = res.data?.data ?? res.data ?? {}
         timelineEntries.value = Array.isArray((session.value as Record<string, unknown>)?.timeline)
           ? (session.value as { timeline: Array<{ time: string; kind: string; title: string; detail: string }> }).timeline
           : []
-      }).catch(() => undefined)
+      } catch { /* 静默忽略 */ }
       return
     }
-    void adminVirtualLearnersApi.getVirtualSession(id).then((res) => {
+    try {
+      const res = await adminVirtualLearnersApi.getVirtualSession(id)
       if (sessionId.value !== id) return
       session.value = res.data?.data ?? res.data ?? {}
       parseBlackbox()
@@ -2132,16 +2172,21 @@ function startPolling() {
         void loadPathStatus()
         void loadTeachingDetail(selectedTeachingSessionId.value, { silent: true })
       }
-    }).catch(() => undefined)
-  }, 5000)
-}
+    } catch { /* 静默忽略 */ }
+  },
+  {
+    interval: 5000,
+    maxBackoff: 30000,
+    circuitBreakerThreshold: 8,
+    skipWhenHidden: true,
+  }
+)
 
 watch(
   sessionId,
   async (id) => {
     if (!id) return
-    if (pollTimer) clearInterval(pollTimer)
-    pollTimer = null
+    stopPolling()
     session.value = null
     logs.value = []
     logsFailed.value = false
@@ -2168,10 +2213,6 @@ watch(
   },
   { immediate: true }
 )
-
-onBeforeUnmount(() => {
-  if (pollTimer) clearInterval(pollTimer)
-})
 
 const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 4000) || '')
 </script>
@@ -2202,44 +2243,68 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-stages {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
+  margin: 2px 0 4px;
 }
+/* 阶段胶囊：极简一行，只保留名称、状态标记与进度 */
 .cp-stage {
-  display: grid;
-  gap: 2px;
-  padding: 10px 16px;
-  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
-  min-width: 130px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--mk-ink);
+  cursor: pointer;
 }
-.cp-stage__order { font-size: 10px; font-weight: 800; color: var(--mk-faint); letter-spacing: 0.08em; }
-.cp-stage strong { font-size: 13px; }
-.cp-stage__state { font-size: 11px; color: var(--mk-faint); }
-.cp-stage { cursor: pointer; }
-.cp-stage--locked { cursor: default; opacity: 0.85; }
-.cp-stage--locked:hover { background: transparent; }
-.cp-stage--active { border-color: var(--mk-blue); background: #eef5ff; }
-.cp-stage--active .cp-stage__state { color: var(--mk-blue); font-weight: 700; }
-.cp-stage--tab { box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.35); }
-.cp-stage--done { border-color: rgba(21, 128, 61, 0.3); }
-.cp-stage--done .cp-stage__state { color: var(--mk-green); }
-.cp-stage__arrow { color: var(--mk-faint); }
+.cp-stage__mark { width: 12px; text-align: center; color: var(--mk-faint); font-size: 12px; }
+.cp-stage__progress { font-size: 11px; font-weight: 700; color: var(--mk-faint); }
+.cp-stage:disabled { cursor: default; opacity: 0.8; }
+.cp-stage--active { border-color: var(--mk-blue); background: #eef5ff; color: var(--mk-blue); }
+.cp-stage--active .cp-stage__mark { color: var(--mk-blue); }
+.cp-stage--tab { box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.3); }
+.cp-stage--done { border-color: rgba(21, 128, 61, 0.35); background: rgba(21, 128, 61, 0.05); }
+.cp-stage--done .cp-stage__mark { color: var(--mk-green); }
 
 .cp-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
   gap: 14px;
   align-items: start;
 }
 
-.cp-controls {
+/* 运行卡：主操作一行 + 底部配置/摘要一行 */
+.cp-run { padding: 12px 16px 14px; display: grid; gap: 10px; }
+.cp-run__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cp-run__autopilot-result { font-size: 12.5px; font-weight: 700; padding: 6px 10px; border-radius: 8px; background: var(--mk-surface); }
+.cp-run__autopilot-result--ok { color: var(--mk-green, #15803d); }
+.cp-run__autopilot-result--bad { color: var(--mk-red, #b91c1c); }
+.cp-run__autopilot-result--muted { color: var(--mk-muted); }
+.cp-run__foot {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
-  padding: 14px 16px 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--mk-line);
+  font-size: 12px;
+  color: var(--mk-muted);
 }
+.cp-run__budget { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+.cp-run__budget select { min-width: 110px; }
+.cp-run__summary { flex: 1; min-width: 200px; font-size: 12px; }
+.cp-run__summary--muted { color: var(--mk-faint); }
+.cp-run__readiness { font-size: 12px; font-weight: 700; }
+.cp-run__readiness--ok { color: var(--mk-green, #15803d); }
+.cp-run__readiness--pending { color: var(--mk-amber, #b45309); }
+.cp-run__readiness--bad { color: var(--mk-red, #b91c1c); }
+.mk-status__spacer { flex: 1; }
+
 .cp-btn {
   padding: 8px 16px;
   border-radius: 8px;
@@ -2269,52 +2334,17 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 /* 危险操作：实心红（与 .mk-btn--danger 一致） */
 .cp-danger-btn { background: var(--mk-red-strong, var(--mk-red)); border-color: var(--mk-red-strong, var(--mk-red)); color: #fff; }
 .cp-danger-btn:hover:not(:disabled) { color: #fff; opacity: 0.9; }
-.cp-config {
-  padding: 10px 16px 0;
-  display: flex;
-  gap: 12px;
-  align-items: center;
+/* 自动驾驶中徽标（运行卡内联） */
+.cp-autopilot__badge {
   font-size: 12px;
-  color: var(--mk-muted);
-}
-.cp-config label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
   font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 999px;
 }
-.cp-config select { min-width: 140px; }
-.cp-controls__hint { font-size: 11px; color: var(--mk-faint); align-self: center; }
+.cp-autopilot__badge--running { background: rgba(245, 158, 11, 0.14); color: var(--mk-amber, #b45309); }
 .cp-tab-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 16px 0; }
 
-.cp-summary { padding: 12px 16px 16px; display: grid; gap: 8px; }
-.cp-summary__item {
-  display: grid;
-  gap: 3px;
-  padding: 9px 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: 9px;
-}
-.cp-summary__item span { font-size: 11px; font-weight: 700; color: var(--mk-faint); }
-.cp-summary__item p { margin: 0; font-size: 12.5px; }
 .cp-none { margin: 0; font-size: 12.5px; color: var(--mk-faint); }
-.cp-path-readiness {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 8px 10px;
-  border-left: 3px solid var(--mk-line);
-  border-radius: 5px;
-  background: #f8fafc;
-}
-.cp-path-readiness span { flex: 0 0 auto; font-size: 11px; font-weight: 800; color: var(--mk-muted); }
-.cp-path-readiness p { margin: 0; font-size: 11.5px; color: var(--mk-muted); line-height: 1.5; }
-.cp-path-readiness--ok { border-left-color: var(--mk-green); background: #f0fdf4; }
-.cp-path-readiness--ok p { color: #15803d; }
-.cp-path-readiness--warn { border-left-color: #d97706; background: #fffbeb; }
-.cp-path-readiness--warn p { color: #b45309; }
-.cp-path-readiness--bad { border-left-color: var(--mk-red); background: var(--mk-red-bg); }
-.cp-path-readiness--bad p { color: var(--mk-red); }
 
 .cp-logs__follow {
   font-size: 10.5px; font-weight: 700; color: var(--mk-green); cursor: pointer;
@@ -2786,24 +2816,16 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-title__id { font-size: 13px; }
   .cp-back { font-size: 14px; }
   .cp-btn { font-size: 14px; padding: 10px 18px; }
-  .cp-config { font-size: 13.5px; }
-  .cp-controls__hint { font-size: 12.5px; }
-  .cp-stage__order { font-size: 11.5px; }
-  .cp-stage strong { font-size: 15px; }
-  .cp-stage__state { font-size: 12.5px; }
+  .cp-run__summary { font-size: 13.5px; }
+  .cp-stage { font-size: 13.5px; }
   .cp-stage__progress { font-size: 12px; }
-  .cp-controls--readonly { font-size: 13.5px; }
   .cp-eval-card__label { font-size: 12px; }
   .cp-eval-card__value { font-size: 14px; }
   .cp-timeline__kind { font-size: 12px; }
   .cp-timeline__stage { font-size: 12px; }
   .cp-timeline__title { font-size: 13.5px; }
   .cp-timeline__detail { font-size: 12.5px; }
-  .cp-summary__item span { font-size: 12.5px; }
-  .cp-summary__item p { font-size: 14px; }
   .cp-none { font-size: 14px; }
-  .cp-path-readiness span { font-size: 12.5px; }
-  .cp-path-readiness p { font-size: 13px; }
   .cp-log { font-size: 13.5px; }
   .cp-log__time { font-size: 12px; }
   .cp-log__phase { font-size: 12px; }
@@ -2880,16 +2902,9 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-title__id { font-size: 15.5px; }
   .cp-back { font-size: 16.5px; }
   .cp-btn { font-size: 16.5px; padding: 12px 22px; }
-  .cp-config { font-size: 16px; }
-  .cp-controls__hint { font-size: 14.5px; }
-  .cp-stage__order { font-size: 13.5px; }
-  .cp-stage strong { font-size: 17.5px; }
-  .cp-stage__state { font-size: 14.5px; }
-  .cp-summary__item span { font-size: 14.5px; }
-  .cp-summary__item p { font-size: 16.5px; }
+  .cp-run__summary { font-size: 16px; }
+  .cp-stage { font-size: 16.5px; }
   .cp-none { font-size: 16.5px; }
-  .cp-path-readiness span { font-size: 14.5px; }
-  .cp-path-readiness p { font-size: 15.5px; }
   .cp-log { font-size: 16px; }
   .cp-log__time { font-size: 14px; }
   .cp-log__phase { font-size: 14px; }

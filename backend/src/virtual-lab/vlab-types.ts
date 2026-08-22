@@ -222,6 +222,8 @@ export interface ErrorLike {
   code?: string | number | null
   statusCode?: number | null
   status?: number
+  /** 可恢复标记：LLM/Provider 瞬时失败（平台副作用未发生）→ 黑盒命令同 key 可续跑 */
+  retryable?: boolean
 }
 
 export function asErrorLike(error: unknown): ErrorLike {

@@ -94,6 +94,17 @@ function isPrismaErrorCode(error: unknown, code: string) {
   return typeof error === 'object' && error !== null && asErrorLike(error).code === code
 }
 
+/**
+ * LLM/Provider 瞬时失败识别（黑盒可恢复失败判定）：
+ * 超时、网络、上游 5xx、限流、空回复、JSON 结构非法等——这类失败发生时
+ * 平台副作用尚未发生，命令可用相同 Idempotency-Key 安全重试。
+ */
+function isTransientLlMFailure(error: unknown): boolean {
+  const message = String(asErrorLike(error).message || error || '').toLowerCase()
+  if (!message.trim()) return true
+  return /structured_output_invalid|invalid chat completion|finish_reason|empty content|api request canceled|fetch failed|timeout|timed out|econnreset|socket|network|rate.?limit|\b429\b|\b5\d\d\b|does not contain valid json|invalid json response|response does not contain|response is empty|missing reply|missing learnerstate/i.test(message)
+}
+
 function isLeaseDatabaseBusyError(error: unknown) {
   if (isPrismaErrorCode(error, 'P1008')) return true
   const code = typeof error === 'object' && error !== null ? String(asErrorLike(error).code || '') : ''
@@ -228,7 +239,9 @@ export class BlackboxVirtualLearnerRunner {
       const existing = await prisma.virtual_experiment_commands.findUnique({
         where: { runId_commandId: { runId, commandId } }
       })
-      if (existing && existing.status !== 'processing' && !this.isReconciliationPendingCommand(existing)) {
+      if (existing && existing.status !== 'processing'
+        && !this.isReconciliationPendingCommand(existing)
+        && !this.isRetryableFailedCommand(existing)) {
         return this.reuseCommand<T>(existing, options.kind, options.request)
       }
       if (existing) this.assertCommandMatches(existing, options.kind, options.request)
@@ -244,7 +257,9 @@ export class BlackboxVirtualLearnerRunner {
         const afterLease = await prisma.virtual_experiment_commands.findUnique({
           where: { runId_commandId: { runId, commandId } }
         })
-        if (afterLease && afterLease.status !== 'processing' && !this.isReconciliationPendingCommand(afterLease)) {
+        if (afterLease && afterLease.status !== 'processing'
+          && !this.isReconciliationPendingCommand(afterLease)
+          && !this.isRetryableFailedCommand(afterLease)) {
           await this.assertCurrentLease(options.sessionId)
           return this.reuseCommand<T>(afterLease, options.kind, options.request)
         }
@@ -286,57 +301,85 @@ export class BlackboxVirtualLearnerRunner {
         const freshState = parseStageResults(freshSession.stageResults)
         let command = afterLease
         let projectionSequence = 0
+        let retryRebuilt = false
         if (command) {
           const receipt = this.pendingProjectionReceipt(command)
           if (!receipt) {
-            throw new BlackboxRunStateError(
-              '待对账命令缺少平台投影回执，不能安全重试',
-              'BLACKBOX_RECONCILIATION_RECEIPT_MISSING'
-            )
+            if (this.isRetryableFailedCommand(command)) {
+              // 可恢复失败续跑：命令失败时平台副作用尚未发生（LLM/Provider 瞬时失败），
+              // 用相同 Idempotency-Key 重置命令后重新执行，幂等语义不变。
+              await this.assertCurrentLease(options.sessionId)
+              await prisma.virtual_experiment_commands.update({
+                where: { id: command.id },
+                data: {
+                  status: 'processing',
+                  errorJson: null,
+                  resultJson: null,
+                  completedAt: null,
+                  triggeredBy: options.operatorId
+                }
+              })
+              command = {
+                ...command,
+                status: 'processing',
+                errorJson: null,
+                resultJson: null,
+                completedAt: null,
+                triggeredBy: options.operatorId
+              }
+              retryRebuilt = true
+            } else {
+              throw new BlackboxRunStateError(
+                '待对账命令缺少平台投影回执，不能安全重试',
+                'BLACKBOX_RECONCILIATION_RECEIPT_MISSING'
+              )
+            }
           }
-          await this.assertCurrentLease(options.sessionId)
-          await prisma.virtual_experiment_commands.update({
-            where: { id: command.id },
-            data: {
+          if (!retryRebuilt) {
+            await this.assertCurrentLease(options.sessionId)
+            await prisma.virtual_experiment_commands.update({
+              where: { id: command.id },
+              data: {
+                status: 'processing',
+                errorJson: null,
+                completedAt: null,
+                triggeredBy: options.operatorId
+              }
+            })
+            command = {
+              ...command,
               status: 'processing',
               errorJson: null,
               completedAt: null,
               triggeredBy: options.operatorId
             }
-          })
-          command = {
-            ...command,
-            status: 'processing',
-            errorJson: null,
-            completedAt: null,
-            triggeredBy: options.operatorId
-          }
-          try {
-            if (receipt.receiptKind === 'checkpoint') {
-              await this.persistTaskCompletionCheckpoint(
-                options.sessionId,
-                freshState,
-                receipt.checkpoint,
-                receipt.projectionKey
-              )
-              projectionSequence = this.projectionSequence(receipt.projectionKey)
-            } else {
-              await this.persist(freshSession, freshState, receipt.platformResult, receipt.projectionKey)
-              if (receipt.finalProjection) {
-                await this.completeCommand(options.sessionId, command.id, receipt.commandResult)
-                return { result: receipt.commandResult as T, reused: false }
+            try {
+              if (receipt!.receiptKind === 'checkpoint') {
+                await this.persistTaskCompletionCheckpoint(
+                  options.sessionId,
+                  freshState,
+                  receipt!.checkpoint,
+                  receipt!.projectionKey
+                )
+                projectionSequence = this.projectionSequence(receipt!.projectionKey)
+              } else {
+                await this.persist(freshSession, freshState, receipt!.platformResult, receipt!.projectionKey)
+                if (receipt!.finalProjection) {
+                  await this.completeCommand(options.sessionId, command.id, receipt!.commandResult)
+                  return { result: receipt!.commandResult as T, reused: false }
+                }
+                projectionSequence = this.projectionSequence(receipt!.projectionKey)
               }
-              projectionSequence = this.projectionSequence(receipt.projectionKey)
+            } catch (error: unknown) {
+              if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) {
+                throw error
+              }
+              const reconciliationError = error instanceof BlackboxReconciliationPendingError
+                ? error
+                : this.reconciliationPendingError(error)
+              await this.recordCommandFailure(options.sessionId, command.id, reconciliationError)
+              throw reconciliationError
             }
-          } catch (error: unknown) {
-            if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) {
-              throw error
-            }
-            const reconciliationError = error instanceof BlackboxReconciliationPendingError
-              ? error
-              : this.reconciliationPendingError(error)
-            await this.recordCommandFailure(options.sessionId, command.id, reconciliationError)
-            throw reconciliationError
           }
         } else {
           const currentTraceCount = Array.isArray(freshState.blackbox?.publicTrace)
@@ -1149,7 +1192,11 @@ export class BlackboxVirtualLearnerRunner {
             name: asErrorLike(error).name || 'Error',
             message: asErrorLike(error).message || '黑盒命令执行失败',
             code: asErrorLike(error).code || null,
-            statusCode: asErrorLike(error).statusCode || null
+            statusCode: asErrorLike(error).statusCode || null,
+            // 可恢复标志：LLM/Provider 瞬时失败（平台副作用未发生）→ 同 key 可续跑
+            retryable: typeof asErrorLike(error).retryable === 'boolean'
+              ? asErrorLike(error).retryable
+              : isTransientLlMFailure(error)
           }),
           completedAt: new Date()
         }
@@ -1190,6 +1237,12 @@ export class BlackboxVirtualLearnerRunner {
     if (this.pendingProjectionReceipt(command)) return true
     return command?.status === 'failed'
       && safeJsonParse<{ code?: string }>(command.errorJson, {}).code === 'BLACKBOX_RECONCILIATION_PENDING'
+  }
+
+  /** 可恢复失败命令：errorJson 带 retryable=true（LLM/Provider 瞬时失败，平台副作用未发生），同 key 可续跑 */
+  private isRetryableFailedCommand(command: VirtualExperimentCommandRow): boolean {
+    if (command?.status !== 'failed') return false
+    return safeJsonParse<{ retryable?: unknown }>(command.errorJson, {}).retryable === true
   }
 
   private isCommandOrderingBarrier(command: VirtualExperimentCommandRow): boolean {
@@ -1577,7 +1630,18 @@ export class BlackboxVirtualLearnerRunner {
         && !(error instanceof BlackboxLeaseLostError)
         && !(error instanceof BlackboxDatabaseBusyError)
         && !(error instanceof BlackboxSessionBusyError)) {
-        await this.persistUnexpectedFailure(sessionId, code, error)
+        if (this.isRecoverableExecutionFailure(error)) {
+          // 可恢复瞬时失败（LLM 超时/上游 5xx/结构非法等）：不终局化整场实验，
+          // 命令已由 runCommand 标记 failed + retryable，前端可用相同 Idempotency-Key 续跑。
+          // 平台副作用未发生（这类错误发生在平台调用或模拟器生成阶段），重放是安全的。
+          logger.warn('[Blackbox] 可恢复瞬时失败，实验保持 running，可用相同 Idempotency-Key 重试', {
+            sessionId,
+            code,
+            error: error instanceof Error ? error.message : String(error)
+          })
+        } else {
+          await this.persistUnexpectedFailure(sessionId, code, error)
+        }
       }
       throw error
     }
@@ -2278,13 +2342,29 @@ export class BlackboxVirtualLearnerRunner {
       }
     }
     await this.markSimulatorDegraded(sessionId, stage, lastError)
-    throw lastError
+    // 标记可恢复：模拟器生成失败时平台副作用尚未发生，黑盒命令可用相同 key 重试续跑（不终局化实验）
+    const retryableError = lastError instanceof Error
+      ? Object.assign(lastError, { retryable: true } as { retryable: boolean })
+      : Object.assign(new Error(String(lastError || '虚拟学习者模拟失败')), { retryable: true })
+    throw retryableError
   }
 
   private isRetryableSimulatorError(error: unknown): boolean {
-    const message = String(error instanceof Error ? error.message : error || '').toLowerCase()
-    if (!message.trim()) return true
-    return /structured_output_invalid|invalid chat completion|finish_reason|empty content|api request canceled|fetch failed|timeout|timed out|econnreset|socket|network|rate.?limit|\b429\b|\b502\b|\b503\b|\b504\b/.test(message)
+    // 空消息按瞬态处理（超时/连接重置等在上层已归一化）
+    const raw = error instanceof Error ? error.message : error ?? ''
+    if (typeof raw === 'string' && !raw.trim()) return true
+    return isTransientLlMFailure(error)
+  }
+
+  /**
+   * 会话级可恢复瞬时失败：LLM/Provider 瞬态错误（超时、网络、5xx、限流、
+   * 响应结构非法等）。此类失败发生时平台副作用尚未发生，命令可安全地用
+   * 相同 Idempotency-Key 重试；实验保持 running，不终局化整场实验。
+   */
+  private isRecoverableExecutionFailure(error: unknown): boolean {
+    const err = asErrorLike(error)
+    if (typeof err.retryable === 'boolean') return err.retryable
+    return isTransientLlMFailure(error)
   }
 
   /** 重试耗尽时的降级标记：写入 stageResults.blackbox.simulatorDegraded（供裁判/审计降权评估），不删除任何数据 */

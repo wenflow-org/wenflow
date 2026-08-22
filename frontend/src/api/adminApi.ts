@@ -115,7 +115,7 @@ function blackboxActionCommandKey(action: Record<string, unknown>): string {
  */
 const adminAxios = axios.create({
   baseURL: API_BASE,
-  timeout: 240000, // 4分钟超时
+  timeout: 30000, // 30秒超时
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -1301,6 +1301,17 @@ export const adminVirtualLearnersApi = {
     }
   ) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/run-full`, data);
+  },
+
+  /** 全自动模式：target='stage' 阶段级（推进完当前阶段即停）/ 'final' 全局级（直达 Path 全部完成，默认） */
+  autopilotStart: async (sessionId: string, data?: { target?: 'stage' | 'final' }) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/autopilot/start`, data || {});
+  },
+  autopilotStop: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/autopilot/stop`);
+  },
+  autopilotStatus: async (sessionId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/autopilot`);
   },
 
   virtualSessionWrapup: async (sessionId: string) => {

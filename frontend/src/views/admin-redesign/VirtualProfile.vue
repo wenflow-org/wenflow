@@ -191,6 +191,16 @@
                   <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" @click="runStory(s, i)">
                     {{ running ? '运行中…' : '运行' }}
                   </button>
+                  <template v-if="autopilotOfStory(s)">
+                    <span class="vp-story__auto" :class="autopilotOfStory(s)!.status === 'running' ? 'is-running' : 'is-done'" :title="autopilotDetailTitle(s)">
+                      ▶ {{ autopilotOfStory(s)!.status === 'running' ? autopilotRunningText(s) : autopilotResultLabel(s) }}
+                      <button v-if="autopilotOfStory(s)!.status === 'running'" type="button" class="mk-link" :disabled="autopilotBusy" @click="autoStopStory(s)">停止</button>
+                    </span>
+                  </template>
+                  <template v-else>
+                    <button type="button" class="mk-btn mk-btn--sm" :disabled="autopilotBusy" title="自动推进完当前阶段（Goal 收敛 / Path 就绪 / 本课完成）即停" @click="autoRunStory(s, i, 'stage')">阶段自动</button>
+                    <button type="button" class="mk-btn mk-btn--sm" :disabled="autopilotBusy" title="直达最终目标（整个 Path 全部任务完成），无人值守" @click="autoRunStory(s, i, 'final')">全局自动</button>
+                  </template>
                   <button type="button" class="mk-link" :disabled="storyBusy" @click="openEditStory(i)">编辑</button>
                   <button type="button" class="mk-link mk-link--danger" :disabled="storyBusy" @click="removeStory(i)">删除</button>
                 </div>
@@ -446,7 +456,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onUnmounted } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { subPage, closeSubPage, virtualProfiles, openSubPage, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
@@ -455,6 +465,7 @@ import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
+import { useSafePolling } from '@/composables/useSafePolling'
 import {
   sessionStageIndex,
   stallState,
@@ -622,6 +633,157 @@ const saving = ref(false)
 const storyBusy = ref(false)
 const sessionBusy = ref(false)
 const quickLearnOpen = ref(false)
+
+/* ===== 故事层级自动运行（阶段级 / 全局级）=====
+   运行单元 = 虚拟学习者 × 故事 × 会话；自动状态挂在最新会话 stageResults.autopilot。
+   一个故事上提供两档：阶段自动（推进完当前阶段即停）/ 全局自动（直达最终目标）。 */
+interface StoryAutopilot {
+  status: 'idle' | 'running' | 'completed' | 'failed' | 'stopped'
+  target?: 'stage' | 'final'
+  completedStage?: string | null
+  steps?: number
+  lastStage?: string | null
+  lastError?: string | null
+}
+const autopilotBusy = ref(false)
+const autopilotMap = ref<Record<string, StoryAutopilot>>({})
+const AUTOPILOT_POLL_INTERVAL_MS = 5000
+
+function autopilotOfStory(s: StoryItem): StoryAutopilot | null {
+  const sid = s.latestRun?.sessionId ? String(s.latestRun.sessionId) : ''
+  if (!sid) return null
+  const st = autopilotMap.value[sid]
+  if (!st || st.status === 'idle') return null
+  return st
+}
+function autopilotTargetLabel(s: StoryItem) {
+  return autopilotOfStory(s)?.target === 'stage' ? '阶段' : '全局'
+}
+function autopilotRunningText(s: StoryItem) {
+  const st = autopilotOfStory(s)
+  return `${autopilotTargetLabel(s)}自动 · ${st?.steps || 0} 步 · ${st?.lastStage || '…'}`
+}
+function autopilotResultLabel(s: StoryItem) {
+  const st = autopilotOfStory(s)
+  if (!st) return ''
+  if (st.status === 'completed') {
+    if (st.target === 'stage') {
+      const stage = st.completedStage
+      const label = (stage && { goal: 'Goal', path: 'Path', teaching: '本课' }[stage as string]) || ''
+      return `${label}已完成`
+    }
+    return '最终目标达成'
+  }
+  if (st.status === 'failed') return '已失败'
+  return '已停止'
+}
+function autopilotDetailTitle(s: StoryItem) {
+  const st = autopilotOfStory(s)
+  if (!st) return ''
+  const level = st.target === 'stage' ? '阶段级' : '全局级'
+  if (st.status === 'failed') return `${level}自动失败：${st.lastError || '未知'}`
+  if (st.status === 'stopped') return `${level}自动已停止${st.lastError ? `：${st.lastError}` : ''}`
+  return `${level}自动 · ${st.steps || 0} 步`
+}
+
+/** 取该故事当前可复用会话：最新运行仍在跑则复用；终态/无运行则需新建 */
+function reusableSessionId(s: StoryItem): string | null {
+  const run = s.latestRun
+  if (!run?.sessionId) return null
+  if (['completed', 'failed', 'abandoned'].includes(String(run.status || ''))) return null
+  return String(run.sessionId)
+}
+
+async function autoRunStory(s: StoryItem, index: number, target: 'stage' | 'final') {
+  const id = subPage.value?.id
+  if (!id || autopilotBusy.value) return
+  if (!isLive.value) { toast.info('演示模式不支持自动运行'); return }
+  autopilotBusy.value = true
+  try {
+    selectStory(s, index)
+    let sessionId = reusableSessionId(s)
+    if (!sessionId) {
+      const payload = storyPayload(s, index)
+      const res = await adminVirtualLearnersApi.startVirtualSession(id, payload)
+      const session = res.data?.data ?? res.data ?? {}
+      sessionId = String(session.id || session.sessionId || '')
+      if (!sessionId) throw new Error('按故事启动会话失败')
+      const pid = subPage.value?.id
+      if (pid) await loadDetail(pid, true)
+    }
+    const start = await adminVirtualLearnersApi.autopilotStart(sessionId, { target })
+    const data = start.data?.data ?? {}
+    autopilotMap.value[sessionId] = {
+      status: 'running',
+      target: data.target === 'stage' ? 'stage' : 'final',
+      steps: 0,
+      lastStage: null
+    }
+    toast.success(target === 'stage' ? '阶段自动已启动：推进完当前阶段即停' : '全局自动已启动：直达最终目标（Path 全部完成）')
+    autopilotPolling.start()
+  } catch (e) {
+    toast.error(`启动自动运行失败：${errMsg(e)}`)
+  } finally {
+    autopilotBusy.value = false
+  }
+}
+
+async function autoStopStory(s: StoryItem) {
+  const sid = s.latestRun?.sessionId ? String(s.latestRun.sessionId) : ''
+  if (!sid || autopilotBusy.value) return
+  autopilotBusy.value = true
+  try {
+    const res = await adminVirtualLearnersApi.autopilotStop(sid)
+    const d = res.data?.data ?? {}
+    if (d.accepted === true) toast.info('已请求停止自动运行')
+    else toast.info(String(d.reason || '当前没有运行中的自动'))
+  } catch (e) {
+    toast.error(`停止失败：${errMsg(e)}`)
+  } finally {
+    autopilotBusy.value = false
+  }
+}
+
+/* 状态轮询：探测所有故事最新会话的 autopilot；无故事目标时自动停止（loadDetail 后会重启） */
+const prevAutopilotStatus = new Map<string, string>()
+const autopilotPolling = useSafePolling(async () => {
+  const validIds = new Set(displayStories.value
+    .map((s) => s.latestRun?.sessionId ? String(s.latestRun.sessionId) : '')
+    .filter(Boolean))
+  // 清理已不在当前故事集合里的终态记录（会话被删除/被新会话取代）
+  for (const sid of Object.keys(autopilotMap.value)) {
+    if (!validIds.has(sid) && autopilotMap.value[sid]?.status !== 'running') {
+      delete autopilotMap.value[sid]
+      prevAutopilotStatus.delete(sid)
+    }
+  }
+  const probeIds = [...new Set([
+    ...Object.keys(autopilotMap.value).filter((sid) => autopilotMap.value[sid]?.status === 'running'),
+    ...validIds
+  ])]
+  if (!probeIds.length) {
+    autopilotPolling.stop()
+    return
+  }
+  for (const sid of probeIds) {
+    try {
+      const res = await adminVirtualLearnersApi.autopilotStatus(sid)
+      const d = res.data?.data as StoryAutopilot | undefined
+      if (d && typeof d.status === 'string' && d.status !== 'idle') {
+        const prev = prevAutopilotStatus.get(sid)
+        autopilotMap.value[sid] = { ...(autopilotMap.value[sid] || {}), ...d }
+        if (prev && prev !== d.status && ['completed', 'failed', 'stopped'].includes(d.status)) {
+          const pid = subPage.value?.id
+          if (pid) loadDetail(pid, true)
+        }
+        prevAutopilotStatus.set(sid, d.status)
+      }
+    } catch { /* 状态读取失败保留旧值 */ }
+  }
+}, { interval: AUTOPILOT_POLL_INTERVAL_MS })
+
+/* 页面打开即探测一次；故事加载完成后重启（空转停止后需要重新唤醒） */
+onMounted(() => { autopilotPolling.start() })
 const editOpen = ref(false)
 const editForm = ref({ name: '', goal: '', level: 'beginner', notes: '', maxRetriesPerStep: 5, maxRetriesTotal: 50 })
 const editErrors = ref<{ name?: string; maxRetriesPerStep?: string; maxRetriesTotal?: string }>({})
@@ -897,6 +1059,8 @@ async function loadDetail(id?: string, quiet = false) {
         }
       })()
     }
+    // 故事数据就绪后重启自动运行状态轮询（空转停止后需要唤醒）
+    autopilotPolling.start()
   } catch {
     if (seq !== loadSeq) return
     const base = liveVirtuals.value.find((v) => v.id === id)
@@ -1357,26 +1521,31 @@ function avatarClassOf(name: string): string {
   return `vp-avatar--${h % 8}`
 }
 
-/* ---- 运行中会话的静默轮询刷新（不打断当前视图；卡顿/推进实时可见） ---- */
+/* ---- 运行中会话的静默轮询刷新（setTimeout 链 + 并发守卫 + 指数退避） ---- */
 const VLAB_POLL_MS = 30_000
-let pollTimer: ReturnType<typeof setInterval> | null = null
+const { start: startPolling, stop: stopPolling } = useSafePolling(
+  async () => {
+    const runningTotal = displayStories.value.reduce((n, s) => n + (s.runningCount || 0), 0)
+    if (runningTotal > 0 && subPage.value?.id) await quietReload(subPage.value.id)
+  },
+  {
+    interval: VLAB_POLL_MS,
+    maxBackoff: 120000,
+    circuitBreakerThreshold: 5,
+    skipWhenHidden: true,
+  }
+)
 watch(
   () => [subPage.value?.id, isLive.value] as const,
   ([id, live]) => {
-    if (!id || !live) return
-    if (pollTimer) clearInterval(pollTimer)
-    pollTimer = setInterval(() => {
-      // 有运行中会话才静默重拉（否则零额外请求）
-      const runningTotal = displayStories.value.reduce((n, s) => n + (s.runningCount || 0), 0)
-      if (runningTotal > 0 && subPage.value?.id) void quietReload(subPage.value.id)
-    }, VLAB_POLL_MS)
+    if (!id || !live) {
+      stopPolling()
+      return
+    }
+    startPolling()
   },
   { immediate: true }
 )
-onUnmounted(() => {
-  if (pollTimer) clearInterval(pollTimer)
-  pollTimer = null
-})
 
 /** 静默重拉：走 loadDetail 的 quiet 模式（不清空视图，轮询不闪屏） */
 async function quietReload(id: string) {
@@ -1712,6 +1881,20 @@ async function quietReload(id: string) {
   animation: vp-pulse 1.4s ease-in-out infinite;
 }
 .vp-story__latest.is-none { color: var(--mk-faint); font-weight: 600; }
+/* 故事层级自动运行徽标：运行中（琥珀） / 已达成（绿） */
+.vp-story__auto {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.vp-story__auto.is-running { background: rgba(245, 158, 11, 0.12); color: var(--mk-amber, #b45309); }
+.vp-story__auto.is-done { background: rgba(21, 128, 61, 0.09); color: var(--mk-green, #15803d); }
 .vp-story__ops {
   display: flex;
   align-items: center;

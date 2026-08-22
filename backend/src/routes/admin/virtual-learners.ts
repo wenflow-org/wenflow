@@ -23,6 +23,7 @@ import { signProjectionToken } from '../../utils/projection-token';
 import blackboxVirtualLearnerRunner from '../../virtual-lab/blackbox-runner';
 import type { LearnerAction } from '../../virtual-lab/contracts';
 import { assertAssistedSessionMode } from '../../virtual-lab/session-mode';
+import { autopilotService, AutopilotService } from '../../virtual-lab/autopilot.service';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { virtualCleanupService } from '../../services/virtual-lab/virtual-cleanup.service';
 import { setRequestContext, getRequestContext } from '../../gateway/api-gateway/context';
@@ -2119,6 +2120,48 @@ router.post('/sessions/:sessionId/blackbox-evaluations', async (req: Request, re
   } catch (error) {
     logger.error('生成黑盒双评估报告失败:', error);
     sendVirtualSessionError(res, error, '生成黑盒双评估报告失败', 502);
+  }
+});
+
+/**
+ * 全自动模式：以「最终目标（Path 全部任务完成）」为唯一终点的无人值守运行。
+ * 后台异步执行（脱离 HTTP 连接），可随时 stop。
+ * POST /api/admin/virtual-learners/sessions/:sessionId/autopilot/start
+ * POST /api/admin/virtual-learners/sessions/:sessionId/autopilot/stop
+ * GET  /api/admin/virtual-learners/sessions/:sessionId/autopilot
+ */
+router.post('/sessions/:sessionId/autopilot/start', async (req: Request, res) => {
+  try {
+    const { sessionId } = req.params;
+    const session = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } });
+    if (!session) return res.status(404).json({ success: false, error: '模拟会话不存在' });
+    const target = String(req.body?.target || 'final') === 'stage' ? 'stage' : 'final';
+    const result = await autopilotService.start(sessionId, { target });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error('启动全自动模式失败:', error);
+    sendVirtualSessionError(res, error, '启动全自动模式失败');
+  }
+});
+
+router.post('/sessions/:sessionId/autopilot/stop', async (req: Request, res) => {
+  try {
+    const result = await autopilotService.stop(req.params.sessionId);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error('停止全自动模式失败:', error);
+    sendVirtualSessionError(res, error, '停止全自动模式失败');
+  }
+});
+
+router.get('/sessions/:sessionId/autopilot', async (req: Request, res) => {
+  try {
+    const session = await prisma.virtual_sessions.findUnique({ where: { id: req.params.sessionId } });
+    if (!session) return res.status(404).json({ success: false, error: '模拟会话不存在' });
+    res.json({ success: true, data: AutopilotService.readState(session) });
+  } catch (error) {
+    logger.error('读取全自动状态失败:', error);
+    res.status(500).json({ success: false, error: error.message || '读取全自动状态失败' });
   }
 });
 

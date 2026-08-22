@@ -37,6 +37,8 @@ const isExtraSkill = (id: string) => EXTRA_COMPONENT_VISIBLE_SKILLS.has(id.repla
 export const liveLoading = ref(false)
 /** 各域拉取失败记录（页面据此局部降级） */
 export const liveFailures = ref<Record<string, string>>({})
+/** 并发守卫：防止 auto-refresh 在上一次未完成时重复发起请求 */
+export const liveRefreshing = ref(false)
 
 /* ================= 工具 ================= */
 
@@ -1665,7 +1667,17 @@ export async function liveDeleteAnnouncement(id: string): Promise<void> {
 
 export async function refreshLiveOverview(force = false) {
   if (liveLoading.value && !force) return
-  liveOverview.value = await fetchLiveOverview()
+  // 并发守卫：避免 auto-refresh 在上一次请求未完成时重复发起
+  if (liveRefreshing.value && !force) return
+  liveRefreshing.value = true
+  try {
+    liveOverview.value = await fetchLiveOverview()
+  } catch (e) {
+    console.error('[live] refreshLiveOverview failed:', e)
+    // 失败时不更新 liveOverview，保留上一次成功的数据
+  } finally {
+    liveRefreshing.value = false
+  }
 }
 
 export async function refreshLiveSkills() {

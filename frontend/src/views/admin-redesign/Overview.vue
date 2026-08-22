@@ -254,10 +254,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { overviewHealth, investigateAgent, intent, dataSource } from './store';
 import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading } from './live';
 import { TERMS } from './terms';
+import { useSafePolling } from '@/composables/useSafePolling';
 
 type Tone = 'ok' | 'warn' | 'bad' | 'muted';
 
@@ -507,31 +508,32 @@ function feedJump(f: { tone: string; errorCategory?: string }) {
   jumpToFailures(f.errorCategory || '')
 }
 
-/* R6：10s 自动刷新（对齐 ExecLogs 模式：document.hidden 守卫 + 离开页面清除；
-   保留 hideTestAccounts 等当前状态不重置；后端 45s 统计缓存兜底限频） */
-let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
+/* R6：10s 自动刷新（使用 setTimeout 链 + 并发守卫 + 指数退避，
+   后端不可用时不会堆积请求导致内存暴涨） */
 const lastUpdated = ref('')
-function startAutoRefresh() {
-  stopAutoRefresh()
-  if (dataSource.value !== 'live') return
-  autoRefreshTimer = setInterval(() => {
-    if (document.hidden) return
-    void refreshLiveOverview()
+const { start: startAutoRefresh, stop: stopAutoRefresh } = useSafePolling(
+  async () => {
+    await refreshLiveOverview()
     lastUpdated.value = new Date().toTimeString().slice(0, 5)
-  }, 10000)
-}
-function stopAutoRefresh() {
-  if (autoRefreshTimer) {
-    clearInterval(autoRefreshTimer)
-    autoRefreshTimer = null
+  },
+  {
+    interval: 10000,
+    maxBackoff: 60000,
+    circuitBreakerThreshold: 5,
+    skipWhenHidden: true,
+    onError: (_e, n) => {
+      console.warn(`[Overview] auto-refresh failed (${n}/5 consecutive)`)
+    },
+    onCircuitBroken: (n) => {
+      console.error(`[Overview] auto-refresh stopped after ${n} consecutive failures — backend may be down`)
+    },
   }
-}
+)
 onMounted(() => {
   if (dataSource.value !== 'live') return
   lastUpdated.value = new Date().toTimeString().slice(0, 5)
   startAutoRefresh()
 })
-onBeforeUnmount(stopAutoRefresh)
 watch(dataSource, (v) => {
   if (v === 'live') {
     lastUpdated.value = new Date().toTimeString().slice(0, 5)

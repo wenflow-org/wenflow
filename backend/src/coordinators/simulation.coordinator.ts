@@ -1937,6 +1937,7 @@ class SimulationOrchestrator {
   /**
    * 一键运行整个会话: Goal -> Path -> Learn
    * 适合"全自动"按钮，跑到 Goal 收敛 -> 自动生成 Path -> 自动启动 Learn -> 跑完所有 task
+   * 诚实返回：任何阶段未推进到位都返回 error，不静默报 success（2026-08-22 修复）。
    */
   async executeFullSession(
     sessionId: string,
@@ -1981,13 +1982,14 @@ class SimulationOrchestrator {
           {
             maxRounds,
             autoAdvanceToPath: options.autoAdvanceToPath ?? true,
-            autoAdvanceToLearning: options.autoAdvanceToLearning ?? false
+            autoAdvanceToLearning: false
           }
         );
         summary.goalRounds = goalResults.length;
         const lastGoal = goalResults[goalResults.length - 1];
-        if (!lastGoal?.goalReady && !lastGoal?.success) {
-          summary.error = lastGoal?.error || 'Goal 阶段未完成';
+        // 诚实返回：Goal 未在预算内收敛同样报错（不再静默跳到后续阶段）
+        if (!lastGoal?.goalReady) {
+          summary.error = lastGoal?.error || `Goal 阶段在 ${maxRounds} 轮内未收敛，请再次运行或调大 maxRounds`;
           return summary;
         }
       }
@@ -1998,7 +2000,19 @@ class SimulationOrchestrator {
       summary.pathGenerated = !!updatedAfterGoal.learningPathId;
 
       // ========== Phase B: Path -> Learn bridge ==========
-      if (updatedAfterGoal.learningPathId && updatedAfterGoal.currentStage !== 'teaching') {
+      if (updatedAfterGoal.currentStage === 'goal') {
+        // Goal 已收敛但未进入 Path 生成（advance 未成功）——显式失败，不等候
+        summary.error = 'Goal 已收敛但未进入 Path 生成，请检查路径生成状态或手动推进';
+        return summary;
+      }
+      if (updatedAfterGoal.currentStage !== 'teaching') {
+        // 等待 Path 生成完成（多点几分钟是正常的，黑盒实测 2-3 分钟）
+        const waitResult = await this.waitForPathReady(sessionId, updatedAfterGoal.learningPathId);
+        if (!waitResult.ready) {
+          summary.error = waitResult.reason || '学习路径未就绪';
+          return summary;
+        }
+        summary.pathGenerated = true;
         try {
           const review = await this.resolvePathReview(sessionId, {
             startLearning: options.autoAdvanceToLearning ?? false
@@ -2018,48 +2032,73 @@ class SimulationOrchestrator {
       const refreshed = await this.getVirtualSession(sessionId);
       if (refreshed.currentStage !== 'teaching') {
         summary.finalStage = refreshed.currentStage;
-        summary.success = true;
+        // 诚实返回：未能进入教学阶段 = 未完成，不允许 success=true 静默提前收工
+        summary.error = `未能进入教学阶段（当前阶段：${refreshed.currentStage}），请检查路径生成或手动推进`;
         return summary;
       }
 
-      let totalLearningSteps = 0;
-      let consecutiveTaskBoundaries = 0;
-      const maxTaskBoundaries = continueOnTaskComplete ? maxMilestones * 3 : 1;
+      // 边界预算按 path 实际任务数计算（不再用 maxMilestones*3 的下限截断：
+      // 多任务 path（如 21 任务）一次点击必须能跑完，否则静默停在半路）
+      let totalTasksBudget = 1;
+      try {
+        const milestones = refreshed.learningPathId
+          ? await prisma.milestones.findMany({
+              where: { learningPathId: refreshed.learningPathId },
+              select: { subtasks: { select: { id: true } } }
+            })
+          : [];
+        const taskCount = milestones.reduce((sum, m) => sum + m.subtasks.length, 0);
+        totalTasksBudget = taskCount > 0 ? taskCount : 1;
+      } catch {
+        totalTasksBudget = 1;
+      }
+      const maxTaskBoundaries = continueOnTaskComplete ? totalTasksBudget + 2 : 1;
 
-      while (consecutiveTaskBoundaries < maxTaskBoundaries) {
+      let totalLearningSteps = 0;
+      let taskBoundaries = 0;
+      let lastAfter: VirtualSessionWithProfile | null = null;
+      while (taskBoundaries < maxTaskBoundaries) {
         const learnResult = await this.executeAutoLearning(sessionId, { maxMilestones });
         totalLearningSteps += learnResult.totalSteps || 0;
 
         // refresh
         const after = await this.getVirtualSession(sessionId);
+        lastAfter = after;
         summary.finalStage = after.currentStage;
 
         if (after.status === 'completed') {
           summary.isPathCompleted = true;
           break;
         }
-        if (after.status === 'failed') {
-          summary.error = learnResult?.error || '学习被中止';
+        if (after.status === 'failed' || after.status === 'abandoned') {
+          summary.error = learnResult?.error || `学习被中止（${after.status}）`;
           break;
         }
         if (!continueOnTaskComplete) {
           break;
         }
-
         if (!learnResult.success) {
           summary.error = learnResult.error || '自动学习失败';
           break;
         }
 
-        // if last loop ran 0 steps, no further progress is possible
+        // 无进展（0 回合）：区分暂停与真无进展，都显式说明
         if ((learnResult.totalSteps || 0) === 0) {
+          const paused = this.parseStageResultsPayload(after.stageResults).teaching?.paused === true;
+          summary.error = paused ? '学习已暂停，请先恢复再继续' : '自动学习无进展（0 回合），停止推进';
           break;
         }
 
-        consecutiveTaskBoundaries += 1;
+        taskBoundaries += 1;
       }
 
       summary.learningSteps = totalLearningSteps;
+      // 边界预算耗尽仍未完成：诚实报错（原实现 success=true 静默收工）
+      if (!summary.isPathCompleted && !summary.error) {
+        const doneTasks = lastAfter?.completedTasks ?? 0;
+        const totalTasks = lastAfter?.totalTasks ?? totalTasksBudget;
+        summary.error = `任务边界预算（${maxTaskBoundaries} 份任务）耗尽仍未完成路径（已完成 ${doneTasks}/${totalTasks}）`;
+      }
       summary.success = !summary.error;
       return summary;
     } catch (error: unknown) {
@@ -2067,6 +2106,42 @@ class SimulationOrchestrator {
       summary.error = asErrorLike(error).message || 'unknown';
       return summary;
     }
+  }
+
+  /**
+   * 等待学习路径生成就绪：轮询 path 的里程碑落地（最多 timeoutMs）。
+   * Goal 收敛后 path 生成是异步任务，实测需要 2-3 分钟；
+   * 黑盒/辅助模式均应等待而非让用户反复点击空转。
+   */
+  async waitForPathReady(
+    sessionId: string,
+    learningPathId: string | null,
+    timeoutMs = 300_000
+  ): Promise<{ ready: boolean; reason?: string }> {
+    const deadline = Date.now() + timeoutMs;
+    let pathId = learningPathId;
+    while (Date.now() < deadline) {
+      if (!pathId) {
+        const s = await this.getVirtualSession(sessionId);
+        pathId = s.learningPathId || null;
+        if (!pathId) {
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+          continue;
+        }
+      }
+      const milestoneCount = await prisma.milestones.count({ where: { learningPathId: pathId } });
+      if (milestoneCount > 0) return { ready: true };
+
+      const path = await prisma.learning_paths.findUnique({
+        where: { id: pathId },
+        select: { status: true }
+      });
+      if (path && !['active', 'generating'].includes(path.status)) {
+        return { ready: false, reason: `路径生成未产出里程碑（path status=${path.status}）` };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
+    return { ready: false, reason: '等待路径生成超时，请检查路径生成任务' };
   }
 
   

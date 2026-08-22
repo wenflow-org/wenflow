@@ -2345,4 +2345,166 @@ describe('BlackboxVirtualLearnerRunner', () => {
       immediateSetTimeout.mockRestore()
     }
   })
+
+  // ===== 2026-08-22 修复：可恢复瞬时失败不终局化整场实验，同 key 可续跑 =====
+
+  function installGoalFailureSession(runner: any) {
+    const session = sessionWith({ conversationId: 'g1' })
+    const state = JSON.parse(session.stageResults)
+    state.experimentSnapshot = {
+      actorProfile: { learningGoal: '测试目标' },
+      story: { visibleOpening: '开场' },
+      frictionBudget: 'normal'
+    }
+    state.blackbox.publicTrace = [{
+      observation: {
+        stage: 'goal', visibleMessages: [{ role: 'platform', content: '请说明目标' }], availableActions: ['chat']
+      }
+    }]
+    session.stageResults = JSON.stringify(state)
+    let currentSession = session
+    runner.getSession = jest.fn(async () => currentSession)
+    runner.context = jest.fn(async () => ({
+      session: currentSession,
+      state: JSON.parse(currentSession.stageResults),
+      adapter: {}
+    }))
+    ;(prisma.virtual_sessions.update as jest.Mock).mockImplementation(async ({ data }: any) => {
+      currentSession = { ...currentSession, ...data }
+      return currentSession
+    })
+    ;(prisma.virtual_experiment_commands.findFirst as jest.Mock).mockResolvedValue({ sequence: 1 })
+    let commandId = 1
+    ;(prisma.virtual_experiment_commands.create as jest.Mock).mockImplementation(async ({ data }: any) => {
+      const row = { id: `cmd-${commandId++}`, status: 'processing', ...data }
+      return row
+    })
+    runner.act = jest.fn().mockResolvedValue({ observation: { stage: 'goal', availableActions: ['chat'] }, control: {} })
+    return () => currentSession
+  }
+
+  function sessionUpdateCalls(): Array<Record<string, unknown>> {
+    return (prisma.virtual_sessions.update as jest.Mock).mock.calls.map((call) => call[0]?.data || {})
+  }
+
+  function commandUpdateCalls() {
+    return (prisma.virtual_experiment_commands.update as jest.Mock).mock.calls.map((call) => call[0]?.data || {})
+  }
+
+  it('LLM 超时失败不终局化实验：命令 failed(retryable=true)，同 key 重试可续跑', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const getCurrentSession = installGoalFailureSession(runner)
+    const immediateSetTimeout = jest.spyOn(global, 'setTimeout').mockImplementation((fn: any) => {
+      if (typeof fn === 'function') fn()
+      return 0 as any
+    })
+    try {
+      // 第一次 work：3 次模拟器重试全部超时 → throw（retryable 由消息判定）
+      ;(executeSkill as jest.Mock)
+        .mockRejectedValue(new Error('timeout of 300000ms exceeded'))
+
+      const options = {
+        sessionId: 'vs1', operatorId: 'admin1', commandId: 'step-a', kind: 'step',
+        request: {}, expectedTraceCount: 1
+      }
+      await expect(runner.runCommand(options, () => runner.autoStep('vs1', 'admin1'))).rejects
+        .toThrow('timeout of 300000ms exceeded')
+
+      // 命令被标记 failed(retryable=true)
+      const failedUpdate = commandUpdateCalls().find((d) => d.status === 'failed')
+      expect(failedUpdate).toBeTruthy()
+      const errorJson = JSON.parse(String(failedUpdate!.errorJson))
+      expect(errorJson.retryable).toBe(true)
+
+      // 会话保持 running：没有任何 update 把状态置为 failed/error
+      expect(sessionUpdateCalls().some((d) => d.status === 'failed')).toBe(false)
+      expect(getCurrentSession().status).toBe('running')
+
+      // 同 key 重试：命令重置后重新执行 → 成功完成（runCommand 会查两次 findUnique）
+      ;(prisma.virtual_experiment_commands.findUnique as jest.Mock)
+        .mockResolvedValue({
+          id: 'cmd-1', status: 'failed', kind: 'step', sequence: 1, requestJson: '{}',
+          resultJson: null,
+          errorJson: JSON.stringify({ retryable: true, message: 'timeout of 300000ms exceeded' })
+        })
+      ;(executeSkill as jest.Mock)
+        .mockReset()
+        .mockResolvedValueOnce({ reply: '我的目标', learnerState: { readyToAdvance: false } })
+
+      const retried = await runner.runCommand(options, () => runner.autoStep('vs1', 'admin1'))
+      expect(retried.reused).toBe(false)
+      expect(runner.act).toHaveBeenCalledWith('vs1', 'admin1', expect.objectContaining({ type: 'chat', text: '我的目标' }))
+      // 命令最终 completed
+      const completedUpdate = commandUpdateCalls().find((d) => d.status === 'completed')
+      expect(completedUpdate).toBeTruthy()
+      // 会话仍然 running（未终局化）
+      expect(getCurrentSession().status).toBe('running')
+    } finally {
+      immediateSetTimeout.mockRestore()
+    }
+  })
+
+  it('模拟器输出缺 learnerState（显式 retryable 标记）不终局化，同 key 重试可续跑', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const getCurrentSession = installGoalFailureSession(runner)
+    const immediateSetTimeout = jest.spyOn(global, 'setTimeout').mockImplementation((fn: any) => {
+      if (typeof fn === 'function') fn()
+      return 0 as any
+    })
+    try {
+      // 模拟器输出无 reply → executeSimulatorSkillWithRetry 抛「动作生成失败」并显式标记 retryable
+      ;(executeSkill as jest.Mock).mockResolvedValueOnce({ degraded: true, learnerState: {} })
+
+      const options = {
+        sessionId: 'vs1', operatorId: 'admin1', commandId: 'step-b', kind: 'step',
+        request: {}, expectedTraceCount: 1
+      }
+      await expect(runner.runCommand(options, () => runner.autoStep('vs1', 'admin1'))).rejects
+        .toThrow('虚拟学习者Goal动作生成失败')
+
+      const failedUpdate = commandUpdateCalls().find((d) => d.status === 'failed')
+      expect(Boolean(failedUpdate)).toBe(true)
+      expect(JSON.parse(String(failedUpdate!.errorJson)).retryable).toBe(true)
+      // 会话未被终局化
+      expect(getCurrentSession().status).toBe('running')
+      expect(sessionUpdateCalls().some((d) => d.status === 'failed')).toBe(false)
+
+      // 同 key 重试成功
+      ;(prisma.virtual_experiment_commands.findUnique as jest.Mock)
+        .mockResolvedValue({
+          id: 'cmd-1', status: 'failed', kind: 'step', sequence: 1, requestJson: '{}',
+          resultJson: null,
+          errorJson: JSON.stringify({ retryable: true, message: '虚拟学习者Goal动作生成失败' })
+        })
+      ;(executeSkill as jest.Mock)
+        .mockReset()
+        .mockResolvedValueOnce({ reply: '我的目标', learnerState: { readyToAdvance: false } })
+
+      await expect(runner.runCommand(options, () => runner.autoStep('vs1', 'admin1'))).resolves
+        .toMatchObject({ reused: false })
+      expect(getCurrentSession().status).toBe('running')
+    } finally {
+      immediateSetTimeout.mockRestore()
+    }
+  })
+
+  it('不可恢复错误仍保持终局化语义（不回归）', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const getCurrentSession = installGoalFailureSession(runner)
+    const immediateSetTimeout = jest.spyOn(global, 'setTimeout').mockImplementation((fn: any) => {
+      if (typeof fn === 'function') fn()
+      return 0 as any
+    })
+    try {
+      // 模拟器正常回复，但平台动作抛出不可恢复错误（非瞬态、非显式 retryable）
+      ;(executeSkill as jest.Mock).mockResolvedValueOnce({ reply: '我的目标', learnerState: { readyToAdvance: false } })
+      runner.act = jest.fn().mockRejectedValue(new Error('投影令牌签发失败'))
+      await expect(runner.autoStep('vs1', 'admin1')).rejects.toThrow('投影令牌签发失败')
+      // 会话被终局化：update 出现 status: failed
+      expect(sessionUpdateCalls().some((d) => d.status === 'failed')).toBe(true)
+      expect(getCurrentSession().status).toBe('failed')
+    } finally {
+      immediateSetTimeout.mockRestore()
+    }
+  })
 })

@@ -309,7 +309,7 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.text()).toContain('辅助模式');
     // 虚拟行为 100% 保留：操作按钮 + 对抗预算 + 删除会话
     expect(wrapper.text()).toContain('一键全流程');
-    expect(wrapper.find('.cp-config').exists()).toBe(true);
+    expect(wrapper.find('.cp-run__budget').exists()).toBe(true);
     expect(wrapper.text()).toContain('删除会话');
     // 白盒无裁判/私有轨迹 → 统一时间线面板不出现（不破坏原黑盒区）
     expect(wrapper.text()).not.toContain('统一时间线');

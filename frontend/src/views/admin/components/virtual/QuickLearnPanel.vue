@@ -208,10 +208,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { adminApi } from '@/api/adminApi'
 import { setProjectionToken } from '@/utils/projection'
+import { useSafePolling } from '@/composables/useSafePolling'
 
 const props = defineProps<{
   visible: boolean
@@ -299,7 +300,23 @@ const openingFrontend = ref(false)
 const fixtureSourcePathId = ref('')
 const currentRun = ref<QuickLearnRun | null>(null)
 const historyRuns = ref<QuickLearnRun[]>([])
-let pollTimer: ReturnType<typeof setInterval> | null = null
+const pollingRunId = ref<string | null>(null)
+const { start: startPolling, stop: stopPolling } = useSafePolling(
+  async () => {
+    const id = pollingRunId.value
+    if (!id) {
+      stopPolling()
+      return
+    }
+    await loadRun(id)
+  },
+  {
+    interval: 2000,
+    maxBackoff: 8000,
+    circuitBreakerThreshold: 10,
+    skipWhenHidden: false,
+  }
+)
 
 const running = computed(() => currentRun.value && isActiveStatus(currentRun.value.status))
 const report = computed(() => currentRun.value?.report || null)
@@ -463,7 +480,7 @@ async function startRun() {
     const runId = String(data.data?.runId || '')
     if (!runId) throw new Error('自动学习 runId 缺失')
     await loadRun(runId)
-    startPolling(runId)
+    startPollingForRun(runId)
   } catch (error: unknown) {
     ElMessage.error(apiErrorMessage(error, '启动账号自动学习失败'))
   } finally {
@@ -477,23 +494,20 @@ async function loadRun(runId: string) {
     const run = data.data as QuickLearnRun
     currentRun.value = run
     if (isActiveStatus(run.status)) {
-      startPolling(runId)
+      // 仍在运行，继续轮询（pollingRunId 已在 startPollingForRun 中设置）
     } else {
       stopPolling()
+      pollingRunId.value = null
     }
   } catch (error: unknown) {
-    // 404 等非瞬时错误：运行已不存在，停止轮询并明确提示；其余瞬时错误静默等待下一轮
     const status = (error as ApiErrorLike)?.response?.status
     if (status != null && status >= 400 && status !== 408 && status !== 429) {
       stopPolling()
+      pollingRunId.value = null
       ElMessage.error(apiErrorMessage(error, '获取运行状态失败，已停止轮询'))
     }
   }
 }
-
-onBeforeUnmount(() => {
-  stopPolling()
-})
 
 async function abortRun() {
   if (!currentRun.value) return
@@ -512,20 +526,14 @@ function resetRun() {
   void loadHistory()
 }
 
-function startPolling(runId: string) {
-  stopPolling()
-  pollTimer = setInterval(() => void loadRun(runId), 2000)
-}
-
-function stopPolling() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
+function startPollingForRun(runId: string) {
+  pollingRunId.value = runId
+  startPolling()
 }
 
 function handleClosed() {
   stopPolling()
+  pollingRunId.value = null
 }
 
 watch(
@@ -536,6 +544,7 @@ watch(
       void loadHistory()
     } else {
       stopPolling()
+      pollingRunId.value = null
     }
   }
 )
