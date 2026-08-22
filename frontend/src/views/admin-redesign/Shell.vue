@@ -31,7 +31,7 @@
         </section>
       </nav>
       <div class="mshell__foot">
-        <span class="mshell__kbd">⌘K</span>
+        <span class="mshell__kbd">{{ kbdMod }}K</span>
         <span>命令面板</span>
       </div>
     </aside>
@@ -73,7 +73,7 @@
           <button type="button" class="mshell__search" @click="$emit('palette')">
             <span class="mshell__search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
             <span class="mshell__search-hint">命令面板</span>
-            <span class="mshell__kbd">⌘K</span>
+            <span class="mshell__kbd">{{ kbdMod }}K</span>
           </button>
           <template v-if="release">
             <span class="mshell__admin">{{ adminName }}</span>
@@ -142,6 +142,8 @@ const version = appVersion
 const year = new Date().getFullYear()
 
 const sourceLabel = computed(() => (dataSource.value === 'live' ? '真实数据' : '演示数据'))
+/** 按平台显示快捷键修饰符：Mac 显示 ⌘，Windows/Linux 显示 Ctrl */
+const kbdMod = computed(() => /Mac|iPhone|iPod|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl + ')
 
 function refreshData() {
   if (liveLoading.value) return
