@@ -119,7 +119,7 @@
         </div>
 
         <!-- 过期/已撤销历史（默认收起；「已撤销」筛选时自动展开） -->
-        <details v-if="g.historical.length" class="ss-hist" :open="statusFilter === 'revoked'">
+        <details v-if="g.historical.length" class="ss-hist" :open="statusFilter !== ''">
           <summary class="ss-hist__summary">
             <span class="ss-hist__title">已过期 · 已撤销（{{ g.historical.length }}）</span>
             <span class="ss-hist__meta">过期 {{ g.expiredCount }} · 已撤销 {{ g.revokedCount }}</span>

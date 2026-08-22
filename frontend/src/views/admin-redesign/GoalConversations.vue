@@ -54,7 +54,7 @@
               </button>
             </div>
           </div>
-          <span class="mk-card__meta" :title="includeTest ? '全量口径：含虚拟学习者与测试/审计账号，行内带标记' : '默认视图：仅真实用户（状态条「总数」同口径）'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含虚拟/测试' : '仅真实' }}）</span>
+          <span class="mk-card__meta" :title="includeTest ? '全量口径：含虚拟学习者与测试/审计账号，行内带标记' : '默认视图：仅真实用户（状态条「总数」同口径）'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含虚拟/测试' : '仅真实' }}）<template v-if="stats.total > rows.length"> · 仅显示最近 {{ rows.length }} 条</template></span>
           <DataScopeToggle v-model="includeTest" />
         </div>
 
