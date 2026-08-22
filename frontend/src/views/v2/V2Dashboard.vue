@@ -199,10 +199,18 @@
           </div>
           <ul class="budget__list">
             <li v-for="g in todaySchedule.activeGoals" :key="g.goalId" class="budget__item">
-              <span class="budget__name">{{ g.title }}</span>
-              <span class="budget__bar"><i :style="{ width: Math.min((g.consumedMinutes / Math.max(g.plannedMinutes, 1)) * 100, 100) + '%' }"></i></span>
-              <span class="budget__num">{{ g.consumedMinutes }} / {{ g.plannedMinutes }} 分钟</span>
-              <span v-if="g.cognitiveBandwidth" class="budget__bw">{{ bandwidthLabel(g.cognitiveBandwidth) }}</span>
+              <router-link v-if="g.pathId" :to="'/learning-paths/' + g.pathId" class="budget__link" :title="'查看「' + g.title + '」的路径详情'">
+                <span class="budget__name">{{ g.title }}</span>
+                <span class="budget__bar"><i :style="{ width: Math.min((g.consumedMinutes / Math.max(g.plannedMinutes, 1)) * 100, 100) + '%' }"></i></span>
+                <span class="budget__num">{{ g.consumedMinutes }} / {{ g.plannedMinutes }} 分钟</span>
+                <span v-if="g.cognitiveBandwidth" class="budget__bw">{{ bandwidthLabel(g.cognitiveBandwidth) }}</span>
+              </router-link>
+              <template v-else>
+                <span class="budget__name">{{ g.title }}</span>
+                <span class="budget__bar"><i :style="{ width: Math.min((g.consumedMinutes / Math.max(g.plannedMinutes, 1)) * 100, 100) + '%' }"></i></span>
+                <span class="budget__num">{{ g.consumedMinutes }} / {{ g.plannedMinutes }} 分钟</span>
+                <span v-if="g.cognitiveBandwidth" class="budget__bw">{{ bandwidthLabel(g.cognitiveBandwidth) }}</span>
+              </template>
             </li>
           </ul>
         </section>
@@ -215,10 +223,12 @@
           </div>
           <ul class="review__list">
             <li v-for="item in reviewDue.slice(0, 5)" :key="item.conceptKey" class="review__item">
-              <span class="review__name">{{ item.label }}</span>
-              <span class="review__bar"><i :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
-              <span class="review__pct">{{ Math.round(item.retention * 100) }}%</span>
-              <span class="review__minutes">约 {{ item.estimatedMinutes }} 分钟</span>
+              <router-link to="/achievements" class="review__link" :title="'查看「' + item.label + '」的复习进度'">
+                <span class="review__name">{{ item.label }}</span>
+                <span class="review__bar"><i :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
+                <span class="review__pct">{{ Math.round(item.retention * 100) }}%</span>
+                <span class="review__minutes">约 {{ item.estimatedMinutes }} 分钟</span>
+              </router-link>
             </li>
           </ul>
           <div class="review__footer">
@@ -1201,6 +1211,9 @@ onMounted(loadAll);
 .budget__total { font-size: 12px; color: var(--faint); }
 .budget__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .budget__item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.budget__link { display: flex; align-items: center; gap: 10px; flex: 1; text-decoration: none; color: inherit; }
+.budget__link:hover { opacity: 0.8; }
+.budget__link:hover .budget__name { color: var(--blue, #2c63d0); }
 .budget__name { min-width: 140px; font-weight: 600; }
 .budget__bar { flex: 1; height: 6px; border-radius: 3px; background: #eef0f4; overflow: hidden; }
 .budget__bar i { display: block; height: 100%; border-radius: 3px; background: #10b981; }
@@ -1215,6 +1228,9 @@ onMounted(loadAll);
 .review__sub { font-size: 12px; color: var(--faint); }
 .review__list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
 .review__item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.review__link { display: flex; align-items: center; gap: 10px; flex: 1; text-decoration: none; color: inherit; }
+.review__link:hover { opacity: 0.8; }
+.review__link:hover .review__name { color: var(--blue, #2c63d0); }
 .review__name { min-width: 140px; font-weight: 600; }
 .review__bar { flex: 1; height: 6px; border-radius: 3px; background: #eef0f4; overflow: hidden; }
 .review__bar i { display: block; height: 100%; border-radius: 3px; background: var(--blue, #3b82f6); }
