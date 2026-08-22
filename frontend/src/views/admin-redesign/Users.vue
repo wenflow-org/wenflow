@@ -54,7 +54,7 @@
           <thead>
             <tr>
               <th v-if="isLive" scope="col" style="width:32px">
-                <input type="checkbox" aria-label="全选" :checked="allChecked" @change="toggleAll" />
+                <input type="checkbox" aria-label="全选" :checked="allChecked" :indeterminate="indeterminate" @change="toggleAll" />
               </th>
               <th scope="col" style="width:200px">用户</th>
               <th scope="col" style="width:90px">角色</th>
@@ -68,7 +68,7 @@
           </thead>
         <tbody>
           <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" @click="openSubPage('user', u.id)">
-            <td v-if="isLive"><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted" :aria-label="`选择 ${u.name}`" @click.stop /></td>
+            <td v-if="isLive"><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isTestAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
             <td>
               <div class="mk-cell-main">
                 <strong>{{ u.name }}</strong>

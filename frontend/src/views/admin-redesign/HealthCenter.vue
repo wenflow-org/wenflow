@@ -177,6 +177,10 @@
         </div>
       </section>
     </template>
+    <div v-else-if="!errorText" class="wb-loading">
+      <span class="spinner"></span>
+      <p>正在加载巡检数据…</p>
+    </div>
   </div>
 </template>
 
@@ -375,6 +379,10 @@ defineExpose({ refresh })
 
 <style scoped>
 .wb { display: grid; gap: 10px; }
+.wb-loading {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 60px 20px; color: var(--mk-muted, #8896b0); font-size: 14px;
+}
 .wb-demo {
   padding: 6px 12px; border: 1px dashed rgba(180, 83, 9, 0.45); border-radius: 10px;
   background: var(--mk-amber-bg); color: var(--mk-amber); font-size: 11.5px; font-weight: 600;
