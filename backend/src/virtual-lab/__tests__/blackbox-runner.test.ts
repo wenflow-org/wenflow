@@ -2454,7 +2454,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     })
     try {
       // 模拟器输出无 reply → executeSimulatorSkillWithRetry 抛「动作生成失败」并显式标记 retryable
-      ;(executeSkill as jest.Mock).mockResolvedValueOnce({ degraded: true, learnerState: {} })
+      (executeSkill as jest.Mock).mockResolvedValueOnce({ degraded: true, learnerState: {} })
 
       const options = {
         sessionId: 'vs1', operatorId: 'admin1', commandId: 'step-b', kind: 'step',
@@ -2498,7 +2498,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     })
     try {
       // 模拟器正常回复，但平台动作抛出不可恢复错误（非瞬态、非显式 retryable）
-      ;(executeSkill as jest.Mock).mockResolvedValueOnce({ reply: '我的目标', learnerState: { readyToAdvance: false } })
+      (executeSkill as jest.Mock).mockResolvedValueOnce({ reply: '我的目标', learnerState: { readyToAdvance: false } })
       runner.act = jest.fn().mockRejectedValue(new Error('投影令牌签发失败'))
       await expect(runner.autoStep('vs1', 'admin1')).rejects.toThrow('投影令牌签发失败')
       // 会话被终局化：update 出现 status: failed

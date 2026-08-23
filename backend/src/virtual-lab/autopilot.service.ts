@@ -287,7 +287,8 @@ export class AutopilotService {
     let lessonRecoveries = 0
     let goalRetries = 0
 
-    // eslint-disable-next-line no-constant-condition`n    while (true) {
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
       if (await this.isStopRequested(sessionId)) {
         await this.markStopped(sessionId, 'stopRequested / 已暂停 / 手动停止')
         return
@@ -537,7 +538,8 @@ export class AutopilotService {
     let stepIndex = 0
     let waitingSince: number | null = null
 
-    // eslint-disable-next-line no-constant-condition`n    while (true) {
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
       if (await this.isStopRequested(sessionId)) {
         await this.markStopped(sessionId, 'stopRequested / 已暂停 / 手动停止')
         return
@@ -603,7 +605,8 @@ export class AutopilotService {
     let goalRetries = 0
     let lessonRecoveries = 0
 
-    // eslint-disable-next-line no-constant-condition`n    while (true) {
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
       if (await this.isStopRequested(sessionId)) {
         await this.markStopped(sessionId, 'stopRequested / 已暂停 / 手动停止')
         return
@@ -736,7 +739,8 @@ export class AutopilotService {
     let waitingSince: number | null = null
     let baselineTaskId: string | null = null
 
-    // eslint-disable-next-line no-constant-condition`n    while (true) {
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
       if (await this.isStopRequested(sessionId)) {
         await this.markStopped(sessionId, 'stopRequested / 已暂停 / 手动停止')
         return
