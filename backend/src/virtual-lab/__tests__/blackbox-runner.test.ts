@@ -2400,6 +2400,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     })
     try {
       // 第一次 work：3 次模拟器重试全部超时 → throw（retryable 由消息判定）
+      // eslint-disable-next-line no-extra-semi
       ;(executeSkill as jest.Mock)
         .mockRejectedValue(new Error('timeout of 300000ms exceeded'))
 

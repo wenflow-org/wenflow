@@ -112,6 +112,7 @@ describe('SimulationOrchestrator.executeFullSession 诚实返回', () => {
   })
 
   it('Goal 未在 maxRounds 内收敛 → error，不再静默 success', async () => {
+    // eslint-disable-next-line no-extra-semi
     ;(coordinator as any).executeAutoLoop = jest.fn().mockResolvedValue([
       { success: true, goalReady: false, error: undefined }
     ])
@@ -124,6 +125,7 @@ describe('SimulationOrchestrator.executeFullSession 诚实返回', () => {
   })
 
   it('Goal 已收敛但未进入 Path 生成（阶段停在 goal）→ error', async () => {
+    // eslint-disable-next-line no-extra-semi
     ;(coordinator as any).executeAutoLoop = jest.fn().mockResolvedValue([
       { success: true, goalReady: true }
     ])
