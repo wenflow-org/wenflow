@@ -16,6 +16,7 @@ import {
   type SkillPromptContract,
 } from '../services/skill-prompt-contract';
 import {
+  ensureCoreAgentPrompts,
   normalizeDeclaredPromptRuntimeContract,
   type DeclaredPromptRuntimeContractIdentity,
 } from './seed-core-agent-prompts';
@@ -710,6 +711,8 @@ export function assertCheckOnlyPromptRuntimeContractParityArgs(argv: string[]): 
 
 async function main(): Promise<void> {
   assertCheckOnlyPromptRuntimeContractParityArgs(process.argv.slice(2));
+  // 检查前同步核心 prompt 到 DB（消除 CI 种子步骤脱节风险）
+  await ensureCoreAgentPrompts(systemPrisma, 'sync');
   const report = await checkPromptRuntimeContractMetadataParity(systemPrisma);
   console.log(JSON.stringify(report, null, 2));
   if (report.hasErrors) process.exitCode = 1;
