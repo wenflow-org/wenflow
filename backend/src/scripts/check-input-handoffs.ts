@@ -12,8 +12,12 @@
 import { scanCoreFiles } from '../services/prompt-lab/core-file-loader';
 import { checkInputHandoffs } from '../services/prompt-lab/input-handoff-check';
 import type { GateIssue } from '../services/prompt-lab/core-compiler';
+import { bootstrapFieldRoutings } from '../services/field-routing-bootstrap.service';
+import systemPrisma from '../config/system-database';
 
 async function main() {
+  // 检查前先同步字段路由表到 DB（避免 CI 中种子步骤与检查步骤脱节）
+  await bootstrapFieldRoutings({ database: systemPrisma as any });
   const strict = process.argv.includes('--strict');
   const { files } = scanCoreFiles();
   const issues: Array<{ skillId: string; issue: GateIssue }> = [];
