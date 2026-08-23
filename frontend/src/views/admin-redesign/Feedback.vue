@@ -10,7 +10,7 @@
         <span class="mk-status__meta">待处理 {{ pendingCount }}</span>
         <span v-if="recent30 != null" class="mk-status__meta">近 30 天 {{ recent30 }}</span>
       </template>
-      <button type="button" class="mk-status__action" :disabled="loading" @click="load(true)">
+      <button type="button" class="mk-status__action" :disabled="loading" @click="() => load(true)">
         {{ loading ? '刷新中…' : '刷新' }}
       </button>
     </div>
@@ -96,7 +96,7 @@
           <span class="mk-empty__icon" aria-hidden="true">◌</span>
           <strong>反馈数据加载失败</strong>
           <span>无法从后端拉取反馈列表。</span>
-          <button type="button" class="mk-empty__action" @click="load">重试</button>
+          <button type="button" class="mk-empty__action" @click="() => load()">重试</button>
         </div>
         <div v-else class="mk-empty mk-empty--min">
           <span v-if="loading" class="mk-spinner" aria-hidden="true"></span>

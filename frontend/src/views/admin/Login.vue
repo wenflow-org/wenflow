@@ -101,7 +101,8 @@
                 <li>网关/Skill 调用链路可观测</li>
               </ul>
             </div>
-          </aside>
+          </div>
+        </aside>
       </div>
     </main>
 

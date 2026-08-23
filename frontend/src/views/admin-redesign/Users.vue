@@ -54,7 +54,7 @@
           <thead>
             <tr>
               <th v-if="isLive" scope="col" style="width:32px">
-                <input type="checkbox" aria-label="全选" :checked="allChecked" :indeterminate="indeterminate" @change="toggleAll" />
+                <input type="checkbox" aria-label="全选" :checked="allChecked" @change="toggleAll" />
               </th>
               <th scope="col" style="width:200px">用户</th>
               <th scope="col" style="width:90px">角色</th>
