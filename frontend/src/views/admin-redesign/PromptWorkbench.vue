@@ -1,7 +1,7 @@
 <template>
-  <div class="mk-page">
-    <!-- 状态条 -->
-    <div class="mk-status">
+  <div :class="{ 'mk-page': !embedded }">
+    <!-- 状态条（嵌入编排结构时隐藏，编排页已有自己的状态栏） -->
+    <div v-if="!embedded" class="mk-status">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">Skill 工作台</strong>
       <span class="mk-status__sep"></span>
@@ -18,7 +18,7 @@
       </div>
     </div>
 
-    <p class="pw-lead">编辑与发布在 Skill 设计页的「协议」页签；「新建 Skill」生成骨架（core.yaml + 户口簿条目 + 编排契约 + handler 占位）。</p>
+    <p v-if="!embedded" class="pw-lead">编辑与发布在 Skill 设计页的「协议」页签；「新建 Skill」生成骨架（core.yaml + 技能登记册条目 + 编排契约 + handler 占位）。</p>
 
 
     <section class="mk-card">
@@ -35,7 +35,7 @@
             <th>输出</th>
             <th>coreHash</th>
             <th>状态</th>
-            <th class="mk-th--right">操作</th>
+            <th class="mk-th--right mk-col--actions">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -116,7 +116,7 @@
                 <select v-model="form.kind" class="sc-field__input">
                   <option value="mainline">mainline（主链，进编排字段路由）</option>
                   <option value="aux">aux（v4-aux-skills 旁挂）</option>
-                  <option value="handler-only">handler-only（无 LLM prompt）</option>
+                  <option value="handler-only">纯函数（无 LLM prompt）</option>
                 </select>
               </label>
               <template v-if="form.kind === 'mainline'">
@@ -166,6 +166,7 @@
 </template>
 
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>()
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { adminPromptWorkbenchApi, adminSkillsApi, type SkillScaffoldMeta, type SkillScaffoldResult } from '@/api/adminApi';

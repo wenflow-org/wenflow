@@ -1,641 +1,586 @@
 <template>
   <div class="mk-page cp">
-    <div class="cp-head">
-      <button type="button" class="cp-back" @click="closeSubPage">← {{ backLabel }}</button>
-      <h1 class="cp-title">会话监控 <span class="cp-title__id mono">{{ shortId }}</span></h1>
-    </div>
-
-
-    <!-- 状态条：一行讲清「现在到哪了、进度如何」，不堆砌 -->
-    <div class="mk-status" :class="statusTone">
-      <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ statusTitle }}</strong>
-      <span class="mk-status__sep"></span>
-      <span class="mk-status__meta mono">{{ shortId }}</span>
-      <span class="mk-status__meta">{{ modeText }}</span>
-      <template v-if="isRealMode"><span class="mk-status__meta">{{ realKindText }}</span></template>
-      <template v-else>
-        <span class="mk-status__meta">{{ statusText(terminalStatus) }}</span>
-        <span v-if="sessionTotalTasks > 0" class="mk-status__meta">任务 {{ completedTasksText }}</span>
-        <span v-if="isBlackbox && blackboxTraceCount" class="mk-status__meta">{{ blackboxTraceCount }} 条轨迹</span>
-      </template>
-      <span class="mk-status__spacer"></span>
-      <button type="button" class="mk-status__action" :disabled="busy" @click="refresh">
-        <span v-if="busy"><span class="mk-spinner"></span> 执行中…</span>
-        <span v-else>刷新</span>
-      </button>
-      <template v-if="!isRealMode && session?.status === 'running'">
-        <button v-if="!isPaused" type="button" class="mk-status__action" :disabled="busy" @click="pauseSession">⏸ 暂停</button>
-        <button v-else type="button" class="mk-status__action mk-status__action--primary" :disabled="busy" @click="resumeSession">▶ 继续</button>
-        <button type="button" class="mk-status__action cp-danger" :disabled="busy" @click="stopLearning">⏹ 停止</button>
-        <button type="button" class="mk-status__action" :disabled="busy" @click="restartLearning">🔄 重启</button>
-      </template>
-      <template v-else-if="!isRealMode && isFailedTerminal">
-        <button type="button" class="mk-status__action mk-status__action--primary" :disabled="busy" @click="restartLearning">🔄 重启学习</button>
-      </template>
-      <button v-if="!isRealMode" type="button" class="mk-status__action cp-danger" :disabled="busy" @click="removeSession">
-        <span v-if="busy"><span class="mk-spinner"></span> 执行中…</span>
-        <span v-else>删除会话</span>
-      </button>
-    </div>
-
-    <!-- 阶段：一行胶囊，只讲阶段与进度 -->
-    <div class="cp-stages">
-      <button
-        v-for="st in stageFlow"
-        :key="st"
-        type="button"
-        class="cp-stage"
-        :class="[stageCls(st), { 'cp-stage--tab': !isBlackbox && activeTab === st }]"
-        :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `查看${stageLabel(st)}`"
-        :disabled="isBlackbox"
-        @click="selectStageTab(st)"
-      >
-        <span class="cp-stage__mark">{{ stageMark(st) }}</span>
-        <span>{{ stageLabel(st) }}</span>
-        <span v-if="stageProgress(st)" class="cp-stage__progress">{{ stageProgress(st) }}</span>
-      </button>
-    </div>
-
-    <div class="cp-grid">
-      <!-- 运行 -->
-      <section class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">运行</h3>
-          <span class="mk-card__meta">{{ isRealMode ? '真实会话 · 只读' : isBlackbox ? '黑盒 API · 阶段操作在下方分页' : '辅助模拟' }}</span>
-        </div>
-        <div class="cp-run">
-          <!-- 主操作：全自动（无人值守跑完）→ 一人一键 -->
-          <div v-if="!isRealMode" class="cp-run__actions">
-            <template v-if="autopilotRunning">
-              <span class="cp-autopilot__badge cp-autopilot__badge--running">▶ 自动驾驶中 · 已推进 {{ Number(autopilot.steps || 0) }} 步 · {{ autopilot.lastStage || '…' }}</span>
-              <button type="button" class="cp-btn cp-danger-btn" :disabled="busy" :title="busy ? '操作执行中' : '请求停止全自动，运行会在下一个安全点退出'" @click="act('autopilotStop')">停止全自动</button>
-            </template>
-            <template v-else>
-              <button type="button" class="cp-btn cp-btn--primary" :disabled="autopilotStartDisabled" :title="autopilotStartTitle" @click="act('autopilotStart')">全自动跑完</button>
-              <button v-if="!isBlackbox" type="button" class="cp-btn" :disabled="runFullDisabled" :title="runFullTitle" @click="act('runFull')">一键全流程</button>
-              <button v-if="isBlackbox && !isTerminal" type="button" class="cp-btn cp-danger-btn" :disabled="busy" :title="busy ? '操作执行中' : '终止当前黑盒实验'" @click="act('abandon')">{{ busy ? '执行中…' : '放弃实验' }}</button>
-              <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn cp-btn--primary" :disabled="busy" :title="busy ? '操作执行中' : '生成终局裁判评估'" @click="act('referee')">{{ busy ? '执行中…' : '生成裁判评估' }}</button>
-              <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn" :disabled="busy" :title="busy ? '操作执行中' : '以相同输入创建新的实验会话'" @click="act('rerun')">{{ busy ? '执行中…' : '按原输入重跑' }}</button>
-            </template>
-          </div>
-          <div v-else class="cp-run__actions">
-            <span>真实教学会话为只读展示。</span>
-          </div>
-
-          <div v-if="autopilotResultText && !autopilotRunning" class="cp-run__autopilot-result" :class="{
-            'cp-run__autopilot-result--ok': autopilot.status === 'completed',
-            'cp-run__autopilot-result--bad': autopilot.status === 'failed',
-            'cp-run__autopilot-result--muted': autopilot.status === 'stopped'
-          }">{{ autopilotResultText }}</div>
-
-          <!-- 底部一行：对抗预算 + 当前阶段摘要 -->
-          <div class="cp-run__foot">
-            <label v-if="!isBlackbox && !isRealMode" class="cp-run__budget">
-              <span>对抗预算</span>
-              <select v-model="frictionBudget" class="mk-filter__select" :disabled="frictionSaving" @change="saveFriction">
-                <option value="none">无</option>
-                <option value="low">低</option>
-                <option value="normal">正常</option>
-                <option value="high">高</option>
-                <option value="stress_test">压力测试</option>
-              </select>
-            </label>
-            <p v-if="runSummary" class="cp-run__summary">{{ runSummary }}</p>
-            <p v-else class="cp-run__summary cp-run__summary--muted">会话刚启动，推进后这里显示各阶段摘要。</p>
-            <span v-if="showPathReadiness" class="cp-run__readiness" :class="`cp-run__readiness--${pathReadinessTone}`">{{ pathReadinessText }}</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- 实时日志 -->
-      <section class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">会话日志</h3>
-          <span class="mk-card__meta">{{ isRealMode ? '只读' : isTerminal ? '已终态' : '5s 轮询' }}</span>
-          <span class="cp-logs__follow" :class="{ 'is-paused': !logFollowsBottom }" :title="logFollowsBottom ? '自动跟随最新日志' : '已暂停跟随 — 滚动到底部恢复'" @click="scrollToBottom">
-            {{ logFollowsBottom ? '⏵ 跟随' : '⏸ 已暂停' }}
-          </span>
-        </div>
-        <div class="cp-logs" ref="logBox" aria-live="polite" aria-label="实时日志" @scroll="onLogScroll">
-          <template v-if="!session">
-            <div v-for="n in 4" :key="n" class="cp-log-skel" aria-hidden="true"></div>
-          </template>
-          <template v-else>
-            <div v-for="(l, i) in logs" :key="i" class="cp-log" :class="{ 'cp-log--error': l.view.isError }">
-              <span class="cp-log__time">{{ l.time }}</span>
-              <span v-if="l.view.phase" class="cp-log__phase" :class="{ 'cp-log__phase--error': l.view.isError }">{{ l.view.phase }}</span>
-              <span class="cp-log__text">{{ l.view.text }}</span>
-              <span v-if="l.view.durationText" class="cp-log__dur">{{ l.view.durationText }}</span>
-              <details v-if="l.view.rawJson" class="cp-log__raw">
-                <summary>原文</summary>
-                <pre>{{ l.view.rawJson }}</pre>
-              </details>
-            </div>
-            <p v-if="logsFailed" class="cp-degrade">
-              日志获取失败
-              <button type="button" class="mk-link" @click="loadLogs">重试</button>
-            </p>
-            <p v-else-if="!logs.length" class="cp-none">暂无日志</p>
-          </template>
-        </div>
-      </section>
-    </div>
-
-    <!-- 分页：Path 内容（主）+ 评审（独立旁路） -->
-    <section v-if="!isBlackbox && activeTab === 'path'" class="mk-card">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">Path 内容</h3>
-        <span class="mk-card__meta">{{ pathDetailMeta || '等待 Path 生成' }}</span>
-      </div>
-      <div v-if="!isRealMode" class="cp-tab-actions">
-        <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
-        <button type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
-        <button type="button" class="cp-btn" :disabled="resetPathDisabled" :title="resetPathTitle" @click="act('resetPath')">重建 Path</button>
-      </div>
-      <div class="cp-path-grid">
-        <!-- 主区：路径内容 -->
-        <div class="cp-path-detail">
-          <div v-if="!session" class="cp-path-skel" aria-hidden="true">
-            <div v-for="n in 3" :key="n"></div>
-          </div>
-          <template v-else>
-            <template v-if="hasPath">
-              <div class="cp-path-detail__head">
-                <strong>{{ pathDetailTitle }}</strong>
-                <span v-if="pathDetailMeta" class="cp-path-detail__meta">{{ pathDetailMeta }}</span>
-              </div>
-              <p v-if="pathDetailSummary" class="cp-path-detail__summary">{{ pathDetailSummary }}</p>
-              <details v-if="pathMilestonesView.length" class="cp-transcript" open>
-                <summary>里程碑 · {{ pathMilestonesView.length }} 个</summary>
-                <article v-for="m in pathMilestonesView" :key="m.stageNumber" class="cp-milestone">
-                  <div class="cp-milestone__head">
-                    <span class="cp-milestone__order">M{{ m.stageNumber }}</span>
-                    <strong>{{ m.title }}</strong>
-                    <span v-if="m.estimatedHours" class="cp-milestone__meta">{{ m.estimatedHours }}h</span>
-                  </div>
-                  <p v-if="m.description" class="cp-milestone__desc">{{ m.description }}</p>
-                  <ul v-if="m.tasks.length" class="cp-task-list">
-                    <li
-                      v-for="t in m.tasks"
-                      :key="t.id || t.title"
-                      :class="{ 'is-done': t.completed, 'is-current': t.current }"
-                    >
-                      <span class="cp-task-list__mark">{{ t.completed ? '✓' : t.current ? '▸' : '·' }}</span>
-                      {{ t.title }}
-                    </li>
-                  </ul>
-                </article>
-              </details>
-              <p v-else-if="pathGenerationInProgress" class="cp-none">Path 阶段任务仍在生成，稍后自动刷新。</p>
-            </template>
-            <p v-if="!hasPath && pathStatusFailed" class="cp-degrade">
-              Path 状态获取失败
-              <button type="button" class="mk-link" @click="loadPathStatus">重试</button>
-            </p>
-            <p v-else-if="!hasPath" class="cp-none">{{ pathEmptyHint }}</p>
-          </template>
-        </div>
-
-        <!-- 旁路：评审面板（独立质量环，不阻塞 Learn；虚拟会话专属） -->
-        <aside v-if="!isRealMode" class="cp-review-panel">
-          <div class="cp-review-panel__head">
-            <span>虚拟学习者评审</span>
-            <em>独立旁路 · 不阻塞 Learn</em>
-          </div>
-          <div class="cp-review-panel__actions">
-            <button type="button" class="cp-btn" :disabled="reviewPathDisabled" :title="reviewPathTitle" @click="act('reviewPath')">评审</button>
-            <button
-              v-if="acceptPathVisible"
-              type="button"
-              class="cp-btn cp-btn--primary"
-              :disabled="acceptPathDisabled"
-              :title="acceptPathTitle"
-              @click="act('acceptPath')"
-            >接受</button>
-            <button
-              v-if="replanPathVisible"
-              type="button"
-              class="cp-btn cp-btn--primary"
-              :disabled="replanPathDisabled"
-              :title="replanPathTitle"
-              @click="act('replanPath')"
-            >按意见重规划</button>
-          </div>
-          <div v-if="pathReviewStatus" class="cp-review">
-            <div class="cp-review__badges">
-              <span class="cp-review__badge" :data-decision="pathReviewDecision">{{ pathReviewDecisionLabel }}</span>
-              <span class="cp-review__meta">{{ pathReviewStatusLabel }}<template v-if="pathReviewTime"> · {{ pathReviewTime }}</template></span>
-            </div>
-            <p v-if="pathReviewReaction" class="cp-review__reaction">{{ pathReviewReaction }}</p>
-            <p v-if="pathReviewConcern" class="cp-review__concern">最大顾虑：{{ pathReviewConcern }}</p>
-            <ul v-if="pathReviewChanges.length" class="cp-review__changes">
-              <li v-for="(c, i) in pathReviewChanges" :key="i">{{ c }}</li>
-            </ul>
-            <p v-if="pathReviewReplan" class="cp-review__replan">{{ pathReviewReplan }}</p>
-          </div>
-          <p v-else class="cp-none">尚未评审。评审只是质量检查，可直接启动 Learn。</p>
-        </aside>
-      </div>
-    </section>
-
-    <!-- 分页：Goal 对话 -->
-    <section v-if="!isBlackbox && activeTab === 'goal'" class="mk-card">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">Goal 对话</h3>
-        <span class="mk-card__meta">
-          {{ goalConversationMessages.length ? `${goalConversationMessages.length} 条已落库` : '暂无记录' }}
-          <template v-if="goalConverged"> · 已收敛</template>
-        </span>
-      </div>
-      <div v-if="!isRealMode" class="cp-tab-actions">
-        <button type="button" class="cp-btn" :disabled="goalStepDisabled" :title="goalStepTitle" @click="act('step')">单步推进</button>
-        <button type="button" class="cp-btn" :disabled="goalAutoDisabled" :title="goalAutoTitle" @click="act('auto')">自动到 Goal 收敛</button>
-        <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
-        <button v-if="goalConverged" type="button" class="cp-btn" @click="selectStageTab('path')">前往 Path →</button>
-      </div>
-      <div class="cp-transcripts">
-        <article
-          v-for="(message, index) in goalConversationMessages"
-          :key="`goal-${index}`"
-          class="cp-transcript__message"
-          :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'"
-        >
-          <span>{{ message.role === 'assistant' ? '平台 Goal' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
-          <p>{{ message.content }}</p>
-        </article>
-        <p v-if="!goalConversationMessages.length" class="cp-none">尚未产生 Goal 对话，点击「单步推进」开始。</p>
-      </div>
-    </section>
-
-    <!-- 分页：Learn 课堂 -->
-    <section v-if="!isBlackbox && activeTab === 'learning'" class="mk-card">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">Learn 课堂</h3>
-        <span class="mk-card__meta">
-          <template v-if="learnLessons.length">{{ learnProgressText }} · </template>
-          <template v-if="displayedTeachingSessionId">课堂 {{ displayedTeachingSessionId.slice(-8) }}</template>
-          <template v-if="learnConversationMessages.length"> · {{ learnConversationMessages.length }} 条</template>
-          <template v-if="!learnLessons.length && !displayedTeachingSessionId && !learnConversationMessages.length">暂无记录</template>
-        </span>
-      </div>
-      <div v-if="!isRealMode" class="cp-tab-actions">
-        <button type="button" class="cp-btn" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
-        <button type="button" class="cp-btn" :disabled="learnStepDisabled" :title="learnStepTitle" @click="act('step')">Learn 单步</button>
-        <button type="button" class="cp-btn" :disabled="learnAutoDisabled" :title="learnAutoTitle" @click="act('auto')">自动完成本课</button>
-        <input
-          v-model.number="learnAutoTurnCap"
-          type="number"
-          min="1"
-          max="100"
-          class="cp-turn-cap"
-          title="自动学习回合上限（1–100）：不同课的收束节奏不同，24 不够时可调高"
-          aria-label="自动学习回合上限"
-        />
-        <button type="button" class="cp-btn" :disabled="resetLearningDisabled" :title="resetLearningTitle" @click="act('resetLearn')">重启 Learn</button>
-        <button type="button" class="cp-btn cp-danger-btn" :disabled="stopLearningDisabled" :title="stopLearningTitle" @click="act('stop')">停止 Learn</button>
-      </div>
-      <div class="cp-transcripts">
-        <!-- 单课视图：当前查看课节的标题/状态/导航；全量任务列表在 Path 页 -->
-        <div v-if="viewedLesson" class="cp-lesson-head">
-          <div class="cp-lesson-head__main">
-            <span class="cp-lesson-head__state" :data-state="viewedLesson.state">{{ lessonStateLabel(viewedLesson.state) }}</span>
-            <strong>第 {{ viewedLessonIndex + 1 }}/{{ learnLessons.length }} 课 · {{ viewedLesson.title }}</strong>
-            <span class="cp-lesson-head__ms">{{ viewedLesson.milestone }}</span>
-          </div>
-          <div class="cp-lesson-head__nav">
-            <button
-              type="button"
-              class="cp-history-btn"
-              :disabled="!prevReplayableLesson"
-              title="上一节有记录的课"
-              @click="prevReplayableLesson && openLesson(prevReplayableLesson)"
-            >‹ 上一课</button>
-            <select
-              v-if="replayableLessons.length > 1"
-              class="cp-lesson-head__select"
-              :value="viewedLesson.teachingSessionId ? viewedLesson.taskId : ''"
-              @change="jumpLesson(($event.target as HTMLSelectElement).value)"
-            >
-              <option v-for="l in replayableLessons" :key="l.taskId" :value="l.taskId">
-                {{ lessonMark(l.state) }} 第 {{ learnLessons.findIndex((x) => x.taskId === l.taskId) + 1 }} 课 · {{ l.title }}
-              </option>
-            </select>
-            <button
-              type="button"
-              class="cp-history-btn"
-              :disabled="!nextReplayableLesson"
-              title="下一节有记录的课"
-              @click="nextReplayableLesson && openLesson(nextReplayableLesson)"
-            >下一课 ›</button>
-          </div>
-        </div>
-        <div v-else-if="teachingSessionHistory.length" class="cp-teaching-history">
-          <button
-            type="button"
-            class="cp-history-btn"
-            :class="{ 'is-current': !selectedTeachingSessionId }"
-            @click="showCurrentTeaching"
-          >
-            当前课堂
-          </button>
-          <button
-            v-for="item in teachingSessionHistory"
-            :key="item.id"
-            type="button"
-            class="cp-history-btn"
-            :class="{ 'is-current': selectedTeachingSessionId === item.id }"
-            @click="showArchivedTeaching(item.id)"
-          >
-            {{ item.taskTitle || `课堂 ${item.id.slice(-8)}` }}
-          </button>
-        </div>
-        <p v-if="teachingDetailLoading" class="cp-none">正在读取教学会话记录…</p>
-        <template v-if="learnConversationMessages.length">
-          <article
-            v-for="(message, index) in learnConversationMessages"
-            :key="`learn-${index}`"
-            class="cp-transcript__message"
-            :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'"
-          >
-            <span>{{ message.role === 'assistant' ? '教师' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
-            <p>{{ message.content }}</p>
-          </article>
+    <!-- ===== 顶部栏：标题 + 状态 + 控制 + 阶段进度 ===== -->
+    <header class="cp-topbar">
+      <div class="cp-topbar__row">
+        <button type="button" class="cp-back" @click="closeSubPage">← {{ backLabel }}</button>
+        <h1 class="cp-title">会话监控 <span class="cp-title__id mono">{{ shortId }}</span></h1>
+        <div class="cp-topbar__spacer"></div>
+        <!-- 执行控制 -->
+        <template v-if="!isRealMode && !autopilotRunning">
+          <button type="button" class="cp-topbar__btn cp-topbar__btn--primary" :disabled="autopilotStartDisabled" :title="autopilotStartTitle" @click="act('autopilotStart')">自动运行</button>
+          <button v-if="!isBlackbox" type="button" class="cp-topbar__btn" :disabled="runFullDisabled" :title="runFullTitle" @click="act('runFull')">单步推进</button>
         </template>
-        <p v-else-if="teachingDetailFailed && !learnConversationMessages.length" class="cp-degrade">
-          教学记录获取失败
-          <button type="button" class="mk-link" @click="loadTeachingDetail(selectedTeachingSessionId)">重试</button>
-        </p>
-        <p v-else-if="!learnConversationMessages.length" class="cp-none">
-          {{ learnEmptyHint }}
-        </p>
+        <template v-if="autopilotRunning">
+          <span class="cp-topbar__autopilot">▶ 自动驾驶 · {{ Number(autopilot.steps || 0) }} 步</span>
+          <button type="button" class="cp-topbar__btn" :disabled="busy" @click="act('autopilotStop')">停止自动驾驶</button>
+        </template>
+        <span class="cp-topbar__sep"></span>
+        <!-- 状态 -->
+        <span class="cp-topbar__dot" :class="`cp-topbar__dot--${statusTone}`"></span>
+        <strong class="cp-topbar__status">{{ statusTitle }}</strong>
+        <span class="cp-topbar__mode">{{ modeText }}</span>
+        <!-- 会话生命周期 -->
+        <template v-if="!isRealMode && session?.status === 'running'">
+          <button v-if="!isPaused" type="button" class="cp-topbar__btn" :disabled="busy" @click="pauseSession">暂停</button>
+          <button v-else type="button" class="cp-topbar__btn cp-topbar__btn--primary" :disabled="busy" @click="resumeSession">继续</button>
+          <button type="button" class="cp-topbar__btn cp-topbar__btn--danger" :disabled="busy" @click="stopLearning">结束</button>
+        </template>
+        <template v-else-if="!isRealMode && isFailedTerminal">
+          <button type="button" class="cp-topbar__btn cp-topbar__btn--primary" :disabled="busy" @click="restartLearning">重新开始</button>
+        </template>
+        <button v-if="!isRealMode" type="button" class="cp-topbar__btn cp-topbar__btn--danger" :disabled="busy" @click="removeSession">删除</button>
+        <button type="button" class="cp-topbar__btn" :disabled="busy" @click="refresh">刷新</button>
       </div>
-    </section>
+      <!-- 阶段进度条 -->
+      <div class="cp-topbar__stages">
+        <button
+          v-for="st in stageFlow"
+          :key="st"
+          type="button"
+          class="cp-stage"
+          :class="[stageCls(st), { 'cp-stage--tab': !isBlackbox && activeTab === st }]"
+          :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `查看${stageLabel(st)}`"
+          :disabled="isBlackbox"
+          @click="selectStageTab(st)"
+        >
+          <span class="cp-stage__mark">{{ stageMark(st) }}</span>
+          <span class="cp-stage__label">{{ stageLabel(st) }}</span>
+          <span v-if="stageProgress(st)" class="cp-stage__progress">{{ stageProgress(st) }}</span>
+        </button>
+      </div>
+    </header>
 
-    <!-- 分页：Wrapup 总结 -->
-    <section v-if="!isBlackbox && activeTab === 'wrapup'" class="mk-card">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">Wrapup 总结</h3>
-        <span class="mk-card__meta">{{ hasWrapup ? '已生成' : '未生成' }}</span>
-      </div>
-      <div class="cp-tab-actions" v-if="!isRealMode">
-        <button type="button" class="cp-btn" :disabled="wrapupDisabled" :title="wrapupTitle" @click="act('wrapup')">生成总结</button>
-      </div>
-      <div class="cp-transcripts">
-        <template v-if="hasWrapup">
-          <div v-if="wrapupFieldCards.length" class="cp-eval-card-grid">
-            <div v-for="card in wrapupFieldCards" :key="card.label" class="cp-eval-card">
-              <span class="cp-eval-card__label">{{ card.label }}</span>
-              <p class="cp-eval-card__value">{{ card.value }}</p>
+    <!-- ===== 主体：左侧内容 + 右侧控制台 ===== -->
+    <div class="cp-body">
+      <!-- 主内容区 -->
+      <main class="cp-main">
+        <!-- Path 内容 -->
+        <section v-if="!isBlackbox && activeTab === 'path'" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">Path 内容</h3>
+            <span class="mk-card__meta">{{ pathDetailMeta || '等待 Path 生成' }}</span>
+          </div>
+          <div v-if="!isRealMode" class="cp-tab-actions">
+            <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
+            <button type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
+            <button type="button" class="cp-btn" :disabled="resetPathDisabled" :title="resetPathTitle" @click="act('resetPath')">重建 Path</button>
+          </div>
+          <div class="cp-path-detail">
+            <div v-if="!session" class="cp-path-skel" aria-hidden="true">
+              <div v-for="n in 3" :key="n"></div>
             </div>
-            <div v-if="wrapupSourceBadge || wrapupStatusBadge" class="cp-eval-card cp-eval-card--meta">
-              <span class="cp-eval-card__label">来源 / 状态</span>
-              <p class="cp-eval-card__badges">
+            <template v-else>
+              <template v-if="hasPath">
+                <div class="cp-path-detail__head">
+                  <strong>{{ pathDetailTitle }}</strong>
+                  <span v-if="pathDetailMeta" class="cp-path-detail__meta">{{ pathDetailMeta }}</span>
+                </div>
+                <p v-if="pathDetailSummary" class="cp-path-detail__summary">{{ pathDetailSummary }}</p>
+                <details v-if="pathMilestonesView.length" class="cp-transcript" open>
+                  <summary>里程碑 · {{ pathMilestonesView.length }} 个</summary>
+                  <article v-for="m in pathMilestonesView" :key="m.stageNumber" class="cp-milestone">
+                    <div class="cp-milestone__head">
+                      <span class="cp-milestone__order">M{{ m.stageNumber }}</span>
+                      <strong>{{ m.title }}</strong>
+                      <span v-if="m.estimatedHours" class="cp-milestone__meta">{{ m.estimatedHours }}h</span>
+                    </div>
+                    <p v-if="m.description" class="cp-milestone__desc">{{ m.description }}</p>
+                    <ul v-if="m.tasks.length" class="cp-task-list">
+                      <li v-for="t in m.tasks" :key="t.id || t.title" :class="{ 'is-done': t.completed, 'is-current': t.current }">
+                        <span class="cp-task-list__mark">{{ t.completed ? '✓' : t.current ? '▸' : '·' }}</span>
+                        <span v-if="t.id && lessonNumber(t.id)" class="cp-task-list__num">第{{ lessonNumber(t.id) }}课</span>
+                        {{ t.title }}
+                      </li>
+                    </ul>
+                  </article>
+                </details>
+                <p v-else-if="pathGenerationInProgress" class="cp-none">Path 阶段任务仍在生成，稍后自动刷新。</p>
+              </template>
+              <p v-if="!hasPath && pathStatusFailed" class="cp-degrade">Path 状态获取失败 <button type="button" class="mk-link" @click="loadPathStatus">重试</button></p>
+              <p v-else-if="!hasPath" class="cp-none">{{ pathEmptyHint }}</p>
+            </template>
+          </div>
+        </section>
+
+        <!-- Goal 对话 -->
+        <section v-if="!isBlackbox && activeTab === 'goal'" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">Goal 对话</h3>
+            <span class="mk-card__meta">
+              {{ goalConversationMessages.length ? `${goalConversationMessages.length} 条已落库` : '暂无记录' }}
+              <template v-if="goalConverged"> · 已收敛</template>
+            </span>
+          </div>
+          <div v-if="!isRealMode" class="cp-tab-actions">
+            <button type="button" class="cp-btn" :disabled="goalStepDisabled" :title="goalStepTitle" @click="act('step')">单步推进</button>
+            <button type="button" class="cp-btn" :disabled="goalAutoDisabled" :title="goalAutoTitle" @click="act('auto')">自动到 Goal 收敛</button>
+            <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
+            <button v-if="goalConverged" type="button" class="cp-btn" @click="selectStageTab('path')">前往 Path →</button>
+          </div>
+          <div class="cp-transcripts">
+            <article v-for="(message, index) in goalConversationMessages" :key="`goal-${index}`" class="cp-transcript__message" :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'">
+              <span>{{ message.role === 'assistant' ? '平台 Goal' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
+              <p>{{ message.content }}</p>
+            </article>
+            <p v-if="!goalConversationMessages.length" class="cp-none">尚未产生 Goal 对话，点击「单步推进」开始。</p>
+          </div>
+        </section>
+
+        <!-- Learn 课堂 -->
+        <section v-if="!isBlackbox && activeTab === 'learning'" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">Learn 课堂</h3>
+            <span class="mk-card__meta">
+              <template v-if="learnLessons.length">{{ learnProgressText }}</template>
+              <template v-if="!learnLessons.length">暂无记录</template>
+            </span>
+          </div>
+          <div v-if="!isRealMode" class="cp-tab-actions">
+            <button v-if="!hasLearningProgress" type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
+            <template v-else>
+              <button type="button" class="cp-btn" :disabled="learnStepDisabled" :title="learnStepTitle" @click="act('step')">推进对话</button>
+              <button type="button" class="cp-btn cp-btn--primary" :disabled="learnAutoDisabled" :title="learnAutoTitle" @click="act('auto')">完成本课</button>
+              <span class="cp-tab-actions__sep"></span>
+              <label class="cp-turn-cap-label">
+                回合上限
+                <input v-model.number="learnAutoTurnCap" type="number" min="1" max="100" class="cp-turn-cap" title="完成本课时最大对话轮数" aria-label="回合上限" />
+              </label>
+              <span class="cp-tab-actions__spacer"></span>
+              <button type="button" class="cp-btn" :disabled="resetLearningDisabled" :title="resetLearningTitle" @click="act('resetLearn')">重新开始</button>
+              <button type="button" class="cp-btn cp-danger-btn" :disabled="stopLearningDisabled" :title="stopLearningTitle" @click="act('stop')">结束学习</button>
+            </template>
+          </div>
+          <!-- 双栏：左侧课程树 + 右侧对话 -->
+          <div class="cp-learn-grid">
+            <!-- 左侧：里程碑 → 课程树 -->
+            <nav class="cp-learn-tree" v-if="lessonTree.length">
+              <div v-for="group in lessonTree" :key="group.milestone" class="cp-learn-tree__group">
+                <div class="cp-learn-tree__ms">
+                  <span class="cp-learn-tree__ms-text">{{ group.milestone }}</span>
+                  <span class="cp-learn-tree__ms-count">{{ group.doneCount }}/{{ group.lessons.length }}</span>
+                </div>
+                <button
+                  v-for="l in group.lessons"
+                  :key="l.taskId"
+                  type="button"
+                  class="cp-learn-tree__lesson"
+                  :class="{ 'is-active': viewedLesson?.taskId === l.taskId, [`is-${l.state}`]: true }"
+                  :disabled="!l.teachingSessionId"
+                  :title="l.teachingSessionId ? '查看课堂对话' : '尚未开始'"
+                  @click="l.teachingSessionId && openLesson(l)"
+                >
+                  <span class="cp-learn-tree__mark">{{ lessonMark(l.state) }}</span>
+                  <span class="cp-learn-tree__num">第{{ lessonNumber(l.taskId) }}课</span>
+                  <span class="cp-learn-tree__title">{{ l.title }}</span>
+                </button>
+              </div>
+            </nav>
+            <p v-else class="cp-none">尚未生成课程，请先生成 Path 并启动 Learn。</p>
+            <!-- 右侧：对话区 -->
+            <div class="cp-learn-chat">
+              <div v-if="viewedLesson" class="cp-lesson-head">
+                <div class="cp-lesson-head__main">
+                  <span class="cp-lesson-head__state" :data-state="viewedLesson.state">{{ lessonStateLabel(viewedLesson.state) }}</span>
+                  <strong>第 {{ lessonNumber(viewedLesson.taskId) }} 课 · {{ viewedLesson.title }}</strong>
+                  <span class="cp-lesson-head__ms">{{ viewedLesson.milestone }}</span>
+                </div>
+              </div>
+              <p v-if="teachingDetailLoading" class="cp-none">正在读取教学会话记录…</p>
+              <!-- 课时总结卡片 -->
+              <div v-if="hasLessonWrapup && lessonWrapup" class="cp-lesson-wrapup">
+                <div class="cp-lesson-wrapup__head">
+                  <span class="cp-lesson-wrapup__badge">✓ 本课总结</span>
+                  <span class="cp-lesson-wrapup__scores">
+                    <span v-if="lessonWrapup.duration" class="cp-lesson-wrapup__score">{{ lessonWrapup.duration }} 分钟</span>
+                    <span v-if="lessonWrapup.turnCount" class="cp-lesson-wrapup__score">{{ lessonWrapup.turnCount }} 轮对话</span>
+                    <span v-if="lessonWrapup.avgUnderstanding !== null" class="cp-lesson-wrapup__score">理解 {{ Math.round(lessonWrapup.avgUnderstanding * 100) }}%</span>
+                    <span v-if="lessonWrapup.avgEngagement !== null" class="cp-lesson-wrapup__score">参与 {{ Math.round(lessonWrapup.avgEngagement * 100) }}%</span>
+                    <span v-if="lessonWrapup.lss !== null" class="cp-lesson-wrapup__score cp-lesson-wrapup__score--primary">LSS {{ Math.round(lessonWrapup.lss * 100) }}%</span>
+                    <span v-if="lessonWrapup.ktl !== null" class="cp-lesson-wrapup__score cp-lesson-wrapup__score--primary">KTL {{ Math.round(lessonWrapup.ktl * 100) }}%</span>
+                  </span>
+                </div>
+                <div class="cp-lesson-wrapup__body">
+                  <!-- 知识点掌握 -->
+                  <div v-if="lessonWrapup.knowledgeItems.length" class="cp-lesson-wrapup__section">
+                    <span class="cp-lesson-wrapup__section-title">知识点掌握</span>
+                    <div v-for="k in lessonWrapup.knowledgeItems" :key="k.name" class="cp-lesson-wrapup__kp">
+                      <span class="cp-lesson-wrapup__kp-name">{{ k.name }}</span>
+                      <span class="cp-lesson-wrapup__kp-status" :class="`is-${k.status}`">{{ { mastered: '✓ 已掌握', learning: '学习中', review: '待复习' }[k.status] || k.status }}</span>
+                      <span class="cp-lesson-wrapup__kp-bar"><i :style="{ width: (k.progress || 0) + '%' }"></i></span>
+                    </div>
+                  </div>
+
+                  <!-- 关键收获 -->
+                  <div v-if="lessonWrapup.keyTakeaways.length" class="cp-lesson-wrapup__section">
+                    <span class="cp-lesson-wrapup__section-title">关键收获</span>
+                    <ul class="cp-lesson-wrapup__takeaways">
+                      <li v-for="(t, i) in lessonWrapup.keyTakeaways" :key="i">{{ t }}</li>
+                    </ul>
+                  </div>
+
+                  <!-- 练习建议 -->
+                  <div v-if="lessonWrapup.practiceAdvice" class="cp-lesson-wrapup__section">
+                    <span class="cp-lesson-wrapup__section-title">练习建议</span>
+                    <p class="cp-lesson-wrapup__text">{{ lessonWrapup.practiceAdvice }}</p>
+                  </div>
+
+                  <!-- 困惑点 -->
+                  <div v-if="lessonWrapup.confusionPoints.length" class="cp-lesson-wrapup__section">
+                    <span class="cp-lesson-wrapup__section-title">困惑点</span>
+                    <ul class="cp-lesson-wrapup__takeaways">
+                      <li v-for="(c, i) in lessonWrapup.confusionPoints" :key="i">{{ c }}</li>
+                    </ul>
+                  </div>
+
+                  <!-- 评估亮点 -->
+                  <div v-if="lessonWrapup.strengths.length || lessonWrapup.improvements.length" class="cp-lesson-wrapup__section">
+                    <span class="cp-lesson-wrapup__section-title">评估</span>
+                    <div v-if="lessonWrapup.strengths.length" class="cp-lesson-wrapup__eval-item">
+                      <span class="cp-lesson-wrapup__eval-label cp-lesson-wrapup__eval-label--good">优势</span>
+                      <span v-for="s in lessonWrapup.strengths" :key="s">{{ s }}</span>
+                    </div>
+                    <div v-if="lessonWrapup.improvements.length" class="cp-lesson-wrapup__eval-item">
+                      <span class="cp-lesson-wrapup__eval-label cp-lesson-wrapup__eval-label--warn">改进</span>
+                      <span v-for="s in lessonWrapup.improvements" :key="s">{{ s }}</span>
+                    </div>
+                  </div>
+
+                  <!-- 情绪 & 认知 -->
+                  <div v-if="lessonWrapup.dominantCognitiveLevel" class="cp-lesson-wrapup__meta-row">
+                    <span v-if="lessonWrapup.dominantCognitiveLevel">认知: {{ lessonWrapup.dominantCognitiveLevel }} → {{ lessonWrapup.lastCognitiveLevel }}</span>
+                    <span>情绪: 😊{{ lessonWrapup.positiveEmotions }} 😐{{ lessonWrapup.neutralEmotions }} 😤{{ lessonWrapup.frustratedEmotions }} 😕{{ lessonWrapup.confusedEmotions }}</span>
+                    <span v-if="lessonWrapup.fatigueRisk">疲劳风险: {{ lessonWrapup.fatigueRisk }}</span>
+                  </div>
+                </div>
+              </div>
+              <template v-if="learnConversationMessages.length">
+                <article v-for="(message, index) in learnConversationMessages" :key="`learn-${index}`" class="cp-transcript__message" :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'">
+                  <span>{{ message.role === 'assistant' ? '教师' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
+                  <p>{{ message.content }}</p>
+                </article>
+              </template>
+              <p v-else-if="teachingDetailFailed && !learnConversationMessages.length" class="cp-degrade">教学记录获取失败 <button type="button" class="mk-link" @click="loadTeachingDetail(selectedTeachingSessionId)">重试</button></p>
+              <p v-else-if="!viewedLesson" class="cp-none">点击左侧课程查看对话。</p>
+              <p v-else-if="!learnConversationMessages.length" class="cp-none">{{ learnEmptyHint }}</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- 总结 -->
+        <section v-if="!isBlackbox && activeTab === 'wrapup'" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">学习总结</h3>
+            <span class="mk-card__meta">
+              {{ completedTaskCount }}/{{ learnLessons.length }} 课已完成
+              <template v-if="hasWrapup"> · 终局总结已生成</template>
+            </span>
+          </div>
+
+          <!-- 课时进度概览 -->
+          <div class="cp-wrapup-lessons" v-if="lessonTree.length">
+            <div v-for="group in lessonTree" :key="group.milestone" class="cp-wrapup-ms">
+              <div class="cp-wrapup-ms__head">
+                <span class="cp-wrapup-ms__title">{{ group.milestone }}</span>
+                <span class="cp-wrapup-ms__count">{{ group.doneCount }}/{{ group.lessons.length }}</span>
+              </div>
+              <div
+                v-for="l in group.lessons"
+                :key="l.taskId"
+                class="cp-wrapup-lesson"
+                :class="{ 'is-done': l.state === 'done', 'is-active': l.state === 'active' }"
+                @click="l.state === 'done' && l.teachingSessionId && viewLessonSummary(l)"
+              >
+                <span class="cp-wrapup-lesson__mark">{{ lessonMark(l.state) }}</span>
+                <span class="cp-wrapup-lesson__num">第{{ lessonNumber(l.taskId) }}课</span>
+                <span class="cp-wrapup-lesson__title">{{ l.title }}</span>
+                <span v-if="l.state === 'done' && l.teachingSessionId" class="cp-wrapup-lesson__action">查看总结 →</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 终局总结（已生成时） -->
+          <template v-if="hasWrapup">
+            <div class="cp-wrapup-stats" v-if="pathDetailTitle || wrapupSourceBadge">
+              <div class="cp-wrapup-stats__goal" v-if="pathDetailTitle">
+                <span class="cp-wrapup-stats__label">学习目标</span>
+                <strong>{{ pathDetailTitle }}</strong>
+              </div>
+              <div class="cp-wrapup-stats__badges">
+                <span class="cp-wrapup-stats__item"><em>{{ pathMilestonesView.length }}</em> 个里程碑</span>
+                <span class="cp-wrapup-stats__item"><em>{{ learnLessons.length }}</em> 节课</span>
                 <span v-if="wrapupSourceBadge" class="mk-badge" :class="wrapupSourceBadge === '模型生成' ? 'mk-badge--info' : 'mk-badge--muted'">{{ wrapupSourceBadge }}</span>
                 <span v-if="wrapupStatusBadge" class="mk-badge" :class="wrapupStatusBadge === 'complete' ? 'mk-badge--ok' : 'mk-badge--warn'">{{ wrapupStatusBadge === 'complete' ? '总结完整' : '降级总结' }}</span>
-              </p>
-            </div>
-          </div>
-          <div v-for="section in wrapupSections" :key="section.label" class="cp-wrapup">
-            <span class="cp-wrapup__label">{{ section.label }}</span>
-            <pre v-if="section.isJson" class="cp-wrapup__json">{{ section.text }}</pre>
-            <p v-else>{{ section.text }}</p>
-          </div>
-        </template>
-        <p v-else class="cp-none">{{ wrapupEmptyHint }}</p>
-      </div>
-    </section>
-
-    <!-- 裁判报告（黑盒终态） -->
-    <section v-if="refereeReports.length || actorAuditReports.length" class="mk-card">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">终局评估</h3>
-        <span class="mk-card__meta">
-          平台 {{ refereeReports.length }} · 角色 {{ actorAuditReports.length }}
-        </span>
-      </div>
-
-      <div v-if="refereeReports.length" class="cp-eval-group">
-        <h4 class="cp-eval-group__title">平台质量裁判</h4>
-        <template v-for="(r, i) in refereeReports" :key="`r-${i}`">
-          <article v-if="r.report" class="cp-eval">
-            <div class="cp-eval__head">
-              <div>
-                <strong>{{ verdictLabel(r.report.verdict) }}</strong>
-                <span class="cp-eval__time">{{ formatTime(r.evaluatedAt) }}</span>
-              </div>
-              <div class="cp-eval__overall">
-                <span class="mk-badge" :class="scoreBadgeCls(r.report.scores?.overall)">
-                  {{ scoreToPct(r.report.scores?.overall) }}
-                </span>
-                <span class="mk-minibar cp-eval__overall-bar">
-                  <i class="mk-minibar__fill" :data-tone="scoreTone(r.report.scores?.overall)" :style="{ width: scoreFillPct(r.report.scores?.overall) + '%' }"></i>
-                </span>
               </div>
             </div>
-            <div v-if="r.report.scores" class="cp-eval__scores">
-              <span v-for="item in scoreItems(r.report.scores, 'referee')" :key="item.label" class="cp-eval__score">
-                <code>{{ item.label }}</code>
-                <strong>{{ scoreToPct(item.value) }}</strong>
-                <span class="mk-minibar">
-                  <i class="mk-minibar__fill" :data-tone="scoreTone(item.value)" :style="{ width: scoreFillPct(item.value) + '%' }"></i>
-                </span>
-              </span>
+            <div class="cp-wrapup-cards" v-if="wrapupFieldCards.length">
+              <div v-for="card in wrapupFieldCards" :key="card.label" class="cp-wrapup-card">
+                <div class="cp-wrapup-card__icon">{{ wrapupCardIcon(card.label) }}</div>
+                <div class="cp-wrapup-card__body">
+                  <span class="cp-wrapup-card__label">{{ card.label }}</span>
+                  <p class="cp-wrapup-card__text">{{ card.value }}</p>
+                </div>
+              </div>
             </div>
-            <div v-if="r.report.findings?.length" class="cp-eval__section">
-              <h5>平台发现</h5>
-              <article v-for="f in r.report.findings" :key="f.code" class="cp-finding">
-                <span class="cp-finding__sev" :data-sev="f.severity">{{ f.severity }}</span>
-                <div>
-                  <strong>{{ f.title }}</strong>
-                  <p>{{ f.detail }}</p>
-                  <details v-if="findingEvidence(r, f).length" class="cp-evidence">
-                    <summary>证据 {{ findingEvidence(r, f).length }}</summary>
-                    <div v-for="e in findingEvidence(r, f)" :key="e.id">
-                      <code>{{ e.source }}{{ e.index === null ? '' : `[${e.index}]` }} · {{ e.path }}</code>
-                      <p>{{ e.excerpt || e.interpretation }}</p>
+            <div v-if="wrapupSections.length" class="cp-wrapup-sections">
+              <div v-for="section in wrapupSections" :key="section.label" class="cp-wrapup-section">
+                <span class="cp-wrapup-section__label">{{ section.label }}</span>
+                <pre v-if="section.isJson" class="cp-wrapup__json">{{ section.text }}</pre>
+                <p v-else class="cp-wrapup-section__text">{{ section.text }}</p>
+              </div>
+            </div>
+            <div class="cp-wrapup-footer" v-if="wrapupSections.length">
+              <span v-if="wrapupSourceBadge" class="mk-badge" :class="wrapupSourceBadge === '模型生成' ? 'mk-badge--info' : 'mk-badge--muted'">{{ wrapupSourceBadge }}</span>
+              <span v-if="wrapupStatusBadge" class="mk-badge" :class="wrapupStatusBadge === 'complete' ? 'mk-badge--ok' : 'mk-badge--warn'">{{ wrapupStatusBadge === 'complete' ? '总结完整' : '降级总结' }}</span>
+            </div>
+          </template>
+
+          <!-- 操作栏 -->
+          <div class="cp-tab-actions" v-if="!isRealMode && !hasWrapup">
+            <button type="button" class="cp-btn" :disabled="wrapupDisabled" :title="wrapupTitle" @click="act('wrapup')">生成终局总结</button>
+          </div>
+          <p v-if="!hasWrapup && !lessonTree.length" class="cp-none" style="padding: 24px 16px;">{{ wrapupEmptyHint }}</p>
+        </section>
+
+        <!-- 终局评估（黑盒终态） -->
+        <section v-if="refereeReports.length || actorAuditReports.length" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">终局评估</h3>
+            <span class="mk-card__meta">平台 {{ refereeReports.length }} · 角色 {{ actorAuditReports.length }}</span>
+          </div>
+          <div v-if="refereeReports.length" class="cp-eval-group">
+            <h4 class="cp-eval-group__title">平台质量裁判</h4>
+            <template v-for="(r, i) in refereeReports" :key="`r-${i}`">
+              <article v-if="r.report" class="cp-eval">
+                <div class="cp-eval__head">
+                  <div><strong>{{ verdictLabel(r.report.verdict) }}</strong><span class="cp-eval__time">{{ formatTime(r.evaluatedAt) }}</span></div>
+                  <div class="cp-eval__overall">
+                    <span class="mk-badge" :class="scoreBadgeCls(r.report.scores?.overall)">{{ scoreToPct(r.report.scores?.overall) }}</span>
+                    <span class="mk-minibar cp-eval__overall-bar"><i class="mk-minibar__fill" :data-tone="scoreTone(r.report.scores?.overall)" :style="{ width: scoreFillPct(r.report.scores?.overall) + '%' }"></i></span>
+                  </div>
+                </div>
+                <div v-if="r.report.scores" class="cp-eval__scores">
+                  <span v-for="item in scoreItems(r.report.scores, 'referee')" :key="item.label" class="cp-eval__score"><code>{{ item.label }}</code><strong>{{ scoreToPct(item.value) }}</strong><span class="mk-minibar"><i class="mk-minibar__fill" :data-tone="scoreTone(item.value)" :style="{ width: scoreFillPct(item.value) + '%' }"></i></span></span>
+                </div>
+                <div v-if="r.report.findings?.length" class="cp-eval__section">
+                  <h5>平台发现</h5>
+                  <article v-for="f in r.report.findings" :key="f.code" class="cp-finding">
+                    <span class="cp-finding__sev" :data-sev="f.severity">{{ f.severity }}</span>
+                    <div><strong>{{ f.title }}</strong><p>{{ f.detail }}</p>
+                      <details v-if="findingEvidence(r, f).length" class="cp-evidence"><summary>证据 {{ findingEvidence(r, f).length }}</summary><div v-for="e in findingEvidence(r, f)" :key="e.id"><code>{{ e.source }}{{ e.index === null ? '' : `[${e.index}]` }} · {{ e.path }}</code><p>{{ e.excerpt || e.interpretation }}</p></div></details>
                     </div>
-                  </details>
+                  </article>
+                </div>
+                <div v-if="r.report.recommendations?.length" class="cp-eval__section">
+                  <h5>平台建议</h5>
+                  <article v-for="(rec, rIdx) in r.report.recommendations" :key="`rec-${rIdx}`" class="cp-rec">
+                    <div class="cp-rec__head"><strong>{{ rec.priority }}</strong><span v-if="rec.findingCodes?.length" class="cp-rec__codes"><code v-for="c in rec.findingCodes" :key="String(c)">{{ c }}</code></span></div>
+                    <p>{{ rec.action }}</p>
+                    <details v-if="rec.rationale" class="cp-rec__rationale"><summary>依据</summary><p>{{ rec.rationale }}</p></details>
+                  </article>
                 </div>
               </article>
-            </div>
-            <div v-if="r.report.recommendations?.length" class="cp-eval__section">
-              <h5>平台建议</h5>
-              <article v-for="(rec, rIdx) in r.report.recommendations" :key="`rec-${rIdx}`" class="cp-rec">
-                <div class="cp-rec__head">
-                  <strong>{{ rec.priority }}</strong>
-                  <span v-if="rec.findingCodes?.length" class="cp-rec__codes">
-                    <code v-for="c in rec.findingCodes" :key="String(c)">{{ c }}</code>
-                  </span>
+            </template>
+          </div>
+          <div v-if="actorAuditReports.length" class="cp-eval-group">
+            <h4 class="cp-eval-group__title">角色保真审计</h4>
+            <template v-for="(r, i) in actorAuditReports" :key="`a-${i}`">
+              <article v-if="r.report" class="cp-eval">
+                <div class="cp-eval__head">
+                  <div><strong>{{ verdictLabel(r.report.verdict) }}</strong><span class="cp-eval__time">{{ formatTime(r.evaluatedAt) }}</span></div>
+                  <div class="cp-eval__overall">
+                    <span class="mk-badge" :class="scoreBadgeCls(r.report.scores?.overall)">{{ scoreToPct(r.report.scores?.overall) }}</span>
+                    <span class="mk-minibar cp-eval__overall-bar"><i class="mk-minibar__fill" :data-tone="scoreTone(r.report.scores?.overall)" :style="{ width: scoreFillPct(r.report.scores?.overall) + '%' }"></i></span>
+                  </div>
                 </div>
-                <p>{{ rec.action }}</p>
-                <details v-if="rec.rationale" class="cp-rec__rationale">
-                  <summary>依据</summary>
-                  <p>{{ rec.rationale }}</p>
-                </details>
-              </article>
-            </div>
-          </article>
-        </template>
-      </div>
-
-      <div v-if="actorAuditReports.length" class="cp-eval-group">
-        <h4 class="cp-eval-group__title">角色保真审计</h4>
-        <template v-for="(r, i) in actorAuditReports" :key="`a-${i}`">
-          <article v-if="r.report" class="cp-eval">
-            <div class="cp-eval__head">
-              <div>
-                <strong>{{ verdictLabel(r.report.verdict) }}</strong>
-                <span class="cp-eval__time">{{ formatTime(r.evaluatedAt) }}</span>
-              </div>
-              <div class="cp-eval__overall">
-                <span class="mk-badge" :class="scoreBadgeCls(r.report.scores?.overall)">
-                  {{ scoreToPct(r.report.scores?.overall) }}
-                </span>
-                <span class="mk-minibar cp-eval__overall-bar">
-                  <i class="mk-minibar__fill" :data-tone="scoreTone(r.report.scores?.overall)" :style="{ width: scoreFillPct(r.report.scores?.overall) + '%' }"></i>
-                </span>
-              </div>
-            </div>
-            <div v-if="r.report.scores" class="cp-eval__scores cp-eval__scores--actor">
-              <span v-for="item in scoreItems(r.report.scores, 'actor')" :key="item.label" class="cp-eval__score">
-                <code>{{ item.label }}</code>
-                <strong>{{ scoreToPct(item.value) }}</strong>
-                <span class="mk-minibar">
-                  <i class="mk-minibar__fill" :data-tone="scoreTone(item.value)" :style="{ width: scoreFillPct(item.value) + '%' }"></i>
-                </span>
-              </span>
-            </div>
-            <div v-if="r.report.findings?.length" class="cp-eval__section">
-              <h5>角色发现</h5>
-              <article v-for="f in r.report.findings" :key="f.code" class="cp-finding">
-                <span class="cp-finding__sev" :data-sev="f.severity">{{ f.severity }}</span>
-                <div>
-                  <strong>{{ f.title }}</strong>
-                  <p>{{ f.detail }}</p>
-                  <details v-if="findingEvidence(r, f).length" class="cp-evidence">
-                    <summary>证据 {{ findingEvidence(r, f).length }}</summary>
-                    <div v-for="e in findingEvidence(r, f)" :key="e.id">
-                      <code>{{ e.source }}{{ e.index === null ? '' : `[${e.index}]` }} · {{ e.path }}</code>
-                      <p>{{ e.excerpt || e.interpretation }}</p>
+                <div v-if="r.report.scores" class="cp-eval__scores cp-eval__scores--actor">
+                  <span v-for="item in scoreItems(r.report.scores, 'actor')" :key="item.label" class="cp-eval__score"><code>{{ item.label }}</code><strong>{{ scoreToPct(item.value) }}</strong><span class="mk-minibar"><i class="mk-minibar__fill" :data-tone="scoreTone(item.value)" :style="{ width: scoreFillPct(item.value) + '%' }"></i></span></span>
+                </div>
+                <div v-if="r.report.findings?.length" class="cp-eval__section">
+                  <h5>角色发现</h5>
+                  <article v-for="f in r.report.findings" :key="f.code" class="cp-finding">
+                    <span class="cp-finding__sev" :data-sev="f.severity">{{ f.severity }}</span>
+                    <div><strong>{{ f.title }}</strong><p>{{ f.detail }}</p>
+                      <details v-if="findingEvidence(r, f).length" class="cp-evidence"><summary>证据 {{ findingEvidence(r, f).length }}</summary><div v-for="e in findingEvidence(r, f)" :key="e.id"><code>{{ e.source }}{{ e.index === null ? '' : `[${e.index}]` }} · {{ e.path }}</code><p>{{ e.excerpt || e.interpretation }}</p></div></details>
                     </div>
-                  </details>
+                  </article>
+                </div>
+                <div v-if="r.report.recommendations?.length" class="cp-eval__section">
+                  <h5>模拟器建议</h5>
+                  <article v-for="(rec, rIdx) in r.report.recommendations" :key="`arec-${rIdx}`" class="cp-rec">
+                    <div class="cp-rec__head"><strong>{{ rec.priority }}</strong><span v-if="rec.findingCodes?.length" class="cp-rec__codes"><code v-for="c in rec.findingCodes" :key="String(c)">{{ c }}</code></span></div>
+                    <p>{{ rec.action }}</p>
+                    <details v-if="rec.rationale" class="cp-rec__rationale"><summary>依据</summary><p>{{ rec.rationale }}</p></details>
+                  </article>
                 </div>
               </article>
-            </div>
-            <div v-if="r.report.recommendations?.length" class="cp-eval__section">
-              <h5>模拟器建议</h5>
-              <article v-for="(rec, rIdx) in r.report.recommendations" :key="`arec-${rIdx}`" class="cp-rec">
-                <div class="cp-rec__head">
-                  <strong>{{ rec.priority }}</strong>
-                  <span v-if="rec.findingCodes?.length" class="cp-rec__codes">
-                    <code v-for="c in rec.findingCodes" :key="String(c)">{{ c }}</code>
-                  </span>
+            </template>
+          </div>
+        </section>
+
+        <!-- 调试：原始 JSON -->
+        <details class="cp-raw">
+          <summary>原始会话数据</summary>
+          <pre>{{ rawJson }}</pre>
+        </details>
+      </main>
+
+      <!-- ===== 右侧控制台 ===== -->
+      <aside class="cp-sidebar">
+        <!-- 运行控制 -->
+        <div class="cp-sidebar__section">
+          <button type="button" class="cp-sidebar__toggle" :class="{ 'is-open': sidebarOpen.run }" @click="sidebarOpen.run = !sidebarOpen.run">
+            <span class="cp-sidebar__toggle-icon">{{ sidebarOpen.run ? '▾' : '▸' }}</span>
+            <span>运行状态</span>
+            <span class="cp-sidebar__toggle-hint">{{ sessionStatusLabel }}</span>
+          </button>
+          <div v-if="sidebarOpen.run" class="cp-sidebar__body">
+            <div class="cp-run">
+              <!-- 自动驾驶结果 -->
+              <div v-if="autopilotResultText && !autopilotRunning" class="cp-run__autopilot-result" :class="{
+                'cp-run__autopilot-result--ok': autopilot.status === 'completed',
+                'cp-run__autopilot-result--bad': autopilot.status === 'failed',
+                'cp-run__autopilot-result--muted': autopilot.status === 'stopped'
+              }">{{ autopilotResultText }}</div>
+
+              <!-- 阶段进度指示 -->
+              <div class="cp-run__stages" v-if="!isRealMode">
+                <div class="cp-run__stage-row" v-for="st in stageFlow" :key="st">
+                  <span class="cp-run__stage-dot" :class="`cp-run__stage-dot--${stageDone(st as StageKey) ? 'done' : stageActive(st as StageKey) ? 'active' : 'pending'}`"></span>
+                  <span class="cp-run__stage-label">{{ stageLabel(st) }}</span>
+                  <span class="cp-run__stage-status">{{ stageMiniStatus(st as StageKey) }}</span>
                 </div>
-                <p>{{ rec.action }}</p>
-                <details v-if="rec.rationale" class="cp-rec__rationale">
-                  <summary>依据</summary>
-                  <p>{{ rec.rationale }}</p>
-                </details>
-              </article>
+              </div>
+
+              <!-- 难度 -->
+              <div class="cp-run__foot">
+                <label v-if="!isBlackbox && !isRealMode" class="cp-run__budget">
+                  难度
+                  <select v-model="frictionBudget" class="mk-filter__select" :disabled="frictionSaving" @change="saveFriction">
+                    <option value="none">无</option>
+                    <option value="low">低</option>
+                    <option value="normal">正常</option>
+                    <option value="high">高</option>
+                    <option value="stress_test">压力测试</option>
+                  </select>
+                </label>
+                <span v-if="showPathReadiness" class="cp-run__readiness" :class="`cp-run__readiness--${pathReadinessTone}`">{{ pathReadinessText }}</span>
+              </div>
             </div>
-          </article>
-        </template>
-      </div>
-    </section>
+          </div>
+        </div>
 
-    <!-- 裁判旁路诊断轨迹 -->
-    <details v-if="refereeTrace.length" class="cp-trace-panel">
-      <summary>
-        <span>裁判旁路诊断</span>
-        <code>{{ refereeTrace.length }} 条 · trace={{ refereeTraceCount }}</code>
-      </summary>
-      <ol class="cp-trace-list">
-        <li v-for="(tv, idx) in refereeTraceViews" :key="(tv.item.traceId || '') + idx">
-          <div class="cp-trace-list__head">
-            <span class="cp-trace-list__seq">#{{ idx + 1 }}</span>
-            <time>{{ formatTime(tv.item.timestamp) }}</time>
-            <code v-if="tv.item.traceId" class="cp-trace-list__id">{{ tv.item.traceId }}</code>
+        <!-- 会话日志 -->
+        <div class="cp-sidebar__section">
+          <button type="button" class="cp-sidebar__toggle" :class="{ 'is-open': sidebarOpen.logs }" @click="sidebarOpen.logs = !sidebarOpen.logs">
+            <span class="cp-sidebar__toggle-icon">{{ sidebarOpen.logs ? '▾' : '▸' }}</span>
+            <span>会话日志</span>
+            <span class="cp-sidebar__toggle-hint">{{ isRealMode ? '只读' : isTerminal ? '已终态' : '5s 轮询' }}</span>
+          </button>
+          <div v-if="sidebarOpen.logs" class="cp-sidebar__body">
+            <div v-if="session && logPhases.length > 1" class="cp-logs__filter">
+              <button v-for="p in logPhases" :key="p" type="button" class="cp-logs__filter-chip" :class="{ 'is-active': logPhaseFilter === p }" @click="logPhaseFilter = logPhaseFilter === p ? '' : p">{{ p }}</button>
+            </div>
+            <div class="cp-logs" ref="logBox" aria-live="polite" aria-label="实时日志" @scroll="onLogScroll">
+              <span class="cp-logs__follow" :class="{ 'is-paused': !logFollowsBottom }" :title="logFollowsBottom ? '自动跟随最新日志' : '已暂停跟随'" @click="scrollToBottom">{{ logFollowsBottom ? '⏵' : '⏸' }}</span>
+              <template v-if="!session">
+                <div v-for="n in 4" :key="n" class="cp-log-skel" aria-hidden="true"></div>
+              </template>
+              <template v-else>
+                <div v-for="(l, i) in filteredLogs" :key="i" class="cp-log" :class="{ 'cp-log--error': l.view.isError }">
+                  <span class="cp-log__time">{{ l.time }}</span>
+                  <span v-if="l.view.phase" class="cp-log__phase" :class="{ 'cp-log__phase--error': l.view.isError }">{{ l.view.phase }}</span>
+                  <span class="cp-log__text">{{ l.view.text }}</span>
+                  <span v-if="l.view.durationText" class="cp-log__dur">{{ l.view.durationText }}</span>
+                  <details v-if="l.view.rawJson" class="cp-log__raw"><summary>原文</summary><pre>{{ l.view.rawJson }}</pre></details>
+                </div>
+                <p v-if="logsFailed" class="cp-degrade">日志获取失败 <button type="button" class="mk-link" @click="loadLogs">重试</button></p>
+                <p v-else-if="!filteredLogs.length" class="cp-none">{{ logPhaseFilter ? '当前筛选无匹配日志' : '暂无日志' }}</p>
+              </template>
+            </div>
           </div>
-          <div v-if="tv.rows.length" class="cp-trace-list__kv">
-            <span v-for="row in tv.rows" :key="row.label">
-              <code>{{ row.label }}</code><strong>{{ row.value }}</strong>
-            </span>
-          </div>
-          <details v-if="tv.rawJson" class="cp-trace-list__raw">
-            <summary>原文 JSON</summary>
-            <pre class="cp-trace-list__body">{{ tv.rawJson }}</pre>
-          </details>
-        </li>
-      </ol>
-    </details>
+        </div>
 
-    <!-- 角色私有状态轨迹（虚拟学习者脑子里在想什么） -->
-    <details v-if="privateStateTrace.length" class="cp-trace-panel">
-      <summary>
-        <span>角色私有状态轨迹</span>
-        <code>{{ privateStateTraceCount }} 条</code>
-      </summary>
-      <ol class="cp-trace-list">
-        <li v-for="(item, idx) in privateStateTrace" :key="(item.sequence ?? idx)">
-          <div class="cp-trace-list__head">
-            <span class="cp-trace-list__seq">#{{ item.sequence ?? (idx + 1) }}</span>
-            <span class="cp-trace-list__stage" :data-stage="item.stage">{{ item.stage }}</span>
-            <code v-if="item.taskId">task={{ item.taskId.slice(0, 8) }}</code>
-            <time v-if="item.generatedAt">{{ formatTime(item.generatedAt) }}</time>
-            <span v-if="item.emotion" class="cp-trace-list__emotion">{{ item.emotion }}</span>
-            <span v-if="item.degraded" class="cp-trace-list__degraded" title="LLM/校验失败时的兜底状态">degraded</span>
-            <span v-if="item.transition" class="cp-trace-list__transition">{{ item.transition }}</span>
+        <!-- 虚拟学习者评审 -->
+        <div v-if="!isRealMode && activeTab === 'path'" class="cp-sidebar__section">
+          <button type="button" class="cp-sidebar__toggle" :class="{ 'is-open': sidebarOpen.review }" @click="sidebarOpen.review = !sidebarOpen.review">
+            <span class="cp-sidebar__toggle-icon">{{ sidebarOpen.review ? '▾' : '▸' }}</span>
+            <span>虚拟学习者评审</span>
+            <span class="cp-sidebar__toggle-hint">{{ pathReviewStatus ? pathReviewDecisionLabel : '未评审' }}</span>
+          </button>
+          <div v-if="sidebarOpen.review" class="cp-sidebar__body">
+            <div class="cp-review-panel__actions">
+              <button type="button" class="cp-btn cp-btn--sm" :disabled="reviewPathDisabled" :title="reviewPathTitle" @click="act('reviewPath')">评审</button>
+              <button v-if="acceptPathVisible" type="button" class="cp-btn cp-btn--primary cp-btn--sm" :disabled="acceptPathDisabled" :title="acceptPathTitle" @click="act('acceptPath')">接受</button>
+              <button v-if="replanPathVisible" type="button" class="cp-btn cp-btn--primary cp-btn--sm" :disabled="replanPathDisabled" :title="replanPathTitle" @click="act('replanPath')">按意见重规划</button>
+            </div>
+            <div v-if="pathReviewStatus" class="cp-review">
+              <div class="cp-review__badges">
+                <span class="cp-review__badge" :data-decision="pathReviewDecision">{{ pathReviewDecisionLabel }}</span>
+                <span class="cp-review__meta">{{ pathReviewStatusLabel }}<template v-if="pathReviewTime"> · {{ pathReviewTime }}</template></span>
+              </div>
+              <p v-if="pathReviewReaction" class="cp-review__reaction">{{ pathReviewReaction }}</p>
+              <p v-if="pathReviewConcern" class="cp-review__concern">最大顾虑：{{ pathReviewConcern }}</p>
+              <ul v-if="pathReviewChanges.length" class="cp-review__changes"><li v-for="(c, i) in pathReviewChanges" :key="i">{{ c }}</li></ul>
+              <p v-if="pathReviewReplan" class="cp-review__replan">{{ pathReviewReplan }}</p>
+            </div>
+            <p v-else class="cp-none">尚未评审。评审只是质量检查，可直接启动 Learn。</p>
           </div>
-          <div v-if="item.phaseFocus" class="cp-trace-list__focus">聚焦：{{ item.phaseFocus }}</div>
-          <div v-if="item.visibleSignal" class="cp-trace-list__signal">{{ item.visibleSignal }}</div>
-          <div v-if="item.stateChangeReason" class="cp-trace-list__reason">状态变化：{{ item.stateChangeReason }}</div>
-          <div v-if="item.metrics && Object.keys(item.metrics).length" class="cp-trace-list__metrics">
-            <span v-for="(v, k) in item.metrics" :key="k">
-              <code>{{ k }}</code><strong>{{ v }}</strong>
-            </span>
-          </div>
-          <div v-if="item.flags && Object.keys(item.flags).length" class="cp-trace-list__flags">
-            <span v-for="(v, k) in item.flags" :key="k" :class="{ active: !!v }">{{ k }}</span>
-          </div>
-          <div v-if="item.blockers?.length" class="cp-trace-list__blockers">
-            <span>阻塞：</span>
-            <span v-for="(b, bIdx) in item.blockers" :key="bIdx" class="cp-trace-list__blocker">{{ b }}</span>
-          </div>
-        </li>
-      </ol>
-    </details>
+        </div>
 
-    <!-- 统一时间线：三流合并（裁判诊断 / 私有状态 / 会话日志），按时间升序单轴展示；真实模式由日志卡承载 -->
-    <details v-if="!isRealMode && hasTraceFlows && unifiedTimeline.length" class="cp-trace-panel cp-timeline-panel">
-      <summary>
-        <span>统一时间线（三流合并）</span>
-        <code>{{ unifiedTimeline.length }} 条 · {{ timelineSourceSummary }}</code>
-      </summary>
-      <ol class="cp-trace-list">
-        <li v-for="(t, idx) in unifiedTimeline" :key="`tl-${idx}`">
-          <div class="cp-trace-list__head">
-            <span class="cp-trace-list__seq">#{{ idx + 1 }}</span>
-            <time>{{ formatTime(t.time) }}</time>
-            <span class="cp-timeline__kind" :data-kind="t.kind">{{ t.kindLabel }}</span>
-            <span v-if="t.stage" class="cp-timeline__stage" :data-stage="String(t.stage).toLowerCase()">{{ t.stage }}</span>
-            <strong class="cp-timeline__title">{{ t.title }}</strong>
+        <!-- Trace 诊断 -->
+        <div v-if="hasTraceFlows" class="cp-sidebar__section">
+          <button type="button" class="cp-sidebar__toggle" :class="{ 'is-open': sidebarOpen.trace }" @click="sidebarOpen.trace = !sidebarOpen.trace">
+            <span class="cp-sidebar__toggle-icon">{{ sidebarOpen.trace ? '▾' : '▸' }}</span>
+            <span>Trace 诊断</span>
+            <span class="cp-sidebar__toggle-hint">{{ refereeTraceCount + privateStateTraceCount }} 条</span>
+          </button>
+          <div v-if="sidebarOpen.trace" class="cp-sidebar__body">
+            <!-- 统一时间线 -->
+            <details v-if="!isRealMode && unifiedTimeline.length" class="cp-trace-panel" open>
+              <summary>统一时间线 · {{ unifiedTimeline.length }} 条</summary>
+              <ol class="cp-trace-list">
+                <li v-for="(t, idx) in unifiedTimeline" :key="`tl-${idx}`">
+                  <div class="cp-trace-list__head"><span class="cp-trace-list__seq">#{{ idx + 1 }}</span><time>{{ formatTime(t.time) }}</time><span class="cp-timeline__kind" :data-kind="t.kind">{{ t.kindLabel }}</span><span v-if="t.stage" class="cp-timeline__stage" :data-stage="String(t.stage).toLowerCase()">{{ t.stage }}</span><strong class="cp-timeline__title">{{ t.title }}</strong></div>
+                  <p v-if="t.detail" class="cp-timeline__detail">{{ t.detail }}</p>
+                </li>
+              </ol>
+            </details>
+            <!-- 裁判旁路诊断 -->
+            <details v-if="refereeTrace.length" class="cp-trace-panel">
+              <summary>裁判旁路诊断 · {{ refereeTraceCount }} 条</summary>
+              <ol class="cp-trace-list">
+                <li v-for="(tv, idx) in refereeTraceViews" :key="(tv.item.traceId || '') + idx">
+                  <div class="cp-trace-list__head"><span class="cp-trace-list__seq">#{{ idx + 1 }}</span><time>{{ formatTime(tv.item.timestamp) }}</time><code v-if="tv.item.traceId" class="cp-trace-list__id">{{ tv.item.traceId }}</code></div>
+                  <div v-if="tv.rows.length" class="cp-trace-list__kv"><span v-for="row in tv.rows" :key="row.label"><code>{{ row.label }}</code><strong>{{ row.value }}</strong></span></div>
+                  <details v-if="tv.rawJson" class="cp-trace-list__raw"><summary>原文 JSON</summary><pre class="cp-trace-list__body">{{ tv.rawJson }}</pre></details>
+                </li>
+              </ol>
+            </details>
+            <!-- 角色私有状态 -->
+            <details v-if="privateStateTrace.length" class="cp-trace-panel">
+              <summary>角色私有状态 · {{ privateStateTraceCount }} 条</summary>
+              <ol class="cp-trace-list">
+                <li v-for="(item, idx) in privateStateTrace" :key="(item.sequence ?? idx)">
+                  <div class="cp-trace-list__head"><span class="cp-trace-list__seq">#{{ item.sequence ?? (idx + 1) }}</span><span class="cp-trace-list__stage" :data-stage="item.stage">{{ item.stage }}</span><code v-if="item.taskId">task={{ item.taskId.slice(0, 8) }}</code><time v-if="item.generatedAt">{{ formatTime(item.generatedAt) }}</time><span v-if="item.emotion" class="cp-trace-list__emotion">{{ item.emotion }}</span><span v-if="item.degraded" class="cp-trace-list__degraded">degraded</span><span v-if="item.transition" class="cp-trace-list__transition">{{ item.transition }}</span></div>
+                  <div v-if="item.phaseFocus" class="cp-trace-list__focus">聚焦：{{ item.phaseFocus }}</div>
+                  <div v-if="item.visibleSignal" class="cp-trace-list__signal">{{ item.visibleSignal }}</div>
+                  <div v-if="item.stateChangeReason" class="cp-trace-list__reason">状态变化：{{ item.stateChangeReason }}</div>
+                  <div v-if="item.metrics && Object.keys(item.metrics).length" class="cp-trace-list__metrics"><span v-for="(v, k) in item.metrics" :key="k"><code>{{ k }}</code><strong>{{ v }}</strong></span></div>
+                  <div v-if="item.flags && Object.keys(item.flags).length" class="cp-trace-list__flags"><span v-for="(v, k) in item.flags" :key="k" :class="{ active: !!v }">{{ k }}</span></div>
+                  <div v-if="item.blockers?.length" class="cp-trace-list__blockers"><span>阻塞：</span><span v-for="(b, bIdx) in item.blockers" :key="bIdx" class="cp-trace-list__blocker">{{ b }}</span></div>
+                </li>
+              </ol>
+            </details>
           </div>
-          <p v-if="t.detail" class="cp-timeline__detail">{{ t.detail }}</p>
-        </li>
-      </ol>
-    </details>
-
-    <!-- 调试：原始 JSON -->
-    <details class="cp-raw">
-      <summary>原始会话数据</summary>
-      <pre>{{ rawJson }}</pre>
-    </details>
+        </div>
+      </aside>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { subPage, closeSubPage, openSubPage } from './store'
 import { errMsg } from './live'
 import { askConfirm } from './useConfirm'
@@ -666,6 +611,20 @@ const logBox = ref<HTMLElement | null>(null)
 const LOG_WINDOW = 60
 /* 日志滚动：接近底部才跟随，用户上翻时不打扰 */
 const logFollowsBottom = ref(true)
+const logPhaseFilter = ref('')
+/* 所有出现过的日志阶段，用于筛选 chips */
+const logPhases = computed(() => {
+  const seen = new Set<string>()
+  for (const l of logs.value) {
+    if (l.view.phase) seen.add(l.view.phase)
+  }
+  return [...seen]
+})
+const filteredLogs = computed(() => {
+  if (!logPhaseFilter.value) return logs.value
+  return logs.value.filter(l => l.view.phase === logPhaseFilter.value)
+})
+const logExpanded = ref(false)
 function onLogScroll() {
   const box = logBox.value
   if (!box) return
@@ -704,6 +663,51 @@ const pathStatusFailed = ref(false)
 const teachingDetail = ref<Record<string, unknown> | null>(null)
 const teachingDetailFailed = ref(false)
 const teachingDetailLoading = ref(false)
+/** 当前查看课时的 wrapup 总结数据 */
+const lessonWrapup = computed(() => {
+  const wrapup = teachingDetail.value?.wrapup
+  if (!wrapup || typeof wrapup !== 'object') return null
+  const w = wrapup as Record<string, unknown>
+  const summary = (w.summary || {}) as Record<string, unknown>
+  const evaluation = (w.evaluation || {}) as Record<string, unknown>
+  const evidence = (w.evidence || {}) as Record<string, unknown>
+  const progress = (w.progress || {}) as Record<string, unknown>
+  const learner = (w.learner || {}) as Record<string, unknown>
+  const knowledgeItems = Array.isArray(summary.knowledgeItems) ? summary.knowledgeItems as Array<{ name: string; status: string; progress: number; evidence: string }> : []
+  const confusionPoints = Array.isArray(evidence.topConfusionPoints) ? evidence.topConfusionPoints as string[] : []
+  const highlights = (summary.evaluationHighlights || {}) as Record<string, unknown>
+  const emotions = (evidence.emotionalSignals || {}) as Record<string, unknown>
+  return {
+    status: String(w.status || ''),
+    duration: numberValue(w.duration),
+    topicSummary: String(summary.topicSummary || ''),
+    knowledgeSummary: String(summary.knowledgeSummary || ''),
+    practiceAdvice: String(summary.practiceAdvice || ''),
+    learningEvaluation: String(summary.learningEvaluation || ''),
+    keyTakeaways: Array.isArray(summary.keyTakeaways) ? summary.keyTakeaways as string[] : [],
+    actionPlan: Array.isArray(summary.actionPlan) ? summary.actionPlan as string[] : [],
+    knowledgeItems,
+    confusionPoints,
+    strengths: Array.isArray(highlights.strengths) ? highlights.strengths as string[] : [],
+    improvements: Array.isArray(highlights.improvements) ? highlights.improvements as string[] : [],
+    lss: numberValue(evaluation.sessionLss),
+    ktl: numberValue(evaluation.sessionKtl),
+    lf: numberValue(evaluation.sessionLf),
+    turnCount: numberValue(evidence.turnCount),
+    avgUnderstanding: numberValue(evidence.avgUnderstanding),
+    avgEngagement: numberValue(evidence.avgEngagement),
+    dominantCognitiveLevel: String(evidence.dominantCognitiveLevel || ''),
+    lastCognitiveLevel: String(evidence.lastCognitiveLevel || ''),
+    positiveEmotions: numberValue(emotions.positive) || 0,
+    neutralEmotions: numberValue(emotions.neutral) || 0,
+    frustratedEmotions: numberValue(emotions.frustrated) || 0,
+    confusedEmotions: numberValue(emotions.confused) || 0,
+    fatigueRisk: String(learner.fatigueRisk || ''),
+    recommendedPacing: String(learner.recommendedPacing || ''),
+    newlyMastered: Array.isArray(progress.newlyMastered) ? progress.newlyMastered as string[] : [],
+  }
+})
+const hasLessonWrapup = computed(() => !!lessonWrapup.value && (!!lessonWrapup.value.topicSummary || !!lessonWrapup.value.knowledgeSummary))
 const selectedTeachingSessionId = ref('')
 
 interface EvaluationReport {
@@ -856,10 +860,9 @@ const autopilotStartTitle = computed(() => {
 })
 const autopilotResultText = computed(() => {
   const st = autopilot.value.status
-  if (st === 'completed') return '已完成：最终目标达成（Path 全部任务跑完）'
-  if (st === 'failed') return `已失败：${firstText(autopilot.value.lastError) || '未知原因'}`
-  if (st === 'stopped') return `已停止：${firstText(autopilot.value.lastError) || '手动停止'}`
-  if (st === 'running') return `运行中：已推进 ${Number(autopilot.value.steps || 0)} 步 · ${autopilot.value.lastStage || '…'}`
+  if (st === 'completed') return '✅ 全部完成：Path 所有任务已跑完'
+  if (st === 'failed') return `❌ 运行失败：${firstText(autopilot.value.lastError) || '未知原因'}`
+  if (st === 'stopped') return '⏸ 已停止自动驾驶'
   return ''
 })
 const statusTone = computed(() =>
@@ -891,6 +894,7 @@ type StageKey = (typeof stageFlow)[number]
 
 /* 阶段分页：阶段条即 tab，默认跟随 currentStage；控制面板与日志常驻 */
 const activeTab = ref<StageKey>('goal')
+const sidebarOpen = reactive({ run: true, logs: true, review: false, trace: false })
 function selectStageTab(st: StageKey) {
   if (isBlackbox.value) return
   activeTab.value = st
@@ -989,11 +993,34 @@ const learnLessons = computed<LearnLesson[]>(() => {
   return lessons
 })
 
+/** Path → Milestones → Lessons 的层级分组，用于 Learn 树形视图 */
+const lessonTree = computed(() => {
+  const tree: { milestone: string; lessons: LearnLesson[]; doneCount: number }[] = []
+  const map = new Map<string, LearnLesson[]>()
+  for (const l of learnLessons.value) {
+    const key = l.milestone
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(l)
+  }
+  for (const m of pathMilestonesView.value) {
+    const lessons = map.get(m.title) || []
+    if (lessons.length) {
+      tree.push({ milestone: m.title, lessons, doneCount: lessons.filter(l => l.state === 'done').length })
+    }
+  }
+  return tree
+})
+
 function lessonMark(state: LessonState) {
   return { done: '✓', active: '▸', failed: '✕', pending: '·' }[state]
 }
 function lessonStateLabel(state: LessonState) {
   return { done: '已完成', active: '进行中', failed: '失败，可重启恢复', pending: '未开始' }[state]
+}
+/** 全局课程编号（跨里程碑递增） */
+function lessonNumber(taskId: string) {
+  const idx = learnLessons.value.findIndex(l => l.taskId === taskId)
+  return idx >= 0 ? idx + 1 : 0
 }
 
 /* Learn 页 = 单课视图：正在查看的课节（默认当前进行中的课），
@@ -1503,13 +1530,28 @@ const wrapupEmptyHint = computed(() =>
     ? '该真实会话未生成总结（无 wrapup 记录）。'
     : '尚无学习总结。Learn 产生进度后点击「生成总结」。'
 )
+/** Wrapup 卡片图标映射 */
+function wrapupCardIcon(label: string) {
+  const map: Record<string, string> = {
+    '主题摘要': '📖',
+    '知识总结': '🧠',
+    '练习建议': '💡',
+    '学习评估': '📊',
+  }
+  return map[label] || '📋'
+}
+/** 从总结页点击课时 → 跳转到 Learn 标签并打开该课时的总结 */
+function viewLessonSummary(lesson: LearnLesson) {
+  activeTab.value = 'learning'
+  nextTick(() => openLesson(lesson))
+}
 
 function stageLabel(st: string) {
   return {
-    goal: 'Goal 对话',
-    path: 'Path 生成',
-    learning: 'Learn 学习',
-    wrapup: 'Wrapup 总结'
+    goal: 'Goal',
+    path: 'Path',
+    learning: 'Learn',
+    wrapup: '总结'
   }[st] || st
 }
 
@@ -1632,6 +1674,34 @@ const runSummary = computed(() => {
   const parts = [goalInfo.value, pathInfo.value, learnInfo.value].filter(Boolean)
   return parts.join(' ｜ ')
 })
+/** 会话状态简短标签 */
+const sessionStatusLabel = computed(() => {
+  if (isRealMode.value) return '只读'
+  if (autopilotRunning.value) return '自动驾驶'
+  if (session.value?.status === 'running') return '运行中'
+  if (session.value?.status === 'completed') return '已完成'
+  if (session.value?.status === 'failed') return '失败'
+  return ''
+})
+/** 阶段迷你状态文本 */
+function stageMiniStatus(st: StageKey) {
+  if (st === 'goal') {
+    const n = goalConversationMessages.value.length
+    return n ? `${n} 轮` : (stageDone(st) ? '已收敛' : '')
+  }
+  if (st === 'path') {
+    return pathMilestonesView.value.length ? `${pathMilestonesView.value.length} 个里程碑` : ''
+  }
+  if (st === 'learning') {
+    const done = learnLessons.value.filter(l => l.state === 'done').length
+    const total = learnLessons.value.length
+    return total ? `${done}/${total}` : ''
+  }
+  if (st === 'wrapup') {
+    return hasWrapup.value ? '已生成' : ''
+  }
+  return ''
+}
 
 /* 数据加载 */
 async function refresh() {
@@ -1928,7 +1998,7 @@ async function saveFriction() {
     await adminVirtualLearnersApi.updateSessionSimulationConfig(sessionId.value, {
       frictionBudget: frictionBudget.value
     })
-    toast.success(`对抗预算已更新：${frictionBudget.value}`)
+    toast.success(`难度等级已更新：${frictionBudget.value}`)
   } catch (e) {
     frictionBudget.value = previous
     toast.error(`更新失败：${errMsg(e)}`)
@@ -2218,10 +2288,63 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 </script>
 
 <style scoped>
-.cp { gap: 14px; }
-.cp-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-.cp-title { margin: 0; font-size: 16px; line-height: 1.4; }
-.cp-title__id { font-size: 11.5px; color: var(--mk-faint); font-weight: 600; }
+/* ===== Top bar ===== */
+.cp { gap: 0; }
+.cp-topbar {
+  background: var(--mk-surface);
+  border-bottom: 1px solid var(--mk-line);
+  padding: 12px 16px 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  margin: -8px -8px 0;
+}
+.cp-topbar__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+}
+.cp-title { margin: 0; font-size: 15px; line-height: 1.4; }
+.cp-title__id { font-size: 11px; color: var(--mk-faint); font-weight: 600; }
+.cp-topbar__spacer { flex: 1; }
+.cp-topbar__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.cp-topbar__dot--ok { background: var(--mk-green); }
+.cp-topbar__dot--info { background: var(--mk-blue); }
+.cp-topbar__dot--warn { background: var(--mk-amber); }
+.cp-topbar__dot--bad { background: var(--mk-red); }
+.cp-topbar__dot--muted { background: var(--mk-faint); }
+.cp-topbar__status { font-size: 13px; font-weight: 700; }
+.cp-topbar__mode { font-size: 11.5px; color: var(--mk-faint); }
+.cp-topbar__btn {
+  border: 1px solid var(--mk-line);
+  border-radius: 6px;
+  background: var(--mk-surface);
+  color: var(--mk-ink);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.cp-topbar__btn:hover:not(:disabled) { border-color: var(--mk-blue); color: var(--mk-blue); }
+.cp-topbar__btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.cp-topbar__btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
+.cp-topbar__btn--primary:hover:not(:disabled) { opacity: 0.9; }
+.cp-topbar__btn--danger { background: var(--mk-red-strong, var(--mk-red)); border-color: var(--mk-red-strong, var(--mk-red)); color: #fff; }
+.cp-topbar__sep { width: 1px; height: 20px; background: var(--mk-line); flex-shrink: 0; margin: 0 2px; }
+.cp-topbar__autopilot {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--mk-amber);
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.1);
+  white-space: nowrap;
+}
+
 .cp-back {
   border: 0;
   background: transparent;
@@ -2232,279 +2355,294 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 6px;
-  width: fit-content;
-  transition: background-color 0.1s ease, transform 0.1s ease;
+  transition: background-color 0.1s ease;
 }
 .cp-back:hover { background: #eff6ff; }
-.cp-back:active { transform: translateY(1px); }
-.cp-danger { background: var(--mk-red-strong, var(--mk-red)); border-color: var(--mk-red-strong, var(--mk-red)); color: #fff; }
-.cp-danger:hover:not(:disabled) { opacity: 0.9; }
 
-.cp-stages {
+/* ----- Stage progress bar ----- */
+.cp-topbar__stages {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin: 2px 0 4px;
+  gap: 0;
+  position: relative;
+  padding: 0 4px;
 }
-/* 阶段胶囊：极简一行，只保留名称、状态标记与进度 */
 .cp-stage {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 14px;
-  border-radius: 999px;
+  padding: 10px 18px;
+  border: none;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--mk-muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+  border-radius: 0;
+}
+.cp-stage:hover:not(:disabled) { color: var(--mk-ink); }
+.cp-stage__mark { font-size: 11px; width: 14px; text-align: center; }
+.cp-stage__label { font-size: 13px; }
+.cp-stage__progress { font-size: 10.5px; font-weight: 600; color: var(--mk-faint); }
+.cp-stage:disabled { cursor: default; opacity: 0.8; }
+.cp-stage--active { border-bottom-color: var(--mk-blue); color: var(--mk-blue); }
+.cp-stage--active .cp-stage__mark { color: var(--mk-blue); }
+.cp-stage--active .cp-stage__progress { color: var(--mk-blue); }
+.cp-stage--tab { }
+.cp-stage--done { color: var(--mk-green); border-bottom-color: var(--mk-green); }
+.cp-stage--done .cp-stage__mark { color: var(--mk-green); }
+.cp-stage--done .cp-stage__progress { color: var(--mk-green); }
+
+/* Stage connecting lines */
+.cp-stage-line {
+  flex: 1 1 24px;
+  min-width: 16px;
+  height: 2px;
+  background: var(--mk-line);
+  margin-bottom: 3px;
+  align-self: center;
+  z-index: 0;
+}
+.cp-stage-line.is-done { background: var(--mk-green); }
+
+/* ===== Body: main + sidebar ===== */
+.cp-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 14px;
+  align-items: start;
+  margin-top: 14px;
+}
+.cp-main {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  min-width: 0;
+}
+
+/* ===== Sidebar ===== */
+.cp-sidebar {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  position: sticky;
+  top: 84px;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+}
+.cp-sidebar__section {
   border: 1px solid var(--mk-line);
+  border-radius: 10px;
   background: var(--mk-surface);
+  overflow: hidden;
+}
+.cp-sidebar__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
   font: inherit;
   font-size: 12.5px;
   font-weight: 700;
   color: var(--mk-ink);
   cursor: pointer;
+  transition: background 0.1s ease;
+  text-align: left;
 }
-.cp-stage__mark { width: 12px; text-align: center; color: var(--mk-faint); font-size: 12px; }
-.cp-stage__progress { font-size: 11px; font-weight: 700; color: var(--mk-faint); }
-.cp-stage:disabled { cursor: default; opacity: 0.8; }
-.cp-stage--active { border-color: var(--mk-blue); background: #eef5ff; color: var(--mk-blue); }
-.cp-stage--active .cp-stage__mark { color: var(--mk-blue); }
-.cp-stage--tab { box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.3); }
-.cp-stage--done { border-color: rgba(21, 128, 61, 0.35); background: rgba(21, 128, 61, 0.05); }
-.cp-stage--done .cp-stage__mark { color: var(--mk-green); }
+.cp-sidebar__toggle:hover { background: rgba(0,0,0,0.02); }
+.cp-sidebar__toggle.is-open { border-bottom: 1px solid var(--mk-line); }
+.cp-sidebar__toggle-icon { font-size: 10px; color: var(--mk-faint); width: 14px; flex-shrink: 0; }
+.cp-sidebar__toggle-hint { font-size: 10.5px; color: var(--mk-faint); font-weight: 400; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+.cp-sidebar__body { padding: 10px 14px 14px; display: grid; gap: 8px; }
 
-.cp-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: 14px;
-  align-items: start;
+/* ----- Run in sidebar ----- */
+.cp-run { display: grid; gap: 10px; }
+.cp-run__actions { display: grid; gap: 6px; }
+.cp-btn--block { width: 100%; justify-content: center; }
+.cp-run__autopilot-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.1);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--mk-amber);
 }
-
-/* 运行卡：主操作一行 + 底部配置/摘要一行 */
-.cp-run { padding: 12px 16px 14px; display: grid; gap: 10px; }
-.cp-run__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cp-run__autopilot-result { font-size: 12.5px; font-weight: 700; padding: 6px 10px; border-radius: 8px; background: var(--mk-surface); }
+.cp-run__autopilot-alert-icon { font-size: 14px; }
+.cp-run__autopilot-result { font-size: 11.5px; font-weight: 700; padding: 6px 10px; border-radius: 6px; background: #f8fafc; }
 .cp-run__autopilot-result--ok { color: var(--mk-green, #15803d); }
 .cp-run__autopilot-result--bad { color: var(--mk-red, #b91c1c); }
 .cp-run__autopilot-result--muted { color: var(--mk-muted); }
-.cp-run__foot {
+
+/* 阶段进度指示 */
+.cp-run__stages {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+.cp-run__stage-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding-top: 10px;
-  border-top: 1px solid var(--mk-line);
-  font-size: 12px;
-  color: var(--mk-muted);
+  gap: 8px;
+  font-size: 11.5px;
 }
-.cp-run__budget { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
-.cp-run__budget select { min-width: 110px; }
-.cp-run__summary { flex: 1; min-width: 200px; font-size: 12px; }
-.cp-run__summary--muted { color: var(--mk-faint); }
-.cp-run__readiness { font-size: 12px; font-weight: 700; }
+.cp-run__stage-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cp-run__stage-dot--done { background: var(--mk-green); }
+.cp-run__stage-dot--active { background: var(--mk-blue); }
+.cp-run__stage-dot--pending { background: var(--mk-line); }
+.cp-run__stage-label {
+  font-weight: 700;
+  color: var(--mk-ink);
+  width: 40px;
+  flex-shrink: 0;
+}
+.cp-run__stage-status {
+  color: var(--mk-faint);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cp-run__foot {
+  display: grid;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--mk-line);
+}
+.cp-run__budget { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 11.5px; color: var(--mk-muted); }
+.cp-run__budget select { min-width: 90px; font-size: 11.5px; }
+.cp-run__readiness { font-size: 11px; font-weight: 700; }
 .cp-run__readiness--ok { color: var(--mk-green, #15803d); }
 .cp-run__readiness--pending { color: var(--mk-amber, #b45309); }
 .cp-run__readiness--bad { color: var(--mk-red, #b91c1c); }
-.mk-status__spacer { flex: 1; }
-
-.cp-btn {
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid var(--mk-line);
-  background: var(--mk-surface);
-  color: var(--mk-ink);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.cp-btn:hover:not(:disabled) { border-color: rgba(44, 99, 208, 0.4); color: var(--mk-blue); }
-.cp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.cp-btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
-/* 自动学习回合上限输入框（与按钮同排，窄体） */
-.cp-turn-cap {
-  width: 64px;
-  padding: 7px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--mk-line);
-  background: var(--mk-surface);
-  color: var(--mk-ink);
-  font: inherit;
-  font-size: 12.5px;
-}
-.cp-btn--primary:hover:not(:disabled) { color: #fff; opacity: 0.9; }
-/* 危险操作：实心红（与 .mk-btn--danger 一致） */
-.cp-danger-btn { background: var(--mk-red-strong, var(--mk-red)); border-color: var(--mk-red-strong, var(--mk-red)); color: #fff; }
-.cp-danger-btn:hover:not(:disabled) { color: #fff; opacity: 0.9; }
-/* 自动驾驶中徽标（运行卡内联） */
 .cp-autopilot__badge {
-  font-size: 12px;
-  font-weight: 700;
-  padding: 5px 10px;
-  border-radius: 999px;
+  font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
 }
 .cp-autopilot__badge--running { background: rgba(245, 158, 11, 0.14); color: var(--mk-amber, #b45309); }
-.cp-tab-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 16px 0; }
 
-.cp-none { margin: 0; font-size: 12.5px; color: var(--mk-faint); }
-
+/* ----- Logs in sidebar ----- */
+.cp-logs {
+  max-height: 360px;
+  overflow-y: auto;
+  display: grid;
+  gap: 4px;
+  position: relative;
+}
 .cp-logs__follow {
-  font-size: 10.5px; font-weight: 700; color: var(--mk-green); cursor: pointer;
-  padding: 2px 8px; border-radius: 999px; background: rgba(16, 185, 129, 0.08);
-  transition: background 0.12s ease;
+  position: sticky;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  margin-left: auto;
+  width: fit-content;
+  font-size: 10px; font-weight: 700; color: var(--mk-green); cursor: pointer;
+  padding: 2px 6px; border-radius: 999px; background: rgba(16, 185, 129, 0.08);
 }
 .cp-logs__follow:hover { background: rgba(16, 185, 129, 0.15); }
 .cp-logs__follow.is-paused { color: var(--mk-amber); background: rgba(217, 119, 6, 0.08); }
-
-.cp-logs {
-  max-height: 320px;
-  overflow-y: auto;
-  padding: 10px 16px 14px;
-  display: grid;
-  gap: 6px;
+.cp-logs__filter { display: flex; gap: 4px; flex-wrap: wrap; padding-bottom: 6px; border-bottom: 1px solid var(--mk-line); margin-bottom: 4px; }
+.cp-logs__filter-chip {
+  padding: 2px 8px; border-radius: 999px; border: 1px solid var(--mk-line);
+  background: var(--mk-surface); font: inherit; font-size: 10px; font-weight: 600;
+  color: var(--mk-muted); cursor: pointer; transition: all 0.12s ease;
 }
-.cp-log { display: flex; align-items: baseline; gap: 8px; font-size: 12px; flex-wrap: wrap; }
-.cp-log--error { padding: 6px 10px; border-radius: 8px; background: var(--mk-red-bg); }
-.cp-log__time { color: var(--mk-faint); font-family: var(--mk-mono); font-size: 10.5px; white-space: nowrap; padding-top: 1px; }
-.cp-log__phase {
-  padding: 0 7px;
-  border-radius: 99px;
-  font-size: 10.5px;
+.cp-logs__filter-chip:hover { border-color: var(--mk-blue); color: var(--mk-blue); }
+.cp-logs__filter-chip.is-active { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
+
+/* ----- Review in sidebar ----- */
+.cp-review-panel__actions { display: flex; flex-wrap: wrap; gap: 5px; }
+
+/* ===== Shared components ===== */
+.cp-btn {
+  padding: 7px 14px;
+  border-radius: 7px;
+  border: 1px solid var(--mk-line);
+  background: var(--mk-surface);
+  color: var(--mk-ink);
+  font: inherit;
+  font-size: 12px;
   font-weight: 700;
-  background: #eef2ff;
-  color: #4453a1;
-  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.cp-btn--sm { padding: 5px 10px; font-size: 11px; border-radius: 6px; }
+.cp-btn:hover:not(:disabled) { border-color: rgba(44, 99, 208, 0.4); color: var(--mk-blue); }
+.cp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.cp-btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
+.cp-btn--primary:hover:not(:disabled) { color: #fff; opacity: 0.9; }
+.cp-danger-btn { background: var(--mk-red-strong, var(--mk-red)); border-color: var(--mk-red-strong, var(--mk-red)); color: #fff; }
+.cp-danger-btn:hover:not(:disabled) { color: #fff; opacity: 0.9; }
+.cp-turn-cap {
+  width: 56px; padding: 5px 6px; border-radius: 6px; border: 1px solid var(--mk-line);
+  background: var(--mk-surface); color: var(--mk-ink); font: inherit; font-size: 12px;
+}
+.cp-tab-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 16px 0; align-items: center; }
+.cp-tab-actions__sep { width: 1px; height: 20px; background: var(--mk-line); flex-shrink: 0; }
+.cp-tab-actions__spacer { flex: 1; }
+.cp-turn-cap-label { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--mk-faint); font-weight: 600; }
+.cp-none { margin: 0; font-size: 12px; color: var(--mk-faint); }
+
+/* Log line */
+.cp-log { display: flex; align-items: baseline; gap: 6px; font-size: 11px; flex-wrap: wrap; }
+.cp-log--error { padding: 4px 8px; border-radius: 6px; background: var(--mk-red-bg); }
+.cp-log__time { color: var(--mk-faint); font-family: var(--mk-mono); font-size: 10px; white-space: nowrap; padding-top: 1px; }
+.cp-log__phase {
+  padding: 0 5px; border-radius: 99px; font-size: 10px; font-weight: 700;
+  background: #eef2ff; color: #4453a1; white-space: nowrap;
 }
 .cp-log__phase--error { background: var(--mk-red); color: #fff; }
 .cp-log__text { color: var(--mk-muted); word-break: break-all; min-width: 0; flex: 1 1 auto; }
 .cp-log--error .cp-log__text { color: var(--mk-red); font-weight: 600; }
-.cp-log__dur {
-  color: var(--mk-faint);
-  font-family: var(--mk-mono);
-  font-size: 10.5px;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-.cp-log__raw { font-size: 11px; flex-basis: 100%; }
+.cp-log__dur { color: var(--mk-faint); font-family: var(--mk-mono); font-size: 10px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cp-log__raw { font-size: 10.5px; flex-basis: 100%; }
 .cp-log__raw summary { cursor: pointer; color: var(--mk-faint); font-weight: 600; user-select: none; }
 .cp-log__raw pre {
-  margin: 4px 0 0;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: var(--mk-code-bg);
-  color: var(--mk-code-fg);
-  font: 10.5px/1.5 var(--mk-mono);
-  white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 160px;
-  overflow: auto;
+  margin: 4px 0 0; padding: 6px 8px; border-radius: 6px; background: var(--mk-code-bg);
+  color: var(--mk-code-fg); font: 10px/1.5 var(--mk-mono); white-space: pre-wrap;
+  word-break: break-all; max-height: 120px; overflow: auto;
 }
-
-/* 初始加载占位（session 未就绪时不显示假空态） */
-.cp-log-skel { height: 13px; border-radius: 4px; background: linear-gradient(90deg, #eef2fa, #f7f9fc 55%, #eef2fa); background-size: 220% 100%; animation: cp-skel 1.4s ease infinite; }
+.cp-log-skel { height: 11px; border-radius: 4px; background: linear-gradient(90deg, #eef2fa, #f7f9fc 55%, #eef2fa); background-size: 220% 100%; animation: cp-skel 1.4s ease infinite; }
 @keyframes cp-skel { from { background-position: 120% 0; } to { background-position: -120% 0; } }
 .cp-path-skel { display: grid; gap: 8px; }
 .cp-path-skel > div { height: 40px; border-radius: 8px; background: linear-gradient(90deg, #eef2fa, #f7f9fc 55%, #eef2fa); background-size: 220% 100%; animation: cp-skel 1.4s ease infinite; }
 
-/* 区块降级提示（获取失败 + 重试） */
+/* Degrade */
 .cp-degrade {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--mk-red);
-  padding: 7px 10px;
-  border-radius: 8px;
-  background: var(--mk-red-bg);
+  margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px;
+  font-weight: 600; color: var(--mk-red); padding: 7px 10px; border-radius: 8px; background: var(--mk-red-bg);
 }
 .cp-degrade .mk-link { font-size: 12px; }
 
+/* Transcripts */
 .cp-transcripts { display: grid; gap: 10px; padding: 12px 16px 16px; }
 .cp-transcript {
-  display: grid;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: 10px;
+  display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: 10px;
 }
 .cp-transcript summary { cursor: pointer; font-size: 12px; font-weight: 800; color: var(--mk-muted); }
 .cp-transcript__message {
-  display: grid;
-  gap: 3px;
-  padding: 8px 10px;
-  border-left: 3px solid #cbd5e1;
-  border-radius: 5px;
-  background: #f8fafc;
+  display: grid; gap: 3px; padding: 8px 10px; border-left: 3px solid #cbd5e1; border-radius: 5px; background: #f8fafc;
 }
 .cp-transcript__message.is-teacher { border-left-color: var(--mk-blue); background: #eff6ff; }
 .cp-transcript__message.is-learner { border-left-color: var(--mk-teal); background: #f0fdfa; }
 .cp-transcript__message span { font-size: 10.5px; font-weight: 800; color: var(--mk-faint); }
 .cp-transcript__message p { margin: 0; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
-.cp-teaching-history { display: flex; flex-wrap: wrap; gap: 6px; }
-.cp-history-btn {
-  border: 1px solid var(--mk-line);
-  border-radius: 6px;
-  background: var(--mk-surface);
-  color: var(--mk-muted);
-  padding: 4px 7px;
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-.cp-history-btn:hover, .cp-history-btn.is-current { border-color: var(--mk-blue); color: var(--mk-blue); background: #eff6ff; }
 
-.cp-lesson-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 10px 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: 10px;
-  background: #f8fafc;
-}
-.cp-lesson-head__main { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
-.cp-lesson-head__main strong { font-size: 13px; }
-.cp-lesson-head__ms { font-size: 11px; color: var(--mk-faint); }
-.cp-lesson-head__state { padding: 2px 8px; border-radius: 4px; font-size: 10.5px; font-weight: 800; background: #f3f5f9; color: var(--mk-muted); }
-.cp-lesson-head__state[data-state='done'] { background: var(--mk-green-bg); color: var(--mk-green); }
-.cp-lesson-head__state[data-state='active'] { background: #eff6ff; color: var(--mk-blue); }
-.cp-lesson-head__state[data-state='failed'] { background: var(--mk-red-bg); color: var(--mk-red); }
-.cp-lesson-head__nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.cp-lesson-head__select {
-  max-width: 240px;
-  border: 1px solid var(--mk-line);
-  border-radius: 6px;
-  background: var(--mk-surface);
-  color: var(--mk-muted);
-  padding: 4px 6px;
-  font: inherit;
-  font-size: 11px;
-}
-
+/* Path detail */
 .cp-path-detail { display: grid; gap: 10px; padding: 12px 16px 16px; align-content: start; }
-.cp-path-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 0;
-  align-items: start;
-}
-.cp-review-panel {
-  display: grid;
-  gap: 10px;
-  padding: 12px 16px 16px;
-  border-left: 1px solid var(--mk-line);
-  align-content: start;
-}
-.cp-review-panel__head { display: grid; gap: 2px; }
-.cp-review-panel__head span { font-size: 12.5px; font-weight: 800; }
-.cp-review-panel__head em { font-style: normal; font-size: 10.5px; color: var(--mk-faint); }
-.cp-review-panel__actions { display: flex; flex-wrap: wrap; gap: 6px; }
-@media (max-width: 1100px) {
-  .cp-path-grid { grid-template-columns: 1fr; }
-  .cp-review-panel { border-left: none; border-top: 1px solid var(--mk-line); }
-}
 .cp-path-detail__head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .cp-path-detail__head strong { font-size: 13.5px; }
 .cp-path-detail__meta { font-size: 11px; color: var(--mk-faint); }
@@ -2520,6 +2658,9 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-task-list li.is-done { color: var(--mk-green); }
 .cp-task-list li.is-current { color: var(--mk-blue); font-weight: 700; }
 .cp-task-list__mark { flex: 0 0 auto; font-family: var(--mk-mono); }
+.cp-task-list__num { font-size: 10.5px; color: var(--mk-faint); font-weight: 600; flex-shrink: 0; }
+
+/* Review */
 .cp-review { display: grid; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #f8fafc; }
 .cp-review__badges { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .cp-review__badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 800; background: #f3f5f9; color: var(--mk-muted); }
@@ -2532,95 +2673,444 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-review__changes { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: 11.5px; color: var(--mk-muted); }
 .cp-review__replan { margin: 0; font-size: 11px; color: var(--mk-blue); }
 
-.cp-wrapup { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: 9px; }
-.cp-wrapup__label { font-size: 11px; font-weight: 800; color: var(--mk-faint); }
-.cp-wrapup p { margin: 0; font-size: 12.5px; line-height: 1.65; white-space: pre-wrap; }
+/* ===== Learn 双栏：课程树 + 对话 ===== */
+.cp-learn-grid {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 0;
+  min-height: 300px;
+}
+.cp-learn-tree {
+  border-right: 1px solid var(--mk-line);
+  padding: 6px 0;
+  overflow-y: auto;
+  max-height: 520px;
+}
+.cp-learn-tree__group {
+  padding: 0;
+}
+.cp-learn-tree__group + .cp-learn-tree__group {
+  border-top: 1px solid var(--mk-line);
+}
+.cp-learn-tree__ms {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 6px;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--mk-ink);
+  background: #f8fafc;
+  letter-spacing: 0.02em;
+}
+.cp-learn-tree__ms-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cp-learn-tree__ms-count {
+  font-size: 10.5px;
+  color: var(--mk-muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--mk-surface);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.cp-learn-tree__lesson {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 12px 7px 24px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: var(--mk-muted);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s ease, color 0.1s ease;
+  border-left: 3px solid transparent;
+}
+.cp-learn-tree__lesson:hover:not(:disabled) { background: rgba(0,0,0,0.02); color: var(--mk-ink); }
+.cp-learn-tree__lesson:disabled { opacity: 0.45; cursor: default; }
+.cp-learn-tree__lesson.is-active { background: #eff6ff; color: var(--mk-blue); border-left-color: var(--mk-blue); font-weight: 700; }
+.cp-learn-tree__lesson.is-done { color: var(--mk-green); }
+.cp-learn-tree__lesson.is-active.is-done { color: var(--mk-blue); }
+.cp-learn-tree__mark { font-size: 10px; width: 14px; text-align: center; flex-shrink: 0; }
+.cp-learn-tree__lesson.is-done .cp-learn-tree__mark { color: var(--mk-green); }
+.cp-learn-tree__lesson.is-active .cp-learn-tree__mark { color: var(--mk-blue); }
+.cp-learn-tree__num { font-size: 10.5px; color: var(--mk-faint); font-weight: 600; flex-shrink: 0; }
+.cp-learn-tree__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-learn-chat {
+  padding: 12px 16px 16px;
+  overflow-y: auto;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+@media (max-width: 900px) {
+  .cp-learn-grid { grid-template-columns: 1fr; }
+  .cp-learn-tree { border-right: none; border-bottom: 1px solid var(--mk-line); max-height: 200px; }
+}
+
+/* Lesson head */
+.cp-lesson-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: 10px; background: #f8fafc;
+  margin-bottom: 10px;
+}
+
+/* ===== 课时总结卡片 ===== */
+.cp-lesson-wrapup {
+  border: 1px solid rgba(21, 128, 61, 0.3);
+  border-radius: 10px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #f8fafc 100%);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.cp-lesson-wrapup__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: rgba(21, 128, 61, 0.06);
+  border-bottom: 1px solid rgba(21, 128, 61, 0.12);
+}
+.cp-lesson-wrapup__badge {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--mk-green);
+}
+.cp-lesson-wrapup__scores {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cp-lesson-wrapup__score {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--mk-muted);
+  background: #fff;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--mk-line);
+}
+.cp-lesson-wrapup__score--primary {
+  color: var(--mk-blue);
+  border-color: rgba(44, 99, 208, 0.3);
+  background: #eff6ff;
+}
+.cp-lesson-wrapup__body {
+  padding: 12px 14px;
+  display: grid;
+  gap: 12px;
+}
+.cp-lesson-wrapup__section {
+  display: grid;
+  gap: 6px;
+}
+.cp-lesson-wrapup__section-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--mk-faint);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.cp-lesson-wrapup__text {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--mk-ink);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+.cp-lesson-wrapup__takeaways {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 3px;
+}
+.cp-lesson-wrapup__takeaways li {
+  font-size: 12px;
+  color: var(--mk-muted);
+  line-height: 1.5;
+}
+
+/* 知识点 */
+.cp-lesson-wrapup__kp {
+  display: grid;
+  grid-template-columns: 1fr auto 80px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.cp-lesson-wrapup__kp-name {
+  font-size: 12px;
+  color: var(--mk-ink);
+  font-weight: 600;
+}
+.cp-lesson-wrapup__kp-status {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.cp-lesson-wrapup__kp-status.is-mastered { background: var(--mk-green-bg); color: var(--mk-green); }
+.cp-lesson-wrapup__kp-status.is-learning { background: #eff6ff; color: var(--mk-blue); }
+.cp-lesson-wrapup__kp-status.is-review { background: var(--mk-amber-bg); color: var(--mk-amber); }
+.cp-lesson-wrapup__kp-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--mk-line);
+  overflow: hidden;
+}
+.cp-lesson-wrapup__kp-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--mk-green);
+  transition: width 0.3s ease;
+}
+
+/* 评估 */
+.cp-lesson-wrapup__eval-item {
+  display: grid;
+  grid-template-columns: 50px 1fr;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--mk-muted);
+  line-height: 1.5;
+}
+.cp-lesson-wrapup__eval-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-align: center;
+  height: fit-content;
+}
+.cp-lesson-wrapup__eval-label--good { background: var(--mk-green-bg); color: var(--mk-green); }
+.cp-lesson-wrapup__eval-label--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
+
+/* 底部元信息 */
+.cp-lesson-wrapup__meta-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 10.5px;
+  color: var(--mk-faint);
+  padding-top: 4px;
+  border-top: 1px solid var(--mk-line);
+}
+.cp-lesson-head__main { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.cp-lesson-head__main strong { font-size: 13px; }
+.cp-lesson-head__ms { font-size: 11px; color: var(--mk-faint); }
+.cp-lesson-head__state { padding: 2px 8px; border-radius: 4px; font-size: 10.5px; font-weight: 800; background: #f3f5f9; color: var(--mk-muted); }
+.cp-lesson-head__state[data-state='done'] { background: var(--mk-green-bg); color: var(--mk-green); }
+.cp-lesson-head__state[data-state='active'] { background: #eff6ff; color: var(--mk-blue); }
+.cp-lesson-head__state[data-state='failed'] { background: var(--mk-red-bg); color: var(--mk-red); }
+.cp-lesson-head__nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cp-lesson-head__select { max-width: 240px; border: 1px solid var(--mk-line); border-radius: 6px; background: var(--mk-surface); color: var(--mk-muted); padding: 4px 6px; font: inherit; font-size: 11px; }
+.cp-teaching-history { display: flex; flex-wrap: wrap; gap: 6px; }
+.cp-history-btn {
+  border: 1px solid var(--mk-line); border-radius: 6px; background: var(--mk-surface); color: var(--mk-muted);
+  padding: 4px 7px; font: inherit; font-size: 11px; cursor: pointer;
+}
+.cp-history-btn:hover, .cp-history-btn.is-current { border-color: var(--mk-blue); color: var(--mk-blue); background: #eff6ff; }
+
+/* ===== Wrapup 学习报告 ===== */
+.cp-wrapup-lessons {
+  display: grid;
+  gap: 0;
+  border-bottom: 1px solid var(--mk-line);
+}
+.cp-wrapup-ms {
+  padding: 0;
+}
+.cp-wrapup-ms + .cp-wrapup-ms {
+  border-top: 1px solid var(--mk-line);
+}
+.cp-wrapup-ms__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--mk-ink);
+  background: #f8fafc;
+}
+.cp-wrapup-ms__count {
+  font-size: 10.5px;
+  color: var(--mk-muted);
+  font-weight: 600;
+  background: var(--mk-surface);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.cp-wrapup-lesson {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px 8px 32px;
+  font-size: 12px;
+  color: var(--mk-muted);
+  cursor: default;
+  border-left: 3px solid transparent;
+  transition: background 0.1s ease;
+}
+.cp-wrapup-lesson.is-done {
+  color: var(--mk-green);
+  cursor: pointer;
+}
+.cp-wrapup-lesson.is-done:hover {
+  background: #f0fdf4;
+}
+.cp-wrapup-lesson.is-active {
+  color: var(--mk-blue);
+  font-weight: 700;
+  background: #eff6ff;
+  border-left-color: var(--mk-blue);
+}
+.cp-wrapup-lesson__mark {
+  font-size: 10px;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.cp-wrapup-lesson__num {
+  font-size: 10.5px;
+  color: var(--mk-faint);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.cp-wrapup-lesson__title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cp-wrapup-lesson__action {
+  font-size: 11px;
+  color: var(--mk-blue);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.cp-wrapup-stats {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #f0f5ff 0%, #f8fafc 100%);
+  border-bottom: 1px solid var(--mk-line);
+}
+.cp-wrapup-stats__goal { display: grid; gap: 4px; min-width: 0; flex: 1 1 300px; }
+.cp-wrapup-stats__label { font-size: 10.5px; font-weight: 800; color: var(--mk-faint); letter-spacing: 0.04em; text-transform: uppercase; }
+.cp-wrapup-stats__goal strong { font-size: 14px; color: var(--mk-ink); line-height: 1.4; }
+.cp-wrapup-stats__badges { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cp-wrapup-stats__item { display: inline-flex; align-items: baseline; gap: 4px; font-size: 12px; color: var(--mk-muted); }
+.cp-wrapup-stats__item em { font-style: normal; font-weight: 800; font-size: 16px; color: var(--mk-blue); font-variant-numeric: tabular-nums; }
+
+.cp-wrapup-cards {
+  display: grid;
+  gap: 10px;
+  padding: 16px 20px;
+}
+.cp-wrapup-card {
+  display: flex;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  background: #fbfcfe;
+  transition: border-color 0.12s ease;
+}
+.cp-wrapup-card:hover { border-color: rgba(44, 99, 208, 0.25); }
+.cp-wrapup-card__icon {
+  font-size: 20px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #eef2ff;
+  flex-shrink: 0;
+}
+.cp-wrapup-card__body { display: grid; gap: 4px; min-width: 0; }
+.cp-wrapup-card__label { font-size: 11px; font-weight: 800; color: var(--mk-faint); letter-spacing: 0.04em; text-transform: uppercase; }
+.cp-wrapup-card__text { margin: 0; font-size: 12.5px; color: var(--mk-ink); line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+
+.cp-wrapup-sections {
+  display: grid;
+  gap: 10px;
+  padding: 0 20px 16px;
+}
+.cp-wrapup-section {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--mk-line);
+  border-radius: 9px;
+  background: #fafbfc;
+}
+.cp-wrapup-section__label { font-size: 11px; font-weight: 800; color: var(--mk-faint); letter-spacing: 0.04em; }
+.cp-wrapup-section__text { margin: 0; font-size: 12.5px; line-height: 1.7; white-space: pre-wrap; color: var(--mk-ink); }
 .cp-wrapup__json { margin: 0; font-size: 11px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; font-family: var(--mk-mono); color: var(--mk-muted); max-height: 240px; overflow: auto; }
 
+.cp-wrapup-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px 16px;
+  border-top: 1px solid var(--mk-line);
+  margin: 0 20px;
+}
+.cp-wrapup-footer .mk-badge { margin: 0; }
+
+/* Raw data */
 .cp-raw { font-size: 12px; color: var(--mk-faint); }
 .cp-raw summary { cursor: pointer; padding: 4px 2px; }
 .cp-raw pre {
-  margin: 8px 0 0;
-  padding: 12px;
-  border-radius: 10px;
-  background: var(--mk-code-bg);
-  color: var(--mk-code-fg);
-  font: 10.5px/1.6 var(--mk-mono);
-  max-height: 300px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
+  margin: 8px 0 0; padding: 12px; border-radius: 10px; background: var(--mk-code-bg); color: var(--mk-code-fg);
+  font: 10.5px/1.6 var(--mk-mono); max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-all;
 }
 
-@media (max-width: 1100px) {
-  .cp-grid { grid-template-columns: 1fr; }
-}
-
-/* ===== 终局评估结构化渲染 ===== */
+/* ===== 终局评估 ===== */
 .cp-eval-group { display: grid; gap: 10px; padding: 14px 16px 4px; }
 .cp-eval-group + .cp-eval-group { border-top: 1px solid var(--mk-line); }
 .cp-eval-group__title { margin: 0; font-size: 12px; font-weight: 700; color: var(--mk-muted); letter-spacing: 0.04em; }
-
-.cp-eval {
-  border: 1px solid var(--mk-line);
-  border-radius: 10px;
-  padding: 12px 14px;
-  display: grid;
-  gap: 10px;
-  margin-bottom: 8px;
-}
+.cp-eval { border: 1px solid var(--mk-line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 10px; margin-bottom: 8px; }
 .cp-eval__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .cp-eval__head strong { font-size: 13px; }
 .cp-eval__time { display: block; font-size: 11px; color: var(--mk-faint); margin-top: 2px; }
 .cp-eval__overall { display: grid; gap: 4px; justify-items: end; }
 .cp-eval__overall-bar { width: 110px; }
-
 .cp-eval__scores { display: flex; flex-wrap: wrap; gap: 8px; }
-.cp-eval__score {
-  display: grid;
-  gap: 3px;
-  min-width: 104px;
-  padding: 6px 9px;
-  border-radius: 6px;
-  background: #f6f8fb;
-  font-size: 11px;
-}
+.cp-eval__score { display: grid; gap: 3px; min-width: 104px; padding: 6px 9px; border-radius: 6px; background: #f6f8fb; font-size: 11px; }
 .cp-eval__score code { font-size: 10.5px; color: var(--mk-faint); }
 .cp-eval__score strong { font-variant-numeric: tabular-nums; color: var(--mk-ink); font-size: 12px; }
-
 .cp-eval__section { display: grid; gap: 6px; }
 .cp-eval__section h5 { margin: 0; font-size: 11.5px; font-weight: 700; color: var(--mk-muted); }
-
-.cp-finding {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px dashed var(--mk-line);
-}
+.cp-finding { display: grid; grid-template-columns: auto 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--mk-line); }
 .cp-finding:last-child { border-bottom: none; }
 .cp-finding strong { font-size: 12.5px; }
 .cp-finding p { margin: 4px 0 0; font-size: 12px; color: var(--mk-muted); line-height: 1.6; }
-.cp-finding__sev {
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-size: 10.5px;
-  font-weight: 700;
-  height: fit-content;
-  background: #f3f5f9;
-  color: var(--mk-muted);
-}
+.cp-finding__sev { padding: 1px 6px; border-radius: 4px; font-size: 10.5px; font-weight: 700; height: fit-content; background: #f3f5f9; color: var(--mk-muted); }
 .cp-finding__sev[data-sev='critical'] { background: var(--mk-red-bg); color: var(--mk-red); }
 .cp-finding__sev[data-sev='major'] { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .cp-finding__sev[data-sev='minor'] { background: #e6f4ff; color: #0958d9; }
 .cp-finding__sev[data-sev='info'] { background: #f0fff5; color: #389e0d; }
-
 .cp-evidence { margin-top: 6px; font-size: 11.5px; }
 .cp-evidence summary { cursor: pointer; color: var(--mk-faint); font-weight: 600; }
 .cp-evidence > div { padding: 4px 8px; border-left: 2px solid var(--mk-line); margin: 6px 0; }
 .cp-evidence code { font-size: 10.5px; color: var(--mk-faint); }
 .cp-evidence p { margin: 2px 0 0; font-size: 11.5px; color: var(--mk-muted); }
-
 .cp-rec { padding: 6px 0; border-bottom: 1px dashed var(--mk-line); }
 .cp-rec:last-child { border-bottom: none; }
 .cp-rec__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -2632,156 +3122,51 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-rec__rationale summary { cursor: pointer; font-weight: 600; }
 .cp-rec__rationale p { margin: 6px 0 0; }
 
-/* =====三类轨迹折叠面板 ===== */
+/* ===== Trace panels ===== */
 .cp-trace-panel {
-  border: 1px solid var(--mk-line);
-  border-radius: 10px;
-  background: #f8fafc;
-  margin-top: 12px;
+  border: 1px solid var(--mk-line); border-radius: 8px; background: #f8fafc;
 }
 .cp-trace-panel > summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 10px 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--mk-ink);
-  user-select: none;
+  list-style: none; cursor: pointer; padding: 8px 12px; display: flex; align-items: center;
+  justify-content: space-between; gap: 8px; font-size: 11.5px; font-weight: 700; color: var(--mk-ink); user-select: none;
 }
 .cp-trace-panel > summary::-webkit-details-marker { display: none; }
-.cp-trace-panel > summary::before { content: '▸'; font-size: 11px; color: var(--mk-faint); margin-right: 4px; }
+.cp-trace-panel > summary::before { content: '▸'; font-size: 10px; color: var(--mk-faint); margin-right: 4px; }
 .cp-trace-panel[open] > summary::before { content: '▾'; }
-.cp-trace-panel > summary code { font-size: 11px; color: var(--mk-faint); }
-
-.cp-trace-list {
-  list-style: none;
-  margin: 0;
-  padding: 0 14px 14px;
-  max-height: 460px;
-  overflow-y: auto;
-  display: grid;
-  gap: 8px;
-}
-.cp-trace-list > li {
-  padding: 9px 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: 6px;
-  background: #fff;
-  display: grid;
-  gap: 6px;
-}
-.cp-trace-list__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 11.5px; }
+.cp-trace-panel > summary code { font-size: 10.5px; color: var(--mk-faint); }
+.cp-trace-list { list-style: none; margin: 0; padding: 0 12px 12px; max-height: 360px; overflow-y: auto; display: grid; gap: 6px; }
+.cp-trace-list > li { padding: 7px 10px; border: 1px solid var(--mk-line); border-radius: 6px; background: #fff; display: grid; gap: 4px; }
+.cp-trace-list__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; }
 .cp-trace-list__seq { font-variant-numeric: tabular-nums; color: var(--mk-faint); font-weight: 700; }
 .cp-trace-list__head time { color: var(--mk-faint); font-variant-numeric: tabular-nums; }
-.cp-trace-list__id { font-size: 10.5px; color: var(--mk-faint); }
-.cp-trace-list__stage {
-  padding: 1px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700;
-  background: #eef2ff; color: #4453a1;
-}
+.cp-trace-list__id { font-size: 10px; color: var(--mk-faint); }
+.cp-trace-list__stage { padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700; background: #eef2ff; color: #4453a1; }
 .cp-trace-list__stage[data-stage='learning'] { background: #ecfdf5; color: #0a8551; }
-.cp-trace-list__emotion,
-.cp-trace-list__transition {
-  padding: 1px 6px; border-radius: 4px; font-size: 10.5px;
-  background: #f3f5f9; color: var(--mk-muted);
-}
-.cp-trace-list__degraded { padding: 1px 6px; border-radius: 4px; font-size: 10.5px; background: var(--mk-red-bg); color: var(--mk-red); }
-.cp-trace-list__focus,
-.cp-trace-list__reason { font-size: 11.5px; color: var(--mk-muted); }
-.cp-trace-list__signal { font-size: 11.5px; color: var(--mk-faint); font-style: italic; }
-.cp-trace-list__metrics { display: flex; flex-wrap: wrap; gap: 6px; }
-.cp-trace-list__metrics > span { display: inline-flex; align-items: baseline; gap: 4px; padding: 2px 6px; background: #f6f8fb; border-radius: 4px; font-size: 10.5px; }
-.cp-trace-list__metrics code { font-size: 10.5px; color: var(--mk-faint); }
+.cp-trace-list__emotion, .cp-trace-list__transition { padding: 1px 5px; border-radius: 4px; font-size: 10px; background: #f3f5f9; color: var(--mk-muted); }
+.cp-trace-list__degraded { padding: 1px 5px; border-radius: 4px; font-size: 10px; background: var(--mk-red-bg); color: var(--mk-red); }
+.cp-trace-list__focus, .cp-trace-list__reason { font-size: 11px; color: var(--mk-muted); }
+.cp-trace-list__signal { font-size: 11px; color: var(--mk-faint); font-style: italic; }
+.cp-trace-list__metrics { display: flex; flex-wrap: wrap; gap: 4px; }
+.cp-trace-list__metrics > span { display: inline-flex; align-items: baseline; gap: 3px; padding: 2px 5px; background: #f6f8fb; border-radius: 4px; font-size: 10px; }
+.cp-trace-list__metrics code { font-size: 10px; color: var(--mk-faint); }
 .cp-trace-list__metrics strong { font-variant-numeric: tabular-nums; color: var(--mk-ink); }
-.cp-trace-list__kv { display: flex; flex-wrap: wrap; gap: 6px; }
-.cp-trace-list__kv > span {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 3px 8px;
-  border-radius: 5px;
-  background: #f6f8fb;
-  font-size: 10.5px;
-  max-width: 100%;
-}
+.cp-trace-list__kv { display: flex; flex-wrap: wrap; gap: 4px; }
+.cp-trace-list__kv > span { display: inline-flex; align-items: baseline; gap: 4px; padding: 2px 6px; border-radius: 4px; background: #f6f8fb; font-size: 10px; max-width: 100%; }
 .cp-trace-list__kv code { flex: 0 0 auto; color: var(--mk-faint); }
 .cp-trace-list__kv strong { color: var(--mk-ink); font-weight: 600; word-break: break-all; }
-.cp-trace-list__raw { font-size: 11px; }
+.cp-trace-list__raw { font-size: 10.5px; }
 .cp-trace-list__raw summary { cursor: pointer; color: var(--mk-faint); font-weight: 600; user-select: none; }
 .cp-trace-list__raw .cp-trace-list__body { margin-top: 4px; }
-.cp-trace-list__flags { display: flex; flex-wrap: wrap; gap: 5px; }
-.cp-trace-list__flags > span { padding: 2px 7px; border-radius: 4px; font-size: 10.5px; background: #f3f5f9; color: var(--mk-faint); border: 1px solid transparent; }
+.cp-trace-list__flags { display: flex; flex-wrap: wrap; gap: 4px; }
+.cp-trace-list__flags > span { padding: 2px 5px; border-radius: 4px; font-size: 10px; background: #f3f5f9; color: var(--mk-faint); border: 1px solid transparent; }
 .cp-trace-list__flags > span.active { background: #e6f4ff; color: #0958d9; border-color: #91caff; }
-.cp-trace-list__blockers { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11.5px; color: var(--mk-muted); }
-.cp-trace-list__blocker { padding: 1px 6px; background: var(--mk-amber-bg); color: var(--mk-amber); border-radius: 4px; }
-.cp-trace-list__body {
-  margin: 4px 0 0; padding: 8px 10px; background: #f8fafc;
-  border-radius: 4px; font-size: 10.5px; line-height: 1.5;
-  color: var(--mk-muted); white-space: pre-wrap;
-  word-break: break-word; max-height: 200px; overflow-y: auto;
-}
+.cp-trace-list__blockers { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 11px; color: var(--mk-muted); }
+.cp-trace-list__blocker { padding: 1px 5px; background: var(--mk-amber-bg); color: var(--mk-amber); border-radius: 4px; }
+.cp-trace-list__body { margin: 4px 0 0; padding: 6px 8px; background: #f8fafc; border-radius: 4px; font-size: 10px; line-height: 1.5; color: var(--mk-muted); white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow-y: auto; }
 
-/* 阶段条进度副标（遗留项 2 C2） */
-.cp-stage__progress {
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--mk-faint);
-  font-variant-numeric: tabular-nums;
-  padding-top: 1px;
-}
-.cp-stage--active .cp-stage__progress { color: var(--mk-blue); }
-.cp-stage--done .cp-stage__progress { color: #15803d; }
-
-/* 真实模式只读提示（推进控制卡内） */
-.cp-controls--readonly { font-size: 12px; color: var(--mk-muted); }
-.cp-controls--readonly span { line-height: 1.6; }
-
-/* Wrapup 评价字段卡（遗留项 2：评价/评估摘要/来源徽章） */
-.cp-eval-card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.cp-eval-card {
-  border: 1px solid var(--mk-line);
-  border-radius: 10px;
-  padding: 10px 12px;
-  display: grid;
-  gap: 5px;
-  background: #fbfcfe;
-}
-.cp-eval-card--meta { background: #fffdf5; border-color: rgba(180, 83, 9, 0.25); }
-.cp-eval-card__label {
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--mk-faint);
-}
-.cp-eval-card__value {
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.7;
-  color: var(--mk-ink);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.cp-eval-card__badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
-.cp-eval-card__badges .mk-badge { margin: 0; }
-
-/* 统一时间线（三流合并）类型/阶段徽章 */
+/* Timeline */
 .cp-timeline__kind {
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 700;
-  background: #f1f5f9;
-  color: var(--mk-muted);
-  white-space: nowrap;
+  padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700; background: #f1f5f9; color: var(--mk-muted); white-space: nowrap;
 }
 .cp-timeline__kind[data-kind='referee'] { background: #fef2f2; color: #b91c1c; }
 .cp-timeline__kind[data-kind='private'] { background: #f5f3ff; color: #6d28d9; }
@@ -2790,59 +3175,45 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-timeline__kind[data-kind='path'] { background: #fff7ed; color: #c2410c; }
 .cp-timeline__kind[data-kind='teaching'] { background: #ecfdf5; color: #0a8551; }
 .cp-timeline__kind[data-kind='evidence'] { background: #ecfeff; color: #0e7490; }
-.cp-timeline__stage {
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 700;
-  background: #eef2ff;
-  color: #4453a1;
-  white-space: nowrap;
-}
+.cp-timeline__stage { padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700; background: #eef2ff; color: #4453a1; white-space: nowrap; }
 .cp-timeline__stage[data-stage='learning'], .cp-timeline__stage[data-stage='teaching'] { background: #ecfdf5; color: #0a8551; }
 .cp-timeline__stage[data-stage='goal'] { background: #faf5ff; color: #7c3aed; }
 .cp-timeline__stage[data-stage='path'] { background: #fff7ed; color: #c2410c; }
 .cp-timeline__title { color: var(--mk-ink); font-weight: 600; word-break: break-word; }
-.cp-timeline__detail {
-  margin: 0;
-  font-size: 11px;
-  color: var(--mk-muted);
-  line-height: 1.6;
-  word-break: break-word;
-}
+.cp-timeline__detail { margin: 0; font-size: 10.5px; color: var(--mk-muted); line-height: 1.6; word-break: break-word; }
 
+/* ===== Responsive ===== */
+@media (max-width: 1100px) {
+  .cp-body { grid-template-columns: 1fr; }
+  .cp-sidebar { position: static; max-height: none; }
+}
 @media (min-width: 2000px) {
+  .cp-body { grid-template-columns: minmax(0, 1fr) 380px; }
   .cp-title { font-size: 18px; }
   .cp-title__id { font-size: 13px; }
   .cp-back { font-size: 14px; }
-  .cp-btn { font-size: 14px; padding: 10px 18px; }
-  .cp-run__summary { font-size: 13.5px; }
-  .cp-stage { font-size: 13.5px; }
+  .cp-topbar__btn { font-size: 13px; }
+  .cp-topbar__status { font-size: 15px; }
+  .cp-stage { font-size: 15px; }
+  .cp-stage__label { font-size: 15px; }
   .cp-stage__progress { font-size: 12px; }
+  .cp-btn { font-size: 14px; padding: 9px 16px; }
+  .cp-btn--sm { font-size: 12.5px; padding: 6px 12px; }
+  .cp-none { font-size: 14px; }
+  .cp-sidebar__toggle { font-size: 14px; }
   .cp-eval-card__label { font-size: 12px; }
   .cp-eval-card__value { font-size: 14px; }
   .cp-timeline__kind { font-size: 12px; }
   .cp-timeline__stage { font-size: 12px; }
   .cp-timeline__title { font-size: 13.5px; }
   .cp-timeline__detail { font-size: 12.5px; }
-  .cp-none { font-size: 14px; }
-  .cp-log { font-size: 13.5px; }
-  .cp-log__time { font-size: 12px; }
-  .cp-log__phase { font-size: 12px; }
-  .cp-log__dur { font-size: 12px; }
-  .cp-log__raw { font-size: 12.5px; }
-  .cp-degrade { font-size: 13.5px; }
-  .cp-degrade .mk-link { font-size: 13.5px; }
+  .cp-log { font-size: 13px; }
+  .cp-log__time { font-size: 11.5px; }
+  .cp-log__phase { font-size: 11.5px; }
+  .cp-log__dur { font-size: 11.5px; }
   .cp-transcript summary { font-size: 13.5px; }
   .cp-transcript__message span { font-size: 12px; }
   .cp-transcript__message p { font-size: 13.5px; }
-  .cp-history-btn { font-size: 12.5px; padding: 5px 8px; }
-  .cp-lesson-head__main strong { font-size: 15px; }
-  .cp-lesson-head__ms { font-size: 12.5px; }
-  .cp-lesson-head__state { font-size: 12px; }
-  .cp-lesson-head__select { font-size: 12.5px; padding: 5px 8px; }
-  .cp-review-panel__head span { font-size: 14px; }
-  .cp-review-panel__head em { font-size: 12px; }
   .cp-path-detail__head strong { font-size: 15.5px; }
   .cp-path-detail__meta { font-size: 12.5px; }
   .cp-path-detail__summary { font-size: 13.5px; }
@@ -2857,8 +3228,10 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-review__concern { font-size: 13px; }
   .cp-review__changes { font-size: 13px; }
   .cp-review__replan { font-size: 12.5px; }
-  .cp-wrapup__label { font-size: 12.5px; }
-  .cp-wrapup p { font-size: 14px; }
+  .cp-wrapup-card__label { font-size: 12.5px; }
+  .cp-wrapup-card__text { font-size: 14px; }
+  .cp-wrapup-section__label { font-size: 12.5px; }
+  .cp-wrapup-section__text { font-size: 14px; }
   .cp-wrapup__json { font-size: 12.5px; }
   .cp-raw { font-size: 13.5px; }
   .cp-raw pre { font-size: 12px; }
@@ -2879,49 +3252,48 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-rec__codes code { font-size: 11.5px; }
   .cp-rec p { font-size: 14px; }
   .cp-rec__rationale { font-size: 13px; }
-  .cp-trace-panel > summary { font-size: 14px; }
-  .cp-trace-panel > summary code { font-size: 12.5px; }
-  .cp-trace-list__head { font-size: 13px; }
-  .cp-trace-list__id { font-size: 12px; }
-  .cp-trace-list__stage { font-size: 12px; }
-  .cp-trace-list__emotion,
-  .cp-trace-list__transition { font-size: 12px; }
-  .cp-trace-list__degraded { font-size: 12px; }
-  .cp-trace-list__focus,
-  .cp-trace-list__reason { font-size: 13px; }
-  .cp-trace-list__signal { font-size: 13px; }
-  .cp-trace-list__metrics > span { font-size: 12px; }
-  .cp-trace-list__metrics code { font-size: 12px; }
-  .cp-trace-list__flags > span { font-size: 12px; }
-  .cp-trace-list__blockers { font-size: 13px; }
-  .cp-trace-list__body { font-size: 12px; }
+  .cp-trace-panel > summary { font-size: 13px; }
+  .cp-trace-panel > summary code { font-size: 12px; }
+  .cp-trace-list__head { font-size: 12.5px; }
+  .cp-trace-list__id { font-size: 11.5px; }
+  .cp-trace-list__stage { font-size: 11.5px; }
+  .cp-trace-list__emotion, .cp-trace-list__transition { font-size: 11.5px; }
+  .cp-trace-list__degraded { font-size: 11.5px; }
+  .cp-trace-list__focus, .cp-trace-list__reason { font-size: 12.5px; }
+  .cp-trace-list__signal { font-size: 12.5px; }
+  .cp-trace-list__metrics > span { font-size: 11.5px; }
+  .cp-trace-list__metrics code { font-size: 11.5px; }
+  .cp-trace-list__flags > span { font-size: 11.5px; }
+  .cp-trace-list__blockers { font-size: 12.5px; }
+  .cp-trace-list__body { font-size: 11.5px; }
 }
-
 @media (min-width: 2800px) {
+  .cp-body { grid-template-columns: minmax(0, 1fr) 440px; }
   .cp-title { font-size: 21px; }
   .cp-title__id { font-size: 15.5px; }
   .cp-back { font-size: 16.5px; }
-  .cp-btn { font-size: 16.5px; padding: 12px 22px; }
-  .cp-run__summary { font-size: 16px; }
-  .cp-stage { font-size: 16.5px; }
+  .cp-topbar__btn { font-size: 15.5px; }
+  .cp-topbar__status { font-size: 17.5px; }
+  .cp-stage { font-size: 17.5px; }
+  .cp-stage__label { font-size: 17.5px; }
+  .cp-stage__progress { font-size: 14px; }
+  .cp-btn { font-size: 16.5px; padding: 11px 20px; }
+  .cp-btn--sm { font-size: 14.5px; padding: 7px 14px; }
   .cp-none { font-size: 16.5px; }
-  .cp-log { font-size: 16px; }
-  .cp-log__time { font-size: 14px; }
-  .cp-log__phase { font-size: 14px; }
-  .cp-log__dur { font-size: 14px; }
-  .cp-log__raw { font-size: 15px; }
-  .cp-degrade { font-size: 16px; }
-  .cp-degrade .mk-link { font-size: 16px; }
+  .cp-sidebar__toggle { font-size: 16.5px; }
+  .cp-eval-card__label { font-size: 14px; }
+  .cp-eval-card__value { font-size: 16.5px; }
+  .cp-timeline__kind { font-size: 14px; }
+  .cp-timeline__stage { font-size: 14px; }
+  .cp-timeline__title { font-size: 16px; }
+  .cp-timeline__detail { font-size: 14.5px; }
+  .cp-log { font-size: 15.5px; }
+  .cp-log__time { font-size: 13.5px; }
+  .cp-log__phase { font-size: 13.5px; }
+  .cp-log__dur { font-size: 13.5px; }
   .cp-transcript summary { font-size: 16px; }
   .cp-transcript__message span { font-size: 14px; }
   .cp-transcript__message p { font-size: 16px; }
-  .cp-history-btn { font-size: 14.5px; padding: 6px 10px; }
-  .cp-lesson-head__main strong { font-size: 17.5px; }
-  .cp-lesson-head__ms { font-size: 14.5px; }
-  .cp-lesson-head__state { font-size: 14px; }
-  .cp-lesson-head__select { font-size: 14.5px; padding: 6px 10px; }
-  .cp-review-panel__head span { font-size: 16.5px; }
-  .cp-review-panel__head em { font-size: 14px; }
   .cp-path-detail__head strong { font-size: 18px; }
   .cp-path-detail__meta { font-size: 14.5px; }
   .cp-path-detail__summary { font-size: 16px; }
@@ -2936,8 +3308,10 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-review__concern { font-size: 15.5px; }
   .cp-review__changes { font-size: 15.5px; }
   .cp-review__replan { font-size: 14.5px; }
-  .cp-wrapup__label { font-size: 14.5px; }
-  .cp-wrapup p { font-size: 16.5px; }
+  .cp-wrapup-card__label { font-size: 14.5px; }
+  .cp-wrapup-card__text { font-size: 16.5px; }
+  .cp-wrapup-section__label { font-size: 14.5px; }
+  .cp-wrapup-section__text { font-size: 16.5px; }
   .cp-wrapup__json { font-size: 14.5px; }
   .cp-raw { font-size: 16px; }
   .cp-raw pre { font-size: 14px; }
@@ -2958,21 +3332,19 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-rec__codes code { font-size: 13.5px; }
   .cp-rec p { font-size: 16.5px; }
   .cp-rec__rationale { font-size: 15.5px; }
-  .cp-trace-panel > summary { font-size: 16.5px; }
-  .cp-trace-panel > summary code { font-size: 14.5px; }
-  .cp-trace-list__head { font-size: 15.5px; }
-  .cp-trace-list__id { font-size: 14px; }
-  .cp-trace-list__stage { font-size: 14px; }
-  .cp-trace-list__emotion,
-  .cp-trace-list__transition { font-size: 14px; }
-  .cp-trace-list__degraded { font-size: 14px; }
-  .cp-trace-list__focus,
-  .cp-trace-list__reason { font-size: 15.5px; }
-  .cp-trace-list__signal { font-size: 15.5px; }
-  .cp-trace-list__metrics > span { font-size: 14px; }
-  .cp-trace-list__metrics code { font-size: 14px; }
-  .cp-trace-list__flags > span { font-size: 14px; }
-  .cp-trace-list__blockers { font-size: 15.5px; }
-  .cp-trace-list__body { font-size: 14px; }
+  .cp-trace-panel > summary { font-size: 15.5px; }
+  .cp-trace-panel > summary code { font-size: 14px; }
+  .cp-trace-list__head { font-size: 14.5px; }
+  .cp-trace-list__id { font-size: 13.5px; }
+  .cp-trace-list__stage { font-size: 13.5px; }
+  .cp-trace-list__emotion, .cp-trace-list__transition { font-size: 13.5px; }
+  .cp-trace-list__degraded { font-size: 13.5px; }
+  .cp-trace-list__focus, .cp-trace-list__reason { font-size: 14.5px; }
+  .cp-trace-list__signal { font-size: 14.5px; }
+  .cp-trace-list__metrics > span { font-size: 13.5px; }
+  .cp-trace-list__metrics code { font-size: 13.5px; }
+  .cp-trace-list__flags > span { font-size: 13.5px; }
+  .cp-trace-list__blockers { font-size: 14.5px; }
+  .cp-trace-list__body { font-size: 13.5px; }
 }
 </style>

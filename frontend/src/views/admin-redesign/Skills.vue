@@ -43,30 +43,22 @@
       <!-- 列表视图：列对齐 + 排序，问题浮顶 -->
       <div v-if="view === 'list'" class="mk-table-scroll">
         <table v-if="filtered.length" class="mk-table sk-table mk-table--fixed">
+          <colgroup>
+            <col style="width:auto">
+            <col style="width:120px">
+            <col style="width:80px">
+            <col style="width:100px">
+            <col style="width:80px">
+            <col style="width:120px">
+          </colgroup>
           <thead>
             <tr>
-              <th style="width:200px">Skill</th>
-              <th style="width:110px">所属阶段</th>
-              <th style="width:80px">类别</th>
-              <th style="width:80px">完成度</th>
-              <th>
-                <button type="button" class="sk-sort" :class="{ 'sk-sort--on': sortKey === 'calls' }" @click="toggleSort('calls')">
-                  调用 {{ sortKey === 'calls' ? (sortDir === 'desc' ? '↓' : '↑') : '' }}
-                </button>
-              </th>
-              <th>
-                <button type="button" class="sk-sort" :class="{ 'sk-sort--on': sortKey === 'errors' }" @click="toggleSort('errors')">
-                  失败 {{ sortKey === 'errors' ? (sortDir === 'desc' ? '↓' : '↑') : '' }}
-                </button>
-              </th>
-              <th>成功率</th>
-              <th>
-                <button type="button" class="sk-sort" :class="{ 'sk-sort--on': sortKey === 'avgMs' }" @click="toggleSort('avgMs')">
-                  平均耗时 {{ sortKey === 'avgMs' ? (sortDir === 'desc' ? '↓' : '↑') : '' }}
-                </button>
-              </th>
+              <th>Skill</th>
+              <th>所属阶段</th>
+              <th>类别</th>
+              <th>完成度</th>
+              <th class="mk-th--right">成功率</th>
               <th>最近调用</th>
-              <th class="mk-th--right">详情</th>
             </tr>
           </thead>
           <tbody>
@@ -93,14 +85,9 @@
                   :title="completionBadgeOf(s.id)!.title"
                 >{{ completionBadgeOf(s.id)!.text }}</span>
                 <span v-else class="mk-na">—</span>
-                <span v-if="s.errors > 0" class="mk-badge mk-badge--sm mk-badge--bad" :title="`${s.errors} 次失败`">{{ s.errors }}</span>
               </td>
-              <td class="mk-num">{{ s.calls || '—' }}</td>
-              <td class="mk-num" :class="{ 'sk-err': s.errors > 0 }">{{ s.calls ? s.errors : '—' }}</td>
               <td class="mk-num" :class="rateTone(s)">{{ successRate(s) }}</td>
-              <td class="mk-num" :class="latencyTone(s)">{{ s.calls ? fmtMs(s.avgMs) : '—' }}</td>
               <td><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
-              <td><span class="sk-go">→</span></td>
             </tr>
           </tbody>
         </table>
@@ -152,130 +139,7 @@
       </div>
     </div>
 
-    <!-- 技能对账面板（SKILL_READINESS_SPEC §4.2）：户口簿 × manifest × 注册 × ACTIVE + 完成度
-         滚动修复 #4：整卡默认折叠（details），展开后表内 10 行/页，不再把页面撑到 3.5 屏
-         深链 ?recon=1[&diff=unregistered|active-missing|live]：落地自动展开并滚动定位（ADMIN_DEEP_SKILLS_APICONFIG_AUDIT §4.2） -->
-    <details ref="recPanelRef" class="mk-card sk-rec" :open="recOpen">
-      <summary class="mk-card__head sk-rec__summary">
-        <div class="sk-rec__title">
-          <strong>技能对账</strong>
-          <span class="mk-card__meta">户口簿 × manifest × gateway 注册 × ACTIVE prompt</span>
-          <button v-if="recDiff" type="button" class="mk-link sk-rec__clear" @click.stop="clearRecDiff">✕ 清除差集定位</button>
-        </div>
-        <div v-if="recLoading" class="sk-rec__loading">加载中…</div>
-        <template v-else-if="recReport">
-          <div class="sk-rec__pills">
-            <span
-              class="mk-pill"
-              :title="`对账口径 = 户口簿全量 ${recReport.summary.total} 条（含外挂能力）；目录 ${cards.length} 条已排除外挂能力（mcp-tool 等）`"
-            >完成度 live {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }} · 目录 {{ cards.length }}</span>
-            <span v-if="recReport.summary.unregistered" class="mk-pill sk-pill--bad">未注册 {{ recReport.summary.unregistered }}</span>
-            <span v-if="recReport.summary.activeMissing" class="mk-pill sk-pill--warn">缺 ACTIVE {{ recReport.summary.activeMissing }}</span>
-            <span v-if="recReport.summary.orphanRegistrations" class="mk-pill sk-pill--bad">幽灵注册 {{ recReport.summary.orphanRegistrations }}</span>
-            <span v-else class="mk-pill">幽灵注册 0</span>
-          </div>
-          <button type="button" class="sk-rec__refresh" :disabled="recLoading" @click.stop="refreshReconciliation">刷新</button>
-        </template>
-      </summary>
-
-      <div v-if="recError" class="mk-empty">
-        <strong>对账数据加载失败</strong>
-        <span>{{ recError }}</span>
-        <button type="button" class="mk-empty__action" @click="refreshReconciliation">重试</button>
-      </div>
-      <div v-else-if="recLoading && !recReport" class="sk-rec__skeleton">
-        <span v-for="n in 8" :key="n"></span>
-      </div>
-      <template v-else-if="recReport">
-        <div class="sk-rec-tools">
-          <div class="mk-pills">
-            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !recOnlyAbnormal }" @click="recOnlyAbnormal = false">全部</button>
-            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': recOnlyAbnormal }" @click="recOnlyAbnormal = true">仅看异常</button>
-          </div>
-          <span class="mk-card__meta">异常 = 未注册 / 缺 ACTIVE / 未上线（非 live）</span>
-        </div>
-        <div class="mk-table-scroll">
-          <table v-if="recReport.items.length" class="mk-table sk-table sk-rec-table">
-            <thead>
-              <tr>
-                <th>Skill</th>
-                <th>户口簿</th>
-                <th>manifest</th>
-                <th>gateway 注册</th>
-                <th>ACTIVE prompt</th>
-                <th>完成度</th>
-                <th>差集</th>
-              </tr>
-            </thead>
-            <tbody>
-              <template v-for="(e, i) in recPageRows" :key="e.kind === 'group' ? `g-${e.group.parentAgent}-${i}` : e.row.skillId">
-                <tr v-if="e.kind === 'group'" class="sk-rec-group">
-                  <td colspan="7">
-                    <span class="sk-rec-group__name">{{ e.group.parentAgent }}</span>
-                    <span class="sk-rec-group__meta">下辖 {{ e.group.items.length }} 条</span>
-                    <span class="sk-rec-group__meta">live {{ e.group.liveCount }} / {{ e.group.items.length }}</span>
-                  </td>
-                </tr>
-                <tr v-else class="sk-row" :class="{ 'sk-rec-flash': recDiff && e.row.diff === recDiff }" @click="openSkillDrawer(e.row.skillId)">
-                  <td>
-                    <div class="sk-cell">
-                      <span class="sk-dot" :class="`sk-dot--${recDotTone(e.row)}`" :title="recDotTone(e.row) === 'ok' ? '健康' : recDotTone(e.row) === 'error' ? '异常' : '空闲'"></span>
-                      <div class="mk-cell-main">
-                        <strong class="sk-id-main" :title="e.row.skillId">{{ e.row.skillId }}</strong>
-                        <span class="sk-name-desc">{{ e.row.displayName || recKindText(e.row.kind) }}<template v-if="e.row.stage"> · {{ e.row.stage }}</template></span>
-                      </div>
-                    </div>
-                  </td>
-                  <td><span class="sk-rec-yn sk-rec-yn--ok">✓</span></td>
-                  <td>
-                    <span :class="['sk-rec-yn', e.row.manifest ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ e.row.manifest ? '✓' : '✗' }}</span>
-                    <span v-if="e.row.kind === 'aux' && !e.row.manifest" class="sk-rec-tag">F12 豁免</span>
-                  </td>
-                  <td>
-                    <span :class="['sk-rec-yn', e.row.registered ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ e.row.registered ? '✓' : '✗' }}</span>
-                    <span v-if="e.row.registrationExempt" class="sk-rec-tag">豁免</span>
-                  </td>
-                  <td>
-                    <span :class="['sk-rec-yn', e.row.active ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ e.row.active ? '✓' : '✗' }}</span>
-                    <span v-if="e.row.noPromptFile" class="sk-rec-tag">handler-only</span>
-                  </td>
-                  <td>
-                    <span class="mk-badge" :class="`mk-badge--rec-${e.row.completion.status}`" :title="recGateDetail(e.row.completion)">
-                      {{ recStatusText(e.row.completion.status) }}
-                    </span>
-                  </td>
-                  <td>
-                    <span v-if="e.row.diff === 'unregistered'" class="sk-rec-diff sk-rec-diff--bad">未注册</span>
-                    <span v-else-if="e.row.diff === 'active-missing'" class="sk-rec-diff sk-rec-diff--warn">缺 ACTIVE</span>
-                    <span v-else class="mk-na">—</span>
-                  </td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
-        </div>
-        <div v-if="recCanMore" class="sk-rec__more">
-          <button type="button" class="mk-link" @click="recLoadMore">
-            加载更多对账行（已显示 {{ recShown.length }} / {{ recFlat.length }}）
-          </button>
-        </div>
-        <div v-if="recReport.orphanRegistrations.length" class="sk-rec-orphans">
-          <strong>幽灵注册残留（注册表有、户口簿无）</strong>
-          <span v-for="orphan in recReport.orphanRegistrations" :key="orphan.name" class="sk-rec-tag sk-rec-tag--bad">{{ orphan.name }}</span>
-        </div>
-        <div class="sk-rec-legend">
-          <span v-for="s in recStatusOrder" :key="s" class="sk-rec-legend__item">
-            <i class="mk-badge" :class="`mk-badge--rec-${s}`"></i>{{ recStatusText(s) }}
-          </span>
-          <span class="mk-card__meta">户口簿口径 {{ recReport.summary.total }} 条（含外挂能力）· 目录 {{ cards.length }} 条</span>
-          <span class="mk-card__meta" style="margin-left:auto">点击行进入设计页 · {{ recReport.generatedAt ? '对账于 ' + new Date(recReport.generatedAt).toLocaleString() : '' }}</span>
-        </div>
-      </template>
-      <div v-else class="mk-empty">
-        <strong>对账面板需要真实数据</strong>
-        <span>请切换到「真实数据」模式后查看（户口簿/manifest/注册表/ACTIVE 为后端快照）。</span>
-      </div>
-    </details>
+    
   </div>
 </template>
 

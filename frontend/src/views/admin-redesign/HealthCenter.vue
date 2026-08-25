@@ -1,186 +1,115 @@
 <template>
-  <div class="wb mk-page">
-    <!-- 顶部：全局统计条（G1：skill 总数 / aux / mainline / 异常 skill 数 + 生成时间 + 刷新） -->
+  <div class="mk-page">
     <div class="mk-status" :class="`mk-status--${barTone}`">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">巡检工作台</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">健康 13 项 · 漂移 · 对账 · 完成度 一页巡检</span>
-      <template v-if="displayReport">
-        <span class="mk-status__sep"></span>
-        <span class="mk-status__meta" :title="displayReport.generatedAt">生成 {{ timeAgo(displayReport.generatedAt) }}</span>
-        <span class="mk-status__sep"></span>
-        <span class="mk-status__meta" title="Skill 总数（户口簿登记口径）">Skill <b class="mk-status__num">{{ global.total }}</b></span>
-        <span class="mk-status__meta" title="辅助 Skill：runAux 框架挂载，不进字段路由">辅助 <b class="mk-status__num">{{ global.aux }}</b></span>
-        <span class="mk-status__meta" title="主链 Skill：进入字段路由，参与编排">主链 <b class="mk-status__num">{{ global.mainline }}</b></span>
-        <span v-if="global.handlerOnly" class="mk-status__meta" title="handler-only：无 LLM prompt 的纯函数 Skill">纯函数 <b class="mk-status__num">{{ global.handlerOnly }}</b></span>
-        <span class="mk-badge" :class="topAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'">
-          {{ topAbnormal > 0 ? `异常 ${topAbnormal}` : '全部健康' }}
-        </span>
-      </template>
-      <button type="button" class="mk-status__action" :disabled="loading" @click="refresh(true)">
-        {{ loading ? '检测中…' : '刷新' }}
-      </button>
+      <span class="mk-status__meta" v-if="displayReport">Skill {{ global.total }} · {{ displayReport.generatedAt ? '更新于 ' + timeAgo(displayReport.generatedAt) : '' }}</span>
+      <span class="mk-badge" :class="topAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'" v-if="displayReport">{{ topAbnormal > 0 ? `异常 ${topAbnormal}` : '全部健康' }}</span>
+      <span class="mk-status__spacer"></span>
+      <button type="button" class="mk-status__action" :disabled="loading" @click="refresh(true)">{{ loading ? '检测中…' : '刷新' }}</button>
     </div>
 
-    <div v-if="!isLive" class="wb-demo">演示数据（demo 模式）：切换 live 数据源后展示真实巡检结果</div>
-    <div v-if="failed && isLive" class="wb-failed">
-      <span>巡检数据加载失败：{{ errorText }}</span>
-      <button type="button" class="mk-status__action" :disabled="loading" @click="refresh(true)">重试</button>
-    </div>
+    <div v-if="failed" class="wb-failed"><span>加载失败：{{ errorText }}</span> <button type="button" class="mk-status__action" :disabled="loading" @click="refresh(true)">重试</button></div>
 
     <template v-if="displayReport">
-      <!-- a. 健康检查：13 项（限高内滚，异常优先视觉） -->
-      <section class="mk-card wb-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">健康检查</h3>
-          <span class="mk-card__meta">{{ displayReport.health.summary.total }} 项检查</span>
-          <span class="mk-card__meta">
-            <template v-for="(n, key) in semanticsCounts" :key="key">{{ key }} {{ n }}<template v-if="key !== lastSemanticsKey"> · </template></template>
-          </span>
-          <span class="mk-badge" :class="healthAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'">
-            {{ healthAbnormal > 0 ? `${healthAbnormal} 项异常` : '无异常' }}
-          </span>
-        </div>
-        <div class="wb-hc-list">
-          <div
-            v-for="item in sortedHealthItems"
-            :key="item.id"
-            class="hc-item"
-            :class="[`hc-item--${item.severity}`]"
-          >
-            <span class="hc-item__dot" :class="`hc-item__dot--${item.severity}`"></span>
-            <div class="hc-item__main">
-              <div class="hc-item__head">
-                <strong class="hc-item__name">{{ item.label }}</strong>
-                <span class="hc-item__status">{{ statusLabel(item) }}</span>
-                <span class="hc-item__count">{{ item.count }}</span>
-                <span class="hc-item__sem">{{ semanticsLabel(item.semantics) }}</span>
-                <span class="hc-item__action-tag">{{ actionLabel(item.action) }}</span>
+      <!-- 四张概要卡片 -->
+      <div class="hc-summary">
+        <button type="button" class="hc-card" :class="healthAbnormal > 0 ? 'hc-card--warn' : 'hc-card--ok'" @click="scrollTo('health')">
+          <span class="hc-card__num">{{ displayReport.health.summary.total }}</span>
+          <span class="hc-card__label">健康检查</span>
+          <span class="hc-card__sub">{{ healthAbnormal > 0 ? `${healthAbnormal} 异常` : '全部正常' }}</span>
+        </button>
+        <button type="button" class="hc-card" :class="driftTotal > 0 ? 'hc-card--warn' : 'hc-card--ok'" @click="scrollTo('drift')">
+          <span class="hc-card__num">{{ driftTotal }}</span>
+          <span class="hc-card__label">漂移</span>
+          <span class="hc-card__sub">{{ driftTotal > 0 ? '需处理' : '正常' }}</span>
+        </button>
+        <button type="button" class="hc-card" :class="reconAbnormal > 0 ? 'hc-card--warn' : 'hc-card--ok'" @click="scrollTo('recon')">
+          <span class="hc-card__num">{{ reconciliation.total }}</span>
+          <span class="hc-card__label">对账</span>
+          <span class="hc-card__sub">{{ reconAbnormal > 0 ? `${reconAbnormal} 异常` : '一致' }}</span>
+        </button>
+        <button type="button" class="hc-card hc-card--ok" @click="scrollTo('completion')">
+          <span class="hc-card__num">{{ completionLive }}</span>
+          <span class="hc-card__label">已上线</span>
+          <span class="hc-card__sub">/ {{ reconciliation.total }}</span>
+        </button>
+      </div>
+
+      <!-- 健康检查 -->
+      <section class="mk-card" id="hc-health">
+        <details class="hc-details" open>
+          <summary class="mk-card__head hc-details__summary">
+            <h3 class="mk-card__title">健康检查</h3>
+            <span class="mk-card__meta">{{ displayReport.health.summary.total }} 项</span>
+            <span class="mk-badge" :class="healthAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'">{{ healthAbnormal > 0 ? `${healthAbnormal} 异常` : '无异常' }}</span>
+          </summary>
+          <div class="hc-checks">
+            <div v-for="item in sortedHealthItems" :key="item.id" class="hc-check" :class="`hc-check--${item.severity}`">
+              <span class="hc-check__dot" :class="`hc-check__dot--${item.severity}`"></span>
+              <div class="hc-check__main">
+                <strong>{{ item.label }}</strong>
+                <span>{{ item.cause }}</span>
               </div>
-              <p class="hc-item__cause">{{ item.cause }}</p>
-              <details class="hc-item__detail">
-                <summary>明细（{{ item.detail.length }}）</summary>
-                <ul>
-                  <li v-for="(d, i) in item.detail" :key="i" class="mono">{{ d }}</li>
-                  <li v-if="item.detail.length === 0" class="hc-item__empty">无问题明细</li>
-                </ul>
-              </details>
-              <p class="hc-item__hint mono">{{ item.fixHint }}</p>
-            </div>
-            <div class="hc-item__ops">
-              <button
-                v-if="item.action === 'fixable' && item.severity !== 'ok'"
-                type="button"
-                class="hc-btn hc-btn--fix"
-                :disabled="fixingId === item.id"
-                @click="fix(item.id)"
-              >{{ fixingId === item.id ? '修复中…' : '一键修复' }}</button>
-              <button
-                v-else-if="item.action === 'fixable'"
-                type="button"
-                class="hc-btn hc-btn--ghost"
-                @click="fix(item.id)"
-              >重跑</button>
-              <button
-                v-else-if="item.action === 'manual' && item.severity !== 'ok'"
-                type="button"
-                class="hc-btn hc-btn--ghost"
-                @click="jump(item.id)"
-              >查看 →</button>
+              <span class="hc-check__count">{{ item.count }}</span>
+              <span class="hc-check__sem">{{ semanticsLabel(item.semantics) }}</span>
+              <button v-if="item.action === 'fixable' && item.severity !== 'ok'" type="button" class="hc-check__btn" :disabled="fixingId === item.id" @click="fix(item.id)">{{ fixingId === item.id ? '修复中…' : '修复' }}</button>
+              <button v-else-if="item.action === 'manual' && item.severity !== 'ok'" type="button" class="hc-check__btn" @click="jump(item.id)">查看 →</button>
             </div>
           </div>
-        </div>
+        </details>
       </section>
 
-      <!-- b. 漂移摘要：契约 / 哈希 / 运行时 三卡 + 跳转 -->
-      <section class="mk-card wb-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">漂移摘要</h3>
-          <span class="mk-card__meta">三种漂移语义独立计数，点击进入明细</span>
-        </div>
-        <div class="wb-stats">
-          <button type="button" class="wb-stat" :class="driftTone(drift.contract)" @click="goDrift('contract')">
-            <span class="wb-stat__label">{{ TERMS.driftContractQualified }}</span>
-            <span class="wb-stat__num">{{ drift.contract }}</span>
-            <span class="mk-badge" :class="badgeCls(drift.contract, 'bad')">{{ drift.contract > 0 ? '需处理' : '正常' }}</span>
-            <span class="wb-stat__go">→ 编排结构 · 漂移 tab</span>
-          </button>
-          <button type="button" class="wb-stat" :class="driftTone(drift.hash)" @click="goDrift('hash')">
-            <span class="wb-stat__label">{{ TERMS.driftHashQualified }}</span>
-            <span class="wb-stat__num">{{ drift.hash }}</span>
-            <span class="mk-badge" :class="badgeCls(drift.hash, 'bad')">{{ drift.hash > 0 ? '需处理' : '正常' }}</span>
-            <span class="wb-stat__go">→ Skill 工作台</span>
-          </button>
-          <button type="button" class="wb-stat" :class="driftTone(drift.runtime)" @click="goDrift('runtime')">
-            <span class="wb-stat__label">{{ TERMS.driftRuntime }}</span>
-            <span class="wb-stat__num">{{ drift.runtime }}</span>
-            <span class="mk-badge" :class="badgeCls(drift.runtime, 'warn')">{{ drift.runtime > 0 ? '观测到' : '正常' }}</span>
-            <span class="wb-stat__go">→ 执行日志</span>
-          </button>
-        </div>
-      </section>
-
-      <!-- c. 对账摘要：W1-W5 计数卡 + 跳转 Skill 目录 -->
-      <section class="mk-card wb-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">对账摘要</h3>
-          <span class="mk-card__meta">户口簿 {{ reconciliation.total }} · 缺注册 / 幽灵注册 / 缺 ACTIVE / 幽灵 ACTIVE / 僵尸 ACTIVE / 接线差集</span>
-          <button type="button" class="mk-status__action" @click="goSkills()">→ Skill 目录对账面板</button>
-        </div>
-        <div class="wb-stats wb-stats--recon">
-          <button type="button" class="wb-stat" :class="reconTone('missingRegistration')" @click="goSkills('unregistered')" :title="`W2 ${TERMS.reconRegistration}：户口簿有、系统注册表无`">
-            <span class="wb-stat__label">缺注册（W2 {{ TERMS.reconRegistration }}）</span>
-            <span class="wb-stat__num">{{ reconciliation.missingRegistration }}</span>
-            <span class="mk-badge" :class="badgeCls(reconciliation.missingRegistration, 'bad')">{{ reconciliation.missingRegistration > 0 ? '异常' : '正常' }}</span>
-          </button>
-          <button type="button" class="wb-stat" :class="reconTone('zombieRegistration')" @click="goSkills()" :title="`W2 ${TERMS.reconRegistration}：系统注册表有行、户口簿已无此技能`">
-            <span class="wb-stat__label">幽灵注册（W2 {{ TERMS.reconRegistration }}）</span>
-            <span class="wb-stat__num">{{ reconciliation.zombieRegistration }}</span>
-            <span class="mk-badge" :class="badgeCls(reconciliation.zombieRegistration, 'bad')">{{ reconciliation.zombieRegistration > 0 ? '异常' : '正常' }}</span>
-          </button>
-          <button type="button" class="wb-stat" :class="reconTone('missingActive')" @click="goSkills('active-missing')" :title="`W1 ${TERMS.reconActive}：有文件/注册，但 DB 无「当前生效」prompt，运行时无法执行`">
-            <span class="wb-stat__label">缺 ACTIVE（W1 {{ TERMS.reconActive }}）</span>
-            <span class="wb-stat__num">{{ reconciliation.missingActive }}</span>
-            <span class="mk-badge" :class="badgeCls(reconciliation.missingActive, 'warn')">{{ reconciliation.missingActive > 0 ? '异常' : '正常' }}</span>
-          </button>
-          <button type="button" class="wb-stat" :class="reconTone('zombieActive')" @click="goSkills()" :title="`W1 ${TERMS.reconActive}：DB ACTIVE 有、户口簿活跃集无`">
-            <span class="wb-stat__label">幽灵 ACTIVE（W1 {{ TERMS.reconActive }}）</span>
-            <span class="wb-stat__num">{{ reconciliation.zombieActive }}</span>
-            <span class="mk-badge" :class="badgeCls(reconciliation.zombieActive, 'bad')">{{ reconciliation.zombieActive > 0 ? '异常' : '正常' }}</span>
-          </button>
-          <button type="button" class="wb-stat" :class="reconTone('zombieSkillActive')" @click="goSkills()" :title="`W1 ${TERMS.reconActive}：已退役 Skill 的 ACTIVE 残留`">
-            <span class="wb-stat__label">僵尸 ACTIVE（W1 {{ TERMS.reconActive }}）</span>
-            <span class="wb-stat__num">{{ reconciliation.zombieSkillActive }}</span>
-            <span class="mk-badge" :class="badgeCls(reconciliation.zombieSkillActive, 'warn')">{{ reconciliation.zombieSkillActive > 0 ? '残留' : '正常' }}</span>
-          </button>
-          <button type="button" class="wb-stat" :class="reconTone('unwired')" @click="goSkills()" :title="`W3 ${TERMS.reconWiring}：运行时定义执行步骤 ↔ 户口簿 coordinator 声明不一致`">
-            <span class="wb-stat__label">接线差集（W3 {{ TERMS.reconWiring }}）</span>
-            <span class="wb-stat__num">{{ reconciliation.unwired }}</span>
-            <span class="mk-badge" :class="badgeCls(reconciliation.unwired, 'warn')">{{ reconciliation.unwired > 0 ? '异常' : '正常' }}</span>
-          </button>
-        </div>
-      </section>
-
-      <!-- d. 完成度分布：五档分布卡 + 跳转 Skill 目录 -->
-      <section class="mk-card wb-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">完成度分布</h3>
-          <span class="mk-card__meta">草稿 → 已上线 五档 · 明细见 Skill 目录对账面板</span>
-          <button type="button" class="mk-status__action" @click="goSkills()">→ Skill 目录</button>
-        </div>
-        <div class="wb-stats wb-stats--rec">
-          <div v-for="tier in completionTiers" :key="tier.status" class="wb-stat wb-stat--rec" :class="tier.status === 'live' ? 'wb-stat--live' : ''">
-            <span class="mk-badge" :class="`mk-badge--rec-${tier.status}`">{{ tier.label }}</span>
-            <span class="wb-stat__num">{{ tierCount(tier.status) }}</span>
+      <!-- 漂移 -->
+      <section v-if="driftTotal > 0" class="mk-card" id="hc-drift">
+        <details class="hc-details" open>
+          <summary class="mk-card__head hc-details__summary">
+            <h3 class="mk-card__title">漂移</h3>
+            <span class="mk-card__meta">{{ driftTotal }} 项</span>
+          </summary>
+          <div class="hc-drift">
+            <div class="hc-drift__item" v-if="drift.contract">
+              <strong>{{ TERMS.driftContractQualified }}</strong>
+              <span class="mk-badge" :class="badgeCls(drift.contract, 'bad')">{{ drift.contract }}</span>
+              <button type="button" class="mk-link" @click="goDrift('contract')">编排结构 →</button>
+            </div>
+            <div class="hc-drift__item" v-if="drift.hash">
+              <strong>{{ TERMS.driftHashQualified }}</strong>
+              <span class="mk-badge" :class="badgeCls(drift.hash, 'bad')">{{ drift.hash }}</span>
+              <button type="button" class="mk-link" @click="goDrift('hash')">Skill 工作台 →</button>
+            </div>
+            <div class="hc-drift__item" v-if="drift.runtime">
+              <strong>{{ TERMS.driftRuntime }}</strong>
+              <span class="mk-badge" :class="badgeCls(drift.runtime, 'warn')">{{ drift.runtime }}</span>
+              <button type="button" class="mk-link" @click="goDrift('runtime')">执行日志 →</button>
+            </div>
           </div>
-        </div>
+        </details>
+      </section>
+
+      <!-- 技能对账 -->
+      <section class="mk-card" id="hc-recon">
+        <SkillReconciliation />
+      </section>
+
+      <!-- 完成度分布 -->
+      <section class="mk-card" id="hc-completion">
+        <details class="hc-details">
+          <summary class="mk-card__head hc-details__summary">
+            <h3 class="mk-card__title">完成度分布</h3>
+            <span class="mk-card__meta">{{ completionLive }} / {{ reconciliation.total }} 已上线</span>
+          </summary>
+          <div class="hc-completion">
+            <div v-for="tier in completionTiers" :key="tier.status" class="hc-completion__bar">
+              <span class="hc-completion__label">{{ tier.label }}</span>
+              <span class="hc-completion__track"><i :style="{ width: Math.max((tierCount(tier.status) / Math.max(reconciliation.total, 1)) * 100, 0) + '%' }" :class="`hc-completion__fill--${tier.status}`"></i></span>
+              <span class="hc-completion__num">{{ tierCount(tier.status) }}</span>
+            </div>
+          </div>
+        </details>
       </section>
     </template>
-    <div v-else-if="!errorText" class="wb-loading">
-      <span class="spinner"></span>
-      <p>正在加载巡检数据…</p>
-    </div>
   </div>
 </template>
 
@@ -202,6 +131,15 @@ import {
 } from '@/api/adminApi'
 import { TERMS } from './terms'
 import { COMPLETION_META } from './glossaryMeta'
+import SkillReconciliation from './SkillReconciliation.vue'
+
+const driftTotal = computed(() => (displayReport.value?.drift?.contract || 0) + (displayReport.value?.drift?.hash || 0) + (displayReport.value?.drift?.runtime || 0))
+const reconAbnormal = computed(() => { const r = displayReport.value?.reconciliation; return (r?.missingRegistration || 0) + (r?.missingActive || 0) + (r?.zombieRegistration || 0) + (r?.zombieActive || 0) + (r?.zombieSkillActive || 0) + (r?.unwired || 0) })
+const completionLive = computed(() => displayReport.value?.completion?.live || 0)
+
+function scrollTo(id: string) {
+  document.getElementById('hc-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 
 const router = useRouter()
 const route = useRoute()
@@ -212,11 +150,7 @@ const failed = ref(false)
 const errorText = ref('')
 const fixingId = ref<HealthCenterItemId | null>(null)
 
-/** demo 模式降级：静态演示数据（G1 布局可见，live 模式不落此分支） */
-const demoReport = ref<HealthCenterSummaryReport>(buildDemoReport())
-
-/** 展示数据源：live 用真实聚合；demo 用降级数据 */
-const displayReport = computed(() => (isLive.value ? report.value : demoReport.value))
+const displayReport = computed(() => report.value)
 /** 健康检查项按 severity 降序（error→warn→ok），异常优先视觉 */
 const severityOrder: Record<string, number> = { error: 0, warn: 1, ok: 2 }
 const sortedHealthItems = computed(() => {
@@ -384,157 +318,58 @@ defineExpose({ refresh })
 </script>
 
 <style scoped>
-.wb { display: grid; gap: 10px; }
-.wb-loading {
-  display: flex; flex-direction: column; align-items: center; gap: 12px;
-  padding: 60px 20px; color: var(--mk-muted, #8896b0); font-size: 14px;
-}
-.wb-demo {
-  padding: 6px 12px; border: 1px dashed rgba(180, 83, 9, 0.45); border-radius: 10px;
-  background: var(--mk-amber-bg); color: var(--mk-amber); font-size: 11.5px; font-weight: 600;
-}
-.wb-failed {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 8px 12px; border: 1px dashed rgba(220, 38, 38, 0.4); border-radius: 10px;
-  font-size: 12px; color: var(--mk-red, #dc2626); background: var(--mk-red-bg, #fef2f2);
-}
-.wb-card { overflow: clip; }
-.wb-card .mk-card__head { gap: 6px; }
+/* 概要卡片 */
+.hc-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+.hc-card { display: grid; gap: 4px; padding: 18px 16px; border-radius: 10px; border: 1px solid var(--mk-line); background: var(--mk-surface); text-align: center; cursor: pointer; font: inherit; transition: border-color 0.12s ease, box-shadow 0.12s ease; }
+.hc-card:hover { border-color: rgba(44,99,208,0.3); }
+.hc-card--ok { border-color: rgba(21,128,61,0.2); }
+.hc-card--warn { border-color: rgba(220,38,38,0.25); background: #fefafa; }
+.hc-card__num { font-size: 30px; font-weight: 800; line-height: 1; }
+.hc-card--ok .hc-card__num { color: var(--mk-green); }
+.hc-card--warn .hc-card__num { color: var(--mk-red); }
+.hc-card__label { font-size: 12px; font-weight: 700; color: var(--mk-ink); }
+.hc-card__sub { font-size: 11px; color: var(--mk-faint); }
 
-/* 统计卡（漂移三卡 / 对账六卡 / 完成度五档） */
-.wb-stats {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 10px 12px 12px;
-}
-.wb-stats--recon { grid-template-columns: repeat(3, 1fr); }
-.wb-stats--rec { grid-template-columns: repeat(5, 1fr); }
-.wb-stat {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
-  padding: 8px 10px; border: 1px solid var(--mk-line); border-radius: 10px;
-  background: var(--mk-surface); text-align: left; font: inherit; cursor: pointer;
-  transition: border-color 0.12s, background 0.12s;
-}
-.wb-stat:hover { border-color: rgba(44, 99, 208, 0.45); background: #f6f9ff; }
-.wb-stat--rec { cursor: default; }
-.wb-stat--rec:hover { border-color: var(--mk-line); background: var(--mk-surface); }
-.wb-stat--alert { border-color: rgba(220, 38, 38, 0.5); background: #fff7f7; }
-.wb-stat--alert:hover { border-color: rgba(220, 38, 38, 0.7); }
-.wb-stat--live { border-color: rgba(22, 163, 74, 0.35); background: #f6fef9; }
-.wb-stat__label { font-size: 11.5px; font-weight: 700; color: var(--mk-muted); }
-.wb-stat__num { font-size: 20px; font-weight: 800; line-height: 1.1; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
-.wb-stat--alert .wb-stat__num { color: var(--mk-red, #dc2626); }
-.wb-stat--live .wb-stat__num { color: var(--mk-green, #15803d); }
-.wb-stat__go { font-size: 10px; color: var(--mk-faint); }
+/* 可折叠 */
+.hc-details__summary { cursor: pointer; user-select: none; list-style: none; }
+.hc-details__summary::-webkit-details-marker { display: none; }
 
-/* 健康检查 13 项：限高内滚（滚动修复 #2 沿用；为满足 ≤2 屏目标收紧到 48vh） */
-.wb-hc-list { display: grid; gap: 6px; max-height: 48vh; overflow-y: auto; overscroll-behavior: contain; padding: 10px 12px 12px; }
-.hc-item {
-  display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start;
-  padding: 9px 12px; border: 1px solid var(--mk-line); border-radius: 10px; background: var(--mk-surface);
-}
-.hc-item--warn { border-color: rgba(217, 119, 6, 0.4); background: #fffcf5; }
-.hc-item--error { border-color: rgba(220, 38, 38, 0.4); background: #fff7f7; }
-.hc-item--info { border-style: dashed; background: #fbfcfe; }
-.hc-item__dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; }
-.hc-item__dot--ok { background: var(--mk-green, #16a34a); }
-.hc-item__dot--warn { background: var(--mk-amber, #d97706); }
-.hc-item__dot--error { background: var(--mk-red, #dc2626); }
-.hc-item__dot--info { background: #94a3b8; }
-.hc-item__main { display: grid; gap: 3px; min-width: 0; }
-.hc-item__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.hc-item__name { font-size: 12.5px; color: var(--mk-ink); }
-.hc-item__status { padding: 0 7px; border-radius: 999px; font-size: 10px; font-weight: 800; }
-.hc-item--ok .hc-item__status { background: var(--mk-green-bg, #f0fdf4); color: var(--mk-green, #15803d); }
-.hc-item--warn .hc-item__status { background: #fef3c7; color: #b45309; }
-.hc-item--error .hc-item__status { background: #fee2e2; color: #b91c1c; }
-.hc-item--info .hc-item__status { background: #eef2f7; color: #64748b; }
-.hc-item__count { font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--mk-ink); }
-.hc-item__action-tag { font-size: 10px; color: var(--mk-faint); }
-.hc-item__sem {
-  padding: 0 7px; border-radius: 999px; font-size: 10px; font-weight: 700;
-  background: #eef2fa; color: var(--mk-muted);
-}
-.hc-item__cause { font-size: 11.5px; color: var(--mk-muted); margin: 0; line-height: 1.45; }
-.hc-item__detail { font-size: 11px; }
-.hc-item__detail summary { cursor: pointer; color: var(--mk-blue); font-weight: 600; }
-.hc-item__detail ul { margin: 4px 0 0; padding-left: 16px; display: grid; gap: 2px; color: var(--mk-muted); }
-.hc-item__empty { list-style: none; color: var(--mk-faint); }
-.hc-item__hint { margin: 2px 0 0; font-size: 10.5px; color: var(--mk-faint); }
-.hc-item__ops { display: flex; gap: 6px; align-items: center; }
-.hc-btn {
-  padding: 4px 12px; border-radius: 999px; border: 1px solid transparent; cursor: pointer;
-  font: inherit; font-size: 11.5px; font-weight: 700; white-space: nowrap;
-}
-.hc-btn--fix { background: var(--mk-blue); color: #fff; }
-.hc-btn--fix:hover { filter: brightness(1.08); }
-.hc-btn--fix:disabled { opacity: 0.55; cursor: wait; }
-.hc-btn--ghost { background: #fff; border-color: var(--mk-line); color: var(--mk-muted); }
-.hc-btn--ghost:hover { color: var(--mk-blue); border-color: rgba(44, 99, 208, 0.4); }
-.mono { font-family: var(--mk-mono); font-size: 10.5px; }
+/* 健康检查行 */
+.hc-checks { }
+.hc-check { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #f3f4f6; }
+.hc-check:last-child { border-bottom: none; }
+.hc-check__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.hc-check__dot--ok { background: var(--mk-green); }
+.hc-check__dot--warn { background: var(--mk-amber); }
+.hc-check__dot--error { background: var(--mk-red); }
+.hc-check__dot--info { background: var(--mk-blue); }
+.hc-check__main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.hc-check__main strong { font-size: 12.5px; }
+.hc-check__main span { font-size: 11px; color: var(--mk-faint); }
+.hc-check__count { font-size: 13px; font-weight: 800; color: var(--mk-ink); min-width: 30px; text-align: right; }
+.hc-check__sem { font-size: 10.5px; color: var(--mk-faint); background: #f3f4f6; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.hc-check__btn { border: 1px solid var(--mk-line); border-radius: 6px; background: #fff; padding: 3px 10px; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; color: var(--mk-blue); white-space: nowrap; }
+.hc-check__btn:hover { border-color: var(--mk-blue); }
+.hc-check__btn:disabled { opacity: 0.5; }
 
-@media (min-width: 2000px) {
-  .wb-stat__label { font-size: 13px; }
-  .wb-stat__num { font-size: 24px; }
-  .wb-stat__go { font-size: 12px; }
-  .hc-item__name { font-size: 14px; }
-  .hc-item__cause { font-size: 13px; }
-  .hc-item__detail { font-size: 12.5px; }
-  .hc-item__hint, .mono { font-size: 12px; }
-  .hc-item__status, .hc-item__sem, .hc-item__action-tag { font-size: 12.5px; }
-  .hc-item__count { font-size: 13px; }
-  .hc-btn { font-size: 13px; }
-  .wb-failed, .wb-demo { font-size: 13px; }
-}
+/* 漂移 */
+.hc-drift { padding: 8px 0; }
+.hc-drift__item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #f3f4f6; }
+.hc-drift__item:last-child { border-bottom: none; }
+.hc-drift__item strong { font-size: 12.5px; }
+
+/* 完成度条 */
+.hc-completion { display: grid; gap: 8px; padding: 14px 16px; }
+.hc-completion__bar { display: flex; align-items: center; gap: 10px; }
+.hc-completion__label { font-size: 11px; font-weight: 700; width: 100px; flex-shrink: 0; color: var(--mk-muted); }
+.hc-completion__track { flex: 1; height: 8px; border-radius: 4px; background: #f3f4f6; overflow: hidden; }
+.hc-completion__track i { display: block; height: 100%; border-radius: 4px; transition: width 0.3s ease; }
+.hc-completion__fill--draft { background: #cbd5e1; }
+.hc-completion__fill--handler-ready { background: #93c5fd; }
+.hc-completion__fill--core-ready { background: #60a5fa; }
+.hc-completion__fill--fields-synced { background: #3b82f6; }
+.hc-completion__fill--live { background: var(--mk-green); }
+.hc-completion__num { font-size: 12px; font-weight: 800; min-width: 30px; text-align: right; }
+
+@media (max-width: 700px) { .hc-summary { grid-template-columns: repeat(2, 1fr); } }
 </style>
-
-<script lang="ts">
-/**
- * demo 模式降级数据：静态演示聚合（与后端 summary 契约同构）。
- * 仅 !isLive 时展示，live 模式失败走 wb-failed 重试，不落此分支。
- */
-
-function demoItem(
-  id: HealthCenterItem['id'], label: string, severity: HealthCenterItem['severity'],
-  status: HealthCenterItem['status'], count: number, cause: string,
-  action: HealthCenterItem['action'], fixHint: string,
-  semantics: HealthCenterItem['semantics'] = 'consistency',
-  base: HealthCenterItem['base'] = 'bidirectional',
-): HealthCenterItem {
-  return { id, label, base, semantics, severity, status, count, detail: [], cause, action, fixHint, source: 'demo' }
-}
-
-function buildDemoReport(): HealthCenterSummaryReport {
-  const items: HealthCenterItem[] = [
-    demoItem('w4-corehash', 'W4 漂移（core → 产物 → DB 哈希）', 'error', 'drifted', 2, '核心文件改动后未重新编译同步', 'fixable', '一键修复：编译 + DB 对账 + 重写 snapshots', 'baseline-drift', 'file:core.yaml'),
-    demoItem('field-routing-contract', '契约漂移（编排契约 vs DB）', 'error', 'drifted', 1, '编排文件字段路由声明与 DB 台账不一致', 'manual', '人工决策：以文件或 DB 一方为准', 'baseline-drift', 'file:orchestration'),
-    demoItem('contract-parity', '契约一致性（manifest ↔ DB 契约元数据）', 'warn', 'unregistered', 1, 'manifest 登记的契约未同步到 DB', 'manual', '在 Skill 目录对账面板核对', 'consistency', 'file:manifest'),
-    demoItem('field-routing', '字段路由（字段/路由维度）', 'ok', 'clean', 0, '字段路由声明与 DB 一致', 'none', '', 'consistency', 'file:orchestration'),
-    demoItem('snapshots', '沙盘说明书（agent-snapshots.md）', 'ok', 'clean', 0, '快照与渲染产物一致', 'none', '', 'consistency', 'file:core.yaml'),
-    demoItem('yaml-crosscheck', 'YAML 交叉校验（参数双写检查）', 'ok', 'clean', 0, '参数双写一致', 'none', '', 'consistency', 'bidirectional'),
-    demoItem('params-consistency', '参数一致性（core 与代码声明）', 'ok', 'clean', 0, '参数声明一致', 'none', '', 'consistency', 'bidirectional'),
-    demoItem('fields-sync', '字段同步（core 声明 ↔ 编排路由）', 'ok', 'clean', 0, '字段声明同步', 'none', '', 'consistency', 'bidirectional'),
-    demoItem('w1-active', 'ACTIVE 检查（W1，双向差集偏户口簿）', 'ok', 'clean', 0, 'ACTIVE prompt 齐备', 'none', '', 'consistency', 'db:managed'),
-    demoItem('w2-registration', '注册对账（W2，双向差集偏户口簿）', 'ok', 'clean', 0, '注册表与户口簿一致', 'none', '', 'consistency', 'db:managed'),
-    demoItem('w3-wiring', '接线对账（W3，双向对等无派生）', 'ok', 'clean', 0, 'steps 引用与户口簿一致', 'none', '', 'consistency', 'bidirectional'),
-    demoItem('override-record', '覆盖行（覆盖权高于文件基准）', 'info', 'none', 0, '无手工覆盖行', 'none', '', 'override-record', 'db:managed'),
-    demoItem('runtime-prompt', '运行时漂移（遥测：代码侧 prompt vs DB ACTIVE）', 'warn', 'observed', 1, '遥测观测到代码侧 prompt 与 DB ACTIVE 不一致', 'manual', '在执行日志排查对应调用', 'runtime-info', 'runtime'),
-  ]
-  return {
-    generatedAt: new Date().toISOString(),
-    health: {
-      summary: { total: items.length, baselineDrift: 2, consistency: 1, overrideRecord: 0, fixable: 1 },
-      items,
-      abnormal: 4,
-    },
-    drift: { contract: 1, hash: 2, runtime: 1 },
-    reconciliation: {
-      total: 8, missingRegistration: 1, zombieRegistration: 0,
-      missingActive: 2, zombieActive: 1, zombieSkillActive: 0, unwired: 1,
-    },
-    completion: {
-      distribution: { draft: 2, 'handler-ready': 1, 'core-ready': 1, 'fields-synced': 2, live: 2 },
-      live: 2,
-    },
-    global: { total: 8, aux: 3, mainline: 5, handlerOnly: 0, abnormalSkills: 2 },
-  }
-}
-</script>
