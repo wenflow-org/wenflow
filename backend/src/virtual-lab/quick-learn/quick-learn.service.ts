@@ -17,7 +17,7 @@
 
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
-import { executeSkill } from '../../skills';
+import { executeSkill, virtualLearnerMemoryCuratorDefinition } from '../../skills';
 import {
   virtualLearnerLearnTurnSimulatorDefinition,
   type LearnLearnerPhase,
@@ -39,6 +39,7 @@ import {
   recordCompletedArtifact,
   writeProfileConceptsAfterLesson,
   type LessonKnowledgePoint,
+  type SelfReportedLearnerState,
 } from '../learner-memory';
 
 const DEFAULT_MAX_TURNS = 25;
@@ -345,6 +346,8 @@ export class QuickLearnService {
       let previousLearnerState: Record<string, any> | null = null;
       let teacherReadyStreak = 0;
       let simulatorFailures = 0;
+      /** 最后一轮模拟器自述状态（内部提炼记忆用） */
+      let lastSimulatorSelfState: SelfReportedLearnerState | null = null;
 
       // ④ 教学回合循环
       for (let turn = 1; turn <= run.maxTurns; turn += 1) {
@@ -394,6 +397,19 @@ export class QuickLearnService {
           learnerFeedback?.stopAsking === true &&
           (!Array.isArray(learnerFeedback?.remainingBlockers) || learnerFeedback.remainingBlockers.length === 0)
         );
+
+        // 记录本轮模拟器自述状态（收束轮的内部提炼依据）
+        lastSimulatorSelfState = {
+          conceptName: (task as any)?.linkedConcept || task.title || null,
+          conceptualMastery: simulatorOutput.learnerState?.conceptualMastery ?? null,
+          taskUnderstanding: simulatorOutput.learnerState?.taskUnderstanding ?? null,
+          proceduralMastery: simulatorOutput.learnerState?.proceduralMastery ?? null,
+          selfReportedTaskDone: learnerFeedback?.selfReportedTaskDone ?? null,
+          confidence: learnerFeedback?.confidence ?? null,
+          wantsMoreHelp: learnerFeedback?.wantsMoreHelp ?? null,
+          remainingBlockers: learnerFeedback?.remainingBlockers ?? null,
+          wantsHint: simulatorOutput.learnerState?.wantsHint ?? null,
+        };
 
         transcriptEntries.push({
           turn,
@@ -470,7 +486,7 @@ export class QuickLearnService {
       if (outcome === 'completed') {
         await learningService.completeTask({ taskId: run.taskId, userId: run.userId });
         // 虚拟学习者记忆回写：画像概念 + 成果物登记（best-effort）
-        await this.persistLearnerMemoryAfterQuickLearn(run, teachingSessionId, task);
+        await this.persistLearnerMemoryAfterQuickLearn(run, teachingSessionId, task, lastSimulatorSelfState, transcriptEntries);
         lifecycle.completionReached = true;
         lifecycle.taskCompleted = true;
       } else if (outcome === 'teacher_ready_learner_not') {
@@ -628,7 +644,9 @@ export class QuickLearnService {
   private async persistLearnerMemoryAfterQuickLearn(
     run: any,
     teachingSessionId: string | null,
-    task: { title: string; acceptanceCriteria?: string | null; taskType?: string | null } | null
+    task: { title: string; acceptanceCriteria?: string | null; taskType?: string | null } | null,
+    selfState: SelfReportedLearnerState | null,
+    transcript: QuickLearnTranscriptEntry[]
   ): Promise<void> {
     try {
       let knowledgePoints: LessonKnowledgePoint[] = [];
@@ -638,7 +656,21 @@ export class QuickLearnService {
           ? (teaching.knowledgeState as LessonKnowledgePoint[]).filter((kp) => kp && typeof kp.name === 'string' && kp.name.trim())
           : [];
       }
-      await writeProfileConceptsAfterLesson(run.userId, knowledgePoints, { source: 'quick-learn' });
+      // 记忆提炼 skill（LLM 主路径，失败走确定性 fallback）
+      const curated = await this.runQuickLearnMemoryCurator(run, transcript, task);
+      const effectiveSelfState: SelfReportedLearnerState | null = curated
+        ? {
+            ...(selfState || {}),
+            conceptName: curated.masteredConcepts[0]?.name || curated.struggleConcepts[0]?.name
+              || selfState?.conceptName || task?.title || null,
+            conceptualMastery: curated.masteredConcepts.length > 0 ? 0.85 : selfState?.conceptualMastery ?? null,
+            selfReportedTaskDone: curated.masteredConcepts.length > 0 ? true : selfState?.selfReportedTaskDone ?? null,
+            remainingBlockers: curated.struggleConcepts.length > 0
+              ? curated.struggleConcepts.map((s) => s.blocker).filter(Boolean)
+              : selfState?.remainingBlockers || null,
+          }
+        : selfState;
+      await writeProfileConceptsAfterLesson(run.userId, knowledgePoints, { source: 'quick-learn', selfState: effectiveSelfState });
       await recordCompletedArtifact({
         userId: run.userId,
         taskId: run.taskId,
@@ -646,12 +678,74 @@ export class QuickLearnService {
         artifactType: task?.taskType || null,
         deliverable: task?.acceptanceCriteria || null,
         knowledgePoints,
+        selfState: effectiveSelfState,
+        memoryDelta: curated?.memoryDelta || null,
+        memoryCurated: curated ? {
+          mastered: curated.masteredConcepts.map((m) => m.name),
+          struggling: curated.struggleConcepts.map((s) => s.name),
+          selfCalibration: curated.selfCalibration,
+        } : undefined,
       });
     } catch (error) {
       logger.warn('[QuickLearn] 虚拟学习者记忆回写失败（不影响运行）', {
         runId: run.id,
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+  }
+
+  /** quick-learn 的记忆提炼 skill 调用（LLM 主路径；失败返回 null 走 fallback） */
+  private async runQuickLearnMemoryCurator(
+    run: any,
+    transcript: QuickLearnTranscriptEntry[],
+    task: { title: string; linkedConcept?: string | null; acceptanceCriteria?: string | null } | null
+  ): Promise<{
+    masteredConcepts: Array<{ name: string; evidence: string; confidence: number }>;
+    struggleConcepts: Array<{ name: string; blocker: string; severity: string }>;
+    selfCalibration: string;
+    memoryDelta: string;
+  } | null> {
+    try {
+      const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id: run.profileId } });
+      if (!profile) return null;
+      const persona = {
+        ...parseJson<Record<string, any>>(profile.profile, {}),
+        learningGoal: profile.learningGoal,
+      };
+      const turnSequence = (Array.isArray(transcript) ? transcript : []).slice(-24).map((entry) => ({
+        turn: entry.turn,
+        reply: entry.learner || '',
+        emotion: null,
+        learnerState: undefined,
+        learnerFeedback: undefined,
+        teacherReply: entry.teacher || '',
+      }));
+      const existing = await buildLearnerMemorySnapshot(run.userId, { limit: 30 }).catch(() => null);
+      const result = await executeSkill(virtualLearnerMemoryCuratorDefinition, {
+        persona,
+        turnSequence,
+        currentTask: {
+          title: task?.title || null,
+          linkedConcept: task?.linkedConcept || null,
+          acceptanceCriteria: task?.acceptanceCriteria || null,
+        },
+        existingKnown: existing?.mastered.map((m) => m.name) || [],
+        existingStruggle: existing?.struggling.map((m) => m.name) || [],
+      });
+      if (!result.success || !result.output) return null;
+      const output = result.output as any;
+      return {
+        masteredConcepts: Array.isArray(output.masteredConcepts) ? output.masteredConcepts : [],
+        struggleConcepts: Array.isArray(output.struggleConcepts) ? output.struggleConcepts : [],
+        selfCalibration: typeof output.selfCalibration === 'string' ? output.selfCalibration : '',
+        memoryDelta: typeof output.memoryDelta === 'string' ? output.memoryDelta : '',
+      };
+    } catch (error) {
+      logger.warn('[QuickLearn] 记忆提炼 skill 调用失败，走确定性 fallback', {
+        runId: run.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
     }
   }
 

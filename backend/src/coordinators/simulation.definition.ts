@@ -12,6 +12,7 @@ export const simulationAgentRuntimeDefinition = {
     { step: 6, agentId: 'teaching-agent', role: 'teaching-session-execution', condition: 'when teaching phase starts', loopOver: 'teaching-turns' },
     { step: 7, agentId: 'skill:virtual-learner-referee', role: 'platform-quality-referee', condition: 'after blackbox experiment reaches terminal state' },
     { step: 8, agentId: 'skill:virtual-learner-actor-auditor', role: 'synthetic-learner-fidelity-audit', condition: 'after blackbox experiment reaches terminal state' },
+    { step: 9, agentId: 'skill:virtual-learner-memory-curator', role: 'after-lesson-memory-curation', condition: 'after a lesson/task completes in any chain' },
   ],
   variableGraph: {
     virtualLearnerSimulation: ['persona', 'story', 'learnerState', 'knowledgeState', 'reaction'],
@@ -21,6 +22,7 @@ export const simulationAgentRuntimeDefinition = {
     aiTeaching: ['teachingSessionId', 'learningProgress', 'teachingLogs'],
     platformRefereeEvaluation: ['verdict', 'scores', 'findings', 'recommendations', 'evidence'],
     actorFidelityAudit: ['verdict', 'scores', 'findings', 'recommendations', 'evidence'],
+    afterLessonMemoryCuration: ['masteredConcepts', 'struggleConcepts', 'selfCalibration', 'memoryDelta'],
   },
   source: 'code',
   managedByCode: true,

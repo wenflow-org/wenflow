@@ -17,6 +17,7 @@ import {
   type OrchestrationStage,
 } from '../../services/field-routing/orchestration-file';
 import { PROMPT_ROLE_META } from '../../services/yaml-vocabulary';
+import { getCanonicalAgentId, getAgentManifest } from '../../services/agent-manifest.service';
 import { writeNodeConfigChange, summarizeTextDigest } from '../../services/node-config-change-audit';
 import { loadSkillsBookRaw } from '../../services/skill-registry/skills-file';
 import { analyzeCoreFieldsSync, type CoreFieldsSyncSkillReport } from '../../scripts/check-core-fields-sync';
@@ -338,8 +339,255 @@ router.get('/skill/:skillId', async (req: Request, res: Response) => {
 // ============================================================
 // 编排文件编辑侧（单源化批次 C）
 // 编排文件 prompts/orchestration/<stage>.yaml 是字段路由唯一声明源。
-// 行级 PATCH /routings/:agentId/:fieldId 与 POST /fields 已退役（批次 D）。
+// 行级 PATCH /routings/:agentId/:fieldId 与 POST /fields 曾退役（批次 D）；
+// 2026-08 编排结构页重构后恢复行级 PATCH（编辑形态回归「编排文件 + 行级并存」）：
+//   - 行级 PATCH 只允许编辑路由行属性（render/handoff/internal/accumulate/visibilityPreset/notes），
+//     不碰字段定义（字段定义仍走编排文件）；
+//   - 落库前将改动回写编排文件对应 routing 条目（File-as-Truth 保持唯一声明源），
+//     文件写失败则整体拒绝（DB 与文件不产生分叉）；
+//   - 系统锁（systemLocked/structureLocked）路由行禁止行级修改；
+//   - 写 node_config_changes 审计（changeType='routing-patch'）。
 // ============================================================
+router.patch('/routings/:agentId/:fieldId', async (req: Request, res: Response) => {
+  const agentId = String(req.params.agentId || '').trim();
+  const fieldId = String(req.params.fieldId || '').trim();
+  if (!agentId || !fieldId) {
+    return res.status(400).json({ success: false, error: { message: 'agentId / fieldId 必填' } });
+  }
+
+  // 允许编辑的列白名单（与编排文件 routing 条目键一致）
+  const EDITABLE_KEYS = ['render', 'handoff', 'internal', 'accumulate', 'visibilityPreset', 'notes'] as const;
+
+  const body = (req.body || {}) as Record<string, unknown>;
+  const edits: Record<string, unknown> = {};
+  for (const key of EDITABLE_KEYS) {
+    if (body[key] !== undefined) edits[key] = body[key];
+  }
+  if (!Object.keys(edits).length) {
+    return res.status(400).json({ success: false, error: { message: '无可编辑字段（render/handoff/internal/accumulate/visibilityPreset/notes）' } });
+  }
+  for (const key of Object.keys(edits)) {
+    if (key === 'handoff') {
+      const raw = edits.handoff;
+      const arr = Array.isArray(raw) ? raw.map(String) : typeof raw === 'string' && raw.trim() ? raw.split(/[,\s]+/).filter(Boolean) : [];
+      const stageNames = new Set(loadOrchestrationFiles().map((s) => s.stage));
+      for (const target of arr) {
+        const canonical = getCanonicalAgentId(target);
+        if (canonical === target && stageNames.has(target)) continue;
+        if (getAgentManifest(canonical)) continue;
+        return res.status(422).json({
+          success: false,
+          error: { message: `handoff 目标 "${target}" 不在 manifest（也不是阶段名）` },
+        });
+      }
+      edits.handoff = arr;
+    } else if (key === 'render') {
+      const v = String(edits.render);
+      if (v !== 'visible' && v !== 'hidden') {
+        return res.status(422).json({ success: false, error: { message: 'render 仅允许 visible / hidden' } });
+      }
+      edits.render = v;
+    } else if (key === 'internal' || key === 'accumulate') {
+      edits[key] = Boolean(edits[key]);
+    } else if (key === 'visibilityPreset') {
+      edits[key] = edits[key] ? String(edits[key]) : null;
+    } else if (key === 'notes') {
+      edits[key] = edits[key] ? String(edits[key]) : null;
+    }
+  }
+
+  // 定位所属编排文件（路由行按 (agentId, fieldId) 全局唯一）
+  const owned = loadOrchestrationFiles().find((s) =>
+    s.routings.some((r) => r.agentId === agentId && r.fieldId === fieldId),
+  );
+  if (!owned) {
+    return res.status(404).json({ success: false, error: { message: `编排文件无该路由行：${agentId}/${fieldId}` } });
+  }
+  const stage = owned.stage;
+  const filePath = resolveOrchestrationFile(stage);
+  if (!filePath) {
+    return res.status(404).json({ success: false, error: { message: `编排文件不存在：${stage}` } });
+  }
+
+  // 读当前 DB 行（锁判定 + 审计 before）
+  const dbRow = await systemPrisma.agent_field_routings.findUnique({
+    where: { agentId_fieldId: { agentId, fieldId } },
+  });
+  if (!dbRow) {
+    return res.status(404).json({ success: false, error: { message: `DB 路由行不存在：${agentId}/${fieldId}（请先同步编排文件）` } });
+  }
+  if (dbRow.systemLocked || dbRow.structureLocked) {
+    return res.status(423).json({
+      success: false,
+      error: { message: '该路由行为系统锁/结构锁，不可行级修改（需改编排文件）' },
+    });
+  }
+  // 字段定义级锁：字段 systemLocked → 该字段的所有路由行均锁定
+  const fieldDef = await systemPrisma.field_definitions.findFirst({
+    where: { stage, fieldId },
+    select: { systemLocked: true, structureLocked: true },
+  });
+  if (fieldDef && (fieldDef.systemLocked || fieldDef.structureLocked)) {
+    return res.status(423).json({
+      success: false,
+      error: { message: '该字段为系统锁/结构锁（字段定义级），不可行级修改（需改编排文件）' },
+    });
+  }
+
+  // 行级修改 → 写回编排文件对应 routing 条目（File-as-Truth 单源化保持）
+  const yaml = await fs.promises.readFile(filePath, 'utf-8');
+  const beforeText = yaml;
+  const lines = yaml.split('\n');
+  // 定位该 (agentId, fieldId) 的 routing 条目：routings 段内逐块扫描
+  // （块 = 每条「- agentId: X」起始到下一个「- agentId:」前；goal-agent 的桥接路由
+  //   可能被 YAML 拆成多段，不能只取首个同名 agent 块）
+  let entryStart = -1;
+  let entryEndInBlock = 0;
+  let blockBase = 0;
+  const routingsIdx = lines.findIndex((l) => l.trim() === 'routings:');
+  const scanStart = routingsIdx >= 0 ? routingsIdx : 0;
+  for (let i = scanStart; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (!t.startsWith('- agentId:')) continue;
+    const idMatch = t.match(/agentId:\s*"?([^"\s]+)"?/);
+    if (!idMatch || idMatch[1] !== agentId) continue;
+    const nextBlock = lines.slice(i + 1).findIndex((l) => l.trim().startsWith('- agentId:'));
+    const blockEndAbs = nextBlock >= 0 ? i + 1 + nextBlock : lines.length;
+    const blockLines = lines.slice(i, blockEndAbs);
+    const fIdx = blockLines.findIndex((l) => l.trim().startsWith('fieldId:'));
+    if (fIdx < 0) continue;
+    const idText = blockLines[fIdx].trim().replace(/^fieldId:\s*/, '').replace(/['"]/g, '').trim();
+    if (idText !== fieldId) continue;
+    entryStart = i;
+    entryEndInBlock = blockEndAbs;
+    blockBase = i;
+    break;
+  }  if (entryStart < 0) {
+    return res.status(422).json({
+      success: false,
+      error: { message: `编排文件 ${stage}.yaml 未找到 ${agentId}/${fieldId} 路由条目（文件与声明不一致，请先同步）` },
+    });
+  }
+  const entryLines = lines.slice(blockBase, entryEndInBlock);
+
+  const indent = (entryLines[0].match(/^\s*/) || [''])[0];
+  const keyIndent = `${indent}  `;
+  const edited = [...entryLines];
+  const setKey = (key: string, value: string) => {
+    const idx = edited.findIndex((l) => l.trim().startsWith(`${key}:`));
+    const line = `${keyIndent}${key}: ${value}`;
+    if (idx >= 0) edited[idx] = line;
+    else edited.splice(edited.length, 0, line);
+  };
+  for (const key of Object.keys(edits) as Array<keyof typeof edits>) {
+    let value = edits[key];
+    if (key === 'handoff') {
+      value = Array.isArray(value) && (value as string[]).length ? `[${(value as string[]).map((v) => `'${v}'`).join(', ')}]` : '[]';
+    } else if (key === 'internal' || key === 'accumulate') {
+      value = value ? 'true' : 'false';
+    } else if (value == null || value === '') {
+      value = 'null';
+    }
+    setKey(key, String(value));
+  }
+
+  const next = [...lines.slice(0, blockBase), ...edited, ...lines.slice(entryEndInBlock)];
+  const nextText = next.join('\n');
+  // 写盘前整体校验（防止行级编辑破坏文件）
+  try {
+    validateOrchestrationContent(nextText);
+  } catch (error) {
+    return res.status(422).json({
+      success: false,
+      error: { message: `行级编辑后的编排文件校验失败（已拒绝写盘）：${error instanceof Error ? error.message : String(error)}` },
+    });
+  }
+
+  await fs.promises.writeFile(filePath, nextText, 'utf-8');
+
+  // DB 同步（仅更新业务列；managedByCode=false 的 admin 覆盖行也允许（行级编辑即 admin 覆盖））
+  const nextData: Record<string, unknown> = {
+    render: edits.render !== undefined ? edits.render : dbRow.render,
+    handoff: edits.handoff !== undefined
+      ? ((edits.handoff as string[]).length ? JSON.stringify(edits.handoff) : null)
+      : dbRow.handoff,
+    internalFlag: edits.internal !== undefined ? edits.internal : dbRow.internalFlag,
+    accumulate: edits.accumulate !== undefined ? edits.accumulate : dbRow.accumulate,
+    visibilityPreset: edits.visibilityPreset !== undefined ? edits.visibilityPreset : dbRow.visibilityPreset,
+    notes: edits.notes !== undefined ? edits.notes : dbRow.notes,
+    updatedAt: new Date(),
+  };
+  // 覆盖 DB 中与本次编辑相关的脏值（notes 等）：
+  // 同步时将文件声明值回写 DB，保证「文件为准」在行级编辑后依然成立
+  const fileSync = async () => {
+    const refreshed = loadOrchestrationFiles().find((s) => s.stage === stage);
+    if (!refreshed) return;
+    const fileRouting = refreshed.routings.find((r) => r.agentId === agentId && r.fieldId === fieldId);
+    if (!fileRouting) return;
+    await systemPrisma.agent_field_routings.update({
+      where: { agentId_fieldId: { agentId, fieldId } },
+      data: {
+        render: fileRouting.render,
+        handoff: fileRouting.handoff.length ? JSON.stringify(fileRouting.handoff) : null,
+        internalFlag: fileRouting.internal,
+        accumulate: fileRouting.accumulate,
+        visibilityPreset: fileRouting.visibilityPreset ?? null,
+        notes: fileRouting.notes ?? null,
+        updatedAt: new Date(),
+      },
+    });
+  };
+  await fileSync();
+
+  // 审计（before = 编辑前 routing 行；after = 编辑后行）
+  try {
+    const actorId = (req as Request & { user?: { userId?: string } }).user?.userId || 'admin';
+    const afterHandoff = edits.handoff !== undefined ? edits.handoff : (parseJson<string[]>(dbRow.handoff) || []);
+    await writeNodeConfigChange(systemPrisma, {
+      changeType: 'routing-patch',
+      targetTable: 'agent_field_routings',
+      targetId: `${agentId}/${fieldId}`,
+      agentId,
+      fieldId,
+      before: {
+        render: dbRow.render,
+        handoff: parseJson<string[]>(dbRow.handoff) || [],
+        internal: dbRow.internalFlag,
+        accumulate: dbRow.accumulate,
+        visibilityPreset: dbRow.visibilityPreset,
+        notes: dbRow.notes,
+      },
+      after: {
+        render: nextData.render,
+        handoff: afterHandoff,
+        internal: nextData.internalFlag,
+        accumulate: nextData.accumulate,
+        visibilityPreset: nextData.visibilityPreset,
+        notes: nextData.notes,
+      },
+      actorId,
+      reason: `行级编辑 ${agentId}/${fieldId}（${stage}）——已回写编排文件 ${stage}.yaml`,
+    });
+  } catch (auditError) {
+    logger.warn('[field-routings] routing-patch audit write failed（不阻断保存）', { agentId, fieldId, error: auditError instanceof Error ? auditError.message : String(auditError) });
+  }
+
+  clearRoutingCache();
+  clearSupplementRenderCache();
+
+  const afterRow = await systemPrisma.agent_field_routings.findUnique({
+    where: { agentId_fieldId: { agentId, fieldId } },
+  });
+  res.json({
+    success: true,
+    data: {
+      stage,
+      routing: afterRow ? serializeRouting(afterRow) : null,
+      fileUpdated: true,
+      syncHint: '已同步编排文件与 DB（行级编辑即 admin 覆盖，后续全量同步将保留该行）',
+    },
+  });
+});
 
 /** 解析 URL 中的 stage 并定位编排文件；非法/不存在返回 null（防路径穿越） */
 function resolveOrchestrationFile(stage: string): string | null {

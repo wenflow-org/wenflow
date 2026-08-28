@@ -82,8 +82,25 @@ describe('lesson-knowledge-enricher normalize（不注入伪值）', () => {
     const result = await lessonKnowledgeEnricher(input);
 
     expect(result.output?.conceptLedger).toHaveLength(1);
-    expect(result.output?.conceptLedger?.[0].evidenceCount).toBe(1);
+    expect(result.output?.conceptLedger?.[0].evidenceCount).toBe(0);
     expect(result.output?.transferSignals?.[0].confidence).toBe(0.5);
     expect(result.output?.recurringConfusions).toEqual([]);
+  });
+
+  it('evidenceCount 缺失/非法时按 0 处理（不虚报为 1）', async () => {
+    mockCallPrompt.mockImplementation(async (spec: any, payload: any) => {
+      const normalized = spec.normalizeOutput({
+        conceptLedger: [
+          { conceptKey: 'A', label: 'A', evidenceCount: undefined },
+          { conceptKey: 'B', label: 'B', evidenceCount: -2 },
+          { conceptKey: 'C', label: 'C', evidenceCount: 'abc' },
+        ],
+      }, payload);
+      return { success: true, output: normalized, debug: { durationMs: 5 } };
+    });
+
+    const result = await lessonKnowledgeEnricher(input);
+
+    expect(result.output?.conceptLedger?.map((c: any) => c.evidenceCount)).toEqual([0, 0, 0]);
   });
 });

@@ -20,7 +20,7 @@ import {
   getSimulationAgentConfig,
   type SimulationAgentConfig
 } from '../services/agentConfig.service';
-import { executeSkill, virtualLearnerGoalDialogueSimulatorDefinition, virtualLearnerPathEvaluatorDefinition, virtualLearnerLearnTurnSimulatorDefinition } from '../skills';
+import { executeSkill, virtualLearnerGoalDialogueSimulatorDefinition, virtualLearnerPathEvaluatorDefinition, virtualLearnerLearnTurnSimulatorDefinition, virtualLearnerMemoryCuratorDefinition } from '../skills';
 import { normalizeFrictionBudget, type FrictionBudget } from '../skills/virtual-learner-shared';
 import { sessionWrapupAgent, type SessionWrapupInput } from '../skills/session-wrapup';
 import { buildGoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
@@ -36,6 +36,7 @@ import {
   recordCompletedArtifact,
   writeProfileConceptsAfterLesson,
   type LessonKnowledgePoint,
+  type SelfReportedLearnerState,
 } from '../virtual-lab/learner-memory';
 import type { LeaseClientLike } from '../virtual-lab/vlab-types';
 import type {
@@ -2905,7 +2906,8 @@ class SimulationOrchestrator {
     task: SimulationTask
   ): Promise<void> {
     try {
-      const learningState = (this.parseStageResultsPayload(session.stageResults).teaching || {}) as Record<string, unknown>;
+      const stageResults = this.parseStageResultsPayload(session.stageResults);
+      const learningState = (stageResults.teaching || {}) as Record<string, unknown>;
       const teachingSessionId = typeof learningState.teachingSessionId === 'string' ? learningState.teachingSessionId : null;
       let knowledgePoints: LessonKnowledgePoint[] = [];
       if (teachingSessionId) {
@@ -2916,7 +2918,37 @@ class SimulationOrchestrator {
             )
           : [];
       }
-      await writeProfileConceptsAfterLesson(session.userId, knowledgePoints, { source: 'assisted' });
+      // 内部提炼：用模拟器自述状态（assisted 的收束轮 learnerState + learnerFeedback）
+      const learnerState = (learningState.learnerState && typeof learningState.learnerState === 'object'
+        ? learningState.learnerState : {}) as Record<string, any>;
+      const feedback = (learningState.latestLearnerFeedback && typeof learningState.latestLearnerFeedback === 'object'
+        ? learningState.latestLearnerFeedback : {}) as Record<string, any>;
+      const selfState: SelfReportedLearnerState | null = {
+        conceptName: task.linkedConcept || task.title || null,
+        conceptualMastery: typeof learnerState.conceptualMastery === 'number' ? learnerState.conceptualMastery : null,
+        taskUnderstanding: typeof learnerState.taskUnderstanding === 'number' ? learnerState.taskUnderstanding : null,
+        proceduralMastery: typeof learnerState.proceduralMastery === 'number' ? learnerState.proceduralMastery : null,
+        selfReportedTaskDone: typeof feedback.selfReportedTaskDone === 'boolean' ? feedback.selfReportedTaskDone : null,
+        confidence: typeof feedback.confidence === 'number' ? feedback.confidence : null,
+        wantsMoreHelp: typeof feedback.wantsMoreHelp === 'boolean' ? feedback.wantsMoreHelp : null,
+        remainingBlockers: Array.isArray(feedback.remainingBlockers) ? feedback.remainingBlockers : null,
+        wantsHint: typeof learnerState.wantsHint === 'boolean' ? learnerState.wantsHint : null,
+      };
+      // 记忆提炼 skill（LLM 主路径，失败走确定性 fallback）
+      const curated = await this.runAssistedMemoryCurator(session, learningState, task);
+      const effectiveSelfState: SelfReportedLearnerState | null = curated
+        ? {
+            ...(selfState || {}),
+            conceptName: curated.masteredConcepts[0]?.name || curated.struggleConcepts[0]?.name
+              || selfState?.conceptName || task.title || null,
+            conceptualMastery: curated.masteredConcepts.length > 0 ? 0.85 : selfState?.conceptualMastery ?? null,
+            selfReportedTaskDone: curated.masteredConcepts.length > 0 ? true : selfState?.selfReportedTaskDone ?? null,
+            remainingBlockers: curated.struggleConcepts.length > 0
+              ? curated.struggleConcepts.map((s) => s.blocker).filter(Boolean)
+              : selfState?.remainingBlockers || null,
+          }
+        : selfState;
+      await writeProfileConceptsAfterLesson(session.userId, knowledgePoints, { source: 'assisted', selfState: effectiveSelfState });
       await recordCompletedArtifact({
         userId: session.userId,
         taskId: task.id,
@@ -2924,6 +2956,13 @@ class SimulationOrchestrator {
         artifactType: typeof task.taskType === 'string' ? task.taskType : null,
         deliverable: typeof task.acceptanceCriteria === 'string' ? task.acceptanceCriteria : null,
         knowledgePoints,
+        selfState: effectiveSelfState,
+        memoryDelta: curated?.memoryDelta || null,
+        memoryCurated: curated ? {
+          mastered: curated.masteredConcepts.map((m) => m.name),
+          struggling: curated.struggleConcepts.map((s) => s.name),
+          selfCalibration: curated.selfCalibration,
+        } : undefined,
         milestoneTitle: null,
       });
     } catch (error) {
@@ -2931,6 +2970,63 @@ class SimulationOrchestrator {
         sessionId,
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+  }
+
+  /** assisted 的记忆提炼 skill 调用（LLM 主路径；失败返回 null 走 fallback） */
+  private async runAssistedMemoryCurator(
+    session: VirtualSessionWithProfile,
+    learningState: Record<string, unknown>,
+    task: SimulationTask
+  ): Promise<{
+    masteredConcepts: Array<{ name: string; evidence: string; confidence: number }>;
+    struggleConcepts: Array<{ name: string; blocker: string; severity: string }>;
+    selfCalibration: string;
+    memoryDelta: string;
+  } | null> {
+    try {
+      const profile = session.virtual_learner_profiles;
+      if (!profile) return null;
+      const persona = {
+        ...safeJsonParse<Record<string, any>>(profile.profile, {}),
+        learningGoal: profile.learningGoal,
+      };
+      // 从 conversationHistory 构建回合序列
+      const history = Array.isArray(learningState.conversationHistory) ? learningState.conversationHistory : [];
+      const turnSequence = history.slice(-24).map((m: any, index: number) => ({
+        turn: index + 1,
+        reply: typeof m.content === 'string' ? m.content : '',
+        emotion: null,
+        learnerState: undefined,
+        learnerFeedback: undefined,
+        role: m.role || 'learner',
+      }));
+      const existing = await buildLearnerMemorySnapshot(session.userId, { limit: 30 }).catch(() => null);
+      const result = await executeSkill(virtualLearnerMemoryCuratorDefinition, {
+        persona,
+        turnSequence,
+        currentTask: {
+          title: task.title || null,
+          linkedConcept: task.linkedConcept || null,
+          acceptanceCriteria: typeof task.acceptanceCriteria === 'string' ? task.acceptanceCriteria : null,
+        },
+        existingKnown: existing?.mastered.map((m) => m.name) || [],
+        existingStruggle: existing?.struggling.map((m) => m.name) || [],
+      });
+      if (!result.success || !result.output) return null;
+      const output = result.output as any;
+      return {
+        masteredConcepts: Array.isArray(output.masteredConcepts) ? output.masteredConcepts : [],
+        struggleConcepts: Array.isArray(output.struggleConcepts) ? output.struggleConcepts : [],
+        selfCalibration: typeof output.selfCalibration === 'string' ? output.selfCalibration : '',
+        memoryDelta: typeof output.memoryDelta === 'string' ? output.memoryDelta : '',
+      };
+    } catch (error) {
+      logger.warn('[simulation-coordinator] 记忆提炼 skill 调用失败，走确定性 fallback', {
+        sessionId: session.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
     }
   }
 

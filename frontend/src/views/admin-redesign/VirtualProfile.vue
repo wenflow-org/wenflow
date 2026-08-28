@@ -162,6 +162,119 @@
           </div>
         </section>
 
+        <!-- 记忆池：这个虚拟学习者"记住了什么"（已掌握 / 到期复习 / 易混淆 / 最近完成事项） -->
+        <section v-if="activeTab === 'memory'" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">记忆池 · {{ memoryCount }}</h3>
+            <span class="mk-card__meta">课后沉淀 · 学过的会被记住，快忘了的会显示为复习点</span>
+            <button
+              v-if="isLive"
+              type="button"
+              class="mk-status__action"
+              :disabled="memoryLoading"
+              @click="loadMemory(true)"
+            >
+              {{ memoryLoading ? '加载中…' : '刷新' }}
+            </button>
+          </div>
+
+          <div v-if="isLive && memoryLoading && !memoryData" class="vp-empty-state">
+            <span class="vp-empty-state__icon" aria-hidden="true">◌</span>
+            <strong>正在读取记忆…</strong>
+          </div>
+
+          <div v-else-if="isLive && memoryLoadFailed" class="vp-empty-state">
+            <span class="vp-empty-state__icon" aria-hidden="true">◌</span>
+            <strong>记忆池加载失败</strong>
+            <p>暂时无法读取该虚拟学习者的记忆数据。</p>
+            <button type="button" class="mk-empty__action" @click="loadMemory(true)">重试</button>
+          </div>
+
+          <div v-else-if="isLive && memoryEmpty" class="vp-empty-state">
+            <span class="vp-empty-state__icon" aria-hidden="true">◌</span>
+            <strong>记忆池还是空的</strong>
+            <p>完成课程后，学到的概念和做过的事会沉淀到这里。<br />还没有学习记录时，记忆池为空是正常的。</p>
+          </div>
+
+          <template v-else>
+            <!-- 概览 -->
+            <div class="vp-memory__overview" v-if="!isLive || memoryData">
+              <div class="vp-memory__stat">
+                <strong>{{ memoryCounts.mastered }}</strong>
+                <span>已掌握</span>
+              </div>
+              <div class="vp-memory__stat" :class="{ 'vp-memory__stat--warn': memoryCounts.dueReview > 0 }">
+                <strong>{{ memoryCounts.dueReview }}</strong>
+                <span>到期复习</span>
+              </div>
+              <div class="vp-memory__stat" :class="{ 'vp-memory__stat--warn': memoryCounts.struggling > 0 }">
+                <strong>{{ memoryCounts.struggling }}</strong>
+                <span>易混淆</span>
+              </div>
+              <div class="vp-memory__stat">
+                <strong>{{ memoryCounts.completed }}</strong>
+                <span>完成事项</span>
+              </div>
+            </div>
+
+            <!-- 已掌握 -->
+            <div v-if="memoryMastered.length" class="vp-memory__group">
+              <div class="vp-memory__group-head">
+                <h4 class="vp-memory__group-title">已掌握</h4>
+                <span class="mk-card__meta">历次课后沉淀的概念</span>
+              </div>
+              <div class="vp-tags">
+                <span v-for="m in memoryMastered" :key="m.name" class="vp-tag vp-tag--ok">{{ m.name }}</span>
+              </div>
+            </div>
+
+            <!-- 到期复习点 -->
+            <div v-if="memoryDueReview.length" class="vp-memory__group">
+              <div class="vp-memory__group-head">
+                <h4 class="vp-memory__group-title">到期复习点</h4>
+                <span class="mk-card__meta">学过但快忘了 · 下一节课会以"旧知唤醒"回到课堂</span>
+              </div>
+              <div class="vp-memory__review">
+                <div v-for="r in memoryDueReview" :key="r.name" class="vp-memory__review-item">
+                  <span class="vp-tag vp-tag--warn">{{ r.name }}</span>
+                  <span class="vp-memory__retention" :title="`保留率 ${Math.round(r.retention * 100)}%`">
+                    保留 {{ Math.round(r.retention * 100) }}%
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 易混淆 / 卡点 -->
+            <div v-if="memoryStruggling.length" class="vp-memory__group">
+              <div class="vp-memory__group-head">
+                <h4 class="vp-memory__group-title">易混淆 / 卡点</h4>
+                <span class="mk-card__meta">仍在学习或反复出问题的概念</span>
+              </div>
+              <div class="vp-tags">
+                <span v-for="s in memoryStruggling" :key="s.name" class="vp-tag vp-tag--warn">{{ s.name }}</span>
+              </div>
+            </div>
+
+            <!-- 最近完成事项（成果物） -->
+            <div v-if="memoryCompleted.length" class="vp-memory__group">
+              <div class="vp-memory__group-head">
+                <h4 class="vp-memory__group-title">最近完成的事</h4>
+                <span class="mk-card__meta">成果物 · 新故事生成时会延续这些</span>
+              </div>
+              <div class="vp-memory__completed">
+                <div v-for="(c, ci) in memoryCompleted" :key="c.taskId || `mc-${ci}`" class="vp-memory__completed-item">
+                  <span class="vp-memory__completed-dot" aria-hidden="true">✓</span>
+                  <div class="vp-memory__completed-body">
+                    <strong>{{ c.title }}</strong>
+                    <span v-if="c.deliverable" class="vp-memory__deliverable">成果：{{ c.deliverable }}</span>
+                    <span v-if="c.completedAt" class="mk-card__meta">{{ formatMemoryTime(c.completedAt) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </section>
+
         <section v-if="activeTab === 'stories'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">故事池 · {{ displayStories.length }}</h3>
@@ -514,8 +627,8 @@ const detailError = ref(false)
 /** 详情接口失败但有列表兜底 → 展示兜底数据 + 提示条（区别于 detailError 全失败态） */
 const fallbackNotice = ref(false)
 
-/* 分页：故事池是主工作区（默认页），画像/运行/验收各归其页 */
-type ProfileTab = 'stories' | 'runs' | 'profile'
+/* 分页：故事池是主工作区（默认页），记忆池/画像/运行各归其页 */
+type ProfileTab = 'stories' | 'runs' | 'profile' | 'memory'
 const activeTab = ref<ProfileTab>('stories')
 
 /* demo 模式的故事池（按样本给出有差异的演示故事） */
@@ -944,8 +1057,7 @@ async function loadDetail(id?: string, quiet = false) {
   } catch {
     if (seq !== loadSeq) return
     const base = liveVirtuals.value.find((v) => v.id === id)
-    if (base) {
-      fallbackNotice.value = true
+    if (base) {      fallbackNotice.value = true
       liveDetail.value = {
         name: base.name,
         archetype: '自定义样本',
@@ -968,9 +1080,77 @@ watch(
   () => [subPage.value?.id, isLive.value] as const,
   async ([id, live]) => {
     if (id && live) await loadDetail(id)
+    if (id && live) void loadMemory(false)
   },
   { immediate: true }
 )
+
+/* ===== 记忆池 ===== */
+interface MemoryData {
+  mastered: Array<{ name: string }>
+  dueReview: Array<{ name: string; retention: number }>
+  struggling: Array<{ name: string }>
+  recentCompleted: Array<{
+    taskId: string | null
+    title: string
+    artifactType: string | null
+    deliverable: string | null
+    completedAt: string
+  }>
+  counts: { mastered: number; dueReview: number; struggling: number; completed: number }
+}
+const memoryData = ref<MemoryData | null>(null)
+const memoryLoading = ref(false)
+const memoryLoadFailed = ref(false)
+
+const memoryMastered = computed(() => memoryData.value?.mastered || [])
+const memoryDueReview = computed(() => memoryData.value?.dueReview || [])
+const memoryStruggling = computed(() => memoryData.value?.struggling || [])
+const memoryCompleted = computed(() => memoryData.value?.recentCompleted || [])
+const memoryCounts = computed(() => memoryData.value?.counts || { mastered: 0, dueReview: 0, struggling: 0, completed: 0 })
+const memoryCount = computed(() => {
+  if (!isLive.value) return 0
+  const c = memoryCounts.value
+  return c.mastered + c.dueReview + c.struggling + c.completed
+})
+const memoryEmpty = computed(() => {
+  const c = memoryCounts.value
+  return c.mastered + c.dueReview + c.struggling + c.completed === 0
+})
+
+async function loadMemory(force = false) {
+  const id = subPage.value?.id
+  if (!id || !isLive.value) return
+  if (memoryLoading.value && !force) return
+  memoryLoading.value = true
+  memoryLoadFailed.value = false
+  try {
+    const res = await adminVirtualLearnersApi.getVirtualLearnerMemory(id)
+    const body = res.data?.data ?? res.data ?? null
+    const d = body || {}
+    memoryData.value = {
+      mastered: Array.isArray(d.mastered) ? d.mastered : [],
+      dueReview: Array.isArray(d.dueReview) ? d.dueReview : [],
+      struggling: Array.isArray(d.struggling) ? d.struggling : [],
+      recentCompleted: Array.isArray(d.recentCompleted) ? d.recentCompleted : [],
+      counts: d.counts || { mastered: 0, dueReview: 0, struggling: 0, completed: 0 }
+    }
+  } catch {
+    memoryLoadFailed.value = true
+    if (!force) memoryData.value = null
+  } finally {
+    memoryLoading.value = false
+  }
+}
+
+function formatMemoryTime(value: string): string {
+  if (!value) return ''
+  try {
+    return new Date(value).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
+  } catch {
+    return value
+  }
+}
 
 /* 编辑画像 */
 function openEdit() {
@@ -1229,6 +1409,7 @@ const tabs = computed(() => {
   const list: Array<{ key: ProfileTab; label: string; count?: number }> = [
     { key: 'stories', label: '故事池', count: displayStories.value.length },
     { key: 'runs', label: '运行', count: (d.value?.runs || []).length },
+    { key: 'memory', label: '记忆池', count: memoryCount.value },
     { key: 'profile', label: '画像' }
   ]
   return list
@@ -2188,5 +2369,115 @@ async function quietReload(id: string) {
   .vp-adv-row--object pre { padding: 9px 14px; max-height: 285px; }
   .vp-story-item__advanced { font-size: 17.5px; }
   .vp-story-item__advanced > summary::before { font-size: 16px; }
+}
+
+/* ===== 记忆池 ===== */
+.vp-memory__overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 16px 18px;
+}
+.vp-memory__stat {
+  border: 1px solid var(--el-border-color-lighter, #e8ecf2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fafbfd;
+  display: grid;
+  gap: 2px;
+}
+.vp-memory__stat strong { font-size: 20px; line-height: 1.2; color: var(--mk-ok, #1f9d55); }
+.vp-memory__stat span { font-size: 11.5px; color: var(--mk-faint, #8a94a6); }
+.vp-memory__stat--warn strong { color: var(--mk-warn, #c78200); }
+.vp-memory__group {
+  padding: 4px 18px 18px;
+}
+.vp-memory__group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.vp-memory__group-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--mk-strong, #232a35);
+}
+.vp-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.vp-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  border: 1px solid transparent;
+}
+.vp-tag--ok {
+  color: #1f7a45;
+  background: #e8f6ee;
+  border-color: #cfe9da;
+}
+.vp-tag--warn {
+  color: #a06a00;
+  background: #fdf3e3;
+  border-color: #f2dfbc;
+}
+.vp-memory__review {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.vp-memory__review-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.vp-memory__retention {
+  font-size: 11.5px;
+  color: var(--mk-faint, #8a94a6);
+}
+.vp-memory__completed {
+  display: grid;
+  gap: 8px;
+}
+.vp-memory__completed-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e8ecf2;
+  border-radius: 10px;
+  background: #fafbfd;
+}
+.vp-memory__completed-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e8f6ee;
+  color: #1f9d55;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.vp-memory__completed-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.vp-memory__completed-body strong { font-size: 13px; color: var(--mk-strong, #232a35); }
+.vp-memory__deliverable {
+  font-size: 12px;
+  color: var(--mk-text, #4a5568);
 }
 </style>

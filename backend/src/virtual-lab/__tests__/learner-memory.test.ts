@@ -12,7 +12,9 @@ import prisma from '../../config/database';
 import { memoryTraceService } from '../../services/memory/memory-trace.service';
 import {
   buildLearnerMemorySnapshot,
+  extractSelfStateFromTrace,
   recordCompletedArtifact,
+  selfExtractLearnerMemory,
   writeProfileConceptsAfterLesson,
 } from '../learner-memory';
 
@@ -56,6 +58,76 @@ function profileRow(profileData: Record<string, unknown>) {
     struggleConcepts: JSON.stringify(profileData.struggleConcepts || []),
   };
 }
+
+describe('selfExtractLearnerMemory（内部提炼：自己觉得学会了什么）', () => {
+  it('自评掌握高 + 自认完成 + 无卡点 → mastered', () => {
+    const result = selfExtractLearnerMemory({
+      conceptName: '剪辑节奏',
+      conceptualMastery: 0.82,
+      taskUnderstanding: 0.8,
+      proceduralMastery: 0.75,
+      selfReportedTaskDone: true,
+      confidence: 0.85,
+      wantsMoreHelp: false,
+      remainingBlockers: [],
+      wantsHint: false,
+    });
+    expect(result.mastered).toEqual(['剪辑节奏']);
+    expect(result.struggling).toEqual([]);
+  });
+
+  it('自评掌握低 / 想要提示 / 有剩余卡点 → struggling', () => {
+    const result = selfExtractLearnerMemory({
+      conceptName: '色彩校正',
+      conceptualMastery: 0.32,
+      selfReportedTaskDone: false,
+      confidence: 0.3,
+      wantsMoreHelp: true,
+      remainingBlockers: ['曲线工具不会用'],
+      wantsHint: true,
+    });
+    expect(result.mastered).toEqual([]);
+    expect(result.struggling).toEqual(['色彩校正']);
+  });
+
+  it('自评完成但掌握中低 → 记入 struggling（嘴硬但没真会）', () => {
+    const result = selfExtractLearnerMemory({
+      conceptName: '转场',
+      conceptualMastery: 0.55,
+      selfReportedTaskDone: true,
+      confidence: 0.7,
+      wantsMoreHelp: false,
+      remainingBlockers: [],
+      wantsHint: false,
+    });
+    expect(result.mastered).toEqual([]);
+    expect(result.struggling).toEqual(['转场']);
+  });
+
+  it('无概念名 / 空状态 → 空结果', () => {
+    expect(selfExtractLearnerMemory(null)).toEqual({ mastered: [], struggling: [] });
+    expect(selfExtractLearnerMemory({ conceptName: '', selfReportedTaskDone: true }))
+      .toEqual({ mastered: [], struggling: [] });
+  });
+});
+
+describe('extractSelfStateFromTrace（从私有状态轨迹提炼收束轮自述）', () => {
+  it('取指定 task 最近的 teaching 轨迹条目', () => {
+    const trace = [
+      { stage: 'goal', state: { phaseFocus: 'understanding' } },
+      { stage: 'teaching', taskId: 't1', state: { conceptualMastery: 0.9, learnerFeedback: { selfReportedTaskDone: true, confidence: 0.9, remainingBlockers: [] } } },
+      { stage: 'teaching', taskId: 't2', state: { conceptualMastery: 0.3, learnerFeedback: { selfReportedTaskDone: false, remainingBlockers: ['卡住'] } } },
+    ];
+    const self = extractSelfStateFromTrace(trace, 't1');
+    expect(self?.conceptualMastery).toBe(0.9);
+    expect(self?.selfReportedTaskDone).toBe(true);
+  });
+
+  it('无 teaching 轨迹时返回 null', () => {
+    expect(extractSelfStateFromTrace([{ stage: 'goal' }], 't1')).toBeNull();
+    expect(extractSelfStateFromTrace(null, 't1')).toBeNull();
+  });
+});
 
 describe('writeProfileConceptsAfterLesson', () => {
   beforeEach(() => {
@@ -111,6 +183,28 @@ describe('writeProfileConceptsAfterLesson', () => {
   it('空输入不写库', async () => {
     await writeProfileConceptsAfterLesson('u1', []);
     expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('selfState 优先于老师侧 knowledgeState（内部提炼）', async () => {
+    mockFindUnique.mockResolvedValue(profileRow({ knownConcepts: [], struggleConcepts: [] }));
+    // 老师认为 mastered，但学习者自己觉得没学会 → 应记 struggle
+    await writeProfileConceptsAfterLesson('u1', [
+      { name: '剪辑节奏', status: 'mastered', progress: 100 },
+    ], {
+      selfState: {
+        conceptName: '剪辑节奏',
+        conceptualMastery: 0.3,
+        selfReportedTaskDone: false,
+        confidence: 0.35,
+        wantsMoreHelp: true,
+        remainingBlockers: ['还不会'],
+        wantsHint: true,
+      },
+    });
+    expect(mockUpdate).toHaveBeenCalled();
+    const data = mockUpdate.mock.calls[0][0].data;
+    expect(JSON.parse(data.knownConcepts)).toEqual([]);
+    expect(JSON.parse(data.struggleConcepts)).toEqual(['剪辑节奏']);
   });
 });
 

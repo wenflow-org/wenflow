@@ -2,9 +2,20 @@ import express from 'express';
 import prisma from '../../config/database';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { learnerSnapshotRefreshService } from '../../services/learner/LearnerSnapshotRefreshService';
+import learningStateService from '../../services/learning/learning-state.service';
 
 const router = express.Router();
 router.use(authMiddleware);
+
+/** 安全解析 JSON 文本（learner_evidence.payload 等），失败返回 null */
+function safeJsonParse<T>(raw: string | null | undefined): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
 
 async function ensureAdmin(userId?: string) {
   if (!userId) return false;
@@ -140,10 +151,74 @@ router.get('/:userId/evidence', async (req, res) => {
       scope: 'path',
     });
 
+    // 教学域 4 类证据（快照 recentEvidence：task-completed / teaching-session / summary / evaluation）
+    const teachingItems = snapshot.knowledgeMemory.currentPath?.recentEvidence || [];
+
+    // 目标/路径域证据：直接从 learner_evidence 表取（goal:understanding:updated / path:created / path:generated / path:adjusted / path:completed），
+    // 与教学证据合并为完整时间线（这些事件原本只用于画像聚合，不在时间线展示——调查结论 1）
+    const domainItems = await prisma.learner_evidence.findMany({
+      where: {
+        userId: req.params.userId,
+        evidenceType: {
+          in: ['goal:understanding:updated', 'path:created', 'path:generated', 'path:adjusted', 'path:completed'],
+        },
+      },
+      orderBy: { occurredAt: 'desc' },
+      take: 30,
+      select: {
+        id: true,
+        evidenceType: true,
+        confidence: true,
+        occurredAt: true,
+        pathId: true,
+        taskId: true,
+        sessionId: true,
+        payload: true,
+      },
+    });
+
+    const domainEvidence = domainItems.map((e) => {
+      const payload = safeJsonParse<Record<string, any>>(e.payload) || {};
+      // goal/path 域证据语义：置信度表示「事件完成度/理解度」，不是学习成败。
+      // 统一用中性 signal 'incomplete'（前端渲染为灰点 + 中文「澄清/创建/生成」等，不误标掌握/未完成）
+      const signal: 'mastery' | 'struggle' | 'fatigue' | 'incomplete' = 'incomplete';
+      return {
+        type: e.evidenceType,
+        taskId: e.taskId || undefined,
+        sessionId: e.sessionId || undefined,
+        conceptKeys: Array.isArray(payload?.conceptKeys) ? payload.conceptKeys.map(String) : [],
+        signal,
+        score: e.confidence,
+        happenedAt: e.occurredAt.toISOString(),
+        // 附加域信息：payload 里的关键摘要
+        detail: e.evidenceType === 'goal:understanding:updated'
+          ? String(payload?.understanding?.surface_goal || payload?.surfaceGoal || '目标澄清对话')
+          : String(payload?.pathTitle || payload?.title || ''),
+      };
+    });
+
+    // 学习压力记录曲线：用系统真实压力指标体系（learning_metrics 的 LSS/KTL/LF/LSB 历史趋势，
+    // 与用户侧 /state/trends 同源）——不是学习分钟数，是每次会话/任务完成时 AI 评估的压力记录
+    let loadCurve: { date: string; lss: number | null; ktl: number | null; lf: number | null; lsb: number | null }[] = [];
+    try {
+      const trendWindow = await learningStateService.getStateTrendWindow(req.params.userId, { days: 90, mode: 'recent' });
+      loadCurve = trendWindow.trends.map((t) => ({
+        date: t.date.toISOString().slice(0, 10),
+        lss: t.lss,
+        ktl: t.ktl,
+        lf: t.lf,
+        lsb: t.lsb,
+      }));
+    } catch {
+      // 压力趋势不可用（如用户无任何指标）时返回空数组，前端显示空态
+    }
+
     return res.json({
       success: true,
       data: {
-        items: snapshot.knowledgeMemory.currentPath?.recentEvidence || [],
+        items: teachingItems,
+        domain: domainEvidence,
+        loadCurve,
       },
     });
   } catch (error: any) {

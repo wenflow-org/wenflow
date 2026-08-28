@@ -738,6 +738,45 @@ async function buildLearnerMemoryStoryHints(profile: {
   }
 }
 
+/**
+ * GET /:id/memory —— 虚拟学习者记忆池
+ * 展示此人记住了什么：已掌握 / 到期复习点 / 易混淆卡点 / 最近完成事项（成果物）。
+ * 数据由 learner-memory 模块聚合（画像 knownConcepts + memory_traces 到期点 + recentCompleted）。
+ */
+router.get('/:id/memory', async (req: Request, res) => {
+  try {
+    const { id } = req.params;
+    const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id } });
+    if (!profile) {
+      return res.status(404).json({ success: false, error: '虚拟用户不存在' });
+    }
+
+    const memory = await buildLearnerMemorySnapshot(profile.userId, { limit: 12 });
+
+    return res.json({
+      success: true,
+      data: {
+        profileId: id,
+        updatedAt: profile.updatedAt,
+        mastered: memory.mastered.map((item) => ({ name: item.name })),
+        dueReview: memory.dueReview.map((item) => ({ name: item.name, retention: item.progress / 100 })),
+        struggling: memory.struggling.map((item) => ({ name: item.name })),
+        recentCompleted: memory.recentCompleted,
+        recentTaskTitles: memory.recentTaskTitles,
+        counts: {
+          mastered: memory.mastered.length,
+          dueReview: memory.dueReview.length,
+          struggling: memory.struggling.length,
+          completed: memory.recentCompleted.length,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error('[virtual-learners] 记忆池获取失败:', error);
+    res.status(500).json({ success: false, error: error instanceof Error ? error.message : '获取记忆池失败' });
+  }
+});
+
 router.get('/:id/stories', async (req: Request, res) => {
   try {
     const { id } = req.params;

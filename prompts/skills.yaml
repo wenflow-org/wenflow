@@ -393,6 +393,26 @@ skills:
           via: service
       sandbox: [simulation]
 
+  - skillId: virtual-learner-memory-curator
+    kind: mainline
+    stage: simulation
+    parentAgent: simulation-agent
+    handlerRef: backend/src/skills/virtual-learner-memory-curator/index.ts
+    coreFile: prompts/core/virtual-learner-memory-curator.yaml
+    displayName: 虚拟学习者课后记忆提炼 Skill
+    description: 以虚拟学习者本人视角，从课堂回合中提炼"自己觉得学会了什么、卡在哪"，产出可沉淀的记忆增量
+    coordinator:
+      agentId: simulation-agent
+      steps:
+        - { step: 9, role: after-lesson-memory-curation, condition: after a lesson/task completes }
+    dataSource:
+      db:
+        - table: virtual_learner_profiles
+          via: service
+        - table: teaching_sessions
+          via: service
+      sandbox: [simulation]
+
   - skillId: virtual-learner-actor-auditor
     kind: mainline
     stage: simulation

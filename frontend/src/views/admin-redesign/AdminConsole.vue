@@ -160,15 +160,18 @@ const router = useRouter()
    打开：openSubPage（任意组件）→ subPage 变化 → URL 补 query；
    恢复：整页刷新 /admin/:page?view=virtual&id=xxx → query watch → subPage 恢复 → 详情组件直接渲染。 */
 const SUBPAGE_VIEWS = ['learner', 'virtual', 'user', 'session', 'session-real']
-// URL → subPage（深链/刷新/前进后退）
+// URL → subPage（深链/刷新/前进后退）；includeTest 透传（虚拟学习者/测试账号深链可查）
 watch(
-  () => [route.query.view, route.query.id] as [unknown, unknown],
-  ([v, id]) => {
+  () => [route.query.view, route.query.id, route.query.includeTest] as [unknown, unknown, unknown],
+  ([v, id, includeTest]) => {
     const view = typeof v === 'string' ? v : ''
     const sid = typeof id === 'string' ? id : ''
+    const it = String(includeTest || '') === 'true'
     if (sid && SUBPAGE_VIEWS.includes(view)) {
-      if (!subPage.value || subPage.value.view !== view || subPage.value.id !== sid) {
-        subPage.value = { view: view as SubPageView, id: sid }
+      const next: { view: SubPageView; id: string; includeTest?: boolean } = it ? { view: view as SubPageView, id: sid, includeTest: true } : { view: view as SubPageView, id: sid }
+      const cur = subPage.value
+      if (!cur || cur.view !== next.view || cur.id !== next.id || !!cur.includeTest !== it) {
+        subPage.value = next
       }
     }
   },
@@ -181,8 +184,11 @@ watch(
     const curView = typeof route.query.view === 'string' ? route.query.view : ''
     const curId = typeof route.query.id === 'string' ? route.query.id : ''
     if (sp) {
-      if (curView !== sp.view || curId !== sp.id) {
-        void router.push({ query: { ...route.query, view: sp.view, id: sp.id } })
+      const q: Record<string, string | (string | null)[]> = { ...route.query, view: sp.view, id: sp.id } as Record<string, string | (string | null)[]>
+      if (sp.includeTest) q.includeTest = 'true'
+      else delete q.includeTest
+      if (curView !== sp.view || curId !== sp.id || (sp.includeTest ? route.query.includeTest !== 'true' : route.query.includeTest != null)) {
+        void router.push({ query: q })
       }
     } else if (curView || curId) {
       // 场景切换中（scene watch 已 push 新路径、route 尚未落地）时跳过：
@@ -192,6 +198,7 @@ watch(
         const q = { ...route.query }
         delete q.view
         delete q.id
+        delete q.includeTest
         void router.replace({ query: q })
       }
     }

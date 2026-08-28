@@ -64,6 +64,10 @@ import { virtualLearnerLearnTurnSimulator as virtualLearnerLearnTurnSimulatorFn 
 export { virtualLearnerRefereeDefinition, VIRTUAL_LEARNER_REFEREE_PROMPT, VIRTUAL_LEARNER_REFEREE_MAX_TOKENS, VIRTUAL_LEARNER_REFEREE_TEMPERATURE } from './virtual-learner-referee';
 import { virtualLearnerReferee as virtualLearnerRefereeFn } from './virtual-learner-referee';
 
+// 虚拟学习者课后记忆提炼
+export { virtualLearnerMemoryCuratorDefinition, VIRTUAL_LEARNER_MEMORY_CURATOR_PROMPT, VIRTUAL_LEARNER_MEMORY_CURATOR_MAX_TOKENS, VIRTUAL_LEARNER_MEMORY_CURATOR_TEMPERATURE } from './virtual-learner-memory-curator';
+import { virtualLearnerMemoryCurator as virtualLearnerMemoryCuratorFn } from './virtual-learner-memory-curator';
+
 // 虚拟学习者角色保真审计
 export { virtualLearnerActorAuditorDefinition, VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT, VIRTUAL_LEARNER_ACTOR_AUDITOR_MAX_TOKENS, VIRTUAL_LEARNER_ACTOR_AUDITOR_TEMPERATURE } from './virtual-learner-actor-auditor';
 import { virtualLearnerActorAuditor as virtualLearnerActorAuditorFn } from './virtual-learner-actor-auditor';
@@ -96,6 +100,7 @@ import { virtualLearnerGoalDialogueSimulatorDefinition } from './virtual-learner
 import { virtualLearnerPathEvaluatorDefinition } from './virtual-learner-path-evaluator';
 import { virtualLearnerLearnTurnSimulatorDefinition } from './virtual-learner-learn-turn-simulator';
 import { virtualLearnerRefereeDefinition } from './virtual-learner-referee';
+import { virtualLearnerMemoryCuratorDefinition } from './virtual-learner-memory-curator';
 import { virtualLearnerActorAuditorDefinition } from './virtual-learner-actor-auditor';
 import { mcpToolDefinition } from './mcp-tool';
 
@@ -109,6 +114,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   virtualLearnerPathEvaluatorDefinition,
   virtualLearnerLearnTurnSimulatorDefinition,
   virtualLearnerRefereeDefinition,
+  virtualLearnerMemoryCuratorDefinition,
   virtualLearnerActorAuditorDefinition,
   mcpToolDefinition,
   ...auxSkillDefinitions,
@@ -186,6 +192,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'virtual-learner-path-evaluator': virtualLearnerPathEvaluatorFn,
   'virtual-learner-learn-turn-simulator': virtualLearnerLearnTurnSimulatorFn,
   'virtual-learner-referee': virtualLearnerRefereeFn,
+  'virtual-learner-memory-curator': virtualLearnerMemoryCuratorFn,
   'virtual-learner-actor-auditor': virtualLearnerActorAuditorFn,
   'mcp-tool': executeMcpToolFn,
   ...auxSkillHandlers,

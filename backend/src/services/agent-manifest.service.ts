@@ -315,6 +315,18 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.2, maxTokens: 2400 }
   },
   {
+    id: 'skill:virtual-learner-memory-curator',
+    name: '虚拟学习者课后记忆提炼 Skill',
+    description: '以虚拟学习者本人视角，从课堂回合中提炼"自己觉得学会了什么、卡在哪"，产出可沉淀的记忆增量',
+    category: 'simulation',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Simulation',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.3, maxTokens: 2400 }
+  },
+  {
     id: 'skill:virtual-learner-actor-auditor',
     name: '角色保真审计 Skill',
     description: '基于画像、故事、摩擦预算、私有状态和公开行为评估合成学习者可信度',
@@ -371,6 +383,7 @@ export const LEGACY_AGENT_MEMBERS: Record<string, string[]> = {
     'skill:virtual-learner-path-evaluator',
     'skill:virtual-learner-learn-turn-simulator',
     'skill:virtual-learner-referee',
+    'skill:virtual-learner-memory-curator',
     'skill:virtual-learner-actor-auditor'
   ]
 };

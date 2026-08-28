@@ -24,93 +24,25 @@
       </template>
     </MkOverview>
 
-    <!-- 页面级视图 tab：主视图 / 工作台 / 拓扑（阶段级子视图留在展开区快捷入口） -->
+    <!-- 页面级视图 tab：字段流转（主视图）/ 工作台 / 拓扑 / 字段路由（阶段级子视图留在展开区快捷入口） -->
     <div class="orch-tabs" role="tablist">
-      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'main' }" @click="viewMode = 'main'">主视图</button>
-      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'workbench' }" @click="viewMode = 'workbench'">工作台</button>
+      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'main' }" @click="viewMode = 'main'">字段流转</button>
       <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'topology' }" @click="viewMode = 'topology'">拓扑</button>
+      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'field-routings' }" @click="viewMode = 'field-routings'">字段路由</button>
+      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'workbench' }" @click="viewMode = 'workbench'">工作台</button>
+      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'sandbox' }" @click="viewMode = 'sandbox'">沙盘</button>
+      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'drift' }" @click="viewMode = 'drift'">漂移</button>
     </div>
 
     <div v-if="viewMode === 'workbench'" class="orch-tabpane"><PromptWorkbench embedded /></div>
     <div v-else-if="viewMode === 'topology'" class="orch-tabpane"><Topology /></div>
-    <div v-else-if="viewMode === 'field-routings'" class="orch-tabpane"><FieldRoutingTable :stage="current?.id || ''" /></div>
+    <div v-else-if="viewMode === 'field-routings'" class="orch-tabpane"><FieldRoutingTable :stage="current?.id || ''" @changed="onRoutingChanged" /></div>
     <div v-else-if="viewMode === 'sandbox'" class="orch-tabpane"><SandboxView /></div>
     <div v-else-if="viewMode === 'drift'" class="orch-tabpane"><DriftAuditPanel :stage="current?.id || ''" /></div>
 
     <template v-else>
-      <!-- 阶段管线：全链路五卡（横滚） -->
-      <div class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">阶段管线 · 全链路</h3>
-          <span class="mk-card__meta">点击阶段查看节点与配置</span>
-        </div>
-        <div class="orch-pipeline">
-          <template v-for="(st, i) in stages" :key="st.id">
-            <button type="button" class="orch-pipe-card" :class="{ 'is-active': active === st.id }" @click="selectStage(st.id)">
-              <span class="orch-pipe-card__num">{{ String(i + 1).padStart(2, '0') }}</span>
-              <div class="orch-pipe-card__body">
-                <strong class="orch-pipe-card__name">{{ st.name }}</strong>
-                <span class="orch-pipe-card__skills">{{ st.skills.length }} Skill</span>
-                <span class="orch-pipe-card__calls">{{ stageCalls(st) }} 次调用</span>
-              </div>
-              <div class="orch-pipe-card__io">
-                <span v-if="st.consumes.length" class="orch-pipe-card__in">← {{ st.consumes.slice(0, 2).join(', ') }}</span>
-                <span v-if="st.produces.length" class="orch-pipe-card__out">{{ st.produces.slice(0, 2).join(', ') }} →</span>
-              </div>
-            </button>
-            <span v-if="i < stages.length - 1" class="orch-pipe-arrow" :class="{ 'is-on': i >= activeIdx }">→</span>
-          </template>
-        </div>
-      </div>
-
-      <!-- 阶段展开：节点与配置（mk-card 统一口径） -->
-      <div v-if="current" class="mk-card orch-expand">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">{{ stageTitle }} · 节点与配置</h3>
-          <span class="mono orch-expand__id">{{ current.agentId }}</span>
-          <span class="mk-card__head-right">
-            <button type="button" class="orch-qbtn" @click="viewMode = 'field-routings'">字段路由</button>
-            <button type="button" class="orch-qbtn" @click="viewMode = 'sandbox'">沙盘</button>
-            <button type="button" class="orch-qbtn" @click="viewMode = 'drift'">漂移</button>
-          </span>
-        </div>
-
-        <div class="orch-expand__flow">
-          <span class="orch-expand__flow-label">数据流</span>
-          <span v-for="v in current.consumes" :key="'in-'+v" class="orch-var orch-var--in">{{ v }}</span>
-          <span class="orch-expand__flow-arrow">→</span>
-          <strong class="orch-expand__flow-agent">{{ current.agentId }}</strong>
-          <span class="orch-expand__flow-arrow">→</span>
-          <span v-for="v in current.produces" :key="'out-'+v" class="orch-var orch-var--out">{{ v }}</span>
-        </div>
-
-        <div v-if="current.defSteps?.length" class="orch-defsteps">
-          <span class="orch-defsteps__label">定义步骤</span>
-          <div class="orch-defsteps__rail">
-            <div v-for="step in current.defSteps" :key="step.step" class="orch-defstep" :class="{ 'orch-defstep--service': step.resolved?.nodeKind === 'service', 'orch-defstep--unresolved': step.resolved?.unresolved }">
-              <span class="orch-defstep__dot"></span>
-              <span class="orch-defstep__id mono">{{ step.agentId }}</span>
-              <span class="orch-defstep__role">{{ step.role }}</span>
-              <span v-if="step.resolved?.unresolved" class="orch-defstep__badge orch-defstep__badge--warn">unresolved</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="orch-skills">
-          <div class="orch-skills__head"><span>Skill 节点（{{ current.skills.length }}）</span></div>
-          <div v-for="s in current.skills" :key="s.id" class="orch-skill" @click="openSkillDrawer(s.id)">
-            <span class="orch-skill__dot" :class="{ 'orch-skill__dot--idle': !s.calls }"></span>
-            <div class="orch-skill__main">
-              <strong>{{ s.name }}</strong>
-              <span class="mono">{{ s.id }}</span>
-            </div>
-            <div class="orch-skill__vars">
-              <span v-for="v in s.produces" :key="v" class="orch-var orch-var--out">{{ v }}</span>
-            </div>
-            <span class="mk-num orch-skill__calls">{{ s.calls || '—' }}</span>
-          </div>
-        </div>
-      </div>
+      <!-- 主视图 = 字段流转图：泳道（阶段）→ 字段分组 → handoff 边；字段即节点，点开看含义与编辑 -->
+      <FieldFlowGraph :key="flowKey" :stage="active" @changed="onRoutingChanged" />
     </template>
   </div>
 </template>
@@ -118,10 +50,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { openSkillDrawer, dataSource, isLive } from './store'
+import { dataSource, isLive } from './store'
 import { liveTopoNodes, liveSkillCatalog, errMsg } from './live'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
 import FieldRoutingTable from './FieldRoutingTable.vue'
+import FieldFlowGraph from './FieldFlowGraph.vue'
 import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
 import Topology from './Topology.vue'
@@ -130,6 +63,12 @@ import MkOverview from './MkOverview.vue'
 import MkKpi from './MkKpi.vue'
 
 const viewMode = ref<'main' | 'workbench' | 'topology' | 'field-routings' | 'sandbox' | 'drift'>('main')
+
+/** 字段流转图数据版本：行级编辑/字段路由变更后 +1 触发重挂载刷新 */
+const flowKey = ref(0)
+function onRoutingChanged() {
+  flowKey.value++
+}
 
 const route = useRoute()
 
@@ -147,13 +86,17 @@ function applyStageQuery() {
 function selectStage(id: string) {
   active.value = id
   viewMode.value = 'main'
+  flowKey.value++
 }
+
 const defsLoading = ref(false)
 const defsLoaded = ref(false)
 const orchCount = ref(0)
 const skillDefCount = ref(0)
 const definitionNotes = ref<string[]>([])
 const orchDefs = ref<Array<Record<string, any>>>([])
+// selectStage 由阶段泳道快捷入口调用（保留语义：切阶段 + 回主视图）
+void selectStage
 
 /* ================= 完成度对账（reconciliation + readiness W4，live-only） ================= */
 const recReport = ref<SkillReconciliationReport | null>(null)
@@ -295,8 +238,7 @@ const demoStages: Stage[] = [
 const active = ref('goal')
 applyStageQuery()
 watch(() => route.query, applyStageQuery)
-const defById = computed(() => new Map(orchDefs.value.map((d) => [d.id, d])))
-// 阶段清单统一后端源：GET /admin/field-routings/stages（派生自编排文件），
+const defById = computed(() => new Map(orchDefs.value.map((d) => [d.id, d])))// 阶段清单统一后端源：GET /admin/field-routings/stages（派生自编排文件），
 // 全量消费、不过滤后端结果；demo 模式回退 demoStages 骨架
 const stageList = ref<Array<{ id: string; displayName: string }>>([])
 
@@ -378,7 +320,6 @@ const unresolvedCount = computed(() =>
 )
 // 空拓扑时 current 为 undefined，模板由 v-if="current" 保护
 const current = computed<Stage | undefined>(() => stages.value.find((s) => s.id === active.value) || stages.value[0])
-const activeIdx = computed(() => stages.value.findIndex((s) => s.id === active.value))
 const stageCalls = (st: Stage) => st.skills.reduce((sum, s) => sum + (s.calls || 0), 0)
 // 概览卡结论点色/标题（唯一动态状态载体；状态条只剩身份 + 数量）
 const statusTone = computed(() => {
@@ -397,10 +338,9 @@ const stageTitle = computed(() => {
   const name = current.value?.name || ''
   return name.endsWith('阶段') ? name : `${name}阶段`
 })
-</script>
-
-<style scoped>
-/* 视图 tab：主视图 / 工作台 / 拓扑（页面级切换，浅底分段条） */
+void stageTitle.value
+</script><style scoped>
+/* 视图 tab：字段流转 / 拓扑 / 字段路由 / 工作台 / 沙盘 / 漂移（页面级切换，浅底分段条） */
 .orch-tabs { display: flex; gap: 4px; padding: 3px; width: fit-content; background: #f1f5f9; border-radius: 10px; }
 .orch-tab {
   padding: 6px 14px; border: 0; border-radius: 8px; background: transparent;
@@ -411,80 +351,10 @@ const stageTitle = computed(() => {
 .orch-tab.is-active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); }
 .orch-tabpane { margin-top: 0; }
 
-/* 阶段管线：全链路五卡（横滚） */
-.orch-pipeline { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding: 12px 14px 14px; }
-.orch-pipe-card {
-  display: grid; grid-template-rows: auto 1fr auto; gap: 6px; padding: 12px 14px;
-  border: 1px solid var(--mk-line); border-radius: 10px; background: #fff; min-width: 172px;
-  cursor: pointer; text-align: left; font: inherit;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease; flex-shrink: 0;
-}
-.orch-pipe-card:hover { border-color: rgba(44, 99, 208, 0.35); }
-.orch-pipe-card.is-active { border-color: var(--mk-blue); background: #f8faff; box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.15); }
-.orch-pipe-card__num { font-size: 11px; font-weight: 800; color: var(--mk-faint); font-family: var(--mk-mono); }
-.orch-pipe-card__body { display: grid; gap: 2px; }
-.orch-pipe-card__name { font-size: 13px; font-weight: 800; }
-.orch-pipe-card__skills { font-size: 11px; color: var(--mk-muted); }
-.orch-pipe-card__calls { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--mk-blue); }
-.orch-pipe-card__io { display: grid; gap: 2px; padding-top: 6px; border-top: 1px dashed var(--mk-line); }
-.orch-pipe-card__in { font-size: 10.5px; color: var(--mk-faint); }
-.orch-pipe-card__out { font-size: 10.5px; color: var(--mk-blue); font-weight: 600; }
-.orch-pipe-arrow { display: flex; align-items: center; padding: 0 6px; font-size: 18px; color: var(--mk-line); flex-shrink: 0; }
-.orch-pipe-arrow.is-on { color: var(--mk-blue); }
-
-/* 阶段展开：head 快捷入口（阶段级子视图） */
-.orch-qbtn {
-  padding: 4px 10px; border: 1px solid var(--mk-line); border-radius: 7px; background: #fff;
-  font: inherit; font-size: 11.5px; font-weight: 600; color: var(--mk-ink); cursor: pointer;
-  transition: border-color 0.12s ease, color 0.12s ease;
-}
-.orch-qbtn:hover { border-color: rgba(44, 99, 208, 0.5); color: var(--mk-blue); }
-
-.orch-expand__id { font-size: 11px; color: var(--mk-faint); font-weight: 600; }
-
-.orch-expand__flow {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 12px 16px; border-bottom: 1px solid var(--mk-line); font-size: 12px; background: #fafbfc;
-}
-.orch-expand__flow-label { font-size: 10.5px; font-weight: 800; color: var(--mk-faint); text-transform: uppercase; margin-right: 4px; }
-.orch-expand__flow-arrow { color: var(--mk-faint); font-size: 14px; }
-.orch-expand__flow-agent { font-family: var(--mk-mono); font-size: 11.5px; color: var(--mk-blue); }
-
-.orch-skills { padding: 4px 0; }
-.orch-skills__head { padding: 8px 16px 4px; font-size: 11px; font-weight: 800; color: var(--mk-faint); text-transform: uppercase; letter-spacing: 0.04em; }
-.orch-skill { display: flex; align-items: center; gap: 10px; padding: 9px 16px; cursor: pointer; transition: background 0.1s ease; border-bottom: 1px solid #f3f4f6; }
-.orch-skill:last-child { border-bottom: none; }
-.orch-skill:hover { background: #f8fafc; }
-.orch-skill__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--mk-green); flex-shrink: 0; }
-.orch-skill__dot--idle { background: var(--mk-line); }
-.orch-skill__main { display: grid; gap: 1px; flex: 1; min-width: 0; }
-.orch-skill__main strong { font-size: 12.5px; }
-.orch-skill__main .mono { font-size: 10.5px; color: var(--mk-faint); }
-.orch-skill__vars { display: flex; gap: 4px; flex-wrap: wrap; }
-.orch-skill__calls { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
-
-.orch-var { padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600; font-family: var(--mk-mono); }
-.orch-var--in { background: #f3f4f6; color: var(--mk-faint); }
-.orch-var--out { background: #eff6ff; color: var(--mk-blue); }
-
-.orch-defsteps { padding: 10px 16px; border-bottom: 1px solid var(--mk-line); }
-.orch-defsteps__label { font-size: 10.5px; font-weight: 800; color: var(--mk-faint); text-transform: uppercase; display: block; margin-bottom: 6px; }
-.orch-defsteps__rail { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
-.orch-defstep { display: flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid var(--mk-line); border-radius: 6px; background: #fff; font-size: 11px; margin-right: 4px; margin-bottom: 4px; }
-.orch-defstep__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--mk-green); flex-shrink: 0; }
-.orch-defstep--unresolved .orch-defstep__dot { background: var(--mk-amber); }
-.orch-defstep__id { font-size: 10.5px; }
-.orch-defstep__role { color: var(--mk-faint); font-size: 10.5px; }
-.orch-defstep__badge { padding: 0 5px; border-radius: 999px; font-size: 9.5px; font-weight: 700; background: #f3f4f6; color: var(--mk-faint); }
-.orch-defstep__badge--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
-
 .mk-status__meta--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
 
-/* 4K：管线与展开区跟随全站节奏 */
+/* 4K：字段流转 tab 条跟随全站节奏 */
 @media (min-width: 2000px) {
   .orch-tab { font-size: 13px; padding: 7px 16px; }
-  .orch-pipe-card { min-width: 190px; padding: 14px 16px; }
-  .orch-pipe-card__name { font-size: 14px; }
-  .orch-skill__main strong { font-size: 13.5px; }
 }
 </style>

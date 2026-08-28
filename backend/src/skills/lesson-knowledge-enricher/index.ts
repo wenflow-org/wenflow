@@ -126,7 +126,8 @@ function normalizeLedgerItem(item: any) {
     misconceptionRisk,
     sourcePaths: safeArray(item?.sourcePaths).map((value) => normalizeText(value)).filter(Boolean),
     sourceTasks: safeArray(item?.sourceTasks).map((value) => normalizeText(value)).filter(Boolean),
-    evidenceCount: Math.max(1, Number.isFinite(Number(item?.evidenceCount)) ? Number(item.evidenceCount) : 1),
+    // 证据计数真实化：模型未给出时按 0（0 就是 0，不虚报）；仅接受有限非负数
+    evidenceCount: Number.isFinite(Number(item?.evidenceCount)) ? Math.max(0, Number(item.evidenceCount)) : 0,
   };
 }
 

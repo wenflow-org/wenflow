@@ -281,7 +281,7 @@
       </p>
     </div>
 
-    <!-- ============ 证据：指标卡常驻 + 动态状态 + 人类化时间线 + 概念证据密度 ============ -->
+    <!-- ============ 证据：指标卡横排 + 左时间线 / 右曲线·建议·密度 两栏 ============ -->
     <div v-else-if="tab === 'evidence'" class="ld-tabpage">
       <template v-if="dynamicState">
         <div class="ld-metrics">
@@ -291,63 +291,144 @@
             <em>{{ m.hint }}</em>
           </div>
         </div>
-        <section class="mk-card">
-          <div class="mk-card__head"><h3 class="mk-card__title">趋势与建议</h3></div>
-          <div class="ld-kv">
-            <div v-for="kv in dynamicRows" :key="kv.label" class="ld-kv__row">
-              <span>{{ kv.label }}</span>
-              <strong>{{ kv.value }}</strong>
-            </div>
-          </div>
-        </section>
       </template>
-      <section class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">证据时间线</h3>
-          <span class="mk-card__meta">{{ evidence.length }} 条 · 点色=事件语义，置信=把握度</span>
-        </div>
-        <div v-if="evidence.length" class="ld-evidence">
-          <div v-for="(e, i) in evidence" :key="i" class="ld-ev">
-            <span
-              class="ld-ev__dot"
-              :class="`is-${evidenceDotTone(e.signal, e.score)}`"
-              :title="evidenceTooltip(e.signal, e.score)"
-            ></span>
-            <div class="ld-ev__main">
-              <strong>{{ evidenceTypeZh(e.title) }}</strong>
-              <span>{{ e.detail || evidenceSignalZh(e.signal) || '—' }}</span>
-              <span v-if="e.concepts.length" class="ld-chips">
-                <span v-for="c in e.concepts.slice(0, 4)" :key="c" class="ld-chip">{{ c }}</span>
-              </span>
-            </div>
-            <span v-if="evidenceLowConfidence(e.score)" class="ld-ev__lack" title="置信度低于 50%，结论仅供参考">证据不足</span>
-            <span class="ld-ev__time">{{ e.time }}</span>
+
+      <div class="ld-ev-grid">
+        <!-- 左栏：证据时间线（主内容） -->
+        <section class="mk-card ld-ev-main">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">证据时间线</h3>
+            <span class="mk-card__meta">{{ evidence.length }} 条学习事件 · 点色=信号，条=置信</span>
           </div>
-        </div>
-        <p v-else class="ld-none">
-          {{ isLive ? '暂无证据记录' : '演示模式下无数据' }}
-          <span v-if="isLive" class="ld-none__hint">学习事件累积后自动生成。</span>
-        </p>
-      </section>
-      <section v-if="conceptStats.length" class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">概念证据密度</h3>
-          <span class="mk-card__meta">证据条数（conceptLedger）</span>
-        </div>
-        <div class="ld-bars ld-bars--dense">
-          <div v-for="c in conceptStats" :key="c.label" class="ld-bar">
-            <div class="ld-bar__head">
-              <strong>{{ c.label }}</strong>
-              <span class="ld-bar__badges">
-                <span class="ld-bar__ev">{{ c.count }} 证据</span>
-              </span>
-            </div>
-            <div class="ld-bar__track">
-              <i :class="`ld-bar__fill is-${c.tone}`" :style="{ width: c.width + '%' }"></i>
+          <div v-if="evidence.length" class="ld-evidence">
+            <div v-for="(e, i) in evidence" :key="i" class="ld-ev">
+              <span class="ld-ev__rail" aria-hidden="true"></span>
+              <span
+                class="ld-ev__dot"
+                :class="`is-${evidenceDotTone(e.signal, e.score, e.title)}`"
+                :title="evidenceFullTooltip(e.title, e.signal, e.score, { sessionId: e.sessionId, taskId: e.taskId, happenedAt: e.happenedAt })"
+              ></span>
+              <div class="ld-ev__main">
+                <div class="ld-ev__top">
+                  <strong>{{ evidenceTypeZh(e.title) }}</strong>
+                  <span class="ld-ev__signal" :class="`is-${evidenceDotTone(e.signal, e.score, e.title)}`">{{ evidenceSignalZh(e.signal, e.title) || '—' }}</span>
+                  <span v-if="evidenceLowConfidence(e.score) && !isDomainEvidence(e.title)" class="ld-ev__lack" title="置信度低于 50%，结论仅供参考">证据不足</span>
+                </div>
+                <span v-if="e.detail" class="ld-ev__detail">{{ e.detail }}</span>
+                <span class="ld-ev__conf" :title="evidenceFullTooltip(e.title, e.signal, e.score, { sessionId: e.sessionId, taskId: e.taskId, happenedAt: e.happenedAt })">
+                  <i
+                    class="ld-ev__confbar"
+                    :class="`is-${evidenceConfidenceTone(e.score)}`"
+                    :style="{ width: Math.max(3, Math.round(e.score * 100)) + '%' }"
+                  ></i>
+                  <em>{{ Math.round(e.score * 100) }}%</em>
+                </span>
+                <span v-if="e.concepts.length" class="ld-chips">
+                  <span v-for="c in e.concepts.slice(0, 4)" :key="c" class="ld-chip">{{ c }}</span>
+                </span>
+                <span v-if="e.sessionId || e.taskId" class="ld-ev__src">
+                  {{ e.sessionId ? `会话 ${shortId(e.sessionId)}` : '' }}{{ e.sessionId && e.taskId ? ' · ' : '' }}{{ e.taskId ? `任务 ${shortId(e.taskId)}` : '' }}
+                </span>
+              </div>
+              <span class="ld-ev__time">{{ e.time }}</span>
             </div>
           </div>
+          <p v-else class="ld-none">
+            {{ isLive ? '暂无证据记录' : '演示模式下无数据' }}
+            <span v-if="isLive" class="ld-none__hint">学习事件累积后自动生成。</span>
+          </p>
+        </section>
+
+        <!-- 右栏：压力曲线（上移）+ 趋势与建议 + 概念证据密度 -->
+        <div class="ld-ev-side">
+          <!-- 学习压力记录曲线：LSS/LF/LSB 真实指标历史（learning_metrics），与指标卡同源 -->
+          <section class="mk-card ld-load">
+            <div class="mk-card__head">
+              <h3 class="mk-card__title">学习压力记录</h3>
+              <div class="ld-load__controls">
+                <div class="ld-load__seg">
+                  <button type="button" class="ld-load__seg-item" :class="{ 'is-on': loadRange === 42 }" @click="loadRange = 42">42 天</button>
+                  <button type="button" class="ld-load__seg-item" :class="{ 'is-on': loadRange === 90 }" @click="loadRange = 90">90 天</button>
+                </div>
+              </div>
+            </div>
+            <div v-if="hasLoad" class="ld-load__body">
+              <div class="ld-load__legend">
+                <span><i class="ld-load__dot is-lss"></i>LSS 压力</span>
+                <span><i class="ld-load__dot is-lf"></i>LF 疲劳</span>
+                <span><i class="ld-load__dot is-lsb"></i>LSB 状态</span>
+                <span v-if="loadDisplayDay" class="ld-load__chip" :class="`ld-load__chip${loadZoneCls(loadZoneOf(loadDisplayDay))}`">
+                  {{ loadZoneCls(loadZoneOf(loadDisplayDay)) === '--fresh' ? '状态良好' : loadZoneCls(loadZoneOf(loadDisplayDay)) === '--optimal' ? '需要休息' : '高风险' }}
+                </span>
+              </div>
+              <div class="ld-load__chart" @mousemove="onLoadHover" @mouseleave="loadHover = null">
+                <svg :viewBox="`0 0 ${LOAD_W} ${LOAD_H}`" preserveAspectRatio="none" aria-hidden="true">
+                  <!-- 参考线：LSB=0（状态平衡线）与 LF=6（疲劳警戒线） -->
+                  <line class="ld-load__guide" :x1="LOAD_PAD" :x2="LOAD_W - LOAD_PAD" :y1="loadYOf(0)" :y2="loadYOf(0)" />
+                  <line class="ld-load__guide ld-load__guide--warn" :x1="LOAD_PAD" :x2="LOAD_W - LOAD_PAD" :y1="loadYOf(6)" :y2="loadYOf(6)" />
+                  <path v-if="loadLineD.lss" :d="loadLineD.lss" class="ld-load__line is-lss" />
+                  <path v-if="loadLineD.lf" :d="loadLineD.lf" class="ld-load__line is-lf" />
+                  <path v-if="loadLineD.lsb" :d="loadLineD.lsb" class="ld-load__line is-lsb" />
+                  <template v-if="loadHover">
+                    <line class="ld-load__cursor" :x1="loadHover.x" :x2="loadHover.x" y1="0" :y2="LOAD_H" />
+                    <circle v-if="loadHover.ylss >= 0" class="ld-load__pt is-lss" :cx="loadHover.x" :cy="loadHover.ylss" r="4" />
+                    <circle v-if="loadHover.ylf >= 0" class="ld-load__pt is-lf" :cx="loadHover.x" :cy="loadHover.ylf" r="4" />
+                    <circle v-if="loadHover.ylsb >= 0" class="ld-load__pt is-lsb" :cx="loadHover.x" :cy="loadHover.ylsb" r="4" />
+                  </template>
+                </svg>
+              </div>
+              <div v-if="loadDisplayDay" class="ld-load__info">
+                <b>{{ loadDisplayDay.label }}</b>
+                <span class="is-lss-t">LSS {{ loadFmt(loadDisplayDay.lss) }}</span>
+                <span class="is-lf-t">LF {{ loadFmt(loadDisplayDay.lf) }}</span>
+                <span class="is-lsb-t">LSB {{ loadFmt(loadDisplayDay.lsb) }}</span>
+              </div>
+              <div class="ld-load__zones">
+                <span><i class="ld-load__dot is-lss"></i>LSS 学习压力（0-10，越高越累）</span>
+                <span><i class="ld-load__dot is-lf"></i>LF 疲劳度（0-10，≥6 警戒）</span>
+                <span><i class="ld-load__dot is-lsb"></i>LSB 状态平衡（KTL-LF，负=状态差）</span>
+              </div>
+            </div>
+            <div v-else class="ld-none">
+              {{ isLive ? '暂无压力记录' : '演示模式下无数据' }}
+              <span v-if="isLive" class="ld-none__hint">学习者完成会话/任务后，系统会记录每次的压力评估。</span>
+            </div>
+          </section>
+
+          <section v-if="dynamicState" class="mk-card">
+            <div class="mk-card__head"><h3 class="mk-card__title">趋势与建议</h3></div>
+            <div class="ld-kv">
+              <div v-for="kv in dynamicRows" :key="kv.label" class="ld-kv__row">
+                <span>{{ kv.label }}</span>
+                <strong>{{ kv.value }}</strong>
+              </div>
+            </div>
+          </section>
+
+          <!-- 概念证据密度：概念名 + 证据条 + 计数；有证据置顶、无证据折叠 -->
+          <section v-if="conceptStats.length" class="mk-card">
+            <div class="mk-card__head">
+              <h3 class="mk-card__title">概念证据密度</h3>
+              <span class="mk-card__meta">各概念关联的学习事件数</span>
+            </div>
+            <div class="ld-bars ld-bars--dense">
+              <div v-for="c in conceptStats" :key="c.label" class="ld-bar" :class="{ 'ld-bar--empty': c.count === 0 }">
+                <div class="ld-bar__head">
+                  <strong :title="evidenceDensityTooltip(c.label, c.count)">{{ c.label }}</strong>
+                  <span class="ld-bar__badges">
+                    <span class="ld-bar__ev" :class="{ 'ld-bar__ev--zero': c.count === 0 }" :title="evidenceDensityTooltip(c.label, c.count)">
+                      {{ c.count === 0 ? '暂无' : `${c.count} 条` }}
+                    </span>
+                  </span>
+                </div>
+                <div class="ld-bar__track">
+                  <i :class="`ld-bar__fill is-${c.tone}`" :style="{ width: c.width + '%' }"></i>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
-      </section>
+      </div>
     </div>
   </div>
 </template>
@@ -355,8 +436,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { subPage, closeSubPage, learnerDetails, isLive, setSubPageLabel } from './store'
-import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveRecomputeLearner, timeAgo, errMsg } from './live'
-import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTooltip, evidenceTypeZh } from './evidence'
+import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveRecomputeLearner, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint } from './live'
+import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab } from './learner-profile'
 import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
 import { askConfirm } from './useConfirm'
@@ -385,11 +466,16 @@ interface EvidenceItem {
   score: number
   signal: string
   concepts: string[]
+  sessionId?: string
+  taskId?: string
+  happenedAt?: string
 }
 
 const liveDetail = ref<Detail | null>(null)
 const rawDetail = ref<Record<string, unknown> | null>(null)
 const liveEvidence = ref<EvidenceItem[]>([])
+/** 学习压力记录曲线：learning_metrics 历史（LSS/KTL/LF/LSB），来自 evidence 接口 loadCurve */
+const loadCurveRaw = ref<LoadCurvePoint[]>([])
 const recomputing = ref(false)
 const tab = ref<LearnerTab>('overview')
 
@@ -456,15 +542,32 @@ async function loadDetail(id: string | undefined, live: boolean) {
     const totalTasks = Number(progress.totalTasks || 0)
     const completedTasks = Number(progress.completedTasks || 0)
     const pct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
-    const evidenceItems = await liveGetLearnerEvidence(id, pathId, includeTest).catch(() => [] as Record<string, unknown>[])
-    liveEvidence.value = evidenceItems.map((e) => ({
-      title: String(e.type || e.kind || '学习事件'),
-      detail: String(e.signal || ''),
-      time: timeAgo(String(e.happenedAt || e.createdAt || '')),
-      signal: String(e.signal || ''),
-      score: Number(e.score || 0),
-      concepts: Array.isArray(e.conceptKeys) ? e.conceptKeys.map(String) : []
-    }))
+    const evidenceRes = await liveGetLearnerEvidence(id, pathId, includeTest).catch(() => ({ items: [], domain: [], loadCurve: [] }))
+    const mapEvidence = (e: Record<string, unknown>): EvidenceItem => {
+      const raw = e as LearnerEvidenceRaw
+      return {
+        title: String(raw.type || raw.kind || '学习事件'),
+        detail: String(raw.detail || raw.signal || ''),
+        time: timeAgo(String(raw.happenedAt || raw.createdAt || '')),
+        signal: String(raw.signal || ''),
+        score: Number(raw.score || 0),
+        concepts: Array.isArray(raw.conceptKeys) ? raw.conceptKeys.map(String) : [],
+        sessionId: raw.sessionId ? String(raw.sessionId) : undefined,
+        taskId: raw.taskId ? String(raw.taskId) : undefined,
+        happenedAt: raw.happenedAt ? String(raw.happenedAt) : undefined
+      }
+    }
+    // 教学域 4 类 + 目标/路径域（learner_evidence 表持久化事件）合并为完整时间线，按时间倒序
+    const merged = [
+      ...evidenceRes.items.map(mapEvidence),
+      ...evidenceRes.domain.map(mapEvidence)
+    ].sort((a, b) => {
+      const ta = a.happenedAt ? new Date(a.happenedAt).getTime() : 0
+      const tb = b.happenedAt ? new Date(b.happenedAt).getTime() : 0
+      return tb - ta
+    })
+    liveEvidence.value = merged
+    loadCurveRaw.value = evidenceRes.loadCurve || []
     liveDetail.value = {
       name: base?.name || String(model.userName || id),
       email: base?.email || '',
@@ -484,8 +587,8 @@ async function loadDetail(id: string | undefined, live: boolean) {
       sessions: liveEvidence.value.slice(0, 6).map((e) => ({
         time: e.time,
         title: e.title,
-        result: evidenceSignalZh(e.signal) || e.detail || '—',
-        tone: evidenceDotTone(e.signal, e.score),
+        result: evidenceSignalZh(e.signal, e.title) || e.detail || '—',
+        tone: evidenceDotTone(e.signal, e.score, e.title),
         concepts: e.concepts
       })),
       snapshot: {
@@ -675,11 +778,11 @@ const DEMO_RAW: Record<string, unknown> = {
 }
 
 const DEMO_EVIDENCE: EvidenceItem[] = [
-  { title: 'task-completed', detail: '数据清洗练习 2/3 · 掌握 +0.12', time: '6 分钟前', score: 0.92, signal: 'mastery', concepts: ['数据清洗'] },
-  { title: 'teaching-session', detail: '「数据透视表」连续 2 次未达标', time: '3 天前', score: 0.86, signal: 'struggle', concepts: ['数据透视表'] },
-  { title: 'summary', detail: '会话后段认知负荷偏高', time: '昨天 21:14', score: 0.7, signal: 'fatigue', concepts: [] },
-  { title: 'task-completed', detail: 'SUMIF 实战 · 一次通过', time: '昨天', score: 0.95, signal: 'mastery', concepts: ['SUMIF'] },
-  { title: 'evaluation', detail: '数据透视表入门 · 标记复习', time: '3 天前', score: 0.32, signal: 'incomplete', concepts: ['数据透视表'] }
+  { title: 'task-completed', detail: '数据清洗练习 2/3 · 掌握 +0.12', time: '6 分钟前', score: 0.92, signal: 'mastery', concepts: ['数据清洗'], taskId: 'task_clean_02', happenedAt: '2026-08-28T08:00:00Z' },
+  { title: 'teaching-session', detail: '「数据透视表」连续 2 次未达标', time: '3 天前', score: 0.86, signal: 'struggle', concepts: ['数据透视表'], sessionId: 'sess_pivot_9f3a', happenedAt: '2026-08-25T10:30:00Z' },
+  { title: 'summary', detail: '会话后段认知负荷偏高', time: '昨天 21:14', score: 0.7, signal: 'fatigue', concepts: [], sessionId: 'sess_sum_7c1d', happenedAt: '2026-08-27T13:14:00Z' },
+  { title: 'task-completed', detail: 'SUMIF 实战 · 一次通过', time: '昨天', score: 0.95, signal: 'mastery', concepts: ['SUMIF'], taskId: 'task_sumif_01', happenedAt: '2026-08-27T09:00:00Z' },
+  { title: 'evaluation', detail: '数据透视表入门 · 标记复习', time: '3 天前', score: 0.32, signal: 'incomplete', concepts: ['数据透视表'], sessionId: 'sess_eval_b2e8', happenedAt: '2026-08-25T11:00:00Z' }
 ]
 
 const profile = computed(() => {
@@ -737,6 +840,18 @@ const EN_ZH: Record<string, string> = {
 const zh = (v: unknown): string => {
   const s = String(v ?? '')
   return EN_ZH[s] ?? s
+}
+
+/** 会话/任务 ID 缩短显示：取末 8 位（前缀是稳定类型标识，末段是随机部分，足够区分） */
+function shortId(id?: string): string {
+  if (!id) return ''
+  const s = String(id)
+  return s.length <= 8 ? s : s.slice(-8)
+}
+
+/** 是否为 goal/path 域证据（目标澄清/路径事件：置信度=过程完成度，不套学习成败语义） */
+function isDomainEvidence(type: string): boolean {
+  return ['goal:understanding:updated', 'path:created', 'path:generated', 'path:adjusted', 'path:completed'].includes(type)
 }
 
 function kvRows(obj: Record<string, unknown> | null, labels: Record<string, string>) {
@@ -836,12 +951,17 @@ const narrativeInsights = computed(() => {
 const metricCards = computed(() => {
   const m = (dynamicState.value?.metrics || {}) as Record<string, number>
   const fmt = (v?: number) => (v == null ? '—' : v.toFixed(1))
-  const tone = (v?: number) => (v == null ? '' : v >= 7 ? 'is-good' : v <= 4 ? 'is-bad' : '')
+  /** 0 值 = 无数据（中性灰，不误报警告红）；>0 才按阈值上色 */
+  const tone = (v?: number) => {
+    if (v == null || v === 0) return 'is-empty'
+    return v >= 7 ? 'is-good' : v <= 4 ? 'is-bad' : ''
+  }
+  const hint = (v?: number, fallback = '') => (v == null || v === 0 ? '暂无数据' : fallback)
   return [
-    { label: 'LSS 学习状态', value: fmt(m.lss), hint: '整体学习健康度', cls: tone(m.lss) },
-    { label: 'KTL 知识轨迹', value: fmt(m.ktl), hint: '知识增长曲线', cls: tone(m.ktl) },
-    { label: 'LF 学习疲劳', value: fmt(m.lf), hint: '越低越好', cls: m.lf != null && m.lf >= 6 ? 'is-bad' : '' },
-    { label: 'LSB 行为稳定', value: fmt(m.lsb), hint: '行为一致性', cls: tone(m.lsb) }
+    { label: 'LSS 学习状态', value: fmt(m.lss), hint: hint(m.lss, '整体学习健康度'), cls: tone(m.lss) },
+    { label: 'KTL 知识轨迹', value: fmt(m.ktl), hint: hint(m.ktl, '知识增长曲线'), cls: tone(m.ktl) },
+    { label: 'LF 学习疲劳', value: fmt(m.lf), hint: hint(m.lf, '越低越好'), cls: m.lf != null && m.lf > 0 && m.lf >= 6 ? 'is-bad' : tone(m.lf) },
+    { label: 'LSB 行为稳定', value: fmt(m.lsb), hint: hint(m.lsb, '行为一致性'), cls: tone(m.lsb) }
   ]
 })
 
@@ -958,7 +1078,8 @@ const conceptBars = computed<ConceptBar[]>(() => {
   return fallback
 })
 
-/** 证据页「概念证据密度」：优先 ledger（evidenceCount），回退 conceptStates（masteryScore 归一化） */
+/** 证据页「概念证据密度」：优先 ledger（evidenceCount），回退 conceptStates（masteryScore 归一化）。
+ *  排序：有证据的概念置顶（按条数降序），无证据的沉底折叠，避免 14 行「0 证据」刷屏 */
 const conceptStats = computed<{ label: string; count: number; tone: ConceptBarTone; width: number }[]>(() => {
   const km = knowledgeMemory.value as Record<string, unknown> | null
   const ledger = (km?.globalBackground as Record<string, unknown> | undefined)?.conceptLedger
@@ -969,8 +1090,11 @@ const conceptStats = computed<{ label: string; count: number; tone: ConceptBarTo
         label: String(item.label || item.conceptKey || '未命名概念'),
         count: Number(item.evidenceCount || 0),
         tone: conceptBarTone(item),
-        width: Math.max(8, Math.round((Number(item.evidenceCount || 0) / max) * 100))
+        width: Number(item.evidenceCount || 0) > 0
+          ? Math.max(8, Math.round((Number(item.evidenceCount || 0) / max) * 100))
+          : 8
       }))
+      .sort((a, b) => (b.count > 0 ? 1 : 0) - (a.count > 0 ? 1 : 0) || b.count - a.count || a.label.localeCompare(b.label, 'zh'))
       .slice(0, 16)
   }
   const states = (km?.currentPath as Record<string, unknown> | undefined)?.conceptStates
@@ -995,6 +1119,113 @@ const milestoneTasks = computed<{ done: number; total: number } | null>(() => {
   const done = Number(p?.completedTasksInMilestone ?? 0)
   return total > 0 ? { done, total } : null
 })
+
+/* ---------- 学习压力记录曲线（learning_metrics 真实指标：LSS/LF/LSB 历史趋势） ---------- */
+const loadRange = ref<42 | 90>(42)
+/** 压力趋势点（含坐标）：直接来自 learning_metrics 历史，无分钟 EWMA 推导 */
+type LoadPoint = {
+  date: string
+  label: string
+  lss: number | null
+  lf: number | null
+  lsb: number | null
+  x: number
+  ylss: number
+  ylf: number
+  ylsb: number
+}
+const loadSeries = computed<LoadPoint[]>(() => {
+  const days = loadRange.value
+  const now = new Date()
+  const keyOf = (offset: number) => {
+    const d = new Date(now)
+    d.setDate(d.getDate() - offset)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  const map = new Map(loadCurveRaw.value.map((p) => [p.date, p]))
+  const out: Omit<LoadPoint, 'x' | 'ylss' | 'ylf' | 'ylsb'>[] = []
+  // 压力曲线从最早有记录的那天开始画（避免一大段空数据）；无记录时回退到窗口起点
+  let start = 0
+  for (let i = days - 1; i >= 0; i--) {
+    if (map.has(keyOf(i))) { start = i; break }
+  }
+  for (let i = start; i >= 0; i--) {
+    const key = keyOf(i)
+    const p = map.get(key)
+    const d = new Date(key + 'T00:00:00')
+    out.push({
+      date: key,
+      label: `${d.getMonth() + 1}月${d.getDate()}日`,
+      lss: p?.lss ?? null,
+      lf: p?.lf ?? null,
+      lsb: p?.lsb ?? null
+    })
+  }
+  return out as LoadPoint[]
+})
+const hasLoad = computed(() => loadSeries.value.some((p) => p.lss != null || p.lf != null || p.lsb != null))
+
+/* SVG 坐标：LSS/LF/LSB 统一 0-10 轴；LF 偶发略超 10（EWMA 累积），Y 域放宽到 -12~12 防贴顶裁切 */
+const LOAD_W = 600
+const LOAD_H = 240
+const LOAD_PAD = 8
+const loadYOf = (v: number | null): number => {
+  if (v == null) return -1 // 无数据 → 不画点
+  const clamped = Math.max(-12, Math.min(12, v))
+  return LOAD_H - ((clamped + 12) / 24) * LOAD_H // -12~12 → 0~240
+}
+const loadPoints = computed<LoadPoint[]>(() => {
+  const n = loadSeries.value.length
+  const usableW = LOAD_W - LOAD_PAD * 2
+  const step = n > 1 ? usableW / (n - 1) : 0
+  return loadSeries.value.map((p, i) => ({
+    ...p,
+    x: LOAD_PAD + step * i,
+    ylss: loadYOf(p.lss),
+    ylf: loadYOf(p.lf),
+    ylsb: loadYOf(p.lsb)
+  }))
+})
+/** 折线 path：跳过 null 点（断开），null 前后不连线 */
+function loadLinePath(key: 'ylss' | 'ylf' | 'ylsb') {
+  const pts = loadPoints.value
+  let d = ''
+  let penDown = false
+  for (const p of pts) {
+    if (p[key] < 0) { penDown = false; continue }
+    d += `${penDown ? 'L' : 'M'}${p.x.toFixed(1)},${p[key].toFixed(1)}`
+    penDown = true
+  }
+  return d
+}
+const loadLineD = computed(() => ({
+  lss: loadLinePath('ylss'),
+  lf: loadLinePath('ylf'),
+  lsb: loadLinePath('ylsb')
+}))
+const loadHover = ref<LoadPoint | null>(null)
+const loadDisplayDay = computed(() => loadHover.value ?? loadPoints.value[loadPoints.value.length - 1] ?? null)
+function onLoadHover(e: MouseEvent) {
+  const el = e.currentTarget as HTMLElement
+  const rect = el.getBoundingClientRect()
+  const relX = ((e.clientX - rect.left) / rect.width) * LOAD_W
+  let best: LoadPoint | null = null
+  let bestDist = Infinity
+  for (const p of loadPoints.value) {
+    const dist = Math.abs(p.x - relX)
+    if (dist < bestDist) { bestDist = dist; best = p }
+  }
+  loadHover.value = best
+}
+const loadFmt = (v: number | null) => (v == null ? '—' : v.toFixed(1))
+/** 压力语义：LF 高 = 疲劳高；LSB = KTL-LF，负 = 状态不佳 */
+function loadZoneOf(p: LoadPoint): 'fresh' | 'optimal' | 'risk' {
+  if (p.lsb == null) return p.lf != null && p.lf >= 6 ? 'risk' : 'optimal'
+  if (p.lsb >= 0) return 'fresh'
+  if (p.lsb >= -3) return 'optimal'
+  return 'risk'
+}
+const loadZoneCls = (z: 'fresh' | 'optimal' | 'risk') => (z === 'fresh' ? '--fresh' : z === 'optimal' ? '--optimal' : '--risk')
 
 const riskFactors = computed(() => (teachingHints.value?.riskFactors || []) as string[])
 
@@ -1105,8 +1336,11 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-bars { padding: 14px 16px 16px; display: grid; gap: 12px; }
 .ld-bars--dense { padding-top: 12px; }
 .ld-bar { display: grid; gap: 5px; }
+/* 无证据概念：折叠态——半透明 + 更紧凑，降低「14 行 0 证据」的刷屏感；悬停恢复不透明度便于阅读 */
+.ld-bar--empty { opacity: 0.6; gap: 3px; margin-top: -5px; }
+.ld-bar--empty:hover { opacity: 1; }
 .ld-bar__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
-.ld-bar__head strong { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ld-bar__head strong { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
 .ld-bar__badges { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
 .ld-bar__risk { font-size: 10.5px; font-weight: 700; }
 .ld-bar__risk--ok { color: var(--mk-green); }
@@ -1121,6 +1355,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   padding: 1px 6px;
   cursor: help;
 }
+.ld-bar__ev--zero { background: #f4f6fa; color: var(--mk-faint); }
 .ld-bar__track {
   height: 7px;
   border-radius: 4px;
@@ -1229,7 +1464,9 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-metric strong { font-size: 22px; font-variant-numeric: tabular-nums; }
 .ld-metric strong.is-good { color: var(--mk-green); }
 .ld-metric strong.is-bad { color: var(--mk-red); }
-.ld-metric em { font-style: normal; font-size: 11px; color: var(--mk-faint); }
+/* 0 值 = 暂无数据：中性灰（比 --mk-faint 深一档，保证可读），不误报警告红 */
+.ld-metric strong.is-empty { color: var(--mk-muted); }
+.ld-metric em { font-style: normal; font-size: 11px; color: var(--mk-muted); }
 
 .ld-flags { display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 16px; }
 .ld-insights { padding: 12px 16px; display: grid; gap: 8px; }
@@ -1237,20 +1474,61 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px 16px; }
 .ld-two > div { display: grid; gap: 7px; align-content: start; }
 
+/* 证据时间线：竖线时间轴 + 信号徽章 + 置信度条 + 来源 */
 .ld-evidence { display: grid; }
 .ld-ev {
+  position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
-  padding: 10px 16px;
+  padding: 12px 16px 12px 22px;
   border-bottom: 1px solid #f0f2f5;
 }
 .ld-ev:last-child { border-bottom: none; }
-.ld-ev__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+/* 竖线时间轴：贯穿每行左侧，末端渐隐；单条时不显示（避免断裂） */
+.ld-ev__rail {
+  position: absolute;
+  left: 15px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, var(--mk-line), transparent);
+}
+.ld-ev:first-child .ld-ev__rail { top: 50%; }
+.ld-ev:last-child .ld-ev__rail { bottom: 50%; }
+.ld-ev:only-child .ld-ev__rail { display: none; }
+.ld-evidence:has(.ld-ev:only-child) .ld-ev__rail { display: none; }
+/* 信号圆点：压在竖线上 */
+.ld-ev__dot {
+  position: relative;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
+  box-shadow: 0 0 0 3px var(--mk-surface);
+}
 .ld-ev__dot.is-ok { background: var(--mk-green); }
 .ld-ev__dot.is-warn { background: var(--mk-amber); }
 .ld-ev__dot.is-bad { background: var(--mk-red); }
 .ld-ev__dot.is-muted { background: var(--mk-muted); }
+.ld-ev__main { flex: 1; display: grid; gap: 3px; min-width: 0; }
+.ld-ev__top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ld-ev__main strong { font-size: 12.5px; }
+.ld-ev__detail { font-size: 11.5px; color: var(--mk-faint); }
+/* 信号徽章：与圆点同色的浅底小标 */
+.ld-ev__signal {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+.ld-ev__signal.is-ok { background: var(--mk-green-bg); color: var(--mk-green); }
+.ld-ev__signal.is-warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
+.ld-ev__signal.is-bad { background: var(--mk-red-bg); color: var(--mk-red); }
+.ld-ev__signal.is-muted { background: #f0f2f5; color: var(--mk-muted); }
+/* 证据不足徽章 */
 .ld-ev__lack {
   flex-shrink: 0;
   font-size: 10.5px;
@@ -1260,16 +1538,102 @@ function barToneBadge(tone: ConceptBarTone): string {
   border-radius: 6px;
   padding: 1px 6px;
 }
-.ld-ev__main { flex: 1; display: grid; min-width: 0; }
-.ld-ev__main strong { font-size: 12.5px; }
-.ld-ev__main span { font-size: 11.5px; color: var(--mk-faint); }
-.ld-ev__time { font-size: 11px; color: var(--mk-faint); white-space: nowrap; }
+/* 置信度迷你条：绿(≥80%) / 蓝(50-79%) / 琥珀(<50%) */
+.ld-ev__conf {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 200px;
+  cursor: help;
+}
+.ld-ev__confbar {
+  display: block;
+  height: 5px;
+  border-radius: 99px;
+  background: #eef2fa;
+  overflow: hidden;
+  position: relative;
+}
+.ld-ev__confbar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 99px;
+}
+.ld-ev__confbar.is-ok::after { background: var(--mk-green); }
+.ld-ev__confbar.is-warn::after { background: var(--mk-amber); }
+.ld-ev__confbar.is-info::after { background: var(--mk-blue); }
+.ld-ev__conf em { font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* 来源行：会话/任务短 ID */
+.ld-ev__src {
+  font-size: 10.5px;
+  color: var(--mk-faint);
+  font-family: var(--mk-mono);
+  opacity: 0.85;
+}
+.ld-ev__time { font-size: 11px; color: var(--mk-faint); white-space: nowrap; margin-top: 3px; }
+
+/* ---------- 证据页两栏布局：左时间线（主） / 右曲线·建议·密度（侧） ---------- */
+.ld-ev-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.ld-ev-main { min-width: 0; }
+/* 时间线限高内滚：50+ 条不撑爆页面，右栏随视口露出 */
+.ld-ev-main .ld-evidence { max-height: 640px; overflow-y: auto; }
+.ld-ev-main .ld-evidence::-webkit-scrollbar { width: 6px; }
+.ld-ev-main .ld-evidence::-webkit-scrollbar-thumb { background: #d5dce8; border-radius: 3px; }
+.ld-ev-side { display: grid; gap: 14px; min-width: 0; }
+
+/* ---------- 学习压力曲线（健康度/疲劳度 EWMA，风格对齐用户侧 V2LearningState） ---------- */
+.ld-load__controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ld-load__stats { font-size: 11.5px; color: var(--mk-muted); font-variant-numeric: tabular-nums; font-weight: 600; }
+.ld-load__seg { display: inline-flex; padding: 3px; background: #eef2fa; border-radius: 9px; gap: 2px; }
+.ld-load__seg-item {
+  border: 0; background: transparent; padding: 4px 10px; border-radius: 7px;
+  font: inherit; font-size: 11.5px; font-weight: 700; color: var(--mk-muted); cursor: pointer;
+}
+.ld-load__seg-item.is-on { background: #fff; color: var(--mk-blue); box-shadow: 0 1px 3px rgba(23, 32, 51, 0.12); }
+.ld-load__body { padding: 12px 14px 14px; display: grid; gap: 10px; }
+.ld-load__legend { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--mk-muted); }
+.ld-load__dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+.ld-load__dot.is-lss { background: var(--mk-blue); }
+.ld-load__dot.is-lf { background: var(--mk-red); }
+.ld-load__dot.is-lsb { background: var(--mk-green); }
+.ld-load__chip { margin-left: auto; font-size: 10.5px; font-weight: 800; padding: 2px 9px; border-radius: 999px; }
+.ld-load__chip--fresh { color: var(--mk-green); background: var(--mk-green-bg); }
+.ld-load__chip--optimal { color: var(--mk-amber); background: var(--mk-amber-bg); }
+.ld-load__chip--risk { color: var(--mk-red); background: var(--mk-red-bg); }
+.ld-load__chart { width: 100%; }
+/* 固定显示高度：侧栏窄时曲线不变形（viewBox 600x240 = 2.5:1，容器按此比例） */
+.ld-load__chart svg { display: block; width: 100%; height: auto; aspect-ratio: 600 / 240; max-height: 260px; }
+.ld-load__guide { stroke: rgba(23, 32, 51, 0.12); stroke-width: 1; stroke-dasharray: 4 4; }
+.ld-load__guide--warn { stroke: rgba(220, 38, 38, 0.28); }
+.ld-load__line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.ld-load__line.is-lss { stroke: var(--mk-blue); }
+.ld-load__line.is-lf { stroke: var(--mk-red); }
+.ld-load__line.is-lsb { stroke: var(--mk-green); }
+.ld-load__cursor { stroke: rgba(23, 32, 51, 0.2); stroke-width: 1; stroke-dasharray: 3 3; }
+.ld-load__pt { stroke: #fff; stroke-width: 2; }
+.ld-load__pt.is-lss { fill: var(--mk-blue); }
+.ld-load__pt.is-lf { fill: var(--mk-red); }
+.ld-load__pt.is-lsb { fill: var(--mk-green); }
+.ld-load__info { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; font-size: 11.5px; color: var(--mk-muted); border-top: 1px dashed var(--mk-line); padding-top: 8px; }
+.ld-load__info b { color: var(--mk-ink); }
+.ld-load__info .is-lss-t { color: var(--mk-blue); font-weight: 700; }
+.ld-load__info .is-lf-t { color: var(--mk-red); font-weight: 700; }
+.ld-load__info .is-lsb-t { color: var(--mk-green); font-weight: 700; }
+.ld-load__zones { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 10.5px; color: var(--mk-faint); }
 
 @media (max-width: 1100px) {
   .ld-grid { grid-template-columns: 1fr; }
   .ld-metrics { grid-template-columns: repeat(2, 1fr); }
   .ld-two { grid-template-columns: 1fr; }
   .ld-found { grid-template-columns: 1fr; }
+  .ld-ev-grid { grid-template-columns: 1fr; }
+  .ld-ev-main .ld-evidence { max-height: none; overflow: visible; }
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
@@ -1299,6 +1663,9 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-ev__main strong { font-size: 14.5px; }
   .ld-ev__main span { font-size: 13.5px; }
   .ld-ev__time { font-size: 13px; }
+  .ld-ev__signal { font-size: 12px; }
+  .ld-ev__conf em { font-size: 12px; }
+  .ld-ev__src { font-size: 12px; }
   .ld-none { padding: 21px 19px; }
   .ld-none__hint { font-size: 13.5px; }
   .ld-progress { padding: 18px; gap: 9px; }
@@ -1347,6 +1714,9 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-ev__main strong { font-size: 17px; }
   .ld-ev__main span { font-size: 16px; }
   .ld-ev__time { font-size: 15px; }
+  .ld-ev__signal { font-size: 14px; }
+  .ld-ev__conf em { font-size: 14px; }
+  .ld-ev__src { font-size: 14px; }
   .ld-none { padding: 25px 22px; }
   .ld-none__hint { font-size: 16px; }
   .ld-progress { padding: 21px; gap: 10px; }
@@ -1395,6 +1765,9 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-ev__main strong { font-size: 20px; }
   .ld-ev__main span { font-size: 18.5px; }
   .ld-ev__time { font-size: 17.5px; }
+  .ld-ev__signal { font-size: 16.5px; }
+  .ld-ev__conf em { font-size: 16.5px; }
+  .ld-ev__src { font-size: 16.5px; }
   .ld-none { padding: 29px 26px; }
   .ld-none__hint { font-size: 18.5px; }
   .ld-progress { padding: 25px; gap: 12px; }

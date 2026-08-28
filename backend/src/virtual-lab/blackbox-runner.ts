@@ -39,7 +39,8 @@ import {
   virtualLearnerGoalDialogueSimulatorDefinition,
   virtualLearnerLearnTurnSimulatorDefinition,
   virtualLearnerActorAuditorDefinition,
-  virtualLearnerRefereeDefinition
+  virtualLearnerRefereeDefinition,
+  virtualLearnerMemoryCuratorDefinition,
 } from '../skills'
 import { getRequestContext, runWithContext } from '../gateway/api-gateway/context'
 import { getAPIGateway } from '../gateway/api-gateway'
@@ -48,9 +49,11 @@ import { learningStateService } from '../services/learning/learning-state.servic
 import { logger } from '../utils/logger'
 import {
   buildLearnerMemorySnapshot,
+  extractSelfStateFromTrace,
   recordCompletedArtifact,
   writeProfileConceptsAfterLesson,
   type LessonKnowledgePoint,
+  type SelfReportedLearnerState,
 } from './learner-memory'
 
 import { safeJsonParse } from '../utils/safe-json'
@@ -1534,7 +1537,30 @@ export class BlackboxVirtualLearnerRunner {
             (kp) => kp && typeof kp.name === 'string' && kp.name.trim()
           )
         : [];
-      await writeProfileConceptsAfterLesson(session.userId, knowledgePoints, { source: 'blackbox' });
+      // 内部提炼：从私有状态轨迹（模拟器自己的收束轮自述）提取，而非抄老师侧看板
+      const trace = Array.isArray(state.blackbox?.learnerPrivateStateTrace)
+        ? state.blackbox.learnerPrivateStateTrace
+        : null;
+      const selfState = extractSelfStateFromTrace(trace, taskId);
+      // 记忆提炼 skill（LLM 主路径，失败走确定性 fallback）
+      const curated = await this.runMemoryCurator(session, state, teachingSessionId, task, trace);
+      const curatedMastered = curated?.masteredConcepts?.map((m) => m.name) || [];
+      const curatedStruggle = curated?.struggleConcepts?.map((s) => s.name) || [];
+      const effectiveSelfState: SelfReportedLearnerState | null = curated
+        ? {
+            ...(selfState || {}),
+            conceptName: curatedMastered[0] || curatedStruggle[0] || selfState?.conceptName || task?.title || null,
+            conceptualMastery: curatedMastered.length > 0 ? 0.85 : selfState?.conceptualMastery ?? null,
+            selfReportedTaskDone: curatedMastered.length > 0 ? true : selfState?.selfReportedTaskDone ?? null,
+            remainingBlockers: curatedStruggle.length > 0
+              ? curated.struggleConcepts.map((s) => s.blocker).filter(Boolean)
+              : selfState?.remainingBlockers || null,
+          }
+        : selfState;
+      await writeProfileConceptsAfterLesson(session.userId, knowledgePoints, {
+        source: 'blackbox',
+        selfState: effectiveSelfState,
+      });
       await recordCompletedArtifact({
         userId: session.userId,
         taskId,
@@ -1542,7 +1568,14 @@ export class BlackboxVirtualLearnerRunner {
         artifactType: task?.taskType || null,
         deliverable: task?.acceptanceCriteria || null,
         knowledgePoints,
+        selfState: effectiveSelfState,
         milestoneTitle: (task as any)?.milestones?.title || null,
+        memoryDelta: curated?.memoryDelta || null,
+        memoryCurated: curated ? {
+          mastered: curatedMastered,
+          struggling: curatedStruggle,
+          selfCalibration: curated.selfCalibration,
+        } : undefined,
       });
     } catch (error) {
       logger.warn('[Blackbox] 虚拟学习者记忆回写失败（不影响任务完成）', {
@@ -1550,6 +1583,108 @@ export class BlackboxVirtualLearnerRunner {
         taskId,
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+  }
+
+  /**
+   * 调用记忆提炼 skill（LLM 主路径；失败返回 null，由确定性 fallback 兜底）。
+   * 输入：画像 + 本课回合压缩序列 + 当前任务 + 旧记忆。
+   */
+  private async runMemoryCurator(
+    session: VirtualSessionRow,
+    state: StageResults,
+    teachingSessionId: string,
+    task: { title: string; linkedConcept?: string | null; acceptanceCriteria?: string | null } | null,
+    trace: Array<Record<string, any>> | null
+  ): Promise<{
+    masteredConcepts: Array<{ name: string; evidence: string; confidence: number }>;
+    struggleConcepts: Array<{ name: string; blocker: string; severity: string }>;
+    selfCalibration: string;
+    memoryDelta: string;
+  } | null> {
+    try {
+      const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id: session.virtualProfileId } });
+      if (!profile) return null;
+      const persona = {
+        ...safeJsonParse<Record<string, unknown>>(profile.profile, {}),
+        learningGoal: profile.learningGoal,
+      };
+      // 从私有轨迹构建回合压缩序列（只取 teaching 阶段）
+      const turnSequence = (trace || [])
+        .filter((entry) => entry?.stage === 'teaching')
+        .slice(-24)
+        .map((entry, index) => {
+          const s = (entry?.state && typeof entry.state === 'object' ? entry.state : {}) as Record<string, any>;
+          const f = (s.learnerFeedback && typeof s.learnerFeedback === 'object' ? s.learnerFeedback : {}) as Record<string, any>;
+          return {
+            turn: index + 1,
+            reply: typeof s.reply === 'string' ? s.reply : '',
+            emotion: typeof s.emotion === 'string' ? s.emotion : null,
+            learnerState: {
+              phaseFocus: typeof s.phaseFocus === 'string' ? s.phaseFocus : undefined,
+              conceptualMastery: typeof s.conceptualMastery === 'number' ? s.conceptualMastery : undefined,
+              taskUnderstanding: typeof s.taskUnderstanding === 'number' ? s.taskUnderstanding : undefined,
+              wantsHint: typeof s.wantsHint === 'boolean' ? s.wantsHint : undefined,
+            },
+            learnerFeedback: {
+              selfReportedTaskDone: typeof f.selfReportedTaskDone === 'boolean' ? f.selfReportedTaskDone : undefined,
+              confidence: typeof f.confidence === 'number' ? f.confidence : undefined,
+              wantsMoreHelp: typeof f.wantsMoreHelp === 'boolean' ? f.wantsMoreHelp : undefined,
+              remainingBlockers: Array.isArray(f.remainingBlockers) ? f.remainingBlockers : undefined,
+            },
+          };
+        });
+      // 若轨迹无 teaching 回合（异常），回退 teaching session 消息
+      const effectiveTurns = turnSequence.length > 0 ? turnSequence : this.buildFallbackTurnSequence(teachingSessionId);
+      const existing = await buildLearnerMemorySnapshot(session.userId, { limit: 30 }).catch(() => null);
+      const result = await executeSkill(virtualLearnerMemoryCuratorDefinition, {
+        persona,
+        turnSequence: effectiveTurns,
+        currentTask: {
+          title: task?.title || null,
+          linkedConcept: task?.linkedConcept || null,
+          acceptanceCriteria: task?.acceptanceCriteria || null,
+        },
+        existingKnown: existing?.mastered.map((m) => m.name) || [],
+        existingStruggle: existing?.struggling.map((m) => m.name) || [],
+      });
+      if (!result.success || !result.output) return null;
+      const output = result.output as any;
+      return {
+        masteredConcepts: Array.isArray(output.masteredConcepts) ? output.masteredConcepts : [],
+        struggleConcepts: Array.isArray(output.struggleConcepts) ? output.struggleConcepts : [],
+        selfCalibration: typeof output.selfCalibration === 'string' ? output.selfCalibration : '',
+        memoryDelta: typeof output.memoryDelta === 'string' ? output.memoryDelta : '',
+      };
+    } catch (error) {
+      logger.warn('[Blackbox] 记忆提炼 skill 调用失败，走确定性 fallback', {
+        sessionId: session.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
+  /** 回退：从 teaching session 消息构建回合序列（轨迹缺失时） */
+  private async buildFallbackTurnSequence(teachingSessionId: string): Promise<Array<Record<string, any>>> {
+    try {
+      const teaching = await prisma.teaching_sessions.findUnique({ where: { id: teachingSessionId } });
+      const raw = teaching?.messages ?? null;
+      const messages = typeof raw === 'string'
+        ? safeJsonParse<any[]>(raw, [])
+        : Array.isArray(raw)
+          ? raw
+          : [];
+      return messages.slice(-24).map((m: any, index: number) => ({
+        turn: index + 1,
+        reply: typeof m.content === 'string' ? m.content : '',
+        emotion: null,
+        learnerState: undefined,
+        learnerFeedback: undefined,
+        role: m.role || 'learner',
+      }));
+    } catch {
+      return [];
     }
   }
 

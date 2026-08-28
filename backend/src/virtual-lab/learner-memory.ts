@@ -36,6 +36,107 @@ export interface LessonKnowledgePoint {
   progress: number;
 }
 
+/**
+ * 模拟器自述的学习者状态（learn-turn-simulator 输出，收束轮持久化在私有状态轨迹里）。
+ * 这是虚拟学习者「自己觉得」的状态——内部提炼的记忆来源。
+ */
+export interface SelfReportedLearnerState {
+  /** 本节课概念（知识看板当前点，学习者自评的对照物） */
+  conceptName?: string | null;
+  /** 概念掌握自评 0-1（learnerState.conceptualMastery） */
+  conceptualMastery?: number | null;
+  /** 任务理解自评 0-1（learnerState.taskUnderstanding） */
+  taskUnderstanding?: number | null;
+  /** 程序性掌握自评 0-1（learnerState.proceduralMastery） */
+  proceduralMastery?: number | null;
+  /** 是否自认任务已完成（learnerFeedback.selfReportedTaskDone） */
+  selfReportedTaskDone?: boolean | null;
+  /** 自评信心 0-1（learnerFeedback.confidence） */
+  confidence?: number | null;
+  /** 还想要更多帮助（learnerFeedback.wantsMoreHelp） */
+  wantsMoreHelp?: boolean | null;
+  /** 剩余的卡点（learnerFeedback.remainingBlockers） */
+  remainingBlockers?: string[] | null;
+  /** 是否想要提示（learnerState.wantsHint） */
+  wantsHint?: boolean | null;
+}
+
+/**
+ * 内部提炼：从虚拟学习者自述状态判断「自己觉得学会了什么 / 卡在哪」。
+ * 不是抄老师侧 knowledgeState，而是模拟器自己的主观认知：
+ * - 概念自评高（≥0.65）且自认完成 → 归入 mastered（自己觉得学会了）
+ * - 概念自评中低 / 想要提示 / 有剩余卡点 → 归入 struggle（自己觉得没学会）
+ * 纯确定性规则，零 LLM。
+ */
+export function selfExtractLearnerMemory(
+  selfState: SelfReportedLearnerState | null | undefined,
+): { mastered: string[]; struggling: string[] } {
+  const mastered: string[] = [];
+  const struggling: string[] = [];
+  if (!selfState) return { mastered, struggling };
+
+  const concept = typeof selfState.conceptName === 'string' && selfState.conceptName.trim()
+    ? selfState.conceptName.trim()
+    : null;
+  if (!concept) return { mastered, struggling };
+
+  const mastery = Number(selfState.conceptualMastery);
+  const taskDone = selfState.selfReportedTaskDone === true;
+  const confidence = Number(selfState.confidence);
+  const wantsHelp = selfState.wantsMoreHelp === true;
+  const wantsHint = selfState.wantsHint === true;
+  const blockers = Array.isArray(selfState.remainingBlockers) && selfState.remainingBlockers.length > 0;
+
+  const confidentEnough = Number.isFinite(mastery)
+    ? mastery >= 0.65
+    : Number.isFinite(confidence)
+      ? confidence >= 0.6
+      : false;
+  const stuck = wantsHelp || wantsHint || blockers || (Number.isFinite(mastery) && mastery < 0.4);
+
+  if (confidentEnough && taskDone && !stuck) {
+    mastered.push(concept);
+  } else if (stuck || !confidentEnough) {
+    struggling.push(concept);
+  }
+  return { mastered, struggling };
+}
+
+/**
+ * 从模拟器私有状态轨迹（learnerPrivateStateTrace）中提炼收束轮的自我状态。
+ * 轨迹元素结构：{ stage, taskId, state: { ...learnerState, learnerFeedback } }。
+ * 取该 task 最近一个 teaching 轨迹条目；找不到时回退到整条轨迹最后一个 teaching 条目。
+ */
+export function extractSelfStateFromTrace(
+  trace: Array<Record<string, any>> | null | undefined,
+  taskId?: string | null,
+): SelfReportedLearnerState | null {
+  if (!Array.isArray(trace) || trace.length === 0) return null;
+  const teaching = trace.filter((entry) => entry?.stage === 'teaching');
+  if (teaching.length === 0) return null;
+
+  const target = taskId
+    ? [...teaching].reverse().find((entry) => String(entry?.taskId || '') === String(taskId))
+    : undefined;
+  const latest = target || teaching[teaching.length - 1];
+  const state = (latest?.state && typeof latest.state === 'object' ? latest.state : {}) as Record<string, any>;
+  const feedback = (state.learnerFeedback && typeof state.learnerFeedback === 'object'
+    ? state.learnerFeedback : {}) as Record<string, any>;
+
+  return {
+    conceptName: typeof state.conceptName === 'string' ? state.conceptName
+      : (typeof state.currentConcept === 'string' ? state.currentConcept : null),
+    conceptualMastery: typeof state.conceptualMastery === 'number' ? state.conceptualMastery : null,
+    taskUnderstanding: typeof state.taskUnderstanding === 'number' ? state.taskUnderstanding : null,
+    proceduralMastery: typeof state.proceduralMastery === 'number' ? state.proceduralMastery : null,
+    selfReportedTaskDone: typeof feedback.selfReportedTaskDone === 'boolean' ? feedback.selfReportedTaskDone : null,
+    confidence: typeof feedback.confidence === 'number' ? feedback.confidence : null,
+    wantsMoreHelp: typeof feedback.wantsMoreHelp === 'boolean' ? feedback.wantsMoreHelp : null,
+    remainingBlockers: Array.isArray(feedback.remainingBlockers) ? feedback.remainingBlockers : null,
+    wantsHint: typeof state.wantsHint === 'boolean' ? state.wantsHint : null,
+  };
+}
+
 /** 学习者记忆快照：喂给 learn-turn-simulator 的 knowledgeSnapshot 部分 */
 export interface LearnerMemorySnapshot {
   /** 已掌握概念（画像 knownConcepts ∪ memory_traces stable/mastered） */
@@ -51,6 +152,10 @@ export interface LearnerMemorySnapshot {
     artifactType: string | null;
     deliverable: string | null;
     completedAt: string;
+    /** 记忆提炼 skill 的一句话记忆增量 */
+    memoryDelta?: string | null;
+    /** 记忆提炼 skill 的自评校准说明 */
+    selfCalibration?: string | null;
   }>;
   /** 最近完成任务的标题列表（轻量版，供模拟器自然引用） */
   recentTaskTitles: string[];
@@ -61,26 +166,45 @@ const STRUGGLE_STATUSES = new Set(['review', 'learning', 'pending']);
 
 /**
  * 课后回写画像概念：掌握 → knownConcepts，仍在学/需复习 → struggleConcepts。
- * 三链共用（assisted 已有等价实现，本函数为统一出口）。
+ * 记忆来源 = 虚拟学习者「自己提炼」的自述状态（selfState），
+ * 而非老师侧 knowledgeState（后者只作 fallback 与成果物证据）。
+ * 三链共用（assisted / blackbox / quick-learn）。
  */
 export async function writeProfileConceptsAfterLesson(
   userId: string,
   knowledgePoints: LessonKnowledgePoint[],
-  options: { source?: string } = {},
+  options: {
+    source?: string;
+    /** 虚拟学习者自述状态（内部提炼的优先来源） */
+    selfState?: SelfReportedLearnerState | null;
+  } = {},
 ): Promise<void> {
-  if (!userId || !Array.isArray(knowledgePoints) || !knowledgePoints.length) return;
+  if (!userId) return;
   try {
     const profile = await prisma.virtual_learner_profiles.findUnique({ where: { userId } });
     if (!profile) return;
 
     const mastered = new Set<string>();
     const struggling = new Set<string>();
-    for (const kp of knowledgePoints) {
-      const name = String(kp?.name || '').trim();
-      if (!name) continue;
-      if (MASTERED_STATUSES.has(kp.status)) mastered.add(name);
-      else if (STRUGGLE_STATUSES.has(kp.status)) struggling.add(name);
+
+    // ① 优先：虚拟学习者自己提炼（selfState）
+    if (options.selfState) {
+      const self = selfExtractLearnerMemory(options.selfState);
+      for (const name of self.mastered) mastered.add(name);
+      for (const name of self.struggling) struggling.add(name);
     }
+
+    // ② fallback：老师侧 knowledgeState（仅当 selfState 缺失或没提炼出任何概念时）
+    if (mastered.size === 0 && struggling.size === 0 && Array.isArray(knowledgePoints)) {
+      for (const kp of knowledgePoints) {
+        const name = String(kp?.name || '').trim();
+        if (!name) continue;
+        if (MASTERED_STATUSES.has(kp.status)) mastered.add(name);
+        else if (STRUGGLE_STATUSES.has(kp.status)) struggling.add(name);
+      }
+    }
+
+    if (mastered.size === 0 && struggling.size === 0) return;
 
     const profileData = safeJsonParse<Record<string, any>>(profile.profile, {});
     const existingKnown = Array.isArray(profileData.knownConcepts) ? profileData.knownConcepts : [];
@@ -172,6 +296,8 @@ export async function buildLearnerMemorySnapshot(
       artifactType: typeof item.artifactType === 'string' ? item.artifactType : null,
       deliverable: typeof item.deliverable === 'string' ? item.deliverable : null,
       completedAt: typeof item.completedAt === 'string' ? item.completedAt : '',
+      memoryDelta: typeof item.memoryDelta === 'string' ? item.memoryDelta : null,
+      selfCalibration: typeof item.selfCalibration === 'string' ? item.selfCalibration : null,
     }));
 
   return {
@@ -186,7 +312,7 @@ export async function buildLearnerMemorySnapshot(
 /**
  * 任务结算后登记「做完的事」（轻量成果物）。
  * 写入画像 profile.recentCompleted（去重 + 上限 12），供故事/开场引用。
- * 数据来源：subtasks 的验收标准 + 课堂知识状态（best-effort）。
+ * 数据来源：subtasks 的验收标准 + 虚拟学习者自述掌握的提炼（best-effort）。
  */
 export async function recordCompletedArtifact(input: {
   userId: string;
@@ -195,7 +321,17 @@ export async function recordCompletedArtifact(input: {
   artifactType?: string | null;
   deliverable?: string | null;
   knowledgePoints?: LessonKnowledgePoint[];
+  /** 虚拟学习者自述状态（内部提炼：自己觉得掌握了什么） */
+  selfState?: SelfReportedLearnerState | null;
   milestoneTitle?: string | null;
+  /** 记忆提炼 skill 的 memoryDelta（一句话记忆增量） */
+  memoryDelta?: string | null;
+  /** 记忆提炼 skill 的完整结果（供记忆池展示"自己怎么想的"） */
+  memoryCurated?: {
+    mastered: string[];
+    struggling: string[];
+    selfCalibration: string;
+  } | null;
 }): Promise<void> {
   if (!input.userId || !input.taskId) return;
   try {
@@ -204,9 +340,15 @@ export async function recordCompletedArtifact(input: {
     const profileData = safeJsonParse<Record<string, any>>(profile.profile, {});
     const existing = Array.isArray(profileData.recentCompleted) ? profileData.recentCompleted : [];
 
-    const masteredNames = (input.knowledgePoints || [])
-      .filter((kp) => kp?.status === 'mastered' && typeof kp.name === 'string' && kp.name.trim())
-      .map((kp) => kp.name.trim());
+    // 优先用自述提炼（内部记忆），缺失时回退老师侧 mastered 概念
+    const selfExtracted = input.selfState ? selfExtractLearnerMemory(input.selfState) : null;
+    const masteredNames = input.memoryCurated?.mastered?.length
+      ? input.memoryCurated.mastered
+      : selfExtracted && selfExtracted.mastered.length > 0
+        ? selfExtracted.mastered
+        : (input.knowledgePoints || [])
+            .filter((kp) => kp?.status === 'mastered' && typeof kp.name === 'string' && kp.name.trim())
+            .map((kp) => kp.name.trim());
     const entry = {
       taskId: input.taskId,
       title: input.taskTitle || '未命名事项',
@@ -214,6 +356,8 @@ export async function recordCompletedArtifact(input: {
       deliverable: input.deliverable || null,
       milestoneTitle: input.milestoneTitle || null,
       masteredConcepts: masteredNames.slice(0, 8),
+      memoryDelta: input.memoryDelta || null,
+      selfCalibration: input.memoryCurated?.selfCalibration || null,
       completedAt: new Date().toISOString(),
     };
     const next = [

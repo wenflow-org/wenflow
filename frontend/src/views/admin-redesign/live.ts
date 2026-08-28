@@ -1192,14 +1192,46 @@ export async function liveGetLearnerDetail(userId: string, pathId?: string, incl
   return res.data?.data ?? res.data ?? {}
 }
 
-export async function liveGetLearnerEvidence(userId: string, pathId?: string, includeTest?: boolean): Promise<Record<string, unknown>[]> {
+/** 压力趋势点：learning_metrics 历史（与用户侧 /state/trends 同源） */
+export interface LoadCurvePoint {
+  date: string
+  lss: number | null
+  ktl: number | null
+  lf: number | null
+  lsb: number | null
+}
+
+export async function liveGetLearnerEvidence(userId: string, pathId?: string, includeTest?: boolean): Promise<{
+  items: Record<string, unknown>[]
+  domain: Record<string, unknown>[]
+  loadCurve: LoadCurvePoint[]
+}> {
   const res = await adminLearnerModelsApi.getEvidence(userId, {
     limit: 20,
     ...(pathId ? { pathId } : {}),
     ...(includeTest ? { includeTest: true } : {}),
   })
   const body = res.data?.data ?? res.data ?? {}
-  return Array.isArray(body) ? body : (body?.items || body?.evidence || [])
+  if (Array.isArray(body)) return { items: body, domain: [], loadCurve: [] }
+  const items = Array.isArray(body.items) ? body.items : (Array.isArray(body.evidence) ? body.evidence : [])
+  const domain = Array.isArray(body.domain) ? body.domain : []
+  const loadCurve = Array.isArray(body.loadCurve) ? body.loadCurve : []
+  return { items, domain, loadCurve }
+}
+
+/** 证据原始字段：后端 LearnerRecentEvidence（type/taskId/sessionId/conceptKeys/signal/score/happenedAt）+
+ *  domain 证据（learner_evidence 表 goal/path 类型，detail 为 payload 摘要） */
+export interface LearnerEvidenceRaw {
+  type?: string
+  kind?: string
+  taskId?: string
+  sessionId?: string
+  conceptKeys?: unknown
+  signal?: string
+  score?: number
+  happenedAt?: string
+  createdAt?: string
+  detail?: string
 }
 
 /* ================= 虚拟学习者 ================= */

@@ -557,6 +557,24 @@ export const adminFieldRoutingsApi = {
    */
   pruneOrchestrationFile: async (stage: string, dryRun = true) =>
     adminAxios.post(`/admin/field-routings/orchestration/${encodeURIComponent(stage)}/prune`, { dryRun }),
+
+  /**
+   * 行级编辑路由行（2026-08 编排结构页重构恢复）：仅允许编辑路由行属性
+   * （render/handoff/internal/accumulate/visibilityPreset/notes），
+   * 后端会同步回写编排文件（File-as-Truth 单源化保持）并写审计。
+   */
+  patchRouting: async (agentId: string, fieldId: string, data: {
+    render?: 'visible' | 'hidden';
+    handoff?: string[];
+    internal?: boolean;
+    accumulate?: boolean;
+    visibilityPreset?: string | null;
+    notes?: string | null;
+  }) =>
+    adminAxios.patch(
+      `/admin/field-routings/routings/${encodeURIComponent(agentId)}/${encodeURIComponent(fieldId)}`,
+      data
+    ),
 };
 
 /**
@@ -1105,6 +1123,10 @@ export const adminVirtualLearnersApi = {
 
   getVirtualLearnerStories: async (id: string) => {
     return adminAxios.get(`/admin/virtual-learners/${id}/stories`);
+  },
+
+  getVirtualLearnerMemory: async (id: string) => {
+    return adminAxios.get(`/admin/virtual-learners/${id}/memory`);
   },
 
   createProjectionToken: async (id: string, data?: { storyId?: string; virtualSessionId?: string; scope?: 'dashboard' | 'full' }) => {
