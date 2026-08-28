@@ -163,7 +163,7 @@ describe('ExecLogs 传统分页（方案 A）', () => {
       await findBtn(w, '下一页').trigger('click');
       await flushPromises();
       expect(liveLogsPage.value).toBe(2);
-      await findBtn(w, '高级筛选').trigger('click');
+      await findBtn(w, '高级').trigger('click');
       await w.find('input[type="checkbox"]').setValue(true);
       await vi.advanceTimersByTime(10000);
       await flushPromises();
@@ -180,7 +180,7 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     await nextTick();
     await findBtn(w, '下一页').trigger('click');
     await flushPromises();
-    const input = w.find<HTMLInputElement>('.log-trace');
+    const input = w.find<HTMLInputElement>('input[placeholder="traceId"]');
     await input.setValue('tr:abc');
     await input.trigger('keydown.enter');
     await flushPromises();
@@ -189,15 +189,15 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     expect(liveLogsPage.value).toBe(1);
   });
 
-  it('P2 Tokens 列：有传输层统计（agent_call_logs）→ 展示 P x / C y 实际值', async () => {
+  it('P2 Tokens 列：有传输层统计（agent_call_logs）→ 展示「输入 x / 输出 y」实际值', async () => {
     liveLogsTotal.value = 1;
     liveLogsFiltered.value = [
       { ...fakeSpan(1), promptTokens: 860, completionTokens: 204 }
     ];
     const w = await mountExec();
     await nextTick();
-    const cell = w.find('.tline__tokens');
-    expect(cell.text()).toBe('P 860 / C 204');
+    const cell = w.find('.exec-tokens');
+    expect(cell.text()).toBe('输入 860 · 输出 204');
     expect(cell.attributes('title')).toContain('agent_call_logs');
     expect(cell.text()).not.toBe('未统计');
   });
@@ -207,7 +207,7 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     liveLogsFiltered.value = [fakeSpan(1)];
     const w = await mountExec();
     await nextTick();
-    const cell = w.find('.tline__tokens');
+    const cell = w.find('.exec-tokens');
     expect(cell.text()).toBe('未统计');
     expect(cell.attributes('title')).toContain('未记录 token 用量');
   });

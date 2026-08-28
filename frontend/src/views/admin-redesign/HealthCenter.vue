@@ -2,10 +2,12 @@
   <div class="mk-page">
     <div class="mk-status" :class="`mk-status--${barTone}`">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">巡检工作台</strong>
+      <strong class="mk-status__title">健康中心</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta" v-if="displayReport">Skill {{ global.total }} · {{ displayReport.generatedAt ? '更新于 ' + timeAgo(displayReport.generatedAt) : '' }}</span>
-      <span class="mk-badge" :class="topAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'" v-if="displayReport">{{ topAbnormal > 0 ? `异常 ${topAbnormal}` : '全部健康' }}</span>
+      <span class="mk-status__meta" v-if="displayReport">
+        技能 {{ global.total }} · 上线 {{ completionLive }}/{{ reconciliation.total }} · {{ displayReport.generatedAt ? '更新于 ' + timeAgo(displayReport.generatedAt) : '' }}
+      </span>
+      <span class="mk-badge" :class="topAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'" v-if="displayReport" :title="badgeTitle">{{ topAbnormal > 0 ? `异常 ${topAbnormal}` : '全部健康' }}</span>
       <span class="mk-status__spacer"></span>
       <button type="button" class="mk-status__action" :disabled="loading" @click="refresh(true)">{{ loading ? '检测中…' : '刷新' }}</button>
     </div>
@@ -15,22 +17,22 @@
     <template v-if="displayReport">
       <!-- 四张概要卡片 -->
       <div class="hc-summary">
-        <button type="button" class="hc-card" :class="healthAbnormal > 0 ? 'hc-card--warn' : 'hc-card--ok'" @click="scrollTo('health')">
+        <button type="button" class="hc-card" :class="healthAbnormal > 0 ? 'hc-card--warn' : 'hc-card--ok'" @click="scrollTo('health')" :title="`${displayReport.health.summary.total} 项健康检查，${healthAbnormal} 项异常`">
           <span class="hc-card__num">{{ displayReport.health.summary.total }}</span>
           <span class="hc-card__label">健康检查</span>
           <span class="hc-card__sub">{{ healthAbnormal > 0 ? `${healthAbnormal} 异常` : '全部正常' }}</span>
         </button>
-        <button type="button" class="hc-card" :class="driftTotal > 0 ? 'hc-card--warn' : 'hc-card--ok'" @click="scrollTo('drift')">
-          <span class="hc-card__num">{{ driftTotal }}</span>
+        <button type="button" class="hc-card" :class="driftActionable > 0 ? 'hc-card--warn' : 'hc-card--ok'" @click="scrollTo('drift')" :title="driftCardTitle">
+          <span class="hc-card__num">{{ driftActionable }}</span>
           <span class="hc-card__label">漂移</span>
-          <span class="hc-card__sub">{{ driftTotal > 0 ? '需处理' : '正常' }}</span>
+          <span class="hc-card__sub">{{ driftActionable > 0 ? '需处理' : '正常' }}</span>
         </button>
-        <button type="button" class="hc-card" :class="reconAbnormal > 0 ? 'hc-card--warn' : 'hc-card--ok'" @click="scrollTo('recon')">
+        <button type="button" class="hc-card" :class="reconAbnormal > 0 ? 'hc-card--warn' : 'hc-card--ok'" @click="scrollTo('recon')" :title="reconCardTitle">
           <span class="hc-card__num">{{ reconciliation.total }}</span>
           <span class="hc-card__label">对账</span>
           <span class="hc-card__sub">{{ reconAbnormal > 0 ? `${reconAbnormal} 异常` : '一致' }}</span>
         </button>
-        <button type="button" class="hc-card hc-card--ok" @click="scrollTo('completion')">
+        <button type="button" class="hc-card hc-card--ok" @click="scrollTo('completion')" title="完成度已达 live 档的技能数">
           <span class="hc-card__num">{{ completionLive }}</span>
           <span class="hc-card__label">已上线</span>
           <span class="hc-card__sub">/ {{ reconciliation.total }}</span>
@@ -46,51 +48,86 @@
             <span class="mk-badge" :class="healthAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'">{{ healthAbnormal > 0 ? `${healthAbnormal} 异常` : '无异常' }}</span>
           </summary>
           <div class="hc-checks">
-            <div v-for="item in sortedHealthItems" :key="item.id" class="hc-check" :class="`hc-check--${item.severity}`">
-              <span class="hc-check__dot" :class="`hc-check__dot--${item.severity}`"></span>
-              <div class="hc-check__main">
-                <strong>{{ item.label }}</strong>
-                <span>{{ item.cause }}</span>
+            <!-- 异常/关注项：默认展开 -->
+            <div v-for="item in healthHighlight" :key="item.id" class="hc-check" :class="`hc-check--${item.severity}`">
+              <button type="button" class="hc-check__row" :aria-expanded="detailOpen(item.id)" @click="toggleDetail(item.id)">
+                <span class="hc-check__dot" :class="`hc-check__dot--${item.severity}`"></span>
+                <span class="hc-check__main">
+                  <strong>{{ item.label }}</strong>
+                  <span>{{ item.cause }}</span>
+                </span>
+                <span class="hc-check__num" :title="countTitle(item)">{{ item.count }}</span>
+                <span class="hc-check__sem" :title="semHint(item.semantics)">{{ semanticsLabel(item.semantics) }}</span>
+                <span v-if="item.detail.length" class="hc-check__caret">{{ detailOpen(item.id) ? '▾' : '▸' }}</span>
+              </button>
+              <span class="hc-check__actions">
+                <button v-if="item.action === 'fixable' && item.severity !== 'ok'" type="button" class="hc-check__btn" :disabled="fixingId === item.id" @click="fix(item.id)">{{ fixingId === item.id ? '修复中…' : '修复' }}</button>
+                <button v-else-if="item.action === 'manual' && item.severity !== 'ok'" type="button" class="hc-check__btn" @click="jump(item.id)">查看 →</button>
+              </span>
+              <div v-if="detailOpen(item.id) && item.detail.length" class="hc-check__detail">
+                <p v-for="(d, i) in visibleDetail(item)" :key="i">{{ d }}</p>
+                <p v-if="detailTruncated(item)" class="hc-check__detail-more">共 {{ item.detail.length }} 条明细，仅显示前 {{ DETAIL_LIMIT }} 条</p>
               </div>
-              <span class="hc-check__count">{{ item.count }}</span>
-              <span class="hc-check__sem">{{ semanticsLabel(item.semantics) }}</span>
-              <button v-if="item.action === 'fixable' && item.severity !== 'ok'" type="button" class="hc-check__btn" :disabled="fixingId === item.id" @click="fix(item.id)">{{ fixingId === item.id ? '修复中…' : '修复' }}</button>
-              <button v-else-if="item.action === 'manual' && item.severity !== 'ok'" type="button" class="hc-check__btn" @click="jump(item.id)">查看 →</button>
             </div>
+
+            <!-- 正常项：收进折叠组，降低噪音 -->
+            <details v-if="healthRemaining.length" class="hc-ok">
+              <summary class="hc-ok__summary"><span class="hc-ok__label">其余 {{ healthRemaining.length }} 项正常</span><span class="mk-card__meta">点击展开</span></summary>
+              <div class="hc-checks">
+                <div v-for="item in healthRemaining" :key="item.id" class="hc-check" :class="`hc-check--${item.severity}`">
+                  <button type="button" class="hc-check__row" :aria-expanded="detailOpen(item.id)" @click="toggleDetail(item.id)">
+                    <span class="hc-check__dot" :class="`hc-check__dot--${item.severity}`"></span>
+                    <span class="hc-check__main">
+                      <strong>{{ item.label }}</strong>
+                      <span>{{ item.cause }}</span>
+                    </span>
+                    <span class="hc-check__num" :title="countTitle(item)">{{ item.count }}</span>
+                    <span class="hc-check__sem" :title="semHint(item.semantics)">{{ semanticsLabel(item.semantics) }}</span>
+                    <span v-if="item.detail.length" class="hc-check__caret">{{ detailOpen(item.id) ? '▾' : '▸' }}</span>
+                  </button>
+                  <div v-if="detailOpen(item.id) && item.detail.length" class="hc-check__detail">
+                    <p v-for="(d, i) in visibleDetail(item)" :key="i">{{ d }}</p>
+                    <p v-if="detailTruncated(item)" class="hc-check__detail-more">共 {{ item.detail.length }} 条明细，仅显示前 {{ DETAIL_LIMIT }} 条</p>
+                  </div>
+                </div>
+              </div>
+            </details>
           </div>
         </details>
       </section>
 
       <!-- 漂移 -->
-      <section v-if="driftTotal > 0" class="mk-card" id="hc-drift">
+      <section v-if="driftAny" class="mk-card" id="hc-drift">
         <details class="hc-details" open>
           <summary class="mk-card__head hc-details__summary">
             <h3 class="mk-card__title">漂移</h3>
-            <span class="mk-card__meta">{{ driftTotal }} 项</span>
+            <span class="mk-card__meta">{{ driftActionable }} 项需处理</span>
+            <span v-if="drift.runtime" class="mk-card__meta">遥测 {{ drift.runtime }} 条</span>
           </summary>
           <div class="hc-drift">
             <div class="hc-drift__item" v-if="drift.contract">
               <strong>{{ TERMS.driftContractQualified }}</strong>
-              <span class="mk-badge" :class="badgeCls(drift.contract, 'bad')">{{ drift.contract }}</span>
+              <span class="mk-badge mk-badge--bad">{{ drift.contract }}</span>
               <button type="button" class="mk-link" @click="goDrift('contract')">编排结构 →</button>
             </div>
             <div class="hc-drift__item" v-if="drift.hash">
               <strong>{{ TERMS.driftHashQualified }}</strong>
-              <span class="mk-badge" :class="badgeCls(drift.hash, 'bad')">{{ drift.hash }}</span>
+              <span class="mk-badge mk-badge--bad">{{ drift.hash }}</span>
               <button type="button" class="mk-link" @click="goDrift('hash')">Skill 工作台 →</button>
             </div>
             <div class="hc-drift__item" v-if="drift.runtime">
               <strong>{{ TERMS.driftRuntime }}</strong>
-              <span class="mk-badge" :class="badgeCls(drift.runtime, 'warn')">{{ drift.runtime }}</span>
+              <span class="mk-badge mk-badge--info" :title="`所有调用中 prompt 与数据库 ACTIVE 不一致的历史记录（最近 ${drift.runtime} 条采样）`">{{ drift.runtime }}</span>
               <button type="button" class="mk-link" @click="goDrift('runtime')">执行日志 →</button>
+              <span class="hc-drift__hint">历史遥测记录，只读观测；数据库同步后不再新增（健康检查 W4 一键修复）</span>
             </div>
           </div>
         </details>
       </section>
 
-      <!-- 技能对账 -->
-      <section class="mk-card" id="hc-recon">
-        <SkillReconciliation />
+      <!-- 技能对账（SkillReconciliation 自身即是 mk-card，外层仅作滚动锚点，避免卡中卡） -->
+      <section id="hc-recon" class="hc-anchor">
+        <SkillReconciliation ref="reconRef" />
       </section>
 
       <!-- 完成度分布 -->
@@ -114,7 +151,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { errMsg, timeAgo } from './live'
@@ -130,15 +167,59 @@ import {
   type HealthReconciliationSummary,
 } from '@/api/adminApi'
 import { TERMS } from './terms'
-import { COMPLETION_META } from './glossaryMeta'
+import { COMPLETION_META, SEMANTICS_META } from './glossaryMeta'
 import SkillReconciliation from './SkillReconciliation.vue'
 
-const driftTotal = computed(() => (displayReport.value?.drift?.contract || 0) + (displayReport.value?.drift?.hash || 0) + (displayReport.value?.drift?.runtime || 0))
-const reconAbnormal = computed(() => { const r = displayReport.value?.reconciliation; return (r?.missingRegistration || 0) + (r?.missingActive || 0) + (r?.zombieRegistration || 0) + (r?.zombieActive || 0) + (r?.zombieSkillActive || 0) + (r?.unwired || 0) })
+const reconRef = ref<{ openPanel?: () => void } | null>(null)
+
+/** 只读观测不计入「需处理」：漂移卡仅统计契约漂移 + W4 哈希漂移 */
+const driftActionable = computed(() => (displayReport.value?.drift?.contract || 0) + (displayReport.value?.drift?.hash || 0))
+const driftAny = computed(() => (displayReport.value?.drift?.contract || 0) + (displayReport.value?.drift?.hash || 0) + (displayReport.value?.drift?.runtime || 0) > 0)
+/** 对账异常口径：剔除与健康检查「ACTIVE 检查（W1）」同源的 zombieSkillActive，避免同一条异常计两次 */
+const reconAbnormal = computed(() => {
+  const r = displayReport.value?.reconciliation
+  return (r?.missingRegistration || 0) + (r?.zombieRegistration || 0) + (r?.missingActive || 0) + (r?.zombieActive || 0) + (r?.unwired || 0)
+})
 const completionLive = computed(() => displayReport.value?.completion?.live || 0)
 
+/** 概要卡 tooltip：解释口径，避免红色数字误读 */
+const driftCardTitle = computed(() => {
+  const parts = [`需处理（契约 + W4）：${driftActionable.value} 项`]
+  if (drift.value.runtime > 0) parts.push(`运行时遥测 ${drift.value.runtime} 条为只读观测，不计入需处理`)
+  return parts.join('；')
+})
+const reconCardTitle = computed(() => {
+  const r = reconciliation.value
+  const parts = [
+    `缺注册 ${r.missingRegistration}`,
+    `幽灵注册 ${r.zombieRegistration}`,
+    `缺 ACTIVE ${r.missingActive}`,
+    `幽灵 ACTIVE ${r.zombieActive}`,
+    `接线差集 ${r.unwired}`,
+  ]
+  const note = r.zombieSkillActive > 0 ? `（W1 僵尸 ACTIVE 残留 ${r.zombieSkillActive} 条与健康检查「ACTIVE 检查」同源，不重复计数）` : ''
+  return parts.join(' · ') + note
+})
+const badgeTitle = computed(() => {
+  const c = counts.value
+  const parts: string[] = []
+  if (c.error > 0) parts.push(`${c.error} 项严重`)
+  if (c.warn > 0) parts.push(`${c.warn} 项关注`)
+  if (global.value.abnormalSkills > 0) parts.push(`${global.value.abnormalSkills} 项技能完成度未达标`)
+  const note = drift.value.runtime > 0 ? `；另有运行时遥测 ${drift.value.runtime} 条（只读观测，非异常）` : ''
+  return parts.length > 0 ? parts.join('、') + note : '全部健康'
+})
+
 function scrollTo(id: string) {
-  document.getElementById('hc-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  if (id === 'recon') {
+    reconRef.value?.openPanel?.()
+  }
+  const el = document.getElementById('hc-' + id)
+  if (!el) return
+  // 滚动目标若默认折叠则先展开，避免滚到空白标题
+  const details = el.querySelector('details')
+  if (details && !details.open && id !== 'recon') details.open = true
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 const router = useRouter()
@@ -182,18 +263,6 @@ const counts = computed(() => {
   return c
 })
 
-/** 分类计数（P3 对账）：按检查项 semantics 客户端实计，分类之和恒等于「N 项检查」总数，
-    修复服务端 summary 分类漏计第 13 项（运行时观测）导致 12 ≠ 13 的口径差 */
-const semanticsCounts = computed(() => {
-  const c: Record<string, number> = {}
-  for (const item of displayReport.value?.health.items || []) {
-    const label = semanticsLabel(item.semantics)
-    c[label] = (c[label] || 0) + 1
-  }
-  return c
-})
-const lastSemanticsKey = computed(() => Object.keys(semanticsCounts.value).slice(-1)[0] || '')
-
 const barTone = computed(() => {
   if (!displayReport.value) return 'muted'
   if (counts.value.error > 0 || global.value.abnormalSkills > 0) return 'bad'
@@ -207,36 +276,50 @@ function tierCount(status: string): number {
   return distribution.value?.[status as keyof typeof distribution.value] ?? 0
 }
 
-/* ---------- 异常显眼标注（1B mk-badge 档位：红=需处理 / 琥珀虚线=关注） ---------- */
-function badgeCls(n: number, severe: 'bad' | 'warn'): string {
-  if (n <= 0) return 'mk-badge--ok'
-  return severe === 'bad' ? 'mk-badge--bad' : 'mk-badge--warn'
+/* ---------- 健康检查项分组：异常/关注项展开，正常项收进折叠组 ---------- */
+function isHealthAbnormal(item: HealthCenterItem): boolean {
+  return item.severity === 'error' || item.severity === 'warn' || item.count > 0
 }
-function driftTone(n: number): string {
-  return n > 0 ? 'wb-stat--alert' : ''
+const healthHighlight = computed(() => sortedHealthItems.value.filter(isHealthAbnormal))
+const healthRemaining = computed(() => sortedHealthItems.value.filter((i) => !isHealthAbnormal(i)))
+
+/** 行内明细展开状态（默认：异常/关注项展开，正常项收起） */
+const detailOpenIds = ref<Set<string>>(new Set())
+function seedDetailOpen(items: HealthCenterItem[]) {
+  const s = new Set<string>()
+  for (const i of items) if (isHealthAbnormal(i)) s.add(i.id)
+  detailOpenIds.value = s
 }
-function reconTone(key: string): string {
-  return (displayReport.value?.reconciliation[key as keyof HealthReconciliationSummary] ?? 0) > 0 ? 'wb-stat--alert' : ''
+watch(() => displayReport.value?.health.items, (items) => { if (items) seedDetailOpen(items) }, { immediate: true })
+function detailOpen(id: string): boolean { return detailOpenIds.value.has(id) }
+function toggleDetail(id: string) {
+  const s = new Set(detailOpenIds.value)
+  if (s.has(id)) s.delete(id); else s.add(id)
+  detailOpenIds.value = s
 }
 
-/* ---------- 健康检查项展示（沿用 2B 现有实现） ---------- */
-const statusLabelMap: Record<string, string> = {
-  clean: '干净',
-  drifted: '漂移',
-  orphan: '孤儿',
-  missing: '缺项',
-  unregistered: '未注册',
-  unwired: '未接线',
-  'type-mismatch': '类型不一致',
-  'missing-declarations': TERMS.statusMissing,
-  active: '存在',
-  none: '无',
-  observed: '观测到',
-  unavailable: '不可用',
+/** 明细截断：防止几十条遥测把页面拉爆 */
+const DETAIL_LIMIT = 20
+function visibleDetail(item: HealthCenterItem): string[] { return item.detail.slice(0, DETAIL_LIMIT) }
+function detailTruncated(item: HealthCenterItem): boolean { return item.detail.length > DETAIL_LIMIT }
+
+/* ---------- 数字带单位 + 语义标签提示 ---------- */
+const COUNT_UNITS: Record<string, string> = {
+  'baseline-drift': '处不一致',
+  consistency: '处偏差',
+  'override-record': '条覆盖记录',
+  'runtime-info': '条遥测记录',
 }
-function statusLabel(item: HealthCenterItem) {
-  return statusLabelMap[item.status] || item.status
+function countTitle(item: HealthCenterItem): string {
+  const unit = COUNT_UNITS[item.semantics] || '项'
+  const detail = item.detail.length ? `（明细 ${item.detail.length} 条）` : ''
+  return `${item.count} ${unit}${detail}`
 }
+function semHint(semantics: HealthCenterItem['semantics']): string {
+  return SEMANTICS_META.find((m) => m.id === semantics)?.hint || ''
+}
+
+/* ---------- 健康检查项展示 ---------- */
 const semanticsLabelMap: Record<string, string> = {
   'baseline-drift': '基准漂移',
   consistency: '一致性偏差',
@@ -245,9 +328,6 @@ const semanticsLabelMap: Record<string, string> = {
 }
 function semanticsLabel(semantics: HealthCenterItem['semantics']) {
   return semanticsLabelMap[semantics] || semantics
-}
-function actionLabel(action: HealthCenterItem['action']) {
-  return action === 'fixable' ? '可一键修复' : action === 'manual' ? '人工决策' : '仅观察'
 }
 
 async function refresh(force = false) {
@@ -270,11 +350,6 @@ function goDrift(kind: keyof HealthDriftSummary) {
   if (kind === 'contract') void router.push('/admin/orchestrator?tab=drift')
   else if (kind === 'hash') void router.push('/admin/skill-workbench')
   else void router.push('/admin/execution-logs')
-}
-function goSkills(diff: '' | 'unregistered' | 'active-missing' = '') {
-  const query: Record<string, string> = { recon: '1' }
-  if (diff) query.diff = diff
-  void router.push({ path: '/admin/skills', query })
 }
 
 /** manual 项跳对应面板：字段路由/契约维度 → 编排结构漂移 tab；参数/契约/对账类 → Skills；yaml → Skill 工作台 */
@@ -309,10 +384,18 @@ async function fix(id: HealthCenterItemId) {
   }
 }
 
+let pollTimer: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
   // ?refresh=1：深链强制重算（避开 60s 缓存）
   const force = route.query.refresh === '1' || route.query.refresh === 'true'
   if (isLive.value) void refresh(force)
+  // 60s 自动轮询（后端同 TTL 缓存，多数请求命中缓存，压力可忽略）
+  pollTimer = setInterval(() => {
+    if (isLive.value && !loading.value) void refresh(false)
+  }, 60_000)
+})
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
 })
 defineExpose({ refresh })
 </script>
@@ -320,6 +403,8 @@ defineExpose({ refresh })
 <style scoped>
 /* 概要卡片 */
 .hc-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+/* 滚动锚点（技能对账外层：组件自身即卡，这里只留定位不留卡盒） */
+.hc-anchor { scroll-margin-top: 14px; }
 .hc-card { display: grid; gap: 4px; padding: 18px 16px; border-radius: 10px; border: 1px solid var(--mk-line); background: var(--mk-surface); text-align: center; cursor: pointer; font: inherit; transition: border-color 0.12s ease, box-shadow 0.12s ease; }
 .hc-card:hover { border-color: rgba(44,99,208,0.3); }
 .hc-card--ok { border-color: rgba(21,128,61,0.2); }
@@ -335,9 +420,9 @@ defineExpose({ refresh })
 .hc-details__summary::-webkit-details-marker { display: none; }
 
 /* 健康检查行 */
-.hc-checks { }
-.hc-check { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #f3f4f6; }
+.hc-check { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; padding: 0 16px; border-bottom: 1px solid #f3f4f6; }
 .hc-check:last-child { border-bottom: none; }
+.hc-check__row { display: flex; align-items: center; gap: 10px; padding: 10px 0; min-width: 0; background: none; border: 0; font: inherit; text-align: left; cursor: pointer; }
 .hc-check__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .hc-check__dot--ok { background: var(--mk-green); }
 .hc-check__dot--warn { background: var(--mk-amber); }
@@ -346,17 +431,32 @@ defineExpose({ refresh })
 .hc-check__main { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .hc-check__main strong { font-size: 12.5px; }
 .hc-check__main span { font-size: 11px; color: var(--mk-faint); }
-.hc-check__count { font-size: 13px; font-weight: 800; color: var(--mk-ink); min-width: 30px; text-align: right; }
+.hc-check__num { font-size: 13px; font-weight: 800; color: var(--mk-ink); min-width: 30px; text-align: right; }
 .hc-check__sem { font-size: 10.5px; color: var(--mk-faint); background: #f3f4f6; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.hc-check__caret { color: var(--mk-faint); font-size: 10px; }
+.hc-check__actions { display: flex; align-items: center; }
 .hc-check__btn { border: 1px solid var(--mk-line); border-radius: 6px; background: #fff; padding: 3px 10px; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; color: var(--mk-blue); white-space: nowrap; }
 .hc-check__btn:hover { border-color: var(--mk-blue); }
 .hc-check__btn:disabled { opacity: 0.5; }
+.hc-check__detail { grid-column: 1 / -1; padding: 0 0 10px 18px; display: grid; gap: 4px; }
+.hc-check__detail p { margin: 0; font-family: var(--mk-mono); font-size: 11px; line-height: 1.5; color: var(--mk-muted); overflow-wrap: anywhere; }
+.hc-check__detail-more { color: var(--mk-amber) !important; }
+
+/* 其余正常项折叠组 */
+.hc-ok { border-top: 1px dashed var(--mk-line); }
+.hc-ok__summary { display: flex; align-items: center; gap: 8px; padding: 8px 16px; cursor: pointer; user-select: none; list-style: none; font-size: 12px; font-weight: 700; color: var(--mk-muted); }
+.hc-ok__summary::-webkit-details-marker { display: none; }
+.hc-ok__summary::before { content: "▸"; color: var(--mk-blue); transition: transform 0.14s ease; }
+.hc-ok[open] > .hc-ok__summary::before { transform: rotate(90deg); }
+.hc-ok__label { color: var(--mk-green); }
+.hc-ok .hc-check:last-child { border-bottom: none; }
 
 /* 漂移 */
 .hc-drift { padding: 8px 0; }
-.hc-drift__item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #f3f4f6; }
+.hc-drift__item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #f3f4f6; flex-wrap: wrap; }
 .hc-drift__item:last-child { border-bottom: none; }
 .hc-drift__item strong { font-size: 12.5px; }
+.hc-drift__hint { font-size: 10.5px; color: var(--mk-faint); width: 100%; padding-left: 0; }
 
 /* 完成度条 */
 .hc-completion { display: grid; gap: 8px; padding: 14px 16px; }

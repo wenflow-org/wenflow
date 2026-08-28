@@ -218,6 +218,12 @@ export class VirtualSessionReclaimService {
       thresholdMs: this.thresholdMs,
       previousStatus: session.status
     };
+    // autopilot 状态同步收口（与批量终止同款）：避免「已回收」但仍显示「自动运行中」
+    if (stageResults.autopilot && typeof stageResults.autopilot === 'object') {
+      stageResults.autopilot.status = 'stopped';
+      stageResults.autopilot.completedAt = reclaimedAt;
+      stageResults.autopilot.lastError = '僵尸会话自动回收';
+    }
 
     let logs: any[] = [];
     try {

@@ -56,7 +56,7 @@
         </tbody>
       </table>
       </div>
-      <div v-if="canMoreCores" class="pw-more">
+      <div v-if="canMoreCores" class="mk-list-more">
         <button type="button" class="mk-link" @click="loadMoreCores">
           加载更多（已显示 {{ shownCores.length }} / {{ cores.length }}）
         </button>
@@ -359,13 +359,6 @@ onMounted(async () => {
 .pw-hash { font-size: 11px; }
 .pl-actions { margin-left: auto; display: flex; gap: 8px; }
 .mk-table--click tbody tr { cursor: pointer; }
-/* 滚动修复 #8：分页加载更多按钮行 */
-.pw-more {
-  display: flex;
-  justify-content: center;
-  padding: 10px 0 12px;
-  border-top: 1px dashed var(--mk-line);
-}
 .sc-result__section { margin-top: 14px; }.sc-result__title { display: block; font-size: 12px; font-weight: 700; color: var(--mk-muted, #5b6577); margin-bottom: 6px; }
 .sc-result__files { margin: 0; padding-left: 18px; }
 .sc-result__files li { font-size: 12px; color: var(--mk-blue, #2c63d0); line-height: 1.8; }

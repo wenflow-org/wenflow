@@ -51,4 +51,19 @@ describe('live.buildOverviewHead（健康环口径）', () => {
     expect(head.tone).toBe('bad');
     expect(head.score).toBe(60);
   });
+
+  it('R3：真实 0 调用但全量有模拟调用 → 纯真实口径，仅给导航提示（不展示虚拟数字）', () => {
+    const head = buildOverviewHead({ todayCalls: 0, todaySuccessRate: 100, todayFailed: 0, activeUsers: 0, todayCallsAll: 200 });
+    expect(head.score).toBeNull();
+    expect(head.tone).toBe('muted');
+    expect(head.headline).toBe('真实用户暂无调用');
+    expect(head.subline).toContain('虚拟学习者');
+    expect(head.subline).not.toContain('200');
+  });
+
+  it('R3：真实 0 且全量 0 调用 → 维持「系统空闲」原文案', () => {
+    const head = buildOverviewHead({ todayCalls: 0, todaySuccessRate: 100, todayFailed: 0, activeUsers: 0 });
+    expect(head.headline).toBe('系统空闲');
+    expect(head.subline).toContain('等待学习者开始');
+  });
 });

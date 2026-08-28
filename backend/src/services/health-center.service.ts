@@ -146,6 +146,12 @@ export interface ParamsConsistencyRow {
   skillId: string;
   core: { temperature: number; maxTokens: number } | null;
   definition: { defaultTemperature?: number; defaultMaxTokens?: number } | null;
+  /**
+   * definition.ts 存在预期：mainline 技能必须有定义文件；
+   * aux/handler-only 的定义义务在 skills.yaml manifest + handler META（v4-aux-skills 形态），
+   * 无 definition.ts 是预期形态，不产生"缺失"提示。
+   */
+  expectDefinition: boolean;
 }
 
 export interface ParamsConsistencyMismatch {
@@ -174,14 +180,17 @@ export function analyzeParamsConsistency(rows: ParamsConsistencyRow[]): ParamsCo
     if (!row.core) continue;
     const def = row.definition;
     if (!def) {
-      missingDeclarations.push(`${row.skillId}：definition.ts 缺失（无 defaultTemperature/defaultMaxTokens）`);
+      // 仅 mainline 需要 definition.ts；aux/handler-only 由 manifest 承载，缺失是预期形态
+      if (row.expectDefinition) {
+        missingDeclarations.push(`${row.skillId}：definition.ts 缺失（无 defaultTemperature/defaultMaxTokens）`);
+      }
+      continue;
     } else {
       const missing: string[] = [];
       if (def.defaultTemperature === undefined) missing.push('defaultTemperature');
       if (def.defaultMaxTokens === undefined) missing.push('defaultMaxTokens');
       if (missing.length > 0) missingDeclarations.push(`${row.skillId}：definition.ts 未声明 ${missing.join('/')}`);
     }
-    if (!def) continue;
 
     for (const field of ['temperature', 'maxTokens'] as const) {
       const coreValue = row.core[field];
@@ -220,11 +229,15 @@ export function buildParamsConsistencyCheck(): ParamsConsistencyResult {
       defaultMaxTokens: def.defaultMaxTokens,
     });
   }
+  // definition.ts 存在预期：mainline 需定义文件（aux/handler-only 定义义务在 manifest + handler META）
+  const book = loadSkillsBookRaw();
+  const expectDefinitionBySkill = new Map(book.skills.map((entry) => [entry.skillId, entry.kind === 'mainline']));
   return analyzeParamsConsistency(
     cores.map((core) => ({
       skillId: core.skillId,
       core: { temperature: core.params.temperature, maxTokens: core.params.maxTokens },
       definition: definitions.get(core.skillId) ?? null,
+      expectDefinition: expectDefinitionBySkill.get(core.skillId) ?? false,
     })),
   );
 }

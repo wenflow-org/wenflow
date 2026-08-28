@@ -209,7 +209,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminApi } from '@/api/adminApi'
 import { setProjectionToken } from '@/utils/projection'
 import { useSafePolling } from '@/composables/useSafePolling'
@@ -511,6 +511,15 @@ async function loadRun(runId: string) {
 
 async function abortRun() {
   if (!currentRun.value) return
+  try {
+    await ElMessageBox.confirm(
+      '将中止当前自动学习运行，已推进的学习记录保留。确认中止？',
+      '中止自动学习',
+      { confirmButtonText: '中止', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch {
+    return // 用户取消
+  }
   try {
     await adminApi.abortQuickLearnRun(currentRun.value.runId)
     ElMessage.info('已请求中止')

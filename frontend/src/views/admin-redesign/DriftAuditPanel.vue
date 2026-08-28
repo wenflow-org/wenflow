@@ -5,7 +5,7 @@
       <summary class="fdp__box-summary">新建字段（编辑编排文件）</summary>
       <div class="fdp__guide">
         <p class="fdp__guide-text">
-          新建字段请直接编辑编排文件，保存后新字段/新路由立即进入 DB（已有行修改见下方漂移报告）。
+          新建字段请直接编辑编排文件，保存后新字段/新路由立即进入数据库（已有行修改见下方漂移报告）。
         </p>
         <p class="fdp__guide-file"><span class="mono">prompts/orchestration/{{ stage }}.yaml</span></p>
         <p class="fdp__guide-text">入口：<strong>「字段路由」页顶部「编排文件」按钮</strong>，在文本框中按现有结构追加
@@ -15,17 +15,17 @@
 
     <!-- 漂移报告 -->
     <details class="fdp__box" open>
-      <summary class="fdp__box-summary">漂移报告（{{ TERMS.driftContractQualified }}：编排文件 vs DB，admin 编辑行豁免）</summary>
+      <summary class="fdp__box-summary">漂移报告（{{ TERMS.driftContractQualified }}：编排文件 vs 数据库，admin 编辑行豁免）</summary>
       <div v-if="driftLoading" class="fdp__empty">检测中…</div>
       <div v-else-if="driftFailed" class="fdp__empty fdp__empty--error">漂移检测失败：无法连接字段路由服务，请稍后重试。<button type="button" class="mk-empty__action" @click="loadDrift">重试</button></div>
-      <div v-else-if="drift.items.length === 0" class="fdp__empty">✅ 无漂移（编排文件与 DB 一致）</div>
+      <div v-else-if="drift.items.length === 0" class="fdp__empty">✅ 无漂移（编排文件与数据库一致）</div>
       <ul v-else class="fdp__drift-list">
         <li v-for="(d, i) in drift.items" :key="i" class="fdp__drift-item">
           <span class="mono fdp__drift-kind">{{ kindLabel(d.kind) }}</span>
           <span class="mono fdp__drift-key">{{ d.key }}</span>
           <span class="fdp__drift-field">{{ d.field }}</span>
           <span class="mono fdp__drift-val fdp__drift-val--seed">声明={{ stringify(d.seedValue) }}</span>
-          <span class="mono fdp__drift-val fdp__drift-val--db">DB={{ stringify(d.dbValue) }}</span>
+          <span class="mono fdp__drift-val fdp__drift-val--db">数据库={{ stringify(d.dbValue) }}</span>
         </li>
       </ul>
       <p v-if="drift.totalDriftCount > drift.items.length" class="fdp__empty">（共 {{ drift.totalDriftCount }} 项，当前筛选显示 {{ drift.items.length }}）</p>

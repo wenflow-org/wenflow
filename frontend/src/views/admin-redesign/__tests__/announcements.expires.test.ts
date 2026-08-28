@@ -99,22 +99,25 @@ describe('Announcements 过期语义（expiresAt）', () => {
     const statusTexts = w.findAll('td').map((td) => td.text());
     expect(statusTexts).toContain('已过期');
     expect(statusTexts).toContain('生效中');
-    // 状态条：2 条总数，生效中只计未过期 1 条
+    // 状态条：标题固定「公告中心」，生效中只计未过期 1 条
     expect(w.text()).toContain('共 2 条');
-    expect(w.text()).toContain('1 条公告生效中');
+    expect(w.text()).toContain('公告中心');
+    expect(w.text()).toContain('生效中 1');
     // 过期行徽章为灰（mk-badge--muted），非绿（生效中）
     const badges = w.findAll('tbody tr td:nth-child(3) .mk-badge').map((b) => b.text());
     expect(badges).toContain('已过期');
   });
 
-  it('全部过期 → 「当前没有生效公告」', async () => {
+  it('全部过期 → 标题仍为「公告中心」（状态走 dot 灰点），无生效中计数', async () => {
     liveAnnouncements.value = [
       makeAnnouncement('a1', { expiresAt: '2026-07-30T00:00:00Z' }),
       makeAnnouncement('a2', { expiresAt: '2026-08-01T00:00:00Z' })
     ];
     const w = await mountAnnouncements();
     await nextTick();
-    expect(w.text()).toContain('当前没有生效公告');
+    expect(w.text()).toContain('公告中心');
+    expect(w.text()).toContain('生效中 0');
+    expect(w.find('.mk-status.mk-status--muted').exists()).toBe(true);
   });
 
   it('不过期（expiresAt 空）的 published → 永久生效中', async () => {
@@ -122,7 +125,8 @@ describe('Announcements 过期语义（expiresAt）', () => {
     const w = await mountAnnouncements();
     await nextTick();
     expect(w.text()).toContain('生效中');
-    expect(w.text()).toContain('1 条公告生效中');
+    expect(w.text()).toContain('公告中心');
+    expect(w.text()).toContain('生效中 1');
     expect(w.text()).not.toContain('已过期');
   });
 });

@@ -1,24 +1,37 @@
 <template>
-  <div class="mk-page">
+  <div class="mk-page mk-page--fill">
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">{{ statusTitle }}</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">会话 {{ rows.length }}</span>
-      <span class="mk-status__meta">进行中 {{ inProgressCount }}</span>
-      <span class="mk-status__meta">有建议 {{ advisoryCount }}</span>
-      <span class="mk-status__meta">缺总结 {{ missingWrapupCount }}</span>
+      <span class="mk-status__meta">共 {{ rows.length }} 条</span>
       <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshNow">
         {{ refreshing ? '刷新中…' : '刷新' }}
       </button>
     </div>
+
+    <!-- 教学概览（共享组件 MkOverview） -->
+    <MkOverview :tone="tsDashTone" :title="tsDashTitle" :subline="tsDashSubline" :window="`最近 ${rows.length} 条会话`" :has-data="tsDashHasData">
+      <template #kpis>
+        <MkKpi label="会话" :value="rows.length" hint="最近加载范围" :title="'当前加载范围内的会话总数（最近 100 条）'" />
+        <MkKpi label="进行中" :value="inProgressCount" hint="当前活动会话" :title="'进行中（active）的会话数'" />
+        <MkKpi label="缺总结" :value="missingWrapupCount" :tone="missingWrapupCount > 0 ? 'bad' : ''" hint="待补全学习闭环" :title="'已结束但未生成课后总结的会话数'" />
+        <MkKpi label="高关注" :value="highAttentionCount" :tone="highAttentionCount > 0 ? 'warn' : ''" :hint="`中低关注 ${attentionCount - highAttentionCount}`" :title="'关注度高的会话数（需优先介入）'" />
+      </template>
+      <template #detail>
+        <span>有建议 {{ advisoryCount }}</span>
+        <span>待关注 {{ attentionCount }}</span>
+        <span>缺总结 {{ missingWrapupCount }}</span>
+        <span>范围：最近 100 条</span>
+      </template>
+    </MkOverview>
 
     <!-- 深链未命中提示：?session= 存在但当前列表（最近 100 条）中找不到 -->
     <div v-if="deepLinkMiss" class="errorbar" role="alert">
       未找到深链指向的会话：它可能不在最近 {{ rows.length }} 条记录内，或已被删除。
     </div>
 
-    <div class="mk-card">
+    <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
           <div class="mk-pills">
@@ -39,8 +52,10 @@
           </select>
           <input class="mk-filter__input" v-model="keyword" placeholder="搜索主题 / 用户 / ID" />
         </div>
-        <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}<template v-if="dataSource === 'live'"> · {{ includeTest ? '含虚拟/测试' : '仅真实' }} · 仅显示最近 100 条</template></span>
-        <DataScopeToggle v-model="includeTest" />
+        <div class="mk-card__head-right">
+          <DataScopeToggle v-model="includeTest" />
+          <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}<template v-if="dataSource === 'live'"> · {{ includeTest ? '含模拟' : '仅真实' }} · 仅显示最近 100 条</template></span>
+        </div>
       </div>
 
       <div v-if="loadFailed" class="ts-error" role="alert">
@@ -60,11 +75,11 @@
               <th style="width:120px">进度</th>
               <th class="mk-col--badge" style="width:90px">产物</th>
               <th class="mk-col--badge" style="width:60px">关注</th>
-              <th class="mk-col--actions mk-th--right">详情</th>
+              <th class="mk-col--actions">详情</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in shown" :key="r.id" class="ts-row" @click="openDetail(r)">
+            <tr v-for="r in paged" :key="r.id" class="ts-row" @click="openDetail(r)">
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ r.topic }}</strong>
@@ -122,14 +137,19 @@
         </table>
 
         <div v-else-if="!loadFailed" class="mk-empty">
-          <strong>{{ rows.length ? '当前筛选无会话' : '还没有教学会话' }}</strong>
-          <span>{{ rows.length ? '放宽筛选条件。' : '真实学习者开始上课后出现在这里。' }}</span>
+          <strong>{{ rows.length ? '当前筛选无会话' : '暂无教学会话' }}</strong>
+          <span>{{ rows.length ? '放宽筛选条件试试。' : '学习者开始上课后，会话记录将自动出现在这里。' }}</span>
           <button v-if="isFiltered && rows.length" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
         </div>
       </div>
-      <div v-if="canMore" class="ts-more">
-        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
-      </div>
+      <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
+      <Pagination
+        v-if="filtered.length"
+        v-model:page="page"
+        v-model:pageSize="pageSize"
+        :total="filtered.length"
+        :showTotal="true"
+      />
     </div>
 
     <!-- 详情抽屉 -->
@@ -217,10 +237,12 @@ import type { SessionProgress } from './statusText'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
-import { useLoadMore } from './useLoadMore'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
+import Pagination from './Pagination.vue'
+import MkOverview from './MkOverview.vue'
+import MkKpi from './MkKpi.vue'
 
 interface WrapupSummary {
   topicSummary?: string
@@ -485,16 +507,49 @@ function clearFilters() {
 }
 
 /* 长列表分批渲染：每批 15 行 */
-const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
+/* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
+   数据全量在客户端（live 拉取 / demo 本地），筛选后按页切片；
+   筛选/数据变化自动回第 1 页（watch filtered） */
+const page = ref(1)
+const pageSize = ref(15)
+const paged = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filtered.value.slice(start, start + pageSize.value)
+})
+watch(filtered, () => {
+  page.value = 1
+})
 
 const inProgressCount = computed(() => rows.value.filter((r) => r.status === 'active').length)
 const advisoryCount = computed(() => rows.value.filter((r) => r.hasAdvisory).length)
 const missingWrapupCount = computed(() => rows.value.filter((r) => r.wrapupStatus === 'missing').length)
 const attentionCount = computed(() => rows.value.filter((r) => r.attention !== 'low').length)
 
+/* ===== 教学概览（ts-dash：会话域 dashboard，结论 + KPI + 详情） ===== */
+const highAttentionCount = computed(() => rows.value.filter((r) => r.attention === 'high').length)
+const tsDashHasData = computed(() => rows.value.length > 0)
+const tsDashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
+  if (!rows.value.length) return 'muted'
+  if (missingWrapupCount.value > 0) return 'warn'
+  if (attentionCount.value > 0) return 'warn'
+  return 'ok'
+})
+const tsDashTitle = computed(() => {
+  if (!rows.value.length) return '暂无教学会话'
+  if (missingWrapupCount.value > 0) return `${missingWrapupCount.value} 个会话缺总结`
+  if (attentionCount.value > 0) return `${attentionCount.value} 个会话待关注`
+  return '教学运行平稳'
+})
+const tsDashSubline = computed(() => {
+  if (!rows.value.length) return '学习者开始上课后，会话记录将自动出现在这里'
+  if (missingWrapupCount.value > 0) return '建议尽快补全课后总结，保证学习闭环'
+  if (attentionCount.value > 0) return '有建议或高关注会话，建议按关注度优先处理'
+  return `${inProgressCount.value} 个进行中 · 会话产物完整`
+})
+
 const statusTone = computed(() => (!rows.value.length ? 'mk-status--muted' : attentionCount.value ? 'mk-status--warn' : 'mk-status--ok'))
 const statusTitle = computed(() =>
-  !rows.value.length ? '还没有教学会话' : attentionCount.value ? `${attentionCount.value} 个会话待关注` : '会话产物完整'
+  !rows.value.length ? '暂无教学会话' : '教学会话'
 )
 
 /* 详情 — URL 同步 ?session=id 支持深链/刷新恢复 */
@@ -627,12 +682,6 @@ function progressTitle(r: Row): string {
 }
 .ts-actions { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .ts-actions .mk-link { padding: 0; }
-.ts-more {
-  display: flex;
-  justify-content: center;
-  padding: 10px 0 12px;
-  border-top: 1px dashed var(--mk-line);
-}
 /* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字） */
 .ts-row td:nth-child(3) .mk-badge { min-width: 60px; justify-content: center; }
 .ts-go { color: var(--mk-faint); font-weight: 700; }

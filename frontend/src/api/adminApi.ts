@@ -1132,6 +1132,11 @@ export const adminVirtualLearnersApi = {
       hiddenGaps?: string[];
       selfAssessment?: string;
     };
+    /** 故事级预算覆盖（可选，缺省继承角色级） */
+    budget?: {
+      maxRetriesPerStep?: number;
+      maxRetriesTotal?: number;
+    };
   }) => {
     return adminAxios.put(`/admin/virtual-learners/${profileId}/stories/${storyIndex}`, data);
   },
@@ -1304,7 +1309,7 @@ export const adminVirtualLearnersApi = {
   },
 
   /** 全自动模式：target='stage' 阶段级（推进完当前阶段即停）/ 'final' 全局级（直达 Path 全部完成，默认） */
-  autopilotStart: async (sessionId: string, data?: { target?: 'stage' | 'final' }) => {
+  autopilotStart: async (sessionId: string, data?: { target?: 'stage' | 'final'; maxTurns?: number }) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/autopilot/start`, data || {});
   },
   autopilotStop: async (sessionId: string) => {

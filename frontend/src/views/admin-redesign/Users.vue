@@ -1,11 +1,11 @@
 <template>
-  <div class="mk-page">
+  <div class="mk-page mk-page--fill">
     <div class="mk-status" :class="users.length ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ users.length ? '用户体系正常' : pill === 'deleted' ? '暂无已删除用户' : '还没有真实用户' }}</strong>
+      <strong class="mk-status__title">用户</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ users.length }} 人</span>
-      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="'用户页默认仅真实用户（不含虚拟学习者与测试账号）；切换「含虚拟·测试」后显示全量并灰标'">
+      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="'仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行'">
         真实 {{ realUsers }}
       </span>
       <span v-if="isLive && pill !== 'deleted' && includeTest" class="mk-status__meta" :title="'全量口径：含虚拟学习者与测试/审计账号（行内带标记）'">测试/虚拟 {{ users.length - realUsers }}</span>
@@ -21,7 +21,7 @@
     </div>
 
 
-    <div class="mk-card">
+    <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
           <div class="mk-pills">
@@ -38,8 +38,10 @@
           </div>
           <input class="mk-filter__input" v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
         </div>
-        <DataScopeToggle v-if="isLive && pill !== 'deleted'" v-model="includeTest" />
-        <span class="mk-card__meta">{{ filtered.length }} / {{ users.length }} 人</span>
+        <div class="mk-card__head-right">
+          <DataScopeToggle v-if="isLive && pill !== 'deleted'" v-model="includeTest" />
+          <span class="mk-card__meta">{{ filtered.length }} / {{ users.length }} 人</span>
+        </div>
       </div>
 
       <MockSkeletonTable v-if="liveLoading && !users.length || (deletedLoading && !users.length)" :cols="7" />
@@ -63,7 +65,7 @@
               <!-- 相对时间列固定宽（--mk-col-time-full 110px，防 1920 全列等比放大 42% 与刷新跳动） -->
               <th scope="col" class="mk-col--time-full">注册时间</th>
               <th scope="col" class="mk-col--time-full">最后登录</th>
-              <th scope="col" class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right mk-col--actions-wide">操作</th>
             </tr>
           </thead>
         <tbody>
@@ -84,7 +86,7 @@
             <td><span class="mk-badge" :class="u.admin ? 'mk-badge--info' : 'mk-badge--muted'">{{ u.admin ? '管理员' : '用户' }}</span></td>
             <td>
               <div class="ul-level">
-                <span class="ul-level__badge" :title="`等级由 XP 推导：${levelFromXp(u.xp)}（库内 currentLevel：${u.currentLevel || '—'}）`">{{ levelLabel(u.xp) }}</span>
+                <span class="ul-level__badge" :title="`XP 推导等级 ${levelFromXp(u.xp)}`">{{ levelLabel(u.xp) }}</span>
                 <span class="ul-level__xp" :class="{ 'mk-na': u.xp === 0 }">{{ u.xp }} XP</span>
               </div>
             </td>
@@ -123,8 +125,8 @@
       </div>
 
       <div v-else class="mk-empty">
-        <strong>没有匹配的用户</strong>
-        <span>放宽筛选条件，或邀请第一位真实用户。</span>
+        <strong>{{ isFiltered ? '没有匹配的用户' : '暂无真实用户' }}</strong>
+        <span>{{ isFiltered ? '放宽筛选条件试试。' : '用户注册后将自动出现在这里。' }}</span>
         <button v-if="isFiltered" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
       </div>
       <!-- 客户端分页（P2：37 行长表单页直排 → mk-pagination 统一分页器，15-30-50-100 条/页） -->

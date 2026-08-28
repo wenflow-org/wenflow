@@ -23,6 +23,8 @@ import { virtualLearnerPathEvaluatorRuntimeDefinition } from '../skills/virtual-
 import { virtualLearnerLearnTurnSimulatorRuntimeDefinition } from '../skills/virtual-learner-learn-turn-simulator/definition';
 import { virtualLearnerRefereeRuntimeDefinition } from '../skills/virtual-learner-referee/definition';
 import { virtualLearnerActorAuditorRuntimeDefinition } from '../skills/virtual-learner-actor-auditor/definition';
+import { adaptiveGuidanceCopyRuntimeDefinition } from '../skills/adaptive-guidance-copy/definition';
+import { lessonKnowledgeEnricherRuntimeDefinition } from '../skills/lesson-knowledge-enricher/definition';
 import { goalAgentRuntimeDefinition } from './goal.definition';
 import { pathAgentRuntimeDefinition as pathOrchestratorRuntimeDefinition } from './path.definition';
 import { AITeachingCoordinatorRuntimeDefinition } from './ai-teaching.definition';
@@ -44,6 +46,8 @@ export const SKILL_RUNTIME_DEFINITIONS = [
   virtualLearnerLearnTurnSimulatorRuntimeDefinition,
   virtualLearnerRefereeRuntimeDefinition,
   virtualLearnerActorAuditorRuntimeDefinition,
+  adaptiveGuidanceCopyRuntimeDefinition,
+  lessonKnowledgeEnricherRuntimeDefinition,
 ];
 
 export const ORCHESTRATOR_RUNTIME_DEFINITIONS = [

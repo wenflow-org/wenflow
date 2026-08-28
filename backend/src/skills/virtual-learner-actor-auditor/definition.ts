@@ -32,7 +32,7 @@ export const virtualLearnerActorAuditorRuntimeDefinition: RuntimeDefinitionRecor
     produces: ['verdict', 'scores', 'findings', 'recommendations', 'evidence'],
   },
   capabilities: ['virtual-learner-actor-audit', 'persona-fidelity-evaluation', 'synthetic-user-validity-check'],
-  defaultMaxTokens: 2400,
+  defaultMaxTokens: 5000,
   defaultTemperature: 0.2,
   source: 'code',
   managedByCode: true,

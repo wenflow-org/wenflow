@@ -216,10 +216,26 @@ export async function createSessionForProfile(
         problemKnowledge: story.problemKnowledge || null,
         goalSeed: story.goalSeed || null,
         disclosurePlan: story.disclosurePlan || null,
+        // 故事级预算覆盖（可选）：单步重试 / 会话总 AI 调用上限；缺省继承角色级
+        budget: story.budget && typeof story.budget === 'object'
+          ? {
+              ...(Number.isFinite(Number(story.budget.maxRetriesPerStep)) ? { maxRetriesPerStep: Math.min(20, Math.max(1, Math.round(Number(story.budget.maxRetriesPerStep)))) } : {}),
+              ...(Number.isFinite(Number(story.budget.maxRetriesTotal)) ? { maxRetriesTotal: Math.min(1000, Math.max(1, Math.round(Number(story.budget.maxRetriesTotal)))) } : {})
+            }
+          : undefined,
       }
     : null);
 
-  const frictionBudget = options.frictionBudget || 'normal';
+  // 难度默认链：本次请求指定 > 画像运行偏好 > 全局 normal
+  const profilePrefs = (parseJson<Record<string, any>>(profile.profile, {}).runtimePrefs || {}) as Record<string, any>;
+  const defaultFriction = SIMULATION_FRICTION_BUDGETS.includes(profilePrefs.frictionBudget)
+    ? profilePrefs.frictionBudget
+    : 'normal';
+  const frictionBudget = options.frictionBudget || defaultFriction;
+  // 每课回合上限初始值：画像运行偏好（三级驾驶舱可对会话临时覆盖）
+  const turnCapPerLesson = Number.isFinite(Number(profilePrefs.turnCapPerLesson))
+    ? Math.min(100, Math.max(1, Math.round(Number(profilePrefs.turnCapPerLesson))))
+    : undefined;
   const actorProfile = options.actorProfileOverride || {
     profile: parseJson<any>(profile.profile, {}),
     learningGoal: profile.learningGoal,
@@ -243,7 +259,7 @@ export async function createSessionForProfile(
       story: storyContext,
       learnerContext: actorProfile.profile,
     } : {}),
-    simulationConfig: { frictionBudget },
+    simulationConfig: { frictionBudget, ...(turnCapPerLesson !== undefined ? { turnCapPerLesson } : {}) },
     ...blackboxState
   };
   const stageResults = JSON.stringify(stageResultsObject);

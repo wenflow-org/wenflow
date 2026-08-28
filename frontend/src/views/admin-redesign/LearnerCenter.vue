@@ -1,8 +1,8 @@
 <template>
-  <div class="mk-page">
+  <div class="mk-page mk-page--fill">
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ statusTitle }}</strong>
+      <strong class="mk-status__title">学习者中心</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ rows.length }} 位学习者</span>
       <span class="mk-status__meta">需关注 {{ riskCount }}</span>
@@ -13,27 +13,32 @@
     </div>
 
 
-    <div class="mk-card">
+    <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
-        <div class="mk-pills">
-          <button
-            v-for="p in pills"
-            :key="p.id"
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': pill === p.id }"
-            @click="pill = p.id"
-          >
-            {{ p.label }}
-          </button>
+        <div class="mk-filter">
+          <div class="mk-pills">
+            <button
+              v-for="p in pills"
+              :key="p.id"
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': pill === p.id }"
+              @click="pill = p.id"
+            >
+              {{ p.label }}
+            </button>
+          </div>
+          <input
+            v-model="keyword"
+            class="mk-filter__input"
+            style="width: 200px;"
+            placeholder="搜索名称 / 邮箱 / ID"
+          />
         </div>
-        <span class="mk-card__meta">先找有问题的人</span>
-        <input
-          v-model="keyword"
-          class="mk-filter__input"
-          style="width: 200px;"
-          placeholder="搜索名称 / 邮箱 / ID"
-        />
+        <div class="mk-card__head-right">
+          <DataScopeToggle v-if="isLive" v-model="includeTest" />
+          <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 人</span>
+        </div>
       </div>
 
       <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="8" />
@@ -45,6 +50,16 @@
       </div>
       <div v-else-if="filtered.length" class="mk-table-scroll">
       <table class="mk-table">
+        <colgroup>
+          <col style="width:180px">
+          <col style="width:35%">
+          <col style="width:80px">
+          <col style="width:60px">
+          <col style="width:110px">
+          <col style="width:180px">
+          <col style="width:90px">
+          <col style="width:var(--mk-col-actions-wide, 120px)">
+        </colgroup>
         <thead>
           <tr>
             <th>学习者</th>
@@ -54,11 +69,11 @@
             <th title="快照置信度：模型对该学习者状态的把握程度，低于 50% 为低置信">置信</th>
             <th>风险摘要</th>
             <th>更新</th>
-            <th class="mk-th--right">操作</th>
+            <th class="mk-col--actions-wide">操作</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="r in shown" :key="r.id" class="lc-row" @click="openSubPage('learner', r.id)">
+          <tr v-for="r in paged" :key="r.id" class="lc-row" @click="openDetail(r)">
             <td>
               <div class="mk-cell-main">
                 <strong>{{ r.name }}</strong>
@@ -79,7 +94,7 @@
                 v-if="r.confidence != null && r.task"
                 class="conf"
                 :class="{ 'conf--low': evidenceLowConfidence(r.confidence) }"
-                :title="`模型对当前快照的置信度：${Math.round(r.confidence * 100)}%。低于 50% 表示证据不足，建议重算。`"
+                :title="`置信度 ${Math.round(r.confidence * 100)}%。低于 50% 表示证据不足`"
               >
                 {{ Math.round(r.confidence * 100) }}%<em v-if="evidenceLowConfidence(r.confidence)" class="conf__lack">证据不足</em>
               </span>
@@ -88,9 +103,9 @@
             <td class="risk-text" :class="{ 'mk-na': !r.risk }">{{ r.risk || '—' }}</td>
             <td class="mk-na">{{ isUpdating(r.id) ? '重算中…' : r.updated }}</td>
             <td>
-              <div class="mk-actions">
-                <button type="button" class="mk-icon-btn" title="详情" @click="openSubPage('learner', r.id)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg></button>
-                <button type="button" class="mk-icon-btn" :disabled="isUpdating(r.id)" :title="isUpdating(r.id) ? '重算中…' : '重算'" @click="recompute(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+              <div class="mk-actions mk-actions--left">
+                <button type="button" class="mk-icon-btn" title="详情" @click.stop="openDetail(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg></button>
+                <button type="button" class="mk-icon-btn" :disabled="isUpdating(r.id)" :title="isUpdating(r.id) ? '重算中…' : '重算'" @click.stop="recompute(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
               </div>
             </td>
           </tr>
@@ -99,25 +114,31 @@
       </div>
 
       <div v-else class="mk-empty">
-        <strong>{{ pill === 'all' ? '还没有学习者快照' : '当前分组没有人' }}</strong>
-        <span>{{ pill === 'all' ? '学习轨迹累积后自动生成。' : '这是好事。' }}</span>
+        <strong>{{ pill === 'all' ? '暂无学习者快照' : '当前分组暂无学习者' }}</strong>
+        <span>{{ pill === 'all' ? '学习者产生学习行为后，快照将自动生成。' : '该风险分组暂无匹配的学习者。' }}</span>
       </div>
-      <div v-if="canMore" class="lc-more">
-        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
-      </div>
+      <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
+      <Pagination
+        v-if="filtered.length"
+        v-model:page="page"
+        v-model:pageSize="pageSize"
+        :total="filtered.length"
+        :showTotal="true"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { openSubPage, isLive } from './store'
-import { liveLearners, liveRecomputeLearner, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg } from './live'
+import { liveLearners, liveRecomputeLearner, liveSetLearnersIncludeTest, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg } from './live'
 import { evidenceLowConfidence } from './evidence'
-import { useLoadMore } from './useLoadMore'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
+import DataScopeToggle from './DataScopeToggle.vue'
+import Pagination from './Pagination.vue'
 
 interface Row {
   id: string
@@ -139,6 +160,14 @@ interface Row {
 
 const pill = ref<'all' | 'risk' | 'stale'>('all')
 const keyword = ref('')
+const includeTest = ref(false)
+watch(includeTest, (v) => {
+  if (isLive.value) void liveSetLearnersIncludeTest(v)
+})
+
+function openDetail(r: Row) {
+  openSubPage('learner', r.id, includeTest.value ? { includeTest: true } : undefined)
+}
 
 const demoRows = ref<Row[]>([]) // demo 数据已移除
 
@@ -200,7 +229,6 @@ const filtered = computed(() => {
 })
 
 const statusTone = computed(() => (!rows.value.length ? 'mk-status--muted' : riskCount.value > 0 ? 'mk-status--warn' : 'mk-status--ok'))
-const statusTitle = computed(() => (!rows.value.length ? '还没有学习者快照' : riskCount.value > 0 ? `${riskCount.value} 位学习者需要关注` : '学习者状态平稳'))
 
 /** live 学习者域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
 const loadFailed = computed(
@@ -211,7 +239,18 @@ function retryLoad() {
 }
 
 /* 长列表分批渲染：每批 15 行 */
-const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
+/* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
+   数据全量在客户端（live 拉取 / demo 本地），筛选后按页切片；
+   筛选/数据变化自动回第 1 页（watch filtered） */
+const page = ref(1)
+const pageSize = ref(15)
+const paged = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filtered.value.slice(start, start + pageSize.value)
+})
+watch(filtered, () => {
+  page.value = 1
+})
 
 const trendText = (t: string) => (t === 'up' ? '↗ 上升' : t === 'down' ? '↘ 下降' : '→ 稳定')
 const fatigueBadge = (f: string) => (f === '高' ? 'mk-badge--bad' : f === '中' ? 'mk-badge--warn' : 'mk-badge--ok')
@@ -225,6 +264,13 @@ const isUpdating = (id: string) => updatingIds.value.has(id)
 
 async function recompute(row: Row) {
   if (isUpdating(row.id)) return
+  const ok = await askConfirm({
+    title: '重算快照',
+    message: `确认重算「${row.name}」的学习者快照？将重新分析其学习状态与概念掌握情况。`,
+    confirmText: '重算',
+    danger: false
+  })
+  if (!ok) return
   updatingIds.value = new Set(updatingIds.value).add(row.id)
   try {
     if (isLive.value) {
@@ -308,19 +354,11 @@ async function recomputeAll() {
   background: #fef3c7;
   color: #b45309;
 }
-.lc-more {
-  display: flex;
-  justify-content: center;
-  padding: 10px 0 12px;
-  border-top: 1px dashed var(--mk-line);
-}
 
 @media (min-width: 2000px) {
   .risk-text { font-size: 14px; }
-  .lc-more { padding: 12px 0 14px; }
 }
 @media (min-width: 2800px) {
   .risk-text { font-size: 16.5px; }
-  .lc-more { padding: 14px 0 17px; }
 }
 </style>

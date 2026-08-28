@@ -5,7 +5,7 @@
       class="ds-toggle__btn"
       :class="{ 'ds-toggle__btn--on': !modelValue }"
       :aria-pressed="!modelValue"
-      title="默认视图：仅真实用户（不含虚拟学习者与测试/审计账号）"
+      title="仅真实用户（不含模拟账号）"
       @click="emit('update:modelValue', false)"
     >
       仅真实
@@ -15,10 +15,10 @@
       class="ds-toggle__btn"
       :class="{ 'ds-toggle__btn--on': modelValue }"
       :aria-pressed="modelValue"
-      title="全量视图：含虚拟学习者与测试/审计账号，行内带标记"
+      title="含模拟账号（虚拟学习者与测试账号），行内带标记"
       @click="emit('update:modelValue', true)"
     >
-      含虚拟·测试
+      含模拟
     </button>
   </div>
 </template>

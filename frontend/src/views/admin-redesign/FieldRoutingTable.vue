@@ -140,10 +140,10 @@
                 <th scope="col">含义</th>
                 <th scope="col">类型</th>
                 <th scope="col">角色</th>
-                <th scope="col">render</th>
-                <th scope="col">handoff</th>
-                <th scope="col">internal</th>
-                <th scope="col">accumulate</th>
+                <th scope="col">可见性</th>
+                <th scope="col">移交</th>
+                <th scope="col">内部</th>
+                <th scope="col">累积</th>
                 <th scope="col">落库键</th>
                 <th scope="col">锁定</th>
               </tr>
@@ -184,7 +184,7 @@
                     :class="{ 'frt__persist--alias': persistKeyOf(row) !== row.fieldId }"
                     :title="persistKeyOf(row) === row.fieldId
                       ? '落库键与字段名一致'
-                      : `落库键与字段名不一致：值实际写入 ${persistKeyOf(row)}（见编排文件 persistKey 声明）`"
+                      : `值实际写入 ${persistKeyOf(row)}`"
                   >{{ persistKeyOf(row) }}</span>
                 </td>
                 <td><span class="mk-badge" :class="`mk-badge--lock-${row.locks?.level || 'editable'}`" :title="lockHint(row.locks?.level)">{{ lockLabel(row.locks?.level) }}</span></td>
@@ -197,22 +197,15 @@
             </tbody>
           </table>
         </div>
-        <!-- 每 agent 组分页（滚动修复 #1：24+31 行全量堆叠 → 15 行/页，翻页不丢数据） -->
-        <div class="frt__pager">
-          <button
-            type="button"
-            class="frt__pager-btn"
-            :disabled="pageOf(agent.agentId) === 0"
-            @click="setPage(agent.agentId, pageOf(agent.agentId) - 1)"
-          >‹ 上一页</button>
-          <span class="frt__pager-info">第 {{ pageOf(agent.agentId) + 1 }} / {{ pagesOf(agent.agentId) }} 页 · 共 {{ filteredOf(agent.agentId).length }} 行</span>
-          <button
-            type="button"
-            class="frt__pager-btn"
-            :disabled="pageOf(agent.agentId) >= pagesOf(agent.agentId) - 1"
-            @click="setPage(agent.agentId, pageOf(agent.agentId) + 1)"
-          >下一页 ›</button>
-        </div>
+        <!-- 每 agent 组分页（统一 mk-pagination 页码器：固定 15 行/页，隐藏每页条数） -->
+        <Pagination
+          :page="pageOf(agent.agentId) + 1"
+          :total="filteredOf(agent.agentId).length"
+          :page-size="AGENT_PAGE_SIZE"
+          :hide-size="true"
+          :show-total="true"
+          @update:page="setPage(agent.agentId, ($event as number) - 1)"
+        />
       </div>
     </template>
 
@@ -257,7 +250,7 @@
             class="mk-btn frt__prune--danger"
             :disabled="orchSaving || orchSyncing || orchPruning"
             @click="runPrune(true)"
-          >确认清理（删除 DB 行）</button>
+          >确认清理（删除数据库行）</button>
           <button type="button" class="mk-btn" :disabled="orchSaving || orchSyncing || orchPruning" @click="forceSync">{{ TERMS.syncToDb }}</button>
           <button type="button" class="mk-btn mk-btn--primary" :disabled="orchSaving || orchSyncing || orchPruning" @click="saveOrchestration">
             {{ orchSaving ? '保存中…' : TERMS.saveToFile }}
@@ -278,6 +271,7 @@ import { useOverlay, useMaskClose } from './useOverlay';
 import { toast } from '@/utils/toast';
 import { askConfirm } from './useConfirm';
 import { TERMS } from './terms';
+import Pagination from './Pagination.vue';
 
 interface FieldItem {
   fieldId: string;
@@ -576,7 +570,7 @@ async function runPrune(apply: boolean) {
     if (data.dryRun) {
       msg = `预检：孤儿行 ${candidates.length} 条（契约 ${byTable('agent_contracts')} · 字段 ${byTable('field_definitions')} · 路由 ${byTable('agent_field_routings')}）`;
       if (candidates.length) {
-        msg += '；确认无误后点「确认清理（删除 DB 行）」执行';
+        msg += '；确认无误后点「确认清理（删除数据库行）」执行';
         pruneConfirming.value = true;
       } else {
         msg += '；无待清理孤儿行';
@@ -877,31 +871,6 @@ watch(() => props.stage, () => void loadStage());
 @media (max-width: 860px) {
   .mk-table--dense { min-width: 1060px; }
 }
-
-/* 每 agent 组分页条（滚动修复 #1） */
-.frt__pager {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
-  border-top: 1px solid var(--mk-line, #e6ebf4);
-  background: #fafbfd;
-}
-.frt__pager-btn {
-  padding: 4px 12px;
-  border: 1px solid var(--mk-line, #e6ebf4);
-  border-radius: 7px;
-  background: #fff;
-  color: var(--mk-blue, #2c63d0);
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.frt__pager-btn:hover:not(:disabled) { border-color: rgba(44, 99, 208, 0.4); }
-.frt__pager-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.frt__pager-info { font-size: 11.5px; color: var(--mk-faint, #71809a); font-variant-numeric: tabular-nums; }
 
 /* 字段列：点分名 + 层级分段小字。
    行高统一修复：fieldId 由 word-break:break-all 改单行 ellipsis（不再折行撑高） */

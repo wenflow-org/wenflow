@@ -56,7 +56,7 @@ export const sessionWrapupRuntimeDefinition: RuntimeDefinitionRecord = {
     'session-summary',
     'session-evaluation',
   ],
-  defaultMaxTokens: 4000,
+  defaultMaxTokens: 8000,
   defaultTemperature: 0.7,
   source: 'code',
   managedByCode: true,

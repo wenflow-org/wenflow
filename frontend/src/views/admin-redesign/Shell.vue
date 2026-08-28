@@ -30,10 +30,11 @@
           </button>
         </section>
       </nav>
-      <div class="mshell__foot">
-        <span class="mshell__kbd">{{ kbdMod }}K</span>
-        <span>命令面板</span>
-      </div>
+      <!-- 左侧底部：极简品牌行（数据源状态由顶栏演示横幅/徽章兜底；命令面板入口在右上角） -->
+      <footer class="mshell__foot">
+        <span class="mshell__foot-name">WenFlow Admin</span>
+        <span class="mshell__foot-ver mono">v{{ version }}</span>
+      </footer>
     </aside>
 
     <!-- 主区 -->
@@ -81,7 +82,7 @@
           </template>
         </div>
       </header>
-      <main class="mshell__content">
+      <main ref="contentEl" class="mshell__content">
         <slot />
       </main>
       <!-- 滚动修复 #9：回到顶部（>2 屏长页出现，全站统一由 Shell 挂载） -->
@@ -95,20 +96,6 @@
         <span class="mk-backtop__icon" aria-hidden="true">↑</span>
         <span>回到顶部</span>
       </button>
-      <footer class="mshell__footer">
-        <div class="mshell__footer-left">
-          <img src="/favicon.png" alt="" class="mshell__footer-logo" />
-          <span class="mshell__footer-name">WenFlow Admin</span>
-          <span class="mshell__footer-ver">v{{ version }}</span>
-        </div>
-        <div class="mshell__footer-right">
-          <span class="mshell__footer-source" :class="dataSource === 'live' ? 'mshell__footer-source--live' : ''">
-            <i class="mshell__footer-dot" aria-hidden="true"></i>{{ sourceLabel }}
-          </span>
-          <span class="mshell__footer-sep">·</span>
-          <span>&copy; {{ year }}</span>
-        </div>
-      </footer>
     </div>
   </div>
 </template>
@@ -124,24 +111,24 @@ import { version as appVersion } from '../../../package.json'
 const props = defineProps<{ current: string; crumb?: string; crumbTitle?: string; release?: boolean }>()
 const emit = defineEmits<{ (e: 'navigate', id: string): void; (e: 'palette'): void; (e: 'glossary'): void }>()
 
-/* 滚动修复 #9：回到顶部按钮（页面 >2 屏且已滚动至少一屏时出现） */
+/* 滚动修复 #9：回到顶部按钮（内容区滚动 >2 屏时出现）；
+   滚动容器已从 window 收敛到 .mshell__content（应用式布局：侧栏固定，右侧独立滚动） */
+const contentEl = ref<HTMLElement | null>(null)
 const backtopVisible = ref(false)
 function onScroll() {
-  backtopVisible.value = window.scrollY > window.innerHeight
+  const el = contentEl.value
+  backtopVisible.value = el ? el.scrollTop > el.clientHeight : false
 }
 function backToTop() {
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+  contentEl.value?.scrollTo({ top: 0, behavior: 'smooth' })
 }
 onMounted(() => {
-  window.addEventListener('scroll', onScroll, { passive: true })
+  contentEl.value?.addEventListener('scroll', onScroll, { passive: true })
   onScroll()
 })
-onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
+onBeforeUnmount(() => contentEl.value?.removeEventListener('scroll', onScroll))
 
 const version = appVersion
-const year = new Date().getFullYear()
-
-const sourceLabel = computed(() => (dataSource.value === 'live' ? '真实数据' : '演示数据'))
 /** 按平台显示快捷键修饰符：Mac 显示 ⌘，Windows/Linux 显示 Ctrl */
 const kbdMod = computed(() => /Mac|iPhone|iPod|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl + ')
 
@@ -247,7 +234,10 @@ const groupedScenes = computed(() => {
 .mshell {
   display: grid;
   grid-template-columns: 208px minmax(0, 1fr);
-  min-height: max(720px, 100dvh);
+  grid-template-rows: minmax(0, 1fr);
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
   background: var(--mk-bg, #f7f8fa);
   color: #1a2a44;
   font-size: 13px;
@@ -269,11 +259,12 @@ const groupedScenes = computed(() => {
 .mshell__brand {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   padding: 2px 8px 0;
 }
 .mshell__logo-full {
-  height: 32px;
+  height: 52px;
   width: auto;
   display: block;
 }
@@ -352,14 +343,23 @@ const groupedScenes = computed(() => {
   50% { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0); }
 }
 
+/* 左侧底部：极简品牌行（WenFlow Admin + 版本；弱化处理，不抢导航注意力） */
 .mshell__foot {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 6px;
+  padding: 12px 12px 6px;
   border-top: 1px solid #eef2fa;
   color: var(--mk-faint);
-  font-size: 11.5px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.mshell__foot-name { font-weight: 700; color: #8a97ab; letter-spacing: 0.02em; }
+.mshell__foot-ver {
+  font-size: 10px;
+  color: #b4c0d2;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .mshell__kbd {
   padding: 1px 6px;
@@ -370,8 +370,8 @@ const groupedScenes = computed(() => {
   font-weight: 700;
 }
 
-/* 主区 */
-.mshell__main { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; }
+/* 主区：高度锁定在壳层（shell 100dvh）内，content 行 1fr 承接剩余高度 */
+.mshell__main { display: grid; grid-template-rows: auto 1fr; min-width: 0; height: 100%; min-height: 0; }
 .mshell__topbar {
   display: flex;
   align-items: center;
@@ -440,7 +440,14 @@ const groupedScenes = computed(() => {
   cursor: pointer;
 }
 .mshell__search-hint { white-space: nowrap; }
-.mshell__content { min-width: 0; }
+/* 右侧内容区：应用式布局的唯一滚动容器（侧栏/顶栏固定，内容区内滚；
+   列表页用 .mk-page--fill 让表格区内滚、分页器吸底） */
+.mshell__content {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
 
 /* 演示数据置顶横幅（阶段 0 R1）：demo 态常驻警示，防止真假混淆 */
 .mshell__demo {
@@ -518,49 +525,13 @@ const groupedScenes = computed(() => {
 }
 .mshell__logout:hover { color: #dc2626; border-color: rgba(220, 38, 38, 0.35); }
 
-/* 页脚 */
-.mshell__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 20px;
-  border-top: 1px solid #e1e8f2;
-  background: #fff;
-  color: var(--mk-faint);
-  font-size: 12px;
-}
-.mshell__footer-left,
-.mshell__footer-right {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.mshell__footer-logo { height: 18px; width: 18px; border-radius: 5px; object-fit: contain; }
-.mshell__footer-name { font-weight: 700; color: #5b6577; }
-.mshell__footer-ver {
-  font-size: 11px; color: var(--mk-muted);
-  font-variant-numeric: tabular-nums;
-  padding: 1px 7px; border-radius: 999px;
-  background: #f1f5fb; border: 1px solid #e3e9f4;
-}
-.mshell__footer-source { display: inline-flex; align-items: center; gap: 6px; }
-.mshell__footer-dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: #c3cede;
-}
-.mshell__footer-source--live { color: var(--mk-green); }
-.mshell__footer-source--live .mshell__footer-dot { background: var(--green, #31b16f); }
-.mshell__footer-sep { color: #c3cede; }
-
 /* 大屏（2000+）：侧栏加宽、字号放大；2800+（4K）再升一档（zoom 之上叠加） */
 @media (min-width: 2000px) {
   .mshell {
     grid-template-columns: 280px minmax(0, 1fr);
   }
   .mshell__side { padding: 18px 14px 14px; gap: 18px; }
-  .mshell__logo-full { height: 48px; }
+  .mshell__logo-full { height: 72px; }
   .mshell__group-title { font-size: 12.5px; padding: 0 12px 7px; }
   .mshell__item { font-size: 14.5px; padding: 11px 12px; gap: 8px; }
   .mshell__item-badge { font-size: 12.5px; padding: 2px 9px; }
@@ -575,7 +546,7 @@ const groupedScenes = computed(() => {
     grid-template-columns: 360px minmax(0, 1fr);
   }
   .mshell__side { padding: 22px 18px 16px; gap: 22px; }
-  .mshell__logo-full { height: 60px; }
+  .mshell__logo-full { height: 72px; }
   .mshell__group-title { font-size: 15px; padding: 0 14px 8px; }
   .mshell__item { font-size: 17px; padding: 14px 14px; gap: 10px; border-radius: 10px; }
   .mshell__item-badge { font-size: 14px; padding: 3px 10px; }
@@ -591,7 +562,7 @@ const groupedScenes = computed(() => {
     grid-template-columns: 440px minmax(0, 1fr);
   }
   .mshell__side { padding: 26px 22px 18px; gap: 26px; }
-  .mshell__logo-full { height: 72px; }
+  .mshell__logo-full { height: 88px; }
   .mshell__group-title { font-size: 17.5px; padding: 0 16px 9px; }
   .mshell__item { font-size: 20px; padding: 16px 16px; gap: 12px; }
   .mshell__item-badge { font-size: 16.5px; padding: 4px 12px; }
@@ -607,8 +578,9 @@ const groupedScenes = computed(() => {
   .mshell__item-label,
   .mshell__item-badge,
   .mshell__group-title,
-  .mshell__foot span:last-child,
   .mshell__search { display: none; }
+  /* 窄屏图标栏：底部品牌/数据源/命令面板信息区整体隐藏（命令面板入口在顶栏） */
+  .mshell__foot { display: none; }
   /* 窄屏图标栏：显示单字图标，悬停提示全名 */
   .mshell__item { justify-content: center; padding: 4px 0; }
   .mshell__item-glyph { display: inline-flex; }

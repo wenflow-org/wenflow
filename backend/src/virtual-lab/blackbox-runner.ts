@@ -46,6 +46,12 @@ import { getAPIGateway } from '../gateway/api-gateway'
 import { agentConfigService } from '../services/agentConfig.service'
 import { learningStateService } from '../services/learning/learning-state.service'
 import { logger } from '../utils/logger'
+import {
+  buildLearnerMemorySnapshot,
+  recordCompletedArtifact,
+  writeProfileConceptsAfterLesson,
+  type LessonKnowledgePoint,
+} from './learner-memory'
 
 import { safeJsonParse } from '../utils/safe-json'
 import type { SkillDefinition } from '../skills/protocol'
@@ -863,11 +869,8 @@ export class BlackboxVirtualLearnerRunner {
             currentPhase: (state.blackbox?.learnerPrivateState?.teaching as Record<string, unknown> | undefined)?.phaseFocus || 'trying',
             previousLearnerState: state.blackbox?.learnerPrivateState?.teaching || null,
             currentTask: latest.visibleTask || null,
-            knowledgeSnapshot: latest.visibleTask?.linkedConcept
-              ? [{ name: String(latest.visibleTask.linkedConcept), status: 'learning', progress: 40 }]
-              : (latest.visibleTask?.title
-                ? [{ name: String(latest.visibleTask.title), status: 'learning', progress: 30 }]
-                : []),
+            knowledgeSnapshot: await this.buildLearnerKnowledgeSnapshot(session.userId, latest.visibleTask),
+            learnerMemory: await this.buildLearnerMemoryForSimulator(session.userId),
             frictionBudget: snapshot.frictionBudget
           },
           snapshot,
@@ -1456,6 +1459,8 @@ export class BlackboxVirtualLearnerRunner {
     if (checkpoint.status !== 'task_completed') {
       try {
         taskResult = await adapter.completeTask(taskId)
+        // 任务真正结算后：虚拟学习者记忆回写（画像概念 + 成果物登记），best-effort
+        await this.persistLearnerMemoryAfterTask(session, taskId, teachingSessionId, state)
       } catch (error: unknown) {
         const lastError = String(asErrorLike(error).message || '任务完成同步失败').slice(0, 1000)
         checkpoint = {
@@ -1507,13 +1512,103 @@ export class BlackboxVirtualLearnerRunner {
     return null
   }
 
+  /**
+   * 黑盒任务结算后的记忆回写：
+   * - 从 teaching session 的 knowledgeState（课堂知识看板）回写画像概念
+   * - 登记「做完的事」（成果物，含验收标准 / 课堂掌握概念）
+   * best-effort：失败不阻断任务完成主流程。
+   */
+  private async persistLearnerMemoryAfterTask(
+    session: VirtualSessionRow,
+    taskId: string,
+    teachingSessionId: string,
+    state: StageResults
+  ): Promise<void> {
+    try {
+      const [teaching, task] = await Promise.all([
+        prisma.teaching_sessions.findUnique({ where: { id: teachingSessionId } }).catch(() => null),
+        prisma.subtasks.findUnique({ where: { id: taskId } }).catch(() => null),
+      ]);
+      const knowledgePoints: LessonKnowledgePoint[] = Array.isArray(teaching?.knowledgeState)
+        ? (teaching.knowledgeState as LessonKnowledgePoint[]).filter(
+            (kp) => kp && typeof kp.name === 'string' && kp.name.trim()
+          )
+        : [];
+      await writeProfileConceptsAfterLesson(session.userId, knowledgePoints, { source: 'blackbox' });
+      await recordCompletedArtifact({
+        userId: session.userId,
+        taskId,
+        taskTitle: task?.title || '当前任务',
+        artifactType: task?.taskType || null,
+        deliverable: task?.acceptanceCriteria || null,
+        knowledgePoints,
+        milestoneTitle: (task as any)?.milestones?.title || null,
+      });
+    } catch (error) {
+      logger.warn('[Blackbox] 虚拟学习者记忆回写失败（不影响任务完成）', {
+        sessionId: session.id,
+        taskId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * 组装学习者记忆快照（knowledgeSnapshot 用）：
+   * - 画像 knownConcepts（历次课后沉淀的已掌握概念）
+   * - memory_traces 到期复习点（旧知唤醒：记得学过、但快忘了）
+   * - 画像 struggleConcepts（仍在学/易混淆）
+   * - 最近完成事项（成果物标题）
+   * 当前任务概念固定附加在首位（保持「当前在看什么」）。
+   */
+  private async buildLearnerKnowledgeSnapshot(
+    userId: string,
+    visibleTask: LearnerObservation['visibleTask'] | undefined
+  ): Promise<Array<{ name: string; status: string; progress: number }>> {
+    const memory = await buildLearnerMemorySnapshot(userId, { limit: 6 }).catch(() => null);
+    const currentName = visibleTask?.linkedConcept || visibleTask?.title || null;
+    const result: Array<{ name: string; status: string; progress: number }> = [];
+    if (currentName) result.push({ name: String(currentName), status: 'learning', progress: 40 });
+    for (const item of memory?.mastered || []) {
+      result.push({ name: item.name, status: 'mastered', progress: 100 });
+    }
+    for (const item of memory?.dueReview || []) {
+      result.push({ name: item.name, status: 'review', progress: item.progress });
+    }
+    for (const item of memory?.struggling || []) {
+      result.push({ name: item.name, status: 'learning', progress: 30 });
+    }
+    return result.slice(0, 8);
+  }
+
+  /**
+   * 组装学习者记忆（learnerMemory 用，供模拟器自然引用）：
+   * 已掌握 / 到期复习 / 易混淆 + 最近完成事项（成果物标题）。
+   */
+  private async buildLearnerMemoryForSimulator(
+    userId: string
+  ): Promise<{
+    mastered: string[];
+    dueReview: string[];
+    struggling: string[];
+    recentCompleted: string[];
+  } | null> {
+    const memory = await buildLearnerMemorySnapshot(userId, { limit: 8 }).catch(() => null);
+    if (!memory) return null;
+    return {
+      mastered: memory.mastered.map((item) => item.name),
+      dueReview: memory.dueReview.map((item) => item.name),
+      struggling: memory.struggling.map((item) => item.name),
+      recentCompleted: memory.recentTaskTitles,
+    };
+  }
+
   private async persistTaskCompletionCheckpoint(
     sessionId: string,
     state: StageResults,
     checkpoint: TaskCompletionCheckpoint,
     projectionKey?: string
-  ) {
-    const fresh = await this.getSession(sessionId)
+  ) {    const fresh = await this.getSession(sessionId)
     this.assertMutableSession(fresh)
     const latestState = parseStageResults(fresh.stageResults, state)
     const projectedCommandIds = Array.isArray(latestState.blackbox?.projectedCommandIds)

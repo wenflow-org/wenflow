@@ -2,9 +2,10 @@
   <div class="mk-page">
     <div class="mk-status" :class="activeCount ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ activeCount ? `${activeCount} 条公告生效中` : '当前没有生效公告' }}</strong>
+      <strong class="mk-status__title">公告中心</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ rows.length }} 条</span>
+      <span class="mk-status__meta">生效中 {{ activeCount }}</span>
       <span class="mk-status__meta">草稿 {{ draftCount }}</span>
       <span class="mk-status__meta">已下线 {{ archivedCount }}</span>
       <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建公告</button>
@@ -22,7 +23,7 @@
             <th>状态</th>
             <th class="mk-col--time-full">发布</th>
             <th class="mk-col--time-full">过期</th>
-            <th class="mk-th--right">操作</th>
+            <th class="mk-col--actions-wide">操作</th>
           </tr>
         </thead>
         <tbody>

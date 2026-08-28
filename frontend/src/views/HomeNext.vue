@@ -310,7 +310,7 @@ onUnmounted(() => {
   min-height: 100vh;
   background: var(--canvas);
   color: var(--ink);
-  font-family: Inter, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", Inter, sans-serif;
   overflow-x: clip;
 }
 

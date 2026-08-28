@@ -16,7 +16,7 @@
         </span>
       </header>
       <p class="sdp-pw__hint">
-        core YAML 是业务 SSOT：保存即编译（dry run 出五块产物与门禁），发布后确定性编译为五块 Prompt（<code class="mono">skill.{{ skillId }}.md</code> + DB ACTIVE），运行时立即生效。
+        core YAML 是业务定义的唯一声明源：保存即编译（dry run 出五块产物与门禁），发布后确定性编译为五块 Prompt（<code class="mono">skill.{{ skillId }}.md</code> + 数据库 ACTIVE），运行时立即生效。
       </p>
       <div class="sdp-pw__viewswitch">
         <button

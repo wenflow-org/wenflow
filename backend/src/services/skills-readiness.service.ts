@@ -12,7 +12,8 @@
  * - W1 ACTIVE 覆盖：户口簿活跃集 vs agent_prompts ACTIVE 双向差集；
  *   noPromptFile=true（handler-only）豁免方向 A；僵尸技能（basic-evaluator /
  *   goal-alignment-checker / course-design，保留注册但零生产调用，RETIRED_SKILLS_FIX_PLAN §4.3）
- *   的 ACTIVE 残留单独报 warn（任务指示，区别于严格差集僵尸）。
+ *   的 ACTIVE 行视为"保留决策下的必需资产"（handler requireActivePrompt: true），
+ *   不计入告警 items，仅保留 zombieSkillActive 数组供审计计数。
  * - W2 注册对账：户口簿活跃集 vs skill_registrations（name 无 skill: 前缀）双向差集；
  *   registrationPoint=agents（learner-model 落 agentHandlers 注册）与 platform-direct
  *   （semantic-freeze-judge 平台守门直调）豁免方向 A（不落 skill_registrations 是预期）。
@@ -40,7 +41,9 @@ import {
   type CoreHashParityReport,
 } from '../scripts/check-core-hash-parity';
 
-/** 僵尸技能：保留注册但零生产调用（skills.yaml notes + RETIRED_SKILLS_FIX_PLAN §4.3），ACTIVE 残留单独报 warn */
+/** 僵尸技能：保留注册但零生产调用（skills.yaml notes + RETIRED_SKILLS_FIX_PLAN §4.3）；
+ * 其 ACTIVE prompt 为保留决策下的必需资产（handler requireActivePrompt: true），
+ * 不计告警（zombieSkillActive 仅作审计计数保留）。 */
 export const ZOMBIE_SKILL_IDS = ['basic-evaluator', 'goal-alignment-checker', 'course-design'] as const;
 
 /** W3-B 免检清单：coordinator.steps=[] 条目（notes 注明 service 侧接线，不进主链 steps） */
@@ -160,6 +163,11 @@ export function analyzeW1(book: SkillsBook, activeRows: CoreHashParityActiveRow[
     .map((entry) => entry.skillId)
     .sort();
 
+  // 告警 items：仅缺 ACTIVE（missingActive）与幽灵 ACTIVE（zombieActive）。
+  // zombieSkillActive 不进入 items——按 RETIRED_SKILLS_FIX_PLAN §4.3 决策，
+  // 三个僵尸项正式保留注册（禁止退役名单），且其 handler requireActivePrompt: true
+  // （v4-aux-skills/index.ts:115，admin 测试入口按需执行依赖 ACTIVE prompt），
+  // 其 ACTIVE 行为必需资产而非"残留"，报警会把保留决策执行者引向错误清理。
   const items: ReadinessWarningItem[] = [
     ...missingActive.map((skillId) => ({
       code: 'W1' as const,
@@ -173,16 +181,10 @@ export function analyzeW1(book: SkillsBook, activeRows: CoreHashParityActiveRow[
       message: '数据库有"当前生效"版本但户口簿活跃集已无此技能（幽灵残留）',
       hint: '登记回户口簿或清理残留',
     })),
-    ...zombieSkillActive.map((skillId) => ({
-      code: 'W1' as const,
-      skillId,
-      message: '保留注册但长期零生产调用的技能存在"当前生效"残留',
-      hint: '零调用保留注册；如需下线确认无调用后移除 prompt 或纳入退役流程',
-    })),
   ];
 
   return {
-    ok: items.length === 0,
+    ok: missingActive.length === 0 && zombieActive.length === 0,
     activeCount: activePromptIds.size,
     missingActive,
     zombieActive,

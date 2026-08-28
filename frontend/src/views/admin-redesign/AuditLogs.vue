@@ -1,42 +1,51 @@
 <template>
-  <div class="mk-page">
-    <!-- 状态条：● 审计日志 · N 条 · 失败 M 条 + tab 切换 + 筛选 -->
+  <div class="mk-page mk-page--fill">
+    <!-- 状态条：标题 + 概览统计 + 刷新（筛选控件在下方卡片头，全站统一） -->
     <div class="mk-status" :class="`mk-status--${statusTone}`">
       <span class="mk-status__dot"></span>
-      <strong>{{ statusTitle }}</strong>
+      <strong class="mk-status__title">{{ statusTitle }}</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta mono">{{ total }} 条</span>
       <span v-if="total" class="mk-status__meta mono">失败 {{ failed }}</span>
-
-      <div class="mk-status__filters">
-        <div class="mk-pills">
-          <button
-            v-for="t in tabs"
-            :key="t.id"
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': tab === t.id }"
-            @click="switchTab(t.id)"
-          >
-            {{ t.label }}
-          </button>
-        </div>
-        <input
-          v-model="keyword"
-          class="log-keyword"
-          :placeholder="tab === 'login' ? '用户名 / IP，回车查询' : '关键词，回车查询'"
-          @keydown.enter="applyFilters"
-        />
-        <select v-model="timeRange" class="log-agent" @change="applyFilters">
-          <option value="today">今天</option>
-          <option value="yesterday">昨天</option>
-          <option value="week">近 7 天</option>
-          <option value="month">近 30 天</option>
-          <option value="all">全部</option>
-        </select>
-        <button type="button" class="log-refresh" :disabled="loading" @click="applyFilters">刷新</button>
-      </div>
+      <button type="button" class="mk-status__action" :disabled="loading" @click="applyFilters">
+        {{ loading ? '刷新中…' : '刷新' }}
+      </button>
     </div>
+
+    <!-- 筛选卡片头（对齐 Users 模式：tabs/搜索/时间范围从状态条移入） -->
+    <div class="mk-card mk-card--fill">
+      <div class="mk-card__head">
+        <div class="mk-filter">
+          <div class="mk-pills">
+            <button
+              v-for="t in tabs"
+              :key="t.id"
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': tab === t.id }"
+              @click="switchTab(t.id)"
+            >
+              {{ t.label }}
+            </button>
+          </div>
+          <input
+            v-model="keyword"
+            class="mk-filter__input"
+            :placeholder="tab === 'login' ? '用户名 / IP，回车查询' : '关键词，回车查询'"
+            @keydown.enter="applyFilters"
+          />
+          <select v-model="timeRange" class="mk-filter__select" aria-label="时间范围" @change="applyFilters">
+            <option value="today">今天</option>
+            <option value="yesterday">昨天</option>
+            <option value="week">近 7 天</option>
+            <option value="month">近 30 天</option>
+            <option value="all">全部</option>
+          </select>
+        </div>
+        <div class="mk-card__head-right">
+          <span class="mk-card__meta">共 {{ total }} 条<template v-if="failed"> · 失败 {{ failed }}</template></span>
+        </div>
+      </div>
 
     <!-- 加载失败错误态 + 重试 -->
     <div v-if="loadError" class="audit-error">
@@ -139,6 +148,7 @@
               <th>IP</th>
               <th>结果</th>
               <th>原因</th>
+              <th class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -153,6 +163,16 @@
               <td class="log-ip mono" :title="a.ip || ''">{{ a.ip || '—' }}</td>
               <td><span class="mk-badge" :class="a.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ a.success ? '成功' : '失败' }}</span></td>
               <td class="log-reason" :title="a.reason || ''">{{ reasonText(a.reason) }}</td>
+              <td class="mk-th--right">
+                <button
+                  v-if="a.success && a.username"
+                  type="button"
+                  class="mk-link"
+                  title="在「会话安全」页查看该用户当前的登录会话（设备/状态/强制下线）"
+                  @click="goSessions(a.username)"
+                >查看会话 →</button>
+                <span v-else class="mk-na">—</span>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -173,11 +193,13 @@
       <span>{{ tab === 'login' ? '管理员登录成功/失败都会在此留痕' : '管理员的增删改操作会自动记录留痕' }}</span>
       <button v-if="isFiltered" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
     </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { adminAuditApi, type AuditLogQuery } from '@/api/adminApi'
 import { errMsg, shortId } from './live'
 import Pagination from './Pagination.vue'
@@ -231,6 +253,11 @@ type TabId = (typeof tabs)[number]['id']
 const tab = ref<TabId>('operation')
 const keyword = ref('')
 const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('week')
+
+/* 深链：?tab=login 直达登录审计（会话安全页「审计日志 · 登录审计 →」跳入） */
+const route = useRoute()
+const router = useRouter()
+if (route.query.tab === 'login') tab.value = 'login'
 
 const logs = ref<AuditLogRow[]>([])
 const attempts = ref<LoginAttemptRow[]>([])
@@ -398,6 +425,11 @@ function fmtLoginTime(iso?: string | null): string {
 onMounted(() => {
   void applyFilters()
 })
+
+/** 会话安全深链：?user=用户名 → 只看该用户当前会话 */
+function goSessions(username: string) {
+  void router.push({ path: '/admin/session-security', query: { user: username } })
+}
 </script>
 
 <style scoped>
@@ -420,56 +452,6 @@ onMounted(() => {
 .mk-status__sep { width: 1px; height: 14px; background: var(--mk-line); }
 .mk-status__meta { color: var(--mk-muted); font-size: 12px; }
 
-.mk-status__filters {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  min-width: 0;
-}
-@media (max-width: 1000px) {
-  .mk-status__filters {
-    margin-left: 0;
-    width: 100%;
-    justify-content: flex-start;
-  }
-  .log-keyword { flex: 1 1 140px; min-width: 0; }
-}
-.log-agent {
-  padding: 6px 10px;
-  border: 1px solid var(--mk-line);
-  border-radius: 8px;
-  background: var(--mk-surface);
-  font-size: 11.5px;
-  color: var(--mk-ink);
-}
-.log-keyword {
-  padding: 6px 10px;
-  border: 1px solid var(--mk-line);
-  border-radius: 8px;
-  background: var(--mk-surface);
-  font: inherit;
-  font-size: 11.5px;
-  color: var(--mk-ink);
-  width: 150px;
-}
-.log-refresh {
-  padding: 6px 10px;
-  border: 1px solid var(--mk-line);
-  border-radius: 8px;
-  background: var(--mk-surface);
-  color: var(--mk-muted);
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.log-refresh:hover { border-color: rgba(44, 99, 208, 0.4); color: var(--mk-ink); }
-.log-refresh:disabled { opacity: 0.65; cursor: not-allowed; }
-
 /* 加载失败错误态 */
 .audit-error { padding: 40px 20px; }
 .audit-error__card {
@@ -489,15 +471,11 @@ onMounted(() => {
 .audit-error__card span { font-size: 12.5px; color: var(--mk-muted); word-break: break-all; }
 
 .log-body {
-  border: 1px solid var(--mk-line);
-  border-radius: 12px;
-  background: var(--mk-surface);
   overflow-x: auto;
 }
 
 /* 表格容器：全站 mk-table 标准表格（4K 由 shared.css 档位覆盖；窄屏表内横向滚动）。
-   视觉重做（F11）：tline div 网格 → 真实 <table>，天然消除 min-width:max-content + fr 轨道的
-   长文本膨胀问题（F9b 的 max-width 封顶随之移除），4K 自动铺满。 */
+   卡内内容区（原 .log-body 自绘边框随 mk-card 统一收敛，不再重复描边）。 */
 .log-body .mk-table th { white-space: nowrap; }
 
 /* 行状态：左侧 3px 色条（成功绿 / 失败红）+ 失败行淡红底 + 展开行高亮 */
@@ -606,8 +584,18 @@ onMounted(() => {
   text-overflow: ellipsis;
   max-width: 320px;
 }
-/* 展开指示：行末箭头，展开时旋转 90° */
+/* 展开指示：行末箭头，展开时旋转 90°。
+   箭头列显式定宽 + 居中 + overflow hidden：auto 布局下表头空列宽度随内容抖动，
+   大字号/旋转动画下字符可能溢出列边界压到相邻列（用户反馈展开后箭头与邻列视觉重叠） */
+.log-body table th:last-child { width: 36px; }
 .log-arrow {
+  display: block;
+  width: 36px;
+  max-width: 36px;
+  min-width: 36px;
+  margin-left: auto;
+  text-align: center;
+  overflow: hidden;
   font-size: 12px;
   color: var(--mk-faint);
   transition: transform 0.15s ease;
@@ -650,16 +638,14 @@ onMounted(() => {
   .mk-status { padding: 10px 16px; }
   .mk-status strong { font-size: 15.5px; }
   .mk-status__meta { font-size: 13px; }
-  .log-keyword { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 180px; }
-  .log-agent { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 100px; }
-  .log-refresh { font-size: 13px; padding: 7px 12px; }
   .log-time,
   .log-target,
   .log-ip { font-size: 13.5px; }
   .log-admin { font-size: 14px; }
   .log-method { font-size: 12px; padding: 2px 9px; }
-  .log-path { font-size: 13.5px; max-width: 320px; }
-  .log-action { font-size: 13px; max-width: 320px; }
+  .log-path { font-size: 13.5px; max-width: 520px; }
+  .log-action { font-size: 13px; max-width: 520px; }
+  .log-admin { max-width: 300px; }
   .log-tt,
   .log-reason,
   .log-none { font-size: 13px; }
@@ -677,8 +663,9 @@ onMounted(() => {
   .log-ip { font-size: 16px; }
   .log-admin { font-size: 16.5px; }
   .log-method { font-size: 14px; }
-  .log-path { font-size: 16px; max-width: 380px; }
-  .log-action { font-size: 15.5px; max-width: 380px; }
+  .log-path { font-size: 16px; max-width: 640px; }
+  .log-action { font-size: 15.5px; max-width: 640px; }
+  .log-admin { max-width: 360px; }
   .log-tt,
   .log-reason,
   .log-none { font-size: 15.5px; }
@@ -692,16 +679,14 @@ onMounted(() => {
   .mk-status { padding: 14px 22px; }
   .mk-status strong { font-size: 18px; }
   .mk-status__meta { font-size: 15px; }
-  .log-keyword { font-size: 15.5px; padding: 9px 14px; width: 215px; }
-  .log-agent { font-size: 15.5px; padding: 9px 14px; width: 115px; }
-  .log-refresh { font-size: 15.5px; padding: 9px 14px; }
   .log-time,
   .log-target,
   .log-ip { font-size: 18px; }
   .log-admin { font-size: 18.5px; }
   .log-method { font-size: 16px; padding: 3px 11px; }
-  .log-path { font-size: 18px; max-width: 460px; }
-  .log-action { font-size: 17.5px; max-width: 460px; }
+  .log-path { font-size: 18px; max-width: 760px; }
+  .log-action { font-size: 17.5px; max-width: 760px; }
+  .log-admin { max-width: 420px; }
   .log-tt,
   .log-reason,
   .log-none { font-size: 17.5px; }

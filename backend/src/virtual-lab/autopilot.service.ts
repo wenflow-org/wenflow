@@ -40,6 +40,8 @@ export type AutopilotState = {
   mode?: AutopilotMode
   /** 本次运行目标：stage（阶段级） / final（全局级） */
   target?: AutopilotTarget
+  /** 每课回合上限（自动推进单课预算；前端驾驶舱「回合上限」透传，默认 50） */
+  maxTurns?: number
   /** 阶段级目标达成时记录已达成的阶段（goal / path / teaching） */
   completedStage?: string | null
   startedAt?: string
@@ -131,7 +133,7 @@ export class AutopilotService {
    * target='stage'：推进完当前阶段即停（阶段级）；
    * target='final'：直达最终目标（Path 全部完成，全局级，默认）。
    */
-  async start(sessionId: string, options: { target?: AutopilotTarget } = {}): Promise<{ runId: string; mode: AutopilotMode; target: AutopilotTarget }> {
+  async start(sessionId: string, options: { target?: AutopilotTarget; maxTurns?: number } = {}): Promise<{ runId: string; mode: AutopilotMode; target: AutopilotTarget }> {
     const target = options.target === 'stage' ? 'stage' : 'final'
     const session = await prisma.virtual_sessions.findUnique({
       where: { id: sessionId },
@@ -146,12 +148,18 @@ export class AutopilotService {
       throw new AutopilotConflictError(sessionId)
     }
 
+    // 每课回合上限：驾驶舱「回合上限」透传（1-100）；未传时沿用上次状态或默认 50
+    const lessonTurnCap = Number.isInteger(options.maxTurns)
+      ? Math.min(100, Math.max(1, options.maxTurns as number))
+      : (typeof current.maxTurns === 'number' ? current.maxTurns : 50)
+
     const runId = `autopilot_${sessionId.slice(0, 8)}_${Date.now()}`
     this.runningSessions.add(sessionId)
     await this.writeState(sessionId, {
       status: 'running',
       mode,
       target,
+      maxTurns: lessonTurnCap,
       completedStage: null,
       startedAt: new Date().toISOString(),
       completedAt: null as unknown as string,
@@ -163,7 +171,7 @@ export class AutopilotService {
       waitingSince: null
     })
 
-    logger.info('[autopilot] 启动全自动运行', { sessionId, runId, mode, target, stage: session.currentStage })
+    logger.info('[autopilot] 启动全自动运行', { sessionId, runId, mode, target, stage: session.currentStage, maxTurns: lessonTurnCap })
 
     setImmediate(() => {
       void this.execute(sessionId, mode, runId, target).catch(async (error) => {
@@ -372,9 +380,9 @@ export class AutopilotService {
         continue
       }
 
-      // ---- Teaching 阶段：逐课推进 ----
+      // ---- Teaching 阶段：逐课推进（回合上限跟随状态 maxTurns） ----
       const learnResult = await simulationCoordinator.runLeasedExclusive(sessionId, () =>
-        simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones: 20, maxTurns: 50 })
+        simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones: 20, maxTurns: AutopilotService.readState(session).maxTurns ?? 50 })
       )
       await this.countStep(sessionId)
 
@@ -404,6 +412,17 @@ export class AutopilotService {
       // 单课失败：可恢复（provider 瞬时）→ restart-learning 续跑，有上限
       if (!learnResult.success) {
         const errMsg = String(learnResult.error || '').toLowerCase()
+        // 预算耗尽（turn/retry budget）是闸门终止信号：restart 只会再次耗尽，不可恢复续跑。
+        // 若本课已完成（taskCompleted）只是下一课启动失败：进度保留，直接终态化 failed，
+        // 文案明确「调高预算后可续传」，避免误报为「学习失败」或空转恢复次数。
+        if (learnResult.taskCompleted || errMsg.includes('budget_exhausted')) {
+          await this.writeState(sessionId, {
+            status: 'failed',
+            completedAt: new Date().toISOString(),
+            lastError: learnResult.error || '自动学习失败'
+          })
+          return
+        }
         const recoverable = /provider|timeout|timed out|fetch failed|network|rate.?limit|503|502|budget|invalid json|does not contain valid json|retry/i.test(errMsg)
         if (!recoverable) {
           await this.writeState(sessionId, {
@@ -670,9 +689,9 @@ export class AutopilotService {
         return
       }
 
-      // ---- Teaching：完成本课即停（executeAutoLearning 以课界为终点） ----
+      // ---- Teaching：完成本课即停（executeAutoLearning 以课界为终点；回合上限跟随状态 maxTurns） ----
       const learnResult = await simulationCoordinator.runLeasedExclusive(sessionId, () =>
-        simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones: 20, maxTurns: 50 })
+        simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones: 20, maxTurns: AutopilotService.readState(session).maxTurns ?? 50 })
       )
       const after = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } })
       if (after) {

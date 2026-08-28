@@ -359,6 +359,7 @@ import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveRecompu
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTooltip, evidenceTypeZh } from './evidence'
 import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab } from './learner-profile'
 import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
+import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 
 interface Detail {
@@ -416,21 +417,25 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   })
 }
 
+let detailLoading = false
+
 watch(
   () => [subPage.value?.id, isLive.value] as const,
   ([id, live]) => {
     void loadDetail(id, live)
   },
-  { immediate: true }
+  { immediate: true, flush: 'sync' }
 )
 
 async function loadDetail(id: string | undefined, live: boolean) {
+  if (detailLoading) return
+  if (!id || !live) return
+  detailLoading = true
   liveDetail.value = null
   rawDetail.value = null
   liveEvidence.value = []
   detailError.value = false
   tab.value = 'overview'
-  if (!id || !live) return
   const base = liveLearners.value.find((l) => l.userId === id)
   const pathId = base?.pathId
   // 从用户详情显式进入学习者画像时携带 includeTest（虚拟/测试账号可查，默认视图仍排除）
@@ -516,12 +521,22 @@ async function loadDetail(id: string | undefined, live: boolean) {
     } else {
       detailError.value = true
     }
+  } finally {
+    detailLoading = false
   }
 }
 
 async function recompute() {
   const id = subPage.value?.id
   if (!id || recomputing.value) return
+  const name = liveDetail.value?.name || id
+  const ok = await askConfirm({
+    title: '重算快照',
+    message: `确认重算「${name}」的学习者快照？将重新分析其学习状态与概念掌握情况。`,
+    confirmText: '重算',
+    danger: false
+  })
+  if (!ok) return
   recomputing.value = true
   try {
     if (isLive.value) {

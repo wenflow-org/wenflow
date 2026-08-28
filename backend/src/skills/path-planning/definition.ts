@@ -55,8 +55,8 @@ export const pathAgentRuntimeDefinition: RuntimeDefinitionRecord = {
     ],
   },
   capabilities: ['path-generation', 'milestone-planning'],
-  defaultMaxTokens: 32000,
-  defaultTemperature: 0.2,
+  defaultMaxTokens: 12000,
+  defaultTemperature: 0.5,
   source: 'code',
   managedByCode: true,
 };

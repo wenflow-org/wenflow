@@ -40,7 +40,9 @@ vi.mock('../live', async () => {
     loadLiveData: vi.fn(async () => {}),
     timeAgo: () => 'x',
     errMsg: (e: unknown) => String(e),
-    shortId: (id: string) => id.slice(0, 8)
+    shortId: (id: string) => id.slice(0, 8),
+    /* VL 列表页使用共享 <Pagination> 页码器（依赖 live.totalPagesOf） */
+    totalPagesOf: (total: number, pageSize: number) => Math.max(1, Math.ceil(total / pageSize))
   };
 });
 
@@ -124,7 +126,8 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
       staleCount: 0,
       maxStaleMins: 0,
       avgDurationMs: 0,
-      reclaimThresholdMs: 0
+      reclaimThresholdMs: 0,
+      todayCalls: 0
     };
     terminateMock.mockReset();
     terminateMock.mockImplementation(async () => ({ data: { data: { dryRun: false, terminated: 2, skippedTerminal: 1 } } }));
@@ -147,7 +150,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.text()).toContain('回收卡死（2）');
   });
 
-  it('运行统计展示（A5）：完成率/失败率/平均时长/卡死最长分钟', async () => {
+  it('运行统计展示（A5）：完成率/失败率/终止率/均耗/卡死最长分钟（状态条）', async () => {
     liveVirtualRunStats.value = {
       profileCount: 3,
       totalSessions: 10,
@@ -163,16 +166,22 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
       staleCount: 2,
       maxStaleMins: 1450,
       avgDurationMs: 7200000,
-      reclaimThresholdMs: 24 * 3600 * 1000
+      reclaimThresholdMs: 24 * 3600 * 1000,
+      todayCalls: 200
     };
     liveVirtualSessionStats.value = { created: 0, running: 0, failed: 3, abandoned: 1, completed: 6, total: 10 };
     liveVirtualStaleCount.value = 2;
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    expect(w.text()).toContain('完成率 60%');
-    expect(w.text()).toContain('系统失败率 30%');
-    expect(w.text()).toContain('人为终止 10%');
-    expect(w.text()).toContain('平均时长 2 小时');
+    // KPI 卡为竖排布局：label 与数字分行（共享 MkKpi），文本无空格拼接；详情行保留空格
+    expect(w.text()).toContain('今日调用');
+    expect(w.text()).toContain('200');
+    expect(w.text()).toContain('完成率');
+    expect(w.text()).toContain('60%');
+    expect(w.text()).toContain('失败率');
+    expect(w.text()).toContain('30%');
+    expect(w.text()).toContain('终止率 10%');
+    expect(w.text()).toContain('均耗 2 小时');
     expect(w.text()).toContain('卡死 2（最长 24.2 小时）');
   });
 
@@ -288,12 +297,17 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(openSubPageMock).toHaveBeenCalledWith('session', 'run-1');
   });
 
-  it('卡死/失败会话 bad 色标注（卡死 N / 失败 N）', async () => {
+  it('卡死/失败会话分列标注（卡死 N 徽章 / 失败列数字）', async () => {
     liveVirtuals.value = [makeVirtual(1, { stalledCount: 1, failedCount: 2 })];
     const w = await mountPage();
+    // 卡死列：徽章文案
     expect(w.text()).toContain('卡死 1');
-    expect(w.text()).toContain('失败 2');
-    const badges = w.findAll('.vl-badge--bad');
-    expect(badges).toHaveLength(2);
+    // 失败列：纯数字（新列布局）
+    const failCell = w.findAll('tbody tr td').find((td) => (td.text() || '').trim() === '2');
+    expect(failCell).toBeTruthy();
+    expect(w.find('.vl-stall').exists()).toBe(true);
+    expect(w.find('.vl-num--bad').exists()).toBe(true);
+    // 运行中列不再混入失败/卡死徽章
+    expect(w.findAll('.vl-badge--bad')).toHaveLength(0);
   });
 });

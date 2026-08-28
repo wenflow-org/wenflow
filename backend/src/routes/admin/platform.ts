@@ -665,6 +665,9 @@ async function computeOverviewStats(): Promise<unknown> {
       await prisma.users.findMany({ where: REAL_USER_WHERE, select: { id: true } })
     ).map((u) => u.id);
     const realUserScope = { userId: { in: realUserIds } };
+    // 虚拟/测试账号 = 全部用户 − 真实用户（差集互补，口径严格无遗漏），供「虚拟调用」独立指标
+    const allUserIds = (await prisma.users.findMany({ select: { id: true } })).map((u) => u.id);
+    const virtualUserIds = allUserIds.filter((id) => !realUserIds.includes(id));
 
     // 并行查询所有统计数据
     const [
@@ -683,6 +686,7 @@ async function computeOverviewStats(): Promise<unknown> {
       totalAgentLogsAll,
       agentCallsToday,
       agentCallsTodayAll,
+      agentCallsTodayVirtual,
       agentSuccessToday,
       agentTimeoutToday,
       activeAgents24h,
@@ -693,7 +697,11 @@ async function computeOverviewStats(): Promise<unknown> {
       usageCalls7d,
       usageCalls7dAll,
       usageModels7d,
-      usageFailuresRows
+      usageFailuresRows,
+      agentLogs7dRows,
+      newUsers7dRows,
+      activeUsers7dRows,
+      agentSkillAgg7d
     ] = await Promise.all([
       // 总用户数（不含虚拟学习者）
       prisma.users.count({
@@ -818,6 +826,18 @@ async function computeOverviewStats(): Promise<unknown> {
             gte: today,
             lt: tomorrow,
           },
+        },
+      }),
+
+      // 今日虚拟/测试账号调用数（真实口径之外的分母，前端单独成卡与真实调用并列区分）
+      prisma.agent_call_logs.count({
+        where: {
+          ...businessExecutionWhere,
+          calledAt: {
+            gte: today,
+            lt: tomorrow,
+          },
+          userId: { in: virtualUserIds },
         },
       }),
 
@@ -948,6 +968,41 @@ async function computeOverviewStats(): Promise<unknown> {
         },
         orderBy: { calledAt: 'desc' },
         select: { errorCategory: true, errorCode: true, error: true },
+      }),
+
+      // G1 总览「近 7 天调用趋势」：行级拉取在端内按本地自然日聚合
+      // （SQLite date() 按 UTC 分组会与本地日错位，端内聚合保证「今日=00:00 起」口径一致）
+      prisma.agent_call_logs.findMany({
+        where: {
+          ...businessExecutionWhere,
+          ...realUserScope,
+          calledAt: { gte: new Date(Date.now() - 7 * 86400000) },
+        },
+        orderBy: { calledAt: 'asc' },
+        select: { calledAt: true, success: true },
+      }),
+
+      // G2 总览「用户增长」：近 7 天新增注册（真实用户）
+      prisma.users.findMany({
+        where: { ...REAL_USER_WHERE, createdAt: { gte: new Date(Date.now() - 7 * 86400000) } },
+        select: { createdAt: true },
+      }),
+
+      // G3 总览「用户增长」：近 7 天活跃用户（教学会话 startTime 按天去重）
+      prisma.teaching_sessions.findMany({
+        where: { users: REAL_USER_WHERE, startTime: { gte: new Date(Date.now() - 7 * 86400000) } },
+        select: { startTime: true, userId: true },
+      }),
+
+      // G4 总览「Top Skill」：近 7 天按 agentId×success 聚合
+      prisma.agent_call_logs.groupBy({
+        by: ['agentId', 'success'],
+        where: {
+          ...businessExecutionWhere,
+          ...realUserScope,
+          calledAt: { gte: new Date(Date.now() - 7 * 86400000) },
+        },
+        _count: true,
       })
     ]);
 
@@ -979,6 +1034,57 @@ async function computeOverviewStats(): Promise<unknown> {
 
     // 计算活跃用户数
     const activeUsersCount = activeUsersToday.length;
+
+    /* ===== G1-G4：总览新增模块（近 7 天趋势 / 用户增长 / Top Skill） ===== */
+    const dayKey = (d: Date | string) => {
+      const dt = new Date(d);
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const dd = String(dt.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    };
+    const trendMap = new Map<string, { calls: number; failed: number }>();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      trendMap.set(dayKey(d), { calls: 0, failed: 0 });
+    }
+    for (const row of agentLogs7dRows) {
+      const bucket = trendMap.get(dayKey(row.calledAt));
+      if (!bucket) continue;
+      bucket.calls += 1;
+      if (!row.success) bucket.failed += 1;
+    }
+    const trend7d = [...trendMap.entries()].map(([date, v]) => ({ date, ...v }));
+
+    const newUsersMap = new Map<string, number>();
+    for (const u of newUsers7dRows) {
+      const k = dayKey(u.createdAt);
+      newUsersMap.set(k, (newUsersMap.get(k) || 0) + 1);
+    }
+    const activeMap = new Map<string, Set<string>>();
+    for (const s of activeUsers7dRows) {
+      const k = dayKey(s.startTime);
+      if (!activeMap.has(k)) activeMap.set(k, new Set());
+      activeMap.get(k)!.add(s.userId);
+    }
+    const growth7d = [...trendMap.keys()].map((date) => ({
+      date,
+      newUsers: newUsersMap.get(date) || 0,
+      activeUsers: activeMap.get(date)?.size || 0,
+    }));
+
+    const skillMap = new Map<string, { calls: number; failed: number }>();
+    for (const row of agentSkillAgg7d) {
+      const cur = skillMap.get(row.agentId) || { calls: 0, failed: 0 };
+      cur.calls += row._count;
+      if (!row.success) cur.failed += row._count;
+      skillMap.set(row.agentId, cur);
+    }
+    const topSkills = [...skillMap.entries()]
+      .map(([agentId, v]) => ({ agentId, ...v }))
+      .sort((a, b) => b.calls - a.calls)
+      .slice(0, 5);
     
     // 计算活跃路径数
     const activePathsCount = activePaths.length;
@@ -1053,6 +1159,8 @@ async function computeOverviewStats(): Promise<unknown> {
           newToday: newUsersToday,
           activeToday: activeUsersCount,
           activeRate: totalUsers > 0 ? (activeUsersCount / totalUsers * 100).toFixed(1) : '0.0',
+          // G2/G3：近 7 天每日新增注册 / 活跃用户（总览「用户增长」卡）
+          growth7d,
         },
         learning: {
           totalPaths,
@@ -1082,6 +1190,11 @@ async function computeOverviewStats(): Promise<unknown> {
           // 全量副口径（含虚拟/测试账号）：前端标注「含虚拟/测试」
           totalCallsAll: agentStatsAll.total,
           todayCallsAll: agentCallsTodayAll,
+          // 虚拟/测试账号独立口径（前端「虚拟调用」卡，与真实调用并列区分）
+          todayCallsVirtual: agentCallsTodayVirtual,
+          // G1/G4：近 7 天每日调用趋势 / Top Skill 活跃榜（总览新增卡）
+          trend7d,
+          topSkills,
         },
         usage,
     };

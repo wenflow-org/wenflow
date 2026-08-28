@@ -3,8 +3,9 @@
     <!-- 状态条 -->
     <div class="mk-status" :class="capabilityRows.length ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ capabilityRows.length ? `${capabilityRows.length} 个外挂能力` : '暂无外挂能力' }}</strong>
+      <strong class="mk-status__title">{{ capabilityRows.length ? '外挂能力' : '暂无外挂能力' }}</strong>
       <span class="mk-status__sep"></span>
+      <span class="mk-status__meta">共 {{ capabilityRows.length }} 个</span>
       <span class="mk-status__meta">MCP {{ mcpCount }}</span>
       <span class="mk-status__meta">能力 Skill {{ capabilityCount }}</span>
       <span class="mk-status__meta">已接入 {{ readyCount }}</span>
@@ -34,7 +35,7 @@
               <th>超时</th>
               <th>配置</th>
               <th>最近调用</th>
-              <th class="mk-th--right">操作</th>
+              <th class="mk-col--actions-wide">操作</th>
             </tr>
           </thead>
           <tbody>

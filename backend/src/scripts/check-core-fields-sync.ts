@@ -28,6 +28,10 @@
  * - path-planning：estimatedHours / estimatedWeeks / cognitiveDesign（兼容镜像字段未路由）
  * - virtual-learner-scenario-designer：personaSeed / story（core 输出未路由，仅 consistencyNotes 进路由）
  *
+ * 2026-08-25 定稿：上述 5 条经逐项证据复核（见 ORPHAN_EXEMPT_FIELDS），均确认
+ * "由路由子字段 / 后续阶段 / 退役语义承载"，移入豁免清单不再报孤儿——保留登记而非删除
+ * core 声明（删除会对 core 哈希与编译产物产生连锁漂移）。
+ *
  * 用法：
  *   ts-node src/scripts/check-core-fields-sync.ts            # --report 全量人审（默认）
  *   ts-node src/scripts/check-core-fields-sync.ts --strict    # 同 exit 规则（缺项/类型不一致 > 0 → 1）
@@ -103,6 +107,56 @@ export const EXEMPT_ROOT_NAMES: ReadonlySet<string> = new Set(EXEMPT_PLATFORM_RO
 /** 孤儿判定过滤：exempt root 的 core 侧等价字段名 → 其承载 root（反向映射） */
 export const CORE_ALIAS_TO_EXEMPT_ROOT: ReadonlyMap<string, string> = new Map(
   EXEMPT_PLATFORM_ROOTS.flatMap((spec) => spec.coreAliases.map((alias) => [alias, spec.root] as const)),
+);
+
+/**
+ * 孤儿豁免清单（2026-08-25 定稿）：core 顶层字段、且确认无需独立路由的条目。
+ * 豁免原则（与 EXEMPT_PLATFORM_ROOTS 同步维护，每条含证据）：
+ * - 顶层声明为兼容镜像，正式数据由路由子字段承载（estimatedHours → milestones.estimatedHours）
+ * - 顶层声明为冗余镜像，正式数据走另一路由根（cognitiveDesign = cognitiveCore）
+ * - 输出经 handoff 由其他 agent 承接，本 skill 无需路由（personaSeed）
+ * - 语义已退役，由下游池承接（story → profileData.storyPool）
+ * 保留登记而非删除 core 声明：删除会对 core 哈希 / 编译产物 / DB ACTIVE 产生连锁漂移。
+ */
+export const ORPHAN_EXEMPT_FIELDS: ReadonlyArray<{ skillId: string; field: string; evidence: string }> = [
+  {
+    skillId: 'path-planning',
+    field: 'estimatedHours',
+    evidence: 'path.yaml:377 routing milestones.estimatedHours（顶层为兼容镜像，实际数据以子字段路由交付）',
+  },
+  {
+    skillId: 'path-planning',
+    field: 'estimatedWeeks',
+    evidence: '顶层冗余声明：周数承载于 milestones 计划与 normalizedInput.planningHints（无独立路由需求）',
+  },
+  {
+    skillId: 'path-planning',
+    field: 'cognitiveDesign',
+    evidence: 'prompts/core/path-planning.yaml:106 自注"兼容镜像 = cognitiveCore"；正式数据走 cognitiveCore.* 路由（path.yaml:341-351）',
+  },
+  {
+    skillId: 'virtual-learner-scenario-designer',
+    field: 'personaSeed',
+    evidence: 'simulation.yaml:102 personas:Seed 路由属 persona-designer；scenario-designer 输出经 handoff [simulation-agent] 承接',
+  },
+  {
+    skillId: 'virtual-learner-scenario-designer',
+    field: 'story',
+    evidence: 'simulation.yaml:35 stories 字段已退役（语义由 profileData.storyPool 承接），core 仍要求输出的故事切片不进数据面路由',
+  },
+];
+
+/** skillId → 已豁免字段名集合（孤儿判定过滤用） */
+export const ORPHAN_EXEMPT_BY_SKILL: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+  (() => {
+    const map = new Map<string, Set<string>>();
+    for (const spec of ORPHAN_EXEMPT_FIELDS) {
+      const set = map.get(spec.skillId) ?? new Set<string>();
+      set.add(spec.field);
+      map.set(spec.skillId, set);
+    }
+    return map;
+  })(),
 );
 
 export interface FieldsSyncMissingItem {
@@ -226,9 +280,11 @@ export function analyzeCoreFieldsSync(
 
     // 孤儿（warn）：core 字段未出现在任何产出 root，且未被豁免 root 的 core 侧等价名承载
     const orphan: FieldsSyncOrphanItem[] = [];
+    const orphanExempt = ORPHAN_EXEMPT_BY_SKILL.get(entry.skillId) ?? new Set<string>();
     for (const field of core.fields) {
       if (seenRoots.has(field.name)) continue;
       if (CORE_ALIAS_TO_EXEMPT_ROOT.has(field.name)) continue;
+      if (orphanExempt.has(field.name)) continue; // 豁免台账（ORPHAN_EXEMPT_FIELDS，2026-08-25 定稿）
       orphan.push({
         coreField: field.name,
         detail: `core 字段未出现在任何产出路由行首段；如需豁免请在平台保留根列表中登记（含别名）或补编排路由`,

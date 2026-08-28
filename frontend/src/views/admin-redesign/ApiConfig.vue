@@ -3,7 +3,7 @@
     <!-- 单行健康条 -->
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ statusTitle }}</strong>
+      <strong class="mk-status__title">模型与接入</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">密钥：{{ keySet ? '已配置' : '未配置' }}</span>
       <span class="mk-status__meta">模型：{{ models.length || '待拉取' }}</span>
@@ -22,7 +22,7 @@
         <h3 class="mk-card__title">接入与模型</h3>
         <span class="mk-badge" :class="connBadge.cls">{{ connBadge.text }}</span>
       </div>
-      <div class="mk-card">
+      <div class="ac-body">
         <div class="ac-row ac-row--2-1">
           <label class="mk-field mk-field--row">
             <span>服务地址</span>
@@ -597,12 +597,6 @@ watch(
 const models = computed(() => fetchedModels.value)
 const ready = computed(() => keySet.value && models.value.length > 0 && !!form.defaultModel)
 const routeCount = computed(() => [form.defaultModel, form.defaultReasoningModel, form.defaultEvaluationModel].filter(Boolean).length)
-const statusTitle = computed(() => {
-  if (ready.value) return '模型服务已就绪'
-  if (keySet.value && !models.value.length) return '密钥已配置 · 待拉取模型列表'
-  if (keySet.value) return '密钥已配置 · 待补齐默认模型'
-  return '待配置模型接入'
-})
 const statusTone = computed(() => {
   if (ready.value) return 'mk-status--ok'
   if (keySet.value) return 'mk-status--muted'
@@ -804,7 +798,8 @@ async function toggleRegistration() {
 </script>
 
 <style scoped>
-.mk-card { display: grid; gap: 14px; padding: 16px; }
+/* 内容区容器（对齐其他页面：mk-card__head + 内容区结构，不覆盖全局 .mk-card 盒模型） */
+.ac-body { display: grid; gap: 14px; padding: 14px 16px; }
 .ac-row { display: grid; gap: 12px; }
 .ac-row--2-1 { grid-template-columns: 1.6fr 1fr; }
 .ac-row--3 { grid-template-columns: repeat(3, 1fr); }
@@ -1112,7 +1107,7 @@ async function toggleRegistration() {
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .mk-card { gap: 16px; padding: 18px; }
+  .ac-body { gap: 16px; padding: 16px 18px; }
   .mk-field__label { font-size: 13.5px; }
   .ac-model { font-size: 13px; padding: 5px 12px; }
   .ac-run { padding: 10px 14px; }
@@ -1140,7 +1135,7 @@ async function toggleRegistration() {
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号继续放大 */
-  .mk-card { gap: 18px; padding: 22px; }
+  .ac-body { gap: 18px; padding: 20px 22px; }
   .mk-field__label { font-size: 15.5px; }
   .ac-model { font-size: 15px; padding: 6px 14px; border-radius: 9px; }
   .ac-run { padding: 12px 16px; }
@@ -1167,7 +1162,7 @@ async function toggleRegistration() {
 }
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：字号继续放大，与页面基线对齐 */
-  .mk-card { gap: 20px; padding: 26px; }
+  .ac-body { gap: 20px; padding: 24px 26px; }
   .mk-field__label { font-size: 18px; }
   .ac-model { font-size: 17.5px; padding: 7px 16px; }
   .ac-run { padding: 14px 18px; }

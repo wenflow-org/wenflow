@@ -1,33 +1,42 @@
 <template>
-  <div class="mk-page">
-    <!-- 状态条 -->
+  <div class="mk-page mk-page--fill">
+    <!-- 状态条（统计全部在概览卡；此处仅标题 + 总量 + 操作） -->
     <div class="mk-status" :class="stats && stats.active > 0 ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">Goal 会话</strong>
       <span class="mk-status__sep"></span>
-      <template v-if="isLive && stats">
-        <span class="mk-status__meta" title="口径：仅真实用户（不含虚拟/测试账号）；列表默认仅真实，切换「含虚拟·测试」后显示全量并灰标虚拟/测试行">总数 {{ stats.total }}（真实用户）</span>
-        <span class="mk-status__meta">进行中 {{ stats.active }}</span>
-        <span class="mk-status__meta">已完成 {{ stats.completed }}</span>
-        <span class="mk-status__meta">完成率 {{ stats.completionRate }}%</span>
-        <span
-          v-if="stats.total > 0"
-          class="gc-stack"
-          :title="`进行中 ${stats.active} · 已完成 ${stats.completed} · 其他 ${stackOther}`"
-        >
+      <span v-if="isLive && stats" class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ stats.total }} 条</span>
+      <button type="button" class="mk-status__action" :disabled="loading" @click="load">
+        {{ loading ? '刷新中…' : '刷新' }}
+      </button>
+    </div>
+
+
+    <!-- Goal 概览（共享组件 MkOverview；pre slot 承载状态堆叠条） -->
+    <MkOverview v-if="isLive && stats" :tone="gcDashTone" :title="gcDashTitle" :subline="gcDashSubline" window="近 30 天窗口" :has-data="gcDashHasData">
+      <template #pre>
+        <div v-if="stats.total > 0" class="gc-stack gc-dash__stack" :title="`进行中 ${stats.active} · 已完成 ${stats.completed} · 其他 ${stackOther}`">
           <span class="gc-stack__bar">
             <i class="gc-stack__seg gc-stack__seg--active" :style="{ width: stackPct('active') }"></i>
             <i class="gc-stack__seg gc-stack__seg--completed" :style="{ width: stackPct('completed') }"></i>
             <i class="gc-stack__seg gc-stack__seg--cancelled" :style="{ width: stackPct('other') }"></i>
           </span>
           <em>进行中 / 已完成 / 其他</em>
-        </span>
+        </div>
       </template>
-      <button type="button" class="mk-status__action" :disabled="loading" @click="load">
-        {{ loading ? '刷新中…' : '刷新' }}
-      </button>
-    </div>
-
+      <template #kpis>
+        <MkKpi label="总对话" :value="stats.total" hint="真实用户口径" :title="'窗口内目标对话总数'" />
+        <MkKpi label="进行中" :value="stats.active" :tone="stats.active > 0 ? 'ok' : ''" hint="正在收集目标" :title="'进行中（待澄清或澄清中）的对话数'" />
+        <MkKpi label="已完成" :value="stats.completed" hint="已产出学习目标" :title="'已完成澄清的对话数'" />
+        <MkKpi label="完成率" :value="`${stats.completionRate}%`" :hint="`待澄清 ${stackOther} 条`" :title="'完成率 = 已完成 / 总对话'" />
+      </template>
+      <template #detail>
+        <span>进行中 {{ stats.active }}</span>
+        <span>已完成 {{ stats.completed }}</span>
+        <span>待澄清 {{ stackOther }}</span>
+        <span>窗口：近 30 天</span>
+      </template>
+    </MkOverview>
 
     <!-- 非 live：无演示数据 -->
     <div v-if="!isLive" class="mk-empty">
@@ -37,10 +46,9 @@
 
     <template v-else>
       <!-- 列表 -->
-      <div class="mk-card">
+      <div class="mk-card mk-card--fill">
         <div class="mk-card__head">
           <div class="mk-filter">
-            <input v-model="keyword" class="mk-filter__input" placeholder="搜索用户 / 邮箱 / 目标摘要" />
             <div class="mk-pills">
               <button
                 v-for="p in statusPills"
@@ -53,9 +61,12 @@
                 {{ p.label }}
               </button>
             </div>
+            <input v-model="keyword" class="mk-filter__input" placeholder="搜索用户 / 邮箱 / 目标摘要" />
           </div>
-          <span class="mk-card__meta" :title="includeTest ? '全量口径：含虚拟学习者与测试/审计账号，行内带标记' : '默认视图：仅真实用户（状态条「总数」同口径）'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含虚拟/测试' : '仅真实' }}）<template v-if="stats && stats.total > rows.length"> · 仅显示最近 {{ rows.length }} 条</template></span>
-          <DataScopeToggle v-model="includeTest" />
+          <div class="mk-card__head-right">
+            <DataScopeToggle v-model="includeTest" />
+            <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含模拟' : '仅真实' }}）<template v-if="stats && stats.total > rows.length"> · 仅显示最近 {{ rows.length }} 条</template></span>
+          </div>
         </div>
 
         <MockSkeletonTable v-if="loading && !rows.length" :cols="6" />
@@ -69,12 +80,12 @@
           <thead>
             <tr>
               <th style="width:160px">用户</th>
-              <th>目标摘要</th>
+              <th style="width:35%">目标摘要</th>
               <th class="mk-col--badge">状态</th>
               <th style="width:160px">阶段</th>
               <th class="mk-col--badge">路径</th>
               <th class="mk-col--time-full">创建时间</th>
-              <th class="mk-col--actions-wide mk-th--right">操作</th>
+              <th class="mk-col--actions-wide">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -109,7 +120,7 @@
               </td>
               <td><span class="mk-cell-sub" :title="r.createdAt">{{ r.createdAt }}</span></td>
               <td>
-                <div class="mk-actions">
+                <div class="mk-actions mk-actions--left">
                   <button type="button" class="mk-icon-btn" title="链路" @click.stop="goTrace(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></button>
                   <button type="button" class="mk-icon-btn" title="控制台" @click.stop="goConsole(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 15h4"/></svg></button>
                   <button type="button" class="mk-icon-btn" :disabled="r.regenerating" :title="r.regenerating ? '生成中…' : '重建路径'" @click.stop="regenerate(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
@@ -127,8 +138,8 @@
         </div>
         <div v-else class="mk-empty">
           <span v-if="!loading" class="mk-empty__icon" aria-hidden="true">◌</span>
-          <strong>{{ loading ? '加载中…' : (keyword || statusFilter ? '当前筛选无匹配' : '暂无会话') }}</strong>
-          <span v-if="!loading">{{ keyword || statusFilter ? '放宽筛选条件试试。' : (includeTest ? '全量口径下没有会话。' : '默认仅展示真实用户会话；切换「含虚拟·测试」可查看虚拟学习者会话。') }}</span>
+          <strong>{{ loading ? '加载中…' : (keyword || statusFilter ? '当前筛选无匹配' : '暂无目标对话') }}</strong>
+          <span v-if="!loading">{{ keyword || statusFilter ? '放宽筛选条件试试。' : (includeTest ? '全量口径下暂无目标对话。' : '默认仅展示真实用户；切换「含模拟」可查看全部。') }}</span>
           <button v-if="isFiltered && !loading" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
         </div>
         <!-- 客户端分页（P2：76 行单页直排 → mk-pagination 统一分页器，15-30-50-100 条/页） -->
@@ -269,6 +280,8 @@ import { askConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
+import MkOverview from './MkOverview.vue'
+import MkKpi from './MkKpi.vue'
 import { adminGoalConversationsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
@@ -382,6 +395,23 @@ function confToneCls(pct: number): string {
 const stackOther = computed(() => {
   const t = stats.value?.total || 0
   return Math.max(0, t - (stats.value?.active || 0) - (stats.value?.completed || 0))
+})
+/* ===== Goal 概览（gc-dash：结论 + KPI，数据同 stats 接口） ===== */
+const gcDashHasData = computed(() => (stats.value?.total || 0) > 0)
+const gcDashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
+  if (!stats.value || stats.value.total === 0) return 'muted'
+  if ((stats.value.active ?? 0) > 0) return 'ok'
+  return 'ok'
+})
+const gcDashTitle = computed(() => {
+  if (!stats.value || stats.value.total === 0) return '暂无目标对话'
+  if ((stats.value.active ?? 0) > 0) return `${stats.value.active} 个目标澄清进行中`
+  return '目标对话已收束'
+})
+const gcDashSubline = computed(() => {
+  if (!stats.value || stats.value.total === 0) return '学习者发起目标对话后自动呈现'
+  if ((stats.value.active ?? 0) > 0) return '学习者正在澄清学习目标，完成后自动进入路径生成'
+  return `全部完成澄清或已收束 · 完成率 ${stats.value.completionRate}%`
 })
 function stackPct(seg: 'active' | 'completed' | 'other'): string {
   const t = stats.value?.total || 0
@@ -701,6 +731,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 概览卡样式由共享组件 MkOverview 承载；仅保留堆叠条（pre slot 内）与行样式 */
+.gc-dash__stack { padding: 0; }
 .gc-row { cursor: pointer; }
 /* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
 .gc-tags { display: flex; gap: 6px; margin-top: 2px; }

@@ -30,20 +30,33 @@
       <p v-else class="brief-actions__clear">没有需要立即处理的事项。</p>
     </header>
 
+    <!-- 系统健康摘要条（G 系列新增：13 项检查一瞥 + 跳转健康中心） -->
+    <button
+      type="button"
+      class="ov-health"
+      :class="`ov-health--${healthTone}`"
+      :title="'查看健康中心完整检查清单'"
+      @click="jump('health-center')"
+    >
+      <span class="ov-health__dot" aria-hidden="true"></span>
+      <strong class="ov-health__title">{{ healthText }}</strong>
+      <span class="ov-health__sub">系统健康 13 项检查 · 点击查看清单</span>
+      <span class="brief-card__go">健康中心 →</span>
+    </button>
+
     <div class="brief-grid">
-      <!-- KPI 行：今日窗口指标 -->
+      <!-- KPI 行：今日窗口指标（共享 MkKpi，clickable 跳转） -->
       <section class="brief-kpis">
-        <div
+        <MkKpi
           v-for="(k, i) in data.kpis"
           :key="k.label"
-          class="kpi kpi--clickable"
+          :label="k.label"
+          :value="k.value"
+          :hint="k.hint"
           :title="kpiTitle(i)"
+          clickable
           @click="jump(kpiTargets[i])"
-        >
-          <span class="kpi__label">{{ k.label }}</span>
-          <strong class="kpi__value">{{ k.value }}</strong>
-          <span class="kpi__hint">{{ k.hint }}</span>
-        </div>
+        />
       </section>
 
       <!-- 学习漏斗 -->
@@ -71,7 +84,10 @@
 
       <!-- 系统脉搏 -->
       <section class="brief-card">
-        <h4>24h 系统脉搏</h4>
+        <div class="brief-card__head">
+          <h4>24h 系统脉搏</h4>
+          <button type="button" class="brief-card__go" @click="jump('execution-logs')">执行日志 →</button>
+        </div>
         <div class="pulse">
           <div
             v-for="(b, i) in data.pulse"
@@ -83,9 +99,9 @@
           ></div>
         </div>
         <div class="pulse__meta">
-          <span title="窗口：近 24h（滚动窗口，非自然日）；仅真实用户，不含虚拟学习者与测试/审计账号">24h 调用 <strong>{{ data.totalCalls }}</strong></span>
-          <span title="窗口：近 24h，失败 + 超时合计（仅真实用户）">异常 <strong :class="{ 'is-bad': data.totalIssues > 0 }">{{ data.totalIssues }}</strong></span>
-          <span title="窗口：近 24h 调用高峰所在小时（仅真实用户）">高峰 {{ data.peak }}</span>
+          <span title="近 24 小时调用量（滚动窗口，仅真实用户）">24h 调用 <strong>{{ data.totalCalls }}</strong></span>
+          <span title="近 24 小时失败 + 超时合计（仅真实用户）">异常 <strong :class="{ 'is-bad': data.totalIssues > 0 }">{{ data.totalIssues }}</strong></span>
+          <span title="近 24 小时调用高峰时段（仅真实用户）">高峰 {{ data.peak }}</span>
         </div>
         <div class="pulse__axis">
           <i v-for="a in pulseAxis" :key="a">{{ a }}</i>
@@ -94,7 +110,10 @@
 
       <!-- 总结产出质量 -->
       <section class="brief-card">
-        <h4 title="窗口：最近 50 次课后总结样本（session-wrapup 抽样）">总结产出质量</h4>
+        <div class="brief-card__head">
+          <h4 title="最近 50 次课后总结的生成质量分布">总结产出质量</h4>
+          <button type="button" class="brief-card__go" @click="jump('teaching-sessions')">教学会话 →</button>
+        </div>
         <div v-if="data.wrapup.sampleSize > 0 && hasWrapupStats" class="wq">
           <div class="wq__row">
             <span class="wq__label">主题总结</span>
@@ -115,55 +134,153 @@
           </div>
           <p class="wq__note">样本 {{ data.wrapup.sampleSize }} 次</p>
         </div>
-        <p v-else-if="data.wrapup.sampleSize > 0" class="brief-card__note">已积累 {{ data.wrapup.sampleSize }} 次课后总结，统计解析中。</p>
-        <p v-else class="brief-card__note">还没有课后总结样本。</p>
+        <p v-else-if="data.wrapup.sampleSize > 0" class="brief-card__note">已积累 {{ data.wrapup.sampleSize }} 次课后总结，正在分析生成质量…</p>
+        <p v-else class="brief-card__note">暂无课后总结，教学会话结束后会自动生成。</p>
       </section>
 
-      <!-- LLM 用量与失败归因（跨 2 列填洞，避免 row3 col3 空白） -->
-      <section class="brief-card brief-card--wide2">
-        <h4 title="近 7 天（滚动窗口）">LLM 用量与失败归因</h4>
-        <div v-if="usageHasData" class="usage">
-          <div class="usage__big">
-            <strong>{{ fmtTokens(data.usage.totalTokens7d) }}</strong>
-            <span>近 7 天 token（仅真实用户，不含虚拟/测试）</span>
-            <em>{{ data.usage.calls7d }} 次调用 · 失败 {{ data.usage.failed7d }}（归因合计 {{ failuresSum7d }}）</em>
-          </div>
-          <p v-if="usageFullDiffers" class="usage__note">
-            全量口径（含虚拟/测试账号）：{{ fmtTokens(data.usage.totalTokens7dAll ?? 0) }} tokens · {{ data.usage.calls7dAll ?? 0 }} 次调用
-          </p>
-          <div v-if="data.usage.models7d.length" class="usage__section">
-            <span class="usage__label">模型用量</span>
-            <div class="usage__rows">
-              <div v-for="m in data.usage.models7d" :key="m.model" class="usage__row">
-                <span class="usage__row-name" :title="m.model">{{ m.model }}</span>
-                <div class="usage__bar-track">
-                  <i class="usage__bar" :style="{ width: modelPct(m.tokens) }"></i>
-                </div>
-                <span class="usage__row-num">{{ fmtTokens(m.tokens) }}</span>
+      <!-- 近 7 天调用趋势（G1：每日调用/失败，真实用户口径） -->
+      <section class="brief-card brief-card--trend">
+        <div class="trend__head">
+          <h4 title="近 7 天每日调用量（真实用户口径）">调用趋势 · 近 7 天</h4>
+          <button type="button" class="brief-card__go" @click="jump('execution-logs')">执行日志 →</button>
+        </div>
+        <div v-if="trend7dSum > 0" class="ov-trend">
+          <div class="ov-trend__rows">
+            <div v-for="d in data.trend7d" :key="d.date" class="ov-trend__day" :title="`${d.date}：${d.calls} 次调用 · 失败 ${d.failed}`">
+              <span class="ov-trend__num" :class="{ 'ov-trend__num--zero': !d.calls }">{{ d.calls || '·' }}</span>
+              <div class="ov-trend__bars">
+                <i class="ov-trend__bar" :style="{ height: barPct(d.calls, trend7dMax) }"></i>
+                <i v-if="d.failed" class="ov-trend__bar ov-trend__bar--fail" :style="{ height: barPct(d.failed, trend7dMax) }"></i>
               </div>
+              <span class="ov-trend__label">{{ dayLabel(d.date) }}</span>
             </div>
           </div>
-          <div v-if="data.usage.failures7d.length" class="usage__section">
-            <span class="usage__label">失败归因（调用级，与失败总数同口径）</span>
-            <ul class="usage__fails">
-              <li v-for="f in data.usage.failures7d" :key="f.category" class="usage__fail" :title="`查看 ${f.category} 类别失败日志（近 7 天）`" @click="jumpToFailures(f.category)">
-                <span class="usage__dot"></span>
-                <span>{{ f.category }}</span>
-                <strong>{{ f.count }}</strong>
-              </li>
-            </ul>
+          <p class="ov-trend__sum">合计 {{ trend7dSum }} 次调用 · 失败 {{ trend7dFail }} 次</p>
+        </div>
+        <p v-else class="brief-card__note">近 7 天暂无真实调用。</p>
+      </section>
+
+      <!-- Top Skill 活跃榜（G4：近 7 天调用最多的节点） -->
+      <section class="brief-card">
+        <div class="brief-card__head">
+          <h4 title="近 7 天调用最多的 Skill（真实用户口径）">Top Skill · 近 7 天</h4>
+          <button type="button" class="brief-card__go" @click="jump('skills')">Skill 运行 →</button>
+        </div>
+        <ul v-if="data.topSkills.length" class="ov-skills">
+          <li
+            v-for="(s, i) in data.topSkills"
+            :key="s.agentId"
+            class="ov-skill"
+            :title="`${s.agentId}：${s.calls} 次调用 · ${s.failed} 次失败 · 点击查看 Skill 运行`"
+            @click="jump('skills')"
+          >
+            <span class="ov-skill__rank">{{ i + 1 }}</span>
+            <span class="ov-skill__name mono" :title="s.agentId">{{ s.agentId }}</span>
+            <div class="ov-skill__track">
+              <i class="ov-skill__bar" :style="{ width: skillPct(s.calls) }"></i>
+            </div>
+            <span class="ov-skill__calls mono">{{ s.calls }}<template v-if="s.failed"> · <em class="ov-skill__fail">{{ s.failed }}</em></template></span>
+          </li>
+        </ul>
+        <p v-else class="brief-card__note">近 7 天暂无调用，无排行。</p>
+      </section>
+
+      <!-- 用户增长（G2/G3：每日新增注册 / 活跃用户） -->
+      <section class="brief-card brief-card--trend">
+        <div class="trend__head">
+          <h4 title="近 7 天每日新增注册 / 活跃用户（真实用户）">用户增长 · 近 7 天</h4>
+          <button type="button" class="brief-card__go" @click="jump('users')">用户管理 →</button>
+        </div>
+        <div v-if="growthSum > 0" class="ov-growth">
+          <div class="ov-growth__rows">
+            <div v-for="g in data.growth7d" :key="g.date" class="ov-growth__day" :title="`${g.date}：新增 ${g.newUsers} · 活跃 ${g.activeUsers}`">
+              <div class="ov-growth__bars">
+                <i class="ov-growth__bar ov-growth__bar--new" :style="{ height: barPct(g.newUsers, growth7dMax) }"></i>
+                <i class="ov-growth__bar ov-growth__bar--active" :style="{ height: barPct(g.activeUsers, growth7dMax) }"></i>
+              </div>
+              <span class="ov-growth__label">{{ dayLabel(g.date) }}</span>
+            </div>
+          </div>
+          <div class="ov-growth__legend">
+            <span><i class="ov-growth__dot ov-growth__dot--new"></i>新增</span>
+            <span><i class="ov-growth__dot ov-growth__dot--active"></i>活跃</span>
+            <span class="mk-card__meta">7 天新增 {{ growthNewSum }} · 活跃峰值 {{ growthPeakActive }}</span>
           </div>
         </div>
-        <p v-else class="brief-card__note">近 7 天还没有 LLM 调用记录。</p>
+        <p v-else class="brief-card__note">近 7 天暂无新增或活跃用户。</p>
+      </section>
+
+      <!-- LLM 用量与失败归因（跨 2 列；头部时间窗 + 数据即跳转入口） -->
+      <section class="brief-card brief-card--wide2">
+        <div class="brief-card__head brief-card__head--usage">
+          <h4 title="近 7 天（滚动窗口）">LLM 用量与失败归因</h4>
+          <span class="brief-card__meta">近 7 天</span>
+        </div>
+        <div v-if="usageHasData" class="usage">
+          <!-- Hero：Token 总量 + 调用/失败 双辅助指标（均为执行日志快捷入口） -->
+          <div class="usage__hero">
+            <button type="button" class="usage__stat usage__stat--big" title="近 7 天真实用户 Token 消耗 · 查看执行日志" @click="jump('execution-logs')">
+              <span class="usage__stat-label">Token 消耗</span>
+              <strong>{{ fmtTokens(data.usage.totalTokens7d) }}</strong>
+              <span class="usage__stat-sub">仅真实用户</span>
+            </button>
+            <i class="usage__hero-sep" aria-hidden="true"></i>
+            <button type="button" class="usage__stat" title="近 7 天调用次数 · 查看执行日志" @click="jump('execution-logs')">
+              <span class="usage__stat-label">调用</span>
+              <strong>{{ data.usage.calls7d }}</strong>
+              <span class="usage__stat-sub">次</span>
+            </button>
+            <button
+              type="button"
+              class="usage__stat"
+              :class="{ 'usage__stat--bad': data.usage.failed7d > 0 }"
+              title="近 7 天失败次数 · 查看失败执行日志"
+              @click="jump('execution-logs')"
+            >
+              <span class="usage__stat-label">失败</span>
+              <strong>{{ data.usage.failed7d }}</strong>
+              <span class="usage__stat-sub">次</span>
+            </button>
+            <p v-if="usageFullDiffers" class="usage__note">全量口径（含模拟账号）{{ fmtTokens(data.usage.totalTokens7dAll ?? 0) }} · {{ data.usage.calls7dAll ?? 0 }} 次</p>
+          </div>
+          <div class="usage__cols">
+            <div v-if="data.usage.models7d.length" class="usage__section">
+              <span class="usage__label">模型用量</span>
+              <div class="usage__rows">
+                <div v-for="m in data.usage.models7d" :key="m.model" class="usage__row">
+                  <span class="usage__row-name" :title="m.model">{{ m.model }}</span>
+                  <div class="usage__bar-track">
+                    <i class="usage__bar" :style="{ width: modelPct(m.tokens) }"></i>
+                  </div>
+                  <span class="usage__row-num">{{ fmtTokens(m.tokens) }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-if="data.usage.failures7d.length" class="usage__section">
+              <span class="usage__label">失败原因分布</span>
+              <ul class="usage__fails">
+                <li v-for="f in data.usage.failures7d" :key="f.category" class="usage__fail" :title="`查看 ${f.category} 类别失败日志（近 7 天）`" @click="jumpToFailures(f.category)">
+                  <span class="usage__dot"></span>
+                  <span>{{ f.category }}</span>
+                  <strong>{{ f.count }}</strong>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <p v-else class="brief-card__note">近 7 天暂无 LLM 调用记录。</p>
       </section>
 
       <!-- 近 7 天目标对话趋势 -->
       <section class="brief-card brief-card--trend">
         <div class="trend__head">
           <h4>新增目标对话 · 近 7 天</h4>
-          <span class="trend__legend">
-            <i class="trend__dot trend__dot--new"></i>当日新增
-            <i class="trend__dot trend__dot--done"></i>当日完成
+          <span class="trend__head-right">
+            <span class="trend__legend">
+              <i class="trend__dot trend__dot--new"></i>当日新增
+              <i class="trend__dot trend__dot--done"></i>当日完成
+            </span>
+            <button type="button" class="brief-card__go" @click="jump('goal-conversations')">目标对话 →</button>
           </span>
         </div>
         <div v-if="data.trend.length" class="trend">
@@ -172,7 +289,7 @@
             :key="d.date"
             class="trend__col"
             :class="{ 'trend__col--today': isToday(d.date) }"
-            :title="`${d.date} · 新增 ${d.total} · 完成 ${d.completed} · 新增按创建日归集，完成按完成时间归集`"
+            :title="`${d.date}：新增 ${d.total} 个对话，完成 ${d.completed} 个`"
           >
             <span class="trend__num" :class="{ 'trend__num--zero': !d.total }">{{ d.total || '·' }}</span>
             <div class="trend__bars">
@@ -184,9 +301,9 @@
             </span>
           </div>
         </div>
-        <p v-else class="brief-card__note">近 7 天还没有目标对话。</p>
+        <p v-else class="brief-card__note">近 7 天暂无新增目标对话。</p>
         <p v-if="data.trend.length" class="trend__sum">
-          合计新增 {{ trendSum.total }} · 完成 {{ trendSum.completed }}（按完成时间归集，与新增非同一批对话）
+          合计新增 {{ trendSum.total }} · 完成 {{ trendSum.completed }}
         </p>
       </section>
 
@@ -196,7 +313,7 @@
           <h4>动态 · 近 24h<span v-if="lastUpdated" class="feed-fresh">更新于 {{ lastUpdated }}</span></h4>
           <label class="feed-filter">
             <input type="checkbox" v-model="hideTestAccounts" />
-            <span>隐藏虚拟/测试账号</span>
+            <span>隐藏模拟账号</span>
           </label>
         </div>
         <template v-if="anomalyFeed.length">
@@ -239,8 +356,8 @@
             </div>
           </li>
         </ul>
-        <p v-else-if="data.feed.length" class="feed__empty">近期动态均为虚拟/测试账号，取消勾选即可查看。</p>
-        <p v-else class="feed__empty">近 24h 还没有动态</p>
+        <p v-else-if="data.feed.length" class="feed__empty">近期动态均为模拟账号，取消「隐藏模拟账号」即可查看。</p>
+        <p v-else class="feed__empty">近 24h 暂无动态。</p>
       </section>
     </div>
   </div>
@@ -257,7 +374,9 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { overviewHealth, investigateAgent, intent, dataSource } from './store';
 import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading } from './live';
+import { adminHealthCenterApi } from '@/api/adminApi';
 import { TERMS } from './terms';
+import MkKpi from './MkKpi.vue';
 import { useSafePolling } from '@/composables/useSafePolling';
 
 type Tone = 'ok' | 'warn' | 'bad' | 'muted';
@@ -288,6 +407,12 @@ interface BriefData {
     totalTokens7dAll?: number;
   };
   trend: { date: string; total: number; completed: number }[];
+  /** G1：近 7 天每日调用/失败趋势 */
+  trend7d: { date: string; calls: number; failed: number }[];
+  /** G4：近 7 天 Top Skill 活跃榜 */
+  topSkills: { agentId: string; calls: number; failed: number }[];
+  /** G2/G3：近 7 天每日新增注册 / 活跃用户 */
+  growth7d: { date: string; newUsers: number; activeUsers: number }[];
   funnel: { label: string; value: string; idle: boolean }[];
   rates: string[];
   pulse: { calls: number; issue: number; label?: string }[];
@@ -330,6 +455,32 @@ const demoUsage: BriefData['usage'] = {
     { category: 'rate_limit', count: 11 }
   ]
 };
+/* G 系列 demo 数据：7 天调用趋势 / Top Skill / 用户增长 */
+const demoTrend7d: BriefData['trend7d'] = [
+  { date: '2026-07-27', calls: 180, failed: 12 },
+  { date: '2026-07-28', calls: 240, failed: 18 },
+  { date: '2026-07-29', calls: 210, failed: 9 },
+  { date: '2026-07-30', calls: 320, failed: 21 },
+  { date: '2026-07-31', calls: 280, failed: 14 },
+  { date: '2026-08-01', calls: 350, failed: 16 },
+  { date: '2026-08-02', calls: 273, failed: 8 }
+];
+const demoTopSkills: BriefData['topSkills'] = [
+  { agentId: 'teaching-agent', calls: 412, failed: 21 },
+  { agentId: 'goal-clarifier', calls: 268, failed: 9 },
+  { agentId: 'path-designer', calls: 194, failed: 14 },
+  { agentId: 'course-design', calls: 152, failed: 6 },
+  { agentId: 'adaptive-guidance', calls: 98, failed: 3 }
+];
+const demoGrowth: BriefData['growth7d'] = [
+  { date: '2026-07-27', newUsers: 2, activeUsers: 9 },
+  { date: '2026-07-28', newUsers: 1, activeUsers: 11 },
+  { date: '2026-07-29', newUsers: 3, activeUsers: 10 },
+  { date: '2026-07-30', newUsers: 0, activeUsers: 14 },
+  { date: '2026-07-31', newUsers: 2, activeUsers: 12 },
+  { date: '2026-08-01', newUsers: 1, activeUsers: 16 },
+  { date: '2026-08-02', newUsers: 4, activeUsers: 18 }
+];
 const demoTrend: BriefData['trend'] = [
   { date: '07-27', total: 2, completed: 1 },
   { date: '07-28', total: 4, completed: 2 },
@@ -362,6 +513,9 @@ const datasets: BriefData = {
   },
   usage: demoUsage,
   trend: demoTrend,
+  trend7d: demoTrend7d,
+  topSkills: demoTopSkills,
+  growth7d: demoGrowth,
   funnel: [
     { label: '用户', value: '128', idle: false },
     { label: '目标对话', value: '86', idle: false },
@@ -408,6 +562,47 @@ const pulseAxis = computed<string[]>(() => {
   return ['00', '06', '12', '18', '23'];
 });
 const pct = (n: number, total: number) => `${total > 0 ? Math.round((n / total) * 100) : 0}%`;
+/* ===== G 系列新增：7 天趋势 / Top Skill / 用户增长 图表 helpers ===== */
+const barPct = (v: number, max: number) => `${v > 0 ? Math.max(Math.round((v / max) * 100), 6) : 3}%`;
+const dayLabel = (date: string) => {
+  const [, m, d] = date.split('-').map(Number);
+  return `${m}/${d}`;
+};
+const trend7dMax = computed(() => Math.max(1, ...(data.value?.trend7d.map((d) => d.calls) || [])));
+const trend7dSum = computed(() => (data.value?.trend7d || []).reduce((a, d) => a + d.calls, 0));
+const trend7dFail = computed(() => (data.value?.trend7d || []).reduce((a, d) => a + d.failed, 0));
+const growth7dMax = computed(() => Math.max(1, ...(data.value?.growth7d || []).flatMap((g) => [g.newUsers, g.activeUsers])));
+const growthSum = computed(() => (data.value?.growth7d || []).reduce((a, g) => a + g.newUsers + g.activeUsers, 0));
+const growthNewSum = computed(() => (data.value?.growth7d || []).reduce((a, g) => a + g.newUsers, 0));
+const growthPeakActive = computed(() => Math.max(0, ...(data.value?.growth7d || []).map((g) => g.activeUsers)));
+const skillMax = computed(() => Math.max(1, ...(data.value?.topSkills.map((s) => s.calls) || [])));
+const skillPct = (calls: number) => `${calls > 0 ? Math.max(Math.round((calls / skillMax.value) * 100), 6) : 0}%`;
+
+/* 系统健康摘要条：拉统一健康清单（60s 缓存），只取 warn/error 计数 */
+const healthCheck = ref<{ total: number; warn: number; error: number } | null>(null);
+const healthTone = computed<Tone>(() =>
+  !healthCheck.value ? 'muted' : healthCheck.value.error > 0 ? 'bad' : healthCheck.value.warn > 0 ? 'warn' : 'ok'
+);
+const healthText = computed(() => {
+  if (!healthCheck.value) return '健康检查加载中'
+  if (healthCheck.value.error > 0) return `${healthCheck.value.error} 项异常`
+  if (healthCheck.value.warn > 0) return `${healthCheck.value.warn} 项需关注`
+  return `${healthCheck.value.total} 项检查全部正常`
+});
+async function loadHealth() {
+  try {
+    const res = await adminHealthCenterApi.get()
+    const items = res.data?.data?.items ?? []
+    if (!items.length) return
+    healthCheck.value = {
+      total: items.length,
+      warn: items.filter((i) => i.severity === 'warn').length,
+      error: items.filter((i) => i.severity === 'error').length,
+    }
+  } catch {
+    healthCheck.value = null
+  }
+}
 const hasWrapupStats = computed(() => {
   const w = data.value?.wrapup;
   if (!w) return false;
@@ -465,20 +660,20 @@ async function retryOverview() {
 // 动态筛选：默认隐藏虚拟学习者与测试/审计账号（后端 excludeTest 已按此过滤并重新拉取），
 // 前端正则仅为 demo 模式兜底
 const hideTestAccounts = overviewHideTest
+// KPI 目标：今日调用 / 今日成功率 / 用户活跃 / 系统活跃（纯真实口径 4 卡；虚拟仿真走「虚拟学习者」页）
 const kpiTargets = ['execution-logs', 'execution-logs', 'users', 'goal-conversations']
 const funnelTargets = ['users', 'goal-conversations', 'goal-conversations', 'learner-center', 'learner-center']
 
-/* 窗口口径标注：KPI 行统一「今日」自然日窗口，个别指标另有细分口径，tooltip 注明消除歧义 */
-const KPI_WINDOWS: string[] = [
-  '窗口：今日（自然日 00:00 起）',
-  '窗口：今日（自然日 00:00 起）',
-  '窗口：今日新增注册 + 今日有学习会话的用户（真实账号口径）',
-  '窗口：今日进行中的目标澄清对话 + 近 24h 有调用的 Skill',
+const KPI_HINTS: string[] = [
+  '今日自然日（00:00 起）',
+  '今日真实调用成功率',
+  '今日新增注册 + 今日有学习会话的用户',
+  '今日进行中的目标对话 + 近 24h 有调用的 Skill',
 ]
 function kpiTitle(i: number): string {
-  const windowText = KPI_WINDOWS[i] || ''
-  const target = kpiTargets[i] === 'execution-logs' ? '执行日志' : kpiTargets[i] === 'users' ? '用户' : kpiTargets[i] === 'goal-conversations' ? '目标对话' : 'Skill 目录'
-  return [windowText, `点击跳转${target}`].filter(Boolean).join(' · ')
+  const hint = KPI_HINTS[i] || ''
+  const target = kpiTargets[i] === 'execution-logs' ? '执行日志' : kpiTargets[i] === 'users' ? '用户管理' : kpiTargets[i] === 'goal-conversations' ? '目标对话' : 'Skill 目录'
+  return [hint, `点击查看${target}`].filter(Boolean).join(' · ')
 }
 function jump(scene: string) {
   if (!scene) return
@@ -530,6 +725,7 @@ const { start: startAutoRefresh, stop: stopAutoRefresh } = useSafePolling(
   }
 )
 onMounted(() => {
+  void loadHealth()
   if (dataSource.value !== 'live') return
   lastUpdated.value = new Date().toTimeString().slice(0, 5)
   startAutoRefresh()
@@ -586,8 +782,8 @@ watch(liveLoading, (loading) => {
 /* 简报头 */
 .brief-head {
   display: grid;
-  gap: 14px;
-  padding: 18px 20px;
+  gap: 12px;
+  padding: 16px 18px;
   border-radius: 12px;
   border: 1px solid var(--mk-line);
   background: #fff;
@@ -601,8 +797,8 @@ watch(liveLoading, (loading) => {
   align-items: center;
   gap: 14px;
 }
-.brief-head__verdict h3 { margin: 0; font-size: 18px; }
-.brief-head__verdict p { margin: 3px 0 0; color: var(--mk-muted); font-size: 13px; }
+.brief-head__verdict h3 { margin: 0; font-size: 16px; font-weight: 750; }
+.brief-head__verdict p { margin: 3px 0 0; color: var(--mk-muted); font-size: 12.5px; }
 
 .brief-score-wrap {
   display: flex;
@@ -696,11 +892,11 @@ watch(liveLoading, (loading) => {
   font-size: 13px;
 }
 
-/* 三列 + KPI 行（KPI 全宽，下方三卡一行，动态全宽） */
+/* 总览栅格：三等宽列（等宽才能形成稳定节奏；LLM 宽卡/动态全宽按需跨列） */
 .brief-grid {
   display: grid;
-  grid-template-columns: 1.1fr 1.2fr 1fr;
-  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
   align-items: stretch;
 }
 .brief-kpis {
@@ -711,25 +907,6 @@ watch(liveLoading, (loading) => {
 }
 /* 跨 2 列：LLM 用量卡填 row3 空洞 */
 .brief-card--wide2 { grid-column: span 2; }
-.kpi {
-  display: grid;
-  gap: 2px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--mk-line);
-  background: #fff;
-}
-.kpi__label { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: var(--mk-faint); }
-.kpi__value {
-  font-size: 22px;
-  font-weight: 800;
-  font-family: var(--mk-mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--mk-ink);
-}
-.kpi__hint { font-size: 11px; color: var(--mk-faint); }
-.kpi--clickable { cursor: pointer; transition: border-color 0.12s ease, transform 0.12s ease; }
-.kpi--clickable:hover { border-color: rgba(44, 99, 208, 0.5); transform: translateY(-1px); }
 .brief-card {
   padding: 16px 18px;
   border-radius: 12px;
@@ -748,10 +925,17 @@ watch(liveLoading, (loading) => {
   color: var(--mk-faint);
 }
 .brief-card__note { margin: 0; font-size: 12.5px; color: var(--mk-muted); }
-/* 短卡（总结/用量）：等高拉伸时把末尾信息贴底，避免"卡片内空一大块" */
+/* 短卡（总结/用量）：等高拉伸时把内容贴底，避免"卡片内空一大块" */
 .brief-card > .wq:last-child,
-.brief-card > .usage:last-child,
-.brief-card > .brief-card__note:last-child { margin-top: auto; }
+.brief-card > .usage:last-child { margin-top: auto; }
+/* 空态说明：卡内垂直居中（等高栅格中避免贴顶 + 大留白） */
+.brief-card > .brief-card__note:last-child {
+  margin-top: auto;
+  margin-bottom: auto;
+  text-align: center;
+  line-height: 1.7;
+  padding: 8px 0;
+}
 .brief-card--feed-full { grid-column: 1 / -1; }
 .brief-card__head--feed {
   display: flex;
@@ -786,19 +970,192 @@ watch(liveLoading, (loading) => {
 .wq__nums { grid-column: 2; font-size: 11.5px; color: var(--mk-faint); }
 .wq__note { margin: 0; font-size: 12px; color: var(--mk-muted); line-height: 1.6; }
 
+/* 卡片头部统一：标题左 + 快捷跳转/时间窗 右（见板 = 状态一瞥 + 一键直达） */
+.brief-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.brief-card__meta {
+  font-size: 11px;
+  color: var(--mk-faint);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.brief-card__go {
+  border: 0;
+  background: transparent;
+  color: var(--mk-blue);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 6px;
+  margin-right: -6px;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0.75;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+.brief-card__go:hover { opacity: 1; background: #eff6ff; }
+
+/* 系统健康摘要条（简报头下全宽按钮条：状态点 + 结论 + 跳转） */
+.ov-health {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color 0.12s ease;
+}
+.ov-health:hover { border-color: rgba(44, 99, 208, 0.5); }
+.ov-health__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-faint); flex-shrink: 0; }
+.ov-health--ok .ov-health__dot { background: var(--mk-green); box-shadow: 0 0 0 3px rgba(49, 177, 111, 0.12); }
+.ov-health--warn .ov-health__dot { background: var(--mk-amber); }
+.ov-health--bad .ov-health__dot { background: var(--mk-red); box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12); }
+.ov-health__title { font-size: 13px; font-weight: 800; color: var(--mk-ink); }
+.ov-health__sub { flex: 1; font-size: 11.5px; color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ov-health .brief-card__go { margin-right: 0; }
+
+/* 近 7 天调用趋势（每日调用柱 + 失败柱同轴） */
+.ov-trend { display: grid; gap: 8px; flex: 1; min-height: 0; align-content: end; }
+.ov-trend__rows {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+.ov-trend__day { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; min-height: 0; }
+.ov-trend__num { font-size: 11px; font-weight: 700; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
+.ov-trend__num--zero { color: var(--mk-faint); }
+.ov-trend__bars { display: flex; align-items: flex-end; gap: 2px; height: 68px; flex: 1; min-height: 0; }
+.ov-trend__bar { width: 10px; border-radius: 3px 3px 1px 1px; background: linear-gradient(180deg, #6aa0ff, #3d7cff); }
+.ov-trend__bar--fail { background: linear-gradient(180deg, #fbbf24, #d97706); }
+.ov-trend__label { font-size: 10.5px; color: var(--mk-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ov-trend__sum { margin: 0; font-size: 11.5px; color: var(--mk-muted); }
+
+/* Top Skill 排行 */
+.ov-skills { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.ov-skill {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 64px auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.ov-skill:hover { background: #f5f8ff; }
+.ov-skill__rank {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: #eef2fa;
+  color: var(--mk-faint);
+  font-size: 10.5px;
+  font-weight: 800;
+}
+.ov-skill:nth-child(1) .ov-skill__rank { background: #dbeafe; color: var(--mk-accent-deep, #1f57cc); }
+.ov-skill__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--mk-ink); }
+.ov-skill__track { height: 6px; border-radius: 99px; background: #f0f3f9; overflow: hidden; }
+.ov-skill__bar { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #6aa0ff, #3d7cff); }
+.ov-skill__calls { font-size: 12px; color: var(--mk-muted); text-align: right; white-space: nowrap; }
+.ov-skill__fail { font-style: normal; color: var(--mk-amber); font-weight: 700; }
+
+/* 用户增长（新增/活跃双柱） */
+.ov-growth { display: grid; gap: 8px; flex: 1; min-height: 0; align-content: end; }
+.ov-growth__rows {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+.ov-growth__day { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; min-height: 0; }
+.ov-growth__bars { display: flex; align-items: flex-end; gap: 3px; height: 68px; }
+.ov-growth__bar { width: 8px; border-radius: 3px 3px 1px 1px; }
+.ov-growth__bar--new { background: linear-gradient(180deg, #6aa0ff, #3d7cff); }
+.ov-growth__bar--active { background: linear-gradient(180deg, #34d399, #15803d); }
+.ov-growth__label { font-size: 10.5px; color: var(--mk-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ov-growth__legend { display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--mk-muted); }
+.ov-growth__legend .mk-card__meta { margin-left: auto; }
+.ov-growth__dot { width: 7px; height: 7px; border-radius: 2px; display: inline-block; margin-right: 4px; }
+.ov-growth__dot--new { background: #3d7cff; }
+.ov-growth__dot--active { background: #15803d; }
+
 /* LLM 用量与失败归因 */
 .usage { display: grid; gap: 14px; }
-.usage__big { display: grid; gap: 2px; }
-.usage__big strong {
-  font-size: 26px;
+/* Hero：Token 总量主角 + 调用/失败 辅指标（横向一排，均可点击跳执行日志） */
+.usage__hero {
+  display: flex;
+  align-items: stretch;
+  gap: 18px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f7faff, #fbfcff);
+  border: 1px solid #e8edf9;
+  position: relative;
+}
+.usage__stat {
+  display: grid;
+  gap: 1px;
+  justify-items: start;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 8px;
+}
+.usage__stat:hover { background: rgba(44, 99, 208, 0.06); }
+.usage__stat-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--mk-faint);
+}
+.usage__stat strong {
+  font-size: 20px;
   font-weight: 800;
-  font-family: var(--mk-mono);
   font-variant-numeric: tabular-nums;
   color: var(--mk-ink);
+  line-height: 1.2;
 }
-.usage__big span { font-size: 11.5px; color: var(--mk-faint); font-weight: 600; letter-spacing: 0.04em; }
-.usage__big em { font-style: normal; font-size: 12.5px; color: var(--mk-muted); }
-.usage__note { margin: 2px 0 0; font-size: 11.5px; color: var(--mk-faint); font-weight: 600; letter-spacing: 0.03em; }
+.usage__stat--big strong { font-size: 26px; }
+.usage__stat--bad strong { color: var(--mk-red); }
+.usage__stat-sub { font-size: 10.5px; color: var(--mk-faint); }
+.usage__hero-sep { width: 1px; align-self: center; height: 34px; background: #e6ebf4; flex-shrink: 0; }
+.usage__note {
+  position: absolute;
+  right: 14px;
+  bottom: 8px;
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--mk-faint);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  max-width: 46%;
+  text-align: right;
+  line-height: 1.5;
+}
+/* 模型用量 / 失败原因 横向两栏（宽卡内避免纵向长串） */
+.usage__cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
 .usage__section { display: grid; gap: 6px; }
 .usage__label { font-size: 11px; font-weight: 700; color: var(--mk-faint); letter-spacing: 0.04em; }
 .usage__rows { display: grid; gap: 5px; }
@@ -818,6 +1175,7 @@ watch(liveLoading, (loading) => {
 .brief-card--trend { display: flex; flex-direction: column; }
 .brief-card--trend .trend { flex: 1; min-height: 0; }
 .trend__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.trend__head-right { display: inline-flex; align-items: center; gap: 12px; }
 .trend__legend { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; color: var(--mk-faint); white-space: nowrap; }
 .trend__dot { width: 7px; height: 7px; border-radius: 2px; display: inline-block; margin-right: 3px; }
 .trend__dot--new { background: linear-gradient(180deg, #6aa0ff, #3d7cff); }
@@ -854,7 +1212,8 @@ watch(liveLoading, (loading) => {
 }
 .funnel__node span { font-size: 11.5px; color: var(--mk-muted); font-weight: 600; }
 .funnel__node strong { font-size: 19px; font-variant-numeric: tabular-nums; }
-.funnel__node--idle { border-style: dashed; background: transparent; }
+/* 空置漏斗节点：浅实线 + 淡底（虚线易被误读为加载/禁用态） */
+.funnel__node--idle { border-style: solid; border-color: #edf0f5; background: #f7f9fc; }
 .funnel__node--idle strong { color: var(--mk-faint); }
 .funnel__node--clickable { cursor: pointer; transition: border-color 0.12s ease; }
 .funnel__node--clickable:hover { border-color: rgba(44, 99, 208, 0.5); }
@@ -875,7 +1234,8 @@ watch(liveLoading, (loading) => {
   background: linear-gradient(180deg, #6aa0ff, #3d7cff);
   opacity: 0.9;
 }
-.pulse__bar--issue { background: linear-gradient(180deg, #f87171, #dc2626); opacity: 1; }
+/* 数据异常柱：琥珀色（与"告警红"语义分离——红=需处理，琥珀=数据观察值） */
+.pulse__bar--issue { background: linear-gradient(180deg, #fbbf24, #d97706); opacity: 1; }
 .pulse__bar--idle { background: #e6ebf4; }
 .pulse__meta {
   display: flex;
@@ -884,7 +1244,8 @@ watch(liveLoading, (loading) => {
   color: var(--mk-muted);
 }
 .pulse__meta strong { color: var(--mk-ink); font-variant-numeric: tabular-nums; }
-.pulse__meta strong.is-bad { color: var(--mk-red); }
+/* 异常计数：琥珀色（与异常柱同语义，区别于"失败/需处理"的告警红） */
+.pulse__meta strong.is-bad { color: var(--mk-amber); }
 .pulse__axis {
   display: flex;
   justify-content: space-between;
@@ -970,10 +1331,11 @@ watch(liveLoading, (loading) => {
 .feed__toggle:hover { border-color: rgba(44, 99, 208, 0.45); color: var(--mk-blue); background: #f5f8ff; }
 
 @media (max-width: 1280px) and (min-width: 1001px) {
-  /* 中等宽度：三列过渡为两列，KPI 与动态卡占整行 */
+  /* 中等宽度：三列过渡为两列，KPI 2+2 换行，动态卡占整行 */
   .brief-grid { grid-template-columns: 1fr 1fr; }
   .brief-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .brief-card--feed { grid-column: 1 / -1; }
+  .usage__cols { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 1000px) {
@@ -981,11 +1343,8 @@ watch(liveLoading, (loading) => {
   .brief-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* 4K：KPI 字号放大（容器已随全站 mk-page 全宽，不再做 max-width 封顶） */
+/* 4K：卡片字号放大（KPI 卡已组件化为 MkKpi，4K 档在组件内；容器随全站 mk-page 全宽） */
 @media (min-width: 2000px) {
-  .kpi__label { font-size: 13px; }
-  .kpi__value { font-size: 26px; }
-  .kpi__hint { font-size: 13px; }
   .brief-card { padding: 20px 24px; }
   .brief-card h4 { font-size: 13.5px; }
   .brief-score { width: 64px; height: 64px; }
@@ -1022,9 +1381,7 @@ watch(liveLoading, (loading) => {
   .pulse__axis { font-size: 11px; }
 }
 @media (min-width: 2800px) {
-  .kpi__label { font-size: 15.5px; }
-  .kpi__value { font-size: 30px; }
-  .kpi__hint { font-size: 15.5px; }
+  .funnel__node span { font-size: 15.5px; }
   .brief-card { padding: 24px 30px; }
   .brief-card h4 { font-size: 16px; }
   .brief-score { width: 76px; height: 76px; }
@@ -1060,11 +1417,8 @@ watch(liveLoading, (loading) => {
   .pulse__meta { font-size: 16.5px; }
   .pulse__axis { font-size: 12.5px; }
 }
-/* 3600+（zoom 1.3 档）：KPI/卡片延续 2800 放大节奏（约 1.17×），并补齐 2000/2800 未覆盖的卡片内文字（feed/pulse/trend/wq/usage/funnel） */
+/* 3600+（zoom 1.3 档）：卡片延续 2800 放大节奏（约 1.17×），补齐 2000/2800 未覆盖的卡片内文字（feed/pulse/trend/wq/usage/funnel） */
 @media (min-width: 3600px) {
-  .kpi__label { font-size: 18px; }
-  .kpi__value { font-size: 35px; }
-  .kpi__hint { font-size: 18px; }
   .brief-card { padding: 28px 36px; }
   .brief-card h4 { font-size: 19px; }
   .brief-card__note { font-size: 14.5px; }

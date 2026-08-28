@@ -1,41 +1,54 @@
 <template>
-  <div class="mk-page">
+  <div class="mk-page mk-page--fill">
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">{{ statusTitle }}</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">{{ cards.length }} 个 Skill</span>
-      <span class="mk-status__meta">有调用 {{ activeCount }}</span>
-      <span class="mk-status__meta">失败节点 {{ errorCount }}</span>
-      <div class="mk-pills" style="margin-left:auto">
-        <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" @click="onlyAttention = false">全部</button>
-        <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" @click="onlyAttention = true">仅看需关注</button>
-      </div>
-      <label v-if="isLive" class="sk-range-wrap" title="统计时间窗口（默认近 7 天）">
-        <span class="sk-range-label">统计窗口</span>
-        <select v-model="statsRange" class="sk-range">
-          <option value="7d">近 7 天</option>
-          <option value="24h">近 24 小时</option>
-          <option value="30d">近 30 天</option>
-          <option value="all">全部</option>
-        </select>
-      </label>
-      <div class="mk-pills">
-        <button type="button" class="mk-pill" :class="{ 'mk-pill--active': view === 'list' }" @click="view = 'list'">列表</button>
-        <button type="button" class="mk-pill" :class="{ 'mk-pill--active': view === 'grid' }" @click="view = 'grid'">网格</button>
-      </div>
+      <span class="mk-status__meta">共 {{ cards.length }} 个 Skill</span>
     </div>
 
-    <div class="mk-card">
+    <!-- Skill 运营概览（共享组件 MkOverview） -->
+    <MkOverview :tone="skDashTone" :title="skDashTitle" :subline="skDashSubline" :window="rangeLabel" :has-data="skDashHasData">
+      <template #kpis>
+        <MkKpi label="成功率" :value="overallRate == null ? '—' : `${overallRate}%`" :tone="rateNumTone" :hint="`成功 ${okCalls} / ${totalCalls}`" :title="'窗口内成功率 = 成功调用 / 总调用'" />
+        <MkKpi label="有调用" :value="activeCount" :hint="`共 ${cards.length} 个 Skill`" :title="'窗口内有调用的 Skill 数'" />
+        <MkKpi label="失败节点" :value="errorCount" :tone="errorCount > 0 ? 'bad' : ''" :hint="`空闲节点 ${idleCount}`" :title="'窗口内出现失败调用的节点数'" />
+        <MkKpi label="平均耗时" :value="avgLatencyText" :hint="`最近调用 ${lastActiveText}`" :title="'成功调用平均耗时（按调用量加权）'" />
+      </template>
+      <template #detail>
+        <span>总调用 {{ totalCalls }}</span>
+        <span>失败 {{ totalErrors }}</span>
+        <span>空闲 {{ idleCount }}</span>
+        <span>{{ rangeDetailLabel }}</span>
+      </template>
+    </MkOverview>
+
+    <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
+          <div class="mk-pills">
+            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" @click="onlyAttention = false">全部</button>
+            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" @click="onlyAttention = true">仅看需关注</button>
+          </div>
           <select v-model="categoryFilter" class="mk-filter__select" aria-label="按类别筛选">
             <option value="">全部类别</option>
             <option v-for="c in categoryOptions" :key="c" :value="c">{{ categoryText(c) }}</option>
           </select>
+          <select v-model="statsRange" class="mk-filter__select" aria-label="统计窗口" :disabled="!isLive">
+            <option value="7d">近 7 天</option>
+            <option value="24h">近 24 小时</option>
+            <option value="30d">近 30 天</option>
+            <option value="all">全部</option>
+          </select>
           <input class="mk-filter__input" v-model="keyword" placeholder="搜索名称 / ID / 类别" />
         </div>
-        <span class="mk-card__meta">{{ filtered.length }} / {{ cards.length }}</span>
+        <div class="mk-card__head-right">
+          <div class="mk-pills">
+            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': view === 'list' }" @click="view = 'list'">列表</button>
+            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': view === 'grid' }" @click="view = 'grid'">网格</button>
+          </div>
+          <span class="mk-card__meta">{{ filtered.length }} / {{ cards.length }}</span>
+        </div>
       </div>
 
       <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="10" />
@@ -62,7 +75,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in shown" :key="s.id" class="sk-row" @click="openSkillDrawer(s.id)">
+            <tr v-for="s in paged" :key="s.id" class="sk-row" @click="openSkillDrawer(s.id)">
               <td>
                 <div class="sk-cell">
                   <span class="sk-dot" :class="`sk-dot--${s.health}`" :title="s.health === 'ok' ? '健康' : s.health === 'error' ? '异常' : '空闲'"></span>
@@ -93,10 +106,10 @@
         </table>
       </div>
 
-      <!-- 网格视图：健康矩阵（保留对比） -->
+      <!-- 网格视图：健康矩阵（保留对比）；与列表共用同一分页器 -->
       <div v-else class="sk-grid sk-grid--inset">
         <button
-          v-for="s in shown"
+          v-for="s in paged"
           :key="s.id"
           type="button"
           class="sk-card"
@@ -134,9 +147,14 @@
         <button v-if="isFiltered" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
       </div>
       </template>
-      <div v-if="canMore" class="sk-more">
-        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
-      </div>
+      <!-- 客户端分页（统一 mk-pagination 页码器）：列表/网格共用，筛选后按页切片 -->
+      <Pagination
+        v-if="filtered.length"
+        v-model:page="page"
+        v-model:pageSize="pageSize"
+        :total="filtered.length"
+        :showTotal="true"
+      />
     </div>
 
     
@@ -152,6 +170,9 @@ import { categoryText } from './statusText'
 import { completionMetaOf } from './glossaryMeta'
 import { useLoadMore } from './useLoadMore'
 import MockSkeletonTable from './SkeletonTable.vue'
+import Pagination from './Pagination.vue'
+import MkOverview from './MkOverview.vue'
+import MkKpi from './MkKpi.vue'
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
 
 type Health = 'ok' | 'idle' | 'error'
@@ -257,6 +278,37 @@ const filtered = computed(() => {
 const activeCount = computed(() => cards.value.filter((c) => c.calls > 0).length)
 const errorCount = computed(() => cards.value.filter((c) => c.errors > 0).length)
 
+/* ===== Skill 运营概览（sk-dash：窗口内聚合 + 结论 + KPI） ===== */
+const totalCalls = computed(() => cards.value.reduce((a, c) => a + c.calls, 0))
+const totalErrors = computed(() => cards.value.reduce((a, c) => a + c.errors, 0))
+const okCalls = computed(() => Math.max(0, totalCalls.value - totalErrors.value))
+const overallRate = computed(() => (totalCalls.value > 0 ? Math.round((okCalls.value / totalCalls.value) * 100) : null))
+const rateNumTone = computed<'' | 'bad' | 'warn'>(() => (overallRate.value == null ? '' : overallRate.value < 70 ? 'bad' : overallRate.value < 90 ? 'warn' : ''))
+const idleCount = computed(() => cards.value.filter((c) => c.calls === 0).length)
+const avgLatencyMs = computed(() => {
+  const called = cards.value.filter((c) => c.calls > 0 && c.avgMs > 0)
+  if (!called.length) return null
+  return Math.round(called.reduce((a, c) => a + c.calls * c.avgMs, 0) / called.reduce((a, c) => a + c.calls, 0))
+})
+const avgLatencyText = computed(() => (avgLatencyMs.value == null ? '—' : avgLatencyMs.value >= 1000 ? `${(avgLatencyMs.value / 1000).toFixed(1)}s` : `${avgLatencyMs.value}ms`))
+const lastActiveText = computed(() => {
+  const t = cards.value.reduce((max, c) => (c.lastAt && c.lastAt !== '从未' && ((max == null) || c.lastAt > max) ? c.lastAt : max), null as string | null)
+  return t || '从未'
+})
+const skDashHasData = computed(() => totalCalls.value > 0 || errorCount.value > 0)
+const skDashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() =>
+  errorCount.value > 0 ? 'bad' : totalCalls.value > 0 ? 'ok' : 'muted'
+)
+const skDashTitle = computed(() =>
+  errorCount.value ? `${errorCount.value} 个节点存在失败` : totalCalls.value ? 'Skill 网络健康' : '暂无运行数据'
+)
+const RANGE_LABELS: Record<string, string> = { '7d': '近 7 天', '24h': '近 24 小时', '30d': '近 30 天', all: '全部时间' }
+const rangeLabel = computed(() => RANGE_LABELS[statsRange.value] || '近期')
+const skDashSubline = computed(() =>
+  errorCount.value ? '建议优先处理失败节点，排查窗口内异常调用' : totalCalls.value ? `${activeCount.value} 个 Skill 有调用 · 运行平稳` : '产生调用后自动呈现统计'
+)
+const rangeDetailLabel = computed(() => `窗口：${rangeLabel.value}`)
+
 const isFiltered = computed(() => onlyAttention.value || !!keyword.value.trim() || !!categoryFilter.value)
 function clearFilters() {
   onlyAttention.value = false
@@ -265,11 +317,22 @@ function clearFilters() {
 }
 
 /* 长列表分批渲染：每批 15 行 */
-const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
+/* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
+   数据全量在客户端（live 拉取 / demo 本地），筛选后按页切片；
+   筛选/数据变化自动回第 1 页（watch filtered）；recShown 属对账明细，仍用加载更多 */
+const page = ref(1)
+const pageSize = ref(15)
+const paged = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filtered.value.slice(start, start + pageSize.value)
+})
+watch(filtered, () => {
+  page.value = 1
+})
 
 const statusTone = computed(() => (errorCount.value ? 'mk-status--bad' : activeCount.value ? 'mk-status--ok' : 'mk-status--muted'))
 const statusTitle = computed(() =>
-  errorCount.value ? `${errorCount.value} 个节点存在失败` : activeCount.value ? 'Skill 网络健康' : '还没有运行数据'
+  cards.value.length ? 'Skill 运行' : '暂无运行数据'
 )
 
 const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
@@ -465,23 +528,6 @@ function recGateDetail(completion: SkillCompletion): string {
 </script>
 
 <style scoped>
-/* 视图切换 */
-.sk-range-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
-  color: var(--mk-muted);
-  white-space: nowrap;
-}
-.sk-range {
-  border: 1px solid var(--mk-line);
-  border-radius: 8px;
-  padding: 3px 8px;
-  font-size: 12px;
-  color: var(--mk-muted, #5a6a85);
-  background: #fff;
-}
 /* 列表视图 */
 /* 可排序表头：button 包裹表头文字，样式重置为继承 th 外观 */
 .sk-sort {
@@ -531,12 +577,6 @@ function recGateDetail(completion: SkillCompletion): string {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   max-width: var(--mk-cell-main-max);
-}
-.sk-more {
-  display: flex;
-  justify-content: center;
-  padding: 10px 0 12px;
-  border-top: 1px dashed var(--mk-line);
 }
 .sk-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .sk-dot--ok { background: var(--mk-green); }
@@ -766,8 +806,6 @@ function recGateDetail(completion: SkillCompletion): string {
 
 /* 大屏档位（mk 体系：2000 ≈×1.15，2800 ≈×1.17） */
 @media (min-width: 2000px) {
-  .sk-range-wrap { font-size: 13px; }
-  .sk-range { font-size: 13.5px; padding: 5px 10px; }
   .sk-card__cat,
   .sk-card__flag { font-size: 12px; }
   .sk-rec__loading { font-size: 13.5px; }
@@ -776,8 +814,6 @@ function recGateDetail(completion: SkillCompletion): string {
   .sk-dot { width: 10px; height: 10px; }
 }
 @media (min-width: 2800px) {
-  .sk-range-wrap { font-size: 15px; }
-  .sk-range { font-size: 16px; padding: 6px 12px; }
   .sk-card__cat,
   .sk-card__flag { font-size: 14px; }
   .sk-rec__loading { font-size: 16px; }

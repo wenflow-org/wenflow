@@ -23,6 +23,8 @@
           <h1 class="vp-top__name">{{ d.name }}</h1>
           <span v-if="d.archetype" class="mk-badge mk-badge--info">{{ d.archetype }}</span>
           <span v-if="levelLabel" class="vp-top__level">{{ levelLabel }}</span>
+          <span v-if="d.goal" class="vp-top__goal" :title="'长期倾向：影响模拟行为与学习需求'">长期倾向：{{ d.goal }}</span>
+          <span v-else class="vp-top__goal vp-top__goal--none" title="长期倾向未设置：学习需求由故事产生">长期倾向未设置</span>
           <!-- 仿真质量常驻徽章：最近一次黑盒终局评估（裁判 / 保真），未评估显示灰标 -->
           <span v-if="isLive" class="vp-quality" :class="qualityTone" :title="qualityTitle">
             <template v-if="qualityReferee || qualityFidelity">
@@ -33,27 +35,26 @@
           </span>
         </div>
         <div v-if="isLive" class="vp-top__actions">
-          <!-- 会话控制栏：根据状态显示不同按钮 -->
-          <template v-if="sessionState === 'running'">
-            <button type="button" class="mk-status__action" :disabled="sessionBusy" @click="pauseSession">⏸ 暂停</button>
-            <button type="button" class="mk-status__action" :disabled="sessionBusy" @click="stopSession">⏹ 停止</button>
-            <button type="button" class="mk-status__action mk-status__action--primary" @click="goCockpit">座舱 →</button>
-          </template>
-          <template v-else-if="sessionState === 'paused'">
-            <button type="button" class="mk-status__action mk-status__action--primary" :disabled="sessionBusy" @click="resumeSession">▶ 继续</button>
-            <button type="button" class="mk-status__action" :disabled="sessionBusy" @click="stopSession">⏹ 停止</button>
-            <button type="button" class="mk-status__action" @click="goCockpit">座舱 →</button>
-          </template>
-          <template v-else-if="sessionState === 'failed'">
-            <!-- failed/abandoned 均落入此分支（tone=bad）：重试对两种终态都可用 -->
-            <button type="button" class="mk-status__action mk-status__action--primary" :disabled="sessionBusy" @click="retrySession">🔄 重试</button>
-            <button type="button" class="mk-status__action" @click="goCockpit">座舱 →</button>
-          </template>
-          <template v-else-if="sessionState === 'completed'">
-            <button type="button" class="mk-status__action" @click="goCockpit">座舱 →</button>
-          </template>
+          <!-- 生命周期控制条（统一模型 vlab-controls：状态徽章 + 该状态合法操作；
+               操作/文案/确认全部来自单一来源，三层同语义） -->
+          <span class="vp-life" :class="`vp-life--${lifeTone}`" :title="lifeHint">
+            <span class="vp-life__dot" aria-hidden="true"></span>{{ lifeLabel }}
+          </span>
+          <button
+            v-for="c in lifeControls"
+            :key="c.key"
+            type="button"
+            class="mk-status__action"
+            :class="{
+              'mk-status__action--primary': c.tone === 'primary',
+              'mk-status__action--danger': c.tone === 'danger'
+            }"
+            :disabled="sessionBusy"
+            :title="c.hint"
+            @click="runLifeAction(c)"
+          >{{ c.label }}</button>
           <button type="button" class="mk-status__action" @click="quickLearnOpen = true">账号自动学习</button>
-          <button type="button" class="mk-status__action" @click="editOpen = true">编辑画像</button>
+          <button type="button" class="mk-status__action" @click="editOpen = true">画像与偏好</button>
         </div>
       </div>
     </header>
@@ -65,28 +66,12 @@
     </div>
 
 
-    <!-- 统计条：故事/运行/进行中 + 长期倾向（KPI 卡片风格） -->
+    <!-- 概览统计：KPI 四卡（全站 MkKpi 语言；点击跳转对应页签；成功/失败数字着色） -->
     <div class="vp-overview">
-      <div class="vp-overview__item">
-        <b>{{ displayStories.length }}</b>
-        <span>故事</span>
-      </div>
-      <div class="vp-overview__item">
-        <b>{{ allRuns.length }}</b>
-        <span>运行</span>
-      </div>
-      <div v-if="runningCount > 0" class="vp-overview__item is-live">
-        <b>{{ runningCount }}</b>
-        <span>进行中</span>
-      </div>
-      <div v-if="failedCount > 0" class="vp-overview__item is-failed">
-        <b>{{ failedCount }}</b>
-        <span>失败</span>
-      </div>
-      <div class="vp-overview__item vp-overview__goal">
-        <span>长期倾向</span>
-        <strong :title="d.goal || '由故事产生当次学习需求'">{{ d.goal || '由故事产生当次学习需求' }}</strong>
-      </div>
+      <MkKpi label="故事" :value="displayStories.length" hint="故事池" :title="'故事池数量（含草稿/已就绪）；点击查看故事池'" clickable @click="activeTab = 'stories'" />
+      <MkKpi label="会话" :value="allRuns.length" hint="累计实验会话" :title="'全部运行记录（含终态）；点击查看运行列表'" clickable @click="activeTab = 'runs'" />
+      <MkKpi label="运行中" :value="runningCount" :tone="runningCount > 0 ? 'ok' : ''" hint="运行中 + 创建中" :title="'当前运行中/创建中的会话数'" clickable @click="activeTab = 'runs'" />
+      <MkKpi label="已失败" :value="failedCount" :tone="failedCount > 0 ? 'bad' : ''" hint="失败或已终止" :title="'失败与终止会话数（可重试续传，不丢进度）'" clickable @click="activeTab = 'runs'" />
     </div>
 
     
@@ -133,6 +118,50 @@
           </div>
         </section>
 
+        <!-- 运行预算：画像级持久配置（LLM 重试 + 回合上限 + 默认难度）；新会话创建时作为初始值，座舱可临时覆盖 -->
+        <section v-if="activeTab === 'profile' && isLive" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">运行预算</h3>
+            <span class="mk-card__meta">新会话默认值 · 座舱可临时覆盖</span>
+          </div>
+          <div class="vp-budget">
+            <label class="mk-field" :class="{ 'mk-field--error': budgetErrors.maxRetriesPerStep }">
+              <span class="mk-field__label">单步最大重试</span>
+              <input v-model.number="budgetForm.maxRetriesPerStep" type="number" min="1" max="20" class="mk-field__input" @input="budgetDirty = true" />
+              <span v-if="budgetErrors.maxRetriesPerStep" class="mk-field__err">{{ budgetErrors.maxRetriesPerStep }}</span>
+              <span class="mk-field__hint">每次上游 LLM 调用失败后的重试次数（一个教学回合含多次上游调用）</span>
+            </label>
+            <label class="mk-field" :class="{ 'mk-field--error': budgetErrors.maxRetriesTotal }">
+              <span class="mk-field__label">会话 AI 调用上限</span>
+              <input v-model.number="budgetForm.maxRetriesTotal" type="number" min="1" max="500" class="mk-field__input" @input="budgetDirty = true" />
+              <span v-if="budgetErrors.maxRetriesTotal" class="mk-field__err">{{ budgetErrors.maxRetriesTotal }}</span>
+              <span class="mk-field__hint">单个会话累计 AI 调用（含重试）达到上限即终止，防止无限跑下去；故事可单独覆盖</span>
+            </label>
+            <label class="mk-field">
+              <span class="mk-field__label">每课回合上限</span>
+              <input v-model.number="budgetForm.turnCapPerLesson" type="number" min="1" max="100" class="mk-field__input" @input="budgetDirty = true" />
+              <span class="mk-field__hint">每课自动推进的回合预算：座舱「完成本课 / 自动运行」的默认上限</span>
+            </label>
+            <label class="mk-field">
+              <span class="mk-field__label">默认难度</span>
+              <select v-model="budgetForm.frictionBudget" class="mk-field__select" @change="budgetDirty = true">
+                <option value="none">无</option>
+                <option value="low">低</option>
+                <option value="normal">正常</option>
+                <option value="high">高</option>
+                <option value="stress_test">压力测试</option>
+              </select>
+              <span class="mk-field__hint">新会话的默认难度（可在座舱按会话临时调整）</span>
+            </label>
+          </div>
+          <div class="mk-card__foot">
+            <span v-if="budgetSavedAt" class="mk-card__meta">已保存 · {{ budgetSavedAt }}</span>
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="budgetSaving" @click="saveBudget">
+              {{ budgetSaving ? '保存中…' : '保存预算' }}
+            </button>
+          </div>
+        </section>
+
         <section v-if="activeTab === 'stories'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">故事池 · {{ displayStories.length }}</h3>
@@ -150,127 +179,53 @@
               </button>
             </div>
           </div>
-          <p v-if="isLive && !displayStories.length" class="vp-next">
-            暂无故事
-          </p>
+          <div v-if="isLive && !displayStories.length" class="vp-empty-state">
+            <span class="vp-empty-state__icon" aria-hidden="true">◌</span>
+            <strong>故事池为空</strong>
+            <p>故事产生学习需求；点击「生成故事」由 AI 根据画像与倾向产出开场故事。</p>
+          </div>
           <div v-if="displayStories.length" class="vp-stories">
             <div
               v-for="(s, i) in displayStories"
               :key="s.id || i"
               class="vp-story"
-              :class="{
-                'is-selected': selectedStoryId === (s.id || String(i)),
-                'is-open': openStoryId === (s.id || String(i))
-              }"
+              :class="{ 'is-selected': selectedStoryId === (s.id || String(i)) }"
             >
-              <!-- 管理行：选中 + 标题/状态 + 阶段计数 + 最近结果 + 操作 -->
+              <!-- 列表行：点击 = 选中 + 进入该故事会话座舱（核心控制在三级页） -->
               <div
                 class="vp-story__row"
                 role="button"
                 tabindex="0"
                 :aria-pressed="selectedStoryId === (s.id || String(i))"
-                :aria-expanded="openStoryId === (s.id || String(i))"
+                :title="s.latestRun?.sessionId ? '进入该故事最新会话座舱' : '选中该故事；尚无会话，可点击「运行」启动'"
                 @click="selectStory(s, i)"
                 @keydown.enter.prevent="selectStory(s, i)"
                 @keydown.space.prevent="selectStory(s, i)"
               >
                 <span class="vp-story__radio" aria-hidden="true"></span>
-                <div class="vp-story__meta">
-                  <strong class="vp-story__title">{{ s.title }}</strong>
-                  <span class="mk-badge" :class="s.status === 'ready' ? 'mk-badge--ok' : 'mk-badge--muted'">
-                    {{ storyStatusLabel(s) }}
-                  </span>
-                  <span v-if="(s.runCount || 0) > 0" class="vp-story__runcount" :title="`共运行 ${s.runCount} 次`">运行 {{ s.runCount }}</span>
+                <div class="vp-story__main">
+                  <div class="vp-story__meta">
+                    <strong class="vp-story__title">{{ s.title }}</strong>
+                    <span class="mk-badge" :class="s.status === 'ready' ? 'mk-badge--ok' : 'mk-badge--muted'">
+                      {{ storyStatusLabel(s) }}
+                    </span>
+                    <span v-if="storyBudgetBadge(s)" class="vp-story__budget-badge" :title="'故事级预算：' + storyBudgetBadge(s) + '；留空字段继承角色级'">预算自定义</span>
+                  </div>
+                  <p class="vp-story__outline" :title="s.outline">{{ s.outline || '暂无故事概述' }}</p>
+                  <div class="vp-story__stats">
+                    <span class="vp-story__stats-item" title="共运行的会话次数">运行 {{ s.runCount || 0 }} 次</span>
+                    <span class="vp-story__stats-item" title="会话进度：目标对话 / 路径规划 / 教学回合 的累计会话数">目标 {{ s.goalCount || 0 }} · 路径 {{ s.pathCount || 0 }} · 教学 {{ s.learnCount || 0 }}</span>
+                    <span class="vp-story__latest" :class="storyLatestText(s).cls">{{ storyLatestText(s).text }}</span>
+                  </div>
                 </div>
-                <span class="vp-story__stages" :title="`累计：Goal ${s.goalCount || 0} · Path ${s.pathCount || 0} · Learn ${s.learnCount || 0}`">
-                  <template v-if="stageTotal(s) > 0">G{{ s.goalCount || 0 }} · P{{ s.pathCount || 0 }} · L{{ s.learnCount || 0 }}</template>
-                  <template v-else>未开始</template>
-                </span>
-                <span class="vp-story__latest" :class="storyLatestText(s).cls">{{ storyLatestText(s).text }}</span>
                 <div class="vp-story__ops" @click.stop>
                   <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" @click="runStory(s, i)">
-                    {{ running ? '运行中…' : '运行' }}
+                    {{ running ? '运行中…' : '▶ 运行' }}
                   </button>
-                  <template v-if="autopilotOfStory(s)">
-                    <span class="vp-story__auto" :class="autopilotOfStory(s)!.status === 'running' ? 'is-running' : 'is-done'" :title="autopilotDetailTitle(s)">
-                      ▶ {{ autopilotOfStory(s)!.status === 'running' ? autopilotRunningText(s) : autopilotResultLabel(s) }}
-                      <button v-if="autopilotOfStory(s)!.status === 'running'" type="button" class="mk-link" :disabled="autopilotBusy" @click="autoStopStory(s)">停止</button>
-                    </span>
-                  </template>
-                  <template v-else>
-                    <button type="button" class="mk-btn mk-btn--sm" :disabled="autopilotBusy" title="自动推进完当前阶段（Goal 收敛 / Path 就绪 / 本课完成）即停" @click="autoRunStory(s, i, 'stage')">阶段自动</button>
-                    <button type="button" class="mk-btn mk-btn--sm" :disabled="autopilotBusy" title="直达最终目标（整个 Path 全部任务完成），无人值守" @click="autoRunStory(s, i, 'final')">全局自动</button>
-                  </template>
                   <button type="button" class="mk-link" :disabled="storyBusy" @click="openEditStory(i)">编辑</button>
                   <button type="button" class="mk-link mk-link--danger" :disabled="storyBusy" @click="removeStory(i)">删除</button>
                 </div>
                 <span class="vp-story__chevron" aria-hidden="true">▸</span>
-              </div>
-
-              <!-- 详情（展开行）：摘要 / 生命周期（累计·当前·投影）/ 运行历史 / 高级诊断 -->
-              <div v-if="openStoryId === (s.id || String(i))" class="vp-story__detail" @click.stop>
-                <p class="vp-detail__outline">{{ s.outline }}</p>
-
-                <div class="vp-lc" :class="{ 'is-stalled': progressOf(s).stalled, 'is-running': progressOf(s).running }"><div class="vp-lc__row"><span class="vp-lc__label">进度</span><span class="vp-lc__current" :class="{ 'vp-lc__current--stalled': progressOf(s).stalled }"><template v-if="progressOf(s).running"><span class="vp-lc__pulse" aria-hidden="true"></span>{{ progressOf(s).stageLabel }} 进行中<template v-if="progressOf(s).stalled"> · 卡顿 {{ progressOf(s).idleMins }} 分钟</template></template><template v-else-if="s.latestRun">最近 {{ progressOf(s).stageLabel || '—' }} · <b>{{ formatRunResult(s.latestRun.status) }}</b> · {{ timeAgo(String(s.latestRun.updatedAt || s.latestRun.createdAt || '')) }}</template><template v-else>尚未运行</template></span><span class="vp-lc__counts">G{{ s.goalCount || 0 }} · P{{ s.pathCount || 0 }} · L{{ s.learnCount || 0 }}</span></div></div>
-
-                <!-- 运行历史（该故事维度） -->
-                <div class="vp-runs-block">
-                  <div class="vp-runs-block__head">
-                    <span>运行历史 · 最近 {{ runsForStory(s).slice(0, STORY_RUN_RECENT_N).length }} 条摘要</span>
-                    <button v-if="s.latestRun?.sessionId" type="button" class="mk-link" @click="openSubPage('session', s.latestRun.sessionId)">最新控制台 →</button>
-                  </div>
-                  <template v-if="runsForStory(s).length">
-                    <div v-for="(r, ri) in runsForStory(s).slice(0, STORY_RUN_RECENT_N)" :key="r.sessionId || ri" class="vp-run">
-                      <div class="vp-run__head">
-                        <strong>{{ formatRunStage(r.stage) }}</strong>
-                        <span class="vp-run__result" :class="`is-${r.tone}`">{{ formatRunResult(r.result) }}<template v-if="r.pathId"> · Path</template></span>
-                      </div>
-                      <div class="vp-run__sub">
-                        <span>{{ r.time }}</span>
-                      </div>
-                      <div v-if="isLive && r.sessionId" class="vp-run__ops">
-                        <button type="button" class="mk-link" @click="openSubPage('session', r.sessionId)">打开控制台</button>
-                        <button type="button" class="mk-link mk-link--danger" :disabled="sessionBusy" @click="removeSession(r.sessionId)">删除</button>
-                      </div>
-                    </div>
-                    <div class="vp-story-runs__more">
-                      <span>共 {{ runsForStory(s).length }} 条</span>
-                      <button type="button" class="mk-link" @click="goRunsTab">查看全部 →</button>
-                    </div>
-                  </template>
-                  <p v-else class="vp-none">这个故事还没有运行记录</p>
-                </div>
-
-                <!-- 高级诊断 -->
-                <details v-if="hasAdvancedFields(s)" class="vp-story-item__advanced" >
-                  <summary>高级诊断</summary>
-                  <div class="vp-adv-body">
-                    <div v-if="getHiddenDetails(s).length" class="vp-adv-row">
-                      <span class="vp-adv-row__label">隐藏细节</span>
-                      <ul>
-                        <li v-for="(item, didx) in getHiddenDetails(s)" :key="`hd-${didx}`">{{ item }}</li>
-                      </ul>
-                    </div>
-                    <div v-if="getBehaviorHooks(s).length" class="vp-adv-row">
-                      <span class="vp-adv-row__label">行为钩子</span>
-                      <ul>
-                        <li v-for="(item, hidx) in getBehaviorHooks(s)" :key="`bh-${hidx}`">{{ item }}</li>
-                      </ul>
-                    </div>
-                    <div v-if="getMisdiagnosis(s)" class="vp-adv-row vp-adv-row--text">
-                      <span class="vp-adv-row__label">误诊假设</span>
-                      <p>{{ getMisdiagnosis(s) }}</p>
-                    </div>
-                    <div v-if="getGoalSeed(s)" class="vp-adv-row vp-adv-row--object">
-                      <span class="vp-adv-row__label">目标种子</span>
-                      <pre>{{ JSON.stringify(getGoalSeed(s), null, 2) }}</pre>
-                    </div>
-                    <div v-if="getDisclosurePlan(s)" class="vp-adv-row vp-adv-row--object">
-                      <span class="vp-adv-row__label">披露计划</span>
-                      <pre>{{ JSON.stringify(getDisclosurePlan(s), null, 2) }}</pre>
-                    </div>
-                  </div>
-                </details>
               </div>
             </div>
           </div>
@@ -299,7 +254,7 @@
                     <template v-if="r.storyTitle && g.key !== '__orphan__' && g.title !== r.storyTitle"> · {{ r.storyTitle }}</template>
                   </div>
                   <div v-if="isLive && r.sessionId" class="vp-run__ops">
-                    <button type="button" class="mk-link" @click="openSubPage('session', r.sessionId)">打开控制台</button>
+                    <button type="button" class="mk-link" @click="openSubPage('session', r.sessionId)">打开座舱</button>
                     <button type="button" class="mk-link mk-link--danger" :disabled="sessionBusy" @click="removeSession(r.sessionId)">删除</button>
                   </div>
                 </div>
@@ -350,23 +305,6 @@
             <span class="mk-field__label">故事 / 备注</span>
             <textarea v-model="editForm.notes" class="mk-field__textarea" rows="4"></textarea>
           </label>
-          <!-- 重试预算配置（以虚拟学习者为单位） -->
-          <div class="mk-field" :class="{ 'mk-field--error': editErrors.maxRetriesPerStep || editErrors.maxRetriesTotal }">
-            <span class="mk-field__label">LLM 重试预算</span>
-            <div class="vp-budget-row">
-              <label class="mk-field--row">
-                <span>单步最大重试</span>
-                <input v-model.number="editForm.maxRetriesPerStep" type="number" min="1" max="20" class="mk-field__input" style="width:80px" />
-              </label>
-              <label class="mk-field--row">
-                <span>全局最大重试</span>
-                <input v-model.number="editForm.maxRetriesTotal" type="number" min="1" max="500" class="mk-field__input" style="width:80px" />
-              </label>
-            </div>
-            <span v-if="editErrors.maxRetriesPerStep" class="mk-field__err">{{ editErrors.maxRetriesPerStep }}</span>
-            <span v-if="editErrors.maxRetriesTotal" class="mk-field__err">{{ editErrors.maxRetriesTotal }}</span>
-            <span class="mk-field__hint">单步：每次上游 LLM 调用失败后的重试次数（一个教学回合含多次上游调用）。全局上限为预留字段，当前版本尚未在运行时累计消耗。</span>
-          </div>
         </div>
         <div class="mk-modal__foot">
           <button type="button" class="mk-btn" @click="editOpen = false">取消</button>
@@ -434,6 +372,19 @@
               <input v-model="editStoryForm.problemKnowledge.selfAssessment" class="mk-field__input" />
             </label>
           </div>
+          <!-- 故事级预算覆盖（可选）：缺省继承角色级预算 -->
+          <div class="vp-pk">
+            <span class="mk-field__label">故事级预算（可选，留空继承角色级）</span>
+            <label class="mk-field">
+              <span class="mk-field__label">单步最大重试</span>
+              <input v-model="editStoryForm.budget.maxRetriesPerStep" type="number" min="1" max="20" class="mk-field__input" placeholder="留空 = 继承角色级（默认 5）" />
+            </label>
+            <label class="mk-field">
+              <span class="mk-field__label">会话 AI 调用上限</span>
+              <input v-model="editStoryForm.budget.maxRetriesTotal" type="number" min="1" max="500" class="mk-field__input" placeholder="留空 = 继承角色级（默认 50）" />
+              <span class="mk-field__hint">单个会话累计 AI 调用（含重试）达到上限即终止；防本故事无限跑</span>
+            </label>
+          </div>
         </div>
         <div class="mk-modal__foot">
           <button type="button" class="mk-btn" @click="editStoryOpen = false">取消</button>
@@ -456,7 +407,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { subPage, closeSubPage, virtualProfiles, openSubPage, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
@@ -465,19 +416,20 @@ import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
+import {
+  VS_STATE_META,
+  vlabControlsFor,
+  type VsControlDef,
+  type VsControlKey,
+  type VsLifecycleState
+} from './vlab-controls'
+import MkKpi from './MkKpi.vue'
 import { useSafePolling } from '@/composables/useSafePolling'
 import {
-  sessionStageIndex,
-  stallState,
   extractQuality,
-  STORY_RUN_RECENT_N,
   RUNS_TAB_WINDOW,
-  VLAB_STAGES,
-  VLAB_STAGE_LABELS,
   type QualityScore
 } from './vlab'
-
-/* 推进条四段标签见 vlab.ts 的 VLAB_STAGE_LABELS（模板直接遍历） */
 
 interface RunItem {
   time: string
@@ -508,6 +460,11 @@ interface Detail {
     maxRetriesPerStep: number
     maxRetriesTotal: number
     consumedRetries?: number
+  }
+  /** 运行偏好（画像级持久，新会话创建时作为 simulationConfig 初始值） */
+  runtimePrefs?: {
+    turnCapPerLesson?: number
+    frictionBudget?: string
   }
 }
 
@@ -593,13 +550,13 @@ const selectedStory = computed(() => {
 })
 const selectedStoryTitle = computed(() => selectedStory.value?.title || '')
 
-/* 展开控制：点击故事行 = 选中（业务语义：按此故事运行）+ 切换展开（查看详情）。
-   选中与展开解耦：openStoryId 只控制详情渲染，selectedStoryId 只控制运行目标 */
-const openStoryId = ref<string | null>(null)
+/* 点击故事行：有会话 → 进入该故事最新会话座舱（核心控制在三级页）；无会话 → 仅选中为运行目标 */
 function selectStory(s: StoryItem, index: number) {
   const id = s.id || String(index)
   selectedStoryId.value = id
-  openStoryId.value = openStoryId.value === id ? null : id
+  if (s.latestRun?.sessionId) {
+    openSubPage('session', s.latestRun.sessionId)
+  }
 }
 
 function storyPayload(s?: StoryItem | null, index?: number) {
@@ -611,182 +568,74 @@ function storyPayload(s?: StoryItem | null, index?: number) {
   return {}
 }
 
-// ===== 故事高级诊断字段（来自 scenario-designer 的 5 个 hidden fields） =====
-const getHiddenDetails = (s: StoryItem): string[] =>
-  Array.isArray(s.hiddenDetails) ? s.hiddenDetails : []
-const getBehaviorHooks = (s: StoryItem): string[] =>
-  Array.isArray(s.behaviorHooks) ? s.behaviorHooks : []
-const getMisdiagnosis = (s: StoryItem): string =>
-  typeof s.misdiagnosis === 'string' ? s.misdiagnosis : ''
-const getGoalSeed = (s: StoryItem): Record<string, unknown> | null =>
-  s.goalSeed && typeof s.goalSeed === 'object' ? s.goalSeed : null
-const getDisclosurePlan = (s: StoryItem): Record<string, unknown> | null =>
-  s.disclosurePlan && typeof s.disclosurePlan === 'object' ? s.disclosurePlan : null
-const hasAdvancedFields = (s: StoryItem) =>
-  getHiddenDetails(s).length > 0
-  || getBehaviorHooks(s).length > 0
-  || !!getMisdiagnosis(s)
-  || !!getGoalSeed(s)
-  || !!getDisclosurePlan(s)
 const running = ref(false)
 const saving = ref(false)
 const storyBusy = ref(false)
 const sessionBusy = ref(false)
 const quickLearnOpen = ref(false)
 
-/* ===== 故事层级自动运行（阶段级 / 全局级）=====
-   运行单元 = 虚拟学习者 × 故事 × 会话；自动状态挂在最新会话 stageResults.autopilot。
-   一个故事上提供两档：阶段自动（推进完当前阶段即停）/ 全局自动（直达最终目标）。 */
-interface StoryAutopilot {
-  status: 'idle' | 'running' | 'completed' | 'failed' | 'stopped'
-  target?: 'stage' | 'final'
-  completedStage?: string | null
-  steps?: number
-  lastStage?: string | null
-  lastError?: string | null
-}
-const autopilotBusy = ref(false)
-const autopilotMap = ref<Record<string, StoryAutopilot>>({})
-const AUTOPILOT_POLL_INTERVAL_MS = 5000
-
-function autopilotOfStory(s: StoryItem): StoryAutopilot | null {
-  const sid = s.latestRun?.sessionId ? String(s.latestRun.sessionId) : ''
-  if (!sid) return null
-  const st = autopilotMap.value[sid]
-  if (!st || st.status === 'idle') return null
-  return st
-}
-function autopilotTargetLabel(s: StoryItem) {
-  return autopilotOfStory(s)?.target === 'stage' ? '阶段' : '全局'
-}
-function autopilotRunningText(s: StoryItem) {
-  const st = autopilotOfStory(s)
-  return `${autopilotTargetLabel(s)}自动 · ${st?.steps || 0} 步 · ${st?.lastStage || '…'}`
-}
-function autopilotResultLabel(s: StoryItem) {
-  const st = autopilotOfStory(s)
-  if (!st) return ''
-  if (st.status === 'completed') {
-    if (st.target === 'stage') {
-      const stage = st.completedStage
-      const label = (stage && { goal: 'Goal', path: 'Path', teaching: '本课' }[stage as string]) || ''
-      return `${label}已完成`
-    }
-    return '最终目标达成'
+/* ===== 运行预算（画像 tab 常驻卡片；画像级持久，新会话创建时作为初始值） ===== */
+const budgetForm = ref({
+  maxRetriesPerStep: 5,
+  maxRetriesTotal: 50,
+  turnCapPerLesson: 24,
+  frictionBudget: 'normal'
+})
+const budgetErrors = ref<{ maxRetriesPerStep?: string; maxRetriesTotal?: string }>({})
+const budgetSaving = ref(false)
+const budgetSavedAt = ref('')
+/** 表单脏标记：用户改过之后，轮询/刷新不再回填覆盖（避免编辑中被 30s 静默轮询重置） */
+const budgetDirty = ref(false)
+function fillBudgetForm() {
+  if (budgetDirty.value) return
+  const b = liveDetail.value?.simulationBudget
+  const rp = liveDetail.value?.runtimePrefs
+  budgetForm.value = {
+    maxRetriesPerStep: b?.maxRetriesPerStep ?? 5,
+    maxRetriesTotal: b?.maxRetriesTotal ?? 50,
+    turnCapPerLesson: rp?.turnCapPerLesson ?? 24,
+    frictionBudget: rp?.frictionBudget || 'normal'
   }
-  if (st.status === 'failed') return '已失败'
-  return '已停止'
+  budgetErrors.value = {}
 }
-function autopilotDetailTitle(s: StoryItem) {
-  const st = autopilotOfStory(s)
-  if (!st) return ''
-  const level = st.target === 'stage' ? '阶段级' : '全局级'
-  if (st.status === 'failed') return `${level}自动失败：${st.lastError || '未知'}`
-  if (st.status === 'stopped') return `${level}自动已停止${st.lastError ? `：${st.lastError}` : ''}`
-  return `${level}自动 · ${st.steps || 0} 步`
-}
-
-/** 取该故事当前可复用会话：最新运行仍在跑则复用；终态/无运行则需新建 */
-function reusableSessionId(s: StoryItem): string | null {
-  const run = s.latestRun
-  if (!run?.sessionId) return null
-  if (['completed', 'failed', 'abandoned'].includes(String(run.status || ''))) return null
-  return String(run.sessionId)
-}
-
-async function autoRunStory(s: StoryItem, index: number, target: 'stage' | 'final') {
+watch(liveDetail, () => { if (isLive.value) fillBudgetForm() })
+async function saveBudget() {
   const id = subPage.value?.id
-  if (!id || autopilotBusy.value) return
-  if (!isLive.value) { toast.info('演示模式不支持自动运行'); return }
-  autopilotBusy.value = true
-  try {
-    selectStory(s, index)
-    let sessionId = reusableSessionId(s)
-    if (!sessionId) {
-      const payload = storyPayload(s, index)
-      const res = await adminVirtualLearnersApi.startVirtualSession(id, payload)
-      const session = res.data?.data ?? res.data ?? {}
-      sessionId = String(session.id || session.sessionId || '')
-      if (!sessionId) throw new Error('按故事启动会话失败')
-      const pid = subPage.value?.id
-      if (pid) await loadDetail(pid, true)
-    }
-    const start = await adminVirtualLearnersApi.autopilotStart(sessionId, { target })
-    const data = start.data?.data ?? {}
-    autopilotMap.value[sessionId] = {
-      status: 'running',
-      target: data.target === 'stage' ? 'stage' : 'final',
-      steps: 0,
-      lastStage: null
-    }
-    toast.success(target === 'stage' ? '阶段自动已启动：推进完当前阶段即停' : '全局自动已启动：直达最终目标（Path 全部完成）')
-    autopilotPolling.start()
-  } catch (e) {
-    toast.error(`启动自动运行失败：${errMsg(e)}`)
-  } finally {
-    autopilotBusy.value = false
-  }
-}
-
-async function autoStopStory(s: StoryItem) {
-  const sid = s.latestRun?.sessionId ? String(s.latestRun.sessionId) : ''
-  if (!sid || autopilotBusy.value) return
-  autopilotBusy.value = true
-  try {
-    const res = await adminVirtualLearnersApi.autopilotStop(sid)
-    const d = res.data?.data ?? {}
-    if (d.accepted === true) toast.info('已请求停止自动运行')
-    else toast.info(String(d.reason || '当前没有运行中的自动'))
-  } catch (e) {
-    toast.error(`停止失败：${errMsg(e)}`)
-  } finally {
-    autopilotBusy.value = false
-  }
-}
-
-/* 状态轮询：探测所有故事最新会话的 autopilot；无故事目标时自动停止（loadDetail 后会重启） */
-const prevAutopilotStatus = new Map<string, string>()
-const autopilotPolling = useSafePolling(async () => {
-  const validIds = new Set(displayStories.value
-    .map((s) => s.latestRun?.sessionId ? String(s.latestRun.sessionId) : '')
-    .filter(Boolean))
-  // 清理已不在当前故事集合里的终态记录（会话被删除/被新会话取代）
-  for (const sid of Object.keys(autopilotMap.value)) {
-    if (!validIds.has(sid) && autopilotMap.value[sid]?.status !== 'running') {
-      delete autopilotMap.value[sid]
-      prevAutopilotStatus.delete(sid)
-    }
-  }
-  const probeIds = [...new Set([
-    ...Object.keys(autopilotMap.value).filter((sid) => autopilotMap.value[sid]?.status === 'running'),
-    ...validIds
-  ])]
-  if (!probeIds.length) {
-    autopilotPolling.stop()
+  if (!id || budgetSaving.value) return
+  budgetErrors.value = {}
+  const perStep = Math.round(Number(budgetForm.value.maxRetriesPerStep))
+  const total = Math.round(Number(budgetForm.value.maxRetriesTotal))
+  if (!Number.isFinite(perStep) || perStep < 1 || perStep > 20) {
+    budgetErrors.value.maxRetriesPerStep = '单步重试须为 1–20 的整数'
     return
   }
-  for (const sid of probeIds) {
-    try {
-      const res = await adminVirtualLearnersApi.autopilotStatus(sid)
-      const d = res.data?.data as StoryAutopilot | undefined
-      if (d && typeof d.status === 'string' && d.status !== 'idle') {
-        const prev = prevAutopilotStatus.get(sid)
-        autopilotMap.value[sid] = { ...(autopilotMap.value[sid] || {}), ...d }
-        if (prev && prev !== d.status && ['completed', 'failed', 'stopped'].includes(d.status)) {
-          const pid = subPage.value?.id
-          if (pid) loadDetail(pid, true)
-        }
-        prevAutopilotStatus.set(sid, d.status)
-      }
-    } catch { /* 状态读取失败保留旧值 */ }
+  if (!Number.isFinite(total) || total < 1 || total > 500) {
+    budgetErrors.value.maxRetriesTotal = '总重试预算须为 1–500 的整数'
+    return
   }
-}, { interval: AUTOPILOT_POLL_INTERVAL_MS })
+  budgetSaving.value = true
+  try {
+    await adminVirtualLearnersApi.updateVirtualLearner(id, {
+      simulationBudget: { maxRetriesPerStep: perStep, maxRetriesTotal: total },
+      runtimePrefs: {
+        turnCapPerLesson: Math.min(100, Math.max(1, Math.round(Number(budgetForm.value.turnCapPerLesson)))),
+        frictionBudget: budgetForm.value.frictionBudget
+      }
+    })
+    budgetDirty.value = false
+    await loadDetail(id)
+    budgetSavedAt.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+    toast.success('运行预算已保存')
+  } catch (e) {
+    toast.error(`保存失败：${errMsg(e)}`)
+  } finally {
+    budgetSaving.value = false
+  }
+}
 
-/* 页面打开即探测一次；故事加载完成后重启（空转停止后需要重新唤醒） */
-onMounted(() => { autopilotPolling.start() })
 const editOpen = ref(false)
-const editForm = ref({ name: '', goal: '', level: 'beginner', notes: '', maxRetriesPerStep: 5, maxRetriesTotal: 50 })
-const editErrors = ref<{ name?: string; maxRetriesPerStep?: string; maxRetriesTotal?: string }>({})
+const editForm = ref({ name: '', goal: '', level: 'beginner', notes: '' })
+const editErrors = ref<{ name?: string }>({})
 useEscape(() => editOpen.value, () => { editOpen.value = false })
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
@@ -807,6 +656,11 @@ interface StoryEditForm {
     hiddenGaps: string
     selfAssessment: string
   }
+  /** 故事级预算覆盖（可留空 = 继承角色级） */
+  budget: {
+    maxRetriesPerStep: string
+    maxRetriesTotal: string
+  }
 }
 const editStoryOpen = ref(false)
 const editStoryIndex = ref<number | null>(null)
@@ -823,6 +677,10 @@ const editStoryForm = ref<StoryEditForm>({
     struggleConcepts: '',
     hiddenGaps: '',
     selfAssessment: ''
+  },
+  budget: {
+    maxRetriesPerStep: '',
+    maxRetriesTotal: ''
   }
 })
 const storyPanelRef = ref<HTMLElement | null>(null)
@@ -838,6 +696,7 @@ function openEditStory(index: number) {
   const pk = (raw.problemKnowledge && typeof raw.problemKnowledge === 'object'
     ? raw.problemKnowledge
     : {}) as Record<string, unknown>
+  const b = (raw.budget && typeof raw.budget === 'object' ? raw.budget : {}) as Record<string, unknown>
   editStoryForm.value = {
     title: String(raw.title || s.title || ''),
     storyOutline: String(raw.storyOutline || raw.outline || s.outline || ''),
@@ -852,6 +711,10 @@ function openEditStory(index: number) {
       struggleConcepts: Array.isArray(pk.struggleConcepts) ? (pk.struggleConcepts as string[]).join('，') : '',
       hiddenGaps: Array.isArray(pk.hiddenGaps) ? (pk.hiddenGaps as string[]).join('，') : '',
       selfAssessment: String(pk.selfAssessment || '')
+    },
+    budget: {
+      maxRetriesPerStep: Number.isFinite(Number(b.maxRetriesPerStep)) ? String(b.maxRetriesPerStep) : '',
+      maxRetriesTotal: Number.isFinite(Number(b.maxRetriesTotal)) ? String(b.maxRetriesTotal) : ''
     }
   }
   editStoryIndex.value = index
@@ -864,6 +727,18 @@ async function saveStory() {
   const f = editStoryForm.value
   const splitList = (v: string) => v.split(/[\n,，;；]/).map((x) => x.trim()).filter(Boolean)
   const familiarities = ['low', 'medium', 'high']
+  // 故事级预算：留空 = 继承角色级；有值才提交
+  const budget: Record<string, number> = {}
+  const stepRaw = String(f.budget.maxRetriesPerStep ?? '').trim()
+  const totalRaw = String(f.budget.maxRetriesTotal ?? '').trim()
+  if (stepRaw) {
+    const v = Math.round(Number(stepRaw))
+    if (Number.isFinite(v)) budget.maxRetriesPerStep = Math.min(20, Math.max(1, v))
+  }
+  if (totalRaw) {
+    const v = Math.round(Number(totalRaw))
+    if (Number.isFinite(v)) budget.maxRetriesTotal = Math.min(500, Math.max(1, v))
+  }
   storySaving.value = true
   try {
     await adminVirtualLearnersApi.updateStory(id, editStoryIndex.value, {
@@ -872,6 +747,7 @@ async function saveStory() {
       storyTriggerEvent: f.storyTriggerEvent.trim() || undefined,
       visibleOpening: f.visibleOpening.trim() || undefined,
       pressurePoints: splitList(f.pressurePoints),
+      budget,
       problemKnowledge: {
         domainFamiliarity: (familiarities.includes(f.problemKnowledge.domainFamiliarity)
           ? f.problemKnowledge.domainFamiliarity
@@ -1004,10 +880,8 @@ async function loadDetail(id?: string, quiet = false) {
 
     if (stories.value.length === 1) {
       selectedStoryId.value = stories.value[0].id || '0'
-      openStoryId.value = selectedStoryId.value
     } else if (selectedStoryId.value && !stories.value.some((s, i) => (s.id || String(i)) === selectedStoryId.value)) {
       selectedStoryId.value = null
-      openStoryId.value = null
     }
 
     liveDetail.value = {
@@ -1045,8 +919,8 @@ async function loadDetail(id?: string, quiet = false) {
       }),
       quality: extractQuality(sessions),
       aiProfile: [
-        { label: '知识水平', value: String(raw.knowledgeLevel || '—') },
-        { label: '模拟模式', value: String(raw.simulationMode || '—') },
+        { label: '知识水平', value: { beginner: '零基础', elementary: '入门', intermediate: '中级', advanced: '进阶' }[String(raw.knowledgeLevel)] || String(raw.knowledgeLevel || '—') },
+        { label: '模拟模式', value: { manual: '手动', auto: '自动' }[String(raw.simulationMode)] || String(raw.simulationMode || '—') },
         { label: '性格基线', value: String(p.emotionalBaseline || p.corePersonality || '—') }
       ],
       simulationBudget: (() => {
@@ -1057,10 +931,16 @@ async function loadDetail(id?: string, quiet = false) {
           maxRetriesTotal: Number(b.maxRetriesTotal) || 50,
           consumedRetries: Number(b.consumedRetries) || 0
         }
+      })(),
+      runtimePrefs: (() => {
+        const rp = (p.runtimePrefs || {}) as Record<string, unknown>
+        if (rp.turnCapPerLesson === undefined && rp.frictionBudget === undefined) return undefined
+        return {
+          turnCapPerLesson: Number(rp.turnCapPerLesson) || undefined,
+          frictionBudget: rp.frictionBudget ? String(rp.frictionBudget) : undefined
+        }
       })()
     }
-    // 故事数据就绪后重启自动运行状态轮询（空转停止后需要唤醒）
-    autopilotPolling.start()
   } catch {
     if (seq !== loadSeq) return
     const base = liveVirtuals.value.find((v) => v.id === id)
@@ -1099,9 +979,7 @@ function openEdit() {
     name: liveDetail.value.name,
     goal: liveDetail.value.goal,
     level: liveDetail.value.level,
-    notes: liveDetail.value.notes || liveDetail.value.story,
-    maxRetriesPerStep: liveDetail.value.simulationBudget?.maxRetriesPerStep ?? 5,
-    maxRetriesTotal: liveDetail.value.simulationBudget?.maxRetriesTotal ?? 50
+    notes: liveDetail.value.notes || liveDetail.value.story
   }
   editErrors.value = {}
   editOpen.value = true
@@ -1115,28 +993,13 @@ async function saveProfile() {
     editErrors.value.name = '请填写画像名称'
     return
   }
-  // 输入框的 min/max 属性在按钮点击保存时不生效，这里显式校验并钳制
-  const perStep = Math.round(Number(editForm.value.maxRetriesPerStep))
-  const total = Math.round(Number(editForm.value.maxRetriesTotal))
-  if (!Number.isFinite(perStep) || perStep < 1 || perStep > 20) {
-    editErrors.value.maxRetriesPerStep = '单步重试须为 1–20 的整数'
-    return
-  }
-  if (!Number.isFinite(total) || total < 1 || total > 500) {
-    editErrors.value.maxRetriesTotal = '总重试预算须为 1–500 的整数'
-    return
-  }
   saving.value = true
   try {
     await adminVirtualLearnersApi.updateVirtualLearner(id, {
       name: editForm.value.name.trim(),
       learningGoal: editForm.value.goal.trim(),
       knowledgeLevel: editForm.value.level,
-      notes: editForm.value.notes.trim(),
-      simulationBudget: {
-        maxRetriesPerStep: perStep,
-        maxRetriesTotal: total
-      }
+      notes: editForm.value.notes.trim()
     })
     await loadDetail(id)
     editOpen.value = false
@@ -1281,8 +1144,9 @@ const activeSessionId = computed(() => {
   const failed = runs.find(r => r.tone === 'bad')
   return failed?.sessionId || null
 })
-/** 会话状态：idle / running / paused / failed / completed */
-const sessionState = computed<'idle' | 'running' | 'paused' | 'failed' | 'completed'>(() => {
+/** 会话生命周期状态（统一模型 vlab-controls：状态徽章 + 合法操作，三层共用）
+ *  派生自最新会话：paused 由 teaching.paused 派生；failed/abandoned 在 tone=bad 下合并展示 */
+const lifeState = computed<VsLifecycleState>(() => {
   const runs = allRuns.value
   if (!runs.length) return 'idle'
   const pausedRun = runs.find(r => r.paused && (r.result === 'running' || r.result === 'created'))
@@ -1292,6 +1156,29 @@ const sessionState = computed<'idle' | 'running' | 'paused' | 'failed' | 'comple
   if (runs.some(r => r.tone === 'ok')) return 'completed'
   return 'idle'
 })
+const lifeMeta = computed(() => VS_STATE_META[lifeState.value])
+const lifeLabel = computed(() => lifeMeta.value.label)
+const lifeTone = computed(() => lifeMeta.value.tone)
+const lifeHint = computed(() => lifeMeta.value.hint)
+const lifeHandlers: Partial<Record<VsControlKey, () => void>> = {
+  pause: pauseSession,
+  resume: resumeSession,
+  stop: stopSession,
+  retry: retrySession,
+  cockpit: goCockpit
+}
+const lifeControls = computed(() => vlabControlsFor(lifeState.value).filter((c) => lifeHandlers[c.key]))
+function runLifeAction(c: VsControlDef) {
+  const fn = lifeHandlers[c.key]
+  if (!fn) return
+  if (c.confirm) {
+    void askConfirm({ title: c.confirm.title, message: c.confirm.message, confirmText: c.confirm.confirmText }).then((ok) => {
+      if (ok) fn()
+    })
+    return
+  }
+  fn()
+}
 async function pauseSession() {
   if (!activeSessionId.value) return
   sessionBusy.value = true
@@ -1307,14 +1194,14 @@ async function resumeSession() {
   sessionBusy.value = true
   try {
     await adminVirtualLearnersApi.resumeVirtualSession(activeSessionId.value)
-    toast.success('会话已恢复')
+    toast.success('会话已恢复 · 再次触发自动学习后继续推进')
     void loadDetail(subPage.value?.id, true)
   } catch (e) { toast.error(`恢复失败：${errMsg(e)}`) }
   finally { sessionBusy.value = false }
 }
 async function stopSession() {
   if (!activeSessionId.value) return
-  if (!await askConfirm({ title: '停止学习', message: '紧急停止当前学习，需要重新开始。确认？', confirmText: '停止', danger: true })) return
+  // 确认由统一模型执行（vlab-controls stop.confirm），此处只执行动作
   sessionBusy.value = true
   try {
     await adminVirtualLearnersApi.stopVirtualLearning(activeSessionId.value)
@@ -1325,6 +1212,7 @@ async function stopSession() {
 }
 async function retrySession() {
   if (!activeSessionId.value) return
+  // 确认由统一模型执行（vlab-controls retry.confirm），此处只执行动作
   sessionBusy.value = true
   try {
     await adminVirtualLearnersApi.restartVirtualLearning(activeSessionId.value)
@@ -1362,15 +1250,10 @@ const d = computed<Detail | undefined>(() => {
   return { ...demo, level: 'beginner', notes: '', quality: { referee: null, fidelity: null } }
 })
 
-/* 全部运行 feed（人物级全量运行流；故事卡只展示最近摘要，职责分离见 D1） */
+/* 全部运行 feed（人物级全量运行流） */
 const allRuns = computed<RunItem[]>(() => (d.value?.runs || []).slice(0, RUNS_TAB_WINDOW))
 
-/* 故事卡「运行历史」→「运行」tab 全量视图 */
-function goRunsTab() {
-  activeTab.value = 'runs'
-}
-
-/* 单个故事的运行历史（故事卡内展开） */
+/* 单个故事的运行历史（运行 tab 分组用） */
 function runsForStory(story: StoryItem): RunItem[] {
   const runs = d.value?.runs || []
   const sid = story.id
@@ -1381,7 +1264,23 @@ function runsForStory(story: StoryItem): RunItem[] {
 
 function storyStatusLabel(s: StoryItem): string {
   if (selectedStoryId.value === (s.id || String(s.index ?? 0))) return '已选'
-  return s.status === 'ready' ? '就绪' : s.status || '草稿'
+  if (s.status === 'ready') return '就绪'
+  if (s.status === 'draft' || !s.status) return '草稿'
+  return s.status
+}
+
+/** 故事级预算覆盖徽标文案（无覆盖返回空串） */
+function storyBudgetBadge(s: StoryItem): string {
+  const b = storyBudgetOf(s)
+  if (!b) return ''
+  const parts: string[] = []
+  if (Number.isFinite(Number(b.maxRetriesPerStep))) parts.push(`单步 ${b.maxRetriesPerStep}`)
+  if (Number.isFinite(Number(b.maxRetriesTotal))) parts.push(`总量 ${b.maxRetriesTotal}`)
+  return parts.join(' · ')
+}
+function storyBudgetOf(s: StoryItem): Record<string, unknown> | null {
+  const b = (s.raw?.budget || null) as unknown
+  return b && typeof b === 'object' ? b as Record<string, unknown> : null
 }
 
 function formatRunStage(stage: string) {
@@ -1390,10 +1289,11 @@ function formatRunStage(stage: string) {
     // 容错：旧数据若 stage/result 仍反了，按状态词不当作阶段
     return '会话'
   }
-  if (s.includes('goal')) return '目标对话'
-  if (s.includes('path')) return '路径生成'
-  if (s.includes('learn') || s.includes('teach')) return '教学回合'
-  if (s.includes('wrap')) return '课后产出'
+  // 与一级/三级页同口径：Goal / Path / Learn / Wrapup（VLAB_STAGE_LABELS）
+  if (s.includes('goal')) return 'Goal'
+  if (s.includes('path')) return 'Path'
+  if (s.includes('learn') || s.includes('teach')) return 'Learn'
+  if (s.includes('wrap')) return 'Wrapup'
   if (s.includes('scenario') || s.includes('story')) return '故事'
   return stage || '会话'
 }
@@ -1401,22 +1301,19 @@ function formatRunStage(stage: string) {
 function formatRunResult(result: string) {
   const r = String(result || '').toLowerCase()
   if (r.includes('goal') && !['running', 'created', 'completed', 'failed', 'error', 'timeout'].includes(r)) {
-    return '目标对话'
+    return 'Goal'
   }
-  if (r === 'running') return '进行中'
-  if (r === 'created') return '已创建'
+  if (r === 'running') return '运行中'
+  if (r === 'created') return '创建中'
   if (r === 'completed' || r === 'success' || r === 'succeeded') return '已完成'
-  if (r === 'failed' || r === 'error') return '失败'
+  if (r === 'failed' || r === 'error') return '已失败'
   if (r === 'abandoned') return '已终止'
   if (r === 'timeout') return '超时'
   if (r === 'paused') return '已暂停'
   return result || '—'
 }
 
-/* ---- 生命周期条（vp-lc）辅助：阶段计数 / 结果色调 ---- */
-function stageTotal(s: StoryItem): number {
-  return (s.goalCount || 0) + (s.pathCount || 0) + (s.learnCount || 0)
-}
+/* ---- 结果色调辅助 ---- */
 function runToneOf(status: string): 'ok' | 'warn' | 'bad' {
   const r = String(status || '').toLowerCase()
   if (r === 'completed' || r === 'success' || r === 'succeeded') return 'ok'
@@ -1424,9 +1321,9 @@ function runToneOf(status: string): 'ok' | 'warn' | 'bad' {
   // abandoned（人为终止）非成功态：标红但文案区分「已终止」而非「失败」
   return 'bad'
 }
-/** 管理行「最近」摘要：进行中 / 最近结果（色调）/ 未运行 */
+/** 管理行「最近」摘要：运行中 / 最近结果（色调）/ 未运行 */
 function storyLatestText(s: StoryItem): { text: string; cls: string } {
-  if ((s.runningCount || 0) > 0) return { text: `${s.runningCount} 个进行中`, cls: 'is-running' }
+  if ((s.runningCount || 0) > 0) return { text: `${s.runningCount} 个运行中`, cls: 'is-running' }
   if (s.latestRun) {
     const tone = runToneOf(s.latestRun.status)
     return {
@@ -1455,40 +1352,6 @@ const runsGrouped = computed<StoryRunGroup[]>(() => {
   if (orphanRuns.length) groups.push({ key: '__orphan__', title: '未关联故事', runs: orphanRuns })
   return groups
 })
-
-/* ---- V2：会话推进条（Goal→Path→Learn→Wrapup 点亮 + 卡顿高亮） ---- */
-interface StoryProgress {
-  visible: boolean
-  running: boolean
-  activeIndex: number
-  stageLabel: string
-  stalled: boolean
-  idleMins: number
-}
-function progressOf(s: StoryItem): StoryProgress {
-  const run = s.latestRun || null
-  const running = (s.runningCount || 0) > 0 && !!run && String(run.status || '').toLowerCase() === 'running'
-  let activeIndex = sessionStageIndex(run?.currentStage)
-  // 无明确阶段（旧数据/已完成会话）：按生命周期计数推导已走通段
-  if (activeIndex < 0 && !running) {
-    if ((s.learnCount || 0) > 0) activeIndex = 2
-    else if ((s.pathCount || 0) > 0) activeIndex = 1
-    else if ((s.goalCount || 0) > 0) activeIndex = 0
-  }
-  const stall = stallState(run ? { status: run.status, updatedAt: run.updatedAt, createdAt: run.createdAt } : null)
-  const stageLabel =
-    activeIndex >= 0
-      ? VLAB_STAGE_LABELS[VLAB_STAGES[Math.min(activeIndex, VLAB_STAGES.length - 1)]]
-      : running ? '推进中' : '已完成'
-  return {
-    visible: running || activeIndex >= 0,
-    running,
-    activeIndex,
-    stageLabel,
-    stalled: stall.stalled,
-    idleMins: stall.idleMins
-  }
-}
 
 /* ---- V3：仿真质量常驻徽章（最近一次裁判 / 保真分） ---- */
 const qualityReferee = computed<number | null>(() => d.value?.quality?.referee?.score ?? null)
@@ -1638,57 +1501,67 @@ async function quietReload(id: string) {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
 }
-
-/* 统计条：stat 胶囊（与列表页「运行概览」胶囊同语言；数字+标签横向排布） */
-.vp-overview {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.vp-overview__item {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 7px 14px;
-  border: 1px solid var(--mk-line);
-  border-radius: 999px;
-  background: var(--mk-surface);
-}
-.vp-overview__item b {
-  font-size: 16px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  color: var(--mk-ink);
-  line-height: 1.2;
-}
-.vp-overview__item span {
-  font-size: 11.5px;
-  color: var(--mk-faint);
-  font-weight: 600;
-  letter-spacing: 0.03em;
-}
-.vp-overview__item.is-live b { color: #047857; }
-.vp-overview__item.is-live { background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.25); }
-.vp-overview__item.is-failed b { color: var(--mk-red, #dc2626); }
-.vp-overview__item.is-failed { background: rgba(220, 38, 38, 0.06); border-color: rgba(220, 38, 38, 0.2); }
-.vp-overview__goal {
+/* 生命周期状态徽章（vlab-controls 唯一语义：运行中/已暂停/已失败/已终止/已完成…） */
+.vp-life {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
-  max-width: 480px;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--mk-line);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--mk-ink);
+  white-space: nowrap;
 }
-.vp-overview__goal span { font-size: 11px; flex-shrink: 0; }
-.vp-overview__goal strong {
-  font-size: 12.5px;
+.vp-life__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-faint); }
+.vp-life--ok .vp-life__dot { background: var(--mk-green); }
+.vp-life--warn .vp-life__dot { background: var(--mk-amber); }
+.vp-life--bad .vp-life__dot { background: var(--mk-red); }
+.vp-life--muted .vp-life__dot { background: var(--mk-faint); }
+.vp-top__actions .mk-status__action--danger { color: var(--mk-red); border-color: rgba(220, 38, 38, 0.35); }
+.vp-top__actions .mk-status__action--danger:hover { border-color: var(--mk-red); background: #fef2f2; }
+
+/* 故事池空态（与全站空数据态同一语言） */
+.vp-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 36px 20px;
+  text-align: center;
+}
+.vp-empty-state__icon { font-size: 30px; line-height: 1; color: var(--mk-faint); }
+.vp-empty-state strong { font-size: 13px; font-weight: 800; }
+.vp-empty-state p { margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--mk-muted); max-width: 340px; }
+
+/* 概览统计：KPI 四卡（全站 MkKpi 语言；点击跳转对应页签） */
+.vp-overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+@media (max-width: 1000px) {
+  .vp-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* 身份区：长期倾向（随名字走，不再挤统计条） */
+.vp-top__goal {
+  font-size: 12px;
   font-weight: 600;
   color: var(--mk-muted);
+  background: #f8fafc;
+  border: 1px solid var(--mk-line);
+  border-radius: 999px;
+  padding: 2px 10px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 420px;
 }
-
+.vp-top__goal--none { color: var(--mk-faint); font-weight: 500; }
 /* 工作流指引 */
 .vp-guide {
   margin: 10px 0 0;
@@ -1713,13 +1586,6 @@ async function quietReload(id: string) {
 .vp-guide__step.is-active { color: #047857; background: rgba(16, 185, 129, 0.14); border-color: rgba(16, 185, 129, 0.4); }
 .vp-guide__arrow { font-size: 12px; color: #c4ccd9; font-weight: 700; }
 .vp-guide__hint { font-size: 12px; color: var(--mk-muted); margin-left: auto; max-width: 480px; text-align: right; }
-
-/* 生命周期阶段标签 */
-.vp-lc__stage-labels { display: flex; align-items: center; gap: 5px; }
-.vp-lc__stage-label {
-  font-size: 10.5px; font-weight: 700; color: var(--mk-faint);
-  padding: 2px 8px; border-radius: 4px; background: #f4f6f9; border: 1px solid #eef1f6; cursor: help;
-}
 
 /* 分页：统一 mk-pills 分段控件 */
 .vp-tabs { width: fit-content; }
@@ -1777,6 +1643,27 @@ async function quietReload(id: string) {
 .vp-profile__row span { color: var(--mk-faint); padding-top: 1px; }
 .vp-profile__row strong { font-weight: 600; line-height: 1.55; word-break: break-word; }
 
+/* 运行预算卡片：4 字段网格 + 底部保存操作条 */
+.vp-budget {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 18px;
+  padding: 16px 18px;
+}
+@media (max-width: 700px) {
+  .vp-budget { grid-template-columns: 1fr; }
+}
+.mk-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 10px 18px;
+  border-top: 1px solid #f0f2f5;
+  background: #fafbfe;
+}
+.mk-card__foot .mk-card__meta { margin-right: auto; }
+
 .vp-stories-head {
   margin-left: auto;
   display: flex;
@@ -1784,32 +1671,35 @@ async function quietReload(id: string) {
   gap: 12px;
   flex-wrap: wrap;
 }
-/* ===== 故事池：管理行 + 展开详情（功能分区） ===== */
+/* ===== 故事池：列表（选中 → 运行目标；展开 → 详情区） ===== */
 .vp-stories { display: grid; gap: 8px; padding: 12px; }
 
-/* 管理行：radio + 标题/状态 + 阶段计数 + 最近结果 + 操作，一行扫完 */
 .vp-story {
   display: grid;
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   background: var(--mk-surface);
   overflow: hidden;
+  transition: border-color 0.14s ease;
 }
+.vp-story:hover { border-color: rgba(44, 99, 208, 0.35); }
+.vp-story.is-selected { border-color: rgba(44, 99, 208, 0.5); }
+
+/* 列表行：radio + 主区（标题/状态 + 简述 + 统计）+ 操作 + 展开 */
 .vp-story__row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 12px 14px;
   cursor: pointer;
   min-width: 0;
   transition: background 0.12s ease;
 }
 .vp-story__row:hover { background: #f6f9ff; }
 .vp-story.is-selected .vp-story__row { background: #f0f7ff; }
-.vp-story.is-open .vp-story__row { border-bottom: 1px dashed #e3e9f3; }
 .vp-story__radio {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   flex-shrink: 0;
   border-radius: 50%;
   border: 2px solid #c4ccd9;
@@ -1818,45 +1708,73 @@ async function quietReload(id: string) {
 }
 .vp-story.is-selected .vp-story__radio {
   border-color: var(--mk-blue);
-  background: radial-gradient(circle, var(--mk-blue) 0 4px, #fff 4.5px);
+  background: radial-gradient(circle, var(--mk-blue) 0 4.5px, #fff 5px);
+}
+/* 主区：标题行 + 简述 + 统计行 */
+.vp-story__main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 .vp-story__meta {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
-  flex: 1 1 auto;
 }
 .vp-story__title {
-  font-size: 13.5px;
+  font-size: 14px;
+  font-weight: 800;
   line-height: 1.4;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.vp-story__runcount {
-  font-family: var(--mk-mono, ui-monospace, monospace);
-  font-size: 11px;
+.vp-story__budget-badge {
+  font-size: 10.5px;
   font-weight: 700;
-  color: var(--mk-muted);
-  padding: 1px 7px;
+  color: var(--mk-amber, #b7791f);
+  background: #fff7e8;
+  border: 1px solid rgba(217, 119, 6, 0.25);
+  padding: 1px 8px;
   border-radius: 999px;
-  background: #f0f2f5;
   flex-shrink: 0;
-}
-/* 阶段计数：G5 · P2 · L1 紧凑摘要 */
-.vp-story__stages {
-  font-family: var(--mk-mono, ui-monospace, monospace);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--mk-faint);
-  background: #f7f8fa;
-  border: 1px solid #eef1f6;
-  border-radius: 999px;
-  padding: 2px 9px;
   white-space: nowrap;
-  flex-shrink: 0;
+}
+/* 简述：单行截断，次要文字色 */
+.vp-story__outline {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mk-muted);
+  line-height: 1.5;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 统计行：运行次数 / 阶段进度（中文术语）/ 最近结果 */
+.vp-story__stats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.vp-story__stats-item {
+  font-size: 11.5px;
+  color: var(--mk-faint);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.vp-story__stats-item:first-child::before {
+  content: '🕐 ';
+  font-size: 10.5px;
+}
+.vp-story__stats-item:nth-child(2)::before {
+  content: '📈 ';
+  font-size: 10.5px;
 }
 /* 最近结果：色调徽标 */
 .vp-story__latest {
@@ -1864,7 +1782,7 @@ async function quietReload(id: string) {
   font-weight: 700;
   white-space: nowrap;
   flex-shrink: 0;
-  min-width: 110px;
+  margin-left: auto;
 }
 .vp-story__latest.is-ok { color: var(--mk-green, #16a34a); }
 .vp-story__latest.is-bad { color: var(--mk-red, #dc2626); }
@@ -1881,50 +1799,18 @@ async function quietReload(id: string) {
   animation: vp-pulse 1.4s ease-in-out infinite;
 }
 .vp-story__latest.is-none { color: var(--mk-faint); font-weight: 600; }
-/* 故事层级自动运行徽标：运行中（琥珀） / 已达成（绿） */
-.vp-story__auto {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 9px;
-  border-radius: 999px;
-  white-space: nowrap;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.vp-story__auto.is-running { background: rgba(245, 158, 11, 0.12); color: var(--mk-amber, #b45309); }
-.vp-story__auto.is-done { background: rgba(21, 128, 61, 0.09); color: var(--mk-green, #15803d); }
+/* 行内操作 */
 .vp-story__ops {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-shrink: 0;
 }
+.vp-story__ops .mk-link { font-size: 12px; }
 .vp-story__chevron {
   color: #c4ccd9;
   font-size: 12px;
-  transition: transform 0.15s ease;
   flex-shrink: 0;
-}
-.vp-story.is-open .vp-story__chevron { transform: rotate(90deg); }
-
-/* 详情展开行：摘要 / 生命周期 / 运行历史 / 高级诊断 分区 */
-.vp-story__detail {
-  display: grid;
-  gap: 10px;
-  padding: 12px 14px 14px 40px;
-  background: #fcfdff;
-}
-.vp-detail__outline {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--mk-muted);
-  line-height: 1.6;
-  padding: 9px 12px;
-  border-radius: 8px;
-  background: #fff;
-  border: 1px solid #e2e8f0;
 }
 
 @keyframes vp-pulse {
@@ -1957,158 +1843,6 @@ async function quietReload(id: string) {
 .vp-quality--warn { color: var(--mk-amber, #b7791f); background: #fff5e6; }
 .vp-quality--bad { color: #dc2626; background: #fdecec; }
 .vp-quality--none { color: var(--mk-faint); background: #f0f2f5; }
-
-/* ===== 生命周期分区（详情内三行）：累计 / 当前 / 投影 ===== */
-.vp-lc {
-  display: grid;
-  gap: 7px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  font-size: 12px;
-  color: var(--mk-muted);
-}
-.vp-lc.is-stalled { border-color: rgba(217, 119, 6, 0.45); background: #fffaf0; }
-.vp-lc__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-.vp-lc__label {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: #a8b3c6;
-  width: 36px;
-  flex-shrink: 0;
-}
-/* 累计：三阶段计数 pill */
-.vp-lc__counts {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.vp-lc__count {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  padding: 2px 10px;
-  border-radius: 999px;
-  background: #f4f6f9;
-  border: 1px solid #eef1f6;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--mk-faint);
-  white-space: nowrap;
-}
-.vp-lc__count b {
-  font-family: var(--mk-mono, ui-monospace, monospace);
-  font-size: 11.5px;
-  color: var(--mk-muted);
-}
-.vp-lc__count.is-on { background: #eef5ff; border-color: rgba(44, 99, 208, 0.3); }
-.vp-lc__count.is-on b { color: var(--mk-blue, #2c63d0); font-weight: 800; }
-/* 当前：运行中（脉冲）/ 最近完成（色调结果） */
-.vp-lc__current {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  flex-wrap: wrap;
-}
-.vp-lc__current--stalled { color: var(--mk-amber, #b7791f); }
-.vp-lc__pulse {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--mk-amber, #b7791f);
-  animation: vp-pulse 1.4s ease-in-out infinite;
-  flex-shrink: 0;
-}
-.vp-lc__result { font-weight: 800; font-variant-numeric: tabular-nums; }
-.vp-lc__result.is-ok { color: var(--mk-green, #16a34a); }
-.vp-lc__result.is-warn { color: var(--mk-amber, #b7791f); }
-.vp-lc__result.is-bad { color: var(--mk-red, #dc2626); }
-/* 投影：集中链接 chips */
-.vp-lc__links {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
-}
-.vp-lc__link {
-  border: 0;
-  background: #e8f0fe;
-  padding: 2px 8px;
-  border-radius: 5px;
-  font: inherit;
-  color: var(--mk-blue, #2c63d0);
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.vp-lc__link:hover { background: #dbe8fd; }
-.vp-story-runs {
-  margin-top: 4px;
-  border-top: 1px dashed #e3e9f3;
-  padding-top: 8px;
-  display: grid;
-  gap: 2px;
-}
-.vp-story-runs__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 2px 2px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--mk-faint);
-}
-.vp-story-runs__head .mk-link {
-  text-transform: none;
-  letter-spacing: 0;
-  font-size: 12px;
-}
-.vp-story-runs .vp-run { padding: 8px 12px; }
-.vp-story-runs .vp-none { padding: 10px 2px; }
-
-/* 运行历史（故事详情内分区）：标题行 + 记录列表，明显边框 */
-.vp-runs-block {
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #fff;
-  overflow: hidden;
-}
-.vp-runs-block__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 12px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--mk-faint);
-}
-.vp-runs-block__head .mk-link {
-  text-transform: none;
-  letter-spacing: 0;
-  font-size: 12px;
-}
-.vp-runs-block .vp-run {
-  margin: 8px 10px;
-}
-.vp-runs-block .vp-run:last-child { margin-bottom: 10px; }
-.vp-runs-block .vp-none { padding: 12px; }
 
 /* 运行 tab：按故事分组 */
 .vp-run-groups { display: grid; gap: 10px; padding: 12px; }
@@ -2323,20 +2057,13 @@ async function quietReload(id: string) {
   .vp-goal span { font-size: 13.5px; }
   .vp-goal strong { font-size: 16.5px; }
   .vp-profile__row { font-size: 15px; }
-  .vp-lc { font-size: 13px; }
-  .vp-lc__label { font-size: 12px; width: 44px; }
-  .vp-lc__count { font-size: 12.5px; }
-  .vp-lc__count b { font-size: 13px; }
-  .vp-lc__link { font-size: 12.5px; }
   .vp-story__title { font-size: 15px; }
-  .vp-detail__outline { font-size: 14px; }
-  .vp-story__stages { font-size: 12.5px; }
+  .vp-story__outline { font-size: 13.5px; }
+  .vp-story__stats-item { font-size: 13px; }
   .vp-story__latest { font-size: 13px; }
   .vp-run__head strong { font-size: 15px; }
   .vp-run__result, .vp-run__sub { font-size: 13px; }
   .vp-run-group__head strong { font-size: 14px; }
-  .vp-story-runs__head { font-size: 13px; }
-  .vp-story-runs__head .mk-link { font-size: 14px; }
   .vp-none { font-size: 15px; }
   .vp-next { font-size: 15px; }
   .vp-tool { font-size: 14.5px; }
@@ -2349,10 +2076,10 @@ async function quietReload(id: string) {
   .vp-trait { padding: 5px 13px; }
   .vp-goal { padding: 14px 16px; }
   .vp-profile__row { grid-template-columns: 126px minmax(0, 1fr); padding: 14px 21px; }
-  .vp-stories { gap: 12px; padding: 14px; }
-  .vp-story__row { padding: 12px 18px; }
-  .vp-story__detail { padding: 14px 18px 16px 48px; }
-  .vp-lc { padding: 12px 14px; }
+  .vp-budget { gap: 16px 21px; padding: 19px 21px; }
+  .mk-card__foot { padding: 12px 21px; }
+  .vp-stories { gap: 8px; padding: 14px; }
+  .vp-story__row { padding: 10px 16px; }
   .vp-run { padding: 11px 14px; }
   .vp-run-groups { padding: 14px; }
   .vp-none { padding: 21px; }
@@ -2379,20 +2106,13 @@ async function quietReload(id: string) {
   .vp-goal span { font-size: 16px; }
   .vp-goal strong { font-size: 19.5px; }
   .vp-profile__row { font-size: 17.5px; }
-  .vp-lc { font-size: 17px; }
-  .vp-lc__label { font-size: 14.5px; width: 52px; }
-  .vp-lc__count { font-size: 15px; }
-  .vp-lc__count b { font-size: 15.5px; }
-  .vp-lc__link { font-size: 15px; }
   .vp-story__title { font-size: 17.5px; }
-  .vp-detail__outline { font-size: 16.5px; }
-  .vp-story__stages { font-size: 15px; }
+  .vp-story__outline { font-size: 16px; }
+  .vp-story__stats-item { font-size: 15.5px; }
   .vp-story__latest { font-size: 15.5px; }
   .vp-run__head strong { font-size: 17.5px; }
   .vp-run__result, .vp-run__sub { font-size: 15.5px; }
   .vp-run-group__head strong { font-size: 16.5px; }
-  .vp-story-runs__head { font-size: 15px; }
-  .vp-story-runs__head .mk-link { font-size: 16.5px; }
   .vp-none { font-size: 17.5px; }
   .vp-next { font-size: 17.5px; }
   .vp-tool { font-size: 17px; }
@@ -2405,10 +2125,10 @@ async function quietReload(id: string) {
   .vp-trait { padding: 6px 15px; }
   .vp-goal { padding: 16px 19px; }
   .vp-profile__row { grid-template-columns: 148px minmax(0, 1fr); padding: 16px 24px; }
-  .vp-stories { gap: 14px; padding: 16px; }
-  .vp-story__row { padding: 14px 22px; }
-  .vp-story__detail { padding: 16px 22px 18px 58px; }
-  .vp-lc { padding: 14px 16px; }
+  .vp-budget { gap: 19px 24px; padding: 22px 24px; }
+  .mk-card__foot { padding: 14px 24px; }
+  .vp-stories { gap: 10px; padding: 16px; }
+  .vp-story__row { padding: 12px 20px; }
   .vp-run { padding: 13px 16px; }
   .vp-run-groups { padding: 16px; }
   .vp-none { padding: 24px; }
@@ -2435,20 +2155,13 @@ async function quietReload(id: string) {
   .vp-goal span { font-size: 18.5px; }
   .vp-goal strong { font-size: 22.5px; }
   .vp-profile__row { font-size: 20.5px; }
-  .vp-lc { font-size: 20px; }
-  .vp-lc__label { font-size: 17px; width: 60px; }
-  .vp-lc__count { font-size: 17.5px; }
-  .vp-lc__count b { font-size: 18px; }
-  .vp-lc__link { font-size: 17.5px; }
   .vp-story__title { font-size: 20.5px; }
-  .vp-detail__outline { font-size: 19.5px; }
-  .vp-story__stages { font-size: 17.5px; }
+  .vp-story__outline { font-size: 19px; }
+  .vp-story__stats-item { font-size: 18.5px; }
   .vp-story__latest { font-size: 18px; }
   .vp-run__head strong { font-size: 20.5px; }
   .vp-run__result, .vp-run__sub { font-size: 18px; }
   .vp-run-group__head strong { font-size: 19.5px; }
-  .vp-story-runs__head { font-size: 17.5px; }
-  .vp-story-runs__head .mk-link { font-size: 19px; }
   .vp-none { font-size: 20.5px; }
   .vp-next { font-size: 20.5px; }
   .vp-tool { font-size: 20px; }
@@ -2461,10 +2174,10 @@ async function quietReload(id: string) {
   .vp-trait { padding: 7px 18px; }
   .vp-goal { padding: 19px 22px; }
   .vp-profile__row { grid-template-columns: 174px minmax(0, 1fr); padding: 19px 28px; }
-  .vp-stories { gap: 16px; padding: 19px; }
-  .vp-story__row { padding: 16px 26px; }
-  .vp-story__detail { padding: 18px 26px 20px 68px; }
-  .vp-lc { padding: 16px 19px; }
+  .vp-budget { gap: 22px 28px; padding: 26px 28px; }
+  .mk-card__foot { padding: 16px 28px; }
+  .vp-stories { gap: 12px; padding: 19px; }
+  .vp-story__row { padding: 15px 24px; }
   .vp-run { padding: 15px 19px; }
   .vp-run-groups { padding: 19px; }
   .vp-none { padding: 28px; }

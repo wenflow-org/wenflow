@@ -50,6 +50,13 @@ export interface LearnLearnerSimulationInput {
     status?: string;
     progress?: number;
   }>;
+  /** 学习者记忆（已掌握/到期复习/最近完成事项），供模拟器自然引用“我记得/我之前做过” */
+  learnerMemory?: {
+    mastered?: string[];
+    dueReview?: string[];
+    struggling?: string[];
+    recentCompleted?: string[];
+  } | null;
   /** 控制学习者对抗度. 默认 'normal' */
   frictionBudget?: FrictionBudget;
 }
@@ -277,6 +284,16 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
     previousLearnerState: input.previousLearnerState || null,
     currentTask: input.currentTask || null,
     knowledgeSnapshot: Array.isArray(input.knowledgeSnapshot) ? input.knowledgeSnapshot.slice(0, 5) : [],
+    learnerMemory: input.learnerMemory && typeof input.learnerMemory === 'object'
+      ? {
+          mastered: Array.isArray(input.learnerMemory.mastered) ? input.learnerMemory.mastered.slice(0, 8) : [],
+          dueReview: Array.isArray(input.learnerMemory.dueReview) ? input.learnerMemory.dueReview.slice(0, 8) : [],
+          struggling: Array.isArray(input.learnerMemory.struggling) ? input.learnerMemory.struggling.slice(0, 8) : [],
+          recentCompleted: Array.isArray(input.learnerMemory.recentCompleted)
+            ? input.learnerMemory.recentCompleted.slice(0, 5)
+            : [],
+        }
+      : null,
     friction: {
       budget: friction.budget,
       triggerProbability: friction.triggered ? 1 : 0,
@@ -288,7 +305,8 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
       requirements: [
         'reply only as the learner, in 1-2 short sentences',
         'apply friction.guidance to calibrate adversarial/failure/emotional patterns this turn',
-        'let personaAnchorHint fields implicitly steer reply style (especially verbosity, confusionStyle, helpSeekingPattern)'
+        'let personaAnchorHint fields implicitly steer reply style (especially verbosity, confusionStyle, helpSeekingPattern)',
+        'you may naturally reference your learnerMemory (things you previously learned or completed) when relevant, but never name the field'
       ]
     }
   };

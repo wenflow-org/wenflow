@@ -1,46 +1,32 @@
 <template>
   <div class="mk-page cp">
-    <!-- ===== 顶部栏：标题 + 状态 + 控制 + 阶段进度 ===== -->
+    <!-- ===== 顶部栏：身份 + 状态（控制全部下沉到下方统一控制台） ===== -->
     <header class="cp-topbar">
       <div class="cp-topbar__row">
         <button type="button" class="cp-back" @click="closeSubPage">← {{ backLabel }}</button>
         <h1 class="cp-title">会话监控 <span class="cp-title__id mono">{{ shortId }}</span></h1>
         <div class="cp-topbar__spacer"></div>
-        <!-- 执行控制 -->
-        <template v-if="!isRealMode && !autopilotRunning">
-          <button type="button" class="cp-topbar__btn cp-topbar__btn--primary" :disabled="autopilotStartDisabled" :title="autopilotStartTitle" @click="act('autopilotStart')">自动运行</button>
-          <button v-if="!isBlackbox" type="button" class="cp-topbar__btn" :disabled="runFullDisabled" :title="runFullTitle" @click="act('runFull')">单步推进</button>
-        </template>
-        <template v-if="autopilotRunning">
-          <span class="cp-topbar__autopilot">▶ 自动驾驶 · {{ Number(autopilot.steps || 0) }} 步</span>
-          <button type="button" class="cp-topbar__btn" :disabled="busy" @click="act('autopilotStop')">停止自动驾驶</button>
-        </template>
+        <!-- 自动驾驶进行中的状态指示（停止按钮在控制台） -->
+        <span v-if="autopilotRunning" class="cp-topbar__autopilot">▶ 自动驾驶 · {{ Number(autopilot.steps || 0) }} 步</span>
         <span class="cp-topbar__sep"></span>
         <!-- 状态 -->
         <span class="cp-topbar__dot" :class="`cp-topbar__dot--${statusTone}`"></span>
         <strong class="cp-topbar__status">{{ statusTitle }}</strong>
         <span class="cp-topbar__mode">{{ modeText }}</span>
-        <!-- 会话生命周期 -->
-        <template v-if="!isRealMode && session?.status === 'running'">
-          <button v-if="!isPaused" type="button" class="cp-topbar__btn" :disabled="busy" @click="pauseSession">暂停</button>
-          <button v-else type="button" class="cp-topbar__btn cp-topbar__btn--primary" :disabled="busy" @click="resumeSession">继续</button>
-          <button type="button" class="cp-topbar__btn cp-topbar__btn--danger" :disabled="busy" @click="stopLearning">结束</button>
-        </template>
-        <template v-else-if="!isRealMode && isFailedTerminal">
-          <button type="button" class="cp-topbar__btn cp-topbar__btn--primary" :disabled="busy" @click="restartLearning">重新开始</button>
-        </template>
-        <button v-if="!isRealMode" type="button" class="cp-topbar__btn cp-topbar__btn--danger" :disabled="busy" @click="removeSession">删除</button>
         <button type="button" class="cp-topbar__btn" :disabled="busy" @click="refresh">刷新</button>
       </div>
-      <!-- 阶段进度条 -->
-      <div class="cp-topbar__stages">
+    </header>
+
+    <!-- ===== 统一控制台：阶段 tab + 该阶段操作（各阶段操作集中置顶，卡片区只留内容） ===== -->
+    <div class="cp-console">
+      <div class="cp-console__tabs" role="tablist">
         <button
           v-for="st in stageFlow"
           :key="st"
           type="button"
           class="cp-stage"
           :class="[stageCls(st), { 'cp-stage--tab': !isBlackbox && activeTab === st }]"
-          :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `查看${stageLabel(st)}`"
+          :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `查看 ${stageLabel(st)} 页签`"
           :disabled="isBlackbox"
           @click="selectStageTab(st)"
         >
@@ -49,7 +35,66 @@
           <span v-if="stageProgress(st)" class="cp-stage__progress">{{ stageProgress(st) }}</span>
         </button>
       </div>
-    </header>
+      <div class="cp-console__actions">
+        <!-- ① 执行推进（跨阶段：自动驾驶 / 一键全流程 / 停止自动驾驶；黑盒与真实会话不提供） -->
+        <template v-if="!isRealMode && !isBlackbox">
+          <template v-if="!autopilotRunning">
+            <button type="button" class="cp-btn cp-btn--primary" :disabled="autopilotStartDisabled" :title="autopilotStartTitle" @click="act('autopilotStart')">自动运行</button>
+            <button type="button" class="cp-btn" :disabled="runFullDisabled" :title="runFullTitle" @click="act('runFull')">一键全流程</button>
+          </template>
+          <button v-else type="button" class="cp-btn" :disabled="busy" @click="act('autopilotStop')">停止自动驾驶</button>
+          <span class="cp-console__sep"></span>
+        </template>
+
+        <!-- ② 阶段操作（随当前页签切换） -->
+        <template v-if="!isRealMode && !isBlackbox && activeTab === 'goal'">
+          <button type="button" class="cp-btn" :disabled="goalStepDisabled" :title="goalStepTitle" @click="act('step')">单步推进</button>
+          <button type="button" class="cp-btn" :disabled="goalAutoDisabled" :title="goalAutoTitle" @click="act('auto')">自动到 Goal 收敛</button>
+          <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
+          <button v-if="goalConverged" type="button" class="cp-btn" @click="selectStageTab('path')">前往 Path →</button>
+        </template>
+        <template v-if="!isRealMode && !isBlackbox && activeTab === 'path'">
+          <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
+          <button type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
+          <button type="button" class="cp-btn" :disabled="resetPathDisabled" :title="resetPathTitle" @click="act('resetPath')">重建 Path</button>
+        </template>
+        <template v-if="!isRealMode && !isBlackbox && activeTab === 'learning'">
+          <button v-if="!hasLearningProgress" type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
+          <template v-else>
+            <button type="button" class="cp-btn" :disabled="learnStepDisabled" :title="learnStepTitle" @click="act('step')">推进对话</button>
+            <button type="button" class="cp-btn cp-btn--primary" :disabled="learnAutoDisabled" :title="learnAutoTitle" @click="act('auto')">完成本课</button>
+            <label class="cp-turn-cap-label" title="每课自动推进的回合预算：『完成本课』与『自动运行』共用；复杂课程可调高到 100">
+              每课回合上限
+              <input v-model.number="learnAutoTurnCap" type="number" min="1" max="100" class="cp-turn-cap" title="完成本课时最大对话轮数（自动运行与完成本课共用）" aria-label="每课回合上限" />
+            </label>
+            <!-- 运行中重开本课（失败后的「重试」由生命周期区统一承载，不重复） -->
+            <button type="button" class="cp-btn" :disabled="resetLearningDisabled" :title="resetLearningTitle" @click="act('resetLearn')">重开本课</button>
+          </template>
+        </template>
+        <template v-if="!isRealMode && !isBlackbox && activeTab === 'wrapup'">
+          <button v-if="!hasWrapup" type="button" class="cp-btn" :disabled="wrapupDisabled" :title="wrapupTitle" @click="act('wrapup')">生成终局总结</button>
+        </template>
+
+        <!-- ③ 会话生命周期（vlab-controls 统一模型：暂停/继续/停止/重试，按状态出现；删除仅终态） -->
+        <template v-if="!isRealMode && lifeControlsCockpit.length">
+          <span class="cp-console__sep"></span>
+          <button
+            v-for="c in lifeControlsCockpit"
+            :key="c.key"
+            type="button"
+            class="cp-btn"
+            :class="{ 'cp-btn--primary': c.tone === 'primary', 'cp-danger-btn': c.tone === 'danger' }"
+            :disabled="busy"
+            :title="c.hint"
+            @click="runCockpitAction(c)"
+          >{{ c.label }}</button>
+        </template>
+        <!-- 真实/黑盒模式声明 -->
+        <span v-if="isRealMode || isBlackbox" class="cp-console__note">
+          {{ isRealMode ? '真实会话：只读监控' : '黑盒模式：由黑盒执行器驱动，辅助控制不可用' }}
+        </span>
+      </div>
+    </div>
 
     <!-- ===== 主体：左侧内容 + 右侧控制台 ===== -->
     <div class="cp-body">
@@ -60,11 +105,6 @@
           <div class="mk-card__head">
             <h3 class="mk-card__title">Path 内容</h3>
             <span class="mk-card__meta">{{ pathDetailMeta || '等待 Path 生成' }}</span>
-          </div>
-          <div v-if="!isRealMode" class="cp-tab-actions">
-            <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
-            <button type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
-            <button type="button" class="cp-btn" :disabled="resetPathDisabled" :title="resetPathTitle" @click="act('resetPath')">重建 Path</button>
           </div>
           <div class="cp-path-detail">
             <div v-if="!session" class="cp-path-skel" aria-hidden="true">
@@ -112,18 +152,16 @@
               <template v-if="goalConverged"> · 已收敛</template>
             </span>
           </div>
-          <div v-if="!isRealMode" class="cp-tab-actions">
-            <button type="button" class="cp-btn" :disabled="goalStepDisabled" :title="goalStepTitle" @click="act('step')">单步推进</button>
-            <button type="button" class="cp-btn" :disabled="goalAutoDisabled" :title="goalAutoTitle" @click="act('auto')">自动到 Goal 收敛</button>
-            <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
-            <button v-if="goalConverged" type="button" class="cp-btn" @click="selectStageTab('path')">前往 Path →</button>
-          </div>
           <div class="cp-transcripts">
             <article v-for="(message, index) in goalConversationMessages" :key="`goal-${index}`" class="cp-transcript__message" :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'">
               <span>{{ message.role === 'assistant' ? '平台 Goal' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
               <p>{{ message.content }}</p>
             </article>
-            <p v-if="!goalConversationMessages.length" class="cp-none">尚未产生 Goal 对话，点击「单步推进」开始。</p>
+            <div v-if="!goalConversationMessages.length" class="cp-empty-state">
+              <span class="cp-empty-state__icon" aria-hidden="true">◌</span>
+              <strong>尚未产生 Goal 对话</strong>
+              <p>学习者澄清从零开始；在上方控制台点「单步推进」或「自动到 Goal 收敛」启动。</p>
+            </div>
           </div>
         </section>
 
@@ -135,21 +173,6 @@
               <template v-if="learnLessons.length">{{ learnProgressText }}</template>
               <template v-if="!learnLessons.length">暂无记录</template>
             </span>
-          </div>
-          <div v-if="!isRealMode" class="cp-tab-actions">
-            <button v-if="!hasLearningProgress" type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
-            <template v-else>
-              <button type="button" class="cp-btn" :disabled="learnStepDisabled" :title="learnStepTitle" @click="act('step')">推进对话</button>
-              <button type="button" class="cp-btn cp-btn--primary" :disabled="learnAutoDisabled" :title="learnAutoTitle" @click="act('auto')">完成本课</button>
-              <span class="cp-tab-actions__sep"></span>
-              <label class="cp-turn-cap-label">
-                回合上限
-                <input v-model.number="learnAutoTurnCap" type="number" min="1" max="100" class="cp-turn-cap" title="完成本课时最大对话轮数" aria-label="回合上限" />
-              </label>
-              <span class="cp-tab-actions__spacer"></span>
-              <button type="button" class="cp-btn" :disabled="resetLearningDisabled" :title="resetLearningTitle" @click="act('resetLearn')">重新开始</button>
-              <button type="button" class="cp-btn cp-danger-btn" :disabled="stopLearningDisabled" :title="stopLearningTitle" @click="act('stop')">结束学习</button>
-            </template>
           </div>
           <!-- 双栏：左侧课程树 + 右侧对话 -->
           <div class="cp-learn-grid">
@@ -335,10 +358,6 @@
             </div>
           </template>
 
-          <!-- 操作栏 -->
-          <div class="cp-tab-actions" v-if="!isRealMode && !hasWrapup">
-            <button type="button" class="cp-btn" :disabled="wrapupDisabled" :title="wrapupTitle" @click="act('wrapup')">生成终局总结</button>
-          </div>
           <p v-if="!hasWrapup && !lessonTree.length" class="cp-none" style="padding: 24px 16px;">{{ wrapupEmptyHint }}</p>
         </section>
 
@@ -425,10 +444,124 @@
         </details>
       </main>
 
-      <!-- ===== 右侧控制台 ===== -->
+      <!-- ===== 右列：阶段卡（按当前阶段） + 运维面板（折叠） ===== -->
       <aside class="cp-sidebar">
-        <!-- 运行控制 -->
-        <div class="cp-sidebar__section">
+        <!-- Goal 阶段卡：预生成 Path（左对话 / 右提案 两列语义） -->
+        <section v-if="!isRealMode && !isBlackbox && activeTab === 'goal'" class="cp-aside-card">
+          <div class="cp-aside-card__head">
+            <h4>预生成 Path <span class="cp-aside-card__dot" :class="hasPath ? 'is-ok' : goalConverged ? 'is-warn' : 'is-muted'"></span></h4>
+            <span class="mk-card__meta">Goal 收敛后生成学习路径方案</span>
+          </div>
+          <div class="cp-aside-card__body">
+            <template v-if="hasPath">
+              <div class="cp-aside-state cp-aside-state--ok">
+                <strong>✓ Path 方案已生成</strong>
+                <p>包含 {{ pathMilestonesView.length }} 个里程碑 · {{ learnLessons.length || '—' }} 节课。</p>
+                <button type="button" class="cp-btn cp-btn--sm cp-btn--primary" @click="selectStageTab('path')">查看 Path →</button>
+              </div>
+            </template>
+            <template v-else-if="pathGenerationInProgress">
+              <div class="cp-aside-state cp-aside-state--busy">
+                <span class="cp-aside-state__spin" aria-hidden="true"></span>
+                <strong>正在生成 Path 方案…</strong>
+                <p>里程碑与课程树生成中，稍后自动刷新；也可前往 Path 页签查看进度。</p>
+              </div>
+            </template>
+            <template v-else>
+              <div class="cp-aside-state" :class="goalConverged ? 'cp-aside-state--warn' : 'cp-aside-state--empty'">
+                <span class="cp-aside-state__icon" aria-hidden="true">{{ goalConverged ? '◎' : '◌' }}</span>
+                <strong>{{ goalConverged ? 'Path 尚未生成' : 'Goal 尚未收敛' }}</strong>
+                <p>{{ goalConverged
+                  ? 'Goal 澄清已完成，点击「生成 Path」产出学习路径方案。'
+                  : '继续「单步推进」或在控制台点「自动到 Goal 收敛」，澄清完成后自动进入 Path 生成。' }}</p>
+                <button v-if="!advancePathDisabled" type="button" class="cp-btn cp-btn--sm" @click="act('advancePath')">生成 Path</button>
+                <button v-else type="button" class="cp-btn cp-btn--sm cp-btn--primary" @click="act('auto')">自动到 Goal 收敛</button>
+              </div>
+            </template>
+          </div>
+        </section>
+
+        <!-- Path 阶段卡：Path 评审（左方案 / 右评审 两列语义） -->
+        <section v-if="!isRealMode && !isBlackbox && activeTab === 'path'" class="cp-aside-card">
+          <div class="cp-aside-card__head">
+            <h4>Path 评审 <span class="cp-aside-card__dot" :class="pathReviewStatus ? 'is-ok' : 'is-muted'"></span></h4>
+            <span class="mk-card__meta">{{ pathReviewStatus ? pathReviewDecisionLabel : '未评审 — 评审只是质量检查，可直接启动 Learn' }}</span>
+          </div>
+          <div class="cp-aside-card__body">
+            <div class="cp-review-panel__actions">
+              <button type="button" class="cp-btn cp-btn--sm" :disabled="reviewPathDisabled" :title="reviewPathTitle" @click="act('reviewPath')">评审</button>
+              <button v-if="acceptPathVisible" type="button" class="cp-btn cp-btn--primary cp-btn--sm" :disabled="acceptPathDisabled" :title="acceptPathTitle" @click="act('acceptPath')">接受</button>
+              <button v-if="replanPathVisible" type="button" class="cp-btn cp-btn--primary cp-btn--sm" :disabled="replanPathDisabled" :title="replanPathTitle" @click="act('replanPath')">按意见重规划</button>
+            </div>
+            <div v-if="pathReviewStatus" class="cp-review">
+              <div class="cp-review__badges">
+                <span class="cp-review__badge" :data-decision="pathReviewDecision">{{ pathReviewDecisionLabel }}</span>
+                <span class="cp-review__meta">{{ pathReviewStatusLabel }}<template v-if="pathReviewTime"> · {{ pathReviewTime }}</template></span>
+              </div>
+              <p v-if="pathReviewReaction" class="cp-review__reaction">{{ pathReviewReaction }}</p>
+              <p v-if="pathReviewConcern" class="cp-review__concern">最大顾虑：{{ pathReviewConcern }}</p>
+              <ul v-if="pathReviewChanges.length" class="cp-review__changes"><li v-for="(c, i) in pathReviewChanges" :key="i">{{ c }}</li></ul>
+              <p v-if="pathReviewReplan" class="cp-review__replan">{{ pathReviewReplan }}</p>
+            </div>
+            <p v-else class="cp-none">尚未评审。评审只是质量检查，可直接启动 Learn。</p>
+          </div>
+        </section>
+
+        <!-- Learn 阶段卡：运行状态（左课堂 / 右监控 两列语义） -->
+        <section v-if="!isRealMode && !isBlackbox && activeTab === 'learning'" class="cp-aside-card">
+          <div class="cp-aside-card__head">
+            <h4>运行状态 <span class="cp-aside-card__dot" :class="autopilotRunning ? 'is-ok' : isPaused ? 'is-warn' : 'is-muted'"></span></h4>
+            <span class="mk-card__meta">{{ sessionStatusLabel }}</span>
+          </div>
+          <div class="cp-aside-card__body">
+            <div class="cp-run">
+              <div v-if="autopilotResultText && !autopilotRunning" class="cp-run__autopilot-result" :class="{
+                'cp-run__autopilot-result--ok': autopilot.status === 'completed',
+                'cp-run__autopilot-result--bad': autopilot.status === 'failed',
+                'cp-run__autopilot-result--muted': autopilot.status === 'stopped'
+              }">{{ autopilotResultText }}</div>
+              <div class="cp-run__stages">
+                <div class="cp-run__stage-row" v-for="st in stageFlow" :key="st">
+                  <span class="cp-run__stage-dot" :class="`cp-run__stage-dot--${stageDone(st as StageKey) ? 'done' : stageActive(st as StageKey) ? 'active' : 'pending'}`"></span>
+                  <span class="cp-run__stage-label">{{ stageLabel(st) }}</span>
+                  <span class="cp-run__stage-status">{{ stageMiniStatus(st as StageKey) }}</span>
+                </div>
+              </div>
+              <div class="cp-run__foot">
+                <label v-if="!isBlackbox && !isRealMode" class="cp-run__budget">
+                  难度
+                  <select v-model="frictionBudget" class="mk-filter__select" :disabled="frictionSaving" @change="saveFriction">
+                    <option value="none">无</option>
+                    <option value="low">低</option>
+                    <option value="normal">正常</option>
+                    <option value="high">高</option>
+                    <option value="stress_test">压力测试</option>
+                  </select>
+                </label>
+                <span v-if="showPathReadiness" class="cp-run__readiness" :class="`cp-run__readiness--${pathReadinessTone}`">{{ pathReadinessText }}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 总结阶段卡：总结统计 -->
+        <section v-if="!isRealMode && !isBlackbox && activeTab === 'wrapup'" class="cp-aside-card">
+          <div class="cp-aside-card__head">
+            <h4>总结统计 <span class="cp-aside-card__dot" :class="hasWrapup ? 'is-ok' : 'is-muted'"></span></h4>
+            <span class="mk-card__meta">{{ hasWrapup ? '终局总结已生成' : '学习完成后生成' }}</span>
+          </div>
+          <div class="cp-aside-card__body">
+            <div class="cp-aside-state" :class="hasWrapup ? 'cp-aside-state--ok' : 'cp-aside-state--empty'">
+              <span class="cp-aside-state__icon" aria-hidden="true">{{ hasWrapup ? '✓' : '◌' }}</span>
+              <strong>{{ completedTaskCount }}/{{ learnLessons.length || '—' }} 课已完成</strong>
+              <p v-if="!hasWrapup && lessonTree.length">全部课程完成后，可在控制台生成终局总结（学习目标、评估、知识掌握）。</p>
+              <p v-else-if="!lessonTree.length">尚未开始学习，生成 Path 并启动 Learn 后这里会展示进度。</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- 运行状态（非 Learn tab 时保留为折叠运维面板） -->
+        <div v-if="!isRealMode && activeTab !== 'learning'" class="cp-sidebar__section">
           <button type="button" class="cp-sidebar__toggle" :class="{ 'is-open': sidebarOpen.run }" @click="sidebarOpen.run = !sidebarOpen.run">
             <span class="cp-sidebar__toggle-icon">{{ sidebarOpen.run ? '▾' : '▸' }}</span>
             <span>运行状态</span>
@@ -501,33 +634,6 @@
           </div>
         </div>
 
-        <!-- 虚拟学习者评审 -->
-        <div v-if="!isRealMode && activeTab === 'path'" class="cp-sidebar__section">
-          <button type="button" class="cp-sidebar__toggle" :class="{ 'is-open': sidebarOpen.review }" @click="sidebarOpen.review = !sidebarOpen.review">
-            <span class="cp-sidebar__toggle-icon">{{ sidebarOpen.review ? '▾' : '▸' }}</span>
-            <span>虚拟学习者评审</span>
-            <span class="cp-sidebar__toggle-hint">{{ pathReviewStatus ? pathReviewDecisionLabel : '未评审' }}</span>
-          </button>
-          <div v-if="sidebarOpen.review" class="cp-sidebar__body">
-            <div class="cp-review-panel__actions">
-              <button type="button" class="cp-btn cp-btn--sm" :disabled="reviewPathDisabled" :title="reviewPathTitle" @click="act('reviewPath')">评审</button>
-              <button v-if="acceptPathVisible" type="button" class="cp-btn cp-btn--primary cp-btn--sm" :disabled="acceptPathDisabled" :title="acceptPathTitle" @click="act('acceptPath')">接受</button>
-              <button v-if="replanPathVisible" type="button" class="cp-btn cp-btn--primary cp-btn--sm" :disabled="replanPathDisabled" :title="replanPathTitle" @click="act('replanPath')">按意见重规划</button>
-            </div>
-            <div v-if="pathReviewStatus" class="cp-review">
-              <div class="cp-review__badges">
-                <span class="cp-review__badge" :data-decision="pathReviewDecision">{{ pathReviewDecisionLabel }}</span>
-                <span class="cp-review__meta">{{ pathReviewStatusLabel }}<template v-if="pathReviewTime"> · {{ pathReviewTime }}</template></span>
-              </div>
-              <p v-if="pathReviewReaction" class="cp-review__reaction">{{ pathReviewReaction }}</p>
-              <p v-if="pathReviewConcern" class="cp-review__concern">最大顾虑：{{ pathReviewConcern }}</p>
-              <ul v-if="pathReviewChanges.length" class="cp-review__changes"><li v-for="(c, i) in pathReviewChanges" :key="i">{{ c }}</li></ul>
-              <p v-if="pathReviewReplan" class="cp-review__replan">{{ pathReviewReplan }}</p>
-            </div>
-            <p v-else class="cp-none">尚未评审。评审只是质量检查，可直接启动 Learn。</p>
-          </div>
-        </div>
-
         <!-- Trace 诊断 -->
         <div v-if="hasTraceFlows" class="cp-sidebar__section">
           <button type="button" class="cp-sidebar__toggle" :class="{ 'is-open': sidebarOpen.trace }" @click="sidebarOpen.trace = !sidebarOpen.trace">
@@ -584,6 +690,13 @@ import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { subPage, closeSubPage, openSubPage } from './store'
 import { errMsg } from './live'
 import { askConfirm } from './useConfirm'
+import {
+  VS_CONTROL_DEFS,
+  vlabControlsFor,
+  type VsControlDef,
+  type VsControlKey,
+  type VsLifecycleState
+} from './vlab-controls'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 import { statusText } from './statusText'
@@ -1334,7 +1447,7 @@ const goalAutoTitle = computed(() => stageMismatchTitle('goal', '自动推进 Go
 const learnStepDisabled = computed(() => stepDisabled.value || currentStage.value !== 'learning')
 const learnStepTitle = computed(() => stageMismatchTitle('learning', '推进 Learn') || stepTitle.value)
 const learnAutoDisabled = computed(() => autoDisabled.value || currentStage.value !== 'learning')
-const learnAutoTitle = computed(() => stageMismatchTitle('learning', '自动推进 Learn') || autoTitle.value)
+const learnAutoTitle = computed(() => stageMismatchTitle('learning', '自动推进对话直至本课收束') || autoTitle.value)
 const advancePathDisabled = computed(() =>
   !!assistedControlBlockReason.value || !goalConverged.value || hasPath.value
 )
@@ -1381,7 +1494,7 @@ const startLearningTitle = computed(() => {
   if (assistedControlBlockReason.value) return assistedControlBlockReason.value
   if (learningActive.value) return 'Learn 已在进行中'
   if (!pathStartable.value) return learningBlockedReason.value || 'Path 尚未准备好启动 Learn'
-  return '启动 Learn（评审为独立旁路，无需先通过评审）'
+  return '启动 Learn：从第一个可运行课程开始（评审不是前置条件，可直接启动）'
 })
 const wrapupDisabled = computed(() => {
   if (!session.value || busy.value || isBlackbox.value || isFailedTerminal.value) return true
@@ -1396,12 +1509,6 @@ const wrapupTitle = computed(() => {
   if (!wrapupAvailable.value && !wrapupTaskSettled.value && learningActive.value) return '课堂总结在课程完成后才会生成：当前任务尚未结算完成'
   if (!wrapupAvailable.value) return '请先启动 Learn 并产生消息或学习进度'
   return '根据当前 Learn 记录生成总结'
-})
-const stopLearningDisabled = computed(() => !!assistedControlBlockReason.value || !learningActive.value)
-const stopLearningTitle = computed(() => {
-  if (assistedControlBlockReason.value) return assistedControlBlockReason.value
-  if (!learningActive.value) return '仅可停止正在进行的 Learn'
-  return '停止当前 Learn'
 })
 const resetPathDisabled = computed(() =>
   !!assistedControlBlockReason.value || !hasPath.value || hasLearnHistoryOrProgress.value
@@ -1731,6 +1838,11 @@ async function refresh() {
     if (['none', 'low', 'normal', 'high', 'stress_test'].includes(fb)) {
       frictionBudget.value = fb as typeof frictionBudget.value
     }
+    // 每课回合上限初始值：画像运行偏好（会话创建时写入 simulationConfig），驾驶舱可临时调
+    const turnCap = Number(simCfg.turnCapPerLesson)
+    if (Number.isFinite(turnCap) && turnCap >= 1 && turnCap <= 100) {
+      learnAutoTurnCap.value = Math.round(turnCap)
+    }
     parseBlackbox()
     await Promise.all([
       loadLogs(),
@@ -2032,12 +2144,7 @@ async function resumeSession() {
 }
 async function stopLearning() {
   if (busy.value) return
-  const ok = await askConfirm({
-    title: '停止学习会话',
-    message: '确认停止当前学习会话？\n会话将标记为失败（可重启恢复），正在执行的回合结束后生效。',
-    confirmText: '停止'
-  })
-  if (!ok) return
+  // 语义与文案由统一模型提供（vlab-controls stop），此处只执行动作
   busy.value = true
   try {
     await adminVirtualLearnersApi.stopVirtualLearning(sessionId.value)
@@ -2049,6 +2156,7 @@ async function stopLearning() {
 }
 async function restartLearning() {
   if (busy.value) return
+  // 语义与文案由统一模型提供（vlab-controls retry：保留进度续传），此处只执行动作
   busy.value = true
   try {
     await adminVirtualLearnersApi.restartVirtualLearning(sessionId.value)
@@ -2059,6 +2167,39 @@ async function restartLearning() {
   } catch (e) {
     toast.error(`重启失败：${errMsg(e)}`)
   } finally { busy.value = false }
+}
+
+/* ===== 生命周期控制（统一模型 vlab-controls）：顶栏操作按钮由状态机派生 ===== */
+const lifeStateCockpit = computed<VsLifecycleState>(() => {
+  const st = String(session.value?.status || '')
+  if (st === 'running') return isPaused.value ? 'paused' : 'running'
+  if (st === 'created') return 'created'
+  if (st === 'failed') return 'failed'
+  if (st === 'abandoned') return 'abandoned'
+  if (st === 'completed') return 'completed'
+  return 'idle'
+})
+const lifeHandlersCockpit: Partial<Record<VsControlKey, () => void>> = {
+  pause: pauseSession,
+  resume: resumeSession,
+  stop: stopLearning,
+  retry: restartLearning,
+  delete: () => { void removeSession() }
+}
+const lifeControlsCockpit = computed(() =>
+  vlabControlsFor(lifeStateCockpit.value).filter((c) => lifeHandlersCockpit[c.key])
+)
+/** 统一操作入口：需确认的操作（stop/retry）先过模型文案确认，再执行 */
+function runCockpitAction(c: VsControlDef) {
+  const fn = lifeHandlersCockpit[c.key]
+  if (!fn) return
+  if (c.confirm) {
+    void askConfirm({ title: c.confirm.title, message: c.confirm.message, confirmText: c.confirm.confirmText }).then((ok) => {
+      if (ok) fn()
+    })
+    return
+  }
+  fn()
 }
 
 /* 控制动作：按阶段路由（learning 走 learning-step / auto-learning） */
@@ -2072,6 +2213,30 @@ async function act(kind: string) {
         title: '终止黑盒实验',
         message: '确认终止当前黑盒实验？\n实验将被标记为已终止，公开轨迹与评估保留，该操作不可撤销。',
         confirmText: '终止实验'
+      })
+      if (!ok) return
+    }
+    /* 重开学习/结束学习：确认文案统一来自 vlab-controls（retry/stop），防语义漂移 */
+    if (kind === 'resetLearn' || kind === 'stop') {
+      const c = VS_CONTROL_DEFS[kind === 'resetLearn' ? 'retry' : 'stop']
+      if (!c.confirm) return
+      const ok = await askConfirm({ title: c.confirm.title, message: c.confirm.message, confirmText: c.confirm.confirmText })
+      if (!ok) return
+    }
+    /* 重建路径/按评审意见重规划：都会替换现有 Path 方案（覆盖型操作），必须确认 */
+    if (kind === 'resetPath') {
+      const ok = await askConfirm({
+        title: '重建学习路径',
+        message: '将删除当前 Path 方案并重新生成（Goal 上下文保留）。\n已有 Learn 历史或进度时会拒绝执行。确认？',
+        confirmText: '重建 Path'
+      })
+      if (!ok) return
+    }
+    if (kind === 'replanPath') {
+      const ok = await askConfirm({
+        title: '按评审意见重规划',
+        message: '将按当前评审意见重新规划 Path 方案，替换现有方案（Goal 上下文保留）。\n确认？',
+        confirmText: '重新规划'
       })
       if (!ok) return
     }
@@ -2102,8 +2267,8 @@ async function act(kind: string) {
         })
         break
       case 'autopilotStart':
-        await adminVirtualLearnersApi.autopilotStart(id)
-        toast.info('全自动模式已启动：将以最终目标（Path 全部完成）为终点持续运行')
+        await adminVirtualLearnersApi.autopilotStart(id, { maxTurns: clampLearnAutoTurnCap() })
+        toast.info('全自动模式已启动：将以最终目标（Path 全部完成）为终点持续运行，每课回合上限随「回合上限」设置')
         break
       case 'autopilotStop':
         await adminVirtualLearnersApi.autopilotStop(id)
@@ -2194,12 +2359,7 @@ async function act(kind: string) {
 
 async function removeSession() {
   if (isRealMode.value) return
-  const ok = await askConfirm({
-    title: '删除会话',
-    message: '确认删除该会话？\n运行记录将一并清理，该操作不可撤销。',
-    confirmText: '删除'
-  })
-  if (!ok) return
+  // 确认由统一模型执行（vlab-controls delete.confirm；删除仅终态可触发），此处只执行动作
   try {
     await adminVirtualLearnersApi.deleteVirtualSession(sessionId.value)
     closeSubPage()
@@ -2359,54 +2519,54 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 }
 .cp-back:hover { background: #eff6ff; }
 
-/* ----- Stage progress bar ----- */
-.cp-topbar__stages {
+/* ===== 统一控制台（阶段 tab + 该阶段操作，置顶汇聚） ===== */
+.cp-console {
   display: flex;
   align-items: center;
-  gap: 0;
-  position: relative;
-  padding: 0 4px;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: 12px;
+  background: var(--mk-surface);
+  box-shadow: var(--mk-shadow-sm);
+  margin-top: 12px;
 }
+.cp-console__tabs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.cp-console__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.cp-console__sep { width: 1px; height: 18px; background: var(--mk-line); flex-shrink: 0; }
+.cp-console__spacer { flex: 1; }
+.cp-console__note { font-size: 11.5px; color: var(--mk-faint); }
+
+/* ----- Stage tabs（pill 形态，置于控制台内） ----- */
 .cp-stage {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 18px;
-  border: none;
-  border-bottom: 3px solid transparent;
+  padding: 6px 13px;
+  border: 1px solid transparent;
+  border-radius: 8px;
   background: transparent;
   font: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 700;
   color: var(--mk-muted);
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
-  border-radius: 0;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
-.cp-stage:hover:not(:disabled) { color: var(--mk-ink); }
+.cp-stage:hover:not(:disabled) { color: var(--mk-ink); background: #f1f5f9; }
 .cp-stage__mark { font-size: 11px; width: 14px; text-align: center; }
-.cp-stage__label { font-size: 13px; }
+.cp-stage__label { font-size: 12.5px; }
 .cp-stage__progress { font-size: 10.5px; font-weight: 600; color: var(--mk-faint); }
 .cp-stage:disabled { cursor: default; opacity: 0.8; }
-.cp-stage--active { border-bottom-color: var(--mk-blue); color: var(--mk-blue); }
+.cp-stage--active { border-color: rgba(44, 99, 208, 0.35); background: #eff6ff; color: var(--mk-blue); }
 .cp-stage--active .cp-stage__mark { color: var(--mk-blue); }
 .cp-stage--active .cp-stage__progress { color: var(--mk-blue); }
-.cp-stage--tab { }
-.cp-stage--done { color: var(--mk-green); border-bottom-color: var(--mk-green); }
+.cp-stage--tab { border-color: rgba(44, 99, 208, 0.35); }
+.cp-stage--tab:hover:not(:disabled) { color: var(--mk-blue); }
+.cp-stage--done { color: var(--mk-green); }
 .cp-stage--done .cp-stage__mark { color: var(--mk-green); }
 .cp-stage--done .cp-stage__progress { color: var(--mk-green); }
-
-/* Stage connecting lines */
-.cp-stage-line {
-  flex: 1 1 24px;
-  min-width: 16px;
-  height: 2px;
-  background: var(--mk-line);
-  margin-bottom: 3px;
-  align-self: center;
-  z-index: 0;
-}
-.cp-stage-line.is-done { background: var(--mk-green); }
 
 /* ===== Body: main + sidebar ===== */
 .cp-body {
@@ -2422,6 +2582,65 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   align-content: start;
   min-width: 0;
 }
+
+/* ===== 右列阶段卡（goal→预生成 Path / path→评审 / learning→运行 / wrapup→统计） ===== */
+.cp-aside-card {
+  border: 1px solid var(--mk-line);
+  border-radius: 12px;
+  background: var(--mk-surface);
+  box-shadow: var(--mk-shadow-sm);
+  overflow: hidden;
+}
+.cp-aside-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--mk-line);
+}
+.cp-aside-card__head h4 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 800;
+}
+.cp-aside-card__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-faint); flex-shrink: 0; }
+.cp-aside-card__dot.is-ok { background: var(--mk-green); }
+.cp-aside-card__dot.is-warn { background: var(--mk-amber); }
+.cp-aside-card__dot.is-muted { background: var(--mk-faint); }
+.cp-aside-card__body { padding: 12px 14px; }
+
+/* 阶段卡内的状态块（空态/就绪/进行中） */
+.cp-aside-state {
+  display: grid;
+  gap: 7px;
+  justify-items: start;
+}
+.cp-aside-state__icon {
+  font-size: 26px;
+  line-height: 1;
+  color: var(--mk-faint);
+}
+.cp-aside-state strong { font-size: 13px; font-weight: 800; }
+.cp-aside-state p { margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--mk-muted); }
+.cp-aside-state--ok strong { color: var(--mk-green); }
+.cp-aside-state--ok .cp-aside-state__icon { color: var(--mk-green); }
+.cp-aside-state--warn strong { color: var(--mk-amber); }
+.cp-aside-state--warn .cp-aside-state__icon { color: var(--mk-amber); }
+.cp-aside-state--empty strong { color: var(--mk-ink); }
+.cp-aside-state--busy strong { color: var(--mk-blue); }
+.cp-aside-state__spin {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--mk-line);
+  border-top-color: var(--mk-blue);
+  border-radius: 50%;
+  animation: cp-spin 0.8s linear infinite;
+}
+@keyframes cp-spin { to { transform: rotate(360deg); } }
 
 /* ===== Sidebar ===== */
 .cp-sidebar {
@@ -2590,11 +2809,20 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   width: 56px; padding: 5px 6px; border-radius: 6px; border: 1px solid var(--mk-line);
   background: var(--mk-surface); color: var(--mk-ink); font: inherit; font-size: 12px;
 }
-.cp-tab-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 16px 0; align-items: center; }
-.cp-tab-actions__sep { width: 1px; height: 20px; background: var(--mk-line); flex-shrink: 0; }
-.cp-tab-actions__spacer { flex: 1; }
 .cp-turn-cap-label { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--mk-faint); font-weight: 600; }
 .cp-none { margin: 0; font-size: 12px; color: var(--mk-faint); }
+
+/* 主内容区空数据态（与右列阶段卡空态同一语言） */
+.cp-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 36px 20px;
+  text-align: center;
+}
+.cp-empty-state__icon { font-size: 30px; line-height: 1; color: var(--mk-faint); }
+.cp-empty-state strong { font-size: 13px; font-weight: 800; color: var(--mk-ink); }
+.cp-empty-state p { margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--mk-muted); max-width: 320px; }
 
 /* Log line */
 .cp-log { display: flex; align-items: baseline; gap: 6px; font-size: 11px; flex-wrap: wrap; }
@@ -2704,11 +2932,16 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   letter-spacing: 0.02em;
 }
 .cp-learn-tree__ms-text {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin-right: 6px;
 }
 .cp-learn-tree__ms-count {
+  flex-shrink: 0;
+  white-space: nowrap;
   font-size: 10.5px;
   color: var(--mk-muted);
   font-weight: 600;

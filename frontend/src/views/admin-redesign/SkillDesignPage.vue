@@ -349,7 +349,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   max-width: 1440px;
   margin: 0 auto;
   min-height: 100vh;
-  font-family: Inter, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", Inter, sans-serif;
 }
 
 .sdp-pane { display: grid; gap: 14px; align-content: start; }

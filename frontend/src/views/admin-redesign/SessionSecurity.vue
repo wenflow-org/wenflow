@@ -1,6 +1,6 @@
 <template>
   <div class="mk-page">
-    <!-- 状态条：全量会话统计 + 状态筛选 -->
+    <!-- 状态条：全量会话统计 + 刷新（状态筛选在下方卡片头，全站统一） -->
     <div class="mk-status" :class="`mk-status--${statusTone}`">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">会话安全</strong>
@@ -9,23 +9,22 @@
       <span v-if="sessions.length" class="mk-status__meta mono">活跃 {{ activeCount }}</span>
       <span v-if="expiredCount" class="mk-status__meta mono">已过期 {{ expiredCount }}</span>
       <span v-if="revokedCount" class="mk-status__meta mono">已撤销 {{ revokedCount }}</span>
+      <button type="button" class="mk-status__action" :disabled="loading" @click="applyFilters">
+        {{ loading ? '刷新中…' : '刷新' }}
+      </button>
+    </div>
 
-      <div class="mk-status__filters">
-        <div class="mk-pills">
-          <button
-            v-for="p in statusPills"
-            :key="p.id"
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': statusFilter === p.id }"
-            :title="`只看${p.label}会话`"
-            @click="statusFilter = statusFilter === p.id ? '' : p.id"
-          >
-            {{ p.label }}<template v-if="countOf(p.id) > 0"> {{ countOf(p.id) }}</template>
-          </button>
-        </div>
-        <button type="button" class="ss-refresh" :disabled="loading" @click="applyFilters">刷新</button>
-      </div>
+    <!-- 审计日志深链横幅（?user=用户名 → 只看该管理员的会话；含分工说明 + 反向跳转） -->
+    <div v-if="deepLinkUser" class="ss-deeplink">
+      <strong>来自审计日志 · 查看「{{ deepLinkUser }}」的登录会话</strong>
+      <span>这里展示登录成功产生的会话（可强制下线）；登录事件完整历史（含失败尝试）见</span>
+      <button type="button" class="mk-link" @click="goAuditLogs">审计日志 · 登录审计 →</button>
+      <button type="button" class="mk-link ss-deeplink__clear" @click="clearDeepLink">× 清除筛选</button>
+    </div>
+    <!-- 常驻分工说明（无深链时） -->
+    <div v-else class="ss-note">
+      <span>展示登录成功产生的会话（可管理/强制下线）；登录事件的完整历史（含失败尝试）见</span>
+      <button type="button" class="mk-link" @click="goAuditLogs">审计日志 · 登录审计 →</button>
     </div>
 
     <!-- 加载失败错误态 + 重试 -->
@@ -38,7 +37,29 @@
     </div>
 
     <!-- 加载中骨架 -->
-    <MockSkeletonTable v-else-if="loading && !sessions.length" :cols="7" :rows="6" />
+    <div v-else class="mk-card mk-card--fill">
+      <div class="mk-card__head">
+        <div class="mk-filter">
+          <div class="mk-pills">
+            <button
+              v-for="p in statusPills"
+              :key="p.id"
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': statusFilter === p.id }"
+              :title="`只看${p.label}会话`"
+              @click="statusFilter = statusFilter === p.id ? '' : p.id"
+            >
+              {{ p.label }}<template v-if="countOf(p.id) > 0"> {{ countOf(p.id) }}</template>
+            </button>
+          </div>
+        </div>
+        <div class="mk-card__head-right">
+          <span class="mk-card__meta">{{ sessions.length }} 个会话<template v-if="activeCount"> · 活跃 {{ activeCount }}</template></span>
+        </div>
+      </div>
+
+    <MockSkeletonTable v-if="loading && !sessions.length" :cols="7" :rows="6" />
 
     <!-- 按管理员分组的标准表格 -->
     <div v-else-if="groups.length" class="ss-body">
@@ -70,7 +91,7 @@
                 <th class="mk-col--time-full">最后活跃</th>
                 <th class="mk-col--time-full">过期时间</th>
                 <th class="mk-col--badge">状态</th>
-                <th class="mk-th--right">操作</th>
+                <th class="mk-th--right mk-col--actions">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -134,7 +155,7 @@
                   <th class="mk-col--time-full">最后活跃</th>
                   <th class="mk-col--time-full">过期时间</th>
                   <th class="mk-col--badge">状态</th>
-                  <th class="mk-th--right">操作</th>
+                  <th class="mk-th--right mk-col--actions">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -177,7 +198,7 @@
       </div>
 
       <!-- 分页：活跃会话每批 12 行（首屏可见） -->
-      <div v-if="canMoreActive" class="ss-more">
+      <div v-if="canMoreActive" class="mk-list-more">
         <button type="button" class="mk-link" @click="loadMoreActive">加载更多（已显示 {{ shownActive.length }} / {{ activeFlat.length }} 个活跃会话）</button>
       </div>
     </div>
@@ -188,11 +209,13 @@
       <strong>{{ statusFilter ? '当前筛选无会话' : '暂无会话记录' }}</strong>
       <span>管理员登录后会话会显示在这里，可随时强制下线</span>
     </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { adminAuthApi, adminSessionsApi } from '@/api/adminApi'
 import { errMsg } from './live'
 import { useLoadMore } from './useLoadMore'
@@ -257,6 +280,18 @@ const statusFilter = ref<'' | SessionStatus>('')
 const myId = ref('')
 let fetching = false
 
+const route = useRoute()
+const router = useRouter()
+/** 审计日志深链：?user=用户名 → 仅展示该管理员的会话组 */
+const deepLinkUser = computed(() => String(route.query.user || '').trim())
+function clearDeepLink() {
+  void router.replace({ query: {} })
+}
+/** 反向跳转：审计日志 · 登录审计 tab */
+function goAuditLogs() {
+  void router.push('/admin/audit-logs?tab=login')
+}
+
 const statusPills: Array<{ id: SessionStatus; label: string }> = [
   { id: 'active', label: '活跃' },
   { id: 'expired', label: '已过期' },
@@ -311,6 +346,7 @@ interface SessionGroup {
 const groups = computed<SessionGroup[]>(() => {
   const map = new Map<string, AdminSessionRow[]>()
   for (const s of filtered.value) {
+    if (deepLinkUser.value && (s.adminName || s.adminEmail || '') !== deepLinkUser.value) continue
     const list = map.get(s.adminId) ?? []
     list.push(s)
     map.set(s.adminId, list)
@@ -451,36 +487,33 @@ onMounted(async () => {
 .mk-status__sep { width: 1px; height: 14px; background: var(--mk-line); }
 .mk-status__meta { color: var(--mk-muted); font-size: 12px; }
 
-.mk-status__filters {
-  margin-left: auto;
+/* 审计日志分工说明 / 深链横幅 */
+.ss-note {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
   flex-wrap: wrap;
-  justify-content: flex-end;
-  min-width: 0;
-}
-@media (max-width: 1000px) {
-  .mk-status__filters {
-    margin-left: 0;
-    width: 100%;
-    justify-content: flex-start;
-  }
-}
-.ss-refresh {
-  padding: 6px 10px;
-  border: 1px solid var(--mk-line);
-  border-radius: 8px;
-  background: var(--mk-surface);
-  color: var(--mk-muted);
-  font: inherit;
+  padding: 8px 14px;
+  border: 1px dashed var(--mk-line);
+  border-radius: 10px;
+  background: #f8fafc;
   font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
+  color: var(--mk-muted);
 }
-.ss-refresh:hover { border-color: rgba(44, 99, 208, 0.4); color: var(--mk-ink); }
-.ss-refresh:disabled { opacity: 0.65; cursor: not-allowed; }
+.ss-deeplink {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  border: 1px solid rgba(44, 99, 208, 0.3);
+  border-radius: 10px;
+  background: #eef5ff;
+  font-size: 12px;
+  color: var(--mk-ink);
+}
+.ss-deeplink strong { font-weight: 700; }
+.ss-deeplink__clear { color: var(--mk-active-muted, #64748b); }
 
 /* 加载失败错误态 */
 .ss-error { padding: 40px 20px; }
@@ -501,13 +534,6 @@ onMounted(async () => {
 .ss-error__card span { font-size: 12.5px; color: var(--mk-muted); word-break: break-all; }
 
 .ss-body { display: grid; gap: 14px; }
-
-.ss-more {
-  display: flex;
-  justify-content: center;
-  padding: 10px 0 12px;
-  border-top: 1px dashed var(--mk-line);
-}
 
 .ss-group {
   border: 1px solid var(--mk-line);
@@ -619,7 +645,6 @@ onMounted(async () => {
   .mk-status__title { font-size: 15.5px; }
   .mk-status__meta { font-size: 13px; }
   .ss-group__head { padding: 12px 18px; }
-  .ss-refresh { font-size: 13.5px; }
   .ss-group__who strong { font-size: 14.5px; }
   .ss-group__email { font-size: 12.5px; }
   .ss-group__count { font-size: 13px; }
@@ -631,7 +656,6 @@ onMounted(async () => {
 }
 @media (min-width: 2800px) {
   .mk-status { padding: 12px 18px; border-radius: 14px; }
-  .ss-refresh { font-size: 16px; }
   .ss-group__who strong { font-size: 16.5px; }
   .ss-group__email { font-size: 14px; }
   .ss-group__count { font-size: 15px; }
@@ -647,7 +671,6 @@ onMounted(async () => {
   .mk-status__title { font-size: 18px; }
   .mk-status__meta { font-size: 15px; }
   .ss-group__head { padding: 14px 22px; }
-  .ss-refresh { font-size: 18.5px; }
   .ss-group__who strong { font-size: 18.5px; }
   .ss-group__email { font-size: 16px; }
   .ss-group__count { font-size: 17px; }

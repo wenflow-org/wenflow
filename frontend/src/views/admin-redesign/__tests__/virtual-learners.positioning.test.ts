@@ -39,7 +39,9 @@ vi.mock('../live', async () => {
     liveDeleteVirtual: vi.fn(async () => {}),
     loadLiveData: vi.fn(async () => {}),
     timeAgo: () => 'x',
-    errMsg: (e: unknown) => String(e)
+    errMsg: (e: unknown) => String(e),
+    /* VL 列表页使用共享 <Pagination> 页码器（依赖 live.totalPagesOf） */
+    totalPagesOf: (total: number, pageSize: number) => Math.max(1, Math.ceil(total / pageSize))
   };
 });
 
@@ -69,24 +71,33 @@ beforeEach(() => {
 });
 
 describe('虚拟学习者定位（D1）', () => {
-  it('页面头部展示「仿真数据生成器」定位说明（管理面操作不面向真实用户）', async () => {
+  it('无数据时：状态条精简 + 仿真概览显示「仿真空闲」结论（统计不渲染）', async () => {
     const wrapper = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
-    const note = wrapper.find('.vl-position');
-    expect(note.exists()).toBe(true);
-    expect(note.text()).toContain('仿真数据生成器');
-    expect(note.text()).toContain('跑真实学习流程');
-    expect(note.text()).toContain('不面向真实用户');
+    const bar = wrapper.find('.mk-status');
+    expect(bar.exists()).toBe(true);
+    // 状态条回归「标题+总量+操作」：不再含分区统计
+    expect(bar.text()).toContain('共 0 人');
+    expect(bar.text()).not.toContain('创建中');
+    // 仿真概览只显示结论头（无数据时不渲染无意义统计）
+    expect(wrapper.find('.mk-overview').exists()).toBe(true);
+    expect(wrapper.text()).toContain('仿真空闲');
+    expect(wrapper.find('.mk-overview__kpis').exists()).toBe(false);
     wrapper.unmount();
   });
 
-  it('虚拟会话占比注记：展示全量虚拟会话数（liveVirtualSessionStats.total）', async () => {
+  it('有数据时：仿真概览 KPI + 运行详情透出全量口径数值（liveVirtualSessionStats 驱动；已失败含 abandoned）', async () => {
     liveVirtualSessionStats.value = { created: 1, running: 2, failed: 3, abandoned: 1, completed: 0, total: 7 };
     const wrapper = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
-    expect(wrapper.find('.vl-position__stats').text()).toContain('当前虚拟会话 7 个');
+    const dash = wrapper.find('.mk-overview');
+    expect(dash.exists()).toBe(true);
+    expect(dash.text()).toContain('创建中 1');
+    expect(dash.text()).toContain('运行中 2');
+    expect(dash.text()).toContain('已失败 4');
+    expect(dash.text()).toContain('仿真运行中');
     wrapper.unmount();
   });
 

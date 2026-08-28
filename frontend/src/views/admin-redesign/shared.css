@@ -28,6 +28,33 @@
   border-radius: 4px;
 }
 
+/* ----- 应用式布局（列表页：右侧内容区占满视口，表格区内滚，分页器吸底） -----
+   用法：.mk-page--fill（页面容器 flex 列）+ .mk-card--fill（主卡片弹性填满）
+   + 卡片内滚动区直接子元素（表格/分组/网格）自动接管纵向滚动，
+   Pagination / mk-list-more 位于卡片尾部 → 随卡片吸底固定。 */
+.mk-page--fill {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.mk-card--fill {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.mk-card--fill > .mk-table-scroll,
+.mk-card--fill > .log-body,
+.mk-card--fill > .ss-body,
+.mk-card--fill > .sk-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 /* ----- 状态条（每页开头一行） -----
    例外授权：ExecLogs 终端页自建 .log-status（规格一致的本地副本，内边距略大以容纳筛选区），
    不再回归本类，属登记在案的状态条例外形态 */
@@ -65,6 +92,8 @@
 }
 .mk-status__action:hover { border-color: rgba(44, 99, 208, 0.4); }
 .mk-status__action--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
+.mk-status__actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.mk-status__actions .mk-status__action { margin-left: 0; }
 
 /* ----- 卡片 ----- */
 .mk-card {
@@ -87,6 +116,7 @@
 }
 .mk-card__title { margin: 0; font-size: 13px; font-weight: 700; }
 .mk-card__meta { color: var(--mk-faint); font-size: 12px; }
+.mk-card__head-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
 /* ----- 表格 ----- */
 .mk-table { width: 100%; border-collapse: collapse; }
@@ -182,6 +212,7 @@
 .mk-na { color: var(--mk-faint); }
 /* 操作列：不换行、不被挤压 */
 .mk-actions { display: flex; gap: 4px; justify-content: flex-end; white-space: nowrap; min-width: 72px; }
+.mk-actions--left { justify-content: flex-start; }
 .mk-actions .mk-menu__btn { flex-shrink: 0; }
 
 /* ----- 列宽工具类（ADMIN_COLUMN_WIDTH_SPEC §3.1） -----
@@ -391,6 +422,7 @@
 /* ----- 通用工具类 ----- */
 .mono { font-family: var(--mk-mono); }
 .mk-th--right { text-align: right; }
+.mk-table th.mk-th--right { text-align: right; }
 .mk-empty--compact { padding: 24px 16px; }
 
 /* ----- 空态 ----- */
@@ -457,6 +489,7 @@
   box-shadow: var(--mk-shadow-modal);
   display: grid;
 }
+.mk-modal__panel--wide { width: min(720px, 100%); }
 .mk-modal__head {
   display: flex;
   align-items: center;
@@ -624,6 +657,21 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 .mk-toast--bad { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .mk-toast--info { background: #eff6ff; color: var(--mk-blue, #2c63d0); }
 
+/* ----- 列表追加脚注（「加载更多」统一形态：与 mk-pagination 页脚同构的虚线分隔行） -----
+   适用：分组/明细类列表（会话安全活跃会话、Skill 对账、核心文件清单、执行日志 demo 追加等），
+   主列表页一律用 <Pagination> 页码器，两类页脚视觉一致 */
+.mk-list-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 9px 14px 11px;
+  border-top: 1px dashed var(--mk-line);
+  font-size: 12px;
+  color: var(--mk-muted);
+}
+
 /* 加载点 */
 .mk-spinner {
   display: inline-block;
@@ -757,6 +805,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   .mk-btn { font-size: 14px; padding: 10px 18px; }
   .mk-btn--sm { font-size: 12.5px; padding: 6px 13px; }
   .mk-toast { font-size: 13.5px; }
+  .mk-list-more { font-size: 13.5px; padding: 11px 16px 13px; }
   .mk-link { font-size: 14px; }
   .mk-actions { min-width: 84px; }
   .mk-drawer__panel { width: var(--mk-drawer-w-lg, 700px); }
@@ -836,6 +885,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   .mk-modal__close { width: 46px; height: 46px; font-size: 22px; }
   .mk-btn { font-size: 19px; padding: 14px 26px; }
   .mk-link { font-size: 19px; }
+  .mk-list-more { font-size: 15.5px; }
   .mk-drawer__panel { width: var(--mk-drawer-w-xxl, 1040px); }
   .mk-drawer__head { padding: 28px 36px 18px; }
   .mk-drawer__title { font-size: 23px; }

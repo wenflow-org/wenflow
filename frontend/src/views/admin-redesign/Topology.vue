@@ -199,7 +199,7 @@
               <div class="agent-card__name" :title="a.id">{{ a.name }}</div>
               <div class="agent-card__sub">{{ a.id }}</div>
             </div>
-            <span v-if="a.errorCount > 0" class="agent-card__dot is-error" :title="`${a.errorCount} 个 Skill 存在失败（${rangeLabel}）；角标=该 Agent 下失败 Skill 数，非失败调用数`">{{ a.errorCount > 9 ? '9+' : a.errorCount }}</span>
+            <span v-if="a.errorCount > 0" class="agent-card__dot is-error" :title="`该 Agent 下 ${a.errorCount} 个 Skill 存在失败（非调用次数）`">{{ a.errorCount > 9 ? '9+' : a.errorCount }}</span>
             <span v-else class="agent-card__dot is-ok" title="状态正常" aria-label="状态正常"></span>
           </div>
           <div class="agent-card__meta">

@@ -51,7 +51,7 @@
   --mk-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
 
   /* 设计 token：字体栈 / 强调色 / 代码块 / 圆角 / 阴影 */
-  --mk-sans: Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mk-sans: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", Inter, sans-serif;
   --mk-accent-deep: #1f57cc;
   --mk-purple: #8d6bff;
   --mk-teal: #0d9488;

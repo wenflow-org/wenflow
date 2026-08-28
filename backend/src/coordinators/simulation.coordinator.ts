@@ -31,6 +31,12 @@ import {
 import { safeJsonParse } from '../utils/safe-json';
 import { asErrorLike } from '../virtual-lab/vlab-types';
 import { memoryTraceService } from '../services/memory/memory-trace.service';
+import {
+  buildLearnerMemorySnapshot,
+  recordCompletedArtifact,
+  writeProfileConceptsAfterLesson,
+  type LessonKnowledgePoint,
+} from '../virtual-lab/learner-memory';
 import type { LeaseClientLike } from '../virtual-lab/vlab-types';
 import type {
   SimulationMilestone,
@@ -72,7 +78,8 @@ function isProviderRetryable(errorMsg: string): boolean {
   const e = errorMsg.toLowerCase();
   // turn_budget_exhausted 是课时预算闸门的显式终止信号：若被当作可重试，
   // 自动循环会静默 restartLearningPhase 把 turns 归零，预算形同虚设
-  if (e.includes('turn_budget_exhausted')) return false;
+  // retry_budget_exhausted 同理：总 AI 调用预算耗尽后 restart 只会再次耗尽，空转恢复次数
+  if (e.includes('turn_budget_exhausted') || e.includes('retry_budget_exhausted')) return false;
   return e.includes('provider') || e.includes('retry') || e.includes('timeout')
     || e.includes('overload') || e.includes('budget') || e.includes('503')
     || e.includes('does not contain valid json') || e.includes('response does not contain');
@@ -473,24 +480,47 @@ class SimulationOrchestrator {
   }
 
   private async retryLearnUpstream<T>(sessionId: string, operation: string, execute: () => Promise<T>): Promise<T> {
+    // 预算来源：故事级覆盖（storyContext.budget）优先，否则角色级（profile.simulationBudget）。
+    // 语义：maxRetriesPerStep = 单次上游调用的重试次数；maxRetriesTotal = 单会话累计 AI 调用
+    // 上限（防无限跑的总护栏，含重试）；两者任一耗尽即终止。
     let maxRetries = LEARN_UPSTREAM_RETRY_ATTEMPTS;
+    let maxTotalCalls: number | null = null;
     try {
-      // 读取虚拟学习者的独立重试预算（per learner），前端「编辑画像」可调
       const session = await this.getVirtualSession(sessionId);
       const profileData = safeJsonParse<VirtualLearnerProfileData>(session.virtual_learner_profiles.profile, {});
-      const budget = profileData?.simulationBudget;
+      const stageResults = this.parseStageResultsPayload(session.stageResults);
+      // 故事级覆盖：会话绑定的故事可单独设预算（单个故事失控时单独限制，不影响其他故事）
+      const storyBudget = (stageResults.story?.budget || null) as Record<string, unknown> | null;
+      const budget = storyBudget || profileData?.simulationBudget || null;
       if (budget && Number.isFinite(Number(budget.maxRetriesPerStep)) && Number(budget.maxRetriesPerStep) > 0) {
         // 上限钳制与路由层/前端输入框一致（[1,20]），防止历史脏数据触发近无限重试
         maxRetries = Math.min(20, Math.max(1, Math.round(Number(budget.maxRetriesPerStep))));
+      }
+      if (budget && Number.isFinite(Number(budget.maxRetriesTotal)) && Number(budget.maxRetriesTotal) > 0) {
+        maxTotalCalls = Math.min(1000, Math.max(1, Math.round(Number(budget.maxRetriesTotal))));
       }
     } catch {
       // 会话尚不可用或 profile 无预算配置：沿用默认值
     }
     let lastError: unknown;
+    let attempts = 0;
     for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+      attempts = attempt;
+      // 总 AI 调用护栏：每次实际执行前检查累计值（含本次），超限即终止
+      if (maxTotalCalls !== null) {
+        const consumed = await this.readAiCallCount(sessionId);
+        if (consumed + 1 > maxTotalCalls) {
+          const err = new Error(`retry_budget_exhausted：本会话累计 AI 调用已达上限（${maxTotalCalls}），已终止。可调高预算后重试续传。`);
+          (err as Error & { code?: string }).code = 'RETRY_BUDGET_EXHAUSTED';
+          throw err;
+        }
+      }
       try {
         await this.assertCurrentSessionLeaseOwned(sessionId);
-        return await execute();
+        const result = await execute();
+        // 成功也计入一次 AI 调用（重试次数 + 最终成功那次）
+        await this.consumeAiCall(sessionId, attempts);
+        return result;
       } catch (error: unknown) {
         lastError = error;
         if (!this.isRetryableLearnUpstreamError(error) || attempt === maxRetries) break;
@@ -504,7 +534,47 @@ class SimulationOrchestrator {
         await new Promise(resolve => setTimeout(resolve, LEARN_UPSTREAM_RETRY_DELAY_MS * attempt));
       }
     }
+    // 重试耗尽：也计入消耗（失败的重试调用）
+    if (maxTotalCalls !== null) {
+      await this.consumeAiCall(sessionId, attempts).catch(() => undefined);
+    }
     throw lastError;
+  }
+
+  /** 读取该会话累计 AI 调用次数（stageResults.runtimeStats.aiCalls） */
+  private async readAiCallCount(sessionId: string): Promise<number> {
+    try {
+      const session = await this.getVirtualSession(sessionId);
+      const stageResults = this.parseStageResultsPayload(session.stageResults);
+      return Number((stageResults.runtimeStats as Record<string, unknown> | undefined)?.aiCalls) || 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /** 原子累计该会话 AI 调用次数（并发安全：事务内读-改-写） */
+  private async consumeAiCall(sessionId: string, count: number): Promise<void> {
+    if (!Number.isFinite(count) || count < 1) return;
+    try {
+      await prisma.$transaction(async (tx) => {
+        const session = await tx.virtual_sessions.findUnique({
+          where: { id: sessionId },
+          select: { stageResults: true }
+        });
+        if (!session) return;
+        const stageResults: StageResults = safeJsonParse<StageResults>(session.stageResults, {});
+        const stats = (stageResults.runtimeStats || {}) as Record<string, unknown>;
+        const prev = Number(stats.aiCalls) || 0;
+        stageResults.runtimeStats = { ...stats, aiCalls: prev + count };
+        await tx.virtual_sessions.update({
+          where: { id: sessionId },
+          data: { stageResults: JSON.stringify(stageResults) }
+        });
+      });
+    } catch (error) {
+      // 计数失败不阻断主流程（护栏是尽力而为，宁可少计一次也不让学习卡死）
+      logger.warn('[simulation-coordinator] 累计 AI 调用计数失败', { sessionId, error: String(error) });
+    }
   }
 
   private boundTaskCompletionError(error: unknown): string {
@@ -1294,6 +1364,8 @@ class SimulationOrchestrator {
         notes: '虚拟学习者完成当前 task 的教学会话',
         rating: 5
       });
+      // 记忆回写：画像概念 + 成果物登记（best-effort，失败不阻断）
+      await this.persistAssistedLearnerMemory(sessionId, session, taskMatch.task);
     } catch (error: unknown) {
       const boundedError = this.boundTaskCompletionError(error);
       const updatedAt = new Date().toISOString();
@@ -1422,7 +1494,13 @@ class SimulationOrchestrator {
           }
         });
       } catch (error: unknown) {
-        const errorMessage = this.boundTaskCompletionError(error);
+        const rawMessage = this.boundTaskCompletionError(error);
+        // 预算耗尽且本课已完成：文案明确「本课已学完、调高预算后可续传」，
+        // 避免用户误以为学习失败；续传从下一课继续，不丢本课进度。
+        const isBudget = /retry_budget_exhausted|budget_exhausted/i.test(rawMessage);
+        const errorMessage = isBudget
+          ? `本课已完成，但会话 AI 调用预算已耗尽，无法启动下一课。可在画像/故事预算中调高「会话 AI 调用上限」后重试续传（从下一课继续，不丢本课进度）。`
+          : rawMessage;
         completedLearningState = {
           ...baseCompletedLearningState,
           taskRuntime: {
@@ -1515,7 +1593,10 @@ class SimulationOrchestrator {
       const profile = this.parseProfileData(session.virtual_learner_profiles);
       const initialStageResults: StageResults = safeJsonParse<StageResults>(session.stageResults, {});
       const storyContext = this.parseStoryContextFromStageResults(initialStageResults);
-      
+      // 管理面终态（批量终止/僵尸回收/失败）的会话不可再推进：防止执行器复活会话
+      if (session.status === 'failed' || session.status === 'abandoned') {
+        throw new Error(`会话已终止（${session.status}），无法继续执行`);
+      }
       if (!session.goalConversationId) {
         // 故事当次需求 → Goal 开场（写入 conversation.description）→ 正式 Path 只吃 Goal，不读 story
         // description 固定用 storyDemand.text，保证传递链不被模拟者改写；模拟者只负责后续轮次。
@@ -2774,6 +2855,86 @@ class SimulationOrchestrator {
   }
 
   /**
+   * 组装 assisted 模式的学习者记忆（learnerMemory 用）：已掌握/到期复习/易混淆 + 最近成果。
+   */
+  private async buildAssistedLearnerMemory(
+    userId: string
+  ): Promise<{
+    mastered: string[];
+    dueReview: string[];
+    struggling: string[];
+    recentCompleted: string[];
+  } | null> {
+    const memory = await buildLearnerMemorySnapshot(userId, { limit: 8 }).catch(() => null);
+    if (!memory) return null;
+    return {
+      mastered: memory.mastered.map((item) => item.name),
+      dueReview: memory.dueReview.map((item) => item.name),
+      struggling: memory.struggling.map((item) => item.name),
+      recentCompleted: memory.recentTaskTitles,
+    };
+  }
+
+  /**
+   * 组装 assisted 模式的学习者记忆快照（knowledgeSnapshot 用）：
+   * 当前任务概念为锚 + 画像已掌握/易混淆 + 到期复习点 + 最近成果。
+   */
+  private async buildAssistedKnowledgeSnapshot(
+    userId: string,
+    currentTask: SimulationTask | null,
+    currentMilestone: SimulationMilestone | null
+  ): Promise<Array<{ name: string; status: string; progress: number }>> {
+    const memory = await buildLearnerMemorySnapshot(userId, { limit: 6 }).catch(() => null);
+    const result: Array<{ name: string; status: string; progress: number }> = [];
+    const anchor = currentTask?.linkedConcept || currentMilestone?.coreConceptId
+      || currentTask?.title || currentMilestone?.title || '当前任务概念';
+    result.push({ name: String(anchor), status: 'learning', progress: 40 });
+    for (const item of memory?.mastered || []) result.push({ name: item.name, status: 'mastered', progress: 100 });
+    for (const item of memory?.dueReview || []) result.push({ name: item.name, status: 'review', progress: item.progress });
+    for (const item of memory?.struggling || []) result.push({ name: item.name, status: 'learning', progress: 30 });
+    return result.slice(0, 8);
+  }
+
+  /**
+   * assisted 模式任务结算后的记忆回写：画像概念（统一出口）+ 成果物登记。
+   * best-effort——失败不阻断任务完成。
+   */
+  private async persistAssistedLearnerMemory(
+    sessionId: string,
+    session: VirtualSessionWithProfile,
+    task: SimulationTask
+  ): Promise<void> {
+    try {
+      const learningState = (this.parseStageResultsPayload(session.stageResults).teaching || {}) as Record<string, unknown>;
+      const teachingSessionId = typeof learningState.teachingSessionId === 'string' ? learningState.teachingSessionId : null;
+      let knowledgePoints: LessonKnowledgePoint[] = [];
+      if (teachingSessionId) {
+        const teaching = await prisma.teaching_sessions.findUnique({ where: { id: teachingSessionId } }).catch(() => null);
+        knowledgePoints = Array.isArray(teaching?.knowledgeState)
+          ? (teaching.knowledgeState as LessonKnowledgePoint[]).filter(
+              (kp) => kp && typeof kp.name === 'string' && kp.name.trim()
+            )
+          : [];
+      }
+      await writeProfileConceptsAfterLesson(session.userId, knowledgePoints, { source: 'assisted' });
+      await recordCompletedArtifact({
+        userId: session.userId,
+        taskId: task.id,
+        taskTitle: task.title || '当前任务',
+        artifactType: typeof task.taskType === 'string' ? task.taskType : null,
+        deliverable: typeof task.acceptanceCriteria === 'string' ? task.acceptanceCriteria : null,
+        knowledgePoints,
+        milestoneTitle: null,
+      });
+    } catch (error) {
+      logger.warn('[simulation-coordinator] 虚拟学习者记忆回写失败（不影响任务完成）', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
    * 任务完成后回写画像字段：掌握的概念 → knownConcepts，仍在学/需复习 → struggleConcepts。
    * best-effort——失败不阻断；修复「画像字段整个学习过程不更新」。
    */
@@ -2848,10 +3009,10 @@ class SimulationOrchestrator {
       const stageResults: StageResults = this.parseStageResultsPayload(session.stageResults)
 
       const learningState = (stageResults.teaching || {}) as TeachingState;
-      if (learningState.manualStop || session.status === 'failed') {
+      if (learningState.manualStop || session.status === 'failed' || session.status === 'abandoned') {
         return {
           success: false,
-          error: learningState.stoppedReason ? `学习已停止: ${learningState.stoppedReason}` : '学习已停止'
+          error: learningState.stoppedReason ? `学习已停止: ${learningState.stoppedReason}` : `学习已停止（${session.status}）`
         }
       }
       // 冻结语义：暂停期间手动单步同样拒绝（拍板 2026-08-21）——
@@ -3091,18 +3252,13 @@ class SimulationOrchestrator {
       };
       
       const virtualReplyStart = Date.now();
-      // 知识看板快照：以当前任务的 linkedConcept 与里程碑概念为锚，供模拟器校准自评（不再恒空）
-      const knowledgeSnapshot = [
-        ...(currentTask?.linkedConcept
-          ? [{ name: String(currentTask.linkedConcept), status: 'learning', progress: 40 }]
-          : []),
-        ...(currentMilestone?.coreConceptId
-          ? [{ name: String(currentMilestone.coreConceptId), status: 'learning', progress: 30 }]
-          : []),
-      ];
-      if (knowledgeSnapshot.length === 0) {
-        knowledgeSnapshot.push({ name: currentTask.title || currentMilestone.title || '当前任务概念', status: 'learning', progress: 30 });
-      }
+      // 知识看板快照：当前任务概念为锚 + 学习者记忆（已掌握/到期复习/易混淆/最近成果）
+      const knowledgeSnapshot = await this.buildAssistedKnowledgeSnapshot(
+        session.userId,
+        currentTask,
+        currentMilestone
+      );
+      const learnerMemoryForSimulator = await this.buildAssistedLearnerMemory(session.userId);
       const virtualReplyOutput = await this.retryLearnUpstream(sessionId, 'simulate-teaching-turn', () => executeSkill(virtualLearnerLearnTurnSimulatorDefinition, {
         learner: {
           profile: profile.profile || {},
@@ -3129,6 +3285,7 @@ class SimulationOrchestrator {
           description: currentTask.description || null,
         },
         knowledgeSnapshot,
+        learnerMemory: learnerMemoryForSimulator,
         frictionBudget: this.getSessionFrictionBudget(session),
       }));
 
@@ -3524,6 +3681,8 @@ class SimulationOrchestrator {
     success: boolean;
     totalSteps?: number;
     completedMilestones?: number;
+    /** 本课已完成但下一课启动失败（如预算耗尽）：进度已保留，会话为 failed 可续传 */
+    taskCompleted?: boolean;
     error?: string;
   }> {
     const maxMilestones = options.maxMilestones || 10;
@@ -3536,10 +3695,10 @@ class SimulationOrchestrator {
       }
 
       const initialStageResults = this.parseStageResultsPayload(session.stageResults)
-      if (initialStageResults.teaching?.manualStop || session.status === 'failed') {
+      if (initialStageResults.teaching?.manualStop || session.status === 'failed' || session.status === 'abandoned') {
         return {
           success: false,
-          error: initialStageResults.teaching?.stoppedReason ? `学习已停止: ${initialStageResults.teaching.stoppedReason}` : '学习已停止'
+          error: initialStageResults.teaching?.stoppedReason ? `学习已停止: ${initialStageResults.teaching.stoppedReason}` : `学习已停止（${session.status}）`
         }
       }
 
@@ -3557,7 +3716,7 @@ class SimulationOrchestrator {
       for (let i = 0; i < maxSteps; i++) {
         const latestSession = await this.getVirtualSession(sessionId)
         const latestStageResults = this.parseStageResultsPayload(latestSession.stageResults)
-        if (latestStageResults.teaching?.manualStop || latestSession.status === 'failed') {
+        if (latestStageResults.teaching?.manualStop || latestSession.status === 'failed' || latestSession.status === 'abandoned') {
           // 旁路紧急停止（requestStopLearning deferred 路径）：循环退出时就地终态化——
           // 此刻仍持有会话租约，是安全的收口点；避免会话停留在 running + manualStop 的悬挂态。
           // 人为终止记 abandoned（拍板 2026-08-21），不计入系统失败率
@@ -3574,6 +3733,13 @@ class SimulationOrchestrator {
             totalSteps: steps,
             error: latestStageResults.teaching?.stoppedReason ? `学习已停止: ${latestStageResults.teaching.stoppedReason}` : '学习已停止'
           }
+        }
+        // 自动驾驶停止请求（autopilot.stopRequested）：管理员在驾驶舱点了「停止自动驾驶」，
+        // 与 teaching.manualStop 不同源（前者在 stageResults.autopilot，后者在 teaching），
+        // 循环内需单独检测，否则僵死为「自动驾驶 · 0 步」悬挂态
+        if ((latestStageResults.autopilot as Record<string, unknown> | undefined)?.stopRequested === true) {
+          logger.info('[simulation-coordinator] 检测到自动驾驶停止请求，退出自动学习', { sessionId, steps });
+          return { success: true, totalSteps: steps, completedMilestones: 0 };
         }
         // 暂停检查：管理员手动暂停时，停止自动循环（不标记失败，可恢复）
         if (latestStageResults.teaching?.paused === true) {
@@ -3604,6 +3770,18 @@ class SimulationOrchestrator {
 
         if (!stepResult.success) {
           const stepErr = stepResult.error || '学习步骤失败';
+          // 本课已完成但下一课启动失败（如预算耗尽）：不是循环可重试的错误，
+          // 直接返回带 taskCompleted 标记的结果——本课进度已保留，会话已由
+          // executeLearningStep 终态化为 failed（可调高预算后重试续传）。
+          if (stepResult.taskCompleted) {
+            return {
+              success: false,
+              totalSteps: steps,
+              completedMilestones: 1,
+              taskCompleted: true,
+              error: stepErr
+            };
+          }
           // Provider 不稳定时自动重试（最多 3 次，间隔递增），而非直接 throw
           if (isProviderRetryable(stepErr) && i < maxSteps - 1) {
             const retryDelay = 3000 * (i === 0 ? 1 : 2);
@@ -3654,11 +3832,13 @@ class SimulationOrchestrator {
       }
       
       // 回合上限耗尽 ≠ 完成：诚实返回失败，不再虚报 completedMilestones
+      // 注意：会话仍为 running、本课教学对话仍 active——恢复动作是「调高上限后再次自动推进」或「手动推进对话」，
+      // 不应引导「重试」（重试=重开本课教学会话，会丢本课已推进的对话轮次）
       return {
         success: false,
         totalSteps: steps,
         completedMilestones: 0,
-        error: `auto_turn_cap_exhausted：已自动推进 ${steps} 回合，本课仍未收束。可在驾驶舱调高回合上限后重试，或改用手动单步推进`
+        error: `auto_turn_cap_exhausted：已自动推进 ${steps} 回合，本课仍未收束。可先调高「回合上限」后再次自动推进，或改用手动单步推进`
       };
     } catch (error: unknown) {
       logger.error('[simulation-coordinator] 自动学习失败', {
@@ -3911,7 +4091,9 @@ class SimulationOrchestrator {
         nextStatus: 'running',
         removeStageResults: ['teaching'],
         logPhasesToRemove: ['teaching-start', 'teaching-step', 'teaching-reply', 'teaching-response', 'stage-transition'],
-        resetTaskProgress: true,
+        // 保留已完成课程进度：重试/自动恢复从「第一个未完成课程」续传，
+        // 只重开失败的本课（learning_paths 上已完成的 subtask 状态不受影响）。
+        resetTaskProgress: false,
         clearCompletedAt: true
       })
 
@@ -3936,6 +4118,18 @@ class SimulationOrchestrator {
         return await this.startLearningPhase(sessionId)
       }
 
+      // 保留进度后的续传兜底：当前任务缺失/第一个里程碑无可启动任务时，
+      // 从「第一个存在可启动任务的里程碑」定位续传点，避免「全部清零重头学」与
+      // 「第一里程碑已完成则报错」两个极端。
+      if (['第一个里程碑没有可用任务', '指定任务当前不可启动'].includes(String(restartResult.error || ''))) {
+        const resumeTaskId = await this.findFirstRunnableTaskId(sessionId)
+        if (resumeTaskId) {
+          logger.info('[simulation-coordinator] 从第一个未完成里程碑续传学习', { sessionId, resumeTaskId })
+          return await this.startLearningPhase(sessionId, { taskId: resumeTaskId })
+        }
+        return restartResult
+      }
+
       return restartResult
     } catch (error: unknown) {
       logger.error('[simulation-coordinator] 重开学习失败', {
@@ -3948,6 +4142,27 @@ class SimulationOrchestrator {
         error: asErrorLike(error).message
       }
     }
+  }
+
+  /** 扫描全部里程碑，返回第一个「当前可启动」任务 id（保留进度后重试的续传定位） */
+  private async findFirstRunnableTaskId(sessionId: string): Promise<string | null> {
+    const session = await this.getVirtualSession(sessionId)
+    if (!session.learningPathId) return null
+    const learningPath = await prisma.learning_paths.findUnique({
+      where: { id: session.learningPathId },
+      include: {
+        milestones: {
+          orderBy: { stageNumber: 'asc' },
+          include: { subtasks: { orderBy: { order: 'asc' } } }
+        }
+      }
+    })
+    if (!learningPath) return null
+    for (const ms of learningPath.milestones as SimulationMilestone[]) {
+      const runnable = this.getRunnableTasks(ms.subtasks || [])
+      if (runnable.length) return runnable[0].id
+    }
+    return null
   }
 
   /**

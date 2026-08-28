@@ -95,10 +95,37 @@
             <p class="demo__tagline">WenFlow 管理后台</p>
             <div class="demo__intro">
               <p>AI 教学模拟 · 学习路径编排 · 实时观测</p>
-              <ul>
-                <li>虚拟学习者全生命周期仿真</li>
-                <li>Prompt 工程 File-as-Truth 体系</li>
-                <li>网关/Skill 调用链路可观测</li>
+            </div>
+
+            <div class="demo__status">
+              <span class="demo__dot"></span>
+              <strong>运行平稳</strong>
+              <span class="demo__score">92</span>
+            </div>
+
+            <div class="demo__panel">
+              <div class="demo__panel-head">
+                <strong>学习漏斗</strong>
+                <span>近 7 天</span>
+              </div>
+              <div class="demo__funnel">
+                <div v-for="item in funnel" :key="item.label" class="demo__funnel-item">
+                  <small>{{ item.label }}</small>
+                  <strong>{{ item.value }}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="demo__panel">
+              <div class="demo__panel-head">
+                <strong>动态</strong>
+                <span>实时</span>
+              </div>
+              <ul class="demo__feed">
+                <li v-for="item in feed" :key="item.text">
+                  <strong>{{ item.text }}</strong>
+                  <span>{{ item.time }}</span>
+                </li>
               </ul>
             </div>
           </div>
@@ -137,6 +164,19 @@ const errors = reactive({
   password: ''
 })
 const loginError = ref('')
+
+const funnel = [
+  { label: '用户', value: '128' },
+  { label: '目标', value: '86' },
+  { label: '路径', value: '64' },
+  { label: '完成', value: '217' }
+]
+
+const feed = [
+  { text: '路径「Excel 自动化」生成成功', time: '6 分钟前' },
+  { text: '新用户注册：liu**@163.com', time: '18 分钟前' },
+  { text: '学习者快照重算完成 ×12', time: '1 小时前' }
+]
 
 function touch(key: 'name' | 'password') {
   if (key === 'name') errors.name = loginForm.name ? '' : '请输入管理员账号'
@@ -464,6 +504,17 @@ onMounted(() => {
   line-height: 1.7;
   color: var(--ink);
   max-width: 32ch;
+}
+
+.demo__intro {
+  margin: 0;
+}
+
+.demo__intro p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.6;
 }
 
 .demo__status {

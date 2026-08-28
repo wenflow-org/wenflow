@@ -1,5 +1,5 @@
 <template>
-  <div class="mk-page">
+  <div class="mk-page mk-page--fill">
     <!-- 状态条 -->
     <div class="mk-status" :class="pendingCount > 0 ? 'mk-status--warn' : 'mk-status--ok'">
       <span class="mk-status__dot"></span>
@@ -23,7 +23,7 @@
 
     <template v-else>
       <!-- 列表 -->
-      <div class="mk-card">
+      <div class="mk-card mk-card--fill">
         <div class="mk-card__head">
           <div class="mk-filter">
             <input v-model="keyword" class="mk-filter__input" placeholder="搜索用户 / 评论 / 任务" />
@@ -62,11 +62,11 @@
               <th>策略</th>
               <th>状态</th>
               <th>时间</th>
-              <th class="mk-th--right">操作</th>
+              <th class="mk-col--actions">操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in shown" :key="r.id" class="fb-row" @click="openDetail(r)">
+            <tr v-for="r in paged" :key="r.id" class="fb-row" @click="openDetail(r)">
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ r.userName }}</strong>
@@ -106,9 +106,14 @@
           <button v-if="isFiltered && !loading" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
         </div>
       </div>
-      <div v-if="canMore" class="fb-more">
-        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
-      </div>
+      <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
+      <Pagination
+        v-if="filtered.length"
+        v-model:page="page"
+        v-model:pageSize="pageSize"
+        :total="filtered.length"
+        :showTotal="true"
+      />
     </template>
 
     <!-- 处理面板 -->
@@ -184,9 +189,9 @@ import { isLive } from './store'
 import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
 import { adminFeedbackApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
-import { useLoadMore } from './useLoadMore'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
+import Pagination from './Pagination.vue'
 
 type Status = 'new' | 'triaged' | 'resolved' | 'dismissed'
 
@@ -284,7 +289,18 @@ function clearFilters() {
 }
 
 /* 长列表分批渲染：每批 15 行 */
-const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
+/* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
+   数据全量在客户端（live 拉取 / demo 本地），筛选后按页切片；
+   筛选/数据变化自动回第 1 页（watch filtered） */
+const page = ref(1)
+const pageSize = ref(15)
+const paged = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filtered.value.slice(start, start + pageSize.value)
+})
+watch(filtered, () => {
+  page.value = 1
+})
 
 async function load(force?: boolean) {
   if (!isLive.value || loading.value) return
@@ -377,12 +393,6 @@ onMounted(() => {
 
 <style scoped>
 .fb-row { cursor: pointer; }
-.fb-more {
-  display: flex;
-  justify-content: center;
-  padding: 10px 0 12px;
-  border-top: 1px dashed var(--mk-line);
-}
 .fb-rating { font-size: 12px; color: var(--mk-muted); }
 .fb-rating b { font-size: 12.5px; color: var(--mk-ink); }
 .fb-rating--low, .fb-rating--low b { color: var(--mk-red); }

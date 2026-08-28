@@ -5,6 +5,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
+import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import AuditLogs from '../AuditLogs.vue';
 
@@ -58,7 +59,13 @@ function findBtn(wrapper: ReturnType<typeof mount>, text: string) {
 }
 
 async function mountAudit() {
-  const w = mount(AuditLogs);
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/admin/:page?', component: { template: '<div />' } }]
+  });
+  await router.push('/admin/audit-logs');
+  await router.isReady();
+  const w = mount(AuditLogs, { global: { plugins: [router] } });
   await flushPromises();
   await flushPromises();
   return w;
@@ -157,7 +164,7 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     const w = await mountAudit();
     await findBtn(w, '下一页').trigger('click');
     await flushPromises();
-    const input = w.find<HTMLInputElement>('.log-keyword');
+    const input = w.find<HTMLInputElement>('.mk-filter__input');
     await input.setValue('admin');
     await input.trigger('keydown.enter');
     await flushPromises();

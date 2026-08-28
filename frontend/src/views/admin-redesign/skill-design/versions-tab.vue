@@ -48,7 +48,7 @@
               <th>版本</th>
               <th>状态</th>
               <th>名称</th>
-              <th class="mk-th--right">操作</th>
+              <th class="mk-th--right mk-col--actions-wide">操作</th>
             </tr>
           </thead>
           <tbody>

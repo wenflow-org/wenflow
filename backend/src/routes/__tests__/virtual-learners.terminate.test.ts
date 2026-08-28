@@ -4,12 +4,14 @@
 const mockVirtualSessionsFindMany = jest.fn()
 const mockVirtualSessionsUpdate = jest.fn()
 const mockAuditCreate = jest.fn()
+const mockLeaseDeleteMany = jest.fn()
 
 jest.mock('../../config/database', () => ({
   __esModule: true,
   default: {
     virtual_sessions: { findMany: mockVirtualSessionsFindMany, update: mockVirtualSessionsUpdate },
-    admin_audit_logs: { create: mockAuditCreate }
+    admin_audit_logs: { create: mockAuditCreate },
+    virtual_experiment_leases: { deleteMany: mockLeaseDeleteMany }
   }
 }))
 jest.mock('../../utils/logger', () => ({
@@ -61,6 +63,7 @@ function sessionRow(overrides: Record<string, unknown> = {}) {
 describe('POST /sessions/terminate（批量终止）', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockLeaseDeleteMany.mockResolvedValue(undefined)
   })
 
   it('默认 dryRun=true：只报告将终止的会话，不落地状态、不写审计', async () => {
@@ -80,9 +83,10 @@ describe('POST /sessions/terminate（批量终止）', () => {
     }))
     expect(mockVirtualSessionsUpdate).not.toHaveBeenCalled()
     expect(mockAuditCreate).not.toHaveBeenCalled()
+    expect(mockLeaseDeleteMany).not.toHaveBeenCalled()
   })
 
-  it('dryRun=false：非终态会话标记 abandoned + 写审计', async () => {
+  it('dryRun=false：非终态会话标记 abandoned + 撤销活跃租约 + 写审计', async () => {
     mockVirtualSessionsFindMany.mockResolvedValue([sessionRow()])
     const handler = getPostHandler('/sessions/terminate')
     const req: any = { body: { sessionIds: ['s-1'], dryRun: false }, user: { userId: 'op-1', name: '管理员甲' } }
@@ -90,6 +94,8 @@ describe('POST /sessions/terminate（批量终止）', () => {
 
     await handler(req, res)
 
+    // 先撤销活跃租约：防 runner 持租约继续执行把 abandoned 会话复活成 running
+    expect(mockLeaseDeleteMany).toHaveBeenCalledWith({ where: { sessionId: 's-1' } })
     expect(mockVirtualSessionsUpdate).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 's-1' },
       data: expect.objectContaining({ status: 'abandoned', completedAt: expect.any(Date) })

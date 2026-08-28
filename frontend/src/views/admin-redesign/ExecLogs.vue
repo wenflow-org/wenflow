@@ -1,85 +1,18 @@
 <template>
-  <div class="mk-page">
-    <!-- 终端状态条 -->
+  <div class="mk-page mk-page--fill">
+    <!-- 终端状态条（对齐 Users 布局：标题 + 统计 + spacer + 主操作） -->
     <div class="mk-status" :class="`mk-status--${statusTone}`">
       <span class="mk-status__dot"></span>
-      <strong>{{ statusTitle }}</strong>
+      <strong class="mk-status__title">执行日志</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta mono">{{ isLive ? `共 ${liveLogsTotal} 条` : `${filtered.length} / ${totalCount} 条` }}</span>
-      <span v-if="logs.length" class="mk-status__meta mono">
-        失败 {{ errCount }} · 成功率 {{ successRate }}%
-      </span>
+      <span class="mk-status__meta">{{ isLive ? `共 ${liveLogsTotal} 条` : `${filtered.length} 条` }}</span>
+      <span v-if="logs.length" class="mk-status__meta">失败 {{ errCount }} · 成功率 {{ successRate }}%</span>
       <span v-if="isFiltered" class="mk-status__filter">
-        排查中：{{ filterLabel }}
-        <button type="button" class="mk-status__clear" aria-label="清除筛选" @click="clearFilter">×</button>
+        {{ filterLabel }}
+        <button type="button" class="mk-status__clear" @click="clearFilter">×</button>
       </span>
-      <div class="mk-status__filters">
-        <div class="mk-pills">
-          <button
-            v-for="p in statusPills"
-            :key="p.id"
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': statusFilter === p.id }"
-            @click="statusFilter = statusFilter === p.id ? '' : p.id"
-          >
-            {{ p.label }}
-          </button>
-        </div>
-        <button
-          v-if="isLive && errorCategory"
-          type="button"
-          class="log-cat"
-          :title="`仅看 ${errorCategory} 类别失败（含空类别启发式归并）`"
-          @click="errorCategory = ''; applyServerQuery()"
-        >
-          类别「{{ errorCategory }}」×
-        </button>
-        <input
-          v-if="isLive"
-          v-model="keyword"
-          class="log-keyword"
-          placeholder="关键词，回车查询"
-          @keydown.enter="applyServerQuery"
-        />
-        <input
-          v-if="isLive"
-          v-model="traceId"
-          class="log-keyword log-trace"
-          placeholder="traceId 直达，回车查询"
-          title="按 traceId 服务端查询：直达该链路日志（不受 200 条样本截断影响）"
-          @keydown.enter="applyServerQuery"
-        />
-        <button type="button" class="log-adv" :class="{ 'log-adv--on': advOpen }" @click="advOpen = !advOpen">
-          高级筛选 <i class="log-adv__caret" :class="{ 'is-open': advOpen }">▾</i>
-        </button>
-        <button v-if="isLive" type="button" class="mk-link" title="导出当前筛选结果的当前页（非全量）" @click="exportJson">导出</button>
-      </div>
-      <div v-if="advOpen" class="log-advpanel">
-        <select v-model="agentFilter" class="log-agent mono">
-          <option value="">全部节点</option>
-          <option v-for="a in agentOptions" :key="a" :value="a">{{ a }}</option>
-        </select>
-        <input
-          v-if="isLive"
-          v-model="sessionId"
-          class="log-keyword log-trace"
-          placeholder="sessionId 搜索，回车查询"
-          title="按业务会话 ID 服务端查询（跨 trace 归组查看前置）"
-          @keydown.enter="applyServerQuery"
-        />
-        <select v-if="isLive" v-model="timeRange" class="log-agent" @change="applyServerQuery">
-          <option value="today">今天</option>
-          <option value="yesterday">昨天</option>
-          <option value="week">近 7 天</option>
-          <option value="month">近 30 天</option>
-          <option value="all">全部</option>
-        </select>
-        <label v-if="isLive" class="log-auto">
-          <input type="checkbox" v-model="autoRefresh" />
-          自动刷新
-        </label>
-      </div>
+      <span class="mk-status__spacer"></span>
+      <button v-if="isLive" type="button" class="mk-status__action" @click="exportJson">导出</button>
     </div>
 
     <!-- 日志流 -->
@@ -89,147 +22,178 @@
       <button type="button" @click="retryLiveLogs">重试</button>
     </div>
     <MockSkeletonTable v-else-if="(liveLoading || liveLogsLoading) && !logs.length" :cols="4" :rows="6" />
-    <div v-else-if="filtered.length" class="log-body">
-      <div class="tline-head" aria-hidden="true">
-        <span class="tline-head__time">时间</span>
-        <span class="tline-head__kind">类型</span>
-        <span class="tline-head__agent">节点</span>
-        <span class="tline-head__msg">消息</span>
-        <span class="tline-head__model">模型</span>
-        <span class="tline-head__tokens">Tokens</span>
-        <span class="tline-head__dur">耗时</span>
-        <span class="tline-head__badge">状态</span>
-        <span class="tline-head__trace">Trace</span>
-        <span class="tline-head__arrow" aria-hidden="true"></span>
-      </div>
-      <div
-        v-for="log in shown"
-        :key="log.id"
-        class="tline"
-        :class="[`tline--${log.status}`, { 'tline--open': openId === log.id }]"
-      >
-        <button
-          type="button"
-          class="tline__main"
-          :aria-expanded="openId === log.id"
-          :aria-controls="`exec-payload-${log.id}`"
-          @click="openId = openId === log.id ? '' : log.id"
-        >
-          <span class="tline__time mono" :title="fmtFull(log.ts)">{{ fmtTime(log.ts) }}</span>
-          <span class="tline__kind" :class="`tline__kind--${kindTone(log)}`">{{ kindText(log) }}</span>
-          <span class="tline__agent mono" @click.stop="openSkillDrawer(log.agent)">{{ log.stage }}</span>
-          <span class="tline__msg" :title="[log.title, !isLive && log.detail ? log.detail : ''].filter(Boolean).join(' · ')">
-            <b>{{ log.title }}</b>
-            <span v-if="log.errorCode" class="tline__errcode mono">{{ errorCodeLabel(log.errorCode) ?? `[${log.errorCategory || 'err'}] ${log.errorCode}` }}</span>
-            <span v-if="log.statusCode && log.statusCode >= 400" class="tline__http mono">HTTP {{ log.statusCode }}</span>
-            <em v-if="log.detail && !isLive">{{ log.detail }}</em>
-            <span v-if="log.recoveredByRetry" class="tline__recovered">重试 {{ (log.attempts || 1) - 1 }} 次后成功</span>
-            <span v-if="promptOf(log)?.drift" class="tline__drift">{{ TERMS.driftRuntime }}</span>
-            <span
-              v-if="log.sessionId"
-              class="tline__session mono"
-              :title="`按业务会话在链路中归组查看：${log.sessionId}`"
-              @click.stop="openSession(log.sessionId)"
-            >会话 {{ shortTrace(log.sessionId) }}</span>
-          </span>
-          <span class="tline__model mono" :title="log.model || undefined">{{ log.model || '—' }}</span>
-          <span class="tline__tokens mono" :title="tokensTitle(log)">{{ tokensText(log) }}</span>
-          <span class="tline__dur mono" :title="fmtMs(log.durationMs)">{{ fmtMs(log.durationMs) }}</span>
-          <span class="tline__badge" :class="`tline__badge--${log.status}`">{{ statusBadge[log.status] }}</span>
-          <span class="tline__trace mono" :title="`${log.traceId} · 在链路中查看完整 Trace`" @click.stop="openTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span>
-          <span class="tline__arrow" aria-hidden="true">▸</span>
-        </button>
-        <div v-if="openId === log.id" :id="`exec-payload-${log.id}`" class="tline__payload">
-          <div class="tline__payload-meta">
-            <span>trace {{ log.traceId }}</span>
-            <button type="button" class="mk-link" @click.stop="openTrace(log.traceId)">在链路中查看完整 Trace →</button>
-            <button v-if="log.sessionId" type="button" class="mk-link" @click.stop="openSession(log.sessionId)">按会话归组查看 →</button>
+    <div v-else-if="filtered.length" class="mk-card mk-card--fill">
+      <div class="mk-card__head">
+        <!-- 左侧筛选组（对齐 Users：pills + 搜索框） -->
+        <div class="mk-filter">
+          <div class="mk-pills">
+            <button v-for="p in statusPills" :key="p.id" type="button" class="mk-pill" :class="{ 'mk-pill--active': statusFilter === p.id }" @click="statusFilter = statusFilter === p.id ? '' : p.id">{{ p.label }}</button>
           </div>
-          <template v-if="isLive">
-            <p v-if="detailLoading === log.id" class="tline__none"><span class="mk-spinner" aria-hidden="true"></span> 拉取日志详情…</p>
-            <template v-else-if="detailCache[log.id]">
-              <!-- 重试时间线：网关升级后的逐次尝试遥测 -->
-              <div v-if="detailCache[log.id].attempts.length" class="tline__section">
-                <span class="tline__label">调用时间线{{ detailCache[log.id].attemptCount > 1 ? ` · 共 ${detailCache[log.id].attemptCount}/${detailCache[log.id].maxAttempts} 次尝试` : '' }}</span>
-                <div class="tline-attempts">
-                  <div
-                    v-for="(a, i) in detailCache[log.id].attempts"
-                    :key="i"
-                    class="tline-attempt"
-                    :class="{ 'tline-attempt--fail': !a.success, 'tline-attempt--retry': a.willRetry }"
-                  >
-                    <div class="tline-attempt__head">
-                      <span class="tline-attempt__no">P#{{ a.promptAttemptNo }} · N#{{ a.transportAttemptNo }}</span>
-                      <span class="mk-badge" :class="a.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ a.success ? '成功' : '失败' }}</span>
-                      <span v-if="a.willRetry" class="tline-attempt__retry">将在 {{ a.backoffMs ?? '—' }}ms 后自动重试</span>
-                      <span class="tline-attempt__dur mono">{{ fmtMs(a.durationMs) }}</span>
-                    </div>
-                    <div class="tline-attempt__meta mono">
-                      <span>{{ a.provider || 'provider?' }}</span>
-                      <span>{{ a.model || 'model?' }}</span>
-                      <span v-if="a.statusCode">HTTP {{ a.statusCode }}</span>
-                      <span v-if="a.promptTokens != null">P {{ a.promptTokens }} / C {{ a.completionTokens ?? 0 }}</span>
-                      <span v-if="a.ttftMs != null" :title="'TTFT（首字节）'">TTFT {{ a.ttftMs }}ms</span>
-                      <span v-if="a.promptCacheHitTokens" class="tline-attempt__cache" :title="'DeepSeek 自动前缀缓存命中'">缓存 {{ a.promptCacheHitTokens }} token</span>
-                      <span v-if="a.routeSource">路由 {{ a.routeSource }}</span>
-                      <span v-if="a.endpointHost">{{ a.endpointHost }}</span>
-                    </div>
-                    <p v-if="a.errorMessage" class="tline-attempt__err">{{ a.errorCode ? `${errorCodeLabel(a.errorCode) ?? a.errorCode} · ` : '' }}{{ a.errorMessage }}</p>
-                  </div>
-                </div>
-              </div>
-              <div v-if="detailCache[log.id].error" class="tline__section">
-                <span class="tline__label tline__label--err">错误</span>
-                <pre>{{ detailCache[log.id].error }}</pre>
-              </div>
-              <div v-if="log.gatewayDurMs" class="tline__section">
-                <span class="tline__label">网关层</span>
-                <p class="tline__none">{{ fmtMs(log.gatewayDurMs) }}（同一调用的 api-gateway 记录，已合并）</p>
-              </div>
-              <div v-if="detailCache[log.id].input" class="tline__section">
-                <span class="tline__label">输入</span>
-                <pre>{{ detailCache[log.id].input }}</pre>
-              </div>
-              <div v-if="detailCache[log.id].output" class="tline__section">
-                <span class="tline__label">输出</span>
-                <pre>{{ detailCache[log.id].output }}</pre>
-              </div>
-              <!-- Prompt 契约维度（prompt_call_logs，同 traceId 关联） -->
-              <div v-if="promptOf(log)" class="tline__section tline__prompt">
-                <span class="tline__label">Prompt 契约</span>
-                <div class="tline__prompt-meta mono">
-                  <span>版本 v{{ promptOf(log)!.version || '—' }}</span>
-                  <span v-if="promptOf(log)!.drift" class="tline__prompt-drift">{{ TERMS.driftRuntime }}</span>
-                  <span v-if="promptOf(log)!.tokens">{{ promptOf(log)!.tokens }}</span>
-                  <span v-if="promptOf(log)!.errorCode">{{ errorCodeLabel(promptOf(log)!.errorCode) ?? `[${promptOf(log)!.errorCode}]` }} {{ promptOf(log)!.errorMessage }}</span>
-                </div>
-                <pre v-if="promptOf(log)!.userPayload">{{ promptOf(log)!.userPayload }}</pre>
-                <pre v-if="promptOf(log)!.rawModelOutput">{{ promptOf(log)!.rawModelOutput }}</pre>
-                <pre v-if="promptOf(log)!.extractedJson">{{ promptOf(log)!.extractedJson }}</pre>
-                <pre v-if="promptOf(log)!.normalizedOutput">{{ promptOf(log)!.normalizedOutput }}</pre>
-              </div>
-              <p v-if="detailFailed[log.id]" class="tline__none tline__none--err">详情拉取失败，请稍后重试</p>
-              <p v-else-if="!detailCache[log.id].attempts.length && !detailCache[log.id].error && !detailCache[log.id].input && !detailCache[log.id].output" class="tline__none">无 payload 记录</p>
-            </template>
-            <p v-else class="tline__none">详情不可用</p>
-          </template>
-          <template v-else>
-            <pre v-if="log.payload">{{ log.payload }}</pre>
-            <p v-else class="tline__none">无 payload 记录</p>
-          </template>
+          <input v-if="isLive" v-model="keyword" class="mk-filter__input" placeholder="关键词搜索" @keydown.enter="applyServerQuery" />
+          <input v-if="isLive" v-model="traceId" class="mk-filter__input" placeholder="traceId" @keydown.enter="applyServerQuery" />
+        </div>
+        <!-- 右侧：错误类别 / 自动刷新 / 高级（对齐 Users：切换控件 + 统计） -->
+        <div class="mk-card__head-right">
+          <span class="mk-card__meta" v-if="isLive && errorCategory">类别「{{ errorCategory }}」<button type="button" class="mk-link" @click="errorCategory = ''; applyServerQuery()">×</button></span>
+          <label v-if="isLive" class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
+          <span class="mk-card__meta">{{ isLive ? `第 ${liveLogsPage} / ${totalPagesOf(liveLogsTotal, liveLogsPageSize)} 页` : '' }}</span>
+          <button type="button" class="mk-link" :class="{ 'mk-link--active': advOpen }" @click="advOpen = !advOpen">高级</button>
         </div>
       </div>
-      <!-- 传统分页（方案 A）：页码器替代「加载更多」；demo 模式保留本地分批加载 -->
-      <Pagination
-        v-if="isLive"
-        v-model:page="currentPage"
-        v-model:pageSize="currentPageSize"
-        :total="liveLogsTotal"
-        :loading="liveLogsLoading"
-      />
-      <div v-else-if="demoCanMore" class="tline-more">
-        <button type="button" class="mk-link" @click="demoLoadMore">加载更多（已显示 {{ demoShown.length }} / {{ filtered.length }}）</button>
+      <div v-if="advOpen" class="log-advpanel">
+        <select v-model="agentFilter" class="mk-filter__select mono">
+          <option value="">全部节点</option>
+          <option v-for="a in agentOptions" :key="a" :value="a">{{ a }}</option>
+        </select>
+        <input v-if="isLive" v-model="sessionId" class="mk-filter__input" placeholder="sessionId" @keydown.enter="applyServerQuery" />
+        <select v-if="isLive" v-model="timeRange" class="mk-filter__select" @change="applyServerQuery">
+          <option value="today">今天</option>
+          <option value="yesterday">昨天</option>
+          <option value="week">近 7 天</option>
+          <option value="month">近 30 天</option>
+          <option value="all">全部</option>
+        </select>
+        <label v-if="isLive" class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
       </div>
+      <MockSkeletonTable v-if="(liveLoading || liveLogsLoading) && !logs.length" :cols="6" :rows="6" />
+      <div v-else-if="filtered.length" class="mk-table-scroll">
+        <table class="mk-table mk-table--click mk-table--fixed exec-table">
+          <colgroup>
+            <col style="width:var(--mk-col-time-full)">
+            <col style="width:48px">
+            <col style="width:150px">
+            <col style="width:200px">
+            <col style="width:120px">
+            <col style="width:132px">
+            <col style="width:64px">
+            <col style="width:62px">
+            <col style="width:98px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>时间</th>
+              <th>类型</th>
+              <th>节点</th>
+              <th>消息</th>
+              <th>模型</th>
+              <th>输入 / 输出</th>
+              <th class="right">耗时</th>
+              <th>状态</th>
+              <th class="right">Trace</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="log in shown" :key="log.id">
+              <tr class="exec-row" :class="[`exec-row--${log.status}`, { 'exec-row--open': openId === log.id }]" @click="openId = openId === log.id ? '' : log.id">
+                <td><span class="mono exec-time" :title="fmtFull(log.ts)">{{ fmtTime(log.ts) }}</span></td>
+                <td><span class="mk-badge" :class="`mk-badge--${kindTone(log)}`">{{ kindText(log) }}</span></td>
+                <td><span class="mono exec-stage" :title="log.agent" @click.stop="openSkillDrawer(log.agent)">{{ log.stage }}</span></td>
+                <td>
+                  <div class="exec-cell">
+                    <div class="exec-cell__line">
+                      <strong class="exec-title" :title="[log.title, !isLive && log.detail ? log.detail : ''].filter(Boolean).join(' · ')">{{ log.title }}</strong>
+                    </div>
+                    <div class="exec-cell__line exec-cell__sub">
+                      <span v-if="log.errorCode" class="tline__errcode mono" :title="log.errorCode">{{ errorCodeLabel(log.errorCode) ?? `[${log.errorCategory || 'err'}] ${log.errorCode}` }}</span>
+                      <span v-if="log.statusCode && log.statusCode >= 400" class="tline__http mono">HTTP {{ log.statusCode }}</span>
+                      <span v-if="log.recoveredByRetry" class="tline__recovered">重试 {{ (log.attempts || 1) - 1 }} 次后成功</span>
+                      <span v-if="promptOf(log)?.drift" class="tline__drift">{{ TERMS.driftRuntime }}</span>
+                      <span v-if="log.sessionId" class="tline__session mono" :title="`按业务会话在链路中归组查看：${log.sessionId}`" @click.stop="openSession(log.sessionId)">会话 {{ shortTrace(log.sessionId) }}</span>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="mono exec-model__name" :title="log.model || undefined">{{ log.model || '—' }}</span></td>
+                <td><span class="mono exec-tokens" :title="tokensTitle(log)">{{ tokensText(log) }}</span></td>
+                <td class="right"><span class="mono exec-dur" :title="fmtMs(log.durationMs)">{{ fmtMs(log.durationMs) }}</span></td>
+                <td><span class="exec-status" :class="`exec-status--${log.status}`">{{ statusText[log.status] }}</span></td>
+                <td class="right"><span class="mono exec-trace" :title="`${log.traceId} · 在链路中查看完整 Trace`" @click.stop="openTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span></td>
+              </tr>
+              <tr v-if="openId === log.id" class="exec-detail">
+                <td colspan="9">
+                  <div class="exec-detail__box">
+                    <div class="tline__payload-meta">
+                      <span class="mono">trace {{ log.traceId }}</span>
+                      <span class="exec-detail__links">
+                        <button type="button" class="mk-link" @click.stop="openTrace(log.traceId)">在链路中查看完整 Trace →</button>
+                        <button v-if="log.sessionId" type="button" class="mk-link" @click.stop="openSession(log.sessionId)">按会话归组查看 →</button>
+                      </span>
+                    </div>
+                    <template v-if="isLive">
+                      <p v-if="detailLoading === log.id" class="tline__none"><span class="mk-spinner" aria-hidden="true"></span> 拉取日志详情中…</p>
+                      <template v-else-if="detailCache[log.id]">
+                        <!-- 重试时间线：网关升级后的逐次尝试遥测 -->
+                        <div v-if="detailCache[log.id].attempts.length" class="tline__section">
+                          <span class="tline__label">调用时间线{{ detailCache[log.id].attemptCount > 1 ? ` · 已尝试 ${detailCache[log.id].attemptCount}/${detailCache[log.id].maxAttempts} 次` : '' }}</span>
+                          <div class="tline-attempts">
+                            <div v-for="(a, i) in detailCache[log.id].attempts" :key="i" class="tline-attempt" :class="{ 'tline-attempt--fail': !a.success, 'tline-attempt--retry': a.willRetry }">
+                              <div class="tline-attempt__head">
+                                <span class="tline-attempt__no">P#{{ a.promptAttemptNo }} · N#{{ a.transportAttemptNo }}</span>
+                                <span class="mk-badge" :class="a.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ a.success ? '成功' : '失败' }}</span>
+                                <span v-if="a.willRetry" class="tline-attempt__retry">将在 {{ a.backoffMs ?? '—' }}ms 后自动重试</span>
+                                <span class="tline-attempt__dur mono">{{ fmtMs(a.durationMs) }}</span>
+                              </div>
+                              <div class="tline-attempt__meta mono">
+                                <span>{{ a.provider || 'provider?' }}</span>
+                                <span>{{ a.model || 'model?' }}</span>
+                                <span v-if="a.statusCode">HTTP {{ a.statusCode }}</span>
+                                <span v-if="a.promptTokens != null">P {{ a.promptTokens }} / C {{ a.completionTokens ?? 0 }}</span>
+                                <span v-if="a.ttftMs != null" :title="'TTFT（首字节）'">TTFT {{ a.ttftMs }}ms</span>
+                                <span v-if="a.promptCacheHitTokens" class="tline-attempt__cache" :title="'DeepSeek 自动前缀缓存命中'">缓存 {{ a.promptCacheHitTokens }} token</span>
+                                <span v-if="a.routeSource">路由 {{ a.routeSource }}</span>
+                                <span v-if="a.endpointHost">{{ a.endpointHost }}</span>
+                              </div>
+                              <p v-if="a.errorMessage" class="tline-attempt__err">{{ a.errorCode ? `${errorCodeLabel(a.errorCode) ?? a.errorCode} · ` : '' }}{{ a.errorMessage }}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div v-if="detailCache[log.id].error" class="tline__section">
+                          <span class="tline__label tline__label--err">错误</span>
+                          <pre>{{ detailCache[log.id].error }}</pre>
+                        </div>
+                        <div v-if="log.gatewayDurMs" class="tline__section">
+                          <span class="tline__label">网关合并</span>
+                          <p class="tline__none">{{ fmtMs(log.gatewayDurMs) }}（同一调用链的 api-gateway 记录，已合并展示）</p>
+                        </div>
+                        <div v-if="detailCache[log.id].input" class="tline__section">
+                          <span class="tline__label">输入</span>
+                          <pre>{{ detailCache[log.id].input }}</pre>
+                        </div>
+                        <div v-if="detailCache[log.id].output" class="tline__section">
+                          <span class="tline__label">输出</span>
+                          <pre>{{ detailCache[log.id].output }}</pre>
+                        </div>
+                        <!-- Prompt 契约维度（prompt_call_logs，同 traceId 关联） -->
+                        <div v-if="promptOf(log)" class="tline__section tline__prompt">
+                          <span class="tline__label">Prompt 契约</span>
+                          <div class="tline__prompt-meta mono">
+                            <span>版本 v{{ promptOf(log)!.version || '—' }}</span>
+                            <span v-if="promptOf(log)!.drift" class="tline__prompt-drift">{{ TERMS.driftRuntime }}</span>
+                            <span v-if="promptOf(log)!.tokens">{{ promptOf(log)!.tokens }}</span>
+                            <span v-if="promptOf(log)!.errorCode">{{ errorCodeLabel(promptOf(log)!.errorCode) ?? `[${promptOf(log)!.errorCode}]` }} {{ promptOf(log)!.errorMessage }}</span>
+                          </div>
+                          <pre v-if="promptOf(log)!.userPayload">{{ promptOf(log)!.userPayload }}</pre>
+                          <pre v-if="promptOf(log)!.rawModelOutput">{{ promptOf(log)!.rawModelOutput }}</pre>
+                          <pre v-if="promptOf(log)!.extractedJson">{{ promptOf(log)!.extractedJson }}</pre>
+                          <pre v-if="promptOf(log)!.normalizedOutput">{{ promptOf(log)!.normalizedOutput }}</pre>
+                        </div>
+                        <p v-if="detailFailed[log.id]" class="tline__none tline__none--err">详情拉取失败，请稍后重试</p>
+                        <p v-else-if="!detailCache[log.id].attempts.length && !detailCache[log.id].error && !detailCache[log.id].input && !detailCache[log.id].output" class="tline__none">无 payload 记录</p>
+                      </template>
+                      <p v-else class="tline__none">详情不可用</p>
+                    </template>
+                    <template v-else>
+                      <p v-if="log.detail" class="tline__none">{{ log.detail }}</p>
+                      <p v-else class="tline__none">无 payload 记录</p>
+                    </template>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <Pagination v-if="isLive" v-model:page="currentPage" v-model:pageSize="currentPageSize" :total="liveLogsTotal" :loading="liveLogsLoading" />
+      <div v-else-if="demoCanMore" class="mk-list-more"><button type="button" class="mk-link" @click="demoLoadMore">加载更多</button></div>
     </div>
 
     <div v-else class="mk-empty">
@@ -243,7 +207,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { spans, intent, openTrace, openSession, openSkillDrawer, clearInvestigation, dataSource, isLive } from './store'
-import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
+import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, totalPagesOf, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
 import { useLoadMore } from './useLoadMore'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -287,14 +251,14 @@ function promptOf(log: { traceId: string; agent: string }): PromptMetaRow | unde
 type TokenRow = { traceId: string; agent: string; promptTokens?: number | null; completionTokens?: number | null }
 function tokensText(log: TokenRow): string {
   if (log.promptTokens != null || log.completionTokens != null) {
-    return `P ${log.promptTokens ?? 0} / C ${log.completionTokens ?? 0}`
+    return `输入 ${log.promptTokens ?? 0} · 输出 ${log.completionTokens ?? 0}`
   }
   const p = promptOf(log)
   return p?.tokens || '未统计'
 }
 function tokensTitle(log: TokenRow): string {
   if (log.promptTokens != null || log.completionTokens != null) {
-    return `Prompt ${log.promptTokens ?? 0} / Completion ${log.completionTokens ?? 0} token（agent_call_logs 传输层统计）`
+    return `输入 ${log.promptTokens ?? 0} / 输出 ${log.completionTokens ?? 0} token（agent_call_logs 传输层统计）`
   }
   const p = promptOf(log)
   if (p?.tokens) return `${p.tokens}（prompt_call_logs 契约层统计）`
@@ -471,7 +435,6 @@ const traceMiss = computed(() => {
 })
 /* live：全量统计来自后端 stats（非 200 行样本）；demo 回退样本计算 */
 const liveStats = computed(() => (isLive.value ? liveLogStats.value : null))
-const totalCount = computed(() => liveStats.value?.total ?? logs.value.length)
 const errCount = computed(() =>
   liveStats.value ? liveStats.value.error : logs.value.filter((l) => l.status === 'err').length
 )
@@ -483,11 +446,6 @@ const successRate = computed(() => {
   return Math.round((ok / logs.value.length) * 100)
 })
 const statusTone = computed(() => (!logs.value.length ? 'muted' : errCount.value ? 'bad' : 'ok'))
-const statusTitle = computed(() => {
-  if (!logs.value.length) return '暂无日志'
-  if (errCount.value) return `执行日志 · ${errCount.value} 次失败`
-  return '执行日志 · 运行平稳'
-})
 /* 排查徽章：读本地筛选（修复此前读 intent 导致的空值）；live 下补充关键词/时间范围/trace/会话 */
 const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部' } as const
 const filterLabel = computed(() =>
@@ -524,15 +482,13 @@ function clearFilter() {
 }
 
 const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
-/* 绝对时间：今天内 HH:MM:SS，跨天 MM-DD HH:MM */
+/* 绝对时间：统一 MM-DD HH:MM:SS（日志可能跨天，全部带日期避免同一列表两种格式；
+   年/完整时区由 tooltip fmtFull 提供） */
 function fmtTime(ts?: number): string {
   if (!ts) return '—'
   const d = new Date(ts)
-  const now = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
-  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) return hm
-  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${hm.slice(0, 5)}`
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 function shortTrace(id: string): string {
   const m = id.match(/^(\w{2}):?([\w-]+)$/)
@@ -548,7 +504,6 @@ function fmtFull(ts?: number | null): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
-const statusBadge = { ok: '✅ 成功', warn: '⚠ 降级', err: '❌ 失败' } as const
 /* 类型列：demo 按 flow/call；live 按执行层（api-gateway→网关 / skill→Skill） */
 function kindText(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   if (log.kind === 'flow') return '流程'
@@ -561,9 +516,13 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   if (log.execLayer === 'skill') return 'skill'
   return 'call'
 }
+/* 状态列文本（旧 statusBadge 语义：成功/超时/失败） */
+const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 </script>
 
 <style scoped>
+/* 全宽布局（与其他管理台页面一致）：9 列固定宽度，宽屏下剩余空间由各列按比例均摊，
+   空白分散到每一列而不是堆在消息列（fixed table-layout 规范行为） */
 .mk-status {
   display: flex;
   align-items: center;
@@ -605,52 +564,6 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   padding: 0 2px;
 }
 
-.mk-status__filters {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  min-width: 0;
-}
-.log-adv {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 10px;
-  border: 1px solid var(--mk-line);
-  border-radius: 8px;
-  background: var(--mk-surface);
-  color: var(--mk-muted);
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.log-adv:hover { border-color: rgba(44, 99, 208, 0.4); color: var(--mk-ink); }
-.log-adv--on { border-color: rgba(44, 99, 208, 0.5); color: var(--mk-blue); background: #eef5ff; }
-.log-adv__caret { font-style: normal; font-size: 10px; transition: transform 0.15s ease; }
-.log-adv__caret.is-open { transform: rotate(180deg); }
-/* 错误类别筛选 chip（失败归因/异常流跳转进入） */
-.log-cat {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border: 1px solid rgba(220, 38, 38, 0.35);
-  border-radius: 999px;
-  background: #fff1f1;
-  color: #b91c1c;
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: 0.12s ease;
-}
-.log-cat:hover { background: #fee2e2; border-color: rgba(220, 38, 38, 0.55); }
 .log-advpanel {
   flex-basis: 100%;
   display: flex;
@@ -663,34 +576,6 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
 @keyframes log-adv-in {
   from { opacity: 0; transform: translateY(-3px); }
 }
-@media (max-width: 1000px) {
-  .mk-status__filters {
-    margin-left: 0;
-    width: 100%;
-    justify-content: flex-start;
-  }
-  .log-keyword { flex: 1 1 140px; min-width: 0; }
-}
-.log-agent {
-  padding: 6px 10px;
-  border: 1px solid var(--mk-line);
-  border-radius: 8px;
-  background: var(--mk-surface);
-  font-size: 11.5px;
-  color: var(--mk-ink);
-}
-.log-keyword {
-  padding: 6px 10px;
-  border: 1px solid var(--mk-line);
-  border-radius: 8px;
-  background: var(--mk-surface);
-  font: inherit;
-  font-size: 11.5px;
-  color: var(--mk-ink);
-  width: 150px;
-}
-/* traceId/sessionId 直达输入：稍窄的等宽输入，与关键词输入同规格 */
-.log-trace { width: 172px; font-family: var(--mk-mono); font-size: 11px; }
 .log-auto {
   display: inline-flex;
   align-items: center;
@@ -699,13 +584,6 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   color: var(--mk-muted);
   cursor: pointer;
   white-space: nowrap;
-}
-
-.log-body {
-  border: 1px solid var(--mk-line);
-  border-radius: 12px;
-  background: var(--mk-surface);
-  overflow-x: auto;
 }
 
 /* P0 修复：执行日志加载失败横幅（对齐 ts-error 规范） */
@@ -738,108 +616,124 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   background: rgba(239, 117, 120, 0.12);
 }
 
-/* 表头：与全站表格页同规范（sticky 顶部、uppercase 小号标签）。
-   10 列模板（时间/类型/节点/消息(弹性)/模型/Tokens/耗时/状态/Trace/箭头）：
-   列宽全部引用 --mk-col-* token（main.css + shared.css 4K 档覆盖，一处变量全站同步） */
-.tline-head {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: grid;
-  grid-template-columns: var(--mk-col-time) 40px 200px minmax(var(--mk-col-flex-min), var(--mk-col-flex-max)) var(--mk-col-model) var(--mk-col-num-wide) 44px var(--mk-col-badge) 88px 18px;
-  gap: 8px;
-  align-items: baseline;
-  padding: 9px 14px;
-  background: #fafbfc;
-  border-bottom: 1px solid var(--mk-line);
-  border-radius: 12px 12px 0 0;
+/* 表头与列表布局见下方 exec-* 区块 */
+
+/* ========== 5 列表格（mk-table 布局）：时间 / 调用 / 模型·Tokens / 耗时 / Trace ==========
+   列宽设计（内容区 1180px、1440 视口）：
+   - 时间：--mk-col-time-full（110px）等宽 HH:MM:SS，跨天 MM-DD HH:MM 不截断
+   - 调用：width auto 吸收剩余空间（≈650px），主行标题 ellipsis
+   - 模型 / Tokens：--excl-model 176px（模型名 116 + 用量 P/C 60），两行堆叠
+   - 耗时：--excl-dur 84px（"123.4ms" 7ch 右对齐）
+   - Trace：--excl-trace 116px（"gw:…8y4tm4" 11ch 右对齐） */
+.exec-table { }
+.exec-table th.right,
+.exec-table td.right { text-align: right; }
+.exec-table thead th { white-space: nowrap; }
+/* 行高压缩：表头/单元格收窄，双行消息列整体更紧凑 */
+.exec-table th { padding: 8px 12px; }
+.exec-table td { padding: 5px 12px; }
+
+.exec-row--err { background: rgba(220, 38, 38, 0.05); }
+.exec-row--open { background: #f6f9ff; }
+.exec-cell { min-width: 0; }
+.exec-cell__line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.exec-cell__line + .exec-cell__line { margin-top: 1px; }
+/* 消息主行：标题截断不换行（title 全值）；14px/650 让"执行完成"这类 4 字短标题
+   在消息列内具有足够视觉权重，抵消列内余白 */
+.exec-title {
+  font-size: 14px;
+  font-weight: 650;
+  min-width: 0;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.exec-cell__sub { flex-wrap: wrap; gap: 5px; }
+/* 节点列：等宽短名，长名 ellipsis（title 全值，点击开 Skill 抽屉）。
+   display:inline-block 必须显式声明——span 为 inline 元素时 max-width/overflow/ellipsis 全部失效，
+   长节点名会溢出节点列侵入消息列（实测 46 字符节点名溢出 132px 与标题重叠） */
+.exec-stage {
+  display: inline-block;
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  color: var(--mk-blue);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.exec-stage:hover { text-decoration: underline; }
+/* 模型 / Tokens 独立列：单行截断（同为 inline span，需 inline-block 让截断生效） */
+.exec-model__name {
+  display: inline-block;
+  font-size: 11px;
   color: var(--mk-faint);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
-.tline-more {
-  display: flex;
+.exec-tokens {
+  display: inline-block;
+  font-size: 10.5px;
+  color: var(--mk-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+/* 状态列徽章（成功/超时/失败） */
+.exec-status {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  padding: 10px 0 12px;
-  border-top: 1px dashed var(--mk-line);
+  font-size: 10.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
 }
-
-.tline { border-bottom: 1px solid #f0f2f5; box-shadow: inset 3px 0 0 0 transparent; }
-.tline:last-child { border-bottom: none; }.tline--ok { box-shadow: inset 3px 0 0 0 var(--mk-green); }
-.tline--err { box-shadow: inset 3px 0 0 0 var(--mk-red); background: rgba(220, 38, 38, 0.04); }
-.tline--warn { box-shadow: inset 3px 0 0 0 var(--mk-amber); }
-
-.tline__main {
-  display: grid;
-  grid-template-columns: var(--mk-col-time) 40px 200px minmax(var(--mk-col-flex-min), var(--mk-col-flex-max)) var(--mk-col-model) var(--mk-col-num-wide) 44px var(--mk-col-badge) 88px 18px;
-  gap: 8px;
-  align-items: baseline;
-  width: 100%;
-  padding: 9px 14px;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.tline__main:hover { background: #f6f9ff; }
-
-/* 窄屏压缩档（<860px）：时间/节点固定列再压缩，给消息列腾空间（时间 72→56、节点 200→150）。
-   断点 Bug 修复：本块必须声明在 .tline-head/.tline__main 基础规则之后——
-   级联按源顺序后声明者胜，旧位置（基础规则之前）的媒体块从未生效，窄屏横向滚动溢出 243px。
-   列宽合计（682px）+ gap 4×9 + padding 28 ≈ 746px ≤ 860 容器 747px：压缩后不再横向溢出 */
-@media (max-width: 860px) {
-  .tline-head,
-  .tline__main { grid-template-columns: 56px 40px 150px minmax(110px, 480px) 90px 84px 44px 44px 52px 12px; gap: 4px; }
-  .tline__payload { padding-left: 56px; }
-}
-
-.tline__time {
+.exec-status--ok { background: var(--mk-green-bg); color: var(--mk-green); }
+.exec-status--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
+.exec-status--err { background: var(--mk-red-bg); color: var(--mk-red); }
+/* 时间/耗时/Trace 等宽数字列 */
+.exec-time {
   font-size: 11px;
   color: var(--mk-faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.tline__kind {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: 700;
-  border-radius: 5px;
-  padding: 1px 6px;
-  white-space: nowrap;
-}
-.tline__kind--flow { background: #eff6ff; color: var(--mk-blue); }
-.tline__kind--call { background: #f0f2f5; color: var(--mk-muted); }
-.tline__kind--skill { background: #f0f7f6; color: var(--mk-teal); }
-.tline__agent {
+.exec-dur {
   font-size: 11px;
-  color: var(--mk-blue);
+  color: var(--mk-muted);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-.tline__agent:hover { text-decoration: underline; }
-.tline__msg {
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
+.exec-trace {
+  font-size: 11px;
+  color: var(--mk-faint);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.exec-trace:hover { color: var(--mk-amber); text-decoration: underline; }
+
+/* 展开详情行（colspan=5）：浅底 + 内容盒内聚，干扰最小化 */
+.exec-detail td { padding: 6px 14px 14px; background: #fbfcfe; vertical-align: top; }
+.exec-detail__box {
+  display: grid;
   gap: 8px;
-  font-size: 12.5px;
-  overflow: hidden;
+  padding: 10px 14px;
+  border-left: 3px solid var(--mk-line);
+  border-radius: 0 8px 8px 0;
+  background: #fff;
 }
-.tline__msg b {
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 45%;
-  flex: 0 1 auto;
-}
+.exec-detail__links { display: inline-flex; gap: 12px; }
+
+/* 窄屏：9 列合计超出 1080px 时横向滚动（容器 .mk-table-scroll overflow-x），不挤压内容 */
+.mk-table-scroll .exec-table { min-width: 1080px; }
+
+/* ---------- 行内 chip（沿用） ---------- */
 .tline__errcode {
   flex-shrink: 0;
   font-size: 10.5px;
@@ -874,63 +768,14 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   padding: 1px 6px;
   white-space: nowrap;
 }
-/* 模型 / Tokens 独立列（P2：从消息列 chip 提出；单行截断 + title 全值，避免行宽爆炸） */
-.tline__tokens,
-.tline__model {
-  min-width: 0;
-  font-size: 10.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tline__tokens { color: var(--mk-muted); text-align: right; }
-.tline__model { color: var(--mk-faint); }
+.tline__session { font-size: 11px; color: var(--mk-blue, #2c63d0); cursor: pointer; }
+.tline__session:hover { text-decoration: underline; }
 /* Prompt 契约展开区 */
 .tline__prompt { border-left: 3px solid rgba(217, 119, 6, 0.4); padding-left: 10px; }
 .tline__prompt-meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--mk-faint); }
 .tline__prompt-drift { color: var(--mk-amber); font-weight: 700; }
-.tline__msg em {
-  font-style: normal;
-  color: var(--mk-faint);
-  font-size: 11.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  flex: 0 1 auto;
-}
-.tline__dur { font-size: 11px; color: var(--mk-muted); text-align: right; font-variant-numeric: tabular-nums; }
-.tline__badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10.5px;
-  font-weight: 700;
-  border-radius: 999px;
-  padding: 1px 8px;
-  white-space: nowrap;
-}
-.tline__badge--ok { background: var(--mk-green-bg); color: var(--mk-green); }
-.tline__badge--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
-.tline__badge--err { background: var(--mk-red-bg); color: var(--mk-red); }
-/* Trace 列：单行 ellipsis（修复 30/30 行折行、行高 56px；列宽 64→88px 容纳 shortTrace「gw:…8y4tm4」） */
-.tline__trace { font-size: 11px; color: var(--mk-faint); text-align: right; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tline__arrow { font-size: 11px; color: var(--mk-faint); text-align: right; transition: transform 0.15s ease; }
-.tline--open .tline__arrow { transform: rotate(90deg); }
-.tline__session { font-size: 11px; color: var(--mk-blue, #2c63d0); cursor: pointer; }
-.tline__session:hover { text-decoration: underline; }
-.tline__trace:hover { color: var(--mk-amber); text-decoration: underline; }
 
-.tline__payload { padding: 2px 14px 12px 68px; display: grid; gap: 8px; }
-.tline__payload-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 11px;
-  color: var(--mk-faint);
-  font-family: var(--mk-mono);
-}
-.tline__payload pre {
+.exec-detail__box pre {
   margin: 0;
   padding: 10px 12px;
   border-radius: 8px;
@@ -941,6 +786,14 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   max-height: 240px;
   white-space: pre-wrap;
   word-break: break-all;
+}
+.tline__payload-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--mk-faint);
+  font-family: var(--mk-mono);
 }
 .tline__none { margin: 0; font-size: 11.5px; color: var(--mk-faint); }
 .tline__none--err { color: var(--mk-red); font-weight: 600; }
@@ -974,32 +827,22 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   .mk-status { padding: 10px 16px; }
   .mk-status strong { font-size: 15.5px; }
   .mk-status__meta { font-size: 13px; }
-  .log-keyword { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 180px; }
-  .log-trace { width: 210px; font-size: 12.5px; }
-  .log-agent { font-size: 13px; padding: 8px 12px; border-radius: 10px; width: 100px; }
   .log-auto { font-size: 13px; }
-  .log-adv { font-size: 13px; }
   .mk-status__filter { font-size: 13px; }
   .mk-status__clear { font-size: 14.5px; }
-  /* 4K 档列宽由 shared.css 4K 段 token 覆盖（--mk-col-*），此处不再逐列复制模板 */
-  .tline-head,
-  .tline__main { gap: 12px; padding: 11px 18px; }
-  .tline-head { font-size: 12.5px; }
-  .tline__time,
-  .tline__agent,
-  .tline__dur,
-  .tline__trace { font-size: 13px; }
-  .tline__arrow { font-size: 13px; }
-  .tline__msg { font-size: 14.5px; }
-  .tline__msg em { font-size: 13px; }
-  .tline__kind { font-size: 11.5px; }
-  .tline__badge { font-size: 12px; }
+  /* 列宽：时间列由 shared.css 4K token 覆盖（--mk-col-time-full），固定列 4K 档字号放大 */
+  .exec-time,
+  .exec-dur,
+  .exec-trace,
+  .exec-stage,
+  .exec-model__name { font-size: 13px; }
+  .exec-title { font-size: 15px; }
+  .exec-tokens,
+  .exec-status { font-size: 12px; }
   .tline__errcode,
   .tline__http,
   .tline__recovered,
-  .tline__drift,
-  .tline__tokens,
-  .tline__model { font-size: 12px; }
+  .tline__drift { font-size: 12px; }
   .tline__session,
   .tline__prompt-meta,
   .tline__payload-meta { font-size: 13px; }
@@ -1008,8 +851,7 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   .tline-attempt__retry,
   .tline-attempt__dur { font-size: 12px; }
   .tline-attempt__err { font-size: 13px; }
-  .tline__payload { padding-left: 84px; }
-  .tline__payload pre { font-size: 13px; }
+  .exec-detail__box pre { font-size: 13px; }
   .tline-attempt__no { font-size: 12px; }
   .tline-attempt__meta { font-size: 11.5px; }
 }
@@ -1022,32 +864,22 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   .mk-status { padding: 14px 22px; }
   .mk-status strong { font-size: 18px; }
   .mk-status__meta { font-size: 15px; }
-  .log-keyword { font-size: 15.5px; padding: 9px 14px; width: 215px; }
-  .log-trace { width: 250px; font-size: 15px; }
-  .log-agent { font-size: 15.5px; padding: 9px 14px; width: 115px; }
   .log-auto { font-size: 15.5px; }
-  .log-adv { font-size: 15.5px; }
   .mk-status__filter { font-size: 15.5px; }
   .mk-status__clear { font-size: 17px; }
-  /* 4K 档列宽由 shared.css 4K 段 token 覆盖 */
-  .tline-head,
-  .tline__main { gap: 14px; padding: 13px 22px; }
-  .tline-head { font-size: 14.5px; }
-  .tline__time,
-  .tline__agent,
-  .tline__dur,
-  .tline__trace { font-size: 15.5px; }
-  .tline__arrow { font-size: 15.5px; }
-  .tline__msg { font-size: 17px; }
-  .tline__msg em { font-size: 15px; }
-  .tline__kind { font-size: 13.5px; }
-  .tline__badge { font-size: 14px; }
+  .exec-table { }
+  .exec-time,
+  .exec-dur,
+  .exec-trace,
+  .exec-stage,
+  .exec-model__name { font-size: 15.5px; }
+  .exec-title { font-size: 17.5px; }
+  .exec-tokens,
+  .exec-status { font-size: 14px; }
   .tline__errcode,
   .tline__http,
   .tline__recovered,
-  .tline__drift,
-  .tline__tokens,
-  .tline__model { font-size: 14px; }
+  .tline__drift { font-size: 14px; }
   .tline__session,
   .tline__prompt-meta,
   .tline__payload-meta { font-size: 15.5px; }
@@ -1056,8 +888,7 @@ function kindTone(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   .tline-attempt__retry,
   .tline-attempt__dur { font-size: 14px; }
   .tline-attempt__err { font-size: 15.5px; }
-  .tline__payload { padding-left: 100px; }
-  .tline__payload pre { font-size: 15.5px; }
+  .exec-detail__box pre { font-size: 15.5px; }
   .tline-attempt__no { font-size: 14px; }
   .tline-attempt__meta { font-size: 13.5px; }
 }

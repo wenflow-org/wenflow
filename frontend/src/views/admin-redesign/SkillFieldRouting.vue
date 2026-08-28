@@ -111,14 +111,14 @@
               <th scope="col">含义</th>
               <th scope="col">类型</th>
               <th scope="col">角色</th>
-              <th scope="col">render</th>
-              <th scope="col">handoff</th>
-              <th scope="col">internal</th>
-              <th scope="col">accumulate</th>
+              <th scope="col">可见性</th>
+              <th scope="col">移交</th>
+              <th scope="col">内部</th>
+              <th scope="col">累积</th>
               <th scope="col">落库键</th>
               <th scope="col">锁定</th>
               <th scope="col">core 状态</th>
-              <th scope="col">操作</th>
+              <th scope="col" class="mk-th--right mk-col--actions-wide">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -142,7 +142,7 @@
               <td>{{ row.internal ? '是' : '否' }}</td>
               <td>{{ row.accumulate ? '是' : '否' }}</td>
               <td>
-                <span class="mono sfr__persist" :class="{ 'sfr__persist--alias': row.persistKey !== row.fieldId }" :title="row.persistKey === row.fieldId ? '落库键与字段名一致' : `落库键与字段名不一致：值实际写入 ${row.persistKey}（见编排文件 persistKey 声明）`">{{ row.persistKey }}</span>
+                <span class="mono sfr__persist" :class="{ 'sfr__persist--alias': row.persistKey !== row.fieldId }" :title="row.persistKey === row.fieldId ? '落库键与字段名一致' : `值实际写入 ${row.persistKey}`">{{ row.persistKey }}</span>
               </td>
               <td><span class="mk-badge" :class="`mk-badge--lock-${row.lockLevel}`" :title="lockHintOf(row.lockLevel)">{{ lockLabelOf(row.lockLevel) }}</span></td>
               <td>

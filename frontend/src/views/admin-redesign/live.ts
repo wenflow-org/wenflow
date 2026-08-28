@@ -226,6 +226,59 @@ export function mapLogsToSpans(items: RawLog[]): TraceSpan[] {
   return out.sort((a, b) => (b.ts || 0) - (a.ts || 0))
 }
 
+/**
+ * 执行日志专用二次合并：mapLogsToSpans 的配对要求「同 traceId」，但 skill 层记录
+ * 常无 traceId（前端回退为 log:<id>），与网关行（gw:<id>）配不上 → 同一次调用
+ * 并列成两行。本函数按「同 sessionId + 时间窗口 + agent 匹配」兜底配对：
+ * 网关信息并入 skill 行（真实 traceId / 模型 / 输入输出 tokens / HTTP 状态），
+ * 网关行不再单独出现。仅执行日志列表使用——瀑布/链路视图保留两行。
+ */
+export function mergeGatewayPairsForExecLogs(spans: TraceSpan[]): TraceSpan[] {
+  const skills = spans.map((s, i) => ({ s, i })).filter(({ s }) => s.execLayer === 'skill')
+  const gateways = spans.map((s, i) => ({ s, i })).filter(({ s }) => s.execLayer === 'api-gateway')
+  if (!skills.length || !gateways.length) return spans
+
+  const used = new Set<number>()
+  const list = [...spans]
+
+  for (const { s: skill, i: si } of skills) {
+    const t = skill.ts || 0
+    let bestG: { s: TraceSpan; i: number } | null = null
+    let bestDiff = Infinity
+    for (const { s: g, i: gi } of gateways) {
+      if (used.has(gi)) continue
+      if (skill.sessionId && g.sessionId && g.sessionId !== skill.sessionId) continue
+      const skillAgent = skill.agent || ''
+      if (!skillAgent) continue
+      // agent 匹配：网关 stage/agent 必须带 skill 名（「API 网关 · path-planning」含 path-planning）
+      const gwText = `${g.stage || ''} ${g.agent || ''}`
+      if (!gwText.includes(skillAgent)) continue
+      const d = Math.abs((g.ts || 0) - t)
+      if (d >= bestDiff) continue
+      if (d >= gatewayPairWindowMs(skill.durationMs || 0, g.durationMs || 0)) continue
+      bestDiff = d
+      bestG = { s: g, i: gi } // gi 为原 spans 索引（used 唯一键），勿用 gateways 下标
+    }
+    if (!bestG) continue
+    const gw = bestG.s
+    used.add(bestG.i)
+    const base = list[si] ?? skill
+    // 网关信息并入 skill 行（真实 traceId / 模型 / 传输层 tokens / HTTP 状态）
+    list[si] = {
+      ...base,
+      traceId: gw.traceId || base.traceId, // 取网关真实链路 ID（可跳完整 Trace）
+      model: base.model || gw.model, // 补模型名
+      promptTokens: base.promptTokens ?? gw.promptTokens, // 补传输层统计
+      completionTokens: base.completionTokens ?? gw.completionTokens,
+      statusCode: base.statusCode ?? gw.statusCode, // 补 HTTP 状态
+      gatewayDurMs: gw.durationMs, // 触发展开区「网关合并」说明
+    }
+  }
+
+  const usedIds = new Set(gateways.filter(({ i }) => used.has(i)).map(({ s }) => s.id))
+  return list.filter((s) => !(s.execLayer === 'api-gateway' && usedIds.has(s.id)))
+}
+
 /* ================= 瀑布：服务端分页 / traceId 直达（W1） =================
  * 瀑布不再只依赖 200 条 boot 快照（实测多为 1-span 截断链路）：
  * - 初始样本 = 全局 boot 快照（liveSpans），零额外请求；
@@ -515,8 +568,9 @@ export async function reloadLiveSpans(query: SpanQuery, page = 1): Promise<void>
     const rawTotal = body.pagination?.total ?? stats?.total ?? items.length
     const total = Number(rawTotal)
     if (Number.isFinite(total)) liveLogsTotal.value = total
-    /* 传统分页：整页替换（下一页可达性由页码器按 page < totalPagesOf(total, pageSize) 判定） */
-    liveLogsFiltered.value = mapLogsToSpans(items)
+    /* 传统分页：整页替换（下一页可达性由页码器按 page < totalPagesOf(total, pageSize) 判定）；
+       网关/skill 并列行做执行日志专用合并（瀑布/链路视图不受影响） */
+    liveLogsFiltered.value = mergeGatewayPairsForExecLogs(mapLogsToSpans(items))
     liveLogsPage.value = page
   } catch (error) {
     // P0 修复：失败必须可见（此前吞错导致首查失败显示「暂无日志」）
@@ -729,6 +783,12 @@ export interface LiveOverviewFull {
     totalTokens7dAll?: number
   }
   trend: { date: string; total: number; completed: number }[]
+  /** G1：近 7 天每日调用/失败趋势（总览新增卡） */
+  trend7d: { date: string; calls: number; failed: number }[]
+  /** G4：近 7 天 Top Skill 活跃榜 */
+  topSkills: { agentId: string; calls: number; failed: number }[]
+  /** G2/G3：近 7 天每日新增注册 / 活跃用户 */
+  growth7d: { date: string; newUsers: number; activeUsers: number }[]
   feed: { text: string; time: string; tone: 'ok' | 'warn' | 'bad' | 'muted'; ts?: number; errorCategory?: string; agentId?: string }[]
   actions: { text: string; link: string; tone: 'bad' | 'warn'; agentId: string }[]
 }
@@ -750,18 +810,26 @@ export interface OverviewHead {
  * - score = 今日真实成功率，无下限钳制（5.3% 就显示 5.3%）；
  * - 今日 0 调用 → score null（环显示「—」，与 KPI 卡一致），不再显示 100；
  * - 成功率 <80% 且失败 >=3 次 → tone 'bad'（红色环高亮）。
+ * - todayCallsAll：今日全量调用（含虚拟/测试）。真实 0 但全量 >0 时，结论如实说明「0 的原因」，
+ *   避免「明明有调用却显示空闲」的误解（R3 修复）。
  */
 export function buildOverviewHead(input: {
   todayCalls: number
   todaySuccessRate: number
   todayFailed: number
   activeUsers: number
+  todayCallsAll?: number
 }): OverviewHead {
   const { todayCalls, todaySuccessRate, todayFailed, activeUsers } = input
+  const todayCallsAll = Number(input.todayCallsAll || 0)
+  const todayOnlySimulated = todayCalls === 0 && todayCallsAll > 0
   const warnByRate = todayCalls >= 20 && todaySuccessRate < 90
   const warnByFailures = todayFailed > 0 && todayFailed >= 3
   const badByRate = todaySuccessRate < 80 && todayFailed >= 3
   if (todayCalls === 0) {
+    if (todayOnlySimulated) {
+      return { tone: 'muted', score: null, headline: '真实用户暂无调用', subline: '今日无真实用户调用；虚拟/模拟仿真请见「虚拟学习者」页。' }
+    }
     return activeUsers === 0
       ? { tone: 'muted', score: null, headline: '系统空闲', subline: '今日尚无调用，等待学习者开始。' }
       : { tone: 'muted', score: null, headline: '今日暂无调用', subline: `今日 ${activeUsers} 人活跃，尚无 Agent 调用。` }
@@ -799,6 +867,8 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
 
   // 指标一律带时间窗口：头部结论只用今日数据（累计值仅作副文案）
   const todayCalls = Number(agents.todayCalls || 0)
+  const todayCallsAll = Number(agents.todayCallsAll || 0)
+  /* 虚拟/测试调用独立口径：后端 overview/stats 已返回（总览不展示，预留供「虚拟学习者」仿真看板使用） */
   // 后端可能返回字符串或非法值（0/0 场景），统一收敛为有限数
   const todaySuccessRate = Number.isFinite(Number(agents.todaySuccessRate ?? 100)) ? Number(agents.todaySuccessRate ?? 100) : 100
   const todayFailed = Math.max(0, Math.round(todayCalls * (1 - todaySuccessRate / 100)))
@@ -806,7 +876,7 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
 
   /* 头部结论：基于今日窗口 + 样本量门槛（今日调用 <20 时只看失败绝对数），
      避免历史失败永久粘住"需要关注"，也避免低流量单次失败误报 */
-  const head = buildOverviewHead({ todayCalls, todaySuccessRate, todayFailed, activeUsers })
+  const head = buildOverviewHead({ todayCalls, todaySuccessRate, todayFailed, activeUsers, todayCallsAll })
 
   /* 漏斗：目标=完成澄清的对话数（非记录数）；路径保留总量、失败数单列用于断点归因 */
   const completedConversations = Number(conv.completed || 0)
@@ -899,16 +969,17 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       agentId
     }))
 
-  /* KPI 行：今日窗口 + 活跃量；真实 0 显示 0，非数值才显示 —（避免「无数据」与「零」混淆） */
+  /* KPI 行：纯真实用户口径（R4：总览回归「真实用户看板」，虚拟/模拟数据不混入；
+     真实 0 显示 0，非数值才显示 —；0 原因给一句导航提示，不展示虚拟数字） */
   const fmt = (n: number, suffix = '') => (Number.isFinite(n) ? `${n}${suffix}` : '—')
-  const todayCallsAll = Number(agents.todayCallsAll || 0)
+  const todayOnlySimulated = todayCalls === 0 && todayCallsAll > 0
   const kpis = [
-    { label: '今日调用', value: fmt(todayCalls), hint: todayCalls > 0 ? `超时 ${Number(agents.todayTimeouts || 0)}` : '等待学习者开始' },
-    { label: '今日成功率', value: todayCalls > 0 ? `${todaySuccessRate}%` : '—', hint: todayFailed > 0 ? `${todayFailed} 次失败` : '无失败' },
+    { label: '今日调用', value: fmt(todayCalls), hint: todayCalls > 0 ? `超时 ${Number(agents.todayTimeouts || 0)}` : todayOnlySimulated ? '今日无真实调用 · 虚拟仿真见「虚拟学习者」' : '等待学习者开始' },
+    { label: '今日成功率', value: todayCalls > 0 ? `${todaySuccessRate}%` : '—', hint: todayFailed > 0 ? `${todayFailed} 次失败` : todayOnlySimulated ? '暂无真实用户调用' : '无失败' },
     { label: '用户活跃', value: `${fmt(Number(users.newToday || 0))} 新增 / ${fmt(activeUsers)} 活跃`, hint: `总用户 ${users.total ?? 0}（真实，不含测试/虚拟）` },
     { label: '系统活跃', value: `${fmt(Number(conv.active || 0))} 对话 / ${fmt(Number(agents.activeAgents24h || 0))} Skill`, hint: '目标澄清 + 近 24h Skill 调用' },
   ]
-  if (todayCallsAll > todayCalls) {
+  if (todayCallsAll > todayCalls && !todayOnlySimulated) {
     kpis[0] = { ...kpis[0], hint: `${kpis[0].hint} · 全量（含虚拟/测试）${todayCallsAll} 次` }
   }
 
@@ -963,6 +1034,9 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     peak,
     usage,
     trend,
+    trend7d: (stats.agents?.trend7d || []).slice(0, 7),
+    topSkills: (stats.agents?.topSkills || []).slice(0, 5),
+    growth7d: (stats.users?.growth7d || []).slice(0, 7),
     feed: [...feedDeduped.values()].slice(0, 12),
     actions
   }
@@ -1079,8 +1153,8 @@ function mapFatigue(f?: string): string {
   return f === 'high' ? '高' : f === 'medium' ? '中' : '低'
 }
 
-async function fetchLiveLearners(): Promise<void> {
-  const res = await adminLearnerModelsApi.list({ limit: 50, excludeTest: true })
+async function fetchLiveLearners(includeTest = false): Promise<void> {
+  const res = await adminLearnerModelsApi.list({ limit: 50, ...(includeTest ? { includeTest: true } : { excludeTest: true }) })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.items || []
   liveLearners.value = items.map((m: Record<string, unknown>) => ({
@@ -1099,6 +1173,10 @@ async function fetchLiveLearners(): Promise<void> {
     struggling: (m.strugglingConcepts as string[]) || [],
     fragile: (m.fragileConcepts as string[]) || []
   }))
+}
+
+export async function liveSetLearnersIncludeTest(includeTest: boolean): Promise<void> {
+  await fetchLiveLearners(includeTest)
 }
 
 export async function liveRecomputeLearner(userId: string, pathId?: string): Promise<void> {
@@ -1185,6 +1263,8 @@ export interface LiveVirtualRunStats {
   maxStaleMins: number
   avgDurationMs: number
   reclaimThresholdMs: number
+  /** 今日虚拟/测试账号调用数（agent_call_logs；仿真看板与真实看板互斥口径） */
+  todayCalls: number
 }
 
 export const liveVirtualRunStats = ref<LiveVirtualRunStats>({
@@ -1202,7 +1282,8 @@ export const liveVirtualRunStats = ref<LiveVirtualRunStats>({
   staleCount: 0,
   maxStaleMins: 0,
   avgDurationMs: 0,
-  reclaimThresholdMs: 0
+  reclaimThresholdMs: 0,
+  todayCalls: 0
 })
 
 async function fetchLiveVirtualStats(): Promise<void> {
@@ -1223,7 +1304,8 @@ async function fetchLiveVirtualStats(): Promise<void> {
     staleCount: Number(body.staleCount ?? 0),
     maxStaleMins: Number(body.maxStaleMins ?? 0),
     avgDurationMs: Number(body.avgDurationMs ?? 0),
-    reclaimThresholdMs: Number(body.reclaimThresholdMs ?? 0)
+    reclaimThresholdMs: Number(body.reclaimThresholdMs ?? 0),
+    todayCalls: Number(body.todayCalls ?? 0)
   }
 }
 

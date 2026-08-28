@@ -5,6 +5,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
+import { createRouter, createMemoryHistory } from 'vue-router';
 import SessionSecurity from '../SessionSecurity.vue';
 
 const h = vi.hoisted(() => ({
@@ -66,7 +67,13 @@ function fakeSession(i: number, opts: { revoked?: boolean; expired?: boolean } =
 
 async function mountSS(sessions: unknown[]) {
   h.getSessions.mockResolvedValue({ data: { data: { sessions } } });
-  const w = mount(SessionSecurity);
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/admin/:page?', component: { template: '<div />' } }]
+  });
+  await router.push('/admin/session-security');
+  await router.isReady();
+  const w = mount(SessionSecurity, { global: { plugins: [router] } });
   await flushPromises();
   await flushPromises();
   return w;
@@ -89,7 +96,7 @@ describe('SessionSecurity 分批渲染（分页器首屏可见）', () => {
   it('超过 12 行时展示「加载更多」分页控件（首屏可见）', async () => {
     const sessions = Array.from({ length: 30 }, (_, i) => fakeSession(i + 1));
     const w = await mountSS(sessions);
-    const more = w.find('.ss-more');
+    const more = w.find('.mk-list-more');
     expect(more.exists()).toBe(true);
     expect(more.text()).toContain('加载更多');
     expect(more.text()).toContain('12 / 30');
@@ -98,7 +105,7 @@ describe('SessionSecurity 分批渲染（分页器首屏可见）', () => {
   it('加载更多：追加下一批至 24 行', async () => {
     const sessions = Array.from({ length: 30 }, (_, i) => fakeSession(i + 1));
     const w = await mountSS(sessions);
-    await w.find('.ss-more button').trigger('click');
+    await w.find('.mk-list-more button').trigger('click');
     await flushPromises();
     expect(w.findAll('.ss-tr').length).toBe(24);
   });
@@ -106,7 +113,7 @@ describe('SessionSecurity 分批渲染（分页器首屏可见）', () => {
   it('≤12 行时不展示分页控件（无分页出视口问题）', async () => {
     const sessions = Array.from({ length: 8 }, (_, i) => fakeSession(i + 1));
     const w = await mountSS(sessions);
-    expect(w.find('.ss-more').exists()).toBe(false);
+    expect(w.find('.mk-list-more').exists()).toBe(false);
   });
 
   it('过期/已撤销历史收进折叠组（不计入活跃分批）', async () => {
@@ -129,7 +136,7 @@ describe('SessionSecurity 分批渲染（分页器首屏可见）', () => {
     // 13 个会话：2 历史进折叠组，11 活跃直接展示（无分页控件）；
     // .ss-tr 同时匹配活跃表行与折叠组内历史表行（13 = 11 活跃 + 2 历史）
     expect(w.find('.ss-hist').exists()).toBe(true);
-    expect(w.find('.ss-more').exists()).toBe(false);
+    expect(w.find('.mk-list-more').exists()).toBe(false);
     expect(w.findAll('.ss-tr').length).toBe(13);
   });
 });

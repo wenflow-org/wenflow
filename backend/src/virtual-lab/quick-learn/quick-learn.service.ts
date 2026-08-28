@@ -34,6 +34,12 @@ import {
   type QuickLearnPropagationReport,
   type QuickLearnTranscriptEntry,
 } from './propagation-report';
+import {
+  buildLearnerMemorySnapshot,
+  recordCompletedArtifact,
+  writeProfileConceptsAfterLesson,
+  type LessonKnowledgePoint,
+} from '../learner-memory';
 
 const DEFAULT_MAX_TURNS = 25;
 const HARD_MAX_TURNS = 40;
@@ -349,6 +355,7 @@ export class QuickLearnService {
 
         const simulatorOutput = await this.runSimulatorTurn({
           learnerPersona,
+          userId: run.userId,
           visibleHistory,
           currentPhase,
           previousLearnerState,
@@ -462,6 +469,8 @@ export class QuickLearnService {
       // ⑥ 仅在双重收束达成时完成任务——教师未认可绝不强制完成
       if (outcome === 'completed') {
         await learningService.completeTask({ taskId: run.taskId, userId: run.userId });
+        // 虚拟学习者记忆回写：画像概念 + 成果物登记（best-effort）
+        await this.persistLearnerMemoryAfterQuickLearn(run, teachingSessionId, task);
         lifecycle.completionReached = true;
         lifecycle.taskCompleted = true;
       } else if (outcome === 'teacher_ready_learner_not') {
@@ -547,6 +556,7 @@ export class QuickLearnService {
 
   private async runSimulatorTurn(input: {
     learnerPersona: Record<string, any>;
+    userId: string;
     visibleHistory: VisibleMessage[];
     currentPhase: LearnLearnerPhase;
     previousLearnerState: Record<string, any> | null;
@@ -557,6 +567,21 @@ export class QuickLearnService {
     const history = input.visibleHistory.slice(-VISIBLE_HISTORY_LIMIT);
     const lastTeacherMessage = [...history].reverse().find((item) => item.role === 'teacher')?.content;
     try {
+      const knowledgeSnapshot = await this.buildQuickLearnKnowledgeSnapshot({
+        userId: input.userId,
+        taskConcept: input.taskConcept,
+        taskTitle: input.taskTitle,
+      });
+      const learnerMemory = input.userId
+        ? await buildLearnerMemorySnapshot(input.userId, { limit: 8 })
+            .then((m) => ({
+              mastered: m.mastered.map((item) => item.name),
+              dueReview: m.dueReview.map((item) => item.name),
+              struggling: m.struggling.map((item) => item.name),
+              recentCompleted: m.recentTaskTitles,
+            }))
+            .catch(() => null)
+        : null;
       const output = await executeSkill(virtualLearnerLearnTurnSimulatorDefinition, {
         learner: input.learnerPersona,
         story: null,
@@ -564,9 +589,8 @@ export class QuickLearnService {
         currentPhase: input.currentPhase,
         previousLearnerState: input.previousLearnerState,
         currentTask: { title: input.taskTitle, milestoneTitle: input.milestoneTitle },
-        knowledgeSnapshot: input.taskConcept
-          ? [{ name: input.taskConcept, status: 'learning', progress: 40 }]
-          : [{ name: input.taskTitle, status: 'learning', progress: 30 }],
+        knowledgeSnapshot,
+        learnerMemory,
         frictionBudget: 'none',
       });
       return (output || null) as LearnLearnerSimulationOutput | null;
@@ -578,9 +602,61 @@ export class QuickLearnService {
     }
   }
 
+  /**
+   * 组装学习者记忆快照（knowledgeSnapshot 用）：画像已掌握/易混淆 + 到期复习点 + 最近成果。
+   * 让虚拟账号带着「学过什么」上这节课（friction=none 的合作型学习者依然“记得”）。
+   */
+  private async buildQuickLearnKnowledgeSnapshot(
+    input: {
+      userId: string | null;
+      taskConcept?: string | null;
+      taskTitle: string;
+    }
+  ): Promise<Array<{ name: string; status: string; progress: number }>> {
+    const userId = input.userId || null;
+    const memory = userId ? await buildLearnerMemorySnapshot(userId, { limit: 6 }).catch(() => null) : null;
+    const currentName = input.taskConcept || input.taskTitle;
+    const result: Array<{ name: string; status: string; progress: number }> = [];
+    if (currentName) result.push({ name: String(currentName), status: 'learning', progress: 40 });
+    for (const item of memory?.mastered || []) result.push({ name: item.name, status: 'mastered', progress: 100 });
+    for (const item of memory?.dueReview || []) result.push({ name: item.name, status: 'review', progress: item.progress });
+    for (const item of memory?.struggling || []) result.push({ name: item.name, status: 'learning', progress: 30 });
+    return result.slice(0, 8);
+  }
+
+  /** quick-learn 任务结算后的记忆回写：画像概念 + 成果物登记（best-effort） */
+  private async persistLearnerMemoryAfterQuickLearn(
+    run: any,
+    teachingSessionId: string | null,
+    task: { title: string; acceptanceCriteria?: string | null; taskType?: string | null } | null
+  ): Promise<void> {
+    try {
+      let knowledgePoints: LessonKnowledgePoint[] = [];
+      if (teachingSessionId) {
+        const teaching = await prisma.teaching_sessions.findUnique({ where: { id: teachingSessionId } }).catch(() => null);
+        knowledgePoints = Array.isArray(teaching?.knowledgeState)
+          ? (teaching.knowledgeState as LessonKnowledgePoint[]).filter((kp) => kp && typeof kp.name === 'string' && kp.name.trim())
+          : [];
+      }
+      await writeProfileConceptsAfterLesson(run.userId, knowledgePoints, { source: 'quick-learn' });
+      await recordCompletedArtifact({
+        userId: run.userId,
+        taskId: run.taskId,
+        taskTitle: task?.title || '当前任务',
+        artifactType: task?.taskType || null,
+        deliverable: task?.acceptanceCriteria || null,
+        knowledgePoints,
+      });
+    } catch (error) {
+      logger.warn('[QuickLearn] 虚拟学习者记忆回写失败（不影响运行）', {
+        runId: run.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   /** 预算“当前任务完成后的下一个任务”：扁平化 milestones×subtasks，取当前任务之后第一个未完成 */
-  private async resolveNextTask(pathId: string, currentTaskId: string): Promise<{ taskId: string; title: string } | null> {
-    const milestones = await prisma.milestones.findMany({
+  private async resolveNextTask(pathId: string, currentTaskId: string): Promise<{ taskId: string; title: string } | null> {    const milestones = await prisma.milestones.findMany({
       where: { learningPathId: pathId },
       orderBy: { order: 'asc' },
       include: { subtasks: { orderBy: { order: 'asc' } } },

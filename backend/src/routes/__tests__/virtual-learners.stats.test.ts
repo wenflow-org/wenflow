@@ -5,12 +5,17 @@
 const mockSessionsGroupBy = jest.fn()
 const mockSessionsFindMany = jest.fn()
 const mockProfilesCount = jest.fn()
+/** 今日虚拟调用查询：users 差集（findMany）+ agent_call_logs 计数 */
+const mockUsersFindMany = jest.fn()
+const mockAgentCallLogsCount = jest.fn()
 
 jest.mock('../../config/database', () => ({
   __esModule: true,
   default: {
     virtual_sessions: { groupBy: mockSessionsGroupBy, findMany: mockSessionsFindMany },
-    virtual_learner_profiles: { count: mockProfilesCount }
+    virtual_learner_profiles: { count: mockProfilesCount },
+    users: { findMany: mockUsersFindMany },
+    agent_call_logs: { count: mockAgentCallLogsCount }
   }
 }))
 jest.mock('../../utils/logger', () => ({
@@ -48,6 +53,9 @@ function createResponse() {
 describe('GET /stats（虚拟实验运行统计）', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    /* 今日虚拟调用默认值：空虚拟用户集 → 0 次（功能用例自行覆盖） */
+    mockUsersFindMany.mockResolvedValue([])
+    mockAgentCallLogsCount.mockResolvedValue(0)
   })
 
   it('统计口径：全量分组计数 + 完成率/失败率（现状 0% 完成也应如实返回）', async () => {
@@ -59,6 +67,9 @@ describe('GET /stats（虚拟实验运行统计）', () => {
       { status: 'completed', _count: { _all: 0 } }
     ])
     mockProfilesCount.mockResolvedValue(10)
+    // 今日虚拟调用：虚拟账号集合 + 计数 200（仿真看板指标）
+    mockUsersFindMany.mockResolvedValue([{ id: 'virt1' }, { id: 'virt2' }])
+    mockAgentCallLogsCount.mockResolvedValue(200)
     mockSessionsFindMany.mockResolvedValueOnce([
       { updatedAt: new Date('2026-08-10T10:00:00.000Z') },
       { updatedAt: new Date('2026-08-08T08:00:00.000Z') }
@@ -80,6 +91,10 @@ describe('GET /stats（虚拟实验运行统计）', () => {
     expect(mockSessionsFindMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
       where: expect.objectContaining({ status: { in: ['completed', 'failed', 'abandoned'] } })
     }))
+    expect(mockUsersFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ OR: expect.any(Array) }) }))
+    expect(mockAgentCallLogsCount).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ calledAt: expect.anything(), userId: { in: ['virt1', 'virt2'] } })
+    }))
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
       success: true,
       data: expect.objectContaining({
@@ -94,7 +109,8 @@ describe('GET /stats（虚拟实验运行统计）', () => {
         failureRate: 40,
         staleCount: 2,
         avgDurationMs: expect.any(Number),
-        reclaimThresholdMs: 24 * 3600 * 1000
+        reclaimThresholdMs: 24 * 3600 * 1000,
+        todayCalls: 200
       })
     }))
   })

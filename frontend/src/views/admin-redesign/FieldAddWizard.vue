@@ -95,12 +95,12 @@
             </label>
 
             <label class="faw__field">
-              <span>persistKey（落库键，别名时填）</span>
+              <span>落库键（persistKey，别名时填）</span>
               <input v-model="form.persistKey" type="text" class="mk-input mono" placeholder="缺省 = 与字段名一致" spellcheck="false" />
             </label>
 
             <label class="faw__field">
-              <span>pathInRawOutput（抽取路径）</span>
+              <span>抽取路径（pathInRawOutput）</span>
               <input v-model="form.pathInRawOutput" type="text" class="mk-input mono" placeholder="internal.ext.xxx.…" spellcheck="false" />
               <span class="faw__hint">嵌套字段建议填；声明字段在产出原始输出里的物理路径</span>
             </label>
@@ -115,7 +115,7 @@
           <div class="faw__checks">
             <label class="faw__check"><input v-model="form.optional" type="checkbox" /> optional（core type 加 ?，仅顶层）</label>
             <label class="faw__check"><input v-model="form.turn" type="checkbox" :disabled="isNested" /> turn（回合输出，仅顶层）</label>
-            <label class="faw__check"><input v-model="form.internal" type="checkbox" /> internal（内部信令，与 handoff 互斥）</label>
+            <label class="faw__check"><input v-model="form.internal" type="checkbox" /> internal（内部标记，与 handoff 互斥）</label>
             <label class="faw__check"><input v-model="form.accumulate" type="checkbox" /> accumulate（累积进学习者状态）</label>
           </div>
           <p v-if="form.internal && handoffList.length" class="faw__warn">⚠ internal 与 handoff 互斥：建议留空 handoff（control-signal 除外）</p>

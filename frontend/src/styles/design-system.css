@@ -173,8 +173,7 @@
      ========================================== */
   
   /* 字体族 */
-  --font-sans: 'Inter', 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 
-               'Microsoft YaHei', '微软雅黑', sans-serif;
+  --font-sans: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Inter', 'Helvetica Neue', '微软雅黑', sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   
   /* 字号 */

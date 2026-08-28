@@ -1,15 +1,34 @@
 ﻿<template>
   <div class="mk-page">
+    <!-- 状态条：标题固定「编排结构」+ 共 N + 刷新（视图切换下沉到 tab 条） -->
     <div class="mk-status" :class="`mk-status--${statusTone}`">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ statusTitle }}</strong>
+      <strong class="mk-status__title">编排结构</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ stages.length }} 阶段 · {{ totalSkills }} 个 Skill</span>
       <span v-if="isLive && w4Drifted.length" class="mk-status__meta mk-status__meta--bad">哈希漂移 {{ w4Drifted.length }}</span>
       <span class="mk-status__spacer"></span>
-      <button type="button" class="mk-status__action" :class="{ 'mk-status__action--primary': viewMode === 'workbench' }" @click="viewMode = viewMode === 'workbench' ? 'main' : 'workbench'">工作台</button>
-      <button type="button" class="mk-status__action" :class="{ 'mk-status__action--primary': viewMode === 'topology' }" @click="viewMode = viewMode === 'topology' ? 'main' : 'topology'">拓扑</button>
       <button v-if="isLive" type="button" class="mk-status__action" :disabled="defsLoading" @click="loadDefinitions">刷新</button>
+    </div>
+
+    <!-- 编排概览（共享 MkOverview：结论头 + KPI + 阶段调用分布；动态结论只在这里） -->
+    <MkOverview :tone="statusTone" :title="statusTitle" :subline="`${stages.length} 阶段 · ${totalSkills} 个 Skill`" :has-data="stages.length > 0">
+      <template #kpis>
+        <MkKpi label="阶段" :value="stages.length" hint="编排全链路" :title="'编排文件中的阶段数（含无拓扑产物的阶段）'" />
+        <MkKpi label="Skill 节点" :value="totalSkills" :hint="`总调用 ${totalCalls}`" :title="'全部阶段的 Skill 节点数'" />
+        <MkKpi label="总调用" :value="totalCalls" :hint="'实时拓扑口径'" :title="'全部阶段 Skill 调用之和（来自拓扑节点统计）'" />
+        <MkKpi label="未解析" :value="unresolvedCount" :tone="unresolvedCount > 0 ? 'bad' : ''" :hint="unresolvedCount ? '定义步骤 unresolved' : '定义步骤全部解析'" :title="'编排定义中未解析的定义步骤数'" />
+      </template>
+      <template #detail>
+        <span v-for="st in stages" :key="st.id" :title="`${st.name} · ${stageCalls(st)} 次调用`">{{ st.name.replace(/阶段$/, '') }} {{ stageCalls(st) }}</span>
+      </template>
+    </MkOverview>
+
+    <!-- 页面级视图 tab：主视图 / 工作台 / 拓扑（阶段级子视图留在展开区快捷入口） -->
+    <div class="orch-tabs" role="tablist">
+      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'main' }" @click="viewMode = 'main'">主视图</button>
+      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'workbench' }" @click="viewMode = 'workbench'">工作台</button>
+      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'topology' }" @click="viewMode = 'topology'">拓扑</button>
     </div>
 
     <div v-if="viewMode === 'workbench'" class="orch-tabpane"><PromptWorkbench embedded /></div>
@@ -19,35 +38,41 @@
     <div v-else-if="viewMode === 'drift'" class="orch-tabpane"><DriftAuditPanel :stage="current?.id || ''" /></div>
 
     <template v-else>
-      <div class="orch-pipeline">
-        <template v-for="(st, i) in stages" :key="st.id">
-          <button type="button" class="orch-pipe-card" :class="{ 'is-active': active === st.id }" @click="selectStage(st.id)">
-            <span class="orch-pipe-card__num">{{ String(i + 1).padStart(2, '0') }}</span>
-            <div class="orch-pipe-card__body">
-              <strong class="orch-pipe-card__name">{{ st.name }}</strong>
-              <span class="orch-pipe-card__skills">{{ st.skills.length }} Skill</span>
-              <span class="orch-pipe-card__calls">{{ stageCalls(st) }} 次调用</span>
-            </div>
-            <div class="orch-pipe-card__io">
-              <span v-if="st.consumes.length" class="orch-pipe-card__in">← {{ st.consumes.slice(0, 2).join(', ') }}</span>
-              <span v-if="st.produces.length" class="orch-pipe-card__out">{{ st.produces.slice(0, 2).join(', ') }} →</span>
-            </div>
-          </button>
-          <span v-if="i < stages.length - 1" class="orch-pipe-arrow" :class="{ 'is-on': i >= activeIdx }">→</span>
-        </template>
+      <!-- 阶段管线：全链路五卡（横滚） -->
+      <div class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">阶段管线 · 全链路</h3>
+          <span class="mk-card__meta">点击阶段查看节点与配置</span>
+        </div>
+        <div class="orch-pipeline">
+          <template v-for="(st, i) in stages" :key="st.id">
+            <button type="button" class="orch-pipe-card" :class="{ 'is-active': active === st.id }" @click="selectStage(st.id)">
+              <span class="orch-pipe-card__num">{{ String(i + 1).padStart(2, '0') }}</span>
+              <div class="orch-pipe-card__body">
+                <strong class="orch-pipe-card__name">{{ st.name }}</strong>
+                <span class="orch-pipe-card__skills">{{ st.skills.length }} Skill</span>
+                <span class="orch-pipe-card__calls">{{ stageCalls(st) }} 次调用</span>
+              </div>
+              <div class="orch-pipe-card__io">
+                <span v-if="st.consumes.length" class="orch-pipe-card__in">← {{ st.consumes.slice(0, 2).join(', ') }}</span>
+                <span v-if="st.produces.length" class="orch-pipe-card__out">{{ st.produces.slice(0, 2).join(', ') }} →</span>
+              </div>
+            </button>
+            <span v-if="i < stages.length - 1" class="orch-pipe-arrow" :class="{ 'is-on': i >= activeIdx }">→</span>
+          </template>
+        </div>
       </div>
 
-      <div v-if="current" class="orch-expand">
-        <div class="orch-expand__head">
-          <div>
-            <h3 class="orch-expand__title">{{ current.name }}</h3>
-            <span class="mono orch-expand__id">{{ current.agentId }}</span>
-          </div>
-          <div class="orch-expand__actions">
-            <button type="button" class="mk-link" @click="viewMode = 'field-routings'">字段路由</button>
-            <button type="button" class="mk-link" @click="viewMode = 'sandbox'">沙盘</button>
-            <button type="button" class="mk-link" @click="viewMode = 'drift'">漂移</button>
-          </div>
+      <!-- 阶段展开：节点与配置（mk-card 统一口径） -->
+      <div v-if="current" class="mk-card orch-expand">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">{{ stageTitle }} · 节点与配置</h3>
+          <span class="mono orch-expand__id">{{ current.agentId }}</span>
+          <span class="mk-card__head-right">
+            <button type="button" class="orch-qbtn" @click="viewMode = 'field-routings'">字段路由</button>
+            <button type="button" class="orch-qbtn" @click="viewMode = 'sandbox'">沙盘</button>
+            <button type="button" class="orch-qbtn" @click="viewMode = 'drift'">漂移</button>
+          </span>
         </div>
 
         <div class="orch-expand__flow">
@@ -92,7 +117,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { openSkillDrawer, dataSource, isLive } from './store'
 import { liveTopoNodes, liveSkillCatalog, errMsg } from './live'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
@@ -101,22 +126,12 @@ import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
 import Topology from './Topology.vue'
 import PromptWorkbench from './PromptWorkbench.vue'
-import { TERMS } from './terms'
+import MkOverview from './MkOverview.vue'
+import MkKpi from './MkKpi.vue'
 
 const viewMode = ref<'main' | 'workbench' | 'topology' | 'field-routings' | 'sandbox' | 'drift'>('main')
 
-/* ================= 健康中心入口（阶段 2B N4：独立成页，编排页只留跳转入口，避免重复渲染） ================= */
-const router = useRouter()
 const route = useRoute()
-
-function openHealthCenter() {
-  void router.push('/admin/health-center')
-}
-
-/** 治理入口卡 → Skill 目录对账面板（完成度五档 + 户口簿对账主出口；深链自动展开 + 滚动定位） */
-function openReconciliation() {
-  void router.push({ path: '/admin/skills', query: { recon: '1' } })
-}
 
 /** ?stage=&tab= 直达（Skill 设计页字段路由 tab → 编排结构页跳转闭环；旧 /admin/topology 重定向落位拓扑 tab） */
 function applyStageQuery() {
@@ -143,7 +158,6 @@ const orchDefs = ref<Array<Record<string, any>>>([])
 /* ================= 完成度对账（reconciliation + readiness W4，live-only） ================= */
 const recReport = ref<SkillReconciliationReport | null>(null)
 const w4Drifted = ref<string[]>([])
-const unresolvedOpen = ref(false)
 
 async function loadReconciliation() {
   if (!isLive.value) return
@@ -155,19 +169,6 @@ async function loadReconciliation() {
   const checks = (read?.data?.data as { checks?: { W4?: { drifted?: string[] } } } | undefined)?.checks
   w4Drifted.value = checks?.W4?.drifted || []
 }
-
-const recSummary = computed(() => recReport.value?.summary || null)
-
-/** 未解析节点清单（来自运行时定义 steps 的 resolved.unresolved） */
-const unresolvedNodes = computed(() => {
-  const out: string[] = []
-  for (const st of stages.value) {
-    for (const d of st.defSteps || []) {
-      if (d.resolved?.unresolved && d.agentId) out.push(`${st.name} · ${d.agentId}`)
-    }
-  }
-  return out
-})
 
 async function loadDefinitions() {
   if (!isLive.value) return
@@ -368,11 +369,18 @@ const stages = computed<Stage[]>(() => {
 })
 
 const totalSkills = computed(() => stages.value.reduce((sum, stage) => sum + stage.skills.length, 0))
+const totalCalls = computed(() => stages.value.reduce((sum, st) => sum + stageCalls(st), 0))
+const unresolvedCount = computed(() =>
+  stages.value.reduce(
+    (sum, st) => sum + (st.defSteps || []).filter((d) => d.resolved?.unresolved).length,
+    0
+  )
+)
 // 空拓扑时 current 为 undefined，模板由 v-if="current" 保护
 const current = computed<Stage | undefined>(() => stages.value.find((s) => s.id === active.value) || stages.value[0])
 const activeIdx = computed(() => stages.value.findIndex((s) => s.id === active.value))
 const stageCalls = (st: Stage) => st.skills.reduce((sum, s) => sum + (s.calls || 0), 0)
-// 状态条按实际数据着色/文案：空拓扑 → muted；存在未解析的定义节点 → warn；否则 ok
+// 概览卡结论点色/标题（唯一动态状态载体；状态条只剩身份 + 数量）
 const statusTone = computed(() => {
   if (!stages.value.length) return 'muted'
   const unresolved = stages.value.some((s) => s.defSteps?.some((d) => d.resolved?.unresolved))
@@ -389,43 +397,62 @@ const stageTitle = computed(() => {
   const name = current.value?.name || ''
   return name.endsWith('阶段') ? name : `${name}阶段`
 })
-// 拓扑 tab 为全局视图（不受当前阶段约束），卡片标题随之切换
-const cardTitle = computed(() =>
-  viewMode.value === 'topology' ? 'Agent 拓扑 · 架构全貌' : `${stageTitle.value} · 节点与配置`
-)
 </script>
 
 <style scoped>
-.orch-pipeline { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding: 4px 0 8px; }
-.orch-pipe-card { display: grid; grid-template-rows: auto 1fr auto; gap: 6px; padding: 14px 16px; border: 1px solid var(--mk-line); border-radius: 10px; background: var(--mk-surface); min-width: 180px; cursor: pointer; text-align: left; font: inherit; transition: border-color 0.12s ease, box-shadow 0.12s ease; flex-shrink: 0; }
-.orch-pipe-card:hover { border-color: rgba(44, 99, 208, 0.3); }
-.orch-pipe-card.is-active { border-color: var(--mk-blue); box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.15); }
+/* 视图 tab：主视图 / 工作台 / 拓扑（页面级切换，浅底分段条） */
+.orch-tabs { display: flex; gap: 4px; padding: 3px; width: fit-content; background: #f1f5f9; border-radius: 10px; }
+.orch-tab {
+  padding: 6px 14px; border: 0; border-radius: 8px; background: transparent;
+  font: inherit; font-size: 12px; font-weight: 700; color: var(--mk-muted); cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.orch-tab:hover { color: var(--mk-ink); }
+.orch-tab.is-active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); }
+.orch-tabpane { margin-top: 0; }
+
+/* 阶段管线：全链路五卡（横滚） */
+.orch-pipeline { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding: 12px 14px 14px; }
+.orch-pipe-card {
+  display: grid; grid-template-rows: auto 1fr auto; gap: 6px; padding: 12px 14px;
+  border: 1px solid var(--mk-line); border-radius: 10px; background: #fff; min-width: 172px;
+  cursor: pointer; text-align: left; font: inherit;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease; flex-shrink: 0;
+}
+.orch-pipe-card:hover { border-color: rgba(44, 99, 208, 0.35); }
+.orch-pipe-card.is-active { border-color: var(--mk-blue); background: #f8faff; box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.15); }
 .orch-pipe-card__num { font-size: 11px; font-weight: 800; color: var(--mk-faint); font-family: var(--mk-mono); }
 .orch-pipe-card__body { display: grid; gap: 2px; }
 .orch-pipe-card__name { font-size: 13px; font-weight: 800; }
 .orch-pipe-card__skills { font-size: 11px; color: var(--mk-muted); }
-.orch-pipe-card__calls { font-size: 10.5px; color: var(--mk-faint); }
-.orch-pipe-card__io { display: grid; gap: 2px; padding-top: 4px; border-top: 1px solid var(--mk-line); }
+.orch-pipe-card__calls { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--mk-blue); }
+.orch-pipe-card__io { display: grid; gap: 2px; padding-top: 6px; border-top: 1px dashed var(--mk-line); }
 .orch-pipe-card__in { font-size: 10.5px; color: var(--mk-faint); }
 .orch-pipe-card__out { font-size: 10.5px; color: var(--mk-blue); font-weight: 600; }
 .orch-pipe-arrow { display: flex; align-items: center; padding: 0 6px; font-size: 18px; color: var(--mk-line); flex-shrink: 0; }
 .orch-pipe-arrow.is-on { color: var(--mk-blue); }
 
-.orch-expand { margin-top: 10px; border: 1px solid var(--mk-line); border-radius: 10px; background: var(--mk-surface); overflow: hidden; }
-.orch-expand__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 18px; background: #f8fafc; border-bottom: 1px solid var(--mk-line); }
-.orch-expand__title { margin: 0; font-size: 15px; font-weight: 800; }
-.orch-expand__id { font-size: 11px; color: var(--mk-faint); display: block; margin-top: 2px; }
-.orch-expand__actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.orch-expand__actions .mk-link { font-size: 11.5px; font-weight: 600; }
+/* 阶段展开：head 快捷入口（阶段级子视图） */
+.orch-qbtn {
+  padding: 4px 10px; border: 1px solid var(--mk-line); border-radius: 7px; background: #fff;
+  font: inherit; font-size: 11.5px; font-weight: 600; color: var(--mk-ink); cursor: pointer;
+  transition: border-color 0.12s ease, color 0.12s ease;
+}
+.orch-qbtn:hover { border-color: rgba(44, 99, 208, 0.5); color: var(--mk-blue); }
 
-.orch-expand__flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 18px; border-bottom: 1px solid var(--mk-line); font-size: 12px; }
+.orch-expand__id { font-size: 11px; color: var(--mk-faint); font-weight: 600; }
+
+.orch-expand__flow {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 12px 16px; border-bottom: 1px solid var(--mk-line); font-size: 12px; background: #fafbfc;
+}
 .orch-expand__flow-label { font-size: 10.5px; font-weight: 800; color: var(--mk-faint); text-transform: uppercase; margin-right: 4px; }
 .orch-expand__flow-arrow { color: var(--mk-faint); font-size: 14px; }
 .orch-expand__flow-agent { font-family: var(--mk-mono); font-size: 11.5px; color: var(--mk-blue); }
 
 .orch-skills { padding: 4px 0; }
-.orch-skills__head { padding: 8px 18px 4px; font-size: 11px; font-weight: 800; color: var(--mk-faint); text-transform: uppercase; letter-spacing: 0.04em; }
-.orch-skill { display: flex; align-items: center; gap: 10px; padding: 9px 18px; cursor: pointer; transition: background 0.1s ease; border-bottom: 1px solid #f3f4f6; }
+.orch-skills__head { padding: 8px 16px 4px; font-size: 11px; font-weight: 800; color: var(--mk-faint); text-transform: uppercase; letter-spacing: 0.04em; }
+.orch-skill { display: flex; align-items: center; gap: 10px; padding: 9px 16px; cursor: pointer; transition: background 0.1s ease; border-bottom: 1px solid #f3f4f6; }
 .orch-skill:last-child { border-bottom: none; }
 .orch-skill:hover { background: #f8fafc; }
 .orch-skill__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--mk-green); flex-shrink: 0; }
@@ -434,13 +461,13 @@ const cardTitle = computed(() =>
 .orch-skill__main strong { font-size: 12.5px; }
 .orch-skill__main .mono { font-size: 10.5px; color: var(--mk-faint); }
 .orch-skill__vars { display: flex; gap: 4px; flex-wrap: wrap; }
-.orch-skill__calls { font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.orch-skill__calls { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .orch-var { padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600; font-family: var(--mk-mono); }
 .orch-var--in { background: #f3f4f6; color: var(--mk-faint); }
 .orch-var--out { background: #eff6ff; color: var(--mk-blue); }
 
-.orch-defsteps { padding: 10px 18px; border-top: 1px solid var(--mk-line); }
+.orch-defsteps { padding: 10px 16px; border-bottom: 1px solid var(--mk-line); }
 .orch-defsteps__label { font-size: 10.5px; font-weight: 800; color: var(--mk-faint); text-transform: uppercase; display: block; margin-bottom: 6px; }
 .orch-defsteps__rail { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
 .orch-defstep { display: flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid var(--mk-line); border-radius: 6px; background: #fff; font-size: 11px; margin-right: 4px; margin-bottom: 4px; }
@@ -452,5 +479,12 @@ const cardTitle = computed(() =>
 .orch-defstep__badge--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
 
 .mk-status__meta--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
-.orch-tabpane { margin-top: 0; }
+
+/* 4K：管线与展开区跟随全站节奏 */
+@media (min-width: 2000px) {
+  .orch-tab { font-size: 13px; padding: 7px 16px; }
+  .orch-pipe-card { min-width: 190px; padding: 14px 16px; }
+  .orch-pipe-card__name { font-size: 14px; }
+  .orch-skill__main strong { font-size: 13.5px; }
+}
 </style>

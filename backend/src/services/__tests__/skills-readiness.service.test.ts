@@ -40,7 +40,7 @@ describe('skills-readiness：W1 ACTIVE 覆盖', () => {
     expect(check.items).toEqual([]);
   });
 
-  it('反例：缺 ACTIVE（missingActive）、不在户口簿的 ACTIVE（zombieActive）、僵尸技能 ACTIVE 残留（zombieSkillActive）', () => {
+  it('反例：缺 ACTIVE（missingActive）、不在户口簿的 ACTIVE（zombieActive）、僵尸技能 ACTIVE 不入告警（保留决策必需资产）', () => {
     const book = makeBook([
       makeEntry({ skillId: 'goal-conversation' }),
       makeEntry({ skillId: 'basic-evaluator', kind: 'aux' }),
@@ -52,8 +52,9 @@ describe('skills-readiness：W1 ACTIVE 覆盖', () => {
     expect(check.ok).toBe(false);
     expect(check.missingActive).toEqual(['goal-conversation']);
     expect(check.zombieActive).toEqual(['ghost-skill']);
-    expect(check.zombieSkillActive).toEqual(['basic-evaluator']);
-    expect(check.items.map((i) => i.code)).toEqual(['W1', 'W1', 'W1']);
+    expect(check.zombieSkillActive).toEqual(['basic-evaluator']); // 审计计数保留
+    // 僵尸项 ACTIVE 为保留注册决策下的必需资产（handler requireActivePrompt: true），不计入告警 items
+    expect(check.items.map((i) => i.code)).toEqual(['W1', 'W1']);
     expect(ZOMBIE_SKILL_IDS).toEqual(expect.arrayContaining(['basic-evaluator', 'goal-alignment-checker', 'course-design']));
   });
 });

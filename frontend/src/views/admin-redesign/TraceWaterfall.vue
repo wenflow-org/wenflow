@@ -1,30 +1,21 @@
 <template>
   <div class="mk-page">
-    <!-- 状态条：当前选中的链路 -->
+    <!-- 状态条：标题固定，当前选中的链路标识在 meta（结论走 dot 色） -->
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title wf-title" :title="activeTrace">{{ statusTitle }}</strong>
+      <strong class="mk-status__title">Trace 链路</strong>
+      <span v-if="activeSpans.length" class="mk-status__meta mono" :title="viewMode === 'session' ? activeSession : activeTrace">{{ viewMode === 'session' ? `会话 ${activeSession}` : `链路 ${activeTrace}` }}</span>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ activeSpans.length }} 个 span</span>
       <span class="mk-status__meta">总耗时 {{ totalDuration }}</span>
       <span class="mk-status__meta">失败 {{ errorCount }}</span>
-      <span v-if="isLive" class="mk-status__meta mono" :title="waterfallTotal ? '样本 = 本地已加载（boot 快照 + 追加页）；全量 = 服务端口径' : '全量口径待服务端返回'">
+      <span v-if="isLive" class="mk-status__meta mono" :title="waterfallTotal ? '本地已加载 vs 服务端全量' : '全量数据待服务端返回'">
         样本 {{ waterfallSpans?.length ?? 0 }} / 全量 {{ waterfallTotal || '—' }}
       </span>
-      <button
-        v-if="canLoadMoreWaterfall"
-        type="button"
-        class="wf-more mk-link"
-        :disabled="waterfallLoading"
-        :title="`追加服务端下一页样本（当前 ${waterfallSpans?.length ?? 0} 条 / 全量 ${waterfallTotal} 条）`"
-        @click="loadMoreWaterfall"
-      >
-        {{ waterfallLoading ? '加载中…' : '加载更多样本' }}
-      </button>
       <span
         v-if="waterfallCapReached"
         class="mk-status__meta"
-        title="行列表未做虚拟化，为保持流畅停止继续追加；全量口径见左侧计数"
+        title="为保持流畅已停止追加；全量数据见左侧计数"
       >已达本地样本上限 {{ WATERFALL_MAX_SPANS }} 条，停止追加</span>
       <button
         v-if="failedTraceIds.length"
@@ -113,7 +104,7 @@
         <span class="wf-ruler__label">{{ viewMode === 'session' ? '会话内 span' : '阶段 / span' }}</span>
         <div class="wf-ruler__track" :style="rulerTrackW ? { width: rulerTrackW } : undefined">
           <span v-for="tick in ticks" :key="tick" class="wf-ruler__tick" :style="{ left: tickLeft(tick) }">
-            {{ tick >= 1000 ? `${tick / 1000}s` : `${tick}ms` }}
+            {{ fmtTick(tick) }}
           </span>
         </div>
       </div>
@@ -223,6 +214,19 @@
       <div v-if="errorCount > 0" class="wf-verdict">
         <strong>结论</strong>
         <p>{{ verdictText }}</p>
+      </div>
+
+      <!-- 翻页：追加下一页样本（统一 mk-list-more 页脚形态，与全局加载更多页脚同构） -->
+      <div v-if="canLoadMoreWaterfall" class="mk-list-more">
+        <button
+          type="button"
+          class="mk-link"
+          :disabled="waterfallLoading"
+          :title="'加载下一页样本'"
+          @click="loadMoreWaterfall"
+        >
+          {{ waterfallLoading ? '加载中…' : '加载更多样本' }}
+        </button>
       </div>
     </div>
 
@@ -567,11 +571,6 @@ const errorCount = computed(() => activeSpans.value.filter((s) => s.status === '
 const totalDuration = computed(() => fmtMs(maxEnd.value))
 
 const statusTone = computed(() => (!activeSpans.value.length ? 'mk-status--muted' : errorCount.value ? 'mk-status--bad' : 'mk-status--ok'))
-const statusTitle = computed(() => {
-  if (!activeSpans.value.length) return viewMode.value === 'session' ? '暂无会话数据' : '暂无链路数据'
-  const scope = viewMode.value === 'session' ? `会话 ${activeSession.value}` : `链路 ${activeTrace.value}`
-  return errorCount.value ? `${scope} 存在失败` : `${scope} 执行成功`
-})
 
 /* 全链路失败提示 + 定位 */
 const failedTraceIds = computed(() => [...new Set(baseSpans.value.filter((s) => s.status === 'err').map((s) => s.traceId))])
@@ -620,14 +619,28 @@ const traceSummary = computed(() => {
   return { spanCount: s.length, total: maxEnd.value, errorCount: errorCount.value, models, avg }
 })
 
-// 刻度：按总量程取 4-5 档
+// 刻度：按总量程取 ~8 档自适应步长（人读友好 1/2/5×10^n 序列），
+// 修复长链路固定 10s/格导致 700s 链路渲染 71 个刻度挤爆表头的问题
+const TICK_STEPS = [100, 200, 500, 1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000, 300000, 600000, 900000, 1800000, 3600000]
+function niceTickStep(endMs: number): number {
+  const target = endMs / 8
+  for (const s of TICK_STEPS) if (target <= s) return s
+  return TICK_STEPS[TICK_STEPS.length - 1]
+}
 const ticks = computed(() => {
   const end = maxEnd.value
-  const step = end > 20000 ? 10000 : end > 8000 ? 4000 : end > 3000 ? 1000 : 500
+  const step = niceTickStep(end)
   const out: number[] = []
   for (let t = 0; t <= end; t += step) out.push(t)
   return out
 })
+/** 刻度标签紧凑格式：0 / 500ms / 30s / 2m / 1h（长链路不再出现 700s 一长串数字） */
+const fmtTick = (t: number) =>
+  t === 0 ? '0'
+    : t >= 3600000 ? `${Math.round(t / 3600000)}h`
+    : t >= 60000 ? `${Math.round(t / 60000)}m`
+    : t >= 1000 ? `${Math.round(t / 1000)}s`
+    : `${t}ms`
 
 const tickLeft = (t: number) => `${(t / maxEnd.value) * 100}%`
 const barLeft = (s: TraceSpan) => `${(s.startMs / maxEnd.value) * 100}%`
@@ -723,7 +736,6 @@ const verdictText = computed(() => {
   min-width: 0;
 }
 .wf-locate { flex-shrink: 0; font-size: 11.5px; }
-.wf-more { flex-shrink: 0; font-size: 11.5px; }
 .wf-filter {
   display: inline-flex;
   align-items: center;

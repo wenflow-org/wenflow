@@ -289,11 +289,13 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
     mockAgentCallLogs.findMany.mockImplementation((args: any) =>
       args?.select?.output ? Promise.resolve([]) : Promise.resolve(rows)
     );
-    // 真实用户 id 集合：统计查询应带 userId in 过滤
-    mockPrisma.users.findMany.mockResolvedValue([
-      { id: 'real1' },
-      { id: 'real2' },
-    ]);
+    // 真实用户 id 集合：统计查询应带 userId in 过滤；
+    // 两次调用：REAL_USER_WHERE 过滤版（real1/real2）→ 全部用户版（额外带虚拟 virt1/virt2，差集构成虚拟口径）
+    mockPrisma.users.findMany.mockImplementation((args: any) =>
+      args?.where?.NOT
+        ? Promise.resolve([{ id: 'real1' }, { id: 'real2' }])
+        : Promise.resolve([{ id: 'real1' }, { id: 'real2' }, { id: 'virt1' }, { id: 'virt2' }])
+    );
     // 全量 groupBy（两次调用：真实 + All）
     mockAgentCallLogs.groupBy.mockImplementation((args: any) =>
       args?.where?.userId
@@ -340,6 +342,8 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
     expect(payload.agents.totalCallsAll).toBe(24);
     expect(payload.agents.todayCalls).toBe(12);
     expect(payload.agents.todayCallsAll).toBe(24);
+    // 虚拟/测试账号独立口径：全量 − 真实 = 12（今日虚拟调用数与真实并行区分）
+    expect(payload.agents.todayCallsVirtual).toBe(12);
     expect(payload.usage.calls7d).toBe(12);
     expect(payload.usage.calls7dAll).toBe(24);
     expect(payload.usage.totalTokens7d).toBe(300000);

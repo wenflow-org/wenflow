@@ -60,7 +60,7 @@
                   <span class="agd__term-def">字段产完后交给谁：可交给下一阶段（如 path）或指定 agent/skill；空=不转交</span>
                 </li>
                 <li v-if="filteredRoles.length" class="agd__term">
-                  <span class="agd__term-name">internal（内部信令）</span>
+                  <span class="agd__term-name">internal（内部标记）</span>
                   <span class="agd__term-def">仅供平台内部/UI 控制使用，不进业务状态的字段标记</span>
                 </li>
                 <li v-if="filteredRoles.length" class="agd__term">

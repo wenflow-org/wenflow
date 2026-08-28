@@ -25,6 +25,7 @@ import type { LearnerAction } from '../../virtual-lab/contracts';
 import { assertAssistedSessionMode } from '../../virtual-lab/session-mode';
 import { autopilotService, AutopilotService } from '../../virtual-lab/autopilot.service';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
+import { buildLearnerMemorySnapshot } from '../../virtual-lab/learner-memory';
 import { virtualCleanupService } from '../../services/virtual-lab/virtual-cleanup.service';
 import { setRequestContext, getRequestContext } from '../../gateway/api-gateway/context';
 import { safeJsonParse } from '../../utils/safe-json';
@@ -56,6 +57,20 @@ router.param('sessionId', (req, _res, next, sessionId) => {
 /** 卡死判定阈值（与 reclaim 服务同源：VLAB_STALE_SESSION_HOURS，默认 24h），保证「状态条卡死数 = 可回收清单数」 */
 function staleThresholdAt(): Date {
   return new Date(Date.now() - virtualSessionReclaimService.getThresholdMs());
+}
+
+/**
+ * 管理员暂停的会话（teaching.paused=true）无写入是预期行为：
+ * reclaim 服务会跳过（skippedPaused），此处统计口径同源排除，
+ * 避免「卡死 N」徽章与回收 dryRun 清单不一致、暂停会话被误标卡死。
+ */
+function isTeachingPausedSession(stageResults: string | null | undefined): boolean {
+  try {
+    const parsed = safeJsonParse<{ teaching?: { paused?: boolean } }>(String(stageResults || ''), {});
+    return parsed?.teaching?.paused === true;
+  } catch {
+    return false;
+  }
 }
 
 /** 重试预算数值钳制：非法输入回退默认值，整数化并限制在 [min, max]（与前端输入框 min/max 一致） */
@@ -693,6 +708,36 @@ async function buildRecentScenarioHints() {
   return hints;
 }
 
+/**
+ * 跨故事记忆提示：把该虚拟学习者最近完成的事项（成果物）注入故事生成，
+ * 让新故事可以延续"他之前做过什么"（如"上个月做过一支探店视频"），
+ * 而不是每次都是全新的人。best-effort：读取失败返回空数组。
+ */
+async function buildLearnerMemoryStoryHints(profile: {
+  userId: string;
+  profile: string;
+}): Promise<string[]> {
+  try {
+    const memory = await buildLearnerMemorySnapshot(profile.userId, { limit: 6 });
+    const hints: string[] = [];
+    if (memory.mastered.length > 0) {
+      hints.push(`此人在过往学习中已掌握：${memory.mastered.map((m) => m.name).join('、')}。新故事可自然承接这些基础，不要让他完全从头开始。`);
+    }
+    if (memory.recentCompleted.length > 0) {
+      const items = memory.recentCompleted
+        .map((item) => item.deliverable ? `${item.title}（成果：${item.deliverable}）` : item.title)
+        .join('；');
+      hints.push(`此人在近期完成了这些事：${items}。新故事可以在这些成果的基础上展开（如后续任务、复盘、被他人看到等），让故事有连续性。`);
+    }
+    if (memory.struggling.length > 0) {
+      hints.push(`此人仍在学习的点：${memory.struggling.map((s) => s.name).join('、')}。新故事可以包含相关但不重复的挑战。`);
+    }
+    return hints;
+  } catch {
+    return [];
+  }
+}
+
 router.get('/:id/stories', async (req: Request, res) => {
   try {
     const { id } = req.params;
@@ -935,6 +980,9 @@ router.post('/:id/draft-stories', async (req: Request, res) => {
     const { profileData } = await ensureProfileStoryPool(profile);
     const existingStoryPool = Array.isArray(profileData.storyPool) ? profileData.storyPool : [];
     const recentScenarioHints = await buildRecentScenarioHints();
+    // 跨故事记忆：注入该虚拟学习者最近完成的事项（成果物），让新故事可以延续"他做过什么"
+    const learnerMemoryHints = await buildLearnerMemoryStoryHints(profile);
+    const storyHints = [...recentScenarioHints, ...learnerMemoryHints];
 
     logger.info('[admin-generate-stories] 开始生成故事', {
       virtualProfileId: id,
@@ -948,7 +996,7 @@ router.post('/:id/draft-stories', async (req: Request, res) => {
       preferredMotivations: profileData?.motivationType ? [profileData.motivationType] : undefined,
       candidateDomains: DEFAULT_SCENARIO_CANDIDATE_DOMAINS,
       candidatePersonas: DEFAULT_SCENARIO_CANDIDATE_PERSONAS,
-      recentScenarioHints,
+      recentScenarioHints: storyHints,
       existingPersonaSeed: profileData,
       existingStoryPool,
       targetStoryCount: 1,
@@ -1003,7 +1051,7 @@ router.post('/:id/draft-stories', async (req: Request, res) => {
 router.put('/:id/stories/:storyIndex', async (req: Request, res) => {
   try {
     const { id, storyIndex } = req.params;
-    const { title, storyOutline, storyTriggerEvent, visibleOpening, pressurePoints, problemKnowledge } = req.body || {};
+    const { title, storyOutline, storyTriggerEvent, visibleOpening, pressurePoints, problemKnowledge, budget } = req.body || {};
 
     const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id } });
     if (!profile) {
@@ -1059,6 +1107,19 @@ router.put('/:id/stories/:storyIndex', async (req: Request, res) => {
           ? problemKnowledge.hiddenGaps.map((item: unknown) => (typeof item === 'string' ? item.trim() : '')).filter((item: string) => !!item)
           : []
       }
+    }
+
+    // 故事级预算覆盖（可选）：单步重试 / 会话总 AI 调用上限；缺省继承角色级
+    if (budget && typeof budget === 'object') {
+      const nextBudget: Record<string, unknown> = {};
+      if (Number.isFinite(Number(budget.maxRetriesPerStep))) {
+        nextBudget.maxRetriesPerStep = Math.min(20, Math.max(1, Math.round(Number(budget.maxRetriesPerStep))));
+      }
+      if (Number.isFinite(Number(budget.maxRetriesTotal))) {
+        nextBudget.maxRetriesTotal = Math.min(1000, Math.max(1, Math.round(Number(budget.maxRetriesTotal))));
+      }
+      if (Object.keys(nextBudget).length) nextStory.budget = nextBudget;
+      else delete nextStory.budget;
     }
 
     updatedStoryPool[index] = nextStory;
@@ -1276,7 +1337,7 @@ router.get('/', async (req: Request, res) => {
 
     // 全量口径聚合（P1-1/D3）：运行中/失败/卡死分区与状态条不再基于 50 条会话样本
     const profileIds = profiles.map(p => p.id);
-    const [statusAgg, perProfileAgg, staleSessions, staleTotal] = await Promise.all([
+    const [statusAgg, perProfileAgg, staleSessions, staleCandidates] = await Promise.all([
       prisma.virtual_sessions.groupBy({
         by: ['status'],
         _count: { _all: true }
@@ -1295,11 +1356,12 @@ router.get('/', async (req: Request, res) => {
               status: 'running',
               updatedAt: { lt: staleThresholdAt() }
             },
-            select: { id: true, virtualProfileId: true }
+            select: { id: true, virtualProfileId: true, stageResults: true }
           })
         : Promise.resolve([]),
-      prisma.virtual_sessions.count({
-        where: { status: { in: ['running', 'created'] }, updatedAt: { lt: staleThresholdAt() } }
+      prisma.virtual_sessions.findMany({
+        where: { status: { in: ['running', 'created'] }, updatedAt: { lt: staleThresholdAt() } },
+        select: { id: true, stageResults: true }
       })
     ]);
     const countByStatus = (status: string) => statusAgg.find(s => s.status === status)?._count?._all ?? 0;
@@ -1313,10 +1375,14 @@ router.get('/', async (req: Request, res) => {
         failedByProfile.set(agg.virtualProfileId, (failedByProfile.get(agg.virtualProfileId) ?? 0) + n);
       }
     }
+    // 卡死口径与 reclaim 服务同源：管理员暂停的会话（teaching.paused）无写入是预期行为，
+    // 不算卡死（否则「卡死 N」与回收 dryRun 清单不一致，且暂停会话会被误标）
     const staleByProfile = new Map<string, number>();
     for (const s of staleSessions) {
+      if (isTeachingPausedSession(s.stageResults)) continue;
       staleByProfile.set(s.virtualProfileId, (staleByProfile.get(s.virtualProfileId) ?? 0) + 1);
     }
+    const staleTotal = staleCandidates.filter((s) => !isTeachingPausedSession(s.stageResults)).length;
     
     const formattedProfiles = profiles.map(p => {
       const profileData = JSON.parse(p.profile || '{}');
@@ -1384,7 +1450,7 @@ router.get('/', async (req: Request, res) => {
  */
 router.get('/stats', async (req: Request, res) => {
   try {
-    const [statusAgg, profileCount, staleSessions, terminalSessions] = await Promise.all([
+    const [statusAgg, profileCount, staleSessions, terminalSessions, todayVirtualCalls] = await Promise.all([
       prisma.virtual_sessions.groupBy({
         by: ['status'],
         _count: { _all: true }
@@ -1392,12 +1458,37 @@ router.get('/stats', async (req: Request, res) => {
       prisma.virtual_learner_profiles.count(),
       prisma.virtual_sessions.findMany({
         where: { status: { in: ['running', 'created'] }, updatedAt: { lt: staleThresholdAt() } },
-        select: { updatedAt: true }
+        select: { id: true, stageResults: true, updatedAt: true }
       }),
       prisma.virtual_sessions.findMany({
         where: { status: { in: ['completed', 'failed', 'abandoned'] } },
         select: { createdAt: true, updatedAt: true }
-      })
+      }),
+      // 今日虚拟/测试账号调用数（agent_call_logs）；仿真看板核心指标，与总览页真实口径互斥
+      (async () => {
+        const virtualIds = (
+          await prisma.users.findMany({
+            where: {
+              OR: [
+                { isVirtualLearner: true },
+                { email: { startsWith: 'virtual_' } },
+                { email: { endsWith: '@test.local' } }
+              ]
+            },
+            select: { id: true }
+          })
+        ).map(u => u.id);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        return prisma.agent_call_logs.count({
+          where: {
+            calledAt: { gte: today, lt: tomorrow },
+            userId: { in: virtualIds }
+          }
+        });
+      })()
     ]);
 
     const countByStatus = (status: string) => statusAgg.find(s => s.status === status)?._count?._all ?? 0;
@@ -1408,9 +1499,11 @@ router.get('/stats', async (req: Request, res) => {
     const running = countByStatus('running');
     const created = countByStatus('created');
 
-    const staleCount = staleSessions.length;
-    const maxStaleMins = staleSessions.length
-      ? Math.max(0, Math.round(Math.max(...staleSessions.map(s => Date.now() - new Date(s.updatedAt).getTime())) / 60000))
+    // 卡死口径与 reclaim 服务同源：管理员暂停的会话无写入是预期行为，不算卡死
+    const staleCandidates = staleSessions.filter((s) => !isTeachingPausedSession(s.stageResults));
+    const staleCount = staleCandidates.length;
+    const maxStaleMins = staleCandidates.length
+      ? Math.max(0, Math.round(Math.max(...staleCandidates.map(s => Date.now() - new Date(s.updatedAt).getTime())) / 60000))
       : 0;
 
     let avgDurationMs = 0;
@@ -1442,7 +1535,9 @@ router.get('/stats', async (req: Request, res) => {
         staleCount,
         maxStaleMins,
         avgDurationMs,
-        reclaimThresholdMs: virtualSessionReclaimService.getThresholdMs()
+        reclaimThresholdMs: virtualSessionReclaimService.getThresholdMs(),
+        // 今日虚拟/测试账号调用数（仿真看板；总览页真实口径之外的"另一半"）
+        todayCalls: todayVirtualCalls
       }
     });
   } catch (error) {
@@ -1550,17 +1645,35 @@ router.put('/:id', async (req: Request, res) => {
     if (req.body.tags) updateData.tags = JSON.stringify(req.body.tags);
     if (req.body.notes) updateData.notes = req.body.notes;
     // simulationBudget 写入 profile JSON（以虚拟学习者为单位的 LLM 重试预算）
+    // 注意：与 runtimePrefs 共用同一 profile JSON，必须从同一 base 叠加，避免相互覆盖
+    let nextProfileJson = profile.profile;
     if (req.body.simulationBudget) {
-      const existingProfile = parseJson<Record<string, unknown>>(profile.profile, {});
-      const existingBudget = (existingProfile.simulationBudget || {}) as Record<string, unknown>;
+      const base = parseJson<Record<string, unknown>>(nextProfileJson, {});
+      const existingBudget = (base.simulationBudget || {}) as Record<string, unknown>;
       const newBudget = { ...existingBudget, ...req.body.simulationBudget };
       // 钳制数值范围（与前端输入框 min/max 一致），防止手误写入超大值导致近无限重试
       newBudget.maxRetriesPerStep = clampBudgetValue(newBudget.maxRetriesPerStep, 5, 1, 20);
       newBudget.maxRetriesTotal = clampBudgetValue(newBudget.maxRetriesTotal, 50, 1, 500);
       // 保留已消耗的 consumedRetries（不能被前端覆盖）
       newBudget.consumedRetries = existingBudget.consumedRetries || 0;
-      updateData.profile = JSON.stringify({ ...existingProfile, simulationBudget: newBudget });
+      nextProfileJson = JSON.stringify({ ...base, simulationBudget: newBudget });
     }
+    // runtimePrefs 写入 profile JSON（虚拟人运行偏好：每课回合上限 / 默认难度；
+    // 新会话创建时作为 simulationConfig 初始值，三级驾驶舱可临时覆盖）
+    if (req.body.runtimePrefs && typeof req.body.runtimePrefs === 'object') {
+      const base = parseJson<Record<string, unknown>>(nextProfileJson, {});
+      const existingPrefs = (base.runtimePrefs || {}) as Record<string, unknown>;
+      const newPrefs: Record<string, unknown> = { ...existingPrefs, ...req.body.runtimePrefs };
+      if (Number.isFinite(Number(newPrefs.turnCapPerLesson))) {
+        newPrefs.turnCapPerLesson = Math.min(100, Math.max(1, Math.round(Number(newPrefs.turnCapPerLesson))));
+      }
+      if (newPrefs.frictionBudget !== undefined) {
+        const friction = String(newPrefs.frictionBudget);
+        newPrefs.frictionBudget = (SIMULATION_FRICTION_BUDGETS as readonly string[]).includes(friction) ? friction : 'normal';
+      }
+      nextProfileJson = JSON.stringify({ ...base, runtimePrefs: newPrefs });
+    }
+    if (nextProfileJson !== profile.profile) updateData.profile = nextProfileJson;
     
     const updated = await prisma.virtual_learner_profiles.update({
       where: { id },
@@ -2136,7 +2249,10 @@ router.post('/sessions/:sessionId/autopilot/start', async (req: Request, res) =>
     const session = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } });
     if (!session) return res.status(404).json({ success: false, error: '模拟会话不存在' });
     const target = String(req.body?.target || 'final') === 'stage' ? 'stage' : 'final';
-    const result = await autopilotService.start(sessionId, { target });
+    // 每课回合上限透传（驾驶舱「回合上限」），未传则沿用状态内上次值/默认 50
+    const rawTurns = Number(req.body?.maxTurns);
+    const maxTurns = Number.isInteger(rawTurns) ? Math.min(100, Math.max(1, rawTurns)) : undefined;
+    const result = await autopilotService.start(sessionId, { target, ...(maxTurns !== undefined ? { maxTurns } : {}) });
     res.json({ success: true, data: result });
   } catch (error) {
     logger.error('启动全自动模式失败:', error);
@@ -2263,6 +2379,12 @@ async function terminateSession(session: Pick<VirtualSessionRow, 'id' | 'status'
     previousStage: session.currentStage,
     operatorId: operator?.userId ?? null
   };
+  // autopilot 状态同步收口：避免「会话已终止」但 stageResults 仍显示「自动运行中」的矛盾
+  if (stageResults.autopilot && typeof stageResults.autopilot === 'object') {
+    (stageResults.autopilot as Record<string, unknown>).status = 'stopped';
+    (stageResults.autopilot as Record<string, unknown>).completedAt = terminatedAt.toISOString();
+    (stageResults.autopilot as Record<string, unknown>).lastError = '管理员批量终止';
+  }
   const logs = parseJson<SimulationLogEntry[]>(session.logs, []);
   logs.push({
     timestamp: terminatedAt.toISOString(),
@@ -2270,6 +2392,9 @@ async function terminateSession(session: Pick<VirtualSessionRow, 'id' | 'status'
     details: { error: `管理员批量终止会话（${session.status} → abandoned）`, output: { action: 'batch-terminate', previousStatus: session.status } }
   });
   const before = { status: session.status, currentStage: session.currentStage, updatedAt: session.updatedAt?.toISOString?.() ?? null };
+  // 先撤销活跃租约：正在执行的 Blackbox/Assisted runner 若持租约，会在下次续租/写库前
+  // 抛 LeaseLost 中止（runLeasedExclusive 的 assertLeaseOwned），避免「终止后 session 被复活成 running」
+  await prisma.virtual_experiment_leases?.deleteMany({ where: { sessionId: session.id } }).catch(() => {});
   await prisma.virtual_sessions.update({
     where: { id: session.id },
     data: {

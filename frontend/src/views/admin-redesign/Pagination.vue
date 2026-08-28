@@ -2,6 +2,7 @@
   <div class="mk-pagination">
     <span v-if="showTotal" class="mk-pagination__total">共 {{ total }} 条</span>
     <select
+      v-if="!hideSize"
       class="mk-pagination__size mono"
       :value="pageSize"
       :disabled="loading"
@@ -43,11 +44,14 @@ const props = withDefaults(
     pageSize: number
     loading?: boolean
     showTotal?: boolean
+    /** 固定每页行数场景（如字段路由表 15 行/页）：隐藏每页条数下拉，页码器形态不变 */
+    hideSize?: boolean
     sizes?: number[]
   }>(),
   {
     loading: false,
     showTotal: false,
+    hideSize: false,
     sizes: () => [15, 30, 50, 100]
   }
 )

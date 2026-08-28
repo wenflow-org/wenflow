@@ -93,7 +93,7 @@
           </tbody>
         </table>
       </div>
-      <div v-if="recCanMore" class="sk-rec__more">
+      <div v-if="recCanMore" class="mk-list-more">
         <button type="button" class="mk-link" @click="recLoadMore">加载更多（已显示 {{ recShown.length }} / {{ recFlat.length }}）</button>
       </div>
       <div v-if="recReport.orphanRegistrations.length" class="sk-rec-orphans">
@@ -251,7 +251,10 @@ function recGateDetail(completion: SkillCompletion): string {
   return "全部门槛通过";
 }
 
-defineExpose({ refresh, recReport, recOpen, recDiff });
+defineExpose({ refresh, recReport, recOpen, recDiff, openPanel });
+
+/** 供父组件（健康中心概要卡跳转）展开对账面板 */
+function openPanel() { recOpen.value = true; }
 </script>
 <style scoped>
 .sk-rec { margin-top: 0; }
@@ -259,7 +262,6 @@ defineExpose({ refresh, recReport, recOpen, recDiff });
 .sk-rec__summary::-webkit-details-marker { display: none; }
 .sk-rec__summary::before { content: "▸"; display: inline-block; margin-right: 6px; color: var(--mk-blue); transition: transform 0.14s ease; }
 .sk-rec[open] > .sk-rec__summary::before { transform: rotate(90deg); }
-.sk-rec__more { display: flex; justify-content: center; padding: 8px 0 10px; border-top: 1px dashed var(--mk-line); }
 .sk-rec-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px 4px; }
 .sk-rec__title { display: flex; flex-direction: column; gap: 2px; }
 .sk-rec__title strong { font-size: 14px; }

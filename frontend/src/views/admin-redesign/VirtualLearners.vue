@@ -1,15 +1,11 @@
 <template>
-  <div class="mk-page">
+  <div class="mk-page mk-page--fill">
     <div class="mk-status" :class="samples.length ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ samples.length ? `${samples.length} 个虚拟学习者` : '还没有虚拟学习者' }}</strong>
+      <strong class="mk-status__title">{{ samples.length ? '虚拟学习者' : '暂无虚拟学习者' }}</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta vl-stat-item" :title="'全量口径：会话处于创建中状态的数量'">创建中 <b class="vl-num">{{ partition.created }}</b></span>
-      <span class="mk-status__meta vl-stat-item vl-status-run" :title="'全量口径：运行中会话数（含卡死）'">运行中 <b class="vl-num">{{ partition.running }}</b></span>
-      <span class="mk-status__meta vl-stat-item vl-status-fail" :title="'全量口径：失败/放弃会话数'">已失败 <b class="vl-num">{{ partition.failed }}</b></span>
-      <span v-if="partition.stale > 0" class="mk-status__meta vl-stat-item vl-status-stale" :title="`超过回收阈值无写入且无活跃租约，可一键回收；最长卡死 ${runStats.maxStaleMins} 分钟`">
-        卡死 <b class="vl-num">{{ partition.stale }}</b><template v-if="runStats.maxStaleMins > 0">（最长 {{ fmtMins(runStats.maxStaleMins) }}）</template>
-      </span>
+      <span class="mk-status__meta">共 {{ samples.length }} 人</span>
+      <span class="mk-status__meta" :title="'今日虚拟/测试账号的 Agent 调用数（自然日口径，与总览页真实调用互斥）'">今日调用 {{ runStats.todayCalls ?? 0 }}</span>
       <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-status__meta vl-truncated" :title="`后端共 ${liveVirtualsTotal} 人，列表仅加载前 ${samples.length} 行`">
         已截断 · 共 {{ liveVirtualsTotal }} 人
       </span>
@@ -23,8 +19,31 @@
       >
         {{ reclaimBusy ? '回收中…' : `回收卡死（${partition.stale}）` }}
       </button>
-      <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建</button>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建</button>
+        <button type="button" class="mk-status__action" @click="batchOpen = true">批量新建</button>
+      </span>
     </div>
+
+    <!-- 仿真概览（共享组件 MkOverview：结论头 + KPI + 详情行） -->
+    <MkOverview :tone="dashTone" :title="dashTitle" :subline="dashSubline" :has-data="hasDashData">
+      <template #kpis>
+        <MkKpi label="今日调用" :value="runStats.todayCalls ?? 0" hint="模拟/测试账号" :title="'今日虚拟/测试账号 Agent 调用数（自然日口径）'" />
+        <MkKpi label="活动会话" :value="partition.running + partition.created" hint="运行中 + 创建中（明细见下方）" :title="'当前运行中 + 创建中会话数（含卡死）'" />
+        <MkKpi label="完成率" :value="`${runStats.completionRate}%`" :hint="`完成 ${runStats.completed} / ${runStats.totalSessions}`" :title="'已完成会话 / 总会话（全量口径）'" />
+        <MkKpi label="失败率" :value="`${runStats.systemFailureRate}%`" :tone="(runStats.systemFailureRate ?? 0) > 0 ? 'bad' : ''" :hint="`已失败 ${partition.failed} · 均耗 ${fmtDuration(runStats.avgDurationMs)}`" :title="'系统失败会话 / 总会话（与状态条同口径）'" />
+      </template>
+      <template #detail>
+        <span :title="'全量口径：会话处于创建中状态的数量'">创建中 {{ partition.created }}</span>
+        <span :title="'全量口径：运行中会话数（含卡死）'">运行中 {{ partition.running }}</span>
+        <span :title="'全量口径：失败/放弃会话数'">已失败 {{ partition.failed }}</span>
+        <span :title="`超过回收阈值无写入且无活跃租约，可一键回收；最长卡死 ${runStats.maxStaleMins} 分钟`">
+          卡死 {{ partition.stale }}<template v-if="runStats.maxStaleMins > 0">（最长 {{ fmtMins(runStats.maxStaleMins) }}）</template>
+        </span>
+        <span :title="'abandoned 会话 / 总会话（含管理员止停、批量终止、僵尸回收）'">终止率 {{ runStats.humanTerminatedRate }}%</span>
+        <span :title="'已完成/失败/放弃会话的平均时长'">均耗 {{ fmtDuration(runStats.avgDurationMs) }}</span>
+      </template>
+    </MkOverview>
 
     <!-- 正在运行：直接列出当前有活跃会话的虚拟学习者，一眼看出谁在跑 -->
     <div v-if="runningSamples.length && isLive" class="vl-running">
@@ -35,113 +54,14 @@
       </button>
     </div>
 
-    <!-- 运行概览：仿真定位 + 派生统计（完成率/失败率/平均时长从状态条移入，避免单行过载） -->
-    <div class="vl-position">
-      <span class="vl-position__icon" aria-hidden="true">🧪</span>
-      <div class="vl-position__text">
-        <strong>仿真数据生成器</strong>
-        <span>虚拟学习者跑真实学习流程，产出可再生成的仿真数据；管理面操作不面向真实用户</span>
-      </div>
-      <div class="vl-position__stats">
-        <template v-if="runStats.totalSessions > 0">
-          <span class="vl-stat" :title="`完成率 = 已完成会话 / 总会话（${runStats.completed}/${runStats.totalSessions}）`">完成率 <b>{{ runStats.completionRate }}%</b></span>
-          <span class="vl-stat" :title="`系统失败率 = failed 会话 / 总会话（${runStats.failed}/${runStats.totalSessions}），不含人为终止`">系统失败率 <b>{{ runStats.systemFailureRate ?? 0 }}%</b></span>
-          <span class="vl-stat" :title="`人为终止率 = abandoned 会话 / 总会话（${runStats.abandoned}/${runStats.totalSessions}），含管理员止停/批量终止/僵尸回收`">人为终止 <b>{{ runStats.humanTerminatedRate ?? 0 }}%</b></span>
-          <span class="vl-stat" :title="'终态会话平均时长（completed/failed/abandoned 的 created→updated）'">平均时长 <b>{{ fmtDuration(runStats.avgDurationMs) }}</b></span>
-        </template>
-        <span v-if="isLive" class="vl-stat vl-stat--live" :title="'全量口径：虚拟会话状态分区（创建中/运行中/失败/放弃/完成）之和'">当前虚拟会话 <b>{{ liveVirtualSessionStats.total }}</b> 个</span>
-      </div>
-    </div>
-
-    <!-- 批量实验：系统级队列实验（创建学习者 → Goal → Path → 学完任务 → 跨日衰减模拟） -->
-    <div class="mk-card">
+    <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">批量实验</h3>
-        <span v-if="runningBatchCount" class="vl-running__label vl-running__label--inline">运行中 {{ runningBatchCount }}</span>
-        <button type="button" class="mk-status__action" @click="batchPanelOpen = !batchPanelOpen">{{ batchPanelOpen ? '收起' : '批量实验' }}</button>
-      </div>
-
-      <template v-if="batchPanelOpen">
-        <!-- 新建实验 -->
-        <div class="vl-bexp__create">
-          <div class="vl-bexp__create-row">
-            <input v-model="batchForm.name" placeholder="实验名称（必填）" style="flex: 2; min-width: 180px" />
-            <button type="button" class="mk-status__action mk-status__action--primary" :disabled="batchCreating" @click="createBatchExperiment">
-              {{ batchCreating ? '创建中…' : '创建并启动' }}
-            </button>
-            <button type="button" class="mk-status__action" :disabled="batchLoading" @click="loadBatchExperiments">刷新列表</button>
-          </div>
-          <div v-for="(l, i) in batchForm.learners" :key="i" class="vl-bexp__create-row">
-            <input v-model="l.name" placeholder="学习者名称（必填）" style="flex: 1.4" />
-            <input v-model="l.learningGoal" placeholder="学习目标（可选）" style="flex: 2" />
-            <select v-model="l.frictionBudget" style="flex: 0.7">
-              <option value="low">低摩擦</option>
-              <option value="normal">正常摩擦</option>
-              <option value="high">高摩擦</option>
-            </select>
-            <button type="button" class="mk-status__action" @click="batchForm.learners.splice(i, 1)">删除</button>
-          </div>
-          <button type="button" class="mk-status__action" @click="batchForm.learners.push({ name: '', learningGoal: '', frictionBudget: 'normal' })">+ 添加学习者</button>
+        <div class="mk-filter">
+          <input class="mk-filter__input" v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
         </div>
-
-        <!-- 实验列表 -->
-        <div v-if="batchLoading && !batchExperiments.length" class="vl-bexp__hint">加载中…</div>
-        <div v-else-if="!batchExperiments.length" class="vl-bexp__hint">还没有批量实验。填写名称和至少一个学习者名，点击创建并启动。</div>
-
-        <div v-for="exp in batchExperiments" :key="exp.id" class="vl-bexp__item">
-          <div class="vl-bexp__head">
-            <strong>{{ exp.name }}</strong>
-            <span class="vl-bexp__meta">{{ exp.status }} · {{ (exp.runs || []).length }} 人 · {{ fmtTime(exp.updatedAt) }}</span>
-            <button type="button" class="mk-status__action" @click="toggleBatchDetail(exp.id)">{{ batchDetailId === exp.id ? '收起' : '详情' }}</button>
-            <button v-if="exp.status === 'running'" type="button" class="mk-status__action" @click="stopBatchExperiment(exp.id)">停止</button>
-          </div>
-
-          <div v-if="batchDetailId === exp.id" class="vl-bexp__runs">
-            <table class="mk-table">
-              <thead>
-                <tr>
-                  <th>学习者</th>
-                  <th>摩擦</th>
-                  <th>阶段</th>
-                  <th>任务进度</th>
-                  <th>当前任务</th>
-                  <th>最近错误</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="run in exp.runs || []" :key="run.id">
-                  <td>{{ run.learnerName }}</td>
-                  <td>{{ run.frictionBudget }}</td>
-                  <td>{{ phaseLabel(run.phase) }}<template v-if="run.status !== 'active'"> / {{ run.status }}</template></td>
-                  <td>{{ run.completedTasks }}/{{ run.totalTasks ?? '?' }}</td>
-                  <td class="vl-bexp__task">{{ run.currentTask || '—' }}</td>
-                  <td class="vl-bexp__err" :title="run.lastError || ''">{{ run.lastError ? run.lastError.slice(0, 40) : '—' }}</td>
-                  <td>
-                    <button type="button" class="mk-status__action" :disabled="batchActionBusy" @click="advanceBatchRun(exp.id, run.id)">推进</button>
-                    <button type="button" class="mk-status__action" :disabled="batchActionBusy" @click="decayBatchRun(exp.id, run.id)">衰减</button>
-                    <button type="button" class="mk-status__action" :disabled="batchActionBusy" @click="snapshotBatchRun(exp.id, run.id)">快照</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-if="(exp.runs || []).some((r) => r.decaySims)" class="vl-bexp__hint">
-              <template v-for="run in exp.runs || []" :key="run.id">
-                <template v-if="run.decaySims">
-                  <span class="vl-bexp__decay">{{ run.learnerName }} 衰减：{{ decaySummary(run.decaySims) }}</span>
-                </template>
-              </template>
-            </div>
-          </div>
+        <div class="mk-card__head-right">
+          <span class="mk-card__meta">{{ filtered.length }} / {{ samples.length }} 人<template v-if="filtered.length < samples.length">（已筛选）</template> · 点击行查看画像</span>
         </div>
-      </template>
-    </div>
-
-
-    <div class="mk-card">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">虚拟学习者列表 <span class="mk-card__meta">共 {{ filtered.length }} 人<template v-if="filtered.length < samples.length">（已筛选）</template> · 点击行查看画像</span></h3>
-        <input class="mk-filter__input" v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
       </div>
 
       <MockSkeletonTable v-if="liveLoading && !samples.length" :cols="6" />
@@ -155,14 +75,16 @@
             <th style="width:180px">虚拟学习者</th>
             <th style="width:200px">长期倾向</th>
             <th class="mk-col--badge">故事池</th>
-            <th class="mk-col--num mk-th--right">会话</th>
-            <th title="当前会话状态：运行中会话数 + 最近阶段；会话数为累计口径；卡死/失败为全量聚合" style="width:160px">运行中</th>
+            <th class="mk-col--num mk-th--right" title="累计会话数（全部会话，含终态）">会话</th>
+            <th title="当前运行中/创建中的会话数及最近阶段；点击进入会话座舱" style="width:150px">运行中</th>
+            <th class="mk-col--num mk-th--right" title="已失败/已终止（abandoned）会话数（全量聚合）">失败</th>
+            <th class="mk-col--num mk-th--right" title="超过回收阈值无写入且无活跃租约的会话数（可在状态条一键回收）">卡死</th>
             <th class="mk-col--time-full">创建</th>
-            <th class="mk-th--right">操作</th>
+            <th class="mk-col--actions-wide">操作</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="s in shown" :key="s.id" class="vl-row" @click="openSubPage('virtual', s.id)">
+          <tr v-for="s in paged" :key="s.id" class="vl-row" @click="openSubPage('virtual', s.id)">
             <td v-if="isLive"><input v-model="selected" type="checkbox" :value="s.id" :aria-label="`选择 ${s.name}`" @click.stop /></td>
             <td>
               <div class="mk-cell-main vl-cell">
@@ -183,35 +105,52 @@
             </td>
             <td class="mk-num">{{ s.sessions }}</td>
             <td>
-              <div class="vl-run-cell">
+              <div class="vl-state-cell">
                 <span
                   v-if="s.runningCount > 0"
                   class="vl-run vl-run--live"
-                  :class="{ 'vl-run--stalled': s.stalledCount > 0 }"
-                  :title="`${s.runningCount} 个会话运行中 · 当前阶段 ${stageLabel(s.currentStage)}${s.runningSessionIds.length ? '；点击进入会话座舱' : ''}`"
+                  :title="`${s.runningCount} 个会话运行中/创建中 · 当前阶段 ${stageLabel(s.currentStage)}；点击进入会话座舱`"
                   @click.stop="openRunningSession(s)"
                 >
                   <span class="vl-run__dot" aria-hidden="true"></span>{{ s.runningCount }} 运行中 · {{ stageLabel(s.currentStage) }}
                 </span>
                 <span v-else class="vl-run vl-run--idle" title="当前没有运行中的会话">空闲</span>
-                <span v-if="s.stalledCount > 0" class="vl-badge vl-badge--bad" :title="`${s.stalledCount} 个运行中会话已卡死（超过回收阈值无写入）`">卡死 {{ s.stalledCount }}</span>
-                <span v-if="s.failedCount > 0" class="vl-badge vl-badge--bad" :title="`${s.failedCount} 个会话已失败/放弃`">失败 {{ s.failedCount }}</span>
               </div>
+            </td>
+            <td class="mk-num">
+              <button
+                type="button"
+                class="vl-faillink mk-num"
+                :class="{ 'vl-num--bad': s.failedCount > 0 }"
+                :title="s.failedCount > 0 ? `${s.failedCount} 个会话已失败/放弃；点击进入画像页，可对失败会话重试（续传保留进度）` : '无失败/终止会话'"
+                @click.stop="openSubPage('virtual', s.id)"
+              >{{ s.failedCount }}</button>
+            </td>
+            <td class="mk-num">
+              <span v-if="s.stalledCount > 0" class="vl-stall" :title="`${s.stalledCount} 个运行中会话已卡死（超过回收阈值无写入），可在状态条一键回收`">卡死 {{ s.stalledCount }}</span>
+              <span v-else class="mk-num--na" title="无卡死会话">—</span>
             </td>
             <td class="mk-na">{{ s.created }}</td>
             <td>
-              <div class="mk-actions">
-                <button type="button" class="mk-icon-btn mk-icon-btn--text" title="画像" @click="openSubPage('virtual', s.id)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg><span>画像</span></button>
+              <div class="mk-actions mk-actions--left">
+                <!-- live：整行点击即进入画像详情，此处只留真正的行内操作（运行 / 更多） -->
+                <button
+                  v-if="!isLive"
+                  type="button"
+                  class="mk-icon-btn mk-icon-btn--text"
+                  title="查看画像：故事池 / 运行记录 / 会话控制"
+                  @click="openSubPage('virtual', s.id)"
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg><span>画像</span></button>
                 <button
                   v-if="isLive"
                   type="button"
                   class="mk-icon-btn mk-icon-btn--text"
                   :class="{ 'mk-link--muted': s.storyCount === 0 }"
-                  :title="s.storyCount === 0 ? '需先生成故事' : '运行'"
+                  :title="s.storyCount === 0 ? '需先生成故事才能运行' : '运行：启动一次新的实验会话（不影响已有会话）'"
                   @click.stop="openLaunch(s)"
                 ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8V4z"/></svg><span>{{ s.storyCount === 0 ? '需故事' : '运行' }}</span></button>
                 <div v-if="isLive" class="mk-menu">
-                  <button type="button" class="mk-menu__btn" aria-label="更多" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(s.id)">⋯</button>
+                  <button type="button" class="mk-menu__btn" aria-label="更多操作（删除）" aria-haspopup="menu" :aria-expanded="menuOpen" :title="'更多操作：删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
                   <div v-if="openMenu === s.id" class="mk-menu__pop" :style="popStyle" @click.stop>
                     <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="busyId === s.id" @click="menuRemove(s)">删除</button>
                   </div>
@@ -234,9 +173,14 @@
         <span>新建虚拟学习者后，在画像页生成故事即可运行。</span>
         <button v-if="isFiltered && samples.length" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
       </div>
-      <div v-if="canMore" class="vl-more">
-        <button type="button" class="mk-link" @click="loadMore">加载更多（已显示 {{ shown.length }} / {{ filtered.length }}）</button>
-      </div>
+      <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
+      <Pagination
+        v-if="filtered.length"
+        v-model:page="page"
+        v-model:pageSize="pageSize"
+        :total="filtered.length"
+        :showTotal="true"
+      />
     </div>
 
     <!-- 批量操作条（对齐 Users.vue 模式：选中后底部浮现；批量删除待 2B 后端打通） -->
@@ -396,21 +340,67 @@
       </div>
     </div>
     </Teleport>
+
+    <!-- 批量新建虚拟学习者 -->
+    <Teleport to="body">
+    <div v-if="batchOpen" ref="batchMaskRef" class="mk-modal" @click.self="batchOpen = false">
+      <div ref="batchPanelRef" class="mk-modal__panel" style="width: min(720px, 100%)" role="dialog" aria-label="批量新建虚拟学习者">
+        <div class="mk-modal__head">
+          <h3 class="mk-modal__title">批量新建虚拟学习者</h3>
+          <button type="button" class="mk-modal__close" aria-label="关闭" @click="batchOpen = false">✕</button>
+        </div>
+        <div class="mk-modal__body">
+          <p class="vl-steps">逐行填写学习者信息，创建后自动为每人生成指定数量的故事。使用「快速填充」可批量生成带编号的名称。</p>
+          <div class="vl-batch-fill">
+            <input v-model="batchPrefix" class="mk-field__input" placeholder="名称前缀" style="width:140px" />
+            <input v-model.number="batchFillCount" type="number" class="mk-field__input" min="1" max="20" placeholder="数量" style="width:80px" />
+            <span class="vl-batch-fill__label">每人</span>
+            <input v-model.number="batchStoryCount" type="number" class="mk-field__input" min="1" max="5" placeholder="故事数" style="width:80px" />
+            <span class="vl-batch-fill__label">个故事</span>
+            <button type="button" class="mk-btn mk-btn--ghost" @click="quickFill">快速填充</button>
+          </div>
+          <div class="vl-batch-table">
+            <div class="vl-batch-row vl-batch-row--head">
+              <span class="vl-batch-col vl-batch-col--name">名称</span>
+              <span class="vl-batch-col vl-batch-col--goal">学习目标</span>
+              <span class="vl-batch-col vl-batch-col--note">备注</span>
+              <span class="vl-batch-col vl-batch-col--story">故事数</span>
+              <span class="vl-batch-col vl-batch-col--act"></span>
+            </div>
+            <div v-for="(r, i) in batchRows" :key="i" class="vl-batch-row">
+              <input v-model="r.name" class="vl-batch-col vl-batch-col--name" placeholder="学习者名称" />
+              <input v-model="r.goal" class="vl-batch-col vl-batch-col--goal" placeholder="学习目标" />
+              <input v-model="r.note" class="vl-batch-col vl-batch-col--note" placeholder="备注" />
+              <input v-model.number="r.storyCount" type="number" class="vl-batch-col vl-batch-col--story" min="0" max="5" />
+              <button type="button" class="vl-batch-col vl-batch-col--act mk-link" @click="batchRows.splice(i, 1)">✕</button>
+            </div>
+          </div>
+          <button type="button" class="mk-link" @click="batchRows.push({ name: '', goal: '', note: '', storyCount: 1 })">+ 添加一行</button>
+          <div v-if="batchError" class="errorbar">{{ batchError }}</div>
+          <button type="button" class="mk-btn mk-btn--primary mk-btn--block" :disabled="batchCreating" @click="doBatchCreate">
+            {{ batchCreating ? '创建中（' + batchProgress + '/' + validBatchCount + '）…' : '创建 ' + validBatchCount + ' 个虚拟学习者' }}
+          </button>
+        </div>
+      </div>
+    </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, liveCreateVirtual, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats } from './live'
-import { adminVirtualLearnersApi, adminBatchExperimentsApi } from '@/api/adminApi'
+import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
-import { useLoadMore } from './useLoadMore'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
+import Pagination from './Pagination.vue'
+import MkOverview from './MkOverview.vue'
+import MkKpi from './MkKpi.vue'
 
 /* 头像色板：按名称哈希取色，同一人恒定同色 */
 const AVATAR_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#64748b']
@@ -488,7 +478,18 @@ function clearFilters() {
 }
 
 /* 长列表分批渲染：每批 15 行 */
-const { shown, canMore, loadMore } = useLoadMore(filtered, 15)
+/* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
+   数据全量在客户端（live 拉取 / demo 本地），筛选后按页切片；
+   筛选/数据变化自动回第 1 页（watch filtered） */
+const page = ref(1)
+const pageSize = ref(15)
+const paged = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filtered.value.slice(start, start + pageSize.value)
+})
+watch(filtered, () => {
+  page.value = 1
+})
 
 /* 新建：人设优先（学习需求由故事产生，不在创建时必填） */
 const createOpen = ref(false)
@@ -767,6 +768,31 @@ const partition = computed(() => {
 /* ===== A5 运行统计：完成率/失败率/平均时长/卡死最长分钟（GET /virtual-learners/stats） ===== */
 const runStats = computed(() => liveVirtualRunStats.value)
 
+/* 仿真概览结论（dashboard 头）：卡死 → warn；有活动会话 → ok；空闲 → muted；
+   完全无数据（无会话/无调用/无活动）时 KPI 区不渲染，避免「无意义 0%」 */
+const hasDashData = computed(() =>
+  (runStats.value.totalSessions ?? 0) > 0
+  || partition.value.running + partition.value.created > 0
+  || (runStats.value.todayCalls ?? 0) > 0
+)
+const dashTone = computed<'warn' | 'ok' | 'muted'>(() =>
+  partition.value.stale > 0 ? 'warn' : partition.value.running + partition.value.created > 0 ? 'ok' : 'muted'
+)
+const dashTitle = computed(() =>
+  partition.value.stale > 0
+    ? `${partition.value.stale} 个会话卡死`
+    : partition.value.running + partition.value.created > 0
+      ? '仿真运行中'
+      : '仿真空闲'
+)
+const dashSubline = computed(() =>
+  partition.value.stale > 0
+    ? '已超出回收阈值，建议一键回收或批量清理'
+    : partition.value.running + partition.value.created > 0
+      ? `${partition.value.running + partition.value.created} 个活动会话`
+      : '新建或运行虚拟学习者开始仿真'
+)
+
 /** 毫秒 → 人类可读时长（分钟/小时） */
 function fmtDuration(ms: number) {
   if (!ms) return '—'
@@ -785,7 +811,7 @@ function fmtMins(mins: number) {
 
 /* ===== A1 批量操作：复选框 + 批量条（对齐 Users.vue 模式） ===== */
 const selected = ref<string[]>([])
-/* batchActionBusy 声明见下方「批量实验面板」区（与批量删除/清理共用同一互斥标志） */
+/* batchActionBusy 声明见下方「批量新建」区（与批量删除/清理共用同一互斥标志） */
 const selectable = computed(() => filtered.value)
 const allChecked = computed(() => selectable.value.length > 0 && selected.value.length === selectable.value.length)
 
@@ -934,121 +960,70 @@ function stageLabel(stage: string | null | undefined): string {
   return s || '—'
 }
 
-/* ===================== 批量实验面板 ===================== */
-const batchPanelOpen = ref(false)
-const batchLoading = ref(false)
+/* ===================== 批量新建 ===================== */
+const batchOpen = ref(false)
 const batchCreating = ref(false)
+const batchPrefix = ref('')
+const batchFillCount = ref(3)
+const batchStoryCount = ref(1)
+const batchProgress = ref(0)
+const batchError = ref('')
+const batchRows = ref<{ name: string; goal: string; note: string; storyCount: number }[]>([{ name: '', goal: '', note: '', storyCount: 1 }])
+const batchPanelRef = ref<HTMLElement | null>(null)
+const batchMaskRef = ref<HTMLElement | null>(null)
 const batchActionBusy = ref(false)
-const batchExperiments = ref<import('@/api/adminApi').BatchExperiment[]>([])
-const batchDetailId = ref<string | null>(null)
-const batchForm = ref<{ name: string; learners: { name: string; learningGoal: string; frictionBudget: string }[] }>({
-  name: '',
-  learners: [
-    { name: '', learningGoal: '', frictionBudget: 'normal' },
-  ],
-})
+useOverlay(computed(() => batchOpen.value), batchPanelRef)
+useMaskClose(batchMaskRef, () => { if (!batchCreating.value) batchOpen.value = false })
 
-/** 运行中的批量实验数（面板标题旁绿标） */
-const runningBatchCount = computed(() => batchExperiments.value.filter((e) => e.status === 'running').length)
+const validBatchCount = computed(() => batchRows.value.filter((r) => r.name.trim()).length)
 
-async function loadBatchExperiments() {
-  batchLoading.value = true
-  try {
-    const res = await adminBatchExperimentsApi.list()
-    batchExperiments.value = (res.data?.data ?? []) as import('@/api/adminApi').BatchExperiment[]
-  } catch (e) {
-    toast.error(`批量实验列表加载失败：${errMsg(e)}`)
-  } finally {
-    batchLoading.value = false
+function quickFill() {
+  const prefix = batchPrefix.value.trim() || '虚拟学习者'
+  const count = Math.max(1, Math.min(20, batchFillCount.value || 3))
+  const stories = Math.max(1, Math.min(5, batchStoryCount.value || 1))
+  batchRows.value = []
+  for (let i = 1; i <= count; i++) {
+    batchRows.value.push({ name: prefix + '-' + String(i).padStart(2, '0'), goal: '', note: '', storyCount: stories })
   }
 }
 
-async function createBatchExperiment() {
-  const name = batchForm.value.name.trim()
-  const learners = batchForm.value.learners
-    .filter((l) => l.name.trim())
-    .map((l) => ({ name: l.name.trim(), learningGoal: l.learningGoal.trim() || undefined, frictionBudget: l.frictionBudget }))
-  if (!name) { toast.error('请填写实验名称'); return }
-  if (!learners.length) { toast.error('至少需要一个学习者名称'); return }
+async function doBatchCreate() {
+  const rows = batchRows.value.filter((r) => r.name.trim())
+  if (!rows.length) { batchError.value = '至少需要一个学习者名称'; return }
+  batchError.value = ''
   batchCreating.value = true
-  try {
-    await adminBatchExperimentsApi.create({ name, learners: learners as import('@/api/adminApi').BatchLearnerInput[] })
-    toast.success(`实验「${name}」已创建并启动`)
-    batchForm.value.name = ''
-    await loadBatchExperiments()
-  } catch (e) {
-    toast.error(`创建失败：${errMsg(e)}`)
-  } finally {
-    batchCreating.value = false
+  batchProgress.value = 0
+  let created = 0
+  let storiesOk = 0
+  for (const r of rows) {
+    try {
+      const story = r.note.trim() || r.name.trim() + '的人物背景待补充'
+      const id = await liveCreateVirtual({ name: r.name.trim(), goal: r.goal.trim(), story })
+      if (id && r.storyCount > 0) {
+        for (let s = 0; s < r.storyCount; s++) {
+          try {
+            await adminVirtualLearnersApi.draftVirtualLearnerStories(id)
+            storiesOk++
+          } catch (e) {
+            console.error('生成故事失败 ' + r.name.trim() + ':', e)
+          }
+        }
+      }
+      created++
+    } catch (e) {
+      console.error('批量创建 ' + r.name.trim() + ' 失败:', e)
+    }
+    batchProgress.value++
+  }
+  batchCreating.value = false
+  batchOpen.value = false
+  if (created > 0) {
+    toast.success('已创建 ' + created + ' 个虚拟学习者（生成 ' + storiesOk + ' 个故事）' + (created < rows.length ? '，' + (rows.length - created) + ' 个失败' : ''))
+    void loadLiveData()
+  } else {
+    toast.error('批量创建失败，请检查网络后重试')
   }
 }
-
-function toggleBatchDetail(id: string) {
-  batchDetailId.value = batchDetailId.value === id ? null : id
-  if (batchDetailId.value) void loadBatchExperiments()
-}
-
-async function stopBatchExperiment(id: string) {
-  try {
-    await adminBatchExperimentsApi.stop(id)
-    toast.success('实验已停止')
-    await loadBatchExperiments()
-  } catch (e) {
-    toast.error(`停止失败：${errMsg(e)}`)
-  }
-}
-
-async function runAction(fn: () => Promise<unknown>, okMsg: string) {
-  batchActionBusy.value = true
-  try {
-    await fn()
-    toast.success(okMsg)
-    await loadBatchExperiments()
-  } catch (e) {
-    toast.error(`${errMsg(e)}`)
-  } finally {
-    batchActionBusy.value = false
-  }
-}
-
-function advanceBatchRun(expId: string, runId: string) {
-  void runAction(() => adminBatchExperimentsApi.advanceRun(expId, runId), '已请求推进一步（调度器会自动继续）')
-}
-function decayBatchRun(expId: string, runId: string) {
-  void runAction(() => adminBatchExperimentsApi.decayRun(expId, runId), '已触发跨日衰减模拟（3/7/14 天逐档）')
-}
-function snapshotBatchRun(expId: string, runId: string) {
-  void runAction(() => adminBatchExperimentsApi.snapshotRun(expId, runId), '已生成画像快照')
-}
-
-function phaseLabel(phase: string): string {
-  const map: Record<string, string> = {
-    setup: '准备', goal: 'Goal', path: 'Path', learn: 'Learn',
-    'learn-done': '学完', decay: '衰减中', done: '完成', failed: '失败',
-  }
-  return map[phase] || phase
-}
-
-function decaySummary(decaySims: string): string {
-  try {
-    const sims = JSON.parse(decaySims) as { days: number; traceCount: number }[]
-    return sims.map((s) => `${s.days}天(概念${s.traceCount})`).join(' → ')
-  } catch { return decaySims.slice(0, 60) }
-}
-
-function fmtTime(t: string): string {
-  try { return new Date(t).toLocaleString('zh-CN', { hour12: false }).slice(5, 19) } catch { return t }
-}
-
-// 轮询刷新（面板展开时）
-watch(batchPanelOpen, (open) => {
-  if (open) void loadBatchExperiments()
-})
-
-// 进页即拉取批量实验（供「运行中」绿标展示，无需先展开面板）
-onMounted(() => {
-  if (isLive.value) void loadBatchExperiments()
-})
 </script>
 
 <style scoped>
@@ -1088,8 +1063,8 @@ onMounted(() => {
   vertical-align: middle;
 }
 .vl-goal--empty { color: var(--mk-faint); font-size: 12px; }
-/* 运行中列：状态胶囊 + 失败/卡死小徽章，统一 flex 间距（原元素堆叠无留白） */
-.vl-run-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 26px; }
+/* 状态列：运行中胶囊 / 失败数 / 卡死徽章 分列展示（一列一语义） */
+.vl-state-cell { display: flex; align-items: center; min-height: 26px; }
 .vl-run {
   display: inline-flex;
   align-items: center;
@@ -1109,21 +1084,49 @@ onMounted(() => {
   cursor: pointer;
 }
 .vl-run--live:hover { background: rgba(16, 185, 129, 0.2); }
-.vl-run--stalled { color: var(--mk-red, #dc2626); background: rgba(220, 38, 38, 0.1); }
-.vl-run--stalled:hover { background: rgba(220, 38, 38, 0.18); }
 .vl-run--live .vl-run__dot { background: #10b981; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); animation: vl-pulse 1.6s infinite; }
-/* 失败/卡死状态标注：bad 色（对齐 mk-badge--bad）；间距由 .vl-run-cell 统一控制 */
-.vl-badge {
+/* 失败列：全量聚合数字（>0 标红，可点击直达画像页的重试入口） */
+.vl-num--bad { color: var(--mk-red, #dc2626); font-weight: 800; }
+.vl-faillink {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.vl-faillink:hover { color: var(--mk-blue); background: #eff6ff; box-shadow: 0 0 0 3px #eff6ff; }
+/* 卡死列：红色徽章（>0 才显示；否则灰 —） */
+.vl-stall {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  padding: 2px 9px;
   border-radius: 999px;
+  background: rgba(220, 38, 38, 0.1);
+  color: var(--mk-red, #dc2626);
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 800;
   white-space: nowrap;
+  cursor: help;
 }
-.vl-badge--bad { background: rgba(220, 38, 38, 0.1); color: var(--mk-red, #dc2626); }
+.mk-num--na { color: var(--mk-faint); font-weight: 600; }
 .vl-status-run { color: #047857; font-weight: 700; }
+
+/* ===== 批量新建表格 ===== */
+.vl-batch-fill { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.vl-batch-table { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.vl-batch-row { display: flex; gap: 8px; align-items: center; }
+.vl-batch-row--head { font-size: 11px; font-weight: 700; color: var(--mk-faint); letter-spacing: 0.04em; padding-bottom: 4px; }
+.vl-batch-col--name { flex: 2; min-width: 100px; }
+.vl-batch-col--goal { flex: 2; min-width: 100px; }
+.vl-batch-col--note { flex: 1.5; min-width: 80px; }
+.vl-batch-col--story { width: 60px; flex-shrink: 0; text-align: center; }
+.vl-batch-col--act { width: 24px; flex-shrink: 0; text-align: center; }
+.vl-batch-fill__label { font-size: 12px; color: var(--mk-muted); white-space: nowrap; }
+.vl-batch-row input { padding: 7px 10px; border: 1px solid var(--mk-line); border-radius: 6px; font-size: 13px; background: var(--mk-surface); color: var(--mk-ink); outline: none; }
+.vl-batch-row input:focus { border-color: var(--mk-blue); box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.12); }
+.vl-steps { font-size: 12.5px; color: var(--mk-muted); margin: 0 0 12px; line-height: 1.6; }
 .vl-status-fail { color: var(--mk-red, #dc2626); font-weight: 700; }
 .vl-status-stale { color: var(--mk-red, #dc2626); font-weight: 700; }
 .vl-status-dur { color: var(--mk-muted, #5b6577); font-weight: 700; }
@@ -1231,11 +1234,10 @@ onMounted(() => {
   100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
 
-/* 状态条数字强调 */
-.vl-num { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--mk-ink); }
-.vl-status-run .vl-num { color: #047857; }
-.vl-status-fail .vl-num { color: var(--mk-red, #dc2626); }
-.vl-status-stale .vl-num { color: var(--mk-red, #dc2626); }
+/* 状态条语义着色（数字随 mk-status__meta 统一字号，仅保留分区色标） */
+.vl-status-run { color: #047857; }
+.vl-status-fail { color: var(--mk-red, #dc2626); }
+.vl-status-stale { color: var(--mk-red, #dc2626); }
 
 /* 名称头像：按名字哈希取色，同一人恒定同色 */
 .vl-avatar {
@@ -1350,12 +1352,6 @@ onMounted(() => {
 .vl-reclaim-id { font-size: 11px; color: var(--mk-muted, #5b6577); }
 .vl-reclaim-stale { margin-left: auto; color: var(--mk-red, #dc2626); font-weight: 700; white-space: nowrap; }
 .vl-steps--ok { background: #e8f7ee; color: #1a7f4b; }
-.vl-more {
-  display: flex;
-  justify-content: center;
-  padding: 10px 0 12px;
-  border-top: 1px dashed var(--mk-line);
-}
 .vl-steps {
   margin: 0 0 4px;
   padding: 8px 10px;
@@ -1424,7 +1420,6 @@ onMounted(() => {
   .vl-advanced[open] summary { margin-bottom: 9px; }
   .vl-batch { gap: 11px; padding: 10px 14px 10px 18px; font-size: 14px; }
   .vl-batch__btn, .vl-batch__danger { font-size: 14px; padding: 7px 16px; }
-  .vl-badge { font-size: 12px; padding: 2px 10px; margin-left: 7px; }
   .vl-reclaim-item { font-size: 13.5px; padding: 8px 12px; }
   .vl-reclaim-id { font-size: 12.5px; }
   .vl-status-reclaim { font-size: 13px; padding: 6px 14px; }

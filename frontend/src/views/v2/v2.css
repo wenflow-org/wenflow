@@ -20,7 +20,7 @@
   flex-direction: column;
   background: var(--canvas);
   color: var(--ink);
-  font-family: Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", Inter, sans-serif;
 }
 /* 页脚吸底：内容不足一屏时 footer 沉底可见（此前空态页 footer 被挤出折叠线外） */
 .v2-page > .v2footer {
