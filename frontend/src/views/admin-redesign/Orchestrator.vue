@@ -39,7 +39,7 @@
       <SandboxView />
     </div>
 
-    <!-- 阶段工作区：流转图（浏览）+ 字段路由（编辑）+ 治理（查证）一体 -->
+    <!-- 阶段工作区：流转图（浏览）+ 字段路由（编辑，默认收起）+ 治理（查证） -->
     <template v-else-if="current">
       <FieldFlowGraph
         :key="flowKey"
@@ -47,10 +47,21 @@
         @changed="onRoutingChanged"
         @stage="onStageChange"
       />
-      <FieldRoutingTable :stage="active" @changed="onRoutingChanged" />
-      <details class="orch-govern" :open="governOpen">
-        <summary class="orch-govern__summary">治理：漂移报告 + 变更审计</summary>
-        <div class="orch-govern__body">
+      <details class="orch-fold">
+        <summary class="orch-fold__summary">
+          字段路由与编排文件
+          <span class="orch-fold__meta">{{ current.skills.length }} Skill · 点开批量查阅 / 编辑编排 YAML</span>
+        </summary>
+        <div class="orch-fold__body">
+          <FieldRoutingTable :stage="active" @changed="onRoutingChanged" />
+        </div>
+      </details>
+      <details class="orch-fold" :open="governOpen">
+        <summary class="orch-fold__summary">
+          治理：漂移报告 + 变更审计
+          <span class="orch-fold__meta">编辑后核对文件与库一致</span>
+        </summary>
+        <div class="orch-fold__body">
           <DriftAuditPanel :stage="active" />
         </div>
       </details>
@@ -373,23 +384,25 @@ void stageTitle.value
 .orch-stage-tab.is-active .orch-stage-tab__name { color: var(--mk-blue); }
 .orch-stage-tab__meta { font-size: 10.5px; font-weight: 600; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 
-/* 治理折叠区（每阶段内）+ 沙盘头部 */
-.orch-govern {
+/* 折叠层（字段路由 / 治理）：阶段工作区的查阅层，默认收起 */
+.orch-fold {
   margin-top: 12px;
   border: 1px solid var(--mk-line); border-radius: 10px;
   background: #fff;
 }
-.orch-govern__summary {
-  padding: 9px 14px;
+.orch-fold__summary {
+  padding: 10px 14px;
+  display: flex; align-items: center; gap: 10px;
   font-size: 12px; font-weight: 800; color: var(--mk-muted);
   cursor: pointer; user-select: none;
   list-style: none;
 }
-.orch-govern__summary::-webkit-details-marker { display: none; }
-.orch-govern__summary::before { content: '▸ '; color: var(--mk-blue); }
-details[open].orch-govern .orch-govern__summary::before { content: '▾ '; }
-.orch-govern__summary:hover { color: var(--mk-blue); }
-.orch-govern__body { padding: 0 14px 14px; }
+.orch-fold__summary::-webkit-details-marker { display: none; }
+.orch-fold__summary::before { content: '▸ '; color: var(--mk-blue); }
+details[open].orch-fold .orch-fold__summary::before { content: '▾ '; }
+.orch-fold__summary:hover { color: var(--mk-blue); }
+.orch-fold__meta { font-size: 11px; font-weight: 600; color: var(--mk-faint); }
+.orch-fold__body { padding: 0 14px 14px; }
 
 /* 沙盘（深链次要入口）顶部条 */
 .orch-pane-head {

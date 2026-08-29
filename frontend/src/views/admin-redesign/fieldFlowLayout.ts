@@ -194,6 +194,8 @@ export interface FocusAnchor {
   kind: 'field' | 'agent'
   y: number
   handoffTargets: string[]
+  /** 聚合卡：指向本卡的字段数（上游）/ 本卡承接的字段数（下游） */
+  fieldCount: number
 }
 
 /** 当前阶段身份集合：阶段名 / <stage>-agent / 所有组 agentId（handoff 目标匹配） */
@@ -208,40 +210,85 @@ export function focusIdentityOf(stages: FlowStage[], focusStageId: string): Set<
   return ids
 }
 
-/** 上下游锚点：上游=其他阶段 handoff 指向当前阶段的字段（字段级）；下游=当前阶段字段 handoff 出去的目标（agent 级） */
+/** 摘要卡行高（两行卡：agent 名 + 字段/统计行） */
+export const FLOW_CARD_H = 64
+export const FLOW_GAP = 12
+
+/**
+ * 上下游流量摘要（聚合版）：上游=来源 agent → 本阶段的字段流（按 agent 聚合，
+ * handoff 本就是 agent 级，聚合卡比逐字段罗列更诚实也更干净）；下游=本阶段 → 目标 agent。
+ */
 export function computeFocusAnchors(
   stages: FlowStage[],
   focusStageId: string,
 ): { upItems: FocusAnchor[]; downItems: FocusAnchor[]; upH: number; downH: number } {
   const ids = focusIdentityOf(stages, focusStageId)
-  const upItems: FocusAnchor[] = []
-  const downItems: FocusAnchor[] = []
-  let yUp = ANCHOR_Y0
-  let yDown = ANCHOR_Y0
+  // 上游：按来源 agent 聚合
+  const upMap = new Map<string, { agentId: string; stage: FlowStage; targets: Set<string>; fieldCount: number }>()
   for (const s of stages) {
     if (s.id === focusStageId) continue
     for (const g of s.groups) for (const f of g.fields) {
       const hits = f.handoffTargets.filter((t) => ids.has(t))
       if (!hits.length) continue
-      upItems.push({ id: f.id, label: shortName(f.fieldId), sub: s.name, stageId: s.id, kind: 'field', y: yUp, handoffTargets: hits })
-      yUp += 42
+      let entry = upMap.get(g.agentId)
+      if (!entry) {
+        entry = { agentId: g.agentId, stage: s, targets: new Set(), fieldCount: 0 }
+        upMap.set(g.agentId, entry)
+      }
+      for (const t of hits) entry.targets.add(t)
+      entry.fieldCount++
     }
   }
+  const upItems: FocusAnchor[] = []
+  let yUp = ANCHOR_Y0
+  for (const entry of upMap.values()) {
+    upItems.push({
+      id: entry.agentId,
+      label: entry.agentId.replace(/^skill:/, '').replace(/-agent$/, ''),
+      sub: entry.stage.name,
+      stageId: entry.stage.id,
+      kind: 'agent',
+      y: yUp,
+      handoffTargets: [...entry.targets],
+      fieldCount: entry.fieldCount,
+    })
+    yUp += FLOW_CARD_H + FLOW_GAP
+  }
+  // 下游：按目标 agent 聚合（统计承接字段数）
+  const downMap = new Map<string, FocusAnchor>()
+  let yDown = ANCHOR_Y0
   const cur = stages.find((s) => s.id === focusStageId)
-  const seen = new Set<string>()
   if (cur) {
     for (const g of cur.groups) for (const f of g.fields) {
       for (const t of f.handoffTargets) {
         const tStage = stageOfTarget(t)
-        if (!tStage || tStage === focusStageId || seen.has(t)) continue
-        seen.add(t)
-        const st = stages.find((s) => s.id === tStage)
-        downItems.push({ id: `t:${t}`, label: t.replace(/^skill:/, '').replace(/-agent$/, ''), sub: st?.name || tStage, stageId: tStage, kind: 'agent', y: yDown, handoffTargets: [] })
-        yDown += 42
+        if (!tStage || tStage === focusStageId) continue
+        let item = downMap.get(t)
+        if (!item) {
+          const st = stages.find((s) => s.id === tStage)
+          item = {
+            id: t,
+            label: t.replace(/^skill:/, '').replace(/-agent$/, ''),
+            sub: st?.name || tStage,
+            stageId: tStage,
+            kind: 'agent',
+            y: yDown,
+            handoffTargets: [],
+            fieldCount: 0,
+          }
+          downMap.set(t, item)
+          yDown += FLOW_CARD_H + FLOW_GAP
+        }
+        item.fieldCount++
       }
     }
   }
-  return { upItems, downItems, upH: yUp + 24, downH: yDown + 24 }
+  return {
+    upItems,
+    downItems: [...downMap.values()],
+    upH: yUp + 24,
+    downH: yDown + 24,
+  }
 }
 
 /** 聚焦跨列边：上游锚点 → 当前阶段目标组（蓝实线）；当前字段/折叠组头 → 下游锚点（灰虚线） */
@@ -272,7 +319,7 @@ export function computeFocusEdges(
       for (const t of fs.field.handoffTargets) {
         const tStage = stageOfTarget(t)
         if (!tStage || tStage === lane.stage.id) continue
-        const item = downItems.find((d) => d.id === `t:${t}`)
+        const item = downItems.find((d) => d.id === t)
         if (!item) continue
         const to = { x: rightX, y: item.y + 17 }
         const midX = (fp.x + fp.w + to.x) / 2
@@ -293,7 +340,7 @@ export function computeFocusEdges(
           const tStage = stageOfTarget(t)
           if (!tStage || tStage === lane.stage.id || seen.has(t)) continue
           seen.add(t)
-          const item = downItems.find((d) => d.id === `t:${t}`)
+          const item = downItems.find((d) => d.id === t)
           if (!item) continue
           const to = { x: rightX, y: item.y + 17 }
           const midX = (from.x + to.x) / 2

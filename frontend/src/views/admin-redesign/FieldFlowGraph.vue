@@ -9,8 +9,13 @@
     <div v-else class="ffg-frame">
       <div class="ffg-toolbar">
         <div class="ffg-toolbar__status">
-          <strong class="ffg-title">{{ stages.find(s=>s.id===focusStage)?.name || '' }}阶段</strong>
+          <strong class="ffg-title">{{ stages.find(s=>s.id===focusStage)?.name?.replace(/阶段$/, '') || '' }}</strong>
           <span class="ffg-meta">{{ currentFieldCount }} 字段 · {{ currentGroupCount }} 组</span>
+          <template v-if="stageRunStat">
+            <span class="ffg-meta" :class="{ 'ffg-meta--bad': stageRunStat.failed > 0 }">
+              {{ fmtCalls(stageRunStat.calls) }} 调用 · {{ stageRunStat.rate }}% 失败
+            </span>
+          </template>
         </div>
         <div class="ffg-toolbar__controls">
           <div class="ffg-search">
@@ -73,7 +78,7 @@
           />
         </svg>
 
-        <!-- 聚焦模式：上游输入列（其他阶段 handoff 指向当前阶段的字段，精确字段级） -->
+        <!-- 聚焦模式：上游流量摘要（来源 agent → 本阶段，聚合卡） -->
         <div
           v-if="layouts.length"
           class="ffg-anchor ffg-anchor--up"
@@ -84,15 +89,20 @@
             v-for="it in anchorLayout.upItems"
             :key="it.id"
             type="button"
-            class="ffg-anchor__item"
+            class="ffg-flow"
             :style="{ top: `${it.y}px` }"
-            :title="`${it.label} · ${it.sub} → 当前阶段`"
-            @click="jumpToField(it)"
+            :title="`${it.sub} · ${it.label} → 本阶段（${it.fieldCount} 字段）`"
+            @click="jumpToStage(it.stageId)"
           >
-            <span class="ffg-anchor__label mono">{{ it.label }}</span>
-            <span class="ffg-anchor__sub">{{ it.sub }}</span>
+            <span class="ffg-flow__head">
+              <span class="ffg-flow__name mono">{{ it.label }}</span>
+              <span class="ffg-flow__sub">{{ it.sub }}</span>
+            </span>
+            <span class="ffg-flow__meta">
+              <b>{{ it.fieldCount }}</b> 字段<template v-if="groupStatOf(it.id)"> · <b :class="{ 'is-err': groupStatOf(it.id)!.failed > 0 }">{{ fmtCalls(groupStatOf(it.id)!.calls) }}</b> 调用{{ groupStatOf(it.id)!.failed ? ` · ${groupStatOf(it.id)!.failed}✗` : '' }}</template>
+            </span>
           </button>
-          <div v-if="!anchorLayout.upItems.length" class="ffg-anchor__empty">无上游字段</div>
+          <div v-if="!anchorLayout.upItems.length" class="ffg-anchor__empty">无上游输入</div>
         </div>
 
         <!-- 泳道（阶段）绝对定位 -->
@@ -213,7 +223,7 @@
           </div>
         </div>
 
-        <!-- 聚焦模式：下游输出列（当前阶段字段 handoff 出去的目标 agent，agent 级） -->
+        <!-- 聚焦模式：下游输出列（本阶段 → 目标 agent，聚合卡） -->
         <div
           v-if="layouts.length"
           class="ffg-anchor ffg-anchor--down"
@@ -224,15 +234,20 @@
             v-for="it in anchorLayout.downItems"
             :key="it.id"
             type="button"
-            class="ffg-anchor__item"
+            class="ffg-flow"
             :style="{ top: `${it.y}px` }"
-            :title="`当前阶段 → ${it.sub} · ${it.label}`"
-            @click="jumpToField(it)"
+            :title="`本阶段 → ${it.sub} · ${it.label}（${it.fieldCount} 字段）`"
+            @click="jumpToStage(it.stageId)"
           >
-            <span class="ffg-anchor__label mono">{{ it.label }}</span>
-            <span class="ffg-anchor__sub">{{ it.sub }}</span>
+            <span class="ffg-flow__head">
+              <span class="ffg-flow__name mono">{{ it.label }}</span>
+              <span class="ffg-flow__sub">{{ it.sub }}</span>
+            </span>
+            <span class="ffg-flow__meta">
+              <b>{{ it.fieldCount }}</b> 字段<template v-if="groupStatOf(it.id)"> · <b :class="{ 'is-err': groupStatOf(it.id)!.failed > 0 }">{{ fmtCalls(groupStatOf(it.id)!.calls) }}</b> 调用{{ groupStatOf(it.id)!.failed ? ` · ${groupStatOf(it.id)!.failed}✗` : '' }}</template>
+            </span>
           </button>
-          <div v-if="!anchorLayout.downItems.length" class="ffg-anchor__empty">无下游目标</div>
+          <div v-if="!anchorLayout.downItems.length" class="ffg-anchor__empty">无下游输出</div>
         </div>
         </div>
       </div>
@@ -364,7 +379,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { adminFieldRoutingsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
@@ -652,15 +667,18 @@ function fieldStatOf(agentId: string) {
   if (!agentId.startsWith('skill:')) return null
   return skillStats.value.get(agentId.replace(/^skill:/, '')) || null
 }
-/** 组头统计：skill 组直取；桥接 agent 聚合其下 skill */
+/** 组头统计：skill 组直取；桥接 agent 聚合其下 skill；阶段名 → 顶层 agent 聚合 */
 function groupStatOf(agentId: string) {
-  const direct = skillStats.value.get(agentId.replace(/^skill:/, ''))
+  const bare = agentId.replace(/^skill:/, '')
+  const direct = skillStats.value.get(bare)
   if (direct) return direct
+  // 阶段名目标（如 handoff → 'path'）→ 顶层 agent
+  const agentKey = _STAGE_ORDER.includes(bare as (typeof _STAGE_ORDER)[number]) ? `${bare}-agent` : agentId
   let calls = 0
   let failed = 0
   let found = false
   for (const n of liveTopoNodes.value) {
-    if (n.type !== 'skill' || n.parentAgentId !== agentId) continue
+    if (n.type !== 'skill' || n.parentAgentId !== agentKey) continue
     calls += n.stats.totalCalls
     failed += n.stats.failed
     found = true
@@ -718,25 +736,30 @@ function switchStage(s: string) {
   focusId.value = ''
   selected.value = null
 }
-/** 点锚点：跳转对应阶段 + 聚焦字段 */
-function jumpToField(item: import('./fieldFlowLayout').FocusAnchor) {
-  if (item.stageId !== focusStage.value) switchStage(item.stageId)
-  if (item.kind !== 'field') return
-  focusId.value = item.id
-  const hit = allFields.value.find((f) => f.id === item.id)
-  if (hit) {
-    const next = new Set(collapsedGroups.value)
-    next.delete(hit.agentId)
-    collapsedGroups.value = next
-    const nextMinor = new Set(expandedMinorGroups.value)
-    nextMinor.add(hit.agentId)
-    expandedMinorGroups.value = nextMinor
-  }
-  nextTick(() => {
-    const el = ffgCanvasRef.value?.querySelector<HTMLElement>(`[data-fid="${item.id.replace(/["\\]/g, '')}"]`)
-    el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  })
+/** 点摘要卡：跳转对应阶段 */
+function jumpToStage(stageId: string) {
+  switchStage(stageId)
 }
+/** 调用量缩写：2820 → 2.8k */
+function fmtCalls(n: number): string {
+  if (n >= 10000) return `${(n / 10000).toFixed(1)}w`
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
+  return String(n)
+}
+/** 本阶段运行指标（阶段指标条） */
+const stageRunStat = computed(() => {
+  const agentId = `${focusStage.value}-agent`
+  let calls = 0
+  let failed = 0
+  let found = false
+  for (const n of liveTopoNodes.value) {
+    if (n.type !== 'skill' || n.parentAgentId !== agentId) continue
+    calls += n.stats.totalCalls
+    failed += n.stats.failed
+    found = true
+  }
+  return found ? { calls, failed, rate: calls ? Math.round((failed / calls) * 1000) / 10 : 0 } : null
+})
 
 /* ================= 缩放 / 平移（画布适配视口，根治长图一屏看不完） ================= */
 const ffgCanvasRef = ref<HTMLElement | null>(null)
@@ -998,8 +1021,7 @@ async function saveEdit() {
 .ffg-search__clear:hover { background: #cbd5e1; color: var(--mk-ink); }
 
 /* 聚焦模式：上下游锚点列 */
-.ffg-anchor {
-  position: absolute; top: 0; z-index: 2;
+.ffg-anchor {  position: absolute; top: 0; z-index: 2;
   width: 240px; box-sizing: border-box;
   background: #f8fafd; border: 1px solid var(--mk-line);
   border-radius: 10px;
@@ -1027,6 +1049,24 @@ async function saveEdit() {
 .ffg-anchor__label { font-size: 10.5px; font-weight: 700; color: var(--mk-ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ffg-anchor__sub { font-size: 9.5px; font-weight: 700; color: var(--mk-blue); background: #eff6ff; border-radius: 6px; padding: 1px 5px; white-space: nowrap; flex-shrink: 0; }
 .ffg-anchor__empty { position: absolute; left: 12px; top: 40px; font-size: 11px; color: var(--mk-faint); }
+
+/* 流量摘要卡（两行：agent 名+阶段 / 字段数+调用统计） */
+.ffg-flow {
+  position: absolute; left: 12px; width: 216px; height: 64px;
+  display: flex; flex-direction: column; justify-content: center; gap: 3px;
+  padding: 0 10px; box-sizing: border-box;
+  border: 1px solid var(--mk-line); border-radius: 9px;
+  background: #fff; font: inherit; text-align: left; cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.ffg-flow:hover { border-color: var(--mk-blue); box-shadow: 0 2px 10px rgba(44, 99, 208, 0.12); }
+.ffg-flow__head { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.ffg-flow__name { font-size: 11.5px; font-weight: 800; color: var(--mk-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ffg-flow__sub { flex-shrink: 0; font-size: 9.5px; font-weight: 700; color: var(--mk-blue); background: #eff6ff; border-radius: 6px; padding: 1px 6px; }
+.ffg-flow__meta { font-size: 10px; font-weight: 600; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ffg-flow__meta b { color: var(--mk-ink); font-weight: 800; }
+.ffg-flow__meta b.is-err { color: #dc2626; }
+.ffg-meta--bad { color: #dc2626; font-weight: 700; }
 .ffg-switch { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--mk-muted); cursor: pointer; }
 .ffg-legend { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--mk-muted); }
 .lg { width: 9px; height: 5px; display: inline-block; border-radius: 2px; }
