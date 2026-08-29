@@ -304,3 +304,15 @@ export const overviewHealth = computed(() => {
   if (errs > 0) return { tone: 'warn' as const, score: 61, headline: `需要关注：${errs} 次失败`, subline: '教学链路连续 429 限流，伴学已降级介入。' }
   return { tone: 'ok' as const, score: 92, headline: '运行平稳', subline: '学习链路与模型服务都在正常区间。' }
 })
+
+/* ================= 页面数据缓存新鲜度（避免切 tab 重复拉取） ================= */
+const pageFetchedAt = new Map<string, number>()
+/** 页面数据在 ttl 内视为新鲜（无需重拉） */
+export function isPageCacheFresh(key: string, ttlMs = 60_000): boolean {
+  const at = pageFetchedAt.get(key)
+  return typeof at === 'number' && Date.now() - at < ttlMs
+}
+/** 标记页面数据已拉取 */
+export function markPageFetched(key: string) {
+  pageFetchedAt.set(key, Date.now())
+}

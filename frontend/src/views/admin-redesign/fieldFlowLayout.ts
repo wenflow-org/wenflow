@@ -175,6 +175,140 @@ export const canvasW = (layouts: StageLayout[]) =>
   layouts.length ? LANE_X0 * 2 + layouts.length * LANE_W + (layouts.length - 1) * LANE_GAP : 400
 export const canvasH = (layouts: StageLayout[]) => Math.max(560, ...layouts.map((l) => l.laneHeight))
 
+/* ================= 阶段聚焦共享（FieldFlowGraph / Topology 运行时视图共用） ================= */
+export const ANCHOR_W = 240
+export const ANCHOR_X0 = 16
+export const ANCHOR_GAP = 24
+/** 锚点列起始 y（对齐泳道组头下方） */
+export const ANCHOR_Y0 = PAD_TOP + HEAD_H + 34
+/** 聚焦模式下泳道 x（右移让出左锚点列） */
+export const focusLaneX = ANCHOR_X0 + ANCHOR_W + ANCHOR_GAP
+/** 聚焦画布宽（左锚点列 + 泳道 + 右锚点列） */
+export const focusCanvasW = ANCHOR_X0 * 2 + ANCHOR_W * 2 + LANE_W + ANCHOR_GAP * 2
+
+export interface FocusAnchor {
+  id: string
+  label: string
+  sub: string
+  stageId: string
+  kind: 'field' | 'agent'
+  y: number
+  handoffTargets: string[]
+}
+
+/** 当前阶段身份集合：阶段名 / <stage>-agent / 所有组 agentId（handoff 目标匹配） */
+export function focusIdentityOf(stages: FlowStage[], focusStageId: string): Set<string> {
+  const st = stages.find((s) => s.id === focusStageId)
+  const ids = new Set<string>()
+  if (st) {
+    ids.add(st.id)
+    ids.add(st.agentId)
+    for (const g of st.groups) ids.add(g.agentId)
+  }
+  return ids
+}
+
+/** 上下游锚点：上游=其他阶段 handoff 指向当前阶段的字段（字段级）；下游=当前阶段字段 handoff 出去的目标（agent 级） */
+export function computeFocusAnchors(
+  stages: FlowStage[],
+  focusStageId: string,
+): { upItems: FocusAnchor[]; downItems: FocusAnchor[]; upH: number; downH: number } {
+  const ids = focusIdentityOf(stages, focusStageId)
+  const upItems: FocusAnchor[] = []
+  const downItems: FocusAnchor[] = []
+  let yUp = ANCHOR_Y0
+  let yDown = ANCHOR_Y0
+  for (const s of stages) {
+    if (s.id === focusStageId) continue
+    for (const g of s.groups) for (const f of g.fields) {
+      const hits = f.handoffTargets.filter((t) => ids.has(t))
+      if (!hits.length) continue
+      upItems.push({ id: f.id, label: shortName(f.fieldId), sub: s.name, stageId: s.id, kind: 'field', y: yUp, handoffTargets: hits })
+      yUp += 42
+    }
+  }
+  const cur = stages.find((s) => s.id === focusStageId)
+  const seen = new Set<string>()
+  if (cur) {
+    for (const g of cur.groups) for (const f of g.fields) {
+      for (const t of f.handoffTargets) {
+        const tStage = stageOfTarget(t)
+        if (!tStage || tStage === focusStageId || seen.has(t)) continue
+        seen.add(t)
+        const st = stages.find((s) => s.id === tStage)
+        downItems.push({ id: `t:${t}`, label: t.replace(/^skill:/, '').replace(/-agent$/, ''), sub: st?.name || tStage, stageId: tStage, kind: 'agent', y: yDown, handoffTargets: [] })
+        yDown += 42
+      }
+    }
+  }
+  return { upItems, downItems, upH: yUp + 24, downH: yDown + 24 }
+}
+
+/** 聚焦跨列边：上游锚点 → 当前阶段目标组（蓝实线）；当前字段/折叠组头 → 下游锚点（灰虚线） */
+export function computeFocusEdges(
+  lane: StageLayout,
+  upItems: FocusAnchor[],
+  downItems: FocusAnchor[],
+): EdgeGeom[] {
+  const out: EdgeGeom[] = []
+  const layouts = [lane]
+  const rightX = focusLaneX + LANE_W + ANCHOR_GAP
+  for (const item of upItems) {
+    const from = { x: focusLaneX - ANCHOR_GAP, y: item.y + 17 }
+    for (const t of item.handoffTargets) {
+      const to = targetAnchor(layouts, t)
+      if (!to) continue
+      const midX = (from.x + to.x) / 2
+      out.push({
+        d: `M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`,
+        stroke: '#2c63d0', width: 1.3, dashed: false,
+        from: item.id, to: t,
+      })
+    }
+  }
+  for (const slot of lane.slots) {
+    for (const fs of slot.fields) {
+      const fp = fieldPos(lane, fs)
+      for (const t of fs.field.handoffTargets) {
+        const tStage = stageOfTarget(t)
+        if (!tStage || tStage === lane.stage.id) continue
+        const item = downItems.find((d) => d.id === `t:${t}`)
+        if (!item) continue
+        const to = { x: rightX, y: item.y + 17 }
+        const midX = (fp.x + fp.w + to.x) / 2
+        out.push({
+          d: `M ${fp.x + fp.w} ${fp.cy} C ${midX} ${fp.cy}, ${midX} ${to.y}, ${to.x} ${to.y}`,
+          stroke: '#8aa6d8', width: 1.2, dashed: true,
+          from: fs.field.fieldId, to: t,
+        })
+      }
+    }
+    // 折叠组（桥接/次要）：组头右缘 → 下游锚点（聚合，按目标去重）
+    if (slot.foldedCount > 0 && slot.fields.length === 0) {
+      const from = { x: focusLaneX + LANE_W - 12, y: slot.headY + 15 }
+      const fullGroup = lane.stage.groups.find((g) => g.agentId === slot.agentId)
+      const seen = new Set<string>()
+      for (const f of fullGroup?.fields || []) {
+        for (const t of f.handoffTargets) {
+          const tStage = stageOfTarget(t)
+          if (!tStage || tStage === lane.stage.id || seen.has(t)) continue
+          seen.add(t)
+          const item = downItems.find((d) => d.id === `t:${t}`)
+          if (!item) continue
+          const to = { x: rightX, y: item.y + 17 }
+          const midX = (from.x + to.x) / 2
+          out.push({
+            d: `M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`,
+            stroke: '#8aa6d8', width: 1.2, dashed: true,
+            from: slot.agentId, to: t,
+          })
+        }
+      }
+    }
+  }
+  return out
+}
+
 export function fieldPos(layout: StageLayout, f: { y: number }) {
   return {
     x: layout.x + FIELD_X,

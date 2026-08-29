@@ -78,6 +78,28 @@
           />
         </svg>
 
+        <!-- 聚焦模式：上游输入列（来源 skill 调用数叠加） -->
+        <div
+          v-if="viewScope === 'focus' && layouts.length"
+          class="topo-anchor"
+          :style="{ left: `${ANCHOR_X0}px`, top: '0px', height: `${anchorColH}px` }"
+        >
+          <div class="topo-anchor__title">↑ 上游输入</div>
+          <button
+            v-for="it in anchorLayout.upItems"
+            :key="it.id"
+            type="button"
+            class="topo-anchor__item"
+            :style="{ top: `${it.y}px` }"
+            :title="`${it.label} · ${it.sub} → 当前阶段`"
+          >
+            <span class="topo-anchor__label mono">{{ it.label }}</span>
+            <span class="topo-anchor__stat" v-if="anchorStat(it)">{{ anchorStat(it) }}</span>
+            <span class="topo-anchor__sub">{{ it.sub }}</span>
+          </button>
+          <div v-if="!anchorLayout.upItems.length" class="topo-anchor__empty">无上游字段</div>
+        </div>
+
         <!-- 泳道（阶段） -->
         <div
           v-for="lane in layouts"
@@ -133,6 +155,28 @@
             </button>
           </div>
         </div>
+
+        <!-- 聚焦模式：下游输出列（目标 agent 聚合统计） -->
+        <div
+          v-if="viewScope === 'focus' && layouts.length"
+          class="topo-anchor topo-anchor--down"
+          :style="{ left: `${ANCHOR_X0 + ANCHOR_W + ANCHOR_GAP + LANE_W + ANCHOR_GAP}px`, top: '0px', height: `${anchorColH}px` }"
+        >
+          <div class="topo-anchor__title">↓ 下游输出</div>
+          <button
+            v-for="it in anchorLayout.downItems"
+            :key="it.id"
+            type="button"
+            class="topo-anchor__item"
+            :style="{ top: `${it.y}px` }"
+            :title="`当前阶段 → ${it.sub} · ${it.label}`"
+          >
+            <span class="topo-anchor__label mono">{{ it.label }}</span>
+            <span class="topo-anchor__stat" v-if="anchorStat(it)">{{ anchorStat(it) }}</span>
+            <span class="topo-anchor__sub">{{ it.sub }}</span>
+          </button>
+          <div v-if="!anchorLayout.downItems.length" class="topo-anchor__empty">无下游目标</div>
+        </div>
       </div>
     </div>
   </div>
@@ -147,8 +191,12 @@ import { AGENT_TONES } from './store'
 import {
   computeLayouts, computeEdges, canvasW as cw, canvasH as ch,
   buildStage, shortName, type StageDetailLike, type FlowStage, type FlowField,
-  type StageLayout,
+  type StageLayout, type EdgeGeom,
+  ANCHOR_W, ANCHOR_X0, ANCHOR_GAP, LANE_W, focusLaneX, focusCanvasW,
+  computeFocusAnchors, computeFocusEdges, type FocusAnchor,
 } from './fieldFlowLayout'
+
+const props = defineProps<{ stage?: string; scope?: 'focus' | 'all' }>()
 
 /* ================= 缩放 / 平移（沿用原拓扑交互） ================= */
 const canvasRef = ref<HTMLElement | null>(null)
@@ -339,10 +387,38 @@ const collapsedBridges = new Set(['goal-agent', 'path-agent', 'teaching-agent', 
 const isBridgeCollapsed = (agentId: string) => collapsedBridges.has(agentId)
 const isMinorExpanded = () => false
 
-const layouts = computed<StageLayout[]>(() => computeLayouts(stages.value, isBridgeCollapsed, isMinorExpanded))
-const edges = computed(() => computeEdges(layouts.value))
-const cW = computed(() => cw(layouts.value))
-const cH = computed(() => ch(layouts.value))
+/** 视图范围：聚焦（单阶段+上下游锚点，与字段图同款）/ 全览（5 泳道） */
+const viewScope = computed<'focus' | 'all'>(() => props.scope || 'all')
+
+/** 上下游锚点（共享计算） */
+const anchorLayout = computed(() => computeFocusAnchors(stages.value, props.stage || ''))
+
+const anchorColH = computed(() => {
+  if (!layouts.value.length) return 520
+  return Math.max(layouts.value[0].laneHeight, anchorLayout.value.upH, anchorLayout.value.downH)
+})
+
+const layouts = computed<StageLayout[]>(() => {
+  const all = computeLayouts(stages.value, isBridgeCollapsed, isMinorExpanded)
+  if (viewScope.value !== 'focus' || !props.stage) return all
+  const cur = all.find((l) => l.stage.id === props.stage)
+  if (!cur) return []
+  cur.x = focusLaneX
+  return [cur]
+})
+const edges = computed<EdgeGeom[]>(() => {
+  const base = computeEdges(layouts.value)
+  if (viewScope.value !== 'focus' || !layouts.value.length) return base
+  return [...base, ...computeFocusEdges(layouts.value[0], anchorLayout.value.upItems, anchorLayout.value.downItems)]
+})
+const cW = computed(() =>
+  viewScope.value === 'focus' && layouts.value.length ? focusCanvasW : cw(layouts.value)
+)
+const cH = computed(() =>
+  viewScope.value === 'focus' && layouts.value.length
+    ? Math.max(520, anchorColH.value)
+    : ch(layouts.value)
+)
 const canvasHeight = computed(() => (isEmpty.value ? 520 : Math.round(availHeight())))
 
 const isEmpty = computed(() => layouts.value.length === 0 || liveTopoNodes.value.length === 0)
@@ -406,6 +482,23 @@ function fieldStat(agentId: string) {
     return s || null
   }
   return null
+}
+/** 锚点统计徽标：上游字段=来源 skill 调用数；下游目标=目标 agent 聚合调用数 */
+function anchorStat(item: FocusAnchor): string | null {
+  let agentId = ''
+  if (item.kind === 'field') {
+    // item.id = `${agentId}\0${fieldId}` → 来源 skill
+    agentId = item.id.split('\0')[0] || ''
+    const stat = fieldStat(agentId)
+    if (!stat) return null
+    return `${stat.calls} 调用${stat.failed ? ` · ${stat.failed}✗` : ''}`
+  }
+  // 下游 agent：t:<agentId>
+  agentId = item.id.startsWith('t:') ? item.id.slice(2) : ''
+  if (!agentId) return null
+  const stat = groupStat(agentId)
+  if (!stat) return null
+  return `${stat.calls} 调用${stat.failed ? ` · ${stat.failed}✗` : ''}`
 }
 /** 渲染用：字段 id → 统计（模板内单次取值，避免 null 判空问题） */
 const fieldStatsById = computed(() => {
@@ -527,6 +620,35 @@ const toneOf = (id: string) => AGENT_TONES[`${id}-agent`] || { hue: '#64748b', s
 
 .topo-viewport { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .topo-edges { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 1; }
+
+/* 聚焦模式：上下游锚点列（与字段图同款布局） */
+.topo-anchor {
+  position: absolute; top: 0; z-index: 2;
+  width: 240px; box-sizing: border-box;
+  background: #f8fafd; border: 1px solid var(--mk-line);
+  border-radius: 10px;
+}
+.topo-anchor__title {
+  position: absolute; top: 0; left: 0; right: 0;
+  padding: 8px 12px;
+  font-size: 11px; font-weight: 800; color: var(--mk-muted);
+  background: linear-gradient(180deg, #eef2fa, #f8fafd);
+  border-bottom: 1px solid var(--mk-line);
+  border-radius: 10px 10px 0 0;
+}
+.topo-anchor--down .topo-anchor__title { color: var(--mk-blue); }
+.topo-anchor__item {
+  position: absolute; left: 12px; width: 216px; height: 34px;
+  display: flex; align-items: center; gap: 5px;
+  padding: 0 8px; box-sizing: border-box;
+  border: 1px solid var(--mk-line); border-radius: 8px;
+  background: #fff; font: inherit; cursor: pointer;
+}
+.topo-anchor__item:hover { border-color: var(--mk-blue); }
+.topo-anchor__label { font-size: 10px; font-weight: 700; color: var(--mk-ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topo-anchor__stat { font-size: 9px; font-weight: 700; color: var(--mk-muted); white-space: nowrap; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.topo-anchor__sub { font-size: 9.5px; font-weight: 700; color: var(--mk-blue); background: #eff6ff; border-radius: 6px; padding: 1px 5px; white-space: nowrap; flex-shrink: 0; }
+.topo-anchor__empty { position: absolute; left: 12px; top: 40px; font-size: 11px; color: var(--mk-faint); }
 
 .topo-lane {
   position: absolute;

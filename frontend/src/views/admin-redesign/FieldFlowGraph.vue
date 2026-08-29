@@ -33,10 +33,6 @@
           />
           <button v-if="query" type="button" class="ffg-search__clear" title="清除" @click="clearQuery">✕</button>
         </div>
-        <label class="ffg-switch" :title="viewScope === 'focus' ? '当前为阶段聚焦：只看当前阶段 + 上下游' : '全览：5 个阶段泳道全部展示'">
-          <input type="checkbox" :checked="viewScope === 'all'" @change="toggleScope" />
-          <span>全览</span>
-        </label>
         <label class="ffg-switch" :title="groupMode ? '当前为组级视图：只显示组头主干，点组展开字段' : '所有组展开，显示全部字段'">
           <input type="checkbox" v-model="groupMode" @change="onGroupModeChange" />
           <span>组级视图</span>
@@ -416,14 +412,15 @@ type SlotLayout = import('./fieldFlowLayout').SlotLayout
 import {
   STAGE_ORDER as _STAGE_ORDER, STAGE_LABELS, computeLayouts, computeEdges,
   canvasW as _canvasW, canvasH as _canvasH, shortName, stageOfTarget,
-  fieldPos, targetAnchor, PAD_TOP, HEAD_H, LANE_W,
-  type EdgeGeom,
+  LANE_W,
+  ANCHOR_W, ANCHOR_X0, ANCHOR_GAP, focusLaneX, focusCanvasW,
+  computeFocusAnchors, computeFocusEdges, type EdgeGeom,
   buildStage as _buildStage, parseHandoff as _parseHandoff, FOLD_ROLES,
 } from './fieldFlowLayout'
 
 /* ================= props ================= */
-const props = defineProps<{ stage: string }>()
-const emit = defineEmits<{ changed: []; stage: [string] }>()
+const props = defineProps<{ stage: string; scope?: 'focus' | 'all' }>()
+const emit = defineEmits<{ changed: []; stage: [string]; scope: ['focus' | 'all'] }>()
 
 /* ================= 状态 ================= */
 const loading = ref(false)
@@ -588,7 +585,7 @@ function onQueryInput() {
   const hitStage = stageOfField(hit)
   if (hitStage && hitStage !== focusStage.value) {
     focusStage.value = hitStage
-    if (viewScope.value !== 'focus') viewScope.value = 'focus'
+    if (viewScope.value !== 'focus') emitScope('focus')
     emit('stage', hitStage)
   }
   focusId.value = hit.id
@@ -639,71 +636,15 @@ function minorRoleOf(slot: SlotLayout) {
   return slot.fields.length === 0
 }
 
-/* ================= 阶段聚焦模式（每阶段看上下游） ================= */
-const viewScope = ref<'focus' | 'all'>('focus')
+/* ================= 阶段聚焦模式（每阶段看上下游；逻辑共享自 fieldFlowLayout） ================= */
+const viewScope = computed<'focus' | 'all'>(() => props.scope || 'focus')
 const focusStage = ref(props.stage)
-const ANCHOR_W = 240
-const ANCHOR_X0 = 16
-const ANCHOR_GAP = 24
-/** 锚点列起始 y（对齐泳道组头下方） */
-const ANCHOR_Y0 = PAD_TOP + HEAD_H + 34
+const emitScope = (v: 'focus' | 'all') => emit('scope', v)
 
 watch(() => props.stage, (s) => { if (s) focusStage.value = s }, { immediate: true })
 
-interface AnchorItem {
-  id: string
-  label: string
-  sub: string
-  stageId: string
-  kind: 'field' | 'agent'
-  y: number
-  handoffTargets: string[]
-}
-
-/** 当前阶段身份集合：阶段名 / <stage>-agent / 所有组 agentId（handoff 目标匹配） */
-const focusIdentity = computed(() => {
-  const st = stages.value.find((s) => s.id === focusStage.value)
-  const ids = new Set<string>()
-  if (st) {
-    ids.add(st.id)
-    ids.add(st.agentId)
-    for (const g of st.groups) ids.add(g.agentId)
-  }
-  return ids
-})
-
-/** 上下游锚点布局：左列=上游输入字段（其他阶段 handoff 指向当前阶段，精确字段级）；右列=下游输出目标（agent 级） */
-const anchorLayout = computed(() => {
-  const ids = focusIdentity.value
-  const upItems: AnchorItem[] = []
-  const downItems: AnchorItem[] = []
-  let yUp = ANCHOR_Y0
-  let yDown = ANCHOR_Y0
-  for (const s of stages.value) {
-    if (s.id === focusStage.value) continue
-    for (const g of s.groups) for (const f of g.fields) {
-      const hits = f.handoffTargets.filter((t) => ids.has(t))
-      if (!hits.length) continue
-      upItems.push({ id: f.id, label: shortName(f.fieldId), sub: s.name, stageId: s.id, kind: 'field', y: yUp, handoffTargets: hits })
-      yUp += 42
-    }
-  }
-  const cur = stages.value.find((s) => s.id === focusStage.value)
-  const seen = new Set<string>()
-  if (cur) {
-    for (const g of cur.groups) for (const f of g.fields) {
-      for (const t of f.handoffTargets) {
-        const tStage = stageOfTarget(t)
-        if (!tStage || tStage === focusStage.value || seen.has(t)) continue
-        seen.add(t)
-        const st = stages.value.find((s) => s.id === tStage)
-        downItems.push({ id: `t:${t}`, label: t.replace(/^skill:/, '').replace(/-agent$/, ''), sub: st?.name || tStage, stageId: tStage, kind: 'agent', y: yDown, handoffTargets: [] })
-        yDown += 42
-      }
-    }
-  }
-  return { upItems, downItems, upH: yUp + 24, downH: yDown + 24 }
-})
+/** 上下游锚点（共享计算） */
+const anchorLayout = computed(() => computeFocusAnchors(stages.value, focusStage.value))
 
 const anchorColH = computed(() => {
   if (!layouts.value.length) return 560
@@ -724,14 +665,12 @@ const layouts = computed<StageLayout[]>(() => {
   const cur = all.find((l) => l.stage.id === focusStage.value)
   if (!cur) return []
   // 泳道右移：让出左侧上游锚点列
-  cur.x = ANCHOR_X0 + ANCHOR_W + ANCHOR_GAP
+  cur.x = focusLaneX
   return [cur]
 })
 
 const canvasW = computed(() =>
-  viewScope.value === 'focus' && layouts.value.length
-    ? ANCHOR_X0 * 2 + ANCHOR_W * 2 + LANE_W + ANCHOR_GAP * 2
-    : _canvasW(layouts.value)
+  viewScope.value === 'focus' && layouts.value.length ? focusCanvasW : _canvasW(layouts.value)
 )
 const canvasH = computed(() =>
   viewScope.value === 'focus' && layouts.value.length
@@ -746,96 +685,24 @@ const canvasStyleH = computed(() => {
   return `${Math.max(560, Math.round(Math.min(scaled, availHeight() * 1.5)))}px`
 })
 
-/** 聚焦模式跨列边：上游锚点 → 当前泳道目标组；当前泳道字段 → 下游锚点 */
-function focusCrossEdges(): EdgeGeom[] {
-  const lane = layouts.value[0]
-  if (!lane) return []
-  const out: EdgeGeom[] = []
-  const laneX0 = ANCHOR_X0 + ANCHOR_W + ANCHOR_GAP
-  // 上游字段 → 当前阶段目标（agent 级锚点）
-  for (const item of anchorLayout.value.upItems) {
-    const from = { x: laneX0 - ANCHOR_GAP, y: item.y + 17 }
-    for (const t of item.handoffTargets) {
-      const to = targetAnchor(layouts.value, t)
-      if (!to) continue
-      const midX = (from.x + to.x) / 2
-      out.push({
-        d: `M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`,
-        stroke: '#2c63d0', width: 1.3, dashed: false,
-        from: item.id, to: t,
-      })
-    }
-  }
-  // 当前字段 → 下游目标（扩展到折叠组：组头右缘 → 下游锚点）
-  const rightX = laneX0 + LANE_W + ANCHOR_GAP
-  for (const slot of lane.slots) {
-    // 展开字段：字段→下游
-    for (const fs of slot.fields) {
-      const fp = fieldPos(lane, fs)
-      for (const t of fs.field.handoffTargets) {
-        const tStage = stageOfTarget(t)
-        if (!tStage || tStage === lane.stage.id) continue
-        const item = anchorLayout.value.downItems.find((d) => d.id === `t:${t}`)
-        if (!item) continue
-        const to = { x: rightX, y: item.y + 17 }
-        const midX = (fp.x + fp.w + to.x) / 2
-        out.push({
-          d: `M ${fp.x + fp.w} ${fp.cy} C ${midX} ${fp.cy}, ${midX} ${to.y}, ${to.x} ${to.y}`,
-          stroke: '#8aa6d8', width: 1.2, dashed: true,
-          from: fs.field.fieldId, to: t,
-        })
-      }
-    }
-    // 折叠组（桥接/次要）：组头右缘 → 下游锚点（聚合，去重到目标）
-    if (slot.foldedCount > 0 && slot.fields.length === 0) {
-      const from = { x: laneX0 + LANE_W - 12, y: slot.headY + 15 }
-      const fullGroup = lane.stage.groups.find((g) => g.agentId === slot.agentId)
-      const seen = new Set<string>()
-      for (const f of fullGroup?.fields || []) {
-        for (const t of f.handoffTargets) {
-          const tStage = stageOfTarget(t)
-          if (!tStage || tStage === lane.stage.id || seen.has(t)) continue
-          seen.add(t)
-          const item = anchorLayout.value.downItems.find((d) => d.id === `t:${t}`)
-          if (!item) continue
-          const to = { x: rightX, y: item.y + 17 }
-          const midX = (from.x + to.x) / 2
-          out.push({
-            d: `M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`,
-            stroke: '#8aa6d8', width: 1.2, dashed: true,
-            from: slot.agentId, to: t,
-          })
-        }
-      }
-    }
-  }
-  return out
-}
-
 const edges = computed<EdgeGeom[]>(() => {
   const base = computeEdges(layouts.value)
   if (viewScope.value !== 'focus' || !layouts.value.length) return base
-  return [...base, ...focusCrossEdges()]
+  return [...base, ...computeFocusEdges(layouts.value[0], anchorLayout.value.upItems, anchorLayout.value.downItems)]
 })
 const edgeCount = computed(() => edges.value.length)
 const isEmpty = computed(() => layouts.value.length === 0)
-
-/** 切换全览/聚焦 */
-function toggleScope() {
-  viewScope.value = viewScope.value === 'focus' ? 'all' : 'focus'
-  focusId.value = ''
-}
 /** 切换聚焦阶段（同步父级 active，供字段路由/编辑联动） */
 function switchStage(s: string) {
   if (s === focusStage.value && viewScope.value === 'focus') return
   focusStage.value = s
-  if (viewScope.value !== 'focus') viewScope.value = 'focus'
+  if (viewScope.value !== 'focus') emitScope('focus')
   emit('stage', s)
   focusId.value = ''
   selected.value = null
 }
 /** 点锚点：跳转对应阶段 + 聚焦字段 */
-function jumpToField(item: AnchorItem) {
+function jumpToField(item: import('./fieldFlowLayout').FocusAnchor) {
   if (item.stageId !== focusStage.value) switchStage(item.stageId)
   if (item.kind !== 'field') return
   focusId.value = item.id

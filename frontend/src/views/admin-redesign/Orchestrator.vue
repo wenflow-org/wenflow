@@ -30,24 +30,38 @@
       <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'edit' }" @click="viewMode = 'edit'">编辑</button>
     </div>
 
-    <!-- 浏览：字段流转 / 拓扑 —— 同一画布，画布内切换（不丢缩放/平移上下文） -->
+    <!-- 浏览：结构 / 运行 —— 同一画布的数据层切换；范围（聚焦/全览）为页面级开关 -->
     <div v-if="viewMode === 'browse'" class="orch-tabpane">
-      <div class="orch-subtabs" role="tablist">
-        <button
-          type="button"
-          class="orch-subtab"
-          :class="{ 'is-active': browseMode === 'flow' }"
-          @click="browseMode = 'flow'"
-        >字段流转</button>
-        <button
-          type="button"
-          class="orch-subtab"
-          :class="{ 'is-active': browseMode === 'topo' }"
-          @click="browseMode = 'topo'"
-        >拓扑</button>
+      <div class="orch-browsebar">
+        <div class="orch-subtabs" role="tablist">
+          <button
+            type="button"
+            class="orch-subtab"
+            :class="{ 'is-active': browseMode === 'flow' }"
+            @click="browseMode = 'flow'"
+          >结构</button>
+          <button
+            type="button"
+            class="orch-subtab"
+            :class="{ 'is-active': browseMode === 'topo' }"
+            @click="browseMode = 'topo'"
+          >运行</button>
+        </div>
+        <label class="orch-scope" :title="browseScope === 'focus' ? '当前为阶段聚焦：只看当前阶段 + 上下游' : '全览：5 个阶段泳道全部展示'">
+          <input type="checkbox" :checked="browseScope === 'all'" @change="toggleBrowseScope" />
+          <span>全览</span>
+        </label>
       </div>
-      <FieldFlowGraph v-if="browseMode === 'flow'" :key="flowKey" :stage="active" @changed="onRoutingChanged" @stage="onStageChange" />
-      <Topology v-else />
+      <FieldFlowGraph
+        v-if="browseMode === 'flow'"
+        :key="flowKey"
+        :stage="active"
+        :scope="browseScope"
+        @changed="onRoutingChanged"
+        @stage="onStageChange"
+        @scope="browseScope = $event"
+      />
+      <Topology v-else :stage="active" :scope="browseScope" />
     </div>
 
     <!-- 编辑：字段路由（表格 + 编排文件）+ 治理（漂移报告 + 变更审计）——编辑闭环 -->
@@ -89,8 +103,13 @@ import MkOverview from './MkOverview.vue'
 import MkKpi from './MkKpi.vue'
 
 const viewMode = ref<'browse' | 'edit' | 'sandbox'>('browse')
-/** 浏览画布内切换：字段流转（结构） / 拓扑（运行时叠加） */
+/** 浏览画布内切换：结构（字段流转）/ 运行（拓扑叠加） */
 const browseMode = ref<'flow' | 'topo'>('flow')
+/** 视图范围（页面级，结构/运行共享）：聚焦（当前阶段+上下游）/ 全览（5 泳道） */
+const browseScope = ref<'focus' | 'all'>('focus')
+function toggleBrowseScope() {
+  browseScope.value = browseScope.value === 'focus' ? 'all' : 'focus'
+}
 /** 编辑页内治理折叠区（漂移/审计）：?tab=drift 深链时自动展开 */
 const governOpen = ref(false)
 
@@ -409,6 +428,16 @@ void stageTitle.value
 }
 .orch-subtab:hover { color: var(--mk-ink); }
 .orch-subtab.is-active { background: #fff; color: var(--mk-blue); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1); }
+
+/* 浏览控制条：子 tab（结构/运行）+ 范围开关（聚焦/全览） */
+.orch-browsebar { display: flex; align-items: center; gap: 14px; margin: 8px 0 10px; }
+.orch-browsebar .orch-subtabs { margin: 0; }
+.orch-scope {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 700; color: var(--mk-muted); cursor: pointer;
+  padding: 4px 10px; background: #eef2fa; border-radius: 8px;
+}
+.orch-scope:hover { color: var(--mk-ink); }
 
 /* 编辑页内治理折叠区（漂移报告 + 变更审计）：编辑闭环的查证端 */
 .orch-govern {
