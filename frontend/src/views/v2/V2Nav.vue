@@ -13,6 +13,7 @@
         >{{ item.label }}</router-link>
       </nav>
       <div class="v2nav__right">
+        <NotificationsBell />
         <V2TaskCenter />
         <router-link
           to="/goal-conversation"
@@ -66,6 +67,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useUserStore } from '@/stores/user';
 import { toast } from '@/utils/toast';
 import V2TaskCenter from './V2TaskCenter.vue';
+import NotificationsBell from '@/components/NotificationsBell.vue';
 
 const route = useRoute();
 const router = useRouter();

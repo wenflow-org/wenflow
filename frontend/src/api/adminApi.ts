@@ -1452,6 +1452,45 @@ export const adminPromptOpsApi = {
     return adminAxios.get('/admin/prompt-ops/skill-catalog');
   },
 
+  // ===== 评估用例（eval-cases） =====
+  getEvalCases: async (agentId?: string) => {
+    return adminAxios.get('/admin/prompt-ops/eval-cases', { params: agentId ? { agentId } : {} });
+  },
+
+  createEvalCase: async (payload: CreateEvalCasePayload) => {
+    return adminAxios.post('/admin/prompt-ops/eval-cases', payload);
+  },
+
+  updateEvalCase: async (id: string, payload: Partial<CreateEvalCasePayload>) => {
+    return adminAxios.put(`/admin/prompt-ops/eval-cases/${encodeURIComponent(id)}`, payload);
+  },
+
+  deleteEvalCase: async (id: string) => {
+    return adminAxios.delete(`/admin/prompt-ops/eval-cases/${encodeURIComponent(id)}`);
+  },
+
+  // ===== 评估运行（run-eval / eval-runs） =====
+  runEval: async (payload: {
+    agentId: string;
+    promptVersionId?: string | null;
+    promptVersion?: number | null;
+    customPrompt?: string;
+    model?: string;
+    repeatCount?: number;
+    caseIds?: string[];
+    adhocCases?: Array<{ id?: string; name?: string; messages: Array<{ role: string; content: string }>; previousState?: unknown; expectations?: unknown }>;
+  }) => {
+    return adminAxios.post('/admin/prompt-ops/run-eval', payload);
+  },
+
+  getEvalRuns: async (agentId?: string, limit?: number) => {
+    return adminAxios.get('/admin/prompt-ops/eval-runs', { params: { agentId: agentId || undefined, limit: limit || undefined } });
+  },
+
+  getEvalRun: async (id: string) => {
+    return adminAxios.get(`/admin/prompt-ops/eval-runs/${encodeURIComponent(id)}`);
+  },
+
 };
 
 // ============================================================
@@ -1755,4 +1794,174 @@ export const getDeletedUsers = async (params?: { page?: number; limit?: number; 
 /** 含已软删用户在内的详情（includeDeleted=1；详情页恢复入口的数据源） */
 export const getUserIncludingDeleted = async (userId: string) => {
   return adminAxios.get(`/admin/users/${encodeURIComponent(userId)}`, { params: { includeDeleted: '1' } });
+};
+
+// ============================================================
+// 成就管理（admin 后台：成就定义 / 解锁记录 / 发放与撤回 / 重检）
+// 后端：backend/src/routes/admin/achievements.ts
+// ============================================================
+
+export interface AchievementDef {
+  id: string;
+  type: string;
+  name: string;
+  description: string;
+  icon: string;
+  xpReward: number;
+  requirement: { type: string; value: number | string };
+  unlockCount: number;
+}
+
+export interface AchievementRecord {
+  id: string;
+  userId: string;
+  type: string;
+  title: string;
+  description: string | null;
+  iconUrl: string | null;
+  xpReward: number;
+  completed: boolean;
+  earnedAt: string | null;
+  createdAt: string;
+  user: { id: string; name: string; email: string; isVirtualLearner: boolean } | null;
+}
+
+export const adminAchievementsApi = {
+  getDefinitions: async () => {
+    return adminAxios.get<{ success: boolean; data: AchievementDef[] }>('/admin/achievements/definitions');
+  },
+  getRecords: async (params?: { page?: number; limit?: number; userId?: string; includeTest?: boolean }) => {
+    return adminAxios.get<{ success: boolean; data: { records: AchievementRecord[]; pagination: { total: number; page: number; limit: number } } }>(
+      '/admin/achievements/records',
+      { params }
+    );
+  },
+  grant: async (userId: string, achievementId: string) => {
+    return adminAxios.post('/admin/achievements/grant', { userId, achievementId });
+  },
+  revoke: async (recordId: string) => {
+    return adminAxios.post('/admin/achievements/revoke', { recordId });
+  },
+  recheck: async (userId: string) => {
+    return adminAxios.post('/admin/achievements/recheck', { userId });
+  },
+};
+
+// ============================================================
+// 内容管理（admin 后台：学习路径治理）
+// 后端：backend/src/routes/admin/learning-content.ts
+// ============================================================
+
+export interface LearningPathRow {
+  id: string;
+  title: string;
+  subject: string;
+  status: string;
+  difficulty: string;
+  estimatedHours: number | null;
+  totalMilestones: number;
+  completedMilestones: number;
+  aiGenerated: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deadline: string | null;
+  user: { id: string; name: string; email: string; isVirtualLearner: boolean } | null;
+  milestoneStatuses: string[];
+  milestoneCount: number;
+}
+
+export interface LearningContentStats {
+  total: number;
+  byStatus: Record<string, number>;
+  bySubject: Array<{ subject: string; count: number }>;
+  totalMilestones: number;
+  totalTasks: number;
+}
+
+export const adminLearningContentApi = {
+  listPaths: async (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    subject?: string;
+    keyword?: string;
+    includeTest?: boolean;
+  }) => {
+    return adminAxios.get<{ success: boolean; data: { paths: LearningPathRow[]; pagination: { total: number; page: number; limit: number } } }>(
+      '/admin/learning-content/paths',
+      { params }
+    );
+  },
+  getPathDetail: async (id: string) => {
+    return adminAxios.get(`/admin/learning-content/paths/${encodeURIComponent(id)}`);
+  },
+  archivePath: async (id: string) => {
+    return adminAxios.post(`/admin/learning-content/paths/${encodeURIComponent(id)}/archive`);
+  },
+  restorePath: async (id: string) => {
+    return adminAxios.post(`/admin/learning-content/paths/${encodeURIComponent(id)}/restore`);
+  },
+  deletePath: async (id: string) => {
+    return adminAxios.delete(`/admin/learning-content/paths/${encodeURIComponent(id)}`);
+  },
+  getStats: async () => {
+    return adminAxios.get<{ success: boolean; data: LearningContentStats }>('/admin/learning-content/stats');
+  },
+};
+
+// ============================================================
+// 运维工具（admin 后台：时间推进模拟 / outbox 死信重放）
+// 后端：backend/src/routes/admin/devtools.ts
+// ============================================================
+
+export const adminDevtoolsApi = {
+  /** 模拟自然天推进（不写库，仅按衰减模型预览画像变化） */
+  advanceTime: async (data: { userId?: string; days?: number; pathId?: string }) => {
+    return adminAxios.post('/admin/devtools/advance-time', data);
+  },
+
+  /** outbox 死信清单（终态死信：worker 不再拾取，需人工确认后重放） */
+  getOutboxDead: async () => {
+    return adminAxios.get<{ success: boolean; data: { deadCount: number; items: Array<{ id: string; eventType: string; userId: string | null; aggregateId: string | null; attemptCount: number; lastError: string | null; occurredAt: string }> } }>(
+      '/admin/devtools/outbox/dead'
+    );
+  },
+
+  /** 死信重放（eventType 可选；缺省全部） */
+  requeueOutboxDead: async (eventType?: string) => {
+    return adminAxios.post('/admin/devtools/outbox/requeue-dead', { eventType });
+  },
+};
+
+// ============================================================
+// 站内通知管理（admin 后台：全员/定向推送）
+// 后端：backend/src/routes/admin/notifications.ts
+// ============================================================
+
+export interface NotificationItem {
+  id: string;
+  userId: string;
+  title: string;
+  body: string | null;
+  kind: string;
+  link: string | null;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+  user: { id: string; name: string; email: string } | null;
+}
+
+export const adminNotificationsApi = {
+  list: async (params?: { page?: number; limit?: number; userId?: string; kind?: string; unreadOnly?: boolean }) => {
+    return adminAxios.get<{ success: boolean; data: { items: NotificationItem[]; pagination: { total: number; page: number; limit: number }; unreadTotal: number } }>(
+      '/admin/notifications',
+      { params }
+    );
+  },
+  send: async (payload: { title: string; body?: string; kind?: string; scope: 'all' | 'user'; userId?: string; link?: string }) => {
+    return adminAxios.post('/admin/notifications', payload);
+  },
+  remove: async (id: string) => {
+    return adminAxios.delete(`/admin/notifications/${encodeURIComponent(id)}`);
+  },
 };

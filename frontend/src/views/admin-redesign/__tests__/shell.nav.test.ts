@@ -35,24 +35,24 @@ describe('Shell 导航', () => {
     }
   });
 
-  it('八个导航分组齐全且顺序稳定', () => {
+  it('九个导航分组齐全且顺序稳定', () => {
     const wrapper = mountShell();
     const groups = wrapper.findAll('.mshell__group-title').map((n) => n.text());
-    expect(groups).toEqual(['总览', '学习者', '仿真实验室', '运行与 Skill', '数据健康', '观测', '配置', '运营']);
+    expect(groups).toEqual(['总览', '学习者', '仿真实验室', 'Skill 管理', '数据健康', '运营', '配置', '观测', '运维']);
   });
 
   it('当前页菜单高亮（active class）', () => {
     const wrapper = mountShell({ current: 'skills' });
     const active = wrapper.findAll('.mshell__item--active');
     expect(active).toHaveLength(1);
-    expect(active[0]!.text()).toContain('Skill 目录');
+    expect(active[0]!.text()).toContain('Skill 运行');
   });
 
   it('点击菜单项 emit navigate(id)', async () => {
     const wrapper = mountShell();
     const skills = wrapper
       .findAll('.mshell__item')
-      .find((n) => n.text().includes('Skill 目录'))!;
+      .find((n) => n.text().includes('Skill 运行'))!;
     await skills.trigger('click');
     expect(wrapper.emitted('navigate')?.[0]).toEqual(['skills']);
   });

@@ -490,11 +490,11 @@
             <span class="mk-field__label">故事级预算（可选，留空继承角色级）</span>
             <label class="mk-field">
               <span class="mk-field__label">单步最大重试</span>
-              <input v-model="editStoryForm.budget.maxRetriesPerStep" type="number" min="1" max="20" class="mk-field__input" placeholder="留空 = 继承角色级（默认 5）" />
+              <input v-model="editStoryForm.budget.maxRetriesPerStep" type="number" min="1" max="20" class="mk-field__input" placeholder="留空 = 继承角色级（默认 8）" />
             </label>
             <label class="mk-field">
               <span class="mk-field__label">会话 AI 调用上限</span>
-              <input v-model="editStoryForm.budget.maxRetriesTotal" type="number" min="1" max="500" class="mk-field__input" placeholder="留空 = 继承角色级（默认 50）" />
+              <input v-model="editStoryForm.budget.maxRetriesTotal" type="number" min="1" max="500" class="mk-field__input" placeholder="留空 = 继承角色级（默认 200）" />
               <span class="mk-field__hint">单个会话累计 AI 调用（含重试）达到上限即终止；防本故事无限跑</span>
             </label>
           </div>
@@ -689,9 +689,9 @@ const quickLearnOpen = ref(false)
 
 /* ===== 运行预算（画像 tab 常驻卡片；画像级持久，新会话创建时作为初始值） ===== */
 const budgetForm = ref({
-  maxRetriesPerStep: 5,
-  maxRetriesTotal: 50,
-  turnCapPerLesson: 24,
+  maxRetriesPerStep: 8,
+  maxRetriesTotal: 200,
+  turnCapPerLesson: 40,
   frictionBudget: 'normal'
 })
 const budgetErrors = ref<{ maxRetriesPerStep?: string; maxRetriesTotal?: string }>({})
@@ -704,9 +704,9 @@ function fillBudgetForm() {
   const b = liveDetail.value?.simulationBudget
   const rp = liveDetail.value?.runtimePrefs
   budgetForm.value = {
-    maxRetriesPerStep: b?.maxRetriesPerStep ?? 5,
-    maxRetriesTotal: b?.maxRetriesTotal ?? 50,
-    turnCapPerLesson: rp?.turnCapPerLesson ?? 24,
+    maxRetriesPerStep: b?.maxRetriesPerStep ?? 8,
+    maxRetriesTotal: b?.maxRetriesTotal ?? 200,
+    turnCapPerLesson: rp?.turnCapPerLesson ?? 40,
     frictionBudget: rp?.frictionBudget || 'normal'
   }
   budgetErrors.value = {}

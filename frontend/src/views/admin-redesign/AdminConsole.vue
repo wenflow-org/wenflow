@@ -83,6 +83,15 @@ const Feedback = asyncPage(() => import('./Feedback.vue'));
 const SessionCockpit = asyncPage(() => import('./SessionCockpit.vue'));
 const VirtualProfile = asyncPage(() => import('./VirtualProfile.vue'));
 const UserDetail = asyncPage(() => import('./UserDetail.vue'));
+const BatchExperiments = asyncPage(() => import('./BatchExperiments.vue'));
+const PromptEval = asyncPage(() => import('./PromptEval.vue'));
+const ContentManager = asyncPage(() => import('./ContentManager.vue'));
+const AchievementsAdmin = asyncPage(() => import('./AchievementsAdmin.vue'));
+const Admins = asyncPage(() => import('./Admins.vue'));
+const Settings = asyncPage(() => import('./Settings.vue'));
+const Devtools = asyncPage(() => import('./Devtools.vue'));
+const ExportData = asyncPage(() => import('./ExportData.vue'));
+const Notifications = asyncPage(() => import('./Notifications.vue'));
 
 const components: Record<string, unknown> = {
   'overview': Overview,
@@ -92,8 +101,10 @@ const components: Record<string, unknown> = {
   'goal-conversations': GoalConversations,
   feedback: Feedback,
   'virtual-learners': VirtualLearners,
+  'batch-experiments': BatchExperiments,
   'skills': Skills,
   'orchestrator': Orchestrator,
+  'prompt-eval': PromptEval,
   'execution-logs': ExecLogs,
   'trace-waterfall': TraceWaterfall,
   'audit-logs': AuditLogs,
@@ -102,7 +113,14 @@ const components: Record<string, unknown> = {
   'announcements': Announcements,
   'session-security': SessionSecurity,
   'skill-workbench': PromptWorkbench,
-  'health-center': HealthCenter
+  'health-center': HealthCenter,
+  'content': ContentManager,
+  'achievements': AchievementsAdmin,
+  'admins': Admins,
+  'settings': Settings,
+  'devtools': Devtools,
+  'export-data': ExportData,
+  'notifications': Notifications
 };
 
 const detailComponents: Record<string, unknown> = {

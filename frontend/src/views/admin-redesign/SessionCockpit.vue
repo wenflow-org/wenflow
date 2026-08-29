@@ -189,9 +189,9 @@
                   type="button"
                   class="cp-learn-tree__lesson"
                   :class="{ 'is-active': viewedLesson?.taskId === l.taskId, [`is-${l.state}`]: true }"
-                  :disabled="!l.teachingSessionId"
-                  :title="l.teachingSessionId ? '查看课堂对话' : '尚未开始'"
-                  @click="l.teachingSessionId && openLesson(l)"
+                  :disabled="busy"
+                  :title="lessonActionTitle(l)"
+                  @click="onLessonClick(l)"
                 >
                   <span class="cp-learn-tree__mark">{{ lessonMark(l.state) }}</span>
                   <span class="cp-learn-tree__num">第{{ lessonNumber(l.taskId) }}课</span>
@@ -1179,6 +1179,37 @@ function openLesson(lesson: LearnLesson) {
   }
 }
 
+/* 课程按钮点击：已有课堂 → 查看对话；未开始（pending）→ 手动选择从该课开始学习。
+   用途：当前课卡住（如回合预算耗尽）时，可跳过直接学习后续课程，不再被 disabled 锁死。 */
+function lessonActionTitle(l: LearnLesson): string {
+  if (l.teachingSessionId) return '查看课堂对话'
+  if (l.state === 'done') return '已完成'
+  return '尚未开始；点击可从该课开始学习（跳过当前卡住的课）'
+}
+async function onLessonClick(l: LearnLesson) {
+  if (l.teachingSessionId) {
+    openLesson(l)
+    return
+  }
+  const id = sessionId.value
+  if (!id || busy.value) return
+  const ok = await askConfirm({
+    title: '从该课开始学习',
+    message: `将从「第 ${lessonNumber(l.taskId)} 课 · ${l.title}」开始学习（跳过当前卡住的课）。\n已完成课程进度保留，未开始课程不会受影响。确认？`,
+    confirmText: '开始学习'
+  })
+  if (!ok) return
+  busy.value = true
+  try {
+    await adminVirtualLearnersApi.startVirtualLearning(id, { taskId: l.taskId })
+    toast.success(`已从「第 ${lessonNumber(l.taskId)} 课」开始学习`)
+    if (!pollingActive.value && !isTerminal.value) startPolling()
+    void refresh()
+  } catch (e) {
+    toast.error(`启动失败：${errMsg(e)}`)
+  } finally { busy.value = false }
+}
+
 /* Learn 空态只反映 Learn 自身状态，不写跨阶段操作引导（解耦：引导在各页操作区与按钮 tooltip） */
 const learnEmptyHint = computed(() => {
   if (isRealMode.value) {
@@ -2093,12 +2124,12 @@ function findingEvidence(report: EvaluationReport, finding: { evidenceIds?: Arra
 
 const frictionBudget = ref<'none' | 'low' | 'normal' | 'high' | 'stress_test'>('normal')
 const frictionSaving = ref(false)
-// 自动学习回合上限（拍板 2026-08-21：前端可配，默认 24，不同课收束节奏不同）
-const learnAutoTurnCap = ref(24)
+// 自动学习回合上限（前端可配，默认 40，不同课收束节奏不同；画像预算可设默认值）
+const learnAutoTurnCap = ref(40)
 
 function clampLearnAutoTurnCap(): number {
   const n = Math.round(Number(learnAutoTurnCap.value))
-  if (!Number.isFinite(n)) return 24
+  if (!Number.isFinite(n)) return 40
   return Math.min(100, Math.max(1, n))
 }
 
@@ -2971,6 +3002,8 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-learn-tree__lesson.is-active { background: #eff6ff; color: var(--mk-blue); border-left-color: var(--mk-blue); font-weight: 700; }
 .cp-learn-tree__lesson.is-done { color: var(--mk-green); }
 .cp-learn-tree__lesson.is-active.is-done { color: var(--mk-blue); }
+/* pending（未开始）也可点击：悬停时提示可从此课开始 */
+.cp-learn-tree__lesson.is-pending:hover { background: #fff8e8; color: var(--mk-amber); }
 .cp-learn-tree__mark { font-size: 10px; width: 14px; text-align: center; flex-shrink: 0; }
 .cp-learn-tree__lesson.is-done .cp-learn-tree__mark { color: var(--mk-green); }
 .cp-learn-tree__lesson.is-active .cp-learn-tree__mark { color: var(--mk-blue); }
