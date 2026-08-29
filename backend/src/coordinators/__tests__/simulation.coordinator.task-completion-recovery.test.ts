@@ -379,11 +379,11 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
 
   it('教学上游重试耗尽后将 Learn 标为失败并保留当前 task 供重启', async () => {
     mockProcessStudentMessage.mockRejectedValue(new Error('API request canceled'))
-    // 重试退避是真实 sleep（5 次尝试共 2+4+6+8=20s），用假时钟快进避免测试超时
+    // 重试退避是真实 sleep（8 次尝试共 2+4+6+8+10+12+14=56s），用假时钟快进避免测试超时
     jest.useFakeTimers()
     try {
       const pending = coordinator.executeLearningStep('simulation-1')
-      await jest.advanceTimersByTimeAsync(30_000)
+      await jest.advanceTimersByTimeAsync(80_000)
       const result = await pending
       const learning = getLearningState()
 
@@ -391,7 +391,7 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
         success: false,
         error: 'API request canceled'
       }))
-      expect(mockProcessStudentMessage).toHaveBeenCalledTimes(5)
+      expect(mockProcessStudentMessage).toHaveBeenCalledTimes(8)
       expect(sessionRecord.status).toBe('failed')
       expect(sessionRecord.currentStage).toBe('teaching')
       expect(learning.taskRuntime).toEqual(expect.objectContaining({
@@ -410,7 +410,7 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
       taskId: 'task-1',
       taskTitle: '任务一',
       teachingSessionId: 'teaching-1',
-      turns: 30
+      turns: 40
     }))
     // 课堂仍在进行：不触发“已完成课堂”的 legacy 恢复分支，让预算检查生效
     mockGetSessionDetail.mockResolvedValue({

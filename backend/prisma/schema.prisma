@@ -781,6 +781,7 @@ model users {
   virtual_learner_profiles  virtual_learner_profiles?
   virtual_sessions          virtual_sessions[]
   password_reset_tokens     password_reset_tokens[]
+  notifications             notifications[]
 
   @@index([deletedAt])
 }
@@ -928,6 +929,26 @@ model announcements {
   //   severity IN ('info','warning','critical')
   @@index([status, publishedAt])
   @@index([status, expiresAt])
+}
+
+// 站内通知（admin 后台定向/全员推送，P2）
+// 用户端通过 GET /api/notifications 拉取；已读状态由通知行 isRead 标记。
+model notifications {
+  id          String    @id @default(uuid())
+  userId      String
+  title       String
+  body        String?
+  kind        String    @default("system") // system | announcement | achievement
+  link        String?
+  isRead      Boolean   @default(false)
+  readAt      DateTime?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  users       users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@index([kind])
 }
 
 // 操作审计日志（admin 后台敏感操作，P1）

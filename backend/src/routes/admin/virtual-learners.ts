@@ -1691,8 +1691,8 @@ router.put('/:id', async (req: Request, res) => {
       const existingBudget = (base.simulationBudget || {}) as Record<string, unknown>;
       const newBudget = { ...existingBudget, ...req.body.simulationBudget };
       // 钳制数值范围（与前端输入框 min/max 一致），防止手误写入超大值导致近无限重试
-      newBudget.maxRetriesPerStep = clampBudgetValue(newBudget.maxRetriesPerStep, 5, 1, 20);
-      newBudget.maxRetriesTotal = clampBudgetValue(newBudget.maxRetriesTotal, 50, 1, 500);
+      newBudget.maxRetriesPerStep = clampBudgetValue(newBudget.maxRetriesPerStep, 8, 1, 20);
+      newBudget.maxRetriesTotal = clampBudgetValue(newBudget.maxRetriesTotal, 200, 1, 500);
       // 保留已消耗的 consumedRetries（不能被前端覆盖）
       newBudget.consumedRetries = existingBudget.consumedRetries || 0;
       nextProfileJson = JSON.stringify({ ...base, simulationBudget: newBudget });

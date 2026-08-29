@@ -233,6 +233,12 @@ import adminSystemStatusRoutes from './routes/admin/system-status';
 import adminMcpRoutes from './routes/admin/mcp';
 import adminHealthCenterRoutes from './routes/admin/health-center';
 import adminGlossaryRoutes from './routes/admin/glossary';
+import adminDevtoolsRoutes from './routes/admin/devtools';
+import adminAchievementsRoutes from './routes/admin/achievements';
+import adminLearningContentRoutes from './routes/admin/learning-content';
+import adminExportRoutes from './routes/admin/export';
+import adminNotificationsRoutes from './routes/admin/notifications';
+import notificationsRoutes from './routes/notifications';
 import aiTeachingRoutes from './routes/ai-teaching.routes';
 import feedbackRoutes from './routes/feedback';
 import configRoutes from './routes/config';
@@ -352,12 +358,23 @@ app.use('/api/admin/feedback', ...adminRouteMiddleware, adminFeedbackRoutes);
 app.use('/api/admin/system', ...adminRouteMiddleware, adminSystemStatusRoutes);
 app.use('/api/admin/health-center', ...adminRouteMiddleware, adminHealthCenterRoutes);
 app.use('/api/admin/glossary', ...adminRouteMiddleware, adminGlossaryRoutes);
+// 运维工具（时间推进模拟 / outbox 死信重放）：路由内部自带 /devtools 前缀，直接挂载到 /api/admin
+app.use('/api/admin', ...adminRouteMiddleware, adminDevtoolsRoutes);
+// 成就管理（成就定义 / 解锁记录 / 发放与撤回）：管理权限 + 审计中间件挂载
+app.use('/api/admin/achievements', ...adminRouteMiddleware, adminAchievementsRoutes);
+// 内容管理（学习路径治理）：管理权限 + 审计中间件挂载
+app.use('/api/admin/learning-content', ...adminRouteMiddleware, adminLearningContentRoutes);
+// 数据导出（CSV 下载）：管理权限 + 审计中间件挂载
+app.use('/api/admin/export', ...adminRouteMiddleware, adminExportRoutes);
+// 站内通知管理（全员/定向推送）：管理权限 + 审计中间件挂载
+app.use('/api/admin/notifications', ...adminRouteMiddleware, adminNotificationsRoutes);
 app.use('/api/admin/prompt-lab', ...adminRouteMiddleware, promptLabRoutes);
 app.use('/api/admin', ...adminRouteMiddleware, adminPlatformRoutes);
 app.use('/api/users', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), userRoutes);
 app.use('/api/agents', authMiddleware, acpContextMiddleware('user'), agentsRoutes);
 app.use('/api/adaptive-guidance', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), adaptiveGuidanceRoutes);
 app.use('/api/ai-teaching', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), aiTeachingRoutes);
+app.use('/api/notifications', authMiddleware, acpContextMiddleware('user'), notificationsRoutes);
 app.use('/api/feedback', authMiddleware, directUserSessionOnly, acpContextMiddleware('user'), feedbackRoutes);
 
 

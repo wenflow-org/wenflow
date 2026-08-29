@@ -65,12 +65,12 @@ const COORDINATOR_ID = 'simulation-agent';
 const ASSISTED_SESSION_LEASE_MS = 10 * 60 * 1000;
 const ASSISTED_SESSION_LEASE_RENEW_MS = 2 * 60 * 1000;
 const LEASE_RETRY_DELAYS_MS = [25, 50, 100];
-const LEARN_UPSTREAM_RETRY_ATTEMPTS = 5;
+const LEARN_UPSTREAM_RETRY_ATTEMPTS = 8;
 const LEARN_UPSTREAM_RETRY_DELAY_MS = 2000;
 /** 一节课的课时预算：超过仍未双方收束则显式失败（可重启恢复），不允许无限拖堂 */
-const LEARN_TASK_TURN_BUDGET = 30;
+const LEARN_TASK_TURN_BUDGET = 40;
 /** 「自动完成本课」单次调用的回合上限（按课界停止，不按里程碑数估算） */
-const LEARN_AUTO_TURN_CAP = 24;
+const LEARN_AUTO_TURN_CAP = 40;
 /** Provider 不稳定时的自动重试上限（每次 executeAutoLearning 循环内） */
 const LEARN_STEP_PROVIDER_RETRIES = 3;
 
