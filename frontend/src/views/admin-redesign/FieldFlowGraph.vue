@@ -8,9 +8,24 @@
         <span class="ffg-sep"></span>
         <span class="ffg-meta"><b>{{ totalFields }}</b> 个字段</span>
         <span class="ffg-meta"><b>{{ edgeCount }}</b> 条流转</span>
-        <span class="ffg-hint">泳道 = 阶段 · 字段按产出分组 · 箭头 = handoff 去向</span>
+        <span class="ffg-hint">泳道 = 阶段 · 组头点击展开字段 · 搜索定位 · 点字段看上下游</span>
       </div>
       <div class="ffg-toolbar__controls">
+        <div class="ffg-search">
+          <input
+            v-model="query"
+            type="search"
+            class="ffg-search__input"
+            placeholder="搜索字段 / Skill…"
+            spellcheck="false"
+            @input="onQueryInput"
+          />
+          <button v-if="query" type="button" class="ffg-search__clear" title="清除" @click="clearQuery">✕</button>
+        </div>
+        <label class="ffg-switch" :title="groupMode ? '当前为组级视图：只显示组头主干，点组展开字段' : '所有组展开，显示全部字段'">
+          <input type="checkbox" v-model="groupMode" @change="onGroupModeChange" />
+          <span>组级视图</span>
+        </label>
         <label class="ffg-switch" :title="showHidden ? '隐藏字段也会显示' : '仅显示对外/流转字段'">
           <input type="checkbox" v-model="showHidden" />
           <span>含隐藏字段</span>
@@ -28,7 +43,24 @@
       <button type="button" class="mk-empty__action" @click="load">重试</button>
     </div>
     <template v-else>
-      <div class="ffg-canvas" :style="{ height: canvasStyleH }">
+      <div
+        ref="ffgCanvasRef"
+        class="ffg-canvas"
+        :style="{ height: canvasStyleH }"
+        @wheel.prevent="onWheel"
+        @pointerdown="onPointerDown"
+        @pointermove="onPointerMove"
+        @pointerup="onPointerUp"
+        @pointerleave="onPointerUp"
+      >
+        <!-- 缩放控件 -->
+        <div class="ffg-zoom" v-if="!isEmpty">
+          <button class="ffg-ctrl" type="button" title="缩小" @click="stepZoom(-1)">−</button>
+          <button class="ffg-ctrl ffg-ctrl--zoom" type="button" :title="zoom === 1 && tx === 0 && ty === 0 ? '当前缩放' : '重置视图'" @click="resetView">{{ Math.round(zoom * 100) }}%</button>
+          <button class="ffg-ctrl" type="button" title="放大" @click="stepZoom(1)">+</button>
+        </div>
+
+        <div class="ffg-viewport" :style="viewportStyle">
         <!-- 连线层（在泳道之下，跨阶段弧线从字段节点引出） -->
         <svg class="ffg-edges" :width="canvasW" :height="canvasH" aria-hidden="true">
           <defs>
@@ -75,22 +107,56 @@
             :key="slot.agentId"
             class="ffg-group"
             :class="{ 'is-bridge': slot.bridge, 'is-collapsed': slot.fields.length === 0 && slot.foldedCount > 0 }"
-            :style="{ top: `${slot.headY}px` }"
+            :style="{ top: `${slot.headY}px`, height: `${30 + slot.fields.length * 42 + (slot.foldedCount ? 22 : 0)}px` }"
           >
             <div
               class="ffg-group__head"
-              :class="{ 'is-clickable': slot.bridge || slot.foldedCount > 0 }"
-              :title="slot.foldedCount > 0 ? '点击展开/折叠次要字段' : ''"
-              @click="slot.bridge ? toggleGroup(slot.agentId) : (slot.foldedCount > 0 && toggleMinor(slot.agentId))"
+              :class="{ 'is-clickable': slot.bridge || slot.foldedCount > 0 || groupMode }"
+              :title="groupMode ? '点击展开/折叠该组字段' : (slot.foldedCount > 0 ? '点击展开/折叠次要字段' : '')"
+              @click="toggleSlot(slot)"
             >
               <span v-if="slot.bridge" class="ffg-group__badge">{{ slot.fields.length === 0 && slot.foldedCount > 0 ? '桥接 ▸' : '桥接 ▾' }}</span>
               <span class="ffg-group__name mono">{{ displayNameOf(slot.agentId) }}</span>
               <span class="ffg-group__count">{{ slot.fields.length }} 字段</span>
               <span v-if="slot.foldedCount" class="ffg-group__fold" :title="minorRoleOf(slot) ? '次要字段（可选补充/控制信号）已折叠，点击展开' : '字段已折叠，点击展开'">▸ {{ slot.foldedCount }}</span>
             </div>
+            <!-- 组级视图：折叠组显示字段预览（渐进披露），未折叠组直接显示完整字段 -->
+            <div v-if="groupMode && slot.foldedCount" class="ffg-group__preview">
+              <button
+                v-for="fs in slot.fields"
+                :key="fs.field.id"
+                type="button"
+                class="ffg-field ffg-field--preview"
+                :class="{
+                  'is-hidden': fs.field.render === 'hidden',
+                  'is-accum': fs.field.accumulate,
+                  'is-internal': fs.field.internal,
+                  'is-locked': fs.field.locked,
+                  'is-handoff': fs.field.handoffTargets.length > 0,
+                  'is-focused': focusId === fs.field.id,
+                  'is-dimmed': dimmed,
+                  'is-related': dimmed && isRelated(fs.field)
+                }"
+                :style="{ top: `${fs.y - slot.headY}px` }"
+                :title="fieldTitle(fs.field)"
+                @click="openField(fs.field)"
+              >
+                <span class="ffg-field__name mono" :title="fs.field.fieldId">{{ shortName(fs.field.fieldId) }}</span>
+                <span class="ffg-field__dot" :title="roleLabel(fs.field.role)"></span>
+              </button>
+              <button
+                v-if="slot.foldedCount"
+                type="button"
+                class="ffg-group__more"
+                :style="{ top: `${30 + slot.fields.length * 42 + 2}px` }"
+                title="展开该组全部字段"
+                @click.stop="toggleSlot(slot)"
+              >+{{ slot.foldedCount }} 更多</button>
+            </div>
 
             <button
               v-for="fs in slot.fields"
+              v-show="!groupMode || !slot.foldedCount"
               :key="fs.field.id"
               type="button"
               class="ffg-field"
@@ -99,25 +165,24 @@
                 'is-accum': fs.field.accumulate,
                 'is-internal': fs.field.internal,
                 'is-locked': fs.field.locked,
-                'is-handoff': fs.field.handoffTargets.length > 0
+                'is-handoff': fs.field.handoffTargets.length > 0,
+                'is-focused': focusId === fs.field.id,
+                'is-dimmed': dimmed,
+                'is-related': dimmed && isRelated(fs.field)
               }"
               :style="{ top: `${fs.y - slot.headY}px` }"
               :title="fieldTitle(fs.field)"
               @click="openField(fs.field)"
             >
               <span class="ffg-field__name mono" :title="fs.field.fieldId">{{ shortName(fs.field.fieldId) }}</span>
-              <span class="ffg-field__tags">
-                <span v-if="fs.field.locked" class="ffg-tag ffg-tag--lock" title="系统锁/结构锁：需改编排文件">锁</span>
-                <span v-if="fs.field.internal" class="ffg-tag ffg-tag--internal" title="内部信令">内</span>
-                <span v-if="fs.field.accumulate" class="ffg-tag ffg-tag--accum" title="累积进学习者状态">累</span>
-                <span class="ffg-tag ffg-tag--role" :title="roleLabel(fs.field.role)">{{ roleLabel(fs.field.role) }}</span>
-              </span>
+              <span class="ffg-field__dot" :title="roleLabel(fs.field.role)"></span>
               <span v-if="fs.field.handoffTargets.length" class="ffg-field__out" title="移交去向">{{ fs.field.handoffTargets[0] }}{{ fs.field.handoffTargets.length > 1 ? ` +${fs.field.handoffTargets.length - 1}` : '' }}</span>
             </button>
             <div v-if="!slot.fields.length" class="ffg-group__empty">
               {{ slot.foldedCount ? `▸ ${slot.foldedCount} 个字段已折叠` : '该组无字段' }}
             </div>
           </div>
+        </div>
         </div>
       </div>
     </template>
@@ -248,7 +313,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { adminFieldRoutingsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
@@ -285,47 +350,19 @@ interface StageDetail {
   promptRoleMeta?: Array<{ id: string; label: string; hint: string }>
 }
 
-interface FlowField {
-  id: string
-  fieldId: string
-  agentId: string
-  description: string
-  valueType: string
-  role: string
-  render: string
-  internal: boolean
-  accumulate: boolean
-  locked: boolean
-  lockLevel: string
-  handoffTargets: string[]
-  pathInRawOutput: string
-  persistKey: string
-  notes: string
-}
-interface FlowGroup {
-  agentId: string
-  bridge: boolean
-  description: string
-  fields: FlowField[]
-}
-interface FlowStage {
-  id: string
-  order: string
-  name: string
-  agentId: string
-  fieldCount: number
-  groups: FlowGroup[]
-}
+type FlowField = import('./fieldFlowLayout').FlowField
+type FlowStage = import('./fieldFlowLayout').FlowStage
+type StageLayout = import('./fieldFlowLayout').StageLayout
+type SlotLayout = import('./fieldFlowLayout').SlotLayout
+import {
+  STAGE_ORDER as _STAGE_ORDER, STAGE_LABELS, computeLayouts, computeEdges,
+  canvasW as _canvasW, canvasH as _canvasH, shortName, stageOfTarget,
+  buildStage as _buildStage, parseHandoff as _parseHandoff, FOLD_ROLES,
+} from './fieldFlowLayout'
 
 /* ================= props ================= */
 const props = defineProps<{ stage: string }>()
 const emit = defineEmits<{ changed: [] }>()
-
-/** 全阶段顺序（泳道顺序 = 编排链路顺序） */
-const STAGE_ORDER = ['goal', 'path', 'teaching', 'profile', 'simulation']
-const STAGE_LABELS: Record<string, string> = {
-  goal: '澄清', path: '规划', teaching: '教学', profile: '画像', simulation: '仿真',
-}
 
 /* ================= 状态 ================= */
 const loading = ref(false)
@@ -340,7 +377,7 @@ const editDraft = reactive({ render: 'visible', handoffText: '', accumulate: fal
 
 /* ================= 角色词表（后端下发，前端回退内置） ================= */
 const roleMeta = computed(() => {
-  for (const s of STAGE_ORDER) {
+  for (const s of _STAGE_ORDER) {
     const meta = detailByStage.value[s]?.promptRoleMeta
     if (meta?.length) return meta
   }
@@ -365,7 +402,7 @@ async function load() {
   error.value = ''
   try {
     const results = await Promise.allSettled(
-      STAGE_ORDER.map(async (s) => {
+      _STAGE_ORDER.map(async (s) => {
         const res = await adminFieldRoutingsApi.getStageDetail(s)
         return { stage: s, detail: (res.data?.data as StageDetail) || null }
       })
@@ -373,7 +410,7 @@ async function load() {
     const next: Record<string, StageDetail | null> = {}
     let firstErr = ''
     results.forEach((r, i) => {
-      const s = STAGE_ORDER[i]
+      const s = _STAGE_ORDER[i]
       if (r.status === 'fulfilled') {
         next[s] = r.value.detail
       } else {
@@ -393,70 +430,18 @@ watch(() => props.stage, () => { selected.value = null; void load() }, { immedia
 defineExpose({ reload: load })
 
 function parseHandoff(raw: string | string[] | null): string[] {
-  if (!raw) return []
-  if (Array.isArray(raw)) return raw
-  try {
-    const arr = JSON.parse(raw)
-    return Array.isArray(arr) ? arr : []
-  } catch {
-    return []
-  }
+  return _parseHandoff(raw)
 }
+void parseHandoff
 
 function buildStage(s: string, d: StageDetail): FlowStage {
-  const fieldById = new Map(d.fields.map((f) => [f.fieldId, f]))
-  const byAgent = new Map<string, RoutingItem[]>()
-  for (const r of d.routings) {
-    const list = byAgent.get(r.agentId) || []
-    list.push(r)
-    byAgent.set(r.agentId, list)
-  }
-  // 阶段内 agent 顺序：skill:<id> 在前（产出组），<stage>-agent 桥接组殿后
-  const agentOrder = (a: string) => (a.startsWith('skill:') ? 0 : 1)
-  const groups = [...byAgent.entries()]
-    .sort((a, b) => agentOrder(a[0]) - agentOrder(b[0]) || a[0].localeCompare(b[0]))
-    .map(([agentId, routings]): FlowGroup => {
-      const bridge = agentId.endsWith('-agent') && !agentId.startsWith('skill:')
-      const fields: FlowField[] = routings
-        .map((r): FlowField => {
-          const f = fieldById.get(r.fieldId)
-          return {
-            id: `${agentId}\0${r.fieldId}`,
-            fieldId: r.fieldId,
-            agentId,
-            description: f?.description || '',
-            valueType: f?.valueType || '',
-            role: f?.promptRole || '',
-            render: r.render,
-            internal: r.internal,
-            accumulate: r.accumulate,
-            locked: r.locks?.level === 'system-locked' || r.locks?.level === 'structure-locked',
-            lockLevel: r.locks?.level || 'fully-editable',
-            handoffTargets: parseHandoff(r.handoff),
-            pathInRawOutput: f?.pathInRawOutput || '',
-            persistKey: f?.persistKey || '',
-            notes: r.notes || '',
-          }
-        })
-        .sort((a, b) => a.fieldId.localeCompare(b.fieldId))
-      const contract = d.agents.find((a) => a.agentId === agentId)
-      return { agentId, bridge, description: contract?.description || '', fields }
-    })
-  const fieldCount = groups.reduce((s2, g) => s2 + g.fields.length, 0)
-  return {
-    id: s,
-    order: String(STAGE_ORDER.indexOf(s) + 1),
-    name: STAGE_LABELS[s] || s,
-    agentId: `${s}-agent`,
-    fieldCount,
-    groups,
-  }
+  return _buildStage(s, d as Parameters<typeof _buildStage>[1])
 }
 
 /** 全阶段泳道（有数据的阶段才显示；保证泳道顺序 = 链路顺序） */
 const stages = computed<FlowStage[]>(() => {
   const out: FlowStage[] = []
-  for (const s of STAGE_ORDER) {
+  for (const s of _STAGE_ORDER) {
     const d = detailByStage.value[s]
     if (!d) continue
     out.push(buildStage(s, d))
@@ -472,30 +457,89 @@ void stageLabel
 function visibleFields(fields: FlowField[]) {
   return showHidden.value ? fields : fields.filter((f) => f.render === 'visible' || f.handoffTargets.length > 0 || f.accumulate)
 }
+void visibleFields
 
 const totalFields = computed(() => stages.value.reduce((s, st) => s + st.fieldCount, 0))
 
-/* ================= 画布与连线（真实坐标 + 跨阶段边） ================= */
-/* 紧凑布局：字段卡单行（名称+徽章），次要字段默认折叠，泳道加宽留白 */
-const LANE_W = 380
-const LANE_GAP = 24
-const LANE_X0 = 16
-const HEAD_H = 48
-const GROUP_H = 30
-const FIELD_H = 34
-const FIELD_GAP = 8
-const FIELD_X = 12
-const FIELD_W = LANE_W - FIELD_X * 2
-const PAD_BOTTOM = 24
-const PAD_TOP = 14
-
-/** 次要角色（可选补充/控制信号/派生展示）默认折叠；组头点击展开看全部 */
-const FOLD_ROLES = new Set(['soft-info', 'control-signal', 'derived-presentation'])
-const minorRole = (f: FlowField) => FOLD_ROLES.has(f.role)
-
+/* ================= 画布与连线（共享布局模块：与拓扑运行时视图同源） ================= */
 /** 折叠状态：桥接组（<stage>-agent）与次要字段组均可点组头展开 */
 const collapsedGroups = ref<Set<string>>(new Set(['goal-agent', 'path-agent', 'teaching-agent', 'profile-agent', 'simulation-agent']))
 const expandedMinorGroups = ref<Set<string>>(new Set())
+/** 组级视图：非桥接 Skill 组默认折叠为组头 + 前 2 字段预览（点组头/"+N 更多"展开）。默认开启——渐进披露，默认只展示主干 */
+const groupMode = ref(true)
+/** 搜索聚焦：输入的字段名 / Skill 名 */
+const query = ref('')
+const focusId = ref('')
+const dimmed = computed(() => !!focusId.value)
+function onGroupModeChange() {
+  // 切换组级视图：清空聚焦（布局高度变化），保持选中
+  focusId.value = ''
+}
+function isRelated(f: FlowField): boolean {
+  if (!focusId.value) return false
+  const focus = allFields.value.find((x) => x.id === focusId.value)
+  if (!focus) return false
+  if (f.id === focus.id) return true
+  // 下游：焦点字段 handoff 指向 f（字段名精确匹配 / 目标 agent 匹配 / 目标阶段匹配）
+  for (const t of focus.handoffTargets) {
+    if (t === f.fieldId || t === f.agentId) return true
+    const tStage = stageOfTarget(t)
+    if (tStage && stageOfField(f) === tStage) return true
+  }
+  // 上游：f 的 handoff 指向焦点字段
+  for (const t of f.handoffTargets) {
+    if (t === focus.fieldId || t === focus.agentId) return true
+    const tStage = stageOfTarget(t)
+    if (tStage && stageOfField(focus) === tStage) return true
+  }
+  return false
+}
+/** 字段所属阶段（按 agentId 找组所在泳道） */
+function stageOfField(f: FlowField): string | null {
+  for (const s of stages.value) {
+    if (s.groups.some((g) => g.agentId === f.agentId)) return s.id
+  }
+  return null
+}
+/** 聚焦字段的 key（用于 handoff 匹配：跨阶段同名字段会串，这里匹配 fieldId 即可） */
+function focusFieldKey(): string {
+  return focusId.value.split('\0').pop() || ''
+}
+void focusFieldKey
+function onQueryInput() {
+  const q = query.value.trim().toLowerCase()
+  if (!q) {
+    focusId.value = ''
+    return
+  }
+  // 在全部字段中找匹配（fieldId / agentId / description / persistKey）
+  const hit = allFields.value.find((f) =>
+    f.fieldId.toLowerCase().includes(q) ||
+    f.agentId.toLowerCase().includes(q) ||
+    f.description.toLowerCase().includes(q) ||
+    (f.persistKey || '').toLowerCase().includes(q)
+  )
+  if (!hit) {
+    focusId.value = ''
+    return
+  }
+  focusId.value = hit.id
+  // 展开所在组：确保能看到它（桥接组 + 组级折叠组都展开）
+  const next = new Set(collapsedGroups.value)
+  next.delete(hit.agentId)
+  collapsedGroups.value = next
+  const nextMinor = new Set(expandedMinorGroups.value)
+  nextMinor.add(hit.agentId)
+  expandedMinorGroups.value = nextMinor
+}
+function clearQuery() {
+  query.value = ''
+  focusId.value = ''
+}
+/** 搜索候选：全部字段（含折叠态不可见的） */
+const allFields = computed<FlowField[]>(() =>
+  stages.value.flatMap((s) => s.groups).flatMap((g) => g.fields)
+)
 function toggleGroup(agentId: string) {
   const next = new Set(collapsedGroups.value)
   if (next.has(agentId)) next.delete(agentId)
@@ -508,227 +552,183 @@ function toggleMinor(agentId: string) {
   else next.add(agentId)
   expandedMinorGroups.value = next
 }
+/** 组头点击：桥接组折叠 / 次要组展开 / 组级视图下 Skill 组展开 */
+function toggleSlot(slot: SlotLayout) {
+  if (slot.bridge) { toggleGroup(slot.agentId); return }
+  if (minorRoleOf(slot)) { toggleMinor(slot.agentId); return }
+  if (groupMode.value) { toggleMinor(slot.agentId); return }
+}
 const isGroupCollapsed = (agentId: string) => collapsedGroups.value.has(agentId)
 const isMinorExpanded = (agentId: string) => expandedMinorGroups.value.has(agentId)
-/** 该组折叠是否因次要角色（用于折叠提示文案） */
-function minorRoleOf(slot: { fields: Array<{ field: FlowField }> }) {
-  return slot.fields.every((fs) => minorRole(fs.field)) || slot.fields.length === 0
+/** 组级视图下，非桥接 Skill 组默认折叠；搜索聚焦时强制展开 */
+const isSkillGroupCollapsed = (agentId: string) => groupMode.value && !expandedMinorGroups.value.has(agentId)
+/** 该组折叠是否因次要角色（用于折叠提示文案；查原始组字段而非折叠后空列表） */
+function minorRoleOf(slot: SlotLayout) {
+  for (const s of stages.value) {
+    const group = s.groups.find((g) => g.agentId === slot.agentId)
+    if (group) return group.fields.length > 0 && group.fields.every((f) => FOLD_ROLES.has(f.role))
+  }
+  return slot.fields.length === 0
 }
 
-/** 长字段名缩写：保留前 2 段 + 末段（hover title 给全名） */
-function shortName(fieldId: string) {
-  const parts = fieldId.split('.')
-  if (parts.length <= 3) return fieldId
-  return `${parts.slice(0, 2).join('.')}…${parts[parts.length - 1]}`
-}
-
-interface StageLayout {
-  stage: FlowStage
-  x: number
-  /** 该泳道内字段节点的绝对坐标表：agentId → 字段列表（每个带 y）+ 组头 y */
-  slots: Array<{ agentId: string; bridge: boolean; fields: Array<{ field: FlowField; y: number }>; foldedCount: number; headY: number }>
-  laneHeight: number
-}
 const layouts = computed<StageLayout[]>(() => {
-  const out: StageLayout[] = []
-  let x = LANE_X0
-  for (const st of stages.value) {
-    let y = PAD_TOP + HEAD_H
-    const slots: StageLayout['slots'] = []
-    for (const g of st.groups) {
-      const list = visibleFields(g.fields)
-      const fieldSlots: StageLayout['slots'][number]['fields'] = []
-      let foldedCount = 0
-      const headY = y
-      y += GROUP_H
-      if (list.length) {
-        for (const f of list) {
-          // 桥接组（<stage>-agent）默认折叠成锚点；次要角色字段默认折叠（可点组头展开）
-          const foldBridge = g.bridge && isGroupCollapsed(g.agentId)
-          const foldMinor = !g.bridge && minorRole(f) && !isMinorExpanded(g.agentId)
-          if (foldBridge || foldMinor) {
-            foldedCount++
-            continue
-          }
-          fieldSlots.push({ field: f, y })
-          y += FIELD_H + FIELD_GAP
-        }
-      }
-      slots.push({ agentId: g.agentId, bridge: g.bridge, fields: fieldSlots, foldedCount, headY })
-    }
-    out.push({ stage: st, x, slots, laneHeight: y + PAD_BOTTOM })
-    x += LANE_W + LANE_GAP
-  }
-  return out
+  // 折叠前先过滤隐藏字段（visibleFields 语义保留在组件层）
+  const filtered = stages.value.map((st) => ({
+    ...st,
+    groups: st.groups.map((g) => ({
+      ...g,
+      fields: showHidden.value ? g.fields : g.fields.filter((f) => f.render === 'visible' || f.handoffTargets.length > 0 || f.accumulate),
+    })),
+  }))
+  return computeLayouts(filtered, isGroupCollapsed, isMinorExpanded, isSkillGroupCollapsed)
 })
 
-const canvasW = computed(() => (layouts.value.length ? LANE_X0 * 2 + layouts.value.length * LANE_W + (layouts.value.length - 1) * LANE_GAP : 400))
-const canvasH = computed(() => Math.max(560, ...layouts.value.map((l) => l.laneHeight)))
+const canvasW = computed(() => _canvasW(layouts.value))
+const canvasH = computed(() => _canvasH(layouts.value))
 /** 画布容器高度 = 最大泳道高度（避免绝对定位泳道被容器裁切） */
-const canvasStyleH = computed(() => `${canvasH.value}px`)
-
-/** 字段 → 画布绝对坐标 */
-function fieldPos(layout: StageLayout, _slot: StageLayout['slots'][number], f: { field: FlowField; y: number }) {
-  return {
-    x: layout.x + FIELD_X,
-    y: f.y,
-    w: FIELD_W,
-    h: FIELD_H,
-    cx: layout.x + FIELD_X + FIELD_W / 2,
-    cy: f.y + FIELD_H / 2,
-  }
-}
-
-/** skill:<id> / <stage>-agent → 所属阶段 id */
-function stageOfTarget(target: string): string | null {
-  if (STAGE_ORDER.includes(target)) return target
-  const bare = target.replace(/^skill:/, '')
-  // 编排定义里的成员 skill 按名映射到阶段（与编排文件 contracts 归属一致）
-  const bySkill: Record<string, string> = {
-    'goal-conversation': 'goal',
-    'path-planning': 'path',
-    'stage-designer': 'path',
-    'teaching-turn': 'teaching',
-    'peer-reinforcement': 'teaching',
-    'session-wrapup': 'teaching',
-    'adaptive-guidance-copy': 'teaching',
-    'learner-model': 'profile',
-    'lesson-knowledge-enricher': 'profile',
-    'virtual-learner-goal-dialogue-simulator': 'simulation',
-    'virtual-learner-path-evaluator': 'simulation',
-    'virtual-learner-learn-turn-simulator': 'simulation',
-    'virtual-learner-referee': 'simulation',
-    'virtual-learner-actor-auditor': 'simulation',
-    'virtual-learner-persona-designer': 'simulation',
-    'virtual-learner-scenario-designer': 'simulation',
-  }
-  if (bySkill[bare]) return bySkill[bare]
-  for (const s of STAGE_ORDER) {
-    if (target === `${s}-agent`) return s
-  }
-  return null
-}
-
-/** 目标 → 目标泳道内的锚点（找该泳道里与目标同 id 的产出组；桥接组折叠时锚到组头） */
-function targetAnchor(layoutsList: StageLayout[], target: string): { x: number; y: number } | null {
-  const tStage = stageOfTarget(target)
-  if (!tStage) return null
-  const lane = layoutsList.find((l) => l.stage.id === tStage)
-  if (!lane) return null
-  const slot = lane.slots.find((s) => s.agentId === target || (target.startsWith('skill:') && s.agentId === target))
-  if (slot) {
-    if (slot.fields.length) {
-      const first = slot.fields[0]
-      return { x: lane.x + FIELD_X + FIELD_W / 2, y: first.y + FIELD_H / 2 }
-    }
-    // 组已折叠（桥接/次要）：锚到组头横条右缘
-    return { x: lane.x + LANE_W - 10, y: PAD_TOP + HEAD_H + 20 }
-  }
-  // 兜底：泳道中线（头部下方）
-  return { x: lane.x + LANE_W / 2, y: PAD_TOP + HEAD_H + 20 }
-}
-
-interface Edge {
-  d: string
-  stroke: string
-  width: number
-  dashed: boolean
-  from: string
-  to: string
-}
-
-const edges = computed<Edge[]>(() => {
-  const out: Edge[] = []
-  const ls = layouts.value
-  if (!ls.length) return out
-  for (const lane of ls) {
-    for (const slot of lane.slots) {
-      // 折叠组（桥接/次要）没有字段节点：从组头聚合锚点引跨阶段边
-      const folded = slot.fields.length === 0 && slot.foldedCount > 0
-      if (folded) {
-        const groupIdx = lane.stage.groups.findIndex((g) => g.agentId === slot.agentId)
-        const anchorY = PAD_TOP + HEAD_H + 26 + groupIdx * 10
-        const from = { x: lane.x + LANE_W - 12, y: anchorY }
-        // 该组字段的 handoff 目标（从全量字段取）
-        const fullGroup = lane.stage.groups.find((g) => g.agentId === slot.agentId)
-        const targets = new Set<string>()
-        for (const f of fullGroup?.fields || []) {
-          for (const t of f.handoffTargets) {
-            const tStage = stageOfTarget(t)
-            if (tStage && tStage !== lane.stage.id) targets.add(t)
-          }
-        }
-        for (const t of targets) {
-          const to = targetAnchor(ls, t)
-          if (!to) continue
-          const midX = (from.x + to.x) / 2
-          out.push({
-            d: `M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`,
-            stroke: '#8aa6d8',
-            width: 1.2,
-            dashed: true,
-            from: slot.agentId,
-            to: t,
-          })
-        }
-        continue
-      }
-      for (const fs of slot.fields) {
-        for (const t of fs.field.handoffTargets) {
-          const tStage = stageOfTarget(t)
-          if (!tStage) continue
-          const from = fieldPos(lane, slot, fs)
-          // 目标就在本泳道（段内桥接：如 skill:goal-conversation → goal-agent）
-          if (tStage === lane.stage.id) {
-            const tSlot = lane.slots.find((s) => s.agentId === t)
-            if (tSlot) {
-              if (tSlot.fields.length) {
-                const first = tSlot.fields[0]
-                const to = { x: lane.x + FIELD_X + FIELD_W / 2, y: first.y - 6 }
-                out.push({
-                  d: `M ${from.cx} ${from.cy} C ${from.cx} ${from.cy + 26}, ${to.x} ${to.y - 26}, ${to.x} ${to.y}`,
-                  stroke: '#2c63d0',
-                  width: 1.4,
-                  dashed: fs.field.render === 'hidden',
-                  from: fs.field.fieldId,
-                  to: t,
-                })
-              } else if (tSlot.foldedCount > 0) {
-                // 桥接组折叠：段内边汇聚到组头锚点
-                const groupIdx = lane.stage.groups.findIndex((g) => g.agentId === t)
-                const to = { x: lane.x + LANE_W - 14, y: PAD_TOP + HEAD_H + 24 + groupIdx * 10 }
-                out.push({
-                  d: `M ${from.cx} ${from.cy} C ${from.cx} ${from.cy + 26}, ${to.x} ${to.y - 26}, ${to.x} ${to.y}`,
-                  stroke: '#8aa6d8',
-                  width: 1.2,
-                  dashed: true,
-                  from: fs.field.fieldId,
-                  to: t,
-                })
-              }
-            }
-            continue
-          }
-          // 跨阶段：水平弧线连到目标泳道
-          const to = targetAnchor(ls, t)
-          if (!to) continue
-          const midX = (from.cx + to.x) / 2
-          out.push({
-            d: `M ${from.cx} ${from.cy} C ${midX} ${from.cy}, ${midX} ${to.y}, ${to.x} ${to.y}`,
-            stroke: '#2c63d0',
-            width: 1.5,
-            dashed: fs.field.render === 'hidden',
-            from: fs.field.fieldId,
-            to: t,
-          })
-        }
-      }
-    }
-  }
-  return out
+/** 画布容器高度：内容缩放后高度（超高部分容器内滚动，不压扁字号） */
+const canvasStyleH = computed(() => {
+  if (isEmpty.value) return '560px'
+  const scaled = canvasH.value * zoom.value
+  return `${Math.max(560, Math.round(Math.min(scaled, availHeight() * 1.5)))}px`
 })
 
+const edges = computed(() => computeEdges(layouts.value))
 const edgeCount = computed(() => edges.value.length)
+const isEmpty = computed(() => layouts.value.length === 0)
+
+/* ================= 缩放 / 平移（画布适配视口，根治长图一屏看不完） ================= */
+const ffgCanvasRef = ref<HTMLElement | null>(null)
+const zoom = ref(1)
+const tx = ref(0)
+const ty = ref(0)
+const panning = ref(false)
+const MIN_ZOOM = 0.35
+const MAX_ZOOM = 2.6
+let userInteracted = false
+let resizeObserver: ResizeObserver | null = null
+const winH = ref(window.innerHeight)
+const globalZoom = ref(1)
+
+function refreshViewport() {
+  const ac = document.querySelector('.ac')
+  const z = ac ? parseFloat((getComputedStyle(ac) as unknown as { zoom?: string }).zoom || '1') : 1
+  globalZoom.value = Number.isFinite(z) && z > 0 ? z : 1
+  winH.value = window.innerHeight
+}
+window.addEventListener('resize', refreshViewport)
+
+const viewportStyle = computed(() => ({
+  width: `${canvasW.value}px`,
+  height: `${canvasH.value}px`,
+  transform: `translate(${tx.value}px, ${ty.value}px) scale(${zoom.value})`,
+}))
+
+/** 可视高度（逻辑空间）：窗口减顶栏与页面内边距 */
+const availHeight = () => Math.max(420, winH.value / globalZoom.value - 104)
+
+/** 初始/重置视图：横向适配视口（宽度优先），纵向保持可读缩放、超高部分滚动 */
+function fitView() {
+  const rect = ffgCanvasRef.value?.getBoundingClientRect()
+  if (!rect || rect.width === 0 || isEmpty.value) return
+  const padding = 20
+  // 只按宽度缩放：内容横跨 5 泳道，高度靠滚动（避免整图压到 60% 字号不可读）
+  const zx = (rect.width / globalZoom.value - padding * 2) / canvasW.value
+  zoom.value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zx))
+  tx.value = Math.max(padding, (rect.width / globalZoom.value - canvasW.value * zoom.value) / 2)
+  ty.value = padding
+}
+
+function zoomAt(anchor: { x: number; y: number }, nextZoomRaw: number) {
+  const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoomRaw))
+  if (nextZoom === zoom.value) return
+  userInteracted = true
+  const ratio = nextZoom / zoom.value
+  tx.value = anchor.x - (anchor.x - tx.value) * ratio
+  ty.value = anchor.y - (anchor.y - ty.value) * ratio
+  zoom.value = nextZoom
+}
+function onWheel(event: WheelEvent) {
+  // 按住 Ctrl/⌘ 或明确缩放意图时缩放；否则纵向滚动画布
+  if (event.ctrlKey || event.metaKey) {
+    event.preventDefault()
+    const factor = event.deltaY < 0 ? 1.14 : 1 / 1.14
+    zoomAt(toCanvasPoint(event), zoom.value * factor)
+    return
+  }
+  const canvas = ffgCanvasRef.value
+  if (!canvas) return
+  // 画布内纵向滚动（内容超高时）
+  const maxScroll = canvas.scrollHeight - canvas.clientHeight
+  if (maxScroll > 0) {
+    canvas.scrollTop = Math.min(maxScroll, Math.max(0, canvas.scrollTop + event.deltaY))
+    if (event.shiftKey) canvas.scrollLeft = Math.min(canvas.scrollWidth - canvas.clientWidth, Math.max(0, canvas.scrollLeft + event.deltaY))
+    return
+  }
+  // 内容未超高：滚轮缩放（保留）
+  const factor = event.deltaY < 0 ? 1.14 : 1 / 1.14
+  zoomAt(toCanvasPoint(event), zoom.value * factor)
+}
+function stepZoom(direction: 1 | -1) {
+  const rect = ffgCanvasRef.value?.getBoundingClientRect()
+  const center = rect ? { x: rect.width / 2, y: rect.height / 2 } : { x: 0, y: 0 }
+  zoomAt(center, zoom.value * (direction > 0 ? 1.25 : 1 / 1.25))
+}
+function resetView() {
+  userInteracted = false
+  fitView()
+}
+function toCanvasPoint(event: { clientX: number; clientY: number }) {
+  const rect = ffgCanvasRef.value?.getBoundingClientRect()
+  if (!rect) return { x: 0, y: 0 }
+  return { x: event.clientX - rect.left, y: event.clientY - rect.top }
+}
+let panOrigin: { x: number; y: number; tx: number; ty: number; pointerId: number } | null = null
+let didPan = false
+function onPointerDown(event: PointerEvent) {
+  if (event.button !== 0) return
+  const point = toCanvasPoint(event)
+  panOrigin = { x: point.x, y: point.y, tx: tx.value, ty: ty.value, pointerId: event.pointerId }
+  didPan = false
+  panning.value = true
+}
+function onPointerMove(event: PointerEvent) {
+  if (!panOrigin) return
+  const point = toCanvasPoint(event)
+  const dx = point.x - panOrigin.x
+  const dy = point.y - panOrigin.y
+  if (!didPan && Math.abs(dx) + Math.abs(dy) > 4) {
+    didPan = true
+    userInteracted = true
+    ffgCanvasRef.value?.setPointerCapture(panOrigin.pointerId)
+  }
+  if (didPan) {
+    tx.value = panOrigin.tx + dx
+    ty.value = panOrigin.ty + dy
+  }
+}
+function onPointerUp() {
+  panOrigin = null
+  panning.value = false
+}
+
+onMounted(() => {
+  refreshViewport()
+  // 布局数据就绪后再 fitView
+  const t = setTimeout(() => { if (!isEmpty.value) fitView() }, 80)
+  resizeObserver = new ResizeObserver(() => {
+    if (!userInteracted) fitView()
+  })
+  if (ffgCanvasRef.value) resizeObserver.observe(ffgCanvasRef.value)
+  watch(layouts, () => {
+    if (!userInteracted) fitView()
+  })
+  onBeforeUnmount(() => {
+    clearTimeout(t)
+    resizeObserver?.disconnect()
+    window.removeEventListener('resize', refreshViewport)
+  })
+})
 
 /* ================= 字段标题 ================= */
 function fieldTitle(f: FlowField) {
@@ -833,6 +833,24 @@ async function saveEdit() {
 .ffg-meta b { color: var(--mk-ink); margin-right: 2px; }
 .ffg-hint { font-size: 11.5px; color: var(--mk-faint); }
 .ffg-toolbar__controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ffg-search { position: relative; display: inline-flex; align-items: center; }
+.ffg-search__input {
+  width: 190px;
+  padding: 5px 26px 5px 10px;
+  border: 1px solid var(--mk-line); border-radius: 8px;
+  font: inherit; font-size: 12px;
+  background: #fbfcfe;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.ffg-search__input:focus { border-color: var(--mk-blue); box-shadow: 0 0 0 3px rgba(44, 99, 208, 0.12); }
+.ffg-search__clear {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 50%; background: #e2e8f0; color: var(--mk-muted);
+  font-size: 9px; line-height: 1; cursor: pointer; padding: 0;
+}
+.ffg-search__clear:hover { background: #cbd5e1; color: var(--mk-ink); }
 .ffg-switch { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--mk-muted); cursor: pointer; }
 .ffg-legend { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--mk-muted); }
 .lg { width: 9px; height: 5px; display: inline-block; border-radius: 2px; }
@@ -847,11 +865,28 @@ async function saveEdit() {
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   background: linear-gradient(180deg, #fbfcff, #f2f5fa);
-  overflow-x: auto;
-  /* 高度自适应内容：绝对定位泳道 + SVG 边层需要容器高度 = 内容高度 */
+  overflow: auto;
   min-height: 560px;
   height: auto;
+  cursor: default;
+  touch-action: none;
+  user-select: none;
 }
+.ffg-canvas.is-panning { cursor: grabbing; }
+.ffg-viewport { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.ffg-zoom {
+  position: absolute; right: 14px; bottom: 12px; z-index: 5;
+  display: flex; align-items: center; gap: 4px; padding: 5px;
+  background: var(--mk-surface); border: 1px solid var(--mk-line); border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(30, 58, 110, 0.1);
+}
+.ffg-ctrl {
+  width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--mk-line); background: var(--mk-surface); color: var(--mk-muted);
+  border-radius: 8px; font-size: 14px; line-height: 1; cursor: pointer;
+}
+.ffg-ctrl:hover { color: var(--mk-blue); border-color: var(--mk-blue); }
+.ffg-ctrl--zoom { width: auto; min-width: 48px; padding: 0 8px; font-size: 11px; font-family: var(--mk-mono); }
 .ffg-lane {
   position: absolute;
   width: 380px;
@@ -946,6 +981,10 @@ async function saveEdit() {
 .ffg-field.is-accum { border-left: 3px solid #d97706; }
 .ffg-field.is-internal { border-left: 3px solid #7c3aed; }
 .ffg-field.is-handoff { border-left: 3px solid var(--mk-blue); }
+/* 聚焦高亮：聚焦字段提亮描边，其余压暗；上下游相关字段保持可见 */
+.ffg-field.is-focused { border-color: var(--mk-blue); box-shadow: 0 0 0 3px rgba(44, 99, 208, 0.18); z-index: 4; }
+.ffg-field.is-dimmed { opacity: 0.35; filter: saturate(0.4); }
+.ffg-field.is-dimmed.is-related { opacity: 1; filter: none; border-color: rgba(44, 99, 208, 0.55); }
 .ffg-field__name {
   font-size: 11.5px;
   font-weight: 700;
@@ -956,7 +995,17 @@ async function saveEdit() {
   flex: 1;
   min-width: 0;
 }
-.ffg-field__tags { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }
+/* 角色色点（替代旧的多标签：锁/内/累进抽屉与 title） */
+.ffg-field__dot {
+  flex-shrink: 0;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--mk-faint);
+  box-shadow: 0 0 0 2px rgba(100, 116, 139, 0.14);
+}
+.ffg-field.is-accum .ffg-field__dot { background: #d97706; box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.16); }
+.ffg-field.is-internal .ffg-field__dot { background: #7c3aed; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.16); }
+.ffg-field.is-handoff .ffg-field__dot { background: var(--mk-blue); box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.16); }
+.ffg-field.is-locked .ffg-field__dot { background: #dc2626; box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.16); }
 .ffg-field__out {
   flex-shrink: 0;
   max-width: 88px;
@@ -984,6 +1033,33 @@ async function saveEdit() {
   font-size: 10.5px;
   color: var(--mk-faint);
 }
+
+/* 组级视图：组头下的字段预览（微缩卡，仅名字+角色点）——容器覆盖组头区域，字段/按钮 top 统一相对组头 */
+.ffg-group__preview { position: absolute; left: 0; right: 0; top: 0; height: 0; }
+.ffg-field--preview {
+  height: 34px;
+  border-color: transparent;
+  background: #f8fafd;
+  box-shadow: none;
+  cursor: pointer;
+}
+.ffg-field--preview:hover { border-color: var(--mk-blue); background: #fff; }
+.ffg-field--preview.is-focused { border-color: var(--mk-blue); box-shadow: 0 0 0 3px rgba(44, 99, 208, 0.18); z-index: 4; }
+.ffg-field--preview.is-dimmed { opacity: 0.35; filter: saturate(0.4); }
+.ffg-field--preview.is-dimmed.is-related { opacity: 1; filter: none; border-color: rgba(44, 99, 208, 0.55); }
+.ffg-field--preview .ffg-field__name { font-size: 10.5px; }
+.ffg-group__more {
+  position: absolute;
+  left: 12px;
+  padding: 2px 9px;
+  border: 1px dashed var(--mk-line);
+  border-radius: 999px;
+  background: #fff;
+  font: inherit; font-size: 10px; font-weight: 700;
+  color: var(--mk-blue);
+  cursor: pointer;
+}
+.ffg-group__more:hover { border-color: var(--mk-blue); background: #eff6ff; }
 
 .ffg-edges { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 1; }
 .ffg-edge { animation: ffg-dash 0.5s ease backwards; }
