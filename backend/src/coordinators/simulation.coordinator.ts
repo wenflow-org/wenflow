@@ -951,7 +951,12 @@ class SimulationOrchestrator {
     previousLearnerState?: Partial<LearnerLatentState>;
     goalState?: SimulationContext['goalState'];
     frictionBudget?: FrictionBudget;
+    userId?: string;
   }) {
+    // 长期记忆注入（目标澄清时学习者能提及过往学习经历）
+    const learnerMemory = params.userId
+      ? await this.buildAssistedLearnerMemory(params.userId)
+      : null;
     const output = await executeSkill(virtualLearnerGoalDialogueSimulatorDefinition, {
       learner: {
         profile: params.profile.profile || {},
@@ -964,6 +969,7 @@ class SimulationOrchestrator {
       visibleContext: this.buildGoalVisibleContext(params.conversationHistory, params.lastAssistantMessage),
       currentPhase: params.currentPhase,
       previousLearnerState: params.previousLearnerState || null,
+      learnerMemory,
       frictionBudget: params.frictionBudget,
       task: {
         mode: 'simulate-goal-learner-turn',
@@ -1611,16 +1617,21 @@ class SimulationOrchestrator {
         }
 
         const openingStart = Date.now();
-        const openingResult = await this.simulateGoalLearnerReply({
-          profile,
-          storyContext,
-          conversationHistory: [],
-          lastAssistantMessage: '',
-          currentPhase: 'opening',
-          previousLearnerState: undefined,
-          goalState: undefined,
-          frictionBudget: this.getSessionFrictionBudget(session)
-        });
+        // 开场模拟者调用同样计入会话 AI 调用预算（此前旁路漏计，管理员手动
+        // 「推进一步」开新 Goal 对话时每次白嫖 1 次调用）
+        const openingResult = await this.retryLearnUpstream(input.sessionId, 'simulate-goal-opening', () =>
+          this.simulateGoalLearnerReply({
+            profile,
+            storyContext,
+            conversationHistory: [],
+            lastAssistantMessage: '',
+            currentPhase: 'opening',
+            previousLearnerState: undefined,
+            goalState: undefined,
+            userId: input.userId,
+            frictionBudget: this.getSessionFrictionBudget(session)
+          })
+        );
 
         logs.push({
           timestamp: new Date().toISOString(),
@@ -1648,10 +1659,13 @@ class SimulationOrchestrator {
         });
 
         await this.assertCurrentSessionLeaseOwned(input.sessionId);
-        const goalResult = await goalConversationService.startConversation(
-          input.userId,
-          openingReply,
-          { systemPromptOverrides: this.getSessionPromptOverrides(session) }
+        // goal agent 开场回应是真实 LLM 调用，计入会话 AI 调用预算
+        const goalResult = await this.retryLearnUpstream(input.sessionId, 'goal-opening-turn', () =>
+          goalConversationService.startConversation(
+            input.userId,
+            openingReply,
+            { systemPromptOverrides: this.getSessionPromptOverrides(session) }
+          )
         );
         
         await this.updateSessionStatus(
@@ -1762,6 +1776,7 @@ class SimulationOrchestrator {
           currentPhase: this.mapGoalStageToLearnerPhase(goalState?.stage || existingGoalState.stage as string | undefined),
           previousLearnerState: stageResults.goal?.learnerState,
           goalState,
+          userId: input.userId,
           frictionBudget: this.getSessionFrictionBudget(session)
         })
       );
@@ -2389,6 +2404,7 @@ class SimulationOrchestrator {
       });
       
       const reactionStart = Date.now();
+      const pathLearnerMemory = await this.buildAssistedLearnerMemory(session.userId);
       const reactionOutput = await executeSkill(virtualLearnerPathEvaluatorDefinition, {
         learner: profile,
         story: this.parseStoryContextFromStageResults(stageResults),
@@ -2407,6 +2423,7 @@ class SimulationOrchestrator {
         },
         goalState: null,
         previousReaction: stageResults.path_review || null,
+        learnerMemory: pathLearnerMemory,
         learnerState: this.mergeLearnerState(profile, (stageResults.path_review?.learnerState || stageResults.goal?.learnerState) as Partial<LearnerLatentState> | undefined, 'path', this.parseStoryContextFromStageResults(stageResults)),
         frictionBudget: this.getSessionFrictionBudget(session)
       });
@@ -3080,7 +3097,25 @@ class SimulationOrchestrator {
     }
   }
 
-  async executeLearningStep(sessionId: string): Promise<{
+  /**
+   * 课时闸门：同一 task 的回合数硬上限。取三者的最大值——
+   * - LEARN_TASK_TURN_BUDGET（默认 40）：未配置时的兜底，防手动单步无限拖堂
+   * - authorizedTurns（executeAutoLearning 的 maxTurns）：驾驶舱「回合上限」本次输入
+   * - 会话生效回合上限（autopilot.maxTurns ?? simulationConfig.turnCapPerLesson）：画像偏好/自动驾驶透传
+   * 任一来源调高即放宽，避免「配置 60 却在第 41 回合被默认闸门提前终态化」。
+   */
+  private resolveLearnTurnBudget(stageResults: StageResults, authorizedTurns?: number): number {
+    const simConfig = (stageResults.simulationConfig || {}) as Record<string, unknown>;
+    const autopilotState = (stageResults.autopilot || {}) as Record<string, unknown>;
+    const candidates = [LEARN_TASK_TURN_BUDGET];
+    const authorized = Number(authorizedTurns);
+    if (Number.isFinite(authorized) && authorized > 0) candidates.push(Math.min(100, Math.round(authorized)));
+    const sessionCap = Number(autopilotState.maxTurns ?? simConfig.turnCapPerLesson);
+    if (Number.isFinite(sessionCap) && sessionCap > 0) candidates.push(Math.min(100, Math.round(sessionCap)));
+    return Math.max(...candidates);
+  }
+
+  async executeLearningStep(sessionId: string, options: { turnBudget?: number } = {}): Promise<{
     success: boolean;
     userMessage?: string;
     aiResponse?: string;
@@ -3299,13 +3334,18 @@ class SimulationOrchestrator {
           ...this.buildLearningProgressSnapshot(milestones, nextMilestoneIdx, 0)
         });
 
-        return await this.executeLearningStep(sessionId);
+        return await this.executeLearningStep(sessionId, options);
       }
 
-      // 课时预算：同一 task 回合数超限仍未双方收束 → 显式失败（可重启恢复），不允许无限拖堂
+      // 课时预算：同一 task 回合数超限仍未双方收束 → 停止推进（不终态化、不丢本课对话）。
+      // 闸门取三者的最大值：默认 40 / 本次授权回合数（executeAutoLearning 透传）/ 会话生效回合上限
+      // （autopilot.maxTurns ?? simulationConfig.turnCapPerLesson）。任一来源调高即放宽，
+      // 避免「驾驶舱配 60 却在第 41 回合被默认闸门拦下」。触发时保持会话 running、教学对话 active，
+      // 恢复动作 = 调高「回合上限」后再次自动推进（继续同一对话），而不是重启丢对话。
+      const learnTurnBudget = this.resolveLearnTurnBudget(stageResults, options.turnBudget);
       const runtimeTurns = taskRuntime.taskId === currentTask.id ? Number(taskRuntime.turns || 0) : 0;
-      if (runtimeTurns >= LEARN_TASK_TURN_BUDGET) {
-        const budgetError = `当前 task 已达 ${LEARN_TASK_TURN_BUDGET} 回合课时预算仍未收束（turn_budget_exhausted）`;
+      if (runtimeTurns >= learnTurnBudget) {
+        const budgetError = `当前 task 已达 ${learnTurnBudget} 回合课时预算仍未收束（turn_budget_exhausted）。请调高「回合上限」后继续推进（对话已保留），或重开本课`;
         logs.push({
           timestamp: new Date().toISOString(),
           phase: 'error',
@@ -3314,11 +3354,11 @@ class SimulationOrchestrator {
             output: { currentTask: currentTask.title, action: 'turn-budget-exhausted', turns: runtimeTurns }
           }
         });
-        await this.persistLearningFailure(sessionId, new Error(budgetError), logs);
+        // 温和停止：不 persistLearningFailure（那会把会话标 failed、逼用户重启丢本课对话）。
+        // 仅记录日志供驾驶舱审计；自动循环/手动单步收到该错误后会停止推进而非空转恢复。
         await this.addSessionLogs(sessionId, logs).catch(() => {});
         return {
           success: false,
-          currentTaskStopped: true,
           logs,
           error: budgetError
         };
@@ -3809,6 +3849,27 @@ class SimulationOrchestrator {
       let steps = 0;
       const maxSteps = options.maxTurns || LEARN_AUTO_TURN_CAP;
 
+      // 入口预检：当前课课时计数已达课时闸门时，第一步 executeLearningStep 就会触发
+      // turn_budget_exhausted。直接温和返回（不终态化、本课对话保留）——恢复动作：
+      // 调高「回合上限」后再次自动推进（继续同一对话），或手动单步推进。
+      {
+        const preStageResults = this.parseStageResultsPayload(session.stageResults);
+        const preTeaching = (preStageResults.teaching || {}) as Record<string, unknown>;
+        const preRuntime = (preTeaching.taskRuntime || {}) as Record<string, unknown>;
+        if (preRuntime.taskId) {
+          const preTurns = Number(preRuntime.turns || 0);
+          const turnBudget = this.resolveLearnTurnBudget(preStageResults, maxSteps);
+          if (preTurns >= turnBudget) {
+            return {
+              success: false,
+              totalSteps: 0,
+              completedMilestones: 0,
+              error: `auto_turn_cap_exhausted：当前课已推进 ${preTurns} 回合达到课时上限（${turnBudget}）。请调高「回合上限」后再次自动推进（对话已保留），或改用手动单步推进`
+            };
+          }
+        }
+      }
+
       for (let i = 0; i < maxSteps; i++) {
         const latestSession = await this.getVirtualSession(sessionId)
         const latestStageResults = this.parseStageResultsPayload(latestSession.stageResults)
@@ -3843,7 +3904,7 @@ class SimulationOrchestrator {
           return { success: true, totalSteps: steps, completedMilestones: 0 };
         }
 
-        const stepResult = await this.executeLearningStep(sessionId);
+        const stepResult = await this.executeLearningStep(sessionId, { turnBudget: maxSteps });
         steps++;
 
         if (stepResult.isPathCompleted) {

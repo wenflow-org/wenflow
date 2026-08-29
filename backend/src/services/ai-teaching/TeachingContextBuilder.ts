@@ -5,6 +5,10 @@ import { teachingStrategyConfig } from '../../config/pedagogy.config';
 import type { TeachingKnowledgePointState, TeachingSessionRecord } from './TeachingSessionRepository';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
+import { executeSkill } from '../../skills';
+import { learningPredictorDefinition, type LearningPredictorOutput } from '../../skills/learning-predictor';
+import { predictionCalibrationService } from '../learner/PredictionCalibrationService';
+import { logger } from '../../utils/logger';
 
 export interface TeachingScenarioContext {
   userId: string;
@@ -104,6 +108,22 @@ export interface TeachingScenarioContext {
     history: InteractionHistoryEntry[];
     absent: boolean;
   } | null;
+  /**
+   * 学习表现预测（任务前，learning-predictor 产出 + 校准实证可靠性）。
+   * 超时/失败/低样本时为 null——教学照常，不得因预测缺失改变行为。
+   */
+  learnerPrediction: LearnerPredictionContext | null;
+}
+
+/** 预测上下文（P2 闭环：预测 + 实证可靠性一起交给教学 Agent） */
+export interface LearnerPredictionContext {
+  stallRisk: number;
+  predictedTone: 'smooth' | 'struggle' | 'fatigue';
+  suggestedDepth: 'shallow' | 'standard' | 'deep';
+  focusConcepts: string[];
+  rationale: string;
+  /** 实证可靠性（来自校准记录，不是 LLM 自报）；样本不足（<5）为 null */
+  reliability: { total: number; stallHitRate: number | null } | null;
 }
 
 /**
@@ -472,7 +492,7 @@ export async function buildTeachingScenarioContext(
     ? (task as any).order
     : Math.max(1, orderedTasks.findIndex((item: any) => item.id === task.id) + 1);
 
-  return {
+  const context = {
     userId,
     taskId: task.id,
     learningPathId: path.id,
@@ -525,5 +545,127 @@ export async function buildTeachingScenarioContext(
     learningSignal,
     lastLessonRecap,
     interactionProfile: buildInteractionProfile(interactionMeta, previousSession?.messages ?? []),
+    learnerPrediction: null,
   };
+
+  // 学习表现预测（P2 闭环）：幂等复用 + 超时保护；结果直接进入教学上下文
+  // - 已有该任务未回写的预测记录 → 复用（重试/恢复不重复调 LLM）
+  // - 无 → await LLM 预测（≤8s，超时降级 null）→ 记录校准行
+  // - 失败/超时 → null，教学照常
+  context.learnerPrediction = await buildLearnerPrediction(userId, path.id, task.id, milestone?.id, previousSession?.id, {
+    fatigueSignal: learningState ? (learningState.lf >= 6 ? 'high' : learningState.lf >= 4 ? 'medium' : 'low') : undefined,
+    taskContext: {
+      title: task.title,
+      knowledgeType: (task as any).knowledgeType,
+      learningObjectives: primaryConcepts,
+    },
+  });
+
+  return context;
+}
+
+/** 预测超时（LLM 调用 3-8s，8s 封顶保证会话创建不被拖死） */
+const PREDICTION_TIMEOUT_MS = 8000;
+/** 实证可靠性的最低样本数：低于此值不给 reliability（防小样本误导） */
+export const PREDICTION_RELIABILITY_MIN_SAMPLE = 5;
+
+/** 幂等获取/生成学习表现预测：优先复用未回写记录，否则调 LLM 并记录（超时→null） */
+async function buildLearnerPrediction(
+  userId: string,
+  pathId: string,
+  taskId: string,
+  milestoneId: string | undefined,
+  sessionId: string | undefined,
+  opts: {
+    fatigueSignal?: 'low' | 'medium' | 'high';
+    taskContext: { title: string; knowledgeType?: string; learningObjectives?: string[] };
+  },
+): Promise<LearnerPredictionContext | null> {
+  try {
+    // 1) 幂等复用：该任务已有未回写的预测 → 直接用（零 LLM 成本）
+    const existing = await prisma.prediction_records.findFirst({
+      where: { userId, taskId, outcome: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (existing) {
+      return await withReliability(userId, {
+        stallRisk: existing.stallRisk,
+        predictedTone: existing.predictedTone as LearnerPredictionContext['predictedTone'],
+        suggestedDepth: existing.suggestedDepth as LearnerPredictionContext['suggestedDepth'],
+        focusConcepts: safeParseStringArray(existing.focusConcepts),
+        rationale: existing.rationale,
+      });
+    }
+
+    // 2) 无记录 → LLM 预测（读取最近知识状态摘要）+ 超时保护
+    const summary = await fetchLatestKnowledgeSummary(userId);
+    const prediction = (await Promise.race([
+      executeSkill(learningPredictorDefinition, {
+        knowledgeStateSummary: summary || '无历史摘要',
+        fatigueSignal: opts.fatigueSignal || 'low',
+        taskContext: opts.taskContext,
+      }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), PREDICTION_TIMEOUT_MS)),
+    ])) as LearningPredictorOutput | null;
+
+    if (!prediction) return null;
+
+    // 3) 记录校准行（await：保证 outcome 回写时能找到记录）
+    await predictionCalibrationService.recordPrediction({
+      userId,
+      pathId,
+      taskId,
+      milestoneId: milestoneId || undefined,
+      sessionId: sessionId || undefined,
+      prediction,
+      summaryEcho: summary?.slice(0, 300),
+    });
+
+    return await withReliability(userId, prediction);
+  } catch (error) {
+    logger.debug('[TeachingContext] 学习表现预测失败（非阻塞）', {
+      userId, taskId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/** 附加实证可靠性（样本 ≥ MIN 才给，防小样本误导） */
+async function withReliability(userId: string, prediction: LearningPredictorOutput): Promise<LearnerPredictionContext> {
+  try {
+    const stats = await predictionCalibrationService.empiricalStats(userId);
+    const reliable = stats.total >= PREDICTION_RELIABILITY_MIN_SAMPLE
+      ? { total: stats.total, stallHitRate: stats.stallHitRate }
+      : null;
+    return { ...prediction, reliability: reliable };
+  } catch {
+    return { ...prediction, reliability: null };
+  }
+}
+
+function safeParseStringArray(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 从最近一次 session-knowledge-distilled 证据中读取知识状态摘要 */
+async function fetchLatestKnowledgeSummary(userId: string): Promise<string | undefined> {
+  try {
+    const row = await prisma.learner_evidence.findFirst({
+      where: { userId, evidenceType: 'session-knowledge-distilled' },
+      orderBy: { occurredAt: 'desc' },
+      select: { payload: true },
+    });
+    if (!row) return undefined;
+    const parsed = JSON.parse(row.payload);
+    return typeof parsed.knowledgeStateSummary === 'string' && parsed.knowledgeStateSummary.trim()
+      ? parsed.knowledgeStateSummary.trim()
+      : undefined;
+  } catch { return undefined; }
 }

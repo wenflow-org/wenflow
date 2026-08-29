@@ -119,7 +119,8 @@
             <div class="demo__panel">
               <div class="demo__panel-head">
                 <strong>动态</strong>
-                <span>实时</span>
+                <!-- 硬编码示意数据：明确标注，避免被误读为真实实时指标 -->
+                <span>示例数据</span>
               </div>
               <ul class="demo__feed">
                 <li v-for="item in feed" :key="item.text">
@@ -225,8 +226,8 @@ const handleLogin = async () => {
       await router.replace(safeRedirect())
     } else {
       const msg = response.data.message || '登录失败，请检查账号密码'
+      // 服务端失败统一进顶部横幅：凭证错误不属于「用户名格式」字段级问题，不挂到 errors.name
       loginError.value = msg
-      errors.name = msg
       toast.error(msg)
     }
   } catch (error: any) {
@@ -235,7 +236,6 @@ const handleLogin = async () => {
       : !status || status >= 500 ? '服务暂时不可用，请稍后重试'
       : error.response?.data?.error?.message || '登录失败，请检查账号密码'
     loginError.value = msg
-    errors.name = msg
     toast.error(msg)
   } finally {
     loading.value = false

@@ -55,10 +55,28 @@
         <div class="ql-run-config">
           <span class="ql-label">本节课最多</span>
           <el-input-number v-model="maxTurns" :min="1" :max="40" size="small" />
+          <span class="ql-label">故事</span>
+          <el-select v-model="selectedStoryId" placeholder="单课故事（可选）" clearable filterable size="small" class="ql-story-select">
+            <el-option
+              v-for="s in storyOptions"
+              :key="s.id"
+              :value="s.id"
+              :label="s.title"
+            />
+          </el-select>
+          <span class="ql-label">摩擦</span>
+          <el-select v-model="frictionBudget" size="small" class="ql-friction-select">
+            <el-option value="none" label="无（合作）" />
+            <el-option value="low" label="低" />
+            <el-option value="normal" label="正常" />
+            <el-option value="high" label="高" />
+            <el-option value="stress_test" label="压力测试" />
+          </el-select>
           <el-button type="primary" :disabled="!selectedTaskId" :loading="starting" @click="startRun">
             让账号开始学习
           </el-button>
         </div>
+        <p class="ql-section__hint">故事可选：选中后单课会带有故事情境（非空时学习者有背景）；摩擦控制本课行为弧线（none=纯合作，normal=真实人物常态）。</p>
 
         <el-collapse class="ql-fixture">
           <el-collapse-item title="没有可学任务？把已有路径复制到该虚拟账号" name="fixture">
@@ -209,7 +227,8 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { toast } from '@/utils/toast'
+import { askConfirm } from '@/views/admin-redesign/useConfirm'
 import { adminApi } from '@/api/adminApi'
 import { setProjectionToken } from '@/utils/projection'
 import { useSafePolling } from '@/composables/useSafePolling'
@@ -294,6 +313,9 @@ const tasksLoading = ref(false)
 const taskTree = ref<QuickLearnPath[]>([])
 const selectedTaskId = ref('')
 const maxTurns = ref(25)
+const selectedStoryId = ref('')
+const frictionBudget = ref('none')
+const storyOptions = ref<Array<{ id: string; title: string }>>([])
 const starting = ref(false)
 const cloning = ref(false)
 const openingFrontend = ref(false)
@@ -395,7 +417,7 @@ async function openFrontend(entry: 'evaluation' | 'path' | 'task' | 'learning-st
   let target = '/dashboard?projection=1'
   if (entry === 'evaluation') {
     if (!currentRun.value.teachingSessionId) {
-      ElMessage.info('本次运行没有可打开的课程结果页')
+      toast.info('本次运行没有可打开的课程结果页')
       return
     }
     target = `/learn/${currentRun.value.taskId}/evaluation/${currentRun.value.teachingSessionId}?pathId=${currentRun.value.pathId}&projection=1`
@@ -408,7 +430,7 @@ async function openFrontend(entry: 'evaluation' | 'path' | 'task' | 'learning-st
   } else if (entry === 'next-task') {
     const nextTaskId = report.value?.downstream?.nextTask?.taskId
     if (!nextTaskId) {
-      ElMessage.info('当前没有下一任务')
+      toast.info('当前没有下一任务')
       return
     }
     target = `/learn/${nextTaskId}?projection=1`
@@ -426,7 +448,7 @@ async function openFrontend(entry: 'evaluation' | 'path' | 'task' | 'learning-st
     })
     window.open(target, '_blank')
   } catch (error: unknown) {
-    ElMessage.error(apiErrorMessage(error, '打开真实前台失败'))
+    toast.error(apiErrorMessage(error, '打开真实前台失败'))
   } finally {
     openingFrontend.value = false
   }
@@ -438,7 +460,7 @@ async function loadTasks() {
     const { data } = await adminApi.getQuickLearnTasks(props.profileId)
     taskTree.value = data.data || []
   } catch (error: unknown) {
-    ElMessage.error(apiErrorMessage(error, '加载任务列表失败'))
+    toast.error(apiErrorMessage(error, '加载任务列表失败'))
   } finally {
     tasksLoading.value = false
   }
@@ -460,11 +482,11 @@ async function cloneFixture() {
       sourcePathId: fixtureSourcePathId.value.trim(),
     })
     const result = data.data as { milestoneCount: number; taskCount: number }
-    ElMessage.success(`路径已复制到该账号：${result.milestoneCount} 个阶段 / ${result.taskCount} 个任务`)
+    toast.success(`路径已复制到该账号：${result.milestoneCount} 个阶段 / ${result.taskCount} 个任务`)
     fixtureSourcePathId.value = ''
     await loadTasks()
   } catch (error: unknown) {
-    ElMessage.error(apiErrorMessage(error, '克隆路径失败'))
+    toast.error(apiErrorMessage(error, '克隆路径失败'))
   } finally {
     cloning.value = false
   }
@@ -476,15 +498,33 @@ async function startRun() {
     const { data } = await adminApi.startQuickLearnRun(props.profileId, {
       taskId: selectedTaskId.value,
       maxTurns: maxTurns.value,
+      ...(selectedStoryId.value ? { storyId: selectedStoryId.value } : {}),
+      frictionBudget: frictionBudget.value || 'none',
     })
     const runId = String(data.data?.runId || '')
     if (!runId) throw new Error('自动学习 runId 缺失')
     await loadRun(runId)
     startPollingForRun(runId)
   } catch (error: unknown) {
-    ElMessage.error(apiErrorMessage(error, '启动账号自动学习失败'))
+    toast.error(apiErrorMessage(error, '启动账号自动学习失败'))
   } finally {
     starting.value = false
+  }
+}
+
+/** 加载该虚拟学习者的故事池（单课故事选择） */
+async function loadStories() {
+  try {
+    const { data } = await adminApi.getVirtualLearnerStories(props.profileId)
+    const stories = data.data?.stories || data.data?.storyPool || []
+    storyOptions.value = (Array.isArray(stories) ? stories : [])
+      .filter((s: any) => s && (s.storyId || s.id || s.index !== undefined))
+      .map((s: any) => ({
+        id: s.storyId || s.id || `idx-${s.index}`,
+        title: s.title || s.storyTitle || '未命名故事',
+      }))
+  } catch {
+    storyOptions.value = []
   }
 }
 
@@ -504,27 +544,25 @@ async function loadRun(runId: string) {
     if (status != null && status >= 400 && status !== 408 && status !== 429) {
       stopPolling()
       pollingRunId.value = null
-      ElMessage.error(apiErrorMessage(error, '获取运行状态失败，已停止轮询'))
+      toast.error(apiErrorMessage(error, '获取运行状态失败，已停止轮询'))
     }
   }
 }
 
 async function abortRun() {
   if (!currentRun.value) return
-  try {
-    await ElMessageBox.confirm(
-      '将中止当前自动学习运行，已推进的学习记录保留。确认中止？',
-      '中止自动学习',
-      { confirmButtonText: '中止', cancelButtonText: '取消', type: 'warning' }
-    )
-  } catch {
-    return // 用户取消
-  }
+  const ok = await askConfirm({
+    title: '中止自动学习',
+    message: '将中止当前自动学习运行，已推进的学习记录保留。确认中止？',
+    confirmText: '中止',
+    danger: true,
+  })
+  if (!ok) return
   try {
     await adminApi.abortQuickLearnRun(currentRun.value.runId)
-    ElMessage.info('已请求中止')
+    toast.info('已请求中止')
   } catch (error: unknown) {
-    ElMessage.error(apiErrorMessage(error, '中止失败'))
+    toast.error(apiErrorMessage(error, '中止失败'))
   }
 }
 
@@ -551,6 +589,7 @@ watch(
     if (visible) {
       void loadTasks()
       void loadHistory()
+      void loadStories()
     } else {
       stopPolling()
       pollingRunId.value = null
@@ -619,6 +658,11 @@ watch(
 .ql-task-select {
   width: 100%;
   margin-bottom: 10px;
+}
+
+.ql-story-select,
+.ql-friction-select {
+  width: 150px;
 }
 
 .ql-run-config {

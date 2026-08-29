@@ -19,6 +19,8 @@ import { adaptiveGuidanceCopy as adaptiveGuidanceCopyFn } from './adaptive-guida
 // 课后知识增强（session-knowledge-distiller + dialogue-concept-extractor 于 2026-07 合并）
 export { lessonKnowledgeEnricherDefinition } from './lesson-knowledge-enricher';
 import { lessonKnowledgeEnricher as lessonKnowledgeEnricherFn } from './lesson-knowledge-enricher';
+export { learningPredictorDefinition } from './learning-predictor';
+import { learningPredictor as learningPredictorFn } from './learning-predictor';
 
 // 目标理解编排器（新增：understanding 管理）
 export { goalUnderstandingComposerDefinition } from './goal-understanding-composer';
@@ -94,6 +96,7 @@ import { SkillDefinition } from './protocol';
 import { stageDesignerDefinition } from './stage-designer';
 import { adaptiveGuidanceCopyDefinition } from './adaptive-guidance-copy';
 import { lessonKnowledgeEnricherDefinition } from './lesson-knowledge-enricher';
+import { learningPredictorDefinition } from './learning-predictor';
 import { virtualLearnerScenarioDesignerDefinition } from './virtual-learner-scenario-designer';
 import { virtualLearnerPersonaDesignerDefinition } from './virtual-learner-persona-designer';
 import { virtualLearnerGoalDialogueSimulatorDefinition } from './virtual-learner-goal-dialogue-simulator';
@@ -108,6 +111,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   stageDesignerDefinition,
   adaptiveGuidanceCopyDefinition,
   lessonKnowledgeEnricherDefinition,
+  learningPredictorDefinition,
   virtualLearnerPersonaDesignerDefinition,
   virtualLearnerScenarioDesignerDefinition,
   virtualLearnerGoalDialogueSimulatorDefinition,
@@ -186,6 +190,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'stage-designer': stageDesignerFn,
   'adaptive-guidance-copy': adaptiveGuidanceCopyFn,
   'lesson-knowledge-enricher': lessonKnowledgeEnricherFn,
+  'learning-predictor': learningPredictorFn,
   'virtual-learner-persona-designer': virtualLearnerPersonaDesignerFn,
   'virtual-learner-scenario-designer': virtualLearnerScenarioDesignerFn,
   'virtual-learner-goal-dialogue-simulator': virtualLearnerGoalDialogueSimulatorFn,

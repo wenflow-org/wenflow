@@ -19,6 +19,8 @@ export interface SafePollingOptions {
   circuitBreakerThreshold?: number
   /** 页面隐藏时是否跳过，默认 true */
   skipWhenHidden?: boolean
+  /** start() 时是否立即执行第一次；false 则等到第一个间隔后才轮询，默认 true */
+  immediate?: boolean
   /** 出错回调 */
   onError?: (error: unknown, consecutiveFailures: number) => void
   /** 断路器触发回调 */
@@ -34,6 +36,7 @@ export function useSafePolling(
     maxBackoff = 60000,
     circuitBreakerThreshold = 5,
     skipWhenHidden = true,
+    immediate = true,
     onError,
     onCircuitBroken,
   } = options
@@ -95,8 +98,12 @@ export function useSafePolling(
     isActive.value = true
     circuitBroken.value = false
     consecutiveFailures.value = 0
-    // 立即执行第一次
-    run()
+    // 立即执行第一次（immediate: false 时跳过，等第一个间隔）
+    if (immediate) {
+      run()
+    } else {
+      scheduleNext()
+    }
   }
 
   function stop() {

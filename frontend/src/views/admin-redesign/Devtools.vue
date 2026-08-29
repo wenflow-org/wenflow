@@ -93,7 +93,7 @@
                 <td :title="fmtDate(item.occurredAt)">{{ timeAgo(item.occurredAt) }}</td>
                 <td>
                   <div class="mk-actions">
-                    <button type="button" class="mk-link" :disabled="requeueBusy" @click="requeueOne(item.eventType)">重放</button>
+                    <button type="button" class="mk-link" :disabled="requeueBusy" @click="requeueOne(item.eventType)">重放该类</button>
                   </div>
                 </td>
               </tr>
@@ -120,6 +120,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { timeAgo, errMsg, shortId } from './live'
+import { askConfirm } from './useConfirm'
 import { adminDevtoolsApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 
@@ -174,6 +175,13 @@ async function loadDead() {
 }
 
 async function requeueAll() {
+  // 重放会重新投递事件、产生真实副作用：执行前确认（与 HealthCenter 修复/会话下线同策略）
+  const ok = await askConfirm({
+    title: '重放全部死信',
+    message: `将重放全部 ${deadCount.value} 条死信事件并重新投递，可能产生重复的业务副作用。确定继续？`,
+    confirmText: '重放全部',
+  })
+  if (!ok) return
   requeueBusy.value = true
   try {
     const res = await adminDevtoolsApi.requeueOutboxDead()
@@ -187,7 +195,15 @@ async function requeueAll() {
   }
 }
 
+/** 注意：后端按事件类型重放（非单条），按钮与确认文案均需明确「该类型全部」范围 */
 async function requeueOne(eventType: string) {
+  const count = deadItems.value.filter((i) => i.eventType === eventType).length
+  const ok = await askConfirm({
+    title: '重放该类型死信',
+    message: `将重放事件类型「${eventType}」的全部死信（当前清单内 ${count} 条），可能产生重复的业务副作用。确定继续？`,
+    confirmText: '重放该类',
+  })
+  if (!ok) return
   requeueBusy.value = true
   try {
     const res = await adminDevtoolsApi.requeueOutboxDead(eventType)

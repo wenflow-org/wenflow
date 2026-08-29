@@ -615,6 +615,32 @@ model learner_projections {
   @@index([lastEventAt])
 }
 
+/// 学习表现预测校准记录（learning-predictor 校准闭环）：
+/// 每次任务前预测一行，任务完成后回写实际结果，据此统计「实证命中率」替代 LLM 自报置信度。
+model prediction_records {
+  id            String   @id
+  userId        String
+  pathId        String?
+  taskId        String?
+  milestoneId   String?
+  sessionId     String?
+  stallRisk     Float
+  predictedTone String // smooth | struggle | fatigue
+  suggestedDepth String // shallow | standard | deep
+  focusConcepts String // JSON string[]
+  rationale     String
+  // 实证对照（任务完成后回写）
+  outcome       String? // not_evaluated | smooth | struggled | failed
+  outcomeAt     DateTime?
+  // 预测来源快照（摘要片段），便于追溯
+  summaryEcho   String?
+  createdAt     DateTime @default(now())
+
+  @@index([userId, taskId])
+  @@index([userId, createdAt])
+  @@index([outcome])
+}
+
 /// 知识点记忆痕迹（记忆引擎 M2）：ACT-R 幂律衰减的持久化载体。
 /// 每个（用户 × 概念）一行；masteryScore 为最近一次评估的内化强度，
 /// lastSeenAt 为最近一次提取/复习时间，decayFactor 为幂律衰减参数 d（默认 0.5，预留个性化标定）。
@@ -896,6 +922,10 @@ model virtual_quick_learn_runs {
   maxTurns          Int       @default(25)
   turns             Int       @default(0)
   teachingSessionId String?
+  // 单课上下文：所属故事（JSON，含 visibleOpening/goalSeed/pressurePoints 等），null 表示无故事（V1 兼容）
+  story             String?
+  // 行为摩擦预算档位：none|low|normal|high|stress_test（V1 默认 none 保持兼容）
+  frictionBudget    String    @default("none")
   progress          String?
   transcript        String?
   report            String?

@@ -245,7 +245,8 @@ export async function virtualLearnerPersonaDesigner(input: any): Promise<SkillEx
       caller: { skillId: 'virtual-learner-persona-designer' },
             buildUserPayload: (payload) => ({
         preferredLevels: normalizeStringArray(payload?.preferredLevels),
-        candidatePersonas: normalizeStringArray(payload?.candidatePersonas, DEFAULT_CANDIDATE_PERSONAS),
+        // 候选池可空：不传/空 → 自由生成（不再兜底固定 15 职业池，消除职业天花板）
+        candidatePersonas: normalizeStringArray(payload?.candidatePersonas),
         recentPersonaHints: normalizeStringArray(payload?.recentPersonaHints, DEFAULT_RECENT_PERSONA_HINTS),
         existingPersonaSeed: payload?.existingPersonaSeed && typeof payload.existingPersonaSeed === 'object' ? payload.existingPersonaSeed : undefined,
       }),

@@ -24,19 +24,16 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'skills', label: 'Skill 运行', group: 'Skill 管理', glyph: '能' },
   { id: 'prompt-eval', label: 'Prompt 评估', group: 'Skill 管理', glyph: '评' },
   { id: 'health-center', label: '健康中心', group: '数据健康', glyph: '健' },
-  { id: 'content', label: '内容管理', group: '运营', glyph: '内' },
+  { id: 'ops-hub', label: '运营中心', group: '运营', glyph: '营' },
   { id: 'announcements', label: '公告', group: '运营', glyph: '告' },
   { id: 'feedback', label: '反馈中心', group: '运营', glyph: '馈' },
-  { id: 'achievements', label: '成就管理', group: '运营', glyph: '成' },
   { id: 'notifications', label: '站内通知', group: '运营', glyph: '信' },
-  { id: 'admins', label: '管理员', group: '配置', glyph: '管' },
   { id: 'api-config', label: '模型与接入', group: '配置', glyph: '安' },
   { id: 'addons', label: '外挂能力', group: '配置', glyph: '件' },
   { id: 'session-security', label: '会话安全', group: '配置', glyph: '锁' },
-  { id: 'settings', label: '平台设置', group: '配置', glyph: '设' },
   { id: 'execution-logs', label: '执行日志', group: '观测', glyph: '志' },
+  { id: 'token-cost', label: 'Token 成本', group: '观测', glyph: '费' },
   { id: 'trace-waterfall', label: 'Trace 链路', group: '观测', glyph: '溯' },
   { id: 'audit-logs', label: '审计日志', group: '观测', glyph: '审' },
-  { id: 'devtools', label: '运维工具', group: '运维', glyph: '维' },
-  { id: 'export-data', label: '数据导出', group: '运维', glyph: '出' }
+  { id: 'ops-center', label: '运维中心', group: '运维', glyph: '维' }
 ]

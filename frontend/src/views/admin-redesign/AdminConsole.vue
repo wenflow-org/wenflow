@@ -85,13 +85,10 @@ const VirtualProfile = asyncPage(() => import('./VirtualProfile.vue'));
 const UserDetail = asyncPage(() => import('./UserDetail.vue'));
 const BatchExperiments = asyncPage(() => import('./BatchExperiments.vue'));
 const PromptEval = asyncPage(() => import('./PromptEval.vue'));
-const ContentManager = asyncPage(() => import('./ContentManager.vue'));
-const AchievementsAdmin = asyncPage(() => import('./AchievementsAdmin.vue'));
-const Admins = asyncPage(() => import('./Admins.vue'));
-const Settings = asyncPage(() => import('./Settings.vue'));
-const Devtools = asyncPage(() => import('./Devtools.vue'));
-const ExportData = asyncPage(() => import('./ExportData.vue'));
+const OpsHub = asyncPage(() => import('./OpsHub.vue'));
+const OpsCenter = asyncPage(() => import('./OpsCenter.vue'));
 const Notifications = asyncPage(() => import('./Notifications.vue'));
+const TokenCost = asyncPage(() => import('./TokenCost.vue'));
 
 const components: Record<string, unknown> = {
   'overview': Overview,
@@ -112,15 +109,14 @@ const components: Record<string, unknown> = {
   'addons': Addons,
   'announcements': Announcements,
   'session-security': SessionSecurity,
+  // 隐藏场景（不在 manifest 侧栏）：PromptWorkbench 是「新建 Skill」骨架生成的唯一入口，
+  // 命令面板「新建 Skill」与健康中心 hash/yaml 跳转深链至此，勿删注册
   'skill-workbench': PromptWorkbench,
   'health-center': HealthCenter,
-  'content': ContentManager,
-  'achievements': AchievementsAdmin,
-  'admins': Admins,
-  'settings': Settings,
-  'devtools': Devtools,
-  'export-data': ExportData,
-  'notifications': Notifications
+  'ops-hub': OpsHub,
+  'ops-center': OpsCenter,
+  'notifications': Notifications,
+  'token-cost': TokenCost
 };
 
 const detailComponents: Record<string, unknown> = {

@@ -6,7 +6,7 @@
       <strong class="mk-status__title">Goal 会话</strong>
       <span class="mk-status__sep"></span>
       <span v-if="isLive && stats" class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ stats.total }} 条</span>
-      <button type="button" class="mk-status__action" :disabled="loading" @click="load">
+      <button type="button" class="mk-status__action" :disabled="loading" @click="load(true)">
         {{ loading ? '刷新中…' : '刷新' }}
       </button>
     </div>
@@ -73,7 +73,7 @@
         <!-- P0 修复：加载失败行内错误 + 重试（此前失败伪装成「暂无会话」） -->
         <div v-else-if="loadError" class="gc-error" role="alert">
           <span>{{ loadError }}</span>
-          <button type="button" class="mk-link" @click="load">重试</button>
+          <button type="button" class="mk-link" @click="load(true)">重试</button>
         </div>
         <div v-else-if="filtered.length" class="mk-table-scroll">
         <table class="mk-table mk-table--fixed">
@@ -513,10 +513,11 @@ watch(filtered, () => {
   page.value = 1
 })
 
-async function load() {
+/* force = true 绕过页面级 TTL 缓存（显式刷新/口径切换用），保证用户操作必然重拉 */
+async function load(force = false) {
   if (!isLive.value || loading.value) return
   // 页面级 TTL 缓存
-  if (isPageCacheFresh('goal-conversations') && rows.value.length) return
+  if (!force && isPageCacheFresh('goal-conversations') && rows.value.length) return
   loading.value = true
   loadError.value = ''
   try {
@@ -721,9 +722,9 @@ async function remove(r: Row) {
 watch(isLive, (v) => {
   if (v) void load()
 })
-/* 数据隔离切换：仅真实 ↔ 含虚拟/测试（切换后立即按新口径重拉） */
+/* 数据隔离切换：仅真实 ↔ 含虚拟/测试（切换后立即按新口径重拉，绕过 TTL 缓存） */
 watch(includeTest, () => {
-  if (isLive.value) void load()
+  if (isLive.value) void load(true)
 })
 onMounted(() => {
   if (isLive.value) void load()

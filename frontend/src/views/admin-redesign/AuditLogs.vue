@@ -270,7 +270,6 @@ const pageSize = ref(30)
 const loading = ref(false)
 const loadError = ref('')
 const openId = ref('')
-let fetching = false
 
 const rows = computed(() => (tab.value === 'operation' ? logs.value : attempts.value))
 
@@ -295,25 +294,29 @@ const currentPageSize = computed({
   }
 })
 
-function buildParams(nextPage: number): AuditLogQuery {
+function buildParams(nextPage: number, scopeOverride?: typeof tab.value): AuditLogQuery {
   return {
     page: nextPage,
     limit: pageSize.value,
-    scope: tab.value,
+    scope: scopeOverride ?? tab.value,
     keyword: keyword.value.trim() || undefined,
     timeRange: timeRange.value === 'all' ? undefined : timeRange.value,
   }
 }
 
-/** 拉取指定页并整体替换列表（total 来自后端 pagination.total，驱动页码器） */
+/** 拉取指定页并整体替换列表（total 来自后端 pagination.total，驱动页码器）。
+    竞态守卫：seq 代际号 last-wins 丢弃过期响应；写入目标按「发起时」的 tab 固定，
+    防止快速切 tab 后旧响应把操作审计写进登录审计（或反之） */
+let fetchSeq = 0
 async function fetchPage(nextPage: number) {
-  if (fetching) return
-  fetching = true
+  const seq = ++fetchSeq
+  const scope = tab.value
   try {
-    const res = await adminAuditApi.getAuditLogs(buildParams(nextPage))
+    const res = await adminAuditApi.getAuditLogs(buildParams(nextPage, scope))
     const data = res.data?.data ?? {}
-    const list = (tab.value === 'operation' ? data.logs : data.attempts) ?? []
-    if (tab.value === 'operation') {
+    const list = (scope === 'operation' ? data.logs : data.attempts) ?? []
+    if (seq !== fetchSeq) return // 已有更新的请求在途/完成：丢弃本次过期响应
+    if (scope === 'operation') {
       logs.value = list
     } else {
       attempts.value = list
@@ -323,9 +326,7 @@ async function fetchPage(nextPage: number) {
     page.value = nextPage
     loadError.value = ''
   } catch (e) {
-    loadError.value = errMsg(e)
-  } finally {
-    fetching = false
+    if (seq === fetchSeq) loadError.value = errMsg(e)
   }
 }
 

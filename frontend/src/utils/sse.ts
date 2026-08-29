@@ -8,6 +8,8 @@ export interface StreamSseHandlers {
   /** 每个 SSE 事件回调（event 为 'delta' | 'final' | 'done' | 'error' | 'restart' 等） */
   onEvent: (event: string, data: any) => void;
   signal?: AbortSignal;
+  /** 空闲超时（ms）：超过该时长未收到任何字节（含注释心跳行）即中止并报错，防服务器挂起导致 typing 永久卡死；默认 60000 */
+  idleTimeoutMs?: number;
 }
 
 /**
@@ -22,6 +24,7 @@ export async function streamSsePost(
 ): Promise<void> {
   const token = localStorage.getItem('token');
   const projectionToken = getProjectionToken();
+  const idleTimeoutMs = handlers.idleTimeoutMs ?? 60_000;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json; charset=utf-8',
     Accept: 'text/event-stream'
@@ -54,13 +57,19 @@ export async function streamSsePost(
       throw new Error('登录状态已失效，请重新登录');
     }
     let message = '请求失败';
+    let code: string | undefined;
+    const status = response.status;
     try {
       const data = await response.json();
       message = data?.error?.message || message;
+      // 保留后端错误码（如 TEACHING_SESSION_STALE）：调用方据此做 stale 重同步，
+      // 只传 message 会导致恢复机制失效、重试带旧 revision 进入死循环
+      code = typeof data?.error?.code === 'string' ? data.error.code : undefined;
     } catch {
       // 忽略非 JSON 错误体
     }
-    throw new Error(message);
+    const error = new Error(message);
+    return Promise.reject(Object.assign(error, { code, status, serverError: true }));
   }
 
   if (!response.body) {
@@ -72,6 +81,25 @@ export async function streamSsePost(
   let buffer = '';
   let pendingEvent = 'message';
   let pendingData: string[] = [];
+  /** 空闲超时：任何字节到达都会重置计时（含心跳注释行），超时即中止，防止服务器挂起时调用方状态机（typing 等）永久卡死 */
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  let idleTimedOut = false;
+
+  const kickIdleTimer = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      idleTimedOut = true;
+      controller.abort();
+    }, idleTimeoutMs);
+  };
+  kickIdleTimer();
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  handlers.signal?.addEventListener('abort', onAbort, { once: true });
+  const cleanup = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    handlers.signal?.removeEventListener('abort', onAbort);
+  };
 
   const dispatch = (event: string, data: string) => {
     let parsed: any = data;
@@ -111,6 +139,8 @@ export async function streamSsePost(
         streamDone = true;
         break;
       }
+      // 收到任何字节即重置空闲计时
+      kickIdleTimer();
       buffer += decoder.decode(value, { stream: true });
       let newlineIndex: number;
       while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
@@ -120,11 +150,17 @@ export async function streamSsePost(
       }
     }
   } catch (error) {
+    if (idleTimedOut) {
+      throw Object.assign(new Error('连接空闲超时，请重试'), { transport: true });
+    }
     if (isAbort(error, handlers.signal)) throw markCancelled(error);
     throw error;
+  } finally {
+    cleanup();
   }
   if (buffer) processLine(buffer.replace(/\r$/, ''));
   if (pendingData.length) dispatch(pendingEvent, pendingData.join('\n'));
+  cleanup();
 }
 
 function isAbort(error: unknown, signal?: AbortSignal): boolean {

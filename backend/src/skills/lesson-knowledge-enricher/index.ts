@@ -89,6 +89,8 @@ export interface LessonKnowledgeEnricherOutput {
     confidence: number;
     count: number;
   }>;
+  /** 知识状态自然语言摘要（LBM 式：供预测器与教学决策直接读取） */
+  knowledgeStateSummary: string;
 }
 
 function normalizeText(value: unknown): string {
@@ -181,6 +183,8 @@ export async function lessonKnowledgeEnricher(input: LessonKnowledgeEnricherInpu
         blockedFoundations: uniqueStrings(safeArray(obj.blockedFoundations)).slice(0, 16),
         transferSignals: signals,
         recurringConfusions: confusions,
+        // 知识状态摘要：LLM 用自然语言浓缩本节课学习状态（LBM 式）；缺省时给空字符串，前端/预测器按空值处理
+        knowledgeStateSummary: typeof obj.knowledgeStateSummary === 'string' ? obj.knowledgeStateSummary.trim() : '',
       };
     },
     validateParsedOutput: (parsed) =>

@@ -830,6 +830,7 @@ export class BlackboxVirtualLearnerRunner {
             },
             currentPhase: latest.availableActions.includes('confirm_proposal') ? 'proposal_evaluation' : 'understanding',
             previousLearnerState: state.blackbox?.learnerPrivateState?.goal || null,
+            learnerMemory: await this.buildLearnerMemoryForSimulator(session.userId),
             frictionBudget: snapshot.frictionBudget
           },
           snapshot,

@@ -307,6 +307,20 @@ onUnmounted(() => {
   --green: #31b16f;
   --accent: #8d6bff;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  /* ???????? token ???????????????????????????? */
+  [data-theme='dark'] & {
+    --ink: #e6edf7;
+    --muted: #9aa8bf;
+    --faint: #7d8ba3;
+    --line: rgba(230, 237, 247, 0.14);
+    --canvas: #0f1620;
+    --surface: #182230;
+    --blue: #4d8bf8;
+    --blue-deep: #6fa3ff;
+    --cyan: #5fc3e6;
+    --green: #3ec984;
+    --accent: #a78bff;
+  }
   min-height: 100vh;
   background: var(--canvas);
   color: var(--ink);

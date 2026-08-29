@@ -240,6 +240,18 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.4, maxTokens: 4000 }
   },
+  {
+    id: 'skill:learning-predictor',
+    name: '学习表现预测 Skill',
+    description: '任务开始前预测卡壳风险与建议深度，校准闭环验证',
+    category: 'profile',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Profile',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.2, maxTokens: 1200 }
+  },
 
   // ============ Simulation 下辖 Skills ============
   {

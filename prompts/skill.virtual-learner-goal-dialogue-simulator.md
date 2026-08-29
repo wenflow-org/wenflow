@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-goal-dialogue-simulator
-coreHash: d0fd1a7f0e92a580530a2179849c395cb62ecd23a23c3288f271f1d29d6834da
+coreHash: 0b1ce370d23779b81aaad3433902be56ff7029f5a7ac6b74df3ca92b0a6314ca
 coreVersion: 1
 temperature: 0.8
 maxTokens: 2400
@@ -25,6 +25,11 @@ failurePolicy: propagate
 - 「visibleContext（object）」`sandbox:simulation.visibleContext`（编排注入） — 完整可见对话上下文（学习者真实看到的世界）
 - 「currentPhase（string）」`sandbox:simulation.currentPhase`（编排注入） — opening|understanding|proposal_evaluation
 - 「previousLearnerState（object）」`sandbox:simulation.previousLearnerState`（编排注入） — 上一轮学习者主观状态
+- 「learnerMemory（object）」`sandbox:simulation.learnerMemory`（编排注入） — 学习者长期记忆（服务端注入，供自然引用）：
+· mastered（string[]）历次课后沉淀的已掌握概念
+· dueReview（string[]）到期复习点（学过但快忘了）
+· struggling（string[]）仍在学/易混淆概念
+· recentCompleted（string[]）最近完成的事项（成果物标题）
 - 「task（object）」`sandbox:simulation.task`（编排注入） — 结构化任务说明（goal 澄清会话）
 
 ## 执行规则
@@ -39,7 +44,8 @@ failurePolicy: propagate
 8. proposal_evaluation 阶段：Goal Agent 已给出方向或方案预览，重点判断"这版方向是否贴我当前任务""是否现实可做""我是否愿意先试"；它不是判断 goal 置信度
 9. 如果方向是对的但仍有执行顾虑，proposalFit / taskRelevance 可以中高，executionConcern 也可以中高
 10. willingToTry=true 表示愿意先试；readyToProceed=true 表示愿意继续让系统生成正式路径，仅当学习者愿意继续时才为 true
-11. 你只输出学习者下一句自然回复，以及该阶段的主观状态字段；不要输出 markdown，不要解释，不要输出代码块
+11. learnerMemory 是你的长期记忆：当澄清对话自然相关时（如对方问到你的基础、经验、过往尝试），可以顺口提及"我之前学过/做过"，但不要编造记忆里没有的经历，也不要把字段名读出来；记忆只在相关时自然浮现
+12. 你只输出学习者下一句自然回复，以及该阶段的主观状态字段；不要输出 markdown，不要解释，不要输出代码块
 
 ## 输出字段
 

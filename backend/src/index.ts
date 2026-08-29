@@ -237,6 +237,7 @@ import adminDevtoolsRoutes from './routes/admin/devtools';
 import adminAchievementsRoutes from './routes/admin/achievements';
 import adminLearningContentRoutes from './routes/admin/learning-content';
 import adminExportRoutes from './routes/admin/export';
+import adminTokenCostRoutes from './routes/admin/token-cost';
 import adminNotificationsRoutes from './routes/admin/notifications';
 import notificationsRoutes from './routes/notifications';
 import aiTeachingRoutes from './routes/ai-teaching.routes';
@@ -368,6 +369,7 @@ app.use('/api/admin/learning-content', ...adminRouteMiddleware, adminLearningCon
 app.use('/api/admin/export', ...adminRouteMiddleware, adminExportRoutes);
 // 站内通知管理（全员/定向推送）：管理权限 + 审计中间件挂载
 app.use('/api/admin/notifications', ...adminRouteMiddleware, adminNotificationsRoutes);
+app.use('/api/admin/token-cost', ...adminRouteMiddleware, adminTokenCostRoutes);
 app.use('/api/admin/prompt-lab', ...adminRouteMiddleware, promptLabRoutes);
 app.use('/api/admin', ...adminRouteMiddleware, adminPlatformRoutes);
 app.use('/api/users', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), userRoutes);

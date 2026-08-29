@@ -560,17 +560,10 @@ const toneOf = (id: string) => AGENT_TONES[`${id}-agent`] || { hue: '#64748b', s
 </script>
 
 <style scoped>
-/* ========== 工作区卡片：工具栏头 + 画布体一体（与字段图同款） ========== */
-.topo-frame {
-  border: 1px solid var(--mk-line);
-  border-radius: 12px;
-  background: #fff;
-  overflow: hidden;
-  box-shadow: var(--mk-shadow-sm);
-}
+/* ========== 工具栏 ========== */
 .topo-toolbar {
   display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
-  padding: 8px 14px; background: linear-gradient(180deg, #fbfcff, #f6f8fc); border-bottom: 1px solid var(--mk-line);
+  padding: 8px 14px; background: var(--mk-surface); border: 1px solid var(--mk-line); border-radius: 10px; box-shadow: var(--mk-shadow-sm);
 }
 .topo-toolbar__status { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
 .topo-status-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
@@ -590,9 +583,10 @@ const toneOf = (id: string) => AGENT_TONES[`${id}-agent`] || { hue: '#64748b', s
 .lg--err { background: #dc2626; }
 .topo-toolbar__vsep { width: 1px; height: 16px; background: var(--mk-line); }
 
-/* ========== 画布（卡片体：无独立边框，由 frame 承载） ========== */
+/* ========== 画布（与字段图一致：绝对定位泳道 + 字段） ========== */
 .topo-canvas {
   position: relative;
+  border: 1px solid var(--mk-line); border-radius: 12px;
   background: radial-gradient(640px 320px at 14% 0%, rgba(44, 99, 208, 0.04), transparent 70%),
     linear-gradient(90deg, rgba(214, 223, 238, 0.2) 1px, transparent 1px) 0 0 / 24px 24px,
     linear-gradient(180deg, rgba(214, 223, 238, 0.2) 1px, transparent 1px) 0 0 / 24px 24px,

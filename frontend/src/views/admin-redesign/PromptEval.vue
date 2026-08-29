@@ -451,7 +451,7 @@ function openEdit(c: EvalCase) {
     caseId: c.caseId,
     name: c.name,
     description: c.description || '',
-    messages: c.messages.map((m) => ({ ...m })),
+    messages: c.messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
     mustInclude: (e.mustIncludeFields || []).join(','),
     mustNotInclude: (e.mustNotInclude || []).join(','),
     expectedStage: e.expectedStage || '',
@@ -506,7 +506,7 @@ async function save() {
 }
 
 /* 行操作 */
-const { toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
+const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 function menuEdit(c: EvalCase) { closeMenu(); openEdit(c) }
 function menuDelete(c: EvalCase) { closeMenu(); void removeCase(c) }
 async function menuRunSingle(c: EvalCase) { closeMenu(); await runSingle(c) }

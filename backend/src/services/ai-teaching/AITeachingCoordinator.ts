@@ -861,6 +861,16 @@ async function buildTeachingTurnInput(
     pathBackgroundContext: buildPathBackgroundContext(context),
     learningSignal: context.learningSignal,
     lastLessonRecap: context.lastLessonRecap,
+    learnerPrediction: context.learnerPrediction
+      ? {
+          stallRisk: context.learnerPrediction.stallRisk,
+          predictedTone: context.learnerPrediction.predictedTone,
+          suggestedDepth: context.learnerPrediction.suggestedDepth,
+          focusConcepts: context.learnerPrediction.focusConcepts,
+          rationale: context.learnerPrediction.rationale,
+          reliability: context.learnerPrediction.reliability,
+        }
+      : undefined,
     interactionProfile: context.interactionProfile
       ? {
           current: (context.interactionProfile.current ?? null) as Record<string, number> | null,

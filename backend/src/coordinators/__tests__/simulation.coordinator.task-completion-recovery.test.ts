@@ -424,18 +424,99 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     const learning = getLearningState()
 
     expect(result).toEqual(expect.objectContaining({
-      success: false,
-      currentTaskStopped: true
+      success: false
     }))
     expect(result.error).toContain('turn_budget_exhausted')
     expect(mockExecuteSkill).not.toHaveBeenCalled()
     expect(mockProcessStudentMessage).not.toHaveBeenCalled()
     expect(mockCompleteTask).not.toHaveBeenCalled()
-    expect(sessionRecord.status).toBe('failed')
+    // 温和停止：会话保持 running、教学状态不被标 error/清空——本课已推进的对话保留，
+    // 管理员调高「回合上限」后可继续推进同一对话，不需要重启丢对话
+    expect(sessionRecord.status).toBe('running')
     expect(sessionRecord.currentStage).toBe('teaching')
     expect(learning.taskRuntime).toEqual(expect.objectContaining({
-      status: 'error',
       taskId: 'task-1'
     }))
+    expect(learning.taskRuntime.status).not.toBe('error')
+  })
+
+  it('驾驶舱调高回合上限（simulationConfig.turnCapPerLesson=60）后课时闸门同步放宽，turns=41 不误标失败', async () => {
+    sessionRecord.stageResults = JSON.stringify({
+      simulationConfig: { turnCapPerLesson: 60 },
+      teaching: buildLearningState({
+        status: 'active',
+        taskId: 'task-1',
+        taskTitle: '任务一',
+        teachingSessionId: 'teaching-1',
+        turns: 41
+      })
+    })
+    // 课堂仍在进行：不触发“已完成课堂”的 legacy 恢复分支
+    mockGetSessionDetail.mockResolvedValue({
+      id: 'teaching-1',
+      taskId: 'task-1',
+      status: 'active',
+      revision: 1
+    })
+
+    const result = await coordinator.executeLearningStep('simulation-1')
+    const learning = getLearningState()
+
+    // 旧硬编码闸门 40 会在 turns=41 触发 turn_budget_exhausted 并把会话标 failed；
+    // 修正后闸门 = max(默认 40, 生效回合上限 60)，41 < 60 正常推进
+    expect(result.success).toBe(true)
+    expect(result.error).toBeUndefined()
+    // mock 的教学回合直接收束（isCompletion + 单 task）→ 正常完成；关键是不落入 failed 终态
+    expect(sessionRecord.status).not.toBe('failed')
+    expect(learning.taskRuntime.status).not.toBe('error')
+  })
+
+  it('回合上限调高后（turnBudget=60）闸门放宽：turns=40 可继续自动推进', async () => {
+    sessionRecord.stageResults = JSON.stringify({
+      teaching: buildLearningState({
+        status: 'active',
+        taskId: 'task-1',
+        taskTitle: '任务一',
+        teachingSessionId: 'teaching-1',
+        turns: 40
+      })
+    })
+    mockGetSessionDetail.mockResolvedValue({
+      id: 'teaching-1',
+      taskId: 'task-1',
+      status: 'active',
+      revision: 1
+    })
+
+    // 旧行为：默认闸门 40 → 第一步就 turn_budget_exhausted；新行为：授权 60 → 闸门 60，正常推进
+    const result = await coordinator.executeLearningStep('simulation-1', { turnBudget: 60 })
+
+    expect(result.success).toBe(true)
+    expect(sessionRecord.status).not.toBe('failed')
+  })
+
+  it('课时已达闸门时 executeAutoLearning 入口预检温和返回，不触发 failed', async () => {
+    sessionRecord.stageResults = JSON.stringify({
+      teaching: buildLearningState({
+        status: 'active',
+        taskId: 'task-1',
+        taskTitle: '任务一',
+        teachingSessionId: 'teaching-1',
+        turns: 40
+      })
+    })
+
+    // 未调高上限（默认 40）：入口预检直接温和返回，不执行任何教学回合
+    const result = await coordinator.executeAutoLearning('simulation-1', { maxTurns: 40 })
+
+    expect(result).toEqual(expect.objectContaining({
+      success: false
+    }))
+    expect(result.error).toContain('auto_turn_cap_exhausted')
+    expect(result.error).toContain('调高')
+    expect(mockExecuteSkill).not.toHaveBeenCalled()
+    expect(mockProcessStudentMessage).not.toHaveBeenCalled()
+    // 会话不终态化：进度与对话保留，调高上限后可继续
+    expect(sessionRecord.status).toBe('running')
   })
 })

@@ -19,7 +19,11 @@ describe('AdminConsole 页面注册表', () => {
 
   it('注册表不残留 manifest 之外的孤儿组件', () => {
     const manifestIds = new Set(MOCK_SCENES.map((s) => s.id));
+    // HIDDEN_SCENE_IDS：有意不在侧栏展示的隐藏场景（深链/命令面板直达），豁免孤儿检查。
+    // skill-workbench = Skill 工作台（PromptWorkbench），历史设计为深链访问的二级页面。
+    const HIDDEN_SCENE_IDS = new Set(['skill-workbench']);
     for (const id of Object.keys(SCENE_COMPONENTS)) {
+      if (HIDDEN_SCENE_IDS.has(id)) continue;
       expect(manifestIds.has(id), `注册表含孤儿组件「${id}」（manifest 无此场景）`).toBe(true);
     }
   });

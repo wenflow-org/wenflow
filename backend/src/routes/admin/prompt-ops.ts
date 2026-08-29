@@ -54,6 +54,7 @@ router.use(rejectPromptOpsRuntimeMutation);
 const SKILL_DISPLAY_NAMES: Record<string, string> = {
   'skill:adaptive-guidance-copy': '自适应引导文案',
   'skill:lesson-knowledge-enricher': '课后知识增强',
+  'skill:learning-predictor': '学习表现预测',
   'skill:peer-reinforcement': '同伴强化对话',
   'skill:session-knowledge-distiller': '会话知识沉淀',
   'skill:stage-designer': '阶段设计师',

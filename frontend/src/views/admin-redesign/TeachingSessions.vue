@@ -348,11 +348,12 @@ const loadFailed = ref(false)
 /* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；切换「含虚拟·测试」后重拉全量并灰标虚拟/测试行 */
 const includeTest = ref(false)
 
-/* 静默拉取：live 模式成功即整表替换；失败保留旧数据（轮询不闪空态），并标记错误条 */
-async function fetchRows(): Promise<boolean> {
+/* 静默拉取：live 模式成功即整表替换；失败保留旧数据（轮询不闪空态），并标记错误条。
+   force = true 绕过页面级 TTL 缓存（显式刷新/口径切换/轮询用） */
+async function fetchRows(force = false): Promise<boolean> {
   if (dataSource.value !== 'live') return false
-  // 页面级 TTL 缓存：切换页面回来时跳过重复请求（轮询不受影响，直接调 API）
-  if (isPageCacheFresh('teaching-sessions') && rows.value.length) return true
+  // 页面级 TTL 缓存：切换页面回来时跳过重复请求（轮询/显式刷新传 force 不受影响）
+  if (!force && isPageCacheFresh('teaching-sessions') && rows.value.length) return true
   try {
     const res = await adminTeachingSessionsApi.list({ limit: 100, includeTest: includeTest.value })
     const body = res.data?.data ?? res.data ?? {}
@@ -371,16 +372,31 @@ async function refreshNow() {
   if (refreshing.value) return
   refreshing.value = true
   try {
-    await fetchRows()
+    await fetchRows(true)
   } finally {
     refreshing.value = false
   }
 }
 
+/* G4：停留页面时静默轮询，避免状态过期（setTimeout 链 + 并发守卫 + 指数退避）。
+   轮询传 force 绕过 TTL 缓存，保证每次 tick 都真实拉取；
+   immediate:false —— 首拉由下方 watch 负责，避免同帧重复请求 */
+const { start: startPolling, stop: stopPolling } = useSafePolling(
+  async () => { await fetchRows(true) },
+  {
+    interval: 20000,
+    maxBackoff: 120000,
+    circuitBreakerThreshold: 5,
+    skipWhenHidden: true,
+    immediate: false,
+  }
+)
+
 watch(
   () => dataSource.value,
   async (src) => {
     if (src !== 'live') {
+      stopPolling()
       rows.value = [...demoRows]
       return
     }
@@ -391,6 +407,8 @@ watch(
     } finally {
       refreshing.value = false
     }
+    // 首拉完成后再启动静默轮询（immediate:false，不会与首拉重复请求）
+    if (dataSource.value === 'live') startPolling()
   },
   { immediate: true }
 )
@@ -399,21 +417,10 @@ watch(
 watch(includeTest, () => {
   if (dataSource.value !== 'live') return
   refreshing.value = true
-  void fetchRows().finally(() => {
+  void fetchRows(true).finally(() => {
     refreshing.value = false
   })
 })
-
-/* G4：停留页面时静默轮询，避免状态过期（setTimeout 链 + 并发守卫 + 指数退避） */
-useSafePolling(
-  async () => { await fetchRows() },
-  {
-    interval: 20000,
-    maxBackoff: 120000,
-    circuitBreakerThreshold: 5,
-    skipWhenHidden: true,
-  }
-)
 
 function mapRow(s: Record<string, unknown>): Row {
   const wrapup = (s.wrapup as Record<string, unknown>) || null

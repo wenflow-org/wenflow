@@ -59,9 +59,9 @@ export const VS_STATE_META: Record<VsLifecycleState, VsStateMeta> = {
   idle:      { label: '无活动会话', hint: '尚无会话或全部会话已终态；可用「运行」启动新会话', tone: 'muted' },
   created:   { label: '创建中', hint: '会话已创建，尚未开始推进（Goal 阶段起点）', tone: 'warn' },
   running:   { label: '运行中', hint: '学习推进中（Goal/Path/Learn）；可暂停或进入座舱', tone: 'ok' },
-  paused:    { label: '已暂停', hint: '管理员冻结：自动推进已停止，无写入不算卡死，可继续或停止', tone: 'warn' },
+  paused:    { label: '已暂停', hint: '管理员冻结：自动推进已停止，无写入不算卡死，可继续或终止', tone: 'warn' },
   failed:    { label: '已失败', hint: '可重试：从第一个未完成课程续传，已完成进度保留', tone: 'bad' },
-  abandoned: { label: '已终止', hint: '已被停止/回收；可重试续传或删除', tone: 'bad' },
+  abandoned: { label: '已终止', hint: '已被终止/回收；可重试续传或删除', tone: 'bad' },
   completed: { label: '已完成', hint: '学习路径全部完成；可进入座舱查看', tone: 'ok' }
 }
 
@@ -86,7 +86,7 @@ export const VS_CONTROL_DEFS: Record<VsControlKey, VsControlDef> = {
   },
   step: {
     key: 'step',
-    label: '推进',
+    label: '推进一步',
     hint: '手动推进一个步骤（当前会话原地前进）',
   },
   auto: {
@@ -97,13 +97,13 @@ export const VS_CONTROL_DEFS: Record<VsControlKey, VsControlDef> = {
   },
   stop: {
     key: 'stop',
-    label: '停止',
-    hint: '终止当前学习（终态 abandoned；不删除数据但不可恢复）',
+    label: '终止',
+    hint: '终止当前学习（终态 abandoned；不删除数据但不可恢复；与「停止自动驾驶」不同——那只停后台循环）',
     tone: 'danger',
     confirm: {
-      title: '停止学习',
+      title: '终止学习',
       message: '将终止当前学习会话（标记为已终止，数据保留）。\n终止后不可恢复，可重试续传或删除。确认？',
-      confirmText: '停止'
+      confirmText: '终止'
     }
   },
   retry: {

@@ -493,8 +493,8 @@ onBeforeUnmount(() => {
 .pcard__badge { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; flex: 0 0 auto; }
 .pcard__badge--green { color: #218a56; background: rgba(49, 177, 111, 0.12); }
 .pcard__badge--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
-.pcard__badge--cyan { color: #2b7a99; background: rgba(67, 176, 216, 0.14); }
-.pcard__badge--red { color: #c0454a; background: rgba(239, 117, 120, 0.12); }
+.pcard__badge--cyan { color: var(--blue-deep, #2b7a99); background: rgba(67, 176, 216, 0.14); }
+.pcard__badge--red { color: var(--red, #c0454a); background: rgba(239, 117, 120, 0.12); }
 .pcard__more { color: var(--faint); font-size: 18px; cursor: pointer; padding: 0 6px; }
 .pcard__title {
   margin: 0; font-size: 15.5px; line-height: 1.4;
@@ -527,18 +527,18 @@ onBeforeUnmount(() => {
 
 .pcard__generating {
   display: flex; align-items: center; gap: 9px;
-  font-size: 13px; color: #2b7a99; font-weight: 600;
+  font-size: 13px; color: var(--blue-deep, #2b7a99); font-weight: 600;
 }
 .pcard__skeleton { display: grid; gap: 8px; }
 .pcard__skeleton i {
   height: 11px; border-radius: 6px;
-  background: linear-gradient(90deg, #e8f4f8 25%, #f4fbfd 50%, #e8f4f8 75%);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--surface) 55%, var(--canvas)) 25%, var(--surface) 50%, color-mix(in srgb, var(--surface) 55%, var(--canvas)) 75%);
   background-size: 200% 100%;
   animation: paths-shimmer 1.5s ease infinite;
 }
 @keyframes paths-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 .pcard__fail-reason {
-  font-size: 12.5px; line-height: 1.6; color: #c0454a;
+  font-size: 12.5px; line-height: 1.6; color: var(--red, #c0454a);
   background: rgba(239, 117, 120, 0.07);
   border: 1px dashed rgba(239, 117, 120, 0.35);
   border-radius: 10px; padding: 9px 12px;
@@ -595,15 +595,15 @@ onBeforeUnmount(() => {
   transition: background 0.15s ease, color 0.15s ease;
 }
 .pcard__menu-item:hover { background: #f1f5fb; color: var(--ink); }
-.pcard__menu-item--danger { color: #c0454a; }
-.pcard__menu-item--danger:hover { background: rgba(239, 117, 120, 0.08); color: #c0454a; }
+.pcard__menu-item--danger { color: var(--red, #c0454a); }
+.pcard__menu-item--danger:hover { background: rgba(239, 117, 120, 0.08); color: var(--red, #c0454a); }
 .pcard__confirm {
   display: flex; align-items: center; gap: 9px;
   font-size: 12.5px; color: var(--muted);
   background: #fafcff; border: 1px dashed var(--line);
   border-radius: 10px; padding: 8px 11px;
 }
-.pcard__confirm-yes { color: #c0454a; font-weight: 800; cursor: pointer; }
+.pcard__confirm-yes { color: var(--red, #c0454a); font-weight: 800; cursor: pointer; }
 .pcard__confirm-no { color: var(--faint); font-weight: 600; cursor: pointer; }
 .paths__loading { display: grid; justify-items: center; gap: 12px; padding: 64px 0; color: var(--faint); font-size: 13px; }
 .goal-banner {

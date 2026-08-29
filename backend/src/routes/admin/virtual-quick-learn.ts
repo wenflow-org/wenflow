@@ -118,17 +118,23 @@ router.get('/:id/quick-learn/tasks', async (req: any, res) => {
  */
 router.post('/:id/quick-learn/runs', async (req: any, res) => {
   try {
-    const { taskId, maxTurns } = req.body || {};
+    const { taskId, maxTurns, storyId, frictionBudget } = req.body || {};
     if (typeof taskId !== 'string' || !taskId.trim()) {
       return res.status(400).json({ success: false, error: '缺少 taskId' });
     }
     if (maxTurns !== undefined && (!Number.isInteger(maxTurns) || maxTurns < 1 || maxTurns > 40)) {
       return res.status(400).json({ success: false, error: 'maxTurns 必须是 1-40 的整数' });
     }
+    if (frictionBudget !== undefined
+      && !['none', 'low', 'normal', 'high', 'stress_test'].includes(frictionBudget)) {
+      return res.status(400).json({ success: false, error: 'frictionBudget 必须是 none|low|normal|high|stress_test' });
+    }
     const result = await quickLearnService.startRun({
       profileId: req.params.id,
       taskId: taskId.trim(),
       ...(maxTurns !== undefined ? { maxTurns } : {}),
+      ...(typeof storyId === 'string' && storyId.trim() ? { storyId: storyId.trim() } : {}),
+      ...(typeof frictionBudget === 'string' && frictionBudget ? { frictionBudget } : {}),
     });
     res.json({ success: true, data: result });
   } catch (error: any) {

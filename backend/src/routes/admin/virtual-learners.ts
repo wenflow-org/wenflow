@@ -80,7 +80,11 @@ function clampBudgetValue(value: unknown, fallback: number, min: number, max: nu
   return Math.min(max, Math.max(min, Math.round(numeric)));
 }
 
-const DEFAULT_SCENARIO_CANDIDATE_DOMAINS = [
+/**
+ * 可选候选池（显式请求时使用；默认不注入 → 自由生成）。
+ * 保留导出以便前端/批量实验显式指定池时引用。
+ */
+export const DEFAULT_SCENARIO_CANDIDATE_DOMAINS = [
   '番茄工作法与时间管理',
   '课堂复盘与总结',
   '需求拆解',
@@ -103,7 +107,7 @@ const DEFAULT_SCENARIO_CANDIDATE_DOMAINS = [
   '基础营养与饮食规划',
 ];
 
-const DEFAULT_SCENARIO_CANDIDATE_PERSONAS = [
+export const DEFAULT_SCENARIO_CANDIDATE_PERSONAS = [
   '销售主管，常被临时消息打断',
   '运营专员，最近要独立做复盘',
   '产品经理，方案总是越写越散',
@@ -947,13 +951,18 @@ router.get('/sessions/:sessionId/teaching-detail', async (req: Request, res) => 
  */
 router.post('/generate-persona', async (req: Request, res) => {
   try {
-    const { preferredLevels, candidatePersonas, existingPersonaSeed } = req.body || {};
+    const { preferredLevels, candidatePersonas, existingPersonaSeed, sampleType } = req.body || {};
     const recentScenarioHints = await buildRecentScenarioHints();
+    // 显式样本类型：'student' 时注入传统学生生成指令（课纲/考试节点/学期节奏/家长同伴环境）
+    const personaHints = sampleType === 'student'
+      ? [...recentScenarioHints, '本次明确生成传统学生样本：学段与年级、目标考试或升学节点、学期节奏（课表/晚自习/假期）、成绩自评、家长与老师的外部期望必须全部具体；emotionalTriggers/failurePatterns 写学生真实模式（家长问成绩、排名下滑、考前突击遗忘等）。']
+      : recentScenarioHints;
 
     const result = await executeSkill(virtualLearnerPersonaDesignerDefinition, {
       preferredLevels,
-      candidatePersonas: Array.isArray(candidatePersonas) && candidatePersonas.length ? candidatePersonas : DEFAULT_SCENARIO_CANDIDATE_PERSONAS,
-      recentPersonaHints: recentScenarioHints,
+      // 未显式传候选池 → 不注入，走自由生成（消除固定职业天花板）
+      candidatePersonas: Array.isArray(candidatePersonas) && candidatePersonas.length ? candidatePersonas : undefined,
+      recentPersonaHints: personaHints,
       existingPersonaSeed,
     });
 
@@ -1021,7 +1030,12 @@ router.post('/:id/draft-stories', async (req: Request, res) => {
     const recentScenarioHints = await buildRecentScenarioHints();
     // 跨故事记忆：注入该虚拟学习者最近完成的事项（成果物），让新故事可以延续"他做过什么"
     const learnerMemoryHints = await buildLearnerMemoryStoryHints(profile);
-    const storyHints = [...recentScenarioHints, ...learnerMemoryHints];
+    // 显式样本类型：'student' 时注入传统学生故事指令（考试节点/课纲压力/作业情境/家长同伴环境）
+    const { sampleType } = req.body || {};
+    const studentHints = sampleType === 'student'
+      ? ['本次明确生成传统学生样本的故事：sourceType 取 study 或 goalType 取 exam_prep，必须写清考试节点与时间压力（月考/期中/期末/模考/倒计时）、课纲既定的学习内容、老师布置的作业情境、家长与老师的期望、同学比较环境；pressurePoints/behaviorHooks 写学生真实卡点（如"很努力但方法不对""一到考试就发挥失常""假期计划崩塌"）。']
+      : [];
+    const storyHints = [...recentScenarioHints, ...learnerMemoryHints, ...studentHints];
 
     logger.info('[admin-generate-stories] 开始生成故事', {
       virtualProfileId: id,
@@ -1031,12 +1045,25 @@ router.post('/:id/draft-stories', async (req: Request, res) => {
       requestedStoryCount: 3,
     });
 
+    // existingPersonaSeed 兜底补全：批量创建时身份可能尚未生成成功（profile 只有 background），
+    // 但 scenario designer 校验缺 education/learningStyle/knownConcepts 等必填字段会直接失败。
+    // 用合理默认值补全，保证故事生成不因身份不完整而失败（身份后续仍可补生成）。
+    const personaSeedForStory: Record<string, unknown> = { ...(profileData || {}) };
+    if (!String(personaSeedForStory.education || '').trim()) personaSeedForStory.education = profile.learningGoal ? '在职学习' : '自学';
+    if (!['reading', 'watching', 'doing', 'listening'].includes(String(personaSeedForStory.learningStyle || ''))) personaSeedForStory.learningStyle = 'doing';
+    if (!Number.isFinite(Number(personaSeedForStory.age))) personaSeedForStory.age = 28;
+    if (!Array.isArray(personaSeedForStory.knownConcepts) || !personaSeedForStory.knownConcepts.length) personaSeedForStory.knownConcepts = ['基础概念'];
+    if (!Array.isArray(personaSeedForStory.struggleConcepts) || !personaSeedForStory.struggleConcepts.length) personaSeedForStory.struggleConcepts = ['方法不清晰'];
+    if (!Array.isArray(personaSeedForStory.emotionalTriggers) || !personaSeedForStory.emotionalTriggers.length) personaSeedForStory.emotionalTriggers = ['遇到挫折'];
+    if (!Array.isArray(personaSeedForStory.failurePatterns) || !personaSeedForStory.failurePatterns.length) personaSeedForStory.failurePatterns = ['半途而废'];
+    if (!['internal', 'external', 'both', 'none'].includes(String(personaSeedForStory.motivationType || ''))) personaSeedForStory.motivationType = 'internal';
+    if (!['minimal', 'moderate', 'abundant'].includes(String(personaSeedForStory.availableTime || ''))) personaSeedForStory.availableTime = 'moderate';
+
     const result = await executeSkill(virtualLearnerScenarioDesignerDefinition, {
       preferredMotivations: profileData?.motivationType ? [profileData.motivationType] : undefined,
-      candidateDomains: DEFAULT_SCENARIO_CANDIDATE_DOMAINS,
-      candidatePersonas: DEFAULT_SCENARIO_CANDIDATE_PERSONAS,
+      // 不注入固定候选域/候选画像池 → 自由生成（消除职业与领域天花板）
       recentScenarioHints: storyHints,
-      existingPersonaSeed: profileData,
+      existingPersonaSeed: personaSeedForStory,
       existingStoryPool,
       targetStoryCount: 1,
     });
@@ -2699,8 +2726,8 @@ router.post('/sessions/:sessionId/auto-learning', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
     const maxMilestones = parseSimulationLimit(req.body?.maxMilestones, 10, 20, 'maxMilestones');
-    // 回合上限前端可配（默认仍为 LEARN_AUTO_TURN_CAP=24）：不同课的收束节奏差异很大
-    const maxTurns = parseSimulationLimit(req.body?.maxTurns, 24, 100, 'maxTurns');
+    // 回合上限前端可配（默认 LEARN_AUTO_TURN_CAP=40）：不同课的收束节奏差异很大
+    const maxTurns = parseSimulationLimit(req.body?.maxTurns, 40, 100, 'maxTurns');
     const result = await runAssistedSessionMutation(sessionId, () =>
       simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones, maxTurns })
     );

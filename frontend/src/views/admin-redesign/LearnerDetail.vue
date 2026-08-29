@@ -427,6 +427,47 @@
               </div>
             </div>
           </section>
+          <!-- 预测校准：实证命中率 + 校准分布 + 最近预测 vs 实际 -->
+          <section v-if="predictionCalib && (predictionCalib.stats.total > 0 || predictionCalib.recent.length)" class="mk-card">
+            <div class="mk-card__head">
+              <h3 class="mk-card__title">预测校准</h3>
+              <span class="mk-card__meta">预测器实证命中率（非自报置信度）</span>
+            </div>
+            <div class="ld-cal">
+              <div class="ld-cal__hits">
+                <div class="ld-cal__hit">
+                  <span>卡壳命中率</span>
+                  <strong :class="calHitCls(predictionCalib?.stats.stallHitRate)">
+                    {{ predictionCalib?.stats.stallHitRate != null ? `${Math.round(predictionCalib.stats.stallHitRate * 100)}%` : '—' }}
+                  </strong>
+                  <em>n={{ predictionCalib?.stats.total ?? 0 }}{{ (predictionCalib?.stats.total ?? 0) < 5 ? ' · 样本不足' : '' }}</em>
+                </div>
+                <div class="ld-cal__hit">
+                  <span>基调命中率</span>
+                  <strong :class="calHitCls(predictionCalib?.stats.toneHitRate)">
+                    {{ predictionCalib?.stats.toneHitRate != null ? `${Math.round(predictionCalib.stats.toneHitRate * 100)}%` : '—' }}
+                  </strong>
+                  <em>&nbsp;</em>
+                </div>
+              </div>
+              <div class="ld-cal__buckets">
+                <div v-for="b in predictionCalib?.stats.calibration ?? []" :key="b.range" class="ld-cal__bucket">
+                  <span class="ld-cal__range">{{ b.range }}</span>
+                  <span class="ld-cal__bar"><i :style="{ width: calBarWidth(b) }"></i></span>
+                  <span class="ld-cal__val">{{ b.hardRate != null ? `${Math.round(b.hardRate * 100)}%` : '—' }} (n={{ b.n }})</span>
+                </div>
+              </div>
+              <div v-if="predictionCalib?.recent?.length" class="ld-cal__recent">
+                <div v-for="p in predictionCalib.recent.slice(0, 5)" :key="p.id" class="ld-cal__row">
+                  <span class="ld-cal__task" :title="p.rationale">{{ shortId(p.taskId) || '任务' }}</span>
+                  <span class="ld-cal__risk">风险 {{ Math.round(p.stallRisk * 100) }}%</span>
+                  <span class="ld-cal__outcome" :class="calOutcomeCls(p.outcome)">
+                    {{ calOutcomeZh(p.outcome) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </div>
@@ -436,7 +477,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { subPage, closeSubPage, learnerDetails, isLive, setSubPageLabel } from './store'
-import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveRecomputeLearner, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint } from './live'
+import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab } from './learner-profile'
 import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
@@ -476,6 +517,8 @@ const rawDetail = ref<Record<string, unknown> | null>(null)
 const liveEvidence = ref<EvidenceItem[]>([])
 /** 学习压力记录曲线：learning_metrics 历史（LSS/KTL/LF/LSB），来自 evidence 接口 loadCurve */
 const loadCurveRaw = ref<LoadCurvePoint[]>([])
+/** 预测校准（实证命中率 + 最近预测），异步加载失败为 null */
+const predictionCalib = ref<PredictionCalibration | null>(null)
 const recomputing = ref(false)
 const tab = ref<LearnerTab>('overview')
 
@@ -568,6 +611,8 @@ async function loadDetail(id: string | undefined, live: boolean) {
     })
     liveEvidence.value = merged
     loadCurveRaw.value = evidenceRes.loadCurve || []
+    // 校准数据独立容错（失败仅卡片不显示）
+    void liveGetLearnerPredictions(id, includeTest).then((calib) => { predictionCalib.value = calib })
     liveDetail.value = {
       name: base?.name || String(model.userName || id),
       email: base?.email || '',
@@ -1227,6 +1272,24 @@ function loadZoneOf(p: LoadPoint): 'fresh' | 'optimal' | 'risk' {
 }
 const loadZoneCls = (z: 'fresh' | 'optimal' | 'risk') => (z === 'fresh' ? '--fresh' : z === 'optimal' ? '--optimal' : '--risk')
 
+/* ---------- 预测校准（实证命中率） ---------- */
+function calHitCls(rate: number | null | undefined): string {
+  if (rate == null) return ''
+  return rate >= 0.7 ? 'is-good' : rate >= 0.5 ? 'is-mid' : 'is-bad'
+}
+function calBarWidth(b: { n: number; hardRate: number | null }): string {
+  if (!b.n || b.hardRate == null) return '4%'
+  return `${Math.max(4, Math.round(b.hardRate * 100))}%`
+}
+function calOutcomeZh(outcome: string | null | undefined): string {
+  if (!outcome) return '待回写'
+  return { smooth: '顺畅', struggled: '挣扎', failed: '未完成' }[outcome] || outcome
+}
+function calOutcomeCls(outcome: string | null | undefined): string {
+  if (!outcome) return 'is-pending'
+  return outcome === 'smooth' ? 'is-smooth' : 'is-hard'
+}
+
 const riskFactors = computed(() => (teachingHints.value?.riskFactors || []) as string[])
 
 const trendText = computed(() => (d.value?.trend === 'up' ? '↗ 上升' : d.value?.trend === 'down' ? '↘ 下降' : '→ 稳定'))
@@ -1626,6 +1689,32 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-load__info .is-lf-t { color: var(--mk-red); font-weight: 700; }
 .ld-load__info .is-lsb-t { color: var(--mk-green); font-weight: 700; }
 .ld-load__zones { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 10.5px; color: var(--mk-faint); }
+
+/* ---------- 预测校准（实证命中率 + 校准分布 + 最近预测） ---------- */
+.ld-cal { padding: 12px 14px 14px; display: grid; gap: 12px; }
+.ld-cal__hits { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ld-cal__hit { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: 10px; background: var(--mk-surface); }
+.ld-cal__hit span { font-size: 10.5px; font-weight: 700; color: var(--mk-muted); }
+.ld-cal__hit strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+.ld-cal__hit strong.is-good { color: var(--mk-green); }
+.ld-cal__hit strong.is-mid { color: var(--mk-amber); }
+.ld-cal__hit strong.is-bad { color: var(--mk-red); }
+.ld-cal__hit em { font-style: normal; font-size: 10px; color: var(--mk-faint); }
+.ld-cal__buckets { display: grid; gap: 6px; }
+.ld-cal__bucket { display: grid; grid-template-columns: 52px 1fr 72px; align-items: center; gap: 8px; font-size: 10.5px; }
+.ld-cal__range { color: var(--mk-faint); font-variant-numeric: tabular-nums; }
+.ld-cal__bar { display: block; height: 8px; border-radius: 99px; background: #eef2fa; overflow: hidden; }
+.ld-cal__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #fbbf24, #f59e0b); min-width: 4px; transition: width 0.15s ease; }
+.ld-cal__val { color: var(--mk-muted); font-variant-numeric: tabular-nums; text-align: right; }
+.ld-cal__recent { display: grid; gap: 0; border-top: 1px dashed var(--mk-line); padding-top: 8px; }
+.ld-cal__row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 11px; border-bottom: 1px solid #f6f7f9; }
+.ld-cal__row:last-child { border-bottom: none; }
+.ld-cal__task { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-ink); font-family: var(--mk-mono); cursor: help; }
+.ld-cal__risk { color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ld-cal__outcome { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.ld-cal__outcome.is-smooth { color: var(--mk-green); background: var(--mk-green-bg); }
+.ld-cal__outcome.is-hard { color: var(--mk-red); background: var(--mk-red-bg); }
+.ld-cal__outcome.is-pending { color: var(--mk-faint); background: #f0f2f5; }
 
 @media (max-width: 1100px) {
   .ld-grid { grid-template-columns: 1fr; }

@@ -156,6 +156,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { errMsg, timeAgo } from './live'
 import { askConfirm } from './useConfirm'
+import { useSafePolling } from '@/composables/useSafePolling'
 import { isLive } from './store'
 import {
   adminHealthCenterApi,
@@ -384,18 +385,27 @@ async function fix(id: HealthCenterItemId) {
   }
 }
 
-let pollTimer: ReturnType<typeof setInterval> | undefined
+/* 60s 自动轮询：统一走 useSafePolling（并发守卫 + 指数退避 + 断路器 + 页面隐藏跳过），
+   替代此前无防护的裸 setInterval */
+const { start: startPolling, stop: stopPolling } = useSafePolling(
+  async () => {
+    if (isLive.value && !loading.value) await refresh(false)
+  },
+  {
+    interval: 60_000,
+    maxBackoff: 300_000,
+    circuitBreakerThreshold: 5,
+    skipWhenHidden: true,
+  }
+)
 onMounted(() => {
   // ?refresh=1：深链强制重算（避开 60s 缓存）
   const force = route.query.refresh === '1' || route.query.refresh === 'true'
   if (isLive.value) void refresh(force)
-  // 60s 自动轮询（后端同 TTL 缓存，多数请求命中缓存，压力可忽略）
-  pollTimer = setInterval(() => {
-    if (isLive.value && !loading.value) void refresh(false)
-  }, 60_000)
+  startPolling()
 })
 onUnmounted(() => {
-  if (pollTimer) clearInterval(pollTimer)
+  stopPolling()
 })
 defineExpose({ refresh })
 </script>

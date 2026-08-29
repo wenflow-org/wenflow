@@ -187,11 +187,12 @@ function isActive(t: { match: string[] }) {
   border-radius: 12px !important;
 }
 
-/* 修复：仅"洗白"默认按钮；保留 danger/link 语义色，避免危险操作与普通按钮混淆 */
+/* 修复：仅"洗白"默认按钮；保留 danger/link 语义色，避免危险操作与普通按钮混淆。
+   背景走 var(--surface)：暗色下自动翻转，避免白底亮字低对比 */
 .uc__body :deep(.el-button--default:not(.is-link):not(.is-text)) {
   border-radius: 12px !important;
   border-color: var(--line, #e3e9f4) !important;
-  background: #fff !important;
+  background: var(--surface, #fff) !important;
   color: var(--muted, #5b6577) !important;
   font-weight: 700;
 }

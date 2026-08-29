@@ -22,6 +22,7 @@ contracts:
   - agentId: skill:virtual-learner-learn-turn-simulator
   - agentId: skill:virtual-learner-referee
   - agentId: skill:virtual-learner-actor-auditor
+  - agentId: skill:virtual-learner-memory-curator
   - agentId: simulation-agent
 
 fields:
@@ -96,6 +97,24 @@ fields:
     promptRole: proposal-output
     valueType: array<object>
     description: 可定位到输入轨迹/角色设定和行为轨迹的证据
+
+  # === memory-curator 输出（课后记忆提炼） ===
+  - fieldId: masteredConcepts
+    promptRole: proposal-output
+    valueType: array<object>
+    description: 学习者自己觉得学会的概念（name/evidence/confidence）
+  - fieldId: struggleConcepts
+    promptRole: proposal-output
+    valueType: array<object>
+    description: 学习者自己觉得没学会的概念（name/blocker/severity）
+  - fieldId: selfCalibration
+    promptRole: proposal-output
+    valueType: string
+    description: 学习者本轮自评可靠度与校准说明
+  - fieldId: memoryDelta
+    promptRole: public-reply
+    valueType: string
+    description: 本课记忆增量一句话（供故事与开场引用）
 
 routings:
   # === persona-designer ===
@@ -254,6 +273,32 @@ routings:
     accumulate: false
   - agentId: skill:virtual-learner-actor-auditor
     fieldId: evidence
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+
+  # === memory-curator ===
+  - agentId: skill:virtual-learner-memory-curator
+    fieldId: masteredConcepts
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-memory-curator
+    fieldId: struggleConcepts
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-memory-curator
+    fieldId: selfCalibration
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:virtual-learner-memory-curator
+    fieldId: memoryDelta
     render: visible
     handoff: [simulation-agent]
     internal: false

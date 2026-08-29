@@ -331,6 +331,10 @@ const displayLogs = computed(() => {
 });
 const detailMetadata = computed(() => parseMetadata(currentLog.value?.metadata));
 
+/* 竞态守卫代际号：last-wins，快速翻页/连点详情时丢弃过期响应 */
+let loadLogsSeq = 0;
+let detailSeq = 0;
+
 onMounted(() => {
   syncDetailViewport();
   window.addEventListener('resize', syncDetailViewport);
@@ -346,6 +350,8 @@ const syncDetailViewport = () => {
 };
 
 const loadLogs = async () => {
+  // 竞态守卫：seq 代际号 last-wins，快速翻页/连点查询时丢弃过期响应
+  const seq = ++loadLogsSeq;
   loading.value = true;
   loadError.value = '';
   try {
@@ -356,23 +362,24 @@ const loadLogs = async () => {
     
     if (filters.agentId) params.agentId = filters.agentId;
     if (filters.capabilityType) params.capabilityType = filters.capabilityType;
-    // el-select clearable 清空时会置为 ''，仅布尔值才下发筛选
     if (typeof filters.success === 'boolean') params.success = filters.success;
     params.includeSystem = filters.includeSystem;
     if (filters.startDate) params.startDate = filters.startDate;
     if (filters.endDate) params.endDate = filters.endDate;
 
     const res = await getAgentLogs(params);
+    if (seq !== loadLogsSeq) return; // 已有更新的请求：丢弃本次过期响应
     logs.value = res.data?.logs || [];
     pagination.total = res.data?.pagination?.total || 0;
   } catch (error: any) {
+    if (seq !== loadLogsSeq) return;
     logs.value = [];
     pagination.total = 0;
     loadError.value = error?.response?.data?.error?.message || '无法读取调用日志，请稍后重试。';
     toast.error('日志加载失败');
     console.error('加载日志失败:', error);
   } finally {
-    loading.value = false;
+    if (seq === loadLogsSeq) loading.value = false;
   }
 };
 
@@ -427,6 +434,8 @@ const resetFilters = () => {
 };
 
 const viewDetail = async (log: AgentLogItem) => {
+  // 竞态守卫：快速连点/先关后点时，过期响应不覆盖当前展示（按发起时 log 归属）
+  const seq = ++detailSeq;
   currentLog.value = log;
   detailError.value = '';
   detailVisible.value = true;
@@ -434,15 +443,17 @@ const viewDetail = async (log: AgentLogItem) => {
 
   try {
     const res = await getAgentLogDetail(log.id);
+    if (seq !== detailSeq) return;
     const detail = res?.data || res;
     if (detail) {
       currentLog.value = detail;
     }
   } catch (error) {
+    if (seq !== detailSeq) return;
     detailError.value = '加载完整详情失败，当前展示的是列表摘要信息。';
     console.error('加载日志详情失败:', error);
   } finally {
-    detailLoading.value = false;
+    if (seq === detailSeq) detailLoading.value = false;
   }
 };
 
@@ -540,6 +551,8 @@ const buildFeedbackPayload = (log: AgentLogItem) => {
 };
 
 const formatDate = (date?: string) => {
+  // 空值守卫：dayjs(undefined) 会返回当前时间，缺失时间戳应显示占位而非误导性的「现在」
+  if (!date) return '—';
   return dayjs(date).format('YYYY-MM-DD HH:mm:ss');
 };
 

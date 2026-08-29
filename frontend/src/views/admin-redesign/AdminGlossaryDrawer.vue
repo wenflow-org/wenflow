@@ -218,7 +218,8 @@ function showCategory(id: string) {
 
 function countOf(id: string) {
   if (id === 'all') return promptRoles.value.length + completionStates.value.length + semantics.value.length + stages.value.length + terms.value.length + docs.value.length
-  if (id === 'flow') return promptRoles.value.length + 5
+  /* flow 分类 = 动态 promptRoles + terms 中 category='flow' 的词条（勿写死数量：静态/接口词条会增减） */
+  if (id === 'flow') return promptRoles.value.length + terms.value.filter((t) => t.category === 'flow').length
   if (id === 'status') return completionStates.value.length + semantics.value.length
   if (id === 'stage') return stages.value.length
   return terms.value.filter((t) => t.category === id).length

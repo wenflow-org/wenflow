@@ -156,11 +156,10 @@ export interface GlossaryDoc {
 
 export const GLOSSARY_DOCS: GlossaryDoc[] = [
   { title: '编排文件运营阅读指南', path: 'prompts/orchestration/_README.md', desc: '字段路由表怎么看、角色人话表、流转怎么读（运营向）' },
-  { title: '漂移完全解释（§5 通俗版给运营看）', path: 'doc/DRIFT_EXPLAINED.md', desc: '说明书 vs 台账 vs 现场三层模型，7 类漂移一句话表' },
-  { title: '健康中心设计（开发向）', path: 'doc/HEALTH_CENTER_DESIGN.md', desc: '13 项检查的设计背景与实现' },
-  { title: '字段路由 UX 设计', path: 'doc/FIELD_ROUTING_UX_REDESIGN.md', desc: '字段路由表的交互设计落盘' },
   { title: 'Skill 协议 V4', path: 'doc/SKILL_PROTOCOL_V4.md', desc: 'Skill/契约/字段的完整协议定义' },
 ];
+// 2026-08-29 清理：DRIFT_EXPLAINED / HEALTH_CENTER_DESIGN / FIELD_ROUTING_UX_REDESIGN 三个条目指向的
+// 文档已不存在（.gitignore 白名单死条目同步清理），按现状移除死链接。
 
 // ============================================================
 // 聚合响应（GET /api/admin/glossary）

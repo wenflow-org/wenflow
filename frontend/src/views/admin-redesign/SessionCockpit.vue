@@ -36,20 +36,20 @@
         </button>
       </div>
       <div class="cp-console__actions">
-        <!-- ① 执行推进（跨阶段：自动驾驶 / 一键全流程 / 停止自动驾驶；黑盒与真实会话不提供） -->
+        <!-- ① 执行推进（跨阶段：自动驾驶（全流程后台）/ 停止自动驾驶；黑盒与真实会话不提供） -->
         <template v-if="!isRealMode && !isBlackbox">
           <template v-if="!autopilotRunning">
-            <button type="button" class="cp-btn cp-btn--primary" :disabled="autopilotStartDisabled" :title="autopilotStartTitle" @click="act('autopilotStart')">自动运行</button>
-            <button type="button" class="cp-btn" :disabled="runFullDisabled" :title="runFullTitle" @click="act('runFull')">一键全流程</button>
+            <button v-if="!autopilotStopping" type="button" class="cp-btn cp-btn--primary" :disabled="autopilotStartDisabled" :title="autopilotStartTitle" @click="act('autopilotStart')">自动驾驶</button>
+            <button v-else type="button" class="cp-btn" disabled title="已请求停止自动驾驶：后台已停止推进，可点击「自动驾驶」重新启动" @click="act('autopilotStart')">已请求停止</button>
           </template>
-          <button v-else type="button" class="cp-btn" :disabled="busy" @click="act('autopilotStop')">停止自动驾驶</button>
+          <button v-else type="button" class="cp-btn" :disabled="busy" title="停止自动驾驶：当前课推进完本轮后停止后台自动运行（学习进度与对话保留，可随时再次启动）" @click="act('autopilotStop')">停止自动驾驶</button>
           <span class="cp-console__sep"></span>
         </template>
 
         <!-- ② 阶段操作（随当前页签切换） -->
         <template v-if="!isRealMode && !isBlackbox && activeTab === 'goal'">
-          <button type="button" class="cp-btn" :disabled="goalStepDisabled" :title="goalStepTitle" @click="act('step')">单步推进</button>
-          <button type="button" class="cp-btn" :disabled="goalAutoDisabled" :title="goalAutoTitle" @click="act('auto')">自动到 Goal 收敛</button>
+          <button type="button" class="cp-btn" :disabled="goalStepDisabled" :title="goalStepTitle" @click="act('step')">推进一步</button>
+          <button type="button" class="cp-btn" :disabled="goalAutoDisabled" :title="goalAutoTitle" @click="act('auto')">自动推进 Goal</button>
           <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
           <button v-if="goalConverged" type="button" class="cp-btn" @click="selectStageTab('path')">前往 Path →</button>
         </template>
@@ -61,11 +61,11 @@
         <template v-if="!isRealMode && !isBlackbox && activeTab === 'learning'">
           <button v-if="!hasLearningProgress" type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
           <template v-else>
-            <button type="button" class="cp-btn" :disabled="learnStepDisabled" :title="learnStepTitle" @click="act('step')">推进对话</button>
-            <button type="button" class="cp-btn cp-btn--primary" :disabled="learnAutoDisabled" :title="learnAutoTitle" @click="act('auto')">完成本课</button>
-            <label class="cp-turn-cap-label" title="每课自动推进的回合预算：『完成本课』与『自动运行』共用；复杂课程可调高到 100">
+            <button type="button" class="cp-btn" :disabled="learnStepDisabled" :title="learnStepTitle" @click="act('step')">推进一步</button>
+            <button type="button" class="cp-btn cp-btn--primary" :disabled="learnAutoDisabled" :title="learnAutoTitle" @click="act('auto')">自动推进本课</button>
+            <label class="cp-turn-cap-label" title="每课自动推进的回合预算：『自动推进本课』与『自动驾驶』共用；复杂课程可调高到 100">
               每课回合上限
-              <input v-model.number="learnAutoTurnCap" type="number" min="1" max="100" class="cp-turn-cap" title="完成本课时最大对话轮数（自动运行与完成本课共用）" aria-label="每课回合上限" />
+              <input v-model.number="learnAutoTurnCap" type="number" min="1" max="100" class="cp-turn-cap" title="每课自动推进的最大对话轮数（自动推进本课与自动驾驶共用）" aria-label="每课回合上限" />
             </label>
             <!-- 运行中重开本课（失败后的「重试」由生命周期区统一承载，不重复） -->
             <button type="button" class="cp-btn" :disabled="resetLearningDisabled" :title="resetLearningTitle" @click="act('resetLearn')">重开本课</button>
@@ -160,7 +160,7 @@
             <div v-if="!goalConversationMessages.length" class="cp-empty-state">
               <span class="cp-empty-state__icon" aria-hidden="true">◌</span>
               <strong>尚未产生 Goal 对话</strong>
-              <p>学习者澄清从零开始；在上方控制台点「单步推进」或「自动到 Goal 收敛」启动。</p>
+              <p>学习者澄清从零开始；在上方控制台点「推进一步」或「自动推进 Goal」启动。</p>
             </div>
           </div>
         </section>
@@ -473,9 +473,9 @@
                 <strong>{{ goalConverged ? 'Path 尚未生成' : 'Goal 尚未收敛' }}</strong>
                 <p>{{ goalConverged
                   ? 'Goal 澄清已完成，点击「生成 Path」产出学习路径方案。'
-                  : '继续「单步推进」或在控制台点「自动到 Goal 收敛」，澄清完成后自动进入 Path 生成。' }}</p>
+                  : '继续「推进一步」或点「自动推进 Goal」，澄清完成后自动进入 Path 生成。' }}</p>
                 <button v-if="!advancePathDisabled" type="button" class="cp-btn cp-btn--sm" @click="act('advancePath')">生成 Path</button>
-                <button v-else type="button" class="cp-btn cp-btn--sm cp-btn--primary" @click="act('auto')">自动到 Goal 收敛</button>
+                <button v-else type="button" class="cp-btn cp-btn--sm cp-btn--primary" @click="act('auto')">自动推进 Goal</button>
               </div>
             </template>
           </div>
@@ -957,8 +957,12 @@ const autopilot = computed(() => asRecord(stageResults.value.autopilot) as {
   lastError?: string | null
   startedAt?: string
   completedAt?: string
+  stopRequested?: boolean
 })
-const autopilotRunning = computed(() => autopilot.value.status === 'running')
+// stopRequested=true 表示已请求停止（可能主循环已死未消费）：视为未运行，
+// 否则会出现「已停止却仍显示停止自动驾驶按钮」的悬挂态（按钮点了没反应）
+const autopilotRunning = computed(() => autopilot.value.status === 'running' && autopilot.value.stopRequested !== true)
+const autopilotStopping = computed(() => autopilot.value.status === 'running' && autopilot.value.stopRequested === true)
 const autopilotStartDisabled = computed(() => {
   if (!session.value) return true
   if (busy.value) return true
@@ -969,13 +973,14 @@ const autopilotStartTitle = computed(() => {
   if (!session.value) return '会话仍在加载'
   if (isTerminal.value) return '会话已终态，无需启动全自动'
   if (autopilotRunning.value) return '全自动正在运行中'
-  return '启动后全程无人值守，直至 Path 全部任务完成'
+  return '自动驾驶：后台持续推进，直达 Path 全部任务完成（每课回合数受「每课回合上限」约束；可随时「停止自动驾驶」暂停，进度保留）'
 })
 const autopilotResultText = computed(() => {
   const st = autopilot.value.status
   if (st === 'completed') return '✅ 全部完成：Path 所有任务已跑完'
   if (st === 'failed') return `❌ 运行失败：${firstText(autopilot.value.lastError) || '未知原因'}`
   if (st === 'stopped') return '⏸ 已停止自动驾驶'
+  if (st === 'running' && autopilot.value.stopRequested === true) return '⏸ 已请求停止自动驾驶（等待确认）'
   return ''
 })
 const statusTone = computed(() =>
@@ -1452,7 +1457,7 @@ const stepTitle = computed(() => {
   if (!session.value) return '会话仍在加载'
   if (busy.value) return '操作执行中'
   if (isTerminal.value) return '会话已终态，不能继续推进'
-  return isBlackbox.value ? '执行一条黑盒实验轨迹' : '推进当前阶段一步'
+  return isBlackbox.value ? '执行一条黑盒实验轨迹' : '推进一步：当前阶段前进一轮（Goal=对话一轮 / Learn=教学对话一轮），结果即时可见'
 })
 const autoDisabled = computed(() => !session.value || busy.value || isTerminal.value || isBlackbox.value)
 const autoTitle = computed(() => {
@@ -1460,10 +1465,8 @@ const autoTitle = computed(() => {
   if (busy.value) return '操作执行中'
   if (isBlackbox.value) return '黑盒模式仅支持单步推进'
   if (isTerminal.value) return '会话已终态，不能继续推进'
-  return '自动推进当前阶段'
+  return '自动推进当前阶段直到收敛或回合上限（Goal=跑到收敛转 Path；Learn=跑完当前课）'
 })
-const runFullDisabled = computed(() => !!assistedControlBlockReason.value)
-const runFullTitle = computed(() => assistedControlBlockReason.value || '自动执行 Goal、Path 和 Learn 流程')
 
 /* 分页内的阶段操作：除通用禁用外，还要求后端 currentStage 匹配，防止在错误阶段误推 */
 function stageMismatchTitle(stage: StageKey, action: string) {
@@ -2179,7 +2182,7 @@ async function stopLearning() {
   busy.value = true
   try {
     await adminVirtualLearnersApi.stopVirtualLearning(sessionId.value)
-    toast.success('已停止学习会话')
+    toast.success('已终止学习会话')
     void refresh()
   } catch (e) {
     toast.error(`停止失败：${errMsg(e)}`)
@@ -2289,14 +2292,6 @@ async function act(kind: string) {
           await adminVirtualLearnersApi.virtualSessionAuto(id, { maxRounds: 10 })
         }
         break
-      case 'runFull':
-        await adminVirtualLearnersApi.virtualSessionRunFull(id, {
-          maxRounds: 10,
-          maxMilestones: 5,
-          autoAdvanceToPath: true,
-          autoAdvanceToLearning: true
-        })
-        break
       case 'autopilotStart':
         await adminVirtualLearnersApi.autopilotStart(id, { maxTurns: clampLearnAutoTurnCap() })
         toast.info('全自动模式已启动：将以最终目标（Path 全部完成）为终点持续运行，每课回合上限随「回合上限」设置')
@@ -2374,7 +2369,7 @@ async function act(kind: string) {
       const target = tabAfterAction[kind]
       if (target) {
         activeTab.value = target
-      } else if (['step', 'auto', 'runFull'].includes(kind)) {
+      } else if (['step', 'auto'].includes(kind)) {
         const next = currentStage.value
         if ((stageFlow as readonly string[]).includes(next)) activeTab.value = next as StageKey
       }

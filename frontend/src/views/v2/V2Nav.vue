@@ -217,7 +217,7 @@ onUnmounted(() => {
   min-width: 160px;
   padding: 6px;
   border-radius: 12px;
-  background: #fff;
+  background: var(--surface, #fff);
   border: 1px solid var(--line, #e3e9f4);
   box-shadow: 0 16px 40px rgba(23, 32, 51, 0.12);
   display: grid;
@@ -252,7 +252,7 @@ onUnmounted(() => {
 }
 .v2nav__menu a:hover,
 .v2nav__menu button:hover {
-  background: #f1f5fb;
+  background: color-mix(in srgb, var(--blue, #3478f6) 8%, var(--surface));
 }
 .v2nav__menu-danger {
   color: #c0454a !important;
@@ -284,7 +284,7 @@ onUnmounted(() => {
     position: fixed;
     left: 0; right: 0; bottom: 0;
     z-index: 40;
-    background: rgba(255, 255, 255, 0.92);
+    background: color-mix(in srgb, var(--surface, #ffffff) 92%, transparent);
     backdrop-filter: blur(16px);
     border-top: 1px solid var(--line, #e3e9f4);
     padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));

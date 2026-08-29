@@ -48,6 +48,30 @@ describe('lesson-knowledge-enricher normalize（不注入伪值）', () => {
     expect(result.output?.blockedFoundations).toEqual([]);
     expect(result.output?.transferSignals).toEqual([]);
     expect(result.output?.recurringConfusions).toEqual([]);
+    // 摘要缺省 → 空字符串（空即空，不脑补）
+    expect(result.output?.knowledgeStateSummary).toBe('');
+  });
+
+  it('knowledgeStateSummary 原样保留（trim），非字符串 → 空字符串', async () => {
+    mockCallPrompt.mockImplementation(async (spec: any, payload: any) => {
+      const normalized = spec.normalizeOutput(
+        { knowledgeStateSummary: '  学习者已掌握 CSV 结构，合并聚合仍脆弱。建议下一任务先复习分组聚合。  ' },
+        payload
+      );
+      return { success: true, output: normalized, debug: { durationMs: 5 } };
+    });
+
+    const result = await lessonKnowledgeEnricher(input);
+    expect(result.output?.knowledgeStateSummary).toBe(
+      '学习者已掌握 CSV 结构，合并聚合仍脆弱。建议下一任务先复习分组聚合。'
+    );
+
+    mockCallPrompt.mockImplementation(async (spec: any, payload: any) => {
+      const normalized = spec.normalizeOutput({ knowledgeStateSummary: 42 }, payload);
+      return { success: true, output: normalized, debug: { durationMs: 5 } };
+    });
+    const result2 = await lessonKnowledgeEnricher(input);
+    expect(result2.output?.knowledgeStateSummary).toBe('');
   });
 
   it('模型产出的 confidence 原样保留（不覆盖为 0.8/0.65 等伪值）', async () => {

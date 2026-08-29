@@ -102,6 +102,15 @@ export interface TeachingTurnInput {
       }>;
       absent?: boolean;
     } | null;
+    /** 学习表现预测（任务前 learning-predictor 产出）：参考信号，非命令；低样本时不得据此改变默认策略 */
+    learnerPrediction?: {
+      stallRisk: number;
+      predictedTone: 'smooth' | 'struggle' | 'fatigue';
+      suggestedDepth: 'shallow' | 'standard' | 'deep';
+      focusConcepts: string[];
+      rationale: string;
+      reliability?: { total: number; stallHitRate: number | null } | null;
+    } | null;
   };
   knowledge: {
     points: Array<{

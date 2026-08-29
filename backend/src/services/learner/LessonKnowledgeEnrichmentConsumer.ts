@@ -59,6 +59,8 @@ export class LessonKnowledgeEnrichmentConsumer {
       reusableFoundations: enriched?.reusableFoundations || [],
       blockedFoundations: enriched?.blockedFoundations || [],
       transferSignals: enriched?.transferSignals || [],
+      // 知识状态自然语言摘要：供预测器（learning-predictor）与教学决策直接读取
+      knowledgeStateSummary: typeof enriched?.knowledgeStateSummary === 'string' ? enriched.knowledgeStateSummary : '',
     };
     const dialogueKnowledge = {
       recurringConfusions: enriched?.recurringConfusions || [],

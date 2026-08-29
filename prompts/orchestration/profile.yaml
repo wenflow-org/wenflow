@@ -38,6 +38,10 @@ fields:
     promptRole: hidden-inference
     valueType: array<object>
     description: 反复出现的困惑点（concept/evidence/confidence）
+  - fieldId: knowledgeStateSummary
+    promptRole: derived-presentation
+    valueType: string
+    description: 本节课后知识状态自然语言摘要（LBM 式，供学习表现预测器与教学决策读取）
 
   # === skill:learner-model 聚合产出（确定性 snapshot 结构） ===
   - fieldId: snapshot.dynamicState
@@ -105,6 +109,13 @@ routings:
     handoff: [profile-agent]
     internal: false
     accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:lesson-knowledge-enricher
+    fieldId: knowledgeStateSummary
+    render: hidden
+    handoff: [profile-agent]
+    internal: false
+    accumulate: false
     visibilityPreset: agent-internal
 
   # learner-model → profile-agent（聚合产出，终点消费）

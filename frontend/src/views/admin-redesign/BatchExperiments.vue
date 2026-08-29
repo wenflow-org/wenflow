@@ -173,6 +173,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { timeAgo, errMsg } from './live'
+import { askConfirm } from './useConfirm'
 import { adminBatchExperimentsApi, type BatchExperiment, type BatchExperimentRun } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -309,12 +310,19 @@ async function create() {
 }
 
 /* 操作 */
-const { toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
+const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 
 function menuDetail(e: ExpRow) { closeMenu(); openDetail(e) }
 function menuStop(e: ExpRow) { closeMenu(); void stop(e) }
 
 async function stop(e: ExpRow) {
+  // 停止会中断正在运行的实验（不可恢复）：执行前确认
+  const ok = await askConfirm({
+    title: '停止实验',
+    message: `确认停止实验「${e.name}」？进行中的运行将中断，实验不会继续执行。`,
+    confirmText: '停止实验',
+  })
+  if (!ok) return
   e.busy = true
   try {
     await adminBatchExperimentsApi.stop(e.id)

@@ -29,6 +29,13 @@ export interface VirtualLearnerPathEvaluatorInput {
   goalState?: Record<string, any> | null;
   previousReaction?: Record<string, any> | null;
   learnerState?: Record<string, any> | null;
+  /** 学习者长期记忆（已掌握/到期复习/最近完成），供评审时自然引用 */
+  learnerMemory?: {
+    mastered?: string[];
+    dueReview?: string[];
+    struggling?: string[];
+    recentCompleted?: string[];
+  } | null;
   /** 控制学习者对抗度. 默认 'normal' */
   frictionBudget?: FrictionBudget;
 }
@@ -199,6 +206,16 @@ function buildUserPayload(input: VirtualLearnerPathEvaluatorInput) {
     goalState: input.goalState || null,
     previousReaction: input.previousReaction || null,
     learnerState: input.learnerState || null,
+    learnerMemory: input.learnerMemory && typeof input.learnerMemory === 'object'
+      ? {
+          mastered: Array.isArray(input.learnerMemory.mastered) ? input.learnerMemory.mastered.slice(0, 8) : [],
+          dueReview: Array.isArray(input.learnerMemory.dueReview) ? input.learnerMemory.dueReview.slice(0, 8) : [],
+          struggling: Array.isArray(input.learnerMemory.struggling) ? input.learnerMemory.struggling.slice(0, 8) : [],
+          recentCompleted: Array.isArray(input.learnerMemory.recentCompleted)
+            ? input.learnerMemory.recentCompleted.slice(0, 5)
+            : [],
+        }
+      : null,
     pathProposal: input.pathProposal || {},
     friction: {
       budget: friction.budget,

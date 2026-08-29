@@ -250,7 +250,7 @@ onMounted(load);
 .ach-card__name { font-size: 15px; }
 .ach-card__desc { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.55; flex: 1; }
 .ach-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
-.ach-card__xp { font-size: 12px; font-weight: 800; color: #6a4de0; }
+.ach-card__xp { font-size: 12px; font-weight: 800; color: var(--accent, #6a4de0); }
 .ach-card__xp--off { color: var(--faint); }
 .ach-card__date { font-size: 11.5px; color: var(--faint); }
 .ach-card__prog { display: flex; align-items: center; gap: 8px; flex: 1; }
@@ -275,7 +275,7 @@ onMounted(load);
 .spinner {
   width: 36px; height: 36px; border-radius: 50%;
   border: 4px solid rgba(52, 120, 246, 0.15);
-  border-top-color: #3478f6;
+  border-top-color: var(--blue, #3478f6);
   animation: ach-spin 0.9s linear infinite;
 }
 @keyframes ach-spin { to { transform: rotate(360deg); } }
@@ -285,7 +285,7 @@ onMounted(load);
   border-radius: 12px;
   background: rgba(239, 117, 120, 0.08);
   border: 1px solid rgba(239, 117, 120, 0.3);
-  color: #c0454a;
+  color: var(--red, #c0454a);
   font-size: 13px; font-weight: 600;
 }
 .errorbar__retry { text-decoration: underline; cursor: pointer; font-weight: 800; }

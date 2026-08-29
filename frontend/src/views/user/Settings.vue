@@ -56,7 +56,7 @@
               <div class="uc-field__pwd">
                 <input
                   v-model="apiConfig.apiKey"
-                  type="password"
+                  :type="showKey ? 'text' : 'password'"
                   class="uc-field__input"
                   :placeholder="hasSavedApiKey ? '已保存，留空继续使用' : '例如 sk-xxxxxxxx'"
                   :disabled="busy"
@@ -123,16 +123,13 @@
         </aside>
       </div>
     </div>
-
-    <UcConfirm :state="confirmState" />
   </CapabilityShell>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
-import UcConfirm from '@/components/user/UcConfirm.vue';
-import { useUcConfirm } from '@/components/user/useUcConfirm';
+import { askConfirm, doneConfirm, failConfirm } from '@/views/admin-redesign/useConfirm';
 import { toast } from '../../utils/toast';
 import { disableUserApiConfig, fetchApiModels, getUserApiConfig, testApiConnection, updateUserApiConfig } from '@/api/userCustom';
 import '@/components/user/uc.css';
@@ -147,7 +144,6 @@ const showKey = ref(false);
 const loadingModels = ref(false);
 const modelOptions = ref<string[]>([]);
 const busy = computed(() => loading.value || saving.value || testing.value || disabling.value || loadingModels.value);
-const { state: confirmState, openConfirm } = useUcConfirm();
 
 // 单配置模式
 const apiConfig = reactive({
@@ -299,29 +295,35 @@ const saveApiConfig = async (): Promise<boolean> => {
 };
 
 const disableConfig = async () => {
-  openConfirm(
-    '禁用自定义 API',
-    '禁用后将立即改用平台默认模型，已保存的端点和 API Key 会保留。确认继续吗？',
-    async () => {
-      disabling.value = true;
-      try {
-        await disableUserApiConfig();
-        apiConfig.enabled = false;
-        toast.success('已禁用自定义 API，将使用平台默认配置');
-      } catch (error: any) {
-        apiConfig.enabled = true;
-        toast.error(`操作失败：${error.message}`);
-      } finally {
-        disabling.value = false;
-      }
-    },
-    { confirmText: '确认禁用', danger: true }
-  );
+  const ok = await askConfirm({
+    title: '禁用自定义 API',
+    message: '禁用后将立即改用平台默认模型，已保存的端点和 API Key 会保留。确认继续吗？',
+    confirmText: '确认禁用',
+    danger: true,
+    busy: true
+  })
+  if (!ok) return
+  disabling.value = true;
+  try {
+    await disableUserApiConfig();
+    apiConfig.enabled = false;
+    toast.success('已禁用自定义 API，将使用平台默认配置');
+    doneConfirm();
+  } catch (error: any) {
+    apiConfig.enabled = true;
+    toast.error(`操作失败：${error.message}`);
+    failConfirm();
+  } finally {
+    disabling.value = false;
+  }
 };
 
 const handleEnabledChange = () => {
   const enabled = apiConfig.enabled
   if (!enabled) {
+    /* 开关 UI 已翻到 false：先回滚为 true 保持「UI=服务端」一致，用户确认禁用后才由
+       disableConfig 真正置 false —— 否则取消确认后开关/徽章/服务端三者失同步 */
+    apiConfig.enabled = true
     void disableConfig();
     return;
   }

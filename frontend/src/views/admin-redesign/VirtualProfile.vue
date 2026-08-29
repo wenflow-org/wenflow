@@ -53,8 +53,8 @@
             :title="c.hint"
             @click="runLifeAction(c)"
           >{{ c.label }}</button>
-          <button type="button" class="mk-status__action" @click="quickLearnOpen = true">账号自动学习</button>
-          <button type="button" class="mk-status__action" @click="editOpen = true">画像与偏好</button>
+          <button type="button" class="mk-status__action" title="账号自动学习：批量自动运行该虚拟人的全部故事/课程（独立于单个故事运行）" @click="quickLearnOpen = true">账号自动学习</button>
+          <button type="button" class="mk-status__action" title="编辑画像与偏好：修改名称、长期倾向、知识水平、个性特质等" @click="editOpen = true">画像与偏好</button>
         </div>
       </div>
     </header>
@@ -140,7 +140,7 @@
             <label class="mk-field">
               <span class="mk-field__label">每课回合上限</span>
               <input v-model.number="budgetForm.turnCapPerLesson" type="number" min="1" max="100" class="mk-field__input" @input="budgetDirty = true" />
-              <span class="mk-field__hint">每课自动推进的回合预算：座舱「完成本课 / 自动运行」的默认上限</span>
+              <span class="mk-field__hint">每课自动推进的回合预算：座舱「自动推进本课 / 自动驾驶」的默认上限</span>
             </label>
             <label class="mk-field">
               <span class="mk-field__label">默认难度</span>
@@ -267,6 +267,9 @@
                   <div class="vp-memory__completed-body">
                     <strong>{{ c.title }}</strong>
                     <span v-if="c.deliverable" class="vp-memory__deliverable">成果：{{ c.deliverable }}</span>
+                    <span v-if="c.memoryDelta" class="vp-memory__delta" :title="`自评校准：${c.selfCalibration || '—'}`">
+                      记忆：{{ c.memoryDelta }}
+                    </span>
                     <span v-if="c.completedAt" class="mk-card__meta">{{ formatMemoryTime(c.completedAt) }}</span>
                   </div>
                 </div>
@@ -280,12 +283,39 @@
             <h3 class="mk-card__title">故事池 · {{ displayStories.length }}</h3>
             <div class="vp-stories-head">
               <span class="mk-card__meta">故事池</span>
+              <!-- 批量操作（对齐一级页：勾选后批量运行/删除） -->
+              <template v-if="isLive && displayStories.length">
+                <label class="vp-story-select-all" :title="allStoriesSelected ? '取消全选' : '全选所有故事'">
+                  <input type="checkbox" :checked="allStoriesSelected" @change="toggleAllStories" aria-label="全选故事" />
+                  <span>已选 {{ selectedStoryKeys.size }}</span>
+                </label>
+                <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" title="为每个勾选的故事启动一次新的实验会话" @click="batchRunStories">批量运行</button>
+                <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="storyBusy" title="删除勾选的故事（不可恢复）" @click="batchRemoveStories">批量删除</button>
+              </template>
+              <div v-if="isLive" class="vp-sample-pills" role="radiogroup" aria-label="故事样本类型">
+                <button
+                  type="button"
+                  class="mk-pill"
+                  :class="{ 'mk-pill--active': storySampleType === 'general' }"
+                  @click="storySampleType = 'general'"
+                >通用</button>
+                <button
+                  type="button"
+                  class="mk-pill"
+                  :class="{ 'mk-pill--active': storySampleType === 'student' }"
+                  title="生成传统学生故事：考试节点/课纲压力/作业情境/家长与同伴环境"
+                  @click="storySampleType = 'student'"
+                >传统学生</button>
+              </div>
               <button
                 v-if="isLive"
                 type="button"
                 class="mk-status__action"
                 :class="{ 'mk-status__action--primary': !displayStories.length }"
                 :disabled="storyBusy"
+                :title="storySampleType === 'student'
+                  ? '生成传统学生故事（考试节点/课纲压力/作业情境/家长同伴环境）'
+                  : '用 AI 生成新的故事脚本（基于该虚拟人画像与指定领域），生成后可运行'"
                 @click="generateStory"
               >
                 {{ storyBusy ? '生成中…' : '生成故事' }}
@@ -304,7 +334,7 @@
               class="vp-story"
               :class="{ 'is-selected': selectedStoryId === (s.id || String(i)) }"
             >
-              <!-- 列表行：点击 = 选中 + 进入该故事会话座舱（核心控制在三级页） -->
+              <!-- 列表行：checkbox 多选（不触发行）+ 点击行 = 选中 + 进入该故事会话座舱 -->
               <div
                 class="vp-story__row"
                 role="button"
@@ -315,6 +345,14 @@
                 @keydown.enter.prevent="selectStory(s, i)"
                 @keydown.space.prevent="selectStory(s, i)"
               >
+                <label class="vp-story__checkbox" :class="{ 'is-checked': selectedStoryKeys.has(storyKey(s, i)) }" :title="selectedStoryKeys.has(storyKey(s, i)) ? '取消勾选' : '勾选（可批量运行/删除）'" @click.stop>
+                  <input
+                    type="checkbox"
+                    :checked="selectedStoryKeys.has(storyKey(s, i))"
+                    :aria-label="`勾选 ${s.title}`"
+                    @change="toggleStorySelect(s, i)"
+                  />
+                </label>
                 <span class="vp-story__radio" aria-hidden="true"></span>
                 <div class="vp-story__main">
                   <div class="vp-story__meta">
@@ -332,11 +370,11 @@
                   </div>
                 </div>
                 <div class="vp-story__ops" @click.stop>
-                  <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" @click="runStory(s, i)">
+                  <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" :title="'用这个故事启动一次新的实验会话（进入座舱）'" @click="runStory(s, i)">
                     {{ running ? '运行中…' : '▶ 运行' }}
                   </button>
-                  <button type="button" class="mk-link" :disabled="storyBusy" @click="openEditStory(i)">编辑</button>
-                  <button type="button" class="mk-link mk-link--danger" :disabled="storyBusy" @click="removeStory(i)">删除</button>
+                  <button type="button" class="mk-link" :disabled="storyBusy" title="编辑故事：标题、概述、故事级预算（留空继承角色级）" @click="openEditStory(i)">编辑</button>
+                  <button type="button" class="mk-link mk-link--danger" :disabled="storyBusy" title="删除该故事（不可恢复）" @click="removeStory(i)">删除</button>
                 </div>
                 <span class="vp-story__chevron" aria-hidden="true">▸</span>
               </div>
@@ -367,8 +405,8 @@
                     <template v-if="r.storyTitle && g.key !== '__orphan__' && g.title !== r.storyTitle"> · {{ r.storyTitle }}</template>
                   </div>
                   <div v-if="isLive && r.sessionId" class="vp-run__ops">
-                    <button type="button" class="mk-link" @click="openSubPage('session', r.sessionId)">打开座舱</button>
-                    <button type="button" class="mk-link mk-link--danger" :disabled="sessionBusy" @click="removeSession(r.sessionId)">删除</button>
+                    <button type="button" class="mk-link" title="进入该会话的座舱：查看对话、推进/自动/暂停/终止等细粒度控制" @click="openSubPage('session', r.sessionId)">打开座舱</button>
+                    <button type="button" class="mk-link mk-link--danger" :disabled="sessionBusy" title="删除该会话（仅终态可删，不可恢复）" @click="removeSession(r.sessionId)">删除</button>
                   </div>
                 </div>
               </div>
@@ -622,6 +660,90 @@ interface StoryItem {
 const liveDetail = ref<Detail | null>(null)
 const stories = ref<StoryItem[]>([])
 const selectedStoryId = ref<string | null>(null)
+/** 故事多选（对齐一级页批量操作）：勾选多个故事后可批量运行/删除；与单选运行目标并存 */
+const selectedStoryKeys = ref<Set<string>>(new Set())
+function storyKey(s: StoryItem, i: number): string {
+  return s.id || String(i)
+}
+function toggleStorySelect(s: StoryItem, i: number) {
+  const k = storyKey(s, i)
+  const next = new Set(selectedStoryKeys.value)
+  if (next.has(k)) next.delete(k)
+  else next.add(k)
+  selectedStoryKeys.value = next
+}
+const allStoriesSelected = computed(() =>
+  displayStories.value.length > 0 && displayStories.value.every((s, i) => selectedStoryKeys.value.has(storyKey(s, i)))
+)
+function toggleAllStories() {
+  const next = new Set<string>()
+  if (!allStoriesSelected.value) {
+    displayStories.value.forEach((s, i) => next.add(storyKey(s, i)))
+  }
+  selectedStoryKeys.value = next
+}
+/** 批量运行：为每个勾选的故事启动一个新会话（串行，逐个提示） */
+async function batchRunStories() {
+  const list = displayStories.value
+  const targets = list
+    .map((s, i) => ({ s, i, k: storyKey(s, i) }))
+    .filter(({ k }) => selectedStoryKeys.value.has(k))
+  if (!targets.length) { toast.error('请先勾选要运行的故事'); return }
+  const id = subPage.value?.id
+  if (!id || running.value) return
+  running.value = true
+  let ok = 0
+  for (const { s, i } of targets) {
+    try {
+      const payload = storyPayload(s, i)
+      const res = await adminVirtualLearnersApi.startVirtualSession(id, payload)
+      const session = res.data?.data ?? res.data ?? {}
+      toast.success(`已按「${s.title || '故事'}」启动：${String(session.id || session.sessionId || '').slice(0, 14)}…`)
+      ok++
+    } catch (e) {
+      toast.error(`「${s.title || '故事'}」启动失败：${errMsg(e)}`)
+    }
+  }
+  running.value = false
+  if (ok > 0) {
+    selectedStoryKeys.value = new Set()
+    await loadDetail(id)
+  }
+}
+/** 批量删除：确认后逐个删除勾选的故事 */
+async function batchRemoveStories() {
+  const list = displayStories.value
+  const targets = list
+    .map((s, i) => ({ s, i, k: storyKey(s, i) }))
+    .filter(({ k }) => selectedStoryKeys.value.has(k))
+  if (!targets.length) { toast.error('请先勾选要删除的故事'); return }
+  const id = subPage.value?.id
+  if (!id || storyBusy.value) return
+  const ok = await askConfirm({
+    title: '批量删除故事',
+    message: `确认删除勾选的 ${targets.length} 个故事？\n关联的运行记录将一并清理，该操作不可撤销。`,
+    confirmText: '批量删除'
+  })
+  if (!ok) return
+  storyBusy.value = true
+  let done = 0
+  // 索引随删除变化：必须从后往前删，避免删第 0 个后第 1 个顶上来导致错位
+  const indexes = targets.map(({ i }) => i).sort((a, b) => b - a)
+  for (const i of indexes) {
+    try {
+      await adminVirtualLearnersApi.deleteStory(id, i)
+      done++
+    } catch (e) {
+      toast.error(`删除第 ${i + 1} 个故事失败：${errMsg(e)}`)
+    }
+  }
+  storyBusy.value = false
+  if (done > 0) {
+    selectedStoryKeys.value = new Set()
+    await loadDetail(id)
+    toast.success(`已删除 ${done} 个故事`)
+  }
+}
 /** 详情加载失败（无列表兜底数据时）→ 明确错误态 + 重试 */
 const detailError = ref(false)
 /** 详情接口失败但有列表兜底 → 展示兜底数据 + 提示条（区别于 detailError 全失败态） */
@@ -1096,6 +1218,8 @@ interface MemoryData {
     artifactType: string | null
     deliverable: string | null
     completedAt: string
+    memoryDelta?: string | null
+    selfCalibration?: string | null
   }>
   counts: { mastered: number; dueReview: number; struggling: number; completed: number }
 }
@@ -1193,12 +1317,14 @@ async function saveProfile() {
 watch(editOpen, (v) => v && openEdit())
 
 /* 故事池 */
+/** 故事样本类型：general=自由生成 / student=传统学生（考试节点/课纲压力/作业情境） */
+const storySampleType = ref<'general' | 'student'>('general')
 async function generateStory() {
   const id = subPage.value?.id
   if (!id || storyBusy.value) return
   storyBusy.value = true
   try {
-    await adminVirtualLearnersApi.draftVirtualLearnerStories(id)
+    await adminVirtualLearnersApi.draftVirtualLearnerStories(id, storySampleType.value === 'student' ? { sampleType: 'student' } : undefined)
     await loadDetail(id)
     toast.success('新故事已生成')
   } catch (e) {
@@ -1209,6 +1335,7 @@ async function generateStory() {
         toast.info('画像不完整，正在 AI 补全后重试…')
         const base = liveVirtuals.value.find((v) => v.id === id)
         const g = await adminVirtualLearnersApi.generatePersona({
+          ...(storySampleType.value === 'student' ? { sampleType: 'student' } : {}),
           existingPersonaSeed: {
             name: base?.name,
             learningGoal: base?.goal,
@@ -1218,7 +1345,7 @@ async function generateStory() {
         const d = g.data?.data ?? g.data ?? {}
         const seed = (d.personaSeed || d) as Record<string, unknown>
         await adminVirtualLearnersApi.updateVirtualLearner(id, { profile: { ...seed } })
-        await adminVirtualLearnersApi.draftVirtualLearnerStories(id)
+        await adminVirtualLearnersApi.draftVirtualLearnerStories(id, storySampleType.value === 'student' ? { sampleType: 'student' } : undefined)
         await loadDetail(id)
         toast.success('画像已补全，新故事已生成')
       } catch (e2) {
@@ -1852,6 +1979,10 @@ async function quietReload(id: string) {
   gap: 12px;
   flex-wrap: wrap;
 }
+.vp-sample-pills {
+  display: inline-flex;
+  gap: 4px;
+}
 /* ===== 故事池：列表（选中 → 运行目标；展开 → 详情区） ===== */
 .vp-stories { display: grid; gap: 8px; padding: 12px; }
 
@@ -1891,6 +2022,32 @@ async function quietReload(id: string) {
   border-color: var(--mk-blue);
   background: radial-gradient(circle, var(--mk-blue) 0 4.5px, #fff 5px);
 }
+/* 多选 checkbox（对齐一级页批量操作） */
+.vp-story__checkbox {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.vp-story__checkbox input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--mk-blue, #2c63d0);
+  cursor: pointer;
+}
+.vp-story-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--mk-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.vp-story-select-all input { width: 14px; height: 14px; accent-color: var(--mk-blue, #2c63d0); cursor: pointer; }
 /* 主区：标题行 + 简述 + 统计行 */
 .vp-story__main {
   display: grid;
@@ -2479,5 +2636,10 @@ async function quietReload(id: string) {
 .vp-memory__deliverable {
   font-size: 12px;
   color: var(--mk-text, #4a5568);
+}
+.vp-memory__delta {
+  font-size: 12px;
+  color: var(--mk-faint, #8a94a6);
+  font-style: italic;
 }
 </style>

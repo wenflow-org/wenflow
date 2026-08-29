@@ -265,6 +265,23 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/orchestrator'
   },
   {
+    // 合并后旧路径兼容：运维工具/数据导出 → 运维中心；内容管理/成就管理 → 运营中心
+    path: '/admin/devtools',
+    redirect: '/admin/ops-center'
+  },
+  {
+    path: '/admin/export-data',
+    redirect: '/admin/ops-center'
+  },
+  {
+    path: '/admin/content',
+    redirect: '/admin/ops-hub'
+  },
+  {
+    path: '/admin/achievements',
+    redirect: '/admin/ops-hub'
+  },
+  {
     // 管理控制台：/admin/:page 反映当前页面（深链/前进后退），动态段置于静态路由之后
     path: '/admin/:page?',
     name: 'AdminConsole',

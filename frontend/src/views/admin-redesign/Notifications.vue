@@ -15,13 +15,14 @@
           <select v-model="kindFilter" class="mk-filter__select" @change="reload">
             <option value="">全部类型</option>
             <option value="system">系统</option>
-            <option value="announcement">公告</option>
+            <option value="announcement">公告提醒</option>
             <option value="achievement">成就</option>
           </select>
           <label class="mk-field--switch">
             <input v-model="unreadOnly" type="checkbox" @change="reload" />
             <span class="mk-field__label" style="margin:0">仅未读</span>
           </label>
+          <span class="nt-boundary" title="全站横幅公告请到「公告」页管理">横幅公告 → 公告页</span>
         </div>
       </div>
 
@@ -109,9 +110,10 @@
               <span class="mk-field__label">类型</span>
               <select v-model="form.kind" class="mk-field__select">
                 <option value="system">系统通知</option>
-                <option value="announcement">公告</option>
+                <option value="announcement">公告提醒（站内信）</option>
                 <option value="achievement">成就</option>
               </select>
+              <span class="mk-field__hint">全站横幅公告请在「公告」页管理；此处「公告提醒」是站内信形态的公告类通知</span>
             </label>
             <div class="mk-field">
               <span class="mk-field__label">发送范围</span>
@@ -196,7 +198,8 @@ const failed = ref(false)
 const kindFilter = ref('')
 const unreadOnly = ref(false)
 
-const statusTone = computed(() => (unreadTotal.value > 0 ? 'mk-status--info' : 'mk-status--ok'))
+/* mk-status 只有 ok/warn/bad/muted 四档（shared.css）：有未读用 warn 提示，无未读为 ok */
+const statusTone = computed(() => (unreadTotal.value > 0 ? 'mk-status--warn' : 'mk-status--ok'))
 
 const kindText = (k: string) => ({ system: '系统', announcement: '公告', achievement: '成就' }[k] || k)
 const kindBadge = (k: string) =>
@@ -337,6 +340,16 @@ void reload()
 
 <style scoped>
 .nt-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nt-boundary {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--mk-faint);
+  background: #f5f7fb;
+  border: 1px dashed var(--mk-line);
+  padding: 2px 8px;
+  border-radius: 999px;
+  cursor: help;
+}
 .nt-list { flex: 1; min-height: 0; overflow-y: auto; }
 .nt-row--unread { background: #f6f9ff; }
 .nt-row--unread .mk-cell-main strong { color: var(--mk-blue); }

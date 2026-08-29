@@ -204,6 +204,13 @@ export class AutopilotService {
       return { accepted: false, reason: `当前没有运行中的全自动（状态：${state.status}）` }
     }
     await this.writeState(sessionId, { stopRequested: true })
+    // 兜底收口：若 stopRequested 已残留而主循环不在跑（进程重启 / 异常退出导致
+    // runningSessions 已清空、状态机永远不会消费该标志），直接终态化为 stopped，
+    // 避免「会话 running + stopRequested」悬挂态（前端会显示已停止却无按钮可点）。
+    // 若主循环仍在运行，则标志由循环下一轮消费并 markStopped，这里不做重复写入。
+    if (!this.runningSessions.has(sessionId)) {
+      await this.markStopped(sessionId, 'stopRequested / 后台循环已不在运行，直接收口')
+    }
     logger.info('[autopilot] 请求停止全自动', { sessionId })
     return { accepted: true }
   }

@@ -102,7 +102,15 @@ export class QuickLearnService {
   /**
    * 启动一次账号自动学习：校验归属与状态后创建运行记录，后台异步执行。
    */
-  async startRun(input: { profileId: string; taskId: string; maxTurns?: number }): Promise<{ runId: string }> {
+  async startRun(input: {
+    profileId: string;
+    taskId: string;
+    maxTurns?: number;
+    /** 单课上下文：所属故事 ID（profile 故事池中的一条），null=无故事（V1 兼容） */
+    storyId?: string;
+    /** 行为摩擦预算档位：none|low|normal|high|stress_test（默认 none 保持兼容） */
+    frictionBudget?: string;
+  }): Promise<{ runId: string }> {
     const profile = await prisma.virtual_learner_profiles.findUnique({
       where: { id: input.profileId },
     });
@@ -158,6 +166,27 @@ export class QuickLearnService {
       throw error;
     }
 
+    // 如果传了 storyId，从 profile 故事池提取故事 JSON
+    let story: string | null = null;
+    if (input.storyId) {
+      const profileData = parseJson<Record<string, any>>(profile.profile, {});
+      const pool = Array.isArray(profileData.storyPool) ? profileData.storyPool : [];
+      const matched = pool.find((s: any) => s?.id === input.storyId);
+      if (matched) {
+        story = JSON.stringify(matched);
+      } else {
+        logger.warn('[QuickLearn] 指定 storyId 未命中故事池，单课将以无故事模式运行', {
+          profileId: profile.id,
+          storyId: input.storyId,
+          poolSize: pool.length,
+        });
+      }
+    }
+
+    const frictionBudget = ['none', 'low', 'normal', 'high', 'stress_test'].includes(input.frictionBudget || '')
+      ? input.frictionBudget!
+      : 'none';
+
     const fixtureOfPathId = path.sourcePathId || null;
     const run = await prisma.virtual_quick_learn_runs.create({
       data: {
@@ -169,6 +198,8 @@ export class QuickLearnService {
         mode: 'fast_forward',
         status: 'queued',
         maxTurns,
+        story,
+        frictionBudget,
       },
     });
 
@@ -365,6 +396,8 @@ export class QuickLearnService {
           taskTitle: task.title,
           milestoneTitle: milestone.title,
           taskConcept: (task as any).linkedConcept || null,
+          story: run.story ? parseJson<Record<string, any>>(run.story, null) : null,
+          frictionBudget: run.frictionBudget || 'none',
         });
 
         if (!simulatorOutput || !simulatorOutput.reply || simulatorOutput.degraded) {
@@ -579,6 +612,10 @@ export class QuickLearnService {
     taskTitle: string;
     milestoneTitle: string;
     taskConcept?: string | null;
+    /** 单课上下文故事（可为 null） */
+    story?: Record<string, any> | null;
+    /** 行为摩擦预算档位（默认 none） */
+    frictionBudget?: string;
   }): Promise<LearnLearnerSimulationOutput | null> {
     const history = input.visibleHistory.slice(-VISIBLE_HISTORY_LIMIT);
     const lastTeacherMessage = [...history].reverse().find((item) => item.role === 'teacher')?.content;
@@ -600,14 +637,14 @@ export class QuickLearnService {
         : null;
       const output = await executeSkill(virtualLearnerLearnTurnSimulatorDefinition, {
         learner: input.learnerPersona,
-        story: null,
+        story: input.story || null,
         visibleContext: { history, lastTeacherMessage },
         currentPhase: input.currentPhase,
         previousLearnerState: input.previousLearnerState,
         currentTask: { title: input.taskTitle, milestoneTitle: input.milestoneTitle },
         knowledgeSnapshot,
         learnerMemory,
-        frictionBudget: 'none',
+        frictionBudget: (input.frictionBudget || 'none') as any,
       });
       return (output || null) as LearnLearnerSimulationOutput | null;
     } catch (error) {
@@ -857,6 +894,8 @@ export class QuickLearnService {
       maxTurns: run.maxTurns,
       turns: run.turns,
       teachingSessionId: run.teachingSessionId,
+      frictionBudget: run.frictionBudget || 'none',
+      story: parseJson<Record<string, any> | null>(run.story, null),
       error: run.error,
       abortRequestedAt: run.abortRequestedAt?.toISOString?.() || null,
       startedAt: run.startedAt?.toISOString?.() || null,

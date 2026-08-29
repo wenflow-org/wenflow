@@ -1234,6 +1234,41 @@ export interface LearnerEvidenceRaw {
   detail?: string
 }
 
+/** 学习者预测校准数据（实证命中率 + 最近预测） */
+export interface PredictionCalibration {
+  stats: {
+    total: number
+    stallHitRate: number | null
+    toneHitRate: number | null
+    calibration: Array<{ range: string; min: number; max: number; n: number; hard: number; hardRate: number | null }>
+  }
+  recent: Array<{
+    id: string
+    taskId?: string
+    stallRisk: number
+    predictedTone: string
+    suggestedDepth: string
+    focusConcepts: string[]
+    rationale: string
+    outcome?: string | null
+    createdAt: string
+    outcomeAt?: string | null
+  }>
+}
+
+export async function liveGetLearnerPredictions(userId: string, includeTest?: boolean): Promise<PredictionCalibration | null> {
+  try {
+    const res = await adminLearnerModelsApi.getPredictions(userId, includeTest ? { includeTest: true } : undefined)
+    const body = res.data?.data ?? res.data ?? {}
+    return {
+      stats: body.stats,
+      recent: Array.isArray(body.recent) ? body.recent : [],
+    }
+  } catch {
+    return null
+  }
+}
+
 /* ================= 虚拟学习者 ================= */
 export interface LiveVirtual {
   id: string
@@ -1397,6 +1432,8 @@ export async function liveCreateVirtual(data: {
   goal?: string
   story: string
   personaSeed?: Record<string, unknown>
+  /** 批次备注（可选）：写入 notes 字段便于识别 */
+  note?: string
 }): Promise<string | null> {
   // personaSeed 存在时展开为完整画像（含 learningStyle 等故事生成必需字段）
   const profile: Record<string, unknown> = data.personaSeed
@@ -1405,7 +1442,7 @@ export async function liveCreateVirtual(data: {
   const res = await adminVirtualLearnersApi.createVirtualLearner({
     name: data.name,
     learningGoal: (data.goal || '').trim(),
-    notes: data.story,
+    notes: data.note?.trim() ? `${data.note.trim()} · ${data.story}` : data.story,
     profile
   })
   const created = res.data?.data ?? res.data ?? {}

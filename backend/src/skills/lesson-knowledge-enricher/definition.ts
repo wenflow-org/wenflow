@@ -29,6 +29,7 @@ export const lessonKnowledgeEnricherRuntimeDefinition: RuntimeDefinitionRecord =
       blockedFoundations: { type: 'array', description: '不稳定前提' },
       transferSignals: { type: 'array', description: '迁移信号' },
       recurringConfusions: { type: 'array', description: '反复混淆模式' },
+      knowledgeStateSummary: { type: 'string', description: '知识状态自然语言摘要（LBM 式，供预测器/教学决策读取）' },
     },
   },
   capabilities: ['lesson-knowledge-enrichment', 'learner-background-update'],

@@ -23,6 +23,8 @@ export interface BatchLearnerConfig {
   name: string;
   learningGoal?: string;
   frictionBudget?: string;
+  /** 样本类型：'student' 生成传统学生样本（课纲/考试节点/学期节奏/家长同伴环境），缺省自由生成 */
+  sampleType?: string;
 }
 
 const MAX_STALL = 10;
@@ -75,11 +77,16 @@ async function createLearner(cfg: BatchLearnerConfig): Promise<string> {
 }
 
 /** 生成人设（LLM）并写回 profile；失败不阻断（用基础档案继续） */
-async function draftPersona(profileId: string): Promise<void> {
+async function draftPersona(profileId: string, sampleType?: string): Promise<void> {
   try {
     const result = await executeSkill(virtualLearnerPersonaDesignerDefinition, {
       preferredLevels: ['beginner'],
       existingPersonaSeed: {},
+      ...(sampleType === 'student'
+        ? {
+            recentPersonaHints: ['本次明确生成传统学生样本：学段与年级、目标考试或升学节点、学期节奏（课表/晚自习/假期）、成绩自评、家长与老师的外部期望必须全部具体；emotionalTriggers/failurePatterns 写学生真实模式（家长问成绩、排名下滑、考前突击遗忘等）。'],
+          }
+        : {}),
     });
     const personaSeed = result?.personaSeed;
     if (personaSeed && typeof personaSeed === 'object') {
@@ -96,7 +103,7 @@ async function draftPersona(profileId: string): Promise<void> {
 }
 
 /** 生成故事（LLM）并写回 storyPool；失败不阻断（会话启动再报错） */
-async function draftStory(profileId: string): Promise<void> {
+async function draftStory(profileId: string, sampleType?: string): Promise<void> {
   try {
     const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id: profileId } });
     if (!profile) return;
@@ -107,7 +114,11 @@ async function draftStory(profileId: string): Promise<void> {
       preferredMotivations: undefined,
       candidateDomains: undefined,
       candidatePersonas: undefined,
-      recentScenarioHints: undefined,
+      ...(sampleType === 'student'
+        ? {
+            recentScenarioHints: ['本次明确生成传统学生样本的故事：sourceType 取 study 或 goalType 取 exam_prep，必须写清考试节点与时间压力、课纲既定的学习内容、老师布置的作业情境、家长与老师的期望、同学比较环境；pressurePoints/behaviorHooks 写学生真实卡点。'],
+          }
+        : {}),
       existingPersonaSeed: profileData,
       existingStoryPool,
       targetStoryCount: 1,
@@ -183,8 +194,10 @@ export async function advanceRun(runId: string): Promise<string> {
         logger.info('[batch-experiment] learner created', { runId, profileId });
         return 'setup';
       }
-      await draftPersona(run.profileId);
-      await draftStory(run.profileId);
+      // 样本类型：实验配置 learnerName 含 [student] 前缀或 frictionBudget 配置时仍自由；sampleType 从 name 标签推断（如 "[student] 高三-李"）
+      const sampleType = run.learnerName?.startsWith('[student]') ? 'student' : undefined;
+      await draftPersona(run.profileId, sampleType);
+      await draftStory(run.profileId, sampleType);
       const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id: run.profileId } });
       const storyList = getStoryPool(profile);
       const story = storyList[0];

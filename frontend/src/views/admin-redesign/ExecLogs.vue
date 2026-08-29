@@ -424,7 +424,8 @@ const filtered = computed(() =>
 const { shown: demoShown, canMore: demoCanMore, loadMore: demoLoadMore } = useLoadMore(filtered, 30)
 const shown = computed(() => (isLive.value ? filtered.value : demoShown.value))
 
-const isFiltered = computed(() => !!(agentFilter.value || statusFilter.value || keyword.value.trim() || traceId.value.trim() || sessionId.value.trim() || errorCategory.value))
+/* 口径与 AuditLogs 一致：时间范围非默认值也计入筛选态，空态才显示「当前筛选无日志」而非「暂无日志」 */
+const isFiltered = computed(() => !!(agentFilter.value || statusFilter.value || keyword.value.trim() || traceId.value.trim() || sessionId.value.trim() || errorCategory.value || timeRange.value !== 'week'))
 /* traceId/sessionId 服务端查询未命中时的空态提示（与 TraceWaterfall 的 wf-notice「样本截断」兜底互补：
    此处是服务端精确查询的直接未命中） */
 const traceMiss = computed(() => {
@@ -475,6 +476,7 @@ function clearFilter() {
   traceId.value = ''
   sessionId.value = ''
   errorCategory.value = ''
+  timeRange.value = 'week' // 时间范围计入 isFiltered 口径，清除时需一并还原
   clearInvestigation()
   /* 服务端筛选下必须重查：仅清本地值不会刷新列表（traceId/sessionId 不在 watch 内，
      避免输入即查询；状态/节点变化由 watch 触发，此处兜底全清场景） */

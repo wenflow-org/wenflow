@@ -2,6 +2,7 @@ import express from 'express';
 import prisma from '../../config/database';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { learnerSnapshotRefreshService } from '../../services/learner/LearnerSnapshotRefreshService';
+import { predictionCalibrationService } from '../../services/learner/PredictionCalibrationService';
 import learningStateService from '../../services/learning/learning-state.service';
 
 const router = express.Router();
@@ -223,6 +224,65 @@ router.get('/:userId/evidence', async (req, res) => {
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: { message: error.message || '获取学习证据失败' } });
+  }
+});
+
+router.get('/:userId/predictions', async (req, res) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+
+    const includeTest = String(req.query.includeTest || '') === 'true';
+    if (!(await ensureVirtualVisible(req.params.userId, includeTest))) {
+      return res.status(404).json({
+        success: false,
+        error: { message: '虚拟学习者数据需显式包含（includeTest=true 可查）' },
+      });
+    }
+
+    // 实证命中率 + 校准桶（预测器可信度的统计口径）
+    const stats = await predictionCalibrationService.empiricalStats(req.params.userId);
+    // 最近预测记录（含回写结果），供前端展示"预测 vs 实际"
+    const recentRows = await prisma.prediction_records.findMany({
+      where: { userId: req.params.userId },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: {
+        id: true,
+        taskId: true,
+        stallRisk: true,
+        predictedTone: true,
+        suggestedDepth: true,
+        focusConcepts: true,
+        rationale: true,
+        outcome: true,
+        createdAt: true,
+        outcomeAt: true,
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        stats,
+        recent: recentRows.map((r) => ({
+          id: r.id,
+          taskId: r.taskId,
+          stallRisk: r.stallRisk,
+          predictedTone: r.predictedTone,
+          suggestedDepth: r.suggestedDepth,
+          focusConcepts: safeJsonParse<string[]>(r.focusConcepts) || [],
+          rationale: r.rationale,
+          outcome: r.outcome,
+          createdAt: r.createdAt.toISOString(),
+          outcomeAt: r.outcomeAt?.toISOString() || null,
+        })),
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: { message: error.message || '获取预测校准数据失败' } });
   }
 });
 

@@ -91,7 +91,8 @@ const auditExports: ExportDef[] = [
   { key: 'audit-logs', label: '审计日志', desc: '管理操作审计：动作 / 目标 / 方法 / 路径 / 状态码 / IP', limit: true },
 ]
 
-const limits = reactive<Record<string, number>>({ 'agent-logs': 1000, 'audit-logs': 2000 })
+/* 默认值必须落在下拉选项集内（1000/5000/20000），否则 select 初始显示空白 */
+const limits = reactive<Record<string, number>>({ 'agent-logs': 1000, 'audit-logs': 1000 })
 const exporting = ref('')
 
 async function doExport(key: string) {

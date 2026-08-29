@@ -306,7 +306,7 @@ import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import { hasUserSession } from '@/utils/api';
 import { renderAiMessageHtml } from '@/utils/sanitize';
-import { ElMessageBox } from 'element-plus';
+import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import './v2.css';
 
 const route = useRoute();
@@ -510,21 +510,20 @@ async function doResume() {
   await live.resume();
 }
 
-function doReset() {
-  ElMessageBox.confirm(
-    '清空后本机保存的对话记录将被删除，此操作不可恢复。',
-    '清空重聊',
-    { confirmButtonText: '清空', cancelButtonText: '取消', type: 'warning' }
-  ).then(() => {
-    live.reset();
-    resetToEntry();
-    // 清掉 URL 中残留的 conversationId，避免刷新后 resumeById 恢复旧会话
-    if (typeof route.params.conversationId === 'string') {
-      router.replace({ name: 'V2GoalConversation' });
-    }
-  }).catch(() => {
-    // 用户取消
+async function doReset() {
+  const ok = await askConfirm({
+    title: '清空重聊',
+    message: '清空后本机保存的对话记录将被删除，此操作不可恢复。',
+    confirmText: '清空',
+    danger: true,
   });
+  if (!ok) return;
+  live.reset();
+  resetToEntry();
+  // 清掉 URL 中残留的 conversationId，避免刷新后 resumeById 恢复旧会话
+  if (typeof route.params.conversationId === 'string') {
+    router.replace({ name: 'V2GoalConversation' });
+  }
 }
 
 const SCENE_BATCH_SIZE = 3;
@@ -733,7 +732,7 @@ function shuffleScenes() {
   border-radius: 12px;
   background: rgba(239, 117, 120, 0.08);
   border: 1px solid rgba(239, 117, 120, 0.3);
-  color: #c0454a;
+  color: var(--red, #c0454a);
   font-size: 13px; font-weight: 600;
 }
 .errorbar__retry { text-decoration: underline; cursor: pointer; font-weight: 800; }
@@ -816,7 +815,7 @@ function shuffleScenes() {
   box-shadow: 0 8px 16px rgba(52, 120, 246, 0.3);
   flex: 0 0 auto;
 }
-.composer__send--off { background: #e3eaf5; color: var(--faint); box-shadow: none; cursor: default; }
+.composer__send--off { background: color-mix(in srgb, var(--line) 60%, transparent); color: var(--faint); box-shadow: none; cursor: default; }
 .composer__hint {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap;
@@ -854,7 +853,7 @@ function shuffleScenes() {
 .panel__head { display: flex; align-items: center; justify-content: space-between; }
 .panel__head strong { font-size: 14px; }
 .panel__count { font-size: 12px; font-weight: 800; color: var(--blue-deep); }
-.panel__bar { height: 6px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
+.panel__bar { height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
 .panel__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
 .panel__confidence { font-size: 11px; color: var(--faint); }
 
@@ -926,17 +925,17 @@ function shuffleScenes() {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--line);
-  background: #fbfdff;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
 }
 .stage-nav { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
 .chat__show-proposal {
   margin-left: auto;
   border: 1px solid rgba(44, 99, 208, 0.35);
-  background: #eef4ff; color: #2c63d0;
+  background: color-mix(in srgb, var(--blue, #3478f6) 10%, var(--surface)); color: var(--blue-deep, #2c63d0);
   border-radius: 999px; padding: 4px 12px;
   font-size: 12px; font-weight: 700; cursor: pointer;
 }
-.chat__show-proposal:hover { background: #e0ebfd; }
+.chat__show-proposal:hover { background: color-mix(in srgb, var(--blue, #3478f6) 18%, var(--surface)); }
 .stage-nav__item {
   display: inline-flex; align-items: center; gap: 7px;
   font-size: 12px; font-weight: 700; color: var(--faint);
@@ -944,7 +943,7 @@ function shuffleScenes() {
 }
 .stage-nav__item i {
   width: 17px; height: 17px; border-radius: 50%;
-  background: #e3eaf5; color: var(--faint);
+  background: color-mix(in srgb, var(--line) 60%, transparent); color: var(--faint);
   font-size: 10.5px; font-weight: 800; font-style: normal;
   display: grid; place-items: center;
 }
@@ -953,7 +952,7 @@ function shuffleScenes() {
 .stage-nav__item--done { color: var(--green); }
 .stage-nav__item--done i { background: var(--green); color: #fff; }
 .chat__clear { font-size: 12px; font-weight: 600; color: var(--faint); cursor: pointer; }
-.chat__clear:hover { color: #c0454a; }
+.chat__clear:hover { color: var(--red, #c0454a); }
 
 .chat__scroll {
   flex: 1;
@@ -1018,7 +1017,7 @@ function shuffleScenes() {
 .msg__meta { font-size: 11px; color: var(--faint); }
 .msg__retry {
   margin-left: 8px;
-  color: #c0454a; font-weight: 800;
+  color: var(--red, #c0454a); font-weight: 800;
   text-decoration: underline; cursor: pointer;
 }
 
@@ -1091,7 +1090,7 @@ function shuffleScenes() {
 .chat .composer {
   padding: 12px 14px;
   border-top: 1px solid var(--line);
-  background: #fbfdff;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
   flex: 0 0 auto;
 }
 
@@ -1124,7 +1123,7 @@ function shuffleScenes() {
   display: grid; gap: 4px;
   padding: 11px 14px;
   border-radius: 12px;
-  background: #f7faff;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
   border: 1px solid #e8eefb;
   text-align: left;
 }

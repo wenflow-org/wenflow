@@ -71,7 +71,7 @@
 
       <!-- 中：导师对话 -->
       <section class="tutor">
-        <div ref="scrollEl" class="tutor__scroll">
+        <div ref="scrollEl" class="tutor__scroll" @scroll="updateNearBottom">
           <template v-for="m in msgs" :key="m.id">
             <div v-if="m.role === 'user'" class="msg msg--user">
               <div class="msg__bubble">{{ m.text }}</div>
@@ -80,7 +80,7 @@
             <div v-else class="msg msg--ai">
               <span class="msg__avatar"><img src="/favicon.png" alt="问流" /></span>
               <div class="msg__content">
-                <div class="msg__bubble msg__bubble--html" v-html="formatMessage(m.text)"></div>
+                <div class="msg__bubble msg__bubble--html" v-html="htmlFor(m)"></div>
                 <span v-if="m.confusion?.length" class="msg__chip msg__chip--confuse">捕获到卡点「{{ m.confusion.join('、') }}」· 导师会在这里多做确认</span>
                 <div class="msg__meta">
                   问流导师 · {{ m.time }}
@@ -95,6 +95,15 @@
             <div class="msg__bubble msg__bubble--typing"><i></i><i></i><i></i></div>
           </div>
         </div>
+
+        <!-- 回到底部浮标：用户上翻看旧内容期间显示，点击回到最新消息 -->
+        <button
+          v-if="!nearBottom && msgs.length > 3"
+          type="button"
+          class="tutor__jump-bottom"
+          aria-label="回到底部"
+          @click="jumpToBottom"
+        >↓ 回到底部</button>
 
         <!-- 开场快捷回复 -->
         <div v-if="quickReplies.length && !typing && !checkpoint" class="replies">
@@ -200,7 +209,7 @@
             <strong>伴学伙伴</strong>
             <small>看到你在当前知识点卡了一下，来帮一把 · <AiContentNote /></small>
           </div>
-          <span class="peerdock__min" title="收起" @click="peerOpen = false">−</span>
+          <span class="peerdock__min" title="收起" @click="minimizePeer">−</span>
         </div>
         <div ref="peerScrollEl" class="peerdock__scroll">
           <div v-for="(p, i) in peerItems" :key="i" class="peerdock__msg" :class="`peerdock__msg--${p.role}`">
@@ -245,7 +254,7 @@ import AiContentNote from '@/components/AiContentNote.vue';
 import { toast } from '@/utils/toast';
 import { useInteractionMeta } from '@/composables/useInteractionMeta';
 import { renderAiMessageHtml } from '@/utils/sanitize';
-import { ElMessageBox } from 'element-plus';
+import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import './v2.css';
 import { unwrap } from './unwrap';
 
@@ -295,6 +304,8 @@ const selectedOptions = ref<string[]>([]);
 const answerText = ref('');
 const checkpointFeedback = ref('');
 const checkpointPassed = ref(false);
+/** 检查点通过后的展示窗口内锁：防止 1.6s 内重复提交同一检查点 */
+const checkpointSubmitting = ref(false);
 
 const completed = ref(false);
 const wrapupText = ref('');
@@ -308,6 +319,12 @@ const scrollEl = ref<HTMLElement | null>(null);
 interface PeerChatItem { role: 'peer' | 'me'; text: string; time: string }
 const peerOpen = ref(false);
 const peerUnread = ref(false);
+/** 触发频控：相邻触发的冷却窗口（ms），防止每轮对话都强制弹窗打扰 */
+const PEER_TRIGGER_COOLDOWN = 60_000;
+/** 距上次自动展开的时间戳：冷却期内仅累计未读红点，不强制展开 */
+let lastPeerAutoOpen = 0;
+/** 用户手动收起过：本轮会话内不再自动展开（尊重用户意图，仅红点提示） */
+let peerManuallyMinimized = false;
 const peerItems = ref<PeerChatItem[]>([]);
 const peerInput = ref('');
 const peerSending = ref(false);
@@ -322,6 +339,14 @@ function openPeer() {
   peerOpen.value = true;
   peerUnread.value = false;
   scrollPeerDown();
+}
+
+/** 用户手动收起：本轮会话内不再自动展开（仅红点），避免「收起又被弹开」的打扰循环；
+    收起视为已读（红点清除，用户已看到内容） */
+function minimizePeer() {
+  peerOpen.value = false;
+  peerUnread.value = false;
+  peerManuallyMinimized = true;
 }
 
 async function sendPeer(e?: unknown) {
@@ -365,14 +390,42 @@ async function sendPeer(e?: unknown) {
 
 const formatMessage = (text: string) => renderAiMessageHtml(text);
 
+/* 流式渲染记忆化：v-html 直接调函数会在每个 delta 触发全列表重渲染 + 全部历史消息重跑
+   markdown/DOMPurify（50 条消息 × 每秒数十 delta 开销显著）。
+   这里按消息对象缓存渲染结果，仅文本变化时惰性重算 */
+const htmlCache = new WeakMap<object, { text: string; html: string }>();
+function htmlFor(m: { text: string }): string {
+  const hit = htmlCache.get(m);
+  if (hit && hit.text === m.text) return hit.html;
+  const html = formatMessage(m.text);
+  htmlCache.set(m, { text: m.text, html });
+  return html;
+}
+
 function nowTime() {
   const d = new Date();
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+/* 贴底跟随：用户上翻看旧内容时暂停自动滚动（避免被持续拽回底部），
+   并在滚动到底部时清除「回到底部」浮标 */
+const nearBottom = ref(true);
+function updateNearBottom() {
+  const el = scrollEl.value;
+  if (!el) return;
+  nearBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 48;
+}
+
 async function scrollDown() {
   await nextTick();
-  if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight;
+  if (scrollEl.value) {
+    scrollEl.value.scrollTop = scrollEl.value.scrollHeight;
+    nearBottom.value = true;
+  }
+}
+
+function jumpToBottom() {
+  scrollDown();
 }
 
 /* ---------- 启动 ---------- */
@@ -421,6 +474,7 @@ async function boot() {
             checkpointFeedback.value = '';
             selectedOptions.value = [];
             answerText.value = '';
+            checkpointSubmitting.value = false;
           }
           if (Array.isArray(detail.knowledgePoints) && detail.knowledgePoints.length) {
             knowledgePoints.value = detail.knowledgePoints;
@@ -497,7 +551,8 @@ async function doSend(text: string, allowStaleRetry = true) {
           }
           if (m) {
             m.text += delta;
-            scrollDown();
+            // 仅贴底时自动跟随（用户上翻看旧内容时不打断）
+            if (nearBottom.value) void scrollDown();
           }
         },
         onRestart: () => {
@@ -529,12 +584,26 @@ async function doSend(text: string, allowStaleRetry = true) {
     } else if (r.aiResponse) {
       pushMsg({ role: 'ai', text: r.aiResponse, time: nowTime(), confusion });
     }
-    // 伴学触发：进独立浮动窗，不占主对话区
+    // 兜底：AI 全程未返回任何内容（空响应）时给占位气泡，避免本轮「无声消失」
+    if (!r.aiResponse && (!aiMsg || !aiMsg.text.trim())) {
+      if (aiMsg?.role === 'ai') {
+        aiMsg.text = '（本轮没有收到回复，你可以换个说法再试一次。）';
+      } else {
+        pushMsg({ role: 'ai', text: '（本轮没有收到回复，你可以换个说法再试一次。）', time: nowTime() });
+      }
+    }
+    // 伴学触发：进独立浮动窗，不占主对话区。
+    // 频控：冷却期（60s）内或用户手动收起过 → 仅累计未读红点，不强制展开，避免打扰循环
     if (r.peerTriggered && r.peerMessage) {
       peerItems.value.push({ role: 'peer', text: String(r.peerMessage), time: nowTime() });
       peerUnread.value = true;
-      peerOpen.value = true;
-      scrollPeerDown();
+      const now = Date.now();
+      const inCooldown = now - lastPeerAutoOpen < PEER_TRIGGER_COOLDOWN;
+      if (!inCooldown && !peerManuallyMinimized) {
+        peerOpen.value = true;
+        lastPeerAutoOpen = now;
+        scrollPeerDown();
+      }
     }
     if (Array.isArray(r.knowledgePoints) && r.knowledgePoints.length) {
       knowledgePoints.value = r.knowledgePoints;
@@ -545,6 +614,7 @@ async function doSend(text: string, allowStaleRetry = true) {
       checkpointFeedback.value = '';
       selectedOptions.value = [];
       answerText.value = '';
+      checkpointSubmitting.value = false;
     }
     if (r.isCompletion) {
       await finish(isReviewMode.value ? 'complete_review' : 'complete_task');
@@ -593,7 +663,16 @@ function toggleOption(id: string) {
 }
 
 async function submitCheckpoint() {
-  if (!checkpoint.value || !session.value || typing.value) return;
+  if (!checkpoint.value || !session.value || typing.value || checkpointSubmitting.value) return;
+  // 空值校验：空选项/空简答直接提示，不消耗一轮 AI 判定
+  if (checkpoint.value.options?.length && !selectedOptions.value.length) {
+    checkpointFeedback.value = '请先选择一个选项';
+    return;
+  }
+  if (!checkpoint.value.options?.length && !answerText.value.trim()) {
+    checkpointFeedback.value = '请先写下你的回答';
+    return;
+  }
   const payload: Record<string, any> = {};
   if (checkpoint.value.options?.length) payload.selectedOptionIds = selectedOptions.value;
   else payload.answerText = answerText.value;
@@ -604,11 +683,14 @@ async function submitCheckpoint() {
     checkpointPassed.value = r.passed === true;
     checkpointFeedback.value = r.feedback || (r.passed ? '回答正确' : r.hint || '再想想');
     if (r.passed || r.nextAction === 'continue') {
+      // 通过后立即锁住本次检查点（1.6s 展示窗口内不可重复提交）
+      checkpointSubmitting.value = true;
       // 记录 timer 并在下次提交/卸载时清理，避免前一次 timeout 清掉新反馈
       window.clearTimeout(checkpointCloseTimer);
       checkpointCloseTimer = window.setTimeout(() => {
         checkpoint.value = null;
         checkpointFeedback.value = '';
+        checkpointSubmitting.value = false;
       }, 1600);
     }
   } catch {
@@ -619,7 +701,7 @@ async function submitCheckpoint() {
 }
 
 async function skipCheckpoint() {
-  if (!checkpoint.value || !session.value || typing.value) return;
+  if (!checkpoint.value || !session.value || typing.value || checkpointSubmitting.value) return;
   const cp = checkpoint.value;
   checkpoint.value = null;
   try {
@@ -655,19 +737,16 @@ async function finish(action: 'complete_task' | 'end_only' | 'complete_review') 
     const msg = e?.message || e?.response?.data?.error?.message || '结算失败';
     toast.error(`课堂收束未完成：${msg}`);
     evaluationUrl.value = `/learn/${taskId}/evaluation/${session.value.sessionId}${pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : ''}`;
-    // 会话可能已收束但轮询异常：提供进入反馈页的途径（via 完成浮层不弹，用 toast 引导）
+    // 会话可能已收束但轮询异常：提供进入反馈页的途径（完成浮层不弹，直接弹全局确认引导，
+    // 不再用 setTimeout（此前 timer 未在卸载清理，路由离开后弹窗会出现在下一个页面上））
     if (session.value) {
-      window.setTimeout(() => {
-        if (!completed.value) {
-          ElMessageBox.confirm(
-            '课堂收束遇到问题。你可以稍后重试，或直接查看学习反馈（反馈可能仍在生成中）。',
-            '收束未完成',
-            { confirmButtonText: '查看学习反馈', cancelButtonText: '稍后重试', type: 'warning' }
-          ).then(() => {
-            if (evaluationUrl.value) router.push(evaluationUrl.value);
-          }).catch(() => {});
-        }
-      }, 300);
+      const go = await askConfirm({
+        title: '收束未完成',
+        message: '课堂收束遇到问题。你可以稍后重试，或直接查看学习反馈（反馈可能仍在生成中）。',
+        confirmText: '查看学习反馈',
+        danger: false,
+      });
+      if (go && evaluationUrl.value) router.push(evaluationUrl.value);
     }
   }
 }
@@ -676,15 +755,13 @@ async function finish(action: 'complete_task' | 'end_only' | 'complete_review') 
 async function completeAndSettle() {
   menuOpen.value = false;
   if (actionBusy.value) return;
-  try {
-    await ElMessageBox.confirm(
-      '确认当前任务已学完？将结算任务并计入里程碑与路径进度，同时生成本次学习总结。',
-      '完成并结算任务',
-      { confirmButtonText: '完成并结算', cancelButtonText: '取消', type: 'success' }
-    );
-  } catch {
-    return;
-  }
+  const ok = await askConfirm({
+    title: '完成并结算任务',
+    message: '确认当前任务已学完？将结算任务并计入里程碑与路径进度，同时生成本次学习总结。',
+    confirmText: '完成并结算',
+    danger: false,
+  });
+  if (!ok) return;
   actionBusy.value = true;
   try {
     if (typing.value) {
@@ -703,15 +780,13 @@ async function completeAndSettle() {
 async function endSession() {
   menuOpen.value = false;
   if (actionBusy.value) return;
-  try {
-    await ElMessageBox.confirm(
-      '仅离开本次学习？将生成本次学习总结，但当前任务不会计入完成进度（里程碑/路径进度不动）。',
-      '仅离开（不计入完成）',
-      { confirmButtonText: '仅离开', cancelButtonText: '取消', type: 'warning' }
-    );
-  } catch {
-    return;
-  }
+  const ok = await askConfirm({
+    title: '仅离开（不计入完成）',
+    message: '仅离开本次学习？将生成本次学习总结，但当前任务不会计入完成进度（里程碑/路径进度不动）。',
+    confirmText: '仅离开',
+    danger: false,
+  });
+  if (!ok) return;
   actionBusy.value = true;
   try {
     // 流式回复进行中：先中止在途请求并等待收尾，避免「完成浮层已弹但会话实际未结束」的假完成
@@ -743,15 +818,13 @@ async function restart() {
   menuOpen.value = false;
   if (actionBusy.value) return;
   if (!session.value) return;
-  try {
-    await ElMessageBox.confirm(
-      '重新开始将清空当前学习进度与消息记录，此操作不可恢复。',
-      '重新开始',
-      { confirmButtonText: '重新开始', cancelButtonText: '取消', type: 'warning' }
-    );
-  } catch {
-    return;
-  }
+  const ok = await askConfirm({
+    title: '重新开始',
+    message: '重新开始将清空当前学习进度与消息记录，此操作不可恢复。',
+    confirmText: '重新开始',
+    danger: true,
+  });
+  if (!ok) return;
   actionBusy.value = true;
   try {
     // 流式生成中先中止，避免与 reset 竞态
@@ -900,7 +973,7 @@ onBeforeUnmount(() => {
 .learn__head {
   display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 18px;
   padding: 12px 24px;
-  background: rgba(255, 255, 255, 0.9);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--line);
 }
@@ -985,6 +1058,16 @@ onBeforeUnmount(() => {
   padding: 20px;
   display: flex; flex-direction: column; gap: 18px;
 }
+.tutor__jump-bottom {
+  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+  z-index: 5;
+  padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); color: var(--muted);
+  font: inherit; font-size: 12px; font-weight: 700;
+  cursor: pointer; box-shadow: 0 4px 14px rgba(23, 32, 51, 0.12);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+.tutor__jump-bottom:hover { color: var(--blue); transform: translateX(-50%) translateY(-1px); }
 .msg { display: flex; flex-direction: column; gap: 5px; max-width: 85%; }
 .msg--user { align-self: flex-end; align-items: flex-end; }
 .msg--user .msg__bubble {
@@ -997,7 +1080,7 @@ onBeforeUnmount(() => {
   padding: 11px 15px;
   font-size: 14px; line-height: 1.65;
   border-radius: 4px 16px 16px 16px;
-  background: #f2f6fc; color: var(--ink);
+  background: color-mix(in srgb, var(--surface) 72%, var(--blue) 4%); color: var(--ink);
 }
 .msg__bubble p { margin: 0 0 8px; }
 .msg__bubble p:last-child { margin-bottom: 0; }
@@ -1082,7 +1165,7 @@ onBeforeUnmount(() => {
   width: min(340px, calc(100vw - 32px));
   display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
   max-height: 440px;
-  background: #fff; border: 1px solid rgba(141, 107, 255, 0.22);
+  background: var(--surface); border: 1px solid rgba(141, 107, 255, 0.22);
   border-radius: 18px; box-shadow: 0 24px 60px rgba(76, 58, 158, 0.18);
   overflow: hidden;
 }
@@ -1143,7 +1226,7 @@ onBeforeUnmount(() => {
 .peerdock__input {
   display: flex; gap: 8px; padding: 10px 12px;
   border-top: 1px solid var(--line, rgba(23, 32, 51, 0.08));
-  background: #fff;
+  background: var(--surface);
 }
 .peerdock__input input {
   flex: 1; min-width: 0; padding: 8px 12px;
@@ -1206,7 +1289,7 @@ onBeforeUnmount(() => {
 .kp-actions {
   padding: 12px 16px;
   border-top: 1px solid var(--line);
-  background: #fbfdff;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
   display: grid; gap: 9px;
 }
 .kp-actions__label { font-size: 11.5px; font-weight: 700; color: var(--faint); }
@@ -1229,11 +1312,11 @@ onBeforeUnmount(() => {
 }
 .kp-btn--mastered:hover { box-shadow: 0 12px 26px rgba(30, 158, 88, 0.3); }
 .kp-btn--retry {
-  color: #b45309;
-  background: #fffbeb;
+  color: var(--amber, #b45309);
+  background: color-mix(in srgb, var(--amber, #f4aa46) 10%, transparent);
   border-color: rgba(180, 83, 9, 0.32);
 }
-.kp-btn--retry:hover { background: #fef3c7; }
+.kp-btn--retry:hover { background: color-mix(in srgb, var(--amber, #f4aa46) 18%, transparent); }
 
 /* ---------- 检查点 ---------- */
 .checkpoint {
@@ -1261,13 +1344,13 @@ onBeforeUnmount(() => {
   font-family: 'JetBrains Mono', Consolas, monospace;
   font-size: 13px;
   resize: none; outline: none;
-  background: #fff;
+  background: var(--surface);
 }
 .checkpoint__input:focus { border-color: rgba(52, 120, 246, 0.5); }
 .checkpoint__actions { display: flex; gap: 10px; }
 
 /* ---------- 输入区 ---------- */
-.composer { display: grid; gap: 7px; padding: 12px 14px; border-top: 1px solid var(--line); background: #fbfdff; }
+.composer { display: grid; gap: 7px; padding: 12px 14px; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 96%, transparent); }
 .composer__box {
   display: flex; align-items: flex-end; gap: 10px;
   background: var(--surface);
@@ -1313,7 +1396,7 @@ onBeforeUnmount(() => {
 .btn-primary--off { opacity: .55; cursor: default; box-shadow: none; }
 .btn-ghost {
   padding: 9px 16px; border-radius: 12px;
-  border: 1px solid var(--line); background: #fff;
+  border: 1px solid var(--line); background: var(--surface);
   font-size: 13.5px; font-weight: 700; color: var(--muted);
   cursor: pointer;
 }
@@ -1360,7 +1443,7 @@ onBeforeUnmount(() => {
 <style scoped>
 /* logo 头像 */
 .msg__avatar {
-  background: #fff !important;
+  background: var(--surface) !important;
   border: 1px solid var(--line);
   box-shadow: 0 2px 6px rgba(23, 32, 51, 0.08);
 }
@@ -1379,7 +1462,7 @@ onBeforeUnmount(() => {
 .learn__init-error { color: #c0454a; font-size: 14px; font-weight: 600; }
 .learn__menu-pop {
   position: absolute; top: 46px; right: 24px; z-index: 40;
-  background: #fff; border: 1px solid var(--line);
+  background: var(--surface); border: 1px solid var(--line);
   border-radius: 12px; padding: 5px;
   box-shadow: 0 12px 30px rgba(23, 32, 51, 0.14);
   display: grid; min-width: 140px;
@@ -1401,7 +1484,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line);
   border-radius: 10px;
   font-size: 13.5px; cursor: pointer;
-  background: #fff;
+  background: var(--surface);
 }
 .checkpoint__option--on { border-color: rgba(52, 120, 246, 0.5); background: rgba(52, 120, 246, 0.06); }
 .checkpoint__feedback {

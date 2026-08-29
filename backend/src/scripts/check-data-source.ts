@@ -97,6 +97,9 @@ const CALL_SITE_MANIFEST: Record<string, CallSite[]> = {
   'lesson-knowledge-enricher': [
     { file: 'backend/src/services/learner/LessonKnowledgeEnrichmentConsumer.ts', line: 27 },
   ],
+  'learning-predictor': [
+    { file: 'backend/src/services/ai-teaching/TeachingContextBuilder.ts', line: 550 },
+  ],
   'virtual-learner-persona-designer': [
     { file: 'backend/src/routes/admin/virtual-learners.ts', line: 837 },
     { file: 'backend/src/routes/admin/virtual-learners.ts', line: 868 },

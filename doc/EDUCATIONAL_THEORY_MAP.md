@@ -64,7 +64,8 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 - **文献**：Yerkes & Dodson (1908) *The relation of strength of stimulus to rapidity of habit-formation*（DOI 10.1002/cne.920180503）。✅ 公认文献
 - **核心观点**：表现随唤醒度倒U变化——唤醒不足→动机低；过度唤醒→表现崩溃；中等唤醒最优。
 - **Wenflow 落点**：**部分（无注释）**。历史分析文档记录 LSS/LSB 阈值设计依据（`doc/history/analysis/2026-05/LEARN_PIPELINE_ANALYSIS.md:281`）；现行 `LearnerSnapshotService.ts:60-93`（lf≥6/lsb<0→recover；趋势向好→push）是倒U的量化实现。
-- **建议**：给 `LearnerSnapshotService` 阈值与 LSS/LSB 指标补理论注释；"不愤不启"三路由的唤醒度映射。
+- **已知缺陷（2026-08-29 修正记录）**：admin 学习者详情"压力曲线"曾错误使用**学习分钟数 EWMA**（运动科学 Banister 隐喻，无学习场景效度）且与指标卡（LSS/LF 0-10 体系）量纲冲突——已改为 `learning_metrics` 真实指标历史（`getStateTrendWindow`，与用户侧 `/state/trends` 同源），见 `LearnerDetail.vue` 压力记录卡片。
+- **建议**：给 `LearnerSnapshotService` 阈值与 LSS/LSB 指标补理论注释；"不愤不启"三路由的唤醒度映射；EWMA 系数（0.95/0.05、0.7/0.15）待真实数据拟合。
 
 ### ⑧ 认知负荷理论（Cognitive Load Theory, CLT）
 - **文献**：Sweller (2010) *Cognitive load theory: Recent theoretical advances*（DOI 10.1017/cbo9780511844744.004）；Sweller (2019) 综述（DOI 10.4324/9780429283895-1）；worked example 效果（DOI 10.1007/978-1-4419-8126-4_8）。✅ Crossref 核实
@@ -72,6 +73,7 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 - **Wenflow 落点**：**已实现**——外在负荷管理：单焦点≤5 知识点（`teaching-turn.yaml:53`）、回复形态预算（`yaml:92-93`）、长对话压缩（`TeachingContextCompressionService.ts`）、conceptLoad=low 不引新概念（`yaml:72`）；内在负荷量测：loadIndex（前端交互特征，`TeachingContextBuilder.ts:97-161`）。
 - **缺口**：**生成负荷（desirable difficulty）未系统化**——只靠 `yaml:59` 轻量升级条文；三路由的"低压升维"是生成负荷的正规化实现。
 - **已知缺陷**：interactionProfile 构建后未注入（`AITeachingCoordinator.ts:749-775` 漏字段，`teaching-turn/index.ts:431` 恒 null）——loadIndex 4 条规则全部空转。**待修（最高优先级）**。
+- **相关落点（2026-08-29）**：`knowledgeStateSummary`（`lesson-knowledge-enricher.yaml` 第 6 输出字段）为 LBM 式文本化知识状态摘要，作为 loadIndex 之外的**会话级状态浓缩**通道，供预测器与教学决策直接读取（理论依据见第四节 LBM 行）。
 
 ### ⑨ 测试效应 / 检索练习（Testing Effect / Retrieval Practice）
 - **文献**：Karpicke & Roediger (2007) *Expanding retrieval practice... equally spaced retrieval enhances long-term retention*（DOI 10.1037/0278-7393.33.4.704）；Karpicke & Roediger (2008) *The critical importance of retrieval for learning*（DOI 10.1126/science.1152408）；Smith, Roediger & Karpicke (2013)（DOI 10.1037/a0033569）。✅ Crossref 核实
@@ -115,6 +117,14 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 - **Wenflow 落点**：**已实现**——README 已将费曼技巧标注为自我解释（`README.md:360`）；`teaching-turn.yaml:67-68`；`peer-reinforcement.yaml:32`（feynman 策略）。
 - **建议**：无，保持。
 
+### ⑯ 预测校准方法论（可证伪置信度 / Empirical Calibration）
+- **文献**：Popper (1959) *The Logic of Scientific Discovery*（可证伪性方法论）；UKT 不确定性感知 KT（pykt.org/ukt）；CIKT（arXiv 2505.17705，预测-反馈迭代）；学习分析荟萃（DOI 10.1177/21582440251336707，干预须闭环才有效）。✅ arXiv/DOI 核实
+- **核心观点**：对学习者的任何量化断言（掌握度/风险/置信度）必须**可被现实检验**——断言留档、结果回写、命中率统计；无 ground truth 的自报置信度没有认知价值。
+- **Wenflow 落点**：**已实现（2026-08-29）**——`learning-predictor` skill（任务前预测 stallRisk/tone/depth，含自洽约束与保守兜底）+ `PredictionCalibrationService.ts`（`prediction_records` 表：预测留档 → task:completed 回写实际结果 → `empiricalStats` 命中率/校准桶）+ 实证可靠性随预测交付（`learnerPrediction.reliability`，样本 <5 置 null）+ 教学 Agent 消费规则（`teaching-turn.yaml` learnerPrediction 条）+ 后台校准可视化（`GET /admin/learner-models/:userId/predictions`，LearnerDetail 校准卡片）。
+- **替换的旧做法**：`profile-aggregator.calculateConfidence` 拍脑袋公式（(sessions/10+0.5+0.5)/3）仍存在于画像聚合（**待收敛**：其输出仅作展示，不再作为决策置信度使用）；预测器置信度已全部走实证命中率。
+- **校验纪律**：校准桶应**单调递增**（预测风险越高实际困难率越高）——非单调即预测器失效信号；命中率统计必须带样本数 n，n<5 不得引用。
+- **建议**：积累 3-6 个月真实校准数据后复核单调性；对 session-wrapup 评估做人工标注对标（LLM vs 人类专家一致性）。
+
 ---
 
 ## 三、神经科学底座（支撑"认知预算"叙事）
@@ -142,6 +152,14 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 | RAG 优于 ToT（评估） | Han et al. (2024)（arXiv 2402.14594） | wrapup 评估若引入证据检索可提升准确率与降本 |
 | 推理模型安全警示 | Zhao et al. (2025) CoT Hijacking（arXiv 2510.26418）：过长思维链削弱拒绝行为 | reasoning 段同样需要"不漏题/不越界"防线条文（教学守卫） |
 | 前缀缓存 / KV Cache | DeepSeek 自动前缀缓存（usage 返回 prompt_cache_hit_tokens） | system 静态前缀 + user 尾部动态槽的注入形态设计依据 |
+| **LBM 语言瓶颈模型** | Wang et al. (2025)（arXiv 2506.16982）：编码器 LLM 压缩学习历史为文本知识状态摘要，解码器仅凭摘要预测未来表现 | **`lesson-knowledge-enricher` 的 `knowledgeStateSummary` 直接理论依据**：文本化知识状态可预测、可解释、不需 KC 信息即达 SOTA（Eedi 第一）；捕获数字模型给不出的具体误解 |
+| **CIKT 协作迭代 KT** | (2025)（arXiv 2505.17705）：Analyst LLM 生成学生画像 + Predictor LLM 预测，KTO 迭代互优化 | **`learning-predictor` 的架构原型**（画像/摘要 → 预测）；长序列显著超越传统 KT 基线 |
+| **LLMKT 对话知识追踪** | (2024)（DOI 10.1145/3706468.3706501）：师生对话场景 LLM-KT 显著超越传统 KT | 对话式教学系统（Wenflow 形态）应走 LLM 原生 KT 而非套 BKT 的依据 |
+| **LKT / KCQRL / LMM-KC** | LKT（arXiv 2406.02893）：语义嵌入零样本超 DKT、解决冷启动；KCQRL（OpenReview）：LLM 自动标注 KC；EDM2025（LMM 提取 KC，跨 5 学科验证） | **"0 人工标注"路线的实证背书**：LLM 生成 KC ≈ 人类标注质量 → 概念台账无需 Q-matrix |
+| **反例：专用模型仍可胜 LLM** | (2026)（arXiv 2603.02830）：大数据量基准上专用 KT 仍优于 LLM | 诚实备忘：LLM 原生路线的胜区是**对话场景+零标注+冷启动+可解释**，不是"大数据预测精度竞赛" |
+| **LLM 自动评估效度** | Gaggioli et al. (2025)（arXiv 2508.02442）：5 个 LLM 作文评分与人评一致但存在偏差；BEA 2025 综述（aclanthology 2025.bea-1.35）：rubric 漂移 + 需人审 | **session-wrapup 评估 / conceptLedger 蒸馏必须校准**的依据；单一 LLM 自评不可直接采信 |
+| **学习分析干预效应量** | Sage Open (2025)（DOI 10.1177/21582440251336707）34 项研究荟萃：LA 干预 SMD≈0.30-0.45（中低）；仪表盘单独展示几乎无效（LAD 综述 2024） | **校准数据必须闭环到教学动作**（learnerPrediction → teaching-turn 规则）而非只做展示的理论依据 |
+| **不确定性感知 KT（UKT）** | pykt.org/ukt（2026）：显式建模学生交互不确定性 | **实证置信度替代自报置信度**的方向依据：低样本降权 / 校准桶 / 命中率 |
 
 ---
 

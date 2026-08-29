@@ -152,8 +152,6 @@
         </article>
         </template>
     </div>
-
-    <UcConfirm :state="confirmState" />
   </CapabilityShell>
 </template>
 
@@ -161,8 +159,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import CapabilityShell from '@/components/user/CapabilityShell.vue'
-import UcConfirm from '@/components/user/UcConfirm.vue'
-import { useUcConfirm } from '@/components/user/useUcConfirm'
+import { askConfirm, doneConfirm, failConfirm } from '@/views/admin-redesign/useConfirm'
 import {
   createUserProjectionGrant,
   getProjectionGrantStatus,
@@ -180,7 +177,6 @@ import '@/components/user/uc.css'
 const router = useRouter()
 const userStore = useUserStore()
 const api = request
-const { state: confirmState, openConfirm } = useUcConfirm()
 
 /* ---------- 修改密码 ---------- */
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
@@ -386,29 +382,33 @@ async function handleCreateProjectionGrant() {
   }
 }
 
-// ---- 手作确认弹窗（共享 UcConfirm） ----
+// ---- 全局确认弹窗（askConfirm 单例，busy 模式：确认后防重复提交） ----
 async function handleRevokeProjectionGrant() {
-  openConfirm(
-    '撤销协助授权',
-    '撤销后，工作人员将不能再凭这份授权查看你的页面，确认继续吗？',
-    async () => {
-      projectionGrantRevoking.value = true
-      try {
-        const res = await revokeUserProjectionGrant(projectionGrant.value?.id)
-        projectionGrant.value = normalizeProjectionGrant(res)
-        if (!projectionGrant.value) {
-          projectionGrantMessage.value = '已撤销'
-        }
-        toast.success('协助授权已撤销')
-        await loadProjectionGrant()
-      } catch (error: any) {
-        toast.error(getErrorMessage(error, '撤销协助授权失败'))
-      } finally {
-        projectionGrantRevoking.value = false
-      }
-    },
-    { confirmText: '撤销', danger: true }
-  )
+  if (projectionGrantRevoking.value) return
+  const ok = await askConfirm({
+    title: '撤销协助授权',
+    message: '撤销后，工作人员将不能再凭这份授权查看你的页面，确认继续吗？',
+    confirmText: '撤销',
+    danger: true,
+    busy: true
+  })
+  if (!ok) return
+  projectionGrantRevoking.value = true
+  try {
+    const res = await revokeUserProjectionGrant(projectionGrant.value?.id)
+    projectionGrant.value = normalizeProjectionGrant(res)
+    if (!projectionGrant.value) {
+      projectionGrantMessage.value = '已撤销'
+    }
+    toast.success('协助授权已撤销')
+    await loadProjectionGrant()
+    doneConfirm()
+  } catch (error: any) {
+    toast.error(getErrorMessage(error, '撤销协助授权失败'))
+    failConfirm()
+  } finally {
+    projectionGrantRevoking.value = false
+  }
 }
 
 // ---- 注销 ----
@@ -417,25 +417,28 @@ async function handleDeactivate() {
     toast.error('请输入当前密码以确认注销')
     return
   }
-  openConfirm(
-    '注销账号',
-    '注销后账号将被标记为已删除，学习数据将无法继续访问；此操作不可自助撤销。确定注销吗？',
-    async () => {
-      deactivating.value = true
-      try {
-        await api.post('/users/me/deactivate', { password: deactivatePassword.value })
-        await userStore.logout()
-        toast.success('账号已注销')
-        await router.replace('/login')
-      } catch (error: any) {
-        toast.error(getErrorMessage(error, '注销失败，请稍后重试'))
-      } finally {
-        deactivating.value = false
-        deactivatePassword.value = ''
-      }
-    },
-    { confirmText: '确认注销', danger: true }
-  )
+  const ok = await askConfirm({
+    title: '注销账号',
+    message: '注销后账号将被标记为已删除，学习数据将无法继续访问；此操作不可自助撤销。确定注销吗？',
+    confirmText: '确认注销',
+    danger: true,
+    busy: true
+  })
+  if (!ok) return
+  deactivating.value = true
+  try {
+    await api.post('/users/me/deactivate', { password: deactivatePassword.value })
+    await userStore.logout()
+    toast.success('账号已注销')
+    await router.replace('/login')
+    doneConfirm()
+  } catch (error: any) {
+    toast.error(getErrorMessage(error, '注销失败，请稍后重试'))
+    failConfirm()
+  } finally {
+    deactivating.value = false
+    deactivatePassword.value = ''
+  }
 }
 </script>
 

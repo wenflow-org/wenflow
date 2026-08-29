@@ -117,7 +117,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Loading } from '@element-plus/icons-vue';
-import { ElMessageBox } from 'element-plus';
+import { askConfirm } from '@/views/admin-redesign/useConfirm';
 // html2canvas 体积大，仅导出图片时动态加载
 import CompletionCard from '@/components/CompletionCard.vue';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
@@ -414,8 +414,11 @@ const handleAdvisoryAction = async (action: string) => {
     return;
   }
   if (action === 'preview') {
-    await ElMessageBox.alert(advisory.ui.body || advisory.rationale, advisory.ui.title || '调整建议', {
-      confirmButtonText: '知道了'
+    await askConfirm({
+      title: advisory.ui.title || '调整建议',
+      message: advisory.ui.body || advisory.rationale,
+      confirmText: '知道了',
+      danger: false,
     });
     return;
   }
@@ -432,13 +435,15 @@ const handleAdvisoryAction = async (action: string) => {
     return;
   }
 
-  try {
-    await ElMessageBox.confirm('这会基于当前学习证据调整当前路径的后续阶段，已完成任务会保留不变。是否继续？', '调整当前路径', {
-      confirmButtonText: '确认调整当前路径',
-      cancelButtonText: '取消',
-      type: 'warning'
-    });
+  const ok = await askConfirm({
+    title: '调整当前路径',
+    message: '这会基于当前学习证据调整当前路径的后续阶段，已完成任务会保留不变。是否继续？',
+    confirmText: '确认调整当前路径',
+    danger: false,
+  });
+  if (!ok) return;
 
+  try {
     const reasonMap: Record<string, string> = {
       reinforce: '根据课后建议，为下一阶段补强关键薄弱点',
       resequence: '根据课后建议，调整下一阶段顺序以降低理解风险',
@@ -466,7 +471,7 @@ const handleAdvisoryAction = async (action: string) => {
       toast.success('已调整当前路径的后续阶段');
     }
   } catch (err: any) {
-    if (err !== 'cancel') toast.error(err?.message || '调整下一阶段失败');
+    toast.error(err?.message || '调整下一阶段失败');
   }
 };
 
@@ -495,7 +500,8 @@ const exportImage = async () => {
     const canvas = await html2canvas(reportRef.value, {
       scale: 2,
       useCORS: true,
-      backgroundColor: '#f3f6fb',
+      // 取当前主题画布色（暗色下导出也跟随暗色）
+      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--canvas').trim() || '#f3f6fb',
       logging: false,
     });
     const link = document.createElement('a');
@@ -528,7 +534,7 @@ onUnmounted(() => {
 <style scoped>
 .evaluation-page {
   min-height: 100vh;
-  background: #f3f6fb;
+  background: var(--canvas);
   padding: 28px 0 64px;
 }
 
@@ -590,9 +596,9 @@ onUnmounted(() => {
   align-items: center;
   gap: 16px;
   padding: 20px 28px;
-  border: 1px solid rgba(23, 32, 51, 0.06);
+  border: 1px solid var(--line, rgba(23, 32, 51, 0.06));
   border-radius: 16px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: 0 1px 3px rgba(23, 32, 51, 0.04);
 }
 
@@ -626,7 +632,7 @@ onUnmounted(() => {
   margin: 0;
   font-size: clamp(22px, 2.8vw, 32px);
   font-weight: 700;
-  color: #172033;
+  color: var(--ink, #172033);
   letter-spacing: -0.02em;
 }
 
@@ -635,12 +641,12 @@ onUnmounted(() => {
   padding: 60px 24px;
   border: 1px solid rgba(23, 32, 51, 0.06);
   border-radius: 16px;
-  background: #fff;
+  background: var(--surface);
   display: grid;
   justify-items: center;
   gap: 12px;
   font-size: 15px;
-  color: #7a8599;
+  color: var(--muted, #7a8599);
 }
 
 .evaluation-error__actions {
@@ -658,14 +664,14 @@ onUnmounted(() => {
 .evaluation-loading__inner { width: 100%; display: grid; gap: 14px; justify-items: stretch; }
 .evaluation-loading__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .evaluation-loading__summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-.evaluation-loading__card { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid rgba(23, 32, 51, 0.06); border-radius: 12px; background: #fbfcfe; }
+.evaluation-loading__card { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid rgba(23, 32, 51, 0.06); border-radius: 12px; background: color-mix(in srgb, var(--surface) 70%, var(--canvas)); }
 .evaluation-loading__text { display: inline-flex; align-items: center; gap: 8px; justify-content: center; margin: 4px 0 0; }
 .evaluation-loading .sk-bar,
 .evaluation-loading__summary i,
 .evaluation-loading__card i {
   height: 12px;
   border-radius: 6px;
-  background: linear-gradient(90deg, #edf1f8 25%, #f7faff 50%, #edf1f8 75%);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--surface) 60%, var(--canvas)) 25%, var(--surface) 50%, color-mix(in srgb, var(--surface) 60%, var(--canvas)) 75%);
   background-size: 200% 100%;
   animation: eval-shimmer 1.4s ease infinite;
 }
@@ -690,7 +696,7 @@ onUnmounted(() => {
 .evaluation-shell :deep(.completion-card) {
   margin-top: 0;
   padding: 28px 32px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid rgba(23, 32, 51, 0.06);
   border-radius: 16px;
   box-shadow: 0 1px 3px rgba(23, 32, 51, 0.04);
@@ -706,19 +712,19 @@ onUnmounted(() => {
 .evaluation-shell :deep(.completion-title) {
   font-size: 20px;
   font-weight: 700;
-  color: #172033;
+  color: var(--ink, #172033);
 }
 
 .evaluation-shell :deep(.completion-header .el-icon) {
   font-size: 28px;
-  color: #31b16f;
+  color: var(--green, #31b16f);
 }
 
 .evaluation-shell :deep(.completion-summary) {
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   padding: 16px 20px;
-  background: #f3f6fb;
+  background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
   border-radius: 12px;
   margin-bottom: 20px;
 }
@@ -726,7 +732,7 @@ onUnmounted(() => {
 .evaluation-shell :deep(.summary-label) {
   font-size: 12px;
   font-weight: 600;
-  color: #7a8599;
+  color: var(--muted, #7a8599);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-bottom: 4px;
@@ -735,13 +741,13 @@ onUnmounted(() => {
 .evaluation-shell :deep(.summary-value) {
   font-size: 15px;
   font-weight: 700;
-  color: #172033;
+  color: var(--ink, #172033);
 }
 
 .evaluation-shell :deep(.completion-section) {
   padding: 18px 20px;
-  background: #fff;
-  border: 1px solid rgba(23, 32, 51, 0.06);
+  background: var(--surface);
+  border: 1px solid var(--line, rgba(23, 32, 51, 0.06));
   border-radius: 12px;
   margin-bottom: 14px;
 }
@@ -749,7 +755,7 @@ onUnmounted(() => {
 .evaluation-shell :deep(.section-title) {
   font-size: 15px;
   font-weight: 700;
-  color: #172033;
+  color: var(--ink, #172033);
   margin-bottom: 12px;
 }
 
@@ -760,12 +766,12 @@ onUnmounted(() => {
 .evaluation-shell :deep(.section-content) {
   font-size: 14px;
   line-height: 1.8;
-  color: #3d4a5c;
+  color: var(--muted, #3d4a5c);
 }
 
 .evaluation-shell :deep(.section-hint) {
   font-size: 13px;
-  color: #7a8599;
+  color: var(--muted, #7a8599);
 }
 
 .evaluation-shell :deep(.metrics-grid) {
@@ -780,13 +786,13 @@ onUnmounted(() => {
   padding: 14px 16px;
   border-radius: 12px;
   border: 1px solid rgba(23, 32, 51, 0.06);
-  background: #f8fafc;
+  background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
 }
 
 .evaluation-shell :deep(.metric-label) {
   font-size: 12px;
   font-weight: 600;
-  color: #7a8599;
+  color: var(--muted, #7a8599);
 }
 
 .evaluation-shell :deep(.metric-badge) {
@@ -798,29 +804,29 @@ onUnmounted(() => {
 
 .evaluation-shell :deep(.metric-card--good .metric-badge) {
   background: rgba(49, 177, 111, 0.1);
-  color: #1a7a42;
+  color: var(--green, #1a7a42);
 }
 
 .evaluation-shell :deep(.metric-card--normal .metric-badge) {
   background: rgba(52, 120, 246, 0.08);
-  color: #1f57cc;
+  color: var(--blue-deep, #1f57cc);
 }
 
 .evaluation-shell :deep(.metric-card--warn .metric-badge) {
   background: rgba(232, 100, 80, 0.08);
-  color: #b44020;
+  color: var(--red, #b44020);
 }
 
 .evaluation-shell :deep(.metric-value) {
   font-size: 26px;
   font-weight: 800;
-  color: #172033;
+  color: var(--ink, #172033);
   margin-top: 8px;
 }
 
 .evaluation-shell :deep(.metric-desc) {
   font-size: 12px;
-  color: #7a8599;
+  color: var(--muted, #7a8599);
   line-height: 1.5;
   margin-top: 6px;
 }
@@ -833,31 +839,31 @@ onUnmounted(() => {
   padding: 14px 16px;
   border-radius: 12px;
   border: 1px solid rgba(23, 32, 51, 0.06);
-  background: #f8fafc;
+  background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
 }
 
 .evaluation-shell :deep(.knowledge-name) {
   font-size: 14px;
   font-weight: 700;
-  color: #172033;
+  color: var(--ink, #172033);
 }
 
 .evaluation-shell :deep(.knowledge-evidence) {
   font-size: 13px;
-  color: #7a8599;
+  color: var(--muted, #7a8599);
   line-height: 1.6;
 }
 
 .evaluation-shell :deep(.ordered-list) {
   font-size: 14px;
   line-height: 1.75;
-  color: #3d4a5c;
+  color: var(--muted, #3d4a5c);
 }
 
 .evaluation-shell :deep(.evaluation-line) {
   font-size: 14px;
   line-height: 1.75;
-  color: #3d4a5c;
+  color: var(--muted, #3d4a5c);
 }
 
 .evaluation-shell :deep(.advisory-section) {
@@ -881,9 +887,9 @@ onUnmounted(() => {
 
 .evaluation-transcript-card {
   padding: 24px 28px;
-  border: 1px solid rgba(23, 32, 51, 0.06);
+  border: 1px solid var(--line, rgba(23, 32, 51, 0.06));
   border-radius: 16px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: 0 1px 3px rgba(23, 32, 51, 0.04);
   display: grid;
   gap: 18px;
@@ -909,7 +915,7 @@ onUnmounted(() => {
   margin: 0;
   font-size: 22px;
   font-weight: 700;
-  color: #172033;
+  color: var(--ink, #172033);
 }
 
 .evaluation-transcript-card__meta {
@@ -918,8 +924,8 @@ onUnmounted(() => {
   min-height: 32px;
   padding: 0 12px;
   border-radius: 999px;
-  background: #f3f6fb;
-  color: #57657a;
+  background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
+  color: var(--muted, #57657a);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -929,7 +935,7 @@ onUnmounted(() => {
   margin: 0;
   font-size: 13px;
   line-height: 1.7;
-  color: #7a8599;
+  color: var(--muted, #7a8599);
 }
 
 .evaluation-transcript-list {
@@ -948,7 +954,7 @@ onUnmounted(() => {
 
 .evaluation-transcript-item--assistant {
   justify-self: start;
-  background: #f8fafc;
+  background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
 }
 
 .evaluation-transcript-item--user {
@@ -967,25 +973,25 @@ onUnmounted(() => {
 .evaluation-transcript-item__meta strong {
   font-size: 13px;
   font-weight: 700;
-  color: #172033;
+  color: var(--ink, #172033);
 }
 
 .evaluation-transcript-item__meta span {
   font-size: 12px;
-  color: #7a8599;
+  color: var(--muted, #7a8599);
 }
 
 .evaluation-transcript-item__body {
   font-size: 14px;
   line-height: 1.8;
-  color: #3d4a5c;
+  color: var(--muted, #3d4a5c);
 }
 
 .evaluation-transcript-empty {
   padding: 20px;
   border-radius: 12px;
-  background: #f8fafc;
-  color: #7a8599;
+  background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
+  color: var(--muted, #7a8599);
   font-size: 14px;
   text-align: center;
 }
@@ -1060,7 +1066,7 @@ onUnmounted(() => {
 
 @media print {
   .evaluation-page {
-    background: #fff;
+    background: var(--surface);
     padding: 0;
     min-height: auto;
   }

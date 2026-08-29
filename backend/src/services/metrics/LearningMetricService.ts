@@ -12,6 +12,7 @@
 
 import prisma from '../../config/database';
 import learningStateService from '../learning/learning-state.service';
+import { predictionCalibrationService } from '../learner/PredictionCalibrationService';
 import { logger } from '../../utils/logger';
 import type { DurableDomainEvent } from '../../events/contracts';
 
@@ -174,6 +175,15 @@ export async function reconcileTaskCompletionMetric(
     completed: true,
     timestamp: event.occurredAt
   });
+
+  // 校准闭环回写（fire-and-forget）：任务完成后对照预测器的历史预测，统计实证命中率
+  void predictionCalibrationService.resolveFromTaskCompletion(event.userId, taskId)
+    .catch((error) => {
+      logger.debug('[LearningMetrics] 预测校准回写失败（不影响主流程）', {
+        userId: event.userId, taskId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
 }
 
 /**

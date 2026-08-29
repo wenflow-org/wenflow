@@ -1,0 +1,26 @@
+version: prompt-lab-manifest/v1
+skillId: learning-predictor
+agentId: skill:learning-predictor
+name: default-skill-learning-predictor
+archetype: distiller
+description: 学习表现预测（任务前：卡壳风险 + 建议深度，校准闭环验证，单次调用）
+acceptableAgentIds: [skill:learning-predictor]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: distillation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: blocking
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: learner-model, phases: [predicted], defaultPhase: predicted, terminalPhases: [predicted], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, predictor, calibration, v4]
+notes: v4 核心文件的契约与运行参数家园

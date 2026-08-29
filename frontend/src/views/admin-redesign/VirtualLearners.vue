@@ -20,8 +20,8 @@
         {{ reclaimBusy ? '回收中…' : `回收卡死（${partition.stale}）` }}
       </button>
       <span class="mk-status__actions">
-        <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建</button>
-        <button type="button" class="mk-status__action" @click="batchOpen = true">批量新建</button>
+        <button type="button" class="mk-status__action mk-status__action--primary" title="新建虚拟学习者：填写名称/目标/故事，生成后可运行实验会话" @click="openCreate">新建</button>
+        <button type="button" class="mk-status__action" title="批量新建：一次创建多个虚拟学习者（表格批量填写）" @click="batchOpen = true">批量新建</button>
       </span>
     </div>
 
@@ -45,13 +45,32 @@
       </template>
     </MkOverview>
 
-    <!-- 正在运行：直接列出当前有活跃会话的虚拟学习者，一眼看出谁在跑 -->
-    <div v-if="runningSamples.length && isLive" class="vl-running">
+    <!-- 正在运行：直接列出当前有活跃会话的虚拟学习者，一眼看出谁在跑；批量生成也在此显示 -->
+    <div v-if="(runningSamples.length || batchTask.active) && isLive" class="vl-running">
       <span class="vl-running__label">正在运行</span>
+      <!-- 批量创建后台进度：创建秒回，AI 身份 + 故事后台推进 -->
+      <button v-if="batchTask.active" type="button" class="vl-running__chip vl-running__chip--batch" :class="`is-${batchTask.status}`" :title="batchTaskStatusTitle" @click="batchTask.expanded = !batchTask.expanded">
+        <span class="vl-running__dot" aria-hidden="true"></span>
+        <template v-if="batchTask.status === 'done'">✓ 批量创建完成</template>
+        <template v-else-if="batchTask.status === 'error'">✕ 批量生成有失败</template>
+        <template v-else>批量生成中</template>
+        <template v-if="batchTask.status === 'running'"> · 身份 {{ batchTask.total - batchTask.personaLeft }}/{{ batchTask.total }}<template v-if="batchTask.totalStories"> · 故事 {{ batchTask.storiesDone }}/{{ batchTask.totalStories }}</template></template>
+      </button>
       <button v-for="s in runningSamples" :key="s.id" type="button" class="vl-running__chip" :title="`${s.runningCount} 个会话运行中 · 点击进入会话座舱`" @click="openRunningSession(s)">
         <span class="vl-running__dot" aria-hidden="true"></span>
         {{ s.name }}<template v-if="s.currentStage"> · {{ stageLabel(s.currentStage) }}</template>
       </button>
+      <!-- 批量生成详情行（点 chip 展开）：进度 + 重试 + 关闭 -->
+      <div v-if="batchTask.active && batchTask.expanded" class="vl-batch-detail" role="status">
+        <span class="vl-batch-detail__text">
+          创建 {{ batchTask.created }}/{{ batchTask.total }} 人
+          <template v-if="batchTask.personaLeft > 0"> · 生成身份 {{ batchTask.total - batchTask.personaLeft }}/{{ batchTask.total }}</template>
+          <template v-if="batchTask.totalStories"> · 生成故事 {{ batchTask.storiesDone }}/{{ batchTask.totalStories }}</template>
+          <template v-if="batchTask.error"> · <span class="vl-batch-detail__err">{{ batchTask.error }}</span></template>
+        </span>
+        <button v-if="batchTask.status === 'error'" type="button" class="mk-btn mk-btn--sm" @click="retryBatchTask">重试失败</button>
+        <button v-if="batchTask.status === 'done' || batchTask.status === 'error'" type="button" class="mk-link" @click="batchTask.active = false">✕ 关闭</button>
+      </div>
     </div>
 
     <div class="mk-card mk-card--fill">
@@ -84,10 +103,10 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="s in paged" :key="s.id" class="vl-row" @click="openSubPage('virtual', s.id)">
+          <tr v-for="s in paged" :key="s.id" class="vl-row">
             <td v-if="isLive"><input v-model="selected" type="checkbox" :value="s.id" :aria-label="`选择 ${s.name}`" @click.stop /></td>
             <td>
-              <div class="mk-cell-main vl-cell">
+              <div class="mk-cell-main vl-cell vl-cell--click" role="button" tabindex="0" :title="`查看 ${s.name} 的画像：故事池 / 运行记录 / 会话控制`" @click="openSubPage('virtual', s.id)" @keydown.enter="openSubPage('virtual', s.id)">
                 <strong class="vl-name">
                   <span class="vl-avatar" :class="avatarClass(s)" aria-hidden="true">{{ s.name.slice(0, 1) }}</span>
                   <span class="vl-name__text">{{ s.name }}</span>
@@ -152,7 +171,7 @@
                 <div v-if="isLive" class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作（删除）" aria-haspopup="menu" :aria-expanded="menuOpen" :title="'更多操作：删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
                   <div v-if="openMenu === s.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                    <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="busyId === s.id" @click="menuRemove(s)">删除</button>
+                    <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="busyId === s.id" title="删除该虚拟学习者（级联删除，不可恢复）" @click="menuRemove(s)">删除</button>
                   </div>
                 </div>
               </div>
@@ -258,10 +277,25 @@
             <span v-if="errors.story" class="mk-field__err">{{ errors.story }}</span>
           </label>
           <div v-if="isLive" class="vl-ai-row">
+            <div class="vl-sample-pills" role="radiogroup" aria-label="样本类型">
+              <button
+                type="button"
+                class="mk-pill"
+                :class="{ 'mk-pill--active': sampleType === 'general' }"
+                @click="sampleType = 'general'"
+              >通用</button>
+              <button
+                type="button"
+                class="mk-pill"
+                :class="{ 'mk-pill--active': sampleType === 'student' }"
+                title="生成传统学生样本：学段/考试节点/学期节奏/家长与同伴环境"
+                @click="sampleType = 'student'"
+              >传统学生</button>
+            </div>
             <button type="button" class="mk-btn mk-btn--ghost vl-ai" :disabled="personaBusy" @click="generatePersona">
               {{ personaBusy ? '生成身份中…' : '✦ AI 生成身份' }}
             </button>
-            <span class="vl-ai-hint">人设 Skill · 只补稳定身份，不依赖学习目标，不写会话故事</span>
+            <span class="vl-ai-hint">人设 Skill · 只补稳定身份，不依赖学习目标，不写会话故事{{ sampleType === 'student' ? ' · 学生样本含考试节点与学期节奏' : '' }}</span>
           </div>
           <p v-if="personaSeed" class="vl-persona-ok">已回填人设，可改称呼/背景后创建</p>
           <details class="vl-advanced">
@@ -350,35 +384,32 @@
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="batchOpen = false">✕</button>
         </div>
         <div class="mk-modal__body">
-          <p class="vl-steps">逐行填写学习者信息，创建后自动为每人生成指定数量的故事。使用「快速填充」可批量生成带编号的名称。</p>
-          <div class="vl-batch-fill">
-            <input v-model="batchPrefix" class="mk-field__input" placeholder="名称前缀" style="width:140px" />
-            <input v-model.number="batchFillCount" type="number" class="mk-field__input" min="1" max="20" placeholder="数量" style="width:80px" />
-            <span class="vl-batch-fill__label">每人</span>
-            <input v-model.number="batchStoryCount" type="number" class="mk-field__input" min="1" max="5" placeholder="故事数" style="width:80px" />
-            <span class="vl-batch-fill__label">个故事</span>
-            <button type="button" class="mk-btn mk-btn--ghost" @click="quickFill">快速填充</button>
+          <p class="vl-steps">设置人数与故事数，点击创建后立即返回——AI 会在后台为每人生成身份与故事，页面顶部状态条可查看进度。</p>
+          <div class="vl-batch-config">
+            <label class="mk-field vl-batch-config__count">
+              <span class="mk-field__label">人数</span>
+              <input v-model.number="batchFillCount" type="number" class="mk-field__input" min="1" max="20" />
+            </label>
+            <label class="mk-field vl-batch-config__stories">
+              <span class="mk-field__label">每人故事数</span>
+              <input v-model.number="batchStoryCount" type="number" class="mk-field__input" min="0" max="5" />
+            </label>
+            <label class="mk-field vl-batch-config__prefix">
+              <span class="mk-field__label">名称前缀 <em class="vl-req-less">可选</em></span>
+              <input v-model="batchPrefix" class="mk-field__input" placeholder="默认 虚拟学习者（自动编号 -01/-02…）" />
+            </label>
           </div>
-          <div class="vl-batch-table">
-            <div class="vl-batch-row vl-batch-row--head">
-              <span class="vl-batch-col vl-batch-col--name">名称</span>
-              <span class="vl-batch-col vl-batch-col--goal">学习目标</span>
-              <span class="vl-batch-col vl-batch-col--note">备注</span>
-              <span class="vl-batch-col vl-batch-col--story">故事数</span>
-              <span class="vl-batch-col vl-batch-col--act"></span>
-            </div>
-            <div v-for="(r, i) in batchRows" :key="i" class="vl-batch-row">
-              <input v-model="r.name" class="vl-batch-col vl-batch-col--name" placeholder="学习者名称" />
-              <input v-model="r.goal" class="vl-batch-col vl-batch-col--goal" placeholder="学习目标" />
-              <input v-model="r.note" class="vl-batch-col vl-batch-col--note" placeholder="备注" />
-              <input v-model.number="r.storyCount" type="number" class="vl-batch-col vl-batch-col--story" min="0" max="5" />
-              <button type="button" class="vl-batch-col vl-batch-col--act mk-link" @click="batchRows.splice(i, 1)">✕</button>
-            </div>
-          </div>
-          <button type="button" class="mk-link" @click="batchRows.push({ name: '', goal: '', note: '', storyCount: 1 })">+ 添加一行</button>
+          <label class="mk-field">
+            <span class="mk-field__label">想要哪类人群？ <em class="vl-req-less">可选，留空 AI 自由发挥</em></span>
+            <textarea v-model="batchCohort" class="mk-field__textarea" rows="2" placeholder="例如：25-35 岁职场人，最近想系统补 Excel/数据分析；或 高三学生，备考压力大。AI 会据此为每人生成差异化身份" />
+          </label>
+          <label class="mk-field">
+            <span class="mk-field__label">批次备注 <em class="vl-req-less">可选</em></span>
+            <input v-model="batchNote" class="mk-field__input" placeholder="这批学习者用于什么实验 / 验收，方便以后识别" />
+          </label>
           <div v-if="batchError" class="errorbar">{{ batchError }}</div>
           <button type="button" class="mk-btn mk-btn--primary mk-btn--block" :disabled="batchCreating" @click="doBatchCreate">
-            {{ batchCreating ? '创建中（' + batchProgress + '/' + validBatchCount + '）…' : '创建 ' + validBatchCount + ' 个虚拟学习者' }}
+            {{ batchCreating ? '创建中…' : `创建 ${batchFillCount || 0} 人 × ${batchStoryCount || 0} 故事（后台生成）` }}
           </button>
         </div>
       </div>
@@ -395,6 +426,7 @@ import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
+import { useSafePolling } from '@/composables/useSafePolling'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -575,11 +607,14 @@ async function removeSample(s: Sample) {
 const busyId = ref<string | null>(null)
 const personaBusy = ref(false)
 const personaSeed = ref<Record<string, unknown> | null>(null)
+/** AI 生成身份的样本类型：general=自由生成 / student=传统学生（课纲/考试/学期节奏） */
+const sampleType = ref<'general' | 'student'>('general')
 async function generatePersona() {
   if (personaBusy.value) return
   personaBusy.value = true
   try {
     const res = await adminVirtualLearnersApi.generatePersona({
+      ...(sampleType.value === 'student' ? { sampleType: 'student' } : {}),
       existingPersonaSeed: {
         name: form.value.name.trim() || undefined,
         nameHint: form.value.name.trim() || undefined,
@@ -966,64 +1001,215 @@ const batchCreating = ref(false)
 const batchPrefix = ref('')
 const batchFillCount = ref(3)
 const batchStoryCount = ref(1)
+/** 人群描述（可选）：AI 据此为每人生成差异化身份；留空自由发挥 */
+const batchCohort = ref('')
+/** 批次备注（可选）：写入每人的 notes 字段，便于识别 */
+const batchNote = ref('')
 const batchProgress = ref(0)
 const batchError = ref('')
-const batchRows = ref<{ name: string; goal: string; note: string; storyCount: number }[]>([{ name: '', goal: '', note: '', storyCount: 1 }])
 const batchPanelRef = ref<HTMLElement | null>(null)
 const batchMaskRef = ref<HTMLElement | null>(null)
 const batchActionBusy = ref(false)
 useOverlay(computed(() => batchOpen.value), batchPanelRef)
 useMaskClose(batchMaskRef, () => { if (!batchCreating.value) batchOpen.value = false })
 
-const validBatchCount = computed(() => batchRows.value.filter((r) => r.name.trim()).length)
+/* ===== 批量创建后台任务：创建人秒回，AI 身份 + 故事后台轮询推进（不占用窗口） ===== */
+interface BatchTask {
+  active: boolean
+  status: 'creating' | 'running' | 'done' | 'error'
+  total: number
+  created: number
+  totalStories: number
+  storiesDone: number
+  /** 剩余待生成身份的人数 */
+  personaLeft: number
+  /** 每人的队列：{ profileId, name, storyCount, needsPersona } */
+  queue: Array<{ profileId: string; name: string; storyCount: number; needsPersona: boolean }>
+  /** 失败项（重试用） */
+  failed: Array<{ profileId: string; name: string; storyCount: number; needsPersona: boolean }>
+  error: string
+  /** 当前处理索引 */
+  currentIdx: number
+  /** 详情行是否展开 */
+  expanded: boolean
+}
+const batchTask = ref<BatchTask>({ active: false, status: 'creating', total: 0, created: 0, totalStories: 0, storiesDone: 0, personaLeft: 0, queue: [], failed: [], error: '', currentIdx: 0, expanded: false })
+const batchTaskStatusTitle = computed(() => {
+  const t = batchTask.value
+  if (t.status === 'done') return `批量创建完成：${t.created} 人${t.totalStories ? ` · ${t.storiesDone} 个故事` : ''}`
+  if (t.status === 'error') return `批量生成有失败：${t.error}（点击展开可重试）`
+  return `后台生成中：身份 ${t.total - t.personaLeft}/${t.total}${t.totalStories ? ` · 故事 ${t.storiesDone}/${t.totalStories}` : ''}（点击展开详情）`
+})
 
-function quickFill() {
-  const prefix = batchPrefix.value.trim() || '虚拟学习者'
-  const count = Math.max(1, Math.min(20, batchFillCount.value || 3))
-  const stories = Math.max(1, Math.min(5, batchStoryCount.value || 1))
-  batchRows.value = []
-  for (let i = 1; i <= count; i++) {
-    batchRows.value.push({ name: prefix + '-' + String(i).padStart(2, '0'), goal: '', note: '', storyCount: stories })
+/** 后台推进队列：每轮处理一个「身份生成」或「故事生成」；全部完成或失败则收尾 */
+async function batchTaskStep() {
+  const task = batchTask.value
+  if (!task.active || task.status !== 'running') return
+  while (task.currentIdx < task.queue.length) {
+    const item = task.queue[task.currentIdx]
+    if (item.storyCount <= 0 && !item.needsPersona) { task.currentIdx++; continue }
+    try {
+      if (item.needsPersona) {
+        // 阶段 1：AI 生成身份（personaSeed → 更新画像）；LLM 偶发缺字段，失败自动重试 2 次
+        let seed: Record<string, unknown> | null = null
+        let lastErr: unknown = null
+        for (let attempt = 0; attempt < 3 && !seed; attempt++) {
+          try {
+            const res = await adminVirtualLearnersApi.generatePersona({
+              ...(sampleType.value === 'student' ? { sampleType: 'student' } : {}),
+              existingPersonaSeed: {
+                name: item.name,
+                nameHint: item.name,
+                // 人群描述注入 notes：指导 AI 生成差异化身份
+                ...(batchCohort.value.trim() ? { notes: batchCohort.value.trim(), background: batchCohort.value.trim() } : {})
+              }
+            })
+            const d = res.data?.data ?? res.data ?? {}
+            const candidate = (d.personaSeed || d.profile || d) as Record<string, unknown> | null
+            // 校验关键字段（后端 validatePersonaOutput 同口径），不完整则视为失败继续重试
+            if (candidate && typeof candidate === 'object' && String(candidate.occupation || '').trim() && String(candidate.education || '').trim()) {
+              seed = candidate
+            } else {
+              lastErr = new Error('personaSeed 缺 occupation/education，重试')
+            }
+          } catch (e) {
+            lastErr = e
+            await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)))
+          }
+        }
+        if (!seed) throw lastErr || new Error('身份生成失败（多次尝试仍缺字段）')
+        const nameFromSeed = String(seed.name || seed.nameHint || seed.occupation || '').trim()
+        const profilePayload: Record<string, unknown> = { ...seed }
+        if (batchNote.value.trim()) profilePayload.batchNote = batchNote.value.trim()
+        // 更新该虚拟学习者：名称 + 画像
+        await adminVirtualLearnersApi.updateVirtualLearner(item.profileId, {
+          name: nameFromSeed || item.name,
+          profile: profilePayload
+        })
+        item.needsPersona = false
+        task.personaLeft = Math.max(0, task.personaLeft - 1)
+        return
+      }
+      if (item.storyCount > 0) {
+        // 阶段 2：生成故事（每次 1 个）；LLM 偶发失败，自动重试 2 次
+        let ok = false
+        let lastErr: unknown = null
+        for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+          try {
+            await adminVirtualLearnersApi.draftVirtualLearnerStories(item.profileId)
+            ok = true
+          } catch (e) {
+            lastErr = e
+            await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)))
+          }
+        }
+        if (!ok) throw lastErr || new Error('故事生成失败')
+        task.storiesDone++
+        item.storyCount--
+        if (item.storyCount <= 0) task.currentIdx++
+        if (task.storiesDone >= task.totalStories && task.queue.every((q) => q.storyCount <= 0)) {
+          task.status = 'done'
+          toast.success(`批量创建完成：${task.created} 人 · 生成 ${task.storiesDone} 个故事`)
+        }
+        return
+      }
+      task.currentIdx++
+    } catch (e) {
+      // 单个项失败：记录并跳过，继续下一项（可重试）
+      task.failed.push({ ...item })
+      task.currentIdx++
+      console.error('批量后台任务失败 ' + item.name + ':', e)
+    }
+  }
+  // 队列走完收尾
+  if (task.failed.length) {
+    task.status = 'error'
+    task.error = `${task.failed.length} 项生成失败（可重试）`
+  } else {
+    task.status = 'done'
+    if (task.totalStories > 0) toast.success(`批量创建完成：${task.created} 人 · 生成 ${task.storiesDone} 个故事`)
+    else toast.success(`批量创建完成：${task.created} 人（未生成故事）`)
   }
 }
 
+/** 重试失败项（重置游标，保证失败项被重新处理，避免死循环跳过） */
+async function retryBatchTask() {
+  const task = batchTask.value
+  if (!task.active || task.status !== 'error') return
+  // 失败项放回队首，游标重置为 0：先重试失败的，再继续剩余
+  task.queue = [...task.failed, ...task.queue]
+  task.failed = []
+  task.error = ''
+  task.currentIdx = 0
+  task.status = 'running'
+  toast.info('已重试失败项')
+}
+
 async function doBatchCreate() {
-  const rows = batchRows.value.filter((r) => r.name.trim())
-  if (!rows.length) { batchError.value = '至少需要一个学习者名称'; return }
+  const count = Math.max(1, Math.min(20, Math.round(Number(batchFillCount.value)) || 3))
+  const stories = Math.max(0, Math.min(5, Math.round(Number(batchStoryCount.value)) || 0))
+  const prefix = batchPrefix.value.trim() || '虚拟学习者'
   batchError.value = ''
   batchCreating.value = true
   batchProgress.value = 0
+  const queue: BatchTask['queue'] = []
   let created = 0
-  let storiesOk = 0
-  for (const r of rows) {
+  let totalStories = 0
+  for (let i = 1; i <= count; i++) {
+    const name = `${prefix}-${String(i).padStart(2, '0')}`
     try {
-      const story = r.note.trim() || r.name.trim() + '的人物背景待补充'
-      const id = await liveCreateVirtual({ name: r.name.trim(), goal: r.goal.trim(), story })
-      if (id && r.storyCount > 0) {
-        for (let s = 0; s < r.storyCount; s++) {
-          try {
-            await adminVirtualLearnersApi.draftVirtualLearnerStories(id)
-            storiesOk++
-          } catch (e) {
-            console.error('生成故事失败 ' + r.name.trim() + ':', e)
-          }
-        }
+      // 创建人（占位名 + 人群描述作背景兜底）；身份由后台 AI 补全
+      const story = batchCohort.value.trim() || name + '的人物背景待补充'
+      const id = await liveCreateVirtual({
+        name,
+        goal: '',
+        story,
+        ...(batchNote.value.trim() ? { note: batchNote.value.trim() } : {})
+      })
+      if (id) {
+        created++
+        queue.push({ profileId: id, name, storyCount: stories, needsPersona: true })
+        totalStories += stories
       }
-      created++
     } catch (e) {
-      console.error('批量创建 ' + r.name.trim() + ' 失败:', e)
+      console.error('批量创建 ' + name + ' 失败:', e)
     }
     batchProgress.value++
   }
   batchCreating.value = false
   batchOpen.value = false
   if (created > 0) {
-    toast.success('已创建 ' + created + ' 个虚拟学习者（生成 ' + storiesOk + ' 个故事）' + (created < rows.length ? '，' + (rows.length - created) + ' 个失败' : ''))
+    toast.success(`已创建 ${created} 个虚拟学习者，后台开始生成身份与故事（不占用窗口）`)
     void loadLiveData()
+    batchTask.value = {
+      active: true,
+      status: 'running',
+      total: created,
+      created,
+      totalStories,
+      storiesDone: 0,
+      personaLeft: queue.length,
+      queue,
+      failed: [],
+      error: '',
+      currentIdx: 0,
+      expanded: true
+    }
+    startBatchPolling()
   } else {
     toast.error('批量创建失败，请检查网络后重试')
   }
 }
+
+/* 批量后台任务轮询：复用 useSafePolling 范式（页面隐藏跳过、失败退避、断路器） */
+const batchPolling = useSafePolling(() => batchTaskStep(), {
+  interval: 2000,
+  maxBackoff: 10000,
+  circuitBreakerThreshold: 5,
+  skipWhenHidden: true,
+  immediate: true
+})
+function startBatchPolling() { batchPolling.start() }
 </script>
 
 <style scoped>
@@ -1037,18 +1223,6 @@ async function doBatchCreate() {
 }
 .mk-actions .mk-icon-btn--text span { font-size: 11px; }
 .mk-actions .mk-icon-btn--text svg { width: 13px; height: 13px; }
-/* ===== 批量实验面板 ===== */
-.vl-bexp__create { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px dashed var(--mk-border, #d7dce5); border-radius: 8px; margin-bottom: 12px; }
-.vl-bexp__create-row { display: flex; gap: 8px; align-items: center; }
-.vl-bexp__create-row input, .vl-bexp__create-row select { padding: 6px 10px; border: 1px solid var(--mk-border, #d7dce5); border-radius: 6px; font-size: 13.5px; background: var(--mk-bg, #fff); color: inherit; }
-.vl-bexp__item { border: 1px solid var(--mk-border, #d7dce5); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
-.vl-bexp__head { display: flex; gap: 10px; align-items: center; padding: 10px 14px; background: var(--mk-card-head-bg, #f7f8fa); flex-wrap: wrap; }
-.vl-bexp__meta { font-size: 12.5px; opacity: 0.65; margin-right: auto; }
-.vl-bexp__runs { padding: 8px 14px 12px; overflow-x: auto; }
-.vl-bexp__task { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.vl-bexp__err { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #dc2626; font-size: 12.5px; }
-.vl-bexp__hint { font-size: 13px; opacity: 0.7; padding: 10px 14px; }
-.vl-bexp__decay { display: inline-block; margin-right: 14px; font-size: 12.5px; color: #7c3aed; }
 /* 窄屏表格：8 列在 704px 内容区会被压扁操作列，设 min-width 触发 .mk-table-scroll 横向滚动（对齐 AuditLogs 模式） */
 .mk-table-scroll .mk-table { min-width: 860px; }
 .mk-link--muted { opacity: 0.55; }
@@ -1113,19 +1287,26 @@ async function doBatchCreate() {
 .mk-num--na { color: var(--mk-faint); font-weight: 600; }
 .vl-status-run { color: #047857; font-weight: 700; }
 
-/* ===== 批量新建表格 ===== */
-.vl-batch-fill { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
-.vl-batch-table { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
-.vl-batch-row { display: flex; gap: 8px; align-items: center; }
-.vl-batch-row--head { font-size: 11px; font-weight: 700; color: var(--mk-faint); letter-spacing: 0.04em; padding-bottom: 4px; }
-.vl-batch-col--name { flex: 2; min-width: 100px; }
-.vl-batch-col--goal { flex: 2; min-width: 100px; }
-.vl-batch-col--note { flex: 1.5; min-width: 80px; }
-.vl-batch-col--story { width: 60px; flex-shrink: 0; text-align: center; }
-.vl-batch-col--act { width: 24px; flex-shrink: 0; text-align: center; }
-.vl-batch-fill__label { font-size: 12px; color: var(--mk-muted); white-space: nowrap; }
-.vl-batch-row input { padding: 7px 10px; border: 1px solid var(--mk-line); border-radius: 6px; font-size: 13px; background: var(--mk-surface); color: var(--mk-ink); outline: none; }
-.vl-batch-row input:focus { border-color: var(--mk-blue); box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.12); }
+/* ===== 批量新建配置区 ===== */
+.vl-batch-config { display: flex; gap: 14px; align-items: flex-end; margin-bottom: 12px; flex-wrap: wrap; }
+.vl-batch-config .mk-field { margin-bottom: 0; }
+.vl-batch-config__count { width: 100px; }
+.vl-batch-config__stories { width: 120px; }
+.vl-batch-config__prefix { flex: 1; min-width: 200px; }
+.vl-req-less { font-style: normal; font-weight: 400; color: var(--mk-faint, #94a3b8); font-size: 11px; }
+/* 批量生成 chip（并入「正在运行」区） */
+.vl-running__chip--batch { border-color: rgba(59, 130, 246, 0.4); color: #1d4ed8; }
+.vl-running__chip--batch .vl-running__dot { background: #3b82f6; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); animation: vl-pulse 1.6s infinite; }
+.vl-running__chip--batch.is-running { border-color: rgba(59, 130, 246, 0.45); }
+.vl-running__chip--batch.is-done { border-color: rgba(16, 185, 129, 0.4); color: #065f46; }
+.vl-running__chip--batch.is-done .vl-running__dot { background: #10b981; animation: none; }
+.vl-running__chip--batch.is-error { border-color: rgba(239, 68, 68, 0.45); color: #dc2626; }
+.vl-running__chip--batch.is-error .vl-running__dot { background: #ef4444; animation: none; }
+@keyframes vl-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); } 50% { box-shadow: 0 0 0 5px rgba(59, 130, 246, 0); } }
+/* 批量生成详情行（点 chip 展开） */
+.vl-batch-detail { display: flex; align-items: center; gap: 12px; padding: 8px 14px; margin-top: 8px; border-radius: 8px; font-size: 12.5px; background: #f8fafc; border: 1px solid #e2e8f0; flex-basis: 100%; }
+.vl-batch-detail__text { color: var(--mk-muted, #5b6577); flex: 1; }
+.vl-batch-detail__err { color: #dc2626; }
 .vl-steps { font-size: 12.5px; color: var(--mk-muted); margin: 0 0 12px; line-height: 1.6; }
 .vl-status-fail { color: var(--mk-red, #dc2626); font-weight: 700; }
 .vl-status-stale { color: var(--mk-red, #dc2626); font-weight: 700; }
@@ -1266,6 +1447,10 @@ async function doBatchCreate() {
   gap: 8px;
   min-width: 0;
 }
+/* 名称列可点击进二级（整行不再监听点击，避免多选勾选时误触） */
+.vl-cell--click { cursor: pointer; border-radius: 6px; transition: background 0.12s ease; }
+.vl-cell--click:hover { background: rgba(44, 99, 208, 0.06); }
+.vl-cell--click:focus-visible { outline: 2px solid rgba(44, 99, 208, 0.4); outline-offset: 1px; }
 .vl-name__text {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1374,6 +1559,11 @@ async function doBatchCreate() {
   align-items: center;
   gap: 10px;
   margin: 2px 0 4px;
+}
+.vl-sample-pills {
+  display: inline-flex;
+  gap: 4px;
+  flex: 0 0 auto;
 }
 .vl-ai { flex: 0 0 auto; }
 .vl-ai-hint {

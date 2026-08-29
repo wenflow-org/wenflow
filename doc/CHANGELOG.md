@@ -3,6 +3,32 @@
 > 本文件随协议修订维护：SKILL_PROTOCOL_V4.md 等现行规范文档每次修订，均在此登记变更条目。
 > 本文件是 doc/ 纳入版本控制（2026-08-10）后的变更基线；此前历次修订无 git 历史，仅以文档内注记（如"2026-08-09 复核"）为据。
 
+## 2026-08-29 · 学习者模型 P0-P2：知识状态摘要 + 学习表现预测 + 校准闭环
+
+### 新增
+
+- **skill:learning-predictor（core v1）**：任务前学习表现预测（stallRisk/predictedTone/suggestedDepth/focusConcepts/rationale）；normalize 含自洽约束（stallRisk≥0.7 强制 struggle）与保守兜底（证据不足→0.5/smooth/standard）。注册链全通：core yaml → md 编译 → DB ACTIVE → manifest（prompt-lab + agent-manifest）→ definitions-registry → skillHandlers → check-data-source。
+- **`prediction_records` 表（prisma）**：预测留档 + outcome 回写列（smooth/struggled/failed）；`PredictionCalibrationService`：recordPrediction / resolveOutcome / resolveFromTaskCompletion（review 状态或 sessionLss≥6 → struggled）/ empiricalStats（命中率 + 校准桶，样本带 n）。
+- **编排字段（profile.yaml）**：`lesson-knowledge-enricher` 新增 `knowledgeStateSummary` 字段声明 + 路由（accumulate: false，不进编排持久化）。
+
+### 行为变化
+
+- **lesson-knowledge-enricher（core 更新）**：输出 5 字段 → 6 字段（新增 `knowledgeStateSummary`，LBM 式文本化知识状态摘要）；normalize 非字符串 → 空串（不脑补）；evidenceCount 历史虚报修复（Math.max(1) → 0 即 0）。
+- **TeachingContextBuilder**：会话创建时幂等获取学习表现预测（已有未回写记录 → 复用；无 → await LLM ≤8s 超时降级 null）；`TeachingScenarioContext.learnerPrediction`（含实证可靠性 reliability，样本 <5 置 null）。
+- **AITeachingCoordinator / teaching-turn**：scenario.learnerPrediction 透传；teaching-turn.yaml 新增消费规则（开场策略参考信号、非命令；低样本不得改变默认策略；不得向学生泄露预测措辞）。
+- **task:completed 消费者（LearningMetricService）**：reconcileTaskCompletionMetric 附带校准回写（fire-and-forget，失败不阻断）。
+- **admin 证据接口**（GET /learner-models/:userId/evidence）：新增 `domain`（goal/path 域证据，中性信号词"澄清/创建/生成"）与 `loadCurve`（learning_metrics 历史趋势，替换错误的分钟数 EWMA）；新增 `GET /:userId/predictions`（校准统计 + 最近预测）。
+- **admin LearnerDetail 证据 tab**：两栏布局（左时间线内滚 / 右曲线·建议·密度·校准卡片）；压力曲线改真实 LSS/LF/LSB 三线 + 参考线；新增"预测校准"卡片（实证命中率 + 校准桶 + 预测 vs 实际）。
+
+### 理论登记
+
+- EDUCATIONAL_THEORY_MAP.md：新增 ⑯ 预测校准方法论；第四节 LLM 表新增 LBM/CIKT/LLMKT/LKT/KCQRL/反例/LLM 评估效度/LA 效应量/UKT 九行（含 arXiv/DOI）。
+
+### 遗留
+
+- `virtual-learner-memory-curator` 缺 manifest（yaml:check / skills:check 既有 FAIL，基线即有，待补）。
+- `profile-aggregator.calculateConfidence` 旧公式仍在画像聚合（仅展示用途，决策置信度已走校准闭环，待收敛）。
+
 ## 2026-08-11 — P0 三件（参数四写收敛第一步 / 快照 import 副作用 / CI 顺序）
 
 ### P0-1 参数四写收敛第一步：manifest runtimeDefaults 废弃

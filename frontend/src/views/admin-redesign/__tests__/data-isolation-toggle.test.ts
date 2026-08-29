@@ -1,7 +1,7 @@
 /**
  * 数据隔离（A3）前端切换测试：TeachingSessions / GoalConversations / Users 三页
  * - 默认「仅真实」：列表请求带 includeTest=false（不含虚拟/测试行）
- * - 切换「含虚拟·测试」：按 includeTest=true 重拉，虚拟/测试行显式灰标（虚拟 / 测试 徽章）
+ * - 切换「含模拟」（原「含虚拟·测试」）：按 includeTest=true 重拉，虚拟/测试行显式灰标（虚拟 / 测试 徽章）
  * - Users：切换触发 liveSetUsersIncludeTest，虚拟行带「虚拟」灰标
  */
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
@@ -167,7 +167,7 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
     wrapper.unmount();
   });
 
-  it('切换「含虚拟·测试」→ 按 includeTest=true 重拉，虚拟/测试行显式灰标', async () => {
+  it('切换「含模拟」→ 按 includeTest=true 重拉，虚拟/测试行显式灰标', async () => {
     tsListMock.mockResolvedValue({ data: { success: true, data: { items: [tsItem('a')] } } });
     dataSource.value = 'live';
     const wrapper = mount(TeachingSessions, { global: { plugins: [mockRouter()] } });
@@ -185,11 +185,11 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
         }
       }
     });
-    await findBtn(wrapper, '含虚拟·测试').trigger('click');
+    await findBtn(wrapper, '含模拟').trigger('click');
     await flushPromises();
     await nextTick();
     expect(tsListMock).toHaveBeenLastCalledWith({ limit: 100, includeTest: true });
-    expect(wrapper.text()).toContain('含虚拟/测试');
+    expect(wrapper.text()).toContain('含模拟');
     const tags = wrapper.findAll('.mk-badge--sm');
     expect(tags).toHaveLength(2);
     expect(tags[0].text()).toBe('虚拟');
@@ -225,11 +225,11 @@ describe('GoalConversations 数据隔离切换（A3）', () => {
         }
       }
     });
-    await findBtn(wrapper, '含虚拟·测试').trigger('click');
+    await findBtn(wrapper, '含模拟').trigger('click');
     await flushPromises();
     await nextTick();
     expect(gcListMock).toHaveBeenLastCalledWith({ limit: 100, includeTest: true });
-    expect(wrapper.text()).toContain('含虚拟/测试');
+    expect(wrapper.text()).toContain('含模拟');
     const tag = wrapper.find('.mk-badge--virtual');
     expect(tag.exists()).toBe(true);
     expect(tag.text()).toBe('虚拟');
@@ -261,7 +261,7 @@ describe('Users 数据隔离切换（A3）', () => {
     expect(wrapper.find('.mk-badge--virtual').exists()).toBe(false);
     expect(wrapper.text()).toContain('真实 1');
 
-    await findBtn(wrapper, '含虚拟·测试').trigger('click');
+    await findBtn(wrapper, '含模拟').trigger('click');
     await nextTick();
     expect(liveSetUsersIncludeTest).toHaveBeenCalledWith(true);
     // 切换后全量口径：后端返回虚拟/测试行 → 虚拟行带「虚拟」灰标

@@ -15,14 +15,15 @@
           />
         </label>
         <div class="mk-confirm__actions">
-          <button type="button" class="mk-btn" @click="settleConfirm(false)">取消</button>
+          <button type="button" class="mk-btn" :disabled="confirmState.busy" @click="settleConfirm(false)">取消</button>
           <button
             type="button"
             class="mk-btn"
             :class="confirmState.danger ? 'mk-confirm__danger' : 'mk-btn--primary'"
+            :disabled="confirmState.busy"
             @click="confirm"
           >
-            {{ confirmState.confirmText }}
+            {{ confirmState.busy ? '处理中…' : confirmState.confirmText }}
           </button>
         </div>
       </div>
@@ -40,12 +41,16 @@ import { useEscape } from './useEscape'
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => confirmState.open), panelRef)
-useMaskClose(maskRef, () => settleConfirm(false))
-useEscape(() => confirmState.open, () => settleConfirm(false))
+useMaskClose(maskRef, () => { if (!confirmState.busy) settleConfirm(false) })
+useEscape(() => confirmState.open, () => { if (!confirmState.busy) settleConfirm(false) })
 
 function confirm() {
+  if (confirmState.busy) return
   if (confirmState.input) {
     settleConfirm(confirmState.inputValue.trim() || null)
+  } else if (confirmState.busyMode) {
+    // busy 模式：确认后不立即关闭，进入 busy 态由业务 done()/failConfirm() 关闭
+    confirmState.busy = true
   } else {
     settleConfirm(true)
   }

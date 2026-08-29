@@ -388,6 +388,12 @@ export const adminLearnerModelsApi = {
     includeTest?: boolean;
   }) => {
     return adminAxios.get(`/admin/learner-models/${userId}/evidence`, { params });
+  },
+
+  getPredictions: async (userId: string, params?: {
+    includeTest?: boolean;
+  }) => {
+    return adminAxios.get(`/admin/learner-models/${userId}/predictions`, { params });
   }
 };
 
@@ -886,6 +892,36 @@ export const adminFeedbackApi = {
 };
 
 /**
+ * Token 成本统计（LLM 用量与成本透视）
+ */
+export const adminTokenCostApi = {
+  /** 总览：总量 / 调用数 / 失败数 / prompt·completion 拆分 / 按天趋势 */
+  getSummary: async (params?: { days?: number; includeTest?: boolean }) => {
+    return adminAxios.get('/admin/token-cost/summary', {
+      params: { ...params, includeTest: params?.includeTest ? '1' : undefined },
+    });
+  },
+  /** per-agent（skill）token 排行 */
+  getBySkill: async (params?: { days?: number; includeTest?: boolean }) => {
+    return adminAxios.get('/admin/token-cost/by-skill', {
+      params: { ...params, includeTest: params?.includeTest ? '1' : undefined },
+    });
+  },
+  /** per-user token 排行 */
+  getByUser: async (params?: { days?: number; includeTest?: boolean; limit?: number }) => {
+    return adminAxios.get('/admin/token-cost/by-user', {
+      params: { ...params, includeTest: params?.includeTest ? '1' : undefined },
+    });
+  },
+  /** per-model token 排行 */
+  getByModel: async (params?: { days?: number; includeTest?: boolean }) => {
+    return adminAxios.get('/admin/token-cost/by-model', {
+      params: { ...params, includeTest: params?.includeTest ? '1' : undefined },
+    });
+  },
+};
+
+/**
  * Goal 会话管理（目标对话 → 路径生成源头）
  */
 export const adminGoalConversationsApi = {
@@ -1109,6 +1145,8 @@ export const adminVirtualLearnersApi = {
     preferredLevels?: string[];
     candidatePersonas?: string[];
     existingPersonaSeed?: Record<string, unknown>;
+    /** 样本类型：'student' 生成传统学生样本（课纲/考试节点/学期节奏/家长同伴环境） */
+    sampleType?: string;
   }) => {
     return adminAxios.post('/admin/virtual-learners/generate-persona', data || {});
   },
@@ -1133,8 +1171,8 @@ export const adminVirtualLearnersApi = {
     return adminAxios.post(`/admin/virtual-learners/${id}/projection-token`, data || {});
   },
 
-  draftVirtualLearnerStories: async (id: string) => {
-    return adminAxios.post(`/admin/virtual-learners/${id}/draft-stories`);
+  draftVirtualLearnerStories: async (id: string, data?: { /** 样本类型：'student' 生成传统学生故事 */ sampleType?: string }) => {
+    return adminAxios.post(`/admin/virtual-learners/${id}/draft-stories`, data || {});
   },
 
   deleteStory: async (profileId: string, storyIndex: number) => {
@@ -1265,7 +1303,7 @@ export const adminVirtualLearnersApi = {
     return adminAxios.get(`/admin/virtual-learners/${profileId}/quick-learn/tasks`);
   },
 
-  startQuickLearnRun: async (profileId: string, data: { taskId: string; maxTurns?: number }) => {
+  startQuickLearnRun: async (profileId: string, data: { taskId: string; maxTurns?: number; storyId?: string; frictionBudget?: string }) => {
     return adminAxios.post(`/admin/virtual-learners/${profileId}/quick-learn/runs`, data);
   },
 

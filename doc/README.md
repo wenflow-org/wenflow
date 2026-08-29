@@ -18,8 +18,8 @@
   - Prompt 管理指南（File-as-Truth 架构）：文件为准、DB 为镜像（v2 旧编译模型，与 v4 版本模型互斥）
 - [`PROMPT_COMPILE_GLOSSARY.md`](./archive/PROMPT_COMPILE_GLOSSARY.md)（已归档 2026-08-09）
   - Prompt 编译概念术语表（旧 prompt-compiler 编译术语，仅描述遗留子系统）
-- [`PROMPT_RECOVERY_MATRIX.md`](./PROMPT_RECOVERY_MATRIX.md)
-  - Prompt 恢复矩阵：各 skill prompt 的可恢复来源（随 prompt-lab sources 退役而失效）
+- [`PROMPT_RECOVERY_MATRIX.md`](./archive/PROMPT_RECOVERY_MATRIX.md)（已归档 2026-08-29）
+  - Prompt 恢复矩阵：各 skill prompt 的可恢复来源（自述"随 prompt-lab sources 退役而失效"，使命完成）
 
 ## 架构与治理
 
@@ -89,6 +89,16 @@
 - [`MCP_DOMAIN_SURVEY.md`](./archive/MCP_DOMAIN_SURVEY.md) — MCP 域机制调查 → 调查使命完成
 - [`CONFIG_SECURITY_CLEANUP.md`](./archive/CONFIG_SECURITY_CLEANUP.md) — 配置安全审计 → 安全清理已实施
 - [`SKILLS_YAML_SPEC.md`](./archive/SKILLS_YAML_SPEC.md) — skills.yaml 实施规格 → skills.yaml 已上线
+
+### 已归档（2026-08-29）
+
+文档清理批次：过时/完成使命文档移入 `history/`，被取代版本移入 `archive/`；根目录 Playwright 临时快照（page-*.md ×17 等，gitignore 已声明为会话临时文件）删除。
+
+- `history/reports/2026-06/CHANGES.md` — 管理员本地登录限制（2026-06 历史实现，文内自声明过时；现行见 ADMIN_LOGIN_GUIDE / SECURITY）
+- `history/reports/2026-08/ADMIN_RECONSTRUCTION_SUMMARY.md` — 管理后台重构总结（结论已被实施吸收，无代码引用）
+- `history/design/2026-08/SKILL_EXPANSION_DESIGN.md` — Skill 扩展设计（已落地，无代码引用）
+- `archive/PROMPT_RECOVERY_MATRIX.md` — Prompt 恢复矩阵（自述随 prompt-lab sources 退役而失效）
+- `.gitignore` 白名单同步清理 9 个死条目（指向已不存在文件的 `!doc/*.md`）；`glossary-content.ts` 同步清理 3 个死链接条目
 
 ### 2026-04 至 2026-05 历史材料
 
