@@ -1,38 +1,26 @@
 ﻿<template>
   <div class="mk-page">
-    <!-- 状态条：标题固定「编排结构」+ 共 N + 刷新（视图切换下沉到 tab 条） -->
+    <!-- 状态条：标题 + 全局关键指标（紧凑单行，替代大 KPI 卡） -->
     <div class="mk-status" :class="`mk-status--${statusTone}`">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">编排结构</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ stages.length }} 阶段 · {{ totalSkills }} 个 Skill</span>
+      <span v-if="isLive" class="mk-status__meta">总调用 {{ totalCalls }}</span>
+      <span v-if="unresolvedCount > 0" class="mk-status__meta mk-status__meta--bad">未解析 {{ unresolvedCount }}</span>
       <span v-if="isLive && w4Drifted.length" class="mk-status__meta mk-status__meta--bad">哈希漂移 {{ w4Drifted.length }}</span>
       <span class="mk-status__spacer"></span>
       <button v-if="isLive" type="button" class="mk-status__action" :disabled="defsLoading" @click="loadDefinitions">刷新</button>
     </div>
 
-    <!-- 编排概览（共享 MkOverview：结论头 + KPI + 阶段调用分布；动态结论只在这里） -->
-    <MkOverview :tone="statusTone" :title="statusTitle" :subline="`${stages.length} 阶段 · ${totalSkills} 个 Skill`" :has-data="stages.length > 0">
-      <template #kpis>
-        <MkKpi label="阶段" :value="stages.length" hint="编排全链路" :title="'编排文件中的阶段数（含无拓扑产物的阶段）'" />
-        <MkKpi label="Skill 节点" :value="totalSkills" :hint="`总调用 ${totalCalls}`" :title="'全部阶段的 Skill 节点数'" />
-        <MkKpi label="总调用" :value="totalCalls" :hint="'实时拓扑口径'" :title="'全部阶段 Skill 调用之和（来自拓扑节点统计）'" />
-        <MkKpi label="未解析" :value="unresolvedCount" :tone="unresolvedCount > 0 ? 'bad' : ''" :hint="unresolvedCount ? '定义步骤 unresolved' : '定义步骤全部解析'" :title="'编排定义中未解析的定义步骤数'" />
-      </template>
-      <template #detail>
-        <span v-for="st in stages" :key="st.id" :title="`${st.name} · ${stageCalls(st)} 次调用`">{{ st.name.replace(/阶段$/, '') }} {{ stageCalls(st) }}</span>
-      </template>
-    </MkOverview>
-
-    <!-- 核心 tab：浏览（字段流转/拓扑）/ 编辑（字段路由 + 治理）。沙盘为深链次要入口，不占主 tab -->
-    <div class="orch-tabs" role="tablist">
-      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'browse' || viewMode === 'sandbox' }" @click="viewMode = 'browse'">浏览</button>
-      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'edit' }" @click="viewMode = 'edit'">编辑</button>
-    </div>
-
-    <!-- 浏览：结构 / 运行 —— 同一画布的数据层切换；范围（聚焦/全览）为页面级开关 -->
-    <div v-if="viewMode === 'browse'" class="orch-tabpane">
-      <div class="orch-browsebar">
+    <!-- 单行控制条：核心 tab（浏览/编辑）+ 浏览子控制（结构/运行 × 聚焦/全览） -->
+    <div class="orch-ctrlbar">
+      <div class="orch-tabs" role="tablist">
+        <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'browse' || viewMode === 'sandbox' }" @click="viewMode = 'browse'">浏览</button>
+        <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'edit' }" @click="viewMode = 'edit'">编辑</button>
+      </div>
+      <template v-if="viewMode === 'browse'">
+        <span class="orch-ctrlbar__sep"></span>
         <div class="orch-subtabs" role="tablist">
           <button
             type="button"
@@ -51,21 +39,10 @@
           <input type="checkbox" :checked="browseScope === 'all'" @change="toggleBrowseScope" />
           <span>全览</span>
         </label>
-      </div>
-      <FieldFlowGraph
-        v-if="browseMode === 'flow'"
-        :key="flowKey"
-        :stage="active"
-        :scope="browseScope"
-        @changed="onRoutingChanged"
-        @stage="onStageChange"
-        @scope="browseScope = $event"
-      />
-      <Topology v-else :stage="active" :scope="browseScope" />
+      </template>
     </div>
 
-    <!-- 编辑：字段路由（表格 + 编排文件）+ 治理（漂移报告 + 变更审计）——编辑闭环 -->
-    <div v-else-if="viewMode === 'edit'" class="orch-tabpane">
+    <div v-if="viewMode === 'edit'" class="orch-tabpane">
       <FieldRoutingTable :stage="current?.id || ''" @changed="onRoutingChanged" />
       <details class="orch-govern" :open="governOpen">
         <summary class="orch-govern__summary">治理：漂移报告 + 变更审计</summary>
@@ -85,6 +62,20 @@
       </div>
       <SandboxView />
     </div>
+
+    <template v-else-if="viewMode === 'browse'">
+      <!-- 主视图 = 字段流转图：泳道（阶段）→ 字段分组 → handoff 边；字段即节点，点开看含义与编辑 -->
+      <FieldFlowGraph
+        v-if="browseMode === 'flow'"
+        :key="flowKey"
+        :stage="active"
+        :scope="browseScope"
+        @changed="onRoutingChanged"
+        @stage="onStageChange"
+        @scope="browseScope = $event"
+      />
+      <Topology v-else :stage="active" :scope="browseScope" />
+    </template>
   </div>
 </template>
 
@@ -99,8 +90,6 @@ import FieldFlowGraph from './FieldFlowGraph.vue'
 import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
 import Topology from './Topology.vue'
-import MkOverview from './MkOverview.vue'
-import MkKpi from './MkKpi.vue'
 
 const viewMode = ref<'browse' | 'edit' | 'sandbox'>('browse')
 /** 浏览画布内切换：结构（字段流转）/ 运行（拓扑叠加） */
@@ -390,12 +379,6 @@ const statusTone = computed(() => {
   const unresolved = stages.value.some((s) => s.defSteps?.some((d) => d.resolved?.unresolved))
   return unresolved ? 'warn' : 'ok'
 })
-const statusTitle = computed(() => {
-  if (!stages.value.length) return '暂无编排阶段数据'
-  const unresolved = stages.value.some((s) => s.defSteps?.some((d) => d.resolved?.unresolved))
-  if (unresolved) return '编排存在未解析节点'
-  return '编排主链完整'
-})
 // 后端阶段名已含"阶段"（如"Goal 阶段"），demo 名无后缀，避免重复拼接
 const stageTitle = computed(() => {
   const name = current.value?.name || ''
@@ -403,7 +386,13 @@ const stageTitle = computed(() => {
 })
 void stageTitle.value
 </script><style scoped>
-/* 视图 tab：字段流转 / 拓扑 / 字段路由 / 工作台 / 沙盘 / 漂移（页面级切换，浅底分段条） */
+/* 单行控制条：核心 tab + 浏览子控制（结构/运行 × 聚焦/全览） */
+.orch-ctrlbar {
+  display: flex; align-items: center; gap: 12px;
+  margin: 10px 0;
+  flex-wrap: wrap;
+}
+.orch-ctrlbar__sep { width: 1px; height: 18px; background: var(--mk-line); }
 .orch-tabs { display: flex; gap: 4px; padding: 3px; width: fit-content; background: #f1f5f9; border-radius: 10px; }
 .orch-tab {
   padding: 6px 14px; border: 0; border-radius: 8px; background: transparent;
@@ -414,11 +403,10 @@ void stageTitle.value
 .orch-tab.is-active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); }
 .orch-tabpane { margin-top: 0; }
 
-/* 浏览画布内切换（字段流转/拓扑）：轻量分段条，主 tab 的次级控件 */
+/* 浏览画布内切换（结构/运行）：轻量分段条 */
 .orch-subtabs {
   display: inline-flex; gap: 2px; padding: 2px;
   background: #eef2fa; border-radius: 8px;
-  margin: 8px 0 10px;
 }
 .orch-subtab {
   padding: 4px 14px; border: 0; border-radius: 6px;
@@ -430,8 +418,6 @@ void stageTitle.value
 .orch-subtab.is-active { background: #fff; color: var(--mk-blue); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1); }
 
 /* 浏览控制条：子 tab（结构/运行）+ 范围开关（聚焦/全览） */
-.orch-browsebar { display: flex; align-items: center; gap: 14px; margin: 8px 0 10px; }
-.orch-browsebar .orch-subtabs { margin: 0; }
 .orch-scope {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 11.5px; font-weight: 700; color: var(--mk-muted); cursor: pointer;

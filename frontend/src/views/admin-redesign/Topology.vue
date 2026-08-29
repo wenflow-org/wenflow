@@ -1,15 +1,13 @@
 <template>
-  <div class="mk-page topo-page">
-    <!-- 工具栏：状态 + 统计 + 图例 + 时间范围 -->
+  <div class="topo-page">
+    <!-- 工作区卡片：工具栏头 + 画布体（与字段图同款一体结构） -->
+    <div class="topo-frame">
+    <!-- 工具栏：健康状态 + 时间范围（紧凑单行） -->
     <div class="topo-toolbar">
       <div class="topo-toolbar__status">
         <span class="topo-status-dot" :class="hasError ? 'is-error' : 'is-ok'"></span>
         <strong class="topo-toolbar__title" :title="statusTitleHint">{{ statusTitle }}</strong>
-        <span class="topo-toolbar__sep"></span>
-        <span class="topo-toolbar__meta"><b>{{ agentNodes.length }}</b> 个阶段</span>
-        <span class="topo-toolbar__meta"><b>{{ skillNodes.length }}</b> 个 Skill</span>
         <span class="topo-toolbar__meta"><b>{{ totalCalls }}</b> 次调用</span>
-        <span class="topo-toolbar__hint">运行时视角：字段/节点叠调用与成功率 · 点 Skill 看详情 · 点 Agent 查日志</span>
       </div>
       <div class="topo-toolbar__controls">
         <span v-if="isLive" class="mk-pills topo-range">
@@ -25,7 +23,6 @@
             {{ r.label }}
           </button>
         </span>
-        <span class="topo-toolbar__vsep"></span>
         <span class="topo-legend"><i class="lg lg--ok"></i>正常</span>
         <span class="topo-legend"><i class="lg lg--idle"></i>空闲</span>
         <span class="topo-legend"><i class="lg lg--err"></i>异常</span>
@@ -179,6 +176,7 @@
         </div>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
@@ -197,6 +195,11 @@ import {
 } from './fieldFlowLayout'
 
 const props = defineProps<{ stage?: string; scope?: 'focus' | 'all' }>()
+
+// 范围/阶段切换后重新适配画布（与字段图同款：布局变化即 fitView）
+watch([() => props.scope, () => props.stage], () => {
+  void nextTick(() => { if (!userInteracted.value) fitView() })
+})
 
 /* ================= 缩放 / 平移（沿用原拓扑交互） ================= */
 const canvasRef = ref<HTMLElement | null>(null)
@@ -236,9 +239,9 @@ function fitView() {
   const rect = canvasRef.value?.getBoundingClientRect()
   if (!rect || rect.width === 0) return
   const padding = 20
-  // 横向适配视口（宽度优先），纵向超高靠容器滚动，避免整图压扁字号
+  // 横向适配视口；只缩小不放大（与字段图同款缩放口径，杜绝卡片忽大忽小）
   const zx = (rect.width / globalZoom.value - padding * 2) / cW.value
-  zoom.value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zx))
+  zoom.value = Math.min(1, Math.max(MIN_ZOOM, zx))
   tx.value = Math.max(padding, (rect.width / globalZoom.value - cW.value * zoom.value) / 2)
   ty.value = padding
 }
@@ -424,7 +427,6 @@ const canvasHeight = computed(() => (isEmpty.value ? 520 : Math.round(availHeigh
 const isEmpty = computed(() => layouts.value.length === 0 || liveTopoNodes.value.length === 0)
 
 /* ================= 运行时叠加 ================= */
-const agentNodes = computed(() => liveTopoNodes.value.filter((n) => n.type === 'agent'))
 const skillNodes = computed(() => liveTopoNodes.value.filter((n) => n.type === 'skill'))
 const totalCalls = computed(() => skillNodes.value.reduce((s, n) => s + n.stats.totalCalls, 0))
 const hasError = computed(() => skillNodes.value.some((n) => n.stats.failed > 0))
@@ -558,10 +560,17 @@ const toneOf = (id: string) => AGENT_TONES[`${id}-agent`] || { hue: '#64748b', s
 </script>
 
 <style scoped>
-/* ========== 工具栏 ========== */
+/* ========== 工作区卡片：工具栏头 + 画布体一体（与字段图同款） ========== */
+.topo-frame {
+  border: 1px solid var(--mk-line);
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: var(--mk-shadow-sm);
+}
 .topo-toolbar {
   display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
-  padding: 8px 14px; background: var(--mk-surface); border: 1px solid var(--mk-line); border-radius: 10px; box-shadow: var(--mk-shadow-sm);
+  padding: 8px 14px; background: linear-gradient(180deg, #fbfcff, #f6f8fc); border-bottom: 1px solid var(--mk-line);
 }
 .topo-toolbar__status { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
 .topo-status-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
@@ -581,10 +590,9 @@ const toneOf = (id: string) => AGENT_TONES[`${id}-agent`] || { hue: '#64748b', s
 .lg--err { background: #dc2626; }
 .topo-toolbar__vsep { width: 1px; height: 16px; background: var(--mk-line); }
 
-/* ========== 画布（与字段图一致：绝对定位泳道 + 字段） ========== */
+/* ========== 画布（卡片体：无独立边框，由 frame 承载） ========== */
 .topo-canvas {
   position: relative;
-  border: 1px solid var(--mk-line); border-radius: 12px;
   background: radial-gradient(640px 320px at 14% 0%, rgba(44, 99, 208, 0.04), transparent 70%),
     linear-gradient(90deg, rgba(214, 223, 238, 0.2) 1px, transparent 1px) 0 0 / 24px 24px,
     linear-gradient(180deg, rgba(214, 223, 238, 0.2) 1px, transparent 1px) 0 0 / 24px 24px,

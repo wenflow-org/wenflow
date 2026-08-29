@@ -1,59 +1,49 @@
 <template>
   <div class="ffg">
-    <!-- 工具栏：状态 + 图例 + 操作 -->
-    <div class="ffg-toolbar">
-      <div class="ffg-toolbar__status">
-        <span class="ffg-dot" :class="loading ? 'is-loading' : 'is-ok'"></span>
-        <strong class="ffg-title">字段流转</strong>
-        <span class="ffg-sep"></span>
-        <div class="ffg-stages" :title="'当前阶段：' + (stages.find(s=>s.id===focusStage)?.name || '')">
-          <button
-            v-for="s in stages"
-            :key="s.id"
-            type="button"
-            class="ffg-stage"
-            :class="{ 'is-active': viewScope === 'focus' && s.id === focusStage }"
-            @click="switchStage(s.id)"
-          >{{ s.name }}</button>
-        </div>
-        <span class="ffg-sep"></span>
-        <span class="ffg-meta"><b>{{ totalFields }}</b> 个字段</span>
-        <span class="ffg-meta"><b>{{ edgeCount }}</b> 条流转</span>
-        <span class="ffg-hint">泳道 = 阶段 · 组头点击展开字段 · 搜索定位 · 点字段看上下游</span>
-      </div>
-      <div class="ffg-toolbar__controls">
-        <div class="ffg-search">
-          <input
-            v-model="query"
-            type="search"
-            class="ffg-search__input"
-            placeholder="搜索字段 / Skill…"
-            spellcheck="false"
-            @input="onQueryInput"
-          />
-          <button v-if="query" type="button" class="ffg-search__clear" title="清除" @click="clearQuery">✕</button>
-        </div>
-        <label class="ffg-switch" :title="groupMode ? '当前为组级视图：只显示组头主干，点组展开字段' : '所有组展开，显示全部字段'">
-          <input type="checkbox" v-model="groupMode" @change="onGroupModeChange" />
-          <span>组级视图</span>
-        </label>
-        <label class="ffg-switch" :title="showHidden ? '隐藏字段也会显示' : '仅显示对外/流转字段'">
-          <input type="checkbox" v-model="showHidden" />
-          <span>含隐藏字段</span>
-        </label>
-        <span class="ffg-legend"><i class="lg lg--handoff"></i>移交</span>
-        <span class="ffg-legend"><i class="lg lg--accumulate"></i>累积</span>
-        <span class="ffg-legend"><i class="lg lg--internal"></i>内部</span>
-        <span class="ffg-legend"><i class="lg lg--end"></i>终点</span>
-      </div>
-    </div>
-
     <div v-if="loading" class="ffg-empty">加载中…</div>
     <div v-else-if="error" class="ffg-empty ffg-empty--error">
       {{ error }}
       <button type="button" class="mk-empty__action" @click="load">重试</button>
     </div>
-    <template v-else>
+    <!-- 工作区卡片：工具栏头 + 画布体（一体，消除漂浮条） -->
+    <div v-else class="ffg-frame">
+      <div class="ffg-toolbar">
+        <div class="ffg-toolbar__status">
+          <strong class="ffg-title">字段流转</strong>
+          <div class="ffg-stages" :title="'当前阶段：' + (stages.find(s=>s.id===focusStage)?.name || '')">
+            <button
+              v-for="s in stages"
+              :key="s.id"
+              type="button"
+              class="ffg-stage"
+              :class="{ 'is-active': viewScope === 'focus' && s.id === focusStage }"
+              @click="switchStage(s.id)"
+            >{{ s.name }}</button>
+          </div>
+        </div>
+        <div class="ffg-toolbar__controls">
+          <div class="ffg-search">
+            <input
+              v-model="query"
+              type="search"
+              class="ffg-search__input"
+              placeholder="搜索字段 / Skill…"
+              spellcheck="false"
+              @input="onQueryInput"
+            />
+            <button v-if="query" type="button" class="ffg-search__clear" title="清除" @click="clearQuery">✕</button>
+          </div>
+          <label class="ffg-switch" :title="groupMode ? '当前为组级视图：只显示组头主干，点组展开字段' : '所有组展开，显示全部字段'">
+            <input type="checkbox" v-model="groupMode" @change="onGroupModeChange" />
+            <span>组级</span>
+          </label>
+          <label class="ffg-switch" :title="showHidden ? '隐藏字段也会显示' : '仅显示对外/流转字段'">
+            <input type="checkbox" v-model="showHidden" />
+            <span>隐藏字段</span>
+          </label>
+          <span class="ffg-legend" title="蓝=移交 · 琥珀=累积 · 紫=内部信令"><i class="lg lg--handoff"></i><i class="lg lg--accumulate"></i><i class="lg lg--internal"></i>图例</span>
+        </div>
+      </div>
       <div
         ref="ffgCanvasRef"
         class="ffg-canvas"
@@ -240,7 +230,7 @@
         </div>
         </div>
       </div>
-    </template>
+    </div>
 
     <!-- 字段详情抽屉 -->
     <Teleport to="body">
@@ -517,8 +507,6 @@ function visibleFields(fields: FlowField[]) {
 }
 void visibleFields
 
-const totalFields = computed(() => stages.value.reduce((s, st) => s + st.fieldCount, 0))
-
 /* ================= 画布与连线（共享布局模块：与拓扑运行时视图同源） ================= */
 /** 折叠状态：桥接组（<stage>-agent）与次要字段组均可点组头展开 */
 const collapsedGroups = ref<Set<string>>(new Set(['goal-agent', 'path-agent', 'teaching-agent', 'profile-agent', 'simulation-agent']))
@@ -647,7 +635,7 @@ watch(() => props.stage, (s) => { if (s) focusStage.value = s }, { immediate: tr
 const anchorLayout = computed(() => computeFocusAnchors(stages.value, focusStage.value))
 
 const anchorColH = computed(() => {
-  if (!layouts.value.length) return 560
+  if (!layouts.value.length) return 480
   return Math.max(layouts.value[0].laneHeight, anchorLayout.value.upH, anchorLayout.value.downH)
 })
 
@@ -674,15 +662,15 @@ const canvasW = computed(() =>
 )
 const canvasH = computed(() =>
   viewScope.value === 'focus' && layouts.value.length
-    ? Math.max(560, anchorColH.value)
+    ? Math.max(480, anchorColH.value)
     : _canvasH(layouts.value)
 )
 /** 画布容器高度 = 最大泳道高度（避免绝对定位泳道被容器裁切） */
 /** 画布容器高度：内容缩放后高度（超高部分容器内滚动，不压扁字号） */
 const canvasStyleH = computed(() => {
-  if (isEmpty.value) return '560px'
+  if (isEmpty.value) return '480px'
   const scaled = canvasH.value * zoom.value
-  return `${Math.max(560, Math.round(Math.min(scaled, availHeight() * 1.5)))}px`
+  return `${Math.max(480, Math.round(Math.min(scaled, availHeight() * 1.5)))}px`
 })
 
 const edges = computed<EdgeGeom[]>(() => {
@@ -690,7 +678,6 @@ const edges = computed<EdgeGeom[]>(() => {
   if (viewScope.value !== 'focus' || !layouts.value.length) return base
   return [...base, ...computeFocusEdges(layouts.value[0], anchorLayout.value.upItems, anchorLayout.value.downItems)]
 })
-const edgeCount = computed(() => edges.value.length)
 const isEmpty = computed(() => layouts.value.length === 0)
 /** 切换聚焦阶段（同步父级 active，供字段路由/编辑联动） */
 function switchStage(s: string) {
@@ -751,14 +738,13 @@ const viewportStyle = computed(() => ({
 /** 可视高度（逻辑空间）：窗口减顶栏与页面内边距 */
 const availHeight = () => Math.max(420, winH.value / globalZoom.value - 104)
 
-/** 初始/重置视图：横向适配视口（宽度优先），纵向保持可读缩放、超高部分滚动 */
+/** 初始/重置视图：横向适配视口；只缩小不放大（内容设计尺寸即可读尺寸，杜绝字段卡忽大忽小） */
 function fitView() {
   const rect = ffgCanvasRef.value?.getBoundingClientRect()
   if (!rect || rect.width === 0 || isEmpty.value) return
   const padding = 20
-  // 只按宽度缩放：内容横跨 5 泳道，高度靠滚动（避免整图压到 60% 字号不可读）
   const zx = (rect.width / globalZoom.value - padding * 2) / canvasW.value
-  zoom.value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zx))
+  zoom.value = Math.min(1, Math.max(MIN_ZOOM, zx))
   tx.value = Math.max(padding, (rect.width / globalZoom.value - canvasW.value * zoom.value) / 2)
   ty.value = padding
 }
@@ -935,7 +921,14 @@ async function saveEdit() {
 </script>
 
 <style scoped>
-/* ========== 工具栏 ========== */
+/* ========== 工作区卡片：工具栏头 + 画布体一体 ========== */
+.ffg-frame {
+  border: 1px solid var(--mk-line);
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: var(--mk-shadow-sm);
+}
 .ffg-toolbar {
   display: flex;
   align-items: center;
@@ -943,10 +936,8 @@ async function saveEdit() {
   gap: 14px;
   flex-wrap: wrap;
   padding: 8px 14px;
-  background: var(--mk-surface);
-  border: 1px solid var(--mk-line);
-  border-radius: 10px;
-  box-shadow: var(--mk-shadow-sm);
+  background: linear-gradient(180deg, #fbfcff, #f6f8fc);
+  border-bottom: 1px solid var(--mk-line);
 }
 .ffg-toolbar__status { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .ffg-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-line); flex-shrink: 0; }
@@ -1025,14 +1016,12 @@ async function saveEdit() {
 .lg--internal { background: #7c3aed; }
 .lg--end { background: #94a3b8; }
 
-/* ========== 画布 ========== */
+/* ========== 画布（卡片体：无独立边框，由 frame 承载） ========== */
 .ffg-canvas {
   position: relative;
-  border: 1px solid var(--mk-line);
-  border-radius: 12px;
   background: linear-gradient(180deg, #fbfcff, #f2f5fa);
   overflow: auto;
-  min-height: 560px;
+  min-height: 480px;
   height: auto;
   cursor: default;
   touch-action: none;
