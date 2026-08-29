@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="mk-page">
-    <!-- 状态条：标题 + 全局关键指标（紧凑单行，替代大 KPI 卡） -->
+    <!-- 状态条：标题 + 全局关键指标（紧凑单行） -->
     <div class="mk-status" :class="`mk-status--${statusTone}`">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">编排结构</strong>
@@ -13,69 +13,49 @@
       <button v-if="isLive" type="button" class="mk-status__action" :disabled="defsLoading" @click="loadDefinitions">刷新</button>
     </div>
 
-    <!-- 单行控制条：核心 tab（浏览/编辑）+ 浏览子控制（结构/运行 × 聚焦/全览） -->
-    <div class="orch-ctrlbar">
-      <div class="orch-tabs" role="tablist">
-        <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'browse' || viewMode === 'sandbox' }" @click="viewMode = 'browse'">浏览</button>
-        <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'edit' }" @click="viewMode = 'edit'">编辑</button>
-      </div>
-      <template v-if="viewMode === 'browse'">
-        <span class="orch-ctrlbar__sep"></span>
-        <div class="orch-subtabs" role="tablist">
-          <button
-            type="button"
-            class="orch-subtab"
-            :class="{ 'is-active': browseMode === 'flow' }"
-            @click="browseMode = 'flow'"
-          >结构</button>
-          <button
-            type="button"
-            class="orch-subtab"
-            :class="{ 'is-active': browseMode === 'topo' }"
-            @click="browseMode = 'topo'"
-          >运行</button>
-        </div>
-        <label class="orch-scope" :title="browseScope === 'focus' ? '当前为阶段聚焦：只看当前阶段 + 上下游' : '全览：5 个阶段泳道全部展示'">
-          <input type="checkbox" :checked="browseScope === 'all'" @change="toggleBrowseScope" />
-          <span>全览</span>
-        </label>
-      </template>
-    </div>
-
-    <div v-if="viewMode === 'edit'" class="orch-tabpane">
-      <FieldRoutingTable :stage="current?.id || ''" @changed="onRoutingChanged" />
-      <details class="orch-govern" :open="governOpen">
-        <summary class="orch-govern__summary">治理：漂移报告 + 变更审计</summary>
-        <div class="orch-govern__body">
-          <DriftAuditPanel :stage="current?.id || ''" />
-        </div>
-      </details>
+    <!-- 阶段导航：五个 tab = 五个阶段（浏览 + 编辑 + 治理都在阶段工作区内） -->
+    <div class="orch-stage-tabs" role="tablist">
+      <button
+        v-for="s in stages"
+        :key="s.id"
+        type="button"
+        class="orch-stage-tab"
+        :class="{ 'is-active': viewMode === 'stage' && active === s.id }"
+        @click="selectStage(s.id)"
+      >
+        <span class="orch-stage-tab__name">{{ s.name.replace(/阶段$/, '') }}</span>
+        <span class="orch-stage-tab__meta">{{ s.skills.length }} Skill · {{ stageCalls(s) }} 调用</span>
+      </button>
     </div>
 
     <!-- 沙盘：深链 ?tab=sandbox / 次要入口（契约对照，独立工作流） -->
-    <div v-else-if="viewMode === 'sandbox'" class="orch-tabpane">
+    <div v-if="viewMode === 'sandbox'" class="orch-tabpane">
       <div class="orch-pane-head">
         <strong class="orch-pane-title">沙盘契约</strong>
         <span class="orch-pane-hint">Agent 输入通道 / 输出字段对照（仿真调试参考）</span>
         <span class="orch-pane-spacer"></span>
-        <button type="button" class="orch-pane-back" @click="viewMode = 'browse'">返回浏览</button>
+        <button type="button" class="orch-pane-back" @click="viewMode = 'stage'">返回阶段</button>
       </div>
       <SandboxView />
     </div>
 
-    <template v-else-if="viewMode === 'browse'">
-      <!-- 主视图 = 字段流转图：泳道（阶段）→ 字段分组 → handoff 边；字段即节点，点开看含义与编辑 -->
+    <!-- 阶段工作区：流转图（浏览）+ 字段路由（编辑）+ 治理（查证）一体 -->
+    <template v-else-if="current">
       <FieldFlowGraph
-        v-if="browseMode === 'flow'"
         :key="flowKey"
         :stage="active"
-        :scope="browseScope"
         @changed="onRoutingChanged"
         @stage="onStageChange"
-        @scope="browseScope = $event"
       />
-      <Topology v-else :stage="active" :scope="browseScope" />
+      <FieldRoutingTable :stage="active" @changed="onRoutingChanged" />
+      <details class="orch-govern" :open="governOpen">
+        <summary class="orch-govern__summary">治理：漂移报告 + 变更审计</summary>
+        <div class="orch-govern__body">
+          <DriftAuditPanel :stage="active" />
+        </div>
+      </details>
     </template>
+    <div v-else class="orch-tabpane"><p class="mk-empty">暂无编排阶段数据</p></div>
   </div>
 </template>
 
@@ -89,16 +69,8 @@ import FieldRoutingTable from './FieldRoutingTable.vue'
 import FieldFlowGraph from './FieldFlowGraph.vue'
 import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
-import Topology from './Topology.vue'
 
-const viewMode = ref<'browse' | 'edit' | 'sandbox'>('browse')
-/** 浏览画布内切换：结构（字段流转）/ 运行（拓扑叠加） */
-const browseMode = ref<'flow' | 'topo'>('flow')
-/** 视图范围（页面级，结构/运行共享）：聚焦（当前阶段+上下游）/ 全览（5 泳道） */
-const browseScope = ref<'focus' | 'all'>('focus')
-function toggleBrowseScope() {
-  browseScope.value = browseScope.value === 'focus' ? 'all' : 'focus'
-}
+const viewMode = ref<'stage' | 'sandbox'>('stage')
 /** 编辑页内治理折叠区（漂移/审计）：?tab=drift 深链时自动展开 */
 const governOpen = ref(false)
 
@@ -107,37 +79,27 @@ const flowKey = ref(0)
 function onRoutingChanged() {
   flowKey.value++
 }
-/** 浏览内切阶段（阶段选择器/锚点跳转）：同步 active，字段路由/编辑联动同阶段 */
+/** 图内锚点跳转切阶段：同步 active（tab 高亮跟随） */
 function onStageChange(s: string) {
   active.value = s
 }
 
 const route = useRoute()
 
-/** ?stage=&tab= 直达（Skill 设计页字段路由 tab → 编排结构页跳转闭环；旧 /admin/topology 重定向落位拓扑） */
+/** ?stage=&tab= 直达（Skill 设计页字段路由 tab → 编排结构页跳转闭环；旧 /admin/topology 重定向落位阶段视图） */
 function applyStageQuery() {
   const qStage = typeof route.query.stage === 'string' && route.query.stage.trim() ? route.query.stage.trim() : ''
   const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
   if (qStage) active.value = qStage
-  const tabAlias = qTab === 'routing' ? 'field-routings' : qTab
-  if (tabAlias === 'field-routings') {
-    viewMode.value = 'edit'
-  } else if (tabAlias === 'topology') {
-    viewMode.value = 'browse'
-    browseMode.value = 'topo'
-  } else if (tabAlias === 'drift') {
-    // 治理并入编辑页：切到编辑 tab 并展开漂移报告
-    viewMode.value = 'edit'
-    governOpen.value = true
-  } else if (tabAlias === 'sandbox') {
-    viewMode.value = 'sandbox'
-  }
-  // workbench 已移出编排页（独立页面 /admin/skill-workbench），tab 忽略
+  // 阶段工作区模式：浏览/编辑/治理都在阶段内；仅沙盘保留独立 pane
+  if (qTab === 'sandbox') viewMode.value = 'sandbox'
+  else if (qTab === 'drift') governOpen.value = true
+  // topology / field-routings / routing / workbench 深链 → 落阶段视图（阶段内含图+表+治理）
 }
 
 function selectStage(id: string) {
   active.value = id
-  viewMode.value = 'browse'
+  viewMode.value = 'stage'
   flowKey.value++
 }
 
@@ -386,46 +348,32 @@ const stageTitle = computed(() => {
 })
 void stageTitle.value
 </script><style scoped>
-/* 单行控制条：核心 tab + 浏览子控制（结构/运行 × 聚焦/全览） */
-.orch-ctrlbar {
-  display: flex; align-items: center; gap: 12px;
-  margin: 10px 0;
-  flex-wrap: wrap;
+/* 阶段导航：五个 tab = 五个阶段（大分段卡，每卡含阶段名 + Skill/调用概要） */
+.orch-stage-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin: 10px 0 12px;
 }
-.orch-ctrlbar__sep { width: 1px; height: 18px; background: var(--mk-line); }
-.orch-tabs { display: flex; gap: 4px; padding: 3px; width: fit-content; background: #f1f5f9; border-radius: 10px; }
-.orch-tab {
-  padding: 6px 14px; border: 0; border-radius: 8px; background: transparent;
-  font: inherit; font-size: 12px; font-weight: 700; color: var(--mk-muted); cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
-}
-.orch-tab:hover { color: var(--mk-ink); }
-.orch-tab.is-active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); }
-.orch-tabpane { margin-top: 0; }
-
-/* 浏览画布内切换（结构/运行）：轻量分段条 */
-.orch-subtabs {
-  display: inline-flex; gap: 2px; padding: 2px;
-  background: #eef2fa; border-radius: 8px;
-}
-.orch-subtab {
-  padding: 4px 14px; border: 0; border-radius: 6px;
-  background: transparent; font: inherit;
-  font-size: 11.5px; font-weight: 700; color: var(--mk-muted);
+.orch-stage-tab {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 9px 14px;
+  border: 1px solid var(--mk-line); border-radius: 10px;
+  background: #fff; font: inherit; text-align: left;
   cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
 }
-.orch-subtab:hover { color: var(--mk-ink); }
-.orch-subtab.is-active { background: #fff; color: var(--mk-blue); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1); }
-
-/* 浏览控制条：子 tab（结构/运行）+ 范围开关（聚焦/全览） */
-.orch-scope {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 11.5px; font-weight: 700; color: var(--mk-muted); cursor: pointer;
-  padding: 4px 10px; background: #eef2fa; border-radius: 8px;
+.orch-stage-tab:hover { border-color: color-mix(in srgb, var(--mk-blue) 45%, var(--mk-line)); }
+.orch-stage-tab.is-active {
+  border-color: var(--mk-blue);
+  background: #f0f5ff;
+  box-shadow: 0 2px 8px rgba(44, 99, 208, 0.12);
 }
-.orch-scope:hover { color: var(--mk-ink); }
+.orch-stage-tab__name { font-size: 13px; font-weight: 800; color: var(--mk-ink); }
+.orch-stage-tab.is-active .orch-stage-tab__name { color: var(--mk-blue); }
+.orch-stage-tab__meta { font-size: 10.5px; font-weight: 600; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 
-/* 编辑页内治理折叠区（漂移报告 + 变更审计）：编辑闭环的查证端 */
+/* 治理折叠区（每阶段内）+ 沙盘头部 */
 .orch-govern {
   margin-top: 12px;
   border: 1px solid var(--mk-line); border-radius: 10px;
