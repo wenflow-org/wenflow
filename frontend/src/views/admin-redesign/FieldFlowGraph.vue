@@ -6,6 +6,17 @@
         <span class="ffg-dot" :class="loading ? 'is-loading' : 'is-ok'"></span>
         <strong class="ffg-title">字段流转</strong>
         <span class="ffg-sep"></span>
+        <div class="ffg-stages" :title="'当前阶段：' + (stages.find(s=>s.id===focusStage)?.name || '')">
+          <button
+            v-for="s in stages"
+            :key="s.id"
+            type="button"
+            class="ffg-stage"
+            :class="{ 'is-active': viewScope === 'focus' && s.id === focusStage }"
+            @click="switchStage(s.id)"
+          >{{ s.name }}</button>
+        </div>
+        <span class="ffg-sep"></span>
         <span class="ffg-meta"><b>{{ totalFields }}</b> 个字段</span>
         <span class="ffg-meta"><b>{{ edgeCount }}</b> 条流转</span>
         <span class="ffg-hint">泳道 = 阶段 · 组头点击展开字段 · 搜索定位 · 点字段看上下游</span>
@@ -22,6 +33,10 @@
           />
           <button v-if="query" type="button" class="ffg-search__clear" title="清除" @click="clearQuery">✕</button>
         </div>
+        <label class="ffg-switch" :title="viewScope === 'focus' ? '当前为阶段聚焦：只看当前阶段 + 上下游' : '全览：5 个阶段泳道全部展示'">
+          <input type="checkbox" :checked="viewScope === 'all'" @change="toggleScope" />
+          <span>全览</span>
+        </label>
         <label class="ffg-switch" :title="groupMode ? '当前为组级视图：只显示组头主干，点组展开字段' : '所有组展开，显示全部字段'">
           <input type="checkbox" v-model="groupMode" @change="onGroupModeChange" />
           <span>组级视图</span>
@@ -80,6 +95,28 @@
             class="ffg-edge"
           />
         </svg>
+
+        <!-- 聚焦模式：上游输入列（其他阶段 handoff 指向当前阶段的字段，精确字段级） -->
+        <div
+          v-if="viewScope === 'focus' && layouts.length"
+          class="ffg-anchor ffg-anchor--up"
+          :style="{ left: `${ANCHOR_X0}px`, top: '0px', height: `${anchorColH}px` }"
+        >
+          <div class="ffg-anchor__title">↑ 上游输入</div>
+          <button
+            v-for="it in anchorLayout.upItems"
+            :key="it.id"
+            type="button"
+            class="ffg-anchor__item"
+            :style="{ top: `${it.y}px` }"
+            :title="`${it.label} · ${it.sub} → 当前阶段`"
+            @click="jumpToField(it)"
+          >
+            <span class="ffg-anchor__label mono">{{ it.label }}</span>
+            <span class="ffg-anchor__sub">{{ it.sub }}</span>
+          </button>
+          <div v-if="!anchorLayout.upItems.length" class="ffg-anchor__empty">无上游字段</div>
+        </div>
 
         <!-- 泳道（阶段）绝对定位 -->
         <div
@@ -182,6 +219,28 @@
               {{ slot.foldedCount ? `▸ ${slot.foldedCount} 个字段已折叠` : '该组无字段' }}
             </div>
           </div>
+        </div>
+
+        <!-- 聚焦模式：下游输出列（当前阶段字段 handoff 出去的目标 agent，agent 级） -->
+        <div
+          v-if="viewScope === 'focus' && layouts.length"
+          class="ffg-anchor ffg-anchor--down"
+          :style="{ left: `${ANCHOR_X0 + ANCHOR_W + ANCHOR_GAP + LANE_W + ANCHOR_GAP}px`, top: '0px', height: `${anchorColH}px` }"
+        >
+          <div class="ffg-anchor__title">↓ 下游输出</div>
+          <button
+            v-for="it in anchorLayout.downItems"
+            :key="it.id"
+            type="button"
+            class="ffg-anchor__item"
+            :style="{ top: `${it.y}px` }"
+            :title="`当前阶段 → ${it.sub} · ${it.label}`"
+            @click="jumpToField(it)"
+          >
+            <span class="ffg-anchor__label mono">{{ it.label }}</span>
+            <span class="ffg-anchor__sub">{{ it.sub }}</span>
+          </button>
+          <div v-if="!anchorLayout.downItems.length" class="ffg-anchor__empty">无下游目标</div>
         </div>
         </div>
       </div>
@@ -313,7 +372,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { adminFieldRoutingsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
@@ -357,12 +416,14 @@ type SlotLayout = import('./fieldFlowLayout').SlotLayout
 import {
   STAGE_ORDER as _STAGE_ORDER, STAGE_LABELS, computeLayouts, computeEdges,
   canvasW as _canvasW, canvasH as _canvasH, shortName, stageOfTarget,
+  fieldPos, targetAnchor, PAD_TOP, HEAD_H, LANE_W,
+  type EdgeGeom,
   buildStage as _buildStage, parseHandoff as _parseHandoff, FOLD_ROLES,
 } from './fieldFlowLayout'
 
 /* ================= props ================= */
 const props = defineProps<{ stage: string }>()
-const emit = defineEmits<{ changed: [] }>()
+const emit = defineEmits<{ changed: []; stage: [string] }>()
 
 /* ================= 状态 ================= */
 const loading = ref(false)
@@ -523,6 +584,13 @@ function onQueryInput() {
     focusId.value = ''
     return
   }
+  // 命中字段不在当前聚焦阶段：自动切阶段（同步父级 active）
+  const hitStage = stageOfField(hit)
+  if (hitStage && hitStage !== focusStage.value) {
+    focusStage.value = hitStage
+    if (viewScope.value !== 'focus') viewScope.value = 'focus'
+    emit('stage', hitStage)
+  }
   focusId.value = hit.id
   // 展开所在组：确保能看到它（桥接组 + 组级折叠组都展开）
   const next = new Set(collapsedGroups.value)
@@ -571,6 +639,77 @@ function minorRoleOf(slot: SlotLayout) {
   return slot.fields.length === 0
 }
 
+/* ================= 阶段聚焦模式（每阶段看上下游） ================= */
+const viewScope = ref<'focus' | 'all'>('focus')
+const focusStage = ref(props.stage)
+const ANCHOR_W = 240
+const ANCHOR_X0 = 16
+const ANCHOR_GAP = 24
+/** 锚点列起始 y（对齐泳道组头下方） */
+const ANCHOR_Y0 = PAD_TOP + HEAD_H + 34
+
+watch(() => props.stage, (s) => { if (s) focusStage.value = s }, { immediate: true })
+
+interface AnchorItem {
+  id: string
+  label: string
+  sub: string
+  stageId: string
+  kind: 'field' | 'agent'
+  y: number
+  handoffTargets: string[]
+}
+
+/** 当前阶段身份集合：阶段名 / <stage>-agent / 所有组 agentId（handoff 目标匹配） */
+const focusIdentity = computed(() => {
+  const st = stages.value.find((s) => s.id === focusStage.value)
+  const ids = new Set<string>()
+  if (st) {
+    ids.add(st.id)
+    ids.add(st.agentId)
+    for (const g of st.groups) ids.add(g.agentId)
+  }
+  return ids
+})
+
+/** 上下游锚点布局：左列=上游输入字段（其他阶段 handoff 指向当前阶段，精确字段级）；右列=下游输出目标（agent 级） */
+const anchorLayout = computed(() => {
+  const ids = focusIdentity.value
+  const upItems: AnchorItem[] = []
+  const downItems: AnchorItem[] = []
+  let yUp = ANCHOR_Y0
+  let yDown = ANCHOR_Y0
+  for (const s of stages.value) {
+    if (s.id === focusStage.value) continue
+    for (const g of s.groups) for (const f of g.fields) {
+      const hits = f.handoffTargets.filter((t) => ids.has(t))
+      if (!hits.length) continue
+      upItems.push({ id: f.id, label: shortName(f.fieldId), sub: s.name, stageId: s.id, kind: 'field', y: yUp, handoffTargets: hits })
+      yUp += 42
+    }
+  }
+  const cur = stages.value.find((s) => s.id === focusStage.value)
+  const seen = new Set<string>()
+  if (cur) {
+    for (const g of cur.groups) for (const f of g.fields) {
+      for (const t of f.handoffTargets) {
+        const tStage = stageOfTarget(t)
+        if (!tStage || tStage === focusStage.value || seen.has(t)) continue
+        seen.add(t)
+        const st = stages.value.find((s) => s.id === tStage)
+        downItems.push({ id: `t:${t}`, label: t.replace(/^skill:/, '').replace(/-agent$/, ''), sub: st?.name || tStage, stageId: tStage, kind: 'agent', y: yDown, handoffTargets: [] })
+        yDown += 42
+      }
+    }
+  }
+  return { upItems, downItems, upH: yUp + 24, downH: yDown + 24 }
+})
+
+const anchorColH = computed(() => {
+  if (!layouts.value.length) return 560
+  return Math.max(layouts.value[0].laneHeight, anchorLayout.value.upH, anchorLayout.value.downH)
+})
+
 const layouts = computed<StageLayout[]>(() => {
   // 折叠前先过滤隐藏字段（visibleFields 语义保留在组件层）
   const filtered = stages.value.map((st) => ({
@@ -580,11 +719,25 @@ const layouts = computed<StageLayout[]>(() => {
       fields: showHidden.value ? g.fields : g.fields.filter((f) => f.render === 'visible' || f.handoffTargets.length > 0 || f.accumulate),
     })),
   }))
-  return computeLayouts(filtered, isGroupCollapsed, isMinorExpanded, isSkillGroupCollapsed)
+  const all = computeLayouts(filtered, isGroupCollapsed, isMinorExpanded, isSkillGroupCollapsed)
+  if (viewScope.value !== 'focus') return all
+  const cur = all.find((l) => l.stage.id === focusStage.value)
+  if (!cur) return []
+  // 泳道右移：让出左侧上游锚点列
+  cur.x = ANCHOR_X0 + ANCHOR_W + ANCHOR_GAP
+  return [cur]
 })
 
-const canvasW = computed(() => _canvasW(layouts.value))
-const canvasH = computed(() => _canvasH(layouts.value))
+const canvasW = computed(() =>
+  viewScope.value === 'focus' && layouts.value.length
+    ? ANCHOR_X0 * 2 + ANCHOR_W * 2 + LANE_W + ANCHOR_GAP * 2
+    : _canvasW(layouts.value)
+)
+const canvasH = computed(() =>
+  viewScope.value === 'focus' && layouts.value.length
+    ? Math.max(560, anchorColH.value)
+    : _canvasH(layouts.value)
+)
 /** 画布容器高度 = 最大泳道高度（避免绝对定位泳道被容器裁切） */
 /** 画布容器高度：内容缩放后高度（超高部分容器内滚动，不压扁字号） */
 const canvasStyleH = computed(() => {
@@ -593,9 +746,113 @@ const canvasStyleH = computed(() => {
   return `${Math.max(560, Math.round(Math.min(scaled, availHeight() * 1.5)))}px`
 })
 
-const edges = computed(() => computeEdges(layouts.value))
+/** 聚焦模式跨列边：上游锚点 → 当前泳道目标组；当前泳道字段 → 下游锚点 */
+function focusCrossEdges(): EdgeGeom[] {
+  const lane = layouts.value[0]
+  if (!lane) return []
+  const out: EdgeGeom[] = []
+  const laneX0 = ANCHOR_X0 + ANCHOR_W + ANCHOR_GAP
+  // 上游字段 → 当前阶段目标（agent 级锚点）
+  for (const item of anchorLayout.value.upItems) {
+    const from = { x: laneX0 - ANCHOR_GAP, y: item.y + 17 }
+    for (const t of item.handoffTargets) {
+      const to = targetAnchor(layouts.value, t)
+      if (!to) continue
+      const midX = (from.x + to.x) / 2
+      out.push({
+        d: `M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`,
+        stroke: '#2c63d0', width: 1.3, dashed: false,
+        from: item.id, to: t,
+      })
+    }
+  }
+  // 当前字段 → 下游目标（扩展到折叠组：组头右缘 → 下游锚点）
+  const rightX = laneX0 + LANE_W + ANCHOR_GAP
+  for (const slot of lane.slots) {
+    // 展开字段：字段→下游
+    for (const fs of slot.fields) {
+      const fp = fieldPos(lane, fs)
+      for (const t of fs.field.handoffTargets) {
+        const tStage = stageOfTarget(t)
+        if (!tStage || tStage === lane.stage.id) continue
+        const item = anchorLayout.value.downItems.find((d) => d.id === `t:${t}`)
+        if (!item) continue
+        const to = { x: rightX, y: item.y + 17 }
+        const midX = (fp.x + fp.w + to.x) / 2
+        out.push({
+          d: `M ${fp.x + fp.w} ${fp.cy} C ${midX} ${fp.cy}, ${midX} ${to.y}, ${to.x} ${to.y}`,
+          stroke: '#8aa6d8', width: 1.2, dashed: true,
+          from: fs.field.fieldId, to: t,
+        })
+      }
+    }
+    // 折叠组（桥接/次要）：组头右缘 → 下游锚点（聚合，去重到目标）
+    if (slot.foldedCount > 0 && slot.fields.length === 0) {
+      const from = { x: laneX0 + LANE_W - 12, y: slot.headY + 15 }
+      const fullGroup = lane.stage.groups.find((g) => g.agentId === slot.agentId)
+      const seen = new Set<string>()
+      for (const f of fullGroup?.fields || []) {
+        for (const t of f.handoffTargets) {
+          const tStage = stageOfTarget(t)
+          if (!tStage || tStage === lane.stage.id || seen.has(t)) continue
+          seen.add(t)
+          const item = anchorLayout.value.downItems.find((d) => d.id === `t:${t}`)
+          if (!item) continue
+          const to = { x: rightX, y: item.y + 17 }
+          const midX = (from.x + to.x) / 2
+          out.push({
+            d: `M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`,
+            stroke: '#8aa6d8', width: 1.2, dashed: true,
+            from: slot.agentId, to: t,
+          })
+        }
+      }
+    }
+  }
+  return out
+}
+
+const edges = computed<EdgeGeom[]>(() => {
+  const base = computeEdges(layouts.value)
+  if (viewScope.value !== 'focus' || !layouts.value.length) return base
+  return [...base, ...focusCrossEdges()]
+})
 const edgeCount = computed(() => edges.value.length)
 const isEmpty = computed(() => layouts.value.length === 0)
+
+/** 切换全览/聚焦 */
+function toggleScope() {
+  viewScope.value = viewScope.value === 'focus' ? 'all' : 'focus'
+  focusId.value = ''
+}
+/** 切换聚焦阶段（同步父级 active，供字段路由/编辑联动） */
+function switchStage(s: string) {
+  if (s === focusStage.value && viewScope.value === 'focus') return
+  focusStage.value = s
+  if (viewScope.value !== 'focus') viewScope.value = 'focus'
+  emit('stage', s)
+  focusId.value = ''
+  selected.value = null
+}
+/** 点锚点：跳转对应阶段 + 聚焦字段 */
+function jumpToField(item: AnchorItem) {
+  if (item.stageId !== focusStage.value) switchStage(item.stageId)
+  if (item.kind !== 'field') return
+  focusId.value = item.id
+  const hit = allFields.value.find((f) => f.id === item.id)
+  if (hit) {
+    const next = new Set(collapsedGroups.value)
+    next.delete(hit.agentId)
+    collapsedGroups.value = next
+    const nextMinor = new Set(expandedMinorGroups.value)
+    nextMinor.add(hit.agentId)
+    expandedMinorGroups.value = nextMinor
+  }
+  nextTick(() => {
+    const el = ffgCanvasRef.value?.querySelector<HTMLElement>(`[data-fid="${item.id.replace(/["\\]/g, '')}"]`)
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  })
+}
 
 /* ================= 缩放 / 平移（画布适配视口，根治长图一屏看不完） ================= */
 const ffgCanvasRef = ref<HTMLElement | null>(null)
@@ -851,6 +1108,48 @@ async function saveEdit() {
   font-size: 9px; line-height: 1; cursor: pointer; padding: 0;
 }
 .ffg-search__clear:hover { background: #cbd5e1; color: var(--mk-ink); }
+
+/* 阶段选择器（聚焦模式） */
+.ffg-stages { display: inline-flex; gap: 2px; padding: 2px; background: #eef2fa; border-radius: 8px; }
+.ffg-stage {
+  padding: 3px 12px; border: 0; border-radius: 6px;
+  background: transparent; font: inherit;
+  font-size: 11.5px; font-weight: 700; color: var(--mk-muted);
+  cursor: pointer;
+}
+.ffg-stage:hover { color: var(--mk-ink); }
+.ffg-stage.is-active { background: #fff; color: var(--mk-blue); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1); }
+
+/* 聚焦模式：上下游锚点列 */
+.ffg-anchor {
+  position: absolute; top: 0; z-index: 2;
+  width: 240px; box-sizing: border-box;
+  background: #f8fafd; border: 1px solid var(--mk-line);
+  border-radius: 10px;
+}
+.ffg-anchor--up { border-color: color-mix(in srgb, #2c63d0 25%, var(--mk-line)); }
+.ffg-anchor--down { border-color: color-mix(in srgb, #8aa6d8 40%, var(--mk-line)); }
+.ffg-anchor__title {
+  position: absolute; top: 0; left: 0; right: 0;
+  padding: 8px 12px;
+  font-size: 11px; font-weight: 800; color: var(--mk-muted);
+  background: linear-gradient(180deg, #eef2fa, #f8fafd);
+  border-bottom: 1px solid var(--mk-line);
+  border-radius: 10px 10px 0 0;
+}
+.ffg-anchor--down .ffg-anchor__title { color: var(--mk-blue); }
+.ffg-anchor__item {
+  position: absolute; left: 12px; width: 216px; height: 34px;
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 8px; box-sizing: border-box;
+  border: 1px solid var(--mk-line); border-radius: 8px;
+  background: #fff; font: inherit; cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.ffg-anchor__item:hover { border-color: var(--mk-blue); box-shadow: 0 2px 8px rgba(44, 99, 208, 0.1); }
+.ffg-anchor__label { font-size: 10.5px; font-weight: 700; color: var(--mk-ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ffg-anchor__sub { font-size: 9.5px; font-weight: 700; color: var(--mk-blue); background: #eff6ff; border-radius: 6px; padding: 1px 5px; white-space: nowrap; flex-shrink: 0; }
+.ffg-anchor__empty { position: absolute; left: 12px; top: 40px; font-size: 11px; color: var(--mk-faint); }
 .ffg-switch { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--mk-muted); cursor: pointer; }
 .ffg-legend { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--mk-muted); }
 .lg { width: 9px; height: 5px; display: inline-block; border-radius: 2px; }

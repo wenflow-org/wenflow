@@ -24,26 +24,53 @@
       </template>
     </MkOverview>
 
-    <!-- 页面级视图 tab：字段流转（主视图）/ 工作台 / 拓扑 / 字段路由（阶段级子视图留在展开区快捷入口） -->
+    <!-- 核心 tab：浏览（字段流转/拓扑）/ 编辑（字段路由 + 治理）。沙盘为深链次要入口，不占主 tab -->
     <div class="orch-tabs" role="tablist">
-      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'main' }" @click="viewMode = 'main'">字段流转</button>
-      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'topology' }" @click="viewMode = 'topology'">拓扑</button>
-      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'field-routings' }" @click="viewMode = 'field-routings'">字段路由</button>
-      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'workbench' }" @click="viewMode = 'workbench'">工作台</button>
-      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'sandbox' }" @click="viewMode = 'sandbox'">沙盘</button>
-      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'drift' }" @click="viewMode = 'drift'">漂移</button>
+      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'browse' || viewMode === 'sandbox' }" @click="viewMode = 'browse'">浏览</button>
+      <button type="button" class="orch-tab" :class="{ 'is-active': viewMode === 'edit' }" @click="viewMode = 'edit'">编辑</button>
     </div>
 
-    <div v-if="viewMode === 'workbench'" class="orch-tabpane"><PromptWorkbench embedded /></div>
-    <div v-else-if="viewMode === 'topology'" class="orch-tabpane"><Topology /></div>
-    <div v-else-if="viewMode === 'field-routings'" class="orch-tabpane"><FieldRoutingTable :stage="current?.id || ''" @changed="onRoutingChanged" /></div>
-    <div v-else-if="viewMode === 'sandbox'" class="orch-tabpane"><SandboxView /></div>
-    <div v-else-if="viewMode === 'drift'" class="orch-tabpane"><DriftAuditPanel :stage="current?.id || ''" /></div>
+    <!-- 浏览：字段流转 / 拓扑 —— 同一画布，画布内切换（不丢缩放/平移上下文） -->
+    <div v-if="viewMode === 'browse'" class="orch-tabpane">
+      <div class="orch-subtabs" role="tablist">
+        <button
+          type="button"
+          class="orch-subtab"
+          :class="{ 'is-active': browseMode === 'flow' }"
+          @click="browseMode = 'flow'"
+        >字段流转</button>
+        <button
+          type="button"
+          class="orch-subtab"
+          :class="{ 'is-active': browseMode === 'topo' }"
+          @click="browseMode = 'topo'"
+        >拓扑</button>
+      </div>
+      <FieldFlowGraph v-if="browseMode === 'flow'" :key="flowKey" :stage="active" @changed="onRoutingChanged" @stage="onStageChange" />
+      <Topology v-else />
+    </div>
 
-    <template v-else>
-      <!-- 主视图 = 字段流转图：泳道（阶段）→ 字段分组 → handoff 边；字段即节点，点开看含义与编辑 -->
-      <FieldFlowGraph :key="flowKey" :stage="active" @changed="onRoutingChanged" />
-    </template>
+    <!-- 编辑：字段路由（表格 + 编排文件）+ 治理（漂移报告 + 变更审计）——编辑闭环 -->
+    <div v-else-if="viewMode === 'edit'" class="orch-tabpane">
+      <FieldRoutingTable :stage="current?.id || ''" @changed="onRoutingChanged" />
+      <details class="orch-govern" :open="governOpen">
+        <summary class="orch-govern__summary">治理：漂移报告 + 变更审计</summary>
+        <div class="orch-govern__body">
+          <DriftAuditPanel :stage="current?.id || ''" />
+        </div>
+      </details>
+    </div>
+
+    <!-- 沙盘：深链 ?tab=sandbox / 次要入口（契约对照，独立工作流） -->
+    <div v-else-if="viewMode === 'sandbox'" class="orch-tabpane">
+      <div class="orch-pane-head">
+        <strong class="orch-pane-title">沙盘契约</strong>
+        <span class="orch-pane-hint">Agent 输入通道 / 输出字段对照（仿真调试参考）</span>
+        <span class="orch-pane-spacer"></span>
+        <button type="button" class="orch-pane-back" @click="viewMode = 'browse'">返回浏览</button>
+      </div>
+      <SandboxView />
+    </div>
   </div>
 </template>
 
@@ -58,34 +85,51 @@ import FieldFlowGraph from './FieldFlowGraph.vue'
 import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
 import Topology from './Topology.vue'
-import PromptWorkbench from './PromptWorkbench.vue'
 import MkOverview from './MkOverview.vue'
 import MkKpi from './MkKpi.vue'
 
-const viewMode = ref<'main' | 'workbench' | 'topology' | 'field-routings' | 'sandbox' | 'drift'>('main')
+const viewMode = ref<'browse' | 'edit' | 'sandbox'>('browse')
+/** 浏览画布内切换：字段流转（结构） / 拓扑（运行时叠加） */
+const browseMode = ref<'flow' | 'topo'>('flow')
+/** 编辑页内治理折叠区（漂移/审计）：?tab=drift 深链时自动展开 */
+const governOpen = ref(false)
 
 /** 字段流转图数据版本：行级编辑/字段路由变更后 +1 触发重挂载刷新 */
 const flowKey = ref(0)
 function onRoutingChanged() {
   flowKey.value++
 }
+/** 浏览内切阶段（阶段选择器/锚点跳转）：同步 active，字段路由/编辑联动同阶段 */
+function onStageChange(s: string) {
+  active.value = s
+}
 
 const route = useRoute()
 
-/** ?stage=&tab= 直达（Skill 设计页字段路由 tab → 编排结构页跳转闭环；旧 /admin/topology 重定向落位拓扑 tab） */
+/** ?stage=&tab= 直达（Skill 设计页字段路由 tab → 编排结构页跳转闭环；旧 /admin/topology 重定向落位拓扑） */
 function applyStageQuery() {
   const qStage = typeof route.query.stage === 'string' && route.query.stage.trim() ? route.query.stage.trim() : ''
   const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
   if (qStage) active.value = qStage
   const tabAlias = qTab === 'routing' ? 'field-routings' : qTab
-  if (tabAlias === 'field-routings' || tabAlias === 'sandbox' || tabAlias === 'drift' || tabAlias === 'topology') {
-    viewMode.value = tabAlias as typeof viewMode.value
+  if (tabAlias === 'field-routings') {
+    viewMode.value = 'edit'
+  } else if (tabAlias === 'topology') {
+    viewMode.value = 'browse'
+    browseMode.value = 'topo'
+  } else if (tabAlias === 'drift') {
+    // 治理并入编辑页：切到编辑 tab 并展开漂移报告
+    viewMode.value = 'edit'
+    governOpen.value = true
+  } else if (tabAlias === 'sandbox') {
+    viewMode.value = 'sandbox'
   }
+  // workbench 已移出编排页（独立页面 /admin/skill-workbench），tab 忽略
 }
 
 function selectStage(id: string) {
   active.value = id
-  viewMode.value = 'main'
+  viewMode.value = 'browse'
   flowKey.value++
 }
 
@@ -350,6 +394,55 @@ void stageTitle.value
 .orch-tab:hover { color: var(--mk-ink); }
 .orch-tab.is-active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); }
 .orch-tabpane { margin-top: 0; }
+
+/* 浏览画布内切换（字段流转/拓扑）：轻量分段条，主 tab 的次级控件 */
+.orch-subtabs {
+  display: inline-flex; gap: 2px; padding: 2px;
+  background: #eef2fa; border-radius: 8px;
+  margin: 8px 0 10px;
+}
+.orch-subtab {
+  padding: 4px 14px; border: 0; border-radius: 6px;
+  background: transparent; font: inherit;
+  font-size: 11.5px; font-weight: 700; color: var(--mk-muted);
+  cursor: pointer;
+}
+.orch-subtab:hover { color: var(--mk-ink); }
+.orch-subtab.is-active { background: #fff; color: var(--mk-blue); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1); }
+
+/* 编辑页内治理折叠区（漂移报告 + 变更审计）：编辑闭环的查证端 */
+.orch-govern {
+  margin-top: 12px;
+  border: 1px solid var(--mk-line); border-radius: 10px;
+  background: #fff;
+}
+.orch-govern__summary {
+  padding: 9px 14px;
+  font-size: 12px; font-weight: 800; color: var(--mk-muted);
+  cursor: pointer; user-select: none;
+  list-style: none;
+}
+.orch-govern__summary::-webkit-details-marker { display: none; }
+.orch-govern__summary::before { content: '▸ '; color: var(--mk-blue); }
+details[open].orch-govern .orch-govern__summary::before { content: '▾ '; }
+.orch-govern__summary:hover { color: var(--mk-blue); }
+.orch-govern__body { padding: 0 14px 14px; }
+
+/* 沙盘（深链次要入口）顶部条 */
+.orch-pane-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; margin-bottom: 10px;
+  background: var(--mk-surface); border: 1px solid var(--mk-line); border-radius: 10px;
+}
+.orch-pane-title { font-size: 13px; font-weight: 800; color: var(--mk-ink); }
+.orch-pane-hint { font-size: 11.5px; color: var(--mk-faint); }
+.orch-pane-spacer { flex: 1; }
+.orch-pane-back {
+  padding: 5px 12px; border: 1px solid var(--mk-line); border-radius: 8px;
+  background: #fff; font: inherit; font-size: 11.5px; font-weight: 700;
+  color: var(--mk-muted); cursor: pointer;
+}
+.orch-pane-back:hover { color: var(--mk-blue); border-color: var(--mk-blue); }
 
 .mk-status__meta--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
 
