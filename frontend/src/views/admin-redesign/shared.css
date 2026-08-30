@@ -366,6 +366,11 @@
   font-weight: 700;
   box-shadow: 0 0 0 1px rgba(44, 99, 208, 0.4), 0 1px 2px rgba(23, 32, 51, 0.08);
 }
+html[data-theme='dark'] .mk-pill--active {
+  background: rgba(91, 141, 239, 0.22);
+  color: #9db8f5;
+  box-shadow: 0 0 0 1px rgba(91, 141, 239, 0.45);
+}
 
 /* ----- 链接按钮 ----- */
 /* 返回按钮：子页面顶部"← 返回"统一样式（原散落在 ud-back/ld-back/vp-back 三处局部定义） */
@@ -744,7 +749,47 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 .mk-drawer__close:hover { background: #e2eaf7; color: var(--mk-ink, #1a2a44); }
 .mk-drawer__body { overflow-y: auto; padding: 14px 18px 20px; min-width: 0; }
 
-/* ================= 超大屏（4K）适配 =================
+/* ================= 暗色模式（D1）：shared.css 硬编码浅色兜底覆写 =================
+   机制：html[data-theme='dark'] 下把散落的浅色背景/悬停/徽章底色替换为深色等价物。
+   新代码应优先引用 --mk-* token，此段只兜底存量硬编码。 */
+html[data-theme='dark'] {
+  .mk-table th { background: #141c2b; }
+  .mk-table td { border-bottom-color: #1f2a3d; }
+  .mk-table tbody tr:hover { background: #1a2436; }
+  .mk-menu__btn:hover { background: #222e44; }
+  .mk-menu__item:hover { background: #1f2b40; }
+  .mk-badge--muted { background: #253049; color: var(--mk-muted); }
+  .mk-badge--info { background: rgba(91, 141, 239, 0.18); }
+  .mk-badge--virtual { background: #1c2637; color: #8fa3bd; border-color: #33415c; }
+  .mk-badge--self { background: rgba(91, 141, 239, 0.22); }
+  .mk-badge--deleted { background: #252d3d; color: #94a3b8; }
+  .mk-badge--role-hidden-inference { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
+  .mk-badge--role-proposal-output { background: rgba(45, 212, 191, 0.14); }
+  .mk-badge--role-control-signal { background: #253049; }
+  .mk-badge--render-visible { background: rgba(74, 222, 128, 0.16); }
+  .mk-badge--render-hidden { background: #253049; }
+  .mk-badge--flow-handoff { background: rgba(91, 141, 239, 0.18); }
+  .mk-badge--flow-internal { background: rgba(244, 114, 182, 0.16); color: #f9a8d4; }
+  .mk-badge--flow-accumulate { background: rgba(74, 222, 128, 0.14); }
+  .mk-pills { background: #1d2739; }
+  .mk-back:hover, .mk-link:hover, .mk-icon-btn:hover { background: #1b2740; }
+  .mk-empty__icon { background: #1d2739; }
+  .mk-empty__action { background: rgba(91, 141, 239, 0.16); border-color: rgba(91, 141, 239, 0.35); }
+  .mk-empty__action:hover { background: rgba(91, 141, 239, 0.26); }
+  .mk-minibar { background: #232f45; }
+  .mk-pagination__btn:disabled { background: #141c2b; }
+  .mk-status__action--primary { background: var(--mk-blue); border-color: var(--mk-blue); }
+  .mk-btn--ghost { background: rgba(91, 141, 239, 0.16); border-color: rgba(91, 141, 239, 0.4); color: #9db8f5; }
+  .mk-btn--ghost:hover { background: rgba(91, 141, 239, 0.26); }
+  .mk-btn--ok { background: rgba(74, 222, 128, 0.14); border-color: rgba(74, 222, 128, 0.35); color: #6ee7a0; }
+  .mk-btn--ok:hover { background: rgba(74, 222, 128, 0.22); border-color: rgba(74, 222, 128, 0.5); }
+  .mk-icon-btn svg { color: var(--mk-faint); }
+  .mk-modal__close, .mk-drawer__close { background: #232f45; color: var(--mk-muted); }
+  .mk-modal__close:hover, .mk-drawer__close:hover { background: #2c3a55; }
+  .mk-input:disabled, .mk-field__input:disabled { background: #131b29; }
+}
+
+/* 4K 超大屏适配（2000/2800/3600 三档） */
    机制说明：
    - 2000/2800px 两档为「字号档」：内容区字号/间距直接放大。
    - ≥2800px 起壳层另叠加全局 zoom（admin-theme.css：2800→1.15、3600→1.3），

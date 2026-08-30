@@ -1449,4 +1449,31 @@ watch(liveLoading, (loading) => {
   .pulse__meta { font-size: 14.5px; }
   .pulse__axis { font-size: 11px; }
 }
+
+/* ================= 暗色模式（D1）：总览页硬编码浅色覆写 ================= */
+html[data-theme='dark'] {
+  .brief-head { background: #141c2b; }
+  .brief-head--warn { background: linear-gradient(180deg, #2a2410, #141c2b); }
+  .brief-head--bad { background: linear-gradient(180deg, #2a1414, #141c2b); }
+  .brief-head--muted { background: #131b2a; }
+  .brief-score__track { stroke: #232f45; }
+  .brief-card { background: #141c2b; }
+  .brief-actions__btn { background: rgba(91, 141, 239, 0.16); border-color: rgba(91, 141, 239, 0.35); }
+  .brief-actions__btn:hover { background: rgba(91, 141, 239, 0.26); }
+  .wq__bars, .ov-skill__track, .usage__bar-track, .pulse__bar--idle { background: #232f45; }
+  .ov-skill:hover, .usage__fail:hover, .feed__item:hover { background: #1b2740; }
+  .feed__item--bad:hover { background: #2a1414; }
+  .feed__item--warn:hover { background: #2a2410; }
+  .trend__col--today { background: rgba(91, 141, 239, 0.12); box-shadow: inset 0 0 0 1px rgba(91, 141, 239, 0.3); }
+  .funnel__node { background: #1b2740; border-color: #232f45; }
+  .funnel__node--idle { background: #131b2a; border-color: #232f45; }
+  .usage__hero { background: linear-gradient(180deg, #141c2b, #131b2a); border-color: #232f45; }
+  .usage__hero-sep { background: #232f45; }
+  .brief-card__go:hover { background: rgba(91, 141, 239, 0.14); }
+  .ov-health { background: #141c2b; }
+  .pulse__bar { background: #3d7cff; }
+  .pulse__bar--issue { background: var(--mk-red); }
+  .ov-trend__bar, .ov-growth__bar--new, .trend__bar, .usage__bar { background: linear-gradient(180deg, #6aa0ff, #3d7cff); }
+  .ov-trend__bar--fail { background: linear-gradient(180deg, #fbbf24, #d97706); }
+}
 </style>

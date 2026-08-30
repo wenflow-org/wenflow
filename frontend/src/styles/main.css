@@ -119,6 +119,45 @@
   --mk-back-color: var(--mk-blue); /* 返回按钮文字色 */
 }
 
+/* ========================================
+   暗色模式（D1 设计改进）
+   机制：html[data-theme='dark'] 覆写 --mk-* 语义 token；组件尽量引用 token，
+   少量硬编码色由 shared.css 暗色段兜底覆写。切换开关见 Shell.vue。
+   ======================================== */
+html[data-theme='dark'] {
+  --mk-ink: #e6edf7;            /* 主文字：深底浅字 */
+  --mk-muted: #9fb0c8;          /* 次级文字 */
+  --mk-faint: #6b7c96;          /* 弱化文字 */
+  --mk-line: #2a3850;           /* 边框/分隔线 */
+  --mk-bg: #0f1624;             /* 页面背景 */
+  --mk-surface: #17202f;        /* 卡片/面板表面 */
+  --mk-blue: #5b8def;           /* 品牌蓝提亮（深底可读性） */
+  --mk-accent-deep: #7aa2ff;
+  --mk-green: #4ade80;
+  --mk-green-bg: rgba(74, 222, 128, 0.14);
+  --mk-amber: #fbbf24;
+  --mk-amber-bg: rgba(251, 191, 36, 0.14);
+  --mk-red: #f87171;
+  --mk-red-bg: rgba(248, 113, 113, 0.14);
+  --mk-blue-bg: rgba(91, 141, 239, 0.16);
+  --mk-purple: #a78bfa;
+  --mk-teal: #2dd4bf;
+  --mk-red-strong: #ef4444;
+  --mk-code-bg: #0b101c;
+  --mk-code-fg: #9db4d8;
+  --mk-code-border: #233250;
+  --mk-close-bg: #26324a;
+  --mk-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.5);
+  --mk-shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --mk-shadow-drawer: -16px 0 48px rgba(0, 0, 0, 0.6);
+  --mk-shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.7);
+  --mk-rec-draft: #4b5563;
+  --mk-rec-handler: #b45309;
+  --mk-rec-core: #5b8def;
+  --mk-rec-synced: #0f766e;
+  --mk-rec-live: #16a34a;
+}
+
 /* 现代化增强包 */
 /*（@import 已统一上移至文件顶部）*/
 

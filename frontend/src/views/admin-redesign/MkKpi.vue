@@ -52,6 +52,9 @@ withDefaults(
 .mk-kpi--compact .mk-kpi__label { font-size: 10.5px; }
 .mk-kpi--compact .mk-kpi__num { font-size: 16px; line-height: 1.2; }
 
+/* 暗色模式（D1） */
+html[data-theme='dark'] .mk-kpi { background: #141c2b; border-color: #232f45; }
+
 /* 4K 三档（对齐全站 mk 体系） */
 @media (min-width: 2000px) {
   .mk-kpi { padding: 15px 18px; border-radius: 14px; gap: 4px; }

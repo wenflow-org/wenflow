@@ -667,4 +667,44 @@ function clearFilters() {
   .ul-batch { gap: 13px; padding: 12px 17px 12px 21px; font-size: 16.5px; }
   .ul-batch__danger { font-size: 16.5px; padding: 8px 19px; }
 }
+
+/* ================= 暗色模式（D1）：用户页局部覆写 ================= */
+html[data-theme='dark'] {
+  .ul-level__badge { background: rgba(91, 141, 239, 0.2); color: #9db8f5; }
+  .ul-tag--self { background: rgba(91, 141, 239, 0.22); color: #9db8f5; }
+  .ul-tag--test { background: rgba(251, 191, 36, 0.16); color: #fcd34d; }
+  .ul-tag--virtual { background: #1c2637; color: #8fa3bd; border-color: #33415c; }
+  .ul-tag--deleted { background: #252d3d; color: #94a3b8; }
+  .ul-batch { background: #17202f; border-color: #2a3850; }
+  .ul-batch__danger { background: rgba(248, 113, 113, 0.16); border-color: rgba(248, 113, 113, 0.4); color: #f87171; }
+  .ul-batch__danger:hover:not(:disabled) { background: rgba(248, 113, 113, 0.26); }
+  /* 表格行内复选框：暗色下自定义外观（原生 checkbox 边框过亮） */
+  .mk-table input[type='checkbox'] {
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid #4a5874;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    vertical-align: middle;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .mk-table input[type='checkbox']:checked {
+    background: var(--mk-blue);
+    border-color: var(--mk-blue);
+  }
+  .mk-table input[type='checkbox']:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+}
 </style>

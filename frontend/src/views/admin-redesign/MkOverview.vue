@@ -42,8 +42,9 @@ withDefaults(
   padding: 14px 16px;
   border: 1px solid var(--mk-line);
   border-radius: 12px;
-  background: #fff;
+  background: var(--mk-surface);
 }
+html[data-theme='dark'] .mk-overview { background: #141c2b; }
 .mk-overview__head {
   display: flex;
   align-items: baseline;

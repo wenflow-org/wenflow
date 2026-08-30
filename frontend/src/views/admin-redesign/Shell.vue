@@ -77,6 +77,15 @@
             <span class="mshell__kbd">{{ kbdMod }}K</span>
           </button>
           <template v-if="release">
+            <button
+              type="button"
+              class="mshell__theme"
+              :title="theme === 'dark' ? '切换到浅色模式' : '切换到暗色模式'"
+              :aria-label="theme === 'dark' ? '切换到浅色模式' : '切换到暗色模式'"
+              @click="toggleTheme"
+            >
+              <span class="mshell__theme-icon" aria-hidden="true">{{ theme === 'dark' ? '☀' : '☾' }}</span>
+            </button>
             <span class="mshell__admin">{{ adminName }}</span>
             <button type="button" class="mshell__logout" @click="logout">退出</button>
           </template>
@@ -131,6 +140,26 @@ onBeforeUnmount(() => contentEl.value?.removeEventListener('scroll', onScroll))
 const version = appVersion
 /** 按平台显示快捷键修饰符：Mac 显示 ⌘，Windows/Linux 显示 Ctrl */
 const kbdMod = computed(() => /Mac|iPhone|iPod|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl + ')
+
+/* D1 暗色模式：localStorage 持久化 + 默认跟随系统 prefers-color-scheme */
+const THEME_KEY = 'wf_admin_theme'
+const theme = ref<'light' | 'dark'>(loadTheme())
+function loadTheme(): 'light' | 'dark' {
+  try {
+    const saved = localStorage.getItem(THEME_KEY)
+    if (saved === 'light' || saved === 'dark') return saved
+  } catch { /* 隐私模式忽略 */ }
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', theme.value)
+  try { localStorage.setItem(THEME_KEY, theme.value) } catch { /* ignore */ }
+}
+function toggleTheme() {
+  theme.value = theme.value === 'dark' ? 'light' : 'dark'
+  applyTheme()
+}
+applyTheme()
 
 function refreshData() {
   if (liveLoading.value) return
@@ -512,6 +541,24 @@ const groupedScenes = computed(() => {
 .mshell__refresh-icon.is-spinning { animation: mshell-spin 0.9s linear infinite; }
 @keyframes mshell-spin { to { transform: rotate(360deg); } }
 .mshell__admin { font-size: 12px; font-weight: 700; color: #1a2a44; }
+.mshell__theme {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e1e8f2;
+  border-radius: 8px;
+  background: #fff;
+  color: #5b6577;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.mshell__theme:hover { color: var(--mk-blue, #2c63d0); border-color: rgba(44, 99, 208, 0.4); }
+.mshell__theme-icon { display: inline-block; }
 .mshell__logout {
   border: 1px solid #e1e8f2;
   background: #fff;
@@ -589,5 +636,38 @@ const groupedScenes = computed(() => {
   .mshell__logo-full { display: none; }
   .mshell__logo-mark { display: block; }
   .mshell__brand { justify-content: center; padding: 2px 0 0; }
+}
+
+/* ================= 暗色模式（D1）：壳层硬编码色覆写 ================= */
+html[data-theme='dark'] {
+  .mshell { background: #0f1624; color: #e6edf7; }
+  .mshell__side { background: #131b2a; border-right-color: #232f45; }
+  .mshell__item { color: #9fb0c8; }
+  .mshell__item:hover { background: #1b2740; color: #e6edf7; }
+  .mshell__item--active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; box-shadow: inset 3px 0 0 var(--mk-blue); }
+  .mshell__item-glyph { background: #1d2739; color: #9fb0c8; }
+  .mshell__item--active .mshell__item-glyph { background: rgba(91, 141, 239, 0.22); color: #7aa2ff; }
+  .mshell__item-badge { background: #1d2739; color: #6b7c96; }
+  .mshell__item--active .mshell__item-badge { background: rgba(91, 141, 239, 0.22); color: #7aa2ff; }
+  .mshell__foot { border-top-color: #1f2a3d; }
+  .mshell__foot-name { color: #64748b; }
+  .mshell__foot-ver { color: #3d4c66; }
+  .mshell__topbar { background: rgba(19, 27, 42, 0.88); border-bottom-color: #232f45; }
+  .mshell__crumb-sep { color: #3d4c66; }
+  .mshell__help { background: rgba(91, 141, 239, 0.14); border-color: rgba(91, 141, 239, 0.4); color: #7aa2ff; }
+  .mshell__help:hover { background: rgba(91, 141, 239, 0.24); }
+  .mshell__help-icon { background: var(--mk-blue); }
+  .mshell__search { background: #131b2a; border-color: #232f45; color: #6b7c96; }
+  .mshell__kbd { background: #1d2739; border-color: #2a3850; }
+  .mshell__refresh, .mshell__logout { background: #131b2a; border-color: #232f45; color: #9fb0c8; }
+  .mshell__theme { background: #131b2a; border-color: #232f45; color: #9fb0c8; }
+  .mshell__theme:hover { color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
+  .mshell__admin { color: #dce5f1; }
+  .mshell__refresh:hover:not(:disabled) { color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
+  .mshell__admin { color: #e6edf7; }
+  .mshell__demo { background: #2a2410; border-bottom-color: rgba(251, 191, 36, 0.3); color: #fcd34d; }
+  .mshell__demo-title { background: #b45309; }
+  .mshell__demo-btn { background: #2a2410; border-color: rgba(251, 191, 36, 0.4); color: #fcd34d; }
+  .mshell__demo-btn:hover { background: #3a2f14; }
 }
 </style>

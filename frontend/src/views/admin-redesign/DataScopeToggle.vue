@@ -57,4 +57,12 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
   color: var(--mk-blue);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
 }
+
+/* 暗色模式（D1）：选中态深蓝底 + 浅字，容器深色 */
+html[data-theme='dark'] .ds-toggle { background: #1d2739; }
+html[data-theme='dark'] .ds-toggle__btn--on {
+  background: rgba(91, 141, 239, 0.24);
+  color: #9db8f5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
 </style>
