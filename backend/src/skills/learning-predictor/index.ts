@@ -104,6 +104,13 @@ export async function learningPredictor(
       parsed && typeof parsed === 'object'
         ? { valid: true }
         : { valid: false, failureReason: 'LEARNING_PREDICTOR_OUTPUT_NOT_OBJECT' },
+    // 2026-08-30：解析/校验失败时带上一轮 rawOutput 重试一次（此前 maxAttempts 默认 1，
+    // 模型输出带围栏/解释文本时整单失败，见当日 24 次 INVALID_JSON 日志）
+    retryStrategy: {
+      maxAttempts: 2,
+      onValidationFail: ({ failureReason }) =>
+        `上一次输出的 JSON 解析失败（${failureReason}）。请只输出一个合法的 JSON 对象，不要包含 markdown 代码块、解释文字或其他文本。`,
+    },
   }, input);
 
   if (!result.success || !result.output) {

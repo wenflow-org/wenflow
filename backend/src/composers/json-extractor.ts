@@ -3,32 +3,62 @@
  *
  * 三套提取逻辑在 2026-08 合入本模块（原 skills/structured-output-parser 已退役；
  * goal-conversation 的 structured-validator 复用本核心，仅保留领域校验）：
- *  - extractJsonObject：最简贪婪提取（callPrompt 默认路径，行为保持不变）
+ *  - extractJsonObject：默认路径（callPrompt），先最简贪婪提取，失败后依次降级：
+ *    直接 parse → 剥离代码围栏 → 修复残缺 JSON → 截取首个完整 JSON 对象。
+ *    容错链在 2026-08-30 加入（修复 learning-predictor 等默认路径 INVALID_JSON 失败）。
  *  - extractStructuredPayloadWithDialogue：3 级策略（raw-trailing → code-fence → JSON: marker）
  *    + 不完整 JSON 修复 + 对话文本拆分（goal 阶段等需要"正文 + JSON"分离的场景）
  */
 
-export function extractJsonObject(raw: string): { extractedJson: string | null; parsed: any | null } {
-  if (typeof raw !== 'string' || !raw.trim()) {
-    return { extractedJson: null, parsed: null };
-  }
-
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) {
-    return { extractedJson: null, parsed: null };
-  }
-
+function parseJsonLoose(raw: string): { json: string; parsed: any } | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  // 1) 直接 parse
   try {
-    return {
-      extractedJson: match[0],
-      parsed: JSON.parse(match[0]),
-    };
-  } catch {
-    return {
-      extractedJson: match[0],
-      parsed: null,
-    };
+    return { json: raw.trim(), parsed: JSON.parse(raw.trim()) };
+  } catch { /* fall through */ }
+  // 2) 剥离 ```json / ``` 代码围栏后 parse
+  const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (fenceMatch) {
+    try {
+      return { json: fenceMatch[1], parsed: JSON.parse(fenceMatch[1]) };
+    } catch { /* fall through */ }
   }
+  // 3) 修复残缺 JSON（补右括号/尾逗号/冒号）后 parse。
+  //    先剥离到首个 '{'，避免 ```json 前缀/解释文字干扰括号配对与 JSON.parse。
+  const firstBrace = raw.indexOf('{');
+  if (firstBrace !== -1) {
+    const jsonish = raw.slice(firstBrace);
+    // 截断的代码围栏：补上闭合标记后再按"围栏内 JSON"修复
+    try {
+      return { json: jsonish, parsed: safeJsonParse(jsonish) };
+    } catch { /* fall through */ }
+  }
+  // 4) 截取首个完整 JSON 对象（跨层括号配对，丢弃尾部截断/多余文本）
+  let depth = 0;
+  let start = -1;
+  for (let i = 0; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (ch === '{') {
+      if (start === -1) start = i;
+      depth += 1;
+    } else if (ch === '}' && start !== -1) {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          const slice = raw.slice(start, i + 1);
+          return { json: slice, parsed: JSON.parse(slice) };
+        } catch { /* fall through */ }
+      }
+    }
+  }
+  return null;
+}
+
+export function extractJsonObject(raw: string): { extractedJson: string | null; parsed: any | null } {
+  const result = parseJsonLoose(raw);
+  return result
+    ? { extractedJson: result.json, parsed: result.parsed }
+    : { extractedJson: raw?.trim() ? raw.match(/\{[\s\S]*\}/)?.[0] ?? null : null, parsed: null };
 }
 
 // ============================================================
@@ -56,8 +86,10 @@ function fixIncompleteJson(jsonStr: string): string {
   const openBrackets = (fixed.match(/\[/g) || []).length;
   const closeBrackets = (fixed.match(/\]/g) || []).length;
 
-  if (openBraces > closeBraces) fixed += '}'.repeat(openBraces - closeBraces);
+  // 先补内层方括号，再补外层大括号：若顺序相反，`[1,2,3,` 会补成 `[1,2,3,}]`，
+  // 尾逗号清理后变成 `[1,2,3}]`——右方括号被挤到大括号外，JSON 依旧非法。
   if (openBrackets > closeBrackets) fixed += ']'.repeat(openBrackets - closeBrackets);
+  if (openBraces > closeBraces) fixed += '}'.repeat(openBraces - closeBraces);
 
   const quoteCount = (fixed.match(/(?<!\\)"/g) || []).length;
   if (quoteCount % 2 !== 0) fixed += '"';
