@@ -105,6 +105,7 @@
             <td>
               <div class="mk-actions mk-actions--left">
                 <button type="button" class="mk-icon-btn" title="详情" @click.stop="openDetail(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg></button>
+                <button v-if="isLive && !r.isTestAccount" type="button" class="mk-icon-btn" :class="{ 'lc-intervene--hot': isRisk(r) }" title="干预：查看会话 / 发送提醒" @click.stop="openIntervene(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></button>
                 <button type="button" class="mk-icon-btn" :disabled="isUpdating(r.id)" :title="isUpdating(r.id) ? '重算中…' : '重算'" @click.stop="recompute(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
               </div>
             </td>
@@ -126,6 +127,43 @@
         :showTotal="true"
       />
     </div>
+
+    <!-- C2 干预动线：风险学习者 → 查看会话 / 发送站内提醒（对标英跃"过程管理"） -->
+    <Teleport to="body">
+      <div v-if="intervene" ref="interveneMask" class="mk-modal">
+        <div class="mk-modal__panel" role="dialog" aria-label="学习者干预">
+          <div class="mk-modal__head">
+            <h3 class="mk-modal__title">干预 · {{ intervene.name }}</h3>
+            <button type="button" class="mk-modal__close" aria-label="关闭" @click="intervene = null">✕</button>
+          </div>
+          <div class="mk-modal__body">
+            <div v-if="intervene.risk" class="lc-iv__risk" :class="{ 'lc-iv__risk--hot': isRisk(intervene) }">
+              <strong>风险摘要</strong>
+              <span>{{ intervene.risk }}</span>
+            </div>
+            <div class="lc-iv__actions">
+              <button type="button" class="mk-btn mk-btn--ghost" @click="goInterveneSession(intervene)">查看学习详情</button>
+              <button type="button" class="mk-btn mk-btn--ghost" @click="goInterveneLogs">查看执行日志</button>
+            </div>
+            <label class="mk-field">
+              <span class="mk-field__label">发送站内提醒 <em class="mk-field__req">*</em></span>
+              <input v-model="interveneTitle" class="mk-field__input" placeholder="提醒标题，如：学习状态提醒" />
+            </label>
+            <label class="mk-field">
+              <span class="mk-field__label">提醒内容</span>
+              <textarea v-model="interveneBody" class="mk-field__textarea" rows="3" placeholder="如：检测到疲劳度偏高，建议休息后继续学习。"></textarea>
+            </label>
+            <p class="lc-iv__hint">提醒将出现在该学习者的站内通知中（scope=user）。</p>
+          </div>
+          <div class="mk-modal__foot">
+            <button type="button" class="mk-btn" @click="intervene = null">取消</button>
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="interveneSending || !interveneTitle.trim()" @click="sendIntervene">
+              {{ interveneSending ? '发送中…' : '发送提醒' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -139,6 +177,7 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
+import { adminNotificationsApi } from '@/api/adminApi'
 
 interface Row {
   id: string
@@ -167,6 +206,57 @@ watch(includeTest, (v) => {
 
 function openDetail(r: Row) {
   openSubPage('learner', r.id, includeTest.value ? { includeTest: true } : undefined)
+}
+
+/* —— C2 干预动线：风险学习者 → 查看会话 / 发送站内提醒 —— */
+const intervene = ref<Row | null>(null)
+const interveneTitle = ref('')
+const interveneBody = ref('')
+const interveneSending = ref(false)
+
+function openIntervene(r: Row) {
+  intervene.value = r
+  interveneTitle.value = r.fatigue === '高' ? '学习状态提醒：疲劳度偏高' : '学习状态提醒'
+  interveneBody.value = r.risk
+    ? `检测到学习状态需关注：${r.risk}。建议调整学习节奏或补充练习。`
+    : r.fatigue !== '低'
+      ? `检测到疲劳度${r.fatigue}，建议适当休息后继续学习。`
+      : '希望保持当前学习节奏，如有困难可随时反馈。'
+}
+function goInterveneSession(r: Row) {
+  intervene.value = null
+  openSubPage('learner', r.id, includeTest.value ? { includeTest: true } : undefined)
+}
+function goInterveneLogs() {
+  intervene.value = null
+  void import('./store').then(({ intent }) => {
+    intent.agentFilter = ''
+    intent.statusFilter = ''
+    intent.traceId = ''
+    intent.errorCategory = ''
+    intent.timeRange = ''
+    intent.scene = 'execution-logs'
+  })
+}
+async function sendIntervene() {
+  const r = intervene.value
+  if (!r || !interveneTitle.value.trim()) return
+  interveneSending.value = true
+  try {
+    await adminNotificationsApi.send({
+      title: interveneTitle.value.trim(),
+      body: interveneBody.value.trim() || undefined,
+      kind: 'learning',
+      scope: 'user',
+      userId: r.id
+    })
+    toast.success('提醒已发送给「' + r.name + '」')
+    intervene.value = null
+  } catch (e) {
+    toast.error(errMsg(e))
+  } finally {
+    interveneSending.value = false
+  }
 }
 
 const demoRows = ref<Row[]>([]) // demo 数据已移除
@@ -361,4 +451,22 @@ async function recomputeAll() {
 @media (min-width: 2800px) {
   .risk-text { font-size: 16.5px; }
 }
+
+/* ================= C2 干预动线 ================= */
+.lc-intervene--hot { color: var(--mk-amber); }
+html[data-theme='dark'] .lc-intervene--hot { color: #fbbf24; }
+.lc-iv__risk {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--mk-amber-bg);
+  border: 1px solid rgba(180, 83, 9, 0.25);
+  color: var(--mk-amber);
+}
+.lc-iv__risk--hot { background: var(--mk-red-bg); border-color: rgba(220, 38, 38, 0.25); color: var(--mk-red); }
+.lc-iv__risk strong { font-size: 12px; font-weight: 800; letter-spacing: 0.04em; }
+.lc-iv__risk span { font-size: 12.5px; line-height: 1.6; }
+.lc-iv__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.lc-iv__hint { margin: 0; font-size: 11.5px; color: var(--mk-faint); line-height: 1.6; }
 </style>
