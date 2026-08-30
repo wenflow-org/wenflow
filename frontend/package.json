@@ -23,6 +23,7 @@
     "axios": "^1.18.1",
     "dayjs": "^1.11.10",
     "dompurify": "^3.4.13",
+    "echarts": "^6.1.0",
     "element-plus": "^2.5.4",
     "highlight.js": "^11.11.1",
     "html2canvas-pro": "^2.0.2",

@@ -361,22 +361,7 @@
                   {{ loadZoneCls(loadZoneOf(loadDisplayDay)) === '--fresh' ? '状态良好' : loadZoneCls(loadZoneOf(loadDisplayDay)) === '--optimal' ? '需要休息' : '高风险' }}
                 </span>
               </div>
-              <div class="ld-load__chart" @mousemove="onLoadHover" @mouseleave="loadHover = null">
-                <svg :viewBox="`0 0 ${LOAD_W} ${LOAD_H}`" preserveAspectRatio="none" aria-hidden="true">
-                  <!-- 参考线：LSB=0（状态平衡线）与 LF=6（疲劳警戒线） -->
-                  <line class="ld-load__guide" :x1="LOAD_PAD" :x2="LOAD_W - LOAD_PAD" :y1="loadYOf(0)" :y2="loadYOf(0)" />
-                  <line class="ld-load__guide ld-load__guide--warn" :x1="LOAD_PAD" :x2="LOAD_W - LOAD_PAD" :y1="loadYOf(6)" :y2="loadYOf(6)" />
-                  <path v-if="loadLineD.lss" :d="loadLineD.lss" class="ld-load__line is-lss" />
-                  <path v-if="loadLineD.lf" :d="loadLineD.lf" class="ld-load__line is-lf" />
-                  <path v-if="loadLineD.lsb" :d="loadLineD.lsb" class="ld-load__line is-lsb" />
-                  <template v-if="loadHover">
-                    <line class="ld-load__cursor" :x1="loadHover.x" :x2="loadHover.x" y1="0" :y2="LOAD_H" />
-                    <circle v-if="loadHover.ylss >= 0" class="ld-load__pt is-lss" :cx="loadHover.x" :cy="loadHover.ylss" r="4" />
-                    <circle v-if="loadHover.ylf >= 0" class="ld-load__pt is-lf" :cx="loadHover.x" :cy="loadHover.ylf" r="4" />
-                    <circle v-if="loadHover.ylsb >= 0" class="ld-load__pt is-lsb" :cx="loadHover.x" :cy="loadHover.ylsb" r="4" />
-                  </template>
-                </svg>
-              </div>
+              <MkChart :option="loadChartOption" height="260px" />
               <div v-if="loadDisplayDay" class="ld-load__info">
                 <b>{{ loadDisplayDay.label }}</b>
                 <span class="is-lss-t">LSS {{ loadFmt(loadDisplayDay.lss) }}</span>
@@ -483,6 +468,8 @@ import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRisk
 import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
+import type { EChartsCoreOption } from 'echarts/core'
+import MkChart from './MkChart.vue'
 
 interface Detail {
   name: string
@@ -1174,10 +1161,6 @@ type LoadPoint = {
   lss: number | null
   lf: number | null
   lsb: number | null
-  x: number
-  ylss: number
-  ylf: number
-  ylsb: number
 }
 const loadSeries = computed<LoadPoint[]>(() => {
   const days = loadRange.value
@@ -1210,58 +1193,95 @@ const loadSeries = computed<LoadPoint[]>(() => {
 })
 const hasLoad = computed(() => loadSeries.value.some((p) => p.lss != null || p.lf != null || p.lsb != null))
 
-/* SVG 坐标：LSS/LF/LSB 统一 0-10 轴；LF 偶发略超 10（EWMA 累积），Y 域放宽到 -12~12 防贴顶裁切 */
-const LOAD_W = 600
-const LOAD_H = 240
-const LOAD_PAD = 8
-const loadYOf = (v: number | null): number => {
-  if (v == null) return -1 // 无数据 → 不画点
-  const clamped = Math.max(-12, Math.min(12, v))
-  return LOAD_H - ((clamped + 12) / 24) * LOAD_H // -12~12 → 0~240
-}
-const loadPoints = computed<LoadPoint[]>(() => {
-  const n = loadSeries.value.length
-  const usableW = LOAD_W - LOAD_PAD * 2
-  const step = n > 1 ? usableW / (n - 1) : 0
-  return loadSeries.value.map((p, i) => ({
-    ...p,
-    x: LOAD_PAD + step * i,
-    ylss: loadYOf(p.lss),
-    ylf: loadYOf(p.lf),
-    ylsb: loadYOf(p.lsb)
-  }))
+/* ECharts option：LSS/LF/LSB 统一 0-10 轴（LF 偶发略超 10，Y 域放宽到 -4~12 防贴顶裁切）；
+   参考线：LSB=0（状态平衡线）与 LF=6（疲劳警戒线）；tooltip 跟随 + 平滑曲线 + 坐标轴刻度 */
+const loadChartOption = computed<EChartsCoreOption>(() => {
+  const labels = loadSeries.value.map((p) => p.label)
+  const lss = loadSeries.value.map((p) => p.lss)
+  const lf = loadSeries.value.map((p) => p.lf)
+  const lsb = loadSeries.value.map((p) => p.lsb)
+  return {
+    animationDuration: 400,
+    grid: { left: 34, right: 16, top: 18, bottom: 26 },
+    tooltip: {
+      trigger: 'axis',
+      confine: true,
+      valueFormatter: (v: unknown) => (v == null ? '—' : Number(v).toFixed(1)),
+    },
+    legend: { show: false },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      boundaryGap: false,
+      axisLine: { lineStyle: { color: 'rgba(23,32,51,0.15)' } },
+      axisTick: { show: false },
+      axisLabel: { color: '#8492ab', fontSize: 11, interval: Math.max(0, Math.floor(labels.length / 8)) },
+    },
+    yAxis: {
+      type: 'value',
+      min: -4,
+      max: 12,
+      splitLine: { lineStyle: { color: 'rgba(23,32,51,0.06)' } },
+      axisLabel: { color: '#8492ab', fontSize: 11 },
+    },
+    series: [
+      {
+        name: 'LSS 压力',
+        type: 'line',
+        data: lss,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        connectNulls: false,
+        lineStyle: { width: 2, color: '#2c63d0' },
+        itemStyle: { color: '#2c63d0' },
+      },
+      {
+        name: 'LF 疲劳',
+        type: 'line',
+        data: lf,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        connectNulls: false,
+        lineStyle: { width: 2, color: '#dc2626' },
+        itemStyle: { color: '#dc2626' },
+      },
+      {
+        name: 'LSB 状态',
+        type: 'line',
+        data: lsb,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        connectNulls: false,
+        lineStyle: { width: 2, color: '#15803d' },
+        itemStyle: { color: '#15803d' },
+      },
+      /* 参考线：LSB=0 平衡线（灰虚）与 LF=6 疲劳警戒线（红虚） */
+      {
+        name: '平衡线',
+        type: 'line',
+        data: Array(labels.length).fill(0),
+        silent: true,
+        symbol: 'none',
+        lineStyle: { type: 'dashed', width: 1, color: 'rgba(23,32,51,0.18)' },
+        tooltip: { show: false },
+      },
+      {
+        name: '疲劳警戒',
+        type: 'line',
+        data: Array(labels.length).fill(6),
+        silent: true,
+        symbol: 'none',
+        lineStyle: { type: 'dashed', width: 1, color: 'rgba(220,38,38,0.35)' },
+        tooltip: { show: false },
+      },
+    ],
+  }
 })
-/** 折线 path：跳过 null 点（断开），null 前后不连线 */
-function loadLinePath(key: 'ylss' | 'ylf' | 'ylsb') {
-  const pts = loadPoints.value
-  let d = ''
-  let penDown = false
-  for (const p of pts) {
-    if (p[key] < 0) { penDown = false; continue }
-    d += `${penDown ? 'L' : 'M'}${p.x.toFixed(1)},${p[key].toFixed(1)}`
-    penDown = true
-  }
-  return d
-}
-const loadLineD = computed(() => ({
-  lss: loadLinePath('ylss'),
-  lf: loadLinePath('ylf'),
-  lsb: loadLinePath('ylsb')
-}))
-const loadHover = ref<LoadPoint | null>(null)
-const loadDisplayDay = computed(() => loadHover.value ?? loadPoints.value[loadPoints.value.length - 1] ?? null)
-function onLoadHover(e: MouseEvent) {
-  const el = e.currentTarget as HTMLElement
-  const rect = el.getBoundingClientRect()
-  const relX = ((e.clientX - rect.left) / rect.width) * LOAD_W
-  let best: LoadPoint | null = null
-  let bestDist = Infinity
-  for (const p of loadPoints.value) {
-    const dist = Math.abs(p.x - relX)
-    if (dist < bestDist) { bestDist = dist; best = p }
-  }
-  loadHover.value = best
-}
+
+const loadDisplayDay = computed(() => loadSeries.value[loadSeries.value.length - 1] ?? null)
 const loadFmt = (v: number | null) => (v == null ? '—' : v.toFixed(1))
 /** 压力语义：LF 高 = 疲劳高；LSB = KTL-LF，负 = 状态不佳 */
 function loadZoneOf(p: LoadPoint): 'fresh' | 'optimal' | 'risk' {
@@ -1669,20 +1689,6 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-load__chip--fresh { color: var(--mk-green); background: var(--mk-green-bg); }
 .ld-load__chip--optimal { color: var(--mk-amber); background: var(--mk-amber-bg); }
 .ld-load__chip--risk { color: var(--mk-red); background: var(--mk-red-bg); }
-.ld-load__chart { width: 100%; }
-/* 固定显示高度：侧栏窄时曲线不变形（viewBox 600x240 = 2.5:1，容器按此比例） */
-.ld-load__chart svg { display: block; width: 100%; height: auto; aspect-ratio: 600 / 240; max-height: 260px; }
-.ld-load__guide { stroke: rgba(23, 32, 51, 0.12); stroke-width: 1; stroke-dasharray: 4 4; }
-.ld-load__guide--warn { stroke: rgba(220, 38, 38, 0.28); }
-.ld-load__line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.ld-load__line.is-lss { stroke: var(--mk-blue); }
-.ld-load__line.is-lf { stroke: var(--mk-red); }
-.ld-load__line.is-lsb { stroke: var(--mk-green); }
-.ld-load__cursor { stroke: rgba(23, 32, 51, 0.2); stroke-width: 1; stroke-dasharray: 3 3; }
-.ld-load__pt { stroke: #fff; stroke-width: 2; }
-.ld-load__pt.is-lss { fill: var(--mk-blue); }
-.ld-load__pt.is-lf { fill: var(--mk-red); }
-.ld-load__pt.is-lsb { fill: var(--mk-green); }
 .ld-load__info { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; font-size: 11.5px; color: var(--mk-muted); border-top: 1px dashed var(--mk-line); padding-top: 8px; }
 .ld-load__info b { color: var(--mk-ink); }
 .ld-load__info .is-lss-t { color: var(--mk-blue); font-weight: 700; }
