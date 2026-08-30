@@ -894,4 +894,17 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   .tline-attempt__no { font-size: 14px; }
   .tline-attempt__meta { font-size: 13.5px; }
 }
+
+/* ================= 暗色模式（D1 补完）：执行日志终端页 ================= */
+html[data-theme='dark'] {
+  .log-status { background: #141c2b; border-color: #232f45; }
+  .exec-row--open { background: #1b2740; }
+  .exec-detail td { background: #131b2a; }
+  .exec-detail__box { background: #0f1624; border-color: #232f45; }
+  .exec-detail__box pre { color: #c6d4ea; }
+  .tline { background: #131b2a; border-color: #232f45; }
+  .tline-attempt { background: #17202f; border-color: #232f45; }
+  .tline-attempt--fail { background: #241a1a; border-left-color: var(--mk-red); }
+  .exec-error { background: rgba(248, 113, 113, 0.14); border-color: rgba(248, 113, 113, 0.35); color: #fca5a5; }
+}
 </style>

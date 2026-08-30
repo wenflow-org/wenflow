@@ -865,4 +865,13 @@ function progressTitle(r: Row): string {
   .ts-more { font-size: 18.5px; }
 }
 
+/* ================= 暗色模式（D1 补完）：教学会话 ================= */
+html[data-theme='dark'] {
+  .ts-tag--virtual { background: #1c2637; color: #8fa3bd; border-color: #33415c; }
+  .ts-tag--test { background: rgba(251, 191, 36, 0.16); color: #fcd34d; }
+  .ts-panel__close { background: #232f45; color: var(--mk-muted); }
+  .ts-card--advisory { background: #2a2410; border-color: rgba(251, 191, 36, 0.3); }
+  .ts-json { background: #0f1624; color: #c6d4ea; }
+}
+
 </style>

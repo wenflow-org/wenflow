@@ -1116,4 +1116,16 @@ const verdictText = computed(() => {
   .wf-verdict strong { font-size: 19px; }
   .wf-verdict p { font-size: 19.5px; }
 }
+
+/* ================= 暗色模式（D1 补完）：Trace 链路 ================= */
+html[data-theme='dark'] {
+  .wf-row--open { background: #1b2740; }
+  .wf-row__main:hover { background: #1b2740; }
+  .wf-row__kind--flow { background: rgba(91, 141, 239, 0.16); color: #93b4f5; }
+  .wf-row__kind--call { background: #253049; color: #9fb0c8; }
+  .wf-attempt--fail { background: #241a1a; border-left-color: var(--mk-red); }
+  .wf-slow { background: rgba(251, 191, 36, 0.1); }
+  .wf-payload { background: #0f1624; border-color: #232f45; color: #c6d4ea; }
+  .wf-summary, .wf-detail { background: #131b2a; border-color: #232f45; }
+}
 </style>

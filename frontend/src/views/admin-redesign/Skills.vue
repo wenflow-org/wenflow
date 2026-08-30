@@ -703,4 +703,14 @@ function recGateDetail(completion: SkillCompletion): string {
   .sk-rec-legend__item .mk-badge { font-size: 14px; }
   .sk-dot { width: 12px; height: 12px; }
 }
+
+/* ================= 暗色模式（D1 补完）：Skill 运行 ================= */
+html[data-theme='dark'] {
+  .sk-card__rate, .sk-table__statusbar { background: #232f45; }
+  .sk-pill--bad { color: #fca5a5; background: rgba(248, 113, 113, 0.14); }
+  .sk-pill--warn { color: #fcd34d; background: rgba(251, 191, 36, 0.14); }
+  .sk-rec-tag--bad { color: #fca5a5; background: rgba(248, 113, 113, 0.14); }
+  .sk-card { background: #141c2b; border-color: #232f45; }
+  .sk-card__head { border-bottom-color: #232f45; }
+}
 </style>

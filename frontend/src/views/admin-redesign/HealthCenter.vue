@@ -482,4 +482,12 @@ defineExpose({ refresh })
 .hc-completion__num { font-size: 12px; font-weight: 800; min-width: 30px; text-align: right; }
 
 @media (max-width: 700px) { .hc-summary { grid-template-columns: repeat(2, 1fr); } }
+
+/* ================= 暗色模式（D1 补完）：健康中心 ================= */
+html[data-theme='dark'] {
+  .hc-card--warn { background: #241a1a; border-color: rgba(248, 113, 113, 0.25); }
+  .hc-check__sem { background: #253049; }
+  .hc-check__btn { background: #17202f; }
+  .hc-completion__track { background: #232f45; }
+}
 </style>

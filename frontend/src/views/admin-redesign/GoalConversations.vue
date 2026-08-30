@@ -1068,4 +1068,13 @@ onMounted(() => {
   .gc-json { font-size: 17.5px; }
   .mk-btn--sm { font-size: 19.5px; }
 }
+
+/* ================= 暗色模式（D1 补完）：目标对话 ================= */
+html[data-theme='dark'] {
+  .gc-tag--virtual { background: #1c2637; color: #8fa3bd; border-color: #33415c; }
+  .gc-tag--test { background: rgba(251, 191, 36, 0.16); color: #fcd34d; }
+  .gc-json { background: #0f1624; color: #c6d4ea; }
+  .gc-msg { background: #141c2b; border-color: #232f45; }
+  .gc-stack__bar { background: #232f45; }
+}
 </style>

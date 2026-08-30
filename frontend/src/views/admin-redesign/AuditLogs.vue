@@ -698,4 +698,16 @@ function goSessions(username: string) {
   .log-payload-row td { padding-left: 100px !important; }
   .log-arrow { font-size: 18px; }
 }
+
+/* ================= 暗色模式（D1 补完）：审计日志 ================= */
+html[data-theme='dark'] {
+  .log-tr--open td { background: #1b2740; }
+  .log-payload-row:hover td { background: #1b2740; }
+  .log-method--get { background: rgba(91, 141, 239, 0.16); color: #93b4f5; }
+  .log-method--post { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
+  .log-method--put { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
+  .log-method--patch { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
+  .log-method--delete { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
+  .log-method--head { background: #253049; color: #9fb0c8; }
+}
 </style>
