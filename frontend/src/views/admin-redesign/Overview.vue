@@ -88,23 +88,11 @@
           <h4>24h 系统脉搏</h4>
           <button type="button" class="brief-card__go" @click="jump('execution-logs')">执行日志 →</button>
         </div>
-        <div class="pulse">
-          <div
-            v-for="(b, i) in data.pulse"
-            :key="i"
-            class="pulse__bar"
-            :class="{ 'pulse__bar--issue': b.issue, 'pulse__bar--idle': !b.calls }"
-            :style="{ height: barHeight(b.calls) }"
-              :title="barTitle(i, b)"
-          ></div>
-        </div>
+        <MkChart v-if="data.pulse.length" :option="pulseChartOption" height="150px" />
         <div class="pulse__meta">
           <span title="近 24 小时调用量（滚动窗口，仅真实用户）">24h 调用 <strong>{{ data.totalCalls }}</strong></span>
           <span title="近 24 小时失败 + 超时合计（仅真实用户）">异常 <strong :class="{ 'is-bad': data.totalIssues > 0 }">{{ data.totalIssues }}</strong></span>
           <span title="近 24 小时调用高峰时段（仅真实用户）">高峰 {{ data.peak }}</span>
-        </div>
-        <div class="pulse__axis">
-          <i v-for="a in pulseAxis" :key="a">{{ a }}</i>
         </div>
       </section>
 
@@ -145,16 +133,7 @@
           <button type="button" class="brief-card__go" @click="jump('execution-logs')">执行日志 →</button>
         </div>
         <div v-if="trend7dSum > 0" class="ov-trend">
-          <div class="ov-trend__rows">
-            <div v-for="d in data.trend7d" :key="d.date" class="ov-trend__day" :title="`${d.date}：${d.calls} 次调用 · 失败 ${d.failed}`">
-              <span class="ov-trend__num" :class="{ 'ov-trend__num--zero': !d.calls }">{{ d.calls || '·' }}</span>
-              <div class="ov-trend__bars">
-                <i class="ov-trend__bar" :style="{ height: barPct(d.calls, trend7dMax) }"></i>
-                <i v-if="d.failed" class="ov-trend__bar ov-trend__bar--fail" :style="{ height: barPct(d.failed, trend7dMax) }"></i>
-              </div>
-              <span class="ov-trend__label">{{ dayLabel(d.date) }}</span>
-            </div>
-          </div>
+          <MkChart :option="trend7dChartOption" height="160px" />
           <p class="ov-trend__sum">合计 {{ trend7dSum }} 次调用 · 失败 {{ trend7dFail }} 次</p>
         </div>
         <p v-else class="brief-card__note">近 7 天暂无真实调用。</p>
@@ -377,6 +356,8 @@ import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading } 
 import { adminHealthCenterApi } from '@/api/adminApi';
 import { TERMS } from './terms';
 import MkKpi from './MkKpi.vue';
+import MkChart from './MkChart.vue';
+import type { EChartsCoreOption } from 'echarts/core';
 import { useSafePolling } from '@/composables/useSafePolling';
 
 type Tone = 'ok' | 'warn' | 'bad' | 'muted';
@@ -541,8 +522,7 @@ const data = computed<BriefData | null>(() => {
   if (dataSource.value === 'live') return liveOverviewFull.value
   return datasets
 });
-const maxCalls = computed(() => Math.max(1, ...(data.value?.pulse.map((b) => b.calls) || [])));
-const barHeight = (calls: number) => `${calls > 0 ? Math.max((calls / maxCalls.value) * 100, 8) : 4}%`;
+// 后端滚动窗口桶带 label（'HH:00'），柱图 title 直接用它；demo 数据无 label 时按下标兜底
 const scoreDash = computed(() => `${(data.value?.score ?? 0) * 1.194} 119.4`);
 const scoreTitle = computed(() => {
   if (!data.value) return ''
@@ -550,16 +530,96 @@ const scoreTitle = computed(() => {
   const label = score == null ? '—' : `${score}%`
   return `${TERMS.healthScoreTitle}（${label}）\n${health.value.subline}`
 });
-// 后端滚动窗口桶带 label（'HH:00'），柱图 title 直接用它；demo 数据无 label 时按下标兜底
-const barTitle = (hour: number, b: { calls: number; issue: number; label?: string }) =>
-  `${b.label || `${String(hour).padStart(2, '0')}:00`} · ${b.calls} 次调用 · ${b.issue} 异常`;
-// 脉搏 x 轴：live 用后端 label（滚动窗口，index 0 = 23h 前）；demo 无 label 回退壁钟刻度
-const pulseAxis = computed<string[]>(() => {
-  const labels = data.value?.pulse.map((b) => b.label).filter(Boolean) as string[];
-  if (labels && labels.length === 24) {
-    return [labels[0], labels[6], labels[12], labels[18], labels[23]];
-  }
-  return ['00', '06', '12', '18', '23'];
+
+/* ===== ECharts 图表（B1 收尾：24h 脉搏 / 7 天调用趋势）===== */
+const pulseChartOption = computed<EChartsCoreOption>(() => {
+  const pts = data.value?.pulse || [];
+  const labels = pts.map((b) => b.label || '');
+  return {
+    animationDuration: 300,
+    grid: { left: 30, right: 8, top: 8, bottom: 20 },
+    tooltip: {
+      trigger: 'axis',
+      confine: true,
+      axisPointer: { type: 'shadow' },
+      formatter: (params: unknown) => {
+        const arr = params as Array<{ axisValue: string; data: number; color: string }>;
+        const i = arr[0]?.axisValue || '';
+        const b = pts[labels.indexOf(i)];
+        if (!b) return i
+        return `${i}<br/>调用 <b>${b.calls}</b> 次<br/>异常 <b>${b.issue}</b> 次`
+      },
+    },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      axisLine: { lineStyle: { color: 'rgba(23,32,51,0.15)' } },
+      axisTick: { show: false },
+      axisLabel: { color: '#8492ab', fontSize: 10, interval: 3 },
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      splitLine: { lineStyle: { color: 'rgba(23,32,51,0.06)' } },
+      axisLabel: { color: '#8492ab', fontSize: 10 },
+    },
+    series: [
+      {
+        name: '调用',
+        type: 'bar',
+        data: pts.map((b) => b.calls),
+        barWidth: '60%',
+        itemStyle: {
+          color: (p: { dataIndex: number }) => (pts[p.dataIndex]?.issue ? '#f87171' : '#3d7cff'),
+          borderRadius: [2, 2, 0, 0],
+        },
+      },
+    ],
+  };
+});
+
+const trend7dChartOption = computed<EChartsCoreOption>(() => {
+  const days = data.value?.trend7d || [];
+  const labels = days.map((d) => dayLabel(d.date));
+  return {
+    animationDuration: 300,
+    grid: { left: 34, right: 8, top: 8, bottom: 20 },
+    tooltip: {
+      trigger: 'axis',
+      confine: true,
+      axisPointer: { type: 'shadow' },
+    },
+    legend: { show: false },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      axisLine: { lineStyle: { color: 'rgba(23,32,51,0.15)' } },
+      axisTick: { show: false },
+      axisLabel: { color: '#8492ab', fontSize: 10 },
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      splitLine: { lineStyle: { color: 'rgba(23,32,51,0.06)' } },
+      axisLabel: { color: '#8492ab', fontSize: 10 },
+    },
+    series: [
+      {
+        name: '调用',
+        type: 'bar',
+        data: days.map((d) => d.calls),
+        barWidth: '30%',
+        itemStyle: { color: '#3d7cff', borderRadius: [2, 2, 0, 0] },
+      },
+      {
+        name: '失败',
+        type: 'bar',
+        data: days.map((d) => d.failed),
+        barWidth: '30%',
+        itemStyle: { color: '#d97706', borderRadius: [2, 2, 0, 0] },
+      },
+    ],
+  };
 });
 const pct = (n: number, total: number) => `${total > 0 ? Math.round((n / total) * 100) : 0}%`;
 /* ===== G 系列新增：7 天趋势 / Top Skill / 用户增长 图表 helpers ===== */
@@ -568,7 +628,6 @@ const dayLabel = (date: string) => {
   const [, m, d] = date.split('-').map(Number);
   return `${m}/${d}`;
 };
-const trend7dMax = computed(() => Math.max(1, ...(data.value?.trend7d.map((d) => d.calls) || [])));
 const trend7dSum = computed(() => (data.value?.trend7d || []).reduce((a, d) => a + d.calls, 0));
 const trend7dFail = computed(() => (data.value?.trend7d || []).reduce((a, d) => a + d.failed, 0));
 const growth7dMax = computed(() => Math.max(1, ...(data.value?.growth7d || []).flatMap((g) => [g.newUsers, g.activeUsers])));
@@ -1022,22 +1081,8 @@ watch(liveLoading, (loading) => {
 .ov-health__sub { flex: 1; font-size: 11.5px; color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ov-health .brief-card__go { margin-right: 0; }
 
-/* 近 7 天调用趋势（每日调用柱 + 失败柱同轴） */
+/* 近 7 天调用趋势（ECharts 图表；仅保留容器与合计行） */
 .ov-trend { display: grid; gap: 8px; flex: 1; min-height: 0; align-content: end; }
-.ov-trend__rows {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 8px;
-  flex: 1;
-  min-height: 0;
-}
-.ov-trend__day { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; min-height: 0; }
-.ov-trend__num { font-size: 11px; font-weight: 700; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
-.ov-trend__num--zero { color: var(--mk-faint); }
-.ov-trend__bars { display: flex; align-items: flex-end; gap: 2px; height: 68px; flex: 1; min-height: 0; }
-.ov-trend__bar { width: 10px; border-radius: 3px 3px 1px 1px; background: linear-gradient(180deg, #6aa0ff, #3d7cff); }
-.ov-trend__bar--fail { background: linear-gradient(180deg, #fbbf24, #d97706); }
-.ov-trend__label { font-size: 10.5px; color: var(--mk-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ov-trend__sum { margin: 0; font-size: 11.5px; color: var(--mk-muted); }
 
 /* Top Skill 排行 */
@@ -1216,24 +1261,7 @@ watch(liveLoading, (loading) => {
 .funnel__node--clickable:hover { border-color: rgba(44, 99, 208, 0.5); }
 .funnel__rate { font-size: 10.5px; font-weight: 800; color: var(--mk-faint); }
 
-/* 脉搏 */
-.pulse {
-  display: flex;
-  align-items: flex-end;
-  gap: 2.5px;
-  height: 84px;
-  padding-top: 6px;
-}
-.pulse__bar {
-  flex: 1 1 0;
-  min-width: 4px;
-  border-radius: 2.5px 2.5px 1px 1px;
-  background: linear-gradient(180deg, #6aa0ff, #3d7cff);
-  opacity: 0.9;
-}
-/* 数据异常柱：琥珀色（与"告警红"语义分离——红=需处理，琥珀=数据观察值） */
-.pulse__bar--issue { background: linear-gradient(180deg, #fbbf24, #d97706); opacity: 1; }
-.pulse__bar--idle { background: #e6ebf4; }
+/* 脉搏（ECharts 图表；仅保留 meta 行样式） */
 .pulse__meta {
   display: flex;
   gap: 16px;
@@ -1243,13 +1271,6 @@ watch(liveLoading, (loading) => {
 .pulse__meta strong { color: var(--mk-ink); font-variant-numeric: tabular-nums; }
 /* 异常计数：琥珀色（与异常柱同语义，区别于"失败/需处理"的告警红） */
 .pulse__meta strong.is-bad { color: var(--mk-amber); }
-.pulse__axis {
-  display: flex;
-  justify-content: space-between;
-  font-size: 9.5px;
-  color: var(--mk-faint);
-  font-variant-numeric: tabular-nums;
-}
 
 /* 时间线（全宽卡：横向排列） */
 .feed {
@@ -1375,7 +1396,6 @@ watch(liveLoading, (loading) => {
   .funnel__node strong { font-size: 22px; }
   .funnel__rate { font-size: 12.5px; }
   .pulse__meta { font-size: 14.5px; }
-  .pulse__axis { font-size: 11px; }
 }
 @media (min-width: 2800px) {
   .funnel__node span { font-size: 15.5px; }
@@ -1412,7 +1432,6 @@ watch(liveLoading, (loading) => {
   .funnel__node strong { font-size: 26px; }
   .funnel__rate { font-size: 14.5px; }
   .pulse__meta { font-size: 16.5px; }
-  .pulse__axis { font-size: 12.5px; }
 }
 /* 3600+（zoom 1.3 档）：卡片延续 2800 放大节奏（约 1.17×），补齐 2000/2800 未覆盖的卡片内文字（feed/pulse/trend/wq/usage/funnel） */
 @media (min-width: 3600px) {
@@ -1447,7 +1466,6 @@ watch(liveLoading, (loading) => {
   .funnel__node strong { font-size: 22px; }
   .funnel__rate { font-size: 12.5px; }
   .pulse__meta { font-size: 14.5px; }
-  .pulse__axis { font-size: 11px; }
 }
 
 /* ================= 暗色模式（D1）：总览页硬编码浅色覆写 ================= */
@@ -1460,7 +1478,7 @@ html[data-theme='dark'] {
   .brief-card { background: #141c2b; }
   .brief-actions__btn { background: rgba(91, 141, 239, 0.16); border-color: rgba(91, 141, 239, 0.35); }
   .brief-actions__btn:hover { background: rgba(91, 141, 239, 0.26); }
-  .wq__bars, .ov-skill__track, .usage__bar-track, .pulse__bar--idle { background: #232f45; }
+  .wq__bars, .ov-skill__track, .usage__bar-track { background: #232f45; }
   .ov-skill:hover, .usage__fail:hover, .feed__item:hover { background: #1b2740; }
   .feed__item--bad:hover { background: #2a1414; }
   .feed__item--warn:hover { background: #2a2410; }
@@ -1471,9 +1489,6 @@ html[data-theme='dark'] {
   .usage__hero-sep { background: #232f45; }
   .brief-card__go:hover { background: rgba(91, 141, 239, 0.14); }
   .ov-health { background: #141c2b; }
-  .pulse__bar { background: #3d7cff; }
-  .pulse__bar--issue { background: var(--mk-red); }
-  .ov-trend__bar, .ov-growth__bar--new, .trend__bar, .usage__bar { background: linear-gradient(180deg, #6aa0ff, #3d7cff); }
-  .ov-trend__bar--fail { background: linear-gradient(180deg, #fbbf24, #d97706); }
+  .ov-growth__bar--new, .trend__bar, .usage__bar { background: linear-gradient(180deg, #6aa0ff, #3d7cff); }
 }
 </style>
