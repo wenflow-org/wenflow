@@ -123,8 +123,6 @@ import { completionMetaOf } from "./glossaryMeta";
 import { useLoadMore } from "./useLoadMore";
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from "@/api/adminApi";
 
-const emit = defineEmits<{ openSkill: [skillId: string] }>();
-
 const recReport = ref<SkillReconciliationReport | null>(null);
 const recLoading = ref(false);
 const recError = ref("");

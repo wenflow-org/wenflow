@@ -637,9 +637,6 @@ const trendSum = computed(() => {
   const completed = trend.reduce((a, d) => a + d.completed, 0);
   return { total, completed };
 });
-// 归因合计（调用级，与 failed7d 同一计数源，恒等校验展示）
-const failuresSum7d = computed(() => (data.value?.usage.failures7d || []).reduce((a, f) => a + f.count, 0));
-
 // 漏斗相邻段速率说明（× 为 1:N 关系而非转化率）
 const rateHint = (i: number) => {
   const pairs = [

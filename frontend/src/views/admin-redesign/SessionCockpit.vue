@@ -3,16 +3,32 @@
     <!-- ===== 顶部栏：身份 + 状态（控制全部下沉到下方统一控制台） ===== -->
     <header class="cp-topbar">
       <div class="cp-topbar__row">
-        <button type="button" class="cp-back" @click="closeSubPage">← {{ backLabel }}</button>
+        <button type="button" class="cp-back" @click="goBack">← {{ backLabel }}</button>
         <h1 class="cp-title">会话监控 <span class="cp-title__id mono">{{ shortId }}</span></h1>
         <div class="cp-topbar__spacer"></div>
         <!-- 自动驾驶进行中的状态指示（停止按钮在控制台） -->
         <span v-if="autopilotRunning" class="cp-topbar__autopilot">▶ 自动驾驶 · {{ Number(autopilot.steps || 0) }} 步</span>
         <span class="cp-topbar__sep"></span>
-        <!-- 状态 -->
-        <span class="cp-topbar__dot" :class="`cp-topbar__dot--${statusTone}`"></span>
-        <strong class="cp-topbar__status">{{ statusTitle }}</strong>
+        <!-- 双轴状态：生命周期徽章（轴 A）+ 阶段条（轴 B） -->
+        <RunStateBadge :status="runLifecycleState" :hint="statusTitle" :pulse="autopilotRunning" />
+        <RunStageBar
+          :stage="runStageForBar"
+          :status="runLifecycleState"
+          :task-progress="runStageTaskProgress"
+          :show-task-text="false"
+        />
+        <span class="cp-topbar__sep"></span>
         <span class="cp-topbar__mode">{{ modeText }}</span>
+        <!-- 预算消耗预警条（累积 AI 调用：已用/上限，≥70% 变黄、≥90% 变红） -->
+        <span
+          class="cp-budget"
+          :class="`is-${budgetTone}`"
+          :title="`本会话累计 AI 调用 ${budgetUsage.used}/${budgetUsage.limit}（含重试）；可在画像/故事预算中调整上限`"
+        >
+          <span class="cp-budget__label">AI 调用</span>
+          <span class="cp-budget__track"><span class="cp-budget__fill" :style="{ width: `${budgetPct}%` }"></span></span>
+          <span class="cp-budget__num">{{ budgetUsage.used }}/{{ budgetUsage.limit }}</span>
+        </span>
         <button type="button" class="cp-topbar__btn" :disabled="busy" @click="refresh">刷新</button>
       </div>
     </header>
@@ -261,11 +277,15 @@
                     <span class="cp-lesson-wrapup__section-title">评估</span>
                     <div v-if="lessonWrapup.strengths.length" class="cp-lesson-wrapup__eval-item">
                       <span class="cp-lesson-wrapup__eval-label cp-lesson-wrapup__eval-label--good">优势</span>
-                      <span v-for="s in lessonWrapup.strengths" :key="s">{{ s }}</span>
+                      <ul class="cp-lesson-wrapup__eval-list">
+                        <li v-for="s in lessonWrapup.strengths" :key="s">{{ s }}</li>
+                      </ul>
                     </div>
                     <div v-if="lessonWrapup.improvements.length" class="cp-lesson-wrapup__eval-item">
                       <span class="cp-lesson-wrapup__eval-label cp-lesson-wrapup__eval-label--warn">改进</span>
-                      <span v-for="s in lessonWrapup.improvements" :key="s">{{ s }}</span>
+                      <ul class="cp-lesson-wrapup__eval-list">
+                        <li v-for="s in lessonWrapup.improvements" :key="s">{{ s }}</li>
+                      </ul>
                     </div>
                   </div>
 
@@ -699,7 +719,8 @@ import {
 } from './vlab-controls'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
-import { statusText } from './statusText'
+import RunStateBadge from './RunStateBadge.vue'
+import RunStageBar from './RunStageBar.vue'
 import { parseLogEntry, type LogEntryView } from './sessionLog'
 import { scoreBadgeCls, scoreFillPct, scoreToPct, scoreTone } from './evalScore'
 import { traceSummaryRows, traceRawJson, type TraceKeyValue } from './traceSummary'
@@ -710,9 +731,31 @@ const shortId = computed(() => (sessionId.value.length > 20 ? `…${sessionId.va
 
 /* 双模式：session=虚拟会话控制台（原行为 100% 保留）；session-real=真实教学/目标会话只读控制台 */
 const isRealMode = computed(() => subPage.value?.view === 'session-real')
-const backLabel = computed(() => (isRealMode.value ? '会话列表' : '虚拟学习者'))
+/** 会话所属画像 id（从会话 API 的 virtual_learner_profiles 取；无 from 时用于回二级画像） */
+const sessionProfileId = computed(() => {
+  const p = (session.value?.virtual_learner_profiles || {}) as Record<string, unknown>
+  return String(p.id || '')
+})
+const backLabel = computed(() => {
+  if (subPage.value?.from) return '画像' // 从二级（画像）进来 → 返回画像
+  if (sessionProfileId.value) return '画像' // 从一级进三级 → 也回该会话所属画像
+  return isRealMode.value ? '会话列表' : '虚拟学习者'
+})
+/** 返回：有来源 → 回来源页；否则回该会话所属画像（二级）；都没有 → 回一级 */
+function goBack() {
+  const from = subPage.value?.from
+  if (from) {
+    closeSubPage()
+    return
+  }
+  const pid = sessionProfileId.value
+  if (pid) {
+    openSubPage('virtual', pid)
+    return
+  }
+  closeSubPage()
+}
 const realKind = ref<'teaching' | 'goal'>('teaching')
-const realKindText = computed(() => (realKind.value === 'teaching' ? '真实教学会话' : '真实目标对话'))
 /* 真实模式时间线（后端合成）与虚拟模式日志原文（统一时间线三流合并用） */
 const timelineEntries = ref<Array<{ time: string; kind: string; title: string; detail: string }>>([])
 const rawLogs = ref<Record<string, unknown>[]>([])
@@ -737,7 +780,6 @@ const filteredLogs = computed(() => {
   if (!logPhaseFilter.value) return logs.value
   return logs.value.filter(l => l.view.phase === logPhaseFilter.value)
 })
-const logExpanded = ref(false)
 function onLogScroll() {
   const box = logBox.value
   if (!box) return
@@ -888,6 +930,33 @@ const stageResults = computed(() => (session.value?.stageResults || {}) as Recor
 const runtime = computed(() => (session.value?.runtime || {}) as Record<string, unknown>)
 const stageStatus = computed(() => (runtime.value.stageStatus || {}) as Record<string, Record<string, unknown>>)
 
+/* ---- 预算消耗（三级页顶栏预警条）：runtimeStats.aiCalls / 画像 maxRetriesTotal ---- */
+const budgetUsage = computed(() => {
+  const rs = (stageResults.value.runtimeStats || {}) as Record<string, unknown>
+  const used = Number(rs.aiCalls) || 0
+  // 故事级预算优先，否则画像级（profile.simulationBudget.maxRetriesTotal），否则默认 600
+  const storyBudget = ((stageResults.value.story || {}) as Record<string, unknown>).budget as Record<string, unknown> | undefined
+  const profileBudget = ((session.value?.virtual_learner_profiles || {}) as Record<string, unknown>).profile as string | undefined
+  let limit = 600
+  try {
+    if (storyBudget && Number.isFinite(Number(storyBudget.maxRetriesTotal))) {
+      limit = Number(storyBudget.maxRetriesTotal)
+    } else if (profileBudget) {
+      const pd = JSON.parse(profileBudget) as Record<string, unknown>
+      const sb = (pd.simulationBudget || {}) as Record<string, unknown>
+      if (Number.isFinite(Number(sb.maxRetriesTotal))) limit = Number(sb.maxRetriesTotal)
+    }
+  } catch { /* 忽略解析失败 */ }
+  return { used, limit: Math.max(1, limit) }
+})
+const budgetPct = computed(() => Math.min(100, Math.round((budgetUsage.value.used / budgetUsage.value.limit) * 100)))
+const budgetTone = computed(() => {
+  const pct = budgetPct.value
+  if (pct >= 90) return 'full'
+  if (pct >= 70) return 'warn'
+  return 'ok'
+})
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -983,17 +1052,6 @@ const autopilotResultText = computed(() => {
   if (st === 'running' && autopilot.value.stopRequested === true) return '⏸ 已请求停止自动驾驶（等待确认）'
   return ''
 })
-const statusTone = computed(() =>
-  !session.value
-    ? 'mk-status--muted'
-    : terminalStatus.value === 'created'
-      ? 'mk-status--muted'
-      : isFailedTerminal.value
-        ? 'mk-status--bad'
-        : isTerminal.value
-          ? 'mk-status--ok'
-          : 'mk-status--warn'
-)
 const statusTitle = computed(() =>
   !session.value
     ? '加载中…'
@@ -1005,6 +1063,33 @@ const statusTitle = computed(() =>
           ? '会话已完成'
           : '会话进行中'
 )
+
+/* 双轴状态（与一/二级页同源）：生命周期合成态 + 阶段条输入 */
+const runLifecycleState = computed(() => {
+  if (!session.value) return 'created'
+  const st = normalized(session.value?.status || '')
+  // 会话终态优先
+  if (['completed', 'failed', 'abandoned'].includes(st)) return st
+  // 手动停止（emergencyStop）标 failed + manualStop → 展示为已手动停止
+  if (manualStopped.value) return 'abandoned'
+  // 暂停（pause API）
+  if (isPaused.value) return 'paused'
+  // autopilot 停止 → 已暂停
+  if (autopilot.value.status === 'stopped') return 'paused'
+  // 运行中（含手动步进）
+  if (st === 'running' || st === 'created') return st === 'created' ? 'created' : 'running'
+  return st || 'created'
+})
+const runStageForBar = computed(() => {
+  if (!session.value) return null
+  return String(session.value?.currentStage || runtime.value.currentStage || 'goal').toLowerCase()
+})
+const runStageTaskProgress = computed(() => {
+  const done = numberValue(session.value?.completedTasks) || 0
+  const total = numberValue(session.value?.totalTasks) || 0
+  if (total <= 0) return null
+  return { done, total }
+})
 
 /* 阶段流：后端 currentStage 枚举是 goal/path/teaching，前端归一为 learning */
 const stageFlow = ['goal', 'path', 'learning', 'wrapup'] as const
@@ -1152,28 +1237,6 @@ const viewedLesson = computed(() => {
     || activeLesson.value
     || null
 })
-const viewedLessonIndex = computed(() =>
-  viewedLesson.value ? learnLessons.value.findIndex((l) => l.taskId === viewedLesson.value!.taskId) : -1
-)
-const replayableLessons = computed(() => learnLessons.value.filter((l) => !!l.teachingSessionId))
-const prevReplayableLesson = computed(() => {
-  if (viewedLessonIndex.value <= 0) return null
-  for (let i = viewedLessonIndex.value - 1; i >= 0; i -= 1) {
-    if (learnLessons.value[i].teachingSessionId) return learnLessons.value[i]
-  }
-  return null
-})
-const nextReplayableLesson = computed(() => {
-  if (viewedLessonIndex.value < 0) return null
-  for (let i = viewedLessonIndex.value + 1; i < learnLessons.value.length; i += 1) {
-    if (learnLessons.value[i].teachingSessionId) return learnLessons.value[i]
-  }
-  return null
-})
-function jumpLesson(taskId: string) {
-  const lesson = learnLessons.value.find((l) => l.taskId === taskId)
-  if (lesson) openLesson(lesson)
-}
 function openLesson(lesson: LearnLesson) {
   if (!lesson.teachingSessionId) return
   const currentTeachingId = firstText(bindings.value.teachingSessionId)
@@ -1776,28 +1839,6 @@ function stageProgress(st: string) {
   }
 }
 
-/* 阶段摘要（读 runtime.stageStatus + bindings） */
-const goalInfo = computed(() => {
-  const g = stageStatus.value.goal || {}
-  const id = bindings.value.goalConversationId || g.conversationId
-  if (!id) return ''
-  if (g.ready || effectiveStageIndex.value >= 1) return `对话已创建 · 已收敛/可生成 Path`
-  return `对话已创建 · 进行中`
-})
-const pathInfo = computed(() => {
-  const p = stageStatus.value.path || {}
-  if (bindings.value.learningPathId || p.generated) {
-    return p.totalMilestones ? `${p.totalMilestones} 个里程碑已生成` : '路径已生成'
-  }
-  return ''
-})
-const learnInfo = computed(() => {
-  const l = stageStatus.value.learning || {}
-  if (l.currentTaskTitle) return `当前任务：${String(l.currentTaskTitle)}`
-  if (bindings.value.teachingSessionId || l.teachingSessionId) return '教学会话进行中'
-  return ''
-})
-
 /* 阶段胶囊状态标记：已完成 ✓ / 当前 · / 其他空 */
 function stageMark(st: string) {
   const key = st as StageKey
@@ -1806,15 +1847,6 @@ function stageMark(st: string) {
   return ''
 }
 
-/* 状态条任务进度（虚拟会话行 completedTasks/totalTasks） */
-const sessionTotalTasks = computed(() => numberValue(session.value?.totalTasks) || 0)
-const completedTasksText = computed(() => `${completedTaskCount.value}/${sessionTotalTasks.value}`)
-
-/* 运行卡底部一行摘要：Goal · Path · 学习合并展示 */
-const runSummary = computed(() => {
-  const parts = [goalInfo.value, pathInfo.value, learnInfo.value].filter(Boolean)
-  return parts.join(' ｜ ')
-})
 /** 会话状态简短标签 */
 const sessionStatusLabel = computed(() => {
   if (isRealMode.value) return '只读'
@@ -1906,7 +1938,8 @@ async function loadLogs() {
         const view = parseLogEntry(l)
         return {
           id: String(l.id ?? ''),
-          time: l.createdAt ? new Date(String(l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
+          // 虚拟会话日志字段是 timestamp（非 createdAt）；兼容两者
+          time: l.timestamp || l.createdAt ? new Date(String(l.timestamp || l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
           text: view.text || view.phase,
           view: { ...view, phase: timelineKindLabel(String(l.phase)) }
         }
@@ -1927,7 +1960,7 @@ async function loadLogs() {
       const view = parseLogEntry(l)
       return {
         id: String(l.id ?? l.messageId ?? ''),
-        time: l.createdAt ? new Date(String(l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
+        time: l.timestamp || l.createdAt ? new Date(String(l.timestamp || l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
         text: view.text || view.phase,
         view
       }
@@ -2047,11 +2080,6 @@ function timelineKindLabel(kind: string): string {
   }
   return map[kind] || kind
 }
-const timelineSourceSummary = computed(() => {
-  const counts = new Map<string, number>()
-  for (const t of unifiedTimeline.value) counts.set(t.kind, (counts.get(t.kind) || 0) + 1)
-  return [...counts.entries()].map(([kind, n]) => `${timelineKindLabel(kind)} ${n}`).join(' · ')
-})
 /* 裁判/私有轨迹流任一存在才展示统一时间线（仅日志时与会话日志卡重复） */
 const hasTraceFlows = computed(() => refereeTrace.value.length > 0 || privateStateTrace.value.length > 0)
 const unifiedTimeline = computed<TimelineEntry[]>(() => {
@@ -2347,7 +2375,7 @@ async function act(kind: string) {
           return
         }
         toast.info('已按原输入重跑，正在切换到新会话')
-        openSubPage('session', newId)
+        openSubPage('session', newId, subPage.value?.from ? { from: subPage.value.from } : undefined)
         return
       }
     }
@@ -2388,7 +2416,7 @@ async function removeSession() {
   // 确认由统一模型执行（vlab-controls delete.confirm；删除仅终态可触发），此处只执行动作
   try {
     await adminVirtualLearnersApi.deleteVirtualSession(sessionId.value)
-    closeSubPage()
+    goBack()
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
   }
@@ -2530,6 +2558,29 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   background: rgba(245, 158, 11, 0.1);
   white-space: nowrap;
 }
+
+/* 预算消耗预警条（顶栏：累积 AI 调用 used/limit，分档变色） */
+.cp-budget {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: help;
+}
+.cp-budget__label { font-weight: 700; color: #64748b; }
+.cp-budget__track { width: 56px; height: 6px; border-radius: 3px; background: #e2e8f0; overflow: hidden; }
+.cp-budget__fill { display: block; height: 100%; border-radius: 3px; background: #10b981; transition: width 0.3s ease; }
+.cp-budget__num { font-weight: 800; color: #334155; font-variant-numeric: tabular-nums; }
+.cp-budget.is-warn { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.07); }
+.cp-budget.is-warn .cp-budget__fill { background: #f59e0b; }
+.cp-budget.is-full { border-color: rgba(239, 68, 68, 0.5); background: rgba(239, 68, 68, 0.07); }
+.cp-budget.is-full .cp-budget__fill { background: #ef4444; }
+.cp-budget.is-full .cp-budget__num { color: #dc2626; }
 
 .cp-back {
   border: 0;
@@ -3144,6 +3195,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   font-size: 12px;
   color: var(--mk-muted);
   line-height: 1.5;
+  align-items: start;
 }
 .cp-lesson-wrapup__eval-label {
   font-size: 10.5px;
@@ -3155,6 +3207,30 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 }
 .cp-lesson-wrapup__eval-label--good { background: var(--mk-green-bg); color: var(--mk-green); }
 .cp-lesson-wrapup__eval-label--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
+/* 优势/改进列表：每条一项，明确分段（替代原 span 碎片换行） */
+.cp-lesson-wrapup__eval-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+.cp-lesson-wrapup__eval-list li {
+  padding-left: 14px;
+  position: relative;
+  line-height: 1.55;
+}
+.cp-lesson-wrapup__eval-list li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 7px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.6;
+}
 
 /* 底部元信息 */
 .cp-lesson-wrapup__meta-row {

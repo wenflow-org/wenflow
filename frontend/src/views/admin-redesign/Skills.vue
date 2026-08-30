@@ -168,7 +168,6 @@ import { skillProfiles, skillStatOf, openSkillDrawer, dataSource, isLive } from 
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
 import { completionMetaOf } from './glossaryMeta'
-import { useLoadMore } from './useLoadMore'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkOverview from './MkOverview.vue'
@@ -205,12 +204,6 @@ function rateTone(s: { calls: number; errors: number }) {
   return ''
 }
 /** 平均耗时阈值着色：>40s 红、>20s 琥珀 */
-function latencyTone(s: { calls: number; avgMs: number }) {
-  if (!s.calls || !s.avgMs) return ''
-  if (s.avgMs > 40000) return 'sk-lat--bad'
-  if (s.avgMs > 20000) return 'sk-lat--warn'
-  return ''
-}
 // 时间窗口切换 → 按新窗口重新拉取统计
 watch(statsRange, async () => {
   if (isLive.value) {
@@ -249,15 +242,6 @@ const cards = computed(() => {
     return { ...p, ...stat, health }
   })
 })
-
-function toggleSort(key: SortKey) {
-  if (sortKey.value === key) {
-    sortDir.value = sortDir.value === 'desc' ? 'asc' : 'desc'
-  } else {
-    sortKey.value = key
-    sortDir.value = 'desc'
-  }
-}
 
 const filtered = computed(() => {
   let list = cards.value
@@ -335,7 +319,6 @@ const statusTitle = computed(() =>
   cards.value.length ? 'Skill 运行' : '暂无运行数据'
 )
 
-const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
 const successRate = (s: { calls: number; errors: number }) =>
   s.calls ? `${(((s.calls - s.errors) / s.calls) * 100).toFixed(0)}%` : '—'
 
@@ -345,8 +328,6 @@ const recLoading = ref(false)
 const recError = ref('')
 /** 滚动修复 #4：对账卡默认折叠（32 行分组表不再默认撑长页面） */
 const recOpen = ref(false)
-/** 面板内「仅看异常」切换（与目录表「仅看需关注」对称；纯前端过滤） */
-const recOnlyAbnormal = ref(false)
 /** 深链定位：?recon=1 展开 + 滚动；?diff=unregistered|active-missing|live 过滤差集行（巡检工作台计数卡 → 目录对账闭环） */
 const route = useRoute()
 const recDiff = ref('')
@@ -359,11 +340,6 @@ function applyRecQuery() {
   recDeepLinked = recon === '1' || recon === 'true'
   recOpen.value = recDeepLinked
   recDiff.value = diff === 'unregistered' || diff === 'active-missing' || diff === 'live' ? diff : ''
-}
-
-function clearRecDiff() {
-  recDiff.value = ''
-  recOpen.value = false
 }
 
 /** 深链落地：数据到达后滚动定位到对账面板（避免折叠态下 scrollIntoView 落空） */
@@ -398,7 +374,6 @@ onMounted(() => {
 })
 
 /** 完成度五档色标（draft → live）；文案单源：glossaryMeta.ts（与后端 glossary-content 对齐） */
-const recStatusOrder = ['draft', 'handler-ready', 'core-ready', 'fields-synced', 'live'] as const
 const recStatusText = (status: string) =>
   completionMetaOf(status)?.label || status
 
@@ -416,100 +391,7 @@ function completionBadgeOf(skillId: string): { cls: string; text: string; title:
   return { cls: `mk-badge--rec-${c.status}`, text: recStatusText(c.status), title: recGateDetail(c) }
 }
 
-/** 对账面板按 parentAgent 分组（P2：goal-agent 下辖 N 条 节头）；无 parentAgent 归"未归属" */
-const REC_AGENT_ORDER = ['goal-agent', 'path-agent', 'teaching-agent', 'profile-agent', 'simulation-agent']
-type RecRow = SkillReconciliationReport['items'][number]
-interface RecGroup { parentAgent: string; items: RecRow[]; liveCount: number }
-type RecEntry = { kind: 'group'; group: RecGroup } | { kind: 'row'; row: RecRow }
-
-const recGroups = computed<RecGroup[]>(() => {
-  if (!recReport.value) return []
-  const groups = new Map<string, RecRow[]>()
-  for (const row of recReport.value.items) {
-    const key = row.parentAgent || '未归属'
-    const list = groups.get(key) || []
-    list.push(row)
-    groups.set(key, list)
-  }
-  const keys = [...groups.keys()].sort((a, b) => {
-    const ai = REC_AGENT_ORDER.indexOf(a)
-    const bi = REC_AGENT_ORDER.indexOf(b)
-    const ar = ai === -1 ? REC_AGENT_ORDER.length : ai
-    const br = bi === -1 ? REC_AGENT_ORDER.length : bi
-    if (ar !== br) return ar - br
-    return a.localeCompare(b)
-  })
-  return keys.map((parentAgent) => {
-    const items = groups.get(parentAgent)!
-    return {
-      parentAgent,
-      items,
-      liveCount: items.filter((row) => row.completion.status === 'live').length,
-    }
-  })
-})
-
-/** 差集过滤：深链 ?diff= 或「仅看异常」时仅保留匹配行，组头随行过滤（空组不显示） */
-function matchesRecFilter(row: RecRow): boolean {
-  if (recOnlyAbnormal.value && !isRecAbnormal(row)) return false
-  if (recDiff.value === 'unregistered') return row.diff === 'unregistered'
-  if (recDiff.value === 'active-missing') return row.diff === 'active-missing'
-  if (recDiff.value === 'live') return row.completion.status === 'live'
-  return true
-}
-
-/** 「仅看异常」判定：差集非空（未注册/缺 ACTIVE）或完成度未达 live */
-function isRecAbnormal(row: RecRow): boolean {
-  return row.diff !== null || row.completion.status !== 'live'
-}
-
-/** 滚动修复 #4：对账行展平（组头 + 行）→ 10 行/页分页 */
-const recFlat = computed<RecEntry[]>(() => {
-  const out: RecEntry[] = []
-  for (const g of recGroups.value) {
-    const items = recDiff.value || recOnlyAbnormal.value ? g.items.filter(matchesRecFilter) : g.items
-    if ((recDiff.value || recOnlyAbnormal.value) && !items.length) continue
-    out.push({ kind: 'group', group: { ...g, items, liveCount: items.filter((row) => row.completion.status === 'live').length } })
-    for (const row of items) out.push({ kind: 'row', row })
-  }
-  return out
-})
-const { shown: recShown, canMore: recCanMore, loadMore: recLoadMore } = useLoadMore(recFlat, 15)
-
-/** 分页切片跨组时自动补组头（组头仅在当前页首现时渲染，重复组头 = 分页边界标识，数据不丢） */
-const recPageRows = computed<RecEntry[]>(() => {
-  const seen = new Set<string>()
-  const out: RecEntry[] = []
-  for (const e of recShown.value) {
-    if (e.kind === 'group') {
-      seen.add(e.group.parentAgent)
-      out.push(e)
-    } else {
-      const key = e.row.parentAgent || '未归属'
-      if (!seen.has(key)) {
-        const found = recFlat.value.find((x) => x.kind === 'group' && x.group.parentAgent === key)
-        const g = found?.kind === 'group' ? found.group : undefined
-        if (g) {
-          out.push({ kind: 'group', group: g })
-          seen.add(key)
-        }
-      }
-      out.push(e)
-    }
-  }
-  return out
-})
-
-const recKindText = (kind: string) =>
-  ({ mainline: '主线', aux: '辅助', 'handler-only': '仅 handler' })[kind] || kind
-
 /** 行健康点：live 绿、差集红、其余灰 */
-function recDotTone(row: SkillReconciliationReport['items'][number]) {
-  if (row.diff === 'unregistered') return 'error'
-  if (row.completion.status === 'live') return 'ok'
-  return 'idle'
-}
-
 /** 完成度徽标 tooltip：首个失败档的依据文本 */
 function recGateDetail(completion: SkillCompletion): string {
   const gates: Array<[string, string]> = [
