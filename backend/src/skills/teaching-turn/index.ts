@@ -338,14 +338,23 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
   const currentPointRemovedByFilter = normalizedCurrentPoint
     && normalizeConceptName(input.scenario.taskProfile?.coreConcept || input.scenario.taskProfile?.linkedConceptName || '')
     && !normalizedKnowledgePoints.some((point) => point.name === normalizedCurrentPoint);
+  // 完成判定（2026-08-30 改为 LLM 语义判定）：
+  // 此前用 acceptanceCriteria 关键词硬匹配（evaluateByCriteria/evaluateByProfile）拦截完成信号，
+  // 对口语化/创作类任务（如视频剪辑 demo 的 diagnose/refine 任务）产生系统性假阴性，
+  // 学生语义上已达标但措辞不匹配即被拦截，导致回合膨胀。
+  // 现在：isCompletionCandidate 由 LLM 基于对话语义自行判断（提示词 rule 18/19/21），
+  // 评估器输出仅作为观测信号透传（completionCandidateEvidence），不再参与完成门禁。
+  const requestedCompletionCandidate = !!control.isCompletionCandidate;
+  const resolvedCompletionCandidate = requestedCompletionCandidate;
+
+  // 观测信号：规则判定（关键词匹配）结果，仅用于与 LLM 判定对比，不参与完成门禁
   const completionEvidenceSatisfied = acceptanceEvidence.hasCriteria
     ? acceptanceEvidence.matched
     : taskCompletionEvidence.matched;
-  const requestedCompletionCandidate = !!control.isCompletionCandidate;
-  const resolvedCompletionCandidate = requestedCompletionCandidate && completionEvidenceSatisfied;
 
-  if (requestedCompletionCandidate && !resolvedCompletionCandidate) {
-    logger.warn('[TeachingTurnAgent] completionCandidate 被验收证据门槛拦截', {
+  // 观测：LLM 语义判定与规则判定（关键词匹配）的分歧，用于评估"LLM 判定方案"的收敛质量
+  if (requestedCompletionCandidate && !completionEvidenceSatisfied) {
+    logger.warn('[TeachingTurnAgent] completionCandidate 与规则证据判定分歧（观测信号，不再拦截）', {
       taskTitle: input.scenario.taskTitle,
       taskType: input.scenario.taskType,
       acceptanceCriteria: acceptanceEvidence.acceptanceCriteria,
@@ -513,11 +522,8 @@ function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
 
   const reply = typeof parsed.reply === 'string' ? parsed.reply.trim() : '';
   const rawCompletionCandidate = parsed.control?.isCompletionCandidate === true;
-  const acceptanceEvidence = evaluateAcceptanceCriteriaEvidence(input);
-  const taskCompletionEvidence = evaluateCompletionByTaskProfile(input);
-  const completionEvidenceSatisfied = acceptanceEvidence.hasCriteria
-    ? acceptanceEvidence.matched
-    : taskCompletionEvidence.matched;
+  // 2026-08-30：完成一致性校验不再使用关键词硬匹配（evaluateByCriteria/evaluateByProfile），
+  // 改为 LLM 语义判定 + 知识硬门禁：模型说完成 + 知识点全 mastered 才允许宣布完成。
   const rawPoints = Array.isArray(parsed.knowledge?.points) ? parsed.knowledge.points : [];
   const inputPointMap = new Map(
     (Array.isArray(input.knowledge?.points) ? input.knowledge.points : [])
@@ -537,7 +543,7 @@ function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
   const allKnowledgeMastered = Array.from(inputPointMap.values()).length > 0
     && Array.from(inputPointMap.values()).every((point: any) => point?.status === 'mastered');
   const hasPrematureCompletionLanguage = /已完成|满足.*要求|满足.*标准|进入下一环节|进入下一个任务|接下来.*下一环节|接下来.*下一个任务/.test(reply);
-  const completionLanguageAllowed = rawCompletionCandidate && completionEvidenceSatisfied && allKnowledgeMastered;
+  const completionLanguageAllowed = rawCompletionCandidate && allKnowledgeMastered;
 
   if (hasPrematureCompletionLanguage && !completionLanguageAllowed) {
     return { valid: false, failureReason: 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH' };

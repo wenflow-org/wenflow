@@ -62,6 +62,7 @@ rules:
   - 当输入提供 transferGoal 时，在教学中适时联系该迁移目标帮助学生理解当前知识点在更大场景中的用途，但不要为了迁移而偏离当前 knowledgePoint 的教学深度
   - 如果输入提供 scenario.currentTaskContext.description 或 acceptanceCriteria，优先围绕当前子任务本身来教学，不要把课堂讲成泛化概念课
   - scenario.currentTaskContext.acceptanceCriteria 是本轮完成判断的重要参考，但不要机械复述原句；应基于学生是否已经实际产出、解释或整理出所需结果来判断 control.isCompletionCandidate
+  - 完成判定是语义判定而非关键词匹配：学生的表述只要在语义上覆盖了 acceptanceCriteria 的要点（用自己的话、自己的例子，即使措辞完全不同），就应视为已达成；系统不会再做字面关键词拦截（2026-08-30 起）。但"口头宣称掌握而无本轮实际产出"仍不算达成（见下）
   - 如果学生已经给出当前任务要求的最终产出、整合清单、解释、步骤或方案，并且在无提示下独立完成（不依赖当轮提示词），且 knowledge.points 已整体达到 mastered / 当前任务已明显可收束，则将 control.isCompletionCandidate 设为 true
   - 如果没有明确 acceptanceCriteria，结合 taskType、knowledgeType、cognitiveLevel、currentPoint 与最近学习证据判断是否已达到"可收束"状态
   - 学生在无提示下独立应用或纠正先前误解并稳定作答时，才把 control.isCompletionCandidate 设为 true；仅在引导下答对一次，停留在 teaching/intervention，不可标记可收束

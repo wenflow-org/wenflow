@@ -243,3 +243,109 @@ describe('teaching-turn interactionProfile（认知负荷量测 · 前端情报�
     expect(normalized.analysis.loadBasis).toBe('combined')
   })
 })
+
+describe('teaching-turn 完成判定（2026-08-30 起 LLM 语义判定，不再关键词硬匹配拦截）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockCallPrompt.mockResolvedValue(SUCCESS_RESULT)
+  })
+
+  // 剪辑 demo 场景：学生口语表达与验收标准措辞完全不同，但语义已达成。
+  // 旧逻辑（关键词子串匹配）会拦截；新逻辑：LLM 说完成即放行（由编排层知识硬门禁兜底）。
+  const EDITING_INPUT = {
+    ...MINIMAL_INPUT,
+    scenario: {
+      ...MINIMAL_INPUT.scenario,
+      taskTitle: '复盘那次后悔点单并记下第一条线索',
+      taskType: 'diagnose',
+      currentTaskContext: {
+        acceptanceCriteria: '复盘那次后悔点单，并记下第一条线索',
+      },
+      taskProfile: { knowledgeType: 'metacognitive', cognitiveLevel: 'analyze', coreConcept: '点单筛选标准' },
+    },
+    messages: [
+      { role: 'user' as const, content: '我上次熬夜点炸鸡后悔了，下次先定好筛选标准，绑到周三晚上对账。' },
+    ],
+    knowledge: {
+      points: [{ name: '点单筛选标准', status: 'mastered' as const, progress: 100 }],
+    },
+  }
+
+  it('LLM 判定完成（isCompletionCandidate=true）即放行，即使学生措辞与验收标准完全不同', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    const normalized = spec.normalizeOutput({
+      reply: '你这句已经把关键翻过来了——不是一次定完美，而是用下一次的真实感受去校准。这节就收在这里。',
+      analysis: { cognitiveLevel: 'analyze', understanding: 0.8 },
+      knowledge: {
+        currentPoint: '点单筛选标准',
+        points: [{ name: '点单筛选标准', status: 'mastered', progress: 100 }],
+      },
+      pedagogy: { strategies: ['reflect'] },
+      control: { isCompletionCandidate: true, shouldTriggerPeer: false },
+    }, input)
+
+    // 核心断言：不再被关键词拦截
+    expect(normalized.control.isCompletionCandidate).toBe(true)
+    // 观测信号仍在：规则判定结果为 rejected（措辞不匹配），但不再影响完成判定
+    expect(normalized.control.completionCandidateEvidence).toMatchObject({
+      hasCriteria: true,
+      decision: 'rejected',
+    })
+  })
+
+  it('LLM 判定未完成（isCompletionCandidate=false）时保持不完成', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    const normalized = spec.normalizeOutput({
+      reply: '我们再确认一下：具体哪条线索记下来？',
+      analysis: { cognitiveLevel: 'analyze', understanding: 0.4 },
+      knowledge: {
+        currentPoint: '点单筛选标准',
+        points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+      },
+      pedagogy: { strategies: ['scaffold'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }, input)
+
+    expect(normalized.control.isCompletionCandidate).toBe(false)
+  })
+
+  it('validateParsedOutput：LLM 完成 + 知识点全 mastered 时允许宣布完成', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    const validation = spec.validateParsedOutput({
+      reply: '本节已完成，我们进入下一环节。',
+      analysis: { cognitiveLevel: 'analyze' },
+      knowledge: {
+        currentPoint: '点单筛选标准',
+        points: [{ name: '点单筛选标准', status: 'mastered', progress: 100 }],
+      },
+      pedagogy: { strategies: ['reflect'] },
+      control: { isCompletionCandidate: true, shouldTriggerPeer: false },
+    }, input)
+
+    expect(validation).toEqual({ valid: true })
+  })
+
+  it('validateParsedOutput：LLM 未完成但回复宣称完成时仍报 MISMATCH（保留防虚假完成）', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    const validation = spec.validateParsedOutput({
+      reply: '本节已完成，我们进入下一环节。',
+      analysis: { cognitiveLevel: 'analyze' },
+      knowledge: {
+        currentPoint: '点单筛选标准',
+        points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+      },
+      pedagogy: { strategies: ['reflect'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }, input)
+
+    expect(validation).toEqual({ valid: false, failureReason: 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH' })
+  })
+})
