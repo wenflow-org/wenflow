@@ -95,6 +95,12 @@
       <div class="wf-summary__item"><b>{{ fmtMs(traceSummary.total) }}</b><span>总耗时</span></div>
       <div class="wf-summary__item" :class="{ 'wf-summary__item--bad': traceSummary.errorCount }"><b>{{ traceSummary.errorCount }}</b><span>失败</span></div>
       <div class="wf-summary__item"><b>{{ fmtMs(traceSummary.avg) }}</b><span>平均耗时</span></div>
+      <div class="wf-summary__item" :title="`输入 ${traceSummary.promptTokens.toLocaleString()} · 输出 ${traceSummary.completionTokens.toLocaleString()}`">
+        <b>{{ fmtTokens(traceSummary.promptTokens + traceSummary.completionTokens) }}</b><span>Token</span>
+      </div>
+      <div class="wf-summary__item" :title="'估算成本（按 deepseek-v4-flash 公开价：输入 ¥0.5/M · 输出 ¥2/M，仅供参考）'">
+        <b>¥{{ traceSummary.estCost }}</b><span>估算成本</span>
+      </div>
       <div class="wf-summary__item wf-summary__models"><span>模型</span><b class="mono">{{ traceSummary.models.length ? traceSummary.models.join(' / ') : '—' }}</b></div>
     </div>
 
@@ -616,7 +622,20 @@ const traceSummary = computed(() => {
   if (!s.length) return null
   const models = [...new Set(s.map((x) => x.model).filter(Boolean))]
   const avg = Math.round(s.reduce((a, x) => a + x.durationMs, 0) / s.length)
-  return { spanCount: s.length, total: maxEnd.value, errorCount: errorCount.value, models, avg }
+  const promptTokens = s.reduce((a, x) => a + (x.promptTokens ?? 0), 0)
+  const completionTokens = s.reduce((a, x) => a + (x.completionTokens ?? 0), 0)
+  // 估算成本：按 deepseek-v4-flash 公开价（输入 ¥0.5/M，输出 ¥2/M），仅供参考
+  const estCost = (promptTokens * 0.5 + completionTokens * 2) / 1_000_000
+  return {
+    spanCount: s.length,
+    total: maxEnd.value,
+    errorCount: errorCount.value,
+    models,
+    avg,
+    promptTokens,
+    completionTokens,
+    estCost: estCost >= 0.01 ? estCost.toFixed(2) : estCost.toFixed(4)
+  }
 })
 
 // 刻度：按总量程取 ~8 档自适应步长（人读友好 1/2/5×10^n 序列），
@@ -682,6 +701,7 @@ watch(activeSpans, async () => {
 })
 
 const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
+const fmtTokens = (n: number) => (n >= 1000000 ? `${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || 0))
 const badgeOf = (s: string) => (s === 'err' ? 'mk-badge--bad' : s === 'warn' ? 'mk-badge--warn' : 'mk-badge--ok')
 
 /* 长 trace ID 在下拉与标题中截断显示（shortTrace 已上移至 watch 之前，见文件上方声明） */
