@@ -620,7 +620,13 @@ export async function startServer() {
       if (process.env.STARTUP_CANARY === '0') {
         logger.debug('[ai-capability] 启动金丝雀探测已跳过（STARTUP_CANARY=0）');
       } else {
-        await aiCapabilityHealthService.refresh();
+        // 启动金丝雀：失败不阻断启动（能力状态由定时探测/首次真实请求校准）。
+        // 2026-08-30：此前 await 超时会把 connectionStatus 写为 failed 并拖慢启动。
+        await aiCapabilityHealthService.refresh().catch(error => {
+          logger.warn('[ai-capability] 启动金丝雀探测失败（不阻断启动）', {
+            error: error instanceof Error ? error.message : String(error)
+          });
+        });
       }
       {
         const probeEnabled = await getRuntimeCapabilityProbeEnabled();
