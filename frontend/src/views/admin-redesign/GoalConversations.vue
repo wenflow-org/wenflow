@@ -3,7 +3,7 @@
     <!-- 状态条（统计全部在概览卡；此处仅标题 + 总量 + 操作） -->
     <div class="mk-status" :class="stats && stats.active > 0 ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">Goal 会话</strong>
+      <strong class="mk-status__title">目标对话</strong>
       <span class="mk-status__sep"></span>
       <span v-if="isLive && stats" class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ stats.total }} 条</span>
       <button type="button" class="mk-status__action" :disabled="loading" @click="load(true)">

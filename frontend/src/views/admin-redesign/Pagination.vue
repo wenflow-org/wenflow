@@ -88,12 +88,12 @@ watch(
   gap: 10px;
   padding: 10px 14px 12px;
   border-top: 1px dashed var(--mk-line);
-  font-size: 12px;
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-muted);
 }
 .mk-pagination__total {
   color: var(--mk-muted);
-  font-size: 12px;
+  font-size: var(--mk-fs-12_5);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -103,7 +103,7 @@ watch(
   border-radius: 8px;
   background: var(--mk-surface);
   color: var(--mk-ink);
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   cursor: pointer;
 }
 .mk-pagination__nav {
@@ -118,7 +118,7 @@ watch(
   background: var(--mk-surface);
   color: var(--mk-ink);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;

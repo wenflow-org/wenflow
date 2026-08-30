@@ -277,7 +277,7 @@ const groupedScenes = computed(() => {
 .mshell__nav { flex: 1; overflow-y: auto; display: grid; gap: 14px; align-content: start; }
 .mshell__group-title {
   padding: 0 10px 5px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -295,7 +295,7 @@ const groupedScenes = computed(() => {
   background: transparent;
   color: #5b6577;
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-13);
   font-weight: 600;
   text-align: left;
   cursor: pointer;
@@ -328,7 +328,7 @@ const groupedScenes = computed(() => {
   border-radius: 999px;
   background: #eef2fa;
   color: var(--mk-faint);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -356,7 +356,7 @@ const groupedScenes = computed(() => {
 }
 .mshell__foot-name { font-weight: 700; color: #8a97ab; letter-spacing: 0.02em; }
 .mshell__foot-ver {
-  font-size: 10px;
+  font-size: 10.5px;
   color: #b4c0d2;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -366,7 +366,7 @@ const groupedScenes = computed(() => {
   border: 1px solid #e1e8f2;
   border-radius: 5px;
   background: #fafbfc;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -384,11 +384,11 @@ const groupedScenes = computed(() => {
   border-bottom: 1px solid #e1e8f2;
 }
 .mshell__crumbs { display: flex; align-items: center; gap: 8px; }
-.mshell__crumb-group { color: var(--mk-faint); font-size: 12px; font-weight: 600; }
+.mshell__crumb-group { color: var(--mk-faint); font-size: var(--mk-fs-12_5); font-weight: 600; }
 .mshell__crumb-sep { color: #c3cede; margin: 0 2px; }
 .mshell__crumb-sub {
   color: var(--mk-accent-deep);
-  font-size: 12px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 700;
   font-family: var(--mk-mono);
   max-width: 180px;
@@ -406,7 +406,7 @@ const groupedScenes = computed(() => {
   background: #eef5ff;
   color: var(--mk-blue, #2c63d0);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;

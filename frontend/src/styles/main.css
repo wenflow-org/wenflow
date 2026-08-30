@@ -77,6 +77,28 @@
   --mk-rec-synced: #0f766e;
   --mk-rec-live: #15803d;
 
+  /* 字号阶梯 token（A 组设计改进）：全站字号单一来源，替代散落 9~20px 硬编码。
+     基础正文 14px（原 13px），微字下限 11px。4K 档仍由 shared.css 媒体查询放大。 */
+  --mk-fs-11: 11px;
+  --mk-fs-12: 12px;
+  --mk-fs-12_5: 12.5px;
+  --mk-fs-13: 13px;
+  --mk-fs-14: 14px;
+  --mk-fs-15: 15px;
+  --mk-fs-16: 16px;
+  --mk-fs-18: 18px;
+  --mk-fs-20: 20px;
+
+  /* 间距阶梯 token（A 组设计改进）：替代散落 10/12/14/16/18px 硬编码 */
+  --mk-space-1: 4px;
+  --mk-space-2: 8px;
+  --mk-space-3: 12px;
+  --mk-space-4: 16px;
+  --mk-space-5: 20px;
+  --mk-space-6: 24px;
+  --mk-space-7: 32px;
+  --mk-space-8: 48px;
+
   /* 列宽 token（ADMIN_COLUMN_WIDTH_SPEC §2/§3 落地）：全站表格列宽单一来源。
      工具类 mk-col--*（shared.css）与三张 grid 行式表（ExecLogs/AuditLogs/SessionSecurity）
      共同引用；4K 三档覆盖值集中在 shared.css 4K 段（一处变量、全站同步）。 */

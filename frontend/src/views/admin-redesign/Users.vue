@@ -4,18 +4,15 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">用户</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">共 {{ users.length }} 人</span>
-      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="'仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行'">
+      <span class="mk-status__meta" :title="isLive ? '后端共 ' + liveUsersTotal + ' 人，列表仅加载前 ' + users.length + ' 行' : undefined">
+        共 {{ users.length }} 人
+      </span>
+      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">
         真实 {{ realUsers }}
       </span>
-      <span v-if="isLive && pill !== 'deleted' && includeTest" class="mk-status__meta" :title="'全量口径：含虚拟学习者与测试/审计账号（行内带标记）'">测试/虚拟 {{ users.length - realUsers }}</span>
-      <span class="mk-status__meta">管理员 {{ adminCount }}</span>
-      <span class="mk-status__meta">当前在线 {{ activeToday }}</span>
-      <span v-if="isLive && registrationEnabled !== null" class="mk-status__meta" :class="registrationEnabled ? '' : 'ul-reg--closed'">
-        注册{{ registrationEnabled ? '开放' : '关闭' }}
-      </span>
-      <span v-if="isLive && pill !== 'deleted' && liveUsersTotal > users.length" class="mk-status__meta ul-truncated" :title="`后端共 ${liveUsersTotal} 人，列表仅加载前 ${users.length} 行`">
-        已截断 · 共 {{ liveUsersTotal }} 人
+      <span v-if="isLive && pill !== 'deleted' && includeTest" class="mk-status__meta" title="全量口径：含虚拟学习者与测试/审计账号（行内带标记）">测试/虚拟 {{ users.length - realUsers }}</span>
+      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="`管理员 ${adminCount} · 当前在线 ${activeToday}${registrationEnabled !== null ? ' · 注册' + (registrationEnabled ? '开放' : '关闭') : ''}`">
+        在线 {{ activeToday }}
       </span>
       <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建用户</button>
     </div>
@@ -634,8 +631,6 @@ function clearFilters() {
 }
 .ul-batch__danger:hover:not(:disabled) { background: var(--mk-red-strong, #b91c1c); }
 .ul-batch__danger:disabled { opacity: 0.6; }
-.ul-reg--closed { color: var(--mk-amber); font-weight: 700; }
-.ul-truncated { color: var(--mk-amber); font-weight: 700; }
 .ul-tags { display: flex; gap: 6px; margin-top: 2px; }
 .ul-tag {
   padding: 1px 8px;
