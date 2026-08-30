@@ -197,6 +197,8 @@ export async function executeSkillHandler(
     taskId: parentContext.taskId || contextEnvelope.session?.taskId,
     locale: contextEnvelope.locale,
     contextEnvelope,
+    // 调用方显式取消信号优先于请求级信号（如 withTimeoutSignal 的超时取消）
+    abortSignal: options.abortSignal || parentContext.abortSignal,
   };
 
   return runWithContext(executionContext, async () => {

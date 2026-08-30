@@ -455,11 +455,42 @@ function buildTeachingStateWithArtifacts(
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> {
   let timer: NodeJS.Timeout | null = null;
+  // 超时取消钩子：调用方可传入 controller，超时 reject 的同时 abort 底层 LLM 调用，
+  // 避免"上层已超时、底层流仍在跑"的幽灵 CALLER_ABORTED 日志与 token 浪费。
+  const controller = new AbortController();
   try {
     return await Promise.race([
       promise,
       new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(errorMessage)), ms);
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error(errorMessage));
+        }, ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * 同 withTimeout，但把超时取消信号暴露给调用方（传给 gateway.execute 的 abortSignal）。
+ */
+async function withTimeoutSignal<T>(
+  promise: (signal: AbortSignal) => Promise<T>,
+  ms: number,
+  errorMessage: string
+): Promise<T> {
+  let timer: NodeJS.Timeout | null = null;
+  const controller = new AbortController();
+  try {
+    return await Promise.race([
+      promise(controller.signal),
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error(errorMessage));
+        }, ms);
       }),
     ]);
   } finally {
@@ -1328,29 +1359,33 @@ export class AITeachingOrchestrator {
         : 'self-assess';
     let parsed: any = null;
     try {
-      const result = await withTimeout(executeSkillWithResult(auxSkillDefinitionMap['teaching-opening-generator'], {
-        subject: context.subject,
-        topic: context.topic,
-        taskTitle: context.taskTitle,
-        taskDescription: context.taskDescription,
-        taskType: context.taskType,
-        pathSummary: context.pathProgress.pathSummary,
-        currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,
-        learner: {
-          confidenceLevel: runtimeSignals.confidenceLevel,
-          recentTrend: runtimeSignals.recentTrend,
-          recommendedPacing: runtimeSignals.recommendedPacing,
-        },
-        openingMode,
-        ...(context.learningSignal ? { learningSignal: context.learningSignal } : {}),
-        ...(context.lastLessonRecap ? { lastLessonRecap: context.lastLessonRecap } : {}),
-        __prompt: {
-          userId: context.userId,
-          taskId: context.taskId,
-          requestPath: '/services/ai-teaching/generate-opening',
-          callerAgentId: AI_TEACHING_AGENT_ID,
-        },
-      }), 15000, 'OPENING_GENERATION_TIMEOUT');
+      const result = await withTimeoutSignal(
+        (signal) => executeSkillWithResult(auxSkillDefinitionMap['teaching-opening-generator'], {
+          subject: context.subject,
+          topic: context.topic,
+          taskTitle: context.taskTitle,
+          taskDescription: context.taskDescription,
+          taskType: context.taskType,
+          pathSummary: context.pathProgress.pathSummary,
+          currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,
+          learner: {
+            confidenceLevel: runtimeSignals.confidenceLevel,
+            recentTrend: runtimeSignals.recentTrend,
+            recommendedPacing: runtimeSignals.recommendedPacing,
+          },
+          openingMode,
+          ...(context.learningSignal ? { learningSignal: context.learningSignal } : {}),
+          ...(context.lastLessonRecap ? { lastLessonRecap: context.lastLessonRecap } : {}),
+          __prompt: {
+            userId: context.userId,
+            taskId: context.taskId,
+            requestPath: '/services/ai-teaching/generate-opening',
+            callerAgentId: AI_TEACHING_AGENT_ID,
+          },
+        }, { abortSignal: signal }),
+        15000,
+        'OPENING_GENERATION_TIMEOUT'
+      );
       parsed = result.success && result.output ? result.output : null;
     } catch (error) {
       // 开场生成失败：降级为确定性开场兜底，保证开课链路在模型不可用时仍可用。

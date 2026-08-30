@@ -79,6 +79,8 @@ export interface SkillExecutionOptions {
   priority?: 'high' | 'normal' | 'low';
   /** 统一调用上下文 sidecar；不会自动进入 LLM payload。 */
   contextEnvelope?: ContextEnvelopeV1;
+  /** 取消信号：注入执行上下文，供底层 LLM 调用（callPrompt → gateway.execute）取消。 */
+  abortSignal?: AbortSignal;
 }
 
 // Skill 执行结果
