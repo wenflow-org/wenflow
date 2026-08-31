@@ -37,6 +37,16 @@
         </div>
         <div class="mk-card__head-right">
           <DataScopeToggle v-if="isLive && pill !== 'deleted'" v-model="includeTest" />
+          <div class="ul-cols">
+            <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen">列</button>
+            <div v-if="colsOpen" class="ul-cols__menu" @click.stop>
+              <label v-for="c in ulColDefs" :key="c.key" class="ul-cols__item" :title="c.title">
+                <input type="checkbox" :checked="!hiddenCols.has(c.key)" @change="toggleUlCol(c.key)" />
+                <span>{{ c.label }}</span>
+              </label>
+              <button v-if="hiddenCols.size" type="button" class="ul-cols__reset" @click="hiddenCols = new Set()">恢复全部列</button>
+            </div>
+          </div>
           <span class="mk-card__meta">{{ filtered.length }} / {{ users.length }} 人</span>
         </div>
       </div>
@@ -52,22 +62,22 @@
         <table class="mk-table mk-table--fixed">
           <thead>
             <tr>
-              <th v-if="isLive" scope="col" style="width:32px">
+              <th v-if="isLive && !hiddenCols.has('check')" scope="col" style="width:32px">
                 <input type="checkbox" aria-label="全选" :checked="allChecked" @change="toggleAll" />
               </th>
               <th scope="col" style="width:200px">用户</th>
-              <th scope="col" style="width:90px">角色</th>
-              <th scope="col" style="width:100px">等级 / XP</th>
-              <th scope="col" class="mk-th--right" style="width:90px">路径 / 会话</th>
+              <th v-if="!hiddenCols.has('role')" scope="col" style="width:90px">角色</th>
+              <th v-if="!hiddenCols.has('level')" scope="col" style="width:100px">等级 / XP</th>
+              <th v-if="!hiddenCols.has('paths')" scope="col" class="mk-th--right" style="width:90px">路径 / 会话</th>
               <!-- 相对时间列固定宽（--mk-col-time-full 110px，防 1920 全列等比放大 42% 与刷新跳动） -->
-              <th scope="col" class="mk-col--time-full">注册时间</th>
-              <th scope="col" class="mk-col--time-full">最后登录</th>
+              <th v-if="!hiddenCols.has('created')" scope="col" class="mk-col--time-full">注册时间</th>
+              <th v-if="!hiddenCols.has('lastlogin')" scope="col" class="mk-col--time-full">最后登录</th>
               <th scope="col" class="mk-th--right mk-col--actions-wide">操作</th>
             </tr>
           </thead>
         <tbody>
           <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" @click="openSubPage('user', u.id)">
-            <td v-if="isLive"><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isTestAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
+            <td v-if="isLive && !hiddenCols.has('check')"><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isTestAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
             <td>
               <div class="mk-cell-main">
                 <strong>{{ u.name }}</strong>
@@ -80,16 +90,16 @@
                 <span v-else-if="isTestAccount(u)" class="mk-badge mk-badge--sm mk-badge--warn">测试账号</span>
               </div>
             </td>
-            <td><span class="mk-badge" :class="u.admin ? 'mk-badge--info' : 'mk-badge--muted'">{{ u.admin ? '管理员' : '用户' }}</span></td>
-            <td>
+            <td v-if="!hiddenCols.has('role')"><span class="mk-badge" :class="u.admin ? 'mk-badge--info' : 'mk-badge--muted'">{{ u.admin ? '管理员' : '用户' }}</span></td>
+            <td v-if="!hiddenCols.has('level')">
               <div class="ul-level">
                 <span class="ul-level__badge" :title="`XP 推导等级 ${levelFromXp(u.xp)}`">{{ levelLabel(u.xp) }}</span>
                 <span class="ul-level__xp" :class="{ 'mk-na': u.xp === 0 }">{{ u.xp }} XP</span>
               </div>
             </td>
-            <td class="mk-num">{{ u.paths }} / {{ u.sessions }}</td>
-            <td><span :class="u.createdAt === '从未' ? 'mk-na' : ''">{{ u.createdAt }}</span></td>
-            <td><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
+            <td v-if="!hiddenCols.has('paths')" class="mk-num">{{ u.paths }} / {{ u.sessions }}</td>
+            <td v-if="!hiddenCols.has('created')"><span :class="u.createdAt === '从未' ? 'mk-na' : ''">{{ u.createdAt }}</span></td>
+            <td v-if="!hiddenCols.has('lastlogin')"><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
             <td>
               <div class="mk-actions">
                 <button type="button" class="mk-icon-btn" title="详情" @click.stop="openSubPage('user', u.id)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg></button>
@@ -322,6 +332,32 @@ const includeTest = ref(false)
 watch(includeTest, (v) => {
   if (isLive.value && pill.value !== 'deleted') void liveSetUsersIncludeTest(v)
 })
+
+/* D3 表格增强：列显隐（localStorage 持久化；6 列可隐藏，用户/操作列固定） */
+const UL_COLS_KEY = 'wf_users_hidden_cols'
+const ulColDefs = [
+  { key: 'check', label: '选择框', title: '批量操作选择框' },
+  { key: 'role', label: '角色', title: '管理员 / 用户' },
+  { key: 'level', label: '等级 / XP', title: 'XP 推导等级' },
+  { key: 'paths', label: '路径 / 会话', title: '学习路径数 / 会话数' },
+  { key: 'created', label: '注册时间', title: '账号创建时间' },
+  { key: 'lastlogin', label: '最后登录', title: '最近登录时间' },
+] as const
+const colsOpen = ref(false)
+const hiddenCols = ref<Set<string>>(new Set())
+try {
+  const saved = JSON.parse(localStorage.getItem(UL_COLS_KEY) || '[]') as unknown
+  if (Array.isArray(saved)) hiddenCols.value = new Set(saved.filter((x): x is string => typeof x === 'string'))
+} catch { /* 隐私模式忽略 */ }
+watch(hiddenCols, (s) => {
+  try { localStorage.setItem(UL_COLS_KEY, JSON.stringify([...s])) } catch { /* ignore */ }
+}, { deep: true })
+function toggleUlCol(key: string) {
+  const next = new Set(hiddenCols.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  hiddenCols.value = next
+}
 
 /** 真实用户数（排除测试/虚拟账号；口径标注用，与总览「总用户」对齐的近似值——列表为前 50 行样本） */
 const realUsers = computed(() => users.value.filter((u) => !u.deleted && !isTestAccountUser(u)).length)
@@ -707,4 +743,52 @@ html[data-theme='dark'] {
     transform: rotate(45deg);
   }
 }
+
+/* ================= D3 表格增强：用户列设置菜单 ================= */
+.ul-cols { position: relative; display: inline-flex; }
+.ul-cols__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: var(--mk-z-menu);
+  min-width: 150px;
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+  background: var(--mk-surface, #fff);
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  box-shadow: var(--mk-shadow-pop);
+}
+.ul-cols__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--mk-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.ul-cols__item:hover { background: #f0f5ff; }
+html[data-theme='dark'] .ul-cols__item:hover { background: #1f2b40; }
+.ul-cols__item input { accent-color: var(--mk-blue, #2c63d0); }
+.ul-cols__reset {
+  margin-top: 4px;
+  border: 0;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border-top: 1px dashed var(--mk-line);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--mk-blue);
+  cursor: pointer;
+  text-align: left;
+}
+.ul-cols__reset:hover { background: #eff6ff; }
+html[data-theme='dark'] .ul-cols__reset:hover { background: #1f2b40; }
 </style>
