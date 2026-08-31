@@ -85,6 +85,9 @@ router.get('/me', async (req, res, next) => {
         currentLevel: true,
         createdAt: true,
         lastLoginAt: true,
+        streakDays: true,
+        longestStreak: true,
+        onboardingCompleted: true,
         deletedAt: true
       }
     });
@@ -313,6 +316,9 @@ router.get('/me/sessions', async (req, res, next) => {
       take: limit
     });
 
+    // 全量总数（含日期过滤，与列表同 where）：供前端统计卡使用，避免分页后统计失真
+    const total = await prisma.teaching_sessions.count({ where });
+
     const taskIds = Array.from(new Set(sessions.map((session) => session.taskId).filter(Boolean))) as string[];
     const tasks = taskIds.length > 0
       ? await prisma.subtasks.findMany({
@@ -365,7 +371,8 @@ router.get('/me/sessions', async (req, res, next) => {
 
     res.json({
       success: true,
-      data: enrichedSessions
+      data: enrichedSessions,
+      total
     });
   } catch (error) {
     next(error);
@@ -542,6 +549,19 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+});
+
+// 标记引导完成
+router.post('/me/onboarding', async (req, res, next) => {
+  try {
+    await prisma.users.update({
+      where: { id: req.user.userId },
+      data: { onboardingCompleted: true }
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: '标记引导完成失败' } });
   }
 });
 

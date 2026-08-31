@@ -12,19 +12,19 @@
         </div>
       </div>
 
-      <!-- 统计 -->
+      <!-- 统计（全量口径：后端 /users/me/sessions total + /learning/stats） -->
       <div class="history__stats">
         <div class="history__stat">
           <span>学习次数</span>
-          <strong>{{ totalSessions }}</strong>
+          <strong>{{ totalSessions }}<i> 次</i></strong>
         </div>
         <div class="history__stat">
           <span>累计时长</span>
           <strong>{{ totalMinutes }}<i> 分钟</i></strong>
         </div>
         <div class="history__stat">
-          <span>已覆盖任务</span>
-          <strong>{{ totalTasks }}<i> 个</i></strong>
+          <span>学习天数</span>
+          <strong>{{ activeDays }}<i> 天</i></strong>
         </div>
       </div>
 
@@ -94,7 +94,6 @@ import request from '@/utils/api';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
-import './v2.css';
 import { unwrap } from './unwrap';
 
 interface SessionRecord {
@@ -142,11 +141,30 @@ function sessionSummary(s: SessionRecord): string {
   return '';
 }
 
-const totalSessions = computed(() => sessions.value.length);
+/* ---------- 全量统计（后端权威，分页不影响） ----------
+   totalSessions：/users/me/sessions 返回的 total（含日期过滤的全量会话数）
+   totalMinutes / activeDays：/learning/stats 的 time.totalMinutes / time.activeLearningDays
+   此前统计只算「已加载页」（sessions.length），分页后失真。 */
+const totalSessions = ref(0);
+const totalMinutes = ref(0);
+const activeDays = ref(0);
 
-const totalMinutes = computed(() => sessions.value.reduce((sum, s) => sum + (s.durationMinutes || 0), 0));
-
-const totalTasks = computed(() => new Set(sessions.value.map((s) => s.taskId).filter(Boolean)).size);
+async function loadStats() {
+  try {
+    const [sessionsRes, statsRes] = await Promise.all([
+      request.get('/users/me/sessions', { params: { limit: 1 } }),
+      request.get('/learning/stats')
+    ]);
+    // total 在响应顶层（与 data 平级），不能用 unwrap（它只取 data）
+    const sessionsBody = sessionsRes as { total?: number };
+    if (typeof sessionsBody?.total === 'number') totalSessions.value = sessionsBody.total;
+    const stats = unwrap<{ time?: { totalMinutes?: number; activeLearningDays?: number } }>(statsRes);
+    if (typeof stats?.time?.totalMinutes === 'number') totalMinutes.value = stats.time.totalMinutes;
+    if (typeof stats?.time?.activeLearningDays === 'number') activeDays.value = stats.time.activeLearningDays;
+  } catch {
+    /* 统计加载失败不阻塞列表（静默降级为 0） */
+  }
+}
 
 interface DayGroup {
   date: string;
@@ -219,6 +237,7 @@ function loadMore() {
 
 onMounted(() => {
   void load(true);
+  void loadStats();
 });
 </script>
 
