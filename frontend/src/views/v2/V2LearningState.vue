@@ -37,22 +37,23 @@
 
             <!-- 图例 + 当前状态 -->
             <div class="ff-legend">
-              <span><i class="ff-dot ff-dot--fitness"></i>健康度（约 13.5 天指数平均）</span>
-              <span><i class="ff-dot ff-dot--fatigue"></i>疲劳度（约 2 天指数平均）</span>
-              <span v-if="latestDay && hasAnyLoad" class="ff-form-chip" :class="`ff-form-chip--${latestDay.zone.cls}`">
-                状态 {{ latestDay.form }} · {{ latestDay.zone.label }}
+              <span><i class="ff-dot ff-dot--fitness"></i>掌握趋势（KTL）</span>
+              <span><i class="ff-dot ff-dot--fatigue"></i>疲劳度（LF）</span>
+              <span><i class="ff-dot ff-dot--lsb"></i>整体状态（LSB = KTL − LF）</span>
+              <span v-if="latestDay && hasAnyLoad" class="ff-form-chip" :class="`ff-form-chip--${latestDay.zone?.cls || 'risk'}`">
+                状态 {{ latestDay.lsb ?? '—' }} · {{ latestDay.zone?.label || '暂无' }}
               </span>
             </div>
 
-            <div v-if="trendLoading" class="chart__loading"><span class="spinner"></span></div>
+            <div v-if="trendLoading" class="chart__loading"><SkeletonLoader variant="lines" :count="3" /></div>
             <div v-else-if="trendError" class="chart__empty">
-              <strong>学习负荷数据加载失败</strong>
+              <strong>学习状态数据加载失败</strong>
               <p>网络或服务暂时不可用，稍后再试。</p>
               <button type="button" class="chart__retry" @click="loadTrends">重试</button>
             </div>
             <div v-else-if="!hasAnyLoad" class="chart__empty">
-              <strong>还没有学习负荷数据</strong>
-              <p>完成学习后，这里会出现健康度、疲劳度与状态值曲线。</p>
+              <strong>还没有学习状态数据</strong>
+              <p>完成学习后，这里会出现掌握趋势、疲劳度与整体状态曲线。</p>
             </div>
             <template v-else>
               <div class="ff-chart" @mousemove="onChartHover" @mouseleave="hoverDay = null">
@@ -61,28 +62,29 @@
                     v-for="p in points" :key="p.date"
                     class="ff-bar"
                     :x="p.bx" :y="p.by" :width="barW" :height="p.bh" rx="1.5"
-                />
-                  <path v-if="fitnessAreaD" :d="fitnessAreaD" class="ff-area" />
-                  <path v-if="fitnessLineD" :d="fitnessLineD" class="ff-line ff-line--fitness" />
-                  <path v-if="fatigueLineD" :d="fatigueLineD" class="ff-line ff-line--fatigue" />
+                  />
+                  <path v-if="lsbLineD" :d="lsbLineD" class="ff-line ff-line--lsb" />
+                  <path v-if="ktlLineD" :d="ktlLineD" class="ff-line ff-line--fitness" />
+                  <path v-if="lfLineD" :d="lfLineD" class="ff-line ff-line--fatigue" />
                   <template v-if="hoverDay">
                     <line class="ff-cursor" :x1="hoverDay.x" :x2="hoverDay.x" y1="0" :y2="chartH" />
-                    <circle class="ff-pt ff-pt--fitness" :cx="hoverDay.x" :cy="hoverDay.fy" r="4" />
-                    <circle class="ff-pt ff-pt--fatigue" :cx="hoverDay.x" :cy="hoverDay.fay" r="4" />
+                    <circle v-if="hoverDay.ky !== null" class="ff-pt ff-pt--fitness" :cx="hoverDay.x" :cy="hoverDay.ky" r="4" />
+                    <circle v-if="hoverDay.ly !== null" class="ff-pt ff-pt--fatigue" :cx="hoverDay.x" :cy="hoverDay.ly" r="4" />
+                    <circle v-if="hoverDay.sy !== null" class="ff-pt ff-pt--lsb" :cx="hoverDay.x" :cy="hoverDay.sy" r="4" />
                   </template>
                 </svg>
               </div>
               <div v-if="displayDay" class="ff-info">
                 <b>{{ displayDay.label }}</b>
-                <span>负荷 {{ displayDay.load }} 分</span>
-                <span class="ff-info__fitness">健康度 {{ displayDay.fitness }}</span>
-                <span class="ff-info__fatigue">疲劳度 {{ displayDay.fatigue }}</span>
-                <span>状态 {{ displayDay.form }}（{{ displayDay.zone.label }}）</span>
+                <span>时长 {{ displayDay.minutes }} 分钟</span>
+                <span class="ff-info__fitness">掌握 {{ displayDay.ktl ?? '—' }}</span>
+                <span class="ff-info__fatigue">疲劳 {{ displayDay.lf ?? '—' }}</span>
+                <span>状态 {{ displayDay.lsb ?? '—' }}（{{ displayDay.zone?.label || '暂无' }}）</span>
               </div>
               <div class="ff-zones">
-                <span><i class="ff-dot ff-dot--fresh"></i>精力充沛（状态 ≥ -5）</span>
-                <span><i class="ff-dot ff-dot--optimal"></i>最优训练区（-25 ~ -5）</span>
-                <span><i class="ff-dot ff-dot--risk"></i>高风险区（&lt; -25，需要安排休息周）</span>
+                <span><i class="ff-dot ff-dot--fresh"></i>精力充沛（LSB ≥ 40）</span>
+                <span><i class="ff-dot ff-dot--optimal"></i>最优训练区（20 ≤ LSB &lt; 40）</span>
+                <span><i class="ff-dot ff-dot--risk"></i>需要休息 / 高风险（LSB &lt; 20）</span>
               </div>
             </template>
           </section>
@@ -198,10 +200,10 @@
           <section class="card sidecard">
             <span class="kicker">指标说明</span>
             <ul class="legend">
-              <li><b class="dot dot--blue"></b>健康度（体能）：学习负荷的 13.5 天指数加权移动平均，代表你的学习体能储备</li>
-              <li><b class="dot dot--purple"></b>疲劳度：学习负荷的 2 天指数加权移动平均，代表近期累积的疲劳</li>
-              <li><b class="dot dot--green"></b>状态值 = 健康度 − 疲劳度；处于最优训练区时，健康度会持续提高</li>
-              <li><b class="dot dot--amber"></b>通过增加负荷制造压力（疲劳度高于健康度）来进步，但要定期安排休息周，避免长期停留在高风险区</li>
+              <li><b class="dot dot--blue"></b>掌握趋势（KTL）：长期学习积累的掌握水平，变化平缓</li>
+              <li><b class="dot dot--purple"></b>疲劳度（LF）：近期学习压力的累积，变化较快</li>
+              <li><b class="dot dot--green"></b>整体状态（LSB = KTL − LF）：疲劳高于掌握时状态下降，提醒休息</li>
+              <li><b class="dot dot--amber"></b>保持规律学习让掌握趋势稳步上升；疲劳偏高时安排休息，避免长期处于低状态区</li>
             </ul>
           </section>
         </aside>
@@ -225,7 +227,7 @@ import { metricsAPI } from '@/api/metrics';
 import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import V2Footer from './V2Footer.vue';
-import './v2.css';
+import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import { unwrap, unwrapArray } from './unwrap';
 
 type MetricKey = 'lsb' | 'lss' | 'ktl' | 'lf';
@@ -283,33 +285,41 @@ const heroTitle = computed(() => {
   return '需要调整一下节奏';
 });
 
-/* ---------- 负荷模型：健康度(42d EWMA) / 疲劳度(7d EWMA) / 状态值(form) ---------- */
+/* ---------- 状态趋势（权威口径：后端 /state/trends，LSS/KTL/LF/LSB，与指标卡同源） ----------
+   此前趋势图在前端用「纯时长 EWMA（42/7 天）」自算 fitness/fatigue/form，与指标卡的
+   LSS/KTL/LF/LSB（质量合成）是两套孤儿模型，且图例文案（13.5 天/2 天）与代码矛盾。
+   现统一为后端权威趋势，删除前端自算。 */
 interface Zone {
   cls: 'fresh' | 'optimal' | 'risk';
   label: string;
 }
 
-interface DayPoint {
+interface TrendPoint {
   date: string;
   label: string;
-  load: number;
-  fitness: number;
-  fatigue: number;
-  form: number;
-  zone: Zone;
+  ktl: number | null;   // 掌握趋势
+  lf: number | null;    // 疲劳
+  lsb: number | null;   // 整体状态 = KTL − LF
+  minutes: number;      // 当日时长（仅展示背景柱，不参与状态计算）
+  zone: Zone | null;
   x: number;
-  fy: number;
-  fay: number;
+  ky: number | null;
+  ly: number | null;
+  sy: number | null;
   bx: number;
   by: number;
   bh: number;
 }
 
 const dailyLoad = ref<Array<{ date: string; minutes: number }>>([]);
+const stateTrends = ref<Array<{ date: string; ktl: number | null; lf: number | null; lsb: number | null }>>([]);
 
-function zoneOf(form: number): Zone {
-  if (form >= -5) return { cls: 'fresh', label: '精力充沛' };
-  if (form >= -25) return { cls: 'optimal', label: '最优训练区' };
+/** 分区基于 LSB（对齐 learning-state.service：LSB = KTL − LF，0-100） */
+function zoneOfLsb(lsb: number | null): Zone | null {
+  if (lsb === null) return null;
+  if (lsb >= 40) return { cls: 'fresh', label: '精力充沛' };
+  if (lsb >= 20) return { cls: 'optimal', label: '最优训练区' };
+  if (lsb >= 0) return { cls: 'risk', label: '需要休息' };
   return { cls: 'risk', label: '高风险区' };
 }
 
@@ -333,53 +343,41 @@ const windowStartOffset = computed(() => {
   return Math.max(base, 7);
 });
 
-const series = computed(() => {
-  const map = new Map(dailyLoad.value.map((d) => [d.date, d.minutes]));
-  const days: Array<Omit<DayPoint, 'x' | 'fy' | 'fay' | 'bx' | 'by' | 'bh'>> = [];
-  let fitness = 0;
-  let fatigue = 0;
-  // EWMA 需要先跑一段历史预热（避免窗口起点就是 0）
-  for (let i = range.value - 1; i >= windowStartOffset.value; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const load = map.get(key) ?? 0;
-    fitness = fitness + (load - fitness) / 42;
-    fatigue = fatigue + (load - fatigue) / 7;
-  }
+const series = computed<Array<Omit<TrendPoint, 'x' | 'ky' | 'ly' | 'sy' | 'bx' | 'by' | 'bh'>>>(() => {
+  const loadMap = new Map(dailyLoad.value.map((d) => [d.date, d.minutes]));
+  const trendMap = new Map(stateTrends.value.map((t) => [t.date, t]));
+  const days: Array<Omit<TrendPoint, 'x' | 'ky' | 'ly' | 'sy' | 'bx' | 'by' | 'bh'>> = [];
   for (let i = windowStartOffset.value; i >= -RIGHT_MARGIN; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const load = i >= 0 ? (map.get(key) ?? 0) : 0;
-    fitness = fitness + (load - fitness) / 42;
-    fatigue = fatigue + (load - fatigue) / 7;
-    const form = fitness - fatigue;
+    const t = trendMap.get(key) ?? null;
+    const lsb = t?.lsb ?? null;
     days.push({
       date: key,
       label: `${d.getMonth() + 1}月${d.getDate()}日`,
-      load,
-      fitness: Math.round(fitness * 10) / 10,
-      fatigue: Math.round(fatigue * 10) / 10,
-      form: Math.round(form * 10) / 10,
-      zone: zoneOf(form)
+      ktl: t?.ktl ?? null,
+      lf: t?.lf ?? null,
+      lsb,
+      minutes: loadMap.get(key) ?? 0,
+      zone: zoneOfLsb(lsb)
     });
   }
   return days;
 });
 
-const hasAnyLoad = computed(() => series.value.some((d) => d.load > 0));
+const hasAnyLoad = computed(() => stateTrends.value.some((t) => t.lsb !== null));
 
 const chartW = 760;
 const chartH = 240;
 const chartPad = 8;
 
 const maxY = computed(() => {
-  const m = Math.max(30, ...series.value.map((d) => Math.max(d.fitness, d.fatigue, d.load)));
+  const m = Math.max(40, ...series.value.map((d) => Math.max(d.ktl ?? 0, d.lf ?? 0, d.lsb ?? 0)));
   return m * 1.15;
 });
 
-const points = computed<DayPoint[]>(() => {
+const points = computed<TrendPoint[]>(() => {
   const n = series.value.length;
   const usableW = chartW - chartPad * 2;
   const step = n > 1 ? usableW / (n - 1) : 0;
@@ -389,11 +387,12 @@ const points = computed<DayPoint[]>(() => {
     return {
       ...d,
       x,
-      fy: yOf(d.fitness),
-      fay: yOf(d.fatigue),
+      ky: d.ktl !== null ? yOf(d.ktl) : null,
+      ly: d.lf !== null ? yOf(d.lf) : null,
+      sy: d.lsb !== null ? yOf(d.lsb) : null,
       bx: x - barW.value / 2,
-      by: yOf(d.load),
-      bh: chartH - yOf(d.load)
+      by: yOf(d.minutes),
+      bh: chartH - yOf(d.minutes)
     };
   });
 });
@@ -403,34 +402,38 @@ const barW = computed(() => {
   return Math.max(2, Math.min(10, ((chartW - chartPad * 2) / n) * 0.55));
 });
 
-function linePath(key: 'fitness' | 'fatigue') {
+/** 单线路径：跳过 null 断点（无数据日不连线） */
+function linePath(key: 'ktl' | 'lf' | 'lsb') {
   const pts = points.value;
   if (!pts.length) return '';
-  return pts
-    .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${(key === 'fitness' ? p.fy : p.fay).toFixed(1)}`)
-    .join(' ');
+  const parts: string[] = [];
+  let pen: string | null = null;
+  for (const p of pts) {
+    const y = key === 'ktl' ? p.ky : key === 'lf' ? p.ly : p.sy;
+    if (y === null) { pen = null; continue; }
+    if (pen === null) {
+      parts.push(`M${p.x.toFixed(1)},${y.toFixed(1)}`);
+      pen = 'L';
+    } else {
+      parts.push(`L${p.x.toFixed(1)},${y.toFixed(1)}`);
+    }
+  }
+  return parts.join(' ');
 }
 
-const fitnessLineD = computed(() => linePath('fitness'));
-const fatigueLineD = computed(() => linePath('fatigue'));
-const fitnessAreaD = computed(() => {
-  const pts = points.value;
-  if (!pts.length) return '';
-  const top = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.fy.toFixed(1)}`).join(' ');
-  const last = pts[pts.length - 1];
-  const first = pts[0];
-  return `${top} L${last.x.toFixed(1)},${chartH} L${first.x.toFixed(1)},${chartH} Z`;
-});
+const ktlLineD = computed(() => linePath('ktl'));
+const lfLineD = computed(() => linePath('lf'));
+const lsbLineD = computed(() => linePath('lsb'));
 
-const latestDay = computed<DayPoint | null>(() => points.value[points.value.length - 1] ?? null);
-const hoverDay = ref<DayPoint | null>(null);
-const displayDay = computed<DayPoint | null>(() => hoverDay.value ?? latestDay.value);
+const latestDay = computed<TrendPoint | null>(() => points.value[points.value.length - 1] ?? null);
+const hoverDay = ref<TrendPoint | null>(null);
+const displayDay = computed<TrendPoint | null>(() => hoverDay.value ?? latestDay.value);
 
 function onChartHover(e: MouseEvent) {
   const el = e.currentTarget as HTMLElement;
   const rect = el.getBoundingClientRect();
   const relX = ((e.clientX - rect.left) / rect.width) * chartW;
-  let best: DayPoint | null = null;
+  let best: TrendPoint | null = null;
   let bestDist = Infinity;
   for (const p of points.value) {
     const dist = Math.abs(p.x - relX);
@@ -447,14 +450,21 @@ async function loadTrends() {
   const seq = ++trendSeq;
   trendLoading.value = true;
   try {
-    const start = new Date();
-    start.setDate(start.getDate() - (range.value - 1));
-    const startDate = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
-    const end = new Date();
-    const endDate = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
-    const response = await request.get('/users/me/sessions', { params: { startDate, endDate, limit: 500 } });
+    // 权威口径：后端 /state/trends（LSS/KTL/LF/LSB，与指标卡同源），替代前端自算 EWMA
+    const [trendRes, sessionRes] = await Promise.all([
+      request.get('/state/trends', { params: { days: range.value, range: 'recent' } }),
+      request.get('/users/me/sessions', { params: { limit: 500 } })
+    ]);
     if (seq !== trendSeq) return;
-    const list = unwrapArray(response);
+    const trendData = unwrap<{ trends?: Array<{ date: string; lss: number | null; ktl: number | null; lf: number | null; lsb: number | null }> }>(trendRes);
+    stateTrends.value = (trendData?.trends || []).map((t) => ({
+      date: String(t.date).slice(0, 10),
+      ktl: typeof t.ktl === 'number' ? t.ktl : null,
+      lf: typeof t.lf === 'number' ? t.lf : null,
+      lsb: typeof t.lsb === 'number' ? t.lsb : null
+    }));
+    // 当日时长背景柱：仅展示，不参与状态计算（口径不冲突）
+    const list = unwrapArray(sessionRes);
     const map = new Map<string, number>();
     for (const s of list) {
       const key = String(s.startTime || '').slice(0, 10);
@@ -468,6 +478,7 @@ async function loadTrends() {
     // 只有最新一次请求的失败才展示错误态（旧请求的失败不覆盖新结果）
     if (seq !== trendSeq) return;
     trendError.value = true;
+    stateTrends.value = [];
     dailyLoad.value = [];
   } finally {
     if (seq === trendSeq) trendLoading.value = false;
@@ -695,7 +706,7 @@ onMounted(() => {
 .muted { font-size: 12px; color: var(--faint); }
 .btn-ghost {
   padding: 10px 18px; border-radius: 12px;
-  border: 1px solid var(--line); background: #fff;
+  border: 1px solid var(--line); background: var(--surface, #fff);
   font-size: 14px; font-weight: 700; color: var(--muted);
   cursor: pointer;
 }
@@ -716,12 +727,12 @@ onMounted(() => {
 
 /* ---------- 趋势图 ---------- */
 .chart { padding: 20px 22px; display: grid; gap: 16px; }
-.seg { display: inline-flex; padding: 3px; background: #eef2fa; border-radius: 10px; gap: 2px; }
+.seg { display: inline-flex; padding: 3px; background: var(--line, #eef2fa); border-radius: 10px; gap: 2px; }
 .seg__item {
   border: 0; background: transparent; padding: 5px 11px; border-radius: 8px;
   font: inherit; font-size: 12px; font-weight: 700; color: var(--muted); cursor: pointer;
 }
-.seg__item--on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(23, 32, 51, 0.12); }
+.seg__item--on { background: var(--surface, #fff); color: var(--ink); box-shadow: 0 1px 3px rgba(23, 32, 51, 0.12); }
 
 /* ---------- AI 建议 ---------- */
 .suggest { padding: 20px 22px; display: grid; gap: 14px; }
@@ -734,7 +745,7 @@ onMounted(() => {
   border-radius: 13px;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-.sug--done { opacity: .66; background: #fafcff; }
+.sug--done { opacity: .66; background: var(--canvas, #fafcff); }
 .sug__icon { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; }
 .sug__body strong { font-size: 13.5px; }
 .sug__body p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
@@ -789,7 +800,7 @@ onMounted(() => {
 .chart__retry:hover { background: rgba(52, 120, 246, 0.12); }
 .chart__empty {
   padding: 30px 0; text-align: center; color: var(--faint); font-size: 13px;
-  border: 1px dashed var(--line); border-radius: 12px; background: #fafcff;
+  border: 1px dashed var(--line); border-radius: 12px; background: var(--canvas, #fafcff);
 }
 .sug--critical { border-color: rgba(239, 117, 120, 0.35); }
 .sug--warning { border-color: rgba(244, 170, 70, 0.35); }
@@ -826,7 +837,7 @@ onMounted(() => {
 .decisions { padding: 20px 22px; display: grid; gap: 12px; }
 .dec {
   display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: start;
-  padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: #fbfcff;
+  padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--canvas, #fbfcff);
 }
 .dec__tag { font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
 .dec__tag--blue { color: #1f57cc; background: rgba(52, 120, 246, 0.1); }
@@ -858,6 +869,7 @@ onMounted(() => {
 .ff-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
 .ff-dot--fitness { background: #3478f6; }
 .ff-dot--fatigue { background: #8d6bff; }
+.ff-dot--lsb { background: #31b16f; }
 .ff-dot--fresh { background: #31b16f; }
 .ff-dot--optimal { background: #3478f6; }
 .ff-dot--risk { background: #ef7578; }
@@ -873,14 +885,15 @@ onMounted(() => {
 .ff-chart { width: 100%; }
 .ff-chart svg { display: block; width: 100%; height: auto; }
 .ff-bar { fill: rgba(52, 120, 246, 0.14); }
-.ff-area { fill: rgba(52, 120, 246, 0.1); }
 .ff-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .ff-line--fitness { stroke: #3478f6; }
 .ff-line--fatigue { stroke: #8d6bff; }
+.ff-line--lsb { stroke: #31b16f; }
 .ff-cursor { stroke: rgba(23, 32, 51, 0.2); stroke-width: 1; stroke-dasharray: 3 3; }
 .ff-pt { stroke: #fff; stroke-width: 2; }
 .ff-pt--fitness { fill: #3478f6; }
 .ff-pt--fatigue { fill: #8d6bff; }
+.ff-pt--lsb { fill: #31b16f; }
 
 .ff-info {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px;
