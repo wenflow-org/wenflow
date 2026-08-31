@@ -1,11 +1,20 @@
 <template>
-  <div class="mshell">
+  <div class="mshell" :data-collapsed="collapsed ? 'true' : 'false'">
     <!-- 迷你侧边栏（同时是导航与「侧栏再设计」演示） -->
     <aside class="mshell__side">
       <div class="mshell__brand">
         <!-- 展开：长方形全 logo（图标 + 问流）；折叠：正方形图标 -->
         <img src="/logo.png" alt="问流" class="mshell__logo-full" />
         <img src="/favicon.png" alt="问流" class="mshell__logo-mark" />
+        <button
+          type="button"
+          class="mshell__collapse"
+          :title="collapsed ? '展开侧栏' : '收起侧栏'"
+          :aria-label="collapsed ? '展开侧栏' : '收起侧栏'"
+          @click="toggleCollapse"
+        >
+          <span aria-hidden="true">{{ collapsed ? '»' : '«' }}</span>
+        </button>
       </div>
       <nav class="mshell__nav">
         <section v-for="group in groupedScenes" :key="group.title" class="mshell__group">
@@ -199,6 +208,18 @@ function toggleDensity() {
   applyDensity()
 }
 applyDensity()
+
+/* 侧栏折叠（D5 导航优化）：用户可切换 完整 ↔ 图标 64px，localStorage 持久化；
+   <860px 由媒体查询强制折叠（兜底） */
+const COLLAPSE_KEY = 'wf_admin_collapsed'
+const collapsed = ref(false)
+try {
+  collapsed.value = localStorage.getItem(COLLAPSE_KEY) === '1'
+} catch { /* 隐私模式忽略 */ }
+function toggleCollapse() {
+  collapsed.value = !collapsed.value
+  try { localStorage.setItem(COLLAPSE_KEY, collapsed.value ? '1' : '0') } catch { /* ignore */ }
+}
 
 function refreshData() {
   if (liveLoading.value) return
@@ -699,6 +720,38 @@ const groupedScenes = computed(() => {
   .mshell__search { padding: 12px 16px; font-size: 18.5px; }
 }
 
+/* 侧栏折叠（D5）：用户切换 data-collapsed 驱动 icon-only 模式；
+   与 <860px 媒体查询兜底共用同一套隐藏规则 */
+.mshell[data-collapsed='true'] { grid-template-columns: 64px minmax(0, 1fr); }
+.mshell[data-collapsed='true'] .mshell__item-label,
+.mshell[data-collapsed='true'] .mshell__item-badge,
+.mshell[data-collapsed='true'] .mshell__group-title,
+.mshell[data-collapsed='true'] .mshell__search { display: none; }
+.mshell[data-collapsed='true'] .mshell__foot { display: none; }
+.mshell[data-collapsed='true'] .mshell__item { justify-content: center; padding: 4px 0; }
+.mshell[data-collapsed='true'] .mshell__item-glyph { display: inline-flex; }
+.mshell[data-collapsed='true'] .mshell__logo-full { display: none; }
+.mshell[data-collapsed='true'] .mshell__logo-mark { display: block; }
+.mshell[data-collapsed='true'] .mshell__brand { justify-content: center; padding: 2px 0 0; }
+.mshell[data-collapsed='true'] .mshell__collapse { position: absolute; right: -14px; top: 18px; }
+
+/* 折叠按钮（展开态右上角，悬停显示 tooltip 由 title 提供） */
+.mshell__collapse {
+  border: 1px solid var(--mk-line, #e1e8f2);
+  background: var(--mk-surface, #fff);
+  color: var(--mk-muted, #5b6577);
+  width: 24px; height: 24px;
+  border-radius: 7px;
+  font-size: 12px; line-height: 1;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0;
+  margin-left: auto;
+  flex-shrink: 0;
+  transition: border-color 0.12s ease, color 0.12s ease;
+}
+.mshell__collapse:hover { color: var(--mk-blue, #2c63d0); border-color: rgba(44, 99, 208, 0.4); }
+
 @media (max-width: 860px) {
   .mshell { grid-template-columns: 64px minmax(0, 1fr); }
   .mshell__item-label,
@@ -732,6 +785,8 @@ html[data-theme='dark'] {
   .mshell__foot-name { color: #64748b; }
   .mshell__foot-ver { color: #3d4c66; }
   .mshell__topbar { background: rgba(19, 27, 42, 0.88); border-bottom-color: #232f45; }
+  .mshell__collapse { background: #131b2a; border-color: #232f45; color: #9fb0c8; }
+  .mshell__collapse:hover { color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
   .mshell__crumb-sep { color: #3d4c66; }
   .mshell__help { background: rgba(91, 141, 239, 0.14); border-color: rgba(91, 141, 239, 0.4); color: #7aa2ff; }
   .mshell__help:hover { background: rgba(91, 141, 239, 0.24); }
