@@ -103,6 +103,13 @@ html[data-theme='dark'] .mk-tabbar__item:hover { background: #22304a; color: #e6
 html[data-theme='dark'] .mk-tabbar__item--active { background: #17202f; color: #7aa2ff; }
 html[data-theme='dark'] .mk-tabbar__close:hover:not(:disabled) { background: #2c3a55; color: #e6edf7; }
 
+/* 1440px 中间档 */
+@media (min-width: 1440px) {
+  .mk-tabbar { padding: 7px 20px 0; }
+  .mk-tabbar__item { font-size: 12.5px; max-width: 200px; }
+  .mk-tabbar__hint { font-size: 11.5px; }
+}
+
 /* 4K 三档（对齐全站 mk 体系） */
 @media (min-width: 2000px) {
   .mk-tabbar { padding: 8px 22px 0; gap: 6px; }

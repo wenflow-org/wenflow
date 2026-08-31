@@ -620,6 +620,18 @@ const groupedScenes = computed(() => {
 }
 .mshell__logout:hover { color: #dc2626; border-color: rgba(220, 38, 38, 0.35); }
 
+/* 1440px 中间档：侧栏/顶栏适度放大（幅度约为 2000 档一半） */
+@media (min-width: 1440px) {
+  .mshell { grid-template-columns: 240px minmax(0, 1fr); }
+  .mshell__item { font-size: 13.5px; padding: 9px 11px; }
+  .mshell__group-title { font-size: 11.5px; }
+  .mshell__item-badge { font-size: 11.5px; }
+  .mshell__topbar { min-height: 56px; padding: 8px 22px; }
+  .mshell__crumb-group, .mshell__crumb-sub { font-size: 13.5px; }
+  .mshell__search { font-size: 13px; }
+  .mshell__logo-full { height: 58px; }
+}
+
 /* 大屏（2000+）：侧栏加宽、字号放大；2800+（4K）再升一档（zoom 之上叠加） */
 @media (min-width: 2000px) {
   .mshell {

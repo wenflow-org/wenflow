@@ -801,7 +801,7 @@ html[data-theme='dark'] {
   .mk-input:disabled, .mk-field__input:disabled { background: #131b29; }
 }
 
-/* 4K 超大屏适配（2000/2800/3600 三档） */
+/* 4K 超大屏适配（2000/2800/3600 三档）
    机制说明：
    - 2000/2800px 两档为「字号档」：内容区字号/间距直接放大。
    - ≥2800px 起壳层另叠加全局 zoom（admin-theme.css：2800→1.15、3600→1.3），
@@ -810,6 +810,33 @@ html[data-theme='dark'] {
    - 覆盖层（抽屉/弹窗，Teleport 到 body、不受 .ac zoom 影响）在各文件内补镜像断点。
    本档位覆盖：mk-page/status/table/badge/menu/filter/pill/link/empty/card/num/
    modal/field/btn/toast/actions 及常用子元素。 */
+
+/* 1440px 中间档（D1 补丁：1440p 屏字号偏小——原只有 2000/2800/3600 三档）。
+   幅度约为 2000 档的一半：仅字号/内边距微调，不动布局结构。 */
+@media (min-width: 1440px) {
+  .mk-page { font-size: 14.5px; padding: 17px 20px 24px; }
+  .mk-status { padding: 8px 14px; }
+  .mk-status__title { font-size: 16px; }
+  .mk-status__meta { font-size: 13.5px; }
+  .mk-status__action { font-size: 13.5px; padding: 5px 12px; }
+  .mk-table th { font-size: 12.5px; padding: 10px 15px; }
+  .mk-table td { font-size: 14.5px; padding: 11px 15px; }
+  .mk-cell-sub { font-size: 12.5px; }
+  .mk-badge { font-size: 12.5px; padding: 2px 10px; }
+  .mk-menu__item { font-size: 14px; }
+  .mk-filter__input,
+  .mk-filter__select { font-size: 13.5px; padding: 8px 13px; height: 38px; }
+  .mk-pill { font-size: 13.5px; padding: 6px 13px; }
+  .mk-card__title { font-size: 14.5px; }
+  .mk-card__meta { font-size: 13px; }
+  .mk-btn { font-size: 13.5px; padding: 9px 17px; }
+  .mk-btn--sm { font-size: 12.5px; padding: 6px 12px; }
+  .mk-empty strong { font-size: 14.5px; }
+  .mk-empty span { font-size: 13.5px; }
+  .mk-num { font-size: 13.5px; }
+  .mk-link { font-size: 13.5px; }
+  .mk-toast { font-size: 13.5px; }
+}
 
 @media (min-width: 2000px) {
   /* 列宽 token 4K 档（×≈1.16，比例对齐 ExecLogs 原 72→84→100 档位；ADMIN_COLUMN_WIDTH_SPEC §2.8） */

@@ -55,6 +55,14 @@ withDefaults(
 /* 暗色模式（D1） */
 html[data-theme='dark'] .mk-kpi { background: #141c2b; border-color: #232f45; }
 
+/* 1440px 中间档 */
+@media (min-width: 1440px) {
+  .mk-kpi { padding: 13px 16px; }
+  .mk-kpi__label { font-size: 12.5px; }
+  .mk-kpi__num { font-size: 22px; }
+  .mk-kpi__hint { font-size: 12.5px; }
+}
+
 /* 4K 三档（对齐全站 mk 体系） */
 @media (min-width: 2000px) {
   .mk-kpi { padding: 15px 18px; border-radius: 14px; gap: 4px; }
