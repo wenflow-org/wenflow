@@ -150,19 +150,28 @@ const version = appVersion
 /** 按平台显示快捷键修饰符：Mac 显示 ⌘，Windows/Linux 显示 Ctrl */
 const kbdMod = computed(() => /Mac|iPhone|iPod|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl + ')
 
-/* D1 暗色模式：localStorage 持久化 + 默认跟随系统 prefers-color-scheme */
+/* D1 暗色模式：localStorage 持久化 + 默认跟随系统 prefers-color-scheme。
+   key 说明：wf_admin_theme 为本项目主 key；同步写 wenflow-theme（router beforeEach 的旧兼容 key），
+   避免路由导航时被 resolveUserTheme 按旧 key 覆盖回系统色（"切暗色后换页回日间" bug）。 */
 const THEME_KEY = 'wf_admin_theme'
+const LEGACY_THEME_KEY = 'wenflow-theme'
 const theme = ref<'light' | 'dark'>(loadTheme())
 function loadTheme(): 'light' | 'dark' {
   try {
     const saved = localStorage.getItem(THEME_KEY)
     if (saved === 'light' || saved === 'dark') return saved
+    // 兼容：旧机制 key 有值时沿用
+    const legacy = localStorage.getItem(LEGACY_THEME_KEY)
+    if (legacy === 'light' || legacy === 'dark') return legacy
   } catch { /* 隐私模式忽略 */ }
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 function applyTheme() {
   document.documentElement.setAttribute('data-theme', theme.value)
-  try { localStorage.setItem(THEME_KEY, theme.value) } catch { /* ignore */ }
+  try {
+    localStorage.setItem(THEME_KEY, theme.value)
+    localStorage.setItem(LEGACY_THEME_KEY, theme.value)
+  } catch { /* ignore */ }
 }
 function toggleTheme() {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
