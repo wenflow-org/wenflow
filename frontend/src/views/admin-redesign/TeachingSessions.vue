@@ -64,6 +64,11 @@
             <option value="">全部状态</option>
             <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
           </select>
+          <select v-model="dateFilter" class="mk-filter__select" aria-label="按开始时间筛选">
+            <option value="">全部时间</option>
+            <option value="7d">近 7 天</option>
+            <option value="30d">近 30 天</option>
+          </select>
           <input class="mk-filter__input" v-model="keyword" placeholder="搜索主题 / 用户 / ID" />
         </div>
         <div class="mk-card__head-right">
@@ -198,52 +203,94 @@
           </header>
 
           <div class="ts-panel__body">
-            <div class="ts-facts">
-              <div><span>用户</span><strong>{{ detail.userName }}</strong></div>
-              <div><span>学科</span><strong>{{ detail.subject }}</strong></div>
-              <div><span>状态</span><strong>{{ statusText(detail.status) }}</strong></div>
-              <div><span>开始</span><strong>{{ detail.startAt }}</strong></div>
-              <div><span>时长</span><strong>{{ detail.duration ? fmtDuration(detail.duration) : '—' }}</strong></div>
-              <div><span>消息</span><strong>{{ detail.messageCount }}</strong></div>
+            <!-- P2-2 抽屉 tabs（对齐 LangSmith side panel） -->
+            <div class="ts-tabs" role="tablist" aria-label="会话详情分区">
+              <button
+                v-for="t in panelTabs"
+                :key="t.id"
+                type="button"
+                class="ts-tabs__item"
+                :class="{ 'ts-tabs__item--on': panelTab === t.id }"
+                role="tab"
+                :aria-selected="panelTab === t.id"
+                @click="panelTab = t.id"
+              >{{ t.label }}</button>
             </div>
 
-            <section v-if="detail.wrapup" class="ts-section">
-              <h4>会话总结 <span class="ts-src">来源：<span class="mk-badge" :class="detail.wrapupSource === '模型生成' ? 'mk-badge--info' : 'mk-badge--muted'">{{ detail.wrapupSource }}</span></span></h4>
-              <div class="ts-card" v-if="detail.wrapup.topicSummary">
-                <span>主题摘要</span>
-                <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('topic') }">{{ detail.wrapup.topicSummary }}</p>
-                <button v-if="isLong(detail.wrapup.topicSummary)" type="button" class="ts-more" @click="toggleCard('topic')">{{ openCards.has('topic') ? '收起' : '展开全文' }}</button>
+            <!-- 概览 tab -->
+            <div v-if="panelTab === 'overview'">
+              <div class="ts-facts">
+                <div><span>用户</span><strong>{{ detail.userName }}</strong></div>
+                <div><span>学科</span><strong>{{ detail.subject }}</strong></div>
+                <div><span>状态</span><strong>{{ statusText(detail.status) }}</strong></div>
+                <div><span>开始</span><strong>{{ detail.startAt }}</strong></div>
+                <div><span>时长</span><strong>{{ detail.duration ? fmtDuration(detail.duration) : '—' }}</strong></div>
+                <div><span>消息</span><strong>{{ detail.messageCount }}</strong></div>
               </div>
-              <div class="ts-card" v-if="detail.wrapup.knowledgeSummary">
-                <span>知识总结</span>
-                <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('knowledge') }">{{ detail.wrapup.knowledgeSummary }}</p>
-                <button v-if="isLong(detail.wrapup.knowledgeSummary)" type="button" class="ts-more" @click="toggleCard('knowledge')">{{ openCards.has('knowledge') ? '收起' : '展开全文' }}</button>
-              </div>
-              <div class="ts-card" v-if="detail.wrapup.practiceAdvice">
-                <span>练习建议</span>
-                <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('practice') }">{{ detail.wrapup.practiceAdvice }}</p>
-                <button v-if="isLong(detail.wrapup.practiceAdvice)" type="button" class="ts-more" @click="toggleCard('practice')">{{ openCards.has('practice') ? '收起' : '展开全文' }}</button>
-              </div>
-              <div class="ts-card" v-if="detail.wrapup.learningEvaluation">
-                <span>学习评估</span>
-                <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('evaluation') }">{{ detail.wrapup.learningEvaluation }}</p>
-                <button v-if="isLong(detail.wrapup.learningEvaluation)" type="button" class="ts-more" @click="toggleCard('evaluation')">{{ openCards.has('evaluation') ? '收起' : '展开全文' }}</button>
-              </div>
-            </section>
 
-            <section v-if="detail.advisory && detail.advisory.priority && detail.advisory.priority !== 'none'" class="ts-section">
-              <h4>额外建议</h4>
-              <div class="ts-card ts-card--advisory">
-                <span>优先级 {{ detail.advisory.priority || '—' }}<template v-if="detail.advisory.title"> · {{ detail.advisory.title }}</template></span>
-                <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('advisory') }">{{ detail.advisory.text || '—' }}</p>
-                <button v-if="isLong(detail.advisory.text)" type="button" class="ts-more" @click="toggleCard('advisory')">{{ openCards.has('advisory') ? '收起' : '展开全文' }}</button>
-              </div>
-            </section>
+              <!-- 事件时间线（P2-2：非消息事件，对齐 Intercom 左对齐垂直线） -->
+              <section v-if="timelineOf(detail).length" class="ts-section">
+                <h4>事件时间线</h4>
+                <ul class="ts-timeline">
+                  <li v-for="(ev, i) in timelineOf(detail)" :key="i" class="ts-timeline__item" :class="`ts-timeline__item--${ev.tone}`">
+                    <span class="ts-timeline__dot" aria-hidden="true"></span>
+                    <div class="ts-timeline__body">
+                      <strong>{{ ev.text }}</strong>
+                      <span>{{ ev.time }}</span>
+                    </div>
+                  </li>
+                </ul>
+              </section>
+            </div>
 
-            <details class="ts-section ts-raw">
-              <summary>原始数据</summary>
-              <pre class="ts-json">{{ detail.rawJson }}</pre>
-            </details>
+            <!-- 总结 tab -->
+            <div v-if="panelTab === 'wrapup'">
+              <section v-if="detail.wrapup" class="ts-section">
+                <h4>会话总结 <span class="ts-src">来源：<span class="mk-badge" :class="detail.wrapupSource === '模型生成' ? 'mk-badge--info' : 'mk-badge--muted'">{{ detail.wrapupSource }}</span></span></h4>
+                <div class="ts-card" v-if="detail.wrapup.topicSummary">
+                  <span>主题摘要</span>
+                  <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('topic') }">{{ detail.wrapup.topicSummary }}</p>
+                  <button v-if="isLong(detail.wrapup.topicSummary)" type="button" class="ts-more" @click="toggleCard('topic')">{{ openCards.has('topic') ? '收起' : '展开全文' }}</button>
+                </div>
+                <div class="ts-card" v-if="detail.wrapup.knowledgeSummary">
+                  <span>知识总结</span>
+                  <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('knowledge') }">{{ detail.wrapup.knowledgeSummary }}</p>
+                  <button v-if="isLong(detail.wrapup.knowledgeSummary)" type="button" class="ts-more" @click="toggleCard('knowledge')">{{ openCards.has('knowledge') ? '收起' : '展开全文' }}</button>
+                </div>
+                <div class="ts-card" v-if="detail.wrapup.practiceAdvice">
+                  <span>练习建议</span>
+                  <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('practice') }">{{ detail.wrapup.practiceAdvice }}</p>
+                  <button v-if="isLong(detail.wrapup.practiceAdvice)" type="button" class="ts-more" @click="toggleCard('practice')">{{ openCards.has('practice') ? '收起' : '展开全文' }}</button>
+                </div>
+                <div class="ts-card" v-if="detail.wrapup.learningEvaluation">
+                  <span>学习评估</span>
+                  <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('evaluation') }">{{ detail.wrapup.learningEvaluation }}</p>
+                  <button v-if="isLong(detail.wrapup.learningEvaluation)" type="button" class="ts-more" @click="toggleCard('evaluation')">{{ openCards.has('evaluation') ? '收起' : '展开全文' }}</button>
+                </div>
+              </section>
+              <p v-else class="ts-empty">该会话暂无课后总结。</p>
+            </div>
+
+            <!-- 建议 tab -->
+            <div v-if="panelTab === 'advisory'">
+              <section v-if="detail.advisory && detail.advisory.priority && detail.advisory.priority !== 'none'" class="ts-section">
+                <h4>额外建议</h4>
+                <div class="ts-card ts-card--advisory">
+                  <span>优先级 {{ detail.advisory.priority || '—' }}<template v-if="detail.advisory.title"> · {{ detail.advisory.title }}</template></span>
+                  <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('advisory') }">{{ detail.advisory.text || '—' }}</p>
+                  <button v-if="isLong(detail.advisory.text)" type="button" class="ts-more" @click="toggleCard('advisory')">{{ openCards.has('advisory') ? '收起' : '展开全文' }}</button>
+                </div>
+              </section>
+              <p v-else class="ts-empty">该会话暂无额外建议。</p>
+            </div>
+
+            <!-- 原始数据 tab -->
+            <div v-if="panelTab === 'raw'">
+              <details class="ts-section ts-raw" open>
+                <summary>原始数据</summary>
+                <pre class="ts-json">{{ detail.rawJson }}</pre>
+              </details>
+            </div>
 
             <div class="ts-actions">
               <button v-if="detail.userId" type="button" class="mk-link" @click="goLearner(detail)">学习者详情 →</button>
@@ -301,6 +348,8 @@ interface Row {
   hasAdvisory: boolean
   attention: 'high' | 'medium' | 'low'
   startAt: string
+  /** 原始开始时间戳（日期范围筛选用） */
+  startTime?: string
   wrapup: WrapupSummary | null
   wrapupSource: string
   advisory: { title: string; text: string; priority: string } | null
@@ -494,6 +543,7 @@ function mapRow(s: Record<string, unknown>): Row {
     hasAdvisory: advisoryRelevant,
     attention,
     startAt: timeAgo(String(s.startTime || '')),
+    startTime: s.startTime ? String(s.startTime) : undefined,
     wrapup: summary,
     wrapupSource: (wrapup?.sources as Record<string, string>)?.summary === 'model' ? '模型生成' : '规则/其他',
     advisory,
@@ -506,6 +556,7 @@ function mapRow(s: Record<string, unknown>): Row {
 const pill = ref<'all' | 'attention' | 'missing'>('all')
 const keyword = ref('')
 const statusFilter = ref('')
+const dateFilter = ref('')
 
 /* P1-3 列显隐（公共组件 MkCols）：用户/状态/互动/进度/产物/关注 可隐藏，会话/详情固定 */
 const tsColDefs = [
@@ -543,15 +594,24 @@ const filtered = computed(() => {
   if (statusFilter.value) {
     list = list.filter((r) => r.status === statusFilter.value)
   }
+  if (dateFilter.value === '7d' || dateFilter.value === '30d') {
+    const cutoff = Date.now() - (dateFilter.value === '7d' ? 7 : 30) * 86400000
+    list = list.filter((r) => {
+      if (!r.startTime) return true // 无时间戳的行不拦截（demo 数据）
+      const t = new Date(r.startTime).getTime()
+      return Number.isFinite(t) && t >= cutoff
+    })
+  }
   const q = keyword.value.trim().toLowerCase()
   if (q) list = list.filter((r) => `${r.topic} ${r.userName} ${r.email} ${r.id}`.toLowerCase().includes(q))
   return list
 })
 
-const isFiltered = computed(() => pill.value !== 'all' || !!statusFilter.value || !!keyword.value.trim())
+const isFiltered = computed(() => pill.value !== 'all' || !!statusFilter.value || !!dateFilter.value || !!keyword.value.trim())
 function clearFilters() {
   pill.value = 'all'
   statusFilter.value = ''
+  dateFilter.value = ''
   keyword.value = ''
 }
 
@@ -598,6 +658,35 @@ const tsDashSubline = computed(() => {
 
 /* 详情 — URL 同步 ?session=id 支持深链/刷新恢复 */
 const detail = ref<Row | null>(null)
+/* P2-2 抽屉 tabs（概览/总结/建议/原始数据） */
+const panelTab = ref<'overview' | 'wrapup' | 'advisory' | 'raw'>('overview')
+const panelTabs = [
+  { id: 'overview' as const, label: '概览' },
+  { id: 'wrapup' as const, label: '总结' },
+  { id: 'advisory' as const, label: '建议' },
+  { id: 'raw' as const, label: '原始数据' }
+]
+/** 事件时间线（P2-2）：由行数据派生非消息事件，按时间倒序 */
+function timelineOf(r: Row): Array<{ text: string; time: string; tone: 'ok' | 'warn' | 'bad' | 'muted' }> {
+  const events: Array<{ text: string; time: string; tone: 'ok' | 'warn' | 'bad' | 'muted' }> = []
+  events.push({ text: '会话开始', time: r.startAt, tone: 'muted' })
+  if (r.status === 'completed' || r.status === 'succeeded') {
+    events.push({ text: '会话完成', time: r.startAt, tone: 'ok' })
+  } else if (r.status === 'failed' || r.status === 'timeout') {
+    events.push({ text: `会话${r.status === 'timeout' ? '超时' : '失败'}`, time: r.startAt, tone: 'bad' })
+  } else if (r.status === 'active' || r.status === 'initializing' || r.status === 'finalizing') {
+    events.push({ text: '会话进行中', time: r.startAt, tone: 'muted' })
+  }
+  if (r.wrapupStatus === 'complete' && r.wrapup) {
+    events.push({ text: `课后总结生成（${r.wrapupSource}）`, time: r.startAt, tone: 'ok' })
+  } else if (r.wrapupStatus === 'missing') {
+    events.push({ text: '缺少课后总结', time: r.startAt, tone: 'warn' })
+  }
+  if (r.hasAdvisory && r.advisory) {
+    events.push({ text: `建议触发（优先级 ${r.advisory.priority}）`, time: r.startAt, tone: r.advisory.priority === 'high' ? 'bad' : 'warn' })
+  }
+  return events
+}
 const route = useRoute()
 const router = useRouter()
 /** 深链存在但列表加载后仍未命中（超出最近 100 条 / 已删除） */
@@ -797,6 +886,32 @@ function progressTitle(r: Row): string {
 .ts-panel__id { font-family: var(--mk-mono); font-size: 10.5px; color: var(--mk-faint); word-break: break-all; }
 .ts-panel__close { border: 0; background: #f0f2f5; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; color: var(--mk-muted); }
 .ts-panel__body { padding: 16px 18px; display: grid; gap: 16px; align-content: start; overflow-y: auto; }
+/* P2-2 抽屉 tabs */
+.ts-tabs { display: flex; gap: 4px; padding-bottom: 10px; border-bottom: 1px solid var(--mk-line); position: sticky; top: 0; background: var(--mk-surface); z-index: 1; }
+html[data-theme='dark'] .ts-tabs { background: #141c2b; }
+.ts-tabs__item {
+  border: 1px solid transparent; background: transparent; padding: 5px 12px;
+  border-radius: 8px; font: inherit; font-size: 12.5px; font-weight: 700;
+  color: var(--mk-muted); cursor: pointer; transition: background 0.12s ease, color 0.12s ease;
+}
+.ts-tabs__item:hover { background: #f0f5ff; color: var(--mk-ink); }
+html[data-theme='dark'] .ts-tabs__item:hover { background: #1f2b40; color: #e6edf7; }
+.ts-tabs__item--on { background: rgba(44, 99, 208, 0.12); color: var(--mk-blue); }
+html[data-theme='dark'] .ts-tabs__item--on { background: rgba(91, 141, 239, 0.18); color: #7aa2ff; }
+.ts-empty { margin: 0; font-size: 12.5px; color: var(--mk-faint); padding: 12px 0; }
+/* P2-2 事件时间线（左对齐垂直线，对齐 Intercom） */
+.ts-timeline { margin: 0; padding: 0; list-style: none; display: grid; gap: 0; }
+.ts-timeline__item { display: flex; gap: 10px; padding: 7px 0; position: relative; }
+.ts-timeline__item::before { content: ''; position: absolute; left: 4px; top: 18px; bottom: -7px; width: 1px; background: var(--mk-line); }
+.ts-timeline__item:last-child::before { display: none; }
+.ts-timeline__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--mk-faint); flex-shrink: 0; margin-top: 4px; z-index: 1; box-shadow: 0 0 0 2px var(--mk-surface); }
+html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px #141c2b; }
+.ts-timeline__item--ok .ts-timeline__dot { background: var(--mk-green); }
+.ts-timeline__item--warn .ts-timeline__dot { background: var(--mk-amber); }
+.ts-timeline__item--bad .ts-timeline__dot { background: var(--mk-red); }
+.ts-timeline__body { display: grid; gap: 1px; min-width: 0; }
+.ts-timeline__body strong { font-size: 12.5px; color: var(--mk-ink); }
+.ts-timeline__body span { font-size: 11px; color: var(--mk-faint); }
 
 .ts-facts {
   display: grid;
