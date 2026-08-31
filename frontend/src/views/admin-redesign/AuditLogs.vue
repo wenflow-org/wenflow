@@ -43,6 +43,16 @@
           </select>
         </div>
         <div class="mk-card__head-right">
+          <div class="al-cols">
+            <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen">列</button>
+            <div v-if="colsOpen" class="al-cols__menu" @click.stop>
+              <label v-for="c in alColDefs" :key="c.key" class="al-cols__item" :title="c.title">
+                <input type="checkbox" :checked="!hiddenCols.has(c.key)" @change="toggleAlCol(c.key)" />
+                <span>{{ c.label }}</span>
+              </label>
+              <button v-if="hiddenCols.size" type="button" class="al-cols__reset" @click="hiddenCols = new Set()">恢复全部列</button>
+            </div>
+          </div>
           <span class="mk-card__meta">共 {{ total }} 条<template v-if="failed"> · 失败 {{ failed }}</template></span>
         </div>
       </div>
@@ -65,13 +75,13 @@
         <table class="mk-table mk-table--click">
           <thead>
             <tr>
-              <th>时间</th>
-              <th>操作者</th>
-              <th>动作</th>
-              <th v-if="!noTargetTypes" title="操作对象类别（如 用户 / 公告 / 会话）">目标类型</th>
-              <th>目标</th>
-              <th>结果</th>
-              <th>IP</th>
+              <th v-if="!hiddenCols.has('time')">时间</th>
+              <th v-if="!hiddenCols.has('admin')">操作者</th>
+              <th v-if="!hiddenCols.has('action')">动作</th>
+              <th v-if="!noTargetTypes && !hiddenCols.has('tt')" title="操作对象类别（如 用户 / 公告 / 会话）">目标类型</th>
+              <th v-if="!hiddenCols.has('target')">目标</th>
+              <th v-if="!hiddenCols.has('result')">结果</th>
+              <th v-if="!hiddenCols.has('ip')">IP</th>
               <th class="mk-th--right" aria-hidden="true"></th>
             </tr>
           </thead>
@@ -84,25 +94,25 @@
                 :aria-controls="`audit-payload-${log.id}`"
                 @click="openId = openId === log.id ? '' : log.id"
               >
-                <td class="log-time mono" :title="fmtFull(log.createdAt)">{{ fmtTime(log.createdAt) }}</td>
-                <td class="log-admin" :title="log.adminName || log.adminId || ''">
+                <td v-if="!hiddenCols.has('time')" class="log-time mono" :title="fmtFull(log.createdAt)">{{ fmtTime(log.createdAt) }}</td>
+                <td v-if="!hiddenCols.has('admin')" class="log-admin" :title="log.adminName || log.adminId || ''">
                   {{ log.adminName || (log.adminId ? shortId(log.adminId) : '—') }}
                 </td>
-                <td :title="log.action">
+                <td v-if="!hiddenCols.has('action')" :title="log.action">
                   <template v-if="methodOf(log)">
                     <span class="log-method" :class="`log-method--${methodOf(log).toLowerCase()}`">{{ methodOf(log) }}</span>
                     <span class="log-path mono">{{ log.path || actionText(log.action) }}</span>
                   </template>
                   <span v-else class="log-action">{{ actionText(log.action) }}</span>
                 </td>
-                <td v-if="!noTargetTypes" class="log-tt" :title="log.targetType || '当前记录未写入目标类型'">{{ targetTypeText(log.targetType) }}</td>
-                <td class="log-target mono" :title="log.targetId || ''">{{ log.targetId ? shortId(log.targetId) : '—' }}</td>
-                <td><span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span></td>
-                <td class="log-ip mono" :title="log.ip || ''">{{ log.ip || '—' }}</td>
+                <td v-if="!noTargetTypes && !hiddenCols.has('tt')" class="log-tt" :title="log.targetType || '当前记录未写入目标类型'">{{ targetTypeText(log.targetType) }}</td>
+                <td v-if="!hiddenCols.has('target')" class="log-target mono" :title="log.targetId || ''">{{ log.targetId ? shortId(log.targetId) : '—' }}</td>
+                <td v-if="!hiddenCols.has('result')"><span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span></td>
+                <td v-if="!hiddenCols.has('ip')" class="log-ip mono" :title="log.ip || ''">{{ log.ip || '—' }}</td>
                 <td class="mk-th--right log-arrow" aria-hidden="true">▸</td>
               </tr>
               <tr v-if="openId === log.id" class="log-payload-row">
-                <td :colspan="noTargetTypes ? 7 : 8">
+                <td :colspan="visibleAlCols">
                   <div :id="`audit-payload-${log.id}`" class="log-payload">
                     <div class="log-payload-meta">
                       <span>{{ log.method }} {{ log.path }} · HTTP {{ log.statusCode }}<template v-if="log.durationMs != null"> · {{ fmtMs(log.durationMs) }}</template></span>
@@ -198,7 +208,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuditApi, type AuditLogQuery } from '@/api/adminApi'
 import { errMsg, shortId } from './live'
@@ -276,6 +286,38 @@ const rows = computed(() => (tab.value === 'operation' ? logs.value : attempts.v
 /** 目标类型列语义（P3）：当前页全部记录未写入 targetType 时隐藏该列（表头/行/网格同步），
     后端补录该字段后自动恢复显示；title 悬停说明列含义 */
 const noTargetTypes = computed(() => logs.value.length > 0 && logs.value.every((l) => !l.targetType))
+
+/* D3 表格增强：列显隐（localStorage 持久化） */
+const AL_COLS_KEY = 'wf_audit_hidden_cols'
+const alColDefs = [
+  { key: 'time', label: '时间', title: '操作时间' },
+  { key: 'admin', label: '操作者', title: '管理员账号' },
+  { key: 'action', label: '动作', title: 'HTTP 方法与路径' },
+  { key: 'tt', label: '目标类型', title: '操作对象类别' },
+  { key: 'target', label: '目标', title: '操作对象 ID' },
+  { key: 'result', label: '结果', title: '成功 / 失败' },
+  { key: 'ip', label: 'IP', title: '来源 IP' },
+] as const
+const colsOpen = ref(false)
+const hiddenCols = ref<Set<string>>(new Set())
+try {
+  const saved = JSON.parse(localStorage.getItem(AL_COLS_KEY) || '[]') as unknown
+  if (Array.isArray(saved)) hiddenCols.value = new Set(saved.filter((x): x is string => typeof x === 'string'))
+} catch { /* 隐私模式忽略 */ }
+watch(hiddenCols, (s) => {
+  try { localStorage.setItem(AL_COLS_KEY, JSON.stringify([...s])) } catch { /* ignore */ }
+}, { deep: true })
+function toggleAlCol(key: string) {
+  const next = new Set(hiddenCols.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  hiddenCols.value = next
+}
+const visibleAlCols = computed(() => {
+  let n = alColDefs.filter((c) => !hiddenCols.value.has(c.key)).length
+  if (noTargetTypes.value) n -= 1 // 目标类型列自动隐藏
+  return n + 1 // + 箭头列
+})
 
 /* 传统分页（方案 A）：页码器 v-model 桥接；翻页 = 整页替换（replace） */
 const currentPage = computed({
@@ -710,4 +752,52 @@ html[data-theme='dark'] {
   .log-method--delete { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
   .log-method--head { background: #253049; color: #9fb0c8; }
 }
+
+/* ================= D3 表格增强：审计列设置菜单 ================= */
+.al-cols { position: relative; display: inline-flex; }
+.al-cols__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: var(--mk-z-menu);
+  min-width: 150px;
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+  background: var(--mk-surface, #fff);
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  box-shadow: var(--mk-shadow-pop);
+}
+.al-cols__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--mk-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.al-cols__item:hover { background: #f0f5ff; }
+html[data-theme='dark'] .al-cols__item:hover { background: #1f2b40; }
+.al-cols__item input { accent-color: var(--mk-blue, #2c63d0); }
+.al-cols__reset {
+  margin-top: 4px;
+  border: 0;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border-top: 1px dashed var(--mk-line);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--mk-blue);
+  cursor: pointer;
+  text-align: left;
+}
+.al-cols__reset:hover { background: #eff6ff; }
+html[data-theme='dark'] .al-cols__reset:hover { background: #1f2b40; }
 </style>
