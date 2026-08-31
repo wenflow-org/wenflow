@@ -1,85 +1,100 @@
 <template>
   <div v-if="d" class="mk-page ud">
-    <button type="button" class="mk-back" @click="closeSubPage">← 用户</button>
-    <div class="ud-id">
-      <span class="ud-avatar">{{ d.name.charAt(0) }}</span>
-      <div>
-        <h1 class="ud-name">{{ d.name }}</h1>
-        <span class="ud-sub">{{ d.email }} · {{ d.role }} · 加入 {{ d.joined }}</span>
-        <span v-if="isDeleted" class="mk-badge mk-badge--sm mk-badge--deleted">已删除</span>
-      </div>
-      <button v-if="isDeleted" type="button" class="mk-status__action" :disabled="restoring" @click="doRestore">
-        {{ restoring ? '恢复中…' : '恢复用户' }}
-      </button>
-      <button type="button" class="mk-status__action" @click="toLearner">查看学习者画像 →</button>
-    </div>
-
-    <div class="ud-kpis">
-      <MkKpi v-for="s in d.stats" :key="s.label" :label="s.label" :value="s.value" />
-    </div>
-
-    <div class="ud-grid">
-      <section class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">学习路径</h3>
-        </div>
-        <div class="ud-paths">
-          <div v-for="p in d.recentPaths" :key="p.title" class="ud-path">
-            <div class="ud-path__main">
-              <strong>{{ p.title }}</strong>
-              <span>{{ p.stage }}</span>
+    <!-- 页头卡（布局重构：返回 + 身份 + 统计 合并为一行页头，对齐 HubSpot/SF record header） -->
+    <header class="ud-head">
+      <div class="ud-head__top">
+        <button type="button" class="mk-back" @click="closeSubPage">← 用户</button>
+        <div class="ud-id">
+          <span class="ud-avatar">{{ d.name.charAt(0) }}</span>
+          <div class="ud-id__main">
+            <div class="ud-id__name-row">
+              <h1 class="ud-name">{{ d.name }}</h1>
+              <span v-if="isDeleted" class="mk-badge mk-badge--sm mk-badge--deleted">已删除</span>
             </div>
-            <div class="ud-path__bar"><i :style="{ width: p.pct + '%' }" :class="{ warn: p.tone === 'warn' }"></i></div>
-            <span class="ud-path__pct">{{ p.pct }}%</span>
+            <span class="ud-sub">{{ d.email }} · {{ d.role }} · 加入 {{ d.joined }}</span>
           </div>
-          <p v-if="!d.recentPaths.length" class="ud-none">路径明细暂不可用</p>
+          <div class="ud-id__actions">
+            <button v-if="isDeleted" type="button" class="mk-status__action" :disabled="restoring" @click="doRestore">
+              {{ restoring ? '恢复中…' : '恢复用户' }}
+            </button>
+            <button type="button" class="mk-status__action" @click="toLearner">查看学习者画像 →</button>
+          </div>
         </div>
-      </section>
+      </div>
+      <div class="ud-kpis">
+        <MkKpi v-for="s in d.stats" :key="s.label" :label="s.label" :value="s.value" />
+      </div>
+    </header>
 
-      <section class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">最近活跃</h3>
-        </div>
-        <div class="ud-activity">
-          <div v-for="(a, i) in d.activity" :key="i" class="ud-act">
-            <span>{{ a.text }}</span>
-            <span class="ud-act__time">{{ a.time }}</span>
+    <!-- 主区双栏（左 2/3 主内容 · 右 1/3 侧栏） -->
+    <div class="ud-main">
+      <div class="ud-col ud-col--main">
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">学习路径</h3>
+            <span class="mk-card__meta">{{ d.recentPaths.length }} 条</span>
           </div>
-          <p v-if="!d.activity.length" class="ud-none">暂无动态记录</p>
-        </div>
-      </section>
+          <div class="ud-paths">
+            <div v-for="p in d.recentPaths" :key="p.title" class="ud-path">
+              <div class="ud-path__main">
+                <strong>{{ p.title }}</strong>
+                <span>{{ p.stage }}</span>
+              </div>
+              <div class="ud-path__bar"><i :style="{ width: p.pct + '%' }" :class="{ warn: p.tone === 'warn' }"></i></div>
+              <span class="ud-path__pct">{{ p.pct }}%</span>
+            </div>
+            <p v-if="!d.recentPaths.length" class="ud-none">路径明细暂不可用</p>
+          </div>
+        </section>
+      </div>
+
+      <div class="ud-col ud-col--side">
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">最近活跃</h3>
+            <span class="mk-card__meta">{{ d.activity.length }} 条</span>
+          </div>
+          <div class="ud-activity">
+            <div v-for="(a, i) in d.activity" :key="i" class="ud-act">
+              <span>{{ a.text }}</span>
+              <span class="ud-act__time">{{ a.time }}</span>
+            </div>
+            <p v-if="!d.activity.length" class="ud-none">暂无动态记录</p>
+          </div>
+        </section>
+
+        <!-- 开发视角许可（仅 live；侧栏卡，与活跃并列） -->
+        <section v-if="isLive" class="mk-card ud-grant">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">开发视角许可</h3>
+            <span class="mk-badge" :class="grantBadgeCls">{{ grantStatusLabel }}</span>
+          </div>
+          <p class="ud-grant__copy">
+            仅当用户明确授予协助许可后，才能打开开发调试站进入该用户视角排查问题。
+          </p>
+          <div v-if="grantMessage" class="ud-grant__notice" :class="grantMsgTone">{{ grantMessage }}</div>
+          <div class="ud-grant__grid">
+            <div><span>开放范围</span><strong>{{ grantScopeLabel }}</strong></div>
+            <div><span>到期时间</span><strong>{{ grantExpiresLabel }}</strong></div>
+            <div><span>协助说明</span><strong>{{ grantNoteLabel }}</strong></div>
+          </div>
+          <div class="ud-grant__actions">
+            <button type="button" class="mk-status__action" :disabled="grantLoading" @click="loadGrant">
+              {{ grantLoading ? '刷新中…' : '刷新许可' }}
+            </button>
+            <button
+              type="button"
+              class="mk-status__action mk-status__action--primary"
+              :disabled="grantStatus !== 'active' || grantOpening"
+              :title="grantStatus !== 'active' ? '需先授权' : undefined"
+              @click="openDebugStation"
+            >
+              {{ grantOpening ? '打开中…' : '打开开发调试站' }}
+            </button>
+          </div>
+        </section>
+      </div>
     </div>
-
-    <!-- 开发视角许可（仅 live） -->
-    <section v-if="isLive" class="mk-card ud-grant">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">开发视角许可</h3>
-        <span class="mk-badge" :class="grantBadgeCls">{{ grantStatusLabel }}</span>
-      </div>
-      <p class="ud-grant__copy">
-        仅当用户明确授予协助许可后，才能打开开发调试站进入该用户视角排查问题。
-      </p>
-      <div v-if="grantMessage" class="ud-grant__notice" :class="grantMsgTone">{{ grantMessage }}</div>
-      <div class="ud-grant__grid">
-        <div><span>开放范围</span><strong>{{ grantScopeLabel }}</strong></div>
-        <div><span>到期时间</span><strong>{{ grantExpiresLabel }}</strong></div>
-        <div><span>协助说明</span><strong>{{ grantNoteLabel }}</strong></div>
-      </div>
-      <div class="ud-grant__actions">
-        <button type="button" class="mk-status__action" :disabled="grantLoading" @click="loadGrant">
-          {{ grantLoading ? '刷新中…' : '刷新许可' }}
-        </button>
-        <button
-          type="button"
-          class="mk-status__action mk-status__action--primary"
-          :disabled="grantStatus !== 'active' || grantOpening"
-          :title="grantStatus !== 'active' ? '需先授权' : undefined"
-          @click="openDebugStation"
-        >
-          {{ grantOpening ? '打开中…' : '打开开发调试站' }}
-        </button>
-      </div>
-    </section>
   </div>
 
   <div v-else-if="detailError" class="mk-page ud">
@@ -356,7 +371,20 @@ const d = computed<Detail | undefined>(() => {
 .ud-skel__card { height: 140px; border-radius: 12px; background: linear-gradient(90deg, #eef2f8 25%, #f7f9fc 50%, #eef2f8 75%); background-size: 200% 100%; animation: ud-skel-shimmer 1.2s infinite; }
 @keyframes ud-skel-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 html[data-theme='dark'] .ud-skel__avatar, html[data-theme='dark'] .ud-skel__line, html[data-theme='dark'] .ud-skel__stat, html[data-theme='dark'] .ud-skel__card { background: linear-gradient(90deg, #1b2537 25%, #232f45 50%, #1b2537 75%); background-size: 200% 100%; }
-.ud-id { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+/* 页头卡（布局重构）：返回 + 身份 + 统计合并，HubSpot/SF record header 形态 */
+.ud-head {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px 14px;
+  border: 1px solid var(--mk-line);
+  border-radius: 12px;
+  background: var(--mk-surface);
+}
+.ud-head__top { display: flex; align-items: flex-start; gap: 12px; }
+.ud-id { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
+.ud-id__main { display: grid; gap: 2px; min-width: 0; }
+.ud-id__name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ud-id__actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
 .ud-avatar {
   width: 46px;
   height: 46px;
@@ -367,24 +395,27 @@ html[data-theme='dark'] .ud-skel__avatar, html[data-theme='dark'] .ud-skel__line
   place-content: center;
   font-size: 18px;
   font-weight: 700;
+  flex-shrink: 0;
 }
 .ud-id h3 { margin: 0; font-size: 18px; }
 .ud-name { margin: 0; font-size: 18px; line-height: 1.4; }
 .ud-sub { color: var(--mk-faint); font-size: 12px; }
 
-/* 统计行（P0-2 设计语言统一：MkKpi 替代自制 ud-stat；此处仅网格容器） */
+/* 统计行（设计语言统一：MkKpi；页头内网格） */
 .ud-kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
-.ud-grid {
+/* 主区双栏（左 2/3 主内容 · 右 1/3 侧栏） */
+.ud-main {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 14px;
   align-items: start;
 }
+.ud-col { display: grid; gap: 14px; align-content: start; }
 .ud-paths { display: grid; }
 .ud-path {
   display: grid;
@@ -460,7 +491,7 @@ html[data-theme='dark'] .ud-skel__avatar, html[data-theme='dark'] .ud-skel__line
 
 @media (max-width: 1100px) {
   .ud-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ud-grid { grid-template-columns: 1fr; }
+  .ud-main { grid-template-columns: 1fr; }
   .ud-grant__grid { grid-template-columns: 1fr; }
 }
 

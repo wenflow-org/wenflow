@@ -23,25 +23,31 @@
   </div>
   <div v-else-if="d" class="mk-page ld">
 
-    <!-- 头部：身份与状态 -->
-    <div class="ld-head">
-      <button type="button" class="mk-back" @click="closeSubPage">← 学习者中心</button>
-      <div class="ld-id">
-        <span class="ld-avatar">{{ d.name.charAt(0) }}</span>
-        <div>
-          <h1 class="ld-name">{{ d.name }}</h1>
-          <span class="ld-sub">{{ d.email }} · 加入 {{ d.joined || '—' }}</span>
+    <!-- 头部卡（布局重构：返回 + 身份 + 徽章 + 操作合并，与 UserDetail 页头卡同形态） -->
+    <header class="ld-head">
+      <div class="ld-head__top">
+        <button type="button" class="mk-back" @click="closeSubPage">← 学习者中心</button>
+        <div class="ld-id">
+          <span class="ld-avatar">{{ d.name.charAt(0) }}</span>
+          <div class="ld-id__main">
+            <div class="ld-id__name-row">
+              <h1 class="ld-name">{{ d.name }}</h1>
+              <span class="ld-badges">
+                <span class="mk-badge" :class="trendBadge">趋势：{{ trendText }}</span>
+                <span class="mk-badge" :class="fatigueBadge">疲劳：{{ d.fatigue }}</span>
+                <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">快照 {{ d.snapshot.version }} · {{ d.snapshot.generatedAt }}</span>
+              </span>
+            </div>
+            <span class="ld-sub">{{ d.email }} · 加入 {{ d.joined || '—' }}</span>
+          </div>
+          <div class="ld-id__actions">
+            <button type="button" class="mk-status__action" :disabled="recomputing" @click="recompute">
+              {{ recomputing ? '重算中…' : '重算快照' }}
+            </button>
+          </div>
         </div>
-        <div class="ld-badges">
-          <span class="mk-badge" :class="trendBadge">趋势：{{ trendText }}</span>
-          <span class="mk-badge" :class="fatigueBadge">疲劳：{{ d.fatigue }}</span>
-          <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">快照 {{ d.snapshot.version }} · {{ d.snapshot.generatedAt }}</span>
-        </div>
-        <button type="button" class="mk-status__action" :disabled="recomputing" @click="recompute">
-          {{ recomputing ? '重算中…' : '重算快照' }}
-        </button>
       </div>
-    </div>
+    </header>
 
     <!-- Tab 栏（6 → 3 合并：总览 / 画像 / 证据；旧 tab 名由 normalizeLearnerTab 重定向） -->
     <div class="ld-tabs">
@@ -1389,29 +1395,26 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 <style scoped>
 .ld { gap: 16px; }
-.ld-back {
-  border: 0;
-  background: transparent;
-  color: var(--mk-blue);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 700;
-  cursor: pointer;
-  padding: 2px 6px;
-  margin: -2px -6px;
-  border-radius: 6px;
-  width: fit-content;
-  transition: background 0.14s ease, transform 0.1s ease;
+/* 头部卡（布局重构）：返回 + 身份 + 徽章 + 操作合并，与 UserDetail 页头卡同形态 */
+.ld-head {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px 14px;
+  border: 1px solid var(--mk-line);
+  border-radius: 12px;
+  background: var(--mk-surface);
 }
-.ld-back:hover { background: #eff6ff; }
-.ld-back:active { transform: translateY(1px); }
-.ld-head { display: grid; gap: 12px; }
+.ld-head__top { display: flex; align-items: flex-start; gap: 12px; }
 .ld-id {
   display: flex;
   align-items: center;
   gap: 14px;
-  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
 }
+.ld-id__main { display: grid; gap: 2px; min-width: 0; }
+.ld-id__name-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ld-id__actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
 .ld-avatar {
   width: 46px;
   height: 46px;
@@ -1422,6 +1425,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   place-content: center;
   font-size: 18px;
   font-weight: 700;
+  flex-shrink: 0;
 }
 .ld-id h3,
 .ld-name { margin: 0; font-size: 18px; line-height: 1.4; }
@@ -1433,13 +1437,14 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: 12.5px; }
 .ld-none__hint { display: block; margin-top: 4px; font-size: 11.5px; opacity: 0.9; }
 
+/* 主区双栏（左 2fr 主内容 · 右 1fr 侧栏） */
 .ld-grid {
   display: grid;
-  grid-template-columns: 1.1fr 1fr;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 14px;
   align-items: start;
 }
-.ld-col { display: grid; gap: 14px; }
+.ld-col { display: grid; gap: 14px; align-content: start; }
 
 .ld-progress { padding: 16px; display: grid; gap: 8px; }
 .ld-progress strong { font-size: 15px; }
@@ -1794,7 +1799,6 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .ld-back { font-size: 14.5px; }
   .ld-avatar { width: 54px; height: 54px; font-size: 21px; }
   .ld-id h3, .ld-name { font-size: 21px; }
   .ld-sub { font-size: 14px; }
@@ -1841,7 +1845,6 @@ function barToneBadge(tone: ConceptBarTone): string {
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号沿用 2000 档的基础上再升一档，对齐 mk 体系 2800（17px 级） */
-  .ld-back { font-size: 17px; }
   .ld-avatar { width: 62px; height: 62px; font-size: 24px; }
   .ld-id h3, .ld-name { font-size: 24.5px; }
   .ld-sub { font-size: 16.5px; }
@@ -1888,7 +1891,6 @@ function barToneBadge(tone: ConceptBarTone): string {
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
-  .ld-back { font-size: 20px; }
   .ld-avatar { width: 72px; height: 72px; font-size: 28px; }
   .ld-id h3, .ld-name { font-size: 28.5px; }
   .ld-sub { font-size: 19px; }
