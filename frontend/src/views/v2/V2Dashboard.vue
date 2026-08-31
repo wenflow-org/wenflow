@@ -229,7 +229,13 @@
         <Transition name="fold">
           <div v-show="showMore" class="folded-sections">
         <!-- 今日预算（多目标调度台账） -->
-        <section v-if="todaySchedule?.activeGoals?.length" class="card budget dash__budget">
+        <section v-if="sourceFailed.budget" class="card dash__budget">
+          <div class="budget__head">
+            <span class="budget__title">今日预算</span>
+          </div>
+          <p class="dash__source-fail">预算数据加载失败，稍后重试。</p>
+        </section>
+        <section v-else-if="todaySchedule?.activeGoals?.length" class="card budget dash__budget">
           <div class="budget__head">
             <span class="budget__title">今日预算 · {{ todaySchedule.activeGoals.length }} 个目标</span>
             <span class="budget__total">共 {{ todaySchedule.totalPlanned }} 分钟</span>
@@ -253,7 +259,13 @@
         </section>
 
         <!-- 今日复习（到期旧知唤醒，复习闭环） -->
-        <section v-if="reviewDue.length" class="card review dash__review">
+        <section v-if="sourceFailed.review" class="card dash__review">
+          <div class="review__head">
+            <span class="review__eyebrow">今日复习</span>
+          </div>
+          <p class="dash__source-fail">复习数据加载失败，稍后重试。</p>
+        </section>
+        <section v-else-if="reviewDue.length" class="card review dash__review">
           <div class="review__head">
             <span class="review__eyebrow">今日复习 · {{ reviewDue.length }} 个知识点到期</span>
             <span class="review__sub">间隔复习对抗遗忘（ACT-R）</span>
@@ -281,7 +293,8 @@
               <strong>本周节奏</strong>
               <button type="button" v-if="hasAnyMinutes" class="link-muted" @click="monthOpen = !monthOpen">{{ monthOpen ? '收起整月' : '展开整月 ›' }}</button>
             </div>
-            <div v-if="hasAnyMinutes" class="week__grid">
+            <div v-if="sourceFailed.week" class="dash__source-fail">学习记录加载失败，节奏与日历暂不可用。</div>
+            <div v-else-if="hasAnyMinutes" class="week__grid">
               <button
                 v-for="d in weekDays"
                 :key="d.date"
@@ -527,9 +540,16 @@ const examples = ['用 Python 自动化处理 Excel 报表', '提升职场沟通
 const reviewDue = ref<Array<{ conceptKey: string; label: string; retention: number; reason: string; estimatedMinutes: number }>>([]);
 const todaySchedule = ref<Record<string, any> | null>(null);
 const loadError = ref(false);
+/** 各数据源失败标记：区块级降级提示（不整页失败，也不伪装成空态） */
+const sourceFailed = ref<Record<string, boolean>>({
+  budget: false,
+  review: false,
+  week: false
+});
 async function loadAll() {
   loading.value = true;
   loadError.value = false;
+  sourceFailed.value = { budget: false, review: false, week: false };
   const fastGroup = await Promise.allSettled([
     learningAPI.getStats(),
     learningAPI.getPaths(),
@@ -548,14 +568,19 @@ async function loadAll() {
   if (statsR.status === 'fulfilled') stats.value = statsR.value as Record<string, any>;
   if (pathsR.status === 'fulfilled') paths.value = pathsR.value as unknown as Array<Record<string, any>>;
   if (sessionsR.status === 'fulfilled') sessions.value = sessionsR.value;
+  else sourceFailed.value.week = true; // 本周节奏/整月日历依赖 sessions
   if (achR.status === 'fulfilled') achievements.value = unwrapArray(achR.value);
   if (dueR.status === 'fulfilled') {
     const body = dueR.value?.data ?? dueR.value ?? {};
     reviewDue.value = Array.isArray(body.items) ? body.items : [];
+  } else {
+    sourceFailed.value.review = true;
   }
   if (scheduleR.status === 'fulfilled') {
     const body = scheduleR.value?.data ?? scheduleR.value ?? {};
     todaySchedule.value = body;
+  } else {
+    sourceFailed.value.budget = true;
   }
   loading.value = false;
   // AI 引导文案独立异步：慢（模型生成可达数秒）也不阻塞首屏，失败静默降级
@@ -833,13 +858,15 @@ function bandwidthLabel(v: string): string {
 }
 
 /** 折叠区是否有实际动态内容（新手无数据时隐藏「展开更多」，避免点开看到空卡）；
-    快捷入口已移出折叠区（始终显示），不受此控制。 */
+    快捷入口已移出折叠区（始终显示），不受此控制。
+    数据源失败也计入：失败提示行需要可见（区别于空态）。 */
 const hasFoldedContent = computed(
   () =>
     Boolean(todaySchedule.value?.activeGoals?.length) ||
     reviewDue.value.length > 0 ||
     hasAnyMinutes.value ||
-    Boolean(nearestAchievement.value)
+    Boolean(nearestAchievement.value) ||
+    Object.values(sourceFailed.value).some(Boolean)
 );
 
 const minutesByDate = computed(() => {
@@ -1408,6 +1435,15 @@ onMounted(loadAll);
 .week__empty {
   padding: 26px 0; text-align: center; color: var(--faint); font-size: 13px;
   border: 1px dashed var(--line); border-radius: 12px; background: color-mix(in srgb, var(--surface) 70%, var(--canvas));
+}
+/* 区块级数据源失败提示（区别于空态：失败可见，不伪装成无数据） */
+.dash__source-fail {
+  padding: 14px 16px;
+  font-size: 12.5px; line-height: 1.6;
+  color: var(--muted);
+  background: rgba(244, 170, 70, 0.08);
+  border: 1px dashed rgba(244, 170, 70, 0.35);
+  border-radius: 10px;
 }
 .week__stats { display: flex; gap: 18px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
 .week__stats b { color: var(--ink); }
