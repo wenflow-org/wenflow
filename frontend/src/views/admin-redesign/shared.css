@@ -833,12 +833,12 @@ html[data-theme='dark'] {
    幅度约为 2000 档的一半：仅字号/内边距微调，不动布局结构。 */
 @media (min-width: 1440px) {
   .mk-page { font-size: 14.5px; padding: 17px 20px 24px; }
-  .mk-status { padding: 8px 14px; }
-  .mk-status__title { font-size: 16px; }
-  .mk-status__meta { font-size: 13.5px; }
-  .mk-status__action { font-size: 13.5px; padding: 5px 12px; }
-  .mk-table th { font-size: 12.5px; padding: 10px 15px; }
-  .mk-table td { font-size: 14.5px; padding: 11px 15px; }
+  .mk-status { padding: 7px 13px; }
+  .mk-status__title { font-size: 15px; }
+  .mk-status__meta { font-size: 13px; }
+  .mk-status__action { font-size: 13px; padding: 5px 11px; }
+  .mk-table th { font-size: 12.5px; padding: 9px 15px; }
+  .mk-table td { font-size: 14.5px; padding: 10px 13px; }
   .mk-cell-sub { font-size: 12.5px; }
   .mk-badge { font-size: 12.5px; padding: 2px 10px; }
   .mk-menu__item { font-size: 14px; }
