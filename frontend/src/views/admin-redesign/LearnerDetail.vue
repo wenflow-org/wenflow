@@ -311,11 +311,14 @@
     <div v-else-if="tab === 'evidence'" class="ld-tabpage">
       <template v-if="dynamicState">
         <div class="ld-metrics">
-          <div v-for="m in metricCards" :key="m.label" class="ld-metric">
-            <span>{{ m.label }}</span>
-            <strong :class="m.cls">{{ m.value }}</strong>
-            <em>{{ m.hint }}</em>
-          </div>
+          <MkKpi
+            v-for="m in metricCards"
+            :key="m.label"
+            :label="m.label"
+            :value="m.value"
+            :hint="m.hint"
+            :tone="m.tone"
+          />
         </div>
       </template>
 
@@ -497,6 +500,7 @@ import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import type { EChartsCoreOption } from 'echarts/core'
 import MkChart from './MkChart.vue'
+import MkKpi from './MkKpi.vue'
 
 interface Detail {
   name: string
@@ -1036,16 +1040,16 @@ const metricCards = computed(() => {
   const m = (dynamicState.value?.metrics || {}) as Record<string, number>
   const fmt = (v?: number) => (v == null ? '—' : v.toFixed(1))
   /** 0 值 = 无数据（中性灰，不误报警告红）；>0 才按阈值上色 */
-  const tone = (v?: number) => {
-    if (v == null || v === 0) return 'is-empty'
-    return v >= 7 ? 'is-good' : v <= 4 ? 'is-bad' : ''
+  const tone = (v?: number): 'ok' | 'bad' | '' => {
+    if (v == null || v === 0) return ''
+    return v >= 7 ? 'ok' : v <= 4 ? 'bad' : ''
   }
   const hint = (v?: number, fallback = '') => (v == null || v === 0 ? '暂无数据' : fallback)
   return [
-    { label: 'LSS 学习状态', value: fmt(m.lss), hint: hint(m.lss, '整体学习健康度'), cls: tone(m.lss) },
-    { label: 'KTL 知识轨迹', value: fmt(m.ktl), hint: hint(m.ktl, '知识增长曲线'), cls: tone(m.ktl) },
-    { label: 'LF 学习疲劳', value: fmt(m.lf), hint: hint(m.lf, '越低越好'), cls: m.lf != null && m.lf > 0 && m.lf >= 6 ? 'is-bad' : tone(m.lf) },
-    { label: 'LSB 行为稳定', value: fmt(m.lsb), hint: hint(m.lsb, '行为一致性'), cls: tone(m.lsb) }
+    { label: 'LSS 学习状态', value: fmt(m.lss), hint: hint(m.lss, '整体学习健康度'), tone: tone(m.lss) },
+    { label: 'KTL 知识轨迹', value: fmt(m.ktl), hint: hint(m.ktl, '知识增长曲线'), tone: tone(m.ktl) },
+    { label: 'LF 学习疲劳', value: fmt(m.lf), hint: hint(m.lf, '越低越好'), tone: m.lf != null && m.lf > 0 && m.lf >= 6 ? 'bad' : tone(m.lf) },
+    { label: 'LSB 行为稳定', value: fmt(m.lsb), hint: hint(m.lsb, '行为一致性'), tone: tone(m.lsb) }
   ]
 })
 
@@ -1604,24 +1608,9 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 .ld-metrics {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
-.ld-metric {
-  display: grid;
-  gap: 3px;
-  padding: 13px 16px;
-  border: 1px solid var(--mk-line);
-  border-radius: 12px;
-  background: var(--mk-surface);
-}
-.ld-metric span { font-size: 11.5px; color: var(--mk-muted); font-weight: 600; }
-.ld-metric strong { font-size: 22px; font-variant-numeric: tabular-nums; }
-.ld-metric strong.is-good { color: var(--mk-green); }
-.ld-metric strong.is-bad { color: var(--mk-red); }
-/* 0 值 = 暂无数据：中性灰（比 --mk-faint 深一档，保证可读），不误报警告红 */
-.ld-metric strong.is-empty { color: var(--mk-muted); }
-.ld-metric em { font-style: normal; font-size: 11px; color: var(--mk-muted); }
 
 .ld-flags { display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 16px; }
 .ld-insights { padding: 12px 16px; display: grid; gap: 8px; }
@@ -1823,9 +1812,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-session__main strong { font-size: 15px; }
   .ld-session__main span, .ld-session__time { font-size: 13.5px; }
   .ld-kv__row { font-size: 14.5px; }
-  .ld-metric span { font-size: 13.5px; }
-  .ld-metric strong { font-size: 26px; }
-  .ld-metric em { font-size: 13px; }
   .ld-insights p { font-size: 14.5px; }
   .ld-ev__main strong { font-size: 14.5px; }
   .ld-ev__main span { font-size: 13.5px; }
@@ -1847,7 +1833,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-session__dot { width: 9px; height: 9px; }
   .ld-kv__row { grid-template-columns: 160px 1fr; gap: 14px; padding: 12px 18px; }
   .ld-metrics { gap: 14px; }
-  .ld-metric { padding: 15px 18px; }
   .ld-flags { padding: 16px 18px; }
   .ld-insights { padding: 14px 18px; }
   .ld-two { padding: 16px 18px; }
@@ -1874,9 +1859,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-session__main strong { font-size: 17.5px; }
   .ld-session__main span, .ld-session__time { font-size: 16px; }
   .ld-kv__row { font-size: 17px; }
-  .ld-metric span { font-size: 16px; }
-  .ld-metric strong { font-size: 30px; }
-  .ld-metric em { font-size: 15.5px; }
   .ld-insights p { font-size: 17px; }
   .ld-ev__main strong { font-size: 17px; }
   .ld-ev__main span { font-size: 16px; }
@@ -1898,7 +1880,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-session__dot { width: 11px; height: 11px; }
   .ld-kv__row { grid-template-columns: 184px 1fr; gap: 16px; padding: 14px 21px; }
   .ld-metrics { gap: 16px; }
-  .ld-metric { padding: 17px 21px; }
   .ld-flags { padding: 19px 21px; }
   .ld-insights { padding: 16px 21px; }
   .ld-two { padding: 19px 21px; }
@@ -1925,9 +1906,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-session__main strong { font-size: 20.5px; }
   .ld-session__main span, .ld-session__time { font-size: 18.5px; }
   .ld-kv__row { font-size: 20px; }
-  .ld-metric span { font-size: 18.5px; }
-  .ld-metric strong { font-size: 35px; }
-  .ld-metric em { font-size: 18px; }
   .ld-insights p { font-size: 20px; }
   .ld-ev__main strong { font-size: 20px; }
   .ld-ev__main span { font-size: 18.5px; }
@@ -1949,7 +1927,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-session__dot { width: 13px; height: 13px; }
   .ld-kv__row { grid-template-columns: 216px 1fr; gap: 19px; padding: 16px 25px; }
   .ld-metrics { gap: 19px; }
-  .ld-metric { padding: 20px 25px; }
   .ld-flags { padding: 22px 25px; }
   .ld-insights { padding: 19px 25px; }
   .ld-two { padding: 22px 25px; }

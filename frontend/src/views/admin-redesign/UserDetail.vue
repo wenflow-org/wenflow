@@ -6,19 +6,16 @@
       <div>
         <h1 class="ud-name">{{ d.name }}</h1>
         <span class="ud-sub">{{ d.email }} · {{ d.role }} · 加入 {{ d.joined }}</span>
-        <span v-if="isDeleted" class="ud-badge">已删除</span>
+        <span v-if="isDeleted" class="mk-badge mk-badge--sm mk-badge--deleted">已删除</span>
       </div>
-      <button v-if="isDeleted" type="button" class="ud-restore" :disabled="restoring" @click="doRestore">
+      <button v-if="isDeleted" type="button" class="mk-status__action" :disabled="restoring" @click="doRestore">
         {{ restoring ? '恢复中…' : '恢复用户' }}
       </button>
-      <button type="button" class="ud-learner-link" @click="toLearner">查看学习者画像 →</button>
+      <button type="button" class="mk-status__action" @click="toLearner">查看学习者画像 →</button>
     </div>
 
-    <div class="ud-stats">
-      <div v-for="s in d.stats" :key="s.label" class="ud-stat">
-        <span>{{ s.label }}</span>
-        <strong>{{ s.value }}</strong>
-      </div>
+    <div class="ud-kpis">
+      <MkKpi v-for="s in d.stats" :key="s.label" :label="s.label" :value="s.value" />
     </div>
 
     <div class="ud-grid">
@@ -119,6 +116,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { subPage, closeSubPage, openSubPage, userDetails, isLive } from './store'
+import MkKpi from './MkKpi.vue'
 import { liveUsers, timeAgo, errMsg } from './live'
 import { adminUsersApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
 import { getProjectionGrantStatus, normalizeProjectionGrant, type ProjectionGrant } from '@/api/userCustom'
@@ -344,22 +342,6 @@ const d = computed<Detail | undefined>(() => {
 
 <style scoped>
 .ud { gap: 16px; }
-.ud-back {
-  border: 0;
-  background: transparent;
-  color: var(--mk-blue);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 700;
-  cursor: pointer;
-  padding: 4px 8px;
-  margin-left: -8px;
-  border-radius: 6px;
-  width: fit-content;
-  transition: background 0.12s ease, transform 0.1s ease;
-}
-.ud-back:hover { background: #eff6ff; }
-.ud-back:active { transform: translateY(1px); }
 /* 骨架屏（P0-2）：加载中替代纯文字，避免布局跳动 */
 .ud-skel { display: grid; gap: 14px; padding-top: 8px; }
 .ud-skel__id { display: flex; align-items: center; gap: 14px; }
@@ -375,20 +357,6 @@ const d = computed<Detail | undefined>(() => {
 @keyframes ud-skel-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 html[data-theme='dark'] .ud-skel__avatar, html[data-theme='dark'] .ud-skel__line, html[data-theme='dark'] .ud-skel__stat, html[data-theme='dark'] .ud-skel__card { background: linear-gradient(90deg, #1b2537 25%, #232f45 50%, #1b2537 75%); background-size: 200% 100%; }
 .ud-id { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.ud-learner-link {
-  margin-left: auto;
-  padding: 6px 14px;
-  border: 1px solid rgba(44, 99, 208, 0.28);
-  border-radius: 999px;
-  background: #eef5ff;
-  color: var(--mk-blue, #2c63d0);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: 0.12s ease;
-}
-.ud-learner-link:hover { background: #dbeafe; border-color: rgba(44, 99, 208, 0.45); }
 .ud-avatar {
   width: 46px;
   height: 46px;
@@ -403,48 +371,13 @@ html[data-theme='dark'] .ud-skel__avatar, html[data-theme='dark'] .ud-skel__line
 .ud-id h3 { margin: 0; font-size: 18px; }
 .ud-name { margin: 0; font-size: 18px; line-height: 1.4; }
 .ud-sub { color: var(--mk-faint); font-size: 12px; }
-.ud-badge {
-  display: inline-block;
-  margin-top: 3px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: #e5e7eb;
-  color: #6b7280;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-}
-.ud-restore {
-  margin-left: auto;
-  padding: 6px 14px;
-  border: 1px solid rgba(44, 99, 208, 0.28);
-  border-radius: 999px;
-  background: #eef5ff;
-  color: var(--mk-blue, #2c63d0);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: 0.12s ease;
-}
-.ud-restore:hover { background: #dbeafe; border-color: rgba(44, 99, 208, 0.45); }
-.ud-restore:disabled { opacity: 0.6; cursor: default; }
 
-.ud-stats {
+/* 统计行（P0-2 设计语言统一：MkKpi 替代自制 ud-stat；此处仅网格容器） */
+.ud-kpis {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
-.ud-stat {
-  display: grid;
-  gap: 3px;
-  padding: 13px 16px;
-  border: 1px solid var(--mk-line);
-  border-radius: 12px;
-  background: var(--mk-surface);
-}
-.ud-stat span { font-size: 11.5px; color: var(--mk-muted); font-weight: 600; }
-.ud-stat strong { font-size: 20px; font-variant-numeric: tabular-nums; }
 
 .ud-grid {
   display: grid;
@@ -526,20 +459,16 @@ html[data-theme='dark'] .ud-skel__avatar, html[data-theme='dark'] .ud-skel__line
 }
 
 @media (max-width: 1100px) {
-  .ud-stats { grid-template-columns: repeat(2, 1fr); }
+  .ud-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ud-grid { grid-template-columns: 1fr; }
   .ud-grant__grid { grid-template-columns: 1fr; }
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .ud-back { font-size: 14.5px; }
-  .ud-learner-link { font-size: 14px; }
   .ud-avatar { width: 54px; height: 54px; font-size: 21px; }
   .ud-id h3, .ud-name { font-size: 21px; }
   .ud-sub { font-size: 14px; }
-  .ud-stat span { font-size: 13.5px; }
-  .ud-stat strong { font-size: 23.5px; }
   .ud-path__main strong { font-size: 15px; }
   .ud-path__main span { font-size: 13.5px; }
   .ud-path__pct { font-size: 14px; }
@@ -550,19 +479,12 @@ html[data-theme='dark'] .ud-skel__avatar, html[data-theme='dark'] .ud-skel__line
   .ud-grant__notice { font-size: 14px; }
   .ud-grant__grid div { font-size: 14px; }
   .ud-grant__grid span { font-size: 13px; }
-  .ud-badge { font-size: 12px; padding: 2px 10px; }
-  .ud-learner-link, .ud-restore { padding: 7px 16px; }
-  .ud-restore { font-size: 14px; }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号升到 2800 级（17px 级） */
-  .ud-back { font-size: 17px; }
-  .ud-learner-link { font-size: 16.5px; }
   .ud-avatar { width: 62px; height: 62px; font-size: 24px; }
   .ud-id h3, .ud-name { font-size: 24.5px; }
   .ud-sub { font-size: 16.5px; }
-  .ud-stat span { font-size: 16px; }
-  .ud-stat strong { font-size: 27.5px; }
   .ud-path__main strong { font-size: 17.5px; }
   .ud-path__main span { font-size: 16px; }
   .ud-path__pct { font-size: 16.5px; }
@@ -573,19 +495,12 @@ html[data-theme='dark'] .ud-skel__avatar, html[data-theme='dark'] .ud-skel__line
   .ud-grant__notice { font-size: 16.5px; }
   .ud-grant__grid div { font-size: 16.5px; }
   .ud-grant__grid span { font-size: 15px; }
-  .ud-badge { font-size: 14px; padding: 3px 12px; }
-  .ud-learner-link, .ud-restore { padding: 8px 19px; }
-  .ud-restore { font-size: 16.5px; }
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
-  .ud-back { font-size: 20px; }
-  .ud-learner-link { font-size: 19px; }
   .ud-avatar { width: 72px; height: 72px; font-size: 28px; }
   .ud-id h3, .ud-name { font-size: 28.5px; }
   .ud-sub { font-size: 19px; }
-  .ud-stat span { font-size: 18.5px; }
-  .ud-stat strong { font-size: 32px; }
   .ud-path__main strong { font-size: 20.5px; }
   .ud-path__main span { font-size: 18.5px; }
   .ud-path__pct { font-size: 19px; }
