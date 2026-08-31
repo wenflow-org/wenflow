@@ -133,7 +133,7 @@
             </label>
             <label class="mk-field" :class="{ 'mk-field--error': budgetErrors.maxRetriesTotal }">
               <span class="mk-field__label">会话 AI 调用上限</span>
-              <input v-model.number="budgetForm.maxRetriesTotal" type="number" min="1" max="500" class="mk-field__input" @input="budgetDirty = true" />
+              <input v-model.number="budgetForm.maxRetriesTotal" type="number" min="1" max="1000" class="mk-field__input" @input="budgetDirty = true" />
               <span v-if="budgetErrors.maxRetriesTotal" class="mk-field__err">{{ budgetErrors.maxRetriesTotal }}</span>
               <span class="mk-field__hint">单个会话累计 AI 调用（含重试）达到上限即终止，防止无限跑下去；故事可单独覆盖</span>
             </label>
@@ -290,6 +290,8 @@
                   <span>已选 {{ selectedStoryKeys.size }}</span>
                 </label>
                 <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" title="为每个勾选的故事启动一次新的实验会话" @click="batchRunStories">批量运行</button>
+                <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm" :disabled="storyBusy" title="对勾选故事的最新会话开启自动驾驶（不新建会话；已运行的自动跳过）" @click="batchAutopilotStories('start')">批量启动</button>
+                <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm" :disabled="storyBusy" title="停止勾选故事最新会话的自动驾驶（学习进度保留）" @click="batchAutopilotStories('stop')">批量停止</button>
                 <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="storyBusy" title="删除勾选的故事（不可恢复）" @click="batchRemoveStories">批量删除</button>
               </template>
               <div v-if="isLive" class="vp-sample-pills" role="radiogroup" aria-label="故事样本类型">
@@ -321,6 +323,19 @@
                 {{ storyBusy ? '生成中…' : '生成故事' }}
               </button>
             </div>
+          </div>
+          <!-- 故事池状态过滤（轴 A 生命周期；与一级页 chips 同语义） -->
+          <div v-if="isLive && displayStories.length" class="vp-filters">
+            <button
+              v-for="opt in storyFilterOptions"
+              :key="opt.key"
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': storyFilter === opt.key }"
+              @click="storyFilter = opt.key"
+            >
+              {{ opt.label }} <span class="vp-filter-count">{{ opt.count }}</span>
+            </button>
           </div>
           <div v-if="isLive && !displayStories.length" class="vp-empty-state">
             <span class="vp-empty-state__icon" aria-hidden="true">◌</span>
@@ -366,7 +381,17 @@
                   <div class="vp-story__stats">
                     <span class="vp-story__stats-item" title="共运行的会话次数">运行 {{ s.runCount || 0 }} 次</span>
                     <span class="vp-story__stats-item" title="会话进度：目标对话 / 路径规划 / 教学回合 的累计会话数">目标 {{ s.goalCount || 0 }} · 路径 {{ s.pathCount || 0 }} · 教学 {{ s.learnCount || 0 }}</span>
-                    <span class="vp-story__latest" :class="storyLatestText(s).cls">{{ storyLatestText(s).text }}</span>
+                    <!-- 双轴状态：生命周期徽章（轴 A）+ 阶段条（轴 B）；与一级页同源组件 -->
+                    <template v-if="s.latestRun?.sessionId">
+                      <RunStateBadge :status="storyRunState(s)" :hint="`${formatRunResult(s.latestRun?.status || '')} · ${timeAgo(String(s.latestRun?.updatedAt || s.latestRun?.createdAt || ''))}`" :pulse="false" />
+                      <RunStageBar
+                        :stage="s.latestRun?.currentStage || null"
+                        :status="storyRunState(s)"
+                        :task-progress="null"
+                        :show-task-text="false"
+                      />
+                    </template>
+                    <span v-else class="vp-story__latest">未运行</span>
                   </div>
                 </div>
                 <div class="vp-story__ops" @click.stop>
@@ -398,6 +423,13 @@
                 <div v-for="(r, i) in g.runs" :key="r.sessionId || i" class="vp-run">
                   <div class="vp-run__head">
                     <strong>{{ formatRunStage(r.stage) }}</strong>
+                    <RunStateBadge :status="r.result" :hint="formatRunResult(r.result)" :pulse="false" />
+                    <RunStageBar
+                      :stage="r.stage"
+                      :status="r.result"
+                      :task-progress="null"
+                      :show-task-text="false"
+                    />
                     <span class="vp-run__result" :class="`is-${r.tone}`">{{ formatRunResult(r.result) }}<template v-if="r.pathId"> · Path</template></span>
                   </div>
                   <div class="vp-run__sub">
@@ -405,7 +437,7 @@
                     <template v-if="r.storyTitle && g.key !== '__orphan__' && g.title !== r.storyTitle"> · {{ r.storyTitle }}</template>
                   </div>
                   <div v-if="isLive && r.sessionId" class="vp-run__ops">
-                    <button type="button" class="mk-link" title="进入该会话的座舱：查看对话、推进/自动/暂停/终止等细粒度控制" @click="openSubPage('session', r.sessionId)">打开座舱</button>
+                    <button type="button" class="mk-link" title="进入该会话的座舱：查看对话、推进/自动/暂停/终止等细粒度控制" @click="openSessionCockpit(r.sessionId)">打开座舱</button>
                     <button type="button" class="mk-link mk-link--danger" :disabled="sessionBusy" title="删除该会话（仅终态可删，不可恢复）" @click="removeSession(r.sessionId)">删除</button>
                   </div>
                 </div>
@@ -532,7 +564,7 @@
             </label>
             <label class="mk-field">
               <span class="mk-field__label">会话 AI 调用上限</span>
-              <input v-model="editStoryForm.budget.maxRetriesTotal" type="number" min="1" max="500" class="mk-field__input" placeholder="留空 = 继承角色级（默认 200）" />
+              <input v-model="editStoryForm.budget.maxRetriesTotal" type="number" min="1" max="1000" class="mk-field__input" placeholder="留空 = 继承角色级（默认 600）" />
               <span class="mk-field__hint">单个会话累计 AI 调用（含重试）达到上限即终止；防本故事无限跑</span>
             </label>
           </div>
@@ -575,6 +607,8 @@ import {
   type VsLifecycleState
 } from './vlab-controls'
 import MkKpi from './MkKpi.vue'
+import RunStateBadge from './RunStateBadge.vue'
+import RunStageBar from './RunStageBar.vue'
 import { useSafePolling } from '@/composables/useSafePolling'
 import {
   extractQuality,
@@ -710,6 +744,57 @@ async function batchRunStories() {
     await loadDetail(id)
   }
 }
+/** 批量启动/停止自动驾驶：对勾选故事的最新会话开启/停止 autopilot（不新建会话；已运行/已停止的自动跳过） */
+async function batchAutopilotStories(action: 'start' | 'stop') {
+  const list = displayStories.value
+  const targets = list
+    .map((s, i) => ({ s, i, k: storyKey(s, i) }))
+    .filter(({ k }) => selectedStoryKeys.value.has(k))
+  if (!targets.length) { toast.error('请先勾选要操作的故事'); return }
+  const id = subPage.value?.id
+  if (!id || storyBusy.value) return
+
+  const withSession = targets.filter((t) => t.s.latestRun?.sessionId)
+  const noSession = targets.length - withSession.length
+  if (!withSession.length) {
+    toast.error(action === 'start' ? '勾选的故事都没有会话；请先「批量运行」创建会话' : '勾选的故事都没有会话，无需停止')
+    return
+  }
+  const verb = action === 'start' ? '启动自动驾驶' : '停止自动驾驶'
+  const ok = await askConfirm({
+    title: `批量${verb}`,
+    message: `将${action === 'start' ? '为' : '停止'}勾选的 ${withSession.length} 个故事的最新会话${action === 'start' ? '开启自动驾驶（target=final 直达 Path 全部完成），已运行的自动跳过' : '的自动驾驶，学习进度保留'}`,
+    confirmText: verb
+  })
+  if (!ok) return
+
+  storyBusy.value = true
+  let done = 0
+  let skipped = 0
+  let failed = 0
+  for (const { s } of withSession) {
+    const sid = String(s.latestRun?.sessionId || '')
+    try {
+      if (action === 'start') {
+        await adminVirtualLearnersApi.autopilotStart(sid, { target: 'final' })
+      } else {
+        await adminVirtualLearnersApi.autopilotStop(sid)
+      }
+      done++
+    } catch (e) {
+      const msg = errMsg(e)
+      if (msg.includes('已有全自动运行') || msg.includes('没有正在运行')) { skipped++; continue }
+      failed++
+      toast.error(`「${s.title || '故事'}」${verb}失败：${msg}`)
+    }
+  }
+  storyBusy.value = false
+  if (done > 0 || skipped > 0) {
+    toast.success(`已${verb} ${done} 个${skipped ? `（跳过 ${skipped}）` : ''}${noSession ? `（${noSession} 个无会话跳过）` : ''}${failed ? `，失败 ${failed}` : ''}`)
+    selectedStoryKeys.value = new Set()
+    await loadDetail(id)
+  }
+}
 /** 批量删除：确认后逐个删除勾选的故事 */
 async function batchRemoveStories() {
   const list = displayStories.value
@@ -769,10 +854,33 @@ const DEMO_STORIES: Record<string, StoryItem[]> = {
     { id: 'demo-s7', index: 1, title: '周末爆发户', outline: 'weekday 低效、周末爆发——系统需要适应她的节奏而不是纠正', status: 'draft', runCount: 0, pathId: null, goalCount: 0, pathCount: 0, learnCount: 0 }
   ]
 }
+const storyFilter = ref('')
+const storyFilterOptions = computed(() => {
+  const base = isLive.value ? stories.value : (DEMO_STORIES[subPage.value?.id || ''] || [])
+  const count = (pred: (s: StoryItem) => boolean) => base.filter(pred).length
+  const running = count((s) => (s.runningCount || 0) > 0)
+  const paused = count((s) => !!s.latestRun && ['paused'].includes(String(s.latestRun.status || '').toLowerCase()))
+  const failed = count((s) => !!s.latestRun && ['failed', 'abandoned', 'timeout'].includes(String(s.latestRun.status || '').toLowerCase()))
+  const completed = count((s) => !!s.latestRun && String(s.latestRun.status || '').toLowerCase() === 'completed')
+  return [
+    { key: '', label: '全部', count: base.length },
+    { key: 'running', label: '运行中', count: running },
+    { key: 'paused', label: '已暂停', count: paused },
+    { key: 'failed', label: '需关注', count: failed },
+    { key: 'completed', label: '已完成', count: completed },
+  ]
+})
 const displayStories = computed<StoryItem[]>(() => {
-  if (isLive.value) return stories.value
-  // demo 模式：未知 ID 不回退到其他样本的故事，显示空故事池（配合「未找到」空态）
-  return DEMO_STORIES[subPage.value?.id || ''] || []
+  let list: StoryItem[] = []
+  if (isLive.value) list = stories.value
+  else list = DEMO_STORIES[subPage.value?.id || ''] || []
+  const sf = storyFilter.value
+  if (!sf) return list
+  if (sf === 'running') return list.filter((s) => (s.runningCount || 0) > 0)
+  if (sf === 'paused') return list.filter((s) => !!s.latestRun && String(s.latestRun.status || '').toLowerCase() === 'paused')
+  if (sf === 'failed') return list.filter((s) => !!s.latestRun && ['failed', 'abandoned', 'timeout'].includes(String(s.latestRun.status || '').toLowerCase()))
+  if (sf === 'completed') return list.filter((s) => !!s.latestRun && String(s.latestRun.status || '').toLowerCase() === 'completed')
+  return list
 })
 
 const selectedStory = computed(() => {
@@ -785,12 +893,20 @@ const selectedStory = computed(() => {
 })
 const selectedStoryTitle = computed(() => selectedStory.value?.title || '')
 
+/** 从二级页进入三级座舱：记忆来源（当前画像），返回时回到本页 */
+function openSessionCockpit(sessionId: string) {
+  const pid = subPage.value?.id || ''
+  openSubPage('session', sessionId, {
+    from: { view: 'virtual', id: pid, label: subPage.value?.label }
+  })
+}
+
 /* 点击故事行：有会话 → 进入该故事最新会话座舱（核心控制在三级页）；无会话 → 仅选中为运行目标 */
 function selectStory(s: StoryItem, index: number) {
   const id = s.id || String(index)
   selectedStoryId.value = id
   if (s.latestRun?.sessionId) {
-    openSubPage('session', s.latestRun.sessionId)
+    openSessionCockpit(s.latestRun.sessionId)
   }
 }
 
@@ -812,7 +928,7 @@ const quickLearnOpen = ref(false)
 /* ===== 运行预算（画像 tab 常驻卡片；画像级持久，新会话创建时作为初始值） ===== */
 const budgetForm = ref({
   maxRetriesPerStep: 8,
-  maxRetriesTotal: 200,
+  maxRetriesTotal: 600,
   turnCapPerLesson: 40,
   frictionBudget: 'normal'
 })
@@ -827,7 +943,7 @@ function fillBudgetForm() {
   const rp = liveDetail.value?.runtimePrefs
   budgetForm.value = {
     maxRetriesPerStep: b?.maxRetriesPerStep ?? 8,
-    maxRetriesTotal: b?.maxRetriesTotal ?? 200,
+    maxRetriesTotal: b?.maxRetriesTotal ?? 600,
     turnCapPerLesson: rp?.turnCapPerLesson ?? 40,
     frictionBudget: rp?.frictionBudget || 'normal'
   }
@@ -845,7 +961,7 @@ async function saveBudget() {
     return
   }
   if (!Number.isFinite(total) || total < 1 || total > 500) {
-    budgetErrors.value.maxRetriesTotal = '总重试预算须为 1–500 的整数'
+    budgetErrors.value.maxRetriesTotal = '总重试预算须为 1–1000 的整数'
     return
   }
   budgetSaving.value = true
@@ -972,7 +1088,7 @@ async function saveStory() {
   }
   if (totalRaw) {
     const v = Math.round(Number(totalRaw))
-    if (Number.isFinite(v)) budget.maxRetriesTotal = Math.min(500, Math.max(1, v))
+    if (Number.isFinite(v)) budget.maxRetriesTotal = Math.min(1000, Math.max(1, v))
   }
   storySaving.value = true
   try {
@@ -1162,8 +1278,8 @@ async function loadDetail(id?: string, quiet = false) {
         const b = (p.simulationBudget || {}) as Record<string, unknown>
         if (!b.maxRetriesPerStep && !b.maxRetriesTotal) return undefined
         return {
-          maxRetriesPerStep: Number(b.maxRetriesPerStep) || 5,
-          maxRetriesTotal: Number(b.maxRetriesTotal) || 50,
+          maxRetriesPerStep: Number(b.maxRetriesPerStep) || 8,
+          maxRetriesTotal: Number(b.maxRetriesTotal) || 600,
           consumedRetries: Number(b.consumedRetries) || 0
         }
       })(),
@@ -1529,7 +1645,7 @@ async function retrySession() {
   finally { sessionBusy.value = false }
 }
 function goCockpit() {
-  if (activeSessionId.value) openSubPage('session', activeSessionId.value)
+  if (activeSessionId.value) openSessionCockpit(activeSessionId.value)
 }
 
 const tabs = computed(() => {
@@ -1621,25 +1737,17 @@ function formatRunResult(result: string) {
   return result || '—'
 }
 
-/* ---- 结果色调辅助 ---- */
-function runToneOf(status: string): 'ok' | 'warn' | 'bad' {
-  const r = String(status || '').toLowerCase()
-  if (r === 'completed' || r === 'success' || r === 'succeeded') return 'ok'
-  if (r === 'running' || r === 'created' || r === 'paused') return 'warn'
-  // abandoned（人为终止）非成功态：标红但文案区分「已终止」而非「失败」
-  return 'bad'
-}
-/** 管理行「最近」摘要：运行中 / 最近结果（色调）/ 未运行 */
-function storyLatestText(s: StoryItem): { text: string; cls: string } {
-  if ((s.runningCount || 0) > 0) return { text: `${s.runningCount} 个运行中`, cls: 'is-running' }
-  if (s.latestRun) {
-    const tone = runToneOf(s.latestRun.status)
-    return {
-      text: `${formatRunResult(s.latestRun.status)} · ${timeAgo(String(s.latestRun.updatedAt || s.latestRun.createdAt || ''))}`,
-      cls: `is-${tone}`,
-    }
-  }
-  return { text: '未运行', cls: 'is-none' }
+/**
+ * 故事最新会话的合成生命周期状态（轴 A，供 RunStateBadge / RunStageBar 使用）
+ * 合成规则：会话终态优先；runningCount>0 且 latestRun running → running；
+ * 其余按 latestRun.status 原样（含 paused/failed/completed/abandoned）
+ */
+function storyRunState(s: StoryItem): string {
+  if ((s.runningCount || 0) > 0 && s.latestRun?.status === 'running') return 'running'
+  const st = String(s.latestRun?.status || '').toLowerCase()
+  if (['completed', 'failed', 'abandoned', 'paused', 'created', 'timeout', 'cancelled'].includes(st)) return st
+  if (st === 'running') return 'running'
+  return st || 'created'
 }
 
 /** 运行 tab：按故事分组的时间线（含「未关联故事」兜底组） */
@@ -1985,6 +2093,9 @@ async function quietReload(id: string) {
 }
 /* ===== 故事池：列表（选中 → 运行目标；展开 → 详情区） ===== */
 .vp-stories { display: grid; gap: 8px; padding: 12px; }
+/* 故事池状态过滤 chips（对齐一级页 vl-filters） */
+.vp-filters { display: flex; align-items: center; gap: 6px; padding: 8px 16px 0; flex-wrap: wrap; }
+.vp-filter-count { font-weight: 800; margin-left: 2px; opacity: 0.75; }
 
 .vp-story {
   display: grid;
@@ -2641,5 +2752,29 @@ async function quietReload(id: string) {
   font-size: 12px;
   color: var(--mk-faint, #8a94a6);
   font-style: italic;
+}
+
+/* ================= 暗色模式（D1 补完）：虚拟画像页 ================= */
+html[data-theme='dark'] {
+  .vp-top, .vp-head, .vp-guide, .vp-tabbar, .vp-panel { background: #141c2b; border-color: #232f45; }
+  .vp-back:hover { background: #1f2b40; }
+  .vp-guide__step:hover { background: rgba(91, 141, 239, 0.14); color: #7aa2ff; }
+  .vp-tab { background: #1b2537; }
+  .vp-tab.is-active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; }
+  .vp-story__row:hover { background: #1b2740; }
+  .vp-story.is-selected .vp-story__row { background: rgba(91, 141, 239, 0.12); }
+  .vp-quality--ok { color: #6ee7a0; background: rgba(74, 222, 128, 0.12); }
+  .vp-quality--warn { color: #fcd34d; background: rgba(251, 191, 36, 0.12); }
+  .vp-quality--bad { color: #fca5a5; background: rgba(248, 113, 113, 0.12); }
+  .vp-quality--none { background: #253049; }
+  .vp-badge, .vp-chip { background: #253049; }
+  .vp-empty { background: #131b2a; }
+  .vp-top__goal { background: #1b2537; }
+  .vp-life--ok { background: rgba(74, 222, 128, 0.12); }
+  .vp-life--warn { background: rgba(251, 191, 36, 0.12); }
+  .vp-life--bad { background: rgba(248, 113, 113, 0.12); }
+  .vp-story { background: #141c2b; border-color: #232f45; }
+  .vp-story__radio { background: #1b2537; }
+  .vp-story.is-selected { background: rgba(91, 141, 239, 0.1); border-color: rgba(91, 141, 239, 0.35); }
 }
 </style>

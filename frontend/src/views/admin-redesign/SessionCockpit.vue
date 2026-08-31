@@ -3684,4 +3684,29 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-trace-list__blockers { font-size: 14.5px; }
   .cp-trace-list__body { font-size: 13.5px; }
 }
+
+/* ================= 暗色模式（D1 补完）：会话座舱 ================= */
+html[data-theme='dark'] {
+  .cp-budget__track { background: #232f45; }
+  .cp-back:hover { background: #1f2b40; }
+  .cp-stage:hover:not(:disabled) { background: #1f2b40; }
+  .cp-stage--active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
+  .cp-run__autopilot-result { background: #141c2b; }
+  .cp-kv, .cp-kv--wrap, .cp-flag, .cp-budget { background: #141c2b; }
+  .cp-transcript__message { background: #141c2b; border-left-color: #2a3850; }
+  .cp-transcript__message.is-teacher { background: rgba(91, 141, 239, 0.12); border-left-color: var(--mk-blue); }
+  .cp-transcript__message.is-learner { background: rgba(45, 212, 191, 0.1); border-left-color: var(--mk-teal); }
+  .cp-review { background: #141c2b; }
+  .cp-review__badge, .cp-lesson-head__state { background: #253049; }
+  .cp-lesson-head__state[data-state='active'] { background: rgba(91, 141, 239, 0.18); color: #7aa2ff; }
+  .cp-learn-tree__lesson.is-active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; border-left-color: var(--mk-blue); }
+  .cp-learn-tree__lesson.is-pending:hover { background: rgba(251, 191, 36, 0.12); color: #fcd34d; }
+  .cp-lesson-wrapup__kp-status.is-learning { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; }
+  .cp-history-btn:hover, .cp-history-btn.is-current { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; }
+  .cp-lesson-wrapup__ok { background: rgba(74, 222, 128, 0.12); }
+  .cp-wrapup-badge { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; }
+  .cp-timeline__row { background: #141c2b; }
+  .cp-verdict { background: #141c2b; }
+  .cp-log__phase { background: rgba(91, 141, 239, 0.16); color: #93b4f5; }
+}
 </style>
