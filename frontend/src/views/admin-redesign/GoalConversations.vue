@@ -82,6 +82,11 @@
           </div>
           <div class="mk-card__head-right">
             <DataScopeToggle v-model="includeTest" />
+            <MkCols
+              :col-defs="gcColDefs"
+              storage-key="wf_goal_hidden_cols"
+              v-model:hidden="gcHiddenCols"
+            />
             <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含模拟' : '仅真实' }}）<template v-if="stats && stats.total > rows.length"> · 仅显示最近 {{ rows.length }} 条</template></span>
           </div>
         </div>
@@ -97,11 +102,11 @@
           <thead>
             <tr>
               <th style="width:160px">用户</th>
-              <th style="width:35%">目标摘要</th>
-              <th class="mk-col--badge">状态</th>
-              <th style="width:160px">阶段</th>
-              <th class="mk-col--badge">路径</th>
-              <th class="mk-col--time-full">创建时间</th>
+              <th v-if="!gcHiddenCols.has('summary')" style="width:35%">目标摘要</th>
+              <th v-if="!gcHiddenCols.has('status')" class="mk-col--badge">状态</th>
+              <th v-if="!gcHiddenCols.has('stage')" style="width:160px">阶段</th>
+              <th v-if="!gcHiddenCols.has('path')" class="mk-col--badge">路径</th>
+              <th v-if="!gcHiddenCols.has('created')" class="mk-col--time-full">创建时间</th>
               <th class="mk-col--actions-wide">操作</th>
             </tr>
           </thead>
@@ -117,9 +122,9 @@
                   <span v-else-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--warn" title="测试/审计账号">测试</span>
                 </div>
               </td>
-              <td><span class="gc-summary" :title="r.summary">{{ r.summary }}</span></td>
-              <td><span class="mk-badge" :class="statusBadge(r.status)">{{ statusLabel(r.status) }}</span></td>
-              <td>
+              <td v-if="!gcHiddenCols.has('summary')"><span class="gc-summary" :title="r.summary">{{ r.summary }}</span></td>
+              <td v-if="!gcHiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(r.status)">{{ statusLabel(r.status) }}</span></td>
+              <td v-if="!gcHiddenCols.has('stage')">
                 <div class="gc-stage-cell">
                   <div class="gc-stage-cell__head">
                     <span class="mk-badge" :class="stageBadgeCls(r.stage)" :title="`阶段：${stageText(r.stage) || '—'}`">{{ stageText(r.stage) || '—' }}</span>
@@ -131,11 +136,11 @@
                   <span v-else class="mk-na">—</span>
                 </div>
               </td>
-              <td>
+              <td v-if="!gcHiddenCols.has('path')">
                 <span v-if="r.hasPath" class="mk-badge mk-badge--info">已生成</span>
                 <span v-else class="mk-na">—</span>
               </td>
-              <td><span class="mk-cell-sub" :title="r.createdAt">{{ r.createdAt }}</span></td>
+              <td v-if="!gcHiddenCols.has('created')"><span class="mk-cell-sub" :title="r.createdAt">{{ r.createdAt }}</span></td>
               <td>
                 <div class="mk-actions mk-actions--left">
                   <button type="button" class="mk-icon-btn" title="链路" @click.stop="goTrace(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></button>
@@ -299,6 +304,7 @@ import Pagination from './Pagination.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkOverview from './MkOverview.vue'
 import MkKpi from './MkKpi.vue'
+import MkCols from './MkCols.vue'
 import { adminGoalConversationsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
@@ -339,6 +345,16 @@ const loadError = ref('')
 const stats = ref<{ total: number; active: number; completed: number; completionRate: string } | null>(null)
 const keyword = ref('')
 const statusFilter = ref('')
+
+/* P1-3 列显隐（公共组件 MkCols）：目标摘要/状态/阶段/路径/创建时间 可隐藏，用户/操作固定 */
+const gcColDefs = [
+  { key: 'summary', label: '目标摘要', title: '对话目标摘要' },
+  { key: 'status', label: '状态', title: '对话状态' },
+  { key: 'stage', label: '阶段', title: '澄清阶段 + 过程点' },
+  { key: 'path', label: '路径', title: '路径是否已生成' },
+  { key: 'created', label: '创建时间', title: '对话创建时间' },
+] as const
+const gcHiddenCols = ref<Set<string>>(new Set())
 const detail = ref<Detail | null>(null)
 
 /* URL 同步：?goal=id 记录当前打开的详情，支持深链/刷新恢复 */

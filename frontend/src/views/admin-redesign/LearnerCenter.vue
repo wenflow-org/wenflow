@@ -49,6 +49,11 @@
         </div>
         <div class="mk-card__head-right">
           <DataScopeToggle v-if="isLive" v-model="includeTest" />
+          <MkCols
+            :col-defs="lcColDefs"
+            storage-key="wf_learner_hidden_cols"
+            v-model:hidden="lcHiddenCols"
+          />
           <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 人</span>
         </div>
       </div>
@@ -63,43 +68,43 @@
       <div v-else-if="filtered.length" class="mk-table-scroll">
       <table class="mk-table">
         <colgroup>
-          <col style="width:180px">
-          <col style="width:35%">
-          <col style="width:80px">
-          <col style="width:60px">
-          <col style="width:110px">
-          <col style="width:180px">
-          <col style="width:90px">
+          <col v-if="!lcHiddenCols.has('learner')" style="width:180px">
+          <col v-if="!lcHiddenCols.has('progress')" style="width:35%">
+          <col v-if="!lcHiddenCols.has('trend')" style="width:80px">
+          <col v-if="!lcHiddenCols.has('fatigue')" style="width:60px">
+          <col v-if="!lcHiddenCols.has('conf')" style="width:110px">
+          <col v-if="!lcHiddenCols.has('risk')" style="width:180px">
+          <col v-if="!lcHiddenCols.has('updated')" style="width:90px">
           <col style="width:var(--mk-col-actions-wide, 120px)">
         </colgroup>
         <thead>
           <tr>
-            <th>学习者</th>
-            <th>当前进度</th>
-            <th>趋势</th>
-            <th>疲劳</th>
-            <th title="快照置信度：模型对该学习者状态的把握程度，低于 50% 为低置信">置信</th>
-            <th>风险摘要</th>
-            <th>更新</th>
+            <th v-if="!lcHiddenCols.has('learner')">学习者</th>
+            <th v-if="!lcHiddenCols.has('progress')">当前进度</th>
+            <th v-if="!lcHiddenCols.has('trend')">趋势</th>
+            <th v-if="!lcHiddenCols.has('fatigue')">疲劳</th>
+            <th v-if="!lcHiddenCols.has('conf')" title="快照置信度：模型对该学习者状态的把握程度，低于 50% 为低置信">置信</th>
+            <th v-if="!lcHiddenCols.has('risk')">风险摘要</th>
+            <th v-if="!lcHiddenCols.has('updated')">更新</th>
             <th class="mk-col--actions-wide">操作</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="r in paged" :key="r.id" class="lc-row" @click="openDetail(r)">
-            <td>
+            <td v-if="!lcHiddenCols.has('learner')">
               <div class="mk-cell-main">
                 <strong>{{ r.name }}</strong>
                 <span class="mk-cell-sub">{{ r.email }}</span>
               </div>
               <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--warn" title="虚拟学习者/测试账号不参与风险队列">测试账号</span>
             </td>
-            <td>
+            <td v-if="!lcHiddenCols.has('progress')">
               <div class="mk-cell-main">
                 <strong class="progress-title">{{ r.task || '未开始' }}</strong>
                 <span class="mk-cell-sub">{{ r.path || '尚未开始学习' }}</span>
               </div>
             </td>
-            <td>
+            <td v-if="!lcHiddenCols.has('trend')">
               <span class="lc-trend" :class="`lc-trend--${r.trend}`" :title="trendTitle(r)">
                 <i class="lc-trend__arrow" aria-hidden="true">{{ r.trend === 'up' ? '↗' : r.trend === 'down' ? '↘' : '→' }}</i>
                 <span class="lc-trend__bars" aria-hidden="true">
@@ -110,8 +115,8 @@
                 {{ trendText(r.trend) }}
               </span>
             </td>
-            <td><span class="mk-badge" :class="fatigueBadge(r.fatigue)">{{ r.fatigue }}</span></td>
-            <td class="mk-num">
+            <td v-if="!lcHiddenCols.has('fatigue')"><span class="mk-badge" :class="fatigueBadge(r.fatigue)">{{ r.fatigue }}</span></td>
+            <td v-if="!lcHiddenCols.has('conf')" class="mk-num">
               <span
                 v-if="r.confidence != null && r.task"
                 class="conf"
@@ -122,8 +127,8 @@
               </span>
               <span v-else class="mk-na" :title="r.task ? '' : '尚未开始学习，暂无置信度'">—</span>
             </td>
-            <td class="risk-text" :class="{ 'mk-na': !r.risk }">{{ r.risk || '—' }}</td>
-            <td class="mk-na">{{ isUpdating(r.id) ? '重算中…' : r.updated }}</td>
+            <td v-if="!lcHiddenCols.has('risk')" class="risk-text" :class="{ 'mk-na': !r.risk }">{{ r.risk || '—' }}</td>
+            <td v-if="!lcHiddenCols.has('updated')" class="mk-na">{{ isUpdating(r.id) ? '重算中…' : r.updated }}</td>
             <td>
               <div class="mk-actions mk-actions--left">
                 <button type="button" class="mk-icon-btn" title="详情" @click.stop="openDetail(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg></button>
@@ -199,6 +204,7 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
+import MkCols from './MkCols.vue'
 import { adminNotificationsApi } from '@/api/adminApi'
 
 interface Row {
@@ -225,6 +231,18 @@ const includeTest = ref(false)
 watch(includeTest, (v) => {
   if (isLive.value) void liveSetLearnersIncludeTest(v)
 })
+
+/* P1-3 列显隐（公共组件 MkCols）：学习者/进度/趋势/疲劳/置信/风险/更新 可隐藏，操作固定 */
+const lcColDefs = [
+  { key: 'learner', label: '学习者', title: '姓名 + 邮箱' },
+  { key: 'progress', label: '当前进度', title: '当前任务 + 路径' },
+  { key: 'trend', label: '趋势', title: '近况趋势' },
+  { key: 'fatigue', label: '疲劳', title: '疲劳度' },
+  { key: 'conf', label: '置信', title: '快照置信度' },
+  { key: 'risk', label: '风险摘要', title: '风险原因' },
+  { key: 'updated', label: '更新', title: '快照更新时间' },
+] as const
+const lcHiddenCols = ref<Set<string>>(new Set())
 
 function openDetail(r: Row) {
   openSubPage('learner', r.id, includeTest.value ? { includeTest: true } : undefined)

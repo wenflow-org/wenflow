@@ -34,19 +34,19 @@
             </button>
           </div>
           <input class="mk-filter__input" v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
+          <select v-model="roleFilter" class="mk-filter__select" aria-label="按角色筛选">
+            <option value="">全部角色</option>
+            <option value="admin">管理员</option>
+            <option value="user">普通用户</option>
+          </select>
         </div>
         <div class="mk-card__head-right">
           <DataScopeToggle v-if="isLive && pill !== 'deleted'" v-model="includeTest" />
-          <div class="ul-cols">
-            <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen">列</button>
-            <div v-if="colsOpen" class="ul-cols__menu" @click.stop>
-              <label v-for="c in ulColDefs" :key="c.key" class="ul-cols__item" :title="c.title">
-                <input type="checkbox" :checked="!hiddenCols.has(c.key)" @change="toggleUlCol(c.key)" />
-                <span>{{ c.label }}</span>
-              </label>
-              <button v-if="hiddenCols.size" type="button" class="ul-cols__reset" @click="hiddenCols = new Set()">恢复全部列</button>
-            </div>
-          </div>
+          <MkCols
+            :col-defs="ulColDefs"
+            storage-key="wf_users_hidden_cols"
+            v-model:hidden="hiddenCols"
+          />
           <span class="mk-card__meta">{{ filtered.length }} / {{ users.length }} 人</span>
         </div>
       </div>
@@ -150,6 +150,7 @@
     <div v-if="isLive && selected.length" class="ul-batch">
       <span>已选 {{ selected.length }} 人</span>
       <button type="button" class="mk-link" @click="selected = []">取消选择</button>
+      <button type="button" class="mk-link" :disabled="batchBusy" @click="exportSelected">导出 CSV</button>
       <button type="button" class="ul-batch__danger" :disabled="batchBusy" @click="batchDelete">
         {{ batchBusy ? '删除中…' : '批量删除' }}
       </button>
@@ -214,6 +215,7 @@ import { askConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
+import MkCols from './MkCols.vue'
 import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
@@ -326,6 +328,7 @@ const users = computed<UserRow[]>(() => {
 
 const pill = ref('all')
 const keyword = ref('')
+const roleFilter = ref('')
 
 /* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；切换「含虚拟·测试」后按新口径重拉并灰标虚拟/测试行 */
 const includeTest = ref(false)
@@ -333,8 +336,7 @@ watch(includeTest, (v) => {
   if (isLive.value && pill.value !== 'deleted') void liveSetUsersIncludeTest(v)
 })
 
-/* D3 表格增强：列显隐（localStorage 持久化；6 列可隐藏，用户/操作列固定） */
-const UL_COLS_KEY = 'wf_users_hidden_cols'
+/* D3 表格增强：列显隐（公共组件 MkCols 接管：菜单 + localStorage 持久化；6 列可隐藏，用户/操作列固定） */
 const ulColDefs = [
   { key: 'check', label: '选择框', title: '批量操作选择框' },
   { key: 'role', label: '角色', title: '管理员 / 用户' },
@@ -343,21 +345,7 @@ const ulColDefs = [
   { key: 'created', label: '注册时间', title: '账号创建时间' },
   { key: 'lastlogin', label: '最后登录', title: '最近登录时间' },
 ] as const
-const colsOpen = ref(false)
 const hiddenCols = ref<Set<string>>(new Set())
-try {
-  const saved = JSON.parse(localStorage.getItem(UL_COLS_KEY) || '[]') as unknown
-  if (Array.isArray(saved)) hiddenCols.value = new Set(saved.filter((x): x is string => typeof x === 'string'))
-} catch { /* 隐私模式忽略 */ }
-watch(hiddenCols, (s) => {
-  try { localStorage.setItem(UL_COLS_KEY, JSON.stringify([...s])) } catch { /* ignore */ }
-}, { deep: true })
-function toggleUlCol(key: string) {
-  const next = new Set(hiddenCols.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  hiddenCols.value = next
-}
 
 /** 真实用户数（排除测试/虚拟账号；口径标注用，与总览「总用户」对齐的近似值——列表为前 50 行样本） */
 const realUsers = computed(() => users.value.filter((u) => !u.deleted && !isTestAccountUser(u)).length)
@@ -538,6 +526,39 @@ async function batchDelete() {
   }
 }
 
+/** 导出选中用户为 CSV（P1：批量操作标配，导出当前选中；含虚拟/测试标记） */
+function exportSelected() {
+  const rows = selected.value
+    .map((id) => users.value.find((u) => u.id === id))
+    .filter((u): u is UserRow => !!u)
+  if (!rows.length) return
+  const esc = (v: unknown) => {
+    const s = String(v ?? '')
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const header = ['姓名', '邮箱', '角色', '等级/XP', '路径/会话', '注册时间', '最后登录', '类型']
+  const lines = rows.map((u) =>
+    [
+      esc(u.name),
+      esc(u.email),
+      u.admin ? '管理员' : '用户',
+      `${levelLabel(u.xp)} / ${u.xp}`,
+      `${u.paths} / ${u.sessions}`,
+      esc(u.createdAt || ''),
+      esc(u.lastLogin || ''),
+      u.deleted ? '已删除' : u.isVirtualLearner ? '虚拟' : isTestAccount(u) ? '测试' : '真实',
+    ].join(',')
+  )
+  const csv = '\uFEFF' + [header.join(','), ...lines].join('\r\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `wenflow-users-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
+  toast.success(`已导出 ${rows.length} 个用户`)
+}
+
 async function toggleRole(u: UserRow) {
   const targetAdmin = !u.admin
   const verb = targetAdmin ? '设为管理员' : '降为普通用户'
@@ -607,6 +628,8 @@ const filtered = computed(() =>
     if (pill.value === 'deleted' && !u.deleted) return false
     if (pill.value === 'admin' && !u.admin) return false
     if (pill.value === 'online' && !u.online) return false
+    if (roleFilter.value === 'admin' && !u.admin) return false
+    if (roleFilter.value === 'user' && u.admin) return false
     const q = keyword.value.trim().toLowerCase()
     if (q && !`${u.name} ${u.email} ${u.id}`.toLowerCase().includes(q)) return false
     return true
@@ -626,10 +649,11 @@ watch(filtered, () => {
   page.value = 1
 })
 
-const isFiltered = computed(() => pill.value !== 'all' || !!keyword.value.trim())
+const isFiltered = computed(() => pill.value !== 'all' || !!keyword.value.trim() || !!roleFilter.value)
 function clearFilters() {
   pill.value = 'all'
   keyword.value = ''
+  roleFilter.value = ''
 }
 </script>
 

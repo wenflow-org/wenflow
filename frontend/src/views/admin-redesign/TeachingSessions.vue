@@ -68,6 +68,11 @@
         </div>
         <div class="mk-card__head-right">
           <DataScopeToggle v-model="includeTest" />
+          <MkCols
+            :col-defs="tsColDefs"
+            storage-key="wf_teaching_hidden_cols"
+            v-model:hidden="tsHiddenCols"
+          />
           <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}<template v-if="dataSource === 'live'"> · {{ includeTest ? '含模拟' : '仅真实' }} · 仅显示最近 100 条</template></span>
         </div>
       </div>
@@ -83,12 +88,12 @@
           <thead>
             <tr>
               <th style="width:220px">会话</th>
-              <th style="width:140px">用户</th>
-              <th class="mk-col--badge" style="width:90px">状态</th>
-              <th style="width:140px">互动</th>
-              <th style="width:120px">进度</th>
-              <th class="mk-col--badge" style="width:90px">产物</th>
-              <th class="mk-col--badge" style="width:60px">关注</th>
+              <th v-if="!tsHiddenCols.has('user')" style="width:140px">用户</th>
+              <th v-if="!tsHiddenCols.has('status')" class="mk-col--badge" style="width:90px">状态</th>
+              <th v-if="!tsHiddenCols.has('interact')" style="width:140px">互动</th>
+              <th v-if="!tsHiddenCols.has('progress')" style="width:120px">进度</th>
+              <th v-if="!tsHiddenCols.has('output')" class="mk-col--badge" style="width:90px">产物</th>
+              <th v-if="!tsHiddenCols.has('attention')" class="mk-col--badge" style="width:60px">关注</th>
               <th class="mk-col--actions">详情</th>
             </tr>
           </thead>
@@ -98,9 +103,14 @@
                 <div class="mk-cell-main">
                   <strong>{{ r.topic }}</strong>
                   <span class="mk-cell-sub">{{ r.subject }} · {{ taskTypeText(r.taskType) }}</span>
+                  <span
+                    v-if="r.wrapup?.topicSummary"
+                    class="ts-summary-preview"
+                    :title="r.wrapup.topicSummary"
+                  >{{ r.wrapup.topicSummary }}</span>
                 </div>
               </td>
-              <td>
+              <td v-if="!tsHiddenCols.has('user')">
                 <div class="mk-cell-main">
                   <strong>{{ r.userName }}</strong>
                   <span class="mk-cell-sub">{{ r.email }}</span>
@@ -110,12 +120,12 @@
                   <span v-else-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--warn" title="测试/审计账号">测试</span>
                 </div>
               </td>
-              <td><span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span></td>
-              <td>
+              <td v-if="!tsHiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span></td>
+              <td v-if="!tsHiddenCols.has('interact')">
                 <span class="mk-num">{{ r.duration ? fmtDuration(r.duration) : '—' }} · {{ r.messageCount }} 条</span>
                 <span v-if="r.knowledgePointCount" class="mk-cell-sub">知识 {{ r.knowledgePointCount }} 点</span>
               </td>
-              <td>
+              <td v-if="!tsHiddenCols.has('progress')">
                 <template v-if="sessionProgressDone(r.status)">
                   <span class="ts-prog ts-prog--done" :title="progressTitle(r)">已完成</span>
                 </template>
@@ -133,13 +143,13 @@
                 </template>
                 <span v-else class="mk-na">—</span>
               </td>
-              <td>
+              <td v-if="!tsHiddenCols.has('output')">
                 <span class="mk-badge" :class="r.wrapupStatus === 'complete' ? 'mk-badge--ok' : 'mk-badge--muted'">
                   {{ r.wrapupStatus === 'complete' ? '有总结' : '缺总结' }}
                 </span>
                 <span v-if="r.hasAdvisory" class="mk-badge" :class="advisoryBadge(r.advisory?.priority)" style="margin-left:4px">建议</span>
               </td>
-              <td>
+              <td v-if="!tsHiddenCols.has('attention')">
                 <span
                   class="ts-att"
                   :class="`ts-att--${r.attention}`"
@@ -263,6 +273,7 @@ import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
 import MkOverview from './MkOverview.vue'
 import MkKpi from './MkKpi.vue'
+import MkCols from './MkCols.vue'
 
 interface WrapupSummary {
   topicSummary?: string
@@ -495,6 +506,17 @@ function mapRow(s: Record<string, unknown>): Row {
 const pill = ref<'all' | 'attention' | 'missing'>('all')
 const keyword = ref('')
 const statusFilter = ref('')
+
+/* P1-3 列显隐（公共组件 MkCols）：用户/状态/互动/进度/产物/关注 可隐藏，会话/详情固定 */
+const tsColDefs = [
+  { key: 'user', label: '用户', title: '用户姓名 + 邮箱' },
+  { key: 'status', label: '状态', title: '会话状态' },
+  { key: 'interact', label: '互动', title: '时长 / 消息数 / 知识点' },
+  { key: 'progress', label: '进度', title: '学习进度' },
+  { key: 'output', label: '产物', title: '课后总结 / 建议' },
+  { key: 'attention', label: '关注', title: '关注度' },
+] as const
+const tsHiddenCols = ref<Set<string>>(new Set())
 const pills = [
   { id: 'all' as const, label: '全部' },
   { id: 'attention' as const, label: '待关注' },
@@ -673,6 +695,19 @@ function progressTitle(r: Row): string {
 <style scoped>
 /* 页头合并（替代独立状态条）：共 N 条 + 刷新按钮，与概览结论同行 */
 .ts-head-meta { font-size: 12.5px; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* 总结预览行（P1-2）：单行 ellipsis + hover 全文，对齐 Intercom 最后消息预览 */
+.ts-summary-preview {
+  display: block;
+  max-width: 320px;
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--mk-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: help;
+}
+.ts-summary-preview::before { content: '📝 '; opacity: 0.7; }
 .ts-row { cursor: pointer; position: relative; }
 /* 关注度行首色条（P0-5）：高关注红 / 中关注琥珀 / 低关注透明——扫视被红色拉住 */
 .ts-row--att-high { box-shadow: inset 3px 0 0 var(--mk-red); }
