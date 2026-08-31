@@ -461,6 +461,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { subPage, closeSubPage, learnerDetails, isLive, setSubPageLabel } from './store'
 import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
@@ -514,6 +515,24 @@ const tabs = [
   { id: 'profile' as const, label: '画像' },
   { id: 'evidence' as const, label: '证据' }
 ]
+
+/* P0-2 tab 路由化：?tab= 深链/刷新保持（与 subPage 的 view/id 同级，不侵入 AdminConsole 机制） */
+const tabRoute = useRoute()
+const tabRouter = useRouter()
+// URL → tab（深链/刷新/前进后退）
+watch(
+  () => tabRoute.query.tab,
+  (t) => {
+    if (typeof t === 'string' && t && t !== tab.value) tab.value = normalizeLearnerTab(t)
+  },
+  { immediate: true }
+)
+// tab → URL（replace：不污染历史栈）
+watch(tab, (t) => {
+  const cur = tabRoute.query.tab
+  const target = t === 'overview' ? undefined : t
+  if (cur !== target) void tabRouter.replace({ query: { ...tabRoute.query, ...(target ? { tab: target } : {}) } })
+})
 
 /** 深链兼容：旧 6-tab 名（cognitive/dynamic/memory/teaching）重定向到新 3-tab */
 function switchTab(id: string) {

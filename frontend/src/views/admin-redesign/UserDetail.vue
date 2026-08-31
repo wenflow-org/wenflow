@@ -95,11 +95,23 @@
     </div>
   </div>
 
-  <div v-else class="mk-page">
+  <div v-else class="mk-page ud">
     <button type="button" class="mk-back" @click="closeSubPage">← 用户</button>
-    <div class="mk-empty">
-      <strong>{{ isLive ? '加载中…' : '该用户暂无更多演示数据' }}</strong>
-      <span>{{ isLive ? '正在拉取真实用户详情' : '演示详情仅覆盖部分样本用户。' }}</span>
+    <!-- 骨架屏（P0-2：替代纯文字 loading，避免布局跳动） -->
+    <div class="ud-skel" aria-hidden="true">
+      <div class="ud-skel__id">
+        <span class="ud-skel__avatar"></span>
+        <div class="ud-skel__lines">
+          <i class="ud-skel__line ud-skel__line--name"></i>
+          <i class="ud-skel__line ud-skel__line--sub"></i>
+        </div>
+      </div>
+      <div class="ud-skel__stats">
+        <i v-for="n in 4" :key="n" class="ud-skel__stat"></i>
+      </div>
+      <div class="ud-skel__grid">
+        <i v-for="n in 2" :key="n" class="ud-skel__card"></i>
+      </div>
     </div>
   </div>
 </template>
@@ -348,6 +360,20 @@ const d = computed<Detail | undefined>(() => {
 }
 .ud-back:hover { background: #eff6ff; }
 .ud-back:active { transform: translateY(1px); }
+/* 骨架屏（P0-2）：加载中替代纯文字，避免布局跳动 */
+.ud-skel { display: grid; gap: 14px; padding-top: 8px; }
+.ud-skel__id { display: flex; align-items: center; gap: 14px; }
+.ud-skel__avatar { width: 48px; height: 48px; border-radius: 12px; background: linear-gradient(90deg, #eef2f8 25%, #f7f9fc 50%, #eef2f8 75%); background-size: 200% 100%; animation: ud-skel-shimmer 1.2s infinite; }
+.ud-skel__lines { display: grid; gap: 6px; flex: 1; max-width: 360px; }
+.ud-skel__line { height: 14px; border-radius: 6px; background: linear-gradient(90deg, #eef2f8 25%, #f7f9fc 50%, #eef2f8 75%); background-size: 200% 100%; animation: ud-skel-shimmer 1.2s infinite; }
+.ud-skel__line--name { width: 55%; height: 18px; }
+.ud-skel__line--sub { width: 80%; height: 12px; }
+.ud-skel__stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.ud-skel__stat { height: 64px; border-radius: 10px; background: linear-gradient(90deg, #eef2f8 25%, #f7f9fc 50%, #eef2f8 75%); background-size: 200% 100%; animation: ud-skel-shimmer 1.2s infinite; }
+.ud-skel__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ud-skel__card { height: 140px; border-radius: 12px; background: linear-gradient(90deg, #eef2f8 25%, #f7f9fc 50%, #eef2f8 75%); background-size: 200% 100%; animation: ud-skel-shimmer 1.2s infinite; }
+@keyframes ud-skel-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+html[data-theme='dark'] .ud-skel__avatar, html[data-theme='dark'] .ud-skel__line, html[data-theme='dark'] .ud-skel__stat, html[data-theme='dark'] .ud-skel__card { background: linear-gradient(90deg, #1b2537 25%, #232f45 50%, #1b2537 75%); background-size: 200% 100%; }
 .ud-id { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .ud-learner-link {
   margin-left: auto;
