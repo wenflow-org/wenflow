@@ -735,6 +735,13 @@ const groupedScenes = computed(() => {
 .mshell[data-collapsed='true'] .mshell__brand { justify-content: center; padding: 2px 0 0; }
 .mshell[data-collapsed='true'] .mshell__collapse { position: absolute; right: -14px; top: 18px; }
 
+/* 顶栏低分辨率紧凑（D5）：<1920px 隐藏面包屑组名（组在侧栏分组已可见，
+   面包屑只留页面名 + 二级页），顶栏聚焦全局工具（对标 SaaS 顶栏职责） */
+@media (max-width: 1919px) {
+  .mshell__crumb-group { display: none; }
+  .mshell__crumbs { gap: 6px; }
+}
+
 /* 折叠按钮（展开态右上角，悬停显示 tooltip 由 title 提供） */
 .mshell__collapse {
   border: 1px solid var(--mk-line, #e1e8f2);
