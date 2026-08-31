@@ -148,6 +148,18 @@
 .mk-table--dense td { padding: 8px 12px; }
 .mk-table--dense td { font-size: 12.5px; }
 
+/* 全局紧凑档（D3 表格增强）：html[data-density='compact'] 一键收紧全站表格。
+   纯 CSS 实现（无需逐页改），与 .mk-table--dense 语义等价但全局生效；
+   切换按钮在 Shell 顶栏（localStorage 持久化，见 Shell.vue）。 */
+html[data-density='compact'] .mk-table th { padding: 5px 10px; }
+html[data-density='compact'] .mk-table td { padding: 5px 10px; }
+html[data-density='compact'] .mk-table--dense th,
+html[data-density='compact'] .mk-table--dense td { padding: 4px 9px; }
+html[data-density='compact'] .mk-table td { font-size: 12px; }
+html[data-density='compact'] .mk-status { padding: 5px 10px; }
+html[data-density='compact'] .mk-card__head { padding: 6px 10px; }
+html[data-density='compact'] .mk-pagination { padding: 6px 10px 8px; }
+
 /* 行内 ⋯ 菜单：低频/危险操作收进菜单，避免与高频操作平铺 */
 .mk-menu { position: relative; display: inline-flex; }
 .mk-menu__btn {

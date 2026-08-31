@@ -79,6 +79,15 @@
           <template v-if="release">
             <button
               type="button"
+              class="mshell__density"
+              :title="density === 'compact' ? '当前紧凑密度 · 点击切换标准' : '当前标准密度 · 点击切换紧凑'"
+              :aria-label="density === 'compact' ? '切换到标准密度' : '切换到紧凑密度'"
+              @click="toggleDensity"
+            >
+              <span class="mshell__density-icon" aria-hidden="true">{{ density === 'compact' ? '⊟' : '⊞' }}</span>
+            </button>
+            <button
+              type="button"
               class="mshell__theme"
               :title="theme === 'dark' ? '切换到浅色模式' : '切换到暗色模式'"
               :aria-label="theme === 'dark' ? '切换到浅色模式' : '切换到暗色模式'"
@@ -160,6 +169,27 @@ function toggleTheme() {
   applyTheme()
 }
 applyTheme()
+
+/* D3 表格增强：全局密度切换（compact/standard），localStorage 持久化 */
+const DENSITY_KEY = 'wf_admin_density'
+const density = ref<'compact' | 'standard'>(loadDensity())
+function loadDensity(): 'compact' | 'standard' {
+  try {
+    const saved = localStorage.getItem(DENSITY_KEY)
+    if (saved === 'compact' || saved === 'standard') return saved
+  } catch { /* 隐私模式忽略 */ }
+  return 'standard'
+}
+function applyDensity() {
+  if (density.value === 'compact') document.documentElement.setAttribute('data-density', 'compact')
+  else document.documentElement.removeAttribute('data-density')
+  try { localStorage.setItem(DENSITY_KEY, density.value) } catch { /* ignore */ }
+}
+function toggleDensity() {
+  density.value = density.value === 'compact' ? 'standard' : 'compact'
+  applyDensity()
+}
+applyDensity()
 
 function refreshData() {
   if (liveLoading.value) return
@@ -559,6 +589,24 @@ const groupedScenes = computed(() => {
 }
 .mshell__theme:hover { color: var(--mk-blue, #2c63d0); border-color: rgba(44, 99, 208, 0.4); }
 .mshell__theme-icon { display: inline-block; }
+.mshell__density {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e1e8f2;
+  border-radius: 8px;
+  background: #fff;
+  color: #5b6577;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.mshell__density:hover { color: var(--mk-blue, #2c63d0); border-color: rgba(44, 99, 208, 0.4); }
+.mshell__density-icon { display: inline-block; font-weight: 700; }
 .mshell__logout {
   border: 1px solid #e1e8f2;
   background: #fff;
@@ -660,8 +708,8 @@ html[data-theme='dark'] {
   .mshell__search { background: #131b2a; border-color: #232f45; color: #6b7c96; }
   .mshell__kbd { background: #1d2739; border-color: #2a3850; }
   .mshell__refresh, .mshell__logout { background: #131b2a; border-color: #232f45; color: #9fb0c8; }
-  .mshell__theme { background: #131b2a; border-color: #232f45; color: #9fb0c8; }
-  .mshell__theme:hover { color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
+  .mshell__theme, .mshell__density { background: #131b2a; border-color: #232f45; color: #9fb0c8; }
+  .mshell__theme:hover, .mshell__density:hover { color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
   .mshell__admin { color: #dce5f1; }
   .mshell__refresh:hover:not(:disabled) { color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
   .mshell__admin { color: #e6edf7; }
