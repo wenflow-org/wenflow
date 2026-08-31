@@ -189,6 +189,13 @@ html[data-theme='dark'] .mk-tabbar__ctx-sep { background: #232f45; }
   .mk-tabbar__hint { font-size: 11.5px; }
 }
 
+/* 1920px 档（最低标准 1080p 全屏） */
+@media (min-width: 1920px) {
+  .mk-tabbar { padding: 8px 21px 0; }
+  .mk-tabbar__item { font-size: 13px; max-width: 210px; }
+  .mk-tabbar__hint { font-size: 12px; }
+}
+
 /* 4K 三档（对齐全站 mk 体系） */
 @media (min-width: 2000px) {
   .mk-tabbar { padding: 8px 22px 0; gap: 6px; }

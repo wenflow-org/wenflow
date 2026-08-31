@@ -642,6 +642,16 @@ const groupedScenes = computed(() => {
 }
 
 /* 大屏（2000+）：侧栏加宽、字号放大；2800+（4K）再升一档（zoom 之上叠加） */
+@media (min-width: 1920px) {
+  .mshell { grid-template-columns: 260px minmax(0, 1fr); }
+  .mshell__item { font-size: 14px; padding: 10px 12px; }
+  .mshell__group-title { font-size: 12px; }
+  .mshell__item-badge { font-size: 12px; }
+  .mshell__topbar { min-height: 60px; padding: 8px 24px; }
+  .mshell__crumb-group, .mshell__crumb-sub { font-size: 14px; }
+  .mshell__search { font-size: 13.5px; }
+  .mshell__logo-full { height: 64px; }
+}
 @media (min-width: 2000px) {
   .mshell {
     grid-template-columns: 280px minmax(0, 1fr);

@@ -856,6 +856,33 @@ html[data-theme='dark'] {
   .mk-toast { font-size: 13.5px; }
 }
 
+/* 1920px 档（D4 补丁：最低标准 1920×1080 全屏时落在 1440 档，字号/间距偏小。
+   取 1440 档与 2000 档之间的中间值，1080p 全屏观感更舒展）。 */
+@media (min-width: 1920px) {
+  .mk-page { font-size: 15px; padding: 19px 24px 27px; gap: 15px; }
+  .mk-status { padding: 8px 14px; border-radius: 11px; }
+  .mk-status__title { font-size: 16px; }
+  .mk-status__meta { font-size: 14px; }
+  .mk-status__action { font-size: 14px; padding: 5px 12px; }
+  .mk-table th { font-size: 13px; padding: 11px 16px; }
+  .mk-table td { font-size: 15px; padding: 12px 16px; }
+  .mk-cell-sub { font-size: 13px; }
+  .mk-badge { font-size: 13px; padding: 3px 10px; }
+  .mk-menu__item { font-size: 14.5px; }
+  .mk-filter__input,
+  .mk-filter__select { font-size: 14px; padding: 9px 13px; height: 41px; }
+  .mk-pill { font-size: 14px; padding: 6px 14px; }
+  .mk-card__title { font-size: 15px; }
+  .mk-card__meta { font-size: 13.5px; }
+  .mk-btn { font-size: 14px; padding: 10px 18px; }
+  .mk-btn--sm { font-size: 13px; padding: 6px 13px; }
+  .mk-empty strong { font-size: 15px; }
+  .mk-empty span { font-size: 14px; }
+  .mk-num { font-size: 14px; }
+  .mk-link { font-size: 14px; }
+  .mk-toast { font-size: 14px; }
+}
+
 @media (min-width: 2000px) {
   /* 列宽 token 4K 档（×≈1.16，比例对齐 ExecLogs 原 72→84→100 档位；ADMIN_COLUMN_WIDTH_SPEC §2.8） */
   :root {

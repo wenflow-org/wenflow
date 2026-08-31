@@ -63,6 +63,12 @@ html[data-theme='dark'] .mk-kpi { background: #141c2b; border-color: #232f45; }
   .mk-kpi__hint { font-size: 12.5px; }
 }
 
+/* 1920px 档（最低标准 1080p 全屏） */
+@media (min-width: 1920px) {
+  .mk-kpi { padding: 14px 17px; }
+  .mk-kpi__num { font-size: 23px; }
+}
+
 /* 4K 三档（对齐全站 mk 体系） */
 @media (min-width: 2000px) {
   .mk-kpi { padding: 15px 18px; border-radius: 14px; gap: 4px; }
