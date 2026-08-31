@@ -573,7 +573,8 @@ async function doSupplement() {
       phase.value = 'preview';
     }
   } catch {
-    /* ignore */
+    // 补充失败：保留已输入内容（不丢用户劳动），留在补充态，展示错误提示
+    toast.error('补充失败，请重试。输入的内容已保留。');
   }
 }
 
