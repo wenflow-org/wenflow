@@ -35,10 +35,22 @@ describe('Shell 导航', () => {
     }
   });
 
-  it('九个导航分组齐全且顺序稳定', () => {
+  it('导航分组齐全且顺序稳定（总览为置顶入口，不进分组）', () => {
     const wrapper = mountShell();
     const groups = wrapper.findAll('.mshell__group-title').map((n) => n.text());
-    expect(groups).toEqual(['总览', '学习者', '仿真实验室', 'Skill 管理', '数据健康', '运营', '配置', '观测', '运维']);
+    expect(groups).toEqual(['学习者', '仿真实验室', 'Skill 管理', '数据健康', '运营', '配置', '观测', '运维']);
+  });
+
+  it('置顶入口（pinned）渲染在分组上方且无组标题', () => {
+    const wrapper = mountShell();
+    const pinnedLabels = wrapper.findAll('.mshell__pinned .mshell__item-label').map((n) => n.text());
+    const pinnedScenes = MOCK_SCENES.filter((s) => s.pinned).map((s) => s.label);
+    expect(pinnedLabels).toEqual(pinnedScenes);
+    // pinned 项不在任何分组内
+    const groupItems = wrapper.findAll('.mshell__group .mshell__item-label').map((n) => n.text());
+    for (const label of pinnedScenes) {
+      expect(groupItems).not.toContain(label);
+    }
   });
 
   it('当前页菜单高亮（active class）', () => {

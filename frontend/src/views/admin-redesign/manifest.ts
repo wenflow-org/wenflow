@@ -10,10 +10,12 @@ export interface MockSceneDef {
   glyph: string
   /** 可选静态徽章；live 模式由 Shell 用真实计数覆盖 */
   badge?: string
+  /** 置顶独立入口（D5 导航优化）：渲染在分组上方（如平台总览=驾驶舱入口） */
+  pinned?: boolean
 }
 
 export const MOCK_SCENES: MockSceneDef[] = [
-  { id: 'overview', label: '平台总览', group: '总览', glyph: '览' },
+  { id: 'overview', label: '平台总览', group: '总览', glyph: '览', pinned: true },
   { id: 'users', label: '用户', group: '学习者', glyph: '人' },
   { id: 'learner-center', label: '学习者中心', group: '学习者', glyph: '习' },
   { id: 'teaching-sessions', label: '教学会话', group: '学习者', glyph: '课' },

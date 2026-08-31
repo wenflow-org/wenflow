@@ -17,6 +17,27 @@
         </button>
       </div>
       <nav class="mshell__nav">
+        <!-- 置顶独立入口（D5）：驾驶舱类页面渲染在分组上方，无组标题 -->
+        <div v-if="pinnedScenes.length" class="mshell__pinned">
+          <button
+            v-for="item in pinnedScenes"
+            :key="item.id"
+            type="button"
+            class="mshell__item"
+            :class="{ 'mshell__item--active': item.id === current }"
+            :title="item.label"
+            @click="go(item)"
+          >
+            <span class="mshell__item-glyph">{{ item.glyph }}</span>
+            <span class="mshell__item-label">{{ item.label }}</span>
+            <span
+              v-if="badgeOf(item)"
+              class="mshell__item-badge"
+              :class="{ 'mshell__item-badge--alarm': isAlarmBadge(item) }"
+              :title="badgeTitle(item)"
+            >{{ badgeOf(item) }}</span>
+          </button>
+        </div>
         <section v-for="group in groupedScenes" :key="group.title" class="mshell__group">
           <div class="mshell__group-title">{{ group.title }}</div>
           <button
@@ -305,9 +326,13 @@ async function logout() {
 
 const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.current))
 
+/** 置顶独立入口（D5）：pinned 项渲染在分组上方（无组标题） */
+const pinnedScenes = computed(() => MOCK_SCENES.filter((s) => s.pinned))
+
 const groupedScenes = computed(() => {
   const groups: Array<{ title: string; items: MockSceneDef[] }> = []
   for (const scene of MOCK_SCENES) {
+    if (scene.pinned) continue // 置顶项不进分组
     let g = groups.find((x) => x.title === scene.group)
     if (!g) {
       g = { title: scene.group, items: [] }
@@ -364,6 +389,15 @@ const groupedScenes = computed(() => {
 }
 
 .mshell__nav { flex: 1; overflow-y: auto; display: grid; gap: 14px; align-content: start; }
+/* 置顶独立入口区（D5）：驾驶舱入口，与分组间用分隔线区分 */
+.mshell__pinned {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--mk-line, #e1e8f2);
+  margin-bottom: 2px;
+}
+.mshell__pinned .mshell__item { font-weight: 800; }
 .mshell__group-title {
   padding: 0 10px 5px;
   font-size: 11px;
@@ -734,6 +768,7 @@ const groupedScenes = computed(() => {
 .mshell[data-collapsed='true'] .mshell__logo-mark { display: block; }
 .mshell[data-collapsed='true'] .mshell__brand { justify-content: center; padding: 2px 0 0; }
 .mshell[data-collapsed='true'] .mshell__collapse { position: absolute; right: -14px; top: 18px; }
+.mshell[data-collapsed='true'] .mshell__pinned { justify-content: center; padding-bottom: 8px; border-bottom-color: #232f45; }
 
 /* 顶栏低分辨率紧凑（D5）：<1920px 隐藏面包屑组名（组在侧栏分组已可见，
    面包屑只留页面名 + 二级页），顶栏聚焦全局工具（对标 SaaS 顶栏职责） */
@@ -781,6 +816,7 @@ const groupedScenes = computed(() => {
 html[data-theme='dark'] {
   .mshell { background: #0f1624; color: #e6edf7; }
   .mshell__side { background: #131b2a; border-right-color: #232f45; }
+  .mshell__pinned { border-bottom-color: #232f45; }
   .mshell__item { color: #9fb0c8; }
   .mshell__item:hover { background: #1b2740; color: #e6edf7; }
   .mshell__item--active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; box-shadow: inset 3px 0 0 var(--mk-blue); }
