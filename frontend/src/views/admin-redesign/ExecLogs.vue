@@ -7,6 +7,7 @@
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ isLive ? `共 ${liveLogsTotal} 条` : `${filtered.length} 条` }}</span>
       <span v-if="logs.length" class="mk-status__meta">失败 {{ errCount }} · 成功率 {{ successRate }}%</span>
+      <span v-if="logs.length" class="mk-status__meta mono" :title="'延迟分位（仅成功日志）：P50 = 中位耗时 · P99 = 99% 请求耗时'">P50 {{ latencyP50 }} · P99 {{ latencyP99 }}</span>
       <span v-if="isFiltered" class="mk-status__filter">
         {{ filterLabel }}
         <button type="button" class="mk-status__clear" @click="clearFilter">×</button>
@@ -486,6 +487,25 @@ const successRate = computed(() => {
   const ok = logs.value.filter((l) => l.status === 'ok').length
   return Math.round((ok / logs.value.length) * 100)
 })
+
+/* B3 观测深度：延迟分位（P50/P99，仅成功日志；对标 Langfuse 观测台核心指标）。
+   live 模式用后端 stats（含 latencyPercentiles 时优先），否则样本计算 */
+const latencyP50 = computed(() => {
+  const st = liveStats.value
+  if (st && st.latencyPercentiles?.p50 != null) return fmtMs(st.latencyPercentiles.p50)
+  return percentileOf(logs.value.filter((l) => l.status === 'ok').map((l) => l.durationMs), 0.5)
+})
+const latencyP99 = computed(() => {
+  const st = liveStats.value
+  if (st && st.latencyPercentiles?.p99 != null) return fmtMs(st.latencyPercentiles.p99)
+  return percentileOf(logs.value.filter((l) => l.status === 'ok').map((l) => l.durationMs), 0.99)
+})
+function percentileOf(durations: number[], q: number): string {
+  const arr = durations.filter((d) => typeof d === 'number' && d >= 0).sort((a, b) => a - b)
+  if (!arr.length) return '—'
+  const idx = Math.min(arr.length - 1, Math.max(0, Math.round((arr.length - 1) * q)))
+  return fmtMs(arr[idx])
+}
 const statusTone = computed(() => (!logs.value.length ? 'muted' : errCount.value ? 'bad' : 'ok'))
 /* 排查徽章：读本地筛选（修复此前读 intent 导致的空值）；live 下补充关键词/时间范围/trace/会话 */
 const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部' } as const

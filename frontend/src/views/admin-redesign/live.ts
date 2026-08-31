@@ -425,6 +425,8 @@ export interface LiveLogStats {
   timeout: number
   error: number
   bySource?: Record<string, number>
+  /** 延迟分位（毫秒）：后端 stats 提供时优先（P50/P99 对标 Langfuse 观测台核心指标） */
+  latencyPercentiles?: { p50?: number; p99?: number }
 }
 export const liveLogStats = ref<LiveLogStats | null>(null)
 
@@ -1279,14 +1281,26 @@ export interface LiveVirtual {
   sessions: number
   /** 故事池条数（会话故事，不是人物背景字数） */
   storyCount: number
-  /** 当前运行中的会话数（后端 runningCount，全量聚合口径） */
+  /** 当前运行中的会话数（后端 runningCount，全量聚合口径，已扣除暂停的自动驾驶） */
   runningCount: number
+  /** 已暂停自动驾驶的会话数（autopilot=stopped，进度保留） */
+  pausedCount: number
   /** 失败/放弃的会话累计数（全量聚合） */
   failedCount: number
   /** 卡死（running 超 reclaim 阈值无写入）会话数 */
   stalledCount: number
   /** 运行中会话 id（会话样本内；用于「运行中」列直达座舱） */
   runningSessionIds: string[]
+  /** 已暂停会话 id（autopilot=stopped） */
+  pausedSessionIds?: string[]
+  /** 阶段进度（轴 B）：Goal/Path/Learn 三态 + 任务进度 */
+  stageProgress?: {
+    goalReady: boolean
+    pathReady: boolean
+    learnStarted: boolean
+    taskDone: number
+    taskTotal: number
+  } | null
   /** 最近一个运行中会话的阶段（无运行中会话时回退最近会话阶段） */
   currentStage: string | null
   createdAt: string
@@ -1353,6 +1367,9 @@ export const liveVirtualRunStats = ref<LiveVirtualRunStats>({
   todayCalls: 0
 })
 
+/** 自动驾驶全局并发（配额条：used=内存运行中，limit=env 可配上限，默认 10） */
+export const liveAutopilotConcurrency = ref({ used: 0, limit: 10 })
+
 async function fetchLiveVirtualStats(): Promise<void> {
   const res = await adminVirtualLearnersApi.getVirtualLearnerStats()
   const body = res.data?.data ?? res.data ?? {}
@@ -1391,15 +1408,27 @@ async function fetchLiveVirtuals(): Promise<void> {
     total: Number(stats?.total ?? liveVirtualSessionStats.value.total)
   }
   liveVirtualStaleCount.value = Number(body.staleCount ?? 0)
+  // 自动驾驶全局并发（配额条：used/limit）
+  const apc = body.autopilotConcurrency as Record<string, number> | undefined
+  liveAutopilotConcurrency.value = {
+    used: Number(apc?.used ?? 0),
+    limit: Number(apc?.limit ?? 10)
+  }
   // 运行统计（完成率/失败率/平均时长/卡死最长分钟）独立并行拉取，失败不影响列表
   void fetchLiveVirtualStats().catch(() => {})
   liveVirtuals.value = items.map((p: Record<string, unknown>) => {
     const profile = (p.profile as Record<string, unknown>) || {}
     const pool = Array.isArray(profile.storyPool) ? profile.storyPool : []
     const storyCount = Number(p.storyCount ?? pool.length ?? 0)
-    // 运行中信号：后端列表接口已补 runningCount/currentStage；旧缓存（无字段）时由 raw.sessions 兜底推导
+    // 运行中信号：后端列表接口已补 runningCount/currentStage/pausedCount；旧缓存（无字段）时由 raw.sessions 兜底推导
     const sessionSample = Array.isArray(p.sessions) ? p.sessions as Record<string, unknown>[] : []
     const runningSessions = sessionSample.filter((s) => String(s.status || '') === 'running')
+    const pausedFallback = sessionSample.filter((s) => {
+      if (String(s.status || '') !== 'running') return false
+      try {
+        return JSON.parse(String(s.stageResults || '{}'))?.autopilot?.status === 'stopped'
+      } catch { return false }
+    })
     return {
       id: String(p.id),
       name: String(profile.name || profile.nameHint || p.userName || p.id),
@@ -1408,14 +1437,19 @@ async function fetchLiveVirtuals(): Promise<void> {
       story: String(profile.background || profile.corePersonality || p.notes || ''),
       sessions: Number(p.sessionCount || (p._count as Record<string, number>)?.sessions || 0),
       storyCount,
-      runningCount: Number(p.runningCount ?? runningSessions.length ?? 0),
+      runningCount: Number(p.runningCount ?? (runningSessions.length - pausedFallback.length) ?? 0),
+      pausedCount: Number(p.pausedCount ?? pausedFallback.length ?? 0),
       failedCount: Number(p.failedCount ?? 0),
       stalledCount: Number(p.stalledCount ?? 0),
       runningSessionIds: (Array.isArray(p.runningSessionIds) ? p.runningSessionIds : runningSessions.map((s) => String(s.id)))
         .map(String)
         .filter(Boolean),
+      pausedSessionIds: (Array.isArray(p.pausedSessionIds) ? p.pausedSessionIds : pausedFallback.map((s) => String(s.id)))
+        .map(String)
+        .filter(Boolean),
       currentStage: String(p.currentStage ?? runningSessions[0]?.currentStage ?? sessionSample[0]?.currentStage ?? '') || null,
       createdAt: String(p.createdAt || ''),
+      stageProgress: (p.stageProgress as LiveVirtual['stageProgress']) || null,
       raw: p
     }
   })
