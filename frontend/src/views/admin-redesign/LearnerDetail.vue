@@ -156,6 +156,32 @@
             <p v-if="riskFactors.length"><span class="ld-actions__k ld-actions__k--warn">风险</span>{{ riskFactors.join('；') }}</p>
           </div>
         </section>
+
+        <!-- 关联实体（P1：HubSpot/SF 侧栏关联卡模式；跨实体跳转记忆来源） -->
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">关联实体</h3>
+            <span class="mk-card__meta">相关记录</span>
+          </div>
+          <div class="ld-related">
+            <button type="button" class="ld-related__item" @click="goUser">
+              <span class="ld-related__icon" aria-hidden="true">人</span>
+              <span class="ld-related__main">
+                <strong>用户账号</strong>
+                <span>查看该用户的账号与角色</span>
+              </span>
+              <i class="ld-related__go">→</i>
+            </button>
+            <button type="button" class="ld-related__item" @click="switchTab('evidence')">
+              <span class="ld-related__icon" aria-hidden="true">证</span>
+              <span class="ld-related__main">
+                <strong>学习证据</strong>
+                <span>查看该学习者的证据明细</span>
+              </span>
+              <i class="ld-related__go">→</i>
+            </button>
+          </div>
+        </section>
       </div>
     </div>
 
@@ -462,7 +488,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { subPage, closeSubPage, learnerDetails, isLive, setSubPageLabel } from './store'
+import { subPage, closeSubPage, openSubPage, learnerDetails, isLive, setSubPageLabel } from './store'
 import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab } from './learner-profile'
@@ -553,6 +579,13 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 }
 
 let detailLoading = false
+
+/** 关联实体（P1）：查看该学习者的用户账号（记忆返回来源） */
+function goUser() {
+  const id = subPage.value?.id
+  if (!id) return
+  openSubPage('user', id, { includeTest: subPage.value?.includeTest })
+}
 
 watch(
   () => [subPage.value?.id, isLive.value] as const,
@@ -1506,6 +1539,26 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 /* 建议行动卡 */
 .ld-actions { padding: 14px 16px; display: grid; gap: 9px; }
+/* 关联实体卡（P1）：HubSpot/SF 关联卡模式 */
+.ld-related { padding: 10px 12px; display: grid; gap: 6px; }
+.ld-related__item {
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--mk-line); border-radius: 10px;
+  background: var(--mk-surface); padding: 9px 12px;
+  font: inherit; text-align: left; cursor: pointer;
+  transition: border-color 0.12s ease, transform 0.12s ease;
+}
+.ld-related__item:hover { border-color: rgba(44, 99, 208, 0.5); transform: translateY(-1px); }
+.ld-related__icon {
+  width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(44, 99, 208, 0.1); color: var(--mk-blue); font-size: 13px;
+}
+.ld-related__main { display: grid; gap: 1px; flex: 1; min-width: 0; }
+.ld-related__main strong { font-size: 12.5px; color: var(--mk-ink); }
+.ld-related__main span { font-size: 11px; color: var(--mk-faint); }
+.ld-related__go { font-style: normal; color: var(--mk-faint); font-weight: 700; }
+.ld-related__item:hover .ld-related__go { color: var(--mk-blue); }
 .ld-actions p { margin: 0; font-size: 12.5px; color: var(--mk-muted); line-height: 1.7; }
 .ld-actions__k {
   display: inline-block;
