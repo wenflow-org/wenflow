@@ -146,12 +146,12 @@
       />
     </div>
 
-    <!-- 批量操作条 -->
-    <div v-if="isLive && selected.length" class="ul-batch">
+    <!-- 批量操作条（全局 mk-batchbar） -->
+    <div v-if="isLive && selected.length" class="mk-batchbar">
       <span>已选 {{ selected.length }} 人</span>
       <button type="button" class="mk-link" @click="selected = []">取消选择</button>
       <button type="button" class="mk-link" :disabled="batchBusy" @click="exportSelected">导出 CSV</button>
-      <button type="button" class="ul-batch__danger" :disabled="batchBusy" @click="batchDelete">
+      <button type="button" class="mk-batchbar__danger" :disabled="batchBusy" @click="batchDelete">
         {{ batchBusy ? '删除中…' : '批量删除' }}
       </button>
     </div>
@@ -661,36 +661,6 @@ function clearFilters() {
 .ul-row { cursor: pointer; }
 .ul-row--deleted { opacity: 0.62; filter: saturate(0.2); }
 .ul-tag--deleted { background: #e5e7eb; color: #4b5563; }
-.ul-batch {
-  position: sticky;
-  bottom: 12px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: fit-content;
-  margin: 0 auto;
-  padding: 8px 12px 8px 16px;
-  border-radius: 999px;
-  border: 1px solid rgba(220, 38, 38, 0.25);
-  background: var(--mk-surface);
-  box-shadow: var(--mk-shadow-pop);
-  font-weight: 600;
-  font-size: 12.5px;
-}
-.ul-batch__danger {
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 0;
-  background: var(--mk-red, #dc2626);
-  color: #fff;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-.ul-batch__danger:hover:not(:disabled) { background: var(--mk-red-strong, #b91c1c); }
-.ul-batch__danger:disabled { opacity: 0.6; }
 .ul-tags { display: flex; gap: 6px; margin-top: 2px; }
 .ul-tag {
   padding: 1px 8px;
@@ -718,14 +688,10 @@ function clearFilters() {
 @media (min-width: 2000px) {
   .ul-tags { gap: 7px; margin-top: 3px; }
   .ul-tag { font-size: 12px; padding: 2px 10px; }
-  .ul-batch { gap: 11px; padding: 10px 14px 10px 18px; font-size: 14px; }
-  .ul-batch__danger { font-size: 14px; padding: 7px 16px; }
 }
 @media (min-width: 2800px) {
   .ul-tags { gap: 8px; margin-top: 4px; }
   .ul-tag { font-size: 14px; padding: 3px 12px; }
-  .ul-batch { gap: 13px; padding: 12px 17px 12px 21px; font-size: 16.5px; }
-  .ul-batch__danger { font-size: 16.5px; padding: 8px 19px; }
 }
 
 /* ================= 暗色模式（D1）：用户页局部覆写 ================= */
@@ -735,9 +701,6 @@ html[data-theme='dark'] {
   .ul-tag--test { background: rgba(251, 191, 36, 0.16); color: #fcd34d; }
   .ul-tag--virtual { background: #1c2637; color: #8fa3bd; border-color: #33415c; }
   .ul-tag--deleted { background: #252d3d; color: #94a3b8; }
-  .ul-batch { background: #17202f; border-color: #2a3850; }
-  .ul-batch__danger { background: rgba(248, 113, 113, 0.16); border-color: rgba(248, 113, 113, 0.4); color: #f87171; }
-  .ul-batch__danger:hover:not(:disabled) { background: rgba(248, 113, 113, 0.26); }
   /* 表格行内复选框：暗色下自定义外观（原生 checkbox 边框过亮） */
   .mk-table input[type='checkbox'] {
     appearance: none;

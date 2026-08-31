@@ -7,7 +7,9 @@
       <span class="mk-status__meta">共 {{ experiments.length }} 个实验</span>
       <span class="mk-status__meta">运行中 {{ runningCount }}</span>
       <span class="mk-status__meta">学习者 {{ learnerTotal }}</span>
-      <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建实验</button>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建实验</button>
+      </span>
     </div>
 
     <div class="mk-card">
@@ -111,7 +113,7 @@
               </div>
               <button type="button" class="mk-link" :disabled="form.learners.length >= 20" @click="addLearner">+ 添加学习者</button>
             </div>
-            <div v-if="errorMsg" class="errorbar">{{ errorMsg }}</div>
+            <div v-if="errorMsg" class="mk-alert">{{ errorMsg }}</div>
           </div>
           <div class="mk-modal__foot">
             <button type="button" class="mk-btn" @click="createOpen = false">取消</button>
@@ -138,7 +140,7 @@
           <div class="mk-drawer__body">
             <div v-if="detailLoading" class="be-detail-loading"><span class="mk-spinner"></span> 加载中…</div>
             <template v-else-if="detailRuns.length">
-              <div v-for="r in detailRuns" :key="r.id" class="be-run">
+              <div v-for="r in detailRuns" :key="r.id" class="mk-card be-run">
                 <div class="be-run__head">
                   <strong>{{ r.learnerName }}</strong>
                   <span class="mk-badge" :class="runStatusBadge(r.status)">{{ runStatusText(r.status) }}</span>
@@ -432,15 +434,8 @@ load()
 .be-budget { height: 34px; }
 
 .be-detail-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 40px 0; color: var(--mk-muted); font-size: 13px; }
-.be-run {
-  border: 1px solid var(--mk-line);
-  border-radius: 10px;
-  padding: 10px 12px;
-  display: grid;
-  gap: 8px;
-  margin-bottom: 10px;
-  background: var(--mk-surface);
-}
+/* 详情 run 卡：mk-card 形态（边框/圆角/背景由全局类提供，此处只留内部布局） */
+.be-run { padding: 12px 14px; display: grid; gap: 8px; margin-bottom: 10px; }
 .be-run__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .be-run__head strong { font-size: 13px; }
 .be-run__phase { margin-left: auto; font-size: 11.5px; color: var(--mk-muted); }
@@ -453,19 +448,22 @@ load()
 
 .mk-drawer__panel--wide { width: min(680px, 100%); }
 
-.errorbar {
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--mk-red-bg, #fef2f2);
-  color: var(--mk-red, #dc2626);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
 @media (min-width: 2000px) {
-  .be-run { padding: 12px 14px; border-radius: 12px; }
+  .be-run { padding: 14px 16px; }
   .be-run__head strong { font-size: 14.5px; }
   .be-run__body { font-size: 13.5px; }
   .be-progress__num { font-size: 13px; }
+}
+@media (min-width: 2800px) {
+  .be-run { padding: 16px 19px; }
+  .be-run__head strong { font-size: 17px; }
+  .be-run__body { font-size: 16px; }
+  .be-progress__num { font-size: 15.5px; }
+}
+@media (min-width: 3600px) {
+  .be-run { padding: 19px 22px; }
+  .be-run__head strong { font-size: 20px; }
+  .be-run__body { font-size: 18.5px; }
+  .be-progress__num { font-size: 18px; }
 }
 </style>

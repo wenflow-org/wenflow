@@ -9,17 +9,17 @@
       <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-status__meta vl-truncated" :title="`后端共 ${liveVirtualsTotal} 人，列表仅加载前 ${samples.length} 行`">
         已截断 · 共 {{ liveVirtualsTotal }} 人
       </span>
-      <button
-        v-if="partition.stale > 0"
-        type="button"
-        class="mk-status__action vl-status-reclaim"
-        :disabled="reclaimBusy"
-        :title="'干跑确认清单后批量标记卡死会话为失败'"
-        @click="openReclaimModal()"
-      >
-        {{ reclaimBusy ? '回收中…' : `回收卡死（${partition.stale}）` }}
-      </button>
       <span class="mk-status__actions">
+        <button
+          v-if="partition.stale > 0"
+          type="button"
+          class="mk-status__action"
+          :disabled="reclaimBusy"
+          :title="'干跑确认清单后批量标记卡死会话为失败'"
+          @click="openReclaimModal()"
+        >
+          {{ reclaimBusy ? '回收中…' : `回收卡死（${partition.stale}）` }}
+        </button>
         <button type="button" class="mk-status__action mk-status__action--primary" title="新建虚拟学习者：填写名称/目标/故事，生成后可运行实验会话" @click="openCreate">新建</button>
         <button type="button" class="mk-status__action" title="批量新建：一次创建多个虚拟学习者（表格批量填写）" @click="batchOpen = true">批量新建</button>
       </span>
@@ -74,7 +74,7 @@
         {{ runChipsExpanded ? '收起' : `还有 ${runChipTotal - RUN_CHIPS_LIMIT} 个` }} ▾
       </button>
       <!-- 批量生成详情行（点 chip 展开）：进度 + 重试 + 关闭 -->
-      <div v-if="batchTask.active && batchTask.expanded" class="vl-batch-detail" role="status">
+      <div v-if="batchTask.active && batchTask.expanded" class="mk-alert mk-alert--info vl-batch-detail" role="status">
         <span class="vl-batch-detail__text">
           创建 {{ batchTask.created }}/{{ batchTask.total }} 人
           <template v-if="batchTask.personaLeft > 0"> · 生成身份 {{ batchTask.total - batchTask.personaLeft }}/{{ batchTask.total }}</template>
@@ -178,7 +178,7 @@
               >{{ s.failedCount }}</button>
             </td>
             <td class="mk-num">
-              <span v-if="s.stalledCount > 0" class="vl-stall" :title="`${s.stalledCount} 个运行中会话已卡死（超过回收阈值无写入），可在状态条一键回收`">卡死 {{ s.stalledCount }}</span>
+              <span v-if="s.stalledCount > 0" class="mk-badge mk-badge--sm mk-badge--bad" :title="`${s.stalledCount} 个运行中会话已卡死（超过回收阈值无写入），可在状态条一键回收`">卡死 {{ s.stalledCount }}</span>
               <span v-else class="mk-num--na" title="无卡死会话">—</span>
             </td>
             <td class="mk-na">{{ s.created }}</td>
@@ -234,26 +234,26 @@
       />
     </div>
 
-    <!-- 批量操作条（对齐 Users.vue 模式：选中后底部浮现；批量删除待 2B 后端打通） -->
-    <div v-if="isLive && selected.length" class="vl-batch">
+    <!-- 批量操作条（全局 mk-batchbar：选中后底部浮现） -->
+    <div v-if="isLive && selected.length" class="mk-batchbar">
       <span>已选 {{ selected.length }} 人</span>
       <button type="button" class="mk-link" @click="selected = []">取消选择</button>
-      <button type="button" class="vl-batch__btn" :disabled="batchActionBusy" :title="'为每个选中的虚拟学习者启动其全部故事的实验会话（一个故事一个会话）'" @click="batchLaunchAllStories">
+      <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" :title="'为每个选中的虚拟学习者启动其全部故事的实验会话（一个故事一个会话）'" @click="batchLaunchAllStories">
         {{ batchActionBusy ? '处理中…' : '启动全部故事' }}
       </button>
-      <button type="button" class="vl-batch__btn" :disabled="batchActionBusy" :title="'对选中虚拟人全部故事的最新会话开启自动驾驶（不新建会话；已运行的自动跳过）'" @click="batchAutopilotStart">
+      <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" :title="'对选中虚拟人全部故事的最新会话开启自动驾驶（不新建会话；已运行的自动跳过）'" @click="batchAutopilotStart">
         {{ batchActionBusy ? '处理中…' : '批量启动自动驾驶' }}
       </button>
-      <button type="button" class="vl-batch__btn" :disabled="batchActionBusy" :title="'停止选中虚拟人全部故事最新会话的自动驾驶（学习进度保留，可随时再启动）'" @click="batchAutopilotStop">
+      <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" :title="'停止选中虚拟人全部故事最新会话的自动驾驶（学习进度保留，可随时再启动）'" @click="batchAutopilotStop">
         {{ batchActionBusy ? '处理中…' : '批量停止自动驾驶' }}
       </button>
-      <button type="button" class="vl-batch__btn" :disabled="batchActionBusy" @click="batchTerminate">
+      <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" @click="batchTerminate">
         {{ batchActionBusy ? '处理中…' : '批量终止' }}
       </button>
-      <button type="button" class="vl-batch__btn" :disabled="batchActionBusy" @click="batchReclaim">
+      <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" @click="batchReclaim">
         {{ batchActionBusy ? '处理中…' : '批量清理卡死' }}
       </button>
-      <button type="button" class="vl-batch__danger" :disabled="batchActionBusy" @click="batchDelete">
+      <button type="button" class="mk-batchbar__danger" :disabled="batchActionBusy" @click="batchDelete">
         批量删除
       </button>
     </div>
@@ -267,11 +267,11 @@
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="reclaimOpen = false">✕</button>
         </div>
         <div class="mk-modal__body">
-          <p class="vl-steps">
+          <p class="mk-alert mk-alert--info vl-steps">
             将把{{ reclaimProfileIds ? '选中虚拟人' : '全部' }}超过回收阈值（{{ reclaimThresholdLabel }}）无写入、且无活跃租约的会话标记为失败（failed, reason=stale）。只改状态，不删除任何数据。
           </p>
-          <p v-if="reclaimLoading" class="vl-steps">正在扫描可回收会话…</p>
-          <p v-else-if="!reclaimPreview.length" class="vl-steps vl-steps--ok">没有可回收的卡死会话。</p>
+          <p v-if="reclaimLoading" class="mk-alert mk-alert--info vl-steps">正在扫描可回收会话…</p>
+          <p v-else-if="!reclaimPreview.length" class="mk-alert mk-alert--ok vl-steps">没有可回收的卡死会话。</p>
           <div v-else class="vl-reclaim-list">
             <div v-for="r in reclaimPreview" :key="r.id" class="vl-reclaim-item">
               <code class="vl-reclaim-id">{{ r.id.slice(0, 14) }}…</code>
@@ -299,7 +299,7 @@
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="createOpen = false">✕</button>
         </div>
         <div class="mk-modal__body">
-          <p class="vl-steps">
+          <p class="mk-alert mk-alert--info vl-steps">
             ① 称呼与背景 → ② AI 补全身份（可选）→ ③ 创建 → ④ 画像页生成故事 → ⑤ 按故事运行
           </p>
           <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
@@ -338,7 +338,7 @@
             </button>
             <span class="vl-ai-hint">人设 Skill · 只补稳定身份，不依赖学习目标，不写会话故事{{ sampleType === 'student' ? ' · 学生样本含考试节点与学期节奏' : '' }}</span>
           </div>
-          <p v-if="personaSeed" class="vl-persona-ok">已回填人设，可改称呼/背景后创建</p>
+          <p v-if="personaSeed" class="mk-alert mk-alert--ok vl-persona-ok">已回填人设，可改称呼/背景后创建</p>
           <details class="vl-advanced">
             <summary>可选 · 长期学习倾向（不是某次故事的目标）</summary>
             <label class="mk-field">
@@ -425,7 +425,7 @@
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="batchOpen = false">✕</button>
         </div>
         <div class="mk-modal__body">
-          <p class="vl-steps">设置人数与故事数，点击创建后立即返回——AI 会在后台为每人生成身份与故事，页面顶部状态条可查看进度。</p>
+          <p class="mk-alert mk-alert--info vl-steps">设置人数与故事数，点击创建后立即返回——AI 会在后台为每人生成身份与故事，页面顶部状态条可查看进度。</p>
           <div class="vl-batch-config">
             <label class="mk-field vl-batch-config__count">
               <span class="mk-field__label">人数</span>
@@ -448,7 +448,7 @@
             <span class="mk-field__label">批次备注 <em class="vl-req-less">可选</em></span>
             <input v-model="batchNote" class="mk-field__input" placeholder="这批学习者用于什么实验 / 验收，方便以后识别" />
           </label>
-          <div v-if="batchError" class="errorbar">{{ batchError }}</div>
+          <div v-if="batchError" class="mk-alert">{{ batchError }}</div>
           <button type="button" class="mk-btn mk-btn--primary mk-btn--block" :disabled="batchCreating" @click="doBatchCreate">
             {{ batchCreating ? '创建中…' : `创建 ${batchFillCount || 0} 人 × ${batchStoryCount || 0} 故事（后台生成）` }}
           </button>
@@ -1474,27 +1474,6 @@ function startBatchPolling() { batchPolling.start() }
   color: var(--mk-faint);
   white-space: nowrap;
 }
-.vl-run__dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.85; flex-shrink: 0; }
-.vl-run--idle { color: var(--mk-faint); }
-.vl-run--live {
-  color: #047857;
-  background: rgba(16, 185, 129, 0.12);
-  border-radius: 999px;
-  padding: 3px 10px;
-  cursor: pointer;
-}
-.vl-run--live:hover { background: rgba(16, 185, 129, 0.2); }
-.vl-run--live .vl-run__dot { background: #10b981; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); animation: vl-pulse 1.6s infinite; }
-/* 已暂停（autopilot stopped）：灰色静态胶囊，点击进画像页 */
-.vl-run--paused {
-  color: #64748b;
-  background: rgba(148, 163, 184, 0.14);
-  border-radius: 999px;
-  padding: 3px 10px;
-  cursor: pointer;
-}
-.vl-run--paused:hover { background: rgba(148, 163, 184, 0.24); }
-.vl-run--paused .vl-run__dot { background: #94a3b8; box-shadow: none; animation: none; }
 /* 失败列：全量聚合数字（>0 标红，可点击直达画像页的重试入口） */
 .vl-num--bad { color: var(--mk-red, #dc2626); font-weight: 800; }
 .vl-faillink {
@@ -1507,21 +1486,7 @@ function startBatchPolling() { batchPolling.start() }
   transition: color 0.12s ease, background 0.12s ease;
 }
 .vl-faillink:hover { color: var(--mk-blue); background: #eff6ff; box-shadow: 0 0 0 3px #eff6ff; }
-/* 卡死列：红色徽章（>0 才显示；否则灰 —） */
-.vl-stall {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 9px;
-  border-radius: 999px;
-  background: rgba(220, 38, 38, 0.1);
-  color: var(--mk-red, #dc2626);
-  font-size: 10.5px;
-  font-weight: 800;
-  white-space: nowrap;
-  cursor: help;
-}
 .mk-num--na { color: var(--mk-faint); font-weight: 600; }
-.vl-status-run { color: #047857; font-weight: 700; }
 
 /* 状态过滤 chips（一级页：与搜索同行，计数联动 samples） */
 .vl-filters { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
@@ -1537,21 +1502,21 @@ function startBatchPolling() { batchPolling.start() }
   gap: 8px;
   padding: 5px 12px;
   border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border: 1px solid var(--mk-line);
+  background: var(--mk-surface);
   font-size: 11.5px;
   cursor: help;
 }
-.vl-concurrency__label { font-weight: 700; color: #475569; }
-.vl-concurrency__track { flex: 1; height: 6px; border-radius: 3px; background: #e2e8f0; overflow: hidden; }
-.vl-concurrency__fill { display: block; height: 100%; border-radius: 3px; background: #10b981; transition: width 0.3s ease; }
-.vl-concurrency__num { font-weight: 800; color: #334155; font-variant-numeric: tabular-nums; }
-.vl-concurrency__full { color: #dc2626; font-weight: 700; font-size: 10.5px; }
+.vl-concurrency__label { font-weight: 700; color: var(--mk-muted); }
+.vl-concurrency__track { flex: 1; height: 6px; border-radius: 3px; background: var(--mk-line); overflow: hidden; }
+.vl-concurrency__fill { display: block; height: 100%; border-radius: 3px; background: var(--mk-green, #10b981); transition: width 0.3s ease; }
+.vl-concurrency__num { font-weight: 800; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
+.vl-concurrency__full { color: var(--mk-red, #dc2626); font-weight: 700; font-size: 10.5px; }
 .vl-concurrency.is-warn { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.07); }
-.vl-concurrency.is-warn .vl-concurrency__fill { background: #f59e0b; }
+.vl-concurrency.is-warn .vl-concurrency__fill { background: var(--mk-amber, #f59e0b); }
 .vl-concurrency.is-full { border-color: rgba(239, 68, 68, 0.5); background: rgba(239, 68, 68, 0.07); }
-.vl-concurrency.is-full .vl-concurrency__fill { background: #ef4444; }
-.vl-concurrency.is-full .vl-concurrency__num { color: #dc2626; }
+.vl-concurrency.is-full .vl-concurrency__fill { background: var(--mk-red, #ef4444); }
+.vl-concurrency.is-full .vl-concurrency__num { color: var(--mk-red, #dc2626); }
 
 /* 「正在运行」折叠展开按钮 */
 .vl-running__more {
@@ -1588,56 +1553,13 @@ function startBatchPolling() { batchPolling.start() }
 .vl-running__chip--batch.is-error { border-color: rgba(239, 68, 68, 0.45); color: #dc2626; }
 .vl-running__chip--batch.is-error .vl-running__dot { background: #ef4444; animation: none; }
 @keyframes vl-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); } 50% { box-shadow: 0 0 0 5px rgba(59, 130, 246, 0); } }
-/* 批量生成详情行（点 chip 展开） */
-.vl-batch-detail { display: flex; align-items: center; gap: 12px; padding: 8px 14px; margin-top: 8px; border-radius: 8px; font-size: 12.5px; background: #f8fafc; border: 1px solid #e2e8f0; flex-basis: 100%; }
+/* 批量生成详情行（点 chip 展开）：mk-alert 形态，此处只留弹性布局 */
+.vl-batch-detail { display: flex; align-items: center; gap: 12px; margin-top: 8px; flex-basis: 100%; }
 .vl-batch-detail__text { color: var(--mk-muted, #5b6577); flex: 1; }
-.vl-batch-detail__err { color: #dc2626; }
-.vl-steps { font-size: 12.5px; color: var(--mk-muted); margin: 0 0 12px; line-height: 1.6; }
-.vl-status-fail { color: var(--mk-red, #dc2626); font-weight: 700; }
-.vl-status-stale { color: var(--mk-red, #dc2626); font-weight: 700; }
-.vl-status-dur { color: var(--mk-muted, #5b6577); font-weight: 700; }
+.vl-batch-detail__err { color: var(--mk-red, #dc2626); }
+/* 弹窗内步骤/结果提示：mk-alert 形态，此处只留边距 */
+.vl-steps { margin: 0 0 12px; line-height: 1.6; }
 .vl-truncated { color: var(--mk-amber); font-weight: 700; }
-/* 运行概览条：仿真定位（左）+ 派生统计胶囊（右），垂直居中对齐 */
-.vl-position {
-  margin: 8px 0 0;
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.vl-position__icon { font-size: 15px; flex-shrink: 0; }
-.vl-position__text {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
-  min-width: 0;
-  font-size: 12.5px;
-  color: var(--mk-muted);
-}
-.vl-position__text strong { color: var(--mk-ink); font-weight: 800; white-space: nowrap; }
-.vl-position__stats {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.vl-stat {
-  font-size: 11.5px;
-  color: var(--mk-muted);
-  white-space: nowrap;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: #fff;
-  border: 1px solid var(--mk-line);
-}
-.vl-stat b { color: var(--mk-ink); font-weight: 800; font-variant-numeric: tabular-nums; }
-.vl-stat--live b { color: var(--mk-blue); }
 
 /* ===== 正在运行条：直接列名当前活跃虚拟学习者（绿点呼吸动画） ===== */
 .vl-running {
@@ -1707,11 +1629,6 @@ function startBatchPolling() { batchPolling.start() }
   100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
 
-/* 状态条语义着色（数字随 mk-status__meta 统一字号，仅保留分区色标） */
-.vl-status-run { color: #047857; }
-.vl-status-fail { color: var(--mk-red, #dc2626); }
-.vl-status-stale { color: var(--mk-red, #dc2626); }
-
 /* 名称头像：按名字哈希取色，同一人恒定同色 */
 .vl-avatar {
   width: 26px;
@@ -1749,64 +1666,6 @@ function startBatchPolling() { batchPolling.start() }
   white-space: nowrap;
   min-width: 0;
 }
-.vl-status-reclaim {
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(220, 38, 38, 0.35);
-  background: rgba(220, 38, 38, 0.08);
-  color: var(--mk-red, #dc2626);
-  font-size: 11.5px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-.vl-status-reclaim:hover:not(:disabled) { background: rgba(220, 38, 38, 0.16); }
-.vl-status-reclaim:disabled { opacity: 0.6; cursor: default; }
-/* 批量操作条：对齐 Users.vue .ul-batch 模式（sticky 底部胶囊条） */
-.vl-batch {
-  position: sticky;
-  bottom: 12px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: fit-content;
-  margin: 0 auto;
-  padding: 8px 12px 8px 16px;
-  border-radius: 999px;
-  border: 1px solid rgba(220, 38, 38, 0.25);
-  background: var(--mk-surface);
-  box-shadow: var(--mk-shadow-pop);
-  font-weight: 600;
-  font-size: 12.5px;
-}
-.vl-batch__btn {
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(220, 38, 38, 0.35);
-  background: transparent;
-  color: var(--mk-red, #dc2626);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-.vl-batch__btn:hover:not(:disabled) { background: rgba(220, 38, 38, 0.08); }
-.vl-batch__btn:disabled { opacity: 0.6; cursor: default; }
-.vl-batch__danger {
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 0;
-  background: var(--mk-red, #dc2626);
-  color: #fff;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-.vl-batch__danger:hover:not(:disabled) { background: var(--mk-red-strong, #b91c1c); }
-.vl-batch__danger:disabled { opacity: 0.45; cursor: not-allowed; }
 /* 一键回收清单 */
 .vl-reclaim-list {
   display: flex;
@@ -1900,11 +1759,8 @@ function startBatchPolling() { batchPolling.start() }
   .vl-advanced { padding: 10px 14px; }
   .vl-advanced summary { font-size: 14px; }
   .vl-advanced[open] summary { margin-bottom: 9px; }
-  .vl-batch { gap: 11px; padding: 10px 14px 10px 18px; font-size: 14px; }
-  .vl-batch__btn, .vl-batch__danger { font-size: 14px; padding: 7px 16px; }
   .vl-reclaim-item { font-size: 13.5px; padding: 8px 12px; }
   .vl-reclaim-id { font-size: 12.5px; }
-  .vl-status-reclaim { font-size: 13px; padding: 6px 14px; }
 }
 @media (min-width: 2800px) {
   .vl-steps { font-size: 15.5px; padding: 11px 14px; }
@@ -1915,23 +1771,27 @@ function startBatchPolling() { batchPolling.start() }
   .vl-advanced { padding: 12px 17px; }
   .vl-advanced summary { font-size: 16.5px; }
   .vl-advanced[open] summary { margin-bottom: 11px; }
-  .vl-batch { gap: 13px; padding: 12px 17px 12px 21px; font-size: 16.5px; }
-  .vl-batch__btn, .vl-batch__danger { font-size: 16.5px; padding: 8px 19px; }
-  .vl-badge { font-size: 14px; padding: 3px 12px; margin-left: 8px; }
   .vl-reclaim-item { font-size: 15.5px; padding: 9px 14px; }
   .vl-reclaim-id { font-size: 14.5px; }
-  .vl-status-reclaim { font-size: 15.5px; padding: 7px 17px; }
+}
+@media (min-width: 3600px) {
+  .vl-steps { font-size: 18px; padding: 13px 16px; }
+  .vl-req { font-size: 16.5px; }
+  .vl-ai-row { gap: 16px; }
+  .vl-ai-hint { font-size: 17.5px; }
+  .vl-persona-ok { font-size: 19px; padding: 9px 16px; }
+  .vl-advanced { padding: 14px 20px; }
+  .vl-advanced summary { font-size: 19px; }
+  .vl-advanced[open] summary { margin-bottom: 13px; }
+  .vl-reclaim-item { font-size: 18px; padding: 11px 16px; }
+  .vl-reclaim-id { font-size: 17px; }
 }
 
 /* ================= 暗色模式（D1 补完）：虚拟学习者列表 ================= */
 html[data-theme='dark'] {
   .vl-faillink:hover { background: rgba(91, 141, 239, 0.14); box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.08); }
-  .vl-concurrency { background: #141c2b; border-color: #232f45; }
-  .vl-concurrency__track { background: #232f45; }
-  .vl-batch-detail { background: #141c2b; border-color: #232f45; }
-  .vl-running__chip, .vl-status-bar, .vl-meta { background: #141c2b; border-color: #232f45; }
+  /* 并发条 / 批量详情：已改用 var(--mk-*) token，暗色由全局 token 覆盖，不再需要页面补丁 */
+  .vl-running__chip { background: #141c2b; border-color: #232f45; }
   .vl-steps--ok { background: rgba(74, 222, 128, 0.12); color: #6ee7a0; }
-  .vl-panel { background: #141c2b; border-color: #232f45; }
-  .vl-avatar { background: #1b2537; }
 }
 </style>

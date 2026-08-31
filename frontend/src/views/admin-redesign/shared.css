@@ -1062,3 +1062,81 @@ html[data-theme='dark'] {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ----- 批量操作条（列表页选中后底部浮现的统一形态；Users/VirtualLearners/Batch 共用） ----- */
+.mk-batchbar {
+  position: sticky;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  margin: 0 auto;
+  padding: 8px 12px 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  background: var(--mk-surface);
+  box-shadow: var(--mk-shadow-pop);
+  font-weight: 600;
+  font-size: 12.5px;
+}
+.mk-batchbar__btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  background: transparent;
+  color: var(--mk-red, #dc2626);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.mk-batchbar__btn:hover:not(:disabled) { background: rgba(220, 38, 38, 0.08); }
+.mk-batchbar__btn:disabled { opacity: 0.6; cursor: default; }
+.mk-batchbar__danger {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--mk-red, #dc2626);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.mk-batchbar__danger:hover:not(:disabled) { background: var(--mk-red-strong, #b91c1c); }
+.mk-batchbar__danger:disabled { opacity: 0.45; cursor: not-allowed; }
+html[data-theme='dark'] .mk-batchbar { background: #17202f; border-color: #2a3850; }
+html[data-theme='dark'] .mk-batchbar__danger { background: rgba(248, 113, 113, 0.16); border-color: rgba(248, 113, 113, 0.4); color: #f87171; }
+html[data-theme='dark'] .mk-batchbar__danger:hover:not(:disabled) { background: rgba(248, 113, 113, 0.26); }
+@media (min-width: 2000px) {
+  .mk-batchbar { gap: 11px; padding: 10px 14px 10px 18px; font-size: 14px; }
+  .mk-batchbar__btn, .mk-batchbar__danger { font-size: 14px; padding: 7px 16px; }
+}
+@media (min-width: 2800px) {
+  .mk-batchbar { gap: 13px; padding: 12px 17px 12px 21px; font-size: 16.5px; }
+  .mk-batchbar__btn, .mk-batchbar__danger { font-size: 16.5px; padding: 8px 19px; }
+}
+
+/* ----- 提示/错误条（表单错误、批量任务提示等统一形态；替代页面级 errorbar/vl-steps） ----- */
+.mk-alert {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--mk-red-bg, #fef2f2);
+  color: var(--mk-red, #dc2626);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.mk-alert--ok {
+  background: rgba(16, 185, 129, 0.1);
+  color: #1a7f4b;
+}
+.mk-alert--info {
+  background: #f4f7fc;
+  color: var(--mk-muted, #5b6577);
+}
+html[data-theme='dark'] .mk-alert--ok { background: rgba(74, 222, 128, 0.12); color: #6ee7a0; }
+html[data-theme='dark'] .mk-alert--info { background: #141c2b; color: #94a3b8; }
