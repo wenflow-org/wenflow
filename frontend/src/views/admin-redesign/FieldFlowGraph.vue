@@ -1390,6 +1390,11 @@ html[data-theme='dark'] {
   }
   .ffg-lane__count, .ffg-group__badge, .ffg-group__fold { background: #253049; color: #9fb0c8; }
 
+  /* agent 卡片标题：暗色下从近白 #e6edf7 降为柔和浅灰蓝，避免刺眼（用户反馈"标题太白"） */
+  .ffg-lane__name { color: #c7d3e8; }
+  .ffg-flow__name { color: #c7d3e8; }
+  .ffg-flow__meta b { color: #c7d3e8; }
+
   /* 组 */
   .ffg-group { background: #141c2b; border-bottom-color: #1f2937; }
   .ffg-group.is-bridge { background: #161f2f; }

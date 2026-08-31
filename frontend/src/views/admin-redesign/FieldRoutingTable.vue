@@ -984,6 +984,8 @@ html[data-theme='dark'] {
   .frt-syncbar__badge--muted { background: #253049; }
   .frt__tablewrap { background: #141c2b; }
   .frt__agenthead { background: #131b2a; }
+  /* agent 卡片标题：暗色下从近白降为柔和浅灰蓝（与编排图一致） */
+  .frt__agentname { color: #c7d3e8; }
   .frt__agentcount { background: #253049; }
   .frt__persist--alias { background: rgba(251, 191, 36, 0.12); }
   .frt__fieldrow:hover { background: #1b2740; }
