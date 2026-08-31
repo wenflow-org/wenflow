@@ -232,10 +232,23 @@ export function clearInvestigation() {
 /* ---------- 二级页面（drill-in） ---------- */
 export type SubPageView = 'learner' | 'virtual' | 'user' | 'session' | 'session-real'
 
-export const subPage = ref<{ view: SubPageView; id: string; label?: string; includeTest?: boolean } | null>(null)
+/** 来源记忆：从二级（画像）进三级（会话）后，返回时回到来源页而非直接回一级列表 */
+export interface SubPageFrom {
+  view: SubPageView
+  id: string
+  label?: string
+}
 
-export function openSubPage(view: SubPageView, id: string, opts?: { includeTest?: boolean }) {
-  subPage.value = opts?.includeTest ? { view, id, includeTest: true } : { view, id }
+export const subPage = ref<{ view: SubPageView; id: string; label?: string; includeTest?: boolean; from?: SubPageFrom } | null>(null)
+
+export function openSubPage(view: SubPageView, id: string, opts?: { includeTest?: boolean; from?: SubPageFrom }) {
+  const base = opts?.includeTest ? { view, id, includeTest: true } : { view, id }
+  // 从二级（virtual/learner）进三级（session）时记忆来源，返回时回到该页
+  if ((view === 'session' || view === 'session-real') && opts?.from) {
+    subPage.value = { ...base, from: opts.from }
+  } else {
+    subPage.value = base
+  }
 }
 
 /** 二级页加载出名称后回写（面包屑显示中文名/短标识；未设置时回退 ID 截断） */
@@ -244,7 +257,13 @@ export function setSubPageLabel(label: string) {
 }
 
 export function closeSubPage() {
-  subPage.value = null
+  // 有来源记忆（从二级进三级）→ 返回来源页；否则回一级列表
+  if (subPage.value?.from) {
+    const { view, id, label } = subPage.value.from
+    subPage.value = { view, id, ...(label ? { label } : {}) }
+  } else {
+    subPage.value = null
+  }
 }
 
 /* ---------- 学习者详情数据 ---------- */

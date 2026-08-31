@@ -582,4 +582,10 @@ onMounted(() => {
   .fb-meta { font-size: 16.5px; }
   .mk-btn--sm { font-size: 19.5px; }
 }
+
+/* ================= 暗色模式（D1 补完）：反馈中心 ================= */
+html[data-theme='dark'] {
+  .fb-card { background: #141c2b; border-color: #232f45; }
+  .fb-badge { background: #253049; }
+}
 </style>

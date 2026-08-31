@@ -792,4 +792,9 @@ void loadStats()
   font-size: 12.5px;
   font-weight: 600;
 }
+
+/* ================= 暗色模式（D1 补完）：运营中心 ================= */
+html[data-theme='dark'] {
+  .oh-panel { background: #141c2b; border-color: #232f45; }
+}
 </style>

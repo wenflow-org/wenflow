@@ -295,4 +295,9 @@ void refreshAll()
   .dt-compare { grid-template-columns: 1fr; }
   .dt-compare__col + .dt-compare__col { border-left: none; border-top: 1px dashed var(--mk-line); }
 }
+
+/* ================= 暗色模式（D1 补完）：运维工具 ================= */
+html[data-theme='dark'] {
+  .dv-card { background: #141c2b; border-color: #232f45; }
+}
 </style>

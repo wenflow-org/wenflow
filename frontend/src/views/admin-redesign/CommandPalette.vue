@@ -329,4 +329,10 @@ function close() {
   .pal__group { font-size: 17.5px; }
   .pal__esc { font-size: 16.5px; }
 }
+
+/* ================= 暗色模式（D1 补完）：命令面板 ================= */
+html[data-theme='dark'] {
+  .pal__panel { background: #17202f; border-color: #232f45; }
+  .pal__item--active { background: rgba(91, 141, 239, 0.16); }
+}
 </style>

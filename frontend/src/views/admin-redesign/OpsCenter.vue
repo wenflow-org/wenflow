@@ -442,4 +442,9 @@ void loadDead()
   .ex-row__text strong { font-size: 14.5px; }
   .ex-row__text span { font-size: 13.5px; }
 }
+
+/* ================= 暗色模式（D1 补完）：运维中心 ================= */
+html[data-theme='dark'] {
+  .oc-tools { background: #141c2b; border-color: #232f45; }
+}
 </style>

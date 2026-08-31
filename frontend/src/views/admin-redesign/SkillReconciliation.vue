@@ -293,4 +293,12 @@ function openPanel() { recOpen.value = true; }
 .sk-rec-legend { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px solid var(--mk-line); font-size: 11px; }
 .sk-rec-legend__item { display: inline-flex; align-items: center; gap: 4px; }
 .sk-rec-legend .mk-card__meta { margin-left: auto; }
+
+/* ================= 暗色模式（D1 补完）：Skill 对账 ================= */
+html[data-theme='dark'] {
+  .sk-rec__refresh { background: #17202f; }
+  .sk-rec-tag { background: #253049; color: #9fb0c8; }
+  .sk-rec-tag--bad { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
+  .sk-rec-group td { background: #131b2a; }
+}
 </style>

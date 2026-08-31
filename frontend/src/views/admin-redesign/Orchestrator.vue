@@ -426,4 +426,10 @@ details[open].orch-fold .orch-fold__summary::before { content: '▾ '; }
 @media (min-width: 2000px) {
   .orch-tab { font-size: 13px; padding: 7px 16px; }
 }
+
+/* ================= 暗色模式（D1 补完）：编排结构 ================= */
+html[data-theme='dark'] {
+  .orch-tab, .orch-panel { background: #141c2b; border-color: #232f45; }
+  .orch-tab.is-active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; }
+}
 </style>

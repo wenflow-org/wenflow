@@ -28,25 +28,28 @@
     <!-- 仿真概览（共享组件 MkOverview：结论头 + KPI + 详情行） -->
     <MkOverview :tone="dashTone" :title="dashTitle" :subline="dashSubline" :has-data="hasDashData">
       <template #kpis>
-        <MkKpi label="今日调用" :value="runStats.todayCalls ?? 0" hint="模拟/测试账号" :title="'今日虚拟/测试账号 Agent 调用数（自然日口径）'" />
-        <MkKpi label="活动会话" :value="partition.running + partition.created" hint="运行中 + 创建中（明细见下方）" :title="'当前运行中 + 创建中会话数（含卡死）'" />
-        <MkKpi label="完成率" :value="`${runStats.completionRate}%`" :hint="`完成 ${runStats.completed} / ${runStats.totalSessions}`" :title="'已完成会话 / 总会话（全量口径）'" />
-        <MkKpi label="失败率" :value="`${runStats.systemFailureRate}%`" :tone="(runStats.systemFailureRate ?? 0) > 0 ? 'bad' : ''" :hint="`已失败 ${partition.failed} · 均耗 ${fmtDuration(runStats.avgDurationMs)}`" :title="'系统失败会话 / 总会话（与状态条同口径）'" />
+        <MkKpi compact label="今日调用" :value="runStats.todayCalls ?? 0" hint="模拟/测试账号" :title="'今日虚拟/测试账号 Agent 调用数（自然日口径）'" />
+        <MkKpi compact label="活动会话" :value="partition.running + partition.created" hint="运行中 + 创建中（明细见下方）" :title="'当前运行中 + 创建中会话数（含卡死）'" />
+        <MkKpi compact label="完成率" :value="`${runStats.completionRate}%`" :hint="`完成 ${runStats.completed} / ${runStats.totalSessions}`" :title="'已完成会话 / 总会话（全量口径）'" />
+        <MkKpi compact label="失败率" :value="`${runStats.systemFailureRate}%`" :tone="(runStats.systemFailureRate ?? 0) > 0 ? 'bad' : ''" :hint="`已失败 ${partition.failed} · 均耗 ${fmtDuration(runStats.avgDurationMs)}`" :title="'系统失败会话 / 总会话（与状态条同口径）'" />
       </template>
-      <template #detail>
-        <span :title="'全量口径：会话处于创建中状态的数量'">创建中 {{ partition.created }}</span>
-        <span :title="'全量口径：运行中会话数（含卡死）'">运行中 {{ partition.running }}</span>
-        <span :title="'全量口径：失败/放弃会话数'">已失败 {{ partition.failed }}</span>
-        <span :title="`超过回收阈值无写入且无活跃租约，可一键回收；最长卡死 ${runStats.maxStaleMins} 分钟`">
-          卡死 {{ partition.stale }}<template v-if="runStats.maxStaleMins > 0">（最长 {{ fmtMins(runStats.maxStaleMins) }}）</template>
-        </span>
-        <span :title="'abandoned 会话 / 总会话（含管理员止停、批量终止、僵尸回收）'">终止率 {{ runStats.humanTerminatedRate }}%</span>
-        <span :title="'已完成/失败/放弃会话的平均时长'">均耗 {{ fmtDuration(runStats.avgDurationMs) }}</span>
+      <template #pre>
+        <!-- 自动驾驶并发配额（并入 KPI 卡内，不占独立行）：used/limit 分段条 -->
+        <div
+          class="vl-concurrency"
+          :class="`is-${concurrencyTone}`"
+          :title="`自动驾驶并发 ${concurrency.used}/${concurrency.limit}：同时运行的自动驾驶会话数（env AUTOPILOT_CONCURRENCY_LIMIT 可配）；满员后新启动会被拒绝，请先暂停部分会话`"
+        >
+          <span class="vl-concurrency__label">并发</span>
+          <span class="vl-concurrency__track"><span class="vl-concurrency__fill" :style="{ width: `${concurrencyPct}%` }"></span></span>
+          <span class="vl-concurrency__num">{{ concurrency.used }}/{{ concurrency.limit }}</span>
+          <span v-if="concurrency.used >= concurrency.limit" class="vl-concurrency__full">已满</span>
+        </div>
       </template>
     </MkOverview>
 
-    <!-- 正在运行：直接列出当前有活跃会话的虚拟学习者，一眼看出谁在跑；批量生成也在此显示 -->
-    <div v-if="(runningSamples.length || batchTask.active) && isLive" class="vl-running">
+    <!-- 正在运行：列出有活跃会话的虚拟学习者（折叠：默认前 8 个，展开看全部）；批量生成也在此显示 -->
+    <div v-if="(runningSamples.length || pausedSamples.length || batchTask.active) && isLive" class="vl-running">
       <span class="vl-running__label">正在运行</span>
       <!-- 批量创建后台进度：创建秒回，AI 身份 + 故事后台推进 -->
       <button v-if="batchTask.active" type="button" class="vl-running__chip vl-running__chip--batch" :class="`is-${batchTask.status}`" :title="batchTaskStatusTitle" @click="batchTask.expanded = !batchTask.expanded">
@@ -56,9 +59,19 @@
         <template v-else>批量生成中</template>
         <template v-if="batchTask.status === 'running'"> · 身份 {{ batchTask.total - batchTask.personaLeft }}/{{ batchTask.total }}<template v-if="batchTask.totalStories"> · 故事 {{ batchTask.storiesDone }}/{{ batchTask.totalStories }}</template></template>
       </button>
-      <button v-for="s in runningSamples" :key="s.id" type="button" class="vl-running__chip" :title="`${s.runningCount} 个会话运行中 · 点击进入会话座舱`" @click="openRunningSession(s)">
+      <!-- 运行中（前 RUN_CHIPS_LIMIT 个，超出折叠） -->
+      <button v-for="s in visibleRunChips" :key="s.id" type="button" class="vl-running__chip" :title="`${s.runningCount} 个会话运行中 · 点击进入会话座舱`" @click="openRunningSession(s)">
         <span class="vl-running__dot" aria-hidden="true"></span>
         {{ s.name }}<template v-if="s.currentStage"> · {{ stageLabel(s.currentStage) }}</template>
+      </button>
+      <!-- 已暂停：autopilot 已停（会话保留），灰色 chip 点击进画像页 -->
+      <button v-for="s in visiblePausedChips" :key="`p-${s.id}`" type="button" class="vl-running__chip vl-running__chip--paused" :title="`${s.pausedCount} 个会话已暂停自动驾驶（进度保留）；点击进入画像页`" @click="openSubPage('virtual', s.id)">
+        <span class="vl-running__dot" aria-hidden="true"></span>
+        {{ s.name }} · 已暂停{{ s.pausedCount > 1 ? ` ${s.pausedCount}` : '' }}
+      </button>
+      <!-- 折叠展开/收起 -->
+      <button v-if="runChipTotal > RUN_CHIPS_LIMIT" type="button" class="vl-running__more" @click="runChipsExpanded = !runChipsExpanded">
+        {{ runChipsExpanded ? '收起' : `还有 ${runChipTotal - RUN_CHIPS_LIMIT} 个` }} ▾
       </button>
       <!-- 批量生成详情行（点 chip 展开）：进度 + 重试 + 关闭 -->
       <div v-if="batchTask.active && batchTask.expanded" class="vl-batch-detail" role="status">
@@ -77,6 +90,20 @@
       <div class="mk-card__head">
         <div class="mk-filter">
           <input class="mk-filter__input" v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
+        </div>
+        <!-- 状态过滤 chips（与搜索同行；计数联动 samples） -->
+        <div v-if="isLive" class="vl-filters" role="tablist" aria-label="按状态过滤">
+          <button
+            v-for="opt in stateFilterOptions"
+            :key="opt.key"
+            type="button"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': stateFilter === opt.key }"
+            @click="stateFilter = opt.key"
+          >
+            {{ opt.label }} <span class="vl-filter-count">{{ opt.count }}</span>
+          </button>
+          <button v-if="isFiltered" type="button" class="mk-link vl-filter-clear" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
           <span class="mk-card__meta">{{ filtered.length }} / {{ samples.length }} 人<template v-if="filtered.length < samples.length">（已筛选）</template> · 点击行查看画像</span>
@@ -125,14 +152,19 @@
             <td class="mk-num">{{ s.sessions }}</td>
             <td>
               <div class="vl-state-cell">
-                <span
-                  v-if="s.runningCount > 0"
-                  class="vl-run vl-run--live"
-                  :title="`${s.runningCount} 个会话运行中/创建中 · 当前阶段 ${stageLabel(s.currentStage)}；点击进入会话座舱`"
-                  @click.stop="openRunningSession(s)"
-                >
-                  <span class="vl-run__dot" aria-hidden="true"></span>{{ s.runningCount }} 运行中 · {{ stageLabel(s.currentStage) }}
-                </span>
+                <template v-if="s.runningCount > 0 || (s.pausedCount ?? 0) > 0">
+                  <RunStateBadge
+                    :status="s.runningCount > 0 ? 'running' : 'paused'"
+                    :hint="`${s.runningCount} 个会话运行中 / ${s.pausedCount ?? 0} 个已暂停 · 点击进入会话座舱`"
+                    @click.stop="openRunningSession(s)"
+                  />
+                  <RunStageBar
+                    :stage="s.currentStage"
+                    :status="s.runningCount > 0 ? 'running' : 'paused'"
+                    :task-progress="s.stageProgress?.learnStarted ? { done: s.stageProgress.taskDone, total: s.stageProgress.taskTotal } : null"
+                    :show-task-text="false"
+                  />
+                </template>
                 <span v-else class="vl-run vl-run--idle" title="当前没有运行中的会话">空闲</span>
               </div>
             </td>
@@ -206,6 +238,15 @@
     <div v-if="isLive && selected.length" class="vl-batch">
       <span>已选 {{ selected.length }} 人</span>
       <button type="button" class="mk-link" @click="selected = []">取消选择</button>
+      <button type="button" class="vl-batch__btn" :disabled="batchActionBusy" :title="'为每个选中的虚拟学习者启动其全部故事的实验会话（一个故事一个会话）'" @click="batchLaunchAllStories">
+        {{ batchActionBusy ? '处理中…' : '启动全部故事' }}
+      </button>
+      <button type="button" class="vl-batch__btn" :disabled="batchActionBusy" :title="'对选中虚拟人全部故事的最新会话开启自动驾驶（不新建会话；已运行的自动跳过）'" @click="batchAutopilotStart">
+        {{ batchActionBusy ? '处理中…' : '批量启动自动驾驶' }}
+      </button>
+      <button type="button" class="vl-batch__btn" :disabled="batchActionBusy" :title="'停止选中虚拟人全部故事最新会话的自动驾驶（学习进度保留，可随时再启动）'" @click="batchAutopilotStop">
+        {{ batchActionBusy ? '处理中…' : '批量停止自动驾驶' }}
+      </button>
       <button type="button" class="vl-batch__btn" :disabled="batchActionBusy" @click="batchTerminate">
         {{ batchActionBusy ? '处理中…' : '批量终止' }}
       </button>
@@ -421,7 +462,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { openSubPage, intent, isLive } from './store'
-import { liveVirtuals, liveCreateVirtual, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats } from './live'
+import { liveVirtuals, liveCreateVirtual, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -431,6 +472,8 @@ import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
+import RunStateBadge from './RunStateBadge.vue'
+import RunStageBar from './RunStageBar.vue'
 import MkOverview from './MkOverview.vue'
 import MkKpi from './MkKpi.vue'
 
@@ -448,25 +491,37 @@ interface Sample {
   goal: string
   storyCount: number
   sessions: number
-  /** 运行中会话数（live：后端全量聚合 runningCount；demo：静态演示值） */
+  /** 运行中会话数（live：后端全量聚合 runningCount，已扣除暂停的自动驾驶；demo：静态演示值） */
   runningCount: number
+  /** 已暂停自动驾驶的会话数（autopilot=stopped，会话数据保留） */
+  pausedCount: number
   /** 失败/放弃会话累计数（全量聚合） */
   failedCount: number
   /** 卡死（running 超回收阈值无写入）会话数 */
   stalledCount: number
   /** 运行中会话 id（会话样本内，用于「运行中」列直达座舱） */
   runningSessionIds: string[]
+  /** 已暂停会话 id（autopilot=stopped） */
+  pausedSessionIds?: string[]
+  /** 阶段进度（轴 B）：Goal/Path/Learn 三态 + 任务进度 */
+  stageProgress?: {
+    goalReady: boolean
+    pathReady: boolean
+    learnStarted: boolean
+    taskDone: number
+    taskTotal: number
+  } | null
   /** 最近一个运行中会话的阶段（无运行中时回退最近会话阶段） */
   currentStage: string | null
   created: string
 }
 
 const all: Sample[] = [
-  { id: 'vl-001', name: '疲惫的运营小张', goal: '把 Excel 周报自动化', storyCount: 2, sessions: 4, runningCount: 1, failedCount: 0, stalledCount: 0, runningSessionIds: ['demo-s1'], currentStage: 'goal', created: '3 天前' },
-  { id: 'vl-002', name: '转行的前教师', goal: '系统学数据分析', storyCount: 1, sessions: 1, runningCount: 0, failedCount: 1, stalledCount: 0, runningSessionIds: [], currentStage: null, created: '1 天前' },
-  { id: 'vl-003', name: '拖延的研究生', goal: '30 天写完论文初稿', storyCount: 1, sessions: 2, runningCount: 1, failedCount: 0, stalledCount: 1, runningSessionIds: ['demo-s2'], currentStage: 'learn', created: '6 小时前' },
-  { id: 'vl-004', name: '焦虑的实习产品经理', goal: '两周上手需求文档', storyCount: 0, sessions: 1, runningCount: 0, failedCount: 0, stalledCount: 0, runningSessionIds: [], currentStage: null, created: '昨天 22:10' },
-  { id: 'vl-005', name: '退休学摄影的阿姨', goal: '学会手机修图', storyCount: 0, sessions: 0, runningCount: 0, failedCount: 0, stalledCount: 0, runningSessionIds: [], currentStage: null, created: '2 小时前' }
+  { id: 'vl-001', name: '疲惫的运营小张', goal: '把 Excel 周报自动化', storyCount: 2, sessions: 4, runningCount: 1, pausedCount: 0, failedCount: 0, stalledCount: 0, runningSessionIds: ['demo-s1'], currentStage: 'goal', created: '3 天前' },
+  { id: 'vl-002', name: '转行的前教师', goal: '系统学数据分析', storyCount: 1, sessions: 1, runningCount: 0, pausedCount: 1, failedCount: 1, stalledCount: 0, runningSessionIds: [], pausedSessionIds: ['demo-p1'], currentStage: null, created: '1 天前' },
+  { id: 'vl-003', name: '拖延的研究生', goal: '30 天写完论文初稿', storyCount: 1, sessions: 2, runningCount: 1, pausedCount: 0, failedCount: 0, stalledCount: 1, runningSessionIds: ['demo-s2'], currentStage: 'learn', created: '6 小时前' },
+  { id: 'vl-004', name: '焦虑的实习产品经理', goal: '两周上手需求文档', storyCount: 0, sessions: 1, runningCount: 0, pausedCount: 0, failedCount: 0, stalledCount: 0, runningSessionIds: [], currentStage: null, created: '昨天 22:10' },
+  { id: 'vl-005', name: '退休学摄影的阿姨', goal: '学会手机修图', storyCount: 0, sessions: 0, runningCount: 0, pausedCount: 0, failedCount: 0, stalledCount: 0, runningSessionIds: [], currentStage: null, created: '2 小时前' }
 ]
 
 const demoSamples = ref<Sample[]>([...all])
@@ -480,6 +535,7 @@ const samples = computed<Sample[]>(() => {
       storyCount: Number(v.storyCount || 0),
       sessions: v.sessions,
       runningCount: Number(v.runningCount || 0),
+      pausedCount: Number(v.pausedCount || 0),
       failedCount: Number(v.failedCount || 0),
       stalledCount: Number(v.stalledCount || 0),
       runningSessionIds: v.runningSessionIds,
@@ -491,6 +547,19 @@ const samples = computed<Sample[]>(() => {
 })
 
 const keyword = ref('')
+/** 状态过滤（轴 A 生命周期）：'' = 全部 / running / paused / queued / failed / created */
+const stateFilter = ref('')
+/** 状态过滤 chips 计数（与 samples 联动） */
+const stateFilterOptions = computed(() => {
+  const count = (pred: (s: Sample) => boolean) => samples.value.filter(pred).length
+  return [
+    { key: '', label: '全部', count: samples.value.length },
+    { key: 'running', label: '运行中', count: count((s) => s.runningCount > 0) },
+    { key: 'queued', label: '排队中', count: 0 },
+    { key: 'paused', label: '已暂停', count: count((s) => (s.pausedCount ?? 0) > 0) },
+    { key: 'failed', label: '需关注', count: count((s) => s.failedCount > 0) },
+  ]
+})
 /** live 虚拟人域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
 const loadFailed = computed(
   () => isLive.value && !liveLoading.value && !!liveFailures.value.virtuals && !liveVirtuals.value.length
@@ -500,13 +569,20 @@ function retryLoad() {
 }
 const filtered = computed(() => {
   const q = keyword.value.trim().toLowerCase()
-  if (!q) return samples.value
-  return samples.value.filter((s) => `${s.name} ${s.goal} ${s.id}`.toLowerCase().includes(q))
+  let list = samples.value
+  if (q) list = list.filter((s) => `${s.name} ${s.goal} ${s.id}`.toLowerCase().includes(q))
+  const sf = stateFilter.value
+  if (sf === 'running') list = list.filter((s) => s.runningCount > 0)
+  else if (sf === 'paused') list = list.filter((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0)
+  else if (sf === 'failed') list = list.filter((s) => s.failedCount > 0)
+  // queued：预留（服务端排队实现后接入）
+  return list
 })
 
-const isFiltered = computed(() => !!keyword.value.trim())
+const isFiltered = computed(() => !!keyword.value.trim() || !!stateFilter.value)
 function clearFilters() {
   keyword.value = ''
+  stateFilter.value = ''
 }
 
 /* 长列表分批渲染：每批 15 行 */
@@ -567,9 +643,11 @@ async function createSample() {
         storyCount: 0,
         sessions: 0,
         runningCount: 0,
+        pausedCount: 0,
         failedCount: 0,
         stalledCount: 0,
         runningSessionIds: [],
+        pausedSessionIds: [],
         currentStage: null,
         created: '刚刚'
       })
@@ -783,8 +861,38 @@ async function startLaunch() {
 
 const runningTotal = computed(() => samples.value.reduce((a, s) => a + s.runningCount, 0))
 
+/** 自动驾驶并发配额条数据（used/limit + 分档色调） */
+const concurrency = computed(() => ({
+  used: Number(liveAutopilotConcurrency.value?.used ?? 0),
+  limit: Math.max(1, Number(liveAutopilotConcurrency.value?.limit ?? 5)),
+}))
+const concurrencyPct = computed(() => Math.min(100, Math.round((concurrency.value.used / concurrency.value.limit) * 100)))
+const concurrencyTone = computed(() => {
+  const pct = concurrencyPct.value
+  if (pct >= 100) return 'full'
+  if (pct >= 70) return 'warn'
+  return 'ok'
+})
+
 /** 当前有活跃会话的虚拟学习者（"正在运行"条直接列名） */
 const runningSamples = computed(() => samples.value.filter((s) => s.runningCount > 0))
+/** 已暂停自动驾驶的虚拟人：无运行中会话，但有暂停会话（autopilot=stopped） */
+const pausedSamples = computed(() => samples.value.filter((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0))
+/* 「正在运行」区折叠：默认显示前 RUN_CHIPS_LIMIT 个 chip，超出折叠（压缩顶部高度，表格尽早露出） */
+const RUN_CHIPS_LIMIT = 4
+const runChipsExpanded = ref(false)
+const runChipTotal = computed(() => runningSamples.value.length + pausedSamples.value.length)
+const visibleRunChips = computed(() => {
+  const list = runningSamples.value
+  if (runChipsExpanded.value) return list
+  return list.slice(0, RUN_CHIPS_LIMIT)
+})
+const visiblePausedChips = computed(() => {
+  const list = pausedSamples.value
+  if (runChipsExpanded.value) return list
+  const runningShown = visibleRunChips.value.length
+  return list.slice(0, Math.max(0, RUN_CHIPS_LIMIT - runningShown))
+})
 
 /* ===== A2 生命周期分区：全量聚合口径（后端 sessionStats/staleCount），替代样本口径状态条 ===== */
 const partition = computed(() => {
@@ -837,13 +945,6 @@ function fmtDuration(ms: number) {
   return `${Number.isInteger(hours) ? String(hours) : hours.toFixed(1)} 小时`
 }
 
-/** 分钟 → 人类可读（小时含 1 位小数） */
-function fmtMins(mins: number) {
-  if (mins < 60) return `${mins} 分钟`
-  const hours = mins / 60
-  return `${Number.isInteger(hours) ? String(hours) : hours.toFixed(1)} 小时`
-}
-
 /* ===== A1 批量操作：复选框 + 批量条（对齐 Users.vue 模式） ===== */
 const selected = ref<string[]>([])
 /* batchActionBusy 声明见下方「批量新建」区（与批量删除/清理共用同一互斥标志） */
@@ -854,13 +955,199 @@ function toggleAll() {
   selected.value = allChecked.value ? [] : selectable.value.map((s) => s.id)
 }
 
+/** 批量启动全部故事：为每个选中的虚拟学习者启动其全部故事的实验会话（一个故事一个会话），
+ *  并自动开启自动驾驶（target=final 直达 Path 全部完成），无需手动逐个启动 */
+async function batchLaunchAllStories() {
+  const ids = [...selected.value]
+  if (!ids.length || batchActionBusy.value) return
+  // 统计将启动的会话数（先确认，避免误操作）
+  let totalStories = 0
+  for (const id of ids) {
+    const s = samples.value.find((x) => x.id === id)
+    totalStories += Number(s?.storyCount ?? 0)
+  }
+  if (totalStories === 0) {
+    toast.error('选中的虚拟学习者都还没有故事；请先在画像页生成故事')
+    return
+  }
+  const ok = await askConfirm({
+    title: '启动全部故事（含自动驾驶）',
+    message: `将为选中的 ${ids.length} 个虚拟学习者启动其全部故事的实验会话，共约 ${totalStories} 个会话，并自动开启自动驾驶（直达 Path 全部完成）。\n注意：并发多个自动驾驶对 LLM 压力较大，建议分批（每批 1-2 人）。确认启动？`,
+    confirmText: `启动 ${totalStories} 个会话`
+  })
+  if (!ok) return
+  batchActionBusy.value = true
+  let launched = 0
+  let autopiloted = 0
+  let failed = 0
+  for (const id of ids) {
+    const s = samples.value.find((x) => x.id === id)
+    if (!s) continue
+    try {
+      // 拿该虚拟人的故事列表
+      const res = await adminVirtualLearnersApi.getVirtualLearnerStories(id)
+      const body = res.data?.data ?? res.data ?? {}
+      const list = Array.isArray(body.stories) ? body.stories : []
+      for (const st of list) {
+        const storyId = String(st.storyId || st.id || st.key || '')
+        if (!storyId) continue
+        try {
+          const sres = await adminVirtualLearnersApi.startVirtualSession(id, { storyId, frictionBudget: 'normal' })
+          const session = sres.data?.data ?? sres.data ?? {}
+          const sid = String(session.id || session.sessionId || '')
+          if (sid) {
+            launched++
+            // 创建后自动开启自动驾驶（target=final：直达 Path 全部完成）
+            try {
+              await adminVirtualLearnersApi.autopilotStart(sid, { target: 'final' })
+              autopiloted++
+            } catch (e) {
+              failed++
+              console.error(`「${s.name}」故事 ${storyId} 自动驾驶启动失败:`, e)
+            }
+          }
+        } catch (e) {
+          failed++
+          console.error(`启动「${s.name}」故事会话失败:`, e)
+        }
+      }
+    } catch (e) {
+      failed++
+      console.error(`获取「${s.name}」故事列表失败:`, e)
+    }
+  }
+  batchActionBusy.value = false
+  if (launched > 0) {
+    toast.success(`已启动 ${launched} 个会话并开启自动驾驶 ${autopiloted} 个（失败 ${failed}）`)
+    selected.value = []
+    void loadLiveData()
+  } else {
+    toast.error(`启动失败：${failed} 个（请检查故事是否生成）`)
+  }
+}
+
+/** 批量启动自动驾驶：对选中虚拟人全部故事的最新会话开启自动驾驶（不新建会话；已运行的自动跳过） */
+async function batchAutopilotStart() {
+  const ids = [...selected.value]
+  if (!ids.length || batchActionBusy.value) return
+  // 先统计有多少个可启动的会话（有最新会话且非终态）
+  let candidates = 0
+  for (const id of ids) {
+    try {
+      const res = await adminVirtualLearnersApi.getVirtualLearnerStories(id)
+      const body = res.data?.data ?? res.data ?? {}
+      const list = Array.isArray(body.stories) ? body.stories : []
+      candidates += list.filter((st: Record<string, unknown>) => {
+        const lr = (st.latestRun || {}) as Record<string, unknown>
+        const status = String(lr.status || '')
+        return !!lr.sessionId && !['completed', 'abandoned'].includes(status)
+      }).length
+    } catch { /* 统计失败忽略 */ }
+  }
+  if (!candidates) {
+    toast.error('选中的虚拟学习者的故事都还没有可启动的会话；请先「启动全部故事」或单个运行')
+    return
+  }
+  const ok = await askConfirm({
+    title: '批量启动自动驾驶',
+    message: `将为选中的 ${ids.length} 个虚拟学习者、约 ${candidates} 个最新会话开启自动驾驶（target=final 直达 Path 全部完成）。\n已在运行自动驾驶的会话会自动跳过，不会重复启动。确认启动？`,
+    confirmText: `启动 ${candidates} 个会话的自动驾驶`
+  })
+  if (!ok) return
+  batchActionBusy.value = true
+  let started = 0
+  let skipped = 0
+  let failed = 0
+  for (const id of ids) {
+    const s = samples.value.find((x) => x.id === id)
+    try {
+      const res = await adminVirtualLearnersApi.getVirtualLearnerStories(id)
+      const body = res.data?.data ?? res.data ?? {}
+      const list = Array.isArray(body.stories) ? body.stories : []
+      for (const st of list) {
+        const lr = (st.latestRun || {}) as Record<string, unknown>
+        const sid = String(lr.sessionId || '')
+        const status = String(lr.status || '')
+        if (!sid || ['completed', 'abandoned'].includes(status)) { skipped++; continue }
+        try {
+          await adminVirtualLearnersApi.autopilotStart(sid, { target: 'final' })
+          started++
+        } catch (e) {
+          if (String(errMsg(e)).includes('已有全自动运行')) { skipped++; continue }
+          failed++
+          console.error(`「${s?.name || id}」会话 ${sid.slice(0, 8)} 自动驾驶启动失败:`, e)
+        }
+      }
+    } catch (e) {
+      failed++
+      console.error(`获取「${s?.name || id}」故事列表失败:`, e)
+    }
+  }
+  batchActionBusy.value = false
+  if (started > 0 || skipped > 0) {
+    toast.success(`已启动自动驾驶 ${started} 个${skipped ? `（跳过 ${skipped}）` : ''}${failed ? `，失败 ${failed}` : ''}`)
+    selected.value = []
+    void loadLiveData()
+  } else {
+    toast.error(`启动失败：${failed} 个（请检查故事会话状态）`)
+  }
+}
+
+/** 批量停止自动驾驶：停止选中虚拟人全部故事最新会话的自动驾驶（学习进度保留） */
+async function batchAutopilotStop() {
+  const ids = [...selected.value]
+  if (!ids.length || batchActionBusy.value) return
+  const ok = await askConfirm({
+    title: '批量停止自动驾驶',
+    message: `将停止选中的 ${ids.length} 个虚拟学习者全部故事最新会话的自动驾驶。\n学习进度与对话保留，可随时再次启动。确认停止？`,
+    confirmText: `停止 ${ids.length} 人`
+  })
+  if (!ok) return
+  batchActionBusy.value = true
+  let stopped = 0
+  let skipped = 0
+  let failed = 0
+  for (const id of ids) {
+    const s = samples.value.find((x) => x.id === id)
+    try {
+      const res = await adminVirtualLearnersApi.getVirtualLearnerStories(id)
+      const body = res.data?.data ?? res.data ?? {}
+      const list = Array.isArray(body.stories) ? body.stories : []
+      for (const st of list) {
+        const lr = (st.latestRun || {}) as Record<string, unknown>
+        const sid = String(lr.sessionId || '')
+        const status = String(lr.status || '')
+        if (!sid || ['completed', 'abandoned', 'failed'].includes(status)) { skipped++; continue }
+        try {
+          await adminVirtualLearnersApi.autopilotStop(sid)
+          stopped++
+        } catch (e) {
+          failed++
+          console.error(`「${s?.name || id}」会话 ${sid.slice(0, 8)} 停止失败:`, e)
+        }
+      }
+    } catch (e) {
+      failed++
+      console.error(`获取「${s?.name || id}」故事列表失败:`, e)
+    }
+  }
+  batchActionBusy.value = false
+  if (stopped > 0 || skipped > 0) {
+    toast.success(`已停止自动驾驶 ${stopped} 个${skipped ? `（跳过 ${skipped}）` : ''}${failed ? `，失败 ${failed}` : ''}`)
+    selected.value = []
+    void loadLiveData()
+  } else {
+    toast.error(`停止失败：${failed} 个（请检查故事会话状态）`)
+  }
+}
+
 /** 批量终止：对选中虚拟人全部非终态会话（运行中/创建中）标记 abandoned；只改状态不删数据 */
 async function batchTerminate() {
   const ids = [...selected.value]
   if (!ids.length || batchActionBusy.value) return
   const runningSum = ids.reduce((a, id) => {
     const s = samples.value.find((x) => x.id === id)
-    return a + (s?.runningCount ?? 0)
+    return a + (s?.runningCount ?? 0) + (s?.pausedCount ?? 0)
   }, 0)
   const ok = await askConfirm({
     title: '批量终止会话',
@@ -1005,7 +1292,6 @@ const batchStoryCount = ref(1)
 const batchCohort = ref('')
 /** 批次备注（可选）：写入每人的 notes 字段，便于识别 */
 const batchNote = ref('')
-const batchProgress = ref(0)
 const batchError = ref('')
 const batchPanelRef = ref<HTMLElement | null>(null)
 const batchMaskRef = ref<HTMLElement | null>(null)
@@ -1017,13 +1303,15 @@ useMaskClose(batchMaskRef, () => { if (!batchCreating.value) batchOpen.value = f
 interface BatchTask {
   active: boolean
   status: 'creating' | 'running' | 'done' | 'error'
+  /** 后端任务 id（服务端队列） */
+  batchId: string
   total: number
   created: number
   totalStories: number
   storiesDone: number
   /** 剩余待生成身份的人数 */
   personaLeft: number
-  /** 每人的队列：{ profileId, name, storyCount, needsPersona } */
+  /** 每人的队列：{ profileId, name, storyCount, needsPersona }（前端不再驱动，保留类型兼容） */
   queue: Array<{ profileId: string; name: string; storyCount: number; needsPersona: boolean }>
   /** 失败项（重试用） */
   failed: Array<{ profileId: string; name: string; storyCount: number; needsPersona: boolean }>
@@ -1033,7 +1321,7 @@ interface BatchTask {
   /** 详情行是否展开 */
   expanded: boolean
 }
-const batchTask = ref<BatchTask>({ active: false, status: 'creating', total: 0, created: 0, totalStories: 0, storiesDone: 0, personaLeft: 0, queue: [], failed: [], error: '', currentIdx: 0, expanded: false })
+const batchTask = ref<BatchTask>({ active: false, status: 'creating', batchId: '', total: 0, created: 0, totalStories: 0, storiesDone: 0, personaLeft: 0, queue: [], failed: [], error: '', currentIdx: 0, expanded: false })
 const batchTaskStatusTitle = computed(() => {
   const t = batchTask.value
   if (t.status === 'done') return `批量创建完成：${t.created} 人${t.totalStories ? ` · ${t.storiesDone} 个故事` : ''}`
@@ -1041,108 +1329,52 @@ const batchTaskStatusTitle = computed(() => {
   return `后台生成中：身份 ${t.total - t.personaLeft}/${t.total}${t.totalStories ? ` · 故事 ${t.storiesDone}/${t.totalStories}` : ''}（点击展开详情）`
 })
 
-/** 后台推进队列：每轮处理一个「身份生成」或「故事生成」；全部完成或失败则收尾 */
+/** 轮询后端批量任务进度（服务端队列：刷新/切页不影响执行） */
 async function batchTaskStep() {
   const task = batchTask.value
   if (!task.active || task.status !== 'running') return
-  while (task.currentIdx < task.queue.length) {
-    const item = task.queue[task.currentIdx]
-    if (item.storyCount <= 0 && !item.needsPersona) { task.currentIdx++; continue }
-    try {
-      if (item.needsPersona) {
-        // 阶段 1：AI 生成身份（personaSeed → 更新画像）；LLM 偶发缺字段，失败自动重试 2 次
-        let seed: Record<string, unknown> | null = null
-        let lastErr: unknown = null
-        for (let attempt = 0; attempt < 3 && !seed; attempt++) {
-          try {
-            const res = await adminVirtualLearnersApi.generatePersona({
-              ...(sampleType.value === 'student' ? { sampleType: 'student' } : {}),
-              existingPersonaSeed: {
-                name: item.name,
-                nameHint: item.name,
-                // 人群描述注入 notes：指导 AI 生成差异化身份
-                ...(batchCohort.value.trim() ? { notes: batchCohort.value.trim(), background: batchCohort.value.trim() } : {})
-              }
-            })
-            const d = res.data?.data ?? res.data ?? {}
-            const candidate = (d.personaSeed || d.profile || d) as Record<string, unknown> | null
-            // 校验关键字段（后端 validatePersonaOutput 同口径），不完整则视为失败继续重试
-            if (candidate && typeof candidate === 'object' && String(candidate.occupation || '').trim() && String(candidate.education || '').trim()) {
-              seed = candidate
-            } else {
-              lastErr = new Error('personaSeed 缺 occupation/education，重试')
-            }
-          } catch (e) {
-            lastErr = e
-            await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)))
-          }
-        }
-        if (!seed) throw lastErr || new Error('身份生成失败（多次尝试仍缺字段）')
-        const nameFromSeed = String(seed.name || seed.nameHint || seed.occupation || '').trim()
-        const profilePayload: Record<string, unknown> = { ...seed }
-        if (batchNote.value.trim()) profilePayload.batchNote = batchNote.value.trim()
-        // 更新该虚拟学习者：名称 + 画像
-        await adminVirtualLearnersApi.updateVirtualLearner(item.profileId, {
-          name: nameFromSeed || item.name,
-          profile: profilePayload
-        })
-        item.needsPersona = false
-        task.personaLeft = Math.max(0, task.personaLeft - 1)
-        return
-      }
-      if (item.storyCount > 0) {
-        // 阶段 2：生成故事（每次 1 个）；LLM 偶发失败，自动重试 2 次
-        let ok = false
-        let lastErr: unknown = null
-        for (let attempt = 0; attempt < 3 && !ok; attempt++) {
-          try {
-            await adminVirtualLearnersApi.draftVirtualLearnerStories(item.profileId)
-            ok = true
-          } catch (e) {
-            lastErr = e
-            await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)))
-          }
-        }
-        if (!ok) throw lastErr || new Error('故事生成失败')
-        task.storiesDone++
-        item.storyCount--
-        if (item.storyCount <= 0) task.currentIdx++
-        if (task.storiesDone >= task.totalStories && task.queue.every((q) => q.storyCount <= 0)) {
-          task.status = 'done'
-          toast.success(`批量创建完成：${task.created} 人 · 生成 ${task.storiesDone} 个故事`)
-        }
-        return
-      }
-      task.currentIdx++
-    } catch (e) {
-      // 单个项失败：记录并跳过，继续下一项（可重试）
-      task.failed.push({ ...item })
-      task.currentIdx++
-      console.error('批量后台任务失败 ' + item.name + ':', e)
+  if (!task.batchId) return
+  try {
+    const res = await adminVirtualLearnersApi.batchCreateJob(task.batchId)
+    const d = res.data?.data ?? res.data ?? {}
+    if (!d || typeof d !== 'object') return
+    task.total = Number(d.total ?? task.total)
+    task.created = Number(d.created ?? task.created)
+    task.totalStories = Number(d.totalStories ?? task.totalStories)
+    task.storiesDone = Number(d.storiesDone ?? 0)
+    task.personaLeft = Number(d.personaLeft ?? 0)
+    const failed = Array.isArray(d.failed) ? d.failed : []
+    task.failed = failed as BatchTask['failed']
+    const st = String(d.status || 'running')
+    if (st === 'done') {
+      task.status = 'done'
+      task.error = ''
+      if (task.totalStories > 0) toast.success(`批量创建完成：${task.created} 人 · 生成 ${task.storiesDone} 个故事`)
+      else toast.success(`批量创建完成：${task.created} 人（未生成故事）`)
+    } else if (st === 'error') {
+      task.status = 'error'
+      task.error = String(d.error || `${failed.length} 项生成失败（可重试）`)
     }
-  }
-  // 队列走完收尾
-  if (task.failed.length) {
-    task.status = 'error'
-    task.error = `${task.failed.length} 项生成失败（可重试）`
-  } else {
-    task.status = 'done'
-    if (task.totalStories > 0) toast.success(`批量创建完成：${task.created} 人 · 生成 ${task.storiesDone} 个故事`)
-    else toast.success(`批量创建完成：${task.created} 人（未生成故事）`)
+  } catch (e) {
+    console.error('批量任务轮询失败:', e)
+    throw e // 让 useSafePolling 退避/断路器处理
   }
 }
 
-/** 重试失败项（重置游标，保证失败项被重新处理，避免死循环跳过） */
+/** 重试失败项（后端队列重试） */
 async function retryBatchTask() {
   const task = batchTask.value
   if (!task.active || task.status !== 'error') return
-  // 失败项放回队首，游标重置为 0：先重试失败的，再继续剩余
-  task.queue = [...task.failed, ...task.queue]
-  task.failed = []
-  task.error = ''
-  task.currentIdx = 0
-  task.status = 'running'
-  toast.info('已重试失败项')
+  if (!task.batchId) return
+  try {
+    await adminVirtualLearnersApi.batchCreateRetry(task.batchId)
+    task.failed = []
+    task.error = ''
+    task.status = 'running'
+    toast.info('已重试失败项')
+  } catch (e) {
+    toast.error(`重试失败：${errMsg(e)}`)
+  }
 }
 
 async function doBatchCreate() {
@@ -1151,53 +1383,47 @@ async function doBatchCreate() {
   const prefix = batchPrefix.value.trim() || '虚拟学习者'
   batchError.value = ''
   batchCreating.value = true
-  batchProgress.value = 0
-  const queue: BatchTask['queue'] = []
-  let created = 0
-  let totalStories = 0
-  for (let i = 1; i <= count; i++) {
-    const name = `${prefix}-${String(i).padStart(2, '0')}`
-    try {
-      // 创建人（占位名 + 人群描述作背景兜底）；身份由后台 AI 补全
-      const story = batchCohort.value.trim() || name + '的人物背景待补充'
-      const id = await liveCreateVirtual({
-        name,
-        goal: '',
-        story,
-        ...(batchNote.value.trim() ? { note: batchNote.value.trim() } : {})
-      })
-      if (id) {
-        created++
-        queue.push({ profileId: id, name, storyCount: stories, needsPersona: true })
-        totalStories += stories
-      }
-    } catch (e) {
-      console.error('批量创建 ' + name + ' 失败:', e)
+  try {
+    const rows = Array.from({ length: count }, (_, i) => ({
+      name: `${prefix}-${String(i + 1).padStart(2, '0')}`,
+      storyCount: stories
+    }))
+    const res = await adminVirtualLearnersApi.batchCreateLearners({
+      rows,
+      ...(batchCohort.value.trim() ? { cohort: batchCohort.value.trim() } : {}),
+      ...(batchNote.value.trim() ? { note: batchNote.value.trim() } : {})
+    })
+    const d = res.data?.data ?? res.data ?? {}
+    const batchId = String(d.batchId || '')
+    const created = Number(d.created ?? 0)
+    const totalStories = Number(d.totalStories ?? 0)
+    batchCreating.value = false
+    batchOpen.value = false
+    if (!batchId || created <= 0) {
+      toast.error('批量创建失败，请检查后重试')
+      return
     }
-    batchProgress.value++
-  }
-  batchCreating.value = false
-  batchOpen.value = false
-  if (created > 0) {
-    toast.success(`已创建 ${created} 个虚拟学习者，后台开始生成身份与故事（不占用窗口）`)
+    toast.success(`已创建 ${created} 个虚拟学习者，后台开始生成身份与故事（服务端队列，刷新/切页不受影响）`)
     void loadLiveData()
     batchTask.value = {
       active: true,
       status: 'running',
+      batchId,
       total: created,
       created,
       totalStories,
       storiesDone: 0,
-      personaLeft: queue.length,
-      queue,
+      personaLeft: created,
+      queue: [],
       failed: [],
       error: '',
       currentIdx: 0,
       expanded: true
     }
     startBatchPolling()
-  } else {
-    toast.error('批量创建失败，请检查网络后重试')
+  } catch (e) {
+    batchCreating.value = false
+    toast.error(`批量创建失败：${errMsg(e)}`)
   }
 }
 
@@ -1259,6 +1485,16 @@ function startBatchPolling() { batchPolling.start() }
 }
 .vl-run--live:hover { background: rgba(16, 185, 129, 0.2); }
 .vl-run--live .vl-run__dot { background: #10b981; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); animation: vl-pulse 1.6s infinite; }
+/* 已暂停（autopilot stopped）：灰色静态胶囊，点击进画像页 */
+.vl-run--paused {
+  color: #64748b;
+  background: rgba(148, 163, 184, 0.14);
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.vl-run--paused:hover { background: rgba(148, 163, 184, 0.24); }
+.vl-run--paused .vl-run__dot { background: #94a3b8; box-shadow: none; animation: none; }
 /* 失败列：全量聚合数字（>0 标红，可点击直达画像页的重试入口） */
 .vl-num--bad { color: var(--mk-red, #dc2626); font-weight: 800; }
 .vl-faillink {
@@ -1287,6 +1523,51 @@ function startBatchPolling() { batchPolling.start() }
 .mk-num--na { color: var(--mk-faint); font-weight: 600; }
 .vl-status-run { color: #047857; font-weight: 700; }
 
+/* 状态过滤 chips（一级页：与搜索同行，计数联动 samples） */
+.vl-filters { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.vl-filters .mk-pill { font-size: 11px; padding: 2px 9px; }
+.vl-filter-count { font-weight: 800; margin-left: 2px; opacity: 0.75; }
+.vl-filter-clear { font-size: 12px; margin-left: 4px; }
+.vl-state-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* 自动驾驶并发配额（MkOverview pre slot：KPI 卡上方细横条，分档变色） */
+.vl-concurrency {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 11.5px;
+  cursor: help;
+}
+.vl-concurrency__label { font-weight: 700; color: #475569; }
+.vl-concurrency__track { flex: 1; height: 6px; border-radius: 3px; background: #e2e8f0; overflow: hidden; }
+.vl-concurrency__fill { display: block; height: 100%; border-radius: 3px; background: #10b981; transition: width 0.3s ease; }
+.vl-concurrency__num { font-weight: 800; color: #334155; font-variant-numeric: tabular-nums; }
+.vl-concurrency__full { color: #dc2626; font-weight: 700; font-size: 10.5px; }
+.vl-concurrency.is-warn { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.07); }
+.vl-concurrency.is-warn .vl-concurrency__fill { background: #f59e0b; }
+.vl-concurrency.is-full { border-color: rgba(239, 68, 68, 0.5); background: rgba(239, 68, 68, 0.07); }
+.vl-concurrency.is-full .vl-concurrency__fill { background: #ef4444; }
+.vl-concurrency.is-full .vl-concurrency__num { color: #dc2626; }
+
+/* 「正在运行」折叠展开按钮 */
+.vl-running__more {
+  border: 1px dashed #cbd5e1;
+  background: #fff;
+  color: #64748b;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+  flex-shrink: 0;
+}
+.vl-running__more:hover { background: rgba(100, 116, 139, 0.08); }
+
 /* ===== 批量新建配置区 ===== */
 .vl-batch-config { display: flex; gap: 14px; align-items: flex-end; margin-bottom: 12px; flex-wrap: wrap; }
 .vl-batch-config .mk-field { margin-bottom: 0; }
@@ -1297,6 +1578,10 @@ function startBatchPolling() { batchPolling.start() }
 /* 批量生成 chip（并入「正在运行」区） */
 .vl-running__chip--batch { border-color: rgba(59, 130, 246, 0.4); color: #1d4ed8; }
 .vl-running__chip--batch .vl-running__dot { background: #3b82f6; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); animation: vl-pulse 1.6s infinite; }
+/* 已暂停自动驾驶：灰色静态（无脉冲），点击进画像页 */
+.vl-running__chip--paused { border-color: rgba(148, 163, 184, 0.45); color: #64748b; }
+.vl-running__chip--paused .vl-running__dot { background: #94a3b8; box-shadow: none; animation: none; }
+.vl-running__chip--paused:hover { background: rgba(148, 163, 184, 0.12); }
 .vl-running__chip--batch.is-running { border-color: rgba(59, 130, 246, 0.45); }
 .vl-running__chip--batch.is-done { border-color: rgba(16, 185, 129, 0.4); color: #065f46; }
 .vl-running__chip--batch.is-done .vl-running__dot { background: #10b981; animation: none; }
@@ -1357,15 +1642,20 @@ function startBatchPolling() { batchPolling.start() }
 /* ===== 正在运行条：直接列名当前活跃虚拟学习者（绿点呼吸动画） ===== */
 .vl-running {
   margin: 10px 0 0;
-  padding: 9px 14px;
+  padding: 5px 12px;
   border-radius: 10px;
   border: 1px solid rgba(16, 185, 129, 0.3);
   background: rgba(16, 185, 129, 0.06);
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  /* 单行 + 横向滚动：chips 再多也不换行撑高，保持顶部紧凑 */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
+.vl-running::-webkit-scrollbar { height: 4px; }
+.vl-running::-webkit-scrollbar-thumb { background: rgba(16, 185, 129, 0.3); border-radius: 2px; }
 .vl-running__label {
   font-size: 12px;
   font-weight: 800;
@@ -1389,15 +1679,17 @@ function startBatchPolling() { batchPolling.start() }
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 11px;
+  padding: 2px 10px;
   border-radius: 999px;
   border: 1px solid rgba(16, 185, 129, 0.35);
   background: #fff;
   color: #065f46;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.12s ease;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .vl-running__chip:hover { background: rgba(16, 185, 129, 0.1); }
 .vl-running__dot {
@@ -1629,5 +1921,17 @@ function startBatchPolling() { batchPolling.start() }
   .vl-reclaim-item { font-size: 15.5px; padding: 9px 14px; }
   .vl-reclaim-id { font-size: 14.5px; }
   .vl-status-reclaim { font-size: 15.5px; padding: 7px 17px; }
+}
+
+/* ================= 暗色模式（D1 补完）：虚拟学习者列表 ================= */
+html[data-theme='dark'] {
+  .vl-faillink:hover { background: rgba(91, 141, 239, 0.14); box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.08); }
+  .vl-concurrency { background: #141c2b; border-color: #232f45; }
+  .vl-concurrency__track { background: #232f45; }
+  .vl-batch-detail { background: #141c2b; border-color: #232f45; }
+  .vl-running__chip, .vl-status-bar, .vl-meta { background: #141c2b; border-color: #232f45; }
+  .vl-steps--ok { background: rgba(74, 222, 128, 0.12); color: #6ee7a0; }
+  .vl-panel { background: #141c2b; border-color: #232f45; }
+  .vl-avatar { background: #1b2537; }
 }
 </style>

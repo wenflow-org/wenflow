@@ -680,4 +680,13 @@ onMounted(async () => {
   .ss-time--soon { font-size: 15.5px; }
   .ss-ip { font-size: 18px; }
 }
+
+/* ================= 暗色模式（D1 补完）：会话安全 ================= */
+html[data-theme='dark'] {
+  .ss-tr--current td { background: rgba(91, 141, 239, 0.1); }
+  .ss-tr--current:hover td { background: rgba(91, 141, 239, 0.16); }
+  .ss-hist__summary:hover { background: #1b2740; }
+  .ss-dot--linux { background: #f59e0b; }
+  .ss-hist { background: #141c2b; border-color: #232f45; }
+}
 </style>

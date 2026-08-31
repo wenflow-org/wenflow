@@ -766,4 +766,15 @@ function goFullEditor() {
   .msk__code { font-size: 17.5px; }
   .msk__prompt { font-size: 18.5px; }
 }
+
+/* ================= 暗色模式（D1 补完）：Skill 抽屉 ================= */
+html[data-theme='dark'] {
+  .msk__panel, .msk__head, .msk__body { background: #17202f; border-color: #232f45; }
+  .msk__tab-badge, .msk__badge { background: #253049; }
+  .mk-pill--active .msk__tab-badge { background: rgba(91, 141, 239, 0.22); color: #9db8f5; }
+  .msk__close:hover { background: #2c3a55; }
+  .msk__row:hover { background: #1b2740; }
+  .msk__primary-link:hover { background: rgba(91, 141, 239, 0.14); }
+  .msk__section { background: #141c2b; }
+}
 </style>

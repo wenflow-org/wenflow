@@ -967,5 +967,18 @@ watch(() => props.stage, () => void loadStage());
   .frt__agentcount { font-size: 14px; padding: 3px 13px; }
   .frt__fieldpath { font-size: 14px; }
   .frt__persist { font-size: 14px; }
-  }
+}
+
+/* ================= 暗色模式（D1 补完）：字段路由表 ================= */
+html[data-theme='dark'] {
+  .frt__toolbar { background: #141c2b; border-color: #232f45; }
+  .frt__toolbar-btn:hover { background: #1f2b40; }
+  .frt-syncbar--muted { background: #141c2b; }
+  .frt-syncbar__badge--muted { background: #253049; }
+  .frt__tablewrap { background: #141c2b; }
+  .frt__agenthead { background: #131b2a; }
+  .frt__agentcount { background: #253049; }
+  .frt__persist--alias { background: rgba(251, 191, 36, 0.12); }
+  .frt__fieldrow:hover { background: #1b2740; }
+}
 </style>

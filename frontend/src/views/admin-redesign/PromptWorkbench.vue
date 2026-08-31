@@ -444,4 +444,12 @@ onMounted(async () => {
   .pw-lead { font-size: 18px; }
   .pw-hash { font-size: 16.5px; }
 }
+
+/* ================= 暗色模式（D1 补完）：Skill 工作台 ================= */
+html[data-theme='dark'] {
+  .sc-msg { background: #141c2b; border-color: #232f45; }
+  .sc-msg--error { background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.35); }
+  .sc-badge-kind { background: #253049; }
+  .sc-msg--warn { background: rgba(251, 191, 36, 0.1); }
+}
 </style>

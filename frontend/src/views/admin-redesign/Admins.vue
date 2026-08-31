@@ -319,4 +319,10 @@ void load()
   font-size: 12.5px;
   font-weight: 600;
 }
+
+/* ================= 暗色模式（D1 补完）：管理员列表 ================= */
+html[data-theme='dark'] {
+  .ad-row--self { background: rgba(91, 141, 239, 0.1); }
+  .ad-badge { background: #253049; }
+}
 </style>

@@ -381,4 +381,10 @@ void reload()
   font-size: 12.5px;
   font-weight: 600;
 }
+
+/* ================= 暗色模式（D1 补完）：站内通知 ================= */
+html[data-theme='dark'] {
+  .nt-row--unread { background: rgba(91, 141, 239, 0.08); }
+  .nt-card { background: #141c2b; }
+}
 </style>

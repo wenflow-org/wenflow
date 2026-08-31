@@ -724,4 +724,16 @@ const toneOf = (id: string) => AGENT_TONES[`${id}-agent`] || { hue: '#64748b', s
   .topo-toolbar__meta, .topo-toolbar__hint { font-size: 13.5px; }
   .topo-field__name { font-size: 12.5px; }
 }
+
+/* ================= 暗色模式（D1 补完）：编排拓扑 ================= */
+html[data-theme='dark'] {
+  .topo-toolbar { background: #141c2b; border-color: #232f45; }
+  .topo-anchor, .topo-lane, .topo-group { background: #141c2b; border-color: #232f45; }
+  .topo-empty__icon { background: #141c2b; }
+  .topo-anchor__sub { background: rgba(91, 141, 239, 0.16); color: #93b4f5; }
+  .topo-lane__count, .topo-group__badge, .topo-group__fold { background: #253049; }
+  .topo-group.is-bridge { background: #131b2a; }
+  .topo-group.is-collapsed { background: #17202f; }
+  .topo-field { background: #17202f; border-color: #232f45; }
+}
 </style>

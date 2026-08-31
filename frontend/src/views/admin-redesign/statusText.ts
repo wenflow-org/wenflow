@@ -34,7 +34,12 @@ const STATUS_TEXT: Record<string, string> = {
   created: '已创建',
   abandoned: '已放弃',
   finalizing: '收尾中',
-  finalization_failed: '收尾失败'
+  finalization_failed: '收尾失败',
+  // 虚拟会话生命周期（双轴：轴 A 生命周期 + 轴 B 阶段进度）
+  queued: '排队中',
+  pausing: '暂停中',
+  resuming: '恢复中',
+  idle: '空闲'
 }
 
 /** 状态英文值 → 中文；未知值原样返回（不返回 —，避免丢失信息） */
@@ -272,4 +277,138 @@ export function targetTypeText(s: string | null | undefined): string {
   const key = String(s || '').toLowerCase()
   if (!key) return '—'
   return TARGET_TEXT[key] || String(s)
+}
+
+/* ============================================================
+ * 虚拟会话生命周期状态（轴 A）→ 展示档位
+ * 双轴分离：本函数处理「生命周期」；阶段进度见 RunStageBar（轴 B）
+ * ============================================================ */
+
+/** 生命周期状态 → 徽章档位（mk-badge 语义）与辅助视觉类 */
+export type RunStateTone = 'ok' | 'bad' | 'warn' | 'info' | 'muted' | 'queued' | 'paused' | 'running'
+
+export function runStateTone(s: string | null | undefined): RunStateTone {
+  const key = String(s || '').toLowerCase()
+  if (key === 'completed' || key === 'succeeded' || key === 'success') return 'ok'
+  if (key === 'failed' || key === 'error' || key === 'timeout') return 'bad'
+  if (key === 'abandoned' || key === 'cancelled' || key === 'canceled') return 'muted'
+  if (key === 'queued') return 'queued'
+  if (key === 'paused') return 'paused'
+  if (key === 'running' || key === 'active' || key === 'in_progress') return 'running'
+  if (key === 'created' || key === 'pending') return 'warn'
+  return 'muted'
+}
+
+/** 生命周期状态 → 图标字符（形状语义，色弱友好：双通道 = 颜色 + 形状） */
+export function runStateIcon(s: string | null | undefined): string {
+  const key = String(s || '').toLowerCase()
+  if (key === 'completed' || key === 'succeeded') return '✓'
+  if (key === 'failed' || key === 'error' || key === 'timeout') return '●'
+  if (key === 'abandoned' || key === 'cancelled' || key === 'canceled') return '✕'
+  if (key === 'queued') return '⏱'
+  if (key === 'paused') return '⏸'
+  if (key === 'running' || key === 'active' || key === 'in_progress') return '◉'
+  if (key === 'created' || key === 'pending') return '○'
+  return '·'
+}
+
+/** 是否终态（completed/failed/abandoned/cancelled） */
+export function isRunTerminal(s: string | null | undefined): boolean {
+  const key = String(s || '').toLowerCase()
+  return ['completed', 'succeeded', 'success', 'failed', 'error', 'timeout', 'abandoned', 'cancelled', 'canceled'].includes(key)
+}
+
+/** 是否「活」状态（running/queued/pausing/created：需要轮询关注） */
+export function isRunActive(s: string | null | undefined): boolean {
+  const key = String(s || '').toLowerCase()
+  return ['running', 'active', 'in_progress', 'queued', 'pausing', 'resuming', 'created', 'pending'].includes(key)
+}
+
+/* ============================================================
+ * 虚拟会话阶段进度（轴 B）：Goal → Path → Learn
+ * ============================================================ */
+
+export type RunStageName = 'goal' | 'path' | 'learn'
+export type RunStageState = 'done' | 'doing' | 'todo' | 'fail' | 'skip'
+
+/** 会话阶段（currentStage）+ 终态 → 三阶段节点状态 */
+export interface RunStageBarInput {
+  /** 当前所处阶段：goal / path / teaching / learn / completed / failed */
+  stage?: string | null
+  /** 会话生命周期状态：completed/failed/abandoned 等终态驱动节点着色 */
+  status?: string | null
+  /** 教学进度（learn 阶段）：完成 x/y 任务 */
+  taskProgress?: { done: number; total: number } | null
+}
+
+export const RUN_STAGE_ORDER: RunStageName[] = ['goal', 'path', 'learn']
+
+/** 推导三阶段节点状态 */
+export function runStageStates(input: RunStageBarInput): Record<RunStageName, RunStageState> {
+  const stage = String(input?.stage || '').toLowerCase()
+  const status = String(input?.status || '').toLowerCase()
+  const terminal = ['completed', 'failed', 'abandoned', 'cancelled', 'timeout'].includes(status)
+  const failed = ['failed', 'timeout'].includes(status) || stage === 'failed'
+  const abandoned = status === 'abandoned' || status === 'cancelled'
+
+  const states: Record<RunStageName, RunStageState> = { goal: 'todo', path: 'todo', learn: 'todo' }
+
+  if (terminal && !failed && !abandoned) {
+    // 全部完成
+    states.goal = 'done'; states.path = 'done'; states.learn = 'done'
+    return states
+  }
+  if (failed) {
+    // 失败定位到具体阶段：currentStage 之前的完成，当前阶段失败
+    const stageIdx = RUN_STAGE_ORDER.indexOf(stage as RunStageName)
+    for (let i = 0; i < RUN_STAGE_ORDER.length; i++) {
+      const name = RUN_STAGE_ORDER[i]
+      if (stageIdx < 0) {
+        states[name] = i === 0 ? 'fail' : 'skip'
+      } else if (i < stageIdx) states[name] = 'done'
+      else if (i === stageIdx) states[name] = 'fail'
+      else states[name] = 'todo'
+    }
+    return states
+  }
+  if (abandoned) {
+    const stageIdx = RUN_STAGE_ORDER.indexOf(stage as RunStageName)
+    for (let i = 0; i < RUN_STAGE_ORDER.length; i++) {
+      const name = RUN_STAGE_ORDER[i]
+      if (stageIdx < 0) states[name] = 'skip'
+      else if (i < stageIdx) states[name] = 'done'
+      else states[name] = 'skip'
+    }
+    return states
+  }
+
+  // 活状态：按当前阶段推导
+  const stageIdx = RUN_STAGE_ORDER.indexOf(stage as RunStageName)
+  if (stage === 'teaching' || stage === 'learn') {
+    states.goal = 'done'; states.path = 'done'; states.learn = 'doing'
+  } else if (stageIdx >= 0) {
+    for (let i = 0; i < RUN_STAGE_ORDER.length; i++) {
+      const name = RUN_STAGE_ORDER[i]
+      if (i < stageIdx) states[name] = 'done'
+      else if (i === stageIdx) states[name] = 'doing'
+      else states[name] = 'todo'
+    }
+  } else if (stageIdx < 0 && stage) {
+    // 未知阶段但有值（如 created）：全部 todo
+  }
+  return states
+}
+
+/** 阶段条文字摘要：如「Goal ✓ / Path 进行中 / Learn 待执行」 */
+export function runStageSummary(input: RunStageBarInput): string {
+  const states = runStageStates(input)
+  const label: Record<RunStageName, string> = { goal: 'Goal', path: 'Path', learn: 'Learn' }
+  const stText: Record<RunStageState, string> = { done: '✓', doing: '进行中', todo: '待执行', fail: '失败', skip: '—' }
+  return RUN_STAGE_ORDER.map((n) => `${label[n]} ${stText[states[n]]}`).join(' / ')
+}
+
+/** 学习进度摘要：任务 done/total；无数据 → '' */
+export function runTaskProgressText(p: { done: number; total: number } | null | undefined): string {
+  if (!p || !Number.isFinite(p.total) || p.total <= 0) return ''
+  return `任务 ${Math.min(Math.max(p.done, 0), p.total)}/${p.total}`
 }

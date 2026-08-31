@@ -1187,4 +1187,13 @@ async function toggleRegistration() {
   .ac-health__stale { font-size: 17px; }
   .ac-save { padding: 15px 18px 15px 24px; }
 }
+
+/* ================= 暗色模式（D1 补完）：模型与接入 ================= */
+html[data-theme='dark'] {
+  .ac-card { background: #141c2b; border-color: #232f45; }
+  .ac-key-toggle:hover { background: rgba(91, 141, 239, 0.14); }
+  .ac-seg { background: #1d2739; }
+  .ac-seg__item--active { background: rgba(91, 141, 239, 0.22); color: #9db8f5; box-shadow: none; }
+  .ac-conn-dot { background: #232f45; }
+}
 </style>
