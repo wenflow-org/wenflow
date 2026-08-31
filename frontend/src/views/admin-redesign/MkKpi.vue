@@ -52,6 +52,21 @@ withDefaults(
 .mk-kpi--compact .mk-kpi__label { font-size: 10.5px; }
 .mk-kpi--compact .mk-kpi__num { font-size: 16px; line-height: 1.2; }
 
+/* 横向紧凑形态（低分辨率区间由 MkOverview 媒体查询触发）：
+   label+hint 左侧、数字右侧单行排布，高度 ≈56px（TailAdmin stat card 形态） */
+.mk-kpi--row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  align-items: baseline;
+  padding: 8px 12px;
+  gap: 1px 8px;
+  border-radius: 10px;
+}
+.mk-kpi--row .mk-kpi__label { grid-column: 1; grid-row: 1; font-size: 11px; }
+.mk-kpi--row .mk-kpi__num { grid-column: 2; grid-row: 1 / span 2; font-size: 19px; text-align: right; }
+.mk-kpi--row .mk-kpi__hint { grid-column: 1; grid-row: 2; font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* 暗色模式（D1） */
 html[data-theme='dark'] .mk-kpi { background: #141c2b; border-color: #232f45; }
 
