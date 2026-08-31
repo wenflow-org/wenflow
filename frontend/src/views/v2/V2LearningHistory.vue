@@ -64,6 +64,12 @@
                 {{ isDone(s) ? '已完成' : '进行中' }}
               </span>
               <span class="history__item-time">{{ s.durationMinutes ? `${s.durationMinutes} 分钟` : '—' }}</span>
+              <!-- 进行中的会话：可继续学习（/learn/:taskId 会恢复或重开课） -->
+              <router-link
+                v-if="!isDone(s) && s.taskId"
+                :to="`/learn/${s.taskId}`"
+                class="history__resume"
+              >继续 ›</router-link>
             </li>
           </ul>
         </section>
@@ -398,6 +404,18 @@ onMounted(() => {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+.history__resume {
+  font-size: 12px; font-weight: 800;
+  color: var(--blue-deep, #1f57cc);
+  text-decoration: none;
+  padding: 5px 12px;
+  border: 1px solid rgba(52, 120, 246, 0.4);
+  background: rgba(52, 120, 246, 0.06);
+  border-radius: 999px;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+.history__resume:hover { background: rgba(52, 120, 246, 0.12); }
 
 .history__more {
   display: flex;
