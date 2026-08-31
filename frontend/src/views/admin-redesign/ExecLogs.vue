@@ -32,12 +32,22 @@
           <input v-if="isLive" v-model="keyword" class="mk-filter__input" placeholder="关键词搜索" @keydown.enter="applyServerQuery" />
           <input v-if="isLive" v-model="traceId" class="mk-filter__input" placeholder="traceId" @keydown.enter="applyServerQuery" />
         </div>
-        <!-- 右侧：错误类别 / 自动刷新 / 高级（对齐 Users：切换控件 + 统计） -->
+        <!-- 右侧：错误类别 / 自动刷新 / 高级 / 列设置（对齐 Users：切换控件 + 统计） -->
         <div class="mk-card__head-right">
           <span class="mk-card__meta" v-if="isLive && errorCategory">类别「{{ errorCategory }}」<button type="button" class="mk-link" @click="errorCategory = ''; applyServerQuery()">×</button></span>
           <label v-if="isLive" class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
           <span class="mk-card__meta">{{ isLive ? `第 ${liveLogsPage} / ${totalPagesOf(liveLogsTotal, liveLogsPageSize)} 页` : '' }}</span>
           <button type="button" class="mk-link" :class="{ 'mk-link--active': advOpen }" @click="advOpen = !advOpen">高级</button>
+          <div class="exec-cols">
+            <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen">列</button>
+            <div v-if="colsOpen" class="exec-cols__menu" @click.stop>
+              <label v-for="c in colDefs" :key="c.key" class="exec-cols__item" :title="c.title">
+                <input type="checkbox" :checked="!hiddenCols.has(c.key)" @change="toggleCol(c.key)" />
+                <span>{{ c.label }}</span>
+              </label>
+              <button v-if="hiddenCols.size" type="button" class="exec-cols__reset" @click="hiddenCols = new Set()">恢复全部列</button>
+            </div>
+          </div>
         </div>
       </div>
       <div v-if="advOpen" class="log-advpanel">
@@ -59,36 +69,36 @@
       <div v-else-if="filtered.length" class="mk-table-scroll">
         <table class="mk-table mk-table--click mk-table--fixed exec-table">
           <colgroup>
-            <col style="width:var(--mk-col-time-full)">
-            <col style="width:48px">
-            <col style="width:150px">
-            <col style="width:200px">
-            <col style="width:120px">
-            <col style="width:132px">
-            <col style="width:64px">
-            <col style="width:62px">
-            <col style="width:98px">
+            <col v-if="!hiddenCols.has('time')" style="width:var(--mk-col-time-full)">
+            <col v-if="!hiddenCols.has('kind')" style="width:48px">
+            <col v-if="!hiddenCols.has('agent')" style="width:150px">
+            <col v-if="!hiddenCols.has('msg')" style="width:200px">
+            <col v-if="!hiddenCols.has('model')" style="width:120px">
+            <col v-if="!hiddenCols.has('tokens')" style="width:132px">
+            <col v-if="!hiddenCols.has('dur')" style="width:64px">
+            <col v-if="!hiddenCols.has('status')" style="width:62px">
+            <col v-if="!hiddenCols.has('trace')" style="width:98px">
           </colgroup>
           <thead>
             <tr>
-              <th>时间</th>
-              <th>类型</th>
-              <th>节点</th>
-              <th>消息</th>
-              <th>模型</th>
-              <th>输入 / 输出</th>
-              <th class="right">耗时</th>
-              <th>状态</th>
-              <th class="right">Trace</th>
+              <th v-if="!hiddenCols.has('time')">时间</th>
+              <th v-if="!hiddenCols.has('kind')">类型</th>
+              <th v-if="!hiddenCols.has('agent')">节点</th>
+              <th v-if="!hiddenCols.has('msg')">消息</th>
+              <th v-if="!hiddenCols.has('model')">模型</th>
+              <th v-if="!hiddenCols.has('tokens')">输入 / 输出</th>
+              <th v-if="!hiddenCols.has('dur')" class="right">耗时</th>
+              <th v-if="!hiddenCols.has('status')">状态</th>
+              <th v-if="!hiddenCols.has('trace')" class="right">Trace</th>
             </tr>
           </thead>
           <tbody>
             <template v-for="log in shown" :key="log.id">
               <tr class="exec-row" :class="[`exec-row--${log.status}`, { 'exec-row--open': openId === log.id }]" @click="openId = openId === log.id ? '' : log.id">
-                <td><span class="mono exec-time" :title="fmtFull(log.ts)">{{ fmtTime(log.ts) }}</span></td>
-                <td><span class="mk-badge" :class="`mk-badge--${kindTone(log)}`">{{ kindText(log) }}</span></td>
-                <td><span class="mono exec-stage" :title="log.agent" @click.stop="openSkillDrawer(log.agent)">{{ log.stage }}</span></td>
-                <td>
+                <td v-if="!hiddenCols.has('time')"><span class="mono exec-time" :title="fmtFull(log.ts)">{{ fmtTime(log.ts) }}</span></td>
+                <td v-if="!hiddenCols.has('kind')"><span class="mk-badge" :class="`mk-badge--${kindTone(log)}`">{{ kindText(log) }}</span></td>
+                <td v-if="!hiddenCols.has('agent')"><span class="mono exec-stage" :title="log.agent" @click.stop="openSkillDrawer(log.agent)">{{ log.stage }}</span></td>
+                <td v-if="!hiddenCols.has('msg')">
                   <div class="exec-cell">
                     <div class="exec-cell__line">
                       <strong class="exec-title" :title="[log.title, !isLive && log.detail ? log.detail : ''].filter(Boolean).join(' · ')">{{ log.title }}</strong>
@@ -102,14 +112,14 @@
                     </div>
                   </div>
                 </td>
-                <td><span class="mono exec-model__name" :title="log.model || undefined">{{ log.model || '—' }}</span></td>
-                <td><span class="mono exec-tokens" :title="tokensTitle(log)">{{ tokensText(log) }}</span></td>
-                <td class="right"><span class="mono exec-dur" :title="fmtMs(log.durationMs)">{{ fmtMs(log.durationMs) }}</span></td>
-                <td><span class="exec-status" :class="`exec-status--${log.status}`">{{ statusText[log.status] }}</span></td>
-                <td class="right"><span class="mono exec-trace" :title="`${log.traceId} · 在链路中查看完整 Trace`" @click.stop="openTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span></td>
+                <td v-if="!hiddenCols.has('model')"><span class="mono exec-model__name" :title="log.model || undefined">{{ log.model || '—' }}</span></td>
+                <td v-if="!hiddenCols.has('tokens')"><span class="mono exec-tokens" :title="tokensTitle(log)">{{ tokensText(log) }}</span></td>
+                <td v-if="!hiddenCols.has('dur')" class="right"><span class="mono exec-dur" :title="fmtMs(log.durationMs)">{{ fmtMs(log.durationMs) }}</span></td>
+                <td v-if="!hiddenCols.has('status')"><span class="exec-status" :class="`exec-status--${log.status}`">{{ statusText[log.status] }}</span></td>
+                <td v-if="!hiddenCols.has('trace')" class="right"><span class="mono exec-trace" :title="`${log.traceId} · 在链路中查看完整 Trace`" @click.stop="openTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span></td>
               </tr>
               <tr v-if="openId === log.id" class="exec-detail">
-                <td colspan="9">
+                <td :colspan="visibleColCount">
                   <div class="exec-detail__box">
                     <div class="tline__payload-meta">
                       <span class="mono">trace {{ log.traceId }}</span>
@@ -224,6 +234,36 @@ const sessionId = ref('')
 const errorCategory = ref('')
 const autoRefresh = ref(false)
 const advOpen = ref(false)
+
+/* D3 表格增强：列显隐（localStorage 持久化；9 列 → 勾选隐藏） */
+const COLS_KEY = 'wf_exec_hidden_cols'
+const colDefs = [
+  { key: 'time', label: '时间', title: '记录时间（HH:mm:ss）' },
+  { key: 'kind', label: '类型', title: '日志类型（执行/重试/告警）' },
+  { key: 'agent', label: '节点', title: 'Skill 节点' },
+  { key: 'msg', label: '消息', title: '消息内容与错误信息' },
+  { key: 'model', label: '模型', title: '使用的 LLM 模型' },
+  { key: 'tokens', label: '输入 / 输出', title: 'Token 用量（输入 / 输出）' },
+  { key: 'dur', label: '耗时', title: '执行耗时' },
+  { key: 'status', label: '状态', title: '执行状态' },
+  { key: 'trace', label: 'Trace', title: '链路 ID（点击直达）' },
+] as const
+const colsOpen = ref(false)
+const hiddenCols = ref<Set<string>>(new Set())
+try {
+  const saved = JSON.parse(localStorage.getItem(COLS_KEY) || '[]') as unknown
+  if (Array.isArray(saved)) hiddenCols.value = new Set(saved.filter((x): x is string => typeof x === 'string'))
+} catch { /* 隐私模式忽略 */ }
+watch(hiddenCols, (s) => {
+  try { localStorage.setItem(COLS_KEY, JSON.stringify([...s])) } catch { /* ignore */ }
+}, { deep: true })
+function toggleCol(key: string) {
+  const next = new Set(hiddenCols.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  hiddenCols.value = next
+}
+const visibleColCount = computed(() => colDefs.length - hiddenCols.value.size)
 
 /* prompt 契约维度：与执行日志同 traceId 关联（版本/漂移/tokens/JSON） */
 onMounted(() => {
@@ -906,5 +946,55 @@ html[data-theme='dark'] {
   .tline-attempt { background: #17202f; border-color: #232f45; }
   .tline-attempt--fail { background: #241a1a; border-left-color: var(--mk-red); }
   .exec-error { background: rgba(248, 113, 113, 0.14); border-color: rgba(248, 113, 113, 0.35); color: #fca5a5; }
+  .exec-cols__menu { background: #17202f; border-color: #232f45; }
+  .exec-cols__item:hover { background: #1f2b40; }
 }
+
+/* ================= D3 表格增强：列设置菜单 ================= */
+.exec-cols { position: relative; display: inline-flex; }
+.exec-cols__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: var(--mk-z-menu);
+  min-width: 150px;
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+  background: var(--mk-surface, #fff);
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  box-shadow: var(--mk-shadow-pop);
+}
+.exec-cols__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--mk-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.exec-cols__item:hover { background: #f0f5ff; }
+html[data-theme='dark'] .exec-cols__item:hover { background: #1f2b40; }
+.exec-cols__item input { accent-color: var(--mk-blue, #2c63d0); }
+.exec-cols__reset {
+  margin-top: 4px;
+  border: 0;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border-top: 1px dashed var(--mk-line);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--mk-blue);
+  cursor: pointer;
+  text-align: left;
+}
+.exec-cols__reset:hover { background: #eff6ff; }
+html[data-theme='dark'] .exec-cols__reset:hover { background: #1f2b40; }
 </style>
