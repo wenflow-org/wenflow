@@ -431,5 +431,23 @@ details[open].orch-fold .orch-fold__summary::before { content: '▾ '; }
 html[data-theme='dark'] {
   .orch-tab, .orch-panel { background: #141c2b; border-color: #232f45; }
   .orch-tab.is-active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; }
+
+  /* 阶段 tab 大分段卡 */
+  .orch-stage-tab { background: #141c2b; border-color: #232f45; }
+  .orch-stage-tab:hover { border-color: color-mix(in srgb, var(--mk-blue) 45%, #2a3850); }
+  .orch-stage-tab.is-active {
+    background: rgba(91, 141, 239, 0.16);
+    border-color: var(--mk-blue);
+    box-shadow: 0 2px 8px rgba(44, 99, 208, 0.22);
+  }
+
+  /* 折叠层（字段路由 / 治理） */
+  .orch-fold { background: #141c2b; border-color: #232f45; }
+  .orch-fold__summary { color: #9fb0c8; }
+  .orch-fold__summary:hover { color: var(--mk-blue); }
+
+  /* 沙盘顶部条返回按钮 */
+  .orch-pane-back { background: #17202f; border-color: #232f45; color: #9fb0c8; }
+  .orch-pane-back:hover { color: var(--mk-blue); border-color: var(--mk-blue); }
 }
 </style>

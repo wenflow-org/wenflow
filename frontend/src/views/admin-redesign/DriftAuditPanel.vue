@@ -241,4 +241,12 @@ watch(() => props.stage, () => {
   .fdp__change-kind { font-size: 14px; padding: 2px 12px; }
   .fdp__empty { padding: 28px; }
 }
+
+/* ================= 暗色模式（D1 补完）：治理漂移审计 ================= */
+html[data-theme='dark'] {
+  .fdp__guide-text code { background: #253049; }
+  .fdp__drift-item { background: #161f2f; }
+  .fdp__change { background: #161f2f; }
+  .fdp__change-kind { background: #253049; color: #9fb0c8; }
+}
 </style>

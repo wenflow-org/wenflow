@@ -1360,4 +1360,70 @@ async function saveEdit() {
   .ffg-meta, .ffg-hint { font-size: 13px; }
   .ffg-field__name { font-size: 12.5px; }
   .ffg-field__out { font-size: 10px; }
-}</style>
+}
+
+/* ================= 暗色模式（D1 补完）：字段编排图 ================= */
+html[data-theme='dark'] {
+  /* 工作区卡片 + 画布 */
+  .ffg-frame { background: #141c2b; border-color: #232f45; }
+  .ffg-toolbar { background: linear-gradient(180deg, #1a2436, #151e2e); border-bottom-color: #232f45; }
+  .ffg-search__input { background: #131b2a; border-color: #2a3850; color: var(--mk-ink); }
+  .ffg-search__clear { background: #2a3850; color: #9fb0c8; }
+  .ffg-search__clear:hover { background: #3a4a68; color: #e6edf7; }
+  .ffg-canvas { background: linear-gradient(180deg, #141c2b, #101725); }
+
+  /* 锚点列 */
+  .ffg-anchor { background: #151e2e; }
+  .ffg-anchor__title { background: linear-gradient(180deg, #1b2638, #151e2e); border-bottom-color: #232f45; }
+  .ffg-anchor__item { background: #17202f; }
+  .ffg-anchor__sub { background: #1b2a45; color: #7aa2ff; }
+
+  /* 流量摘要卡 */
+  .ffg-flow { background: #17202f; }
+  .ffg-flow__sub { background: #1b2a45; color: #7aa2ff; }
+
+  /* 泳道 */
+  .ffg-lane { background: #141c2b; border-color: color-mix(in srgb, var(--hue) 22%, #232f45); }
+  .ffg-lane__head {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--hue) 8%, #17202f), #141c2b 60%);
+    border-bottom-color: color-mix(in srgb, var(--hue) 14%, #232f45);
+  }
+  .ffg-lane__count, .ffg-group__badge, .ffg-group__fold { background: #253049; color: #9fb0c8; }
+
+  /* 组 */
+  .ffg-group { background: #141c2b; border-bottom-color: #1f2937; }
+  .ffg-group.is-bridge { background: #161f2f; }
+  .ffg-group.is-collapsed { background: #131b2b; }
+
+  /* 字段卡 */
+  .ffg-field { background: #17202f; }
+  .ffg-field.is-hidden { background: rgba(23, 32, 47, 0.6); }
+  .ffg-field--preview { background: #151e2e; }
+  .ffg-field--preview:hover { background: #1a2436; }
+  .ffg-field__out { background: #1b2a45; color: #7aa2ff; }
+
+  /* 组折叠 / 更多按钮 */
+  .ffg-group__more { background: #17202f; }
+  .ffg-group__more:hover { background: #1b2a45; }
+
+  /* 标签（彩色浅底 → 深底等价） */
+  .ffg-tag--lock { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
+  .ffg-tag--internal { background: rgba(192, 132, 252, 0.16); color: #d8b4fe; }
+  .ffg-tag--accum { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
+  .ffg-tag--role { background: #253049; color: #9fb0c8; }
+
+  /* 抽屉 */
+  .ffg-drawer { background: #141c2b; }
+  .ffg-drawer__head { border-bottom-color: #232f45; }
+  .ffg-drawer__body { background: #141c2b; }
+  .ffg-flow-block { background: #1b2a45; }
+
+  /* 编辑区 */
+  .ffg-edit--locked { background: #131b2a; }
+  .ffg-edit__pills { background: #1a2436; }
+  .ffg-pill.is-on { background: #232f45; color: #7aa2ff; }
+  .ffg-edit__input { background: #131b2a; border-color: #2a3850; color: var(--mk-ink); }
+  .ffg-edit__msg { background: #1b2a45; color: #7aa2ff; }
+  .ffg-edit__msg.is-error { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
+}
+</style>
