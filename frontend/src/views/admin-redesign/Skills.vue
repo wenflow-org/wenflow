@@ -47,6 +47,16 @@
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': view === 'list' }" @click="view = 'list'">列表</button>
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': view === 'grid' }" @click="view = 'grid'">网格</button>
           </div>
+          <div v-if="view === 'list'" class="sk-cols">
+            <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen">列</button>
+            <div v-if="colsOpen" class="sk-cols__menu" @click.stop>
+              <label v-for="c in skColDefs" :key="c.key" class="sk-cols__item" :title="c.title">
+                <input type="checkbox" :checked="!hiddenCols.has(c.key)" @change="toggleSkCol(c.key)" />
+                <span>{{ c.label }}</span>
+              </label>
+              <button v-if="hiddenCols.size" type="button" class="sk-cols__reset" @click="hiddenCols = new Set()">恢复全部列</button>
+            </div>
+          </div>
           <span class="mk-card__meta">{{ filtered.length }} / {{ cards.length }}</span>
         </div>
       </div>
@@ -58,20 +68,20 @@
         <table v-if="filtered.length" class="mk-table sk-table mk-table--fixed">
           <colgroup>
             <col style="width:auto">
-            <col style="width:120px">
-            <col style="width:80px">
-            <col style="width:100px">
-            <col style="width:80px">
-            <col style="width:120px">
+            <col v-if="!hiddenCols.has('agent')" style="width:120px">
+            <col v-if="!hiddenCols.has('cat')" style="width:80px">
+            <col v-if="!hiddenCols.has('completion')" style="width:100px">
+            <col v-if="!hiddenCols.has('rate')" style="width:80px">
+            <col v-if="!hiddenCols.has('last')" style="width:120px">
           </colgroup>
           <thead>
             <tr>
               <th>Skill</th>
-              <th>所属阶段</th>
-              <th>类别</th>
-              <th>完成度</th>
-              <th class="mk-th--right">成功率</th>
-              <th>最近调用</th>
+              <th v-if="!hiddenCols.has('agent')">所属阶段</th>
+              <th v-if="!hiddenCols.has('cat')">类别</th>
+              <th v-if="!hiddenCols.has('completion')">完成度</th>
+              <th v-if="!hiddenCols.has('rate')" class="mk-th--right">成功率</th>
+              <th v-if="!hiddenCols.has('last')">最近调用</th>
             </tr>
           </thead>
           <tbody>
@@ -85,12 +95,12 @@
                   </div>
                 </div>
               </td>
-              <td>
+              <td v-if="!hiddenCols.has('agent')">
                 <span v-if="s.agentId" class="sk-agent-tag" :title="s.agentId">{{ s.agentName || s.agentId }}</span>
                 <span v-else class="mk-na">工具类</span>
               </td>
-              <td><span class="mk-badge mk-badge--muted" :title="s.category">{{ categoryText(s.category) }}</span></td>
-              <td>
+              <td v-if="!hiddenCols.has('cat')"><span class="mk-badge mk-badge--muted" :title="s.category">{{ categoryText(s.category) }}</span></td>
+              <td v-if="!hiddenCols.has('completion')">
                 <span
                   v-if="completionBadgeOf(s.id)"
                   class="mk-badge"
@@ -99,8 +109,8 @@
                 >{{ completionBadgeOf(s.id)!.text }}</span>
                 <span v-else class="mk-na">—</span>
               </td>
-              <td class="mk-num" :class="rateTone(s)">{{ successRate(s) }}</td>
-              <td><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
+              <td v-if="!hiddenCols.has('rate')" class="mk-num" :class="rateTone(s)">{{ successRate(s) }}</td>
+              <td v-if="!hiddenCols.has('last')"><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
             </tr>
           </tbody>
         </table>
@@ -181,6 +191,31 @@ const onlyAttention = ref(false)
 const keyword = ref('')
 const categoryFilter = ref('')
 const view = ref<'list' | 'grid'>('list')
+
+/* D3 表格增强：列显隐（localStorage 持久化；Skill 列固定） */
+const SK_COLS_KEY = 'wf_skills_hidden_cols'
+const skColDefs = [
+  { key: 'agent', label: '所属阶段', title: '所属顶层 Agent' },
+  { key: 'cat', label: '类别', title: 'Skill 类别' },
+  { key: 'completion', label: '完成度', title: '完成度五档' },
+  { key: 'rate', label: '成功率', title: '窗口内成功率' },
+  { key: 'last', label: '最近调用', title: '最近调用时间' },
+] as const
+const colsOpen = ref(false)
+const hiddenCols = ref<Set<string>>(new Set())
+try {
+  const saved = JSON.parse(localStorage.getItem(SK_COLS_KEY) || '[]') as unknown
+  if (Array.isArray(saved)) hiddenCols.value = new Set(saved.filter((x): x is string => typeof x === 'string'))
+} catch { /* 隐私模式忽略 */ }
+watch(hiddenCols, (s) => {
+  try { localStorage.setItem(SK_COLS_KEY, JSON.stringify([...s])) } catch { /* ignore */ }
+}, { deep: true })
+function toggleSkCol(key: string) {
+  const next = new Set(hiddenCols.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  hiddenCols.value = next
+}
 const sortKey = ref<SortKey>('errors')
 const sortDir = ref<'asc' | 'desc'>('desc')
 const statsRange = liveSkillStatsRange
@@ -713,4 +748,52 @@ html[data-theme='dark'] {
   .sk-card { background: #141c2b; border-color: #232f45; }
   .sk-card__head { border-bottom-color: #232f45; }
 }
+
+/* ================= D3 表格增强：Skill 列设置菜单 ================= */
+.sk-cols { position: relative; display: inline-flex; }
+.sk-cols__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: var(--mk-z-menu);
+  min-width: 150px;
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+  background: var(--mk-surface, #fff);
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  box-shadow: var(--mk-shadow-pop);
+}
+.sk-cols__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--mk-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.sk-cols__item:hover { background: #f0f5ff; }
+html[data-theme='dark'] .sk-cols__item:hover { background: #1f2b40; }
+.sk-cols__item input { accent-color: var(--mk-blue, #2c63d0); }
+.sk-cols__reset {
+  margin-top: 4px;
+  border: 0;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border-top: 1px dashed var(--mk-line);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--mk-blue);
+  cursor: pointer;
+  text-align: left;
+}
+.sk-cols__reset:hover { background: #eff6ff; }
+html[data-theme='dark'] .sk-cols__reset:hover { background: #1f2b40; }
 </style>
