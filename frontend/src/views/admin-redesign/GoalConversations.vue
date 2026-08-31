@@ -166,7 +166,7 @@
             </div>
             <button type="button" class="gc-panel__close" aria-label="关闭" @click="closeDetail">✕</button>
           </header>
-          <div class="gc-panel__body">
+          <div ref="bodyRef" class="gc-panel__body">
             <div class="gc-facts">
               <div><span>邮箱</span><strong :title="detail.userEmail">{{ detail.userEmail || '—' }}</strong></div>
               <div>
@@ -231,7 +231,9 @@
             </section>
 
             <section v-if="detail.messages.length" class="gc-section">
-              <h4>对话轮次 <span class="mono">{{ detail.messages.length }}</span></h4>
+              <h4>对话轮次 <span class="mono">{{ detail.messages.length }}</span>
+                <button type="button" class="gc-msg-jump" title="滚动到最新消息" @click="scrollMsgsToBottom">最新 ↓</button>
+              </h4>
               <div class="gc-msgs">
                 <div v-for="(m, i) in detail.messages" :key="i" class="gc-msg" :class="`gc-msg--${m.role}`">
                   <div class="gc-msg__bubble">
@@ -439,8 +441,14 @@ function menuRemove(r: Row) {
 }
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
+const bodyRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => !!detail.value), panelRef)
 useMaskClose(maskRef, closeDetail)
+
+/** P2：消息流「最新 ↓」——滚动抽屉内容到底部（长会话快捷定位） */
+function scrollMsgsToBottom() {
+  bodyRef.value?.scrollTo({ top: bodyRef.value.scrollHeight, behavior: 'smooth' })
+}
 
 const statusPills = [
   { id: 'active', label: '进行中' },
@@ -926,7 +934,15 @@ onMounted(() => {
 
 /* 对话轮次：气泡式（用户右对齐蓝色，AI 左对齐浅灰） */
 .gc-msgs { display: grid; gap: 8px; }
-.gc-msg { display: flex; }
+/* P2：消息流「最新 ↓」按钮（长会话快捷定位） */
+.gc-msg-jump {
+  border: 1px solid var(--mk-line); background: var(--mk-surface);
+  color: var(--mk-blue); font: inherit; font-size: 11px; font-weight: 700;
+  padding: 2px 9px; border-radius: 999px; cursor: pointer; margin-left: 8px;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.gc-msg-jump:hover { border-color: rgba(44, 99, 208, 0.5); background: #f0f5ff; }
+html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { display: flex; }
 .gc-msg--user { justify-content: flex-end; }
 .gc-msg--assistant { justify-content: flex-start; }
 .gc-msg--unknown { justify-content: flex-start; }
