@@ -28,7 +28,7 @@
 
       <!-- 加载 -->
       <div v-if="loading" class="dash__loading">
-        <span class="spinner"></span>
+        <SkeletonLoader variant="dashboard" />
       </div>
 
       <!-- 整页加载失败 -->
@@ -191,6 +191,43 @@
           </aside>
         </div>
 
+        <!-- 展开/收起按钮 -->
+        <!-- 快捷入口（始终显示，不随折叠区隐藏） -->
+        <div class="quick">
+          <router-link to="/learning-state" class="quick__item">
+            <span class="quick__icon quick__icon--pulse">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 13h4l2-7 4 12 2-7h6v2h-4.6l-2.4 8.4L9.6 7.6 7.6 15H3v-2z"/></svg>
+            </span>
+            <span class="quick__body"><strong>学习状态</strong><small>节奏 · 负荷 · AI 建议</small></span>
+            <span class="quick__go">›</span>
+          </router-link>
+          <router-link to="/learning-paths" class="quick__item">
+            <span class="quick__icon quick__icon--layers">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="m12 2 10 5-10 5L2 7l10-5zm0 7.6L18.9 7 12 4.4 5.1 7 12 9.6zM2 12l10 5 10-5v2l-10 5L2 14v-2zm0 5 10 5 10-5v2l-10 5L2 19v-2z" opacity=".9"/></svg>
+            </span>
+            <span class="quick__body"><strong>全部路径</strong><small>{{ pathsCountText }}</small></span>
+            <span class="quick__go">›</span>
+          </router-link>
+          <router-link to="/achievements" class="quick__item">
+            <span class="quick__icon quick__icon--medal">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V22l4-2 4 2v-7.26A7 7 0 0 0 12 2z"/></svg>
+            </span>
+            <span class="quick__body"><strong>成就</strong><small>{{ achievementsText }}</small></span>
+            <span class="quick__go">›</span>
+          </router-link>
+        </div>
+
+        <div class="more-toggle" v-if="hasFoldedContent">
+          <button type="button" class="more-toggle__btn" @click="showMore = !showMore">
+            <svg :class="{ 'more-toggle__arrow--open': showMore }" viewBox="0 0 24 24" width="16" height="16">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>
+            </svg>
+            {{ showMore ? '收起' : '展开更多' }}
+          </button>
+        </div>
+
+        <Transition name="fold">
+          <div v-show="showMore" class="folded-sections">
         <!-- 今日预算（多目标调度台账） -->
         <section v-if="todaySchedule?.activeGoals?.length" class="card budget dash__budget">
           <div class="budget__head">
@@ -350,30 +387,8 @@
           </div>
         </section>
 
-        <!-- 快捷入口 -->
-        <div class="quick">
-          <router-link to="/learning-state" class="quick__item">
-            <span class="quick__icon quick__icon--pulse">
-              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 13h4l2-7 4 12 2-7h6v2h-4.6l-2.4 8.4L9.6 7.6 7.6 15H3v-2z"/></svg>
-            </span>
-            <span class="quick__body"><strong>学习状态</strong><small>节奏 · 负荷 · AI 建议</small></span>
-            <span class="quick__go">›</span>
-          </router-link>
-          <router-link to="/learning-paths" class="quick__item">
-            <span class="quick__icon quick__icon--layers">
-              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="m12 2 10 5-10 5L2 7l10-5zm0 7.6L18.9 7 12 4.4 5.1 7 12 9.6zM2 12l10 5 10-5v2l-10 5L2 14v-2zm0 5 10 5 10-5v2l-10 5L2 19v-2z" opacity=".9"/></svg>
-            </span>
-            <span class="quick__body"><strong>全部路径</strong><small>{{ pathsCountText }}</small></span>
-            <span class="quick__go">›</span>
-          </router-link>
-          <router-link to="/achievements" class="quick__item">
-            <span class="quick__icon quick__icon--medal">
-              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V22l4-2 4 2v-7.26A7 7 0 0 0 12 2z"/></svg>
-            </span>
-            <span class="quick__body"><strong>成就</strong><small>{{ achievementsText }}</small></span>
-            <span class="quick__go">›</span>
-          </router-link>
-        </div>
+          </div>
+        </Transition>
       </template>
     </main>
 
@@ -473,7 +488,7 @@ import { useUserStore } from '@/stores/user';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
-import './v2.css';
+import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import { unwrapArray } from './unwrap';
 
 const router = useRouter();
@@ -485,6 +500,7 @@ const tipDismissed = ref(false);
 const resting = ref(false);
 const retrying = ref(false);
 const monthOpen = ref(false);
+const showMore = ref(false);
 
 const stats = ref<Record<string, any> | null>(null);
 const paths = ref<Array<Record<string, any>>>([]);
@@ -816,6 +832,16 @@ function bandwidthLabel(v: string): string {
   return map[v] ?? v;
 }
 
+/** 折叠区是否有实际动态内容（新手无数据时隐藏「展开更多」，避免点开看到空卡）；
+    快捷入口已移出折叠区（始终显示），不受此控制。 */
+const hasFoldedContent = computed(
+  () =>
+    Boolean(todaySchedule.value?.activeGoals?.length) ||
+    reviewDue.value.length > 0 ||
+    hasAnyMinutes.value ||
+    Boolean(nearestAchievement.value)
+);
+
 const minutesByDate = computed(() => {
   const map = new Map<string, number>();
   for (const s of sessions.value) {
@@ -828,7 +854,11 @@ const minutesByDate = computed(() => {
 
 const todayMinutes = computed(() => minutesByDate.value.get(todayStr) ?? 0);
 
+/* 优先使用服务端 streak，回退到客户端计算 */
 const streakDays = computed(() => {
+  const serverStreak = userStore.user?.streakDays;
+  if (serverStreak != null && serverStreak > 0) return serverStreak;
+  /* 客户端回退（兼容旧数据） */
   let streak = 0;
   const d = new Date();
   if ((minutesByDate.value.get(todayStr) ?? 0) === 0) d.setDate(d.getDate() - 1);
@@ -1172,7 +1202,7 @@ onMounted(loadAll);
 .tip--empty { border-color: rgba(141, 107, 255, 0.22); background: linear-gradient(135deg, rgba(141, 107, 255, 0.07), rgba(52, 120, 246, 0.04)); }
 .tip__icon {
   width: 26px; height: 26px; border-radius: 8px;
-  background: #fff; color: var(--blue-deep);
+  background: var(--surface, #fff); color: var(--blue-deep);
   display: grid; place-items: center; flex: 0 0 auto;
   box-shadow: 0 1px 3px rgba(23, 32, 51, 0.1);
 }
@@ -1280,7 +1310,7 @@ onMounted(loadAll);
 .action__meta { display: flex; gap: 8px; flex-wrap: wrap; }
 .tag {
   padding: 5px 11px; border-radius: 999px;
-  background: #f1f5fb; border: 1px solid var(--line);
+  background: var(--line, #f1f5fb); border: 1px solid var(--line);
   font-size: 12px; font-weight: 600; color: var(--muted);
 }
 .tag--blue { background: rgba(52, 120, 246, 0.09); border-color: rgba(52, 120, 246, 0.3); color: var(--blue-deep); }
@@ -1296,7 +1326,7 @@ onMounted(loadAll);
 }
 .btn-ghost {
   padding: 10px 18px; border-radius: 12px;
-  border: 1px solid var(--line); background: #fff;
+  border: 1px solid var(--line); background: var(--surface, #fff);
   font-size: 14px; font-weight: 700; color: var(--muted); cursor: pointer;
 }
 .action__today { display: flex; align-items: center; gap: 10px; margin-top: 0; font-size: 12px; color: var(--faint); }
@@ -1401,7 +1431,7 @@ onMounted(loadAll);
 .month__nav { display: flex; align-items: center; gap: 12px; font-size: 13px; font-weight: 700; color: var(--muted); }
 .month__arrow {
   width: 26px; height: 26px; border-radius: 8px;
-  border: 1px solid var(--line); background: #fff;
+  border: 1px solid var(--line); background: var(--surface, #fff);
   display: grid; place-items: center; cursor: pointer; color: var(--muted);
 }
 .month__arrow--off { opacity: 0.35; cursor: default; }
@@ -1603,7 +1633,7 @@ a.btn-primary { text-decoration: none; }
   width: 30px; height: 30px; border-radius: 9px;
   display: grid; place-items: center;
   color: var(--faint); font-size: 16px; cursor: pointer;
-  border: 1px solid var(--line); background: #fff;
+  border: 1px solid var(--line); background: var(--surface, #fff);
 }
 .sheet__close:hover { color: var(--ink); }
 
@@ -1745,5 +1775,60 @@ a.btn-primary { text-decoration: none; }
   .day__cell { width: 28px; height: 28px; border-radius: 8px; font-size: 11px; }
   .month { padding: 16px 14px; }
   .month__meta { gap: 10px; }
+}
+</style>
+
+<style scoped>
+/* ---------- 展开/收起 ---------- */
+.fold-enter-active,
+.fold-leave-active {
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+.fold-enter-from,
+.fold-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+.fold-enter-to,
+.fold-leave-from {
+  opacity: 1;
+  max-height: 2000px;
+}
+
+.folded-sections {
+  display: grid;
+  gap: 16px;
+}
+
+.more-toggle {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+.more-toggle__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 18px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.more-toggle__btn:hover {
+  color: var(--blue-deep);
+  border-color: rgba(52, 120, 246, 0.3);
+  background: rgba(52, 120, 246, 0.04);
+}
+.more-toggle__arrow--open {
+  transform: rotate(180deg);
+}
+.more-toggle__btn svg {
+  transition: transform 0.2s ease;
 }
 </style>
