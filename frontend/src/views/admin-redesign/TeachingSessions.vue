@@ -1,44 +1,32 @@
 <template>
   <div class="mk-page mk-page--fill">
-    <!-- 教学概览（共享组件 MkOverview；结论 + 刷新合并为一行页头，替代独立状态条） -->
-    <MkOverview :tone="tsDashTone" :title="tsDashTitle" :subline="tsDashSubline" :window="`最近 ${rows.length} 条会话`" :has-data="tsDashHasData">
-      <template #action>
-        <span class="ts-head-meta">共 {{ rows.length }} 条</span>
-        <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshNow">
-          {{ refreshing ? '刷新中…' : '刷新' }}
-        </button>
-      </template>
-      <template #kpis>
-        <MkKpi label="会话" :value="rows.length" hint="最近加载范围" :title="'当前加载范围内的会话总数（最近 100 条）'" />
-        <MkKpi label="进行中" :value="inProgressCount" hint="当前活动会话" :title="'进行中（active）的会话数'" />
-        <MkKpi
-          label="缺总结"
-          :value="missingWrapupCount"
-          :tone="missingWrapupCount > 0 ? 'bad' : ''"
-          hint="待补全学习闭环"
-          :title="'已结束但未生成课后总结的会话数 · 点击筛选'"
-          clickable
-          :class="{ 'mk-kpi--linked-on': pill === 'missing' }"
-          @click="pill = pill === 'missing' ? 'all' : 'missing'"
-        />
-        <MkKpi
-          label="高关注"
-          :value="highAttentionCount"
-          :tone="highAttentionCount > 0 ? 'warn' : ''"
-          :hint="`中低关注 ${attentionCount - highAttentionCount}`"
-          :title="'关注度高的会话数（需优先介入）· 点击筛选'"
-          clickable
-          :class="{ 'mk-kpi--linked-on': pill === 'attention' }"
-          @click="pill = pill === 'attention' ? 'all' : 'attention'"
-        />
-      </template>
-      <template #detail>
-        <span>有建议 {{ advisoryCount }}</span>
-        <span>待关注 {{ attentionCount }}</span>
-        <span>缺总结 {{ missingWrapupCount }}</span>
-        <span>范围：最近 100 条</span>
-      </template>
-    </MkOverview>
+    <!-- 教学会话页头（单行状态条：结论 + 可点击计数 + 刷新；与用户/学习者中心/目标对话统一形态） -->
+    <div class="mk-status" :class="tsDashTone === 'bad' ? 'mk-status--bad' : tsDashTone === 'warn' ? 'mk-status--warn' : tsDashTone === 'muted' ? 'mk-status--muted' : 'mk-status--ok'">
+      <span class="mk-status__dot"></span>
+      <strong class="mk-status__title">{{ tsDashTitle }}</strong>
+      <span class="mk-status__sep"></span>
+      <span class="mk-status__meta">{{ tsDashSubline }}</span>
+      <span class="mk-status__meta">进行中 {{ inProgressCount }}</span>
+      <button
+        type="button"
+        class="ts-count-link"
+        :class="{ 'ts-count-link--on': pill === 'missing' }"
+        title="点击筛选「缺总结」会话"
+        @click="pill = pill === 'missing' ? 'all' : 'missing'"
+      >缺总结 {{ missingWrapupCount }}</button>
+      <button
+        type="button"
+        class="ts-count-link"
+        :class="{ 'ts-count-link--on': pill === 'attention' }"
+        title="点击筛选「待关注」会话"
+        @click="pill = pill === 'attention' ? 'all' : 'attention'"
+      >高关注 {{ highAttentionCount }}</button>
+      <span v-if="advisoryCount" class="mk-status__meta" title="含建议的会话数">有建议 {{ advisoryCount }}</span>
+      <span class="mk-status__meta">共 {{ rows.length }} 条</span>
+      <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshNow">
+        {{ refreshing ? '刷新中…' : '刷新' }}
+      </button>
+    </div>
 
     <!-- 深链未命中提示：?session= 存在但当前列表（最近 100 条）中找不到 -->
     <div v-if="deepLinkMiss" class="errorbar" role="alert">
@@ -318,8 +306,6 @@ import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
-import MkOverview from './MkOverview.vue'
-import MkKpi from './MkKpi.vue'
 import MkCols from './MkCols.vue'
 
 interface WrapupSummary {
@@ -634,9 +620,8 @@ const advisoryCount = computed(() => rows.value.filter((r) => r.hasAdvisory).len
 const missingWrapupCount = computed(() => rows.value.filter((r) => r.wrapupStatus === 'missing').length)
 const attentionCount = computed(() => rows.value.filter((r) => r.attention !== 'low').length)
 
-/* ===== 教学概览（ts-dash：会话域 dashboard，结论 + KPI + 详情） ===== */
+/* ===== 教学概览（ts-dash：会话域结论，状态条承载） ===== */
 const highAttentionCount = computed(() => rows.value.filter((r) => r.attention === 'high').length)
-const tsDashHasData = computed(() => rows.value.length > 0)
 const tsDashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
   if (!rows.value.length) return 'muted'
   if (missingWrapupCount.value > 0) return 'warn'
@@ -784,6 +769,15 @@ function progressTitle(r: Row): string {
 <style scoped>
 /* 页头合并（替代独立状态条）：共 N 条 + 刷新按钮，与概览结论同行 */
 .ts-head-meta { font-size: 12.5px; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* 页头计数锚点（与学习者中心 lc-count-link 同形态）：缺总结/高关注可点击筛选 */
+.ts-count-link {
+  border: 0; background: transparent; padding: 2px 6px;
+  font: inherit; font-size: 12.5px; font-weight: 700;
+  color: var(--mk-muted); cursor: pointer; border-radius: 6px;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.ts-count-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); }
+.ts-count-link--on { color: var(--mk-blue); background: rgba(44, 99, 208, 0.12); }
 /* 总结预览行（P1-2）：单行 ellipsis + hover 全文，对齐 Intercom 最后消息预览 */
 .ts-summary-preview {
   display: block;

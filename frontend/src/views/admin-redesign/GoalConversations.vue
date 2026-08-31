@@ -1,59 +1,38 @@
 <template>
   <div class="mk-page mk-page--fill">
-    <!-- 状态条（统计全部在概览卡；此处仅标题 + 总量 + 操作） -->
-    <div class="mk-status" :class="stats && stats.active > 0 ? 'mk-status--ok' : 'mk-status--muted'">
+    <!-- 目标对话页头（单行状态条：结论 + 堆叠条 + 可点击计数 + 刷新；与教学会话统一形态） -->
+    <div class="mk-status" :class="gcDashTone === 'bad' ? 'mk-status--bad' : gcDashTone === 'warn' ? 'mk-status--warn' : gcDashTone === 'muted' ? 'mk-status--muted' : 'mk-status--ok'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">目标对话</strong>
+      <strong class="mk-status__title">{{ gcDashTitle }}</strong>
       <span class="mk-status__sep"></span>
-      <span v-if="isLive && stats" class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ stats.total }} 条</span>
+      <span class="mk-status__meta">{{ gcDashSubline }}</span>
+      <div v-if="isLive && stats && stats.total > 0" class="gc-stack gc-stack--inline" :title="`进行中 ${stats.active} · 已完成 ${stats.completed} · 其他 ${stackOther}`">
+        <span class="gc-stack__bar">
+          <i class="gc-stack__seg gc-stack__seg--active" :style="{ width: stackPct('active') }"></i>
+          <i class="gc-stack__seg gc-stack__seg--completed" :style="{ width: stackPct('completed') }"></i>
+          <i class="gc-stack__seg gc-stack__seg--cancelled" :style="{ width: stackPct('other') }"></i>
+        </span>
+      </div>
+      <button
+        type="button"
+        class="gc-count-link"
+        :class="{ 'gc-count-link--on': statusFilter === 'active' }"
+        title="点击筛选「进行中」对话"
+        @click="statusFilter = statusFilter === 'active' ? '' : 'active'"
+      >进行中 {{ stats?.active ?? 0 }}</button>
+      <button
+        type="button"
+        class="gc-count-link"
+        :class="{ 'gc-count-link--on': statusFilter === 'completed' }"
+        title="点击筛选「已完成」对话"
+        @click="statusFilter = statusFilter === 'completed' ? '' : 'completed'"
+      >已完成 {{ stats?.completed ?? 0 }}</button>
+      <span v-if="stackOther" class="mk-status__meta">待澄清 {{ stackOther }}</span>
+      <span v-if="isLive && stats" class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ stats.total }} 条 · 近 30 天</span>
       <button type="button" class="mk-status__action" :disabled="loading" @click="load(true)">
         {{ loading ? '刷新中…' : '刷新' }}
       </button>
     </div>
-
-
-    <!-- Goal 概览（共享组件 MkOverview；pre slot 承载状态堆叠条） -->
-    <MkOverview v-if="isLive && stats" :tone="gcDashTone" :title="gcDashTitle" :subline="gcDashSubline" window="近 30 天窗口" :has-data="gcDashHasData">
-      <template #pre>
-        <div v-if="stats.total > 0" class="gc-stack gc-dash__stack" :title="`进行中 ${stats.active} · 已完成 ${stats.completed} · 其他 ${stackOther}`">
-          <span class="gc-stack__bar">
-            <i class="gc-stack__seg gc-stack__seg--active" :style="{ width: stackPct('active') }"></i>
-            <i class="gc-stack__seg gc-stack__seg--completed" :style="{ width: stackPct('completed') }"></i>
-            <i class="gc-stack__seg gc-stack__seg--cancelled" :style="{ width: stackPct('other') }"></i>
-          </span>
-          <em>进行中 / 已完成 / 其他</em>
-        </div>
-      </template>
-      <template #kpis>
-        <MkKpi label="总对话" :value="stats.total" hint="真实用户口径" :title="'窗口内目标对话总数'" />
-        <MkKpi
-          label="进行中"
-          :value="stats.active"
-          :tone="stats.active > 0 ? 'ok' : ''"
-          hint="正在收集目标"
-          :title="'进行中（待澄清或澄清中）的对话数 · 点击筛选'"
-          clickable
-          :class="{ 'mk-kpi--linked-on': statusFilter === 'active' }"
-          @click="statusFilter = statusFilter === 'active' ? '' : 'active'"
-        />
-        <MkKpi
-          label="已完成"
-          :value="stats.completed"
-          hint="已产出学习目标"
-          :title="'已完成澄清的对话数 · 点击筛选'"
-          clickable
-          :class="{ 'mk-kpi--linked-on': statusFilter === 'completed' }"
-          @click="statusFilter = statusFilter === 'completed' ? '' : 'completed'"
-        />
-        <MkKpi label="完成率" :value="`${stats.completionRate}%`" :hint="`待澄清 ${stackOther} 条`" :title="'完成率 = 已完成 / 总对话'" />
-      </template>
-      <template #detail>
-        <span>进行中 {{ stats.active }}</span>
-        <span>已完成 {{ stats.completed }}</span>
-        <span>待澄清 {{ stackOther }}</span>
-        <span>窗口：近 30 天</span>
-      </template>
-    </MkOverview>
 
     <!-- 非 live：无演示数据 -->
     <div v-if="!isLive" class="mk-empty">
@@ -302,8 +281,6 @@ import { askConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
-import MkOverview from './MkOverview.vue'
-import MkKpi from './MkKpi.vue'
 import MkCols from './MkCols.vue'
 import { adminGoalConversationsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
@@ -429,8 +406,7 @@ const stackOther = computed(() => {
   const t = stats.value?.total || 0
   return Math.max(0, t - (stats.value?.active || 0) - (stats.value?.completed || 0))
 })
-/* ===== Goal 概览（gc-dash：结论 + KPI，数据同 stats 接口） ===== */
-const gcDashHasData = computed(() => (stats.value?.total || 0) > 0)
+/* ===== Goal 概览（gc-dash：结论，状态条承载） ===== */
 const gcDashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
   if (!stats.value || stats.value.total === 0) return 'muted'
   if ((stats.value.active ?? 0) > 0) return 'ok'
@@ -889,6 +865,15 @@ onMounted(() => {
 .gc-stack__seg--completed { background: var(--mk-green); }
 .gc-stack__seg--cancelled { background: var(--mk-amber); }
 .gc-stack em { font-style: normal; font-size: 10.5px; color: var(--mk-faint); white-space: nowrap; }
+/* 页头计数锚点（与教学会话 ts-count-link 同形态）：进行中/已完成可点击筛选 */
+.gc-count-link {
+  border: 0; background: transparent; padding: 2px 6px;
+  font: inherit; font-size: 12.5px; font-weight: 700;
+  color: var(--mk-muted); cursor: pointer; border-radius: 6px;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.gc-count-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); }
+.gc-count-link--on { color: var(--mk-blue); background: rgba(44, 99, 208, 0.12); }
 
 /* 理解与方案卡片 */
 .gc-insight {
