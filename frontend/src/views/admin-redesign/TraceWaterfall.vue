@@ -95,6 +95,9 @@
       <div class="wf-summary__item"><b>{{ fmtMs(traceSummary.total) }}</b><span>总耗时</span></div>
       <div class="wf-summary__item" :class="{ 'wf-summary__item--bad': traceSummary.errorCount }"><b>{{ traceSummary.errorCount }}</b><span>失败</span></div>
       <div class="wf-summary__item"><b>{{ fmtMs(traceSummary.avg) }}</b><span>平均耗时</span></div>
+      <div class="wf-summary__item" :title="'链路内 span 延迟分位：P50 = 中位耗时 · P99 = 99% span 耗时'">
+        <b class="mono">P50 {{ fmtMs(traceSummary.p50) }} · P99 {{ fmtMs(traceSummary.p99) }}</b><span>延迟分位</span>
+      </div>
       <div class="wf-summary__item" :title="`输入 ${traceSummary.promptTokens.toLocaleString()} · 输出 ${traceSummary.completionTokens.toLocaleString()}`">
         <b>{{ fmtTokens(traceSummary.promptTokens + traceSummary.completionTokens) }}</b><span>Token</span>
       </div>
@@ -621,7 +624,9 @@ const traceSummary = computed(() => {
   const s = activeSpans.value
   if (!s.length) return null
   const models = [...new Set(s.map((x) => x.model).filter(Boolean))]
-  const avg = Math.round(s.reduce((a, x) => a + x.durationMs, 0) / s.length)
+  const durations = s.map((x) => x.durationMs).filter((d): d is number => typeof d === 'number' && d >= 0).sort((a, b) => a - b)
+  const avg = durations.length ? Math.round(durations.reduce((a, x) => a + x, 0) / durations.length) : 0
+  const pct = (q: number) => durations.length ? durations[Math.min(durations.length - 1, Math.max(0, Math.round((durations.length - 1) * q)))] : 0
   const promptTokens = s.reduce((a, x) => a + (x.promptTokens ?? 0), 0)
   const completionTokens = s.reduce((a, x) => a + (x.completionTokens ?? 0), 0)
   // 估算成本：按 deepseek-v4-flash 公开价（输入 ¥0.5/M，输出 ¥2/M），仅供参考
@@ -632,6 +637,8 @@ const traceSummary = computed(() => {
     errorCount: errorCount.value,
     models,
     avg,
+    p50: pct(0.5),
+    p99: pct(0.99),
     promptTokens,
     completionTokens,
     estCost: estCost >= 0.01 ? estCost.toFixed(2) : estCost.toFixed(4)
