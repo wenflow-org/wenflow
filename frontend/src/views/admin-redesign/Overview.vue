@@ -59,29 +59,6 @@
         />
       </section>
 
-      <!-- 学习漏斗 -->
-      <section class="brief-card">
-        <h4>学习漏斗 · 累计</h4>
-        <div class="funnel">
-          <template v-for="(n, i) in data.funnel" :key="n.label">
-            <div
-              class="funnel__node funnel__node--clickable"
-              :class="{ 'funnel__node--idle': n.idle }"
-              :title="funnelTargets[i] === 'users' ? '查看用户' : funnelTargets[i] === 'goal-conversations' ? '查看目标对话' : '查看学习者中心'"
-              @click="jump(funnelTargets[i])"
-            >
-              <span>{{ n.label }}</span>
-              <strong>{{ n.value }}</strong>
-            </div>
-            <span
-              v-if="i < data.funnel.length - 1"
-              class="funnel__rate"
-              :title="rateHint(i)"
-            >{{ data.rates[i] }}</span>
-          </template>
-        </div>
-      </section>
-
       <!-- 系统脉搏 -->
       <section class="brief-card">
         <div class="brief-card__head">
@@ -94,6 +71,80 @@
           <span title="近 24 小时失败 + 超时合计（仅真实用户）">异常 <strong :class="{ 'is-bad': data.totalIssues > 0 }">{{ data.totalIssues }}</strong></span>
           <span title="近 24 小时调用高峰时段（仅真实用户）">高峰 {{ data.peak }}</span>
         </div>
+      </section>
+
+      <!-- 近 7 天调用趋势（G1：每日调用/失败，真实用户口径） -->
+      <section class="brief-card brief-card--trend">
+        <div class="trend__head">
+          <h4 title="近 7 天每日调用量（真实用户口径）">调用趋势 · 近 7 天</h4>
+          <button type="button" class="brief-card__go" @click="jump('execution-logs')">执行日志 →</button>
+        </div>
+        <div v-if="trend7dSum > 0" class="ov-trend">
+          <MkChart :option="trend7dChartOption" height="160px" />
+          <p class="ov-trend__sum">合计 {{ trend7dSum }} 次调用 · 失败 {{ trend7dFail }} 次</p>
+        </div>
+        <p v-else class="brief-card__note">近 7 天暂无真实调用。</p>
+      </section>
+
+      <!-- 用户增长（G2/G3：每日新增注册 / 活跃用户，与调用趋势同属 7 天趋势区） -->
+      <section class="brief-card brief-card--trend">
+        <div class="trend__head">
+          <h4 title="近 7 天每日新增注册 / 活跃用户（真实用户）">用户增长 · 近 7 天</h4>
+          <button type="button" class="brief-card__go" @click="jump('users')">用户管理 →</button>
+        </div>
+        <div v-if="growthSum > 0" class="ov-growth">
+          <div class="ov-growth__rows">
+            <div v-for="g in data.growth7d" :key="g.date" class="ov-growth__day" :title="`${g.date}：新增 ${g.newUsers} · 活跃 ${g.activeUsers}`">
+              <div class="ov-growth__bars">
+                <i class="ov-growth__bar ov-growth__bar--new" :style="{ height: barPct(g.newUsers, growth7dMax) }"></i>
+                <i class="ov-growth__bar ov-growth__bar--active" :style="{ height: barPct(g.activeUsers, growth7dMax) }"></i>
+              </div>
+              <span class="ov-growth__label">{{ dayLabel(g.date) }}</span>
+            </div>
+          </div>
+          <div class="ov-growth__legend">
+            <span><i class="ov-growth__dot ov-growth__dot--new"></i>新增</span>
+            <span><i class="ov-growth__dot ov-growth__dot--active"></i>活跃</span>
+            <span class="mk-card__meta">7 天新增 {{ growthNewSum }} · 活跃峰值 {{ growthPeakActive }}</span>
+          </div>
+        </div>
+        <p v-else class="brief-card__note">近 7 天暂无新增或活跃用户。</p>
+      </section>
+
+      <!-- 近 7 天目标对话趋势（与调用/用户增长同属趋势区） -->
+      <section class="brief-card brief-card--trend">
+        <div class="trend__head">
+          <h4>新增目标对话 · 近 7 天</h4>
+          <span class="trend__head-right">
+            <span class="trend__legend">
+              <i class="trend__dot trend__dot--new"></i>当日新增
+              <i class="trend__dot trend__dot--done"></i>当日完成
+            </span>
+            <button type="button" class="brief-card__go" @click="jump('goal-conversations')">目标对话 →</button>
+          </span>
+        </div>
+        <div v-if="data.trend.length" class="trend">
+          <div
+            v-for="d in data.trend"
+            :key="d.date"
+            class="trend__col"
+            :class="{ 'trend__col--today': isToday(d.date) }"
+            :title="`${d.date}：新增 ${d.total} 个对话，完成 ${d.completed} 个`"
+          >
+            <span class="trend__num" :class="{ 'trend__num--zero': !d.total }">{{ d.total || '·' }}</span>
+            <div class="trend__bars">
+              <i class="trend__bar" :style="{ height: trendH(d.total) }"></i>
+              <i class="trend__bar trend__bar--ok" :style="{ height: trendH(d.completed) }"></i>
+            </div>
+            <span class="trend__day" :class="{ 'trend__day--today': isToday(d.date) }">
+              {{ trendLabel(d.date) }}{{ isToday(d.date) ? ' 今日' : '' }}
+            </span>
+          </div>
+        </div>
+        <p v-else class="brief-card__note">近 7 天暂无新增目标对话。</p>
+        <p v-if="data.trend.length" class="trend__sum">
+          合计新增 {{ trendSum.total }} · 完成 {{ trendSum.completed }}
+        </p>
       </section>
 
       <!-- 总结产出质量 -->
@@ -126,19 +177,6 @@
         <p v-else class="brief-card__note">暂无课后总结，教学会话结束后会自动生成。</p>
       </section>
 
-      <!-- 近 7 天调用趋势（G1：每日调用/失败，真实用户口径） -->
-      <section class="brief-card brief-card--trend">
-        <div class="trend__head">
-          <h4 title="近 7 天每日调用量（真实用户口径）">调用趋势 · 近 7 天</h4>
-          <button type="button" class="brief-card__go" @click="jump('execution-logs')">执行日志 →</button>
-        </div>
-        <div v-if="trend7dSum > 0" class="ov-trend">
-          <MkChart :option="trend7dChartOption" height="160px" />
-          <p class="ov-trend__sum">合计 {{ trend7dSum }} 次调用 · 失败 {{ trend7dFail }} 次</p>
-        </div>
-        <p v-else class="brief-card__note">近 7 天暂无真实调用。</p>
-      </section>
-
       <!-- Top Skill 活跃榜（G4：近 7 天调用最多的节点） -->
       <section class="brief-card">
         <div class="brief-card__head">
@@ -164,29 +202,27 @@
         <p v-else class="brief-card__note">近 7 天暂无调用，无排行。</p>
       </section>
 
-      <!-- 用户增长（G2/G3：每日新增注册 / 活跃用户） -->
-      <section class="brief-card brief-card--trend">
-        <div class="trend__head">
-          <h4 title="近 7 天每日新增注册 / 活跃用户（真实用户）">用户增长 · 近 7 天</h4>
-          <button type="button" class="brief-card__go" @click="jump('users')">用户管理 →</button>
-        </div>
-        <div v-if="growthSum > 0" class="ov-growth">
-          <div class="ov-growth__rows">
-            <div v-for="g in data.growth7d" :key="g.date" class="ov-growth__day" :title="`${g.date}：新增 ${g.newUsers} · 活跃 ${g.activeUsers}`">
-              <div class="ov-growth__bars">
-                <i class="ov-growth__bar ov-growth__bar--new" :style="{ height: barPct(g.newUsers, growth7dMax) }"></i>
-                <i class="ov-growth__bar ov-growth__bar--active" :style="{ height: barPct(g.activeUsers, growth7dMax) }"></i>
-              </div>
-              <span class="ov-growth__label">{{ dayLabel(g.date) }}</span>
+      <!-- 学习漏斗（业务主线，累计口径；下沉到明细区） -->
+      <section class="brief-card">
+        <h4>学习漏斗 · 累计</h4>
+        <div class="funnel">
+          <template v-for="(n, i) in data.funnel" :key="n.label">
+            <div
+              class="funnel__node funnel__node--clickable"
+              :class="{ 'funnel__node--idle': n.idle }"
+              :title="funnelTargets[i] === 'users' ? '查看用户' : funnelTargets[i] === 'goal-conversations' ? '查看目标对话' : '查看学习者中心'"
+              @click="jump(funnelTargets[i])"
+            >
+              <span>{{ n.label }}</span>
+              <strong>{{ n.value }}</strong>
             </div>
-          </div>
-          <div class="ov-growth__legend">
-            <span><i class="ov-growth__dot ov-growth__dot--new"></i>新增</span>
-            <span><i class="ov-growth__dot ov-growth__dot--active"></i>活跃</span>
-            <span class="mk-card__meta">7 天新增 {{ growthNewSum }} · 活跃峰值 {{ growthPeakActive }}</span>
-          </div>
+            <span
+              v-if="i < data.funnel.length - 1"
+              class="funnel__rate"
+              :title="rateHint(i)"
+            >{{ data.rates[i] }}</span>
+          </template>
         </div>
-        <p v-else class="brief-card__note">近 7 天暂无新增或活跃用户。</p>
       </section>
 
       <!-- LLM 用量与失败归因（跨 2 列；头部时间窗 + 数据即跳转入口） -->
@@ -248,42 +284,6 @@
           </div>
         </div>
         <p v-else class="brief-card__note">近 7 天暂无 LLM 调用记录。</p>
-      </section>
-
-      <!-- 近 7 天目标对话趋势 -->
-      <section class="brief-card brief-card--trend">
-        <div class="trend__head">
-          <h4>新增目标对话 · 近 7 天</h4>
-          <span class="trend__head-right">
-            <span class="trend__legend">
-              <i class="trend__dot trend__dot--new"></i>当日新增
-              <i class="trend__dot trend__dot--done"></i>当日完成
-            </span>
-            <button type="button" class="brief-card__go" @click="jump('goal-conversations')">目标对话 →</button>
-          </span>
-        </div>
-        <div v-if="data.trend.length" class="trend">
-          <div
-            v-for="d in data.trend"
-            :key="d.date"
-            class="trend__col"
-            :class="{ 'trend__col--today': isToday(d.date) }"
-            :title="`${d.date}：新增 ${d.total} 个对话，完成 ${d.completed} 个`"
-          >
-            <span class="trend__num" :class="{ 'trend__num--zero': !d.total }">{{ d.total || '·' }}</span>
-            <div class="trend__bars">
-              <i class="trend__bar" :style="{ height: trendH(d.total) }"></i>
-              <i class="trend__bar trend__bar--ok" :style="{ height: trendH(d.completed) }"></i>
-            </div>
-            <span class="trend__day" :class="{ 'trend__day--today': isToday(d.date) }">
-              {{ trendLabel(d.date) }}{{ isToday(d.date) ? ' 今日' : '' }}
-            </span>
-          </div>
-        </div>
-        <p v-else class="brief-card__note">近 7 天暂无新增目标对话。</p>
-        <p v-if="data.trend.length" class="trend__sum">
-          合计新增 {{ trendSum.total }} · 完成 {{ trendSum.completed }}
-        </p>
       </section>
 
       <!-- 动态时间线（全宽；异常事件置顶，普通事件折叠，近 24h 时间窗） -->
