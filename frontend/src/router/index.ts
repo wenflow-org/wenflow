@@ -2,30 +2,10 @@
 import { hasUserSession } from '../utils/api';
 import { hasAdminSession } from '../api/adminApi';
 import { getProjectionToken } from '../utils/projection';
-
-/** 主题持久化：Shell.vue（admin）写入 wf_admin_theme；旧机制兼容 wenflow-theme。
-    两 key 需保持同步，否则 beforeEach 会用旧 key 覆盖 Shell 已切换的主题（"切暗色后换页回日间"）。 */
-const THEME_STORAGE_KEY = 'wenflow-theme';
-const ADMIN_THEME_KEY = 'wf_admin_theme';
-
-function applyDocumentTheme(theme: 'light' | 'dark') {
-  const html = document.documentElement;
-  html.setAttribute('data-theme', theme);
-  html.classList.toggle('dark', theme === 'dark');
-}
-
-function resolveUserTheme(): 'light' | 'dark' {
-  if (typeof localStorage === 'undefined') return 'light';
-  const admin = localStorage.getItem(ADMIN_THEME_KEY);
-  if (admin === 'light' || admin === 'dark') return admin;
-  const stored = localStorage.getItem(THEME_STORAGE_KEY);
-  if (stored === 'light' || stored === 'dark') return stored;
-  const prefersDark = typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  return prefersDark ? 'dark' : 'light';
-}
+import { applyDocumentTheme, readTheme } from '../utils/theme';
 
 function syncThemeForRoute(_path: string) {
-  applyDocumentTheme(resolveUserTheme());
+  applyDocumentTheme(readTheme());
 }
 
 const routes: RouteRecordRaw[] = [

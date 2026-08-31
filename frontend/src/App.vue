@@ -22,16 +22,30 @@ import { useUserStore } from './stores/user';
 import ToastHost from './components/ui/ToastHost.vue';
 import AnnouncementBanner from './components/AnnouncementBanner.vue';
 import MockConfirm from './views/admin-redesign/Confirm.vue';
+import { readTheme, applyDocumentTheme } from './utils/theme';
 
 const userStore = useUserStore();
 // 同步恢复登录态，避免子组件 onMounted/watch 时 isLoggedIn 仍为 false
 userStore.initFromStorage();
+
+// 主题初始化：从 localStorage 或系统偏好读取，防止首屏闪烁。
+// 与 router beforeEach / ThemeToggle / index.html 首屏脚本同源（utils/theme.ts SSOT），
+// 避免「路由切换时按旧 key 回退系统偏好 → 日间模式黑白闪烁」。
+;(function initTheme() {
+  applyDocumentTheme(readTheme());
+})();
 </script>
 
 <style scoped>
 #app {
   min-height: 100vh;
   min-height: 100dvh;
+  background: var(--canvas);
+}
+#app-main {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--canvas);
 }
 
 /* 无障碍：跳到主要内容（仅键盘聚焦时可见） */
