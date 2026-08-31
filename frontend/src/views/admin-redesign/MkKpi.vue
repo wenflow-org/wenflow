@@ -46,6 +46,8 @@ withDefaults(
 .mk-kpi--ok .mk-kpi__num { color: var(--mk-green); }
 .mk-kpi--clickable { cursor: pointer; transition: border-color 0.12s ease, transform 0.12s ease; }
 .mk-kpi--clickable:hover { border-color: rgba(44, 99, 208, 0.5); transform: translateY(-1px); }
+/* 筛选联动激活态（P0-4）：KPI 作为筛选锚点，激活时高亮边框 */
+.mk-kpi--linked-on { border-color: var(--mk-blue); box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.18); }
 
 /* 紧凑模式（列表页顶部 KPI）：压高度 */
 .mk-kpi--compact { padding: 6px 10px; gap: 1px; border-radius: 8px; }

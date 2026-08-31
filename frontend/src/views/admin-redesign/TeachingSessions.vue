@@ -11,8 +11,26 @@
       <template #kpis>
         <MkKpi label="会话" :value="rows.length" hint="最近加载范围" :title="'当前加载范围内的会话总数（最近 100 条）'" />
         <MkKpi label="进行中" :value="inProgressCount" hint="当前活动会话" :title="'进行中（active）的会话数'" />
-        <MkKpi label="缺总结" :value="missingWrapupCount" :tone="missingWrapupCount > 0 ? 'bad' : ''" hint="待补全学习闭环" :title="'已结束但未生成课后总结的会话数'" />
-        <MkKpi label="高关注" :value="highAttentionCount" :tone="highAttentionCount > 0 ? 'warn' : ''" :hint="`中低关注 ${attentionCount - highAttentionCount}`" :title="'关注度高的会话数（需优先介入）'" />
+        <MkKpi
+          label="缺总结"
+          :value="missingWrapupCount"
+          :tone="missingWrapupCount > 0 ? 'bad' : ''"
+          hint="待补全学习闭环"
+          :title="'已结束但未生成课后总结的会话数 · 点击筛选'"
+          clickable
+          :class="{ 'mk-kpi--linked-on': pill === 'missing' }"
+          @click="pill = pill === 'missing' ? 'all' : 'missing'"
+        />
+        <MkKpi
+          label="高关注"
+          :value="highAttentionCount"
+          :tone="highAttentionCount > 0 ? 'warn' : ''"
+          :hint="`中低关注 ${attentionCount - highAttentionCount}`"
+          :title="'关注度高的会话数（需优先介入）· 点击筛选'"
+          clickable
+          :class="{ 'mk-kpi--linked-on': pill === 'attention' }"
+          @click="pill = pill === 'attention' ? 'all' : 'attention'"
+        />
       </template>
       <template #detail>
         <span>有建议 {{ advisoryCount }}</span>
@@ -75,7 +93,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in paged" :key="r.id" class="ts-row" @click="openDetail(r)">
+            <tr v-for="r in paged" :key="r.id" class="ts-row" :class="`ts-row--att-${r.attention}`" @click="openDetail(r)">
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ r.topic }}</strong>
@@ -121,7 +139,13 @@
                 </span>
                 <span v-if="r.hasAdvisory" class="mk-badge" :class="advisoryBadge(r.advisory?.priority)" style="margin-left:4px">建议</span>
               </td>
-              <td><span class="mk-badge" :class="attentionBadge(r.attention)">{{ r.attention === 'high' ? '高' : r.attention === 'medium' ? '中' : '低' }}</span></td>
+              <td>
+                <span
+                  class="ts-att"
+                  :class="`ts-att--${r.attention}`"
+                  :title="r.attention === 'high' ? '高关注：需优先介入' : r.attention === 'medium' ? '中关注' : '低关注'"
+                >{{ r.attention === 'high' ? '高' : r.attention === 'medium' ? '中' : '低' }}</span>
+              </td>
               <td>
                 <div class="ts-actions">
                   <button type="button" class="mk-icon-btn" title="链路" @click.stop="goTrace(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></button>
@@ -623,18 +647,14 @@ function toggleCard(key: string) {
 const isLong = (s?: string) => (s || '').length > 120
 
 /* 状态映射统一走共享字典（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
+/* 状态徽章降噪（P0-5）：只对异常态上色，正常态统一灰——对齐 Langfuse「只有
+   ERROR/WARNING 上色」；completed/succeeded 不再绿（绿留给业务正向信号） */
 const statusBadge = (s: string) =>
-  s === 'completed' || s === 'succeeded'
-    ? 'mk-badge--ok'
-    : s === 'failed' || s === 'timeout' || s === 'discarded' || s === 'finalization_failed'
-      ? 'mk-badge--bad'
-      : s === 'superseded'
-        ? 'mk-badge--warn'
-        : s === 'initializing'
-          ? 'mk-badge--muted'
-          : s === 'finalizing'
-            ? 'mk-badge--info'
-            : 'mk-badge--info'
+  s === 'failed' || s === 'timeout' || s === 'discarded' || s === 'finalization_failed'
+    ? 'mk-badge--bad'
+    : s === 'superseded'
+      ? 'mk-badge--warn'
+      : 'mk-badge--muted'
 const attentionBadge = (a: string) => (a === 'high' ? 'mk-badge--bad' : a === 'medium' ? 'mk-badge--warn' : 'mk-badge--ok')
 /* 建议徽章带优先级色（T3）：high=bad / medium=warn / 其余 info */
 const advisoryBadge = (p?: string) => (p === 'high' ? 'mk-badge--bad' : p === 'medium' ? 'mk-badge--warn' : 'mk-badge--info')
@@ -653,7 +673,15 @@ function progressTitle(r: Row): string {
 <style scoped>
 /* 页头合并（替代独立状态条）：共 N 条 + 刷新按钮，与概览结论同行 */
 .ts-head-meta { font-size: 12.5px; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ts-row { cursor: pointer; }
+.ts-row { cursor: pointer; position: relative; }
+/* 关注度行首色条（P0-5）：高关注红 / 中关注琥珀 / 低关注透明——扫视被红色拉住 */
+.ts-row--att-high { box-shadow: inset 3px 0 0 var(--mk-red); }
+.ts-row--att-medium { box-shadow: inset 3px 0 0 var(--mk-amber); }
+/* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
+.ts-att { font-size: 11.5px; font-weight: 700; color: var(--mk-faint); white-space: nowrap; }
+.ts-att--high { color: var(--mk-red); }
+.ts-att--medium { color: var(--mk-amber); }
+.ts-att--low { color: var(--mk-faint); }
 /* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
 .ts-tags { display: flex; gap: 6px; margin-top: 2px; }
 .ts-tag {

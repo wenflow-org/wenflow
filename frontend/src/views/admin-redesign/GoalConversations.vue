@@ -26,8 +26,25 @@
       </template>
       <template #kpis>
         <MkKpi label="总对话" :value="stats.total" hint="真实用户口径" :title="'窗口内目标对话总数'" />
-        <MkKpi label="进行中" :value="stats.active" :tone="stats.active > 0 ? 'ok' : ''" hint="正在收集目标" :title="'进行中（待澄清或澄清中）的对话数'" />
-        <MkKpi label="已完成" :value="stats.completed" hint="已产出学习目标" :title="'已完成澄清的对话数'" />
+        <MkKpi
+          label="进行中"
+          :value="stats.active"
+          :tone="stats.active > 0 ? 'ok' : ''"
+          hint="正在收集目标"
+          :title="'进行中（待澄清或澄清中）的对话数 · 点击筛选'"
+          clickable
+          :class="{ 'mk-kpi--linked-on': statusFilter === 'active' }"
+          @click="statusFilter = statusFilter === 'active' ? '' : 'active'"
+        />
+        <MkKpi
+          label="已完成"
+          :value="stats.completed"
+          hint="已产出学习目标"
+          :title="'已完成澄清的对话数 · 点击筛选'"
+          clickable
+          :class="{ 'mk-kpi--linked-on': statusFilter === 'completed' }"
+          @click="statusFilter = statusFilter === 'completed' ? '' : 'completed'"
+        />
         <MkKpi label="完成率" :value="`${stats.completionRate}%`" :hint="`待澄清 ${stackOther} 条`" :title="'完成率 = 已完成 / 总对话'" />
       </template>
       <template #detail>

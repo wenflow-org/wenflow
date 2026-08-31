@@ -5,8 +5,20 @@
       <strong class="mk-status__title">学习者中心</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ rows.length }} 位学习者</span>
-      <span class="mk-status__meta">需关注 {{ riskCount }}</span>
-      <span class="mk-status__meta">低置信 {{ lowConfCount }}</span>
+      <button
+        type="button"
+        class="lc-count-link"
+        :class="{ 'lc-count-link--on': pill === 'risk' }"
+        :title="'点击筛选「需关注」学习者（趋势下降 / 疲劳中高 / 有风险）'"
+        @click="pill = pill === 'risk' ? 'all' : 'risk'"
+      >需关注 {{ riskCount }}</button>
+      <button
+        type="button"
+        class="lc-count-link"
+        :class="{ 'lc-count-link--on': pill === 'stale' }"
+        :title="'点击筛选「低置信」学习者（快照置信度低于 50%）'"
+        @click="pill = pill === 'stale' ? 'all' : 'stale'"
+      >低置信 {{ lowConfCount }}</button>
       <button type="button" class="mk-status__action" :disabled="recomputingAll || !rows.length" @click="recomputeAll">
         {{ recomputingAll ? `重算中 ${recomputeProgress}/${rows.length}…` : '全部重算' }}
       </button>
@@ -87,7 +99,17 @@
                 <span class="mk-cell-sub">{{ r.path || '尚未开始学习' }}</span>
               </div>
             </td>
-            <td><span class="trend" :class="`trend--${r.trend}`">{{ trendText(r.trend) }}</span></td>
+            <td>
+              <span class="lc-trend" :class="`lc-trend--${r.trend}`" :title="trendTitle(r)">
+                <i class="lc-trend__arrow" aria-hidden="true">{{ r.trend === 'up' ? '↗' : r.trend === 'down' ? '↘' : '→' }}</i>
+                <span class="lc-trend__bars" aria-hidden="true">
+                  <i class="lc-trend__bar lc-trend__bar--1"></i>
+                  <i class="lc-trend__bar lc-trend__bar--2"></i>
+                  <i class="lc-trend__bar lc-trend__bar--3"></i>
+                </span>
+                {{ trendText(r.trend) }}
+              </span>
+            </td>
             <td><span class="mk-badge" :class="fatigueBadge(r.fatigue)">{{ r.fatigue }}</span></td>
             <td class="mk-num">
               <span
@@ -343,6 +365,8 @@ watch(filtered, () => {
 })
 
 const trendText = (t: string) => (t === 'up' ? '↗ 上升' : t === 'down' ? '↘ 下降' : '→ 稳定')
+const trendTitle = (r: Row) =>
+  `近况趋势：${trendText(r.trend)}${r.trend === 'down' ? '（需关注）' : r.trend === 'up' ? '（学习状态向好）' : '（状态平稳）'}。趋势基于近期学习表现，详细曲线见详情页`
 const fatigueBadge = (f: string) => (f === '高' ? 'mk-badge--bad' : f === '中' ? 'mk-badge--warn' : 'mk-badge--ok')
 
 /* 重算 */
@@ -424,10 +448,38 @@ async function recomputeAll() {
 
 <style scoped>
 .lc-row { cursor: pointer; }
+/* 页头计数锚点（P0-3）：需关注/低置信可点击筛选 */
+.lc-count-link {
+  border: 0; background: transparent; padding: 0;
+  font: inherit; font-size: 12.5px; font-weight: 700;
+  color: var(--mk-muted); cursor: pointer;
+  border-radius: 6px;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.lc-count-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); padding: 2px 6px; margin: -2px -6px; }
+.lc-count-link--on { color: var(--mk-blue); background: rgba(44, 99, 208, 0.12); padding: 2px 6px; margin: -2px -6px; }
+/* 趋势列（P0-1 信号可视化）：箭头 + 迷你条 + 文字（无历史序列时的三态可视化；
+   lssHistory 暴露后可升级真 sparkline） */
 .trend { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .trend--up { color: var(--mk-green); }
 .trend--down { color: var(--mk-red); }
 .trend--flat { color: var(--mk-muted); }
+.lc-trend { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: 12px; color: var(--mk-muted); white-space: nowrap; cursor: help; }
+.lc-trend--up { color: var(--mk-green); }
+.lc-trend--down { color: var(--mk-red); }
+.lc-trend--flat { color: var(--mk-muted); }
+.lc-trend__arrow { font-style: normal; }
+.lc-trend__bars { display: inline-flex; align-items: flex-end; gap: 1.5px; height: 12px; }
+.lc-trend__bar { width: 3px; border-radius: 1px; background: currentColor; opacity: 0.55; }
+.lc-trend__bar--1 { height: 5px; }
+.lc-trend__bar--2 { height: 8px; }
+.lc-trend__bar--3 { height: 11px; }
+.lc-trend--up .lc-trend__bar--1 { height: 11px; opacity: 0.85; }
+.lc-trend--up .lc-trend__bar--2 { height: 8px; }
+.lc-trend--up .lc-trend__bar--3 { height: 5px; opacity: 0.4; }
+.lc-trend--down .lc-trend__bar--1 { height: 5px; opacity: 0.4; }
+.lc-trend--down .lc-trend__bar--2 { height: 8px; }
+.lc-trend--down .lc-trend__bar--3 { height: 11px; opacity: 0.85; }
 .progress-title { font-weight: 600; }
 .risk-text { color: var(--mk-amber); font-size: 12.5px; }
 .conf { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-muted); cursor: help; }
