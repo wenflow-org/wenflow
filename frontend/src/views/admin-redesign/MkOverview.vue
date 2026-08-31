@@ -5,6 +5,8 @@
       <strong class="mk-overview__title">{{ title }}</strong>
       <span v-if="subline" class="mk-overview__sub">{{ subline }}</span>
       <span v-if="window" class="mk-overview__window">{{ window }}</span>
+      <!-- 右侧操作区（如刷新按钮）：与结论同行，替代独立状态条 -->
+      <span v-if="$slots.action" class="mk-overview__action"><slot name="action" /></span>
     </header>
     <!-- 可选前置区（如目标对话的状态堆叠条） -->
     <slot name="pre" />
@@ -59,6 +61,8 @@ html[data-theme='dark'] .mk-overview { background: #141c2b; }
 .mk-overview__title { font-size: var(--mk-fs-15); font-weight: 800; color: var(--mk-ink); }
 .mk-overview__sub { font-size: var(--mk-fs-12_5); color: var(--mk-muted); }
 .mk-overview__window { margin-left: auto; font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-faint); letter-spacing: 0.03em; white-space: nowrap; }
+.mk-overview__action { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.mk-overview__action:empty { display: none; }
 .mk-overview__kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

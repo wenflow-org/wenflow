@@ -1,17 +1,13 @@
 <template>
   <div class="mk-page mk-page--fill">
-    <div class="mk-status" :class="statusTone">
-      <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ statusTitle }}</strong>
-      <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">共 {{ rows.length }} 条</span>
-      <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshNow">
-        {{ refreshing ? '刷新中…' : '刷新' }}
-      </button>
-    </div>
-
-    <!-- 教学概览（共享组件 MkOverview） -->
+    <!-- 教学概览（共享组件 MkOverview；结论 + 刷新合并为一行页头，替代独立状态条） -->
     <MkOverview :tone="tsDashTone" :title="tsDashTitle" :subline="tsDashSubline" :window="`最近 ${rows.length} 条会话`" :has-data="tsDashHasData">
+      <template #action>
+        <span class="ts-head-meta">共 {{ rows.length }} 条</span>
+        <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshNow">
+          {{ refreshing ? '刷新中…' : '刷新' }}
+        </button>
+      </template>
       <template #kpis>
         <MkKpi label="会话" :value="rows.length" hint="最近加载范围" :title="'当前加载范围内的会话总数（最近 100 条）'" />
         <MkKpi label="进行中" :value="inProgressCount" hint="当前活动会话" :title="'进行中（active）的会话数'" />
@@ -554,11 +550,6 @@ const tsDashSubline = computed(() => {
   return `${inProgressCount.value} 个进行中 · 会话产物完整`
 })
 
-const statusTone = computed(() => (!rows.value.length ? 'mk-status--muted' : attentionCount.value ? 'mk-status--warn' : 'mk-status--ok'))
-const statusTitle = computed(() =>
-  !rows.value.length ? '暂无教学会话' : '教学会话'
-)
-
 /* 详情 — URL 同步 ?session=id 支持深链/刷新恢复 */
 const detail = ref<Row | null>(null)
 const route = useRoute()
@@ -660,6 +651,8 @@ function progressTitle(r: Row): string {
 </script>
 
 <style scoped>
+/* 页头合并（替代独立状态条）：共 N 条 + 刷新按钮，与概览结论同行 */
+.ts-head-meta { font-size: 12.5px; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ts-row { cursor: pointer; }
 /* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
 .ts-tags { display: flex; gap: 6px; margin-top: 2px; }
