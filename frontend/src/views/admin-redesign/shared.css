@@ -150,15 +150,33 @@
 
 /* 全局紧凑档（D3 表格增强）：html[data-density='compact'] 一键收紧全站表格。
    纯 CSS 实现（无需逐页改），与 .mk-table--dense 语义等价但全局生效；
-   切换按钮在 Shell 顶栏（localStorage 持久化，见 Shell.vue）。 */
+   切换按钮在 Shell 顶栏（localStorage 持久化，见 Shell.vue）。
+   覆盖：表格行高/字号 + 卡片/状态条/分页器 + 页面间距/KPI（无表格页也有体感）。 */
 html[data-density='compact'] .mk-table th { padding: 5px 10px; }
 html[data-density='compact'] .mk-table td { padding: 5px 10px; }
 html[data-density='compact'] .mk-table--dense th,
 html[data-density='compact'] .mk-table--dense td { padding: 4px 9px; }
 html[data-density='compact'] .mk-table td { font-size: 12px; }
 html[data-density='compact'] .mk-status { padding: 5px 10px; }
+html[data-density='compact'] .mk-status__title { font-size: 14px; }
+html[data-density='compact'] .mk-status__meta { font-size: 12px; }
+html[data-density='compact'] .mk-status__action { font-size: 12px; padding: 4px 10px; }
 html[data-density='compact'] .mk-card__head { padding: 6px 10px; }
+html[data-density='compact'] .mk-card__title { font-size: 13.5px; }
 html[data-density='compact'] .mk-pagination { padding: 6px 10px 8px; }
+/* 无表格页体感：页面间距 + KPI 卡片 + 徽章 + 筛选器 */
+html[data-density='compact'] .mk-page { padding: 12px 14px 18px; gap: 10px; }
+html[data-density='compact'] .mk-kpi { padding: 9px 12px; }
+html[data-density='compact'] .mk-kpi__num { font-size: 18px; }
+html[data-density='compact'] .mk-kpi__label { font-size: 11.5px; }
+html[data-density='compact'] .mk-kpi__hint { font-size: 11.5px; }
+html[data-density='compact'] .mk-badge { font-size: 11px; padding: 1px 7px; }
+html[data-density='compact'] .mk-pill { font-size: 12px; padding: 4px 11px; }
+html[data-density='compact'] .mk-filter__input,
+html[data-density='compact'] .mk-filter__select { font-size: 12px; padding: 6px 10px; height: 31px; }
+html[data-density='compact'] .mk-btn--sm { font-size: 11.5px; padding: 4px 10px; }
+html[data-density='compact'] .mk-cell-sub { font-size: 11px; }
+html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 
 /* 行内 ⋯ 菜单：低频/危险操作收进菜单，避免与高频操作平铺 */
 .mk-menu { position: relative; display: inline-flex; }
