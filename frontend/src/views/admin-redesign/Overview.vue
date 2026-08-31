@@ -169,10 +169,9 @@
             <span class="wq__label">表现分析</span>
             <div class="wq__bars">
               <i class="wq__bar wq__bar--ok" :style="{ width: pct(data.wrapup.evaluationModel, data.wrapup.sampleSize) }"></i>
-              <i class="wq__bar wq__bar--blue" :style="{ width: pct(data.wrapup.evaluationAiFallback, data.wrapup.sampleSize) }"></i>
               <i class="wq__bar wq__bar--bad" :style="{ width: pct(data.wrapup.evaluationFailed, data.wrapup.sampleSize) }"></i>
             </div>
-            <span class="wq__nums">{{ data.wrapup.evaluationModel }} 模型 / {{ data.wrapup.evaluationAiFallback }} AI 兜底 / {{ data.wrapup.evaluationFailed }} 失败</span>
+            <span class="wq__nums">{{ data.wrapup.evaluationModel }} 模型 / {{ data.wrapup.evaluationFailed }} 失败</span>
           </div>
           <p class="wq__note">样本 {{ data.wrapup.sampleSize }} 次</p>
         </div>

@@ -1019,24 +1019,18 @@ async function computeOverviewStats(): Promise<unknown> {
       if (!log.output) continue;
       try {
         const parsed = JSON.parse(log.output);
-        // 兼容两种 schema：
-        // 旧 schema：parsed.sources.summary/evaluation 显式标记 model/fallback/failed
-        // 新 schema（agent-output-v1）：无 sources 字段，用 success + metadata.agentType
-        //   + 内部降级标记（runtimeEnvelope.businessState.degraded）推断来源
-        const summarySource = parsed?.sources?.summary || parsed?.summarySource;
-        const evaluationSource = parsed?.sources?.evaluation || parsed?.evaluationSource;
-        const degraded = !!(parsed?.runtimeEnvelope?.businessState as any)?.degraded
-          || !!(parsed?.runtimeEnvelope as any)?.degraded
-          || (parsed?.internal as any)?.degraded === true;
+        // 仅接受 agent-output-v1（当前唯一 schema；历史上不存在旧格式输出，
+        // sources/summarySource 等顶层字段从未被序列化过，见 git 7b2d58e）
+        if (parsed?.schemaVersion !== 'agent-output-v1') continue;
         const ok = parsed?.success !== false;
         wrapupSourceStats.sampleSize += 1;
-        // 总结来源：显式标记优先；新 schema 下成功即 model（output 有完整内容 = 模型产出）
-        if (summarySource === 'model' || (!summarySource && ok)) wrapupSourceStats.summaryModel += 1;
-        else if (summarySource === 'fallback' || degraded) wrapupSourceStats.summaryFallback += 1;
-        // 评估来源：显式标记优先；新 schema 下失败/降级计入 failed，否则 model
-        if (evaluationSource === 'model' || (!evaluationSource && ok && !degraded)) wrapupSourceStats.evaluationModel += 1;
-        else if (evaluationSource === 'ai-fallback' || (!evaluationSource && ok && degraded)) wrapupSourceStats.evaluationAiFallback += 1;
-        else if (evaluationSource === 'failed' || evaluationSource === 'unavailable' || !ok) wrapupSourceStats.evaluationFailed += 1;
+        // 总结来源：success=true（handler 在 model 路径置 true，否则 false）= 模型产出
+        if (ok) wrapupSourceStats.summaryModel += 1;
+        else wrapupSourceStats.summaryFallback += 1;
+        // 评估来源：success=true = model；失败/不可用 = failed。
+        // ai-fallback 已退役（8fe993d），不再产出，evaluationAiFallback 恒 0
+        if (ok) wrapupSourceStats.evaluationModel += 1;
+        else wrapupSourceStats.evaluationFailed += 1;
       } catch {
         continue;
       }
