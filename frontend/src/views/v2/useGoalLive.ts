@@ -42,6 +42,8 @@ const MSG_KEY = 'v2_goal_msgs';
  * 避免在途 final 把已清空的 conversationId/messages/localStorage 写回。
  */
 let generation = 0;
+/** 当前在途流式请求的 AbortController（stop() 中止生成用） */
+let currentAbort: AbortController | null = null;
 
 const INVALID_PATTERN = /待确认|待收集|未知|尚未|不确定|暂无|没有发现|未提供|n\/?a/i;
 
@@ -90,6 +92,8 @@ function formatMsgTime(raw?: string): string {
 
 const conversationId = ref('');
 const messages = ref<LiveMessage[]>([]);
+/** 流式渐进渲染：SSE delta 累积的原始模型文本（goal skill 为 JSON 输出，final 到达前展示此文本；到达后以官方消息为准） */
+const streamingText = ref('');
 let messageSeq = 0;
 const pushMessage = (m: LiveMessage): LiveMessage => {
   const withId: LiveMessage = { ...m, id: m.id ?? `m_${Date.now().toString(36)}_${++messageSeq}` };
@@ -166,6 +170,8 @@ const proposal = computed(() => {
 function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string; replaceMessages?: boolean } = {}, gen = generation) {
   // 会话代次不一致：会话已被重置，丢弃过期响应
   if (gen !== generation) return;
+  // final 到达：流式气泡完成，以官方消息为准
+  streamingText.value = '';
   const core = env.internal?.core;
   const ext = env.internal?.ext?.goalConversation;
 
@@ -221,19 +227,25 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
   sending.value = true;
   failed.value = '';
   lastPayload.value = text;
-  // goal skill 为 JSON 输出（无 delta），期间由 typing 指示器呈现等待态；
-  // final 到达后由 applyEnvelope 一次性合并消息，无需占位气泡。
+  // 流式渐进渲染：SSE delta 累积实时上屏；goal skill 为 JSON 输出（无结构化 delta），
+  // 展示原始模型文本作为「正在思考」的可见反馈，final 到达后以官方消息为准替换。
+  streamingText.value = '';
+  const onDelta = (t: string) => {
+    if (gen === generation) streamingText.value += t;
+  };
+  const abort = new AbortController();
+  currentAbort = abort;
   try {
     let env: GoalConversationEnvelope | null = null;
     try {
       if (action === 'start') {
-        env = await streamStartGoalConversation(text, { meta });
+        env = await streamStartGoalConversation(text, { meta }, { onDelta, signal: abort.signal });
       } else if (action === 'confirm') {
-        env = await streamReplyGoalConversation(conversationId.value, text, { confirmProposal: true });
+        env = await streamReplyGoalConversation(conversationId.value, text, { confirmProposal: true }, { onDelta, signal: abort.signal });
       } else if (action === 'supplement') {
-        env = await streamRegenerateGoalConversation(conversationId.value, text);
+        env = await streamRegenerateGoalConversation(conversationId.value, text, { onDelta, signal: abort.signal });
       } else {
-        env = await streamReplyGoalConversation(conversationId.value, text, { meta });
+        env = await streamReplyGoalConversation(conversationId.value, text, { meta }, { onDelta, signal: abort.signal });
       }
     } catch (streamError) {
       const e = streamError as { cancelled?: boolean; transport?: boolean; recoveryEnvelope?: GoalConversationEnvelope };
@@ -278,8 +290,18 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
     throw e;
   } finally {
     // 仅当前代次负责收尾 sending，避免过期 run 的 finally 打断新会话的进行中状态
-    if (gen === generation) sending.value = false;
+    if (gen === generation) {
+      sending.value = false;
+      streamingText.value = '';
+    }
+    if (currentAbort === abort) currentAbort = null;
   }
+}
+
+/** 中止当前流式生成：SSE 连接断开，已流出的部分保留在 streamingText（可继续/重试） */
+function stop() {
+  currentAbort?.abort();
+  currentAbort = null;
 }
 
 async function send(text: string) {
@@ -357,7 +379,10 @@ function hasSession(): boolean {
 function reset(clearStorage = true) {
   // 自增代次：作废所有在途请求的响应，防止其把已清空的状态写回
   generation += 1;
+  currentAbort?.abort();
+  currentAbort = null;
   sending.value = false;
+  streamingText.value = '';
   conversationId.value = '';
   messages.value = [];
   stage.value = '';
@@ -402,6 +427,7 @@ export function useGoalLive() {
     proposal,
     learningPath,
     sending,
+    streamingText,
     failed,
     started,
     quickReplyHintShown,
@@ -414,6 +440,7 @@ export function useGoalLive() {
     resumeById,
     hasSession,
     reset,
-    resetView
+    resetView,
+    stop
   });
 }

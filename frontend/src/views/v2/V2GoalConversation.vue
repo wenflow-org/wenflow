@@ -137,8 +137,17 @@
             </div>
             <div v-else class="msg msg--ai">
               <span class="msg__avatar"><img src="/favicon.png" alt="问流" /></span>
-              <div class="msg__content">
-                <div class="msg__bubble msg__bubble--html" v-html="formatMessage(km.msg.content)"></div>
+              <div class="msg__content msg__content--actions"
+                @mouseenter="onBubbleEnter(km.key)"
+                @mouseleave="onBubbleLeave"
+              >
+                <div class="msg__bubble msg__bubble--html msg__bubble--relative" v-html="formatMessage(km.msg.content)"></div>
+                <MessageActions
+                  :show="hoveredMsgId === km.key"
+                  :streaming="live.sending"
+                  @regenerate="regenerateMessage(km.msg)"
+                  @copy="copyMessage(km.msg.content)"
+                />
                 <div class="msg__meta">
                   问流 · {{ km.msg.time }}
                   <button v-if="km.msg.failed" type="button" class="msg__retry" @click="doRetry">重试</button>
@@ -147,10 +156,20 @@
             </div>
           </template>
 
-          <!-- typing -->
-          <div v-if="live.sending" class="msg msg--ai">
+          <!-- typing：等待首个 delta 期间 -->
+          <div v-if="live.sending && !live.streamingText" class="msg msg--ai">
             <span class="msg__avatar"><img src="/favicon.png" alt="问流" /></span>
             <div class="msg__bubble msg__bubble--typing"><i></i><i></i><i></i></div>
+          </div>
+
+          <!-- 流式渐进渲染：SSE delta 实时累积（goal skill 为 JSON 输出，展示原始模型文本；
+               final 到达后由官方消息替换，避免双泡；方案浮层打开时不重复展示，浮层内已有流式进度） -->
+          <div v-if="live.sending && live.streamingText && !showProposal" class="msg msg--ai">
+            <span class="msg__avatar"><img src="/favicon.png" alt="问流" /></span>
+            <div class="msg__content msg__content--actions">
+              <div class="msg__bubble msg__bubble--html msg__bubble--streaming" v-html="formatMessage(live.streamingText)"></div>
+              <div class="msg__meta">问流 · 正在生成…</div>
+            </div>
           </div>
 
           <!-- 快捷补充选项面板（skill 每轮返回） -->
@@ -178,6 +197,16 @@
         <!-- 输入区 -->
         <div class="composer">
           <label class="visually-hidden" for="goal-chat-input">回答上面的问题，或补充你的基础、时间和限制</label>
+          <!-- 停止生成：流式期间显式中止（已流出的部分保留） -->
+          <button
+            v-if="live.sending"
+            type="button"
+            class="composer__stop"
+            @click="live.stop()"
+          >
+            <svg viewBox="0 0 24 24" width="12" height="12"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
+            停止生成
+          </button>
           <div class="composer__box" :class="{ 'composer__box--active': input.trim() }">
             <textarea
               id="goal-chat-input"
@@ -268,7 +297,16 @@
             <h2 class="proposal__title">正在生成你的路径…</h2>
             <p class="proposal__generating-note">根据 {{ live.filledCount }} 条已确认信息拆解阶段，一般 30 秒内完成。</p>
             <div class="skeleton"><i style="width: 82%"></i><i style="width: 64%"></i><i style="width: 74%"></i></div>
+            <!-- 流式进度：模型输出实时可见（原始思考文本），生成不再是无反馈等待 -->
+            <div v-if="live.streamingText" class="proposal__stream">
+              <span class="proposal__stream-label">实时生成中</span>
+              <p class="proposal__stream-text">{{ live.streamingText }}</p>
+            </div>
             <div class="proposal__note">可以离开本页，生成进度会保留。</div>
+            <button type="button" class="proposal__stop" @click="live.stop()">
+              <svg viewBox="0 0 24 24" width="12" height="12"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
+              停止生成
+            </button>
           </div>
 
           <!-- 生成成功 -->
@@ -300,19 +338,25 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useGoalLive } from './useGoalLive';
+import { useGoalLive, type LiveMessage } from './useGoalLive';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
+import MessageActions from '@/components/chat/MessageActions.vue';
 import { hasUserSession } from '@/utils/api';
+import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
 import { renderAiMessageHtml } from '@/utils/sanitize';
+import { toast } from '@/utils/toast';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
-import './v2.css';
 
 const route = useRoute();
 const router = useRouter();
 const live = useGoalLive();
 const loggedIn = hasUserSession();
+
+/* ---------- 键盘快捷键 ---------- */
+/* Escape 已在 onProposalKey 中处理方案浮层关闭；
+   此处预留扩展位：后续 live 支持 cancel() 时可加 Escape 中止生成 */
 
 // 稳定 key 渲染消息列表（失败气泡移除/追加时避免 DOM 复用错乱）
 const keyedMessages = computed(() =>
@@ -394,6 +438,34 @@ const supplementMode = ref(false);
 const supplementText = ref('');
 const confirmError = ref(false);
 
+/* ---------- 消息操作 ---------- */
+const hoveredMsgId = ref<string | null>(null);
+function onBubbleEnter(id: string) { hoveredMsgId.value = id; }
+function onBubbleLeave() { hoveredMsgId.value = null; }
+
+async function copyMessage(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success('已复制到剪贴板');
+  } catch { toast.error('复制失败'); }
+}
+
+async function regenerateMessage(msg: LiveMessage) {
+  if (live.sending) return;
+  // Find the user message preceding this AI message
+  const idx = live.messages.indexOf(msg);
+  let lastUser = '';
+  for (let i = idx - 1; i >= 0; i--) {
+    if (live.messages[i].role === 'user') { lastUser = live.messages[i].content; break; }
+  }
+  if (!lastUser) { toast.info('找不到对应的问题'); return; }
+  // Remove the current AI message and re-send
+  live.messages.splice(idx, 1);
+  try {
+    await live.send(lastUser);
+  } catch { /* handled by live.failed */ }
+}
+
 const formatMessage = (text: string) => renderAiMessageHtml(text);
 
 const stageLabel = computed(() => {
@@ -428,6 +500,13 @@ async function scrollToBottom() {
 
 watch(() => live.messages.length, scrollToBottom);
 watch(() => live.sending, scrollToBottom);
+// 流式渐进渲染：delta 累积时持续贴底（仅近底时跟随，避免打断上翻阅读）
+watch(() => live.streamingText, () => {
+  if (!live.sending || !scrollEl.value) return;
+  const el = scrollEl.value;
+  const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  if (nearBottom) void scrollToBottom();
+});
 
 // 快捷回复提示只展示一次：首次出现快捷回复时置位
 watch(
@@ -796,6 +875,19 @@ function shuffleScenes() {
   box-shadow: 0 6px 20px rgba(23, 32, 51, 0.06);
 }
 .composer__box--active { border-color: rgba(52, 120, 246, 0.4); }
+.composer__stop {
+  justify-self: end;
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 12px; font-weight: 700;
+  color: var(--blue-deep);
+  background: rgba(52, 120, 246, 0.08);
+  border: 1px solid rgba(52, 120, 246, 0.35);
+  border-radius: 999px;
+  padding: 6px 13px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.composer__stop:hover { background: rgba(52, 120, 246, 0.14); }
 .composer__textarea {
   flex: 1;
   border: 0; outline: none; resize: none;
@@ -866,7 +958,7 @@ function shuffleScenes() {
   border: 1px solid transparent;
   transition: background .15s ease;
 }
-.field--done:hover { background: #f6f9ff; }
+.field--done:hover { background: color-mix(in srgb, var(--surface) 96%, var(--ink)); }
 .field__mark {
   width: 18px; height: 18px; border-radius: 50%;
   margin-top: 2px;
@@ -983,7 +1075,7 @@ function shuffleScenes() {
   padding: 11px 15px;
   font-size: 14px; line-height: 1.65;
   border-radius: 4px 16px 16px 16px;
-  background: #f2f6fc; color: var(--ink);
+  background: var(--bubble-ai-bg, #f2f6fc); color: var(--ink);
 }
 .msg--ai { flex-direction: row; align-items: flex-start; gap: 10px; max-width: 92%; }
 .msg--ai .msg__content { display: grid; gap: 5px; min-width: 0; }
@@ -998,6 +1090,23 @@ function shuffleScenes() {
   padding: 1px 6px; border-radius: 6px;
   font-size: 12.5px;
 }
+/* 流式渐进渲染气泡：末尾光标提示仍在生成 */
+.msg__bubble--streaming::after {
+  content: '';
+  display: inline-block;
+  width: 2px; height: 1em;
+  margin-left: 3px;
+  vertical-align: -0.15em;
+  background: var(--blue-deep);
+  animation: goal-stream-caret 0.9s steps(2, start) infinite;
+}
+@keyframes goal-stream-caret {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+/* MessageActions 定位容器 */
+.msg__bubble--relative { position: relative; }
+.msg__content--actions { position: relative; }
 .msg__bubble--typing { display: inline-flex; gap: 5px; align-items: center; padding: 14px 16px; }
 .msg__bubble--typing i {
   width: 7px; height: 7px; border-radius: 50%;
@@ -1115,6 +1224,35 @@ function shuffleScenes() {
   display: grid; gap: 16px;
 }
 .proposal--center { justify-items: center; text-align: center; gap: 12px; }
+.proposal__stream {
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--blue) 8%);
+  border: 1px solid rgba(52, 120, 246, 0.2);
+  display: grid; gap: 6px;
+}
+.proposal__stream-label { font-size: 11px; font-weight: 800; color: var(--blue-deep); letter-spacing: .04em; }
+.proposal__stream-text {
+  margin: 0;
+  font-size: 12.5px; line-height: 1.7;
+  color: var(--muted);
+  max-height: 120px; overflow-y: auto;
+  white-space: pre-wrap;
+}
+.proposal__stop {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 12px; font-weight: 700;
+  color: var(--blue-deep);
+  background: rgba(52, 120, 246, 0.08);
+  border: 1px solid rgba(52, 120, 246, 0.35);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.proposal__stop:hover { background: rgba(52, 120, 246, 0.14); }
 .proposal__eyebrow { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
 .proposal__title { margin: 0; font-size: 21px; letter-spacing: -0.01em; }
 .proposal__generating-note { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.7; max-width: 44ch; }
@@ -1141,7 +1279,7 @@ function shuffleScenes() {
   padding: 12px 10px;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: #fbfcff;
+  background: var(--surface, #fbfcff);
 }
 .pstep i {
   width: 22px; height: 22px; border-radius: 8px;
@@ -1156,7 +1294,7 @@ function shuffleScenes() {
   border: 1px dashed var(--line);
   border-radius: 10px;
   padding: 9px 12px;
-  background: #fafcff;
+  background: var(--supplement-bg, #fafcff);
   text-align: left;
 }
 .proposal__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -1173,7 +1311,7 @@ function shuffleScenes() {
 .btn-primary--off { opacity: .55; cursor: default; box-shadow: none; }
 .btn-ghost {
   padding: 11px 18px; border-radius: 12px;
-  border: 1px solid var(--line); background: #fff;
+  border: 1px solid var(--line); background: var(--surface, #fff);
   font-size: 14px; font-weight: 700; color: var(--muted);
   cursor: pointer;
 }
@@ -1251,7 +1389,7 @@ function shuffleScenes() {
 <style scoped>
 /* logo 头像 */
 .msg__avatar {
-  background: #fff !important;
+  background: var(--surface, #fff) !important;
   border: 1px solid var(--line);
   box-shadow: 0 2px 6px rgba(23, 32, 51, 0.08);
 }
@@ -1269,5 +1407,79 @@ function shuffleScenes() {
   object-fit: contain;
   border-radius: 16px;
   box-shadow: 0 10px 24px rgba(23, 32, 51, 0.12);
+}
+</style>
+
+<style scoped>
+/* 暗色模式适配（scoped 确保优先级与组件样式一致） */
+:global([data-theme='dark']) .msg__bubble {
+  background: var(--bubble-ai-bg, rgba(24, 34, 48, 0.8));
+  color: var(--ink);
+}
+:global([data-theme='dark']) .msg--ai .msg__bubble b,
+:global([data-theme='dark']) .msg--ai .msg__bubble strong {
+  color: var(--blue-deep);
+}
+:global([data-theme='dark']) .proposal__row {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--line);
+}
+:global([data-theme='dark']) .proposal__skip {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--line);
+}
+:global([data-theme='dark']) .pstep {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--line);
+}
+:global([data-theme='dark']) .btn-ghost {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--muted);
+}
+:global([data-theme='dark']) .proposal__supplement-input {
+  background: rgba(246, 187, 99, 0.06);
+  border-color: rgba(246, 187, 99, 0.35);
+  color: var(--ink);
+}
+:global([data-theme='dark']) .proposal__supplement-input::placeholder {
+  color: var(--faint);
+}
+:global([data-theme='dark']) .chat__show-proposal {
+  background: rgba(77, 139, 248, 0.12);
+  color: var(--blue-deep);
+}
+:global([data-theme='dark']) .msg__avatar {
+  background: var(--surface) !important;
+  border-color: var(--line);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+:global([data-theme='dark']) .overlay {
+  background: rgba(15, 22, 32, 0.65);
+}
+:global([data-theme='dark']) .proposal {
+  border-color: rgba(77, 139, 248, 0.2);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.4);
+}
+:global([data-theme='dark']) .scene-card:hover:not(:disabled) {
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.25);
+}
+:global([data-theme='dark']) .peerdock {
+  background: var(--surface);
+  border-color: rgba(167, 139, 255, 0.18);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+}
+:global([data-theme='dark']) .peerdock__bubble {
+  background: rgba(167, 139, 255, 0.1);
+  border-color: rgba(167, 139, 255, 0.15);
+}
+:global([data-theme='dark']) .peerdock__input input {
+  background: var(--canvas);
+  border-color: var(--line);
+  color: var(--ink);
+}
+:global([data-theme='dark']) .replies-panel {
+  background: var(--surface);
+  border-color: var(--line);
 }
 </style>

@@ -159,12 +159,20 @@ export async function regenerateGoalConversation(conversationId: string, adjustm
  */
 export type GoalStreamAction = 'start' | 'reply' | 'regenerate';
 
+/** 流式回调：后端 SSE 每收到一个 delta（模型输出 token 流）时触发。
+    goal skill 为 JSON 输出，delta 为原始模型文本；最终以 final envelope 为准。 */
+export interface GoalStreamHandlers {
+  onDelta?: (text: string) => void;
+  signal?: AbortSignal;
+}
+
 async function streamGoalRequest(
   action: GoalStreamAction,
   conversationId: string | null,
   payload: { text?: string; contextMode?: GoalConversationContextMode; confirmProposal?: boolean; adjustments?: string; meta?: InteractionMeta },
-  signal?: AbortSignal
+  handlers: GoalStreamHandlers = {}
 ): Promise<GoalConversationEnvelope> {
+  const { onDelta, signal } = handlers;
   const url = action === 'start'
     ? '/goal-conversation/start'
     : `/goal-conversation/${conversationId}/${action === 'reply' ? 'reply' : 'regenerate'}`;
@@ -193,6 +201,10 @@ async function streamGoalRequest(
         if (event === 'final') {
           receivedAnything = true;
           envelope = data?.data || data || null;
+        } else if (event === 'delta') {
+          // 模型输出 token 流：实时上屏（渐进渲染），final 到达后以 envelope 为准替换
+          receivedAnything = true;
+          if (typeof data?.text === 'string') onDelta?.(data.text);
         } else if (event === 'error') {
           receivedAnything = true;
           serverError = {
@@ -232,31 +244,31 @@ async function streamGoalRequest(
 export async function streamStartGoalConversation(
   text: string,
   options: GoalConversationRequestOptions = {},
-  signal?: AbortSignal
+  handlers: GoalStreamHandlers = {}
 ): Promise<GoalConversationEnvelope> {
-  return streamGoalRequest('start', null, { text, contextMode: options.contextMode, meta: options.meta }, signal);
+  return streamGoalRequest('start', null, { text, contextMode: options.contextMode, meta: options.meta }, handlers);
 }
 
 export async function streamReplyGoalConversation(
   conversationId: string,
   text: string,
   options: GoalConversationRequestOptions = {},
-  signal?: AbortSignal
+  handlers: GoalStreamHandlers = {}
 ): Promise<GoalConversationEnvelope> {
   return streamGoalRequest('reply', conversationId, {
     text,
     contextMode: options.contextMode,
     confirmProposal: options.confirmProposal,
     meta: options.meta
-  }, signal);
+  }, handlers);
 }
 
 export async function streamRegenerateGoalConversation(
   conversationId: string,
   adjustments?: string,
-  signal?: AbortSignal
+  handlers: GoalStreamHandlers = {}
 ): Promise<GoalConversationEnvelope> {
-  return streamGoalRequest('regenerate', conversationId, { adjustments }, signal);
+  return streamGoalRequest('regenerate', conversationId, { adjustments }, handlers);
 }
 
 export async function deleteGoalConversation(conversationId: string): Promise<void> {

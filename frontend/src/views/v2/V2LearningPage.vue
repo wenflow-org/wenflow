@@ -9,6 +9,7 @@
         <small>{{ pathName }}</small>
       </div>
       <div class="learn__head-right">
+        <router-link to="/learning-state" class="learn__state-link" title="查看学习状态与节奏">学习状态</router-link>
         <span class="learn__live">{{ session ? '学习中' : '连接中' }}</span>
         <span class="learn__menu" title="更多" @click="menuOpen = !menuOpen">⋯</span>
         <Transition name="pop">
@@ -79,8 +80,17 @@
             </div>
             <div v-else class="msg msg--ai">
               <span class="msg__avatar"><img src="/favicon.png" alt="问流" /></span>
-              <div class="msg__content">
-                <div class="msg__bubble msg__bubble--html" v-html="htmlFor(m)"></div>
+              <div class="msg__content msg__content--actions"
+                @mouseenter="onBubbleEnter(m.id || '')"
+                @mouseleave="onBubbleLeave"
+              >
+                <div class="msg__bubble msg__bubble--html msg__bubble--relative" v-html="htmlFor(m)"></div>
+                <MessageActions
+                  :show="hoveredMsgId === m.id"
+                  :streaming="typing && streamingBubbleIndex === msgs.indexOf(m)"
+                  @regenerate="regenerateMessage(m)"
+                  @copy="copyMessage(m.text)"
+                />
                 <span v-if="m.confusion?.length" class="msg__chip msg__chip--confuse">捕获到卡点「{{ m.confusion.join('、') }}」· 导师会在这里多做确认</span>
                 <div class="msg__meta">
                   问流导师 · {{ m.time }}
@@ -177,6 +187,19 @@
           </div>
         </div>
 
+        <!-- 停止生成按钮 -->
+        <Transition name="typing-fade">
+          <button
+            v-if="typing"
+            type="button"
+            class="stop-btn"
+            @click="stopGeneration"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
+            停止生成
+          </button>
+        </Transition>
+
         <!-- 完成浮层 -->
         <Transition name="finish-pop">
           <div v-if="completed" class="finish">
@@ -251,11 +274,12 @@ import { useRoute, useRouter } from 'vue-router';
 import request, { API_BASE_URL } from '@/utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import AiContentNote from '@/components/AiContentNote.vue';
+import MessageActions from '@/components/chat/MessageActions.vue';
 import { toast } from '@/utils/toast';
 import { useInteractionMeta } from '@/composables/useInteractionMeta';
+import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
 import { renderAiMessageHtml } from '@/utils/sanitize';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
-import './v2.css';
 import { unwrap } from './unwrap';
 
 const route = useRoute();
@@ -263,6 +287,28 @@ const router = useRouter();
 const taskId = String(route.params.taskId || '');
 const isReviewMode = computed(() => route.query.mode === 'review');
 const interactionMeta = useInteractionMeta();
+
+/* ---------- 键盘快捷键 ---------- */
+useKeyboardShortcuts([
+  {
+    key: 'Escape',
+    handler: () => {
+      if (completed.value) return;
+      // 流式生成中：中止
+      if (typing.value && streamAbort) {
+        streamAbort.abort();
+        streamAbort = null;
+        return;
+      }
+      // 检查点可见：跳过
+      if (checkpoint.value && !checkpointSubmitting.value) {
+        skipCheckpoint();
+        return;
+      }
+    },
+    description: '停止生成 / 跳过检查点',
+  },
+]);
 
 /* ---------- 基础 ---------- */
 const taskTitle = ref('');
@@ -512,6 +558,38 @@ let checkpointCloseTimer = 0;
  */
 const streamingBubbleIndex = ref(-1);
 
+/* ---------- 消息操作 ---------- */
+const hoveredMsgId = ref<string | null>(null);
+
+function onBubbleEnter(id: string) { hoveredMsgId.value = id; }
+function onBubbleLeave() { hoveredMsgId.value = null; }
+
+async function copyMessage(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success('已复制到剪贴板');
+  } catch { toast.error('复制失败'); }
+}
+
+async function regenerateMessage(m: ChatMsg) {
+  if (typing.value || !session.value) return;
+  // Find the user message preceding this AI message
+  const idx = msgs.value.indexOf(m);
+  let lastUser = '';
+  for (let i = idx - 1; i >= 0; i--) {
+    if (msgs.value[i].role === 'user') { lastUser = msgs.value[i].text; break; }
+  }
+  if (!lastUser) { toast.info('找不到对应的问题'); return; }
+  // Remove the current AI message and re-send
+  msgs.value.splice(idx, 1);
+  await doSend(lastUser);
+}
+
+function stopGeneration() {
+  streamAbort?.abort();
+  streamAbort = null;
+}
+
 async function send(e?: unknown) {
   // IME 组合期守卫：拼音选词回车不发送
   const ke = e as KeyboardEvent | undefined;
@@ -683,7 +761,8 @@ async function submitCheckpoint() {
     checkpointPassed.value = r.passed === true;
     checkpointFeedback.value = r.feedback || (r.passed ? '回答正确' : r.hint || '再想想');
     if (r.passed || r.nextAction === 'continue') {
-      // 通过后立即锁住本次检查点（1.6s 展示窗口内不可重复提交）
+      // 通过后立即锁住本次检查点（3s 展示窗口内不可重复提交）；
+      // 延长自 1.6s：反馈需要时间阅读，避免「刚看到答对了就消失」
       checkpointSubmitting.value = true;
       // 记录 timer 并在下次提交/卸载时清理，避免前一次 timeout 清掉新反馈
       window.clearTimeout(checkpointCloseTimer);
@@ -691,7 +770,7 @@ async function submitCheckpoint() {
         checkpoint.value = null;
         checkpointFeedback.value = '';
         checkpointSubmitting.value = false;
-      }, 1600);
+      }, 3000);
     }
   } catch {
     checkpointFeedback.value = '提交失败，再试一次';
@@ -987,6 +1066,16 @@ onBeforeUnmount(() => {
   color: var(--blue-deep);
 }
 .learn__head-right { display: flex; align-items: center; gap: 10px; }
+.learn__state-link {
+  font-size: 11.5px; font-weight: 700;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 4px 11px; border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+}
+.learn__state-link:hover { color: var(--blue-deep); border-color: rgba(52, 120, 246, 0.4); background: rgba(52, 120, 246, 0.06); }
 .learn__live {
   font-size: 11px; font-weight: 800; color: var(--green);
   background: rgba(49, 177, 111, 0.1);
@@ -1197,7 +1286,7 @@ onBeforeUnmount(() => {
 .peerdock__scroll {
   overflow-y: auto; padding: 12px;
   display: grid; gap: 10px; align-content: start;
-  background: #fafbff;
+  background: var(--canvas, #fafbff);
 }
 .peerdock__msg { display: grid; gap: 3px; justify-items: start; }
 .peerdock__msg--me { justify-items: end; }
@@ -1474,7 +1563,7 @@ onBeforeUnmount(() => {
   text-align: left;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.learn__menu-item:hover { background: #f1f5fb; color: var(--ink); }
+.learn__menu-item:hover { background: color-mix(in srgb, var(--surface) 96%, var(--ink)); color: var(--ink); }
 .learn__menu-item--primary { color: var(--blue, #2c63d0); }
 .learn__menu-item--primary:hover { background: #e8effc; color: var(--blue, #2c63d0); }
 .learn__head-right { position: relative; }
@@ -1508,6 +1597,38 @@ onBeforeUnmount(() => {
 }
 .msg__bubble--html :deep(pre code) { background: transparent; color: inherit; padding: 0; }
 .replies { padding: 10px 16px 0; }
+
+/* MessageActions 定位容器 */
+.msg__content--actions { position: relative; }
+.msg__bubble--relative { position: relative; }
+
+/* 停止生成按钮 */
+.stop-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(239, 117, 120, 0.35);
+  background: rgba(239, 117, 120, 0.06);
+  color: var(--red, #c0454a);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  margin-top: 4px;
+}
+.stop-btn:hover {
+  background: rgba(239, 117, 120, 0.12);
+  border-color: rgba(239, 117, 120, 0.5);
+}
+
+.typing-fade-enter-active { transition: opacity 0.2s ease; }
+.typing-fade-leave-active { transition: opacity 0.12s ease; }
+.typing-fade-enter-from,
+.typing-fade-leave-to { opacity: 0; }
 .replies__row { display: flex; flex-wrap: wrap; gap: 8px; }
 .reply {
   display: inline-flex; align-items: center;
@@ -1571,5 +1692,53 @@ onBeforeUnmount(() => {
 }
 .learn__body--no-kp .tutor {
   max-height: calc(100vh - 120px);
+}
+</style>
+
+<style scoped>
+/* 暗色模式适配 */
+:global([data-theme='dark']) .msg__bubble {
+  background: color-mix(in srgb, var(--surface) 72%, var(--blue) 4%);
+  color: var(--ink);
+}
+:global([data-theme='dark']) .msg--ai .msg__bubble b,
+:global([data-theme='dark']) .msg--ai .msg__bubble strong {
+  color: var(--blue-deep);
+}
+:global([data-theme='dark']) .msg__bubble--html :deep(code) {
+  background: rgba(77, 139, 248, 0.15);
+  color: var(--blue-deep);
+}
+:global([data-theme='dark']) .msg__bubble--html :deep(pre) {
+  background: #0d1520;
+  color: #c8daf0;
+}
+:global([data-theme='dark']) .msg__avatar {
+  background: var(--surface) !important;
+  border-color: var(--line);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+:global([data-theme='dark']) .tutor__jump-bottom {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--muted);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+:global([data-theme='dark']) .learn__menu {
+  background: var(--surface);
+  border-color: var(--line);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+:global([data-theme='dark']) .learn__menu-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+}
+:global([data-theme='dark']) .kp-bar {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:global([data-theme='dark']) .stop-btn {
+  background: rgba(239, 117, 120, 0.1);
+  border-color: rgba(239, 117, 120, 0.3);
 }
 </style>
