@@ -151,6 +151,9 @@
       <section class="brief-card">
         <div class="brief-card__head">
           <h4 title="最近 50 次课后总结的生成质量分布">总结产出质量</h4>
+          <span v-if="wrapupModelPct != null" class="wq__pct" :class="wrapupPctTone" :title="`${data.wrapup.summaryModel}/${data.wrapup.sampleSize} 次由模型直接生成`">
+            {{ wrapupModelPct }}% 模型生成
+          </span>
           <button type="button" class="brief-card__go" @click="jump('teaching-sessions')">教学会话 →</button>
         </div>
         <div v-if="data.wrapup.sampleSize > 0 && hasWrapupStats" class="wq">
@@ -504,7 +507,7 @@ const datasets: BriefData = {
     { label: '任务', value: '342', idle: false },
     { label: '完成', value: '217', idle: false }
   ],
-  rates: ['67%', '74%', '×5.3 个/条', '63%'],
+  rates: ['67%', '74%', '×5.3', '63%'],
   pulse: pulse([2, 1, 0, 0, 1, 3, 6, 9, 14, 18, 22, 19, 16, 21, 25, 28, 24, 19, 15, 12, 8, 5, 4, 3]),
   totalCalls: 273,
   totalIssues: 0,
@@ -666,6 +669,19 @@ const hasWrapupStats = computed(() => {
   const w = data.value?.wrapup;
   if (!w) return false;
   return w.summaryModel > 0 || w.summaryFallback > 0 || w.evaluationModel > 0 || w.evaluationAiFallback > 0 || w.evaluationFailed > 0;
+});
+/** 总结质量主导百分比（P3）：模型直接生成占比；无样本时为 null */
+const wrapupModelPct = computed(() => {
+  const w = data.value?.wrapup;
+  if (!w || !w.sampleSize || w.sampleSize <= 0) return null;
+  return Math.round((w.summaryModel / w.sampleSize) * 100);
+});
+const wrapupPctTone = computed(() => {
+  const p = wrapupModelPct.value;
+  if (p == null) return '';
+  if (p >= 90) return 'wq__pct--ok';
+  if (p >= 70) return 'wq__pct--warn';
+  return 'wq__pct--bad';
 });
 const usageHasData = computed(() => {
   const u = data.value?.usage;
@@ -889,7 +905,11 @@ watch(liveLoading, (loading) => {
   font-size: 14px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
+  color: var(--mk-ink);
 }
+.brief-head--warn .brief-score strong { color: var(--mk-amber); }
+.brief-head--bad .brief-score strong { color: var(--mk-red); }
+.brief-head--muted .brief-score strong { color: var(--mk-faint); }
 .brief-score__cap {
   font-size: 9px;
   font-weight: 700;
@@ -1025,6 +1045,17 @@ watch(liveLoading, (loading) => {
 .wq__bar--bad { background: var(--mk-red); }
 .wq__nums { grid-column: 2; font-size: 11.5px; color: var(--mk-faint); }
 .wq__note { margin: 0; font-size: 12px; color: var(--mk-muted); line-height: 1.6; }
+/* P3：模型生成占比徽标（卡头，色随占比） */
+.wq__pct {
+  font-size: 11.5px; font-weight: 800; padding: 2px 9px; border-radius: 999px;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.wq__pct--ok { background: rgba(22, 163, 74, 0.12); color: #15803d; }
+.wq__pct--warn { background: rgba(245, 158, 11, 0.14); color: #b45309; }
+.wq__pct--bad { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
+html[data-theme='dark'] .wq__pct--ok { background: rgba(22, 163, 74, 0.18); color: #4ade80; }
+html[data-theme='dark'] .wq__pct--warn { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
+html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); color: #fca5a5; }
 
 /* 卡片头部统一：标题左 + 快捷跳转/时间窗 右（见板 = 状态一瞥 + 一键直达） */
 .brief-card__head {
