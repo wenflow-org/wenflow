@@ -113,7 +113,7 @@ describe('useGoalLive 流式渐进渲染', () => {
         capturedSignal = handlers.signal ?? null;
         return new Promise((_resolve, reject) => {
           capturedSignal?.addEventListener('abort', () => {
-            reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+            reject(Object.assign(new Error('aborted'), { name: 'AbortError', cancelled: true }));
           });
         });
       }
@@ -124,6 +124,7 @@ describe('useGoalLive 流式渐进渲染', () => {
       reset: () => void;
       sending: boolean;
       streamingText: string;
+      failed: string;
     };
     live.reset();
     void live.send('开始').catch(() => undefined);
@@ -132,8 +133,11 @@ describe('useGoalLive 流式渐进渲染', () => {
     live.stop();
     expect((capturedSignal as AbortSignal | null)?.aborted).toBe(true);
 
-    // abort 后 run 的 catch/finally 会异步收尾；等一帧验证 sending 复位
+    // abort 后 run 的 catch/finally 会异步收尾；等一帧验证：
+    // - sending 复位
+    // - 用户主动停止 → failed 置位（提供重试入口）
     await new Promise((r) => setTimeout(r, 20));
     expect(live.sending).toBe(false);
+    expect(live.failed).toBe('start');
   });
 });

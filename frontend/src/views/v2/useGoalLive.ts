@@ -44,6 +44,8 @@ const MSG_KEY = 'v2_goal_msgs';
 let generation = 0;
 /** 当前在途流式请求的 AbortController（stop() 中止生成用） */
 let currentAbort: AbortController | null = null;
+/** 用户主动点击「停止生成」：中止后置 failed 提供重试入口（区别于离页中止的静默） */
+let userStopped = false;
 
 const INVALID_PATTERN = /待确认|待收集|未知|尚未|不确定|暂无|没有发现|未提供|n\/?a/i;
 
@@ -230,6 +232,7 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
   // 流式渐进渲染：SSE delta 累积实时上屏；goal skill 为 JSON 输出（无结构化 delta），
   // 展示原始模型文本作为「正在思考」的可见反馈，final 到达后以官方消息为准替换。
   streamingText.value = '';
+  userStopped = false;
   const onDelta = (t: string) => {
     if (gen === generation) streamingText.value += t;
   };
@@ -249,7 +252,15 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
       }
     } catch (streamError) {
       const e = streamError as { cancelled?: boolean; transport?: boolean; recoveryEnvelope?: GoalConversationEnvelope };
-      // 离页/取消：不重发
+      // 用户主动停止：置 failed 提供重试入口（流式部分保留在 streamingText）
+      if (e.cancelled && userStopped) {
+        failed.value = action;
+        if (action !== 'start' && action !== 'supplement') {
+          pushMessage({ role: 'ai', content: '已停止生成。可以点下方「重试」继续，或直接输入新内容。', time: nowTime(), failed: true });
+        }
+        throw streamError;
+      }
+      // 离页中止：不重发也不弹重试
       if (e.cancelled) throw streamError;
       if (e.recoveryEnvelope) {
         // 422 恢复信封：模型部分产出可用，应用后视为本轮已处理
@@ -297,9 +308,9 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
     if (currentAbort === abort) currentAbort = null;
   }
 }
-
 /** 中止当前流式生成：SSE 连接断开，已流出的部分保留在 streamingText（可继续/重试） */
 function stop() {
+  userStopped = true;
   currentAbort?.abort();
   currentAbort = null;
 }
@@ -381,6 +392,7 @@ function reset(clearStorage = true) {
   generation += 1;
   currentAbort?.abort();
   currentAbort = null;
+  userStopped = false;
   sending.value = false;
   streamingText.value = '';
   conversationId.value = '';
