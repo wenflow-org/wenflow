@@ -288,6 +288,8 @@ async function pollOnce() {
 }
 
 async function refreshStatus(card: PathCard) {
+  // 手动刷新：重置断路器计数（用户主动重试应重新计数）
+  pollFailCount.value = 0;
   try {
     const lc = await learningAPI.getPathGenerationStatus(card.id);
     if (lc.phase === 'ready') {
@@ -306,6 +308,8 @@ async function refreshStatus(card: PathCard) {
 
 async function doRetry(card: PathCard) {
   if (retrying.value) return;
+  // 手动重试：重置断路器计数（用户主动重试应重新计数）
+  pollFailCount.value = 0;
   retrying.value = card.id;
   menuFor.value = '';
   try {
