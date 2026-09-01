@@ -155,7 +155,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { dataSource, intent, isLive } from './store'
+import { intent } from './store'
 import {
   liveAnnouncements,
   liveCreateAnnouncement,
@@ -188,40 +188,7 @@ interface Row {
 }
 
 
-/* demo 数据 */
-const demoRows: Row[] = [
-  {
-    id: 'an-1',
-    title: '系统维护通知',
-    body: '7 月 25 日 02:00-04:00 平台升级维护，期间学习会话可能短暂中断，请提前保存进度。',
-    severity: 'warning',
-    status: 'published',
-    publishedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
-    expiresAt: null
-  },
-  {
-    id: 'an-2',
-    title: '新功能：路径回放上线',
-    body: '学习者现在可以在详情页回看任意一节课的完整教学过程。',
-    severity: 'info',
-    status: 'published',
-    publishedAt: new Date(Date.now() - 26 * 3600000).toISOString(),
-    expiresAt: new Date(Date.now() + 5 * 24 * 3600000).toISOString()
-  },
-  {
-    id: 'an-3',
-    title: '模型供应商切换预案',
-    body: '如主模型连续失败超过阈值，将临时切换到备用供应商，响应可能变慢。',
-    severity: 'critical',
-    status: 'draft',
-    publishedAt: null,
-    expiresAt: null
-  }
-]
-
-const demoList = ref<Row[]>([])
-
-const rows = computed<Row[]>(() => (isLive.value ? liveAnnouncements.value : demoList.value))
+const rows = computed<Row[]>(() => liveAnnouncements.value)
 
 /* live 拉取失败态：liveFailures 由 store 的 loadLiveData 填充（announcements 域失败时置位） */
 const liveFailed = ref(false)
@@ -250,7 +217,7 @@ function clearFilters() {
 watch(
   liveFailures,
   () => {
-    liveFailed.value = isLive.value && !!liveFailures.value.announcements
+    liveFailed.value = !!liveFailures.value.announcements
   },
   { deep: true, immediate: true }
 )
@@ -287,14 +254,6 @@ async function retryLive() {
   }
 }
 
-watch(
-  () => dataSource.value,
-  (src) => {
-    if (src !== 'live') demoList.value = demoRows.map((r) => ({ ...r }))
-  },
-  { immediate: true }
-)
-
 /* 统计 */
 const activeCount = computed(
   () => rows.value.filter((r) => r.status === 'published' && (!r.expiresAt || new Date(r.expiresAt).getTime() > Date.now())).length
@@ -314,11 +273,7 @@ function menuRemove(r: Row) {
 async function publish(r: Row) {
   r.busy = true
   try {
-    if (isLive.value) await livePublishAnnouncement(r.id)
-    else {
-      r.status = 'published'
-      r.publishedAt = new Date().toISOString()
-    }
+    await livePublishAnnouncement(r.id)
     toast.success(`「${r.title}」已发布，用户端立即可见`)
   } catch (e) {
     toast.error(`发布失败：${errMsg(e)}`)
@@ -330,8 +285,7 @@ async function publish(r: Row) {
 async function archive(r: Row) {
   r.busy = true
   try {
-    if (isLive.value) await liveArchiveAnnouncement(r.id)
-    else r.status = 'archived'
+    await liveArchiveAnnouncement(r.id)
     toast.success(`「${r.title}」已下线`)
   } catch (e) {
     toast.error(`下线失败：${errMsg(e)}`)
@@ -349,8 +303,7 @@ async function remove(r: Row) {
   if (!ok) return
   r.busy = true
   try {
-    if (isLive.value) await liveDeleteAnnouncement(r.id)
-    else demoList.value = demoList.value.filter((x) => x.id !== r.id)
+    await liveDeleteAnnouncement(r.id)
     toast.success('公告已删除')
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
@@ -431,22 +384,12 @@ async function saveEdit() {
   if (Object.keys(errors.value).length) return
   creating.value = true
   try {
-    if (isLive.value) {
-      await liveUpdateAnnouncement(editingId.value, {
-        title: form.value.title.trim(),
-        body: form.value.body.trim(),
-        severity: form.value.severity,
-        expiresAt: toIso(form.value.expiresAt)
-      })
-    } else {
-      const r = demoList.value.find((x) => x.id === editingId.value)
-      if (r) {
-        r.title = form.value.title.trim()
-        r.body = form.value.body.trim()
-        r.severity = form.value.severity
-        r.expiresAt = toIso(form.value.expiresAt)
-      }
-    }
+    await liveUpdateAnnouncement(editingId.value, {
+      title: form.value.title.trim(),
+      body: form.value.body.trim(),
+      severity: form.value.severity,
+      expiresAt: toIso(form.value.expiresAt)
+    })
     createOpen.value = false
     toast.success('公告已保存')
   } catch (e) {
@@ -463,25 +406,13 @@ async function create() {
   if (Object.keys(errors.value).length) return
   creating.value = true
   try {
-    if (isLive.value) {
-      await liveCreateAnnouncement({
-        title: form.value.title.trim(),
-        body: form.value.body.trim(),
-        severity: form.value.severity,
-        expiresAt: toIso(form.value.expiresAt),
-        publishNow: form.value.publishNow
-      })
-    } else {
-      demoList.value.unshift({
-        id: `an-${Date.now() % 100000}`,
-        title: form.value.title.trim(),
-        body: form.value.body.trim(),
-        severity: form.value.severity,
-        status: form.value.publishNow ? 'published' : 'draft',
-        publishedAt: form.value.publishNow ? new Date().toISOString() : null,
-        expiresAt: toIso(form.value.expiresAt)
-      })
-    }
+    await liveCreateAnnouncement({
+      title: form.value.title.trim(),
+      body: form.value.body.trim(),
+      severity: form.value.severity,
+      expiresAt: toIso(form.value.expiresAt),
+      publishNow: form.value.publishNow
+    })
     createOpen.value = false
     toast.success(form.value.publishNow ? '公告已创建并发布' : '草稿已创建')
   } catch (e) {

@@ -142,12 +142,12 @@ beforeEach(() => {
   gcStatsMock.mockResolvedValue({
     data: { success: true, data: { total: 1, active: 1, completed: 0, completionRate: '0' } }
   });
-  dataSource.value = 'demo';
+  dataSource.value = 'live';
   clearPageCache(); // 清除页面级 TTL 缓存，确保每次测试都重新拉取
 });
 
 afterEach(() => {
-  dataSource.value = 'demo';
+  dataSource.value = 'live';
   liveUsers.value = [];
 });
 

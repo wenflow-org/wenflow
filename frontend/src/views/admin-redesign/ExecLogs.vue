@@ -5,7 +5,7 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">执行日志</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">{{ isLive ? `共 ${liveLogsTotal} 条` : `${filtered.length} 条` }}</span>
+      <span class="mk-status__meta">共 {{ liveLogsTotal }} 条</span>
       <span v-if="logs.length" class="mk-status__meta">失败 {{ errCount }} · 成功率 {{ successRate }}%</span>
       <span v-if="logs.length" class="mk-status__meta mono" :title="'延迟分位（仅成功日志）：P50 = 中位耗时 · P99 = 99% 请求耗时'">P50 {{ latencyP50 }} · P99 {{ latencyP99 }}</span>
       <span v-if="isFiltered" class="mk-status__filter">
@@ -13,7 +13,7 @@
         <button type="button" class="mk-status__clear" @click="clearFilter">×</button>
       </span>
       <span class="mk-status__actions">
-        <button v-if="isLive" type="button" class="mk-status__action" @click="exportJson">导出</button>
+        <button type="button" class="mk-status__action" @click="exportJson">导出</button>
       </span>
     </div>
 
@@ -31,14 +31,14 @@
           <div class="mk-pills">
             <button v-for="p in statusPills" :key="p.id" type="button" class="mk-pill" :class="{ 'mk-pill--active': statusFilter === p.id }" @click="statusFilter = statusFilter === p.id ? '' : p.id">{{ p.label }}</button>
           </div>
-          <input v-if="isLive" v-model="keyword" class="mk-filter__input" placeholder="关键词搜索" @keydown.enter="applyServerQuery" />
-          <input v-if="isLive" v-model="traceId" class="mk-filter__input" placeholder="traceId" @keydown.enter="applyServerQuery" />
+          <input v-model="keyword" class="mk-filter__input" placeholder="关键词搜索" @keydown.enter="applyServerQuery" />
+          <input v-model="traceId" class="mk-filter__input" placeholder="traceId" @keydown.enter="applyServerQuery" />
         </div>
         <!-- 右侧：错误类别 / 自动刷新 / 高级 / 列设置（对齐 Users：切换控件 + 统计） -->
         <div class="mk-card__head-right">
-          <span class="mk-card__meta" v-if="isLive && errorCategory">类别「{{ errorCategory }}」<button type="button" class="mk-link" @click="errorCategory = ''; applyServerQuery()">×</button></span>
-          <label v-if="isLive" class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
-          <span class="mk-card__meta">{{ isLive ? `第 ${liveLogsPage} / ${totalPagesOf(liveLogsTotal, liveLogsPageSize)} 页` : '' }}</span>
+          <span class="mk-card__meta" v-if="errorCategory">类别「{{ errorCategory }}」<button type="button" class="mk-link" @click="errorCategory = ''; applyServerQuery()">×</button></span>
+          <label class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
+          <span class="mk-card__meta">第 {{ liveLogsPage }} / {{ totalPagesOf(liveLogsTotal, liveLogsPageSize) }} 页</span>
           <button type="button" class="mk-link" :class="{ 'mk-link--active': advOpen }" @click="advOpen = !advOpen">高级</button>
           <div class="exec-cols">
             <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen">列</button>
@@ -57,15 +57,15 @@
           <option value="">全部节点</option>
           <option v-for="a in agentOptions" :key="a" :value="a">{{ a }}</option>
         </select>
-        <input v-if="isLive" v-model="sessionId" class="mk-filter__input" placeholder="sessionId" @keydown.enter="applyServerQuery" />
-        <select v-if="isLive" v-model="timeRange" class="mk-filter__select" @change="applyServerQuery">
+        <input v-model="sessionId" class="mk-filter__input" placeholder="sessionId" @keydown.enter="applyServerQuery" />
+        <select v-model="timeRange" class="mk-filter__select" @change="applyServerQuery">
           <option value="today">今天</option>
           <option value="yesterday">昨天</option>
           <option value="week">近 7 天</option>
           <option value="month">近 30 天</option>
           <option value="all">全部</option>
         </select>
-        <label v-if="isLive" class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
+        <label class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
       </div>
       <MockSkeletonTable v-if="(liveLoading || liveLogsLoading) && !logs.length" :cols="6" :rows="6" />
       <div v-else-if="filtered.length" class="mk-table-scroll">
@@ -103,7 +103,7 @@
                 <td v-if="!hiddenCols.has('msg')">
                   <div class="exec-cell">
                     <div class="exec-cell__line">
-                      <strong class="exec-title" :title="[log.title, !isLive && log.detail ? log.detail : ''].filter(Boolean).join(' · ')">{{ log.title }}</strong>
+                      <strong class="exec-title" :title="log.title">{{ log.title }}</strong>
                     </div>
                     <div class="exec-cell__line exec-cell__sub">
                       <span v-if="log.errorCode" class="tline__errcode mono" :title="log.errorCode">{{ errorCodeLabel(log.errorCode) ?? `[${log.errorCategory || 'err'}] ${log.errorCode}` }}</span>
@@ -130,8 +130,7 @@
                         <button v-if="log.sessionId" type="button" class="mk-link" @click.stop="openSession(log.sessionId)">按会话归组查看 →</button>
                       </span>
                     </div>
-                    <template v-if="isLive">
-                      <p v-if="detailLoading === log.id" class="tline__none"><span class="mk-spinner" aria-hidden="true"></span> 拉取日志详情中…</p>
+                    <p v-if="detailLoading === log.id" class="tline__none"><span class="mk-spinner" aria-hidden="true"></span> 拉取日志详情中…</p>
                       <template v-else-if="detailCache[log.id]">
                         <!-- 重试时间线：网关升级后的逐次尝试遥测 -->
                         <div v-if="detailCache[log.id].attempts.length" class="tline__section">
@@ -192,11 +191,6 @@
                         <p v-else-if="!detailCache[log.id].attempts.length && !detailCache[log.id].error && !detailCache[log.id].input && !detailCache[log.id].output" class="tline__none">无 payload 记录</p>
                       </template>
                       <p v-else class="tline__none">详情不可用</p>
-                    </template>
-                    <template v-else>
-                      <p v-if="log.detail" class="tline__none">{{ log.detail }}</p>
-                      <p v-else class="tline__none">无 payload 记录</p>
-                    </template>
                   </div>
                 </td>
               </tr>
@@ -204,8 +198,7 @@
           </tbody>
         </table>
       </div>
-      <Pagination v-if="isLive" v-model:page="currentPage" v-model:pageSize="currentPageSize" :total="liveLogsTotal" :loading="liveLogsLoading" />
-      <div v-else-if="demoCanMore" class="mk-list-more"><button type="button" class="mk-link" @click="demoLoadMore">加载更多</button></div>
+      <Pagination v-model:page="currentPage" v-model:pageSize="currentPageSize" :total="liveLogsTotal" :loading="liveLogsLoading" />
     </div>
 
     <div v-else class="mk-empty">
@@ -218,9 +211,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { spans, intent, openTrace, openSession, openSkillDrawer, clearInvestigation, dataSource, isLive } from './store'
+import { intent, openTrace, openSession, openSkillDrawer, clearInvestigation, dataSource } from './store'
 import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, totalPagesOf, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
-import { useLoadMore } from './useLoadMore'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
@@ -269,16 +261,13 @@ const visibleColCount = computed(() => colDefs.length - hiddenCols.value.size)
 
 /* prompt 契约维度：与执行日志同 traceId 关联（版本/漂移/tokens/JSON） */
 onMounted(() => {
-  if (!isLive.value) return
   void loadPromptIndex()
   // 首屏必须触发服务端查询：liveLogsFiltered 只有 applyServerQuery 一个写入点，
   // 不查则页面永远空列表（后端有数据也显示「暂无日志」）
   void applyServerQuery()
 })
 watch(dataSource, () => {
-  if (dataSource.value !== 'live') return
   void loadPromptIndex()
-  // demo → live 切换后同样触发首次查询
   void applyServerQuery()
 })
 function promptOf(log: { traceId: string; agent: string }): PromptMetaRow | undefined {
@@ -324,14 +313,12 @@ function currentQuery(): SpanQuery {
 }
 
 async function applyServerQuery() {
-  if (!isLive.value) return
   /* 筛选/搜索/traceId/sessionId 直达/每页条数等变化：回第 1 页（传统分页语义） */
   await reloadLiveSpans(currentQuery())
 }
 
 /** 自动刷新：保留当前页码重查（区别于筛选变化回第 1 页） */
 function refreshLivePage() {
-  if (!isLive.value) return Promise.resolve()
   return reloadLiveSpans(currentQuery(), liveLogsPage.value)
 }
 
@@ -348,11 +335,11 @@ const currentPageSize = computed({
   set: (s: number) => {
     if (s === liveLogsPageSize.value) return
     liveLogsPageSize.value = s
-    if (isLive.value) void reloadLiveSpans(currentQuery())
+    void reloadLiveSpans(currentQuery())
   }
 })
 async function goPage(p: number) {
-  if (!isLive.value || p < 1 || p === liveLogsPage.value) return
+  if (p < 1 || p === liveLogsPage.value) return
   await reloadLiveSpans(currentQuery(), p)
   /* 翻页替换列表后滚动回顶部（列表长于视口时保持位置感） */
   window.scrollTo(0, 0)
@@ -360,9 +347,9 @@ async function goPage(p: number) {
 
 /* P0 分页正确性：状态/节点过滤上移服务端（status/agentId 参数，API 已支持），
    消除「本地过滤 × 服务端分页」组合缺陷（旧实现下第 2 页整页被滤掉时，
-   「加载更多」空转无感知变化）；demo 模式仍走本地 filtered 过滤 */
+   「加载更多」空转无感知变化） */
 watch([statusFilter, agentFilter], () => {
-  if (isLive.value) void applyServerQuery()
+  void applyServerQuery()
 })
 
 /* P0 修复：错误横幅重试 */
@@ -381,15 +368,11 @@ const { start: startAutoRefresh, stop: stopAutoRefresh } = useSafePolling(
   }
 )
 watch(autoRefresh, (on) => {
-  if (on && isLive.value) {
+  if (on) {
     startAutoRefresh()
   } else {
     stopAutoRefresh()
   }
-})
-watch(isLive, (live) => {
-  if (!live) stopAutoRefresh()
-  else if (autoRefresh.value) startAutoRefresh()
 })
 
 /* 导出当前筛选结果为 JSON */
@@ -421,7 +404,7 @@ function setDetail(id: string, d: LogDetail) {
 }
 
 watch(openId, async (id) => {
-  if (!id || !isLive.value || detailCache.value[id]) return
+  if (!id || detailCache.value[id]) return
   detailLoading.value = id
   try {
     const d = await fetchLogDetail(id)
@@ -450,7 +433,7 @@ watch(
   { immediate: true }
 )
 
-const logs = computed(() => (isLive.value ? liveLogsFiltered.value : spans.value))
+const logs = computed(() => liveLogsFiltered.value)
 const agentOptions = computed(() => [...new Set(logs.value.map((s) => s.agent))].sort())
 
 const filtered = computed(() =>
@@ -461,23 +444,20 @@ const filtered = computed(() =>
   })
 )
 
-/* 长列表分批渲染：每批 30 行（仅 demo 模式，滚动修复 #5）；
-   live 模式整页替换（传统分页），不再需要「加载更多」——页码器替代 */
-const { shown: demoShown, canMore: demoCanMore, loadMore: demoLoadMore } = useLoadMore(filtered, 30)
-const shown = computed(() => (isLive.value ? filtered.value : demoShown.value))
+const shown = computed(() => filtered.value)
 
 /* 口径与 AuditLogs 一致：时间范围非默认值也计入筛选态，空态才显示「当前筛选无日志」而非「暂无日志」 */
 const isFiltered = computed(() => !!(agentFilter.value || statusFilter.value || keyword.value.trim() || traceId.value.trim() || sessionId.value.trim() || errorCategory.value || timeRange.value !== 'week'))
 /* traceId/sessionId 服务端查询未命中时的空态提示（与 TraceWaterfall 的 wf-notice「样本截断」兜底互补：
    此处是服务端精确查询的直接未命中） */
 const traceMiss = computed(() => {
-  if (!isLive.value || filtered.value.length) return ''
+  if (filtered.value.length) return ''
   if (traceId.value.trim()) return `traceId ${traceId.value.trim()}`
   if (sessionId.value.trim()) return `sessionId ${sessionId.value.trim()}`
   return ''
 })
-/* live：全量统计来自后端 stats（非 200 行样本）；demo 回退样本计算 */
-const liveStats = computed(() => (isLive.value ? liveLogStats.value : null))
+/* 全量统计来自后端 stats（非 200 行样本） */
+const liveStats = computed(() => liveLogStats.value)
 const errCount = computed(() =>
   liveStats.value ? liveStats.value.error : logs.value.filter((l) => l.status === 'err').length
 )
@@ -490,7 +470,7 @@ const successRate = computed(() => {
 })
 
 /* B3 观测深度：延迟分位（P50/P99，仅成功日志；对标 Langfuse 观测台核心指标）。
-   live 模式用后端 stats（含 latencyPercentiles 时优先），否则样本计算 */
+   用后端 stats（含 latencyPercentiles 时优先），否则样本计算 */
 const latencyP50 = computed(() => {
   const st = liveStats.value
   if (st && st.latencyPercentiles?.p50 != null) return fmtMs(st.latencyPercentiles.p50)
@@ -512,7 +492,7 @@ const statusTone = computed(() => (!logs.value.length ? 'muted' : errCount.value
 const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部' } as const
 const filterLabel = computed(() =>
   [
-    isLive.value && timeRange.value !== 'week' ? timeRangeLabels[timeRange.value] : '',
+    timeRange.value !== 'week' ? timeRangeLabels[timeRange.value] : '',
     agentFilter.value || '',
     statusFilter.value === 'err' ? '仅失败' : statusFilter.value === 'warn' ? '仅超时' : statusFilter.value === 'ok' ? '仅成功' : '',
     errorCategory.value ? `类别「${errorCategory.value}」` : '',
@@ -541,7 +521,7 @@ function clearFilter() {
   clearInvestigation()
   /* 服务端筛选下必须重查：仅清本地值不会刷新列表（traceId/sessionId 不在 watch 内，
      避免输入即查询；状态/节点变化由 watch 触发，此处兜底全清场景） */
-  if (isLive.value) void applyServerQuery()
+  void applyServerQuery()
 }
 
 const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
@@ -567,7 +547,7 @@ function fmtFull(ts?: number | null): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
-/* 类型列：demo 按 flow/call；live 按执行层（api-gateway→网关 / skill→Skill） */
+/* 类型列：按执行层（api-gateway→网关 / skill→Skill） */
 function kindText(log: { kind: 'flow' | 'call'; execLayer?: string }): string {
   if (log.kind === 'flow') return '流程'
   if (log.execLayer === 'skill') return 'Skill'

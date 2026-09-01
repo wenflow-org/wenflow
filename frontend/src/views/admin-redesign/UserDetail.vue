@@ -63,8 +63,8 @@
           </div>
         </section>
 
-        <!-- 开发视角许可（仅 live；侧栏卡，与活跃并列） -->
-        <section v-if="isLive" class="mk-card ud-grant">
+        <!-- 开发视角许可（侧栏卡，与活跃并列） -->
+        <section class="mk-card ud-grant">
           <div class="mk-card__head">
             <h3 class="mk-card__title">开发视角许可</h3>
             <span class="mk-badge" :class="grantBadgeCls">{{ grantStatusLabel }}</span>
@@ -130,7 +130,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { subPage, closeSubPage, openSubPage, userDetails, isLive } from './store'
+import { subPage, closeSubPage, openSubPage } from './store'
 import MkKpi from './MkKpi.vue'
 import { liveUsers, timeAgo, errMsg } from './live'
 import { adminUsersApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
@@ -198,7 +198,7 @@ const grantNoteLabel = computed(() => projectionGrant.value?.note?.trim() || '�
 
 async function loadGrant() {
   const id = subPage.value?.id
-  if (!id || !isLive.value) return
+  if (!id) return
   grantLoading.value = true
   grantMessage.value = ''
   try {
@@ -252,14 +252,15 @@ async function openDebugStation() {
 }
 
 watch(
-  () => [subPage.value?.id, isLive.value] as const,
-  ([id, live]) => {
+  () => subPage.value?.id,
+  () => {
     liveDetail.value = null
     projectionGrant.value = null
     grantMessage.value = ''
     detailError.value = false
     isDeleted.value = false
-    if (!id || !live) return
+    const id = subPage.value?.id
+    if (!id) return
     void loadDetail()
   },
   { immediate: true }
@@ -290,7 +291,7 @@ async function doRestore() {
 
 async function loadDetail() {
   const id = subPage.value?.id
-  if (!id || !isLive.value) return
+  if (!id) return
   liveDetail.value = null
   detailError.value = false
   void loadGrant()
@@ -349,10 +350,7 @@ async function loadDetail() {
   }
 }
 
-const d = computed<Detail | undefined>(() => {
-  if (isLive.value) return liveDetail.value || undefined
-  return userDetails.find((x) => x.id === subPage.value?.id)
-})
+const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 </script>
 
 <style scoped>

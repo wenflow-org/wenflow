@@ -2,7 +2,7 @@
  * Addons 外挂能力列冒烟（P1 视觉修复）：
  * 1. 能力列主名 + ID 均带 title 全值（截断处可读）
  * 2. 能力列首列最小宽度兜底（原 51px 截断至 1-2 字符）
- * 3. demo 模式 3 行能力全部渲染（MCP 工具调用 / 生图 / 网页搜索）
+ * 3. live 模式：后端配置 + MCP 工具列表渲染
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -30,8 +30,8 @@ vi.mock('@/api/adminApi', () => ({
   adminMcpApi: apiObject({ list: mcpListMock })
 }));
 
-async function mountDemo() {
-  dataSource.value = 'demo';
+async function mountLive() {
+  dataSource.value = 'live';
   const wrapper = mount(Addons);
   await flushPromises();
   await nextTick();
@@ -42,16 +42,38 @@ async function mountDemo() {
 beforeEach(() => {
   configsMock.mockReset();
   mcpListMock.mockReset();
-  dataSource.value = 'demo';
+  configsMock.mockResolvedValue({
+    data: {
+      data: {
+        configs: [
+          { skillId: 'mcp-tool', displayName: 'MCP 工具调用', model: 'deepseek-v4-flash' },
+          { skillId: 'text-to-image', displayName: '生图', model: 'flux' },
+          { skillId: 'web-search', displayName: '网页搜索', model: 'deepseek-v4-flash' }
+        ]
+      }
+    }
+  });
+  mcpListMock.mockResolvedValue({
+    data: {
+      data: {
+        tools: [
+          { id: 'mcp-tool', name: 'MCP 工具调用', description: '调用外部 MCP 服务', type: 'http' },
+          { id: 'text-to-image', name: '生图', description: '文生图', type: 'http' },
+          { id: 'web-search', name: '网页搜索', description: '实时搜索', type: 'search' }
+        ]
+      }
+    }
+  });
+  dataSource.value = 'live';
 });
 
 afterEach(() => {
-  dataSource.value = 'demo';
+  dataSource.value = 'live';
 });
 
 describe('Addons 外挂能力列（P1：51px 截断修复）', () => {
-  it('demo：能力列主名与 ID 均渲染完整值并带 title 全值', async () => {
-    const wrapper = await mountDemo();
+  it('live：能力列主名与 ID 均渲染完整值并带 title 全值', async () => {
+    const wrapper = await mountLive();
     const strongs = wrapper.findAll('tbody .mk-cell-main strong');
     const subs = wrapper.findAll('tbody .mk-cell-main .mk-cell-sub');
     const names = strongs.map((s) => s.text());

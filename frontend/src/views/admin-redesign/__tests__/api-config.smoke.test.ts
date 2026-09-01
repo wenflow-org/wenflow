@@ -96,8 +96,8 @@ function makeSnapshot(overrides: Partial<Record<'overall' | 'stale', string | bo
   };
 }
 
-async function mountApiConfig(live: boolean) {
-  dataSource.value = live ? 'live' : 'demo';
+async function mountApiConfig() {
+  dataSource.value = 'live';
   const wrapper = mount(ApiConfig);
   await flushPromises();
   await nextTick();
@@ -112,7 +112,7 @@ describe('ApiConfig P1 修复批', () => {
     probeCapabilitiesMock.mockReset();
     getProbeSettingsMock.mockReset();
     getReliabilityMock.mockReset();
-    dataSource.value = 'demo';
+    dataSource.value = 'live';
     liveApiConfig.value = null;
     getConfigMock.mockResolvedValue({
       data: {
@@ -135,7 +135,7 @@ describe('ApiConfig P1 修复批', () => {
 
   it('汇总角标：「5 能力 · 1 异常」（degraded 计异常）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
-    const wrapper = await mountApiConfig(true);
+    const wrapper = await mountApiConfig();
     expect(wrapper.text()).toContain('5 能力 · 1 异常');
     expect(wrapper.find('.ac-sec__title .mk-badge--warn').exists()).toBe(true);
     wrapper.unmount();
@@ -156,7 +156,7 @@ describe('ApiConfig P1 修复批', () => {
         }
       }
     });
-    const wrapper = await mountApiConfig(true);
+    const wrapper = await mountApiConfig();
     expect(wrapper.text()).toContain('5 能力 · 全部正常');
     wrapper.unmount();
   });
@@ -168,7 +168,7 @@ describe('ApiConfig P1 修复批', () => {
     // 探测挂起期间断言 stale 语义；resolve 后断言快照刷新
     let resolveProbe: (v: unknown) => void = () => {};
     probeCapabilitiesMock.mockReturnValue(new Promise((r) => { resolveProbe = r; }));
-    const wrapper = await mountApiConfig(true);
+    const wrapper = await mountApiConfig();
     expect(getCapabilitiesMock).toHaveBeenCalled();
     expect(probeCapabilitiesMock).toHaveBeenCalledTimes(1);
     // stale 语义：上次探测时间 + 已过期提示 + 探活未开启副文案 + 探测中
@@ -186,7 +186,7 @@ describe('ApiConfig P1 修复批', () => {
 
   it('脏位分域标注：连接 + 策略 分别列出', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
-    const wrapper = await mountApiConfig(true);
+    const wrapper = await mountApiConfig();
     // 修改服务地址 → 连接组
     const urlInput = wrapper.find('input[placeholder="https://api.example.com/v1"]');
     await urlInput.setValue('https://new.example.com/v1');
@@ -202,7 +202,7 @@ describe('ApiConfig P1 修复批', () => {
 
   it('状态条与能力行时间同源：均为「上次探测」且来自快照 checkedAt', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
-    const wrapper = await mountApiConfig(true);
+    const wrapper = await mountApiConfig();
     expect(wrapper.find('.mk-status').text()).toContain('上次探测');
     expect(wrapper.find('.ac-sec__sub').text()).toContain('最近探测');
     wrapper.unmount();

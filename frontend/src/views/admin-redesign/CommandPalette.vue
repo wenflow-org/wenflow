@@ -50,8 +50,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { MOCK_SCENES } from './manifest'
-import { dataSource, openTrace, queueQuickAction } from './store'
-import { loadLiveData, backToDemo } from './live'
+import { openTrace, queueQuickAction } from './store'
+import { loadLiveData } from './live'
 import { useOverlay, useMaskClose } from './useOverlay'
 
 const props = defineProps<{ open: boolean }>()
@@ -85,22 +85,11 @@ const items = computed<Item[]>(() => {
   list.push({
     key: 'action:live',
     icon: '●',
-    label: dataSource.value === 'live' ? '刷新真实数据' : '切换到真实数据',
+    label: '刷新真实数据',
     hint: '数据源',
     group: '操作',
     run: () => void loadLiveData(true)
   })
-  // 生产构建隐藏「切换到演示数据」（阶段 0 R1）：demo 仅保留为开发态离线预览
-  if (!import.meta.env.PROD) {
-    list.push({
-      key: 'action:demo',
-      icon: '○',
-      label: '切换到演示数据',
-      hint: '数据源',
-      group: '操作',
-      run: () => backToDemo()
-    })
-  }
   list.push(
     {
       key: 'action:create-user',

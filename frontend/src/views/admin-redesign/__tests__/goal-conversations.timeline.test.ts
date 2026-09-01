@@ -63,11 +63,11 @@ beforeEach(() => {
   statsMock.mockResolvedValue({
     data: { success: true, data: { total: 2, active: 1, completed: 1, completionRate: '50' } }
   });
-  dataSource.value = 'demo';
+  dataSource.value = 'live';
 });
 
 afterEach(() => {
-  dataSource.value = 'demo';
+  dataSource.value = 'live';
 });
 
 describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进度）', () => {

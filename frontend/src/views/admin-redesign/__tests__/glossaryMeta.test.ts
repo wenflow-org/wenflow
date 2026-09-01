@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 import {
   COMPLETION_META,
   SEMANTICS_META,
-  DEMO_GLOSSARY_TERMS,
   completionMetaOf
 } from '../glossaryMeta';
 
@@ -59,23 +58,5 @@ describe('基准三分语义（SEMANTICS_META）', () => {
       expect(meta.label.trim().length).toBeGreaterThan(0);
       expect(meta.hint.trim().length).toBeGreaterThan(0);
     }
-  });
-});
-
-describe('demo 兜底词条（DEMO_GLOSSARY_TERMS）', () => {
-  it('词条非空且 term/def 完整', () => {
-    expect(DEMO_GLOSSARY_TERMS.length).toBeGreaterThan(10);
-    const seen = new Set<string>();
-    for (const t of DEMO_GLOSSARY_TERMS) {
-      expect(seen.has(t.term), `词条重复：${t.term}`).toBe(false);
-      seen.add(t.term);
-      expect(t.def.trim().length, `「${t.term}」def 为空`).toBeGreaterThan(0);
-    }
-  });
-
-  it('核心词条（漂移/对账/同步/健康分 相关术语统一）', () => {
-    const terms = DEMO_GLOSSARY_TERMS.map((t) => t.term);
-    expect(terms).toContain('漂移');
-    expect(terms).toContain('完成度');
   });
 });

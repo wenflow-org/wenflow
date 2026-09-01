@@ -1,12 +1,5 @@
 ﻿<template>
-  <div v-if="notFound" class="mk-page vp">
-    <div class="mk-empty">
-      <strong>未找到该虚拟学习者</strong>
-      <span>样本可能已被删除，或链接已失效。</span>
-      <button type="button" class="mk-link" @click="closeSubPage">← 虚拟学习者</button>
-    </div>
-  </div>
-  <div v-else-if="detailError" class="mk-page vp">
+  <div v-if="detailError" class="mk-page vp">
     <div class="mk-empty">
       <span class="mk-empty__icon" aria-hidden="true">◌</span>
       <strong>画像加载失败</strong>
@@ -583,15 +576,15 @@
   <div v-else class="mk-page">
     <button type="button" class="mk-back" @click="closeSubPage">← 虚拟学习者</button>
     <div class="mk-empty">
-      <strong>{{ isLive ? '加载中…' : '该样本暂无更多演示数据' }}</strong>
-      <span>{{ isLive ? '正在拉取真实画像' : '演示详情仅覆盖部分样本。' }}</span>
+      <strong>加载中…</strong>
+      <span>正在拉取真实画像。</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { subPage, closeSubPage, virtualProfiles, openSubPage, isLive } from './store'
+import { subPage, closeSubPage, openSubPage, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import QuickLearnPanel from '@/views/admin/components/virtual/QuickLearnPanel.vue'
@@ -838,25 +831,9 @@ const fallbackNotice = ref(false)
 type ProfileTab = 'stories' | 'runs' | 'profile' | 'memory'
 const activeTab = ref<ProfileTab>('stories')
 
-/* demo 模式的故事池（按样本给出有差异的演示故事） */
-const DEMO_STORIES: Record<string, StoryItem[]> = {
-  'vl-001': [
-    { id: 'demo-s1', index: 0, title: '周五下午的老板突袭', outline: '17:40 老板临时要周报汇总，她只有 40 分钟做完 3 小时的活', status: 'ready', runCount: 2, pathId: 'demo-p1', goalCount: 2, pathCount: 1, learnCount: 3 },
-    { id: 'demo-s2', index: 1, title: '模板救星', outline: '她找到去年的周报模板，但数据源格式变了，VLOOKUP 全报错', status: 'ready', runCount: 1, pathId: null, goalCount: 1, pathCount: 0, learnCount: 0 },
-    { id: 'demo-s3', index: 2, title: '最后一次手工周报', outline: '同事告诉她"其实可以自动化"，她决定这次真的学会', status: 'draft', runCount: 0, pathId: null, goalCount: 0, pathCount: 0, learnCount: 0 }
-  ],
-  'vl-002': [
-    { id: 'demo-s4', index: 0, title: '十年教案的思维惯性', outline: '她把学习路径排成"学期课程表"，两周还没写第一行代码', status: 'ready', runCount: 1, pathId: 'demo-p2', goalCount: 1, pathCount: 1, learnCount: 2 },
-    { id: 'demo-s5', index: 1, title: '被推着的第一个项目', outline: '里程碑倒逼：本周必须交出一份真实数据分析，哪怕很糙', status: 'ready', runCount: 0, pathId: null, goalCount: 0, pathCount: 0, learnCount: 0 }
-  ],
-  'vl-003': [
-    { id: 'demo-s6', index: 0, title: '截稿日前 30 天', outline: '导师下了最后通牒，她却在擦桌子、整理文献、做一切与论文无关的事', status: 'ready', runCount: 1, pathId: null, goalCount: 1, pathCount: 0, learnCount: 0 },
-    { id: 'demo-s7', index: 1, title: '周末爆发户', outline: 'weekday 低效、周末爆发——系统需要适应她的节奏而不是纠正', status: 'draft', runCount: 0, pathId: null, goalCount: 0, pathCount: 0, learnCount: 0 }
-  ]
-}
 const storyFilter = ref('')
 const storyFilterOptions = computed(() => {
-  const base = isLive.value ? stories.value : (DEMO_STORIES[subPage.value?.id || ''] || [])
+  const base = stories.value
   const count = (pred: (s: StoryItem) => boolean) => base.filter(pred).length
   const running = count((s) => (s.runningCount || 0) > 0)
   const paused = count((s) => !!s.latestRun && ['paused'].includes(String(s.latestRun.status || '').toLowerCase()))
@@ -871,9 +848,7 @@ const storyFilterOptions = computed(() => {
   ]
 })
 const displayStories = computed<StoryItem[]>(() => {
-  let list: StoryItem[] = []
-  if (isLive.value) list = stories.value
-  else list = DEMO_STORIES[subPage.value?.id || ''] || []
+  let list = stories.value
   const sf = storyFilter.value
   if (!sf) return list
   if (sf === 'running') return list.filter((s) => (s.runningCount || 0) > 0)
@@ -949,7 +924,7 @@ function fillBudgetForm() {
   }
   budgetErrors.value = {}
 }
-watch(liveDetail, () => { if (isLive.value) fillBudgetForm() })
+watch(liveDetail, () => fillBudgetForm())
 async function saveBudget() {
   const id = subPage.value?.id
   if (!id || budgetSaving.value) return
@@ -1315,10 +1290,10 @@ async function loadDetail(id?: string, quiet = false) {
 }
 
 watch(
-  () => [subPage.value?.id, isLive.value] as const,
-  async ([id, live]) => {
-    if (id && live) await loadDetail(id)
-    if (id && live) void loadMemory(false)
+  () => subPage.value?.id,
+  async (id) => {
+    if (id) await loadDetail(id)
+    if (id) void loadMemory(false)
   },
   { immediate: true }
 )
@@ -1349,7 +1324,6 @@ const memoryStruggling = computed(() => memoryData.value?.struggling || [])
 const memoryCompleted = computed(() => memoryData.value?.recentCompleted || [])
 const memoryCounts = computed(() => memoryData.value?.counts || { mastered: 0, dueReview: 0, struggling: 0, completed: 0 })
 const memoryCount = computed(() => {
-  if (!isLive.value) return 0
   const c = memoryCounts.value
   return c.mastered + c.dueReview + c.struggling + c.completed
 })
@@ -1360,7 +1334,7 @@ const memoryEmpty = computed(() => {
 
 async function loadMemory(force = false) {
   const id = subPage.value?.id
-  if (!id || !isLive.value) return
+  if (!id) return
   if (memoryLoading.value && !force) return
   memoryLoading.value = true
   memoryLoadFailed.value = false
@@ -1500,27 +1474,20 @@ async function removeStory(index: number) {
 async function runStory(story?: StoryItem, index?: number) {
   const id = subPage.value?.id
   if (!id || running.value) return
-  if (isLive.value) {
-    const target = story || selectedStory.value
-    if (!target && displayStories.value.length !== 1) {
-      toast.error('请先选择一个故事；每个故事对应一套学习任务（Path）')
-      return
-    }
-    if (target) selectStory(target, typeof index === 'number' ? index : target.index ?? 0)
+  const target = story || selectedStory.value
+  if (!target && displayStories.value.length !== 1) {
+    toast.error('请先选择一个故事；每个故事对应一套学习任务（Path）')
+    return
   }
+  if (target) selectStory(target, typeof index === 'number' ? index : target.index ?? 0)
   running.value = true
   try {
-    if (isLive.value) {
-      const payload = storyPayload(story, index)
-      const res = await adminVirtualLearnersApi.startVirtualSession(id, payload)
-      const session = res.data?.data ?? res.data ?? {}
-      const storyLabel = selectedStoryTitle.value || story?.title || '故事'
-      toast.success(`已按「${storyLabel}」启动：${String(session.id || session.sessionId || '').slice(0, 14)}…`)
-      await loadDetail(id)
-    } else {
-      await new Promise((r) => setTimeout(r, 900))
-      toast.success('演示运行完成：Goal 对话 8 轮收敛')
-    }
+    const payload = storyPayload(story, index)
+    const res = await adminVirtualLearnersApi.startVirtualSession(id, payload)
+    const session = res.data?.data ?? res.data ?? {}
+    const storyLabel = selectedStoryTitle.value || story?.title || '故事'
+    toast.success(`已按「${storyLabel}」启动：${String(session.id || session.sessionId || '').slice(0, 14)}…`)
+    await loadDetail(id)
   } catch (e) {
     toast.error(`启动失败：${errMsg(e)}`)
   } finally {
@@ -1664,15 +1631,7 @@ const levelLabel = computed(() => ({
   advanced: '进阶'
 }[d.value?.level || ''] || d.value?.level || ''))
 
-/** demo 模式：未知 ID 一律显示「未找到」空态，严禁回退展示其他人的数据 */
-const notFound = computed(() => !isLive.value && !virtualProfiles.some((x) => x.id === subPage.value?.id))
-
-const d = computed<Detail | undefined>(() => {
-  if (isLive.value) return liveDetail.value || undefined
-  const demo = virtualProfiles.find((x) => x.id === subPage.value?.id)
-  if (!demo) return undefined
-  return { ...demo, level: 'beginner', notes: '', quality: { referee: null, fidelity: null } }
-})
+const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
 /* 全部运行 feed（人物级全量运行流） */
 const allRuns = computed<RunItem[]>(() => (d.value?.runs || []).slice(0, RUNS_TAB_WINDOW))
@@ -1815,9 +1774,9 @@ const { start: startPolling, stop: stopPolling } = useSafePolling(
   }
 )
 watch(
-  () => [subPage.value?.id, isLive.value] as const,
-  ([id, live]) => {
-    if (!id || !live) {
+  () => subPage.value?.id,
+  (id) => {
+    if (!id) {
       stopPolling()
       return
     }

@@ -123,8 +123,8 @@ function makeReport(): SkillReconciliationReport {
   };
 }
 
-async function mountSkills(live: boolean) {
-  dataSource.value = live ? 'live' : 'demo';
+async function mountSkills() {
+  dataSource.value = 'live';
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
@@ -141,21 +141,9 @@ async function mountSkills(live: boolean) {
 describe('Skill 目录 P1 修复批', () => {
   beforeEach(() => {
     getReconciliationMock.mockReset();
-    dataSource.value = 'demo';
+    dataSource.value = 'live';
     liveSkillProfiles.value = [];
     liveSkillStatsMap.value = null;
-  });
-
-  it('demo 模式：目录表含完成度列，行显示 —（无对账数据）', async () => {
-    const wrapper = await mountSkills(false);
-    expect(getReconciliationMock).not.toHaveBeenCalled();
-    const headers = wrapper.findAll('th').map((th) => th.text());
-    expect(headers).toContain('完成度');
-    // demo 无对账快照：完成度列显示 —
-    expect(wrapper.text()).toContain('目标对话');
-    const firstRow = wrapper.findAll('tbody tr')[0];
-    expect(firstRow.text()).toContain('—');
-    wrapper.unmount();
   });
 
   it('live 模式：目录表渲染完成度五档徽章（复用对账数据）', async () => {
@@ -170,7 +158,7 @@ describe('Skill 目录 P1 修复批', () => {
       'draft-c': { calls: 0, errors: 0, avgMs: 0, lastAt: '从未' },
       'not-in-rec': { calls: 0, errors: 0, avgMs: 0, lastAt: '从未' }
     };
-    const wrapper = await mountSkills(true);
+    const wrapper = await mountSkills();
     expect(getReconciliationMock).toHaveBeenCalled();
     // 目录表完成度徽章：live → 已上线，draft → 草稿；无对账行 → —
     expect(wrapper.find('.sk-table tbody .mk-badge--rec-live').exists()).toBe(true);
@@ -186,7 +174,7 @@ describe('Skill 目录 P1 修复批', () => {
       { id: 'live-a', name: 'Live A', category: 'analysis', agentId: 'goal-agent', agentName: '目标 Agent' }
     ];
     liveSkillStatsMap.value = { 'live-a': { calls: 1, errors: 0, avgMs: 50, lastAt: '刚刚' } };
-    const wrapper = await mountSkills(true);
+    const wrapper = await mountSkills();
     const pill = wrapper.find('.sk-rec__pills .mk-pill');
     expect(pill.text()).toContain('完成度 live 2 / 4');
     expect(pill.text()).toContain('目录 1');
@@ -200,7 +188,7 @@ describe('Skill 目录 P1 修复批', () => {
       { id: 'live-a', name: 'Live A', category: 'analysis', agentId: 'goal-agent', agentName: '目标 Agent' }
     ];
     liveSkillStatsMap.value = { 'live-a': { calls: 1, errors: 0, avgMs: 50, lastAt: '刚刚' } };
-    const wrapper = await mountSkills(true);
+    const wrapper = await mountSkills();
     // 展开对账面板
     await wrapper.find('.sk-rec__summary').trigger('click');
     await nextTick();

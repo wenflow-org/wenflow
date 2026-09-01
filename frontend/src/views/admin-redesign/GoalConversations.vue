@@ -35,10 +35,10 @@
       </span>
     </div>
 
-    <!-- 非 live：无演示数据 -->
-    <div v-if="!isLive" class="mk-empty">
+    <!-- 空态：无数据时显示（live 列表为空） -->
+    <div v-if="!rows.length && !loading" class="mk-empty">
       <strong>暂无 Goal 会话数据</strong>
-      <span>刷新或切换到真实数据查看。</span>
+      <span>学习者发起目标对话后自动呈现。</span>
     </div>
 
     <template v-else>
@@ -727,12 +727,12 @@ async function remove(r: Row) {
   }
 }
 
-watch(isLive, (v) => {
-  if (v) void load()
+watch(isLive, () => {
+  void load()
 })
 /* 数据隔离切换：仅真实 ↔ 含虚拟/测试（切换后立即按新口径重拉，绕过 TTL 缓存） */
 watch(includeTest, () => {
-  if (isLive.value) void load(true)
+  void load(true)
 })
 onMounted(() => {
   if (isLive.value) void load()

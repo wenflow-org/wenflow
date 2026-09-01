@@ -78,8 +78,8 @@ function makeReport(overrides: Partial<HealthCenterSummaryReport> = {}): HealthC
   return { ...base, ...overrides };
 }
 
-async function mountWorkbench(live: boolean) {
-  dataSource.value = live ? 'live' : 'demo';
+async function mountWorkbench() {
+  dataSource.value = 'live';
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
@@ -96,19 +96,12 @@ async function mountWorkbench(live: boolean) {
 describe('健康中心（G1）', () => {
   beforeEach(() => {
     getSummaryMock.mockReset();
-    dataSource.value = 'demo';
-  });
-
-  it('demo 模式降级：仅状态条，不请求后端', async () => {
-    const wrapper = await mountWorkbench(false);
-    expect(wrapper.find('.mk-status__title').text()).toBe('健康中心');
-    expect(wrapper.find('.hc-summary').exists()).toBe(false);
-    expect(getSummaryMock).not.toHaveBeenCalled();
+    dataSource.value = 'live';
   });
 
   it('live + summary mock：概要卡四张 + 计数口径 + 健康检查分组', async () => {
     getSummaryMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
-    const wrapper = await mountWorkbench(true);
+    const wrapper = await mountWorkbench();
     expect(getSummaryMock).toHaveBeenCalledTimes(1);
     expect(getSummaryMock).toHaveBeenCalledWith(false);
 
@@ -148,7 +141,7 @@ describe('健康中心（G1）', () => {
 
   it('行内明细展开：异常项默认展开，点击收起；明细截断提示', async () => {
     getSummaryMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
-    const wrapper = await mountWorkbench(true);
+    const wrapper = await mountWorkbench();
 
     // 高亮区内带 detail 的项默认展开（w4-corehash 2 条 + runtime-prompt 截断 20 条）
     const details = wrapper.findAll('.hc-check__detail');
@@ -172,17 +165,18 @@ describe('健康中心（G1）', () => {
     expect(wrapper.find('.hc-ok .hc-check--info').exists()).toBe(true);
   });
 
-  it('网络失败降级：wb-failed + 重试成功后恢复', async () => {
+  it('网络失败降级：失败空态 + 重试成功后恢复', async () => {
     getSummaryMock.mockRejectedValueOnce(new Error('network down'));
-    const wrapper = await mountWorkbench(true);
-    expect(wrapper.find('.wb-failed').exists()).toBe(true);
-    expect(wrapper.find('.wb-failed').text()).toContain('加载失败');
+    const wrapper = await mountWorkbench();
+    const failedBox = wrapper.find('.mk-empty');
+    expect(failedBox.exists()).toBe(true);
+    expect(failedBox.text()).toContain('加载失败');
 
     getSummaryMock.mockResolvedValueOnce({ data: { success: true, data: makeReport() } });
-    await wrapper.find('.wb-failed .mk-status__action').trigger('click');
+    await wrapper.find('.mk-empty__action').trigger('click');
     await flushPromises();
     await nextTick();
-    expect(wrapper.find('.wb-failed').exists()).toBe(false);
+    expect(wrapper.find('.mk-empty').exists()).toBe(false);
     expect(wrapper.findAll('.hc-check__row').length).toBe(13);
     expect(getSummaryMock).toHaveBeenCalledWith(true); // 重试走强制刷新
   });

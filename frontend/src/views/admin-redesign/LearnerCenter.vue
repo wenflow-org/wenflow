@@ -221,11 +221,9 @@ interface Row {
   risk: string
   updated: string
   confidence?: number
-  /** 更新时间戳（用于排序），demo 按相对时间倒推 */
+  /** 更新时间戳（用于排序） */
   ts?: number
 }
-
-/* demo 数据已移除 — 非 live 模式返回空列表 */
 
 const pill = ref<'all' | 'risk' | 'stale'>('all')
 const keyword = ref('')
@@ -301,33 +299,28 @@ async function sendIntervene() {
   }
 }
 
-const demoRows = ref<Row[]>([]) // demo 数据已移除
-
-const rows = computed<Row[]>(() => {
-  if (isLive.value) {
-    return liveLearners.value.map((m) => ({
-      id: m.userId,
-      name: m.name,
-      email: m.email,
-      isTestAccount: m.isTestAccount,
-      path: m.pathTitle || '',
-      task: m.currentTask || m.currentMilestone || '',
-      trend: m.trend,
-      fatigue: m.fatigue as Row['fatigue'],
-      risk: m.struggling.length
-        ? `概念「${m.struggling[0]}」挣扎`
-        : m.fatigue === '高'
-          ? '疲劳风险高'
-          : m.fragile.length
-            ? `概念「${m.fragile[0]}」记忆待巩固`
-            : '',
-      updated: timeAgo(m.generatedAt),
-      confidence: m.confidence,
-      ts: m.generatedAt ? new Date(m.generatedAt).getTime() : undefined
-    }))
-  }
-  return demoRows.value
-})
+const rows = computed<Row[]>(() =>
+  liveLearners.value.map((m) => ({
+    id: m.userId,
+    name: m.name,
+    email: m.email,
+    isTestAccount: m.isTestAccount,
+    path: m.pathTitle || '',
+    task: m.currentTask || m.currentMilestone || '',
+    trend: m.trend,
+    fatigue: m.fatigue as Row['fatigue'],
+    risk: m.struggling.length
+      ? `概念「${m.struggling[0]}」挣扎`
+      : m.fatigue === '高'
+        ? '疲劳风险高'
+        : m.fragile.length
+          ? `概念「${m.fragile[0]}」记忆待巩固`
+          : '',
+    updated: timeAgo(m.generatedAt),
+    confidence: m.confidence,
+    ts: m.generatedAt ? new Date(m.generatedAt).getTime() : undefined
+  }))
+)
 
 const pills = [
   { id: 'all' as const, label: '全部' },
@@ -370,9 +363,8 @@ function retryLoad() {
   void loadLiveData()
 }
 
-/* 长列表分批渲染：每批 15 行 */
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
-   数据全量在客户端（live 拉取 / demo 本地），筛选后按页切片；
+   数据全量在客户端（live 拉取），筛选后按页切片；
    筛选/数据变化自动回第 1 页（watch filtered） */
 const page = ref(1)
 const pageSize = ref(15)
@@ -407,14 +399,8 @@ async function recompute(row: Row) {
   if (!ok) return
   updatingIds.value = new Set(updatingIds.value).add(row.id)
   try {
-    if (isLive.value) {
-      await liveRecomputeLearner(row.id)
-      toast.success(`「${row.name}」快照已重算（真实）`)
-    } else {
-      await new Promise((r) => setTimeout(r, 800))
-      row.updated = '刚刚'
-      toast.success(`「${row.name}」快照已重算`)
-    }
+    await liveRecomputeLearner(row.id)
+    toast.success(`「${row.name}」快照已重算（真实）`)
   } catch (e) {
     toast.error(`重算失败：${errMsg(e)}`)
   } finally {
@@ -426,41 +412,35 @@ async function recompute(row: Row) {
 
 async function recomputeAll() {
   if (recomputingAll.value || !rows.value.length) return
-  const ok = await askConfirm({
+  const confirmed = await askConfirm({
     title: '全部重算快照',
     message: `确认重算全部 ${rows.value.length} 位学习者的快照？将逐个重新生成，耗时取决于人数。`,
     confirmText: '全部重算',
     danger: false
   })
-  if (!ok) return
+  if (!confirmed) return
   recomputingAll.value = true
   recomputeProgress.value = 0
-  if (isLive.value) {
-    let ok = 0
-    let fail = 0
-    for (const r of rows.value) {
-      updatingIds.value = new Set(updatingIds.value).add(r.id)
-      try {
-        await liveRecomputeLearner(r.id)
-        ok++
-      } catch {
-        fail++
-      } finally {
-        const next = new Set(updatingIds.value)
-        next.delete(r.id)
-        updatingIds.value = next
-        recomputeProgress.value++
-      }
+  let ok = 0
+  let fail = 0
+  for (const r of rows.value) {
+    updatingIds.value = new Set(updatingIds.value).add(r.id)
+    try {
+      await liveRecomputeLearner(r.id)
+      ok++
+    } catch {
+      fail++
+    } finally {
+      const next = new Set(updatingIds.value)
+      next.delete(r.id)
+      updatingIds.value = next
+      recomputeProgress.value++
     }
-    if (fail) {
-      toast.error(`重算完成：${ok} 成功 · ${fail} 失败`)
-    } else {
-      toast.success(`已重算 ${ok} 个快照（真实）`)
-    }
+  }
+  if (fail) {
+    toast.error(`重算完成：${ok} 成功 · ${fail} 失败`)
   } else {
-    await new Promise((r) => setTimeout(r, 1200))
-    demoRows.value.forEach((r) => (r.updated = '刚刚'))
-    toast.success(`已重算 ${rows.value.length} 个快照`)
+    toast.success(`已重算 ${ok} 个快照（真实）`)
   }
   recomputingAll.value = false
 }

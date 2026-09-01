@@ -173,13 +173,6 @@
               <div class="mk-actions mk-actions--left">
                 <!-- live：整行点击即进入画像详情，此处只留真正的行内操作（运行 / 更多） -->
                 <button
-                  v-if="!isLive"
-                  type="button"
-                  class="mk-icon-btn mk-icon-btn--text"
-                  title="查看画像：故事池 / 运行记录 / 会话控制"
-                  @click="openSubPage('virtual', s.id)"
-                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg><span>画像</span></button>
-                <button
                   v-if="isLive"
                   type="button"
                   class="mk-icon-btn mk-icon-btn--text"
@@ -476,7 +469,7 @@ interface Sample {
   goal: string
   storyCount: number
   sessions: number
-  /** 运行中会话数（live：后端全量聚合 runningCount，已扣除暂停的自动驾驶；demo：静态演示值） */
+  /** 运行中会话数（live：后端全量聚合 runningCount，已扣除暂停的自动驾驶） */
   runningCount: number
   /** 已暂停自动驾驶的会话数（autopilot=stopped，会话数据保留） */
   pausedCount: number
@@ -501,35 +494,22 @@ interface Sample {
   created: string
 }
 
-const all: Sample[] = [
-  { id: 'vl-001', name: '疲惫的运营小张', goal: '把 Excel 周报自动化', storyCount: 2, sessions: 4, runningCount: 1, pausedCount: 0, failedCount: 0, stalledCount: 0, runningSessionIds: ['demo-s1'], currentStage: 'goal', created: '3 天前' },
-  { id: 'vl-002', name: '转行的前教师', goal: '系统学数据分析', storyCount: 1, sessions: 1, runningCount: 0, pausedCount: 1, failedCount: 1, stalledCount: 0, runningSessionIds: [], pausedSessionIds: ['demo-p1'], currentStage: null, created: '1 天前' },
-  { id: 'vl-003', name: '拖延的研究生', goal: '30 天写完论文初稿', storyCount: 1, sessions: 2, runningCount: 1, pausedCount: 0, failedCount: 0, stalledCount: 1, runningSessionIds: ['demo-s2'], currentStage: 'learn', created: '6 小时前' },
-  { id: 'vl-004', name: '焦虑的实习产品经理', goal: '两周上手需求文档', storyCount: 0, sessions: 1, runningCount: 0, pausedCount: 0, failedCount: 0, stalledCount: 0, runningSessionIds: [], currentStage: null, created: '昨天 22:10' },
-  { id: 'vl-005', name: '退休学摄影的阿姨', goal: '学会手机修图', storyCount: 0, sessions: 0, runningCount: 0, pausedCount: 0, failedCount: 0, stalledCount: 0, runningSessionIds: [], currentStage: null, created: '2 小时前' }
-]
-
-const demoSamples = ref<Sample[]>([...all])
-
-const samples = computed<Sample[]>(() => {
-  if (isLive.value) {
-    return liveVirtuals.value.map((v) => ({
-      id: v.id,
-      name: v.name,
-      goal: v.goal,
-      storyCount: Number(v.storyCount || 0),
-      sessions: v.sessions,
-      runningCount: Number(v.runningCount || 0),
-      pausedCount: Number(v.pausedCount || 0),
-      failedCount: Number(v.failedCount || 0),
-      stalledCount: Number(v.stalledCount || 0),
-      runningSessionIds: v.runningSessionIds,
-      currentStage: v.currentStage || null,
-      created: timeAgo(v.createdAt)
-    }))
-  }
-  return demoSamples.value
-})
+const samples = computed<Sample[]>(() =>
+  liveVirtuals.value.map((v) => ({
+    id: v.id,
+    name: v.name,
+    goal: v.goal,
+    storyCount: Number(v.storyCount || 0),
+    sessions: v.sessions,
+    runningCount: Number(v.runningCount || 0),
+    pausedCount: Number(v.pausedCount || 0),
+    failedCount: Number(v.failedCount || 0),
+    stalledCount: Number(v.stalledCount || 0),
+    runningSessionIds: v.runningSessionIds,
+    currentStage: v.currentStage || null,
+    created: timeAgo(v.createdAt)
+  }))
+)
 
 const keyword = ref('')
 /** 状态过滤（轴 A 生命周期）：'' = 全部 / running / paused / queued / failed / created */
@@ -572,7 +552,7 @@ function clearFilters() {
 
 /* 长列表分批渲染：每批 15 行 */
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
-   数据全量在客户端（live 拉取 / demo 本地），筛选后按页切片；
+   数据全量在客户端（live 拉取），筛选后按页切片；
    筛选/数据变化自动回第 1 页（watch filtered） */
 const page = ref(1)
 const pageSize = ref(15)
@@ -605,40 +585,18 @@ async function createSample() {
 
   creating.value = true
   try {
-    if (isLive.value) {
-      const createdId = await liveCreateVirtual({
-        name: form.value.name.trim(),
-        goal: form.value.aspiration.trim(),
-        story: form.value.story.trim(),
-        personaSeed: personaSeed.value || undefined
-      })
-      createOpen.value = false
-      if (createdId) {
-        toast.success('虚拟人已创建。下一步：在画像页生成故事（产生学习需求）')
-        openSubPage('virtual', createdId)
-      } else {
-        toast.success('虚拟人已创建，但列表刷新失败——若列表未出现，请手动刷新查看')
-      }
+    const createdId = await liveCreateVirtual({
+      name: form.value.name.trim(),
+      goal: form.value.aspiration.trim(),
+      story: form.value.story.trim(),
+      personaSeed: personaSeed.value || undefined
+    })
+    createOpen.value = false
+    if (createdId) {
+      toast.success('虚拟人已创建。下一步：在画像页生成故事（产生学习需求）')
+      openSubPage('virtual', createdId)
     } else {
-      const id = `vl-${String(demoSamples.value.length + 1).padStart(3, '0')}`
-      demoSamples.value.unshift({
-        id,
-        name: form.value.name.trim(),
-        goal: form.value.aspiration.trim() || '—',
-        storyCount: 0,
-        sessions: 0,
-        runningCount: 0,
-        pausedCount: 0,
-        failedCount: 0,
-        stalledCount: 0,
-        runningSessionIds: [],
-        pausedSessionIds: [],
-        currentStage: null,
-        created: '刚刚'
-      })
-      createOpen.value = false
-      toast.success('虚拟人已创建（演示）。下一步生成故事')
-      openSubPage('virtual', id)
+      toast.success('虚拟人已创建，但列表刷新失败——若列表未出现，请手动刷新查看')
     }
   } catch (e) {
     toast.error(`创建失败：${errMsg(e)}`)
@@ -773,14 +731,6 @@ async function openLaunch(s: Sample) {
   launchTarget.value = s
   launchForm.value = { storyId: '', mode: 'assisted', friction: 'normal' }
   launchStories.value = []
-  if (!isLive.value) {
-    launchStories.value = [
-      { id: 'demo-s1', title: '演示故事 A', runCount: 1, pathId: 'demo-p1' },
-      { id: 'demo-s2', title: '演示故事 B', runCount: 0, pathId: null }
-    ]
-    launchForm.value.storyId = launchStories.value[0].id
-    return
-  }
   launchStoriesLoading.value = true
   try {
     const res = await adminVirtualLearnersApi.getVirtualLearnerStories(s.id)
@@ -844,8 +794,6 @@ async function startLaunch() {
   }
 }
 
-const runningTotal = computed(() => samples.value.reduce((a, s) => a + s.runningCount, 0))
-
 /** 自动驾驶并发配额条数据（used/limit + 分档色调） */
 const concurrency = computed(() => ({
   used: Number(liveAutopilotConcurrency.value?.used ?? 0),
@@ -881,9 +829,6 @@ const visiblePausedChips = computed(() => {
 
 /* ===== A2 生命周期分区：全量聚合口径（后端 sessionStats/staleCount），替代样本口径状态条 ===== */
 const partition = computed(() => {
-  if (!isLive.value) {
-    return { created: 0, running: runningTotal.value, failed: 0, stale: 0 }
-  }
   const st = liveVirtualSessionStats.value
   return {
     created: st.created,

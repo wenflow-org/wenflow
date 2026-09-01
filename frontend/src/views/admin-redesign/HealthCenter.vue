@@ -338,7 +338,6 @@ function semanticsLabel(semantics: HealthCenterItem['semantics']) {
 }
 
 async function refresh(force = false) {
-  if (!isLive.value) return
   loading.value = true
   failed.value = false
   try {

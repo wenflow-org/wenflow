@@ -9,7 +9,7 @@
       <span class="mk-status__meta">MCP {{ mcpCount }}</span>
       <span class="mk-status__meta">能力 Skill {{ capabilityCount }}</span>
       <span class="mk-status__meta">已接入 {{ readyCount }}</span>
-      <span v-if="isLive" class="mk-status__meta">MCP 服务 {{ mcpTools.length }}</span>
+      <span class="mk-status__meta">MCP 服务 {{ mcpTools.length }}</span>
     </div>
 
     <!-- ① 外挂能力 + ② MCP 服务：行数少时并栏（审计 E3），数据增长后回到单列全宽 -->
@@ -177,7 +177,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { dataSource, openSkillDrawer, investigateAgent, isLive } from './store'
+import { dataSource, openSkillDrawer, investigateAgent } from './store'
 import { timeAgo, errMsg } from './live'
 import { adminSkillsApi, adminMcpApi } from '@/api/adminApi'
 import { EXTRA_COMPONENT_VISIBLE_SKILLS, EXTRA_CAPABILITY_META } from '@/views/admin/capabilityCatalog'
@@ -284,11 +284,6 @@ interface McpTool {
   enabled: boolean
 }
 
-const demoMcpTools: McpTool[] = [
-  { id: 'web-search', name: '网页搜索', description: '实时搜索并返回结果摘要', type: 'search', endpoint: '${SEARCH_API_URL}', enabled: false },
-  { id: 'file-reader', name: '文件读取', description: '读取工作区文件', type: 'filesystem', endpoint: 'local', enabled: true }
-]
-
 const mcpTools = ref<McpTool[]>([])
 /** MCP 服务列表 loading / 失败（独立于能力配置的 loading，避免两域状态互绑） */
 const mcpLoading = ref(false)
@@ -319,17 +314,8 @@ async function loadMcpTools() {
 watch(
   () => [dataSource.value],
   () => {
-    if (dataSource.value === 'live') {
-      void loadConfigs()
-      void loadMcpTools()
-    } else {
-      configMap.value = {
-        'mcp-tool': { displayName: 'MCP 工具调用', model: 'deepseek-v4-flash', requestTimeoutMs: 60000, lastCalledAt: new Date(Date.now() - 2 * 3600000).toISOString() }
-      }
-      configsFailed.value = false
-      mcpTools.value = demoMcpTools.map((t) => ({ ...t }))
-      mcpFailed.value = false
-    }
+    void loadConfigs()
+    void loadMcpTools()
   },
   { immediate: true }
 )
@@ -368,21 +354,12 @@ async function saveTool() {
   if (Object.keys(toolErrors.value).length) return
   toolSaving.value = true
   try {
-    if (dataSource.value === 'live') {
-      if (toolEditingId.value) {
-        await adminMcpApi.updateTool(toolEditingId.value, { ...toolForm.value })
-      } else {
-        await adminMcpApi.createTool({ ...toolForm.value })
-      }
-      await loadMcpTools()
+    if (toolEditingId.value) {
+      await adminMcpApi.updateTool(toolEditingId.value, { ...toolForm.value })
     } else {
-      if (toolEditingId.value) {
-        const t = mcpTools.value.find((x) => x.id === toolEditingId.value)
-        if (t) Object.assign(t, { name: toolForm.value.name, type: toolForm.value.type, endpoint: toolForm.value.endpoint, description: toolForm.value.description, enabled: toolForm.value.enabled })
-      } else {
-        mcpTools.value.push({ id: toolForm.value.id.trim(), name: toolForm.value.name.trim(), type: toolForm.value.type, endpoint: toolForm.value.endpoint.trim(), description: toolForm.value.description, enabled: toolForm.value.enabled })
-      }
+      await adminMcpApi.createTool({ ...toolForm.value })
     }
+    await loadMcpTools()
     toolOpen.value = false
     toast.success(toolEditingId.value ? 'MCP 服务已更新' : 'MCP 服务已创建')
   } catch (e) {
@@ -400,12 +377,8 @@ async function removeTool(t: McpTool) {
   })
   if (!ok) return
   try {
-    if (dataSource.value === 'live') {
-      await adminMcpApi.removeTool(t.id)
-      await loadMcpTools()
-    } else {
-      mcpTools.value = mcpTools.value.filter((x) => x.id !== t.id)
-    }
+    await adminMcpApi.removeTool(t.id)
+    await loadMcpTools()
     toast.success('MCP 服务已删除')
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
@@ -434,15 +407,9 @@ async function testTool(t: McpTool) {
   testingId.value = t.id
   testResult.value = null
   try {
-    if (dataSource.value === 'live') {
-      const res = await adminMcpApi.testTool(t.id)
-      const d = res.data?.data ?? {}
-      testResult.value = { id: t.id, ok: !!d.ok, latencyMs: Number(d.latencyMs || 0), error: d.error }
-    } else {
-      // demo：模拟延迟与结果
-      await new Promise((r) => setTimeout(r, 400))
-      testResult.value = { id: t.id, ok: t.enabled, latencyMs: 120 + Math.round(Math.random() * 200) }
-    }
+    const res = await adminMcpApi.testTool(t.id)
+    const d = res.data?.data ?? {}
+    testResult.value = { id: t.id, ok: !!d.ok, latencyMs: Number(d.latencyMs || 0), error: d.error }
   } catch (e) {
     testResult.value = { id: t.id, ok: false, error: errMsg(e) }
   } finally {

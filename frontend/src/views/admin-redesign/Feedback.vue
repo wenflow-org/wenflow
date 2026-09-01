@@ -17,9 +17,9 @@
       </span>
     </div>
 
-    <div v-if="!isLive" class="mk-empty mk-empty--min">
+    <div v-if="!rows.length && !loading" class="mk-empty mk-empty--min">
       <strong>暂无反馈数据</strong>
-      <span>刷新或切换到真实数据查看。</span>
+      <span>学习者提交反馈后自动呈现。</span>
     </div>
 
     <template v-else>
@@ -292,7 +292,7 @@ function clearFilters() {
 
 /* 长列表分批渲染：每批 15 行 */
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
-   数据全量在客户端（live 拉取 / demo 本地），筛选后按页切片；
+   数据全量在客户端（live 拉取），筛选后按页切片；
    筛选/数据变化自动回第 1 页（watch filtered） */
 const page = ref(1)
 const pageSize = ref(15)
@@ -305,7 +305,7 @@ watch(filtered, () => {
 })
 
 async function load(force?: boolean) {
-  if (!isLive.value || loading.value) return
+  if (loading.value) return
   if (!force && isPageCacheFresh('feedback') && rows.value.length) return
   loading.value = true
   loadFailed.value = false
@@ -385,11 +385,8 @@ async function save(status: Status) {
   }
 }
 
-watch(isLive, (v) => {
-  if (v) void load()
-})
 onMounted(() => {
-  if (isLive.value) void load()
+  void load()
 })
 </script>
 

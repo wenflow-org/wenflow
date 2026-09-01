@@ -266,10 +266,6 @@ interface UserRow {
   busy?: boolean
 }
 
-/* demo 用户数据已移除 — 非 live 模式返回空列表 */
-
-const demoUsers = ref<UserRow[]>([]) // demo 数据已移除
-
 /** Phase 2：已删除筛选 pill 的独立数据源（后端 status=deleted，与活跃列表隔离） */
 const deletedUsers = ref<UserRow[]>([])
 const deletedLoading = ref(false)
@@ -307,25 +303,22 @@ async function loadDeletedUsers() {
 }
 
 const users = computed<UserRow[]>(() => {
-  if (isLive.value) {
-    if (pill.value === 'deleted') return deletedUsers.value
-    return liveUsers.value.map((u) => ({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      admin: u.isAdmin,
-      online: !!u.lastLoginAt && Date.now() - new Date(u.lastLoginAt).getTime() < 30 * 60000,
-      isVirtualLearner: u.isVirtualLearner,
-      isTestAccount: u.isTestAccount,
-      createdAt: timeAgo(u.createdAt),
-      lastLogin: timeAgo(u.lastLoginAt),
-      paths: u.paths,
-      sessions: u.sessions,
-      xp: u.xp,
-      currentLevel: u.currentLevel
-    }))
-  }
-  return demoUsers.value
+  if (pill.value === 'deleted') return deletedUsers.value
+  return liveUsers.value.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    admin: u.isAdmin,
+    online: !!u.lastLoginAt && Date.now() - new Date(u.lastLoginAt).getTime() < 30 * 60000,
+    isVirtualLearner: u.isVirtualLearner,
+    isTestAccount: u.isTestAccount,
+    createdAt: timeAgo(u.createdAt),
+    lastLogin: timeAgo(u.lastLoginAt),
+    paths: u.paths,
+    sessions: u.sessions,
+    xp: u.xp,
+    currentLevel: u.currentLevel
+  }))
 })
 
 const pill = ref('all')
@@ -443,45 +436,28 @@ async function saveUser() {
 
   creating.value = true
   try {
-    if (isLive.value) {
-      if (editTarget.value) {
-        await adminUsersApi.updateUser(editTarget.value.id, {
-          name: form.value.name.trim(),
-          email: form.value.email.trim(),
-          isAdmin: form.value.admin,
-          ...(form.value.password ? { password: form.value.password } : {})
-        })
-        const target = liveUsers.value.find((x) => x.id === editTarget.value?.id)
-        if (target) {
-          target.name = form.value.name.trim()
-          target.email = form.value.email.trim()
-          target.isAdmin = form.value.admin
-        }
-        toast.success('用户已更新（真实写入）')
-      } else {
-        await liveCreateUser({
-          name: form.value.name.trim(),
-          email: form.value.email.trim(),
-          password: form.value.password,
-          admin: form.value.admin
-        })
-        toast.success('用户已创建（真实写入）')
-      }
-    } else {
-      demoUsers.value.unshift({
-        id: `u${Date.now() % 100000}`,
+    if (editTarget.value) {
+      await adminUsersApi.updateUser(editTarget.value.id, {
         name: form.value.name.trim(),
         email: form.value.email.trim(),
-        admin: form.value.admin,
-        online: false,
-        createdAt: '刚刚',
-        lastLogin: '从未',
-        paths: 0,
-        sessions: 0,
-        xp: 0,
-        currentLevel: 'L1'
+        isAdmin: form.value.admin,
+        ...(form.value.password ? { password: form.value.password } : {})
       })
-      toast.success('用户已创建，出现在列表顶部')
+      const target = liveUsers.value.find((x) => x.id === editTarget.value?.id)
+      if (target) {
+        target.name = form.value.name.trim()
+        target.email = form.value.email.trim()
+        target.isAdmin = form.value.admin
+      }
+      toast.success('用户已更新（真实写入）')
+    } else {
+      await liveCreateUser({
+        name: form.value.name.trim(),
+        email: form.value.email.trim(),
+        password: form.value.password,
+        admin: form.value.admin
+      })
+      toast.success('用户已创建（真实写入）')
     }
     createOpen.value = false
     pill.value = 'all'
@@ -639,7 +615,7 @@ const filtered = computed(() =>
 )
 
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
-   数据全量在客户端（live 拉取 / demo 本地），筛选后按页切片；
+   数据全量在客户端（live 拉取），筛选后按页切片；
    筛选/数据源变化自动回第 1 页（watch filtered） */
 const page = ref(1)
 const pageSize = ref(15)

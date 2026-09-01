@@ -149,7 +149,6 @@ watch(recReport, async (report) => {
 });
 
 async function refresh() {
-  if (!isLive.value) return;
   recLoading.value = true;
   recError.value = "";
   try {
@@ -163,8 +162,8 @@ async function refresh() {
   }
 }
 
-watch(isLive, (live) => { if (live) refresh(); });
-onMounted(() => { applyRecQuery(); if (isLive.value) refresh(); });
+watch(isLive, () => { refresh(); });
+onMounted(() => { applyRecQuery(); refresh(); });
 
 const recStatusOrder = ["draft", "handler-ready", "core-ready", "fields-synced", "live"] as const;
 const recStatusText = (status: string) => completionMetaOf(status)?.label || status;

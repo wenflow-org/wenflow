@@ -1,17 +1,10 @@
 <template>
-  <div v-if="notFound" class="mk-page ld">
-    <div class="mk-empty">
-      <strong>未找到该学习者</strong>
-      <span>学习者可能已被删除，或链接已失效。</span>
-      <button type="button" class="mk-link" @click="closeSubPage">← 返回学习者中心</button>
-    </div>
-  </div>
-  <div v-else-if="detailError" class="mk-page ld">
+  <div v-if="detailError" class="mk-page ld">
     <div class="mk-empty">
       <span class="mk-empty__icon" aria-hidden="true">◌</span>
       <strong>详情加载失败</strong>
       <span>暂时无法获取该学习者的完整快照。</span>
-      <button type="button" class="mk-empty__action" @click="loadDetail(subPage?.id, isLive)">重试</button>
+      <button type="button" class="mk-empty__action" @click="loadDetail(subPage?.id)">重试</button>
     </div>
   </div>
   <div v-else-if="loading" class="mk-page ld">
@@ -101,8 +94,8 @@
             </div>
           </div>
           <p v-else class="ld-none">
-            {{ isLive ? '暂无概念账本数据' : '演示模式下无数据' }}
-            <span v-if="isLive" class="ld-none__hint">重算快照后由知识记忆服务生成。</span>
+            {{ '暂无概念账本数据' }}
+            <span class="ld-none__hint">重算快照后由知识记忆服务生成。</span>
           </p>
         </section>
       </div>
@@ -125,8 +118,8 @@
             ></span>
           </div>
           <p v-else class="ld-none">
-            {{ isLive ? '暂无 7 天活跃数据' : '演示模式下无数据' }}
-            <span v-if="isLive" class="ld-none__hint">学习者产生会话后将自动生成。</span>
+            {{ '暂无 7 天活跃数据' }}
+            <span class="ld-none__hint">学习者产生会话后将自动生成。</span>
           </p>
         </section>
 
@@ -308,8 +301,8 @@
         </section>
       </template>
       <p v-else class="ld-none">
-        {{ isLive ? '暂无认知画像数据' : '演示模式下无数据' }}
-        <span v-if="isLive" class="ld-none__hint">重算快照后生成。</span>
+        {{ '暂无认知画像数据' }}
+        <span class="ld-none__hint">重算快照后生成。</span>
       </p>
     </div>
 
@@ -369,8 +362,8 @@
             </div>
           </div>
           <p v-else class="ld-none">
-            {{ isLive ? '暂无证据记录' : '演示模式下无数据' }}
-            <span v-if="isLive" class="ld-none__hint">学习事件累积后自动生成。</span>
+            {{ '暂无证据记录' }}
+            <span class="ld-none__hint">学习事件累积后自动生成。</span>
           </p>
         </section>
 
@@ -410,8 +403,8 @@
               </div>
             </div>
             <div v-else class="ld-none">
-              {{ isLive ? '暂无压力记录' : '演示模式下无数据' }}
-              <span v-if="isLive" class="ld-none__hint">学习者完成会话/任务后，系统会记录每次的压力评估。</span>
+              {{ '暂无压力记录' }}
+              <span class="ld-none__hint">学习者完成会话/任务后，系统会记录每次的压力评估。</span>
             </div>
           </section>
 
@@ -497,7 +490,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { subPage, closeSubPage, openSubPage, learnerDetails, isLive, setSubPageLabel } from './store'
+import { subPage, closeSubPage, openSubPage, setSubPageLabel } from './store'
 import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab } from './learner-profile'
@@ -598,16 +591,16 @@ function goUser() {
 }
 
 watch(
-  () => [subPage.value?.id, isLive.value] as const,
-  ([id, live]) => {
-    void loadDetail(id, live)
+  () => subPage.value?.id,
+  (id) => {
+    void loadDetail(id)
   },
   { immediate: true, flush: 'sync' }
 )
 
-async function loadDetail(id: string | undefined, live: boolean) {
+async function loadDetail(id: string | undefined) {
   if (detailLoading) return
-  if (!id || !live) return
+  if (!id) return
   detailLoading = true
   liveDetail.value = null
   rawDetail.value = null
@@ -736,17 +729,12 @@ async function recompute() {
   if (!ok) return
   recomputing.value = true
   try {
-    if (isLive.value) {
-      const base = liveLearners.value.find((l) => l.userId === id)
-      await liveRecomputeLearner(id, base?.pathId)
-      toast.success('快照已重算（真实）')
-      const prevTab = tab.value
-      await loadDetail(id, true)
-      tab.value = prevTab
-    } else {
-      await new Promise((r) => setTimeout(r, 800))
-      toast.success('快照已重算')
-    }
+    const base = liveLearners.value.find((l) => l.userId === id)
+    await liveRecomputeLearner(id, base?.pathId)
+    toast.success('快照已重算（真实）')
+    const prevTab = tab.value
+    await loadDetail(id)
+    tab.value = prevTab
   } catch (e) {
     toast.error(`重算失败：${errMsg(e)}`)
   } finally {
@@ -754,139 +742,16 @@ async function recompute() {
   }
 }
 
-const loading = computed(() => isLive.value && !liveDetail.value && !detailError.value)
+const loading = computed(() => !liveDetail.value && !detailError.value)
 
 const d = computed<Detail | null>(() => {
-  if (isLive.value) {
-    if (detailError.value) return null
-    return liveDetail.value || null
-  }
-  const found = learnerDetails.find((x) => x.id === subPage.value?.id)
-  return found || null
+  if (detailError.value) return null
+  return liveDetail.value || null
 })
-
-/** demo 模式：未知 ID 一律显示「未找到」空态，严禁回退展示其他人的数据 */
-const notFound = computed(() => !isLive.value && !learnerDetails.some((x) => x.id === subPage.value?.id))
 
 /* ---------- Tab 数据推导 ---------- */
-/** demo 模式的完整诊断数据（对齐真实 learner-models 结构） */
-const DEMO_RAW: Record<string, unknown> = {
-  profile: {
-    cognitive: {
-      metacognitionLevel: '中等（能说出哪里不懂，但归因常偏表面）',
-      thinkingStyle: '示例驱动：先看成品再理解原理',
-      confusionPattern: '把不熟悉的概念归到已知框架里，造成隐性误用',
-      priorKnowledgeStructure: '办公场景经验丰富，编程概念零散',
-      selfAssessmentAccuracy: '偏低（自评掌握的模块实测正确率 62%）'
-    },
-    preferences: { learningStyle: '做中学，容忍短视频，不耐长文档', pacePreference: '25 分钟小任务' },
-    emotional: { baseline: '平稳，周五下午易焦躁', motivationDriver: '解决周报这一件事' },
-    behavioral: {
-      avgResponseTime: 42,
-      avgMessageLength: 38,
-      avgInteractionInterval: 3,
-      engagementLevel: 0.82,
-      consistencyScore: 0.76
-    },
-    learning: { ktl: 5.9, lf: 3.2, lss: 6.8, lsb: 0.71, recentProgress: 'improving', streak: 9 },
-    history: {
-      totalSessions: 23,
-      totalMessages: 412,
-      avgSessionDuration: 21,
-      topicsExplored: ['Excel 自动化', '数据清洗', '周报生成'],
-      conceptsStruggled: ['数据透视表', '数组公式'],
-      conceptsMastered: ['单元格引用', 'SUMIF', '筛选']
-    },
-    curriculumControls: {
-      taskGranularityLevel: 'small',
-      conceptDensityLevel: 'medium',
-      reviewFrequencyLevel: 'high',
-      progressionStrategyNote: '先建立可复用模板，再逐步拆解原理'
-    },
-    derivedInsights: {
-      learningVelocity: 0.62,
-      optimalSessionLength: 25,
-      recommendedDifficulty: 'medium',
-      suggestedApproach: '示例驱动 + 小步练习',
-      riskFactors: ['自评偏高导致跳练'],
-      strengths: ['真实场景迁移快', '习惯复盘']
-    },
-    narrativeInsights: [
-      '目标单一且清晰：解决周报自动化这一件事，动机强烈。',
-      '办公场景经验丰富，编程概念零散，先备知识结构偏经验型。',
-      '示例驱动型学习者：先看成品再理解原理，反感长文档。',
-      '自评偏高，容易跳过巩固环节，需要客观反馈校准。'
-    ]
-  },
-  dynamicState: {
-    metrics: { lss: 6.8, ktl: 5.9, lf: 3.2, lsb: 0.71 },
-    recentTrend: '上升',
-    fatigueRisk: '低',
-    confidenceTrend: '缓升',
-    recentSessionQuality: '良好（近 3 次 2 次一次通过）',
-    recommendedPacing: '保持当前节奏，可尝试每周加 1 次挑战任务',
-    recommendedInteraction: { hintTiming: 'immediate', encouragement: 'medium', challenge: 'medium' }
-  },
-  learningControlState: {
-    shouldAvoidNewConcepts: false,
-    shouldPreferConsolidation: true,
-    shouldOfferBreak: false
-  },
-  knowledgeMemory: {
-    currentPath: {
-      pathTitle: 'Excel 自动化入门',
-      progress: { totalTasks: 16, completedTasks: 7, totalMilestones: 3, completedMilestones: 1, totalTasksInMilestone: 6, completedTasksInMilestone: 4 },
-      conceptStates: [
-        { label: '单元格引用', status: 'mastered', masteryScore: 0.92 },
-        { label: 'SUMIF', status: 'mastered', masteryScore: 0.88 },
-        { label: '筛选', status: 'learning', masteryScore: 0.6 },
-        { label: '数据透视表', status: 'struggling', masteryScore: 0.35 },
-        { label: '数组公式', status: 'fragile', masteryScore: 0.4 }
-      ]
-    },
-    globalSignals: {
-      masteredConcepts: ['单元格引用', 'SUMIF', '筛选'],
-      fragileConcepts: ['数组公式'],
-      strugglingConcepts: ['数据透视表']
-    },
-    globalBackground: {
-      conceptLedger: [
-        { conceptKey: 'cell-ref', label: '单元格引用', transferReadiness: 'high', misconceptionRisk: 'low', evidenceCount: 6 },
-        { conceptKey: 'sumif', label: 'SUMIF', transferReadiness: 'high', misconceptionRisk: 'low', evidenceCount: 5 },
-        { conceptKey: 'filter', label: '筛选', transferReadiness: 'medium', misconceptionRisk: 'medium', evidenceCount: 3 },
-        { conceptKey: 'pivot', label: '数据透视表', transferReadiness: 'low', misconceptionRisk: 'high', evidenceCount: 2 },
-        { conceptKey: 'array', label: '数组公式', transferReadiness: 'low', misconceptionRisk: 'medium', evidenceCount: 1 }
-      ],
-      recurringConfusions: [{ label: '数组公式', pattern: '近期多次出现 review / fragile 信号' }],
-      reusableFoundations: ['单元格引用', 'SUMIF'],
-      blockedFoundations: ['数组公式', '数据透视表']
-    }
-  },
-  teachingHints: {
-    recommendedApproach: '示例驱动 + 小步练习：每个概念先给可复用模板，再拆原理',
-    promptEnhancement: '涉及表格结构时主动给出示例列名；置信度低时复述确认',
-    emphasize: ['单元格引用', 'SUMIF', '筛选', '真实场景迁移'],
-    avoid: ['数组公式（暂时）', '术语堆叠', '长时间纯讲解'],
-    riskFactors: ['自评偏高导致跳练', '周五下午疲劳窗口', '数据透视表可能触发畏难']
-  }
-}
-
-const DEMO_EVIDENCE: EvidenceItem[] = [
-  { title: 'task-completed', detail: '数据清洗练习 2/3 · 掌握 +0.12', time: '6 分钟前', score: 0.92, signal: 'mastery', concepts: ['数据清洗'], taskId: 'task_clean_02', happenedAt: '2026-08-28T08:00:00Z' },
-  { title: 'teaching-session', detail: '「数据透视表」连续 2 次未达标', time: '3 天前', score: 0.86, signal: 'struggle', concepts: ['数据透视表'], sessionId: 'sess_pivot_9f3a', happenedAt: '2026-08-25T10:30:00Z' },
-  { title: 'summary', detail: '会话后段认知负荷偏高', time: '昨天 21:14', score: 0.7, signal: 'fatigue', concepts: [], sessionId: 'sess_sum_7c1d', happenedAt: '2026-08-27T13:14:00Z' },
-  { title: 'task-completed', detail: 'SUMIF 实战 · 一次通过', time: '昨天', score: 0.95, signal: 'mastery', concepts: ['SUMIF'], taskId: 'task_sumif_01', happenedAt: '2026-08-27T09:00:00Z' },
-  { title: 'evaluation', detail: '数据透视表入门 · 标记复习', time: '3 天前', score: 0.32, signal: 'incomplete', concepts: ['数据透视表'], sessionId: 'sess_eval_b2e8', happenedAt: '2026-08-25T11:00:00Z' }
-]
-
-const profile = computed(() => {
-  if (!isLive.value) return DEMO_RAW.profile as Record<string, unknown>
-  return (rawDetail.value?.profile || null) as Record<string, unknown> | null
-})
-const dynamicState = computed(() => {
-  if (!isLive.value) return DEMO_RAW.dynamicState as Record<string, unknown>
-  return (rawDetail.value?.dynamicState || null) as Record<string, unknown> | null
-})
+const profile = computed(() => (rawDetail.value?.profile || null) as Record<string, unknown> | null)
+const dynamicState = computed(() => (rawDetail.value?.dynamicState || null) as Record<string, unknown> | null)
 interface TeachingHintsShape {
   recommendedApproach?: string
   promptEnhancement?: string
@@ -895,20 +760,11 @@ interface TeachingHintsShape {
   riskFactors?: string[]
 }
 
-const teachingHints = computed(() => {
-  if (!isLive.value) return DEMO_RAW.teachingHints as TeachingHintsShape
-  return (rawDetail.value?.teachingHints || null) as TeachingHintsShape | null
-})
-const knowledgeMemory = computed(() => {
-  if (!isLive.value) return DEMO_RAW.knowledgeMemory as Record<string, unknown>
-  return (rawDetail.value?.knowledgeMemory || null) as Record<string, unknown> | null
-})
-const controlState = computed(() => {
-  if (!isLive.value) return DEMO_RAW.learningControlState as Record<string, unknown>
-  return (rawDetail.value?.learningControlState || null) as Record<string, unknown> | null
-})
-/** 证据记录：live 用接口数据，demo 用演示时间线 */
-const evidence = computed(() => (isLive.value ? liveEvidence.value : DEMO_EVIDENCE))
+const teachingHints = computed(() => (rawDetail.value?.teachingHints || null) as TeachingHintsShape | null)
+const knowledgeMemory = computed(() => (rawDetail.value?.knowledgeMemory || null) as Record<string, unknown> | null)
+const controlState = computed(() => (rawDetail.value?.learningControlState || null) as Record<string, unknown> | null)
+/** 证据记录：后端 learner-models 证据接口 */
+const evidence = computed(() => liveEvidence.value)
 
 /** 后端快照的英文枚举 → 中文（参照 LearnerCenter mapTrend/mapFatigue 模式） */
 const EN_ZH: Record<string, string> = {

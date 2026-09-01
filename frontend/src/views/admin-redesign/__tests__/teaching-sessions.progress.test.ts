@@ -3,7 +3,6 @@
  * 1. live 模式：后端补字段 progress → 任务 x/y + mk-minibar 迷你条（档位色：完成 ok / 失败 bad）
  * 2. 中断态：失败/超时显示「中断于 任务 x/y」
  * 3. 无进度数据（老数据）→ —
- * 4. demo 模式：演示行带进度
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -63,12 +62,12 @@ async function mountLive() {
 
 beforeEach(() => {
   listMock.mockReset();
-  dataSource.value = 'demo';
+  dataSource.value = 'live';
   clearPageCache();
 });
 
 afterEach(() => {
-  dataSource.value = 'demo';
+  dataSource.value = 'live';
 });
 
 describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）', () => {
@@ -157,17 +156,6 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     const row = wrapper.find('tbody tr');
     expect(row.text()).toContain('—');
     expect(row.find('.ts-prog').exists()).toBe(false);
-    wrapper.unmount();
-  });
-
-  it('demo 模式：演示行带进度渲染（终态已完成行只显「已完成」，进行中/中断态仍显任务进度）', async () => {
-    dataSource.value = 'demo';
-    const wrapper = mount(TeachingSessions, { global: { plugins: [mockRouter()] } });
-    await flushPromises();
-    expect(listMock).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('已完成');
-    expect(wrapper.text()).toContain('中断于 任务 3/4');
-    expect(wrapper.findAll('.ts-prog--done').length).toBeGreaterThan(0);
     wrapper.unmount();
   });
 });

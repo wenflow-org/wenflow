@@ -67,7 +67,7 @@
             storage-key="wf_teaching_hidden_cols"
             v-model:hidden="tsHiddenCols"
           />
-          <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}<template v-if="dataSource === 'live'"> · {{ includeTest ? '含模拟' : '仅真实' }} · 仅显示最近 100 条</template></span>
+          <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}<template> · {{ includeTest ? '含模拟' : '仅真实' }} · 仅显示最近 100 条</template></span>
         </div>
       </div>
 
@@ -344,70 +344,6 @@ interface Row {
   progress: SessionProgress | null
 }
 
-/* ---------- demo 数据 ---------- */
-const demoRows: Row[] = [
-  {
-    id: 'ts-demo-1', topic: '数据清洗练习：缺失值处理', subject: 'Excel 自动化', taskType: 'practice',
-    userName: '陈晓', email: 'chenxiao@…', userId: '', isVirtualLearner: false, isTestAccount: false, status: 'completed', duration: 1840, messageCount: 12, knowledgePointCount: 4,
-    wrapupStatus: 'complete', hasAdvisory: true, attention: 'low', startAt: '32 分钟前',
-    wrapup: {
-      topicSummary: '围绕缺失值识别与填充策略展开，从 ISBLANK 判断到 IF 嵌套填充，最后落到真实周报的清洗演练。',
-      knowledgeSummary: '掌握了 ISBLANK 与 IF 组合判断；理解缺失值填充要先看分布再定策略，均值填充不是万能的。',
-      practiceAdvice: '建议完成一次真实表格的缺失值清洗：先统计每列缺失率，再分别给出填充或删除的理由。',
-      learningEvaluation: '理解到位，练习一次通过，可以进入下一阶段「数据透视」。'
-    },
-    wrapupSource: '模型生成', advisory: { priority: 'medium', title: '', text: '可安排一次真实数据练习巩固：用她自己团队的周报（脱敏后）做一次完整清洗，强化迁移。' },
-    rawJson: '{\n  "demo": true\n}', progress: { taskIndex: 2, totalTasks: 3, milestoneIndex: 2, totalMilestones: 4 }
-  },
-  {
-    id: 'ts-demo-2', topic: 'JOIN 实战 3/4', subject: 'SQL 基础', taskType: 'practice',
-    userName: '赵敏', email: 'zhaomin@…', userId: '', isVirtualLearner: false, isTestAccount: false, status: 'failed', duration: 620, messageCount: 4, knowledgePointCount: 2,
-    wrapupStatus: 'missing', hasAdvisory: true, attention: 'high', startAt: '4 分钟前',
-    wrapup: null, wrapupSource: '—', advisory: { priority: 'high', title: '', text: '连续 3 次任务失败且本次会话异常中断：建议伴学介入，把 JOIN 去重拆成「先 DISTINCT 再 JOIN」两步，并临时降低练习难度。' },
-    rawJson: '{\n  "demo": true\n}', progress: { taskIndex: 3, totalTasks: 4, milestoneIndex: 3, totalMilestones: 4 }
-  },
-  {
-    id: 'ts-demo-3', topic: '提问训练：把模糊问题拆成假设', subject: '数据分析思维', taskType: 'acquire',
-    userName: '刘一帆', email: 'liu**@…', userId: '', isVirtualLearner: false, isTestAccount: false, status: 'completed', duration: 1500, messageCount: 9, knowledgePointCount: 3,
-    wrapupStatus: 'complete', hasAdvisory: true, attention: 'medium', startAt: '22 分钟前',
-    wrapup: {
-      topicSummary: '练习把「为什么转化率低」拆成可验证的子假设。',
-      knowledgeSummary: '能列出 3 个候选假设，但对「采样偏差」的理解还停留在定义层面。',
-      practiceAdvice: '用一个真实运营场景，写出假设并标注每个假设需要的证据。',
-      learningEvaluation: '框架已有，概念「采样偏差」挣扎，建议安排一次专项复盘。'
-    },
-    wrapupSource: '模型生成', advisory: { priority: 'medium', title: '', text: '概念「采样偏差」连续两次未达标，建议下节课前插入 5 分钟图例复盘。' },
-    rawJson: '{\n  "demo": true\n}', progress: { taskIndex: 1, totalTasks: 4, milestoneIndex: 1, totalMilestones: 3 }
-  },
-  {
-    id: 'ts-demo-4', topic: '函数练习 2/5：参数与返回值', subject: 'Python 入门', taskType: 'practice',
-    userName: '孙可', email: 'sunke@…', userId: '', isVirtualLearner: false, isTestAccount: false, status: 'completed', duration: 2100, messageCount: 15, knowledgePointCount: 5,
-    wrapupStatus: 'complete', hasAdvisory: false, attention: 'low', startAt: '2 小时前',
-    wrapup: {
-      topicSummary: '默认参数与返回值的基础训练。',
-      knowledgeSummary: '默认参数掌握；对「作用域」仍有混淆，把全局变量当返回值用。',
-      practiceAdvice: '完成 3 道纯函数改写练习。',
-      learningEvaluation: '通过但用时偏长，建议下一课前做 5 分钟热身。'
-    },
-    wrapupSource: '规则回退', advisory: null,
-    rawJson: '{\n  "demo": true\n}', progress: { taskIndex: 2, totalTasks: 5, milestoneIndex: 2, totalMilestones: 4 }
-  },
-  {
-    id: 'ts-demo-5', topic: '邮件表达：开场与诉求句', subject: '职场英语', taskType: 'reading',
-    userName: '周洁', email: 'zhoujie@…', userId: '', isVirtualLearner: false, isTestAccount: false, status: 'active', duration: 480, messageCount: 3, knowledgePointCount: 1,
-    wrapupStatus: 'missing', hasAdvisory: false, attention: 'low', startAt: '18 分钟前',
-    wrapup: null, wrapupSource: '—', advisory: null,
-    rawJson: '{\n  "demo": true\n}', progress: { taskIndex: 1, totalTasks: 3, milestoneIndex: 1, totalMilestones: 4 }
-  },
-  {
-    id: 'ts-demo-6', topic: '五十音图：か行・さ行', subject: '日语 N5', taskType: 'quiz',
-    userName: '冯远', email: 'fengyuan@…', userId: '', isVirtualLearner: false, isTestAccount: false, status: 'timeout', duration: 360, messageCount: 2, knowledgePointCount: 0,
-    wrapupStatus: 'missing', hasAdvisory: true, attention: 'high', startAt: '1 小时前',
-    wrapup: null, wrapupSource: '—', advisory: { priority: 'high', title: '', text: '测验超时且中途离开：近 5 天活跃度持续下降，建议触发挽留流程并下调每日任务量。' },
-    rawJson: '{\n  "demo": true\n}', progress: { taskIndex: 1, totalTasks: 2, milestoneIndex: 1, totalMilestones: 5 }
-  }
-]
-
 const rows = ref<Row[]>([])
 const refreshing = ref(false)
 const loadFailed = ref(false)
@@ -415,10 +351,9 @@ const loadFailed = ref(false)
 /* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；切换「含虚拟·测试」后重拉全量并灰标虚拟/测试行 */
 const includeTest = ref(false)
 
-/* 静默拉取：live 模式成功即整表替换；失败保留旧数据（轮询不闪空态），并标记错误条。
+/* 静默拉取：成功即整表替换；失败保留旧数据（轮询不闪空态），并标记错误条。
    force = true 绕过页面级 TTL 缓存（显式刷新/口径切换/轮询用） */
 async function fetchRows(force = false): Promise<boolean> {
-  if (dataSource.value !== 'live') return false
   // 页面级 TTL 缓存：切换页面回来时跳过重复请求（轮询/显式刷新传 force 不受影响）
   if (!force && isPageCacheFresh('teaching-sessions') && rows.value.length) return true
   try {
@@ -448,7 +383,7 @@ async function refreshNow() {
 /* G4：停留页面时静默轮询，避免状态过期（setTimeout 链 + 并发守卫 + 指数退避）。
    轮询传 force 绕过 TTL 缓存，保证每次 tick 都真实拉取；
    immediate:false —— 首拉由下方 watch 负责，避免同帧重复请求 */
-const { start: startPolling, stop: stopPolling } = useSafePolling(
+const { start: startPolling } = useSafePolling(
   async () => { await fetchRows(true) },
   {
     interval: 20000,
@@ -461,12 +396,7 @@ const { start: startPolling, stop: stopPolling } = useSafePolling(
 
 watch(
   () => dataSource.value,
-  async (src) => {
-    if (src !== 'live') {
-      stopPolling()
-      rows.value = [...demoRows]
-      return
-    }
+  async () => {
     refreshing.value = true
     try {
       const ok = await fetchRows()
@@ -475,14 +405,13 @@ watch(
       refreshing.value = false
     }
     // 首拉完成后再启动静默轮询（immediate:false，不会与首拉重复请求）
-    if (dataSource.value === 'live') startPolling()
+    startPolling()
   },
   { immediate: true }
 )
 
 /* 数据隔离切换：仅真实 ↔ 含虚拟/测试（切换后立即按新口径重拉） */
 watch(includeTest, () => {
-  if (dataSource.value !== 'live') return
   refreshing.value = true
   void fetchRows(true).finally(() => {
     refreshing.value = false
@@ -584,7 +513,7 @@ const filtered = computed(() => {
   if (dateFilter.value === '7d' || dateFilter.value === '30d') {
     const cutoff = Date.now() - (dateFilter.value === '7d' ? 7 : 30) * 86400000
     list = list.filter((r) => {
-      if (!r.startTime) return true // 无时间戳的行不拦截（demo 数据）
+      if (!r.startTime) return true // 无时间戳的行不拦截
       const t = new Date(r.startTime).getTime()
       return Number.isFinite(t) && t >= cutoff
     })
@@ -602,9 +531,8 @@ function clearFilters() {
   keyword.value = ''
 }
 
-/* 长列表分批渲染：每批 15 行 */
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
-   数据全量在客户端（live 拉取 / demo 本地），筛选后按页切片；
+   数据全量在客户端（live 拉取），筛选后按页切片；
    筛选/数据变化自动回第 1 页（watch filtered） */
 const page = ref(1)
 const pageSize = ref(15)

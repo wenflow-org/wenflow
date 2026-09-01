@@ -185,7 +185,7 @@
             <pre v-if="promptOf(span)!.rawModelOutput" class="wf-payload">{{ promptOf(span)!.rawModelOutput }}</pre>
           </div>
           <!-- 重试时间线（live，展开时拉取） -->
-          <div v-if="dataSource === 'live' && detailLoading === span.id" class="wf-facts"><span class="wf-fact">拉取重试时间线…</span></div>
+          <div v-if="detailLoading === span.id" class="wf-facts"><span class="wf-fact">拉取重试时间线…</span></div>
           <div v-else-if="detailFailed.has(span.id)" class="wf-facts">
             <span class="wf-fact wf-fact--bad">重试时间线拉取失败</span>
             <button type="button" class="mk-link" @click="openSpanId = ''; void nextTick().then(() => openSpanId = span.id)">重试</button>
@@ -256,7 +256,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { spans, intent, openSkillDrawer, dataSource, isLive, type TraceSpan } from './store'
+import { spans, intent, openSkillDrawer, dataSource, type TraceSpan } from './store'
 import {
   livePromptIndex,
   loadPromptIndex,
@@ -289,10 +289,8 @@ const activeSession = ref('')
 const failuresOnly = ref(false)
 const sortMode = ref<'time' | 'dur-desc' | 'dur-asc'>('time')
 
-/* W1：瀑布样本源 = 服务端可扩充集合（boot 快照 + 追加页 + 直达重查）；demo 模式沿用 store 演示数据 */
-const baseSpans = computed<TraceSpan[]>(() =>
-  dataSource.value === 'live' ? (waterfallSpans.value ?? spans.value) : spans.value
-)
+/* W1：瀑布样本源 = 服务端可扩充集合（boot 快照 + 追加页 + 直达重查） */
+const baseSpans = computed<TraceSpan[]>(() => waterfallSpans.value ?? spans.value)
 
 /* ---- 预聚合概要（性能热点修复）----
  * 此前 pickTrace 的排序比较器每次比较都对 baseSpans 做两次全量 filter（O(t·log t·n)），
@@ -360,19 +358,16 @@ const sessionAggMap = computed<Map<string, SessionAgg>>(() => {
 
 /* Prompt 契约索引（与执行日志同源：同 traceId 关联 prompt_call_logs） */
 onMounted(() => {
-  if (dataSource.value === 'live') void loadPromptIndex()
+  void loadPromptIndex()
   waterfallSyncFromBoot()
   observeRowTrack()
 })
 onBeforeUnmount(() => {
   trackObserver?.disconnect()
 })
-// demo → live 切换后重载（与 ExecLogs 一致）
 watch(dataSource, () => {
-  if (dataSource.value === 'live') {
-    void loadPromptIndex()
-    waterfallSyncFromBoot()
-  }
+  void loadPromptIndex()
+  waterfallSyncFromBoot()
 })
 function promptOf(span: { traceId: string; agent: string }): PromptMetaRow | undefined {
   const list = livePromptIndex.value[span.traceId]
@@ -398,7 +393,7 @@ function setDetail(id: string, d: LogDetail) {
 const detailFailed = ref(new Set<string>())
 
 watch(openSpanId, async (id) => {
-  if (!id || dataSource.value !== 'live' || detailCache.value[id]) return
+  if (!id || detailCache.value[id]) return
   detailLoading.value = id
   try {
     setDetail(id, await fetchLogDetail(id))
@@ -429,14 +424,12 @@ watch(
       return
     }
     // W1 直达：样本外 trace 不再只给提示——服务端按 traceId 整链路重查后选中
-    if (dataSource.value === 'live') {
-      const found = await waterfallFetchTrace(t)
-      if (found && allTraceIds.value.includes(t)) {
-        activeTrace.value = t
-        notice.value = ''
-      } else if (!found) {
-        notice.value = `链路 ${shortTrace(t)} 未找到（服务端无此 traceId 记录）`
-      }
+    const found = await waterfallFetchTrace(t)
+    if (found && allTraceIds.value.includes(t)) {
+      activeTrace.value = t
+      notice.value = ''
+    } else if (!found) {
+      notice.value = `链路 ${shortTrace(t)} 未找到（服务端无此 traceId 记录）`
     }
   },
   { immediate: true }
@@ -557,17 +550,13 @@ watch(
       notice.value = ''
       return
     }
-    if (dataSource.value === 'live') {
-      const found = await waterfallFetchSession(sid)
-      if (found && sessionIds.value.includes(sid)) {
-        activeSession.value = sid
-        viewMode.value = 'session'
-        notice.value = ''
-      } else if (!found) {
-        notice.value = `会话 ${shortTrace(sid)} 未找到（服务端无此 sessionId 记录）`
-      }
-    } else {
-      notice.value = `会话 ${shortTrace(sid)} 不在当前加载范围内（样本截断），无法按会话归组`
+    const found = await waterfallFetchSession(sid)
+    if (found && sessionIds.value.includes(sid)) {
+      activeSession.value = sid
+      viewMode.value = 'session'
+      notice.value = ''
+    } else if (!found) {
+      notice.value = `会话 ${shortTrace(sid)} 未找到（服务端无此 sessionId 记录）`
     }
   },
   { immediate: true }
@@ -594,24 +583,22 @@ function locateFailure() {
 /* W1：加载更多样本（服务端分页追加）+ traceId 直达搜索 */
 /* 本地样本上限：行列表无虚拟化，达到 WATERFALL_MAX_SPANS 后停止追加并提示 */
 const waterfallCapReached = computed(
-  () => dataSource.value === 'live' && (waterfallSpans.value?.length ?? 0) >= WATERFALL_MAX_SPANS
+  () => (waterfallSpans.value?.length ?? 0) >= WATERFALL_MAX_SPANS
 )
 const canLoadMoreWaterfall = computed(() =>
-  dataSource.value === 'live'
-  && waterfallSpans.value !== null
+  waterfallSpans.value !== null
   && waterfallTotal.value > 0
   && (waterfallSpans.value?.length ?? 0) < waterfallTotal.value
   && !waterfallCapReached.value
   && !waterfallLoading.value
 )
 async function loadMoreWaterfall() {
-  if (!isLive.value) return
   await waterfallLoadMore()
 }
 /** 输入完整 traceId 回车 → 服务端直达重查并选中（与执行日志 traceId 直达同模式） */
 async function searchTrace() {
   const q = traceKeyword.value.trim()
-  if (!q || !isLive.value) return
+  if (!q) return
   const found = await waterfallFetchTrace(q)
   if (found) {
     activeTrace.value = q

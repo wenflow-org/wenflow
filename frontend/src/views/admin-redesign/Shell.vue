@@ -1,6 +1,6 @@
 <template>
   <div class="mshell" :data-collapsed="collapsed ? 'true' : 'false'">
-    <!-- 迷你侧边栏（同时是导航与「侧栏再设计」演示） -->
+    <!-- 迷你侧边栏（导航 + 侧栏再设计展示） -->
     <aside class="mshell__side">
       <div class="mshell__brand">
         <!-- 展开：长方形全 logo（图标 + 问流）；折叠：正方形图标 -->
@@ -60,7 +60,7 @@
           </button>
         </section>
       </nav>
-      <!-- 左侧底部：极简品牌行（数据源状态由顶栏演示横幅/徽章兜底；命令面板入口在右上角） -->
+      <!-- 左侧底部：极简品牌行（命令面板入口在右上角） -->
       <footer class="mshell__foot">
         <span class="mshell__foot-name">WenFlow Admin</span>
         <span class="mshell__foot-ver mono">v{{ version }}</span>
@@ -69,18 +69,11 @@
 
     <!-- 主区 -->
     <div class="mshell__main">
-      <!-- 阶段 0 R1：demo 数据源存在时（开发态手动切换/后端不可用残留）置顶横幅，防止真假混淆 -->
-      <div v-if="dataSource === 'demo' && !liveLoading" class="mshell__demo" role="alert">
-        <strong class="mshell__demo-title">演示数据</strong>
-        <span class="mshell__demo-text">当前展示内置演示数据（离线预览），非真实平台数据，操作不会写入系统</span>
-        <button type="button" class="mshell__demo-btn" @click="refreshData">连接真实数据</button>
-      </div>
       <header class="mshell__topbar">
         <div class="mshell__crumbs">
           <span class="mshell__crumb-group">{{ currentScene?.group }}</span>
           <span class="mshell__crumb-sep">/</span>
           <strong>{{ currentScene?.label }}</strong>
-          <span v-if="dataSource === 'demo'" class="mk-badge mk-badge--warn mshell__demo-badge">演示模式</span>
           <template v-if="crumb">
             <span class="mshell__crumb-sep">/</span>
             <span class="mshell__crumb-sub" :title="crumbTitle || crumb">{{ crumb }}</span>
@@ -151,7 +144,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { MOCK_SCENES, type MockSceneDef } from './manifest'
-import { dataSource } from './store'
 import { liveNavBadges, alarmNavBadges, loadLiveData, liveLoading } from './live'
 import { adminAuthApi, clearAdminSession } from '@/api/adminApi'
 import { readTheme, writeTheme, applyDocumentTheme } from '@/utils/theme'
@@ -235,10 +227,7 @@ function refreshData() {
 }
 
 function badgeOf(item: MockSceneDef): string {
-  if (dataSource.value === 'live') {
-    return liveNavBadges.value[item.id] || ''
-  }
-  return item.badge || ''
+  return liveNavBadges.value[item.id] || ''
 }
 
 /* 徽章语义说明：红色=告警（近 7 天执行失败数，点击进入执行日志后自动平息）；
@@ -246,7 +235,7 @@ function badgeOf(item: MockSceneDef): string {
 function badgeTitle(item: MockSceneDef): string {
   const count = badgeOf(item)
   if (!count) return ''
-  if (dataSource.value === 'live' && alarmNavBadges.has(item.id)) {
+  if (alarmNavBadges.has(item.id)) {
     return `近 7 天执行失败 ${count} 次（告警徽章：红色；进入执行日志页后自动平息）`
   }
   return `${item.label}：${count}`
@@ -279,7 +268,6 @@ function markAlarmRead(item: MockSceneDef) {
 }
 
 function isAlarmBadge(item: MockSceneDef): boolean {
-  if (dataSource.value !== 'live') return false
   const cur = Number(liveNavBadges.value[item.id] || 0)
   const read = Number(alarmRead.value[item.id] || 0)
   return alarmNavBadges.has(item.id) && cur > 0 && cur > read
@@ -559,46 +547,6 @@ const groupedScenes = computed(() => {
   overflow-x: hidden;
 }
 
-/* 演示数据置顶横幅（阶段 0 R1）：demo 态常驻警示，防止真假混淆 */
-.mshell__demo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 20px;
-  background: #fffbeb;
-  border-bottom: 1px solid rgba(217, 119, 6, 0.35);
-  color: #92400e;
-  font-size: 12px;
-  position: sticky;
-  top: 0;
-  z-index: var(--mk-z-menu);
-}
-.mshell__demo-title {
-  flex-shrink: 0;
-  padding: 1px 9px;
-  border-radius: 999px;
-  background: #f59e0b;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-.mshell__demo-text { flex: 1; min-width: 0; line-height: 1.5; }
-.mshell__demo-btn {
-  flex-shrink: 0;
-  padding: 4px 12px;
-  border: 1px solid rgba(217, 119, 6, 0.5);
-  border-radius: 999px;
-  background: #fff;
-  color: #92400e;
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-.mshell__demo-btn:hover { background: #fef3c7; border-color: rgba(217, 119, 6, 0.75); }
-
 /* release 模式：顶栏右侧管理员区 */
 .mshell__topbar-right { display: flex; align-items: center; gap: 12px; }
 .mshell__refresh {
@@ -829,9 +777,5 @@ html[data-theme='dark'] {
   .mshell__admin { color: #dce5f1; }
   .mshell__refresh:hover:not(:disabled) { color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
   .mshell__admin { color: #e6edf7; }
-  .mshell__demo { background: #2a2410; border-bottom-color: rgba(251, 191, 36, 0.3); color: #fcd34d; }
-  .mshell__demo-title { background: #b45309; }
-  .mshell__demo-btn { background: #2a2410; border-color: rgba(251, 191, 36, 0.4); color: #fcd34d; }
-  .mshell__demo-btn:hover { background: #3a2f14; }
 }
 </style>

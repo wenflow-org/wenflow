@@ -350,7 +350,6 @@ const skillStats = computed(() => {
 const detailByStage = ref<Record<string, StageDetailLike | null>>({})
 const defsLoaded = ref(false)
 async function loadDefs() {
-  if (!isLive.value) return
   try {
     const stages = ['goal', 'path', 'teaching', 'profile', 'simulation']
     const results = await Promise.allSettled(
@@ -370,7 +369,7 @@ async function loadDefs() {
     defsLoaded.value = false
   }
 }
-watch(isLive, (v) => { if (v) void loadDefs() }, { immediate: true })
+watch(isLive, () => { void loadDefs() }, { immediate: true })
 // 拓扑数据变化（时间范围切换）后重新适配视图
 watch(liveTopoNodes, () => { void nextTick(() => fitView()) })
 

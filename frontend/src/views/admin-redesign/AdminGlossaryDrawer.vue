@@ -37,7 +37,7 @@
         </div>
 
         <div ref="bodyRef" class="mk-drawer__body agd__body" @scroll.passive="onBodyScroll">
-          <template v-if="dataSource === 'live' && !loaded">
+          <template v-if="!loaded">
             <div class="agd__loading">加载术语表中…</div>
           </template>
           <template v-else>
@@ -122,10 +122,6 @@
                 </li>
               </ul>
             </section>
-
-            <p v-if="dataSource !== 'live'" class="agd__demo-note">
-              演示模式：以下为内置精简词条；连接后端后自动加载完整术语表（GET /api/admin/glossary）。
-            </p>
           </template>
         </div>
       </aside>
@@ -136,8 +132,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { adminGlossaryApi } from '@/api/adminApi'
-import { dataSource } from './store'
-import { COMPLETION_META, SEMANTICS_META, DEMO_GLOSSARY_TERMS, DEMO_GLOSSARY_DOCS } from './glossaryMeta'
+import { COMPLETION_META, SEMANTICS_META, type GlossaryTerm } from './glossaryMeta'
 import { errMsg } from './live'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -162,8 +157,8 @@ const promptRoles = ref<PromptRoleMeta[]>([])
 const completionStates = ref(COMPLETION_META)
 const semantics = ref(SEMANTICS_META)
 const stages = ref<StageMeta[]>([])
-const terms = ref(DEMO_GLOSSARY_TERMS)
-const docs = ref(DEMO_GLOSSARY_DOCS)
+const terms = ref<GlossaryTerm[]>([])
+const docs = ref<Array<{ title: string; path: string; desc: string }>>([])
 
 const CATEGORY_SECTIONS = [
   { id: 'concept', label: '概念' },
@@ -244,7 +239,6 @@ const filteredDocs = computed(() => docs.value.filter((d) =>
   !kwLower.value || d.title.includes(kwLower.value) || d.path.includes(kwLower.value) || d.desc.includes(kwLower.value)))
 
 async function load() {
-  if (dataSource.value !== 'live') return
   try {
     const res = await adminGlossaryApi.get()
     const data = res.data?.data
@@ -324,7 +318,6 @@ function close() { emit('close') }
 .agd__term-def { font-size: 11.5px; color: var(--mk-muted, #5b6577); line-height: 1.5; }
 .agd__term-where { font-style: normal; color: var(--mk-blue, #2c63d0); }
 .agd__empty { padding: 8px 0; color: var(--mk-faint, #71809a); font-size: 12px; }
-.agd__demo-note { margin-top: 16px; padding: 8px 12px; border: 1px dashed rgba(44, 99, 208, 0.4); border-radius: 9px; background: #f0f5ff; color: var(--mk-blue, #2c63d0); font-size: 11.5px; }
 
 @media (min-width: 2000px) {
   .agd__panel { width: 560px; }
@@ -339,7 +332,6 @@ function close() { emit('close') }
   .agd__term-en { font-size: 12.5px; }
   .agd__term-def { font-size: 13.5px; }
   .agd__empty { font-size: 14px; }
-  .agd__demo-note { font-size: 13.5px; }
 }
 @media (min-width: 2800px) {
   .agd__panel { width: 700px; }
@@ -354,7 +346,6 @@ function close() { emit('close') }
   .agd__term-en { font-size: 15px; }
   .agd__term-def { font-size: 16px; }
   .agd__empty { font-size: 16.5px; }
-  .agd__demo-note { font-size: 16px; }
 }
 @media (min-width: 3600px) {
   .agd__panel { width: 880px; }
@@ -369,7 +360,6 @@ function close() { emit('close') }
   .agd__term-en { font-size: 17.5px; }
   .agd__term-def { font-size: 19px; }
   .agd__empty { font-size: 19.5px; }
-  .agd__demo-note { font-size: 19px; }
 }
 
 /* ================= 暗色模式（D1 补完）：术语表抽屉 ================= */
@@ -378,7 +368,6 @@ html[data-theme='dark'] {
   .agd__nav-item { background: #1d2739; }
   .agd__nav-item.is-active { background: rgba(91, 141, 239, 0.22); color: #9db8f5; }
   .agd__term { background: #141c2b; }
-  .agd__demo-note { background: rgba(91, 141, 239, 0.1); }
   /* 吸顶分类标题：白底穿帮修复 */
   .agd__section-title { background: #17202f; }
 }

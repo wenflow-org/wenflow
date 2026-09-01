@@ -42,10 +42,6 @@
               <span class="mk-badge mk-badge--muted">{{ categoryLabel }}</span>
               <span class="mk-badge mk-badge--muted">{{ liveMeta?.agentName || skillProfile.agentName || '—' }}</span>
             </template>
-            <template v-else>
-              <span class="mk-badge mk-badge--muted">Agent</span>
-              <span class="mk-badge mk-badge--muted">{{ memberSkills.length }} Skill<template v-if="memberErrors"> · {{ memberErrors }} 异常</template></span>
-            </template>
           </div>
           <p v-if="entity.description" class="msk__desc" :title="entity.description">{{ entity.description }}</p>
         </header>
@@ -87,7 +83,7 @@
               <strong>{{ stat.calls ? fmtMs(stat.avgMs) : '—' }}</strong>
             </div>
           </div>
-          <p v-if="skillProfile && isLive && statsSourceNote" class="msk__note">{{ statsSourceNote }}</p>
+          <p v-if="skillProfile && statsSourceNote" class="msk__note">{{ statsSourceNote }}</p>
 
           <!-- 生效模型（skill 模式）：所属/类别已进头部 chips -->
           <div v-if="skillProfile" class="msk__kv">
@@ -95,33 +91,6 @@
             <strong class="mono">{{ liveMeta?.model || skillProfile.promptVersion || '默认' }}</strong>
             <em v-if="liveMeta?.modelSource" class="msk__src">{{ liveMeta.modelSource }}</em>
           </div>
-
-          <!-- Agent 视图：下辖 Skill 清单 -->
-          <section v-if="!skillProfile && memberSkills.length" class="msk__section">
-            <header class="msk__sec-head">
-              <h4>下辖 Skill</h4>
-              <span class="msk__sec-meta mono">{{ memberSkills.length }}</span>
-            </header>
-            <div class="msk__list">
-              <button
-                v-for="s in memberSkills"
-                :key="s.id"
-                type="button"
-                class="msk__row"
-                @click="openSkillDrawer(s.id)"
-              >
-                <span
-                  class="msk__dot"
-                  :class="skillStatOf(s.id).errors ? 'is-err' : skillStatOf(s.id).calls ? 'is-ok' : 'is-idle'"
-                  :title="memberDotLabel(s.id)"
-                  :aria-label="memberDotLabel(s.id)"
-                ></span>
-                <span class="msk__row-title">{{ s.name }}</span>
-                <span class="msk__row-num mono">{{ skillStatOf(s.id).calls || '—' }}</span>
-                <span class="msk__row-id mono">{{ s.id }}</span>
-              </button>
-            </div>
-          </section>
 
           <section class="msk__section">
             <header class="msk__sec-head">
@@ -150,7 +119,7 @@
           <template v-if="activeTab === 'prompt'">
           <section v-if="skillProfile" class="msk__section">
             <header class="msk__sec-head">
-              <h4>{{ isLive ? '生效 Prompt' : 'Prompt 版本' }}</h4>
+              <h4>生效 Prompt</h4>
               <span class="msk__sec-meta">
                 <span class="mono">{{ liveMeta?.promptVersion || skillProfile.promptVersion || '默认' }}</span>
               </span>
@@ -162,7 +131,7 @@
             </div>
           </section>
 
-          <section v-if="skillProfile && isLive" class="msk__section msk__section--actions">
+          <section v-if="skillProfile" class="msk__section msk__section--actions">
             <button type="button" class="msk__primary-link" @click="goFullEditor">打开 Prompt 设计页 →</button>
             <p class="msk__none">设计页统一承接：协议（core 编辑/发布）、版本、试跑、运行时与工程视图；抽屉仅保留只读速览。</p>
           </section>
@@ -182,15 +151,10 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   intent,
-  skillProfiles,
-  agentProfiles,
-  skillsOfAgent,
   skillStatOf,
   recentSpansOf,
   openTrace,
-  openSkillDrawer,
   closeSkillDrawer,
-  dataSource,
   AGENT_TONES
 } from './store'
 import { liveSkillProfiles, liveExtraProfiles } from './live'
@@ -207,24 +171,18 @@ useMaskClose(maskRef, closeSkillDrawer)
 
 const router = useRouter()
 
-const isLive = computed(() => dataSource.value === 'live')
-
 const skillProfile = computed(() => {
   const id = intent.skillDrawerId
-  // live 模式只认真实注册表（含外挂能力 Skill）：查不到即「未找到」，不静默回退 demo 档案
-  if (isLive.value) {
-    const live =
-      liveSkillProfiles.value.find((p) => p.id === id) ||
-      liveExtraProfiles.value.find((p) => p.id === id)
-    if (live) {
-      return { id: live.id, name: live.name, agentId: '', agentName: '', category: live.category, promptVersion: '', description: '' }
-    }
-    return null
+  // 只认真实注册表（含外挂能力 Skill）：查不到即「未找到」，不静默回退
+  const live =
+    liveSkillProfiles.value.find((p) => p.id === id) ||
+    liveExtraProfiles.value.find((p) => p.id === id)
+  if (live) {
+    return { id: live.id, name: live.name, agentId: '', agentName: '', category: live.category, promptVersion: '', description: '' }
   }
-  return skillProfiles.find((p) => p.id === id) || null
+  return null
 })
-const agentProfile = computed(() => agentProfiles.find((p) => p.id === intent.skillDrawerId) || null)
-const entity = computed(() => skillProfile.value || agentProfile.value)
+const entity = computed(() => skillProfile.value)
 
 /* 身份色：与 Agent 拓扑同套阶段色（按所属 Agent 取色） */
 const tone = computed(() => {
@@ -258,7 +216,7 @@ const visibleTabs = computed<Array<{ key: DrawerTab; label: string; badge?: stri
     {
       key: 'overview',
       label: '概览',
-      badge: !skillProfile.value && memberSkills.value.length ? String(memberSkills.value.length) : undefined,
+      badge: undefined,
       badgeCls: undefined
     }
   ]
@@ -299,7 +257,7 @@ watch(
     liveMeta.value = null
     metaLoading.value = true
     activeTab.value = 'overview'
-    if (!id || !isLive.value || !skillProfile.value) { metaLoading.value = false; return }
+    if (!id || !skillProfile.value) { metaLoading.value = false; return }
     try {
       const [metaRes, promptRes] = await Promise.all([
         adminSkillWorkbenchApi.getMeta(id).catch(() => null),
@@ -338,24 +296,12 @@ watch(
   { immediate: true }
 )
 
-const memberSkills = computed(() => (agentProfile.value ? skillsOfAgent(agentProfile.value.id) : []))
-const memberErrors = computed(() => memberSkills.value.filter((s) => skillStatOf(s.id).errors > 0).length)
-
 /** 状态点可访问性文本 */
-const memberDotLabel = (id: string) => {
-  const st = skillStatOf(id)
-  return st.errors ? '该 Skill 有失败' : st.calls ? '正常' : '无调用'
-}
 const statusDotLabel = (s: string) => (s === 'ok' ? '成功' : s === 'err' ? '失败' : '超时')
 
 const stat = computed(() => {
   if (skillProfile.value) return skillStatOf(skillProfile.value.id)
-  // Agent：聚合下辖 Skill 的统计
-  const members = memberSkills.value.map((s) => skillStatOf(s.id))
-  const calls = members.reduce((a, m) => a + m.calls, 0)
-  const errors = members.reduce((a, m) => a + m.errors, 0)
-  const avgMs = calls ? Math.round(members.reduce((a, m) => a + m.avgMs * m.calls, 0) / calls) : 0
-  return { calls, errors, avgMs, lastAt: calls ? '刚刚' : '从未' }
+  return { calls: 0, errors: 0, avgMs: 0, lastAt: '从未' }
 })
 
 const recent = computed(() => (entity.value ? recentSpansOf(entity.value.id) : []))

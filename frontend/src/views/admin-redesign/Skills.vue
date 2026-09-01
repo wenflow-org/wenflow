@@ -34,7 +34,7 @@
             <option value="">全部类别</option>
             <option v-for="c in categoryOptions" :key="c" :value="c">{{ categoryText(c) }}</option>
           </select>
-          <select v-model="statsRange" class="mk-filter__select" aria-label="统计窗口" :disabled="!isLive">
+          <select v-model="statsRange" class="mk-filter__select" aria-label="统计窗口">
             <option value="7d">近 7 天</option>
             <option value="24h">近 24 小时</option>
             <option value="30d">近 30 天</option>
@@ -174,7 +174,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { skillProfiles, skillStatOf, openSkillDrawer, dataSource, isLive } from './store'
+import { skillStatOf, openSkillDrawer, isLive } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
 import { completionMetaOf } from './glossaryMeta'
@@ -239,19 +239,17 @@ function rateTone(s: { calls: number; errors: number }) {
 /** 平均耗时阈值着色：>40s 红、>20s 琥珀 */
 // 时间窗口切换 → 按新窗口重新拉取统计
 watch(statsRange, async () => {
-  if (isLive.value) {
-    try {
-      await refreshLiveSkills()
-      liveSkillsError.value = ''
-    } catch (e) {
-      liveSkillsError.value = errMsg(e)
-    }
+  try {
+    await refreshLiveSkills()
+    liveSkillsError.value = ''
+  } catch (e) {
+    liveSkillsError.value = errMsg(e)
   }
 })
 
 /** live 拉取失败：初始装载失败（liveFailures.skills）或窗口切换/重试失败（本地） */
 const liveSkillsError = ref('')
-const skillsError = computed(() => liveSkillsError.value || (isLive.value ? liveFailures.value.skills || '' : ''))
+const skillsError = computed(() => liveSkillsError.value || liveFailures.value.skills || '')
 
 async function retrySkills() {
   liveSkillsError.value = ''
@@ -263,12 +261,9 @@ async function retrySkills() {
   }
 }
 
-// 卡片数据 = 档案 + 实时统计（live 模式用真实注册表，为空即空态；demo 模式用演示档案）
+// 卡片数据 = 档案 + 实时统计（live 注册表；为空即空态）
 const cards = computed(() => {
-  const profiles =
-    dataSource.value === 'live'
-      ? liveSkillProfiles.value.map((p) => ({ ...p, promptVersion: '', description: '' }))
-      : skillProfiles
+  const profiles = liveSkillProfiles.value.map((p) => ({ ...p, promptVersion: '', description: '' }))
   return profiles.map((p) => {
     const stat = skillStatOf(p.id)
     const health: Health = stat.errors > 0 ? 'error' : stat.calls === 0 ? 'idle' : 'ok'
@@ -320,7 +315,7 @@ function clearFilters() {
 
 /* 长列表分批渲染：每批 15 行 */
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
-   数据全量在客户端（live 拉取 / demo 本地），筛选后按页切片；
+   数据全量在客户端（live 拉取），筛选后按页切片；
    筛选/数据变化自动回第 1 页（watch filtered）；recShown 属对账明细，仍用加载更多 */
 const page = ref(1)
 const pageSize = ref(15)
@@ -368,7 +363,6 @@ watch(recReport, async (report) => {
 })
 
 async function refreshReconciliation() {
-  if (!isLive.value) return
   recLoading.value = true
   recError.value = ''
   try {
@@ -382,13 +376,13 @@ async function refreshReconciliation() {
   }
 }
 
-watch(isLive, (live) => {
-  if (live) refreshReconciliation()
+watch(isLive, () => {
+  refreshReconciliation()
 })
 
 onMounted(() => {
   applyRecQuery()
-  if (isLive.value) refreshReconciliation()
+  refreshReconciliation()
 })
 
 /** 完成度五档色标（draft → live）；文案单源：glossaryMeta.ts（与后端 glossary-content 对齐） */

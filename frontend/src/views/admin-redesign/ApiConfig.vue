@@ -442,7 +442,7 @@ async function probeHealth() {
   }
 }
 
-/* ---------- 表单状态（demo / live 共用一套交互） ---------- */
+/* ---------- 表单状态（live 一套交互） ---------- */
 const form = reactive({
   apiUrl: '',
   apiKey: '',
@@ -552,9 +552,6 @@ function retryConfigLoad() {
   void loadProbe()
 }
 
-/* demo 数据 */
-const DEMO_MODELS = ['deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-v4-lite', 'deepseek-v4-vision', 'qwen3-32b', 'qwen3-14b']
-
 function applyLiveConfig() {
   if (!cfg.value) return
   form.apiUrl = cfg.value.apiUrl
@@ -571,28 +568,13 @@ function applyLiveConfig() {
   dirty.value = new Set()
 }
 
-function applyDemoState() {
-  form.apiUrl = 'https://api.deepseek.com/v1'
-  form.apiKey = ''
-  form.defaultModel = 'deepseek-v4-flash'
-  form.defaultReasoningModel = 'deepseek-v4-pro'
-  form.defaultEvaluationModel = 'deepseek-v4-pro'
-  fetchedModels.value = [...DEMO_MODELS]
-  keySet.value = true
-  connectionStatus.value = 'connected'
-  savedApiUrl.value = form.apiUrl
-  dirty.value = new Set(['conn', 'route'])
-}
-
 watch(
   () => [dataSource.value, cfg.value] as const,
   () => {
-    if (dataSource.value === 'live') {
-      applyLiveConfig()
-      if (!reliability.value) void loadReliability()
-      if (!probe.loaded) void loadProbe()
-      void loadHealth()
-    } else applyDemoState()
+    applyLiveConfig()
+    if (!reliability.value) void loadReliability()
+    if (!probe.loaded) void loadProbe()
+    void loadHealth()
   },
   { immediate: true, deep: true }
 )
@@ -637,21 +619,12 @@ async function fetchModels() {
   if (fetching.value || !form.apiUrl) return
   fetching.value = true
   try {
-    if (isLive.value) {
-      const list = await liveFetchModels(form.apiUrl, form.apiKey)
-      fetchedModels.value = list
-      modelsFetchedOnce.value = true
-      connectionStatus.value = 'connected'
-      markDirty('conn')
-      toast.info(list.length ? `已获取 ${list.length} 个模型，记得保存` : '连接成功，但服务未返回模型列表')
-    } else {
-      await new Promise((r) => setTimeout(r, 900))
-      fetchedModels.value = [...DEMO_MODELS]
-      keySet.value = true
-      connectionStatus.value = 'connected'
-      markDirty('conn')
-      toast.success(`已获取 ${DEMO_MODELS.length} 个模型，记得保存`)
-    }
+    const list = await liveFetchModels(form.apiUrl, form.apiKey)
+    fetchedModels.value = list
+    modelsFetchedOnce.value = true
+    connectionStatus.value = 'connected'
+    markDirty('conn')
+    toast.info(list.length ? `已获取 ${list.length} 个模型，记得保存` : '连接成功，但服务未返回模型列表')
   } catch (e) {
     connectionStatus.value = 'failed'
     toast.error(`连接失败：${errMsg(e)}`)
@@ -666,22 +639,17 @@ async function runTest() {
   testResult.value = null
   const started = Date.now()
   try {
-    if (isLive.value) {
-      const r = await liveRunModelTest({
-        apiUrl: form.apiUrl,
-        apiKey: form.apiKey,
-        model: testModel.value,
-        prompt: '用一句话介绍你自己。'
-      })
-      testResult.value = {
-        ok: true,
-        text: r.text.slice(0, 80),
-        latency: r.latencyMs ? `${r.latencyMs}ms` : `${Date.now() - started}ms`,
-        usage: r.usage
-      }
-    } else {
-      await new Promise((r) => setTimeout(r, 800))
-      testResult.value = { ok: true, text: '模型测试成功。', latency: '238ms', usage: 'P 12 / C 9 / T 21' }
+    const r = await liveRunModelTest({
+      apiUrl: form.apiUrl,
+      apiKey: form.apiKey,
+      model: testModel.value,
+      prompt: '用一句话介绍你自己。'
+    })
+    testResult.value = {
+      ok: true,
+      text: r.text.slice(0, 80),
+      latency: r.latencyMs ? `${r.latencyMs}ms` : `${Date.now() - started}ms`,
+      usage: r.usage
     }
   } catch (e) {
     testResult.value = { ok: false, text: errMsg(e).slice(0, 80) }
@@ -693,7 +661,7 @@ async function runTest() {
 async function saveAll() {
   if (saving.value) return
   // 高风险确认：开放公网访问需二次确认
-  if (isLive.value && dirty.value.has('policy') && policy.adminAccessMode === 'any') {
+  if (dirty.value.has('policy') && policy.adminAccessMode === 'any') {
     const ok = await askConfirm({
       title: '开放公网访问',
       message: '你正在将 Admin 后台开放到公网/任意来源访问。\n任何能访问该服务地址的人都能看到管理入口，请确认已了解风险。',
@@ -703,59 +671,53 @@ async function saveAll() {
   }
   saving.value = true
   try {
-    if (isLive.value) {
-      if (dirty.value.has('conn') || dirty.value.has('route')) {
-        const payload: {
-          apiUrl: string
-          apiKey: string
-          defaultModel: string
-          defaultReasoningModel: string
-          defaultEvaluationModel: string
-          availableModels?: string[]
-        } = {
-          apiUrl: form.apiUrl,
-          apiKey: form.apiKey,
-          defaultModel: form.defaultModel,
-          defaultReasoningModel: form.defaultReasoningModel,
-          defaultEvaluationModel: form.defaultEvaluationModel
-        }
-        // G5：从未成功拉取过模型时不提交 availableModels，避免空数组清空后端模型列表
-        if (modelsFetchedOnce.value) payload.availableModels = fetchedModels.value
-        await liveSaveApiConfig(payload as Parameters<typeof liveSaveApiConfig>[0])
+    if (dirty.value.has('conn') || dirty.value.has('route')) {
+      const payload: {
+        apiUrl: string
+        apiKey: string
+        defaultModel: string
+        defaultReasoningModel: string
+        defaultEvaluationModel: string
+        availableModels?: string[]
+      } = {
+        apiUrl: form.apiUrl,
+        apiKey: form.apiKey,
+        defaultModel: form.defaultModel,
+        defaultReasoningModel: form.defaultReasoningModel,
+        defaultEvaluationModel: form.defaultEvaluationModel
       }
-      if (dirty.value.has('policy')) {
-        await liveSaveNetworkPolicy({ ...policy })
-      }
-      if (dirty.value.has('reliability') && reliability.value) {
-        await adminPlatformSettingsApi.updateReliabilitySettings({ ...reliability.value })
-      }
-      if (dirty.value.has('probe') && probe.loaded) {
-        const payload: { enabled?: boolean; intervalMs?: number } = {}
-        if (probe.enabled !== probe.lastEnabled) payload.enabled = probe.enabled
-        if (probe.intervalSec !== probe.lastIntervalSec) {
-          payload.intervalMs = Math.round(probe.intervalSec * 1000)
-        }
-        if (Object.keys(payload).length) {
-          const res = await adminCapabilityProbeApi.updateSettings(payload)
-          const d = res.data?.data ?? {}
-          if (typeof d.enabled === 'boolean') {
-            probe.enabled = d.enabled
-            probe.lastEnabled = d.enabled
-          }
-          if (typeof d.intervalMs === 'number') {
-            probe.intervalSec = Math.round(d.intervalMs / 1000)
-            probe.lastIntervalSec = probe.intervalSec
-          }
-        }
-      }
-      // L5：probe 未加载成功时保留其脏标记，避免静默丢弃用户改动
-      dirty.value = new Set(dirty.value.has('probe') && !probe.loaded ? ['probe'] : [])
-      toast.success('配置已保存并生效')
-    } else {
-      await new Promise((r) => setTimeout(r, 400))
-      dirty.value = new Set()
-      toast.success('连接与安全配置已保存')
+      // G5：从未成功拉取过模型时不提交 availableModels，避免空数组清空后端模型列表
+      if (modelsFetchedOnce.value) payload.availableModels = fetchedModels.value
+      await liveSaveApiConfig(payload as Parameters<typeof liveSaveApiConfig>[0])
     }
+    if (dirty.value.has('policy')) {
+      await liveSaveNetworkPolicy({ ...policy })
+    }
+    if (dirty.value.has('reliability') && reliability.value) {
+      await adminPlatformSettingsApi.updateReliabilitySettings({ ...reliability.value })
+    }
+    if (dirty.value.has('probe') && probe.loaded) {
+      const payload: { enabled?: boolean; intervalMs?: number } = {}
+      if (probe.enabled !== probe.lastEnabled) payload.enabled = probe.enabled
+      if (probe.intervalSec !== probe.lastIntervalSec) {
+        payload.intervalMs = Math.round(probe.intervalSec * 1000)
+      }
+      if (Object.keys(payload).length) {
+        const res = await adminCapabilityProbeApi.updateSettings(payload)
+        const d = res.data?.data ?? {}
+        if (typeof d.enabled === 'boolean') {
+          probe.enabled = d.enabled
+          probe.lastEnabled = d.enabled
+        }
+        if (typeof d.intervalMs === 'number') {
+          probe.intervalSec = Math.round(d.intervalMs / 1000)
+          probe.lastIntervalSec = probe.intervalSec
+        }
+      }
+    }
+    // L5：probe 未加载成功时保留其脏标记，避免静默丢弃用户改动
+    dirty.value = new Set(dirty.value.has('probe') && !probe.loaded ? ['probe'] : [])
+    toast.success('配置已保存并生效')
   } catch (e) {
     toast.error(`保存失败：${errMsg(e)}`)
   } finally {
@@ -764,11 +726,9 @@ async function saveAll() {
 }
 
 function discardAll() {
-  if (isLive.value) {
-    applyLiveConfig()
-    void loadReliability()
-    void loadProbe()
-  } else applyDemoState()
+  applyLiveConfig()
+  void loadReliability()
+  void loadProbe()
   toast.info('已放弃未保存的变更')
 }
 

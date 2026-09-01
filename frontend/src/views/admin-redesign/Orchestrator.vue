@@ -6,11 +6,11 @@
       <strong class="mk-status__title">编排结构</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ stages.length }} 阶段 · {{ totalSkills }} 个 Skill</span>
-      <span v-if="isLive" class="mk-status__meta">总调用 {{ totalCalls }}</span>
+      <span class="mk-status__meta">总调用 {{ totalCalls }}</span>
       <span v-if="unresolvedCount > 0" class="mk-status__meta mk-status__meta--bad">未解析 {{ unresolvedCount }}</span>
-      <span v-if="isLive && w4Drifted.length" class="mk-status__meta mk-status__meta--bad">哈希漂移 {{ w4Drifted.length }}</span>
+      <span v-if="w4Drifted.length" class="mk-status__meta mk-status__meta--bad">哈希漂移 {{ w4Drifted.length }}</span>
       <span class="mk-status__actions">
-        <button v-if="isLive" type="button" class="mk-status__action" :disabled="defsLoading" @click="loadDefinitions">刷新</button>
+        <button type="button" class="mk-status__action" :disabled="defsLoading" @click="loadDefinitions">刷新</button>
       </span>
     </div>
 
@@ -74,7 +74,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { dataSource, isLive } from './store'
+import { dataSource } from './store'
 import { liveTopoNodes, liveSkillCatalog, errMsg } from './live'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
 import FieldRoutingTable from './FieldRoutingTable.vue'
@@ -129,7 +129,6 @@ const recReport = ref<SkillReconciliationReport | null>(null)
 const w4Drifted = ref<string[]>([])
 
 async function loadReconciliation() {
-  if (!isLive.value) return
   const [rec, read] = await Promise.all([
     adminSkillsApi.getReconciliation().catch(() => null),
     adminSkillsApi.getReadiness(false).catch(() => null),
@@ -140,7 +139,6 @@ async function loadReconciliation() {
 }
 
 async function loadDefinitions() {
-  if (!isLive.value) return
   defsLoading.value = true
   try {
     const [orchRes, agentRes] = await Promise.all([
@@ -172,19 +170,15 @@ async function loadDefinitions() {
 }
 
 onMounted(() => {
-  if (isLive.value) {
-    void loadDefinitions()
-    void loadReconciliation()
-  }
+  void loadDefinitions()
+  void loadReconciliation()
   void loadStages()
 })
-// demo → live 切换后：阶段清单与运行时定义需要按真实源重拉（初始 onMounted 时可能尚未切到 live）
+// 阶段清单与运行时定义按真实源拉取（初始 onMounted 时后端可能尚未就绪，切换后重试）
 watch(dataSource, () => {
-  if (dataSource.value === 'live') {
-    void loadStages()
-    if (!defsLoaded.value) void loadDefinitions()
-    if (!recReport.value) void loadReconciliation()
-  }
+  void loadStages()
+  if (!defsLoaded.value) void loadDefinitions()
+  if (!recReport.value) void loadReconciliation()
 })
 
 interface SkillNode { id: string; name: string; calls: number; produces: string[] }
@@ -199,73 +193,11 @@ interface Stage {
   defSteps?: DefStep[]
 }
 
-// demo-only：离线/演示模式的阶段骨架与调用数（假数据仅 demo 模式可见）。
-// live 模式（下方 stages computed 的 live 分支）完全由 API 驱动：
-//   GET stages（编排文件派生）+ 拓扑节点 + skill-catalog + 编排定义，
-//   不再以本清单为骨架，避免 demo 阶段/假调用数污染真实展示。
-const demoStages: Stage[] = [
-  {
-    id: 'goal',
-    name: '澄清',
-    agentId: 'goal-agent',
-    consumes: ['user_message'],
-    produces: ['goal_understanding', 'learner_profile'],
-    skills: [
-      { id: 'goal-conversation', name: '目标对话', calls: 1284, produces: ['dialogue_concepts'] }
-    ]
-  },
-  {
-    id: 'path',
-    name: '规划',
-    agentId: 'path-agent',
-    consumes: ['goal_understanding'],
-    produces: ['learning_path', 'milestones'],
-    skills: [
-      { id: 'path-planning', name: '路径规划', calls: 640, produces: ['learning_path'] },
-      { id: 'stage-designer', name: '阶段设计', calls: 498, produces: ['milestones'] }
-    ]
-  },
-  {
-    id: 'teaching',
-    name: '教学',
-    agentId: 'teaching-agent',
-    consumes: ['learning_path', 'milestones'],
-    produces: ['teaching_session', 'mastery_delta'],
-    skills: [
-      { id: 'teaching-turn', name: '教学回合', calls: 2210, produces: ['round_output'] },
-      { id: 'peer-reinforcement', name: '伴学补强', calls: 388, produces: ['boost_note'] },
-      { id: 'session-wrapup', name: '课后产出', calls: 415, produces: ['wrapup_notes'] }
-    ]
-  },
-  {
-    id: 'profile',
-    name: '画像',
-    agentId: 'profile-agent',
-    consumes: ['mastery_delta'],
-    produces: ['learner_snapshot', 'risk_signals'],
-    skills: [
-      { id: 'learner-model', name: '状态聚合', calls: 930, produces: ['learner_snapshot'] },
-      { id: 'lesson-knowledge-enricher', name: '知识蒸馏', calls: 260, produces: ['concept_map'] }
-    ]
-  },
-  {
-    id: 'simulation',
-    name: '仿真',
-    agentId: 'simulation-agent',
-    consumes: ['learner_snapshot'],
-    produces: ['simulation_report'],
-    skills: [
-      { id: 'virtual-learner-learn-turn-simulator', name: '回合模拟', calls: 320, produces: ['sim_turns'] },
-      { id: 'virtual-learner-path-evaluator', name: '路径评估', calls: 96, produces: ['simulation_report'] }
-    ]
-  }
-]
-
 const active = ref('goal')
 applyStageQuery()
 watch(() => route.query, applyStageQuery)
 const defById = computed(() => new Map(orchDefs.value.map((d) => [d.id, d])))// 阶段清单统一后端源：GET /admin/field-routings/stages（派生自编排文件），
-// 全量消费、不过滤后端结果；demo 模式回退 demoStages 骨架
+// 全量消费、不过滤后端结果
 const stageList = ref<Array<{ id: string; displayName: string }>>([])
 
 async function loadStages() {
@@ -279,20 +211,17 @@ async function loadStages() {
       }
     }
   } catch {
-    // 端点不可用：stageList 置空（live 下由拓扑 Agent 节点派生，仍为真实数据；demo 下走演示骨架）
+    // 端点不可用：stageList 置空（由拓扑 Agent 节点派生，仍为真实数据）
     stageList.value = []
   }
 }
 
 const stages = computed<Stage[]>(() => {
-  // demo-only：演示/离线模式回退演示骨架；live 模式永不返回 demoStages
-  if (dataSource.value !== 'live') return demoStages
-
-  // live：拓扑未就绪（为空/拉取失败）时返回空数组，渲染空态
+  // 拓扑未就绪（为空/拉取失败）时返回空数组，渲染空态
   if (!liveTopoNodes.value.length) return []
 
-  // live：阶段清单以 GET stages（编排文件派生）为准，无白名单过滤；
-  // 该端点失败时退化为拓扑 Agent 节点派生（仍为真实数据，无 demo 兜底）。
+  // 阶段清单以 GET stages（编排文件派生）为准，无白名单过滤；
+  // 该端点失败时退化为拓扑 Agent 节点派生（仍为真实数据）。
   // stage → 顶层 Agent 的约定映射 <stage>-agent 与后端 STAGE_AGENT_MAP 同源
   // （每个编排文件 contracts 中 manifest kind=agent 者均为 <stage>-agent）；
   // 拓扑中查不到 Agent 的阶段仍展示（真实字段路由 tab 可用），成员列表为空。
@@ -306,7 +235,7 @@ const stages = computed<Stage[]>(() => {
     const members = liveTopoNodes.value.filter(
       (n) => n.type === 'skill' && n.parentAgentId === agentId
     )
-    // 真实变量流：来自 prompt-ops skill-catalog 的 input/output 字段（无 demo 兜底）
+    // 真实变量流：来自 prompt-ops skill-catalog 的 input/output 字段
     const catalogAgent = liveSkillCatalog.value.find((a) => a.agentId === agentId)
     const catalogById = new Map((catalogAgent?.skills || []).map((c) => [c.skillId, c]))
     const skills = members.map((node) => {
@@ -353,7 +282,7 @@ const statusTone = computed(() => {
   const unresolved = stages.value.some((s) => s.defSteps?.some((d) => d.resolved?.unresolved))
   return unresolved ? 'warn' : 'ok'
 })
-// 后端阶段名已含"阶段"（如"Goal 阶段"），demo 名无后缀，避免重复拼接
+// 后端阶段名已含"阶段"（如"Goal 阶段"），避免重复拼接
 const stageTitle = computed(() => {
   const name = current.value?.name || ''
   return name.endsWith('阶段') ? name : `${name}阶段`

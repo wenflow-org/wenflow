@@ -405,7 +405,7 @@ interface BriefData {
   feed: { text: string; time: string; tone: Tone; ts?: number; errorCategory?: string; agentId?: string }[];
 }
 
-// 结论来自 store（由 spans 推导，与日志/瀑布/Skill 同源）；funnel/pulse/feed 为演示数据
+// 结论来自 store（由 spans 推导，与日志/瀑布/Skill 同源）；全部数据来自后端统计
 const health = computed(() => overviewHealth.value);
 
 // 健康结论与行动项同源：health 提示异常时即使静态 actions 为空也要给出排查入口，避免「需关注」与「无事可做」并存
@@ -419,112 +419,8 @@ const effectiveActions = computed(() => {
   return [];
 });
 
-const pulse = (hot: number[]) =>
-  Array.from({ length: 24 }, (_, i) => ({
-    calls: hot[i] || 0,
-    issue: 0
-  }));
-
-const demoUsage: BriefData['usage'] = {
-  calls7d: 1824,
-  failed7d: 96,
-  totalTokens7d: 4018915,
-  models7d: [{ model: 'deepseek-v4-flash', calls: 1530, tokens: 4018915 }],
-  failures7d: [
-    { category: 'provider_http', count: 243 },
-    { category: 'authentication', count: 26 },
-    { category: 'protocol', count: 25 },
-    { category: 'caller_abort', count: 12 },
-    { category: 'rate_limit', count: 11 }
-  ]
-};
-/* G 系列 demo 数据：7 天调用趋势 / Top Skill / 用户增长 */
-const demoTrend7d: BriefData['trend7d'] = [
-  { date: '2026-07-27', calls: 180, failed: 12 },
-  { date: '2026-07-28', calls: 240, failed: 18 },
-  { date: '2026-07-29', calls: 210, failed: 9 },
-  { date: '2026-07-30', calls: 320, failed: 21 },
-  { date: '2026-07-31', calls: 280, failed: 14 },
-  { date: '2026-08-01', calls: 350, failed: 16 },
-  { date: '2026-08-02', calls: 273, failed: 8 }
-];
-const demoTopSkills: BriefData['topSkills'] = [
-  { agentId: 'teaching-agent', calls: 412, failed: 21 },
-  { agentId: 'goal-clarifier', calls: 268, failed: 9 },
-  { agentId: 'path-designer', calls: 194, failed: 14 },
-  { agentId: 'course-design', calls: 152, failed: 6 },
-  { agentId: 'adaptive-guidance', calls: 98, failed: 3 }
-];
-const demoGrowth: BriefData['growth7d'] = [
-  { date: '2026-07-27', newUsers: 2, activeUsers: 9 },
-  { date: '2026-07-28', newUsers: 1, activeUsers: 11 },
-  { date: '2026-07-29', newUsers: 3, activeUsers: 10 },
-  { date: '2026-07-30', newUsers: 0, activeUsers: 14 },
-  { date: '2026-07-31', newUsers: 2, activeUsers: 12 },
-  { date: '2026-08-01', newUsers: 1, activeUsers: 16 },
-  { date: '2026-08-02', newUsers: 4, activeUsers: 18 }
-];
-const demoTrend: BriefData['trend'] = [
-  { date: '07-27', total: 2, completed: 1 },
-  { date: '07-28', total: 4, completed: 2 },
-  { date: '07-29', total: 3, completed: 1 },
-  { date: '07-30', total: 6, completed: 3 },
-  { date: '07-31', total: 5, completed: 2 },
-  { date: '08-01', total: 7, completed: 3 },
-  { date: '08-02', total: 4, completed: 2 }
-];
-
-const datasets: BriefData = {
-  tone: 'ok',
-  score: 92,
-  headline: '运行平稳',
-  subline: '学习链路与模型服务都在正常区间。',
-  actions: [],
-  kpis: [
-    { label: '今日调用', value: '273', hint: '超时 2' },
-    { label: '今日成功率', value: '99.3%', hint: '2 次失败' },
-    { label: '用户活跃', value: '6 新增 / 18 活跃', hint: '总 32 名用户（真实）' },
-    { label: '系统活跃', value: '12 对话 / 16 Skill', hint: '目标规划 + 近 24h' }
-  ],
-  wrapup: {
-    sampleSize: 42,
-    summaryModel: 38,
-    summaryFallback: 4,
-    evaluationModel: 31,
-    evaluationAiFallback: 8,
-    evaluationFailed: 3
-  },
-  usage: demoUsage,
-  trend: demoTrend,
-  trend7d: demoTrend7d,
-  topSkills: demoTopSkills,
-  growth7d: demoGrowth,
-  funnel: [
-    { label: '用户', value: '128', idle: false },
-    { label: '目标对话', value: '86', idle: false },
-    { label: '路径', value: '64', idle: false },
-    { label: '任务', value: '342', idle: false },
-    { label: '完成', value: '217', idle: false }
-  ],
-  rates: ['67%', '74%', '×5.3', '63%'],
-  pulse: pulse([2, 1, 0, 0, 1, 3, 6, 9, 14, 18, 22, 19, 16, 21, 25, 28, 24, 19, 15, 12, 8, 5, 4, 3]),
-  totalCalls: 273,
-  totalIssues: 0,
-  peak: '15:00',
-  feed: [
-    { text: '「数据分析入门」路径第 3 阶段完成', time: '6 分钟前', tone: 'ok' },
-    { text: '新用户注册：liu**@163.com', time: '18 分钟前', tone: 'muted' },
-    { text: '路径「Excel 自动化」生成成功', time: '42 分钟前', tone: 'ok' },
-    { text: '学习者快照重算完成 ×12', time: '1 小时前', tone: 'muted' }
-  ]
-}
-
-const data = computed<BriefData | null>(() => {
-  // live 模式：全部来自真实统计；数据为空/拉取失败时不回退 demo 假数据（模板有 v-else 空态）
-  if (dataSource.value === 'live') return liveOverviewFull.value
-  return datasets
-});
-// 后端滚动窗口桶带 label（'HH:00'），柱图 title 直接用它；demo 数据无 label 时按下标兜底
+const data = computed<BriefData | null>(() => liveOverviewFull.value);
+// 后端滚动窗口桶带 label（'HH:00'），柱图 title 直接用它
 const scoreDash = computed(() => `${(data.value?.score ?? 0) * 1.194} 119.4`);
 const scoreTitle = computed(() => {
   if (!data.value) return ''
@@ -702,7 +598,7 @@ const trendLabel = (date: string) => {
   const m = String(date).match(/\d{2}-\d{2}$/);
   return m ? m[0] : String(date).slice(5);
 };
-// 与后端 UTC 切日同口径；demo 数据为 MM-DD 短格式，兼容匹配（computed：跨午夜后仍正确）
+// 与后端 UTC 切日同口径；后端日期为 MM-DD 短格式，兼容匹配（computed：跨午夜后仍正确）
 const todayStr = computed(() => new Date().toISOString().slice(0, 10));
 const isToday = (date: string) => date === todayStr.value || date === todayStr.value.slice(5);
 const trendSum = computed(() => {
@@ -722,14 +618,12 @@ const rateHint = (i: number) => {
   return pairs[i] || ''
 };
 
-// 重试按钮：仅 live 模式会出现空态（demo 恒有数据），force 跳过 liveLoading 守卫保证点击必重拉
+// 重试按钮：force 跳过 liveLoading 守卫保证点击必重拉
 async function retryOverview() {
-  if (dataSource.value !== 'live') return
   await refreshLiveOverview(true)
 }
 
-// 动态筛选：默认隐藏虚拟学习者与测试/审计账号（后端 excludeTest 已按此过滤并重新拉取），
-// 前端正则仅为 demo 模式兜底
+// 动态筛选：默认隐藏虚拟学习者与测试/审计账号（后端 excludeTest 已按此过滤并重新拉取）
 const hideTestAccounts = overviewHideTest
 // KPI 目标：今日调用 / 今日成功率 / 用户活跃 / 系统活跃（纯真实口径 4 卡；虚拟仿真走「虚拟学习者」页）
 const kpiTargets = ['execution-logs', 'execution-logs', 'users', 'goal-conversations']
@@ -777,7 +671,7 @@ function feedJump(f: { tone: string; errorCategory?: string }) {
 /* R6：10s 自动刷新（使用 setTimeout 链 + 并发守卫 + 指数退避，
    后端不可用时不会堆积请求导致内存暴涨） */
 const lastUpdated = ref('')
-const { start: startAutoRefresh, stop: stopAutoRefresh } = useSafePolling(
+const { start: startAutoRefresh } = useSafePolling(
   async () => {
     await refreshLiveOverview()
     lastUpdated.value = new Date().toTimeString().slice(0, 5)
@@ -797,17 +691,12 @@ const { start: startAutoRefresh, stop: stopAutoRefresh } = useSafePolling(
 )
 onMounted(() => {
   void loadHealth()
-  if (dataSource.value !== 'live') return
   lastUpdated.value = new Date().toTimeString().slice(0, 5)
   startAutoRefresh()
 })
-watch(dataSource, (v) => {
-  if (v === 'live') {
-    lastUpdated.value = new Date().toTimeString().slice(0, 5)
-    startAutoRefresh()
-  } else {
-    stopAutoRefresh()
-  }
+watch(dataSource, () => {
+  lastUpdated.value = new Date().toTimeString().slice(0, 5)
+  startAutoRefresh()
 })
 const isTestAccount = (text: string) => {
   const email = String(text || '').replace(/^新用户注册：/, '');
@@ -827,7 +716,6 @@ const showNormalEvents = ref(false)
 // pending 标志 + liveLoading 回落 watch 保证开关一定生效（last-wins，只重拉一次）
 let pendingOverviewReload = false
 async function refreshOverviewQueued() {
-  if (dataSource.value !== 'live') return
   if (liveLoading.value) {
     pendingOverviewReload = true
     return
@@ -836,10 +724,10 @@ async function refreshOverviewQueued() {
   await refreshLiveOverview()
 }
 watch(hideTestAccounts, () => {
-  if (dataSource.value === 'live') void refreshOverviewQueued()
+  void refreshOverviewQueued()
 })
 watch(liveLoading, (loading) => {
-  if (!loading && pendingOverviewReload && dataSource.value === 'live') {
+  if (!loading && pendingOverviewReload) {
     pendingOverviewReload = false
     void refreshLiveOverview()
   }

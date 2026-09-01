@@ -19,7 +19,7 @@
       </span>
     </div>
 
-    <div v-if="!isLive" class="mk-empty mk-empty--min">
+    <div v-if="!summary && !loading" class="mk-empty mk-empty--min">
       <strong>暂无 Token 成本数据</strong>
       <span>切换到真实数据查看 LLM 用量透视。</span>
     </div>
@@ -180,17 +180,17 @@ const rangePills = [
 
 const trend = computed(() => summary.value?.trend || [])
 const statusTone = computed(() =>
-  !isLive.value || !summary.value ? 'mk-status--muted'
+  !summary.value ? 'mk-status--muted'
     : summary.value.totals.failed > 0 ? 'mk-status--warn'
       : 'mk-status--ok'
 )
 
 watch([days, includeTest], () => {
-  if (isLive.value) void load()
+  void load()
 })
 
 async function load(force = false) {
-  if (!isLive.value || loading.value) return
+  if (loading.value) return
   if (!force && isPageCacheFresh('token-cost') && summary.value) return
   loading.value = true
   loadFailed.value = false
