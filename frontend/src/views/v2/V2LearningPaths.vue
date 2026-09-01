@@ -52,7 +52,7 @@
               <span class="pcard__thumb" aria-hidden="true">{{ thumbLetter(card) }}</span>
               <div class="pcard__body">
                 <h3 class="pcard__title">{{ card.title }}</h3>
-                <p v-if="card.desc" class="pcard__desc">{{ card.desc }}</p>
+                <p class="pcard__desc">{{ card.desc }}</p>
               </div>
               <div class="pcard__head-right">
                 <span v-if="card.kind === 'generating' || card.kind === 'failed'" class="pcard__badge" :class="badgeCls(card)">{{ statusLabel(card) }}</span>
@@ -480,7 +480,7 @@ onBeforeUnmount(() => {
 .pcard--failed::before { background: linear-gradient(180deg, var(--red), var(--amber)); }
 .pcard--generating { background: linear-gradient(180deg, rgba(67, 176, 216, 0.04), var(--surface) 55%); }
 .pcard--failed { border-color: rgba(239, 117, 120, 0.3); }
-.pcard__head { display: flex; align-items: stretch; gap: 12px; }
+.pcard__head { display: flex; align-items: center; gap: 12px; }
 .pcard__thumb {
   width: 36px; height: 36px; border-radius: 11px;
   display: grid; place-items: center;
@@ -491,7 +491,7 @@ onBeforeUnmount(() => {
 .pcard--completed .pcard__thumb { background: linear-gradient(135deg, var(--green), #58c98f); }
 .pcard--generating .pcard__thumb { background: linear-gradient(135deg, #43b0d8, #7cc7e2); }
 .pcard--failed .pcard__thumb { background: linear-gradient(135deg, var(--red), var(--amber)); }
-.pcard__body { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.pcard__body { flex: 1; min-width: 0; }
 .pcard__head-right { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .pcard__badge { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; flex: 0 0 auto; }
 .pcard__badge--green { color: #218a56; background: rgba(49, 177, 111, 0.12); }
@@ -502,10 +502,14 @@ onBeforeUnmount(() => {
 .pcard__title {
   margin: 0; font-size: 15.5px; line-height: 1.4;
   min-width: 0;
+  /* 固定 2 行展示高度：1 行标题与 2 行标题的卡 head 高度一致，内部元素水平对齐 */
+  min-height: calc(1.4em * 2);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .pcard__desc {
   margin: 4px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6;
+  /* 固定 2 行展示高度（与 title 同理） */
+  min-height: calc(1.6em * 2);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 

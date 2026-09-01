@@ -34,9 +34,6 @@
           <Transition name="v2menu">
             <div v-if="menuOpen" class="v2nav__menu" role="menu">
               <router-link to="/user/account" role="menuitem" @click="menuOpen = false">个人中心</router-link>
-              <router-link to="/user/settings" role="menuitem" @click="menuOpen = false">API 接入</router-link>
-              <router-link to="/user/agent-logs" role="menuitem" @click="menuOpen = false">调用日志</router-link>
-              <router-link to="/docs" role="menuitem" @click="menuOpen = false">开发者文档</router-link>
               <button type="button" role="menuitem" class="v2nav__menu-theme" @click="toggleTheme">
                 <span class="v2nav__menu-theme-label">{{ isDark ? '切换到亮色模式' : '切换到暗色模式' }}</span>
                 <span class="v2nav__menu-theme-icon" aria-hidden="true">

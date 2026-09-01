@@ -41,10 +41,15 @@ userStore.initFromStorage();
   min-height: 100vh;
   min-height: 100dvh;
   background: var(--canvas);
+  /* flex 布局：公告条占流后 app-main 用 flex:1 吃掉剩余空间，
+     v2-page 的 footer 吸底不再依赖写死的 41px 公告条高度 */
+  display: flex;
+  flex-direction: column;
 }
 #app-main {
-  min-height: 100vh;
-  min-height: 100dvh;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   background: var(--canvas);
 }
 

@@ -47,9 +47,9 @@ html, body {
 
 /* ====== .v2-page 布局（不再需要重新定义变量，:root 已提供） ====== */
 .v2-page {
-  /* 公告条（AnnouncementBanner，约 41px）占流在 .v2-page 上方；
-     min-height 需扣除，否则 footer 吸底后仍被挤出视口底部 */
-  min-height: calc(100vh - 41px);
+  /* 公告条在 #app 外层占流（App.vue #app 为 flex column），
+     v2-page 自身 flex:1 撑满 app-main 剩余空间，footer 吸底不再依赖写死的 41px 扣减 */
+  flex: 1;
   display: flex;
   flex-direction: column;
   background: var(--canvas);
@@ -59,6 +59,12 @@ html, body {
 /* 页脚吸底：内容不足一屏时 footer 沉底可见（此前空态页 footer 被挤出折叠线外） */
 .v2-page > .v2footer {
   margin-top: auto;
+}
+/* main 撑满剩余空间：与 footer 的 margin-top:auto 配合实现真正吸底
+   （此前多数页面 main 未设 flex:1，内容不足一屏时 footer 悬在半空） */
+.v2-page > main {
+  flex: 1;
+  min-width: 0;
 }
 
 /* 暗色模式：组件级覆写（:root 已定义全局暗色变量，以下仅处理非 scoped 元素） */
