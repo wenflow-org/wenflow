@@ -4,9 +4,9 @@
  * Shows: 🔄 重新生成 (hidden during streaming), 📋 复制
  * Positioned top-right of the message bubble using CSS.
  */
-import { ref } from 'vue';
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
 
-defineProps<{
+const props = defineProps<{
   show?: boolean;
   streaming?: boolean;
 }>();
@@ -18,6 +18,26 @@ const emit = defineEmits<{
 
 const copied = ref(false);
 
+/** 触屏设备（无 hover）：操作常显，不依赖 hover 状态 */
+const touchMode = ref(false);
+let mq: MediaQueryList | null = null;
+function syncTouchMode() {
+  touchMode.value = mq?.matches === true;
+}
+onMounted(() => {
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    mq = window.matchMedia('(hover: none)');
+    syncTouchMode();
+    mq.addEventListener('change', syncTouchMode);
+  }
+});
+onBeforeUnmount(() => {
+  mq?.removeEventListener('change', syncTouchMode);
+});
+
+/** 最终显示：触屏常显；桌面 hover 驱动 */
+const visible = computed(() => touchMode.value || props.show === true);
+
 async function handleCopy() {
   emit('copy');
   copied.value = true;
@@ -27,7 +47,7 @@ async function handleCopy() {
 
 <template>
   <Transition name="actions-pop">
-    <div v-if="show" class="msg-actions">
+    <div v-show="visible" class="msg-actions">
       <button
         v-if="!streaming"
         type="button"
@@ -85,6 +105,20 @@ async function handleCopy() {
 }
 .msg-actions__btn:active {
   background: rgba(52, 120, 246, 0.14);
+}
+
+/* 触屏设备（无 hover）：操作按钮常显，避免「看不到操作」；
+   位置改到气泡下方，避免遮挡消息内容 */
+@media (hover: none) {
+  .msg-actions {
+    position: static;
+    justify-content: flex-end;
+    margin-top: 4px;
+    box-shadow: none;
+    background: transparent;
+    backdrop-filter: none;
+    padding: 0;
+  }
 }
 
 /* Transition */
