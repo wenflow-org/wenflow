@@ -14,10 +14,25 @@
         <span class="learn__menu" title="更多" @click="menuOpen = !menuOpen">⋯</span>
         <Transition name="pop">
           <div v-if="menuOpen" class="learn__menu-pop">
-            <button type="button" class="learn__menu-item learn__menu-item--primary" @click="completeAndSettle">✓ 完成并结算任务</button>
-            <button type="button" class="learn__menu-item" @click="endSession">仅离开（不计入完成）</button>
-            <button type="button" class="learn__menu-item" @click="pauseAndLeave">暂停并离开</button>
-            <button type="button" class="learn__menu-item" @click="restart">重新开始</button>
+            <div class="learn__menu-group">
+              <span class="learn__menu-label">结束本节课</span>
+              <button type="button" class="learn__menu-item learn__menu-item--primary" @click="completeAndSettle">
+                <span class="learn__menu-item-main"><strong>完成并结算任务</strong><small>计入进度 · 生成本次学习总结</small></span>
+              </button>
+              <button type="button" class="learn__menu-item" @click="endSession">
+                <span class="learn__menu-item-main"><strong>结束学习（不计入完成）</strong><small>生成本次总结，不推进任务进度</small></span>
+              </button>
+            </div>
+            <div class="learn__menu-sep"></div>
+            <div class="learn__menu-group">
+              <span class="learn__menu-label">暂离或重学</span>
+              <button type="button" class="learn__menu-item" @click="pauseAndLeave">
+                <span class="learn__menu-item-main"><strong>暂停并离开</strong><small>进度保留，下次从这继续</small></span>
+              </button>
+              <button type="button" class="learn__menu-item learn__menu-item--danger" @click="restart">
+                <span class="learn__menu-item-main"><strong>重新开始</strong><small>清空当前进度与消息</small></span>
+              </button>
+            </div>
           </div>
         </Transition>
       </div>
@@ -1701,18 +1716,30 @@ onBeforeUnmount(() => {
   background: var(--surface); border: 1px solid var(--line);
   border-radius: 12px; padding: 5px;
   box-shadow: 0 12px 30px rgba(23, 32, 51, 0.14);
-  display: grid; min-width: 140px;
+  display: grid; min-width: 220px;
 }
+.learn__menu-group { display: grid; gap: 1px; }
+.learn__menu-label {
+  padding: 6px 12px 3px;
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em;
+  color: var(--faint);
+}
+.learn__menu-sep { height: 1px; background: var(--line); margin: 4px 6px; }
 .learn__menu-item {
-  padding: 9px 12px; border-radius: 8px;
+  padding: 8px 12px; border-radius: 8px;
   font-size: 13px; font-weight: 600; color: var(--muted);
   cursor: pointer; white-space: nowrap;
   text-align: left;
   transition: background 0.15s ease, color 0.15s ease;
 }
+.learn__menu-item-main { display: grid; gap: 2px; }
+.learn__menu-item-main strong { font-size: 13px; font-weight: 700; color: inherit; }
+.learn__menu-item-main small { font-size: 11px; font-weight: 500; color: var(--faint); white-space: normal; }
 .learn__menu-item:hover { background: color-mix(in srgb, var(--surface) 96%, var(--ink)); color: var(--ink); }
 .learn__menu-item--primary { color: var(--blue, #2c63d0); }
 .learn__menu-item--primary:hover { background: #e8effc; color: var(--blue, #2c63d0); }
+.learn__menu-item--danger { color: #c0454a; }
+.learn__menu-item--danger:hover { background: rgba(239, 117, 120, 0.1); color: #c0454a; }
 .learn__head-right { position: relative; }
 .checkpoint__option {
   display: flex; align-items: center; gap: 9px;
