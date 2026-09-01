@@ -155,12 +155,18 @@ const TYPE_LABELS: Record<string, string> = {
   milestone: '里程碑',
   streak: '连续学习',
   completion: '完成度',
-  mastery: '知识掌握'
+  mastery: '知识掌握',
+  social: '社交互动'
 };
+
+/** 类型标签：已知映射 → 未知类型兜底「其他」（不直出英文 key） */
+function typeLabel(t: string): string {
+  return TYPE_LABELS[t] ?? '其他';
+}
 
 const typeFilters = computed(() => {
   const types = [...new Set(items.value.map((a) => a.type))];
-  return types.map((t) => ({ key: t, label: TYPE_LABELS[t] ?? t }));
+  return types.map((t) => ({ key: t, label: typeLabel(t) }));
 });
 
 const unlockedCount = computed(() => items.value.filter((a) => a.unlocked).length);
