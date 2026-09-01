@@ -14,15 +14,21 @@
           <p class="ob__sub">你的账号已就绪。<br />30 秒定个方向，问流会帮你把目标拆成可执行的学习路径。</p>
           <div class="ob__feat">
             <div class="ob__feat-item">
-              <span class="ob__feat-icon">🎯</span>
+              <span class="ob__feat-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h4a2 2 0 0 1 2 2v1.28c.6.35 1 .98 1 1.72a2 2 0 0 1-1 1.73V17a2 2 0 0 1-2 2h-4v1.27c.6.34 1 .99 1 1.73a2 2 0 1 1-4 0c0-.74.4-1.39 1-1.73V19H7a2 2 0 0 1-2-2v-3.27A2 2 0 0 1 4 12c0-.74.4-1.38 1-1.72V9a2 2 0 0 1 2-2h4V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/></svg>
+              </span>
               <div><strong>先聊清楚目标</strong><small>把模糊想法聊成清晰的学习方向</small></div>
             </div>
             <div class="ob__feat-item">
-              <span class="ob__feat-icon">🧭</span>
+              <span class="ob__feat-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M21 3 3 10.5l7.5 2L13 21 21 3z"/></svg>
+              </span>
               <div><strong>生成学习路径</strong><small>阶段化拆解，每一步都知道学什么</small></div>
             </div>
             <div class="ob__feat-item">
-              <span class="ob__feat-icon">💬</span>
+              <span class="ob__feat-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM7 9h10v2H7V9zm6 5H7v-2h6v2zm4-6H7V6h10v2z"/></svg>
+              </span>
               <div><strong>对话式导师</strong><small>边学边问，AI 按你的节奏调整</small></div>
             </div>
           </div>
@@ -44,7 +50,7 @@
               :class="{ 'ob__choice--on': goalChoice === c.value }"
               @click="goalChoice = c.value"
             >
-              <span class="ob__choice-icon">{{ c.icon }}</span>
+              <span class="ob__choice-icon" v-html="c.icon"></span>
               <span class="ob__choice-body"><strong>{{ c.label }}</strong><small>{{ c.desc }}</small></span>
             </button>
           </div>
@@ -101,10 +107,10 @@ const userName = computed(() => userStore.user?.name || '同学')
 const step = ref(1)
 
 const goalChoices = [
-  { value: 'work', icon: '💼', label: '职业技能', desc: '编程、数据分析、办公效率等' },
-  { value: 'study', icon: '📚', label: '学业提升', desc: '考试、课业、升学准备等' },
-  { value: 'hobby', icon: '🎨', label: '兴趣探索', desc: '语言、设计、音乐、写作等' },
-  { value: 'life', icon: '🌱', label: '个人成长', desc: '沟通、理财、健康管理等' }
+  { value: 'work', icon: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M20 6h-4V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zM10 4h4v2h-4V4z"/></svg>', label: '职业技能', desc: '编程、数据分析、办公效率等' },
+  { value: 'study', icon: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM9 4h2v5l2-1.5L15 9V4h1v16H8V4h1z" opacity=".9"/></svg>', label: '学业提升', desc: '考试、课业、升学准备等' },
+  { value: 'hobby', icon: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2a5 5 0 0 1 5 5c0 1.11-.36 2.11-.97 2.93a5.5 5.5 0 0 1 3.9 7.9A6 6 0 0 1 15 22H8a6 6 0 0 1-2.5-11.4 5 5 0 0 1 5-8.6z" opacity=".9"/></svg>', label: '兴趣探索', desc: '语言、设计、音乐、写作等' },
+  { value: 'life', icon: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 15h-2v-2h2zm0-4h-2V7h2z"/></svg>', label: '个人成长', desc: '沟通、理财、健康管理等' }
 ]
 
 const freqChoices = [

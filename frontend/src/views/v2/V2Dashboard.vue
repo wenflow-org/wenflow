@@ -326,7 +326,10 @@
               </div>
             </section>
             <section class="card mini" v-if="nearestAchievement">
-              <div class="mini__icon mini__icon--medal">{{ nearestAchievement.icon }}</div>
+              <div class="mini__icon mini__icon--medal">
+                <img v-if="nearestAchievement.iconUrl" :src="nearestAchievement.iconUrl" alt="" class="mini__icon-img" />
+                <svg v-else viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V22l4-2 4 2v-7.26A7 7 0 0 0 12 2zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/></svg>
+              </div>
               <div>
                 <strong>成就「{{ nearestAchievement.name }}」<span v-if="nearestAchievement.achieved" class="mini__badge">待解锁</span></strong>
                 <p>{{ nearestAchievement.hint }}</p>
@@ -831,7 +834,7 @@ const nearestAchievement = computed(() => {
   const nearest = locked.sort((a, b) => (b.progress?.percentage ?? 0) - (a.progress?.percentage ?? 0))[0];
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : (Math.round(n * 10) / 10).toString());
   return {
-    icon: nearest.icon || '🏅',
+    iconUrl: typeof nearest.icon === 'string' && nearest.icon.startsWith('http') ? nearest.icon : '',
     name: nearest.name,
     achieved: (nearest.progress?.current ?? 0) >= (nearest.progress?.total ?? 1),
     hint: `${nearest.description}（${fmt(nearest.progress?.current ?? 0)}/${fmt(nearest.progress?.total ?? 1)}）`
@@ -1454,6 +1457,7 @@ onMounted(loadAll);
 .mini__icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: 0 0 auto; }
 .mini__icon--flame { color: #d9741a; background: rgba(244, 170, 70, 0.16); }
 .mini__icon--medal { color: var(--accent); background: rgba(141, 107, 255, 0.13); }
+.mini__icon-img { width: 18px; height: 18px; object-fit: contain; display: block; }
 .mini strong { font-size: 14px; }
 .mini p { margin: 3px 0 0; font-size: 12px; color: var(--muted); }
 .mini__badge {

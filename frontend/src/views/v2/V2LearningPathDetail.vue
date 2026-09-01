@@ -105,13 +105,13 @@
             class="view-toggle__btn"
             :class="{ 'view-toggle__btn--active': viewMode === 'list' }"
             @click="setView('list')"
-          >📋 列表视图</button>
+          ><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5zm2 0v3h14V5H5zm0 5v9h6v-9H5zm8 0v9h6v-9h-6z" opacity=".9"/></svg> 列表视图</button>
           <button
             type="button"
             class="view-toggle__btn"
             :class="{ 'view-toggle__btn--active': viewMode === 'timeline' }"
             @click="setView('timeline')"
-          >📅 时间线视图</button>
+          ><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M6 2a1 1 0 0 0-1 1v1H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1V3a1 1 0 1 0-2 0v1H9V3a1 1 0 0 0-2 0v1H7V3a1 1 0 0 0-1-1zM4 8h16v11H4V8zm2 3v2h5v-2H6zm7 0v2h5v-2h-5z" opacity=".9"/></svg> 时间线视图</button>
         </div>
 
         <div class="detail__grid">

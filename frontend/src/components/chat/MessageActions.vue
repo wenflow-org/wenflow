@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * MessageActions — hover action menu for AI message bubbles.
- * Shows: 👍 有用 / 👎 不佳 (message feedback), 🔄 重新生成 (hidden during streaming), 📋 复制
+ * Shows: 有用 / 不佳 (message feedback), 重新生成 (hidden during streaming), 复制
  * Positioned top-right of the message bubble using CSS.
  */
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue';

@@ -45,7 +45,9 @@
             <button v-if="total > items.length" type="button" class="nb__more" @click="loadMore">加载更多</button>
           </template>
           <div v-else class="nb__empty">
-            <span class="nb__empty-icon" aria-hidden="true">🔔</span>
+            <span class="nb__empty-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6v-5c0-3.07-1.64-5.64-4.5-6.32V4a2.5 2.5 0 0 0-5 0v.68C6.63 5.36 5 7.93 5 11v5l-2 2v1h18v-1l-2-2z" opacity=".85"/></svg>
+            </span>
             <span>暂无通知</span>
           </div>
         </div>

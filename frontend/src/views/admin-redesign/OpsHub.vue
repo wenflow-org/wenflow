@@ -247,7 +247,10 @@
               <tr v-for="r in records" :key="r.id">
                 <td>
                   <div class="mk-cell-main">
-                    <strong><span class="ac-icon">{{ r.iconUrl || '🏆' }}</span> {{ r.title }}</strong>
+                    <strong><span class="ac-icon">
+                      <img v-if="r.iconUrl" :src="r.iconUrl" alt="" class="ac-icon-img" />
+                      <svg v-else viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V22l4-2 4 2v-7.26A7 7 0 0 0 12 2zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/></svg>
+                    </span> {{ r.title }}</strong>
                     <span class="mk-cell-sub" :title="r.description || ''">{{ r.description || '' }}</span>
                   </div>
                 </td>

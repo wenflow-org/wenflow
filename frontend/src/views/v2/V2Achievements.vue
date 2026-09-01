@@ -216,7 +216,7 @@ function showToast(msg: string) {
 }
 
 function shareAchievement(a: Achievement) {
-  const text = `🏆 我在问流解锁了成就「${a.name}」！+${a.xpReward} XP`
+  const text = `我在问流解锁了成就「${a.name}」！+${a.xpReward} XP`
   if (navigator.share) {
     navigator.share({ title: a.name, text }).catch(() => {})
   } else if (navigator.clipboard) {

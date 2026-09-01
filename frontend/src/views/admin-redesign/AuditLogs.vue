@@ -200,7 +200,10 @@
 
     <!-- 空态 -->
     <div v-else class="mk-empty">
-      <div class="mk-empty__icon" aria-hidden="true">{{ tab === 'login' ? '🔑' : '🕵️' }}</div>
+      <div class="mk-empty__icon" aria-hidden="true">
+        <svg v-if="tab === 'login'" viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M12.65 10a5.99 5.99 0 0 0-6.88-3.88c-2.29.46-4.15 2.29-4.63 4.58A6.006 6.006 0 0 0 7 18a5.99 5.99 0 0 0 5.65-4H17v2h4v-4h-2v-2h-6.35zM7 14a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" opacity=".85"/></svg>
+        <svg v-else viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7v1a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2V9a7 7 0 0 0-7-7zm3 12a1 1 0 0 1 0 2 5.5 5.5 0 0 1-2.5-.6V17a.5.5 0 0 1-1 0v-1.6a5.5 5.5 0 0 1-2.5.6 1 1 0 0 1 0-2 3.5 3.5 0 0 0 0-7 1 1 0 0 1 0-2 5.5 5.5 0 0 1 3.5 2.6V6a.5.5 0 0 1 1 0v.4A5.5 5.5 0 0 1 15 4a1 1 0 0 1 0 2 3.5 3.5 0 0 0 0 7z" opacity=".85"/></svg>
+      </div>
       <strong>{{ isFiltered ? '当前筛选无审计记录' : tab === 'login' ? '暂无登录审计' : '暂无审计记录' }}</strong>
       <span>{{ tab === 'login' ? '管理员登录成功/失败都会在此留痕' : '管理员的增删改操作会自动记录留痕' }}</span>
       <button v-if="isFiltered" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>

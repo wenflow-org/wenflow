@@ -18,7 +18,7 @@
       <summary class="fdp__box-summary">漂移报告（{{ TERMS.driftContractQualified }}：编排文件 vs 数据库，admin 编辑行豁免）</summary>
       <div v-if="driftLoading" class="fdp__empty">检测中…</div>
       <div v-else-if="driftFailed" class="fdp__empty fdp__empty--error">漂移检测失败：无法连接字段路由服务，请稍后重试。<button type="button" class="mk-empty__action" @click="loadDrift">重试</button></div>
-      <div v-else-if="drift.items.length === 0" class="fdp__empty">✅ 无漂移（编排文件与数据库一致）</div>
+      <div v-else-if="drift.items.length === 0" class="fdp__empty"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg> 无漂移（编排文件与数据库一致）</div>
       <ul v-else class="fdp__drift-list">
         <li v-for="(d, i) in drift.items" :key="i" class="fdp__drift-item">
           <span class="mono fdp__drift-kind">{{ kindLabel(d.kind) }}</span>
