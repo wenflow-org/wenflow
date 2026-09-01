@@ -585,26 +585,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 <style scoped>
 /* 全宽布局（与其他管理台页面一致）：9 列固定宽度，宽屏下剩余空间由各列按比例均摊，
    空白分散到每一列而不是堆在消息列（fixed table-layout 规范行为） */
-.mk-status {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--mk-line);
-  background: var(--mk-surface);
-  box-shadow: var(--mk-shadow-sm);
-  flex-wrap: wrap;
-  /* 终端页例外：字号/圆角与 mk-status 基础规格一致，
-     内边距略大是为容纳状态条内的筛选区（pills + 关键词 + 高级筛选） */
-}
-.mk-status__dot { width: 9px; height: 9px; border-radius: 50%; }
-.mk-status--ok .mk-status__dot { background: var(--mk-green); }
-.mk-status--bad .mk-status__dot { background: var(--mk-red); }
-.mk-status--muted .mk-status__dot { background: var(--mk-faint); }
-.mk-status strong { font-size: 14px; }
-.mk-status__sep { width: 1px; height: 14px; background: var(--mk-line); }
-.mk-status__meta { color: var(--mk-muted); font-size: 12px; }
+/* 状态条走全局 mk-status 体系；此处仅扩展终端页专属的筛选徽章类 */
 
 .mk-status__filter {
   display: inline-flex;
@@ -886,9 +867,6 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3，高度换算回逻辑坐标） ========== */
 @media (min-width: 2000px) {
-  .mk-status { padding: 10px 16px; }
-  .mk-status strong { font-size: 15.5px; }
-  .mk-status__meta { font-size: 13px; }
   .log-auto { font-size: 13px; }
   .mk-status__filter { font-size: 13px; }
   .mk-status__clear { font-size: 14.5px; }
@@ -919,13 +897,9 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号沿用 2000px 档 */
-  .mk-status { padding: 12px 18px; border-radius: 14px; }
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：字号继续放大 */
-  .mk-status { padding: 14px 22px; }
-  .mk-status strong { font-size: 18px; }
-  .mk-status__meta { font-size: 15px; }
   .log-auto { font-size: 15.5px; }
   .mk-status__filter { font-size: 15.5px; }
   .mk-status__clear { font-size: 17px; }

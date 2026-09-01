@@ -1154,5 +1154,10 @@ html[data-theme='dark'] {
   .wf-slow { background: rgba(251, 191, 36, 0.1); }
   .wf-payload { background: #0f1624; border-color: #232f45; color: #c6d4ea; }
   .wf-summary, .wf-detail { background: #131b2a; border-color: #232f45; }
+  /* 补漏：分隔线/轨道/标签/结论条（此前硬编码浅色在暗色下残留） */
+  .wf-row { border-bottom-color: #232f45; }
+  .wf-row__track, .wf-row__gw, .wf-fact { background: #1b2537; }
+  .wf-verdict { background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.3); }
+  .wf-notice { background: rgba(251, 191, 36, 0.1); border-color: rgba(251, 191, 36, 0.3); }
 }
 </style>

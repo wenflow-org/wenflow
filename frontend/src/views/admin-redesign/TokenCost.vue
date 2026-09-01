@@ -37,26 +37,11 @@
     </div>
 
     <template v-else>
-      <!-- 概览卡 -->
+      <!-- 概览卡（MkKpi 统一形态） -->
       <section class="tc-overview">
-        <div class="tc-card tc-card--kpi">
-          <span class="tc-kpi__label">总 Token</span>
-          <strong class="tc-kpi__num">{{ summary ? fmtTokens(summary.totals.tokens) : '—' }}</strong>
-          <span class="tc-kpi__sub">
-            prompt {{ summary ? fmtTokens(summary.totals.promptTokens) : '—' }} ·
-            completion {{ summary ? fmtTokens(summary.totals.completionTokens) : '—' }}
-          </span>
-        </div>
-        <div class="tc-card tc-card--kpi">
-          <span class="tc-kpi__label">调用次数</span>
-          <strong class="tc-kpi__num">{{ summary ? summary.totals.calls : '—' }}</strong>
-          <span class="tc-kpi__sub">近 {{ days }} 天</span>
-        </div>
-        <div class="tc-card tc-card--kpi" :class="{ 'tc-card--bad': summary && summary.totals.failed > 0 }">
-          <span class="tc-kpi__label">失败调用</span>
-          <strong class="tc-kpi__num">{{ summary ? summary.totals.failed : '—' }}</strong>
-          <span class="tc-kpi__sub">含重试后的终态失败</span>
-        </div>
+        <MkKpi label="总 Token" :value="summary ? fmtTokens(summary.totals.tokens) : '—'" :hint="`prompt ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · completion ${summary ? fmtTokens(summary.totals.completionTokens) : '—'}`" />
+        <MkKpi label="调用次数" :value="summary ? summary.totals.calls : '—'" :hint="`近 ${days} 天`" />
+        <MkKpi label="失败调用" :value="summary ? summary.totals.failed : '—'" :tone="summary && summary.totals.failed > 0 ? 'bad' : ''" :hint="'含重试后的终态失败'" />
       </section>
 
       <!-- 趋势图 -->
@@ -151,6 +136,7 @@ import { isLive } from './store'
 import { errMsg, isPageCacheFresh, markPageFetched } from './live'
 import { adminTokenCostApi } from '@/api/adminApi'
 import DataScopeToggle from './DataScopeToggle.vue'
+import MkKpi from './MkKpi.vue'
 import { toast } from '@/utils/toast'
 
 interface RankItem {
@@ -260,26 +246,15 @@ function rankPct(tokens: number): string {
 .tc-pills { display: inline-flex; }
 .tc-status--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
 
+/* 概览卡：MkKpi 网格容器（统计卡本体由 MkKpi 提供，含暗色/4K 自动适配） */
 .tc-overview {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 14px;
 }
-.tc-card {
-  background: var(--mk-card-bg, #fff);
-  border: 1px solid var(--mk-border, #e5e9f2);
-  border-radius: 12px;
-  padding: 16px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.tc-card--kpi .tc-kpi__label { font-size: 12px; font-weight: 700; color: var(--mk-muted, #6b7280); letter-spacing: 0.02em; }
-.tc-card--kpi .tc-kpi__num { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--mk-ink, #1a2a44); }
-.tc-card--kpi .tc-kpi__sub { font-size: 11.5px; color: var(--mk-faint, #9ca3af); font-variant-numeric: tabular-nums; }
-.tc-card--bad .tc-kpi__num { color: var(--mk-red, #dc2626); }
 
+/* 趋势图：柱状图（专属可视化，保留自制） */
 .tc-trend {
   display: flex;
   align-items: flex-end;
@@ -304,7 +279,7 @@ function rankPct(tokens: number): string {
 .tc-trend__bar {
   width: 70%;
   margin: 0 auto;
-  background: linear-gradient(180deg, #5b8def, #2f6fed);
+  background: linear-gradient(180deg, var(--mk-blue, #5b8def), var(--mk-accent-deep, #2f6fed));
   border-radius: 4px 4px 0 0;
   min-height: 2px;
 }
@@ -343,14 +318,14 @@ function rankPct(tokens: number): string {
 .tc-rank__bar-track {
   flex: 1;
   height: 10px;
-  background: var(--mk-track-bg, #eef1f6);
+  background: var(--mk-line, #eef1f6);
   border-radius: 999px;
   overflow: hidden;
 }
 .tc-rank__bar {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, #6fa1f5, #2f6fed);
+  background: linear-gradient(90deg, var(--mk-blue, #6fa1f5), var(--mk-accent-deep, #2f6fed));
   border-radius: 999px;
 }
 .tc-rank__num {
@@ -372,4 +347,37 @@ function rankPct(tokens: number): string {
   font-weight: 600;
 }
 .tc-rank__meta em { font-style: normal; color: var(--mk-red, #dc2626); }
+
+/* 4K：趋势图/排行条跟随全站节奏 */
+@media (min-width: 2000px) {
+  .tc-trend { height: 170px; }
+  .tc-trend__day { font-size: 12px; }
+  .tc-rank__name { font-size: 14px; width: 170px; min-width: 170px; }
+  .tc-rank__num { font-size: 14px; width: 84px; min-width: 84px; }
+  .tc-rank__meta { font-size: 12.5px; width: 98px; min-width: 98px; }
+  .tc-rank__bar-track { height: 12px; }
+}
+@media (min-width: 2800px) {
+  .tc-trend { height: 200px; }
+  .tc-trend__day { font-size: 14px; }
+  .tc-rank__name { font-size: 16.5px; width: 200px; min-width: 200px; }
+  .tc-rank__num { font-size: 16.5px; width: 100px; min-width: 100px; }
+  .tc-rank__meta { font-size: 14.5px; width: 115px; min-width: 115px; }
+  .tc-rank__bar-track { height: 14px; }
+}
+@media (min-width: 3600px) {
+  .tc-trend { height: 235px; }
+  .tc-trend__day { font-size: 16.5px; }
+  .tc-rank__name { font-size: 19.5px; width: 235px; min-width: 235px; }
+  .tc-rank__num { font-size: 19.5px; width: 118px; min-width: 118px; }
+  .tc-rank__meta { font-size: 17px; width: 135px; min-width: 135px; }
+  .tc-rank__bar-track { height: 16px; }
+}
+
+/* 暗色模式（D1 补完）：Token 成本（此前完全缺失） */
+html[data-theme='dark'] {
+  .tc-trend__bar { background: linear-gradient(180deg, #5b8def, #2f6fed); }
+  .tc-rank__bar { background: linear-gradient(90deg, #6fa1f5, #2f6fed); }
+  .tc-rank__bar-track { background: #232f45; }
+}
 </style>

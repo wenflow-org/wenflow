@@ -476,24 +476,7 @@ function goSessions(username: string) {
 </script>
 
 <style scoped>
-.mk-status {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--mk-line);
-  background: var(--mk-surface);
-  box-shadow: var(--mk-shadow-sm);
-  flex-wrap: wrap;
-}
-.mk-status__dot { width: 9px; height: 9px; border-radius: 50%; }
-.mk-status--ok .mk-status__dot { background: var(--mk-green); }
-.mk-status--bad .mk-status__dot { background: var(--mk-red); }
-.mk-status--muted .mk-status__dot { background: var(--mk-faint); }
-.mk-status strong { font-size: 14px; }
-.mk-status__sep { width: 1px; height: 14px; background: var(--mk-line); }
-.mk-status__meta { color: var(--mk-muted); font-size: 12px; }
+/* 状态条走全局 mk-status 体系（shared.css）；此处不再 scoped 覆盖 */
 
 /* 加载失败错误态 */
 .audit-error { padding: 40px 20px; }
@@ -676,11 +659,8 @@ function goSessions(username: string) {
 .log-section { display: grid; gap: 4px; }
 .log-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
 
-/* 大屏/4K 适配（全站 mk 体系档位；表格自身由 shared.css 档位覆盖） */
+/* 大屏/4K 适配（全站 mk 体系档位；表格与状态条由 shared.css 档位覆盖） */
 @media (min-width: 2000px) {
-  .mk-status { padding: 10px 16px; }
-  .mk-status strong { font-size: 15.5px; }
-  .mk-status__meta { font-size: 13px; }
   .log-time,
   .log-target,
   .log-ip { font-size: 13.5px; }
@@ -700,7 +680,6 @@ function goSessions(username: string) {
   .log-arrow { font-size: 14px; }
 }
 @media (min-width: 2800px) {
-  .mk-status { padding: 12px 18px; border-radius: 14px; }
   .log-time,
   .log-target,
   .log-ip { font-size: 16px; }
@@ -719,9 +698,6 @@ function goSessions(username: string) {
   .log-arrow { font-size: 16.5px; }
 }
 @media (min-width: 3600px) {
-  .mk-status { padding: 14px 22px; }
-  .mk-status strong { font-size: 18px; }
-  .mk-status__meta { font-size: 15px; }
   .log-time,
   .log-target,
   .log-ip { font-size: 18px; }

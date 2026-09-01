@@ -378,7 +378,7 @@ void loadDead()
   flex-wrap: wrap;
   padding: 10px 12px;
   border-bottom: 1px solid var(--mk-line);
-  background: #fafbfc;
+  background: var(--mk-surface);
   font-size: 12.5px;
 }
 .dt-result__head strong { font-size: 13px; }
@@ -414,6 +414,16 @@ void loadDead()
   .dt-grid { grid-template-columns: 1.6fr 0.7fr 1.4fr auto; }
   .dt-compare__col pre { font-size: 12.5px; }
 }
+@media (min-width: 2800px) {
+  .dt-compare__col pre { font-size: 15px; }
+  .ex-row__text strong { font-size: 16.5px; }
+  .ex-row__text span { font-size: 15.5px; }
+}
+@media (min-width: 3600px) {
+  .dt-compare__col pre { font-size: 17.5px; }
+  .ex-row__text strong { font-size: 19.5px; }
+  .ex-row__text span { font-size: 18px; }
+}
 @media (max-width: 1100px) {
   .dt-grid { grid-template-columns: 1fr 1fr; }
   .dt-compare { grid-template-columns: 1fr; }
@@ -428,7 +438,7 @@ void loadDead()
   justify-content: space-between;
   gap: 16px;
   padding: 10px 2px;
-  border-bottom: 1px solid #f6f7f9;
+  border-bottom: 1px solid var(--mk-line);
   flex-wrap: wrap;
 }
 .ex-row:last-child { border-bottom: none; }
@@ -445,6 +455,6 @@ void loadDead()
 
 /* ================= 暗色模式（D1 补完）：运维中心 ================= */
 html[data-theme='dark'] {
-  .oc-tools { background: #141c2b; border-color: #232f45; }
+  /* dt-result/ex-row 已走 var(--mk-*) token，暗色由全局 token 覆盖 */
 }
 </style>
