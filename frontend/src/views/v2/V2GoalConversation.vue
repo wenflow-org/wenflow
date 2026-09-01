@@ -64,14 +64,24 @@
             @keydown.enter.exact.prevent="doSend"
           ></textarea>
           <button
+            v-if="!live.sending"
             type="button"
             class="composer__send"
-            :class="{ 'composer__send--off': !input.trim() || live.sending }"
-            :disabled="!input.trim() || live.sending"
+            :class="{ 'composer__send--off': !input.trim() }"
+            :disabled="!input.trim()"
             aria-label="发送"
             @click="doSend"
           >
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
+          </button>
+          <button
+            v-else
+            type="button"
+            class="composer__send composer__send--stop"
+            aria-label="停止生成"
+            @click="live.stop()"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
           </button>
         </div>
       </div>
@@ -222,16 +232,6 @@
         <!-- 输入区 -->
         <div class="composer">
           <label class="visually-hidden" for="goal-chat-input">回答上面的问题，或补充你的基础、时间和限制</label>
-          <!-- 停止生成：流式期间显式中止（已流出的部分保留） -->
-          <button
-            v-if="live.sending"
-            type="button"
-            class="composer__stop"
-            @click="live.stop()"
-          >
-            <svg viewBox="0 0 24 24" width="12" height="12"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
-            停止生成
-          </button>
           <div class="composer__box" :class="{ 'composer__box--active': input.trim() }">
             <textarea
               id="goal-chat-input"
@@ -243,15 +243,26 @@
               @keydown.enter.exact.prevent="doSend"
             ></textarea>
             <span class="composer__count">{{ input.length }} / 500</span>
+            <!-- 发送/停止 同位置切换：生成中变停止（主流聊天交互，位置固定不占额外空间） -->
             <button
+              v-if="!live.sending"
               type="button"
               class="composer__send"
-              :class="{ 'composer__send--off': !input.trim() || live.sending }"
-              :disabled="!input.trim() || live.sending"
+              :class="{ 'composer__send--off': !input.trim() }"
+              :disabled="!input.trim()"
               aria-label="发送"
               @click="doSend"
             >
               <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
+            </button>
+            <button
+              v-else
+              type="button"
+              class="composer__send composer__send--stop"
+              aria-label="停止生成"
+              @click="live.stop()"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
             </button>
           </div>
           <div class="composer__hint">
@@ -950,19 +961,6 @@ function shuffleScenes() {
   box-shadow: 0 6px 20px rgba(23, 32, 51, 0.06);
 }
 .composer__box--active { border-color: rgba(52, 120, 246, 0.4); }
-.composer__stop {
-  justify-self: end;
-  display: inline-flex; align-items: center; gap: 6px;
-  font: inherit; font-size: 12px; font-weight: 700;
-  color: var(--blue-deep);
-  background: rgba(52, 120, 246, 0.08);
-  border: 1px solid rgba(52, 120, 246, 0.35);
-  border-radius: 999px;
-  padding: 6px 13px;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.composer__stop:hover { background: rgba(52, 120, 246, 0.14); }
 .composer__textarea {
   flex: 1;
   border: 0; outline: none; resize: none;
@@ -981,8 +979,21 @@ function shuffleScenes() {
   color: #fff; cursor: pointer;
   box-shadow: 0 8px 16px rgba(52, 120, 246, 0.3);
   flex: 0 0 auto;
+  border: 0;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 .composer__send--off { background: color-mix(in srgb, var(--line) 60%, transparent); color: var(--faint); box-shadow: none; cursor: default; }
+/* 生成中：同一按钮切换为红色停止态（主流聊天交互） */
+.composer__send--stop {
+  background: linear-gradient(135deg, #e5484d, #c92a2f);
+  box-shadow: 0 8px 16px rgba(229, 72, 77, 0.28);
+}
+.composer__send--stop:hover {
+  background: linear-gradient(135deg, #ef5b60, #d43a40);
+  box-shadow: 0 10px 20px rgba(229, 72, 77, 0.36);
+  transform: translateY(-1px);
+}
+.composer__send--stop:active { transform: translateY(0) scale(0.97); }
 .composer__hint {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap;

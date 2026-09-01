@@ -217,8 +217,28 @@
               @keydown.enter.exact.prevent="send"
             ></textarea>
             <span class="composer__count">{{ input.length }} / 800</span>
-            <span class="composer__send" :class="{ 'composer__send--off': !input.trim() || typing || checkpointPending }" @click="send">
+            <!-- 发送/停止 同位置切换：导师流式中变停止（checkpointPending 判定中不可停止，保持禁用） -->
+            <span
+              v-if="!typing"
+              class="composer__send"
+              :class="{ 'composer__send--off': !input.trim() || checkpointPending }"
+              role="button"
+              tabindex="0"
+              @click="send"
+              @keydown.enter="send"
+            >
               <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
+            </span>
+            <span
+              v-else
+              class="composer__send composer__send--stop"
+              role="button"
+              tabindex="0"
+              title="停止生成"
+              @click="stopGeneration"
+              @keydown.enter="stopGeneration"
+            >
+              <svg viewBox="0 0 24 24" width="13" height="13"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
             </span>
           </div>
           <div class="composer__hint">
@@ -226,19 +246,6 @@
             <AiContentNote />
           </div>
         </div>
-
-        <!-- 停止生成按钮 -->
-        <Transition name="typing-fade">
-          <button
-            v-if="typing && !checkpointPending"
-            type="button"
-            class="stop-btn"
-            @click="stopGeneration"
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
-            停止生成
-          </button>
-        </Transition>
 
         <!-- 完成浮层 -->
         <Transition name="finish-pop">
@@ -1625,8 +1632,20 @@ onBeforeUnmount(() => {
   color: #fff; cursor: pointer;
   box-shadow: 0 8px 16px rgba(52, 120, 246, 0.3);
   flex: 0 0 auto;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 .composer__send--off { background: #e3eaf5; color: var(--faint); box-shadow: none; cursor: default; }
+/* 生成中：同一按钮切换为红色停止态（主流聊天交互，替代原独立 stop-btn） */
+.composer__send--stop {
+  background: linear-gradient(135deg, #e5484d, #c92a2f);
+  box-shadow: 0 8px 16px rgba(229, 72, 77, 0.28);
+}
+.composer__send--stop:hover {
+  background: linear-gradient(135deg, #ef5b60, #d43a40);
+  box-shadow: 0 10px 20px rgba(229, 72, 77, 0.36);
+  transform: translateY(-1px);
+}
+.composer__send--stop:active { transform: translateY(0) scale(0.97); }
 .composer__hint {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap;
@@ -1776,29 +1795,6 @@ onBeforeUnmount(() => {
 .msg__content--actions { position: relative; }
 .msg__bubble--relative { position: relative; }
 
-/* 停止生成按钮 */
-.stop-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  align-self: center;
-  padding: 7px 16px;
-  border-radius: 999px;
-  border: 1px solid rgba(239, 117, 120, 0.35);
-  background: rgba(239, 117, 120, 0.06);
-  color: var(--red, #c0454a);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-  margin-top: 4px;
-}
-.stop-btn:hover {
-  background: rgba(239, 117, 120, 0.12);
-  border-color: rgba(239, 117, 120, 0.5);
-}
-
 .typing-fade-enter-active { transition: opacity 0.2s ease; }
 .typing-fade-leave-active { transition: opacity 0.12s ease; }
 .typing-fade-enter-from,
@@ -1910,9 +1906,5 @@ onBeforeUnmount(() => {
 :global([data-theme='dark']) .kp-bar {
   background: var(--surface);
   border-color: var(--line);
-}
-:global([data-theme='dark']) .stop-btn {
-  background: rgba(239, 117, 120, 0.1);
-  border-color: rgba(239, 117, 120, 0.3);
 }
 </style>
