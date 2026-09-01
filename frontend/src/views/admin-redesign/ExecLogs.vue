@@ -12,8 +12,9 @@
         {{ filterLabel }}
         <button type="button" class="mk-status__clear" @click="clearFilter">×</button>
       </span>
-      <span class="mk-status__spacer"></span>
-      <button v-if="isLive" type="button" class="mk-status__action" @click="exportJson">导出</button>
+      <span class="mk-status__actions">
+        <button v-if="isLive" type="button" class="mk-status__action" @click="exportJson">导出</button>
+      </span>
     </div>
 
     <!-- 日志流 -->

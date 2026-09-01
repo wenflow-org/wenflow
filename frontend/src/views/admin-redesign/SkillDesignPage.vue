@@ -23,17 +23,21 @@
         </span>
         <span v-if="recentFailures > 0" class="mk-status__meta sdp-bad-text">近 8 条 {{ recentFailures }} 失败</span>
         <span v-if="overview.drift === 'file-vs-db-mismatch'" class="mk-badge mk-badge--warn">{{ TERMS.driftContract }}</span>
-        <button type="button" class="mk-status__action" :disabled="loading" @click="loadAll">
-          {{ loading ? '刷新中…' : '刷新' }}
-        </button>
-        <button type="button" class="mk-status__action mk-status__action--primary sdp-action-fix" @click="goDryRun">
-          试跑
-        </button>
+        <span class="mk-status__actions">
+          <button type="button" class="mk-status__action" :disabled="loading" @click="loadAll">
+            {{ loading ? '刷新中…' : '刷新' }}
+          </button>
+          <button type="button" class="mk-status__action mk-status__action--primary sdp-action-fix" @click="goDryRun">
+            试跑
+          </button>
+        </span>
       </div>
       <div v-else class="mk-status mk-status--muted">
         <span class="mk-status__dot"></span>
         <strong class="mk-status__title">{{ loading ? '加载中…' : loadFailed ? '概览加载失败' : skillId }}</strong>
-        <button v-if="loadFailed && !loading" type="button" class="mk-status__action" @click="loadAll">重试</button>
+        <span class="mk-status__actions">
+          <button v-if="loadFailed && !loading" type="button" class="mk-status__action" @click="loadAll">重试</button>
+        </span>
       </div>
     </header>
 

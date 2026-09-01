@@ -14,7 +14,9 @@
       <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="`管理员 ${adminCount} · 当前在线 ${activeToday}${registrationEnabled !== null ? ' · 注册' + (registrationEnabled ? '开放' : '关闭') : ''}`">
         在线 {{ activeToday }}
       </span>
-      <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建用户</button>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建用户</button>
+      </span>
     </div>
 
 

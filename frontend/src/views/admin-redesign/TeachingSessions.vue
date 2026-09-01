@@ -23,13 +23,15 @@
       >高关注 {{ highAttentionCount }}</button>
       <span v-if="advisoryCount" class="mk-status__meta" title="含建议的会话数">有建议 {{ advisoryCount }}</span>
       <span class="mk-status__meta">共 {{ rows.length }} 条</span>
-      <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshNow">
-        {{ refreshing ? '刷新中…' : '刷新' }}
-      </button>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshNow">
+          {{ refreshing ? '刷新中…' : '刷新' }}
+        </button>
+      </span>
     </div>
 
     <!-- 深链未命中提示：?session= 存在但当前列表（最近 100 条）中找不到 -->
-    <div v-if="deepLinkMiss" class="errorbar" role="alert">
+    <div v-if="deepLinkMiss" class="mk-alert" role="alert">
       未找到深链指向的会话：它可能不在最近 {{ rows.length }} 条记录内，或已被删除。
     </div>
 

@@ -6,7 +6,9 @@
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ admins.length }} 名</span>
       <span class="mk-status__meta">当前会话 {{ currentAdmin.name || '—' }}</span>
-      <button type="button" class="mk-status__action mk-status__action--primary" @click="openAdd">添加管理员</button>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action mk-status__action--primary" @click="openAdd">添加管理员</button>
+      </span>
     </div>
 
     <div class="mk-card">
@@ -97,7 +99,7 @@
             </div>
             <p v-else-if="searched" class="ad-none">没有匹配的用户（仅真实用户可提升）</p>
             <p v-else class="mk-field__hint">输入至少 2 个字符搜索真实用户</p>
-            <div v-if="addError" class="errorbar">{{ addError }}</div>
+            <div v-if="addError" class="mk-alert">{{ addError }}</div>
           </div>
           <div class="mk-modal__foot">
             <button type="button" class="mk-btn" @click="addOpen = false">取消</button>
@@ -311,13 +313,21 @@ void load()
 .ad-candidate__main strong { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ad-none { color: var(--mk-faint); font-size: 12.5px; text-align: center; padding: 12px 0; }
 
-.errorbar {
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--mk-red-bg, #fef2f2);
-  color: var(--mk-red, #dc2626);
-  font-size: 12.5px;
-  font-weight: 600;
+/* 4K：弹窗候选列表跟随全站节奏 */
+@media (min-width: 2000px) {
+  .ad-candidate__main strong { font-size: 14px; }
+  .ad-candidate { padding: 10px 12px; }
+  .ad-none { font-size: 14px; }
+}
+@media (min-width: 2800px) {
+  .ad-candidate__main strong { font-size: 16.5px; }
+  .ad-candidate { padding: 12px 14px; }
+  .ad-none { font-size: 16.5px; }
+}
+@media (min-width: 3600px) {
+  .ad-candidate__main strong { font-size: 19.5px; }
+  .ad-candidate { padding: 14px 16px; }
+  .ad-none { font-size: 19.5px; }
 }
 
 /* ================= 暗色模式（D1 补完）：管理员列表 ================= */

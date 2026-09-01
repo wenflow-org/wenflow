@@ -122,7 +122,7 @@ describe('Skills 新页头（单行状态条）', () => {
     expect(link.exists()).toBe(true)
     expect(link.text()).toContain('失败节点')
     await link.trigger('click')
-    expect(w.vm.onlyAttention).toBe(true)
+    expect((w.vm as any).onlyAttention).toBe(true)
     // 激活态类
     expect(link.classes()).toContain('mk-status__meta-link--on')
   })

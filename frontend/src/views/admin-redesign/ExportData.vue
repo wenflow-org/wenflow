@@ -129,7 +129,7 @@ async function doExport(key: string) {
   justify-content: space-between;
   gap: 16px;
   padding: 10px 2px;
-  border-bottom: 1px solid #f6f7f9;
+  border-bottom: 1px solid var(--mk-line);
   flex-wrap: wrap;
 }
 .ex-row:last-child { border-bottom: none; }

@@ -8,14 +8,14 @@
       <span class="mk-status__meta">核心文件 {{ cores.length }}</span>
       <span class="mk-status__meta pw-ok">同步 {{ countBy('synced') }}</span>
       <span class="mk-status__meta pw-warn">待编译发布 {{ countBy('pending-compile') }}</span>
-      <div class="pl-actions">
+      <span class="mk-status__actions">
         <button type="button" class="mk-status__action" @click="openScaffold">
           新建 Skill
         </button>
         <button type="button" class="mk-status__action" :disabled="loading" @click="loadList">
           <span v-if="loading"><span class="mk-spinner"></span> 刷新中…</span><span v-else>刷新</span>
         </button>
-      </div>
+      </span>
     </div>
 
     <p v-if="!embedded" class="pw-lead">编辑与发布在 Skill 设计页的「协议」页签；「新建 Skill」生成骨架（core.yaml + 技能登记册条目 + 编排契约 + handler 占位）。</p>
@@ -357,7 +357,6 @@ onMounted(async () => {
   line-height: 1.7;
 }
 .pw-hash { font-size: 11px; }
-.pl-actions { margin-left: auto; display: flex; gap: 8px; }
 .mk-table--click tbody tr { cursor: pointer; }
 .sc-result__section { margin-top: 14px; }.sc-result__title { display: block; font-size: 12px; font-weight: 700; color: var(--mk-muted, #5b6577); margin-bottom: 6px; }
 .sc-result__files { margin: 0; padding-left: 18px; }

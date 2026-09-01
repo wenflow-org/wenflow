@@ -6,7 +6,9 @@
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">内部调试与运维辅助</span>
       <span class="mk-status__meta" :class="{ 'is-bad': deadCount > 0 }">outbox 死信 {{ deadCount }}</span>
-      <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
+      </span>
     </div>
 
     <!-- 时间推进模拟 -->

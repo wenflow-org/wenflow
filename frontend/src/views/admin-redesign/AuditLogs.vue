@@ -7,9 +7,11 @@
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta mono">{{ total }} 条</span>
       <span v-if="total" class="mk-status__meta mono">失败 {{ failed }}</span>
-      <button type="button" class="mk-status__action" :disabled="loading" @click="applyFilters">
-        {{ loading ? '刷新中…' : '刷新' }}
-      </button>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action" :disabled="loading" @click="applyFilters">
+          {{ loading ? '刷新中…' : '刷新' }}
+        </button>
+      </span>
     </div>
 
     <!-- 筛选卡片头（对齐 Users 模式：tabs/搜索/时间范围从状态条移入） -->

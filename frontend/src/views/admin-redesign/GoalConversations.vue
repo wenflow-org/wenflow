@@ -29,9 +29,11 @@
       >已完成 {{ stats?.completed ?? 0 }}</button>
       <span v-if="stackOther" class="mk-status__meta">待澄清 {{ stackOther }}</span>
       <span v-if="isLive && stats" class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ stats.total }} 条 · 近 30 天</span>
-      <button type="button" class="mk-status__action" :disabled="loading" @click="load(true)">
-        {{ loading ? '刷新中…' : '刷新' }}
-      </button>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action" :disabled="loading" @click="load(true)">
+          {{ loading ? '刷新中…' : '刷新' }}
+        </button>
+      </span>
     </div>
 
     <!-- 非 live：无演示数据 -->

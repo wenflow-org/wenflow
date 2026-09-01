@@ -26,9 +26,11 @@
         </button>
       </div>
       <DataScopeToggle v-if="isLive" v-model="includeTest" />
-      <button type="button" class="mk-status__action" :disabled="loading" @click="() => load(true)">
-        {{ loading ? '刷新中…' : '刷新' }}
-      </button>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action" :disabled="loading" @click="() => load(true)">
+          {{ loading ? '刷新中…' : '刷新' }}
+        </button>
+      </span>
     </div>
 
     <div v-if="!isLive" class="mk-empty mk-empty--min">

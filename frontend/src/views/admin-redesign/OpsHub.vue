@@ -773,6 +773,35 @@ void loadStats()
 .ac-candidate strong { font-size: 12.5px; }
 .ac-none { color: var(--mk-faint); font-size: 12.5px; text-align: center; padding: 10px 0; }
 
+/* 4K：抽屉/弹窗内容跟随全站节奏（MkKpi/表格/状态条由全局档接管） */
+@media (min-width: 2000px) {
+  .ct-progress__num { font-size: 13px; }
+  .ct-milestone__head strong { font-size: 14.5px; }
+  .ct-milestone__meta { font-size: 12.5px; }
+  .ct-subtask { font-size: 13.5px; }
+  .ac-candidate strong { font-size: 14px; }
+  .ac-candidate { padding: 10px 12px; }
+  .ac-none { font-size: 14px; }
+}
+@media (min-width: 2800px) {
+  .ct-progress__num { font-size: 15.5px; }
+  .ct-milestone__head strong { font-size: 17px; }
+  .ct-milestone__meta { font-size: 14.5px; }
+  .ct-subtask { font-size: 16px; }
+  .ac-candidate strong { font-size: 16.5px; }
+  .ac-candidate { padding: 12px 14px; }
+  .ac-none { font-size: 16.5px; }
+}
+@media (min-width: 3600px) {
+  .ct-progress__num { font-size: 18px; }
+  .ct-milestone__head strong { font-size: 20px; }
+  .ct-milestone__meta { font-size: 17px; }
+  .ct-subtask { font-size: 18.5px; }
+  .ac-candidate strong { font-size: 19.5px; }
+  .ac-candidate { padding: 14px 16px; }
+  .ac-none { font-size: 19.5px; }
+}
+
 /* ================= 暗色模式（D1 补完）：运营中心 ================= */
 html[data-theme='dark'] {
   /* ac-grant-target/ac-candidate 已走 var(--mk-*) token，无需页面补丁 */

@@ -648,4 +648,29 @@ onMounted(() => void load())
 .sfr__empty { padding: 30px; color: var(--mk-faint, #71809a); text-align: center; }
 .sfr__emptyrow { color: var(--mk-faint, #71809a); text-align: center; padding: 14px; }
 .sfr__error-text { margin: 0 0 10px; font-size: 12.5px; line-height: 1.6; }
+
+/* 4K：字段路由表内容跟随全站节奏 */
+@media (min-width: 2000px) {
+  .sfr__empty { font-size: 14px; padding: 34px; }
+  .sfr__emptyrow { font-size: 14px; }
+  .sfr__error-text { font-size: 14px; }
+  .sfr__persist { font-size: 12.5px; }
+}
+@media (min-width: 2800px) {
+  .sfr__empty { font-size: 16.5px; padding: 40px; }
+  .sfr__emptyrow { font-size: 16.5px; }
+  .sfr__error-text { font-size: 16.5px; }
+  .sfr__persist { font-size: 14.5px; }
+}
+@media (min-width: 3600px) {
+  .sfr__empty { font-size: 19.5px; padding: 47px; }
+  .sfr__emptyrow { font-size: 19.5px; }
+  .sfr__error-text { font-size: 19.5px; }
+  .sfr__persist { font-size: 17px; }
+}
+
+/* 暗色模式（D1 补完）：字段路由表 */
+html[data-theme='dark'] {
+  .sfr__persist--alias { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
+}
 </style>

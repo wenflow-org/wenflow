@@ -212,4 +212,12 @@ onMounted(() => void loadSandboxView());
   .sbx__handoff { font-size: 14px; padding: 2px 12px; }
   .sbx__empty { padding: 28px; }
 }
+
+/* 暗色模式（D1 补完）：沙盘契约（语义色块转暗色系） */
+html[data-theme='dark'] {
+  .sbx__agenthead { background: #141c2b; }
+  .sbx__src--routing-output { background: rgba(91, 141, 239, 0.18); color: #9db8f5; }
+  .sbx__src--routing-channel { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
+  .sbx__handoff { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
+}
 </style>

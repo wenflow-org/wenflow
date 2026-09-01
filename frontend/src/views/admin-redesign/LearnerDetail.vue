@@ -1935,4 +1935,35 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-ev { padding: 16px 25px; gap: 19px; }
   .ld-ev__dot { width: 13px; height: 13px; }
 }
+
+/* ================= 暗色模式（D1 补完）：学习者详情（此前完全缺失） ================= */
+html[data-theme='dark'] {
+  /* 进度条/概念账本/趋势/会话/证据/日历 浅灰底统一替换 */
+  .ld-progress__bar,
+  .ld-bar__track,
+  .ld-bar__ev--zero,
+  .ld-trend__track,
+  .ld-cal__bar,
+  .ld-cal__outcome.is-pending,
+  .ld-ev__signal.is-muted,
+  .ld-load__seg,
+  .ld-badge-seg { background: #232f45; }
+  /* 分隔线（进度/趋势/会话/证据/日历） */
+  .ld-trend,
+  .ld-session,
+  .ld-ev,
+  .ld-cal__row,
+  .ld-bar__ev { border-bottom-color: #232f45; }
+  /* 淡蓝底（hover/摘要） */
+  .ld-badge-seg.is-on,
+  .ld-concept-legend__seg--hot { background: rgba(91, 141, 239, 0.18); }
+  /* 语义渐变（warn/bad 用暗色系，避免浅红/浅琥珀过亮） */
+  .ld-bar__fill.is-warn,
+  .ld-trend__bar--up { background: linear-gradient(90deg, #b45309, #92400e); }
+  .ld-bar__fill.is-bad,
+  .ld-trend__bar--down { background: linear-gradient(90deg, #b91c1c, #7f1d1d); }
+  .ld-bar__fill.is-muted { background: linear-gradient(90deg, #4a5874, #33415c); }
+  /* 滚动条 */
+  .ld-ev-main .ld-evidence::-webkit-scrollbar-thumb { background: #33415c; }
+}
 </style>

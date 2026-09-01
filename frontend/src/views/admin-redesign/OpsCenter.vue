@@ -6,11 +6,13 @@
       <span class="mk-status__sep"></span>
       <span v-if="tab === 'tools'" class="mk-status__meta" :class="{ 'is-bad': deadCount > 0 }">outbox 死信 {{ deadCount }}</span>
       <span v-else class="mk-status__meta">CSV 下载 · UTF-8（Excel 可直接打开）</span>
-      <span class="mk-pills" style="margin-left:auto">
-        <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'tools' }" @click="switchTab('tools')">运维工具</button>
-        <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'export' }" @click="switchTab('export')">数据导出</button>
+      <span class="mk-status__actions">
+        <span class="mk-pills">
+          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'tools' }" @click="switchTab('tools')">运维工具</button>
+          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'export' }" @click="switchTab('export')">数据导出</button>
+        </span>
+        <button v-if="tab === 'tools'" type="button" class="mk-status__action" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
       </span>
-      <button v-if="tab === 'tools'" type="button" class="mk-status__action" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
     </div>
 
     <!-- ===== Tab1: 运维工具 ===== -->

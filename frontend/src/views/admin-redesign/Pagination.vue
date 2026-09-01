@@ -130,7 +130,7 @@ watch(
 .mk-pagination__btn:disabled {
   color: var(--mk-faint);
   cursor: not-allowed;
-  background: #f8fafc;
+  background: var(--mk-line);
 }
 .mk-pagination__page {
   font-variant-numeric: tabular-nums;

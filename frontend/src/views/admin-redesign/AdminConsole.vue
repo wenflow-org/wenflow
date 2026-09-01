@@ -429,9 +429,9 @@ function onGlobalKey(e: KeyboardEvent) {
   gap: 10px;
   justify-items: center;
   padding: 32px 40px;
-  border: 1px solid #e1e8f2;
+  border: 1px solid var(--mk-line);
   border-radius: 16px;
-  background: #fff;
+  background: var(--mk-surface);
   box-shadow: var(--mk-shadow-modal);
 }
 .ac-error__card strong { font-size: 16px; color: #1a2a44; }

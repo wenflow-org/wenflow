@@ -19,9 +19,11 @@
         :title="'点击筛选「低置信」学习者（快照置信度低于 50%）'"
         @click="pill = pill === 'stale' ? 'all' : 'stale'"
       >低置信 {{ lowConfCount }}</button>
-      <button type="button" class="mk-status__action" :disabled="recomputingAll || !rows.length" @click="recomputeAll">
-        {{ recomputingAll ? `重算中 ${recomputeProgress}/${rows.length}…` : '全部重算' }}
-      </button>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action" :disabled="recomputingAll || !rows.length" @click="recomputeAll">
+          {{ recomputingAll ? `重算中 ${recomputeProgress}/${rows.length}…` : '全部重算' }}
+        </button>
+      </span>
     </div>
 
 

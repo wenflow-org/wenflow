@@ -6,7 +6,9 @@
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">注册 {{ registrationEnabled === null ? '—' : registrationEnabled ? '开放' : '关闭' }}</span>
       <span class="mk-status__meta">探活 {{ probe.enabled ? '开启' : '关闭' }}</span>
-      <button type="button" class="mk-status__action" :disabled="saving" @click="saveAll">{{ saving ? '保存中…' : '保存全部' }}</button>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action" :disabled="saving" @click="saveAll">{{ saving ? '保存中…' : '保存全部' }}</button>
+      </span>
     </div>
 
     <!-- 注册策略 -->

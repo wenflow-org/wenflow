@@ -10,11 +10,12 @@
         <span class="mk-status__meta">待处理 {{ pendingCount }}</span>
         <span v-if="recent30 != null" class="mk-status__meta">近 30 天 {{ recent30 }}</span>
       </template>
-      <button type="button" class="mk-status__action" :disabled="loading" @click="() => load(true)">
-        {{ loading ? '刷新中…' : '刷新' }}
-      </button>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action" :disabled="loading" @click="() => load(true)">
+          {{ loading ? '刷新中…' : '刷新' }}
+        </button>
+      </span>
     </div>
-
 
     <div v-if="!isLive" class="mk-empty mk-empty--min">
       <strong>暂无反馈数据</strong>
