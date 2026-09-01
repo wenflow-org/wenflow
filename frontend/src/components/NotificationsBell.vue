@@ -44,6 +44,11 @@
             </div>
             <button v-if="total > items.length" type="button" class="nb__more" @click="loadMore">加载更多</button>
           </template>
+          <!-- 加载失败：显示错误行（区别于空态，B6 修复） -->
+          <div v-else-if="loadError" class="nb__empty nb__empty--error">
+            <span>通知加载失败</span>
+            <button type="button" class="nb__retry" @click="load(true)">重试</button>
+          </div>
           <div v-else class="nb__empty">
             <span class="nb__empty-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6v-5c0-3.07-1.64-5.64-4.5-6.32V4a2.5 2.5 0 0 0-5 0v.68C6.63 5.36 5 7.93 5 11v5l-2 2v1h18v-1l-2-2z" opacity=".85"/></svg>
@@ -76,6 +81,8 @@ const items = ref<NotifItem[]>([])
 const total = ref(0)
 const page = ref(1)
 const loading = ref(false)
+/** 加载失败标记：失败显示错误行（区别于「暂无通知」空态，B6 修复） */
+const loadError = ref(false)
 const rootRef = ref<HTMLElement | null>(null)
 
 const unread = computed(() => items.value.filter((n) => !n.isRead).length)
@@ -86,6 +93,7 @@ async function load(reset = true) {
     items.value = []
   }
   loading.value = true
+  loadError.value = false
   try {
     const res = await api.get('/notifications', { params: { page: page.value, limit: 10 } })
     const data = res.data?.data ?? {}
@@ -94,7 +102,8 @@ async function load(reset = true) {
     else items.value = [...items.value, ...list]
     total.value = data.total ?? items.value.length
   } catch {
-    // 通知失败静默降级（不打扰学习主流程）
+    // 通知失败：标记错误（不伪装成「暂无通知」空态）
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -283,6 +292,17 @@ onBeforeUnmount(() => {
   font-size: 13px;
 }
 .nb__empty-icon { font-size: 22px; }
+.nb__empty--error { color: var(--muted, #5b6577); }
+.nb__retry {
+  font: inherit; font-size: 12px; font-weight: 700;
+  color: var(--blue-deep, #1f57cc);
+  background: rgba(52, 120, 246, 0.08);
+  border: 1px solid rgba(52, 120, 246, 0.35);
+  border-radius: 999px;
+  padding: 5px 14px;
+  cursor: pointer;
+}
+.nb__retry:hover { background: rgba(52, 120, 246, 0.14); }
 
 @media (max-width: 1100px) {
   .nb__panel { right: -8px; }

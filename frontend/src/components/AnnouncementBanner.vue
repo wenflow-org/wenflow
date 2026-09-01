@@ -86,6 +86,7 @@ async function fetchActive() {
         })).filter((a) => a.id && a.title)
       : []
   } catch {
+    // 公告为辅助信息：加载失败静默（不显示横幅 > 错误条打扰），区别于面板类（如通知）需可见错误
     items.value = []
   } finally {
     loading.value = false
