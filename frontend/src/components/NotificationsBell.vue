@@ -3,6 +3,7 @@
     <button
       type="button"
       class="nb__bell"
+      :class="{ 'nb__bell--open': open }"
       :aria-label="`通知${unread > 0 ? `（${unread} 条未读）` : ''}`"
       aria-haspopup="dialog"
       :aria-expanded="open ? 'true' : 'false'"
@@ -164,14 +165,38 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: 999px;
-  border: 0;
-  background: transparent;
+  border-radius: 10px;
+  border: 1px solid var(--line, #e3e9f4);
+  background: var(--surface, #fff);
   color: var(--muted, #5b6577);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
-.nb__bell:hover { background: #f1f5fb; color: var(--blue-deep, #1f57cc); }
+.nb__bell:hover {
+  border-color: color-mix(in srgb, var(--blue, #3478f6) 30%, var(--line, #e3e9f4));
+  background: color-mix(in srgb, var(--blue, #3478f6) 5%, transparent);
+  color: var(--blue-deep, #1f57cc);
+}
+.nb__bell--open {
+  border-color: color-mix(in srgb, var(--blue, #3478f6) 40%, transparent);
+  background: color-mix(in srgb, var(--blue, #3478f6) 8%, transparent);
+}
+
+/* 暗色模式：与任务中心/主题切换按钮同款适配 */
+[data-theme='dark'] .nb__bell {
+  background: var(--surface, #182230);
+  border-color: var(--line, #2a3648);
+  color: var(--muted, #9aa8bf);
+}
+[data-theme='dark'] .nb__bell:hover {
+  border-color: color-mix(in srgb, var(--blue, #4d8bf8) 30%, var(--line, #2a3648));
+  background: color-mix(in srgb, var(--blue, #4d8bf8) 5%, transparent);
+  color: var(--blue-deep, #1f57cc);
+}
+[data-theme='dark'] .nb__bell--open {
+  border-color: color-mix(in srgb, var(--blue, #4d8bf8) 40%, transparent);
+  background: color-mix(in srgb, var(--blue, #4d8bf8) 8%, transparent);
+}
 .nb__dot {
   position: absolute;
   top: 3px;
@@ -186,7 +211,7 @@ onBeforeUnmount(() => {
   font-weight: 800;
   line-height: 16px;
   text-align: center;
-  box-shadow: 0 0 0 2px #fff;
+  box-shadow: 0 0 0 2px var(--surface, #fff);
 }
 
 .nb__panel {

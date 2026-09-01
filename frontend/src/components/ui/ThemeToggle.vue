@@ -35,18 +35,20 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border: 1px solid var(--line, #e3e9f4);
-  border-radius: 8px;
-  background: none;
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  color: var(--muted, #5b6577);
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   flex-shrink: 0;
 }
 .theme-toggle:hover {
-  background: var(--canvas, #f3f6fb);
-  border-color: rgba(52, 120, 246, 0.3);
+  background: color-mix(in srgb, var(--blue, #3478f6) 5%, transparent);
+  border-color: color-mix(in srgb, var(--blue, #3478f6) 30%, var(--line, #e3e9f4));
+  color: var(--blue-deep, #1f57cc);
 }
 .theme-toggle__icon {
   font-size: 18px;
