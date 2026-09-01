@@ -880,7 +880,7 @@ function progressTitle(r: Row): string {
 .ts-panel__title { display: grid; gap: 6px; justify-items: start; }
 .ts-panel__title h3 { margin: 0; font-size: 16px; }
 .ts-panel__id { font-family: var(--mk-mono); font-size: 10.5px; color: var(--mk-faint); word-break: break-all; }
-.ts-panel__close { border: 0; background: #f0f2f5; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; color: var(--mk-muted); }
+.ts-panel__close { border: 0; background: var(--mk-line); width: 30px; height: 30px; border-radius: 8px; cursor: pointer; color: var(--mk-muted); }
 .ts-panel__body { padding: 16px 18px; display: grid; gap: 16px; align-content: start; overflow-y: auto; }
 /* P2-2 抽屉 tabs */
 .ts-tabs { display: flex; gap: 4px; padding-bottom: 10px; border-bottom: 1px solid var(--mk-line); position: sticky; top: 0; background: var(--mk-surface); z-index: 1; }

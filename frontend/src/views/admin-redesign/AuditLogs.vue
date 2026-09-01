@@ -581,7 +581,7 @@ function goSessions(username: string) {
   font-weight: 700;
   border-radius: 5px;
   padding: 1px 8px;
-  background: #eff6ff;
+  background: var(--mk-blue-bg);
   color: var(--mk-blue);
   white-space: nowrap;
   overflow: hidden;
@@ -725,6 +725,7 @@ function goSessions(username: string) {
 /* ================= 暗色模式（D1 补完）：审计日志 ================= */
 html[data-theme='dark'] {
   .log-tr--open td { background: #1b2740; }
+  .log-payload-row td,
   .log-payload-row:hover td { background: #1b2740; }
   .log-method--get { background: rgba(91, 141, 239, 0.16); color: #93b4f5; }
   .log-method--post { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }

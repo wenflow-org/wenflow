@@ -872,7 +872,7 @@ const verdictText = computed(() => {
   /* 表头与数据行对齐：.wf-row__main 有 padding 9px 14px，表头需一致，否则时间刻度条与瀑布轨道错位（4K 放大后肉眼可见） */
   padding: 9px 14px;
   border-bottom: 1px solid var(--mk-line);
-  background: #fafbfc;
+  background: var(--mk-surface);
 }
 .wf-ruler__label {
   padding: 0;

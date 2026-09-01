@@ -644,7 +644,7 @@ const toneOf = (id: string) => AGENT_TONES[`${id}-agent`] || { hue: '#64748b', s
   display: flex; align-items: center; gap: 5px;
   padding: 0 8px; box-sizing: border-box;
   border: 1px solid var(--mk-line); border-radius: 8px;
-  background: #fff; font: inherit; cursor: pointer;
+  background: var(--mk-surface); font: inherit; cursor: pointer;
 }
 .topo-anchor__item:hover { border-color: var(--mk-blue); }
 .topo-anchor__label { font-size: 10px; font-weight: 700; color: var(--mk-ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

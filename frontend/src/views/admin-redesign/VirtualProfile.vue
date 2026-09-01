@@ -2776,5 +2776,20 @@ html[data-theme='dark'] {
   .vp-story { background: #141c2b; border-color: #232f45; }
   .vp-story__radio { background: #1b2537; }
   .vp-story.is-selected { background: rgba(91, 141, 239, 0.1); border-color: rgba(91, 141, 239, 0.35); }
+  /* 补漏：特征标签/目标/预算徽章/运行卡/工具/记忆统计/警告标签 */
+  .vp-trait { background: #253049; color: #9fb0c8; }
+  .vp-goal { background: #141c2b; border-color: #232f45; }
+  .vp-story__budget-badge { background: #1d2739; color: #9fb0c8; }
+  .vp-run-group { background: #141c2b; border-color: #232f45; }
+  .vp-run-group__head { background: #1b2537; }
+  .vp-run { background: #141c2b; border-color: #232f45; }
+  .vp-run:hover { background: #1b2740; }
+  .vp-next { background: #1b2537; border-color: #232f45; }
+  .vp-tool { background: #141c2b; border-color: #232f45; color: #9fb0c8; }
+  .vp-tool--primary { background: rgba(91, 141, 239, 0.18); color: #9db8f5; }
+  .vp-memory__stat { background: #141c2b; border-color: #232f45; }
+  .vp-tag--warn { background: rgba(251, 191, 36, 0.12); color: #fcd34d; }
+  .vp-pk { background: #141c2b; border-color: #232f45; }
+  .vp-adv-row--object pre { background: #0f1624; color: #c6d4ea; }
 }
 </style>

@@ -301,7 +301,7 @@ void load()
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: #eef2fa;
+  background: var(--mk-line);
   color: var(--mk-muted);
   display: grid;
   place-items: center;

@@ -1965,5 +1965,10 @@ html[data-theme='dark'] {
   .ld-bar__fill.is-muted { background: linear-gradient(90deg, #4a5874, #33415c); }
   /* 滚动条 */
   .ld-ev-main .ld-evidence::-webkit-scrollbar-thumb { background: #33415c; }
+  /* 补漏：操作提示标签/概念 chip/置信条/加载分段 */
+  .ld-actions__k { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
+  .ld-chip { background: #253049; color: #9fb0c8; }
+  .ld-ev__confbar { background: #232f45; }
+  .ld-load__seg-item.is-on { background: rgba(91, 141, 239, 0.22); color: #9db8f5; box-shadow: none; }
 }
 </style>

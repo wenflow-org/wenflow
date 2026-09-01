@@ -3708,5 +3708,24 @@ html[data-theme='dark'] {
   .cp-timeline__row { background: #141c2b; }
   .cp-verdict { background: #141c2b; }
   .cp-log__phase { background: rgba(91, 141, 239, 0.16); color: #93b4f5; }
+  /* 补漏：wrapup 分数/卡片/小节/trace 面板/时间线标签 */
+  .cp-lesson-wrapup__score { background: #1d2739; color: #9fb0c8; }
+  .cp-lesson-wrapup__score--primary { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
+  .cp-wrapup-card,
+  .cp-wrapup-section,
+  .cp-trace-panel { background: #141c2b; border-color: #232f45; }
+  .cp-trace-list__body { background: #1b2537; }
+  .cp-run__stages { background: #141c2b; }
+  .cp-wrapup-lesson.is-active { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
+  .cp-wrapup-lesson.is-done:hover { background: rgba(74, 222, 128, 0.1); }
+  .cp-timeline__kind[data-kind='referee'] { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
+  .cp-timeline__kind[data-kind='private'] { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
+  .cp-timeline__kind[data-kind='log'] { background: rgba(129, 140, 248, 0.14); color: #a5b4fc; }
+  .cp-timeline__kind[data-kind='goal'] { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
+  .cp-timeline__kind[data-kind='path'] { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
+  .cp-timeline__kind[data-kind='teaching'] { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
+  .cp-timeline__kind[data-kind='evidence'] { background: rgba(45, 212, 191, 0.14); color: #5eead4; }
+  .cp-timeline__stage[data-stage='goal'] { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
+  .cp-timeline__stage[data-stage='path'] { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
 }
 </style>

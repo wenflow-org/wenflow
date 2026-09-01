@@ -839,7 +839,7 @@ watch(() => props.stage, () => void loadStage());
   padding: 9px 12px;
   border: 1px solid rgba(44, 99, 208, 0.35);
   border-radius: 9px;
-  background: #f0f5ff;
+  background: var(--mk-blue-bg);
   color: var(--mk-blue, #2c63d0);
   font-size: 12px;
   font-weight: 600;

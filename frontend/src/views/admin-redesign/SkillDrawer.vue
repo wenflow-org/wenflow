@@ -634,14 +634,14 @@ function goFullEditor() {
   width: min(520px, 100vw);
   height: 100%;
   margin-left: auto;
-  background: #fff;
+  background: var(--mk-surface);
   display: grid;
   place-content: center;
   gap: 8px;
   text-align: center;
   padding: 24px;
 }
-.msk__notfound strong { font-size: 14px; color: #223252; }
+.msk__notfound strong { font-size: 14px; color: var(--mk-ink); }
 .msk__notfound span { font-size: 12.5px; color: var(--mk-faint); }
 
 /* 代码井（Prompt 预览） */

@@ -400,7 +400,7 @@ onMounted(async () => {
   padding: 8px 12px;
   border: 1px dashed rgba(180, 83, 9, 0.45);
   border-radius: 9px;
-  background: #fffbeb;
+  background: var(--mk-amber-bg);
   color: var(--mk-amber, #b45309);
   font-size: 12px;
   font-weight: 600;
