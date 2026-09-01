@@ -1,6 +1,6 @@
 <template>
   <div class="mk-page mk-page--fill">
-    <!-- 状态条 -->
+    <!-- 状态条（单行：计数 + 刷新；范围/数据范围移入下方筛选条） -->
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">Token 成本</strong>
@@ -12,20 +12,6 @@
           失败 {{ summary.totals.failed }}
         </span>
       </template>
-      <span class="mk-status__sep"></span>
-      <div class="mk-pills tc-pills">
-        <button
-          v-for="p in rangePills"
-          :key="p.days"
-          type="button"
-          class="mk-pill"
-          :class="{ 'mk-pill--active': days === p.days }"
-          @click="days = p.days"
-        >
-          {{ p.label }}
-        </button>
-      </div>
-      <DataScopeToggle v-if="isLive" v-model="includeTest" />
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="loading" @click="() => load(true)">
           {{ loading ? '刷新中…' : '刷新' }}
@@ -39,6 +25,22 @@
     </div>
 
     <template v-else>
+      <!-- 筛选条（范围 + 数据范围，独立一行，对齐 TraceWaterfall 筛选条形态） -->
+      <div class="tc-filterbar">
+        <div class="mk-pills tc-pills">
+          <button
+            v-for="p in rangePills"
+            :key="p.days"
+            type="button"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': days === p.days }"
+            @click="days = p.days"
+          >
+            {{ p.label }}
+          </button>
+        </div>
+        <DataScopeToggle v-if="isLive" v-model="includeTest" />
+      </div>
       <!-- 概览卡（MkKpi 统一形态） -->
       <section class="tc-overview">
         <MkKpi label="总 Token" :value="summary ? fmtTokens(summary.totals.tokens) : '—'" :hint="`prompt ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · completion ${summary ? fmtTokens(summary.totals.completionTokens) : '—'}`" />
@@ -246,6 +248,18 @@ function rankPct(tokens: number): string {
 
 <style scoped>
 .tc-pills { display: inline-flex; }
+/* 筛选条（范围 + 数据范围，独立一行卡片形态） */
+.tc-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  background: var(--mk-surface);
+  margin-bottom: 12px;
+}
 .tc-status--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
 
 /* 概览卡：MkKpi 网格容器（统计卡本体由 MkKpi 提供，含暗色/4K 自动适配） */

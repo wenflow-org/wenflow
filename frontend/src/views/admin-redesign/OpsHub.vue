@@ -9,12 +9,14 @@
       <span v-if="tab === 'content'" class="mk-status__meta">任务 {{ stats?.totalTasks ?? '—' }}</span>
       <span v-else class="mk-status__meta">成就定义 {{ defs.length }} · 解锁 {{ totalRecords }}</span>
       <span class="mk-status__actions">
-        <span class="mk-pills">
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'content' }" @click="switchTab('content')">内容管理</button>
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'achievements' }" @click="switchTab('achievements')">成就管理</button>
-        </span>
         <button v-if="tab === 'content'" type="button" class="mk-status__action" :disabled="loading" @click="reload">刷新</button>
       </span>
+    </div>
+
+    <!-- 内容/成就 tab 切换（独立一行，对齐 TraceWaterfall 筛选条形态） -->
+    <div class="mk-pills oh-tabs">
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'content' }" @click="switchTab('content')">内容管理</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'achievements' }" @click="switchTab('achievements')">成就管理</button>
     </div>
 
     <!-- ===== Tab1: 内容管理 ===== -->
@@ -717,6 +719,14 @@ void loadStats()
 
 <style scoped>
 .ct-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+/* 内容/成就 tab 条（独立一行卡片形态，对齐全站筛选条） */
+.oh-tabs {
+  padding: 8px 14px;
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  background: var(--mk-surface);
+  margin-bottom: 12px;
+}
 
 .ct-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ct-filter .mk-filter__input { min-width: 220px; }

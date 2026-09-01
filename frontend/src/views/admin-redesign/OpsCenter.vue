@@ -7,12 +7,14 @@
       <span v-if="tab === 'tools'" class="mk-status__meta" :class="{ 'is-bad': deadCount > 0 }">outbox 死信 {{ deadCount }}</span>
       <span v-else class="mk-status__meta">CSV 下载 · UTF-8（Excel 可直接打开）</span>
       <span class="mk-status__actions">
-        <span class="mk-pills">
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'tools' }" @click="switchTab('tools')">运维工具</button>
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'export' }" @click="switchTab('export')">数据导出</button>
-        </span>
         <button v-if="tab === 'tools'" type="button" class="mk-status__action" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
       </span>
+    </div>
+
+    <!-- 工具/导出 tab 切换（独立一行，对齐 TraceWaterfall 筛选条形态） -->
+    <div class="mk-pills oc-tabs">
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'tools' }" @click="switchTab('tools')">运维工具</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'export' }" @click="switchTab('export')">数据导出</button>
     </div>
 
     <!-- ===== Tab1: 运维工具 ===== -->
@@ -370,6 +372,14 @@ void loadDead()
 
 <style scoped>
 .dt-body { padding: 14px; display: grid; gap: 14px; }
+/* 工具/导出 tab 条（独立一行卡片形态，对齐全站筛选条） */
+.oc-tabs {
+  padding: 8px 14px;
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  background: var(--mk-surface);
+  margin-bottom: 12px;
+}
 .dt-grid { display: grid; grid-template-columns: 1.6fr 0.7fr 1.4fr auto; gap: 12px; align-items: end; }
 .dt-actions { display: grid; gap: 6px; }
 .dt-result { border: 1px solid var(--mk-line); border-radius: 10px; overflow: hidden; }
