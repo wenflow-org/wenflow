@@ -94,6 +94,20 @@
 .mk-status__action--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
 .mk-status__actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .mk-status__actions .mk-status__action { margin-left: 0; }
+/* 状态条可点击计数锚点（P0-3 页头统一：需关注/失败节点等计数可点击筛选；
+   LearnerCenter.lc-count-link / Skills 共用，全局化避免每页复制） */
+.mk-status__meta-link {
+  border: 0; background: transparent; padding: 0;
+  font: inherit; font-size: 12.5px; font-weight: 700;
+  color: var(--mk-muted); cursor: pointer;
+  border-radius: 6px;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.mk-status__meta-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); padding: 2px 6px; margin: -2px -6px; }
+.mk-status__meta-link--on { color: var(--mk-blue); background: rgba(44, 99, 208, 0.12); padding: 2px 6px; margin: -2px -6px; }
+/* 状态条 meta 语义着色（成功率红/琥珀等；Orchestrator 曾页面私有，全局化） */
+.mk-status__meta--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
+.mk-status__meta--warn { color: var(--mk-amber, #d97706); font-weight: 700; }
 
 /* ----- 卡片 ----- */
 .mk-card {

@@ -421,8 +421,6 @@ details[open].orch-fold .orch-fold__summary::before { content: '▾ '; }
 }
 .orch-pane-back:hover { color: var(--mk-blue); border-color: var(--mk-blue); }
 
-.mk-status__meta--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
-
 /* 4K：阶段导航与折叠层跟随全站节奏 */
 @media (min-width: 2000px) {
   .orch-stage-tab { padding: 11px 16px; }

@@ -5,23 +5,24 @@
       <strong class="mk-status__title">{{ statusTitle }}</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ cards.length }} 个 Skill</span>
+      <span v-if="overallRate != null" class="mk-status__meta" :class="rateNumTone === 'bad' ? 'mk-status__meta--bad' : rateNumTone === 'warn' ? 'mk-status__meta--warn' : ''" :title="'窗口内成功率 = 成功调用 / 总调用'">
+        成功率 {{ overallRate }}%<template v-if="totalCalls">（{{ okCalls }}/{{ totalCalls }}）</template>
+      </span>
+      <button
+        v-if="errorCount > 0"
+        type="button"
+        class="mk-status__meta-link"
+        :class="{ 'mk-status__meta-link--on': onlyAttention }"
+        :title="'窗口内出现失败调用的节点数；点击筛选「仅看需关注」'"
+        @click="onlyAttention = !onlyAttention"
+      >失败节点 {{ errorCount }}</button>
+      <span v-if="idleCount > 0" class="mk-status__meta" title="窗口内无调用的 Skill 数">空闲 {{ idleCount }}</span>
+      <span v-if="avgLatencyText !== '—'" class="mk-status__meta" title="成功调用平均耗时（按调用量加权）">平均耗时 {{ avgLatencyText }}</span>
+      <span v-if="totalCalls" class="mk-status__meta">总调用 {{ totalCalls }}</span>
+      <span class="mk-status__actions">
+        <span class="mk-status__meta">{{ rangeLabel }}</span>
+      </span>
     </div>
-
-    <!-- Skill 运营概览（共享组件 MkOverview） -->
-    <MkOverview :tone="skDashTone" :title="skDashTitle" :subline="skDashSubline" :window="rangeLabel" :has-data="skDashHasData">
-      <template #kpis>
-        <MkKpi label="成功率" :value="overallRate == null ? '—' : `${overallRate}%`" :tone="rateNumTone" :hint="`成功 ${okCalls} / ${totalCalls}`" :title="'窗口内成功率 = 成功调用 / 总调用'" />
-        <MkKpi label="有调用" :value="activeCount" :hint="`共 ${cards.length} 个 Skill`" :title="'窗口内有调用的 Skill 数'" />
-        <MkKpi label="失败节点" :value="errorCount" :tone="errorCount > 0 ? 'bad' : ''" :hint="`空闲节点 ${idleCount}`" :title="'窗口内出现失败调用的节点数'" />
-        <MkKpi label="平均耗时" :value="avgLatencyText" :hint="`最近调用 ${lastActiveText}`" :title="'成功调用平均耗时（按调用量加权）'" />
-      </template>
-      <template #detail>
-        <span>总调用 {{ totalCalls }}</span>
-        <span>失败 {{ totalErrors }}</span>
-        <span>空闲 {{ idleCount }}</span>
-        <span>{{ rangeDetailLabel }}</span>
-      </template>
-    </MkOverview>
 
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
@@ -180,8 +181,6 @@ import { categoryText } from './statusText'
 import { completionMetaOf } from './glossaryMeta'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
-import MkOverview from './MkOverview.vue'
-import MkKpi from './MkKpi.vue'
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
 
 type Health = 'ok' | 'idle' | 'error'
@@ -310,23 +309,8 @@ const avgLatencyMs = computed(() => {
   return Math.round(called.reduce((a, c) => a + c.calls * c.avgMs, 0) / called.reduce((a, c) => a + c.calls, 0))
 })
 const avgLatencyText = computed(() => (avgLatencyMs.value == null ? '—' : avgLatencyMs.value >= 1000 ? `${(avgLatencyMs.value / 1000).toFixed(1)}s` : `${avgLatencyMs.value}ms`))
-const lastActiveText = computed(() => {
-  const t = cards.value.reduce((max, c) => (c.lastAt && c.lastAt !== '从未' && ((max == null) || c.lastAt > max) ? c.lastAt : max), null as string | null)
-  return t || '从未'
-})
-const skDashHasData = computed(() => totalCalls.value > 0 || errorCount.value > 0)
-const skDashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() =>
-  errorCount.value > 0 ? 'bad' : totalCalls.value > 0 ? 'ok' : 'muted'
-)
-const skDashTitle = computed(() =>
-  errorCount.value ? `${errorCount.value} 个节点存在失败` : totalCalls.value ? 'Skill 网络健康' : '暂无运行数据'
-)
 const RANGE_LABELS: Record<string, string> = { '7d': '近 7 天', '24h': '近 24 小时', '30d': '近 30 天', all: '全部时间' }
 const rangeLabel = computed(() => RANGE_LABELS[statsRange.value] || '近期')
-const skDashSubline = computed(() =>
-  errorCount.value ? '建议优先处理失败节点，排查窗口内异常调用' : totalCalls.value ? `${activeCount.value} 个 Skill 有调用 · 运行平稳` : '产生调用后自动呈现统计'
-)
-const rangeDetailLabel = computed(() => `窗口：${rangeLabel.value}`)
 
 const isFiltered = computed(() => onlyAttention.value || !!keyword.value.trim() || !!categoryFilter.value)
 function clearFilters() {
