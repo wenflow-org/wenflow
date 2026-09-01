@@ -300,5 +300,8 @@ html[data-theme='dark'] {
   .sk-rec-tag { background: #253049; color: #9fb0c8; }
   .sk-rec-tag--bad { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
   .sk-rec-group td { background: #131b2a; }
+  /* 补漏：pill 语义底 */
+  .sk-pill--bad { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
+  .sk-pill--warn { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
 }
 </style>

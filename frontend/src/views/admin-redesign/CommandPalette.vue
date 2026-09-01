@@ -334,5 +334,9 @@ function close() {
 html[data-theme='dark'] {
   .pal__panel { background: #17202f; border-color: #232f45; }
   .pal__item--active { background: rgba(91, 141, 239, 0.16); }
+  /* 输入/选项文字：此前硬编码 #1a2a44 在暗色下不可见 */
+  .pal__input,
+  .pal__item { color: var(--mk-ink, #e6edf7); }
+  .pal__input::placeholder { color: var(--mk-faint); }
 }
 </style>

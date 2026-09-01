@@ -1793,5 +1793,10 @@ html[data-theme='dark'] {
   /* 并发条 / 批量详情：已改用 var(--mk-*) token，暗色由全局 token 覆盖，不再需要页面补丁 */
   .vl-running__chip { background: #141c2b; border-color: #232f45; }
   .vl-steps--ok { background: rgba(74, 222, 128, 0.12); color: #6ee7a0; }
+  /* 补漏：折叠展开按钮/回收清单/高级区/人设成功提示（硬编码浅底） */
+  .vl-running__more { background: #141c2b; border-color: #2a3850; color: #8fa3bd; }
+  .vl-reclaim-item,
+  .vl-advanced { background: #141c2b; border-color: #232f45; }
+  .vl-persona-ok { background: rgba(74, 222, 128, 0.12); color: #6ee7a0; }
 }
 </style>

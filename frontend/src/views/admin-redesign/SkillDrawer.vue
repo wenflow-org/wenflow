@@ -776,5 +776,8 @@ html[data-theme='dark'] {
   .msk__row:hover { background: #1b2740; }
   .msk__primary-link:hover { background: rgba(91, 141, 239, 0.14); }
   .msk__section { background: #141c2b; }
+  /* 文字色补漏：统计数字/kv 值硬编码 #1a2a44，暗色下不可见 */
+  .msk__stat strong,
+  .msk__kv strong { color: var(--mk-ink, #e6edf7); }
 }
 </style>

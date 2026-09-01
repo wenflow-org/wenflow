@@ -379,5 +379,7 @@ html[data-theme='dark'] {
   .agd__nav-item.is-active { background: rgba(91, 141, 239, 0.22); color: #9db8f5; }
   .agd__term { background: #141c2b; }
   .agd__demo-note { background: rgba(91, 141, 239, 0.1); }
+  /* 吸顶分类标题：白底穿帮修复 */
+  .agd__section-title { background: #17202f; }
 }
 </style>

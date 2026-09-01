@@ -434,7 +434,7 @@ function onGlobalKey(e: KeyboardEvent) {
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-modal);
 }
-.ac-error__card strong { font-size: 16px; color: #1a2a44; }
+.ac-error__card strong { font-size: 16px; color: var(--mk-ink); }
 .ac-error__card span { font-size: 13px; color: #5b6577; }
 .ac-error__retry {
   margin-top: 6px;

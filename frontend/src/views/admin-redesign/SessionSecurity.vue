@@ -664,5 +664,8 @@ html[data-theme='dark'] {
   .ss-hist__summary:hover { background: #1b2740; }
   .ss-dot--linux { background: #f59e0b; }
   .ss-hist { background: #141c2b; border-color: #232f45; }
+  /* 补漏：当前会话徽章/折叠组头浅底 */
+  .ss-current { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
+  .ss-hist__summary { background: #1b2537; }
 }
 </style>
