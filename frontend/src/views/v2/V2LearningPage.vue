@@ -960,9 +960,9 @@ async function endSession() {
   menuOpen.value = false;
   if (actionBusy.value) return;
   const ok = await askConfirm({
-    title: '仅离开（不计入完成）',
-    message: '仅离开本次学习？将生成本次学习总结，但当前任务不会计入完成进度（里程碑/路径进度不动）。',
-    confirmText: '仅离开',
+    title: '结束学习（不计入完成）',
+    message: '结束本次学习？将生成本次学习总结，但当前任务不会计入完成进度（里程碑/路径进度不动）。',
+    confirmText: '结束学习',
     danger: false,
   });
   if (!ok) return;
