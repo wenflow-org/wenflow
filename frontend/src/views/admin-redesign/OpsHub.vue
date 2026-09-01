@@ -8,21 +8,20 @@
       <span v-if="tab === 'content'" class="mk-status__meta">里程碑 {{ stats?.totalMilestones ?? '—' }}</span>
       <span v-if="tab === 'content'" class="mk-status__meta">任务 {{ stats?.totalTasks ?? '—' }}</span>
       <span v-else class="mk-status__meta">成就定义 {{ defs.length }} · 解锁 {{ totalRecords }}</span>
-      <span class="mk-pills" style="margin-left:auto">
-        <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'content' }" @click="switchTab('content')">内容管理</button>
-        <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'achievements' }" @click="switchTab('achievements')">成就管理</button>
+      <span class="mk-status__actions">
+        <span class="mk-pills">
+          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'content' }" @click="switchTab('content')">内容管理</button>
+          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'achievements' }" @click="switchTab('achievements')">成就管理</button>
+        </span>
+        <button v-if="tab === 'content'" type="button" class="mk-status__action" :disabled="loading" @click="reload">刷新</button>
       </span>
-      <button v-if="tab === 'content'" type="button" class="mk-status__action" :disabled="loading" @click="reload">刷新</button>
     </div>
 
     <!-- ===== Tab1: 内容管理 ===== -->
     <template v-if="tab === 'content'">
-    <!-- 统计卡 -->
+    <!-- 状态统计（MkKpi 统一形态） -->
     <div class="ct-cards">
-      <div v-for="(s, label) in statusCards" :key="label" class="ct-card">
-        <strong>{{ s }}</strong>
-        <span>{{ label }}</span>
-      </div>
+      <MkKpi v-for="(s, label) in statusCards" :key="label" :label="label" :value="s" />
     </div>
 
     <!-- 筛选 + 列表 -->
@@ -332,7 +331,7 @@
                 </button>
               </div>
               <p v-else-if="grantSearched" class="ac-none">没有匹配用户</p>
-              <div v-if="grantError" class="errorbar">{{ grantError }}</div>
+              <div v-if="grantError" class="mk-alert">{{ grantError }}</div>
             </div>
             <div class="mk-modal__foot">
               <button type="button" class="mk-btn" @click="grantOpen = false">取消</button>
@@ -358,6 +357,7 @@ import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
+import MkKpi from './MkKpi.vue'
 
 /* ===== 一级 Tab：内容管理 / 成就管理 ===== */
 const tab = ref<'content' | 'achievements'>('content')
@@ -702,17 +702,6 @@ void loadStats()
 
 <style scoped>
 .ct-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
-.ct-card {
-  display: grid;
-  gap: 2px;
-  padding: 12px 14px;
-  border: 1px solid var(--mk-line);
-  border-radius: 12px;
-  background: var(--mk-surface);
-  box-shadow: var(--mk-shadow-sm);
-}
-.ct-card strong { font-size: 18px; font-family: var(--mk-mono); }
-.ct-card span { font-size: 11.5px; color: var(--mk-faint); font-weight: 600; }
 
 .ct-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ct-filter .mk-filter__input { min-width: 220px; }
@@ -761,7 +750,7 @@ void loadStats()
   padding: 10px 12px;
   border: 1px solid var(--mk-line);
   border-radius: 10px;
-  background: #fafbfc;
+  background: var(--mk-surface);
 }
 .ac-grant-target > div { flex: 1; display: grid; gap: 1px; min-width: 0; }
 .ac-grant-target strong { font-size: 13px; }
@@ -784,17 +773,8 @@ void loadStats()
 .ac-candidate strong { font-size: 12.5px; }
 .ac-none { color: var(--mk-faint); font-size: 12.5px; text-align: center; padding: 10px 0; }
 
-.errorbar {
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--mk-red-bg, #fef2f2);
-  color: var(--mk-red, #dc2626);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
 /* ================= 暗色模式（D1 补完）：运营中心 ================= */
 html[data-theme='dark'] {
-  .oh-panel { background: #141c2b; border-color: #232f45; }
+  /* ac-grant-target/ac-candidate 已走 var(--mk-*) token，无需页面补丁 */
 }
 </style>

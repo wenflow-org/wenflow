@@ -116,19 +116,20 @@
       />
     </template>
 
-    <!-- 处理面板 -->
+    <!-- 处理面板（mk-drawer 体系：暗色/4K 由全局接管） -->
     <Teleport to="body">
-      <div v-if="detail" ref="maskRef" class="fb-mask">
-        <aside ref="panelRef" class="fb-panel" role="dialog" aria-label="反馈详情">
-          <header class="fb-panel__head">
+      <div v-if="detail" ref="maskRef" class="mk-drawer">
+        <div class="mk-drawer__mask" @click="detail = null"></div>
+        <aside ref="panelRef" class="mk-drawer__panel fb-panel" role="dialog" aria-label="反馈详情">
+          <header class="mk-drawer__head">
             <div class="fb-panel__title">
               <span class="mk-badge" :class="statusBadge(detail.status)">{{ statusLabel(detail.status) }}</span>
-              <h3>{{ detail.userName }} 的反馈</h3>
+              <h3 class="mk-drawer__title">{{ detail.userName }} 的反馈</h3>
               <span class="fb-panel__id mono">{{ detail.id }}</span>
             </div>
-            <button type="button" class="fb-panel__close" aria-label="关闭" @click="detail = null">✕</button>
+            <button type="button" class="mk-drawer__close" aria-label="关闭" @click="detail = null">✕</button>
           </header>
-          <div class="fb-panel__body">
+          <div class="mk-drawer__body fb-body">
             <div class="fb-facts">
               <div><span>评分</span><strong class="mono">{{ detail.rating }}★</strong></div>
               <div><span>有用度</span><strong class="mono">{{ detail.helpfulness ?? '—' }}</strong></div>
@@ -417,48 +418,12 @@ onMounted(() => {
   color: var(--mk-muted);
 }
 
-/* 处理面板 */
-.fb-mask {
-  position: fixed;
-  inset: 0;
-  z-index: var(--mk-z-drawer);
-  background: rgba(15, 23, 42, 0.36);
-  display: flex;
-  justify-content: flex-end;
-}
-.fb-panel {
-  width: min(560px, 100vw);
-  height: 100%;
-  background: #fff;
-  box-shadow: var(--mk-shadow-drawer);
-  display: grid;
-  grid-template-rows: auto 1fr;
-  animation: fb-in 0.2s ease;
-}
-
-
-@keyframes fb-in { from { transform: translateX(30px); opacity: 0; } }
-.fb-panel__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--mk-line);
-}
+/* 处理面板：mk-drawer 体系（遮罩/面板/头/体/关闭按钮由全局类提供；
+   fb- 仅保留内容区布局与覆盖层内细节样式） */
 .fb-panel__title { display: grid; gap: 6px; justify-items: start; }
-.fb-panel__title h3 { margin: 0; font-size: 16px; }
 .fb-panel__id { font-size: 10.5px; color: var(--mk-faint); word-break: break-all; }
-.fb-panel__close {
-  border: 0;
-  background: var(--mk-close-bg, #f0f2f5);
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  cursor: pointer;
-  color: var(--mk-muted);
-}
-.fb-panel__body { padding: 16px 18px; display: grid; gap: 16px; align-content: start; overflow-y: auto; }
+/* 抽屉内容区：mk-drawer__body 提供滚动/内边距，此处补纵向排布 */
+.fb-body { display: grid; gap: 16px; align-content: start; }
 
 .fb-facts {
   display: grid;
@@ -487,61 +452,31 @@ onMounted(() => {
 .fb-code {
   padding: 2px 8px;
   border-radius: 999px;
-  background: #eef2fa;
+  background: var(--mk-line);
   color: var(--mk-muted);
   font-size: 10.5px;
 }
 .fb-note {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid #dbe3ef;
+  border: 1px solid var(--mk-line);
   border-radius: 9px;
+  background: var(--mk-surface);
   font: inherit;
   font-size: 12px;
+  color: var(--mk-ink);
   resize: vertical;
   line-height: 1.6;
 }
 .fb-note:focus { outline: none; border-color: var(--mk-blue); }
 
 .fb-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.fb-btn-primary {
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: 0;
-  background: var(--mk-blue);
-  color: #fff;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.fb-btn--green {
-  background: transparent;
-  border: 1px solid var(--mk-green);
-  color: var(--mk-green);
-}
-.fb-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-.fb-btn-muted {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--mk-line);
-  background: transparent;
-  color: var(--mk-muted);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
 .fb-meta { margin: 0; font-size: 10px; color: var(--mk-faint); word-break: break-all; }
 
-
-/* 4K：抽屉加宽 + 字号跟随壳层放大 */
+/* 4K：内容区字号跟随壳层放大（面板宽度/头/体由 mk-drawer 全局档接管） */
 @media (min-width: 2000px) {
-  .fb-panel { width: min(700px, 100vw); }
-  .fb-panel__head { padding: 20px 24px; }
-  .fb-panel__title h3 { font-size: 19px; }
+  .fb-panel__title h3 { font-size: 17px; }
   .fb-panel__id { font-size: 12.5px; }
-  .fb-panel__body { padding: 20px 24px; }
   .fb-facts span { font-size: 13px; }
   .fb-facts strong { font-size: 14.5px; }
   .fb-section h4 { font-size: 13px; }
@@ -549,14 +484,10 @@ onMounted(() => {
   .fb-note { font-size: 14px; }
   .fb-code { font-size: 12.5px; }
   .fb-meta { font-size: 12px; }
-  .mk-btn--sm { font-size: 14px; }
 }
 @media (min-width: 2800px) {
-  .fb-panel { width: min(880px, 100vw); }
-  .fb-panel__head { padding: 24px 30px; }
-  .fb-panel__title h3 { font-size: 23px; }
+  .fb-panel__title h3 { font-size: 20px; }
   .fb-panel__id { font-size: 15px; }
-  .fb-panel__body { padding: 24px 30px; }
   .fb-facts span { font-size: 15.5px; }
   .fb-facts strong { font-size: 17px; }
   .fb-section h4 { font-size: 15.5px; }
@@ -564,15 +495,11 @@ onMounted(() => {
   .fb-note { font-size: 16.5px; }
   .fb-code { font-size: 15px; }
   .fb-meta { font-size: 14px; }
-  .mk-btn--sm { font-size: 16.5px; }
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
-  .fb-panel { width: min(1040px, 100vw); }
-  .fb-panel__head { padding: 28px 36px; }
-  .fb-panel__title h3 { font-size: 27px; }
+  .fb-panel__title h3 { font-size: 23px; }
   .fb-panel__id { font-size: 17.5px; }
-  .fb-panel__body { padding: 28px 36px; }
   .fb-facts span { font-size: 18px; }
   .fb-facts strong { font-size: 20px; }
   .fb-section h4 { font-size: 18px; }
@@ -580,12 +507,12 @@ onMounted(() => {
   .fb-note { font-size: 19.5px; }
   .fb-code { font-size: 17.5px; }
   .fb-meta { font-size: 16.5px; }
-  .mk-btn--sm { font-size: 19.5px; }
 }
 
-/* ================= 暗色模式（D1 补完）：反馈中心 ================= */
+/* 暗色模式（D1 补完）：fb- 内容区细节（面板底色/头/体已由 mk-drawer 全局接管） */
 html[data-theme='dark'] {
-  .fb-card { background: #141c2b; border-color: #232f45; }
-  .fb-badge { background: #253049; }
+  .fb-code { background: #232f45; color: #9fb0c8; }
+  .fb-note { background: #141c2b; border-color: #232f45; color: var(--mk-ink); }
+  .fb-note:focus { border-color: var(--mk-blue); }
 }
 </style>

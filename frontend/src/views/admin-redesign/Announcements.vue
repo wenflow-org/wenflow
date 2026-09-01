@@ -8,13 +8,35 @@
       <span class="mk-status__meta">生效中 {{ activeCount }}</span>
       <span class="mk-status__meta">草稿 {{ draftCount }}</span>
       <span class="mk-status__meta">已下线 {{ archivedCount }}</span>
-      <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建公告</button>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建公告</button>
+      </span>
     </div>
 
 
     <div class="mk-card">
+      <div class="mk-card__head">
+        <div class="mk-filter">
+          <input v-model="keyword" class="mk-filter__input" placeholder="搜索标题 / 正文" />
+          <select v-model="severityFilter" class="mk-filter__select" aria-label="按级别筛选">
+            <option value="">全部级别</option>
+            <option value="info">通知</option>
+            <option value="warning">提醒</option>
+            <option value="critical">紧急</option>
+          </select>
+          <select v-model="statusFilter" class="mk-filter__select" aria-label="按状态筛选">
+            <option value="">全部状态</option>
+            <option value="published">生效中</option>
+            <option value="draft">草稿</option>
+            <option value="archived">已下线</option>
+          </select>
+          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
+        </div>
+        <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 条</span>
+      </div>
+
       <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="6" />
-      <div v-else-if="rows.length" class="mk-table-scroll an-list">
+      <div v-else-if="filtered.length" class="mk-table-scroll an-list">
       <table class="mk-table">
         <thead>
           <tr>
@@ -27,7 +49,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="r in rows" :key="r.id">
+          <tr v-for="r in filtered" :key="r.id">
             <td>
               <div class="mk-cell-main">
                 <strong>{{ r.title }}</strong>
@@ -66,9 +88,10 @@
       </div>
 
       <div v-else class="mk-empty mk-empty--min">
-        <strong>还没有公告</strong>
-        <span>维护通知、功能发布、政策变更——第一条公告从「新建公告」开始。</span>
-        <button type="button" class="mk-empty__action" @click="openCreate">新建公告</button>
+        <strong>{{ isFiltered ? '没有匹配的公告' : '还没有公告' }}</strong>
+        <span>{{ isFiltered ? '放宽筛选条件试试。' : '维护通知、功能发布、政策变更都会在这里汇总。' }}</span>
+        <button v-if="isFiltered" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
+        <button v-else type="button" class="mk-empty__action" @click="openCreate">新建公告</button>
       </div>
     </div>
 
@@ -203,6 +226,26 @@ const rows = computed<Row[]>(() => (isLive.value ? liveAnnouncements.value : dem
 /* live 拉取失败态：liveFailures 由 store 的 loadLiveData 填充（announcements 域失败时置位） */
 const liveFailed = ref(false)
 const liveRetrying = ref(false)
+
+/* 客户端筛选：关键词 + 级别 + 状态（与学习者域列表页同形态） */
+const keyword = ref('')
+const severityFilter = ref('')
+const statusFilter = ref('')
+const filtered = computed(() => {
+  const q = keyword.value.trim().toLowerCase()
+  return rows.value.filter((r) => {
+    if (severityFilter.value && r.severity !== severityFilter.value) return false
+    if (statusFilter.value && r.status !== statusFilter.value) return false
+    if (q && !`${r.title} ${r.body}`.toLowerCase().includes(q)) return false
+    return true
+  })
+})
+const isFiltered = computed(() => !!keyword.value.trim() || !!severityFilter.value || !!statusFilter.value)
+function clearFilters() {
+  keyword.value = ''
+  severityFilter.value = ''
+  statusFilter.value = ''
+}
 
 watch(
   liveFailures,

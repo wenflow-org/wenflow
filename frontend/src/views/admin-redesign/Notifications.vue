@@ -6,7 +6,9 @@
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ total }}</span>
       <span class="mk-status__meta">未读 {{ unreadTotal }}</span>
-      <button type="button" class="mk-status__action mk-status__action--primary" @click="openSend">发送通知</button>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action mk-status__action--primary" @click="openSend">发送通知</button>
+      </span>
     </div>
 
     <div class="mk-card mk-card--fill">
@@ -150,7 +152,7 @@
               </div>
               <p v-else-if="targetSearched" class="nt-none">没有匹配用户</p>
             </div>
-            <div v-if="sendError" class="errorbar">{{ sendError }}</div>
+            <div v-if="sendError" class="mk-alert">{{ sendError }}</div>
           </div>
           <div class="mk-modal__foot">
             <button type="button" class="mk-btn" @click="sendOpen = false">取消</button>
@@ -343,15 +345,15 @@ void reload()
 .nt-boundary {
   margin-left: auto;
   font-size: 11px;
-  color: var(--mk-faint);
-  background: #f5f7fb;
+  color: var(--mk-muted);
+  background: var(--mk-line);
   border: 1px dashed var(--mk-line);
   padding: 2px 8px;
   border-radius: 999px;
   cursor: help;
 }
 .nt-list { flex: 1; min-height: 0; overflow-y: auto; }
-.nt-row--unread { background: #f6f9ff; }
+.nt-row--unread { background: var(--mk-blue-bg, #f6f9ff); }
 .nt-row--unread .mk-cell-main strong { color: var(--mk-blue); }
 
 .nt-scope { display: flex; gap: 8px; }
@@ -373,18 +375,29 @@ void reload()
 .nt-candidate strong { font-size: 12.5px; }
 .nt-none { color: var(--mk-faint); font-size: 12.5px; text-align: center; padding: 10px 0; }
 
-.errorbar {
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--mk-red-bg, #fef2f2);
-  color: var(--mk-red, #dc2626);
-  font-size: 12.5px;
-  font-weight: 600;
+/* 4K：弹窗内候选列表/提示条跟随全站节奏 */
+@media (min-width: 2000px) {
+  .nt-boundary { font-size: 12.5px; padding: 3px 10px; }
+  .nt-candidate strong { font-size: 14px; }
+  .nt-candidate { padding: 10px 12px; }
+  .nt-none { font-size: 14px; }
+}
+@media (min-width: 2800px) {
+  .nt-boundary { font-size: 14.5px; padding: 4px 12px; }
+  .nt-candidate strong { font-size: 16.5px; }
+  .nt-candidate { padding: 12px 14px; }
+  .nt-none { font-size: 16.5px; }
+}
+@media (min-width: 3600px) {
+  .nt-boundary { font-size: 17px; padding: 5px 14px; }
+  .nt-candidate strong { font-size: 19.5px; }
+  .nt-candidate { padding: 14px 16px; }
+  .nt-none { font-size: 19.5px; }
 }
 
 /* ================= 暗色模式（D1 补完）：站内通知 ================= */
 html[data-theme='dark'] {
   .nt-row--unread { background: rgba(91, 141, 239, 0.08); }
-  .nt-card { background: #141c2b; }
+  .nt-boundary { background: #1b2537; border-color: #2a3850; color: #8fa3bd; }
 }
 </style>
