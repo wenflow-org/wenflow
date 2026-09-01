@@ -6,6 +6,12 @@
  * - 并发守卫：前一个请求未完成时不发新请求
  * - 指数退避：连续失败时拉长间隔（base → 2× → 4× → 8× → max），成功后恢复
  * - 断路器：连续失败 N 次后停止轮询，需手动重试
+ *
+ * 注意：本 composable 只管「请求异常」层面的健康（网络/后端不可用）。
+ * 业务终止（如路径生成 ready/failed 这类正常终态）请在 fn 内自行处理：
+ * 检测到终态后不要再调度——可在 fn 内调用 stop() 或抛自定义错误。
+ * 参考：V2LearningPaths/V2LearningPathDetail 的路径轮询是业务定制版
+ * （多卡/终态分支/toast），未强行收敛到这里，避免回归。
  */
 
 import { ref, onBeforeUnmount } from 'vue'
