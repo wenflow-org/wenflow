@@ -804,7 +804,14 @@ async function finish(action: 'complete_task' | 'end_only' | 'complete_review') 
     }) as unknown as Record<string, any>;
     completed.value = true;
     const wrapup = r.wrapup;
-    wrapupText.value = wrapup?.summary?.topicSummary || wrapup?.summary?.learningEvaluation || '';
+    // 收尾寄语兜底链：topicSummary → learningEvaluation → practiceAdvice → knowledgeSummary，
+    // 最后才落「这次学习已经记录。」（避免 wrapup 缺字段时干巴巴收尾）
+    wrapupText.value =
+      wrapup?.summary?.topicSummary ||
+      wrapup?.summary?.learningEvaluation ||
+      wrapup?.summary?.practiceAdvice ||
+      wrapup?.summary?.knowledgeSummary ||
+      '';
     const stats: Array<{ label: string; value: string | number }> = [];
     if (wrapup?.progress?.newlyMastered?.length) stats.push({ label: '新掌握知识点', value: wrapup.progress.newlyMastered.length });
     if (wrapup?.evaluation?.duration) stats.push({ label: '分钟', value: Math.round(wrapup.evaluation.duration) });
