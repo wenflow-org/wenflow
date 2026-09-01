@@ -9,6 +9,16 @@
       <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-status__meta vl-truncated" :title="`后端共 ${liveVirtualsTotal} 人，列表仅加载前 ${samples.length} 行`">
         已截断 · 共 {{ liveVirtualsTotal }} 人
       </span>
+      <span class="mk-status__meta" title="当前运行中 + 创建中会话数（含卡死）">活动会话 {{ partition.running + partition.created }}</span>
+      <span class="mk-status__meta" :title="`已完成会话 / 总会话（全量口径）`">完成率 {{ runStats.completionRate }}%</span>
+      <span class="mk-status__meta" :class="(runStats.systemFailureRate ?? 0) > 0 ? 'mk-status__meta--bad' : ''" :title="'系统失败会话 / 总会话（与状态条同口径）'">失败率 {{ runStats.systemFailureRate }}%</span>
+      <span
+        class="mk-status__meta vl-concurrency"
+        :class="`is-${concurrencyTone}`"
+        :title="`自动驾驶并发 ${concurrency.used}/${concurrency.limit}：同时运行的自动驾驶会话数（env AUTOPILOT_CONCURRENCY_LIMIT 可配）；满员后新启动会被拒绝，请先暂停部分会话`"
+      >
+        并发 {{ concurrency.used }}/{{ concurrency.limit }}<template v-if="concurrency.used >= concurrency.limit"> · 已满</template>
+      </span>
       <span class="mk-status__actions">
         <button
           v-if="partition.stale > 0"
@@ -24,29 +34,6 @@
         <button type="button" class="mk-status__action" title="批量新建：一次创建多个虚拟学习者（表格批量填写）" @click="batchOpen = true">批量新建</button>
       </span>
     </div>
-
-    <!-- 仿真概览（共享组件 MkOverview：结论头 + KPI + 详情行） -->
-    <MkOverview :tone="dashTone" :title="dashTitle" :subline="dashSubline" :has-data="hasDashData">
-      <template #kpis>
-        <MkKpi compact label="今日调用" :value="runStats.todayCalls ?? 0" hint="模拟/测试账号" :title="'今日虚拟/测试账号 Agent 调用数（自然日口径）'" />
-        <MkKpi compact label="活动会话" :value="partition.running + partition.created" hint="运行中 + 创建中（明细见下方）" :title="'当前运行中 + 创建中会话数（含卡死）'" />
-        <MkKpi compact label="完成率" :value="`${runStats.completionRate}%`" :hint="`完成 ${runStats.completed} / ${runStats.totalSessions}`" :title="'已完成会话 / 总会话（全量口径）'" />
-        <MkKpi compact label="失败率" :value="`${runStats.systemFailureRate}%`" :tone="(runStats.systemFailureRate ?? 0) > 0 ? 'bad' : ''" :hint="`已失败 ${partition.failed} · 均耗 ${fmtDuration(runStats.avgDurationMs)}`" :title="'系统失败会话 / 总会话（与状态条同口径）'" />
-      </template>
-      <template #pre>
-        <!-- 自动驾驶并发配额（并入 KPI 卡内，不占独立行）：used/limit 分段条 -->
-        <div
-          class="vl-concurrency"
-          :class="`is-${concurrencyTone}`"
-          :title="`自动驾驶并发 ${concurrency.used}/${concurrency.limit}：同时运行的自动驾驶会话数（env AUTOPILOT_CONCURRENCY_LIMIT 可配）；满员后新启动会被拒绝，请先暂停部分会话`"
-        >
-          <span class="vl-concurrency__label">并发</span>
-          <span class="vl-concurrency__track"><span class="vl-concurrency__fill" :style="{ width: `${concurrencyPct}%` }"></span></span>
-          <span class="vl-concurrency__num">{{ concurrency.used }}/{{ concurrency.limit }}</span>
-          <span v-if="concurrency.used >= concurrency.limit" class="vl-concurrency__full">已满</span>
-        </div>
-      </template>
-    </MkOverview>
 
     <!-- 正在运行：列出有活跃会话的虚拟学习者（折叠：默认前 8 个，展开看全部）；批量生成也在此显示 -->
     <div v-if="(runningSamples.length || pausedSamples.length || batchTask.active) && isLive" class="vl-running">
@@ -474,8 +461,6 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
-import MkOverview from './MkOverview.vue'
-import MkKpi from './MkKpi.vue'
 
 /* 头像色板：按名称哈希取色，同一人恒定同色 */
 const AVATAR_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#64748b']
@@ -911,39 +896,7 @@ const partition = computed(() => {
 /* ===== A5 运行统计：完成率/失败率/平均时长/卡死最长分钟（GET /virtual-learners/stats） ===== */
 const runStats = computed(() => liveVirtualRunStats.value)
 
-/* 仿真概览结论（dashboard 头）：卡死 → warn；有活动会话 → ok；空闲 → muted；
-   完全无数据（无会话/无调用/无活动）时 KPI 区不渲染，避免「无意义 0%」 */
-const hasDashData = computed(() =>
-  (runStats.value.totalSessions ?? 0) > 0
-  || partition.value.running + partition.value.created > 0
-  || (runStats.value.todayCalls ?? 0) > 0
-)
-const dashTone = computed<'warn' | 'ok' | 'muted'>(() =>
-  partition.value.stale > 0 ? 'warn' : partition.value.running + partition.value.created > 0 ? 'ok' : 'muted'
-)
-const dashTitle = computed(() =>
-  partition.value.stale > 0
-    ? `${partition.value.stale} 个会话卡死`
-    : partition.value.running + partition.value.created > 0
-      ? '仿真运行中'
-      : '仿真空闲'
-)
-const dashSubline = computed(() =>
-  partition.value.stale > 0
-    ? '已超出回收阈值，建议一键回收或批量清理'
-    : partition.value.running + partition.value.created > 0
-      ? `${partition.value.running + partition.value.created} 个活动会话`
-      : '新建或运行虚拟学习者开始仿真'
-)
-
-/** 毫秒 → 人类可读时长（分钟/小时） */
-function fmtDuration(ms: number) {
-  if (!ms) return '—'
-  const mins = Math.round(ms / 60000)
-  if (mins < 60) return `${mins} 分钟`
-  const hours = mins / 60
-  return `${Number.isInteger(hours) ? String(hours) : hours.toFixed(1)} 小时`
-}
+/* 仿真概览结论已收敛到单行状态条（KPI/结论随状态条 meta 展示，双块移除） */
 
 /* ===== A1 批量操作：复选框 + 批量条（对齐 Users.vue 模式） ===== */
 const selected = ref<string[]>([])
@@ -1495,28 +1448,18 @@ function startBatchPolling() { batchPolling.start() }
 .vl-filter-clear { font-size: 12px; margin-left: 4px; }
 .vl-state-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
-/* 自动驾驶并发配额（MkOverview pre slot：KPI 卡上方细横条，分档变色） */
+/* 自动驾驶并发配额（状态条 meta：紧凑文字形态，满员红色警示） */
 .vl-concurrency {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--mk-line);
-  background: var(--mk-surface);
-  font-size: 11.5px;
+  gap: 4px;
+  font-size: 12px;
   cursor: help;
+  font-weight: 700;
+  color: var(--mk-muted);
 }
-.vl-concurrency__label { font-weight: 700; color: var(--mk-muted); }
-.vl-concurrency__track { flex: 1; height: 6px; border-radius: 3px; background: var(--mk-line); overflow: hidden; }
-.vl-concurrency__fill { display: block; height: 100%; border-radius: 3px; background: var(--mk-green, #10b981); transition: width 0.3s ease; }
-.vl-concurrency__num { font-weight: 800; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
-.vl-concurrency__full { color: var(--mk-red, #dc2626); font-weight: 700; font-size: 10.5px; }
-.vl-concurrency.is-warn { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.07); }
-.vl-concurrency.is-warn .vl-concurrency__fill { background: var(--mk-amber, #f59e0b); }
-.vl-concurrency.is-full { border-color: rgba(239, 68, 68, 0.5); background: rgba(239, 68, 68, 0.07); }
-.vl-concurrency.is-full .vl-concurrency__fill { background: var(--mk-red, #ef4444); }
-.vl-concurrency.is-full .vl-concurrency__num { color: var(--mk-red, #dc2626); }
+.vl-concurrency.is-full { color: var(--mk-red, #dc2626); }
+.vl-concurrency.is-warn { color: var(--mk-amber, #f59e0b); }
 
 /* 「正在运行」折叠展开按钮 */
 .vl-running__more {

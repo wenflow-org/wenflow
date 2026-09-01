@@ -1,11 +1,10 @@
 <template>
   <div class="mk-page mk-page--fill">
-    <!-- 目标对话页头（单行状态条：结论 + 堆叠条 + 可点击计数 + 刷新；与教学会话统一形态） -->
+    <!-- 目标对话页头（单行状态条：页面名 + 堆叠条 + 可点击计数 + 刷新；与其他列表页统一形态） -->
     <div class="mk-status" :class="gcDashTone === 'bad' ? 'mk-status--bad' : gcDashTone === 'warn' ? 'mk-status--warn' : gcDashTone === 'muted' ? 'mk-status--muted' : 'mk-status--ok'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ gcDashTitle }}</strong>
+      <strong class="mk-status__title">目标对话</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">{{ gcDashSubline }}</span>
       <div v-if="isLive && stats && stats.total > 0" class="gc-stack gc-stack--inline" :title="`进行中 ${stats.active} · 已完成 ${stats.completed} · 其他 ${stackOther}`">
         <span class="gc-stack__bar">
           <i class="gc-stack__seg gc-stack__seg--active" :style="{ width: stackPct('active') }"></i>
@@ -415,16 +414,6 @@ const gcDashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
   if (!stats.value || stats.value.total === 0) return 'muted'
   if ((stats.value.active ?? 0) > 0) return 'ok'
   return 'ok'
-})
-const gcDashTitle = computed(() => {
-  if (!stats.value || stats.value.total === 0) return '暂无目标对话'
-  if ((stats.value.active ?? 0) > 0) return `${stats.value.active} 个目标澄清进行中`
-  return '目标对话已收束'
-})
-const gcDashSubline = computed(() => {
-  if (!stats.value || stats.value.total === 0) return '学习者发起目标对话后自动呈现'
-  if ((stats.value.active ?? 0) > 0) return '学习者正在澄清学习目标，完成后自动进入路径生成'
-  return `全部完成澄清或已收束 · 完成率 ${stats.value.completionRate}%`
 })
 function stackPct(seg: 'active' | 'completed' | 'other'): string {
   const t = stats.value?.total || 0

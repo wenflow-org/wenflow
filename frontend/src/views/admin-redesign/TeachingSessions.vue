@@ -1,11 +1,10 @@
 <template>
   <div class="mk-page mk-page--fill">
-    <!-- 教学会话页头（单行状态条：结论 + 可点击计数 + 刷新；与用户/学习者中心/目标对话统一形态） -->
+    <!-- 教学会话页头（单行状态条：页面名 + 短计数 + 可点击筛选 + 刷新；与其他列表页统一形态） -->
     <div class="mk-status" :class="tsDashTone === 'bad' ? 'mk-status--bad' : tsDashTone === 'warn' ? 'mk-status--warn' : tsDashTone === 'muted' ? 'mk-status--muted' : 'mk-status--ok'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ tsDashTitle }}</strong>
+      <strong class="mk-status__title">教学会话</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">{{ tsDashSubline }}</span>
       <span class="mk-status__meta">进行中 {{ inProgressCount }}</span>
       <button
         type="button"
@@ -629,18 +628,6 @@ const tsDashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
   if (missingWrapupCount.value > 0) return 'warn'
   if (attentionCount.value > 0) return 'warn'
   return 'ok'
-})
-const tsDashTitle = computed(() => {
-  if (!rows.value.length) return '暂无教学会话'
-  if (missingWrapupCount.value > 0) return `${missingWrapupCount.value} 个会话缺总结`
-  if (attentionCount.value > 0) return `${attentionCount.value} 个会话待关注`
-  return '教学运行平稳'
-})
-const tsDashSubline = computed(() => {
-  if (!rows.value.length) return '学习者开始上课后，会话记录将自动出现在这里'
-  if (missingWrapupCount.value > 0) return '建议尽快补全课后总结，保证学习闭环'
-  if (attentionCount.value > 0) return '有建议或高关注会话，建议按关注度优先处理'
-  return `${inProgressCount.value} 个进行中 · 会话产物完整`
 })
 
 /* 详情 — URL 同步 ?session=id 支持深链/刷新恢复 */
