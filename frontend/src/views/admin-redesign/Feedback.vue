@@ -177,7 +177,7 @@
               <button type="button" class="mk-btn mk-btn--sm mk-btn--ghost" :disabled="saving" @click="save('dismissed')">忽略</button>
             </div>
 
-            <p class="fb-meta mono">task={{ detail.taskId || '—' }} · session={{ detail.sessionId || '—' }}</p>
+            <p class="fb-meta mono" :title="`task=${detail.taskId || '—'} · session=${detail.sessionId || '—'}`">task={{ detail.taskId || '—' }} · session={{ detail.sessionId || '—' }}</p>
           </div>
         </aside>
       </div>
@@ -472,7 +472,7 @@ onMounted(() => {
 .fb-note:focus { outline: none; border-color: var(--mk-blue); }
 
 .fb-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.fb-meta { margin: 0; font-size: 10px; color: var(--mk-faint); word-break: break-all; }
+.fb-meta { margin: 0; font-size: 10px; color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* 4K：内容区字号跟随壳层放大（面板宽度/头/体由 mk-drawer 全局档接管） */
 @media (min-width: 2000px) {

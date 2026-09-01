@@ -1501,7 +1501,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 }
 .ld-bar__ev--zero { background: #f4f6fa; color: var(--mk-faint); }
 .ld-bar__track {
-  height: 7px;
+  height: 8px;
   border-radius: 4px;
   background: #eef2fa;
   overflow: hidden;

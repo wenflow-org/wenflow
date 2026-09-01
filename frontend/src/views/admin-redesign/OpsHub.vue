@@ -19,9 +19,16 @@
 
     <!-- ===== Tab1: 内容管理 ===== -->
     <template v-if="tab === 'content'">
-    <!-- 状态统计（MkKpi 统一形态） -->
+    <!-- 状态统计（MkKpi 统一形态；失败>0 红色警示） -->
     <div class="ct-cards">
-      <MkKpi v-for="(s, label) in statusCards" :key="label" :label="label" :value="s" />
+      <MkKpi
+        v-for="c in statusCards"
+        :key="c.label"
+        :label="c.label"
+        :value="c.value"
+        :tone="c.tone"
+        :hint="c.hint"
+      />
     </div>
 
     <!-- 筛选 + 列表 -->
@@ -386,12 +393,17 @@ const includeTest = ref(false)
 const stats = ref<LearningContentStats | null>(null)
 
 const statusTone = computed(() => 'mk-status--ok')
-const statusCards = computed(() => ({
-  '学习中': String(stats.value?.byStatus?.active || 0),
-  '已完成': String(stats.value?.byStatus?.completed || 0),
-  '生成失败': String(stats.value?.byStatus?.failed || 0),
-  '已下线': String(stats.value?.byStatus?.archived || 0),
-}))
+const statusCards = computed(() => {
+  const s = stats.value?.byStatus || {}
+  const failed = s.failed || 0
+  const items: Array<{ label: string; value: string; tone: '' | 'ok' | 'warn' | 'bad'; hint: string }> = [
+    { label: '学习中', value: String(s.active || 0), tone: (s.active || 0) > 0 ? 'ok' : '', hint: (s.active || 0) > 0 ? '进行中' : '' },
+    { label: '已完成', value: String(s.completed || 0), tone: '', hint: '' },
+    { label: '生成失败', value: String(failed), tone: failed > 0 ? 'bad' : '', hint: failed > 0 ? '需关注' : '' },
+    { label: '已下线', value: String(s.archived || 0), tone: '', hint: '' },
+  ]
+  return items
+})
 const subjectOptions = computed(() => (stats.value?.bySubject || []).map((s) => s.subject))
 
 const statusText = (s: string) => ({ active: '学习中', completed: '已完成', failed: '生成失败', archived: '已下线' }[s] || s)

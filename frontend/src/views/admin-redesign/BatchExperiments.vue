@@ -4,9 +4,7 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">批量实验</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">共 {{ experiments.length }} 个实验</span>
-      <span class="mk-status__meta">运行中 {{ runningCount }}</span>
-      <span class="mk-status__meta">学习者 {{ learnerTotal }}</span>
+      <span class="mk-status__meta">共 {{ experiments.length }} 个实验 · 运行中 {{ runningCount }} · 学习者 {{ learnerTotal }}</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建实验</button>
       </span>
@@ -38,7 +36,9 @@
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ (e.runs || []).length }} 名</strong>
-                  <span class="mk-cell-sub">完成 {{ doneRuns(e).length }} · 失败 {{ failedRuns(e).length }}</span>
+                  <span class="mk-cell-sub" :class="{ 'be-cell--fail': failedRuns(e).length > 0 }" :title="`完成 ${doneRuns(e).length} · 失败 ${failedRuns(e).length} · 进行中 ${(e.runs || []).filter((r) => r.status === 'active').length}`">
+                    完成 {{ doneRuns(e).length }}<template v-if="failedRuns(e).length"> · <b class="be-fail-num">失败 {{ failedRuns(e).length }}</b></template>
+                  </span>
                 </div>
               </td>
               <td>
@@ -424,7 +424,9 @@ load()
 <style scoped>
 .be-list { min-height: var(--mk-empty-min-h, calc(100dvh - 230px)); }
 .be-progress { display: flex; align-items: center; gap: 8px; min-width: 140px; }
-.be-progress .mk-minibar { flex: 1; }
+/* 学习者列：失败数红色强调（失败有值时突出，无失败保持副行灰） */
+.be-fail-num { color: var(--mk-red); font-weight: 700; }
+.be-cell--fail { color: var(--mk-red); }.be-progress .mk-minibar { flex: 1; }
 .be-progress__num { font-family: var(--mk-mono); font-size: 11.5px; color: var(--mk-muted); white-space: nowrap; }
 
 .be-rows { display: grid; gap: 6px; }
