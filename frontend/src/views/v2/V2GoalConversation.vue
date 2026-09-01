@@ -370,7 +370,7 @@ import AiContentNote from '@/components/AiContentNote.vue';
 import MessageActions from '@/components/chat/MessageActions.vue';
 import { hasUserSession } from '@/utils/api';
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
-import { renderAiMessageHtml } from '@/utils/sanitize';
+import { plainMessageHtml } from '@/utils/messageMarkdown';
 import { toast } from '@/utils/toast';
 import { feedbackApi } from '@/api/feedback';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
@@ -540,7 +540,7 @@ async function regenerateMessage(msg: LiveMessage) {
   } catch { /* handled by live.failed */ }
 }
 
-const formatMessage = (text: string) => renderAiMessageHtml(text);
+const formatMessage = (text: string) => plainMessageHtml(text);
 
 const stageLabel = computed(() => {
   if (live.stageIndex === 3) return '可生成路径';

@@ -5,7 +5,7 @@
  * Designed to work inside a container that provides its own scroll (e.g. .tutor__scroll, .chat__scroll).
  */
 import { nextTick, ref } from 'vue';
-import { renderAiMessageHtml } from '@/utils/sanitize';
+import { cachedMessageHtml } from '@/utils/messageMarkdown';
 
 export interface ChatMessage {
   id?: string;
@@ -32,15 +32,8 @@ const emit = defineEmits<{
 
 const scrollEl = ref<HTMLElement | null>(null);
 
-/** Streaming-render memoisation: avoids re-running markdown + DOMPurify on every delta */
-const htmlCache = new WeakMap<object, { text: string; html: string }>();
-function htmlFor(m: { text: string }): string {
-  const hit = htmlCache.get(m);
-  if (hit && hit.text === m.text) return hit.html;
-  const html = renderAiMessageHtml(m.text);
-  htmlCache.set(m, { text: m.text, html });
-  return html;
-}
+/** Streaming-render memoisation: avoids re-running markdown + DOMPurify on every delta（共享工具） */
+const htmlFor = (m: { text: string }) => cachedMessageHtml(m);
 
 const nearBottom = ref(true);
 function updateNearBottom() {

@@ -304,7 +304,7 @@ import MessageActions from '@/components/chat/MessageActions.vue';
 import { toast } from '@/utils/toast';
 import { useInteractionMeta } from '@/composables/useInteractionMeta';
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
-import { renderAiMessageHtml } from '@/utils/sanitize';
+import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { unwrap } from './unwrap';
 
@@ -460,19 +460,12 @@ async function sendPeer(e?: unknown) {
   }
 }
 
-const formatMessage = (text: string) => renderAiMessageHtml(text);
+const formatMessage = (text: string) => plainMessageHtml(text);
 
 /* 流式渲染记忆化：v-html 直接调函数会在每个 delta 触发全列表重渲染 + 全部历史消息重跑
    markdown/DOMPurify（50 条消息 × 每秒数十 delta 开销显著）。
-   这里按消息对象缓存渲染结果，仅文本变化时惰性重算 */
-const htmlCache = new WeakMap<object, { text: string; html: string }>();
-function htmlFor(m: { text: string }): string {
-  const hit = htmlCache.get(m);
-  if (hit && hit.text === m.text) return hit.html;
-  const html = formatMessage(m.text);
-  htmlCache.set(m, { text: m.text, html });
-  return html;
-}
+   共享工具按消息对象缓存渲染结果，仅文本变化时惰性重算 */
+const htmlFor = (m: { text: string }) => cachedMessageHtml(m);
 
 function nowTime() {
   const d = new Date();
