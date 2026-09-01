@@ -147,6 +147,7 @@
                   :streaming="live.sending"
                   @regenerate="regenerateMessage(km.msg)"
                   @copy="copyMessage(km.msg.content)"
+                  @feedback="(up) => sendMessageFeedback(km.msg, up)"
                 />
                 <div class="msg__meta">
                   问流 · {{ km.msg.time }}
@@ -347,6 +348,7 @@ import { hasUserSession } from '@/utils/api';
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
 import { renderAiMessageHtml } from '@/utils/sanitize';
 import { toast } from '@/utils/toast';
+import { feedbackApi } from '@/api/feedback';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 
 const route = useRoute();
@@ -448,6 +450,20 @@ async function copyMessage(text: string) {
     await navigator.clipboard.writeText(text);
     toast.success('已复制到剪贴板');
   } catch { toast.error('复制失败'); }
+}
+
+/** 消息级点赞/点踩上报：内容去重（后端按内容哈希 key），失败静默不打扰 */
+async function sendMessageFeedback(msg: LiveMessage, thumbsUp: boolean) {
+  if (!live.conversationId || !msg.content) return;
+  try {
+    await feedbackApi.submitMessage({
+      sessionId: live.conversationId,
+      messageText: msg.content,
+      thumbsUp
+    });
+  } catch {
+    /* 反馈失败不影响对话，静默 */
+  }
 }
 
 async function regenerateMessage(msg: LiveMessage) {

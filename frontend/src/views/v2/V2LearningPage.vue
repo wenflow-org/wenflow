@@ -90,6 +90,7 @@
                   :streaming="typing && streamingBubbleIndex === msgs.indexOf(m)"
                   @regenerate="regenerateMessage(m)"
                   @copy="copyMessage(m.text)"
+                  @feedback="(up) => sendMessageFeedback(m, up)"
                 />
                 <span v-if="m.confusion?.length" class="msg__chip msg__chip--confuse">捕获到卡点「{{ m.confusion.join('、') }}」· 导师会在这里多做确认</span>
                 <div class="msg__meta">
@@ -273,6 +274,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import request, { API_BASE_URL } from '@/utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';
+import { feedbackApi } from '@/api/feedback';
 import AiContentNote from '@/components/AiContentNote.vue';
 import MessageActions from '@/components/chat/MessageActions.vue';
 import { toast } from '@/utils/toast';
@@ -569,6 +571,20 @@ async function copyMessage(text: string) {
     await navigator.clipboard.writeText(text);
     toast.success('已复制到剪贴板');
   } catch { toast.error('复制失败'); }
+}
+
+/** 消息级点赞/点踩上报：内容去重（后端按内容哈希 key），失败静默不打扰 */
+async function sendMessageFeedback(m: ChatMsg, thumbsUp: boolean) {
+  if (!session.value || !m.text) return;
+  try {
+    await feedbackApi.submitMessage({
+      sessionId: session.value.sessionId,
+      messageText: m.text,
+      thumbsUp
+    });
+  } catch {
+    /* 反馈失败不影响对话，静默 */
+  }
 }
 
 async function regenerateMessage(m: ChatMsg) {

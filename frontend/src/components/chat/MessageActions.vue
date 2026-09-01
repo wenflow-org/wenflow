@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * MessageActions — hover action menu for AI message bubbles.
- * Shows: 🔄 重新生成 (hidden during streaming), 📋 复制
+ * Shows: 👍 有用 / 👎 不佳 (message feedback), 🔄 重新生成 (hidden during streaming), 📋 复制
  * Positioned top-right of the message bubble using CSS.
  */
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
@@ -14,9 +14,11 @@ const props = defineProps<{
 const emit = defineEmits<{
   regenerate: [];
   copy: [];
+  feedback: [thumbsUp: boolean];
 }>();
 
 const copied = ref(false);
+const feedbackSent = ref<'up' | 'down' | null>(null);
 
 /** 触屏设备（无 hover）：操作常显，不依赖 hover 状态 */
 const touchMode = ref(false);
@@ -43,11 +45,40 @@ async function handleCopy() {
   copied.value = true;
   setTimeout(() => { copied.value = false; }, 1500);
 }
+
+function handleFeedback(thumbsUp: boolean) {
+  // 防重复：同一气泡已点过则忽略（或允许切换？点过即锁定，简单可靠）
+  if (feedbackSent.value) return;
+  feedbackSent.value = thumbsUp ? 'up' : 'down';
+  emit('feedback', thumbsUp);
+}
 </script>
 
 <template>
   <Transition name="actions-pop">
     <div v-show="visible" class="msg-actions">
+      <button
+        type="button"
+        class="msg-actions__btn"
+        :class="{ 'msg-actions__btn--sent-up': feedbackSent === 'up' }"
+        :title="feedbackSent === 'up' ? '已标记有用' : '这条回复有用'"
+        :disabled="!!feedbackSent"
+        @click.stop="handleFeedback(true)"
+      >
+        <svg v-if="feedbackSent === 'up'" viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M1 21h4V9H1v12zM23 10a2 2 0 0 0-2-2h-6.31l.95-4.57.03-.32a1.5 1.5 0 0 0-.44-1.06L14.17 1 7.59 7.59A2 2 0 0 0 7 9v10a2 2 0 0 0 2 2h9a2 2 0 0 0 1.84-1.22l3.02-7.05A2 2 0 0 0 23 12v-2z"/></svg>
+        <svg v-else viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M1 21h4V9H1v12zM23 10a2 2 0 0 0-2-2h-6.31l.95-4.57.03-.32a1.5 1.5 0 0 0-.44-1.06L14.17 1 7.59 7.59A2 2 0 0 0 7 9v10a2 2 0 0 0 2 2h9a2 2 0 0 0 1.84-1.22l3.02-7.05A2 2 0 0 0 23 12v-2z" opacity=".75"/></svg>
+      </button>
+      <button
+        type="button"
+        class="msg-actions__btn"
+        :class="{ 'msg-actions__btn--sent-down': feedbackSent === 'down' }"
+        :title="feedbackSent === 'down' ? '已标记不佳' : '这条回复不佳'"
+        :disabled="!!feedbackSent"
+        @click.stop="handleFeedback(false)"
+      >
+        <svg v-if="feedbackSent === 'down'" viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M15 3H6a2 2 0 0 0-1.84 1.22L2.14 11.27A2 2 0 0 0 2 12v2a2 2 0 0 0 2 2h6.31l-.95 4.57-.03.32a1.5 1.5 0 0 0 .44 1.06L11.83 23l6.58-6.59A2 2 0 0 0 19 15V5a2 2 0 0 0-2-2h-2z"/></svg>
+        <svg v-else viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M15 3H6a2 2 0 0 0-1.84 1.22L2.14 11.27A2 2 0 0 0 2 12v2a2 2 0 0 0 2 2h6.31l-.95 4.57-.03.32a1.5 1.5 0 0 0 .44 1.06L11.83 23l6.58-6.59A2 2 0 0 0 19 15V5a2 2 0 0 0-2-2h-2z" opacity=".75"/></svg>
+      </button>
       <button
         v-if="!streaming"
         type="button"
@@ -105,6 +136,17 @@ async function handleCopy() {
 }
 .msg-actions__btn:active {
   background: rgba(52, 120, 246, 0.14);
+}
+.msg-actions__btn:disabled {
+  cursor: default;
+}
+.msg-actions__btn--sent-up {
+  color: var(--green, #1e9e58);
+  background: rgba(49, 177, 111, 0.1);
+}
+.msg-actions__btn--sent-down {
+  color: #c0454a;
+  background: rgba(239, 117, 120, 0.1);
 }
 
 /* 触屏设备（无 hover）：操作按钮常显，避免「看不到操作」；
