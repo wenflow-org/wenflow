@@ -8,9 +8,9 @@
           <AiContentNote class="evaluation-head__ai-note" />
         </div>
         <div class="evaluation-head__actions">
-          <el-button :loading="exportingImage" @click="exportImage">导出图片</el-button>
-          <el-button @click="exportPdf">打印或另存为 PDF</el-button>
-          <el-button type="primary" @click="goBackToPath">返回学习路径</el-button>
+          <button type="button" class="btn-ghost" :disabled="exportingImage" @click="exportImage">{{ exportingImage ? '导出中…' : '导出图片' }}</button>
+          <button type="button" class="btn-ghost" @click="exportPdf">打印或另存为 PDF</button>
+          <button type="button" class="btn-primary" @click="() => goBackToPath()">返回学习路径</button>
         </div>
       </header>
 
@@ -33,7 +33,7 @@
             <i v-for="n in 3" :key="'b' + n"></i>
           </div>
           <p class="evaluation-loading__text">
-            <el-icon class="spin"><Loading /></el-icon>
+            <span class="evaluation-spinner" aria-hidden="true"></span>
             正在整理本次学习反馈，请稍候…
           </p>
         </div>
@@ -42,8 +42,8 @@
       <section v-else-if="error" class="evaluation-error">
         <p>{{ error }}</p>
         <div class="evaluation-error__actions">
-          <el-button type="primary" @click="fetchEvaluation">重试</el-button>
-          <el-button @click="goBackToPath">返回学习路径</el-button>
+          <button type="button" class="btn-primary" @click="fetchEvaluation">重试</button>
+          <button type="button" class="btn-ghost" @click="() => goBackToPath()">返回学习路径</button>
         </div>
       </section>
 
@@ -116,7 +116,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Loading } from '@element-plus/icons-vue';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 // html2canvas 体积大，仅导出图片时动态加载
 import CompletionCard from '@/components/CompletionCard.vue';
@@ -665,6 +664,18 @@ onUnmounted(() => {
 .evaluation-loading__summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .evaluation-loading__card { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid rgba(23, 32, 51, 0.06); border-radius: 12px; background: color-mix(in srgb, var(--surface) 70%, var(--canvas)); }
 .evaluation-loading__text { display: inline-flex; align-items: center; gap: 8px; justify-content: center; margin: 4px 0 0; }
+/* 加载 spinner（替代 el-icon Loading，统一 v2 风格） */
+.evaluation-spinner {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(52, 120, 246, 0.2);
+  border-top-color: var(--blue, #3478f6);
+  animation: evaluation-spin 0.8s linear infinite;
+  flex: none;
+}
+@keyframes evaluation-spin {
+  to { transform: rotate(360deg); }
+}
 .evaluation-loading .sk-bar,
 .evaluation-loading__summary i,
 .evaluation-loading__card i {
