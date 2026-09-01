@@ -46,7 +46,7 @@
               <h1 class="action__title">给自己放个小假</h1>
               <p class="action__desc">想回来的时候，任务还在这里等你。</p>
               <div class="action__footer">
-                <button type="button" class="btn-primary" @click="resting = false">恢复学习</button>
+                <button type="button" class="btn-primary" @click="setResting(false)">恢复学习</button>
               </div>
             </template>
             <template v-else>
@@ -81,7 +81,7 @@
                   </button>
                   <router-link to="/learning-paths" class="link-muted">查看全部路径</router-link>
                 </template>
-                <button type="button" class="link-muted" @click="resting = true">今天休息</button>
+                <button type="button" class="link-muted" @click="setResting(true)">今天休息</button>
               </div>
               <div class="action__today">
                 <div class="action__today-bar"><i :style="{ width: todayBarPct + '%' }"></i></div>
@@ -513,7 +513,19 @@ const userStore = useUserStore();
 /* ================= 基础状态 ================= */
 const loading = ref(true);
 const tipDismissed = ref(false);
+/** 「今天休息」：持久化到 localStorage（按日期），当天刷新保留，次日自动复位 */
+const REST_KEY = 'wf_dash_resting_date';
 const resting = ref(false);
+try {
+  resting.value = localStorage.getItem(REST_KEY) === localDateKey(new Date());
+} catch { /* 隐私模式忽略 */ }
+function setResting(v: boolean) {
+  resting.value = v;
+  try {
+    if (v) localStorage.setItem(REST_KEY, localDateKey(new Date()));
+    else localStorage.removeItem(REST_KEY);
+  } catch { /* 忽略 */ }
+}
 const retrying = ref(false);
 const monthOpen = ref(false);
 const showMore = ref(false);
