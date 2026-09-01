@@ -999,6 +999,12 @@ async function restart() {
     checkpoint.value = null;
     checkpointPending.value = false;
     completed.value = false;
+    // 伴学窗同步重置（B7：上一会话内容不残留到新开课）
+    peerItems.value = [];
+    peerUnread.value = false;
+    peerOpen.value = false;
+    peerManuallyMinimized = false;
+    lastPeerAutoOpen = 0;
     await boot();
   } catch (e: any) {
     toast.error(e?.message || e?.response?.data?.error?.message || '重新开始失败，请稍后重试');
