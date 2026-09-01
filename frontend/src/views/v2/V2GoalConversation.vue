@@ -131,8 +131,32 @@
 
         <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal }" aria-live="polite">
           <template v-for="km in keyedMessages" :key="km.key">
-            <div v-if="km.msg.role === 'user'" class="msg msg--user">
-              <div class="msg__bubble">{{ km.msg.content }}</div>
+            <div v-if="km.msg.role === 'user'" class="msg msg--user" :class="{ 'msg--editing': editingMsgId === km.key }">
+              <!-- 编辑态：textarea 替换气泡 -->
+              <div v-if="editingMsgId === km.key" class="msg__edit">
+                <textarea
+                  v-model="editingText"
+                  class="msg__edit-input"
+                  rows="2"
+                  maxlength="500"
+                  @keydown.enter.exact.prevent="saveEdit(km.msg)"
+                  @keydown.esc="cancelEdit"
+                ></textarea>
+                <div class="msg__edit-actions">
+                  <span class="msg__edit-save" role="button" tabindex="0" @click="saveEdit(km.msg)" @keydown.enter="saveEdit(km.msg)">保存</span>
+                  <span class="msg__edit-cancel" role="button" tabindex="0" @click="cancelEdit" @keydown.enter="cancelEdit">取消</span>
+                </div>
+              </div>
+              <template v-else>
+                <div class="msg__bubble">{{ km.msg.content }}</div>
+                <button
+                  v-if="canEditMessage(km.msg)"
+                  type="button"
+                  class="msg__edit-btn"
+                  title="编辑这条消息"
+                  @click="startEdit(km.msg, km.key)"
+                >✎</button>
+              </template>
               <div class="msg__meta">你 · {{ km.msg.time }}</div>
             </div>
             <div v-else class="msg msg--ai">
@@ -438,6 +462,9 @@ const scrollEl = ref<HTMLElement | null>(null);
 const phase = ref<'preview' | 'generating' | 'done'>('preview');
 const supplementMode = ref(false);
 const supplementText = ref('');
+/* 用户消息内联编辑（仅最后一条用户消息可编辑） */
+const editingMsgId = ref<string | null>(null);
+const editingText = ref('');
 const confirmError = ref(false);
 
 /* ---------- 消息操作 ---------- */
@@ -466,6 +493,37 @@ async function sendMessageFeedback(msg: LiveMessage, thumbsUp: boolean) {
   }
 }
 
+/* ---------- 用户消息内联编辑（仅最后一条用户消息可编辑） ---------- */
+function canEditMessage(msg: LiveMessage): boolean {
+  if (live.sending || editingMsgId.value) return false;
+  const lastUserIdx = live.messages.map((x) => x.role).lastIndexOf('user');
+  return lastUserIdx >= 0 && live.messages[lastUserIdx] === msg;
+}
+
+function startEdit(msg: LiveMessage, key: string) {
+  editingMsgId.value = key;
+  editingText.value = msg.content;
+}
+
+function cancelEdit() {
+  editingMsgId.value = null;
+  editingText.value = '';
+}
+
+/** 保存编辑：替换文本 → 裁掉其后所有消息 → 重新发送 */
+async function saveEdit(msg: LiveMessage) {
+  const t = editingText.value.trim();
+  if (!t || t === msg.content) { cancelEdit(); return; }
+  const idx = live.messages.indexOf(msg);
+  if (idx < 0) { cancelEdit(); return; }
+  live.messages.splice(idx, live.messages.length - idx, { ...msg, content: t });
+  editingMsgId.value = null;
+  editingText.value = '';
+  try {
+    await live.send(t, true);
+  } catch { /* handled by live.failed */ }
+}
+
 async function regenerateMessage(msg: LiveMessage) {
   if (live.sending) return;
   // Find the user message preceding this AI message
@@ -475,10 +533,10 @@ async function regenerateMessage(msg: LiveMessage) {
     if (live.messages[i].role === 'user') { lastUser = live.messages[i].content; break; }
   }
   if (!lastUser) { toast.info('找不到对应的问题'); return; }
-  // Remove the current AI message and re-send
+  // Remove the current AI message and re-send（不重复 push 用户消息）
   live.messages.splice(idx, 1);
   try {
-    await live.send(lastUser);
+    await live.send(lastUser, true);
   } catch { /* handled by live.failed */ }
 }
 
@@ -1081,12 +1139,66 @@ function shuffleScenes() {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.msg--user { align-self: flex-end; align-items: flex-end; }
+.msg--user { align-self: flex-end; align-items: flex-end; position: relative; }
 .msg--user .msg__bubble {
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   color: #fff;
   border-radius: 16px 16px 4px 16px;
   white-space: pre-wrap;
+}
+/* 用户消息编辑按钮（hover 显示；触屏常显） */
+.msg--user .msg__edit-btn {
+  position: absolute;
+  top: 2px; right: 100%;
+  margin-right: 6px;
+  width: 24px; height: 24px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--faint);
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.msg--user:hover .msg__edit-btn { opacity: 1; }
+.msg--user .msg__edit-btn:hover { color: var(--blue-deep); border-color: rgba(52, 120, 246, 0.4); }
+@media (hover: none) {
+  .msg--user .msg__edit-btn { opacity: 1; }
+}
+/* 编辑态 */
+.msg--editing { align-self: flex-end; align-items: flex-end; }
+.msg__edit {
+  display: grid; gap: 6px;
+  min-width: min(320px, 70vw);
+}
+.msg__edit-input {
+  width: 100%;
+  border: 1px solid rgba(52, 120, 246, 0.4);
+  border-radius: 12px;
+  padding: 9px 12px;
+  font: inherit; font-size: 13.5px; line-height: 1.6;
+  color: var(--ink);
+  background: var(--surface);
+  resize: vertical;
+  outline: none;
+}
+.msg__edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.msg__edit-save, .msg__edit-cancel {
+  font-size: 12px; font-weight: 700;
+  padding: 5px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.msg__edit-save {
+  color: #fff;
+  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+}
+.msg__edit-cancel {
+  color: var(--muted);
+  border: 1px solid var(--line);
+  background: var(--surface);
 }
 .msg__bubble {
   padding: 11px 15px;

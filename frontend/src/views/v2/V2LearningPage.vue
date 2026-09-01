@@ -74,8 +74,32 @@
       <section class="tutor">
         <div ref="scrollEl" class="tutor__scroll" @scroll="updateNearBottom">
           <template v-for="m in msgs" :key="m.id">
-            <div v-if="m.role === 'user'" class="msg msg--user">
-              <div class="msg__bubble">{{ m.text }}</div>
+            <div v-if="m.role === 'user'" class="msg msg--user" :class="{ 'msg--editing': editingMsgId === m.id }">
+              <!-- 编辑态：textarea 替换气泡 -->
+              <div v-if="editingMsgId === m.id" class="msg__edit">
+                <textarea
+                  v-model="editingText"
+                  class="msg__edit-input"
+                  rows="2"
+                  maxlength="800"
+                  @keydown.enter.exact.prevent="saveEdit(m)"
+                  @keydown.esc="cancelEdit"
+                ></textarea>
+                <div class="msg__edit-actions">
+                  <span class="msg__edit-save" role="button" tabindex="0" @click="saveEdit(m)" @keydown.enter="saveEdit(m)">保存</span>
+                  <span class="msg__edit-cancel" role="button" tabindex="0" @click="cancelEdit" @keydown.enter="cancelEdit">取消</span>
+                </div>
+              </div>
+              <template v-else>
+                <div class="msg__bubble">{{ m.text }}</div>
+                <button
+                  v-if="canEditMessage(m)"
+                  type="button"
+                  class="msg__edit-btn"
+                  title="编辑这条消息"
+                  @click="startEdit(m)"
+                >✎</button>
+              </template>
               <div class="msg__meta">你 · {{ m.time }}</div>
             </div>
             <div v-else class="msg msg--ai">
@@ -587,6 +611,44 @@ async function sendMessageFeedback(m: ChatMsg, thumbsUp: boolean) {
   }
 }
 
+/* ---------- 用户消息内联编辑（ChatGPT/Claude 标准能力） ----------
+   仅允许编辑「最后一条用户消息」：编辑后替换文本 + 裁掉其后所有消息 + 重新发送。
+   后端 teaching 会话为顺序追加，重发即新回合，无需后端改动。 */
+const editingMsgId = ref<string | null>(null);
+const editingText = ref('');
+
+/** 可编辑条件：最后一条用户消息（且不在流式/结算中） */
+function canEditMessage(m: ChatMsg): boolean {
+  if (typing.value || completed.value || editingMsgId.value) return false;
+  const lastUserIdx = msgs.value.map((x) => x.role).lastIndexOf('user');
+  return lastUserIdx >= 0 && msgs.value[lastUserIdx] === m;
+}
+
+function startEdit(m: ChatMsg) {
+  editingMsgId.value = m.id ?? null;
+  editingText.value = m.text;
+}
+
+function cancelEdit() {
+  editingMsgId.value = null;
+  editingText.value = '';
+}
+
+/** 保存编辑：替换文本 → 裁掉其后所有消息 → 重新发送 */
+async function saveEdit(m: ChatMsg) {
+  const t = editingText.value.trim();
+  if (!t || !session.value) { cancelEdit(); return; }
+  if (t === m.text) { cancelEdit(); return; }
+  const idx = msgs.value.indexOf(m);
+  if (idx < 0) { cancelEdit(); return; }
+  // 替换本条 + 裁掉其后（含 AI 回复）
+  msgs.value.splice(idx, msgs.value.length - idx, { ...m, text: t });
+  editingMsgId.value = null;
+  editingText.value = '';
+  // 重新发送（不重复 push 用户消息，消息已替换）
+  await doSend(t, true, true);
+}
+
 async function regenerateMessage(m: ChatMsg) {
   if (typing.value || !session.value) return;
   // Find the user message preceding this AI message
@@ -596,9 +658,9 @@ async function regenerateMessage(m: ChatMsg) {
     if (msgs.value[i].role === 'user') { lastUser = msgs.value[i].text; break; }
   }
   if (!lastUser) { toast.info('找不到对应的问题'); return; }
-  // Remove the current AI message and re-send
+  // Remove the current AI message and re-send（不重复 push 用户消息）
   msgs.value.splice(idx, 1);
-  await doSend(lastUser);
+  await doSend(lastUser, true, true);
 }
 
 function stopGeneration() {
@@ -621,10 +683,10 @@ async function sendDirect(text: string) {
   await doSend(text);
 }
 
-async function doSend(text: string, allowStaleRetry = true) {
+async function doSend(text: string, allowStaleRetry = true, skipUserPush = false) {
   if (!session.value) return;
   lastUserText = text;
-  pushMsg({ role: 'user', text, time: nowTime() });
+  if (!skipUserPush) pushMsg({ role: 'user', text, time: nowTime() });
   quickReplies.value = [];
   typing.value = true;
   scrollDown();
@@ -1181,12 +1243,66 @@ onBeforeUnmount(() => {
 }
 .tutor__jump-bottom:hover { color: var(--blue); transform: translateX(-50%) translateY(-1px); }
 .msg { display: flex; flex-direction: column; gap: 5px; max-width: 85%; }
-.msg--user { align-self: flex-end; align-items: flex-end; }
+.msg--user { align-self: flex-end; align-items: flex-end; position: relative; }
 .msg--user .msg__bubble {
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   color: #fff;
   border-radius: 16px 16px 4px 16px;
   white-space: pre-wrap;
+}
+/* 用户消息编辑按钮（hover 显示；触屏常显） */
+.msg--user .msg__edit-btn {
+  position: absolute;
+  top: 2px; right: 100%;
+  margin-right: 6px;
+  width: 24px; height: 24px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--faint);
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.msg--user:hover .msg__edit-btn { opacity: 1; }
+.msg--user .msg__edit-btn:hover { color: var(--blue-deep); border-color: rgba(52, 120, 246, 0.4); }
+@media (hover: none) {
+  .msg--user .msg__edit-btn { opacity: 1; }
+}
+/* 编辑态 */
+.msg--editing { align-self: flex-end; align-items: flex-end; }
+.msg__edit {
+  display: grid; gap: 6px;
+  min-width: min(320px, 70vw);
+}
+.msg__edit-input {
+  width: 100%;
+  border: 1px solid rgba(52, 120, 246, 0.4);
+  border-radius: 12px;
+  padding: 9px 12px;
+  font: inherit; font-size: 13.5px; line-height: 1.6;
+  color: var(--ink);
+  background: var(--surface);
+  resize: vertical;
+  outline: none;
+}
+.msg__edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.msg__edit-save, .msg__edit-cancel {
+  font-size: 12px; font-weight: 700;
+  padding: 5px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.msg__edit-save {
+  color: #fff;
+  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+}
+.msg__edit-cancel {
+  color: var(--muted);
+  border: 1px solid var(--line);
+  background: var(--surface);
 }
 .msg__bubble {
   padding: 11px 15px;

@@ -304,11 +304,11 @@ function stop() {
   currentAbort = null;
 }
 
-async function send(text: string) {
+async function send(text: string, skipUserPush = false) {
   const t = text.trim();
   if (!t || sending.value) return;
-  // 先上屏，再等 AI（与 supplement 一致）
-  pushMessage({ role: 'user', content: t, time: nowTime() });
+  // 先上屏，再等 AI（与 supplement 一致）；skipUserPush=true 时调用方已替换消息（内联编辑）
+  if (!skipUserPush) pushMessage({ role: 'user', content: t, time: nowTime() });
   started.value = true;
   localStorage.setItem(MSG_KEY, JSON.stringify(messages.value.slice(-60)));
   const meta = metaTracker.collect(t);
