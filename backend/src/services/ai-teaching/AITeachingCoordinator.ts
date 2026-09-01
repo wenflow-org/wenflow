@@ -1528,7 +1528,8 @@ export class AITeachingOrchestrator {
       effectiveInitialKnowledgeState,
       knowledgeStateService.merge(
         existingPoints,
-        teachingOutput.knowledge.points
+        teachingOutput.knowledge.points,
+        session.mode === 'review' // 复习课允许 mastered 降级：复习失败在掌握度数据上真实可见
       )
     );
     // 知识完成度仍是 completion 的唯一硬门禁；envelope phase 仅作观测 soft 信号
@@ -2121,6 +2122,9 @@ export class AITeachingOrchestrator {
           pathId: session.learningPathId,
           milestoneId: session.milestoneId,
           duration: durationMinutes,
+          // 断链修复 P0-5：任务的可迁移目标（task.transferable 派生），供课后知识增强
+          // （lesson-knowledge-enricher）判断"迁移意图是否达成"，闭环 transferGoal 信号
+          transferGoal: context?.cognitiveFrame?.transferGoal || null,
           performance: evaluationResult ? persistedEvaluation : null,
           knowledgeState: session.knowledgeState,
           visibleDialogueContext: session.messages.slice(-16).map((message) => ({

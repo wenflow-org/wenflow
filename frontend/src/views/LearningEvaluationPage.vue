@@ -123,7 +123,6 @@ import CompletionCard from '@/components/CompletionCard.vue';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
 import SessionFeedbackPanel from '@/components/learning/SessionFeedbackPanel.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
-import '@/views/v2/v2.css';
 import { aiTeachingAPI, type SessionDetail, type WrapupArtifact } from '@/api/aiTeaching';
 import { toast } from '@/utils/toast';
 import api from '@/utils/api';

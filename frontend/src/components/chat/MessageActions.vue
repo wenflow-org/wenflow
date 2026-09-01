@@ -1,0 +1,95 @@
+<script setup lang="ts">
+/**
+ * MessageActions — hover action menu for AI message bubbles.
+ * Shows: 🔄 重新生成 (hidden during streaming), 📋 复制
+ * Positioned top-right of the message bubble using CSS.
+ */
+import { ref } from 'vue';
+
+defineProps<{
+  show?: boolean;
+  streaming?: boolean;
+}>();
+
+const emit = defineEmits<{
+  regenerate: [];
+  copy: [];
+}>();
+
+const copied = ref(false);
+
+async function handleCopy() {
+  emit('copy');
+  copied.value = true;
+  setTimeout(() => { copied.value = false; }, 1500);
+}
+</script>
+
+<template>
+  <Transition name="actions-pop">
+    <div v-if="show" class="msg-actions">
+      <button
+        v-if="!streaming"
+        type="button"
+        class="msg-actions__btn"
+        title="重新生成"
+        @click.stop="emit('regenerate')"
+      >
+        <svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+        <span>重新生成</span>
+      </button>
+      <button
+        type="button"
+        class="msg-actions__btn"
+        :title="copied ? '已复制' : '复制'"
+        @click.stop="handleCopy"
+      >
+        <svg v-if="!copied" viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>
+        <svg v-else viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
+        <span>{{ copied ? '已复制' : '复制' }}</span>
+      </button>
+    </div>
+  </Transition>
+</template>
+
+<style scoped>
+.msg-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface, #fff) 92%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(23, 32, 51, 0.1);
+  z-index: 2;
+}
+.msg-actions__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted, #5b6577);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.msg-actions__btn:hover {
+  background: rgba(52, 120, 246, 0.08);
+  color: var(--blue-deep, #1f57cc);
+}
+.msg-actions__btn:active {
+  background: rgba(52, 120, 246, 0.14);
+}
+
+/* Transition */
+.actions-pop-enter-active { transition: opacity 0.15s ease, transform 0.15s cubic-bezier(0.16, 1, 0.3, 1); }
+.actions-pop-leave-active { transition: opacity 0.1s ease, transform 0.1s ease; }
+.actions-pop-enter-from { opacity: 0; transform: scale(0.95) translateY(-2px); }
+.actions-pop-leave-to { opacity: 0; transform: scale(0.97); }
+</style>

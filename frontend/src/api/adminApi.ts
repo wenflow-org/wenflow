@@ -2,6 +2,7 @@
 import axios from 'axios';
 import { setAuthFlashMessage } from '@/utils/authFlash';
 import { clearUserLocalState } from '@/utils/sessionCleanup';
+import { AI_REQUEST_TIMEOUT } from '@/utils/api';
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const ADMIN_SESSION_REQUEST_TIMEOUT_MS = 10000;
 
@@ -935,7 +936,8 @@ export const adminGoalConversationsApi = {
     return adminAxios.delete(`/admin/goal-conversations/${encodeURIComponent(id)}`);
   },
   regeneratePath: async (id: string) => {
-    return adminAxios.post(`/admin/goal-conversations/${encodeURIComponent(id)}/regenerate-path`);
+    // LLM 上游调用（Path 重生成）：放宽到 AI 请求超时
+    return adminAxios.post(`/admin/goal-conversations/${encodeURIComponent(id)}/regenerate-path`, undefined, { timeout: AI_REQUEST_TIMEOUT });
   },
   getStats: async () => {
     return adminAxios.get('/admin/goal-conversations/stats/overview');
@@ -1148,7 +1150,8 @@ export const adminVirtualLearnersApi = {
     /** 样本类型：'student' 生成传统学生样本（课纲/考试节点/学期节奏/家长同伴环境） */
     sampleType?: string;
   }) => {
-    return adminAxios.post('/admin/virtual-learners/generate-persona', data || {});
+    // LLM 上游调用（persona-designer skill）：上游慢/限流时 30s 默认超时不够，放宽到 AI 请求超时
+    return adminAxios.post('/admin/virtual-learners/generate-persona', data || {}, { timeout: AI_REQUEST_TIMEOUT });
   },
 
   getVirtualLearners: async (params?: { page?: number; limit?: number }) => {
@@ -1172,7 +1175,8 @@ export const adminVirtualLearnersApi = {
   },
 
   draftVirtualLearnerStories: async (id: string, data?: { /** 样本类型：'student' 生成传统学生故事 */ sampleType?: string }) => {
-    return adminAxios.post(`/admin/virtual-learners/${id}/draft-stories`, data || {});
+    // LLM 上游调用（scenario-designer skill）：放宽到 AI 请求超时
+    return adminAxios.post(`/admin/virtual-learners/${id}/draft-stories`, data || {}, { timeout: AI_REQUEST_TIMEOUT });
   },
 
   deleteStory: async (profileId: string, storyIndex: number) => {
@@ -1381,6 +1385,17 @@ export const adminVirtualLearnersApi = {
 
   virtualSessionWrapup: async (sessionId: string) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/wrapup`);
+  },
+
+  /* ===== 批量新建（服务端队列） ===== */
+  batchCreateLearners: async (data: { rows: Array<{ name: string; storyCount: number }>; cohort?: string; note?: string }) => {
+    return adminAxios.post('/admin/virtual-learners/batch-create', data);
+  },
+  batchCreateJob: async (batchId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/batch-create/${batchId}`);
+  },
+  batchCreateRetry: async (batchId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/batch-create/${batchId}/retry`);
   },
 
   updateSessionSimulationConfig: async (

@@ -67,6 +67,14 @@
                 <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
                 {{ currentTask.status === 'in_progress' ? '继续当前任务' : '开始学习' }}
               </span>
+              <span
+                v-if="canLearn"
+                class="btn-ghost"
+                title="觉得路径不合适？补充说明后重新生成"
+                @click="openAdjustDialog"
+              >
+                补充说明调整
+              </span>
               <span v-else-if="allDone" class="btn-ghost">全部任务已完成</span>
             </div>
           </div>
@@ -90,9 +98,25 @@
           </div>
         </section>
 
+        <!-- 视图切换 -->
+        <div class="view-toggle">
+          <button
+            type="button"
+            class="view-toggle__btn"
+            :class="{ 'view-toggle__btn--active': viewMode === 'list' }"
+            @click="setView('list')"
+          >📋 列表视图</button>
+          <button
+            type="button"
+            class="view-toggle__btn"
+            :class="{ 'view-toggle__btn--active': viewMode === 'timeline' }"
+            @click="setView('timeline')"
+          >📅 时间线视图</button>
+        </div>
+
         <div class="detail__grid">
-          <!-- 阶段列表 -->
-          <div class="stages">
+          <!-- ===== 列表视图 ===== -->
+          <div v-if="viewMode === 'list'" class="stages">
             <section v-if="!stages.length" class="stages__empty card">
               <span class="kicker">路径准备中</span>
               <strong>还没有阶段与任务</strong>
@@ -145,6 +169,85 @@
             </section>
           </div>
 
+          <!-- ===== 时间线视图 ===== -->
+          <div v-else-if="viewMode === 'timeline'" class="stages tl">
+            <section v-if="!stages.length" class="stages__empty card">
+              <span class="kicker">路径准备中</span>
+              <strong>还没有阶段与任务</strong>
+              <p>阶段与任务生成后，会在这里展示学习计划。请稍后刷新页面查看。</p>
+            </section>
+
+            <!-- 开始节点 -->
+            <div v-if="stages.length" class="tl__start">
+              <span class="tl__node tl__node--start">○</span>
+              <span class="tl__label">开始</span>
+            </div>
+
+            <!-- 阶段节点 -->
+            <div
+              v-for="(stage, si) in stages"
+              :key="stage.id || si"
+              class="tl__stage"
+              :class="`tl__stage--${stageStatus(stage, si)}`"
+            >
+              <!-- 阶段头部 -->
+              <div class="tl__row" @click="toggleTimelineStage(si)">
+                <span class="tl__node tl__node--stage" :class="`tl__node--${stageStatus(stage, si)}`">
+                  <svg v-if="stageStatus(stage, si) === 'done'" viewBox="0 0 24 24" width="10" height="10"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
+                </span>
+                <div class="tl__info">
+                  <div class="tl__head">
+                    <strong class="tl__title">阶段{{ stageNo(stage, si) }}: {{ stage.title }}</strong>
+                    <span v-if="stageStatus(stage, si) === 'done'" class="tl__badge tl__badge--done">✅ 已完成</span>
+                    <span v-else-if="stageStatus(stage, si) === 'current'" class="tl__badge tl__badge--current">🔄 进行中</span>
+                    <span v-else class="tl__badge tl__badge--locked">🔒 待解锁</span>
+                  </div>
+                  <small class="tl__desc">{{ stage.goal || stage.description }}</small>
+                  <div class="tl__prog-bar">
+                    <div class="tl__prog-fill" :style="{ width: stagePercent(stage) + '%' }"></div>
+                  </div>
+                  <small class="tl__prog-text">{{ stageDoneCount(stage) }} / {{ stageTasks(stage).length }} 完成</small>
+                </div>
+                <span class="tl__chev" :class="{ 'tl__chev--open': timelineOpenStages.includes(si) }">⌄</span>
+              </div>
+
+              <!-- 任务列表 -->
+              <div class="tl__tasks" :class="{ 'tl__tasks--open': timelineOpenStages.includes(si) }">
+                <div class="tl__tasks-inner">
+                  <div
+                    v-for="task in stageTasks(stage)"
+                    :key="task.id"
+                    class="tl__task"
+                    :class="`tl__task--${taskCls(task)}`"
+                    @click="onTaskClick(task)"
+                  >
+                    <span class="tl__task-connector"></span>
+                    <span class="tl__task-dot" :class="`tl__task-dot--${taskCls(task)}`">
+                      <svg v-if="task.status === 'completed'" viewBox="0 0 24 24" width="8" height="8"><path fill="#fff" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
+                      <span v-else-if="taskCls(task) === 'current'" class="tl__task-spinner"></span>
+                    </span>
+                    <div class="tl__task-body">
+                      <strong>{{ task.title || task.displayLabel }}</strong>
+                      <small>{{ taskKindText(task) }} · {{ task.estimatedMinutes || '—' }}分钟</small>
+                    </div>
+                    <span class="tl__task-status">
+                      <template v-if="task.status === 'completed'">✅</template>
+                      <template v-else-if="taskCls(task) === 'current'">🔄 ← 当前</template>
+                      <template v-else-if="taskCls(task) === 'locked'">🔒</template>
+                      <template v-else>○ 待开始</template>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 完成节点 -->
+            <div v-if="stages.length" class="tl__end" :class="{ 'tl__end--done': allDone }">
+              <span class="tl__node tl__node--end" :class="{ 'tl__node--end-done': allDone }">{{ allDone ? '✓' : '○' }}</span>
+              <span class="tl__label" :class="{ 'tl__label--done': allDone }">完成</span>
+            </div>
+          </div>
+
           <!-- 侧栏 -->
           <aside class="side">
             <section v-if="!stages.length" class="card sidecard">
@@ -188,6 +291,36 @@
       </template>
     </main>
 
+    <!-- 补充说明调整弹窗 -->
+    <div v-if="adjustDialogOpen" class="adjust-dialog-mask" @click.self="adjustDialogOpen = false">
+      <div class="adjust-dialog card">
+        <h3 class="adjust-dialog__title">补充说明调整路径</h3>
+        <p class="adjust-dialog__desc">
+          觉得路径不合适？说说哪里需要调整（节奏、难度、阶段顺序、范围等）。已完成的内容会保留，未开始的部分会按你的说明重新规划。
+        </p>
+        <textarea
+          v-model="adjustText"
+          class="adjust-dialog__textarea"
+          rows="4"
+          maxlength="500"
+          placeholder="例如：第二阶段太难了，先补一下基础再进入；整体节奏想放慢一些……"
+        ></textarea>
+        <div class="adjust-dialog__actions">
+          <button type="button" class="btn-ghost" :disabled="adjusting" @click="adjustDialogOpen = false">取消</button>
+          <button
+            type="button"
+            class="btn-primary"
+            :class="{ 'btn-primary--off': adjusting }"
+            :disabled="adjusting || !adjustText.trim()"
+            @click="submitAdjust"
+          >
+            <span v-if="adjusting" class="spinner spinner--sm"></span>
+            {{ adjusting ? '正在调整…' : '确认调整' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- AI 生成提示 + 页脚：一起沉底 -->
     <div class="detail__foot">
       <div class="detail__ai-note">
@@ -207,7 +340,6 @@ import { toast } from '@/utils/toast';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
-import './v2.css';
 
 const route = useRoute();
 const router = useRouter();
@@ -219,6 +351,35 @@ const loading = ref(true);
 const loadError = ref(false);
 const retrying = ref(false);
 const openStages = ref<number[]>([]);
+
+/* ---------- 视图切换 ---------- */
+const viewMode = ref<'list' | 'timeline'>((() => {
+  try { return (localStorage.getItem('v2_path_view') || 'list') as 'list' | 'timeline'; } catch { return 'list'; }
+})());
+const timelineOpenStages = ref<number[]>([]);
+
+function setView(mode: 'list' | 'timeline') {
+  viewMode.value = mode;
+  try { localStorage.setItem('v2_path_view', mode); } catch { /* ignore */ }
+}
+
+function toggleTimelineStage(si: number) {
+  const i = timelineOpenStages.value.indexOf(si);
+  if (i >= 0) timelineOpenStages.value.splice(i, 1);
+  else timelineOpenStages.value.push(si);
+}
+
+function stagePercent(stage: Record<string, any>): number {
+  const tasks = stageTasks(stage);
+  if (!tasks.length) return 0;
+  return Math.round((tasks.filter(t => t.status === 'completed').length / tasks.length) * 100);
+}
+
+function onTaskClick(task: Record<string, any>) {
+  const cls = taskCls(task);
+  if (cls === 'locked') return;
+  goLearn(task.id);
+}
 
 const pathTitle = computed(() => path.value?.title || path.value?.name || '');
 
@@ -237,6 +398,11 @@ async function load(silent = false) {
     // 默认展开：第一个未完成的阶段 + 当前阶段
     const idx = stages.value.findIndex((s) => stageStatusRaw(s) !== 'done');
     openStages.value = idx >= 0 ? [...new Set([Math.max(0, idx - 1), idx])] : stages.value.map((_, i) => i);
+    // 时间线视图：展开已完成 + 当前阶段
+    timelineOpenStages.value = stages.value
+      .map((s, i) => ({ s, i }))
+      .filter(({ s, i }) => stageStatus(s, i) === 'done' || stageStatus(s, i) === 'current')
+      .map(({ i }) => i);
   } catch {
     if (!silent) loadError.value = true;
   } finally {
@@ -293,6 +459,44 @@ async function doRetry() {
     toast.error('重新生成失败，请稍后再试');
   } finally {
     retrying.value = false;
+  }
+}
+
+/* ---------- 补充说明调整 ---------- */
+const adjustDialogOpen = ref(false);
+const adjustText = ref('');
+const adjusting = ref(false);
+
+function openAdjustDialog() {
+  adjustText.value = '';
+  adjustDialogOpen.value = true;
+}
+
+async function submitAdjust() {
+  const t = adjustText.value.trim();
+  if (!t || adjusting.value) return;
+  adjusting.value = true;
+  try {
+    const res = await learningAPI.regeneratePath(pathId.value, t) as unknown as { message?: string; data?: any };
+    adjustDialogOpen.value = false;
+    const status = res?.data?.status;
+    if (status === 'redesigned-stage') {
+      toast.success(res?.message || '已按你的补充说明调整后续阶段');
+      // 重设计是异步的，稍后刷新看到新任务
+      setTimeout(() => { load(true); }, 1500);
+    } else if (status === 'awaiting-confirmation') {
+      toast.info('调整方案已生成，需在路径页确认后生效');
+    } else {
+      // regenerating：整路径重建，进入轮询
+      toast.success(res?.message || '正在按你的补充说明重新生成');
+      schedulePoll();
+      setTimeout(() => { load(true); }, 1500);
+    }
+  } catch (err: any) {
+    const msg = err?.response?.data?.error?.message || err?.message || '调整失败，请稍后再试';
+    toast.error(msg);
+  } finally {
+    adjusting.value = false;
   }
 }
 
@@ -490,7 +694,7 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
 .metric {
   display: grid; gap: 2px;
   padding: 9px 14px;
-  background: #f7faff; border: 1px solid #e8eefb;
+  background: var(--canvas, #f7faff); border: 1px solid var(--line, #e8eefb);
   border-radius: 12px;
   font-size: 11.5px; color: var(--faint);
 }
@@ -507,7 +711,7 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
 .btn-primary--block { justify-content: center; width: 100%; }
 .btn-ghost {
   padding: 10px 18px; border-radius: 12px;
-  border: 1px solid var(--line); background: #fff;
+  border: 1px solid var(--line); background: var(--surface, #fff);
   font-size: 14px; font-weight: 700; color: var(--muted);
   cursor: pointer;
 }
@@ -617,7 +821,7 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
 .sidecard--current { border-color: rgba(52, 120, 246, 0.3); }
 .tag {
   padding: 4px 10px; border-radius: 999px;
-  background: #f1f5fb; border: 1px solid var(--line);
+  background: var(--line, #f1f5fb); border: 1px solid var(--line);
   font-size: 11.5px; font-weight: 600; color: var(--muted);
 }
 .tag--blue { background: rgba(52, 120, 246, 0.09); border-color: rgba(52, 120, 246, 0.3); color: var(--blue-deep); }
@@ -657,7 +861,7 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
 .genbar__text p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
 .objectives {
   margin: 0 0 8px; padding: 10px 12px 10px 28px;
-  background: #f7faff; border: 1px solid #e8eefb; border-radius: 10px;
+  background: var(--canvas, #f7faff); border: 1px solid var(--line, #e8eefb); border-radius: 10px;
   display: grid; gap: 4px;
 }
 .objectives li { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
@@ -672,5 +876,332 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+</style>
+
+<style scoped>
+/* ===== 视图切换按钮 ===== */
+.view-toggle {
+  display: flex; gap: 4px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e4e9f2);
+  border-radius: 12px;
+  padding: 4px;
+  width: fit-content;
+}
+.view-toggle__btn {
+  padding: 8px 16px;
+  border: none; border-radius: 9px;
+  background: transparent;
+  font-size: 13px; font-weight: 600;
+  color: var(--muted, #5b6577);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+}
+.view-toggle__btn:hover { color: var(--ink, #172033); background: var(--line, #f1f5fb); }
+.view-toggle__btn--active {
+  background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #2563eb));
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(52, 120, 246, 0.25);
+}
+
+/* ===== 时间线容器 ===== */
+.tl {
+  position: relative;
+  display: flex; flex-direction: column;
+  gap: 0;
+  padding: 0 0 0 8px;
+}
+
+/* 垂直时间线连接线 */
+.tl::before {
+  content: '';
+  position: absolute;
+  left: 19px; top: 16px; bottom: 16px;
+  width: 2px;
+  background: var(--line, #e4e9f2);
+  border-radius: 1px;
+}
+
+/* ===== 开始 / 完成端点 ===== */
+.tl__start, .tl__end {
+  display: flex; align-items: center; gap: 12px;
+  padding: 6px 0;
+  position: relative; z-index: 1;
+}
+.tl__node {
+  width: 12px; height: 12px; border-radius: 50%;
+  display: grid; place-items: center;
+  flex-shrink: 0;
+  font-size: 10px; line-height: 1;
+}
+.tl__node--start {
+  border: 2px solid var(--blue, #3478f6);
+  background: var(--surface, #fff);
+  color: var(--blue, #3478f6);
+}
+.tl__node--end {
+  border: 2px solid var(--faint, #b0b8c8);
+  background: var(--surface, #fff);
+  color: var(--faint, #b0b8c8);
+  font-size: 9px;
+}
+.tl__node--end-done {
+  border-color: var(--green, #31b16f);
+  background: var(--green, #31b16f);
+  color: #fff;
+}
+.tl__label {
+  font-size: 13px; font-weight: 700;
+  color: var(--muted, #5b6577);
+}
+.tl__label--done { color: var(--green, #31b16f); }
+
+/* ===== 阶段节点 ===== */
+.tl__stage {
+  position: relative; z-index: 1;
+  padding: 4px 0;
+}
+.tl__row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.tl__row:hover { background: rgba(52, 120, 246, 0.04); }
+
+/* 阶段圆形节点 */
+.tl__node--stage {
+  width: 14px; height: 14px; border-radius: 50%;
+  margin-top: 3px;
+  flex-shrink: 0;
+  transition: box-shadow 0.3s, border-color 0.3s, background 0.3s;
+}
+.tl__node--done {
+  border: none;
+  background: var(--blue, #3478f6);
+  color: #fff;
+}
+.tl__node--current {
+  border: 3px solid var(--blue, #3478f6);
+  background: var(--surface, #fff);
+  box-shadow: 0 0 0 4px rgba(52, 120, 246, 0.18);
+  animation: tl-pulse 2s ease-in-out infinite;
+}
+.tl__node--todo {
+  border: 2px solid var(--faint, #b0b8c8);
+  background: var(--surface, #fff);
+  color: var(--faint, #b0b8c8);
+}
+
+@keyframes tl-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(52, 120, 246, 0.18); }
+  50%      { box-shadow: 0 0 0 8px rgba(52, 120, 246, 0.08); }
+}
+
+/* 阶段信息区 */
+.tl__info { flex: 1; min-width: 0; }
+.tl__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tl__title { font-size: 14.5px; color: var(--ink, #172033); }
+.tl__desc { display: block; margin-top: 2px; font-size: 12.5px; color: var(--faint, #b0b8c8); line-height: 1.5; }
+
+/* 状态徽章 */
+.tl__badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+  white-space: nowrap;
+}
+.tl__badge--done { background: rgba(49, 177, 111, 0.1); color: #1d7a4c; }
+.tl__badge--current { background: rgba(52, 120, 246, 0.1); color: var(--blue-deep, #2563eb); }
+.tl__badge--locked { background: var(--line, #f1f5fb); color: var(--muted, #5b6577); }
+
+/* 进度条 */
+.tl__prog-bar {
+  margin-top: 8px;
+  height: 4px; border-radius: 2px;
+  background: var(--line, #e4e9f2);
+  overflow: hidden;
+}
+.tl__prog-fill {
+  height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, var(--blue, #3478f6), var(--blue-deep, #2563eb));
+  transition: width 0.4s ease;
+}
+.tl__prog-text {
+  display: block; margin-top: 4px;
+  font-size: 11.5px; color: var(--faint, #b0b8c8);
+}
+
+/* 展开/折叠箭头 */
+.tl__chev {
+  margin-top: 4px;
+  color: var(--faint, #b0b8c8);
+  font-size: 14px;
+  transition: transform 0.18s ease;
+  flex-shrink: 0;
+}
+.tl__chev--open { transform: rotate(180deg); }
+
+/* 左边框：已完成/进行中蓝色，待解锁灰色 */
+.tl__stage--done .tl__row,
+.tl__stage--current .tl__row {
+  border-left: 3px solid var(--blue, #3478f6);
+  margin-left: 13px; padding-left: 11px;
+}
+.tl__stage--todo .tl__row {
+  border-left: 3px solid var(--faint, #b0b8c8);
+  margin-left: 13px; padding-left: 11px;
+}
+
+/* ===== 任务列表（可展开） ===== */
+.tl__tasks {
+  display: grid; grid-template-rows: 0fr;
+  transition: grid-template-rows 0.32s cubic-bezier(0.32, 0.72, 0.24, 1);
+}
+.tl__tasks--open { grid-template-rows: 1fr; }
+.tl__tasks-inner {
+  overflow: hidden; min-height: 0;
+  padding-left: 32px;
+  display: grid; gap: 2px;
+}
+
+/* 单个任务行 */
+.tl__task {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+  position: relative;
+}
+.tl__task:hover { background: rgba(52, 120, 246, 0.04); }
+.tl__task--locked { opacity: 0.55; cursor: not-allowed; }
+
+/* 任务连接线 */
+.tl__task-connector {
+  position: absolute;
+  left: -8px; top: 0; bottom: 0;
+  width: 2px;
+  background: var(--line, #e4e9f2);
+}
+
+/* 任务节点圆点 */
+.tl__task-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  display: grid; place-items: center;
+  flex-shrink: 0;
+  position: relative; z-index: 1;
+}
+.tl__task-dot--completed {
+  background: var(--green, #31b16f);
+}
+.tl__task-dot--current {
+  background: var(--blue, #3478f6);
+  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.2);
+  animation: tl-dot-pulse 1.5s ease-in-out infinite;
+}
+.tl__task-dot--todo {
+  border: 2px dashed #cfdaee;
+  background: var(--surface, #fff);
+}
+.tl__task-dot--locked {
+  background: var(--faint, #b0b8c8);
+  opacity: 0.4;
+}
+
+@keyframes tl-dot-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.2); }
+  50%      { box-shadow: 0 0 0 6px rgba(52, 120, 246, 0.08); }
+}
+
+/* 任务文本 */
+.tl__task-body { flex: 1; min-width: 0; }
+.tl__task-body strong { display: block; font-size: 13px; color: var(--ink, #172033); }
+.tl__task-body small { display: block; margin-top: 1px; font-size: 11.5px; color: var(--faint, #b0b8c8); }
+
+/* 任务状态标签 */
+.tl__task-status {
+  font-size: 11px; font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 旋转指示器 */
+.tl__task-spinner {
+  display: block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--blue, #3478f6);
+  animation: tl-spin 1s linear infinite;
+}
+
+@keyframes tl-spin {
+  0%   { box-shadow: 0 0 0 0 var(--blue, #3478f6); }
+  50%  { box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.3); }
+  100% { box-shadow: 0 0 0 0 var(--blue, #3478f6); }
+}
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 900px) {
+  .view-toggle { width: 100%; }
+  .view-toggle__btn { flex: 1; text-align: center; font-size: 12.5px; }
+  .tl__row { padding: 8px 10px; gap: 10px; }
+  .tl__title { font-size: 13.5px; }
+  .tl__badge { font-size: 10px; padding: 2px 6px; }
+  .tl__tasks-inner { padding-left: 24px; }
+  .tl__task-status { font-size: 10px; }
+}
+
+/* ===== 补充说明调整弹窗 ===== */
+.adjust-dialog-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(10, 20, 40, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.adjust-dialog {
+  width: 100%;
+  max-width: 480px;
+  padding: 22px 24px;
+}
+.adjust-dialog__title {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+.adjust-dialog__desc {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #5a6b85;
+}
+.adjust-dialog__textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: 10px 12px;
+  border: 1px solid #d9e1ee;
+  border-radius: 8px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  resize: vertical;
+  background: #fff;
+  color: #1c2b45;
+  box-sizing: border-box;
+}
+.adjust-dialog__textarea:focus {
+  outline: none;
+  border-color: #3478f6;
+}
+.adjust-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
 }
 </style>

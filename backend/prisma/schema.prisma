@@ -657,13 +657,15 @@ model memory_traces {
   // SM-2 式间隔递增因子：复习成功 ×2（上限在计算侧 clamp 32），初始 1
   intervalFactor  Float     @default(1)
   lastRetention   Float?
-  source          String?   // derived（从 knowledgeState 确定性映射）| model（LLM 评估，预留）
+  source          String?   // derived（从 knowledgeState 确定性映射）| model（LLM 评估，预留）| review-event
+  dueAt           DateTime? // 下次到期时间（FSRS/调度物化列；null 走旧惰性 isReviewDue 兜底）
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   @@unique([userId, conceptKey])
   @@index([userId, lastSeenAt])
   @@index([userId, stability])
+  @@index([userId, dueAt])
 }
 
 model user_agent_configs {
@@ -788,6 +790,10 @@ model users {
   createdAt                 DateTime                   @default(now())
   updatedAt                 DateTime
   lastLoginAt               DateTime?
+  streakDays                Int                        @default(0)
+  streakLastDate            DateTime?
+  longestStreak             Int                        @default(0)
+  onboardingCompleted       Boolean                    @default(false)
   dashboardGuidanceSnapshot String?
   learningStateRevision     Int                        @default(0)
   achievements              achievements[]
@@ -1090,4 +1096,30 @@ model batch_experiment_runs {
 
   @@index([experimentId])
   @@index([status])
+}
+
+// 批量新建虚拟学习者后台任务（服务端队列：创建人 + 后台逐个生成身份/故事；
+// 前端只提交并轮询进度，刷新/切页不影响任务执行）
+model virtual_batch_jobs {
+  id           String   @id @default(uuid())
+  kind         String   @default("create-learners")
+  status       String   @default("running") // running / done / error
+  total        Int      @default(0) // 总人数
+  created      Int      @default(0) // 已创建人数
+  totalStories Int      @default(0) // 总故事数
+  storiesDone  Int      @default(0) // 已完成故事数
+  personaLeft  Int      @default(0) // 剩余待生成身份人数
+  queue        String? // JSON: [{ profileId, name, storyCount, needsPersona }]
+  failed       String? // JSON: 失败项数组
+  error        String?
+  cohort       String? // 人群描述（可选）
+  note         String? // 批次备注（可选）
+  createdBy    String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
 }

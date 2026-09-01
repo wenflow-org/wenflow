@@ -22,6 +22,7 @@ export const lessonKnowledgeEnricherDefinition: SkillDefinition = {
   inputSchema: {
     type: 'object',
     properties: {
+      transferGoal: { type: 'string', description: '任务的可迁移目标（task.transferable 派生，可空）：本课迁移意图的锚点，用于判断迁移信号是否与该意图相关' },
       knowledgeState: { type: 'array', description: '当前课堂知识状态', required: true },
       knowledgeDelta: { type: 'object', description: '课堂知识变化量' },
       wrapup: { type: 'object', description: '课堂总结与评估' },
@@ -46,6 +47,8 @@ export const lessonKnowledgeEnricherDefinition: SkillDefinition = {
 };
 
 export interface LessonKnowledgeEnricherInput {
+  /** 任务的可迁移目标（task.transferable 派生）：迁移信号的意图锚点，可为 null */
+  transferGoal?: string | null;
   knowledgeState: Array<{ name: string; status: 'pending' | 'learning' | 'mastered' | 'review'; progress: number }>;
   knowledgeDelta?: {
     newlyMastered?: string[];

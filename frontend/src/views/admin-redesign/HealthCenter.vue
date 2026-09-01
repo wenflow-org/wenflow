@@ -8,14 +8,20 @@
         技能 {{ global.total }} · 上线 {{ completionLive }}/{{ reconciliation.total }} · {{ displayReport.generatedAt ? '更新于 ' + timeAgo(displayReport.generatedAt) : '' }}
       </span>
       <span class="mk-badge" :class="topAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'" v-if="displayReport" :title="badgeTitle">{{ topAbnormal > 0 ? `异常 ${topAbnormal}` : '全部健康' }}</span>
-      <span class="mk-status__spacer"></span>
-      <button type="button" class="mk-status__action" :disabled="loading" @click="refresh(true)">{{ loading ? '检测中…' : '刷新' }}</button>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action" :disabled="loading" @click="refresh(true)">{{ loading ? '检测中…' : '刷新' }}</button>
+      </span>
     </div>
 
-    <div v-if="failed" class="wb-failed"><span>加载失败：{{ errorText }}</span> <button type="button" class="mk-status__action" :disabled="loading" @click="refresh(true)">重试</button></div>
+    <div v-if="failed" class="mk-empty mk-empty--min">
+      <span class="mk-empty__icon" aria-hidden="true">◌</span>
+      <strong>健康报告加载失败</strong>
+      <span>{{ errorText }}</span>
+      <button type="button" class="mk-empty__action" :disabled="loading" @click="refresh(true)">{{ loading ? '重试中…' : '重试' }}</button>
+    </div>
 
     <template v-if="displayReport">
-      <!-- 四张概要卡片 -->
+      <!-- 四张概要卡片（MkKpi 统一形态：数字 + 标签 + 副行，可点击跳转锚点） -->
       <div class="hc-summary">
         <button type="button" class="hc-card" :class="healthAbnormal > 0 ? 'hc-card--warn' : 'hc-card--ok'" @click="scrollTo('health')" :title="`${displayReport.health.summary.total} 项健康检查，${healthAbnormal} 项异常`">
           <span class="hc-card__num">{{ displayReport.health.summary.total }}</span>
@@ -61,8 +67,8 @@
                 <span v-if="item.detail.length" class="hc-check__caret">{{ detailOpen(item.id) ? '▾' : '▸' }}</span>
               </button>
               <span class="hc-check__actions">
-                <button v-if="item.action === 'fixable' && item.severity !== 'ok'" type="button" class="hc-check__btn" :disabled="fixingId === item.id" @click="fix(item.id)">{{ fixingId === item.id ? '修复中…' : '修复' }}</button>
-                <button v-else-if="item.action === 'manual' && item.severity !== 'ok'" type="button" class="hc-check__btn" @click="jump(item.id)">查看 →</button>
+                <button v-if="item.action === 'fixable' && item.severity !== 'ok'" type="button" class="mk-btn mk-btn--sm" :disabled="fixingId === item.id" @click="fix(item.id)">{{ fixingId === item.id ? '修复中…' : '修复' }}</button>
+                <button v-else-if="item.action === 'manual' && item.severity !== 'ok'" type="button" class="mk-btn mk-btn--sm" @click="jump(item.id)">查看 →</button>
               </span>
               <div v-if="detailOpen(item.id) && item.detail.length" class="hc-check__detail">
                 <p v-for="(d, i) in visibleDetail(item)" :key="i">{{ d }}</p>
@@ -411,26 +417,32 @@ defineExpose({ refresh })
 </script>
 
 <style scoped>
-/* 概要卡片 */
-.hc-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+/* 概要卡片（MkKpi 同形态：数字 + 标签 + 副行，点击跳转锚点） */
+.hc-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 /* 滚动锚点（技能对账外层：组件自身即卡，这里只留定位不留卡盒） */
 .hc-anchor { scroll-margin-top: 14px; }
-.hc-card { display: grid; gap: 4px; padding: 18px 16px; border-radius: 10px; border: 1px solid var(--mk-line); background: var(--mk-surface); text-align: center; cursor: pointer; font: inherit; transition: border-color 0.12s ease, box-shadow 0.12s ease; }
-.hc-card:hover { border-color: rgba(44,99,208,0.3); }
+.hc-card {
+  display: grid; gap: 4px; padding: 14px 16px;
+  border-radius: 12px; border: 1px solid #e8edf6;
+  background: var(--mk-surface);
+  text-align: left; cursor: pointer; font: inherit;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+}
+.hc-card:hover { border-color: rgba(44,99,208,0.5); transform: translateY(-1px); }
 .hc-card--ok { border-color: rgba(21,128,61,0.2); }
-.hc-card--warn { border-color: rgba(220,38,38,0.25); background: #fefafa; }
-.hc-card__num { font-size: 30px; font-weight: 800; line-height: 1; }
+.hc-card--warn { border-color: rgba(220,38,38,0.25); }
+.hc-card__num { font-size: 22px; font-weight: 800; line-height: 1.25; font-variant-numeric: tabular-nums; }
 .hc-card--ok .hc-card__num { color: var(--mk-green); }
 .hc-card--warn .hc-card__num { color: var(--mk-red); }
-.hc-card__label { font-size: 12px; font-weight: 700; color: var(--mk-ink); }
-.hc-card__sub { font-size: 11px; color: var(--mk-faint); }
+.hc-card__label { font-size: 12px; font-weight: 700; color: var(--mk-faint); }
+.hc-card__sub { font-size: 11px; color: var(--mk-muted); }
 
 /* 可折叠 */
 .hc-details__summary { cursor: pointer; user-select: none; list-style: none; }
 .hc-details__summary::-webkit-details-marker { display: none; }
 
 /* 健康检查行 */
-.hc-check { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; padding: 0 16px; border-bottom: 1px solid #f3f4f6; }
+.hc-check { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; padding: 0 16px; border-bottom: 1px solid var(--mk-line); }
 .hc-check:last-child { border-bottom: none; }
 .hc-check__row { display: flex; align-items: center; gap: 10px; padding: 10px 0; min-width: 0; background: none; border: 0; font: inherit; text-align: left; cursor: pointer; }
 .hc-check__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
@@ -442,12 +454,9 @@ defineExpose({ refresh })
 .hc-check__main strong { font-size: 12.5px; }
 .hc-check__main span { font-size: 11px; color: var(--mk-faint); }
 .hc-check__num { font-size: 13px; font-weight: 800; color: var(--mk-ink); min-width: 30px; text-align: right; }
-.hc-check__sem { font-size: 10.5px; color: var(--mk-faint); background: #f3f4f6; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.hc-check__sem { font-size: 10.5px; color: var(--mk-muted); background: var(--mk-line); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
 .hc-check__caret { color: var(--mk-faint); font-size: 10px; }
 .hc-check__actions { display: flex; align-items: center; }
-.hc-check__btn { border: 1px solid var(--mk-line); border-radius: 6px; background: #fff; padding: 3px 10px; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; color: var(--mk-blue); white-space: nowrap; }
-.hc-check__btn:hover { border-color: var(--mk-blue); }
-.hc-check__btn:disabled { opacity: 0.5; }
 .hc-check__detail { grid-column: 1 / -1; padding: 0 0 10px 18px; display: grid; gap: 4px; }
 .hc-check__detail p { margin: 0; font-family: var(--mk-mono); font-size: 11px; line-height: 1.5; color: var(--mk-muted); overflow-wrap: anywhere; }
 .hc-check__detail-more { color: var(--mk-amber) !important; }
@@ -463,7 +472,7 @@ defineExpose({ refresh })
 
 /* 漂移 */
 .hc-drift { padding: 8px 0; }
-.hc-drift__item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #f3f4f6; flex-wrap: wrap; }
+.hc-drift__item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--mk-line); flex-wrap: wrap; }
 .hc-drift__item:last-child { border-bottom: none; }
 .hc-drift__item strong { font-size: 12.5px; }
 .hc-drift__hint { font-size: 10.5px; color: var(--mk-faint); width: 100%; padding-left: 0; }
@@ -472,7 +481,7 @@ defineExpose({ refresh })
 .hc-completion { display: grid; gap: 8px; padding: 14px 16px; }
 .hc-completion__bar { display: flex; align-items: center; gap: 10px; }
 .hc-completion__label { font-size: 11px; font-weight: 700; width: 100px; flex-shrink: 0; color: var(--mk-muted); }
-.hc-completion__track { flex: 1; height: 8px; border-radius: 4px; background: #f3f4f6; overflow: hidden; }
+.hc-completion__track { flex: 1; height: 8px; border-radius: 4px; background: var(--mk-line); overflow: hidden; }
 .hc-completion__track i { display: block; height: 100%; border-radius: 4px; transition: width 0.3s ease; }
 .hc-completion__fill--draft { background: #cbd5e1; }
 .hc-completion__fill--handler-ready { background: #93c5fd; }
@@ -481,13 +490,48 @@ defineExpose({ refresh })
 .hc-completion__fill--live { background: var(--mk-green); }
 .hc-completion__num { font-size: 12px; font-weight: 800; min-width: 30px; text-align: right; }
 
-@media (max-width: 700px) { .hc-summary { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 700px) { .hc-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* 4K：概要卡/检查行/完成度条跟随全站节奏 */
+@media (min-width: 2000px) {
+  .hc-card { padding: 16px 19px; }
+  .hc-card__num { font-size: 25px; }
+  .hc-card__label { font-size: 13.5px; }
+  .hc-card__sub { font-size: 12.5px; }
+  .hc-check__main strong { font-size: 14px; }
+  .hc-check__main span, .hc-check__sem { font-size: 12.5px; }
+  .hc-check__num { font-size: 14.5px; }
+  .hc-drift__item strong { font-size: 14px; }
+  .hc-completion__label { font-size: 12.5px; }
+  .hc-completion__num { font-size: 13.5px; }
+}
+@media (min-width: 2800px) {
+  .hc-card { padding: 19px 22px; }
+  .hc-card__num { font-size: 29px; }
+  .hc-card__label { font-size: 16px; }
+  .hc-card__sub { font-size: 14.5px; }
+  .hc-check__main strong { font-size: 16.5px; }
+  .hc-check__main span, .hc-check__sem { font-size: 14.5px; }
+  .hc-check__num { font-size: 17px; }
+  .hc-drift__item strong { font-size: 16.5px; }
+  .hc-completion__label { font-size: 14.5px; }
+  .hc-completion__num { font-size: 16px; }
+}
+@media (min-width: 3600px) {
+  .hc-card { padding: 22px 26px; }
+  .hc-card__num { font-size: 34px; }
+  .hc-card__label { font-size: 18.5px; }
+  .hc-card__sub { font-size: 17px; }
+  .hc-check__main strong { font-size: 19.5px; }
+  .hc-check__main span, .hc-check__sem { font-size: 17px; }
+  .hc-check__num { font-size: 20px; }
+  .hc-drift__item strong { font-size: 19.5px; }
+  .hc-completion__label { font-size: 17px; }
+  .hc-completion__num { font-size: 18.5px; }
+}
 
 /* ================= 暗色模式（D1 补完）：健康中心 ================= */
 html[data-theme='dark'] {
-  .hc-card--warn { background: #241a1a; border-color: rgba(248, 113, 113, 0.25); }
-  .hc-check__sem { background: #253049; }
-  .hc-check__btn { background: #17202f; }
-  .hc-completion__track { background: #232f45; }
+  .hc-card--warn { border-color: rgba(248, 113, 113, 0.25); }
 }
 </style>

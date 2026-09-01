@@ -33,9 +33,14 @@ inputs:
     type: object?
     ref: sandbox:path.replan
     desc: 路径重调上下文（模式/触发来源/冻结任务/学习者投影）
+  - name: adjustments
+    type: string?
+    ref: sandbox:path.normalizedInput.understanding.adjustments
+    desc: 用户侧补充说明（path 页面"补充说明重新生成"）：用户明确说哪里不合适，重规划时最高优先级输入
 rules:
-  - 输入：标签化纯文本（非 JSON），分区含原始学习目标/学习主题/目标水平/具体应用场景/学习重点/可用时间/总学习周期（周）/用户确认的方案轮廓/路径前置清洗结果（normalizedInput JSON）/完整对话历史/【路径重调模式】/【强制要求】
+  - 输入：标签化纯文本（非 JSON），分区含原始学习目标/学习主题/目标水平/具体应用场景/学习重点/可用时间/总学习周期（周）/用户确认的方案轮廓/路径前置清洗结果（normalizedInput JSON）/完整对话历史/【路径重调模式】/用户补充说明/【强制要求】
   - normalizedInput 是路径生成的主真相源，由编排层（learning.service / coordinator）确定性定帧后通过【路径前置清洗结果】JSON 分区注入（原 skill:path-scene-framing 已移除，不再经过 LLM 清洗）；未提供时以标签文本分区和对话历史为准
+  - 如果提供了用户补充说明（normalizedInput.understanding.adjustments）：这是用户对当前路径不满意之处的直接陈述，优先级高于原目标表述；重新规划时必须针对补充说明调整路径结构（如节奏、难度、阶段顺序、范围），并在 milestone 设计中体现调整意图；补充说明与已确认方案冲突时，以补充说明为准
   - normalizedInput.confirmedProposal（或标签分区的"用户确认的方案轮廓"）是用户已确认方向，必须优先遵守，尤其是 learningDirection、firstDeliverable、keyStages、outOfScope
   - normalizedInput.successCriteria 如果存在 observableResult 或 acceptanceCheck，必须用于约束里程碑目标与任务完成标准
   - normalizedInput.planningHints 如果存在，是上游对路径节奏的建议范围，优先用于决定概念数、milestone 数、周期上限；若缺失再使用默认范围

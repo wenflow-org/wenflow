@@ -150,7 +150,7 @@ flowchart TD
 |------|------|
 | **前端** | Vue 3 + TypeScript + Vite 6 + Element Plus + Pinia |
 | **后端** | Node.js + Express + TypeScript + Prisma |
-| **数据库（当前）** | SQLite（主库 36 表 + system 库 16 表，双库架构） |
+| **数据库（当前）** | SQLite（主库 43 表 + system 库 14 表，双库架构） |
 | **AI 接入** | OpenAI 兼容模型网关（默认 DeepSeek：deepseek-v4-flash / v4-pro / r1），支持 SSE 流式、重试预算、thinking mode 控制 |
 | **Agent / Skill 编排** | EduClaw Gateway + 5 个顶层 Agent（goal/path/teaching/profile/simulation，无 prompt 编排器）/ Skill 执行层（prompts/core 真源 → 编译产物 → DB 镜像）+ Coordinators + Durable Outbox 事件链 |
 | **模型配置分层** | 环境变量 → 平台默认 → Agent/Skill 级 → 用户自定义 API / 模型覆盖 |

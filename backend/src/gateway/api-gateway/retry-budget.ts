@@ -36,7 +36,8 @@ export const RETRY_BUDGET_HARD_LIMITS = {
   maxTransportRetries: 5,
   maxLogicalRetries: 5,
   minRequestTimeoutMs: 10_000,
-  maxRequestTimeoutMs: 300_000,
+  // 上游响应慢：硬上限从 5 分钟放宽到 10 分钟（2026-08-30）
+  maxRequestTimeoutMs: 600_000,
   minRetryBaseDelayMs: 100,
   maxRetryBaseDelayMs: 5_000,
   maxRetryAfterMs: 10_000

@@ -115,7 +115,7 @@ export class LearningDecisionFeedService {
       });
     }
 
-    // ---------- 2. 路径版本调整（replan 已发生的决策） ----------
+    // ---------- 2. 路径调整（replan 已发生的决策） ----------
     const replanned = (input.paths || [])
       .filter((path) => path.replanReason && String(path.replanReason).trim())
       .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
@@ -125,7 +125,7 @@ export class LearningDecisionFeedService {
         kind: 'path-replanned',
         captured: `路径「${path.title || '学习路径'}」完成了一次调整`,
         judgment: String(path.replanReason),
-        action: '已基于当前证据生成新的路径版本，已完成的内容不受影响',
+        action: '已按当前证据调整后续阶段安排，已完成的内容不受影响',
         priority: 'medium',
         at: toIso(path.updatedAt)
       });

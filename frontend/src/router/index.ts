@@ -49,6 +49,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '找回密码' }
   },
   {
+    path: '/onboarding',
+    name: 'V2Onboarding',
+    component: () => import('@/views/v2/V2Onboarding.vue'),
+    meta: { title: '开始使用', requiresAuth: true }
+  },
+  {
     path: '/dashboard',
     name: 'V2Dashboard',
     component: () => import('@/views/v2/V2Dashboard.vue'),
@@ -292,7 +298,7 @@ const router = createRouter({
   }
 });
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   document.title = `${to.meta.title || '问流 WenFlow'} - 问流 WenFlow`;
   syncThemeForRoute(to.path);
   const usesAdminSurface = to.path.startsWith('/admin/') && to.path !== '/admin/login';
@@ -316,6 +322,20 @@ router.beforeEach((to, _from, next) => {
   if (to.meta.requiresAuth && !hasSession && !projectionToken) {
     next({ path: '/login', query: { redirect: to.fullPath } });
     return;
+  }
+
+  // 新用户引导：已登录但未完成 onboarding → 强制跳转到引导页（自身除外）
+  if (to.meta.requiresAuth && hasSession && to.path !== '/onboarding') {
+    try {
+      const { userAPI } = await import('@/api/user');
+      const profile = await userAPI.getProfile();
+      if (profile.onboardingCompleted === false) {
+        next({ path: '/onboarding', query: { redirect: to.fullPath } });
+        return;
+      }
+    } catch {
+      /* 获取 profile 失败不阻塞正常导航 */
+    }
   }
 
   // 已登录用户访问登录/注册页

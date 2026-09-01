@@ -171,7 +171,7 @@ export class APIRouter {
         maxTokens: inheritedRoute.maxTokens,
         timeoutMs: config.requestTimeoutMs == null
           ? inheritedRoute.timeoutMs
-          : Math.min(300_000, Math.max(10_000, config.requestTimeoutMs)),
+          : Math.min(600_000, Math.max(10_000, config.requestTimeoutMs)),
         timeoutSource: config.requestTimeoutMs != null ? 'skill-override' : inheritedRoute.timeoutSource,
         privateNetworkPolicy,
         source,

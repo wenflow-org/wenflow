@@ -550,9 +550,13 @@ export const learningAPI = {
     return response.data;
   },
 
-  // 重新生成学习路径
-  async regeneratePath(pathId: string): Promise<{ message?: string }> {
-    const response = await api.post(`/learning/paths/${pathId}/regenerate`, undefined, { timeout: AI_REQUEST_TIMEOUT });
+  // 重新生成学习路径（支持用户侧补充说明 adjustments）
+  async regeneratePath(pathId: string, adjustments?: string): Promise<{ message?: string; data?: any }> {
+    const response = await api.post(
+      `/learning/paths/${pathId}/regenerate`,
+      adjustments ? { adjustments } : undefined,
+      { timeout: AI_REQUEST_TIMEOUT }
+    );
     return response.data;
   },
 

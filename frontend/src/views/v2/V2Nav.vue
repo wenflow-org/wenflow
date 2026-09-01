@@ -15,6 +15,7 @@
       <div class="v2nav__right">
         <NotificationsBell />
         <V2TaskCenter />
+        <ThemeToggle />
         <router-link
           to="/goal-conversation"
           class="v2nav__cta"
@@ -68,6 +69,7 @@ import { useUserStore } from '@/stores/user';
 import { toast } from '@/utils/toast';
 import V2TaskCenter from './V2TaskCenter.vue';
 import NotificationsBell from '@/components/NotificationsBell.vue';
+import ThemeToggle from '@/components/ui/ThemeToggle.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -139,7 +141,7 @@ onUnmounted(() => {
 
 <style scoped>
 .v2nav {
-  background: rgba(255, 255, 255, 0.86);
+  background: var(--v2nav-bg, rgba(255, 255, 255, 0.86));
   backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--line, #e3e9f4);
   position: sticky; top: 0; z-index: 30;
@@ -194,7 +196,7 @@ onUnmounted(() => {
   font: inherit;
   transition: background 0.15s ease;
 }
-.v2nav__avatar:hover { background: #f1f5fb; }
+.v2nav__avatar:hover { background: color-mix(in srgb, var(--surface) 92%, var(--ink)); }
 .v2nav__avatar i {
   width: 34px; height: 34px; border-radius: 50%;
   background: linear-gradient(135deg, var(--blue, #3478f6), var(--accent, #8d6bff));

@@ -18,6 +18,24 @@ export const AI_REQUEST_TIMEOUT = 300000;
 
 let unauthorizedRedirect: Promise<void> | null = null;
 
+// ---- Token-refresh mutex ----
+let refreshPromise: Promise<boolean> | null = null;
+
+async function tryRefresh(): Promise<boolean> {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    try {
+      const resp = await axios.post('/api/auth/refresh', null, { withCredentials: true });
+      return resp.data?.success === true;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
+
 /**
  * 用户会话标记：token 已通过 HttpOnly Cookie 下发，JS 侧只记录"已登录"标记（非敏感）
  * 旧的 localStorage token 为历史遗留，读取处均做兼容
@@ -78,7 +96,7 @@ api.interceptors.response.use(
   (response) => {
     return response.data;
   },
-  (error) => {
+  async (error) => {
     // 如果是取消错误，直接返回
     if (axios.isCancel(error) || error.name === 'CanceledError' || error.name === 'AbortError') {
       return Promise.reject({ message: '请求已取消', cancelled: true });
@@ -88,11 +106,21 @@ api.interceptors.response.use(
       const { status, data } = error.response;
       const url = typeof error.config?.url === 'string' ? error.config.url : '';
 
-      // 401 未授权 - 跳转登录（认证类端点自身 401 为凭证错误，不触发会话失效跳转）
+      // 401 未授权 - 先尝试静默刷新 access token，失败再跳登录
       if (status === 401
+        && !error.config?._retry
         && !AUTH_ENDPOINT_PATTERN.test(url)
         && (hasUserSession() || getProjectionToken())) {
-        void redirectToLoginOnce();
+        // 保存原始请求配置用于重试
+        const originalConfig = { ...error.config };
+        originalConfig._retry = true;
+        const refreshed = await tryRefresh();
+        if (refreshed) {
+          // 刷新成功，重试原始请求
+          return api.request(originalConfig);
+        }
+        // 刷新失败，跳转登录
+        redirectToLoginOnce();
       }
 
       // 返回错误信息，保留完整 response 以便上层读取 422 恢复信封等结构化数据。

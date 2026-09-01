@@ -1,5 +1,7 @@
 ﻿/* V2 共享设计变量与基础类 */
-.v2-page {
+
+/* ====== 全局变量定义在 :root，所有元素可继承 ====== */
+:root {
   --ink: #172033;
   --muted: #5b6577;
   --faint: #67758f;
@@ -13,6 +15,38 @@
   --green: #1e9e58;
   --amber: #f4aa46;
   --red: #ef7578;
+  --bubble-ai-bg: #f2f6fc;
+  --supplement-bg: #fafcff;
+  --v2nav-bg: rgba(255, 255, 255, 0.86);
+}
+[data-theme='dark'] {
+  --ink: #e6edf7;
+  --muted: #9aa8bf;
+  --faint: #7d8ba3;
+  --line: #2a3648;
+  --canvas: #0f1620;
+  --surface: #182230;
+  --blue: #4d8bf8;
+  --blue-deep: #6fa3ff;
+  --accent: #a78bff;
+  --cyan: #5fc3e6;
+  --green: #3ec984;
+  --amber: #f6bb63;
+  --red: #f28588;
+  --bubble-ai-bg: rgba(24, 34, 48, 0.8);
+  --supplement-bg: rgba(246, 187, 99, 0.06);
+  --v2nav-bg: rgba(15, 22, 32, 0.88);
+}
+
+/* ====== 全局背景兜底：路由切换过渡期间防止白闪 ====== */
+html, body {
+  margin: 0; padding: 0;
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+/* ====== .v2-page 布局（不再需要重新定义变量，:root 已提供） ====== */
+.v2-page {
   /* 公告条（AnnouncementBanner，约 41px）占流在 .v2-page 上方；
      min-height 需扣除，否则 footer 吸底后仍被挤出视口底部 */
   min-height: calc(100vh - 41px);
@@ -27,21 +61,203 @@
   margin-top: auto;
 }
 
-/* 暗色模式：全局 token 覆写（此前 v2 体系无 dark 段，导致"亮页+暗弹窗"混搭） */
+/* 暗色模式：组件级覆写（:root 已定义全局暗色变量，以下仅处理非 scoped 元素） */
+[data-theme='dark'] .v2-page .card {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme='dark'] .v2-page .chart__empty {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme='dark'] .v2-page .errorbar {
+  background: rgba(242, 133, 136, 0.1);
+  border-color: rgba(242, 133, 136, 0.25);
+  color: #f28588;
+}
+
+[data-theme='dark'] .v2-page .spinner {
+  border-color: rgba(77, 139, 248, 0.15);
+}
+
+[data-theme='dark'] .v2-page .spinner--sm {
+  border-color: rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+}
+
+[data-theme='dark'] .v2-page .btn-primary {
+  box-shadow: 0 10px 22px rgba(77, 139, 248, 0.2);
+}
+
+[data-theme='dark'] .v2-page .btn-primary:not(:disabled):hover {
+  box-shadow: 0 14px 28px rgba(77, 139, 248, 0.25);
+}
+
+[data-theme='dark'] .v2-page .btn-ghost {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+[data-theme='dark'] .v2-page .btn-ghost:not(:disabled):hover {
+  border-color: rgba(77, 139, 248, 0.4);
+  color: var(--blue-deep);
+}
+
+/* 表单自动填充：暗色模式保持深色背景 */
+[data-theme='dark'] .v2-page .field__input:-webkit-autofill,
+[data-theme='dark'] .v2-page .field__input:-webkit-autofill:hover,
+[data-theme='dark'] .v2-page .field__input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--surface) inset;
+  -webkit-text-fill-color: var(--ink);
+}
+
+/* 空态 / 骨架屏 / 伪元素背景：暗色模式适配 */
+[data-theme='dark'] .v2-page .skeleton i,
+[data-theme='dark'] .v2-page .stage-card__skeleton i {
+  background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.06) 75%);
+  background-size: 200% 100%;
+}
+
+/* SkeletonLoader 组件：暗色模式适配（使用 CSS custom property，组件内通过 var 引用） */
+[data-theme='dark'] .v2-page .skeleton-loader .skel {
+  background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.06) 75%);
+  background-size: 200% 100%;
+}
+[data-theme='dark'] .v2-page .skeleton-loader .skel-card {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+/* ================= 暗色模式：V2Nav 覆写 ================= */
 [data-theme='dark'] .v2-page {
-  --ink: #e6edf7;
-  --muted: #9aa8bf;
-  --faint: #7d8ba3;
-  --line: #2a3648;
-  --canvas: #0f1620;
-  --surface: #182230;
-  --blue: #4d8bf8;
-  --blue-deep: #6fa3ff;
-  --accent: #a78bff;
-  --cyan: #5fc3e6;
-  --green: #3ec984;
-  --amber: #f6bb63;
-  --red: #f28588;
+  --v2nav-bg: rgba(15, 22, 32, 0.88);
+}
+[data-theme='dark'] .v2nav__avatar:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+[data-theme='dark'] .v2nav__menu {
+  background: var(--surface, #182230);
+  border-color: var(--line, #2a3648);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+[data-theme='dark'] .v2nav__menu a,
+[data-theme='dark'] .v2nav__menu button {
+  color: var(--ink, #e6edf7);
+}
+[data-theme='dark'] .v2nav__menu a:hover,
+[data-theme='dark'] .v2nav__menu button:hover {
+  background: rgba(77, 139, 248, 0.1);
+}
+[data-theme='dark'] .v2nav__menu-danger {
+  color: #f28588 !important;
+  border-top-color: var(--line, #2a3648) !important;
+}
+
+/* 底部移动导航暗色适配 */
+[data-theme='dark'] .v2nav__tabs {
+  background: rgba(15, 22, 32, 0.92);
+  border-top-color: var(--line, #2a3648);
+}
+
+/* ================= 暗色模式：V2GoalConversation 覆写 ================= */
+/* 以下仅保留非 scoped 元素（overlay/proposal/chat__show-proposal/scene-card）；
+   scoped 元素（msg__bubble/pstep/btn-ghost 等）已移入组件 scoped 样式 */
+[data-theme='dark'] .overlay {
+  background: rgba(15, 22, 32, 0.65);
+}
+[data-theme='dark'] .proposal {
+  border-color: rgba(77, 139, 248, 0.2);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.4);
+}
+[data-theme='dark'] .chat__show-proposal {
+  background: rgba(77, 139, 248, 0.12);
+  color: var(--blue-deep);
+}
+[data-theme='dark'] .scene-card:hover:not(:disabled) {
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.25);
+}
+
+/* 伴学浮动窗暗色适配 */
+[data-theme='dark'] .peerdock {
+  background: var(--surface);
+  border-color: rgba(167, 139, 255, 0.18);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+}
+[data-theme='dark'] .peerdock__scroll {
+  background: rgba(255, 255, 255, 0.02);
+}
+[data-theme='dark'] .peerdock__bubble {
+  background: rgba(167, 139, 255, 0.1);
+  border-color: rgba(167, 139, 255, 0.15);
+}
+[data-theme='dark'] .peerdock__input input {
+  background: var(--canvas);
+  border-color: var(--line);
+  color: var(--ink);
+}
+[data-theme='dark'] .peerdock__input button:disabled {
+  opacity: 0.3;
+}
+
+/* 快捷补充面板暗色适配 */
+[data-theme='dark'] .replies-panel {
+  background: var(--surface);
+  border-color: var(--line);
+}
+[data-theme='dark'] .replies-panel__option {
+  background: rgba(77, 139, 248, 0.06);
+}
+[data-theme='dark'] .replies-panel__option:hover {
+  background: rgba(77, 139, 248, 0.12);
+}
+
+/* ================= 暗色模式：V2LearningPage 覆写 ================= */
+[data-theme='dark'] .learn__head {
+  background: rgba(15, 22, 32, 0.92);
+}
+[data-theme='dark'] .learn__menu-pop {
+  background: var(--surface);
+  border-color: var(--line);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+[data-theme='dark'] .learn__menu-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+[data-theme='dark'] .learn__menu-item--primary:hover {
+  background: rgba(77, 139, 248, 0.12);
+}
+[data-theme='dark'] .kp__bar {
+  background: rgba(255, 255, 255, 0.06);
+}
+[data-theme='dark'] .kp__mark {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+[data-theme='dark'] .tutor__jump-bottom {
+  background: var(--surface);
+  border-color: var(--line);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+[data-theme='dark'] .finish {
+  background: rgba(15, 22, 32, 0.75);
+}
+[data-theme='dark'] .finish__card {
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.4);
+}
+[data-theme='dark'] .msg__code {
+  background: #0d1520;
+  color: #c8daf0;
+}
+[data-theme='dark'] .stage-card {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 16px 40px rgba(0, 0, 0, 0.3);
+}
+[data-theme='dark'] .checkpoint__option {
+  background: var(--surface);
+  border-color: var(--line);
+}
+[data-theme='dark'] .checkpoint__input {
+  background: var(--canvas);
+  border-color: var(--line);
+  color: var(--ink);
 }
 
 /* 焦点可见性（可访问性基线）：用户侧统一 focus 样式 */

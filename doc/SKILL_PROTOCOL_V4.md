@@ -17,7 +17,7 @@
 
 ### 1.2 范围
 
-- 本协议约束 **24 个 core skill**（15 个首批 + 8 个辅助 Skill（§5.6，v4-aux-skills 实际 handler 数）+ semantic-freeze-judge；清单见附录 A。**以 `prompts/core/` 实际文件数为准**（2026-08-11 复核：24 个 yaml 文件；session-evaluation-fallback 已退役；此前 25 个，再此前 27 含 2 个已退役条目）。
+- 本协议约束 **26 个 core skill**（15 个首批 + 8 个辅助 Skill（§5.6，v4-aux-skills 实际 handler 数）+ semantic-freeze-judge + learning-predictor + virtual-learner-memory-curator；清单见附录 A。**以 `prompts/core/` 实际文件数为准**（2026-08-30 复核：26 个 yaml 文件；session-evaluation-fallback 已退役；learning-predictor 与 virtual-learner-memory-curator 为 2026-08-11 纯重试改造后新增；此前 24/25 个）。
 - code-only skill（acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-selector）豁免，不进入核心文件体系（handler-only 确定性组件，无 LLM prompt）。
 - 无生产调用点的注册 skill（label-generator 等 11 个）维持现状，接入生产时必须先满足本协议。
 
@@ -368,9 +368,9 @@ coreHash 写入侧 = 编译发布流程（与 sourceHash 同批落库）；判�
 | Delta 写 | 缺席=不变、null=清空、输出=覆盖 的增量输出模式（试验） |
 | 基准 v1 | 现行 prompt 在版本体系中的登记身份 |
 
-## 附录 A. 受约束 skill 清单（25 core + 3 code-only）
+## 附录 A. 受约束 skill 清单（26 core + 3 code-only）
 
-> 2026-08-09 复核：以 `prompts/core/` 实际文件数为准（25 个 yaml；此前声称 36/27，差额为已退役 skill 未同步）。
+> 2026-08-30 复核：以 `prompts/core/` 实际文件数为准（26 个 yaml；此前声称 25/24，差额为 2026-08-11 后新增 learning-predictor 与 virtual-learner-memory-curator，以及已退役 skill 未同步）。
 
 首批（15）：
 conversational：goal-conversation、teaching-turn、virtual-learner-goal-dialogue-simulator、virtual-learner-learn-turn-simulator
@@ -386,6 +386,10 @@ extractor：basic-evaluator、goal-alignment-checker、skill-compiler
 copywriter：learner-progress-report、skill-author
 
 平台守门（1）：semantic-freeze-judge（extractor，thinkingMode=disabled；调用方式见 §5.6 平台层例外）
+
+新增（2，2026-08-11 纯重试改造后加入核心文件体系）：
+- learning-predictor（distiller，预测校准闭环：`learning_metrics` 预测 vs 实际，`prediction_records` 表）
+- virtual-learner-memory-curator（虚拟学习者记忆策展；⚠️ 缺 manifest，`yaml:check` / `skills:check` 基线既有 FAIL，待补；failurePolicy 仍为 fallback，是 26 个 core 中唯一残留 fallback 值，与 2026-08-11 纯重试原则冲突）
 
 code-only（3，无 LLM prompt，handler-only 确定性组件）：
 acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-selector

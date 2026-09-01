@@ -34,8 +34,8 @@ const version = appVersion;
 .v2footer {
   margin-top: auto;
   /* 顶部柔和渐变分隔线：白底向浅灰过渡 */
-  border-top: 1px solid rgba(227, 233, 244, 0.55);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.75));
+  border-top: 1px solid var(--line, rgba(227, 233, 244, 0.55));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface, #fff) 50%, transparent), color-mix(in srgb, var(--surface, #fff) 75%, transparent));
 }
 .v2footer__inner {
   max-width: 1180px;

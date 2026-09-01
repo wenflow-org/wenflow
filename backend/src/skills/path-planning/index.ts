@@ -552,7 +552,7 @@ ${conversationHistory.map((m: any) => `${m.role}: ${m.content}`).join('\n')}
 
 ${replan ? `
 【路径重调模式】
-- 重调模式：${replan.mode || 'new_version'}
+- 重调模式：${replan.mode || 'overwrite'}
 - 触发来源：${replan.triggerSource || 'unknown'}
 - 源路径 ID：${replan.sourcePathId || 'unknown'}
 - 冻结已完成任务：${Array.isArray(replan.freezeCompletedTaskIds) && replan.freezeCompletedTaskIds.length > 0 ? replan.freezeCompletedTaskIds.join('、') : '无'}
@@ -561,11 +561,11 @@ ${replan ? `
 ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
 
 【重调要求】
-1. 这是对现有学习路径的新版本重调，不是从零忽略已有学习历史重新规划。
+1. 这是对现有学习路径的调整重调，不是从零忽略已有学习历史重新规划。
 2. 必须显式参考学习者已稳定掌握、掌握不稳、持续吃力和前置缺口信息。
 3. 不要围绕已稳定掌握内容重复铺设大量基础阶段。
 4. 对掌握不稳和前置缺口内容，应通过补桥接阶段、补充任务、降低阶段跳跃度来处理。
-5. 如果已完成任务被冻结，请把它们视为既有学习历史，不要在新版本里简单复制同名任务来伪装重调。` : ''}
+5. 如果已完成任务被冻结，请把它们视为既有学习历史，不要简单复制同名任务来伪装重调。` : ''}
 
 【强制要求】以下所有生成内容必须紧密围绕"${analysis.context || input.goal}"展开：
 - 路径名称必须包含"${analysis.context || input.goal}"的核心主题关键词（提取 2-6 字即可），不得使用通用模板名称

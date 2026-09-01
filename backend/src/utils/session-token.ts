@@ -1,10 +1,14 @@
 import jwt, { JwtPayload, SignOptions } from 'jsonwebtoken';
 
 export type SessionTokenType = 'user' | 'admin';
+export type UserTokenType = 'access' | 'refresh';
 
 export const SESSION_TOKEN_ISSUER = 'wenflow';
 export const USER_TOKEN_AUDIENCE = 'wenflow:user';
 export const ADMIN_TOKEN_AUDIENCE = 'wenflow:admin';
+
+export const ACCESS_TOKEN_EXPIRES_IN = '30m' as const;
+export const REFRESH_TOKEN_EXPIRES_IN = '30d' as const;
 
 export interface SessionTokenPayload extends JwtPayload {
   userId: string;
@@ -12,6 +16,8 @@ export interface SessionTokenPayload extends JwtPayload {
   email?: string;
   isAdmin?: boolean;
   type?: SessionTokenType;
+  // Dual-token purpose: distinguishes access vs refresh tokens within the 'user' domain
+  purpose?: UserTokenType;
   // P2 会话管理：签发时由调用方传入随机 UUID，用于 admin_sessions 表关联与吊销
   jti?: string;
   // 用户域令牌吊销版本：改密/管理员重置密码时递增，旧 token 校验不通过
@@ -98,4 +104,52 @@ export const verifySessionToken = (
 
     return validateTokenDomain(payload, expectedType, true);
   }
+};
+
+// ──── Dual-token (Access + Refresh) helpers ────
+// Uses `purpose` field to distinguish token purpose within the 'user' domain,
+// so `type: 'user'` is preserved for domain validation.
+
+/** Sign a short-lived access token (30 minutes). */
+export const signAccessToken = (
+  userId: string,
+  name: string,
+  tokenVersion: number
+): string =>
+  signSessionToken(
+    { userId, name, tokenVersion, purpose: 'access' },
+    'user',
+    ACCESS_TOKEN_EXPIRES_IN
+  );
+
+/** Sign a long-lived refresh token (30 days). */
+export const signRefreshToken = (
+  userId: string,
+  tokenVersion: number
+): string =>
+  signSessionToken(
+    { userId, tokenVersion, purpose: 'refresh' },
+    'user',
+    REFRESH_TOKEN_EXPIRES_IN
+  );
+
+/** Verify an access token (purpose must be 'access'). */
+export const verifyAccessToken = (token: string): SessionTokenPayload => {
+  const payload = verifySessionToken(token, 'user');
+  if (payload.purpose !== 'access') {
+    // Allow legacy tokens without purpose field (backward compat during migration)
+    if (payload.purpose !== undefined) {
+      throw new jwt.JsonWebTokenError('Token 类型不匹配：需要 access token');
+    }
+  }
+  return payload;
+};
+
+/** Verify a refresh token (purpose must be 'refresh'). */
+export const verifyRefreshToken = (token: string): SessionTokenPayload => {
+  const payload = verifySessionToken(token, 'user');
+  if (payload.purpose !== 'refresh') {
+    throw new jwt.JsonWebTokenError('Token 类型不匹配：需要 refresh token');
+  }
+  return payload;
 };

@@ -23,6 +23,10 @@ export class LessonKnowledgeEnrichmentConsumer {
       : Array.isArray(data.wrapup?.sessionStructure?.classroomEventHistory)
         ? data.wrapup.sessionStructure.classroomEventHistory
         : [];
+    // 断链修复 P0-5：任务的可迁移目标（由 lesson:completed 事件携带）
+    const transferGoal = typeof data.transferGoal === 'string' && data.transferGoal.trim()
+      ? data.transferGoal.trim()
+      : null;
 
     // 单次 LLM 调用完成知识台账蒸馏 + 隐性概念抽取（原两个 skill 合并）
     // 隔离语义：enricher 失败 → 不写证据、不写 receipt → 抛错给 outbox worker
@@ -31,6 +35,7 @@ export class LessonKnowledgeEnrichmentConsumer {
     let enriched: LessonKnowledgeEnricherOutput | null = null;
     try {
       enriched = await executeSkill(lessonKnowledgeEnricherDefinition, {
+        transferGoal,
         knowledgeState,
         knowledgeDelta: data.wrapup?.progress
           ? {

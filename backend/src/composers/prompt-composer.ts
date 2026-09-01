@@ -319,7 +319,8 @@ export async function callPrompt<TInput, TOutput>(
     },
   });
   let currentMaxTokens = generationResolution.maxTokens;
-  const tokenCeiling = Math.max(currentMaxTokens || 8000, 32000);
+  // 默认 max_tokens 统一 32k（2026-08-30 拍板）：LLM 输出不稳定时不再因 8k 截断漏字段
+  const tokenCeiling = Math.max(currentMaxTokens || 32000, 32000);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {

@@ -21,18 +21,16 @@ export const useUserStore = defineStore('user', () => {
   function markLoggedIn(profile: Pick<UserProfile, 'id' | 'name'>) {
     hasSession.value = true;
     user.value = profile as UserProfile;
-    // 清除历史遗留的 JS 可读 token，统一走 HttpOnly Cookie
-    localStorage.removeItem('token');
     localStorage.setItem(USER_SESSION_KEY, '1');
     localStorage.setItem('user', JSON.stringify(profile));
   }
 
-  async function login(name: string, password: string) {
+  async function login(name: string, password: string, remember = true) {
     loading.value = true;
     error.value = null;
 
     try {
-      const response = await authAPI.login({ name, password });
+      const response = await authAPI.login({ name, password, remember });
 
       // auth 接口当前只返回 id/name 的最简用户信息，随后立即拉取完整档案
       markLoggedIn(response.user);
@@ -47,12 +45,12 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  async function register(name: string, password: string) {
+  async function register(name: string, password: string, remember = true) {
     loading.value = true;
     error.value = null;
 
     try {
-      const response = await authAPI.register({ name, password });
+      const response = await authAPI.register({ name, password, remember });
 
       markLoggedIn(response.user);
       await fetchProfile().catch(() => {});

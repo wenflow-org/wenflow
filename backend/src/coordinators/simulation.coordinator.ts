@@ -2213,7 +2213,7 @@ class SimulationOrchestrator {
   async waitForPathReady(
     sessionId: string,
     learningPathId: string | null,
-    timeoutMs = 300_000
+    timeoutMs = 600_000
   ): Promise<{ ready: boolean; reason?: string }> {
     const deadline = Date.now() + timeoutMs;
     let pathId = learningPathId;
@@ -2227,7 +2227,19 @@ class SimulationOrchestrator {
         }
       }
       const milestoneCount = await prisma.milestones.count({ where: { learningPathId: pathId } });
-      if (milestoneCount > 0) return { ready: true };
+      if (milestoneCount > 0) {
+        // 关键：里程碑存在 ≠ 可启动。任务（subtasks）可能在里程碑写入后才插入，
+        // 过早 ready 会让 startLearningPhase 报「第一个里程碑没有可用任务」。
+        // 必须等到至少一个里程碑下有非 completed 的可启动任务。
+        const firstRunnable = await prisma.subtasks.findFirst({
+          where: {
+            milestones: { learningPathId: pathId },
+            status: { not: 'completed' }
+          },
+          select: { id: true }
+        });
+        if (firstRunnable) return { ready: true };
+      }
 
       const path = await prisma.learning_paths.findUnique({
         where: { id: pathId },
@@ -3337,30 +3349,97 @@ class SimulationOrchestrator {
         return await this.executeLearningStep(sessionId, options);
       }
 
-      // 课时预算：同一 task 回合数超限仍未双方收束 → 停止推进（不终态化、不丢本课对话）。
-      // 闸门取三者的最大值：默认 40 / 本次授权回合数（executeAutoLearning 透传）/ 会话生效回合上限
-      // （autopilot.maxTurns ?? simulationConfig.turnCapPerLesson）。任一来源调高即放宽，
-      // 避免「驾驶舱配 60 却在第 41 回合被默认闸门拦下」。触发时保持会话 running、教学对话 active，
-      // 恢复动作 = 调高「回合上限」后再次自动推进（继续同一对话），而不是重启丢对话。
+      // 课时预算（时间盒）：同一 task 回合数超限仍未双方收束 → 按「超时跳课」处理：
+      // 标记本课完成（timebox skip），自动推进到下一课，而不是卡住本课等待人工干预。
+      // 闸门取三者的最大值：默认 40 / 本次授权回合数（executeAutoLearning 透传）/ 会话生效回合上限。
+      // 用户诉求（2026-08-30）：单课程上限轮次超了还没结束，就跳下一节课，不让进度卡死。
       const learnTurnBudget = this.resolveLearnTurnBudget(stageResults, options.turnBudget);
       const runtimeTurns = taskRuntime.taskId === currentTask.id ? Number(taskRuntime.turns || 0) : 0;
       if (runtimeTurns >= learnTurnBudget) {
-        const budgetError = `当前 task 已达 ${learnTurnBudget} 回合课时预算仍未收束（turn_budget_exhausted）。请调高「回合上限」后继续推进（对话已保留），或重开本课`;
+        const skipReason = `当前 task 已达 ${learnTurnBudget} 回合课时上限仍未收束，自动跳过本课，进入下一课（timebox-skip）`;
         logs.push({
           timestamp: new Date().toISOString(),
-          phase: 'error',
+          phase: 'teaching-response',
           details: {
-            error: budgetError,
-            output: { currentTask: currentTask.title, action: 'turn-budget-exhausted', turns: runtimeTurns }
+            output: {
+              currentTask: currentTask.title,
+              action: 'turn-budget-skip',
+              turns: runtimeTurns,
+              budget: learnTurnBudget
+            }
           }
         });
-        // 温和停止：不 persistLearningFailure（那会把会话标 failed、逼用户重启丢本课对话）。
-        // 仅记录日志供驾驶舱审计；自动循环/手动单步收到该错误后会停止推进而非空转恢复。
+        // 构造 timebox 跳过的 pending 完成态，走完整完成链路（completeTask 落库 + 推进下一课）
+        const skipFinalizedAt = new Date().toISOString();
+        const skipTaskRuntime = {
+          status: 'task_completion_pending',
+          reason: skipReason,
+          taskId: currentTask.id,
+          taskTitle: currentTask.title,
+          teachingSessionId: taskRuntime.teachingSessionId ?? null,
+          teachingRevision: taskRuntime.teachingRevision ?? learningState.teachingRevision,
+          closureDecision: {
+            canCompleteTask: true,
+            reason: 'timebox-skip',
+            autoEnded: true
+          },
+          finalizedAt: skipFinalizedAt,
+          completionSource: 'timebox-skip',
+          error: null,
+          updatedAt: skipFinalizedAt,
+          timeboxSkip: true
+        };
+        const skipLearningState = {
+          ...learningState,
+          teachingRevision: taskRuntime.teachingRevision ?? learningState.teachingRevision,
+          taskRuntime: skipTaskRuntime
+        };
+        await this.updateTeachingStatePreservingControlFlags(sessionId, skipLearningState);
+        // 复用完成链路：endSession（若教学会话在跑）+ completeTask + 推进下一课
+        try {
+          await this.assertCurrentSessionLeaseOwned(sessionId);
+          const teachingSessionId = typeof taskRuntime.teachingSessionId === 'string' ? taskRuntime.teachingSessionId : null;
+          const teachingRevision = typeof taskRuntime.teachingRevision === 'number'
+            ? taskRuntime.teachingRevision
+            : (typeof learningState.teachingRevision === 'number' ? learningState.teachingRevision : undefined);
+          if (teachingSessionId) {
+            await aiTeachingOrchestrator.endSession(teachingSessionId, 'task-completed', teachingRevision).catch(() => {});
+          }
+        } catch (error: unknown) {
+          logger.warn('[simulation-coordinator] timebox-skip endSession 失败（不阻断跳课）', {
+            sessionId,
+            error: asErrorLike(error).message || String(error)
+          });
+        }
+        const skipResult = await this.completeCheckpointedSimulationTask(
+          sessionId,
+          session,
+          skipLearningState,
+          milestones,
+          skipTaskRuntime,
+          logs
+        );
+        if (!skipResult) {
+          throw new Error('待跳过的任务不在当前学习路径中');
+        }
+        if (!skipResult.success && skipResult.currentTaskStopped) {
+          // completeTask 失败：保留 pending checkpoint（会话 running，可恢复续传）
+          return {
+            success: false,
+            taskCompleted: false,
+            currentTaskStopped: true,
+            logs,
+            error: skipResult.error || '跳过本课失败（完成结算未落库）'
+          };
+        }
         await this.addSessionLogs(sessionId, logs).catch(() => {});
         return {
-          success: false,
+          success: true,
+          taskCompleted: true,
+          isPathCompleted: skipResult.isPathCompleted === true,
+          milestoneProgress: skipResult.milestoneProgress,
           logs,
-          error: budgetError
+          error: undefined
         };
       }
       

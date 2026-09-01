@@ -9,10 +9,10 @@
 - [`SKILL_PROTOCOL_V4.md`](./SKILL_PROTOCOL_V4.md)
   - 统一 Skill 协议 v4 规则文档（核心文件 core.yaml / 六材料池 / 五块编译产物 / 守门三查 / SkillResult）
   - 后续 AI 开发、重构的最高指导准则（v4.1-draft：新增 §2.6 编排文件章节，编排文件为字段路由唯一源）
-- [`PROMPT_AUTHORING_PROTOCOL.md`](./archive/PROMPT_AUTHORING_PROTOCOL_v2.md)（已归档 2026-08-09）
+- [`PROMPT_AUTHORING_PROTOCOL v2`](./archive/PROMPT_AUTHORING_PROTOCOL_v2.md)（已归档 2026-08-09）
   - Prompt 编写协议 v2（原现行 ACTIVE）：八类标准块 / archetype 矩阵 / promptContract / runtimeContract
   - 归档原因：LLM 部分已被 v4 取代；code-only 约束并入 v4.1
-- [`PROMPT_PROTOCOL_V4_PREWORK_SURVEY.md`](./PROMPT_PROTOCOL_V4_PREWORK_SURVEY.md)
+- [`PROMPT_PROTOCOL_V4_PREWORK_SURVEY.md`](./archive/PROMPT_PROTOCOL_V4_PREWORK_SURVEY.md)（已归档，v4 预改造调查）
   - v4 预改造调查：25 个 prompt 结构盘点、运行时链路、材料池适配、基建落点与 M0 清单（M0 已完成输入 2026-07-27，仅供参考）
 - [`PROMPT_MANAGEMENT_GUIDE.md`](./archive/PROMPT_MANAGEMENT_GUIDE.md)（已归档 2026-08-09）
   - Prompt 管理指南（File-as-Truth 架构）：文件为准、DB 为镜像（v2 旧编译模型，与 v4 版本模型互斥）
@@ -23,12 +23,12 @@
 
 ## 架构与治理
 
-- [`ARCHITECTURE_BASELINE_2026-07.md`](./ARCHITECTURE_BASELINE_2026-07.md)
-  - 基于当前代码的前后端、AI Skill、数据、事件和部署架构基线
-  - 核心业务链路与当前风险摘要
-- [`ARCHITECTURE_ALIGNMENT_AND_REMEDIATION_PLAN.md`](./ARCHITECTURE_ALIGNMENT_AND_REMEDIATION_PLAN.md)
+- [`ARCHITECTURE_BASELINE_2026-07.md`](./archive/ARCHITECTURE_BASELINE_2026-07.md)（已归档，2026-07 架构基线快照）
+  - 基于当时代码的前后端、AI Skill、数据、事件和部署架构基线
+  - 核心业务链路与当时风险摘要；现行架构以代码与本文档索引中的现行文档为准
+- [`ARCHITECTURE_ALIGNMENT_AND_REMEDIATION_PLAN.md`](./archive/ARCHITECTURE_ALIGNMENT_AND_REMEDIATION_PLAN.md)（已归档，2026-07 修复计划）
   - Prompt 漂移、Agent/Skill 概念错位和事件链错位说明
-  - P0/P1/P2 修复顺序、依赖关系与验收标准
+  - P0/P1/P2 修复顺序、依赖关系与验收标准（结论已被实施吸收，保留作背景参考）
 - [`NON_FUNCTIONAL_GOVERNANCE_PLAN.md`](./NON_FUNCTIONAL_GOVERNANCE_PLAN.md)
   - 安全、可靠性、测试、部署、可观测性、性能和数据治理统一清单
   - 发布阻断项、实施波次和发布验收标准

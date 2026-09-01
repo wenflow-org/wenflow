@@ -2,7 +2,7 @@
  * Agent Manifest - 真理源
  *
  * 架构：
- *   - 5 个顶层 Agent（kind=agent）：goal / path / teaching / learner / simulation
+ *   - 5 个顶层 Agent（kind=agent）：goal / path / teaching / profile / simulation
  *     - Agent 是"编排器"，不持有 system prompt，不直接调用 LLM
  *     - Agent 下辖一组 Skill（agentMembers，由 prompts/skills.yaml parentAgent 派生，P1）
  *   - N 个 Skill（kind=skill）：实际持有 prompt、调用 LLM 的执行单元
@@ -131,7 +131,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     aliases: ['goal-conversation-agent', 'goal-conversation'],
     ioContractVersion: 'agent-output-v1',
     // 与 prompts/skill.goal-conversation.md 及 handler codeDefaults 对齐（仅展示/兜底，权威在 ACTIVE prompt）
-    defaultModelConfig: { temperature: 0.7, maxTokens: 8000 }
+    defaultModelConfig: { temperature: 0.7, maxTokens: 32000 }
   },
 
   // ============ Path 下辖 Skills ============
@@ -264,7 +264,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.8, maxTokens: 8000 }
+    defaultModelConfig: { temperature: 0.8, maxTokens: 32000 }
   },
   {
     id: 'skill:virtual-learner-scenario-designer',
@@ -276,7 +276,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.9, maxTokens: 8000 }
+    defaultModelConfig: { temperature: 0.9, maxTokens: 32000 }
   },
   {
     id: 'skill:virtual-learner-goal-dialogue-simulator',
@@ -288,7 +288,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.8, maxTokens: 8000 }
+    defaultModelConfig: { temperature: 0.8, maxTokens: 32000 }
   },
   {
     id: 'skill:virtual-learner-path-evaluator',
@@ -300,7 +300,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.8, maxTokens: 8000 }
+    defaultModelConfig: { temperature: 0.8, maxTokens: 32000 }
   },
   {
     id: 'skill:virtual-learner-learn-turn-simulator',
@@ -312,7 +312,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.8, maxTokens: 8000 }
+    defaultModelConfig: { temperature: 0.8, maxTokens: 32000 }
   },
   {
     id: 'skill:virtual-learner-referee',

@@ -33,7 +33,6 @@
 import { useRoute } from 'vue-router'
 import V2Nav from '@/views/v2/V2Nav.vue'
 import V2Footer from '@/views/v2/V2Footer.vue'
-import '@/views/v2/v2.css'
 
 defineProps<{ title: string; description?: string }>()
 

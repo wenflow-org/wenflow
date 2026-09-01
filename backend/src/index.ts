@@ -27,6 +27,7 @@ import { learnerEvidenceProjector } from './services/learner/LearnerEvidenceProj
 import { learnerSnapshotRefreshService } from './services/learner/LearnerSnapshotRefreshService';
 import { learnerProfileService } from './services/learner/LearnerProfileService';
 import { lessonKnowledgeEnrichmentConsumer } from './services/learner/LessonKnowledgeEnrichmentConsumer';
+import { reviewCompletedConsumer } from './services/learner/ReviewCompletedConsumer';
 import { quickLearnService } from './virtual-lab/quick-learn/quick-learn.service';
 import { reconcileTaskCompletionMetric } from './services/metrics/LearningMetricService';
 import { refreshRuntimeNetworkPolicy } from './services/runtime-network-policy.service';
@@ -639,6 +640,10 @@ export async function startServer() {
     
       const durableConsumers = new DurableEventConsumerRegistry();
       durableConsumers.register(['task:completed'], reconcileTaskCompletionMetric);
+      // 断链修复 P0-1：复习结果事件消费者（写 learner_evidence + memory_traces，幂等）
+      durableConsumers.register(['review:completed'], async (event) => {
+        await reviewCompletedConsumer.handle(event);
+      });
       durableConsumers.register([
         'goal:understanding:updated',
         'task:completed',

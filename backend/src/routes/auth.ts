@@ -5,7 +5,15 @@ import authService, { InvalidCredentialsError, ResetTokenInvalidError, UsernameT
 import { getPlatformSettings } from '../services/platform-settings.service';
 import { loginRateLimitMiddleware, recordLoginAttempt } from '../middleware/login-rate-limit.middleware';
 import { authMiddleware } from '../middleware/auth.middleware';
-import { setAuthCookie, clearAuthCookie } from '../utils/auth-cookie';
+import {
+  setAuthCookie,
+  clearAuthCookie,
+  setRefreshCookie,
+  clearRefreshCookie,
+  resolveRefreshToken,
+  THIRTY_DAYS_MS,
+} from '../utils/auth-cookie';
+import { verifyRefreshToken } from '../utils/session-token';
 import { aiCapabilityHealthService } from '../services/ai-capability-health.service';
 import { logger } from '../utils/logger';
 import {
@@ -121,11 +129,13 @@ const registerSchema = z.object({
     .max(1024, '密码最长 1024 位')
     .regex(/[a-zA-Z]/, '密码必须包含字母')
     .regex(/[0-9]/, '密码必须包含数字'),
+  remember: z.boolean().optional(),
 });
 
 const loginSchema = z.object({
   name: z.string().min(1, '用户名不能为空').max(64, '用户名最长 64 位'),
-  password: z.string().min(1, '密码不能为空').max(1024, '密码最长 1024 位')
+  password: z.string().min(1, '密码不能为空').max(1024, '密码最长 1024 位'),
+  remember: z.boolean().optional(),
 });
 
 // 注册
@@ -182,7 +192,7 @@ router.post('/register', async (req, res, next) => {
     }
 
     // 验证请求数据
-    const data = registerSchema.parse(req.body) as { name: string; password: string };
+    const data = registerSchema.parse(req.body) as { name: string; password: string; remember?: boolean };
 
     // 调用服务
     const result = await authService.register(data);
@@ -192,10 +202,11 @@ router.post('/register', async (req, res, next) => {
     // 落库本次成功注册（配额累计；失败仅告警不阻断）
     await registerQuotaService.recordSuccessfulRegistration(clientIP, data.name);
 
-    // 同步写入 HttpOnly Cookie（前端不再需要将 token 存入 localStorage）
-    // 安全加固：token 仅经 Cookie 下发，响应体不再返回（消除 JS 内存可窃取面）
-    const { token, ...safeResult } = result;
-    setAuthCookie(res, token, 'user');
+    // 同步写入 HttpOnly Cookie（双 token：accessToken + refreshToken）
+    const { accessToken, refreshToken, ...safeResult } = result;
+    const remember = data.remember === true;
+    setAuthCookie(res, accessToken, 'user');
+    setRefreshCookie(res, refreshToken, remember ? THIRTY_DAYS_MS : null);
 
     res.status(201).json({
       success: true,
@@ -235,7 +246,7 @@ router.post('/login', loginRateLimitMiddleware, async (req, res, next) => {
 
   try {
     // 验证请求数据
-    const data = loginSchema.parse(req.body) as { name: string; password: string };
+    const data = loginSchema.parse(req.body) as { name: string; password: string; remember?: boolean };
     loginName = data.name;
     const clientIP = req.ip || req.headers['x-forwarded-for'] || 'unknown';
 
@@ -244,9 +255,11 @@ router.post('/login', loginRateLimitMiddleware, async (req, res, next) => {
 
     recordLoginAttempt(data.name, clientIP.toString(), true, 'user', 'ok');
 
-    // 同步写入 HttpOnly Cookie；token 仅经 Cookie 下发，响应体不再返回
-    const { token, ...safeResult } = result;
-    setAuthCookie(res, token, 'user');
+    // 同步写入 HttpOnly Cookie（双 token：accessToken + refreshToken）
+    const { accessToken, refreshToken, ...safeResult } = result;
+    const remember = data.remember === true;
+    setAuthCookie(res, accessToken, 'user');
+    setRefreshCookie(res, refreshToken, remember ? THIRTY_DAYS_MS : null);
 
     res.status(200).json({
       success: true,
@@ -280,13 +293,83 @@ router.post('/login', loginRateLimitMiddleware, async (req, res, next) => {
   }
 });
 
-// 登出：清除 HttpOnly 认证 Cookie
+// 登出：清除 HttpOnly 认证 Cookie + Refresh Token Cookie
 router.post('/logout', (req, res) => {
   clearAuthCookie(res, 'user');
+  clearRefreshCookie(res);
   res.status(200).json({
     success: true,
     data: { message: '已退出登录' }
   });
+});
+
+// 刷新令牌：验证 refresh token，签发新的 access + refresh token pair（rotation）
+router.post('/refresh', async (req, res, next) => {
+  try {
+    const refreshTokenCookie = resolveRefreshToken(req);
+    if (!refreshTokenCookie) {
+      return res.status(401).json({
+        success: false,
+        error: { message: '未提供刷新令牌' }
+      });
+    }
+
+    // 验证 refresh token
+    const payload = verifyRefreshToken(refreshTokenCookie);
+
+    // 查找用户，校验 tokenVersion 与未被软删
+    const prisma = (await import('../config/database')).default;
+    const userRecord = await prisma.users.findUnique({
+      where: { id: payload.userId },
+      select: { id: true, name: true, deletedAt: true, tokenVersion: true }
+    });
+
+    if (!userRecord || userRecord.deletedAt) {
+      return res.status(401).json({
+        success: false,
+        error: { message: '会话已失效，请重新登录' }
+      });
+    }
+
+    if (typeof payload.tokenVersion === 'number'
+      && (userRecord.tokenVersion ?? 0) !== payload.tokenVersion) {
+      return res.status(401).json({
+        success: false,
+        error: { message: '会话已失效，请重新登录' }
+      });
+    }
+
+    // 签发新的 token pair（rotation）
+    const { accessToken, refreshToken: newRefreshToken } = authService.generateTokenPair(
+      userRecord.id,
+      userRecord.name,
+      userRecord.tokenVersion ?? 0
+    );
+
+    // 设置新 cookies
+    setAuthCookie(res, accessToken, 'user');
+    setRefreshCookie(res, newRefreshToken);
+
+    res.status(200).json({
+      success: true,
+      data: { message: '令牌已刷新' }
+    });
+  } catch (error: any) {
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({
+        success: false,
+        error: { message: '刷新令牌已过期，请重新登录' }
+      });
+    }
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({
+        success: false,
+        error: { message: '无效的刷新令牌' }
+      });
+    }
+    logger.error('刷新令牌失败:', error);
+    next(error);
+  }
 });
 
 // 修改密码（登录态，需验证当前密码）

@@ -11,6 +11,7 @@ import prisma from '../../config/database';
 import {
   calculateRetention,
   isReviewDue,
+  reviewIntervalDays,
   clamp01,
   DEFAULT_DECAY_FACTOR,
   DEFAULT_RETENTION_THRESHOLD,
@@ -27,6 +28,10 @@ export interface MemoryTraceInput {
   masteryScore: number;
   stability?: MemoryStability;
   source?: string;
+  /** 下次到期时间（物化 dueAt；缺省按 ACT-R 间隔规则计算） */
+  dueAt?: Date | null;
+  /** 复习间隔因子（用于计算 dueAt；默认沿用现有 intervalFactor 语义） */
+  intervalFactor?: number;
 }
 
 export interface SessionKnowledgeOutcome {
@@ -56,6 +61,16 @@ export function mapKnowledgeStatusToMastery(
 }
 
 class MemoryTraceService {
+  /** 计算下次到期时间：now + intervalDays（ACT-R Cepeda 15% × factor） */
+  private computeDueAt(input: MemoryTraceInput, now: Date): Date | null {
+    if (input.dueAt) return input.dueAt;
+    const factor = Number.isFinite(input.intervalFactor) && (input.intervalFactor as number) > 0
+      ? (input.intervalFactor as number)
+      : 1;
+    const intervalDays = reviewIntervalDays(DEFAULT_RETENTION_TARGET_DAYS, factor);
+    return new Date(now.getTime() + intervalDays * 24 * 60 * 60 * 1000);
+  }
+
   /** 记录一次提取/评估：upsert 痕迹并累计提取次数 */
   async recordExtraction(input: MemoryTraceInput): Promise<void> {
     const masteryScore = clamp01(input.masteryScore);
@@ -63,6 +78,7 @@ class MemoryTraceService {
       ? (input.stability as MemoryStability)
       : 'developing';
     const now = new Date();
+    const dueAt = this.computeDueAt(input, now);
     await prisma.memory_traces.upsert({
       where: {
         userId_conceptKey: { userId: input.userId, conceptKey: input.conceptKey },
@@ -77,6 +93,7 @@ class MemoryTraceService {
         lastSeenAt: now,
         extractionCount: 1,
         source: input.source ?? 'derived',
+        dueAt,
       },
       update: {
         label: input.label ?? undefined,
@@ -85,6 +102,7 @@ class MemoryTraceService {
         lastSeenAt: now,
         extractionCount: { increment: 1 },
         source: input.source ?? undefined,
+        dueAt,
       },
     });
   }
@@ -140,40 +158,66 @@ class MemoryTraceService {
       : DEFAULT_RETENTION_THRESHOLD;
     const limit = Number.isInteger(options.limit) && (options.limit as number) > 0 ? options.limit : 20;
 
-    const traces = await prisma.memory_traces.findMany({
-      where: { userId },
-      orderBy: { lastSeenAt: 'desc' },
-    });
+    // 断链修复 P0-6：优先 SQL 直查 dueAt <= now（物化到期），解决全表扫；
+    // 老数据 dueAt 为 null 的仍走惰性 isReviewDue 兜底合并。
+    const [materialized, legacy] = await Promise.all([
+      prisma.memory_traces.findMany({
+        where: { userId, dueAt: { lte: now } },
+        orderBy: { dueAt: 'asc' },
+      }),
+      prisma.memory_traces.findMany({
+        where: { userId, dueAt: null },
+        orderBy: { lastSeenAt: 'desc' },
+      }),
+    ]);
 
-    const due = traces
-      .map((trace) => {
-        const result = isReviewDue({
-          masteryScore: trace.masteryScore,
-          lastSeenAt: trace.lastSeenAt,
-          retentionTargetDays,
-          retentionThreshold: threshold,
-          decayFactor: trace.decayFactor ?? DEFAULT_DECAY_FACTOR,
-          intervalFactor: trace.intervalFactor ?? 1,
+    const due = [
+      ...materialized.map((trace) => ({
+        conceptKey: trace.conceptKey,
+        label: trace.label,
+        masteryScore: trace.masteryScore,
+        stability: trace.stability as MemoryStability,
+        lastSeenAt: trace.lastSeenAt,
+        extractionCount: trace.extractionCount,
+        retention: calculateRetention(
+          trace.masteryScore,
+          trace.lastSeenAt,
           now,
-        });
-        return {
-          conceptKey: trace.conceptKey,
-          label: trace.label,
-          masteryScore: trace.masteryScore,
-          stability: trace.stability as MemoryStability,
-          lastSeenAt: trace.lastSeenAt,
-          extractionCount: trace.extractionCount,
-          retention: result.retention,
-          intervalDays: result.intervalDays,
-          reason: result.reason,
-          due: result.due,
-        };
-      })
-      .filter((item) => item.due)
+          trace.decayFactor ?? DEFAULT_DECAY_FACTOR,
+        ),
+        intervalDays: reviewIntervalDays(retentionTargetDays, trace.intervalFactor ?? 1),
+        reason: 'interval-elapsed' as const,
+      })),
+      ...legacy
+        .map((trace) => {
+          const result = isReviewDue({
+            masteryScore: trace.masteryScore,
+            lastSeenAt: trace.lastSeenAt,
+            retentionTargetDays,
+            retentionThreshold: threshold,
+            decayFactor: trace.decayFactor ?? DEFAULT_DECAY_FACTOR,
+            intervalFactor: trace.intervalFactor ?? 1,
+            now,
+          });
+          if (!result.due) return null;
+          return {
+            conceptKey: trace.conceptKey,
+            label: trace.label,
+            masteryScore: trace.masteryScore,
+            stability: trace.stability as MemoryStability,
+            lastSeenAt: trace.lastSeenAt,
+            extractionCount: trace.extractionCount,
+            retention: result.retention,
+            intervalDays: result.intervalDays,
+            reason: result.reason,
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null),
+    ]
       .sort((a, b) => a.retention - b.retention)
       .slice(0, limit);
 
-    return due.map(({ due: _due, ...rest }) => rest);
+    return due;
   }
 
   /** 保留率快照（读取时计算，不落库） */

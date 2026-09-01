@@ -512,7 +512,7 @@ const decisions = computed<DecisionCard[]>(() =>
 
 const decisionKindMeta: Record<string, { label: string; cls: string }> = {
   'path-adjust': { label: '路径调整', cls: 'dec__tag--blue' },
-  'path-replanned': { label: '路径版本', cls: 'dec__tag--purple' },
+  'path-replanned': { label: '路径调整', cls: 'dec__tag--purple' },
   'kp-carryover': { label: '课程延续', cls: 'dec__tag--cyan' },
   'concept-watch': { label: '持续关注', cls: 'dec__tag--amber' },
   'pace': { label: '节奏调控', cls: 'dec__tag--green' }

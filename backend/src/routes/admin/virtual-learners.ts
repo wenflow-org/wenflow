@@ -45,6 +45,7 @@ import {
   createSessionForProfile,
   SIMULATION_FRICTION_BUDGETS,
 } from '../../virtual-lab/session-factory';
+import { batchJobService } from '../../virtual-lab/batch-job.service';
 
 const router = express.Router();
 
@@ -817,6 +818,15 @@ router.get('/:id/stories', async (req: Request, res) => {
               createdAt: session.createdAt,
               storyContext: parseStoryContext(session),
               bindings: buildSessionBindings(session),
+              // 自动驾驶状态（供前端区分「运行中 / 已暂停」：会话 status=running 但 autopilot=stopped 视为暂停）
+              autopilotStatus: (() => {
+                try {
+                  const sr = JSON.parse(session.stageResults || '{}');
+                  return sr?.autopilot?.status || null;
+                } catch {
+                  return null;
+                }
+              })(),
             }))
         : [];
 
@@ -1388,7 +1398,13 @@ router.get('/', async (req: Request, res) => {
               status: true,
               currentStage: true,
               createdAt: true,
-              updatedAt: true
+              updatedAt: true,
+              stageResults: true,
+              goalConversationId: true,
+              learningPathId: true,
+              currentTaskId: true,
+              completedTasks: true,
+              totalTasks: true
             },
             orderBy: { createdAt: 'desc' },
             take: 50
@@ -1403,7 +1419,7 @@ router.get('/', async (req: Request, res) => {
 
     // 全量口径聚合（P1-1/D3）：运行中/失败/卡死分区与状态条不再基于 50 条会话样本
     const profileIds = profiles.map(p => p.id);
-    const [statusAgg, perProfileAgg, staleSessions, staleCandidates] = await Promise.all([
+    const [statusAgg, perProfileAgg, staleSessions, staleCandidates, runningSessionsAll] = await Promise.all([
       prisma.virtual_sessions.groupBy({
         by: ['status'],
         _count: { _all: true }
@@ -1428,7 +1444,14 @@ router.get('/', async (req: Request, res) => {
       prisma.virtual_sessions.findMany({
         where: { status: { in: ['running', 'created'] }, updatedAt: { lt: staleThresholdAt() } },
         select: { id: true, stageResults: true }
-      })
+      }),
+      // 运行中口径细分：会话 status=running 但 autopilot=stopped（用户暂停自动驾驶）不算「正在运行」
+      profileIds.length
+        ? prisma.virtual_sessions.findMany({
+            where: { virtualProfileId: { in: profileIds }, status: 'running' },
+            select: { id: true, virtualProfileId: true, stageResults: true }
+          })
+        : Promise.resolve([]),
     ]);
     const countByStatus = (status: string) => statusAgg.find(s => s.status === status)?._count?._all ?? 0;
     const runningByProfile = new Map<string, number>();
@@ -1440,6 +1463,21 @@ router.get('/', async (req: Request, res) => {
       } else if (agg.status === 'failed' || agg.status === 'abandoned') {
         failedByProfile.set(agg.virtualProfileId, (failedByProfile.get(agg.virtualProfileId) ?? 0) + n);
       }
+    }
+    // 运行中扣减：autopilot=stopped（用户暂停自动驾驶）的会话归入「已暂停」，不再算运行中
+    const pausedByProfile = new Map<string, number>();
+    const isAutopilotStopped = (stageResultsJson: string | null | undefined): boolean => {
+      try {
+        const sr = JSON.parse(stageResultsJson || '{}');
+        return sr?.autopilot?.status === 'stopped';
+      } catch {
+        return false;
+      }
+    };
+    for (const s of runningSessionsAll) {
+      if (!isAutopilotStopped(s.stageResults)) continue;
+      runningByProfile.set(s.virtualProfileId, Math.max(0, (runningByProfile.get(s.virtualProfileId) ?? 0) - 1));
+      pausedByProfile.set(s.virtualProfileId, (pausedByProfile.get(s.virtualProfileId) ?? 0) + 1);
     }
     // 卡死口径与 reclaim 服务同源：管理员暂停的会话（teaching.paused）无写入是预期行为，
     // 不算卡死（否则「卡死 N」与回收 dryRun 清单不一致，且暂停会话会被误标）
@@ -1455,7 +1493,33 @@ router.get('/', async (req: Request, res) => {
       const storyPool = Array.isArray(profileData?.storyPool) ? profileData.storyPool : [];
       // 运行中信号：列表一屏回答「谁在跑、跑到哪个阶段」（阶段仍取会话样本，计数已全量聚合）
       const sessionSample = Array.isArray(p.sessions) ? p.sessions : [];
-      const runningSessions = sessionSample.filter((s) => s.status === 'running');
+      const autopilotStoppedIds = new Set(
+        sessionSample
+          .filter((s) => {
+            try {
+              return JSON.parse(String(s.stageResults || '{}'))?.autopilot?.status === 'stopped';
+            } catch {
+              return false;
+            }
+          })
+          .map((s) => s.id)
+      );
+      const runningSessions = sessionSample.filter((s) => s.status === 'running' && !autopilotStoppedIds.has(s.id));
+      const pausedSessions = sessionSample.filter((s) => s.status === 'running' && autopilotStoppedIds.has(s.id));
+      // 阶段进度（轴 B）：从最新会话的 stageResults 推导 Goal/Path/Learn 三态 + 任务进度
+      const latestSession = sessionSample[0];
+      let stageProgress: { goalReady: boolean; pathReady: boolean; learnStarted: boolean; taskDone: number; taskTotal: number } | null = null;
+      if (latestSession) {
+        let sr: Record<string, any> = {};
+        try { sr = JSON.parse(String(latestSession.stageResults || '{}')); } catch { /* 忽略 */ }
+        stageProgress = {
+          goalReady: !!(sr?.goal?.converged || sr?.goal?.finalStage || sr?.goal?.stage === 'completed' || latestSession.goalConversationId),
+          pathReady: !!(sr?.path?.success || latestSession.learningPathId),
+          learnStarted: !!(sr?.teaching?.teachingSessionId || latestSession.currentTaskId || latestSession.currentStage === 'teaching' || latestSession.currentStage === 'learn'),
+          taskDone: Number(latestSession.completedTasks) || 0,
+          taskTotal: Number(latestSession.totalTasks) || 0,
+        };
+      }
       return {
         ...p,
         email: p.users.email,
@@ -1468,10 +1532,15 @@ router.get('/', async (req: Request, res) => {
         sessionCount: p._count?.sessions ?? sessionSample.length,
         storyCount: storyPool.length,
         runningCount: runningByProfile.get(p.id) ?? 0,
+        // 已暂停自动驾驶的会话数（autopilot=stopped，会话数据保留）
+        pausedCount: pausedByProfile.get(p.id) ?? 0,
         failedCount: failedByProfile.get(p.id) ?? 0,
         stalledCount: staleByProfile.get(p.id) ?? 0,
         currentStage: runningSessions[0]?.currentStage || sessionSample[0]?.currentStage || null,
-        runningSessionIds: runningSessions.map((s) => s.id)
+        runningSessionIds: runningSessions.map((s) => s.id),
+        pausedSessionIds: pausedSessions.map((s) => s.id),
+        // 阶段进度（轴 B）：Goal/Path/Learn 三态 + 任务进度
+        stageProgress
       };
     });
 
@@ -1483,6 +1552,8 @@ router.get('/', async (req: Request, res) => {
       completed: countByStatus('completed'),
       total: statusAgg.reduce((a, s) => a + (s._count?._all ?? 0), 0)
     };
+    // 自动驾驶全局并发（配额条数据：used=内存运行中会话数，limit=env 可配上限）
+    const autopilotConcurrency = autopilotService.getConcurrencyStats();
 
     res.json({
       success: true,
@@ -1495,6 +1566,7 @@ router.get('/', async (req: Request, res) => {
           totalPages: Math.ceil(total / limit)
         },
         sessionStats,
+        autopilotConcurrency,
         staleCount: staleTotal,
         reclaimThresholdMs: virtualSessionReclaimService.getThresholdMs()
       }
@@ -1719,7 +1791,7 @@ router.put('/:id', async (req: Request, res) => {
       const newBudget = { ...existingBudget, ...req.body.simulationBudget };
       // 钳制数值范围（与前端输入框 min/max 一致），防止手误写入超大值导致近无限重试
       newBudget.maxRetriesPerStep = clampBudgetValue(newBudget.maxRetriesPerStep, 8, 1, 20);
-      newBudget.maxRetriesTotal = clampBudgetValue(newBudget.maxRetriesTotal, 200, 1, 500);
+      newBudget.maxRetriesTotal = clampBudgetValue(newBudget.maxRetriesTotal, 600, 1, 1000);
       // 保留已消耗的 consumedRetries（不能被前端覆盖）
       newBudget.consumedRetries = existingBudget.consumedRetries || 0;
       nextProfileJson = JSON.stringify({ ...base, simulationBudget: newBudget });
@@ -3384,6 +3456,68 @@ router.post('/batch-delete', async (req: Request, res) => {
   } catch (error) {
     logger.error('批量删除虚拟学习者失败:', error);
     res.status(500).json({ success: false, error: error?.message || '批量删除失败' });
+  }
+});
+
+/**
+ * 批量新建虚拟学习者（服务端队列）：
+ * 同步创建学习者（秒回 batchId），后台逐个生成身份 + 故事，前端轮询进度。
+ * POST /api/admin/virtual-learners/batch-create
+ * body: { rows: [{ name, storyCount }], cohort?, note? }
+ */
+router.post('/batch-create', async (req: Request, res) => {
+  try {
+    const rows = Array.isArray(req.body?.rows) ? (req.body.rows as Array<{ name?: string; storyCount?: number }>) : [];
+    if (!rows.length) {
+      return res.status(400).json({ success: false, error: 'rows 至少提供一行' });
+    }
+    if (rows.length > 50) {
+      return res.status(400).json({ success: false, error: '单批最多 50 人，请分批操作' });
+    }
+    const result = await batchJobService.submit({
+      rows: rows.map((r) => ({ name: String(r?.name || '').trim(), storyCount: Math.round(Number(r?.storyCount)) || 0 })),
+      cohort: typeof req.body?.cohort === 'string' ? req.body.cohort : undefined,
+      note: typeof req.body?.note === 'string' ? req.body.note : undefined,
+      createdBy: req.user?.userId ?? null,
+    });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error('批量新建失败:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || '批量新建失败' });
+  }
+});
+
+/**
+ * 批量任务进度
+ * GET /api/admin/virtual-learners/batch-create/:batchId
+ */
+router.get('/batch-create/:batchId', async (req: Request, res) => {
+  try {
+    const job = await batchJobService.getJob(req.params.batchId);
+    if (!job) {
+      return res.status(404).json({ success: false, error: '批量任务不存在' });
+    }
+    res.json({ success: true, data: job });
+  } catch (error) {
+    logger.error('查询批量任务失败:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || '查询批量任务失败' });
+  }
+});
+
+/**
+ * 批量任务重试失败项
+ * POST /api/admin/virtual-learners/batch-create/:batchId/retry
+ */
+router.post('/batch-create/:batchId/retry', async (req: Request, res) => {
+  try {
+    const ok = await batchJobService.retry(req.params.batchId);
+    if (!ok) {
+      return res.status(404).json({ success: false, error: '批量任务不存在或没有失败项' });
+    }
+    res.json({ success: true, data: { retried: true } });
+  } catch (error) {
+    logger.error('批量任务重试失败:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || '批量任务重试失败' });
   }
 });
 

@@ -4,11 +4,13 @@ import api from '../utils/api';
 export interface LoginData {
   name: string;
   password: string;
+  remember?: boolean;
 }
 
 export interface RegisterData {
   name: string;
   password: string;
+  remember?: boolean;
 }
 
 export interface AuthResponse {

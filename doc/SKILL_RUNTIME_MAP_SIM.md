@@ -1,6 +1,7 @@
 # 仿真与辅助 Skill 运行环境地图
 
 > 审计员只读调查产物（2026-08-10）。覆盖：simulation 家族 8 个 skill + aux skill 9 个 + handler-only 1 个（skill:learner-model）。注：aux 中 session-evaluation-fallback 已于 2026-08-11 退役（调查时点仍注册，见 §2.2 标注）。
+> ⚠️ 2026-08-30 复核：§1.3/1.4/1.5 的 failurePolicy 描述已按 2026-08-11 纯重试改造后的实际值（propagate）修正；agent-manifest 归属数已更新（16 skill → 20 skill）。其余行号/调用链为 2026-08-10 时点快照，如与现行代码冲突以代码为准。
 > 证据精确到 file:line。路径相对仓库根 `D:\wenflow\wenflow`。
 > 字段路由唯一源 = `prompts/orchestration/simulation.yaml`（simulation 家族）+ 主链各 stage yaml（goal/path/teaching/profile）。
 
@@ -54,7 +55,7 @@
   - **blackbox（正式链）**：`autoStep`（blackbox-runner.ts:717-733，经 `executeSimulatorSkill` :2126，带快照 prompt/route 覆写 + L2 sandbox 对账 :2130-2139）。输入按 stageResults.experimentSnapshot 拼装。
   - 输出收取：skill 内 `normalizeOutput`（skills/virtual-learner-goal-dialogue-simulator/index.ts:186）读 reply/emotion/learnerState/debug；协调器再读 `output.reply`/`output.emotion`/`output.debug?.stateChangeReason`/`runtimeEnvelope.contextUpdate.nextState`（:1432-1445、:1594-1602）；blackbox 读 `output.reply`/`output.learnerState`/`output.emotion`/`output.debug`（:733-741）。
 - **流转**：handoff=[simulation-agent]。落库：assisted → `virtual_sessions.stageResults.goal.learnerState/lastRuntimeEnvelope`（updateStageResults :1610-1616）与 `logs[].phase=virtual-reply`；blackbox → `stageResults.blackbox.learnerPrivateState.goal` + `learnerPrivateStateTrace`（persistPrivateState blackbox-runner.ts:736-741、1887-1926）。下游消费：SessionCockpit 私有状态时间线（frontend/src/views/admin-redesign/SessionCockpit.vue:1444+）、actor-auditor 输入（buildActorAuditInput :1715-1729）。
-- **运行环境**：**仿真黑盒 + 辅助模式**（双链）。触发：goal 每轮自动。失败语义：skill 层 fallback（yaml:72 failurePolicy=fallback；LLM 失败返回 `degraded:true` 保守兜底 :299-315）；协调器层 `retryLearnUpstream` 3 次（:401-420）+ reply 缺失即抛错（:1575-1577）；blackbox 层 reply 缺失抛 `BLACKBOX_*`（:733）。validation 排除（skill-output-validator.ts:157）。
+- **运行环境**：**仿真黑盒 + 辅助模式**（双链）。触发：goal 每轮自动。失败语义：core `failurePolicy: propagate`（yaml:82，2026-08-11 纯重试改造后由 fallback 改为 propagate；LLM 失败由调用方处理，assisted 协调器层 `retryLearnUpstream` 3 次 :401-420 + reply 缺失即抛错 :1575-1577；blackbox 层 reply 缺失抛 `BLACKBOX_*` :733；skill 层已无 fallback 兜底 `degraded:true`）。validation 排除（skill-output-validator.ts:157）。
 
 ## 1.4 skill:virtual-learner-path-evaluator（Path 评估器）
 
@@ -63,7 +64,7 @@
 - **调用链**：**仅 assisted 模式**。`reviewPathProposal`（simulation.coordinator.ts:2091-2215，executeSkill :2126）。core 明确"blackbox 模式不调用本技能"（path-evaluator.yaml:7）。输入手拼：learner=parseProfileData、pathProposal=learning_paths+milestones、previousReaction=stageResults.path_review、frictionBudget。
 - **输出收取**：`normalizeOutput`（skills/virtual-learner-path-evaluator/index.ts:148）读 reaction/visibleRequestedChanges/debug；决策读 `debug.internalDecision`（合法枚举否则默认 'accept'，:2155-2157）、`debug.internalConfidence`、`debug.visibleSignal`（:2159）。
 - **流转**：handoff=[simulation-agent]。落库：`stageResults.path_review`（:2178-2190）+ `logs[].phase=path-review`。下游：acceptPathReview（:2218-2251）/replanPathFromReview（:2254-2324）/resolvePathReview（:2330-2371）人工闸门。
-- **运行环境**：**仿真黑盒的辅助调试旁路**（仅 assisted/legacy；blackbox 不触发）。失败语义：core `failurePolicy: fallback`（yaml:61，skill 层有 buildFallback）；reaction 缺失抛"虚拟用户 Path 评审结果无效"（:2148-2150），reviewPathProposal catch 后返回 success=false（:2204-2214）。validation 排除（skill-output-validator.ts:159）。
+- **运行环境**：**仿真黑盒的辅助调试旁路**（仅 assisted/legacy；blackbox 不触发）。失败语义：core `failurePolicy: propagate`（yaml:71，2026-08-11 纯重试改造后由 fallback 改为 propagate；skill 层已无 buildFallback）；reaction 缺失抛"虚拟用户 Path 评审结果无效"（:2148-2150），reviewPathProposal catch 后返回 success=false（:2204-2214）。validation 排除（skill-output-validator.ts:159）。
 
 ## 1.5 skill:virtual-learner-learn-turn-simulator（Learn 阶段回合模拟器）
 
@@ -75,7 +76,7 @@
   - **quick-learn**：`runSimulatorTurn`（quick-learn.service.ts:560-571，固定 `frictionBudget: 'none'` :570，story=null）。
   - 输出收取：`normalizeOutput`（skills/virtual-learner-learn-turn-simulator/index.ts:198）读 reply/emotion/learnerState/learnerFeedback/debug；assisted 经 `resolveSimLearnerState`（coordination :847-854，优先 envelope.contextUpdate.nextState）；收束判定读 learnerFeedback.{selfReportedTaskDone,wantsMoreHelp,stopAsking,remainingBlockers}（:2877-2882；quick-learn :384-389；blackbox :781-784）。
 - **流转**：handoff=[simulation-agent]。落库：assisted → `stageResults.teaching.learnerState/latestLearnerFeedback/closureDecision/taskRuntime/conversationHistory`（:3072-3114）；blackbox → `learnerPrivateState.teaching` + trace；quick-learn → `virtual_quick_learn_runs.transcript/report`（:669-670）。下游：SessionCockpit 课堂面板、QuickLearnPanel.vue:400 传播报告。
-- **运行环境**：**仿真黑盒 + 辅助模式 + 快速学习**（三链共用）。失败语义：core `failurePolicy: fallback`（yaml:91）；assisted 层 retry 3 次 + reply 空抛错（:2826-2829）+ turn 预算 30 显式失败（LEARN_TASK_TURN_BUDGET=30，:47、:2724-2745）；blackbox reply 缺失抛错（:780）；quick-learn 连续 3 次 degraded 终止运行（SIMULATOR_FAILURE_LIMIT=3，quick-learn.service.ts:41、:360-369）。validation 排除（skill-output-validator.ts:158）。
+- **运行环境**：**仿真黑盒 + 辅助模式 + 快速学习**（三链共用）。失败语义：core `failurePolicy: propagate`（yaml:101，2026-08-11 纯重试改造后由 fallback 改为 propagate）；assisted 层 retry 3 次 + reply 空抛错（:2826-2829）+ turn 预算 30 显式失败（LEARN_TASK_TURN_BUDGET=30，:47、:2724-2745）；blackbox reply 缺失抛错（:780）；quick-learn 连续 3 次 degraded 终止运行（SIMULATOR_FAILURE_LIMIT=3，quick-learn.service.ts:41、:360-369）。validation 排除（skill-output-validator.ts:158）。
 
 ## 1.6 skill:virtual-learner-referee（平台体验裁判）
 

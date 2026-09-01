@@ -22,8 +22,7 @@
 
       <!-- 加载 -->
       <div v-if="loading" class="paths__loading">
-        <span class="spinner"></span>
-        <p>正在加载学习路径…</p>
+        <SkeletonLoader variant="list" :count="4" />
       </div>
 
       <!-- 失败 -->
@@ -149,7 +148,7 @@ import { learningAPI } from '@/api/learning';
 import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import V2Footer from './V2Footer.vue';
-import './v2.css';
+import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 
 type CardKind = 'ready' | 'generating' | 'failed' | 'completed';
 interface PathCard {
@@ -437,14 +436,14 @@ onBeforeUnmount(() => {
 }
 .btn-ghost {
   padding: 10px 18px; border-radius: 12px;
-  border: 1px solid var(--line); background: #fff;
+  border: 1px solid var(--line); background: var(--surface, #fff);
   font-size: 14px; font-weight: 700; color: var(--muted);
   cursor: pointer;
 }
 
 .filters { display: flex; gap: 8px; flex-wrap: wrap; }
 .filter {
-  border: 1px solid var(--line); background: #fff;
+  border: 1px solid var(--line); background: var(--surface, #fff);
   border-radius: 999px; padding: 8px 15px;
   font: inherit; font-size: 13px; font-weight: 600; color: var(--muted);
   cursor: pointer; transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
@@ -582,7 +581,7 @@ onBeforeUnmount(() => {
 .pcard__more-wrap { position: relative; }
 .pcard__menu {
   position: absolute; top: 26px; right: 0; z-index: 10;
-  background: #fff; border: 1px solid var(--line);
+  background: var(--surface, #fff); border: 1px solid var(--line);
   border-radius: 12px; padding: 5px;
   box-shadow: 0 12px 30px rgba(23, 32, 51, 0.14);
   display: grid; min-width: 120px;
@@ -594,13 +593,13 @@ onBeforeUnmount(() => {
   text-align: left;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.pcard__menu-item:hover { background: #f1f5fb; color: var(--ink); }
+.pcard__menu-item:hover { background: color-mix(in srgb, var(--surface) 96%, var(--ink)); color: var(--ink); }
 .pcard__menu-item--danger { color: var(--red, #c0454a); }
 .pcard__menu-item--danger:hover { background: rgba(239, 117, 120, 0.08); color: var(--red, #c0454a); }
 .pcard__confirm {
   display: flex; align-items: center; gap: 9px;
   font-size: 12.5px; color: var(--muted);
-  background: #fafcff; border: 1px dashed var(--line);
+  background: var(--canvas, #fafcff); border: 1px dashed var(--line);
   border-radius: 10px; padding: 8px 11px;
 }
 .pcard__confirm-yes { color: var(--red, #c0454a); font-weight: 800; cursor: pointer; }

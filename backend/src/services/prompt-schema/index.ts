@@ -10,7 +10,7 @@
  *
  * 真相源仍是 prompts/*.md；本工具只在内存里拆/拼，便于运营按块编辑与可视化。
  *
- * 详见 doc/PROMPT_AUTHORING_PROTOCOL.md。
+ * 详见 doc/archive/PROMPT_AUTHORING_PROTOCOL_v2.md（v2 已归档 2026-08-09，现行协议为 SKILL_PROTOCOL_V4）。
  *
  * ⚠️ 向后兼容：保留 v1 的 PromptSchema 字段（title/identity/rulesRaw/rules/output/
  *    extras/conformant/warnings）+ parsePromptSchema/composePromptSchema/parseRuleItems/

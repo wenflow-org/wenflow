@@ -1,13 +1,20 @@
 import type { TeachingKnowledgePointState } from './TeachingSessionRepository';
 
 export class KnowledgeStateService {
+  /**
+   * 合并知识看板。
+   * @param allowDegrade 是否允许 mastered 降级（复习课传 true：复习失败时 LLM 判定可把
+   *   mastered 回退为 review/learning，让掌握度数据真实反映；普通课保持"只升不降"，
+   *   避免 LLM 单轮误判导致掌握度倒退）。
+   */
   merge(
     existing: TeachingKnowledgePointState[],
     incoming: Array<{
       name: string;
       status: 'pending' | 'learning' | 'mastered' | 'review';
       progress: number;
-    }>
+    }>,
+    allowDegrade = false,
   ): TeachingKnowledgePointState[] {
     if (!incoming.length) return existing;
 
@@ -21,8 +28,12 @@ export class KnowledgeStateService {
 
       merged.set(point.name, {
         ...previous,
-        status: point.status === 'mastered' || previous.status !== 'mastered' ? point.status : previous.status,
-        progress: Math.max(previous.progress, point.progress),
+        // 只升不降：mastered 一旦达成，除非 allowDegrade（复习课）否则不降级
+        status:
+          previous.status === 'mastered' && !allowDegrade
+            ? previous.status
+            : point.status,
+        progress: allowDegrade ? point.progress : Math.max(previous.progress, point.progress),
       });
     }
 

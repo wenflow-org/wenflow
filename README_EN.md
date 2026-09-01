@@ -79,8 +79,8 @@ Inspired by load-and-recovery ideas from sports science, WenFlow tracks learning
 | Metric | Meaning | Usage |
 |------|------|------|
 | LSS | Learning Stress Score | Based on task difficulty, duration, cognitive load, EWMA-smoothed |
-| KTL | Knowledge Training Load | Long-term accumulation, 42-day decay factor 0.95 |
-| LF | Learning Fatigue | Short-term accumulation, 7-day decay factor 0.70 |
+| KTL | Knowledge Training Load | Long-term accumulation, daily decay factor 0.95 (half-life ≈ 13.5 days) |
+| LF | Learning Fatigue | Short-term accumulation, daily decay factor 0.70 (half-life ≈ 1.9 days) |
 | LSB | Learning State Balance | KTL - LF, warns against over-learning |
 
 ### Platform Agent Architecture (Simplified)
@@ -149,9 +149,9 @@ The admin panel lives at `/admin` with 16+ pages, all backed by real APIs (demo 
 |------|------|
 | **Frontend** | Vue 3 + TypeScript + Vite 6 + Element Plus + Pinia |
 | **Backend** | Node.js + Express + TypeScript + Prisma |
-| **Database** | SQLite (main DB with 36 tables + system DB with 16 tables, dual-database architecture) |
+| **Database** | SQLite (main DB with 43 tables + system DB with 14 tables, dual-database architecture) |
 | **AI Integration** | OpenAI-compatible model gateway (default: DeepSeek deepseek-v4-flash / v4-pro / r1), SSE streaming, retry budget, thinking-mode control |
-| **Agent Coordination** | EduClaw Gateway + 7 official Agents / Skill orchestration + Coordinators + Event Bus (outbox durable events) |
+| **Agent Coordination** | EduClaw Gateway + 5 top-level Agents (goal/path/teaching/profile/simulation) / Skill orchestration (prompts/core source → compiled artifacts → DB mirror) + Coordinators + Durable Outbox event chain |
 | **Model Config Layers** | Env vars → platform defaults → Agent/Skill level → user-defined API / model overrides |
 | **Virtual Experiment** | Virtual Learner Lab (black-box simulation + Quick Learn) |
 | **Observability** | Agent/Skill call logs, trace waterfall, LLM execution details |

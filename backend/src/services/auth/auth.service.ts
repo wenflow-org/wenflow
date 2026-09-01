@@ -3,7 +3,14 @@ import bcrypt from 'bcryptjs';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
-import { signSessionToken, verifySessionToken } from '../../utils/session-token';
+import {
+  signSessionToken,
+  verifySessionToken,
+  signAccessToken,
+  signRefreshToken,
+  verifyAccessToken,
+  verifyRefreshToken,
+} from '../../utils/session-token';
 import { getPasswordResetMailProvider } from './password-reset-mailer';
 import { isTestAccountUser } from '../../utils/test-account';
 
@@ -66,6 +73,19 @@ class AuthService {
     }
   }
 
+  // ──── Dual-token pair generation ────
+
+  /** Issue a fresh access + refresh token pair for a user. */
+  generateTokenPair(
+    userId: string,
+    name: string,
+    tokenVersion: number
+  ): { accessToken: string; refreshToken: string } {
+    const accessToken = signAccessToken(userId, name, tokenVersion);
+    const refreshToken = signRefreshToken(userId, tokenVersion);
+    return { accessToken, refreshToken };
+  }
+
   // 注册
   async register(data: RegisterData) {
     try {
@@ -94,7 +114,11 @@ class AuthService {
       });
 
       // 生成 JWT
-      const token = this.generateToken({ userId: user.id, name: user.name });
+      const { accessToken, refreshToken } = this.generateTokenPair(
+        user.id,
+        user.name,
+        user.tokenVersion || 0
+      );
 
       logger.info(`新用户注册：${user.name}`);
 
@@ -103,7 +127,8 @@ class AuthService {
           id: user.id,
           name: user.name,
         },
-        token
+        accessToken,
+        refreshToken,
       };
     } catch (error) {
       logger.error('注册失败:', error);
@@ -146,11 +171,11 @@ class AuthService {
       });
 
       // 生成 JWT（携带 tokenVersion，供改密/重置后吊销旧令牌）
-      const token = this.generateToken({
-        userId: user.id,
-        name: user.name,
-        tokenVersion: user.tokenVersion || 0,
-      });
+      const { accessToken, refreshToken } = this.generateTokenPair(
+        user.id,
+        user.name,
+        user.tokenVersion || 0
+      );
 
       logger.info(`用户登录：${user.name}`);
 
@@ -160,7 +185,8 @@ class AuthService {
           email: user.email,
           name: user.name,
         },
-        token
+        accessToken,
+        refreshToken,
       };
     } catch (error) {
       logger.error('登录失败:', error);
@@ -225,7 +251,7 @@ class AuthService {
     }
   }
 
-  // 生成 JWT
+  // 生成旧版单 token（保留供 verifyToken 等场景使用）
   private generateToken(payload: JWTPayload): string {
     return signSessionToken(payload, 'user', this.JWT_EXPIRES_IN as any);
   }

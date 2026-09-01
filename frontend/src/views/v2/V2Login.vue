@@ -43,6 +43,11 @@
         <span v-if="errors.password" class="field__error">{{ errors.password }}</span>
       </label>
 
+      <label class="remember-row">
+        <input type="checkbox" v-model="remember" class="remember-cb" />
+        <span>记住我</span>
+      </label>
+
       <button type="submit" class="btn-primary btn-primary--block" :disabled="loading">
         {{ loading ? '正在登录…' : '登录' }}
       </button>
@@ -83,6 +88,7 @@ const form = reactive({
 });
 const errors = reactive({ name: '', password: '' });
 const showPwd = ref(false);
+const remember = ref(true);
 const formError = ref('');
 
 function touch(key: 'name' | 'password') {
@@ -109,10 +115,15 @@ async function handleLogin() {
 
   loading.value = true;
   try {
-    await userStore.login(form.name, form.password);
+    await userStore.login(form.name, form.password, remember.value);
     localStorage.setItem(LAST_NAME_KEY, form.name);
     toast.success('登录成功');
-    await router.replace(safeRedirect.value || '/dashboard');
+    // 新用户引导：未完成 onboarding → 跳转引导页
+    if (userStore.user?.onboardingCompleted === false) {
+      await router.replace('/onboarding');
+    } else {
+      await router.replace(safeRedirect.value || '/dashboard');
+    }
   } catch (error: unknown) {
     const message = error && typeof error === 'object' && 'message' in error
       ? String(error.message)
@@ -204,6 +215,19 @@ onMounted(() => {
 .forgot-link:hover {
   color: var(--blue-deep);
   text-decoration: underline;
+}
+
+.remember-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+.remember-cb {
+  accent-color: var(--blue);
 }
 </style>
 

@@ -7,8 +7,10 @@
       <span class="mk-status__meta">用例 {{ cases.length }}</span>
       <span class="mk-status__meta">评估历史 {{ runs.length }}</span>
       <span class="mk-status__meta" :title="lastRunHint">{{ lastRunText }}</span>
-      <button type="button" class="mk-status__action" @click="tab = 'runs'">评估历史</button>
-      <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建用例</button>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action" @click="tab = 'runs'">评估历史</button>
+        <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建用例</button>
+      </span>
     </div>
 
     <!-- 筛选行 -->
@@ -206,7 +208,7 @@
               <input v-model="form.enabled" type="checkbox" />
               <span class="mk-field__label" style="margin:0">启用（参与批量评估）</span>
             </label>
-            <div v-if="formError" class="errorbar">{{ formError }}</div>
+            <div v-if="formError" class="mk-alert">{{ formError }}</div>
           </div>
           <div class="mk-modal__foot">
             <button type="button" class="mk-btn" @click="formOpen = false">取消</button>
@@ -232,10 +234,10 @@
             <div v-if="runDetailLoading" class="pe-detail-loading"><span class="mk-spinner"></span> 加载中…</div>
             <template v-else-if="runDetail">
               <div class="pe-run-summary">
-                <div class="pe-run-stat"><strong>{{ runDetail.summary.passRate ?? 0 }}%</strong><span>通过率</span></div>
-                <div class="pe-run-stat"><strong>{{ runDetail.summary.passedCount ?? 0 }}/{{ runDetail.summary.totalRuns ?? 0 }}</strong><span>通过/总数</span></div>
-                <div class="pe-run-stat"><strong>{{ runDetail.summary.structuredSuccessRate ?? 0 }}%</strong><span>结构化输出</span></div>
-                <div class="pe-run-stat"><strong>{{ fmtMs(runDetail.durationMs) }}</strong><span>总耗时</span></div>
+                <MkKpi label="通过率" :value="`${runDetail.summary.passRate ?? 0}%`" />
+                <MkKpi label="通过/总数" :value="`${runDetail.summary.passedCount ?? 0}/${runDetail.summary.totalRuns ?? 0}`" />
+                <MkKpi label="结构化输出" :value="`${runDetail.summary.structuredSuccessRate ?? 0}%`" />
+                <MkKpi label="总耗时" :value="fmtMs(runDetail.durationMs)" />
               </div>
               <div v-if="runDetail.results.length" class="pe-results">
                 <div v-for="(res, i) in runDetail.results" :key="i" class="pe-result-row" :class="{ 'pe-result-row--fail': !res.passed }">
@@ -268,6 +270,7 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
+import MkKpi from './MkKpi.vue'
 
 interface EvalCase {
   id: string
@@ -580,7 +583,8 @@ void reloadCases()
 <style scoped>
 .pe-filter { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; }
 .pe-filter__hint { color: var(--mk-faint); font-size: 11.5px; margin-left: auto; }
-.pe-list { min-height: var(--mk-empty-min-h, calc(100dvh - 230px)); }
+/* 列表高度：空态占位交给 mk-empty--min，有数据时表格自然高度（不再硬撑满屏） */
+.pe-list { min-height: 0; }
 .pe-expect { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--mk-muted); }
 .pe-result { display: flex; align-items: baseline; gap: 6px; }
 .pe-result strong { font-size: 13px; font-family: var(--mk-mono); }
@@ -594,22 +598,11 @@ void reloadCases()
 .pe-msg { display: grid; grid-template-columns: 88px 1fr 28px; gap: 8px; align-items: center; }
 .pe-msg__role { height: 34px; }
 
-.errorbar {
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--mk-red-bg, #fef2f2);
-  color: var(--mk-red, #dc2626);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
 .pe-detail-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 40px 0; color: var(--mk-muted); font-size: 13px; }
-.pe-run-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
-.pe-run-stat { display: grid; gap: 2px; padding: 12px; border: 1px solid var(--mk-line); border-radius: 10px; text-align: center; }
-.pe-run-stat strong { font-size: 16px; font-family: var(--mk-mono); }
-.pe-run-stat span { font-size: 11px; color: var(--mk-faint); }
+/* 运行概要：MkKpi 网格容器（统计卡本体由 MkKpi 提供） */
+.pe-run-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .pe-results { display: grid; gap: 8px; }
-.pe-result-row { border: 1px solid var(--mk-line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; }
+.pe-result-row { border: 1px solid var(--mk-line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; background: var(--mk-surface); }
 .pe-result-row--fail { border-color: rgba(220, 38, 38, 0.35); background: var(--mk-red-bg, #fef2f2); }
 .pe-result-row__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pe-result-row__head strong { font-size: 12.5px; }
@@ -633,6 +626,23 @@ void reloadCases()
 @media (min-width: 2000px) {
   .pe-result-row__head strong { font-size: 14px; }
   .pe-result-row__out { font-size: 13.5px; }
-  .pe-run-stat strong { font-size: 18px; }
+}
+@media (min-width: 2800px) {
+  .pe-result-row__head strong { font-size: 16.5px; }
+  .pe-result-row__out { font-size: 16px; }
+  .pe-expect { font-size: 13.5px; max-width: 300px; }
+}
+@media (min-width: 3600px) {
+  .pe-result-row__head strong { font-size: 19.5px; }
+  .pe-result-row__out { font-size: 18.5px; }
+  .pe-expect { font-size: 16px; max-width: 350px; }
+}
+
+/* 暗色模式（D1 补完）：Prompt 评估（此前完全缺失） */
+html[data-theme='dark'] {
+  .pe-result-row { background: #141c2b; border-color: #232f45; }
+  .pe-result-row--fail { background: rgba(248, 113, 113, 0.08); border-color: rgba(248, 113, 113, 0.35); }
+  .pe-check--ok { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
+  .pe-check--fail { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
 }
 </style>

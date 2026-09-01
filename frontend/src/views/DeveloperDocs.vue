@@ -394,8 +394,6 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
 </script>
 
 <style scoped>
-@import './v2/v2.css';
-
 .docs { min-height: 100vh; }
 
 /* ---------- 顶栏 ---------- */

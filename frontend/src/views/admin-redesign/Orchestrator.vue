@@ -9,8 +9,9 @@
       <span v-if="isLive" class="mk-status__meta">总调用 {{ totalCalls }}</span>
       <span v-if="unresolvedCount > 0" class="mk-status__meta mk-status__meta--bad">未解析 {{ unresolvedCount }}</span>
       <span v-if="isLive && w4Drifted.length" class="mk-status__meta mk-status__meta--bad">哈希漂移 {{ w4Drifted.length }}</span>
-      <span class="mk-status__spacer"></span>
-      <button v-if="isLive" type="button" class="mk-status__action" :disabled="defsLoading" @click="loadDefinitions">刷新</button>
+      <span class="mk-status__actions">
+        <button v-if="isLive" type="button" class="mk-status__action" :disabled="defsLoading" @click="loadDefinitions">刷新</button>
+      </span>
     </div>
 
     <!-- 阶段导航：五个 tab = 五个阶段（浏览 + 编辑 + 治理都在阶段工作区内） -->
@@ -362,7 +363,7 @@ void stageTitle.value
 /* 阶段导航：五个 tab = 五个阶段（大分段卡，每卡含阶段名 + Skill/调用概要） */
 .orch-stage-tabs {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 6px;
   margin: 10px 0 12px;
 }
@@ -370,14 +371,14 @@ void stageTitle.value
   display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
   padding: 9px 14px;
   border: 1px solid var(--mk-line); border-radius: 10px;
-  background: #fff; font: inherit; text-align: left;
+  background: var(--mk-surface); font: inherit; text-align: left;
   cursor: pointer;
   transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
 }
 .orch-stage-tab:hover { border-color: color-mix(in srgb, var(--mk-blue) 45%, var(--mk-line)); }
 .orch-stage-tab.is-active {
   border-color: var(--mk-blue);
-  background: #f0f5ff;
+  background: rgba(44, 99, 208, 0.08);
   box-shadow: 0 2px 8px rgba(44, 99, 208, 0.12);
 }
 .orch-stage-tab__name { font-size: 13px; font-weight: 800; color: var(--mk-ink); }
@@ -388,7 +389,7 @@ void stageTitle.value
 .orch-fold {
   margin-top: 12px;
   border: 1px solid var(--mk-line); border-radius: 10px;
-  background: #fff;
+  background: var(--mk-surface);
 }
 .orch-fold__summary {
   padding: 10px 14px;
@@ -415,22 +416,53 @@ details[open].orch-fold .orch-fold__summary::before { content: '▾ '; }
 .orch-pane-spacer { flex: 1; }
 .orch-pane-back {
   padding: 5px 12px; border: 1px solid var(--mk-line); border-radius: 8px;
-  background: #fff; font: inherit; font-size: 11.5px; font-weight: 700;
+  background: var(--mk-surface); font: inherit; font-size: 11.5px; font-weight: 700;
   color: var(--mk-muted); cursor: pointer;
 }
 .orch-pane-back:hover { color: var(--mk-blue); border-color: var(--mk-blue); }
 
 .mk-status__meta--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
 
-/* 4K：字段流转 tab 条跟随全站节奏 */
+/* 4K：阶段导航与折叠层跟随全站节奏 */
 @media (min-width: 2000px) {
-  .orch-tab { font-size: 13px; padding: 7px 16px; }
+  .orch-stage-tab { padding: 11px 16px; }
+  .orch-stage-tab__name { font-size: 14.5px; }
+  .orch-stage-tab__meta { font-size: 12px; }
+  .orch-fold__summary { padding: 12px 16px; font-size: 13.5px; }
+  .orch-fold__meta { font-size: 12.5px; }
+  .orch-fold__body { padding: 0 16px 16px; }
+  .orch-pane-head { padding: 12px 16px; }
+  .orch-pane-title { font-size: 14.5px; }
+  .orch-pane-hint { font-size: 13px; }
+  .orch-pane-back { font-size: 13px; padding: 6px 14px; }
+}
+@media (min-width: 2800px) {
+  .orch-stage-tab { padding: 13px 19px; }
+  .orch-stage-tab__name { font-size: 17px; }
+  .orch-stage-tab__meta { font-size: 14px; }
+  .orch-fold__summary { padding: 14px 19px; font-size: 16px; }
+  .orch-fold__meta { font-size: 14.5px; }
+  .orch-fold__body { padding: 0 19px 19px; }
+  .orch-pane-head { padding: 14px 19px; }
+  .orch-pane-title { font-size: 17px; }
+  .orch-pane-hint { font-size: 15px; }
+  .orch-pane-back { font-size: 15.5px; padding: 7px 17px; }
+}
+@media (min-width: 3600px) {
+  .orch-stage-tab { padding: 15px 22px; }
+  .orch-stage-tab__name { font-size: 20px; }
+  .orch-stage-tab__meta { font-size: 16.5px; }
+  .orch-fold__summary { padding: 16px 22px; font-size: 18.5px; }
+  .orch-fold__meta { font-size: 17px; }
+  .orch-fold__body { padding: 0 22px 22px; }
+  .orch-pane-head { padding: 16px 22px; }
+  .orch-pane-title { font-size: 20px; }
+  .orch-pane-hint { font-size: 17.5px; }
+  .orch-pane-back { font-size: 18px; padding: 8px 20px; }
 }
 
 /* ================= 暗色模式（D1 补完）：编排结构 ================= */
 html[data-theme='dark'] {
-  .orch-tab, .orch-panel { background: #141c2b; border-color: #232f45; }
-  .orch-tab.is-active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; }
 
   /* 阶段 tab 大分段卡 */
   .orch-stage-tab { background: #141c2b; border-color: #232f45; }

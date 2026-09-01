@@ -5,13 +5,14 @@ export type DurableEventType =
   | 'path:created'
   | 'path:generated'
   | 'path:adjusted'
-  | 'path:completed';
+  | 'path:completed'
+  | 'review:completed';
 
 export interface DurableDomainEvent<T = Record<string, any>> {
   id: string;
   type: DurableEventType;
   schemaVersion: number;
-  aggregateType: 'goal' | 'task' | 'lesson' | 'path';
+  aggregateType: 'goal' | 'task' | 'lesson' | 'path' | 'review';
   aggregateId: string;
   aggregateVersion?: number | null;
   userId?: string | null;

@@ -446,19 +446,6 @@ function recGateDetail(completion: SkillCompletion): string {
 
 <style scoped>
 /* 列表视图 */
-/* 可排序表头：button 包裹表头文字，样式重置为继承 th 外观 */
-.sk-sort {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  user-select: none;
-  white-space: nowrap;
-}
-.sk-sort:hover { color: var(--mk-blue); }
-.sk-sort--on { color: var(--mk-blue); }
 .sk-row { cursor: pointer; }
 .sk-cell { display: flex; align-items: center; gap: 10px; }
 /* 目录表列宽防抖（ADMIN_COLUMN_WIDTH_AUDIT ④）：全部固定宽，杜绝内容撑宽抖动；
@@ -503,10 +490,6 @@ function recGateDetail(completion: SkillCompletion): string {
 /* 指标阈值着色 */
 .sk-rate--bad { color: var(--mk-red); font-weight: 700; }
 .sk-rate--warn { color: var(--mk-amber); font-weight: 700; }
-.sk-lat--bad { color: var(--mk-red); font-weight: 700; }
-.sk-lat--warn { color: var(--mk-amber); font-weight: 700; }
-.sk-go { color: var(--mk-faint); font-weight: 700; }
-.sk-row:hover .sk-go { color: var(--mk-blue); }
 
 /* 网格视图 */
 .sk-grid {
@@ -574,7 +557,7 @@ function recGateDetail(completion: SkillCompletion): string {
 }
 .sk-card__err { color: var(--mk-red); font-weight: 700; }
 /* 失败率进度条 */
-.sk-card__rate { display: block; width: 100%; height: 4px; border-radius: 99px; background: #eef2fa; overflow: hidden; margin-top: 2px; }
+.sk-card__rate { display: block; width: 100%; height: 4px; border-radius: 99px; background: var(--mk-line); overflow: hidden; margin-top: 2px; }
 .sk-card__rate-bar { display: block; height: 100%; border-radius: 99px; background: var(--mk-green); transition: width 0.15s ease; }
 .sk-card__rate-bar.is-bad { background: var(--mk-red); }
 
@@ -584,8 +567,8 @@ function recGateDetail(completion: SkillCompletion): string {
   align-items: center;
   padding: 2px 9px;
   border-radius: 999px;
-  background: #eef2fa;
-  color: #41516e;
+  background: var(--mk-line);
+  color: var(--mk-muted);
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
@@ -664,8 +647,8 @@ function recGateDetail(completion: SkillCompletion): string {
   margin-left: 4px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: #eef2fa;
-  color: #41516e;
+  background: var(--mk-line);
+  color: var(--mk-muted);
   font-size: 10px;
   font-weight: 600;
   vertical-align: 1px;
@@ -692,7 +675,7 @@ function recGateDetail(completion: SkillCompletion): string {
 /* parentAgent 分组节头（P2 补全：goal-agent 下辖 N 条） */
 .sk-rec-group td {
   padding: 6px 14px;
-  background: #f4f7fc;
+  background: var(--mk-surface);
   border-bottom: 1px solid var(--mk-line, #e6ebf4);
 }
 .sk-rec-group__name {
@@ -738,6 +721,14 @@ function recGateDetail(completion: SkillCompletion): string {
   .sk-rec-legend__item .mk-badge { font-size: 14px; }
   .sk-dot { width: 12px; height: 12px; }
 }
+@media (min-width: 3600px) {
+  .sk-card__cat,
+  .sk-card__flag { font-size: 16.5px; }
+  .sk-rec__loading { font-size: 18.5px; }
+  .sk-rec-diff { font-size: 17.5px; }
+  .sk-rec-legend__item .mk-badge { font-size: 16.5px; }
+  .sk-dot { width: 14px; height: 14px; }
+}
 
 /* ================= 暗色模式（D1 补完）：Skill 运行 ================= */
 html[data-theme='dark'] {
@@ -747,6 +738,12 @@ html[data-theme='dark'] {
   .sk-rec-tag--bad { color: #fca5a5; background: rgba(248, 113, 113, 0.14); }
   .sk-card { background: #141c2b; border-color: #232f45; }
   .sk-card__head { border-bottom-color: #232f45; }
+  .sk-card--error { background: linear-gradient(180deg, #241a1a, #141c2b); }
+  .sk-dot--idle, .sk-card--idle .sk-card__dot { background: #4a5874; }
+  .sk-agent-tag, .sk-rec-tag { background: #232f45; color: #9fb0c8; }
+  .sk-rec-group td { background: #1b2537; }
+  .sk-rec__refresh { background: #17202f; }
+  .sk-rec-flash { animation: none; }
 }
 
 /* ================= D3 表格增强：Skill 列设置菜单 ================= */

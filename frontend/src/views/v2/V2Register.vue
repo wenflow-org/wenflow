@@ -61,6 +61,11 @@
         <span v-if="errors.confirm" class="field__error">{{ errors.confirm }}</span>
       </label>
 
+      <label class="remember-row">
+        <input type="checkbox" v-model="remember" class="remember-cb" />
+        <span>记住我</span>
+      </label>
+
       <button type="submit" class="btn-primary btn-primary--block" :disabled="loading">
         {{ loading ? '正在创建账号…' : '创建账号' }}
       </button>
@@ -96,6 +101,7 @@ const dailyQuota = ref(0);
 const form = reactive({ name: '', password: '', confirm: '' });
 const errors = reactive({ name: '', password: '', confirm: '' });
 const showPwd = ref(false);
+const remember = ref(true);
 
 const checks = computed(() => ({
   length: form.password.length >= 8,
@@ -155,9 +161,9 @@ async function handleRegister() {
 
   loading.value = true;
   try {
-    await userStore.register(form.name, form.password);
+    await userStore.register(form.name, form.password, remember.value);
     toast.success('注册成功');
-    await router.replace(safeRedirect.value || '/dashboard');
+    await router.replace('/onboarding');
   } catch (error: unknown) {
     const message = error && typeof error === 'object' && 'message' in error
       ? String(error.message)
@@ -233,6 +239,19 @@ onMounted(loadStatus);
   cursor: pointer; padding: 0;
 }
 .switch button:hover { text-decoration: underline; }
+
+.remember-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+.remember-cb {
+  accent-color: var(--blue);
+}
 </style>
 
 <style scoped>

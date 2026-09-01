@@ -140,7 +140,7 @@ const buildStoredGoalPathRequest = (path: {
   userId: string;
   description?: string | null;
   aiPromptTemplate?: string | null;
-}) => {
+}, adjustments?: string | null) => {
   const parsed = parsePromptTemplate(path.aiPromptTemplate);
   const goalFinalPayload = parsed?.goalFinalPayload && typeof parsed.goalFinalPayload === 'object'
     ? parsed.goalFinalPayload
@@ -159,6 +159,7 @@ const buildStoredGoalPathRequest = (path: {
     rawGoal: typeof goalFinalPayload.rawGoal === 'string' && goalFinalPayload.rawGoal.trim()
       ? goalFinalPayload.rawGoal
       : (path.description || ''),
+    adjustments: typeof adjustments === 'string' && adjustments.trim() ? adjustments.trim() : null,
     visibleSummary: goalFinalPayload.visibleSummary || null,
     conversationHistory: Array.isArray(goalFinalPayload.conversationHistory) ? goalFinalPayload.conversationHistory : [],
     finalUserVisible: typeof goalFinalPayload.finalUserVisible === 'string' ? goalFinalPayload.finalUserVisible : undefined,
@@ -694,14 +695,30 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
 });
 
 // 重新生成已有学习路径（主动触发，覆盖当前路径）
+// 支持用户侧"补充说明"（adjustments）：
+//   - 无学习进度（全 todo）→ 整路径重建（replace-path），补充说明注入 goal 请求供 LLM 重新规划
+//   - 有已完成任务（completed，无 in_progress）→ 收敛为重设计当前活动阶段（replan-stage），
+//     补充说明作为 reason 传给 stage-designer，已完成任务保留冻结
+//   - 有 in_progress 任务或未结束课堂 → 409 拦截，提示先结束课堂
 router.post('/paths/:pathId/regenerate', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const { pathId } = req.params;
     withPathContext(req, pathId, String(req.body?.sourceConversationId || ''));
 
+    const adjustments = typeof req.body?.adjustments === 'string' && req.body.adjustments.trim()
+      ? req.body.adjustments.trim()
+      : null;
+
     const path = await prisma.learning_paths.findUnique({
-      where: { id: pathId }
+      where: { id: pathId },
+      include: {
+        milestones: {
+          include: {
+            subtasks: { select: { id: true, status: true } }
+          }
+        }
+      }
     });
 
     if (!path) {
@@ -718,9 +735,38 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
       });
     }
 
+    const tasks = (path.milestones || []).flatMap((milestone: any) => milestone.subtasks || []);
+    const hasInProgress = tasks.some((task: any) => task.status === 'in_progress');
+    const hasCompleted = tasks.some((task: any) => task.status === 'completed');
+
+    // 有进行中任务或已完成任务（有学习进度）→ 走 replan-stage 语义（保留已完成，重设计当前活动阶段）
+    if (hasInProgress || hasCompleted) {
+      // 复用 requestPathReplan 的 overwrite 分支：补充说明作为 reason，重设计当前活动阶段
+      const result = await learningService.requestPathReplan({
+        pathId,
+        userId,
+        triggerSource: 'api',
+        mode: 'overwrite',
+        reason: adjustments || '用户主动调整路径',
+        requireConfirmation: false,
+        evidence: {
+          adjustments,
+          source: 'path-regenerate'
+        }
+      });
+      return res.json({
+        success: true,
+        data: result,
+        message: adjustments
+          ? '已按你的补充说明调整后续阶段'
+          : '已调整后续阶段'
+      });
+    }
+
+    // 无学习进度 → 整路径重建（现有 replace-path 语义），补充说明注入 goal 请求
     const runId = await learningService.claimPathCoreGeneration(pathId, path.activeGenerationRunId);
 
-    const storedGoalRequest = buildStoredGoalPathRequest(path)
+    const storedGoalRequest = buildStoredGoalPathRequest(path, adjustments)
       || await buildGoalPathRequestFromConversation(path);
 
     if (storedGoalRequest) {
@@ -741,7 +787,9 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
         sourceConversationId,
         existingPathId: pathId,
         generationRunId: runId,
-        userProfile: {}
+        userProfile: {
+          ...(adjustments ? { replan: { mode: 'regenerate-user', reason: adjustments, sourcePathId: pathId } } : {})
+        }
       }, {
         onError: async (error) => {
           logger.error(`重新生成学习路径失败：${pathId}`, error);
@@ -752,8 +800,10 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
 
     res.json({
       success: true,
-      data: { runId },
-      message: '正在重新生成学习路径'
+      data: { runId, adjustments },
+      message: adjustments
+        ? '正在按你的补充说明重新生成学习路径'
+        : '正在重新生成学习路径'
     });
   } catch (error: any) {
     if (sendPathMutationConflict(res, error)) return;

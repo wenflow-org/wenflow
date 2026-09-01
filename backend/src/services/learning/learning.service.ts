@@ -4203,6 +4203,11 @@ const learningPath = await prisma.learning_paths.findUnique({
       await tx.learning_paths.update({
         where: { id: path.id },
         data: {
+          // 断链修复 P0-4：真实 replan 流补写 replan 元数据（此前 LearningDecisionFeedService
+          // 依赖 replanReason 非空，而真实 replan 从不写 → 决策卡不出现）
+          replanMode: data.mode || 'overwrite',
+          replanTriggerSource: data.triggerSource || 'api',
+          replanReason: data.reason || null,
           aiPromptTemplate: JSON.stringify({
             ...parsedTemplate,
             stageDesigns: {
@@ -4703,6 +4708,48 @@ const learningPath = await prisma.learning_paths.findUnique({
         }
       } catch (error) {
         logger.warn('写入今日调度台账失败（不影响任务完成）:', error);
+      }
+
+      // 更新连续学习天数（best-effort，不影响任务完成）
+      try {
+        const today = new Date();
+        const todayStr = today.toISOString().slice(0, 10); // YYYY-MM-DD
+
+        const user = await prisma.users.findUnique({
+          where: { id: data.userId },
+          select: { streakDays: true, streakLastDate: true, longestStreak: true }
+        });
+
+        if (user) {
+          let newStreak = user.streakDays;
+          const lastDate = user.streakLastDate?.toISOString().slice(0, 10);
+
+          if (lastDate !== todayStr) {
+            if (!lastDate) {
+              newStreak = 1;
+            } else {
+              const last = new Date(lastDate + 'T00:00:00Z');
+              const diffDays = Math.floor((today.getTime() - last.getTime()) / (24 * 60 * 60 * 1000));
+              if (diffDays === 1) {
+                newStreak = user.streakDays + 1;
+              } else {
+                newStreak = 1;
+              }
+            }
+
+            const newLongest = Math.max(newStreak, user.longestStreak);
+            await prisma.users.update({
+              where: { id: data.userId },
+              data: {
+                streakDays: newStreak,
+                streakLastDate: today,
+                longestStreak: newLongest
+              }
+            });
+          }
+        }
+      } catch (error) {
+        logger.warn('更新学习连续天数失败（不影响任务完成）:', error);
       }
 
       // 基于学习者状态中心生成学习报告

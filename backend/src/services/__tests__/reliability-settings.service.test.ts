@@ -38,7 +38,7 @@ describe('reliability settings service', () => {
       maxUpstreamAttempts: 5,
       maxTransportRetries: 3,
       maxLogicalRetries: 3,
-      defaultRequestTimeoutMs: 300000,
+      defaultRequestTimeoutMs: 600000,
       retryBaseDelayMs: 1000,
       maxRetryAfterMs: 10000,
       jitterEnabled: true
@@ -60,7 +60,7 @@ describe('reliability settings service', () => {
       maxUpstreamAttempts: 10,
       maxTransportRetries: 5,
       maxLogicalRetries: 5,
-      defaultRequestTimeoutMs: 300000,
+      defaultRequestTimeoutMs: 600000,
       retryBaseDelayMs: 5000,
       maxRetryAfterMs: 10000,
       jitterEnabled: false

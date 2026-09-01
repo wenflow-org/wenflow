@@ -29,6 +29,15 @@ const AUTOPILOT_BLACKBOX_STEP_RETRIES = 3
 const AUTOPILOT_WAIT_OBSERVATION_LIMIT_MS = 10 * 60 * 1000
 /** 迭代间最小间隔（防止热循环打满数据库） */
 const AUTOPILOT_LOOP_PAUSE_MS = 1500
+/**
+ * 自动驾驶全局并发上限（env AUTOPILOT_CONCURRENCY_LIMIT 可覆盖）。
+ * 同时进行的自动驾驶会话数（内存 runningSessions）超过该值即拒绝新启动（QUEUE_FULL），
+ * 防止大量会话并发打爆 LLM 上游。前端通过列表接口 autopilotConcurrency 展示配额条。
+ */
+const AUTOPILOT_CONCURRENCY_LIMIT = Math.max(
+  1,
+  Math.min(200, Number(process.env.AUTOPILOT_CONCURRENCY_LIMIT) || 10)
+)
 
 export type AutopilotMode = 'assisted' | 'blackbox'
 
@@ -71,6 +80,17 @@ export class AutopilotTerminalError extends Error {
   constructor() {
     super('会话已处于终态，无需启动全自动')
     this.name = 'AutopilotTerminalError'
+  }
+}
+
+/** 自动驾驶并发上限已满：拒绝新启动（前端展示「并发已满，请先暂停/等待」） */
+export class AutopilotQueueFullError extends Error {
+  readonly code = 'AUTOPILOT_QUEUE_FULL'
+  readonly statusCode = 409
+
+  constructor(used: number, limit: number) {
+    super(`自动驾驶并发已达上限（${used}/${limit}），请先暂停部分会话或稍后重试`)
+    this.name = 'AutopilotQueueFullError'
   }
 }
 
@@ -147,6 +167,10 @@ export class AutopilotService {
     if (this.runningSessions.has(sessionId) || current.status === 'running') {
       throw new AutopilotConflictError(sessionId)
     }
+    // 全局并发闸门：同时运行的自动驾驶数达到上限 → 拒绝新启动（前端配额条提示）
+    if (this.runningSessions.size >= AUTOPILOT_CONCURRENCY_LIMIT) {
+      throw new AutopilotQueueFullError(this.runningSessions.size, AUTOPILOT_CONCURRENCY_LIMIT)
+    }
 
     // 每课回合上限：驾驶舱「回合上限」透传（1-100）；未传时沿用上次状态或默认 50
     const lessonTurnCap = Number.isInteger(options.maxTurns)
@@ -213,6 +237,14 @@ export class AutopilotService {
     }
     logger.info('[autopilot] 请求停止全自动', { sessionId })
     return { accepted: true }
+  }
+
+  /** 全局自动驾驶并发统计（used=内存中正在运行的会话数；limit=env 可配上限） */
+  getConcurrencyStats(): { used: number; limit: number } {
+    return {
+      used: this.runningSessions.size,
+      limit: AUTOPILOT_CONCURRENCY_LIMIT,
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -336,6 +368,18 @@ export class AutopilotService {
         if (result.stopped) return
         if (result.converged) {
           goalRetries = 0
+          // 关键：Goal 收敛后必须触发 Path 生成并推进阶段（currentStage: goal → path），
+          // 否则主循环下次迭代仍在 goal 阶段，永远不进入 Path/Learn（"Goal 跑完就不跑"根因）
+          try {
+            await simulationCoordinator.runLeasedExclusive(sessionId, async () => {
+              await simulationCoordinator.advanceToPathGeneration(sessionId)
+            })
+          } catch (error: unknown) {
+            logger.warn('[autopilot] Goal 收敛后触发 Path 生成失败', {
+              sessionId,
+              error: asErrorLike(error).message || String(error)
+            })
+          }
           continue
         }
         goalRetries += 1

@@ -147,7 +147,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { adminAuthApi, markAdminSession } from '@/api/adminApi'
 import { toast } from '../../utils/toast'
 import { consumeAuthFlashMessage } from '../../utils/authFlash'
-import '@/views/v2/v2.css'
 
 const router = useRouter()
 const route = useRoute()

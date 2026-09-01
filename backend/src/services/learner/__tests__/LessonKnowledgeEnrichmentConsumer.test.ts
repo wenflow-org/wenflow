@@ -48,6 +48,7 @@ describe('LessonKnowledgeEnrichmentConsumer', () => {
         sessionId: 'session-1',
         taskId: 'task-1',
         pathId: 'path-1',
+        transferGoal: '把递归思想迁移到树的遍历',
         knowledgeState: [{ name: 'A', status: 'mastered', progress: 100 }],
         visibleDialogueContext: []
       }
@@ -57,6 +58,7 @@ describe('LessonKnowledgeEnrichmentConsumer', () => {
     expect(executeSkill).toHaveBeenCalledWith(
       { name: 'lesson-knowledge-enricher' },
       expect.objectContaining({
+        transferGoal: '把递归思想迁移到树的遍历',
         knowledgeState: [{ name: 'A', status: 'mastered', progress: 100 }],
         visibleDialogueContext: []
       })
@@ -70,6 +72,48 @@ describe('LessonKnowledgeEnrichmentConsumer', () => {
     const evidenceRows = tx.learner_evidence.createMany.mock.calls[0][0].data;
     expect(evidenceRows.every((row: any) => !('confidence' in row))).toBe(true);
     expect(tx.domain_event_inbox.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('transferGoal 缺失/为空时不传给 skill（老事件兼容）', async () => {
+    inboxFindUnique.mockResolvedValue(null);
+    executeSkill.mockResolvedValue({
+      conceptLedger: [],
+      reusableFoundations: [],
+      blockedFoundations: [],
+      transferSignals: [],
+      recurringConfusions: []
+    });
+    const tx = {
+      domain_event_inbox: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({})
+      },
+      learner_evidence: { createMany: jest.fn().mockResolvedValue({ count: 2 }) }
+    };
+    transaction.mockImplementation(async (callback: any) => callback(tx));
+
+    await new LessonKnowledgeEnrichmentConsumer().handle(createDomainEvent({
+      id: 'evt-lesson-no-transfer',
+      type: 'lesson:completed',
+      aggregateType: 'lesson',
+      aggregateId: 'session-2',
+      userId: 'user-1',
+      source: 'test',
+      data: {
+        sessionId: 'session-2',
+        taskId: 'task-2',
+        knowledgeState: [],
+        visibleDialogueContext: []
+      }
+    }));
+
+    expect(executeSkill).toHaveBeenCalledWith(
+      { name: 'lesson-knowledge-enricher' },
+      expect.objectContaining({
+        transferGoal: null,
+        knowledgeState: []
+      })
+    );
   });
 
   it('executeSkill 失败时不写证据、不写 receipt，并向 outbox 抛错（退避重投语义）', async () => {

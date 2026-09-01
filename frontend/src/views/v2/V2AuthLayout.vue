@@ -68,7 +68,6 @@
 
 <script setup lang="ts">
 import V2Footer from './V2Footer.vue';
-import './v2.css';
 
 </script>
 

@@ -1,6 +1,6 @@
 ---
 agentId: skill:path-planning
-coreHash: 144d17957384c5adf62e64565e9d53b6dfb7694a2df3ad401ad70e62efa6f54d
+coreHash: 0526a0320c32ac71de31cdbb2155d84c4cb093bce1352537c843c89f5bbc1b16
 coreVersion: 1
 temperature: 0.5
 maxTokens: 12000
@@ -26,42 +26,44 @@ failurePolicy: retry
 - 「confirmedProposal（object）」`sandbox:path.normalizedInput.confirmedProposal`（编排注入） — 用户确认的方向（learningDirection/firstDeliverable/keyStages/outOfScope）
 - 「conversationHistory（object[]）」`sandbox:goal.collectedData.history`（编排注入） — 完整对话历史（验证关键信息）
 - 「replan（object?）」`sandbox:path.replan`（编排注入） — 路径重调上下文（模式/触发来源/冻结任务/学习者投影）
+- 「adjustments（string?）」`sandbox:path.normalizedInput.understanding.adjustments`（编排注入） — 用户侧补充说明（path 页面"补充说明重新生成"）：用户明确说哪里不合适，重规划时最高优先级输入
 
 ## 执行规则
 
-1. 输入：标签化纯文本（非 JSON），分区含原始学习目标/学习主题/目标水平/具体应用场景/学习重点/可用时间/总学习周期（周）/用户确认的方案轮廓/路径前置清洗结果（normalizedInput JSON）/完整对话历史/【路径重调模式】/【强制要求】
+1. 输入：标签化纯文本（非 JSON），分区含原始学习目标/学习主题/目标水平/具体应用场景/学习重点/可用时间/总学习周期（周）/用户确认的方案轮廓/路径前置清洗结果（normalizedInput JSON）/完整对话历史/【路径重调模式】/用户补充说明/【强制要求】
 2. normalizedInput 是路径生成的主真相源，由编排层（learning.service / coordinator）确定性定帧后通过【路径前置清洗结果】JSON 分区注入（原 skill:path-scene-framing 已移除，不再经过 LLM 清洗）；未提供时以标签文本分区和对话历史为准
-3. normalizedInput.confirmedProposal（或标签分区的"用户确认的方案轮廓"）是用户已确认方向，必须优先遵守，尤其是 learningDirection、firstDeliverable、keyStages、outOfScope
-4. normalizedInput.successCriteria 如果存在 observableResult 或 acceptanceCheck，必须用于约束里程碑目标与任务完成标准
-5. normalizedInput.planningHints 如果存在，是上游对路径节奏的建议范围，优先用于决定概念数、milestone 数、周期上限；若缺失再使用默认范围
-6. normalizedInput 中包含的场景、痛点和背景信息必须优先用于锚定路径场景、命名和范围边界
-7. 必须严格按以下顺序思考：第一步定义 cognitiveCore，第二步根据 cognitiveCore 设计 milestone，第三步输出兼容镜像字段；禁止跳过第一步直接生成 milestone
-8. 当前平台执行环境仅支持文本输入与文本输出：不得把图片、视频、音频、截图、图表、界面观察、外部演示或其他非文本信息作为路径推进的必要前提；如果某个内容天然偏视觉、听觉或演示，必须改写为文字描述、文字步骤、文字化案例或结构化文本对比；可以提及外部资源作为课后可选扩展，但主路径不得依赖非文本资源才能继续推进
-9. cognitiveCore 必须包含 1 个 cognitiveDomain 和 planningHints.conceptRange 范围内的 coreConcepts；若未提供 planningHints，默认 2-4 个
-10. coreConcepts 中必须且只能有 1 个 role = "hub"
-11. 先提炼 coreConcepts，再基于 coreConcepts 整合 cognitiveDomain；不要先写 cognitiveDomain 再反向补概念
-12. 核心概念不是知识点、功能模块、学习阶段或任务步骤，而是解决这类问题时必须理解的底层认知关系；一条好的核心概念描述的是"关系"而不是"事物"，应该能迁移到相近但不同的场景
-13. 提炼 coreConcepts 用三问推理框架：第一问"这个人真正在应对什么"（不要回答要做什么，要回答在与什么博弈，如"坡道起步总是熄火"背后是在应对"动力传递的时机与反馈信号的识别"）；第二问"如果只保留一个最核心的关系，它是什么"（即 hub concept，是"如果这个没理解后面的都白做"的那个关系）；第三问"还有哪些关系支撑着这个核心"（supporting concepts，必须明确自己与 hub 的关系：前提、展开、互补，或循环校准）
-14. 概念质量三检验：可迁移检验（放到另一个相近领域是否仍成立，只能用于当前功能/页面/模块/步骤则不合格）；非任务检验（如果在描述先做什么再做什么，它是任务不是概念）；可指导检验（Learn 层拿到后是否知道要帮助学习者建立什么理解、练习什么判断、校准什么能力）
-15. coreConcept.name 应该写成一句关系描述而不是单词标签，优先控制在 12-28 个字，更详细的解释写到 description；好的名称如"动力传递临界点的识别与稳定维持""生理唤醒与睡眠驱力的动态平衡调控"，不好的名称如单个对象名"离合器""睡眠卫生"、任务动作句"梳理需求""提炼检查点"
-16. 在 coreConcepts 稳定后再整合 cognitiveDomain：不是把每个概念重说一遍，而是回答这些概念合在一起最终构成了什么一体化底层能力；写成"能力/判断/组织/调节/映射/验证"一类表述，优先使用句式"在____约束下，识别____并建立____"、"把____转成____，再通过____完成校准"；好的 cognitiveDomain 应让人看到这条路径最终训练的不是某个功能，而是一种可复用的认知能力
-17. milestone 必须按认知递进组织，而不是按功能模块、页面对象或知识目录排列；应体现类似：识别问题结构 → 建立判断框架 → 在场景中应用 → 通过验证与迭代收敛
-18. 如果目标涉及多个功能或模块，必须围绕一个共同交付物收口，而不是平均拆分
-19. 每个里程碑是一个独立学习目标，可以独立评估完成度；每个 milestone 必须明确绑定 1 个 coreConcept
-20. hub concept 必须被非首阶段 milestone 显式复用（在 description 中体现"在新场景中回捞"），不允许每个概念只出现一次；复用下限按里程碑数量分档：milestone ≥ 3 时至少被 2 个非首阶段 milestone 复用，milestone = 2 时至少被 1 个非首阶段 milestone 复用（这是下限，不是上限）
-21. milestone 数量优先遵守 normalizedInput.planningHints.milestoneRange；若未提供 planningHints，默认 3-6 个
-22. milestone 只写阶段级骨架，不要输出任何 subtask、task slot、acceptanceCriteria、教学脚本或周计划；title 不要写成"第1周""第2周"这类排期语句，也不要写成"记录/梳理/提炼/整合"这类操作步骤句
-23. milestone title 必须表达"认知动作 + 关系对象"，不能退化为孤立主题名词：好的如"识别动力传递临界点的信号并建立稳定维持框架"（动作"识别/建立"+ 关系对象"临界点信号/维持框架"），不好的如"离合器""动力传递""排序算法"这类名词标签
-24. 如果 normalizedInput.confirmedProposal.firstDeliverable 存在，第一个 milestone 必须直接服务于它；第一个 milestone 的 goal 应明确首阶段要建立的核心能力入口，而不是写成完整执行处方
-25. 如果 successCriteria.observableResult 存在，所有里程碑 goal 必须通向该结果；如果 observableResult 缺失但 firstDeliverable 存在，用 firstDeliverable 作为首阶段和早期验收的主锚点；如果两者都缺失，再依据 realProblem 与 keyStages 组织路径；若 realProblem 与 keyStages 也皆为空，先按三问框架的第一问写出对该用户真实困境的诊断（"这个人真正在应对什么"），再依据诊断组织路径
-26. goal 必须是用户可观察的阶段结果，但保持阶段级，不要下钻成 task 级验收细则
-27. 如果输入提供 totalWeeks 不要超过它，maxWeeks 存在也不要超过，两者都缺失默认不超过 52 周；整体阶段任务量要与输入的 timeBudget/timePerWeek 等预算匹配，不要明显超配；预算不足时优先保留 hub concept 与 firstDeliverable 相关阶段，裁剪外围阶段；当预算不足以容纳完整的四段递进（识别问题结构→建立判断框架→场景应用→验证收敛）时，把四段合并为两段：前两段合并为"识别与建立框架"，后两段合并为"应用与验证收敛"，且合并后的后段 milestone 必须在 description 中显式回捞前段建立的判断框架概念，不允许只做应用不回捞
-28. 当原始目标天然容易让人想到视频教程、图片示意、界面演示时，也必须把路径收束为纯文本可完成的学习安排
-29. 如果提供了具体应用场景，所有里程碑标题、描述、goal 都必须紧密围绕该场景，不可使用泛泛的通用示例
-30. 路径名称必须是简洁的主题名：核心主题/技能 + 水平词（如"Python 自动化 Excel 报表入门"），控制在 8-20 个字；名称只表达"学什么"，不要冒号加副标题、括号补充说明、"从…到…"完整过程句，也不要把用户目标原文整段搬入名称；具体场景、交付物与细节放进 summary 和 milestones
-31. 名称硬性自检：拟定的名称若包含逗号、分号、破折号（——/-/—）、"知道要""但…""导致…"等因果从句形态，或超过 20 个字，判定为不合格，必须改写为"主题/技能 + 水平词"的短名；禁止把 real_problem 的诊断原文（如"知道要签字，但触发时机与当前状态冲突"）作为路径名称
-32. summary 必须用 1-2 句"人话"概括"这条路径适合谁（场景）+ 解决什么（能力）"，从学习者视角表述；禁止复制或改写 real_problem 的诊断全文、禁止把理解字段原文照搬进 summary
-33. 如果用户水平是 beginner，路径名称必须使用"入门""基础""从零开始"等词，不得出现"中级""进阶""高级"等词
+3. 如果提供了用户补充说明（normalizedInput.understanding.adjustments）：这是用户对当前路径不满意之处的直接陈述，优先级高于原目标表述；重新规划时必须针对补充说明调整路径结构（如节奏、难度、阶段顺序、范围），并在 milestone 设计中体现调整意图；补充说明与已确认方案冲突时，以补充说明为准
+4. normalizedInput.confirmedProposal（或标签分区的"用户确认的方案轮廓"）是用户已确认方向，必须优先遵守，尤其是 learningDirection、firstDeliverable、keyStages、outOfScope
+5. normalizedInput.successCriteria 如果存在 observableResult 或 acceptanceCheck，必须用于约束里程碑目标与任务完成标准
+6. normalizedInput.planningHints 如果存在，是上游对路径节奏的建议范围，优先用于决定概念数、milestone 数、周期上限；若缺失再使用默认范围
+7. normalizedInput 中包含的场景、痛点和背景信息必须优先用于锚定路径场景、命名和范围边界
+8. 必须严格按以下顺序思考：第一步定义 cognitiveCore，第二步根据 cognitiveCore 设计 milestone，第三步输出兼容镜像字段；禁止跳过第一步直接生成 milestone
+9. 当前平台执行环境仅支持文本输入与文本输出：不得把图片、视频、音频、截图、图表、界面观察、外部演示或其他非文本信息作为路径推进的必要前提；如果某个内容天然偏视觉、听觉或演示，必须改写为文字描述、文字步骤、文字化案例或结构化文本对比；可以提及外部资源作为课后可选扩展，但主路径不得依赖非文本资源才能继续推进
+10. cognitiveCore 必须包含 1 个 cognitiveDomain 和 planningHints.conceptRange 范围内的 coreConcepts；若未提供 planningHints，默认 2-4 个
+11. coreConcepts 中必须且只能有 1 个 role = "hub"
+12. 先提炼 coreConcepts，再基于 coreConcepts 整合 cognitiveDomain；不要先写 cognitiveDomain 再反向补概念
+13. 核心概念不是知识点、功能模块、学习阶段或任务步骤，而是解决这类问题时必须理解的底层认知关系；一条好的核心概念描述的是"关系"而不是"事物"，应该能迁移到相近但不同的场景
+14. 提炼 coreConcepts 用三问推理框架：第一问"这个人真正在应对什么"（不要回答要做什么，要回答在与什么博弈，如"坡道起步总是熄火"背后是在应对"动力传递的时机与反馈信号的识别"）；第二问"如果只保留一个最核心的关系，它是什么"（即 hub concept，是"如果这个没理解后面的都白做"的那个关系）；第三问"还有哪些关系支撑着这个核心"（supporting concepts，必须明确自己与 hub 的关系：前提、展开、互补，或循环校准）
+15. 概念质量三检验：可迁移检验（放到另一个相近领域是否仍成立，只能用于当前功能/页面/模块/步骤则不合格）；非任务检验（如果在描述先做什么再做什么，它是任务不是概念）；可指导检验（Learn 层拿到后是否知道要帮助学习者建立什么理解、练习什么判断、校准什么能力）
+16. coreConcept.name 应该写成一句关系描述而不是单词标签，优先控制在 12-28 个字，更详细的解释写到 description；好的名称如"动力传递临界点的识别与稳定维持""生理唤醒与睡眠驱力的动态平衡调控"，不好的名称如单个对象名"离合器""睡眠卫生"、任务动作句"梳理需求""提炼检查点"
+17. 在 coreConcepts 稳定后再整合 cognitiveDomain：不是把每个概念重说一遍，而是回答这些概念合在一起最终构成了什么一体化底层能力；写成"能力/判断/组织/调节/映射/验证"一类表述，优先使用句式"在____约束下，识别____并建立____"、"把____转成____，再通过____完成校准"；好的 cognitiveDomain 应让人看到这条路径最终训练的不是某个功能，而是一种可复用的认知能力
+18. milestone 必须按认知递进组织，而不是按功能模块、页面对象或知识目录排列；应体现类似：识别问题结构 → 建立判断框架 → 在场景中应用 → 通过验证与迭代收敛
+19. 如果目标涉及多个功能或模块，必须围绕一个共同交付物收口，而不是平均拆分
+20. 每个里程碑是一个独立学习目标，可以独立评估完成度；每个 milestone 必须明确绑定 1 个 coreConcept
+21. hub concept 必须被非首阶段 milestone 显式复用（在 description 中体现"在新场景中回捞"），不允许每个概念只出现一次；复用下限按里程碑数量分档：milestone ≥ 3 时至少被 2 个非首阶段 milestone 复用，milestone = 2 时至少被 1 个非首阶段 milestone 复用（这是下限，不是上限）
+22. milestone 数量优先遵守 normalizedInput.planningHints.milestoneRange；若未提供 planningHints，默认 3-6 个
+23. milestone 只写阶段级骨架，不要输出任何 subtask、task slot、acceptanceCriteria、教学脚本或周计划；title 不要写成"第1周""第2周"这类排期语句，也不要写成"记录/梳理/提炼/整合"这类操作步骤句
+24. milestone title 必须表达"认知动作 + 关系对象"，不能退化为孤立主题名词：好的如"识别动力传递临界点的信号并建立稳定维持框架"（动作"识别/建立"+ 关系对象"临界点信号/维持框架"），不好的如"离合器""动力传递""排序算法"这类名词标签
+25. 如果 normalizedInput.confirmedProposal.firstDeliverable 存在，第一个 milestone 必须直接服务于它；第一个 milestone 的 goal 应明确首阶段要建立的核心能力入口，而不是写成完整执行处方
+26. 如果 successCriteria.observableResult 存在，所有里程碑 goal 必须通向该结果；如果 observableResult 缺失但 firstDeliverable 存在，用 firstDeliverable 作为首阶段和早期验收的主锚点；如果两者都缺失，再依据 realProblem 与 keyStages 组织路径；若 realProblem 与 keyStages 也皆为空，先按三问框架的第一问写出对该用户真实困境的诊断（"这个人真正在应对什么"），再依据诊断组织路径
+27. goal 必须是用户可观察的阶段结果，但保持阶段级，不要下钻成 task 级验收细则
+28. 如果输入提供 totalWeeks 不要超过它，maxWeeks 存在也不要超过，两者都缺失默认不超过 52 周；整体阶段任务量要与输入的 timeBudget/timePerWeek 等预算匹配，不要明显超配；预算不足时优先保留 hub concept 与 firstDeliverable 相关阶段，裁剪外围阶段；当预算不足以容纳完整的四段递进（识别问题结构→建立判断框架→场景应用→验证收敛）时，把四段合并为两段：前两段合并为"识别与建立框架"，后两段合并为"应用与验证收敛"，且合并后的后段 milestone 必须在 description 中显式回捞前段建立的判断框架概念，不允许只做应用不回捞
+29. 当原始目标天然容易让人想到视频教程、图片示意、界面演示时，也必须把路径收束为纯文本可完成的学习安排
+30. 如果提供了具体应用场景，所有里程碑标题、描述、goal 都必须紧密围绕该场景，不可使用泛泛的通用示例
+31. 路径名称必须是简洁的主题名：核心主题/技能 + 水平词（如"Python 自动化 Excel 报表入门"），控制在 8-20 个字；名称只表达"学什么"，不要冒号加副标题、括号补充说明、"从…到…"完整过程句，也不要把用户目标原文整段搬入名称；具体场景、交付物与细节放进 summary 和 milestones
+32. 名称硬性自检：拟定的名称若包含逗号、分号、破折号（——/-/—）、"知道要""但…""导致…"等因果从句形态，或超过 20 个字，判定为不合格，必须改写为"主题/技能 + 水平词"的短名；禁止把 real_problem 的诊断原文（如"知道要签字，但触发时机与当前状态冲突"）作为路径名称
+33. summary 必须用 1-2 句"人话"概括"这条路径适合谁（场景）+ 解决什么（能力）"，从学习者视角表述；禁止复制或改写 real_problem 的诊断全文、禁止把理解字段原文照搬进 summary
+34. 如果用户水平是 beginner，路径名称必须使用"入门""基础""从零开始"等词，不得出现"中级""进阶""高级"等词
 
 ## 输出字段
 

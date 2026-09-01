@@ -88,7 +88,6 @@ TeachingContextBuilder
         ↓
 ai-teaching-agent
         ↓
-teaching-turn-agent / peer-agent / summary-agent / session-evaluation-agent
 teaching-turn-agent / peer-agent / session-wrapup-agent
 ```
 
@@ -450,7 +449,7 @@ admin v1 优先做：
 
 建议新增：
 
-- `frontend/src/views/admin/LearnerModels.vue`
+- `frontend/src/views/admin/LearnerModels.vue`（已实现于 `admin-redesign/LearnerCenter.vue`）
 
 建议展示：
 
@@ -469,7 +468,7 @@ admin v1 优先做：
 
 建议新增：
 
-- `frontend/src/views/admin/LearnerModelDetail.vue`
+- `frontend/src/views/admin/LearnerModelDetail.vue`（已实现于 `admin-redesign/LearnerDetail.vue`）
 
 建议 tab：
 
@@ -589,10 +588,14 @@ query：
 
 - `backend/src/routes/admin/learner-models.ts`
 
+> ⚠️ 2026-08-30 复核：页面实际实现于管理端重构后的新路径（路由 `/admin/learner-models` 重定向至 `/admin/learner-center`）：
+> - 前端列表页：`frontend/src/views/admin-redesign/LearnerCenter.vue`（原设计名 LearnerModels.vue）
+> - 前端详情页：`frontend/src/views/admin-redesign/LearnerDetail.vue`（原设计名 LearnerModelDetail.vue）
+
 ### Admin 前端
 
-- `frontend/src/views/admin/LearnerModels.vue`
-- `frontend/src/views/admin/LearnerModelDetail.vue`
+- `frontend/src/views/admin-redesign/LearnerCenter.vue`（原设计 `views/admin/LearnerModels.vue`）
+- `frontend/src/views/admin-redesign/LearnerDetail.vue`（原设计 `views/admin/LearnerModelDetail.vue`）
 - `frontend/src/api/adminApi.ts`
 - `frontend/src/router/index.ts`
 

@@ -65,6 +65,17 @@ function valueTypeMatches(value: unknown, base: string): boolean {
 
 function extractEnumCandidates(desc: string | undefined): string[] | null {
   if (!desc) return null;
+  // `|` 是枚举的标准分隔符：按它切分后，每段截到第一个非候选字符（说明文字等）为止，
+  // 避免 `example-first|predict|self-assess，必须保持...` 这类 desc 把 self-assess 与说明混在一起被吞。
+  const pipeParts = desc
+    .split('|')
+    .map((part) => {
+      const m = part.match(/^[\w-]+/)
+      return m ? m[0] : ''
+    })
+    .filter((part) => part.length > 0);
+  if (pipeParts.length >= 2) return pipeParts;
+
   const candidates: string[] = [];
   for (const marker of ENUM_MARKERS) {
     if (!desc.includes(marker)) continue;

@@ -93,12 +93,12 @@ export class ReplanAdvisoryService {
         ui: {
           title: priority === 'high' ? '建议先确认路径调整' : '可以考虑调整后续路径',
           body: focusPoints.length > 0
-            ? `系统检测到 ${focusPoints.join('、')} 这些点仍会影响后续推进。建议先确认是否调整“${nextMilestone.title}”及后续阶段安排。该调整只会创建新的路径版本，不会覆盖你已完成的内容。`
-            : `系统判断当前学习者状态与知识背景提示“${nextMilestone.title}”之后的推进方式需要重新确认。该调整只会创建新的路径版本，不会覆盖你已完成的内容。`,
+            ? `系统检测到 ${focusPoints.join('、')} 这些点仍会影响后续推进。建议先确认是否调整“${nextMilestone.title}”及后续阶段安排。该调整只会调整后续阶段的课程安排，不会覆盖你已完成的内容。`
+            : `系统判断当前学习者状态与知识背景提示“${nextMilestone.title}”之后的推进方式需要重新确认。该调整只会调整后续阶段的课程安排，不会覆盖你已完成的内容。`,
           options: [
             { key: 'keep', label: '保持原计划', description: '继续按当前路径推进。' },
             { key: 'preview', label: '查看调整建议', description: '先查看系统建议，再决定是否调整。' },
-            { key: 'confirm', label: '确认创建新版本', description: '确认后基于当前证据生成新的路径版本。' },
+            { key: 'confirm', label: '确认调整后续阶段', description: '确认后基于当前证据调整后续阶段的课程安排。' },
           ],
         },
       };
@@ -136,7 +136,7 @@ export class ReplanAdvisoryService {
         reasonCodes,
         ui: {
           title: '可以考虑加速下一阶段',
-          body: `你在当前阶段的掌握比较稳定，而且本节课学习压力与疲劳都不高。建议把下一阶段“${nextMilestone.title}”调整成更聚焦的版本。该调整只会创建一个新的路径版本，不影响你已完成的内容。`,
+          body: `你在当前阶段的掌握比较稳定，而且本节课学习压力与疲劳都不高。建议把下一阶段“${nextMilestone.title}”调整成更聚焦的安排。该调整只会调整后续阶段的课程安排，不影响你已完成的内容。`,
           options: [
             { key: 'keep', label: '保持原计划', description: '继续按当前路径推进。' },
             { key: 'accelerate', label: '压缩下一阶段', description: '减少重复内容，更快进入重点。' },
@@ -169,8 +169,8 @@ export class ReplanAdvisoryService {
         ui: {
           title: '建议先调整下一阶段安排',
           body: focusPoints.length > 0
-            ? `你刚完成当前阶段，但 ${focusPoints.join('、')} 这些点还不够稳定。建议在进入“${nextMilestone.title}”前，先插入一个补强版本。该调整只会创建新的路径版本，不影响你已完成的内容。`
-            : `你刚完成当前阶段，但当前学习信号显示直接进入“${nextMilestone.title}”的风险偏高。建议先调整下一阶段安排。该调整只会创建新的路径版本，不影响你已完成的内容。`,
+            ? `你刚完成当前阶段，但 ${focusPoints.join('、')} 这些点还不够稳定。建议在进入“${nextMilestone.title}”前，先补强相关安排。该调整只会调整后续阶段的课程安排，不影响你已完成的内容。`
+            : `你刚完成当前阶段，但当前学习信号显示直接进入“${nextMilestone.title}”的风险偏高。建议先调整下一阶段安排。该调整只会调整后续阶段的课程安排，不影响你已完成的内容。`,
           options: [
             { key: 'keep', label: '保持原计划', description: '继续按当前路径进入下一阶段。' },
             { key: 'reinforce', label: '补强后再进', description: '先补一个关键小节，再进入下一阶段。' },

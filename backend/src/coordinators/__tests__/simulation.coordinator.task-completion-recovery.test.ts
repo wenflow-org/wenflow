@@ -404,7 +404,7 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     }
   })
 
-  it('同一 task 达到课时预算后显式失败，不再调用 LLM，也不误标完成', async () => {
+  it('同一 task 达到课时上限后自动跳过本课（timebox-skip）推进下一课，不再卡住', async () => {
     setLearningState(buildLearningState({
       status: 'active',
       taskId: 'task-1',
@@ -423,17 +423,18 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     const result = await coordinator.executeLearningStep('simulation-1')
     const learning = getLearningState()
 
+    // 用户诉求（2026-08-30）：回合上限超了还没结束 → 标记本课完成，自动跳下一课，不让进度卡死
     expect(result).toEqual(expect.objectContaining({
-      success: false
+      success: true,
+      taskCompleted: true
     }))
-    expect(result.error).toContain('turn_budget_exhausted')
+    expect(result.error).toBeUndefined()
+    // 跳课走完成链路：completeTask 结算当前课（不再调用教学 LLM 推进本课）
     expect(mockExecuteSkill).not.toHaveBeenCalled()
     expect(mockProcessStudentMessage).not.toHaveBeenCalled()
-    expect(mockCompleteTask).not.toHaveBeenCalled()
-    // 温和停止：会话保持 running、教学状态不被标 error/清空——本课已推进的对话保留，
-    // 管理员调高「回合上限」后可继续推进同一对话，不需要重启丢对话
-    expect(sessionRecord.status).toBe('running')
-    expect(sessionRecord.currentStage).toBe('teaching')
+    expect(mockCompleteTask).toHaveBeenCalled()
+    // 单 task 的 mock 路径：跳课后整条 Path 完成 → 会话 completed（真实多课场景推进下一课保持 running）
+    expect(sessionRecord.status).toBe('completed')
     expect(learning.taskRuntime).toEqual(expect.objectContaining({
       taskId: 'task-1'
     }))

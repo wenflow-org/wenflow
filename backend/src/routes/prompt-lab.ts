@@ -250,7 +250,7 @@ function normalizeManifest(skillId: string, manifestInput: any, sourceContent = 
             ? sanitizeString(runtimeDefaults.tier, 'chat')
             : 'chat',
           temperature: sanitizeNumber(runtimeDefaults.temperature, 0.7, 0, 2),
-          maxTokens: sanitizeNumber(runtimeDefaults.maxTokens, 8000, 1000, 64000),
+          maxTokens: sanitizeNumber(runtimeDefaults.maxTokens, 32000, 1000, 64000),
           model: sanitizeString(runtimeDefaults.model, '') || null,
           thinkingMode: sanitizeString(runtimeDefaults.thinkingMode, 'default'),
           reasoningEffort: sanitizeString(runtimeDefaults.reasoningEffort, 'default')

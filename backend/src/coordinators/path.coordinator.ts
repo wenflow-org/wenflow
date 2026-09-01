@@ -41,6 +41,8 @@ interface GoalFinalPayload {
   finalUserVisible?: string | null;
   /** 配置式值流转（P1 试点）：routings 表 goal-agent 交付行抽取的 goal→path 字段 */
   goalHandoffFields?: Record<string, any>;
+  /** 用户侧补充说明（path 页面"补充说明重新生成"） */
+  adjustments?: string | null;
 }
 
 interface NormalizedPathInputV1 {
@@ -92,6 +94,8 @@ export interface GoalPathRequest {
   source?: 'goal';
   mode?: 'generate';
   rawGoal: string;
+  /** 用户侧补充说明（path 页面"补充说明重新生成"）：进 normalizedInput 供 path-agent 重规划时针对性调整 */
+  adjustments?: string | null;
   visibleSummary?: GoalFinalPayload['visibleSummary'];
   conversationHistory?: Array<{ role: string; content: string }>;
   finalUserVisible?: string;
@@ -233,6 +237,8 @@ class PathCoordinator {
       visibleSummary: input.visibleSummary || null,
       conversationHistory: input.conversationHistory || [],
       finalUserVisible: typeof input.finalUserVisible === 'string' ? input.finalUserVisible : null,
+      // 用户侧补充说明（path 页面"补充说明重新生成"）
+      adjustments: typeof input.adjustments === 'string' && input.adjustments.trim() ? input.adjustments.trim() : null,
     };
 
     const source = {
@@ -249,6 +255,8 @@ class PathCoordinator {
         constraints_and_boundaries: goalFinalPayload.visibleSummary?.constraintsAndBoundaries || [],
         scenario: goalFinalPayload.visibleSummary?.scenario || null,
         current_pain_point: goalFinalPayload.visibleSummary?.currentPainPoint || null,
+        // 用户侧补充说明：重规划时的最高优先级输入（用户明确说"哪里不合适"）
+        adjustments: goalFinalPayload.adjustments,
         background: {
           current_level: goalFinalPayload.visibleSummary?.currentBaseline?.level || null,
           available_time: goalFinalPayload.visibleSummary?.resources?.timeBudget || null,

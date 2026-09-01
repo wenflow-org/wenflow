@@ -697,7 +697,7 @@ async function regenerate(r: Row) {
   if (r.regenerating) return
   const ok = await askConfirm({
     title: '重建学习路径',
-    message: `确认为「${r.userName}」重新生成学习路径？\n将基于该会话产出新版本路径，覆盖当前路径。`,
+    message: `确认为「${r.userName}」重新生成学习路径？\n将基于该会话重新生成路径，覆盖当前路径。`,
     confirmText: '重建路径',
     danger: false
   })

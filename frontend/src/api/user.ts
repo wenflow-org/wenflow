@@ -16,6 +16,9 @@ export interface UserProfile {
   xpToNextLevel?: number;
   createdAt?: string;
   lastLoginAt?: string | null;
+  streakDays?: number;
+  longestStreak?: number;
+  onboardingCompleted?: boolean;
 }
 
 export interface UpdateProfileData {
