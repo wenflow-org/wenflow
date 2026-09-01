@@ -103,9 +103,9 @@ const items = computed<Item[]>(() => {
       key: 'action:create-announcement',
       icon: '＋',
       label: '新建公告',
-      hint: '公告',
+      hint: '运营中心 · 公告',
       group: '操作',
-      run: () => queueQuickAction('announcements', 'create-announcement')
+      run: () => queueQuickAction('ops-hub', 'create-announcement')
     },
     {
       key: 'action:create-virtual',

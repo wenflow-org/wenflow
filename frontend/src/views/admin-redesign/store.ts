@@ -109,6 +109,8 @@ export interface InvestigationIntent {
   errorCategory: string
   /** 执行日志时间范围快捷筛选（'' = 页面默认） */
   timeRange: string
+  /** 跳转执行日志后聚焦 Trace tab（openTrace/openSession 深链标志） */
+  traceFocus: boolean
 }
 
 export const intent = reactive<InvestigationIntent>({
@@ -120,7 +122,8 @@ export const intent = reactive<InvestigationIntent>({
   sessionId: '',
   quickAction: '',
   errorCategory: '',
-  timeRange: ''
+  timeRange: '',
+  traceFocus: false
 })
 
 /** 命令面板 → 页面快捷动作（如打开新建弹窗），页面消费后需清空 */
@@ -134,26 +137,31 @@ export function investigateAgent(agentId: string) {
   intent.agentFilter = agentId
   intent.statusFilter = 'err'
   intent.traceId = ''
+  intent.sessionId = ''
+  intent.traceFocus = false
   intent.errorCategory = ''
   intent.timeRange = ''
   intent.scene = 'execution-logs'
 }
 
-/** 任意位置点 Trace → 独立 Trace 瀑布页（预填该链路） */
+/** 任意位置点 Trace → 执行日志页的 Trace tab（预填该链路） */
 export function openTrace(traceId: string) {
   intent.traceId = traceId
+  intent.sessionId = ''
   intent.agentFilter = ''
   intent.statusFilter = ''
-  intent.scene = 'trace-waterfall'
+  intent.traceFocus = true
+  intent.scene = 'execution-logs'
 }
 
-/** 任意位置点会话 → Trace 瀑布页（优先会话分组视图） */
+/** 任意位置点会话 → 执行日志页的 Trace tab（优先会话分组视图） */
 export function openSession(sessionId: string) {
   intent.traceId = ''
   intent.sessionId = sessionId
   intent.agentFilter = ''
   intent.statusFilter = ''
-  intent.scene = 'trace-waterfall'
+  intent.traceFocus = true
+  intent.scene = 'execution-logs'
 }
 
 /** 打开 Skill 详情抽屉（不切换场景） */

@@ -1,6 +1,6 @@
 <template>
-  <div class="mk-page">
-    <div class="mk-status" :class="statusTone">
+  <div :class="embedded ? 'be-embedded' : 'mk-page'">
+    <div v-if="!embedded" class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">批量实验</strong>
       <span class="mk-status__sep"></span>
@@ -8,6 +8,11 @@
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建实验</button>
       </span>
+    </div>
+
+    <div v-if="embedded" class="mk-card__head be-embedded__head">
+      <span class="mk-card__meta">批量实验：一次创建多个虚拟学习者，系统级队列实验（目标 → 路径 → 学习 → 跨日衰减）</span>
+      <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openCreate">新建实验</button>
     </div>
 
     <div class="mk-card">
@@ -182,6 +187,9 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
+
+/** 嵌入模式：作为虚拟学习者「批量实验」tab 渲染（隐藏页面外壳/状态条） */
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 interface ExpRow extends BatchExperiment {
   busy?: boolean

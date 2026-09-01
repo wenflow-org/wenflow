@@ -35,6 +35,17 @@
       </span>
     </div>
 
+    <!-- 学习者 / 批量实验 tab 切换 -->
+    <div class="mk-pills vl-tabs">
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': vlTab === 'learners' }" @click="vlTab = 'learners'">学习者</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': vlTab === 'experiments' }" @click="vlTab = 'experiments'">批量实验</button>
+    </div>
+
+    <!-- ===== Tab2: 批量实验（嵌入 BatchExperiments 组件） ===== -->
+    <BatchExperiments v-if="vlTab === 'experiments'" embedded />
+
+    <!-- ===== Tab1: 学习者列表（默认） ===== -->
+    <template v-if="vlTab === 'learners'">
     <!-- 正在运行：列出有活跃会话的虚拟学习者（折叠：默认前 8 个，展开看全部）；批量生成也在此显示 -->
     <div v-if="(runningSamples.length || pausedSamples.length || batchTask.active) && isLive" class="vl-running">
       <span class="vl-running__label">正在运行</span>
@@ -436,6 +447,7 @@
       </div>
     </div>
     </Teleport>
+    </template>
   </div>
 </template>
 
@@ -454,6 +466,10 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
+import BatchExperiments from './BatchExperiments.vue'
+
+/* 学习者 / 批量实验 tab（批量实验为低频调试工具，折叠进本页） */
+const vlTab = ref<'learners' | 'experiments'>('learners')
 
 /* 头像色板：按名称哈希取色，同一人恒定同色 */
 const AVATAR_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#64748b']

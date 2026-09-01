@@ -242,7 +242,22 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/admin/traces',
-    redirect: '/admin/trace-waterfall'
+    redirect: '/admin/execution-logs'
+  },
+  {
+    // Trace 已并入执行日志（下钻 tab），旧 URL 兼容
+    path: '/admin/trace-waterfall',
+    redirect: '/admin/execution-logs'
+  },
+  {
+    // 公告已并入运营中心（内容 tab），旧 URL 兼容
+    path: '/admin/announcements',
+    redirect: '/admin/ops-hub'
+  },
+  {
+    // 批量实验已并入虚拟学习者（tab），旧 URL 兼容
+    path: '/admin/batch-experiments',
+    redirect: '/admin/virtual-learners'
   },
   {
     path: '/admin/models',

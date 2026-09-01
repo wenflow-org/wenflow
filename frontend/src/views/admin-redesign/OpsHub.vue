@@ -7,17 +7,27 @@
       <span v-if="tab === 'content'" class="mk-status__meta">路径 {{ stats?.total ?? '—' }}</span>
       <span v-if="tab === 'content'" class="mk-status__meta">里程碑 {{ stats?.totalMilestones ?? '—' }}</span>
       <span v-if="tab === 'content'" class="mk-status__meta">任务 {{ stats?.totalTasks ?? '—' }}</span>
-      <span v-else class="mk-status__meta">成就定义 {{ defs.length }} · 解锁 {{ totalRecords }}</span>
+      <span v-else-if="tab === 'achievements'" class="mk-status__meta">成就定义 {{ defs.length }} · 解锁 {{ totalRecords }}</span>
+      <template v-else>
+        <span class="mk-status__meta">公告 {{ annRows }} 条</span>
+        <span class="mk-status__meta">生效中 {{ annActive }}</span>
+        <span class="mk-status__meta">草稿 {{ annDraft }}</span>
+      </template>
       <span class="mk-status__actions">
         <button v-if="tab === 'content'" type="button" class="mk-status__action" :disabled="loading" @click="reload">刷新</button>
+        <button v-else-if="tab === 'announcements'" type="button" class="mk-status__action mk-status__action--primary" @click="annCreate()">新建公告</button>
       </span>
     </div>
 
-    <!-- 内容/成就 tab 切换（独立一行，对齐 TraceWaterfall 筛选条形态） -->
+    <!-- 内容/成就/公告 tab 切换（独立一行，对齐 TraceWaterfall 筛选条形态） -->
     <div class="mk-pills oh-tabs">
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'content' }" @click="switchTab('content')">内容管理</button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'achievements' }" @click="switchTab('achievements')">成就管理</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'announcements' }" @click="switchTab('announcements')">公告</button>
     </div>
+
+    <!-- ===== Tab3: 公告（运营内容子模块，嵌入 Announcements 组件） ===== -->
+    <Announcements v-if="tab === 'announcements'" ref="annRef" embedded />
 
     <!-- ===== Tab1: 内容管理 ===== -->
     <template v-if="tab === 'content'">
@@ -359,8 +369,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { timeAgo, errMsg, shortId } from './live'
+import { computed, ref, watch } from 'vue'
+import { timeAgo, errMsg, shortId, liveAnnouncements } from './live'
+import { intent } from './store'
 import { adminLearningContentApi, adminAchievementsApi, adminUsersApi, type LearningContentStats, type LearningPathRow, type AchievementDef, type AchievementRecord } from '@/api/adminApi'
 import { useRowMenu } from './useRowMenu'
 import { useEscape } from './useEscape'
@@ -370,13 +381,33 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkKpi from './MkKpi.vue'
+import Announcements from './Announcements.vue'
 
-/* ===== 一级 Tab：内容管理 / 成就管理 ===== */
-const tab = ref<'content' | 'achievements'>('content')
-function switchTab(t: 'content' | 'achievements') {
+/* ===== 一级 Tab：内容管理 / 成就管理 / 公告 ===== */
+const tab = ref<'content' | 'achievements' | 'announcements'>('content')
+function switchTab(t: 'content' | 'achievements' | 'announcements') {
   tab.value = t
   if (t === 'content' && !contentLoaded.value) { void reload(); void loadStats() }
   if (t === 'achievements' && !defs.value.length && !defsLoading.value) void loadDefs()
+}
+/* 命令面板快捷动作：新建公告 → 切到公告 tab（Announcements 挂载后消费 quickAction 打开弹窗） */
+watch(
+  () => intent.quickAction,
+  (a) => {
+    if (a === 'create-announcement') {
+      tab.value = 'announcements'
+    }
+  },
+  { immediate: true }
+)
+
+/* 公告 tab：嵌入 Announcements 组件，宿主状态条展示计数 + 新建入口（ref 通信） */
+const annRef = ref<InstanceType<typeof Announcements> | null>(null)
+const annRows = computed(() => liveAnnouncements.value.length)
+const annActive = computed(() => annRef.value?.activeCount ?? 0)
+const annDraft = computed(() => annRef.value?.draftCount ?? 0)
+function annCreate() {
+  annRef.value?.openCreate()
 }
 const contentLoaded = ref(false)
 

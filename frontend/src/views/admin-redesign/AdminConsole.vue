@@ -69,11 +69,9 @@ const VirtualLearners = asyncPage(() => import('./VirtualLearners.vue'));
 const Skills = asyncPage(() => import('./Skills.vue'));
 const Orchestrator = asyncPage(() => import('./Orchestrator.vue'));
 const ExecLogs = asyncPage(() => import('./ExecLogs.vue'));
-const TraceWaterfall = asyncPage(() => import('./TraceWaterfall.vue'));
 const AuditLogs = asyncPage(() => import('./AuditLogs.vue'));
 const ApiConfig = asyncPage(() => import('./ApiConfig.vue'));
 const Addons = asyncPage(() => import('./Addons.vue'));
-const Announcements = asyncPage(() => import('./Announcements.vue'));
 const SessionSecurity = asyncPage(() => import('./SessionSecurity.vue'));
 const PromptWorkbench = asyncPage(() => import('./PromptWorkbench.vue'));
 const HealthCenter = asyncPage(() => import('./HealthCenter.vue'));
@@ -84,7 +82,6 @@ const Feedback = asyncPage(() => import('./Feedback.vue'));
 const SessionCockpit = asyncPage(() => import('./SessionCockpit.vue'));
 const VirtualProfile = asyncPage(() => import('./VirtualProfile.vue'));
 const UserDetail = asyncPage(() => import('./UserDetail.vue'));
-const BatchExperiments = asyncPage(() => import('./BatchExperiments.vue'));
 const PromptEval = asyncPage(() => import('./PromptEval.vue'));
 const OpsHub = asyncPage(() => import('./OpsHub.vue'));
 const OpsCenter = asyncPage(() => import('./OpsCenter.vue'));
@@ -99,16 +96,13 @@ const components: Record<string, unknown> = {
   'goal-conversations': GoalConversations,
   feedback: Feedback,
   'virtual-learners': VirtualLearners,
-  'batch-experiments': BatchExperiments,
   'skills': Skills,
   'orchestrator': Orchestrator,
   'prompt-eval': PromptEval,
   'execution-logs': ExecLogs,
-  'trace-waterfall': TraceWaterfall,
   'audit-logs': AuditLogs,
   'api-config': ApiConfig,
   'addons': Addons,
-  'announcements': Announcements,
   'session-security': SessionSecurity,
   // 隐藏场景（不在 manifest 侧栏）：PromptWorkbench 是「新建 Skill」骨架生成的唯一入口，
   // 命令面板「新建 Skill」与健康中心 hash/yaml 跳转深链至此，勿删注册

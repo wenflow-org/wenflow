@@ -1,7 +1,7 @@
 <template>
-  <div class="mk-page">
+  <div :class="embedded ? 'wf-embedded' : 'mk-page'">
     <!-- 状态条：标题 + 当前链路标识 + 关键信号（对齐全站单行状态条） -->
-    <div class="mk-status" :class="statusTone">
+    <div v-if="!embedded" class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">Trace 链路</strong>
       <span v-if="activeSpans.length" class="mk-status__meta mono" :title="viewMode === 'session' ? activeSession : activeTrace">{{ viewMode === 'session' ? `会话 ${activeSession}` : `链路 ${activeTrace}` }}</span>
@@ -257,6 +257,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { spans, intent, openSkillDrawer, dataSource, type TraceSpan } from './store'
+
+/** 嵌入模式：作为执行日志「Trace 链路」tab 渲染（隐藏页面外壳/状态条） */
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 import {
   livePromptIndex,
   loadPromptIndex,

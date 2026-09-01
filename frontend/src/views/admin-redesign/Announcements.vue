@@ -1,6 +1,6 @@
 <template>
-  <div class="mk-page">
-    <div class="mk-status" :class="activeCount ? 'mk-status--ok' : 'mk-status--muted'">
+  <div :class="embedded ? 'an-embedded' : 'mk-page'">
+    <div v-if="!embedded" class="mk-status" :class="activeCount ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">公告中心</strong>
       <span class="mk-status__sep"></span>
@@ -176,6 +176,9 @@ import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 
+/** 嵌入模式：作为运营中心「公告」tab 渲染（隐藏页面外壳/状态条） */
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+
 interface Row {
   id: string
   title: string
@@ -348,6 +351,9 @@ function openCreate() {
   errors.value = {}
   createOpen.value = true
 }
+
+/** 嵌入模式（运营中心公告 tab）：暴露新建入口与计数给宿主 */
+defineExpose({ openCreate, activeCount, draftCount, archivedCount })
 
 /** 编辑：预填表单（publishedAt 与发布状态保持不动） */
 function openEdit(r: Row) {

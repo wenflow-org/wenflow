@@ -39,9 +39,9 @@ describe('AdminConsole 页面注册表', () => {
     }
   });
 
-  it('每页必须属于九个导航分组之一（侧栏组名稳定，防分组漂移）', () => {
+  it('每页必须属于导航分组之一（侧栏组名稳定，防分组漂移）', () => {
     const groups = new Set(MOCK_SCENES.map((s) => s.group));
-    expect(groups).toEqual(new Set(['总览', '学习者', '仿真实验室', 'Skill 管理', '数据健康', '观测', '配置', '运营', '运维']));
+    expect(groups).toEqual(new Set(['总览', '学习者', '仿真实验室', 'Skill 管理', '运营', '配置', '观测']));
   });
 
   it('详情页注册表（subPage）四个视图齐全', () => {

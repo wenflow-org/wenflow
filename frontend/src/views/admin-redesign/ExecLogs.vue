@@ -17,6 +17,17 @@
       </span>
     </div>
 
+    <!-- 日志 / Trace 链路 tab 切换（Trace 为执行日志下钻视图） -->
+    <div class="mk-pills el-tabs">
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': elTab === 'logs' }" @click="elTab = 'logs'">日志</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': elTab === 'trace' }" @click="elTab = 'trace'">Trace 链路</button>
+    </div>
+
+    <!-- ===== Tab2: Trace 链路（嵌入 TraceWaterfall 组件） ===== -->
+    <TraceWaterfall v-if="elTab === 'trace'" embedded />
+
+    <!-- ===== Tab1: 日志流（默认） ===== -->
+    <template v-if="elTab === 'logs'">
     <!-- 日志流 -->
     <!-- P0 修复：加载失败显示错误横幅 + 重试，不再伪装成「暂无日志」 -->
     <div v-if="liveLogsError" class="exec-error" role="alert">
@@ -110,7 +121,7 @@
                       <span v-if="log.statusCode && log.statusCode >= 400" class="tline__http mono">HTTP {{ log.statusCode }}</span>
                       <span v-if="log.recoveredByRetry" class="tline__recovered">重试 {{ (log.attempts || 1) - 1 }} 次后成功</span>
                       <span v-if="promptOf(log)?.drift" class="tline__drift">{{ TERMS.driftRuntime }}</span>
-                      <span v-if="log.sessionId" class="tline__session mono" :title="`按业务会话在链路中归组查看：${log.sessionId}`" @click.stop="openSession(log.sessionId)">会话 {{ shortTrace(log.sessionId) }}</span>
+                      <span v-if="log.sessionId" class="tline__session mono" :title="`按业务会话在链路中归组查看：${log.sessionId}`" @click.stop="showTrace(undefined, log.sessionId)">会话 {{ shortTrace(log.sessionId) }}</span>
                     </div>
                   </div>
                 </td>
@@ -118,7 +129,7 @@
                 <td v-if="!hiddenCols.has('tokens')"><span class="mono exec-tokens" :title="tokensTitle(log)">{{ tokensText(log) }}</span></td>
                 <td v-if="!hiddenCols.has('dur')" class="right"><span class="mono exec-dur" :title="fmtMs(log.durationMs)">{{ fmtMs(log.durationMs) }}</span></td>
                 <td v-if="!hiddenCols.has('status')"><span class="exec-status" :class="`exec-status--${log.status}`">{{ statusText[log.status] }}</span></td>
-                <td v-if="!hiddenCols.has('trace')" class="right"><span class="mono exec-trace" :title="`${log.traceId} · 在链路中查看完整 Trace`" @click.stop="openTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span></td>
+                <td v-if="!hiddenCols.has('trace')" class="right"><span class="mono exec-trace" :title="`${log.traceId} · 在链路中查看完整 Trace`" @click.stop="showTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span></td>
               </tr>
               <tr v-if="openId === log.id" class="exec-detail">
                 <td :colspan="visibleColCount">
@@ -126,8 +137,8 @@
                     <div class="tline__payload-meta">
                       <span class="mono">trace {{ log.traceId }}</span>
                       <span class="exec-detail__links">
-                        <button type="button" class="mk-link" @click.stop="openTrace(log.traceId)">在链路中查看完整 Trace →</button>
-                        <button v-if="log.sessionId" type="button" class="mk-link" @click.stop="openSession(log.sessionId)">按会话归组查看 →</button>
+                        <button type="button" class="mk-link" @click.stop="showTrace(log.traceId)">在链路中查看完整 Trace →</button>
+                        <button v-if="log.sessionId" type="button" class="mk-link" @click.stop="showTrace(undefined, log.sessionId)">按会话归组查看 →</button>
                       </span>
                     </div>
                     <p v-if="detailLoading === log.id" class="tline__none"><span class="mk-spinner" aria-hidden="true"></span> 拉取日志详情中…</p>
@@ -206,17 +217,39 @@
       <strong v-else>{{ isFiltered ? '当前筛选无日志' : '暂无日志' }}</strong>
       <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
     </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { intent, openTrace, openSession, openSkillDrawer, clearInvestigation, dataSource } from './store'
+import { intent, openSkillDrawer, clearInvestigation, dataSource } from './store'
 import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, totalPagesOf, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
+import TraceWaterfall from './TraceWaterfall.vue'
 import { TERMS, errorCodeLabel } from './terms'
+
+/* 日志 / Trace 链路 tab（Trace 为执行日志下钻视图） */
+const elTab = ref<'logs' | 'trace'>('logs')
+/** 切到 Trace tab 并让瀑布聚焦指定链路/会话（openTrace/openSession 深链接入） */
+function showTrace(traceId?: string, sessionId?: string) {
+  elTab.value = 'trace'
+  if (sessionId) intent.sessionId = sessionId
+  else if (traceId) intent.traceId = traceId
+}
+/* 深链：openTrace/openSession 设置 intent.traceFocus 后导航到本页 → 自动切 Trace tab */
+watch(
+  () => intent.traceFocus,
+  (focus) => {
+    if (focus) {
+      intent.traceFocus = false
+      elTab.value = 'trace'
+    }
+  },
+  { immediate: true }
+)
 
 const openId = ref('')
 const statusFilter = ref('')
