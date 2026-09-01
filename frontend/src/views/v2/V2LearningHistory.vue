@@ -119,7 +119,7 @@ interface SessionRecord {
 const PAGE_SIZE = 30;
 
 const sessions = ref<SessionRecord[]>([]);
-const loading = ref(false);
+const loading = ref(true);
 const loadError = ref('');
 const hasMore = ref(true);
 
@@ -213,7 +213,8 @@ const groupedSessions = computed<DayGroup[]>(() => {
 });
 
 async function load(reset = false) {
-  if (loading.value) return;
+  // 首屏（sessions 空且 loading=true 初始）允许进入；后续加载中拦截（防并发翻页）
+  if (loading.value && sessions.value.length > 0) return;
   loading.value = true;
   loadError.value = '';
   try {
