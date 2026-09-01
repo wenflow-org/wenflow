@@ -1,6 +1,6 @@
 <template>
   <div class="mk-page">
-    <!-- 状态条：标题固定，当前选中的链路标识在 meta（结论走 dot 色） -->
+    <!-- 状态条：标题 + 当前链路标识 + 关键信号（对齐全站单行状态条） -->
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">Trace 链路</strong>
@@ -8,15 +8,6 @@
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ activeSpans.length }} 个 span</span>
       <span class="mk-status__meta">总耗时 {{ totalDuration }}</span>
-      <span class="mk-status__meta">失败 {{ errorCount }}</span>
-      <span v-if="isLive" class="mk-status__meta mono" :title="waterfallTotal ? '本地已加载 vs 服务端全量' : '全量数据待服务端返回'">
-        样本 {{ waterfallSpans?.length ?? 0 }} / 全量 {{ waterfallTotal || '—' }}
-      </span>
-      <span
-        v-if="waterfallCapReached"
-        class="mk-status__meta"
-        title="为保持流畅已停止追加；全量数据见左侧计数"
-      >已达本地样本上限 {{ WATERFALL_MAX_SPANS }} 条，停止追加</span>
       <button
         v-if="failedTraceIds.length"
         type="button"
@@ -25,62 +16,73 @@
       >
         {{ failedTraceIds.length }} 条链路含失败，定位 →
       </button>
-      <div class="wf-tracepick">
-        <span v-if="sessionIds.length" class="mk-pills wf-mode">
-          <button
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': viewMode === 'trace' }"
-            :aria-pressed="viewMode === 'trace'"
-            @click="viewMode = 'trace'"
-          >链路</button>
-          <button
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': viewMode === 'session' }"
-            :aria-pressed="viewMode === 'session'"
-            @click="viewMode = 'session'"
-          >会话</button>
-        </span>
-        <span class="wf-filter">
-          <button
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': failuresOnly }"
-            :aria-pressed="failuresOnly"
-            title="只显示失败行（err）"
-            @click="failuresOnly = !failuresOnly"
-          >仅失败{{ errorTotal > 0 ? ` ${errorTotal}` : '' }}</button>
-          <select v-model="sortMode" class="wf-sort mono" aria-label="排序方式" title="按耗时排序">
-            <option value="time">默认（时间序）</option>
-            <option value="dur-desc">耗时 ↓</option>
-            <option value="dur-asc">耗时 ↑</option>
-          </select>
-        </span>
-        <template v-if="viewMode === 'session'">
-          <span class="wf-tracepick__count">{{ sessionIds.length }} 个会话</span>
-          <select class="wf-tracepick__select mono" v-model="activeSession" aria-label="选择会话">
-            <option v-for="s in sessionIds" :key="s" :value="s">
-              {{ sessionLabel(s) }}
-            </option>
-          </select>
-        </template>
-        <template v-else>
-          <span class="wf-tracepick__count">{{ traceIds.length }} 条链路</span>
-          <input
-            v-model="traceKeyword"
-            class="wf-tracepick__search mono"
-            placeholder="筛选链路 ID"
-            title="按链路 ID 片段过滤；输入完整 ID 后回车可服务端直达"
-            @keydown.enter.prevent="searchTrace"
-          />
-          <select class="wf-tracepick__select mono" v-model="activeTrace" aria-label="选择链路">
-            <option v-for="t in traceIds" :key="t" :value="t">
-              {{ traceLabel(t) }}
-            </option>
-          </select>
-        </template>
-      </div>
+      <span class="mk-status__actions">
+        <button
+          v-if="waterfallCapReached"
+          type="button"
+          class="mk-status__action"
+          :title="'为保持流畅已停止追加；全量数据见左侧计数'"
+          @click="notice = '已达本地样本上限，全量数据见左侧计数'"
+        >已达上限 {{ WATERFALL_MAX_SPANS }} 条</button>
+      </span>
+    </div>
+
+    <!-- 筛选工具条（独立一行：模式/仅失败/排序/搜索，从状态条移出对齐全站筛选卡形态） -->
+    <div class="wf-tracepick">
+      <span v-if="sessionIds.length" class="mk-pills wf-mode">
+        <button
+          type="button"
+          class="mk-pill"
+          :class="{ 'mk-pill--active': viewMode === 'trace' }"
+          :aria-pressed="viewMode === 'trace'"
+          @click="viewMode = 'trace'"
+        >链路</button>
+        <button
+          type="button"
+          class="mk-pill"
+          :class="{ 'mk-pill--active': viewMode === 'session' }"
+          :aria-pressed="viewMode === 'session'"
+          @click="viewMode = 'session'"
+        >会话</button>
+      </span>
+      <span class="wf-filter">
+        <button
+          type="button"
+          class="mk-pill"
+          :class="{ 'mk-pill--active': failuresOnly }"
+          :aria-pressed="failuresOnly"
+          title="只显示失败行（err）"
+          @click="failuresOnly = !failuresOnly"
+        >仅失败{{ errorTotal > 0 ? ` ${errorTotal}` : '' }}</button>
+        <select v-model="sortMode" class="wf-sort mono" aria-label="排序方式" title="按耗时排序">
+          <option value="time">默认（时间序）</option>
+          <option value="dur-desc">耗时 ↓</option>
+          <option value="dur-asc">耗时 ↑</option>
+        </select>
+      </span>
+      <template v-if="viewMode === 'session'">
+        <span class="wf-tracepick__count">{{ sessionIds.length }} 个会话</span>
+        <select class="wf-tracepick__select mono" v-model="activeSession" aria-label="选择会话">
+          <option v-for="s in sessionIds" :key="s" :value="s">
+            {{ sessionLabel(s) }}
+          </option>
+        </select>
+      </template>
+      <template v-else>
+        <span class="wf-tracepick__count">{{ traceIds.length }} 条链路</span>
+        <input
+          v-model="traceKeyword"
+          class="wf-tracepick__search mono"
+          placeholder="筛选链路 ID"
+          title="按链路 ID 片段过滤；输入完整 ID 后回车可服务端直达"
+          @keydown.enter.prevent="searchTrace"
+        />
+        <select class="wf-tracepick__select mono" v-model="activeTrace" aria-label="选择链路">
+          <option v-for="t in traceIds" :key="t" :value="t">
+            {{ traceLabel(t) }}
+          </option>
+        </select>
+      </template>
     </div>
 
     <!-- 跳转目标不在当前加载样本内时的提示（trace/session 通用） -->
@@ -755,11 +757,17 @@ const verdictText = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 筛选工具条（独立一行：模式切换/仅失败/排序/搜索；对齐 ExecLogs 卡片头筛选形态） */
 .wf-tracepick {
-  margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  background: var(--mk-surface);
+  margin-bottom: 12px;
   min-width: 0;
 }
 .wf-locate { flex-shrink: 0; font-size: 11.5px; }
