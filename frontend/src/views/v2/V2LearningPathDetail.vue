@@ -349,6 +349,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { learningAPI } from '@/api/learning';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import { toast } from '@/utils/toast';
+import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
@@ -657,12 +658,19 @@ async function viewFeedback(task: Record<string, any>) {
     if (detail?.sessionId) {
       const pathQuery = pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : '';
       router.push(`/learn/${task.id}/evaluation/${detail.sessionId}${pathQuery}`);
-    } else {
-      toast.warning('暂无当堂评估记录');
+      return;
     }
   } catch {
-    toast.error('加载评估失败，请稍后再试');
+    /* 无评估记录或加载失败：走降级引导 */
   }
+  // 降级：无当堂评估记录时给出可操作的替代入口（回看历史；或用户自行重新进入任务学习）
+  const go = await askConfirm({
+    title: '暂无当堂评估记录',
+    message: '这节课还没有生成学习反馈，可能是结算尚未完成。你可以回看学习历史；想继续学这个任务，也可以直接点任务卡片重新进入。',
+    confirmText: '回看学习历史',
+    danger: false,
+  });
+  if (go) router.push('/learning-history');
 }
 
 onMounted(load);
