@@ -198,9 +198,15 @@
                 <div class="tl__info">
                   <div class="tl__head">
                     <strong class="tl__title">阶段{{ stageNo(stage, si) }}: {{ stage.title }}</strong>
-                    <span v-if="stageStatus(stage, si) === 'done'" class="tl__badge tl__badge--done">✅ 已完成</span>
-                    <span v-else-if="stageStatus(stage, si) === 'current'" class="tl__badge tl__badge--current">🔄 进行中</span>
-                    <span v-else class="tl__badge tl__badge--locked">🔒 待解锁</span>
+                    <span v-if="stageStatus(stage, si) === 'done'" class="tl__badge tl__badge--done">
+                      <svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>已完成
+                    </span>
+                    <span v-else-if="stageStatus(stage, si) === 'current'" class="tl__badge tl__badge--current">
+                      <svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z" opacity=".9"/><path fill="currentColor" d="M10 16.5l6-4.5-6-4.5z"/></svg>进行中
+                    </span>
+                    <span v-else class="tl__badge tl__badge--locked">
+                      <svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm-3 8V6a3 3 0 0 1 6 0v3H9z"/></svg>待解锁
+                    </span>
                   </div>
                   <small class="tl__desc">{{ stage.goal || stage.description }}</small>
                   <div class="tl__prog-bar">
@@ -231,9 +237,15 @@
                       <small>{{ taskKindText(task) }} · {{ task.estimatedMinutes || '—' }}分钟</small>
                     </div>
                     <span class="tl__task-status">
-                      <template v-if="task.status === 'completed'">✅</template>
-                      <template v-else-if="taskCls(task) === 'current'">🔄 ← 当前</template>
-                      <template v-else-if="taskCls(task) === 'locked'">🔒</template>
+                      <template v-if="task.status === 'completed'">
+                        <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg> 已完成
+                      </template>
+                      <template v-else-if="taskCls(task) === 'current'">
+                        <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z" opacity=".9"/><path fill="currentColor" d="M10 16.5l6-4.5-6-4.5z"/></svg> 当前
+                      </template>
+                      <template v-else-if="taskCls(task) === 'locked'">
+                        <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm-3 8V6a3 3 0 0 1 6 0v3H9z"/></svg>
+                      </template>
                       <template v-else>○ 待开始</template>
                     </span>
                   </div>
@@ -1006,9 +1018,11 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
 .tl__title { font-size: 14.5px; color: var(--ink, #172033); }
 .tl__desc { display: block; margin-top: 2px; font-size: 12.5px; color: var(--faint, #b0b8c8); line-height: 1.5; }
 
-/* 状态徽章 */
+/* 状态徽章（图标 + 文字对齐） */
 .tl__badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 11px; font-weight: 700;
@@ -1122,8 +1136,11 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
 .tl__task-body strong { display: block; font-size: 13px; color: var(--ink, #172033); }
 .tl__task-body small { display: block; margin-top: 1px; font-size: 11.5px; color: var(--faint, #b0b8c8); }
 
-/* 任务状态标签 */
+/* 任务状态标签（图标 + 文字对齐） */
 .tl__task-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px; font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;
