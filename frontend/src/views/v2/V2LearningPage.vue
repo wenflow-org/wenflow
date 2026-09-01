@@ -202,7 +202,7 @@
               @keydown.enter.exact.prevent="send"
             ></textarea>
             <span class="composer__count">{{ input.length }} / 800</span>
-            <span class="composer__send" :class="{ 'composer__send--off': !input.trim() || typing }" @click="send">
+            <span class="composer__send" :class="{ 'composer__send--off': !input.trim() || typing || checkpointPending }" @click="send">
               <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
             </span>
           </div>
@@ -215,7 +215,7 @@
         <!-- 停止生成按钮 -->
         <Transition name="typing-fade">
           <button
-            v-if="typing"
+            v-if="typing && !checkpointPending"
             type="button"
             class="stop-btn"
             @click="stopGeneration"
@@ -376,6 +376,8 @@ const selectedOptions = ref<string[]>([]);
 const answerText = ref('');
 const checkpointFeedback = ref('');
 const checkpointPassed = ref(false);
+/** 检查点提交 in-flight：与导师流式（typing）分离，避免「停止生成」按钮误显、结算等待遗漏 */
+const checkpointPending = ref(false);
 /** 检查点通过后的展示窗口内锁：防止 1.6s 内重复提交同一检查点 */
 const checkpointSubmitting = ref(false);
 
@@ -666,7 +668,7 @@ async function send(e?: unknown) {
   const ke = e as KeyboardEvent | undefined;
   if (ke && (ke.isComposing || ke.keyCode === 229)) return;
   const t = input.value.trim();
-  if (!t || typing.value || !session.value) return;
+  if (!t || typing.value || checkpointPending.value || !session.value) return;
   input.value = '';
   await doSend(t);
 }
@@ -825,7 +827,7 @@ async function submitCheckpoint() {
   const payload: Record<string, any> = {};
   if (checkpoint.value.options?.length) payload.selectedOptionIds = selectedOptions.value;
   else payload.answerText = answerText.value;
-  typing.value = true;
+  checkpointPending.value = true;
   try {
     const r = await aiTeachingAPI.submitCheckpoint(session.value.sessionId, checkpoint.value.id, payload, session.value.revision) as unknown as Record<string, any>;
     session.value.revision = r.revision ?? session.value.revision + 1;
@@ -846,14 +848,15 @@ async function submitCheckpoint() {
   } catch {
     checkpointFeedback.value = '提交失败，再试一次';
   } finally {
-    typing.value = false;
+    checkpointPending.value = false;
   }
 }
 
 async function skipCheckpoint() {
-  if (!checkpoint.value || !session.value || typing.value || checkpointSubmitting.value) return;
+  if (!checkpoint.value || !session.value || typing.value || checkpointPending.value || checkpointSubmitting.value) return;
   const cp = checkpoint.value;
   checkpoint.value = null;
+  checkpointPending.value = true;
   try {
     const r = await aiTeachingAPI.submitCheckpoint(session.value.sessionId, cp.id, { skip: true }, session.value.revision) as unknown as Record<string, any>;
     session.value.revision = typeof r?.revision === 'number' ? r.revision : session.value.revision + 1;
@@ -861,6 +864,8 @@ async function skipCheckpoint() {
     toast.error(e?.message || e?.response?.data?.error?.message || '跳过检查点失败');
     // 失败恢复检查点，允许用户重试或改作答
     checkpoint.value = cp;
+  } finally {
+    checkpointPending.value = false;
   }
 }
 
@@ -921,10 +926,11 @@ async function completeAndSettle() {
   if (!ok) return;
   actionBusy.value = true;
   try {
-    if (typing.value) {
+    // 流式回复或检查点判定 in-flight：先中止在途请求并等待收尾，避免「完成浮层已弹但会话实际未结束」的假完成
+    if (typing.value || checkpointPending.value) {
       streamAbort?.abort();
       streamAbort = null;
-      for (let i = 0; i < 20 && typing.value; i++) {
+      for (let i = 0; i < 20 && (typing.value || checkpointPending.value); i++) {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
     }
@@ -946,11 +952,11 @@ async function endSession() {
   if (!ok) return;
   actionBusy.value = true;
   try {
-    // 流式回复进行中：先中止在途请求并等待收尾，避免「完成浮层已弹但会话实际未结束」的假完成
-    if (typing.value) {
+    // 流式回复或检查点判定 in-flight：先中止在途请求并等待收尾，避免「完成浮层已弹但会话实际未结束」的假完成
+    if (typing.value || checkpointPending.value) {
       streamAbort?.abort();
       streamAbort = null;
-      for (let i = 0; i < 20 && typing.value; i++) {
+      for (let i = 0; i < 20 && (typing.value || checkpointPending.value); i++) {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
     }
@@ -991,6 +997,7 @@ async function restart() {
     session.value.revision = typeof rev === 'number' ? rev : session.value.revision + 1;
     msgs.value = [];
     checkpoint.value = null;
+    checkpointPending.value = false;
     completed.value = false;
     await boot();
   } catch (e: any) {
@@ -1065,6 +1072,7 @@ async function recoverSession(sid: string) {
       msgs.value = [];
       checkpoint.value = null;
       checkpointFeedback.value = '';
+      checkpointPending.value = false;
       completed.value = false;
       quickReplies.value = (s.opening?.quickReplies || []).map((q: Record<string, any>) => q.text || q).filter(Boolean);
       if (Array.isArray(s.knowledgePoints) && s.knowledgePoints.length) {
