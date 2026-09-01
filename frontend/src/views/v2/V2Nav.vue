@@ -13,9 +13,7 @@
         >{{ item.label }}</router-link>
       </nav>
       <div class="v2nav__right">
-        <NotificationsBell />
-        <V2TaskCenter />
-        <ThemeToggle />
+        <V2NotifCenter />
         <router-link
           to="/goal-conversation"
           class="v2nav__cta"
@@ -39,6 +37,13 @@
               <router-link to="/user/settings" role="menuitem" @click="menuOpen = false">API 接入</router-link>
               <router-link to="/user/agent-logs" role="menuitem" @click="menuOpen = false">调用日志</router-link>
               <router-link to="/docs" role="menuitem" @click="menuOpen = false">开发者文档</router-link>
+              <button type="button" role="menuitem" class="v2nav__menu-theme" @click="toggleTheme">
+                <span class="v2nav__menu-theme-label">{{ isDark ? '切换到亮色模式' : '切换到暗色模式' }}</span>
+                <span class="v2nav__menu-theme-icon" aria-hidden="true">
+                  <svg v-if="isDark" viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2a7 7 0 1 1 0-14 7 7 0 0 1 0 14zm0-15V2m0 20v-2m-9-9H1m22 0h-2M4.9 4.9 3.5 3.5m17 17-1.4-1.4m0-14.2 1.4-1.4m-17 17 1.4-1.4"/></svg>
+                  <svg v-else viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+                </span>
+              </button>
               <button type="button" role="menuitem" class="v2nav__menu-danger" @click="handleLogout">
                 退出登录
               </button>
@@ -69,9 +74,8 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useUserStore } from '@/stores/user';
 import { toast } from '@/utils/toast';
-import V2TaskCenter from './V2TaskCenter.vue';
-import NotificationsBell from '@/components/NotificationsBell.vue';
-import ThemeToggle from '@/components/ui/ThemeToggle.vue';
+import { applyDocumentTheme, readTheme, writeTheme } from '@/utils/theme';
+import V2NotifCenter from './V2NotifCenter.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -114,6 +118,17 @@ function onNewGoalClick() {
 const userName = computed(() => userStore.user?.name || '学习者');
 const avatarLetter = computed(() => (userStore.user?.name || '学').charAt(0));
 
+/* 主题切换（原 ThemeToggle 逻辑，移入头像菜单） */
+const isDark = ref(false);
+function applyTheme(dark: boolean) {
+  isDark.value = dark;
+  applyDocumentTheme(dark ? 'dark' : 'light');
+  writeTheme(dark ? 'dark' : 'light');
+}
+function toggleTheme() {
+  applyTheme(!isDark.value);
+}
+
 async function handleLogout() {
   menuOpen.value = false;
   userStore.logout();
@@ -131,6 +146,7 @@ function onKey(e: KeyboardEvent) {
 }
 
 onMounted(() => {
+  applyTheme(readTheme() === 'dark');
   document.addEventListener('click', onDocClick);
   document.addEventListener('keydown', onKey);
 });
@@ -257,6 +273,22 @@ onUnmounted(() => {
 .v2nav__menu a:hover,
 .v2nav__menu button:hover {
   background: color-mix(in srgb, var(--blue, #3478f6) 8%, var(--surface));
+}
+/* 主题切换项：图标居右 */
+.v2nav__menu-theme {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.v2nav__menu-theme-icon {
+  display: grid;
+  place-items: center;
+  width: 22px; height: 22px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--blue, #3478f6) 10%, transparent);
+  color: var(--blue-deep, #1f57cc);
+  flex-shrink: 0;
 }
 .v2nav__menu-danger {
   color: #c0454a !important;
