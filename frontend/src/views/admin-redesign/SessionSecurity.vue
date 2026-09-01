@@ -467,25 +467,8 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.mk-status {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--mk-line);
-  background: var(--mk-surface);
-  box-shadow: var(--mk-shadow-sm);
-  flex-wrap: wrap;
-}
-.mk-status__dot { width: 9px; height: 9px; border-radius: 50%; }
-.mk-status--ok .mk-status__dot { background: var(--mk-green); }
-.mk-status--warn .mk-status__dot { background: var(--mk-amber); }
-.mk-status--bad .mk-status__dot { background: var(--mk-red); }
-.mk-status--muted .mk-status__dot { background: var(--mk-faint); }
-.mk-status__title { font-size: 14px; }
-.mk-status__sep { width: 1px; height: 14px; background: var(--mk-line); }
-.mk-status__meta { color: var(--mk-muted); font-size: 12px; }
+/* 状态条走全局 mk-status 体系（shared.css）；此处不再 scoped 覆盖，
+   避免遮蔽全局升级（此前重定义导致 mk-status__actions 等新类不生效） */
 
 /* 审计日志分工说明 / 深链横幅 */
 .ss-note {
@@ -496,7 +479,7 @@ onMounted(async () => {
   padding: 8px 14px;
   border: 1px dashed var(--mk-line);
   border-radius: 10px;
-  background: #f8fafc;
+  background: var(--mk-surface);
   font-size: 11.5px;
   color: var(--mk-muted);
 }
@@ -508,7 +491,7 @@ onMounted(async () => {
   padding: 8px 14px;
   border: 1px solid rgba(44, 99, 208, 0.3);
   border-radius: 10px;
-  background: #eef5ff;
+  background: var(--mk-blue-bg);
   font-size: 12px;
   color: var(--mk-ink);
 }
@@ -548,7 +531,7 @@ onMounted(async () => {
   gap: 12px;
   flex-wrap: wrap;
   padding: 10px 14px;
-  background: #fafbfc;
+  background: var(--mk-surface);
   border-bottom: 1px solid var(--mk-line);
 }
 .ss-group__who { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
@@ -570,8 +553,8 @@ onMounted(async () => {
 .ss-group__revokeall:hover { background: var(--mk-red-bg, #fef2f2); text-decoration: underline; }
 
 /* 表格内自定义单元格 */
-.ss-tr--current td { background: #f0f7ff; }
-.ss-tr--current:hover td { background: #e8f2ff; }
+.ss-tr--current td { background: var(--mk-blue-bg); }
+.ss-tr--current:hover td { background: color-mix(in srgb, var(--mk-blue-bg) 75%, var(--mk-line)); }
 .ss-tr--empty td {
   padding: 26px 14px;
   text-align: center;
@@ -639,11 +622,8 @@ onMounted(async () => {
 .ss-hist__summary:hover { background: #f4f7fc; }
 .ss-hist__meta { color: var(--mk-faint); font-weight: 600; font-size: 11px; }
 
-/* 大屏/4K 适配（全站 mk 体系档位；表格自身由 shared.css 档位覆盖） */
+/* 大屏/4K 适配（全站 mk 体系档位；表格与状态条由 shared.css 档位覆盖） */
 @media (min-width: 2000px) {
-  .mk-status { padding: 10px 16px; }
-  .mk-status__title { font-size: 15.5px; }
-  .mk-status__meta { font-size: 13px; }
   .ss-group__head { padding: 12px 18px; }
   .ss-group__who strong { font-size: 14.5px; }
   .ss-group__email { font-size: 12.5px; }
@@ -655,7 +635,6 @@ onMounted(async () => {
   .ss-ip { font-size: 13.5px; }
 }
 @media (min-width: 2800px) {
-  .mk-status { padding: 12px 18px; border-radius: 14px; }
   .ss-group__who strong { font-size: 16.5px; }
   .ss-group__email { font-size: 14px; }
   .ss-group__count { font-size: 15px; }
@@ -667,9 +646,6 @@ onMounted(async () => {
   .ss-ip { font-size: 15.5px; }
 }
 @media (min-width: 3600px) {
-  .mk-status { padding: 14px 22px; }
-  .mk-status__title { font-size: 18px; }
-  .mk-status__meta { font-size: 15px; }
   .ss-group__head { padding: 14px 22px; }
   .ss-group__who strong { font-size: 18.5px; }
   .ss-group__email { font-size: 16px; }

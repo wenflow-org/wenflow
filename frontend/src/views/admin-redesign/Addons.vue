@@ -504,12 +504,12 @@ function goConfig() {
   gap: 12px;
   align-items: center;
   padding: 10px 16px;
-  border-bottom: 1px solid #f6f7f9;
+  border-bottom: 1px solid var(--mk-line);
 }
 .ac-mcp__row:last-child { border-bottom: none; }
 .ac-mcp__dot { width: 8px; height: 8px; border-radius: 50%; }
 .ac-mcp__dot.is-on { background: var(--mk-green); box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12); }
-.ac-mcp__dot.is-off { background: #c3cede; }
+.ac-mcp__dot.is-off { background: var(--mk-faint); }
 .ac-mcp__main { display: grid; gap: 1px; min-width: 0; }
 .ac-mcp__main strong { font-size: 12.5px; font-weight: 600; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ac-mcp__id { font-size: 10.5px; color: var(--mk-faint); }
@@ -578,5 +578,11 @@ function goConfig() {
   .ac-mcp__main strong { font-size: 18.5px; }
   .ac-mcp__id { font-size: 16px; }
   .ac-mcp__type, .ac-mcp__endpoint { font-size: 17px; }
+}
+
+/* ================= 暗色模式（D1 补完）：外挂能力 ================= */
+html[data-theme='dark'] {
+  .ac-error { background: rgba(248, 113, 113, 0.1); }
+  .ac-mcp__dot.is-off { background: #4a5874; }
 }
 </style>

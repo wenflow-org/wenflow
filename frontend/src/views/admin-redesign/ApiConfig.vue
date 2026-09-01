@@ -92,7 +92,7 @@
             <option v-if="!models.length" value="">无可用模型</option>
           </select>
         </label>
-        <button type="button" class="ac-run" :disabled="!models.length || testing" @click="runTest">
+        <button type="button" class="mk-btn mk-btn--primary" :disabled="!models.length || testing" @click="runTest">
           <span v-if="testing"><span class="mk-spinner"></span> 测试中…</span>
           <span v-else>运行测试</span>
         </button>
@@ -865,18 +865,6 @@ async function toggleRegistration() {
   font-weight: 600;
 }
 
-.ac-run {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--mk-line);
-  background: var(--mk-surface);
-  color: var(--mk-blue);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-.ac-run:disabled { opacity: 0.5; cursor: not-allowed; }
-
 .ac-policy {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1190,10 +1178,9 @@ async function toggleRegistration() {
 
 /* ================= 暗色模式（D1 补完）：模型与接入 ================= */
 html[data-theme='dark'] {
-  .ac-card { background: #141c2b; border-color: #232f45; }
   .ac-key-toggle:hover { background: rgba(91, 141, 239, 0.14); }
   .ac-seg { background: #1d2739; }
   .ac-seg__item--active { background: rgba(91, 141, 239, 0.22); color: #9db8f5; box-shadow: none; }
-  .ac-conn-dot { background: #232f45; }
+  .ac-save { background: #141c2b; border-color: #232f45; }
 }
 </style>
