@@ -277,8 +277,11 @@ html, body {
    残留默认边框与灰底 */
 /* 按钮基础归零：v2 页 button 去掉浏览器默认样式（边框/背景/内边距/字体），
    外观统一由各 class（btn-primary/link-muted 等）定义，避免「今天休息」类文本按钮
-   残留默认边框与灰底。:where() 使本规则特异性与元素选择器同级，不会压过组件 class */
-.v2-page button:where(:not(.el-button)) {
+   残留默认边框与灰底。:where() 使本规则特异性与元素选择器同级，不会压过组件 class。
+   排除 uc-btn 系列（用户中心组件库自带完整样式：渐变主按钮/边框/背景），
+   否则 .v2-page 的类+元素特异性 (0,1,1) 会压过 .uc-btn--primary 的 (0,1,0)，
+   导致个人中心按钮渐变/背景被清空 */
+.v2-page button:where(:not(.el-button):not(.uc-btn)) {
   font: inherit;
   letter-spacing: inherit;
   line-height: inherit;
