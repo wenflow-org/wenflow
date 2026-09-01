@@ -454,7 +454,7 @@ watch(
 );
 
 function goPaths() {
-  router.push(`/learning-paths?from=goal&auto=1&conversationId=${live.conversationId}`);
+  router.push(`/learning-paths?from=goal&conversationId=${live.conversationId}`);
 }
 
 const input = ref('');

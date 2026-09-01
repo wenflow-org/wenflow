@@ -876,7 +876,8 @@ async function finish(action: 'complete_task' | 'end_only' | 'complete_review') 
     const r = await aiTeachingAPI.finalizeSessionReliably(session.value.sessionId, {
       action,
       revision: session.value.revision,
-      reason: action === 'complete_task' ? 'task-completed' : action === 'complete_review' ? 'manual-end' : 'manual-end'
+      // 三种 action 的收尾原因统一为 manual-end（task-completed 由后端 task 完成事件单独判定）
+      reason: 'manual-end'
     }) as unknown as Record<string, any>;
     completed.value = true;
     const wrapup = r.wrapup;

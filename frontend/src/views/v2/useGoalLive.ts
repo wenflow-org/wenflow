@@ -4,6 +4,10 @@
  */
 import { computed, reactive, ref } from 'vue';
 import {
+  GOAL_CONVERSATION_CID_KEY as CID_KEY,
+  GOAL_CONVERSATION_MSGS_KEY as MSG_KEY
+} from '@/utils/sessionCleanup';
+import {
   startGoalConversation,
   replyGoalConversation,
   getGoalConversation,
@@ -31,9 +35,6 @@ export interface LiveField {
   status: 'done' | 'todo';
   fresh?: boolean;
 }
-
-const CID_KEY = 'v2_goal_cid';
-const MSG_KEY = 'v2_goal_msgs';
 
 /**
  * 会话代次（generation token）：reset/resetView 自增。
