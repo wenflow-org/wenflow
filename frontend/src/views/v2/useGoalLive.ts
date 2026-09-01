@@ -185,7 +185,12 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
     conversationId.value = core.conversationId;
     localStorage.setItem(CID_KEY, core.conversationId);
   }
-  stage.value = core?.stage ?? '';
+  // stage 兜底：后端字段缺省时按已开始对话处理（澄清阶段），避免 started=true 但
+  // stage='' 的非法组合（A1：此前会导致 stageIndex 无意义回退第 1 步但无文案）
+  const rawStage = core?.stage;
+  stage.value = rawStage === 'understanding' || rawStage === 'proposing' || rawStage === 'ready' || rawStage === 'completed'
+    ? rawStage
+    : 'understanding';
   confidence.value = Math.round((core?.confidence ?? 0) * 100);
   isCompleted.value = core?.isCompleted === true;
   learningPath.value = core?.learningPath ?? null;
