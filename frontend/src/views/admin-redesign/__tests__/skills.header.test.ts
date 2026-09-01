@@ -113,7 +113,8 @@ describe('Skills 新页头（单行状态条）', () => {
     expect(linkTexts.some((t) => t.includes('失败节点'))).toBe(true)
     expect(meta.some((t) => t.includes('空闲'))).toBe(true)
     expect(meta.some((t) => t.includes('平均耗时'))).toBe(true)
-    expect(meta.some((t) => t.includes('总调用'))).toBe(true)
+    // 总调用已并入成功率括号（如 77%（115/150）），不再独立展示
+    expect(meta.some((t) => t.includes('成功率') && t.includes('（'))).toBe(true)
   })
 
   it('失败节点计数可点击切换「仅看需关注」', async () => {

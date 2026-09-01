@@ -290,8 +290,8 @@ function rankPct(tokens: number): string {
 .tc-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  margin-bottom: 14px;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 @media (max-width: 1200px) {
   .tc-grid { grid-template-columns: 1fr; }

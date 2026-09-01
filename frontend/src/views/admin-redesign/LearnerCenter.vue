@@ -129,8 +129,8 @@
               </span>
               <span v-else class="mk-na" :title="r.task ? '' : '尚未开始学习，暂无置信度'">—</span>
             </td>
-            <td v-if="!lcHiddenCols.has('risk')" class="risk-text" :class="{ 'mk-na': !r.risk }">{{ r.risk || '—' }}</td>
-            <td v-if="!lcHiddenCols.has('updated')" class="mk-na">{{ isUpdating(r.id) ? '重算中…' : r.updated }}</td>
+            <td v-if="!lcHiddenCols.has('risk')" class="risk-text" :class="{ 'mk-na': !r.risk }" :title="r.risk || ''">{{ r.risk || '—' }}</td>
+            <td v-if="!lcHiddenCols.has('updated')" class="lc-updated">{{ isUpdating(r.id) ? '重算中…' : r.updated }}</td>
             <td>
               <div class="mk-actions mk-actions--left">
                 <button type="button" class="mk-icon-btn" title="详情" @click.stop="openDetail(r)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg></button>
@@ -501,7 +501,9 @@ async function recomputeAll() {
 .lc-trend--down .lc-trend__bar--2 { height: 8px; }
 .lc-trend--down .lc-trend__bar--3 { height: 11px; opacity: 0.85; }
 .progress-title { font-weight: 600; }
-.risk-text { color: var(--mk-amber); font-size: 12.5px; }
+.risk-text { color: var(--mk-amber); font-size: 12.5px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 更新列：相对时间不换行（"4 分钟前"拆行问题） */
+.lc-updated { white-space: nowrap; color: var(--mk-faint); font-size: 12px; }
 .conf { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-muted); cursor: help; }
 .conf__lack { font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
 .conf--low { color: var(--mk-amber); }
@@ -527,6 +529,9 @@ async function recomputeAll() {
 /* ================= C2 干预动线 ================= */
 .lc-intervene--hot { color: var(--mk-amber); }
 html[data-theme='dark'] .lc-intervene--hot { color: #fbbf24; }
+/* 暗色：页头计数锚点激活态转暗色蓝 */
+html[data-theme='dark'] .lc-count-link:hover { background: rgba(91, 141, 239, 0.14); }
+html[data-theme='dark'] .lc-count-link--on { background: rgba(91, 141, 239, 0.22); color: #9db8f5; }
 .lc-iv__risk {
   display: grid;
   gap: 4px;

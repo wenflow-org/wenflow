@@ -18,7 +18,6 @@
       >失败节点 {{ errorCount }}</button>
       <span v-if="idleCount > 0" class="mk-status__meta" title="窗口内无调用的 Skill 数">空闲 {{ idleCount }}</span>
       <span v-if="avgLatencyText !== '—'" class="mk-status__meta" title="成功调用平均耗时（按调用量加权）">平均耗时 {{ avgLatencyText }}</span>
-      <span v-if="totalCalls" class="mk-status__meta">总调用 {{ totalCalls }}</span>
       <span class="mk-status__actions">
         <span class="mk-status__meta">{{ rangeLabel }}</span>
       </span>

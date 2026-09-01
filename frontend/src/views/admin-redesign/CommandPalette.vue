@@ -12,7 +12,7 @@
             aria-expanded="true"
             aria-controls="pal-listbox"
             :aria-activedescendant="flat[active] ? `pal-opt-${flat[active].key}` : undefined"
-            placeholder="搜索页面或操作…（↑↓ 选择，Enter 执行）"
+            placeholder="搜索页面或操作…"
             @keydown.down.prevent="move(1)"
             @keydown.up.prevent="move(-1)"
             @keydown.enter.prevent="run(active)"
