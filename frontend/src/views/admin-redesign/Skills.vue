@@ -450,17 +450,19 @@ function recGateDetail(completion: SkillCompletion): string {
 .sk-cell { display: flex; align-items: center; gap: 10px; }
 /* 目录表列宽防抖（ADMIN_COLUMN_WIDTH_AUDIT ④）：全部固定宽，杜绝内容撑宽抖动；
    Skill 列 = 吸收列（剩余宽度主要进它，1920 不再全列等比放大 42%）。
+   用 :not(.sk-rec-table) 排除下方对账表（7 列结构不同）；
+   固定宽统一走 mk-col-* token（4K 档由 shared.css 自动放大）。
    用 :not(.sk-rec-table) 排除下方对账表（7 列结构不同） */
-.sk-table:not(.sk-rec-table) th:nth-child(1), .sk-table:not(.sk-rec-table) td:nth-child(1) { width: 380px; }
-.sk-table:not(.sk-rec-table) th:nth-child(2), .sk-table:not(.sk-rec-table) td:nth-child(2) { width: 170px; }
+.sk-table:not(.sk-rec-table) th:nth-child(1), .sk-table:not(.sk-rec-table) td:nth-child(1) { width: var(--mk-col-flex-max); }
+.sk-table:not(.sk-rec-table) th:nth-child(2), .sk-table:not(.sk-rec-table) td:nth-child(2) { width: var(--mk-col-model); }
 .sk-table:not(.sk-rec-table) th:nth-child(3), .sk-table:not(.sk-rec-table) td:nth-child(3) { width: var(--mk-col-badge); }
-.sk-table:not(.sk-rec-table) th:nth-child(4), .sk-table:not(.sk-rec-table) td:nth-child(4) { width: 96px; }
+.sk-table:not(.sk-rec-table) th:nth-child(4), .sk-table:not(.sk-rec-table) td:nth-child(4) { width: var(--mk-col-badge); }
 .sk-table:not(.sk-rec-table) th:nth-child(5), .sk-table:not(.sk-rec-table) td:nth-child(5),
 .sk-table:not(.sk-rec-table) th:nth-child(6), .sk-table:not(.sk-rec-table) td:nth-child(6),
-.sk-table:not(.sk-rec-table) th:nth-child(7), .sk-table:not(.sk-rec-table) td:nth-child(7) { width: 64px; }
-.sk-table:not(.sk-rec-table) th:nth-child(8), .sk-table:not(.sk-rec-table) td:nth-child(8) { width: 72px; }
-.sk-table:not(.sk-rec-table) th:nth-child(9), .sk-table:not(.sk-rec-table) td:nth-child(9) { width: 88px; }
-.sk-table:not(.sk-rec-table) th:nth-child(10), .sk-table:not(.sk-rec-table) td:nth-child(10) { width: 60px; }
+.sk-table:not(.sk-rec-table) th:nth-child(7), .sk-table:not(.sk-rec-table) td:nth-child(7) { width: var(--mk-col-num); }
+.sk-table:not(.sk-rec-table) th:nth-child(8), .sk-table:not(.sk-rec-table) td:nth-child(8) { width: var(--mk-col-num); }
+.sk-table:not(.sk-rec-table) th:nth-child(9), .sk-table:not(.sk-rec-table) td:nth-child(9) { width: var(--mk-col-num-wide); }
+.sk-table:not(.sk-rec-table) th:nth-child(10), .sk-table:not(.sk-rec-table) td:nth-child(10) { width: var(--mk-col-actions); }
 /* 英文原名（id）主行：等宽突出；中文描述副行：灰色正文（非 mono）。
    截断上限统一引用 token（原散落 460px） */
 .sk-id-main {
@@ -497,10 +499,9 @@ function recGateDetail(completion: SkillCompletion): string {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px;
 }
+/* 应用式布局（mk-card--fill）：不内滚，高度交给页面滚动（消除双滚动条） */
 .sk-grid--inset {
   padding: 12px;
-  max-height: 68vh;
-  overflow-y: auto;
 }
 .sk-card {
   display: grid;
@@ -583,167 +584,43 @@ function recGateDetail(completion: SkillCompletion): string {
   flex-shrink: 0;
 }
 
-/* ================= 技能对账面板（SKILL_READINESS_SPEC §4.2） ================= */
-.sk-rec { margin-top: 14px; }
-/* 滚动修复 #4：对账卡 details 折叠（summary = 卡头） */
-.sk-rec__summary { cursor: pointer; user-select: none; list-style: none; }
-.sk-rec__summary::-webkit-details-marker { display: none; }
-.sk-rec__summary::before {
-  content: '▸';
-  display: inline-block;
-  margin-right: 6px;
-  color: var(--mk-blue, #2c63d0);
-  transition: transform 0.14s ease;
-}
-.sk-rec[open] > .sk-rec__summary::before { transform: rotate(90deg); }
-.sk-rec__more {
-  display: flex;
-  justify-content: center;
-  padding: 8px 0 10px;
-  border-top: 1px dashed var(--mk-line);
-}
-.sk-rec-tools {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 10px 14px 4px;
-}
-.sk-rec__title { display: flex; flex-direction: column; gap: 2px; }
-.sk-rec__title strong { font-size: 14px; }
-.sk-rec__clear { width: fit-content; }
-.sk-rec-flash { animation: sk-rec-flash 1.4s ease 2; }
-@keyframes sk-rec-flash {
-  0%, 100% { background: transparent; }
-  50% { background: #fdf3e3; }
-}
-.sk-rec__loading { color: var(--mk-faint); font-size: 12px; margin-left: auto; }
-.sk-rec__pills { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
-.sk-pill--bad { color: var(--mk-red-strong, #b91c1c); background: #fdecec; }
-.sk-pill--warn { color: var(--mk-amber, #d97706); background: #fdf3e3; }
-.sk-rec__refresh {
-  border: 1px solid var(--mk-line);
-  background: #fff;
-  border-radius: 8px;
-  padding: 3px 10px;
-  font: inherit;
-  font-size: 11.5px;
-  color: var(--mk-muted);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.sk-rec__refresh:hover { border-color: rgba(44, 99, 208, 0.4); color: var(--mk-blue); }
-.sk-rec__refresh:disabled { opacity: 0.5; cursor: default; }
-.sk-rec__skeleton { display: grid; gap: 8px; padding: 12px; }
-.sk-rec__skeleton span { height: 26px; border-radius: 8px; background: linear-gradient(90deg, #eef2fa, #f7f9fc, #eef2fa); background-size: 200% 100%; animation: sk-rec-shimmer 1.2s infinite; }
-@keyframes sk-rec-shimmer { 50% { background-position: -200% 0; } }
-
-.sk-rec-table th, .sk-rec-table td { text-align: left; }
-.sk-rec-yn { font-weight: 700; font-size: 13px; }
-.sk-rec-yn--ok { color: var(--mk-green, #16a34a); }
-.sk-rec-yn--no { color: var(--mk-red, #dc2626); }
-.sk-rec-tag {
-  display: inline-block;
-  margin-left: 4px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--mk-line);
-  color: var(--mk-muted);
-  font-size: 10px;
-  font-weight: 600;
-  vertical-align: 1px;
-}
-.sk-rec-tag--bad { background: #fdecec; color: var(--mk-red-strong, #b91c1c); }
-
-/* 完成度五档色标：draft → live */
-.sk-rec-diff { font-size: 11px; font-weight: 700; }
-.sk-rec-diff--bad { color: var(--mk-red, #dc2626); }
-.sk-rec-diff--warn { color: var(--mk-amber, #d97706); }
-
-.sk-rec-orphans {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 10px 14px;
-  border-top: 1px dashed var(--mk-line);
-  font-size: 12px;
-  color: var(--mk-muted);
-}
-.sk-rec-orphans .sk-rec-tag { margin-left: 0; }
-
-/* parentAgent 分组节头（P2 补全：goal-agent 下辖 N 条） */
-.sk-rec-group td {
-  padding: 6px 14px;
-  background: var(--mk-surface);
-  border-bottom: 1px solid var(--mk-line, #e6ebf4);
-}
-.sk-rec-group__name {
-  font-family: var(--mk-mono);
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--mk-blue, #2c63d0);
-}
-.sk-rec-group__meta {
-  margin-left: 8px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--mk-muted, #5b6577);
-}
-
-.sk-rec-legend {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 10px 14px;
-  border-top: 1px dashed var(--mk-line);
-  font-size: 11.5px;
-  color: var(--mk-muted);
-}
-.sk-rec-legend__item { display: inline-flex; align-items: center; gap: 5px; }
-.sk-rec-legend__item .mk-badge { padding: 2px 8px; font-size: 10px; }
-
-/* 大屏档位（mk 体系：2000 ≈×1.15，2800 ≈×1.17） */
+/* 大屏档位（mk 体系：2000 ≈×1.15，2800 ≈×1.17，3600 ≈×1.3） */
 @media (min-width: 2000px) {
   .sk-card__cat,
   .sk-card__flag { font-size: 12px; }
-  .sk-rec__loading { font-size: 13.5px; }
-  .sk-rec-diff { font-size: 12.5px; }
-  .sk-rec-legend__item .mk-badge { font-size: 11.5px; }
   .sk-dot { width: 10px; height: 10px; }
+  .sk-agent-tag { font-size: 12.5px; padding: 3px 11px; }
+  .sk-cols__item { font-size: 13.5px; padding: 7px 9px; }
+  .sk-id-main { font-size: 13.5px; }
+  .sk-name-desc { font-size: 13px; }
 }
 @media (min-width: 2800px) {
   .sk-card__cat,
   .sk-card__flag { font-size: 14px; }
-  .sk-rec__loading { font-size: 16px; }
-  .sk-rec-diff { font-size: 15px; }
-  .sk-rec-legend__item .mk-badge { font-size: 14px; }
   .sk-dot { width: 12px; height: 12px; }
+  .sk-agent-tag { font-size: 14.5px; padding: 4px 13px; }
+  .sk-cols__item { font-size: 16px; padding: 8px 11px; }
+  .sk-id-main { font-size: 16px; }
+  .sk-name-desc { font-size: 15.5px; }
 }
 @media (min-width: 3600px) {
   .sk-card__cat,
   .sk-card__flag { font-size: 16.5px; }
-  .sk-rec__loading { font-size: 18.5px; }
-  .sk-rec-diff { font-size: 17.5px; }
-  .sk-rec-legend__item .mk-badge { font-size: 16.5px; }
   .sk-dot { width: 14px; height: 14px; }
+  .sk-agent-tag { font-size: 17px; padding: 5px 15px; }
+  .sk-cols__item { font-size: 18.5px; padding: 9px 13px; }
+  .sk-id-main { font-size: 18.5px; }
+  .sk-name-desc { font-size: 18px; }
 }
 
 /* ================= 暗色模式（D1 补完）：Skill 运行 ================= */
 html[data-theme='dark'] {
-  .sk-card__rate, .sk-table__statusbar { background: #232f45; }
-  .sk-pill--bad { color: #fca5a5; background: rgba(248, 113, 113, 0.14); }
-  .sk-pill--warn { color: #fcd34d; background: rgba(251, 191, 36, 0.14); }
-  .sk-rec-tag--bad { color: #fca5a5; background: rgba(248, 113, 113, 0.14); }
+  .sk-card__rate { background: #232f45; }
   .sk-card { background: #141c2b; border-color: #232f45; }
   .sk-card__head { border-bottom-color: #232f45; }
   .sk-card--error { background: linear-gradient(180deg, #241a1a, #141c2b); }
   .sk-dot--idle, .sk-card--idle .sk-card__dot { background: #4a5874; }
-  .sk-agent-tag, .sk-rec-tag { background: #232f45; color: #9fb0c8; }
-  .sk-rec-group td { background: #1b2537; }
-  .sk-rec__refresh { background: #17202f; }
-  .sk-rec-flash { animation: none; }
+  .sk-agent-tag { background: #232f45; color: #9fb0c8; }
 }
 
 /* ================= D3 表格增强：Skill 列设置菜单 ================= */
@@ -793,4 +670,13 @@ html[data-theme='dark'] .sk-cols__item:hover { background: #1f2b40; }
 }
 .sk-cols__reset:hover { background: #eff6ff; }
 html[data-theme='dark'] .sk-cols__reset:hover { background: #1f2b40; }
+@media (min-width: 2000px) {
+  .sk-cols__reset { font-size: 13.5px; padding: 7px 9px; }
+}
+@media (min-width: 2800px) {
+  .sk-cols__reset { font-size: 16px; padding: 8px 11px; }
+}
+@media (min-width: 3600px) {
+  .sk-cols__reset { font-size: 18.5px; padding: 9px 13px; }
+}
 </style>
