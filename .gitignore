@@ -252,3 +252,10 @@ page-*.md
 
 # UI 审计截图临时目录
 .ui-audit/
+
+# 实验残留（一次性调试/探测脚本与产物，不入库）
+work/
+_pi-ai-test/
+_dsh-index-test.mjs
+_probe.mjs
+_verify-dsh.mjs
