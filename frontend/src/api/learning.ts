@@ -481,9 +481,13 @@ export const mergeGenerationLifecycle = (
   lifecycleValue: unknown
 ): LearningPath => {
   const generationLifecycle = normalizeGenerationLifecycle(lifecycleValue);
+  // stage_design 阶段失败也应映射为 failed（此前只处理 core，导致 stage_design 失败
+  // 时 path.status 仍为 active，Dashboard 等消费方把失败路径当「进行中」）
   const nextStatus = generationLifecycle.phase === 'core'
     ? (generationLifecycle.status === 'failed' ? 'failed' : 'generating')
-    : (path.status === 'completed' ? 'completed' : 'active');
+    : (generationLifecycle.status === 'failed' || generationLifecycle.status === 'stale'
+      ? 'failed'
+      : (path.status === 'completed' ? 'completed' : 'active'));
 
   return {
     ...path,
