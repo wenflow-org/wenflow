@@ -480,7 +480,7 @@ onBeforeUnmount(() => {
 .pcard--failed::before { background: linear-gradient(180deg, var(--red), var(--amber)); }
 .pcard--generating { background: linear-gradient(180deg, rgba(67, 176, 216, 0.04), var(--surface) 55%); }
 .pcard--failed { border-color: rgba(239, 117, 120, 0.3); }
-.pcard__head { display: flex; align-items: flex-start; gap: 12px; }
+.pcard__head { display: flex; align-items: stretch; gap: 12px; }
 .pcard__thumb {
   width: 36px; height: 36px; border-radius: 11px;
   display: grid; place-items: center;
@@ -491,7 +491,7 @@ onBeforeUnmount(() => {
 .pcard--completed .pcard__thumb { background: linear-gradient(135deg, var(--green), #58c98f); }
 .pcard--generating .pcard__thumb { background: linear-gradient(135deg, #43b0d8, #7cc7e2); }
 .pcard--failed .pcard__thumb { background: linear-gradient(135deg, var(--red), var(--amber)); }
-.pcard__body { flex: 1; min-width: 0; }
+.pcard__body { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
 .pcard__head-right { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .pcard__badge { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; flex: 0 0 auto; }
 .pcard__badge--green { color: #218a56; background: rgba(49, 177, 111, 0.12); }
@@ -509,14 +509,14 @@ onBeforeUnmount(() => {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 
-.pcard__progress-row { display: flex; align-items: center; gap: 10px; }
+.pcard__progress-row { display: flex; align-items: center; gap: 10px; flex: 1; }
 .pcard__progress { flex: 1; height: 6px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
 .pcard__progress i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
 .pcard__percent {
   font-size: 12px; font-weight: 800; color: var(--blue-deep);
   font-variant-numeric: tabular-nums; flex: 0 0 auto;
 }
-.pcard__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 2px; }
+.pcard__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; }
 .pcard__meta { font-size: 12px; color: var(--faint); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pcard__cta {
   display: inline-flex; align-items: center; gap: 4px;
@@ -526,12 +526,14 @@ onBeforeUnmount(() => {
 }
 .pcard__cta svg { transition: transform 0.15s ease; }
 .pcard:hover .pcard__cta { transform: translateX(2px); }
-.pcard__actions { display: flex; justify-content: flex-end; margin-top: 2px; }
+.pcard__actions { display: flex; justify-content: flex-end; margin-top: auto; }
 
 .pcard__generating {
   display: flex; align-items: center; gap: 9px;
   font-size: 13px; color: var(--blue-deep, #2b7a99); font-weight: 600;
 }
+/* 生成中：中间内容区弹性拉伸，底部操作行压底（与 ready 卡内容高度对齐） */
+.pcard--generating .pcard__skeleton { flex: 1; align-content: center; }
 .pcard__skeleton { display: grid; gap: 8px; }
 .pcard__skeleton i {
   height: 11px; border-radius: 6px;
@@ -546,6 +548,8 @@ onBeforeUnmount(() => {
   border: 1px dashed rgba(239, 117, 120, 0.35);
   border-radius: 10px; padding: 9px 12px;
 }
+/* 失败：原因区弹性拉伸，重试按钮压底（与 ready 卡内容高度对齐） */
+.pcard--failed .pcard__fail-reason { flex: 1; display: grid; align-content: center; }
 
 .empty {
   display: grid; justify-items: center; align-content: center; gap: 12px;
