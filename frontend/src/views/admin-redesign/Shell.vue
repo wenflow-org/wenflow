@@ -38,26 +38,39 @@
             >{{ badgeOf(item) }}</span>
           </button>
         </div>
-        <section v-for="group in groupedScenes" :key="group.title" class="mshell__group">
-          <div class="mshell__group-title">{{ group.title }}</div>
+        <section v-for="group in groupedScenes" :key="group.title" class="mshell__group" :data-open="isGroupOpen(group.title) ? 'true' : 'false'">
           <button
-            v-for="item in group.items"
-            :key="item.id"
             type="button"
-            class="mshell__item"
-            :class="{ 'mshell__item--active': item.id === current }"
-            :title="item.label"
-            @click="go(item)"
+            class="mshell__group-head"
+            :class="{ 'mshell__group-head--active': groupContainsCurrent(group.title) }"
+            :aria-expanded="isGroupOpen(group.title)"
+            :title="`${group.title}（${group.items.length} 项）`"
+            @click="toggleGroup(group.title)"
           >
-            <span class="mshell__item-glyph">{{ item.glyph }}</span>
-            <span class="mshell__item-label">{{ item.label }}</span>
-            <span
-              v-if="badgeOf(item)"
-              class="mshell__item-badge"
-              :class="{ 'mshell__item-badge--alarm': isAlarmBadge(item) }"
-              :title="badgeTitle(item)"
-            >{{ badgeOf(item) }}</span>
+            <span class="mshell__group-name">{{ group.title }}</span>
+            <span v-if="groupBadgeCount(group.title)" class="mshell__group-badge" :class="{ 'mshell__group-badge--alarm': groupHasAlarm(group.title) }" :title="groupBadgeTitle(group.title)">{{ groupBadgeCount(group.title) }}</span>
+            <span class="mshell__group-arrow" aria-hidden="true">▸</span>
           </button>
+          <div v-show="isGroupOpen(group.title)" class="mshell__group-body">
+            <button
+              v-for="item in group.items"
+              :key="item.id"
+              type="button"
+              class="mshell__item"
+              :class="{ 'mshell__item--active': item.id === current }"
+              :title="item.label"
+              @click="go(item)"
+            >
+              <span class="mshell__item-glyph">{{ item.glyph }}</span>
+              <span class="mshell__item-label">{{ item.label }}</span>
+              <span
+                v-if="badgeOf(item)"
+                class="mshell__item-badge"
+                :class="{ 'mshell__item-badge--alarm': isAlarmBadge(item) }"
+                :title="badgeTitle(item)"
+              >{{ badgeOf(item) }}</span>
+            </button>
+          </div>
         </section>
       </nav>
       <!-- 左侧底部：极简品牌行（命令面板入口在右上角） -->
@@ -142,7 +155,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { MOCK_SCENES, type MockSceneDef } from './manifest'
 import { liveNavBadges, alarmNavBadges, loadLiveData, liveLoading } from './live'
 import { adminAuthApi, clearAdminSession } from '@/api/adminApi'
@@ -317,6 +330,62 @@ const groupedScenes = computed(() => {
   }
   return groups
 })
+
+/* ===== 组级折叠（对齐 AntD SubMenu 模式）：组标题点击展开/收起，
+   当前页所在组自动展开；状态 localStorage 持久化 ===== */
+const GROUP_OPEN_KEY = 'wf_admin_group_open'
+const openGroups = ref<Set<string>>(loadOpenGroups())
+function loadOpenGroups(): Set<string> {
+  try {
+    const raw = localStorage.getItem(GROUP_OPEN_KEY)
+    if (!raw) return new Set()
+    const arr = JSON.parse(raw) as string[]
+    return new Set(Array.isArray(arr) ? arr : [])
+  } catch {
+    return new Set()
+  }
+}
+function persistOpenGroups() {
+  try { localStorage.setItem(GROUP_OPEN_KEY, JSON.stringify([...openGroups.value])) } catch { /* ignore */ }
+}
+function isGroupOpen(title: string): boolean {
+  if (collapsed.value) return true // 整栏折叠（64px 图标）时所有项可见
+  return openGroups.value.has(title)
+}
+function toggleGroup(title: string) {
+  const next = new Set(openGroups.value)
+  if (next.has(title)) next.delete(title)
+  else next.add(title)
+  openGroups.value = next
+  persistOpenGroups()
+}
+/** 当前页所在组：导航后自动展开（其他组保持用户状态） */
+const groupContainsCurrent = (title: string) => groupedScenes.value.find((g) => g.title === title)?.items.some((i) => i.id === props.current) ?? false
+watch(
+  () => props.current,
+  (cur: string) => {
+    if (!cur || collapsed.value) return
+    const g = groupedScenes.value.find((x) => x.items.some((i) => i.id === cur))
+    if (g && !openGroups.value.has(g.title)) {
+      openGroups.value = new Set(openGroups.value).add(g.title)
+      persistOpenGroups()
+    }
+  },
+  { immediate: true }
+)
+/* 组徽章聚合：组内项徽章计数求和；含告警项时红色警示 */
+const groupItems = (title: string) => groupedScenes.value.find((g) => g.title === title)?.items ?? []
+const groupBadgeCount = (title: string) => {
+  let total = 0
+  for (const item of groupItems(title)) total += Number(badgeOf(item) || 0)
+  return total || ''
+}
+const groupHasAlarm = (title: string) => groupItems(title).some((i) => isAlarmBadge(i))
+function groupBadgeTitle(title: string): string {
+  const items = groupItems(title)
+  const parts = items.filter((i) => badgeOf(i)).map((i) => `${i.label} ${badgeOf(i)}`)
+  return parts.join(' · ') || `${title}：计数`
+}
 </script>
 
 <style scoped>
@@ -373,15 +442,58 @@ const groupedScenes = computed(() => {
   margin-bottom: 2px;
 }
 .mshell__pinned .mshell__item { font-weight: 800; }
-.mshell__group-title {
-  padding: 0 10px 5px;
+.mshell__group { display: grid; gap: 1px; }
+/* 组头（可点击折叠）：组名 + 聚合徽章 + 箭头 */
+.mshell__group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px 4px;
+  border: 0;
+  background: transparent;
+  font: inherit;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--mk-faint);
+  cursor: pointer;
+  border-radius: 8px;
+  transition: color 0.12s ease, background 0.12s ease;
 }
-.mshell__group { display: grid; gap: 1px; }
+.mshell__group-head:hover { color: var(--mk-muted); background: rgba(90, 110, 140, 0.06); }
+.mshell__group-head--active { color: var(--mk-accent-deep, #1f57cc); }
+.mshell__group-name { flex: 1; text-align: left; }
+.mshell__group-badge {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #eef2fa;
+  color: var(--mk-faint);
+  font-size: 10px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+}
+.mshell__group-badge--alarm {
+  background: #fee2e2;
+  color: #b91c1c;
+  animation: mshell-alarm-pulse 1.6s ease-in-out infinite;
+}
+.mshell__group-arrow {
+  font-size: 9px;
+  opacity: 0.65;
+  transition: transform 0.15s ease;
+}
+.mshell__group[data-open='true'] .mshell__group-arrow { transform: rotate(90deg); }
+.mshell__group-body { display: grid; gap: 1px; }
+/* 子项层级：组内子项相对组标题缩进，强化从属关系（对齐 AntD inline menu 缩进层级） */
+.mshell__group-body .mshell__item { padding-left: 22px; }
+.mshell__group-body .mshell__item .mshell__item-glyph {
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+}
 .mshell__item {
   display: flex;
   align-items: center;
@@ -694,16 +806,18 @@ const groupedScenes = computed(() => {
 .mshell[data-collapsed='true'] { grid-template-columns: 64px minmax(0, 1fr); }
 .mshell[data-collapsed='true'] .mshell__item-label,
 .mshell[data-collapsed='true'] .mshell__item-badge,
-.mshell[data-collapsed='true'] .mshell__group-title,
+.mshell[data-collapsed='true'] .mshell__group-head,
 .mshell[data-collapsed='true'] .mshell__search { display: none; }
 .mshell[data-collapsed='true'] .mshell__foot { display: none; }
 .mshell[data-collapsed='true'] .mshell__item { justify-content: center; padding: 4px 0; }
+.mshell[data-collapsed='true'] .mshell__group-body .mshell__item { padding-left: 0; }
 .mshell[data-collapsed='true'] .mshell__item-glyph { display: inline-flex; }
 .mshell[data-collapsed='true'] .mshell__logo-full { display: none; }
 .mshell[data-collapsed='true'] .mshell__logo-mark { display: block; }
 .mshell[data-collapsed='true'] .mshell__brand { justify-content: center; padding: 2px 0 0; }
 .mshell[data-collapsed='true'] .mshell__collapse { position: absolute; right: -14px; top: 18px; }
 .mshell[data-collapsed='true'] .mshell__pinned { justify-content: center; padding-bottom: 8px; border-bottom-color: #232f45; }
+.mshell[data-collapsed='true'] .mshell__group { margin-top: 10px; }
 
 /* 顶栏低分辨率紧凑（D5）：<1920px 隐藏面包屑组名（组在侧栏分组已可见，
    面包屑只留页面名 + 二级页），顶栏聚焦全局工具（对标 SaaS 顶栏职责） */
@@ -733,12 +847,13 @@ const groupedScenes = computed(() => {
   .mshell { grid-template-columns: 64px minmax(0, 1fr); }
   .mshell__item-label,
   .mshell__item-badge,
-  .mshell__group-title,
+  .mshell__group-head,
   .mshell__search { display: none; }
   /* 窄屏图标栏：底部品牌/数据源/命令面板信息区整体隐藏（命令面板入口在顶栏） */
   .mshell__foot { display: none; }
   /* 窄屏图标栏：显示单字图标，悬停提示全名 */
   .mshell__item { justify-content: center; padding: 4px 0; }
+  .mshell__group-body .mshell__item { padding-left: 0; }
   .mshell__item-glyph { display: inline-flex; }
 
   /* 折叠：长方形 logo 换正方形图标 */
@@ -752,6 +867,11 @@ html[data-theme='dark'] {
   .mshell { background: #0f1624; color: #e6edf7; }
   .mshell__side { background: #131b2a; border-right-color: #232f45; }
   .mshell__pinned { border-bottom-color: #232f45; }
+  .mshell__group-head { color: #6b7c96; }
+  .mshell__group-head:hover { color: #9fb0c8; background: rgba(120, 140, 170, 0.08); }
+  .mshell__group-head--active { color: #7aa2ff; }
+  .mshell__group-badge { background: #1d2739; color: #6b7c96; }
+  .mshell__group-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
   .mshell__item { color: #9fb0c8; }
   .mshell__item:hover { background: #1b2740; color: #e6edf7; }
   .mshell__item--active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; box-shadow: inset 3px 0 0 var(--mk-blue); }
