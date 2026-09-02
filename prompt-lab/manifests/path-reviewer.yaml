@@ -1,0 +1,39 @@
+version: prompt-lab-manifest/v1
+skillId: path-reviewer
+agentId: skill:path-reviewer
+name: default-skill-path-reviewer
+archetype: extractor
+description: 学习路径质量评审（CIDDP 五维度评分 + 重规划指令）
+acceptableAgentIds:
+  - skill:path-reviewer
+  - path-agent
+publish:
+  enabled: true
+  exportTargets:
+    - platform-prompts
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: extraction
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: blocking
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: path-generation, phases: [path-reviewed], defaultPhase: path-reviewed, terminalPhases: [path-reviewed], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership:
+  tier: production
+  visibility: internal
+tags:
+  - core-skill
+  - extractor
+  - path-phase
+  - v4
+notes: >
+  路径评审器（EduPlanner evaluator-optimizer 模式）：path-planning 生成后做 CIDDP 五维度评审，
+  低于阈值（0.75）输出 replanInstructions 触发重规划。

@@ -159,6 +159,18 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.3, maxTokens: 32000 }
   },
+  {
+    id: 'skill:path-reviewer',
+    name: '路径评审 Skill',
+    description: '对 path-planning 生成的路径做 CIDDP 五维度评审，低于阈值触发重规划',
+    category: 'path',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Path',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.3, maxTokens: 4000 }
+  },
 
   // ============ Learning 下辖 Skills ============
   {
@@ -385,7 +397,7 @@ for (const item of AGENT_MANIFEST) {
  */
 export const LEGACY_AGENT_MEMBERS: Record<string, string[]> = {
   'goal-agent': ['skill:goal-conversation'],
-  'path-agent': ['skill:path-planning', 'skill:stage-designer'],
+  'path-agent': ['skill:path-planning', 'skill:stage-designer', 'skill:path-reviewer'],
   'teaching-agent': ['skill:teaching-turn', 'skill:peer-reinforcement', 'skill:session-wrapup', 'skill:adaptive-guidance-copy'],
   'profile-agent': ['skill:learner-model', 'skill:lesson-knowledge-enricher'],
   'simulation-agent': [
