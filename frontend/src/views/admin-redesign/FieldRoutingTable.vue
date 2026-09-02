@@ -250,7 +250,7 @@
             class="mk-btn frt__prune--danger"
             :disabled="orchSaving || orchSyncing || orchPruning"
             @click="runPrune(true)"
-          >确认清理（删除数据库行）</button>
+          >确认清理冗余配置</button>
           <button type="button" class="mk-btn" :disabled="orchSaving || orchSyncing || orchPruning" @click="forceSync">{{ TERMS.syncToDb }}</button>
           <button type="button" class="mk-btn mk-btn--primary" :disabled="orchSaving || orchSyncing || orchPruning" @click="saveOrchestration">
             {{ orchSaving ? '保存中…' : TERMS.saveToFile }}
@@ -570,7 +570,7 @@ async function runPrune(apply: boolean) {
     if (data.dryRun) {
       msg = `预检：孤儿行 ${candidates.length} 条（契约 ${byTable('agent_contracts')} · 字段 ${byTable('field_definitions')} · 路由 ${byTable('agent_field_routings')}）`;
       if (candidates.length) {
-        msg += '；确认无误后点「确认清理（删除数据库行）」执行';
+        msg += '；确认无误后点「确认清理冗余配置」执行';
         pruneConfirming.value = true;
       } else {
         msg += '；无待清理孤儿行';

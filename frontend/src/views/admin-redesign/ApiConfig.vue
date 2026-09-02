@@ -224,11 +224,11 @@
                   <input v-model.number="reliability.maxLogicalRetries" type="number" min="0" max="5" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
-                  <span>退避基数 ms</span>
+                  <span>退避基数（毫秒）</span>
                   <input v-model.number="reliability.retryBaseDelayMs" type="number" min="100" step="100" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
-                  <span>Retry-After 上限 ms</span>
+                  <span>Retry-After 上限（毫秒）</span>
                   <input v-model.number="reliability.maxRetryAfterMs" type="number" min="1000" step="1000" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field mk-field--switch">
@@ -244,7 +244,7 @@
               <div class="ac-group__title">超时</div>
               <div class="ac-group__fields">
                 <label class="mk-field">
-                  <span>单次超时 ms</span>
+                  <span>单次超时（毫秒）</span>
                   <input v-model.number="reliability.defaultRequestTimeoutMs" type="number" min="1000" step="1000" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
               </div>

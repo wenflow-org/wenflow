@@ -105,7 +105,7 @@
               <span class="mk-field__label">学习者配置 <em class="mk-field__req">*</em>（最多 20 名）</span>
               <div class="be-rows">
                 <div class="be-row be-row--head">
-                  <span>名称</span><span>学习目标</span><span>摩擦预算</span><span></span>
+                  <span>名称</span><span>学习目标</span><span>分心程度</span><span></span>
                 </div>
                 <div v-for="(r, i) in form.learners" :key="i" class="be-row">
                   <input v-model="r.name" class="mk-input" placeholder="学习者名称" />
@@ -256,7 +256,7 @@ async function load() {
 
 /* 创建弹窗 */
 const budgets = [
-  { id: 'none', label: '无摩擦' },
+  { id: 'none', label: '无分心' },
   { id: 'low', label: '低' },
   { id: 'normal', label: '正常' },
   { id: 'high', label: '高' },

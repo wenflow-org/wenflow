@@ -31,7 +31,7 @@
 
     <!-- 深链未命中提示：?session= 存在但当前列表（最近 100 条）中找不到 -->
     <div v-if="deepLinkMiss" class="mk-alert" role="alert">
-      未找到深链指向的会话：它可能不在最近 {{ rows.length }} 条记录内，或已被删除。
+      未能定位该会话：它可能不在最近 {{ rows.length }} 条记录内，或已被删除。
     </div>
 
     <div class="mk-card mk-card--fill">

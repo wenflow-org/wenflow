@@ -363,7 +363,7 @@ watch(
       else {
         detail.value = null
         // 目标可能超出最近 100 条或已被删除：明示而非静默关闭
-        toast.warning('未找到深链指向的会话：可能不在最近 100 条内，或已被删除')
+        toast.warning('未能定位该会话：可能不在最近 100 条内，或已被删除')
       }
     } else if (!gid && detail.value) {
       detail.value = null

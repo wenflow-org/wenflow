@@ -121,7 +121,7 @@
             <th class="mk-col--badge">故事池</th>
             <th class="mk-col--num mk-th--right" title="累计会话数（全部会话，含终态）">会话</th>
             <th title="当前运行中/创建中的会话数及最近阶段；点击进入会话座舱" style="width:150px">运行中</th>
-            <th class="mk-col--num mk-th--right" title="已失败/已终止（abandoned）会话数（全量聚合）">失败</th>
+            <th class="mk-col--num mk-th--right" title="已失败/已终止会话数（全量聚合）">失败</th>
             <th class="mk-col--num mk-th--right" title="超过回收阈值无写入且无活跃租约的会话数（可在状态条一键回收）">卡死</th>
             <th class="mk-col--time-full">创建</th>
             <th class="mk-col--actions-wide">操作</th>
@@ -171,7 +171,7 @@
                 type="button"
                 class="vl-faillink mk-num"
                 :class="{ 'vl-num--bad': s.failedCount > 0 }"
-                :title="s.failedCount > 0 ? `${s.failedCount} 个会话已失败/放弃；点击进入画像页，可对失败会话重试（续传保留进度）` : '无失败/终止会话'"
+                :title="s.failedCount > 0 ? `${s.failedCount} 个会话已失败/已终止；点击进入画像页，可对失败会话重试（续传保留进度）` : '无失败/终止会话'"
                 @click.stop="openSubPage('virtual', s.id)"
               >{{ s.failedCount }}</button>
             </td>
@@ -1065,7 +1065,7 @@ async function batchTerminate() {
   }, 0)
   const ok = await askConfirm({
     title: '批量终止会话',
-    message: `确认终止选中的 ${ids.length} 个虚拟学习者全部非终态会话（运行中 ${runningSum} + 创建中）？\n会话将标记为已终止（abandoned），数据保留，该操作不可撤销。`,
+    message: `确认终止选中的 ${ids.length} 个虚拟学习者全部非终态会话（运行中 ${runningSum} + 创建中）？\n会话将标记为已终止，数据保留，该操作不可撤销。`,
     confirmText: `终止 ${ids.length} 人`
   })
   if (!ok) return
