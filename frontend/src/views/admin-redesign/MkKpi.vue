@@ -51,8 +51,8 @@ withDefaults(
 
 /* 紧凑模式（列表页顶部 KPI）：压高度 */
 .mk-kpi--compact { padding: 6px 10px; gap: 1px; border-radius: 8px; }
-.mk-kpi--compact .mk-kpi__label { font-size: 10.5px; }
-.mk-kpi--compact .mk-kpi__num { font-size: 16px; line-height: 1.2; }
+.mk-kpi--compact .mk-kpi__label { font-size: var(--mk-fs-11); }
+.mk-kpi--compact .mk-kpi__num { font-size: var(--mk-fs-16); line-height: 1.2; }
 
 /* 横向紧凑形态（低分辨率区间由 MkOverview 媒体查询触发）：
    label+hint 左侧、数字右侧单行排布，高度 ≈56px（TailAdmin stat card 形态） */
@@ -65,9 +65,9 @@ withDefaults(
   gap: 1px 8px;
   border-radius: 10px;
 }
-.mk-kpi--row .mk-kpi__label { grid-column: 1; grid-row: 1; font-size: 11px; }
+.mk-kpi--row .mk-kpi__label { grid-column: 1; grid-row: 1; font-size: var(--mk-fs-11); }
 .mk-kpi--row .mk-kpi__num { grid-column: 2; grid-row: 1 / span 2; font-size: 19px; text-align: right; }
-.mk-kpi--row .mk-kpi__hint { grid-column: 1; grid-row: 2; font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-kpi--row .mk-kpi__hint { grid-column: 1; grid-row: 2; font-size: var(--mk-fs-11); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 暗色模式（D1） */
 html[data-theme='dark'] .mk-kpi { background: #141c2b; border-color: #232f45; }

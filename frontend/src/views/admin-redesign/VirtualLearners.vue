@@ -1358,10 +1358,10 @@ function startBatchPolling() { batchPolling.start() }
   width: auto;
   padding: 0 5px;
   gap: 3px;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   color: var(--mk-faint);
 }
-.mk-actions .mk-icon-btn--text span { font-size: 11px; }
+.mk-actions .mk-icon-btn--text span { font-size: var(--mk-fs-11); }
 .mk-actions .mk-icon-btn--text svg { width: 13px; height: 13px; }
 /* 窄屏表格：8 列在 704px 内容区会被压扁操作列，设 min-width 触发 .mk-table-scroll 横向滚动（对齐 AuditLogs 模式） */
 .mk-table-scroll .mk-table { min-width: 860px; }
@@ -1376,14 +1376,14 @@ function startBatchPolling() { batchPolling.start() }
   text-overflow: ellipsis;
   vertical-align: middle;
 }
-.vl-goal--empty { color: var(--mk-faint); font-size: 12px; }
+.vl-goal--empty { color: var(--mk-faint); font-size: var(--mk-fs-12); }
 /* 状态列：运行中胶囊 / 失败数 / 卡死徽章 分列展示（一列一语义） */
 .vl-state-cell { display: flex; align-items: center; min-height: 26px; }
 .vl-run {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   font-weight: 700;
   color: var(--mk-faint);
   white-space: nowrap;
@@ -1404,9 +1404,9 @@ function startBatchPolling() { batchPolling.start() }
 
 /* 状态过滤 chips（一级页：与搜索同行，计数联动 samples） */
 .vl-filters { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.vl-filters .mk-pill { font-size: 11px; padding: 2px 9px; }
+.vl-filters .mk-pill { font-size: var(--mk-fs-11); padding: 2px 9px; }
 .vl-filter-count { font-weight: 800; margin-left: 2px; opacity: 0.75; }
-.vl-filter-clear { font-size: 12px; margin-left: 4px; }
+.vl-filter-clear { font-size: var(--mk-fs-12); margin-left: 4px; }
 .vl-state-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
 /* 自动驾驶并发配额（状态条 meta：紧凑文字形态，满员红色警示） */
@@ -1414,7 +1414,7 @@ function startBatchPolling() { batchPolling.start() }
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   cursor: help;
   font-weight: 700;
   color: var(--mk-muted);
@@ -1427,7 +1427,7 @@ function startBatchPolling() { batchPolling.start() }
   border: 1px dashed #cbd5e1;
   background: #fff;
   color: #64748b;
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   font-weight: 700;
   padding: 3px 10px;
   border-radius: 999px;
@@ -1443,7 +1443,7 @@ function startBatchPolling() { batchPolling.start() }
 .vl-batch-config__count { width: 100px; }
 .vl-batch-config__stories { width: 120px; }
 .vl-batch-config__prefix { flex: 1; min-width: 200px; }
-.vl-req-less { font-style: normal; font-weight: 400; color: var(--mk-faint, #94a3b8); font-size: 11px; }
+.vl-req-less { font-style: normal; font-weight: 400; color: var(--mk-faint, #94a3b8); font-size: var(--mk-fs-11); }
 /* 批量生成 chip（并入「正在运行」区） */
 .vl-running__chip--batch { border-color: rgba(59, 130, 246, 0.4); color: #1d4ed8; }
 .vl-running__chip--batch .vl-running__dot { background: #3b82f6; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); animation: vl-pulse 1.6s infinite; }
@@ -1483,7 +1483,7 @@ function startBatchPolling() { batchPolling.start() }
 .vl-running::-webkit-scrollbar { height: 4px; }
 .vl-running::-webkit-scrollbar-thumb { background: rgba(16, 185, 129, 0.3); border-radius: 2px; }
 .vl-running__label {
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   font-weight: 800;
   color: #047857;
   white-space: nowrap;
@@ -1510,7 +1510,7 @@ function startBatchPolling() { batchPolling.start() }
   border: 1px solid rgba(16, 185, 129, 0.35);
   background: #fff;
   color: #065f46;
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   font-weight: 700;
   cursor: pointer;
   transition: background 0.12s ease;
@@ -1542,7 +1542,7 @@ function startBatchPolling() { batchPolling.start() }
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   font-weight: 800;
   flex-shrink: 0;
 }
@@ -1587,9 +1587,9 @@ function startBatchPolling() { batchPolling.start() }
   border-radius: 10px;
   background: #fafbfd;
   border: 1px solid #e8ecf2;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
 }
-.vl-reclaim-id { font-size: 11px; color: var(--mk-muted, #5b6577); }
+.vl-reclaim-id { font-size: var(--mk-fs-11); color: var(--mk-muted, #5b6577); }
 .vl-reclaim-stale { margin-left: auto; color: var(--mk-red, #dc2626); font-weight: 700; white-space: nowrap; }
 .vl-steps--ok { background: #e8f7ee; color: #1a7f4b; }
 .vl-steps {
@@ -1598,12 +1598,12 @@ function startBatchPolling() { batchPolling.start() }
   border-radius: 10px;
   background: #f4f7fc;
   color: var(--mk-muted, #5b6577);
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   line-height: 1.5;
 }
 .vl-req {
   font-style: normal;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   color: var(--mk-blue, #2c63d0);
   margin-left: 4px;
@@ -1623,7 +1623,7 @@ function startBatchPolling() { batchPolling.start() }
 .vl-ai { flex: 0 0 auto; }
 .vl-ai-hint {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   color: var(--mk-faint, #8492ab);
   line-height: 1.45;
 }
@@ -1633,7 +1633,7 @@ function startBatchPolling() { batchPolling.start() }
   border-radius: 8px;
   background: #e8f7ee;
   color: #1a7f4b;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   font-weight: 600;
 }
 .vl-advanced {
@@ -1645,7 +1645,7 @@ function startBatchPolling() { batchPolling.start() }
 }
 .vl-advanced summary {
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   font-weight: 700;
   color: var(--mk-muted, #5b6577);
   list-style: none;

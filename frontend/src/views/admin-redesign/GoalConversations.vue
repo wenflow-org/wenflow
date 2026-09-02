@@ -748,7 +748,7 @@ onMounted(() => {
 .gc-tag {
   padding: 1px 8px;
   border-radius: 999px;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   letter-spacing: 0.03em;
 }
@@ -767,7 +767,7 @@ onMounted(() => {
 .gc-stage-cell__dot.is-on { background: var(--mk-blue); }
 .gc-stage-cell__dot.is-on:last-child { background: var(--mk-green); }
 .gc-stage-cell__tl {
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   color: var(--mk-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -812,8 +812,8 @@ onMounted(() => {
   border-bottom: 1px solid var(--mk-line);
 }
 .gc-panel__title { display: grid; gap: 6px; justify-items: start; }
-.gc-panel__title h3 { margin: 0; font-size: 16px; }
-.gc-panel__id { font-size: 10.5px; color: var(--mk-faint); word-break: break-all; }
+.gc-panel__title h3 { margin: 0; font-size: var(--mk-fs-16); }
+.gc-panel__id { font-size: var(--mk-fs-11); color: var(--mk-faint); word-break: break-all; }
 .gc-panel__close {
   border: 0;
   background: var(--mk-close-bg, #f0f2f5);
@@ -831,8 +831,8 @@ onMounted(() => {
   gap: 10px;
 }
 .gc-facts > div { display: grid; gap: 2px; }
-.gc-facts span { font-size: 11px; color: var(--mk-faint); font-weight: 600; }
-.gc-facts strong { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gc-facts span { font-size: var(--mk-fs-11); color: var(--mk-faint); font-weight: 600; }
+.gc-facts strong { font-size: var(--mk-fs-12_5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 560px) {
   .gc-facts { grid-template-columns: repeat(2, 1fr); }
@@ -863,11 +863,11 @@ onMounted(() => {
 .gc-stack__seg--active { background: var(--mk-blue); }
 .gc-stack__seg--completed { background: var(--mk-green); }
 .gc-stack__seg--cancelled { background: var(--mk-amber); }
-.gc-stack em { font-style: normal; font-size: 10.5px; color: var(--mk-faint); white-space: nowrap; }
+.gc-stack em { font-style: normal; font-size: var(--mk-fs-11); color: var(--mk-faint); white-space: nowrap; }
 /* 页头计数锚点（与教学会话 ts-count-link 同形态）：进行中/已完成可点击筛选 */
 .gc-count-link {
   border: 0; background: transparent; padding: 2px 6px;
-  font: inherit; font-size: 12.5px; font-weight: 700;
+  font: inherit; font-size: var(--mk-fs-12_5); font-weight: 700;
   color: var(--mk-muted); cursor: pointer; border-radius: 6px;
   transition: color 0.12s ease, background 0.12s ease;
 }
@@ -890,14 +890,14 @@ onMounted(() => {
 }
 .gc-insight__row:last-child { border-bottom: none; }
 .gc-insight__row > span {
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   color: var(--mk-faint);
   white-space: nowrap;
 }
 .gc-insight__row p {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-muted);
   line-height: 1.7;
 }
@@ -906,7 +906,7 @@ onMounted(() => {
   padding-left: 18px;
   display: grid;
   gap: 3px;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-muted);
   line-height: 1.6;
 }
@@ -914,21 +914,21 @@ onMounted(() => {
 .gc-section { display: grid; gap: 8px; }
 .gc-section h4 {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--mk-faint);
 }
 .gc-section h4 .mono { margin-left: 4px; }
-.gc-desc { margin: 0; font-size: 12.5px; color: var(--mk-muted); line-height: 1.7; }
+.gc-desc { margin: 0; font-size: var(--mk-fs-12_5); color: var(--mk-muted); line-height: 1.7; }
 
 /* 对话轮次：气泡式（用户右对齐蓝色，AI 左对齐浅灰） */
 .gc-msgs { display: grid; gap: 8px; }
 /* P2：消息流「最新 ↓」按钮（长会话快捷定位） */
 .gc-msg-jump {
   border: 1px solid var(--mk-line); background: var(--mk-surface);
-  color: var(--mk-blue); font: inherit; font-size: 11px; font-weight: 700;
+  color: var(--mk-blue); font: inherit; font-size: var(--mk-fs-11); font-weight: 700;
   padding: 2px 9px; border-radius: 999px; cursor: pointer; margin-left: 8px;
   transition: border-color 0.12s ease, background 0.12s ease;
 }
@@ -956,13 +956,13 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
   border-top-right-radius: 4px;
 }
 .gc-msg__head { display: flex; align-items: center; gap: 8px; }
-.gc-msg__role { font-size: 10.5px; font-weight: 700; }
+.gc-msg__role { font-size: var(--mk-fs-11); font-weight: 700; }
 .gc-msg--user .gc-msg__role { color: var(--mk-blue); }
 .gc-msg--assistant .gc-msg__role,
 .gc-msg--unknown .gc-msg__role { color: var(--mk-muted); }
-.gc-msg__time { font-size: 10.5px; color: var(--mk-faint); margin-left: auto; white-space: nowrap; }
-.gc-msg__bubble p { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--mk-ink); white-space: pre-wrap; word-break: break-word; }
-.gc-none { margin: 0; color: var(--mk-faint); font-size: 12px; }
+.gc-msg__time { font-size: var(--mk-fs-11); color: var(--mk-faint); margin-left: auto; white-space: nowrap; }
+.gc-msg__bubble p { margin: 0; font-size: var(--mk-fs-12_5); line-height: 1.7; color: var(--mk-ink); white-space: pre-wrap; word-break: break-word; }
+.gc-none { margin: 0; color: var(--mk-faint); font-size: var(--mk-fs-12); }
 
 .gc-error {
   display: flex;
@@ -974,14 +974,14 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
   background: rgba(239, 117, 120, 0.08);
   border: 1px solid rgba(239, 117, 120, 0.3);
   color: #c0454a;
-  font-size: 13px;
+  font-size: var(--mk-fs-13);
   font-weight: 600;
   margin-bottom: 14px;
 }
 
 .gc-raw summary {
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -995,7 +995,7 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
   background: var(--mk-code-bg, #101826);
   border: 1px solid var(--mk-code-border, #1c2a40);
   color: var(--mk-code-fg, #9db8dc);
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   line-height: 1.6;
   max-height: 220px;
   overflow: auto;
@@ -1009,7 +1009,7 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
   background: transparent;
   color: var(--mk-blue);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 700;
   cursor: pointer;
   padding: 8px 4px;
@@ -1023,7 +1023,7 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
   background: var(--mk-blue);
   color: #fff;
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 700;
   cursor: pointer;
   transition: background 0.12s ease;
@@ -1037,7 +1037,7 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
   background: var(--mk-red-strong, var(--mk-red));
   color: #fff;
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 700;
   cursor: pointer;
   transition: background 0.12s ease;

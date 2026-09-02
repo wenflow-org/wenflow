@@ -344,7 +344,7 @@ void reload()
 .nt-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .nt-boundary {
   margin-left: auto;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   color: var(--mk-muted);
   background: var(--mk-line);
   border: 1px dashed var(--mk-line);
@@ -372,8 +372,8 @@ void reload()
 }
 .nt-candidate:hover { border-color: rgba(44, 99, 208, 0.4); }
 .nt-candidate--on { border-color: var(--mk-blue); box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.12); }
-.nt-candidate strong { font-size: 12.5px; }
-.nt-none { color: var(--mk-faint); font-size: 12.5px; text-align: center; padding: 10px 0; }
+.nt-candidate strong { font-size: var(--mk-fs-12_5); }
+.nt-none { color: var(--mk-faint); font-size: var(--mk-fs-12_5); text-align: center; padding: 10px 0; }
 
 /* 4K：弹窗内候选列表/提示条跟随全站节奏 */
 @media (min-width: 2000px) {

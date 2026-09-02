@@ -406,7 +406,7 @@ function onGlobalKey(e: KeyboardEvent) {
   gap: 10px;
   min-height: 50vh;
   color: #5b6577;
-  font-size: 14px;
+  font-size: var(--mk-fs-14);
 }
 .ac-boot .mk-spinner { width: 16px; height: 16px; border-width: 2px; }
 
@@ -428,8 +428,8 @@ function onGlobalKey(e: KeyboardEvent) {
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-modal);
 }
-.ac-error__card strong { font-size: 16px; color: var(--mk-ink); }
-.ac-error__card span { font-size: 13px; color: #5b6577; }
+.ac-error__card strong { font-size: var(--mk-fs-16); color: var(--mk-ink); }
+.ac-error__card span { font-size: var(--mk-fs-13); color: #5b6577; }
 .ac-error__retry {
   margin-top: 6px;
   padding: 8px 20px;
@@ -438,7 +438,7 @@ function onGlobalKey(e: KeyboardEvent) {
   background: var(--mk-blue, #2c63d0);
   color: #fff;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--mk-fs-13);
   font-weight: 700;
   cursor: pointer;
 }
@@ -470,7 +470,7 @@ function onGlobalKey(e: KeyboardEvent) {
   gap: 12px;
   padding: 60px 20px;
   color: var(--mk-muted, #8896b0);
-  font-size: 14px;
+  font-size: var(--mk-fs-14);
 }
 .admin-page-error {
   margin: 24px;

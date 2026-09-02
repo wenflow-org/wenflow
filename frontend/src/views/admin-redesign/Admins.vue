@@ -305,13 +305,13 @@ void load()
   color: var(--mk-muted);
   display: grid;
   place-items: center;
-  font-size: 13px;
+  font-size: var(--mk-fs-13);
   font-weight: 800;
   flex-shrink: 0;
 }
 .ad-candidate__main { display: grid; gap: 1px; min-width: 0; flex: 1; }
-.ad-candidate__main strong { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ad-none { color: var(--mk-faint); font-size: 12.5px; text-align: center; padding: 12px 0; }
+.ad-candidate__main strong { font-size: var(--mk-fs-12_5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ad-none { color: var(--mk-faint); font-size: var(--mk-fs-12_5); text-align: center; padding: 12px 0; }
 
 /* 4K：弹窗候选列表跟随全站节奏 */
 @media (min-width: 2000px) {

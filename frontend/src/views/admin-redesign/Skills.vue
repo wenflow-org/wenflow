@@ -451,7 +451,7 @@ function recGateDetail(completion: SkillCompletion): string {
   text-overflow: ellipsis;
 }
 .sk-name-desc {
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   color: var(--mk-faint);
   line-height: 1.5;
   font-family: inherit;
@@ -501,21 +501,21 @@ function recGateDetail(completion: SkillCompletion): string {
 .sk-card--idle .sk-card__dot { background: #c3cede; }
 .sk-card--error .sk-card__dot { background: var(--mk-red); animation: sk-blink 1.2s ease infinite; }
 @keyframes sk-blink { 50% { opacity: 0.3; } }
-.sk-card__cat { font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--mk-faint); }
-.sk-card__flag { margin-left: auto; font-size: 10.5px; font-weight: 700; color: var(--mk-red); }
+.sk-card__cat { font-size: var(--mk-fs-11); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--mk-faint); }
+.sk-card__flag { margin-left: auto; font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-red); }
 .sk-card--idle .sk-card__flag { color: var(--mk-faint); }
 
 /* 英文原名（id）主行 + 中文解释副行 */
 .sk-card__name {
   font-family: var(--mk-mono);
-  font-size: 13px;
+  font-size: var(--mk-fs-13);
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .sk-card__id {
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   color: var(--mk-faint);
   line-height: 1.5;
   overflow: hidden;
@@ -526,7 +526,7 @@ function recGateDetail(completion: SkillCompletion): string {
 .sk-card__stats {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   color: var(--mk-muted);
   font-variant-numeric: tabular-nums;
   border-top: 1px dashed var(--mk-line);
@@ -547,7 +547,7 @@ function recGateDetail(completion: SkillCompletion): string {
   border-radius: 999px;
   background: var(--mk-line);
   color: var(--mk-muted);
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -622,7 +622,7 @@ html[data-theme='dark'] {
   gap: 8px;
   padding: 6px 8px;
   border-radius: 7px;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-muted);
   cursor: pointer;
   white-space: nowrap;
@@ -639,7 +639,7 @@ html[data-theme='dark'] .sk-cols__item:hover { background: #1f2b40; }
   border-radius: 7px;
   border-top: 1px dashed var(--mk-line);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   font-weight: 700;
   color: var(--mk-blue);
   cursor: pointer;

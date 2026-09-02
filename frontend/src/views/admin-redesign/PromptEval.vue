@@ -582,13 +582,13 @@ void reloadCases()
 
 <style scoped>
 .pe-filter { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; }
-.pe-filter__hint { color: var(--mk-faint); font-size: 11.5px; margin-left: auto; }
+.pe-filter__hint { color: var(--mk-faint); font-size: var(--mk-fs-12); margin-left: auto; }
 /* 列表高度：空态占位交给 mk-empty--min，有数据时表格自然高度（不再硬撑满屏） */
 .pe-list { min-height: 0; }
-.pe-expect { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--mk-muted); }
+.pe-expect { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--mk-fs-12); color: var(--mk-muted); }
 .pe-result { display: flex; align-items: baseline; gap: 6px; }
-.pe-result strong { font-size: 13px; font-family: var(--mk-mono); }
-.pe-result span { font-size: 11px; color: var(--mk-faint); }
+.pe-result strong { font-size: var(--mk-fs-13); font-family: var(--mk-mono); }
+.pe-result span { font-size: var(--mk-fs-11); color: var(--mk-faint); }
 .pe-result--ok strong { color: var(--mk-green); }
 .pe-result--warn strong { color: var(--mk-amber); }
 .pe-result--bad strong { color: var(--mk-red); }
@@ -598,22 +598,22 @@ void reloadCases()
 .pe-msg { display: grid; grid-template-columns: 88px 1fr 28px; gap: 8px; align-items: center; }
 .pe-msg__role { height: 34px; }
 
-.pe-detail-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 40px 0; color: var(--mk-muted); font-size: 13px; }
+.pe-detail-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 40px 0; color: var(--mk-muted); font-size: var(--mk-fs-13); }
 /* 运行概要：MkKpi 网格容器（统计卡本体由 MkKpi 提供） */
 .pe-run-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .pe-results { display: grid; gap: 8px; }
 .pe-result-row { border: 1px solid var(--mk-line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; background: var(--mk-surface); }
 .pe-result-row--fail { border-color: rgba(220, 38, 38, 0.35); background: var(--mk-red-bg, #fef2f2); }
 .pe-result-row__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.pe-result-row__head strong { font-size: 12.5px; }
-.pe-result-row__meta { margin-left: auto; font-size: 11px; color: var(--mk-faint); }
+.pe-result-row__head strong { font-size: var(--mk-fs-12_5); }
+.pe-result-row__meta { margin-left: auto; font-size: var(--mk-fs-11); color: var(--mk-faint); }
 .pe-result-row__checks { display: flex; gap: 6px; flex-wrap: wrap; }
-.pe-check { font-size: 11px; padding: 1px 8px; border-radius: 99px; font-weight: 600; }
+.pe-check { font-size: var(--mk-fs-11); padding: 1px 8px; border-radius: 99px; font-weight: 600; }
 .pe-check--ok { background: var(--mk-green-bg); color: var(--mk-green); }
 .pe-check--fail { background: var(--mk-red-bg); color: var(--mk-red); }
 .pe-result-row__out {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   color: var(--mk-muted);
   max-height: 96px;
   overflow-y: auto;

@@ -299,7 +299,7 @@ function rankPct(tokens: number): string {
   border-radius: 4px 4px 0 0;
   min-height: 2px;
 }
-.tc-trend__day { font-size: 10.5px; color: var(--mk-faint, #9ca3af); font-weight: 600; white-space: nowrap; }
+.tc-trend__day { font-size: var(--mk-fs-11); color: var(--mk-faint, #9ca3af); font-weight: 600; white-space: nowrap; }
 
 .tc-grid {
   display: grid;
@@ -324,7 +324,7 @@ function rankPct(tokens: number): string {
 .tc-rank__name {
   width: 150px;
   min-width: 150px;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 600;
   color: var(--mk-ink, #1a2a44);
   overflow: hidden;
@@ -348,7 +348,7 @@ function rankPct(tokens: number): string {
   width: 74px;
   min-width: 74px;
   text-align: right;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--mk-ink, #1a2a44);
@@ -357,7 +357,7 @@ function rankPct(tokens: number): string {
   width: 86px;
   min-width: 86px;
   text-align: right;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   color: var(--mk-faint, #9ca3af);
   font-variant-numeric: tabular-nums;
   font-weight: 600;

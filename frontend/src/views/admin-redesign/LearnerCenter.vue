@@ -451,7 +451,7 @@ async function recomputeAll() {
 /* 页头计数锚点（P0-3）：需关注/低置信可点击筛选 */
 .lc-count-link {
   border: 0; background: transparent; padding: 0;
-  font: inherit; font-size: 12.5px; font-weight: 700;
+  font: inherit; font-size: var(--mk-fs-12_5); font-weight: 700;
   color: var(--mk-muted); cursor: pointer;
   border-radius: 6px;
   transition: color 0.12s ease, background 0.12s ease;
@@ -464,7 +464,7 @@ async function recomputeAll() {
 .trend--up { color: var(--mk-green); }
 .trend--down { color: var(--mk-red); }
 .trend--flat { color: var(--mk-muted); }
-.lc-trend { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: 12px; color: var(--mk-muted); white-space: nowrap; cursor: help; }
+.lc-trend { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: var(--mk-fs-12); color: var(--mk-muted); white-space: nowrap; cursor: help; }
 .lc-trend--up { color: var(--mk-green); }
 .lc-trend--down { color: var(--mk-red); }
 .lc-trend--flat { color: var(--mk-muted); }
@@ -481,18 +481,18 @@ async function recomputeAll() {
 .lc-trend--down .lc-trend__bar--2 { height: 8px; }
 .lc-trend--down .lc-trend__bar--3 { height: 11px; opacity: 0.85; }
 .progress-title { font-weight: 600; }
-.risk-text { color: var(--mk-amber); font-size: 12.5px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.risk-text { color: var(--mk-amber); font-size: var(--mk-fs-12_5); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 更新列：相对时间不换行（"4 分钟前"拆行问题） */
-.lc-updated { white-space: nowrap; color: var(--mk-faint); font-size: 12px; }
+.lc-updated { white-space: nowrap; color: var(--mk-faint); font-size: var(--mk-fs-12); }
 .conf { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-muted); cursor: help; }
-.conf__lack { font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
+.conf__lack { font-style: normal; font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
 .conf--low { color: var(--mk-amber); }
 .lc-tag-test {
   display: inline-block;
   margin-top: 2px;
   padding: 1px 8px;
   border-radius: 999px;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   letter-spacing: 0.03em;
   background: #fef3c7;
@@ -522,8 +522,8 @@ html[data-theme='dark'] .lc-count-link--on { background: rgba(91, 141, 239, 0.22
   color: var(--mk-amber);
 }
 .lc-iv__risk--hot { background: var(--mk-red-bg); border-color: rgba(220, 38, 38, 0.25); color: var(--mk-red); }
-.lc-iv__risk strong { font-size: 12px; font-weight: 800; letter-spacing: 0.04em; }
-.lc-iv__risk span { font-size: 12.5px; line-height: 1.6; }
+.lc-iv__risk strong { font-size: var(--mk-fs-12); font-weight: 800; letter-spacing: 0.04em; }
+.lc-iv__risk span { font-size: var(--mk-fs-12_5); line-height: 1.6; }
 .lc-iv__actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.lc-iv__hint { margin: 0; font-size: 11.5px; color: var(--mk-faint); line-height: 1.6; }
+.lc-iv__hint { margin: 0; font-size: var(--mk-fs-12); color: var(--mk-faint); line-height: 1.6; }
 </style>

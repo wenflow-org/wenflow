@@ -392,8 +392,8 @@ onMounted(() => {
 
 <style scoped>
 .fb-row { cursor: pointer; }
-.fb-rating { font-size: 12px; color: var(--mk-muted); }
-.fb-rating b { font-size: 12.5px; color: var(--mk-ink); }
+.fb-rating { font-size: var(--mk-fs-12); color: var(--mk-muted); }
+.fb-rating b { font-size: var(--mk-fs-12_5); color: var(--mk-ink); }
 .fb-rating--low, .fb-rating--low b { color: var(--mk-red); }
 .fb-comment {
   display: inline-block;
@@ -404,7 +404,7 @@ onMounted(() => {
   vertical-align: bottom;
   color: var(--mk-muted);
 }
-.fb-agent { font-size: 11px; color: var(--mk-muted); }
+.fb-agent { font-size: var(--mk-fs-11); color: var(--mk-muted); }
 .fb-strategy {
   display: inline-block;
   max-width: 200px;
@@ -412,14 +412,14 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   vertical-align: bottom;
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   color: var(--mk-muted);
 }
 
 /* 处理面板：mk-drawer 体系（遮罩/面板/头/体/关闭按钮由全局类提供；
    fb- 仅保留内容区布局与覆盖层内细节样式） */
 .fb-panel__title { display: grid; gap: 6px; justify-items: start; }
-.fb-panel__id { font-size: 10.5px; color: var(--mk-faint); word-break: break-all; }
+.fb-panel__id { font-size: var(--mk-fs-11); color: var(--mk-faint); word-break: break-all; }
 /* 抽屉内容区：mk-drawer__body 提供滚动/内边距，此处补纵向排布 */
 .fb-body { display: grid; gap: 16px; align-content: start; }
 
@@ -429,8 +429,8 @@ onMounted(() => {
   gap: 10px;
 }
 .fb-facts > div { display: grid; gap: 2px; min-width: 0; }
-.fb-facts span { font-size: 11px; color: var(--mk-faint); font-weight: 600; }
-.fb-facts strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-facts span { font-size: var(--mk-fs-11); color: var(--mk-faint); font-weight: 600; }
+.fb-facts strong { font-size: var(--mk-fs-12); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 560px) {
   .fb-facts { grid-template-columns: repeat(2, 1fr); }
@@ -439,20 +439,20 @@ onMounted(() => {
 .fb-section { display: grid; gap: 8px; }
 .fb-section h4 {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--mk-faint);
 }
-.fb-text { margin: 0; font-size: 12.5px; color: var(--mk-ink); line-height: 1.7; white-space: pre-wrap; }
+.fb-text { margin: 0; font-size: var(--mk-fs-12_5); color: var(--mk-ink); line-height: 1.7; white-space: pre-wrap; }
 .fb-codes { display: flex; gap: 6px; flex-wrap: wrap; }
 .fb-code {
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--mk-line);
   color: var(--mk-muted);
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
 }
 .fb-note {
   width: 100%;
@@ -461,7 +461,7 @@ onMounted(() => {
   border-radius: 9px;
   background: var(--mk-surface);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   color: var(--mk-ink);
   resize: vertical;
   line-height: 1.6;
@@ -469,7 +469,7 @@ onMounted(() => {
 .fb-note:focus { outline: none; border-color: var(--mk-blue); }
 
 .fb-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.fb-meta { margin: 0; font-size: 10px; color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fb-meta { margin: 0; font-size: var(--mk-fs-11); color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* 4K：内容区字号跟随壳层放大（面板宽度/头/体由 mk-drawer 全局档接管） */
 @media (min-width: 2000px) {

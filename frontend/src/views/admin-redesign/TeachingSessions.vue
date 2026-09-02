@@ -685,11 +685,11 @@ function progressTitle(r: Row): string {
 
 <style scoped>
 /* 页头合并（替代独立状态条）：共 N 条 + 刷新按钮，与概览结论同行 */
-.ts-head-meta { font-size: 12.5px; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ts-head-meta { font-size: var(--mk-fs-12_5); color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* 页头计数锚点（与学习者中心 lc-count-link 同形态）：缺总结/高关注可点击筛选 */
 .ts-count-link {
   border: 0; background: transparent; padding: 2px 6px;
-  font: inherit; font-size: 12.5px; font-weight: 700;
+  font: inherit; font-size: var(--mk-fs-12_5); font-weight: 700;
   color: var(--mk-muted); cursor: pointer; border-radius: 6px;
   transition: color 0.12s ease, background 0.12s ease;
 }
@@ -700,7 +700,7 @@ function progressTitle(r: Row): string {
   display: block;
   max-width: 320px;
   margin-top: 3px;
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   color: var(--mk-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -713,7 +713,7 @@ function progressTitle(r: Row): string {
 .ts-row--att-high { box-shadow: inset 3px 0 0 var(--mk-red); }
 .ts-row--att-medium { box-shadow: inset 3px 0 0 var(--mk-amber); }
 /* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
-.ts-att { font-size: 11.5px; font-weight: 700; color: var(--mk-faint); white-space: nowrap; }
+.ts-att { font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }
 .ts-att--high { color: var(--mk-red); }
 .ts-att--medium { color: var(--mk-amber); }
 .ts-att--low { color: var(--mk-faint); }
@@ -722,7 +722,7 @@ function progressTitle(r: Row): string {
 .ts-tag {
   padding: 1px 8px;
   border-radius: 999px;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   letter-spacing: 0.03em;
 }
@@ -732,14 +732,14 @@ function progressTitle(r: Row): string {
 .ts-row td:first-child .mk-cell-sub { max-width: 300px; }
 /* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */
 .ts-prog { display: grid; gap: 4px; max-width: 96px; }
-.ts-prog__num { font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.ts-prog__num { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-12); font-weight: 700; white-space: nowrap; }
 .ts-prog__bar { width: 88px; height: 5px; }
 /* 终态完成列（P1 语义修复）：只显「已完成」文字，不再与进度条并存；title 保留历史进度 */
 .ts-prog--done {
   display: inline-flex;
   align-items: center;
   color: var(--mk-green);
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -760,7 +760,7 @@ function progressTitle(r: Row): string {
   border-radius: 8px;
   background: var(--mk-red-bg);
   color: var(--mk-red);
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 600;
 }
 
@@ -793,8 +793,8 @@ function progressTitle(r: Row): string {
   border-bottom: 1px solid var(--mk-line);
 }
 .ts-panel__title { display: grid; gap: 6px; justify-items: start; }
-.ts-panel__title h3 { margin: 0; font-size: 16px; }
-.ts-panel__id { font-family: var(--mk-mono); font-size: 10.5px; color: var(--mk-faint); word-break: break-all; }
+.ts-panel__title h3 { margin: 0; font-size: var(--mk-fs-16); }
+.ts-panel__id { font-family: var(--mk-mono); font-size: var(--mk-fs-11); color: var(--mk-faint); word-break: break-all; }
 .ts-panel__close { border: 0; background: var(--mk-line); width: 30px; height: 30px; border-radius: 8px; cursor: pointer; color: var(--mk-muted); }
 .ts-panel__body { padding: 16px 18px; display: grid; gap: 16px; align-content: start; overflow-y: auto; }
 /* P2-2 抽屉 tabs */
@@ -802,14 +802,14 @@ function progressTitle(r: Row): string {
 html[data-theme='dark'] .ts-tabs { background: #141c2b; }
 .ts-tabs__item {
   border: 1px solid transparent; background: transparent; padding: 5px 12px;
-  border-radius: 8px; font: inherit; font-size: 12.5px; font-weight: 700;
+  border-radius: 8px; font: inherit; font-size: var(--mk-fs-12_5); font-weight: 700;
   color: var(--mk-muted); cursor: pointer; transition: background 0.12s ease, color 0.12s ease;
 }
 .ts-tabs__item:hover { background: #f0f5ff; color: var(--mk-ink); }
 html[data-theme='dark'] .ts-tabs__item:hover { background: #1f2b40; color: #e6edf7; }
 .ts-tabs__item--on { background: rgba(44, 99, 208, 0.12); color: var(--mk-blue); }
 html[data-theme='dark'] .ts-tabs__item--on { background: rgba(91, 141, 239, 0.18); color: #7aa2ff; }
-.ts-empty { margin: 0; font-size: 12.5px; color: var(--mk-faint); padding: 12px 0; }
+.ts-empty { margin: 0; font-size: var(--mk-fs-12_5); color: var(--mk-faint); padding: 12px 0; }
 /* P2-2 事件时间线（左对齐垂直线，对齐 Intercom） */
 .ts-timeline { margin: 0; padding: 0; list-style: none; display: grid; gap: 0; }
 .ts-timeline__item { display: flex; gap: 10px; padding: 7px 0; position: relative; }
@@ -821,8 +821,8 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px #141c2b; }
 .ts-timeline__item--warn .ts-timeline__dot { background: var(--mk-amber); }
 .ts-timeline__item--bad .ts-timeline__dot { background: var(--mk-red); }
 .ts-timeline__body { display: grid; gap: 1px; min-width: 0; }
-.ts-timeline__body strong { font-size: 12.5px; color: var(--mk-ink); }
-.ts-timeline__body span { font-size: 11px; color: var(--mk-faint); }
+.ts-timeline__body strong { font-size: var(--mk-fs-12_5); color: var(--mk-ink); }
+.ts-timeline__body span { font-size: var(--mk-fs-11); color: var(--mk-faint); }
 
 .ts-facts {
   display: grid;
@@ -830,8 +830,8 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px #141c2b; }
   gap: 10px;
 }
 .ts-facts > div { display: grid; gap: 2px; }
-.ts-facts span { font-size: 11px; color: var(--mk-faint); font-weight: 600; }
-.ts-facts strong { font-size: 12.5px; }
+.ts-facts span { font-size: var(--mk-fs-11); color: var(--mk-faint); font-weight: 600; }
+.ts-facts strong { font-size: var(--mk-fs-12_5); }
 
 @media (max-width: 560px) {
   .ts-facts { grid-template-columns: repeat(2, 1fr); }
@@ -840,7 +840,7 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px #141c2b; }
 .ts-section { display: grid; gap: 8px; }
 .ts-section h4 {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -849,7 +849,7 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px #141c2b; }
   align-items: center;
   gap: 8px;
 }
-.ts-src { font-size: 10.5px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+.ts-src { font-size: var(--mk-fs-11); font-weight: 600; text-transform: none; letter-spacing: 0; }
 .ts-card {
   border: 1px solid var(--mk-line);
   border-radius: 10px;
@@ -857,8 +857,8 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px #141c2b; }
   display: grid;
   gap: 4px;
 }
-.ts-card span { font-size: 11px; color: var(--mk-faint); font-weight: 700; }
-.ts-card p { margin: 0; font-size: 12.5px; line-height: 1.7; white-space: pre-wrap; }
+.ts-card span { font-size: var(--mk-fs-11); color: var(--mk-faint); font-weight: 700; }
+.ts-card p { margin: 0; font-size: var(--mk-fs-12_5); line-height: 1.7; white-space: pre-wrap; }
 .ts-card--advisory { border-color: rgba(180, 83, 9, 0.3); background: #fffdf5; }
 
 /* 长文本截断 */
@@ -875,14 +875,14 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px #141c2b; }
   background: transparent;
   color: var(--mk-blue, #2c63d0);
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   font-weight: 700;
   cursor: pointer;
   padding: 0;
 }
 .ts-raw summary {
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;

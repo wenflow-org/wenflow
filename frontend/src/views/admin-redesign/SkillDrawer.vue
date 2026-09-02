@@ -372,7 +372,7 @@ function goFullEditor() {
   border-radius: 999px;
   display: inline-grid;
   place-items: center;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 800;
   background: #eef2fa;
   color: var(--mk-faint);
@@ -409,7 +409,7 @@ function goFullEditor() {
 .msk__titlebox { min-width: 0; flex: 1; padding-top: 1px; }
 .msk__name {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--mk-fs-16);
   font-weight: 600;
   color: #16233c;
   line-height: 1.3;
@@ -417,7 +417,7 @@ function goFullEditor() {
 .msk__id {
   display: block;
   margin-top: 2px;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-faint);
   word-break: break-all;
 }
@@ -429,7 +429,7 @@ function goFullEditor() {
   border-radius: 8px;
   cursor: pointer;
   color: var(--mk-muted);
-  font-size: 13px;
+  font-size: var(--mk-fs-13);
   flex-shrink: 0;
   transition: background 0.15s ease;
 }
@@ -446,7 +446,7 @@ function goFullEditor() {
   margin: 0;
   padding-left: 49px;
   color: #5b6577;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   line-height: 1.6;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -478,10 +478,10 @@ function goFullEditor() {
   padding: 10px 12px 11px;
 }
 .msk__stat + .msk__stat { border-left: 1px solid #eef2f8; }
-.msk__stat span { font-size: 12px; color: var(--mk-faint); font-weight: 600; }
+.msk__stat span { font-size: var(--mk-fs-12); color: var(--mk-faint); font-weight: 600; }
 .msk__stat strong {
   font-family: var(--mk-mono);
-  font-size: 16px;
+  font-size: var(--mk-fs-16);
   font-weight: 600;
   color: #1a2a44;
   font-variant-numeric: tabular-nums;
@@ -490,7 +490,7 @@ function goFullEditor() {
 .msk__stat strong.is-ok { color: var(--mk-green); }
 .msk__stat strong.is-warn { color: var(--mk-amber); }
 .msk__stat strong.is-na { color: var(--mk-faint); }
-.msk__note { margin: -8px 0 0; font-size: 12.5px; color: var(--mk-faint); }
+.msk__note { margin: -8px 0 0; font-size: var(--mk-fs-12_5); color: var(--mk-faint); }
 
 /* 生效模型 kv 行 */
 .msk__kv {
@@ -501,11 +501,11 @@ function goFullEditor() {
   border: 1px dashed var(--mk-line);
   border-radius: 10px;
 }
-.msk__kv span { font-size: 12px; color: var(--mk-faint); font-weight: 600; }
-.msk__kv strong { font-size: 12px; color: #1a2a44; font-weight: 600; }
+.msk__kv span { font-size: var(--mk-fs-12); color: var(--mk-faint); font-weight: 600; }
+.msk__kv strong { font-size: var(--mk-fs-12); color: #1a2a44; font-weight: 600; }
 .msk__src {
   margin-left: auto;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   font-style: normal;
   font-weight: 600;
   color: var(--mk-faint);
@@ -521,7 +521,7 @@ function goFullEditor() {
 }
 .msk__sec-head h4 {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -531,7 +531,7 @@ function goFullEditor() {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-faint);
   font-weight: 600;
 }
@@ -548,7 +548,7 @@ function goFullEditor() {
   border-radius: 9px;
   background: #fff;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   text-align: left;
   cursor: pointer;
   transition: border-color 0.12s ease, background 0.12s ease;
@@ -566,16 +566,16 @@ function goFullEditor() {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.msk__row-num { color: #5b6577; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.msk__row-num { color: #5b6577; font-size: var(--mk-fs-12_5); font-variant-numeric: tabular-nums; }
 .msk__row-id {
   color: var(--mk-faint);
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.msk__none { margin: 0; color: var(--mk-faint); font-size: 12px; }
+.msk__none { margin: 0; color: var(--mk-faint); font-size: var(--mk-fs-12); }
 .msk__notfound {
   width: min(520px, 100vw);
   height: 100%;
@@ -587,8 +587,8 @@ function goFullEditor() {
   text-align: center;
   padding: 24px;
 }
-.msk__notfound strong { font-size: 14px; color: var(--mk-ink); }
-.msk__notfound span { font-size: 12.5px; color: var(--mk-faint); }
+.msk__notfound strong { font-size: var(--mk-fs-14); color: var(--mk-ink); }
+.msk__notfound span { font-size: var(--mk-fs-12_5); color: var(--mk-faint); }
 
 /* 代码井（Prompt 预览） */
 .msk__code {
@@ -615,7 +615,7 @@ function goFullEditor() {
   padding: 9px 12px;
   border: 1px dashed var(--mk-line);
   border-radius: 9px;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   color: #5b6577;
 }
 .mk-link {
@@ -624,7 +624,7 @@ function goFullEditor() {
   color: var(--mk-blue, #2c63d0);
   font: inherit;
   font-weight: 700;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -637,7 +637,7 @@ function goFullEditor() {
   color: var(--mk-blue, #2c63d0);
   font: inherit;
   font-weight: 700;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   padding: 10px 12px;
   border-radius: 10px;
   cursor: pointer;

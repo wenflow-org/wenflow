@@ -49,14 +49,14 @@ const animated = computed(() => props.pulse && (isRunning.value || isQueued.valu
   gap: 4px;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   line-height: 1.5;
   white-space: nowrap;
   border: 1px solid transparent;
   cursor: default;
 }
-.rs-badge__icon { font-size: 10px; line-height: 1; flex-shrink: 0; }
+.rs-badge__icon { font-size: var(--mk-fs-11); line-height: 1; flex-shrink: 0; }
 .rs-badge--compact { padding: 2px 6px; }
 
 /* 色板：Prefect 风格（颜色 + 形状双通道） */

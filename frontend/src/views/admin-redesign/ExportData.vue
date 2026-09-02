@@ -134,12 +134,12 @@ async function doExport(key: string) {
 }
 .ex-row:last-child { border-bottom: none; }
 .ex-row__text { display: grid; gap: 2px; min-width: 0; }
-.ex-row__text strong { font-size: 13px; }
-.ex-row__text span { font-size: 12px; color: var(--mk-muted); max-width: 640px; }
+.ex-row__text strong { font-size: var(--mk-fs-13); }
+.ex-row__text span { font-size: var(--mk-fs-12); color: var(--mk-muted); max-width: 640px; }
 .ex-row__actions { display: flex; align-items: center; gap: 8px; }
 .ex-row__actions .mk-filter__select { min-width: 110px; height: 30px; padding: 3px 8px; }
 
-.ex-notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 12.5px; color: var(--mk-muted); }
+.ex-notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: var(--mk-fs-12_5); color: var(--mk-muted); }
 
 @media (min-width: 2000px) {
   .ex-row__text strong { font-size: 14.5px; }

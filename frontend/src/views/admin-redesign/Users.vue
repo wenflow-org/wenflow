@@ -643,7 +643,7 @@ function clearFilters() {
 .ul-tag {
   padding: 1px 8px;
   border-radius: 999px;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   letter-spacing: 0.03em;
 }
@@ -654,14 +654,14 @@ function clearFilters() {
 .ul-level__badge {
   padding: 1px 8px;
   border-radius: 999px;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   letter-spacing: 0.03em;
   background: #e0f2fe;
   color: #0369a1;
   cursor: help;
 }
-.ul-level__xp { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--mk-muted); font-weight: 600; }
+.ul-level__xp { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-12); color: var(--mk-muted); font-weight: 600; }
 
 @media (min-width: 2000px) {
   .ul-tags { gap: 7px; margin-top: 3px; }
@@ -731,7 +731,7 @@ html[data-theme='dark'] {
   gap: 8px;
   padding: 6px 8px;
   border-radius: 7px;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-muted);
   cursor: pointer;
   white-space: nowrap;
@@ -748,7 +748,7 @@ html[data-theme='dark'] .ul-cols__item:hover { background: #1f2b40; }
   border-radius: 7px;
   border-top: 1px dashed var(--mk-line);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   font-weight: 700;
   color: var(--mk-blue);
   cursor: pointer;

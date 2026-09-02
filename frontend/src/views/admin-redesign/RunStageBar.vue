@@ -57,7 +57,7 @@ const DONE_TEXT: Record<RunStageName, string> = { goal: '目标', path: '路径'
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   white-space: nowrap;
 }
 .rs-bar__node {
@@ -94,7 +94,7 @@ const DONE_TEXT: Record<RunStageName, string> = { goal: '目标', path: '路径'
 .rs-bar__node--skip .rs-bar__label { color: #cbd5e1; text-decoration: line-through; }
 
 .rs-bar__connector--done { background: #2ac769; }
-.rs-bar__task { margin-left: 4px; color: #64748b; font-weight: 600; font-size: 10.5px; }
+.rs-bar__task { margin-left: 4px; color: #64748b; font-weight: 600; font-size: var(--mk-fs-11); }
 .rs-bar__done { margin-left: 4px; color: #0e8a4d; font-weight: 700; }
 
 @keyframes rsbar-pulse {

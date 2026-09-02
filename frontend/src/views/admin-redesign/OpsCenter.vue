@@ -391,26 +391,26 @@ void loadDead()
   padding: 10px 12px;
   border-bottom: 1px solid var(--mk-line);
   background: var(--mk-surface);
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
 }
-.dt-result__head strong { font-size: 13px; }
+.dt-result__head strong { font-size: var(--mk-fs-13); }
 .dt-result__head .mono { color: var(--mk-muted); }
 .dt-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
 .dt-compare__col { padding: 12px; min-width: 0; }
 .dt-compare__col + .dt-compare__col { border-left: 1px dashed var(--mk-line); }
-.dt-compare__col h5 { margin: 0 0 8px; font-size: 11px; font-weight: 700; color: var(--mk-faint); letter-spacing: 0.05em; }
+.dt-compare__col h5 { margin: 0 0 8px; font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-faint); letter-spacing: 0.05em; }
 .dt-compare__col pre {
   margin: 0;
   max-height: 300px;
   overflow: auto;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   line-height: 1.6;
   color: var(--mk-muted);
   white-space: pre-wrap;
   word-break: break-all;
 }
 
-.dt-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 32px 0; color: var(--mk-muted); font-size: 13px; }
+.dt-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 32px 0; color: var(--mk-muted); font-size: var(--mk-fs-13); }
 .dt-err {
   display: inline-block;
   max-width: 320px;
@@ -419,7 +419,7 @@ void loadDead()
   white-space: nowrap;
   vertical-align: bottom;
   color: var(--mk-red);
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
 }
 
 @media (min-width: 2000px) {
@@ -455,11 +455,11 @@ void loadDead()
 }
 .ex-row:last-child { border-bottom: none; }
 .ex-row__text { display: grid; gap: 2px; min-width: 0; }
-.ex-row__text strong { font-size: 13px; }
-.ex-row__text span { font-size: 12px; color: var(--mk-muted); max-width: 640px; }
+.ex-row__text strong { font-size: var(--mk-fs-13); }
+.ex-row__text span { font-size: var(--mk-fs-12); color: var(--mk-muted); max-width: 640px; }
 .ex-row__actions { display: flex; align-items: center; gap: 8px; }
 .ex-row__actions .mk-filter__select { min-width: 110px; height: 30px; padding: 3px 8px; }
-.ex-notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 12.5px; color: var(--mk-muted); }
+.ex-notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: var(--mk-fs-12_5); color: var(--mk-muted); }
 @media (min-width: 2000px) {
   .ex-row__text strong { font-size: 14.5px; }
   .ex-row__text span { font-size: 13.5px; }

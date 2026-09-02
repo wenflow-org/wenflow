@@ -98,7 +98,7 @@ function act(kind: 'close' | 'closeOthers' | 'closeRight' | 'togglePin') {
   border-radius: 8px 8px 0 0;
   background: #f6f8fb;
   color: var(--mk-muted);
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   white-space: nowrap;
   max-width: 180px;
   cursor: pointer;
@@ -114,7 +114,7 @@ function act(kind: 'close' | 'closeOthers' | 'closeRight' | 'togglePin') {
 }
 .mk-tabbar__item--pinned .mk-tabbar__label { color: var(--mk-ink); }
 .mk-tabbar__item--active.mk-tabbar__item--pinned .mk-tabbar__label { color: var(--mk-blue); }
-.mk-tabbar__pin { font-size: 10px; margin-right: 2px; opacity: 0.85; }
+.mk-tabbar__pin { font-size: var(--mk-fs-11); margin-right: 2px; opacity: 0.85; }
 .mk-tabbar__label {
   border: 0;
   background: transparent;
@@ -132,7 +132,7 @@ function act(kind: 'close' | 'closeOthers' | 'closeRight' | 'togglePin') {
   width: 18px;
   height: 18px;
   border-radius: 5px;
-  font-size: 10px;
+  font-size: var(--mk-fs-11);
   line-height: 1;
   color: var(--mk-faint);
   cursor: pointer;
@@ -140,7 +140,7 @@ function act(kind: 'close' | 'closeOthers' | 'closeRight' | 'togglePin') {
 }
 .mk-tabbar__close:hover:not(:disabled) { background: #e2e8f2; color: var(--mk-ink); }
 .mk-tabbar__close:disabled { cursor: default; opacity: 0.4; }
-.mk-tabbar__hint { margin-left: auto; font-size: 11px; color: var(--mk-faint); white-space: nowrap; padding-right: 4px; }
+.mk-tabbar__hint { margin-left: auto; font-size: var(--mk-fs-11); color: var(--mk-faint); white-space: nowrap; padding-right: 4px; }
 
 /* 右键菜单 */
 .mk-tabbar__ctx {
@@ -161,7 +161,7 @@ function act(kind: 'close' | 'closeOthers' | 'closeRight' | 'togglePin') {
   padding: 7px 10px;
   border-radius: 7px;
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 600;
   color: var(--mk-muted);
   text-align: left;

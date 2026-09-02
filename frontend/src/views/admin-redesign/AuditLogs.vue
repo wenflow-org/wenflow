@@ -498,8 +498,8 @@ function goSessions(username: string) {
   box-shadow: var(--mk-shadow-modal);
   text-align: center;
 }
-.audit-error__card strong { font-size: 14px; color: var(--mk-ink); }
-.audit-error__card span { font-size: 12.5px; color: var(--mk-muted); word-break: break-all; }
+.audit-error__card strong { font-size: var(--mk-fs-14); color: var(--mk-ink); }
+.audit-error__card span { font-size: var(--mk-fs-12_5); color: var(--mk-muted); word-break: break-all; }
 
 .log-body {
   overflow-x: auto;
@@ -529,7 +529,7 @@ function goSessions(username: string) {
 
 /* 单元格 */
 .log-time {
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   color: var(--mk-faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -545,7 +545,7 @@ function goSessions(username: string) {
 .log-method {
   display: inline-block;
   font-family: var(--mk-mono);
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   font-weight: 800;
   border-radius: 5px;
   padding: 1px 7px;
@@ -566,7 +566,7 @@ function goSessions(username: string) {
 .log-path {
   /* inline-block（非 inline）：max-width/text-overflow 只对块级盒生效 */
   display: inline-block;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   color: var(--mk-ink);
   white-space: nowrap;
   overflow: hidden;
@@ -577,7 +577,7 @@ function goSessions(username: string) {
 /* 非 API 动作（中文标签）：中性蓝 chip */
 .log-action {
   display: inline-block;
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   font-weight: 700;
   border-radius: 5px;
   padding: 1px 8px;
@@ -589,26 +589,26 @@ function goSessions(username: string) {
   max-width: 240px;
 }
 .log-tt {
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   color: var(--mk-muted);
   white-space: nowrap;
 }
 .log-target {
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   color: var(--mk-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .log-ip {
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   color: var(--mk-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .log-reason {
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   color: var(--mk-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -627,7 +627,7 @@ function goSessions(username: string) {
   margin-left: auto;
   text-align: center;
   overflow: hidden;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   color: var(--mk-faint);
   transition: transform 0.15s ease;
 }
@@ -638,7 +638,7 @@ function goSessions(username: string) {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   color: var(--mk-faint);
   font-family: var(--mk-mono);
 }
@@ -660,9 +660,9 @@ function goSessions(username: string) {
   white-space: pre-wrap;
   word-break: break-all;
 }
-.log-none { margin: 0; font-size: 11.5px; color: var(--mk-faint); }
+.log-none { margin: 0; font-size: var(--mk-fs-12); color: var(--mk-faint); }
 .log-section { display: grid; gap: 4px; }
-.log-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
+.log-label { font-size: var(--mk-fs-11); font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
 
 /* 大屏/4K 适配（全站 mk 体系档位；表格与状态条由 shared.css 档位覆盖） */
 @media (min-width: 2000px) {
@@ -757,7 +757,7 @@ html[data-theme='dark'] {
   gap: 8px;
   padding: 6px 8px;
   border-radius: 7px;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-muted);
   cursor: pointer;
   white-space: nowrap;
@@ -774,7 +774,7 @@ html[data-theme='dark'] .al-cols__item:hover { background: #1f2b40; }
   border-radius: 7px;
   border-top: 1px dashed var(--mk-line);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   font-weight: 700;
   color: var(--mk-blue);
   cursor: pointer;

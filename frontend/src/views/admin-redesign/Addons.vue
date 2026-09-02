@@ -429,7 +429,7 @@ function goConfig() {
 </script>
 
 <style scoped>
-.mono { font-family: var(--mk-mono); font-size: 12px; }
+.mono { font-family: var(--mk-mono); font-size: var(--mk-fs-12); }
 
 /* 能力列：主名 + ID 双行，最小宽度兜底（原 51px 截断至 1-2 字符；并栏/窄卡下不被其余列挤压，
    超宽时由 .mk-table-scroll 横向滚动承接） */
@@ -457,7 +457,7 @@ function goConfig() {
   border-radius: 8px;
   background: var(--mk-red-bg);
   color: var(--mk-red);
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 600;
 }
 .ac-error .mk-link { color: var(--mk-red); text-decoration: underline; }
@@ -478,10 +478,10 @@ function goConfig() {
 .ac-mcp__dot.is-on { background: var(--mk-green); box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12); }
 .ac-mcp__dot.is-off { background: var(--mk-faint); }
 .ac-mcp__main { display: grid; gap: 1px; min-width: 0; }
-.ac-mcp__main strong { font-size: 12.5px; font-weight: 600; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ac-mcp__id { font-size: 10.5px; color: var(--mk-faint); }
-.ac-mcp__type { font-size: 11px; color: var(--mk-muted); }
-.ac-mcp__test { font-size: 11px; font-weight: 700; white-space: nowrap; }
+.ac-mcp__main strong { font-size: var(--mk-fs-12_5); font-weight: 600; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-mcp__id { font-size: var(--mk-fs-11); color: var(--mk-faint); }
+.ac-mcp__type { font-size: var(--mk-fs-11); color: var(--mk-muted); }
+.ac-mcp__test { font-size: var(--mk-fs-11); font-weight: 700; white-space: nowrap; }
 .ac-mcp__test.is-ok { color: var(--mk-green); }
 .ac-mcp__test.is-bad { color: var(--mk-red); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 /* 模型列：长模型名单行截断（上限 --mk-col-model-wide 140px + title 全值；原 57px 无截断越界源） */
@@ -492,7 +492,7 @@ function goConfig() {
   text-overflow: ellipsis;
 }
 .ac-mcp__endpoint {
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   color: var(--mk-faint);
   min-width: 0;
   white-space: nowrap;

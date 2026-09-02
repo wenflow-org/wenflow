@@ -124,7 +124,7 @@ watch(() => props.stage, () => {
   padding: 11px 14px;
   cursor: pointer;
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 700;
   color: var(--mk-ink, #1a2a44);
   list-style: none;
@@ -136,14 +136,14 @@ watch(() => props.stage, () => {
 .fdp__box-summary::-webkit-details-marker { display: none; }
 .fdp__box-summary::before {
   content: '▸';
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   color: var(--mk-faint, #71809a);
   transition: transform 0.16s ease;
 }
 .fdp__box[open] > .fdp__box-summary::before { transform: rotate(90deg); }
 .fdp__box[open] > .fdp__box-summary { border-bottom: 1px solid var(--mk-line, #e6ebf4); }
 .fdp__guide { display: grid; gap: 8px; padding: 12px 14px; }
-.fdp__guide-text { margin: 0; color: var(--mk-muted, #5b6577); font-size: 12.5px; line-height: 1.6; }
+.fdp__guide-text { margin: 0; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-12_5); line-height: 1.6; }
 .fdp__guide-file {
   margin: 0;
   padding: 8px 12px;
@@ -151,11 +151,11 @@ watch(() => props.stage, () => {
   border-radius: 9px;
   background: var(--mk-blue-bg, #eff6ff);
   color: var(--mk-blue, #2c63d0);
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 700;
 }
-.fdp__guide-file .mono { font-size: 12px; font-weight: 700; color: var(--mk-blue, #2c63d0); }
-.fdp__guide-text code { font-family: var(--mk-mono, ui-monospace, monospace); font-size: 11.5px; background: #f0f2f5; padding: 1px 6px; border-radius: 5px; }
+.fdp__guide-file .mono { font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-blue, #2c63d0); }
+.fdp__guide-text code { font-family: var(--mk-mono, ui-monospace, monospace); font-size: var(--mk-fs-12); background: #f0f2f5; padding: 1px 6px; border-radius: 5px; }
 .fdp__drift-list { margin: 0; padding: 6px 14px 12px; list-style: none; }
 .fdp__drift-item {
   display: flex;
@@ -166,7 +166,7 @@ watch(() => props.stage, () => {
   border: 1px solid var(--mk-line, #e6ebf4);
   border-radius: 9px;
   background: #fafbfd;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   flex-wrap: wrap;
 }
 .fdp__drift-kind {
@@ -175,14 +175,14 @@ watch(() => props.stage, () => {
   border-radius: 999px;
   background: var(--mk-amber-bg, #fffbeb);
   color: var(--mk-amber, #b45309);
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 .fdp__drift-key { font-weight: 700; color: var(--mk-ink, #1a2a44); }
 .fdp__drift-field { color: var(--mk-faint, #71809a); }
-.fdp__drift-val { font-size: 11.5px; }
+.fdp__drift-val { font-size: var(--mk-fs-12); }
 .fdp__drift-val--seed { color: var(--mk-muted, #5b6577); }
 .fdp__drift-val--db { color: var(--mk-blue, #2c63d0); font-weight: 600; }
 .fdp__changes-list { margin: 0; padding: 8px 14px 12px; list-style: none; }
@@ -195,7 +195,7 @@ watch(() => props.stage, () => {
   border: 1px solid var(--mk-line, #e6ebf4);
   border-radius: 9px;
   background: #fafbfd;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   flex-wrap: wrap;
 }
 .fdp__change-kind {
@@ -204,7 +204,7 @@ watch(() => props.stage, () => {
   border-radius: 999px;
   background: #eef2fa;
   color: var(--mk-muted, #5b6577);
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   font-weight: 800;
   text-transform: uppercase;
 }

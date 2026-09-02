@@ -435,21 +435,21 @@ load()
 /* 学习者列：失败数红色强调（失败有值时突出，无失败保持副行灰） */
 .be-fail-num { color: var(--mk-red); font-weight: 700; }
 .be-cell--fail { color: var(--mk-red); }.be-progress .mk-minibar { flex: 1; }
-.be-progress__num { font-family: var(--mk-mono); font-size: 11.5px; color: var(--mk-muted); white-space: nowrap; }
+.be-progress__num { font-family: var(--mk-mono); font-size: var(--mk-fs-12); color: var(--mk-muted); white-space: nowrap; }
 
 .be-rows { display: grid; gap: 6px; }
 .be-row { display: grid; grid-template-columns: 1.2fr 1.6fr 0.9fr 28px; gap: 8px; align-items: center; }
-.be-row--head { font-size: 11px; font-weight: 700; color: var(--mk-faint); letter-spacing: 0.04em; }
+.be-row--head { font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-faint); letter-spacing: 0.04em; }
 .be-row--head span:last-child { visibility: hidden; }
 .be-budget { height: 34px; }
 
-.be-detail-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 40px 0; color: var(--mk-muted); font-size: 13px; }
+.be-detail-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 40px 0; color: var(--mk-muted); font-size: var(--mk-fs-13); }
 /* 详情 run 卡：mk-card 形态（边框/圆角/背景由全局类提供，此处只留内部布局） */
 .be-run { padding: 12px 14px; display: grid; gap: 8px; margin-bottom: 10px; }
 .be-run__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.be-run__head strong { font-size: 13px; }
-.be-run__phase { margin-left: auto; font-size: 11.5px; color: var(--mk-muted); }
-.be-run__body { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--mk-muted); }
+.be-run__head strong { font-size: var(--mk-fs-13); }
+.be-run__phase { margin-left: auto; font-size: var(--mk-fs-12); color: var(--mk-muted); }
+.be-run__body { display: flex; gap: 12px; flex-wrap: wrap; font-size: var(--mk-fs-12); color: var(--mk-muted); }
 .be-run__task { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .be-run__stall { color: var(--mk-amber); }
 .be-run__error { color: var(--mk-red); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

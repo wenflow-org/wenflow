@@ -609,7 +609,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   border-radius: 999px;
   background: var(--mk-red-bg);
   color: var(--mk-red);
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   font-weight: 700;
 }
 .mk-status__clear {
@@ -617,7 +617,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   background: transparent;
   color: inherit;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--mk-fs-13);
   padding: 0 2px;
 }
 
@@ -637,7 +637,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   color: var(--mk-muted);
   cursor: pointer;
   white-space: nowrap;
@@ -654,7 +654,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   background: rgba(239, 117, 120, 0.08);
   border: 1px solid rgba(239, 117, 120, 0.3);
   color: #c0454a;
-  font-size: 13px;
+  font-size: var(--mk-fs-13);
   font-weight: 600;
 }
 .exec-error button {
@@ -664,7 +664,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   border-radius: 8px;
   padding: 4px 12px;
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
@@ -698,7 +698,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 /* 消息主行：标题截断不换行（title 全值）；14px/650 让"执行完成"这类 4 字短标题
    在消息列内具有足够视觉权重，抵消列内余白 */
 .exec-title {
-  font-size: 14px;
+  font-size: var(--mk-fs-14);
   font-weight: 650;
   min-width: 0;
   flex: 1 1 auto;
@@ -712,7 +712,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
    长节点名会溢出节点列侵入消息列（实测 46 字符节点名溢出 132px 与标题重叠） */
 .exec-stage {
   display: inline-block;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   color: var(--mk-blue);
   cursor: pointer;
   white-space: nowrap;
@@ -724,7 +724,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 /* 模型 / Tokens 独立列：单行截断（同为 inline span，需 inline-block 让截断生效） */
 .exec-model__name {
   display: inline-block;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   color: var(--mk-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -733,7 +733,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 }
 .exec-tokens {
   display: inline-block;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   color: var(--mk-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -745,7 +745,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   border-radius: 999px;
   padding: 1px 8px;
@@ -756,19 +756,19 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 .exec-status--err { background: var(--mk-red-bg); color: var(--mk-red); }
 /* 时间/耗时/Trace 等宽数字列 */
 .exec-time {
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   color: var(--mk-faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .exec-dur {
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   color: var(--mk-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .exec-trace {
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   color: var(--mk-faint);
   white-space: nowrap;
   cursor: pointer;
@@ -793,7 +793,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 /* ---------- 行内 chip（沿用） ---------- */
 .tline__errcode {
   flex-shrink: 0;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   color: #dc2626;
   background: rgba(220, 38, 38, 0.08);
@@ -803,21 +803,21 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 }
 .tline__http {
   flex-shrink: 0;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   color: #dc2626;
   white-space: nowrap;
 }
 .tline__recovered {
   flex-shrink: 0;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   color: var(--mk-amber);
   white-space: nowrap;
 }
 .tline__drift {
   flex-shrink: 0;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   color: var(--mk-amber);
   background: rgba(217, 119, 6, 0.1);
@@ -825,11 +825,11 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   padding: 1px 6px;
   white-space: nowrap;
 }
-.tline__session { font-size: 11px; color: var(--mk-blue, #2c63d0); cursor: pointer; }
+.tline__session { font-size: var(--mk-fs-11); color: var(--mk-blue, #2c63d0); cursor: pointer; }
 .tline__session:hover { text-decoration: underline; }
 /* Prompt 契约展开区 */
 .tline__prompt { border-left: 3px solid rgba(217, 119, 6, 0.4); padding-left: 10px; }
-.tline__prompt-meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--mk-faint); }
+.tline__prompt-meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: var(--mk-fs-11); color: var(--mk-faint); }
 .tline__prompt-drift { color: var(--mk-amber); font-weight: 700; }
 
 .exec-detail__box pre {
@@ -848,14 +848,14 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   color: var(--mk-faint);
   font-family: var(--mk-mono);
 }
-.tline__none { margin: 0; font-size: 11.5px; color: var(--mk-faint); }
+.tline__none { margin: 0; font-size: var(--mk-fs-12); color: var(--mk-faint); }
 .tline__none--err { color: var(--mk-red); font-weight: 600; }
 .tline__section { display: grid; gap: 4px; }
-.tline__label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
+.tline__label { font-size: var(--mk-fs-11); font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
 .tline__label--err { color: var(--mk-red); }
 
 /* 重试时间线 */
@@ -872,12 +872,12 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 .tline-attempt--fail { border-left-color: var(--mk-red); background: #fffafa; }
 .tline-attempt--retry { border-left-color: var(--mk-amber); }
 .tline-attempt__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.tline-attempt__no { font-family: var(--mk-mono); font-size: 10.5px; font-weight: 800; color: var(--mk-muted); }
-.tline-attempt__retry { font-size: 10.5px; font-weight: 700; color: var(--mk-amber); }
+.tline-attempt__no { font-family: var(--mk-mono); font-size: var(--mk-fs-11); font-weight: 800; color: var(--mk-muted); }
+.tline-attempt__retry { font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-amber); }
 .tline-attempt__cache { font-weight: 700; color: var(--mk-green, #15803d); }
-.tline-attempt__dur { margin-left: auto; font-size: 10.5px; color: var(--mk-faint); }
-.tline-attempt__meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 10px; color: var(--mk-faint); }
-.tline-attempt__err { margin: 0; font-size: 11px; color: var(--mk-red); word-break: break-all; }
+.tline-attempt__dur { margin-left: auto; font-size: var(--mk-fs-11); color: var(--mk-faint); }
+.tline-attempt__meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: var(--mk-fs-11); color: var(--mk-faint); }
+.tline-attempt__err { margin: 0; font-size: var(--mk-fs-11); color: var(--mk-red); word-break: break-all; }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3，高度换算回逻辑坐标） ========== */
 @media (min-width: 2000px) {
@@ -980,7 +980,7 @@ html[data-theme='dark'] {
   gap: 8px;
   padding: 6px 8px;
   border-radius: 7px;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-muted);
   cursor: pointer;
   white-space: nowrap;
@@ -997,7 +997,7 @@ html[data-theme='dark'] .exec-cols__item:hover { background: #1f2b40; }
   border-radius: 7px;
   border-top: 1px dashed var(--mk-line);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   font-weight: 700;
   color: var(--mk-blue);
   cursor: pointer;

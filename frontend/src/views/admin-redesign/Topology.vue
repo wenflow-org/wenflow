@@ -569,13 +569,13 @@ const toneOf = (id: string) => AGENT_TONES[`${id}-agent`] || { hue: '#64748b', s
 .topo-status-dot.is-ok { background: var(--mk-green); animation: tk-pulse 2.6s ease-out infinite; }
 .topo-status-dot.is-error { background: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14); }
 @keyframes tk-pulse { 0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.32); } 70% { box-shadow: 0 0 0 6px rgba(22, 163, 74, 0); } 100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); } }
-.topo-toolbar__title { font-size: 14px; font-weight: 700; color: var(--mk-ink); }
+.topo-toolbar__title { font-size: var(--mk-fs-14); font-weight: 700; color: var(--mk-ink); }
 .topo-toolbar__sep { width: 1px; height: 14px; background: var(--mk-line); }
-.topo-toolbar__meta { font-size: 12px; font-weight: 600; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
+.topo-toolbar__meta { font-size: var(--mk-fs-12); font-weight: 600; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 .topo-toolbar__meta b { color: var(--mk-ink); font-weight: 600; margin-right: 3px; }
-.topo-toolbar__hint { font-size: 12px; color: var(--mk-faint); }
+.topo-toolbar__hint { font-size: var(--mk-fs-12); color: var(--mk-faint); }
 .topo-toolbar__controls { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap; }
-.topo-legend { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--mk-muted); }
+.topo-legend { display: inline-flex; align-items: center; gap: 5px; font-size: var(--mk-fs-11); color: var(--mk-muted); }
 .lg { width: 7px; height: 7px; display: inline-block; border-radius: 50%; }
 .lg--ok { background: var(--mk-green); }
 .lg--idle { background: #c3cede; }
@@ -595,7 +595,7 @@ const toneOf = (id: string) => AGENT_TONES[`${id}-agent`] || { hue: '#64748b', s
 .topo-canvas.is-panning { cursor: grabbing; }
 .topo-hint {
   position: absolute; left: 14px; bottom: 12px; z-index: 2;
-  font-size: 11px; color: var(--mk-faint);
+  font-size: var(--mk-fs-11); color: var(--mk-faint);
   background: rgba(255, 255, 255, 0.82); border: 1px solid rgba(203, 213, 231, 0.65); border-radius: 8px;
   padding: 4px 9px; pointer-events: none;
 }
@@ -608,16 +608,16 @@ const toneOf = (id: string) => AGENT_TONES[`${id}-agent`] || { hue: '#64748b', s
 .topo-ctrl {
   width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
   border: 1px solid var(--mk-line); background: var(--mk-surface); color: var(--mk-muted);
-  border-radius: 8px; font-size: 14px; line-height: 1; cursor: pointer;
+  border-radius: 8px; font-size: var(--mk-fs-14); line-height: 1; cursor: pointer;
 }
 .topo-ctrl:hover { color: var(--mk-blue); border-color: var(--mk-blue); }
-.topo-ctrl--zoom { width: auto; min-width: 48px; padding: 0 8px; font-size: 11px; font-family: var(--mk-mono); }
+.topo-ctrl--zoom { width: auto; min-width: 48px; padding: 0 8px; font-size: var(--mk-fs-11); font-family: var(--mk-mono); }
 .topo-empty {
   position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); z-index: 2;
-  text-align: center; color: var(--mk-faint); font-size: 13px;
+  text-align: center; color: var(--mk-faint); font-size: var(--mk-fs-13);
 }
 .topo-empty__icon { width: 56px; height: 56px; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: #fff; border: 1px dashed var(--mk-line); color: #b3c0d6; }
-.topo-empty__sub { font-size: 11.5px; margin-top: 4px; }
+.topo-empty__sub { font-size: var(--mk-fs-12); margin-top: 4px; }
 
 .topo-viewport { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .topo-edges { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 1; }
@@ -632,7 +632,7 @@ const toneOf = (id: string) => AGENT_TONES[`${id}-agent`] || { hue: '#64748b', s
 .topo-anchor__title {
   position: absolute; top: 0; left: 0; right: 0;
   padding: 8px 12px;
-  font-size: 11px; font-weight: 800; color: var(--mk-muted);
+  font-size: var(--mk-fs-11); font-weight: 800; color: var(--mk-muted);
   background: linear-gradient(180deg, #eef2fa, #f8fafd);
   border-bottom: 1px solid var(--mk-line);
   border-radius: 10px 10px 0 0;
@@ -646,10 +646,10 @@ const toneOf = (id: string) => AGENT_TONES[`${id}-agent`] || { hue: '#64748b', s
   background: var(--mk-surface); font: inherit; cursor: pointer;
 }
 .topo-anchor__item:hover { border-color: var(--mk-blue); }
-.topo-anchor__label { font-size: 10px; font-weight: 700; color: var(--mk-ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topo-anchor__label { font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topo-anchor__stat { font-size: 9px; font-weight: 700; color: var(--mk-muted); white-space: nowrap; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .topo-anchor__sub { font-size: 9.5px; font-weight: 700; color: var(--mk-blue); background: #eff6ff; border-radius: 6px; padding: 1px 5px; white-space: nowrap; flex-shrink: 0; }
-.topo-anchor__empty { position: absolute; left: 12px; top: 40px; font-size: 11px; color: var(--mk-faint); }
+.topo-anchor__empty { position: absolute; left: 12px; top: 40px; font-size: var(--mk-fs-11); color: var(--mk-faint); }
 
 .topo-lane {
   position: absolute;
@@ -666,11 +666,11 @@ const toneOf = (id: string) => AGENT_TONES[`${id}-agent`] || { hue: '#64748b', s
 }
 .topo-lane__idx {
   width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 7px; background: var(--hue); color: #fff; font-size: 11px; font-weight: 800; flex-shrink: 0;
+  border-radius: 7px; background: var(--hue); color: #fff; font-size: var(--mk-fs-11); font-weight: 800; flex-shrink: 0;
 }
-.topo-lane__name { font-size: 13px; font-weight: 800; color: var(--mk-ink); }
-.topo-lane__id { font-size: 10px; color: var(--mk-faint); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.topo-lane__count { font-size: 10.5px; font-weight: 700; color: var(--mk-faint); background: #eef2fa; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.topo-lane__name { font-size: var(--mk-fs-13); font-weight: 800; color: var(--mk-ink); }
+.topo-lane__id { font-size: var(--mk-fs-11); color: var(--mk-faint); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topo-lane__count { font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-faint); background: #eef2fa; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
 
 .topo-group {
   position: absolute; left: 0; right: 0; z-index: 2;
@@ -682,8 +682,8 @@ const toneOf = (id: string) => AGENT_TONES[`${id}-agent`] || { hue: '#64748b', s
   display: flex; align-items: center; gap: 6px; padding: 6px 12px 4px; height: 30px; box-sizing: border-box;
 }
 .topo-group__badge { padding: 0 6px; border-radius: 999px; background: #eef2fa; color: var(--mk-muted); font-size: 9.5px; font-weight: 800; }
-.topo-group__name { font-size: 10.5px; font-weight: 700; color: var(--mk-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.topo-group__stat { font-size: 10px; color: var(--mk-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.topo-group__name { font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topo-group__stat { font-size: var(--mk-fs-11); color: var(--mk-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .topo-group__stat b { font-weight: 700; }
 .topo-group__stat b.is-bad { color: #dc2626; }
 .topo-group__stat b.is-idle { color: #c3cede; }
@@ -705,17 +705,17 @@ const toneOf = (id: string) => AGENT_TONES[`${id}-agent`] || { hue: '#64748b', s
 .topo-field.is-err { border-color: rgba(220, 38, 38, 0.45); }
 .topo-field.is-handoff { border-left: 3px solid var(--mk-blue); }
 .topo-field__name {
-  font-size: 11.5px; font-weight: 700; color: var(--mk-ink);
+  font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-ink);
   flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .topo-field.is-idle .topo-field__name { color: var(--mk-faint); }
-.topo-field__stat { font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
+.topo-field__stat { font-size: var(--mk-fs-11); font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
 .topo-field__stat b { font-weight: 700; }
 .topo-field__stat b.is-bad { color: #dc2626; }
 .topo-field__stat b.is-idle { color: #c3cede; }
 .topo-field__stat b.is-ok { color: var(--mk-green); }
 .topo-field__stat em { font-style: normal; color: #dc2626; font-weight: 700; }
-.topo-field__ms { font-size: 10px; color: var(--mk-faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.topo-field__ms { font-size: var(--mk-fs-11); color: var(--mk-faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 
 /* 4K */
 @media (min-width: 2000px) {

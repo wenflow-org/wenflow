@@ -67,16 +67,16 @@ function confirm() {
   display: grid;
   gap: 12px;
 }
-.mk-confirm__title { margin: 0; font-size: 15px; font-weight: 700; }
+.mk-confirm__title { margin: 0; font-size: var(--mk-fs-15); font-weight: 700; }
 .mk-confirm__msg {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--mk-fs-13);
   line-height: 1.7;
   color: var(--mk-muted);
   white-space: pre-wrap;
 }
 .mk-confirm__input { display: grid; gap: 6px; }
-.mk-confirm__input span { font-size: 12px; font-weight: 700; color: var(--mk-muted); }
+.mk-confirm__input span { font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-muted); }
 .mk-confirm__actions {
   display: flex;
   justify-content: flex-end;

@@ -370,7 +370,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   background: transparent;
   color: var(--mk-blue);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 700;
   cursor: pointer;
   padding: 0;
@@ -378,7 +378,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   width: fit-content;
 }
 .sdp-back:hover { text-decoration: underline; }
-.sdp-parent { font-size: 12px; font-weight: 600; white-space: nowrap; }
+.sdp-parent { font-size: var(--mk-fs-12); font-weight: 600; white-space: nowrap; }
 .sdp-ellipsis {
   max-width: 320px;
   overflow: hidden;
@@ -398,9 +398,9 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   background: var(--mk-amber-bg);
   border: 1px solid rgba(180, 83, 9, 0.3);
   color: var(--mk-amber);
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
 }
-.sdp-drift code { font-size: 11px; }
+.sdp-drift code { font-size: var(--mk-fs-11); }
 
 /* ---------- Tabs（收敛为全局 mk-pills / mk-pill） ---------- */
 

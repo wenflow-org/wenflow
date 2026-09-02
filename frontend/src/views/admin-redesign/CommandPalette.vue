@@ -236,13 +236,13 @@ function close() {
   padding: 13px 16px;
   border-bottom: 1px solid var(--mk-line);
 }
-.pal__icon { color: var(--mk-faint); font-size: 15px; }
+.pal__icon { color: var(--mk-faint); font-size: var(--mk-fs-15); }
 .pal__input {
   flex: 1;
   border: 0;
   outline: none;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--mk-fs-14);
   color: #1a2a44;
   background: transparent;
 }
@@ -251,7 +251,7 @@ function close() {
   box-shadow: 0 0 0 3px rgba(44, 99, 208, 0.25);
 }
 .pal__esc {
-  font-size: 10px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   color: var(--mk-faint);
   border: 1px solid var(--mk-line);
@@ -262,7 +262,7 @@ function close() {
 .pal__list { overflow-y: auto; padding: 6px; }
 .pal__group {
   padding: 8px 10px 4px;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--mk-faint);
@@ -277,16 +277,16 @@ function close() {
   border-radius: 8px;
   background: transparent;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--mk-fs-13);
   color: #1a2a44;
   cursor: pointer;
   text-align: left;
 }
 .pal__item--active { background: #eef5ff; }
-.pal__item-icon { color: var(--mk-blue, #2c63d0); font-size: 12px; width: 16px; text-align: center; }
+.pal__item-icon { color: var(--mk-blue, #2c63d0); font-size: var(--mk-fs-12); width: 16px; text-align: center; }
 .pal__item-label { flex: 1; }
-.pal__item-hint { font-size: 11px; color: var(--mk-faint); }
-.pal__empty { padding: 20px; text-align: center; color: var(--mk-faint); font-size: 13px; margin: 0; }
+.pal__item-hint { font-size: var(--mk-fs-11); color: var(--mk-faint); }
+.pal__empty { padding: 20px; text-align: center; color: var(--mk-faint); font-size: var(--mk-fs-13); margin: 0; }
 
 
 /* 4K：命令面板加宽 + 字号跟随壳层放大 */

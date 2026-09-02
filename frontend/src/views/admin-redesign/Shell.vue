@@ -411,7 +411,7 @@ function groupBadgeTitle(title: string): string {
   overflow: hidden;
   background: var(--mk-bg, #f7f8fa);
   color: #1a2a44;
-  font-size: 13px;
+  font-size: var(--mk-fs-13);
 }
 
 /* 侧边栏 */
@@ -466,7 +466,7 @@ function groupBadgeTitle(title: string): string {
   border: 0;
   background: transparent;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--mk-fs-14);
   font-weight: 800;
   letter-spacing: 0;
   color: #2b3a55;
@@ -491,7 +491,7 @@ function groupBadgeTitle(title: string): string {
   border-radius: 999px;
   background: #eef2fa;
   color: var(--mk-faint);
-  font-size: 10px;
+  font-size: var(--mk-fs-11);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   line-height: 16px;
@@ -513,7 +513,7 @@ function groupBadgeTitle(title: string): string {
 .mshell__group-body .mshell__item .mshell__item-glyph {
   width: 20px;
   height: 20px;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
 }
 .mshell__item {
   display: flex;
@@ -548,7 +548,7 @@ function groupBadgeTitle(title: string): string {
   border-radius: 8px;
   background: #eef2fa;
   color: #5b6577;
-  font-size: 13px;
+  font-size: var(--mk-fs-13);
   font-weight: 800;
   flex-shrink: 0;
   transition: background 0.12s ease, color 0.12s ease;
@@ -559,7 +559,7 @@ function groupBadgeTitle(title: string): string {
   border-radius: 999px;
   background: #eef2fa;
   color: var(--mk-faint);
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -582,12 +582,12 @@ function groupBadgeTitle(title: string): string {
   padding: 12px 12px 6px;
   border-top: 1px solid #eef2fa;
   color: var(--mk-faint);
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   flex-shrink: 0;
 }
 .mshell__foot-name { font-weight: 700; color: #8a97ab; letter-spacing: 0.02em; }
 .mshell__foot-ver {
-  font-size: 10.5px;
+  font-size: var(--mk-fs-11);
   color: #b4c0d2;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -597,7 +597,7 @@ function groupBadgeTitle(title: string): string {
   border: 1px solid #e1e8f2;
   border-radius: 5px;
   background: #fafbfc;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
 }
 
@@ -652,7 +652,7 @@ function groupBadgeTitle(title: string): string {
   border-radius: 50%;
   background: var(--mk-blue, #2c63d0);
   color: #fff;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   font-weight: 800;
   line-height: 1;
 }
@@ -667,7 +667,7 @@ function groupBadgeTitle(title: string): string {
   background: #fafbfc;
   color: var(--mk-faint);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   cursor: pointer;
 }
 .mshell__search-hint { white-space: nowrap; }
@@ -692,17 +692,17 @@ function groupBadgeTitle(title: string): string {
   background: #fff;
   color: #5b6577;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   font-weight: 600;
   cursor: pointer;
   transition: color 0.15s ease, border-color 0.15s ease;
 }
 .mshell__refresh:hover:not(:disabled) { color: var(--mk-blue, #2c63d0); border-color: rgba(44, 99, 208, 0.4); }
 .mshell__refresh:disabled { cursor: default; color: var(--mk-faint); }
-.mshell__refresh-icon { display: inline-block; font-size: 13px; line-height: 1; }
+.mshell__refresh-icon { display: inline-block; font-size: var(--mk-fs-13); line-height: 1; }
 .mshell__refresh-icon.is-spinning { animation: mshell-spin 0.9s linear infinite; }
 @keyframes mshell-spin { to { transform: rotate(360deg); } }
-.mshell__admin { font-size: 12px; font-weight: 700; color: #1a2a44; }
+.mshell__admin { font-size: var(--mk-fs-12); font-weight: 700; color: #1a2a44; }
 .mshell__theme {
   display: inline-flex;
   align-items: center;
@@ -714,7 +714,7 @@ function groupBadgeTitle(title: string): string {
   background: #fff;
   color: #5b6577;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--mk-fs-14);
   line-height: 1;
   cursor: pointer;
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
@@ -732,7 +732,7 @@ function groupBadgeTitle(title: string): string {
   background: #fff;
   color: #5b6577;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--mk-fs-14);
   line-height: 1;
   cursor: pointer;
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
@@ -745,7 +745,7 @@ function groupBadgeTitle(title: string): string {
   padding: 5px 12px;
   border-radius: 8px;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   font-weight: 700;
   color: #5b6577;
   cursor: pointer;
@@ -854,7 +854,7 @@ function groupBadgeTitle(title: string): string {
   color: var(--mk-muted, #5b6577);
   width: 24px; height: 24px;
   border-radius: 7px;
-  font-size: 12px; line-height: 1;
+  font-size: var(--mk-fs-12); line-height: 1;
   cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
   padding: 0;

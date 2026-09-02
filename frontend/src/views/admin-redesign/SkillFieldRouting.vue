@@ -571,10 +571,10 @@ onMounted(() => void load())
   border: 1px dashed rgba(220, 38, 38, 0.4);
   border-radius: 9px;
   background: var(--mk-red-bg, #fef2f2);
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   line-height: 1.5;
 }
-.sfr__sync-title { color: var(--mk-red, #dc2626); font-size: 11.5px; }
+.sfr__sync-title { color: var(--mk-red, #dc2626); font-size: var(--mk-fs-12); }
 .sfr__sync-item { display: inline-flex; gap: 4px; align-items: center; }
 .sfr__sync-item--err { color: var(--mk-red, #dc2626); font-weight: 600; }
 .sfr__sync-item--warn { color: var(--mk-amber, #b45309); font-weight: 600; }
@@ -589,9 +589,9 @@ onMounted(() => void load())
   border: 1px dashed rgba(180, 83, 9, 0.45);
   border-radius: 9px;
   background: var(--mk-amber-bg, #fffbeb);
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
 }
-.sfr__orphan-title { color: var(--mk-amber, #b45309); font-size: 11.5px; }
+.sfr__orphan-title { color: var(--mk-amber, #b45309); font-size: var(--mk-fs-12); }
 .sfr__orphan-item { display: inline-flex; gap: 4px; align-items: center; color: var(--mk-muted, #5b6577); }
 .sfr__orphan-item code { color: var(--mk-amber, #b45309); font-weight: 700; }
 
@@ -607,7 +607,7 @@ onMounted(() => void load())
   padding: 9px 14px;
   cursor: pointer;
   user-select: none;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 700;
   color: var(--mk-muted, #5b6577);
   list-style: none;

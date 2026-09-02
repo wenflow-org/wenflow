@@ -779,7 +779,7 @@ async function toggleRegistration() {
   border-radius: 8px;
   width: 32px;
   height: 32px;
-  font-size: 14px;
+  font-size: var(--mk-fs-14);
   line-height: 1;
   cursor: pointer;
   display: inline-flex;
@@ -789,7 +789,7 @@ async function toggleRegistration() {
 }
 .ac-key-toggle:hover { background: #eef5ff; border-color: var(--mk-blue, #2c63d0); }
 .ac-keyhint {
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   color: var(--mk-amber);
   font-weight: 600;
   font-style: normal;
@@ -806,9 +806,9 @@ async function toggleRegistration() {
   border-top: 1px solid #f0f2f5;
 }
 .ac-test__model { min-width: 260px; }
-.ac-test__meta { font-size: 11.5px; color: var(--mk-faint); }
+.ac-test__meta { font-size: var(--mk-fs-12); color: var(--mk-faint); }
 .ac-test__text {
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -824,7 +824,7 @@ async function toggleRegistration() {
   background: #eef2fa;
   color: var(--mk-muted);
   font-family: var(--mk-mono);
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   font-weight: 600;
 }
 
@@ -836,10 +836,10 @@ async function toggleRegistration() {
 }
 .ac-policy__item { display: grid; gap: 8px; align-content: start; }
 .ac-policy--3 { grid-template-columns: repeat(3, 1fr); }
-.ac-policy__label { font-size: 12px; font-weight: 700; color: var(--mk-muted); }
-.ac-policy__desc { font-size: 12px; color: var(--mk-muted); line-height: 1.6; }
+.ac-policy__label { font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-muted); }
+.ac-policy__desc { font-size: var(--mk-fs-12); color: var(--mk-muted); line-height: 1.6; }
 .ac-policy__toggle { width: fit-content; }
-.ac-policy__warn { font-size: 11.5px; color: var(--mk-red); font-weight: 600; }
+.ac-policy__warn { font-size: var(--mk-fs-12); color: var(--mk-red); font-weight: 600; }
 .ac-seg { display: inline-flex; gap: 4px; padding: 3px; background: #eef2fa; border-radius: 10px; width: fit-content; }
 .ac-seg__item {
   border: 0;
@@ -847,14 +847,14 @@ async function toggleRegistration() {
   padding: 6px 12px;
   border-radius: 7px;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   font-weight: 600;
   color: var(--mk-muted);
   cursor: pointer;
 }
 .ac-seg__item--active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 2px rgba(23, 32, 51, 0.1); }
 
-.ac-textarea { resize: vertical; font-size: 12px; }
+.ac-textarea { resize: vertical; font-size: var(--mk-fs-12); }
 
 /* 能力健康 */
 .ac-health { display: grid; padding: 2px 0 8px; }
@@ -866,7 +866,7 @@ async function toggleRegistration() {
   align-items: center;
   padding: 4px 0 2px;
   border-bottom: 1px solid #f0f2f5;
-  font-size: 10px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -880,7 +880,7 @@ async function toggleRegistration() {
   align-items: center;
   padding: 7px 0;
   border-bottom: 1px solid #f0f2f5;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
 }
 .ac-health__row:last-child { border-bottom: none; }
 .ac-health__dot { width: 8px; height: 8px; border-radius: 50%; }
@@ -888,10 +888,10 @@ async function toggleRegistration() {
 .ac-health__dot.is-degraded { background: var(--mk-amber); }
 .ac-health__dot.is-unavailable { background: var(--mk-red); }
 .ac-health__dot.is-unknown { background: var(--mk-faint); }
-.ac-health__id { font-size: 11px; color: var(--mk-ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-health__id { font-size: var(--mk-fs-11); color: var(--mk-ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ac-health__msg { color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ac-health__lat { font-size: 11px; color: var(--mk-muted); font-variant-numeric: tabular-nums; }
-.ac-health__time { font-size: 11px; color: var(--mk-faint); white-space: nowrap; }
+.ac-health__lat { font-size: var(--mk-fs-11); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
+.ac-health__time { font-size: var(--mk-fs-11); color: var(--mk-faint); white-space: nowrap; }
 .ac-health__foot {
   display: flex;
   align-items: center;
@@ -919,14 +919,14 @@ async function toggleRegistration() {
   align-items: baseline;
   gap: 10px;
   padding: 14px 0 0;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--mk-faint);
 }
-.ac-sec__sub { margin-left: auto; font-size: 11px; letter-spacing: 0; text-transform: none; font-weight: 500; }
-.ac-health__stale { font-size: 11px; color: var(--mk-faint); }
+.ac-sec__sub { margin-left: auto; font-size: var(--mk-fs-11); letter-spacing: 0; text-transform: none; font-weight: 500; }
+.ac-health__stale { font-size: var(--mk-fs-11); color: var(--mk-faint); }
 
 /* 调用参数分组 */
 .ac-cols {
@@ -944,7 +944,7 @@ async function toggleRegistration() {
 .ac-groups { display: grid; gap: 18px; padding: 12px 0 8px; }
 .ac-group { display: grid; gap: 8px; }
 .ac-group__title {
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -987,7 +987,7 @@ async function toggleRegistration() {
 .ac-rel__note {
   margin: 0;
   padding: 0 0 14px;
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   color: var(--mk-faint);
 }
 /* 降级提示：健康快照不可用 / 配置读取失败 */
@@ -998,7 +998,7 @@ async function toggleRegistration() {
   color: var(--mk-red);
   font-weight: 600;
 }
-.ac-rel__error .mk-link { font-size: 11.5px; }
+.ac-rel__error .mk-link { font-size: var(--mk-fs-12); }
 .ac-config-error {
   display: flex;
   align-items: center;
@@ -1008,7 +1008,7 @@ async function toggleRegistration() {
   border-radius: 8px;
   background: var(--mk-red-bg);
   color: var(--mk-red);
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
   font-weight: 600;
 }
 

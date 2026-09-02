@@ -257,26 +257,26 @@ void refreshAll()
   padding: 10px 12px;
   border-bottom: 1px solid var(--mk-line);
   background: #fafbfc;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-12_5);
 }
-.dt-result__head strong { font-size: 13px; }
+.dt-result__head strong { font-size: var(--mk-fs-13); }
 .dt-result__head .mono { color: var(--mk-muted); }
 .dt-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
 .dt-compare__col { padding: 12px; min-width: 0; }
 .dt-compare__col + .dt-compare__col { border-left: 1px dashed var(--mk-line); }
-.dt-compare__col h5 { margin: 0 0 8px; font-size: 11px; font-weight: 700; color: var(--mk-faint); letter-spacing: 0.05em; }
+.dt-compare__col h5 { margin: 0 0 8px; font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-faint); letter-spacing: 0.05em; }
 .dt-compare__col pre {
   margin: 0;
   max-height: 300px;
   overflow: auto;
-  font-size: 11px;
+  font-size: var(--mk-fs-11);
   line-height: 1.6;
   color: var(--mk-muted);
   white-space: pre-wrap;
   word-break: break-all;
 }
 
-.dt-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 32px 0; color: var(--mk-muted); font-size: 13px; }
+.dt-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 32px 0; color: var(--mk-muted); font-size: var(--mk-fs-13); }
 .dt-err {
   display: inline-block;
   max-width: 320px;
@@ -285,7 +285,7 @@ void refreshAll()
   white-space: nowrap;
   vertical-align: bottom;
   color: var(--mk-red);
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
 }
 
 @media (min-width: 2000px) {

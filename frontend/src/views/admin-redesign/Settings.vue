@@ -256,12 +256,12 @@ void loadProbe()
   flex-wrap: wrap;
 }
 .st-row__text { display: grid; gap: 2px; }
-.st-row__text strong { font-size: 13px; }
-.st-row__text span { font-size: 12px; color: var(--mk-muted); max-width: 560px; }
+.st-row__text strong { font-size: var(--mk-fs-13); }
+.st-row__text span { font-size: var(--mk-fs-12); color: var(--mk-muted); max-width: 560px; }
 
 .st-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
-.st-loading { display: flex; align-items: center; gap: 10px; color: var(--mk-muted); font-size: 13px; padding: 10px 0; }
-.st-error { display: flex; align-items: center; gap: 8px; color: var(--mk-red); font-size: 13px; }
+.st-loading { display: flex; align-items: center; gap: 10px; color: var(--mk-muted); font-size: var(--mk-fs-13); padding: 10px 0; }
+.st-error { display: flex; align-items: center; gap: 8px; color: var(--mk-red); font-size: var(--mk-fs-13); }
 
 .st-caps { display: flex; gap: 8px; flex-wrap: wrap; border-top: 1px dashed var(--mk-line); padding-top: 12px; }
 .st-cap {
@@ -271,10 +271,10 @@ void loadProbe()
   padding: 6px 10px;
   border: 1px solid var(--mk-line);
   border-radius: 8px;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
 }
 .st-cap__name { font-weight: 700; }
-.st-cap__meta { color: var(--mk-faint); font-size: 11px; }
+.st-cap__meta { color: var(--mk-faint); font-size: var(--mk-fs-11); }
 
 @media (min-width: 2000px) {
   .st-row__text strong { font-size: 14.5px; }

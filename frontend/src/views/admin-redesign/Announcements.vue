@@ -475,7 +475,7 @@ function expiresLabel(iso: string): string {
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   font-weight: 700;
   color: var(--mk-muted);
   cursor: pointer;

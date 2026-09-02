@@ -310,9 +310,9 @@ void stageTitle.value
   background: rgba(44, 99, 208, 0.08);
   box-shadow: 0 2px 8px rgba(44, 99, 208, 0.12);
 }
-.orch-stage-tab__name { font-size: 13px; font-weight: 800; color: var(--mk-ink); }
+.orch-stage-tab__name { font-size: var(--mk-fs-13); font-weight: 800; color: var(--mk-ink); }
 .orch-stage-tab.is-active .orch-stage-tab__name { color: var(--mk-blue); }
-.orch-stage-tab__meta { font-size: 10.5px; font-weight: 600; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
+.orch-stage-tab__meta { font-size: var(--mk-fs-11); font-weight: 600; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 
 /* 折叠层（字段路由 / 治理）：阶段工作区的查阅层，默认收起 */
 .orch-fold {
@@ -323,7 +323,7 @@ void stageTitle.value
 .orch-fold__summary {
   padding: 10px 14px;
   display: flex; align-items: center; gap: 10px;
-  font-size: 12px; font-weight: 800; color: var(--mk-muted);
+  font-size: var(--mk-fs-12); font-weight: 800; color: var(--mk-muted);
   cursor: pointer; user-select: none;
   list-style: none;
 }
@@ -331,7 +331,7 @@ void stageTitle.value
 .orch-fold__summary::before { content: '▸ '; color: var(--mk-blue); }
 details[open].orch-fold .orch-fold__summary::before { content: '▾ '; }
 .orch-fold__summary:hover { color: var(--mk-blue); }
-.orch-fold__meta { font-size: 11px; font-weight: 600; color: var(--mk-faint); }
+.orch-fold__meta { font-size: var(--mk-fs-11); font-weight: 600; color: var(--mk-faint); }
 .orch-fold__body { padding: 0 14px 14px; }
 
 /* 沙盘（深链次要入口）顶部条 */
@@ -340,12 +340,12 @@ details[open].orch-fold .orch-fold__summary::before { content: '▾ '; }
   padding: 10px 14px; margin-bottom: 10px;
   background: var(--mk-surface); border: 1px solid var(--mk-line); border-radius: 10px;
 }
-.orch-pane-title { font-size: 13px; font-weight: 800; color: var(--mk-ink); }
-.orch-pane-hint { font-size: 11.5px; color: var(--mk-faint); }
+.orch-pane-title { font-size: var(--mk-fs-13); font-weight: 800; color: var(--mk-ink); }
+.orch-pane-hint { font-size: var(--mk-fs-12); color: var(--mk-faint); }
 .orch-pane-spacer { flex: 1; }
 .orch-pane-back {
   padding: 5px 12px; border: 1px solid var(--mk-line); border-radius: 8px;
-  background: var(--mk-surface); font: inherit; font-size: 11.5px; font-weight: 700;
+  background: var(--mk-surface); font: inherit; font-size: var(--mk-fs-12); font-weight: 700;
   color: var(--mk-muted); cursor: pointer;
 }
 .orch-pane-back:hover { color: var(--mk-blue); border-color: var(--mk-blue); }

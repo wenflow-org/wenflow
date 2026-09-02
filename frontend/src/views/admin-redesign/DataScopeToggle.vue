@@ -46,7 +46,7 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
   background: transparent;
   color: var(--mk-muted);
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--mk-fs-12);
   font-weight: 700;
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
