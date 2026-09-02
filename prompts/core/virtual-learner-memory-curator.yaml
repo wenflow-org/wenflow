@@ -62,5 +62,5 @@ constraints:
   - 不输出 learner reply、availableActions 或下一步实时动作
   - 概念必须来自输入（任务/对话/自评），不编造
   - 证据不足时保守输出：宁缺毋滥
-params: { temperature: 0.3, maxTokens: 2400, failurePolicy: fallback }
+params: { temperature: 0.3, maxTokens: 2400, failurePolicy: propagate }
 deltaOutput: false
