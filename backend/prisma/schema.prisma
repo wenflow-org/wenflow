@@ -594,6 +594,31 @@ model learner_evidence {
   @@index([taskId])
 }
 
+// 误解台账（G-R-R Phase 2）：跨会话追踪结构化误解的生命周期
+// suspected（首次观察到）→ confirmed（再次出现，假设得到佐证）→ addressed（学生后续正确表现，误解已消除）
+model misconception_ledger {
+  id              String   @id
+  userId          String
+  conceptKey      String
+  hypothesisHash  String   // hypothesis 文本短哈希（跨会话去重/upsert 锚点）
+  hypothesis      String
+  canonicalLabel  String?
+  confidence      Int      // 0|25|50|75|100 软分级置信度（G-R-R 约定）
+  evidence        String?
+  status          String   @default("suspected") // suspected | confirmed | addressed
+  occurrenceCount Int      @default(1)
+  firstSeenAt     DateTime @default(now())
+  lastSeenAt      DateTime @default(now())
+  lastSessionId   String?
+  resolvedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, conceptKey, hypothesisHash])
+  @@index([userId, status])
+  @@index([userId, lastSeenAt])
+}
+
 model learner_projections {
   id             String   @id
   projectionKey  String   @unique

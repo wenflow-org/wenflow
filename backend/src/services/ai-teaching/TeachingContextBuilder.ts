@@ -8,6 +8,7 @@ import type { TeachingLearnerProjection } from '../../agents/learner-model-agent
 import { executeSkill } from '../../skills';
 import { learningPredictorDefinition, type LearningPredictorOutput } from '../../skills/learning-predictor';
 import { predictionCalibrationService } from '../learner/PredictionCalibrationService';
+import { getActiveForConcepts } from '../learner/misconception-ledger.service';
 import { logger } from '../../utils/logger';
 
 export interface TeachingScenarioContext {
@@ -113,6 +114,15 @@ export interface TeachingScenarioContext {
    * 超时/失败/低样本时为 null——教学照常，不得因预测缺失改变行为。
    */
   learnerPrediction: LearnerPredictionContext | null;
+  /** 历史误解（G-R-R Phase 2）：当前任务相关概念的活跃误解，供教学回合引用（"你上次在这里犯过类似的错"） */
+  priorMisconceptions: Array<{
+    conceptKey: string;
+    hypothesis: string;
+    canonicalLabel: string | null;
+    confidence: number;
+    status: string;
+    occurrenceCount: number;
+  }> | null;
 }
 
 /** 预测上下文（P2 闭环：预测 + 实证可靠性一起交给教学 Agent） */
@@ -487,6 +497,19 @@ export async function buildTeachingScenarioContext(
     ...cognitiveFrame.neighboringConcepts,
     ...prerequisiteConcepts,
   ]).filter((concept) => !primaryConcepts.includes(concept)).slice(0, 3);
+  // 误解台账（G-R-R Phase 2）：拉取当前任务相关概念的活跃误解，注入教学上下文
+  const priorMisconceptions = await getActiveForConcepts(userId, [
+    ...primaryConcepts,
+    ...prerequisiteConcepts,
+    ...supportingConcepts,
+  ], 5).then((rows) => rows.length > 0 ? rows.map((r) => ({
+    conceptKey: r.conceptKey,
+    hypothesis: r.hypothesis,
+    canonicalLabel: r.canonicalLabel,
+    confidence: r.confidence,
+    status: r.status,
+    occurrenceCount: r.occurrenceCount,
+  })) : null);
   const orderedTasks = Array.isArray(milestone?.subtasks) ? milestone.subtasks : [];
   const currentTaskOrder = typeof (task as any).order === 'number'
     ? (task as any).order
@@ -546,6 +569,7 @@ export async function buildTeachingScenarioContext(
     lastLessonRecap,
     interactionProfile: buildInteractionProfile(interactionMeta, previousSession?.messages ?? []),
     learnerPrediction: null,
+    priorMisconceptions,
   };
 
   // 学习表现预测（P2 闭环）：幂等复用 + 超时保护；结果直接进入教学上下文

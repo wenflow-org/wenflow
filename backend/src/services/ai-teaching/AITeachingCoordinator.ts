@@ -29,6 +29,7 @@ import { classifyFinalizationError } from './FinalizationErrors';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
 import { learnerExitService } from '../learner/LearnerExitService';
 import { memoryTraceService } from '../memory/memory-trace.service';
+import { recordMisconceptions } from '../learner/misconception-ledger.service';
 
 export type TeachingMode = 'tutor' | 'peer' | 'debate';
 const AI_TEACHING_AGENT_ID = 'teaching-agent';
@@ -1861,6 +1862,19 @@ export class AITeachingOrchestrator {
         markTaskInProgress: true,
       });
       committed = true;
+
+      // 误解台账（G-R-R Phase 2）：异步记录本轮结构化误解，best-effort 不阻断回合
+      const misconceptions = teachingOutput.analysis?.misconceptions;
+      if (Array.isArray(misconceptions) && misconceptions.length > 0) {
+        void recordMisconceptions(session.userId, sessionId, misconceptions.map((m) => ({
+          conceptKey: m.conceptKey || '',
+          hypothesis: m.hypothesis,
+          canonicalLabel: m.canonicalLabel ?? null,
+          confidence: m.confidence,
+          evidence: m.evidence,
+          status: m.status,
+        })).filter((m) => m.conceptKey && m.hypothesis));
+      }
 
       const baseResult = {
       analysis: teachingOutput.analysis,
