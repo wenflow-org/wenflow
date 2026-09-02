@@ -1148,5 +1148,7 @@ html[data-theme='dark'] {
   /* 补漏：密钥切换钮/模型胶囊浅底 */
   .ac-key-toggle,
   .ac-model { background: #1d2739; color: #9fb0c8; }
+  /* 开关轨道：浅灰轨道暗色化（滑块保持白色——深色开关的标准做法） */
+  .ac-switch i { background: #3a4a63; }
 }
 </style>

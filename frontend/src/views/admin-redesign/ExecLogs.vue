@@ -777,13 +777,14 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 
 /* 展开详情行（colspan=5）：浅底 + 内容盒内聚，干扰最小化 */
 .exec-detail td { padding: 6px 14px 14px; background: #fbfcfe; vertical-align: top; }
+html[data-theme='dark'] .exec-detail td { background: #101826; }
 .exec-detail__box {
   display: grid;
   gap: 8px;
   padding: 10px 14px;
   border-left: 3px solid var(--mk-line);
   border-radius: 0 8px 8px 0;
-  background: #fff;
+  background: var(--mk-surface);
 }
 .exec-detail__links { display: inline-flex; gap: 12px; }
 
@@ -867,9 +868,10 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   padding: 8px 10px;
   display: grid;
   gap: 4px;
-  background: #fff;
+  background: var(--mk-surface);
 }
-.tline-attempt--fail { border-left-color: var(--mk-red); background: #fffafa; }
+.tline-attempt--fail { border-left-color: var(--mk-red); background: var(--mk-surface); }
+html[data-theme='dark'] .tline-attempt--fail { background: rgba(220, 38, 38, 0.08); }
 .tline-attempt--retry { border-left-color: var(--mk-amber); }
 .tline-attempt__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .tline-attempt__no { font-family: var(--mk-mono); font-size: var(--mk-fs-11); font-weight: 800; color: var(--mk-muted); }

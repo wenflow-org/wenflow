@@ -794,7 +794,7 @@ onMounted(() => {
 .gc-panel {
   width: min(560px, 100vw);
   height: 100%;
-  background: #fff;
+  background: var(--mk-surface);
   box-shadow: var(--mk-shadow-drawer);
   display: grid;
   grid-template-rows: auto 1fr;
@@ -947,7 +947,7 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
 .gc-msg--assistant .gc-msg__bubble,
 .gc-msg--unknown .gc-msg__bubble {
   background: #f7f9fc;
-  border: 1px solid #e6ecf6;
+  border: 1px solid var(--mk-line);
   border-top-left-radius: 4px;
 }
 .gc-msg--user .gc-msg__bubble {
@@ -1099,7 +1099,13 @@ html[data-theme='dark'] {
   .gc-tag--virtual { background: #1c2637; color: #8fa3bd; border-color: #33415c; }
   .gc-tag--test { background: rgba(251, 191, 36, 0.16); color: #fcd34d; }
   .gc-json { background: #0f1624; color: #c6d4ea; }
-  .gc-msg { background: #141c2b; border-color: #232f45; }
+  /* 消息气泡：容器级旧覆写修正为气泡级（assistant 灰蓝 / user 深蓝） */
+  .gc-msg--assistant .gc-msg__bubble,
+  .gc-msg--unknown .gc-msg__bubble { background: #1b2433; border-color: #2a3850; }
+  .gc-msg--user .gc-msg__bubble { background: #16233a; border-color: #27405f; }
   .gc-stack__bar { background: #232f45; }
+  .gc-insight__row { border-bottom-color: #1e2839; }
+  .gc-mask { background: rgba(4, 8, 16, 0.55); }
+  .gc-stage-cell__dot { background: #2a3850; }
 }
 </style>

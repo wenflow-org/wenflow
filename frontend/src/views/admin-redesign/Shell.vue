@@ -896,6 +896,7 @@ html[data-theme='dark'] {
   .mshell__group-head--active .mshell__group-icon { color: #7aa2ff; }
   .mshell__group-badge { background: #1d2739; color: #6b7c96; }
   .mshell__group-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
+  .mshell__item-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
   .mshell__item { color: #9fb0c8; }
   .mshell__item:hover { background: #1b2740; color: #e6edf7; }
   .mshell__item--active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; box-shadow: inset 3px 0 0 var(--mk-blue); }

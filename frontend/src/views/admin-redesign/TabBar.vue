@@ -181,6 +181,8 @@ html[data-theme='dark'] .mk-tabbar__close:hover:not(:disabled) { background: #2c
 html[data-theme='dark'] .mk-tabbar__ctx { background: #17202f; border-color: #232f45; }
 html[data-theme='dark'] .mk-tabbar__ctx-item:hover:not(:disabled) { background: #1f2b40; color: #e6edf7; }
 html[data-theme='dark'] .mk-tabbar__ctx-sep { background: #232f45; }
+html[data-theme='dark'] .mk-tabbar__item { background: #1d2739; }
+html[data-theme='dark'] .mk-tabbar__item:hover { background: #232f45; }
 
 /* 1440px 中间档 */
 @media (min-width: 1440px) {

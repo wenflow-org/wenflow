@@ -782,4 +782,8 @@ html[data-theme='dark'] .al-cols__item:hover { background: #1f2b40; }
 }
 .al-cols__reset:hover { background: #eff6ff; }
 html[data-theme='dark'] .al-cols__reset:hover { background: #1f2b40; }
+html[data-theme='dark'] .log-tr--open td { background: #131c2c; }
+html[data-theme='dark'] .log-payload-row td,
+html[data-theme='dark'] .log-payload-row:hover td { background: #101826; }
+html[data-theme='dark'] .log-payload-row td { border-bottom-color: #1e2839; }
 </style>

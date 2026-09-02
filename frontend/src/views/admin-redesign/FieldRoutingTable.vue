@@ -989,5 +989,9 @@ html[data-theme='dark'] {
   .frt__agentcount { background: #253049; }
   .frt__persist--alias { background: rgba(251, 191, 36, 0.12); }
   .frt__fieldrow:hover { background: #1b2740; }
+
+  .frt__orch-summary { background: #101826; }
+  .frt__orch-textarea { background: #0f1624; }
+  .frt__orch-quick { background: rgba(91, 141, 239, 0.12); }
 }
 </style>

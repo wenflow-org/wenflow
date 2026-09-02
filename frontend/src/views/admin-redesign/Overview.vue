@@ -1408,5 +1408,7 @@ html[data-theme='dark'] {
   .brief-card__go:hover { background: rgba(91, 141, 239, 0.14); }
   .ov-health { background: #141c2b; }
   .ov-growth__bar--new, .trend__bar, .usage__bar { background: linear-gradient(180deg, #6aa0ff, #3d7cff); }
+
+  .ov-skill__rank { background: #1d2739; }
 }
 </style>

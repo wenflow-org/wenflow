@@ -3727,5 +3727,10 @@ html[data-theme='dark'] {
   .cp-timeline__kind[data-kind='evidence'] { background: rgba(45, 212, 191, 0.14); color: #5eead4; }
   .cp-timeline__stage[data-stage='goal'] { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
   .cp-timeline__stage[data-stage='path'] { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
+
+  .cp-learn-tree__ms { background: #141c2b; }
+  .cp-lesson-head { background: #141c2b; }
+  .cp-wrapup-ms__head { background: #141c2b; }
+  .cp-wrapup-card__icon { background: #1b2440; }
 }
 </style>
