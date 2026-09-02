@@ -4,6 +4,9 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">运营中心</strong>
       <span class="mk-status__sep"></span>
+      <span v-if="tab === 'workbench'" class="mk-status__meta">待处理反馈 {{ wbPendingFeedback }}</span>
+      <span v-if="tab === 'workbench'" class="mk-status__meta" :class="wbFailedPaths > 0 ? 'mk-status__meta--bad' : ''">失败路径 {{ wbFailedPaths }}</span>
+      <span v-if="tab === 'workbench'" class="mk-status__meta" :class="wbDeadLetters > 0 ? 'mk-status__meta--bad' : ''">死信 {{ wbDeadLetters }}</span>
       <span v-if="tab === 'content'" class="mk-status__meta">路径 {{ stats?.total ?? '—' }}</span>
       <span v-if="tab === 'content'" class="mk-status__meta">里程碑 {{ stats?.totalMilestones ?? '—' }}</span>
       <span v-if="tab === 'content'" class="mk-status__meta">任务 {{ stats?.totalTasks ?? '—' }}</span>
@@ -19,12 +22,64 @@
       </span>
     </div>
 
-    <!-- 内容/成就/公告 tab 切换（独立一行，对齐 TraceWaterfall 筛选条形态） -->
+    <!-- 工作台 / 内容 / 成就 / 公告 tab 切换（独立一行） -->
     <div class="mk-pills oh-tabs">
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'workbench' }" @click="switchTab('workbench')">工作台</button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'content' }" @click="switchTab('content')">内容管理</button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'achievements' }" @click="switchTab('achievements')">成就管理</button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'announcements' }" @click="switchTab('announcements')">公告</button>
     </div>
+
+    <!-- ===== Tab0: 工作台（待办聚合 + 运营概览） ===== -->
+    <template v-if="tab === 'workbench'">
+      <!-- 待办聚合：运营需要处理的事，点击直达对应页面并预筛 -->
+      <div class="ow-todos">
+        <button type="button" class="ow-todo" :class="{ 'is-bad': wbPendingFeedback > 0 }" title="点击查看待处理反馈" @click="goFeedbackPending">
+          <span class="ow-todo__num">{{ wbPendingFeedback }}</span>
+          <span class="ow-todo__label">待处理反馈</span>
+          <span class="ow-todo__hint">学习者低分反馈等待分流</span>
+        </button>
+        <button type="button" class="ow-todo" :class="{ 'is-bad': wbFailedPaths > 0 }" title="点击查看生成失败路径" @click="goFailedPaths">
+          <span class="ow-todo__num">{{ wbFailedPaths }}</span>
+          <span class="ow-todo__label">生成失败路径</span>
+          <span class="ow-todo__hint">目标对话产出路径失败，需排查</span>
+        </button>
+        <button type="button" class="ow-todo" :class="{ 'is-bad': wbDeadLetters > 0 }" title="点击查看 outbox 死信" @click="goDeadLetters">
+          <span class="ow-todo__num">{{ wbDeadLetters }}</span>
+          <span class="ow-todo__label">Outbox 死信</span>
+          <span class="ow-todo__hint">领域事件投递失败，影响画像/成就</span>
+        </button>
+        <button type="button" class="ow-todo" :class="{ 'is-warn': annDraft > 0 }" title="点击查看草稿公告" @click="switchTab('announcements')">
+          <span class="ow-todo__num">{{ annDraft }}</span>
+          <span class="ow-todo__label">草稿公告</span>
+          <span class="ow-todo__hint">已创建未发布的公告</span>
+        </button>
+      </div>
+
+      <!-- 运营概览：路径状态 + 公告状态 + 反馈趋势 -->
+      <div class="ow-overview">
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h4 class="mk-card__title">学习路径</h4>
+            <button type="button" class="mk-link" @click="switchTab('content')">管理 →</button>
+          </div>
+          <div class="ct-cards ow-path-cards">
+            <MkKpi v-for="c in statusCards" :key="c.label" :label="c.label" :value="c.value" :tone="c.tone" :hint="c.hint" />
+          </div>
+        </section>
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h4 class="mk-card__title">公告</h4>
+            <button type="button" class="mk-link" @click="switchTab('announcements')">管理 →</button>
+          </div>
+          <div class="ow-ann-stats">
+            <div class="ow-ann-stat"><b>{{ annActive }}</b><span>生效中</span></div>
+            <div class="ow-ann-stat"><b>{{ annDraft }}</b><span>草稿</span></div>
+            <div class="ow-ann-stat"><b>{{ annArchived }}</b><span>已下线</span></div>
+          </div>
+        </section>
+      </div>
+    </template>
 
     <!-- ===== Tab3: 公告（运营内容子模块，嵌入 Announcements 组件） ===== -->
     <Announcements v-if="tab === 'announcements'" ref="annRef" embedded />
@@ -369,10 +424,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { timeAgo, errMsg, shortId, liveAnnouncements } from './live'
 import { intent } from './store'
-import { adminLearningContentApi, adminAchievementsApi, adminUsersApi, type LearningContentStats, type LearningPathRow, type AchievementDef, type AchievementRecord } from '@/api/adminApi'
+import { adminLearningContentApi, adminAchievementsApi, adminUsersApi, adminFeedbackApi, adminDevtoolsApi, adminAnnouncementsApi, type LearningContentStats, type LearningPathRow, type AchievementDef, type AchievementRecord } from '@/api/adminApi'
 import { useRowMenu } from './useRowMenu'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -383,12 +438,14 @@ import Pagination from './Pagination.vue'
 import MkKpi from './MkKpi.vue'
 import Announcements from './Announcements.vue'
 
-/* ===== 一级 Tab：内容管理 / 成就管理 / 公告 ===== */
-const tab = ref<'content' | 'achievements' | 'announcements'>('content')
-function switchTab(t: 'content' | 'achievements' | 'announcements') {
+/* ===== 一级 Tab：工作台 / 内容管理 / 成就管理 / 公告 ===== */
+const tab = ref<'workbench' | 'content' | 'achievements' | 'announcements'>('workbench')
+function switchTab(t: 'workbench' | 'content' | 'achievements' | 'announcements') {
   tab.value = t
+  if (t === 'workbench') void loadWorkbench()
   if (t === 'content' && !contentLoaded.value) { void reload(); void loadStats() }
   if (t === 'achievements' && !defs.value.length && !defsLoading.value) void loadDefs()
+  if (t === 'announcements') void loadAnnouncements()
 }
 /* 命令面板快捷动作：新建公告 → 切到公告 tab（Announcements 挂载后消费 quickAction 打开弹窗） */
 watch(
@@ -401,11 +458,81 @@ watch(
   { immediate: true }
 )
 
-/* 公告 tab：嵌入 Announcements 组件，宿主状态条展示计数 + 新建入口（ref 通信） */
-const annRef = ref<InstanceType<typeof Announcements> | null>(null)
+/* ===== 工作台：待办聚合（反馈待处理 / 失败路径 / 死信 / 草稿公告） ===== */
+const wbPendingFeedback = ref(0)
+const wbFailedPaths = ref(0)
+const wbDeadLetters = ref(0)
+const wbLoading = ref(false)
+async function loadWorkbench() {
+  if (wbLoading.value) return
+  wbLoading.value = true
+  const [, , dead] = await Promise.all([
+    // 待处理反馈：后端 status=new 计数（与 Feedback 页口径一致）
+    adminFeedbackApi.list({ limit: 1, status: 'new' })
+      .then((r) => { const d = r.data?.data ?? r.data ?? {}; wbPendingFeedback.value = Number(d.pagination?.total ?? d.total ?? 0) })
+      .catch(() => { wbPendingFeedback.value = 0 }),
+    // 失败路径：学习内容 stats（与内容 tab 口径一致）
+    adminLearningContentApi.getStats()
+      .then((r) => { const s = (r.data?.data ?? r.data) as LearningContentStats | null; wbFailedPaths.value = s?.byStatus?.failed ?? 0 })
+      .catch(() => { wbFailedPaths.value = 0 }),
+    // outbox 死信：运维中心工具 tab 同源（返回 {deadCount, items}）
+    adminDevtoolsApi.getOutboxDead()
+      .then((r) => {
+        const d = r.data?.data as { deadCount?: number } | null | undefined
+        wbDeadLetters.value = Number(d?.deadCount ?? 0)
+      })
+      .catch(() => { wbDeadLetters.value = 0 })
+  ])
+  wbLoading.value = false
+  void dead
+}
+/** 待处理反馈 → 反馈中心（预筛待处理） */
+function goFeedbackPending() {
+  intent.scene = 'feedback'
+  intent.quickAction = '' // 确保不触发其他快捷动作
+  // 反馈中心无状态深链参数，直接导航；由 Feedback 页默认筛选待处理
+}
+/** 生成失败路径 → 内容管理 tab（预筛 failed） */
+function goFailedPaths() {
+  tab.value = 'content'
+  statusFilter.value = 'failed'
+  void reload()
+}
+/** outbox 死信 → 运维中心工具 tab */
+function goDeadLetters() {
+  intent.scene = 'ops-center'
+}
+/* 默认进入工作台：立即拉取待办聚合（公告计数由 live 层加载） */
+onMounted(() => {
+  void loadWorkbench()
+  void loadAnnouncements()
+})
 const annRows = computed(() => liveAnnouncements.value.length)
-const annActive = computed(() => annRef.value?.activeCount ?? 0)
-const annDraft = computed(() => annRef.value?.draftCount ?? 0)
+const annActive = computed(() => liveAnnouncements.value.filter((a) => a.status === 'published').length)
+const annDraft = computed(() => liveAnnouncements.value.filter((a) => a.status === 'draft').length)
+const annArchived = computed(() => liveAnnouncements.value.filter((a) => a.status === 'archived').length)
+async function loadAnnouncements() {
+  if (!liveAnnouncements.value.length) {
+    try {
+      const res = await adminAnnouncementsApi.list()
+      const body = res.data?.data ?? res.data ?? {}
+      const items = body.items || []
+      liveAnnouncements.value = items.map((a: Record<string, unknown>) => ({
+        id: String(a.id),
+        title: String(a.title || ''),
+        body: String(a.body || ''),
+        severity: (a.severity as 'info' | 'warning' | 'critical') || 'info',
+        status: (a.status as 'draft' | 'published' | 'archived') || 'draft',
+        publishedAt: (a.publishedAt as string) || null,
+        expiresAt: (a.expiresAt as string) || null,
+        createdBy: (a.createdBy as string) || null,
+        createdAt: String(a.createdAt || '')
+      }))
+    } catch { /* liveFailures 已兜底 */ }
+  }
+}
+/* 公告 tab：嵌入 Announcements 组件，宿主提供新建入口（ref 通信） */
+const annRef = ref<InstanceType<typeof Announcements> | null>(null)
 function annCreate() {
   annRef.value?.openCreate()
 }
@@ -858,8 +985,64 @@ void loadStats()
   .ac-none { font-size: 19.5px; }
 }
 
+/* ================= 工作台（待办聚合 + 运营概览） ================= */
+.ow-todos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.ow-todo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  background: var(--mk-surface);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.ow-todo:hover { border-color: rgba(44, 99, 208, 0.45); box-shadow: var(--mk-shadow-sm); }
+.ow-todo__num { font-size: 22px; font-weight: 800; color: var(--mk-muted); font-variant-numeric: tabular-nums; line-height: 1.2; }
+.ow-todo__label { font-size: 13px; font-weight: 700; color: var(--mk-ink); }
+.ow-todo__hint { font-size: 11px; color: var(--mk-faint); line-height: 1.4; }
+.ow-todo.is-bad { border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.05); }
+.ow-todo.is-bad .ow-todo__num { color: var(--mk-red, #dc2626); }
+.ow-todo.is-warn { border-color: rgba(217, 119, 6, 0.35); background: rgba(217, 119, 6, 0.05); }
+.ow-todo.is-warn .ow-todo__num { color: var(--mk-amber, #d97706); }
+
+.ow-overview {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+.ow-path-cards { margin-top: 4px; }
+.ow-ann-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding-top: 4px; }
+.ow-ann-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 6px;
+  border-radius: 8px;
+  background: var(--mk-surface-2, #f4f7fb);
+}
+.ow-ann-stat b { font-size: 18px; font-weight: 800; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
+.ow-ann-stat span { font-size: 11px; color: var(--mk-faint); }
+@media (max-width: 1100px) {
+  .ow-overview { grid-template-columns: 1fr; }
+}
+
 /* ================= 暗色模式（D1 补完）：运营中心 ================= */
 html[data-theme='dark'] {
   /* ac-grant-target/ac-candidate 已走 var(--mk-*) token，无需页面补丁 */
+  .ow-todo { background: #131b2a; }
+  .ow-todo.is-bad { background: rgba(239, 68, 68, 0.08); }
+  .ow-todo.is-warn { background: rgba(217, 119, 6, 0.08); }
+  .ow-ann-stat { background: #1d2739; }
 }
 </style>
