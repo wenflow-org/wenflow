@@ -659,6 +659,8 @@ model memory_traces {
   lastRetention   Float?
   source          String?   // derived（从 knowledgeState 确定性映射）| model（LLM 评估，预留）| review-event
   dueAt           DateTime? // 下次到期时间（FSRS/调度物化列；null 走旧惰性 isReviewDue 兜底）
+  fsrsStability   Float?    // FSRS-6 稳定性（天）：回忆率降到 desiredRetention 所需时间；null = 未初始化（走 legacy ACT-R 兜底）
+  fsrsDifficulty  Float?    // FSRS-6 难度（1-10）：null = 未初始化
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
