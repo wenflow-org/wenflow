@@ -45,6 +45,7 @@ rules:
   - normalizedInput.successCriteria 如果存在 observableResult 或 acceptanceCheck，必须用于约束里程碑目标与任务完成标准
   - normalizedInput.planningHints 如果存在，是上游对路径节奏的建议范围，优先用于决定概念数、milestone 数、周期上限；若缺失再使用默认范围
   - normalizedInput 中包含的场景、痛点和背景信息必须优先用于锚定路径场景、命名和范围边界
+  - 前提知识递归发现（RPKT）：先识别目标的核心概念，再对照 normalizedInput.learnerProfile（backgroundExperience/currentBaseline）与 conversationHistory 判断哪些前置知识已知、哪些未知；对未知前置递归追问"要理解 X 必须先懂什么"，最大深度 3 层，直至触及学习者已确认的知识边界。将发现的前置缺口纳入 cognitiveCore.prerequisiteTree，且 milestone 顺序必须匹配缺口链的深度顺序（从基础到高级，禁止跳过基础直接进入高级应用）。若用户明显为零基础（背景缺失），不得假设其已掌握前置，须显式补基础认知框架
   - 必须严格按以下顺序思考：第一步定义 cognitiveCore，第二步根据 cognitiveCore 设计 milestone，第三步输出兼容镜像字段；禁止跳过第一步直接生成 milestone
   - 当前平台执行环境仅支持文本输入与文本输出：不得把图片、视频、音频、截图、图表、界面观察、外部演示或其他非文本信息作为路径推进的必要前提；如果某个内容天然偏视觉、听觉或演示，必须改写为文字描述、文字步骤、文字化案例或结构化文本对比；可以提及外部资源作为课后可选扩展，但主路径不得依赖非文本资源才能继续推进
   - cognitiveCore 必须包含 1 个 cognitiveDomain 和 planningHints.conceptRange 范围内的 coreConcepts；若未提供 planningHints，默认 2-4 个
@@ -94,7 +95,11 @@ fields:
       正式认知结构，结构：
       {
         "cognitiveDomain": 这条路径主要训练的一体化底层能力,
-        "coreConcepts": [{ "id": "concept-1", "name": 关系描述式概念名, "role": "hub|supporting", "description": "..." }]
+        "coreConcepts": [{ "id": "concept-1", "name": 关系描述式概念名, "role": "hub|supporting", "description": "..." }],
+        "prerequisiteTree": 可选。前提知识缺口链（RPKT 递归发现），结构：
+        { "rootConcept": 目标核心概念, "knownConcepts": [已确认掌握的前置],
+          "unknownConcepts": [{ "concept": 未知前置, "depth": 1-3, "note": 需补什么 }],
+          "gapChain": [按深度从基础到高级排序的缺口概念], "maxDepth": 3 }
       }
   - name: cognitiveDesign
     type: object?
