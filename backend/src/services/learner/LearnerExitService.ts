@@ -37,6 +37,35 @@ export interface LearnerExitView {
   accountView: LearnerExitAccountView;
 }
 
+/**
+ * 交错排序：相邻复习项不共享 conceptKey（交错学习——训练学生从题目特征自主判断策略）。
+ * 贪心轮转：按 conceptKey 分组后轮流取，保证同概念不连续出现。
+ */
+function interleaveByConcept<T extends { conceptKey: string }>(items: T[], limit: number): T[] {
+  const buckets = new Map<string, T[]>();
+  for (const item of items) {
+    const key = item.conceptKey || '';
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(item);
+    else buckets.set(key, [item]);
+  }
+  const result: T[] = [];
+  const keys = Array.from(buckets.keys());
+  let added = true;
+  while (result.length < limit && added) {
+    added = false;
+    for (const key of keys) {
+      const bucket = buckets.get(key);
+      if (bucket && bucket.length > 0) {
+        result.push(bucket.shift()!);
+        added = true;
+        if (result.length >= limit) break;
+      }
+    }
+  }
+  return result;
+}
+
 export interface LearnerExitScope {
   userId: string;
   learningPathId?: string | null;
@@ -67,10 +96,11 @@ export class LearnerExitService {
     return { snapshot, dueReview, accountView };
   }
 
-  /** 到期复习点（记忆引擎 M2 的只读出口；写入仍由 teaching endSession 经 memoryTraceService 上报） */
+  /** 到期复习点（记忆引擎 M2 的只读出口；交错排序：相邻项不共享 conceptKey，训练策略选择） */
   async getDueReview(userId: string, limit = 5): Promise<LearnerExitDueReviewItem[]> {
-    const traces = await memoryTraceService.getDueTraces(userId, { limit });
-    return traces.map((t) => ({
+    // 获取更多候选（2×），以便交错后仍有足够条目
+    const traces = await memoryTraceService.getDueTraces(userId, { limit: Math.max(limit, limit * 2) });
+    const items = traces.map((t) => ({
       conceptKey: t.conceptKey,
       label: t.label,
       masteryScore: t.masteryScore,
@@ -78,6 +108,10 @@ export class LearnerExitService {
       reason: t.reason,
       extractionCount: t.extractionCount,
     }));
+
+    // 交错排序：相邻复习项不共享 conceptKey（交错学习——训练学生从题目特征自主判断策略）
+    const interleaved = interleaveByConcept(items, limit);
+    return interleaved;
   }
 
   /** 账户视图：name/xp/level（level 单点公式，替代散落的 Math.floor(Math.sqrt(xp/100))+1） */
