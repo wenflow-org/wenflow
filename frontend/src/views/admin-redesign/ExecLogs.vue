@@ -7,7 +7,7 @@
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ liveLogsTotal }} 条</span>
       <span v-if="logs.length" class="mk-status__meta">失败 {{ errCount }} · 成功率 {{ successRate }}%</span>
-      <span v-if="logs.length" class="mk-status__meta mono" :title="'延迟分位（仅成功日志）：P50 = 中位耗时 · P99 = 99% 请求耗时'">P50 {{ latencyP50 }} · P99 {{ latencyP99 }}</span>
+      <span v-if="logs.length" class="mk-status__meta mono" :title="'延迟分位（仅成功日志）：P50 = 中位耗时 · P99 = 99% 请求耗时'">耗时 P50 {{ latencyP50 }} · P99 {{ latencyP99 }}</span>
       <span v-if="isFiltered" class="mk-status__filter">
         {{ filterLabel }}
         <button type="button" class="mk-status__clear" @click="clearFilter">×</button>

@@ -3,17 +3,17 @@
     <summary class="mk-card__head sk-rec__summary">
       <div class="sk-rec__title">
         <strong>技能对账</strong>
-        <span class="mk-card__meta">技能登记册 × manifest × gateway 注册 × ACTIVE 版本</span>
+        <span class="mk-card__meta" title="核对四个来源的登记是否一致：配置文件清单（manifest）、系统运行注册（gateway）、生效版本（ACTIVE prompt）、技能登记册">配置文件 × 运行注册 × 生效版本 × 登记册</span>
         <button v-if="recDiff" type="button" class="mk-link sk-rec__clear" @click.stop="clearRecDiff">✕ 清除差集定位</button>
       </div>
       <div v-if="recLoading" class="sk-rec__loading">加载中…</div>
       <template v-else-if="recReport">
         <div class="sk-rec__pills">
-          <span class="mk-pill" :title="`技能登记册全量（含外挂能力）vs 目录`">完成度 live {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
+          <span class="mk-pill" :title="`技能登记册全量（含外挂能力）vs 目录`">已上线 {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
           <span v-if="recReport.summary.unregistered" class="mk-pill sk-pill--bad">未注册 {{ recReport.summary.unregistered }}</span>
-          <span v-if="recReport.summary.activeMissing" class="mk-pill sk-pill--warn">缺 ACTIVE {{ recReport.summary.activeMissing }}</span>
-          <span v-if="recReport.summary.orphanRegistrations" class="mk-pill sk-pill--bad">幽灵注册 {{ recReport.summary.orphanRegistrations }}</span>
-          <span v-else class="mk-pill">幽灵注册 0</span>
+          <span v-if="recReport.summary.activeMissing" class="mk-pill sk-pill--warn" title="缺 ACTIVE：无生效版本">无生效版本 {{ recReport.summary.activeMissing }}</span>
+          <span v-if="recReport.summary.orphanRegistrations" class="mk-pill sk-pill--bad" title="登记册已删除/不存在，但注册记录仍残留（幽灵注册）">失效注册 {{ recReport.summary.orphanRegistrations }}</span>
+          <span v-else class="mk-pill">失效注册 0</span>
         </div>
         <button type="button" class="sk-rec__refresh" :disabled="recLoading" @click.stop="refresh">刷新</button>
       </template>
@@ -33,17 +33,17 @@
           <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !recOnlyAbnormal }" @click="recOnlyAbnormal = false">全部</button>
           <button type="button" class="mk-pill" :class="{ 'mk-pill--active': recOnlyAbnormal }" @click="recOnlyAbnormal = true">仅看异常</button>
         </div>
-        <span class="mk-card__meta">异常 = 未注册 / 缺 ACTIVE / 未上线（非 live）</span>
+        <span class="mk-card__meta" title="异常 = 未注册（配置文件缺失）/ 缺 ACTIVE（无生效版本）/ 未上线（完成度非 live）">异常 = 未注册 / 无生效版本 / 未上线</span>
       </div>
       <div class="mk-table-scroll">
         <table v-if="recReport.items.length" class="mk-table sk-table sk-rec-table">
           <thead>
             <tr>
               <th>Skill</th>
-              <th>技能登记册</th>
-              <th>manifest</th>
-              <th>gateway 注册</th>
-              <th>ACTIVE prompt</th>
+              <th title="是否存在于技能登记册">登记册</th>
+              <th title="manifest：是否在配置文件中声明">配置声明</th>
+              <th title="gateway 注册：是否已在系统运行中注册">运行注册</th>
+              <th title="ACTIVE prompt：是否有生效版本">生效版本</th>
               <th>完成度</th>
               <th>差集</th>
             </tr>
@@ -85,7 +85,7 @@
                 </td>
                 <td>
                   <span v-if="e.row.diff === 'unregistered'" class="sk-rec-diff sk-rec-diff--bad">未注册</span>
-                  <span v-else-if="e.row.diff === 'active-missing'" class="sk-rec-diff sk-rec-diff--warn">缺 ACTIVE</span>
+                  <span v-else-if="e.row.diff === 'active-missing'" class="sk-rec-diff sk-rec-diff--warn" title="缺 ACTIVE：无生效版本">无生效版本</span>
                   <span v-else class="mk-na">—</span>
                 </td>
               </tr>
@@ -97,7 +97,7 @@
         <button type="button" class="mk-link" @click="recLoadMore">加载更多（已显示 {{ recShown.length }} / {{ recFlat.length }}）</button>
       </div>
       <div v-if="recReport.orphanRegistrations.length" class="sk-rec-orphans">
-        <strong>幽灵注册残留</strong>
+        <strong title="登记册已删除/不存在，但注册记录仍残留">失效注册残留</strong>
         <span v-for="orphan in recReport.orphanRegistrations" :key="orphan.name" class="sk-rec-tag sk-rec-tag--bad">{{ orphan.name }}</span>
       </div>
       <div class="sk-rec-legend">
@@ -108,8 +108,8 @@
       </div>
     </template>
     <div v-else class="mk-empty">
-      <strong>对账面板需要真实数据</strong>
-      <span>请切换到「真实数据」模式后查看。</span>
+      <strong>暂无对账数据</strong>
+      <span>技能尚未登记，或对账报告暂不可用。可点击「刷新」重试。</span>
     </div>
   </details>
 </template>

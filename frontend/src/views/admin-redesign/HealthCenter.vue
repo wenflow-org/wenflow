@@ -21,6 +21,17 @@
     </div>
 
     <template v-if="displayReport">
+      <!-- 面向运营的一句话引导：页面用途 + 关键术语速查（折叠，避免噪音） -->
+      <details class="hc-guide">
+        <summary class="hc-guide__summary">本页看什么？<span class="mk-card__meta">技能是否健康运行 · 点开看术语速查</span></summary>
+        <div class="hc-guide__body">
+          <p><b>健康检查</b>：系统自动检查技能运行的各个环境（配置、注册、提示词版本等），异常项可一键修复或跳转处理。</p>
+          <p><b>漂移</b>：配置内容与实际运行不一致——通常是修改了 Skill 配置但尚未同步/发布生效，去对应页面点「同步/发布」即可。</p>
+          <p><b>对账</b>：核对技能在四个登记来源（配置文件、运行注册、生效版本、登记册）中是否齐全一致；「失效注册 / 无生效版本」等需要人工处理。</p>
+          <p><b>ACTIVE / W1-W5</b>：系统内部对「当前生效的提示词版本 / 各类自动检查」的编号称呼，处理时按页面提示操作即可，不影响理解问题本身。</p>
+        </div>
+      </details>
+
       <!-- 四张概要卡片（MkKpi 统一形态：数字 + 标签 + 副行，可点击跳转锚点） -->
       <div class="hc-summary">
         <button type="button" class="hc-card" :class="healthAbnormal > 0 ? 'hc-card--warn' : 'hc-card--ok'" @click="scrollTo('health')" :title="`${displayReport.health.summary.total} 项健康检查，${healthAbnormal} 项异常`">
@@ -102,7 +113,7 @@
         </details>
       </section>
 
-      <!-- 漂移 -->
+      <!-- 漂移：配置与生效不一致（改完配置没同步/发布，普通运营可理解为「配置改了但没生效」） -->
       <section v-if="driftAny" class="mk-card" id="hc-drift">
         <details class="hc-details" open>
           <summary class="mk-card__head hc-details__summary">
@@ -110,22 +121,23 @@
             <span class="mk-card__meta">{{ driftActionable }} 项需处理</span>
             <span v-if="drift.runtime" class="mk-card__meta">遥测 {{ drift.runtime }} 条</span>
           </summary>
+          <p class="hc-drift__desc">配置内容与实际运行不一致：通常是修改了 Skill 配置但尚未同步/发布生效。处理后可保持线上行为与配置一致。</p>
           <div class="hc-drift">
             <div class="hc-drift__item" v-if="drift.contract">
-              <strong>{{ TERMS.driftContractQualified }}</strong>
-              <span class="mk-badge mk-badge--bad">{{ drift.contract }}</span>
-              <button type="button" class="mk-link" @click="goDrift('contract')">编排结构 →</button>
+              <strong :title="TERMS.driftValueMismatch">{{ TERMS.driftContractQualified }}</strong>
+              <span class="mk-badge mk-badge--bad" title="编排文件声明与数据库不一致的处数">{{ drift.contract }}</span>
+              <button type="button" class="mk-link" @click="goDrift('contract')">去同步 →</button>
             </div>
             <div class="hc-drift__item" v-if="drift.hash">
-              <strong>{{ TERMS.driftHashQualified }}</strong>
-              <span class="mk-badge mk-badge--bad">{{ drift.hash }}</span>
-              <button type="button" class="mk-link" @click="goDrift('hash')">Skill 工作台 →</button>
+              <strong title="核心文件与编译产物、数据库三方哈希不一致">{{ TERMS.driftHashQualified }}</strong>
+              <span class="mk-badge mk-badge--bad" title="需重新编译/发布使生效的处数">{{ drift.hash }}</span>
+              <button type="button" class="mk-link" @click="goDrift('hash')">去发布 →</button>
             </div>
             <div class="hc-drift__item" v-if="drift.runtime">
-              <strong>{{ TERMS.driftRuntime }}</strong>
+              <strong title="线上实际调用使用的提示词版本与当前配置不一致">{{ TERMS.driftRuntime }}</strong>
               <span class="mk-badge mk-badge--info" :title="`所有调用中 prompt 与数据库 ACTIVE 不一致的历史记录（最近 ${drift.runtime} 条采样）`">{{ drift.runtime }}</span>
               <button type="button" class="mk-link" @click="goDrift('runtime')">执行日志 →</button>
-              <span class="hc-drift__hint">历史遥测记录，只读观测；数据库同步后不再新增（健康检查 W4 一键修复）</span>
+              <span class="hc-drift__hint">只读观测记录：若确认线上行为正常可忽略；配置同步后不再新增。</span>
             </div>
           </div>
         </details>
@@ -191,20 +203,20 @@ const completionLive = computed(() => displayReport.value?.completion?.live || 0
 
 /** 概要卡 tooltip：解释口径，避免红色数字误读 */
 const driftCardTitle = computed(() => {
-  const parts = [`需处理（契约 + W4）：${driftActionable.value} 项`]
-  if (drift.value.runtime > 0) parts.push(`运行时遥测 ${drift.value.runtime} 条为只读观测，不计入需处理`)
+  const parts = [`需处理：${driftActionable.value} 项（配置改后未同步/发布生效）`]
+  if (drift.value.runtime > 0) parts.push(`另 ${drift.value.runtime} 条运行观测记录为只读参考，不计入需处理`)
   return parts.join('；')
 })
 const reconCardTitle = computed(() => {
   const r = reconciliation.value
   const parts = [
-    `缺注册 ${r.missingRegistration}`,
-    `幽灵注册 ${r.zombieRegistration}`,
-    `缺 ACTIVE ${r.missingActive}`,
-    `幽灵 ACTIVE ${r.zombieActive}`,
-    `接线差集 ${r.unwired}`,
+    `登记缺项 ${r.missingRegistration}`,
+    `失效注册 ${r.zombieRegistration}`,
+    `无生效版本 ${r.missingActive}`,
+    `失效生效版本 ${r.zombieActive}`,
+    `接线不一致 ${r.unwired}`,
   ]
-  const note = r.zombieSkillActive > 0 ? `（W1 僵尸 ACTIVE 残留 ${r.zombieSkillActive} 条与健康检查「ACTIVE 检查」同源，不重复计数）` : ''
+  const note = r.zombieSkillActive > 0 ? `（另有 ${r.zombieSkillActive} 条失效 ACTIVE 与健康检查「生效版本检查」同源，不重复计数）` : ''
   return parts.join(' · ') + note
 })
 const badgeTitle = computed(() => {
@@ -213,7 +225,7 @@ const badgeTitle = computed(() => {
   if (c.error > 0) parts.push(`${c.error} 项严重`)
   if (c.warn > 0) parts.push(`${c.warn} 项关注`)
   if (global.value.abnormalSkills > 0) parts.push(`${global.value.abnormalSkills} 项技能完成度未达标`)
-  const note = drift.value.runtime > 0 ? `；另有运行时遥测 ${drift.value.runtime} 条（只读观测，非异常）` : ''
+  const note = drift.value.runtime > 0 ? `；另有 ${drift.value.runtime} 条运行观测记录（只读参考，非异常）` : ''
   return parts.length > 0 ? parts.join('、') + note : '全部健康'
 })
 
@@ -440,6 +452,31 @@ defineExpose({ refresh })
 .hc-details__summary { cursor: pointer; user-select: none; list-style: none; }
 .hc-details__summary::-webkit-details-marker { display: none; }
 
+/* 面向运营的一句话引导（折叠说明条） */
+.hc-guide {
+  border: 1px dashed var(--mk-line);
+  border-radius: 10px;
+  background: var(--mk-surface);
+}
+.hc-guide__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  font-size: var(--mk-fs-13);
+  font-weight: 700;
+  color: var(--mk-blue);
+}
+.hc-guide__summary::-webkit-details-marker { display: none; }
+.hc-guide__summary::before { content: "▸"; color: var(--mk-blue); transition: transform 0.14s ease; }
+.hc-guide[open] > .hc-guide__summary::before { transform: rotate(90deg); }
+.hc-guide__body { padding: 2px 16px 12px; display: grid; gap: 6px; }
+.hc-guide__body p { margin: 0; font-size: var(--mk-fs-12_5); color: var(--mk-muted); line-height: 1.6; }
+.hc-guide__body b { color: var(--mk-ink); font-weight: 700; }
+
 /* 健康检查行 */
 .hc-check { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; padding: 0 16px; border-bottom: 1px solid var(--mk-line); }
 .hc-check:last-child { border-bottom: none; }
@@ -470,6 +507,7 @@ defineExpose({ refresh })
 .hc-ok .hc-check:last-child { border-bottom: none; }
 
 /* 漂移 */
+.hc-drift__desc { margin: 0; padding: 10px 16px 2px; font-size: var(--mk-fs-12_5); color: var(--mk-muted); line-height: 1.6; border-bottom: 1px solid var(--mk-line); }
 .hc-drift { padding: 8px 0; }
 .hc-drift__item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--mk-line); flex-wrap: wrap; }
 .hc-drift__item:last-child { border-bottom: none; }
