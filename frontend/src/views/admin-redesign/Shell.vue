@@ -47,6 +47,7 @@
             :title="`${group.title}（${group.items.length} 项）`"
             @click="toggleGroup(group.title)"
           >
+            <svg class="mshell__group-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" v-html="groupIcon(group.title)"></svg>
             <span class="mshell__group-name">{{ group.title }}</span>
             <span v-if="groupBadgeCount(group.title)" class="mshell__group-badge" :class="{ 'mshell__group-badge--alarm': groupHasAlarm(group.title) }" :title="groupBadgeTitle(group.title)">{{ groupBadgeCount(group.title) }}</span>
             <span class="mshell__group-arrow" aria-hidden="true">▸</span>
@@ -333,6 +334,18 @@ const groupedScenes = computed(() => {
 
 /* ===== 组级折叠（对齐 AntD SubMenu 模式）：组标题点击展开/收起，
    当前页所在组自动展开；状态 localStorage 持久化 ===== */
+/** 组标题 SVG 图标（lucide 风格线性图标，内联 path） */
+const GROUP_ICONS: Record<string, string> = {
+  学习者: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  仿真实验室: '<path d="M10 2v7.5L4.5 19a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L14 9.5V2"/><path d="M8.5 2h7"/><path d="M7 14h10"/>',
+  'Skill 管理': '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
+  运营: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+  配置: '<line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/>',
+  观测: '<path d="M3 3v18h18"/><path d="m7 15 4-5 3 3 5-7"/>',
+}
+function groupIcon(title: string): string {
+  return GROUP_ICONS[title] || ''
+}
 const GROUP_OPEN_KEY = 'wf_admin_group_open'
 const openGroups = ref<Set<string>>(loadOpenGroups())
 function loadOpenGroups(): Set<string> {
@@ -443,27 +456,35 @@ function groupBadgeTitle(title: string): string {
 }
 .mshell__pinned .mshell__item { font-weight: 800; }
 .mshell__group { display: grid; gap: 1px; }
-/* 组头（可点击折叠）：组名 + 聚合徽章 + 箭头 */
+/* 组头（可点击折叠）：组图标 + 组名 + 聚合徽章 + 箭头 */
 .mshell__group-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  padding: 6px 10px 4px;
+  padding: 7px 10px 5px;
   border: 0;
   background: transparent;
   font: inherit;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 800;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--mk-faint);
+  letter-spacing: 0;
+  color: #2b3a55;
   cursor: pointer;
   border-radius: 8px;
   transition: color 0.12s ease, background 0.12s ease;
 }
-.mshell__group-head:hover { color: var(--mk-muted); background: rgba(90, 110, 140, 0.06); }
+.mshell__group-head:hover { color: var(--mk-accent-deep, #1f57cc); background: rgba(90, 110, 140, 0.06); }
 .mshell__group-head--active { color: var(--mk-accent-deep, #1f57cc); }
+.mshell__group-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--mk-faint);
+  transition: color 0.12s ease;
+}
+.mshell__group-head:hover .mshell__group-icon,
+.mshell__group-head--active .mshell__group-icon { color: var(--mk-accent-deep, #1f57cc); }
 .mshell__group-name { flex: 1; text-align: left; }
 .mshell__group-badge {
   padding: 0 6px;
@@ -867,9 +888,12 @@ html[data-theme='dark'] {
   .mshell { background: #0f1624; color: #e6edf7; }
   .mshell__side { background: #131b2a; border-right-color: #232f45; }
   .mshell__pinned { border-bottom-color: #232f45; }
-  .mshell__group-head { color: #6b7c96; }
-  .mshell__group-head:hover { color: #9fb0c8; background: rgba(120, 140, 170, 0.08); }
+  .mshell__group-head { color: #c9d6e8; }
+  .mshell__group-head:hover { color: #7aa2ff; background: rgba(120, 140, 170, 0.08); }
   .mshell__group-head--active { color: #7aa2ff; }
+  .mshell__group-icon { color: #6b7c96; }
+  .mshell__group-head:hover .mshell__group-icon,
+  .mshell__group-head--active .mshell__group-icon { color: #7aa2ff; }
   .mshell__group-badge { background: #1d2739; color: #6b7c96; }
   .mshell__group-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
   .mshell__item { color: #9fb0c8; }
