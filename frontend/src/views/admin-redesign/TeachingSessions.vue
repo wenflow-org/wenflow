@@ -775,7 +775,7 @@ function progressTitle(r: Row): string {
 .ts-panel {
   width: min(560px, 100vw);
   height: 100%;
-  background: #fff;
+  background: var(--mk-surface);
   box-shadow: var(--mk-shadow-drawer);
   display: grid;
   grid-template-rows: auto 1fr;
@@ -799,7 +799,7 @@ function progressTitle(r: Row): string {
 .ts-panel__body { padding: 16px 18px; display: grid; gap: 16px; align-content: start; overflow-y: auto; }
 /* P2-2 抽屉 tabs */
 .ts-tabs { display: flex; gap: 4px; padding-bottom: 10px; border-bottom: 1px solid var(--mk-line); position: sticky; top: 0; background: var(--mk-surface); z-index: 1; }
-html[data-theme='dark'] .ts-tabs { background: #141c2b; }
+html[data-theme='dark'] .ts-tabs { background: var(--mk-surface); }
 .ts-tabs__item {
   border: 1px solid transparent; background: transparent; padding: 5px 12px;
   border-radius: 8px; font: inherit; font-size: var(--mk-fs-12_5); font-weight: 700;
@@ -816,7 +816,7 @@ html[data-theme='dark'] .ts-tabs__item--on { background: rgba(91, 141, 239, 0.18
 .ts-timeline__item::before { content: ''; position: absolute; left: 4px; top: 18px; bottom: -7px; width: 1px; background: var(--mk-line); }
 .ts-timeline__item:last-child::before { display: none; }
 .ts-timeline__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--mk-faint); flex-shrink: 0; margin-top: 4px; z-index: 1; box-shadow: 0 0 0 2px var(--mk-surface); }
-html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px #141c2b; }
+html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surface); }
 .ts-timeline__item--ok .ts-timeline__dot { background: var(--mk-green); }
 .ts-timeline__item--warn .ts-timeline__dot { background: var(--mk-amber); }
 .ts-timeline__item--bad .ts-timeline__dot { background: var(--mk-red); }
@@ -949,6 +949,7 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px #141c2b; }
 
 /* ================= 暗色模式（D1 补完）：教学会话 ================= */
 html[data-theme='dark'] {
+  .ts-mask { background: rgba(4, 8, 16, 0.55); }
   .ts-tag--virtual { background: #1c2637; color: #8fa3bd; border-color: #33415c; }
   .ts-tag--test { background: rgba(251, 191, 36, 0.16); color: #fcd34d; }
   .ts-panel__close { background: #232f45; color: var(--mk-muted); }
