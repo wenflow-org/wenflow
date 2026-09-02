@@ -6,6 +6,7 @@
 
 import prisma from '../../config/database';
 import learningStateService from '../../services/learning/learning-state.service';
+import { computeCalibrationBias } from '../../services/learner/calibration.service';
 import {
   LearnerModelProfile,
   CognitiveProfile,
@@ -107,14 +108,20 @@ export class ProfileAggregator {
   async aggregateProfile(userId: string): Promise<ProfileAggregationResult> {
     const changes: string[] = [];
     
-    const [goalConversation, baseline, metrics, sessions] = await Promise.all([
+    const [goalConversation, baseline, metrics, sessions, calibrationBias] = await Promise.all([
       this.fetchGoalConversationData(userId),
       this.fetchBaselineData(userId),
       this.fetchMetricsData(userId),
-      this.fetchSessionData(userId)
+      this.fetchSessionData(userId),
+      computeCalibrationBias(userId),
     ]);
     
     const cognitive = this.mergeCognitive(goalConversation?.cognitive, changes);
+    // 元认知校准闭环：数据驱动校准（来自 memory_traces FSRS 实际表现）覆盖 LLM 理解的自评
+    if (calibrationBias !== 'accurate') {
+      cognitive.selfAssessmentAccuracy = calibrationBias;
+      changes.push(`认知校准：LLM 自评 → 数据驱动 ${calibrationBias}`);
+    }
     const behavioral = this.mergeBehavioral(baseline, changes);
     const learning = this.mergeLearning(metrics, goalConversation?.background, changes);
     const preferences = this.mergePreferences(goalConversation?.preferences, changes);
