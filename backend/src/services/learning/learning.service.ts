@@ -48,6 +48,7 @@ import { buildFramedNormalizedInput } from './path-planning-hints';
 import { assembleStageDesignerChannels } from '../field-dispatcher';
 import { stageDesignerDefinition } from '../../skills/stage-designer';
 import { pathAgentDefinition } from '../../skills/path-planning';
+import { pathReviewerDefinition } from '../../skills/path-reviewer';
 
 interface CreateGoalData {
   userId: string;
@@ -3292,6 +3293,38 @@ class LearningService {
     try {
       logger.info('开始生成学习路径...', { userId: data.userId, goal: data.description });
       const analysis = await this.analyzePathWithAgent(data);
+      // 路径评审（CIDDP 五维度）：best-effort，不阻断路径生成
+      let pathReview: any = null;
+      try {
+        const reviewResult = await executeSkill(pathReviewerDefinition, {
+          pathPlan: {
+            name: analysis.pathName,
+            summary: analysis.summary,
+            cognitiveCore: analysis.cognitiveDesign,
+            milestones: analysis.suggestedMilestones,
+            estimatedHours: analysis.estimatedTotalHours,
+          },
+          goalContext: {
+            surfaceGoal: (data as any).description,
+            confirmedProposal: (data as any).confirmedProposal,
+            learnerProfile: (data as any).userProfile?.learnerProfile,
+          },
+          prerreqTree: (data as any).userProfile?.normalizedInput?.prerequisiteTree,
+        });
+        if (reviewResult?.success && reviewResult?.output) {
+          pathReview = reviewResult.output;
+          if (pathReview.passed === false && pathReview.replanInstructions) {
+            logger.info('[path-reviewer] 路径未通过评审，已记录重规划指令', {
+              score: pathReview.score,
+              replanInstructions: pathReview.replanInstructions,
+            });
+          }
+        }
+      } catch (reviewError) {
+        logger.warn('[path-reviewer] 评审调用失败（best-effort，不阻断生成）', {
+          error: reviewError instanceof Error ? reviewError.message : String(reviewError),
+        });
+      }
       if (data.existingPathId && coreRunId) {
         await this.heartbeatGenerationRun(data.existingPathId, coreRunId, { progress: 50 });
       }
@@ -3310,6 +3343,7 @@ class LearningService {
       const fullPath = await this.persistGeneratedPath(data, {
         ...analysis,
         cognitiveDesign,
+        pathReview,
       }, normalizedMilestonesData, coreRunId);
       const duration = Date.now() - startTime;
       const sceneSummary = buildSceneSummaryFromFraming(
