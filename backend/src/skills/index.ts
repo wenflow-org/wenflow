@@ -106,6 +106,7 @@ import { virtualLearnerRefereeDefinition } from './virtual-learner-referee';
 import { virtualLearnerMemoryCuratorDefinition } from './virtual-learner-memory-curator';
 import { virtualLearnerActorAuditorDefinition } from './virtual-learner-actor-auditor';
 import { pathReviewerDefinition, pathReviewer as pathReviewerFn } from './path-reviewer';
+import { kcMapperDefinition, kcMapper as kcMapperFn } from './kc-mapper';
 import { mcpToolDefinition } from './mcp-tool';
 
 export const allSkillDefinitions: SkillDefinition[] = [
@@ -122,6 +123,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   virtualLearnerMemoryCuratorDefinition,
   virtualLearnerActorAuditorDefinition,
   pathReviewerDefinition,
+  kcMapperDefinition,
   mcpToolDefinition,
   ...auxSkillDefinitions,
   // 核心 LLM 能力单元（注册为 Skill 以确保 agent-registry 可见）
@@ -202,6 +204,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'virtual-learner-memory-curator': virtualLearnerMemoryCuratorFn,
   'virtual-learner-actor-auditor': virtualLearnerActorAuditorFn,
   'path-reviewer': pathReviewerFn,
+  'kc-mapper': kcMapperFn,
   'mcp-tool': executeMcpToolFn,
   ...auxSkillHandlers,
   // 核心 LLM 能力单元（原 agents/，已迁入 skills/）

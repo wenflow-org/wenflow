@@ -171,6 +171,18 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.3, maxTokens: 4000 }
   },
+  {
+    id: 'skill:kc-mapper',
+    name: '知识组件映射 Skill',
+    description: '将认知概念和子任务分解为细粒度 KC，标注前置依赖关系',
+    category: 'path',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Path',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.3, maxTokens: 8000 }
+  },
 
   // ============ Learning 下辖 Skills ============
   {
@@ -397,7 +409,7 @@ for (const item of AGENT_MANIFEST) {
  */
 export const LEGACY_AGENT_MEMBERS: Record<string, string[]> = {
   'goal-agent': ['skill:goal-conversation'],
-  'path-agent': ['skill:path-planning', 'skill:stage-designer', 'skill:path-reviewer'],
+  'path-agent': ['skill:path-planning', 'skill:stage-designer', 'skill:path-reviewer', 'skill:kc-mapper'],
   'teaching-agent': ['skill:teaching-turn', 'skill:peer-reinforcement', 'skill:session-wrapup', 'skill:adaptive-guidance-copy'],
   'profile-agent': ['skill:learner-model', 'skill:lesson-knowledge-enricher'],
   'simulation-agent': [

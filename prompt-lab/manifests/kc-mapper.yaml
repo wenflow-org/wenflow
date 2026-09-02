@@ -1,0 +1,39 @@
+version: prompt-lab-manifest/v1
+skillId: kc-mapper
+agentId: skill:kc-mapper
+name: default-skill-kc-mapper
+archetype: extractor
+description: 知识组件映射（KC 分解 + 前置依赖图）
+acceptableAgentIds:
+  - skill:kc-mapper
+  - path-agent
+publish:
+  enabled: true
+  exportTargets:
+    - platform-prompts
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: extraction
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: blocking
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: path-generation, phases: [kc-mapped], defaultPhase: kc-mapped, terminalPhases: [kc-mapped], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership:
+  tier: production
+  visibility: internal
+tags:
+  - core-skill
+  - extractor
+  - path-phase
+  - v4
+notes: >
+  KC 映射器（LLMKT 递归标注法）：将认知概念和子任务分解为细粒度 KC，标注前置依赖。
+  运行时机：stage-designer 完成后，在 enrichLearningPathWithAnderson 尾部调用。
