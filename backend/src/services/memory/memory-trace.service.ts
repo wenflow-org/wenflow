@@ -23,6 +23,7 @@ import {
   type FsrsGradeCode,
   type FsrsMemoryState,
 } from './fsrs';
+import { getActiveForConcepts } from '../learner/misconception-ledger.service';
 
 export type MemoryStability = 'unknown' | 'fragile' | 'developing' | 'stable';
 
@@ -313,12 +314,16 @@ class MemoryTraceService {
         : fsrsStateFromLegacy(trace.masteryScore, trace.extractionCount, trace.lastSeenAt);
       const now = new Date();
       const result = fsrsSchedule(prev, grade, now);
+      // 语义干扰矩阵：活跃误解 → 稳定性降低（下次复习更早，对比式纠错）
+      const activeMisconceptions = await getActiveForConcepts(userId, [conceptKey], 1);
+      const interferenceMultiplier = activeMisconceptions.length > 0 ? 0.85 : 1;
+      const adjustedStability = result.state.stability * interferenceMultiplier;
       await prisma.memory_traces.updateMany({
         where: { userId, conceptKey },
         data: {
-          fsrsStability: result.state.stability,
+          fsrsStability: adjustedStability,
           fsrsDifficulty: result.state.difficulty,
-          dueAt: new Date(now.getTime() + result.intervalDays * DAY_MS),
+          dueAt: new Date(now.getTime() + Math.round(result.intervalDays * interferenceMultiplier) * DAY_MS),
         },
       });
       return;
