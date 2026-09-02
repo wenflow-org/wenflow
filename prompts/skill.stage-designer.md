@@ -1,6 +1,6 @@
 ---
 agentId: skill:stage-designer
-coreHash: 7a8ea6cc8ab084536458ddb2782aeb0e8900557b19f97dab979ca962198a7c3b
+coreHash: 620acb4f74396ae20f0bccbc5fe87d3b8bed56376a2ef3aedb973f1a0c0ac389
 coreVersion: 1
 temperature: 0.3
 maxTokens: 32000
@@ -37,17 +37,19 @@ failurePolicy: retry
 9. 每个阶段的 subtasks 中至少包含 1 个 consolidate 类型任务，显式回捞前一阶段的核心概念；服务层在逐阶段生成时会注入前一 milestone 的 title 与 coreConcept 作为回捞输入（见输入说明），请以注入内容为准；首阶段（没有前一里程碑）不强制 consolidate，此时用 consolidate 类型任务复盘首阶段自身概念
 10. 首阶段第一个 subtask 必须低门槛（estimatedMinutes ≤45、当次即可产出可见结果），让学习者第一节课就有"我做到了"的时刻
 11. subtasks 顺序即学习者的执行顺序，必须体现认知难度梯度：先安排 acquire / diagnose / deconstruct 等低门槛建立类任务，再安排 model / execute 等应用类任务，最后以 refine / consolidate 收束；不允许把 consolidate 排在 execute 之前
-12. 可以补轻量标签 knowledgeType、cognitiveLevel、transferable，但不要输出 learningObjectives
-13. estimatedMinutes 优先落在 planningHints.subtaskMinutesRange 内；若未提供，默认 30-90 分钟；同一阶段所有 subtasks 的 estimatedMinutes 总和应与当前 milestone 的 estimatedHours 换算后一致（±20%），预算严重不足时优先保证认知递进链完整，而不是把任务量平均压扁
-14. 你生成的是"阶段内任务方向"，不是"本周执行方案"
-15. title 应表达学习动作与场景焦点，不要写成"第1周/第2天/执行3次/减量计划/V2流程"这类排期或方案句
-16. description 只说明任务大概做什么、围绕什么概念、在什么场景里观察或练习；不要写详细步骤链
-17. acceptanceHint 只给一个轻量完成信号，不要写数字化处方：不要写"执行3次、连续7天、剂量减半、产出V2流程并验证"，可以写"能说清主要触发模式、能比较两种策略差异、能把一个中断动作嵌入现有流程"
-18. 如果你想到的是"记录3次、执行1周、减少依赖、完成A/B/C步骤"，说明你写成了干预方案
-19. 当前平台执行环境仅支持文本输入与文本输出：不得把图片、视频、音频、截图、图表、界面观察、外部演示或其他非文本信息作为任务推进的必要前提；如果某个内容天然偏视觉、听觉或演示，必须改写为文字描述、文字步骤、文字化案例或结构化文本对比；可以提及外部资源作为课后可选扩展，但主任务不得依赖非文本资源才能继续推进
-20. 不要把 subtasks 写成 Learn 层的课堂安排；不要预设老师如何讲、如何追问、如何点评
-21. 好的 subtasks 示例：识别个人高唤醒触发模式、比较两种中断策略的适用场景、将一个中断动作嵌入现有睡前流程、观察流程调整后的主观变化
-22. 不好的 subtasks 示例：第2周执行新版流程至少3次并记录结果、制定褪黑素减量计划并在本周完成、按步骤A-B-C完成放松脚本训练、产出V2版完整方案并做效果验证
+12. 每个 subtask 必须标注 icapLevel（passive|active|constructive|interactive），标注依据为该任务要求的外显行为而非 type 名称；可以补轻量标签 knowledgeType、cognitiveLevel、transferable，但不要输出 learningObjectives
+13. ICAP 档位映射（用于自检）：acquire/execute 若只是"阅读/按步骤完成"→active，若要求"用自己的话重述/解释每一步为什么"→constructive；deconstruct/diagnose/refine/model 默认为 constructive；consolidate 若只是"回顾/总结"→active，若要求"整合不同阶段框架形成新理解"→constructive，若"与同伴讨论共建"→interactive
+14. ICAP 递进约束：同一阶段内 subtasks 的 icapLevel 应呈非递减（active→constructive→interactive），不得出现 constructive→active 的降级；首阶段首任务 icapLevel 最低为 active（禁止纯 passive 起步，本平台核心是体验式学习）
+15. estimatedMinutes 优先落在 planningHints.subtaskMinutesRange 内；若未提供，默认 30-90 分钟；同一阶段所有 subtasks 的 estimatedMinutes 总和应与当前 milestone 的 estimatedHours 换算后一致（±20%），预算严重不足时优先保证认知递进链完整，而不是把任务量平均压扁
+16. 你生成的是"阶段内任务方向"，不是"本周执行方案"
+17. title 应表达学习动作与场景焦点，不要写成"第1周/第2天/执行3次/减量计划/V2流程"这类排期或方案句
+18. description 只说明任务大概做什么、围绕什么概念、在什么场景里观察或练习；不要写详细步骤链
+19. acceptanceHint 只给一个轻量完成信号，不要写数字化处方：不要写"执行3次、连续7天、剂量减半、产出V2流程并验证"，可以写"能说清主要触发模式、能比较两种策略差异、能把一个中断动作嵌入现有流程"
+20. 如果你想到的是"记录3次、执行1周、减少依赖、完成A/B/C步骤"，说明你写成了干预方案
+21. 当前平台执行环境仅支持文本输入与文本输出：不得把图片、视频、音频、截图、图表、界面观察、外部演示或其他非文本信息作为任务推进的必要前提；如果某个内容天然偏视觉、听觉或演示，必须改写为文字描述、文字步骤、文字化案例或结构化文本对比；可以提及外部资源作为课后可选扩展，但主任务不得依赖非文本资源才能继续推进
+22. 不要把 subtasks 写成 Learn 层的课堂安排；不要预设老师如何讲、如何追问、如何点评
+23. 好的 subtasks 示例：识别个人高唤醒触发模式、比较两种中断策略的适用场景、将一个中断动作嵌入现有睡前流程、观察流程调整后的主观变化
+24. 不好的 subtasks 示例：第2周执行新版流程至少3次并记录结果、制定褪黑素减量计划并在本周完成、按步骤A-B-C完成放松脚本训练、产出V2版完整方案并做效果验证
 
 ## 输出字段
 
@@ -61,6 +63,7 @@ failurePolicy: retry
   "linkedConcept": 等于 milestone.coreConcept 的 concept-id,
   "knowledgeType": "factual|conceptual|procedural|metacognitive",
   "cognitiveLevel": "remember|understand|apply|analyze|evaluate|create",
+  "icapLevel": "active|constructive|interactive",
   "transferable": true
 }
 
