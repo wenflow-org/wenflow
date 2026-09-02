@@ -137,11 +137,25 @@ export interface TeachingTurnOutput {
     levelScore: number;
     understanding: number;
     confusionPoints: string[];
+    /** 结构化误解台账（G-R-R Phase 1）：每项含 hypothesis/evidence/confidence */
+    misconceptions?: Array<{
+      conceptKey: string;
+      hypothesis: string;
+      canonicalLabel?: string | null;
+      confidence: number;
+      evidence: string;
+      status: string;
+    }>;
+    /** 回合级知识状态估计（θ−d 路由信号）：conceptMastery + 任务难度 + 建议 */
+    ktEstimate?: {
+      conceptMastery?: Array<{ conceptKey: string; mastery: number; evidence?: string }>;
+      currentTaskDifficulty?: number;
+      predictedNextCorrectness?: number;
+      recommendation?: string;
+    };
     engagement: number;
     emotionalState: string;
-    /** 合成认知负荷 0-1（LLM 基于语义+前端交互特征判断），默认 0.5 */
     loadIndex: number;
-    /** 判断依据：semantic|structure|pacing|combined|absent，默认 absent */
     loadBasis: string;
   };
   knowledge: {
@@ -376,6 +390,8 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
       confusionPoints: Array.isArray(analysis.confusionPoints)
         ? analysis.confusionPoints.map((item: any) => String(item))
         : [],
+      ...(normalizeMisconceptions(analysis.misconceptions)),
+      ...(normalizeKtEstimate(analysis.ktEstimate)),
       engagement: Number.isFinite(analysis.engagement) ? Number(analysis.engagement) : 0.5,
       emotionalState: (typeof analysis.emotionalState === 'string' && (ALLOWED_EMOTIONAL_STATES as readonly string[]).includes(analysis.emotionalState))
         ? analysis.emotionalState
@@ -436,6 +452,52 @@ function normalizeCheckpoint(value: Record<string, any>): NonNullable<TeachingTu
     ...(type !== 'short_answer' ? { options } : {}),
     ...(typeof value.hint === 'string' && value.hint.trim() ? { hint: value.hint.trim() } : {}),
   };
+}
+
+/** 归一化结构化误解台账（G-R-R Phase 1）：过滤缺证据项，置信度收敛到 0|25|50|75|100 五档 */
+function normalizeMisconceptions(value: any): { misconceptions?: NonNullable<TeachingTurnOutput['analysis']['misconceptions']> } {
+  if (!Array.isArray(value) || value.length === 0) return {};
+  const items = value
+    .filter((item: any) => item && typeof item?.hypothesis === 'string' && item.hypothesis.trim())
+    .slice(0, 8)
+    .map((item: any) => ({
+      conceptKey: typeof item.conceptKey === 'string' ? item.conceptKey.trim().slice(0, 120) : '',
+      hypothesis: String(item.hypothesis).trim().slice(0, 300),
+      canonicalLabel: typeof item.canonicalLabel === 'string' && item.canonicalLabel.trim()
+        ? item.canonicalLabel.trim().slice(0, 200)
+        : null,
+      confidence: [0, 25, 50, 75, 100].includes(Number(item.confidence)) ? Number(item.confidence) : 50,
+      evidence: typeof item.evidence === 'string' ? item.evidence.trim().slice(0, 300) : '',
+      status: item.status === 'confirmed' || item.status === 'addressed' ? String(item.status) : 'suspected',
+    }));
+  return items.length > 0 ? { misconceptions: items } : {};
+}
+
+/** 归一化回合级知识状态估计（θ−d 路由信号）：数值钳制、推荐值白名单 */
+function normalizeKtEstimate(value: any): { ktEstimate?: NonNullable<TeachingTurnOutput['analysis']['ktEstimate']> } {
+  if (!value || typeof value !== 'object') return {};
+  const conceptMastery = Array.isArray(value.conceptMastery)
+    ? value.conceptMastery
+        .filter((item: any) => item && typeof item?.conceptKey === 'string' && item.conceptKey.trim())
+        .slice(0, 5)
+        .map((item: any) => ({
+          conceptKey: String(item.conceptKey).trim().slice(0, 120),
+          mastery: Number.isFinite(Number(item.mastery)) ? Math.max(0, Math.min(1, Number(item.mastery))) : 0.5,
+          evidence: typeof item.evidence === 'string' ? item.evidence.trim().slice(0, 200) : undefined,
+        }))
+    : undefined;
+  const result: NonNullable<TeachingTurnOutput['analysis']['ktEstimate']> = {};
+  if (conceptMastery && conceptMastery.length > 0) result.conceptMastery = conceptMastery;
+  if (Number.isFinite(Number(value.currentTaskDifficulty))) {
+    result.currentTaskDifficulty = Math.max(0, Math.min(1, Number(value.currentTaskDifficulty)));
+  }
+  if (Number.isFinite(Number(value.predictedNextCorrectness))) {
+    result.predictedNextCorrectness = Math.max(0, Math.min(1, Number(value.predictedNextCorrectness)));
+  }
+  if (typeof value.recommendation === 'string' && ['consolidate', 'advance', 'challenge', 'scaffold'].includes(value.recommendation)) {
+    result.recommendation = value.recommendation;
+  }
+  return Object.keys(result).length > 0 ? { ktEstimate: result } : {};
 }
 
 function buildPromptInput(input: TeachingTurnInput) {
