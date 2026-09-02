@@ -579,8 +579,8 @@ onMounted(() => {
   gap: 2px;
   padding: 8px 6px;
   border-radius: 10px;
-  background: #f7faff;
-  border: 1px solid #e8eefb;
+  background: var(--bubble-ai-bg);
+  border: 1px solid var(--line);
   text-align: center;
 }
 
@@ -629,7 +629,7 @@ onMounted(() => {
   border-top: 1px solid var(--line);
   color: var(--faint);
   font-size: 11.5px;
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--v2nav-bg);
 }
 
 .auth__footer-logo {
@@ -641,6 +641,21 @@ onMounted(() => {
 
 .auth__footer-sep {
   opacity: 0.5;
+}
+
+/* ===== 深色模式（data-theme=dark）：压制硬编码浅色光晕与渐变，统计卡/页脚随变量反转 ===== */
+[data-theme='dark'] .auth__demo-side {
+  background:
+    radial-gradient(320px 220px at 90% 0%, rgba(141, 107, 255, 0.14), transparent 65%),
+    linear-gradient(160deg, rgba(77, 139, 248, 0.1), rgba(24, 34, 48, 0.2));
+}
+[data-theme='dark'] .auth__bg {
+  background:
+    radial-gradient(560px 300px at 12% -4%, rgba(77, 139, 248, 0.08), transparent 60%),
+    radial-gradient(480px 260px at 88% 104%, rgba(167, 139, 255, 0.07), transparent 60%);
+}
+[data-theme='dark'] .auth__card {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 24px 60px rgba(0, 0, 0, 0.45);
 }
 
 @media (max-width: 760px) {
