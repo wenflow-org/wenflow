@@ -287,6 +287,7 @@ sandbox:teaching-agent.visibleDialogueContext
 | `blockedFoundations` | string[] | profile-agent |
 | `transferSignals` | object[] | profile-agent |
 | `recurringConfusions` | object[] | profile-agent |
+| `knowledgeStateSummary` | string | profile-agent |
 | `snapshot.dynamicState` | object | profile-agent |
 | `snapshot.learningControlState` | object | profile-agent |
 | `snapshot.replanSignal` | object | profile-agent |
