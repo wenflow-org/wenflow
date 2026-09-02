@@ -124,6 +124,8 @@ export interface LearnerDynamicState {
     encouragement: 'low' | 'medium' | 'high';
     challenge: 'low' | 'medium' | 'high';
   };
+  /** SRL 三阶段追踪（Zimmerman 2000）：forethought=规划期，performance=执行期，self-reflection=反思期 */
+  srlPhase: 'forethought' | 'performance' | 'self-reflection';
 }
 
 export interface LearnerRecentEvidence {

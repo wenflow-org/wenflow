@@ -35,6 +35,13 @@ function deriveFatigueRisk(lf: number): 'low' | 'medium' | 'high' {
   return 'low';
 }
 
+/** SRL 三阶段（Zimmerman 2000）：活跃会话=performance，完结会话=reflection，否则=forethought */
+function deriveSrlPhase(latestSession: { updatedAt?: Date; status?: string } | null): 'forethought' | 'performance' | 'self-reflection' {
+  if (!latestSession) return 'forethought';
+  if (latestSession.status === 'active' || latestSession.status === 'paused') return 'performance';
+  return 'self-reflection';
+}
+
 function derivePacing(lss: number, lf: number, ktl: number): 'slow' | 'moderate' | 'fast' {
   if (lf >= 6 || lss >= 6) return 'slow';
   if (ktl >= 5 && lf <= 3 && lss <= 4) return 'fast';
@@ -179,7 +186,7 @@ export class LearnerSnapshotService {
       prisma.teaching_sessions.findFirst({
         where: { userId: input.userId },
         orderBy: { updatedAt: 'desc' },
-        select: { updatedAt: true },
+        select: { updatedAt: true, status: true },
       }),
       prisma.subtasks.findFirst({
         where: { userId: input.userId, status: 'completed' },
@@ -212,6 +219,8 @@ export class LearnerSnapshotService {
         encouragement: personalization.config.interaction.encouragementFrequency,
         challenge: personalization.config.interaction.challengeFrequency,
       },
+      // SRL 三阶段（Zimmerman 2000）：活跃会话=performance，刚完结=reflection，否则=forethought
+      srlPhase: deriveSrlPhase(latestSession),
     };
 
     const currentPath = knowledgeMemory.currentPath
@@ -297,7 +306,7 @@ export class LearnerSnapshotService {
       prisma.teaching_sessions.findFirst({
         where: { userId: input.userId },
         orderBy: { updatedAt: 'desc' },
-        select: { updatedAt: true },
+        select: { updatedAt: true, status: true },
       }),
       prisma.subtasks.findFirst({
         where: { userId: input.userId, status: 'completed' },
@@ -329,6 +338,7 @@ export class LearnerSnapshotService {
         encouragement: personalization.config.interaction.encouragementFrequency,
         challenge: personalization.config.interaction.challengeFrequency,
       },
+      srlPhase: deriveSrlPhase(latestSession),
     };
 
     const currentPath = knowledgeMemory.currentPath
