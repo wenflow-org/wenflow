@@ -8,6 +8,16 @@
       <span class="mk-status__meta">共 {{ liveLogsTotal }} 条</span>
       <span v-if="logs.length" class="mk-status__meta">失败 {{ errCount }} · 成功率 {{ successRate }}%</span>
       <span v-if="logs.length" class="mk-status__meta mono" :title="'延迟分位（仅成功日志）：P50 = 中位耗时 · P99 = 99% 请求耗时'">耗时 P50 {{ latencyP50 }} · P99 {{ latencyP99 }}</span>
+      <button
+        v-if="testCount > 0"
+        type="button"
+        class="mk-status__meta-link"
+        :class="{ 'mk-status__meta-link--on': testFilter !== '' }"
+        :title="testFilter === 'only' ? '仅看测试 → 点击恢复全部' : testFilter === 'hide' ? '已排除测试 → 点击仅看测试' : '连通性/探活测试日志（模型接入页产生），点击排除 → 再点仅看 → 三态切换'"
+        @click="cycleTestFilter"
+      >
+        测试 {{ testCount }}
+      </button>
       <span v-if="isFiltered" class="mk-status__filter">
         {{ filterLabel }}
         <button type="button" class="mk-status__clear" @click="clearFilter">×</button>
@@ -107,9 +117,14 @@
           </thead>
           <tbody>
             <template v-for="log in shown" :key="log.id">
-              <tr class="exec-row" :class="[`exec-row--${log.status}`, { 'exec-row--open': openId === log.id }]" @click="openId = openId === log.id ? '' : log.id">
+              <tr class="exec-row" :class="[`exec-row--${log.status}`, { 'exec-row--test': isTestLog(log), 'exec-row--open': openId === log.id }]" @click="openId = openId === log.id ? '' : log.id">
                 <td v-if="!hiddenCols.has('time')"><span class="mono exec-time" :title="fmtFull(log.ts)">{{ fmtTime(log.ts) }}</span></td>
-                <td v-if="!hiddenCols.has('kind')"><span class="mk-badge" :class="`mk-badge--${kindTone(log)}`">{{ kindText(log) }}</span></td>
+                <td v-if="!hiddenCols.has('kind')">
+                  <span class="exec-kind-group">
+                    <span class="mk-badge" :class="`mk-badge--${kindTone(log)}`">{{ kindText(log) }}</span>
+                    <span v-if="isTestLog(log)" class="exec-test-tag" title="模型接入页的连通性/探活测试调用（system-canary）">测试</span>
+                  </span>
+                </td>
                 <td v-if="!hiddenCols.has('agent')"><span class="mono exec-stage" :title="log.agent" @click.stop="openSkillDrawer(log.agent)">{{ log.stage }}</span></td>
                 <td v-if="!hiddenCols.has('msg')">
                   <div class="exec-cell">
@@ -469,8 +484,15 @@ watch(
 const logs = computed(() => liveLogsFiltered.value)
 const agentOptions = computed(() => [...new Set(logs.value.map((s) => s.agent))].sort())
 
+/** 连通性/探活测试日志识别：sourceEntry = system-canary（模型接入页探活 + 测试连接产生） */
+const isTestLog = (l: { sourceEntry?: string }) => l.sourceEntry === 'system-canary'
+/** 测试日志筛选：'' = 全部 / hide = 排除测试 / only = 仅看测试 */
+const testFilter = ref<'hide' | '' | 'only'>('')
+
 const filtered = computed(() =>
   logs.value.filter((l) => {
+    if (testFilter.value === 'hide' && isTestLog(l)) return false
+    if (testFilter.value === 'only' && !isTestLog(l)) return false
     if (agentFilter.value && l.agent !== agentFilter.value) return false
     if (statusFilter.value && l.status !== statusFilter.value) return false
     return true
@@ -480,7 +502,7 @@ const filtered = computed(() =>
 const shown = computed(() => filtered.value)
 
 /* 口径与 AuditLogs 一致：时间范围非默认值也计入筛选态，空态才显示「当前筛选无日志」而非「暂无日志」 */
-const isFiltered = computed(() => !!(agentFilter.value || statusFilter.value || keyword.value.trim() || traceId.value.trim() || sessionId.value.trim() || errorCategory.value || timeRange.value !== 'week'))
+const isFiltered = computed(() => !!(testFilter.value || agentFilter.value || statusFilter.value || keyword.value.trim() || traceId.value.trim() || sessionId.value.trim() || errorCategory.value || timeRange.value !== 'week'))
 /* traceId/sessionId 服务端查询未命中时的空态提示（与 TraceWaterfall 的 wf-notice「样本截断」兜底互补：
    此处是服务端精确查询的直接未命中） */
 const traceMiss = computed(() => {
@@ -521,11 +543,19 @@ function percentileOf(durations: number[], q: number): string {
   return fmtMs(arr[idx])
 }
 const statusTone = computed(() => (!logs.value.length ? 'muted' : errCount.value ? 'bad' : 'ok'))
+/** 测试日志计数（当前服务端窗口内的 system-canary 行） */
+const testCount = computed(() => logs.value.filter((l) => isTestLog(l)).length)
+/** 测试筛选三态循环：全部 → 排除测试 → 仅看测试 → 全部 */
+function cycleTestFilter() {
+  testFilter.value = testFilter.value === '' ? 'hide' : testFilter.value === 'hide' ? 'only' : ''
+  void applyServerQuery()
+}
 /* 排查徽章：读本地筛选（修复此前读 intent 导致的空值）；live 下补充关键词/时间范围/trace/会话 */
 const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部' } as const
 const filterLabel = computed(() =>
   [
     timeRange.value !== 'week' ? timeRangeLabels[timeRange.value] : '',
+    testFilter.value === 'hide' ? '排除测试' : testFilter.value === 'only' ? '仅看测试' : '',
     agentFilter.value || '',
     statusFilter.value === 'err' ? '仅失败' : statusFilter.value === 'warn' ? '仅超时' : statusFilter.value === 'ok' ? '仅成功' : '',
     errorCategory.value ? `类别「${errorCategory.value}」` : '',
@@ -544,6 +574,7 @@ const statusPills = [
 ]
 
 function clearFilter() {
+  testFilter.value = ''
   agentFilter.value = ''
   statusFilter.value = ''
   keyword.value = ''
@@ -692,6 +723,23 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 
 .exec-row--err { background: rgba(220, 38, 38, 0.05); }
 .exec-row--open { background: #f6f9ff; }
+/* 连通性/探活测试行：弱化（降饱和降透明度），保留可读但不再与业务日志抢眼 */
+.exec-row--test { opacity: 0.62; }
+.exec-row--test:hover { opacity: 0.85; }
+.exec-row--test.exec-row--open { opacity: 0.9; }
+.exec-kind-group { display: inline-flex; align-items: center; gap: 5px; }
+/* 测试标签：灰底小徽章（与类型徽章并排，业务日志不出现） */
+.exec-test-tag {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--mk-line, #e6ebf4);
+  color: var(--mk-muted, #5b6577);
+  white-space: nowrap;
+}
+html[data-theme='dark'] .exec-test-tag { background: #2a3850; color: #8fa3bd; }
 .exec-cell { min-width: 0; }
 .exec-cell__line { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .exec-cell__line + .exec-cell__line { margin-top: 1px; }

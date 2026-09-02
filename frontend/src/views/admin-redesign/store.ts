@@ -46,6 +46,8 @@ export interface TraceSpan {
   gatewayDurMs?: number
   /** 业务会话 ID（教学/目标对话等业务链路，用于会话归组） */
   sessionId?: string
+  /** 来源入口（platform / system-canary / simulation / admin / user）；连通性测试 = system-canary */
+  sourceEntry?: string
   /** agent_call_logs 传输层 token 统计（无数据 = 未统计） */
   promptTokens?: number | null
   completionTokens?: number | null

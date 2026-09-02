@@ -204,6 +204,8 @@ export function mapLogsToSpans(items: RawLog[]): TraceSpan[] {
       errorCategory: log.errorCategory,
       errorCode: log.errorCode,
       errorMessage: log.errorMessage,
+      /** 来源入口（platform / system-canary / simulation / admin / user）；连通性测试 = system-canary */
+      sourceEntry: log.sourceEntry || undefined,
       gatewayDurMs: gatewayLog ? Number(gatewayLog.durationMs || 0) : undefined,
       sessionId: log.sessionId || undefined,
       promptTokens: log.promptTokens != null ? Number(log.promptTokens) : null,
