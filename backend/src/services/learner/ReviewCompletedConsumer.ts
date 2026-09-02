@@ -19,8 +19,19 @@ import prisma from '../../config/database';
 import type { DurableDomainEvent } from '../../events/contracts';
 import { logger } from '../../utils/logger';
 import { clamp01 } from '../memory/actr';
+import { fsrsSchedule, fsrsStateFromLegacy, type FsrsGradeCode, type FsrsMemoryState } from '../memory/fsrs';
 
 const CONSUMER_ID = 'review-completed-consumer-v1';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** rating → FSRS grade（again=Again, hard=Hard, good=Good, easy=Easy） */
+const RATING_TO_GRADE: Record<ReviewRating, FsrsGradeCode> = {
+  again: 1,
+  hard: 2,
+  good: 3,
+  easy: 4,
+};
 
 export type ReviewRating = 'again' | 'hard' | 'good' | 'easy';
 
@@ -93,11 +104,25 @@ export class ReviewCompletedConsumer {
           }
         });
 
-        // 2) 调度数据源 → memory_traces（rating 语义更新，幂等；dueAt 物化：again 不延后、good/easy 延后）
+        // 2) 调度数据源 → memory_traces（FSRS-6 DSR 调度：按成绩更新稳定性/难度/到期时间）
         const now = new Date();
-        const dueAt = item.rating === 'again'
-          ? new Date(now.getTime() + 24 * 60 * 60 * 1000) // 复习失败：1 天后重试
-          : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000 * 2); // 复习成功：7 天 ×2（间隔递增，后续可换 FSRS）
+        const grade = RATING_TO_GRADE[item.rating];
+        const existing = await tx.memory_traces.findUnique({
+          where: { userId_conceptKey: { userId: event.userId, conceptKey } }
+        });
+        const prev: FsrsMemoryState | null = existing
+          ? (existing.fsrsStability !== null && existing.fsrsStability !== undefined
+            ? {
+                stability: existing.fsrsStability,
+                difficulty: existing.fsrsDifficulty ?? 5,
+                reps: existing.extractionCount,
+                lapses: 0,
+                lastReviewAt: existing.lastSeenAt,
+              }
+            : fsrsStateFromLegacy(existing.masteryScore, existing.extractionCount, existing.lastSeenAt))
+          : null;
+        const result = fsrsSchedule(prev, grade, now);
+        const dueAt = new Date(now.getTime() + result.intervalDays * DAY_MS);
         await tx.memory_traces.upsert({
           where: {
             userId_conceptKey: { userId: event.userId, conceptKey }
@@ -113,6 +138,8 @@ export class ReviewCompletedConsumer {
             extractionCount: 1,
             source: 'review-event',
             dueAt,
+            fsrsStability: result.state.stability,
+            fsrsDifficulty: result.state.difficulty,
           },
           update: {
             label: item.label ?? undefined,
@@ -122,8 +149,8 @@ export class ReviewCompletedConsumer {
             extractionCount: { increment: 1 },
             source: 'review-event',
             dueAt,
-            // rating 语义：again 不放大间隔（复习失败，下次更快到期）
-            ...(item.rating !== 'again' ? { intervalFactor: { multiply: 2 } } : {}),
+            fsrsStability: result.state.stability,
+            fsrsDifficulty: result.state.difficulty,
           }
         });
       }

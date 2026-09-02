@@ -340,6 +340,7 @@ export class SessionFinalizationService {
       for (const p of progressed) {
         const mastery = p.status === 'mastered' ? (Number(p.progress) >= 100 ? 0.9 : 0.85) : 0.5;
         const rating = p.status === 'mastered' ? (Number(p.progress) >= 100 ? 'easy' : 'good') : 'hard';
+        const fsrsGrade = rating === 'easy' ? 4 : rating === 'good' ? 3 : rating === 'hard' ? 2 : 1;
         items.push({
           conceptKey: p.name,
           label: p.name,
@@ -355,9 +356,10 @@ export class SessionFinalizationService {
           masteryScore: mastery,
           stability: p.status === 'mastered' ? 'stable' : 'fragile',
           source: 'derived',
+          fsrsGrade: fsrsGrade as 1 | 2 | 3 | 4,
         });
-        // SM-2 式间隔递增：复习成功 → 下次间隔 ×2（上限计算侧 clamp 32）
-        await memoryTraceService.bumpReviewInterval(session.userId, p.name);
+        // FSRS-6 DSR 调度：复习成功按成绩更新 stability/difficulty
+        await memoryTraceService.bumpReviewInterval(session.userId, p.name, fsrsGrade as 1 | 2 | 3 | 4);
       }
       logger.info('[SessionFinalization] 复习完成回写记忆引擎', {
         sessionId: session.id,

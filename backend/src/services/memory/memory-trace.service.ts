@@ -16,10 +16,19 @@ import {
   DEFAULT_DECAY_FACTOR,
   DEFAULT_RETENTION_THRESHOLD,
 } from './actr';
+import {
+  fsrsSchedule,
+  fsrsStateFromLegacy,
+  fsrsEmptyState,
+  type FsrsGradeCode,
+  type FsrsMemoryState,
+} from './fsrs';
 
 export type MemoryStability = 'unknown' | 'fragile' | 'developing' | 'stable';
 
 const ALLOWED_STABILITY: MemoryStability[] = ['unknown', 'fragile', 'developing', 'stable'];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface MemoryTraceInput {
   userId: string;
@@ -32,6 +41,8 @@ export interface MemoryTraceInput {
   dueAt?: Date | null;
   /** 复习间隔因子（用于计算 dueAt；默认沿用现有 intervalFactor 语义） */
   intervalFactor?: number;
+  /** FSRS 复习成绩（Again/Hard/Good/Easy）；提供时走 FSRS-6 DSR 调度，否则走 legacy ACT-R */
+  fsrsGrade?: FsrsGradeCode;
 }
 
 export interface SessionKnowledgeOutcome {
@@ -71,14 +82,36 @@ class MemoryTraceService {
     return new Date(now.getTime() + intervalDays * 24 * 60 * 60 * 1000);
   }
 
-  /** 记录一次提取/评估：upsert 痕迹并累计提取次数 */
+  /** 记录一次提取/评估：upsert 痕迹并累计提取次数；提供 fsrsGrade 时走 FSRS-6 DSR 调度 */
   async recordExtraction(input: MemoryTraceInput): Promise<void> {
     const masteryScore = clamp01(input.masteryScore);
     const stability = ALLOWED_STABILITY.includes(input.stability as MemoryStability)
       ? (input.stability as MemoryStability)
       : 'developing';
     const now = new Date();
-    const dueAt = this.computeDueAt(input, now);
+    let dueAt = this.computeDueAt(input, now);
+    let fsrsStability: number | null = null;
+    let fsrsDifficulty: number | null = null;
+
+    if (input.fsrsGrade !== undefined) {
+      const existing = await this.getTrace(input.userId, input.conceptKey);
+      const prev: FsrsMemoryState | null = existing
+        ? (existing.fsrsStability !== null && existing.fsrsStability !== undefined
+          ? {
+              stability: existing.fsrsStability,
+              difficulty: existing.fsrsDifficulty ?? 5,
+              reps: existing.extractionCount,
+              lapses: 0,
+              lastReviewAt: existing.lastSeenAt,
+            }
+          : fsrsStateFromLegacy(existing.masteryScore, existing.extractionCount, existing.lastSeenAt))
+        : fsrsEmptyState();
+      const result = fsrsSchedule(prev, input.fsrsGrade, now);
+      fsrsStability = result.state.stability;
+      fsrsDifficulty = result.state.difficulty;
+      dueAt = new Date(now.getTime() + result.intervalDays * DAY_MS);
+    }
+
     await prisma.memory_traces.upsert({
       where: {
         userId_conceptKey: { userId: input.userId, conceptKey: input.conceptKey },
@@ -94,6 +127,8 @@ class MemoryTraceService {
         extractionCount: 1,
         source: input.source ?? 'derived',
         dueAt,
+        fsrsStability,
+        fsrsDifficulty,
       },
       update: {
         label: input.label ?? undefined,
@@ -103,6 +138,8 @@ class MemoryTraceService {
         extractionCount: { increment: 1 },
         source: input.source ?? undefined,
         dueAt,
+        ...(fsrsStability !== null ? { fsrsStability } : {}),
+        ...(fsrsDifficulty !== null ? { fsrsDifficulty } : {}),
       },
     });
   }
@@ -259,10 +296,34 @@ class MemoryTraceService {
   }
 
   /**
-   * SM-2 式间隔递增：复习成功后下次间隔 ×2（factor 上限由 actr.MAX_INTERVAL_FACTOR 计算侧 clamp）。
-   * 仅当痕迹存在时生效；best-effort。
+   * FSRS-6 调度更新：复习成功后按成绩更新 FSRS 状态（Dsr 稳定性/难度）；grade 未提供时走 legacy SM-2 ×2。
    */
-  async bumpReviewInterval(userId: string, conceptKey: string): Promise<void> {
+  async bumpReviewInterval(userId: string, conceptKey: string, grade?: FsrsGradeCode): Promise<void> {
+    if (grade !== undefined) {
+      const trace = await this.getTrace(userId, conceptKey);
+      if (!trace) return;
+      const prev: FsrsMemoryState = trace.fsrsStability !== null && trace.fsrsStability !== undefined
+        ? {
+            stability: trace.fsrsStability,
+            difficulty: trace.fsrsDifficulty ?? 5,
+            reps: trace.extractionCount,
+            lapses: 0,
+            lastReviewAt: trace.lastSeenAt,
+          }
+        : fsrsStateFromLegacy(trace.masteryScore, trace.extractionCount, trace.lastSeenAt);
+      const now = new Date();
+      const result = fsrsSchedule(prev, grade, now);
+      await prisma.memory_traces.updateMany({
+        where: { userId, conceptKey },
+        data: {
+          fsrsStability: result.state.stability,
+          fsrsDifficulty: result.state.difficulty,
+          dueAt: new Date(now.getTime() + result.intervalDays * DAY_MS),
+        },
+      });
+      return;
+    }
+    // legacy SM-2: intervalFactor ×2
     await prisma.memory_traces.updateMany({
       where: { userId, conceptKey },
       data: { intervalFactor: { multiply: 2 } },
