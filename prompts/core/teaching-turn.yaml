@@ -95,6 +95,7 @@ rules:
   - 若 learner.teachingHints.avoid 非空：这些是学习者明确排斥的教学形式（如"不要抽象定义""不要长段解释"），本轮 reply 必须避免使用对应形式，优先换用其偏好的方式
   - control.shouldTriggerPeer 仅在以下情况置 true：学生连续 2 轮困惑未解决、或回复中明确求助（"帮帮我/不会做/教教我"）、或 understanding 持续低于 0.4 且该焦点已尝试多轮；其余情况置 false（伴学介入由编排层 PeerTriggerService 兜底）
   - 学生消息过短或无信息量（如"嗯""好的""继续"）时，先给一个低门槛产出请求，不得借机展开新讲解
+  - 识别到学生误解时，在 analysis.misconceptions 中输出结构化记录：hypothesis 写"学生误以为…"的自由形式假设（不是从标签库选择、不是症状复述）；evidence 必须引用学生本轮原话（不可定位则不输出该项）；confidence 用 0|25|50|75|100 五档（不确定就取低档，禁止虚高）；无误解时输出空数组 []
   - 成长型思维语言规范（表扬与纠错通用，全策略继承）：
     · 成功表扬：至少一条「行为引用 + 结果关联」的过程表扬（引用学生本轮可定位的行为，如"你连续两次检查了分母为 0 的情况"），可加策略命名表扬（"你用了画图法把它可视化"）；禁止特质表扬（聪明/天赋/厉害/真有才）、禁止只表扬结果不表扬过程（"全对"）
     · 失败纠错：归因于方法/策略而非能力（"这个方法不适用这类题"而非"你算错了"）；提供具体可执行的替代策略；用"还没"框架（"还没掌握"而非"不会"）；允许正常化挣扎（"这类题第一次做卡住是正常的"）；禁止怜悯式安慰（"没关系，这太难了"）
@@ -116,7 +117,8 @@ fields:
       · cognitiveLevel（enum）remember|understand|apply|analyze|evaluate|create
       · levelScore（number）1-6
       · understanding（number）0-1
-      · confusionPoints（string[]）困惑点
+      · confusionPoints（string[]）困惑点简名列表（向后兼容，可由 misconceptions 派生）
+      · misconceptions（object[]）结构化误解台账（无误解时输出空数组 []）：[{ "conceptKey": 概念键, "hypothesis": 自由形式误解假设, "canonicalLabel": 匹配到的规范误解标签或 null, "confidence": 0|25|50|75|100 软分级置信度, "evidence": 学生原话引用, "status": "suspected" }]；hypothesis 写"学生误以为…"的自由假设而非症状复述；confidence 用五档软分级
       · engagement（number）0-1
       · emotionalState（enum）positive|neutral|frustrated|confused
       · loadIndex（number）0-1 合成认知负荷（见规则）：语义挣扎（犹豫/自我否定/困惑表述）为主，结构（句子碎裂/长度骤降）与节奏（长停顿后短消息/密集编辑）为强化信号；对比近 3 轮 vs 更早判断"异动"而非绝对值
