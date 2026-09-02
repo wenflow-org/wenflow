@@ -123,6 +123,8 @@ export interface TeachingScenarioContext {
     status: string;
     occurrenceCount: number;
   }> | null;
+  /** 任务模式：normal（默认教学）| productiveFailure（有效失败：先让学生挣扎，后整合） */
+  taskMode?: 'normal' | 'productiveFailure';
 }
 
 /** 预测上下文（P2 闭环：预测 + 实证可靠性一起交给教学 Agent） */
@@ -331,6 +333,22 @@ function buildTaskKnowledgeSeeds(_params: {
   resolvedConcept: { id: string | null; name: string | null; description: string | null };
 }): TeachingKnowledgePointState[] {
   return [];
+}
+
+/** 有效失败（PF）触发条件：概念性任务 + 无既定学习目标（新概念）+ 有迁移目标 + 练习/项目型 */
+function determineTaskMode(
+  task: any,
+  persistedLearningObjectives: string[],
+  cognitiveFrame: { targetRelation: string | null },
+): 'normal' | 'productiveFailure' {
+  const isConceptual = task.knowledgeType === 'conceptual';
+  const isNewConcept = persistedLearningObjectives.length === 0;
+  const hasTransferGoal = cognitiveFrame.targetRelation !== null;
+  const isPracticeOrProject = task.taskType === 'practice' || task.taskType === 'project';
+  if (isConceptual && isNewConcept && hasTransferGoal && isPracticeOrProject) {
+    return 'productiveFailure';
+  }
+  return 'normal';
 }
 
 /**
@@ -570,6 +588,7 @@ export async function buildTeachingScenarioContext(
     interactionProfile: buildInteractionProfile(interactionMeta, previousSession?.messages ?? []),
     learnerPrediction: null,
     priorMisconceptions,
+    taskMode: determineTaskMode(task, persistedLearningObjectives, cognitiveFrame),
   };
 
   // 学习表现预测（P2 闭环）：幂等复用 + 超时保护；结果直接进入教学上下文

@@ -932,6 +932,8 @@ async function buildTeachingTurnInput(
       triggerTokens: compression.triggerTokens,
       recap: compression.recap,
     } : undefined,
+    taskMode: context.taskMode,
+    priorMisconceptions: context.priorMisconceptions,
   };
 
   // L2 声明化装配（只读对账）：状态池形状由 sandbox-resolver 的 teaching provider 声明，

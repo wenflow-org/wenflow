@@ -111,6 +111,17 @@ export interface TeachingTurnInput {
       rationale: string;
       reliability?: { total: number; stallHitRate: number | null } | null;
     } | null;
+    /** 任务模式：normal | productiveFailure（有效失败：先让学生挣扎，后整合） */
+    taskMode?: 'normal' | 'productiveFailure';
+    /** 历史误解台账（G-R-R Phase 2）：供教学回合引用已记录的结构化误解 */
+    priorMisconceptions?: Array<{
+      conceptKey: string;
+      hypothesis: string;
+      canonicalLabel: string | null;
+      confidence: number;
+      status: string;
+      occurrenceCount: number;
+    }> | null;
   };
   knowledge: {
     points: Array<{
