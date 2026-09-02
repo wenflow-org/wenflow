@@ -54,7 +54,7 @@ withDefaults(
 .mk-kpi--compact .mk-kpi__label { font-size: var(--mk-fs-11); }
 .mk-kpi--compact .mk-kpi__num { font-size: var(--mk-fs-16); line-height: 1.2; }
 
-/* 横向紧凑形态（低分辨率区间由 MkOverview 媒体查询触发）：
+/* 横向紧凑形态（低分辨率区间媒体查询触发）：
    label+hint 左侧、数字右侧单行排布，高度 ≈56px（TailAdmin stat card 形态） */
 .mk-kpi--row {
   grid-template-columns: minmax(0, 1fr) auto;

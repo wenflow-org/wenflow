@@ -740,7 +740,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 概览卡样式由共享组件 MkOverview 承载；仅保留堆叠条（pre slot 内）与行样式 */
+/* 概览卡样式由共享 mk-overview/mk-kpi 体系承载；此处仅保留堆叠条（pre slot 内）与行样式 */
 .gc-dash__stack { padding: 0; }
 .gc-row { cursor: pointer; }
 /* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
