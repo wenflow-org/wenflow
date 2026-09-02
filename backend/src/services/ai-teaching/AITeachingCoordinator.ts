@@ -195,6 +195,7 @@ function buildLearnerStateContext(
   latestAnalysis?: any,
 ) {
   const previous = teachingState?.learnerStateContext || {};
+  const ktEstimate = latestAnalysis?.ktEstimate;
   return {
     currentUnderstanding: latestAnalysis?.understanding ?? previous.currentUnderstanding ?? null,
     currentCognitiveLevel: latestAnalysis?.cognitiveLevel || previous.currentCognitiveLevel || null,
@@ -202,6 +203,8 @@ function buildLearnerStateContext(
     emotionalState: latestAnalysis?.emotionalState || previous.emotionalState || null,
     engagement: latestAnalysis?.engagement ?? previous.engagement ?? null,
     struggleDetected: previous.struggleDetected === true,
+    // θ−d 路由信号（回合级知识状态估计）：供 wrapup 证据消费与 session_load 聚合
+    ...(ktEstimate ? { ktEstimate } : {}),
   };
 }
 
@@ -333,13 +336,21 @@ function determineNextStage(params: {
   // 而非仅依赖情绪/困惑点显式信号；M1 感知层消费接入）
   const loadIndex = Number(teachingOutput.analysis?.loadIndex);
   const highLoad = Number.isFinite(loadIndex) && loadIndex > 0.85;
+  // θ−d 路由（回合级知识追踪信号）：mastery 显著低于任务难度或建议 scaffold 时，
+  // 视同"知识状态层面的卡点"，与负荷路由（瞬态）互补作为 intervention 辅助证据
+  const ktEstimate = teachingOutput.analysis?.ktEstimate;
+  const ktLowMastery = Array.isArray(ktEstimate?.conceptMastery)
+    ? ktEstimate!.conceptMastery!.some((c) => Number.isFinite(c.mastery) && c.mastery < 0.4)
+    : false;
+  const ktHighDifficulty = Number.isFinite(ktEstimate?.currentTaskDifficulty) && (ktEstimate!.currentTaskDifficulty as number) > 0.6;
+  const ktStruggle = ktEstimate?.recommendation === 'scaffold' || (ktLowMastery && ktHighDifficulty);
 
   if (completionCandidate) {
     return { stage: 'ready_to_close', reason: '检测到完成候选，当前任务已接近收束' };
   }
 
-  if (peerTriggered || understanding < 0.35 || emotion === 'frustrated' || confusionPoints.length >= 2 || (highLoad && understanding < 0.6)) {
-    return { stage: 'intervention', reason: highLoad ? '认知负荷过高，进入干预降载' : '学生出现明显卡点，进入干预阶段' };
+  if (peerTriggered || understanding < 0.35 || emotion === 'frustrated' || confusionPoints.length >= 2 || (highLoad && understanding < 0.6) || (ktStruggle && understanding < 0.6)) {
+    return { stage: 'intervention', reason: highLoad ? '认知负荷过高，进入干预降载' : ktStruggle ? '知识状态低于任务难度（θ−d），进入干预' : '学生出现明显卡点，进入干预阶段' };
   }
 
   if (currentStage === 'opening' && learnerMessage.trim()) {
