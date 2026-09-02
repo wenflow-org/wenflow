@@ -536,7 +536,6 @@ const stateFilterOptions = computed(() => {
   return [
     { key: '', label: '全部', count: samples.value.length },
     { key: 'running', label: '运行中', count: count((s) => s.runningCount > 0) },
-    { key: 'queued', label: '排队中', count: 0 },
     { key: 'paused', label: '已暂停', count: count((s) => (s.pausedCount ?? 0) > 0) },
     { key: 'failed', label: '需关注', count: count((s) => s.failedCount > 0) },
   ]

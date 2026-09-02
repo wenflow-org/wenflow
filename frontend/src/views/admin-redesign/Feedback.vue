@@ -17,7 +17,21 @@
       </span>
     </div>
 
-    <div v-if="!rows.length && !loading" class="mk-empty mk-empty--min">
+    <!-- 刷新失败但仍有旧数据：轻量错误横幅（区别于首载失败全屏态） -->
+    <div v-if="loadFailed && rows.length" class="mk-alert" role="alert">
+      刷新失败，当前显示上次加载的数据。
+      <button type="button" class="mk-link" @click="() => load(true)">重试</button>
+    </div>
+
+    <!-- 加载失败（首载无数据时优先于空态展示，含重试） -->
+    <div v-if="loadFailed && !rows.length" class="mk-empty mk-empty--min">
+      <span class="mk-empty__icon" aria-hidden="true">◌</span>
+      <strong>反馈数据加载失败</strong>
+      <span>无法从后端拉取反馈列表。</span>
+      <button type="button" class="mk-empty__action" @click="() => load(true)">重试</button>
+    </div>
+
+    <div v-else-if="!rows.length && !loading" class="mk-empty mk-empty--min">
       <strong>暂无反馈数据</strong>
       <span>学习者提交反馈后自动呈现。</span>
     </div>

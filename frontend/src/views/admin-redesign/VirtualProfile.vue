@@ -330,11 +330,17 @@
               {{ opt.label }} <span class="vp-filter-count">{{ opt.count }}</span>
             </button>
           </div>
-          <div v-if="isLive && !displayStories.length" class="vp-empty-state">
+          <!-- 空态三态：底层无故事 / 筛选无匹配（故事存在但过滤后为空） -->
+          <div v-if="isLive && !stories.length" class="vp-empty-state">
             <span class="vp-empty-state__icon" aria-hidden="true">◌</span>
             <strong>故事池为空</strong>
             <p>故事产生学习需求；点击「生成故事」由 AI 根据画像与倾向产出开场故事。</p>
           </div>
+          <div v-else-if="isLive && !displayStories.length && storyFilter" class="vp-none">
+            当前筛选无匹配
+            <button type="button" class="mk-link" @click="storyFilter = ''">查看全部故事</button>
+          </div>
+          <div v-else-if="!isLive && !displayStories.length" class="vp-none">还没有故事。</div>
           <div v-if="displayStories.length" class="vp-stories">
             <div
               v-for="(s, i) in displayStories"
@@ -398,7 +404,6 @@
               </div>
             </div>
           </div>
-          <p v-else class="vp-none">还没有故事。</p>
         </section>
 
         <section v-if="activeTab === 'runs'" class="mk-card">

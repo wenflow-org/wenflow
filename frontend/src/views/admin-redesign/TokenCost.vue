@@ -19,9 +19,17 @@
       </span>
     </div>
 
-    <div v-if="!summary && !loading" class="mk-empty mk-empty--min">
+    <!-- 加载失败（优先于空态） -->
+    <div v-if="loadFailed && !summary" class="mk-empty mk-empty--min">
+      <span class="mk-empty__icon" aria-hidden="true">◌</span>
+      <strong>Token 成本数据加载失败</strong>
+      <span>无法从后端拉取用量统计。</span>
+      <button type="button" class="mk-empty__action" @click="() => load(true)">重试</button>
+    </div>
+
+    <div v-else-if="!summary && !loading" class="mk-empty mk-empty--min">
       <strong>暂无 Token 成本数据</strong>
-      <span>切换到真实数据查看 LLM 用量透视。</span>
+      <span>产生 LLM 调用后，用量与成本会自动汇总在这里。</span>
     </div>
 
     <template v-else>
@@ -187,7 +195,7 @@ const statusTone = computed(() =>
 
 watch([days, includeTest], () => {
   void load()
-})
+}, { immediate: true })
 
 async function load(force = false) {
   if (loading.value) return

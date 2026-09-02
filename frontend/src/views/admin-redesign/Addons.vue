@@ -110,6 +110,8 @@
       <div v-else class="mk-empty mk-empty--min">
         <strong>{{ mcpLoading ? '加载中…' : mcpFailed ? 'MCP 服务加载失败' : '暂无 MCP 服务' }}</strong>
         <span v-if="!mcpLoading && !mcpFailed">MCP 工具（如网页搜索、生图）在此登记，供外挂能力调用。</span>
+        <span v-else-if="mcpFailed">无法从后端拉取 MCP 服务列表。</span>
+        <button v-if="mcpFailed" type="button" class="mk-empty__action" :disabled="mcpLoading" @click="loadMcpTools">重试</button>
       </div>
     </div>
 

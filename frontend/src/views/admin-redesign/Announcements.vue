@@ -205,7 +205,11 @@ const filtered = computed(() => {
   const q = keyword.value.trim().toLowerCase()
   return rows.value.filter((r) => {
     if (severityFilter.value && r.severity !== severityFilter.value) return false
-    if (statusFilter.value && r.status !== statusFilter.value) return false
+    if (statusFilter.value) {
+      // 状态口径与徽章一致：「生效中」仅含未过期的 published（已过期由徽章在「全部状态」中标识）
+      const expired = r.status === 'published' && r.expiresAt && new Date(r.expiresAt).getTime() <= Date.now()
+      if (statusFilter.value === 'published' ? expired || r.status !== 'published' : r.status !== statusFilter.value) return false
+    }
     if (q && !`${r.title} ${r.body}`.toLowerCase().includes(q)) return false
     return true
   })

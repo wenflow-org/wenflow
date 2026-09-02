@@ -75,9 +75,16 @@
         <button type="button" class="mk-empty__action" @click="reload">重试</button>
       </div>
       <div v-else class="mk-empty mk-empty--min">
-        <strong>还没有通知</strong>
-        <span>发送全员或定向通知后，用户端会收到站内信。</span>
-        <button type="button" class="mk-empty__action" @click="openSend">发送第一条通知</button>
+        <template v-if="kindFilter || unreadOnly">
+          <strong>当前筛选无匹配</strong>
+          <span>试试切换通知类型，或关闭「仅未读」。</span>
+          <button type="button" class="mk-empty__action" @click="clearFilter">清除筛选</button>
+        </template>
+        <template v-else>
+          <strong>还没有通知</strong>
+          <span>发送全员或定向通知后，用户端会收到站内信。</span>
+          <button type="button" class="mk-empty__action" @click="openSend">发送第一条通知</button>
+        </template>
       </div>
       <Pagination
         v-if="total > pageSize"
@@ -199,6 +206,12 @@ const loading = ref(false)
 const failed = ref(false)
 const kindFilter = ref('')
 const unreadOnly = ref(false)
+/** 清除筛选并重新加载 */
+function clearFilter() {
+  kindFilter.value = ''
+  unreadOnly.value = false
+  void reload()
+}
 
 /* mk-status 只有 ok/warn/bad/muted 四档（shared.css）：有未读用 warn 提示，无未读为 ok */
 const statusTone = computed(() => (unreadTotal.value > 0 ? 'mk-status--warn' : 'mk-status--ok'))
