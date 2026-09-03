@@ -197,6 +197,9 @@ function buildLearnerStateContext(
 ) {
   const previous = teachingState?.learnerStateContext || {};
   const ktEstimate = latestAnalysis?.ktEstimate;
+  const frustratedStreak = latestAnalysis?.emotionalState === 'frustrated'
+    ? (previous.frustratedStreak ?? 0) + 1
+    : 0;
   return {
     currentUnderstanding: latestAnalysis?.understanding ?? previous.currentUnderstanding ?? null,
     currentCognitiveLevel: latestAnalysis?.cognitiveLevel || previous.currentCognitiveLevel || null,
@@ -204,6 +207,7 @@ function buildLearnerStateContext(
     emotionalState: latestAnalysis?.emotionalState || previous.emotionalState || null,
     engagement: latestAnalysis?.engagement ?? previous.engagement ?? null,
     struggleDetected: previous.struggleDetected === true,
+    frustratedStreak,
     // θ−d 路由信号（回合级知识状态估计）：供 wrapup 证据消费与 session_load 聚合
     ...(ktEstimate ? { ktEstimate } : {}),
   };
@@ -325,8 +329,10 @@ function determineNextStage(params: {
   teachingOutput: TeachingTurnOutput;
   peerTriggered: boolean;
   learnerMessage: string;
+  taskMode?: 'normal' | 'productiveFailure';
+  frustratedStreak?: number;
 }): { stage: LearnStage; reason: string } {
-  const { currentStage, teachingOutput, peerTriggered, learnerMessage } = params;
+  const { currentStage, teachingOutput, peerTriggered, learnerMessage, taskMode, frustratedStreak } = params;
   const understanding = Number(teachingOutput.analysis?.understanding ?? 0.5);
   const emotion = teachingOutput.analysis?.emotionalState;
   const confusionPoints = Array.isArray(teachingOutput.analysis?.confusionPoints)
@@ -348,6 +354,11 @@ function determineNextStage(params: {
 
   if (completionCandidate) {
     return { stage: 'ready_to_close', reason: '检测到完成候选，当前任务已接近收束' };
+  }
+
+  // PF 逃生舱：连续 2 轮 frustrated 或 loadIndex > 0.85 → 强制退出 PF 模式（标记可收束，跳过整合）
+  if (taskMode === 'productiveFailure' && ((frustratedStreak ?? 0) >= 2 || highLoad)) {
+    return { stage: 'ready_to_close', reason: `PF 逃生舱触发：${highLoad ? '认知过载' : `连续 ${frustratedStreak} 轮受挫`}，退出有效失败模式` };
   }
 
   if (peerTriggered || understanding < 0.35 || emotion === 'frustrated' || confusionPoints.length >= 2 || (highLoad && understanding < 0.6) || (ktStruggle && understanding < 0.6)) {
@@ -1623,6 +1634,8 @@ export class AITeachingOrchestrator {
       teachingOutput: effectiveTeachingOutput,
       peerTriggered,
       learnerMessage: message,
+      taskMode: context.taskMode,
+      frustratedStreak: previousTeachingState?.learnerStateContext?.frustratedStreak ?? 0,
     });
     const learnerStateContext = buildLearnerStateContext(context, previousTeachingState, {
       ...teachingOutput.analysis,
