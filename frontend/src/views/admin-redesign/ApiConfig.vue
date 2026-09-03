@@ -57,30 +57,35 @@
         <label class="mk-field">
           <span>可用模型</span>
           <div class="ac-models">
-            <span v-for="m in models" :key="m" class="ac-model">{{ m }}</span>
-            <span v-if="!models.length" class="mk-na">尚未拉取模型</span>
+            <template v-if="models.length">
+              <span v-for="m in models" :key="m" class="ac-model">{{ m }}</span>
+            </template>
+            <div v-else class="ac-models__empty">
+              <span class="ac-models__empty-icon" aria-hidden="true">﹢</span>
+              <span>尚未拉取模型，点击右上角「连接并拉取」获取服务商模型列表</span>
+            </div>
           </div>
         </label>
         <div class="ac-row ac-row--3">
           <label class="mk-field">
             <span>对话默认</span>
-            <select class="mk-filter__select" v-model="form.defaultModel" :disabled="!models.length" @change="markDirty('route')">
+            <select class="mk-filter__select" :disabled="!models.length" :value="form.defaultModel" @change="form.defaultModel = ($event.target as HTMLSelectElement).value; markDirty('route')">
+              <option v-if="!models.length" value="">未设置（等待拉取）</option>
               <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
-              <option v-if="!models.length" value="">未设置</option>
             </select>
           </label>
           <label class="mk-field">
             <span>推理默认</span>
-            <select class="mk-filter__select" v-model="form.defaultReasoningModel" :disabled="!models.length" @change="markDirty('route')">
+            <select class="mk-filter__select" :disabled="!models.length" :value="form.defaultReasoningModel" @change="form.defaultReasoningModel = ($event.target as HTMLSelectElement).value; markDirty('route')">
+              <option v-if="!models.length" value="">未设置（等待拉取）</option>
               <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
-              <option v-if="!models.length" value="">未设置</option>
             </select>
           </label>
           <label class="mk-field">
             <span>评估默认</span>
-            <select class="mk-filter__select" v-model="form.defaultEvaluationModel" :disabled="!models.length" @change="markDirty('route')">
+            <select class="mk-filter__select" :disabled="!models.length" :value="form.defaultEvaluationModel" @change="form.defaultEvaluationModel = ($event.target as HTMLSelectElement).value; markDirty('route')">
+              <option v-if="!models.length" value="">未设置（等待拉取）</option>
               <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
-              <option v-if="!models.length" value="">未设置</option>
             </select>
           </label>
         </div>
@@ -90,9 +95,9 @@
       <div class="ac-test">
         <label class="mk-field mk-field--row ac-test__model">
           <span>测试模型</span>
-          <select class="mk-filter__select" v-model="testModel" :disabled="!models.length">
+          <select class="mk-filter__select" :disabled="!models.length" :value="testModel" @change="testModel = ($event.target as HTMLSelectElement).value">
+            <option v-if="!models.length" value="">无可用模型（等待拉取）</option>
             <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
-            <option v-if="!models.length" value="">无可用模型</option>
           </select>
         </label>
         <button type="button" class="mk-btn mk-btn--primary" :disabled="!models.length || testing" @click="runTest">
@@ -109,13 +114,15 @@
       </div>
     </section>
 
-    <!-- 安全与访问（全宽，三栏） -->
-    <section class="mk-card">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">安全与访问</h3>
-        <span class="mk-badge mk-badge--info">平台策略 · 热生效</span>
-      </div>
-      <div class="ac-policy ac-policy--3">
+    <!-- 安全与访问 + AI 调用与健康 并排（两张中等卡横向利用空间,减少纵向堆叠空白） -->
+    <div class="ac-main-grid">
+      <!-- 安全与访问（三栏） -->
+      <section class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">安全与访问</h3>
+          <span class="mk-badge mk-badge--info">平台策略 · 热生效</span>
+        </div>
+        <div class="ac-policy ac-policy--3">
         <div class="ac-policy__item">
           <span class="ac-policy__label">Admin 访问范围</span>
           <div class="ac-seg">
@@ -188,10 +195,10 @@
           </button>
         </div>
       </div>
-    </section>
+      </section>
 
-    <!-- AI 调用与健康（全宽分区：可靠性 → 探测 → 健康） -->
-    <section v-if="isLive && (reliability || probe.loaded || configLoadFailed)" class="mk-card">
+      <!-- AI 调用与健康（可靠性 → 探测 → 健康） -->
+      <section v-if="isLive && (reliability || probe.loaded || configLoadFailed)" class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">AI 调用与健康</h3>
         <span class="mk-badge" :class="healthBadgeCls">{{ healthLabel }}</span>
@@ -317,7 +324,8 @@
           </div>
         </div>
       </div>
-    </section>
+      </section>
+    </div>
 
     <!-- 保存条：脏位分域标注（连接/路由/策略/可靠性/探测） -->
     <div v-if="dirty.size > 0" class="ac-save">
@@ -762,7 +770,7 @@ async function toggleRegistration() {
 
 <style scoped>
 /* 内容区容器（对齐其他页面：mk-card__head + 内容区结构，不覆盖全局 .mk-card 盒模型） */
-.ac-body { display: grid; gap: 14px; padding: 14px 16px; }
+.ac-body { display: grid; gap: 12px; padding: 12px 16px; }
 .ac-row { display: grid; gap: 12px; }
 .ac-row--2-1 { grid-template-columns: 1.6fr 1fr; }
 .ac-row--3 { grid-template-columns: repeat(3, 1fr); }
@@ -827,6 +835,36 @@ async function toggleRegistration() {
   font-size: var(--mk-fs-12);
   font-weight: 600;
 }
+/* 可用模型空态：引导操作而非一行弱文字（原「尚未拉取模型」独占一行显空） */
+.ac-models__empty {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px dashed var(--mk-line);
+  border-radius: 8px;
+  background: #fafbfc;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-12_5);
+}
+.ac-models__empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--mk-blue-bg);
+  color: var(--mk-blue);
+  font-size: 13px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+html[data-theme='dark'] .ac-models__empty { background: #141c2b; }
+/* 模型选择下拉：无模型时禁用态不拉满（原 select width:100% 占满整行显空） */
+.ac-body .mk-filter__select { min-width: 0; }
+.ac-body .mk-filter__select[disabled] { opacity: 0.6; cursor: not-allowed; }
+.ac-body .ac-row--3 .mk-filter__select { max-width: 280px; }
 
 .ac-policy {
   display: grid;
@@ -834,13 +872,21 @@ async function toggleRegistration() {
   gap: 14px;
   padding: 16px;
 }
+/* 安全与访问 + AI 调用与健康 并排（减少纵向堆叠空白；不强制等高,各自按内容高度） */
+.ac-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 12px;
+  align-items: start;
+}
+.ac-main-grid > .mk-card { min-width: 0; }
 .ac-policy__item { display: grid; gap: 8px; align-content: start; }
-.ac-policy--3 { grid-template-columns: repeat(3, 1fr); }
+.ac-policy--3 { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
 .ac-policy__label { font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-muted); }
 .ac-policy__desc { font-size: var(--mk-fs-12); color: var(--mk-muted); line-height: 1.6; }
 .ac-policy__toggle { width: fit-content; }
 .ac-policy__warn { font-size: var(--mk-fs-12); color: var(--mk-red); font-weight: 600; }
-.ac-seg { display: inline-flex; gap: 4px; padding: 3px; background: #eef2fa; border-radius: 10px; width: fit-content; }
+.ac-seg { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: #eef2fa; border-radius: 10px; width: fit-content; }
 .ac-seg__item {
   border: 0;
   background: transparent;
@@ -851,6 +897,7 @@ async function toggleRegistration() {
   font-weight: 600;
   color: var(--mk-muted);
   cursor: pointer;
+  white-space: nowrap;
 }
 .ac-seg__item--active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 2px rgba(23, 32, 51, 0.1); }
 
@@ -1043,6 +1090,7 @@ async function toggleRegistration() {
 
 /* 侧栏占 208px，断点需按视口 1100px 触发（内容区 ≈ 892px），安全策略单列 */
 @media (max-width: 1100px) {
+  .ac-main-grid { grid-template-columns: 1fr; }
   .ac-policy { grid-template-columns: 1fr; }
   .ac-cols { grid-template-columns: 1fr; }
   .ac-cols__main { padding: 0 16px; }
