@@ -96,7 +96,7 @@
             <col v-if="!hiddenCols.has('time')" style="width:var(--mk-col-time-full)">
             <col v-if="!hiddenCols.has('kind')" style="width:36px">
             <col v-if="!hiddenCols.has('agent')" style="width:130px">
-            <col v-if="!hiddenCols.has('msg')" style="width:260px">
+            <col v-if="!hiddenCols.has('msg')" style="width:220px">
             <col v-if="!hiddenCols.has('model')" style="width:140px">
             <col v-if="!hiddenCols.has('tokens')" style="width:132px">
             <col v-if="!hiddenCols.has('dur')" style="width:52px">
@@ -108,7 +108,7 @@
               <th v-if="!hiddenCols.has('time')">时间</th>
               <th v-if="!hiddenCols.has('kind')">类型</th>
               <th v-if="!hiddenCols.has('agent')">节点</th>
-              <th v-if="!hiddenCols.has('msg')">消息</th>
+              <th v-if="!hiddenCols.has('msg')">调用</th>
               <th v-if="!hiddenCols.has('model')">模型</th>
               <th v-if="!hiddenCols.has('tokens')">输入 / 输出</th>
               <th v-if="!hiddenCols.has('dur')" class="right">耗时</th>
@@ -130,7 +130,11 @@
                 <td v-if="!hiddenCols.has('msg')">
                   <div class="exec-cell">
                     <div class="exec-cell__line">
-                      <strong class="exec-title" :title="log.title">{{ log.title }}</strong>
+                      <!-- 主行：错误行显示错误摘要（红）；成功行显示调用内容预览（prompt 提取），
+                           无内容时弱化「执行完成」——避免与状态列"成功"重复占位（原恒显"执行完成"零信息量） -->
+                      <strong v-if="log.status === 'err'" class="exec-title exec-title--err" :title="log.title || log.detail">{{ log.title || log.detail }}</strong>
+                      <strong v-else-if="contentPreview(log)" class="exec-title exec-title--preview" :title="log.title">{{ contentPreview(log) }}</strong>
+                      <strong v-else class="exec-title exec-title--ok" :title="log.title">{{ log.title }}</strong>
                     </div>
                     <div class="exec-cell__line exec-cell__sub">
                       <span v-if="log.errorCode" class="tline__errcode mono" :title="log.errorCode">{{ errorCodeLabel(log.errorCode) ?? `[${log.errorCategory || 'err'}] ${log.errorCode}` }}</span>
@@ -324,6 +328,25 @@ function promptOf(log: { traceId: string; agent: string }): PromptMetaRow | unde
   if (!list?.length) return undefined
   const agentId = `skill:${log.agent}`
   return list.find((p) => p.agentId === agentId || p.agentId.replace(/^skill:/, '') === log.agent)
+}
+
+/* 成功调用的内容预览（消息列主行）：从契约层提取输出摘要，
+   让列表行有信息量而非恒显「执行完成」（与状态列冗余）。
+   优先级：extractedJson 的键列表 > normalizedOutput 摘要 > userPayload 摘要；均无则空（回落弱化「执行完成」）。 */
+function contentPreview(log: { traceId: string; agent: string }): string {
+  const p = promptOf(log)
+  if (!p) return ''
+  const json = p.extractedJson?.trim()
+  if (json) {
+    const keys = json.slice(0, 400).match(/"([^"]{1,24})"\s*:/g)
+    if (keys?.length) return keys.slice(0, 3).map((k) => k.replace(/["\s:]/g, '')).join(' · ')
+  }
+  const out = p.normalizedOutput?.trim() || p.userPayload?.trim()
+  if (out) {
+    const oneLine = out.replace(/\s+/g, ' ').trim()
+    return oneLine.length > 32 ? `${oneLine.slice(0, 32)}…` : oneLine
+  }
+  return ''
 }
 
 /* Tokens 列语义（P2）：传输层（agent_call_logs.promptTokens/completionTokens）优先——
@@ -755,6 +778,11 @@ html[data-theme='dark'] .exec-test-tag { background: #2a3850; color: #8fa3bd; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 消息列语义变体：错误摘要(红) / 内容预览(灰蓝) / 成功弱化——告别恒显「执行完成」与状态列重复 */
+.exec-title--err { color: var(--mk-red, #dc2626); font-weight: 700; }
+.exec-title--err:hover { text-decoration: underline; }
+.exec-title--preview { color: var(--mk-muted, #5b6577); font-weight: 600; }
+.exec-title--ok { color: var(--mk-faint, #5f6f8c); font-weight: 500; }
 .exec-cell__sub { flex-wrap: wrap; gap: 5px; }
 /* 节点列：等宽短名，长名 ellipsis（title 全值，点击开 Skill 抽屉）。
    display:inline-block 必须显式声明——span 为 inline 元素时 max-width/overflow/ellipsis 全部失效，
@@ -837,11 +865,11 @@ html[data-theme='dark'] .exec-detail td { background: #101826; }
 }
 .exec-detail__links { display: inline-flex; gap: 12px; }
 
-/* 窄屏自适应：9 列固定宽合计 ≈1002px(消息列 260px,不再弹性吸走全部剩余空间——
-   修复 1440px 下消息列 466px 失衡、模型/输入输出列被截断的问题)。
-   容器 <1002px 时出现横向滚动(原 min-width:1080px 在 840px 容器下把列压坏/裁出)。
-   1440px 视口无滚动且各列均衡;1080px 视口滚动 ~160px 但列宽稳定不挤压。 */
-.mk-table-scroll .exec-table { min-width: 1002px; }
+/* 窄屏自适应：9 列固定宽合计 ≈962px(调用列 220px——原 466px 弹性列吸走全部剩余空间、
+   与状态列「成功」语义重复,已缩窄并弱化成功行)。
+   容器 <962px 时出现横向滚动(原 min-width:1080px 在 840px 容器下把列压坏/裁出)。
+   1440px 视口无滚动且各列均衡;1080px 视口滚动但列宽稳定不挤压。 */
+.mk-table-scroll .exec-table { min-width: 962px; }
 
 /* ---------- 行内 chip（沿用） ---------- */
 .tline__errcode {
