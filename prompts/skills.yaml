@@ -91,6 +91,36 @@ skills:
           via: routings
       sandbox: [path]
 
+  - skillId: path-reviewer
+    kind: mainline
+    stage: path
+    parentAgent: path-agent
+    handlerRef: backend/src/skills/path-reviewer/index.ts
+    coreFile: prompts/core/path-reviewer.yaml
+    displayName: 路径评审 Skill
+    description: 对路径生成结果做 CIDDP 五维度评审，低于阈值输出重规划指令
+    coordinator:
+      agentId: path-agent
+      steps:
+        - { step: 4, role: path-quality-review }
+    dataSource:
+      sandbox: [path]
+
+  - skillId: kc-mapper
+    kind: mainline
+    stage: path
+    parentAgent: path-agent
+    handlerRef: backend/src/skills/kc-mapper/index.ts
+    coreFile: prompts/core/kc-mapper.yaml
+    displayName: 知识组件映射 Skill
+    description: 将认知概念和子任务分解为细粒度 KC，标注前置依赖
+    coordinator:
+      agentId: path-agent
+      steps:
+        - { step: 5, role: kc-mapping }
+    dataSource:
+      sandbox: [path]
+
   # ============ teaching-agent 下辖（mainline） ============
   - skillId: teaching-turn
     kind: mainline
@@ -251,6 +281,21 @@ skills:
           via: event
       sandbox: []
     notes: LLM 输入来自 lesson:completed 领域事件 payload（AITeachingCoordinator.ts:1981-2006 发布，teaching_sessions 数据投影）；domain_event_inbox 为消费幂等读（LessonKnowledgeEnrichmentConsumer.ts:12）
+
+  - skillId: learning-predictor
+    kind: mainline
+    stage: profile
+    parentAgent: profile-agent
+    handlerRef: backend/src/skills/learning-predictor/index.ts
+    coreFile: prompts/core/learning-predictor.yaml
+    displayName: 学习表现预测 Skill
+    description: 任务前基于知识状态摘要预测卡壳风险，含实证校准闭环
+    coordinator:
+      agentId: profile-agent
+      steps:
+        - { step: 3, role: pre-task-prediction, condition: before starting a new task }
+    dataSource:
+      sandbox: []
 
   # ============ simulation-agent 下辖（mainline，黑盒实验链） ============
   - skillId: virtual-learner-persona-designer

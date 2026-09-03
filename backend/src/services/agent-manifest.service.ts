@@ -411,7 +411,7 @@ export const LEGACY_AGENT_MEMBERS: Record<string, string[]> = {
   'goal-agent': ['skill:goal-conversation'],
   'path-agent': ['skill:path-planning', 'skill:stage-designer', 'skill:path-reviewer', 'skill:kc-mapper'],
   'teaching-agent': ['skill:teaching-turn', 'skill:peer-reinforcement', 'skill:session-wrapup', 'skill:adaptive-guidance-copy'],
-  'profile-agent': ['skill:learner-model', 'skill:lesson-knowledge-enricher'],
+  'profile-agent': ['skill:learner-model', 'skill:lesson-knowledge-enricher', 'skill:learning-predictor'],
   'simulation-agent': [
     'skill:virtual-learner-persona-designer',
     'skill:virtual-learner-scenario-designer',

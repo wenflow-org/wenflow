@@ -20,13 +20,13 @@ function writeTempYaml(content: string): string {
 }
 
 describe('skills-file loader（P0 户口簿）', () => {
-  it('加载真实 prompts/skills.yaml：26 条活跃登记，kind/stage 分布符合规格', () => {
+  it('加载真实 prompts/skills.yaml：30 条活跃登记，kind/stage 分布符合规格', () => {
     const book = parseSkillsFile(SKILLS_FILE_PATH);
     expect(book.version).toBe(1);
-    expect(book.skills.length).toBe(26);
+    expect(book.skills.length).toBe(30);
 
     const byKind = (kind: string) => book.skills.filter((entry) => entry.kind === kind);
-    expect(byKind('mainline').length).toBe(15);
+    expect(byKind('mainline').length).toBe(19);
     expect(byKind('handler-only').length).toBe(2);
     expect(byKind('aux').length).toBe(9);
 
@@ -50,20 +50,20 @@ describe('skills-file loader（P0 户口簿）', () => {
     }
   });
 
-  it('派生视图：活跃集 26 条、parentAgent 归属映射（保序）', () => {
+  it('派生视图：活跃集 30 条、parentAgent 归属映射（保序）', () => {
     const book = loadSkillsBookRaw();
-    expect(getActiveSkillIds(book).size).toBe(26);
+    expect(getActiveSkillIds(book).size).toBe(30);
     const members = getParentAgentMembers(book);
     expect(members.get('goal-agent')).toEqual(['skill:goal-conversation']);
-    expect(members.get('path-agent')).toEqual(['skill:path-planning', 'skill:stage-designer']);
+    expect(members.get('path-agent')).toEqual(['skill:path-planning', 'skill:stage-designer', 'skill:path-reviewer', 'skill:kc-mapper']);
     expect(members.get('teaching-agent')).toEqual([
       'skill:teaching-turn',
       'skill:peer-reinforcement',
       'skill:session-wrapup',
       'skill:adaptive-guidance-copy',
     ]);
-    expect(members.get('profile-agent')).toEqual(['skill:learner-model', 'skill:lesson-knowledge-enricher']);
-    expect(members.get('simulation-agent')).toHaveLength(7);
+    expect(members.get('profile-agent')).toEqual(['skill:learner-model', 'skill:lesson-knowledge-enricher', 'skill:learning-predictor']);
+    expect(members.get('simulation-agent')).toHaveLength(8);
     expect(members.has('mcp-tool')).toBe(false);
   });
 

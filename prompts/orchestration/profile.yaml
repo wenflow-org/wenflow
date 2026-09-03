@@ -13,6 +13,7 @@ description: 学习者画像增强与背景知识沉淀（编排器内部）
 contracts:
   - agentId: skill:lesson-knowledge-enricher
   - agentId: skill:learner-model
+  - agentId: skill:learning-predictor
   - agentId: profile-agent
 
 fields:

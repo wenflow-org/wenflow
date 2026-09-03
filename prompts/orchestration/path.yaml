@@ -4,11 +4,13 @@
 stage: path
 order: 2
 displayName: Path 阶段
-description: 学习路径生成：Framing → Path Planning → Stage Designer
+description: 学习路径生成：Framing → Path Planning → Stage Designer → Path Reviewer → KC Mapper
 
 contracts:
   - agentId: skill:path-planning
   - agentId: skill:stage-designer
+  - agentId: skill:path-reviewer
+  - agentId: skill:kc-mapper
   - agentId: path-agent
 
 fields:
