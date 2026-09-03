@@ -49,6 +49,7 @@ import { assembleStageDesignerChannels } from '../field-dispatcher';
 import { stageDesignerDefinition } from '../../skills/stage-designer';
 import { pathAgentDefinition } from '../../skills/path-planning';
 import { pathReviewerDefinition } from '../../skills/path-reviewer';
+import { kcMapperDefinition } from '../../skills/kc-mapper';
 
 interface CreateGoalData {
   userId: string;
@@ -3034,6 +3035,44 @@ class LearningService {
         await Promise.all(batchIndexes.map(processStageDesign));
       }
 
+      // KC 映射（kc-mapper）：stage-designer 全部完成后，将概念与子任务分解为知识组件 + 依赖图
+      let kcAnnotation: any = null;
+      try {
+        const parsedTemplate = this.parsePathPromptTemplate(learningPath.aiPromptTemplate || null);
+        const kcResult = await executeSkill(kcMapperDefinition, {
+          cognitiveCore: (parsedTemplate as any)?.cognitiveDesign || null,
+          milestones: learningPath.milestones.map((m) => ({
+            stageNumber: m.stageNumber,
+            title: m.title,
+            coreConcept: m.coreConceptName || m.coreConceptId,
+            description: m.description,
+            goal: m.goal,
+          })),
+          subtasks: stageDesignOutputs.flatMap((s) => s.subtasks.map((t: any) => ({
+            title: t.title,
+            type: t.type,
+            linkedConcept: t.linkedConcept,
+            knowledgeType: t.knowledgeType,
+            cognitiveLevel: t.cognitiveLevel,
+          }))),
+          prerequisiteTree: (parsedTemplate as any)?.normalizedInput?.prerequisiteTree || null,
+        });
+        if (kcResult?.success && kcResult?.output) {
+          kcAnnotation = kcResult.output;
+          logger.info('[kc-mapper] KC 映射完成', {
+            userId: data.userId,
+            pathId,
+            kcCount: kcAnnotation?.conceptKcs?.length || 0,
+          });
+        }
+      } catch (kcError) {
+        logger.warn('[kc-mapper] 映射失败（best-effort，不阻断路径生成）', {
+          userId: data.userId,
+          pathId,
+          error: kcError instanceof Error ? kcError.message : String(kcError),
+        });
+      }
+
       await prisma.$transaction(async (tx) => {
         await assertGenerationRunFence(tx, pathId, runId);
         const lockedPath = await tx.learning_paths.updateMany({
@@ -3091,9 +3130,11 @@ class LearningService {
             aiPromptTemplate: JSON.stringify({
               ...parsedTemplate,
               stageDesigns: stageDesignRawOutputs,
+              kcAnnotation,
               _generation: {
                 ...(parsedTemplate?._generation && typeof parsedTemplate._generation === 'object' ? parsedTemplate._generation : {}),
                 stageDesign: 'succeeded',
+                kcMapping: kcAnnotation ? 'succeeded' : 'skipped',
                 lastError: null,
                 sourceConversationId: data.sourceConversationId || null,
                 triggerSource,
