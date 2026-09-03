@@ -743,17 +743,8 @@ onMounted(() => {
 /* 概览卡样式由共享 mk-overview/mk-kpi 体系承载；此处仅保留堆叠条（pre slot 内）与行样式 */
 .gc-dash__stack { padding: 0; }
 .gc-row { cursor: pointer; }
-/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
-.gc-tags { display: flex; gap: 6px; margin-top: 2px; }
-.gc-tag {
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: var(--mk-fs-11);
-  font-weight: 700;
-  letter-spacing: 0.03em;
-}
-.gc-tag--virtual { background: #f1f5f9; color: #64748b; border: 1px dashed #cbd5e1; }
-.gc-tag--test { background: #fef3c7; color: #b45309; }
+/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；徽章本体用 mk-badge--*） */
+.gc-tags { display: flex; gap: 5px; margin-top: 2px; }
 /* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
 .gc-stage-cell { display: grid; gap: 4px; min-width: 148px; }
 .gc-stage-cell__head { display: flex; align-items: center; gap: 8px; }
@@ -1096,8 +1087,6 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
 
 /* ================= 暗色模式（D1 补完）：目标对话 ================= */
 html[data-theme='dark'] {
-  .gc-tag--virtual { background: #1c2637; color: #8fa3bd; border-color: #33415c; }
-  .gc-tag--test { background: rgba(251, 191, 36, 0.16); color: #fcd34d; }
   .gc-json { background: #0f1624; color: #c6d4ea; }
   /* 消息气泡：容器级旧覆写修正为气泡级（assistant 灰蓝 / user 深蓝） */
   .gc-msg--assistant .gc-msg__bubble,
