@@ -56,31 +56,76 @@ export interface SessionKnowledgeOutcome {
 export function mapKnowledgeStatusToMastery(
   status: SessionKnowledgeOutcome['status'],
   progress: number,
+  calibrationBias: 'overconfident' | 'accurate' | 'underconfident' = 'accurate',
 ): { masteryScore: number; stability: MemoryStability } {
   const p = Number.isFinite(progress) ? Math.max(0, Math.min(100, progress)) : 0;
+  let score: number;
+  let stability: MemoryStability;
   switch (status) {
     case 'mastered':
-      return { masteryScore: p >= 100 ? 0.9 : 0.85, stability: 'stable' };
+      score = p >= 100 ? 0.9 : 0.85;
+      stability = 'stable';
+      break;
     case 'review':
-      return { masteryScore: 0.5, stability: 'fragile' };
+      score = 0.5;
+      stability = 'fragile';
+      break;
     case 'learning':
-      return { masteryScore: 0.35, stability: 'developing' };
+      score = 0.35;
+      stability = 'developing';
+      break;
     case 'pending':
-      return { masteryScore: 0.2, stability: 'unknown' };
+      score = 0.2;
+      stability = 'unknown';
+      break;
     default:
-      return { masteryScore: 0.3, stability: 'developing' };
+      score = 0.3;
+      stability = 'developing';
+      break;
   }
+  // 元认知校准闭环：overconfident → 降权（自报掌握度不可信），underconfident → 微升
+  if (calibrationBias === 'overconfident') score = Math.max(0.1, score - 0.1);
+  else if (calibrationBias === 'underconfident') score = Math.min(0.95, score + 0.05);
+  return { masteryScore: score, stability };
 }
 
 class MemoryTraceService {
-  /** 计算下次到期时间：now + intervalDays（ACT-R Cepeda 15% × factor） */
-  private computeDueAt(input: MemoryTraceInput, now: Date): Date | null {
+  /** 默认睡眠窗口（保守估计：23:00-07:00），dueAt 不落在该区间内 */
+  private static readonly SLEEP_START_HOUR = 23;
+  private static readonly SLEEP_END_HOUR = 7;
+  /** 活跃窗口起始（上午 9 点），dueAt 过早时锚定到此 */
+  private static readonly ACTIVE_START_HOUR = 9;
+
+  /** 将 dueAt 锚定到活跃窗口：跳过睡眠区间（23-07），不足 1 天时保证至少跨 1 个睡眠周期 */
+  private snapToActiveWindow(dueAt: Date, now: Date, isFirstExtraction: boolean): Date {
+    const due = new Date(dueAt);
+    const hour = due.getHours();
+    // 落在睡眠窗口 → 推到次日早晨
+    if (hour >= MemoryTraceService.SLEEP_START_HOUR || hour < MemoryTraceService.SLEEP_END_HOUR) {
+      due.setHours(MemoryTraceService.ACTIVE_START_HOUR, 0, 0, 0);
+      if (hour >= MemoryTraceService.SLEEP_START_HOUR) {
+        due.setDate(due.getDate() + 1);
+      }
+    }
+    // 首次提取：确保至少跨 1 个睡眠周期（Rasch & Born 2013, Gais 2006）
+    if (isFirstExtraction) {
+      const minDue = new Date(now);
+      minDue.setDate(minDue.getDate() + 1);
+      minDue.setHours(MemoryTraceService.ACTIVE_START_HOUR, 0, 0, 0);
+      if (due < minDue) return minDue;
+    }
+    return due;
+  }
+
+  /** 计算下次到期时间：now + intervalDays（ACT-R Cepeda 15% × factor），加睡眠窗口锚定 */
+  private computeDueAt(input: MemoryTraceInput, now: Date, isFirstExtraction = false): Date | null {
     if (input.dueAt) return input.dueAt;
     const factor = Number.isFinite(input.intervalFactor) && (input.intervalFactor as number) > 0
       ? (input.intervalFactor as number)
       : 1;
     const intervalDays = reviewIntervalDays(DEFAULT_RETENTION_TARGET_DAYS, factor);
-    return new Date(now.getTime() + intervalDays * 24 * 60 * 60 * 1000);
+    const rawDue = new Date(now.getTime() + intervalDays * 24 * 60 * 60 * 1000);
+    return this.snapToActiveWindow(rawDue, now, isFirstExtraction);
   }
 
   /** 记录一次提取/评估：upsert 痕迹并累计提取次数；提供 fsrsGrade 时走 FSRS-6 DSR 调度 */
@@ -90,12 +135,13 @@ class MemoryTraceService {
       ? (input.stability as MemoryStability)
       : 'developing';
     const now = new Date();
-    let dueAt = this.computeDueAt(input, now);
+    let dueAt = this.computeDueAt(input, now, false);  // legacy: 保守不判首次
     let fsrsStability: number | null = null;
     let fsrsDifficulty: number | null = null;
 
     if (input.fsrsGrade !== undefined) {
       const existing = await this.getTrace(input.userId, input.conceptKey);
+      const isFirstExtraction = !existing || existing.extractionCount === 0;
       const prev: FsrsMemoryState | null = existing
         ? (existing.fsrsStability !== null && existing.fsrsStability !== undefined
           ? {
@@ -110,7 +156,8 @@ class MemoryTraceService {
       const result = fsrsSchedule(prev, input.fsrsGrade, now);
       fsrsStability = result.state.stability;
       fsrsDifficulty = result.state.difficulty;
-      dueAt = new Date(now.getTime() + result.intervalDays * DAY_MS);
+      const rawDue = new Date(now.getTime() + result.intervalDays * DAY_MS);
+      dueAt = this.snapToActiveWindow(rawDue, now, isFirstExtraction);
     }
 
     await prisma.memory_traces.upsert({
@@ -150,11 +197,12 @@ class MemoryTraceService {
     userId: string,
     items: SessionKnowledgeOutcome[],
     source = 'derived',
+    calibrationBias: 'overconfident' | 'accurate' | 'underconfident' = 'accurate',
   ): Promise<number> {
     let count = 0;
     for (const item of items) {
       if (!item?.name || !String(item.name).trim()) continue;
-      const { masteryScore, stability } = mapKnowledgeStatusToMastery(item.status, item.progress);
+      const { masteryScore, stability } = mapKnowledgeStatusToMastery(item.status, item.progress, calibrationBias);
       await this.recordExtraction({
         userId,
         conceptKey: String(item.name).trim(),
@@ -318,12 +366,14 @@ class MemoryTraceService {
       const activeMisconceptions = await getActiveForConcepts(userId, [conceptKey], 1);
       const interferenceMultiplier = activeMisconceptions.length > 0 ? 0.85 : 1;
       const adjustedStability = result.state.stability * interferenceMultiplier;
+      const rawDue = new Date(now.getTime() + Math.round(result.intervalDays * interferenceMultiplier) * DAY_MS);
+      const isFirstExtraction = trace.extractionCount === 0;
       await prisma.memory_traces.updateMany({
         where: { userId, conceptKey },
         data: {
           fsrsStability: adjustedStability,
           fsrsDifficulty: result.state.difficulty,
-          dueAt: new Date(now.getTime() + Math.round(result.intervalDays * interferenceMultiplier) * DAY_MS),
+          dueAt: this.snapToActiveWindow(rawDue, now, isFirstExtraction),
         },
       });
       return;

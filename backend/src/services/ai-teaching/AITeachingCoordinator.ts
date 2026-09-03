@@ -2200,7 +2200,8 @@ export class AITeachingOrchestrator {
 
       dashboardGuidanceSnapshotService.refreshInBackground(session.userId, 'lesson-wrapup');
       // 记忆引擎 M2：课后按知识看板状态确定性回写内化强度（best-effort，失败不阻断课堂完成）
-      memoryTraceService.recordSessionOutcome(session.userId, session.knowledgeState, 'derived').catch((error) => {
+      const calibrationBias = learnerSnapshot?.profile?.cognitive?.selfAssessmentAccuracy ?? 'accurate';
+      memoryTraceService.recordSessionOutcome(session.userId, session.knowledgeState, 'derived', calibrationBias).catch((error) => {
         logger.warn('[AITeaching] 记忆痕迹回写失败', {
           sessionId,
           userId: session.userId,
