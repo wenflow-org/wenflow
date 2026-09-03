@@ -13,6 +13,7 @@
 import prisma from '../../config/database';
 import { learnerSnapshotService, LearnerSnapshotService } from './LearnerSnapshotService';
 import { memoryTraceService } from '../memory/memory-trace.service';
+import { getActiveForConcepts } from './misconception-ledger.service';
 import { getLevelFromXp } from './level.util';
 import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
 
@@ -40,8 +41,13 @@ export interface LearnerExitView {
 /**
  * 交错排序：相邻复习项不共享 conceptKey（交错学习——训练学生从题目特征自主判断策略）。
  * 贪心轮转：按 conceptKey 分组后轮流取，保证同概念不连续出现。
+ * confusablePairs：高 σ 语义混淆对（同一 canonicalLabel 的概念互不可邻）。
  */
-function interleaveByConcept<T extends { conceptKey: string }>(items: T[], limit: number): T[] {
+function interleaveByConcept<T extends { conceptKey: string }>(
+  items: T[],
+  limit: number,
+  confusablePairs?: Map<string, Set<string>>,
+): T[] {
   const buckets = new Map<string, T[]>();
   for (const item of items) {
     const key = item.conceptKey || '';
@@ -52,12 +58,19 @@ function interleaveByConcept<T extends { conceptKey: string }>(items: T[], limit
   const result: T[] = [];
   const keys = Array.from(buckets.keys());
   let added = true;
+  let prevKey = '';
   while (result.length < limit && added) {
     added = false;
     for (const key of keys) {
+      // 高 σ 隔开：当前 key 与上一项互不可邻时跳过
+      if (confusablePairs && prevKey) {
+        const confusable = confusablePairs.get(key);
+        if (confusable && confusable.has(prevKey)) continue;
+      }
       const bucket = buckets.get(key);
       if (bucket && bucket.length > 0) {
         result.push(bucket.shift()!);
+        prevKey = key;
         added = true;
         if (result.length >= limit) break;
       }
@@ -109,8 +122,38 @@ export class LearnerExitService {
       extractionCount: t.extractionCount,
     }));
 
-    // 交错排序：相邻复习项不共享 conceptKey（交错学习——训练学生从题目特征自主判断策略）
-    const interleaved = interleaveByConcept(items, limit);
+    // 高 σ 概念对：查询活跃误解的 canonicalLabel，识别语义混淆对
+    const conceptKeys = items.map((i) => i.conceptKey);
+    const confusablePairs = new Map<string, Set<string>>();
+    if (conceptKeys.length > 0) {
+      try {
+        const activeMisconceptions = await getActiveForConcepts(userId, conceptKeys, 20);
+        // 按 canonicalLabel 分组：同一 label 下的概念互不可邻
+        const labelGroups = new Map<string, Set<string>>();
+        for (const m of activeMisconceptions) {
+          const label = m.canonicalLabel || m.hypothesis?.slice(0, 60) || '';
+          if (!label) continue;
+          const group = labelGroups.get(label) || new Set<string>();
+          group.add(m.conceptKey);
+          labelGroups.set(label, group);
+        }
+        for (const [, keys] of labelGroups) {
+          if (keys.size <= 1) continue;
+          for (const key of keys) {
+            const neighbors = confusablePairs.get(key) || new Set<string>();
+            for (const other of keys) {
+              if (other !== key) neighbors.add(other);
+            }
+            confusablePairs.set(key, neighbors);
+          }
+        }
+      } catch {
+        // 查询失败静默降级，不影响复习队列
+      }
+    }
+
+    // 交错排序：相邻复习项不共享 conceptKey，且不互不可邻（高 σ 语义混淆对隔开）
+    const interleaved = interleaveByConcept(items, limit, confusablePairs);
     return interleaved;
   }
 

@@ -1891,6 +1891,17 @@ export class AITeachingOrchestrator {
         })).filter((m) => m.conceptKey && m.hypothesis));
       }
 
+      // θ−d EMA：ktEstimate 跨会话滑动平均（α=0.2），best-effort 不阻断回合
+      const ktConceptMastery = teachingOutput.analysis?.ktEstimate?.conceptMastery;
+      if (Array.isArray(ktConceptMastery) && ktConceptMastery.length > 0) {
+        void memoryTraceService.applyKtEstimate(session.userId, ktConceptMastery.map((c) => ({
+          conceptKey: c.conceptKey,
+          mastery: c.mastery,
+        }))).catch((error) => {
+          logger.warn('[AITeachingCoordinator] ktEstimate EMA 回写失败', { error: error instanceof Error ? error.message : String(error) });
+        });
+      }
+
       const baseResult = {
       analysis: teachingOutput.analysis,
       aiResponse: teachingOutput.reply,

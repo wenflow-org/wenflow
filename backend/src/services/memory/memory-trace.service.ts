@@ -345,6 +345,49 @@ class MemoryTraceService {
   }
 
   /**
+   * θ−d 知识状态 EMA：将 teaching-turn 的 ktEstimate.conceptMastery 以 α=0.2 滑动平均
+   * 累积进 memory_traces.ktMasteryEma（跨会话知识状态的确定性通道，替代每轮 LLM 独立估计）。
+   * 只更新 ktMasteryEma，不触碰 extractionCount/lastSeenAt/FSRS 状态（不干扰复习调度）。
+   */
+  async applyKtEstimate(
+    userId: string,
+    items: Array<{ conceptKey: string; mastery: number }>,
+  ): Promise<void> {
+    if (!items || items.length === 0) return;
+    const ALPHA = 0.2;
+    const now = new Date();
+    for (const item of items) {
+      const key = String(item.conceptKey || '').trim();
+      if (!key) continue;
+      const mastery = Number.isFinite(item.mastery) ? Math.max(0, Math.min(1, item.mastery)) : null;
+      if (mastery === null) continue;
+      const existing = await this.getTrace(userId, key);
+      if (existing) {
+        const prev = existing.ktMasteryEma ?? existing.masteryScore;
+        const ema = Number.isFinite(prev) ? ALPHA * mastery + (1 - ALPHA) * (prev as number) : mastery;
+        await prisma.memory_traces.updateMany({
+          where: { userId, conceptKey: key },
+          data: { ktMasteryEma: ema },
+        });
+      } else {
+        // 无痕迹也记录 EMA（独立于 ACT-R/FSRS 调度的知识状态通道）
+        await prisma.memory_traces.create({
+          data: {
+            id: `mt_${now.getTime()}_${Math.random().toString(36).slice(2, 10)}`,
+            userId,
+            conceptKey: key,
+            masteryScore: 0.3,
+            stability: 'unknown',
+            ktMasteryEma: mastery,
+            extractionCount: 0,
+            source: 'kt-estimate',
+          },
+        });
+      }
+    }
+  }
+
+  /**
    * FSRS-6 调度更新：复习成功后按成绩更新 FSRS 状态（Dsr 稳定性/难度）；grade 未提供时走 legacy SM-2 ×2。
    */
   async bumpReviewInterval(userId: string, conceptKey: string, grade?: FsrsGradeCode): Promise<void> {
