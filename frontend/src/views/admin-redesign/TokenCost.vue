@@ -23,13 +23,34 @@
     <div v-if="loadFailed && !summary" class="mk-empty mk-empty--min">
       <span class="mk-empty__icon" aria-hidden="true">◌</span>
       <strong>Token 成本数据加载失败</strong>
-      <span>无法从后端拉取用量统计。</span>
+      <span>无法从后端拉取用量统计，请重试或稍后再来。</span>
       <button type="button" class="mk-empty__action" @click="() => load(true)">重试</button>
     </div>
 
+    <!-- 首载骨架：KPI 卡 + 趋势图 + 排行占位（对齐全站 MockSkeleton 语言） -->
+    <template v-else-if="!summary && loading">
+      <div class="tc-filterbar tc-filterbar--skeleton"></div>
+      <section class="tc-overview">
+        <div v-for="i in 3" :key="i" class="mk-kpi tc-skel-kpi"><i class="tc-skel tc-skel--kpi-num"></i><i class="tc-skel tc-skel--kpi-label"></i></div>
+      </section>
+      <section class="mk-card">
+        <div class="mk-card__head"><i class="tc-skel tc-skel--title"></i></div>
+        <div class="tc-skel-chart">
+          <i v-for="i in 7" :key="i" class="tc-skel tc-skel--bar"></i>
+        </div>
+      </section>
+      <section class="mk-card">
+        <div class="mk-card__head"><i class="tc-skel tc-skel--title"></i></div>
+        <div class="tc-skel-rows">
+          <i v-for="i in 4" :key="i" class="tc-skel tc-skel--row"></i>
+        </div>
+      </section>
+    </template>
+
+    <!-- 整页无数据（真实空态）：summary 为空且已加载完成 -->
     <div v-else-if="!summary && !loading" class="mk-empty mk-empty--min">
       <strong>暂无 Token 成本数据</strong>
-      <span>产生 LLM 调用后，用量与成本会自动汇总在这里。</span>
+      <span>近 {{ days }} 天没有任何 LLM 调用记录，产生调用后这里会展示用量与成本。</span>
     </div>
 
     <template v-else>
@@ -403,5 +424,37 @@ html[data-theme='dark'] {
   .tc-trend__bar { background: linear-gradient(180deg, #5b8def, #2f6fed); }
   .tc-rank__bar { background: linear-gradient(90deg, #6fa1f5, #2f6fed); }
   .tc-rank__bar-track { background: #232f45; }
+}
+
+/* 首载骨架：KPI 卡 / 趋势图 / 排行行 占位（skeleton shimmer 对齐 SkillReconciliation sk-rec__skeleton 手法） */
+.tc-filterbar--skeleton { height: 44px; }
+.tc-skel-kpi { display: grid; gap: 8px; }
+.tc-skel-kpi .tc-skel { display: block; }
+.tc-skel {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #eef2fa, #f7f9fc, #eef2fa);
+  background-size: 200% 100%;
+  animation: tc-skel-shimmer 1.2s infinite;
+}
+@keyframes tc-skel-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.tc-skel--kpi-num { width: 60%; height: 26px; }
+.tc-skel--kpi-label { width: 40%; height: 12px; }
+.tc-skel--title { width: 180px; height: 14px; }
+.tc-skel-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 150px;
+  padding: 12px 16px 16px;
+}
+.tc-skel--bar { flex: 1; height: 70%; border-radius: 4px 4px 0 0; }
+.tc-skel--bar:nth-child(2n) { height: 45%; }
+.tc-skel--bar:nth-child(3n) { height: 85%; }
+.tc-skel-rows { display: grid; gap: 10px; padding: 12px 16px 16px; }
+.tc-skel--row { height: 22px; border-radius: 8px; }
+html[data-theme='dark'] .tc-skel {
+  background: linear-gradient(90deg, #1f2b40, #26334d, #1f2b40);
+  background-size: 200% 100%;
 }
 </style>

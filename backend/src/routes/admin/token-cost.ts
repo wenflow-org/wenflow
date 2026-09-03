@@ -92,6 +92,59 @@ interface RankEntry {
   failed: number;
 }
 
+/* 计算结果缓存：4 个端点共用的 loadTokenData 是全量聚合（全表扫 agent_call_logs），
+   页面并发请求 summary/by-skill/by-user/by-model 会把它重复执行 4 遍（实测 3.7 万行 ×4 ≈ 10s）。
+   加 30s TTL 内存缓存（key = days + includeTest）：并发 4 请求只计算 1 次，其余秒回。
+   数据的写入路径不在本路由（api-gateway 落库），TTL 内新调用延迟 30s 可见属可接受口径延迟。 */
+const TOKEN_CACHE_TTL_MS = 30_000;
+
+interface TokenDataResult {
+  totals: { tokens: number; promptTokens: number; completionTokens: number; calls: number; failed: number };
+  trend: Array<{ date: string; tokens: number; calls: number; failed: number }>;
+  bySkill: RankEntry[];
+  byUser: RankEntry[];
+  byModel: RankEntry[];
+}
+
+const tokenCache = new Map<string, { expires: number; data: TokenDataResult }>();
+/** in-flight 去重：并发 4 请求首载时共享同一个计算 Promise,只跑一次全表聚合 */
+const tokenInflight = new Map<string, Promise<TokenDataResult>>();
+
+function cacheKey(days: number, includeTest: boolean): string {
+  return `${days}:${includeTest ? 1 : 0}`;
+}
+
+async function loadTokenDataCached(days: number, includeTest: boolean): Promise<TokenDataResult> {
+  const key = cacheKey(days, includeTest);
+  const hit = tokenCache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.data;
+
+  // 已有同 key 计算在途 → 复用（首载 4 并发只触发一次全表聚合）
+  const inflight = tokenInflight.get(key);
+  if (inflight) return inflight;
+
+  const promise = loadTokenData(days, includeTest).then((data) => {
+    tokenCache.set(key, { expires: Date.now() + TOKEN_CACHE_TTL_MS, data });
+    // 防堆积：仅清理过期项（数量级极小，无需定时器）
+    for (const [k, v] of tokenCache) {
+      if (v.expires <= Date.now()) tokenCache.delete(k);
+    }
+    return data;
+  });
+  tokenInflight.set(key, promise);
+  try {
+    return await promise;
+  } finally {
+    tokenInflight.delete(key);
+  }
+}
+
+/** 测试钩子：清空缓存（jest beforeEach 使用，避免用例间缓存污染） */
+export function __clearTokenCacheForTests(): void {
+  tokenCache.clear();
+  tokenInflight.clear();
+}
+
 /**
  * 统一数据加载：
  * - tokenRows：带 token 的 gateway 行（含 metadata.skillId 解析）
@@ -206,7 +259,7 @@ router.get('/summary', async (req: Request, res: Response) => {
   try {
     const days = parseDays(req.query.days);
     const includeTest = parseIncludeTest(req.query.includeTest);
-    const data = await loadTokenData(days, includeTest);
+    const data = await loadTokenDataCached(days, includeTest);
     res.json({
       success: true,
       data: {
@@ -229,7 +282,7 @@ router.get('/by-skill', async (req: Request, res: Response) => {
   try {
     const days = parseDays(req.query.days);
     const includeTest = parseIncludeTest(req.query.includeTest);
-    const data = await loadTokenData(days, includeTest);
+    const data = await loadTokenDataCached(days, includeTest);
     res.json({ success: true, data: { days, includeTest, items: data.bySkill } });
   } catch (error: any) {
     logger.error('token-cost by-skill 失败:', error);
@@ -245,7 +298,7 @@ router.get('/by-user', async (req: Request, res: Response) => {
     const days = parseDays(req.query.days);
     const includeTest = parseIncludeTest(req.query.includeTest);
     const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
-    const data = await loadTokenData(days, includeTest);
+    const data = await loadTokenDataCached(days, includeTest);
 
     const top = data.byUser.slice(0, limit);
     const ids = top.map((r) => r.key).filter((k) => k !== '未归因');
@@ -272,7 +325,7 @@ router.get('/by-model', async (req: Request, res: Response) => {
   try {
     const days = parseDays(req.query.days);
     const includeTest = parseIncludeTest(req.query.includeTest);
-    const data = await loadTokenData(days, includeTest);
+    const data = await loadTokenDataCached(days, includeTest);
     res.json({ success: true, data: { days, includeTest, items: data.byModel } });
   } catch (error: any) {
     logger.error('token-cost by-model 失败:', error);

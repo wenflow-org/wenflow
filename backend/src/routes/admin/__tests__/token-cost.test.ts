@@ -26,7 +26,7 @@ jest.mock('../../../config/system-database', () => ({
   default: { $executeRawUnsafe: jest.fn().mockResolvedValue([]), $disconnect: jest.fn() },
 }));
 
-import { agentDisplayName, parseMetadataSkillId } from '../token-cost';
+import { agentDisplayName, parseMetadataSkillId, __clearTokenCacheForTests } from '../token-cost';
 import router from '../token-cost';
 
 function getRouteHandler(path: string, method: 'get' | 'post') {
@@ -95,7 +95,25 @@ describe('parseMetadataSkillId', () => {
 });
 
 describe('GET /token-cost/summary', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => { jest.clearAllMocks(); __clearTokenCacheForTests(); });
+
+  it('缓存命中：同 key 二次请求不重复查库（TTL 30s 内存缓存）', async () => {
+    mockUsers.findMany.mockResolvedValue([{ id: 'u1' }]);
+    mockAgentCallLogs.findMany
+      .mockResolvedValueOnce([tokenRow('teaching-turn', 'u1', 'm1', 100)])
+      .mockResolvedValueOnce([]);
+
+    const handler = getRouteHandler('/summary', 'get');
+    const res = createResponse();
+    await handler(createRequest({ days: '7' }), res);
+    expect(mockAgentCallLogs.findMany).toHaveBeenCalledTimes(2); // tokenRows + callRows
+
+    // 二次请求：缓存命中，findMany 不再被调用
+    const res2 = createResponse();
+    await handler(createRequest({ days: '7' }), res2);
+    expect(mockAgentCallLogs.findMany).toHaveBeenCalledTimes(2);
+    expect(res2.json.mock.calls[0][0].data.totals.tokens).toBe(100);
+  });
 
   it('总量 / 调用数 / prompt·completion / 按天趋势', async () => {
     mockUsers.findMany.mockResolvedValue([{ id: 'u1' }, { id: 'u2' }]);
@@ -132,7 +150,7 @@ describe('GET /token-cost/summary', () => {
 });
 
 describe('GET /token-cost/by-skill', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => { jest.clearAllMocks(); __clearTokenCacheForTests(); });
 
   it('按 metadata.skillId 聚合：token 降序 + 失败计数 + 可读名', async () => {
     mockUsers.findMany.mockResolvedValue([]);
@@ -178,7 +196,7 @@ describe('GET /token-cost/by-skill', () => {
 });
 
 describe('GET /token-cost/by-user', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => { jest.clearAllMocks(); __clearTokenCacheForTests(); });
 
   it('top N 排行 + 用户名邮箱补全', async () => {
     mockUsers.findMany
@@ -206,7 +224,7 @@ describe('GET /token-cost/by-user', () => {
 });
 
 describe('GET /token-cost/by-model', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => { jest.clearAllMocks(); __clearTokenCacheForTests(); });
 
   it('按 model 聚合排行', async () => {
     mockUsers.findMany.mockResolvedValue([]);
