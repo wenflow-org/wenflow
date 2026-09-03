@@ -18,8 +18,11 @@
     </div>
 
 
-    <!-- 接入与模型（全宽：连接 → 模型/路由 → 连通性验证） -->
-    <section class="mk-card">
+    <!-- 主布局：左列(接入与模型+安全与访问 纵向) / 右列(AI 调用与健康) -->
+    <div class="ac-layout">
+      <div class="ac-layout__main">
+        <!-- 接入与模型（全宽：连接 → 模型/路由 → 连通性验证） -->
+        <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">接入与模型</h3>
         <span class="mk-badge" :class="connBadge.cls">{{ connBadge.text }}</span>
@@ -114,9 +117,7 @@
       </div>
     </section>
 
-    <!-- 安全与访问 + AI 调用与健康 并排（两张中等卡横向利用空间,减少纵向堆叠空白） -->
-    <div class="ac-main-grid">
-      <!-- 安全与访问（三栏） -->
+      <!-- 安全与访问（左列内） -->
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">安全与访问</h3>
@@ -196,8 +197,10 @@
         </div>
       </div>
       </section>
+      </div><!-- /ac-layout__main -->
 
-      <!-- AI 调用与健康（可靠性 → 探测 → 健康） -->
+      <!-- AI 调用与健康（右列） -->
+      <div class="ac-layout__side">
       <section v-if="isLive && (reliability || probe.loaded || configLoadFailed)" class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">AI 调用与健康</h3>
@@ -325,7 +328,8 @@
         </div>
       </div>
       </section>
-    </div>
+      </div><!-- /ac-layout__side -->
+    </div><!-- /ac-layout -->
 
     <!-- 保存条：脏位分域标注（连接/路由/策略/可靠性/探测） -->
     <div v-if="dirty.size > 0" class="ac-save">
@@ -872,14 +876,28 @@ html[data-theme='dark'] .ac-models__empty { background: #141c2b; }
   gap: 14px;
   padding: 16px;
 }
-/* 安全与访问 + AI 调用与健康 并排（减少纵向堆叠空白；不强制等高,各自按内容高度） */
-.ac-main-grid {
+/* 主布局：左列(接入与模型 + 安全与访问 纵向) / 右列(AI 调用与健康)。
+   比「两卡并排一高一矮」更平衡：左列两卡填充,右列监控卡独立。
+   1100px 以下回落单列(右列卡移到左列下方)。 */
+.ac-layout {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
   gap: 12px;
   align-items: start;
 }
-.ac-main-grid > .mk-card { min-width: 0; }
+.ac-layout__main {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  align-content: start;
+}
+.ac-layout__side {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.ac-layout > .mk-card, .ac-layout__main > .mk-card, .ac-layout__side > .mk-card { min-width: 0; }
 .ac-policy__item { display: grid; gap: 8px; align-content: start; }
 .ac-policy--3 { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
 .ac-policy__label { font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-muted); }
@@ -982,6 +1000,18 @@ html[data-theme='dark'] .ac-models__empty { background: #141c2b; }
   gap: 0;
   align-items: start;
 }
+/* 右列窄宽（~490px）：调用参数/能力健康 纵向堆叠,健康表压缩到 4 列(隐藏"信息"列),
+   能力列压缩、响应/时间列保宽——原能力 345px 挤压了"最近探测"列导致折行 */
+.ac-layout__side .ac-cols { grid-template-columns: 1fr; }
+.ac-layout__side .ac-cols__main { padding: 0 16px; }
+.ac-layout__side .ac-cols__side { border-left: none; padding: 0 16px; margin-top: 6px; }
+.ac-layout__side .ac-health__row,
+.ac-layout__side .ac-health__head { grid-template-columns: 10px minmax(0, 1fr) auto 74px; }
+.ac-layout__side .ac-health__msg { display: none; }
+.ac-layout__side .ac-health__head span:nth-child(3) { display: none; }
+.ac-layout__side .ac-health__id { font-size: var(--mk-fs-12); }
+.ac-layout__side .ac-health__lat { white-space: nowrap; }
+.ac-layout__side .ac-health__time { white-space: nowrap; text-align: right; }
 .ac-cols__main { min-width: 0; padding: 0 18px 0 16px; }
 .ac-cols__side {
   min-width: 0;
@@ -1090,7 +1120,8 @@ html[data-theme='dark'] .ac-models__empty { background: #141c2b; }
 
 /* 侧栏占 208px，断点需按视口 1100px 触发（内容区 ≈ 892px），安全策略单列 */
 @media (max-width: 1100px) {
-  .ac-main-grid { grid-template-columns: 1fr; }
+  .ac-layout { grid-template-columns: 1fr; }
+  .ac-policy--3 { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
   .ac-policy { grid-template-columns: 1fr; }
   .ac-cols { grid-template-columns: 1fr; }
   .ac-cols__main { padding: 0 16px; }
