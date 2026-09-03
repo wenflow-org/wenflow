@@ -1185,14 +1185,20 @@ function stepHue(step: FlowStep): string {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .dfg-journey__meta { font-size: var(--mk-fs-11); font-weight: 600; color: var(--mk-muted); font-variant-numeric: tabular-nums; }
+/* 中间管道：横向 hub 胶囊 + 上下短竖线（不再竖排 agentId） */
 .dfg-journey__pipe {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  padding: 0 4px; flex-shrink: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  padding: 0 2px; flex-shrink: 0; min-width: 0;
 }
-.dfg-journey__pipe i { width: 2px; height: 14px; border-radius: 2px; }
+.dfg-journey__pipe i { width: 2px; height: 10px; border-radius: 2px; opacity: 0.7; }
 .dfg-journey__hub {
-  font-size: 10px; font-weight: 700; color: var(--mk-faint);
-  writing-mode: vertical-rl; letter-spacing: 0.08em; white-space: nowrap;
+  font-size: 11px; font-weight: 700; color: var(--mk-faint);
+  letter-spacing: 0.02em; white-space: nowrap;
+  max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+  writing-mode: initial; /* 关键：不再竖排 */
+  padding: 3px 10px; border-radius: 999px;
+  background: color-mix(in srgb, #64748b 8%, transparent);
+  border: 1px solid color-mix(in srgb, #64748b 18%, transparent);
 }
 
 /* 流水线画布 */
@@ -1473,7 +1479,11 @@ html[data-theme='dark'] {
   .dfg-journey__node.is-end .dfg-journey__dir { color: #c4b5fd; }
   .dfg-journey__dir { color: #6b7c96; }
   .dfg-journey__node strong { color: #c7d3e8; }
-  .dfg-journey__hub { color: #6b7c96; }
+  .dfg-journey__hub {
+    color: #8fa3bd;
+    background: color-mix(in srgb, #64748b 14%, transparent);
+    border-color: color-mix(in srgb, #64748b 26%, transparent);
+  }
   .dfg-pipe { background: linear-gradient(180deg, #141c2b, #101725); }
   .dfg-gate { background: color-mix(in srgb, var(--hz) 7%, #121a29); border-color: color-mix(in srgb, var(--hz) 40%, #2a3850); }
   .dfg-gate--exit { background: color-mix(in srgb, var(--hz) 8%, #141c2b); }
