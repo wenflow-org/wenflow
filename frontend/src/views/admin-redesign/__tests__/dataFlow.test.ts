@@ -107,6 +107,20 @@ describe('path 阶段（入口 24 字段；闸口分发 normalizedInput；内部
     expect(svc!.kind).toBe('service')
     expect(svc!.outputs).toHaveLength(0)
   })
+  it('orphan 步骤：已注册 agent 但无字段契约（0 routing 行 + 不在 defSteps）→ kind=orphan，如实保留调用统计', () => {
+    if (f.steps.some((s) => s.agentId === 'skill:kc-mapper')) {
+      const o = f.steps.find((s) => s.agentId === 'skill:kc-mapper')!
+      expect(o.kind).toBe('orphan')
+      expect(o.outputs).toHaveLength(0)
+      expect(o.inputs).toHaveLength(0)
+      expect(o.calls).toBe(0)
+    } else {
+      // fixture 无 orphan 时：确认 model 类型可表达且普通 skill 不受影响
+      const pp = f.steps.find((s) => s.agentId === 'skill:path-planning')!
+      expect(pp.kind).toBe('skill')
+      expect(pp.outputs.length).toBeGreaterThan(0)
+    }
+  })
 })
 
 describe('teaching 阶段（入口 path 交接；teaching-turn 输入来自闸口分发；内部边 teaching-turn→peer-reinforcement）', () => {

@@ -128,7 +128,7 @@ export interface FlowChip {
 export interface FlowStep {
   index: number              // 展示顺序（1 起）
   agentId: string
-  kind: 'skill' | 'service' | 'bridge-entry' | 'cross-agent'
+  kind: 'skill' | 'service' | 'bridge-entry' | 'cross-agent' | 'orphan'
   name: string               // 显示名（resolved 优先）
   role?: string
   loopOver?: string
@@ -366,10 +366,14 @@ export function buildStageFlow(
     }
     const resolvedName = def?.resolved?.displayName || ''
     const owner = isSkill || isBridge ? undefined : ownerStageOf(a)
+    // orphan：已注册 agent（agents 清单/拓扑统计），但无字段契约（0 routing 行）且不在 defSteps
+    // 如实呈现为「无契约 Skill」：保留调用统计（健康信号），标注 no-contract 而非误导性「0 产出」
+    const isOrphan = isSkill && !outputs.length && !inputs.length && !def
     const kind = isBridge ? 'bridge-entry' as const
-      : isSkill ? 'skill' as const
-        : owner ? 'cross-agent' as const
-          : (def?.resolved?.kind === 'service' ? 'service' as const : 'skill' as const)
+      : isOrphan ? 'orphan' as const
+        : isSkill ? 'skill' as const
+          : owner ? 'cross-agent' as const
+            : (def?.resolved?.kind === 'service' ? 'service' as const : 'skill' as const)
     const name = isBridge ? `${stageName}闸口` : resolvedName || a.replace(/^skill:/, '')
     steps.push({
       index: i + 1,

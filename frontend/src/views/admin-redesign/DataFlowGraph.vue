@@ -192,21 +192,28 @@
             </div>
           </section>
 
-          <!-- 服务 / 跨阶段步骤（无字段契约，如实展示） -->
-          <section v-else-if="step.kind === 'service' || step.kind === 'cross-agent'" :data-card-key="step.agentId" class="dfg-step dfg-step--bare" :class="{ 'is-unresolved': step.unresolved, 'is-flash': flashKey === step.agentId }">
+          <!-- 服务 / 跨阶段 / 无契约 Skill 步骤（无字段契约，如实展示） -->
+          <section v-else-if="step.kind === 'service' || step.kind === 'cross-agent' || step.kind === 'orphan'" :data-card-key="step.agentId" class="dfg-step dfg-step--bare" :class="{ 'is-unresolved': step.unresolved, 'is-orphan': step.kind === 'orphan', 'is-flash': flashKey === step.agentId }">
             <header class="dfg-step__head">
               <span class="dfg-step__idx">{{ step.index }}</span>
               <strong class="dfg-step__name">{{ step.name }}</strong>
               <span
+                v-if="step.kind !== 'orphan'"
                 class="dfg-step__badge"
                 :class="step.kind === 'service' ? 'dfg-step__badge--svc' : 'dfg-step__badge--cross'"
               >{{ step.kind === 'service' ? '代码服务' : '跨阶段引用' }}</span>
+              <span v-else class="dfg-step__badge dfg-step__badge--warn" title="该 Skill 已在 agents 注册并产生调用，但无字段路由契约，未接入数据流水线">无数据契约</span>
               <span v-if="step.unresolved" class="dfg-step__badge dfg-step__badge--warn" title="编排定义中该步骤未解析到契约">未解析</span>
               <span v-if="step.fromStage" class="dfg-step__stage mono" @click="switchStage(step.fromStage!)" title="点击跳到该阶段">→ {{ stageNameOf(step.fromStage) }}</span>
               <span v-if="step.role" class="dfg-step__role">{{ step.role }}</span>
+              <template v-if="step.kind === 'orphan' && step.calls != null">
+                <span class="dfg-step__agent mono">{{ step.agentId }}</span>
+                <span class="dfg-step__stat" :class="{ 'is-err': step.failed > 0 }">{{ fmtCalls(step.calls) }} 调用<template v-if="step.failed"> · {{ fmtCalls(step.failed) }}✗</template></span>
+              </template>
               <span class="dfg-step__spacer"></span>
               <span v-if="step.condition" class="dfg-step__cond" :title="step.condition">触发：{{ step.condition }}</span>
               <span v-if="step.loopOver" class="dfg-step__cond" :title="`循环 ${step.loopOver}`">循环：{{ step.loopOver }}</span>
+              <span v-if="step.kind === 'orphan'" class="dfg-step__count" title="该 Skill 无字段路由行，不参与阶段内数据流转">无字段流转</span>
               <span v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)" :title="`长程字段${p.dir === 'out' ? '流向' : '来自'} ${p.peerLabel}（点击定位）`">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
             </header>
           </section>
@@ -1264,6 +1271,12 @@ html[data-theme='dark'] .dfg-step__port:hover { background: #22345a; }
 }
 .dfg-step--bare { border-style: dashed; background: #fafbfd; }
 .dfg-step--bare.is-unresolved { border-color: color-mix(in srgb, var(--mk-amber) 45%, var(--mk-line)); }
+/* orphan：已注册但无字段契约的 Skill（调用统计是真实健康信号，红色警示） */
+.dfg-step--bare.is-orphan {
+  border-color: color-mix(in srgb, var(--mk-red) 40%, var(--mk-line));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mk-red) 4%, #fff), #fff 55%);
+}
+.dfg-step--bare.is-orphan .dfg-step__badge--warn { background: color-mix(in srgb, var(--mk-red) 12%, #fff); }
 .dfg-step__head {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: 8px 12px 6px;
@@ -1470,6 +1483,8 @@ html[data-theme='dark'] {
   .dfg-step--gate { background: linear-gradient(180deg, color-mix(in srgb, var(--hz) 9%, #16202f), #141c2b 60%); }
   .dfg-step--bare { background: #131b2a; }
   .dfg-step--bare.is-unresolved { border-color: color-mix(in srgb, var(--mk-amber) 45%, #2a3850); }
+  .dfg-step--bare.is-orphan { border-color: color-mix(in srgb, var(--mk-red) 40%, #2a3850); background: linear-gradient(180deg, color-mix(in srgb, var(--mk-red) 6%, #131b2a), #131b2a 60%); }
+  .dfg-step--bare.is-orphan .dfg-step__badge--warn { background: rgba(248, 113, 113, 0.14); }
   .dfg-step__head { background: linear-gradient(180deg, color-mix(in srgb, var(--hz) 10%, #17202f), #141c2b 70%); border-bottom-color: color-mix(in srgb, var(--hz) 12%, #232f45); }
   .dfg-step__name { color: #c7d3e8; }
   .dfg-step__badge { background: #253049; color: #9fb0c8; }
