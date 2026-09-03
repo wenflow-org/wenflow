@@ -644,6 +644,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   font-weight: 700;
   cursor: pointer;
 }
+.mk-btn svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 6px; }
 .mk-btn:hover { background: #f6f9ff; }
 .mk-btn--primary {
   background: var(--mk-blue, #2c63d0);

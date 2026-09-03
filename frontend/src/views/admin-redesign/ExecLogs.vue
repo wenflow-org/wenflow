@@ -135,6 +135,10 @@
                       <strong v-if="log.status === 'err'" class="exec-title exec-title--err" :title="log.title || log.detail">{{ log.title || log.detail }}</strong>
                       <strong v-else-if="contentPreview(log)" class="exec-title exec-title--preview" :title="log.title">{{ contentPreview(log) }}</strong>
                       <strong v-else class="exec-title exec-title--ok" :title="log.title">{{ log.title }}</strong>
+                      <!-- 链路入口：图标按钮,一眼可见点击直达 Trace(替代隐藏的 Trace 列) -->
+                      <button type="button" class="exec-trace-btn" title="查看完整调用链路(Trace):这条调用从进入到出结果的全部阶段" @click.stop="showTrace(log.traceId)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.2"/><circle cx="5" cy="18" r="2.2"/><circle cx="19" cy="12" r="2.2"/><path d="M7 6h7a3 3 0 0 1 3 3"/><path d="M7 18h7a3 3 0 0 0 3-3"/></svg>
+                      </button>
                     </div>
                     <div class="exec-cell__line exec-cell__sub">
                       <span v-if="log.errorCode" class="tline__errcode mono" :title="log.errorCode">{{ errorCodeLabel(log.errorCode) ?? `[${log.errorCategory || 'err'}] ${log.errorCode}` }}</span>
@@ -157,8 +161,11 @@
                     <div class="tline__payload-meta">
                       <span class="mono">trace {{ log.traceId }}</span>
                       <span class="exec-detail__links">
-                        <button type="button" class="mk-link" @click.stop="showTrace(log.traceId)">在链路中查看完整 Trace →</button>
-                        <button v-if="log.sessionId" type="button" class="mk-link" @click.stop="showTrace(undefined, log.sessionId)">按会话归组查看 →</button>
+                        <button type="button" class="mk-btn mk-btn--ghost mk-btn--sm" @click.stop="showTrace(log.traceId)">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.2"/><circle cx="5" cy="18" r="2.2"/><circle cx="19" cy="12" r="2.2"/><path d="M7 6h7a3 3 0 0 1 3 3"/><path d="M7 18h7a3 3 0 0 0 3-3"/></svg>
+                          查看完整调用链路
+                        </button>
+                        <button v-if="log.sessionId" type="button" class="mk-btn mk-btn--sm" @click.stop="showTrace(undefined, log.sessionId)">按会话归组查看</button>
                       </span>
                     </div>
                     <!-- 摘要行：表格弱化列的完整值（类型/模型/输入输出），展开即看全不丢信息 -->
@@ -799,6 +806,24 @@ html[data-theme='dark'] .exec-test-tag { background: #2a3850; color: #8fa3bd; }
 .exec-title--err:hover { text-decoration: underline; }
 .exec-title--preview { color: var(--mk-muted, #5b6577); font-weight: 600; }
 .exec-title--ok { color: var(--mk-faint, #5f6f8c); font-weight: 500; }
+/* 链路入口图标按钮：主行右侧,常显弱化/hover 高亮,点击直达 Trace(替代隐藏的 Trace 列) */
+.exec-trace-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mk-faint);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.exec-trace-btn svg { width: 15px; height: 15px; }
+.exec-trace-btn:hover { background: var(--mk-blue-bg, #eff6ff); color: var(--mk-blue, #2c63d0); }
 .exec-cell__sub { flex-wrap: wrap; gap: 5px; }
 /* 节点列：等宽短名，长名 ellipsis（title 全值，点击开 Skill 抽屉）。
    display:inline-block 必须显式声明——span 为 inline 元素时 max-width/overflow/ellipsis 全部失效，
