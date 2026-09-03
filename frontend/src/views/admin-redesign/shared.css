@@ -136,19 +136,22 @@
 .mk-table { width: 100%; border-collapse: collapse; }
 .mk-table th {
   text-align: left;
-  padding: 9px 14px;
+  padding: 8px 13px;
   font-size: var(--mk-fs-12);
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--mk-faint);
+  color: var(--mk-muted);
   background: #fafbfc;
   border-bottom: 1px solid var(--mk-line);
   white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
 }
+/* 表头 hover 反馈（对齐 AntD：无排序功能时仍给可交互提示的视觉响应） */
+.mk-table th:hover { background: #f2f6fb; color: var(--mk-ink); }
 .mk-table td {
-  padding: 10px 14px;
-  border-bottom: 1px solid #f6f7f9;
+  padding: 9px 13px;
+  border-bottom: 1px solid #eef1f7;
   vertical-align: middle;
 }
 .mk-table tr:last-child td { border-bottom: none; }
@@ -286,10 +289,12 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 2px 9px;
+  padding: 2px 8px;
   border-radius: 999px;
+  border: 1px solid transparent;
   font-size: var(--mk-fs-12);
-  font-weight: 700;
+  font-weight: 600;
+  line-height: 1.4;
   white-space: nowrap;
 }
 .mk-badge--ok { background: var(--mk-green-bg); color: var(--mk-green); }
@@ -805,6 +810,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
    新代码应优先引用 --mk-* token，此段只兜底存量硬编码。 */
 html[data-theme='dark'] {
   .mk-table th { background: #141c2b; }
+  .mk-table th:hover { background: #1c2637; color: var(--mk-ink); }
   .mk-table td { border-bottom-color: #1f2a3d; }
   .mk-table tbody tr:hover { background: #1a2436; }
   .mk-menu__btn:hover { background: #222e44; }
@@ -828,7 +834,7 @@ html[data-theme='dark'] {
   .mk-empty__action { background: rgba(91, 141, 239, 0.16); border-color: rgba(91, 141, 239, 0.35); }
   .mk-empty__action:hover { background: rgba(91, 141, 239, 0.26); }
   .mk-minibar { background: #232f45; }
-  .mk-pagination__btn:disabled { background: #141c2b; }
+  .mk-pagination__btn:disabled { background: transparent; }
   .mk-status__action--primary { background: var(--mk-blue); border-color: var(--mk-blue); }
   .mk-btn--ghost { background: rgba(91, 141, 239, 0.16); border-color: rgba(91, 141, 239, 0.4); color: #9db8f5; }
   .mk-btn--ghost:hover { background: rgba(91, 141, 239, 0.26); }
@@ -858,10 +864,10 @@ html[data-theme='dark'] {
   .mk-status__title { font-size: 15px; }
   .mk-status__meta { font-size: 13px; }
   .mk-status__action { font-size: 13px; padding: 5px 11px; }
-  .mk-table th { font-size: 12.5px; padding: 9px 15px; }
-  .mk-table td { font-size: 14.5px; padding: 10px 13px; }
+  .mk-table th { font-size: 12.5px; padding: 8px 14px; }
+  .mk-table td { font-size: 14.5px; padding: 9px 13px; }
   .mk-cell-sub { font-size: 12.5px; }
-  .mk-badge { font-size: 12.5px; padding: 2px 10px; }
+  .mk-badge { font-size: 12.5px; padding: 2px 9px; }
   .mk-menu__item { font-size: 14px; }
   .mk-filter__input,
   .mk-filter__select { font-size: 13.5px; padding: 8px 13px; height: 38px; }
@@ -885,10 +891,10 @@ html[data-theme='dark'] {
   .mk-status__title { font-size: 16px; }
   .mk-status__meta { font-size: 14px; }
   .mk-status__action { font-size: 14px; padding: 5px 12px; }
-  .mk-table th { font-size: 13px; padding: 11px 16px; }
-  .mk-table td { font-size: 15px; padding: 12px 16px; }
+  .mk-table th { font-size: 13px; padding: 10px 15px; }
+  .mk-table td { font-size: 15px; padding: 11px 15px; }
   .mk-cell-sub { font-size: 13px; }
-  .mk-badge { font-size: 13px; padding: 3px 10px; }
+  .mk-badge { font-size: 13px; padding: 3px 9px; }
   .mk-menu__item { font-size: 14.5px; }
   .mk-filter__input,
   .mk-filter__select { font-size: 14px; padding: 9px 13px; height: 41px; }

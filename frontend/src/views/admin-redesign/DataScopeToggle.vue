@@ -32,22 +32,22 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
 .ds-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 999px;
-  background: #eef1f6;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 8px;
+  background: #eef2fa;
   white-space: nowrap;
   flex-shrink: 0;
 }
 .ds-toggle__btn {
-  padding: 3px 12px;
+  padding: 3px 10px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 6px;
   background: transparent;
   color: var(--mk-muted);
   font: inherit;
   font-size: var(--mk-fs-12);
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
 }
@@ -55,14 +55,15 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
 .ds-toggle__btn--on {
   background: #fff;
   color: var(--mk-blue);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  font-weight: 700;
+  box-shadow: 0 0 0 1px rgba(44, 99, 208, 0.4), 0 1px 2px rgba(23, 32, 51, 0.08);
 }
 
-/* 暗色模式（D1）：选中态深蓝底 + 浅字，容器深色 */
+/* 暗色模式（D1）：对齐 mk-pill--active 深色等价物 */
 html[data-theme='dark'] .ds-toggle { background: #1d2739; }
 html[data-theme='dark'] .ds-toggle__btn--on {
-  background: rgba(91, 141, 239, 0.24);
+  background: rgba(91, 141, 239, 0.22);
   color: #9db8f5;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 1px rgba(91, 141, 239, 0.45);
 }
 </style>

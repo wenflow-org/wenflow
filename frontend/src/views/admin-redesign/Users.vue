@@ -638,25 +638,15 @@ function clearFilters() {
 <style scoped>
 .ul-row { cursor: pointer; }
 .ul-row--deleted { opacity: 0.62; filter: saturate(0.2); }
-.ul-tag--deleted { background: #e5e7eb; color: #4b5563; }
-.ul-tags { display: flex; gap: 6px; margin-top: 2px; }
-.ul-tag {
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: var(--mk-fs-11);
-  font-weight: 700;
-  letter-spacing: 0.03em;
-}
-.ul-tag--self { background: #dbeafe; color: var(--mk-accent-deep, #1f57cc); }
-.ul-tag--test { background: #fef3c7; color: #b45309; }
-.ul-tag--virtual { background: #f1f5f9; color: #64748b; border: 1px dashed #cbd5e1; }
+.ul-tags { display: flex; gap: 5px; margin-top: 2px; }
 .ul-level { display: flex; align-items: center; gap: 6px; }
 .ul-level__badge {
   padding: 1px 8px;
   border-radius: 999px;
   font-size: var(--mk-fs-11);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.03em;
+  line-height: 1.5;
   background: #e0f2fe;
   color: #0369a1;
   cursor: help;
@@ -664,21 +654,15 @@ function clearFilters() {
 .ul-level__xp { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-12); color: var(--mk-muted); font-weight: 600; }
 
 @media (min-width: 2000px) {
-  .ul-tags { gap: 7px; margin-top: 3px; }
-  .ul-tag { font-size: 12px; padding: 2px 10px; }
+  .ul-tags { gap: 6px; margin-top: 3px; }
 }
 @media (min-width: 2800px) {
-  .ul-tags { gap: 8px; margin-top: 4px; }
-  .ul-tag { font-size: 14px; padding: 3px 12px; }
+  .ul-tags { gap: 7px; margin-top: 4px; }
 }
 
 /* ================= 暗色模式（D1）：用户页局部覆写 ================= */
 html[data-theme='dark'] {
   .ul-level__badge { background: rgba(91, 141, 239, 0.2); color: #9db8f5; }
-  .ul-tag--self { background: rgba(91, 141, 239, 0.22); color: #9db8f5; }
-  .ul-tag--test { background: rgba(251, 191, 36, 0.16); color: #fcd34d; }
-  .ul-tag--virtual { background: #1c2637; color: #8fa3bd; border-color: #33415c; }
-  .ul-tag--deleted { background: #252d3d; color: #94a3b8; }
   /* 表格行内复选框：暗色下自定义外观（原生 checkbox 边框过亮） */
   .mk-table input[type='checkbox'] {
     appearance: none;
