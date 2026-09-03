@@ -55,9 +55,31 @@ export async function computeCalibrationBias(userId: string): Promise<Calibratio
       }
     }
 
+    // 隐藏 JOL 辅助信号：查询最近 10 次完结会话的自评信号
+    let jolOverconfidentCount = 0;
+    let jolUnderconfidentCount = 0;
+    try {
+      const recentSessions = await prisma.teaching_sessions.findMany({
+        where: { userId, status: 'completed', teachingState: { not: null } },
+        orderBy: { updatedAt: 'desc' },
+        take: 10,
+        select: { teachingState: true },
+      });
+      for (const session of recentSessions) {
+        const state = typeof session.teachingState === 'string'
+          ? JSON.parse(session.teachingState)
+          : session.teachingState;
+        const signal = (state as any)?.learnerStateContext?.selfAssessmentSignal;
+        if (signal === 'high') jolOverconfidentCount++;
+        else if (signal === 'low') jolUnderconfidentCount++;
+      }
+    } catch {
+      // 查询失败不影响 FSRS 主信号
+    }
+
     const total = traces.length;
-    const overRatio = overconfidentCount / total;
-    const underRatio = underconfidentCount / total;
+    const overRatio = (overconfidentCount + jolOverconfidentCount * 0.5) / (total + jolOverconfidentCount * 0.5 + jolUnderconfidentCount * 0.5);
+    const underRatio = (underconfidentCount + jolUnderconfidentCount * 0.5) / (total + jolOverconfidentCount * 0.5 + jolUnderconfidentCount * 0.5);
 
     if (overRatio >= 0.3 && overRatio > underRatio) return 'overconfident';
     if (underRatio >= 0.3 && underRatio > overRatio) return 'underconfident';

@@ -200,6 +200,7 @@ function buildLearnerStateContext(
   const frustratedStreak = latestAnalysis?.emotionalState === 'frustrated'
     ? (previous.frustratedStreak ?? 0) + 1
     : 0;
+  const selfAssessmentSignal = latestAnalysis?.selfAssessmentSignal ?? previous.selfAssessmentSignal ?? null;
   return {
     currentUnderstanding: latestAnalysis?.understanding ?? previous.currentUnderstanding ?? null,
     currentCognitiveLevel: latestAnalysis?.cognitiveLevel || previous.currentCognitiveLevel || null,
@@ -208,6 +209,7 @@ function buildLearnerStateContext(
     engagement: latestAnalysis?.engagement ?? previous.engagement ?? null,
     struggleDetected: previous.struggleDetected === true,
     frustratedStreak,
+    selfAssessmentSignal,
     // θ−d 路由信号（回合级知识状态估计）：供 wrapup 证据消费与 session_load 聚合
     ...(ktEstimate ? { ktEstimate } : {}),
   };
