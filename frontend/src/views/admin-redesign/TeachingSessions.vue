@@ -795,20 +795,19 @@ function progressTitle(r: Row): string {
 .ts-panel__title { display: grid; gap: 6px; justify-items: start; }
 .ts-panel__title h3 { margin: 0; font-size: var(--mk-fs-16); }
 .ts-panel__id { font-family: var(--mk-mono); font-size: var(--mk-fs-11); color: var(--mk-faint); word-break: break-all; }
-.ts-panel__close { border: 0; background: var(--mk-line); width: 30px; height: 30px; border-radius: 8px; cursor: pointer; color: var(--mk-muted); }
+.ts-panel__close { border: 0; background: var(--mk-close-bg, #f0f2f5); width: 30px; height: 30px; border-radius: 8px; cursor: pointer; color: var(--mk-muted); transition: background 0.12s, color 0.12s; }
+.ts-panel__close:hover { background: var(--mk-line, #e2eaf7); color: var(--mk-ink); }
 .ts-panel__body { padding: 16px 18px; display: grid; gap: 16px; align-content: start; overflow-y: auto; }
-/* P2-2 抽屉 tabs */
-.ts-tabs { display: flex; gap: 4px; padding-bottom: 10px; border-bottom: 1px solid var(--mk-line); position: sticky; top: 0; background: var(--mk-surface); z-index: 1; }
+/* P2-2 抽屉 tabs（对齐 AntD Tabs 下划线式：选中态底部 2px 品牌蓝 + 蓝字） */
+.ts-tabs { display: flex; gap: 2px; padding-bottom: 0; border-bottom: 1px solid var(--mk-line); position: sticky; top: 0; background: var(--mk-surface); z-index: 1; }
 html[data-theme='dark'] .ts-tabs { background: var(--mk-surface); }
 .ts-tabs__item {
-  border: 1px solid transparent; background: transparent; padding: 5px 12px;
-  border-radius: 8px; font: inherit; font-size: var(--mk-fs-12_5); font-weight: 700;
-  color: var(--mk-muted); cursor: pointer; transition: background 0.12s ease, color 0.12s ease;
+  border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 7px 12px;
+  margin-bottom: -1px; border-radius: 0; font: inherit; font-size: var(--mk-fs-12_5); font-weight: 600;
+  color: var(--mk-muted); cursor: pointer; transition: color 0.12s ease, border-color 0.12s ease;
 }
-.ts-tabs__item:hover { background: #f0f5ff; color: var(--mk-ink); }
-html[data-theme='dark'] .ts-tabs__item:hover { background: #1f2b40; color: #e6edf7; }
-.ts-tabs__item--on { background: rgba(44, 99, 208, 0.12); color: var(--mk-blue); }
-html[data-theme='dark'] .ts-tabs__item--on { background: rgba(91, 141, 239, 0.18); color: #7aa2ff; }
+.ts-tabs__item:hover { color: var(--mk-ink); }
+.ts-tabs__item--on { border-bottom-color: var(--mk-blue); color: var(--mk-blue); font-weight: 700; }
 .ts-empty { margin: 0; font-size: var(--mk-fs-12_5); color: var(--mk-faint); padding: 12px 0; }
 /* P2-2 事件时间线（左对齐垂直线，对齐 Intercom） */
 .ts-timeline { margin: 0; padding: 0; list-style: none; display: grid; gap: 0; }
@@ -953,6 +952,7 @@ html[data-theme='dark'] {
   .ts-tag--virtual { background: #1c2637; color: #8fa3bd; border-color: #33415c; }
   .ts-tag--test { background: rgba(251, 191, 36, 0.16); color: #fcd34d; }
   .ts-panel__close { background: #232f45; color: var(--mk-muted); }
+  .ts-panel__close:hover { background: #2c3a55; color: var(--mk-ink); }
   .ts-card--advisory { background: #2a2410; border-color: rgba(251, 191, 36, 0.3); }
   .ts-json { background: #0f1624; color: #c6d4ea; }
 }
