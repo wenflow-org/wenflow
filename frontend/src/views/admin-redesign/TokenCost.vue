@@ -84,16 +84,26 @@
           <span class="mk-card__meta">本地自然日口径</span>
         </div>
         <div v-if="trend.length" class="tc-trend">
-          <div
-            v-for="d in trend"
-            :key="d.date"
-            class="tc-trend__col"
-            :title="`${d.date}：${fmtTokens(d.tokens)} · ${d.calls} 次 · 失败 ${d.failed}`"
-          >
-            <div class="tc-trend__bar-track">
-              <i class="tc-trend__bar" :style="{ height: trendH(d.tokens) }"></i>
+          <!-- Y 轴刻度 -->
+          <div class="tc-trend__axis" aria-hidden="true">
+            <span>{{ fmtTokens(trendMax) }}</span>
+            <span>{{ fmtTokens(trendMax / 2) }}</span>
+            <span>0</span>
+          </div>
+          <div class="tc-trend__plot">
+            <div
+              v-for="d in trend"
+              :key="d.date"
+              class="tc-trend__col"
+              :title="`${d.date}：${fmtTokens(d.tokens)} · ${d.calls} 次 · 失败 ${d.failed}`"
+            >
+              <div class="tc-trend__bar-track">
+                <i class="tc-trend__bar" :class="{ 'tc-trend__bar--today': isToday(d.date) }" :style="{ height: trendH(d.tokens) }">
+                  <span class="tc-trend__val">{{ d.tokens ? fmtTokens(d.tokens) : '' }}</span>
+                </i>
+              </div>
+              <span class="tc-trend__day" :class="{ 'tc-trend__day--today': isToday(d.date) }">{{ dayLabel(d.date) }}</span>
             </div>
-            <span class="tc-trend__day">{{ dayLabel(d.date) }}</span>
           </div>
         </div>
         <p v-else class="mk-card__note">近 {{ days }} 天暂无调用记录。</p>
@@ -107,7 +117,8 @@
             <span class="mk-card__meta">{{ bySkill.length }} 个<template v-if="bySkill.length > 6"> · 显示前 6</template></span>
           </div>
           <div v-if="bySkill.length" class="tc-rank">
-            <div v-for="r in bySkill.slice(0, 6)" :key="r.key" class="tc-rank__row">
+            <div v-for="(r, i) in bySkill.slice(0, 6)" :key="r.key" class="tc-rank__row">
+              <span class="tc-rank__no" :class="{ 'tc-rank__no--top': i < 3 }">{{ i + 1 }}</span>
               <span class="tc-rank__name" :title="r.key">{{ r.display }}</span>
               <div class="tc-rank__bar-track">
                 <i class="tc-rank__bar" :style="{ width: rankPct(r.tokens) }"></i>
@@ -126,7 +137,8 @@
             <span class="mk-card__meta">Top {{ byUser.length }}</span>
           </div>
           <div v-if="byUser.length" class="tc-rank">
-            <div v-for="r in byUser" :key="r.key" class="tc-rank__row">
+            <div v-for="(r, i) in byUser" :key="r.key" class="tc-rank__row">
+              <span class="tc-rank__no" :class="{ 'tc-rank__no--top': i < 3 }">{{ i + 1 }}</span>
               <span class="tc-rank__name" :title="`${r.name || ''} ${r.email || ''}`.trim() || r.key">
                 {{ r.name || shortId(r.key) }}
               </span>
@@ -147,7 +159,8 @@
             <span class="mk-card__meta">{{ byModel.length }} 个</span>
           </div>
           <div v-if="byModel.length" class="tc-rank">
-            <div v-for="r in byModel" :key="r.key" class="tc-rank__row">
+            <div v-for="(r, i) in byModel" :key="r.key" class="tc-rank__row">
+              <span class="tc-rank__no" :class="{ 'tc-rank__no--top': i < 3 }">{{ i + 1 }}</span>
               <span class="tc-rank__name" :title="r.key">{{ r.key }}</span>
               <div class="tc-rank__bar-track">
                 <i class="tc-rank__bar" :style="{ width: rankPct(r.tokens) }"></i>
@@ -264,6 +277,12 @@ function dayLabel(date: string): string {
   return `${m}/${d}`
 }
 
+function isToday(date: string): boolean {
+  const [y, m, d] = date.split('-').map(Number)
+  const today = new Date()
+  return y === today.getFullYear() && m === today.getMonth() + 1 && d === today.getDate()
+}
+
 const trendMax = computed(() => Math.max(1, ...trend.value.map((t) => t.tokens)))
 function trendH(tokens: number): string {
   return `${Math.max(2, Math.round((tokens / trendMax.value) * 100))}%`
@@ -299,36 +318,93 @@ function rankPct(tokens: number): string {
   margin-bottom: 14px;
 }
 
-/* 趋势图：柱状图（专属可视化，保留自制） */
+/* 趋势图：柱状图 + Y 轴刻度 + 网格线 + 柱顶数值 + 今日高亮（对齐 AntD Chart 语言） */
 .tc-trend {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 12px;
+  height: 200px;
+  padding: 14px 16px 12px;
+}
+/* Y 轴刻度（max / max/2 / 0 三档，与网格线对齐） */
+.tc-trend__axis {
   display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   align-items: flex-end;
-  gap: 6px;
-  height: 170px;
-  padding: 12px 4px 0;
+  padding-bottom: 24px; /* 留出底部日期行高，使 0 刻度线不与日期重叠 */
+  font-size: var(--mk-fs-11);
+  color: var(--mk-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tc-trend__plot {
+  display: flex;
+  gap: 8px;
+  /* 三条水平网格线：max / max/2 / 0（背景渐变重复模拟虚线网格） */
+  background-image: repeating-linear-gradient(
+    to top,
+    transparent 0,
+    transparent calc(33.333% - 1px),
+    var(--mk-line) calc(33.333% - 1px),
+    var(--mk-line) 33.333%
+  );
+  background-size: 100% 100%;
+  padding-bottom: 24px;
 }
 .tc-trend__col {
   flex: 1;
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
 .tc-trend__bar-track {
-  flex: 1;
   width: 100%;
+  height: 100%;
   display: flex;
   align-items: flex-end;
+  justify-content: center;
 }
 .tc-trend__bar {
-  width: 70%;
-  margin: 0 auto;
+  position: relative;
+  width: 62%;
+  min-height: 2px;
   background: linear-gradient(180deg, var(--mk-blue, #5b8def), var(--mk-accent-deep, #2f6fed));
   border-radius: 4px 4px 0 0;
-  min-height: 2px;
+  opacity: 0.72;
+  transition: opacity 0.12s;
 }
-.tc-trend__day { font-size: var(--mk-fs-11); color: var(--mk-faint, #9ca3af); font-weight: 600; white-space: nowrap; }
+.tc-trend__bar:hover { opacity: 1; }
+/* 今日柱：实色高亮（非透明），视觉聚焦最新一天；矮柱也给最小高度保证高亮可见 */
+.tc-trend__bar--today {
+  opacity: 1;
+  min-height: 8px;
+  background: linear-gradient(180deg, #5b8def, #1f57cc);
+  box-shadow: 0 0 0 1px rgba(44, 99, 208, 0.25);
+}
+/* 柱顶数值（柱子够高时显示；矮柱可借 hover title 查看） */
+.tc-trend__val {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: var(--mk-fs-11);
+  color: var(--mk-muted);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.tc-trend__day {
+  font-size: var(--mk-fs-11);
+  color: var(--mk-faint);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tc-trend__day--today { color: var(--mk-blue); font-weight: 700; }
 
 .tc-grid {
   display: grid;
@@ -349,7 +425,26 @@ function rankPct(tokens: number): string {
 .tc-rank__row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+}
+/* 排名徽章：1/2/3 实心蓝(前三)、其余灰(中性) */
+.tc-rank__no {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--mk-fs-11);
+  font-weight: 700;
+  color: var(--mk-faint);
+  background: #f0f2f5;
+  font-variant-numeric: tabular-nums;
+}
+.tc-rank__no--top {
+  background: var(--mk-blue-bg, #eff6ff);
+  color: var(--mk-blue, #2c63d0);
 }
 .tc-rank__name {
   flex: 0 1 130px;
@@ -397,24 +492,24 @@ function rankPct(tokens: number): string {
 
 /* 4K：趋势图/排行条跟随全站节奏 */
 @media (min-width: 2000px) {
-  .tc-trend { height: 170px; }
-  .tc-trend__day { font-size: 12px; }
+  .tc-trend { height: 230px; }
+  .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: 12px; }
   .tc-rank__name { font-size: 14px; flex-basis: 160px; }
   .tc-rank__num { font-size: 14px; width: 70px; min-width: 70px; }
   .tc-rank__meta { font-size: 12.5px; width: 84px; min-width: 84px; }
   .tc-rank__bar-track { height: 12px; }
 }
 @media (min-width: 2800px) {
-  .tc-trend { height: 200px; }
-  .tc-trend__day { font-size: 14px; }
+  .tc-trend { height: 270px; }
+  .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: 14px; }
   .tc-rank__name { font-size: 16.5px; flex-basis: 190px; }
   .tc-rank__num { font-size: 16.5px; width: 86px; min-width: 86px; }
   .tc-rank__meta { font-size: 14.5px; width: 100px; min-width: 100px; }
   .tc-rank__bar-track { height: 14px; }
 }
 @media (min-width: 3600px) {
-  .tc-trend { height: 235px; }
-  .tc-trend__day { font-size: 16.5px; }
+  .tc-trend { height: 310px; }
+  .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: 16.5px; }
   .tc-rank__name { font-size: 19.5px; flex-basis: 220px; }
   .tc-rank__num { font-size: 19.5px; width: 100px; min-width: 100px; }
   .tc-rank__meta { font-size: 17px; width: 118px; min-width: 118px; }
@@ -424,8 +519,11 @@ function rankPct(tokens: number): string {
 /* 暗色模式（D1 补完）：Token 成本（此前完全缺失） */
 html[data-theme='dark'] {
   .tc-trend__bar { background: linear-gradient(180deg, #5b8def, #2f6fed); }
+  .tc-trend__bar--today { background: linear-gradient(180deg, #7aa2ff, #3b6fe0); }
   .tc-rank__bar { background: linear-gradient(90deg, #6fa1f5, #2f6fed); }
   .tc-rank__bar-track { background: #232f45; }
+  .tc-rank__no { background: #253049; color: var(--mk-muted); }
+  .tc-rank__no--top { background: rgba(91, 141, 239, 0.2); color: #9db8f5; }
 }
 
 /* 首载骨架：KPI 卡 / 趋势图 / 排行行 占位（skeleton shimmer 对齐 SkillReconciliation sk-rec__skeleton 手法） */
