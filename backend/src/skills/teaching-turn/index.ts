@@ -164,6 +164,14 @@ export interface TeachingTurnOutput {
       predictedNextCorrectness?: number;
       recommendation?: string;
     };
+    /** PF 模式解法尝试台账（每轮新尝试，供整合期对比） */
+    rsmAttempts?: Array<{
+      method: string;
+      outcome: string;
+      evidence: string;
+    }>;
+    /** 隐藏自评信号（静默提取，供校准闭环；不改变教学行为） */
+    selfAssessmentSignal?: 'high' | 'medium' | 'low';
     engagement: number;
     emotionalState: string;
     loadIndex: number;
@@ -403,6 +411,8 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
         : [],
       ...(normalizeMisconceptions(analysis.misconceptions)),
       ...(normalizeKtEstimate(analysis.ktEstimate)),
+      ...(normalizeRsmAttempts(analysis.rsmAttempts)),
+      ...(normalizeSelfAssessmentSignal(analysis.selfAssessmentSignal)),
       engagement: Number.isFinite(analysis.engagement) ? Number(analysis.engagement) : 0.5,
       emotionalState: (typeof analysis.emotionalState === 'string' && (ALLOWED_EMOTIONAL_STATES as readonly string[]).includes(analysis.emotionalState))
         ? analysis.emotionalState
@@ -509,6 +519,28 @@ function normalizeKtEstimate(value: any): { ktEstimate?: NonNullable<TeachingTur
     result.recommendation = value.recommendation;
   }
   return Object.keys(result).length > 0 ? { ktEstimate: result } : {};
+}
+
+/** 归一化 PF 解法尝试台账：过滤缺方法描述的项，outcome 收敛到四值 */
+function normalizeRsmAttempts(value: any): { rsmAttempts?: NonNullable<TeachingTurnOutput['analysis']['rsmAttempts']> } {
+  if (!Array.isArray(value) || value.length === 0) return {};
+  const items = value
+    .filter((item: any) => item && typeof item?.method === 'string' && item.method.trim())
+    .slice(0, 6)
+    .map((item: any) => ({
+      method: String(item.method).trim().slice(0, 200),
+      outcome: ['stuck', 'partial', 'wrong', 'success'].includes(item?.outcome) ? String(item.outcome) : 'partial',
+      evidence: typeof item?.evidence === 'string' ? item.evidence.trim().slice(0, 300) : '',
+    }));
+  return items.length > 0 ? { rsmAttempts: items } : {};
+}
+
+/** 归一化隐藏自评信号：只接受 high|medium|low，其余丢弃 */
+function normalizeSelfAssessmentSignal(value: any): { selfAssessmentSignal?: NonNullable<TeachingTurnOutput['analysis']['selfAssessmentSignal']> } {
+  if (value === 'high' || value === 'medium' || value === 'low') {
+    return { selfAssessmentSignal: value };
+  }
+  return {};
 }
 
 function buildPromptInput(input: TeachingTurnInput) {
