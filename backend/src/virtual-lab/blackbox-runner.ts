@@ -736,6 +736,32 @@ export class BlackboxVirtualLearnerRunner {
       where: { id: sessionId },
       data: { stageResults: JSON.stringify(nextState), updatedAt: new Date() }
     })
+
+    // TIR 反馈闭环：auditor frictionCalibration < 60 → 自动调整 persona frictionBudget
+    if (report?.success && report?.output?.scores?.frictionCalibration < 60) {
+      try {
+        const profile = await prisma.virtual_learner_profiles.findUnique({ where: { userId: session.userId } });
+        if (profile) {
+          const profileData = safeJsonParse<Record<string, any>>(profile.profile, {});
+          const currentFriction = typeof profileData.frictionBudget === 'number' ? profileData.frictionBudget : 5;
+          // 摩擦校准偏低 → 增加摩擦预算（让学习者更多挣扎/求助，更真实）
+          const adjusted = Math.min(10, Math.max(1, currentFriction + 1));
+          await prisma.virtual_learner_profiles.update({
+            where: { userId: session.userId },
+            data: { profile: JSON.stringify({ ...profileData, frictionBudget: adjusted }), updatedAt: new Date() },
+          });
+          logger.info('[vlab-auditor] TIR 反馈：frictionBudget 已调整', {
+            userId: session.userId,
+            previous: currentFriction,
+            adjusted,
+            frictionCalibration: report.output.scores.frictionCalibration,
+          });
+        }
+      } catch (tirError) {
+        logger.warn('[vlab-auditor] TIR 反馈写入失败', { error: tirError instanceof Error ? tirError.message : String(tirError) });
+      }
+    }
+
     return { ...auditRecord, reused: false }
   }
 

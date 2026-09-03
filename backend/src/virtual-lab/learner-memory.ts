@@ -364,11 +364,20 @@ export async function recordCompletedArtifact(input: {
       entry,
       ...existing.filter((item: any) => !item || item?.taskId !== input.taskId),
     ].slice(0, 12);
+    profileData.recentCompleted = next;
+
+    // TIR 反馈闭环：curator 的 selfCalibration 分析 → 自动回写 profile 的 selfAssessmentAccuracy
+    const calibration = input.memoryCurated?.selfCalibration || '';
+    if (calibration.includes('高估') || calibration.includes('偏高估')) {
+      profileData.selfAssessmentAccuracy = 'overconfident';
+    } else if (calibration.includes('低估') || calibration.includes('偏低')) {
+      profileData.selfAssessmentAccuracy = 'underconfident';
+    }
 
     await prisma.virtual_learner_profiles.update({
       where: { userId: input.userId },
       data: {
-        profile: JSON.stringify({ ...profileData, recentCompleted: next }),
+        profile: JSON.stringify(profileData),
         updatedAt: new Date(),
       },
     });
