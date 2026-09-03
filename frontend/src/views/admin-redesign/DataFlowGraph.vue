@@ -35,6 +35,10 @@
             <input type="checkbox" v-model="showHidden" />
             <span>隐藏字段</span>
           </label>
+          <label class="dfg-switch" title="默认淡化连线，仅悬停/聚焦时点亮；关闭则不显示步间连线">
+            <input type="checkbox" v-model="edgeFaded" />
+            <span>连线</span>
+          </label>
         </div>
       </div>
 
@@ -80,24 +84,27 @@
         class="dfg-pipe"
         :class="{ 'is-dimmed': !!focusKey }"
       >
-        <!-- 连线层（轨道线：同字段 产出 → 消费 / 产出 → 出口） -->
+        <!-- 连线层（Bus 总线：卡右缘 → 右侧走廊 → 目标卡右缘，不穿卡片内容） -->
         <svg class="dfg-edges" :width="pipeW" :height="pipeH" aria-hidden="true">
           <g v-for="(e, i) in edgeGeoms" :key="i">
-            <path
-              :d="e.d"
-              fill="none"
-              :stroke="e.hue"
-              :stroke-width="e.highlight ? 2.4 : 1.4"
-              :opacity="e.highlight ? 0.95 : e.dimmed ? 0.06 : 0.4"
-              :stroke-linecap="'round'"
-            />
-            <circle v-if="e.highlight || true" :cx="e.x1" :cy="e.y1" r="2.4" :fill="e.hue" :opacity="e.highlight ? 0.9 : 0.35" />
-            <circle :cx="e.x2" :cy="e.y2" r="2.4" :fill="e.hue" :opacity="e.highlight ? 0.9 : 0.35" />
+            <template v-if="e.d">
+              <path
+                :d="e.d"
+                fill="none"
+                :stroke="e.hue"
+                :stroke-width="e.highlight ? 2.2 : 1.2"
+                :opacity="e.op"
+                :class="{ 'is-hot': e.highlight }"
+                stroke-linecap="round"
+              />
+              <circle :cx="e.x1" :cy="e.y1" r="3" :fill="e.hue" :opacity="e.dotOp" />
+              <path :d="e.arrow" :fill="e.hue" :opacity="e.dotOp" />
+            </template>
           </g>
         </svg>
 
         <!-- ===== ① 入口交接（跨阶段输入） ===== -->
-        <section v-if="flow && entryVisible.length" class="dfg-gate dfg-gate--entry" :style="{ '--hz': toneOf(flow.entryFrom?.stageId || '').hue }">
+        <section v-if="flow && entryVisible.length" data-card-key="__entry__" class="dfg-gate dfg-gate--entry" :class="{ 'is-flash': flashKey === '__entry__' }" :style="{ '--hz': toneOf(flow.entryFrom?.stageId || '').hue }">
           <header class="dfg-gate__head">
             <span class="dfg-gate__icon">⇣</span>
             <div class="dfg-gate__title">
@@ -105,6 +112,7 @@
               <span class="dfg-gate__sub">{{ entryVisible.length }} 个字段经 {{ flow.entryFrom?.stageId }}-agent 移交进入本阶段</span>
             </div>
             <span class="dfg-gate__count">{{ entryVisible.length }} 字段</span>
+            <span v-for="p in farPorts['__entry__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)" :title="`长程字段流入 ${p.peerLabel}（点击定位）`">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
           </header>
           <div class="dfg-chips">
             <button
@@ -135,7 +143,7 @@
         <!-- ===== 中间：Agent 内部步骤链 ===== -->
         <template v-for="step in flowSteps" :key="step.index">
           <!-- 桥接闸口（入口整装 / 分发） -->
-          <section v-if="step.kind === 'bridge-entry' && step.outputChips.length" class="dfg-step dfg-step--gate" :style="{ '--hz': toneOf(flow!.stageId).hue }">
+          <section v-if="step.kind === 'bridge-entry' && step.outputChips.length" :data-card-key="step.agentId" class="dfg-step dfg-step--gate" :class="{ 'is-flash': flashKey === step.agentId }" :style="{ '--hz': toneOf(flow!.stageId).hue }">
             <header class="dfg-step__head">
               <span class="dfg-step__idx">⇡</span>
               <strong class="dfg-step__name">{{ step.name }}</strong>
@@ -146,6 +154,7 @@
               </template>
               <span class="dfg-step__spacer"></span>
               <span class="dfg-step__count">{{ step.outputChips.length }} 字段</span>
+              <span v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)" :title="`长程字段${p.dir === 'out' ? '流向' : '来自'} ${p.peerLabel}（点击定位）`">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
             </header>
             <div class="dfg-step__body">
               <p class="dfg-step__note">上游字段在阶段闸口完成整装重命名，再分发给内部 Skill（字段带 → 目标 标签）</p>
@@ -177,7 +186,7 @@
           </section>
 
           <!-- 服务 / 跨阶段步骤（无字段契约，如实展示） -->
-          <section v-else-if="step.kind === 'service' || step.kind === 'cross-agent'" class="dfg-step dfg-step--bare" :class="{ 'is-unresolved': step.unresolved }">
+          <section v-else-if="step.kind === 'service' || step.kind === 'cross-agent'" :data-card-key="step.agentId" class="dfg-step dfg-step--bare" :class="{ 'is-unresolved': step.unresolved, 'is-flash': flashKey === step.agentId }">
             <header class="dfg-step__head">
               <span class="dfg-step__idx">{{ step.index }}</span>
               <strong class="dfg-step__name">{{ step.name }}</strong>
@@ -191,11 +200,12 @@
               <span class="dfg-step__spacer"></span>
               <span v-if="step.condition" class="dfg-step__cond" :title="step.condition">触发：{{ step.condition }}</span>
               <span v-if="step.loopOver" class="dfg-step__cond" :title="`循环 ${step.loopOver}`">循环：{{ step.loopOver }}</span>
+              <span v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)" :title="`长程字段${p.dir === 'out' ? '流向' : '来自'} ${p.peerLabel}（点击定位）`">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
             </header>
           </section>
 
           <!-- Skill 步骤卡 -->
-          <section v-else class="dfg-step" :class="{ 'has-inputs': step.inputChips.length }" :style="{ '--hz': stepHue(step) }">
+          <section v-else :data-card-key="step.agentId" class="dfg-step" :class="{ 'has-inputs': step.inputChips.length, 'is-flash': flashKey === step.agentId }" :style="{ '--hz': stepHue(step) }">
             <header class="dfg-step__head">
               <span class="dfg-step__idx">{{ step.index }}</span>
               <strong class="dfg-step__name">{{ step.name }}</strong>
@@ -209,6 +219,7 @@
               <span v-if="step.condition" class="dfg-step__cond" :title="step.condition">触发：{{ step.condition }}</span>
               <span v-if="step.loopOver" class="dfg-step__cond" :title="`循环 ${step.loopOver}`">循环：{{ step.loopOver }}</span>
               <span class="dfg-step__count">{{ step.outputChips.length }} 产出</span>
+              <span v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)" :title="`长程字段${p.dir === 'out' ? '流向' : '来自'} ${p.peerLabel}（点击定位）`">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
             </header>
             <div class="dfg-step__body">
               <!-- 流入 -->
@@ -284,7 +295,7 @@
         </template>
 
         <!-- ===== ② 出口移交（跨阶段输出） ===== -->
-        <section v-if="flow && flow.exit.length" class="dfg-gate dfg-gate--exit" :style="{ '--hz': toneOf(flow.exitTo?.stageId || '').hue }">
+        <section v-if="flow && flow.exit.length" data-card-key="__exit__" class="dfg-gate dfg-gate--exit" :class="{ 'is-flash': flashKey === '__exit__' }" :style="{ '--hz': toneOf(flow.exitTo?.stageId || '').hue }">
           <header class="dfg-gate__head">
             <span class="dfg-gate__icon">⇢</span>
             <div class="dfg-gate__title">
@@ -292,6 +303,7 @@
               <span class="dfg-gate__sub">{{ flow.agentId }} 汇总 {{ flow.exit.length }} 个字段，整体移交下一阶段</span>
             </div>
             <span class="dfg-gate__count">{{ flow.exit.length }} 字段</span>
+            <span v-for="p in farPorts['__exit__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)" :title="`长程字段来自 ${p.peerLabel}（点击定位）`">来自 {{ p.peerLabel }}<b>{{ p.count }}</b></span>
           </header>
           <div class="dfg-chips">
             <button
@@ -486,6 +498,7 @@ const detailByStage = ref<Record<string, StageDetailLike | null>>({})
 const orchDefs = ref<Record<string, DefStepLike[]>>({})
 const stageNames = ref<Record<string, string>>({})
 const showHidden = ref(false)
+const edgeFaded = ref(true) // 默认淡化连线（悬停/聚焦点亮）；关 = 不画步间连线（端口徽标仍可用）
 const query = ref('')
 const selected = ref<FlowChip | null>(null)
 const saving = ref(false)
@@ -728,12 +741,44 @@ function toggleFamily(name: string) {
   focusId.value = ''
 }
 
-/* ================= 轨道线（SVG：实测 DOM 位置，跨槽位连线） ================= */
+/* ================= 轨道线（SVG：实测 DOM 位置，Bus 总线端口路由） ================= */
 const pipeRef = ref<HTMLElement | null>(null)
 const pipeW = ref(0)
 const pipeH = ref(0)
-const edgeGeoms = ref<Array<{ d: string; hue: string; x1: number; y1: number; x2: number; y2: number; highlight: boolean; dimmed: boolean }>>([])
+const edgeGeoms = ref<EdgeGeom[]>([])
+  /**
+   * 边几何（Bus 总线路由：不穿卡片内容）
+   * - 端口锚点位于「卡片外缘」：源=所在卡右缘、目标=所在卡左缘（芯片中线高度，钳制在卡内）
+   * - 路径 = 源卡右缘 → 右侧走廊（垂直）→ 目标卡左缘，正交折线 + 圆角
+   * - far（跨多卡长程，spanY > FAR_SPAN）不画线，由卡头端口徽标承接（点击滚动聚焦）
+   */
+  type EdgeMode = 'near' | 'far'
+
+  interface EdgeGeom {
+    d: string
+    hue: string
+    x1: number
+    y1: number
+    x2: number
+    y2: number
+    arrow: string            // 终点箭头（指向目标芯片，向左）
+    op: number
+    dotOp: number
+    highlight: boolean
+    dimmed: boolean
+    mode: EdgeMode
+    fieldId: string
+    from: string
+    to: string
+  }
+  const FAR_SPAN = 700
+  const laneOf = (i: number) => i % 4
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
+
 const nodeRects = ref(new Map<string, DOMRect>())
+// 槽位 → 所属卡片 key；卡片 key → 管道局部矩形（端口总线锚点用）
+let slotCard = new Map<string, string>()
+let cardRects = new Map<string, DOMRect>()
 
 function measure() {
   const root = pipeRef.value
@@ -742,16 +787,30 @@ function measure() {
   pipeW.value = root.scrollWidth
   pipeH.value = root.scrollHeight
   const map = new Map<string, DOMRect>()
+  const slotMap = new Map<string, string>()
+  const cardMap = new Map<string, DOMRect>()
+  for (const el of root.querySelectorAll<HTMLElement>('[data-card-key]')) {
+    const key = el.getAttribute('data-card-key') || ''
+    const r = el.getBoundingClientRect()
+    cardMap.set(key, new DOMRect(r.left - rr.left, r.top - rr.top, r.width, r.height))
+  }
   for (const el of root.querySelectorAll<HTMLElement>('[data-chip-id][data-chip-role]')) {
     const id = `${el.getAttribute('data-chip-id')}|${el.getAttribute('data-chip-role')}`
     const r = el.getBoundingClientRect()
     map.set(id, new DOMRect(r.left - rr.left, r.top - rr.top, r.width, r.height))
+    const card = el.closest<HTMLElement>('[data-card-key]')
+    if (card) slotMap.set(id, card.getAttribute('data-card-key') || '')
   }
   for (const el of root.querySelectorAll<HTMLElement>('[data-gate-anchor]')) {
+    const id = `gate|${el.getAttribute('data-gate-anchor')}`
     const r = el.getBoundingClientRect()
-    map.set(`gate|${el.getAttribute('data-gate-anchor')}`, new DOMRect(r.left - rr.left, r.top - rr.top, r.width, r.height))
+    map.set(id, new DOMRect(r.left - rr.left, r.top - rr.top, r.width, r.height))
+    const card = el.closest<HTMLElement>('[data-card-key]')
+    if (card) slotMap.set(id, card.getAttribute('data-card-key') || '')
   }
   nodeRects.value = map
+  slotCard = slotMap
+  cardRects = cardMap
   renderEdges()
 }
 
@@ -770,37 +829,112 @@ const edgeSet = computed(() => {
   return f.edges.filter((e) => visibleFields.has(e.fieldId))
 })
 
+/** 长程端口徽标：跨多卡不画线 → 卡头显示「↳ N 下游 / N 上游」，点击滚动聚焦 */
+const farPorts = ref<Record<string, Array<{ dir: 'out' | 'in'; count: number; peer: string; peerLabel: string }>>>({})
+const flashKey = ref('')
+
+function cardLabelOf(key: string) {
+  const f = flow.value
+  if (!f) return key
+  if (key === '__entry__') return f.entryFrom?.stageName ? `入口·${f.entryFrom.stageName}` : '链首'
+  if (key === '__exit__') return '出口'
+  const s = flowSteps.value.find((x) => x.agentId === key)
+  return s ? s.name.replace(/ Skill$/, '') : key
+}
+
 function renderEdges() {
   const f = flow.value
   if (!f || !nodeRects.value.size) return
-  const outs: Array<{ d: string; hue: string; x1: number; y1: number; x2: number; y2: number; highlight: boolean; dimmed: boolean; fieldId: string; from: string; to: string }> = []
+  // 走廊：所有卡同宽同右缘，busX 在卡片右缘与管道右缘之间（lane 分散防叠）
+  const outs: EdgeGeom[] = []
+  const farAgg = new Map<string, Map<string, 'out' | 'in'>>()
+  let lane = 0
   for (const e of edgeSet.value) {
-    let from: DOMRect | undefined
-    let to: DOMRect | undefined
-    if (e.kind === 'internal') {
-      from = rectOf('out', e.from)
-      to = rectOf('in', e.to)
-      if (!to) to = rectOf('gate', e.to) // 桥接闸口直接分发的输入副本
-    } else if (e.kind === 'exit') {
-      from = rectOf('out', e.from)
-      to = rectOf('exit', e.to)
-    } else {
-      from = rectOf('entry', e.from)
-      to = nodeRects.value.get(`gate|${f.agentId}`)
-    }
-    if (!from || !to) continue
-    const x1 = from.right, y1 = from.top + from.height / 2
-    const x2 = to.left, y2 = to.top + to.height / 2
-    const d = `M ${x1} ${y1} C ${x1 + 30} ${y1}, ${Math.max(x1 + 30, x2 - 30)} ${y2}, ${x2} ${y2}`
+    const fromSlot = e.kind === 'entry' ? `${e.from}|entry` : `${e.from}|out`
+    let dstSlot = `${e.to}|in`
+    let dstChip = rectOf('in', e.to)
+    if (!dstChip && e.kind === 'internal') { dstSlot = `gate|${e.to}`; dstChip = rectOf('gate', e.to) }
+    if (e.kind === 'exit') { dstSlot = `${e.to}|exit`; dstChip = rectOf('exit', e.to) }
+    if (e.kind === 'entry') { dstSlot = `gate|${f.agentId}`; dstChip = nodeRects.value.get(dstSlot) }
+    const srcChip = rectOf(e.kind === 'entry' ? 'entry' : 'out', e.from)
+    if (!srcChip || !dstChip) continue
+    const srcCardKey = slotCard.get(fromSlot)
+    const dstCardKey = slotCard.get(dstSlot)
+    const srcCard = srcCardKey ? cardRects.get(srcCardKey) : undefined
+    const dstCard = dstCardKey ? cardRects.get(dstCardKey) : undefined
+    if (!srcCard || !dstCard) continue
+    // 端口锚点：宿主卡「右缘」，y = 芯片中线（钳制在卡内）——线不进入卡片内部
+    const x1 = srcCard.right
+    const y1 = clamp(srcChip.top + srcChip.height / 2, srcCard.top + 4, srcCard.bottom - 4)
+    const x2 = dstCard.right
+    const y2 = clamp(dstChip.top + dstChip.height / 2, dstCard.top + 4, dstCard.bottom - 4)
     const linked = relatedIds.value.has(e.from) && relatedIds.value.has(e.to)
+    const highlight = linked
+      || (!!hoverChip.value && hoverChip.value === e.from)
+      || (!!familyFocus.value && e.fieldId.startsWith(`${familyFocus.value}.`))
+    const dimmed = (!!focusId.value || !!familyFocus.value || !!hoverChip.value) && !linked
+    const spanY = Math.abs(y2 - y1)
+    const mode: EdgeMode = spanY > FAR_SPAN ? 'far' : 'near'
+    const baseOp = edgeFaded.value ? 0.22 : 0
+    const op = highlight ? 0.95 : dimmed ? 0.05 : baseOp
+    const dotOp = highlight ? 0.95 : dimmed ? 0.08 : edgeFaded.value ? 0.4 : 0.15
+    if (mode === 'far') {
+      // 不画线：登记端口徽标（双向：源卡「下游」，目标卡「上游」）
+      if (!farAgg.has(srcCardKey!)) farAgg.set(srcCardKey!, new Map())
+      farAgg.get(srcCardKey!)!.set(dstCardKey!, 'out')
+      if (!farAgg.has(dstCardKey!)) farAgg.set(dstCardKey!, new Map())
+      farAgg.get(dstCardKey!)!.set(srcCardKey!, 'in')
+      continue
+    }
+    // Bus 正交折线：卡右缘 → 走廊竖走 → 目标卡右缘，Q 圆角
+    const busX = x1 + 40 - laneOf(lane++) * 9
+    let d: string
+    if (Math.abs(y2 - y1) < 1) {
+      d = `M ${x1} ${y1} L ${x2} ${y2}` // 同高兜底
+    } else {
+      const r = Math.min(6, Math.abs(y2 - y1) / 2)
+      const dir = y2 > y1 ? 1 : -1
+      d = [
+        `M ${x1} ${y1}`,
+        `L ${busX} ${y1}`,
+        `Q ${busX} ${y1} ${busX} ${y1 + dir * r}`,
+        `L ${busX} ${y2 - dir * r}`,
+        `Q ${busX} ${y2} ${x2} ${y2}`,
+      ].join(' ')
+    }
     outs.push({
-      d, hue: e.hue, x1, y1, x2, y2,
-      highlight: linked || (!!hoverChip.value && hoverChip.value === e.from) || (!!familyFocus.value && e.fieldId.startsWith(`${familyFocus.value}.`)),
-      dimmed: (!!focusId.value || !!familyFocus.value || !!hoverChip.value) && !linked,
+      d,
+      hue: e.hue,
+      x1, y1, x2, y2,
+      arrow: `M ${x2 + 7} ${y2 - 4.2} L ${x2} ${y2} L ${x2 + 7} ${y2 + 4.2} Z`,
+      op,
+      dotOp,
+      highlight,
+      dimmed,
+      mode,
       fieldId: e.fieldId, from: e.from, to: e.to,
     })
   }
+  // far 徽标聚合（同 peer 多字段计一次）
+  const farOut: Record<string, Array<{ dir: 'out' | 'in'; count: number; peer: string; peerLabel: string }>> = {}
+  for (const [key, peers] of farAgg) {
+    farOut[key] = []
+    for (const [peer, dir] of peers) {
+      farOut[key].push({ dir, count: 1, peer, peerLabel: cardLabelOf(peer) })
+    }
+  }
+  farPorts.value = farOut
   edgeGeoms.value = outs
+}
+
+function focusCard(key: string) {
+  const root = pipeRef.value
+  if (!root) return
+  const el = root.querySelector<HTMLElement>(`[data-card-key="${CSS.escape(key)}"]`)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  flashKey.value = key
+  window.setTimeout(() => { if (flashKey.value === key) flashKey.value = '' }, 1500)
 }
 
 let measureRaf = 0
@@ -831,6 +965,10 @@ watch(focusId, scheduleMeasure)
 watch(expandedEntry, scheduleMeasure)
 watch(expandedSteps, scheduleMeasure, { deep: true })
 watch(() => flow.value?.stageId, scheduleMeasure)
+// hover / 数据族聚焦只影响边的高亮态（无需重测 DOM），轻量重算几何
+watch(hoverChip, () => { if (nodeRects.value.size) renderEdges() })
+watch(familyFocus, () => { if (nodeRects.value.size) renderEdges() })
+watch(edgeFaded, () => { if (nodeRects.value.size) renderEdges() })
 
 /* ================= 抽屉 ================= */
 function chipTitle(c: FlowChip) {
@@ -1033,6 +1171,7 @@ function stepHue(step: FlowStep): string {
 .dfg-pipe {
   position: relative;
   padding: 16px 20px 28px;
+  padding-right: 84px; /* 右侧走廊：Bus 连线在此垂直走线，不穿卡片 */
   max-width: 1060px;
   margin: 0 auto;
   display: grid;
@@ -1042,6 +1181,29 @@ function stepHue(step: FlowStep): string {
 }
 .dfg-pipe.is-dimmed { opacity: 1; }
 .dfg-edges { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 3; }
+.dfg-edges path.is-hot { stroke-dasharray: 5 4; animation: dfg-flow 0.7s linear infinite; }
+@keyframes dfg-flow { to { stroke-dashoffset: -9; } }
+
+/* 长程端口徽标（跨多卡不画线，点击滚动聚焦） */
+.dfg-step__port {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 800; color: var(--mk-blue);
+  background: #eef4ff; border: 1px solid #d8e5fb; border-radius: 999px;
+  padding: 1px 7px; cursor: pointer; max-width: 160px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+.dfg-step__port:hover { background: #dbe9ff; box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.18); }
+.dfg-step__port b { font-variant-numeric: tabular-nums; }
+html[data-theme='dark'] .dfg-step__port { background: #1c2a44; border-color: #2c3f63; color: #8fb3ff; }
+html[data-theme='dark'] .dfg-step__port:hover { background: #22345a; }
+
+/* 滚动聚焦闪烁（点击端口徽标后目标卡闪两下） */
+.dfg-step.is-flash, .dfg-gate.is-flash { animation: dfg-flash 0.7s ease 2; }
+@keyframes dfg-flash {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(44, 99, 208, 0); }
+  45% { box-shadow: 0 0 0 4px rgba(44, 99, 208, 0.45); }
+}
 
 /* 进出闸口卡 */
 .dfg-gate {
