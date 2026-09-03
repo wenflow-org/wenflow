@@ -54,9 +54,15 @@
           <strong>{{ flow.entryFrom.stageName }}</strong>
           <span class="dfg-journey__meta">{{ flow.entry.length }} 字段交接</span>
         </button>
+        <span v-else-if="flow.stageId === 'goal'" class="dfg-journey__node dfg-journey__node--up is-start">
+          <span class="dfg-journey__dir">↑ 数据起点</span>
+          <strong>学习者目标输入</strong>
+          <span class="dfg-journey__meta">由目标对话发起，进入 goal-agent</span>
+        </span>
         <span v-else class="dfg-journey__node dfg-journey__node--up is-empty">
-          <span class="dfg-journey__dir">↑ 链首</span>
-          <strong>无上游输入</strong>
+          <span class="dfg-journey__dir">↑ 无上游交接</span>
+          <strong>独立接收输入</strong>
+          <span class="dfg-journey__meta">{{ flow.agentId }} 不接收其它阶段移交的字段</span>
         </span>
         <span class="dfg-journey__pipe">
           <i :style="{ background: toneOf(flow.stageId).hue }"></i>
@@ -73,9 +79,10 @@
           <strong>{{ flow.exitTo.stageName }}</strong>
           <span class="dfg-journey__meta">{{ flow.exit.length }} 字段移交</span>
         </button>
-        <span v-else class="dfg-journey__node dfg-journey__node--down is-empty">
-          <span class="dfg-journey__dir">↓ 终点</span>
-          <strong>本阶段为链尾（累积进学习者状态）</strong>
+        <span v-else class="dfg-journey__node dfg-journey__node--down is-end">
+          <span class="dfg-journey__dir">↓ 数据终点</span>
+          <strong>累积进学习者状态</strong>
+          <span class="dfg-journey__meta">{{ flow.agentId }} 不再向下游移交字段</span>
         </span>
       </div>
 
@@ -1149,6 +1156,20 @@ function stepHue(step: FlowStep): string {
 }
 .dfg-journey__node:hover { border-color: var(--mk-blue); box-shadow: 0 2px 8px rgba(44, 99, 208, 0.1); }
 .dfg-journey__node.is-empty { cursor: default; background: #fafbfd; }
+.dfg-journey__node.is-start {
+  cursor: default;
+  background: linear-gradient(180deg, #fff, #f3f9f4);
+  border-color: color-mix(in srgb, #16a34a 36%, var(--mk-line));
+  border-style: dashed;
+}
+.dfg-journey__node.is-start .dfg-journey__dir { color: #16a34a; }
+.dfg-journey__node.is-end {
+  cursor: default;
+  background: linear-gradient(180deg, #fff, #f7f4fe);
+  border-color: color-mix(in srgb, #7c3aed 32%, var(--mk-line));
+  border-style: dashed;
+}
+.dfg-journey__node.is-end .dfg-journey__dir { color: #7c3aed; }
 .dfg-journey__node--up { border-color: color-mix(in srgb, #2c63d0 30%, var(--mk-line)); }
 .dfg-journey__node--down { border-color: color-mix(in srgb, #8aa6d8 45%, var(--mk-line)); }
 .dfg-journey__dir { font-size: 10px; font-weight: 800; color: var(--mk-faint); letter-spacing: 0.04em; }
@@ -1433,6 +1454,10 @@ html[data-theme='dark'] {
   .dfg-journey { background: linear-gradient(180deg, #141c2b, #121a29); border-bottom-color: #232f45; }
   .dfg-journey__node { background: #17202f; border-color: #2a3850; }
   .dfg-journey__node.is-empty { background: #131b2a; }
+  .dfg-journey__node.is-start { background: linear-gradient(180deg, #16202f, #14261c); border-color: color-mix(in srgb, #16a34a 36%, #2a3850); }
+  .dfg-journey__node.is-start .dfg-journey__dir { color: #4ade80; }
+  .dfg-journey__node.is-end { background: linear-gradient(180deg, #16202f, #1c1830); border-color: color-mix(in srgb, #7c3aed 32%, #2a3850); }
+  .dfg-journey__node.is-end .dfg-journey__dir { color: #c4b5fd; }
   .dfg-journey__dir { color: #6b7c96; }
   .dfg-journey__node strong { color: #c7d3e8; }
   .dfg-journey__hub { color: #6b7c96; }
