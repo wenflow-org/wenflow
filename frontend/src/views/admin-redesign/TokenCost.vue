@@ -100,14 +100,14 @@
       </section>
 
       <div class="tc-grid">
-        <!-- per-skill 排行 -->
+        <!-- per-skill 排行（Top 6） -->
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">Skill 用量排行</h3>
-            <span class="mk-card__meta">{{ bySkill.length }} 个</span>
+            <span class="mk-card__meta">{{ bySkill.length }} 个<template v-if="bySkill.length > 6"> · 显示前 6</template></span>
           </div>
           <div v-if="bySkill.length" class="tc-rank">
-            <div v-for="r in bySkill.slice(0, 12)" :key="r.key" class="tc-rank__row">
+            <div v-for="r in bySkill.slice(0, 6)" :key="r.key" class="tc-rank__row">
               <span class="tc-rank__name" :title="r.key">{{ r.display }}</span>
               <div class="tc-rank__bar-track">
                 <i class="tc-rank__bar" :style="{ width: rankPct(r.tokens) }"></i>
@@ -139,26 +139,26 @@
           </div>
           <p v-else class="mk-card__note">暂无数据。</p>
         </section>
-      </div>
 
-      <!-- per-model 排行 -->
-      <section class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">模型用量排行</h3>
-          <span class="mk-card__meta">{{ byModel.length }} 个</span>
-        </div>
-        <div v-if="byModel.length" class="tc-rank">
-          <div v-for="r in byModel" :key="r.key" class="tc-rank__row">
-            <span class="tc-rank__name" :title="r.key">{{ r.key }}</span>
-            <div class="tc-rank__bar-track">
-              <i class="tc-rank__bar" :style="{ width: rankPct(r.tokens) }"></i>
-            </div>
-            <span class="tc-rank__num">{{ fmtTokens(r.tokens) }}</span>
-            <span class="tc-rank__meta">{{ r.calls }} 次<em v-if="r.failed"> · 败 {{ r.failed }}</em></span>
+        <!-- per-model 排行 -->
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">模型用量排行</h3>
+            <span class="mk-card__meta">{{ byModel.length }} 个</span>
           </div>
-        </div>
-        <p v-else class="mk-card__note">暂无数据。</p>
-      </section>
+          <div v-if="byModel.length" class="tc-rank">
+            <div v-for="r in byModel" :key="r.key" class="tc-rank__row">
+              <span class="tc-rank__name" :title="r.key">{{ r.key }}</span>
+              <div class="tc-rank__bar-track">
+                <i class="tc-rank__bar" :style="{ width: rankPct(r.tokens) }"></i>
+              </div>
+              <span class="tc-rank__num">{{ fmtTokens(r.tokens) }}</span>
+              <span class="tc-rank__meta">{{ r.calls }} 次<em v-if="r.failed"> · 败 {{ r.failed }}</em></span>
+            </div>
+          </div>
+          <p v-else class="mk-card__note">暂无数据。</p>
+        </section>
+      </div>
     </template>
   </div>
 </template>
@@ -304,7 +304,7 @@ function rankPct(tokens: number): string {
   display: flex;
   align-items: flex-end;
   gap: 6px;
-  height: 150px;
+  height: 170px;
   padding: 12px 4px 0;
 }
 .tc-trend__col {
@@ -332,9 +332,10 @@ function rankPct(tokens: number): string {
 
 .tc-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 16px;
+  align-items: start;
 }
 @media (max-width: 1200px) {
   .tc-grid { grid-template-columns: 1fr; }
@@ -351,8 +352,8 @@ function rankPct(tokens: number): string {
   gap: 10px;
 }
 .tc-rank__name {
-  width: 150px;
-  min-width: 150px;
+  flex: 0 1 130px;
+  min-width: 0;
   font-size: var(--mk-fs-12_5);
   font-weight: 600;
   color: var(--mk-ink, #1a2a44);
@@ -361,7 +362,8 @@ function rankPct(tokens: number): string {
   white-space: nowrap;
 }
 .tc-rank__bar-track {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 20px;
   height: 10px;
   background: var(--mk-line, #eef1f6);
   border-radius: 999px;
@@ -374,8 +376,8 @@ function rankPct(tokens: number): string {
   border-radius: 999px;
 }
 .tc-rank__num {
-  width: 74px;
-  min-width: 74px;
+  width: 58px;
+  min-width: 58px;
   text-align: right;
   font-size: var(--mk-fs-12_5);
   font-weight: 700;
@@ -383,8 +385,8 @@ function rankPct(tokens: number): string {
   color: var(--mk-ink, #1a2a44);
 }
 .tc-rank__meta {
-  width: 86px;
-  min-width: 86px;
+  width: 70px;
+  min-width: 70px;
   text-align: right;
   font-size: var(--mk-fs-11);
   color: var(--mk-faint, #9ca3af);
@@ -397,25 +399,25 @@ function rankPct(tokens: number): string {
 @media (min-width: 2000px) {
   .tc-trend { height: 170px; }
   .tc-trend__day { font-size: 12px; }
-  .tc-rank__name { font-size: 14px; width: 170px; min-width: 170px; }
-  .tc-rank__num { font-size: 14px; width: 84px; min-width: 84px; }
-  .tc-rank__meta { font-size: 12.5px; width: 98px; min-width: 98px; }
+  .tc-rank__name { font-size: 14px; flex-basis: 160px; }
+  .tc-rank__num { font-size: 14px; width: 70px; min-width: 70px; }
+  .tc-rank__meta { font-size: 12.5px; width: 84px; min-width: 84px; }
   .tc-rank__bar-track { height: 12px; }
 }
 @media (min-width: 2800px) {
   .tc-trend { height: 200px; }
   .tc-trend__day { font-size: 14px; }
-  .tc-rank__name { font-size: 16.5px; width: 200px; min-width: 200px; }
-  .tc-rank__num { font-size: 16.5px; width: 100px; min-width: 100px; }
-  .tc-rank__meta { font-size: 14.5px; width: 115px; min-width: 115px; }
+  .tc-rank__name { font-size: 16.5px; flex-basis: 190px; }
+  .tc-rank__num { font-size: 16.5px; width: 86px; min-width: 86px; }
+  .tc-rank__meta { font-size: 14.5px; width: 100px; min-width: 100px; }
   .tc-rank__bar-track { height: 14px; }
 }
 @media (min-width: 3600px) {
   .tc-trend { height: 235px; }
   .tc-trend__day { font-size: 16.5px; }
-  .tc-rank__name { font-size: 19.5px; width: 235px; min-width: 235px; }
-  .tc-rank__num { font-size: 19.5px; width: 118px; min-width: 118px; }
-  .tc-rank__meta { font-size: 17px; width: 135px; min-width: 135px; }
+  .tc-rank__name { font-size: 19.5px; flex-basis: 220px; }
+  .tc-rank__num { font-size: 19.5px; width: 100px; min-width: 100px; }
+  .tc-rank__meta { font-size: 17px; width: 118px; min-width: 118px; }
   .tc-rank__bar-track { height: 16px; }
 }
 
