@@ -529,12 +529,14 @@ function goSessions(username: string) {
 
 /* 单元格 */
 .log-time {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .log-admin {
+  font-size: var(--mk-fs-12_5);
+  color: var(--mk-ink);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -545,7 +547,7 @@ function goSessions(username: string) {
 .log-method {
   display: inline-block;
   font-family: var(--mk-mono);
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-12);
   font-weight: 800;
   border-radius: 5px;
   padding: 1px 7px;
@@ -566,7 +568,7 @@ function goSessions(username: string) {
 .log-path {
   /* inline-block（非 inline）：max-width/text-overflow 只对块级盒生效 */
   display: inline-block;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-ink);
   white-space: nowrap;
   overflow: hidden;
@@ -577,7 +579,7 @@ function goSessions(username: string) {
 /* 非 API 动作（中文标签）：中性蓝 chip */
 .log-action {
   display: inline-block;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-12_5);
   font-weight: 700;
   border-radius: 5px;
   padding: 1px 8px;
@@ -589,26 +591,26 @@ function goSessions(username: string) {
   max-width: 240px;
 }
 .log-tt {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-muted);
   white-space: nowrap;
 }
 .log-target {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .log-ip {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .log-reason {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -627,7 +629,7 @@ function goSessions(username: string) {
   margin-left: auto;
   text-align: center;
   overflow: hidden;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-faint);
   transition: transform 0.15s ease;
 }
@@ -670,7 +672,7 @@ function goSessions(username: string) {
   .log-target,
   .log-ip { font-size: 13.5px; }
   .log-admin { font-size: 14px; }
-  .log-method { font-size: 12px; padding: 2px 9px; }
+  .log-method { font-size: 12.5px; padding: 2px 9px; }
   .log-path { font-size: 13.5px; max-width: 520px; }
   .log-action { font-size: 13px; max-width: 520px; }
   .log-admin { max-width: 300px; }

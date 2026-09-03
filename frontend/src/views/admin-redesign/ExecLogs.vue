@@ -760,7 +760,7 @@ html[data-theme='dark'] .exec-test-tag { background: #2a3850; color: #8fa3bd; }
    长节点名会溢出节点列侵入消息列（实测 46 字符节点名溢出 132px 与标题重叠） */
 .exec-stage {
   display: inline-block;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-blue);
   cursor: pointer;
   white-space: nowrap;
@@ -772,7 +772,7 @@ html[data-theme='dark'] .exec-test-tag { background: #2a3850; color: #8fa3bd; }
 /* 模型 / Tokens 独立列：单行截断（同为 inline span，需 inline-block 让截断生效） */
 .exec-model__name {
   display: inline-block;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -781,7 +781,7 @@ html[data-theme='dark'] .exec-test-tag { background: #2a3850; color: #8fa3bd; }
 }
 .exec-tokens {
   display: inline-block;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -793,7 +793,7 @@ html[data-theme='dark'] .exec-test-tag { background: #2a3850; color: #8fa3bd; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-12);
   font-weight: 700;
   border-radius: 999px;
   padding: 1px 8px;
@@ -804,19 +804,19 @@ html[data-theme='dark'] .exec-test-tag { background: #2a3850; color: #8fa3bd; }
 .exec-status--err { background: var(--mk-red-bg); color: var(--mk-red); }
 /* 时间/耗时/Trace 等宽数字列 */
 .exec-time {
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .exec-dur {
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .exec-trace {
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-12_5);
   color: var(--mk-faint);
   white-space: nowrap;
   cursor: pointer;
@@ -874,7 +874,7 @@ html[data-theme='dark'] .exec-detail td { background: #101826; }
   padding: 1px 6px;
   white-space: nowrap;
 }
-.tline__session { font-size: var(--mk-fs-11); color: var(--mk-blue, #2c63d0); cursor: pointer; }
+.tline__session { font-size: var(--mk-fs-12_5); color: var(--mk-blue, #2c63d0); cursor: pointer; }
 .tline__session:hover { text-decoration: underline; }
 /* Prompt 契约展开区 */
 .tline__prompt { border-left: 3px solid rgba(217, 119, 6, 0.4); padding-left: 10px; }
@@ -942,7 +942,7 @@ html[data-theme='dark'] .tline-attempt--fail { background: rgba(220, 38, 38, 0.0
   .exec-model__name { font-size: 13px; }
   .exec-title { font-size: 15px; }
   .exec-tokens,
-  .exec-status { font-size: 12px; }
+  .exec-status { font-size: 13px; }
   .tline__errcode,
   .tline__http,
   .tline__recovered,
