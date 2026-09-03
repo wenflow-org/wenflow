@@ -91,13 +91,14 @@
       <MockSkeletonTable v-if="(liveLoading || liveLogsLoading) && !logs.length" :cols="6" :rows="6" />
       <div v-else-if="filtered.length" class="mk-table-scroll">
         <table class="mk-table mk-table--click mk-table--fixed exec-table">
+
           <colgroup>
             <col v-if="!hiddenCols.has('time')" style="width:var(--mk-col-time-full)">
             <col v-if="!hiddenCols.has('kind')" style="width:36px">
             <col v-if="!hiddenCols.has('agent')" style="width:130px">
-            <col v-if="!hiddenCols.has('msg')" style="width:auto">
-            <col v-if="!hiddenCols.has('model')" style="width:94px">
-            <col v-if="!hiddenCols.has('tokens')" style="width:128px">
+            <col v-if="!hiddenCols.has('msg')" style="width:260px">
+            <col v-if="!hiddenCols.has('model')" style="width:140px">
+            <col v-if="!hiddenCols.has('tokens')" style="width:132px">
             <col v-if="!hiddenCols.has('dur')" style="width:52px">
             <col v-if="!hiddenCols.has('status')" style="width:56px">
             <col v-if="!hiddenCols.has('trace')" style="width:86px">
@@ -836,11 +837,11 @@ html[data-theme='dark'] .exec-detail td { background: #101826; }
 }
 .exec-detail__links { display: inline-flex; gap: 12px; }
 
-/* 窄屏自适应：消息列为弹性列（width:auto 吸剩余空间），固定列合计 ≈900px。
-   容器 <900px 时出现横向滚动（原 min-width:1080px 在 840px 容器下把列压坏/裁出,
-   用户反馈 1080px 视口文字重叠）。改 900px：1440px 视口无滚动,
-   1080px 视口滚动 ~60px 但各列保持最优宽、不挤压（AntD Table 溢出横滚标准行为）。 */
-.mk-table-scroll .exec-table { min-width: 900px; }
+/* 窄屏自适应：9 列固定宽合计 ≈1002px(消息列 260px,不再弹性吸走全部剩余空间——
+   修复 1440px 下消息列 466px 失衡、模型/输入输出列被截断的问题)。
+   容器 <1002px 时出现横向滚动(原 min-width:1080px 在 840px 容器下把列压坏/裁出)。
+   1440px 视口无滚动且各列均衡;1080px 视口滚动 ~160px 但列宽稳定不挤压。 */
+.mk-table-scroll .exec-table { min-width: 1002px; }
 
 /* ---------- 行内 chip（沿用） ---------- */
 .tline__errcode {
