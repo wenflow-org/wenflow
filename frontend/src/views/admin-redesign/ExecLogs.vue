@@ -95,8 +95,8 @@
           <colgroup>
             <col v-if="!hiddenCols.has('time')" style="width:var(--mk-col-time-full)">
             <col v-if="!hiddenCols.has('kind')" style="width:36px">
-            <col v-if="!hiddenCols.has('agent')" style="width:130px">
-            <col v-if="!hiddenCols.has('msg')" style="width:220px">
+            <col v-if="!hiddenCols.has('agent')" style="width:120px">
+            <col v-if="!hiddenCols.has('msg')" style="width:180px">
             <col v-if="!hiddenCols.has('model')" style="width:140px">
             <col v-if="!hiddenCols.has('tokens')" style="width:132px">
             <col v-if="!hiddenCols.has('dur')" style="width:52px">
@@ -160,6 +160,14 @@
                         <button type="button" class="mk-link" @click.stop="showTrace(log.traceId)">在链路中查看完整 Trace →</button>
                         <button v-if="log.sessionId" type="button" class="mk-link" @click.stop="showTrace(undefined, log.sessionId)">按会话归组查看 →</button>
                       </span>
+                    </div>
+                    <!-- 摘要行：表格弱化列的完整值（类型/模型/输入输出），展开即看全不丢信息 -->
+                    <div class="exec-detail__meta mono">
+                      <span class="mk-badge" :class="`mk-badge--${kindTone(log)}`">{{ kindText(log) }}</span>
+                      <span v-if="log.model" :title="log.model">{{ log.model }}</span>
+                      <span v-if="log.promptTokens != null || log.completionTokens != null || promptOf(log)?.tokens" :title="tokensTitle(log)">{{ tokensText(log) }}</span>
+                      <span v-if="log.errorCode" class="tline__errcode">{{ errorCodeLabel(log.errorCode) ?? log.errorCode }}</span>
+                      <span v-if="log.statusCode && log.statusCode >= 400">HTTP {{ log.statusCode }}</span>
                     </div>
                     <p v-if="detailLoading === log.id" class="tline__none"><span class="mk-spinner" aria-hidden="true"></span> 拉取日志详情中…</p>
                       <template v-else-if="detailCache[log.id]">
@@ -288,18 +296,26 @@ const colDefs = [
   { key: 'time', label: '时间', title: '记录时间（HH:mm:ss）' },
   { key: 'kind', label: '类型', title: '日志类型（执行/重试/告警）' },
   { key: 'agent', label: '节点', title: 'Skill 节点' },
-  { key: 'msg', label: '消息', title: '消息内容与错误信息' },
+  { key: 'msg', label: '调用', title: '调用内容与错误信息' },
   { key: 'model', label: '模型', title: '使用的 LLM 模型' },
   { key: 'tokens', label: '输入 / 输出', title: 'Token 用量（输入 / 输出）' },
   { key: 'dur', label: '耗时', title: '执行耗时' },
   { key: 'status', label: '状态', title: '执行状态' },
   { key: 'trace', label: 'Trace', title: '链路 ID（点击直达）' },
 ] as const
+/* 次要列默认隐藏（收进展开区）：表格只留高频辨识列(时间/节点/调用/耗时/状态),
+   窄屏无需滚动、信息不丢（点击行看全）。列设置可手动开启。 */
+const DEFAULT_HIDDEN = ['kind', 'model', 'tokens', 'trace']
 const colsOpen = ref(false)
 const hiddenCols = ref<Set<string>>(new Set())
 try {
-  const saved = JSON.parse(localStorage.getItem(COLS_KEY) || '[]') as unknown
-  if (Array.isArray(saved)) hiddenCols.value = new Set(saved.filter((x): x is string => typeof x === 'string'))
+  const raw = localStorage.getItem(COLS_KEY)
+  // 首次访问(无记录)→ 新默认(次要列收进展开区);已有记录(含空数组=全显示)→ 尊重用户配置
+  if (raw == null) hiddenCols.value = new Set(DEFAULT_HIDDEN)
+  else {
+    const saved = JSON.parse(raw) as unknown
+    if (Array.isArray(saved)) hiddenCols.value = new Set(saved.filter((x): x is string => typeof x === 'string'))
+  }
 } catch { /* 隐私模式忽略 */ }
 watch(hiddenCols, (s) => {
   try { localStorage.setItem(COLS_KEY, JSON.stringify([...s])) } catch { /* ignore */ }
@@ -864,12 +880,22 @@ html[data-theme='dark'] .exec-detail td { background: #101826; }
   background: var(--mk-surface);
 }
 .exec-detail__links { display: inline-flex; gap: 12px; }
+/* 展开区摘要行：次要列完整值(类型/模型/输入输出/错误码)，与 trace 行同层级 */
+.exec-detail__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 0 2px;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-12);
+}
+.exec-detail__meta > span { white-space: nowrap; }
 
-/* 窄屏自适应：9 列固定宽合计 ≈962px(调用列 220px——原 466px 弹性列吸走全部剩余空间、
-   与状态列「成功」语义重复,已缩窄并弱化成功行)。
-   容器 <962px 时出现横向滚动(原 min-width:1080px 在 840px 容器下把列压坏/裁出)。
-   1440px 视口无滚动且各列均衡;1080px 视口滚动但列宽稳定不挤压。 */
-.mk-table-scroll .exec-table { min-width: 962px; }
+/* 窄屏自适应：min-width 只保证默认 5 列(时间/节点/调用/耗时/状态)在窄容器内不塌陷 ≈620px;
+   用户开启全部 9 列时由列定宽自然撑超(≈962px),容器横向滚动(AntD Table 标准行为)。
+   原 min-width:962px 在 5 列默认下也硬撑导致 1080px 视口多余滚动。 */
+.mk-table-scroll .exec-table { min-width: 620px; }
 
 /* ---------- 行内 chip（沿用） ---------- */
 .tline__errcode {
