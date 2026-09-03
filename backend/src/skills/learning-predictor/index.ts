@@ -23,11 +23,8 @@ export const learningPredictorDefinition: SkillDefinition = {
     type: 'object',
     properties: {
       knowledgeStateSummary: { type: 'string', description: '最近一次知识状态摘要（lesson-knowledge-enricher 产出）' },
-      conceptLedger: { type: 'array', description: '概念台账（已掌握/脆弱概念）' },
-      recentConfusions: { type: 'array', description: '最近反复混淆' },
       fatigueSignal: { type: 'string', description: '疲劳/状态信号（low|medium|high）' },
-      taskContext: { type: 'object', description: '目标任务：title/knowledgeType/learningObjectives' },
-      historySummary: { type: 'string', description: '历史表现摘要（可选）' }
+      taskContext: { type: 'object', description: '目标任务：title/knowledgeType/learningObjectives' }
     }
   },
   outputSchema: {
@@ -46,15 +43,12 @@ export const learningPredictorDefinition: SkillDefinition = {
 
 export interface LearningPredictorInput {
   knowledgeStateSummary?: string;
-  conceptLedger?: Array<Record<string, unknown>>;
-  recentConfusions?: Array<Record<string, unknown>>;
   fatigueSignal?: 'low' | 'medium' | 'high';
   taskContext?: {
     title?: string;
     knowledgeType?: string;
     learningObjectives?: string[];
   };
-  historySummary?: string;
 }
 
 export interface LearningPredictorOutput {

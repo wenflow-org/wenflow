@@ -13,11 +13,8 @@ export const learningPredictorRuntimeDefinition: RuntimeDefinitionRecord = {
     type: 'object',
     properties: {
       knowledgeStateSummary: { type: 'string', description: '最近一次知识状态摘要' },
-      conceptLedger: { type: 'array', description: '概念台账' },
-      recentConfusions: { type: 'array', description: '最近反复混淆' },
       fatigueSignal: { type: 'string', description: '疲劳信号 low|medium|high' },
       taskContext: { type: 'object', description: '目标任务上下文' },
-      historySummary: { type: 'string', description: '历史表现摘要' },
     },
   },
   outputSchema: {

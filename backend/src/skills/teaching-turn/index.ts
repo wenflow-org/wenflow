@@ -171,7 +171,6 @@ export interface TeachingTurnOutput {
     ktEstimate?: {
       conceptMastery?: Array<{ conceptKey: string; mastery: number; evidence?: string }>;
       currentTaskDifficulty?: number;
-      predictedNextCorrectness?: number;
       recommendation?: string;
     };
     /** PF 模式解法尝试台账（每轮新尝试，供整合期对比） */
@@ -521,9 +520,6 @@ function normalizeKtEstimate(value: any): { ktEstimate?: NonNullable<TeachingTur
   if (conceptMastery && conceptMastery.length > 0) result.conceptMastery = conceptMastery;
   if (Number.isFinite(Number(value.currentTaskDifficulty))) {
     result.currentTaskDifficulty = Math.max(0, Math.min(1, Number(value.currentTaskDifficulty)));
-  }
-  if (Number.isFinite(Number(value.predictedNextCorrectness))) {
-    result.predictedNextCorrectness = Math.max(0, Math.min(1, Number(value.predictedNextCorrectness)));
   }
   if (typeof value.recommendation === 'string' && ['consolidate', 'advance', 'challenge', 'scaffold'].includes(value.recommendation)) {
     result.recommendation = value.recommendation;

@@ -260,6 +260,10 @@ interface PathCognitiveConcept {
 interface PathCognitiveDesign {
   cognitiveDomain?: string | null;
   coreConcepts?: PathCognitiveConcept[];
+  /** RPKT 前提知识缺口链（可选，path-planning 产出；供 stage-designer/kc-mapper/path-reviewer 消费） */
+  prerequisiteTree?: unknown;
+  /** CLT 认知负荷画像（可选，path-planning 产出；供 stage-designer 按 loadTarget 调整子任务设计） */
+  loadProfile?: unknown;
 }
 
 const NEW_PATH_TASK_TYPES = ['acquire', 'deconstruct', 'model', 'execute', 'diagnose', 'refine', 'consolidate'] as const;
@@ -1485,6 +1489,8 @@ class LearningService {
         ? candidate.cognitiveDomain.trim()
         : fallbackDomain,
       coreConcepts: normalizedConcepts,
+      ...(candidate?.prerequisiteTree ? { prerequisiteTree: candidate.prerequisiteTree } : {}),
+      ...(candidate?.loadProfile ? { loadProfile: candidate.loadProfile } : {}),
     };
   }
 
@@ -1750,6 +1756,8 @@ class LearningService {
           ? generatedCognitiveDesign.cognitiveDomain.trim()
           : getSceneFramingFallbackDomain(sceneFraming) || analysis?.subject || data.description,
         coreConcepts: generatedCoreConcepts,
+        prerequisiteTree: (generatedCognitiveDesign as any)?.prerequisiteTree ?? undefined,
+        loadProfile: (generatedCognitiveDesign as any)?.loadProfile ?? undefined,
       },
       getSceneFramingFallbackDomain(sceneFraming) || analysis?.subject || data.description,
       focusSource,
@@ -3055,7 +3063,7 @@ class LearningService {
             knowledgeType: t.knowledgeType,
             cognitiveLevel: t.cognitiveLevel,
           }))),
-          prerequisiteTree: (parsedTemplate as any)?.normalizedInput?.prerequisiteTree || null,
+          prerequisiteTree: (parsedTemplate as any)?.cognitiveDesign?.prerequisiteTree || null,
         });
         if (kcResult?.success && kcResult?.output) {
           kcAnnotation = kcResult.output;
@@ -3350,7 +3358,7 @@ class LearningService {
             confirmedProposal: (data as any).confirmedProposal,
             learnerProfile: (data as any).userProfile?.learnerProfile,
           },
-          prerreqTree: (data as any).userProfile?.normalizedInput?.prerequisiteTree,
+          prerreqTree: (analysis.cognitiveDesign as any)?.prerequisiteTree,
         });
         if (reviewResult?.success && reviewResult?.output) {
           pathReview = reviewResult.output;

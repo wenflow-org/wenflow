@@ -134,7 +134,6 @@ fields:
       · ktEstimate（object，可选）回合级知识状态估计（θ−d 路由信号，供编排层做难度感知路由）：
         { "conceptMastery": [{ "conceptKey": 概念键, "mastery": 0-1 掌握概率, "evidence": 学生原话依据 }],
           "currentTaskDifficulty": 0-1 当前任务难度估计,
-          "predictedNextCorrectness": 0-1 预测下一轮正确率,
           "recommendation": "consolidate|advance|challenge|scaffold" 下一步教学建议 }
         mastery 是 0-1 概率而非二元；必须由学生本轮发言可引用的证据支撑，无证据时不输出该 conceptKey 或标 0.5；无充分证据时整体可省略
   - name: knowledge

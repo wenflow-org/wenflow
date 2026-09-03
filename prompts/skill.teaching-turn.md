@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-turn
-coreHash: aaeee7fcdce3930ae8969ebdb1adba65299de1f559f95a1adffef12ae4f09f4a
+coreHash: cee04d4db116bc8ae28ff94567b7049a9f67c247980e904bdf563c4cfa606289
 coreVersion: 1
 temperature: 0.7
 maxTokens: 12000
@@ -106,7 +106,6 @@ failurePolicy: retry
 · ktEstimate（object，可选）回合级知识状态估计（θ−d 路由信号，供编排层做难度感知路由）：
   { "conceptMastery": [{ "conceptKey": 概念键, "mastery": 0-1 掌握概率, "evidence": 学生原话依据 }],
     "currentTaskDifficulty": 0-1 当前任务难度估计,
-    "predictedNextCorrectness": 0-1 预测下一轮正确率,
     "recommendation": "consolidate|advance|challenge|scaffold" 下一步教学建议 }
   mastery 是 0-1 概率而非二元；必须由学生本轮发言可引用的证据支撑，无证据时不输出该 conceptKey 或标 0.5；无充分证据时整体可省略（当轮）
 - knowledge · object — 当前任务知识看板，子字段：
