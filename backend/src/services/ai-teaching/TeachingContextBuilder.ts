@@ -125,6 +125,16 @@ export interface TeachingScenarioContext {
   }> | null;
   /** 任务模式：normal（默认教学）| productiveFailure（有效失败：先让学生挣扎，后整合） */
   taskMode?: 'normal' | 'productiveFailure';
+  /** 行为投影器（LLM-KT Behavioral Dynamics Projector）：近期回合级行为动态压缩 */
+  behavioralProfile: {
+    avgUnderstanding: number | null;
+    avgLoadIndex: number | null;
+    avgEngagement: number | null;
+    dominantEmotion: string | null;
+    frustrationRate: number | null;
+    knowledgeMasteryEma: number | null;
+    sampleSize: number;
+  } | null;
 }
 
 /** 预测上下文（P2 闭环：预测 + 实证可靠性一起交给教学 Agent） */
@@ -492,6 +502,7 @@ export async function buildTeachingScenarioContext(
     ? learningSignalRaw.trim()
     : null;
   const lastLessonRecap = await fetchLastLessonRecap(userId, path.id, task.id);
+  const behavioralProfile = await fetchBehavioralProfile(userId);
   const milestone = task.milestones;
   const taskProfile = {
     knowledgeType: (task as any).knowledgeType || null,
@@ -589,6 +600,7 @@ export async function buildTeachingScenarioContext(
     learnerPrediction: null,
     priorMisconceptions,
     taskMode: determineTaskMode(task, persistedLearningObjectives, cognitiveFrame),
+    behavioralProfile,
   };
 
   // 学习表现预测（P2 闭环）：幂等复用 + 超时保护；结果直接进入教学上下文
@@ -711,4 +723,56 @@ async function fetchLatestKnowledgeSummary(userId: string): Promise<string | und
       ? parsed.knowledgeStateSummary.trim()
       : undefined;
   } catch { return undefined; }
+}
+
+/** 行为投影器（LLM-KT Behavioral Dynamics Projector）：近期回合级行为动态压缩 */
+async function fetchBehavioralProfile(userId: string): Promise<TeachingScenarioContext['behavioralProfile']> {
+  try {
+    const recentSessions = await prisma.teaching_sessions.findMany({
+      where: { userId, status: 'completed' },
+      orderBy: { updatedAt: 'desc' },
+      take: 3,
+      select: { messages: true },
+    });
+    const allAnalysis: any[] = [];
+    for (const session of recentSessions) {
+      const msgs = Array.isArray(session.messages) ? session.messages : [];
+      for (const msg of msgs) {
+        if (msg.role === 'assistant' && msg.analysis) allAnalysis.push(msg.analysis);
+      }
+    }
+    if (allAnalysis.length === 0) return null;
+
+    const avg = (vals: number[]) => vals.reduce((a, b) => a + b, 0) / vals.length || 0;
+    const understandings = allAnalysis.map((a) => a.understanding).filter((v) => Number.isFinite(v));
+    const loadIndices = allAnalysis.map((a) => a.loadIndex).filter((v) => Number.isFinite(v));
+    const engagements = allAnalysis.map((a) => a.engagement).filter((v) => Number.isFinite(v));
+    const emotions = allAnalysis.map((a) => a.emotionalState).filter((v) => typeof v === 'string');
+    const frustratedCount = emotions.filter((e) => e === 'frustrated').length;
+
+    const ktEmaRows = await prisma.memory_traces.findMany({
+      where: { userId, ktMasteryEma: { not: null } },
+      select: { ktMasteryEma: true },
+    });
+    const ktMasteryAvg = ktEmaRows.length > 0
+      ? ktEmaRows.reduce((sum, r) => sum + (r.ktMasteryEma ?? 0), 0) / ktEmaRows.length
+      : null;
+
+    // 主导情绪
+    const emotionCounts = new Map<string, number>();
+    for (const e of emotions) emotionCounts.set(e, (emotionCounts.get(e) || 0) + 1);
+    let dominantEmotion: string | null = null;
+    let maxCount = 0;
+    for (const [e, count] of emotionCounts) { if (count > maxCount) { maxCount = count; dominantEmotion = e; } }
+
+    return {
+      avgUnderstanding: understandings.length > 0 ? Math.round(avg(understandings) * 100) / 100 : null,
+      avgLoadIndex: loadIndices.length > 0 ? Math.round(avg(loadIndices) * 100) / 100 : null,
+      avgEngagement: engagements.length > 0 ? Math.round(avg(engagements) * 100) / 100 : null,
+      dominantEmotion,
+      frustrationRate: emotions.length > 0 ? Math.round((frustratedCount / emotions.length) * 100) / 100 : null,
+      knowledgeMasteryEma: ktMasteryAvg !== null ? Math.round(ktMasteryAvg * 100) / 100 : null,
+      sampleSize: allAnalysis.length,
+    };
+  } catch { return null; }
 }

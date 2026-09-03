@@ -122,6 +122,16 @@ export interface TeachingTurnInput {
       status: string;
       occurrenceCount: number;
     }> | null;
+    /** 行为投影器（LLM-KT Behavioral Dynamics Projector）：近期回合级行为动态压缩 */
+    behavioralProfile?: {
+      avgUnderstanding: number | null;
+      avgLoadIndex: number | null;
+      avgEngagement: number | null;
+      dominantEmotion: string | null;
+      frustrationRate: number | null;
+      knowledgeMasteryEma: number | null;
+      sampleSize: number;
+    } | null;
   };
   knowledge: {
     points: Array<{
