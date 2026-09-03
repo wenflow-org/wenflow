@@ -40,10 +40,10 @@
       <SandboxView />
     </div>
 
-    <!-- 阶段工作区：流转图（浏览）+ 字段路由（编辑，默认收起）+ 治理（查证） -->
+    <!-- 阶段工作区：数据旅程流水线（浏览）+ 字段路由（编辑，默认收起）+ 治理（查证） -->
     <template v-else-if="current">
-      <FieldFlowGraph
-        :key="flowKey"
+      <DataFlowGraph
+        :key="`${active}-${flowKey}`"
         :stage="active"
         @changed="onRoutingChanged"
         @stage="onStageChange"
@@ -78,7 +78,7 @@ import { dataSource } from './store'
 import { liveTopoNodes, liveSkillCatalog, errMsg } from './live'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
 import FieldRoutingTable from './FieldRoutingTable.vue'
-import FieldFlowGraph from './FieldFlowGraph.vue'
+import DataFlowGraph from './DataFlowGraph.vue'
 import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
 
