@@ -93,14 +93,14 @@
         <table class="mk-table mk-table--click mk-table--fixed exec-table">
           <colgroup>
             <col v-if="!hiddenCols.has('time')" style="width:var(--mk-col-time-full)">
-            <col v-if="!hiddenCols.has('kind')" style="width:48px">
-            <col v-if="!hiddenCols.has('agent')" style="width:150px">
-            <col v-if="!hiddenCols.has('msg')" style="width:200px">
-            <col v-if="!hiddenCols.has('model')" style="width:120px">
-            <col v-if="!hiddenCols.has('tokens')" style="width:132px">
-            <col v-if="!hiddenCols.has('dur')" style="width:64px">
-            <col v-if="!hiddenCols.has('status')" style="width:62px">
-            <col v-if="!hiddenCols.has('trace')" style="width:98px">
+            <col v-if="!hiddenCols.has('kind')" style="width:36px">
+            <col v-if="!hiddenCols.has('agent')" style="width:130px">
+            <col v-if="!hiddenCols.has('msg')" style="width:auto">
+            <col v-if="!hiddenCols.has('model')" style="width:94px">
+            <col v-if="!hiddenCols.has('tokens')" style="width:128px">
+            <col v-if="!hiddenCols.has('dur')" style="width:52px">
+            <col v-if="!hiddenCols.has('status')" style="width:56px">
+            <col v-if="!hiddenCols.has('trace')" style="width:86px">
           </colgroup>
           <thead>
             <tr>
@@ -836,8 +836,11 @@ html[data-theme='dark'] .exec-detail td { background: #101826; }
 }
 .exec-detail__links { display: inline-flex; gap: 12px; }
 
-/* 窄屏：9 列合计超出 1080px 时横向滚动（容器 .mk-table-scroll overflow-x），不挤压内容 */
-.mk-table-scroll .exec-table { min-width: 1080px; }
+/* 窄屏自适应：消息列为弹性列（width:auto 吸剩余空间），固定列合计 ≈900px。
+   容器 <900px 时出现横向滚动（原 min-width:1080px 在 840px 容器下把列压坏/裁出,
+   用户反馈 1080px 视口文字重叠）。改 900px：1440px 视口无滚动,
+   1080px 视口滚动 ~60px 但各列保持最优宽、不挤压（AntD Table 溢出横滚标准行为）。 */
+.mk-table-scroll .exec-table { min-width: 900px; }
 
 /* ---------- 行内 chip（沿用） ---------- */
 .tline__errcode {
