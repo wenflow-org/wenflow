@@ -80,6 +80,9 @@ function normalizeSubtasks(raw: any, fallbackConcept: string | null) {
       cognitiveLevel: ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'].includes(item?.cognitiveLevel)
         ? item.cognitiveLevel
         : null,
+      icapLevel: ['passive', 'active', 'constructive', 'interactive'].includes(item?.icapLevel)
+        ? item.icapLevel
+        : null,
       transferable: !!item?.transferable,
     }))
     .filter((item) => !!item.title);

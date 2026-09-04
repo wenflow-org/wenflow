@@ -30,13 +30,13 @@ rules:
   - 任务要可执行，但不要写成完整教案，不要输出课堂话术
   - 可以输出 description 和 acceptanceHint，但要保持轻量，不要写成刚性周计划、次数处方、剂量处方、行为干预脚本或微型项目说明书
   - type 只能是 acquire|deconstruct|model|execute|diagnose|refine|consolidate
-  - linkedConcept 必须等于 milestone.coreConcept，除非 repairHints 明确要求桥接任务；consolidate 类型任务若在回捞前一阶段概念，linkedConcept 可以指向被回捞的跨阶段概念（crossStageConcept）
+  - linkedConcept 默认指向当前 milestone 绑定的 coreConcept（主干概念），但同一阶段的 subtasks 不得全部锁定在同一个概念上机械复读：允许拆分多个认知分面（如"机制理解→操作实现→边界防御→迁移应用"），并通过 linkedConcept 指向当前 milestone 的 coreConcept 或其相邻 supporting concepts 实现多概念交织；consolidate 类型任务若在回捞前一阶段概念，linkedConcept 可以指向被回捞的跨阶段概念（crossStageConcept）；除非 repairHints 明确要求桥接任务，否则支持概念只允许来自同一 cognitiveCore 中声明的概念，不得引入未声明概念
   - 输出数量优先遵守 normalizedInput.planningHints.subtasksPerStageRange；若未提供，默认 3-6 个
   - 如果输入提供 firstDeliverable，当前阶段若是首阶段，应让第一批任务直接服务它
   - 每个阶段的 subtasks 中至少包含 1 个 consolidate 类型任务，显式回捞前一阶段的核心概念；服务层在逐阶段生成时会注入前一 milestone 的 title 与 coreConcept 作为回捞输入（见输入说明），请以注入内容为准；首阶段（没有前一里程碑）不强制 consolidate，此时用 consolidate 类型任务复盘首阶段自身概念
   - 首阶段第一个 subtask 必须低门槛（estimatedMinutes ≤45、当次即可产出可见结果），让学习者第一节课就有"我做到了"的时刻
   - subtasks 顺序即学习者的执行顺序，必须体现认知难度梯度：先安排 acquire / diagnose / deconstruct 等低门槛建立类任务，再安排 model / execute 等应用类任务，最后以 refine / consolidate 收束；不允许把 consolidate 排在 execute 之前
-  - 若输入提供 milestone 的 loadTarget（来自 cognitiveCore.loadProfile），据此调整 subtask 设计：loadTarget=low 时至少 60% 的 subtasks 应为 acquire/deconstruct 类型（建立基础），每个 subtask 只引入 ≤1 个新概念；loadTarget=medium 时 model/execute 类型占比 ≥ 40%，允许 2-3 个概念的交互；loadTarget=high 时 diagnose/refine 类型占比 ≥ 30%，允许 3-4 个概念同时交互。同一阶段内 subtask 的 cognitiveLevel 必须呈 Bloom 递进（remember→understand→apply→analyze），不可跳跃
+  - 若输入提供 milestone 的 loadTarget（来自 cognitiveCore.loadProfile），据此调整 subtask 设计：loadTarget=low 时至少 60% 的 subtasks 应为 acquire/deconstruct 类型（建立基础），每个 subtask 只引入 ≤1 个新概念；loadTarget=medium 时 model/execute 类型占比 ≥ 40%，允许 2-3 个概念的交互；loadTarget=high 时 diagnose/refine 类型占比 ≥ 30%，允许 3-4 个概念同时交互。cognitiveLevel 仅作为每任务的目标深度标注（供 teaching 层升降级参考），不约束阶段内任务序列顺序
   - 每个 subtask 必须标注 icapLevel（passive|active|constructive|interactive），标注依据为该任务要求的外显行为而非 type 名称；可以补轻量标签 knowledgeType、cognitiveLevel、transferable，但不要输出 learningObjectives
   - ICAP 档位映射（用于自检）：acquire/execute 若只是"阅读/按步骤完成"→active，若要求"用自己的话重述/解释每一步为什么"→constructive；deconstruct/diagnose/refine/model 默认为 constructive；consolidate 若只是"回顾/总结"→active，若要求"整合不同阶段框架形成新理解"→constructive，若"与同伴讨论共建"→interactive
   - ICAP 递进约束：同一阶段内 subtasks 的 icapLevel 应呈非递减（active→constructive→interactive），不得出现 constructive→active 的降级；首阶段首任务 icapLevel 最低为 active（禁止纯 passive 起步，本平台核心是体验式学习）
@@ -61,7 +61,7 @@ fields:
         "estimatedMinutes": 30,
         "description": 任务的大概内容（围绕什么概念、在什么场景观察或练习）,
         "acceptanceHint": 一个轻量完成信号,
-        "linkedConcept": 等于 milestone.coreConcept 的 concept-id,
+        "linkedConcept": "当前阶段 coreConcept 的 concept-id（或同一 cognitiveCore 内的 supporting concept-id，用于多概念交织任务）",
         "knowledgeType": "factual|conceptual|procedural|metacognitive",
         "cognitiveLevel": "remember|understand|apply|analyze|evaluate|create",
         "icapLevel": "active|constructive|interactive",

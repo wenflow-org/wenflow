@@ -110,6 +110,7 @@ function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
         subtasksPerStageRange: Array.isArray(planningHints.subtasksPerStageRange) ? planningHints.subtasksPerStageRange : null,
         subtaskMinutesRange: Array.isArray(planningHints.subtaskMinutesRange) ? planningHints.subtaskMinutesRange : null,
         maxWeeks: typeof planningHints.maxWeeks === 'number' ? planningHints.maxWeeks : null,
+        targetMilestones: typeof planningHints.targetMilestones === 'number' ? planningHints.targetMilestones : null,
       } : null,
       prerequisiteCheckResults: Array.isArray(normalizedInput.prerequisiteCheckResults)
         ? normalizedInput.prerequisiteCheckResults.map((item: any) => ({
@@ -165,7 +166,7 @@ interface PathOutput {
   milestones: MilestoneOutput[];
 }
 
-export function validatePathPlanningOutput(parsed: any) {
+export function validatePathPlanningOutput(parsed: any, expectedMilestones?: number | null) {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return { valid: false as const, failureReason: 'PATH_PLANNING_OUTPUT_NOT_OBJECT' };
   }
@@ -197,11 +198,15 @@ export function validatePathPlanningOutput(parsed: any) {
 
   const conceptIds = new Set<string>();
   const conceptNames = new Set<string>();
+  let hubConceptId: string | null = null;
   for (const concept of coreConcepts) {
-    if (typeof concept.id === 'string' && concept.id) conceptIds.add(concept.id)
-    if (typeof concept.name === 'string' && concept.name) conceptNames.add(concept.name)
+    if (typeof concept.id === 'string' && concept.id) conceptIds.add(concept.id);
+    if (typeof concept.name === 'string' && concept.name) conceptNames.add(concept.name);
+    if (concept.role === 'hub') hubConceptId = concept.id;
   }
-  for (const milestone of parsed.milestones) {
+  let hubReuseCount = 0;
+  const milestonesArray = parsed.milestones;
+  for (const milestone of milestonesArray) {
     if (!milestone || typeof milestone !== 'object') {
       return { valid: false as const, failureReason: 'PATH_PLANNING_MILESTONE_INVALID' };
     }
@@ -212,6 +217,23 @@ export function validatePathPlanningOutput(parsed: any) {
       && !conceptIds.has(milestone.coreConcept) && !conceptNames.has(milestone.coreConcept)) {
       return { valid: false as const, failureReason: 'PATH_PLANNING_MILESTONE_CONCEPT_UNBOUND' };
     }
+    // hub 复用统计（rule 66：hub 必须被"非首阶段"milestone 显式复用，不含首阶段）
+    const isFirstStage = milestone.stageNumber === 1;
+    if (!isFirstStage && hubConceptId && typeof milestone.coreConcept === 'string') {
+      const hubConcept = coreConcepts.find((c: any) => c.role === 'hub');
+      if (hubConcept && (milestone.coreConcept === hubConceptId
+        || (hubConcept.name && milestone.coreConcept === hubConcept.name))) {
+        hubReuseCount += 1;
+      }
+    }
+  }
+  // hub 复用下限（CLT 回捞约束代码化）：milestone ≥3 时至少被 2 个非首阶段 milestone 复用，
+  // milestone=2 时至少 1 个。实测历史合规率仅 ~13%（LLM 倾向每阶段挂新概念而非回捞 hub），
+  // 直接阻断会打回 86% 路径破坏生产 → 当前为"警告级"审计：记录 warning 不阻断，积累数据后再决定收紧。
+  const warnings: string[] = [];
+  const hubRequired = milestonesArray.length >= 3 ? 2 : milestonesArray.length === 2 ? 1 : 0;
+  if (hubConceptId && hubRequired > 0 && hubReuseCount < hubRequired) {
+    warnings.push(`PATH_PLANNING_HUB_REUSE_INSUFFICIENT(reused=${hubReuseCount}, required=${hubRequired})`);
   }
   const stageNumbers = parsed.milestones.map((m: any) => m && m.stageNumber).filter((n: any) => typeof n === 'number');
   if (stageNumbers.length === parsed.milestones.length && stageNumbers.length > 0) {
@@ -221,7 +243,20 @@ export function validatePathPlanningOutput(parsed: any) {
     }
   }
 
-  return { valid: true as const };
+  // 强制里程碑数量：targetMilestones 由上游 keyStages 直接得出，path 必须精确匹配（阻断级）
+  if (typeof expectedMilestones === 'number' && Number.isInteger(expectedMilestones) && expectedMilestones >= 1) {
+    const count = parsed.milestones.length;
+    if (count !== expectedMilestones) {
+      return {
+        valid: false as const,
+        failureReason: `PATH_PLANNING_MILESTONE_COUNT_MISMATCH(expected=${expectedMilestones}, got=${count})`,
+      };
+    }
+  }
+
+  const result: { valid: true; warnings?: string[] } = { valid: true as const };
+  if (warnings.length > 0) result.warnings = warnings;
+  return result;
 }
 
 /**
@@ -534,6 +569,15 @@ async function generatePath(
         : [];
   const observableResult = framingNormalizedInput?.successCriteria?.observableResult || null;
   const acceptanceCheck = framingNormalizedInput?.successCriteria?.acceptanceCheck || null;
+  // 强制里程碑数量：优先取 framing planningHints.targetMilestones（由 keyStages 直接得出），
+  // 其次用已确认 keyStages 数量推导；均缺失时为 null（validator 跳过数量校验）
+  const expectedMilestones: number | null = Number.isInteger(
+    (framingNormalizedInput?.planningHints as any)?.targetMilestones
+  )
+    ? (framingNormalizedInput?.planningHints as any).targetMilestones
+    : confirmedStages.length > 0
+      ? Math.min(8, Math.max(2, confirmedStages.length))
+      : null;
   const promptFriendlySceneFraming = buildPromptFriendlyNormalizedInput(framingNormalizedInput);
 
   const userPayload = `原始学习目标：${input.goal}
@@ -625,7 +669,7 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
         extractedJson: '',
       }
     }),
-    validateParsedOutput: (parsed) => validatePathPlanningOutput(parsed),
+    validateParsedOutput: (parsed) => validatePathPlanningOutput(parsed, expectedMilestones),
     mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
       contract: runtimeContract,
       artifact: output,

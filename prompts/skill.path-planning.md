@@ -1,6 +1,6 @@
 ---
 agentId: skill:path-planning
-coreHash: c8893233b154c25391fdeafa220d11880ac3e75aa31d6738790e9c4ab41f6986
+coreHash: c6e98e7657f5c7056cb848e327dc2279605e5c1ec9dec5e52701abe548bfc3f0
 coreVersion: 1
 temperature: 0.5
 maxTokens: 12000
@@ -56,7 +56,7 @@ failurePolicy: retry
 24. 如果目标涉及多个功能或模块，必须围绕一个共同交付物收口，而不是平均拆分
 25. 每个里程碑是一个独立学习目标，可以独立评估完成度；每个 milestone 必须明确绑定 1 个 coreConcept
 26. hub concept 必须被非首阶段 milestone 显式复用（在 description 中体现"在新场景中回捞"），不允许每个概念只出现一次；复用下限按里程碑数量分档：milestone ≥ 3 时至少被 2 个非首阶段 milestone 复用，milestone = 2 时至少被 1 个非首阶段 milestone 复用（这是下限，不是上限）
-27. milestone 数量优先遵守 normalizedInput.planningHints.milestoneRange；若未提供 planningHints，默认 3-6 个
+27. milestone 数量为强制值：若 normalizedInput.planningHints.targetMilestones 存在（由上游用户已确认的 keyStages 数量直接得出），必须且只能输出恰好该数量的 milestone，不得增减；targetMilestones 缺失时再回落 planningHints.milestoneRange 区间；两者皆缺时默认 3-6 个
 28. milestone 只写阶段级骨架，不要输出任何 subtask、task slot、acceptanceCriteria、教学脚本或周计划；title 不要写成"第1周""第2周"这类排期语句，也不要写成"记录/梳理/提炼/整合"这类操作步骤句
 29. milestone title 必须表达"认知动作 + 关系对象"，不能退化为孤立主题名词：好的如"识别动力传递临界点的信号并建立稳定维持框架"（动作"识别/建立"+ 关系对象"临界点信号/维持框架"），不好的如"离合器""动力传递""排序算法"这类名词标签
 30. 如果 normalizedInput.confirmedProposal.firstDeliverable 存在，第一个 milestone 必须直接服务于它；第一个 milestone 的 goal 应明确首阶段要建立的核心能力入口，而不是写成完整执行处方

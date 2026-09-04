@@ -68,4 +68,64 @@ describe('path-planning raw validator', () => {
       ],
     })).toEqual({ valid: false, failureReason: 'PATH_PLANNING_STAGE_NUMBER_GAP' })
   })
+
+  it('enforces exact milestone count when expectedMilestones is provided', () => {
+    const output3 = {
+      ...validOutput,
+      milestones: [
+        { stageNumber: 1, title: 't1', coreConcept: 'concept-1' },
+        { stageNumber: 2, title: 't2', coreConcept: 'concept-1' },
+        { stageNumber: 3, title: 't3', coreConcept: 'concept-1' },
+      ],
+    }
+    // 数量匹配 → 通过
+    expect(validatePathPlanningOutput(output3, 3)).toEqual({ valid: true })
+    // 数量不匹配 → 打回（关键：prompt 要求精确输出 N 个，代码层仍然是硬校验）
+    expect(validatePathPlanningOutput(output3, 4)).toEqual({
+      valid: false,
+      failureReason: 'PATH_PLANNING_MILESTONE_COUNT_MISMATCH(expected=4, got=3)',
+    })
+  })
+
+  it('reports insufficient hub reuse as warning (non-blocking audit)', () => {
+    // 3 个 milestone，hub(concept-1) 只在首阶段出现 → 非首阶段复用 0 次 < 2 → 产生 warning 但 valid 仍为 true
+    const sparseHub = {
+      ...validOutput,
+      milestones: [
+        { stageNumber: 1, title: 't1', coreConcept: 'concept-1' }, // hub
+        { stageNumber: 2, title: 't2', coreConcept: 'concept-2' }, // supporting
+        { stageNumber: 3, title: 't3', coreConcept: 'concept-2' }, // supporting
+      ],
+      cognitiveCore: {
+        cognitiveDomain: 'understand',
+        coreConcepts: [
+          { id: 'concept-1', name: 'hub关系', role: 'hub' },
+          { id: 'concept-2', name: '支撑关系', role: 'supporting' },
+        ],
+      },
+    }
+    const result = validatePathPlanningOutput(sparseHub)
+    expect(result.valid).toBe(true)
+    expect((result as any).warnings).toEqual(['PATH_PLANNING_HUB_REUSE_INSUFFICIENT(reused=0, required=2)'])
+  })
+
+  it('accepts hub reuse across non-first milestones without warning', () => {
+    // hub(concept-1) 在 stage 2/3 被复用 → 非首阶段复用 2 次 ≥ 2 → 无 warning
+    const goodHub = {
+      ...validOutput,
+      milestones: [
+        { stageNumber: 1, title: 't1', coreConcept: 'concept-2' },
+        { stageNumber: 2, title: 't2', coreConcept: 'concept-1' },
+        { stageNumber: 3, title: 't3', coreConcept: 'concept-1' },
+      ],
+      cognitiveCore: {
+        cognitiveDomain: 'understand',
+        coreConcepts: [
+          { id: 'concept-1', name: 'hub关系', role: 'hub' },
+          { id: 'concept-2', name: '支撑关系', role: 'supporting' },
+        ],
+      },
+    }
+    expect(validatePathPlanningOutput(goodHub)).toEqual({ valid: true })
+  })
 })

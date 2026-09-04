@@ -40,6 +40,66 @@ function isOperationalStageLike(value: string | null): boolean {
     || new RegExp(matchPattern).test(value);
 }
 
+/**
+ * 中文数字/时间短语 → 周数的确定性兜底解析。
+ * 仅用于 timeDimensions.totalWeeks 缺失时钳制 maxWeeks（紧迫场景兜底），
+ * 不改变 pace 档位。解析不出返回 null（保持 pace 默认值）。
+ */
+export function inferMaxWeeksFromTimeHorizon(timeHorizon: string | null): number | null {
+  if (!timeHorizon) return null;
+  const text = timeHorizon.trim();
+  if (!text) return null;
+
+  const cnNum: Record<string, number> = { '半': 0.5, '一': 1, '两': 2, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10 };
+
+  const parseNum = (s: string): number | null => {
+    const t = s.trim();
+    if (/^\d+$/.test(t)) return Number(t);
+    if (cnNum[t]) return cnNum[t];
+    return null;
+  };
+
+  const match = (re: RegExp): RegExpMatchArray | null => re.exec(text);
+
+  // 单位解析：N个月 / 半年 / 一年
+  const month = match(/(\d+|半|一|两|二|三|四|五|六|七八|九十|[一二三四五六七八九十]+)\s*(?:个)?月/);
+  if (month) {
+    const n = parseNum(month[1]);
+    if (n !== null && n > 0) return n * 4.3;
+  }
+  const year = match(/(\d+|一|两|二|三)\s*年/);
+  if (year) {
+    const n = parseNum(year[1]);
+    if (n !== null && n > 0) return n * 52;
+  }
+  // 半年（"半"不是年份，是半年）
+  if (/半年/.test(text)) return 26;
+  // N天 / 两三天（只接受单字中文数字，双字组合解析不了）
+  const day = match(/(\d+|两|三|四|五|六|七|一|二)\s*天/);
+  if (day) {
+    const n = parseNum(day[1]);
+    if (n !== null && n > 0) return n / 7;
+  }
+  // N周（排除星期名：周五/周日 等是 weekday 不是 5周）
+  const week = match(/(\d+|一|两|二|三|四|五六|三四)\s*(?:个)?周(?![一二三四五六日天])/);
+  if (week) {
+    const n = parseNum(week[1]);
+    if (n !== null && n > 0) return n;
+  }
+  // N个星期 / N个礼拜
+  const fortnight = match(/(\d+|一|两|二|三|四|五六)\s*个?(?:星期|礼拜)/);
+  if (fortnight) {
+    const n = parseNum(fortnight[1]);
+    if (n !== null && n > 0) return n;
+  }
+
+  // 截止信号：紧迫 → 短周期
+  if (/(下周|下星期|下礼拜|明天|今晚|今晚就要|明晚|后天|这两三天|两三天|这两天|周末前|下周五|月底前|周末)/.test(text)) return 1;
+  if (/(月底|月末)/.test(text)) return 3;
+
+  return null;
+}
+
 function parseBudgetMinutes(value: string | null): number | null {
   if (!value) return null;
   const match = value.match(/(\d+(?:\.\d+)?)/);
@@ -62,6 +122,8 @@ export interface PlanningHints {
   subtasksPerStageRange: [number, number];
   subtaskMinutesRange: [number, number];
   maxWeeks: number;
+  /** 强制里程碑目标数量（由上游 keyStages 数量直接透传，path LLM 必须精确输出该值，不增减） */
+  targetMilestones: number | null;
 }
 
 export function derivePlanningHints(
@@ -80,17 +142,20 @@ export function derivePlanningHints(
   let conceptRange: [number, number] = [...paceConfig.conceptRange];
   let subtasksPerStageRange: [number, number] = [...paceConfig.subtasksPerStageRange];
   const defaultMinutesRange: [number, number] = [...paceConfig.defaultMinutesRange];
-  // maxWeeks：优先用 goal 层 LLM 推断的 totalWeeks（×1.2 缓冲），缺失回退 pace 档位固定值，硬上限 52
+  // 强制里程碑数量：直接透传上游 keyStages 数量（用户已确认的阶段数），上下限夹取 2-8。
+  // 不再依赖 LLM 在区间内自行选值（实测区间总是懒选下限 3-4）。
+  const targetMilestones: number | null = keyStageCount > 0
+    ? Math.min(8, Math.max(2, keyStageCount))
+    : null;
+  // maxWeeks：优先用 goal 层 LLM 推断的 totalWeeks（×1.2 缓冲）；
+  // 其次用自由文本 time_horizon 的确定性周数兜底（LLM 未产出 totalWeeks 时仍能钳制紧迫场景）；
+  // 最后回退 pace 档位固定值，硬上限 52
   const inferredWeeks = Number.isFinite(timeDimensions?.totalWeeks) && (timeDimensions!.totalWeeks as number) > 0
     ? (timeDimensions!.totalWeeks as number)
-    : null;
+    : inferMaxWeeksFromTimeHorizon(timeHorizon);
   const maxWeeks: number = inferredWeeks
     ? Math.min(52, Math.max(1, Math.ceil(inferredWeeks * 1.2)))
     : paceConfig.maxWeeks;
-
-  if (keyStageCount > 0) {
-    milestoneRange = [keyStageCount, keyStageCount + 2];
-  }
 
   const parsedSessionMinutes = timePerSession && timePerSession.match(/(\d+)/)
     ? Number(timePerSession.match(/(\d+)/)?.[1])
@@ -117,9 +182,15 @@ export function derivePlanningHints(
     }
   }
 
+  // 强制里程碑数量存在时，milestoneRange 同步为精确目标（消除 LLM 区间懒选），保留 pace 默认作为无 target 时的兜底
+  const effectiveMilestoneRange: [number, number] = targetMilestones !== null
+    ? [targetMilestones, targetMilestones]
+    : milestoneRange;
+
   return {
     paceSignal,
-    milestoneRange,
+    milestoneRange: effectiveMilestoneRange,
+    targetMilestones,
     conceptRange,
     subtasksPerStageRange,
     subtaskMinutesRange,

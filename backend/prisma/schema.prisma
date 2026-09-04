@@ -449,6 +449,7 @@ model subtasks {
   usersId              String?
   annotationConfidence Float?
   cognitiveLevel       String?
+  icapLevel            String?
   coreConcept          String?
   displayLabel         String?
   knowledgeType        String?
@@ -464,6 +465,7 @@ model subtasks {
   @@index([milestoneId])
   @@index([knowledgeType])
   @@index([cognitiveLevel])
+  @@index([icapLevel])
   @@index([status, completedAt])
 }
 
