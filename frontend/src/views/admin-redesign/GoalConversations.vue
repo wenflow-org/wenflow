@@ -1,9 +1,10 @@
 <template>
   <div class="mk-page mk-page--fill">
     <!-- 目标对话页头（单行状态条：页面名 + 堆叠条 + 可点击计数 + 刷新；与其他列表页统一形态） -->
-    <div class="mk-status" :class="gcDashTone === 'bad' ? 'mk-status--bad' : gcDashTone === 'warn' ? 'mk-status--warn' : gcDashTone === 'muted' ? 'mk-status--muted' : 'mk-status--ok'">
+    <!-- 目标对话专项状态条：仅目标对话/学习路径 tab 显示（教学会话 tab 由该视图自身状态条承载） -->
+    <div v-if="gcTab !== 'teaching'" class="mk-status" :class="gcDashTone === 'bad' ? 'mk-status--bad' : gcDashTone === 'warn' ? 'mk-status--warn' : gcDashTone === 'muted' ? 'mk-status--muted' : 'mk-status--ok'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">目标对话</strong>
+      <strong class="mk-status__title">{{ gcTab === 'paths' ? '学习路径' : '目标对话' }}</strong>
       <span class="mk-status__sep"></span>
       <div v-if="isLive && stats && stats.total > 0" class="gc-stack gc-stack--inline" :title="`进行中 ${stats.active} · 已完成 ${stats.completed} · 其他 ${stackOther}`">
         <span class="gc-stack__bar">
@@ -34,6 +35,19 @@
         </button>
       </span>
     </div>
+
+    <!-- 二级切换：教学会话 / 目标对话 / 学习路径（同域三视图——教学会话=上课记录；学习路径=目标对话产出物） -->
+    <div class="mk-pills gc-tabs">
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'teaching' }" @click="switchGcTab('teaching')">教学会话</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'conversations' }" @click="switchGcTab('conversations')">目标对话</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'paths' }" @click="switchGcTab('paths')">学习路径</button>
+    </div>
+
+    <!-- ===== Tab0: 教学会话（嵌入 TeachingSessions 组件，同域合并） ===== -->
+    <TeachingSessions v-if="gcTab === 'teaching'" embedded />
+
+    <!-- ===== Tab1: 目标对话 ===== -->
+    <template v-if="gcTab === 'conversations'">
 
     <!-- 空态：无数据时显示（live 列表为空） -->
     <div v-if="!rows.length && !loading" class="mk-empty">
@@ -154,6 +168,10 @@
         />
       </div>
     </template>
+    </template>
+
+    <!-- ===== Tab2: 学习路径（原「内容管理」合并：路径是目标对话的产出物，同域治理视图） ===== -->
+    <OpsContent v-if="gcTab === 'paths'" embedded :initial-status="pathInitialStatus" />
 
     <!-- 详情面板 -->
     <Teleport to="body">
@@ -275,7 +293,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { isLive, openSession, openSubPage } from './store'
+import { isLive, intent } from './store'
+import { useSessionDrill } from './useSessionDrill'
 import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
 import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS } from './statusText'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -285,6 +304,8 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from './MkCols.vue'
+import OpsContent from './OpsContent.vue'
+import TeachingSessions from './TeachingSessions.vue'
 import { adminGoalConversationsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
@@ -326,6 +347,20 @@ const stats = ref<{ total: number; active: number; completed: number; completion
 const keyword = ref('')
 const statusFilter = ref('')
 
+/* 二级 tab：教学会话 / 目标对话 / 学习路径（同域合并：教学会话=上课记录、学习路径=目标对话产出物；
+   「内容管理」独立场景已并入；2026-09-04 导航收敛并入教学会话） */
+const GC_TABS = ['teaching', 'conversations', 'paths'] as const
+type GcTab = (typeof GC_TABS)[number]
+const gcTab = ref<GcTab>('conversations')
+/** 深链预筛（工作台「生成失败路径」→ failed）；用户手动切 tab 即视为已消费，下次切回恢复全部 */
+const pathInitialStatus = ref('')
+function switchGcTab(t: GcTab) {
+  gcTab.value = t
+  if (t === 'paths') pathInitialStatus.value = ''
+  /* URL 同步（?tab=…）：深链/刷新/前进后退可寻址（合并宿主页统一约定；与 ?goal 详情参数共存） */
+  if (route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
+}
+
 /* P1-3 列显隐（公共组件 MkCols）：目标摘要/状态/阶段/路径/创建时间 可隐藏，用户/操作固定 */
 const gcColDefs = [
   { key: 'summary', label: '目标摘要', title: '对话目标摘要' },
@@ -340,6 +375,27 @@ const detail = ref<Detail | null>(null)
 /* URL 同步：?goal=id 记录当前打开的详情，支持深链/刷新恢复 */
 const route = useRoute()
 const router = useRouter()
+/* URL → tab（含合并页深链直达：/admin/sessions?tab=teaching|conversations|paths） */
+watch(
+  () => route.query.tab,
+  (t) => {
+    const v = typeof t === 'string' && (GC_TABS as readonly string[]).includes(t) ? (t as GcTab) : null
+    if (v && v !== gcTab.value) gcTab.value = v
+    else if (!v && gcTab.value !== 'conversations') gcTab.value = 'conversations'
+  },
+  { immediate: true }
+)
+/* intent 深链（运营中心「管理 →/生成失败路径」、总览「教学会话」卡）：tab + 预筛按需下发 */
+watch(
+  () => intent.tab,
+  (t) => {
+    if (t === 'teaching' || t === 'paths' || t === 'conversations') {
+      gcTab.value = t
+      intent.tab = ''
+    }
+  },
+  { immediate: true }
+)
 /* URL → detail：页面加载/刷新时恢复 */
 watch(
   () => route.query.goal,
@@ -596,23 +652,7 @@ function closeDetail() {
 }
 
 /** 真实会话与控制台数据契约不兼容（座舱仅服务虚拟会话）：先提供轻量深链——学习者画像 + Trace 瀑布按 sessionId 归组 */
-function goLearner(r: Row) {
-  if (!r.userId) return
-  closeDetail()
-  openSubPage('learner', r.userId)
-}
-
-function goTrace(r: Row) {
-  closeDetail()
-  openSession(r.id)
-}
-
-/** 真实会话进控制台（双模式）：session-real 只读座舱，经 /admin/session-console 同构映射渲染 */
-function goConsole(r: Row) {
-  if (!r.id) return
-  closeDetail()
-  openSubPage('session-real', r.id)
-}
+const { goLearner, goTrace, goConsole } = useSessionDrill(closeDetail)
 
 /** 归一化消息角色：后端用 ai/assistant，统一为 assistant */
 function normRole(r: unknown): string {
@@ -736,6 +776,12 @@ watch(includeTest, () => {
 })
 onMounted(() => {
   if (isLive.value) void load()
+  /* 深链：运营工作台「生成失败路径」→ 直达「学习路径」tab 并预筛失败（消费后清空，避免菜单直达被残留污染） */
+  if (intent.statusFilter === 'failed') {
+    gcTab.value = 'paths'
+    pathInitialStatus.value = 'failed'
+    intent.statusFilter = ''
+  }
 })
 </script>
 

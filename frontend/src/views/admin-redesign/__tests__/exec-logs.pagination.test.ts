@@ -6,6 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
+import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import ExecLogs from '../ExecLogs.vue';
 import type { TraceSpan } from '../store';
@@ -69,7 +70,14 @@ function findBtn(wrapper: ReturnType<typeof mount>, text: string) {
 }
 
 async function mountExec() {
-  const w = mount(ExecLogs);
+  // 合并页统一约定：?tab= 深链（可寻址），测试与真实应用一致提供 router
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
+  });
+  await router.push('/admin/execution-logs');
+  await router.isReady();
+  const w = mount(ExecLogs, { global: { plugins: [router] } });
   await flushPromises();
   return w;
 }

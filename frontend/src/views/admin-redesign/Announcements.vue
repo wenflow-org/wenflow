@@ -1,6 +1,6 @@
 <template>
-  <div :class="embedded ? 'an-embedded' : 'mk-page'">
-    <div v-if="!embedded" class="mk-status" :class="activeCount ? 'mk-status--ok' : 'mk-status--muted'">
+  <div :class="embedded ? 'mk-page--fill an-embedded' : 'mk-page'">
+    <div class="mk-status" :class="activeCount ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">公告中心</strong>
       <span class="mk-status__sep"></span>
@@ -176,7 +176,7 @@ import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 
-/** 嵌入模式：作为运营中心「公告」tab 渲染（隐藏页面外壳/状态条） */
+/** 嵌入模式：作为「通知与公告」页「公告」tab 渲染（仅去掉外层壳，状态条/新建/编辑弹窗保留） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 interface Row {
@@ -461,6 +461,8 @@ function expiresLabel(iso: string): string {
 </script>
 
 <style scoped>
+/* 嵌入模式（宿主通知与公告页 flex 列内）：占满剩余高度，列表区接管滚动 */
+.an-embedded { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 /* 列表区兜底高度：行数少时卡片铺满页面，消除表格下方 760px 全宽灰区（复用空态 --mk-empty-min-h 同款口径） */
 .an-list {
   min-height: var(--mk-empty-min-h, calc(100dvh - 230px));

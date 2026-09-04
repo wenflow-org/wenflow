@@ -1,5 +1,5 @@
 <template>
-  <div class="mk-page mk-page--fill">
+  <div :class="embedded ? 'mk-page tc-embedded' : 'mk-page'">
     <!-- 状态条（单行：计数 + 刷新；范围/数据范围移入下方筛选条） -->
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
@@ -74,14 +74,18 @@
       <section class="tc-overview">
         <MkKpi label="总 Token" :value="summary ? fmtTokens(summary.totals.tokens) : '—'" :hint="`prompt ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · completion ${summary ? fmtTokens(summary.totals.completionTokens) : '—'}`" />
         <MkKpi label="调用次数" :value="summary ? summary.totals.calls : '—'" :hint="`近 ${days} 天`" />
-        <MkKpi label="失败调用" :value="summary ? summary.totals.failed : '—'" :tone="summary && summary.totals.failed > 0 ? 'bad' : ''" :hint="'含重试后的终态失败'" />
+        <MkKpi label="失败调用" :value="summary ? summary.totals.failed : '—'" :tone="summary && summary.totals.failed > 0 ? 'bad' : ''" :hint="failRateHint" />
       </section>
 
       <!-- 趋势图 -->
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">Token 用量趋势 · 近 {{ days }} 天</h3>
-          <span class="mk-card__meta">本地自然日口径</span>
+          <div class="tc-head-links">
+            <span class="mk-card__meta" title="本页为 token-cost 端点精确聚合（含重试后终态失败）；总览「LLM 用量」卡为近 7 天汇总 hero">口径：本地自然日 · 精确聚合</span>
+            <button type="button" class="mk-link" @click="goOverview">总览趋势 →</button>
+            <button type="button" class="mk-link" @click="goExecLogs">逐调用明细 →</button>
+          </div>
         </div>
         <div v-if="trend.length" class="tc-trend">
           <!-- Y 轴刻度 -->
@@ -98,77 +102,58 @@
               :title="`${d.date}：${fmtTokens(d.tokens)} · ${d.calls} 次 · 失败 ${d.failed}`"
             >
               <div class="tc-trend__bar-track">
-                <i class="tc-trend__bar" :class="{ 'tc-trend__bar--today': isToday(d.date) }" :style="{ height: trendH(d.tokens) }">
-                  <span class="tc-trend__val">{{ d.tokens ? fmtTokens(d.tokens) : '' }}</span>
+                <i
+                  v-if="d.tokens > 0"
+                  class="tc-trend__bar"
+                  :class="{ 'tc-trend__bar--today': isToday(d.date) }"
+                  :style="{ height: trendH(d.tokens) }"
+                >
+                  <span class="tc-trend__val">{{ fmtTokens(d.tokens) }}</span>
                 </i>
               </div>
-              <span class="tc-trend__day" :class="{ 'tc-trend__day--today': isToday(d.date) }">{{ dayLabel(d.date) }}</span>
+              <span class="tc-trend__day" :class="{ 'tc-trend__day--today': isToday(d.date), 'tc-trend__day--empty': d.tokens === 0 }">{{ dayLabel(d.date) }}</span>
             </div>
           </div>
         </div>
         <p v-else class="mk-card__note">近 {{ days }} 天暂无调用记录。</p>
       </section>
 
-      <div class="tc-grid">
-        <!-- per-skill 排行（Top 6） -->
-        <section class="mk-card">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">Skill 用量排行</h3>
-            <span class="mk-card__meta">{{ bySkill.length }} 个<template v-if="bySkill.length > 6"> · 显示前 6</template></span>
+      <!-- 用量排行：Skill 全宽大表 + 用户/模型半宽侧表 -->
+      <section class="mk-card tc-card tc-card--skill">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">Skill 用量排行</h3>
+          <div class="mk-card__head-right">
+            <span class="mk-card__meta">{{ bySkill.length }} 个<template v-if="!skillAll && bySkill.length > skillLimit"> · 显示前 {{ skillLimit }}</template></span>
+            <button
+              v-if="bySkill.length > skillLimit"
+              type="button"
+              class="tc-more"
+              @click="skillAll = !skillAll"
+            >
+              {{ skillAll ? '收起' : `查看全部 ${bySkill.length}` }}
+            </button>
           </div>
-          <div v-if="bySkill.length" class="tc-rank">
-            <div v-for="(r, i) in bySkill.slice(0, 6)" :key="r.key" class="tc-rank__row">
-              <span class="tc-rank__no" :class="{ 'tc-rank__no--top': i < 3 }">{{ i + 1 }}</span>
-              <span class="tc-rank__name" :title="r.key">{{ r.display }}</span>
-              <div class="tc-rank__bar-track">
-                <i class="tc-rank__bar" :style="{ width: rankPct(r.tokens) }"></i>
-              </div>
-              <span class="tc-rank__num">{{ fmtTokens(r.tokens) }}</span>
-              <span class="tc-rank__meta">{{ r.calls }} 次<em v-if="r.failed"> · 败 {{ r.failed }}</em></span>
-            </div>
-          </div>
-          <p v-else class="mk-card__note">暂无数据。</p>
-        </section>
+        </div>
+        <TcRankTable v-if="bySkill.length" :items="skillRows" variant="skill" :total-tokens="totalTokens" />
+        <p v-else class="mk-card__note">暂无数据。</p>
+      </section>
 
-        <!-- per-user 排行 -->
-        <section class="mk-card">
+      <div class="tc-ranks">
+        <section class="mk-card tc-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">用户用量排行</h3>
             <span class="mk-card__meta">Top {{ byUser.length }}</span>
           </div>
-          <div v-if="byUser.length" class="tc-rank">
-            <div v-for="(r, i) in byUser" :key="r.key" class="tc-rank__row">
-              <span class="tc-rank__no" :class="{ 'tc-rank__no--top': i < 3 }">{{ i + 1 }}</span>
-              <span class="tc-rank__name" :title="`${r.name || ''} ${r.email || ''}`.trim() || r.key">
-                {{ r.name || shortId(r.key) }}
-              </span>
-              <div class="tc-rank__bar-track">
-                <i class="tc-rank__bar" :style="{ width: rankPct(r.tokens) }"></i>
-              </div>
-              <span class="tc-rank__num">{{ fmtTokens(r.tokens) }}</span>
-              <span class="tc-rank__meta">{{ r.calls }} 次<em v-if="r.failed"> · 败 {{ r.failed }}</em></span>
-            </div>
-          </div>
+          <TcRankTable v-if="byUser.length" :items="byUser" variant="user" :total-tokens="totalTokens" />
           <p v-else class="mk-card__note">暂无数据。</p>
         </section>
 
-        <!-- per-model 排行 -->
-        <section class="mk-card">
+        <section class="mk-card tc-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">模型用量排行</h3>
             <span class="mk-card__meta">{{ byModel.length }} 个</span>
           </div>
-          <div v-if="byModel.length" class="tc-rank">
-            <div v-for="(r, i) in byModel" :key="r.key" class="tc-rank__row">
-              <span class="tc-rank__no" :class="{ 'tc-rank__no--top': i < 3 }">{{ i + 1 }}</span>
-              <span class="tc-rank__name" :title="r.key">{{ r.key }}</span>
-              <div class="tc-rank__bar-track">
-                <i class="tc-rank__bar" :style="{ width: rankPct(r.tokens) }"></i>
-              </div>
-              <span class="tc-rank__num">{{ fmtTokens(r.tokens) }}</span>
-              <span class="tc-rank__meta">{{ r.calls }} 次<em v-if="r.failed"> · 败 {{ r.failed }}</em></span>
-            </div>
-          </div>
+          <TcRankTable v-if="byModel.length" :items="byModel" variant="model" :total-tokens="totalTokens" />
           <p v-else class="mk-card__note">暂无数据。</p>
         </section>
       </div>
@@ -178,24 +163,16 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { isLive } from './store'
+import { isLive, intent } from './store'
 import { errMsg, isPageCacheFresh, markPageFetched } from './live'
 import { adminTokenCostApi } from '@/api/adminApi'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkKpi from './MkKpi.vue'
+import TcRankTable, { type RankRow } from './TcRankTable.vue'
 import { toast } from '@/utils/toast'
 
-interface RankItem {
-  key: string
-  display: string
-  tokens: number
-  calls: number
-  failed: number
-  promptTokens: number
-  completionTokens: number
-  name?: string | null
-  email?: string | null
-}
+/** 嵌入模式：作为「执行日志」页「成本分析」tab 渲染（仅去掉外层壳，状态条/筛选/排行保留） */
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 interface Summary {
   days: number
@@ -210,9 +187,13 @@ const loading = ref(false)
 const loadFailed = ref(false)
 
 const summary = ref<Summary | null>(null)
-const bySkill = ref<RankItem[]>([])
-const byUser = ref<RankItem[]>([])
-const byModel = ref<RankItem[]>([])
+const bySkill = ref<RankRow[]>([])
+const byUser = ref<RankRow[]>([])
+const byModel = ref<RankRow[]>([])
+
+/** Skill 排行默认展示行数；超出可一键展开全部 */
+const skillLimit = 6
+const skillAll = ref(false)
 
 const rangePills = [
   { days: 7, label: '近 7 天' },
@@ -221,11 +202,29 @@ const rangePills = [
 ]
 
 const trend = computed(() => summary.value?.trend || [])
+const totalTokens = computed(() => summary.value?.totals.tokens || 0)
+const skillRows = computed(() => bySkill.value.slice(0, skillAll.value ? bySkill.value.length : skillLimit))
 const statusTone = computed(() =>
   !summary.value ? 'mk-status--muted'
     : summary.value.totals.failed > 0 ? 'mk-status--warn'
       : 'mk-status--ok'
 )
+const failRateHint = computed(() => {
+  const s = summary.value?.totals
+  if (!s) return '含重试后的终态失败'
+  const rate = s.calls > 0 ? Math.round((s.failed / s.calls) * 100) : 0
+  return `失败率 ${rate}% · 含重试后的终态失败`
+})
+
+/* 跨页互跳：成本聚合页 ⇄ 明细页（执行日志行级 token）/ 总览趋势
+   口径说明：本页为 token-cost 端点精确聚合（含重试终态失败）；执行日志展示逐调用行级 token 明细；
+   总览「LLM 用量」卡为近 7 天汇总 hero。三处同域但粒度/窗口不同，互跳避免口径黑盒。 */
+function goExecLogs() {
+  intent.scene = 'execution-logs'
+}
+function goOverview() {
+  intent.scene = 'overview'
+}
 
 watch([days, includeTest], () => {
   void load()
@@ -245,9 +244,9 @@ async function load(force = false) {
       adminTokenCostApi.getByModel(params),
     ])
     summary.value = sumRes.data?.data ?? sumRes.data ?? null
-    bySkill.value = (skillRes.data?.data?.items ?? []) as RankItem[]
-    byUser.value = (userRes.data?.data?.items ?? []) as RankItem[]
-    byModel.value = (modelRes.data?.data?.items ?? []) as RankItem[]
+    bySkill.value = (skillRes.data?.data?.items ?? []) as RankRow[]
+    byUser.value = (userRes.data?.data?.items ?? []) as RankRow[]
+    byModel.value = (modelRes.data?.data?.items ?? []) as RankRow[]
     markPageFetched('token-cost')
   } catch (e) {
     loadFailed.value = true
@@ -263,11 +262,6 @@ function fmtTokens(n: number): string {
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
   if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`
   return String(n)
-}
-
-function shortId(id: string): string {
-  if (!id) return '—'
-  return id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id
 }
 
 function dayLabel(date: string): string {
@@ -287,14 +281,11 @@ const trendMax = computed(() => Math.max(1, ...trend.value.map((t) => t.tokens))
 function trendH(tokens: number): string {
   return `${Math.max(2, Math.round((tokens / trendMax.value) * 100))}%`
 }
-
-const rankMax = computed(() => Math.max(1, ...bySkill.value.map((r) => r.tokens), ...byUser.value.map((r) => r.tokens), ...byModel.value.map((r) => r.tokens)))
-function rankPct(tokens: number): string {
-  return `${Math.max(2, Math.round((tokens / rankMax.value) * 100))}%`
-}
 </script>
 
 <style scoped>
+/* 嵌入模式（宿主执行日志页 flex 列内）：占满剩余高度，整页接管滚动 */
+.tc-embedded { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .tc-pills { display: inline-flex; }
 /* 筛选条（范围 + 数据范围，独立一行卡片形态） */
 .tc-filterbar {
@@ -306,7 +297,6 @@ function rankPct(tokens: number): string {
   border: 1px solid var(--mk-line);
   border-radius: 10px;
   background: var(--mk-surface);
-  margin-bottom: 12px;
 }
 .tc-status--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
 
@@ -315,10 +305,16 @@ function rankPct(tokens: number): string {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
-  margin-bottom: 14px;
 }
 
 /* 趋势图：柱状图 + Y 轴刻度 + 网格线 + 柱顶数值 + 今日高亮（对齐 AntD Chart 语言） */
+.tc-head-links {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+.tc-head-links .mk-card__meta { margin-left: 0; }
 .tc-trend {
   display: grid;
   grid-template-columns: 48px 1fr;
@@ -378,10 +374,9 @@ function rankPct(tokens: number): string {
   transition: opacity 0.12s;
 }
 .tc-trend__bar:hover { opacity: 1; }
-/* 今日柱：实色高亮（非透明），视觉聚焦最新一天；矮柱也给最小高度保证高亮可见 */
+/* 今日柱：实色高亮（非透明），视觉聚焦最新一天 */
 .tc-trend__bar--today {
   opacity: 1;
-  min-height: 8px;
   background: linear-gradient(180deg, #5b8def, #1f57cc);
   box-shadow: 0 0 0 1px rgba(44, 99, 208, 0.25);
 }
@@ -405,125 +400,57 @@ function rankPct(tokens: number): string {
   white-space: nowrap;
 }
 .tc-trend__day--today { color: var(--mk-blue); font-weight: 700; }
+.tc-trend__day--empty { color: var(--mk-faint); opacity: 0.55; }
 
-.tc-grid {
+/* —— 用量排行 —— */
+.tc-card--skill { grid-column: 1 / -1; }
+.tc-ranks {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
   align-items: start;
 }
 @media (max-width: 1200px) {
-  .tc-grid { grid-template-columns: 1fr; }
+  .tc-ranks { grid-template-columns: 1fr; }
 }
 
-.tc-rank {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.tc-rank__row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-/* 排名徽章：1/2/3 实心蓝(前三)、其余灰(中性) */
-.tc-rank__no {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+/* 展开全部 / 收起（Skill 排行） */
+.tc-more {
+  border: 0;
+  background: transparent;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: var(--mk-fs-12);
+  font-weight: 700;
+  color: var(--mk-blue);
   border-radius: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--mk-fs-11);
-  font-weight: 700;
-  color: var(--mk-faint);
-  background: #f0f2f5;
-  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.12s;
 }
-.tc-rank__no--top {
-  background: var(--mk-blue-bg, #eff6ff);
-  color: var(--mk-blue, #2c63d0);
-}
-.tc-rank__name {
-  flex: 0 1 130px;
-  min-width: 0;
-  font-size: var(--mk-fs-12_5);
-  font-weight: 600;
-  color: var(--mk-ink, #1a2a44);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tc-rank__bar-track {
-  flex: 1 1 auto;
-  min-width: 20px;
-  height: 10px;
-  background: var(--mk-line, #eef1f6);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.tc-rank__bar {
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, var(--mk-blue, #6fa1f5), var(--mk-accent-deep, #2f6fed));
-  border-radius: 999px;
-}
-.tc-rank__num {
-  width: 58px;
-  min-width: 58px;
-  text-align: right;
-  font-size: var(--mk-fs-12_5);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--mk-ink, #1a2a44);
-}
-.tc-rank__meta {
-  width: 70px;
-  min-width: 70px;
-  text-align: right;
-  font-size: var(--mk-fs-11);
-  color: var(--mk-faint, #9ca3af);
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
-.tc-rank__meta em { font-style: normal; color: var(--mk-red, #dc2626); }
+.tc-more:hover { background: rgba(44, 99, 208, 0.08); }
 
-/* 4K：趋势图/排行条跟随全站节奏 */
+/* 4K：趋势图跟随全站节奏 */
 @media (min-width: 2000px) {
   .tc-trend { height: 230px; }
   .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: 12px; }
-  .tc-rank__name { font-size: 14px; flex-basis: 160px; }
-  .tc-rank__num { font-size: 14px; width: 70px; min-width: 70px; }
-  .tc-rank__meta { font-size: 12.5px; width: 84px; min-width: 84px; }
-  .tc-rank__bar-track { height: 12px; }
+  .tc-trend__bar { width: 58%; }
 }
 @media (min-width: 2800px) {
   .tc-trend { height: 270px; }
   .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: 14px; }
-  .tc-rank__name { font-size: 16.5px; flex-basis: 190px; }
-  .tc-rank__num { font-size: 16.5px; width: 86px; min-width: 86px; }
-  .tc-rank__meta { font-size: 14.5px; width: 100px; min-width: 100px; }
-  .tc-rank__bar-track { height: 14px; }
+  .tc-trend__bar { width: 54%; }
 }
 @media (min-width: 3600px) {
   .tc-trend { height: 310px; }
   .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: 16.5px; }
-  .tc-rank__name { font-size: 19.5px; flex-basis: 220px; }
-  .tc-rank__num { font-size: 19.5px; width: 100px; min-width: 100px; }
-  .tc-rank__meta { font-size: 17px; width: 118px; min-width: 118px; }
-  .tc-rank__bar-track { height: 16px; }
+  .tc-trend__bar { width: 50%; }
 }
 
-/* 暗色模式（D1 补完）：Token 成本（此前完全缺失） */
+/* 暗色模式（D1 补完）：Token 成本 */
 html[data-theme='dark'] {
   .tc-trend__bar { background: linear-gradient(180deg, #5b8def, #2f6fed); }
   .tc-trend__bar--today { background: linear-gradient(180deg, #7aa2ff, #3b6fe0); }
-  .tc-rank__bar { background: linear-gradient(90deg, #6fa1f5, #2f6fed); }
-  .tc-rank__bar-track { background: #232f45; }
-  .tc-rank__no { background: #253049; color: var(--mk-muted); }
-  .tc-rank__no--top { background: rgba(91, 141, 239, 0.2); color: #9db8f5; }
+  .tc-more:hover { background: rgba(91, 141, 239, 0.14); }
 }
 
 /* 首载骨架：KPI 卡 / 趋势图 / 排行行 占位（skeleton shimmer 对齐 SkillReconciliation sk-rec__skeleton 手法） */

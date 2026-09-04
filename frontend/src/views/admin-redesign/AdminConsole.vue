@@ -63,8 +63,8 @@ function asyncPage(loader: () => Promise<any>) {
 }
 
 const Overview = asyncPage(() => import('./Overview.vue'));
-const Users = asyncPage(() => import('./Users.vue'));
-const LearnerCenter = asyncPage(() => import('./LearnerCenter.vue'));
+const People = asyncPage(() => import('./People.vue'));
+const Sessions = asyncPage(() => import('./GoalConversations.vue'));
 const VirtualLearners = asyncPage(() => import('./VirtualLearners.vue'));
 const Skills = asyncPage(() => import('./Skills.vue'));
 const Orchestrator = asyncPage(() => import('./Orchestrator.vue'));
@@ -75,25 +75,23 @@ const Addons = asyncPage(() => import('./Addons.vue'));
 const SessionSecurity = asyncPage(() => import('./SessionSecurity.vue'));
 const PromptWorkbench = asyncPage(() => import('./PromptWorkbench.vue'));
 const HealthCenter = asyncPage(() => import('./HealthCenter.vue'));
-const LearnerDetail = asyncPage(() => import('./LearnerDetail.vue'));
-const TeachingSessions = asyncPage(() => import('./TeachingSessions.vue'));
-const GoalConversations = asyncPage(() => import('./GoalConversations.vue'));
+const Messages = asyncPage(() => import('./Messages.vue'));
 const Feedback = asyncPage(() => import('./Feedback.vue'));
-const SessionCockpit = asyncPage(() => import('./SessionCockpit.vue'));
-const VirtualProfile = asyncPage(() => import('./VirtualProfile.vue'));
-const UserDetail = asyncPage(() => import('./UserDetail.vue'));
 const PromptEval = asyncPage(() => import('./PromptEval.vue'));
 const OpsHub = asyncPage(() => import('./OpsHub.vue'));
+const OpsAchievements = asyncPage(() => import('./OpsAchievements.vue'));
 const OpsCenter = asyncPage(() => import('./OpsCenter.vue'));
-const Notifications = asyncPage(() => import('./Notifications.vue'));
-const TokenCost = asyncPage(() => import('./TokenCost.vue'));
+const LearnerDetail = asyncPage(() => import('./LearnerDetail.vue'));
+const VirtualProfile = asyncPage(() => import('./VirtualProfile.vue'));
+const UserDetail = asyncPage(() => import('./UserDetail.vue'));
+const SessionCockpit = asyncPage(() => import('./SessionCockpit.vue'));
 
 const components: Record<string, unknown> = {
   'overview': Overview,
-  'users': Users,
-  'learner-center': LearnerCenter,
-  'teaching-sessions': TeachingSessions,
-  'goal-conversations': GoalConversations,
+  // 导航收敛 2026-09-04：users+learner-center → people；teaching-sessions+goal-conversations → sessions；
+  // announcements+notifications → messages；token-cost → execution-logs（成本分析 tab）
+  'people': People,
+  'sessions': Sessions,
   feedback: Feedback,
   'virtual-learners': VirtualLearners,
   'skills': Skills,
@@ -109,9 +107,9 @@ const components: Record<string, unknown> = {
   'skill-workbench': PromptWorkbench,
   'health-center': HealthCenter,
   'ops-hub': OpsHub,
-  'ops-center': OpsCenter,
-  'notifications': Notifications,
-  'token-cost': TokenCost
+  'ops-achievements': OpsAchievements,
+  'messages': Messages,
+  'ops-center': OpsCenter
 };
 
 const detailComponents: Record<string, unknown> = {

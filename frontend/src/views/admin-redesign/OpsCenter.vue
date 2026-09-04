@@ -2,7 +2,7 @@
   <div class="mk-page">
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">运维中心</strong>
+      <strong class="mk-status__title">系统工具</strong>
       <span class="mk-status__sep"></span>
       <span v-if="tab === 'tools'" class="mk-status__meta" :class="{ 'is-bad': deadCount > 0 }">outbox 死信 {{ deadCount }}</span>
       <span v-else class="mk-status__meta">CSV 下载 · UTF-8（Excel 可直接打开）</span>
@@ -465,7 +465,7 @@ void loadDead()
   .ex-row__text span { font-size: 13.5px; }
 }
 
-/* ================= 暗色模式（D1 补完）：运维中心 ================= */
+/* ================= 暗色模式（D1 补完）：系统工具 ================= */
 html[data-theme='dark'] {
   /* dt-result/ex-row 已走 var(--mk-*) token，暗色由全局 token 覆盖 */
 }

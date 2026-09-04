@@ -111,8 +111,8 @@ describe('健康中心（G1）', () => {
     expect(bar).toContain('上线 2/8');
     expect(bar).toContain('异常 6');
 
-    // 概要卡四张
-    const cards = wrapper.findAll('.hc-card');
+    // 概要 KPI 四张（共享 MkKpi 组件：标签 + 数字 + 副行，点击跳转锚点）
+    const cards = wrapper.findAll('.mk-kpi');
     expect(cards.length).toBe(4);
     expect(cards[0].text()).toContain('13');      // 健康检查
     expect(cards[0].text()).toContain('4 异常');

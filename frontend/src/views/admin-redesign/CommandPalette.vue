@@ -95,17 +95,17 @@ const items = computed<Item[]>(() => {
       key: 'action:create-user',
       icon: '＋',
       label: '新建用户',
-      hint: '用户',
+      hint: '用户与学习者',
       group: '操作',
-      run: () => queueQuickAction('users', 'create-user')
+      run: () => queueQuickAction('people', 'create-user')
     },
     {
       key: 'action:create-announcement',
       icon: '＋',
       label: '新建公告',
-      hint: '运营中心 · 公告',
+      hint: '通知与公告',
       group: '操作',
-      run: () => queueQuickAction('ops-hub', 'create-announcement')
+      run: () => queueQuickAction('messages', 'create-announcement')
     },
     {
       key: 'action:create-virtual',

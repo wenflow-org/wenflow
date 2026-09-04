@@ -398,6 +398,16 @@ export const adminLearnerModelsApi = {
   }
 };
 
+export const adminMemoryTracesApi = {
+  list: async (params?: {
+    userId?: string;
+    limit?: number;
+    includeVirtual?: boolean;
+  }) => {
+    return adminAxios.get('/admin/memory-traces', { params });
+  }
+};
+
 export const adminTeachingSessionsApi = {
   list: async (params?: {
     page?: number;
@@ -608,6 +618,8 @@ export const adminApiConfigApi = {
     defaultModel: string;
     defaultReasoningModel: string;
     defaultEvaluationModel: string;
+    defaultThinkingMode?: string;
+    defaultReasoningEffort?: string;
   }) => {
     return adminAxios.put('/admin/api-config', data);
   },
@@ -1400,7 +1412,7 @@ export const adminVirtualLearnersApi = {
 
   updateSessionSimulationConfig: async (
     sessionId: string,
-    data: { frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test' }
+    data: { frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test'; model?: string | null }
   ) => {
     return adminAxios.put(`/admin/virtual-learners/sessions/${sessionId}/simulation-config`, data);
   },
@@ -1673,6 +1685,9 @@ export const adminApi = {
 
   // Learner Models
   ...adminLearnerModelsApi,
+
+  // Memory Traces
+  ...adminMemoryTracesApi,
 
   // Agents
   ...adminAgentsApi,

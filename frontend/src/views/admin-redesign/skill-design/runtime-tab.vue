@@ -55,6 +55,7 @@
           <span>思考强度</span>
           <select v-model="rtForm.reasoningEffort" class="mk-input" :disabled="!rtForm.enabled || rtForm.thinkingMode === 'disabled'">
             <option value="default">跟随继承值 / 模型默认</option>
+            <option value="low">low</option>
             <option value="high">high</option>
             <option value="max">max</option>
           </select>
@@ -116,7 +117,7 @@ interface RuntimeForm {
   tier: 'chat' | 'reasoning'
   model: string
   thinkingMode: 'default' | 'enabled' | 'disabled'
-  reasoningEffort: 'default' | 'high' | 'max'
+  reasoningEffort: 'default' | 'low' | 'high' | 'max'
   requestTimeoutMs: number | null
   enabled: boolean
 }

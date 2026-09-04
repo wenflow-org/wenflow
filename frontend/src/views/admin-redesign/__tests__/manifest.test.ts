@@ -41,7 +41,18 @@ describe('AdminConsole 页面注册表', () => {
 
   it('每页必须属于导航分组之一（侧栏组名稳定，防分组漂移）', () => {
     const groups = new Set(MOCK_SCENES.map((s) => s.group));
-    expect(groups).toEqual(new Set(['总览', '学习者', '仿真实验室', 'Skill 管理', '运营', '配置', '观测']));
+    expect(groups).toEqual(new Set(['总览', '学习者', 'Skill 管理', '运营', '配置', '观测']));
+  });
+
+  it('侧栏徽章 key 必须指向存在的场景（防悬空徽章：公告曾因 manifest 缺 announcements 而悬空）', async () => {
+    const { liveNavBadges, alarmNavBadges } = await import('../live');
+    const ids = new Set(MOCK_SCENES.map((s) => s.id));
+    for (const key of Object.keys(liveNavBadges.value)) {
+      expect(ids.has(key), `liveNavBadges 含未注册场景 key「${key}」`).toBe(true);
+    }
+    for (const id of alarmNavBadges) {
+      expect(ids.has(id), `alarmNavBadges 含未注册场景 id「${id}」`).toBe(true);
+    }
   });
 
   it('详情页注册表（subPage）四个视图齐全', () => {

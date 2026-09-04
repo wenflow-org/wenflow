@@ -113,6 +113,8 @@ export interface InvestigationIntent {
   timeRange: string
   /** 跳转执行日志后聚焦 Trace tab（openTrace/openSession 深链标志） */
   traceFocus: boolean
+  /** 合并宿主页 tab 深链（people/sessions/messages/execution-logs 等页面内 tab），页面消费后清空 */
+  tab: string
 }
 
 export const intent = reactive<InvestigationIntent>({
@@ -125,7 +127,8 @@ export const intent = reactive<InvestigationIntent>({
   quickAction: '',
   errorCategory: '',
   timeRange: '',
-  traceFocus: false
+  traceFocus: false,
+  tab: ''
 })
 
 /** 命令面板 → 页面快捷动作（如打开新建弹窗），页面消费后需清空 */

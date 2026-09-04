@@ -55,7 +55,7 @@
           :hint="k.hint"
           :title="kpiTitle(i)"
           clickable
-          @click="jump(kpiTargets[i])"
+          @click="jump(kpiTargets[i].scene, kpiTargets[i].tab)"
         />
       </section>
 
@@ -90,7 +90,7 @@
       <section class="brief-card brief-card--trend">
         <div class="trend__head">
           <h4 title="近 7 天每日新增注册 / 活跃用户（真实用户）">用户增长 · 近 7 天</h4>
-          <button type="button" class="brief-card__go" @click="jump('users')">用户管理 →</button>
+          <button type="button" class="brief-card__go" @click="jump('people')">用户与学习者 →</button>
         </div>
         <div v-if="growthSum > 0" class="ov-growth">
           <div class="ov-growth__rows">
@@ -120,7 +120,7 @@
               <i class="trend__dot trend__dot--new"></i>当日新增
               <i class="trend__dot trend__dot--done"></i>当日完成
             </span>
-            <button type="button" class="brief-card__go" @click="jump('goal-conversations')">目标对话 →</button>
+            <button type="button" class="brief-card__go" @click="jump('sessions')">目标对话 →</button>
           </span>
         </div>
         <div v-if="data.trend.length" class="trend">
@@ -154,7 +154,7 @@
           <span v-if="wrapupModelPct != null" class="wq__pct" :class="wrapupPctTone" :title="`${data.wrapup.summaryModel}/${data.wrapup.sampleSize} 次由模型直接生成`">
             {{ wrapupModelPct }}% 模型生成
           </span>
-          <button type="button" class="brief-card__go" @click="jump('teaching-sessions')">教学会话 →</button>
+          <button type="button" class="brief-card__go" @click="jump('sessions', 'teaching')">教学会话 →</button>
         </div>
         <div v-if="data.wrapup.sampleSize > 0 && hasWrapupStats" class="wq">
           <div class="wq__row">
@@ -212,8 +212,8 @@
             <div
               class="funnel__node funnel__node--clickable"
               :class="{ 'funnel__node--idle': n.idle }"
-              :title="funnelTargets[i] === 'users' ? '查看用户' : funnelTargets[i] === 'goal-conversations' ? '查看目标对话' : '查看学习者中心'"
-              @click="jump(funnelTargets[i])"
+              :title="funnelTitle(i)"
+              @click="jump(funnelTargets[i].scene, funnelTargets[i].tab)"
             >
               <span>{{ n.label }}</span>
               <strong>{{ n.value }}</strong>
@@ -626,8 +626,20 @@ async function retryOverview() {
 // 动态筛选：默认隐藏虚拟学习者与测试/审计账号（后端 excludeTest 已按此过滤并重新拉取）
 const hideTestAccounts = overviewHideTest
 // KPI 目标：今日调用 / 今日成功率 / 用户活跃 / 系统活跃（纯真实口径 4 卡；虚拟仿真走「虚拟学习者」页）
-const kpiTargets = ['execution-logs', 'execution-logs', 'users', 'goal-conversations']
-const funnelTargets = ['users', 'goal-conversations', 'goal-conversations', 'learner-center', 'learner-center']
+// 导航收敛 2026-09-04：users+learner-center → people（tab: account|state）；goal-conversations → sessions
+const kpiTargets: Array<{ scene: string; tab?: string }> = [
+  { scene: 'execution-logs' },
+  { scene: 'execution-logs' },
+  { scene: 'people' },
+  { scene: 'sessions' }
+]
+const funnelTargets: Array<{ scene: string; tab?: string }> = [
+  { scene: 'people' },
+  { scene: 'sessions' },
+  { scene: 'sessions' },
+  { scene: 'people', tab: 'state' },
+  { scene: 'people', tab: 'state' }
+]
 
 const KPI_HINTS: string[] = [
   '今日自然日（00:00 起）',
@@ -637,16 +649,26 @@ const KPI_HINTS: string[] = [
 ]
 function kpiTitle(i: number): string {
   const hint = KPI_HINTS[i] || ''
-  const target = kpiTargets[i] === 'execution-logs' ? '执行日志' : kpiTargets[i] === 'users' ? '用户管理' : kpiTargets[i] === 'goal-conversations' ? '目标对话' : 'Skill 目录'
-  return [hint, `点击查看${target}`].filter(Boolean).join(' · ')
+  const target = kpiTargets[i]?.scene || ''
+  const label = target === 'execution-logs' ? '执行日志'
+    : target === 'people' ? '用户与学习者'
+      : target === 'sessions' ? '学习会话' : 'Skill 目录'
+  return [hint, `点击查看${label}`].filter(Boolean).join(' · ')
 }
-function jump(scene: string) {
+function funnelTitle(i: number): string {
+  const t = funnelTargets[i]
+  if (!t) return ''
+  if (t.scene === 'people') return t.tab === 'state' ? '查看学习者中心' : '查看用户'
+  return '查看学习会话'
+}
+function jump(scene: string, tab?: string) {
   if (!scene) return
   intent.agentFilter = ''
   intent.statusFilter = ''
   intent.traceId = ''
   intent.errorCategory = ''
   intent.timeRange = ''
+  intent.tab = tab || ''
   intent.scene = scene
 }
 

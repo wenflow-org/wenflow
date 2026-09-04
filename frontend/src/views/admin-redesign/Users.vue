@@ -1,5 +1,5 @@
 <template>
-  <div class="mk-page mk-page--fill">
+  <div :class="embedded ? 'mk-page--fill u-embedded' : 'mk-page mk-page--fill'">
     <div class="mk-status" :class="users.length ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">用户</strong>
@@ -222,6 +222,9 @@ import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
 import { isTestAccountUser, levelFromXp, levelLabel } from './learner-profile'
+
+/** 嵌入模式：作为「用户与学习者」页「账号管理」tab 渲染（仅去掉外层壳，状态条/列表/弹窗保留） */
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 /** 与后端 validatePasswordRule 一致：≥8 位且同时包含字母和数字 */
 const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
@@ -636,6 +639,8 @@ function clearFilters() {
 </script>
 
 <style scoped>
+/* 嵌入模式（宿主 People 页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
+.u-embedded { flex: 1; min-height: 0; overflow: hidden; }
 .ul-row { cursor: pointer; }
 .ul-row--deleted { opacity: 0.62; filter: saturate(0.2); }
 .ul-tags { display: flex; gap: 5px; margin-top: 2px; }

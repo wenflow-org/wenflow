@@ -196,9 +196,28 @@ const routes: RouteRecordRaw[] = [
   // 旧版带参数路由 → 新平级页面（参数型无法被 /admin/:page 吸收，保留重定向）
   {
     path: '/admin/learner-models/:userId?',
-    redirect: '/admin/learner-center'
+    redirect: '/admin/people?tab=state'
   },
   {
+    // 导航收敛 2026-09-04：用户+学习者中心合并为「用户与学习者」（同域双子视图 tab 化）
+    path: '/admin/users',
+    redirect: () => ({ path: '/admin/people', query: { tab: 'account' } })
+  },
+  {
+    path: '/admin/learner-center',
+    redirect: () => ({ path: '/admin/people', query: { tab: 'state' } })
+  },
+  {
+    // 导航收敛 2026-09-04：教学会话+目标对话（含学习路径）合并为「学习会话」
+    path: '/admin/teaching-sessions',
+    redirect: () => ({ path: '/admin/sessions', query: { tab: 'teaching' } })
+  },
+  {
+    path: '/admin/goal-conversations',
+    redirect: '/admin/sessions'
+  },
+  {
+    // 兼容：Agent 拓扑视图已并入编排结构页（拓扑数据并入运行时统计），旧 URL 落在默认阶段视图（?tab=topology 仅作兼容 query，编排页按阶段泳道渲染）
     path: '/admin/agent-registry/:agentId?',
     redirect: () => ({ path: '/admin/orchestrator', query: { tab: 'topology' } })
   },
@@ -207,7 +226,7 @@ const routes: RouteRecordRaw[] = [
     redirect: (to) => ({ path: `/admin/skills/${to.params.agentId as string}` })
   },
   {
-    // 阶段 2D：Agent 拓扑降级并入编排结构页（第 5 个 tab），旧 URL 重定向兼容（深链/书签）
+    // 兼容：旧拓扑独立页 → 编排结构页（拓扑统计已并入阶段泳道；query 仅保 URL 兼容，无独立 tab）
     path: '/admin/topology',
     redirect: () => ({ path: '/admin/orchestrator', query: { tab: 'topology' } })
   },
@@ -250,11 +269,6 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/execution-logs'
   },
   {
-    // 公告已并入运营中心（内容 tab），旧 URL 兼容
-    path: '/admin/announcements',
-    redirect: '/admin/ops-hub'
-  },
-  {
     // 批量实验已并入虚拟学习者（tab），旧 URL 兼容
     path: '/admin/batch-experiments',
     redirect: '/admin/virtual-learners'
@@ -281,12 +295,31 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/ops-center'
   },
   {
+    // 内容管理（学习路径）已并入「学习会话」页（同域治理视图），旧 URL / ops-content 兼容直达路径 tab
     path: '/admin/content',
-    redirect: '/admin/ops-hub'
+    redirect: () => ({ path: '/admin/sessions', query: { tab: 'paths' } })
+  },
+  {
+    path: '/admin/ops-content',
+    redirect: () => ({ path: '/admin/sessions', query: { tab: 'paths' } })
+  },
+  {
+    // 导航收敛 2026-09-04：公告+站内通知合并为「通知与公告」（数据层独立，页面级 tab 收敛双入口）
+    path: '/admin/announcements',
+    redirect: () => ({ path: '/admin/messages', query: { tab: 'announce' } })
+  },
+  {
+    path: '/admin/notifications',
+    redirect: () => ({ path: '/admin/messages', query: { tab: 'inapp' } })
   },
   {
     path: '/admin/achievements',
-    redirect: '/admin/ops-hub'
+    redirect: '/admin/ops-achievements'
+  },
+  {
+    // Token 成本已并入执行日志第三 tab（成本分析），旧 URL 兼容
+    path: '/admin/token-cost',
+    redirect: () => ({ path: '/admin/execution-logs', query: { tab: 'cost' } })
   },
   {
     // 管理控制台：/admin/:page 反映当前页面（深链/前进后退），动态段置于静态路由之后

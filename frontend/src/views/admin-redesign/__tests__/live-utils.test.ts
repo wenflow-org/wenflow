@@ -117,7 +117,8 @@ describe('live.liveNavBadges（侧栏徽章推导）', () => {
       skills: '3',
       // addons = liveExtra 数量优先；为 0 时由静态清单兜底（size=3）
       addons: '1',
-      announcements: '1',
+      // 通知与公告徽章（场景 id messages；公告计数与侧栏徽章同源）
+      messages: '1',
       'execution-logs': '2'
     });
   });

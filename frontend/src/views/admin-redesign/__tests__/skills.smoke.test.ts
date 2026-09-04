@@ -9,6 +9,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import Skills from '../Skills.vue';
+import SkillReconciliation from '../SkillReconciliation.vue';
 import { dataSource, liveSkillStatsMap } from '../store';
 import { liveSkillProfiles } from '../live';
 import type { SkillCompletion, SkillReconciliationReport } from '@/api/adminApi';
@@ -138,6 +139,22 @@ async function mountSkills() {
   return wrapper;
 }
 
+/* 对账面板本体在 SkillReconciliation（HealthCenter 内嵌）；仅看异常/口径 pill 属该组件契约 */
+async function mountRecon() {
+  dataSource.value = 'live';
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
+  });
+  await router.push('/admin/health-center');
+  await router.isReady();
+  const wrapper = mount(SkillReconciliation, { global: { plugins: [router] } });
+  await flushPromises();
+  await nextTick();
+  await flushPromises();
+  return wrapper;
+}
+
 describe('Skill 目录 P1 修复批', () => {
   beforeEach(() => {
     getReconciliationMock.mockReset();
@@ -168,28 +185,21 @@ describe('Skill 目录 P1 修复批', () => {
     wrapper.unmount();
   });
 
-  it('折叠 pill 口径：户口簿全量 vs 目录（排除外挂能力）并列标注', async () => {
+  it('对账面板口径 pill：「已上线 X / 总数」并列标注（户口簿全量口径）', async () => {
     getReconciliationMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
-    liveSkillProfiles.value = [
-      { id: 'live-a', name: 'Live A', category: 'analysis', agentId: 'goal-agent', agentName: '目标 Agent' }
-    ];
-    liveSkillStatsMap.value = { 'live-a': { calls: 1, errors: 0, avgMs: 50, lastAt: '刚刚' } };
-    const wrapper = await mountSkills();
+    const wrapper = await mountRecon();
+    // 对账面板（HealthCenter 内嵌的 SkillReconciliation）头部口径 pill
     const pill = wrapper.find('.sk-rec__pills .mk-pill');
-    expect(pill.text()).toContain('完成度 live 2 / 4');
-    expect(pill.text()).toContain('目录 1');
-    expect(pill.attributes('title')).toContain('户口簿');
+    expect(pill.text()).toContain('已上线 2 / 4');
+    // 异常计数 pill：未注册 1
+    expect(wrapper.text()).toContain('未注册 1');
     wrapper.unmount();
   });
 
   it('对账面板「仅看异常」：过滤后仅剩异常行（未注册/非 live），live 行隐藏', async () => {
     getReconciliationMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
-    liveSkillProfiles.value = [
-      { id: 'live-a', name: 'Live A', category: 'analysis', agentId: 'goal-agent', agentName: '目标 Agent' }
-    ];
-    liveSkillStatsMap.value = { 'live-a': { calls: 1, errors: 0, avgMs: 50, lastAt: '刚刚' } };
-    const wrapper = await mountSkills();
-    // 展开对账面板
+    const wrapper = await mountRecon();
+    // 展开对账面板（details 默认折叠态需点击 summary 展开才能看到表格；recOpen 由深度链控制时自动展开）
     await wrapper.find('.sk-rec__summary').trigger('click');
     await nextTick();
     await flushPromises();

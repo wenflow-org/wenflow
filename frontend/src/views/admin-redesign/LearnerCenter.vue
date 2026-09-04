@@ -1,5 +1,5 @@
 <template>
-  <div class="mk-page mk-page--fill">
+  <div :class="embedded ? 'mk-page--fill lc-embedded' : 'mk-page mk-page--fill'">
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">学习者中心</strong>
@@ -208,6 +208,9 @@ import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
 import MkCols from './MkCols.vue'
 import { adminNotificationsApi } from '@/api/adminApi'
+
+/** 嵌入模式：作为「用户与学习者」页「学习状态」tab 渲染（仅去掉外层壳，状态条/列表/干预弹窗保留） */
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 interface Row {
   id: string
@@ -447,6 +450,8 @@ async function recomputeAll() {
 </script>
 
 <style scoped>
+/* 嵌入模式（宿主 People 页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
+.lc-embedded { flex: 1; min-height: 0; overflow: hidden; }
 .lc-row { cursor: pointer; }
 /* 页头计数锚点（P0-3）：需关注/低置信可点击筛选 */
 .lc-count-link {

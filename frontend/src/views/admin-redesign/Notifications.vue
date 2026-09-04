@@ -1,5 +1,5 @@
 <template>
-  <div class="mk-page">
+  <div :class="embedded ? 'mk-page--fill nt-embedded' : 'mk-page'">
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">站内通知</strong>
@@ -184,6 +184,9 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 
+/** 嵌入模式：作为「通知与公告」页「站内通知」tab 渲染（仅去掉外层壳，状态条/发送弹窗保留） */
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+
 interface NotifRow {
   id: string
   userId: string
@@ -354,6 +357,8 @@ void reload()
 </script>
 
 <style scoped>
+/* 嵌入模式（宿主通知与公告页 flex 列内）：占满剩余高度，表格区内滚 */
+.nt-embedded { flex: 1; min-height: 0; overflow: hidden; }
 .nt-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .nt-boundary {
   margin-left: auto;

@@ -10,6 +10,7 @@ import {
   adminSkillsApi,
   adminUsersApi,
   adminLearnerModelsApi,
+  adminMemoryTracesApi,
   adminVirtualLearnersApi,
   adminApiConfigApi,
   adminAgentsApi,
@@ -1196,6 +1197,28 @@ export async function liveGetLearnerDetail(userId: string, pathId?: string, incl
   return res.data?.data ?? res.data ?? {}
 }
 
+/** 记忆痕迹（含 FSRS 记忆保持率 retrievability）：管理后台观察复习调度状态 */
+export interface MemoryTraceRow {
+  conceptKey: string
+  label: string | null
+  masteryScore: number
+  stability: string
+  extractionCount: number
+  lastSeenAt: string | null
+  fsrsStability: number | null
+  fsrsDifficulty: number | null
+  ktMasteryEma: number | null
+  dueAt: string | null
+  retrievability: number | null
+  updatedAt: string
+}
+
+export async function liveGetMemoryTraces(params?: { userId?: string; limit?: number; includeVirtual?: boolean }): Promise<MemoryTraceRow[]> {
+  const res = await adminMemoryTracesApi.list({ limit: 50, ...(params || {}) })
+  const body = res.data?.data ?? res.data ?? {}
+  return Array.isArray(body.rows) ? body.rows : (Array.isArray(body) ? body : [])
+}
+
 /** 压力趋势点：learning_metrics 历史（与用户侧 /state/trends 同源） */
 export interface LoadCurvePoint {
   date: string
@@ -1512,6 +1535,8 @@ export interface LiveApiConfig {
   defaultModel: string
   defaultReasoningModel: string
   defaultEvaluationModel: string
+  defaultThinkingMode: 'default' | 'enabled' | 'disabled'
+  defaultReasoningEffort: 'default' | 'low' | 'high' | 'max'
   connectionStatus: string
   lastCheckedAt: string
   networkPolicy: {
@@ -1534,6 +1559,8 @@ async function fetchLiveApiConfig(): Promise<void> {
     defaultModel: d.defaultModel || '',
     defaultReasoningModel: d.defaultReasoningModel || '',
     defaultEvaluationModel: d.defaultEvaluationModel || '',
+    defaultThinkingMode: d.defaultThinkingMode || 'default',
+    defaultReasoningEffort: d.defaultReasoningEffort || 'default',
     connectionStatus: d.connectionStatus || 'unknown',
     lastCheckedAt: d.lastCheckedAt || '',
     networkPolicy: {
@@ -1559,6 +1586,8 @@ export async function liveSaveApiConfig(data: {
   defaultModel: string
   defaultReasoningModel: string
   defaultEvaluationModel: string
+  defaultThinkingMode?: 'default' | 'enabled' | 'disabled'
+  defaultReasoningEffort?: 'default' | 'low' | 'high' | 'max'
 }): Promise<void> {
   await adminApiConfigApi.updateConfig(data)
   await fetchLiveApiConfig()
@@ -1791,7 +1820,7 @@ export const liveNavBadges = computed<Record<string, string>>(() => {
   const addons = liveExtraProfiles.value.length || EXTRA_COMPONENT_VISIBLE_SKILLS.size
   if (addons > 0) out.addons = String(addons)
   const published = liveAnnouncements.value.filter((a) => a.status === 'published').length
-  if (published > 0) out.announcements = String(published)
+  if (published > 0) out.messages = String(published)
   // 事故信号：近 7 天失败数（>0 时侧栏亮红）
   const failed = (liveSpans.value || []).filter((s) => s.status === 'err').length
   if (failed > 0) out['execution-logs'] = String(failed)

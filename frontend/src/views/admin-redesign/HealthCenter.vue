@@ -21,39 +21,60 @@
     </div>
 
     <template v-if="displayReport">
-      <!-- 面向运营的一句话引导：页面用途 + 关键术语速查（折叠，避免噪音） -->
-      <details class="hc-guide">
-        <summary class="hc-guide__summary">本页看什么？<span class="mk-card__meta">技能是否健康运行 · 点开看术语速查</span></summary>
-        <div class="hc-guide__body">
-          <p><b>健康检查</b>：系统自动检查技能运行的各个环境（配置、注册、提示词版本等），异常项可一键修复或跳转处理。</p>
-          <p><b>漂移</b>：配置内容与实际运行不一致——通常是修改了 Skill 配置但尚未同步/发布生效，去对应页面点「同步/发布」即可。</p>
-          <p><b>对账</b>：核对技能在四个登记来源（配置文件、运行注册、生效版本、登记册）中是否齐全一致；「失效注册 / 无生效版本」等需要人工处理。</p>
-          <p><b>ACTIVE / W1-W5</b>：系统内部对「当前生效的提示词版本 / 各类自动检查」的编号称呼，处理时按页面提示操作即可，不影响理解问题本身。</p>
-        </div>
-      </details>
+      <!-- 面向运营的一句话引导（与健康检查/漂移等折叠 section 同形态：mk-card + hc-details 折叠头） -->
+      <section class="mk-card">
+        <details class="hc-details">
+          <summary class="mk-card__head hc-details__summary">
+            <h3 class="mk-card__title">本页看什么？</h3>
+            <span class="mk-card__meta">系统健康 13 项检查 · 技能是否健康运行 · 点开看术语速查</span>
+          </summary>
+          <div class="hc-guide__body">
+            <p><b>健康检查</b>：系统自动检查技能运行的各个环境（配置、注册、提示词版本等），异常项可一键修复或跳转处理。</p>
+            <p><b>漂移</b>：配置内容与实际运行不一致——通常是修改了 Skill 配置但尚未同步/发布生效，去对应页面点「同步/发布」即可。</p>
+            <p><b>对账</b>：核对技能在四个登记来源（配置文件、运行注册、生效版本、登记册）中是否齐全一致；「失效注册 / 无生效版本」等需要人工处理。</p>
+            <p><b>ACTIVE / W1-W5</b>：系统内部对「当前生效的提示词版本 / 各类自动检查」的编号称呼，处理时按页面提示操作即可，不影响理解问题本身。</p>
+          </div>
+        </details>
+      </section>
 
-      <!-- 四张概要卡片（MkKpi 统一形态：数字 + 标签 + 副行，可点击跳转锚点） -->
+      <!-- 概要 KPI（共享 MkKpi 统一形态：标签 + 数字 + 副行，可点击跳转锚点） -->
       <div class="hc-summary">
-        <button type="button" class="hc-card" :class="healthAbnormal > 0 ? 'hc-card--warn' : 'hc-card--ok'" @click="scrollTo('health')" :title="`${displayReport.health.summary.total} 项健康检查，${healthAbnormal} 项异常`">
-          <span class="hc-card__num">{{ displayReport.health.summary.total }}</span>
-          <span class="hc-card__label">健康检查</span>
-          <span class="hc-card__sub">{{ healthAbnormal > 0 ? `${healthAbnormal} 异常` : '全部正常' }}</span>
-        </button>
-        <button type="button" class="hc-card" :class="driftActionable > 0 ? 'hc-card--warn' : 'hc-card--ok'" @click="scrollTo('drift')" :title="driftCardTitle">
-          <span class="hc-card__num">{{ driftActionable }}</span>
-          <span class="hc-card__label">漂移</span>
-          <span class="hc-card__sub">{{ driftActionable > 0 ? '需处理' : '正常' }}</span>
-        </button>
-        <button type="button" class="hc-card" :class="reconAbnormal > 0 ? 'hc-card--warn' : 'hc-card--ok'" @click="scrollTo('recon')" :title="reconCardTitle">
-          <span class="hc-card__num">{{ reconciliation.total }}</span>
-          <span class="hc-card__label">对账</span>
-          <span class="hc-card__sub">{{ reconAbnormal > 0 ? `${reconAbnormal} 异常` : '一致' }}</span>
-        </button>
-        <button type="button" class="hc-card hc-card--ok" @click="scrollTo('completion')" title="完成度已达 live 档的技能数">
-          <span class="hc-card__num">{{ completionLive }}</span>
-          <span class="hc-card__label">已上线</span>
-          <span class="hc-card__sub">/ {{ reconciliation.total }}</span>
-        </button>
+        <MkKpi
+          label="健康检查"
+          :value="displayReport.health.summary.total"
+          :hint="healthAbnormal > 0 ? `${healthAbnormal} 异常` : '全部正常'"
+          :tone="healthAbnormal > 0 ? 'warn' : 'ok'"
+          clickable
+          :title="`${displayReport.health.summary.total} 项健康检查，${healthAbnormal} 项异常`"
+          @click="scrollTo('health')"
+        />
+        <MkKpi
+          label="漂移"
+          :value="driftActionable"
+          :hint="driftActionable > 0 ? '需处理' : '正常'"
+          :tone="driftActionable > 0 ? 'warn' : 'ok'"
+          clickable
+          :title="driftCardTitle"
+          @click="scrollTo('drift')"
+        />
+        <MkKpi
+          label="对账"
+          :value="reconciliation.total"
+          :hint="reconAbnormal > 0 ? `${reconAbnormal} 异常` : '一致'"
+          :tone="reconAbnormal > 0 ? 'warn' : 'ok'"
+          clickable
+          :title="reconCardTitle"
+          @click="scrollTo('recon')"
+        />
+        <MkKpi
+          label="已上线"
+          :value="completionLive"
+          :hint="`/ ${reconciliation.total}`"
+          tone="ok"
+          clickable
+          title="完成度已达 live 档的技能数"
+          @click="scrollTo('completion')"
+        />
       </div>
 
       <!-- 健康检查 -->
@@ -187,6 +208,7 @@ import {
 } from '@/api/adminApi'
 import { TERMS } from './terms'
 import { COMPLETION_META, SEMANTICS_META } from './glossaryMeta'
+import MkKpi from './MkKpi.vue'
 import SkillReconciliation from './SkillReconciliation.vue'
 
 const reconRef = ref<{ openPanel?: () => void } | null>(null)
@@ -428,52 +450,17 @@ defineExpose({ refresh })
 </script>
 
 <style scoped>
-/* 概要卡片（MkKpi 同形态：数字 + 标签 + 副行，点击跳转锚点） */
+/* 概要 KPI（共享 MkKpi 组件：标签 + 数字 + 副行，点击跳转锚点） */
 .hc-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 /* 滚动锚点（技能对账外层：组件自身即卡，这里只留定位不留卡盒） */
 .hc-anchor { scroll-margin-top: 14px; }
-.hc-card {
-  display: grid; gap: 4px; padding: 14px 16px;
-  border-radius: 12px; border: 1px solid #e8edf6;
-  background: var(--mk-surface);
-  text-align: left; cursor: pointer; font: inherit;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
-}
-.hc-card:hover { border-color: rgba(44,99,208,0.5); transform: translateY(-1px); }
-.hc-card--ok { border-color: rgba(21,128,61,0.2); }
-.hc-card--warn { border-color: rgba(220,38,38,0.25); }
-.hc-card__num { font-size: 22px; font-weight: 800; line-height: 1.25; font-variant-numeric: tabular-nums; }
-.hc-card--ok .hc-card__num { color: var(--mk-green); }
-.hc-card--warn .hc-card__num { color: var(--mk-red); }
-.hc-card__label { font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-faint); }
-.hc-card__sub { font-size: var(--mk-fs-11); color: var(--mk-muted); }
 
 /* 可折叠 */
 .hc-details__summary { cursor: pointer; user-select: none; list-style: none; }
 .hc-details__summary::-webkit-details-marker { display: none; }
 
-/* 面向运营的一句话引导（折叠说明条） */
-.hc-guide {
-  border: 1px dashed var(--mk-line);
-  border-radius: 10px;
-  background: var(--mk-surface);
-}
-.hc-guide__summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  cursor: pointer;
-  user-select: none;
-  list-style: none;
-  font-size: var(--mk-fs-13);
-  font-weight: 700;
-  color: var(--mk-blue);
-}
-.hc-guide__summary::-webkit-details-marker { display: none; }
-.hc-guide__summary::before { content: "▸"; color: var(--mk-blue); transition: transform 0.14s ease; }
-.hc-guide[open] > .hc-guide__summary::before { transform: rotate(90deg); }
-.hc-guide__body { padding: 2px 16px 12px; display: grid; gap: 6px; }
+/* 面向运营的一句话引导（折叠区正文；容器已用 mk-card + hc-details 折叠头，与各 section 同形态） */
+.hc-guide__body { padding: 10px 14px 12px; display: grid; gap: 6px; }
 .hc-guide__body p { margin: 0; font-size: var(--mk-fs-12_5); color: var(--mk-muted); line-height: 1.6; }
 .hc-guide__body b { color: var(--mk-ink); font-weight: 700; }
 
@@ -529,12 +516,8 @@ defineExpose({ refresh })
 
 @media (max-width: 700px) { .hc-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
-/* 4K：概要卡/检查行/完成度条跟随全站节奏 */
+/* 4K：检查行/完成度条跟随全站节奏（概要 KPI 由 MkKpi 自带档位） */
 @media (min-width: 2000px) {
-  .hc-card { padding: 16px 19px; }
-  .hc-card__num { font-size: 25px; }
-  .hc-card__label { font-size: 13.5px; }
-  .hc-card__sub { font-size: 12.5px; }
   .hc-check__main strong { font-size: 14px; }
   .hc-check__main span, .hc-check__sem { font-size: 12.5px; }
   .hc-check__num { font-size: 14.5px; }
@@ -543,10 +526,6 @@ defineExpose({ refresh })
   .hc-completion__num { font-size: 13.5px; }
 }
 @media (min-width: 2800px) {
-  .hc-card { padding: 19px 22px; }
-  .hc-card__num { font-size: 29px; }
-  .hc-card__label { font-size: 16px; }
-  .hc-card__sub { font-size: 14.5px; }
   .hc-check__main strong { font-size: 16.5px; }
   .hc-check__main span, .hc-check__sem { font-size: 14.5px; }
   .hc-check__num { font-size: 17px; }
@@ -555,20 +534,11 @@ defineExpose({ refresh })
   .hc-completion__num { font-size: 16px; }
 }
 @media (min-width: 3600px) {
-  .hc-card { padding: 22px 26px; }
-  .hc-card__num { font-size: 34px; }
-  .hc-card__label { font-size: 18.5px; }
-  .hc-card__sub { font-size: 17px; }
   .hc-check__main strong { font-size: 19.5px; }
   .hc-check__main span, .hc-check__sem { font-size: 17px; }
   .hc-check__num { font-size: 20px; }
   .hc-drift__item strong { font-size: 19.5px; }
   .hc-completion__label { font-size: 17px; }
   .hc-completion__num { font-size: 18.5px; }
-}
-
-/* ================= 暗色模式（D1 补完）：健康中心 ================= */
-html[data-theme='dark'] {
-  .hc-card--warn { border-color: rgba(248, 113, 113, 0.25); }
 }
 </style>

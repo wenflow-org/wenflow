@@ -1,5 +1,5 @@
 <template>
-  <div class="mk-page mk-page--fill">
+  <div :class="embedded ? 'mk-page--fill ts-embedded' : 'mk-page mk-page--fill'">
     <!-- 教学会话页头（单行状态条：页面名 + 短计数 + 可点击筛选 + 刷新；与其他列表页统一形态） -->
     <div class="mk-status" :class="tsDashTone === 'bad' ? 'mk-status--bad' : tsDashTone === 'warn' ? 'mk-status--warn' : tsDashTone === 'muted' ? 'mk-status--muted' : 'mk-status--ok'">
       <span class="mk-status__dot"></span>
@@ -296,7 +296,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { dataSource, openSession, openSubPage } from './store'
+import { dataSource } from './store'
+import { useSessionDrill } from './useSessionDrill'
 import { timeAgo, isPageCacheFresh, markPageFetched } from './live'
 import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone } from './statusText'
 import type { SessionProgress } from './statusText'
@@ -308,6 +309,9 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
 import MkCols from './MkCols.vue'
+
+/** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（仅去掉外层壳，状态条/列表/抽屉轮询保留） */
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 interface WrapupSummary {
   topicSummary?: string
@@ -632,23 +636,7 @@ function openDetail(r: Row) {
 }
 
 /** 真实教学会话与控制台数据契约不兼容（座舱仅服务虚拟会话）：轻量深链 = 学习者详情 / Trace 瀑布按 sessionId 归组 */
-function goLearner(r: Row) {
-  if (!r.userId) return
-  detail.value = null
-  openSubPage('learner', r.userId)
-}
-
-function goTrace(r: Row) {
-  detail.value = null
-  openSession(r.id)
-}
-
-/** 真实会话进控制台（双模式）：session-real 只读座舱，经 /admin/session-console 同构映射渲染 */
-function goConsole(r: Row) {
-  if (!r.id) return
-  detail.value = null
-  openSubPage('session-real', r.id)
-}
+const { goLearner, goTrace, goConsole } = useSessionDrill(closeDetail)
 
 function toggleCard(key: string) {
   const next = new Set(openCards.value)
@@ -684,6 +672,8 @@ function progressTitle(r: Row): string {
 </script>
 
 <style scoped>
+/* 嵌入模式（宿主学习会话页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
+.ts-embedded { flex: 1; min-height: 0; overflow: hidden; }
 /* 页头合并（替代独立状态条）：共 N 条 + 刷新按钮，与概览结论同行 */
 .ts-head-meta { font-size: var(--mk-fs-12_5); color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* 页头计数锚点（与学习者中心 lc-count-link 同形态）：缺总结/高关注可点击筛选 */

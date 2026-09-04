@@ -3,7 +3,7 @@
     <!-- ===== 顶部栏：身份 + 状态（控制全部下沉到下方统一控制台） ===== -->
     <header class="cp-topbar">
       <div class="cp-topbar__row">
-        <button type="button" class="cp-back" @click="goBack">← {{ backLabel }}</button>
+        <button type="button" class="mk-back" @click="goBack">← {{ backLabel }}</button>
         <h1 class="cp-title">会话监控 <span class="cp-title__id mono">{{ shortId }}</span></h1>
         <div class="cp-topbar__spacer"></div>
         <!-- 自动驾驶进行中的状态指示（停止按钮在控制台） -->
@@ -558,6 +558,14 @@
                     <option value="stress_test">压力测试</option>
                   </select>
                 </label>
+                <label v-if="!isBlackbox && !isRealMode" class="cp-run__budget">
+                  模型
+                  <select v-model="simModel" class="mk-filter__select" :disabled="simModelSaving" @change="saveModel">
+                    <option value="">默认（路由）</option>
+                    <option v-for="m in (liveApiConfig?.availableModels || [])" :key="m" :value="m">{{ m }}</option>
+                  </select>
+                  <span class="cp-run__budget-hint" title="实验快照在会话启动时捕获，模型变更需重跑（rerun）或新会话才生效">重跑生效</span>
+                </label>
                 <span v-if="showPathReadiness" class="cp-run__readiness" :class="`cp-run__readiness--${pathReadinessTone}`">{{ pathReadinessText }}</span>
               </div>
             </div>
@@ -616,6 +624,14 @@
                     <option value="high">高</option>
                     <option value="stress_test">压力测试</option>
                   </select>
+                </label>
+                <label v-if="!isBlackbox && !isRealMode" class="cp-run__budget">
+                  模型
+                  <select v-model="simModel" class="mk-filter__select" :disabled="simModelSaving" @change="saveModel">
+                    <option value="">默认（路由）</option>
+                    <option v-for="m in (liveApiConfig?.availableModels || [])" :key="m" :value="m">{{ m }}</option>
+                  </select>
+                  <span class="cp-run__budget-hint" title="实验快照在会话启动时捕获，模型变更需重跑（rerun）或新会话才生效">重跑生效</span>
                 </label>
                 <span v-if="showPathReadiness" class="cp-run__readiness" :class="`cp-run__readiness--${pathReadinessTone}`">{{ pathReadinessText }}</span>
               </div>
@@ -708,7 +724,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { subPage, closeSubPage, openSubPage } from './store'
-import { errMsg } from './live'
+import { errMsg, liveApiConfig } from './live'
 import { askConfirm } from './useConfirm'
 import {
   VS_CONTROL_DEFS,
@@ -1909,6 +1925,8 @@ async function refresh() {
     if (Number.isFinite(turnCap) && turnCap >= 1 && turnCap <= 100) {
       learnAutoTurnCap.value = Math.round(turnCap)
     }
+    const m = String(simCfg.model || '')
+    simModel.value = m
     parseBlackbox()
     await Promise.all([
       loadLogs(),
@@ -2155,6 +2173,9 @@ function findingEvidence(report: EvaluationReport, finding: { evidenceIds?: Arra
 
 const frictionBudget = ref<'none' | 'low' | 'normal' | 'high' | 'stress_test'>('normal')
 const frictionSaving = ref(false)
+// 会话级模型覆盖（#12）：空 = 用 api-config 默认路由；可选值来自 liveApiConfig.availableModels
+const simModel = ref('')
+const simModelSaving = ref(false)
 // 自动学习回合上限（前端可配，默认 40，不同课收束节奏不同；画像预算可设默认值）
 const learnAutoTurnCap = ref(40)
 
@@ -2178,6 +2199,23 @@ async function saveFriction() {
     toast.error(`更新失败：${errMsg(e)}`)
   } finally {
     frictionSaving.value = false
+  }
+}
+
+async function saveModel() {
+  if (!sessionId.value || isBlackbox.value || busy.value || simModelSaving.value) return
+  simModelSaving.value = true
+  const previous = simModel.value
+  try {
+    await adminVirtualLearnersApi.updateSessionSimulationConfig(sessionId.value, {
+      model: simModel.value || null
+    })
+    toast.success(simModel.value ? `模型已覆盖：${simModel.value}` : '已恢复默认模型路由')
+  } catch (e) {
+    simModel.value = previous
+    toast.error(`更新失败：${errMsg(e)}`)
+  } finally {
+    simModelSaving.value = false
   }
 }
 
@@ -2582,20 +2620,6 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-budget.is-full .cp-budget__fill { background: #ef4444; }
 .cp-budget.is-full .cp-budget__num { color: #dc2626; }
 
-.cp-back {
-  border: 0;
-  background: transparent;
-  color: var(--mk-blue);
-  font: inherit;
-  font-size: var(--mk-fs-12_5);
-  font-weight: 700;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: background-color 0.1s ease;
-}
-.cp-back:hover { background: #eff6ff; }
-
 /* ===== 统一控制台（阶段 tab + 该阶段操作，置顶汇聚） ===== */
 .cp-console {
   display: flex;
@@ -2820,6 +2844,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   border-top: 1px solid var(--mk-line);
 }
 .cp-run__budget { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: var(--mk-fs-12); color: var(--mk-muted); }
+.cp-run__budget-hint { font-weight: 400; font-size: var(--mk-fs-11); color: var(--mk-faint); cursor: help; }
 .cp-run__budget select { min-width: 90px; font-size: var(--mk-fs-12); }
 .cp-run__readiness { font-size: var(--mk-fs-11); font-weight: 700; }
 .cp-run__readiness--ok { color: var(--mk-green, #15803d); }
@@ -3528,7 +3553,6 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-body { grid-template-columns: minmax(0, 1fr) 380px; }
   .cp-title { font-size: 18px; }
   .cp-title__id { font-size: 13px; }
-  .cp-back { font-size: 14px; }
   .cp-topbar__btn { font-size: 13px; }
   .cp-topbar__status { font-size: 15px; }
   .cp-stage { font-size: 15px; }
@@ -3608,7 +3632,6 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-body { grid-template-columns: minmax(0, 1fr) 440px; }
   .cp-title { font-size: 21px; }
   .cp-title__id { font-size: 15.5px; }
-  .cp-back { font-size: 16.5px; }
   .cp-topbar__btn { font-size: 15.5px; }
   .cp-topbar__status { font-size: 17.5px; }
   .cp-stage { font-size: 17.5px; }
@@ -3688,7 +3711,6 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 /* ================= 暗色模式（D1 补完）：会话座舱 ================= */
 html[data-theme='dark'] {
   .cp-budget__track { background: #232f45; }
-  .cp-back:hover { background: #1f2b40; }
   .cp-stage:hover:not(:disabled) { background: #1f2b40; }
   .cp-stage--active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
   .cp-run__autopilot-result { background: #141c2b; }

@@ -38,7 +38,7 @@ describe('Shell 导航', () => {
   it('导航分组齐全且顺序稳定（总览为置顶入口，不进分组）', () => {
     const wrapper = mountShell();
     const groups = wrapper.findAll('.mshell__group-name').map((n) => n.text());
-    expect(groups).toEqual(['学习者', '仿真实验室', 'Skill 管理', '运营', '配置', '观测']);
+    expect(groups).toEqual(['学习者', 'Skill 管理', '运营', '配置', '观测']);
   });
 
   it('置顶入口（pinned）渲染在分组上方且无组标题', () => {
@@ -69,10 +69,11 @@ describe('Shell 导航', () => {
     expect(wrapper.emitted('navigate')?.[0]).toEqual(['skills']);
   });
 
-  it('面包屑展示当前场景分组/名称', () => {
+  it('侧栏搜索条展示（命令面板入口原顶栏迁入 + Ctrl+K 提示）', () => {
     const wrapper = mountShell({ current: 'execution-logs' });
-    const crumbs = wrapper.findAll('.mshell__crumb-group, .mshell__crumbs strong');
-    expect(crumbs.map((n) => n.text())).toEqual(['观测', '执行日志']);
+    expect(wrapper.find('.mshell__search').exists()).toBe(true);
+    expect(wrapper.find('.mshell__search-hint').text()).toContain('命令面板');
+    expect(wrapper.find('.mshell__kbd').exists()).toBe(true);
   });
 
   it('release 模式下展示管理员区（退出按钮）', () => {

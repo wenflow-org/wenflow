@@ -172,8 +172,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
 import { skillStatOf, openSkillDrawer, isLive } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
@@ -335,32 +334,12 @@ const statusTitle = computed(() =>
 const successRate = (s: { calls: number; errors: number }) =>
   s.calls ? `${(((s.calls - s.errors) / s.calls) * 100).toFixed(0)}%` : '—'
 
-/* ================= 技能对账面板（SKILL_READINESS_SPEC §4.2） ================= */
+/* ================= 对账数据（目录表完成度列投影） =================
+   明细对账面板本体在健康中心内嵌的 SkillReconciliation（含 ?recon=/?diff= 深链定位）；
+   本页只消费其 completion 映射用于完成度列，不再重复深链逻辑。 */
 const recReport = ref<SkillReconciliationReport | null>(null)
 const recLoading = ref(false)
 const recError = ref('')
-/** 滚动修复 #4：对账卡默认折叠（32 行分组表不再默认撑长页面） */
-const recOpen = ref(false)
-/** 深链定位：?recon=1 展开 + 滚动；?diff=unregistered|active-missing|live 过滤差集行（巡检工作台计数卡 → 目录对账闭环） */
-const route = useRoute()
-const recDiff = ref('')
-const recPanelRef = ref<HTMLElement | null>(null)
-let recDeepLinked = false
-
-function applyRecQuery() {
-  const recon = String(route.query.recon || '')
-  const diff = typeof route.query.diff === 'string' ? route.query.diff : ''
-  recDeepLinked = recon === '1' || recon === 'true'
-  recOpen.value = recDeepLinked
-  recDiff.value = diff === 'unregistered' || diff === 'active-missing' || diff === 'live' ? diff : ''
-}
-
-/** 深链落地：数据到达后滚动定位到对账面板（避免折叠态下 scrollIntoView 落空） */
-watch(recReport, async (report) => {
-  if (!report || !recDeepLinked || !recOpen.value) return
-  await nextTick()
-  recPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-})
 
 async function refreshReconciliation() {
   recLoading.value = true
@@ -381,7 +360,6 @@ watch(isLive, () => {
 })
 
 onMounted(() => {
-  applyRecQuery()
   refreshReconciliation()
 })
 

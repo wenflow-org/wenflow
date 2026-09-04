@@ -16,6 +16,12 @@
           <span aria-hidden="true">{{ collapsed ? '»' : '«' }}</span>
         </button>
       </div>
+      <!-- 命令面板入口（原顶栏「命令面板 Ctrl+K」迁入侧栏，C5 顶部搜索条形态；折叠态仅放大镜） -->
+      <button type="button" class="mshell__search" @click="$emit('palette')">
+        <span class="mshell__search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
+        <span class="mshell__search-hint">命令面板</span>
+        <span class="mshell__kbd">{{ kbdMod }}K</span>
+      </button>
       <nav class="mshell__nav">
         <!-- 置顶独立入口（D5）：驾驶舱类页面渲染在分组上方，无组标题 -->
         <div v-if="pinnedScenes.length" class="mshell__pinned">
@@ -74,69 +80,59 @@
           </div>
         </section>
       </nav>
-      <!-- 左侧底部：极简品牌行（命令面板入口在右上角） -->
+      <!-- 左侧底部：工具行（刷新/这是什么/密度/主题，原顶栏迁入）+ 用户区（admin + 退出） -->
       <footer class="mshell__foot">
-        <span class="mshell__foot-name">WenFlow Admin</span>
-        <span class="mshell__foot-ver mono">v{{ version }}</span>
+        <div class="mshell__tools">
+          <button
+            type="button"
+            class="mshell__tool"
+            :disabled="liveLoading"
+            :title="liveLoading ? '刷新中…' : '刷新真实数据'"
+            :aria-label="liveLoading ? '刷新中…' : '刷新真实数据'"
+            @click="refreshData"
+          >
+            <span class="mshell__refresh-icon" :class="{ 'is-spinning': liveLoading }"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></span>
+          </button>
+          <button type="button" class="mshell__tool" title="运营术语表 / 这是什么" aria-label="运营术语表 / 这是什么" @click="$emit('glossary')">
+            <span class="mshell__tool-icon mshell__tool-icon--q">?</span>
+          </button>
+          <template v-if="release">
+            <button
+              type="button"
+              class="mshell__tool"
+              :title="density === 'compact' ? '当前紧凑密度 · 点击切换标准' : '当前标准密度 · 点击切换紧凑'"
+              :aria-label="density === 'compact' ? '切换到标准密度' : '切换到紧凑密度'"
+              @click="toggleDensity"
+            >
+              <span class="mshell__tool-icon" aria-hidden="true">{{ density === 'compact' ? '⊟' : '⊞' }}</span>
+            </button>
+            <button
+              type="button"
+              class="mshell__tool"
+              :title="theme === 'dark' ? '切换到浅色模式' : '切换到暗色模式'"
+              :aria-label="theme === 'dark' ? '切换到浅色模式' : '切换到暗色模式'"
+              @click="toggleTheme"
+            >
+              <span class="mshell__tool-icon" aria-hidden="true">{{ theme === 'dark' ? '☀' : '☾' }}</span>
+            </button>
+          </template>
+        </div>
+        <template v-if="release">
+          <div class="mshell__user">
+            <span class="mshell__user-avatar" aria-hidden="true">{{ adminName.slice(0, 1).toUpperCase() }}</span>
+            <span class="mshell__user-name">{{ adminName }}</span>
+            <button type="button" class="mshell__logout" :title="'退出登录'" aria-label="退出登录" @click="logout">退出</button>
+          </div>
+        </template>
+        <div class="mshell__brandline">
+          <span class="mshell__foot-name">WenFlow Admin</span>
+          <span class="mshell__foot-ver mono">v{{ version }}</span>
+        </div>
       </footer>
     </aside>
 
     <!-- 主区 -->
     <div class="mshell__main">
-      <header class="mshell__topbar">
-        <div class="mshell__crumbs">
-          <span class="mshell__crumb-group">{{ currentScene?.group }}</span>
-          <span class="mshell__crumb-sep">/</span>
-          <strong>{{ currentScene?.label }}</strong>
-          <template v-if="crumb">
-            <span class="mshell__crumb-sep">/</span>
-            <span class="mshell__crumb-sub" :title="crumbTitle || crumb">{{ crumb }}</span>
-          </template>
-        </div>
-        <div class="mshell__topbar-right">
-          <button
-            type="button"
-            class="mshell__refresh"
-            :disabled="liveLoading"
-            title="刷新真实数据"
-            @click="refreshData"
-          >
-            <span class="mshell__refresh-icon" :class="{ 'is-spinning': liveLoading }"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></span>
-            <span class="mshell__refresh-label">{{ liveLoading ? '刷新中' : '刷新' }}</span>
-          </button>
-          <button type="button" class="mshell__help" title="运营术语表 / 这是什么" @click="$emit('glossary')">
-            <span class="mshell__help-icon">?</span>
-            <span class="mshell__help-label">这是什么</span>
-          </button>
-          <button type="button" class="mshell__search" @click="$emit('palette')">
-            <span class="mshell__search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
-            <span class="mshell__search-hint">命令面板</span>
-            <span class="mshell__kbd">{{ kbdMod }}K</span>
-          </button>
-          <template v-if="release">
-            <button
-              type="button"
-              class="mshell__density"
-              :title="density === 'compact' ? '当前紧凑密度 · 点击切换标准' : '当前标准密度 · 点击切换紧凑'"
-              :aria-label="density === 'compact' ? '切换到标准密度' : '切换到紧凑密度'"
-              @click="toggleDensity"
-            >
-              <span class="mshell__density-icon" aria-hidden="true">{{ density === 'compact' ? '⊟' : '⊞' }}</span>
-            </button>
-            <button
-              type="button"
-              class="mshell__theme"
-              :title="theme === 'dark' ? '切换到浅色模式' : '切换到暗色模式'"
-              :aria-label="theme === 'dark' ? '切换到浅色模式' : '切换到暗色模式'"
-              @click="toggleTheme"
-            >
-              <span class="mshell__theme-icon" aria-hidden="true">{{ theme === 'dark' ? '☀' : '☾' }}</span>
-            </button>
-            <span class="mshell__admin">{{ adminName }}</span>
-            <button type="button" class="mshell__logout" @click="logout">退出</button>
-          </template>
-        </div>
-      </header>
       <main ref="contentEl" class="mshell__content">
         <slot />
       </main>
@@ -313,8 +309,6 @@ async function logout() {
   window.location.replace('/admin/login')
 }
 
-const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.current))
-
 /** 置顶独立入口（D5）：pinned 项渲染在分组上方（无组标题） */
 const pinnedScenes = computed(() => MOCK_SCENES.filter((s) => s.pinned))
 
@@ -337,7 +331,6 @@ const groupedScenes = computed(() => {
 /** 组标题 SVG 图标（lucide 风格线性图标，内联 path） */
 const GROUP_ICONS: Record<string, string> = {
   学习者: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
-  仿真实验室: '<path d="M10 2v7.5L4.5 19a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L14 9.5V2"/><path d="M8.5 2h7"/><path d="M7 14h10"/>',
   'Skill 管理': '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
   运营: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
   配置: '<line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/>',
@@ -383,6 +376,16 @@ watch(
       openGroups.value = new Set(openGroups.value).add(g.title)
       persistOpenGroups()
     }
+  },
+  { immediate: true }
+)
+/* 告警平息口径：进入告警场景即视为已读（侧栏 go() 之外，TabBar/命令面板/深链直达也应平息；
+   用 props.current watch 而非仅 Shell 点击，保证各导航路径一致） */
+watch(
+  () => props.current,
+  (cur) => {
+    const item = MOCK_SCENES.find((s) => s.id === cur)
+    if (item && alarmNavBadges.has(item.id)) markAlarmRead(item)
   },
   { immediate: true }
 )
@@ -574,16 +577,106 @@ function groupBadgeTitle(title: string): string {
   50% { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0); }
 }
 
-/* 左侧底部：极简品牌行（WenFlow Admin + 版本；弱化处理，不抢导航注意力） */
+/* 左侧底部：工具行 + 用户区 + 品牌行（原顶栏功能迁入侧栏 C5） */
 .mshell__foot {
+  display: grid;
+  gap: 8px;
+  padding: 10px 10px 8px;
+  border-top: 1px solid #eef2fa;
+  flex-shrink: 0;
+}
+/* 工具行：刷新 / 这是什么 / 密度 / 主题，一行 icon 按钮（title 兜底语义，节省纵向空间） */
+.mshell__tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-start;
+}
+.mshell__tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #8a97ab;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.mshell__tool:hover { background: #eef2fa; color: var(--mk-blue, #2c63d0); }
+.mshell__tool:disabled { opacity: 0.45; cursor: default; }
+.mshell__tool-icon { font-size: var(--mk-fs-13); line-height: 1; }
+.mshell__tool-icon--q {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--mk-blue, #2c63d0);
+  color: #fff;
+  font-size: var(--mk-fs-10);
+  font-weight: 800;
+}
+.mshell__refresh-icon.is-spinning { animation: mshell-spin 0.8s linear infinite; }
+@keyframes mshell-spin { to { transform: rotate(360deg); } }
+
+/* 用户区：头像 + 用户名 + 退出 */
+.mshell__user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 2px;
+  border-top: 1px solid #f2f5fb;
+}
+.mshell__user-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #dbe9ff;
+  color: var(--mk-accent-deep, #1f57cc);
+  font-size: var(--mk-fs-11);
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.mshell__user-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--mk-fs-12);
+  font-weight: 700;
+  color: var(--mk-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mshell__logout {
+  border: 0;
+  background: transparent;
+  color: var(--mk-faint);
+  font: inherit;
+  font-size: var(--mk-fs-11);
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+.mshell__logout:hover { background: rgba(220, 38, 38, 0.08); color: var(--mk-red, #dc2626); }
+
+/* 品牌行弱化 */
+.mshell__brandline {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 12px 12px 6px;
-  border-top: 1px solid #eef2fa;
+  padding: 0 2px;
   color: var(--mk-faint);
   font-size: var(--mk-fs-11);
-  flex-shrink: 0;
 }
 .mshell__foot-name { font-weight: 700; color: #8a97ab; letter-spacing: 0.02em; }
 .mshell__foot-ver {
@@ -601,67 +694,13 @@ function groupBadgeTitle(title: string): string {
   font-weight: 700;
 }
 
-/* 主区：高度锁定在壳层（shell 100dvh）内，content 行 1fr 承接剩余高度 */
-.mshell__main { display: grid; grid-template-rows: auto 1fr; min-width: 0; height: 100%; min-height: 0; }
-.mshell__topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  min-height: 52px;
-  padding: 7px 20px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid #e1e8f2;
-}
-.mshell__crumbs { display: flex; align-items: center; gap: 8px; }
-.mshell__crumb-group { color: var(--mk-faint); font-size: var(--mk-fs-12_5); font-weight: 600; }
-.mshell__crumb-sep { color: #c3cede; margin: 0 2px; }
-.mshell__crumb-sub {
-  color: var(--mk-accent-deep);
-  font-size: var(--mk-fs-12_5);
-  font-weight: 700;
-  font-family: var(--mk-mono);
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mshell__help {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 12px;
-  border: 1px solid var(--mk-blue, #2c63d0);
-  border-radius: 8px;
-  background: #eef5ff;
-  color: var(--mk-blue, #2c63d0);
-  font: inherit;
-  font-size: var(--mk-fs-12_5);
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-.mshell__help:hover { background: #dce9ff; border-color: rgba(44, 99, 208, 0.55); }
-.mshell__help-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: var(--mk-blue, #2c63d0);
-  color: #fff;
-  font-size: var(--mk-fs-11);
-  font-weight: 800;
-  line-height: 1;
-}
-.mshell__help-label { white-space: nowrap; }
+/* 侧栏搜索条（原顶栏「命令面板 Ctrl+K」迁入）：全宽搜索框形态，折叠态仅放大镜 */
 .mshell__search {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  margin: 2px 10px 8px;
+  padding: 7px 10px;
   border: 1px solid #e1e8f2;
   border-radius: 8px;
   background: #fafbfc;
@@ -669,97 +708,38 @@ function groupBadgeTitle(title: string): string {
   font: inherit;
   font-size: var(--mk-fs-12);
   cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  flex-shrink: 0;
 }
+.mshell__search:hover { border-color: rgba(44, 99, 208, 0.45); background: #f3f7ff; }
 .mshell__search-hint { white-space: nowrap; }
-/* 右侧内容区：应用式布局的唯一滚动容器（侧栏/顶栏固定，内容区内滚；
-   列表页用 .mk-page--fill 让表格区内滚、分页器吸底） */
+
+/* 主区：高度锁定在壳层（shell 100dvh）内，content 行 1fr 承接剩余高度 */
+.mshell__main { display: grid; grid-template-rows: 1fr; min-width: 0; height: 100%; min-height: 0; }
+/* 内容区：应用式布局的唯一滚动容器（侧栏/工具行固定，内容区内滚；
+   列表页用 .mk-page--fill 让表格区内滚、分页器吸底。
+   flex 列：TabBar（.mk-tabbar）固定吸顶，页面块（其余子元素）独占剩余高度并内滚，
+   fill 页 height:100% 相对页面块计算 → 无 TabBar 38px 导致的整页多余滚动 */
 .mshell__content {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.mshell__content > :not(.mk-tabbar) {
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
 }
 
-/* release 模式：顶栏右侧管理员区 */
-.mshell__topbar-right { display: flex; align-items: center; gap: 12px; }
-.mshell__refresh {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border: 1px solid #e1e8f2;
-  border-radius: 8px;
-  background: #fff;
-  color: #5b6577;
-  font: inherit;
-  font-size: var(--mk-fs-12);
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
-}
-.mshell__refresh:hover:not(:disabled) { color: var(--mk-blue, #2c63d0); border-color: rgba(44, 99, 208, 0.4); }
-.mshell__refresh:disabled { cursor: default; color: var(--mk-faint); }
-.mshell__refresh-icon { display: inline-block; font-size: var(--mk-fs-13); line-height: 1; }
-.mshell__refresh-icon.is-spinning { animation: mshell-spin 0.9s linear infinite; }
-@keyframes mshell-spin { to { transform: rotate(360deg); } }
-.mshell__admin { font-size: var(--mk-fs-12); font-weight: 700; color: #1a2a44; }
-.mshell__theme {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid #e1e8f2;
-  border-radius: 8px;
-  background: #fff;
-  color: #5b6577;
-  font: inherit;
-  font-size: var(--mk-fs-14);
-  line-height: 1;
-  cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-.mshell__theme:hover { color: var(--mk-blue, #2c63d0); border-color: rgba(44, 99, 208, 0.4); }
-.mshell__theme-icon { display: inline-block; }
-.mshell__density {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid #e1e8f2;
-  border-radius: 8px;
-  background: #fff;
-  color: #5b6577;
-  font: inherit;
-  font-size: var(--mk-fs-14);
-  line-height: 1;
-  cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-.mshell__density:hover { color: var(--mk-blue, #2c63d0); border-color: rgba(44, 99, 208, 0.4); }
-.mshell__density-icon { display: inline-block; font-weight: 700; }
-.mshell__logout {
-  border: 1px solid #e1e8f2;
-  background: #fff;
-  padding: 5px 12px;
-  border-radius: 8px;
-  font: inherit;
-  font-size: var(--mk-fs-12);
-  font-weight: 700;
-  color: #5b6577;
-  cursor: pointer;
-}
-.mshell__logout:hover { color: #dc2626; border-color: rgba(220, 38, 38, 0.35); }
-
-/* 1440px 中间档：侧栏/顶栏适度放大（幅度约为 2000 档一半） */
+/* 1440px 中间档：侧栏适度放大（幅度约为 2000 档一半） */
 @media (min-width: 1440px) {
   .mshell { grid-template-columns: 240px minmax(0, 1fr); }
   .mshell__item { font-size: 13.5px; padding: 9px 11px; }
   .mshell__group-title { font-size: 11.5px; }
   .mshell__item-badge { font-size: 11.5px; }
-  .mshell__topbar { min-height: 56px; padding: 8px 22px; }
-  .mshell__crumb-group, .mshell__crumb-sub { font-size: 13.5px; }
   .mshell__search { font-size: 13px; }
   .mshell__logo-full { height: 58px; }
 }
@@ -770,8 +750,6 @@ function groupBadgeTitle(title: string): string {
   .mshell__item { font-size: 14px; padding: 10px 12px; }
   .mshell__group-title { font-size: 12px; }
   .mshell__item-badge { font-size: 12px; }
-  .mshell__topbar { min-height: 60px; padding: 8px 24px; }
-  .mshell__crumb-group, .mshell__crumb-sub { font-size: 14px; }
   .mshell__search { font-size: 13.5px; }
   .mshell__logo-full { height: 64px; }
 }
@@ -785,10 +763,9 @@ function groupBadgeTitle(title: string): string {
   .mshell__item { font-size: 14.5px; padding: 11px 12px; gap: 8px; }
   .mshell__item-badge { font-size: 12.5px; padding: 2px 9px; }
   .mshell__foot { font-size: 13px; padding: 10px 12px; }
-  .mshell__topbar { min-height: 64px; padding: 8px 24px; }
-  .mshell__crumb-group,
-  .mshell__crumb-sub { font-size: 13.5px; }
   .mshell__search { padding: 8px 12px; font-size: 13.5px; }
+  .mshell__tool { width: 30px; height: 30px; }
+  .mshell__user-avatar { width: 28px; height: 28px; }
 }
 @media (min-width: 2800px) {
   .mshell {
@@ -800,10 +777,11 @@ function groupBadgeTitle(title: string): string {
   .mshell__item { font-size: 17px; padding: 14px 14px; gap: 10px; border-radius: 10px; }
   .mshell__item-badge { font-size: 14px; padding: 3px 10px; }
   .mshell__foot { font-size: 15px; padding: 12px 14px; }
-  .mshell__topbar { min-height: 78px; padding: 10px 28px; }
-  .mshell__crumb-group,
-  .mshell__crumb-sub { font-size: 16px; }
   .mshell__search { padding: 10px 14px; font-size: 16px; }
+  .mshell__tool { width: 36px; height: 36px; }
+  .mshell__tool-icon { font-size: 16px; }
+  .mshell__user-avatar { width: 32px; height: 32px; }
+  .mshell__user-name { font-size: 14px; }
 }
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：侧栏再加宽、字号继续放大 */
@@ -816,10 +794,11 @@ function groupBadgeTitle(title: string): string {
   .mshell__item { font-size: 20px; padding: 16px 16px; gap: 12px; }
   .mshell__item-badge { font-size: 16.5px; padding: 4px 12px; }
   .mshell__foot { font-size: 17.5px; padding: 14px 16px; }
-  .mshell__topbar { min-height: 92px; padding: 12px 32px; }
-  .mshell__crumb-group,
-  .mshell__crumb-sub { font-size: 18.5px; }
   .mshell__search { padding: 12px 16px; font-size: 18.5px; }
+  .mshell__tool { width: 42px; height: 42px; }
+  .mshell__tool-icon { font-size: 19px; }
+  .mshell__user-avatar { width: 38px; height: 38px; }
+  .mshell__user-name { font-size: 17px; }
 }
 
 /* 侧栏折叠（D5）：用户切换 data-collapsed 驱动 icon-only 模式；
@@ -827,9 +806,32 @@ function groupBadgeTitle(title: string): string {
 .mshell[data-collapsed='true'] { grid-template-columns: 64px minmax(0, 1fr); }
 .mshell[data-collapsed='true'] .mshell__item-label,
 .mshell[data-collapsed='true'] .mshell__item-badge,
-.mshell[data-collapsed='true'] .mshell__group-head,
-.mshell[data-collapsed='true'] .mshell__search { display: none; }
-.mshell[data-collapsed='true'] .mshell__foot { display: none; }
+.mshell[data-collapsed='true'] .mshell__group-head { display: none; }
+/* 折叠态：搜索条收为仅放大镜 icon 方块；工具/用户区收为 icon 列 */
+.mshell[data-collapsed='true'] .mshell__search {
+  margin: 2px 8px 8px;
+  padding: 0;
+  width: 34px;
+  height: 30px;
+  justify-content: center;
+}
+.mshell[data-collapsed='true'] .mshell__search-hint,
+.mshell[data-collapsed='true'] .mshell__search .mshell__kbd { display: none; }
+.mshell[data-collapsed='true'] .mshell__foot {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 10px 8px 8px;
+}
+.mshell[data-collapsed='true'] .mshell__tools {
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+.mshell[data-collapsed='true'] .mshell__user { flex-direction: column; gap: 4px; justify-content: center; padding: 6px 0; }
+.mshell[data-collapsed='true'] .mshell__user-name { display: none; }
+.mshell[data-collapsed='true'] .mshell__logout { padding: 4px; }
+.mshell[data-collapsed='true'] .mshell__brandline { display: none; }
 .mshell[data-collapsed='true'] .mshell__item { justify-content: center; padding: 4px 0; }
 .mshell[data-collapsed='true'] .mshell__group-body .mshell__item { padding-left: 0; }
 .mshell[data-collapsed='true'] .mshell__item-glyph { display: inline-flex; }
@@ -839,13 +841,6 @@ function groupBadgeTitle(title: string): string {
 .mshell[data-collapsed='true'] .mshell__collapse { position: absolute; right: -14px; top: 18px; }
 .mshell[data-collapsed='true'] .mshell__pinned { justify-content: center; padding-bottom: 8px; border-bottom-color: #232f45; }
 .mshell[data-collapsed='true'] .mshell__group { margin-top: 10px; }
-
-/* 顶栏低分辨率紧凑（D5）：<1920px 隐藏面包屑组名（组在侧栏分组已可见，
-   面包屑只留页面名 + 二级页），顶栏聚焦全局工具（对标 SaaS 顶栏职责） */
-@media (max-width: 1919px) {
-  .mshell__crumb-group { display: none; }
-  .mshell__crumbs { gap: 6px; }
-}
 
 /* 折叠按钮（展开态右上角，悬停显示 tooltip 由 title 提供） */
 .mshell__collapse {
@@ -868,10 +863,28 @@ function groupBadgeTitle(title: string): string {
   .mshell { grid-template-columns: 64px minmax(0, 1fr); }
   .mshell__item-label,
   .mshell__item-badge,
-  .mshell__group-head,
-  .mshell__search { display: none; }
-  /* 窄屏图标栏：底部品牌/数据源/命令面板信息区整体隐藏（命令面板入口在顶栏） */
-  .mshell__foot { display: none; }
+  .mshell__group-head { display: none; }
+  /* 窄屏图标栏：搜索/工具/用户区收为 icon（命令面板入口在侧栏搜索条，不能整体隐藏） */
+  .mshell__search {
+    margin: 2px 8px 8px;
+    padding: 0;
+    width: 34px;
+    height: 30px;
+    justify-content: center;
+  }
+  .mshell__search-hint,
+  .mshell__search .mshell__kbd { display: none; }
+  .mshell__foot {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    padding: 10px 8px 8px;
+  }
+  .mshell__tools { flex-direction: column; gap: 6px; align-items: center; }
+  .mshell__user { flex-direction: column; gap: 4px; justify-content: center; padding: 6px 0; }
+  .mshell__user-name { display: none; }
+  .mshell__logout { padding: 4px; }
+  .mshell__brandline { display: none; }
   /* 窄屏图标栏：显示单字图标，悬停提示全名 */
   .mshell__item { justify-content: center; padding: 4px 0; }
   .mshell__group-body .mshell__item { padding-left: 0; }
@@ -907,20 +920,18 @@ html[data-theme='dark'] {
   .mshell__foot { border-top-color: #1f2a3d; }
   .mshell__foot-name { color: #64748b; }
   .mshell__foot-ver { color: #3d4c66; }
-  .mshell__topbar { background: rgba(19, 27, 42, 0.88); border-bottom-color: #232f45; }
   .mshell__collapse { background: #131b2a; border-color: #232f45; color: #9fb0c8; }
   .mshell__collapse:hover { color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
-  .mshell__crumb-sep { color: #3d4c66; }
-  .mshell__help { background: rgba(91, 141, 239, 0.14); border-color: rgba(91, 141, 239, 0.4); color: #7aa2ff; }
-  .mshell__help:hover { background: rgba(91, 141, 239, 0.24); }
-  .mshell__help-icon { background: var(--mk-blue); }
   .mshell__search { background: #131b2a; border-color: #232f45; color: #6b7c96; }
+  .mshell__search:hover { background: #1b2740; border-color: rgba(91, 141, 239, 0.4); }
   .mshell__kbd { background: #1d2739; border-color: #2a3850; }
-  .mshell__refresh, .mshell__logout { background: #131b2a; border-color: #232f45; color: #9fb0c8; }
-  .mshell__theme, .mshell__density { background: #131b2a; border-color: #232f45; color: #9fb0c8; }
-  .mshell__theme:hover, .mshell__density:hover { color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
-  .mshell__admin { color: #dce5f1; }
-  .mshell__refresh:hover:not(:disabled) { color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
-  .mshell__admin { color: #e6edf7; }
+  .mshell__tool { color: #6b7c96; }
+  .mshell__tool:hover { background: #1b2740; color: #7aa2ff; }
+  .mshell__tool-icon--q { background: var(--mk-blue); }
+  .mshell__user { border-top-color: #1f2a3d; }
+  .mshell__user-avatar { background: #1d2739; color: #7aa2ff; }
+  .mshell__user-name { color: #e6edf7; }
+  .mshell__logout { color: #64748b; }
+  .mshell__logout:hover { background: rgba(220, 38, 38, 0.14); color: #f87171; }
 }
 </style>

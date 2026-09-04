@@ -27,14 +27,18 @@
       </span>
     </div>
 
-    <!-- 日志 / Trace 链路 tab 切换（Trace 为执行日志下钻视图） -->
+    <!-- 日志 / Trace 链路 / 成本分析 tab（Trace 为执行日志下钻视图；成本分析为同源观测并入） -->
     <div class="mk-pills el-tabs">
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': elTab === 'logs' }" @click="elTab = 'logs'">日志</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': elTab === 'trace' }" @click="elTab = 'trace'">Trace 链路</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': elTab === 'logs' }" @click="switchElTab('logs')">日志</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': elTab === 'trace' }" @click="switchElTab('trace')">Trace 链路</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': elTab === 'cost' }" @click="switchElTab('cost')">成本分析</button>
     </div>
 
     <!-- ===== Tab2: Trace 链路（嵌入 TraceWaterfall 组件） ===== -->
     <TraceWaterfall v-if="elTab === 'trace'" embedded />
+
+    <!-- ===== Tab3: 成本分析（嵌入 TokenCost 组件，观测同域并入 2026-09-04） ===== -->
+    <TokenCost v-if="elTab === 'cost'" embedded />
 
     <!-- ===== Tab1: 日志流（默认） ===== -->
     <template v-if="elTab === 'logs'">
@@ -258,21 +262,43 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { intent, openSkillDrawer, clearInvestigation, dataSource } from './store'
 import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, totalPagesOf, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import TraceWaterfall from './TraceWaterfall.vue'
+import TokenCost from './TokenCost.vue'
 import { TERMS, errorCodeLabel } from './terms'
 
-/* 日志 / Trace 链路 tab（Trace 为执行日志下钻视图） */
-const elTab = ref<'logs' | 'trace'>('logs')
+/* 日志 / Trace 链路 / 成本分析 tab（Trace 为执行日志下钻视图；成本分析为观测同域并入） */
+const EL_TABS = ['logs', 'trace', 'cost'] as const
+type ElTab = (typeof EL_TABS)[number]
+const elTab = ref<ElTab>('logs')
+const route = useRoute()
+const router = useRouter()
+/* URL ↔ tab 双向同步：?tab=logs|trace|cost（深链/刷新可寻址；合并宿主页统一约定） */
+watch(
+  () => route.query.tab,
+  (t) => {
+    const v = typeof t === 'string' && (EL_TABS as readonly string[]).includes(t) ? (t as ElTab) : null
+    if (v && v !== elTab.value) elTab.value = v
+    else if (!v && elTab.value !== 'logs') elTab.value = 'logs'
+  },
+  { immediate: true }
+)
+/** 切 tab（同步 ?tab= URL，深链/刷新可寻址） */
+function switchElTab(t: ElTab) {
+  elTab.value = t
+  if (route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
+}
 /** 切到 Trace tab 并让瀑布聚焦指定链路/会话（openTrace/openSession 深链接入） */
 function showTrace(traceId?: string, sessionId?: string) {
   elTab.value = 'trace'
   if (sessionId) intent.sessionId = sessionId
   else if (traceId) intent.traceId = traceId
+  if (route.query.tab !== 'trace') void router.replace({ query: { ...route.query, tab: 'trace' } })
 }
 /* 深链：openTrace/openSession 设置 intent.traceFocus 后导航到本页 → 自动切 Trace tab */
 watch(

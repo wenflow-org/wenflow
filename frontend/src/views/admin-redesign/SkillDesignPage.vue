@@ -2,7 +2,7 @@
   <div class="mk-page sdp">
     <!-- 顶部：返回 + 状态条（与 console 统一的运维简报语言） -->
     <header class="sdp-head">
-      <button type="button" class="sdp-back" @click="goConsole">← 控制台</button>
+      <button type="button" class="mk-back" @click="goConsole">← 控制台</button>
       <div v-if="overview" class="mk-status" :class="statusToneCls">
         <span class="mk-status__dot"></span>
         <strong class="mk-status__title">{{ overview.displayName || skillId }}</strong>
@@ -365,19 +365,6 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   align-items: start;
   padding: 4px 0 2px;
 }
-.sdp-back {
-  border: 0;
-  background: transparent;
-  color: var(--mk-blue);
-  font: inherit;
-  font-size: var(--mk-fs-12_5);
-  font-weight: 700;
-  cursor: pointer;
-  padding: 0;
-  white-space: nowrap;
-  width: fit-content;
-}
-.sdp-back:hover { text-decoration: underline; }
 .sdp-parent { font-size: var(--mk-fs-12); font-weight: 600; white-space: nowrap; }
 .sdp-ellipsis {
   max-width: 320px;
@@ -414,7 +401,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
 @media (min-width: 3600px) {
   /* 4K：设计页独立渲染（无全局 zoom），字号大幅放大以对齐管理台基线 */
   .sdp { max-width: 3000px; }
-  .sdp-back { font-size: 19px; }
+  .mk-back { font-size: 19px; }
   .sdp-parent { font-size: 18px; }
   .sdp-drift { font-size: 18px; padding: 14px 18px; }
   .sdp-drift code { font-size: 17px; }

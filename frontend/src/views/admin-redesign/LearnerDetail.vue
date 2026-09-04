@@ -8,7 +8,7 @@
     </div>
   </div>
   <div v-else-if="loading" class="mk-page ld">
-    <button type="button" class="mk-back" @click="closeSubPage">← 学习者中心</button>
+    <button type="button" class="mk-back" @click="closeSubPage">← 用户与学习者</button>
     <div class="mk-empty mk-empty--min">
       <span class="mk-spinner" aria-hidden="true"></span>
       <strong>正在加载学习者详情…</strong>
@@ -16,10 +16,10 @@
   </div>
   <div v-else-if="d" class="mk-page ld">
 
-    <!-- 头部卡（布局重构：返回 + 身份 + 徽章 + 操作合并，与 UserDetail 页头卡同形态） -->
+    <!-- 头部卡（布局重构：返回独立成行 + 身份 + 徽章 + 操作，与 UserDetail 页头卡同形态） -->
     <header class="ld-head">
+      <button type="button" class="mk-back" @click="closeSubPage">← 用户与学习者</button>
       <div class="ld-head__top">
-        <button type="button" class="mk-back" @click="closeSubPage">← 学习者中心</button>
         <div class="ld-id">
           <span class="ld-avatar">{{ d.name.charAt(0) }}</span>
           <div class="ld-id__main">
@@ -272,6 +272,27 @@
             </div>
           </div>
         </section>
+        <section v-if="memoryTraces.length" class="mk-card">
+          <div class="mk-card__head"><h3 class="mk-card__title">记忆痕迹与保持率（FSRS）</h3></div>
+          <table class="ld-mt">
+            <thead>
+              <tr><th>概念</th><th>掌握度</th><th>稳定性(天)</th><th>难度</th><th>保持率</th><th>到期</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="t in memoryTraces" :key="t.conceptKey">
+                <td>{{ t.label || t.conceptKey }}</td>
+                <td>{{ Math.round((t.masteryScore || 0) * 100) }}%</td>
+                <td>{{ t.fsrsStability != null ? t.fsrsStability.toFixed(1) : '—' }}</td>
+                <td>{{ t.fsrsDifficulty != null ? t.fsrsDifficulty.toFixed(1) : '—' }}</td>
+                <td>
+                  <span v-if="t.retrievability != null" :class="t.retrievability < 0.5 ? 'ld-mt--low' : t.retrievability < 0.8 ? 'ld-mt--mid' : 'ld-mt--high'">{{ Math.round(t.retrievability * 100) }}%</span>
+                  <span v-else class="ld-none">未初始化</span>
+                </td>
+                <td>{{ t.dueAt ? timeAgo(t.dueAt) : '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
         <section v-if="controlFlags.length" class="mk-card">
           <div class="mk-card__head"><h3 class="mk-card__title">教学控制信号</h3></div>
           <div class="ld-flags">
@@ -491,7 +512,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { subPage, closeSubPage, openSubPage, setSubPageLabel } from './store'
-import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration } from './live'
+import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab } from './learner-profile'
 import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
@@ -532,6 +553,7 @@ interface EvidenceItem {
 const liveDetail = ref<Detail | null>(null)
 const rawDetail = ref<Record<string, unknown> | null>(null)
 const liveEvidence = ref<EvidenceItem[]>([])
+const memoryTraces = ref<MemoryTraceRow[]>([])
 /** 学习压力记录曲线：learning_metrics 历史（LSS/KTL/LF/LSB），来自 evidence 接口 loadCurve */
 const loadCurveRaw = ref<LoadCurvePoint[]>([])
 /** 预测校准（实证命中率 + 最近预测），异步加载失败为 null */
@@ -655,6 +677,8 @@ async function loadDetail(id: string | undefined) {
     loadCurveRaw.value = evidenceRes.loadCurve || []
     // 校准数据独立容错（失败仅卡片不显示）
     void liveGetLearnerPredictions(id, includeTest).then((calib) => { predictionCalib.value = calib })
+    // 记忆痕迹（含 FSRS 保持率）独立容错（失败仅卡片不显示）
+    void liveGetMemoryTraces({ userId: id, includeVirtual: includeTest }).then((rows) => { memoryTraces.value = rows }).catch(() => { memoryTraces.value = [] })
     liveDetail.value = {
       name: base?.name || String(model.userName || id),
       email: base?.email || '',
@@ -1466,6 +1490,15 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-kv__row:last-child { border-bottom: none; }
 .ld-kv__row span { color: var(--mk-faint); }
 .ld-kv__row strong { font-weight: 600; white-space: pre-wrap; }
+
+.ld-mt { width: 100%; border-collapse: collapse; font-size: var(--mk-fs-12); }
+.ld-mt th, .ld-mt td { padding: 8px 16px; text-align: left; border-bottom: 1px solid #f0f2f5; }
+.ld-mt th { color: var(--mk-faint); font-weight: 600; }
+.ld-mt td { font-variant-numeric: tabular-nums; }
+.ld-mt tr:last-child td { border-bottom: none; }
+.ld-mt--low { color: #d64545; font-weight: 700; }
+.ld-mt--mid { color: #b98900; font-weight: 600; }
+.ld-mt--high { color: #2f9e44; font-weight: 600; }
 
 .ld-metrics {
   display: grid;

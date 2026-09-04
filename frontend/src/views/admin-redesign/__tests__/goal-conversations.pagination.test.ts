@@ -27,10 +27,11 @@ const { apiObject } = vi.hoisted(() => ({
 }));
 
 vi.mock('../store', async () => {
-  const { ref } = await import('vue');
+  const { ref, reactive } = await import('vue');
   return {
     isLive: ref(true),
     dataSource: ref('live'),
+    intent: reactive({ scene: 'goal-conversations', statusFilter: '', agentFilter: '', traceId: '', quickAction: '' }),
     openSession: vi.fn(),
     openSubPage: vi.fn()
   };

@@ -5,6 +5,15 @@
       <strong class="mk-status__title">{{ samples.length ? '虚拟学习者' : '暂无虚拟学习者' }}</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ samples.length }} 人</span>
+      <button
+        v-for="opt in stateFilterOptions.filter((o) => o.key)"
+        :key="opt.key"
+        type="button"
+        class="lc-count-link"
+        :class="{ 'lc-count-link--on': stateFilter === opt.key }"
+        :title="`点击筛选「${opt.label}」虚拟学习者`"
+        @click="stateFilter = stateFilter === opt.key ? '' : opt.key"
+      >{{ opt.label }} {{ opt.count }}</button>
       <span class="mk-status__meta" :title="'今日虚拟/测试账号的 Agent 调用数（自然日口径，与总览页真实调用互斥）'">今日调用 {{ runStats.todayCalls ?? 0 }}</span>
       <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-status__meta vl-truncated" :title="`后端共 ${liveVirtualsTotal} 人，列表仅加载前 ${samples.length} 行`">
         已截断 · 共 {{ liveVirtualsTotal }} 人
@@ -89,20 +98,6 @@
         <div class="mk-filter">
           <input class="mk-filter__input" v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
         </div>
-        <!-- 状态过滤 chips（与搜索同行；计数联动 samples） -->
-        <div v-if="isLive" class="vl-filters" role="tablist" aria-label="按状态过滤">
-          <button
-            v-for="opt in stateFilterOptions"
-            :key="opt.key"
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': stateFilter === opt.key }"
-            @click="stateFilter = opt.key"
-          >
-            {{ opt.label }} <span class="vl-filter-count">{{ opt.count }}</span>
-          </button>
-          <button v-if="isFiltered" type="button" class="mk-link vl-filter-clear" @click="clearFilters">清除筛选</button>
-        </div>
         <div class="mk-card__head-right">
           <span class="mk-card__meta">{{ filtered.length }} / {{ samples.length }} 人<template v-if="filtered.length < samples.length">（已筛选）</template> · 点击行查看画像</span>
         </div>
@@ -111,20 +106,32 @@
       <MockSkeletonTable v-if="liveLoading && !samples.length" :cols="6" />
       <div v-else-if="filtered.length" class="mk-table-scroll">
       <table class="mk-table mk-table--click mk-table--fixed">
+        <colgroup>
+          <col v-if="isLive" style="width:32px">
+          <col style="width:var(--mk-col-flex-min, 200px);max-width:var(--mk-col-flex-max, 840px)">
+          <col style="width:var(--mk-col-model-wide, 165px)">
+          <col style="width:var(--mk-col-badge, 76px)">
+          <col style="width:var(--mk-col-num, 64px)">
+          <col style="width:150px">
+          <col style="width:var(--mk-col-num, 64px)">
+          <col style="width:var(--mk-col-num, 64px)">
+          <col style="width:var(--mk-col-time-full, 128px)">
+          <col style="width:var(--mk-col-actions-wide, 140px)">
+        </colgroup>
         <thead>
           <tr>
-            <th v-if="isLive" scope="col" style="width:32px">
+            <th v-if="isLive" scope="col">
               <input type="checkbox" aria-label="全选" :checked="allChecked" @change="toggleAll" />
             </th>
-            <th style="width:180px">虚拟学习者</th>
-            <th style="width:200px">长期倾向</th>
-            <th class="mk-col--badge">故事池</th>
-            <th class="mk-col--num mk-th--right" title="累计会话数（全部会话，含终态）">会话</th>
-            <th title="当前运行中/创建中的会话数及最近阶段；点击进入会话座舱" style="width:150px">运行中</th>
-            <th class="mk-col--num mk-th--right" title="已失败/已终止会话数（全量聚合）">失败</th>
-            <th class="mk-col--num mk-th--right" title="超过回收阈值无写入且无活跃租约的会话数（可在状态条一键回收）">卡死</th>
-            <th class="mk-col--time-full">创建</th>
-            <th class="mk-col--actions-wide">操作</th>
+            <th>虚拟学习者</th>
+            <th>长期倾向</th>
+            <th>故事池</th>
+            <th class="mk-th--right" title="累计会话数（全部会话，含终态）">会话</th>
+            <th title="当前运行中/创建中的会话数及最近阶段；点击进入会话座舱">运行中</th>
+            <th class="mk-th--right" title="已失败/已终止会话数（全量聚合）">失败</th>
+            <th class="mk-th--right" title="超过回收阈值无写入且无活跃租约的会话数（可在状态条一键回收）">卡死</th>
+            <th>创建</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody>
@@ -1402,10 +1409,16 @@ function startBatchPolling() { batchPolling.start() }
 .mk-num--na { color: var(--mk-faint); font-weight: 600; }
 
 /* 状态过滤 chips（一级页：与搜索同行，计数联动 samples） */
-.vl-filters { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.vl-filters .mk-pill { font-size: var(--mk-fs-11); padding: 2px 9px; }
-.vl-filter-count { font-weight: 800; margin-left: 2px; opacity: 0.75; }
-.vl-filter-clear { font-size: var(--mk-fs-12); margin-left: 4px; }
+/* 页头计数锚点（对齐 LearnerCenter lc-count-link）：运行中/已暂停/需关注 可点击筛选 */
+.lc-count-link {
+  border: 0; background: transparent; padding: 0;
+  font: inherit; font-size: var(--mk-fs-12_5); font-weight: 700;
+  color: var(--mk-muted); cursor: pointer;
+  border-radius: 6px;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.lc-count-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); padding: 2px 6px; margin: -2px -6px; }
+.lc-count-link--on { color: var(--mk-blue); background: rgba(44, 99, 208, 0.12); padding: 2px 6px; margin: -2px -6px; }
 .vl-state-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
 /* 自动驾驶并发配额（状态条 meta：紧凑文字形态，满员红色警示） */

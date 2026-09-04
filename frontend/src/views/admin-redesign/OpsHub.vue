@@ -1,468 +1,117 @@
 <template>
   <div class="mk-page">
-    <div class="mk-status" :class="statusTone">
+    <div class="mk-status">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">运营中心</strong>
       <span class="mk-status__sep"></span>
-      <span v-if="tab === 'workbench'" class="mk-status__meta">待处理反馈 {{ wbPendingFeedback }}</span>
-      <span v-if="tab === 'workbench'" class="mk-status__meta" :class="wbFailedPaths > 0 ? 'mk-status__meta--bad' : ''">失败路径 {{ wbFailedPaths }}</span>
-      <span v-if="tab === 'workbench'" class="mk-status__meta" :class="wbDeadLetters > 0 ? 'mk-status__meta--bad' : ''">死信 {{ wbDeadLetters }}</span>
-      <span v-if="tab === 'content'" class="mk-status__meta">路径 {{ stats?.total ?? '—' }}</span>
-      <span v-if="tab === 'content'" class="mk-status__meta">里程碑 {{ stats?.totalMilestones ?? '—' }}</span>
-      <span v-if="tab === 'content'" class="mk-status__meta">任务 {{ stats?.totalTasks ?? '—' }}</span>
-      <span v-else-if="tab === 'achievements'" class="mk-status__meta">成就定义 {{ defs.length }} · 解锁 {{ totalRecords }}</span>
-      <template v-else>
-        <span class="mk-status__meta">公告 {{ annRows }} 条</span>
-        <span class="mk-status__meta">生效中 {{ annActive }}</span>
-        <span class="mk-status__meta">草稿 {{ annDraft }}</span>
-      </template>
+      <span class="mk-status__meta">待处理反馈 {{ wbPendingFeedback }}</span>
+      <span class="mk-status__meta" :class="wbFailedPaths > 0 ? 'mk-status__meta--bad' : ''">失败路径 {{ wbFailedPaths }}</span>
+      <span class="mk-status__meta" :class="wbDeadLetters > 0 ? 'mk-status__meta--bad' : ''">死信 {{ wbDeadLetters }}</span>
+      <span class="mk-status__meta">公告 {{ ann.rows }} 条</span>
       <span class="mk-status__actions">
-        <button v-if="tab === 'content'" type="button" class="mk-status__action" :disabled="loading" @click="reload">刷新</button>
-        <button v-else-if="tab === 'announcements'" type="button" class="mk-status__action mk-status__action--primary" @click="annCreate()">新建公告</button>
+        <button type="button" class="mk-status__action" :disabled="wbLoading" @click="refreshAll">
+          {{ wbLoading ? '刷新中…' : '刷新' }}
+        </button>
       </span>
     </div>
 
-    <!-- 工作台 / 内容 / 成就 / 公告 tab 切换（独立一行） -->
-    <div class="mk-pills oh-tabs">
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'workbench' }" @click="switchTab('workbench')">工作台</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'content' }" @click="switchTab('content')">内容管理</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'achievements' }" @click="switchTab('achievements')">成就管理</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'announcements' }" @click="switchTab('announcements')">公告</button>
-    </div>
-
-    <!-- ===== Tab0: 工作台（待办聚合 + 运营概览） ===== -->
-    <template v-if="tab === 'workbench'">
-      <!-- 待办聚合：运营需要处理的事，点击直达对应页面并预筛 -->
-      <div class="ow-todos">
-        <button type="button" class="ow-todo" :class="{ 'is-bad': wbPendingFeedback > 0 }" title="点击查看待处理反馈" @click="goFeedbackPending">
-          <span class="ow-todo__num">{{ wbPendingFeedback }}</span>
-          <span class="ow-todo__label">待处理反馈</span>
-          <span class="ow-todo__hint">学习者低分反馈等待分流</span>
-        </button>
-        <button type="button" class="ow-todo" :class="{ 'is-bad': wbFailedPaths > 0 }" title="点击查看生成失败路径" @click="goFailedPaths">
-          <span class="ow-todo__num">{{ wbFailedPaths }}</span>
-          <span class="ow-todo__label">生成失败路径</span>
-          <span class="ow-todo__hint">目标对话产出路径失败，需排查</span>
-        </button>
-        <button type="button" class="ow-todo" :class="{ 'is-bad': wbDeadLetters > 0 }" title="点击查看 outbox 死信" @click="goDeadLetters">
-          <span class="ow-todo__num">{{ wbDeadLetters }}</span>
-          <span class="ow-todo__label">Outbox 死信</span>
-          <span class="ow-todo__hint">领域事件投递失败，影响画像/成就</span>
-        </button>
-        <button type="button" class="ow-todo" :class="{ 'is-warn': annDraft > 0 }" title="点击查看草稿公告" @click="switchTab('announcements')">
-          <span class="ow-todo__num">{{ annDraft }}</span>
-          <span class="ow-todo__label">草稿公告</span>
-          <span class="ow-todo__hint">已创建未发布的公告</span>
-        </button>
-      </div>
-
-      <!-- 运营概览：路径状态 + 公告状态 + 反馈趋势 -->
-      <div class="ow-overview">
-        <section class="mk-card">
-          <div class="mk-card__head">
-            <h4 class="mk-card__title">学习路径</h4>
-            <button type="button" class="mk-link" @click="switchTab('content')">管理 →</button>
-          </div>
-          <div class="ct-cards ow-path-cards">
-            <MkKpi v-for="c in statusCards" :key="c.label" :label="c.label" :value="c.value" :tone="c.tone" :hint="c.hint" />
-          </div>
-        </section>
-        <section class="mk-card">
-          <div class="mk-card__head">
-            <h4 class="mk-card__title">公告</h4>
-            <button type="button" class="mk-link" @click="switchTab('announcements')">管理 →</button>
-          </div>
-          <div class="ow-ann-stats">
-            <div class="ow-ann-stat"><b>{{ annActive }}</b><span>生效中</span></div>
-            <div class="ow-ann-stat"><b>{{ annDraft }}</b><span>草稿</span></div>
-            <div class="ow-ann-stat"><b>{{ annArchived }}</b><span>已下线</span></div>
-          </div>
-        </section>
-      </div>
-    </template>
-
-    <!-- ===== Tab3: 公告（运营内容子模块，嵌入 Announcements 组件） ===== -->
-    <Announcements v-if="tab === 'announcements'" ref="annRef" embedded />
-
-    <!-- ===== Tab1: 内容管理 ===== -->
-    <template v-if="tab === 'content'">
-    <!-- 状态统计（MkKpi 统一形态；失败>0 红色警示） -->
-    <div class="ct-cards">
-      <MkKpi
-        v-for="c in statusCards"
-        :key="c.label"
-        :label="c.label"
-        :value="c.value"
-        :tone="c.tone"
-        :hint="c.hint"
-      />
-    </div>
-
-    <!-- 筛选 + 列表 -->
-    <div class="mk-card mk-card--fill">
+    <!-- 运营待办（全宽：按严重度排序的行动清单，非统计卡） -->
+    <section class="mk-card">
       <div class="mk-card__head">
-        <div class="ct-filter">
-          <input v-model="keyword" class="mk-filter__input" placeholder="搜索标题 / 描述 / 用户…" @keydown.enter="reload" />
-          <select v-model="statusFilter" class="mk-filter__select" @change="reload">
-            <option value="">全部状态</option>
-            <option value="active">学习中</option>
-            <option value="completed">已完成</option>
-            <option value="failed">生成失败</option>
-            <option value="archived">已下线</option>
-          </select>
-          <select v-model="subjectFilter" class="mk-filter__select" @change="reload">
-            <option value="">全部学科</option>
-            <option v-for="s in subjectOptions" :key="s" :value="s">{{ s }}</option>
-          </select>
-          <button type="button" class="mk-btn mk-btn--sm" @click="reload">查询</button>
+        <h4 class="mk-card__title">运营待办</h4>
+        <span class="mk-card__meta">按优先级排序 · 点击直达对应页面</span>
+      </div>
+      <div class="ow-todo-list">
+        <button
+          v-for="t in todoItems"
+          :key="t.key"
+          type="button"
+          class="ow-todo"
+          :class="[`ow-todo--${t.severity}`, { 'ow-todo--done': t.count === 0 }]"
+          :title="t.count > 0 ? t.hint : '该事项已清零'"
+          @click="t.action"
+        >
+          <i class="ow-todo__dot" aria-hidden="true"></i>
+          <span class="ow-todo__main">
+            <strong class="ow-todo__label">{{ t.label }}</strong>
+            <em class="ow-todo__hint">{{ t.hint }}</em>
+          </span>
+          <b class="ow-todo__count" :class="{ 'ow-todo__count--bad': t.count > 0 }">{{ t.count }}</b>
+          <span class="ow-todo__go">{{ t.count > 0 ? '去处理 →' : '已清零' }}</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 状态面板：路径 / 公告并列，紧凑行式区别于 Dashboard KPI 卡 -->
+    <div class="ow-panels">
+      <section class="mk-card">
+        <div class="mk-card__head">
+          <h4 class="mk-card__title">学习路径</h4>
+          <button type="button" class="mk-link" @click="goContent">管理 →</button>
         </div>
-        <label class="mk-field--switch ct-test">
-          <input v-model="includeTest" type="checkbox" @change="reload" />
-          <span class="mk-field__label" style="margin:0">含虚拟/测试</span>
-        </label>
-      </div>
-
-      <MockSkeletonTable v-if="loading && !rows.length" :cols="7" />
-      <div v-else-if="rows.length" class="mk-table-scroll ct-list">
-        <table class="mk-table">
-          <thead>
-            <tr>
-              <th>路径</th>
-              <th>用户</th>
-              <th>学科</th>
-              <th>状态</th>
-              <th>进度</th>
-              <th class="mk-col--time-full">更新</th>
-              <th class="mk-col--actions-wide">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="p in rows" :key="p.id">
-              <td>
-                <div class="mk-cell-main">
-                  <strong class="mk-cell-text">{{ p.title }}</strong>
-                  <span class="mk-cell-sub" :title="p.id">{{ shortId(p.id, 10, 4) }} · {{ p.difficulty }} · {{ p.estimatedHours ? '~' + p.estimatedHours + 'h' : '—' }}</span>
-                </div>
-              </td>
-              <td>
-                <div class="mk-cell-main">
-                  <strong>{{ p.user?.name || '—' }}</strong>
-                  <span class="mk-cell-sub">{{ p.user?.email || '' }}</span>
-                </div>
-              </td>
-              <td><span class="mk-badge mk-badge--muted">{{ p.subject || '—' }}</span></td>
-              <td><span class="mk-badge" :class="statusBadge(p.status)">{{ statusText(p.status) }}</span></td>
-              <td>
-                <div class="ct-progress" :title="`${p.completedMilestones}/${p.totalMilestones} 里程碑`">
-                  <span class="mk-minibar"><span class="mk-minibar__fill" :data-tone="progressTone(p)" :style="{ width: progressPct(p) + '%' }"></span></span>
-                  <span class="ct-progress__num">{{ progressPct(p) }}%</span>
-                </div>
-              </td>
-              <td :title="fmtDate(p.updatedAt)">{{ timeAgo(p.updatedAt) }}</td>
-              <td>
-                <div class="mk-actions">
-                  <button type="button" class="mk-link" @click="openDetail(p)">详情</button>
-                  <button v-if="p.status !== 'archived'" type="button" class="mk-link mk-link--danger" :disabled="p.busy" @click="archive(p)">下线</button>
-                  <button v-else type="button" class="mk-link" :disabled="p.busy" @click="restore(p)">恢复</button>
-                  <div class="mk-menu">
-                    <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === p.id" @click.stop="toggleMenu(p.id)">⋯</button>
-                    <div v-if="openMenu === p.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                      <button type="button" class="mk-menu__item" @click="menuDetail(p)">查看结构</button>
-                      <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuDelete(p)">删除路径</button>
-                    </div>
-                  </div>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div v-else-if="failed" class="mk-empty">
-        <span class="mk-empty__icon" aria-hidden="true">!</span>
-        <strong>内容加载失败</strong>
-        <button type="button" class="mk-empty__action" @click="reload">重试</button>
-      </div>
-      <div v-else class="mk-empty mk-empty--min">
-        <strong>没有学习路径</strong>
-        <span>用户的目标对话生成路径后，会出现在这里。</span>
-      </div>
-
-      <Pagination
-        v-if="total > pageSize"
-        v-model:page="page"
-        :total="total"
-        :page-size="pageSize"
-        :loading="loading"
-        show-total
-        @update:page="reload"
-      />
+        <div class="ow-state">
+          <div class="ow-state__seg" aria-hidden="true">
+            <i v-for="s in pathSegments" :key="s.key" :class="`ow-seg--${s.tone}`" :style="{ width: s.pct }" :title="`${s.label} ${s.count}`"></i>
+          </div>
+          <div class="ow-state__rows">
+            <div v-for="c in pathCards" :key="c.label" class="ow-state__row">
+              <span><i class="ow-state__dot" :class="`ow-state__dot--${c.tone || 'muted'}`"></i>{{ c.label }}</span>
+              <b :class="{ 'ow-state__bad': c.tone === 'bad' && Number(c.value) > 0 }">{{ c.value }}</b>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="mk-card">
+        <div class="mk-card__head">
+          <h4 class="mk-card__title">公告</h4>
+          <button type="button" class="mk-link" @click="goAnnouncements">管理 →</button>
+        </div>
+        <div class="ow-state">
+          <div class="ow-state__seg" aria-hidden="true">
+            <i v-for="s in annSegments" :key="s.key" :class="`ow-seg--${s.tone}`" :style="{ width: s.pct }" :title="`${s.label} ${s.count}`"></i>
+          </div>
+          <div class="ow-state__rows">
+            <div v-for="s in annSegments" :key="s.key" class="ow-state__row">
+              <span><i class="ow-state__dot" :class="`ow-state__dot--${s.tone}`"></i>{{ s.label }}</span>
+              <b>{{ s.count }}</b>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
 
-    <!-- 路径结构详情抽屉 -->
-    <Teleport to="body">
-      <div v-if="detailOpen" class="mk-drawer">
-        <div class="mk-drawer__mask" @click="detailOpen = false"></div>
-        <div class="mk-drawer__panel mk-drawer__panel--wide" role="dialog" aria-label="路径结构">
-          <div class="mk-drawer__head">
-            <div>
-              <h3 class="mk-drawer__title">{{ detail?.title }}</h3>
-              <span class="mk-drawer__sub">{{ detail?.subject }} · {{ detail?.user?.name || '—' }} · {{ detail?.milestones?.length || 0 }} 个里程碑</span>
-            </div>
-            <button type="button" class="mk-drawer__close" aria-label="关闭" @click="detailOpen = false">✕</button>
-          </div>
-          <div class="mk-drawer__body">
-            <div v-if="detailLoading" class="ct-loading"><span class="mk-spinner"></span> 加载中…</div>
-            <template v-else-if="detail">
-              <p v-if="detail.description" class="ct-desc">{{ detail.description }}</p>
-              <div v-for="m in detail.milestones" :key="m.id" class="ct-milestone">
-                <div class="ct-milestone__head">
-                  <strong>{{ m.stageNumber }}. {{ m.title }}</strong>
-                  <span class="mk-badge" :class="msBadge(m.status)">{{ msText(m.status) }}</span>
-                  <span class="ct-milestone__meta mono">~{{ m.estimatedHours ?? '—' }}h</span>
-                </div>
-                <div v-if="m.subtasks.length" class="ct-subtasks">
-                  <div v-for="t in m.subtasks" :key="t.id" class="ct-subtask">
-                    <span class="ct-subtask__dot" :class="`ct-subtask__dot--${t.status}`"></span>
-                    <span class="ct-subtask__title">{{ t.title }}</span>
-                    <span class="mk-badge mk-badge--sm mk-badge--muted">{{ taskTypeText(t.taskType) }}</span>
-                    <span class="ct-subtask__meta mono">{{ t.estimatedMinutes }}min</span>
-                  </div>
-                </div>
-                <p v-else class="mk-na ct-milestone__empty">无子任务</p>
-              </div>
-            </template>
-          </div>
-        </div>
+    <!-- 生效中公告（最近发布，行动入口） -->
+    <section v-if="livePublished.length" class="mk-card">
+      <div class="mk-card__head">
+        <h4 class="mk-card__title">生效中公告</h4>
+        <button type="button" class="mk-link" @click="goAnnouncements">全部公告 →</button>
       </div>
-    </Teleport>
-    </template>
-
-    <!-- ===== Tab2: 成就管理 ===== -->
-    <template v-else>
-      <!-- 二级切换：成就定义 / 解锁记录 -->
-      <div class="mk-card ach-tabs">
-        <div class="ach-tabs__bar">
-          <span class="mk-pills">
-            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': achTab === 'defs' }" @click="switchAchTab('defs')">成就定义</button>
-            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': achTab === 'records' }" @click="switchAchTab('records')">解锁记录</button>
-          </span>
-        </div>
+      <div class="ow-ann-list">
+        <button v-for="a in livePublished" :key="a.id" type="button" class="ow-ann" @click="goAnnouncements">
+          <span class="mk-badge" :class="annBadge(a.severity)">{{ annSeverityText(a.severity) }}</span>
+          <span class="ow-ann__title" :title="a.body">{{ a.title }}</span>
+          <span class="ow-ann__meta">{{ a.publishedAt ? timeAgo(a.publishedAt) : '—' }}</span>
+          <span class="ow-ann__go">查看 →</span>
+        </button>
       </div>
-
-      <!-- 成就定义 -->
-      <div v-if="achTab === 'defs'" class="mk-card">
-        <MockSkeletonTable v-if="defsLoading && !defs.length" :cols="5" />
-        <div v-else-if="defs.length" class="mk-table-scroll ac-list">
-          <table class="mk-table">
-            <thead>
-              <tr>
-                <th>成就</th>
-                <th>类型</th>
-                <th>条件</th>
-                <th class="mk-col--num">XP</th>
-                <th class="mk-col--num">已解锁</th>
-                <th class="mk-col--actions">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="d in defs" :key="d.id">
-                <td>
-                  <div class="mk-cell-main">
-                    <strong><span class="ac-icon">{{ d.icon }}</span> {{ d.name }}</strong>
-                    <span class="mk-cell-sub">{{ d.description }}</span>
-                  </div>
-                </td>
-                <td><span class="mk-badge" :class="typeBadge(d.type)">{{ typeText(d.type) }}</span></td>
-                <td class="mk-cell-text">{{ reqText(d.requirement) }}</td>
-                <td class="mk-num">+{{ d.xpReward }}</td>
-                <td class="mk-num">{{ d.unlockCount }}</td>
-                <td>
-                  <div class="mk-actions">
-                    <button type="button" class="mk-link" @click="openGrant(d)">手动发放</button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div v-else-if="defsFailed" class="mk-empty">
-          <span class="mk-empty__icon" aria-hidden="true">!</span>
-          <strong>成就定义加载失败</strong>
-          <button type="button" class="mk-empty__action" @click="loadDefs">重试</button>
-        </div>
-      </div>
-
-      <!-- 解锁记录 -->
-      <div v-else class="mk-card mk-card--fill">
-        <div class="mk-card__head">
-          <div class="ac-filter">
-            <input v-model="recordSearch" class="mk-filter__input" placeholder="搜索用户姓名 / 邮箱…" @keydown.enter="reloadRecords" />
-            <button type="button" class="mk-btn mk-btn--sm" @click="reloadRecords">查询</button>
-          </div>
-          <label class="mk-field--switch">
-            <input v-model="achIncludeTest" type="checkbox" @change="reloadRecords" />
-            <span class="mk-field__label" style="margin:0">含虚拟/测试</span>
-          </label>
-        </div>
-        <MockSkeletonTable v-if="recordsLoading && !records.length" :cols="6" />
-        <div v-else-if="records.length" class="mk-table-scroll ac-list">
-          <table class="mk-table">
-            <thead>
-              <tr>
-                <th>成就</th>
-                <th>用户</th>
-                <th>类型</th>
-                <th class="mk-col--num">XP</th>
-                <th class="mk-col--time-full">解锁时间</th>
-                <th class="mk-col--actions">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="r in records" :key="r.id">
-                <td>
-                  <div class="mk-cell-main">
-                    <strong><span class="ac-icon">
-                      <img v-if="r.iconUrl" :src="r.iconUrl" alt="" class="ac-icon-img" />
-                      <svg v-else viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V22l4-2 4 2v-7.26A7 7 0 0 0 12 2zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/></svg>
-                    </span> {{ r.title }}</strong>
-                    <span class="mk-cell-sub" :title="r.description || ''">{{ r.description || '' }}</span>
-                  </div>
-                </td>
-                <td>
-                  <div class="mk-cell-main">
-                    <strong>
-                      {{ r.user?.name || '—' }}
-                      <span v-if="r.user?.isVirtualLearner" class="mk-badge mk-badge--virtual">虚拟</span>
-                    </strong>
-                    <span class="mk-cell-sub">{{ r.user?.email || r.userId }}</span>
-                  </div>
-                </td>
-                <td><span class="mk-badge" :class="typeBadge(r.type)">{{ typeText(r.type) }}</span></td>
-                <td class="mk-num">+{{ r.xpReward }}</td>
-                <td :title="fmtDate(r.earnedAt)">{{ timeAgo(r.earnedAt) }}</td>
-                <td>
-                  <div class="mk-actions">
-                    <button type="button" class="mk-link mk-link--danger" :disabled="r.busy" @click="revoke(r)">撤回</button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div v-else-if="recordsFailed" class="mk-empty">
-          <span class="mk-empty__icon" aria-hidden="true">!</span>
-          <strong>解锁记录加载失败</strong>
-          <button type="button" class="mk-empty__action" @click="reloadRecords">重试</button>
-        </div>
-        <div v-else class="mk-empty mk-empty--min">
-          <strong>还没有解锁记录</strong>
-          <span>用户完成任务、连续学习、达成里程碑后自动解锁，也可在「成就定义」手动发放。</span>
-        </div>
-        <Pagination
-          v-if="totalRecords > pageSize"
-          v-model:page="recordPage"
-          :total="totalRecords"
-          :page-size="pageSize"
-          :loading="recordsLoading"
-          show-total
-          @update:page="reloadRecords"
-        />
-      </div>
-
-      <!-- 手动发放弹窗 -->
-      <Teleport to="body">
-        <div v-if="grantOpen" ref="maskRef" class="mk-modal">
-          <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="手动发放成就">
-            <div class="mk-modal__head">
-              <h3 class="mk-modal__title">手动发放成就</h3>
-              <button type="button" class="mk-modal__close" aria-label="关闭" @click="grantOpen = false">✕</button>
-            </div>
-            <div class="mk-modal__body">
-              <div class="mk-field">
-                <span class="mk-field__label">成就</span>
-                <div class="ac-grant-target">
-                  <span class="ac-icon ac-icon--lg">{{ grantTarget?.icon }}</span>
-                  <div>
-                    <strong>{{ grantTarget?.name }}</strong>
-                    <span class="mk-cell-sub">{{ grantTarget?.description }}</span>
-                  </div>
-                  <span class="mk-badge mk-badge--ok">+{{ grantTarget?.xpReward }} XP</span>
-                </div>
-              </div>
-              <label class="mk-field" :class="{ 'mk-field--error': errors.user }">
-                <span class="mk-field__label">用户</span>
-                <input v-model="grantSearch" class="mk-field__input" placeholder="搜索姓名 / 邮箱（至少 2 字符）…" @input="searchGrantUser" />
-                <span v-if="errors.user" class="mk-field__err">{{ errors.user }}</span>
-              </label>
-              <div v-if="grantResults.length" class="ac-candidates">
-                <button
-                  v-for="u in grantResults"
-                  :key="u.id"
-                  type="button"
-                  class="ac-candidate"
-                  :class="{ 'ac-candidate--on': grantUserId === u.id }"
-                  @click="grantUserId = u.id"
-                >
-                  <strong>{{ u.name || u.email }}</strong>
-                  <span class="mk-cell-sub">{{ u.email }}</span>
-                </button>
-              </div>
-              <p v-else-if="grantSearched" class="ac-none">没有匹配用户</p>
-              <div v-if="grantError" class="mk-alert">{{ grantError }}</div>
-            </div>
-            <div class="mk-modal__foot">
-              <button type="button" class="mk-btn" @click="grantOpen = false">取消</button>
-              <button type="button" class="mk-btn mk-btn--primary" :disabled="!grantUserId || granting" @click="confirmGrant">
-                {{ granting ? '发放中…' : '确认发放（+XP）' }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </Teleport>
-    </template>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { timeAgo, errMsg, shortId, liveAnnouncements } from './live'
+import { computed, onMounted, ref } from 'vue'
+import { timeAgo, liveAnnouncements } from './live'
 import { intent } from './store'
-import { adminLearningContentApi, adminAchievementsApi, adminUsersApi, adminFeedbackApi, adminDevtoolsApi, adminAnnouncementsApi, type LearningContentStats, type LearningPathRow, type AchievementDef, type AchievementRecord } from '@/api/adminApi'
-import { useRowMenu } from './useRowMenu'
-import { useEscape } from './useEscape'
-import { useOverlay, useMaskClose } from './useOverlay'
-import { askConfirm } from './useConfirm'
-import { toast } from '@/utils/toast'
-import MockSkeletonTable from './SkeletonTable.vue'
-import Pagination from './Pagination.vue'
-import MkKpi from './MkKpi.vue'
-import Announcements from './Announcements.vue'
+import { adminFeedbackApi, adminLearningContentApi, adminDevtoolsApi, type LearningContentStats } from '@/api/adminApi'
+import { announcementCounts, segmentPct } from './opsShared'
 
-/* ===== 一级 Tab：工作台 / 内容管理 / 成就管理 / 公告 ===== */
-const tab = ref<'workbench' | 'content' | 'achievements' | 'announcements'>('workbench')
-function switchTab(t: 'workbench' | 'content' | 'achievements' | 'announcements') {
-  tab.value = t
-  if (t === 'workbench') void loadWorkbench()
-  if (t === 'content' && !contentLoaded.value) { void reload(); void loadStats() }
-  if (t === 'achievements' && !defs.value.length && !defsLoading.value) void loadDefs()
-  if (t === 'announcements') void loadAnnouncements()
-}
-/* 命令面板快捷动作：新建公告 → 切到公告 tab（Announcements 挂载后消费 quickAction 打开弹窗） */
-watch(
-  () => intent.quickAction,
-  (a) => {
-    if (a === 'create-announcement') {
-      tab.value = 'announcements'
-    }
-  },
-  { immediate: true }
-)
-
-/* ===== 工作台：待办聚合（反馈待处理 / 失败路径 / 死信 / 草稿公告） ===== */
+/* ===== 运营待办：反馈待处理 / 失败路径 / 死信 / 草稿公告 ===== */
 const wbPendingFeedback = ref(0)
 const wbFailedPaths = ref(0)
 const wbDeadLetters = ref(0)
 const wbLoading = ref(false)
+const stats = ref<LearningContentStats | null>(null)
+
 async function loadWorkbench() {
   if (wbLoading.value) return
   wbLoading.value = true
@@ -471,11 +120,11 @@ async function loadWorkbench() {
     adminFeedbackApi.list({ limit: 1, status: 'new' })
       .then((r) => { const d = r.data?.data ?? r.data ?? {}; wbPendingFeedback.value = Number(d.pagination?.total ?? d.total ?? 0) })
       .catch(() => { wbPendingFeedback.value = 0 }),
-    // 失败路径：学习内容 stats（与内容 tab 口径一致）
+    // 失败路径：学习内容 stats（与内容管理页口径一致）
     adminLearningContentApi.getStats()
-      .then((r) => { const s = (r.data?.data ?? r.data) as LearningContentStats | null; wbFailedPaths.value = s?.byStatus?.failed ?? 0 })
+      .then((r) => { const s = (r.data?.data ?? r.data) as LearningContentStats | null; stats.value = s; wbFailedPaths.value = s?.byStatus?.failed ?? 0 })
       .catch(() => { wbFailedPaths.value = 0 }),
-    // outbox 死信：运维中心工具 tab 同源（返回 {deadCount, items}）
+    // outbox 死信：系统工具页（原运维中心）工具 tab 同源（返回 {deadCount, items}）
     adminDevtoolsApi.getOutboxDead()
       .then((r) => {
         const d = r.data?.data as { deadCount?: number } | null | undefined
@@ -486,563 +135,279 @@ async function loadWorkbench() {
   wbLoading.value = false
   void dead
 }
+
+/* 待办清单：按严重度排序（坏>警告>中性），零值弱化为「已清零」 */
+const todoItems = computed(() => [
+  { key: 'feedback', label: '待处理反馈', hint: '学习者低分反馈等待分流', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending },
+  { key: 'paths', label: '生成失败路径', hint: '目标对话产出路径失败，需排查', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths },
+  { key: 'dead', label: 'Outbox 死信', hint: '领域事件投递失败，影响画像/成就', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters },
+  { key: 'draft', label: '草稿公告', hint: '已创建未发布的公告', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements },
+])
+
+/* 公告三态计数（live 层共享，与侧栏徽章同源） */
+const ann = announcementCounts
+
+/* 状态面板：路径四态 + 公告三态（比例条 + 行式计数） */
+const pathSegments = computed(() =>
+  segmentPct([
+    { key: 'active', label: '学习中', count: stats.value?.byStatus?.active || 0, tone: 'ok' },
+    { key: 'completed', label: '已完成', count: stats.value?.byStatus?.completed || 0, tone: 'info' },
+    { key: 'failed', label: '生成失败', count: stats.value?.byStatus?.failed || 0, tone: 'bad' },
+    { key: 'archived', label: '已下线', count: stats.value?.byStatus?.archived || 0, tone: 'muted' },
+  ])
+)
+/* 路径状态行（原 MkKpi 色板口径：非零计数的警示态才着色） */
+const pathCards = computed(() => {
+  const s = stats.value?.byStatus || {}
+  const failedN = s.failed || 0
+  return [
+    { label: '学习中', value: String(s.active || 0), tone: (s.active || 0) > 0 ? ('ok' as const) : '' },
+    { label: '已完成', value: String(s.completed || 0), tone: '' },
+    { label: '生成失败', value: String(failedN), tone: failedN > 0 ? ('bad' as const) : '' },
+    { label: '已下线', value: String(s.archived || 0), tone: '' },
+  ]
+})
+const annSegments = computed(() =>
+  segmentPct([
+    { key: 'published', label: '生效中', count: ann.value.published, tone: 'info' },
+    { key: 'draft', label: '草稿', count: ann.value.draft, tone: 'warn' },
+    { key: 'archived', label: '已下线', count: ann.value.archived, tone: 'muted' },
+  ])
+)
+
+/* 生效中公告列表（最近发布优先） */
+const livePublished = computed(() =>
+  liveAnnouncements.value
+    .filter((a) => a.status === 'published')
+    .sort((a, b) => String(b.publishedAt || '').localeCompare(String(a.publishedAt || '')))
+    .slice(0, 4)
+)
+const annSeverityText = (s: string) => ({ info: '通知', warning: '提醒', critical: '紧急' }[s] || s)
+const annBadge = (s: string) =>
+  s === 'critical' ? 'mk-badge--bad' : s === 'warning' ? 'mk-badge--warn' : 'mk-badge--info'
+
+/* ===== 跨页深链（运营组内各页均为独立场景，操作对象页唯一） ===== */
 /** 待处理反馈 → 反馈中心（预筛待处理） */
 function goFeedbackPending() {
   intent.scene = 'feedback'
   intent.quickAction = '' // 确保不触发其他快捷动作
   // 反馈中心无状态深链参数，直接导航；由 Feedback 页默认筛选待处理
 }
-/** 生成失败路径 → 内容管理 tab（预筛 failed） */
+/** 生成失败路径 → 学习会话页「学习路径」tab（预筛 failed，宿主消费 intent.statusFilter/tab 后清空） */
 function goFailedPaths() {
-  tab.value = 'content'
-  statusFilter.value = 'failed'
-  void reload()
+  intent.statusFilter = 'failed'
+  intent.tab = 'paths'
+  intent.scene = 'sessions'
 }
-/** outbox 死信 → 运维中心工具 tab */
+/** outbox 死信 → 系统工具页（原运维中心） */
 function goDeadLetters() {
   intent.scene = 'ops-center'
 }
-/* 默认进入工作台：立即拉取待办聚合（公告计数由 live 层加载） */
+/** 学习路径管理 → 学习会话页「学习路径」tab */
+function goContent() {
+  intent.tab = 'paths'
+  intent.scene = 'sessions'
+}
+/** 公告管理页（通知与公告 · 公告 tab） */
+function goAnnouncements() {
+  intent.tab = 'announce'
+  intent.scene = 'messages'
+}
+/** 手动整体刷新：待办聚合 + 公告 live 计数（公告列表由 live 层管理，此处仅触发重拉） */
+async function refreshAll() {
+  await loadWorkbench()
+}
+
+/* 默认进入即拉取待办聚合（公告计数由 live 层加载） */
 onMounted(() => {
   void loadWorkbench()
-  void loadAnnouncements()
 })
-const annRows = computed(() => liveAnnouncements.value.length)
-const annActive = computed(() => liveAnnouncements.value.filter((a) => a.status === 'published').length)
-const annDraft = computed(() => liveAnnouncements.value.filter((a) => a.status === 'draft').length)
-const annArchived = computed(() => liveAnnouncements.value.filter((a) => a.status === 'archived').length)
-async function loadAnnouncements() {
-  if (!liveAnnouncements.value.length) {
-    try {
-      const res = await adminAnnouncementsApi.list()
-      const body = res.data?.data ?? res.data ?? {}
-      const items = body.items || []
-      liveAnnouncements.value = items.map((a: Record<string, unknown>) => ({
-        id: String(a.id),
-        title: String(a.title || ''),
-        body: String(a.body || ''),
-        severity: (a.severity as 'info' | 'warning' | 'critical') || 'info',
-        status: (a.status as 'draft' | 'published' | 'archived') || 'draft',
-        publishedAt: (a.publishedAt as string) || null,
-        expiresAt: (a.expiresAt as string) || null,
-        createdBy: (a.createdBy as string) || null,
-        createdAt: String(a.createdAt || '')
-      }))
-    } catch { /* liveFailures 已兜底 */ }
-  }
-}
-/* 公告 tab：嵌入 Announcements 组件，宿主提供新建入口（ref 通信） */
-const annRef = ref<InstanceType<typeof Announcements> | null>(null)
-function annCreate() {
-  annRef.value?.openCreate()
-}
-const contentLoaded = ref(false)
-
-type PathRow = LearningPathRow & { busy?: boolean }
-
-const rows = ref<PathRow[]>([])
-const total = ref(0)
-const page = ref(1)
-const pageSize = ref(20)
-const loading = ref(false)
-const failed = ref(false)
-const keyword = ref('')
-const statusFilter = ref('')
-const subjectFilter = ref('')
-const includeTest = ref(false)
-const stats = ref<LearningContentStats | null>(null)
-
-const statusTone = computed(() => 'mk-status--ok')
-const statusCards = computed(() => {
-  const s = stats.value?.byStatus || {}
-  const failed = s.failed || 0
-  const items: Array<{ label: string; value: string; tone: '' | 'ok' | 'warn' | 'bad'; hint: string }> = [
-    { label: '学习中', value: String(s.active || 0), tone: (s.active || 0) > 0 ? 'ok' : '', hint: (s.active || 0) > 0 ? '进行中' : '' },
-    { label: '已完成', value: String(s.completed || 0), tone: '', hint: '' },
-    { label: '生成失败', value: String(failed), tone: failed > 0 ? 'bad' : '', hint: failed > 0 ? '需关注' : '' },
-    { label: '已下线', value: String(s.archived || 0), tone: '', hint: '' },
-  ]
-  return items
-})
-const subjectOptions = computed(() => (stats.value?.bySubject || []).map((s) => s.subject))
-
-const statusText = (s: string) => ({ active: '学习中', completed: '已完成', failed: '生成失败', archived: '已下线' }[s] || s)
-const statusBadge = (s: string) =>
-  s === 'active' ? 'mk-badge--ok' : s === 'completed' ? 'mk-badge--info' : s === 'failed' ? 'mk-badge--bad' : 'mk-badge--muted'
-
-const progressPct = (p: PathRow) => {
-  if (!p.totalMilestones) return 0
-  return Math.min(100, Math.round((p.completedMilestones / p.totalMilestones) * 100))
-}
-const progressTone = (p: PathRow) => {
-  const pct = progressPct(p)
-  return pct >= 100 ? 'ok' : p.status === 'failed' ? 'bad' : 'warn'
-}
-
-function fmtDate(iso?: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-async function reload() {
-  loading.value = true
-  failed.value = false
-  try {
-    const res = await adminLearningContentApi.listPaths({
-      page: page.value,
-      limit: pageSize.value,
-      status: statusFilter.value || undefined,
-      subject: subjectFilter.value || undefined,
-      keyword: keyword.value.trim() || undefined,
-      includeTest: includeTest.value || undefined,
-    })
-    const body = res.data?.data ?? res.data ?? {}
-    rows.value = (body.paths || []).map((p: PathRow) => ({ ...p, busy: false }))
-    total.value = body.pagination?.total ?? rows.value.length
-    contentLoaded.value = true
-  } catch (e) {
-    failed.value = true
-    toast.error(`加载失败：${errMsg(e)}`)
-  } finally {
-    loading.value = false
-  }
-}
-
-async function loadStats() {
-  try {
-    const res = await adminLearningContentApi.getStats()
-    stats.value = res.data?.data ?? res.data
-  } catch {
-    stats.value = null
-  }
-}
-
-async function archive(p: PathRow) {
-  const ok = await askConfirm({
-    title: '下线路径',
-    message: `确认下线「${p.title}」？\n用户端将无法继续学习该路径。`,
-    confirmText: '下线',
-  })
-  if (!ok) return
-  p.busy = true
-  try {
-    await adminLearningContentApi.archivePath(p.id)
-    p.status = 'archived'
-    toast.success('路径已下线')
-    void loadStats()
-  } catch (e) {
-    toast.error(`下线失败：${errMsg(e)}`)
-  } finally {
-    p.busy = false
-  }
-}
-
-async function restore(p: PathRow) {
-  // 恢复会让路径立即回到用户端可见/可学，与下线对称需要确认
-  const ok = await askConfirm({
-    title: '恢复路径',
-    message: `确认恢复「${p.title}」？恢复后用户端立即可见并继续学习该路径。`,
-    confirmText: '恢复',
-  })
-  if (!ok) return
-  p.busy = true
-  try {
-    await adminLearningContentApi.restorePath(p.id)
-    p.status = 'active'
-    toast.success('路径已恢复')
-    void loadStats()
-  } catch (e) {
-    toast.error(`恢复失败：${errMsg(e)}`)
-  } finally {
-    p.busy = false
-  }
-}
-
-async function remove(p: PathRow) {
-  const ok = await askConfirm({
-    title: '删除路径',
-    message: `确认删除「${p.title}」？\n将级联删除其全部里程碑与子任务，不可撤销。`,
-    confirmText: '删除',
-  })
-  if (!ok) return
-  p.busy = true
-  try {
-    await adminLearningContentApi.deletePath(p.id)
-    rows.value = rows.value.filter((x) => x.id !== p.id)
-    toast.success('路径已删除')
-    void loadStats()
-  } catch (e) {
-    toast.error(`删除失败：${errMsg(e)}`)
-  } finally {
-    p.busy = false
-  }
-}
-
-/* 详情 */
-const detailOpen = ref(false)
-const detailLoading = ref(false)
-const detail = ref<any>(null)
-
-async function openDetail(p: PathRow) {
-  detailOpen.value = true
-  detailLoading.value = true
-  detail.value = null
-  try {
-    const res = await adminLearningContentApi.getPathDetail(p.id)
-    detail.value = res.data?.data ?? res.data
-  } catch (e) {
-    toast.error(`加载详情失败：${errMsg(e)}`)
-  } finally {
-    detailLoading.value = false
-  }
-}
-
-const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
-function menuDetail(p: PathRow) { closeMenu(); openDetail(p) }
-function menuDelete(p: PathRow) { closeMenu(); void remove(p) }
-
-const msText = (s: string) => ({ locked: '未解锁', in_progress: '进行中', completed: '已完成' }[s] || s)
-const msBadge = (s: string) =>
-  s === 'completed' ? 'mk-badge--ok' : s === 'in_progress' ? 'mk-badge--info' : 'mk-badge--muted'
-const taskTypeText = (t: string) => ({ practice: '练习', acquire: '习得', reflection: '反思', assessment: '评估' }[t] || t)
-
-/* ===== Tab2: 成就管理 ===== */
-const achTab = ref<'defs' | 'records'>('defs')
-function switchAchTab(t: 'defs' | 'records') {
-  achTab.value = t
-  if (t === 'records' && !records.value.length && !recordsLoading.value) void reloadRecords()
-}
-
-/* 定义 */
-const defs = ref<AchievementDef[]>([])
-const defsLoading = ref(false)
-const defsFailed = ref(false)
-
-const typeText = (t: string) => ({ milestone: '里程碑', streak: '连续', completion: '完成度', mastery: '掌握', social: '社交' }[t] || t)
-const typeBadge = (t: string) =>
-  t === 'milestone' ? 'mk-badge--info' : t === 'streak' ? 'mk-badge--warn' : t === 'completion' ? 'mk-badge--ok' : t === 'mastery' ? 'mk-badge--bad' : 'mk-badge--muted'
-const reqText = (r: AchievementDef['requirement']) => {
-  const t = r.type
-  if (t === 'task_count') return `完成 ${r.value} 个任务`
-  if (t === 'streak_days') return `连续学习 ${r.value} 天`
-  if (t === 'path_completion') return `完成 ${r.value} 条路径`
-  if (t === 'ktl_level') return `KTL 达到 ${r.value}`
-  return `自定义条件`
-}
-
-async function loadDefs() {
-  defsLoading.value = true
-  defsFailed.value = false
-  try {
-    const res = await adminAchievementsApi.getDefinitions()
-    defs.value = (res.data?.data ?? res.data) || []
-  } catch (e) {
-    defsFailed.value = true
-    toast.error(`加载失败：${errMsg(e)}`)
-  } finally {
-    defsLoading.value = false
-  }
-}
-
-/* 记录 */
-const records = ref<Array<AchievementRecord & { busy?: boolean }>>([])
-const totalRecords = ref(0)
-const recordPage = ref(1)
-const recordsLoading = ref(false)
-const recordsFailed = ref(false)
-const recordSearch = ref('')
-const achIncludeTest = ref(false)
-
-async function reloadRecords() {
-  recordsLoading.value = true
-  recordsFailed.value = false
-  try {
-    const res = await adminAchievementsApi.getRecords({
-      page: recordPage.value,
-      limit: pageSize.value,
-      userId: recordSearch.value.trim() || undefined,
-      includeTest: achIncludeTest.value || undefined,
-    })
-    const body = res.data?.data ?? res.data ?? {}
-    records.value = (body.records || []).map((r) => ({ ...r, busy: false }))
-    totalRecords.value = body.pagination?.total ?? records.value.length
-  } catch (e) {
-    recordsFailed.value = true
-    toast.error(`加载失败：${errMsg(e)}`)
-  } finally {
-    recordsLoading.value = false
-  }
-}
-
-/* 撤回 */
-async function revoke(r: AchievementRecord & { busy?: boolean }) {
-  const ok = await askConfirm({
-    title: '撤回成就',
-    message: `确认撤回「${r.title}」（${r.user?.name || '未知用户'}）？\n将扣回 ${r.xpReward} XP。`,
-    confirmText: '撤回',
-  })
-  if (!ok) return
-  r.busy = true
-  try {
-    await adminAchievementsApi.revoke(r.id)
-    records.value = records.value.filter((x) => x.id !== r.id)
-    totalRecords.value = Math.max(0, totalRecords.value - 1)
-    toast.success('成就已撤回')
-  } catch (e) {
-    toast.error(`撤回失败：${errMsg(e)}`)
-  } finally {
-    r.busy = false
-  }
-}
-
-/* 发放 */
-const grantOpen = ref(false)
-useEscape(() => grantOpen.value, () => { grantOpen.value = false })
-const panelRef = ref<HTMLElement | null>(null)
-const maskRef = ref<HTMLElement | null>(null)
-useOverlay(computed(() => grantOpen.value), panelRef)
-useMaskClose(maskRef, () => { grantOpen.value = false })
-
-const grantTarget = ref<AchievementDef | null>(null)
-const grantSearch = ref('')
-const grantResults = ref<Array<{ id: string; name: string; email: string }>>([])
-const grantSearched = ref(false)
-const grantUserId = ref('')
-const granting = ref(false)
-const grantError = ref('')
-const errors = ref<{ user?: string }>({})
-
-function openGrant(d: AchievementDef) {
-  grantTarget.value = d
-  grantSearch.value = ''
-  grantResults.value = []
-  grantSearched.value = false
-  grantUserId.value = ''
-  grantError.value = ''
-  errors.value = {}
-  grantOpen.value = true
-}
-
-let grantTimer: ReturnType<typeof setTimeout> | undefined
-function searchGrantUser() {
-  clearTimeout(grantTimer)
-  const q = grantSearch.value.trim()
-  if (q.length < 2) {
-    grantResults.value = []
-    grantSearched.value = false
-    return
-  }
-  grantTimer = setTimeout(async () => {
-    try {
-      const res = await adminUsersApi.getUsers({ page: 1, limit: 8, search: q })
-      const body = res.data?.data ?? res.data ?? {}
-      const users = body.users || body.items || []
-      grantResults.value = users.map((u: Record<string, unknown>) => ({
-        id: String(u.id),
-        name: String(u.name || ''),
-        email: String(u.email || ''),
-      }))
-      grantSearched.value = true
-    } catch {
-      grantResults.value = []
-      grantSearched.value = true
-    }
-  }, 300)
-}
-
-async function confirmGrant() {
-  if (!grantUserId.value || !grantTarget.value) { errors.value.user = '请选择用户'; return }
-  granting.value = true
-  grantError.value = ''
-  try {
-    await adminAchievementsApi.grant(grantUserId.value, grantTarget.value.id)
-    grantOpen.value = false
-    toast.success(`已向用户发放「${grantTarget.value.name}」（+${grantTarget.value.xpReward} XP）`)
-    void loadDefs()
-    if (achTab.value === 'records') void reloadRecords()
-  } catch (e) {
-    grantError.value = errMsg(e)
-  } finally {
-    granting.value = false
-  }
-}
-
-void loadDefs()
-
-void reload()
-void loadStats()
 </script>
 
 <style scoped>
-.ct-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
-/* 内容/成就 tab 条（独立一行卡片形态，对齐全站筛选条） */
-.oh-tabs {
-  padding: 8px 14px;
-  border: 1px solid var(--mk-line);
-  border-radius: 10px;
-  background: var(--mk-surface);
-  margin-bottom: 12px;
-}
-
-.ct-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ct-filter .mk-filter__input { min-width: 220px; }
-.ct-test { margin-left: auto; }
-.ct-list { flex: 1; min-height: 0; overflow-y: auto; }
-.ct-progress { display: flex; align-items: center; gap: 8px; min-width: 120px; }
-.ct-progress .mk-minibar { flex: 1; }
-.ct-progress__num { font-family: var(--mk-mono); font-size: var(--mk-fs-12); color: var(--mk-muted); }
-
-.ct-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 40px 0; color: var(--mk-muted); font-size: var(--mk-fs-13); }
-.ct-desc { color: var(--mk-muted); font-size: var(--mk-fs-12_5); margin: 0 0 12px; }
-.ct-milestone {
-  border: 1px solid var(--mk-line);
-  border-radius: 10px;
-  padding: 10px 12px;
-  margin-bottom: 10px;
-}
-.ct-milestone__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ct-milestone__head strong { font-size: var(--mk-fs-13); }
-.ct-milestone__meta { margin-left: auto; color: var(--mk-faint); font-size: var(--mk-fs-11); }
-.ct-milestone__empty { font-size: var(--mk-fs-12); margin: 8px 0 0; }
-.ct-subtasks { display: grid; gap: 4px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--mk-line); }
-.ct-subtask { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-12); }
-.ct-subtask__dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.ct-subtask__dot--completed { background: var(--mk-green); }
-.ct-subtask__dot--in_progress { background: var(--mk-blue); }
-.ct-subtask__dot--todo { background: var(--mk-faint); }
-.ct-subtask__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ct-subtask__meta { color: var(--mk-faint); font-size: var(--mk-fs-11); }
-
-.mk-drawer__panel--wide { width: min(720px, 100%); }
-
-/* ===== Tab2: 成就管理 ===== */
-.ach-tabs__bar { padding: 8px 14px; }
-.ac-list { min-height: var(--mk-empty-min-h, calc(100dvh - 230px)); }
-.ac-icon { margin-right: 4px; }
-.ac-icon--lg { font-size: 22px; margin-right: 10px; }
-
-.ac-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ac-filter .mk-filter__input { min-width: 240px; }
-
-.ac-grant-target {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: 10px;
-  background: var(--mk-surface);
-}
-.ac-grant-target > div { flex: 1; display: grid; gap: 1px; min-width: 0; }
-.ac-grant-target strong { font-size: var(--mk-fs-13); }
-
-.ac-candidates { display: grid; gap: 6px; max-height: 220px; overflow-y: auto; }
-.ac-candidate {
+/* ================= 运营工作台（待办清单 + 状态面板，区别于 Dashboard 统计卡） ================= */
+/* 状态面板：路径 / 公告并列（行式计数 + 比例条，非 KPI 卡） */
+.ow-panels {
   display: grid;
-  gap: 1px;
-  padding: 8px 10px;
-  border: 1px solid var(--mk-line);
-  border-radius: 8px;
-  background: var(--mk-surface);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  width: 100%;
-}
-.ac-candidate:hover { border-color: rgba(44, 99, 208, 0.4); }
-.ac-candidate--on { border-color: var(--mk-blue); box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.12); }
-.ac-candidate strong { font-size: var(--mk-fs-12_5); }
-.ac-none { color: var(--mk-faint); font-size: var(--mk-fs-12_5); text-align: center; padding: 10px 0; }
-
-/* 4K：抽屉/弹窗内容跟随全站节奏（MkKpi/表格/状态条由全局档接管） */
-@media (min-width: 2000px) {
-  .ct-progress__num { font-size: 13px; }
-  .ct-milestone__head strong { font-size: 14.5px; }
-  .ct-milestone__meta { font-size: 12.5px; }
-  .ct-subtask { font-size: 13.5px; }
-  .ac-candidate strong { font-size: 14px; }
-  .ac-candidate { padding: 10px 12px; }
-  .ac-none { font-size: 14px; }
-}
-@media (min-width: 2800px) {
-  .ct-progress__num { font-size: 15.5px; }
-  .ct-milestone__head strong { font-size: 17px; }
-  .ct-milestone__meta { font-size: 14.5px; }
-  .ct-subtask { font-size: 16px; }
-  .ac-candidate strong { font-size: 16.5px; }
-  .ac-candidate { padding: 12px 14px; }
-  .ac-none { font-size: 16.5px; }
-}
-@media (min-width: 3600px) {
-  .ct-progress__num { font-size: 18px; }
-  .ct-milestone__head strong { font-size: 20px; }
-  .ct-milestone__meta { font-size: 17px; }
-  .ct-subtask { font-size: 18.5px; }
-  .ac-candidate strong { font-size: 19.5px; }
-  .ac-candidate { padding: 14px 16px; }
-  .ac-none { font-size: 19.5px; }
-}
-
-/* ================= 工作台（待办聚合 + 运营概览） ================= */
-.ow-todos {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.ow-todo {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 12px 14px;
-  border: 1px solid var(--mk-line);
-  border-radius: 10px;
-  background: var(--mk-surface);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-.ow-todo:hover { border-color: rgba(44, 99, 208, 0.45); box-shadow: var(--mk-shadow-sm); }
-.ow-todo__num { font-size: 22px; font-weight: 800; color: var(--mk-muted); font-variant-numeric: tabular-nums; line-height: 1.2; }
-.ow-todo__label { font-size: var(--mk-fs-13); font-weight: 700; color: var(--mk-ink); }
-.ow-todo__hint { font-size: var(--mk-fs-11); color: var(--mk-faint); line-height: 1.4; }
-.ow-todo.is-bad { border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.05); }
-.ow-todo.is-bad .ow-todo__num { color: var(--mk-red, #dc2626); }
-.ow-todo.is-warn { border-color: rgba(217, 119, 6, 0.35); background: rgba(217, 119, 6, 0.05); }
-.ow-todo.is-warn .ow-todo__num { color: var(--mk-amber, #d97706); }
-
-.ow-overview {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   align-items: start;
 }
-.ow-path-cards { margin-top: 4px; }
-.ow-ann-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding-top: 4px; }
-.ow-ann-stat {
-  display: flex;
-  flex-direction: column;
+
+/* 待办清单：行动行式（严重度圆点 + 标题/说明 + 计数 + 去处理），非统计卡 */
+.ow-todo-list { padding: 2px 10px 6px; }
+.ow-todo {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 2px;
-  padding: 10px 6px;
-  border-radius: 8px;
-  background: var(--mk-surface-2, #f4f7fb);
+  gap: 12px;
+  width: 100%;
+  padding: 10px 8px;
+  border: 0;
+  border-bottom: 1px solid #eef1f7;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
 }
-.ow-ann-stat b { font-size: var(--mk-fs-18); font-weight: 800; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
-.ow-ann-stat span { font-size: var(--mk-fs-11); color: var(--mk-faint); }
+.ow-todo:last-child { border-bottom: none; }
+.ow-todo:hover { background: #f6f9ff; }
+html[data-theme='dark'] .ow-todo { border-bottom-color: #1f2a3d; }
+html[data-theme='dark'] .ow-todo:hover { background: #1a2436; }
+.ow-todo__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--mk-faint);
+  flex-shrink: 0;
+}
+.ow-todo--bad .ow-todo__dot { background: var(--mk-red); box-shadow: 0 0 0 3px var(--mk-red-bg); }
+.ow-todo--warn .ow-todo__dot { background: var(--mk-amber); box-shadow: 0 0 0 3px var(--mk-amber-bg); }
+.ow-todo__main { display: grid; gap: 1px; min-width: 0; }
+.ow-todo__label { font-size: var(--mk-fs-13); font-weight: 700; color: var(--mk-ink); }
+.ow-todo__hint {
+  font-style: normal;
+  font-size: var(--mk-fs-11);
+  color: var(--mk-faint);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ow-todo__count {
+  font-size: var(--mk-fs-18);
+  font-weight: 800;
+  color: var(--mk-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 42px;
+  text-align: right;
+}
+.ow-todo__count--bad { color: var(--mk-red); }
+.ow-todo__go {
+  font-size: var(--mk-fs-11);
+  font-weight: 700;
+  color: var(--mk-blue);
+  white-space: nowrap;
+  padding: 3px 8px;
+  border-radius: 6px;
+  transition: background 0.12s;
+}
+.ow-todo__go:hover { background: rgba(44, 99, 208, 0.08); }
+/* 已清零：整体弱化 */
+.ow-todo--done { cursor: default; }
+.ow-todo--done .ow-todo__label, .ow-todo--done .ow-todo__count { color: var(--mk-faint); }
+.ow-todo--done .ow-todo__go { color: var(--mk-green); }
+.ow-todo--done:hover { background: transparent; }
+
+/* 状态面板：比例条 + 行式计数 */
+.ow-state { padding: 8px 14px 12px; display: grid; gap: 10px; }
+.ow-state__seg {
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--mk-line);
+}
+.ow-state__seg i { display: block; height: 100%; min-width: 0; transition: width 0.2s ease; }
+.ow-seg--ok { background: var(--mk-green); }
+.ow-seg--info { background: var(--mk-blue); }
+.ow-seg--warn { background: var(--mk-amber); }
+.ow-seg--bad { background: var(--mk-red); }
+.ow-seg--muted { background: #c3cbda; }
+html[data-theme='dark'] .ow-seg--muted { background: #3b4a66; }
+.ow-state__rows { display: grid; gap: 5px; }
+.ow-state__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--mk-fs-12_5);
+  color: var(--mk-muted);
+}
+.ow-state__row b {
+  font-size: var(--mk-fs-14);
+  font-weight: 800;
+  color: var(--mk-ink);
+  font-variant-numeric: tabular-nums;
+}
+.ow-state__bad { color: var(--mk-red) !important; }
+.ow-state__dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: 1px;
+}
+.ow-state__dot--ok { background: var(--mk-green); }
+.ow-state__dot--info { background: var(--mk-blue); }
+.ow-state__dot--warn { background: var(--mk-amber); }
+.ow-state__dot--bad { background: var(--mk-red); }
+.ow-state__dot--muted { background: #c3cbda; }
+html[data-theme='dark'] .ow-state__dot--muted { background: #3b4a66; }
+
+/* 生效中公告列表 */
+.ow-ann-list { padding: 2px 14px 6px; }
+.ow-ann {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 4px;
+  border: 0;
+  border-bottom: 1px solid #eef1f7;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.ow-ann:last-child { border-bottom: none; }
+.ow-ann:hover { background: #f6f9ff; }
+html[data-theme='dark'] .ow-ann { border-bottom-color: #1f2a3d; }
+html[data-theme='dark'] .ow-ann:hover { background: #1a2436; }
+.ow-ann__title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--mk-fs-12_5);
+  font-weight: 600;
+  color: var(--mk-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ow-ann__meta { font-size: var(--mk-fs-11); color: var(--mk-faint); white-space: nowrap; }
+.ow-ann__go { font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-blue); white-space: nowrap; }
 @media (max-width: 1100px) {
-  .ow-overview { grid-template-columns: 1fr; }
+  .ow-panels { grid-template-columns: 1fr; }
 }
 
-/* ================= 暗色模式（D1 补完）：运营中心 ================= */
-html[data-theme='dark'] {
-  /* ac-grant-target/ac-candidate 已走 var(--mk-*) token，无需页面补丁 */
-  .ow-todo { background: #131b2a; }
-  .ow-todo.is-bad { background: rgba(239, 68, 68, 0.08); }
-  .ow-todo.is-warn { background: rgba(217, 119, 6, 0.08); }
-  .ow-ann-stat { background: #1d2739; }
+/* 4K：待办/状态行跟随全站节奏 */
+@media (min-width: 2000px) {
+  .ow-todo__label { font-size: 14.5px; }
+  .ow-todo__hint { font-size: 12px; }
+  .ow-todo__count { font-size: 20px; }
+  .ow-state__row { font-size: 13.5px; }
+  .ow-state__row b { font-size: 15.5px; }
+  .ow-ann__title { font-size: 14px; }
+  .ow-ann__meta, .ow-ann__go { font-size: 12px; }
+}
+@media (min-width: 2800px) {
+  .ow-todo__label { font-size: 17px; }
+  .ow-todo__hint { font-size: 14px; }
+  .ow-todo__count { font-size: 23px; }
+  .ow-state__row { font-size: 15.5px; }
+  .ow-state__row b { font-size: 18px; }
+  .ow-ann__title { font-size: 16.5px; }
+  .ow-ann__meta, .ow-ann__go { font-size: 14px; }
+}
+@media (min-width: 3600px) {
+  .ow-todo__label { font-size: 20px; }
+  .ow-todo__hint { font-size: 16.5px; }
+  .ow-todo__count { font-size: 27px; }
+  .ow-state__row { font-size: 18px; }
+  .ow-state__row b { font-size: 21px; }
+  .ow-ann__title { font-size: 19.5px; }
+  .ow-ann__meta, .ow-ann__go { font-size: 16.5px; }
 }
 </style>

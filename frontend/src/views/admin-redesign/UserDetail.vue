@@ -1,9 +1,9 @@
 <template>
   <div v-if="d" class="mk-page ud">
-    <!-- 页头卡（布局重构：返回 + 身份 + 统计 合并为一行页头，对齐 HubSpot/SF record header） -->
+    <!-- 页头卡（布局重构：返回独立成行 + 身份 + 统计，对齐 HubSpot/SF record header） -->
     <header class="ud-head">
+      <button type="button" class="mk-back" @click="closeSubPage">← 用户</button>
       <div class="ud-head__top">
-        <button type="button" class="mk-back" @click="closeSubPage">← 用户</button>
         <div class="ud-id">
           <span class="ud-avatar">{{ d.name.charAt(0) }}</span>
           <div class="ud-id__main">
