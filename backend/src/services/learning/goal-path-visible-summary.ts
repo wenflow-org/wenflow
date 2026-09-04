@@ -7,6 +7,7 @@ export interface GoalPathVisibleSummary {
   urgency: string | null;
   backgroundExperience: string | null;
   learningSignal: string | null;
+  goalOrientation: string | null;
   painPoints: string[];
   constraintsAndBoundaries: string[];
   scenario: string | null;
@@ -22,6 +23,13 @@ export interface GoalPathVisibleSummary {
     timePerSession: string | null;
     timeHorizon: string | null;
     deadlineText: string | null;
+  } | null;
+  /** LLM 推断的时间维度数值（totalWeeks/estimatedHours/sessionsPerWeek/sessionsLengthMin） */
+  timeDimensions: {
+    totalWeeks?: number | null;
+    estimatedHours?: number | null;
+    sessionsPerWeek?: number | null;
+    sessionsLengthMin?: number | null;
   } | null;
   successCriteria: {
     observableResult: string | null;
@@ -129,6 +137,7 @@ export function buildGoalPathVisibleSummary(params: {
     || (timeBudgetCadence === 'per_session' ? timeBudget : null);
   const timeHorizon = normalizeString(understanding?.available_resources?.time_horizon);
   const deadlineText = normalizeString(understanding?.deadline_text);
+  const timeDimensions = buildTimeDimensions(understanding?.time_dimensions);
   const scenario = buildScenario(understanding, backgroundExperience, realProblem);
   const currentBaseline = buildCurrentBaseline(understanding);
 
@@ -147,6 +156,7 @@ export function buildGoalPathVisibleSummary(params: {
     urgency: normalizeString(understanding?.urgency),
     backgroundExperience,
     learningSignal: normalizeString(understanding?.learning_signal),
+    goalOrientation: normalizeString(understanding?.goal_orientation),
     painPoints,
     constraintsAndBoundaries,
     scenario,
@@ -176,5 +186,21 @@ export function buildGoalPathVisibleSummary(params: {
           outOfScope,
         }
       : null,
+    timeDimensions,
   };
+}
+
+/** LLM 推断的时间维度数值（goal 层 time_dimensions）：数值型钳制，非法/缺失给 null */
+function buildTimeDimensions(raw: unknown): NonNullable<GoalPathVisibleSummary['timeDimensions']> {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const num = (v: unknown): number | null =>
+    Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null;
+  const result = {
+    totalWeeks: num(r.totalWeeks),
+    estimatedHours: num(r.estimatedHours),
+    sessionsPerWeek: num(r.sessionsPerWeek),
+    sessionsLengthMin: num(r.sessionsLengthMin),
+  };
+  return Object.values(result).some((v) => v !== null) ? result : null;
 }

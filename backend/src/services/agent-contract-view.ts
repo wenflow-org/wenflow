@@ -65,8 +65,11 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'normalizedInput.problemSpace.realProblem',
     'normalizedInput.learnerProfile.surfaceGoal',
     'normalizedInput.confirmedProposal',
+    'normalizedInput.prerequisiteTree',
+    'normalizedInput.understanding.adjustments',
     'previousMilestone',
     'milestones',
+    'subtasks',
     'cognitiveCore',
     'planningHints',
     'replan',
@@ -133,6 +136,11 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'avoidDomains',
     'candidateDomains',
     'recentScenarioHints',
+    'learnerMemory',
+    'persona',
+    'turnSequence',
+    'existingKnown',
+    'existingStruggle',
   ],
 };
 

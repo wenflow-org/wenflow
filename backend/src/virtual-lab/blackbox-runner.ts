@@ -38,6 +38,7 @@ import {
   VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE,
   virtualLearnerGoalDialogueSimulatorDefinition,
   virtualLearnerLearnTurnSimulatorDefinition,
+  virtualLearnerEpistemicGroundingDefinition,
   virtualLearnerActorAuditorDefinition,
   virtualLearnerRefereeDefinition,
   virtualLearnerMemoryCuratorDefinition,
@@ -886,6 +887,27 @@ export class BlackboxVirtualLearnerRunner {
           role: item.role === 'platform' ? 'teacher' : 'learner',
           content: item.content
         }))
+        // 阶段1：认知判决（BEAGLE Strategist 段，物理两阶段第一段；失败降级 null，不阻断叙事）
+        let epistemicGrounding: any = null
+        try {
+          const groundingOutput = await this.executeSimulatorSkill(
+            virtualLearnerEpistemicGroundingDefinition,
+            {
+              learner,
+              currentTask: latest.visibleTask || null,
+              knowledgeSnapshot: await this.buildLearnerKnowledgeSnapshot(session.userId, latest.visibleTask),
+              previousLearnerState: state.blackbox?.learnerPrivateState?.teaching || null,
+            },
+            snapshot,
+            'teaching'
+          )
+          epistemicGrounding = (groundingOutput as any)?.epistemicGrounding || null
+        } catch (groundingError) {
+          logger.warn('[Blackbox] 认知判决失败（降级为无硬约束叙事）', {
+            sessionId,
+            error: groundingError instanceof Error ? groundingError.message : String(groundingError),
+          })
+        }
         const output = await this.executeSimulatorSkillWithRetry(
           sessionId,
           virtualLearnerLearnTurnSimulatorDefinition,
@@ -901,6 +923,7 @@ export class BlackboxVirtualLearnerRunner {
             currentTask: latest.visibleTask || null,
             knowledgeSnapshot: await this.buildLearnerKnowledgeSnapshot(session.userId, latest.visibleTask),
             learnerMemory: await this.buildLearnerMemoryForSimulator(session.userId),
+            epistemicGrounding,
             frictionBudget: snapshot.frictionBudget
           },
           snapshot,
@@ -917,7 +940,8 @@ export class BlackboxVirtualLearnerRunner {
             : { type: 'chat', text: output.reply }
         await this.persistPrivateState(session, state, 'teaching', {
           ...output.learnerState,
-          learnerFeedback: output.learnerFeedback
+          learnerFeedback: output.learnerFeedback,
+          epistemicGrounding
         }, {
           emotion: output.emotion,
           degraded: output.degraded,
@@ -2389,7 +2413,9 @@ export class BlackboxVirtualLearnerRunner {
         actorProfile,
         story: state.story || null,
         frictionBudget: ['none', 'low', 'normal', 'high', 'stress_test'].includes(state.simulationConfig?.frictionBudget)
-          ? state.simulationConfig.frictionBudget : 'normal'
+          ? state.simulationConfig.frictionBudget : 'normal',
+        modelOverride: typeof state.simulationConfig?.model === 'string' && state.simulationConfig.model.trim()
+          ? state.simulationConfig.model.trim() : null
       }
     )
   }
@@ -2397,7 +2423,7 @@ export class BlackboxVirtualLearnerRunner {
   private async captureSimulatorExperimentSnapshot(
     routingUserId: string | undefined,
     capturedAt: string,
-    input: { actorProfile: Record<string, unknown>; story: Record<string, unknown> | null; frictionBudget: string }
+    input: { actorProfile: Record<string, unknown>; story: Record<string, unknown> | null; frictionBudget: string; modelOverride?: string | null }
   ): Promise<ExperimentSnapshot> {
     const prompts = await this.resolveSimulatorPrompts()
     const gateway = getAPIGateway()
@@ -2422,7 +2448,7 @@ export class BlackboxVirtualLearnerRunner {
           promptFingerprint: this.valueFingerprint(prompts.values.goal),
           temperature: prompts.goal.temperature,
           maxTokens: prompts.goal.maxTokens,
-          route: this.sanitizeSimulatorRoute(goalRoute)
+          route: this.sanitizeSimulatorRoute(goalRoute, input.modelOverride)
         },
         teaching: {
           skillId: virtualLearnerLearnTurnSimulatorDefinition.name,
@@ -2431,7 +2457,7 @@ export class BlackboxVirtualLearnerRunner {
           promptFingerprint: this.valueFingerprint(prompts.values.teaching),
           temperature: prompts.teaching.temperature,
           maxTokens: prompts.teaching.maxTokens,
-          route: this.sanitizeSimulatorRoute(teachingRoute)
+          route: this.sanitizeSimulatorRoute(teachingRoute, input.modelOverride)
         }
       }
     }
@@ -2466,13 +2492,13 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private sanitizeSimulatorRoute(route: ResolvedRoute) {
+  private sanitizeSimulatorRoute(route: ResolvedRoute, modelOverride?: string | null) {
     return {
       providerType: route.providerType,
       providerId: route.providerId,
       source: route.source,
       endpoint: this.replaySafeEndpoint(route.endpoint),
-      model: route.model,
+      model: typeof modelOverride === 'string' && modelOverride.trim() ? modelOverride.trim() : route.model,
       privateNetworkPolicy: route.privateNetworkPolicy || 'runtime',
       thinkingMode: route.thinkingMode || 'default',
       reasoningEffort: route.reasoningEffort || 'default',

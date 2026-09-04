@@ -51,6 +51,10 @@ export const W3_STEPS_EMPTY_EXEMPT: Record<string, string> = {
   'adaptive-guidance-copy': 'dashboard 侧调用（services/learner/DashboardGuidanceSnapshotService），不在 ai-teaching.definition.ts steps 内；contracts 有登记',
   'virtual-learner-persona-designer': '前置配置阶段（routes/admin/virtual-learners.ts），不在 simulation.definition.ts 主链 steps 内',
   'virtual-learner-scenario-designer': '前置配置阶段（同 persona-designer），不在主链 steps 内',
+  'path-reviewer': 'service 侧调用（learning.service.ts 内联 CIDDP 评审），非 path.coordinator 编排，不在 path.definition.ts steps 内',
+  'kc-mapper': 'service 侧调用（learning.service.ts KC 映射），非 path.coordinator 编排，不在 path.definition.ts steps 内',
+  'learning-predictor': 'service 侧调用（ai-teaching/TeachingContextBuilder 任务前预测），非 profile.coordinator 编排',
+  'virtual-learner-epistemic-grounding': 'teaching 回合内部辅助（blackbox-runner.ts / simulation.coordinator.ts 认知判决），在 learn-turn-simulator 前调用，不在 simulation.definition.ts 主链 steps 内',
 };
 
 export interface ReadinessWarningItem {

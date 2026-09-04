@@ -32,6 +32,14 @@ export interface PathGenerationInput {
   };
 }
 
+/** 前置知识探测结果（goal 层 prerequisiteCheckResults 透传，供 path-planning prerequisiteTree.knownConcepts 校准） */
+interface PrerequisiteCheckResult {
+  probeId?: string;
+  targetConcept?: string;
+  userAnswer?: string;
+  isCorrect?: boolean;
+}
+
 interface GoalFinalPayload {
   sourceConversationId?: string;
   existingPathId?: string;
@@ -43,6 +51,8 @@ interface GoalFinalPayload {
   goalHandoffFields?: Record<string, any>;
   /** 用户侧补充说明（path 页面"补充说明重新生成"） */
   adjustments?: string | null;
+  /** 前置知识探测结果（goal 层 prerequisiteCheckResults 透传，供 prerequisiteTree.knownConcepts 校准） */
+  prerequisiteCheckResults?: PrerequisiteCheckResult[] | null;
 }
 
 interface NormalizedPathInputV1 {
@@ -58,6 +68,7 @@ interface NormalizedPathInputV1 {
     backgroundExperience: string | null;
     painPoints: string[];
     learningSignal: string | null;
+    goalOrientation: string | null;
     constraintsAndBoundaries: string[];
   };
   problemSpace: {
@@ -83,6 +94,15 @@ interface NormalizedPathInputV1 {
     keyStages: string[];
     outOfScope: string[];
   };
+  /** LLM 推断的时间维度数值（goal 层 time_dimensions 透传，供 planningHints maxWeeks 推导） */
+  timeDimensions?: {
+    totalWeeks?: number | null;
+    estimatedHours?: number | null;
+    sessionsPerWeek?: number | null;
+    sessionsLengthMin?: number | null;
+  } | null;
+  /** 前置知识探测结果（goal 层透传，path-planning 读入 prerequisiteTree.knownConcepts） */
+  prerequisiteCheckResults?: PrerequisiteCheckResult[];
 }
 
 export interface GoalPathRequest {
@@ -101,6 +121,8 @@ export interface GoalPathRequest {
   finalUserVisible?: string;
   /** goal skill 产出的结构化画像（learner.identity/learning_context 等），供 path-planning scenario 判定 */
   structuredData?: Record<string, any> | null;
+  /** 前置知识探测结果（goal 层 prerequisiteCheckResults 透传） */
+  prerequisiteCheckResults?: PrerequisiteCheckResult[] | null;
   systemPromptOverrides?: {
     pathAgent?: string;
   };
@@ -200,6 +222,7 @@ class PathCoordinator {
         backgroundExperience: str('understanding.background_experience', visibleSummary?.backgroundExperience),
         painPoints,
         learningSignal: str('understanding.learning_signal', visibleSummary?.learningSignal),
+        goalOrientation: str('understanding.goal_orientation', visibleSummary?.goalOrientation),
         constraintsAndBoundaries: arr('understanding.constraints_and_boundaries', visibleSummary?.constraintsAndBoundaries),
       },
       problemSpace: {
@@ -227,6 +250,7 @@ class PathCoordinator {
         keyStages: arr('confirmedProposal.key_stages', visibleSummary?.confirmedProposal?.keyStages),
         outOfScope: arr('confirmedProposal.out_of_scope', visibleSummary?.confirmedProposal?.outOfScope),
       } : null,
+      timeDimensions: visibleSummary?.timeDimensions ?? null,
     };
   }
   private buildNormalizedGoalInput(input: GoalPathRequest, config: PathAgentInputConfig): PathGenerationInput {
@@ -239,6 +263,8 @@ class PathCoordinator {
       finalUserVisible: typeof input.finalUserVisible === 'string' ? input.finalUserVisible : null,
       // 用户侧补充说明（path 页面"补充说明重新生成"）
       adjustments: typeof input.adjustments === 'string' && input.adjustments.trim() ? input.adjustments.trim() : null,
+      // 前置知识探测结果（goal 层 prerequisiteCheckResults 透传）
+      prerequisiteCheckResults: input.prerequisiteCheckResults || null,
     };
 
     const source = {
@@ -286,6 +312,9 @@ class PathCoordinator {
       visibleSummary,
       goalFinalPayload.rawGoal
     );
+    if (goalFinalPayload.prerequisiteCheckResults?.length) {
+      normalizedInputV1.prerequisiteCheckResults = goalFinalPayload.prerequisiteCheckResults;
+    }
 
     // L2 声明化装配（只读对账）：状态池形状由 sandbox-resolver 的 path provider 声明，
     // 本链只提供确定性定帧结果。缺键打 warn，不阻断。
@@ -370,6 +399,7 @@ class PathCoordinator {
           finalUserVisible: goalFinalPayload.finalUserVisible || null,
           visibleSummary: goalFinalPayload.visibleSummary || null,
           conversationHistory: goalFinalPayload.conversationHistory || [],
+          prerequisiteCheckResults: goalFinalPayload.prerequisiteCheckResults || null,
         },
       }
     };

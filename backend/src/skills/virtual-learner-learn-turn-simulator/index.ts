@@ -12,6 +12,7 @@ import {
   decideFrictionTrigger,
   PERSONA_FIELD_ANCHORS_HINT,
 } from '../virtual-learner-shared';
+import type { EpistemicGrounding } from '../virtual-learner-epistemic-grounding';
 
 export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS = 800;
 export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE = 0.7;
@@ -57,6 +58,8 @@ export interface LearnLearnerSimulationInput {
     struggling?: string[];
     recentCompleted?: string[];
   } | null;
+  /** 本轮认知判决（物理两阶段第一段产出，硬约束） */
+  epistemicGrounding?: EpistemicGrounding | null;
   /** 控制学习者对抗度. 默认 'normal' */
   frictionBudget?: FrictionBudget;
 }
@@ -294,6 +297,7 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
             : [],
         }
       : null,
+    epistemicGrounding: input.epistemicGrounding || null,
     friction: {
       budget: friction.budget,
       triggerProbability: friction.triggered ? 1 : 0,

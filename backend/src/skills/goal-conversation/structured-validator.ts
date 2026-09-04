@@ -53,7 +53,8 @@ export function validateGoalConversationStructuredOutput(
   // 允许新版扁平结构（understanding/nextQuestions/...直接在顶层）和旧版包装结构（goalConversation 包装层）
   const allowedTopLevelKeys = new Set([
     'reply', 'state', 'goalConversation', 'hints',
-    'understanding', 'nextQuestions', 'quickReplies', 'confirmedProposal', 'confidenceScores', 'structuredData'
+    'understanding', 'nextQuestions', 'quickReplies', 'confirmedProposal', 'confidenceScores', 'structuredData',
+    'proposalQuality'
   ]);
   const { parsedJson, dialogueText, parseMode, parseError } = extractStructuredPayload(content);
 

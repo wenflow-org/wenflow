@@ -20,7 +20,7 @@ import {
   getSimulationAgentConfig,
   type SimulationAgentConfig
 } from '../services/agentConfig.service';
-import { executeSkill, virtualLearnerGoalDialogueSimulatorDefinition, virtualLearnerPathEvaluatorDefinition, virtualLearnerLearnTurnSimulatorDefinition, virtualLearnerMemoryCuratorDefinition } from '../skills';
+import { executeSkill, virtualLearnerGoalDialogueSimulatorDefinition, virtualLearnerPathEvaluatorDefinition, virtualLearnerLearnTurnSimulatorDefinition, virtualLearnerEpistemicGroundingDefinition, virtualLearnerMemoryCuratorDefinition } from '../skills';
 import { normalizeFrictionBudget, type FrictionBudget } from '../skills/virtual-learner-shared';
 import { sessionWrapupAgent, type SessionWrapupInput } from '../skills/session-wrapup';
 import { buildGoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
@@ -3474,6 +3474,34 @@ class SimulationOrchestrator {
         currentMilestone
       );
       const learnerMemoryForSimulator = await this.buildAssistedLearnerMemory(session.userId);
+      // 阶段1：认知判决（BEAGLE 物理两阶段第一段；失败降级 null，不阻断叙事）
+      let epistemicGrounding: any = null;
+      try {
+        const groundingRaw: any = await executeSkill(virtualLearnerEpistemicGroundingDefinition, {
+          learner: {
+            profile: profile.profile || {},
+            learningGoal: profile.learningGoal,
+            knownConcepts: profile.knownConcepts || [],
+            struggleConcepts: profile.struggleConcepts || [],
+            personalityTraits: profile.personalityTraits || {},
+          },
+          currentTask: {
+            title: currentTask.title,
+            milestoneTitle: currentMilestone.title,
+            acceptanceCriteria: currentTask.acceptanceCriteria || null,
+            description: currentTask.description || null,
+          },
+          knowledgeSnapshot,
+          previousLearnerState: mergedLearnerState,
+        });
+        epistemicGrounding = groundingRaw?.output?.epistemicGrounding || groundingRaw?.epistemicGrounding || null;
+      } catch (groundingError) {
+        logger.warn('[simulation-coordinator] 认知判决失败（降级为无硬约束叙事）', {
+          sessionId,
+          error: groundingError instanceof Error ? groundingError.message : String(groundingError),
+        });
+      }
+
       const virtualReplyOutput = await this.retryLearnUpstream(sessionId, 'simulate-teaching-turn', () => executeSkill(virtualLearnerLearnTurnSimulatorDefinition, {
         learner: {
           profile: profile.profile || {},
@@ -3501,6 +3529,7 @@ class SimulationOrchestrator {
         },
         knowledgeSnapshot,
         learnerMemory: learnerMemoryForSimulator,
+        epistemicGrounding,
         frictionBudget: this.getSessionFrictionBudget(session),
       }));
 

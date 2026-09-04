@@ -347,6 +347,27 @@ ${parsedJson.pain_points || parsedJson.understanding?.pain_points ? `你的痛�
 确认这个方向对吗？如有补充可以告诉我。`;
 }
 
+/** 前置探测题判分确定性比对：用 confirmedProposal.prerequisiteDiagnostics 的 correctOption 覆盖 LLM 判分（防"自己出题自己判"） */
+function applyPrerequisiteProbeAnswerKey(understanding: any, confirmedProposal: any): any {
+  if (!understanding || typeof understanding !== 'object') return understanding;
+  const results = understanding.prerequisiteCheckResults;
+  if (!Array.isArray(results) || results.length === 0) return understanding;
+  const probes = confirmedProposal && typeof confirmedProposal === 'object'
+    ? confirmedProposal.prerequisiteDiagnostics
+    : null;
+  if (!Array.isArray(probes) || probes.length === 0) return understanding;
+  let changed = false;
+  const resolved = results.map((result: any) => {
+    if (!result || typeof result !== 'object') return result;
+    const probe = probes.find((p: any) => p && typeof p === 'object' && p.probeId === result.probeId);
+    if (!probe || typeof probe.correctOption !== 'string' || typeof result.userAnswer !== 'string') return result;
+    const deterministic = result.userAnswer === probe.correctOption;
+    if (result.isCorrect !== deterministic) changed = true;
+    return { ...result, isCorrect: deterministic };
+  });
+  return changed ? { ...understanding, prerequisiteCheckResults: resolved } : understanding;
+}
+
 function normalizeStageAndConfidence(
   stage: 'understanding' | 'proposing' | 'ready' | 'completed',
   confidence: number,
@@ -683,6 +704,8 @@ function parseGoalConversationResponse(
   }
 
   understanding = sanitizeUnderstanding(understanding);
+  // 探测题判分确定性比对：correctOption 覆盖 LLM 判分，防"自己出题自己判"的自洽偏差
+  understanding = applyPrerequisiteProbeAnswerKey(understanding, confirmedProposal);
 
   dialogueText = normalizeDialogueText(dialogueText);
   if (parsedJson?.reply) {

@@ -9,21 +9,54 @@
  */
 import prisma from '../../config/database';
 import {
-  calculateRetention,
-  isReviewDue,
   reviewIntervalDays,
   clamp01,
-  DEFAULT_DECAY_FACTOR,
   DEFAULT_RETENTION_THRESHOLD,
 } from './actr';
 import {
   fsrsSchedule,
   fsrsStateFromLegacy,
   fsrsEmptyState,
+  fsrsRetrievability,
   type FsrsGradeCode,
   type FsrsMemoryState,
 } from './fsrs';
 import { getActiveForConcepts } from '../learner/misconception-ledger.service';
+
+/** FSRS 统一保留率（#8 legacy 退役）：trace 有 FSRS 状态用 FSRS，否则 fsrsStateFromLegacy 推导 */
+function fsrsRetentionOfTrace(
+  trace: {
+    fsrsStability: number | null;
+    fsrsDifficulty: number | null;
+    masteryScore: number;
+    extractionCount: number;
+    lastSeenAt: Date | null;
+  },
+  now: Date,
+): number {
+  if (!trace.lastSeenAt) return 1;
+  const state: FsrsMemoryState = trace.fsrsStability !== null && trace.fsrsStability !== undefined
+    ? {
+        stability: trace.fsrsStability,
+        difficulty: trace.fsrsDifficulty ?? 5,
+        reps: trace.extractionCount,
+        lapses: 0,
+        lastReviewAt: trace.lastSeenAt,
+      }
+    : fsrsStateFromLegacy(trace.masteryScore, trace.extractionCount, trace.lastSeenAt);
+  return fsrsRetrievability(state, now);
+}
+
+/** FSRS 间隔展示（#8 legacy 退役）：stability 天（有 FSRS 状态用 FSRS，否则 legacy 推导） */
+function fsrsIntervalDaysOfTrace(
+  trace: { fsrsStability: number | null; masteryScore: number; extractionCount: number; lastSeenAt: Date | null },
+): number {
+  if (trace.fsrsStability !== null && trace.fsrsStability !== undefined) {
+    return Math.max(1, Math.round(trace.fsrsStability));
+  }
+  const state = fsrsStateFromLegacy(trace.masteryScore, trace.extractionCount, trace.lastSeenAt);
+  return Math.max(1, Math.round(state.stability));
+}
 
 export type MemoryStability = 'unknown' | 'fragile' | 'developing' | 'stable';
 
@@ -265,27 +298,15 @@ class MemoryTraceService {
         stability: trace.stability as MemoryStability,
         lastSeenAt: trace.lastSeenAt,
         extractionCount: trace.extractionCount,
-        retention: calculateRetention(
-          trace.masteryScore,
-          trace.lastSeenAt,
-          now,
-          trace.decayFactor ?? DEFAULT_DECAY_FACTOR,
-        ),
-        intervalDays: reviewIntervalDays(retentionTargetDays, trace.intervalFactor ?? 1),
+        retention: fsrsRetentionOfTrace(trace, now),
+        intervalDays: fsrsIntervalDaysOfTrace(trace),
         reason: 'interval-elapsed' as const,
       })),
       ...legacy
         .map((trace) => {
-          const result = isReviewDue({
-            masteryScore: trace.masteryScore,
-            lastSeenAt: trace.lastSeenAt,
-            retentionTargetDays,
-            retentionThreshold: threshold,
-            decayFactor: trace.decayFactor ?? DEFAULT_DECAY_FACTOR,
-            intervalFactor: trace.intervalFactor ?? 1,
-            now,
-          });
-          if (!result.due) return null;
+          const retention = fsrsRetentionOfTrace(trace, now);
+          if (!trace.lastSeenAt) return null; // never-seen：从未提取不判到期
+          if (retention >= threshold) return null; // 保留率未跌破阈值
           return {
             conceptKey: trace.conceptKey,
             label: trace.label,
@@ -293,9 +314,9 @@ class MemoryTraceService {
             stability: trace.stability as MemoryStability,
             lastSeenAt: trace.lastSeenAt,
             extractionCount: trace.extractionCount,
-            retention: result.retention,
-            intervalDays: result.intervalDays,
-            reason: result.reason,
+            retention,
+            intervalDays: fsrsIntervalDaysOfTrace(trace),
+            reason: 'below-threshold' as const,
           };
         })
         .filter((item): item is NonNullable<typeof item> => item !== null),
@@ -330,12 +351,7 @@ class MemoryTraceService {
       stability: trace.stability as MemoryStability,
       lastSeenAt: trace.lastSeenAt,
       extractionCount: trace.extractionCount,
-      retention: calculateRetention(
-        trace.masteryScore,
-        trace.lastSeenAt,
-        now,
-        trace.decayFactor ?? DEFAULT_DECAY_FACTOR,
-      ),
+      retention: fsrsRetentionOfTrace(trace, now),
     }));
   }
 
@@ -421,11 +437,8 @@ class MemoryTraceService {
       });
       return;
     }
-    // legacy SM-2: intervalFactor ×2
-    await prisma.memory_traces.updateMany({
-      where: { userId, conceptKey },
-      data: { intervalFactor: { multiply: 2 } },
-    });
+    // legacy SM-2（intervalFactor ×2）已退役：FSRS 已全面接管，无 grade 时不再更新 legacy 间隔因子。
+    // 唯一调用方 SessionFinalizationService 已恒传 grade，此分支为死代码。
   }
 }
 

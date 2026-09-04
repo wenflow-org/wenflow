@@ -69,7 +69,8 @@ export function derivePlanningHints(
   timePerSession: string | null,
   timeBudget: string | null,
   timeBudgetCadence: TimeBudgetCadence | null,
-  keyStages: string[]
+  keyStages: string[],
+  timeDimensions?: { totalWeeks?: number | null; estimatedHours?: number | null; sessionsPerWeek?: number | null; sessionsLengthMin?: number | null } | null
 ): PlanningHints {
   const paceSignal = inferPaceSignal(timeHorizon);
   const keyStageCount = keyStages.length;
@@ -79,7 +80,13 @@ export function derivePlanningHints(
   let conceptRange: [number, number] = [...paceConfig.conceptRange];
   let subtasksPerStageRange: [number, number] = [...paceConfig.subtasksPerStageRange];
   const defaultMinutesRange: [number, number] = [...paceConfig.defaultMinutesRange];
-  const maxWeeks: number = paceConfig.maxWeeks;
+  // maxWeeks：优先用 goal 层 LLM 推断的 totalWeeks（×1.2 缓冲），缺失回退 pace 档位固定值，硬上限 52
+  const inferredWeeks = Number.isFinite(timeDimensions?.totalWeeks) && (timeDimensions!.totalWeeks as number) > 0
+    ? (timeDimensions!.totalWeeks as number)
+    : null;
+  const maxWeeks: number = inferredWeeks
+    ? Math.min(52, Math.max(1, Math.ceil(inferredWeeks * 1.2)))
+    : paceConfig.maxWeeks;
 
   if (keyStageCount > 0) {
     milestoneRange = [keyStageCount, keyStageCount + 2];
@@ -149,7 +156,10 @@ export function buildFramedNormalizedInput(input: any): any {
   const timeBudgetCadence = normalizeCadence(resources.timeBudgetCadence);
   const timePerSession = normalizeString(resources.timePerSession);
   const timeHorizon = normalizeString(resources.timeHorizon);
-  const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages);
+  const timeDimensions = input.timeDimensions && typeof input.timeDimensions === 'object'
+    ? input.timeDimensions
+    : null;
+  const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages, timeDimensions);
 
   return {
     ...input,
@@ -166,6 +176,7 @@ export function buildFramedNormalizedInput(input: any): any {
       backgroundExperience: normalizeString(learnerProfile.backgroundExperience),
       painPoints: normalizeStringArray(learnerProfile.painPoints),
       learningSignal: normalizeString(learnerProfile.learningSignal),
+      goalOrientation: normalizeString(learnerProfile.goalOrientation),
       constraintsAndBoundaries: normalizeStringArray(learnerProfile.constraintsAndBoundaries),
     },
     problemSpace: {
@@ -194,6 +205,7 @@ export function buildFramedNormalizedInput(input: any): any {
           outOfScope: normalizeStringArray(confirmedProposal.outOfScope),
         }
       : null,
+    timeDimensions,
     planningHints,
   };
 }

@@ -222,6 +222,7 @@ import adminUsersRoutes from './routes/admin/users';
 import adminSessionsRoutes from './routes/admin/sessions';
 import adminAuditLogsRoutes from './routes/admin/audit-logs';
 import adminLearnerModelsRoutes from './routes/admin/learner-models';
+import adminMemoryTracesRoutes from './routes/admin/memory-traces';
 import adminAnnouncementsRoutes from './routes/admin/announcements';
 import announcementsRoutes from './routes/announcements';
 import adminVirtualLearnersRoutes from './routes/admin/virtual-learners';
@@ -351,6 +352,7 @@ app.use('/api/admin/audit-logs', adminAccessRestrictMiddleware, adminAuthMiddlew
 app.use('/api/admin/announcements', ...adminRouteMiddleware, adminAnnouncementsRoutes);
 app.use('/api/admin/mcp', ...adminRouteMiddleware, adminMcpRoutes);
 app.use('/api/admin/learner-models', ...adminRouteMiddleware, adminLearnerModelsRoutes);
+app.use('/api/admin/memory-traces', ...adminRouteMiddleware, adminMemoryTracesRoutes);
 app.use('/api/admin/goal-conversations', ...adminRouteMiddleware, adminGoalConversationsRoutes);
 app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualLearnersRoutes);
 app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualQuickLearnRoutes);

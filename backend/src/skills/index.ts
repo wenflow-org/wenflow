@@ -61,6 +61,10 @@ import { virtualLearnerPathEvaluator as virtualLearnerPathEvaluatorFn } from './
 // 虚拟学习者 Learn 回合模拟
 export { virtualLearnerLearnTurnSimulatorDefinition, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE } from './virtual-learner-learn-turn-simulator';
 import { virtualLearnerLearnTurnSimulator as virtualLearnerLearnTurnSimulatorFn } from './virtual-learner-learn-turn-simulator';
+import { virtualLearnerEpistemicGrounding as virtualLearnerEpistemicGroundingFn } from './virtual-learner-epistemic-grounding';
+
+// 虚拟学习者认知判决（物理两阶段第一段）
+export { virtualLearnerEpistemicGroundingDefinition, VIRTUAL_LEARNER_EPISTEMIC_GROUNDING_PROMPT, VIRTUAL_LEARNER_EPISTEMIC_GROUNDING_MAX_TOKENS, VIRTUAL_LEARNER_EPISTEMIC_GROUNDING_TEMPERATURE } from './virtual-learner-epistemic-grounding';
 
 // 虚拟学习者实验旁路裁判
 export { virtualLearnerRefereeDefinition, VIRTUAL_LEARNER_REFEREE_PROMPT, VIRTUAL_LEARNER_REFEREE_MAX_TOKENS, VIRTUAL_LEARNER_REFEREE_TEMPERATURE } from './virtual-learner-referee';
@@ -102,6 +106,7 @@ import { virtualLearnerPersonaDesignerDefinition } from './virtual-learner-perso
 import { virtualLearnerGoalDialogueSimulatorDefinition } from './virtual-learner-goal-dialogue-simulator';
 import { virtualLearnerPathEvaluatorDefinition } from './virtual-learner-path-evaluator';
 import { virtualLearnerLearnTurnSimulatorDefinition } from './virtual-learner-learn-turn-simulator';
+import { virtualLearnerEpistemicGroundingDefinition } from './virtual-learner-epistemic-grounding';
 import { virtualLearnerRefereeDefinition } from './virtual-learner-referee';
 import { virtualLearnerMemoryCuratorDefinition } from './virtual-learner-memory-curator';
 import { virtualLearnerActorAuditorDefinition } from './virtual-learner-actor-auditor';
@@ -119,6 +124,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   virtualLearnerGoalDialogueSimulatorDefinition,
   virtualLearnerPathEvaluatorDefinition,
   virtualLearnerLearnTurnSimulatorDefinition,
+  virtualLearnerEpistemicGroundingDefinition,
   virtualLearnerRefereeDefinition,
   virtualLearnerMemoryCuratorDefinition,
   virtualLearnerActorAuditorDefinition,
@@ -200,6 +206,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'virtual-learner-goal-dialogue-simulator': virtualLearnerGoalDialogueSimulatorFn,
   'virtual-learner-path-evaluator': virtualLearnerPathEvaluatorFn,
   'virtual-learner-learn-turn-simulator': virtualLearnerLearnTurnSimulatorFn,
+  'virtual-learner-epistemic-grounding': virtualLearnerEpistemicGroundingFn,
   'virtual-learner-referee': virtualLearnerRefereeFn,
   'virtual-learner-memory-curator': virtualLearnerMemoryCuratorFn,
   'virtual-learner-actor-auditor': virtualLearnerActorAuditorFn,

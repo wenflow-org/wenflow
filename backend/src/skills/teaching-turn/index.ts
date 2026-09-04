@@ -17,7 +17,7 @@ const TEACHING_TURN_PROMPT = loadPromptFile(AGENT_ID)?.systemPrompt || '';
 type MessageRole = 'user' | 'assistant' | 'system';
 
 const ALLOWED_COGNITIVE_LEVELS = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'] as const;
-const ALLOWED_EMOTIONAL_STATES = ['positive', 'neutral', 'frustrated', 'confused'] as const;
+const ALLOWED_EMOTIONAL_STATES = ['positive', 'neutral', 'frustrated', 'confused', 'bored'] as const;
 const ALLOWED_KNOWLEDGE_STATUSES = ['pending', 'learning', 'mastered', 'review'] as const;
 const ALLOWED_LOAD_BASIS = ['semantic', 'structure', 'pacing', 'combined', 'absent'] as const;
 
@@ -181,6 +181,8 @@ export interface TeachingTurnOutput {
     }>;
     /** 隐藏自评信号（静默提取，供校准闭环；不改变教学行为） */
     selfAssessmentSignal?: 'high' | 'medium' | 'low';
+    /** 求助行为分流（自由描述，供后台统计与软拦截） */
+    helpSeekingType?: string;
     engagement: number;
     emotionalState: string;
     loadIndex: number;
@@ -415,13 +417,12 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
         : 'understand',
       levelScore: Number.isFinite(analysis.levelScore) ? Number(analysis.levelScore) : 2,
       understanding: Number.isFinite(analysis.understanding) ? Number(analysis.understanding) : 0.5,
-      confusionPoints: Array.isArray(analysis.confusionPoints)
-        ? analysis.confusionPoints.map((item: any) => String(item))
-        : [],
+      confusionPoints: resolveConfusionPoints(analysis.confusionPoints, analysis.misconceptions),
       ...(normalizeMisconceptions(analysis.misconceptions)),
       ...(normalizeKtEstimate(analysis.ktEstimate)),
       ...(normalizeRsmAttempts(analysis.rsmAttempts)),
       ...(normalizeSelfAssessmentSignal(analysis.selfAssessmentSignal)),
+      ...(normalizeHelpSeekingType(analysis.helpSeekingType)),
       engagement: Number.isFinite(analysis.engagement) ? Number(analysis.engagement) : 0.5,
       emotionalState: (typeof analysis.emotionalState === 'string' && (ALLOWED_EMOTIONAL_STATES as readonly string[]).includes(analysis.emotionalState))
         ? analysis.emotionalState
@@ -485,8 +486,7 @@ function normalizeCheckpoint(value: Record<string, any>): NonNullable<TeachingTu
 }
 
 /** 归一化结构化误解台账（G-R-R Phase 1）：过滤缺证据项，置信度收敛到 0|25|50|75|100 五档 */
-function normalizeMisconceptions(value: any): { misconceptions?: NonNullable<TeachingTurnOutput['analysis']['misconceptions']> } {
-  if (!Array.isArray(value) || value.length === 0) return {};
+function normalizeMisconceptions(value: any): { misconceptions?: NonNullable<TeachingTurnOutput['analysis']['misconceptions']> } {  if (!Array.isArray(value) || value.length === 0) return {};
   const items = value
     .filter((item: any) => item && typeof item?.hypothesis === 'string' && item.hypothesis.trim())
     .slice(0, 8)
@@ -501,6 +501,20 @@ function normalizeMisconceptions(value: any): { misconceptions?: NonNullable<Tea
       status: item.status === 'confirmed' || item.status === 'addressed' ? String(item.status) : 'suspected',
     }));
   return items.length > 0 ? { misconceptions: items } : {};
+}
+
+/** confusionPoints 归一化：LLM 直接输出时优先采用（向后兼容）；未输出时由 normalize 后的 misconceptions 派生（消除双写） */
+function resolveConfusionPoints(rawConfusionPoints: any, rawMisconceptions: any): string[] {
+  const direct = Array.isArray(rawConfusionPoints)
+    ? rawConfusionPoints.map((item: any) => String(item).trim()).filter(Boolean).slice(0, 5)
+    : [];
+  if (direct.length > 0) return direct;
+  const normalized = normalizeMisconceptions(rawMisconceptions);
+  if (!normalized.misconceptions?.length) return [];
+  const derived = normalized.misconceptions
+    .map((m) => m.canonicalLabel || m.conceptKey)
+    .filter(Boolean) as string[];
+  return Array.from(new Set(derived)).slice(0, 5);
 }
 
 /** 归一化回合级知识状态估计（θ−d 路由信号）：数值钳制、推荐值白名单 */
@@ -547,6 +561,13 @@ function normalizeSelfAssessmentSignal(value: any): { selfAssessmentSignal?: Non
     return { selfAssessmentSignal: value };
   }
   return {};
+}
+
+/** 归一化求助行为分流：自由描述（放宽枚举约束），截断限长；空值丢弃 */
+function normalizeHelpSeekingType(value: any): { helpSeekingType?: string } {
+  if (typeof value !== 'string') return {};
+  const t = value.trim().slice(0, 120);
+  return t ? { helpSeekingType: t } : {};
 }
 
 function buildPromptInput(input: TeachingTurnInput) {

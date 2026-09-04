@@ -76,13 +76,22 @@ export function sanitizeUnderstanding(understanding: any): any {
     cognitive_profile: { ...(understanding.cognitive_profile || {}) },
     emotional_profile: { ...(understanding.emotional_profile || {}) }
   }
-  const topLevelKeys = ['surface_goal', 'real_problem', 'motivation', 'urgency', 'pain_points', 'background_experience', 'learning_signal']
+  const topLevelKeys = ['surface_goal', 'real_problem', 'motivation', 'urgency', 'pain_points', 'background_experience', 'learning_signal', 'goal_orientation', 'cognitive_bandwidth']
   topLevelKeys.forEach((key) => {
     if (isPlaceholderValue(sanitized[key])) { delete sanitized[key] }
   })
   Object.keys(sanitized.background).forEach((key) => {
     if (isPlaceholderValue(sanitized.background[key])) { delete sanitized.background[key] }
   })
+  // 嵌套容器子字段同样清理空串/占位（模型会输出 "" 或"未明确"：time_horizon=""/sdt_needs.autonomy=""）
+  const cleanContainer = (container: any) => {
+    if (!container || typeof container !== 'object') return
+    Object.keys(container).forEach((key) => {
+      if (isPlaceholderValue(container[key])) { delete container[key] }
+    })
+  }
+  cleanContainer(sanitized.available_resources)
+  cleanContainer(sanitized.sdt_needs)
   return sanitized
 }
 

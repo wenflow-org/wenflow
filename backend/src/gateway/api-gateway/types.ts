@@ -28,7 +28,7 @@ export interface ResolvedRoute {
   /** 推理模型（用户双模型配置：reasoningModel / 平台 defaultReasoningModel），供两段式调用使用 */
   reasoningModel?: string;
   thinkingMode?: 'default' | 'enabled' | 'disabled';
-  reasoningEffort?: 'default' | 'high' | 'max';
+  reasoningEffort?: 'default' | 'low' | 'high' | 'max';
   temperature: number;
   maxTokens: number;
   timeoutMs?: number;

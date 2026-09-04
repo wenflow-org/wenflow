@@ -101,10 +101,10 @@ skills:
     description: 对路径生成结果做 CIDDP 五维度评审，低于阈值输出重规划指令
     coordinator:
       agentId: path-agent
-      steps:
-        - { step: 4, role: path-quality-review }
+      steps: []
     dataSource:
       sandbox: [path]
+    notes: service 侧调用（learning.service.ts 内联评审，非 path.coordinator 编排），不在 path.definition.ts steps 内
 
   - skillId: kc-mapper
     kind: mainline
@@ -116,10 +116,10 @@ skills:
     description: 将认知概念和子任务分解为细粒度 KC，标注前置依赖
     coordinator:
       agentId: path-agent
-      steps:
-        - { step: 5, role: kc-mapping }
+      steps: []
     dataSource:
       sandbox: [path]
+    notes: service 侧调用（learning.service.ts KC 映射，非 path.coordinator 编排），不在 path.definition.ts steps 内
 
   # ============ teaching-agent 下辖（mainline） ============
   - skillId: teaching-turn
@@ -292,10 +292,10 @@ skills:
     description: 任务前基于知识状态摘要预测卡壳风险，含实证校准闭环
     coordinator:
       agentId: profile-agent
-      steps:
-        - { step: 3, role: pre-task-prediction, condition: before starting a new task }
+      steps: []
     dataSource:
       sandbox: []
+    notes: service 侧调用（ai-teaching/TeachingContextBuilder 任务前预测，非 profile.coordinator 编排），不在 profile.definition.ts steps 内
 
   # ============ simulation-agent 下辖（mainline，黑盒实验链） ============
   - skillId: virtual-learner-persona-designer
@@ -478,6 +478,26 @@ skills:
         - table: virtual_learner_profiles
           via: service
       sandbox: [simulation]
+
+  - skillId: virtual-learner-epistemic-grounding
+    kind: mainline
+    stage: simulation
+    parentAgent: simulation-agent
+    handlerRef: backend/src/skills/virtual-learner-epistemic-grounding/index.ts
+    coreFile: prompts/core/virtual-learner-epistemic-grounding.yaml
+    displayName: 认知判决 Skill
+    description: 基于画像掌握度对当前步骤能否做对做离散认知判决（BEAGLE 物理两阶段第一段）
+    coordinator:
+      agentId: simulation-agent
+      steps: []
+    dataSource:
+      db:
+        - table: virtual_learner_profiles
+          via: service
+        - table: teaching_sessions
+          via: service
+      sandbox: [simulation]
+    notes: teaching 回合内部辅助（blackbox-runner.ts / simulation.coordinator.ts 认知判决，在 learn-turn-simulator 前调用），不在 simulation.definition.ts 主链 steps 内
 
   # ============ 独立 handler-only（无 parentAgent，不进 agentMembers 派生） ============
   - skillId: mcp-tool

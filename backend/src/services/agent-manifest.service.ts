@@ -339,6 +339,18 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.8, maxTokens: 32000 }
   },
   {
+    id: 'skill:virtual-learner-epistemic-grounding',
+    name: '虚拟学习者认知判决 Skill',
+    description: '基于学习者画像掌握度，对本轮能否做对当前步骤做离散认知判决（BEAGLE 物理两阶段第一段）',
+    category: 'simulation',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Simulation',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.3, maxTokens: 800 }
+  },
+  {
     id: 'skill:virtual-learner-referee',
     name: '平台体验裁判 Skill',
     description: '基于 Blackbox 公开轨迹、旁路诊断和控制回执生成独立实验裁判报告',
@@ -418,6 +430,7 @@ export const LEGACY_AGENT_MEMBERS: Record<string, string[]> = {
     'skill:virtual-learner-goal-dialogue-simulator',
     'skill:virtual-learner-path-evaluator',
     'skill:virtual-learner-learn-turn-simulator',
+    'skill:virtual-learner-epistemic-grounding',
     'skill:virtual-learner-referee',
     'skill:virtual-learner-memory-curator',
     'skill:virtual-learner-actor-auditor'

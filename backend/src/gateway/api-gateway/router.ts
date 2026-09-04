@@ -19,7 +19,7 @@ interface Config {
   model: string;
   reasoningModel?: string;
   thinkingMode?: 'default' | 'enabled' | 'disabled';
-  reasoningEffort?: 'default' | 'high' | 'max';
+  reasoningEffort?: 'default' | 'low' | 'high' | 'max';
   temperature: number;
   maxTokens: number;
   privateNetworkPolicy: ResolvedRoute['privateNetworkPolicy'];
@@ -385,11 +385,12 @@ export class APIRouter {
     return 'default';
   }
 
-  private normalizeReasoningEffort(value?: string | null): 'default' | 'high' | 'max' {
+  private normalizeReasoningEffort(value?: string | null): 'default' | 'low' | 'high' | 'max' {
     const normalized = (value || '').trim().toLowerCase();
-    if (normalized === 'high' || normalized === 'max') {
+    if (normalized === 'low' || normalized === 'high' || normalized === 'max') {
       return normalized;
     }
+    // medium/xhigh 等由上游映射处理，不在此归一；平台只显式表达 default/low/high/max
     return 'default';
   }
 
@@ -410,8 +411,8 @@ export class APIRouter {
         endpoint: config.apiUrl || this.resolveBaseEndpoint(),
         apiKey: this.resolvePlatformApiKey(config, config.apiUrl || this.resolveBaseEndpoint()),
         model: this.resolveModel(config.defaultModel),
-        thinkingMode: 'default',
-        reasoningEffort: 'default',
+        thinkingMode: this.normalizeThinkingMode(config.defaultThinkingMode || 'default'),
+        reasoningEffort: this.normalizeReasoningEffort(config.defaultReasoningEffort || 'default'),
         temperature: config.defaultTemperature ?? 0.7,
         maxTokens: config.defaultMaxTokens ?? 2000,
         privateNetworkPolicy: 'runtime',

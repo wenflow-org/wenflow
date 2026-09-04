@@ -163,6 +163,9 @@ const buildStoredGoalPathRequest = (path: {
     visibleSummary: goalFinalPayload.visibleSummary || null,
     conversationHistory: Array.isArray(goalFinalPayload.conversationHistory) ? goalFinalPayload.conversationHistory : [],
     finalUserVisible: typeof goalFinalPayload.finalUserVisible === 'string' ? goalFinalPayload.finalUserVisible : undefined,
+    prerequisiteCheckResults: Array.isArray(goalFinalPayload.prerequisiteCheckResults)
+      ? goalFinalPayload.prerequisiteCheckResults
+      : null,
   };
 };
 
@@ -218,6 +221,9 @@ const buildGoalPathRequestFromConversation = async (path: {
       }))
       .filter((message: { role: string; content: string }) => message.content),
     finalUserVisible: typeof collectedData.finalUserVisible === 'string' ? collectedData.finalUserVisible : undefined,
+    prerequisiteCheckResults: Array.isArray(collectedData.understanding?.prerequisiteCheckResults)
+      ? collectedData.understanding.prerequisiteCheckResults
+      : null,
   };
 };
 

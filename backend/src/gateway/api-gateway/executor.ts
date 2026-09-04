@@ -910,7 +910,8 @@ export class APIExecutor {
     if (route.thinkingMode === 'enabled' || route.thinkingMode === 'disabled') {
       requestBody.thinking = { type: route.thinkingMode };
     }
-    if (route.thinkingMode !== 'disabled' && (route.reasoningEffort === 'high' || route.reasoningEffort === 'max')) {
+    if (route.thinkingMode !== 'disabled'
+      && (route.reasoningEffort === 'low' || route.reasoningEffort === 'high' || route.reasoningEffort === 'max')) {
       requestBody.reasoning_effort = route.reasoningEffort;
     }
   }

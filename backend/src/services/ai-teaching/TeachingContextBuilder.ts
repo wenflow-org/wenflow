@@ -239,7 +239,31 @@ function dedupeConcepts(values: Array<string | null | undefined>): string[] {
 
 function parsePathPromptTemplateCore(path: any) {
   const promptTemplate = parsePathPromptTemplate(path?.aiPromptTemplate);
-  return promptTemplate?.cognitiveCore || promptTemplate?.cognitiveDesign || null;
+  // #9 退役：统一读 cognitiveCore（旧数据需先跑 scripts/migrate-cognitive-core.ts 迁移）
+  return promptTemplate?.cognitiveCore || null;
+}
+
+/** 从 kcAnnotation.taskKcLinks 解析当前任务的细粒度知识组件（KC）列表（kc-mapper 下游激活 3b） */
+function resolveTaskKcsFromPath(task: any, path: any): Array<{ kcId: string; name: string; taxonomy: string }> {
+  try {
+    const template = path?.aiPromptTemplate ? JSON.parse(path.aiPromptTemplate) : {};
+    const kcAnnotation = template?.kcAnnotation;
+    if (!kcAnnotation || typeof kcAnnotation !== 'object') return [];
+    const taskKcLinks = Array.isArray(kcAnnotation.taskKcLinks) ? kcAnnotation.taskKcLinks : [];
+    const matched = taskKcLinks.find((link: any) => normalizeConcept(link?.taskTitle) === normalizeConcept(task?.title));
+    if (!matched || !Array.isArray(matched.linkedKCs)) return [];
+    const kcGraphNodes = Array.isArray(kcAnnotation.kcGraph?.nodes) ? kcAnnotation.kcGraph.nodes : [];
+    return matched.linkedKCs.map((kcId: any) => {
+      const node = kcGraphNodes.find((n: any) => normalizeConcept(n?.kcId) === normalizeConcept(kcId));
+      return {
+        kcId: normalizeConcept(kcId) || String(kcId || ''),
+        name: normalizeConcept(node?.name) || '',
+        taxonomy: normalizeConcept(node?.taxonomy) || '',
+      };
+    }).filter((item: any) => item.kcId);
+  } catch {
+    return [];
+  }
 }
 
 function resolveTaskConceptFromPath(task: any, path: any): { id: string | null; name: string | null; description: string | null } {
@@ -559,6 +583,7 @@ export async function buildTeachingScenarioContext(
       prerequisiteConcepts,
       supportingConcepts,
     },
+    taskKcs: resolveTaskKcsFromPath(task, path),
     taskKnowledgeSeeds,
     taskProfile,
     currentTaskContext: {

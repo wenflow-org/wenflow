@@ -2884,10 +2884,13 @@ router.post('/sessions/:sessionId/wrapup', async (req: Request, res) => {
 router.put('/sessions/:sessionId/simulation-config', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
-    const { frictionBudget } = req.body || {};
+    const { frictionBudget, model } = req.body || {};
 
     if (frictionBudget && !SIMULATION_FRICTION_BUDGETS.includes(frictionBudget)) {
       return res.status(400).json({ success: false, error: 'frictionBudget 不合法' });
+    }
+    if (model !== undefined && model !== null && typeof model !== 'string') {
+      return res.status(400).json({ success: false, error: 'model 必须是字符串' });
     }
 
     const simulationConfig = await runAssistedSessionMutation(sessionId, async (session, assertLeaseOwned) => {
@@ -2896,7 +2899,8 @@ router.put('/sessions/:sessionId/simulation-config', async (req: Request, res) =
         ...stageResults,
         simulationConfig: {
           ...(stageResults.simulationConfig || {}),
-          ...(frictionBudget ? { frictionBudget } : {})
+          ...(frictionBudget ? { frictionBudget } : {}),
+          ...(typeof model === 'string' && model.trim() ? { model: model.trim() } : {})
         }
       };
 

@@ -20,6 +20,7 @@ contracts:
   - agentId: skill:virtual-learner-goal-dialogue-simulator
   - agentId: skill:virtual-learner-path-evaluator
   - agentId: skill:virtual-learner-learn-turn-simulator
+  - agentId: skill:virtual-learner-epistemic-grounding
   - agentId: skill:virtual-learner-referee
   - agentId: skill:virtual-learner-actor-auditor
   - agentId: skill:virtual-learner-memory-curator
@@ -115,6 +116,10 @@ fields:
     promptRole: public-reply
     valueType: string
     description: 本课记忆增量一句话（供故事与开场引用）
+  - fieldId: epistemicGrounding
+    promptRole: public-reply
+    valueType: object
+    description: 本轮认知判决（sampledCorrectness/blockedConcept/errorPattern/masteryProb，物理两阶段第一段产出）
 
 routings:
   # === persona-designer ===
@@ -180,6 +185,14 @@ routings:
     internal: true
     accumulate: false
     notes: internal — 仅调试
+
+  # === epistemic-grounding（物理两阶段第一段） ===
+  - agentId: skill:virtual-learner-epistemic-grounding
+    fieldId: epistemicGrounding
+    render: visible
+    handoff: [skill:virtual-learner-learn-turn-simulator]
+    internal: false
+    accumulate: false
 
   # === learn-turn ===
   - agentId: skill:virtual-learner-learn-turn-simulator

@@ -106,6 +106,8 @@ interface GeneratePathData {
       sourcePathId?: string;
       learnerReplanProjection?: any;
       freezeCompletedTaskIds?: string[];
+      /** path-reviewer 评审失败后的重规划指令（自动重规划闭环注入，非用户侧） */
+      reviewerFeedback?: string;
     };
   };
   systemPromptOverrides?: {
@@ -248,6 +250,8 @@ interface GoalToPathHandoffSnapshot {
   finalUserVisible: string | null;
   visibleSummary: any;
   conversationHistory: Array<{ role: string; content: string }>;
+  /** 前置知识探测结果（goal 层透传，供 prerequisiteTree.knownConcepts 校准） */
+  prerequisiteCheckResults?: Array<{ probeId?: string; targetConcept?: string; userAnswer?: string; isCorrect?: boolean }> | null;
 }
 
 interface PathCognitiveConcept {
@@ -944,6 +948,11 @@ function buildGoalToPathHandoffSnapshot(data: GeneratePathData): GoalToPathHando
         : Array.isArray(data.userProfile?.conversationHistory)
           ? data.userProfile.conversationHistory
           : [],
+      prerequisiteCheckResults: Array.isArray(handoff.prerequisiteCheckResults)
+        ? handoff.prerequisiteCheckResults
+        : (Array.isArray(data.userProfile?.normalizedInput?.prerequisiteCheckResults)
+          ? data.userProfile.normalizedInput.prerequisiteCheckResults
+          : null),
     };
   }
 
@@ -956,6 +965,9 @@ function buildGoalToPathHandoffSnapshot(data: GeneratePathData): GoalToPathHando
     finalUserVisible: null,
     visibleSummary: null,
     conversationHistory: Array.isArray(data.userProfile?.conversationHistory) ? data.userProfile.conversationHistory : [],
+    prerequisiteCheckResults: Array.isArray(data.userProfile?.normalizedInput?.prerequisiteCheckResults)
+      ? data.userProfile.normalizedInput.prerequisiteCheckResults
+      : null,
   };
 }
 
@@ -1714,8 +1726,9 @@ class LearningService {
   private buildPathCognitiveDesign(data: GeneratePathData, analysis: any): PathCognitiveDesign {
     const sceneFraming = (analysis?.sceneFraming as PathSceneFraming | undefined)
       || (data.userProfile?.pathSceneFraming as PathSceneFraming | undefined);
-    const generatedCognitiveDesign = analysis?.cognitiveDesign && typeof analysis.cognitiveDesign === 'object'
-      ? analysis.cognitiveDesign
+    const generatedCognitiveDesignRaw = analysis?.cognitiveCore || analysis?.cognitiveDesign;
+    const generatedCognitiveDesign = generatedCognitiveDesignRaw && typeof generatedCognitiveDesignRaw === 'object'
+      ? generatedCognitiveDesignRaw
       : null;
     const confirmedStages = Array.isArray(data.userProfile?.confirmedProposal?.key_stages)
       ? data.userProfile.confirmedProposal.key_stages.filter((item: any) => typeof item === 'string' && item.trim())
@@ -2620,7 +2633,7 @@ class LearningService {
           estimatedHours: m.estimatedHours,
           tasks: []
         })),
-        cognitiveDesign: path.cognitiveCore || path.cognitiveDesign,
+        cognitiveCore: path.cognitiveCore || path.cognitiveDesign,
         recommendations: [],
         feasibility: 'high'
       };
@@ -2651,7 +2664,7 @@ class LearningService {
         pathAgentInput: analysis.pathAgentInput || null,
         pathAgentRaw: analysis.pathAgentRaw || null,
         suggestedMilestones: normalizedMilestonesData,
-        cognitiveDesign,
+        cognitiveCore: cognitiveDesign,
         adjustmentPolicy,
         adjustmentEvidence,
         _generation: {
@@ -3048,7 +3061,7 @@ class LearningService {
       try {
         const parsedTemplate = this.parsePathPromptTemplate(learningPath.aiPromptTemplate || null);
         const kcResult = await executeSkill(kcMapperDefinition, {
-          cognitiveCore: (parsedTemplate as any)?.cognitiveDesign || null,
+          cognitiveCore: (parsedTemplate as any)?.cognitiveCore || (parsedTemplate as any)?.cognitiveDesign || null,
           milestones: learningPath.milestones.map((m) => ({
             stageNumber: m.stageNumber,
             title: m.title,
@@ -3063,7 +3076,7 @@ class LearningService {
             knowledgeType: t.knowledgeType,
             cognitiveLevel: t.cognitiveLevel,
           }))),
-          prerequisiteTree: (parsedTemplate as any)?.cognitiveDesign?.prerequisiteTree || null,
+          prerequisiteTree: ((parsedTemplate as any)?.cognitiveCore || (parsedTemplate as any)?.cognitiveDesign)?.prerequisiteTree || null,
         });
         if (kcResult?.success && kcResult?.output) {
           kcAnnotation = kcResult.output;
@@ -3079,6 +3092,34 @@ class LearningService {
           pathId,
           error: kcError instanceof Error ? kcError.message : String(kcError),
         });
+      }
+
+      // KC 映射持久化（kc-mapper 下游激活 3a）：写回 aiPromptTemplate，结束"写后无读者"，供 teaching-turn 按 KC 粒度消费
+      if (kcAnnotation) {
+        try {
+          const currentPath = await prisma.learning_paths.findUnique({
+            where: { id: pathId },
+            select: { aiPromptTemplate: true },
+          });
+          const currentTemplate = this.parsePathPromptTemplate(currentPath?.aiPromptTemplate || null);
+          await prisma.learning_paths.update({
+            where: { id: pathId },
+            data: {
+              aiPromptTemplate: JSON.stringify({ ...currentTemplate, kcAnnotation }),
+              updatedAt: new Date(),
+            },
+          });
+          logger.info('[kc-mapper] KC 映射已持久化到 aiPromptTemplate', {
+            pathId,
+            kcCount: kcAnnotation?.conceptKcs?.length || 0,
+            taskKcLinkCount: kcAnnotation?.taskKcLinks?.length || 0,
+          });
+        } catch (persistError) {
+          logger.warn('[kc-mapper] KC 映射持久化失败（best-effort，不阻断路径生成）', {
+            pathId,
+            error: persistError instanceof Error ? persistError.message : String(persistError),
+          });
+        }
       }
 
       await prisma.$transaction(async (tx) => {
@@ -3341,7 +3382,7 @@ class LearningService {
 
     try {
       logger.info('开始生成学习路径...', { userId: data.userId, goal: data.description });
-      const analysis = await this.analyzePathWithAgent(data);
+      let analysis = await this.analyzePathWithAgent(data);
       // 路径评审（CIDDP 五维度）：best-effort，不阻断路径生成
       let pathReview: any = null;
       try {
@@ -3349,7 +3390,7 @@ class LearningService {
           pathPlan: {
             name: analysis.pathName,
             summary: analysis.summary,
-            cognitiveCore: analysis.cognitiveDesign,
+            cognitiveCore: analysis.cognitiveCore || analysis.cognitiveDesign,
             milestones: analysis.suggestedMilestones,
             estimatedHours: analysis.estimatedTotalHours,
           },
@@ -3358,15 +3399,45 @@ class LearningService {
             confirmedProposal: (data as any).confirmedProposal,
             learnerProfile: (data as any).userProfile?.learnerProfile,
           },
-          prerreqTree: (analysis.cognitiveDesign as any)?.prerequisiteTree,
+          prerreqTree: ((analysis.cognitiveCore || analysis.cognitiveDesign) as any)?.prerequisiteTree,
         });
         if (reviewResult?.success && reviewResult?.output) {
           pathReview = reviewResult.output;
           if (pathReview.passed === false && pathReview.replanInstructions) {
-            logger.info('[path-reviewer] 路径未通过评审，已记录重规划指令', {
+            logger.info('[path-reviewer] 路径未通过评审，触发一次自动重规划', {
               score: pathReview.score,
               replanInstructions: pathReview.replanInstructions,
             });
+            try {
+              const replanData: GeneratePathData = {
+                ...data,
+                source: 'replan',
+                mode: 'replan',
+                userProfile: {
+                  ...(data.userProfile || {}),
+                  replan: {
+                    ...(data.userProfile?.replan || {}),
+                    triggerSource: 'path-reviewer',
+                    reviewerFeedback: pathReview.replanInstructions,
+                  },
+                },
+              };
+              const replannedAnalysis = await this.analyzePathWithAgent(replanData);
+              if (replannedAnalysis?.suggestedMilestones?.length) {
+                analysis = replannedAnalysis;
+                pathReview = { ...pathReview, replanned: true };
+                logger.info('[path-reviewer] 自动重规划完成，采用重规划结果', {
+                  score: pathReview.score,
+                  replanInstructions: pathReview.replanInstructions,
+                });
+              } else {
+                logger.warn('[path-reviewer] 重规划结果为空，保留原路径', { score: pathReview.score });
+              }
+            } catch (replanError) {
+              logger.warn('[path-reviewer] 自动重规划失败（best-effort，保留原路径）', {
+                error: replanError instanceof Error ? replanError.message : String(replanError),
+              });
+            }
           }
         }
       } catch (reviewError) {

@@ -6,6 +6,7 @@ import type { SessionWrapupArtifact, SessionWrapupSummary } from '../../skills/s
 import { teachingTurnAgentDefinition, type TeachingTurnInput, type TeachingTurnOutput } from '../../skills/teaching-turn';
 import { executeSkill, executeSkillWithResult, auxSkillDefinitionMap, sessionWrapupAgentDefinition, peerAgentDefinition } from '../../skills';
 import { buildTeachingScenarioContext, type TeachingScenarioContext, type InteractionMetaRecord } from './TeachingContextBuilder';
+import { fsrsRetrievability, type FsrsMemoryState } from '../memory/fsrs';
 import {
   teachingSessionRepository,
   TeachingSessionConflictError,
@@ -2010,6 +2011,7 @@ export class AITeachingOrchestrator {
     const knowledgeDelta = computeKnowledgeDelta(initialKnowledgeState, session.knowledgeState);
     const sessionEvidence = computeSessionEvidence(session);
     const context = await buildTeachingScenarioContext(session.userId, session.taskId, session);
+    const reviewHints = await this.loadRetrievabilityHints(session.userId);
 
     let wrapupOutput: any = null;
     try {
@@ -2041,6 +2043,7 @@ export class AITeachingOrchestrator {
         knowledgeContext: {
           initialPoints: initialKnowledgeState,
           delta: knowledgeDelta,
+          reviewHints,
         },
         sessionEvidence,
         sessionStructure: {
@@ -2571,6 +2574,47 @@ export class AITeachingOrchestrator {
       if (!committed) {
         await teachingSessionRepository.releaseOperation(sessionId, operationClaim.operationId);
       }
+    }
+  }
+
+  /**
+   * 记忆保持率提示（retrievability 学生端可视化）：查该用户低保持率的记忆点，注入 wrapup 供叙事引用。
+   * 数值由 FSRS 公式确定性计算（零 LLM），wrapup 只做自然语言引用，禁止编造。
+   */
+  private async loadRetrievabilityHints(userId: string): Promise<Array<{ concept: string; retrievability: number }>> {
+    try {
+      const traces = await prisma.memory_traces.findMany({
+        where: { userId, fsrsStability: { not: null }, lastSeenAt: { not: null } },
+        orderBy: { dueAt: 'asc' },
+        take: 20,
+        select: {
+          label: true,
+          conceptKey: true,
+          fsrsStability: true,
+          fsrsDifficulty: true,
+          extractionCount: true,
+          lastSeenAt: true,
+        },
+      });
+      const now = new Date();
+      return traces
+        .map((t) => {
+          const state: FsrsMemoryState = {
+            stability: t.fsrsStability as number,
+            difficulty: t.fsrsDifficulty ?? 5,
+            reps: t.extractionCount,
+            lapses: 0,
+            lastReviewAt: t.lastSeenAt as Date,
+          };
+          return {
+            concept: t.label || t.conceptKey,
+            retrievability: Math.round(fsrsRetrievability(state, now) * 100) / 100,
+          };
+        })
+        .filter((h) => h.retrievability < 0.8)
+        .slice(0, 5);
+    } catch {
+      return [];
     }
   }
 

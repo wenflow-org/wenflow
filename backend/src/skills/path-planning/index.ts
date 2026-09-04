@@ -71,6 +71,7 @@ function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
         backgroundExperience: normalizePromptString(learnerProfile.backgroundExperience),
         painPoints: normalizePromptStringArray(learnerProfile.painPoints),
         learningSignal: normalizePromptString(learnerProfile.learningSignal),
+        goalOrientation: normalizePromptString(learnerProfile.goalOrientation),
         constraintsAndBoundaries: normalizePromptStringArray(learnerProfile.constraintsAndBoundaries),
         currentBaseline: {
           level: normalizePromptString(learnerProfile.currentBaseline?.level),
@@ -110,6 +111,22 @@ function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
         subtaskMinutesRange: Array.isArray(planningHints.subtaskMinutesRange) ? planningHints.subtaskMinutesRange : null,
         maxWeeks: typeof planningHints.maxWeeks === 'number' ? planningHints.maxWeeks : null,
       } : null,
+      prerequisiteCheckResults: Array.isArray(normalizedInput.prerequisiteCheckResults)
+        ? normalizedInput.prerequisiteCheckResults.map((item: any) => ({
+            probeId: normalizePromptString(item?.probeId),
+            targetConcept: normalizePromptString(item?.targetConcept),
+            userAnswer: normalizePromptString(item?.userAnswer),
+            isCorrect: typeof item?.isCorrect === 'boolean' ? item.isCorrect : undefined,
+          }))
+        : null,
+      timeDimensions: normalizedInput.timeDimensions && typeof normalizedInput.timeDimensions === 'object'
+        ? {
+            totalWeeks: Number.isFinite(normalizedInput.timeDimensions.totalWeeks) ? normalizedInput.timeDimensions.totalWeeks : null,
+            estimatedHours: Number.isFinite(normalizedInput.timeDimensions.estimatedHours) ? normalizedInput.timeDimensions.estimatedHours : null,
+            sessionsPerWeek: Number.isFinite(normalizedInput.timeDimensions.sessionsPerWeek) ? normalizedInput.timeDimensions.sessionsPerWeek : null,
+            sessionsLengthMin: Number.isFinite(normalizedInput.timeDimensions.sessionsLengthMin) ? normalizedInput.timeDimensions.sessionsLengthMin : null,
+          }
+        : null,
     },
   };
 }
@@ -600,7 +617,7 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
       subject: analysis.subject,
       totalMilestones: pathData.totalMilestones,
       estimatedHours: pathData.estimatedHours,
-      cognitiveCore: pathData.cognitiveCore,
+      cognitiveCore: pathData.cognitiveCore || pathData.cognitiveDesign,
       cognitiveDesign: pathData.cognitiveDesign || pathData.cognitiveCore,
       milestones: pathData.milestones,
       _debug: {

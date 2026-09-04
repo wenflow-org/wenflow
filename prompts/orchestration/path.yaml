@@ -342,43 +342,43 @@ routings:
   - agentId: skill:path-planning
     fieldId: cognitiveCore.cognitiveDomain
     render: visible
-    handoff: [path-agent, skill:stage-designer]
+    handoff: [path-agent, skill:stage-designer, skill:kc-mapper]
     internal: false
     accumulate: true
   - agentId: skill:path-planning
     fieldId: cognitiveCore.coreConcepts
     render: visible
-    handoff: [path-agent, skill:stage-designer]
+    handoff: [path-agent, skill:stage-designer, skill:kc-mapper]
     internal: false
     accumulate: true
   - agentId: skill:path-planning
     fieldId: milestones.stageNumber
     render: visible
-    handoff: [skill:stage-designer, path-agent]
+    handoff: [skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer]
     internal: false
     accumulate: false
   - agentId: skill:path-planning
     fieldId: milestones.title
     render: visible
-    handoff: [skill:stage-designer, path-agent]
+    handoff: [skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer]
     internal: false
     accumulate: false
   - agentId: skill:path-planning
     fieldId: milestones.coreConcept
     render: visible
-    handoff: [skill:stage-designer, path-agent]
+    handoff: [skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer]
     internal: false
     accumulate: false
   - agentId: skill:path-planning
     fieldId: milestones.goal
     render: visible
-    handoff: [skill:stage-designer, path-agent]
+    handoff: [skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer]
     internal: false
     accumulate: false
   - agentId: skill:path-planning
     fieldId: milestones.estimatedHours
     render: visible
-    handoff: [skill:stage-designer, path-agent]
+    handoff: [skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer]
     internal: false
     accumulate: false
 
