@@ -133,13 +133,13 @@ sandbox:goal-agent.understanding.urgency
 | `path.name` | string | path-agent |
 | `path.summary` | string | path-agent |
 | `path.totalMilestones` | number | path-agent |
-| `cognitiveCore.cognitiveDomain` | string | path-agent, skill:stage-designer |
-| `cognitiveCore.coreConcepts` | array<object> | path-agent, skill:stage-designer |
-| `milestones.stageNumber` | number | skill:stage-designer, path-agent |
-| `milestones.title` | string | skill:stage-designer, path-agent |
-| `milestones.coreConcept` | string | skill:stage-designer, path-agent |
-| `milestones.goal` | string | skill:stage-designer, path-agent |
-| `milestones.estimatedHours` | number | skill:stage-designer, path-agent |
+| `cognitiveCore.cognitiveDomain` | string | path-agent, skill:stage-designer, skill:kc-mapper |
+| `cognitiveCore.coreConcepts` | array<object> | path-agent, skill:stage-designer, skill:kc-mapper |
+| `milestones.stageNumber` | number | skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer |
+| `milestones.title` | string | skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer |
+| `milestones.coreConcept` | string | skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer |
+| `milestones.goal` | string | skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer |
+| `milestones.estimatedHours` | number | skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer |
 | `subtasks.title` | string | path-agent |
 | `subtasks.type` | string | path-agent |
 | `subtasks.estimatedMinutes` | number | path-agent |
@@ -169,17 +169,20 @@ sandbox:path-agent.normalizedInput.planningHints.milestoneRange
 sandbox:path-agent.normalizedInput.planningHints.paceSignal
 sandbox:path-agent.normalizedInput.planningHints.subtaskMinutesRange
 sandbox:path-agent.normalizedInput.planningHints.subtasksPerStageRange
+sandbox:path-agent.normalizedInput.prerequisiteTree
 sandbox:path-agent.normalizedInput.problemSpace.currentPainPoint
 sandbox:path-agent.normalizedInput.problemSpace.realProblem
 sandbox:path-agent.normalizedInput.problemSpace.scenario
 sandbox:path-agent.normalizedInput.resources.timeBudget
 sandbox:path-agent.normalizedInput.resources.timeBudgetCadence
 sandbox:path-agent.normalizedInput.successCriteria.observableResult
+sandbox:path-agent.normalizedInput.understanding.adjustments
 sandbox:path-agent.path.name
 sandbox:path-agent.path.summary
 sandbox:path-agent.planningHints
 sandbox:path-agent.previousMilestone
 sandbox:path-agent.replan
+sandbox:path-agent.subtasks
 sandbox:path-agent.subtasks.acceptanceCriteria
 sandbox:path-agent.subtasks.title
 ```
@@ -326,16 +329,20 @@ sandbox:simulation-agent.candidatePersonas
 sandbox:simulation-agent.control
 sandbox:simulation-agent.currentPhase
 sandbox:simulation-agent.currentTask
+sandbox:simulation-agent.existingKnown
 sandbox:simulation-agent.existingPersonaSeed
+sandbox:simulation-agent.existingStruggle
 sandbox:simulation-agent.experimentSummary
 sandbox:simulation-agent.frictionBudget
 sandbox:simulation-agent.goalState
 sandbox:simulation-agent.knowledgeSnapshot
 sandbox:simulation-agent.learner
+sandbox:simulation-agent.learnerMemory
 sandbox:simulation-agent.learnerPrivateState
 sandbox:simulation-agent.learnerState
 sandbox:simulation-agent.metricCompleteness
 sandbox:simulation-agent.pathProposal
+sandbox:simulation-agent.persona
 sandbox:simulation-agent.preferredDomains
 sandbox:simulation-agent.preferredGoalTypes
 sandbox:simulation-agent.preferredLevels
@@ -349,6 +356,7 @@ sandbox:simulation-agent.refereeTrace
 sandbox:simulation-agent.story
 sandbox:simulation-agent.storyMeta
 sandbox:simulation-agent.task
+sandbox:simulation-agent.turnSequence
 sandbox:simulation-agent.visibleContext
 ```
 

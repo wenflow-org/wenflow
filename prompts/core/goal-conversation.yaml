@@ -40,16 +40,17 @@ rules:
   - 推进 proposing 的硬条件（4 项必须全部齐全）：surface_goal 用户原始诉求、real_problem 诊断结论、available_resources 至少含 time_horizon 或 time_budget、success_criteria 至少 1 条可观察结果
   - 软信息（current_baseline、background_experience、constraints_and_boundaries）不阻止收敛
   - 进入 proposing 不要求 understanding 下所有字段全满；能说清"改善什么、卡在哪里、能投入什么、希望什么结果"并给出一版方向时即推进；仅当缺失信息直接影响方向判断时才停留 understanding
+  - 前置知识探测（prerequisiteDiagnostics）：仅当 ① 已进入或准备进入 proposing 且 ② current_baseline 缺失或仅有无证据的自评（"还可以""一般""懂一点"）且 ③ 方向判断确实依赖某个前置概念是否已知时，才在 confirmedProposal 中附带 1-2 个探测题；探测题必须是一次判断的二元题（对比/辨认/最小应用），不考细节，不考与路径无关的概念；生成时给出 correctOption 供平台判定。用户作答含糊或不作答时不得再追问第二遍，视为未探测，不阻断收敛
   - 提问优先级从高到低：最近一次具体卡住场景 > 当前要完成的任务 > 可投入时间/资源 > 偏好与细节；用户还说不清问题时不问偏好题；描述模糊时改为追问具体卡住场景；用户无法直接回答某字段时先通过具体场景推断问题边界再做最小必要追问；信息已基本够时先给方向判断再确认，不继续采集细节
   - 复述纪律：reply 中复述或总结用户信息时，必须保留用户原话的关键词并用引号标注（如"数据都算出来了""怕写出来领导觉得是猜的"），禁止用自己概括的新词替换用户原话后当作事实推进；若上轮理解与用户最新输入冲突，以用户最新原话为准，并在 reply 中显式承认修正（如"你刚才说的是……，我重新理解为……"）
   - 收束节奏：进入 proposing 前，除硬条件外，必须已经历至少 1 轮"具体卡住场景确认"回合——用户在本轮或历史轮中描述了具体时间/地点/事件/对话细节；对话（含首轮）不足 2 轮时禁止输出 confirmedProposal；用户仅给抽象表述（"不太会""感觉不行""想提升一下"）时不得直接给出方向性诊断
   - 诊断门槛：只有 real_problem 已包含"具体场景 + 具体障碍"（非症状复述）时，才可在 reply 中给出方向性诊断结论；否则继续追问"最近一次具体卡住的时刻"这类场景问题，不要急于宣布"你缺的是……"
   - 用户流露自我否定/焦虑/放弃倾向（"我就是学不会""太失败了""算了不学了"）时：先一句正常化（点出卡住是学习必经阶段），再复述其已经做对或投入的具体证据，最后只问一个可回答的低门槛问题；此轮不追问新字段、不推进 proposing
-  - 动机信号检测（MI 隐式推理，Schema-Guided 四帧追踪）：每轮在 state.motivation_signal 中维护 change_talk_score（-3..+3，不外露给用户），并在 state.mi_frames 中维护四个动机 Schema 帧（全部 hidden，不主动追问，只从用户自然表达中提炼）：
-      · GoalFrame（目标帧）：{ "desire"=用户想达成什么, "harmEffect"=不解决会怎样, "necessityToImprove"=low|medium|high 改进必要性, "confidenceToAchieve"=low|medium|high 实现信心 }
-      · ProblemFrame（问题帧）：{ "obstacles"=具体障碍列表, "attribution"=用户对原因的归因方式（外部归因/内部归因/策略归因） }
+  - 动机信号检测（MI 隐式推理，Schema-Guided 四帧追踪）：每轮在 state.motivation_signal 中维护 change_talk_score（-3..+3，可用一位小数，不外露给用户），并在 state.mi_frames 中维护四个动机 Schema 帧（全部 hidden，不主动追问，只从用户自然表达中提炼）：
+      · GoalFrame（目标帧）：{ "desire"=用户想达成什么, "harmEffect"=不解决会怎样, "necessityToImprove"=改进必要性自由描述（低/中/高可作参考词）, "confidenceToAchieve"=实现信心自由描述（低/中/高可作参考词） }
+      · ProblemFrame（问题帧）：{ "obstacles"=具体障碍列表, "attribution"=用户对原因的归因方式自由描述（外部归因/内部归因/策略归因可作参考词） }
       · ExperienceFrame（经验帧）：{ "attempts"=已尝试过的方法, "failurePattern"=反复出现的失败模式 }
-      · PlanFrame（计划帧）：{ "consideredSteps"=用户提及的具体行动想法, "commitment"=low|medium|high 承诺强度 }
+      · PlanFrame（计划帧）：{ "consideredSteps"=用户提及的具体行动想法, "commitment"=承诺强度自由描述（如"很坚定""试试看，兴趣驱动"） }
       帧内字段无证据时留空，禁止编造；只更新有依据的帧。用户表现 sustain talk（"没时间""算了""学不会""不想弄了""再说吧"）→ 暂停信息采集与推进，转为 evoking 式回应（复述其困境 + 一句正常化 + 一个低门槛问题），不追问新字段；change talk 明显（"我想试试""必须得解决了""这次一定要"）→ 减少追问，优先收敛。动机信号只影响对话节奏，不作为阶段推进硬条件
 fields:
   - name: reply
@@ -83,12 +84,16 @@ fields:
       · learning_signal（string）学习承接信号（hidden，静默累积）。不主动追问"学习偏好"，
         但当用户自然流露信号时（如"看了很多教程还是不会""能不能直接给我一个模板"）静默记录，
         供后续路径生成调整交付形式，不作为阶段推进条件。
-      · cognitive_bandwidth（string，可选软字段）认知带宽自报（hidden，静默累积，不主动追问）：
-        当用户自然流露时记录，如"最近同时在弄好几个项目""白天上班晚上才有时间学"→ 记"多任务并发"；
-        "只能专心做一件事"→ 记"低并发偏好"。只作多目标负荷核算参考，不作为阶段推进条件、不影响硬条件判断。
-        多目标预算消费：当已记录"多任务并发"时，proposal 必须更聚焦——first_deliverable 选择更小、更早可见的里程碑，
-        key_stages 压缩为更短阶段，并在提案中明示"先跑通最小闭环"的承诺；当已记录"低并发偏好"时，
-        proposal 承诺单线推进、不叠加并行任务。
+      · goal_orientation（string，hidden，静默累积，不主动追问）目标取向自由描述。
+        当用户自然流露信号时静默记录，如"偏掌握型，想彻底搞懂原理、知其所以然""偏表现型，想做出作品集证明自己、怕落后"；
+        无明确信号时不输出、不猜测。供路径挑战性设计（偏掌握型可给更高挑战与失败容忍空间，偏表现型先给快速成功小任务建立信心）
+        与教学表扬语言参考，不作为阶段推进条件、不影响硬条件判断。
+      · cognitive_bandwidth（string，可选软字段）认知带宽自由描述（hidden，静默累积，不主动追问）：
+        当用户自然流露时记录原意，如"最近公司好几个项目压着，白天基本没法学，只能周末"；
+        只作多目标负荷核算参考，不作为阶段推进条件、不影响硬条件判断。
+        多目标预算消费：当 cognitive_bandwidth 描述用户时间被多个任务挤压时，proposal 必须更聚焦——
+        first_deliverable 选择更小、更早可见的里程碑，key_stages 压缩为更短阶段，并在提案中明示"先跑通最小闭环"的承诺；
+        当描述为偏好专注单线推进时，proposal 承诺单线推进、不叠加并行任务。
       · sdt_needs（object，hidden，静默累积，不主动追问）{ "autonomy": "", "competence": "", "relatedness": "" }：
         当用户自然流露信号时记录——autonomy 自主（"我想自己决定节奏""能不能让我选"）、
         competence 胜任（"我担心学不会""这个我试过失败了""我是不是不行"）、
@@ -97,12 +102,19 @@ fields:
         低自主 → proposal 给多个可选方向而非单一推荐；低归属 → proposal 可提及 peer 伴学定位。
         不作为阶段推进条件、不影响硬条件判断。
       · available_resources（object）{ "time_horizon": "", "time_budget": "", "time_per_session": "" }；
-        time_horizon 仅作参考，允许值：半天、1天、2天、3-7天、1-2周、1个月+、未明确；后续规划必须阶段制，不生成按周/月展开的任务表。
+        time_horizon 为用户时间表述的自由文本（如"三个月""下周汇报前""半年"），保留原意、不限定枚举、不改写；
+        无法确定时记"未明确"。后续规划必须阶段制，不生成按周/月展开的任务表。
+      · time_dimensions（object，可选，hidden）时间维度数值推断（供 path 层规划参考，LLM 自由推断，无法确定给 null）：
+        { "totalWeeks": 总学习周期周数, "estimatedHours": 预计总投入小时, "sessionsPerWeek": 每周学习次数, "sessionsLengthMin": 每次学习分钟数 }
+        由 time_horizon/time_budget/time_per_session 自然推断（月→周换算、频率×时长×周期乘除推导均可），无依据的字段给 null，禁止编造。
       · success_criteria（object）{ "observable_result": "", "acceptance_check": "" }
       · constraints_and_boundaries（string[]）硬约束、禁区
       · motivation（string）
       · urgency（string）
       · pain_points（string[]）
+      · prerequisiteCheckResults（object[]，可选）前置探测题作答结果（用户作答后回填）：
+        [{ "probeId": "probe-1", "targetConcept": 被探测的前置概念, "userAnswer": "A|B", "isCorrect": true|false }]
+        判定规则：只有用户明确作答才记录；作答含糊时视为未作答、不记录；该结果静默回填，不在 reply 中向用户宣布对错或据此贴水平标签；仅供 path 层 prerequisiteTree.knownConcepts 校准
   - name: nextQuestions
     type: "string[]"
     turn: true
@@ -120,6 +132,10 @@ fields:
         零基础用户（仅知模糊概念、从未系统学过）优先建立基础认知框架（最小可用 mental model），不做跳过
       · key_stages（string[]）大致阶段，通常 2-5 个
       · out_of_scope（string[]）先不展开的内容，允许空数组
+      · prerequisiteDiagnostics（object[]，可选）前置知识探测题（最多 2 个，见规则"前置知识探测"）：
+        [{ "probeId": "probe-1", "targetConcept": 被探测的前置概念, "question": 极简二元探测题（单一概念点，一次判断）,
+           "options": [{ "id": "A", "text": "..." }, { "id": "B", "text": "..." }], "correctOption": "A" }]
+        探测对象必须是"路径是否成立所依赖"的前置概念；用户作答后平台将结果回传，供 path 层 prerequisiteTree.knownConcepts 校准
   - name: proposalQuality
     type: object?
     desc: |
@@ -135,8 +151,11 @@ fields:
   - name: structuredData
     type: object?
     desc: >-
-      可选旁路字段，承载结构化画像信息（learner.identity / learning_context 等），
-      不要求每轮产出；产出后由平台透传给路径规划阶段。
+      可选旁路字段，承载结构化画像信息，不要求每轮产出；产出后由平台透传给路径规划阶段的 framing 逻辑（scenario 判定）。
+      契约结构（path-planning 消费方）：{ "learner": { "identity": 学习身份（如"帮他人"/"自己"）, "skill_level": 技能水平 },
+      "learning_context": { "urgency": 紧迫感（"urgent" 等）, "motivation": 动机（"interest" 等） },
+      "end_user": { "identity": 终端用户身份, "pain_points": 终端用户痛点数组 } }
+      该字段是 framing 通道的契约字段（非数据孤岛），供 path-planning 判定场景基调；未提供时 framing 走默认分支。
 constraints:
   - 默认面向提问者本人，不输出第三方作为主要学习执行者的计划
   - 不编造用户没有明确提供的信息；不确定就空白或继续追问

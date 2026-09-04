@@ -88,6 +88,8 @@ interface RankEntry {
   key: string;
   display: string;
   tokens: number;
+  promptTokens: number;
+  completionTokens: number;
   calls: number;
   failed: number;
 }
@@ -196,8 +198,10 @@ async function loadTokenData(days: number, includeTest: boolean) {
     for (let i = 0; i < maps.length; i += 1) {
       const key = entries[i][0];
       const display = entries[i][1];
-      const e = maps[i].get(key) || { key, display, tokens: 0, calls: 0, failed: 0 };
+      const e = maps[i].get(key) || { key, display, tokens: 0, promptTokens: 0, completionTokens: 0, calls: 0, failed: 0 };
       e.tokens += t;
+      e.promptTokens += r.promptTokens || 0;
+      e.completionTokens += r.completionTokens || 0;
       e.calls += 1;
       if (r.success === false) e.failed += 1;
       maps[i].set(key, e);

@@ -63,10 +63,10 @@ for (const p of lp) {
 }
 
 console.log('\n===== memory_traces（记忆引擎痕迹，间隔/衰减因子）=====');
-const mt = q(`SELECT u.name, mt.conceptKey, mt.label, mt.masteryScore, mt.stability, mt.intervalFactor, mt.decayFactor, mt.lastRetention, mt.extractionCount
+const mt = q(`SELECT u.name, mt.conceptKey, mt.label, mt.masteryScore, mt.stability, mt.intervalFactor, mt.decayFactor, mt.extractionCount
   FROM memory_traces mt JOIN users u ON u.id = mt.userId
   WHERE u.isVirtualLearner = 0 ORDER BY mt.updatedAt DESC LIMIT 12`);
-for (const m of mt) console.log(`- [${m.name}] ${trunc(m.conceptKey, 30)} | ${trunc(m.label, 30)} | m=${m.masteryScore} st=${m.stability} iv=${m.intervalFactor} dec=${m.decayFactor} ret=${m.lastRetention} n=${m.extractionCount}`);
+for (const m of mt) console.log(`- [${m.name}] ${trunc(m.conceptKey, 30)} | ${trunc(m.label, 30)} | m=${m.masteryScore} st=${m.stability} iv=${m.intervalFactor} dec=${m.decayFactor} n=${m.extractionCount}`);
 
 console.log('\n===== 虚拟学习者画像（结构化）=====');
 const vp = q(`SELECT vp.profile, vp.learningGoal, vp.knowledgeLevel, vp.personalityTraits, vp.tags FROM virtual_learner_profiles vp LIMIT 8`);

@@ -28,9 +28,6 @@ interface ShortcutConfig {
  */
 export function useKeyboardShortcuts(shortcuts: ShortcutConfig[]) {
   function handleKeydown(e: KeyboardEvent) {
-    // Ignore events inside input/textarea/select unless explicitly handled
-    const tag = (e.target as HTMLElement)?.tagName
-
     for (const s of shortcuts) {
       const ctrlMatch = s.ctrl ? (e.ctrlKey || e.metaKey) : !(e.ctrlKey || e.metaKey)
       const shiftMatch = s.shift ? e.shiftKey : !e.shiftKey

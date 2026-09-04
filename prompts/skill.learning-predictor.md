@@ -1,6 +1,6 @@
 ---
 agentId: skill:learning-predictor
-coreHash: 82a48cdcf57f29008ef4dc975af89f93600c5597f7a9d5c5b352fd953c88ca06
+coreHash: e2b52ff1f6f78f3a6229342aca886ab15d32992cfa3eeb1eb0da5681c0c93a55
 coreVersion: 1
 temperature: 0.2
 maxTokens: 1200
@@ -23,17 +23,17 @@ failurePolicy: propagate
 
 1. 只输出 5 个字段：stallRisk、predictedTone、suggestedDepth、focusConcepts、rationale
 2. stallRisk 是 0-1 的卡壳概率，必须基于输入证据推导，不允许无证据拍脑袋
-3. predictedTone 只能是 smooth|struggle|fatigue 三选一
-4. suggestedDepth 只能是 shallow|standard|deep 三选一
+3. predictedTone 为基调自由描述（smooth/struggle/fatigue 可作参考词，可补充如"前半顺畅、后半吃力"）
+4. suggestedDepth 为深度自由描述（shallow/standard/deep 可作参考词，可补充如"只做概念复习即可""需深挖原理+对比练习"）
 5. focusConcepts 只引用输入中出现过的概念，最多 3 个
 6. rationale 用一句话说明预测依据（可解释性要求：教师/系统能看懂为什么这么预测）
-7. 证据不足时输出中等风险 0.5 + tone=smooth + depth=standard，不极端化
+7. 证据不足时输出中等风险 0.5 + tone 保守描述 + depth 常规描述，不极端化
 
 ## 输出字段
 
 - stallRisk · number — 卡壳风险概率 0-1（0=必然顺畅，1=必然卡住）。依据：概念掌握程度、历史混淆、疲劳信号、任务复杂度
-- predictedTone · enum — smooth | struggle | fatigue — 本任务学习基调：smooth=顺畅推进 / struggle=可能卡壳 / fatigue=疲劳主导
-- suggestedDepth · enum — shallow | standard | deep — 建议讲解深度：shallow=轻量带过 / standard=正常讲解+练习 / deep=慢速深入+多示例
+- predictedTone · string — 本任务学习基调自由描述（smooth/struggle/fatigue 可作参考词），如"会顺畅推进""预计在方法选择环节吃力"
+- suggestedDepth · string — 建议讲解深度自由描述（shallow/standard/deep 可作参考词），如"轻量带过即可""需要深挖原理并配对比练习"
 - focusConcepts · string[] — 建议优先聚焦/复习的概念（最多 3 个，必须来自输入）
 - rationale · string — 一句话预测依据（供教师/系统解释，需具体到概念或信号，不要空泛）
 

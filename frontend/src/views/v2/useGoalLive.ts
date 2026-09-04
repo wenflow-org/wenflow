@@ -112,6 +112,8 @@ const understanding = ref<GoalUnderstanding>({});
 const collected = ref<Record<string, unknown>>({});
 const quickReplies = ref<Array<{ text: string; icon?: string }>>([]);
 const confirmedProposal = ref<Record<string, unknown> | null>(null);
+/** 前置探测题作答记录（probeId → 选项 id，防重复作答） */
+const probeAnswers = ref<Record<string, string>>({});
 const learningPath = ref<{ id: string; status?: string } | null>(null);
 const sending = ref(false);
 const failed = ref<'start' | 'reply' | 'confirm' | 'supplement' | 'resume' | ''>('');
@@ -166,9 +168,38 @@ const proposal = computed(() => {
   );
   const stages = toList(cp.key_stages ?? cp.stages ?? cp.outline).slice(0, 5);
   const skip = toList(cp.out_of_scope ?? cp.not_now ?? cp.exclude).slice(0, 6);
+  const probes = toProbes(cp.prerequisiteDiagnostics ?? cp.prerequisite_diagnostics ?? cp.prerequisite_diagnostics_list);
   if (!problem && !outcome && stages.length === 0) return null;
-  return { problem, outcome, stages, skip };
+  return { problem, outcome, stages, skip, probes };
 });
+
+/** 前置探测题（goal-conversation prerequisiteDiagnostics）→ 展示结构 */
+function toProbes(raw: unknown): Array<{
+  probeId: string;
+  targetConcept: string;
+  question: string;
+  options: Array<{ id: string; text: string }>;
+}> {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((p: any) => {
+      const options = Array.isArray(p?.options)
+        ? p.options.map((o: any) => ({
+            id: typeof o?.id === 'string' ? o.id : '',
+            text: typeof o?.text === 'string' ? o.text : String(o?.text ?? ''),
+          })).filter((o: { id: string; text: string }) => o.id && o.text)
+        : [];
+      if (!options.length) return null;
+      return {
+        probeId: typeof p?.probeId === 'string' ? p.probeId : '',
+        targetConcept: typeof p?.targetConcept === 'string' ? p.targetConcept : '',
+        question: typeof p?.question === 'string' ? p.question : '',
+        options,
+      };
+    })
+    .filter((p): p is NonNullable<typeof p> => !!p && !!p.probeId && !!p.question)
+    .slice(0, 2);
+}
 
 function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string; replaceMessages?: boolean } = {}, gen = generation) {
   // 会话代次不一致：会话已被重置，丢弃过期响应
@@ -344,6 +375,15 @@ async function confirm() {
   await run('confirm', label);
 }
 
+/** 前置探测题作答：把选项以明确格式作为用户消息发送，goal-conversation 回填 prerequisiteCheckResults */
+async function answerProbe(probe: { probeId: string; targetConcept: string; question: string; options: Array<{ id: string; text: string }> }, optionId: string, optionText: string) {
+  if (sending.value) return;
+  if (probeAnswers.value[probe.probeId]) return; // 已作答，防重复
+  probeAnswers.value = { ...probeAnswers.value, [probe.probeId]: optionId };
+  const text = `【前置自测】${probe.question} 我选 ${optionId}（${optionText}）`;
+  await send(text, false);
+}
+
 async function supplement(text: string) {
   const t = text.trim();
   if (!conversationId.value || !t || sending.value) return;
@@ -443,6 +483,7 @@ export function useGoalLive() {
     totalFields: FIELD_DEFS.length,
     quickReplies,
     proposal,
+    probeAnswers,
     learningPath,
     sending,
     streamingText,
@@ -452,6 +493,7 @@ export function useGoalLive() {
     meta: metaTracker,
     send,
     confirm,
+    answerProbe,
     supplement,
     retry,
     resume,

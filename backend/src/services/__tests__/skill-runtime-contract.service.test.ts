@@ -173,7 +173,8 @@ describe('skill-runtime-contract.service', () => {
       expect.objectContaining({
         model: 'route-model',
         temperature: 0.7,
-        maxTokens: 8000,
+        // 全局默认 maxTokens=128k：ACTIVE prompt 8000 被抬到 131072（2026-09 定案）
+        maxTokens: 131072,
         source: 'active-prompt',
       })
     )

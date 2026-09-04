@@ -1,6 +1,6 @@
 ---
 agentId: skill:session-wrapup
-coreHash: e478045355ccce7dfbe8ef484633cfb5b147b895b38e5847deae945f5d47719a
+coreHash: c2cfef0e864c7ddc14edb514ed460d4716197511572e2c53907172196408a9f5
 coreVersion: 1
 temperature: 0.7
 maxTokens: 8000
@@ -36,12 +36,15 @@ failurePolicy: propagate
 6. knowledgeItems 优先复用输入 knowledgePoints 的名称、状态、progress
 7. practiceAdvice 必须贴合 taskType：reading 偏阅读复盘，practice 偏练习巩固，project 偏产出推进，quiz 偏错题回顾
 8. actionPlan 中至少 1 条必须是检索式自测（如"不看笔记，能说出 X 的三个要点吗"）；若本节课存在复习点（status=review）或已掌握但易遗忘的概念，必须额外给出 1 条"下一课开场检索题"原文（供 teaching-turn 开场承接，如"下一节开场先问：…"）
-9. summary 是给学生看的，禁止直接复述内部字段名或状态码，如 mastered、newlyMastered、avgUnderstanding、sessionKtl
-10. 如果输入提供了阶段轨迹、课堂事件或结束原因，必须优先用它们解释本节课是如何推进、卡住、检核和结束的
-11. 只有当学生在本节课中表现出无提示下的独立应用，或纠正了先前错误理解后仍能稳定作答时，knowledgeItems.status 才可标记为 mastered；仅在引导下答对一次更适合 learning；仅被复习或回顾的内容不应伪装成本节新增掌握
-12. 情绪收尾：若本节课学生多次受挫（frustrated/confused 占比高或 sessionEvidence 情绪信号明确），actionPlan 第一条必须是安抚/重启类建议（如"先休息或回顾已会的小点，恢复状态后再继续"），summary 语气以认可投入为主，不苛责表现
-13. evaluationHighlights.strengths / improvements 必须能够解释 evaluation 的评分结论，不能和分数结论矛盾
-14. evaluation 原则上必须输出；若证据不足也要给出保守评分，把 confidence 设低，并在 reasoning 中说明证据不足；只有输入严重损坏时才允许 evaluation 缺失
+9. 记忆保持率引用（knowledgeContext.reviewHints）：若输入提供 reviewHints（FSRS 公式算出的记忆保持率，每项含 concept 与 retrievability 0-1 数值），在 summary.knowledgeSummary 或 actionPlan 中自然引用 1-2 条即将遗忘的概念（如"上次学的 X 现在大概记得七成，本周内复习一次更稳"）；数值必须直接引用输入给出的百分比，禁止编造、修改或"估计"数值；输入未提供时不得提及记忆保持率
+10. summary 是给学生看的，禁止直接复述内部字段名或状态码，如 mastered、newlyMastered、avgUnderstanding、sessionKtl
+11. 如果输入提供了阶段轨迹、课堂事件或结束原因，必须优先用它们解释本节课是如何推进、卡住、检核和结束的
+12. 只有当学生在本节课中表现出无提示下的独立应用，或纠正了先前错误理解后仍能稳定作答时，knowledgeItems.status 才可标记为 mastered；仅在引导下答对一次更适合 learning；仅被复习或回顾的内容不应伪装成本节新增掌握
+13. 情绪收尾：若本节课学生多次受挫（frustrated/confused 占比高或 sessionEvidence 情绪信号明确），actionPlan 第一条必须是安抚/重启类建议（如"先休息或回顾已会的小点，恢复状态后再继续"），summary 语气以认可投入为主，不苛责表现
+14. evaluationHighlights.strengths / improvements 必须能够解释 evaluation 的评分结论，不能和分数结论矛盾
+15. evaluation 原则上必须输出；若证据不足也要给出保守评分，把 confidence 设低，并在 reasoning 中说明证据不足；只有输入严重损坏时才允许 evaluation 缺失
+16. summary 输出长度预算（token 治理）：topicSummary ≤ 2 句、knowledgeSummary ≤ 3 句、practiceAdvice ≤ 3 条、learningEvaluation ≤ 3 句（亮点+改进各 1-2 条）、keyTakeaways ≤ 3 条、actionPlan ≤ 3 条、knowledgeItems ≤ 5 项；禁止为凑完整性而重复同一信息——topicSummary 与 knowledgeSummary 不得大段重叠、learningEvaluation 与 evaluationHighlights 不得复述同一句话；每句以信息增量优先，宁可少写不可灌水
+17. metricMetadata 必须随 evaluation 输出，显式标注 sessionLss/sessionLf 为间接推断值（isDirectMeasurement=false）；不得在 summary 中向学生输出"你的压力/疲劳值为 X"这类绝对化断言
 
 ## 输出字段
 
@@ -60,6 +63,10 @@ failurePolicy: propagate
 · sessionLss / sessionKtl / sessionLf（number）范围 0-10
 · confidence（number）范围 0-1，表示证据充分度，不是主观自信
 · reasoning（string）最多 120 字，并引用 1-2 个关键证据
+· metricMetadata（object，固定输出）效度元数据标注，结构：
+  { "sessionLss": { "isDirectMeasurement": false, "proxyBasis": "基于对话语速与文本语义特征推断的学习压力，非生理测量" },
+    "sessionLf": { "isDirectMeasurement": false, "proxyBasis": "基于对话语义与投入变化的疲劳推断，非生理测量" },
+    "sessionKtl": { "isDirectMeasurement": false, "proxyBasis": "基于本节课产出证据的知识获得质量评估" } }
 评分参考：
 · sessionKtl（本节知识获得质量）：8-10 学生能独立完成核心任务，或修正关键误解后稳定应用核心知识点；5-7 引导下能推进但对核心概念仍模糊或应用不稳定；1-4 反复卡住未能完成核心任务或关键误解仍未解决
 · sessionLss（本节学习压力）：8-10 多轮阻塞、反复困惑、高负荷；5-7 有明显吃力和停顿但引导下仍能推进；1-4 课堂整体顺畅

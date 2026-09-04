@@ -144,6 +144,11 @@ export const ORPHAN_EXEMPT_FIELDS: ReadonlyArray<{ skillId: string; field: strin
     field: 'story',
     evidence: 'simulation.yaml:35 stories 字段已退役（语义由 profileData.storyPool 承接），core 仍要求输出的故事切片不进数据面路由',
   },
+  {
+    skillId: 'goal-conversation',
+    field: 'proposalQuality',
+    evidence: '顶层内部自评（confirmedProposal 的 SMART 分维度），仅驱动 reply 改善提示，不进数据面路由；goal.yaml:125 只路由 confirmedProposal.* 子字段',
+  },
 ];
 
 /** skillId → 已豁免字段名集合（孤儿判定过滤用） */

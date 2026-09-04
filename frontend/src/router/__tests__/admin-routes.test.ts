@@ -74,13 +74,46 @@ describe('Admin 路由重定向', () => {
     expect(router.currentRoute.value.name).toBe('AdminSkillEditor');
     expect(router.currentRoute.value.params.agentId).toEqual(['goal-agent']);
   });
+
+  it('导航收敛旧 URL 重定向（2026-09-04：同域双子视图合并为单页 tab）', async () => {
+    await router.push('/admin/users');
+    expect(router.currentRoute.value.path).toBe('/admin/people');
+    expect(router.currentRoute.value.query.tab).toBe('account');
+    await router.push('/admin/learner-center');
+    expect(router.currentRoute.value.path).toBe('/admin/people');
+    expect(router.currentRoute.value.query.tab).toBe('state');
+    await router.push('/admin/learner-models/u1');
+    expect(router.currentRoute.value.path).toBe('/admin/people');
+    expect(router.currentRoute.value.query.tab).toBe('state');
+    await router.push('/admin/teaching-sessions');
+    expect(router.currentRoute.value.path).toBe('/admin/sessions');
+    expect(router.currentRoute.value.query.tab).toBe('teaching');
+    await router.push('/admin/goal-conversations');
+    expect(router.currentRoute.value.path).toBe('/admin/sessions');
+    await router.push('/admin/content');
+    expect(router.currentRoute.value.path).toBe('/admin/sessions');
+    expect(router.currentRoute.value.query.tab).toBe('paths');
+    await router.push('/admin/ops-content');
+    expect(router.currentRoute.value.path).toBe('/admin/sessions');
+    expect(router.currentRoute.value.query.tab).toBe('paths');
+    await router.push('/admin/announcements');
+    expect(router.currentRoute.value.path).toBe('/admin/messages');
+    expect(router.currentRoute.value.query.tab).toBe('announce');
+    await router.push('/admin/notifications');
+    expect(router.currentRoute.value.path).toBe('/admin/messages');
+    expect(router.currentRoute.value.query.tab).toBe('inapp');
+    await router.push('/admin/token-cost');
+    expect(router.currentRoute.value.path).toBe('/admin/execution-logs');
+    expect(router.currentRoute.value.query.tab).toBe('cost');
+  });
 });
 
 describe('Admin 主路由解析', () => {
-  it('/admin/users → AdminConsole 路由 + page 参数', async () => {
+  it('/admin/users → /admin/people?tab=account（用户与学习者 · 账号 tab）', async () => {
     await router.push('/admin/users');
     expect(router.currentRoute.value.name).toBe('AdminConsole');
-    expect(router.currentRoute.value.params.page).toBe('users');
+    expect(router.currentRoute.value.params.page).toBe('people');
+    expect(router.currentRoute.value.query.tab).toBe('account');
   });
 
   it('/admin/skills/:agentId → SkillDesignPage 路由（不被 :page 吞掉）', async () => {

@@ -298,6 +298,25 @@
 
             <div v-if="live.proposal.skip.length" class="proposal__skip">先不学：{{ live.proposal.skip.join('、') }}</div>
 
+            <!-- 前置自测：帮路径更贴合基础（可选作答，作答后自动收录） -->
+            <div v-if="live.proposal.probes && live.proposal.probes.length" class="proposal__probes">
+              <span class="proposal__stages-label">快速自测（可选）</span>
+              <div v-for="p in live.proposal.probes" :key="p.probeId" class="probe">
+                <p class="probe__q">{{ p.question }}</p>
+                <div class="probe__opts">
+                  <button
+                    v-for="o in p.options"
+                    :key="o.id"
+                    type="button"
+                    class="probe__opt"
+                    :class="{ 'probe__opt--on': live.probeAnswers[p.probeId] === o.id }"
+                    :disabled="live.sending || !!live.probeAnswers[p.probeId]"
+                    @click="live.answerProbe(p, o.id, o.text)"
+                  ><b>{{ o.id }}</b> {{ o.text }}</button>
+                </div>
+              </div>
+            </div>
+
             <div v-if="confirmError" class="errorbar">
               确认失败，请重试。<button type="button" class="errorbar__retry" @click="doConfirm">重试</button>
             </div>
@@ -380,7 +399,6 @@ import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import MessageActions from '@/components/chat/MessageActions.vue';
 import { hasUserSession } from '@/utils/api';
-import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
 import { plainMessageHtml } from '@/utils/messageMarkdown';
 import { toast } from '@/utils/toast';
 import { feedbackApi } from '@/api/feedback';
@@ -1437,6 +1455,31 @@ function shuffleScenes() {
   background: var(--supplement-bg, #fafcff);
   text-align: left;
 }
+.proposal__probes {
+  display: grid; gap: 10px; width: 100%; text-align: left;
+}
+.probe {
+  display: grid; gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface, #fbfcff);
+}
+.probe__q { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.55; }
+.probe__opts { display: flex; gap: 8px; flex-wrap: wrap; }
+.probe__opt {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  font-size: 12.5px; color: var(--ink);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.probe__opt b { color: var(--blue-deep); font-size: 12px; }
+.probe__opt:hover:not(:disabled) { border-color: var(--blue); }
+.probe__opt--on { border-color: var(--blue); background: rgba(52, 120, 246, .1); }
+.probe__opt:disabled { opacity: .65; cursor: default; }
 .proposal__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .proposal__actions--center { justify-content: center; }
 .btn-primary {
