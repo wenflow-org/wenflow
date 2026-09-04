@@ -152,7 +152,8 @@ export function renderSupplementText(
   lines.push('  - state.stage / state.confidence / state.done：控制信号');
   lines.push('  - understanding：所有 understanding.* 字段（包括 hidden 的，仅状态层使用）');
   lines.push('  - confirmedProposal：proposal-output 字段（proposing/ready 阶段）');
-  lines.push('  - next_questions / quick_replies：public-reply 字段');
+  lines.push('  - proposalQuality：proposing 阶段产出 confirmedProposal 时同步自评（SMART 五维）');
+  lines.push('  - nextQuestions / quickReplies：public-reply 字段');
   lines.push('');
   lines.push(SUPPLEMENT_END_BANNER);
 

@@ -17,6 +17,10 @@ export interface APIConfig {
   defaultEvaluationModel: string;
   defaultTemperature?: number;
   defaultMaxTokens?: number;
+  /** 平台默认思考模式：default(跟随模型/上游) | enabled | disabled */
+  defaultThinkingMode?: string;
+  /** 平台默认思考强度：default | high | max */
+  defaultReasoningEffort?: string;
   reasoningEndpoint?: string;
   lightEndpoint?: string;
   chatModels?: string[];
@@ -33,6 +37,8 @@ const defaultConfig: APIConfig = {
   defaultEvaluationModel: process.env.AI_MODEL_REASONING || '',
   defaultTemperature: 0.7,
   defaultMaxTokens: 2048,
+  defaultThinkingMode: 'default',
+  defaultReasoningEffort: 'default',
   reasoningEndpoint: undefined,
   lightEndpoint: undefined,
   chatModels: [],
@@ -68,6 +74,8 @@ class APIConfigService {
           defaultEvaluationModel: dbConfig.defaultEvaluationModel || defaultConfig.defaultEvaluationModel,
           defaultTemperature: dbConfig.defaultTemperature ?? defaultConfig.defaultTemperature,
           defaultMaxTokens: dbConfig.defaultMaxTokens ?? defaultConfig.defaultMaxTokens,
+          defaultThinkingMode: dbConfig.defaultThinkingMode || defaultConfig.defaultThinkingMode,
+          defaultReasoningEffort: dbConfig.defaultReasoningEffort || defaultConfig.defaultReasoningEffort,
           reasoningEndpoint: dbConfig.reasoningEndpoint || undefined,
           lightEndpoint: dbConfig.lightEndpoint || undefined,
           chatModels: dbConfig.chatModels ? JSON.parse(dbConfig.chatModels) : [],
@@ -106,6 +114,8 @@ class APIConfigService {
           defaultEvaluationModel: mergedConfig.defaultEvaluationModel,
           defaultTemperature: mergedConfig.defaultTemperature,
           defaultMaxTokens: mergedConfig.defaultMaxTokens,
+          defaultThinkingMode: mergedConfig.defaultThinkingMode || 'default',
+          defaultReasoningEffort: mergedConfig.defaultReasoningEffort || 'default',
           reasoningEndpoint: mergedConfig.reasoningEndpoint || null,
           lightEndpoint: mergedConfig.lightEndpoint || null,
           chatModels: mergedConfig.chatModels ? JSON.stringify(mergedConfig.chatModels) : null,
@@ -123,6 +133,8 @@ class APIConfigService {
           defaultEvaluationModel: mergedConfig.defaultEvaluationModel,
           defaultTemperature: mergedConfig.defaultTemperature,
           defaultMaxTokens: mergedConfig.defaultMaxTokens,
+          defaultThinkingMode: mergedConfig.defaultThinkingMode || 'default',
+          defaultReasoningEffort: mergedConfig.defaultReasoningEffort || 'default',
           reasoningEndpoint: mergedConfig.reasoningEndpoint || null,
           lightEndpoint: mergedConfig.lightEndpoint || null,
           chatModels: mergedConfig.chatModels ? JSON.stringify(mergedConfig.chatModels) : null,

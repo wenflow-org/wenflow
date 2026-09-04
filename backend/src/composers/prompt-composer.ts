@@ -319,8 +319,8 @@ export async function callPrompt<TInput, TOutput>(
     },
   });
   let currentMaxTokens = generationResolution.maxTokens;
-  // 默认 max_tokens 统一 32k（2026-08-30 拍板）：LLM 输出不稳定时不再因 8k 截断漏字段
-  const tokenCeiling = Math.max(currentMaxTokens || 32000, 32000);
+  // max_tokens 已由 resolve-llm-call-params 统一抬到 128k 全局下限（2026-09-03 定案）；
+  // 重试时不再将 maxTokens ×2 放大（见 validation_failed 分支注释），故无需 tokenCeiling 上界。
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {
@@ -474,13 +474,8 @@ export async function callPrompt<TInput, TOutput>(
         llmRequestId: lastLlmRequestId || undefined,
         transportAttemptCount: gatewayMetadata?.attemptCount
       });
-      // 长度截断时抬高后续 attempt 的 maxTokens（goal 原行为）
-      const finishReason = response.choices?.[0]?.finish_reason || response.finishReason;
-      const wasTruncated = finishReason === 'length'
-        || /[",:][^"]*$/.test(rawModelOutput.trim().slice(-50));
-      if (wasTruncated && typeof currentMaxTokens === 'number') {
-        currentMaxTokens = Math.min(tokenCeiling, currentMaxTokens * 2);
-      }
+      // 长度截断（reasoning 白烧会占满 max_tokens）时**不再**翻倍 maxTokens 整包重跑：
+      // 保持原上限重试一次即可——翻倍只会让重试时思考烧更多 token、首字更慢（2026-09 审计定案）
       continue;
     }
 

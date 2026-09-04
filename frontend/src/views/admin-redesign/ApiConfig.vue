@@ -92,6 +92,53 @@
             </select>
           </label>
         </div>
+
+        <!-- 默认思考：平台级开关 + 强度（未单独配置的 Skill 继承此默认；skill 级可在设计页运行时 tab 覆盖） -->
+        <div class="ac-think">
+          <div class="ac-think__title">
+            <strong>默认思考</strong>
+            <em>未单独配置的 Skill 继承此默认；可在 Skill 设计页「运行时」单独覆盖</em>
+          </div>
+          <div class="ac-think__fields">
+            <label class="mk-field mk-field--switch">
+              <span>启用思考</span>
+              <span class="ac-switch">
+                <input
+                  type="checkbox"
+                  :checked="thinkingOn"
+                  @change="setThinkingOn(($event.target as HTMLInputElement).checked)"
+                />
+                <i aria-hidden="true"></i>
+              </span>
+            </label>
+            <label class="mk-field">
+              <span>思考强度</span>
+              <select
+                class="mk-filter__select"
+                :disabled="!thinkingOn"
+                :value="form.defaultReasoningEffort"
+                @change="setEffort(($event.target as HTMLSelectElement).value)"
+              >
+                <option value="default">跟随模型默认</option>
+                <option value="low">low</option>
+                <option value="high">high</option>
+                <option value="max">max</option>
+              </select>
+            </label>
+            <label class="mk-field">
+              <span>思考模式</span>
+              <select
+                class="mk-filter__select"
+                :value="form.defaultThinkingMode"
+                @change="setThinkingMode(($event.target as HTMLSelectElement).value)"
+              >
+                <option value="default">跟随模型默认</option>
+                <option value="enabled">强制开启</option>
+                <option value="disabled">关闭</option>
+              </select>
+            </label>
+          </div>
+        </div>
       </div>
 
       <!-- 连通性验证（并入本卡，横向操作） -->
@@ -460,7 +507,9 @@ const form = reactive({
   apiKey: '',
   defaultModel: '',
   defaultReasoningModel: '',
-  defaultEvaluationModel: ''
+  defaultEvaluationModel: '',
+  defaultThinkingMode: 'default' as 'default' | 'enabled' | 'disabled',
+  defaultReasoningEffort: 'default' as 'default' | 'low' | 'high' | 'max'
 })
 const policy = reactive({
   adminAccessMode: 'private' as 'loopback' | 'private' | 'any',
@@ -571,6 +620,8 @@ function applyLiveConfig() {
   form.defaultModel = cfg.value.defaultModel
   form.defaultReasoningModel = cfg.value.defaultReasoningModel
   form.defaultEvaluationModel = cfg.value.defaultEvaluationModel
+  form.defaultThinkingMode = cfg.value.defaultThinkingMode || 'default'
+  form.defaultReasoningEffort = cfg.value.defaultReasoningEffort || 'default'
   fetchedModels.value = [...cfg.value.availableModels]
   keySet.value = cfg.value.apiKeyConfigured
   connectionStatus.value = cfg.value.connectionStatus
@@ -592,6 +643,31 @@ watch(
 )
 
 const models = computed(() => fetchedModels.value)
+
+/** 思考开关 = enabled(强制) 或 default(跟随模型) 视为"开"；disabled 视为"关"。
+    关闭时后端仍可被 skill 级配置覆盖；此处仅表达平台默认。 */
+const thinkingOn = computed(() => form.defaultThinkingMode !== 'disabled')
+function setThinkingOn(on: boolean) {
+  // 开 → 回到「跟随模型默认」（不强制）；关 → disabled，同时强度复位 default
+  form.defaultThinkingMode = on ? (form.defaultThinkingMode === 'disabled' ? 'default' : form.defaultThinkingMode) : 'disabled'
+  if (!on) form.defaultReasoningEffort = 'default'
+  markDirty('route')
+}
+
+function setThinkingMode(v: string) {
+  if (v === 'default' || v === 'enabled' || v === 'disabled') {
+    form.defaultThinkingMode = v
+    if (v === 'disabled') form.defaultReasoningEffort = 'default'
+    markDirty('route')
+  }
+}
+function setEffort(v: string) {
+  if (v === 'default' || v === 'low' || v === 'high' || v === 'max') {
+    form.defaultReasoningEffort = v
+    markDirty('route')
+  }
+}
+
 const ready = computed(() => keySet.value && models.value.length > 0 && !!form.defaultModel)
 const routeCount = computed(() => [form.defaultModel, form.defaultReasoningModel, form.defaultEvaluationModel].filter(Boolean).length)
 const statusTone = computed(() => {
@@ -690,13 +766,17 @@ async function saveAll() {
         defaultModel: string
         defaultReasoningModel: string
         defaultEvaluationModel: string
+        defaultThinkingMode?: string
+        defaultReasoningEffort?: string
         availableModels?: string[]
       } = {
         apiUrl: form.apiUrl,
         apiKey: form.apiKey,
         defaultModel: form.defaultModel,
         defaultReasoningModel: form.defaultReasoningModel,
-        defaultEvaluationModel: form.defaultEvaluationModel
+        defaultEvaluationModel: form.defaultEvaluationModel,
+        defaultThinkingMode: form.defaultThinkingMode,
+        defaultReasoningEffort: form.defaultReasoningEffort
       }
       // G5：从未成功拉取过模型时不提交 availableModels，避免空数组清空后端模型列表
       if (modelsFetchedOnce.value) payload.availableModels = fetchedModels.value
@@ -864,6 +944,35 @@ async function toggleRegistration() {
   font-weight: 800;
   flex-shrink: 0;
 }
+
+/* 默认思考：平台级开关 + 强度（继承链顶端，skill 级可覆盖） */
+.ac-think {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #edf0f5;
+  border-radius: 10px;
+  background: #fafbfc;
+}
+.ac-think__title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ac-think__title strong { font-size: var(--mk-fs-12_5); color: var(--mk-ink); }
+.ac-think__title em {
+  font-style: normal;
+  font-size: var(--mk-fs-11);
+  color: var(--mk-faint);
+}
+.ac-think__fields {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.6fr) minmax(150px, 1fr) minmax(150px, 1fr);
+  gap: 12px;
+  align-items: end;
+}
+.ac-think__fields .mk-field { margin: 0; }
 html[data-theme='dark'] .ac-models__empty { background: #141c2b; }
 /* 模型选择下拉：无模型时禁用态不拉满（原 select width:100% 占满整行显空） */
 .ac-body .mk-filter__select { min-width: 0; }
@@ -1133,6 +1242,7 @@ html[data-theme='dark'] .ac-models__empty { background: #141c2b; }
   .ac-health__head { grid-template-columns: 10px minmax(0, 1fr) auto; }
   .ac-health__msg { display: none; }
   .ac-health__head span:nth-child(3) { display: none; }
+  .ac-think__fields { grid-template-columns: 1fr; }
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
@@ -1142,6 +1252,10 @@ html[data-theme='dark'] .ac-models__empty { background: #141c2b; }
   .ac-model { font-size: 13px; padding: 5px 12px; }
   .ac-run { padding: 10px 14px; }
   .ac-policy { gap: 16px; padding: 18px; }
+  .ac-think { gap: 12px; padding: 12px 14px; }
+  .ac-think__title strong { font-size: 13.5px; }
+  .ac-think__title em { font-size: 12px; }
+  .ac-think__fields { gap: 14px; }
   .ac-policy__label { font-size: 13.5px; }
   .ac-policy__desc { font-size: 13px; }
   .ac-policy__warn { font-size: 13px; }
@@ -1229,5 +1343,8 @@ html[data-theme='dark'] {
   .ac-model { background: #1d2739; color: #9fb0c8; }
   /* 开关轨道：浅灰轨道暗色化（滑块保持白色——深色开关的标准做法） */
   .ac-switch i { background: #3a4a63; }
+  .ac-think { background: #141c2b; border-color: #232f45; }
+  .ac-think__title strong { color: #c7d2e2; }
+  .ac-think__title em { color: #7c8aa3; }
 }
 </style>

@@ -108,6 +108,8 @@ model platform_api_configs {
   updatedAt              DateTime  @default(now())
   defaultTemperature     Float     @default(0.7)
   defaultMaxTokens       Int       @default(2000)
+  defaultThinkingMode    String?   @default("default")
+  defaultReasoningEffort String?   @default("default")
   reasoningEndpoint      String?
   lightEndpoint          String?
   chatModels             String?

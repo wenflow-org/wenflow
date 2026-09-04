@@ -6259,6 +6259,8 @@ export namespace Prisma {
     updatedAt: Date | null
     defaultTemperature: number | null
     defaultMaxTokens: number | null
+    defaultThinkingMode: string | null
+    defaultReasoningEffort: string | null
     reasoningEndpoint: string | null
     lightEndpoint: string | null
     chatModels: string | null
@@ -6284,6 +6286,8 @@ export namespace Prisma {
     updatedAt: Date | null
     defaultTemperature: number | null
     defaultMaxTokens: number | null
+    defaultThinkingMode: string | null
+    defaultReasoningEffort: string | null
     reasoningEndpoint: string | null
     lightEndpoint: string | null
     chatModels: string | null
@@ -6309,6 +6313,8 @@ export namespace Prisma {
     updatedAt: number
     defaultTemperature: number
     defaultMaxTokens: number
+    defaultThinkingMode: number
+    defaultReasoningEffort: number
     reasoningEndpoint: number
     lightEndpoint: number
     chatModels: number
@@ -6346,6 +6352,8 @@ export namespace Prisma {
     updatedAt?: true
     defaultTemperature?: true
     defaultMaxTokens?: true
+    defaultThinkingMode?: true
+    defaultReasoningEffort?: true
     reasoningEndpoint?: true
     lightEndpoint?: true
     chatModels?: true
@@ -6371,6 +6379,8 @@ export namespace Prisma {
     updatedAt?: true
     defaultTemperature?: true
     defaultMaxTokens?: true
+    defaultThinkingMode?: true
+    defaultReasoningEffort?: true
     reasoningEndpoint?: true
     lightEndpoint?: true
     chatModels?: true
@@ -6396,6 +6406,8 @@ export namespace Prisma {
     updatedAt?: true
     defaultTemperature?: true
     defaultMaxTokens?: true
+    defaultThinkingMode?: true
+    defaultReasoningEffort?: true
     reasoningEndpoint?: true
     lightEndpoint?: true
     chatModels?: true
@@ -6508,6 +6520,8 @@ export namespace Prisma {
     updatedAt: Date
     defaultTemperature: number
     defaultMaxTokens: number
+    defaultThinkingMode: string | null
+    defaultReasoningEffort: string | null
     reasoningEndpoint: string | null
     lightEndpoint: string | null
     chatModels: string | null
@@ -6552,6 +6566,8 @@ export namespace Prisma {
     updatedAt?: boolean
     defaultTemperature?: boolean
     defaultMaxTokens?: boolean
+    defaultThinkingMode?: boolean
+    defaultReasoningEffort?: boolean
     reasoningEndpoint?: boolean
     lightEndpoint?: boolean
     chatModels?: boolean
@@ -6577,6 +6593,8 @@ export namespace Prisma {
     updatedAt?: boolean
     defaultTemperature?: boolean
     defaultMaxTokens?: boolean
+    defaultThinkingMode?: boolean
+    defaultReasoningEffort?: boolean
     reasoningEndpoint?: boolean
     lightEndpoint?: boolean
     chatModels?: boolean
@@ -6602,6 +6620,8 @@ export namespace Prisma {
     updatedAt?: boolean
     defaultTemperature?: boolean
     defaultMaxTokens?: boolean
+    defaultThinkingMode?: boolean
+    defaultReasoningEffort?: boolean
     reasoningEndpoint?: boolean
     lightEndpoint?: boolean
     chatModels?: boolean
@@ -6631,6 +6651,8 @@ export namespace Prisma {
       updatedAt: Date
       defaultTemperature: number
       defaultMaxTokens: number
+      defaultThinkingMode: string | null
+      defaultReasoningEffort: string | null
       reasoningEndpoint: string | null
       lightEndpoint: string | null
       chatModels: string | null
@@ -7046,6 +7068,8 @@ export namespace Prisma {
     readonly updatedAt: FieldRef<"platform_api_configs", 'DateTime'>
     readonly defaultTemperature: FieldRef<"platform_api_configs", 'Float'>
     readonly defaultMaxTokens: FieldRef<"platform_api_configs", 'Int'>
+    readonly defaultThinkingMode: FieldRef<"platform_api_configs", 'String'>
+    readonly defaultReasoningEffort: FieldRef<"platform_api_configs", 'String'>
     readonly reasoningEndpoint: FieldRef<"platform_api_configs", 'String'>
     readonly lightEndpoint: FieldRef<"platform_api_configs", 'String'>
     readonly chatModels: FieldRef<"platform_api_configs", 'String'>
@@ -16346,6 +16370,8 @@ export namespace Prisma {
     updatedAt: 'updatedAt',
     defaultTemperature: 'defaultTemperature',
     defaultMaxTokens: 'defaultMaxTokens',
+    defaultThinkingMode: 'defaultThinkingMode',
+    defaultReasoningEffort: 'defaultReasoningEffort',
     reasoningEndpoint: 'reasoningEndpoint',
     lightEndpoint: 'lightEndpoint',
     chatModels: 'chatModels',
@@ -17062,6 +17088,8 @@ export namespace Prisma {
     updatedAt?: DateTimeFilter<"platform_api_configs"> | Date | string
     defaultTemperature?: FloatFilter<"platform_api_configs"> | number
     defaultMaxTokens?: IntFilter<"platform_api_configs"> | number
+    defaultThinkingMode?: StringNullableFilter<"platform_api_configs"> | string | null
+    defaultReasoningEffort?: StringNullableFilter<"platform_api_configs"> | string | null
     reasoningEndpoint?: StringNullableFilter<"platform_api_configs"> | string | null
     lightEndpoint?: StringNullableFilter<"platform_api_configs"> | string | null
     chatModels?: StringNullableFilter<"platform_api_configs"> | string | null
@@ -17087,6 +17115,8 @@ export namespace Prisma {
     updatedAt?: SortOrder
     defaultTemperature?: SortOrder
     defaultMaxTokens?: SortOrder
+    defaultThinkingMode?: SortOrderInput | SortOrder
+    defaultReasoningEffort?: SortOrderInput | SortOrder
     reasoningEndpoint?: SortOrderInput | SortOrder
     lightEndpoint?: SortOrderInput | SortOrder
     chatModels?: SortOrderInput | SortOrder
@@ -17115,6 +17145,8 @@ export namespace Prisma {
     updatedAt?: DateTimeFilter<"platform_api_configs"> | Date | string
     defaultTemperature?: FloatFilter<"platform_api_configs"> | number
     defaultMaxTokens?: IntFilter<"platform_api_configs"> | number
+    defaultThinkingMode?: StringNullableFilter<"platform_api_configs"> | string | null
+    defaultReasoningEffort?: StringNullableFilter<"platform_api_configs"> | string | null
     reasoningEndpoint?: StringNullableFilter<"platform_api_configs"> | string | null
     lightEndpoint?: StringNullableFilter<"platform_api_configs"> | string | null
     chatModels?: StringNullableFilter<"platform_api_configs"> | string | null
@@ -17140,6 +17172,8 @@ export namespace Prisma {
     updatedAt?: SortOrder
     defaultTemperature?: SortOrder
     defaultMaxTokens?: SortOrder
+    defaultThinkingMode?: SortOrderInput | SortOrder
+    defaultReasoningEffort?: SortOrderInput | SortOrder
     reasoningEndpoint?: SortOrderInput | SortOrder
     lightEndpoint?: SortOrderInput | SortOrder
     chatModels?: SortOrderInput | SortOrder
@@ -17173,6 +17207,8 @@ export namespace Prisma {
     updatedAt?: DateTimeWithAggregatesFilter<"platform_api_configs"> | Date | string
     defaultTemperature?: FloatWithAggregatesFilter<"platform_api_configs"> | number
     defaultMaxTokens?: IntWithAggregatesFilter<"platform_api_configs"> | number
+    defaultThinkingMode?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
+    defaultReasoningEffort?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
     reasoningEndpoint?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
     lightEndpoint?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
     chatModels?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
@@ -18587,6 +18623,8 @@ export namespace Prisma {
     updatedAt?: Date | string
     defaultTemperature?: number
     defaultMaxTokens?: number
+    defaultThinkingMode?: string | null
+    defaultReasoningEffort?: string | null
     reasoningEndpoint?: string | null
     lightEndpoint?: string | null
     chatModels?: string | null
@@ -18612,6 +18650,8 @@ export namespace Prisma {
     updatedAt?: Date | string
     defaultTemperature?: number
     defaultMaxTokens?: number
+    defaultThinkingMode?: string | null
+    defaultReasoningEffort?: string | null
     reasoningEndpoint?: string | null
     lightEndpoint?: string | null
     chatModels?: string | null
@@ -18637,6 +18677,8 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     defaultTemperature?: FloatFieldUpdateOperationsInput | number
     defaultMaxTokens?: IntFieldUpdateOperationsInput | number
+    defaultThinkingMode?: NullableStringFieldUpdateOperationsInput | string | null
+    defaultReasoningEffort?: NullableStringFieldUpdateOperationsInput | string | null
     reasoningEndpoint?: NullableStringFieldUpdateOperationsInput | string | null
     lightEndpoint?: NullableStringFieldUpdateOperationsInput | string | null
     chatModels?: NullableStringFieldUpdateOperationsInput | string | null
@@ -18662,6 +18704,8 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     defaultTemperature?: FloatFieldUpdateOperationsInput | number
     defaultMaxTokens?: IntFieldUpdateOperationsInput | number
+    defaultThinkingMode?: NullableStringFieldUpdateOperationsInput | string | null
+    defaultReasoningEffort?: NullableStringFieldUpdateOperationsInput | string | null
     reasoningEndpoint?: NullableStringFieldUpdateOperationsInput | string | null
     lightEndpoint?: NullableStringFieldUpdateOperationsInput | string | null
     chatModels?: NullableStringFieldUpdateOperationsInput | string | null
@@ -18687,6 +18731,8 @@ export namespace Prisma {
     updatedAt?: Date | string
     defaultTemperature?: number
     defaultMaxTokens?: number
+    defaultThinkingMode?: string | null
+    defaultReasoningEffort?: string | null
     reasoningEndpoint?: string | null
     lightEndpoint?: string | null
     chatModels?: string | null
@@ -18712,6 +18758,8 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     defaultTemperature?: FloatFieldUpdateOperationsInput | number
     defaultMaxTokens?: IntFieldUpdateOperationsInput | number
+    defaultThinkingMode?: NullableStringFieldUpdateOperationsInput | string | null
+    defaultReasoningEffort?: NullableStringFieldUpdateOperationsInput | string | null
     reasoningEndpoint?: NullableStringFieldUpdateOperationsInput | string | null
     lightEndpoint?: NullableStringFieldUpdateOperationsInput | string | null
     chatModels?: NullableStringFieldUpdateOperationsInput | string | null
@@ -18737,6 +18785,8 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     defaultTemperature?: FloatFieldUpdateOperationsInput | number
     defaultMaxTokens?: IntFieldUpdateOperationsInput | number
+    defaultThinkingMode?: NullableStringFieldUpdateOperationsInput | string | null
+    defaultReasoningEffort?: NullableStringFieldUpdateOperationsInput | string | null
     reasoningEndpoint?: NullableStringFieldUpdateOperationsInput | string | null
     lightEndpoint?: NullableStringFieldUpdateOperationsInput | string | null
     chatModels?: NullableStringFieldUpdateOperationsInput | string | null
@@ -20296,6 +20346,8 @@ export namespace Prisma {
     updatedAt?: SortOrder
     defaultTemperature?: SortOrder
     defaultMaxTokens?: SortOrder
+    defaultThinkingMode?: SortOrder
+    defaultReasoningEffort?: SortOrder
     reasoningEndpoint?: SortOrder
     lightEndpoint?: SortOrder
     chatModels?: SortOrder
@@ -20326,6 +20378,8 @@ export namespace Prisma {
     updatedAt?: SortOrder
     defaultTemperature?: SortOrder
     defaultMaxTokens?: SortOrder
+    defaultThinkingMode?: SortOrder
+    defaultReasoningEffort?: SortOrder
     reasoningEndpoint?: SortOrder
     lightEndpoint?: SortOrder
     chatModels?: SortOrder
@@ -20351,6 +20405,8 @@ export namespace Prisma {
     updatedAt?: SortOrder
     defaultTemperature?: SortOrder
     defaultMaxTokens?: SortOrder
+    defaultThinkingMode?: SortOrder
+    defaultReasoningEffort?: SortOrder
     reasoningEndpoint?: SortOrder
     lightEndpoint?: SortOrder
     chatModels?: SortOrder
