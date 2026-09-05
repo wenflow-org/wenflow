@@ -6,7 +6,7 @@
 
 **An AI learning-path prototype that starts from real problems**
 
-> WenFlow: don't start by finding courses; start by clarifying the real problem.
+> Core idea: learning begins with clarifying the real problem, not with choosing a course.
 
 English Version | [中文版](README.md)
 
@@ -23,22 +23,19 @@ English Version | [中文版](README.md)
 
 ## Why WenFlow?
 
-Learning often gets stuck not because you are not trying hard enough, but because the goal is too broad, the resources are overwhelming, and the first step is unclear.
+Many learning difficulties stem not from a lack of effort, but from goals that are too broad, an overload of materials, and an unclear first step.
 
-Many learning products start by giving you content: courses, materials, exercises, and predefined paths.  
-WenFlow starts somewhere else: helping you clarify what you are really trying to solve.
+Most learning products start by supplying content: courses, materials, exercises, and predefined paths. WenFlow takes a different approach — it first helps learners clarify the problem they actually need to solve, then generates an actionable learning path from it, refined continuously through dialogue, output, and feedback.
 
-It turns a vague goal into an actionable learning path: clarify the problem, generate a route, then keep adjusting through dialogue, output, and feedback.
-
-As AI gets better at producing answers, the more valuable capabilities are no longer just remembering content, but:
+As AI becomes increasingly capable of producing answers, the skills worth cultivating are no longer limited to memorizing content, but:
 
 - **problem definition**: turning a vague goal into an explorable question
-- **systems thinking**: seeing the structure between knowledge, context, and action
-- **judgment**: deciding what is worth believing amid information overload
+- **systems thinking**: understanding the structural relationships between knowledge, context, and action
+- **judgment**: discerning what is worth trusting amid information overload
 - **AI collaboration**: treating AI as a partner for questioning, feedback, and reasoning
-- **creativity**: making new connections between what you already know
+- **creativity**: making new connections between existing knowledge
 
-**Answers will keep getting cheaper. Problems will matter more.**
+**Answers will become increasingly abundant; the quality of the questions will matter more.**
 
 ---
 
@@ -51,27 +48,27 @@ These six screenshots show WenFlow's core experience, from a real problem to a c
 | ① Start from a Real Problem |
 |:---:|
 | ![Start from a Real Problem](docs/images/home-start-from-problem.png) |
-| Say what you're trying to solve first, instead of hunting for courses |
+| Learners state their problem first, rather than choosing a course |
 
 | ② Clarify the Real Goal | ③ Generate a Learning Path |
 |:---:|:---:|
 | ![Clarify the Real Goal](docs/images/goal-clarification.png) | ![Generate a Learning Path](docs/images/learning-path.png) |
-| The AI keeps asking until the goal is clear | A vague goal becomes phases, tasks, and a first step you can do today |
+| The AI clarifies the real goal through multi-round questioning | A vague goal becomes phases, tasks, and an actionable first step |
 
 | ④ Enter Round-based Learning | ⑤ Learning Loop Overview |
 |:---:|:---:|
 | ![Enter Round-based Learning](docs/images/round-based-learning.png) | ![Learning Loop Overview](docs/images/learning-loop-overview.png) |
-| The AI teaches, you answer, feedback is instant | A post-session summary and evaluation show you what to learn next |
+| The AI teaches, the learner answers, and feedback is immediate; teaching adapts dynamically | A post-session summary and evaluation provide guidance on what to learn next |
 
 | ⑥ Learning State Tracking |
 |:---:|
 | ![Learning State Tracking](docs/images/learning-state.png) |
-| LSS / KTL / LF / LSB tracked continuously, and it tells you when to rest |
+| LSS / KTL / LF / LSB tracked continuously, with rest prompts when fatigue is detected |
 
 ### From Problem to Path
-- **Problem Clarification**: multi-round dialogue until the goal is clear
-- **Path Generation**: a vague goal becomes phases, tasks, and a first step you can start today
-- **Round-based Learning**: the AI teaches, you answer, feedback is instant, and the path keeps adjusting to your understanding
+- **Problem Clarification**: multi-round natural dialogue to clarify the learning goal
+- **Path Generation**: a vague goal becomes phases, tasks, and an actionable first step
+- **Round-based Learning**: the AI teaches, the learner answers, feedback is immediate, and teaching adapts to the learner's understanding
 
 ### Learning State Tracking
 Inspired by load-and-recovery ideas from sports science, WenFlow tracks learning state rather than only whether a task was completed:
@@ -111,24 +108,24 @@ flowchart TD
 ```
 
 - Top-level agents are orchestration-oriented; the Skills actually hold the prompts and call the LLM.
-- Clarify the goal first, then break it into a path. Generation starts only after you confirm (an AI-reported "ready" doesn't count).
-- Teaching progresses opening → teaching ⇄ intervention → ready_to_close → wrapup; checkpoints only appear inside rounds; session mode is always tutor.
-- When the student gets stuck (help keywords, several low-understanding rounds), peer reinforcement kicks in — the current task is never abandoned.
-- Each session ends with a summary, evaluation, and replan suggestions. Paths are never changed automatically; a new version is created only after you confirm.
+- The goal is clarified first, then broken into a path. Path generation starts only after explicit user confirmation.
+- Teaching progresses opening → teaching ⇄ intervention → ready_to_close → wrapup; checkpoints appear only inside rounds; session mode is always tutor.
+- When a learner shows signs of getting stuck (help keywords, several consecutive low-understanding rounds), peer reinforcement is triggered — the current task is never abandoned.
+- Each session ends with a summary, evaluation, and replan suggestions. Paths are never changed automatically; a new version is created only after user confirmation.
 - After a lesson, events are persisted and the learner profile is updated; the next lesson starts with that context.
 
 ### Virtual Learner Lab
 
 Virtual learner accounts exercise the product the way a real user would, to validate the platform:
 
-- **Black-box simulation**: walks through goal → path → learning like a normal user, with a referee and actor-fidelity audit checking the results
-- **Quick Learn**: picks a virtual account's task, auto-completes a lesson, and produces a propagation report
+- **Black-box simulation**: walks through goal → path → learning from a normal user's perspective, with a referee and actor-fidelity audit checking the results
+- **Quick Learn**: selects a task from a virtual account, auto-completes a lesson, and produces a propagation report
 
 ### Admin Console
 
 The admin panel lives at `/admin` with 18 scene pages (grouped by the sidebar), all backed by real APIs (demo data only when nothing is available):
 
-- **Overview**: platform overview — is today healthy, which model fails the most, what needs investigation
+- **Overview**: platform overview — current system health, the model with the highest failure rate, and items requiring investigation
 - **Learners**: people & learners (accounts / learning state tabs) — learning state, risk and fatigue, with manual snapshot recompute; learning sessions (teaching sessions / goal conversations / learning paths tabs); virtual learners
 - **Skill Management**: orchestration structure (stage lanes + topology stats), Skill runtime (success rate, failing nodes, idle and average-latency monitoring), Skill design page (secondary page: protocol editing, compile, gate checks, publish, rollback, version diff, trial runs — including one-click rerun of the last real call), Prompt evaluation, health center
 - **Operations**: ops hub (todo workbench), achievements, feedback center, notifications & announcements (announce / in-app tabs)
@@ -167,9 +164,9 @@ The admin panel lives at `/admin` with 18 scene pages (grouped by the sidebar), 
 
 WenFlow is still in an **early development stage**, serving as an experimental prototype for validating a different learning approach.
 
-Instead of simply accelerating old learning workflows, it explores another path: what if learning starts from a real problem, and AI helps clarify goals, shape the path, and organize feedback along the way?
+The project is not a simple acceleration of existing learning workflows; it explores an alternative path — starting from real problems, with AI helping to clarify goals, shape the path, and organize feedback — to determine whether this approach is better suited to the AI era.
 
-The project is meant to keep exploring how to cultivate five capabilities that matter in the AI era: **problem definition, systems thinking, judgment, AI collaboration, and creativity**.
+The project will continue to explore how to cultivate five capabilities that matter in the AI era: **problem definition, systems thinking, judgment, AI collaboration, and creativity**.
 
 ---
 
@@ -193,7 +190,7 @@ npm run env:setup
 ```
 
 Note: For first-time use, it is recommended to finish environment setup before choosing a startup script. If `backend/.env` is missing or `JWT_SECRET` is invalid, the startup scripts will also launch the setup flow automatically.
-When the backend starts, core prompts are synced from the repo into the database automatically; a fresh GitHub checkout just works, no manual import needed.
+When the backend starts, core prompts are synced from the repo into the database automatically; a fresh clone runs directly, with no manual prompt import required.
 
 ### Local Development
 
@@ -305,7 +302,7 @@ Note: `prompts:sync-core` aligns the database ACTIVE versions with the compiled 
 
 - By default, the frontend calls the backend through the relative `/api` path, forwarded by Vite proxy or Nginx.
 - The admin panel primarily reads `VITE_API_BASE_URL` from `frontend/.env`.
-- The main user-facing app always uses `/api` in dev mode; outside dev mode `VITE_API_BASE_URL` takes priority, with `VITE_API_URL` kept only as a legacy fallback. If you do not have a custom deployment need, keeping `/api` is the safest default.
+- The main user-facing app always uses `/api` in dev mode; outside dev mode `VITE_API_BASE_URL` takes priority, with `VITE_API_URL` kept only as a legacy fallback. Unless a custom deployment is required, the default `/api` is recommended.
 
 For more fine-grained deployment steps or non-script startup, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
@@ -353,11 +350,11 @@ Important: Admin login defaults to `ADMIN_ACCESS_MODE=private`, allowing only lo
 The design is grounded in these theories, each backed by concrete implementation:
 
 1. **Cognitive Load Theory** - per-round knowledge-point caps, response-format budgets, automatic context compression
-2. **Self-directed Learning** - you state the goal and confirm the plan; pacing is yours
+2. **Self-directed Learning** - the goal is stated and the plan confirmed by the learner; the pace is learner-controlled
 3. **Zone of Proximal Development + Scaffolding** - difficulty adjusts to understanding; prerequisite gaps are backfilled first
-4. **Formative Assessment** - per-round understanding diagnosis plus checkpoint quizzes; instant feedback, retry on failure
-5. **Deliberate + Retrieval Practice** - mastery means explaining it yourself; post-session retrieval self-tests carry into the next lesson
-6. **Feynman Technique (Self-explanation)** - explain it in your own words to someone else; if you can't, learn it again
+4. **Formative Assessment** - per-round understanding diagnosis plus checkpoint quizzes; immediate feedback, retry on failure
+5. **Deliberate + Retrieval Practice** - mastery is demonstrated by explaining a point independently; post-session retrieval self-tests carry into the next lesson
+6. **Feynman Technique (Self-explanation)** - explaining in one's own words to verify understanding; relearn when unable to articulate clearly
 7. **Anderson's Taxonomy** - six cognitive levels from remember to create, applied across labeling, teaching, and completion checks
 
 For the full theoretical foundation (literature with DOI/arXiv links, WenFlow implementation index, and gap list), see [doc/EDUCATIONAL_THEORY_MAP.md](doc/EDUCATIONAL_THEORY_MAP.md).
@@ -374,7 +371,7 @@ Copyright (c) 2026 wenflow-org
 
 ## Acknowledgments
 
-Thanks to all [Linux.do](https://linux.do/) members for their sharing.
+Gratitude to the [Linux.do](https://linux.do/) community for their ongoing support and sharing.
 
 ---
 
