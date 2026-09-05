@@ -703,7 +703,7 @@ watch(() => props.stage, () => void loadStage());
 }
 .frt__toolbar-btn:hover { background: #f6f9ff; border-color: rgba(44, 99, 208, 0.4); }
 .frt__toolbar-btn:disabled { opacity: 0.55; cursor: not-allowed; }
-.frt__toolbar-hint { color: var(--mk-faint, #71809a); font-size: var(--mk-fs-12); }
+.frt__toolbar-hint { color: var(--mk-faint, var(--mk-faint-soft)); font-size: var(--mk-fs-12); }
 
 /* ========== core 联动提示条（M3） ========== */
 .frt-syncbar {
@@ -784,25 +784,25 @@ watch(() => props.stage, () => void loadStage());
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--mk-faint, #71809a);
+  color: var(--mk-faint, var(--mk-faint-soft));
 }
 .frt__legend-group--roles + .frt__legend-group .frt__legend-title { margin-top: 10px; }
 .frt__legend-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
-.frt__legend-loading { margin: 0; font-size: var(--mk-fs-12); color: var(--mk-faint, #71809a); }
+.frt__legend-loading { margin: 0; font-size: var(--mk-fs-12); color: var(--mk-faint, var(--mk-faint-soft)); }
 .frt__legend-item { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.frt__legend-en { flex-shrink: 0; font-size: var(--mk-fs-11); color: var(--mk-faint, #71809a); }
+.frt__legend-en { flex-shrink: 0; font-size: var(--mk-fs-11); color: var(--mk-faint, var(--mk-faint-soft)); }
 .frt__legend-hint { font-size: var(--mk-fs-12); color: var(--mk-muted, #5b6577); min-width: 0; }
 .frt__legend-foot {
   margin: 0;
   padding: 6px 14px 10px;
   font-size: var(--mk-fs-11);
-  color: var(--mk-faint, #71809a);
+  color: var(--mk-faint, var(--mk-faint-soft));
 }
 .frt__legend-foot .mono { font-size: var(--mk-fs-11); color: var(--mk-blue, #2c63d0); }
 
 /* ========== 搜索 / 过滤 ========== */
 .frt__filter { margin-bottom: 12px; }
-.frt__filter-count { font-size: var(--mk-fs-12); color: var(--mk-faint, #71809a); font-weight: 600; }
+.frt__filter-count { font-size: var(--mk-fs-12); color: var(--mk-faint, var(--mk-faint-soft)); font-weight: 600; }
 
 .frt__orch-panel { width: min(820px, 100%); }
 .frt__orch-summary {
@@ -863,7 +863,7 @@ watch(() => props.stage, () => void loadStage());
 .frt__agent { margin-bottom: 18px; border: 1px solid var(--mk-line, #e6ebf4); border-radius: 12px; overflow: hidden; background: var(--mk-surface, #fff); box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06)); }
 .frt__agenthead { padding: 10px 14px; background: #fafbfd; border-bottom: 1px solid var(--mk-line, #e6ebf4); display: flex; align-items: baseline; gap: 10px; }
 .frt__agentname { font-weight: 700; color: var(--mk-ink, #1a2a44); }
-.frt__agentdesc { color: var(--mk-faint, #71809a); font-size: var(--mk-fs-12); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frt__agentdesc { color: var(--mk-faint, var(--mk-faint-soft)); font-size: var(--mk-fs-12); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .frt__agentcount { margin-left: auto; padding: 1px 9px; border-radius: 999px; background: #eef2fa; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-11); font-weight: 700; white-space: nowrap; }
 /* 表格本体已并入 mk-table mk-table--dense（shared.css）：仅保留滚动容器（限高 + 粘性表头生效） */
 /* 横向+纵向滚动容器（滚动修复 #1）：表头 sticky 吸顶，容器限高内部滚动，页面本体不被撑长 */
@@ -878,7 +878,7 @@ watch(() => props.stage, () => void loadStage());
 .frt__field { display: block; min-width: 0; color: var(--mk-ink, #1a2a44); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .frt__fieldpath {
   font-size: var(--mk-fs-11);
-  color: var(--mk-faint, #71809a);
+  color: var(--mk-faint, var(--mk-faint-soft));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -921,9 +921,9 @@ watch(() => props.stage, () => void loadStage());
 .frt__orch-quick-title { font-weight: 800; color: var(--mk-blue, #2c63d0); }
 .frt__orch-quick-item b { margin-right: 4px; color: var(--mk-ink, #1a2a44); }
 
-.frt__handoff { max-width: var(--mk-col-id); color: var(--mk-faint, #71809a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.frt__empty { padding: 30px; color: var(--mk-faint, #71809a); text-align: center; }
-.frt__emptyrow { color: var(--mk-faint, #71809a); text-align: center; padding: 14px; }
+.frt__handoff { max-width: var(--mk-col-id); color: var(--mk-faint, var(--mk-faint-soft)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frt__empty { padding: 30px; color: var(--mk-faint, var(--mk-faint-soft)); text-align: center; }
+.frt__emptyrow { color: var(--mk-faint, var(--mk-faint-soft)); text-align: center; padding: 14px; }
 
 @media (min-width: 2000px) {
   .frt__toolbar-btn { font-size: 14px; padding: 10px 20px; }

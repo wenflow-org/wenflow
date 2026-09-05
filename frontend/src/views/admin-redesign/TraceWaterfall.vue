@@ -1150,7 +1150,7 @@ html[data-theme='dark'] {
   .wf-row__kind--call { background: #253049; color: #9fb0c8; }
   .wf-attempt--fail { background: #241a1a; border-left-color: var(--mk-red); }
   .wf-slow { background: rgba(251, 191, 36, 0.1); }
-  .wf-payload { background: #0f1624; border-color: #232f45; color: #c6d4ea; }
+  .wf-payload { background: #0f1624; border-color: #232f45; color: var(--mk-pre-fg); }
   .wf-summary, .wf-detail { background: #131b2a; border-color: #232f45; }
   /* 补漏：分隔线/轨道/标签/结论条（此前硬编码浅色在暗色下残留） */
   .wf-row { border-bottom-color: #232f45; }

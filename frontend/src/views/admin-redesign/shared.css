@@ -837,6 +837,11 @@ html[data-theme='dark'] {
   .mk-minibar { background: #232f45; }
   .mk-pagination__btn:disabled { background: transparent; }
   .mk-status__action--primary { background: var(--mk-blue); border-color: var(--mk-blue); }
+  /* 暗色下默认按钮 hover 回深底（原来 #f6f9ff 近白闪） */
+  .mk-btn:hover { background: #1b2740; }
+  .mk-btn--primary:hover { background: #6a9cf3; }
+  .mk-btn--danger:hover,
+  .mk-btn--danger:active { background: var(--mk-red-strong); }
   .mk-btn--ghost { background: rgba(91, 141, 239, 0.16); border-color: rgba(91, 141, 239, 0.4); color: #9db8f5; }
   .mk-btn--ghost:hover { background: rgba(91, 141, 239, 0.26); }
   .mk-btn--ok { background: rgba(74, 222, 128, 0.14); border-color: rgba(74, 222, 128, 0.35); color: #6ee7a0; }

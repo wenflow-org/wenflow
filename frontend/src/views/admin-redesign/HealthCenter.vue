@@ -507,11 +507,11 @@ defineExpose({ refresh })
 .hc-completion__label { font-size: var(--mk-fs-11); font-weight: 700; width: 100px; flex-shrink: 0; color: var(--mk-muted); }
 .hc-completion__track { flex: 1; height: 8px; border-radius: 4px; background: var(--mk-line); overflow: hidden; }
 .hc-completion__track i { display: block; height: 100%; border-radius: 4px; transition: width 0.3s ease; }
-.hc-completion__fill--draft { background: #cbd5e1; }
-.hc-completion__fill--handler-ready { background: #93c5fd; }
-.hc-completion__fill--core-ready { background: #60a5fa; }
-.hc-completion__fill--fields-synced { background: #3b82f6; }
-.hc-completion__fill--live { background: var(--mk-green); }
+.hc-completion__fill--draft { background: var(--mk-rec-draft); }
+.hc-completion__fill--handler-ready { background: var(--mk-rec-handler); }
+.hc-completion__fill--core-ready { background: var(--mk-rec-core); }
+.hc-completion__fill--fields-synced { background: var(--mk-rec-synced); }
+.hc-completion__fill--live { background: var(--mk-rec-live); }
 .hc-completion__num { font-size: var(--mk-fs-12); font-weight: 800; min-width: 30px; text-align: right; }
 
 @media (max-width: 700px) { .hc-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

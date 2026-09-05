@@ -1008,9 +1008,9 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
   gap: 12px;
   padding: 12px 16px;
   border-radius: 12px;
-  background: rgba(239, 117, 120, 0.08);
-  border: 1px solid rgba(239, 117, 120, 0.3);
-  color: #c0454a;
+  background: var(--mk-red-bg, #fef2f2);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  color: var(--mk-red, #dc2626);
   font-size: var(--mk-fs-13);
   font-weight: 600;
   margin-bottom: 14px;
@@ -1133,7 +1133,7 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
 
 /* ================= 暗色模式（D1 补完）：目标对话 ================= */
 html[data-theme='dark'] {
-  .gc-json { background: #0f1624; color: #c6d4ea; }
+  .gc-json { background: #0f1624; color: var(--mk-pre-fg); }
   /* 消息气泡：容器级旧覆写修正为气泡级（assistant 灰蓝 / user 深蓝） */
   .gc-msg--assistant .gc-msg__bubble,
   .gc-msg--unknown .gc-msg__bubble { background: #1b2433; border-color: #2a3850; }
@@ -1142,5 +1142,6 @@ html[data-theme='dark'] {
   .gc-insight__row { border-bottom-color: #1e2839; }
   .gc-mask { background: rgba(4, 8, 16, 0.55); }
   .gc-stage-cell__dot { background: #2a3850; }
+  .gc-error { border-color: rgba(248, 113, 113, 0.35); }
 }
 </style>

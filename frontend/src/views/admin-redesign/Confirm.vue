@@ -89,6 +89,10 @@ function confirm() {
   color: #fff;
 }
 .mk-confirm__danger:hover { background: #b91c1c; }
+/* 暗色覆写：与 shared.css 同源同值（Confirm 独立承载，不依赖 admin shared.css 加载） */
+html[data-theme='dark'] .mk-btn:hover { background: #1b2740; }
+html[data-theme='dark'] .mk-btn--primary:hover { background: #6a9cf3; }
+html[data-theme='dark'] .mk-confirm__danger:hover { background: var(--mk-red-strong, #ef4444); }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {

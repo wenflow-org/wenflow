@@ -43,4 +43,10 @@ function barWidth(i: number, j: number) {
 @keyframes skl-shimmer {
   to { background-position: -200% 0; }
 }
+
+/* 暗色模式：亮灰渐变换深底等阶（原来 #eef2f7/#f7f9fc 每页加载闪白条） */
+html[data-theme='dark'] .skl { border-bottom-color: #232f45; }
+html[data-theme='dark'] .skl__bar {
+  background: linear-gradient(90deg, #1d2739 25%, #2a3a55 50%, #1d2739 75%);
+}
 </style>

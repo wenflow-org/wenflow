@@ -755,16 +755,16 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   gap: 12px;
   padding: 12px 16px;
   border-radius: 12px;
-  background: rgba(239, 117, 120, 0.08);
-  border: 1px solid rgba(239, 117, 120, 0.3);
-  color: #c0454a;
+  background: var(--mk-red-bg, #fef2f2);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  color: var(--mk-red, #dc2626);
   font-size: var(--mk-fs-13);
   font-weight: 600;
 }
 .exec-error button {
-  border: 1px solid rgba(239, 117, 120, 0.4);
+  border: 1px solid rgba(220, 38, 38, 0.4);
   background: transparent;
-  color: #c0454a;
+  color: var(--mk-red, #dc2626);
   border-radius: 8px;
   padding: 4px 12px;
   font: inherit;
@@ -774,7 +774,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   white-space: nowrap;
 }
 .exec-error button:hover {
-  background: rgba(239, 117, 120, 0.12);
+  background: rgba(220, 38, 38, 0.12);
 }
 
 /* 表头与列表布局见下方 exec-* 区块 */
@@ -1108,7 +1108,7 @@ html[data-theme='dark'] {
   .exec-row--open { background: #1b2740; }
   .exec-detail td { background: #131b2a; }
   .exec-detail__box { background: #0f1624; border-color: #232f45; }
-  .exec-detail__box pre { color: #c6d4ea; }
+  .exec-detail__box pre { color: var(--mk-pre-fg); }
   .tline { background: #131b2a; border-color: #232f45; }
   .tline-attempt { background: #17202f; border-color: #232f45; }
   .tline-attempt--fail { background: #241a1a; border-left-color: var(--mk-red); }

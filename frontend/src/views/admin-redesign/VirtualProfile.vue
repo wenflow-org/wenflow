@@ -2754,7 +2754,7 @@ html[data-theme='dark'] {
   .vp-memory__stat { background: #141c2b; border-color: #232f45; }
   .vp-tag--warn { background: rgba(251, 191, 36, 0.12); color: #fcd34d; }
   .vp-pk { background: #141c2b; border-color: #232f45; }
-  .vp-adv-row--object pre { background: #0f1624; color: #c6d4ea; }
+  .vp-adv-row--object pre { background: #0f1624; color: var(--mk-pre-fg); }
 
   .mk-card__foot { background: #141c2b; }
   .vp-tag--ok { background: rgba(62, 201, 132, 0.14); color: #3ec984; }

@@ -457,7 +457,8 @@ function groupBadgeTitle(title: string): string {
   border-bottom: 1px solid var(--mk-line, #e1e8f2);
   margin-bottom: 2px;
 }
-.mshell__pinned .mshell__item { font-weight: 800; }
+/* 置顶入口比组内子项略收高度：驾驶舱入口不再显高（用户反馈 2026-09-05） */
+  .mshell__pinned .mshell__item { font-weight: 800; padding-top: 6px; padding-bottom: 6px; }
 .mshell__group { display: grid; gap: 1px; }
 /* 组头（可点击折叠）：组图标 + 组名 + 聚合徽章 + 箭头 */
 .mshell__group-head {
@@ -887,6 +888,7 @@ function groupBadgeTitle(title: string): string {
   .mshell__brandline { display: none; }
   /* 窄屏图标栏：显示单字图标，悬停提示全名 */
   .mshell__item { justify-content: center; padding: 4px 0; }
+  .mshell__pinned .mshell__item { padding-top: 4px; padding-bottom: 4px; }
   .mshell__group-body .mshell__item { padding-left: 0; }
   .mshell__item-glyph { display: inline-flex; }
 

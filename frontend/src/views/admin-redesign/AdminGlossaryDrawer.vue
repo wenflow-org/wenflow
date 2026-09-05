@@ -283,7 +283,7 @@ function close() { emit('close') }
 @keyframes agd-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 .agd__title { display: grid; gap: 2px; }
 .agd__title strong { font-size: var(--mk-fs-15); color: var(--mk-ink, #1a2a44); }
-.agd__subtitle { font-size: var(--mk-fs-12); color: var(--mk-faint, #71809a); }
+.agd__subtitle { font-size: var(--mk-fs-12); color: var(--mk-faint, var(--mk-faint-soft)); }
 .agd__search { display: grid; gap: 8px; padding: 6px 18px 12px; border-bottom: 1px solid var(--mk-line, #e6ebf4); }
 /* 滚动修复 #10：分类锚点导航条（横向滚动小胶囊） */
 .agd__nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
@@ -295,7 +295,7 @@ function close() { emit('close') }
 .agd__nav-item:hover { color: var(--mk-blue, #2c63d0); }
 .agd__nav-item.is-active { background: #dbe9ff; color: var(--mk-accent-deep, #1f57cc); border-color: rgba(44, 99, 208, 0.35); }
 .agd__body { overflow-y: auto; padding: 6px 18px 20px; }
-.agd__loading { padding: 30px 0; text-align: center; color: var(--mk-faint, #71809a); font-size: var(--mk-fs-12_5); }
+.agd__loading { padding: 30px 0; text-align: center; color: var(--mk-faint, var(--mk-faint-soft)); font-size: var(--mk-fs-12_5); }
 .agd__section { margin-top: 14px; }
 /* 滚动修复 #10：分类标题吸顶（抽屉内部滚动时分区标题常驻顶部） */
 .agd__section-title {
@@ -309,15 +309,15 @@ function close() { emit('close') }
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--mk-faint, #71809a);
+  color: var(--mk-faint, var(--mk-faint-soft));
 }
 .agd__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
 .agd__term { display: grid; gap: 1px; padding: 7px 10px; border-radius: 9px; background: #f8fafd; }
 .agd__term-name { font-size: var(--mk-fs-12_5); font-weight: 700; color: var(--mk-ink, #1a2a44); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-.agd__term-en { font-size: var(--mk-fs-11); color: var(--mk-faint, #71809a); font-weight: 600; }
+.agd__term-en { font-size: var(--mk-fs-11); color: var(--mk-faint, var(--mk-faint-soft)); font-weight: 600; }
 .agd__term-def { font-size: var(--mk-fs-12); color: var(--mk-muted, #5b6577); line-height: 1.5; }
 .agd__term-where { font-style: normal; color: var(--mk-blue, #2c63d0); }
-.agd__empty { padding: 8px 0; color: var(--mk-faint, #71809a); font-size: var(--mk-fs-12); }
+.agd__empty { padding: 8px 0; color: var(--mk-faint, var(--mk-faint-soft)); font-size: var(--mk-fs-12); }
 
 @media (min-width: 2000px) {
   .agd__panel { width: 560px; }

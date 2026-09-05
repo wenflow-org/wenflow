@@ -944,7 +944,7 @@ html[data-theme='dark'] {
   .ts-panel__close { background: #232f45; color: var(--mk-muted); }
   .ts-panel__close:hover { background: #2c3a55; color: var(--mk-ink); }
   .ts-card--advisory { background: #2a2410; border-color: rgba(251, 191, 36, 0.3); }
-  .ts-json { background: #0f1624; color: #c6d4ea; }
+  .ts-json { background: #0f1624; color: var(--mk-pre-fg); }
 }
 
 </style>

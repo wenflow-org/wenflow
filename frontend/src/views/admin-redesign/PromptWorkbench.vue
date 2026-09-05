@@ -452,6 +452,6 @@ html[data-theme='dark'] {
   .sc-msg--warn { background: rgba(251, 191, 36, 0.1); }
   /* 补漏：输入框/代码块浅底 */
   .sc-field__input { background: #141c2b; }
-  .sc-result__pre { background: #0f1624; color: #c6d4ea; }
+  .sc-result__pre { background: #0f1624; color: var(--mk-pre-fg); }
 }
 </style>

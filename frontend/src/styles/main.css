@@ -36,6 +36,7 @@
   --mk-ink: #1a2a44;
   --mk-muted: #5b6577;
   --mk-faint: #5f6f8c;
+  --mk-faint-soft: #71809a;      /* 弱化文字更浅档（详情页元信息/表格说明等零星硬编码收敛） */
   --mk-line: #e6ebf4;
   --mk-bg: #f7f8fa;
   --mk-surface: #ffffff;
@@ -59,6 +60,7 @@
   --mk-code-bg: #0d1420;
   --mk-code-fg: #8ba3c7;
   --mk-code-border: #1c2a40;
+  --mk-pre-fg: #c6d4ea;           /* 代码井前景（prompt/JSON/预 文本块硬编码收敛） */
   --mk-radius-xs: 4px;
   --mk-radius-sm: 6px;
   --mk-radius-md: 8px;
@@ -128,6 +130,7 @@ html[data-theme='dark'] {
   --mk-ink: #e6edf7;            /* 主文字：深底浅字 */
   --mk-muted: #9fb0c8;          /* 次级文字 */
   --mk-faint: #6b7c96;          /* 弱化文字 */
+  --mk-faint-soft: #8fa3bd;     /* 弱化文字亮档（暗色下可读性补足） */
   --mk-line: #2a3850;           /* 边框/分隔线 */
   --mk-bg: #0f1624;             /* 页面背景 */
   --mk-surface: #17202f;        /* 卡片/面板表面 */
@@ -146,6 +149,7 @@ html[data-theme='dark'] {
   --mk-code-bg: #0b101c;
   --mk-code-fg: #9db4d8;
   --mk-code-border: #233250;
+  --mk-pre-fg: #c6d4ea;         /* 暗色代码井前景：维持原值 */
   --mk-close-bg: #26324a;
   --mk-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.5);
   --mk-shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.55);
