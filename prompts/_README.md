@@ -14,11 +14,19 @@
 prompts/
 ├── core/                # v4 核心文件（YAML，唯一人工编辑入口，业务 SSOT）
 ├── orchestration/       # 字段路由编排文件（数据面声明源，见 orchestration/_README.md）
+├── manifests/           # skill 契约（promptContract / runtimeContract），发布时写入 DB metadata
+├── field-lineage.yaml   # 字段消费者血缘注册表（管理端编辑分级；失效时回退内置静态表）
 ├── skills.yaml          # skill 户口簿（跨阶段技能注册唯一声明源，规格见 doc/SKILLS_YAML_SPEC.md）
 ├── skill.*.md           # 编译产物（由 compile 生成，勿手改；漂移会被 sync 跳过）
 ├── backups/             # 发布/回滚前的生产快照（按 skillId/时间戳归档）
 ├── _README.md           # 本说明
 ```
+
+## 契约与字段血缘
+
+`manifests/<skillId>.yaml` 声明每个 skill 的 `promptContract`（必填字段/校验规则）与 `runtimeContract`（模型参数/重试/失败策略）。发布时（`POST /api/admin/prompt-lab/publish-core`）从 manifest 读取并写入 DB `agent_prompts` ACTIVE 行的 `metadata.promptLab`；运行时 `resolve-prompt-contract.ts` / `resolve-runtime-contract.ts` 读取契约用于字段校验与参数解析。
+
+`field-lineage.yaml`（可人工编辑）声明字段 → 消费者映射，供管理端「字段路由」展示爆炸半径。由 `field-lineage.ts` 读取，失效或缺失时回退内置静态表。
 
 ## 如何修改 Prompt
 

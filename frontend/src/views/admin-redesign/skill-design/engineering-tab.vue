@@ -27,7 +27,7 @@
     <section v-if="overview.runtimeContract" class="sdp-eng">
       <header class="sdp-sec-head">
         <h4>运行时契约</h4>
-        <span class="sdp-sec-meta mono">{{ overview.runtimeContractSource === 'manifest' ? 'prompt-lab/manifests' : 'buildDefaultRuntimeContract' }}</span>
+        <span class="sdp-sec-meta mono">{{ overview.runtimeContractSource === 'manifest' ? 'prompts/manifests' : 'buildDefaultRuntimeContract' }}</span>
       </header>
       <table class="sdp-kv">
         <tbody>
