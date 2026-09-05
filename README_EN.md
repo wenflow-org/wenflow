@@ -19,6 +19,8 @@ English Version | [中文版](README.md)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.17.0-green.svg)](https://nodejs.org)
 [![Vue](https://img.shields.io/badge/vue-3.x-brightgreen.svg)](https://vuejs.org)
 
+📋 **[Changelog](CHANGELOG.md)** · Monthly feature updates
+
 ---
 
 ## Why WenFlow?
@@ -107,9 +109,9 @@ flowchart TD
     R1 -. after confirm .-> P1
 ```
 
-- Top-level agents are orchestration-oriented; the Skills actually hold the prompts and call the LLM.
+- Top-level agents are orchestration-oriented; the Skills hold the prompts and call the LLM.
 - The goal is clarified first, then broken into a path. Path generation starts only after explicit user confirmation.
-- Teaching progresses opening → teaching ⇄ intervention → ready_to_close → wrapup; checkpoints appear only inside rounds; session mode is always tutor.
+- Teaching progresses opening → teaching ⇄ intervention → (checkpoint) → ready_to_close → wrapup; checkpoints appear only inside rounds; session mode is always tutor.
 - When a learner shows signs of getting stuck (help keywords, several consecutive low-understanding rounds), peer reinforcement is triggered — the current task is never abandoned.
 - Each session ends with a summary, evaluation, and replan suggestions. Paths are never changed automatically; a new version is created only after user confirmation.
 - After a lesson, events are persisted and the learner profile is updated; the next lesson starts with that context.
@@ -174,6 +176,7 @@ The project will continue to explore how to cultivate five capabilities that mat
 
 ### Requirements
 - Node.js >= 20.17.0
+- Recommended: Windows + PowerShell 5.1+; the root startup scripts are Windows-only. On Linux/macOS, use the Docker deployment.
 
 ### Recommended Order (First Run)
 
@@ -242,7 +245,7 @@ Note: `-UseNginx` mode runs `npm run build` (frontend) and generates runtime con
 # One-shot start (interactively fills backend/.env; env vars can also be passed non-interactively)
 ./docker-start.sh
 
-# Database backup (one-off operations service, read-only volume mount)
+# Database backup (one-off operations service, read-only volume mount; requires WENFLOW_BACKUP_HOST_DIR to be set to the backup output directory)
 docker compose -f docker-compose.operations.yml run --rm backup
 ```
 
@@ -327,7 +330,7 @@ On first startup, the system reads these fields from `backend/.env` to auto-crea
 
 ```env
 INIT_ADMIN_NAME=admin
-INIT_ADMIN_PASSWORD=YourStrongPassword123
+INIT_ADMIN_PASSWORD=Admin@2026Strong
 ```
 
 If admin already exists in database, creation is skipped.
@@ -338,7 +341,7 @@ Important: Admin login defaults to `ADMIN_ACCESS_MODE=private`, allowing only lo
 
 ### Reverse Proxy Common Issues
 
-- Don't add trailing `/` to `CORS_ORIGIN` (use `https://demo.example.com`, not `https://demo.example.com/`)
+- Do not add a trailing `/` to `CORS_ORIGIN` (use `https://demo.example.com`, not `https://demo.example.com/`)
 - Set `TRUST_PROXY` to the IP/CIDR of the proxy that directly connects to the backend; production rejects `true`
 - Do not publish a backend port that bypasses the trusted proxy. Docker Compose exposes only Nginx to the host
 - If "origin not allowed" error occurs, check browser `Origin` matches `CORS_ORIGIN`
@@ -347,17 +350,19 @@ Important: Admin login defaults to `ADMIN_ACCESS_MODE=private`, allowing only lo
 
 ## Educational Theory Foundation
 
-The design is grounded in these theories, each backed by concrete implementation:
+The design is grounded in these theories, each backed by concrete implementation (the full 16-theory map with literature DOI/arXiv links and implementation index is in [doc/EDUCATIONAL_THEORY_MAP.md](doc/EDUCATIONAL_THEORY_MAP.md)):
 
 1. **Cognitive Load Theory** - per-round knowledge-point caps, response-format budgets, automatic context compression
 2. **Self-directed Learning** - the goal is stated and the plan confirmed by the learner; the pace is learner-controlled
 3. **Zone of Proximal Development + Scaffolding** - difficulty adjusts to understanding; prerequisite gaps are backfilled first
 4. **Formative Assessment** - per-round understanding diagnosis plus checkpoint quizzes; immediate feedback, retry on failure
 5. **Deliberate + Retrieval Practice** - mastery is demonstrated by explaining a point independently; post-session retrieval self-tests carry into the next lesson
-6. **Feynman Technique (Self-explanation)** - explaining in one's own words to verify understanding; relearn when unable to articulate clearly
-7. **Anderson's Taxonomy** - six cognitive levels from remember to create, applied across labeling, teaching, and completion checks
-
-For the full theoretical foundation (literature with DOI/arXiv links, WenFlow implementation index, and gap list), see [doc/EDUCATIONAL_THEORY_MAP.md](doc/EDUCATIONAL_THEORY_MAP.md).
+6. **Spacing Effect + Review Loop** - multi-day increasing intervals (SM-2 style) with an automatic review-lesson loop for long-term retention
+7. **Feynman Technique (Self-explanation)** - explaining in one's own words to verify understanding; relearn when unable to articulate clearly
+8. **ICAP Framework** - learning activities classified by cognitive engagement (Interactive > Constructive > Active > Passive); stage tasks follow a non-decreasing ICAP level
+9. **Productive Failure** - a two-phase approach of independent trial first, then comparison and integration, using failure as a learning signal
+10. **Predictive Calibration Methodology** - teaching confidence is falsifiable: predictions logged, outcomes written back, hit-rate statistics drive tuning
+11. **Anderson's Taxonomy** - six cognitive levels from remember to create, applied across labeling, teaching, and completion checks
 
 ---
 

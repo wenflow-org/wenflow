@@ -19,6 +19,8 @@
 [![Node](https://img.shields.io/badge/node-%3E%3D20.17.0-green.svg)](https://nodejs.org)
 [![Vue](https://img.shields.io/badge/vue-3.x-brightgreen.svg)](https://vuejs.org)
 
+📋 **[更新日志](CHANGELOG.md)** · 按月记录主要功能更新
+
 ---
 
 ## 为什么存在？
@@ -75,7 +77,7 @@
 
 | 指标 | 含义 | 用途 |
 |------|------|------|
-| LSS | 学习压力评分 | 基于任务难度、时长、认知负荷，EWMA 平滑 |
+| LSS | 学习压力评分 | 基于任务难度、时长、认知负荷、效率与完成率综合计算 |
 | KTL | 知识训练负荷（Knowledge Training Load） | 长期积累，日衰减因子 0.95（半衰期约 13.5 天） |
 | LF | 学习疲劳度 | 短期累计，日衰减因子 0.70（半衰期约 2 天） |
 | LSB | 学习状态平衡 | KTL - LF，预警过度学习 |
@@ -109,7 +111,7 @@ flowchart TD
 
 - 顶层 Agent 负责编排，真正持有 prompt、直接调用模型的是 Skills。
 - 先澄清目标，再拆解路径。路径生成须经用户显式确认后才启动。
-- 教学按 opening → teaching ⇄ intervention → ready_to_close → wrapup 推进；检查点仅在回合内出现；课堂模式固定为 tutor。
+- 教学按 opening → teaching ⇄ intervention →（checkpoint）→ ready_to_close → wrapup 推进；检查点仅在回合内出现；课堂模式固定为 tutor。
 - 学习者出现求助信号（求助关键词、连续数轮理解度偏低）时触发伴学，不会放弃当前任务。
 - 课后自动生成总结与评估，并附带重规划建议；路径不会自动变更，须经用户确认后才生成新版本。
 - 每节课结束后，事件将持久化并更新学习者画像；下一节课开始时，AI 会基于这些信息继续教学。
@@ -118,7 +120,7 @@ flowchart TD
 
 通过虚拟学习者账号，以真实用户的方式完整运行产品，用于功能验证：
 
-- **黑盒模拟**：以普通用户的视角完整走完“目标 → 路径 → 学习”全流程，并由裁判与角色保真审计把关
+- **黑盒模拟**：以普通用户的视角完整执行“目标 → 路径 → 学习”全流程，并由裁判与角色保真审计把关
 - **Quick Learn**：选取虚拟账号下的任务，自动完成一节课并生成传播报告
 
 ### 管理端
@@ -150,7 +152,7 @@ flowchart TD
 | **前端** | Vue 3 + TypeScript + Vite 6 + Element Plus + Pinia |
 | **后端** | Node.js + Express + TypeScript + Prisma |
 | **数据库（当前）** | SQLite（主库 44 表 + system 库 14 表，双库架构） |
-| **AI 接入** | OpenAI 兼容模型网关（默认 DeepSeek：deepseek-v4-flash / v4-pro / r1），支持 SSE 流式、重试预算、thinking mode 控制 |
+| **AI 接入** | OpenAI 兼容模型网关（默认 chat=deepseek-v4-flash / reasoning=deepseek-v4-pro，另有 deepseek-r1 可用），支持 SSE 流式、重试预算、thinking mode 控制 |
 | **Agent / Skill 编排** | EduClaw Gateway + 5 个顶层 Agent（goal/path/teaching/profile/simulation，无 prompt 编排器）/ Skill 执行层（prompts/core 真源 → 编译产物 → DB 镜像）+ Coordinators + Durable Outbox 事件链 |
 | **模型配置分层** | 环境变量 → 平台默认 → Agent/Skill 级 → 用户自定义 API / 模型覆盖 |
 | **虚拟实验** | Virtual Learner Lab（黑盒模拟 + Quick Learn） |
@@ -200,7 +202,7 @@ npm run env:setup
 ./start-dev.ps1
 ```
 
-说明：脚本会自动装依赖、生成双 Prisma Client、给主库和 System DB 分别执行 migrate、必要时引导创建或补全 `backend/.env`，启动前再自动同步一次 core prompts。
+说明：脚本会自动安装依赖、生成双 Prisma Client、给主库和 System DB 分别执行 migrate、必要时引导创建或补全 `backend/.env`，启动前再自动同步一次 core prompts。
 如需跳过 Prisma 初始化可使用：`./start-dev.ps1 -SkipPrisma`。注意：该选项也会跳过启动前的 core prompts 同步，仅适用于数据库和 prompts 已经准备好的环境。
 
 ### 局域网开发模式
@@ -239,16 +241,16 @@ npm run dev:nginx
 ### Docker 部署（Linux/macOS）
 
 ```bash
-# 一键启动（交互式补齐 backend/.env，也支持环境变量非交互传入）
+# 启动（交互式补齐 backend/.env，也支持环境变量非交互传入）
 ./docker-start.sh
 
-# 数据库备份（一次性 operations 服务，只读挂载数据卷）
+# 数据库备份（一次性 operations 服务，只读挂载数据卷；需先设置 WENFLOW_BACKUP_HOST_DIR 指定备份输出目录）
 docker compose -f docker-compose.operations.yml run --rm backup
 ```
 
 说明：`docker-compose.yml` 提供 migrate / backend / nginx 三个服务，默认只发布 Nginx（80），不发布后端 `3001`；后端强制 `ADMIN_ACCESS_MODE=private`。详见 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
-### 质量检查（本地 CI 同款）
+### 质量检查（与 CI 一致）
 
 ```bash
 # 依次执行：secret 扫描 → Prisma 双 schema 校验 → 空库迁移回放 → 后端 typecheck → LLM 调用契约检查 → 迁移部署 → prompts 门禁 → lint → 后端/前端测试 → 前后端构建
@@ -304,7 +306,7 @@ npm run prompts:core:check
 
 - 默认情况下，前端通过相对路径 `/api` 访问后端，由 Vite 代理或 Nginx 转发。
 - 管理端配置主要读取 `frontend/.env` 中的 `VITE_API_BASE_URL`。
-- 普通用户端在开发模式下固定走 `/api`；非开发模式下 `VITE_API_BASE_URL` 优先，`VITE_API_URL` 仅作历史兜底。如果没有特殊部署需求，保持默认 `/api` 即可。
+- 普通用户端在开发模式下固定使用 `/api`；非开发模式下 `VITE_API_BASE_URL` 优先，`VITE_API_URL` 仅作历史兼容保留。如果没有特殊部署需求，保持默认 `/api` 即可。
 
 如需更细粒度的部署或非脚本方式启动，可参考 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
@@ -329,7 +331,7 @@ npm run prompts:core:check
 
 ```env
 INIT_ADMIN_NAME=admin
-INIT_ADMIN_PASSWORD=YourStrongPassword123
+INIT_ADMIN_PASSWORD=Admin@2026Strong
 ```
 
 如果数据库里已经存在管理员，系统会自动跳过创建。
@@ -338,7 +340,7 @@ INIT_ADMIN_PASSWORD=YourStrongPassword123
 
 注意：管理员登录默认 `ADMIN_ACCESS_MODE=private`，仅允许本机与局域网（RFC1918）来源访问；可设为 `loopback`（仅本机）或 `any`（不限制来源），并用 `ADMIN_ALLOWED_IPS` 精确放行指定客户端 IP。访问模式策略可在管理端「模型与接入」页面热生效，环境变量仅作默认值。如确有公网远程管理需求，请配合 VPN 或精确 IP 白名单，并自行承担安全加固责任。详见 [admin-guide.md](admin-guide.md)
 
-### 反向代理常见坑
+### 反向代理常见问题
 
 - `CORS_ORIGIN` 建议不要写尾部 `/`（如 `https://demo.example.com`，不要写成 `https://demo.example.com/`）。
 - 使用反向代理时，将 `TRUST_PROXY` 配置为直接连接后端的代理 IP/CIDR；生产禁止使用 `true`。
@@ -349,17 +351,19 @@ INIT_ADMIN_PASSWORD=YourStrongPassword123
 
 ## 教育理论基础
 
-设计背后的理论，每条都有对应实现：
+设计背后的理论，每条都有对应实现（完整 16 条理论、文献 DOI/arXiv 链接与落点索引见 [doc/EDUCATIONAL_THEORY_MAP.md](doc/EDUCATIONAL_THEORY_MAP.md)）：
 
 1. **认知负荷理论** - 单轮知识点上限、回复形态预算，长对话自动压缩
 2. **自我导向学习** - 目标由学习者提出、方案由学习者确认，学习节奏由学习者掌控
 3. **最近发展区 + 支架** - 难度随理解度自动升降，理解受阻时回补前置基础
 4. **形成性评估** - 每轮理解度诊断 + 检查点测验，即时反馈、失败重学
 5. **刻意练习 + 检索练习** - 能够独立阐述才算掌握；课后检索式自测，下一节开场承接
-6. **费曼技巧（自我解释）** - 以复述讲解检验理解，无法讲清时重新学习
-7. **安德森认知目标分类** - 从"记忆"到"创造"6 级认知目标，贯穿标注、教学与完成判定
-
-完整理论依据（含各理论的文献 DOI/arXiv 链接、Wenflow 落点索引与缺口清单）见 [doc/EDUCATIONAL_THEORY_MAP.md](doc/EDUCATIONAL_THEORY_MAP.md)。
+6. **间隔效应与复习闭环** - 跨日递增间隔（SM-2 式）+ 自动复习课闭环，巩固长期记忆
+7. **费曼技巧（自我解释）** - 以复述讲解检验理解，无法讲清时重新学习
+8. **ICAP 框架** - 学习活动按认知参与度分档（交互 > 建构 > 主动 > 被动），阶段任务按 ICAP 等级递进
+9. **有效失败（Productive Failure）** - 先独立试错、再对比整合的两阶段教学，以失败作为学习信号
+10. **预测校准方法论** - 教学决策置信度可证伪：预测留档、结果回写、命中率统计，数据驱动调优
+11. **安德森认知目标分类** - 从"记忆"到"创造"6 级认知目标，贯穿标注、教学与完成判定
 
 ---
 
