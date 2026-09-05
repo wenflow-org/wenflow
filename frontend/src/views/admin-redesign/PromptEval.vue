@@ -157,44 +157,41 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="formOpen = false">✕</button>
           </div>
           <div class="mk-modal__body">
-            <!-- 白话引导：这个页面是干什么的（单行紧凑） -->
+            <!-- 一行引导 -->
             <div class="pe-guide">
-              <span class="pe-guide__title">「评估用例」= 一段学生说的话 + 期望助手怎么回</span>
-              <span class="pe-guide__steps">① 选能力 → ② 学生怎么说 → ③ 期望（可跳过）→ 点「保存并立即试跑」。以后改 prompt 一键重跑防退化。</span>
+              <span class="pe-guide__title">评估用例 = 学生说的话 + 期望助手怎么回</span>
+              <span class="pe-guide__steps">改 prompt 后一键重跑防退化；期望可不填，填好直接「保存并立即试跑」。</span>
             </div>
 
-            <!-- 第 1 步：选能力 -->
-            <div class="pe-sec">
-              <div class="pe-sec__title"><span class="pe-sec__num">1</span> 选能力</div>
-              <div class="pe-form-grid">
-                <label class="mk-field" :class="{ 'mk-field--error': errors.agentId }">
-                  <span class="mk-field__label">助手能力 <em class="mk-field__req">*</em></span>
-                  <select v-model="form.agentId" class="mk-field__select" :disabled="!!editingId">
-                    <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.label }}</option>
-                  </select>
-                  <span class="mk-field__hint">{{ agentDesc }}</span>
-                  <span v-if="errors.agentId" class="mk-field__err">{{ errors.agentId }}</span>
-                </label>
-                <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
-                  <span class="mk-field__label">用例名称 <em class="mk-field__req">*</em></span>
-                  <input v-model="form.name" class="mk-field__input" placeholder="例如：学生说要考英语" />
-                  <span v-if="errors.name" class="mk-field__err">{{ errors.name }}</span>
-                </label>
-              </div>
+            <!-- 能力 + 名称 -->
+            <div class="pe-form-grid">
+              <label class="mk-field" :class="{ 'mk-field--error': errors.agentId }">
+                <span class="mk-field__label">助手能力 <em class="mk-field__req">*</em></span>
+                <select v-model="form.agentId" class="mk-field__select" :disabled="!!editingId">
+                  <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.label }}</option>
+                </select>
+                <span class="mk-field__hint">{{ agentDesc }}</span>
+                <span v-if="errors.agentId" class="mk-field__err">{{ errors.agentId }}</span>
+              </label>
+              <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
+                <span class="mk-field__label">用例名称 <em class="mk-field__req">*</em></span>
+                <input v-model="form.name" class="mk-field__input" placeholder="例如：学生说要考英语" />
+                <span v-if="errors.name" class="mk-field__err">{{ errors.name }}</span>
+              </label>
             </div>
 
-            <!-- 第 2 步：学生说什么 -->
-            <div class="pe-sec">
-              <div class="pe-sec__title"><span class="pe-sec__num">2</span> 学生怎么说
-                <span class="pe-input-src">
-                  <button type="button" class="pe-src-btn" :class="{ 'pe-src-btn--on': form.inputSource === 'manual' }" @click="form.inputSource = 'manual'">手写对话</button>
-                  <button type="button" class="pe-src-btn" :class="{ 'pe-src-btn--on': form.inputSource === 'simulated' }" @click="form.inputSource = 'simulated'">🎭 模拟学生（虚拟学习者扮演）</button>
-                </span>
+            <!-- 学生输入：标准 tab 切换 -->
+            <div class="pe-input-block">
+              <div class="pe-tabs" role="tablist">
+                <button type="button" class="pe-tab" role="tab" :aria-selected="form.inputSource === 'manual'"
+                  :class="{ 'pe-tab--on': form.inputSource === 'manual' }" @click="form.inputSource = 'manual'">✍️ 手写对话</button>
+                <button type="button" class="pe-tab" role="tab" :aria-selected="form.inputSource === 'simulated'"
+                  :class="{ 'pe-tab--on': form.inputSource === 'simulated' }" @click="form.inputSource = 'simulated'">🎭 模拟学生</button>
               </div>
 
-              <!-- 手写对话：现有人工输入消息序列 -->
-              <template v-if="form.inputSource === 'manual'">
-                <div class="mk-field">
+              <div class="pe-tab-body">
+                <!-- 手写对话 -->
+                <template v-if="form.inputSource === 'manual'">
                   <div class="pe-msgs">
                     <div v-for="(m, i) in form.messages" :key="i" class="pe-msg">
                       <select v-model="m.role" class="mk-input pe-msg__role">
@@ -202,83 +199,70 @@
                         <option value="assistant">助手</option>
                       </select>
                       <input v-model="m.content" class="mk-input pe-msg__content"
-                        :placeholder="m.role === 'user' ? '例如：我想考英语，帮帮我' : '助手的历史回复（模拟多轮对话，可选）'" />
+                        :placeholder="m.role === 'user' ? '例如：我想考英语，帮帮我' : '助手的历史回复（可选，模拟多轮）'" />
                       <button type="button" class="mk-link mk-link--danger" :disabled="form.messages.length <= 1" @click="form.messages.splice(i, 1)">✕</button>
                     </div>
                   </div>
                   <button type="button" class="mk-link" @click="form.messages.push({ role: 'user', content: '' })">+ 再加一轮对话</button>
-                  <span class="mk-field__hint">手写学生的台词。想要更真实、更省事，切到"模拟学生"让虚拟学习者来扮演。</span>
-                </div>
-              </template>
+                </template>
 
-              <!-- 模拟学生：场景 → 虚拟学习者生成真实学生输入 -->
-              <template v-else>
-                <div class="mk-field" :class="{ 'mk-field--error': errors.scenario }">
-                  <span class="mk-field__label">学生场景 <em class="mk-field__req">*</em></span>
-                  <textarea v-model="form.scenario" class="mk-field__textarea" rows="2"
-                    placeholder="例如：我想考英语，时间不多，每周只能挤两次一小时" />
-                  <span v-if="errors.scenario" class="mk-field__err">{{ errors.scenario }}</span>
-                  <span class="mk-field__hint">一句话描述"这个学生是谁、想干什么"。跑评估时，虚拟学习者会按人设把这个场景说得更自然真实。</span>
-                </div>
-                <div class="mk-field">
-                  <span class="mk-field__label">学生人设 <span class="mk-field__opt">（可选）</span></span>
-                  <select v-model="form.personaId" class="mk-field__select">
-                    <option value="">为这个场景新建（自动生成学生人设）</option>
-                    <option v-for="v in virtualLearners" :key="v.id" :value="v.id">{{ v.label }}</option>
-                  </select>
-                  <span class="mk-field__hint">选已有虚拟学习者，学生就按它的人设和故事说话；不选就用场景即时生成。可去「虚拟学习者」页面管理。</span>
-                </div>
-                <details class="pe-adv pe-adv--inline" :open="simAdvOpen" @toggle="onSimAdvToggle">
-                  <summary>模拟设置 <span class="pe-adv__hint">{{ simSummary }}</span></summary>
-                  <div class="pe-form-grid">
-                    <label class="mk-field">
-                      <span class="mk-field__label">对话轮数 <span class="mk-field__opt">（goal 专属）</span></span>
-                      <input v-model.number="form.dialogueRounds" type="number" min="1" max="5" class="mk-field__input mono" />
-                      <span class="mk-field__hint">>1 开启多轮对话：助手与虚拟学生来回聊，逐轮校验字段。</span>
-                    </label>
-                    <label class="mk-field">
-                      <span class="mk-field__label">学生对抗度</span>
-                      <select v-model="form.frictionBudget" class="mk-field__select">
-                        <option value="none">none · 全程配合</option>
-                        <option value="low">low · 轻微犹豫</option>
-                        <option value="normal">normal · 正常学生</option>
-                        <option value="high">high · 难缠（质疑/拖延）</option>
-                        <option value="stress_test">stress_test · 极端对抗</option>
-                      </select>
-                      <span class="mk-field__hint">对抗度越高，学生越容易打断、质疑、拖延——专测字段在"难缠学生"下是否仍稳定产出。</span>
-                    </label>
+                <!-- 模拟学生：虚拟学习者扮演输入 -->
+                <template v-else>
+                  <div class="mk-field" :class="{ 'mk-field--error': errors.scenario }">
+                    <span class="mk-field__label">学生场景 <em class="mk-field__req">*</em></span>
+                    <textarea v-model="form.scenario" class="mk-field__textarea" rows="2"
+                      placeholder="例如：我想考英语，时间不多，每周只能挤两次一小时" />
+                    <span v-if="errors.scenario" class="mk-field__err">{{ errors.scenario }}</span>
+                    <span class="mk-field__hint">一句话描述学生是谁、想干什么。跑评估时虚拟学习者按此扮演学生，说得更真实。</span>
                   </div>
                   <label class="mk-field">
-                    <span class="mk-field__label">收敛门禁字段 <span class="mk-field__opt">（可选）</span></span>
-                    <input v-model="form.convergeRequires" class="mk-field__input mono" placeholder="例如：real_problem,confirmedProposal" />
-                    <span class="mk-field__hint">对话推进中必须产出的助手字段（逗号分隔），缺了就判不通过。</span>
+                    <span class="mk-field__label">学生人设 <span class="mk-field__opt">（可选）</span></span>
+                    <select v-model="form.personaId" class="mk-field__select">
+                      <option value="">为这个场景新建（自动生成学生人设）</option>
+                      <option v-for="v in virtualLearners" :key="v.id" :value="v.id">{{ v.label }}</option>
+                    </select>
                   </label>
-                </details>
-              </template>
-
-              <label class="mk-field">
-                <span class="mk-field__label">备注（可选）</span>
-                <textarea v-model="form.description" class="mk-field__textarea" rows="2" placeholder="这个用例想验证什么，比如：学生只说一句话时，助手也要能引导出学习目标" />
-              </label>
+                  <!-- 模拟参数：一行内联，不折叠 -->
+                  <div class="pe-params">
+                    <label class="pe-param">
+                      <span class="pe-param__label">对话轮数</span>
+                      <input v-model.number="form.dialogueRounds" type="number" min="1" max="5" class="mk-input mono" />
+                    </label>
+                    <label class="pe-param">
+                      <span class="pe-param__label">学生对抗度</span>
+                      <select v-model="form.frictionBudget" class="mk-input">
+                        <option value="none">none · 配合</option>
+                        <option value="low">low · 犹豫</option>
+                        <option value="normal">normal · 正常</option>
+                        <option value="high">high · 难缠</option>
+                        <option value="stress_test">stress · 极端</option>
+                      </select>
+                    </label>
+                    <label class="pe-param pe-param--grow">
+                      <span class="pe-param__label">收敛门禁字段（可选）</span>
+                      <input v-model="form.convergeRequires" class="mk-input mono" placeholder="real_problem,confirmedProposal" />
+                    </label>
+                  </div>
+                </template>
+              </div>
             </div>
 
-            <!-- 第 3 步：期望助手表现（可选，默认收起） -->
-            <details class="pe-adv pe-sec pe-sec--expect" :open="expectOpen" @toggle="onExpectToggle">
-              <summary class="pe-sec__title"><span class="pe-sec__num">3</span> 期望助手怎么回 <span class="pe-adv__hint">{{ expectSummary }}</span></summary>
+            <!-- 期望（可选，单层折叠） -->
+            <details class="pe-expect" :open="expectOpen" @toggle="onExpectToggle">
+              <summary>期望助手怎么回 <span class="pe-expect__hint">{{ expectSummary }}</span></summary>
               <div class="pe-form-grid">
                 <label class="mk-field">
-                  <span class="mk-field__label">必须做到 <span class="mk-field__opt">（写人话，逗号分隔）</span></span>
+                  <span class="mk-field__label">必须做到 <span class="mk-field__opt">（人话，逗号分隔）</span></span>
                   <input v-model="form.mustContain" class="mk-field__input" :placeholder="agentMustContainPlaceholder" />
-                  <span class="mk-field__hint">回复里必须出现这些内容才算通过，例如：{{ agentMustContainExample }}</span>
+                  <span class="mk-field__hint">回复必须包含这些内容才算通过，例如：{{ agentMustContainExample }}</span>
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">不能出现</span>
                   <input v-model="form.mustNotInclude" class="mk-field__input" placeholder="例如：我不知道,去问老师吧" />
-                  <span class="mk-field__hint">回复里出现这些字样就不通过（逗号分隔）。</span>
+                  <span class="mk-field__hint">回复出现这些字样就不通过。</span>
                 </label>
               </div>
-
-              <details class="pe-adv pe-adv--inner">
+              <details class="pe-adv">
                 <summary>高级校验 <span class="pe-adv__hint">让助手按固定结构输出后，逐项卡结构字段</span></summary>
                 <div v-if="form.agentId === 'skill:goal-conversation'" class="mk-field">
                   <span class="mk-field__label">期望输出阶段</span>
@@ -308,6 +292,10 @@
                   <span v-if="form.inputPayloadError" class="mk-field__err">{{ form.inputPayloadError }}</span>
                 </div>
               </details>
+              <label class="mk-field">
+                <span class="mk-field__label">备注（可选）</span>
+                <textarea v-model="form.description" class="mk-field__textarea" rows="2" placeholder="这个用例想验证什么，比如：学生只说一句话时，助手也要能引导出学习目标" />
+              </label>
             </details>
 
             <label class="mk-field mk-field--switch">
@@ -623,19 +611,10 @@ const form = ref({
 })
 const errors = ref<{ name?: string; agentId?: string; scenario?: string }>({})
 
-/** 折叠状态：期望（第3步）与模拟设置，默认收起，编辑已有配置时展开 */
+/** 折叠状态：期望区默认收起，编辑已有配置时展开 */
 const expectOpen = ref(false)
-const simAdvOpen = ref(false)
 const onExpectToggle = (e: Event) => { expectOpen.value = (e.target as HTMLDetailsElement).open }
-const onSimAdvToggle = (e: Event) => { simAdvOpen.value = (e.target as HTMLDetailsElement).open }
 
-const FRICTION_LABEL: Record<string, string> = {
-  none: '全程配合',
-  low: '轻微犹豫',
-  normal: '正常学生',
-  high: '难缠',
-  stress_test: '极端对抗',
-}
 const expectSummary = computed(() => {
   const parts: string[] = []
   const mc = form.value.mustContain.split(/[,，]/).filter((s) => s.trim()).length
@@ -646,12 +625,6 @@ const expectSummary = computed(() => {
   if (mn) parts.push(`不能出现 ${mn} 项`)
   if (adv) parts.push('已配高级校验')
   return parts.length ? `已设置：${parts.join(' · ')}` : '可选，跳过也能试跑'
-})
-const simSummary = computed(() => {
-  const parts: string[] = [`轮数 ${form.value.dialogueRounds || 1}`, `对抗 ${FRICTION_LABEL[form.value.frictionBudget] || form.value.frictionBudget}`]
-  const conv = form.value.convergeRequires.split(/[,，]/).filter((s) => s.trim()).length
-  if (conv) parts.push(`收敛门禁 ${conv} 项`)
-  return parts.join(' · ')
 })
 
 /** 已有虚拟学习者列表（复用其 persona + 故事池） */
@@ -727,7 +700,6 @@ function openCreate() {
   formError.value = ''
   formOpen.value = true
   expectOpen.value = false
-  simAdvOpen.value = false
   void loadVirtualLearners()
 }
 
@@ -768,10 +740,9 @@ function openEdit(c: EvalCase) {
   errors.value = {}
   formError.value = ''
   formOpen.value = true
-  // 编辑时：已有期望配置/非默认模拟设置则自动展开对应折叠
+  // 编辑时：已有期望配置则自动展开期望折叠
   const e2 = c.expectations || {}
   expectOpen.value = !!(e2.mustIncludeFields?.length || e2.mustContainText?.length || e2.mustNotInclude?.length || e2.expectedStage || e2.expectedMilestones != null || e2.expectedSubtaskCount != null)
-  simAdvOpen.value = !!((e2.dialogueRounds ?? 1) > 1 || ((e2 as any).frictionBudget && (e2 as any).frictionBudget !== 'normal') || e2.convergeRequires?.length)
   void loadVirtualLearners()
 }
 
@@ -1039,48 +1010,67 @@ void reloadCases()
 }
 .pe-guide__title { font-size: var(--mk-fs-12_5); font-weight: 700; color: var(--mk-indigo, #4f46e5); }
 .pe-guide__steps { font-size: var(--mk-fs-12); color: var(--mk-muted); line-height: 1.5; }
-.pe-sec { display: grid; gap: 10px; margin-bottom: 18px; }
-.pe-sec__title {
-  display: flex; align-items: center; gap: 8px;
-  font-size: var(--mk-fs-13); font-weight: 700; color: var(--mk-text);
-}
-.pe-sec__num {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px; border-radius: 50%;
-  background: var(--mk-indigo, #4f46e5); color: #fff;
-  font-size: var(--mk-fs-11); font-weight: 700; flex: none;
-}
-.pe-sec__opt { font-size: var(--mk-fs-11); font-weight: 500; color: var(--mk-faint); }
 .mk-field__opt { font-size: var(--mk-fs-11); color: var(--mk-faint); font-weight: 500; }
-/* 输入来源切换（手写 / 模拟学生）：整体不拆行，随标题 wrap 时保持成组 */
-.pe-input-src { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle; flex-shrink: 0; flex-wrap: nowrap; }
-.pe-sec__title { flex-wrap: wrap; row-gap: 6px; }
-.pe-src-btn {
-  border: 1px solid var(--mk-line); background: transparent; color: var(--mk-muted);
-  font-size: var(--mk-fs-11_5); font-weight: 600; border-radius: 99px; padding: 2px 10px; cursor: pointer;
-  transition: all .15s ease;
+
+/* ===== 学生输入：标准 tab ===== */
+.pe-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
+.pe-tab {
+  border: 0;
+  background: transparent;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: var(--mk-fs-13);
+  font-weight: 600;
+  color: var(--mk-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
 }
-.pe-src-btn:hover { border-color: var(--mk-indigo, #6366f1); color: var(--mk-indigo, #6366f1); }
-.pe-src-btn--on { background: var(--mk-indigo, #4f46e5); border-color: var(--mk-indigo, #4f46e5); color: #fff; }
-/* 模拟对话轨迹 */
-.pe-transcript { display: grid; gap: 6px; margin-top: 6px; }
-.pe-transcript__row { display: grid; grid-template-columns: 56px 1fr; gap: 8px; font-size: var(--mk-fs-12); }
-.pe-transcript__role { font-weight: 700; padding-top: 2px; }
-.pe-transcript__role--goal { color: var(--mk-indigo, #6366f1); }
-.pe-transcript__role--learner { color: var(--mk-green); }
-.pe-transcript__content { color: var(--mk-muted); line-height: 1.6; word-break: break-all; }
-.pe-transcript__meta { grid-column: 2; font-size: var(--mk-fs-11); color: var(--mk-faint); }
+.pe-tab:hover { color: var(--mk-ink); }
+.pe-tab--on { color: var(--mk-blue, #2c63d0); border-bottom-color: var(--mk-blue, #2c63d0); }
+.pe-tab-body {
+  border: 1px solid var(--mk-line);
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  background: var(--mk-surface);
+}
+
+/* 模拟参数：一行内联 */
+.pe-params { display: grid; grid-template-columns: 84px 150px 1fr; gap: 10px; align-items: end; }
+.pe-param { display: grid; gap: 4px; }
+.pe-param__label { font-size: var(--mk-fs-11_5); font-weight: 600; color: var(--mk-muted); }
+
+/* ===== 期望（可选，单层折叠） ===== */
+.pe-expect { border-top: 1px solid var(--mk-line); padding-top: 10px; }
+.pe-expect summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--mk-fs-13);
+  font-weight: 700;
+  color: var(--mk-text);
+  user-select: none;
+}
+.pe-expect summary::-webkit-details-marker { display: none; }
+.pe-expect summary::before { content: '▸'; font-size: var(--mk-fs-11); color: var(--mk-faint); transition: transform .15s ease; }
+.pe-expect[open] summary::before { transform: rotate(90deg); }
+.pe-expect__hint { font-size: var(--mk-fs-11); font-weight: 400; color: var(--mk-faint); }
+.pe-expect > * + * { margin-top: 10px; }
+/* 折叠语义恢复：内容元素的显式 display（grid 等）会覆盖 UA 的 display:none */
+.pe-expect:not([open]) > *:not(summary),
+.pe-adv:not([open]) > *:not(summary) { display: none !important; }
+
+/* ===== 高级校验（期望内的二级折叠） ===== */
 .pe-adv {
   border: 1px dashed var(--mk-line);
   border-radius: 10px;
   padding: 8px 12px 12px;
-  /* details 必须用 block 流：display:grid 会打乱 summary 与内容的布局顺序 */
   display: block;
 }
-/* 内容元素的显式 display（如 .pe-form-grid 的 grid）会覆盖 UA 的 display:none，
-   导致折叠的 details 内容仍然可见——这里强制恢复折叠语义 */
-.pe-adv:not([open]) > *:not(summary),
-.pe-sec--expect:not([open]) > *:not(summary) { display: none !important; }
 .pe-adv > * + * { margin-top: 10px; }
 .pe-adv summary {
   cursor: pointer;
@@ -1092,16 +1082,15 @@ void reloadCases()
 }
 .pe-adv summary:hover { color: var(--mk-indigo, #4f46e5); }
 .pe-adv__hint { font-size: var(--mk-fs-11); font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
-/* 第 3 步期望整体折叠（details 伪装成分步区块，block 流） */
-.pe-sec--expect { padding: 0; border: 0; margin-bottom: 18px; }
-.pe-sec--expect > summary { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-13); font-weight: 700; color: var(--mk-text); list-style: none; padding: 4px 0; }
-.pe-sec--expect > summary::-webkit-details-marker { display: none; }
-.pe-sec--expect > summary::before { content: '▸'; font-size: var(--mk-fs-11); color: var(--mk-faint); transition: transform .15s ease; }
-.pe-sec--expect[open] > summary::before { transform: rotate(90deg); }
-.pe-sec--expect > * + * { margin-top: 10px; }
-/* 模拟设置折叠（无虚线边框，紧贴字段流） */
-.pe-adv--inline { border: 0; padding: 0; margin: 0; }
-.pe-adv--inner { border-style: solid; margin-top: 0; }
+
+/* 模拟对话轨迹 */
+.pe-transcript { display: grid; gap: 6px; margin-top: 6px; }
+.pe-transcript__row { display: grid; grid-template-columns: 56px 1fr; gap: 8px; font-size: var(--mk-fs-12); }
+.pe-transcript__role { font-weight: 700; padding-top: 2px; }
+.pe-transcript__role--goal { color: var(--mk-indigo, #6366f1); }
+.pe-transcript__role--learner { color: var(--mk-green); }
+.pe-transcript__content { color: var(--mk-muted); line-height: 1.6; word-break: break-all; }
+.pe-transcript__meta { grid-column: 2; font-size: var(--mk-fs-11); color: var(--mk-faint); }
 
 .pe-detail-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 40px 0; color: var(--mk-muted); font-size: var(--mk-fs-13); }
 /* 运行概要：MkKpi 网格容器（统计卡本体由 MkKpi 提供） */
