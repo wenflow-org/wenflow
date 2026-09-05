@@ -1008,8 +1008,22 @@ void reloadCases()
 
 .pe-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .pe-msgs { display: grid; gap: 6px; }
-.pe-msg { display: grid; grid-template-columns: 88px 1fr 28px; gap: 8px; align-items: center; }
-.pe-msg__role { height: 34px; }
+/* 消息行：三列统一自然高度（select/input 同用 .mk-input 自然高度，不做固定 height，
+   否则 1440px+ 字号档 padding 放大后会裁切 select 文字） */
+.pe-msg { display: grid; grid-template-columns: 92px 1fr 30px; gap: 8px; align-items: center; }
+/* 统一 select/input 的行高，让高度由 padding+line-height 自然决定；
+   不固定 height，避免 1440/2000/2800px 字号档 padding 放大后裁切文字 */
+.pe-msg .mk-input { line-height: 18px; }
+.pe-msg select.mk-input { line-height: 19px; }
+.pe-msg .mk-link {
+  justify-self: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+}
 
 /* 用例表单：白话引导 + 分步区块 */
 .pe-guide {
@@ -1038,8 +1052,9 @@ void reloadCases()
 }
 .pe-sec__opt { font-size: var(--mk-fs-11); font-weight: 500; color: var(--mk-faint); }
 .mk-field__opt { font-size: var(--mk-fs-11); color: var(--mk-faint); font-weight: 500; }
-/* 输入来源切换（手写 / 模拟学生） */
-.pe-input-src { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle; }
+/* 输入来源切换（手写 / 模拟学生）：整体不拆行，随标题 wrap 时保持成组 */
+.pe-input-src { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle; flex-shrink: 0; flex-wrap: nowrap; }
+.pe-sec__title { flex-wrap: wrap; row-gap: 6px; }
 .pe-src-btn {
   border: 1px solid var(--mk-line); background: transparent; color: var(--mk-muted);
   font-size: var(--mk-fs-11_5); font-weight: 600; border-radius: 99px; padding: 2px 10px; cursor: pointer;
