@@ -157,16 +157,10 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="formOpen = false">✕</button>
           </div>
           <div class="mk-modal__body">
-            <!-- 白话引导：这个页面是干什么的 -->
+            <!-- 白话引导：这个页面是干什么的（单行紧凑） -->
             <div class="pe-guide">
-              <div class="pe-guide__title">「评估用例」是什么？</div>
-              <p class="pe-guide__text">
-                它记录<b>一段学生说的话</b> + <b>期望助手怎么回</b>。填好保存后跑一次评估，系统会自动把这段对话交给助手，
-                并对照期望打分。<b>最大用处</b>：以后每次改动助手的 prompt，一键重跑所有用例，防止"修好一个学生、搞坏另一个"。
-              </p>
-              <p class="pe-guide__steps">
-                三步搞定：<b>① 选能力 → ② 写学生说的话 → ③ 期望助手表现（可跳过）</b>，点「保存并立即试跑」马上看效果。
-              </p>
+              <span class="pe-guide__title">「评估用例」= 一段学生说的话 + 期望助手怎么回</span>
+              <span class="pe-guide__steps">① 选能力 → ② 学生怎么说 → ③ 期望（可跳过）→ 点「保存并立即试跑」。以后改 prompt 一键重跑防退化。</span>
             </div>
 
             <!-- 第 1 步：选能力 -->
@@ -234,29 +228,32 @@
                   </select>
                   <span class="mk-field__hint">选已有虚拟学习者，学生就按它的人设和故事说话；不选就用场景即时生成。可去「虚拟学习者」页面管理。</span>
                 </div>
-                <div class="pe-form-grid">
+                <details class="pe-adv pe-adv--inline" :open="simAdvOpen" @toggle="onSimAdvToggle">
+                  <summary>模拟设置 <span class="pe-adv__hint">{{ simSummary }}</span></summary>
+                  <div class="pe-form-grid">
+                    <label class="mk-field">
+                      <span class="mk-field__label">对话轮数 <span class="mk-field__opt">（goal 专属）</span></span>
+                      <input v-model.number="form.dialogueRounds" type="number" min="1" max="5" class="mk-field__input mono" />
+                      <span class="mk-field__hint">>1 开启多轮对话：助手与虚拟学生来回聊，逐轮校验字段。</span>
+                    </label>
+                    <label class="mk-field">
+                      <span class="mk-field__label">学生对抗度</span>
+                      <select v-model="form.frictionBudget" class="mk-field__select">
+                        <option value="none">none · 全程配合</option>
+                        <option value="low">low · 轻微犹豫</option>
+                        <option value="normal">normal · 正常学生</option>
+                        <option value="high">high · 难缠（质疑/拖延）</option>
+                        <option value="stress_test">stress_test · 极端对抗</option>
+                      </select>
+                      <span class="mk-field__hint">对抗度越高，学生越容易打断、质疑、拖延——专测字段在"难缠学生"下是否仍稳定产出。</span>
+                    </label>
+                  </div>
                   <label class="mk-field">
-                    <span class="mk-field__label">对话轮数 <span class="mk-field__opt">（goal 专属）</span></span>
-                    <input v-model.number="form.dialogueRounds" type="number" min="1" max="5" class="mk-field__input mono" />
-                    <span class="mk-field__hint">>1 开启多轮对话：助手与虚拟学生来回聊，逐轮校验字段。</span>
+                    <span class="mk-field__label">收敛门禁字段 <span class="mk-field__opt">（可选）</span></span>
+                    <input v-model="form.convergeRequires" class="mk-field__input mono" placeholder="例如：real_problem,confirmedProposal" />
+                    <span class="mk-field__hint">对话推进中必须产出的助手字段（逗号分隔），缺了就判不通过。</span>
                   </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">学生对抗度</span>
-                    <select v-model="form.frictionBudget" class="mk-field__select">
-                      <option value="none">none · 全程配合</option>
-                      <option value="low">low · 轻微犹豫</option>
-                      <option value="normal">normal · 正常学生</option>
-                      <option value="high">high · 难缠（质疑/拖延）</option>
-                      <option value="stress_test">stress_test · 极端对抗</option>
-                    </select>
-                    <span class="mk-field__hint">对抗度越高，学生越容易打断、质疑、拖延——专测字段在"难缠学生"下是否仍稳定产出。</span>
-                  </label>
-                </div>
-                <label class="mk-field">
-                  <span class="mk-field__label">收敛门禁字段 <span class="mk-field__opt">（可选）</span></span>
-                  <input v-model="form.convergeRequires" class="mk-field__input mono" placeholder="例如：real_problem,confirmedProposal" />
-                  <span class="mk-field__hint">对话推进中必须产出的助手字段（逗号分隔），缺了就判不通过。</span>
-                </label>
+                </details>
               </template>
 
               <label class="mk-field">
@@ -265,9 +262,9 @@
               </label>
             </div>
 
-            <!-- 第 3 步：期望助手表现（可选） -->
-            <div class="pe-sec">
-              <div class="pe-sec__title"><span class="pe-sec__num">3</span> 期望助手怎么回 <span class="pe-sec__opt">（可选，跳过也能试跑）</span></div>
+            <!-- 第 3 步：期望助手表现（可选，默认收起） -->
+            <details class="pe-adv pe-sec pe-sec--expect" :open="expectOpen" @toggle="onExpectToggle">
+              <summary class="pe-sec__title"><span class="pe-sec__num">3</span> 期望助手怎么回 <span class="pe-adv__hint">{{ expectSummary }}</span></summary>
               <div class="pe-form-grid">
                 <label class="mk-field">
                   <span class="mk-field__label">必须做到 <span class="mk-field__opt">（写人话，逗号分隔）</span></span>
@@ -281,7 +278,7 @@
                 </label>
               </div>
 
-              <details class="pe-adv">
+              <details class="pe-adv pe-adv--inner">
                 <summary>高级校验 <span class="pe-adv__hint">让助手按固定结构输出后，逐项卡结构字段</span></summary>
                 <div v-if="form.agentId === 'skill:goal-conversation'" class="mk-field">
                   <span class="mk-field__label">期望输出阶段</span>
@@ -311,7 +308,7 @@
                   <span v-if="form.inputPayloadError" class="mk-field__err">{{ form.inputPayloadError }}</span>
                 </div>
               </details>
-            </div>
+            </details>
 
             <label class="mk-field mk-field--switch">
               <input v-model="form.enabled" type="checkbox" />
@@ -626,6 +623,37 @@ const form = ref({
 })
 const errors = ref<{ name?: string; agentId?: string; scenario?: string }>({})
 
+/** 折叠状态：期望（第3步）与模拟设置，默认收起，编辑已有配置时展开 */
+const expectOpen = ref(false)
+const simAdvOpen = ref(false)
+const onExpectToggle = (e: Event) => { expectOpen.value = (e.target as HTMLDetailsElement).open }
+const onSimAdvToggle = (e: Event) => { simAdvOpen.value = (e.target as HTMLDetailsElement).open }
+
+const FRICTION_LABEL: Record<string, string> = {
+  none: '全程配合',
+  low: '轻微犹豫',
+  normal: '正常学生',
+  high: '难缠',
+  stress_test: '极端对抗',
+}
+const expectSummary = computed(() => {
+  const parts: string[] = []
+  const mc = form.value.mustContain.split(/[,，]/).filter((s) => s.trim()).length
+  const mn = form.value.mustNotInclude.split(/[,，]/).filter((s) => s.trim()).length
+  const adv = form.value.expectedStage.trim() || form.value.mustInclude.trim()
+    || form.value.expectedMilestones != null || form.value.expectedSubtaskCount != null
+  if (mc) parts.push(`必须做到 ${mc} 项`)
+  if (mn) parts.push(`不能出现 ${mn} 项`)
+  if (adv) parts.push('已配高级校验')
+  return parts.length ? `已设置：${parts.join(' · ')}` : '可选，跳过也能试跑'
+})
+const simSummary = computed(() => {
+  const parts: string[] = [`轮数 ${form.value.dialogueRounds || 1}`, `对抗 ${FRICTION_LABEL[form.value.frictionBudget] || form.value.frictionBudget}`]
+  const conv = form.value.convergeRequires.split(/[,，]/).filter((s) => s.trim()).length
+  if (conv) parts.push(`收敛门禁 ${conv} 项`)
+  return parts.join(' · ')
+})
+
 /** 已有虚拟学习者列表（复用其 persona + 故事池） */
 const virtualLearners = ref<Array<{ id: string; label: string }>>([])
 const virtualLearnersLoading = ref(false)
@@ -698,6 +726,8 @@ function openCreate() {
   errors.value = {}
   formError.value = ''
   formOpen.value = true
+  expectOpen.value = false
+  simAdvOpen.value = false
   void loadVirtualLearners()
 }
 
@@ -738,6 +768,10 @@ function openEdit(c: EvalCase) {
   errors.value = {}
   formError.value = ''
   formOpen.value = true
+  // 编辑时：已有期望配置/非默认模拟设置则自动展开对应折叠
+  const e2 = c.expectations || {}
+  expectOpen.value = !!(e2.mustIncludeFields?.length || e2.mustContainText?.length || e2.mustNotInclude?.length || e2.expectedStage || e2.expectedMilestones != null || e2.expectedSubtaskCount != null)
+  simAdvOpen.value = !!((e2.dialogueRounds ?? 1) > 1 || ((e2 as any).frictionBudget && (e2 as any).frictionBudget !== 'normal') || e2.convergeRequires?.length)
   void loadVirtualLearners()
 }
 
@@ -979,15 +1013,18 @@ void reloadCases()
 
 /* 用例表单：白话引导 + 分步区块 */
 .pe-guide {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
   background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(14, 165, 233, 0.06));
   border: 1px solid rgba(99, 102, 241, 0.25);
-  border-radius: 12px;
-  padding: 12px 14px;
-  margin-bottom: 16px;
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 4px;
 }
-.pe-guide__title { font-size: var(--mk-fs-12_5); font-weight: 700; color: var(--mk-indigo, #4f46e5); margin-bottom: 6px; }
-.pe-guide__text { font-size: var(--mk-fs-12_5); line-height: 1.7; color: var(--mk-text); margin: 0 0 6px; }
-.pe-guide__steps { font-size: var(--mk-fs-12_5); color: var(--mk-muted); margin: 0; }
+.pe-guide__title { font-size: var(--mk-fs-12_5); font-weight: 700; color: var(--mk-indigo, #4f46e5); }
+.pe-guide__steps { font-size: var(--mk-fs-12); color: var(--mk-muted); line-height: 1.5; }
 .pe-sec { display: grid; gap: 10px; margin-bottom: 18px; }
 .pe-sec__title {
   display: flex; align-items: center; gap: 8px;
@@ -1035,6 +1072,15 @@ void reloadCases()
 }
 .pe-adv summary:hover { color: var(--mk-indigo, #4f46e5); }
 .pe-adv__hint { font-size: var(--mk-fs-11); font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
+/* 第 3 步期望整体折叠（details 伪装成分步区块） */
+.pe-sec--expect { padding: 0; border: 0; margin-bottom: 18px; display: grid; gap: 10px; }
+.pe-sec--expect > summary { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-13); font-weight: 700; color: var(--mk-text); list-style: none; }
+.pe-sec--expect > summary::-webkit-details-marker { display: none; }
+.pe-sec--expect > summary::before { content: '▸'; font-size: var(--mk-fs-11); color: var(--mk-faint); transition: transform .15s ease; }
+.pe-sec--expect[open] > summary::before { transform: rotate(90deg); }
+/* 模拟设置折叠（无虚线边框，紧贴字段流） */
+.pe-adv--inline { border: 0; padding: 0; margin: 0; }
+.pe-adv--inner { border-style: solid; margin-top: 10px; }
 
 .pe-detail-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 40px 0; color: var(--mk-muted); font-size: var(--mk-fs-13); }
 /* 运行概要：MkKpi 网格容器（统计卡本体由 MkKpi 提供） */
