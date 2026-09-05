@@ -69,6 +69,13 @@ async function main() {
   console.log('summary:', JSON.stringify(run1.data?.summary));
   console.log('checks:', JSON.stringify(r1?.checks, null, 2));
   console.log('studentTurns:', r1?.studentTurns, 'converged:', r1?.converged);
+  // ===== 输入/输出字段展示（验证 simMeta + output.fields + transcript.fields）=====
+  console.log('simMeta:', JSON.stringify(r1?.simMeta, null, 1));
+  console.log('output.fields:', JSON.stringify(r1?.output?.fields));
+  console.log('transcript fields per round:');
+  for (const t of r1?.transcript || []) {
+    if (t.fields) console.log(`  [r${t.round}] fields:`, JSON.stringify(t.fields));
+  }
   console.log('transcript:');
   for (const t of r1?.transcript || []) {
     console.log(`  [r${t.round} ${t.role}] ${String(t.content).slice(0, 120)}`);

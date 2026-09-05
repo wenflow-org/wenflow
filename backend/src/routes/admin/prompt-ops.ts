@@ -847,6 +847,8 @@ router.post('/run-eval', async (req: Request, res: Response) => {
               simConfig: sim,
               simInput: simInputs[ci] as { learner: any; story: any },
             });
+            const lastAgentTurn = [...loop.transcript].reverse().find((t) => t.role === 'goal_agent');
+            const simIn = simInputs[ci] as { learner: any; story: any } | null;
             results.push({
               caseId: item.id,
               caseName: item.name,
@@ -857,7 +859,13 @@ router.post('/run-eval', async (req: Request, res: Response) => {
                 conversationContextCount: 0,
                 previousState: item.previousState || {},
               },
-              output: { userVisible: '', stage: 'simulated', confidence: 0 },
+              output: {
+                userVisible: '',
+                stage: lastAgentTurn?.stage || 'simulated',
+                confidence: 0,
+                // 最终一轮的结构化字段明细（评估核心）
+                fields: lastAgentTurn?.fields || null,
+              },
               debug: {
                 promptVersion: promptConfig.promptVersion,
                 attemptCount: 0,
@@ -870,6 +878,20 @@ router.post('/run-eval', async (req: Request, res: Response) => {
               transcript: loop.transcript,
               studentTurns: loop.studentTurns,
               converged: loop.converged,
+              // 输入侧信息：人设摘要 + 故事 + 当次诉求（结果区展示"输入/输出"）
+              simMeta: {
+                persona: pickPersonaSummary(simIn?.learner),
+                story: simIn?.story
+                  ? {
+                      title: simIn.story.title || simIn.story.visibleOpening || null,
+                      surfaceGoal: simIn.story.goalSeed?.surfaceGoal || null,
+                      realProblem: simIn.story.goalSeed?.realProblem || null,
+                    }
+                  : null,
+                demandText: loop.transcript[0]?.content || '',
+                frictionBudget: sim.frictionBudget,
+                dialogueRounds: sim.dialogueRounds,
+              },
             });
             continue;
           }
@@ -916,6 +938,10 @@ router.post('/run-eval', async (req: Request, res: Response) => {
               userVisible: parsed ? JSON.stringify(parsed).slice(0, 300) : '',
               stage: parsed ? 'n/a' : adapterResult.result?.internal?.core?.stage || 'understanding',
               confidence: adapterResult.result?.internal?.core?.confidence || 0,
+              // goal 的结构化字段明细（评估核心）；path/stage 的 parsed 已含字段
+              fields: canonicalAgentId === 'skill:goal-conversation'
+                ? pickGoalCoreFields(adapterResult.result?.internal?.core)
+                : null,
             },
             debug: {
               promptVersion: promptConfig.promptVersion,
@@ -926,6 +952,24 @@ router.post('/run-eval', async (req: Request, res: Response) => {
             },
             checks,
             passed,
+            // simulated 单轮：附输入侧信息（人设摘要 + 诉求 + 模拟配置）
+            ...(sim && sim.dialogueRounds <= 1
+              ? {
+                  simMeta: {
+                    persona: pickPersonaSummary(simInputs[ci]?.learner),
+                    story: (simInputs[ci] as any)?.story
+                      ? {
+                          title: (simInputs[ci] as any).story.title || (simInputs[ci] as any).story.visibleOpening || null,
+                          surfaceGoal: (simInputs[ci] as any).story.goalSeed?.surfaceGoal || null,
+                          realProblem: (simInputs[ci] as any).story.goalSeed?.realProblem || null,
+                        }
+                      : null,
+                    demandText: String([...item.messages].reverse().find((m: any) => m.role === 'user')?.content || ''),
+                    frictionBudget: sim.frictionBudget,
+                    dialogueRounds: sim.dialogueRounds,
+                  },
+                }
+              : {}),
           });
         }
       }
@@ -1242,6 +1286,30 @@ function deriveGoalSimPhase(
   return 'proposal_evaluation';
 }
 
+/** 提取 goal 输出的结构化字段明细（评估核心），只保留展示所需键 */
+function pickGoalCoreFields(core: any): Record<string, unknown> | null {
+  if (!core || typeof core !== 'object') return null;
+  const out: Record<string, unknown> = {};
+  for (const k of ['stage', 'emotion', 'need', 'understanding', 'real_problem', 'confirmedProposal', 'confidence', 'goalReadiness']) {
+    const v = core[k];
+    if (v !== undefined && v !== null && v !== '') out[k] = v;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** 虚拟学习者人设摘要（供结果区展示"输入"侧） */
+function pickPersonaSummary(learner: any): Record<string, unknown> | null {
+  if (!learner || typeof learner !== 'object') return null;
+  const out: Record<string, unknown> = {};
+  for (const k of ['nameHint', 'age', 'occupation', 'background', 'knownConcepts', 'struggleConcepts', 'learningStyle', 'availableTime', 'motivationType', 'adversarialPattern']) {
+    const v = learner[k];
+    if (v !== undefined && v !== null && v !== '') {
+      out[k] = Array.isArray(v) ? v.slice(0, 4) : v;
+    }
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 /**
  * goal-conversation 多轮模拟评估。
  * 被测 skill 与虚拟学生交替：逐轮记录字段检查（round 前缀）+ 全局文字期望（allTurns，任一轮命中即过）+ 收敛门禁。
@@ -1293,6 +1361,8 @@ async function runSimulatedGoalLoop(params: {
       content: userVisible,
       checks: computeGoalChecks(finalResult, expectations),
       stage: finalResult?.internal?.core?.stage || null,
+      // 结构化字段明细：评估的核心（stage/need/real_problem/confirmedProposal 等）
+      fields: pickGoalCoreFields(finalResult?.internal?.core),
     });
 
     if (round > 1 && previousLearnerState?.readyToProceed === true) break;

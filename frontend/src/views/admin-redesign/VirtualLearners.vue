@@ -507,6 +507,23 @@
               <span v-if="testResult.checks" class="pt-meta mono">{{ Object.values(testResult.checks).filter(Boolean).length }}/{{ Object.keys(testResult.checks).length }} 项检查通过</span>
               <span v-if="testResult.transcript?.length" class="pt-meta">对话 {{ testResult.transcript.length }} 轮{{ testResult.converged === true ? ' · 已收敛' : '' }}</span>
             </div>
+
+            <!-- 输入 / 输出：评估的完整上下文 -->
+            <div v-if="testResult.simMeta || testResult.output?.fields" class="pt-io">
+              <div v-if="testResult.simMeta" class="pt-io__col">
+                <div class="pt-io__title">📥 输入</div>
+                <div v-if="testResult.simMeta.demandText" class="pt-io__row"><span class="pt-io__k">学生诉求</span>{{ testResult.simMeta.demandText }}</div>
+                <div v-if="personaBriefText" class="pt-io__row"><span class="pt-io__k">学生人设</span>{{ personaBriefText }}</div>
+                <div class="pt-io__row"><span class="pt-io__k">模拟参数</span>轮数 {{ testResult.simMeta.dialogueRounds }} · 对抗 {{ frictionLabelText }}</div>
+              </div>
+              <div v-if="testResult.output?.fields" class="pt-io__col">
+                <div class="pt-io__title">📤 输出字段{{ testResult.transcript?.length > 1 ? '（最终轮）' : '' }}</div>
+                <div class="pt-fields">
+                  <span v-for="(fv, fk) in testResult.output.fields" :key="fk" class="pt-field"><b>{{ fk }}</b>={{ shortField(fv) }}</span>
+                </div>
+              </div>
+            </div>
+
             <div v-if="testResult.checks" class="pt-checks">
               <span v-for="(v, k) in testResult.checks" :key="k" class="pt-check" :class="v ? 'pt-check--ok' : 'pt-check--bad'">{{ v ? '✓' : '✗' }} {{ testCheckLabel(String(k)) }}</span>
             </div>
@@ -515,6 +532,9 @@
                 <span class="pt-role" :class="t.role === 'goal_agent' ? 'pt-role--agent' : 'pt-role--learner'">{{ t.role === 'goal_agent' ? '助手' : '学生' }} · 第{{ t.round }}轮</span>
                 <div class="pt-bubble">
                   <div class="pt-content">{{ t.content }}</div>
+                  <div v-if="t.fields" class="pt-fields">
+                    <span v-for="(fv, fk) in t.fields" :key="fk" class="pt-field"><b>{{ fk }}</b>={{ shortField(fv) }}</span>
+                  </div>
                   <div v-if="t.error" class="pt-state">⚠️ {{ t.error }}</div>
                   <div v-if="t.learnerState" class="pt-state">
                     被理解 {{ Math.round((t.learnerState.feltUnderstood ?? 0) * 100) }}% · 目标清晰 {{ Math.round((t.learnerState.problemClarity ?? 0) * 100) }}% · readyToProceed={{ t.learnerState.readyToProceed === true ? '是' : '否' }}{{ t.emotion ? ` · ${t.emotion}` : '' }}
@@ -800,6 +820,26 @@ function openPromptTest(s: Sample) {
 function closePromptTest() {
   if (testRunning.value) return
   testTarget.value = null
+}
+
+/** 人设摘要（输入区展示） */
+const personaBriefText = computed(() => {
+  const p = testResult.value?.simMeta?.persona
+  if (!p) return ''
+  const parts: string[] = []
+  if (p.nameHint) parts.push(String(p.nameHint))
+  if (p.age) parts.push(`${p.age}岁`)
+  if (p.occupation) parts.push(String(p.occupation))
+  if (p.background) parts.push(String(p.background).slice(0, 60))
+  return parts.join(' · ')
+})
+const frictionLabelText = computed(() => {
+  const m: Record<string, string> = { none: '全程配合', low: '轻微犹豫', normal: '正常', high: '难缠', stress_test: '极端对抗' }
+  return m[String(testResult.value?.simMeta?.frictionBudget)] || '正常'
+})
+function shortField(v: unknown): string {
+  const s = typeof v === 'string' ? v : JSON.stringify(v)
+  return s.length > 40 ? `${s.slice(0, 40)}…` : s
 }
 
 /** 把校验 key 翻译成人话 */
@@ -1634,6 +1674,20 @@ function startBatchPolling() { batchPolling.start() }
 .pt-result { display: grid; gap: 10px; }
 .pt-verdict { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .pt-meta { font-size: var(--mk-fs-12); color: var(--mk-muted); }
+/* 输入/输出区 */
+.pt-io { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border: 1px solid var(--mk-line, #e1e8f2); border-radius: 10px; padding: 10px 12px; background: var(--mk-surface); }
+.pt-io__col { display: grid; gap: 6px; align-content: start; }
+.pt-io__title { font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-muted); }
+.pt-io__row { font-size: var(--mk-fs-12); color: var(--mk-text); line-height: 1.5; word-break: break-word; }
+.pt-io__k { display: inline-block; font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-faint, #94a3b8); margin-right: 6px; }
+/* 字段明细 chips */
+.pt-fields { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 4px; }
+.pt-field {
+  font-size: var(--mk-fs-11); padding: 1px 7px; border-radius: 6px; font-family: var(--mk-mono, monospace);
+  background: rgba(99, 102, 241, 0.08); color: var(--mk-indigo, #4f46e5); border: 1px solid rgba(99, 102, 241, 0.2);
+  word-break: break-all;
+}
+.pt-field b { font-weight: 700; }
 .pt-checks { display: flex; gap: 6px; flex-wrap: wrap; }
 .pt-check { font-size: var(--mk-fs-11); padding: 1px 8px; border-radius: 99px; font-weight: 600; }
 .pt-check--ok { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #16a34a); }
@@ -1654,6 +1708,8 @@ function startBatchPolling() { batchPolling.start() }
 html[data-theme='dark'] .pt-check--ok { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
 html[data-theme='dark'] .pt-check--bad { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
 html[data-theme='dark'] .pt-content { color: var(--mk-ink, #e2e8f0); }
+html[data-theme='dark'] .pt-io { border-color: #1f2a3d; }
+html[data-theme='dark'] .pt-field { background: rgba(129, 140, 248, 0.14); color: #a5b4fc; border-color: rgba(129, 140, 248, 0.3); }
 /* 批量生成 chip（并入「正在运行」区） */
 .vl-running__chip--batch { border-color: rgba(59, 130, 246, 0.4); color: #1d4ed8; }
 .vl-running__chip--batch .vl-running__dot { background: #3b82f6; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); animation: vl-pulse 1.6s infinite; }
