@@ -1074,9 +1074,14 @@ void reloadCases()
   border: 1px dashed var(--mk-line);
   border-radius: 10px;
   padding: 8px 12px 12px;
-  display: grid;
-  gap: 10px;
+  /* details 必须用 block 流：display:grid 会打乱 summary 与内容的布局顺序 */
+  display: block;
 }
+/* 内容元素的显式 display（如 .pe-form-grid 的 grid）会覆盖 UA 的 display:none，
+   导致折叠的 details 内容仍然可见——这里强制恢复折叠语义 */
+.pe-adv:not([open]) > *:not(summary),
+.pe-sec--expect:not([open]) > *:not(summary) { display: none !important; }
+.pe-adv > * + * { margin-top: 10px; }
 .pe-adv summary {
   cursor: pointer;
   font-size: var(--mk-fs-12_5);
@@ -1087,15 +1092,16 @@ void reloadCases()
 }
 .pe-adv summary:hover { color: var(--mk-indigo, #4f46e5); }
 .pe-adv__hint { font-size: var(--mk-fs-11); font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
-/* 第 3 步期望整体折叠（details 伪装成分步区块） */
-.pe-sec--expect { padding: 0; border: 0; margin-bottom: 18px; display: grid; gap: 10px; }
-.pe-sec--expect > summary { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-13); font-weight: 700; color: var(--mk-text); list-style: none; }
+/* 第 3 步期望整体折叠（details 伪装成分步区块，block 流） */
+.pe-sec--expect { padding: 0; border: 0; margin-bottom: 18px; }
+.pe-sec--expect > summary { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-13); font-weight: 700; color: var(--mk-text); list-style: none; padding: 4px 0; }
 .pe-sec--expect > summary::-webkit-details-marker { display: none; }
 .pe-sec--expect > summary::before { content: '▸'; font-size: var(--mk-fs-11); color: var(--mk-faint); transition: transform .15s ease; }
 .pe-sec--expect[open] > summary::before { transform: rotate(90deg); }
+.pe-sec--expect > * + * { margin-top: 10px; }
 /* 模拟设置折叠（无虚线边框，紧贴字段流） */
 .pe-adv--inline { border: 0; padding: 0; margin: 0; }
-.pe-adv--inner { border-style: solid; margin-top: 10px; }
+.pe-adv--inner { border-style: solid; margin-top: 0; }
 
 .pe-detail-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 40px 0; color: var(--mk-muted); font-size: var(--mk-fs-13); }
 /* 运行概要：MkKpi 网格容器（统计卡本体由 MkKpi 提供） */
