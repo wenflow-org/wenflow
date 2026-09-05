@@ -64,7 +64,7 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 ### ⑦ Yerkes-Dodson 唤醒度定律（Inverted-U）
 - **文献**：Yerkes & Dodson (1908) *The relation of strength of stimulus to rapidity of habit-formation*（[DOI 10.1002/cne.920180503](https://doi.org/10.1002/cne.920180503)）。✅ 公认文献
 - **核心观点**：表现随唤醒度倒U变化——唤醒不足→动机低；过度唤醒→表现崩溃；中等唤醒最优。
-- **Wenflow 落点**：**部分（无注释）**。历史分析文档记录 LSS/LSB 阈值设计依据（仅存本地：`doc/history/analysis/2026-05/LEARN_PIPELINE_ANALYSIS.md:281`）；现行 `services/learner/LearnerSnapshotService.ts`（`paceMode：lf≥6 或 lsb<0 → recover；趋势向好 → push`）是倒U的量化实现。
+- **Wenflow 落点**：**部分（无注释）**。LSS/LSB 阈值设计依据来自 2026-05 历史分析（已清理不保留）；现行 `services/learner/LearnerSnapshotService.ts`（`paceMode：lf≥6 或 lsb<0 → recover；趋势向好 → push`）是倒U的量化实现。
 - **已知缺陷（2026-08-29 修正记录）**：admin 学习者详情"压力曲线"曾错误使用**学习分钟数 EWMA**（运动科学 Banister 隐喻，无学习场景效度）且与指标卡（LSS/LF 0-10 体系）量纲冲突——已改为 `learning_metrics` 真实指标历史（`getStateTrendWindow`，与用户侧 `/state/trends` 同源），见 `LearnerDetail.vue` 压力记录卡片。
 - **建议**：给 `LearnerSnapshotService` 阈值与 LSS/LSB 指标补理论注释；"不愤不启"三路由的唤醒度映射；EWMA 系数（0.95/0.05、0.7/0.15）待真实数据拟合。
 

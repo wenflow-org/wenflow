@@ -44,10 +44,6 @@
 
 ---
 
-## Process materials not in the repo (local only)
+## Process materials (removed, not in repo)
 
-- `archive/`: superseded protocols and designs (UNIFIED_SKILL_PROTOCOL v1/v2, PROMPT_AUTHORING_PROTOCOL v1.2/v2, STAGE_MIGRATION_GUIDE, etc.)
-- `history/`: point-in-time artifacts (snapshots / analysis / design / notes / reports, archived by YYYY-MM)
-- `design/`: topic-specific design drafts (master plan, UI/UX diagnosis, un-landed proposals, etc.)
-- Survey snapshots: `SKILL_RUNTIME_MAP_MAIN/SIM.md` (2026-08 runtime surveys, read-only, line numbers may be stale)
-- Process records: `ORCHESTRATOR_FIELD_FLOW_REDESIGN.md`, `VIRTUAL_LEARNER_QUICK_LEARN_DESIGN_*.md` (previously referenced by quick-learn source comments, now reworded), `CHANGES_*.md`, `doc/CHANGELOG.md`
+Survey snapshots (`SKILL_RUNTIME_MAP_MAIN/SIM`), design process records (`ORCHESTRATOR_FIELD_FLOW_REDESIGN`, `QUICK_LEARN` design doc), `design/` folder, `CHANGES_*` change logs and `doc/CHANGELOG` were cleaned up on 2026-09-05 and are no longer kept in the repository. Prompt-lab `archive/` (v2 legacy assets) was cleaned up at the same time.

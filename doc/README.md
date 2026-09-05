@@ -45,10 +45,6 @@
 
 ---
 
-## 不在仓库的过程材料（仅本机）
+## 过程材料（已清理，不在仓库）
 
-- `archive/`：被取代的协议与设计（UNIFIED_SKILL_PROTOCOL v1/v2、PROMPT_AUTHORING_PROTOCOL v1.2/v2、STAGE_MIGRATION_GUIDE 等）
-- `history/`：时间点产物（snapshots / analysis / design / notes / reports，按 YYYY-MM 归档）
-- `design/`：专项设计稿（主计划、UI/UX 诊断、未落地草案等）
-- 调查快照：`SKILL_RUNTIME_MAP_MAIN/SIM.md`（2026-08 运行时调查，只读、行号可能过期）
-- 过程记录：`ORCHESTRATOR_FIELD_FLOW_REDESIGN.md`、`VIRTUAL_LEARNER_QUICK_LEARN_DESIGN_*.md`（quick-learn 源码注释曾引用其章节，已改为按实现说明）、`CHANGES_*.md`、`doc/CHANGELOG.md`
+调查快照（SKILL_RUNTIME_MAP_MAIN/SIM）、设计过程（ORCHESTRATOR_FIELD_FLOW_REDESIGN、QUICK_LEARN 设计稿）、design/ 目录（主计划/诊断/草案）、CHANGES_* 改动记录与 doc/CHANGELOG 等历史过程材料已于 2026-09-05 清理（不纳入仓库）。prompt-lab/archive/ 中的 v2 遗留资产同步清理。

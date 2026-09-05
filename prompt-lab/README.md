@@ -2,7 +2,7 @@
 
 > **v4 现状注记（2026-07-28）**：统一 Skill 协议 v4 已落地（`doc/SKILL_PROTOCOL_V4.md`）。
 > 业务真相源已迁移至 **`prompts/core/<skillId>.yaml`（核心文件）**，prompt 均为五块编译产物。
-> 本目录中：`sources/`、`compiler-skill/`、`compiled/`、过程文档已归档至 `archive/`（v2 端点 compile-source/publish/sources 已随运营工作台上线移除）；`manifests/` 继续作为契约与执行参数的平台层家园；发布备份已迁至 **`prompts/backups/`**；`field-lineage.yaml` 为字段血缘注册表（可编辑）。
+> 本目录中：`sources/`、`compiler-skill/`、`compiled/`、过程文档等 v2 遗留资产已清理（不保留）；`manifests/` 继续作为契约与执行参数的平台层家园；发布备份已迁至 **`prompts/backups/`**；`field-lineage.yaml` 为字段血缘注册表（可编辑）。
 > 编辑入口：核心文件 → `POST /api/prompt-lab/compile-core`（预览+守门）→ `POST /api/prompt-lab/publish-core`（发布）；管理界面：Admin「Prompt 工作台」。
 
 ## 当前结构
@@ -11,7 +11,6 @@
 prompt-lab/
   manifests/               # 平台层契约与路由参数（22 个 LLM skill）
   field-lineage.yaml       # 字段消费者注册表
-  archive/                 # v2 source/compiler/compiled 与过程文档，只读历史材料
 
 prompts/
   backups/                 # 保存、发布与回滚前快照（自 prompt-lab 迁入，与 prompts 同级）
@@ -29,6 +28,5 @@ prompts/core/<skillId>.yaml (业务 SSOT)
 
 - 发布版本保存 coreSnapshot、coreHash、coreVersion 与运行契约快照。
 - 回滚先恢复历史 coreSnapshot，再确定性重编译 Runtime Prompt，保持 SSOT 一致。
-- `archive/` 下的 v2 文件不得作为发布输入。
 
 规范以 `doc/SKILL_PROTOCOL_V4.md` 为准；运营入口为 Admin「Prompt 工作台」。

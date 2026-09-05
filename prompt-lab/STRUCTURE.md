@@ -7,7 +7,6 @@
 prompt-lab/
   manifests/               # 22 个 LLM skill 的 prompt/runtime 契约与路由参数
   field-lineage.yaml       # 字段 -> 消费者注册表，供编辑分级展示
-  archive/                 # v2 sources/compiler/compiled 与过程文档，只读历史材料
   README.md
   STRUCTURE.md
 
@@ -20,7 +19,7 @@ prompts/
 - `manifests/`：平台层契约家园。核心文件不声明 runtime/prompt contract；发布时将其快照写入 ACTIVE `agent_prompts.metadata`。
 - `field-lineage.yaml`：运营侧展示字段消费者与爆炸半径。加载失败时后端以静态表兜底。
 - `prompts/backups/`（原 `prompt-lab/backups/`）：人工文件备份；发布版本的可靠回滚材料是 DB metadata 中的 `promptLab.coreSnapshot`。
-- `archive/`：已退役的 v2 资产。不得作为编译、发布或恢复输入。
+- v2 遗留资产（`sources/` / `compiler-skill/` / `compiled/` / 过程文档）已清理不保留。
 
 ## 发布与回滚
 
