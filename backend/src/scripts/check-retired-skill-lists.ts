@@ -11,7 +11,7 @@
  *    说明：静态检查只能覆盖注册集；"零生产调用"判定需调用点审计，见
  *    services/skill-output-validator.ts 排除名单注释（自述口径）。
  * 3. manifest 状态一致性：退役 skill 不得存在 prompts/core/<id>.yaml（core 文件=活跃证据）；
- *    prompt-lab/manifests/<id>.yaml 仅允许已声明残留项存在
+ *    prompts/manifests/<id>.yaml 仅允许已声明残留项存在
  *    （concept-priority / path-adjustment-generator，2026-08-09 退役仅 manifest 残留）。
  *
  * 用法：npm run retired:check（已挂入 prompts:check:all 链）
@@ -22,7 +22,7 @@ import { allSkillDefinitions } from '../skills';
 import { PURGED_SKILLS, ALL_RETIRED_SKILLS } from '../skills/retired-skills';
 
 const CORE_DIR = path.join(process.cwd(), '../prompts/core');
-const MANIFESTS_DIR = path.join(process.cwd(), '../prompt-lab/manifests');
+const MANIFESTS_DIR = path.join(process.cwd(), '../prompts/manifests');
 
 /** 已声明允许保留 manifest 残留的退役项（2026-08-09 退役，resolve-prompt-contract 按需加载无运行影响） */
 const MANIFEST_RESIDUE_ALLOWED = new Set(['concept-priority', 'path-adjustment-generator']);
@@ -58,7 +58,7 @@ function main() {
     }
     const manifestPath = path.join(MANIFESTS_DIR, `${name}.yaml`);
     if (fs.existsSync(manifestPath) && !MANIFEST_RESIDUE_ALLOWED.has(name)) {
-      errors.push(`退役 skill ${name} 存在未声明残留的 manifest prompt-lab/manifests/${name}.yaml（删除文件，或加入 MANIFEST_RESIDUE_ALLOWED 并注明原因）`);
+      errors.push(`退役 skill ${name} 存在未声明残留的 manifest prompts/manifests/${name}.yaml（删除文件，或加入 MANIFEST_RESIDUE_ALLOWED 并注明原因）`);
     }
   }
 

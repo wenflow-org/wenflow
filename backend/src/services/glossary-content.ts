@@ -85,7 +85,7 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   { term: '编排文件', category: 'concept', def: 'prompts/orchestration/<阶段>.yaml：字段路由的唯一声明源，描述"谁产出什么、往哪路由"', where: '编排结构 → 字段路由 tab →「编排文件」按钮' },
   { term: '户口簿', category: 'concept', def: 'prompts/skills.yaml：全部 Skill 的登记册（注册表），Skill 目录对账面板以此为准' },
   { term: '契约', category: 'concept', def: 'Agent/Skill 与平台之间的"服务约定"：展示名、职责、输入输出结构；manifest 是 v4 契约的唯一声明处' },
-  { term: 'manifest', category: 'concept', def: 'prompt-lab/manifests/<skill>.yaml：Skill 的运行时契约文件（prompt 契约、模型参数、失败策略）' },
+  { term: 'manifest', category: 'concept', def: 'prompts/manifests/<skill>.yaml：Skill 的运行时契约文件（prompt 契约、模型参数、失败策略）' },
   { term: 'gateway 注册', category: 'concept', def: 'Skill 在运行时接线（gateway）里的注册状态，决定它能否被编排调用' },
   { term: 'ACTIVE prompt', category: 'concept', def: '数据库里标记为"当前生效"的 prompt 版本；运行时只执行 ACTIVE 版，改文件必须同步它才生效' },
   { term: '字段', category: 'concept', def: '一条数据的命名（如 understanding.surface_goal），点分路径=层级；含义列有中文解释' },

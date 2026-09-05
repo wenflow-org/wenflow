@@ -91,7 +91,7 @@ export function getFieldLineageWithDeclarations(skillId: string): FieldLineageEn
   return Array.from(merged.values());
 }
 
-const LINEAGE_FILE = path.join(process.cwd(), '../prompt-lab/field-lineage.yaml');
+const LINEAGE_FILE = path.join(process.cwd(), '../prompts/field-lineage.yaml');
 let lineageCache: { mtimeMs: number; entries: FieldLineageEntry[] } | null = null;
 
 function isValidEntry(value: unknown): value is FieldLineageEntry {
@@ -105,7 +105,7 @@ function isValidEntry(value: unknown): value is FieldLineageEntry {
   );
 }
 
-/** 血缘文件（prompt-lab/field-lineage.yaml）可编辑；失效或缺席时回退内置静态表 */
+/** 血缘文件（prompts/field-lineage.yaml）可编辑；失效或缺席时回退内置静态表 */
 function loadLineageEntries(): FieldLineageEntry[] {
   try {
     const stat = fs.statSync(LINEAGE_FILE);

@@ -16,7 +16,7 @@ type DeclaredFieldRole = { direction: string; visibility: string; owner?: string
  * v4：契约声明上收平台层（prompt-lab manifest），prompt 文件 frontmatter 不再携带 promptContract。
  */
 function loadDeclaredFields(fileName: string): Record<string, DeclaredFieldRole> {
-  const raw = fs.readFileSync(path.join(process.cwd(), '../prompt-lab/manifests', fileName), 'utf-8')
+  const raw = fs.readFileSync(path.join(process.cwd(), '../prompts/manifests', fileName), 'utf-8')
   const meta = yaml.load(raw) as any
   return (meta?.promptContract?.fields || {}) as Record<string, DeclaredFieldRole>
 }

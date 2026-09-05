@@ -90,7 +90,7 @@ const router = Router();
 router.use(rejectPromptLabFileMutation);
 
 // M3：prompts 目录复用 loader 的 PROMPTS_DIR 解析（支持 PROMPTS_DIR 环境变量覆盖），
-// prompt-lab/manifests 与 prompts 同级存放于仓库根，避免 process.cwd() 双轨不一致。
+// prompts/manifests 与 prompts 同级存放于仓库根，避免 process.cwd() 双轨不一致。
 const PROMPT_LAB_DIR = path.join(path.dirname(PROMPTS_DIR), 'prompt-lab');
 const MANIFESTS_DIR = path.join(PROMPT_LAB_DIR, 'manifests');
 // 发布备份与 prompts 同级存放（prompts/backups/<skillId>/），不再跨目录到 prompt-lab
@@ -675,7 +675,7 @@ router.post('/publish-core', async (req, res) => {
       // manifest 缺失不再抛错（降级为警告）：metadata 携带 manifest-missing 标记
       const metadataInfo = JSON.parse(metadata) as { promptLab?: { runtimeContractSource?: string } };
       if (metadataInfo.promptLab?.runtimeContractSource === 'manifest-missing') {
-        metadataWarning = `v4 skill 缺少契约 manifest（prompt-lab/manifests/${skillId}.yaml），metadata 未携带 runtime/prompt 契约`;
+        metadataWarning = `v4 skill 缺少契约 manifest（prompts/manifests/${skillId}.yaml），metadata 未携带 runtime/prompt 契约`;
         logger.warn(metadataWarning);
       }
 

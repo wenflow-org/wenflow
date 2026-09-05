@@ -22,7 +22,7 @@ import {
   type DeclaredPromptRuntimeContractIdentity,
 } from './seed-core-agent-prompts';
 
-const MANIFESTS_DIR = path.join(process.cwd(), '../prompt-lab/manifests');
+const MANIFESTS_DIR = path.join(process.cwd(), '../prompts/manifests');
 
 export interface ActivePromptRuntimeContractMetadataRow {
   id: string;

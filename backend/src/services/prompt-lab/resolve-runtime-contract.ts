@@ -7,7 +7,7 @@ import {
   type RuntimeContract,
 } from './runtime-contract';
 
-const MANIFESTS_DIR = path.join(process.cwd(), '../prompt-lab/manifests');
+const MANIFESTS_DIR = path.join(process.cwd(), '../prompts/manifests');
 
 function toSkillId(agentId: string): string {
   return String(agentId || '').replace(/^skill:/, '').trim();
@@ -82,7 +82,7 @@ export async function resolveEffectiveRuntimeContract(
 
 /**
  * 解析 skill 的 runtimeContract：
- * 1) 有 prompt-lab/manifests/<skillId>.yaml 则读其中 runtimeContract 并 normalize
+ * 1) 有 prompts/manifests/<skillId>.yaml 则读其中 runtimeContract 并 normalize
  * 2) 否则用 buildDefaultRuntimeContract 推断
  */
 export async function resolveRuntimeContract(

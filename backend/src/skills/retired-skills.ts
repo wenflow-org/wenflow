@@ -24,7 +24,7 @@
  * 维护规则：
  * 1. 新退役条目：曾注册过的补入 PURGED_SKILLS；从未注册（仅 code-only / manifest 残留）
  *    的补入 RESIDUE_ONLY_SKILLS。同步更新 doc/SKILL_PROTOCOL_V4.md 附录 A 与
- *    prompts/core / prompt-lab/manifests 对应文件处置。
+ *    prompts/core / prompts/manifests 对应文件处置。
  * 2. 正式注销注册中 skill（如 v4-aux）必须四同步：注册代码 / 文件 / 本名单 / 文档，
  *    避免再造僵尸。
  * 3. 本文件被 retired:check 门禁（backend/src/scripts/check-retired-skill-lists.ts）校验：
@@ -95,7 +95,7 @@ export const PURGED_SKILLS: readonly string[] = [
  * - goal-understanding-composer / teaching-strategy-selector / acceptance-evidence-evaluator：
  *   2026-08 LLM skill 本体注销，保留确定性纯函数模块（被 goal-conversation / teaching-turn 消费）
  * - concept-priority / path-adjustment-generator：2026-08-09 退役，仅 manifest 残留
- *   （prompt-lab/manifests/，resolve-prompt-contract 按需加载，无运行影响）
+ *   （prompts/manifests/，resolve-prompt-contract 按需加载，无运行影响）
  */
 const RESIDUE_ONLY_SKILLS: readonly string[] = [
   'goal-understanding-composer',

@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { runYamlVocabularyCheck } from '../check-yaml-vocabulary';
 
-const MANIFESTS_DIR = path.resolve(__dirname, '../../../../prompt-lab/manifests');
+const MANIFESTS_DIR = path.resolve(__dirname, '../../../../prompts/manifests');
 
 describe('check-yaml-vocabulary C2（参数单写）', () => {
   it('C2 语义：core 单写自检通过，manifest 无 runtimeDefaults 残留（缺省即跳过）', () => {

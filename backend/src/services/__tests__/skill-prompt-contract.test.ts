@@ -138,7 +138,7 @@ describe('Skill Prompt Contract v2', () => {
     // v4：契约真相源 = 平台层 manifest（runtime 经 ACTIVE metadata → manifest → default 链解析）；
     // goal-conversation 已切换 v4 编译产物，frontmatter 不再携带 promptContract，两者统一从 manifest 对账
     for (const skillId of ['goal-conversation', 'teaching-turn']) {
-      const raw = fs.readFileSync(path.join(process.cwd(), '../prompt-lab/manifests', `${skillId}.yaml`), 'utf-8')
+      const raw = fs.readFileSync(path.join(process.cwd(), '../prompts/manifests', `${skillId}.yaml`), 'utf-8')
       const manifest = yaml.load(raw) as any
       const runtimeContract = manifest.runtimeContract === undefined
         ? undefined

@@ -30,7 +30,7 @@ import {
   valueTypeToCoreType,
 } from '../services/yaml-vocabulary';
 
-const MANIFESTS_DIR = path.join(process.cwd(), '../prompt-lab/manifests');
+const MANIFESTS_DIR = path.join(process.cwd(), '../prompts/manifests');
 
 interface RawManifest {
   skillId?: unknown;
