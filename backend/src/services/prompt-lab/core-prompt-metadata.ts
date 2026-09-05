@@ -13,9 +13,9 @@ import { normalizeRuntimeContract, type RuntimeContract } from './runtime-contra
 import { normalizeSkillPromptContract, type SkillPromptContract } from '../skill-prompt-contract';
 import { PROMPTS_DIR } from '../../composers/prompt-files/loader';
 
-// M3：与 loader 的 PROMPTS_DIR 同源解析仓库根（支持 PROMPTS_DIR 环境变量覆盖），
+// M3：与 loader 的 PROMPTS_DIR 同源解析（支持 PROMPTS_DIR 环境变量覆盖），
 // manifests 位于仓库根 prompts/manifests，避免 process.cwd() 双轨不一致。
-const MANIFESTS_DIR = path.join(path.dirname(PROMPTS_DIR), 'prompt-lab', 'manifests');
+const MANIFESTS_DIR = path.join(PROMPTS_DIR, 'manifests');
 
 function loadManifestContracts(skillId: string): {
   runtimeContract: RuntimeContract;

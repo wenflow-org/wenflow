@@ -91,8 +91,7 @@ router.use(rejectPromptLabFileMutation);
 
 // M3：prompts 目录复用 loader 的 PROMPTS_DIR 解析（支持 PROMPTS_DIR 环境变量覆盖），
 // prompts/manifests 与 prompts 同级存放于仓库根，避免 process.cwd() 双轨不一致。
-const PROMPT_LAB_DIR = path.join(path.dirname(PROMPTS_DIR), 'prompt-lab');
-const MANIFESTS_DIR = path.join(PROMPT_LAB_DIR, 'manifests');
+const MANIFESTS_DIR = path.join(PROMPTS_DIR, 'manifests');
 // 发布备份与 prompts 同级存放（prompts/backups/<skillId>/），不再跨目录到 prompt-lab
 const BACKUPS_DIR = path.join(PROMPTS_DIR, 'backups');
 
