@@ -157,83 +157,120 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="formOpen = false">✕</button>
           </div>
           <div class="mk-modal__body">
-            <div class="pe-form-grid">
-              <label class="mk-field" :class="{ 'mk-field--error': errors.agentId }">
-                <span class="mk-field__label">Agent <em class="mk-field__req">*</em></span>
-                <select v-model="form.agentId" class="mk-field__select" :disabled="!!editingId">
-                  <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.label }}</option>
-                </select>
-                <span v-if="errors.agentId" class="mk-field__err">{{ errors.agentId }}</span>
-              </label>
-              <label class="mk-field">
-                <span class="mk-field__label">Case ID</span>
-                <input v-model="form.caseId" class="mk-field__input mono" :disabled="!!editingId" placeholder="留空自动生成" />
-              </label>
+            <!-- 白话引导：这个页面是干什么的 -->
+            <div class="pe-guide">
+              <div class="pe-guide__title">「评估用例」是什么？</div>
+              <p class="pe-guide__text">
+                它记录<b>一段学生说的话</b> + <b>期望助手怎么回</b>。填好保存后跑一次评估，系统会自动把这段对话交给助手，
+                并对照期望打分。<b>最大用处</b>：以后每次改动助手的 prompt，一键重跑所有用例，防止"修好一个学生、搞坏另一个"。
+              </p>
+              <p class="pe-guide__steps">
+                三步搞定：<b>① 选能力 → ② 写学生说的话 → ③ 期望助手表现（可跳过）</b>，点「保存并立即试跑」马上看效果。
+              </p>
             </div>
-            <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
-              <span class="mk-field__label">用例名称 <em class="mk-field__req">*</em></span>
-              <input v-model="form.name" class="mk-field__input" placeholder="例如：用户明确说出目标场景" />
-              <span v-if="errors.name" class="mk-field__err">{{ errors.name }}</span>
-            </label>
-            <label class="mk-field">
-              <span class="mk-field__label">描述（可选）</span>
-              <textarea v-model="form.description" class="mk-field__textarea" rows="2" placeholder="用例意图、覆盖点…" />
-            </label>
-            <div class="mk-field">
-              <span class="mk-field__label">消息序列 <em class="mk-field__req">*</em></span>
-              <div class="pe-msgs">
-                <div v-for="(m, i) in form.messages" :key="i" class="pe-msg">
-                  <select v-model="m.role" class="mk-input pe-msg__role">
-                    <option value="user">用户</option>
-                    <option value="assistant">助手</option>
+
+            <!-- 第 1 步：选能力 -->
+            <div class="pe-sec">
+              <div class="pe-sec__title"><span class="pe-sec__num">1</span> 选能力</div>
+              <div class="pe-form-grid">
+                <label class="mk-field" :class="{ 'mk-field--error': errors.agentId }">
+                  <span class="mk-field__label">助手能力 <em class="mk-field__req">*</em></span>
+                  <select v-model="form.agentId" class="mk-field__select" :disabled="!!editingId">
+                    <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.label }}</option>
                   </select>
-                  <input v-model="m.content" class="mk-input pe-msg__content" placeholder="消息内容" />
-                  <button type="button" class="mk-link mk-link--danger" :disabled="form.messages.length <= 1" @click="form.messages.splice(i, 1)">✕</button>
-                </div>
+                  <span class="mk-field__hint">{{ agentDesc }}</span>
+                  <span v-if="errors.agentId" class="mk-field__err">{{ errors.agentId }}</span>
+                </label>
+                <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
+                  <span class="mk-field__label">用例名称 <em class="mk-field__req">*</em></span>
+                  <input v-model="form.name" class="mk-field__input" placeholder="例如：学生说要考英语" />
+                  <span v-if="errors.name" class="mk-field__err">{{ errors.name }}</span>
+                </label>
               </div>
-              <button type="button" class="mk-link" @click="form.messages.push({ role: 'user', content: '' })">+ 添加消息</button>
             </div>
 
-            <!-- path/stage：结构化输入 JSON（存进 previousStateJson 承载） -->
-            <div v-if="isStructuredSkill(form.agentId)" class="mk-field">
-              <span class="mk-field__label">结构化输入（JSON）</span>
-              <textarea v-model="form.inputPayloadText" class="mk-field__textarea mono" rows="6"
-                placeholder='例如：{"type":"path","goal":"…","currentLevel":"beginner","expectedMilestones":3}'
-                @change="parseInputPayload" />
-              <span v-if="form.inputPayloadError" class="mk-field__err">{{ form.inputPayloadError }}</span>
-              <span class="mk-field__hint">path：goal/currentLevel/expectedMilestones；stage：milestone/cognitiveCore/expectedSubtaskCount</span>
+            <!-- 第 2 步：学生说什么 -->
+            <div class="pe-sec">
+              <div class="pe-sec__title"><span class="pe-sec__num">2</span> 写学生说的话</div>
+              <div class="mk-field">
+                <div class="pe-msgs">
+                  <div v-for="(m, i) in form.messages" :key="i" class="pe-msg">
+                    <select v-model="m.role" class="mk-input pe-msg__role">
+                      <option value="user">学生</option>
+                      <option value="assistant">助手</option>
+                    </select>
+                    <input v-model="m.content" class="mk-input pe-msg__content"
+                      :placeholder="m.role === 'user' ? '例如：我想考英语，帮帮我' : '助手的历史回复（模拟多轮对话，可选）'" />
+                    <button type="button" class="mk-link mk-link--danger" :disabled="form.messages.length <= 1" @click="form.messages.splice(i, 1)">✕</button>
+                  </div>
+                </div>
+                <button type="button" class="mk-link" @click="form.messages.push({ role: 'user', content: '' })">+ 再加一轮对话</button>
+                <span class="mk-field__hint">第一条通常是学生说话；想模拟多轮对话再点"加一轮"，把角色改成助手填历史回复。</span>
+              </div>
+              <label class="mk-field">
+                <span class="mk-field__label">备注（可选）</span>
+                <textarea v-model="form.description" class="mk-field__textarea" rows="2" placeholder="这个用例想验证什么，比如：学生只说一句话时，助手也要能引导出学习目标" />
+              </label>
             </div>
 
-            <!-- path/stage：契约期望数量 -->
-            <div v-if="form.agentId === 'skill:path-planning'" class="mk-field">
-              <span class="mk-field__label">期望里程碑数（path-planning）</span>
-              <input v-model.number="form.expectedMilestones" type="number" min="1" max="8" class="mk-field__input mono" placeholder="例如：3" />
+            <!-- 第 3 步：期望助手表现（可选） -->
+            <div class="pe-sec">
+              <div class="pe-sec__title"><span class="pe-sec__num">3</span> 期望助手怎么回 <span class="pe-sec__opt">（可选，跳过也能试跑）</span></div>
+              <div class="pe-form-grid">
+                <label class="mk-field">
+                  <span class="mk-field__label">必须做到 <span class="mk-field__opt">（写人话，逗号分隔）</span></span>
+                  <input v-model="form.mustContain" class="mk-field__input" :placeholder="agentMustContainPlaceholder" />
+                  <span class="mk-field__hint">回复里必须出现这些内容才算通过，例如：{{ agentMustContainExample }}</span>
+                </label>
+                <label class="mk-field">
+                  <span class="mk-field__label">不能出现</span>
+                  <input v-model="form.mustNotInclude" class="mk-field__input" placeholder="例如：我不知道,去问老师吧" />
+                  <span class="mk-field__hint">回复里出现这些字样就不通过（逗号分隔）。</span>
+                </label>
+              </div>
+
+              <details class="pe-adv">
+                <summary>高级校验 <span class="pe-adv__hint">让助手按固定结构输出后，逐项卡结构字段</span></summary>
+                <div v-if="form.agentId === 'skill:goal-conversation'" class="mk-field">
+                  <span class="mk-field__label">期望输出阶段</span>
+                  <input v-model="form.expectedStage" class="mk-field__input mono" placeholder="understanding / proposal / confirmed" />
+                  <span class="mk-field__hint">助手内部应进入的阶段（选填）。</span>
+                </div>
+                <div v-if="form.agentId === 'skill:path-planning'" class="mk-field">
+                  <span class="mk-field__label">期望里程碑数</span>
+                  <input v-model.number="form.expectedMilestones" type="number" min="1" max="8" class="mk-field__input mono" placeholder="例如：3" />
+                  <span class="mk-field__hint">助手必须拆出恰好这么多阶段里程碑。</span>
+                </div>
+                <div v-if="form.agentId === 'skill:stage-designer'" class="mk-field">
+                  <span class="mk-field__label">期望子任务数</span>
+                  <input v-model.number="form.expectedSubtaskCount" type="number" min="1" max="8" class="mk-field__input mono" placeholder="例如：4" />
+                  <span class="mk-field__hint">助手必须拆出恰好这么多子任务。</span>
+                </div>
+                <label class="mk-field">
+                  <span class="mk-field__label">输出结构字段 <span class="mk-field__opt">（进阶）</span></span>
+                  <input v-model="form.mustInclude" class="mk-field__input mono" :placeholder="`例如：${agentFieldHint}`" />
+                  <span class="mk-field__hint">{{ agentLabel(form.agentId) }} 的合法输出字段：{{ agentFieldHint }}。只在想精确卡结构时填。</span>
+                </label>
+                <div v-if="isStructuredSkill(form.agentId)" class="mk-field">
+                  <span class="mk-field__label">完整输入结构（JSON，一般不用填）</span>
+                  <textarea v-model="form.inputPayloadText" class="mk-field__textarea mono" rows="4"
+                    placeholder='例如：{"type":"path","goal":"…","currentLevel":"beginner","expectedMilestones":3}'
+                    @change="parseInputPayload" />
+                  <span v-if="form.inputPayloadError" class="mk-field__err">{{ form.inputPayloadError }}</span>
+                </div>
+              </details>
             </div>
-            <div v-if="form.agentId === 'skill:stage-designer'" class="mk-field">
-              <span class="mk-field__label">期望子任务数（stage-designer）</span>
-              <input v-model.number="form.expectedSubtaskCount" type="number" min="1" max="8" class="mk-field__input mono" placeholder="例如：4" />
-            </div>
-            <label class="mk-field">
-              <span class="mk-field__label">期望包含字段（逗号分隔，可选）</span>
-              <input v-model="form.mustInclude" class="mk-field__input mono" placeholder="例如：stage,real_problem,confirmedProposal" />
-            </label>
-            <label class="mk-field">
-              <span class="mk-field__label">期望不包含文本（逗号分隔，可选）</span>
-              <input v-model="form.mustNotInclude" class="mk-field__input" placeholder="例如：我不知道,暂时无法" />
-            </label>
-            <label class="mk-field">
-              <span class="mk-field__label">期望输出阶段（可选）</span>
-              <input v-model="form.expectedStage" class="mk-field__input mono" placeholder="例如：understanding / proposal / confirmed" />
-            </label>
+
             <label class="mk-field mk-field--switch">
               <input v-model="form.enabled" type="checkbox" />
-              <span class="mk-field__label" style="margin:0">启用（参与批量评估）</span>
+              <span class="mk-field__label" style="margin:0">参与批量评估（不勾就只单独试跑时用）</span>
             </label>
             <div v-if="formError" class="mk-alert">{{ formError }}</div>
           </div>
           <div class="mk-modal__foot">
-            <button type="button" class="mk-btn" @click="formOpen = false">取消</button>
-            <button type="button" class="mk-btn mk-btn--primary" :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存' }}</button>
+            <button type="button" class="mk-btn" :disabled="saving || savingRun" @click="formOpen = false">取消</button>
+            <button type="button" class="mk-btn" :disabled="saving || savingRun" @click="save">{{ saving ? '保存中…' : '保存' }}</button>
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="saving || savingRun" @click="saveAndRun">{{ savingRun ? '试跑中…' : '保存并立即试跑' }}</button>
           </div>
         </div>
       </div>
@@ -268,7 +305,7 @@
                     <span class="pe-result-row__meta mono">#{{ res.runIndex }} · {{ fmtMs(res.durationMs) }} · stage={{ res.output?.stage ?? '—' }}</span>
                   </div>
                   <div v-if="!res.passed" class="pe-result-row__checks">
-                    <span v-for="(v, k) in res.checks" :key="k" class="pe-check" :class="v ? 'pe-check--ok' : 'pe-check--fail'">{{ v ? '✓' : '✗' }} {{ k }}</span>
+                    <span v-for="(v, k) in res.checks" :key="k" class="pe-check" :class="v ? 'pe-check--ok' : 'pe-check--fail'">{{ v ? '✓' : '✗' }} {{ checkLabel(String(k)) }}</span>
                   </div>
                   <p v-if="res.output?.userVisible" class="pe-result-row__out">{{ res.output.userVisible }}</p>
                 </div>
@@ -300,7 +337,7 @@ interface EvalCase {
   name: string
   description: string | null
   messages: Array<{ role: string; content: string }>
-  expectations: { mustIncludeFields?: string[]; mustNotInclude?: string[]; expectedStage?: string; expectedMilestones?: number; expectedSubtaskCount?: number } | null
+  expectations: { mustIncludeFields?: string[]; mustContainText?: string[]; mustNotInclude?: string[]; expectedStage?: string; expectedMilestones?: number; expectedSubtaskCount?: number } | null
   previousState?: Record<string, unknown> | null
   inputPayload?: Record<string, unknown> | null
   enabled: boolean
@@ -321,12 +358,33 @@ interface EvalRun {
   createdAt: string
 }
 
-const agents = [
-  { id: 'skill:goal-conversation', label: 'goal-conversation' },
-  { id: 'skill:path-planning', label: 'path-planning' },
-  { id: 'skill:stage-designer', label: 'stage-designer' },
-]
-const agentLabel = (id: string) => agents.find((a) => a.id === id)?.label || id
+// 后端 run-eval 支持的 3 个能力 + 白话元数据（标签/一句话说明/该能力输出的字段名）
+const AGENT_META: Record<string, { label: string; desc: string; fields: string; mustContainExample: string }> = {
+  'skill:goal-conversation': {
+    label: 'goal-conversation · 聊目标摸需求',
+    desc: '先和学生对话，摸清真实目标，给出理解和方案，最后确认。',
+    fields: 'stage, emotion, need, real_problem, confirmedProposal',
+    mustContainExample: '你的目标，学习计划',
+  },
+  'skill:path-planning': {
+    label: 'path-planning · 大目标拆路径',
+    desc: '把一个大目标拆成几个阶段里程碑，每段给出核心理念和资源。',
+    fields: 'cognitiveCore, milestones, resources',
+    mustContainExample: '第一个月，第二阶段',
+  },
+  'skill:stage-designer': {
+    label: 'stage-designer · 里程碑拆子任务',
+    desc: '把一个里程碑展开成具体的子任务步骤。',
+    fields: 'subtasks',
+    mustContainExample: '任务一，学习目标',
+  },
+}
+const agents = Object.entries(AGENT_META).map(([id, m]) => ({ id, label: m.label }))
+const agentLabel = (id: string) => AGENT_META[id]?.label || id
+const agentDesc = computed(() => AGENT_META[form.value.agentId]?.desc || '')
+const agentFieldHint = computed(() => AGENT_META[form.value.agentId]?.fields || '')
+const agentMustContainExample = computed(() => AGENT_META[form.value.agentId]?.mustContainExample || '')
+const agentMustContainPlaceholder = computed(() => `例如：${AGENT_META[form.value.agentId]?.mustContainExample || ''}`)
 
 const tab = ref<'cases' | 'runs'>('cases')
 const agentFilter = ref('')
@@ -353,6 +411,31 @@ function fmtMs(ms: number | undefined | null): string {
   return `${(ms / 1000).toFixed(1)}s`
 }
 const promptSourceText = (s: string) => ({ active: 'ACTIVE', version: '版本', custom: '自定义', draft: '草稿' }[s] || s)
+/** 把校验 key 翻译成人话，例如 mustContain:先问目标 → 「必须出现"先问目标"」 */
+const checkLabel = (rawKey: string): string => {
+  const [kind, ...rest] = rawKey.split(':')
+  const val = rest.join(':')
+  if (kind === 'mustContain') return `必须出现「${val}」`
+  if (kind === 'mustNotInclude') return `不能出现「${val}」`
+  if (kind === 'mustInclude') return `含字段 ${val}`
+  const map: Record<string, string> = {
+    parsed: '输出可解析',
+    contractValid: '结构契约合法',
+    structuredOutputValid: '结构化输出合法',
+    stageValid: '阶段识别正确',
+    expectedStage: '阶段符合预期',
+    milestoneCount: '里程碑数',
+    milestoneCountMatchesExpected: '里程碑数与期望一致',
+    namePresent: '含名称',
+    milestonesPresent: '含里程碑',
+    cognitiveCorePresent: '含核心理念',
+    subtaskCount: '子任务数',
+    subtaskCountMatchesExpected: '子任务数与期望一致',
+    subtasksPresent: '含子任务',
+    inputsUsingCognitives: '使用认知要素',
+  }
+  return map[rawKey] || rawKey
+}
 const resultTone = (r: EvalRun) => {
   const p = r.summary.passRate ?? 0
   return p >= 90 ? 'pe-result--ok' : p >= 60 ? 'pe-result--warn' : 'pe-result--bad'
@@ -448,6 +531,7 @@ const form = ref({
   inputPayloadError: '',
   expectedMilestones: null as number | null,
   expectedSubtaskCount: null as number | null,
+  mustContain: '',
   mustInclude: '',
   mustNotInclude: '',
   expectedStage: '',
@@ -489,6 +573,7 @@ function openCreate() {
     inputPayloadError: '',
     expectedMilestones: null,
     expectedSubtaskCount: null,
+    mustContain: '',
     mustInclude: '',
     mustNotInclude: '',
     expectedStage: '',
@@ -519,6 +604,7 @@ function openEdit(c: EvalCase) {
     inputPayloadError: '',
     expectedMilestones: typeof e.expectedMilestones === 'number' ? e.expectedMilestones : null,
     expectedSubtaskCount: typeof e.expectedSubtaskCount === 'number' ? e.expectedSubtaskCount : null,
+    mustContain: (e.mustContainText || []).join('，'),
     mustInclude: (e.mustIncludeFields || []).join(','),
     mustNotInclude: (e.mustNotInclude || []).join(','),
     expectedStage: e.expectedStage || '',
@@ -542,8 +628,10 @@ function buildInputPayload(): Record<string, unknown> | null {
 
 function buildPayload(): CreateEvalCasePayload {
   const expectations: Record<string, unknown> = {}
-  const mustInclude = form.value.mustInclude.split(',').map((s) => s.trim()).filter(Boolean)
-  const mustNotInclude = form.value.mustNotInclude.split(',').map((s) => s.trim()).filter(Boolean)
+  const mustContain = form.value.mustContain.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
+  const mustInclude = form.value.mustInclude.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
+  const mustNotInclude = form.value.mustNotInclude.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
+  if (mustContain.length) expectations.mustContainText = mustContain
   if (mustInclude.length) expectations.mustIncludeFields = mustInclude
   if (mustNotInclude.length) expectations.mustNotInclude = mustNotInclude
   if (form.value.expectedStage.trim()) expectations.expectedStage = form.value.expectedStage.trim()
@@ -563,12 +651,12 @@ function buildPayload(): CreateEvalCasePayload {
   }
 }
 
-async function save() {
+async function save(): Promise<boolean> {
   errors.value = {}
   formError.value = ''
-  if (!form.value.agentId) { errors.value.agentId = '请选择 Agent'; return }
-  if (!form.value.name.trim()) { errors.value.name = '请输入用例名称'; return }
-  if (!form.value.messages.some((m) => m.content.trim())) { formError.value = '至少需要一条有内容的消息'; return }
+  if (!form.value.agentId) { errors.value.agentId = '请选择助手能力'; return false }
+  if (!form.value.name.trim()) { errors.value.name = '请输入用例名称'; return false }
+  if (!form.value.messages.some((m) => m.content.trim())) { formError.value = '至少需要一条学生说的话'; return false }
   saving.value = true
   try {
     const payload = buildPayload()
@@ -581,10 +669,38 @@ async function save() {
     }
     formOpen.value = false
     void reloadCases()
+    return true
   } catch (e) {
     formError.value = errMsg(e)
+    return false
   } finally {
     saving.value = false
+  }
+}
+
+/** 保存并立即试跑：保存成功后，用表单内容跑一次（adhoc，不进历史） */
+const savingRun = ref(false)
+async function saveAndRun() {
+  if (!(await save())) return
+  const c: EvalCase = {
+    id: editingId.value || 'new',
+    agentId: form.value.agentId,
+    caseId: form.value.caseId.trim() || `adhoc-${Date.now().toString(36)}`,
+    name: form.value.name.trim(),
+    description: form.value.description.trim() || null,
+    messages: form.value.messages.filter((m) => m.content.trim()).map((m) => ({ role: m.role, content: m.content.trim() })),
+    previousState: buildInputPayload() || undefined,
+    inputPayload: buildInputPayload(),
+    expectations: buildPayload().expectations || null,
+    enabled: form.value.enabled,
+    createdAt: '',
+    updatedAt: '',
+  }
+  savingRun.value = true
+  try {
+    await runSingle(c)
+  } finally {
+    savingRun.value = false
   }
 }
 
@@ -714,6 +830,48 @@ void reloadCases()
 .pe-msgs { display: grid; gap: 6px; }
 .pe-msg { display: grid; grid-template-columns: 88px 1fr 28px; gap: 8px; align-items: center; }
 .pe-msg__role { height: 34px; }
+
+/* 用例表单：白话引导 + 分步区块 */
+.pe-guide {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(14, 165, 233, 0.06));
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.pe-guide__title { font-size: var(--mk-fs-12_5); font-weight: 700; color: var(--mk-indigo, #4f46e5); margin-bottom: 6px; }
+.pe-guide__text { font-size: var(--mk-fs-12_5); line-height: 1.7; color: var(--mk-text); margin: 0 0 6px; }
+.pe-guide__steps { font-size: var(--mk-fs-12_5); color: var(--mk-muted); margin: 0; }
+.pe-sec { display: grid; gap: 10px; margin-bottom: 18px; }
+.pe-sec__title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: var(--mk-fs-13); font-weight: 700; color: var(--mk-text);
+}
+.pe-sec__num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--mk-indigo, #4f46e5); color: #fff;
+  font-size: var(--mk-fs-11); font-weight: 700; flex: none;
+}
+.pe-sec__opt { font-size: var(--mk-fs-11); font-weight: 500; color: var(--mk-faint); }
+.mk-field__opt { font-size: var(--mk-fs-11); color: var(--mk-faint); font-weight: 500; }
+.pe-adv {
+  border: 1px dashed var(--mk-line);
+  border-radius: 10px;
+  padding: 8px 12px 12px;
+  display: grid;
+  gap: 10px;
+}
+.pe-adv summary {
+  cursor: pointer;
+  font-size: var(--mk-fs-12_5);
+  font-weight: 600;
+  color: var(--mk-muted);
+  padding: 4px 0;
+  user-select: none;
+}
+.pe-adv summary:hover { color: var(--mk-indigo, #4f46e5); }
+.pe-adv__hint { font-size: var(--mk-fs-11); font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
 
 .pe-detail-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 40px 0; color: var(--mk-muted); font-size: var(--mk-fs-13); }
 /* 运行概要：MkKpi 网格容器（统计卡本体由 MkKpi 提供） */

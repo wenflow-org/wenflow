@@ -75,12 +75,43 @@ async function main() {
   const checks = runRes.data?.results?.[0]?.checks;
   console.log('checks:', JSON.stringify(checks, null, 2));
 
-  // 3. 清理：删除用例
+  // 3. 创建 goal 用例（人话校验 mustContainText + mustNotInclude）
+  const goalCaseId = `verify-goal-${Date.now().toString(36)}`;
+  const goalCreate = await request('POST', `${BASE}/eval-cases`, {
+    agentId: 'skill:goal-conversation',
+    caseId: goalCaseId,
+    name: '考英语（人话校验验证）',
+    messages: [{ role: 'user', content: '我想考英语，时间不多，帮我想想怎么安排' }],
+    expectations: {
+      mustContainText: ['目标'],
+      mustNotInclude: ['我不知道', '暂时无法'],
+    },
+    enabled: true,
+  });
+  console.log('\ncreate goal case:', goalCreate.success ? 'OK' : JSON.stringify(goalCreate));
+
+  // 3.5 跑 goal 用例，确认 mustContain/mustNotInclude 检查出现且全过
+  const goalRun = await request('POST', `${BASE}/run-eval`, {
+    agentId: 'skill:goal-conversation',
+    caseIds: [goalCaseId],
+    repeatCount: 1,
+  });
+  const goalChecks = goalRun.data?.results?.[0]?.checks;
+  console.log('goal run summary:', JSON.stringify(goalRun.data?.summary));
+  console.log('goal checks:', JSON.stringify(goalChecks, null, 2));
+
+  // 4. 清理：删除用例
   const list = await request('GET', `${BASE}/eval-cases?agentId=skill:path-planning`);
   const created = (list.data || []).find((c: any) => c.caseId === caseId);
   if (created) {
     const del = await request('DELETE', `${BASE}/eval-cases/${created.id}`);
     console.log('\ncleanup delete:', del.success ? 'OK' : JSON.stringify(del));
+  }
+  const goalList = await request('GET', `${BASE}/eval-cases?agentId=skill:goal-conversation`);
+  const goalCreated = (goalList.data || []).find((c: any) => c.caseId === goalCaseId);
+  if (goalCreated) {
+    const del = await request('DELETE', `${BASE}/eval-cases/${goalCreated.id}`);
+    console.log('cleanup delete goal:', del.success ? 'OK' : JSON.stringify(del));
   }
 
   await prisma.$disconnect();

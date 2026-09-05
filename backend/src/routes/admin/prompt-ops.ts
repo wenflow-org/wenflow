@@ -829,6 +829,14 @@ router.post('/run-eval', async (req: Request, res: Response) => {
                 );
               }
             }
+            // 人话检查：回复中必须出现的文字（一个都不能少）
+            if (Array.isArray(expectations.mustContainText)) {
+              for (const phrase of expectations.mustContainText) {
+                checks[`mustContain:${phrase}`] = userVisible.includes(
+                  String(phrase)
+                );
+              }
+            }
             if (Array.isArray(expectations.mustNotInclude)) {
               for (const phrase of expectations.mustNotInclude) {
                 checks[`mustNotInclude:${phrase}`] = !userVisible.includes(
@@ -1233,6 +1241,12 @@ async function runSkillChecks(params: {
         checks[`mustInclude:${field}`] = JSON.stringify(parsed).includes(String(field));
       }
     }
+    // 人话检查：输出中必须出现的文字（覆盖 name/title/描述等自然语言内容）
+    if (Array.isArray(expect.mustContainText)) {
+      for (const phrase of expect.mustContainText) {
+        checks[`mustContain:${phrase}`] = JSON.stringify(parsed).includes(String(phrase));
+      }
+    }
   }
 
   if (skillId === 'skill:stage-designer') {
@@ -1246,6 +1260,12 @@ async function runSkillChecks(params: {
     if (Array.isArray(expect.mustIncludeFields)) {
       for (const field of expect.mustIncludeFields) {
         checks[`mustInclude:${field}`] = JSON.stringify(parsed).includes(String(field));
+      }
+    }
+    // 人话检查：输出中必须出现的文字
+    if (Array.isArray(expect.mustContainText)) {
+      for (const phrase of expect.mustContainText) {
+        checks[`mustContain:${phrase}`] = JSON.stringify(parsed).includes(String(phrase));
       }
     }
   }

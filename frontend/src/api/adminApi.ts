@@ -1062,6 +1062,16 @@ export const adminSkillsApi = {
     return adminAxios.post(`/admin/skills/${encodeURIComponent(skillId)}/test`, input);
   },
 
+  /** 模型延迟探测：不对 handler 全量试跑，直发上游看指定思考档的真实延迟/JSON/token */
+  modelProbe: async (skillId: string, data: {
+    thinkingMode?: string;
+    reasoningEffort?: string;
+    testInput?: string;
+    timeoutMs?: number;
+  }) => {
+    return adminAxios.post(`/admin/skills/${encodeURIComponent(skillId)}/model-probe`, data);
+  },
+
   getEffectiveSkillPrompt: async (skillId: string) => {
     return adminAxios.get(`/admin/skills/${encodeURIComponent(skillId)}/effective-prompt`);
   },
@@ -1477,6 +1487,8 @@ export const adminVirtualLearnersApi = {
 // ============================================================
 export interface EvalCaseExpectations {
   mustIncludeFields?: string[];
+  /** 人话校验：回复中必须出现的文字（一个都不能少） */
+  mustContainText?: string[];
   mustNotInclude?: string[];
   expectedStage?: string;
   /** path-planning：期望里程碑数（同时作为 prompt 注入约束） */
