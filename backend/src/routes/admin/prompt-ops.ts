@@ -766,6 +766,7 @@ router.post('/run-eval', async (req: Request, res: Response) => {
         messages: safeParse(c.messagesJson, []),
         previousState: safeParse(c.previousStateJson, null),
         expectations: safeParse(c.expectationsJson, null),
+        inputPayload: null, // DB 用例暂不支持结构化输入（path 场景请用 adhocCases 传 inputPayload）
       })),
       ...adhocCases.map((c: any, idx: number) => ({
         id: c.id || `adhoc-${idx + 1}`,
@@ -773,6 +774,8 @@ router.post('/run-eval', async (req: Request, res: Response) => {
         messages: Array.isArray(c.messages) ? c.messages : [],
         previousState: c.previousState || null,
         expectations: c.expectations || null,
+        inputPayload: c.inputPayload || null,
+        input: c.input || null,
       })),
     ].filter((c) => c.messages.length > 0);
 
@@ -1092,15 +1095,35 @@ async function runSkillEvalCase(params: {
       confirmedProposal: previousState?.confirmedProposal || null,
       conversationHistory: history,
     };
+    // 若调用方指定期望里程碑数（等同 coordinator 的 targetMilestones 注入），拼进 user 文本强制
+    const expectedFromInput = Number.isInteger((promptInput as any)?.expectedMilestones)
+      ? (promptInput as any).expectedMilestones
+      : null;
+    const milestoneDirective = expectedFromInput !== null
+      ? `\n\n【结构规模硬约束】本次规划必须且只能输出恰好 ${expectedFromInput} 个 milestone（数量精确，不是范围建议，不得增减）。`
+      : '';
+    // userPayload 复用 generatePath 的文本模板（goal + 结构化输入），指令作为前缀注入
+    const userPayloadText = `原始学习目标：${promptInput.goal || userInput}
+${milestoneDirective}
+
+路径前置清洗结果（高优先级参考输入）：
+${JSON.stringify({
+  learnerProfile: { currentBaseline: { level: promptInput.currentLevel || 'beginner' } },
+  resources: { timeBudget: promptInput.metadata?.availableTime || null },
+  confirmedProposal: promptInput.confirmedProposal || null,
+  planningHints: {
+    targetMilestones: expectedFromInput,
+    milestoneRange: expectedFromInput !== null ? [expectedFromInput, expectedFromInput] : null,
+  },
+}, null, 2)}
+
+【重要】请把以上清洗结果视为上游已整理好的正式输入，据此设计路径。`;
     const promptResult = await callPrompt<any, any>({
       agentId: 'skill:path-planning',
       defaultSystemPrompt: systemPrompt,
       requireActivePrompt: false,
       caller: { agentId: 'path-agent', skillId: 'path-planning' },
-      buildUserPayload: () => ({
-        ...promptInput,
-        __promptOverridden: true,
-      }),
+      buildUserPayload: () => userPayloadText,
       parseRawOutput: (raw) => {
         const parsed = extractJson(raw);
         return { parsed, extractedJson: parsed ? JSON.stringify(parsed) : null };
@@ -1120,6 +1143,26 @@ async function runSkillEvalCase(params: {
       normalizedInput: null,
       repairHints: null,
     };
+    // 若调用方指定期望子任务数（等同 coordinator 的 targetSubtasksPerStage 注入），
+    // 写进 normalizedInput.planningHints 供 prompt 强制读取
+    const expectedFromInput = Number.isInteger((promptInput as any)?.expectedSubtaskCount)
+      ? (promptInput as any).expectedSubtaskCount
+      : null;
+    const enrichedNormalizedInput =
+      promptInput.normalizedInput && typeof promptInput.normalizedInput === 'object'
+        ? {
+            ...promptInput.normalizedInput,
+            planningHints: expectedFromInput !== null
+              ? {
+                  ...(promptInput.normalizedInput.planningHints || {}),
+                  targetSubtasksPerStage: expectedFromInput,
+                  subtasksPerStageRange: [expectedFromInput, expectedFromInput],
+                }
+              : (promptInput.normalizedInput.planningHints || null),
+          }
+        : expectedFromInput !== null
+          ? { planningHints: { targetSubtasksPerStage: expectedFromInput, subtasksPerStageRange: [expectedFromInput, expectedFromInput] } }
+          : null;
     const promptResult = await callPrompt<any, any>({
       agentId: 'skill:stage-designer',
       defaultSystemPrompt: systemPrompt,
@@ -1129,7 +1172,7 @@ async function runSkillEvalCase(params: {
         milestone: promptInput.milestone,
         previousMilestone: promptInput.previousMilestone || null,
         cognitiveCore: promptInput.cognitiveCore,
-        normalizedInput: promptInput.normalizedInput || null,
+        normalizedInput: enrichedNormalizedInput,
         repairHints: promptInput.repairHints || null,
         __promptOverridden: true,
       }),
