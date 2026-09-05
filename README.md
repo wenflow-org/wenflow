@@ -127,13 +127,16 @@ flowchart TD
 
 ### 管理端
 
-管理后台在 `/admin`，16+ 个页面，数据来自真实 API（没有数据时才用演示数据）：
+管理后台在 `/admin`，共 18 个场景页（按侧栏分组），数据来自真实 API（没有数据时才用演示数据）：
 
-- **总览与用户**：平台总览——今天健不健康、哪个模型失败最多、哪里要排查；用户和学习者中心——看学习状态、风险和疲劳度，能手动重算快照；教学会话、目标对话、反馈中心
-- **Prompt 工程**：改 Prompt 的一套流程——编译、守门检查、发布、回滚、版本对比，还能拿最近一次真实调用重跑验证
-- **观测调试**：拓扑图看哪些节点在失败、哪些闲置；编排看数据在阶段之间怎么流动；执行日志带重试时间线，可自动刷新、导出；Trace 瀑布把一次慢请求拆到每个环节找原因
-- **模型与接入**：模型怎么路由（对话 / 推理 / 评估）、连不连得通、能访问哪些网络、重试和超时怎么设
-- **虚拟实验**：AI 生成人设、故事池跑实验、Quick Learn 自动上课、会话驾驶舱做黑盒模拟，详见下方「虚拟学习者实验室」
+- **总览**：平台总览——今天健不健康、哪个模型失败最多、哪里要排查
+- **学习者**：用户与学习者（账号 / 学习状态双 tab）——看学习状态、风险和疲劳度，能手动重算快照；学习会话（教学会话 / 目标对话 / 学习路径三 tab）；虚拟学习者
+- **Skill 管理**：编排结构（阶段泳道 + 拓扑统计）、Skill 运行（成功率、失败节点、空闲与平均耗时监控）、Skill 设计页（二级页：协议编辑、编译、守门检查、发布、回滚、版本对比、试跑——含最近一次真实调用一键重跑）、Prompt 评估、健康中心
+- **运营**：运营中心（待办工作台）、成就管理、反馈中心、通知与公告（公告 / 站内通知双 tab）
+- **配置**：模型与接入（路由 / 连通性 / 网络边界 / 重试超时）、外挂能力、会话安全、系统工具（运维工具 + 数据导出）
+- **观测**：执行日志（日志 / Trace 瀑布 / 成本分析三个 tab，带重试时间线、自动刷新、导出）、审计日志
+
+> 说明：拓扑视图已并入「编排结构」页；Trace 瀑布与 Token 成本分析已并入「执行日志」；批量实验已并入「虚拟学习者」。场景清单以 `frontend/src/views/admin-redesign/manifest.ts` 为准。
 
 ### Prompt 工程体系（Prompt Lab v4，File-as-Truth）
 
@@ -150,7 +153,7 @@ flowchart TD
 |------|------|
 | **前端** | Vue 3 + TypeScript + Vite 6 + Element Plus + Pinia |
 | **后端** | Node.js + Express + TypeScript + Prisma |
-| **数据库（当前）** | SQLite（主库 43 表 + system 库 14 表，双库架构） |
+| **数据库（当前）** | SQLite（主库 44 表 + system 库 14 表，双库架构） |
 | **AI 接入** | OpenAI 兼容模型网关（默认 DeepSeek：deepseek-v4-flash / v4-pro / r1），支持 SSE 流式、重试预算、thinking mode 控制 |
 | **Agent / Skill 编排** | EduClaw Gateway + 5 个顶层 Agent（goal/path/teaching/profile/simulation，无 prompt 编排器）/ Skill 执行层（prompts/core 真源 → 编译产物 → DB 镜像）+ Coordinators + Durable Outbox 事件链 |
 | **模型配置分层** | 环境变量 → 平台默认 → Agent/Skill 级 → 用户自定义 API / 模型覆盖 |
@@ -252,11 +255,11 @@ docker compose -f docker-compose.operations.yml run --rm backup
 ### 质量检查（本地 CI 同款）
 
 ```bash
-# 依次执行：secret 扫描 → Prisma 双 schema 校验 → 空库迁移回放 → 后端 typecheck → 后端测试 → 前后端构建
+# 依次执行：secret 扫描 → Prisma 双 schema 校验 → 空库迁移回放 → 后端 typecheck → LLM 调用契约检查 → 迁移部署 → prompts 门禁 → lint → 后端/前端测试 → 前后端构建
 npm run check
 ```
 
-说明：GitHub Actions（`.github/workflows/quality-check.yml`）在 push main/master 与 PR 时会执行相同检查（另加 Git 历史 secret 扫描）。
+说明：GitHub Actions（`.github/workflows/quality-check.yml`）在 push main/master/develop 与 PR 时会执行相同检查（另加 Git 历史 secret 扫描）。
 
 ### 环境配置辅助命令
 
@@ -305,7 +308,7 @@ npm run prompts:core:check
 
 - 默认情况下，前端通过相对路径 `/api` 访问后端，由 Vite 代理或 Nginx 转发。
 - 管理端配置主要读取 `frontend/.env` 中的 `VITE_API_BASE_URL`。
-- 普通用户端在非开发模式下兼容读取 `VITE_API_URL`；如果没有特殊部署需求，保持默认 `/api` 即可。
+- 普通用户端在开发模式下固定走 `/api`；非开发模式下 `VITE_API_BASE_URL` 优先，`VITE_API_URL` 仅作历史兜底。如果没有特殊部署需求，保持默认 `/api` 即可。
 
 如需更细粒度的部署或非脚本方式启动，可参考 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
@@ -359,6 +362,8 @@ INIT_ADMIN_PASSWORD=YourStrongPassword123
 5. **刻意练习 + 检索练习** - 能独立讲出才算掌握；课后检索式自测，下一节开场承接
 6. **费曼技巧（自我解释）** - 用自己的话讲给别人听，讲不清楚就重学
 7. **安德森认知目标分类** - 从"记忆"到"创造"6 级认知目标，贯穿标注、教学与完成判定
+
+完整理论依据（含各理论的文献 DOI/arXiv 链接、Wenflow 落点索引与缺口清单）见 [doc/EDUCATIONAL_THEORY_MAP.md](doc/EDUCATIONAL_THEORY_MAP.md)。
 
 ---
 

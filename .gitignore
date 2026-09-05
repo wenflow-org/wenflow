@@ -218,9 +218,8 @@ test_dialogue.py
 
 nul
 
-# Local architecture docs (track only current spec/design docs; archive & history stay untracked)
+# Local architecture docs (track only current spec/result docs; archive, history, design drafts, survey snapshots & changelogs stay untracked locally)
 doc/*
-!doc/CHANGELOG.md
 !doc/SKILL_PROTOCOL_V4.md
 !doc/README.md
 !doc/README.en.md
@@ -231,18 +230,12 @@ doc/*
 !doc/PATH_PRODUCTION_REPLAN_CONTRACT.md
 !doc/PATH_PRODUCTION_REPLAN_CONTRACT.en.md
 !doc/VIRTUAL_LEARNER_CHAIN.md
-!doc/VIRTUAL_LEARNER_QUICK_LEARN_DESIGN_2026-07-21_091152.md
 !doc/LEARNER_MODEL_ARCHITECTURE.md
 !doc/LEARNER_MODEL_ARCHITECTURE.en.md
 !doc/AGENT_IO_DESIGN_V3.md
-!doc/SKILL_RUNTIME_MAP_MAIN.md
-!doc/SKILL_RUNTIME_MAP_SIM.md
-!doc/design/
-doc/design/*
-!doc/design/LEARN_AGENT_CENTRALIZATION_PLAN.md
-!doc/design/admin-console-ui-ux-diagnosis.md
-!doc/design/platform-capabilities-design.md
+!doc/SKILL_DEVELOPMENT_GUIDE.md
 doc/archive/
+doc/history/
 
 # Playwright MCP 会话临时文件
 .playwright-mcp/

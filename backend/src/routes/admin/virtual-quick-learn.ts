@@ -4,7 +4,8 @@
  * 账号自动学习：开发者选定虚拟学习者账号名下的任务，系统沿真实生产链
  * 驱动该账号学完一节课，并生成学习传播报告（前后快照对比 + 下游影响）。
  *
- * 设计文档：doc/VIRTUAL_LEARNER_QUICK_LEARN_DESIGN_2026-07-21_091152.md 第 6.5 节
+ * 设计要点：沿生产链驱动账号学完一节课（含传播报告），详见本文件实现与
+ * 虚拟学习者链路（doc/VIRTUAL_LEARNER_CHAIN.md）。
  */
 
 import express from 'express';

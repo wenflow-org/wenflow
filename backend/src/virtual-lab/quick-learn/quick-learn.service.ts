@@ -5,7 +5,8 @@
  *   startSession → teaching-turn × N（双重收束）→ endSession（含 wrapup）
  *   → completeTask → 等待异步投影 → 生成 Propagation Report。
  *
- * 设计文档：doc/VIRTUAL_LEARNER_QUICK_LEARN_DESIGN_2026-07-21_091152.md
+ * 设计要点：只走生产入口，不直接改业务状态；教师未认可时绝不强制完成任务。
+ * 运行链与边界见本文件实现及虚拟学习者链路（doc/VIRTUAL_LEARNER_CHAIN.md）。
  *
  * 边界：
  * - 只走生产入口，不直接改业务状态；教师未认可时绝不强制完成任务。

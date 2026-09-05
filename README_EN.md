@@ -126,13 +126,16 @@ Virtual learner accounts exercise the product the way a real user would, to vali
 
 ### Admin Console
 
-The admin panel lives at `/admin` with 16+ pages, all backed by real APIs (demo data only when nothing is available):
+The admin panel lives at `/admin` with 18 scene pages (grouped by the sidebar), all backed by real APIs (demo data only when nothing is available):
 
-- **Overview & Users**: platform overview — is today healthy, which model fails the most, what needs investigation; users / learner center — learning state, risk and fatigue, with manual snapshot recompute; teaching sessions, goal conversations, feedback center
-- **Prompt Engineering**: a full workflow for editing prompts — compile, gate checks, publish, rollback, version diff, plus rerunning a recent real call to verify
-- **Observability & Debugging**: topology canvas shows which nodes are failing or idle; orchestrator shows how data flows between stages; execution logs include retry timelines with auto-refresh and export; trace waterfall breaks a slow request down to each step
-- **Models & Access**: how models are routed (chat / reasoning / evaluation), connectivity checks, network boundary policy, retry and timeout settings
-- **Virtual Experiments**: AI-generated personas, story-pool driven experiments, Quick Learn auto-teaching, and a session cockpit for black-box simulation — see the "Virtual Learner Lab" section below
+- **Overview**: platform overview — is today healthy, which model fails the most, what needs investigation
+- **Learners**: people & learners (accounts / learning state tabs) — learning state, risk and fatigue, with manual snapshot recompute; learning sessions (teaching sessions / goal conversations / learning paths tabs); virtual learners
+- **Skill Management**: orchestration structure (stage lanes + topology stats), Skill runtime (success rate, failing nodes, idle and average-latency monitoring), Skill design page (secondary page: protocol editing, compile, gate checks, publish, rollback, version diff, trial runs — including one-click rerun of the last real call), Prompt evaluation, health center
+- **Operations**: ops hub (todo workbench), achievements, feedback center, notifications & announcements (announce / in-app tabs)
+- **Configuration**: models & access (routing / connectivity / network boundary / retry & timeout), add-ons, session security, system tools (ops tools + data export)
+- **Observability**: execution logs (logs / trace waterfall / cost analysis tabs, with retry timelines, auto-refresh, export), audit logs
+
+> Note: the topology view has been merged into the "Orchestration Structure" page; the trace waterfall and token cost analysis are now tabs inside "Execution Logs"; batch experiments have been merged into "Virtual Learners". The authoritative scene list is `frontend/src/views/admin-redesign/manifest.ts`.
 
 ### Prompt Engineering (Prompt Lab v4, File-as-Truth)
 
@@ -149,7 +152,7 @@ The admin panel lives at `/admin` with 16+ pages, all backed by real APIs (demo 
 |------|------|
 | **Frontend** | Vue 3 + TypeScript + Vite 6 + Element Plus + Pinia |
 | **Backend** | Node.js + Express + TypeScript + Prisma |
-| **Database** | SQLite (main DB with 43 tables + system DB with 14 tables, dual-database architecture) |
+| **Database** | SQLite (main DB with 44 tables + system DB with 14 tables, dual-database architecture) |
 | **AI Integration** | OpenAI-compatible model gateway (default: DeepSeek deepseek-v4-flash / v4-pro / r1), SSE streaming, retry budget, thinking-mode control |
 | **Agent Coordination** | EduClaw Gateway + 5 top-level Agents (goal/path/teaching/profile/simulation) / Skill orchestration (prompts/core source → compiled artifacts → DB mirror) + Coordinators + Durable Outbox event chain |
 | **Model Config Layers** | Env vars → platform defaults → Agent/Skill level → user-defined API / model overrides |
@@ -251,11 +254,11 @@ Note: `docker-compose.yml` provides three services (migrate / backend / nginx) a
 ### Quality Check (same as CI)
 
 ```bash
-# Runs: secret scan → Prisma schema validation → clean-replay migrations → backend typecheck → backend tests → backend + frontend builds
+# Runs: secret scan → Prisma schema validation → clean-replay migrations → backend typecheck → LLM call contract check → migrate deploy → prompts gates → lint → backend/frontend tests → backend + frontend builds
 npm run check
 ```
 
-Note: GitHub Actions (`.github/workflows/quality-check.yml`) runs the same checks on push to main/master and on PRs (plus a git-history secret scan).
+Note: GitHub Actions (`.github/workflows/quality-check.yml`) runs the same checks on push to main/master/develop and on PRs (plus a git-history secret scan).
 
 ### First-time Environment Setup (Recommended)
 
@@ -302,7 +305,7 @@ Note: `prompts:sync-core` aligns the database ACTIVE versions with the compiled 
 
 - By default, the frontend calls the backend through the relative `/api` path, forwarded by Vite proxy or Nginx.
 - The admin panel primarily reads `VITE_API_BASE_URL` from `frontend/.env`.
-- The main user-facing app also supports `VITE_API_URL` outside development mode; if you do not have a custom deployment need, keeping `/api` is the safest default.
+- The main user-facing app always uses `/api` in dev mode; outside dev mode `VITE_API_BASE_URL` takes priority, with `VITE_API_URL` kept only as a legacy fallback. If you do not have a custom deployment need, keeping `/api` is the safest default.
 
 For more fine-grained deployment steps or non-script startup, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
@@ -358,6 +361,8 @@ The design is grounded in these theories, each backed by concrete implementation
 5. **Deliberate + Retrieval Practice** - mastery means explaining it yourself; post-session retrieval self-tests carry into the next lesson
 6. **Feynman Technique (Self-explanation)** - explain it in your own words to someone else; if you can't, learn it again
 7. **Anderson's Taxonomy** - six cognitive levels from remember to create, applied across labeling, teaching, and completion checks
+
+For the full theoretical foundation (literature with DOI/arXiv links, WenFlow implementation index, and gap list), see [doc/EDUCATIONAL_THEORY_MAP.md](doc/EDUCATIONAL_THEORY_MAP.md).
 
 ---
 

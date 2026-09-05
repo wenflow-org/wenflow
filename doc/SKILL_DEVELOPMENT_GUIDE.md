@@ -4,9 +4,9 @@
 > 一条龙说明。平台定位：**字段级管理能力**（core.yaml 与编排文件双声明，字段级原子增/改/删 API）。
 >
 > 相关设计文档：
-> - 字段级编辑设计：`doc/UNIFIED_EDITING_DESIGN.md`（M1 加字段 / M3 改删字段的原子 API 契约）
+> - 字段级编辑设计（已归档，背景参考）：`doc/archive/UNIFIED_EDITING_DESIGN.md`（M1 加字段 / M3 改删字段的原子 API 契约）
 > - 户口簿规格（已归档，背景参考）：`doc/archive/SKILLS_YAML_SPEC.md`（schema §1、校验清单 §2.4）
-> - 扩展设计：`doc/SKILL_EXPANSION_DESIGN.md`（三分类、字段回填、最小动作集 §3.7）
+> - 扩展设计（已移入历史，背景参考）：`doc/history/design/2026-08/SKILL_EXPANSION_DESIGN.md`（三分类、字段回填、最小动作集 §3.7）
 > - 完成度状态机：`backend/src/services/skill-registry/skill-completion.service.ts`
 >
 > 日期：2026-08-12

@@ -49,7 +49,7 @@ npm run dev
 已存在管理员时：
 
 ```text
-✅ 已存在管理员账户，跳过创建
+✅ 管理员账户已存在，跳过创建
 ```
 
 ## 登录管理端
@@ -60,7 +60,7 @@ npm run dev
 
 使用你在 `backend/.env` 中配置的管理员用户名和密码登录。
 
-注意：当前管理员登录接口仅允许本机访问（`localhost` / `127.0.0.1` / `::1`）。如果通过局域网地址、普通反向代理域名或其他远程来源访问，后端会拒绝登录请求。
+注意：管理员登录默认 `ADMIN_ACCESS_MODE=private`，允许本机与局域网（RFC1918）来源访问；可设为 `loopback`（仅本机 `localhost` / `127.0.0.1` / `::1`）或 `any`（不限制来源），并用 `ADMIN_ALLOWED_IPS` 精确放行指定客户端 IP。该策略可在管理端「模型与接入」页面持久化到 System DB 并热生效，环境变量仅作默认值；如需修改请参考 [ADMIN_LOGIN_GUIDE.md](ADMIN_LOGIN_GUIDE.md)。
 
 ## 安全建议
 

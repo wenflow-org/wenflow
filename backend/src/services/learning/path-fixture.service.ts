@@ -4,7 +4,8 @@
  * 把一条已有学习路径（含 milestones / subtasks 及全部教学标注字段）确定性地
  * 克隆到指定用户名下，作为虚拟学习者账号自动学习的测试路径。
  *
- * 设计文档：doc/VIRTUAL_LEARNER_QUICK_LEARN_DESIGN_2026-07-21_091152.md 第 6.1 节
+ * 设计要点：把已有学习路径确定性地克隆到指定用户名下，作为虚拟学习者自动学习的测试路径。
+ * 具体章节见虚拟学习者链路（doc/VIRTUAL_LEARNER_CHAIN.md）。
  *
  * 关键约束（来自 schema 与学习门禁）：
  * - learning_paths.activeGenerationRunId 有 @unique，克隆必须置 null

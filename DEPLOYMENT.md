@@ -25,7 +25,7 @@
 - 自动安装依赖（缺少 `node_modules` 时）
 - 生成双 Prisma Client，并对主库和 System DB 分别执行 `prisma migrate deploy`
 - 自动将核心 agent / skill prompts 从当前代码同步到数据库 ACTIVE 版本
-- 清理开发端口占用（3001、5173）
+- 检查开发端口（3001、5173）可用（被占用时报错退出，需要先手动停掉占用进程）
 - 启动后端与前端开发服务
 - 自动打开浏览器
 
@@ -53,7 +53,7 @@
 `-UseNginx` 模式会自动：
 - 构建前端（`npm run build`）
 - 生成运行时配置 `runtime/nginx/wenflow.nginx.conf`
-- 停止系统 nginx 进程并启动/重载脚本管理的 Nginx
+- 启动/重载脚本管理的 Nginx（若系统 nginx 或其他进程已占用 80 端口，脚本会报错退出，需先手动停止）
 - 写入反向代理相关环境变量（`FRONTEND_URL`、`CORS_ORIGIN`、`TRUST_PROXY=127.0.0.1`）
 
 ### 方式三：手动启动
