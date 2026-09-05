@@ -978,14 +978,13 @@ void reloadCases()
 .pe-result--bad strong { color: var(--mk-red); }
 
 .pe-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* mk-field 是 grid 容器，两列等高拉伸会把内部 input/select 也拉高（input 被撑到 51px 的根因）。
+   顶部对齐、不拉伸，让字段保持自身自然高度 */
+.pe-form-grid .mk-field { align-content: start; }
 .pe-msgs { display: grid; gap: 6px; }
-/* 消息行：三列统一自然高度（select/input 同用 .mk-input 自然高度，不做固定 height，
-   否则 1440px+ 字号档 padding 放大后会裁切 select 文字） */
+/* 消息行：三列统一自然高度（行高统一由下方 .pe-tab-body .mk-input 规则处理，
+   不固定 height，避免 1440px+ 字号档 padding 放大后裁切 select 文字） */
 .pe-msg { display: grid; grid-template-columns: 92px 1fr 30px; gap: 8px; align-items: center; }
-/* 统一 select/input 的行高，让高度由 padding+line-height 自然决定；
-   不固定 height，避免 1440/2000/2800px 字号档 padding 放大后裁切文字 */
-.pe-msg .mk-input { line-height: 18px; }
-.pe-msg select.mk-input { line-height: 19px; }
 .pe-msg .mk-link {
   justify-self: center;
   width: 28px;
@@ -1041,6 +1040,24 @@ void reloadCases()
 .pe-params { display: grid; grid-template-columns: 84px 150px 1fr; gap: 10px; align-items: end; }
 .pe-param { display: grid; gap: 4px; }
 .pe-param__label { font-size: var(--mk-fs-11_5); font-weight: 600; color: var(--mk-muted); }
+
+/* ===== select 与 input 高度统一 =====
+   Chrome 原生 select 有 appearance 导致的盒模型差异（与 input 差 1-2px）。
+   去掉原生外观 + 统一 line-height 后两者高度完全一致，且随各字号档同步放大不裁切。 */
+.mk-field__select,
+.pe-tab-body select.mk-input,
+.pe-params select.mk-input {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238492ab' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 12px;
+  padding-right: 32px;
+  line-height: 20px;
+}
+.mk-field__input { line-height: 20px; }
+.pe-tab-body .mk-input { line-height: 20px; }
 
 /* ===== 期望（可选，单层折叠） ===== */
 .pe-expect { border-top: 1px solid var(--mk-line); padding-top: 10px; }
