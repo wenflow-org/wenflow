@@ -8,6 +8,7 @@
       <span class="mk-status__meta">评估历史 {{ runs.length }}</span>
       <span class="mk-status__meta" :title="lastRunHint">{{ lastRunText }}</span>
       <span class="mk-status__actions">
+        <button type="button" class="mk-status__action" :disabled="!canRunBatch" @click="runBatch">批量跑评估</button>
         <button type="button" class="mk-status__action" @click="tab = 'runs'">评估历史</button>
         <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建用例</button>
       </span>
@@ -192,6 +193,26 @@
               </div>
               <button type="button" class="mk-link" @click="form.messages.push({ role: 'user', content: '' })">+ 添加消息</button>
             </div>
+
+            <!-- path/stage：结构化输入 JSON（存进 previousStateJson 承载） -->
+            <div v-if="isStructuredSkill(form.agentId)" class="mk-field">
+              <span class="mk-field__label">结构化输入（JSON）</span>
+              <textarea v-model="form.inputPayloadText" class="mk-field__textarea mono" rows="6"
+                placeholder='例如：{"type":"path","goal":"…","currentLevel":"beginner","expectedMilestones":3}'
+                @change="parseInputPayload" />
+              <span v-if="form.inputPayloadError" class="mk-field__err">{{ form.inputPayloadError }}</span>
+              <span class="mk-field__hint">path：goal/currentLevel/expectedMilestones；stage：milestone/cognitiveCore/expectedSubtaskCount</span>
+            </div>
+
+            <!-- path/stage：契约期望数量 -->
+            <div v-if="form.agentId === 'skill:path-planning'" class="mk-field">
+              <span class="mk-field__label">期望里程碑数（path-planning）</span>
+              <input v-model.number="form.expectedMilestones" type="number" min="1" max="8" class="mk-field__input mono" placeholder="例如：3" />
+            </div>
+            <div v-if="form.agentId === 'skill:stage-designer'" class="mk-field">
+              <span class="mk-field__label">期望子任务数（stage-designer）</span>
+              <input v-model.number="form.expectedSubtaskCount" type="number" min="1" max="8" class="mk-field__input mono" placeholder="例如：4" />
+            </div>
             <label class="mk-field">
               <span class="mk-field__label">期望包含字段（逗号分隔，可选）</span>
               <input v-model="form.mustInclude" class="mk-field__input mono" placeholder="例如：stage,real_problem,confirmedProposal" />
@@ -279,7 +300,9 @@ interface EvalCase {
   name: string
   description: string | null
   messages: Array<{ role: string; content: string }>
-  expectations: { mustIncludeFields?: string[]; mustNotInclude?: string[]; expectedStage?: string } | null
+  expectations: { mustIncludeFields?: string[]; mustNotInclude?: string[]; expectedStage?: string; expectedMilestones?: number; expectedSubtaskCount?: number } | null
+  previousState?: Record<string, unknown> | null
+  inputPayload?: Record<string, unknown> | null
   enabled: boolean
   createdAt: string
   updatedAt: string
@@ -302,8 +325,6 @@ const agents = [
   { id: 'skill:goal-conversation', label: 'goal-conversation' },
   { id: 'skill:path-planning', label: 'path-planning' },
   { id: 'skill:stage-designer', label: 'stage-designer' },
-  { id: 'skill:teaching-turn', label: 'teaching-turn' },
-  { id: 'skill:session-wrapup', label: 'session-wrapup' },
 ]
 const agentLabel = (id: string) => agents.find((a) => a.id === id)?.label || id
 
@@ -360,6 +381,8 @@ async function reloadCases() {
       description: (c.description as string) || null,
       messages: Array.isArray(c.messages) ? c.messages : [],
       expectations: (c.expectations as EvalCase['expectations']) || null,
+      previousState: (c.previousState as Record<string, unknown>) || null,
+      inputPayload: (c.inputPayload as Record<string, unknown>) || null,
       enabled: c.enabled !== false,
       createdAt: String(c.createdAt || ''),
       updatedAt: String(c.updatedAt || ''),
@@ -421,12 +444,38 @@ const form = ref({
   name: '',
   description: '',
   messages: [{ role: 'user' as 'user' | 'assistant', content: '' }],
+  inputPayloadText: '',
+  inputPayloadError: '',
+  expectedMilestones: null as number | null,
+  expectedSubtaskCount: null as number | null,
   mustInclude: '',
   mustNotInclude: '',
   expectedStage: '',
   enabled: true,
 })
 const errors = ref<{ name?: string; agentId?: string }>({})
+
+function isStructuredSkill(agentId: string): boolean {
+  return agentId === 'skill:path-planning' || agentId === 'skill:stage-designer'
+}
+
+function parseInputPayload() {
+  form.value.inputPayloadError = ''
+  const text = form.value.inputPayloadText.trim()
+  if (!text) return
+  try {
+    const parsed = JSON.parse(text)
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      form.value.inputPayloadError = '必须是 JSON 对象'
+      return
+    }
+    // 期望数量从输入里同步到独立字段（builder 里同时写 inputPayload + expectations）
+    if (parsed.expectedMilestones != null) form.value.expectedMilestones = Number(parsed.expectedMilestones)
+    if (parsed.expectedSubtaskCount != null) form.value.expectedSubtaskCount = Number(parsed.expectedSubtaskCount)
+  } catch (e: any) {
+    form.value.inputPayloadError = `JSON 解析失败：${e?.message || String(e)}`
+  }
+}
 
 function openCreate() {
   editingId.value = ''
@@ -436,6 +485,10 @@ function openCreate() {
     name: '',
     description: '',
     messages: [{ role: 'user', content: '' }],
+    inputPayloadText: '',
+    inputPayloadError: '',
+    expectedMilestones: null,
+    expectedSubtaskCount: null,
     mustInclude: '',
     mustNotInclude: '',
     expectedStage: '',
@@ -449,12 +502,23 @@ function openCreate() {
 function openEdit(c: EvalCase) {
   editingId.value = c.id
   const e = c.expectations || {}
+  // path/stage 结构化输入：从 previousState/inputPayload 回填（DB 用例的 previousStateJson 同时承载）
+  const structured = {
+    ...((c as any).previousState || {}),
+    ...((c as any).inputPayload || {}),
+  }
+  const structuredKeys = Object.keys(structured)
+  const inputPayloadText = structuredKeys.length ? JSON.stringify(structured, null, 2) : ''
   form.value = {
     agentId: c.agentId,
     caseId: c.caseId,
     name: c.name,
     description: c.description || '',
     messages: c.messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+    inputPayloadText,
+    inputPayloadError: '',
+    expectedMilestones: typeof e.expectedMilestones === 'number' ? e.expectedMilestones : null,
+    expectedSubtaskCount: typeof e.expectedSubtaskCount === 'number' ? e.expectedSubtaskCount : null,
     mustInclude: (e.mustIncludeFields || []).join(','),
     mustNotInclude: (e.mustNotInclude || []).join(','),
     expectedStage: e.expectedStage || '',
@@ -465,6 +529,17 @@ function openEdit(c: EvalCase) {
   formOpen.value = true
 }
 
+function buildInputPayload(): Record<string, unknown> | null {
+  const text = form.value.inputPayloadText.trim()
+  if (!text) return null
+  try {
+    const parsed = JSON.parse(text)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
 function buildPayload(): CreateEvalCasePayload {
   const expectations: Record<string, unknown> = {}
   const mustInclude = form.value.mustInclude.split(',').map((s) => s.trim()).filter(Boolean)
@@ -472,12 +547,17 @@ function buildPayload(): CreateEvalCasePayload {
   if (mustInclude.length) expectations.mustIncludeFields = mustInclude
   if (mustNotInclude.length) expectations.mustNotInclude = mustNotInclude
   if (form.value.expectedStage.trim()) expectations.expectedStage = form.value.expectedStage.trim()
+  if (form.value.expectedMilestones != null) expectations.expectedMilestones = form.value.expectedMilestones
+  if (form.value.expectedSubtaskCount != null) expectations.expectedSubtaskCount = form.value.expectedSubtaskCount
+  const inputPayload = buildInputPayload()
   return {
     agentId: form.value.agentId,
     caseId: form.value.caseId.trim() || undefined,
     name: form.value.name.trim(),
     description: form.value.description.trim() || undefined,
     messages: form.value.messages.filter((m) => m.content.trim()).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content.trim() })),
+    // path/stage：结构化输入透传（后端合并进 previousStateJson）
+    ...(inputPayload ? { inputPayload } : {}),
     expectations: Object.keys(expectations).length ? (expectations as CreateEvalCasePayload['expectations']) : undefined,
     enabled: form.value.enabled,
   }
@@ -538,13 +618,50 @@ async function toggleEnabled(c: EvalCase) {
   }
 }
 
+/** 批量跑评估：对当前 agentFilter 下所有启用用例跑（走 DB caseIds） */
+const canRunBatch = computed(() => cases.value.some((c) => c.enabled))
+async function runBatch() {
+  if (!canRunBatch.value) { toast.info('请先创建并启用至少一个用例'); return }
+  const target = agentFilter.value || ''
+  const targetCases = cases.value.filter((c) => c.enabled && (!target || c.agentId === target))
+  if (!targetCases.length) { toast.info('当前筛选下没有启用的用例'); return }
+  const busy = toast.info(`正在批量评估 ${targetCases.length} 个用例…`, 0)
+  try {
+    const res = await adminPromptOpsApi.runEval({
+      agentId: targetCases[0].agentId,
+      caseIds: targetCases.map((c) => c.caseId),
+      repeatCount: 1,
+    })
+    const data = res.data?.data ?? res.data
+    const summary = data?.summary || {}
+    toast.close(busy)
+    toast.success(`批量完成：${summary.passedCount ?? 0}/${summary.totalRuns ?? 0} 通过（${summary.passRate ?? 0}%）`)
+    void reloadRuns()
+  } catch (e) {
+    toast.close(busy)
+    toast.error(`批量评估失败：${errMsg(e)}`)
+  }
+}
+
 /** 单条试跑：直接跑一个用例（不回写历史） */
 async function runSingle(c: EvalCase) {
   const busy = toast.info(`正在试跑「${c.name}」…`, 0)
   try {
+    const structured = {
+      ...((c as any).previousState || {}),
+      ...((c as any).inputPayload || {}),
+    }
+    const inputPayload = Object.keys(structured).length ? structured : undefined
     const res = await adminPromptOpsApi.runEval({
       agentId: c.agentId,
-      adhocCases: [{ id: c.caseId, name: c.name, messages: c.messages, expectations: c.expectations || undefined }],
+      adhocCases: [{
+        id: c.caseId,
+        name: c.name,
+        messages: c.messages,
+        previousState: (c as any).previousState || undefined,
+        ...(inputPayload ? { inputPayload } : {}),
+        expectations: c.expectations || undefined,
+      }],
       repeatCount: 1,
     })
     const data = res.data?.data ?? res.data

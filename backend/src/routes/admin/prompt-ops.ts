@@ -623,8 +623,9 @@ router.post('/eval-cases', async (req: Request, res: Response) => {
         name,
         description: body.description ? String(body.description) : null,
         messagesJson: JSON.stringify(messages),
-        previousStateJson: body.previousState
-          ? JSON.stringify(body.previousState)
+        // 结构化输入（path/stage 的 goal/milestone/cognitiveCore 等）合并进 previousStateJson 承载
+        previousStateJson: body.inputPayload || body.previousState
+          ? JSON.stringify({ ...(body.previousState || {}), ...(body.inputPayload || {}) })
           : null,
         expectationsJson: body.expectations
           ? JSON.stringify(body.expectations)
@@ -655,9 +656,10 @@ router.put('/eval-cases/:id', async (req: Request, res: Response) => {
     if (typeof body.name === 'string') data.name = body.name.trim();
     if (typeof body.description === 'string') data.description = body.description;
     if (Array.isArray(body.messages)) data.messagesJson = JSON.stringify(body.messages);
-    if (body.previousState !== undefined) {
-      data.previousStateJson = body.previousState
-        ? JSON.stringify(body.previousState)
+    if (body.previousState !== undefined || body.inputPayload !== undefined) {
+      const merged = { ...(body.previousState || {}), ...(body.inputPayload || {}) };
+      data.previousStateJson = Object.keys(merged).length
+        ? JSON.stringify(merged)
         : null;
     }
     if (body.expectations !== undefined) {
@@ -766,7 +768,8 @@ router.post('/run-eval', async (req: Request, res: Response) => {
         messages: safeParse(c.messagesJson, []),
         previousState: safeParse(c.previousStateJson, null),
         expectations: safeParse(c.expectationsJson, null),
-        inputPayload: null, // DB 用例暂不支持结构化输入（path 场景请用 adhocCases 传 inputPayload）
+        // DB 用例的结构化输入复用 previousStateJson 承载（path/stage 的 goal/milestone/cognitiveCore/expectedMilestones 等）
+        inputPayload: safeParse(c.previousStateJson, null),
       })),
       ...adhocCases.map((c: any, idx: number) => ({
         id: c.id || `adhoc-${idx + 1}`,
@@ -774,7 +777,7 @@ router.post('/run-eval', async (req: Request, res: Response) => {
         messages: Array.isArray(c.messages) ? c.messages : [],
         previousState: c.previousState || null,
         expectations: c.expectations || null,
-        inputPayload: c.inputPayload || null,
+        inputPayload: c.inputPayload || c.previousState || null,
         input: c.input || null,
       })),
     ].filter((c) => c.messages.length > 0);

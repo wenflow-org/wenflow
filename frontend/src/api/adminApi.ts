@@ -252,13 +252,19 @@ export const adminDashboardApi = {
 /**
  * 平台开关设置 API
  */
+export interface RegistrationSettings {
+  registrationEnabled: boolean;
+  registerIpQuotaEnabled?: boolean;
+  registerIpDailyQuota?: number;
+}
+
 export const adminPlatformSettingsApi = {
-  getRegistrationSetting: async () => {
+  getRegistrationSetting: async (): Promise<{ data: { data: RegistrationSettings } }> => {
     return adminAxios.get('/admin/settings/registration');
   },
 
-  updateRegistrationSetting: async (registrationEnabled: boolean) => {
-    return adminAxios.put('/admin/settings/registration', { registrationEnabled });
+  updateRegistrationSetting: async (data: Partial<RegistrationSettings>): Promise<{ data: { data: RegistrationSettings } }> => {
+    return adminAxios.put('/admin/settings/registration', data);
   },
 
   getReliabilitySettings: async () => {
@@ -1473,6 +1479,10 @@ export interface EvalCaseExpectations {
   mustIncludeFields?: string[];
   mustNotInclude?: string[];
   expectedStage?: string;
+  /** path-planning：期望里程碑数（同时作为 prompt 注入约束） */
+  expectedMilestones?: number;
+  /** stage-designer：期望子任务数（同时作为 prompt 注入约束） */
+  expectedSubtaskCount?: number;
   notes?: string;
 }
 
@@ -1483,6 +1493,8 @@ export interface CreateEvalCasePayload {
   description?: string;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
   previousState?: Record<string, unknown>;
+  /** path/stage 的结构化输入（milestone/cognitiveCore/expectedMilestones 等） */
+  inputPayload?: Record<string, unknown>;
   expectations?: EvalCaseExpectations;
   enabled?: boolean;
 }
@@ -1543,7 +1555,14 @@ export const adminPromptOpsApi = {
     model?: string;
     repeatCount?: number;
     caseIds?: string[];
-    adhocCases?: Array<{ id?: string; name?: string; messages: Array<{ role: string; content: string }>; previousState?: unknown; expectations?: unknown }>;
+    adhocCases?: Array<{
+      id?: string;
+      name?: string;
+      messages: Array<{ role: string; content: string }>;
+      previousState?: unknown;
+      inputPayload?: unknown;
+      expectations?: unknown;
+    }>;
   }) => {
     return adminAxios.post('/admin/prompt-ops/run-eval', payload);
   },
