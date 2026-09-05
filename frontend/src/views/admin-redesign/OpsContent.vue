@@ -1,13 +1,28 @@
 <template>
-  <div :class="embedded ? 'mk-page--fill oc-embedded' : 'mk-page'">
-    <!-- 独立场景形态：状态条（嵌入时由宿主页头承担，不重复渲染） -->
-    <div v-if="!embedded" class="mk-status">
+  <div :class="embedded ? 'mk-page--fill oc-embedded' : 'mk-page mk-page--fill'">
+    <!-- 学习路径页头（单行状态条：页面名 + 四态可点计数 + 里程碑/任务总量 + 刷新）
+         embedded（学习会话合并宿主）时由宿主状态条承载域计数，本组件不再渲染状态条 -->
+    <div v-if="!embedded" class="mk-status" :class="`mk-status--${dashTone}`">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">内容管理</strong>
+      <strong class="mk-status__title">学习路径</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">路径 {{ stats?.total ?? '—' }}</span>
-      <span class="mk-status__meta">里程碑 {{ stats?.totalMilestones ?? '—' }}</span>
-      <span class="mk-status__meta">任务 {{ stats?.totalTasks ?? '—' }}</span>
+      <button
+        type="button"
+        class="oc-count-link"
+        :class="{ 'oc-count-link--on': statusFilter === 'active' }"
+        title="点击筛选「学习中」路径"
+        @click="statusFilter = statusFilter === 'active' ? '' : 'active'"
+      >学习中 {{ byStatus('active') }}</button>
+      <button
+        type="button"
+        class="oc-count-link"
+        :class="{ 'oc-count-link--on': statusFilter === 'completed' }"
+        title="点击筛选「已完成」路径"
+        @click="statusFilter = statusFilter === 'completed' ? '' : 'completed'"
+      >已完成 {{ byStatus('completed') }}</button>
+      <span v-if="byStatus('failed') > 0" class="mk-status__meta mk-status__meta--warn" title="目标对话产出路径失败，需排查">生成失败 {{ byStatus('failed') }}</span>
+      <span v-if="byStatus('archived') > 0" class="mk-status__meta">已下线 {{ byStatus('archived') }}</span>
+      <span class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ stats?.total ?? '—' }} 条 · 里程碑 {{ stats?.totalMilestones ?? '—' }} · 任务 {{ stats?.totalTasks ?? '—' }}</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="loading" @click="reload">
           {{ loading ? '刷新中…' : '刷新' }}
@@ -15,81 +30,88 @@
       </span>
     </div>
 
-    <!-- 状态统计（MkKpi 统一形态；失败>0 红色警示） -->
-    <div class="oc-cards">
-      <MkKpi
-        v-for="c in statusCards"
-        :key="c.label"
-        :label="c.label"
-        :value="c.value"
-        :tone="c.tone"
-        :hint="c.hint"
-      />
-    </div>
-
-    <!-- 筛选 + 列表 -->
+    <!-- 筛选 + 列表（单行头部与教学会话/目标对话 tab 一致：pill 组 + 搜索 + 数据口径 + 列显隐） -->
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
-        <div class="oc-filter">
-          <input v-model="keyword" class="mk-filter__input" placeholder="搜索标题 / 描述 / 用户…" @keydown.enter="reload" />
-          <select v-model="statusFilter" class="mk-filter__select" @change="reload">
-            <option value="">全部状态</option>
-            <option value="active">学习中</option>
-            <option value="completed">已完成</option>
-            <option value="failed">生成失败</option>
-            <option value="archived">已下线</option>
-          </select>
-          <select v-model="subjectFilter" class="mk-filter__select" @change="reload">
-            <option value="">全部学科</option>
-            <option v-for="s in subjectOptions" :key="s" :value="s">{{ s }}</option>
-          </select>
-          <button type="button" class="mk-btn mk-btn--sm" @click="reload">查询</button>
+        <div class="mk-filter">
+          <div class="mk-pills">
+            <button
+              v-for="p in statusPills"
+              :key="p.id"
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': statusFilter === p.id }"
+              @click="statusFilter = statusFilter === p.id ? '' : p.id"
+            >
+              {{ p.label }}
+            </button>
+          </div>
+          <input
+            v-model="keyword"
+            class="mk-filter__input"
+            placeholder="搜索标题 / 用户 / ID"
+          />
         </div>
-        <label class="mk-field--switch oc-test">
-          <input v-model="includeTest" type="checkbox" @change="reload" />
-          <span class="mk-field__label" style="margin:0">含虚拟/测试</span>
-        </label>
+        <div class="mk-card__head-right">
+          <DataScopeToggle v-model="includeTest" />
+          <MkCols
+            :col-defs="colDefs"
+            storage-key="wf_paths_hidden_cols"
+            v-model:hidden="hiddenCols"
+          />
+          <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">
+            {{ rows.length }} / {{ total }} 条（{{ includeTest ? '含模拟' : '仅真实' }}）
+          </span>
+        </div>
       </div>
 
       <MockSkeletonTable v-if="loading && !rows.length" :cols="7" />
-      <div v-else-if="rows.length" class="mk-table-scroll oc-list">
-        <table class="mk-table">
+      <div v-else-if="failed" class="oc-error" role="alert">
+        <span>路径列表加载失败</span>
+        <button type="button" class="mk-link" @click="reload">重试</button>
+      </div>
+      <div v-else-if="filtered.length" class="mk-table-scroll oc-list">
+        <table class="mk-table mk-table--fixed">
           <thead>
             <tr>
               <th>路径</th>
-              <th>用户</th>
-              <th>学科</th>
-              <th>状态</th>
-              <th>进度</th>
-              <th class="mk-col--time-full">更新</th>
+              <th v-if="!hiddenCols.has('subject')" style="width:32%">主题</th>
+              <th v-if="!hiddenCols.has('user')" style="width:150px">用户</th>
+              <th v-if="!hiddenCols.has('status')" class="mk-col--badge">状态</th>
+              <th v-if="!hiddenCols.has('progress')" style="width:130px">进度</th>
+              <th v-if="!hiddenCols.has('updated')" class="mk-col--time-full">更新</th>
               <th class="mk-col--actions-wide">操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="p in rows" :key="p.id">
+            <tr v-for="p in paged" :key="p.id">
               <td>
                 <div class="mk-cell-main">
                   <strong class="mk-cell-text">{{ p.title }}</strong>
-                  <span class="mk-cell-sub" :title="p.id">{{ shortId(p.id, 10, 4) }} · {{ p.difficulty }} · {{ p.estimatedHours ? '~' + p.estimatedHours + 'h' : '—' }}</span>
+                  <span class="mk-cell-sub" :title="p.id">{{ shortId(p.id, 10, 4) }} · {{ difficultyText(p.difficulty) }}{{ p.estimatedHours ? ' · ~' + p.estimatedHours + 'h' : '' }}</span>
                 </div>
               </td>
-              <td>
+              <td v-if="!hiddenCols.has('subject')"><span class="oc-subject" :title="p.subject || ''">{{ p.subject || '—' }}</span></td>
+              <td v-if="!hiddenCols.has('user')">
                 <div class="mk-cell-main">
                   <strong>{{ p.user?.name || '—' }}</strong>
                   <span class="mk-cell-sub">{{ p.user?.email || '' }}</span>
                 </div>
+                <div class="oc-tags">
+                  <span v-if="p.user?.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
+                  <span v-else-if="p.isTestAccount" class="mk-badge mk-badge--sm mk-badge--warn" title="测试/审计账号">测试</span>
+                </div>
               </td>
-              <td><span class="mk-badge mk-badge--muted">{{ p.subject || '—' }}</span></td>
-              <td><span class="mk-badge" :class="statusBadge(p.status)">{{ statusText(p.status) }}</span></td>
-              <td>
+              <td v-if="!hiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(p.status)">{{ statusText(p.status) }}</span></td>
+              <td v-if="!hiddenCols.has('progress')">
                 <div class="oc-progress" :title="`${p.completedMilestones}/${p.totalMilestones} 里程碑`">
                   <span class="mk-minibar"><span class="mk-minibar__fill" :data-tone="progressTone(p)" :style="{ width: progressPct(p) + '%' }"></span></span>
                   <span class="oc-progress__num">{{ progressPct(p) }}%</span>
                 </div>
               </td>
-              <td :title="fmtDate(p.updatedAt)">{{ timeAgo(p.updatedAt) }}</td>
+              <td v-if="!hiddenCols.has('updated')" :title="fmtDate(p.updatedAt)">{{ timeAgo(p.updatedAt) }}</td>
               <td>
-                <div class="mk-actions">
+                <div class="mk-actions mk-actions--left">
                   <button type="button" class="mk-link" @click="openDetail(p)">详情</button>
                   <button v-if="p.status !== 'archived'" type="button" class="mk-link mk-link--danger" :disabled="p.busy" @click="archive(p)">下线</button>
                   <button v-else type="button" class="mk-link" :disabled="p.busy" @click="restore(p)">恢复</button>
@@ -106,24 +128,19 @@
           </tbody>
         </table>
       </div>
-      <div v-else-if="failed" class="mk-empty">
-        <span class="mk-empty__icon" aria-hidden="true">!</span>
-        <strong>内容加载失败</strong>
-        <button type="button" class="mk-empty__action" @click="reload">重试</button>
-      </div>
-      <div v-else class="mk-empty mk-empty--min">
-        <strong>没有学习路径</strong>
-        <span>用户的目标对话生成路径后，会出现在这里。</span>
+      <div v-else class="mk-empty">
+        <span v-if="!loading" class="mk-empty__icon" aria-hidden="true">◌</span>
+        <strong>{{ loading ? '加载中…' : (keyword || statusFilter ? '当前筛选无匹配' : '没有学习路径') }}</strong>
+        <span v-if="!loading">{{ keyword || statusFilter ? '放宽筛选条件试试。' : '用户的目标对话生成路径后，会出现在这里。' }}</span>
+        <button v-if="isFiltered && !loading" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
       </div>
 
       <Pagination
-        v-if="total > pageSize"
+        v-if="filtered.length > pageSize"
         v-model:page="page"
-        :total="total"
-        :page-size="pageSize"
-        :loading="loading"
-        show-total
-        @update:page="reload"
+        v-model:pageSize="pageSize"
+        :total="filtered.length"
+        :showTotal="true"
       />
     </div>
 
@@ -168,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { timeAgo, errMsg, shortId } from './live'
 import { intent } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
@@ -177,39 +194,77 @@ import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
-import MkKpi from './MkKpi.vue'
+import MkCols from './MkCols.vue'
+import DataScopeToggle from './DataScopeToggle.vue'
 import { statusText, statusBadge } from './opsShared'
 
-/** 嵌入模式：作为「目标对话」页内「学习路径」tab 渲染（隐藏页面壳与状态条，KPI/筛选/表格/抽屉保留）；
-    initialStatus：宿主深链预筛（如工作台「生成失败路径」→ 'failed'），挂载时应用。 */
+/** 嵌入模式：作为「目标对话」页内「学习路径」tab 渲染（隐藏页面壳与状态条，筛选/表格/抽屉保留）；
+    initialStatus：宿主深链预筛（如工作台「生成失败路径」→ 'failed'），挂载时应用。
+    count 事件：stats 加载完成后上报路径总数（宿主「路径 N」徽章） */
 const props = withDefaults(defineProps<{ embedded?: boolean; initialStatus?: string }>(), { embedded: false, initialStatus: '' })
+const emit = defineEmits<{ (e: 'count', total: number): void }>()
 
-type PathRow = LearningPathRow & { busy?: boolean }
+type PathRow = LearningPathRow & { busy?: boolean; isTestAccount?: boolean }
 
 const rows = ref<PathRow[]>([])
 const total = ref(0)
 const page = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(15)
 const loading = ref(false)
 const failed = ref(false)
 const keyword = ref('')
 const statusFilter = ref('')
-const subjectFilter = ref('')
 const includeTest = ref(false)
 const stats = ref<LearningContentStats | null>(null)
 
-const statusCards = computed(() => {
-  const s = stats.value?.byStatus || {}
-  const failedN = s.failed || 0
-  const items: Array<{ label: string; value: string; tone: '' | 'ok' | 'warn' | 'bad'; hint: string }> = [
-    { label: '学习中', value: String(s.active || 0), tone: (s.active || 0) > 0 ? 'ok' : '', hint: (s.active || 0) > 0 ? '进行中' : '' },
-    { label: '已完成', value: String(s.completed || 0), tone: '', hint: '' },
-    { label: '生成失败', value: String(failedN), tone: failedN > 0 ? 'bad' : '', hint: failedN > 0 ? '需关注' : '' },
-    { label: '已下线', value: String(s.archived || 0), tone: '', hint: '' },
-  ]
-  return items
+/* 状态 pill 组（与教学会话/目标对话头部同形态；点击可取消，取色全站语义） */
+const statusPills = [
+  { id: 'active', label: '学习中' },
+  { id: 'completed', label: '已完成' },
+  { id: 'failed', label: '生成失败' },
+  { id: 'archived', label: '已下线' }
+]
+
+/* 列显隐（与同页其他列表一致）：目标摘要/用户/状态/进度/更新 可隐藏，路径/操作固定 */
+const colDefs = [
+  { key: 'subject', label: '主题', title: '路径主题（学科或目标）' },
+  { key: 'user', label: '用户', title: '所属用户' },
+  { key: 'status', label: '状态', title: '路径状态' },
+  { key: 'progress', label: '进度', title: '里程碑完成进度' },
+  { key: 'updated', label: '更新时间', title: '最近更新' }
+] as const
+const hiddenCols = ref<Set<string>>(new Set())
+
+/* 状态条四态计数 + 基调（与目标对话/教学会话同形态：失败>0 警示琥珀，空库静默） */
+const byStatus = (s: string) => stats.value?.byStatus?.[s] || 0
+const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
+  if (!stats.value || stats.value.total === 0) return 'muted'
+  if ((stats.value.byStatus?.failed || 0) > 0) return 'warn'
+  return 'ok'
 })
-const subjectOptions = computed(() => (stats.value?.bySubject || []).map((s) => s.subject))
+
+/* 客户端过滤（与教学会话/目标对话 tab 一致：全量拉最近 100 条后本地即时过滤，无「查询」按钮） */
+const filtered = computed(() => {
+  const k = keyword.value.trim().toLowerCase()
+  return rows.value.filter((p) => {
+    if (statusFilter.value && p.status !== statusFilter.value) return false
+    if (!k) return true
+    return `${p.title} ${p.user?.name || ''} ${p.user?.email || ''} ${p.subject || ''}`.toLowerCase().includes(k)
+  })
+})
+const isFiltered = computed(() => !!keyword.value.trim() || !!statusFilter.value)
+function clearFilters() {
+  keyword.value = ''
+  statusFilter.value = ''
+}
+watch(filtered, () => {
+  page.value = 1
+})
+
+const paged = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filtered.value.slice(start, start + pageSize.value)
+})
 
 const progressPct = (p: PathRow) => {
   if (!p.totalMilestones) return 0
@@ -219,6 +274,8 @@ const progressTone = (p: PathRow) => {
   const pct = progressPct(p)
   return pct >= 100 ? 'ok' : p.status === 'failed' ? 'bad' : 'warn'
 }
+const difficultyText = (d: string) =>
+  ({ beginner: '入门', intermediate: '进阶', advanced: '高阶' }[d] || d || '—')
 
 function fmtDate(iso?: string | null): string {
   if (!iso) return '—'
@@ -231,12 +288,10 @@ async function reload() {
   loading.value = true
   failed.value = false
   try {
+    /* 全量拉最近 100 条后客户端过滤（与教学会话/目标对话一致；筛选即时响应，无服务端往返） */
     const res = await adminLearningContentApi.listPaths({
-      page: page.value,
-      limit: pageSize.value,
-      status: statusFilter.value || undefined,
-      subject: subjectFilter.value || undefined,
-      keyword: keyword.value.trim() || undefined,
+      page: 1,
+      limit: 100,
       includeTest: includeTest.value || undefined,
     })
     const body = res.data?.data ?? res.data ?? {}
@@ -254,6 +309,8 @@ async function loadStats() {
   try {
     const res = await adminLearningContentApi.getStats()
     stats.value = res.data?.data ?? res.data
+    /* 宿主域计数徽章（embedded 才消费） */
+    emit('count', Number(stats.value?.total || 0))
   } catch {
     stats.value = null
   }
@@ -364,19 +421,57 @@ onMounted(() => {
   void reload()
   void loadStats()
 })
+/* 数据隔离切换：仅真实 ↔ 含虚拟/测试（切换后立即按新口径重拉） */
+watch(includeTest, () => {
+  void reload()
+})
+
+/* 宿主刷新联动（学习会话合并宿主「刷新」按钮 → reload） */
+defineExpose({ reload })
 </script>
 
 <style scoped>
-.oc-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
-/* 嵌入模式（目标对话页「学习路径」tab）：fill 容器内占满，KPI 卡行 + 主卡片弹性 */
+/* 页头计数锚点（与教学会话 ts-count-link / 目标对话 gc-count-link 同形态）：学习中/已完成可点击筛选 */
+.oc-count-link {
+  border: 0; background: transparent; padding: 2px 6px;
+  font: inherit; font-size: var(--mk-fs-12_5); font-weight: 700;
+  color: var(--mk-muted); cursor: pointer; border-radius: 6px;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.oc-count-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); }
+.oc-count-link--on { color: var(--mk-blue); background: rgba(44, 99, 208, 0.12); }
+/* 嵌入模式（目标对话页「学习路径」tab）：fill 容器内占满，主卡片弹性 */
 .oc-embedded { flex: 1; min-height: 0; overflow: hidden; }
-.oc-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.oc-filter .mk-filter__input { min-width: 220px; }
-.oc-test { margin-left: auto; }
-.oc-list { flex: 1; min-height: 0; overflow-y: auto; }
+.oc-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--mk-red-bg, #fef2f2);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  color: var(--mk-red, #dc2626);
+  font-size: var(--mk-fs-13);
+  font-weight: 600;
+  margin: 10px 14px;
+}
 .oc-progress { display: flex; align-items: center; gap: 8px; min-width: 120px; }
 .oc-progress .mk-minibar { flex: 1; }
 .oc-progress__num { font-family: var(--mk-mono); font-size: var(--mk-fs-12); color: var(--mk-muted); }
+/* 虚拟/测试行内标记（对齐同页 conversations/teaching 行样式） */
+.oc-tags { display: flex; gap: 4px; margin-top: 2px; }
+/* 主题列：subject 字段或为学科或为生成路径时写入的目标文本（可能很长），单行省略 + hover 全文 */
+.oc-subject {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  font-size: var(--mk-fs-12_5);
+  color: var(--mk-muted);
+}
 
 .oc-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 40px 0; color: var(--mk-muted); font-size: var(--mk-fs-13); }
 .oc-desc { color: var(--mk-muted); font-size: var(--mk-fs-12_5); margin: 0 0 12px; }
@@ -420,4 +515,7 @@ onMounted(() => {
   .oc-milestone__meta { font-size: 17px; }
   .oc-subtask { font-size: 18.5px; }
 }
+
+/* 暗色模式：补齐暗色覆写（原缺失，与全站 Token 红覆盖对齐） */
+html[data-theme='dark'] .oc-error { border-color: rgba(248, 113, 113, 0.35); }
 </style>
