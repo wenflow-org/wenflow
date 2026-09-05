@@ -654,21 +654,37 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
     requireActivePrompt: true,
     caller: { agentId: 'path-agent', skillId: 'path-planning' },
         buildUserPayload: () => userPayload,
-    normalizeOutput: (pathData) => ({
-      id: `path_${Date.now()}`,
-      name: pathData.name,
-      summary: typeof pathData.summary === 'string' ? pathData.summary : undefined,
-      subject: analysis.subject,
-      totalMilestones: pathData.totalMilestones,
-      estimatedHours: pathData.estimatedHours,
-      cognitiveCore: pathData.cognitiveCore || pathData.cognitiveDesign,
-      cognitiveDesign: pathData.cognitiveDesign || pathData.cognitiveCore,
-      milestones: pathData.milestones,
-      _debug: {
-        rawModelOutput: '',
-        extractedJson: '',
-      }
-    }),
+    normalizeOutput: (pathData) => {
+      // estimatedHours/estimatedWeeks 合法性钳制：非有限/负值/超合理上限 → 置 null（让下游 0 兜底）
+      const clampHours = (v: any): number | null => {
+        const n = Number(v);
+        if (!Number.isFinite(n) || n <= 0 || n > 10000) return null;
+        return Math.round(n);
+      };
+      const clampWeeks = (v: any): number | null => {
+        const n = Number(v);
+        if (!Number.isFinite(n) || n <= 0 || n > 104) return null;
+        return n;
+      };
+      const estimatedHours = clampHours(pathData.estimatedHours);
+      const estimatedWeeks = clampWeeks(pathData.estimatedWeeks);
+      return {
+        id: `path_${Date.now()}`,
+        name: pathData.name,
+        summary: typeof pathData.summary === 'string' ? pathData.summary : undefined,
+        subject: analysis.subject,
+        totalMilestones: pathData.totalMilestones,
+        estimatedHours,
+        estimatedWeeks,
+        cognitiveCore: pathData.cognitiveCore || pathData.cognitiveDesign,
+        cognitiveDesign: pathData.cognitiveDesign || pathData.cognitiveCore,
+        milestones: pathData.milestones,
+        _debug: {
+          rawModelOutput: '',
+          extractedJson: '',
+        }
+      };
+    },
     validateParsedOutput: (parsed) => validatePathPlanningOutput(parsed, expectedMilestones),
     mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
       contract: runtimeContract,
