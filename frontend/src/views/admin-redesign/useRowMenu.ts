@@ -29,6 +29,8 @@ export function useRowMenu() {
   let triggerEl: HTMLElement | null = null
   let lastClickTarget: EventTarget | null = null
   let popKeydown: ((e: KeyboardEvent) => void) | null = null
+  /** 菜单打开时刻：忽略打开后短时间内的 scroll（focus/渲染引发的滚动不应关菜单） */
+  let openedAt = 0
 
   /** 收集弹层内可聚焦项（跳过 disabled / 隐藏） */
   function getItems(el: HTMLElement): HTMLElement[] {
@@ -49,11 +51,12 @@ export function useRowMenu() {
     if (!popEl) return
     const items = getItems(popEl)
     if (items.length) {
-      items[0].focus()
+      // preventScroll：focus 引发的自动滚动会触发 document scroll 监听 → closeMenu 把菜单立即关掉
+      items[0].focus({ preventScroll: true })
       return
     }
     if (!popEl.hasAttribute('tabindex')) popEl.tabIndex = -1
-    popEl.focus()
+    popEl.focus({ preventScroll: true })
   }
 
   /** 弹层内方向键/Home/End/Enter 导航（listener 绑定在弹层容器 keydown 上） */
@@ -125,6 +128,7 @@ export function useRowMenu() {
     }
     openMenu.value = id
     menuOpen.value = true
+    openedAt = Date.now()
     triggerEl =
       lastClickTarget instanceof Element
         ? (lastClickTarget.closest<HTMLElement>('.mk-menu__btn') ?? (lastClickTarget as HTMLElement))
@@ -156,19 +160,25 @@ export function useRowMenu() {
   function onDocKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape' && openMenu.value) closeMenu()
   }
+  function onDocScroll() {
+    if (!openMenu.value) return
+    // 菜单打开后 200ms 内的滚动（焦点自动滚动/渲染抖动）不关闭菜单
+    if (Date.now() - openedAt < 200) return
+    closeMenu()
+  }
 
   onMounted(() => {
     document.addEventListener('click', closeMenu)
     document.addEventListener('click', onDocClickCapture, true)
     document.addEventListener('keydown', onDocKeydown)
-    document.addEventListener('scroll', closeMenu, true)
+    document.addEventListener('scroll', onDocScroll, true)
     window.addEventListener('resize', closeMenu)
   })
   onBeforeUnmount(() => {
     document.removeEventListener('click', closeMenu)
     document.removeEventListener('click', onDocClickCapture, true)
     document.removeEventListener('keydown', onDocKeydown)
-    document.removeEventListener('scroll', closeMenu, true)
+    document.removeEventListener('scroll', onDocScroll, true)
     window.removeEventListener('resize', closeMenu)
   })
 
