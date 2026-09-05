@@ -634,14 +634,13 @@ async function loadVirtualLearners() {
   virtualLearnersLoading.value = true
   try {
     const res = await adminVirtualLearnersApi.getVirtualLearners({ limit: 100 })
-    const list: any[] = res?.data?.data || res?.data || []
-    const vs = (Array.isArray(list) ? list : (Array.isArray((list as any).list) ? (list as any).list : []))
-    virtualLearners.value = vs.map((v: any) => ({
-      id: v.id,
-      label: [v.userName, v.name, v.profileData?.nameHint || v.displayName].find(Boolean)
-        ? `${[v.userName, v.name, v.profileData?.nameHint || v.displayName].filter(Boolean).join(' · ')}`
-        : v.id.slice(0, 8),
-    })).filter((v: any) => v.id)
+    const payload: any = res?.data?.data || res?.data || {}
+    const profiles = Array.isArray(payload) ? payload : (Array.isArray(payload.profiles) ? payload.profiles : [])
+    virtualLearners.value = profiles.map((v: any) => {
+      const nameHint = v?.profile?.nameHint || v?.nameHint || ''
+      const label = [v?.userName, nameHint].filter(Boolean).join(' · ')
+      return { id: v?.id, label: label || String(v?.id || '').slice(0, 8) }
+    }).filter((v: any) => v.id)
   } catch (e) {
     // 虚拟学习者列表加载失败不阻断表单（模拟模式为可选能力）
     console.warn('加载虚拟学习者失败', e)

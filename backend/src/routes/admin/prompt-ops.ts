@@ -752,7 +752,13 @@ router.post('/run-eval', async (req: Request, res: Response) => {
     const promptConfig = await resolvePrompt(canonicalAgentId, body);
 
     // 解析用例
-    const dbCases = Array.isArray(body.caseIds) && body.caseIds.length
+    // 语义：
+    //  - 显式 caseIds        → 只跑指定 DB 用例
+    //  - adhocCases 且无 caseIds → 只跑 adhoc（单条试跑）
+    //  - 都没有             → 全部 enabled DB 用例（批量评估）
+    const hasExplicitCaseFilter = Array.isArray(body.caseIds) && body.caseIds.length > 0;
+    const hasAdhocOnly = !hasExplicitCaseFilter && Array.isArray(body.adhocCases) && body.adhocCases.length > 0;
+    const dbCases = hasExplicitCaseFilter
       ? await systemPrisma.prompt_eval_cases.findMany({
           where: {
             agentId: canonicalAgentId,
@@ -760,9 +766,11 @@ router.post('/run-eval', async (req: Request, res: Response) => {
             enabled: true,
           },
         })
-      : await systemPrisma.prompt_eval_cases.findMany({
-          where: { agentId: canonicalAgentId, enabled: true },
-        });
+      : hasAdhocOnly
+        ? []
+        : await systemPrisma.prompt_eval_cases.findMany({
+            where: { agentId: canonicalAgentId, enabled: true },
+          });
 
     const adhocCases = Array.isArray(body.adhocCases) ? body.adhocCases : [];
 
