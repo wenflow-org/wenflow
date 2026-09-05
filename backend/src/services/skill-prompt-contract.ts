@@ -146,8 +146,6 @@ function normalizeArchetype(value: string | undefined): Archetype {
 
 function inferArtifactKind(skillId: string, archetype: Archetype): SkillPromptArtifactKind {
   if (archetype === 'code-only') return 'code';
-  if (skillId === 'prompt-compiler') return 'compilation';
-  if (skillId === 'path-scene-framing') return 'normalization';
   if (archetype === 'conversational') return 'conversation';
   if (archetype === 'extractor') return 'extraction';
   if (archetype === 'distiller') return 'distillation';
@@ -163,7 +161,6 @@ function inferInteractionMode(archetype: Archetype): SkillPromptInteractionMode 
 
 function inferInputTransport(skillId: string, archetype: Archetype): SkillPromptInputTransport {
   if (archetype === 'code-only') return 'none';
-  if (skillId === 'prompt-compiler') return 'yaml';
   if (['path-planning', 'peer-reinforcement', 'session-wrapup'].includes(skillId)) {
     return 'tagged-text';
   }
@@ -172,16 +169,15 @@ function inferInputTransport(skillId: string, archetype: Archetype): SkillPrompt
 
 function inferOutputMedia(skillId: string, archetype: Archetype): SkillPromptOutputMedia {
   if (archetype === 'code-only') return 'none';
-  if (skillId === 'prompt-compiler') return 'markdown';
   return 'json';
 }
 
 function inferFailurePolicy(skillId: string, archetype: Archetype): SkillPromptFailurePolicy {
   if (archetype === 'code-only') return 'none';
-  if (['goal-conversation', 'path-planning', 'path-scene-framing', 'stage-designer', 'learning-turn', 'prompt-compiler'].includes(skillId)) {
+  if (['goal-conversation', 'path-planning', 'stage-designer', 'teaching-turn'].includes(skillId)) {
     return 'retry';
   }
-  if (['adaptive-guidance-copy', 'goal-profile-inference', 'learning-pattern-distiller', 'lesson-knowledge-enricher', 'session-wrapup', 'peer-reinforcement'].includes(skillId)) {
+  if (['adaptive-guidance-copy', 'lesson-knowledge-enricher', 'session-wrapup', 'peer-reinforcement'].includes(skillId)) {
     return 'deterministic-fallback';
   }
   if (archetype === 'extractor' || archetype === 'distiller' || archetype === 'copywriter') {
@@ -208,9 +204,7 @@ export function buildDefaultSkillPromptContract(identity: SkillPromptContractIde
       media: outputMedia,
       schemaSource: executionMode === 'code-only'
         ? 'none'
-        : skillId === 'prompt-compiler'
-          ? 'external-spec'
-          : 'runtime-validator',
+        : 'runtime-validator',
       envelope: executionMode === 'code-only'
         ? 'none'
         : identity.runtimeContract?.outputEnvelope || 'adapter',

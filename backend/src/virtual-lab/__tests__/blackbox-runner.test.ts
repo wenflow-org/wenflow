@@ -90,7 +90,7 @@ function sessionWith(control: Record<string, unknown>, privateState: Record<stri
     learningPathId: 'p1',
     currentTaskId: control.taskId || null,
     status: 'running',
-    currentStage: 'learning',
+    currentStage: 'teaching',
     stageResults: JSON.stringify(state)
   }
 }
@@ -159,12 +159,12 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const state = JSON.parse(session.stageResults)
     state.blackbox.publicTrace = [{
       timestamp: '2026-07-14T10:01:00.000Z',
-      observation: { stage: 'learning', visibleMessages: [], availableActions: ['chat'] },
+      observation: { stage: 'teaching', visibleMessages: [], availableActions: ['chat'] },
       control: { teachingSessionId: 'teach-1', taskId: 'task-1' }
     }]
     state.blackbox.learnerPrivateStateTrace = [{
       sequence: 1,
-      stage: 'learning',
+      stage: 'teaching',
       taskId: 'task-1',
       emotion: 'confused',
       degraded: true,
@@ -205,7 +205,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     expect(learningStateService.getSessionStateTimeline).toHaveBeenCalledWith('u1', ['teach-1'])
     expect(snapshot.stateTimeline.actor.entries[0]).toEqual(expect.objectContaining({
       sequence: 1,
-      stage: 'learning',
+      stage: 'teaching',
       emotion: 'confused',
       degraded: true,
       metrics: expect.objectContaining({ cognitiveLoad: 72, confidence: 35, satisfaction: 40 }),
@@ -273,7 +273,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     expect(state.experiment.runId).toMatch(/^run_/)
     expect(state.experimentSnapshot).toEqual(expect.objectContaining({
       routingUserId: 'admin1',
-      simulatorPrompts: { goal: 'frozen goal', learning: 'frozen learn' }
+      simulatorPrompts: { goal: 'frozen goal', teaching: 'frozen learn' }
     }))
     expect(state.experimentSnapshot.simulators.goal).toEqual(expect.objectContaining({
       promptVersion: 7,
@@ -284,7 +284,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
         model: 'virtual-learner-goal-dialogue-simulator-model'
       })
     }))
-    expect(state.experimentSnapshot.simulators.learning).toEqual(expect.objectContaining({
+    expect(state.experimentSnapshot.simulators.teaching).toEqual(expect.objectContaining({
       promptVersion: 8,
       temperature: 0.35,
       maxTokens: 800
@@ -336,13 +336,13 @@ describe('BlackboxVirtualLearnerRunner', () => {
       actorProfile: { learningGoal: '旧目标' },
       story: null,
       frictionBudget: 'stress_test',
-      simulatorPrompts: { goal: 'old goal', learning: 'old learn' },
+      simulatorPrompts: { goal: 'old goal', teaching: 'old learn' },
       simulators: {
         goal: {
           temperature: 0.1, maxTokens: 111,
           route: { providerId: 'provider-old', credentialFingerprint: 'hash-old', endpoint: 'https://old.example/v1', model: 'model-old' }
         },
-        learning: {
+        teaching: {
           temperature: 0.2, maxTokens: 222,
           route: { providerId: 'provider-old', credentialFingerprint: 'hash-old', endpoint: 'https://old.example/v1', model: 'model-old' }
         }
@@ -570,15 +570,12 @@ describe('BlackboxVirtualLearnerRunner', () => {
       commandId: 'newer-command'
     }, newerWork)).rejects.toMatchObject({ code: 'BLACKBOX_RECONCILIATION_PENDING' })
     expect(newerWork).not.toHaveBeenCalled()
-
-    await expect(runner.runCommand(options, work)).rejects.toMatchObject({
-      code: 'BLACKBOX_RECONCILIATION_PENDING', retryable: true
-    })
-    expect(command.resultJson).toBe(firstReceipt)
     expect(command).toEqual(expect.objectContaining({ status: 'failed' }))
     expect(JSON.parse(command.errorJson)).toEqual(expect.objectContaining({
       code: 'BLACKBOX_RECONCILIATION_PENDING'
     }))
+
+    // 自动对账已消耗一次失败的持久化尝试；同 key 重试直接对账成功
     const reconciled = await runner.runCommand(options, work)
 
     expect(reconciled).toEqual({
@@ -929,12 +926,12 @@ describe('BlackboxVirtualLearnerRunner', () => {
     }
     const teachingResult = {
       observation: {
-        stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '第一个任务' },
+        stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '第一个任务' },
         availableActions: ['chat', 'abandon']
       },
       control: {
         learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1',
-        teachingRevision: 1, platformStage: 'learning'
+        teachingRevision: 1, platformStage: 'teaching'
       }
     }
     const adapter = {
@@ -980,7 +977,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     expect(adapter.startTeaching).toHaveBeenCalledTimes(1)
     expect(response.result).toEqual({
       action: { type: 'start_learning', taskId: 't1' }, result: expect.objectContaining({
-        observation: expect.objectContaining({ stage: 'learning' })
+        observation: expect.objectContaining({ stage: 'teaching' })
       })
     })
     const projectedCommandIds = JSON.parse(currentSession.stageResults).blackbox.projectedCommandIds
@@ -1076,12 +1073,12 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith(
       { conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 7 },
-      { learning: { phaseFocus: 'trying' } }
+      { teaching: { phaseFocus: 'trying' } }
     )
     const initialState = JSON.parse(session.stageResults)
     initialState.blackbox.learnerPrivateStateTrace = [{
       sequence: 1,
-      stage: 'learning',
+      stage: 'teaching',
       taskId: 't1',
       state: { phaseFocus: 'trying' },
       emotion: 'confused',
@@ -1091,7 +1088,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     }]
     session.stageResults = JSON.stringify(initialState)
     addObservation(session, {
-      stage: 'learning',
+      stage: 'teaching',
       visibleMessages: [],
       visibleTask: { id: 't1', title: '第一个任务' },
       availableActions: ['chat', 'confirm_complete', 'abandon']
@@ -1138,7 +1135,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const update = updates.at(-1)![0]
     const persisted = JSON.parse(update.data.stageResults)
     expect(update.data).toEqual(expect.objectContaining({ currentTaskId: 't2', status: 'running' }))
-    expect(persisted.blackbox.learnerPrivateState.learning).toBeUndefined()
+    expect(persisted.blackbox.learnerPrivateState.teaching).toBeUndefined()
     expect(persisted.blackbox.learnerPrivateStateTrace.at(-1)).toEqual(expect.objectContaining({
       taskId: 't1',
       transition: 'task_completed',
@@ -1164,10 +1161,10 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith(
       { conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 7 },
-      { learning: { phaseFocus: 'trying' } }
+      { teaching: { phaseFocus: 'trying' } }
     )
     addObservation(session, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['chat', 'abandon']
     })
     const adapter = {
@@ -1216,10 +1213,10 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith(
       { conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 7 },
-      { learning: { phaseFocus: 'trying' } }
+      { teaching: { phaseFocus: 'trying' } }
     )
     addObservation(session, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['confirm_complete', 'abandon']
     })
     const adapter = {
@@ -1237,7 +1234,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
 
     const result = await runner.act('vs1', 'admin1', { type: 'confirm_complete' })
 
-    expect(result.observation.stage).toBe('learning')
+    expect(result.observation.stage).toBe('teaching')
     expect(result.observation.availableActions).toContain('confirm_complete')
     expect(result.observation.lastActionResult).toEqual(expect.objectContaining({ status: 'error' }))
     expect(result.observation.lastActionResult?.visibleMessage).toContain('请重试完成任务')
@@ -1245,24 +1242,24 @@ describe('BlackboxVirtualLearnerRunner', () => {
     expect(adapter.getPath).not.toHaveBeenCalled()
     const persisted = JSON.parse(currentSession().stageResults)
     expect(currentSession()).toEqual(expect.objectContaining({
-      status: 'running', currentStage: 'learning', completedAt: null
+      status: 'running', currentStage: 'teaching', completedAt: null
     }))
     expect(persisted.blackbox.control.terminalReason).toBeUndefined()
     expect(persisted.blackbox.control.taskCompletionCheckpoint).toEqual(expect.objectContaining({
       taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 8,
       status: 'teaching_finalized', lastError: '任务服务暂时不可用'
     }))
-    expect(persisted.blackbox.learnerPrivateState.learning).toEqual({ phaseFocus: 'trying' })
+    expect(persisted.blackbox.learnerPrivateState.teaching).toEqual({ phaseFocus: 'trying' })
   })
 
   it('endTeaching 后检查点写失败时停止且不调用 completeTask', async () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     let currentSession = sessionWith(
       { conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 7 },
-      { learning: { phaseFocus: 'trying' } }
+      { teaching: { phaseFocus: 'trying' } }
     )
     addObservation(currentSession, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['confirm_complete', 'abandon']
     })
     const adapter = {
@@ -1301,10 +1298,10 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     let currentSession = sessionWith(
       { conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 7 },
-      { learning: { phaseFocus: 'trying' } }
+      { teaching: { phaseFocus: 'trying' } }
     )
     addObservation(currentSession, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['confirm_complete', 'abandon']
     })
     const adapter = {
@@ -1355,7 +1352,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
       teachingSessionId: 'teach1', teachingRevision: 7
     })
     addObservation(currentSession, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['confirm_complete', 'abandon']
     })
     const adapter = {
@@ -1436,10 +1433,10 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith(
       { conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 7 },
-      { learning: { phaseFocus: 'trying' } }
+      { teaching: { phaseFocus: 'trying' } }
     )
     addObservation(session, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['confirm_complete', 'abandon']
     })
     const adapter = {
@@ -1484,10 +1481,10 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith(
       { conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 7 },
-      { learning: { phaseFocus: 'trying' } }
+      { teaching: { phaseFocus: 'trying' } }
     )
     addObservation(session, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['confirm_complete', 'abandon']
     })
     const adapter = {
@@ -1514,7 +1511,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const pending = await runner.act('vs1', 'admin1', { type: 'confirm_complete' })
     const resumed = await runner.act('vs1', 'admin1', { type: 'confirm_complete' })
 
-    expect(pending.observation.stage).toBe('learning')
+    expect(pending.observation.stage).toBe('teaching')
     expect(pending.control).toEqual(expect.objectContaining({
       taskCompleted: true,
       platformStage: 'path-refresh-pending',
@@ -1538,7 +1535,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
       teachingRevision: 8, taskCompletionCheckpoint: checkpoint
     })
     addObservation(session, {
-      stage: 'learning', visibleMessages: [{ role: 'platform', content: '请重试完成任务' }],
+      stage: 'teaching', visibleMessages: [{ role: 'platform', content: '请重试完成任务' }],
       visibleTask: { id: 't1', title: '任务' }, availableActions: ['confirm_complete', 'abandon']
     })
     const state = JSON.parse(session.stageResults)
@@ -1574,12 +1571,12 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const adapter = {
       startTeaching: jest.fn().mockResolvedValue({
         observation: {
-          stage: 'learning', visibleMessages: [], visibleTask: { id: 't2', title: '下一任务' },
+          stage: 'teaching', visibleMessages: [], visibleTask: { id: 't2', title: '下一任务' },
           availableActions: ['chat', 'abandon']
         },
         control: {
           learningPathId: 'p1', taskId: 't2', teachingSessionId: 'teach2',
-          teachingRevision: 1, platformStage: 'learning'
+          teachingRevision: 1, platformStage: 'teaching'
         }
       })
     }
@@ -1602,7 +1599,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
       teachingRevision: 9
     })
     addObservation(session, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' }, availableActions: ['chat', 'abandon']
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' }, availableActions: ['chat', 'abandon']
     })
     const adapter = {
       endTeaching: jest.fn().mockResolvedValue({
@@ -1632,7 +1629,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith({ conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1' })
     addObservation(session, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' }, availableActions: ['chat', 'abandon']
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' }, availableActions: ['chat', 'abandon']
     })
     const adapter = {
       endTeaching: jest.fn(),
@@ -1708,16 +1705,16 @@ describe('BlackboxVirtualLearnerRunner', () => {
       teachingSessionId: 'teach1', teachingRevision: 7
     })
     addObservation(currentSession, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['chat', 'abandon']
     })
     const adapter = {
       sendTeachingMessage: jest.fn().mockResolvedValue({
         observation: {
-          stage: 'learning', visibleMessages: [{ role: 'platform', content: '继续' }],
+          stage: 'teaching', visibleMessages: [{ role: 'platform', content: '继续' }],
           availableActions: ['chat', 'abandon']
         },
-        control: { teachingSessionId: 'teach1', teachingRevision: 8, platformStage: 'learning' }
+        control: { teachingSessionId: 'teach1', teachingRevision: 8, platformStage: 'teaching' }
       })
     }
     runner.getSession = jest.fn(async () => currentSession)
@@ -1734,7 +1731,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
 
     expect(adapter.sendTeachingMessage).toHaveBeenCalledTimes(1)
     expect(prisma.virtual_sessions.update).toHaveBeenCalledTimes(1)
-    expect(currentSession).toEqual(expect.objectContaining({ status: 'running', currentStage: 'learning' }))
+    expect(currentSession).toEqual(expect.objectContaining({ status: 'running', currentStage: 'teaching' }))
     expect(JSON.parse(currentSession.stageResults).blackbox.control.terminalReason).toBeUndefined()
   })
 
@@ -1745,7 +1742,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
       teachingSessionId: 'teach1', teachingRevision: 7
     })
     addObservation(currentSession, {
-      stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
+      stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '任务' },
       availableActions: ['confirm_complete', 'abandon']
     })
     const adapter = {
@@ -1905,7 +1902,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
       control: { learningPathId: 'p1', taskId: 't1' }
     })
     runner.act = jest.fn().mockResolvedValue({
-      observation: { stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '第一个任务' }, availableActions: ['chat'] },
+      observation: { stage: 'teaching', visibleMessages: [], visibleTask: { id: 't1', title: '第一个任务' }, availableActions: ['chat'] },
       control: { learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1' }
     })
     ;(prisma.virtual_learner_profiles.findUnique as jest.Mock).mockResolvedValue({
@@ -1916,7 +1913,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
 
     expect(runner.observe).toHaveBeenCalledWith('vs1', 'admin1')
     expect(runner.act).toHaveBeenCalledWith('vs1', 'admin1', { type: 'start_learning', taskId: 't1' })
-    expect(result.result.observation.stage).toBe('learning')
+    expect(result.result.observation.stage).toBe('teaching')
     expect(executeSkill).not.toHaveBeenCalled()
   })
 
@@ -1925,7 +1922,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     let currentSession: any = {
       ...sessionWith(
         { conversationId: 'g1', learningPathId: 'p1', taskId: null, runCompleted: true, terminalReason: 'completed' },
-        { learning: { phaseFocus: 'reflecting' } }
+        { teaching: { phaseFocus: 'reflecting' } }
       ),
       status: 'completed',
       currentStage: 'completed',
@@ -2003,7 +2000,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     let currentSession: any = {
       ...sessionWith(
         { conversationId: 'g1', runCompleted: true, terminalReason: 'completed' },
-        { goal: { trust: 0.5 }, learning: { phaseFocus: 'reflecting' } }
+        { goal: { trust: 0.5 }, teaching: { phaseFocus: 'reflecting' } }
       ),
       status: 'completed',
       currentStage: 'completed',
@@ -2102,5 +2099,413 @@ describe('BlackboxVirtualLearnerRunner', () => {
     expect(input.story.title).toBe('快照故事')
     expect(input.frictionBudget).toBe('high')
     expect(JSON.stringify(input)).not.toContain('后来修改')
+  })
+
+  it('自动对账失败时保持 barrier 语义：不同 key 仍返回 RECONCILIATION_PENDING', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const currentSession = sessionWith({})
+    const platformResult = {
+      observation: { stage: 'goal', visibleMessages: [], availableActions: ['chat'] },
+      control: { conversationId: 'goal-stuck' }
+    }
+    const adapter = { startGoal: jest.fn().mockResolvedValue(platformResult) }
+    runner.getSession = jest.fn(async () => currentSession)
+    runner.context = jest.fn(async () => ({
+      session: currentSession,
+      state: JSON.parse(currentSession.stageResults),
+      adapter
+    }))
+    let command: any = null
+    ;(prisma.virtual_sessions.update as jest.Mock).mockRejectedValue(new Error('final projection unavailable'))
+    ;(prisma.virtual_experiment_commands.findUnique as jest.Mock).mockImplementation(async ({ where }: any) =>
+      where.id ? command?.id === where.id ? command : null
+        : command?.commandId === where.runId_commandId.commandId ? command : null
+    )
+    ;(prisma.virtual_experiment_commands.findFirst as jest.Mock).mockResolvedValue(null)
+    ;(prisma.virtual_experiment_commands.findMany as jest.Mock).mockImplementation(async () =>
+      ['processing', 'failed'].includes(command?.status) ? [command] : []
+    )
+    ;(prisma.virtual_experiment_commands.create as jest.Mock).mockImplementation(async ({ data }: any) => {
+      command = { id: 'command-stuck', status: 'processing', ...data }
+      return command
+    })
+    ;(prisma.virtual_experiment_commands.update as jest.Mock).mockImplementation(async ({ data }: any) => {
+      command = { ...command, ...data }
+      return command
+    })
+    const options = {
+      sessionId: 'vs1', operatorId: 'admin1', commandId: 'stuck-command', kind: 'action' as const,
+      request: { type: 'chat', text: '开始' }, expectedTraceCount: 0
+    }
+    const work = jest.fn(() => runner.act('vs1', 'admin1', options.request))
+
+    await expect(runner.runCommand(options, work)).rejects.toMatchObject({
+      code: 'BLACKBOX_RECONCILIATION_PENDING', retryable: true
+    })
+    const newerWork = jest.fn()
+    await expect(runner.runCommand({ ...options, commandId: 'newer-command' }, newerWork))
+      .rejects.toMatchObject({ code: 'BLACKBOX_RECONCILIATION_PENDING' })
+    expect(newerWork).not.toHaveBeenCalled()
+    expect(command).toEqual(expect.objectContaining({
+      commandId: 'stuck-command', status: 'failed'
+    }))
+    expect(JSON.parse(command.errorJson)).toEqual(expect.objectContaining({
+      code: 'BLACKBOX_RECONCILIATION_PENDING'
+    }))
+    expect(adapter.startGoal).toHaveBeenCalledTimes(1)
+  })
+
+  it('不同 key 的新命令自动对账较早 barrier：只重放投影不重做平台副作用', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    let currentSession = sessionWith({})
+    const platformResult = {
+      observation: {
+        stage: 'goal', visibleMessages: [{ role: 'platform', content: '请说明目标' }],
+        availableActions: ['chat', 'abandon']
+      },
+      control: { conversationId: 'goal-1', platformStage: 'goal' }
+    }
+    const adapter = { startGoal: jest.fn().mockResolvedValue(platformResult) }
+    runner.getSession = jest.fn(async () => currentSession)
+    runner.context = jest.fn(async () => ({
+      session: currentSession,
+      state: JSON.parse(currentSession.stageResults),
+      adapter
+    }))
+    runner.getExperimentSnapshot = jest.fn().mockResolvedValue({
+      actorProfile: { learningGoal: '开始' },
+      story: { visibleOpening: '开始' },
+      frictionBudget: 'normal'
+    })
+    let projectionAttempts = 0
+    ;(prisma.virtual_sessions.update as jest.Mock).mockImplementation(async ({ data }: any) => {
+      projectionAttempts += 1
+      if (projectionAttempts <= 1) throw new Error('final projection unavailable')
+      currentSession = { ...currentSession, ...data }
+      return currentSession
+    })
+    let command: any = null
+    const work = jest.fn(() => runner.autoStep('vs1', 'admin1'))
+    const newerWork = jest.fn()
+    ;(prisma.virtual_experiment_commands.findUnique as jest.Mock).mockImplementation(async ({ where }: any) =>
+      where.id ? command?.id === where.id ? command : null
+        : command?.commandId === where.runId_commandId.commandId ? command : null
+    )
+    ;(prisma.virtual_experiment_commands.findFirst as jest.Mock).mockResolvedValue(null)
+    ;(prisma.virtual_experiment_commands.findMany as jest.Mock).mockImplementation(async () =>
+      ['processing', 'failed'].includes(command?.status) ? [command] : []
+    )
+    ;(prisma.virtual_experiment_commands.create as jest.Mock).mockImplementation(async ({ data }: any) => {
+      command = { id: 'command-reconcile', status: 'processing', ...data }
+      return command
+    })
+    ;(prisma.virtual_experiment_commands.update as jest.Mock).mockImplementation(async ({ data }: any) => {
+      command = { ...command, ...data }
+      return command
+    })
+    const options = {
+      sessionId: 'vs1', operatorId: 'admin1', commandId: 'reconcile-command',
+      kind: 'step' as const, request: {}, expectedTraceCount: 0
+    }
+
+    await expect(runner.runCommand(options, work)).rejects.toMatchObject({
+      code: 'BLACKBOX_RECONCILIATION_PENDING', retryable: true
+    })
+    expect(adapter.startGoal).toHaveBeenCalledTimes(1)
+
+    // 新 key 命令触发自动对账：barrier 被完成、投影只落盘一次，然后因轨迹序号过期被拒绝
+    await expect(runner.runCommand({ ...options, commandId: 'newer-command' }, newerWork))
+      .rejects.toMatchObject({ code: 'BLACKBOX_TRACE_SEQUENCE_MISMATCH' })
+    expect(newerWork).not.toHaveBeenCalled()
+    expect(command).toEqual(expect.objectContaining({
+      id: 'command-reconcile', commandId: 'reconcile-command', status: 'completed', errorJson: null
+    }))
+    expect(JSON.parse(command.resultJson)).toEqual({
+      action: { type: 'chat', text: '开始' },
+      result: platformResult
+    })
+    expect(adapter.startGoal).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(currentSession.stageResults).blackbox.publicTrace).toHaveLength(1)
+    expect(projectionAttempts).toBe(2)
+
+    // 前端刷新轨迹序号后重试新命令可正常执行
+    ;(prisma.virtual_experiment_commands.findFirst as jest.Mock).mockResolvedValue({ sequence: 1 })
+    ;(prisma.virtual_experiment_commands.create as jest.Mock).mockImplementation(async ({ data }: any) => {
+      command = { id: 'command-newer', status: 'processing', ...data }
+      return command
+    })
+    const newerOptions = { ...options, commandId: 'newer-command', expectedTraceCount: 1 }
+    await expect(runner.runCommand(newerOptions, newerWork)).resolves.toMatchObject({ reused: false })
+    expect(newerWork).toHaveBeenCalledTimes(1)
+  })
+
+  it('终态会话拒绝新命令且不获取租约，但同 key 已完成命令仍可复用结果', async () => {
+    const runner = new BlackboxVirtualLearnerRunner()
+    const session = { ...sessionWith({}), status: 'failed', currentStage: 'error' }
+    ;(prisma.virtual_sessions.findUnique as jest.Mock).mockResolvedValue(session)
+    ;(prisma.virtual_experiment_commands.findUnique as jest.Mock).mockResolvedValue({
+      id: 'command-done', status: 'completed', kind: 'step', requestJson: '{}',
+      resultJson: JSON.stringify({ observation: { stage: 'goal' } })
+    })
+
+    const reused = await runner.runCommand({
+      sessionId: 'vs1', operatorId: 'admin1', commandId: 'command-done', kind: 'step',
+      request: {}, expectedTraceCount: 1
+    }, jest.fn())
+    expect(reused).toEqual({ result: { observation: { stage: 'goal' } }, reused: true })
+
+    ;(prisma.virtual_experiment_commands.findUnique as jest.Mock).mockResolvedValue(null)
+    await expect(runner.runCommand({
+      sessionId: 'vs1', operatorId: 'admin1', commandId: 'brand-new-command', kind: 'step',
+      request: {}, expectedTraceCount: 1
+    }, jest.fn())).rejects.toMatchObject({ code: 'BLACKBOX_RUN_TERMINAL' })
+    expect(prisma.virtual_experiment_leases.create).not.toHaveBeenCalled()
+    expect(prisma.virtual_experiment_commands.create).not.toHaveBeenCalled()
+  })
+
+  it('模拟器瞬态失败按 3-strike 语义重试成功后继续执行（不报废实验）', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const session = sessionWith({ conversationId: 'g1' })
+    const state = JSON.parse(session.stageResults)
+    state.experimentSnapshot = {
+      actorProfile: { learningGoal: '测试目标' },
+      story: { visibleOpening: '开场' },
+      frictionBudget: 'normal'
+    }
+    state.blackbox.publicTrace = [{
+      observation: {
+        stage: 'goal', visibleMessages: [{ role: 'platform', content: '请说明目标' }], availableActions: ['chat']
+      }
+    }]
+    session.stageResults = JSON.stringify(state)
+    runner.context = jest.fn().mockResolvedValue({ session, state })
+    runner.persistPrivateState = jest.fn()
+    runner.act = jest.fn().mockResolvedValue({ observation: { stage: 'goal' }, control: {} })
+    const immediateSetTimeout = jest.spyOn(global, 'setTimeout').mockImplementation((fn: any) => {
+      if (typeof fn === 'function') fn()
+      return 0 as any
+    })
+    try {
+      (executeSkill as jest.Mock)
+        .mockRejectedValueOnce(new Error('fetch failed: connection reset'))
+        .mockRejectedValueOnce(new Error('API request canceled'))
+        .mockResolvedValueOnce({ reply: '我的目标', learnerState: { readyToAdvance: false } })
+
+      await runner.autoStep('vs1', 'admin1')
+
+      expect(executeSkill).toHaveBeenCalledTimes(3)
+      expect(runner.act).toHaveBeenCalledWith('vs1', 'admin1', { type: 'chat', text: '我的目标' })
+    } finally {
+      immediateSetTimeout.mockRestore()
+    }
+  })
+
+  it('模拟器输出缺 reply 也纳入 3-strike 重试，耗尽后落 degraded 标记并明确失败', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const session = sessionWith({ conversationId: 'g1' })
+    const state = JSON.parse(session.stageResults)
+    state.experimentSnapshot = {
+      actorProfile: { learningGoal: '测试目标' },
+      story: { visibleOpening: '开场' },
+      frictionBudget: 'normal'
+    }
+    state.blackbox.publicTrace = [{
+      observation: {
+        stage: 'goal', visibleMessages: [{ role: 'platform', content: '请说明目标' }], availableActions: ['chat']
+      }
+    }]
+    session.stageResults = JSON.stringify(state)
+    let currentSession = session
+    runner.getSession = jest.fn(async () => currentSession)
+    runner.context = jest.fn(async () => ({
+      session: currentSession,
+      state: JSON.parse(currentSession.stageResults)
+    }))
+    ;(prisma.virtual_sessions.update as jest.Mock).mockImplementation(async ({ data }: any) => {
+      currentSession = { ...currentSession, ...data }
+      return currentSession
+    })
+    const immediateSetTimeout = jest.spyOn(global, 'setTimeout').mockImplementation((fn: any) => {
+      if (typeof fn === 'function') fn()
+      return 0 as any
+    })
+    try {
+      (executeSkill as jest.Mock).mockResolvedValue({ degraded: true, learnerState: {} })
+
+      await expect(runner.autoStep('vs1', 'admin1')).rejects.toThrow('虚拟学习者Goal动作生成失败')
+      expect(executeSkill).toHaveBeenCalledTimes(3)
+      const degradedState = JSON.parse(currentSession.stageResults)
+      expect(degradedState.blackbox.simulatorDegraded).toEqual(expect.objectContaining({
+        stage: 'goal',
+        retryAttempts: 3,
+        error: '虚拟学习者Goal动作生成失败'
+      }))
+      expect(degradedState.blackbox.simulatorDegradedHistory).toHaveLength(1)
+    } finally {
+      immediateSetTimeout.mockRestore()
+    }
+  })
+
+  // ===== 2026-08-22 修复：可恢复瞬时失败不终局化整场实验，同 key 可续跑 =====
+
+  function installGoalFailureSession(runner: any) {
+    const session = sessionWith({ conversationId: 'g1' })
+    const state = JSON.parse(session.stageResults)
+    state.experimentSnapshot = {
+      actorProfile: { learningGoal: '测试目标' },
+      story: { visibleOpening: '开场' },
+      frictionBudget: 'normal'
+    }
+    state.blackbox.publicTrace = [{
+      observation: {
+        stage: 'goal', visibleMessages: [{ role: 'platform', content: '请说明目标' }], availableActions: ['chat']
+      }
+    }]
+    session.stageResults = JSON.stringify(state)
+    let currentSession = session
+    runner.getSession = jest.fn(async () => currentSession)
+    runner.context = jest.fn(async () => ({
+      session: currentSession,
+      state: JSON.parse(currentSession.stageResults),
+      adapter: {}
+    }))
+    ;(prisma.virtual_sessions.update as jest.Mock).mockImplementation(async ({ data }: any) => {
+      currentSession = { ...currentSession, ...data }
+      return currentSession
+    })
+    ;(prisma.virtual_experiment_commands.findFirst as jest.Mock).mockResolvedValue({ sequence: 1 })
+    let commandId = 1
+    ;(prisma.virtual_experiment_commands.create as jest.Mock).mockImplementation(async ({ data }: any) => {
+      const row = { id: `cmd-${commandId++}`, status: 'processing', ...data }
+      return row
+    })
+    runner.act = jest.fn().mockResolvedValue({ observation: { stage: 'goal', availableActions: ['chat'] }, control: {} })
+    return () => currentSession
+  }
+
+  function sessionUpdateCalls(): Array<Record<string, unknown>> {
+    return (prisma.virtual_sessions.update as jest.Mock).mock.calls.map((call) => call[0]?.data || {})
+  }
+
+  function commandUpdateCalls() {
+    return (prisma.virtual_experiment_commands.update as jest.Mock).mock.calls.map((call) => call[0]?.data || {})
+  }
+
+  it('LLM 超时失败不终局化实验：命令 failed(retryable=true)，同 key 重试可续跑', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const getCurrentSession = installGoalFailureSession(runner)
+    const immediateSetTimeout = jest.spyOn(global, 'setTimeout').mockImplementation((fn: any) => {
+      if (typeof fn === 'function') fn()
+      return 0 as any
+    })
+    try {
+      // 第一次 work：3 次模拟器重试全部超时 → throw（retryable 由消息判定）
+      // eslint-disable-next-line no-extra-semi
+      ;(executeSkill as jest.Mock)
+        .mockRejectedValue(new Error('timeout of 300000ms exceeded'))
+
+      const options = {
+        sessionId: 'vs1', operatorId: 'admin1', commandId: 'step-a', kind: 'step',
+        request: {}, expectedTraceCount: 1
+      }
+      await expect(runner.runCommand(options, () => runner.autoStep('vs1', 'admin1'))).rejects
+        .toThrow('timeout of 300000ms exceeded')
+
+      // 命令被标记 failed(retryable=true)
+      const failedUpdate = commandUpdateCalls().find((d) => d.status === 'failed')
+      expect(failedUpdate).toBeTruthy()
+      const errorJson = JSON.parse(String(failedUpdate!.errorJson))
+      expect(errorJson.retryable).toBe(true)
+
+      // 会话保持 running：没有任何 update 把状态置为 failed/error
+      expect(sessionUpdateCalls().some((d) => d.status === 'failed')).toBe(false)
+      expect(getCurrentSession().status).toBe('running')
+
+      // 同 key 重试：命令重置后重新执行 → 成功完成（runCommand 会查两次 findUnique）
+      ;(prisma.virtual_experiment_commands.findUnique as jest.Mock)
+        .mockResolvedValue({
+          id: 'cmd-1', status: 'failed', kind: 'step', sequence: 1, requestJson: '{}',
+          resultJson: null,
+          errorJson: JSON.stringify({ retryable: true, message: 'timeout of 300000ms exceeded' })
+        })
+      ;(executeSkill as jest.Mock)
+        .mockReset()
+        .mockResolvedValueOnce({ reply: '我的目标', learnerState: { readyToAdvance: false } })
+
+      const retried = await runner.runCommand(options, () => runner.autoStep('vs1', 'admin1'))
+      expect(retried.reused).toBe(false)
+      expect(runner.act).toHaveBeenCalledWith('vs1', 'admin1', expect.objectContaining({ type: 'chat', text: '我的目标' }))
+      // 命令最终 completed
+      const completedUpdate = commandUpdateCalls().find((d) => d.status === 'completed')
+      expect(completedUpdate).toBeTruthy()
+      // 会话仍然 running（未终局化）
+      expect(getCurrentSession().status).toBe('running')
+    } finally {
+      immediateSetTimeout.mockRestore()
+    }
+  })
+
+  it('模拟器输出缺 learnerState（显式 retryable 标记）不终局化，同 key 重试可续跑', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const getCurrentSession = installGoalFailureSession(runner)
+    const immediateSetTimeout = jest.spyOn(global, 'setTimeout').mockImplementation((fn: any) => {
+      if (typeof fn === 'function') fn()
+      return 0 as any
+    })
+    try {
+      // 模拟器输出无 reply → executeSimulatorSkillWithRetry 抛「动作生成失败」并显式标记 retryable
+      (executeSkill as jest.Mock).mockResolvedValueOnce({ degraded: true, learnerState: {} })
+
+      const options = {
+        sessionId: 'vs1', operatorId: 'admin1', commandId: 'step-b', kind: 'step',
+        request: {}, expectedTraceCount: 1
+      }
+      await expect(runner.runCommand(options, () => runner.autoStep('vs1', 'admin1'))).rejects
+        .toThrow('虚拟学习者Goal动作生成失败')
+
+      const failedUpdate = commandUpdateCalls().find((d) => d.status === 'failed')
+      expect(Boolean(failedUpdate)).toBe(true)
+      expect(JSON.parse(String(failedUpdate!.errorJson)).retryable).toBe(true)
+      // 会话未被终局化
+      expect(getCurrentSession().status).toBe('running')
+      expect(sessionUpdateCalls().some((d) => d.status === 'failed')).toBe(false)
+
+      // 同 key 重试成功
+      ;(prisma.virtual_experiment_commands.findUnique as jest.Mock)
+        .mockResolvedValue({
+          id: 'cmd-1', status: 'failed', kind: 'step', sequence: 1, requestJson: '{}',
+          resultJson: null,
+          errorJson: JSON.stringify({ retryable: true, message: '虚拟学习者Goal动作生成失败' })
+        })
+      ;(executeSkill as jest.Mock)
+        .mockReset()
+        .mockResolvedValueOnce({ reply: '我的目标', learnerState: { readyToAdvance: false } })
+
+      await expect(runner.runCommand(options, () => runner.autoStep('vs1', 'admin1'))).resolves
+        .toMatchObject({ reused: false })
+      expect(getCurrentSession().status).toBe('running')
+    } finally {
+      immediateSetTimeout.mockRestore()
+    }
+  })
+
+  it('不可恢复错误仍保持终局化语义（不回归）', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const getCurrentSession = installGoalFailureSession(runner)
+    const immediateSetTimeout = jest.spyOn(global, 'setTimeout').mockImplementation((fn: any) => {
+      if (typeof fn === 'function') fn()
+      return 0 as any
+    })
+    try {
+      // 模拟器正常回复，但平台动作抛出不可恢复错误（非瞬态、非显式 retryable）
+      (executeSkill as jest.Mock).mockResolvedValueOnce({ reply: '我的目标', learnerState: { readyToAdvance: false } })
+      runner.act = jest.fn().mockRejectedValue(new Error('投影令牌签发失败'))
+      await expect(runner.autoStep('vs1', 'admin1')).rejects.toThrow('投影令牌签发失败')
+      // 会话被终局化：update 出现 status: failed
+      expect(sessionUpdateCalls().some((d) => d.status === 'failed')).toBe(true)
+      expect(getCurrentSession().status).toBe('failed')
+    } finally {
+      immediateSetTimeout.mockRestore()
+    }
   })
 })

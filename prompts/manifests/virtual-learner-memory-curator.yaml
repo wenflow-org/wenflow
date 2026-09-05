@@ -1,0 +1,44 @@
+version: prompt-lab-manifest/v1
+skillId: virtual-learner-memory-curator
+agentId: skill:virtual-learner-memory-curator
+name: default-skill-virtual-learner-memory-curator
+archetype: distiller
+description: 虚拟学习者课后记忆提炼（以学习者本人视角沉淀主观记忆增量）
+acceptableAgentIds:
+  - skill:virtual-learner-memory-curator
+publish:
+  enabled: true
+  exportTargets:
+    - platform-prompts
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: distillation
+  interactionMode: snapshot
+  input:
+    transport: json
+    schemaSource: skill-definition
+  output:
+    media: json
+    schemaSource: runtime-validator
+    envelope: adapter
+  context:
+    envelope: context-envelope/v1
+    delivery: sidecar
+    modelExposure: projected
+  failurePolicy: blocking
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: simulation-refresh
+  businessState: { domain: virtual-learner, phases: [simulation-step-completed], defaultPhase: simulation-step-completed, terminalPhases: [simulation-step-completed], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: simulation-refresh, stateOwner: orchestrator }
+  outputEnvelope: adapter
+ownership:
+  tier: production
+  visibility: internal
+tags:
+  - virtual-learner
+  - distiller
+  - core-skill
+  - v4
+notes: 2026-09-02 补齐缺失 manifest（SKILL_PROTOCOL_V4 附录 A 待补项）；failurePolicy 与 core propagate 对齐（映射 blocking）

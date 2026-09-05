@@ -13,6 +13,7 @@
         >{{ item.label }}</router-link>
       </nav>
       <div class="v2nav__right">
+        <V2NotifCenter />
         <router-link
           to="/goal-conversation"
           class="v2nav__cta"
@@ -33,9 +34,13 @@
           <Transition name="v2menu">
             <div v-if="menuOpen" class="v2nav__menu" role="menu">
               <router-link to="/user/account" role="menuitem" @click="menuOpen = false">个人中心</router-link>
-              <router-link to="/user/agents" role="menuitem" @click="menuOpen = false">AI 助手</router-link>
-              <router-link to="/user/settings" role="menuitem" @click="menuOpen = false">API 接入</router-link>
-              <router-link to="/docs" role="menuitem" @click="menuOpen = false">开发者文档</router-link>
+              <button type="button" role="menuitem" class="v2nav__menu-theme" @click="toggleTheme">
+                <span class="v2nav__menu-theme-label">{{ isDark ? '切换到亮色模式' : '切换到暗色模式' }}</span>
+                <span class="v2nav__menu-theme-icon" aria-hidden="true">
+                  <svg v-if="isDark" viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2a7 7 0 1 1 0-14 7 7 0 0 1 0 14zm0-15V2m0 20v-2m-9-9H1m22 0h-2M4.9 4.9 3.5 3.5m17 17-1.4-1.4m0-14.2 1.4-1.4m-17 17 1.4-1.4"/></svg>
+                  <svg v-else viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+                </span>
+              </button>
               <button type="button" role="menuitem" class="v2nav__menu-danger" @click="handleLogout">
                 退出登录
               </button>
@@ -66,6 +71,8 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useUserStore } from '@/stores/user';
 import { toast } from '@/utils/toast';
+import { applyDocumentTheme, readTheme, writeTheme } from '@/utils/theme';
+import V2NotifCenter from './V2NotifCenter.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -99,13 +106,25 @@ function isActive(item: { match: string[] }) {
  * 派发事件由 V2GoalConversation 监听并重置视图（清内存、保留本地恢复入口）。
  */
 function onNewGoalClick() {
-  if (route.path === '/goal-conversation') {
+  // 按路由 name 判断：深链 /goal-conversation/gc_xxx 与无参路由同样命中
+  if (route.name === 'V2GoalConversation') {
     window.dispatchEvent(new CustomEvent('v2:new-goal'));
   }
 }
 
-const userName = computed(() => userStore.user?.name || '同学');
-const avatarLetter = computed(() => (userStore.user?.name || '同').charAt(0));
+const userName = computed(() => userStore.user?.name || '学习者');
+const avatarLetter = computed(() => (userStore.user?.name || '学').charAt(0));
+
+/* 主题切换（原 ThemeToggle 逻辑，移入头像菜单） */
+const isDark = ref(false);
+function applyTheme(dark: boolean) {
+  isDark.value = dark;
+  applyDocumentTheme(dark ? 'dark' : 'light');
+  writeTheme(dark ? 'dark' : 'light');
+}
+function toggleTheme() {
+  applyTheme(!isDark.value);
+}
 
 async function handleLogout() {
   menuOpen.value = false;
@@ -124,6 +143,7 @@ function onKey(e: KeyboardEvent) {
 }
 
 onMounted(() => {
+  applyTheme(readTheme() === 'dark');
   document.addEventListener('click', onDocClick);
   document.addEventListener('keydown', onKey);
 });
@@ -136,7 +156,7 @@ onUnmounted(() => {
 
 <style scoped>
 .v2nav {
-  background: rgba(255, 255, 255, 0.86);
+  background: var(--v2nav-bg, rgba(255, 255, 255, 0.86));
   backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--line, #e3e9f4);
   position: sticky; top: 0; z-index: 30;
@@ -154,48 +174,56 @@ onUnmounted(() => {
 .v2nav__links {
   display: flex; gap: 2px; margin-left: 28px;
 }
+/* 主导航链接：44px 高 + 14.5px 字号（比 CTA 更突出，主次层级正确） */
 .v2nav__links a {
-  padding: 9px 14px; border-radius: 999px;
-  font-size: 14px; font-weight: 700; color: var(--muted, #5b6577);
+  padding: 11px 16px; border-radius: 999px;
+  font-size: 14.5px; font-weight: 700; color: var(--muted, #5b6577);
   cursor: pointer; text-decoration: none; transition: color 0.14s ease, background 0.14s ease;
 }
 .v2nav__links a:hover { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.08); }
 .v2nav__links a.active { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.1); }
 .v2nav__right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+/* 规划新目标 CTA：36px 高（次级动作，弱于主导航链接）。
+   flex-shrink: 0 + nowrap：防止窄屏 flex 行把按钮压缩到文字宽度以下，
+   导致文字竖排换行、按钮纵向膨胀超出导航栏并裁出视口顶部（ISSUE-001）。 */
 .v2nav__cta {
   display: inline-flex; align-items: center; justify-content: center;
-  min-height: 42px; padding: 0 18px; border-radius: 999px;
+  min-height: 36px; padding: 0 14px; border-radius: 999px;
   background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
-  color: #fff; font-size: 14px; font-weight: 800;
-  box-shadow: 0 8px 18px rgba(52, 120, 246, 0.28);
+  color: #fff; font-size: 13px; font-weight: 800;
+  box-shadow: 0 6px 14px rgba(52, 120, 246, 0.26);
   cursor: pointer; text-decoration: none;
+  white-space: nowrap; flex-shrink: 0;
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 .v2nav__cta:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 24px rgba(52, 120, 246, 0.34);
+  transform: translateY(-1px);
+  box-shadow: 0 9px 18px rgba(52, 120, 246, 0.32);
 }
 .v2nav__cta:active {
   transform: translateY(0) scale(0.98);
 }
 .v2nav__user { position: relative; }
 .v2nav__avatar {
-  display: flex; align-items: center; gap: 7px;
-  font-size: 13px; font-weight: 700;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13.5px; font-weight: 700;
   color: var(--ink, #172033);
   background: transparent;
   border: 0;
-  padding: 4px 6px 4px 4px;
+  padding: 5px 10px 5px 5px;
   border-radius: 999px;
   cursor: pointer;
   font: inherit;
+  transition: background 0.15s ease;
 }
-.v2nav__avatar:hover { background: #f1f5fb; }
+.v2nav__avatar:hover { background: color-mix(in srgb, var(--surface) 92%, var(--ink)); }
 .v2nav__avatar i {
-  width: 26px; height: 26px; border-radius: 50%;
-  background: var(--blue-deep, #1f57cc); color: #fff;
-  font-style: normal; font-size: 12px;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--blue, #3478f6), var(--accent, #8d6bff));
+  color: #fff;
+  font-style: normal; font-size: 15px;
   display: grid; place-items: center;
+  box-shadow: 0 4px 10px rgba(52, 120, 246, 0.25);
 }
 .v2nav__caret {
   font-size: 10px;
@@ -211,7 +239,7 @@ onUnmounted(() => {
   min-width: 160px;
   padding: 6px;
   border-radius: 12px;
-  background: #fff;
+  background: var(--surface, #fff);
   border: 1px solid var(--line, #e3e9f4);
   box-shadow: 0 16px 40px rgba(23, 32, 51, 0.12);
   display: grid;
@@ -246,7 +274,23 @@ onUnmounted(() => {
 }
 .v2nav__menu a:hover,
 .v2nav__menu button:hover {
-  background: #f1f5fb;
+  background: color-mix(in srgb, var(--blue, #3478f6) 8%, var(--surface));
+}
+/* 主题切换项：图标居右 */
+.v2nav__menu-theme {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.v2nav__menu-theme-icon {
+  display: grid;
+  place-items: center;
+  width: 22px; height: 22px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--blue, #3478f6) 10%, transparent);
+  color: var(--blue-deep, #1f57cc);
+  flex-shrink: 0;
 }
 .v2nav__menu-danger {
   color: #c0454a !important;
@@ -257,6 +301,25 @@ onUnmounted(() => {
 @media (max-width: 1100px) {
   .v2nav__links { display: none; }
   .v2nav__name { display: none; }
+}
+
+/* 移动端压缩顶部导航：高度 72→56，logo 48→34，CTA 36→32，间距收窄 */
+@media (max-width: 900px) {
+  .v2nav__in {
+    height: 56px;
+    gap: 12px;
+    width: calc(100% - 28px);
+  }
+  .v2nav__logo { height: 34px; }
+  .v2nav__cta {
+    min-height: 32px;
+    padding: 0 12px;
+    font-size: 12px;
+    box-shadow: 0 4px 10px rgba(52, 120, 246, 0.22);
+  }
+  .v2nav__right { gap: 8px; }
+  .v2nav__avatar { padding: 4px 8px 4px 4px; font-size: 12.5px; }
+  .v2nav__avatar i { width: 28px; height: 28px; font-size: 13px; }
 }
 
 /* 大屏（1680+）：导航内容与页面容器同宽（1360）居中，避免 4K 下内容贴左 */
@@ -278,7 +341,7 @@ onUnmounted(() => {
     position: fixed;
     left: 0; right: 0; bottom: 0;
     z-index: 40;
-    background: rgba(255, 255, 255, 0.92);
+    background: color-mix(in srgb, var(--surface, #ffffff) 92%, transparent);
     backdrop-filter: blur(16px);
     border-top: 1px solid var(--line, #e3e9f4);
     padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));

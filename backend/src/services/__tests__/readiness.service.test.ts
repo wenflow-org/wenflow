@@ -4,6 +4,11 @@ import { encryptSecret } from '../../utils/secret-crypto'
 
 const originalSecretKeys = process.env.SECRET_ENCRYPTION_KEYS
 const originalSecretKeyId = process.env.SECRET_ENCRYPTION_CURRENT_KEY_ID
+// logger 模块加载会触发 dotenv，注入 backend/.env 的 AI_API_*；测试须显式隔离，
+// 避免"平台 AI 路由缺配置"用例被环境变量兜底误判为 ok
+const originalAiKey = process.env.AI_API_KEY
+const originalAiUrl = process.env.AI_API_URL
+const originalAiModel = process.env.AI_MODEL
 
 function createDatabases() {
   const main = {
@@ -24,13 +29,13 @@ function createDatabases() {
         { agentId: 'skill:goal-conversation' },
         { agentId: 'skill:path-planning' },
         { agentId: 'skill:stage-designer' },
-        { agentId: 'skill:learning-turn' },
+        { agentId: 'skill:teaching-turn' },
         { agentId: 'skill:session-wrapup' }
       ])
     },
-    agent_contracts: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.contractAgentIds.length) },
-    field_definitions: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.fieldIds.length) },
-    agent_field_routings: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.routings.length) },
+    agent_contracts: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.contractAgentIds.length), findMany: jest.fn().mockResolvedValue([]) },
+    field_definitions: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.fieldIds.length), findMany: jest.fn().mockResolvedValue([]) },
+    agent_field_routings: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.routings.length), findMany: jest.fn().mockResolvedValue([]) },
     agent_registrations: { count: jest.fn().mockResolvedValue(1) },
     skill_registrations: { count: jest.fn().mockResolvedValue(1) }
   }
@@ -38,11 +43,23 @@ function createDatabases() {
 }
 
 describe('ReadinessService', () => {
+  beforeEach(() => {
+    delete process.env.AI_API_KEY
+    delete process.env.AI_API_URL
+    delete process.env.AI_MODEL
+  })
+
   afterEach(() => {
     if (originalSecretKeys === undefined) delete process.env.SECRET_ENCRYPTION_KEYS
     else process.env.SECRET_ENCRYPTION_KEYS = originalSecretKeys
     if (originalSecretKeyId === undefined) delete process.env.SECRET_ENCRYPTION_CURRENT_KEY_ID
     else process.env.SECRET_ENCRYPTION_CURRENT_KEY_ID = originalSecretKeyId
+    if (originalAiKey === undefined) delete process.env.AI_API_KEY
+    else process.env.AI_API_KEY = originalAiKey
+    if (originalAiUrl === undefined) delete process.env.AI_API_URL
+    else process.env.AI_API_URL = originalAiUrl
+    if (originalAiModel === undefined) delete process.env.AI_MODEL
+    else process.env.AI_MODEL = originalAiModel
   })
 
   it('双库和核心运行态可读时返回 ready', async () => {
@@ -81,7 +98,7 @@ describe('ReadinessService', () => {
     expect(result.checks.gatewayRegistry).toBe('failed')
   })
 
-  it('平台 AI 路由缺少 endpoint、key 或 model 时不 ready', async () => {
+  it('平台 AI 路由缺少 endpoint、key 或 model 时降级为 warning 且不阻塞整体 ready', async () => {
     const { main, system } = createDatabases()
     system.platform_api_configs.findFirst.mockResolvedValue({
       apiUrl: 'https://api.example.com/v1',
@@ -90,8 +107,8 @@ describe('ReadinessService', () => {
     })
     const result = await new ReadinessService(main, system).check()
 
-    expect(result.ready).toBe(false)
-    expect(result.checks.aiConfiguration).toBe('failed')
+    expect(result.ready).toBe(true)
+    expect(result.checks.aiConfiguration).toBe('warning')
   })
 
   it('平台 API Key 加密后仍会验证其可解密性', async () => {
@@ -110,7 +127,7 @@ describe('ReadinessService', () => {
     expect(result.checks.aiConfiguration).toBe('ok')
   })
 
-  it('平台 API Key 密文无法解密时不 ready', async () => {
+  it('平台 API Key 密文无法解密时降级为 warning 且不阻塞整体 ready', async () => {
     process.env.SECRET_ENCRYPTION_KEYS = `test:${Buffer.alloc(32, 7).toString('base64')}`
     process.env.SECRET_ENCRYPTION_CURRENT_KEY_ID = 'test'
     const encrypted = encryptSecret('test-key', 'system.platform_api_configs.apiKey')
@@ -125,8 +142,8 @@ describe('ReadinessService', () => {
 
     const result = await new ReadinessService(main, system).check()
 
-    expect(result.ready).toBe(false)
-    expect(result.checks.aiConfiguration).toBe('failed')
+    expect(result.ready).toBe(true)
+    expect(result.checks.aiConfiguration).toBe('warning')
   })
 
   it('字段路由 seed 只完成一部分时不 ready', async () => {

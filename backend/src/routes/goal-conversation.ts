@@ -1,10 +1,45 @@
 ﻿import express, { Request, Response } from 'express';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
 import requirementOrchestrator from '../coordinators/requirement.coordinator';
 import { PromptStreamEvent, setRequestContext } from '../gateway/api-gateway/context';
 
 const router = express.Router();
+
+// ---- G5：LLM 计费端点按用户维度限速（额度可经环境变量调整）----
+const parseRateLimitEnvValue = (value: string | undefined, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+const goalConversationUserLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: parseRateLimitEnvValue(process.env.GOAL_CONVERSATION_MAX_PER_HOUR, 60),
+  message: { success: false, error: { message: '对话请求过于频繁，请稍后再试' } },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.userId || ipKeyGenerator(req.ip, 56),
+});
+
+// G5：LLM 输入长度上限（4KB），防止超长输入放大计费成本
+const GOAL_INPUT_MAX_CHARS = 4096;
+
+const META_KEYS = ['draftMs', 'idleMsBefore', 'lastIdleMs', 'editingCount', 'deleteCount', 'charsPerSentence'] as const;
+
+/** 清洗前端交互特征（认知负荷量测 · 前端情报层）：只保留合法数值，缺失/非法返回 undefined（absent 降级） */
+function sanitizeMeta(raw: unknown): Record<string, number> | null | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const meta: Record<string, number> = {};
+  let valid = false;
+  for (const key of META_KEYS) {
+    const value = (raw as Record<string, unknown>)[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      meta[key] = value;
+      valid = true;
+    }
+  }
+  return valid ? meta : undefined;
+}
 
 /** 写一条 SSE 事件。HTTP 200 已提交后无法再改状态码，业务失败统一以 event: error 带内下发。 */
 const writeSseEvent = (res: Response, event: string, data: unknown) => {
@@ -22,11 +57,13 @@ const resolveGoalError = (error: any, req: Request): { status: number; code: str
       data: goalEnvelopeForRequest(req, error.result)
     };
   }
-  const message = error instanceof Error ? error.message : String(error || '处理失败');
+  const raw = error instanceof Error ? error.message : String(error || '处理失败');
+  // 安全加固：仅白名单消息可回显，其余一律脱敏为通用文案（防止内部错误/堆栈泄漏）
+  const safe = raw === '对话会话不存在';
   return {
-    status: message === '对话会话不存在' ? 404 : 500,
+    status: safe ? 404 : 500,
     code: 'INTERNAL_ERROR',
-    message
+    message: safe ? raw : '处理失败，请稍后重试'
   };
 };
 
@@ -59,6 +96,10 @@ const handleStreamingGoal = async (
         }
       },
     },
+    // 目标对话以 conversationId 作为会话标识，注入后执行日志/瀑布可归组追溯
+    sessionId: (req as any).params?.conversationId || undefined,
+    conversationId: (req as any).params?.conversationId || undefined,
+    sourceEntry: 'platform',
   });
 
   try {
@@ -152,7 +193,7 @@ function getConfirmProposal(body: any): boolean {
   return body?.confirmProposal === true;
 }
 
-router.post('/start', authMiddleware, async (req: Request, res: Response) => {
+router.post('/start', authMiddleware, goalConversationUserLimiter, async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
     const goal = getInputText(req.body);
@@ -163,6 +204,10 @@ router.post('/start', authMiddleware, async (req: Request, res: Response) => {
 
     if (!goal || goal.trim().length === 0) {
       return res.status(400).json({ success: false, error: '学习目标不能为空' });
+    }
+
+    if (goal.length > GOAL_INPUT_MAX_CHARS) {
+      return res.status(400).json({ success: false, error: `学习目标不能超过 ${GOAL_INPUT_MAX_CHARS} 字符` });
     }
 
     if (String(req.headers?.accept || '').includes('text/event-stream')) {
@@ -190,11 +235,11 @@ router.post('/start', authMiddleware, async (req: Request, res: Response) => {
         data: goalEnvelopeForRequest(req, error.result)
       });
     }
-    return res.status(500).json({ success: false, error: error.message || '开始对话失败' });
+    return res.status(500).json({ success: false, error: '开始对话失败，请稍后重试' });
   }
 });
 
-router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: Response) => {
+router.post('/:conversationId/reply', authMiddleware, goalConversationUserLimiter, async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
     const { conversationId } = req.params;
@@ -208,13 +253,18 @@ router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: 
       return res.status(400).json({ success: false, error: '回复内容不能为空' });
     }
 
+    if (reply.length > GOAL_INPUT_MAX_CHARS) {
+      return res.status(400).json({ success: false, error: `回复内容不能超过 ${GOAL_INPUT_MAX_CHARS} 字符` });
+    }
+
     if (String(req.headers?.accept || '').includes('text/event-stream')) {
       return handleStreamingGoal(
         req,
         res,
         () => requirementOrchestrator.step(conversationId, reply, userId, {
           contextMode: getContextMode(req.body),
-          confirmProposal: getConfirmProposal(req.body)
+          confirmProposal: getConfirmProposal(req.body),
+          meta: sanitizeMeta(req.body?.meta)
         }),
         (result) => goalEnvelopeForRequest(req, result, conversationId)
       );
@@ -222,7 +272,8 @@ router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: 
 
     const result = await requirementOrchestrator.step(conversationId, reply, userId, {
       contextMode: getContextMode(req.body),
-      confirmProposal: getConfirmProposal(req.body)
+      confirmProposal: getConfirmProposal(req.body),
+      meta: sanitizeMeta(req.body?.meta)
     });
     return res.json({
       success: true,
@@ -238,18 +289,22 @@ router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: 
       });
     }
     const status = error.message === '对话会话不存在' ? 404 : 500;
-    return res.status(status).json({ success: false, error: error.message || '继续对话失败' });
+    return res.status(status).json({ success: false, error: status === 404 ? error.message : '继续对话失败，请稍后重试' });
   }
 });
 
-router.post('/:conversationId/regenerate', authMiddleware, async (req: Request, res: Response) => {
+router.post('/:conversationId/regenerate', authMiddleware, goalConversationUserLimiter, async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
     const { conversationId } = req.params;
-    const { adjustments } = req.body;
+    const adjustments = typeof req.body?.adjustments === 'string' ? req.body.adjustments : undefined;
 
     if (!userId) {
       return res.status(401).json({ success: false, error: '用户未认证' });
+    }
+
+    if (adjustments && adjustments.length > GOAL_INPUT_MAX_CHARS) {
+      return res.status(400).json({ success: false, error: `调整说明不能超过 ${GOAL_INPUT_MAX_CHARS} 字符` });
     }
 
     if (String(req.headers?.accept || '').includes('text/event-stream')) {
@@ -273,7 +328,7 @@ router.post('/:conversationId/regenerate', authMiddleware, async (req: Request, 
       return res.status(409).json({ success: false, error: { message: '路径正在生成中，请稍后再试', code: 'PATH_GENERATION_RUN_CHANGED', status: 409 } });
     }
     const status = error.message === '对话会话不存在' ? 404 : 500;
-    return res.status(status).json({ success: false, error: error.message || '重新生成路径失败' });
+    return res.status(status).json({ success: false, error: status === 404 ? error.message : '重新生成路径失败，请稍后重试' });
   }
 });
 
@@ -291,7 +346,7 @@ router.delete('/:conversationId', authMiddleware, async (req: Request, res: Resp
   } catch (error: any) {
     logger.error('重置对话失败:', error);
     const status = error.message === '对话会话不存在' ? 404 : 500;
-    return res.status(status).json({ success: false, error: error.message || '重置对话失败' });
+    return res.status(status).json({ success: false, error: status === 404 ? error.message : '重置对话失败，请稍后重试' });
   }
 });
 
@@ -360,7 +415,7 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
   } catch (error: any) {
     logger.error('获取对话会话失败:', error);
     const status = error.message === '对话会话不存在' ? 404 : 500;
-    return res.status(status).json({ success: false, error: error.message || '获取对话会话失败' });
+    return res.status(status).json({ success: false, error: status === 404 ? error.message : '获取对话会话失败，请稍后重试' });
   }
 });
 

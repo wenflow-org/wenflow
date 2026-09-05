@@ -78,7 +78,7 @@
 
       <div v-if="error" class="session-feedback__error" role="alert">
         <span>{{ error }}</span>
-        <button type="button" @click="submit">重试</button>
+        <button type="button" @click="errorKind === 'load' ? load() : submit()">重试</button>
       </div>
 
       <div class="session-feedback__actions">
@@ -122,6 +122,8 @@ const loading = ref(true)
 const submitting = ref(false)
 const saved = ref(false)
 const error = ref('')
+/** 错误来源：load 失败重试应走 load()（submit 在 rating=0 时会被守卫拦下），submit 失败重试 submit() */
+const errorKind = ref<'load' | 'submit'>('load')
 const savedSnapshot = ref('')
 
 const ratingLabels = ['没有帮助', '帮助较少', '一般', '有帮助', '很有帮助']
@@ -179,6 +181,7 @@ const load = async () => {
   try {
     applyFeedback(await feedbackApi.getSession(props.sessionId))
   } catch (err) {
+    errorKind.value = 'load'
     error.value = errorMessage(err, '读取反馈失败，你仍可以重新提交。')
     applyFeedback(null)
   } finally {
@@ -208,6 +211,7 @@ const submit = async () => {
     applyFeedback(feedback)
     emit('submitted', feedback)
   } catch (err) {
+    errorKind.value = 'submit'
     error.value = errorMessage(err, '提交失败，你填写的内容已保留。')
   } finally {
     submitting.value = false

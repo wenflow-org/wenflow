@@ -16,6 +16,8 @@ interface MemoryRun {
   maxTurns: number
   turns: number
   teachingSessionId: string | null
+  story: string | null
+  frictionBudget: string
   progress: string | null
   transcript: string | null
   report: string | null
@@ -41,6 +43,8 @@ const runsCreate = jest.fn(async ({ data }: any) => {
     maxTurns: data.maxTurns,
     turns: 0,
     teachingSessionId: null,
+    story: data.story ?? null,
+    frictionBudget: data.frictionBudget ?? 'none',
     progress: null,
     transcript: null,
     report: null,
@@ -290,6 +294,37 @@ describe('QuickLearnService', () => {
       await expect(quickLearnService.startRun({ profileId: 'p1', taskId: 't1' })).rejects.toMatchObject({
         code: 'QUICK_LEARN_RUN_CONFLICT',
       })
+    })
+
+    it('storyId 命中故事池时写入 story，frictionBudget 透传', async () => {
+      profileFindUnique.mockResolvedValue({
+        ...buildProfile(),
+        profile: JSON.stringify({
+          age: 25,
+          storyPool: [{ id: 'story_a', title: '老板要周报', visibleOpening: '每周五都要交周报' }],
+        }),
+      })
+      await quickLearnService.startRun({ profileId: 'p1', taskId: 't1', storyId: 'story_a', frictionBudget: 'normal' })
+      expect(runsCreate).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          frictionBudget: 'normal',
+          story: expect.stringContaining('老板要周报'),
+        }),
+      }))
+    })
+
+    it('storyId 未命中故事池时 story 为 null；非法 frictionBudget 回退 none', async () => {
+      await quickLearnService.startRun({ profileId: 'p1', taskId: 't1', storyId: 'missing', frictionBudget: 'bogus' })
+      expect(runsCreate).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ story: null, frictionBudget: 'none' }),
+      }))
+    })
+
+    it('不传参数时保持 V1 兼容（story=null, frictionBudget=none）', async () => {
+      await quickLearnService.startRun({ profileId: 'p1', taskId: 't1' })
+      expect(runsCreate).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ story: null, frictionBudget: 'none' }),
+      }))
     })
 
     it('maxTurns 被限制在硬上限内', async () => {

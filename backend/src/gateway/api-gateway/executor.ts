@@ -446,8 +446,10 @@ export class APIExecutor {
         content: '',
         usage: undefined as ChatResponse['usage'] | undefined,
         finishReason: '',
-        sawSseEvent: false
+        sawSseEvent: false,
+        ttftMs: undefined as number | undefined,
       };
+      const streamStartAt = Date.now();
       let statusCode = 0;
       let contentType = '';
       let responseHeaders: Record<string, string> = {};
@@ -485,6 +487,7 @@ export class APIExecutor {
               const choice = parsed?.choices?.[0];
               const delta = typeof choice?.delta?.content === 'string' ? choice.delta.content : undefined;
               if (delta !== undefined) {
+                if (state.ttftMs === undefined) state.ttftMs = Date.now() - streamStartAt;
                 state.content += delta;
                 if (delta) onStreamChunk?.(delta);
               }
@@ -559,6 +562,7 @@ export class APIExecutor {
             ...(state.usage ? { usage: state.usage } : {})
           } as ChatResponse;
           (parsedResponse as any)._routeThinkingMode = route.thinkingMode || 'default';
+          if (state.ttftMs !== undefined) (parsedResponse as any).ttftMs = state.ttftMs;
         }
 
         return {
@@ -766,6 +770,15 @@ export class APIExecutor {
       messageCount: request.messages?.length || 0,
       requestBytes: Buffer.byteLength(JSON.stringify(request), 'utf8'),
       responseBytes: attempt.responseBytes || null,
+      // KV 前缀缓存可观测列（2026-08）：TTFT 与缓存命中
+      // 兼容两种 usage 形态：DeepSeek 新版 prompt_tokens_details.cached_tokens / OpenAI 旧版 prompt_cache_hit_tokens
+      ttftMs: (response as any)?.ttftMs ?? null,
+      promptCacheHitTokens: (response as any)?.usage?.prompt_tokens_details?.cached_tokens
+        ?? (response as any)?.usage?.prompt_cache_hit_tokens
+        ?? null,
+      promptCacheMissTokens: (response as any)?.usage?.prompt_tokens_details?.uncached_tokens
+        ?? (response as any)?.usage?.prompt_cache_miss_tokens
+        ?? null,
       expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
       metadata: JSON.stringify({
         temperature: request.temperature ?? null,
@@ -774,6 +787,14 @@ export class APIExecutor {
         thinkingMode: route.thinkingMode ?? null,
         reasoningEffort: route.reasoningEffort ?? null,
         executionMode: attempt.executionMode ?? null,
+        // 可观测增量（2026-08）：TTFT 与缓存命中（列已落、此处保留 JSON 冗余）
+        ttftMs: (response as any)?.ttftMs ?? null,
+        promptCacheHitTokens: (response as any)?.usage?.prompt_tokens_details?.cached_tokens
+          ?? (response as any)?.usage?.prompt_cache_hit_tokens
+          ?? null,
+        promptCacheMissTokens: (response as any)?.usage?.prompt_tokens_details?.uncached_tokens
+          ?? (response as any)?.usage?.prompt_cache_miss_tokens
+          ?? null,
       })
     });
   }
@@ -807,7 +828,11 @@ export class APIExecutor {
       contentPreview, errorCategory: finalError?.category, errorCode: finalError?.code, errorMessage,
       executionMode
     };
-    success ? logger.info('[api-gateway] execution succeeded', logData) : logger.error('[api-gateway] execution failed', logData);
+    if (success) {
+      logger.info('[api-gateway] execution succeeded', logData);
+    } else {
+      logger.error('[api-gateway] execution failed', logData);
+    }
 
     const promptTokens = attempts.reduce((sum, item) => sum + (item.response?.usage?.prompt_tokens || 0), 0);
     const completionTokens = attempts.reduce((sum, item) => sum + (item.response?.usage?.completion_tokens || 0), 0);
@@ -885,7 +910,8 @@ export class APIExecutor {
     if (route.thinkingMode === 'enabled' || route.thinkingMode === 'disabled') {
       requestBody.thinking = { type: route.thinkingMode };
     }
-    if (route.thinkingMode !== 'disabled' && (route.reasoningEffort === 'high' || route.reasoningEffort === 'max')) {
+    if (route.thinkingMode !== 'disabled'
+      && (route.reasoningEffort === 'low' || route.reasoningEffort === 'high' || route.reasoningEffort === 'max')) {
       requestBody.reasoning_effort = route.reasoningEffort;
     }
   }

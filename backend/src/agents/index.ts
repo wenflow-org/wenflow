@@ -18,17 +18,6 @@ export {
   ProgressMetrics
 } from './protocol';
 
-// 新的插件系统 - 使用别名避免冲突
-export { 
-  AgentPlugin, 
-  AgentConfig,
-  AgentRegistration,
-  AgentPluginFactory 
-} from './plugin-types';
-export { agentPluginRegistry } from './plugin-registry';
-
-export { registerAllPlugins, getAllPlugins } from './plugins';
-
 // Path Agent
 export { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn } from '../skills/path-planning';
 
@@ -48,9 +37,9 @@ export {
 } from './learner-model-agent';
 
 export {
-  learningTurnAgentDefinition,
-  learningTurnAgentHandler,
-} from '../skills/learning-turn';
+  teachingTurnAgentDefinition,
+  teachingTurnAgentHandler,
+} from '../skills/teaching-turn';
 
 export {
   sessionWrapupAgentDefinition,
@@ -65,26 +54,12 @@ export {
   simulationOrchestrator
 } from './simulation-agent';
 
-// Path Adjustment
-export {
-  pathAdjustmentEngine,
-  PathAdjustment,
-  AdjustmentType,
-  AdjustmentTarget,
-  AdjustmentReason
-} from '../skills/path-planning/adjustment';
-
-export {
-  allAdjustmentStrategies,
-  getApplicableStrategies
-} from '../skills/path-planning/strategies';
-
 // 所有 Agent 定义
 import { AgentDefinition } from './protocol';
 import { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn } from '../skills/path-planning';
 import { learnerModelAgentDefinition, learnerModelAgentHandler as learnerModelAgentHandlerFn } from './learner-model-agent';
 import { goalConversationAgentDefinition, goalConversationAgentHandler } from '../skills/goal-conversation';
-import { learningTurnAgentDefinition, learningTurnAgentHandler } from '../skills/learning-turn';
+import { teachingTurnAgentDefinition, teachingTurnAgentHandler } from '../skills/teaching-turn';
 import { peerAgentDefinition, peerAgentHandler } from '../skills/peer-reinforcement';
 import { sessionWrapupAgentDefinition, sessionWrapupAgentHandler } from '../skills/session-wrapup';
 import { simulationOrchestratorAgentDefinition, simulationOrchestratorAgentHandler } from './simulation-agent';
@@ -95,7 +70,7 @@ export const allAgentDefinitions: AgentDefinition[] = [
   pathAgentDefinition,
   learnerModelAgentDefinition,
   goalConversationAgentDefinition,
-  learningTurnAgentDefinition,
+  teachingTurnAgentDefinition,
   peerAgentDefinition,
   sessionWrapupAgentDefinition,
   simulationOrchestratorAgentDefinition
@@ -105,7 +80,7 @@ export const agentHandlers: Record<string, (input: any, context: any) => Promise
   'skill:path-planning': pathAgentHandlerFn,
   'skill:learner-model': learnerModelAgentHandlerFn,
   'skill:goal-conversation': goalConversationAgentHandler,
-  'skill:learning-turn': learningTurnAgentHandler,
+  'skill:teaching-turn': teachingTurnAgentHandler,
   'skill:peer-reinforcement': peerAgentHandler,
   'skill:session-wrapup': sessionWrapupAgentHandler,
   'simulation-agent': simulationOrchestratorAgentHandler

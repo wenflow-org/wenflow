@@ -18,15 +18,23 @@ function database(existing: any = null) {
 }
 
 describe('initializeAdmin', () => {
-  it('未配置密码时安全跳过', async () => {
+  it('开发环境未配置密码时使用内置默认密码创建', async () => {
     const db = database()
-    await expect(initializeAdmin(db, {})).resolves.toEqual({ status: 'skipped_not_configured' })
+    const result = await initializeAdmin(db, {})
+    expect(bcrypt.hash).toHaveBeenCalledWith('ChangeMe_2026_Admin', 10)
+    expect(db.users.create).toHaveBeenCalled()
+    expect(result.status).toBe('created')
+  })
+
+  it('生产环境未配置密码时安全跳过', async () => {
+    const db = database()
+    await expect(initializeAdmin(db, { NODE_ENV: 'production' })).resolves.toEqual({ status: 'skipped_not_configured' })
     expect(db.users.create).not.toHaveBeenCalled()
   })
 
-  it('未配置密码时不因普通用户占用默认身份而阻止启动', async () => {
+  it('生产环境未配置密码时不因普通用户占用默认身份而阻止启动', async () => {
     const db = database({ id: 'user-1', role: 'user', isAdmin: false })
-    await expect(initializeAdmin(db, {})).resolves.toEqual({ status: 'skipped_not_configured' })
+    await expect(initializeAdmin(db, { NODE_ENV: 'production' })).resolves.toEqual({ status: 'skipped_not_configured' })
     expect(db.users.findFirst).toHaveBeenCalledTimes(1)
   })
 

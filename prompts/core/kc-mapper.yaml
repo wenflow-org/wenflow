@@ -1,0 +1,67 @@
+# v1 核心文件：kc-mapper（SKILL_PROTOCOL_V4 §2）
+# 知识组件映射器：将 path-planning 生成的认知概念和 stage-designer 生成的子任务，
+# 分解为细粒度的知识组件（KC），并标注 KC 之间的前置依赖关系。
+# 参考 LLMKT（LAK 2025）递归标注法：domain → cluster → specific KC。
+skillId: kc-mapper
+baseVersion: 1
+identity: |
+  你是知识组件（KC）映射器。你的输入是 path-planning 生成的认知核心（cognitiveCore）和
+  stage-designer 生成的任务列表（subtasks），你的输出是细粒度的知识组件标注和 KC 依赖图。
+  你不需要评价路径质量，只需要将概念和任务分解为可被评估的知识单元。
+channels: [path, task]
+stateAdvance: false
+inputs:
+  - name: cognitiveCore
+    type: object
+    ref: skill:path-planning.cognitiveCore
+    desc: 认知核心（coreConcepts + cognitiveDomain）
+  - name: milestones
+    type: object[]
+    ref: skill:path-planning.milestones
+    desc: 里程碑骨架（title/coreConcept/description/goal）
+  - name: subtasks
+    type: object[]
+    ref: sandbox:path.subtasks
+    desc: 阶段子任务列表（title/type/linkedConcept/knowledgeType/cognitiveLevel）
+  - name: prerequisiteTree
+    type: object?
+    ref: sandbox:path.normalizedInput.prerequisiteTree
+    desc: RPKT 前提知识缺口链（可选，用于校验 KC 依赖是否覆盖已知缺口）
+rules:
+  - 只做 KC 标注，不评价路径质量
+  - 每个 coreConcept 分解为 2-5 个 KC（可观测的知识组件），每个 KC 描述一个具体的、可被评估的知识单元
+  - KC 命名规范：动词 + 可观测对象（如"识别半联动点"而非"离合器操作"），区别于 coreConcept 的"关系描述式"命名
+  - KC 标注 taxonomy（factual|conceptual|procedural|metacognitive）
+  - KC 之间标注 prerequisiteKCs（前置依赖：要理解 KC-B 必须先掌握 KC-A）
+  - 每个 subtask 关联到至少 1 个 KC（通过 linkedKC 字段）
+  - 如果提供 prerequisiteTree，KC 依赖图必须覆盖所有 unknownConcepts（缺口链中的概念必须有对应的 KC 和前置标注）
+  - 不编造不存在于输入中的概念或 KC
+fields:
+  - name: conceptKcs
+    type: "object[]"
+    desc: |
+      每个 coreConcept 的 KC 分解，每项：
+      { "conceptId": "concept-1", "kcs": [{ "kcId": "kc-1a", "name": "识别半联动点", "taxonomy": "procedural", "prerequisiteKCs": ["kc-1a-prereq"] }] }
+  - name: taskKcLinks
+    type: "object[]"
+    desc: |
+      每个 subtask 关联的 KC，每项：
+      { "taskTitle": "识别个人高唤醒触发模式", "linkedKCs": ["kc-1a", "kc-1b"] }
+  - name: kcGraph
+    type: object
+    desc: |
+      KC 依赖图，结构：
+      { "nodes": [{ "kcId": "kc-1a", "name": "KC名", "taxonomy": "factual|conceptual|procedural|metacognitive" }],
+        "edges": [{ "from": "kc-1a", "to": "kc-1b", "relation": "prerequisite" }] }
+  - name: gapCoverage
+    type: object?
+    desc: |
+      前提缺口覆盖报告（仅在提供 prerequisiteTree 时输出），结构：
+      { "covered": ["已覆盖的缺口概念"], "uncovered": [{ "concept": "未覆盖的缺口概念", "reason": "原因" }] }
+constraints:
+  - 不编造不存在于输入中的概念或 KC
+  - KC 命名必须是动词+可观测对象，不能是名词标签
+  - taxonomy 必须是 factual|conceptual|procedural|metacognitive 之一
+params: { temperature: 0.3, maxTokens: 8000, failurePolicy: propagate }
+deltaOutput: false
+outputMedia: json

@@ -26,24 +26,23 @@ import {
   getAgentManifest,
 } from '../../services/agent-manifest.service';
 import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
+import { pathAgentDefinition } from '../../skills/path-planning';
+import { validatePathPlanningOutput } from '../../skills/path-planning';
+import { stageDesignerDefinition } from '../../skills/stage-designer';
+import { validateStageDesignerOutput } from '../../skills/stage-designer';
 import { executeSkill } from '../../skills';
-import { ensureCoreAgentPrompts } from '../../scripts/seed-core-agent-prompts';
+import { virtualLearnerGoalDialogueSimulatorDefinition, type GoalLearnerSimulationOutput } from '../../skills/virtual-learner-goal-dialogue-simulator';
+import { virtualLearnerPersonaDesignerDefinition } from '../../skills/virtual-learner-persona-designer';
+import { resolveStorySessionDemand } from '../../virtual-lab/story-demand';
+import { callPrompt } from '../../composers/prompt-composer';
 import {
   parsePromptSchema,
-  suggestRulePrefix,
-  type PromptSchema,
 } from '../../services/prompt-schema';
 import { compilePrompt } from '../../services/prompt-compiler';
-import { promptCache } from '../../services/cache/prompt-cache.service';
 import {
   listTopLevelAgents,
   listSkillsOfAgent,
 } from '../../services/agent-manifest.service';
-import {
-  extractFieldsFromSource,
-  updateFieldsInSource,
-  type EditableField,
-} from '../../services/prompt-source-fields';
 import { resolveRuntimeContractsForAgents } from '../../services/prompt-lab/resolve-runtime-contract';
 
 const router = Router();
@@ -63,14 +62,12 @@ router.use(rejectPromptOpsRuntimeMutation);
 const SKILL_DISPLAY_NAMES: Record<string, string> = {
   'skill:adaptive-guidance-copy': '自适应引导文案',
   'skill:lesson-knowledge-enricher': '课后知识增强',
-  'skill:goal-profile-inference': '目标画像推断',
-  'skill:learning-pattern-distiller': '学习模式提炼',
-  'skill:path-scene-framing': '路径场景包装',
+  'skill:learning-predictor': '学习表现预测',
   'skill:peer-reinforcement': '同伴强化对话',
   'skill:session-knowledge-distiller': '会话知识沉淀',
   'skill:stage-designer': '阶段设计师',
   'skill:virtual-learner-goal-dialogue-simulator': '虚拟学员·目标对话模拟',
-  'skill:virtual-learner-learn-turn-simulator': '虚拟学员·学习回合模拟',
+  'skill:virtual-learner-learn-turn-simulator': '虚拟学员·教学回合模拟',
   'skill:virtual-learner-path-evaluator': '虚拟学员·路径评估',
   'skill:virtual-learner-persona-designer': '虚拟学员·人设设计',
   'skill:virtual-learner-scenario-designer': '虚拟学员·场景设计',
@@ -81,19 +78,16 @@ const SKILL_DISPLAY_NAMES: Record<string, string> = {
 // stage 与 OrchestratorDefinitions 页一致：澄清(goal) / 规划(path) / 学习(learning)
 // 暂未迁移到字段路由的 agent 留空，前端会回退到「手填字段 ID」
 // ============================================================
-const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'learning'> = {
+const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'teaching' | 'profile'> = {
   'skill:goal-conversation': 'goal',
-  'skill:goal-profile-inference': 'goal',
   // 以下虽未迁移但确定隶属的 stage
   'skill:path-planning': 'path',
-  'skill:path-scene-framing': 'path',
   'skill:stage-designer': 'path',
-  'skill:learning-turn': 'learning',
-  'skill:session-wrapup': 'learning',
-  'skill:peer-reinforcement': 'learning',
-  'skill:adaptive-guidance-copy': 'learning',
-  'skill:learning-pattern-distiller': 'learning',
-  'skill:lesson-knowledge-enricher': 'learning',
+  'skill:teaching-turn': 'teaching',
+  'skill:session-wrapup': 'teaching',
+  'skill:peer-reinforcement': 'teaching',
+  'skill:adaptive-guidance-copy': 'teaching',
+  'skill:lesson-knowledge-enricher': 'profile',
 };
 
 // ============================================================
@@ -296,377 +290,6 @@ router.get('/agent-overview', async (_req: Request, res: Response) => {
 });
 
 // ============================================================
-// GET /api/admin/prompt-ops/agent-fields/:agentId
-// 拉取该 agent 所属 stage 的字段路由（用于 AI 起草字段选择器）
-// 返回扁平字段列表 + 所属 orchestrator 的路由（如果 agent 即编排器）
-// ============================================================
-router.get('/agent-fields/:agentId', async (req: Request, res: Response) => {
-  const agentId = String(req.params.agentId || '').trim();
-  const stage = AGENT_STAGE_MAP[agentId] || null;
-
-  if (!stage) {
-    return res.json({
-      success: true,
-      data: {
-        agentId,
-        stage: null,
-        fields: [],
-        hint: '该 agent 还未迁移到字段路由表，AI 起草时请手动输入 fieldId',
-      },
-    });
-  }
-
-  try {
-    const [contracts, fields, routings] = await Promise.all([
-      systemPrisma.agent_contracts.findMany({ where: { stage } }),
-      systemPrisma.field_definitions.findMany({ where: { stage } }),
-      systemPrisma.agent_field_routings.findMany({
-        where: {
-          agentId: {
-            in: (
-              await systemPrisma.agent_contracts.findMany({
-                where: { stage },
-                select: { agentId: true },
-              })
-            ).map((c) => c.agentId),
-          },
-        },
-      }),
-    ]);
-
-    // 把 routing 按 fieldId 聚合，列出该字段在哪些 agent 出现 + 主导 promptRole
-    const routingByField = new Map<
-      string,
-      Array<{
-        agentId: string;
-        render: string;
-        accumulate: boolean;
-        internal: boolean;
-      }>
-    >();
-    for (const r of routings) {
-      if (!routingByField.has(r.fieldId)) routingByField.set(r.fieldId, []);
-      routingByField.get(r.fieldId)!.push({
-        agentId: r.agentId,
-        render: r.render,
-        accumulate: r.accumulate,
-        internal: r.internalFlag,
-      });
-    }
-
-    const fieldList = fields.map((f) => ({
-      fieldId: f.fieldId,
-      stage: f.stage,
-      promptRole: f.promptRole,
-      valueType: f.valueType,
-      description: f.description,
-      snakeName: f.snakeName,
-      camelName: f.camelName,
-      systemLocked: f.systemLocked,
-      structureLocked: f.structureLocked,
-      agentRoutings: routingByField.get(f.fieldId) || [],
-      // 推荐选中：所有非 control-signal 且非 system-locked 的字段
-      recommendedSelected:
-        !f.systemLocked &&
-        f.promptRole !== 'control-signal' &&
-        f.promptRole !== 'derived-presentation',
-    }));
-
-    return res.json({
-      success: true,
-      data: {
-        agentId,
-        stage,
-        fields: fieldList,
-        contracts: contracts.map((c) => ({
-          agentId: c.agentId,
-          displayName: c.displayName,
-        })),
-      },
-    });
-  } catch (error: any) {
-    logger.error('[admin-prompt-ops] agent-fields failed:', error);
-    return res.status(500).json({
-      success: false,
-      error: { message: error.message || '加载字段路由失败' },
-    });
-  }
-});
-
-// ============================================================
-// GET /api/admin/prompt-ops/recent-call-samples?agentId=&limit=
-// 拉 prompt_call_logs 最近 N 条作为评估集来源
-// 返回:每条携带 userPayload(JSON)/normalizedOutput/success/createdAt/conversationId
-// ============================================================
-router.get('/recent-call-samples', async (req: Request, res: Response) => {
-  const agentId = String(req.query.agentId || '').trim();
-  const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
-  if (!agentId) {
-    return res
-      .status(400)
-      .json({ success: false, error: { message: 'agentId 必填' } });
-  }
-
-  try {
-    const logs = await prisma.prompt_call_logs.findMany({
-      where: { agentId },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      select: {
-        id: true,
-        agentId: true,
-        success: true,
-        durationMs: true,
-        userPayload: true,
-        normalizedOutput: true,
-        rawModelOutput: true,
-        conversationId: true,
-        userId: true,
-        createdAt: true,
-        systemPromptVersion: true,
-      },
-    });
-
-    const samples = logs.map((log) => {
-      const userPayload = safeParse(log.userPayload, null);
-      const normalizedOutput = safeParse(log.normalizedOutput, null);
-
-      // 抽出 messages 序列（如果 userPayload 形似 conversation 结构）
-      let messages: Array<{ role: string; content: string }> = [];
-      let inputPreview = '';
-      if (userPayload && typeof userPayload === 'object') {
-        if (Array.isArray(userPayload.messages)) {
-          messages = userPayload.messages
-            .filter((m: any) => m && typeof m.content === 'string')
-            .map((m: any) => ({
-              role: m.role || 'user',
-              content: String(m.content),
-            }));
-          inputPreview = messages[messages.length - 1]?.content || '';
-        } else if (typeof userPayload.input === 'string') {
-          messages = [{ role: 'user', content: userPayload.input }];
-          inputPreview = userPayload.input;
-          if (Array.isArray(userPayload.conversationHistory)) {
-            messages = [
-              ...userPayload.conversationHistory.map((m: any) => ({
-                role: m.role || 'user',
-                content: String(m.content || ''),
-              })),
-              ...messages,
-            ];
-          }
-        }
-      }
-
-      return {
-        id: log.id,
-        success: log.success,
-        durationMs: log.durationMs,
-        promptVersion: log.systemPromptVersion,
-        conversationId: log.conversationId,
-        userId: log.userId,
-        createdAt: log.createdAt,
-        messages,
-        inputPreview: inputPreview.length > 120 ? inputPreview.slice(0, 120) + '…' : inputPreview,
-        outputStage:
-          normalizedOutput?.internal?.core?.stage ||
-          normalizedOutput?.stage ||
-          null,
-      };
-    });
-
-    return res.json({ success: true, data: samples });
-  } catch (error: any) {
-    logger.error('[admin-prompt-ops] recent-call-samples failed:', error);
-    return res.status(500).json({
-      success: false,
-      error: { message: error.message || '加载调用样本失败' },
-    });
-  }
-});
-
-// ============================================================
-// 字段表 × field_definitions 打通（路线丙）
-// prompt 的 JSON schema 是「字段结构」真相源；field_definitions 表是
-// 「字段路由/治理元数据」（耦合度 / 锁）真相源。这里按 stage 查表，用
-// 三级匹配（精确 fieldId → 别名 → 叶子路径后缀）把治理元数据 LEFT JOIN
-// 到 outputFields/inputFields 上。表里没有的字段保持无注解（优雅降级）。
-// ============================================================
-
-/** promptRole → 耦合度 */
-function roleToCoupling(role: string | null | undefined): 'contract' | 'flow' | 'prose' {
-  switch (role) {
-    case 'control-signal':
-      return 'flow';
-    case 'hard-required':
-    case 'proposal-output':
-    case 'public-reply':
-      return 'contract';
-    default:
-      return 'prose'; // soft-info / hidden-inference / derived-presentation
-  }
-}
-
-/**
- * prompt JSON 路径 → field_definitions fieldId 的已知别名。
- * 两套 envelope 形状不同（state.stage vs core.stage、reply vs userVisible），
- * 这里登记核心控制/回复字段的对应关系。
- */
-const FIELD_PATH_ALIASES: Record<string, string> = {
-  reply: 'userVisible',
-  'state.stage': 'core.stage',
-  'state.confidence': 'core.confidence',
-  'state.done': 'core.isCompleted',
-};
-
-interface FieldGovernance {
-  coupling: 'contract' | 'flow' | 'prose';
-  promptRole: string | null;
-  systemLocked: boolean;
-  structureLocked: boolean;
-  fieldId: string;
-}
-
-/** 把一个 stage 的 field_definitions 行做成多键查找表（精确 + 叶子后缀） */
-async function buildFieldDefLookup(
-  stage: string
-): Promise<{ exact: Map<string, FieldGovernance>; leaf: Map<string, FieldGovernance> }> {
-  const rows = await systemPrisma.field_definitions.findMany({ where: { stage } });
-  const exact = new Map<string, FieldGovernance>();
-  const leaf = new Map<string, FieldGovernance>();
-  for (const r of rows as any[]) {
-    const gov: FieldGovernance = {
-      coupling: roleToCoupling(r.promptRole),
-      promptRole: r.promptRole ?? null,
-      systemLocked: !!r.systemLocked,
-      structureLocked: !!r.structureLocked,
-      fieldId: r.fieldId,
-    };
-    exact.set(r.fieldId, gov);
-    const leafKey = r.fieldId.split('.').slice(-2).join('.'); // 末两段
-    if (!leaf.has(leafKey)) leaf.set(leafKey, gov);
-    const last = r.fieldId.split('.').slice(-1)[0];
-    if (!leaf.has(last)) leaf.set(last, gov);
-  }
-  return { exact, leaf };
-}
-
-/** 给一组字段注解治理元数据（三级匹配） */
-function annotateFields(
-  fields: any[],
-  lookup: { exact: Map<string, FieldGovernance>; leaf: Map<string, FieldGovernance> }
-): void {
-  for (const f of fields) {
-    const p: string = f.path;
-    let gov = lookup.exact.get(p); // 1) 精确 fieldId
-    if (!gov && FIELD_PATH_ALIASES[p]) gov = lookup.exact.get(FIELD_PATH_ALIASES[p]); // 2) 别名
-    if (!gov) gov = lookup.leaf.get(p.split('.').slice(-2).join('.')); // 3a) 末两段
-    if (!gov) gov = lookup.leaf.get(p.split('.').slice(-1)[0]); // 3b) 末一段
-    if (gov) {
-      f.coupling = gov.coupling;
-      f.promptRole = gov.promptRole;
-      f.systemLocked = gov.systemLocked;
-      f.structureLocked = gov.structureLocked;
-      f.governedFieldId = gov.fieldId;
-      f.governed = true;
-    } else {
-      f.coupling = null;
-      f.governed = false;
-    }
-  }
-}
-
-// ============================================================
-// GET /api/admin/prompt-ops/prompt-schema/:agentId
-// 返回该 agent 当前 ACTIVE prompt 的结构化拆解 + lint 结果 + 推荐 R prefix
-// 来源优先级：DB ACTIVE > File，确保运营改的是运行时真正用的 prompt
-// ============================================================
-router.get('/prompt-schema/:agentId', async (req: Request, res: Response) => {
-  const agentId = String(req.params.agentId || '').trim();
-  if (!agentId) {
-    return res.status(400).json({
-      success: false,
-      error: { message: 'agentId 必填' },
-    });
-  }
-
-  try {
-    const dbActive = await systemPrisma.agent_prompts.findFirst({
-      where: { agentId, status: 'ACTIVE' },
-      orderBy: { version: 'desc' },
-    });
-
-    // archetype 真相源是 .md frontmatter（解析器不读 frontmatter），无论 db/file 都从文件取
-    const allFiles = loadAllPromptFiles();
-    const file = allFiles.find(
-      (f) =>
-        f.agentId === agentId ||
-        (Array.isArray(f.acceptableAgentIds) &&
-          f.acceptableAgentIds.includes(agentId))
-    );
-
-    let sourceText = '';
-    let source: 'db' | 'file' | 'none' = 'none';
-    if (dbActive?.systemPrompt) {
-      sourceText = dbActive.systemPrompt;
-      source = 'db';
-    } else if (file?.systemPrompt) {
-      sourceText = file.systemPrompt;
-      source = 'file';
-    }
-
-    const schema = sourceText
-      ? parsePromptSchema(sourceText)
-      : ({
-          title: null,
-          identity: '',
-          rulesRaw: '',
-          rules: [],
-          output: '',
-          extras: [],
-          conformant: false,
-          warnings: ['没有找到 prompt 文本'],
-        } as PromptSchema);
-
-    // 把 frontmatter 的 archetype 注入 schema（前端 archetype 徽章 / code-only 空态依赖它）
-    (schema as any).archetype = (file as any)?.archetype || null;
-
-    // 字段表 × field_definitions 打通：按 stage LEFT JOIN 治理元数据（耦合度/锁）
-    const stage = AGENT_STAGE_MAP[agentId] || null;
-    if (stage) {
-      try {
-        const lookup = await buildFieldDefLookup(stage);
-        if (Array.isArray((schema as any).outputFields)) annotateFields((schema as any).outputFields, lookup);
-        if (Array.isArray((schema as any).inputFields)) annotateFields((schema as any).inputFields, lookup);
-      } catch (e: any) {
-        logger.warn(`[prompt-schema] field_definitions join 失败（不影响主流程）: ${e?.message || e}`);
-      }
-    }
-
-    return res.json({
-      success: true,
-      data: {
-        agentId,
-        source,
-        promptText: sourceText,
-        schema,
-        promptContract: (file as any)?.promptContract || null,
-        fieldGovernanceStage: stage,
-        suggestedRulePrefix: suggestRulePrefix(agentId),
-        promptVersionId: dbActive?.id || null,
-        promptVersion: dbActive?.version || null,
-      },
-    });
-  } catch (error: any) {
-    logger.error('[admin-prompt-ops] prompt-schema failed:', error);
-    return res.status(500).json({
-      success: false,
-      error: { message: error.message || '加载 prompt schema 失败' },
-    });
-  }
-});
-
-// ============================================================
 // GET /api/admin/prompt-ops/skill-rules-overview
 // 全局 R-XX-NN 规则总览（用于「Skill 规则总览」抽屉）
 // 返回每个 skill / agent 的规则项，并按 prefix 分组聚合
@@ -766,6 +389,29 @@ router.get('/skill-rules-overview', async (_req: Request, res: Response) => {
       success: false,
       error: { message: error.message || '加载规则总览失败' },
     });
+  }
+});
+
+// ============================================================
+// GET /api/admin/prompt-ops/sandbox-view
+// 沙盘契约视图（只读）：5 个顶层 agent 的输入通道/输出字段/合法沙盘键
+// 数据源：routings 表 + core fields 声明（agent-contract-view 动态推导）
+// ============================================================
+router.get('/sandbox-view', async (_req: Request, res: Response) => {
+  try {
+    const { buildAllAgentSandboxViews, SANDBOX_AGENT_IDS, SANDBOX_EXTRA_KEYS } = await import('../../services/agent-contract-view');
+    const views = await buildAllAgentSandboxViews();
+    res.json({
+      success: true,
+      data: {
+        agents: views,
+        agentIds: [...SANDBOX_AGENT_IDS],
+        extraKeys: SANDBOX_EXTRA_KEYS,
+        generatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error.message || '加载沙盘视图失败' } });
   }
 });
 
@@ -952,7 +598,9 @@ router.post('/eval-cases', async (req: Request, res: Response) => {
         .status(400)
         .json({ success: false, error: { message: 'agentId / name 必填' } });
     }
-    if (messages.length === 0) {
+    // 虚拟学习者模拟输入（mode:simulated）的学生话由模拟器生成，messages 可为空
+    const isSimulated = extractSimConfig(body.expectations) !== null;
+    if (messages.length === 0 && !isSimulated) {
       return res
         .status(400)
         .json({ success: false, error: { message: '至少 1 条 message' } });
@@ -980,8 +628,9 @@ router.post('/eval-cases', async (req: Request, res: Response) => {
         name,
         description: body.description ? String(body.description) : null,
         messagesJson: JSON.stringify(messages),
-        previousStateJson: body.previousState
-          ? JSON.stringify(body.previousState)
+        // 结构化输入（path/stage 的 goal/milestone/cognitiveCore 等）合并进 previousStateJson 承载
+        previousStateJson: body.inputPayload || body.previousState
+          ? JSON.stringify({ ...(body.previousState || {}), ...(body.inputPayload || {}) })
           : null,
         expectationsJson: body.expectations
           ? JSON.stringify(body.expectations)
@@ -1012,9 +661,10 @@ router.put('/eval-cases/:id', async (req: Request, res: Response) => {
     if (typeof body.name === 'string') data.name = body.name.trim();
     if (typeof body.description === 'string') data.description = body.description;
     if (Array.isArray(body.messages)) data.messagesJson = JSON.stringify(body.messages);
-    if (body.previousState !== undefined) {
-      data.previousStateJson = body.previousState
-        ? JSON.stringify(body.previousState)
+    if (body.previousState !== undefined || body.inputPayload !== undefined) {
+      const merged = { ...(body.previousState || {}), ...(body.inputPayload || {}) };
+      data.previousStateJson = Object.keys(merged).length
+        ? JSON.stringify(merged)
         : null;
     }
     if (body.expectations !== undefined) {
@@ -1080,12 +730,18 @@ router.post('/run-eval', async (req: Request, res: Response) => {
       .json({ success: false, error: { message: 'agentId 必填' } });
   }
 
-  if (canonicalAgentId !== 'skill:goal-conversation') {
+  const SUPPORTED_EVAL_SKILLS = new Set([
+    'skill:goal-conversation',
+    'skill:path-planning',
+    'skill:stage-designer',
+  ]);
+
+  if (!SUPPORTED_EVAL_SKILLS.has(canonicalAgentId)) {
     return res.status(400).json({
       success: false,
       error: {
         message:
-          '当前评测器仅内置 skill:goal-conversation 的 handler 路由；' +
+          `当前评测器支持：${[...SUPPORTED_EVAL_SKILLS].join(', ')}；` +
           '其他 agent 请使用单条试跑（runtime-definitions/test），或实现对应的 evalAdapter',
       },
     });
@@ -1096,7 +752,13 @@ router.post('/run-eval', async (req: Request, res: Response) => {
     const promptConfig = await resolvePrompt(canonicalAgentId, body);
 
     // 解析用例
-    const dbCases = Array.isArray(body.caseIds) && body.caseIds.length
+    // 语义：
+    //  - 显式 caseIds        → 只跑指定 DB 用例
+    //  - adhocCases 且无 caseIds → 只跑 adhoc（单条试跑）
+    //  - 都没有             → 全部 enabled DB 用例（批量评估）
+    const hasExplicitCaseFilter = Array.isArray(body.caseIds) && body.caseIds.length > 0;
+    const hasAdhocOnly = !hasExplicitCaseFilter && Array.isArray(body.adhocCases) && body.adhocCases.length > 0;
+    const dbCases = hasExplicitCaseFilter
       ? await systemPrisma.prompt_eval_cases.findMany({
           where: {
             agentId: canonicalAgentId,
@@ -1104,9 +766,11 @@ router.post('/run-eval', async (req: Request, res: Response) => {
             enabled: true,
           },
         })
-      : await systemPrisma.prompt_eval_cases.findMany({
-          where: { agentId: canonicalAgentId, enabled: true },
-        });
+      : hasAdhocOnly
+        ? []
+        : await systemPrisma.prompt_eval_cases.findMany({
+            where: { agentId: canonicalAgentId, enabled: true },
+          });
 
     const adhocCases = Array.isArray(body.adhocCases) ? body.adhocCases : [];
 
@@ -1117,6 +781,8 @@ router.post('/run-eval', async (req: Request, res: Response) => {
         messages: safeParse(c.messagesJson, []),
         previousState: safeParse(c.previousStateJson, null),
         expectations: safeParse(c.expectationsJson, null),
+        // DB 用例的结构化输入复用 previousStateJson 承载（path/stage 的 goal/milestone/cognitiveCore/expectedMilestones 等）
+        inputPayload: safeParse(c.previousStateJson, null),
       })),
       ...adhocCases.map((c: any, idx: number) => ({
         id: c.id || `adhoc-${idx + 1}`,
@@ -1124,14 +790,38 @@ router.post('/run-eval', async (req: Request, res: Response) => {
         messages: Array.isArray(c.messages) ? c.messages : [],
         previousState: c.previousState || null,
         expectations: c.expectations || null,
+        inputPayload: c.inputPayload || c.previousState || null,
+        input: c.input || null,
       })),
-    ].filter((c) => c.messages.length > 0);
+    // simulated 用例由虚拟学习者生成输入，messages 可为空；其余要求至少一条消息
+    ].filter((c) => c.messages.length > 0 || extractSimConfig(c.expectations) !== null);
 
     if (!evalCases.length) {
       return res.status(400).json({
         success: false,
         error: { message: '没有可用的评估用例（DB 用例或 ad-hoc）' },
       });
+    }
+
+    // ---- 虚拟学习者模拟输入展开（expectations.mode === 'simulated'）----
+    const simConfigs: Array<SimEvalConfig | null> = evalCases.map((c) => extractSimConfig(c.expectations));
+    const simInputs: Array<{ learner: any; story: any } | null> = [];
+    for (let ci = 0; ci < evalCases.length; ci += 1) {
+      const sim = simConfigs[ci];
+      if (!sim) {
+        simInputs.push(null);
+        continue;
+      }
+      const input = await resolveSimulatedEvalInput({
+        personaId: sim.personaId,
+        scenario: sim.scenario,
+      });
+      // 用模拟出的学生诉求替换首条 user 消息
+      const firstUser = evalCases[ci].messages.find((m: any) => m.role === 'user');
+      if (firstUser) firstUser.content = input.demandText;
+      else evalCases[ci].messages.unshift({ role: 'user', content: input.demandText });
+      evalCases[ci].expectations = { ...(evalCases[ci].expectations || {}), ...sim };
+      simInputs.push({ learner: input.learner, story: input.story });
     }
 
     const repeatCount = Math.max(1, Math.min(5, Number(body.repeatCount || 1)));
@@ -1143,58 +833,91 @@ router.post('/run-eval', async (req: Request, res: Response) => {
     }
 
     try {
-      for (const item of evalCases) {
+      for (let ci = 0; ci < evalCases.length; ci += 1) {
+        const item = evalCases[ci];
+        const sim = simConfigs[ci];
         for (let runIdx = 0; runIdx < repeatCount; runIdx += 1) {
-          const lastUser = [...item.messages]
-            .reverse()
-            .find((m: any) => m.role === 'user');
-          const userInput = String(lastUser?.content || '');
-          const history = item.messages
-            .slice(0, -1)
-            .map((m: any) => ({ role: m.role, content: m.content }));
-          const previousState = item.previousState || {};
-
           const callStart = Date.now();
-          const result = await executeSkill(goalConversationAgentDefinition, {
-            input: userInput,
-            userId: 'admin-prompt-ops',
-            conversationHistory: history,
-            previousUnderstanding: previousState?.understanding || {},
-            previousStage: previousState?.stage || 'understanding',
-            previousState,
-            maxFormatRetries: 2,
-            systemPromptOverride: promptConfig.systemPrompt,
+
+          // ---- 多轮 goal 模拟评估（mode:simulated + dialogueRounds>1）----
+          if (sim && sim.dialogueRounds > 1 && canonicalAgentId === 'skill:goal-conversation') {
+            const loop = await runSimulatedGoalLoop({
+              systemPrompt: promptConfig.systemPrompt,
+              caseItem: item,
+              simConfig: sim,
+              simInput: simInputs[ci] as { learner: any; story: any },
+            });
+            const lastAgentTurn = [...loop.transcript].reverse().find((t) => t.role === 'goal_agent');
+            const simIn = simInputs[ci] as { learner: any; story: any } | null;
+            results.push({
+              caseId: item.id,
+              caseName: item.name,
+              runIndex: runIdx + 1,
+              durationMs: Date.now() - callStart,
+              input: {
+                userInput: loop.transcript[0]?.content || '',
+                conversationContextCount: 0,
+                previousState: item.previousState || {},
+              },
+              output: {
+                userVisible: '',
+                stage: lastAgentTurn?.stage || 'simulated',
+                confidence: 0,
+                // 最终一轮的结构化字段明细（评估核心）
+                fields: lastAgentTurn?.fields || null,
+              },
+              debug: {
+                promptVersion: promptConfig.promptVersion,
+                attemptCount: 0,
+                parseMode: 'rounds',
+                failureType: 'none',
+                structuredOutputValid: true,
+              },
+              checks: loop.checks,
+              passed: loop.passed,
+              transcript: loop.transcript,
+              studentTurns: loop.studentTurns,
+              converged: loop.converged,
+              // 输入侧信息：人设摘要 + 故事 + 当次诉求（结果区展示"输入/输出"）
+              simMeta: {
+                persona: pickPersonaSummary(simIn?.learner),
+                story: simIn?.story
+                  ? {
+                      title: simIn.story.title || simIn.story.visibleOpening || null,
+                      surfaceGoal: simIn.story.goalSeed?.surfaceGoal || null,
+                      realProblem: simIn.story.goalSeed?.realProblem || null,
+                    }
+                  : null,
+                demandText: loop.transcript[0]?.content || '',
+                frictionBudget: sim.frictionBudget,
+                dialogueRounds: sim.dialogueRounds,
+              },
+            });
+            continue;
+          }
+
+          // 用 adapter 分发调用（goal 走 executeSkill；path/stage 走 callPrompt + validator）
+          const adapterResult = await runSkillEvalCase({
+            skillId: canonicalAgentId,
+            systemPrompt: promptConfig.systemPrompt,
+            caseItem: item,
           });
           const durationMs = Date.now() - callStart;
+          const { parsed } = adapterResult;
 
-          // 期望检查
+          // 期望检查：goal 走结构化输出检查；path/stage 走 validator 契约检查
           const expectations = item.expectations || {};
-          const userVisible = String(result?.userVisible || '');
-          const checks: Record<string, boolean> = {
-            structuredOutputValid:
-              result?.debug?.structuredOutputValid === true,
-            stageValid: !!result?.internal?.core?.stage,
-          };
-          if (Array.isArray(expectations.mustIncludeFields)) {
-            for (const field of expectations.mustIncludeFields) {
-              checks[`mustInclude:${field}`] = JSON.stringify(result).includes(
-                String(field)
-              );
-            }
-          }
-          if (Array.isArray(expectations.mustNotInclude)) {
-            for (const phrase of expectations.mustNotInclude) {
-              checks[`mustNotInclude:${phrase}`] = !userVisible.includes(
-                String(phrase)
-              );
-            }
-          }
-          if (
-            typeof expectations.expectedStage === 'string' &&
-            expectations.expectedStage
-          ) {
-            checks.expectedStage =
-              result?.internal?.core?.stage === expectations.expectedStage;
+          let checks: Record<string, boolean> = {};
+          if (canonicalAgentId === 'skill:goal-conversation') {
+            checks = computeGoalChecks(adapterResult.result, expectations);
+          } else {
+            const { checks: contractChecks } = await runSkillChecks({
+              skillId: canonicalAgentId,
+              parsed,
+              expectations,
+              caseItem: item,
+            });
+            checks = contractChecks;
           }
 
           const passed = Object.values(checks).every(Boolean);
@@ -1204,22 +927,49 @@ router.post('/run-eval', async (req: Request, res: Response) => {
             caseName: item.name,
             runIndex: runIdx + 1,
             durationMs,
-            input: { userInput, conversationContextCount: history.length, previousState },
+            input: {
+              userInput: String(
+                [...item.messages].reverse().find((m: any) => m.role === 'user')?.content || ''
+              ),
+              conversationContextCount: item.messages.length - 1,
+              previousState: item.previousState || {},
+            },
             output: {
-              userVisible,
-              stage: result?.internal?.core?.stage || 'understanding',
-              confidence: result?.internal?.core?.confidence || 0,
+              userVisible: parsed ? JSON.stringify(parsed).slice(0, 300) : '',
+              stage: parsed ? 'n/a' : adapterResult.result?.internal?.core?.stage || 'understanding',
+              confidence: adapterResult.result?.internal?.core?.confidence || 0,
+              // goal 的结构化字段明细（评估核心）；path/stage 的 parsed 已含字段
+              fields: canonicalAgentId === 'skill:goal-conversation'
+                ? pickGoalCoreFields(adapterResult.result?.internal?.core)
+                : null,
             },
             debug: {
-              promptVersion: result?.debug?.promptVersion || promptConfig.promptVersion,
-              attemptCount: result?.debug?.attemptCount || 0,
-              parseMode: result?.debug?.parseMode || 'none',
-              failureType: result?.debug?.failureType || 'none',
-              structuredOutputValid:
-                result?.debug?.structuredOutputValid === true,
+              promptVersion: promptConfig.promptVersion,
+              attemptCount: 0,
+              parseMode: 'none',
+              failureType: parsed ? 'none' : 'raw-output',
+              structuredOutputValid: parsed ? true : adapterResult.result?.debug?.structuredOutputValid === true,
             },
             checks,
             passed,
+            // simulated 单轮：附输入侧信息（人设摘要 + 诉求 + 模拟配置）
+            ...(sim && sim.dialogueRounds <= 1
+              ? {
+                  simMeta: {
+                    persona: pickPersonaSummary(simInputs[ci]?.learner),
+                    story: (simInputs[ci] as any)?.story
+                      ? {
+                          title: (simInputs[ci] as any).story.title || (simInputs[ci] as any).story.visibleOpening || null,
+                          surfaceGoal: (simInputs[ci] as any).story.goalSeed?.surfaceGoal || null,
+                          realProblem: (simInputs[ci] as any).story.goalSeed?.realProblem || null,
+                        }
+                      : null,
+                    demandText: String([...item.messages].reverse().find((m: any) => m.role === 'user')?.content || ''),
+                    frictionBudget: sim.frictionBudget,
+                    dialogueRounds: sim.dialogueRounds,
+                  },
+                }
+              : {}),
           });
         }
       }
@@ -1377,6 +1127,525 @@ router.get('/eval-runs/:id', async (req: Request, res: Response) => {
 // ============================================================
 // 工具：解析 prompt 配置（来自 prompt-stability 的同名逻辑简化）
 // ============================================================
+
+/**
+ * 从模型输出提取 JSON（code-fence / raw / marker）
+ */
+function extractJson(text: string): any {
+  if (!text) return null;
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const candidate = fenced ? fenced[1] : text;
+  const start = candidate.indexOf('{');
+  const end = candidate.lastIndexOf('}');
+  if (start < 0 || end < 0 || end <= start) return null;
+  try {
+    return JSON.parse(candidate.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Skill 评估调用器（adapter 分发）：
+ * - goal-conversation：走 executeSkill（多轮对话，校验结构化输出 + 期望字段）
+ * - path-planning / stage-designer：直接 callPrompt（systemPromptOverride=被评估版本）+ 契约字段校验
+ * 返回 { result, parsed }，parsed 为模型原始输出 JSON（供 validator 检查）
+ */
+// ============================================================
+// 虚拟学习者模拟输入（mode:simulated）
+// ============================================================
+
+const SIM_EVAL_FRICTION_OPTIONS = ['none', 'low', 'normal', 'high', 'stress_test'] as const;
+
+interface SimEvalConfig {
+  mode: 'simulated';
+  scenario?: string;
+  personaId?: string;
+  dialogueRounds: number;
+  frictionBudget: (typeof SIM_EVAL_FRICTION_OPTIONS)[number];
+  convergeRequires: string[];
+}
+
+function extractSimConfig(expectations: any): SimEvalConfig | null {
+  if (!expectations || expectations.mode !== 'simulated') return null;
+  return {
+    mode: 'simulated',
+    scenario: typeof expectations.scenario === 'string' ? expectations.scenario : undefined,
+    personaId: typeof expectations.personaId === 'string' ? expectations.personaId : undefined,
+    dialogueRounds: Math.max(0, Math.min(5, Number(expectations.dialogueRounds) || 1)),
+    frictionBudget: SIM_EVAL_FRICTION_OPTIONS.includes(expectations.frictionBudget)
+      ? (expectations.frictionBudget as SimEvalConfig['frictionBudget'])
+      : 'normal',
+    convergeRequires: Array.isArray(expectations.convergeRequires)
+      ? expectations.convergeRequires.map((s: any) => String(s).trim()).filter(Boolean)
+      : [],
+  };
+}
+
+/**
+ * 构造模拟学习者（learner）与当次学生诉求（demandText）。
+ * 来源①：已有虚拟人（virtual_learner_profiles）；②：场景描述即时生成（persona-designer）。
+ */
+async function resolveSimulatedEvalInput(sim: {
+  personaId?: string;
+  scenario?: string;
+}): Promise<{ learner: any; story: any; demandText: string; source: string }> {
+  let personaSeed: any = null;
+  let story: any = null;
+
+  if (sim.personaId) {
+    const profile = await prisma.virtual_learner_profiles.findUnique({
+      where: { id: sim.personaId },
+    });
+    if (!profile) throw new Error(`模拟学习者 ${sim.personaId} 不存在`);
+    const profileData = safeParse<any>(profile.profile, {});
+    personaSeed =
+      profileData?.personaSeed && typeof profileData.personaSeed === 'object'
+        ? profileData.personaSeed
+        : (profileData || null);
+    const storyPool = Array.isArray(profileData?.storyPool) ? profileData.storyPool : [];
+    story = storyPool[0] || null;
+  }
+
+  if (!personaSeed && sim.scenario?.trim()) {
+    try {
+      // executeSkill 返回 output 本身（personaSeed 顶层）
+      const personaOut: any = await executeSkill(virtualLearnerPersonaDesignerDefinition, {
+        recentPersonaHints: [sim.scenario.trim()],
+      });
+      personaSeed = personaOut?.personaSeed || null;
+    } catch (e: any) {
+      logger.warn('[prompt-ops] persona-designer 生成失败，使用最小人设兜底', {
+        error: e?.message,
+      });
+      personaSeed = {
+        nameHint: '模拟学生',
+        background: sim.scenario.trim(),
+        motivationType: 'necessity',
+        learningStyle: 'doing',
+        availableTime: 'moderate',
+        communicationStyle: '日常口语',
+      };
+    }
+  }
+
+  if (!story && sim.scenario?.trim()) {
+    story = {
+      id: `eval_story_${randomUUID().slice(0, 8)}`,
+      visibleOpening: sim.scenario.trim(),
+      goalSeed: { surfaceGoal: sim.scenario.trim(), realProblem: sim.scenario.trim() },
+    };
+  }
+
+  const demand = resolveStorySessionDemand({ story, profileLearningGoal: null });
+  if (!demand.text) {
+    throw new Error('模拟输入无法生成学生诉求（需要 scenario，或该虚拟学习者的故事池非空）');
+  }
+  return {
+    learner: personaSeed || {},
+    story,
+    demandText: demand.text,
+    source: demand.source || 'scenario',
+  };
+}
+
+/** goal-conversation 的字段检查（既有逻辑提取，供单轮/多轮共用） */
+function computeGoalChecks(result: any, expectations: any): Record<string, boolean> {
+  const userVisible = String(result?.userVisible || '');
+  const checks: Record<string, boolean> = {
+    structuredOutputValid: result?.debug?.structuredOutputValid === true,
+    stageValid: !!result?.internal?.core?.stage,
+  };
+  if (Array.isArray(expectations.mustIncludeFields)) {
+    for (const field of expectations.mustIncludeFields) {
+      checks[`mustInclude:${field}`] = JSON.stringify(result).includes(String(field));
+    }
+  }
+  if (Array.isArray(expectations.mustContainText)) {
+    for (const phrase of expectations.mustContainText) {
+      checks[`mustContain:${phrase}`] = userVisible.includes(String(phrase));
+    }
+  }
+  if (Array.isArray(expectations.mustNotInclude)) {
+    for (const phrase of expectations.mustNotInclude) {
+      checks[`mustNotInclude:${phrase}`] = !userVisible.includes(String(phrase));
+    }
+  }
+  if (typeof expectations.expectedStage === 'string' && expectations.expectedStage) {
+    checks.expectedStage = result?.internal?.core?.stage === expectations.expectedStage;
+  }
+  return checks;
+}
+
+function deriveGoalSimPhase(
+  round: number,
+  totalRounds: number
+): 'opening' | 'understanding' | 'proposal_evaluation' {
+  if (round <= 1) return 'opening';
+  if (round < totalRounds) return 'understanding';
+  return 'proposal_evaluation';
+}
+
+/** 提取 goal 输出的结构化字段明细（评估核心），只保留展示所需键 */
+function pickGoalCoreFields(core: any): Record<string, unknown> | null {
+  if (!core || typeof core !== 'object') return null;
+  const out: Record<string, unknown> = {};
+  for (const k of ['stage', 'emotion', 'need', 'understanding', 'real_problem', 'confirmedProposal', 'confidence', 'goalReadiness']) {
+    const v = core[k];
+    if (v !== undefined && v !== null && v !== '') out[k] = v;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** 虚拟学习者人设摘要（供结果区展示"输入"侧） */
+function pickPersonaSummary(learner: any): Record<string, unknown> | null {
+  if (!learner || typeof learner !== 'object') return null;
+  const out: Record<string, unknown> = {};
+  for (const k of ['nameHint', 'age', 'occupation', 'background', 'knownConcepts', 'struggleConcepts', 'learningStyle', 'availableTime', 'motivationType', 'adversarialPattern']) {
+    const v = learner[k];
+    if (v !== undefined && v !== null && v !== '') {
+      out[k] = Array.isArray(v) ? v.slice(0, 4) : v;
+    }
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/**
+ * goal-conversation 多轮模拟评估。
+ * 被测 skill 与虚拟学生交替：逐轮记录字段检查（round 前缀）+ 全局文字期望（allTurns，任一轮命中即过）+ 收敛门禁。
+ */
+async function runSimulatedGoalLoop(params: {
+  systemPrompt: string;
+  caseItem: any;
+  simConfig: SimEvalConfig;
+  simInput: { learner: any; story: any };
+}): Promise<{
+  transcript: any[];
+  result: any;
+  parsed: any;
+  checks: Record<string, boolean>;
+  passed: boolean;
+  studentTurns: number;
+  converged: boolean;
+}> {
+  const { systemPrompt, caseItem, simConfig, simInput } = params;
+  const expectations = caseItem.expectations || {};
+  const { dialogueRounds, frictionBudget, convergeRequires } = simConfig;
+
+  const transcript: any[] = [];
+  const allAgentReplies: string[] = [];
+  const checks: Record<string, boolean> = {};
+  let previousLearnerState: any = null;
+  let finalResult: any = null;
+  let finalParsed: any = null;
+  let studentTurns = 0;
+
+  let currentMessages: any[] = (caseItem.messages || []).map((m: any) => ({
+    role: m.role === 'assistant' ? ('assistant' as const) : ('user' as const),
+    content: String(m.content || ''),
+  }));
+
+  for (let round = 1; round <= dialogueRounds; round += 1) {
+    const adapter = await runSkillEvalCase({
+      skillId: 'skill:goal-conversation',
+      systemPrompt,
+      caseItem: { ...caseItem, messages: currentMessages },
+    });
+    finalResult = adapter.result;
+    finalParsed = adapter.parsed;
+    const userVisible = String(finalResult?.userVisible || '');
+    allAgentReplies.push(userVisible);
+    transcript.push({
+      round,
+      role: 'goal_agent',
+      content: userVisible,
+      checks: computeGoalChecks(finalResult, expectations),
+      stage: finalResult?.internal?.core?.stage || null,
+      // 结构化字段明细：评估的核心（stage/need/real_problem/confirmedProposal 等）
+      fields: pickGoalCoreFields(finalResult?.internal?.core),
+    });
+
+    if (round > 1 && previousLearnerState?.readyToProceed === true) break;
+    if (round >= dialogueRounds) break;
+
+    // executeSkill 返回 output 本身（reply/emotion/learnerState），失败 throw
+    let simOut: any = null;
+    try {
+      simOut = await executeSkill(virtualLearnerGoalDialogueSimulatorDefinition, {
+        learner: simInput.learner,
+        story: simInput.story,
+        visibleContext: {
+          history: currentMessages
+            .filter((m) => m.content)
+            .map((m) => ({
+              role: m.role === 'assistant' ? ('goal_agent' as const) : ('learner' as const),
+              content: m.content,
+            })),
+          lastGoalAgentMessage: userVisible,
+        },
+        currentPhase: deriveGoalSimPhase(round, dialogueRounds),
+        previousLearnerState,
+        frictionBudget,
+      });
+    } catch (e: any) {
+      const err = String(e?.message || e || 'simulator-failed');
+      logger.warn('[prompt-ops] goal-dialogue-simulator 调用失败', { error: err });
+      transcript.push({ round, role: 'learner', content: '[模拟器失败，提前结束]', degraded: true, error: err });
+      break;
+    }
+    const learnerReply = String(simOut?.reply || '').trim();
+    if (!learnerReply) {
+      transcript.push({ round, role: 'learner', content: '[模拟器失败，提前结束]', degraded: true, error: 'empty learner reply' });
+      break;
+    }
+    previousLearnerState = simOut?.learnerState || null;
+    studentTurns += 1;
+    transcript.push({
+      round,
+      role: 'learner',
+      content: learnerReply,
+      emotion: simOut?.emotion || null,
+      learnerState: previousLearnerState,
+    });
+    currentMessages = [...currentMessages, { role: 'user' as const, content: learnerReply }];
+  }
+
+  // 逐轮结构检查（round 前缀，可定位第几轮失败）
+  for (const t of transcript) {
+    if (t.role !== 'goal_agent') continue;
+    for (const [k, v] of Object.entries<boolean>(t.checks || {})) {
+      checks[`round${t.round}:${k}`] = v;
+    }
+  }
+  // 全局文字期望：任意助手回复命中即过（多轮对话语义）
+  const joined = allAgentReplies.join('\n');
+  if (Array.isArray(expectations.mustContainText)) {
+    for (const phrase of expectations.mustContainText) {
+      checks[`allTurns:mustContain:${phrase}`] = joined.includes(String(phrase));
+    }
+  }
+  if (Array.isArray(expectations.mustNotInclude)) {
+    for (const phrase of expectations.mustNotInclude) {
+      checks[`allTurns:mustNotInclude:${phrase}`] = !joined.includes(String(phrase));
+    }
+  }
+  // 收敛门禁（仅配置时参与）
+  const converged =
+    previousLearnerState?.readyToProceed === true ||
+    (finalResult?.internal?.core?.stage === 'confirmed' && dialogueRounds > 1);
+  if (convergeRequires.length) {
+    for (const field of convergeRequires) {
+      checks[`converge:${field}`] = joined.includes(String(field));
+    }
+  }
+
+  const passed = Object.values(checks).every(Boolean);
+  return { transcript, result: finalResult, parsed: finalParsed, checks, passed, studentTurns, converged };
+}
+
+async function runSkillEvalCase(params: {
+  skillId: string;
+  systemPrompt: string;
+  caseItem: { messages: any[]; previousState?: any; inputPayload?: any };
+  input?: any;
+}): Promise<{ result: any; parsed: any }> {
+  const { skillId, systemPrompt, caseItem, input } = params;
+  const lastUser = [...caseItem.messages].reverse().find((m: any) => m.role === 'user');
+  const userInput = String(lastUser?.content || '');
+  const history = caseItem.messages.slice(0, -1).map((m: any) => ({ role: m.role, content: m.content }));
+  const previousState = caseItem.previousState || {};
+
+  if (skillId === 'skill:goal-conversation') {
+    const result = await executeSkill(goalConversationAgentDefinition, {
+      input: userInput,
+      userId: 'admin-prompt-ops',
+      conversationHistory: history,
+      previousUnderstanding: previousState?.understanding || {},
+      previousStage: previousState?.stage || 'understanding',
+      previousState,
+      maxFormatRetries: 2,
+      systemPromptOverride: systemPrompt,
+    });
+    return { result, parsed: null };
+  }
+
+  // path / stage：用 callPrompt 直接评估被指定版本的 prompt（不依赖 ACTIVE）
+  if (skillId === 'skill:path-planning') {
+    const promptInput = input || caseItem.inputPayload || {
+      type: 'path',
+      goal: userInput,
+      currentLevel: previousState?.currentBaseline?.level || 'beginner',
+      metadata: { availableTime: previousState?.resources?.timeBudget || null },
+      confirmedProposal: previousState?.confirmedProposal || null,
+      conversationHistory: history,
+    };
+    // 若调用方指定期望里程碑数（等同 coordinator 的 targetMilestones 注入），拼进 user 文本强制
+    const expectedFromInput = Number.isInteger((promptInput as any)?.expectedMilestones)
+      ? (promptInput as any).expectedMilestones
+      : null;
+    const milestoneDirective = expectedFromInput !== null
+      ? `\n\n【结构规模硬约束】本次规划必须且只能输出恰好 ${expectedFromInput} 个 milestone（数量精确，不是范围建议，不得增减）。`
+      : '';
+    // userPayload 复用 generatePath 的文本模板（goal + 结构化输入），指令作为前缀注入
+    const userPayloadText = `原始学习目标：${promptInput.goal || userInput}
+${milestoneDirective}
+
+路径前置清洗结果（高优先级参考输入）：
+${JSON.stringify({
+  learnerProfile: { currentBaseline: { level: promptInput.currentLevel || 'beginner' } },
+  resources: { timeBudget: promptInput.metadata?.availableTime || null },
+  confirmedProposal: promptInput.confirmedProposal || null,
+  planningHints: {
+    targetMilestones: expectedFromInput,
+    milestoneRange: expectedFromInput !== null ? [expectedFromInput, expectedFromInput] : null,
+  },
+}, null, 2)}
+
+【重要】请把以上清洗结果视为上游已整理好的正式输入，据此设计路径。`;
+    const promptResult = await callPrompt<any, any>({
+      agentId: 'skill:path-planning',
+      defaultSystemPrompt: systemPrompt,
+      requireActivePrompt: false,
+      caller: { agentId: 'path-agent', skillId: 'path-planning' },
+      buildUserPayload: () => userPayloadText,
+      parseRawOutput: (raw) => {
+        const parsed = extractJson(raw);
+        return { parsed, extractedJson: parsed ? JSON.stringify(parsed) : null };
+      },
+      normalizeOutput: (parsed) => ({ parsed }),
+      validateParsedOutput: () => ({ valid: true }),
+      retryStrategy: { maxAttempts: 2 },
+    }, { ...promptInput, systemPromptOverride: systemPrompt });
+    return { result: promptResult, parsed: promptResult?.output?.parsed || null };
+  }
+
+  if (skillId === 'skill:stage-designer') {
+    const promptInput = input || caseItem.inputPayload || {
+      milestone: { stageNumber: 1, title: '示例阶段' },
+      previousMilestone: null,
+      cognitiveCore: { cognitiveDomain: '示例', coreConcepts: [] },
+      normalizedInput: null,
+      repairHints: null,
+    };
+    // 若调用方指定期望子任务数（等同 coordinator 的 targetSubtasksPerStage 注入），
+    // 写进 normalizedInput.planningHints 供 prompt 强制读取
+    const expectedFromInput = Number.isInteger((promptInput as any)?.expectedSubtaskCount)
+      ? (promptInput as any).expectedSubtaskCount
+      : null;
+    const enrichedNormalizedInput =
+      promptInput.normalizedInput && typeof promptInput.normalizedInput === 'object'
+        ? {
+            ...promptInput.normalizedInput,
+            planningHints: expectedFromInput !== null
+              ? {
+                  ...(promptInput.normalizedInput.planningHints || {}),
+                  targetSubtasksPerStage: expectedFromInput,
+                  subtasksPerStageRange: [expectedFromInput, expectedFromInput],
+                }
+              : (promptInput.normalizedInput.planningHints || null),
+          }
+        : expectedFromInput !== null
+          ? { planningHints: { targetSubtasksPerStage: expectedFromInput, subtasksPerStageRange: [expectedFromInput, expectedFromInput] } }
+          : null;
+    const promptResult = await callPrompt<any, any>({
+      agentId: 'skill:stage-designer',
+      defaultSystemPrompt: systemPrompt,
+      requireActivePrompt: false,
+      caller: { skillId: 'stage-designer' },
+      buildUserPayload: () => ({
+        milestone: promptInput.milestone,
+        previousMilestone: promptInput.previousMilestone || null,
+        cognitiveCore: promptInput.cognitiveCore,
+        normalizedInput: enrichedNormalizedInput,
+        repairHints: promptInput.repairHints || null,
+        __promptOverridden: true,
+      }),
+      parseRawOutput: (raw) => {
+        const parsed = extractJson(raw);
+        return { parsed, extractedJson: parsed ? JSON.stringify(parsed) : null };
+      },
+      normalizeOutput: (parsed) => ({ parsed }),
+      validateParsedOutput: () => ({ valid: true }),
+      retryStrategy: { maxAttempts: 2 },
+    }, { ...promptInput, systemPromptOverride: systemPrompt });
+    return { result: promptResult, parsed: promptResult?.output?.parsed || null };
+  }
+
+  throw new Error(`不支持的评估 skill: ${skillId}`);
+}
+
+/**
+ * Skill 契约校验（path/stage 复用 validator；goal 结构化校验）
+ * 返回 checks 供前端逐项展示；goal 返回空 checks（由调用方基于 executeSkill result 计算）
+ */
+async function runSkillChecks(params: {
+  skillId: string;
+  parsed: any;
+  expectations: any;
+  caseItem: { messages: any[]; previousState?: any; inputPayload?: any };
+}): Promise<{ checks: Record<string, boolean>; parsed: any }> {
+  const { skillId, parsed, expectations, caseItem } = params;
+  const checks: Record<string, boolean> = {};
+
+  if (skillId === 'skill:goal-conversation') {
+    return { checks, parsed };
+  }
+
+  const expect = expectations || {};
+  if (!parsed) {
+    checks.parsed = false;
+    return { checks, parsed };
+  }
+  checks.parsed = true;
+
+  if (skillId === 'skill:path-planning') {
+    const expectedMilestones = typeof expect.expectedMilestones === 'number' ? expect.expectedMilestones : null;
+    const validation = validatePathPlanningOutput(parsed, expectedMilestones);
+    checks.contractValid = validation.valid;
+    checks.milestoneCount = Array.isArray(parsed.milestones) ? parsed.milestones.length : 0;
+    if (expectedMilestones !== null) {
+      checks.milestoneCountMatchesExpected = checks.milestoneCount === expectedMilestones;
+    }
+    checks.namePresent = typeof parsed.name === 'string' && parsed.name.trim().length > 0;
+    checks.milestonesPresent = Array.isArray(parsed.milestones) && parsed.milestones.length > 0;
+    checks.cognitiveCorePresent = !!parsed.cognitiveCore;
+    if (Array.isArray(expect.mustIncludeFields)) {
+      for (const field of expect.mustIncludeFields) {
+        checks[`mustInclude:${field}`] = JSON.stringify(parsed).includes(String(field));
+      }
+    }
+    // 人话检查：输出中必须出现的文字（覆盖 name/title/描述等自然语言内容）
+    if (Array.isArray(expect.mustContainText)) {
+      for (const phrase of expect.mustContainText) {
+        checks[`mustContain:${phrase}`] = JSON.stringify(parsed).includes(String(phrase));
+      }
+    }
+  }
+
+  if (skillId === 'skill:stage-designer') {
+    const validation = validateStageDesignerOutput(parsed);
+    checks.contractValid = validation.valid;
+    checks.subtaskCount = Array.isArray(parsed.subtasks) ? parsed.subtasks.length : 0;
+    if (typeof expect.expectedSubtaskCount === 'number') {
+      checks.subtaskCountMatchesExpected = checks.subtaskCount === expect.expectedSubtaskCount;
+    }
+    checks.subtasksPresent = Array.isArray(parsed.subtasks) && parsed.subtasks.length > 0;
+    if (Array.isArray(expect.mustIncludeFields)) {
+      for (const field of expect.mustIncludeFields) {
+        checks[`mustInclude:${field}`] = JSON.stringify(parsed).includes(String(field));
+      }
+    }
+    // 人话检查：输出中必须出现的文字
+    if (Array.isArray(expect.mustContainText)) {
+      for (const phrase of expect.mustContainText) {
+        checks[`mustContain:${phrase}`] = JSON.stringify(parsed).includes(String(phrase));
+      }
+    }
+  }
+
+  return { checks, parsed };
+}
+
 async function resolvePrompt(
   canonicalAgentId: string,
   payload: any
@@ -1433,32 +1702,6 @@ async function resolvePrompt(
     model: payload.model || active.model || null,
   };
 }
-
-/**
- * 触发 prompt 文件热同步
- * POST /api/admin/prompt-ops/sync
- * 运行 sync 模式，将 prompts/*.md 与 DB 比对，归档旧版本、创建新版本，立即生效
- */
-router.post('/sync', async (_req: Request, res: Response) => {
-  try {
-    const result = await ensureCoreAgentPrompts(systemPrisma, 'sync');
-    res.json({
-      success: true,
-      data: {
-        created: result.created,
-        updated: result.updated,
-        skipped: result.skipped,
-        mode: 'sync',
-      },
-    });
-  } catch (error: any) {
-    logger.error('Prompt sync 失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '同步失败',
-    });
-  }
-});
 
 /**
  * 编译预览 — P-PROMPT-COMPILE
@@ -1531,188 +1774,6 @@ router.get('/:agentId/compile-info', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: error.message || '编译预览失败',
-    });
-  }
-});
-
-/**
- * 手动重编译 — P-PROMPT-COMPILE
- * POST /admin/prompt-ops/:agentId/recompile
- *
- * 行为:
- *   - 拉 DB ACTIVE 源 → 调 compilePrompt → 落库 compiledSystemPrompt 等字段
- *   - 同步失效 prompt cache (热更换关键: 下次 LLM 调用立即拿新产物)
- *   - 不重新版本号 (产物只是源的派生, 不算新版本)
- */
-router.post('/:agentId/recompile', async (req: Request, res: Response) => {
-  try {
-    const rawId = req.params.agentId;
-    const ids = rawId.startsWith('skill:') ? [rawId, rawId.slice(6)] : [rawId, `skill:${rawId}`];
-
-    let activePrompt: any = null;
-    for (const id of ids) {
-      activePrompt = await systemPrisma.agent_prompts.findFirst({
-        where: { agentId: id, status: 'ACTIVE' },
-        orderBy: { version: 'desc' },
-      });
-      if (activePrompt) break;
-    }
-
-    if (!activePrompt) {
-      return res.status(404).json({
-        success: false,
-        error: `未找到 agentId=${rawId} 的 ACTIVE prompt`,
-      });
-    }
-
-    const source: string = activePrompt.systemPrompt || '';
-    const routingKey = rawId.startsWith('skill:') ? rawId.slice(6) : rawId;
-    const compileResult = await compilePrompt(source, routingKey);
-
-    await systemPrisma.agent_prompts.update({
-      where: { id: activePrompt.id },
-      data: {
-        compiledSystemPrompt: compileResult.compiled,
-        compiledAt: new Date(),
-        sourceHash: compileResult.sourceHash,
-        compileContextHash: compileResult.compileContextHash,
-        compileStatus: compileResult.status,
-        compileError: compileResult.error || null,
-      },
-    });
-
-    // 热更换关键: 失效缓存, 下次 LLM 调用立即拿新产物
-    try {
-      promptCache.clearAgentCache(activePrompt.agentId);
-      if (activePrompt.agentId !== rawId) promptCache.clearAgentCache(rawId);
-    } catch (cacheErr: any) {
-      logger.warn('清缓存失败 (非致命):', cacheErr?.message);
-    }
-
-    res.json({
-      success: true,
-      data: {
-        agentId: rawId,
-        status: compileResult.status,
-        rewritten: compileResult.rewritten,
-        fieldsApplied: compileResult.fieldsApplied,
-        sourceHash: compileResult.sourceHash,
-        compileContextHash: compileResult.compileContextHash,
-        warnings: compileResult.warnings,
-        error: compileResult.error || null,
-      },
-    });
-  } catch (error: any) {
-    logger.error('recompile 失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '重编译失败',
-    });
-  }
-});
-
-/**
- * 保存源 + 自动编译 + 失效缓存 (一键完成"编辑→编译") — P-PROMPT-COMPILE
- * PUT /admin/prompt-ops/:agentId/source
- *
- * body: { systemPrompt: string, autoCompile?: boolean (默认 true) }
- *
- * 行为:
- *   1. 把 systemPrompt 写入 ACTIVE 版本的 systemPrompt 字段 (原地更新, 不新建版本)
- *   2. autoCompile=true 时立即调 compilePrompt → 落库
- *   3. 失效 prompt cache → 下次 LLM 调用立即用新源/新产物
- *
- * 设计取舍:
- *   - 原地更新 systemPrompt 是热更换语义 — 用户改 prompt 立即生效, 不引入新版本号
- *   - 如需保留历史版本应该走 agent-prompts.ts 的 publish 流程 (创建新 DRAFT 版本)
- *   - 本端点是 "运营快速调整" 路径, 跟 sync(.md 文件) 不冲突
- */
-router.put('/:agentId/source', async (req: Request, res: Response) => {
-  try {
-    const rawId = req.params.agentId;
-    const { systemPrompt, autoCompile = true } = req.body || {};
-
-    if (typeof systemPrompt !== 'string' || systemPrompt.trim().length === 0) {
-      return res.status(400).json({ success: false, error: 'systemPrompt 不能为空' });
-    }
-
-    const ids = rawId.startsWith('skill:') ? [rawId, rawId.slice(6)] : [rawId, `skill:${rawId}`];
-
-    let activePrompt: any = null;
-    for (const id of ids) {
-      activePrompt = await systemPrisma.agent_prompts.findFirst({
-        where: { agentId: id, status: 'ACTIVE' },
-        orderBy: { version: 'desc' },
-      });
-      if (activePrompt) break;
-    }
-
-    if (!activePrompt) {
-      return res.status(404).json({
-        success: false,
-        error: `未找到 agentId=${rawId} 的 ACTIVE prompt`,
-      });
-    }
-
-    // 1) 保存源
-    await systemPrisma.agent_prompts.update({
-      where: { id: activePrompt.id },
-      data: {
-        systemPrompt,
-        updatedAt: new Date(),
-        // 标记产物 stale (autoCompile=false 时让下次 LLM 调用前 lazy 重编译)
-        compileStatus: autoCompile ? activePrompt.compileStatus : 'stale',
-      },
-    });
-
-    let compileResult: any = null;
-
-    // 2) 自动编译
-    if (autoCompile) {
-      const routingKey = rawId.startsWith('skill:') ? rawId.slice(6) : rawId;
-      compileResult = await compilePrompt(systemPrompt, routingKey);
-
-      await systemPrisma.agent_prompts.update({
-        where: { id: activePrompt.id },
-        data: {
-          compiledSystemPrompt: compileResult.compiled,
-          compiledAt: new Date(),
-          sourceHash: compileResult.sourceHash,
-          compileContextHash: compileResult.compileContextHash,
-          compileStatus: compileResult.status,
-          compileError: compileResult.error || null,
-        },
-      });
-    }
-
-    // 3) 失效缓存 (热更换关键)
-    try {
-      promptCache.clearAgentCache(activePrompt.agentId);
-      if (activePrompt.agentId !== rawId) promptCache.clearAgentCache(rawId);
-    } catch (cacheErr: any) {
-      logger.warn('清缓存失败 (非致命):', cacheErr?.message);
-    }
-
-    res.json({
-      success: true,
-      data: {
-        agentId: rawId,
-        savedSource: true,
-        compiled: autoCompile,
-        compileStatus: compileResult?.status || (autoCompile ? null : 'stale'),
-        rewritten: compileResult?.rewritten || false,
-        fieldsApplied: compileResult?.fieldsApplied || 0,
-        sourceHash: compileResult?.sourceHash || null,
-        compileContextHash: compileResult?.compileContextHash || null,
-        warnings: compileResult?.warnings || [],
-        error: compileResult?.error || null,
-      },
-    });
-  } catch (error: any) {
-    logger.error('保存源失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '保存失败',
     });
   }
 });
@@ -1791,12 +1852,14 @@ router.get('/skill-catalog', async (_req: Request, res: Response) => {
               const schema = parsePromptSchema(prompt.systemPrompt);
               inputFields = (schema.inputFields || []).map((f) => ({
                 path: f.path,
+                name: f.path,
                 valueType: f.valueType,
                 enumValues: f.enumValues || null,
                 note: f.note || '',
               }));
               outputFields = (schema.outputFields || []).map((f) => ({
                 path: f.path,
+                name: f.path,
                 valueType: f.valueType,
                 enumValues: f.enumValues || null,
                 note: f.note || '',
@@ -1838,144 +1901,6 @@ router.get('/skill-catalog', async (_req: Request, res: Response) => {
       success: false,
       error: error.message || '加载 skill 目录失败',
     });
-  }
-});
-
-/**
- * GET /admin/prompt-ops/:agentId/fields
- *
- * 从 prompt 源里抽出 input + output 可编辑字段表 (供 GUI 渲染).
- * source-of-truth 仍是 prompt source 里的 ```json``` 块, 这只是一个 GUI 友好视图.
- */
-router.get('/:agentId/fields', async (req: Request, res: Response) => {
-  try {
-    const rawId = req.params.agentId;
-    const ids = rawId.startsWith('skill:') ? [rawId, rawId.slice(6)] : [rawId, `skill:${rawId}`];
-
-    let activePrompt: any = null;
-    for (const id of ids) {
-      activePrompt = await systemPrisma.agent_prompts.findFirst({
-        where: { agentId: id, status: 'ACTIVE' },
-        orderBy: { version: 'desc' },
-      });
-      if (activePrompt) break;
-    }
-    if (!activePrompt) {
-      return res.status(404).json({ success: false, error: `未找到 agentId=${rawId} 的 ACTIVE prompt` });
-    }
-
-    const source: string = activePrompt.systemPrompt || '';
-    const inputFields = extractFieldsFromSource(source, 'input');
-    const outputFields = extractFieldsFromSource(source, 'output');
-
-    res.json({
-      success: true,
-      data: {
-        agentId: rawId,
-        inputFields,
-        outputFields,
-        inputFieldCount: inputFields.length,
-        outputFieldCount: outputFields.length,
-      },
-    });
-  } catch (error: any) {
-    logger.error('fields GET 失败:', error);
-    res.status(500).json({ success: false, error: error.message || '加载字段失败' });
-  }
-});
-
-/**
- * PUT /admin/prompt-ops/:agentId/fields
- * body: { inputFields?: EditableField[], outputFields?: EditableField[], autoCompile?: boolean }
- *
- * 把字段表序列化回 prompt 源里的 ```json``` 块, 等价于 GUI 字段编辑 → 改源 → 自动编译 → 热更换.
- * 仅替换 ```json``` 块, 段内 prose / OUT-XX / IN-XX 全部保留.
- */
-router.put('/:agentId/fields', async (req: Request, res: Response) => {
-  try {
-    const rawId = req.params.agentId;
-    const { inputFields, outputFields, autoCompile = true } = req.body || {};
-
-    if (!inputFields && !outputFields) {
-      return res.status(400).json({ success: false, error: '至少提供 inputFields 或 outputFields' });
-    }
-
-    const ids = rawId.startsWith('skill:') ? [rawId, rawId.slice(6)] : [rawId, `skill:${rawId}`];
-
-    let activePrompt: any = null;
-    for (const id of ids) {
-      activePrompt = await systemPrisma.agent_prompts.findFirst({
-        where: { agentId: id, status: 'ACTIVE' },
-        orderBy: { version: 'desc' },
-      });
-      if (activePrompt) break;
-    }
-    if (!activePrompt) {
-      return res.status(404).json({ success: false, error: `未找到 agentId=${rawId} 的 ACTIVE prompt` });
-    }
-
-    const currentSource: string = activePrompt.systemPrompt || '';
-    const { source: newSource, warnings } = updateFieldsInSource(
-      currentSource,
-      inputFields as EditableField[] | undefined,
-      outputFields as EditableField[] | undefined
-    );
-
-    if (newSource === currentSource) {
-      return res.json({
-        success: true,
-        data: { changed: false, warnings, note: '字段表未变化, 源未更新' },
-      });
-    }
-
-    // 写回源
-    await systemPrisma.agent_prompts.update({
-      where: { id: activePrompt.id },
-      data: {
-        systemPrompt: newSource,
-        updatedAt: new Date(),
-        compileStatus: autoCompile ? activePrompt.compileStatus : 'stale',
-      },
-    });
-
-    let compileResult: any = null;
-    if (autoCompile) {
-      const routingKey = rawId.startsWith('skill:') ? rawId.slice(6) : rawId;
-      compileResult = await compilePrompt(newSource, routingKey);
-      await systemPrisma.agent_prompts.update({
-        where: { id: activePrompt.id },
-        data: {
-          compiledSystemPrompt: compileResult.compiled,
-          compiledAt: new Date(),
-          sourceHash: compileResult.sourceHash,
-          compileContextHash: compileResult.compileContextHash,
-          compileStatus: compileResult.status,
-          compileError: compileResult.error || null,
-        },
-      });
-    }
-
-    try {
-      promptCache.clearAgentCache(activePrompt.agentId);
-      if (activePrompt.agentId !== rawId) promptCache.clearAgentCache(rawId);
-    } catch (cacheErr: any) {
-      logger.warn('清缓存失败 (非致命):', cacheErr?.message);
-    }
-
-    res.json({
-      success: true,
-      data: {
-        changed: true,
-        autoCompile,
-        compileStatus: compileResult?.status || (autoCompile ? null : 'stale'),
-        fieldsApplied: compileResult?.fieldsApplied || 0,
-        warnings: [...warnings, ...(compileResult?.warnings || [])],
-        error: compileResult?.error || null,
-      },
-    });
-  } catch (error: any) {
-    logger.error('fields PUT 失败:', error);
-    res.status(500).json({ success: false, error: error.message || '保存字段失败' });
   }
 });
 

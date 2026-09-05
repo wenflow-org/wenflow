@@ -15,7 +15,7 @@ describe('goal-conversation alias (Phase 3)', () => {
   it('aligns skill defaultModelConfig maxTokens with File-as-Truth prompt', () => {
     const skill = getAgentManifest('skill:goal-conversation')
     expect(skill?.kind).toBe('skill')
-    expect(skill?.defaultModelConfig?.maxTokens).toBe(8000)
+    expect(skill?.defaultModelConfig?.maxTokens).toBe(32000)
     expect(skill?.defaultModelConfig?.temperature).toBe(0.7)
   })
 })

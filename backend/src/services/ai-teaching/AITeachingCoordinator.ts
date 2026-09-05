@@ -3,10 +3,10 @@ import { logger } from '../../utils/logger';
 import prisma from '../../config/database';
 import learningStateService, { LearningStateMetrics } from '../learning/learning-state.service';
 import type { SessionWrapupArtifact, SessionWrapupSummary } from '../../skills/session-wrapup';
-import { learningTurnAgentDefinition, type LearningTurnInput, type LearningTurnOutput } from '../../skills/learning-turn';
+import { teachingTurnAgentDefinition, type TeachingTurnInput, type TeachingTurnOutput } from '../../skills/teaching-turn';
 import { executeSkill, executeSkillWithResult, auxSkillDefinitionMap, sessionWrapupAgentDefinition, peerAgentDefinition } from '../../skills';
-import { getEventBus } from '../../gateway/event-bus';
-import { buildTeachingScenarioContext, type TeachingScenarioContext } from './TeachingContextBuilder';
+import { buildTeachingScenarioContext, type TeachingScenarioContext, type InteractionMetaRecord } from './TeachingContextBuilder';
+import { fsrsRetrievability, type FsrsMemoryState } from '../memory/fsrs';
 import {
   teachingSessionRepository,
   TeachingSessionConflictError,
@@ -22,14 +22,18 @@ import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefresh
 import { learnerSnapshotService } from '../learner/LearnerSnapshotService';
 import { dashboardGuidanceSnapshotService } from '../learner/DashboardGuidanceSnapshotService';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
+import { assembleTeachingTurnChannels } from '../field-dispatcher';
 import { createDomainEvent } from '../../events/contracts';
 import { replanAdvisoryService, type ReplanAdvisory } from './ReplanAdvisoryService';
 import { hasReliableSessionEvaluation, mergeFinalTeachingState } from './SessionFinalizationPolicy';
 import { classifyFinalizationError } from './FinalizationErrors';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
+import { learnerExitService } from '../learner/LearnerExitService';
+import { memoryTraceService } from '../memory/memory-trace.service';
+import { recordMisconceptions } from '../learner/misconception-ledger.service';
 
 export type TeachingMode = 'tutor' | 'peer' | 'debate';
-const AI_TEACHING_AGENT_ID = 'learning-agent';
+const AI_TEACHING_AGENT_ID = 'teaching-agent';
 
 export interface KnowledgePointStatus {
   name: string;
@@ -50,6 +54,8 @@ export interface TeachingCheckpoint {
 export interface CheckpointSubmitPayload {
   selectedOptionIds?: string[];
   answerText?: string;
+  /** 跳过检查点：清除待处理检查点并记录历史，不触发教学回合 */
+  skip?: boolean;
 }
 
 export interface CheckpointSubmitResult {
@@ -63,6 +69,8 @@ export interface CheckpointSubmitResult {
 export interface TeachingSessionStartInput {
   userId: string;
   taskId: string;
+  /** 会话模式：tutor（默认教学）/ review（复习课，knowledgeState 注入到期复习点） */
+  mode?: 'tutor' | 'review';
 }
 
 export interface TeachingOpening {
@@ -74,10 +82,114 @@ export interface TeachingOpening {
 
 type SessionResumeMode = 'new' | 'resumed';
 
+/** 开场景卡片元数据（供前端开场 UI 结构化渲染，区分首课/续课/重学/恢复/复习） */
+export interface SessionOpeningScene {
+  kind: 'first' | 'continuation' | 'relearn' | 'resume' | 'review';
+  /** 卡片主标题（面向学习者的人话，如「这节课是 X 的延续」） */
+  title: string;
+  /** 衔接素材：上一课的摘要 / 卡点（有则展示在卡片上） */
+  recap?: {
+    topic: string | null;
+    summary: string | null;
+    retrievalCue: string | null;
+    unresolved: string[];
+    /** 位置关系：same-milestone-prev-task / prev-milestone / same-task / last-any */
+    relation?: string | null;
+    sourceStage?: number | null;
+    sourceTitle?: string | null;
+  } | null;
+  /** 同任务重学次数（≥2 表示这是重学） */
+  attempt?: number;
+  /** 前序阶段掌握度（供"基础稳不稳"提示） */
+  mastery?: Array<{ stage: number; title: string; state: 'unknown' | 'partial' | 'stable' | 'at-risk' }>;
+}
+
+/** 依据会话场景与上下文推导开场卡（纯函数，便于测试） */
+export function buildSessionOpeningScene(opts: {
+  mode: SessionResumeMode;
+  review?: boolean;
+  context: TeachingScenarioContext;
+  sameTaskAttempt?: number;
+}): SessionOpeningScene {
+  const { mode, review, context, sameTaskAttempt } = opts;
+  const prior = context.priorLearningContext;
+  const recap = context.lastLessonRecap;
+  if (review) {
+    return {
+      kind: 'review',
+      title: '今日复习 · 回捞快忘的知识点',
+      recap: recap ? {
+        topic: recap.sourceTopic,
+        summary: recap.topicSummary,
+        retrievalCue: recap.retrievalCue,
+        unresolved: recap.unresolvedPoints,
+        relation: recap.relation,
+        sourceStage: recap.sourceStageNumber ?? null,
+        sourceTitle: recap.sourceTaskTitle ?? recap.sourceMilestoneTitle ?? null,
+      } : null,
+      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState })) || [],
+    };
+  }
+  if (mode === 'resumed') {
+    return {
+      kind: 'resume',
+      title: '继续这节课 · 从上次离开的地方接着学',
+      recap: recap ? {
+        topic: recap.sourceTopic,
+        summary: recap.topicSummary,
+        retrievalCue: recap.retrievalCue,
+        unresolved: recap.unresolvedPoints,
+        relation: recap.relation,
+        sourceStage: recap.sourceStageNumber ?? null,
+        sourceTitle: recap.sourceTaskTitle ?? recap.sourceMilestoneTitle ?? null,
+      } : null,
+      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState })) || [],
+    };
+  }
+  // mode === 'new'：区分首课 / 同任务重学 / 第二课接续
+  if (sameTaskAttempt && sameTaskAttempt >= 2) {
+    return {
+      kind: 'relearn',
+      title: '重新学这一课 · 上次没完全掌握的这次补上',
+      recap: recap && recap.relation === 'same-task' ? {
+        topic: recap.sourceTopic,
+        summary: recap.sameTaskHistory?.lastSummary || recap.topicSummary,
+        retrievalCue: recap.retrievalCue,
+        unresolved: recap.unresolvedPoints,
+        relation: recap.relation,
+        sourceStage: recap.sourceStageNumber ?? null,
+        sourceTitle: context.taskTitle,
+      } : null,
+      attempt: sameTaskAttempt,
+      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState })) || [],
+    };
+  }
+  const hasAdjacent = recap && (recap.relation === 'same-milestone-prev-task' || recap.relation === 'prev-milestone');
+  if (hasAdjacent) {
+    return {
+      kind: 'continuation',
+      title: '接着上一课往下学',
+      recap: {
+        topic: recap.sourceTopic,
+        summary: recap.topicSummary,
+        retrievalCue: recap.retrievalCue,
+        unresolved: recap.unresolvedPoints,
+        relation: recap.relation,
+        sourceStage: recap.sourceStageNumber ?? null,
+        sourceTitle: recap.sourceTaskTitle ?? recap.sourceMilestoneTitle ?? null,
+      },
+      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState })) || [],
+    };
+  }
+  return { kind: 'first', title: '开始这节课', mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState })) || [] };
+}
+
 interface ProcessStudentMessageOptions {
   operationClaim?: TeachingSessionOperationClaim;
   checkpointId?: string;
   expectedRevision?: number;
+  /** 前端交互特征（认知负荷量测 · 前端情报层）：随学生消息落库并注入教学上下文 */
+  interactionMeta?: InteractionMetaRecord | null;
 }
 
 const RECOVERY_WINDOW_MS = 48 * 60 * 60 * 1000;
@@ -106,13 +218,14 @@ function toMessageRole(role: string): 'user' | 'assistant' | 'system' {
   return 'user';
 }
 
-function appendTimestamp(messages: Array<{ role: string; content: string; timestamp?: string; analysis?: any; checkpoint?: boolean }>): TeachingSessionMessage[] {
+function appendTimestamp(messages: Array<{ role: string; content: string; timestamp?: string; analysis?: any; checkpoint?: boolean; meta?: Record<string, number> | null }>): TeachingSessionMessage[] {
   return messages.map((message) => ({
     role: toMessageRole(message.role),
     content: message.content,
     timestamp: message.timestamp || new Date().toISOString(),
     ...(message.analysis ? { analysis: message.analysis } : {}),
-    ...(message.checkpoint ? { checkpoint: true } : {})
+    ...(message.checkpoint ? { checkpoint: true } : {}),
+    ...(message.meta && Object.keys(message.meta).length > 0 ? { meta: message.meta } : {})
   }));
 }
 
@@ -186,6 +299,11 @@ function buildLearnerStateContext(
   latestAnalysis?: any,
 ) {
   const previous = teachingState?.learnerStateContext || {};
+  const ktEstimate = latestAnalysis?.ktEstimate;
+  const frustratedStreak = latestAnalysis?.emotionalState === 'frustrated'
+    ? (previous.frustratedStreak ?? 0) + 1
+    : 0;
+  const selfAssessmentSignal = latestAnalysis?.selfAssessmentSignal ?? previous.selfAssessmentSignal ?? null;
   return {
     currentUnderstanding: latestAnalysis?.understanding ?? previous.currentUnderstanding ?? null,
     currentCognitiveLevel: latestAnalysis?.cognitiveLevel || previous.currentCognitiveLevel || null,
@@ -193,6 +311,10 @@ function buildLearnerStateContext(
     emotionalState: latestAnalysis?.emotionalState || previous.emotionalState || null,
     engagement: latestAnalysis?.engagement ?? previous.engagement ?? null,
     struggleDetected: previous.struggleDetected === true,
+    frustratedStreak,
+    selfAssessmentSignal,
+    // θ−d 路由信号（回合级知识状态估计）：供 wrapup 证据消费与 session_load 聚合
+    ...(ktEstimate ? { ktEstimate } : {}),
   };
 }
 
@@ -309,24 +431,43 @@ function detectEndIntent(message: string) {
 
 function determineNextStage(params: {
   currentStage: LearnStage;
-  teachingOutput: LearningTurnOutput;
+  teachingOutput: TeachingTurnOutput;
   peerTriggered: boolean;
   learnerMessage: string;
+  taskMode?: 'normal' | 'productiveFailure';
+  frustratedStreak?: number;
 }): { stage: LearnStage; reason: string } {
-  const { currentStage, teachingOutput, peerTriggered, learnerMessage } = params;
+  const { currentStage, teachingOutput, peerTriggered, learnerMessage, taskMode, frustratedStreak } = params;
   const understanding = Number(teachingOutput.analysis?.understanding ?? 0.5);
   const emotion = teachingOutput.analysis?.emotionalState;
   const confusionPoints = Array.isArray(teachingOutput.analysis?.confusionPoints)
     ? teachingOutput.analysis.confusionPoints
     : [];
   const completionCandidate = teachingOutput.control?.isCompletionCandidate === true;
+  // loadIndex 作为 intervention 的辅助证据（认知过载 >0.85 且理解不足时倾向干预，
+  // 而非仅依赖情绪/困惑点显式信号；M1 感知层消费接入）
+  const loadIndex = Number(teachingOutput.analysis?.loadIndex);
+  const highLoad = Number.isFinite(loadIndex) && loadIndex > 0.85;
+  // θ−d 路由（回合级知识追踪信号）：mastery 显著低于任务难度或建议 scaffold 时，
+  // 视同"知识状态层面的卡点"，与负荷路由（瞬态）互补作为 intervention 辅助证据
+  const ktEstimate = teachingOutput.analysis?.ktEstimate;
+  const ktLowMastery = Array.isArray(ktEstimate?.conceptMastery)
+    ? ktEstimate!.conceptMastery!.some((c) => Number.isFinite(c.mastery) && c.mastery < 0.4)
+    : false;
+  const ktHighDifficulty = Number.isFinite(ktEstimate?.currentTaskDifficulty) && (ktEstimate!.currentTaskDifficulty as number) > 0.6;
+  const ktStruggle = ktEstimate?.recommendation === 'scaffold' || (ktLowMastery && ktHighDifficulty);
 
   if (completionCandidate) {
     return { stage: 'ready_to_close', reason: '检测到完成候选，当前任务已接近收束' };
   }
 
-  if (peerTriggered || understanding < 0.35 || emotion === 'frustrated' || confusionPoints.length >= 2) {
-    return { stage: 'intervention', reason: '学生出现明显卡点，进入干预阶段' };
+  // PF 逃生舱：连续 2 轮 frustrated 或 loadIndex > 0.85 → 强制退出 PF 模式（标记可收束，跳过整合）
+  if (taskMode === 'productiveFailure' && ((frustratedStreak ?? 0) >= 2 || highLoad)) {
+    return { stage: 'ready_to_close', reason: `PF 逃生舱触发：${highLoad ? '认知过载' : `连续 ${frustratedStreak} 轮受挫`}，退出有效失败模式` };
+  }
+
+  if (peerTriggered || understanding < 0.35 || emotion === 'frustrated' || confusionPoints.length >= 2 || (highLoad && understanding < 0.6) || (ktStruggle && understanding < 0.6)) {
+    return { stage: 'intervention', reason: highLoad ? '认知负荷过高，进入干预降载' : ktStruggle ? '知识状态低于任务难度（θ−d），进入干预' : '学生出现明显卡点，进入干预阶段' };
   }
 
   if (currentStage === 'opening' && learnerMessage.trim()) {
@@ -348,7 +489,7 @@ function buildClassroomContext(params: {
   previousState: Record<string, any> | null | undefined;
   stage: LearnStage;
   stageReason: string;
-  teachingOutput?: LearningTurnOutput | null;
+  teachingOutput?: TeachingTurnOutput | null;
   learnerMessage: string;
   context: TeachingScenarioContext;
   knowledgeState: TeachingKnowledgePointState[];
@@ -442,11 +583,42 @@ function buildTeachingStateWithArtifacts(
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> {
   let timer: NodeJS.Timeout | null = null;
+  // 超时取消钩子：调用方可传入 controller，超时 reject 的同时 abort 底层 LLM 调用，
+  // 避免"上层已超时、底层流仍在跑"的幽灵 CALLER_ABORTED 日志与 token 浪费。
+  const controller = new AbortController();
   try {
     return await Promise.race([
       promise,
       new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(errorMessage)), ms);
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error(errorMessage));
+        }, ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * 同 withTimeout，但把超时取消信号暴露给调用方（传给 gateway.execute 的 abortSignal）。
+ */
+async function withTimeoutSignal<T>(
+  promise: (signal: AbortSignal) => Promise<T>,
+  ms: number,
+  errorMessage: string
+): Promise<T> {
+  let timer: NodeJS.Timeout | null = null;
+  const controller = new AbortController();
+  try {
+    return await Promise.race([
+      promise(controller.signal),
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error(errorMessage));
+        }, ms);
       }),
     ]);
   } finally {
@@ -455,14 +627,38 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: str
 }
 
 function computeEffectiveDurationMinutes(session: TeachingSessionRecord) {
-  const rawDuration = Math.max(1, Math.round((Date.now() - session.startTime.getTime()) / 60000));
   const sessionArtifacts = parseSessionArtifacts(session.teachingState);
-  const pausedDurationMs = Number(sessionArtifacts.pausedDurationMs || 0);
-  if (!Number.isFinite(pausedDurationMs) || pausedDurationMs <= 0) {
-    return rawDuration;
+  let pausedDurationMs = Number(sessionArtifacts.pausedDurationMs || 0);
+  if (!Number.isFinite(pausedDurationMs) || pausedDurationMs < 0) pausedDurationMs = 0;
+
+  // 暂停中直接收束：当前暂停段（pausedAt → now）一并计入暂停，避免把切走时间算入
+  if (session.status === 'paused' && typeof sessionArtifacts.pausedAt === 'string') {
+    const pausedAtMs = new Date(sessionArtifacts.pausedAt).getTime();
+    if (Number.isFinite(pausedAtMs)) {
+      pausedDurationMs += Math.max(0, Date.now() - pausedAtMs);
+    }
   }
 
-  return Math.max(1, Math.round((Date.now() - session.startTime.getTime() - pausedDurationMs) / 60000));
+  const rawDuration = Math.max(1, Math.round((Date.now() - session.startTime.getTime() - pausedDurationMs) / 60000));
+
+  // idle 封顶：按消息时间戳间隔估算活跃时长（间隔 > 30 分钟视为暂停，与 timeout-fallback 规则一致），
+  // 防止合盖睡眠/进程被杀等无 pagehide 场景把 idle 时间算入学习时长
+  const messages = Array.isArray(session.messages) ? session.messages : [];
+  const times = messages
+    .map((m) => (m.timestamp ? new Date(m.timestamp).getTime() : NaN))
+    .filter((t) => Number.isFinite(t))
+    .sort((a, b) => a - b);
+  if (times.length > 0) {
+    let activeMinutes = 0;
+    for (let i = 1; i < times.length; i++) {
+      activeMinutes += Math.min((times[i] - times[i - 1]) / 60000, 30);
+    }
+    // 首条消息前引导段 + 最后活动后的收尾窗各按最多 30 分钟计
+    const capped = Math.round(activeMinutes + 60);
+    return Math.max(1, Math.min(rawDuration, capped));
+  }
+
+  return rawDuration;
 }
 
 function buildRecoveredOpening(session: TeachingSessionRecord): TeachingOpening {
@@ -471,6 +667,20 @@ function buildRecoveredOpening(session: TeachingSessionRecord): TeachingOpening 
     question: '准备好了的话，我们继续刚才的内容。',
     quickReplies: [{ text: '继续上次进度' }, { text: '先回顾一下' }, { text: '从当前焦点继续' }],
     mode: 'self-assess',
+  };
+}
+
+/**
+ * 确定性开场兜底：generateOpening（LLM）失败/无有效结构时使用，
+ * 保证开课链路在模型不可用时仍可用（此前直接抛错导致开课整体不可用）。
+ * 结构对齐 TeachingOpening 契约（message/question/quickReplies/mode）。
+ */
+function buildDeterministicOpening(context: TeachingScenarioContext): TeachingOpening {
+  return {
+    message: `我们先从 **${context.topic || context.taskTitle}** 开始这节课。目标是把关键知识点讲清楚，并在过程中检查你的掌握情况。`,
+    question: '准备好了的话，我们直接开始。',
+    quickReplies: [{ text: '准备好了，开始' }, { text: '先讲讲目标' }, { text: '换种方式讲解' }],
+    mode: 'example-first',
   };
 }
 
@@ -483,6 +693,74 @@ function cloneKnowledgePoints(points: TeachingKnowledgePointState[] | null | und
       status: point.status,
       progress: Number.isFinite(point.progress) ? Number(point.progress) : 0,
     }));
+}
+
+/**
+ * M1 兜底：正式课后产出（executeSkill）抛错 / 返回 success:false 时构造的
+ * summary-only wrapup（不调 LLM），结构对齐 applyTimeoutWrapupFallback，
+ * 保证 endSession 收束流程继续，不落入 finalization_failed。
+ */
+function buildEndWrapupFallback(session: TeachingSessionRecord, durationMinutes: number): {
+  result: any;
+  artifact: any;
+} {
+  const knowledgePoints = cloneKnowledgePoints(session.knowledgeState);
+  const mastered = knowledgePoints.filter((p) => p.status === 'mastered').map((p) => p.name);
+  const learning = knowledgePoints.filter((p) => p.status === 'learning').map((p) => p.name);
+  const summary = {
+    topicSummary: '本次学习记录生成遇到问题，为你保留了基础总结。',
+    knowledgeSummary: mastered.length > 0 ? `已掌握：${mastered.join('、')}。` : '暂未确认掌握的知识点。',
+    practiceAdvice: '重新完成一次完整的学习后，这里会给出完整建议。',
+    learningEvaluation: '未生成学习评价。',
+    knowledgeItems: knowledgePoints.map((p) => ({
+      name: p.name,
+      status: p.status,
+      progress: p.progress,
+      evidence: p.status === 'mastered' ? '会话中确认掌握' : '会话中未完成确认',
+    })),
+    keyTakeaways: [] as string[],
+    actionPlan: [] as string[],
+    evaluationHighlights: { strengths: [] as string[], improvements: [] as string[] },
+    metricInterpretation: {
+      session: '未生成本节课堂表现。',
+      longTerm: '未生成长期状态评估。',
+    },
+    summaryVersion: 'v2',
+  };
+  const progress = {
+    newlyMastered: mastered,
+    movedToReview: [] as string[],
+    stillLearning: learning,
+    unchangedMastered: [] as string[],
+  };
+  const evidence = {
+    turnCount: Array.isArray(session.messages) ? session.messages.length : 0,
+    avgUnderstanding: null,
+    avgEngagement: null,
+    dominantCognitiveLevel: null,
+    lastCognitiveLevel: null,
+    topConfusionPoints: [] as string[],
+    emotionalSignals: { positive: 0, neutral: 0, frustrated: 0, confused: 0 },
+    completionCandidateSeen: false,
+  };
+  return {
+    result: {
+      summary,
+      evaluation: null,
+      summarySource: 'fallback' as const,
+      evaluationSource: 'failed' as const,
+      runtimeEnvelope: null,
+    },
+    artifact: {
+      status: 'summary-only' as const,
+      sources: { summary: 'end-fallback' as const, evaluation: 'failed' as const },
+      summary,
+      evaluation: null,
+      progress,
+      evidence,
+      duration: durationMinutes,
+    },
+  };
 }
 
 /** 合并后知识点的总数上限（防止模型每轮新增点导致无限膨胀） */
@@ -548,57 +826,6 @@ function hasPrematureNextStepLanguage(reply: string): boolean {
   return patterns.some((pattern) => pattern.test(text));
 }
 
-function buildFallbackOpening(
-  context: TeachingScenarioContext,
-  openingMode: TeachingOpening['mode']
-): TeachingOpening {
-  const taskTitle = context.taskTitle || context.topic || '当前任务';
-  const coreConcept = context.taskProfile.coreConcept || context.taskProfile.linkedConceptName || context.pathProgress.currentMilestoneTitle;
-  const acceptanceCriteria = context.currentTaskContext.acceptanceCriteria || context.currentTaskContext.description || context.taskDescription || '';
-  const shortGoal = acceptanceCriteria.trim() || `先把 ${taskTitle} 这一步做清楚`;
-
-  if (openingMode === 'example-first') {
-    return {
-      mode: openingMode,
-      message: `这节课我们先不铺开讲，直接拿 **${taskTitle}** 里最小的一步开始。`,
-      question: coreConcept
-        ? `如果你现在就动手做，围绕“${coreConcept}”你会先观察哪一点？`
-        : `如果你现在就动手做，你觉得这一步最先该确认什么？`,
-      quickReplies: [
-        { text: '先看字段或输入差异' },
-        { text: '先拆成最小步骤' },
-        { text: '先给我一个示范' },
-      ],
-    };
-  }
-
-  if (openingMode === 'predict') {
-    return {
-      mode: openingMode,
-      message: `开始之前，先做一个快速判断，看看你对 **${taskTitle}** 的直觉在哪里。`,
-      question: coreConcept
-        ? `围绕“${coreConcept}”，你猜这一步最容易出错的是哪里？`
-        : `你猜这一步最容易卡住的地方是什么？`,
-      quickReplies: [
-        { text: '我大概知道风险点' },
-        { text: '我只能猜个方向' },
-        { text: '我想先听你拆解' },
-      ],
-    };
-  }
-
-  return {
-    mode: openingMode,
-    message: `开始前先快速校准一下，我们这节会聚焦 **${taskTitle}**，目标是 ${shortGoal}。`,
-    question: '你现在更接近哪种状态？',
-    quickReplies: [
-      { text: '我知道大概要做什么' },
-      { text: '我只有模糊感觉' },
-      { text: '我想先看一个例子' },
-    ],
-  };
-}
-
 function computeKnowledgeDelta(
   initialPoints: TeachingKnowledgePointState[],
   finalPoints: TeachingKnowledgePointState[]
@@ -644,8 +871,52 @@ function computeKnowledgeDelta(
   };
 }
 
-function computeSessionEvidence(session: TeachingSessionRecord) {
-  // 排除检查点合成消息（非真实学生话语），避免污染理解/参与度统计
+/**
+ * session_load 聚合（loadIndex 聚合消费）：从会话消息的 analysis.loadIndex 聚合
+ * 均值/峰值/loadBasis 分布，以 metricType='session_load' 幂等写入 learning_metrics
+ * （sourceKey=session-load:{sessionId}）。无 loadIndex 证据时跳过。
+ */
+async function commitSessionLoadMetric(session: TeachingSessionRecord): Promise<void> {
+  const loadIndexes: number[] = [];
+  const basisCounter = new Map<string, number>();
+  for (const message of session.messages) {
+    const load = Number(message.analysis?.loadIndex);
+    if (Number.isFinite(load)) loadIndexes.push(load);
+    const basis = message.analysis?.loadBasis;
+    if (typeof basis === 'string' && basis) {
+      basisCounter.set(basis, (basisCounter.get(basis) || 0) + 1);
+    }
+  }
+  if (loadIndexes.length === 0) return;
+  const avg = loadIndexes.reduce((sum, value) => sum + value, 0) / loadIndexes.length;
+  const max = Math.max(...loadIndexes);
+  const basisDist: Record<string, number> = {};
+  for (const [key, count] of basisCounter) basisDist[key] = count;
+
+  await prisma.learning_metrics.upsert({
+    where: {
+      sourceKey: `session-load:${session.id}`,
+    },
+    update: {},
+    create: {
+      id: `sl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+      sourceKey: `session-load:${session.id}`,
+      userId: session.userId,
+      pathId: session.learningPathId || null,
+      taskId: session.taskId,
+      metricType: 'session_load',
+      value: Number(avg.toFixed(3)),
+      metadata: JSON.stringify({
+        max: Number(max.toFixed(3)),
+        basisDist,
+        perTurnCount: loadIndexes.length,
+        scale: '0-1',
+      }),
+    },
+  });
+}
+
+function computeSessionEvidence(session: TeachingSessionRecord) {  // 排除检查点合成消息（非真实学生话语），避免污染理解/参与度统计
   const analyzedMessages = session.messages.filter((message) => !!message.analysis && !message.checkpoint);
   const avg = (values: number[]) => values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
   const understandingScores = analyzedMessages
@@ -709,10 +980,10 @@ function computeSessionEvidence(session: TeachingSessionRecord) {
   };
 }
 
-function buildLearningTurnInput(
+async function buildTeachingTurnInput(
   session: TeachingSessionRecord,
   context: TeachingScenarioContext
-): LearningTurnInput {
+): Promise<TeachingTurnInput> {
   const compression = teachingContextCompressionService.compress(session.messages);
   const teachingState = session.teachingState || {};
   const classroomContext = teachingState.classroomContext || {};
@@ -729,48 +1000,121 @@ function buildLearningTurnInput(
       : [],
   };
 
+  const scenario: TeachingTurnInput['scenario'] = {
+    subject: context.subject,
+    topic: context.topic,
+    taskTitle: context.taskTitle,
+    taskDescription: context.taskDescription,
+    taskType: context.taskType,
+    taskProfile: context.taskProfile,
+    currentTaskContext: context.currentTaskContext,
+    cognitiveFrame: context.cognitiveFrame,
+    teachingStrategyGuidance: context.teachingStrategyGuidance,
+    pathTitle: context.pathProgress.pathTitle,
+    pathSummary: context.pathProgress.pathSummary,
+    currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,
+    currentStageNumber: context.pathProgress.currentStageNumber,
+    currentTaskOrder: context.pathProgress.currentTaskOrder,
+    totalTasksInMilestone: context.pathProgress.totalTasksInMilestone,
+    taskKnowledgeScope: context.taskKnowledgeScope,
+    pathBackgroundContext: buildPathBackgroundContext(context),
+    learningSignal: context.learningSignal,
+    lastLessonRecap: context.lastLessonRecap,
+    priorLearningContext: context.priorLearningContext,
+    learnerPrediction: context.learnerPrediction
+      ? {
+          stallRisk: context.learnerPrediction.stallRisk,
+          predictedTone: context.learnerPrediction.predictedTone,
+          suggestedDepth: context.learnerPrediction.suggestedDepth,
+          focusConcepts: context.learnerPrediction.focusConcepts,
+          rationale: context.learnerPrediction.rationale,
+          reliability: context.learnerPrediction.reliability,
+        }
+      : undefined,
+    interactionProfile: context.interactionProfile
+      ? {
+          current: (context.interactionProfile.current ?? null) as Record<string, number> | null,
+          history: (context.interactionProfile.history ?? []).map((h) => ({
+            role: h.role,
+            timestamp: h.timestamp,
+            meta: (h.meta ?? null) as Record<string, number> | null,
+            textLength: h.textLength,
+          })),
+          absent: context.interactionProfile.absent,
+        }
+      : undefined,
+    contextCompression: compression.compressed ? {
+      enabled: true,
+      estimatedTokens: compression.estimatedTokens,
+      triggerTokens: compression.triggerTokens,
+      recap: compression.recap,
+    } : undefined,
+    taskMode: context.taskMode,
+    priorMisconceptions: context.priorMisconceptions,
+    behavioralProfile: context.behavioralProfile,
+  };
+
+  // L2 声明化装配（只读对账）：状态池形状由 sandbox-resolver 的 teaching provider 声明，
+  // 本链只提供原始 context。缺键打 warn，不阻断。
+  try {
+    const { checkAgentSandboxRefsFromContext } = await import('../sandbox-resolver.service');
+    await checkAgentSandboxRefsFromContext(
+      'teaching-turn',
+      'teaching',
+      {
+        sessionMessages: session.messages.map((item) => ({ role: item.role, content: item.content })),
+        sessionId: session.id,
+        mode: session.mode,
+        topic: context.topic,
+        learnerProjection: context.learnerProjection,
+        knowledgeState: session.knowledgeState,
+        classroomContext,
+        teachingControlContext,
+        scenario: scenario as Record<string, unknown>,
+        interactionProfile: (context as any).interactionProfile,
+      },
+      { warnContext: { sessionId: session.id } }
+    );
+  } catch {
+    // 对账失败不影响主流程
+  }
+
+  // 配置式输入通道（P2 声明 + 本链运行时消费）：routings 表 teaching-agent 通道行抽值优先，
+  // 缺失回退既有组装；visibleDialogueContext 保持 {role, content} 映射语义
+  const { channels } = await assembleTeachingTurnChannels({ session, teachingState, context }).catch(() => ({ channels: {}, skipped: [] }));
+  const configuredVisible = Array.isArray(channels['visibleDialogueContext'])
+    ? channels['visibleDialogueContext']
+        .filter((item: any) => item && (typeof item.role === 'string' || typeof item.role === 'number'))
+        .map((item: any) => ({ role: item.role, content: typeof item.content === 'string' ? item.content : '' }))
+    : null;
+
   return {
     messages: compression.messages,
-    learner: context.learnerProjection,
-    scenario: {
-      subject: context.subject,
-      topic: context.topic,
-      taskTitle: context.taskTitle,
-      taskDescription: context.taskDescription,
-      taskType: context.taskType,
-      taskProfile: context.taskProfile,
-      currentTaskContext: context.currentTaskContext,
-      cognitiveFrame: context.cognitiveFrame,
-      teachingStrategyGuidance: context.teachingStrategyGuidance,
-      pathTitle: context.pathProgress.pathTitle,
-      pathSummary: context.pathProgress.pathSummary,
-      currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,
-      currentStageNumber: context.pathProgress.currentStageNumber,
-      currentTaskOrder: context.pathProgress.currentTaskOrder,
-      totalTasksInMilestone: context.pathProgress.totalTasksInMilestone,
-      taskKnowledgeScope: context.taskKnowledgeScope,
-      pathBackgroundContext: buildPathBackgroundContext(context),
-      learningSignal: context.learningSignal,
-      lastLessonRecap: context.lastLessonRecap,
-      contextCompression: compression.compressed ? {
-        enabled: true,
-        estimatedTokens: compression.estimatedTokens,
-        triggerTokens: compression.triggerTokens,
-        recap: compression.recap,
-      } : undefined,
-    },
-    classroomContext,
+    learner: channels['learner.learnerProjection'] || context.learnerProjection,
+    scenario,
+    classroomContext: channels['classroomContext'] || classroomContext,
     classroomEventContext,
-    visibleDialogueContext: session.messages.map((item) => ({
-      role: item.role,
-      content: item.content,
-    })),
+    // visibleDialogueContext 压缩修复（KV 前缀优化）：压缩后只带最近 N 条（recap 由
+    // scenario.contextCompression 承担），避免全量历史绕过压缩导致 user payload 无界增长
+    visibleDialogueContext: configuredVisible || (() => {
+      if (compression.compressed) {
+        return compression.messages
+          .filter((item) => item.role !== 'system')
+          .map((item) => ({ role: item.role as 'user' | 'assistant', content: item.content }));
+      }
+      return session.messages.map((item) => ({
+        role: item.role,
+        content: item.content,
+      }));
+    })(),
     knowledge: {
-      points: session.knowledgeState,
+      points: (channels['knowledge.state'] && Array.isArray(channels['knowledge.state'])
+        ? channels['knowledge.state']
+        : session.knowledgeState),
     },
     controls: {
       mode: session.mode as TeachingMode,
-      teachingControlContext,
+      teachingControlContext: channels['controls.teachingControlContext'] || teachingControlContext,
     }
   };
 }
@@ -803,7 +1147,7 @@ function pruneOverlyBroadCoreConceptPoints(
 
 function reconcileTeachingKnowledgeState(
   context: TeachingScenarioContext,
-  output: LearningTurnOutput,
+  output: TeachingTurnOutput,
   existingPoints: TeachingKnowledgePointState[]
 ) {
   const coreConcept = context.taskProfile.coreConcept || context.taskProfile.linkedConceptName || null;
@@ -827,16 +1171,16 @@ function reconcileTeachingKnowledgeState(
         currentPoint,
         points: filteredOutputPoints,
       }
-    } as LearningTurnOutput,
+    } as TeachingTurnOutput,
     existingPoints: filteredExistingPoints,
   };
 }
 
-function extractTeachingOutput(agentOutput: any): LearningTurnOutput {
+function extractTeachingOutput(agentOutput: any): TeachingTurnOutput {
   return (
-    agentOutput?.internal?.ext?.learningTurnOutcome?.artifact
+    agentOutput?.internal?.ext?.teachingTurnOutcome?.artifact
     || agentOutput?.internal?.ext?.teaching
-  ) as LearningTurnOutput;
+  ) as TeachingTurnOutput;
 }
 
 function extractPeerDebug(agentOutput: any) {
@@ -849,6 +1193,10 @@ function extractTeachingPromptDebug(agentOutput: any) {
 
 export class AITeachingOrchestrator {
   private idleTimeoutMs = 120 * 60 * 1000;
+  /** 长时间未恢复的 paused 会话视为放弃：超过该阈值按超时兜底处理（用户可随时通过下一轮教学回合恢复） */
+  private pausedSessionTimeoutMs = 24 * 60 * 60 * 1000;
+  /** 终态脏数据保留期：failed/superseded/discarded 行超过该时长后由 idle 巡检清理 */
+  private terminalSessionRetentionMs = 30 * 24 * 60 * 60 * 1000;
   private idleTimer: NodeJS.Timeout | null = null;
   private idleCheckInFlight: Promise<void> | null = null;
   private stopping = false;
@@ -892,9 +1240,70 @@ export class AITeachingOrchestrator {
     knowledgePoints: KnowledgePointStatus[];
     mode: SessionResumeMode;
     revision: number;
+    scene?: SessionOpeningScene;
   }> {
     const context = await buildTeachingScenarioContext(input.userId, input.taskId, null);
+    // 当前任务的历史完结次数（判断「同任务重学」，供开场卡 scene.kind = relearn）
+    let sameTaskAttempt = 0;
+    try {
+      sameTaskAttempt = await prisma.teaching_sessions.count({
+        where: {
+          userId: input.userId,
+          taskId: input.taskId,
+          status: { in: ['completed', 'discarded'] },
+        },
+      });
+    } catch { /* 统计失败不阻断 */ }
     const seededKnowledgeState = cloneKnowledgePoints(context.taskKnowledgeSeeds);
+    // 复习课模式：knowledgeState 种子 = 任务种子 + 到期复习点（全部注入，非 limit 2）
+    if (input.mode === 'review') {
+      try {
+        const dueTraces = await learnerExitService.getDueReview(input.userId, 20);
+        const existingKeys = new Set(seededKnowledgeState.map((point) => point.name));
+        for (const trace of dueTraces) {
+          if (existingKeys.has(trace.conceptKey)) continue;
+          seededKnowledgeState.push({
+            name: trace.conceptKey,
+            status: 'review',
+            progress: Math.round(trace.retention * 100),
+          });
+          existingKeys.add(trace.conceptKey);
+        }
+      } catch (error) {
+        logger.warn('[AITeaching] 复习课到期点注入失败，使用任务种子', {
+          userId: input.userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    // 记忆引擎 M2：经 learn agent 出口惰性检查到期复习点，作为 review 状态注入本节课知识看板
+    // （旧知唤醒，best-effort：查询失败不阻断开课；出口=LearnerExitService.getDueReview）
+    try {
+      const dueTraces = await learnerExitService.getDueReview(input.userId, 2);
+      if (dueTraces.length > 0) {
+        const existingKeys = new Set(seededKnowledgeState.map((point) => point.name));
+        for (const trace of dueTraces) {
+          if (existingKeys.has(trace.conceptKey)) continue;
+          seededKnowledgeState.push({
+            name: trace.conceptKey,
+            status: 'review',
+            progress: Math.round(trace.retention * 100),
+          });
+          existingKeys.add(trace.conceptKey);
+          logger.info('[AITeaching] 到期旧知唤醒注入看板', {
+            userId: input.userId,
+            taskId: input.taskId,
+            conceptKey: trace.conceptKey,
+            retention: trace.retention,
+          });
+        }
+      }
+    } catch (error) {
+      logger.warn('[AITeaching] 到期复习点查询失败，跳过注入', {
+        userId: input.userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     const sessionId = buildSessionId(input.userId);
     const reservation = await teachingSessionRepository.reserve({
       id: sessionId,
@@ -905,7 +1314,7 @@ export class AITeachingOrchestrator {
       subject: context.subject,
       topic: context.topic,
       taskType: context.taskType,
-      mode: 'tutor',
+      mode: input.mode || 'tutor',
       messages: [],
       knowledgeState: seededKnowledgeState,
       teachingState: null,
@@ -968,6 +1377,7 @@ export class AITeachingOrchestrator {
           knowledgePoints: normalizeKnowledgePoints(resumedKnowledgeState),
           mode: 'resumed',
           revision: previousSession.revision + 1,
+          scene: buildSessionOpeningScene({ mode: 'resumed', context: resumedContext, sameTaskAttempt }),
         };
       } finally {
         if (!committed) {
@@ -1075,6 +1485,12 @@ export class AITeachingOrchestrator {
         knowledgePoints: normalizeKnowledgePoints(seededKnowledgeState),
         mode: 'new',
         revision: session.revision,
+        scene: buildSessionOpeningScene({
+          mode: 'new',
+          context,
+          sameTaskAttempt,
+          ...(input.mode === 'review' ? { review: true } : {}),
+        }),
       };
     } catch (error) {
       await teachingSessionRepository.failInitialization(sessionId, operationId);
@@ -1092,54 +1508,58 @@ export class AITeachingOrchestrator {
         && runtimeSignals.recommendedPacing !== 'slow'
         ? 'predict'
         : 'self-assess';
-    const fallbackOpening = buildFallbackOpening(context, openingMode);
     let parsed: any = null;
     try {
-      const result = await withTimeout(executeSkillWithResult(auxSkillDefinitionMap['learning-opening-generator'], {
-        subject: context.subject,
-        topic: context.topic,
-        taskTitle: context.taskTitle,
-        taskDescription: context.taskDescription,
-        taskType: context.taskType,
-        pathSummary: context.pathProgress.pathSummary,
-        currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,
-        learner: {
-          confidenceLevel: runtimeSignals.confidenceLevel,
-          recentTrend: runtimeSignals.recentTrend,
-          recommendedPacing: runtimeSignals.recommendedPacing,
-        },
-        openingMode,
-        ...(context.learningSignal ? { learningSignal: context.learningSignal } : {}),
-        ...(context.lastLessonRecap ? { lastLessonRecap: context.lastLessonRecap } : {}),
-        __fallback: fallbackOpening,
-        __prompt: {
-          userId: context.userId,
-          taskId: context.taskId,
-          requestPath: '/services/ai-teaching/generate-opening',
-          callerAgentId: AI_TEACHING_AGENT_ID,
-        },
-      }), 15000, 'OPENING_GENERATION_TIMEOUT');
+      const result = await withTimeoutSignal(
+        (signal) => executeSkillWithResult(auxSkillDefinitionMap['teaching-opening-generator'], {
+          subject: context.subject,
+          topic: context.topic,
+          taskTitle: context.taskTitle,
+          taskDescription: context.taskDescription,
+          taskType: context.taskType,
+          pathSummary: context.pathProgress.pathSummary,
+          currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,
+          learner: {
+            confidenceLevel: runtimeSignals.confidenceLevel,
+            recentTrend: runtimeSignals.recentTrend,
+            recommendedPacing: runtimeSignals.recommendedPacing,
+          },
+          openingMode,
+          ...(context.learningSignal ? { learningSignal: context.learningSignal } : {}),
+          ...(context.lastLessonRecap ? { lastLessonRecap: context.lastLessonRecap } : {}),
+          ...(context.priorLearningContext ? { priorLearningContext: context.priorLearningContext } : {}),
+          __prompt: {
+            userId: context.userId,
+            taskId: context.taskId,
+            requestPath: '/services/ai-teaching/generate-opening',
+            callerAgentId: AI_TEACHING_AGENT_ID,
+          },
+        }, { abortSignal: signal }),
+        15000,
+        'OPENING_GENERATION_TIMEOUT'
+      );
       parsed = result.success && result.output ? result.output : null;
     } catch (error) {
-      logger.warn('[AITeaching] 开场交互块生成失败，使用 fallback opening', {
+      // 开场生成失败：降级为确定性开场兜底，保证开课链路在模型不可用时仍可用。
+      logger.warn('[AITeaching] 开场交互块生成失败，降级为确定性开场', {
         error: error instanceof Error ? error.message : String(error),
         userId: context.userId,
         taskId: context.taskId,
         topic: context.topic,
       });
-      return fallbackOpening;
+      return buildDeterministicOpening(context);
     }
 
     if (parsed) {
       return parsed as TeachingOpening;
     }
 
-    logger.warn('[AITeaching] 开场交互块缺少有效结构，使用 fallback opening', {
+    logger.warn('[AITeaching] 开场交互块缺少有效结构，降级为确定性开场', {
       userId: context.userId,
       taskId: context.taskId,
       topic: context.topic,
     });
-    return fallbackOpening;
+    return buildDeterministicOpening(context);
   }
 
   async processStudentMessage(
@@ -1147,7 +1567,7 @@ export class AITeachingOrchestrator {
     message: string,
     options: ProcessStudentMessageOptions = {},
   ): Promise<{
-    analysis: LearningTurnOutput['analysis'];
+    analysis: TeachingTurnOutput['analysis'];
     aiResponse: string;
     strategies: string[];
     knowledgePoint: string | null;
@@ -1167,7 +1587,7 @@ export class AITeachingOrchestrator {
       stateUpdate: LearningStateMetrics | null;
       duration: number;
       summarySource: 'model' | 'fallback';
-      evaluationSource: 'model' | 'ai-fallback' | 'failed';
+      evaluationSource: 'model' | 'ai-fallback' | 'failed' | 'unavailable';
     };
     advisory?: ReplanAdvisory;
     revision: number;
@@ -1198,7 +1618,7 @@ export class AITeachingOrchestrator {
         throw new Error('理解检查不存在或已处理');
       }
 
-      const context = await buildTeachingScenarioContext(session.userId, session.taskId, session);
+      const context = await buildTeachingScenarioContext(session.userId, session.taskId, session, options.interactionMeta);
       const endIntent = detectEndIntent(message);
 
     const updatedMessages = appendTimestamp([
@@ -1209,6 +1629,10 @@ export class AITeachingOrchestrator {
         timestamp: new Date().toISOString(),
         // 检查点合成消息打标记：进入教学上下文供模型分析答案，但不参与学生行为证据统计
         ...(options.checkpointId ? { checkpoint: true } : {}),
+        // 前端交互特征（认知负荷量测 · 前端情报层）：随消息落库，供后续轮次对比
+        ...(options.interactionMeta && Object.keys(options.interactionMeta).length > 0
+          ? { meta: options.interactionMeta as Record<string, number> }
+          : {}),
       }
     ]);
 
@@ -1224,20 +1648,28 @@ export class AITeachingOrchestrator {
       session.knowledgeState,
     );
 
-    const turnInput = buildLearningTurnInput({
+    const turnInput = await buildTeachingTurnInput({
       ...session,
       messages: updatedMessages,
       knowledgeState: frozenKnowledgeState,
     }, context);
-    const turnResult = await executeSkill(learningTurnAgentDefinition, turnInput, {
-      contextEnvelope: {
-        schemaVersion: 'context-envelope/v1',
-        principal: { userId: session.userId },
-        session: { sessionId: session.id, taskId: session.taskId },
-      },
-    });
+    // 教学回合 wall-clock 超时兜底：LLM 挂起时避免操作租约（30min）被占导致会话内所有操作 409 BUSY；
+    // 超时走 releaseOperation + 客户端重试路径（revision 未递增，重试安全）。
+    // 阈值对齐 platform_settings.aiReliability.defaultRequestTimeoutMs（300s）：
+    // 旧值 90s 会误杀正常回合——教学回合含 2 次 LLM 调用（模拟器 + teaching-turn），上游慢时单次即可超 90s。
+    const turnResult = await withTimeout(
+      executeSkill(teachingTurnAgentDefinition, turnInput, {
+        contextEnvelope: {
+          schemaVersion: 'context-envelope/v1',
+          principal: { userId: session.userId },
+          session: { sessionId: session.id, taskId: session.taskId },
+        },
+      }),
+      300_000,
+      'TEACHING_TURN_TIMEOUT: 教学回合执行超过 300 秒'
+    );
     if (!turnResult.success) {
-      throw new Error(typeof turnResult.error === 'string' ? turnResult.error : turnResult.error?.message || 'LEARNING_TURN_FAILED');
+      throw new Error(typeof turnResult.error === 'string' ? turnResult.error : turnResult.error?.message || 'TEACHING_TURN_FAILED');
     }
 
     const turnRuntimeEnvelope = turnResult?.runtimeEnvelope || null;
@@ -1248,7 +1680,8 @@ export class AITeachingOrchestrator {
       effectiveInitialKnowledgeState,
       knowledgeStateService.merge(
         existingPoints,
-        teachingOutput.knowledge.points
+        teachingOutput.knowledge.points,
+        session.mode === 'review' // 复习课允许 mastered 降级：复习失败在掌握度数据上真实可见
       )
     );
     // 知识完成度仍是 completion 的唯一硬门禁；envelope phase 仅作观测 soft 信号
@@ -1274,7 +1707,7 @@ export class AITeachingOrchestrator {
         envelopeTerminal: turnRuntimeEnvelope?.businessState?.isTerminal === true,
       });
     }
-    const effectiveTeachingOutput: LearningTurnOutput = {
+    const effectiveTeachingOutput: TeachingTurnOutput = {
       ...teachingOutput,
       control: {
         ...teachingOutput.control,
@@ -1284,6 +1717,8 @@ export class AITeachingOrchestrator {
     const previousClassroomStage = (previousTeachingState.classroomContext?.stage?.current as LearnStage) || 'opening';
     const peerTriggered = peerTriggerService.shouldTrigger(session, teachingOutput, message);
     let peerMessage: string | undefined;
+    let peerStrategy: string | null = null;
+    let peerFollowUpQuestions: string[] = [];
     let peerDebug: any = null;
     let peerRuntimeEnvelope: any = null;
 
@@ -1314,6 +1749,12 @@ export class AITeachingOrchestrator {
           },
         });
         peerMessage = peerResult.internal?.ext?.peer?.message || peerResult.userVisible || '';
+        // 伴学策略与后续追问一并透传（供前端展示「正在用什么学法」与快选追问）
+        const peerExt = peerResult.internal?.ext?.peer || null;
+        peerStrategy = peerExt?.strategy || null;
+        peerFollowUpQuestions = Array.isArray(peerExt?.followUpQuestions)
+          ? peerExt.followUpQuestions.filter((q: unknown) => typeof q === 'string' && q.trim())
+          : [];
         peerDebug = extractPeerDebug(peerResult);
         peerRuntimeEnvelope = peerResult?.runtimeEnvelope
           || peerResult?.internal?.ext?.peer?.runtimeEnvelope
@@ -1328,6 +1769,8 @@ export class AITeachingOrchestrator {
       teachingOutput: effectiveTeachingOutput,
       peerTriggered,
       learnerMessage: message,
+      taskMode: context.taskMode,
+      frustratedStreak: previousTeachingState?.learnerStateContext?.frustratedStreak ?? 0,
     });
     const learnerStateContext = buildLearnerStateContext(context, previousTeachingState, {
       ...teachingOutput.analysis,
@@ -1352,7 +1795,7 @@ export class AITeachingOrchestrator {
       ? [...previousTeachingState.classroomEventHistory]
       : [];
 
-    classroomEvents.push(buildClassroomEvent('learning-turn', nextStageDecision.reason, {
+    classroomEvents.push(buildClassroomEvent('teaching-turn', nextStageDecision.reason, {
       stage: nextStageDecision.stage,
       focusKnowledgePoint: classroomContext.focus.currentKnowledgePoint,
       learnerMessage: message,
@@ -1448,6 +1891,8 @@ export class AITeachingOrchestrator {
       promptDebug,
       peerTriggered,
       peerMessage: peerMessage || null,
+      peerStrategy,
+      peerFollowUpQuestions,
       peerDebug,
     };
 
@@ -1505,7 +1950,7 @@ export class AITeachingOrchestrator {
       },
       };
 
-      // 检查点产生：learning-turn 可选输出 control.checkpoint，按规则落库为 pendingCheckpoint
+      // 检查点产生：teaching-turn 可选输出 control.checkpoint，按规则落库为 pendingCheckpoint
       const checkpointCandidate = teachingOutput.control.checkpoint;
       if (
         !submittedCheckpoint
@@ -1513,8 +1958,8 @@ export class AITeachingOrchestrator {
         && !endIntent.isEndIntent
         && checkpointCandidate
         && !previousTeachingState.pendingCheckpoint
-        && (teachingState.lastCheckpointTurn === undefined
-          || updatedMessages.length - teachingState.lastCheckpointTurn >= 4)
+        && (previousTeachingState.lastCheckpointTurn === undefined
+          || updatedMessages.length - previousTeachingState.lastCheckpointTurn >= 4)
       ) {
         const checkpointTitle = checkpointCandidate.question.length > 20
           ? `${checkpointCandidate.question.slice(0, 20)}…`
@@ -1548,10 +1993,14 @@ export class AITeachingOrchestrator {
           understanding,
         });
 
-        delete teachingState.pendingCheckpoint;
-        const nextSessionArtifacts = { ...parseSessionArtifacts(teachingState) };
-        delete nextSessionArtifacts.pendingCheckpoint;
-        teachingState.sessionArtifacts = nextSessionArtifacts;
+        // 仅答对时消费检查点；答错保留 pendingCheckpoint（同一 cpId 可重答，
+        // 前端答错反馈后再次提交不会落入「理解检查不存在或已处理」）
+        if (passed) {
+          delete teachingState.pendingCheckpoint;
+          const nextSessionArtifacts = { ...parseSessionArtifacts(teachingState) };
+          delete nextSessionArtifacts.pendingCheckpoint;
+          teachingState.sessionArtifacts = nextSessionArtifacts;
+        }
         teachingState.checkpointHistory = checkpointHistory.slice(-20);
         checkpointResolution = { passed, understanding };
       }
@@ -1566,16 +2015,45 @@ export class AITeachingOrchestrator {
       });
       committed = true;
 
+      // 误解台账（G-R-R Phase 2）：异步记录本轮结构化误解，best-effort 不阻断回合
+      const misconceptions = teachingOutput.analysis?.misconceptions;
+      if (Array.isArray(misconceptions) && misconceptions.length > 0) {
+        void recordMisconceptions(session.userId, sessionId, misconceptions.map((m) => ({
+          conceptKey: m.conceptKey || '',
+          hypothesis: m.hypothesis,
+          canonicalLabel: m.canonicalLabel ?? null,
+          confidence: m.confidence,
+          evidence: m.evidence,
+          status: m.status,
+        })).filter((m) => m.conceptKey && m.hypothesis));
+      }
+
+      // θ−d EMA：ktEstimate 跨会话滑动平均（α=0.2），best-effort 不阻断回合
+      const ktConceptMastery = teachingOutput.analysis?.ktEstimate?.conceptMastery;
+      if (Array.isArray(ktConceptMastery) && ktConceptMastery.length > 0) {
+        void memoryTraceService.applyKtEstimate(session.userId, ktConceptMastery.map((c) => ({
+          conceptKey: c.conceptKey,
+          mastery: c.mastery,
+        }))).catch((error) => {
+          logger.warn('[AITeachingCoordinator] ktEstimate EMA 回写失败', { error: error instanceof Error ? error.message : String(error) });
+        });
+      }
+
       const baseResult = {
       analysis: teachingOutput.analysis,
       aiResponse: teachingOutput.reply,
       strategies: effectiveTeachingOutput.pedagogy.strategies,
       knowledgePoint: effectiveTeachingOutput.knowledge.currentPoint,
+      ...(effectiveTeachingOutput.knowledge.confirmCheck
+        ? { confirmCheck: effectiveTeachingOutput.knowledge.confirmCheck }
+        : {}),
       knowledgePoints: normalizeKnowledgePoints(mergedKnowledge),
       isCompletion: completionReady,
       currentState,
       peerTriggered,
       peerMessage,
+      peerStrategy,
+      peerFollowUpQuestions,
       promptDebug,
       peerDebug,
       // 统一运行契约观测（不改变 isCompletion 硬门禁）
@@ -1617,7 +2095,7 @@ export class AITeachingOrchestrator {
       stateUpdate: LearningStateMetrics | null;
       duration: number;
       summarySource: 'model' | 'fallback';
-      evaluationSource: 'model' | 'ai-fallback' | 'failed';
+      evaluationSource: 'model' | 'ai-fallback' | 'failed' | 'unavailable';
     };
     advisory?: ReplanAdvisory;
     revision: number;
@@ -1671,8 +2149,11 @@ export class AITeachingOrchestrator {
     const knowledgeDelta = computeKnowledgeDelta(initialKnowledgeState, session.knowledgeState);
     const sessionEvidence = computeSessionEvidence(session);
     const context = await buildTeachingScenarioContext(session.userId, session.taskId, session);
+    const reviewHints = await this.loadRetrievabilityHints(session.userId);
 
-    const wrapupOutput = await executeSkill(sessionWrapupAgentDefinition, {
+    let wrapupOutput: any = null;
+    try {
+      wrapupOutput = await executeSkill(sessionWrapupAgentDefinition, {
       input: {
         messages: session.messages.map((message) => ({
           role: message.role,
@@ -1700,6 +2181,7 @@ export class AITeachingOrchestrator {
         knowledgeContext: {
           initialPoints: initialKnowledgeState,
           delta: knowledgeDelta,
+          reviewHints,
         },
         sessionEvidence,
         sessionStructure: {
@@ -1721,9 +2203,19 @@ export class AITeachingOrchestrator {
         session: { sessionId: session.id, taskId: session.taskId },
       },
     });
+    } catch (error) {
+      logger.warn('[AITeaching] 课后产出生成异常，改用 summary-only 兜底继续收束', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
-    const wrapupResult = wrapupOutput.internal.ext.sessionWrapup.result;
-    const wrapupArtifact = wrapupOutput.internal.ext.sessionWrapup.artifact;
+    // M1 兜底：executeSkill 抛错或返回 success:false（internal.ext.sessionWrapup 缺失）时，
+    // 用 summary-only 对象顶替，保证收束流程继续，避免整次收束失败为 finalization_failed。
+    const endWrapupFallback = buildEndWrapupFallback(session, durationMinutes);
+    const sessionWrapupExt = wrapupOutput?.internal?.ext?.sessionWrapup;
+    const wrapupResult = sessionWrapupExt?.result || endWrapupFallback.result;
+    const wrapupArtifact = sessionWrapupExt?.artifact || endWrapupFallback.artifact;
     const wrapupRuntimeEnvelope = wrapupOutput?.runtimeEnvelope
       || wrapupResult?.runtimeEnvelope
       || null;
@@ -1761,7 +2253,7 @@ export class AITeachingOrchestrator {
         ktl: finalState?.ktl ?? 0,
         lf: finalState?.lf ?? 0,
         lsb: finalState?.lsb ?? 0,
-        evaluationSource: (evaluationResult?.source || 'failed') as 'model' | 'ai-fallback' | 'failed',
+        evaluationSource: (evaluationResult?.source || 'unavailable') as 'model' | 'ai-fallback' | 'failed' | 'unavailable',
         messageCount: session.messages.filter((message) => message.role === 'user').length,
         avgUnderstanding: sessionEvidence.avgUnderstanding ?? 0,
         avgCognitiveLevel: lastAnalyzedMessage?.analysis?.cognitiveLevel || 'understand',
@@ -1825,6 +2317,9 @@ export class AITeachingOrchestrator {
           pathId: session.learningPathId,
           milestoneId: session.milestoneId,
           duration: durationMinutes,
+          // 断链修复 P0-5：任务的可迁移目标（task.transferable 派生），供课后知识增强
+          // （lesson-knowledge-enricher）判断"迁移意图是否达成"，闭环 transferGoal 信号
+          transferGoal: context?.cognitiveFrame?.transferGoal || null,
           performance: evaluationResult ? persistedEvaluation : null,
           knowledgeState: session.knowledgeState,
           visibleDialogueContext: session.messages.slice(-16).map((message) => ({
@@ -1836,6 +2331,13 @@ export class AITeachingOrchestrator {
           wrapup: finalWrapup,
           advisory
         }
+      });
+
+      await commitSessionLoadMetric(session).catch((error) => {
+        logger.warn('[AITeaching] session_load 指标写入失败（不影响收束）', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       });
 
       try {
@@ -1865,6 +2367,15 @@ export class AITeachingOrchestrator {
       }
 
       dashboardGuidanceSnapshotService.refreshInBackground(session.userId, 'lesson-wrapup');
+      // 记忆引擎 M2：课后按知识看板状态确定性回写内化强度（best-effort，失败不阻断课堂完成）
+      const calibrationBias = learnerSnapshot?.profile?.cognitive?.selfAssessmentAccuracy ?? 'accurate';
+      memoryTraceService.recordSessionOutcome(session.userId, session.knowledgeState, 'derived', calibrationBias).catch((error) => {
+        logger.warn('[AITeaching] 记忆痕迹回写失败', {
+          sessionId,
+          userId: session.userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
       return {
         status: 'completed',
         operationId,
@@ -1986,6 +2497,38 @@ export class AITeachingOrchestrator {
     }
 
     try {
+      // 跳过检查点：清除待处理检查点（记录历史，允许后续生成新检查点），不触发教学回合
+      if (payload?.skip === true) {
+        const teachingState: Record<string, any> = { ...(session.teachingState || {}) };
+        delete teachingState.pendingCheckpoint;
+        const nextArtifacts = { ...parseSessionArtifacts(teachingState) };
+        delete nextArtifacts.pendingCheckpoint;
+        teachingState.sessionArtifacts = nextArtifacts;
+        const history = Array.isArray(teachingState.checkpointHistory)
+          ? [...teachingState.checkpointHistory]
+          : [];
+        history.push({
+          checkpointId,
+          submittedAt: new Date().toISOString(),
+          passed: false,
+          skipped: true,
+        });
+        teachingState.checkpointHistory = history.slice(-20);
+        await teachingSessionRepository.commitTurnState(sessionId, operationClaim.operationId, {
+          messages: session.messages,
+          knowledgeState: session.knowledgeState,
+          teachingState,
+          taskId: session.taskId,
+          userId: session.userId,
+        });
+        return {
+          passed: false,
+          feedback: '已跳过这个检查点，我们继续。',
+          nextAction: 'continue',
+          revision: (operationClaim.session.revision ?? 0) + 1,
+        };
+      }
+
       let answer: string;
       if (checkpoint.type === 'short_answer') {
         answer = payload.answerText?.trim() || '';
@@ -2172,9 +2715,50 @@ export class AITeachingOrchestrator {
     }
   }
 
+  /**
+   * 记忆保持率提示（retrievability 学生端可视化）：查该用户低保持率的记忆点，注入 wrapup 供叙事引用。
+   * 数值由 FSRS 公式确定性计算（零 LLM），wrapup 只做自然语言引用，禁止编造。
+   */
+  private async loadRetrievabilityHints(userId: string): Promise<Array<{ concept: string; retrievability: number }>> {
+    try {
+      const traces = await prisma.memory_traces.findMany({
+        where: { userId, fsrsStability: { not: null }, lastSeenAt: { not: null } },
+        orderBy: { dueAt: 'asc' },
+        take: 20,
+        select: {
+          label: true,
+          conceptKey: true,
+          fsrsStability: true,
+          fsrsDifficulty: true,
+          extractionCount: true,
+          lastSeenAt: true,
+        },
+      });
+      const now = new Date();
+      return traces
+        .map((t) => {
+          const state: FsrsMemoryState = {
+            stability: t.fsrsStability as number,
+            difficulty: t.fsrsDifficulty ?? 5,
+            reps: t.extractionCount,
+            lapses: 0,
+            lastReviewAt: t.lastSeenAt as Date,
+          };
+          return {
+            concept: t.label || t.conceptKey,
+            retrievability: Math.round(fsrsRetrievability(state, now) * 100) / 100,
+          };
+        })
+        .filter((h) => h.retrievability < 0.8)
+        .slice(0, 5);
+    } catch {
+      return [];
+    }
+  }
+
   private async syncVirtualSessionTimeout(sessionId: string): Promise<void> {
     const sessions = await prisma.virtual_sessions.findMany({
-      where: { currentStage: 'learning' },
+      where: { currentStage: 'teaching' },
       select: {
         id: true,
         status: true,
@@ -2191,12 +2775,14 @@ export class AITeachingOrchestrator {
         stageResults = {};
       }
 
-      const learningState = stageResults.learning || {};
+      const learningState = stageResults.teaching || {};
       if (learningState?.teachingSessionId !== sessionId) continue;
 
       const nextLearningState = {
         ...learningState,
-        manualStop: true,
+        // 注意：不写 manualStop —— 这是系统自动超时而非人工停止，
+        // 写 manualStop 会让前端显示「已手动停止」并污染停止口径（数据取证证实
+        // failed 会话中大量 manualStop=true 实为超时连锁）。原因由 stoppedReason 表达。
         stoppedAt: new Date().toISOString(),
         stoppedReason: 'teaching-session-timeout',
         taskRuntime: {
@@ -2225,7 +2811,7 @@ export class AITeachingOrchestrator {
               details: {
                 error: 'TEACHING_SESSION_TIMEOUT',
                 output: {
-                  action: 'learning-step-stopped',
+                  action: 'teaching-step-stopped',
                   teachingSessionId: sessionId
                 }
               }
@@ -2302,6 +2888,64 @@ export class AITeachingOrchestrator {
         await this.applyTimeoutWrapupFallback(session.id);
       }
     }
+
+    // M4 兜底：paused 是客户端主动暂停，不短时打断；但 pausedAt 超过阈值（如 24h）视为放弃，
+    // 走与 active 超时相同的兜底路径（状态转 timeout + summary-only wrapup）。
+    // 用户之后可通过下一轮教学回合恢复（active/paused/timeout 均可），正常收束会覆盖兜底 wrapup。
+    const pausedCutoff = new Date(Date.now() - this.pausedSessionTimeoutMs);
+    const pausedSessions = await prisma.teaching_sessions.findMany({
+      where: { status: 'paused' },
+      select: {
+        id: true,
+        revision: true,
+        teachingState: true,
+      }
+    });
+
+    for (const session of pausedSessions) {
+      let teachingState: Record<string, any> | null = null;
+      try {
+        teachingState = JSON.parse(session.teachingState || '{}');
+      } catch {
+        teachingState = null;
+      }
+      const artifacts = parseSessionArtifacts(teachingState);
+      const pausedAt = typeof artifacts.pausedAt === 'string'
+        ? new Date(artifacts.pausedAt).getTime()
+        : NaN;
+      if (!Number.isFinite(pausedAt) || pausedAt > pausedCutoff.getTime()) continue;
+      const timedOut = await teachingSessionRepository.timeoutIfPaused(session.id, session.revision, pausedCutoff);
+      if (timedOut) {
+        logger.info('[AITeaching] 长时间未恢复的暂停会话按超时兜底处理', {
+          sessionId: session.id,
+          pausedAt: new Date(pausedAt).toISOString(),
+        });
+        await this.syncVirtualSessionTimeout(session.id);
+        await this.applyTimeoutWrapupFallback(session.id);
+      }
+    }
+
+    // 终态脏数据治理：failed/superseded/discarded 行无业务价值（开课失败已改为复用 openKey），
+    // 超过保留期后删除，避免会话表无限累积
+    try {
+      const terminalCutoff = new Date(Date.now() - this.terminalSessionRetentionMs);
+      const cleaned = await prisma.teaching_sessions.deleteMany({
+        where: {
+          status: { in: ['failed', 'superseded', 'discarded'] },
+          updatedAt: { lte: terminalCutoff }
+        }
+      });
+      if (cleaned.count > 0) {
+        logger.info('[AITeaching] 清理过期终态会话行', {
+          count: cleaned.count,
+          cutoff: terminalCutoff.toISOString(),
+        });
+      }
+    } catch (error) {
+      logger.warn('[AITeaching] 终态会话清理失败（不影响巡检）', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**
@@ -2371,10 +3015,29 @@ export class AITeachingOrchestrator {
         },
       };
 
-      await prisma.teaching_sessions.update({
-        where: { id: sessionId },
-        data: { wrapup: JSON.stringify(wrapup) }
+      const guarded = await prisma.teaching_sessions.updateMany({
+        where: { id: sessionId, status: 'timeout', wrapup: null },
+        data: {
+          wrapup: JSON.stringify(wrapup),
+          ...(() => {
+            // 终态清理：移除待处理检查点，避免详情接口残留
+            const state = session.teachingState && typeof session.teachingState === 'object'
+              ? { ...session.teachingState }
+              : {};
+            delete (state as Record<string, any>).pendingCheckpoint;
+            const artifacts = state.sessionArtifacts && typeof state.sessionArtifacts === 'object'
+              ? { ...state.sessionArtifacts }
+              : {};
+            delete (artifacts as Record<string, any>).pendingCheckpoint;
+            state.sessionArtifacts = artifacts;
+            return { teachingState: JSON.stringify(state) };
+          })()
+        }
       });
+      if (guarded.count !== 1) {
+        logger.info('[AITeaching] 兜底 wrapup 被跳过（会话已离开 timeout 或已有正式总结）', { sessionId });
+        return;
+      }
       logger.info('[AITeaching] 超时会话已写入兜底学习记录', { sessionId, durationMinutes });
     } catch (error) {
       logger.warn('[AITeaching] 超时会话兜底记录写入失败', {
@@ -2389,6 +3052,8 @@ export class AITeachingOrchestrator {
     message: string
   ): Promise<{
     peerResponse: string;
+    strategy: string | null;
+    followUpQuestions: string[];
   }> {
     const session = await teachingSessionRepository.getById(sessionId);
     if (!session) {
@@ -2429,13 +3094,18 @@ export class AITeachingOrchestrator {
     });
 
     const peerResponse = peerResult.internal?.ext?.peer?.message || peerResult.userVisible || '';
+    const peerExt = peerResult.internal?.ext?.peer || null;
+    const strategy = peerExt?.strategy || null;
+    const followUpQuestions = Array.isArray(peerExt?.followUpQuestions)
+      ? peerExt.followUpQuestions.filter((q: unknown) => typeof q === 'string' && q.trim())
+      : [];
     // 伴学对话落库（带 peer 标记），页面刷新后不丢失
     const now = new Date().toISOString();
     await teachingSessionRepository.appendPeerMessages(sessionId, [
       { role: 'user', content: message, timestamp: now, peer: true },
       { role: 'assistant', content: peerResponse, timestamp: now, peer: true },
     ]);
-    return { peerResponse };
+    return { peerResponse, strategy, followUpQuestions };
   }
 }
 

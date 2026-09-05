@@ -71,6 +71,27 @@ describe('toWrapupArtifact', () => {
     expect(artifact.sources.evaluation).toBe('failed')
   })
 
+  it('unavailable 来源（evaluation 缺失，纯重试+明确失败）→ summary-only 且 evaluation=null', () => {
+    const artifact = toWrapupArtifact({
+      summary,
+      evaluation: null,
+      summarySource: 'model',
+      evaluationSource: 'unavailable'
+    } as any, input)
+
+    expect(artifact.status).toBe('summary-only')
+    expect(artifact.evaluation).toBeNull()
+    expect(artifact.sources.evaluation).toBe('unavailable')
+
+    const outcome = toWrapupSkillOutcome({
+      summary,
+      evaluation: null,
+      summarySource: 'model',
+      evaluationSource: 'unavailable'
+    } as any, input)
+    expect(outcome.meta.quality).toBe('partial')
+  })
+
   it('模型或 AI fallback 评估保持可展示', () => {
     const evaluation = {
       sessionLss: 4,

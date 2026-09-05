@@ -17,7 +17,6 @@ jest.mock('../../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
 }))
 jest.mock('../../ai/ai.service', () => ({ __esModule: true, default: {} }))
-jest.mock('../state-tracking.service', () => ({ __esModule: true, default: {} }))
 jest.mock('../learning-state.service', () => ({ __esModule: true, default: {} }))
 jest.mock('../../achievements/achievement.service', () => ({ __esModule: true, default: {} }))
 jest.mock('../../learner/LearnerSnapshotRefreshService', () => ({ learnerSnapshotRefreshService: {} }))
@@ -27,9 +26,7 @@ jest.mock('../../learner/DashboardGuidanceSnapshotService', () => ({
 jest.mock('../../learner/LearnerProjectionService', () => ({ learnerProjectionService: {} }))
 jest.mock('../../learner/LearnerProgressService', () => ({ learnerProgressService: {} }))
 jest.mock('../../background-task-tracker.service', () => ({ runBackgroundTask: mockRunBackgroundTask }))
-jest.mock('../../../gateway/event-bus', () => ({ getEventBus: () => ({ emit: jest.fn() }) }))
 jest.mock('../../../skills', () => ({ executeSkill: jest.fn() }))
-jest.mock('../../../skills/path-scene-framing', () => ({ pathSceneFramingDefinition: {} }))
 jest.mock('../../../skills/stage-designer', () => ({ stageDesignerDefinition: {} }))
 jest.mock('../../../skills/path-planning', () => ({ pathAgentDefinition: {} }))
 

@@ -1,6 +1,6 @@
 // 学习状态追踪路由
 import express from 'express';
-import stateTrackingService from '../services/learning/state-tracking.service';
+import learningStateService from '../services/learning/learning-state.service';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
 
@@ -24,7 +24,7 @@ router.get('/current', async (req: any, res) => {
       });
     }
 
-    const currentState = await stateTrackingService.getCurrentState(userId);
+    const currentState = await learningStateService.getCurrentStateDisplay(userId);
 
     if (!currentState) {
       return res.status(200).json({
@@ -34,7 +34,7 @@ router.get('/current', async (req: any, res) => {
       });
     }
 
-    const suggestion = stateTrackingService.generateSuggestion(currentState);
+    const suggestion = learningStateService.generateDisplaySuggestion(currentState);
 
     // currentState 已经是展示尺度 (0-100)
     res.json({
@@ -75,7 +75,7 @@ router.get('/trends', async (req: any, res) => {
       });
     }
 
-    const trendWindow = await stateTrackingService.getStateTrendWindow(userId, {
+    const trendWindow = await learningStateService.getStateTrendWindow(userId, {
       days,
       mode: rangeMode,
     });
@@ -114,7 +114,7 @@ router.get('/warnings', async (req: any, res) => {
       });
     }
 
-    const warnings = await stateTrackingService.checkWarnings(userId);
+    const warnings = await learningStateService.checkWarnings(userId);
 
     res.json({
       success: true,

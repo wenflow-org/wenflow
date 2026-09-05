@@ -27,5 +27,5 @@ fields:
     desc: 对齐修正建议列表
 constraints:
   - 不生成新路径，不删除或重排现有任务
-params: { temperature: 0.3, maxTokens: 3000, failurePolicy: fallback }
+params: { temperature: 0.3, maxTokens: 3000, failurePolicy: propagate }
 deltaOutput: false

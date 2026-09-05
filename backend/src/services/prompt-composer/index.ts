@@ -21,30 +21,61 @@ import {
   getAgentRoutings,
   type FieldRoutingRow,
 } from '../field-dispatcher';
+import { createHash } from 'crypto';
 import { logger } from '../../utils/logger';
+import { PROMPT_ROLE_META } from '../yaml-vocabulary';
 
 const SUPPLEMENT_BANNER = '═══ 字段路由 SUPPLEMENT（运行时由路由表自动渲染，admin 可调）═══';
 const SUPPLEMENT_END_BANNER = '═══ SUPPLEMENT 结束 ═══';
 
-const ROLE_GROUP_LABELS: Record<string, string> = {
-  'hard-required': '【必填字段（缺一不进 proposing）】',
-  'soft-info': '【可选信息字段（不阻止收敛，但有最好填）】',
-  'hidden-inference': '【隐藏推断字段（仅做内部累积，不要展示给用户）】',
-  'proposal-output': '【方向方案产物（proposing 阶段输出）】',
-  'public-reply': '【面向用户的回复字段】',
-  'derived-presentation': '【派生展示字段（系统派生，仅供前端展示）】',
-  'control-signal': '【控制信号（驱动状态机）】',
-};
+// supplement 渲染缓存：路由表经 field-dispatcher 30s TTL 缓存，渲染文本与之同周期缓存，
+// 避免每轮对话重复拼接；admin 改表后最多 30s 生效（与路由表缓存一致）。
+const SUPPLEMENT_RENDER_TTL_MS = 30_000;
+interface SupplementRenderCacheEntry {
+  loadedAt: number;
+  text: string;
+  fieldsCovered: number;
+  routingHash: string | null;
+}
+const supplementRenderCache = new Map<string, SupplementRenderCacheEntry>();
 
-const ROLE_DISPLAY_ORDER: Array<keyof typeof ROLE_GROUP_LABELS> = [
-  'hard-required',
-  'soft-info',
-  'hidden-inference',
-  'proposal-output',
-  'public-reply',
-  'derived-presentation',
-  'control-signal',
-];
+/**
+ * 路由快照指纹：由路由行关键字段（fieldId/promptRole/valueType/pathInRawOutput/handoff）
+ * 确定性导出。用于：
+ *  - supplement 渲染缓存 key
+ *  - prompt_call_logs.routingContextHash（admin 改表后 hash 变化，版本归因可见）
+ */
+export async function getRoutingSnapshotHash(agentId: string): Promise<string | null> {
+  try {
+    const rows = await getAgentRoutings(agentId);
+    if (!rows.length) return null;
+    const snapshot = rows
+      .map((r) => ({
+        fieldId: r.fieldId,
+        promptRole: r.promptRole || null,
+        valueType: r.valueType || null,
+        pathInRawOutput: r.pathInRawOutput || null,
+        handoff: [...(r.handoff || [])].sort(),
+        render: r.render,
+        internal: r.internal,
+        accumulate: r.accumulate,
+      }))
+      .sort((a, b) => (a.fieldId < b.fieldId ? -1 : 1));
+    return createHash('sha256').update(JSON.stringify(snapshot)).digest('hex').slice(0, 16);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * promptRole 分组标签（渲染进 LLM supplement）。
+ * 单源：yaml-vocabulary.PROMPT_ROLE_META（本处只做格式包装，不写第二份人话文案）。
+ */
+const ROLE_GROUP_LABELS: Record<string, string> = Object.fromEntries(
+  PROMPT_ROLE_META.map((m) => [m.id, `【${m.label}（${m.hint}）】`]),
+);
+
+const ROLE_DISPLAY_ORDER: string[] = PROMPT_ROLE_META.map((m) => m.id);
 
 interface RoutingGroupItem {
   fieldId: string;
@@ -121,7 +152,8 @@ export function renderSupplementText(
   lines.push('  - state.stage / state.confidence / state.done：控制信号');
   lines.push('  - understanding：所有 understanding.* 字段（包括 hidden 的，仅状态层使用）');
   lines.push('  - confirmedProposal：proposal-output 字段（proposing/ready 阶段）');
-  lines.push('  - next_questions / quick_replies：public-reply 字段');
+  lines.push('  - proposalQuality：proposing 阶段产出 confirmedProposal 时同步自评（SMART 五维）');
+  lines.push('  - nextQuestions / quickReplies：public-reply 字段');
   lines.push('');
   lines.push(SUPPLEMENT_END_BANNER);
 
@@ -129,48 +161,35 @@ export function renderSupplementText(
 }
 
 /**
- * 把 supplement 拼到 system prompt 末尾
+ * 取得字段路由 supplement 纯文本（KV 前缀缓存友好化）：
+ * 供调用方以"user payload JSON 外前缀文本"注入（system 保持纯静态）。
+ * 复用 30s 渲染缓存；无 supplement 时返回 null。
  */
-export async function composePromptFromAgentRouting(
-  agentId: string,
-  basePrompt: string
-): Promise<{
-  finalPrompt: string;
-  supplementApplied: boolean;
-  fieldsCovered: number;
-}> {
-  try {
+export async function getSupplementTextForAgent(agentId: string): Promise<{ text: string | null }> {
+  const now = Date.now();
+  const cached = supplementRenderCache.get(agentId);
+  if (!cached || now - cached.loadedAt >= SUPPLEMENT_RENDER_TTL_MS) {
     const rows = await getAgentRoutings(agentId);
-    if (!rows.length) {
-      return { finalPrompt: basePrompt, supplementApplied: false, fieldsCovered: 0 };
-    }
+    const routingHash = await getRoutingSnapshotHash(agentId);
     const { text, fieldsCovered } = renderSupplementText(rows);
-    if (!text) {
-      return { finalPrompt: basePrompt, supplementApplied: false, fieldsCovered: 0 };
-    }
-    // 防御：如果 basePrompt 已经包含 supplement banner，先剥掉再追加，避免叠加
-    const cleaned = stripExistingSupplement(basePrompt);
-    return {
-      finalPrompt: `${cleaned}\n${text}`,
-      supplementApplied: true,
+    supplementRenderCache.set(agentId, {
+      loadedAt: now,
+      text,
       fieldsCovered,
-    };
-  } catch (err) {
-    logger.warn('[prompt-composer] failed to compose supplement', {
-      agentId,
-      error: (err as Error).message,
+      routingHash,
     });
-    return { finalPrompt: basePrompt, supplementApplied: false, fieldsCovered: 0 };
   }
+  const entry = supplementRenderCache.get(agentId)!;
+  return { text: entry.text || null };
 }
 
-/**
- * 剥掉已有的 supplement 段（如果之前 prompt 里被人手贴过）
- */
-export function stripExistingSupplement(prompt: string): string {
-  if (!prompt.includes(SUPPLEMENT_BANNER)) return prompt;
-  const idx = prompt.indexOf(SUPPLEMENT_BANNER);
-  return prompt.slice(0, idx).trimEnd();
+/** 测试/管理端用：清空 supplement 渲染缓存 */
+export function clearSupplementRenderCache(agentId?: string): void {
+  if (agentId) {
+    supplementRenderCache.delete(agentId);
+  } else {
+    supplementRenderCache.clear();
+  }
 }
 
 /**
@@ -181,15 +200,4 @@ export function isPromptSupplementEnabled(): boolean {
   if (typeof v !== 'string') return true;
   const lo = v.trim().toLowerCase();
   return !['0', 'false', 'off', 'no'].includes(lo);
-}
-
-/**
- * 测试用：返回 routing supplement 文本（方便 admin 在管理面板看到当前 supplement）
- */
-export async function previewSupplementForAgent(agentId: string): Promise<{
-  text: string;
-  fieldsCovered: number;
-}> {
-  const rows = await getAgentRoutings(agentId);
-  return renderSupplementText(rows);
 }

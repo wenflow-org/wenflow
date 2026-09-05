@@ -1,8 +1,29 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../../config/database';
 import systemPrisma from '../../config/system-database';
+import {
+  listAgentManifest,
+  getAgentManifest,
+} from '../../services/agent-manifest.service';
+import {
+  SKILL_RUNTIME_DEFINITIONS,
+  ORCHESTRATOR_RUNTIME_DEFINITIONS,
+} from '../../coordinators/definitions-registry';
 
 const router = Router();
+
+/**
+ * prompt-call-logs 大文本列裁剪上限（ADMIN_PERFORMANCE_AUDIT P7）：
+ * userPayload/rawModelOutput/extractedJson/normalizedOutput 可能数 MB，
+ * 200 行列表响应可达数 MB。前端展示侧本就按 6000 字符截断（live.ts capText），
+ * 服务端先裁一次，响应体从数 MB 降到有界，展示语义不变。
+ */
+const PROMPT_CALL_LOG_TEXT_CAP = 6000;
+
+function capPayloadText(value: string | null | undefined): string | null | undefined {
+  if (value == null || value === '') return value;
+  return value.length > PROMPT_CALL_LOG_TEXT_CAP ? value.slice(0, PROMPT_CALL_LOG_TEXT_CAP) : value;
+}
 
 function parseJson(value: string | null | undefined) {
   if (!value) return null;
@@ -13,15 +34,52 @@ function parseJson(value: string | null | undefined) {
   }
 }
 
-router.get('/agents', async (_req: Request, res: Response) => {
-  const rows = await systemPrisma.agent_definitions.findMany({
-    orderBy: [
-      { category: 'asc' },
-      { displayName: 'asc' },
-    ],
-  });
+const skillDefMap = new Map(SKILL_RUNTIME_DEFINITIONS.map((def) => [def.id, def]));
 
-  const agentIds = rows.map((row) => row.id);
+/**
+ * 实时编译：编排 steps 的 agentId → manifest 解析（displayName/kind）
+ * 服务节点（kind: 'service'）不在 manifest，保留原 id 并标注 service
+ */
+function resolveStepAgent(agentId: string, step?: { kind?: string }) {
+  const entry = getAgentManifest(agentId);
+  if (entry) {
+    return {
+      agentId: entry.id,
+      displayName: entry.name,
+      kind: entry.kind,
+      nodeKind: step?.kind || entry.kind,
+    };
+  }
+  return {
+    agentId,
+    displayName: agentId,
+    kind: step?.kind || 'unknown',
+    nodeKind: step?.kind || 'unknown',
+    unresolved: true,
+  };
+}
+
+function compileOrchestrator(def: (typeof ORCHESTRATOR_RUNTIME_DEFINITIONS)[number]) {
+  return {
+    id: def.id,
+    displayName: def.displayName,
+    description: def.description,
+    category: def.category,
+    steps: (def.steps || []).map((step: any) => ({
+      ...step,
+      resolved: resolveStepAgent(step.agentId, step),
+    })),
+    variableGraph: def.variableGraph || null,
+    source: def.source || 'code',
+    managedByCode: def.managedByCode ?? true,
+  };
+}
+
+router.get('/agents', async (_req: Request, res: Response) => {
+  const manifest = listAgentManifest();
+  const skillEntries = manifest.filter((entry) => entry.kind === 'skill');
+
+  const agentIds = skillEntries.map((entry) => entry.id);
   const activePrompts = await systemPrisma.agent_prompts.findMany({
     where: {
       agentId: { in: agentIds },
@@ -39,145 +97,37 @@ router.get('/agents', async (_req: Request, res: Response) => {
       model: true,
     },
   });
-
   const promptMap = new Map(activePrompts.map((item) => [item.agentId, item]));
 
   res.json({
     success: true,
-    data: rows.map((row) => ({
-      activePrompt: promptMap.get(row.id) || null,
-      id: row.id,
-      displayName: row.displayName,
-      description: row.description,
-      category: row.category,
-      inputSchema: parseJson(row.inputSchema),
-      outputSchema: parseJson(row.outputSchema),
-      variableBindings: parseJson(row.variableBindings),
-      capabilities: parseJson(row.capabilities) || [],
-      defaultMaxTokens: row.defaultMaxTokens,
-      defaultTemperature: row.defaultTemperature,
-      schemaVersion: row.schemaVersion,
-      source: row.source,
-      managedByCode: row.managedByCode,
-      updatedAt: row.updatedAt,
-    })),
+    data: skillEntries.map((entry) => {
+      const def = skillDefMap.get(entry.id);
+      return {
+        activePrompt: promptMap.get(entry.id) || null,
+        id: entry.id,
+        displayName: def?.displayName || entry.name,
+        description: def?.description || entry.description,
+        category: entry.category,
+        inputSchema: def?.inputSchema || null,
+        outputSchema: def?.outputSchema || null,
+        variableBindings: def?.variableBindings || null,
+        capabilities: def?.capabilities || [],
+        defaultMaxTokens: def?.defaultMaxTokens ?? entry.defaultModelConfig?.maxTokens ?? null,
+        defaultTemperature: def?.defaultTemperature ?? entry.defaultModelConfig?.temperature ?? null,
+        schemaVersion: (def as any)?.schemaVersion ?? 1,
+        source: def?.source || 'code',
+        managedByCode: def?.managedByCode ?? true,
+        parentAgentId: entry.agentMembers ? undefined : undefined,
+      };
+    }),
   });
 });
 
-router.get('/agents/:id', async (req: Request, res: Response) => {
-  const row = await systemPrisma.agent_definitions.findUnique({
-    where: { id: req.params.id },
-  });
-
-  if (!row) {
-    return res.status(404).json({ success: false, error: { message: 'Definition 不存在' } });
-  }
-
-  const activePrompt = await systemPrisma.agent_prompts.findFirst({
-    where: {
-      agentId: row.id,
-      status: 'ACTIVE',
-    },
-    select: {
-      id: true,
-      version: true,
-      name: true,
-      description: true,
-      systemPrompt: true,
-      temperature: true,
-      maxTokens: true,
-      model: true,
-      updatedAt: true,
-      publishedAt: true,
-    },
-  });
-
-  const recentPromptCalls = await prisma.prompt_call_logs.findMany({
-    where: { agentId: row.id },
-    orderBy: { createdAt: 'desc' },
-    take: 5,
-  });
-
-  return res.json({
-    success: true,
-    data: {
-      activePrompt,
-      recentPromptCalls: recentPromptCalls.map((item) => ({
-        id: item.id,
-        success: item.success,
-        durationMs: item.durationMs,
-        promptDrift: item.promptDrift,
-        pathId: item.pathId,
-        pipelineRunId: item.pipelineRunId,
-        pipelineStepIndex: item.pipelineStepIndex,
-        createdAt: item.createdAt,
-        userPayload: item.userPayload,
-        extractedJson: item.extractedJson,
-        normalizedOutput: parseJson(item.normalizedOutput),
-      })),
-      id: row.id,
-      displayName: row.displayName,
-      description: row.description,
-      category: row.category,
-      inputSchema: parseJson(row.inputSchema),
-      outputSchema: parseJson(row.outputSchema),
-      variableBindings: parseJson(row.variableBindings),
-      capabilities: parseJson(row.capabilities) || [],
-      defaultMaxTokens: row.defaultMaxTokens,
-      defaultTemperature: row.defaultTemperature,
-      schemaVersion: row.schemaVersion,
-      source: row.source,
-      managedByCode: row.managedByCode,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-    },
-  });
-});
-
-router.get('/orchestrators', async (_req: Request, res: Response) => {
-  const rows = await systemPrisma.orchestrator_definitions.findMany({
-    orderBy: { displayName: 'asc' },
-  });
-
+router.get('/orchestrators', (_req: Request, res: Response) => {
   res.json({
     success: true,
-    data: rows.map((row) => ({
-      id: row.id,
-      displayName: row.displayName,
-      description: row.description,
-      category: row.category,
-      steps: parseJson(row.steps) || [],
-      variableGraph: parseJson(row.variableGraph),
-      source: row.source,
-      managedByCode: row.managedByCode,
-      updatedAt: row.updatedAt,
-    })),
-  });
-});
-
-router.get('/orchestrators/:id', async (req: Request, res: Response) => {
-  const row = await systemPrisma.orchestrator_definitions.findUnique({
-    where: { id: req.params.id },
-  });
-
-  if (!row) {
-    return res.status(404).json({ success: false, error: { message: 'Orchestrator definition 不存在' } });
-  }
-
-  return res.json({
-    success: true,
-    data: {
-      id: row.id,
-      displayName: row.displayName,
-      description: row.description,
-      category: row.category,
-      steps: parseJson(row.steps) || [],
-      variableGraph: parseJson(row.variableGraph),
-      source: row.source,
-      managedByCode: row.managedByCode,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-    },
+    data: ORCHESTRATOR_RUNTIME_DEFINITIONS.map(compileOrchestrator),
   });
 });
 
@@ -209,37 +159,45 @@ router.get('/prompt-call-logs', async (req: Request, res: Response) => {
 
   res.json({
     success: true,
-    data: rows.map((row) => ({
-      id: row.id,
-      agentId: row.agentId,
-      systemPromptVersion: row.systemPromptVersion,
-      systemPromptHash: row.systemPromptHash,
-      userPayload: row.userPayload,
-      rawModelOutput: row.rawModelOutput,
-      extractedJson: row.extractedJson,
-      normalizedOutput: parseJson(row.normalizedOutput),
-      success: row.success,
-      errorCode: row.errorCode,
-      errorMessage: row.errorMessage,
-      promptDrift: row.promptDrift,
-      durationMs: row.durationMs,
-      tokenUsage: parseJson(row.tokenUsage),
-      pathId: row.pathId,
-      userId: row.userId,
-      conversationId: row.conversationId,
-      pipelineRunId: row.pipelineRunId,
-      pipelineStepIndex: row.pipelineStepIndex,
-      traceId: (row as any).traceId,
-      parentExecutionId: (row as any).parentExecutionId,
-      promptAttemptCount: row.promptAttemptCount,
-      llmRequestCount: row.llmRequestCount,
-      finalLlmRequestId: row.finalLlmRequestId,
-      failureStage: row.failureStage,
-      attempts: parseJson(row.attemptTrace) || [],
-      providerId: row.providerId,
-      model: row.model,
-      createdAt: row.createdAt,
-    })),
+    data: rows.map((row) => {
+      // 大文本列服务端截断（超长时仅返回前 N 字符；normalizedOutput 截断后
+      // parseJson 失败 → 回退返回截断文本预览，保证可展示）
+      const userPayload = capPayloadText(row.userPayload);
+      const rawModelOutput = capPayloadText(row.rawModelOutput);
+      const extractedJson = capPayloadText(row.extractedJson);
+      const normalizedRaw = capPayloadText(row.normalizedOutput);
+      return {
+        id: row.id,
+        agentId: row.agentId,
+        systemPromptVersion: row.systemPromptVersion,
+        systemPromptHash: row.systemPromptHash,
+        userPayload,
+        rawModelOutput,
+        extractedJson,
+        normalizedOutput: parseJson(normalizedRaw) ?? normalizedRaw,
+        success: row.success,
+        errorCode: row.errorCode,
+        errorMessage: row.errorMessage,
+        promptDrift: row.promptDrift,
+        durationMs: row.durationMs,
+        tokenUsage: parseJson(row.tokenUsage),
+        pathId: row.pathId,
+        userId: row.userId,
+        conversationId: row.conversationId,
+        pipelineRunId: row.pipelineRunId,
+        pipelineStepIndex: row.pipelineStepIndex,
+        traceId: (row as any).traceId,
+        parentExecutionId: (row as any).parentExecutionId,
+        promptAttemptCount: row.promptAttemptCount,
+        llmRequestCount: row.llmRequestCount,
+        finalLlmRequestId: row.finalLlmRequestId,
+        failureStage: row.failureStage,
+        attempts: parseJson(row.attemptTrace) || [],
+        providerId: row.providerId,
+        model: row.model,
+        createdAt: row.createdAt,
+      };
+    }),
   });
 });
 

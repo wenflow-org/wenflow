@@ -22,7 +22,7 @@ type ConceptSignal = {
   score: number;
   status: 'pending' | 'learning' | 'mastered' | 'review';
   stability: 'unknown' | 'fragile' | 'developing' | 'stable';
-  sourceType: 'task-label' | 'session-knowledge' | 'derived';
+  sourceType: 'task-label' | 'session-knowledge' | 'derived' | 'memory-trace';
   taskId?: string;
   milestoneId?: string;
   seenAt?: string;
@@ -96,7 +96,22 @@ export class LearnerKnowledgeMemoryService {
             },
           },
         })
-      : null;
+      : // 无 pathId（如 admin 证据端点场景）时自动定位用户最新 active 路径，
+        // 否则 currentPath 恒空、recentEvidence/conceptLedger 等画像数据前端永远看不到
+        await prisma.learning_paths.findFirst({
+          where: { userId: input.userId, status: 'active' },
+          orderBy: { updatedAt: 'desc' },
+          include: {
+            milestones: {
+              orderBy: { stageNumber: 'asc' },
+              include: {
+                subtasks: {
+                  orderBy: { order: 'asc' },
+                },
+              },
+            },
+          },
+        });
 
     if (!path || path.userId !== input.userId) {
       return {
@@ -116,7 +131,7 @@ export class LearnerKnowledgeMemoryService {
       };
     }
 
-    const [sessions, persistedEvidence] = await Promise.all([
+    const [sessions, persistedEvidence, memoryTraces] = await Promise.all([
       prisma.teaching_sessions.findMany({
         where: {
           userId: input.userId,
@@ -138,6 +153,12 @@ export class LearnerKnowledgeMemoryService {
         where: { userId: input.userId, pathId: path.id },
         orderBy: { occurredAt: 'desc' },
         take: 50
+      }),
+      // 记忆引擎 M2 读侧并轨：memory_traces（ACT-R 痕迹）并入概念信号，脆弱/到期概念显式标记
+      prisma.memory_traces.findMany({
+        where: { userId: input.userId },
+        orderBy: { updatedAt: 'desc' },
+        take: 50,
       })
     ]);
 
@@ -258,20 +279,43 @@ export class LearnerKnowledgeMemoryService {
       }
 
       if (knowledgeState.length > 0) {
-        recentEvidence.push({
-          type: 'teaching-session',
-          taskId: session.taskId,
-          sessionId: session.id,
-          conceptKeys: knowledgeState.map((item) => item.name).filter(Boolean),
-          signal: knowledgeState.some((item) => item.status === 'review')
-            ? 'struggle'
-            : knowledgeState.some((item) => item.status === 'mastered')
-              ? 'mastery'
-              : 'incomplete',
-          score: knowledgeState.reduce((sum, item) => sum + item.progress, 0) / Math.max(1, knowledgeState.length) / 100,
-          happenedAt,
-        });
-      }
+      recentEvidence.push({
+        type: 'teaching-session',
+        taskId: session.taskId,
+        sessionId: session.id,
+        conceptKeys: knowledgeState.map((item) => item.name).filter(Boolean),
+        signal: knowledgeState.some((item) => item.status === 'review')
+          ? 'struggle'
+          : knowledgeState.some((item) => item.status === 'mastered')
+            ? 'mastery'
+            : 'incomplete',
+        score: knowledgeState.reduce((sum, item) => sum + item.progress, 0) / Math.max(1, knowledgeState.length) / 100,
+        happenedAt,
+      });
+    }
+
+    // 记忆引擎 M2 读侧并轨：memory_traces 痕迹注入概念信号（sourceType: memory-trace）
+    // 脆弱（stability=fragile）或低掌握（masteryScore<0.5）或高间隔因子（即将到期）→ review/fragile 信号
+    for (const trace of memoryTraces) {
+      const conceptKey = normalizeConceptKey(trace.conceptKey);
+      if (!conceptKey) continue;
+      const fragile = trace.stability === 'fragile'
+        || (trace.masteryScore ?? 0.5) < 0.5
+        || (trace.intervalFactor ?? 1) > 4;
+      const mastered = !fragile && (trace.stability === 'stable' || (trace.masteryScore ?? 0) >= 0.8);
+      const current = conceptSignals.get(conceptKey) || [];
+      current.push({
+        score: trace.masteryScore ?? 0.5,
+        status: mastered ? 'mastered' : fragile ? 'review' : 'learning',
+        stability: mastered ? 'stable' : fragile ? 'fragile' : 'developing',
+        sourceType: 'memory-trace',
+        taskId: undefined,
+        milestoneId: undefined,
+        seenAt: (trace.lastSeenAt || trace.updatedAt).toISOString(),
+        label: trace.label || trace.conceptKey,
+      });
+      conceptSignals.set(conceptKey, current);
+    }
 
       if (Array.isArray(summaryPayload?.knowledgeItems)) {
         for (const item of summaryPayload.knowledgeItems) {
@@ -347,9 +391,11 @@ export class LearnerKnowledgeMemoryService {
 
       const sourceType = signals.some((signal) => signal.sourceType === 'session-knowledge')
         ? 'session-knowledge'
-        : signals.some((signal) => signal.sourceType === 'derived')
-          ? 'derived'
-          : 'task-label';
+        : signals.some((signal) => signal.sourceType === 'memory-trace')
+          ? 'memory-trace'
+          : signals.some((signal) => signal.sourceType === 'derived')
+            ? 'derived'
+            : 'task-label';
 
       return {
         conceptKey,

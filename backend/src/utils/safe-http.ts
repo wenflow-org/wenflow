@@ -366,12 +366,15 @@ export async function validateExternalUrl(
     throw new UnsafeUrlError('URL 格式无效')
   }
 
-  const allowedProtocols = process.env.NODE_ENV === 'production' || options.privateNetworkPolicy === 'public-only'
+  // 协议白名单：生产强制 HTTPS；非生产允许 HTTP（明文仅限公网目标——
+  // 私网/本机/链路本地由下方 IP 校验拦截，SSRF 防护不降级）。
+  // 背景：newapi 等第三方网关普遍以明文 HTTP 部署，用户自带 key 场景必须可接入。
+  const allowedProtocols = process.env.NODE_ENV === 'production'
     ? new Set(['https:'])
     : new Set(['http:', 'https:'])
   if (!allowedProtocols.has(url.protocol)) {
     throw new UnsafeUrlError(
-      process.env.NODE_ENV === 'production' || options.privateNetworkPolicy === 'public-only'
+      process.env.NODE_ENV === 'production'
         ? '当前调用仅允许 HTTPS URL'
         : '仅允许 HTTP 或 HTTPS URL'
     )

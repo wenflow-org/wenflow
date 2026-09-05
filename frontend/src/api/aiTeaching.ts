@@ -1,5 +1,6 @@
 import api, { AI_REQUEST_TIMEOUT } from '../utils/api';
 import { streamSsePost } from '../utils/sse';
+import type { InteractionMeta } from '../composables/useInteractionMeta';
 
 export interface TeachingSession {
   sessionId: string;
@@ -8,7 +9,7 @@ export interface TeachingSession {
   startTime: string;
   welcomeMessage: string;
   knowledgePoints?: KnowledgePointStatus[];
-  mode?: 'new' | 'resumed';
+  mode?: 'new' | 'resumed' | 'review';
   revision: number;
   opening?: {
     message: string;
@@ -42,6 +43,8 @@ export interface Checkpoint {
 export interface CheckpointSubmitPayload {
   selectedOptionIds?: string[];
   answerText?: string;
+  /** 跳过检查点：清除待处理检查点并记录历史，不触发教学回合 */
+  skip?: boolean;
 }
 
 export interface CheckpointSubmitResult {
@@ -61,6 +64,8 @@ export interface MessageResult {
     confusionPoints: string[];
     engagement: string;
     emotionalState: string;
+    loadIndex?: number;
+    loadBasis?: string;
   };
   state: {
     lss: number;
@@ -80,6 +85,8 @@ export interface MessageResult {
   wrapup?: WrapupArtifact | null;
   advisory?: ReplanAdvisory | null;
   peerMessage?: string | null;
+  peerStrategy?: string | null;
+  peerFollowUpQuestions?: string[];
   peerDebug?: Record<string, unknown> | null;
   checkpoint?: Checkpoint | null;
   promptDebug?: Record<string, unknown> | null;
@@ -109,6 +116,8 @@ export interface MessageResult {
 
 export interface PeerMessageResult {
   peerResponse: string;
+  peerStrategy?: string | null;
+  peerFollowUpQuestions?: string[];
 }
 
 export interface LearningState {
@@ -147,7 +156,7 @@ export interface SessionDetail {
   endTime: string | null;
   duration: number | null;
   status: string;
-  messages: Array<{ role: string; content: string; timestamp: string; analysis?: Record<string, unknown>; strategies?: string[]; knowledgePoint?: string | null; knowledgePoints?: KnowledgePointStatus[]; promptDebug?: Record<string, unknown> | null; peerTriggered?: boolean; peerMessage?: string | null; peerDebug?: Record<string, unknown> | null }>;
+  messages: Array<{ role: string; content: string; timestamp: string; analysis?: Record<string, unknown>; strategies?: string[]; knowledgePoint?: string | null; knowledgePoints?: KnowledgePointStatus[]; promptDebug?: Record<string, unknown> | null; peerTriggered?: boolean; peerMessage?: string | null; peerStrategy?: string | null; peerFollowUpQuestions?: string[]; peerDebug?: Record<string, unknown> | null; peer?: boolean }>;
   state: Record<string, unknown> | null;
   knowledgePoints?: KnowledgePointStatus[];
   wrapup?: WrapupArtifact | null;
@@ -165,7 +174,7 @@ export interface SessionEvaluation {
   sessionKtl?: number;
   sessionLf?: number;
   confidence?: number;
-  evaluationSource?: 'model' | 'ai-fallback' | 'failed';
+  evaluationSource?: 'model' | 'ai-fallback' | 'failed' | 'unavailable';
   messageCount: number;
   avgUnderstanding: number;
   avgCognitiveLevel?: string;
@@ -199,7 +208,7 @@ export interface WrapupArtifact {
   status: 'complete' | 'summary-only';
   sources: {
     summary: 'model' | 'fallback' | 'timeout-fallback';
-    evaluation: 'model' | 'ai-fallback' | 'failed';
+    evaluation: 'model' | 'ai-fallback' | 'failed' | 'unavailable';
   };
   summary: SessionSummary;
   evaluation: (SessionEvaluation & {
@@ -219,7 +228,7 @@ export interface WrapupArtifact {
   } | null;
   duration?: number;
   summarySource?: 'model' | 'fallback';
-  evaluationSource?: 'model' | 'ai-fallback' | 'failed';
+  evaluationSource?: 'model' | 'ai-fallback' | 'failed' | 'unavailable';
 }
 
 export interface ReplanAdvisory {
@@ -326,13 +335,29 @@ const finalizationStepCompleted = (result: FinalizationResult, action: FinalizeA
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
 
 export const aiTeachingAPI = {
-  async startSession(taskId: string): Promise<TeachingSession> {
-    const result = await api.post(`/ai-teaching/tasks/${taskId}/session`, {}, { timeout: AI_REQUEST_TIMEOUT });
+  async startSession(taskId: string, mode?: 'tutor' | 'review'): Promise<TeachingSession> {
+    const result = await api.post(
+      `/ai-teaching/tasks/${taskId}/session`,
+      mode ? { mode } : {},
+      { timeout: AI_REQUEST_TIMEOUT }
+    );
     return result.data || result;
   },
 
-  async sendMessage(sessionId: string, message: string, revision: number): Promise<MessageResult> {
-    const result = await api.post(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision }, { timeout: AI_REQUEST_TIMEOUT });
+  /** 到期复习清单（复习闭环） */
+  async getReviewDue(): Promise<Array<{ conceptKey: string; label: string; retention: number; reason: string; estimatedMinutes: number }>> {
+    const result = await api.get('/ai-teaching/review/due');
+    return result.data?.items || [];
+  },
+
+  /** 开始复习课（mode=review，knowledgeState 注入到期复习点） */
+  async startReviewSession(taskId: string): Promise<TeachingSession> {
+    const result = await api.post('/ai-teaching/review/sessions', { taskId }, { timeout: AI_REQUEST_TIMEOUT });
+    return result.data || result;
+  },
+
+  async sendMessage(sessionId: string, message: string, revision: number, meta?: InteractionMeta): Promise<MessageResult> {
+    const result = await api.post(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision, ...(meta ? { meta } : {}) }, { timeout: AI_REQUEST_TIMEOUT });
     return result.data || result;
   },
 
@@ -347,7 +372,8 @@ export const aiTeachingAPI = {
     sessionId: string,
     message: string,
     revision: number,
-    handlers: { onDelta: (text: string) => void; onRestart?: () => void; signal?: AbortSignal }
+    handlers: { onDelta: (text: string) => void; onRestart?: () => void; signal?: AbortSignal },
+    meta?: InteractionMeta
   ): Promise<MessageResult> {
     return new Promise<MessageResult>((resolve, reject) => {
       let result: MessageResult | null = null;
@@ -359,7 +385,7 @@ export const aiTeachingAPI = {
         settled = true;
         reject(error);
       };
-      streamSsePost(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision }, {
+      streamSsePost(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision, ...(meta ? { meta } : {}) }, {
         signal: handlers.signal,
         onEvent: (event, data) => {
           if (event === 'delta' && typeof data?.text === 'string') {

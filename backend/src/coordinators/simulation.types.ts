@@ -26,6 +26,12 @@ export interface VirtualLearnerProfileData {
   learningPreferences?: string[];
   failurePatterns?: string[];
   behavioralProfileSummary?: string;
+  /** 虚拟学习者的 LLM 重试预算（per learner 独立配置） */
+  simulationBudget?: {
+    maxRetriesPerStep: number;
+    maxRetriesTotal: number;
+    consumedRetries?: number;
+  };
 }
 
 export interface PersonalityTraits {
@@ -115,11 +121,17 @@ export interface GoalConcernPool {
 export interface SimulationContext {
   profile: VirtualLearnerProfile;
   conversationHistory: ConversationHistoryItem[];
-  currentStage: 'goal' | 'path' | 'learning';
+  currentStage: 'goal' | 'path' | 'teaching';
   lastAssistantMessage?: string;
   storyContext?: {
     storyId?: string | null;
     title?: string;
+    /** 故事主标题（wrapup 等消费方使用） */
+    storyTitle?: string;
+    /** 故事主题词（wrapup 等消费方使用） */
+    subject?: string;
+    pathTitle?: string | null;
+    pathSummary?: string | null;
     sourceType?: string | null;
     outline?: string;
     triggerEvent?: string;
@@ -160,7 +172,7 @@ export interface SimulationContext {
 
 export interface SimulationLogEntry {
   timestamp: string;
-  phase: 'virtual-reply' | 'goal-response' | 'stage-transition' | 'path-review' | 'path-replan' | 'learning-reply' | 'learning-response' | 'learning-start' | 'error';
+  phase: 'virtual-reply' | 'goal-response' | 'stage-transition' | 'path-review' | 'path-replan' | 'teaching-reply' | 'teaching-response' | 'teaching-start' | 'error';
   durationMs?: number;
   details: {
     input?: any;
@@ -178,7 +190,7 @@ export interface SimulationStepResult {
     confidence: number;
     quickReplies?: string[];
   };
-  currentStage: 'goal' | 'path' | 'learning';
+  currentStage: 'goal' | 'path' | 'teaching';
   goalReady: boolean;
   logs: SimulationLogEntry[];
   error?: string;

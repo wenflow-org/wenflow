@@ -2,10 +2,11 @@ import { logger } from '../../utils/logger';
 import { agentConfigService } from '../../services/agentConfig.service';
 import { mergeStateDelta } from './delta-merge';
 import {
-  composePromptFromAgentRouting,
+  getSupplementTextForAgent,
   isPromptSupplementEnabled,
 } from '../../services/prompt-composer';
 import { callPrompt } from '../../composers/prompt-composer';
+import { loadPromptFile } from '../../composers/prompt-files/loader';
 import type { PromptCallSpec } from '../../composers/types';
 import {
   AgentContext,
@@ -19,6 +20,10 @@ import {
   type StructuredParseResult,
   validateGoalConversationStructuredOutput
 } from './structured-validator';
+
+// File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
+const GOAL_CONVERSATION_PROMPT = loadPromptFile('skill:goal-conversation')?.systemPrompt || '';
+
 import {
   isPlaceholderValue,
   mergeUnderstanding,
@@ -56,6 +61,10 @@ export interface GoalConversationInternal {
       structuredData?: any;
       confirmedProposal?: any;
       confidenceScores?: any;
+      /** 动机信号（跨轮累积，hidden，仅供对话节奏参考） */
+      motivationSignal?: any;
+      /** 动机 Schema 帧（跨轮累积，hidden，仅供对话节奏参考） */
+      miFrames?: any;
     };
   };
 }
@@ -121,6 +130,8 @@ interface StageControlOptions {
   previousStage?: 'understanding' | 'proposing' | 'ready' | 'completed' | string;
   previousConfidence?: number;
   confirmProposal?: boolean;
+  /** 上一轮完整状态快照（含跨轮累积字段 motivationSignal/miFrames） */
+  previousState?: GoalConversationStateSnapshot;
 }
 
 interface GoalConversationStateSnapshot {
@@ -131,6 +142,9 @@ interface GoalConversationStateSnapshot {
   structuredData?: any;
   confirmedProposal?: any;
   confidenceScores?: any;
+  /** 动机信号与动机帧（跨轮累积，hidden） */
+  motivationSignal?: any;
+  miFrames?: any;
 }
 
 interface RetryAttemptInfo {
@@ -149,14 +163,18 @@ interface GoalPromptInput {
   previousUnderstanding?: any;
   previousStage?: string;
   confirmProposal?: boolean;
+  /** 字段路由 supplement 纯文本（user 前缀注入，system 纯静态） */
+  supplementText?: string | null;
 }
 
-function buildGoalConversationUserPayload(input: {
+export function buildGoalConversationUserPayload(input: {
   userInput: string;
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
   previousState?: GoalConversationStateSnapshot;
   previousUnderstanding?: any;
   previousStage?: string;
+  /** 字段路由 supplement 纯文本（KV 前缀缓存友好化：注入 user 前缀，system 保持纯静态；30s 粒度） */
+  supplementText?: string | null;
 }): string {
   const statePayload = input.previousState
     ? input.previousState
@@ -177,10 +195,9 @@ function buildGoalConversationUserPayload(input: {
     text: item.content
   }));
 
-  return JSON.stringify({
-    userInput: input.userInput,
-    state: statePayload,
-    conversationContext,
+  // 键序按"稳定→动态"（KV 前缀缓存）：task 常量前置（跨轮/跨用户稳定），
+  // 动态块（state 全量快照 / 当轮输入 / 增长历史）后置，最大化 user 内前缀命中。
+  const payloadJson = JSON.stringify({
     task: {
       mode: 'goal-conversation-turn-update',
       requirements: [
@@ -190,8 +207,14 @@ function buildGoalConversationUserPayload(input: {
         'do not treat conversationContext as chat history to continue',
         'return exactly one raw JSON object with no extra text'
       ]
-    }
+    },
+    state: statePayload,
+    userInput: input.userInput,
+    conversationContext
   }, null, 2);
+
+  // supplement 作为 JSON 外前缀文本（不污染 JSON 键集）；无 supplement 时纯 JSON
+  return input.supplementText ? `${input.supplementText}\n\n${payloadJson}` : payloadJson;
 }
 
 export const goalConversationAgentDefinition: AgentDefinition = {
@@ -333,6 +356,27 @@ ${parsedJson.pain_points || parsedJson.understanding?.pain_points ? `你的痛�
 确认这个方向对吗？如有补充可以告诉我。`;
 }
 
+/** 前置探测题判分确定性比对：用 confirmedProposal.prerequisiteDiagnostics 的 correctOption 覆盖 LLM 判分（防"自己出题自己判"） */
+function applyPrerequisiteProbeAnswerKey(understanding: any, confirmedProposal: any): any {
+  if (!understanding || typeof understanding !== 'object') return understanding;
+  const results = understanding.prerequisiteCheckResults;
+  if (!Array.isArray(results) || results.length === 0) return understanding;
+  const probes = confirmedProposal && typeof confirmedProposal === 'object'
+    ? confirmedProposal.prerequisiteDiagnostics
+    : null;
+  if (!Array.isArray(probes) || probes.length === 0) return understanding;
+  let changed = false;
+  const resolved = results.map((result: any) => {
+    if (!result || typeof result !== 'object') return result;
+    const probe = probes.find((p: any) => p && typeof p === 'object' && p.probeId === result.probeId);
+    if (!probe || typeof probe.correctOption !== 'string' || typeof result.userAnswer !== 'string') return result;
+    const deterministic = result.userAnswer === probe.correctOption;
+    if (result.isCorrect !== deterministic) changed = true;
+    return { ...result, isCorrect: deterministic };
+  });
+  return changed ? { ...understanding, prerequisiteCheckResults: resolved } : understanding;
+}
+
 function normalizeStageAndConfidence(
   stage: 'understanding' | 'proposing' | 'ready' | 'completed',
   confidence: number,
@@ -374,7 +418,7 @@ function hasThinProposalPayload(payload: {
   understanding?: any;
   confirmedProposal?: any;
   structuredData?: any;
-}): boolean {
+}): { thin: boolean; missing: string[] } {
   const understanding = payload.understanding || {};
   const confirmedProposal = payload.confirmedProposal || {};
   const structuredData = payload.structuredData || {};
@@ -391,12 +435,38 @@ function hasThinProposalPayload(payload: {
   const isNonEmptyArray = (v: any): boolean =>
     Array.isArray(v) && v.filter((item) => typeof item === 'string' && item.trim().length > 0).length >= 2;
 
+  // real_problem 必须是具体诊断：过短（<6 字）视为症状级；与 surface_goal 重叠率 ≥0.75
+  // 视为同义改写（未完成诊断），两者都不能满足推进硬条件
+  const isSubstantiveRealProblem = (real: any, surface: any): boolean => {
+    if (!isNonEmptyString(real) || !isNonEmptyString(surface)) return isNonEmptyString(real);
+    const r = real.trim().replace(/\s+/g, '');
+    if (r.length < 6) return false;
+    const s = surface.trim().replace(/\s+/g, '');
+    const overlap = [...r].filter((ch) => s.includes(ch)).length;
+    return overlap / r.length < 0.75;
+  };
+
+  // 时间字段"未明确/不清楚/不知道/无"不满足硬条件
+  const isUsableTime = (v: any): boolean => {
+    if (!isNonEmptyString(v)) return false;
+    return !/^(未明确|不清楚|不知道|无|没有)$/.test(v.trim());
+  };
+
+  // 缺失字段收集（排障用）：checkField 返回 false 时记录 fieldId
+  const missing: string[] = [];
+
   if (requiredFields && requiredFields.length > 0) {
     // 把 fieldId 拆到 understanding / confirmedProposal 两个根上
     const checkField = (fieldId: string): boolean => {
       if (fieldId.startsWith('understanding.')) {
         const path = fieldId.slice('understanding.'.length);
         const v = valueAt(understanding, path);
+        if (path === 'real_problem') {
+          return isSubstantiveRealProblem(v, valueAt(understanding, 'surface_goal'));
+        }
+        if (path === 'available_resources.time_budget' || path === 'available_resources.time_horizon') {
+          return isUsableTime(v);
+        }
         return isNonEmptyString(v) || isNonEmptyArray(v);
       }
       if (fieldId.startsWith('confirmedProposal.')) {
@@ -409,34 +479,43 @@ function hasThinProposalPayload(payload: {
       return true; // userVisible / core.* 等不参与该判定
     };
 
-    // 特殊处理 time_budget OR time_horizon（任意其一即可）
-    const hasTimeAny = (() => {
-      const tb = valueAt(understanding, 'available_resources.time_budget');
-      const th = valueAt(understanding, 'available_resources.time_horizon');
-      return isNonEmptyString(tb) || isNonEmptyString(th);
-    })();
+    // 特殊处理 time_budget OR time_horizon（任意其一即可，且必须非"未明确"）
+    const tb = valueAt(understanding, 'available_resources.time_budget');
+    const th = valueAt(understanding, 'available_resources.time_horizon');
+    const hasTimeAny = isUsableTime(tb) || isUsableTime(th);
+    if (!hasTimeAny) {
+      missing.push(
+        tb || th
+          ? 'available_resources.time_budget/time_horizon(未明确)'
+          : 'available_resources.time_budget/time_horizon(缺失)'
+      );
+    }
 
-    const otherChecks = requiredFields
-      .filter(
-        (id) =>
-          id !== 'understanding.available_resources.time_budget' &&
-          id !== 'understanding.available_resources.time_horizon'
-      )
-      .map(checkField);
+    const nonTimeFields = requiredFields.filter(
+      (id) =>
+        id !== 'understanding.available_resources.time_budget' &&
+        id !== 'understanding.available_resources.time_horizon'
+    );
+    const otherChecks = nonTimeFields.map(checkField);
+
+    for (let i = 0; i < otherChecks.length; i++) {
+      if (!otherChecks[i]) {
+        const fieldId = nonTimeFields[i];
+        if (fieldId) missing.push(fieldId);
+      }
+    }
 
     const allRequiredHit = hasTimeAny && otherChecks.every(Boolean);
     // V3：阈值 = 硬必需字段数（time_budget/time_horizon 二选一算 1 个）
     // 旧硬编码兜底固定阈值 5，但 V3 routing 实际数量可能少于 5（当前 5 个 = 3 + 1）
     // 用 otherChecks.length + 1 与 allRequiredHit 含义一致；不再 max(_, 5)
-    return !allRequiredHit;
+    return { thin: !allRequiredHit, missing };
   }
 
   // 兜底：原硬编码逻辑
   const hasRealProblem = typeof understanding.real_problem === 'string' && understanding.real_problem.trim().length > 0;
-  const hasTimeBudget = typeof understanding.available_resources?.time_budget === 'string'
-    && understanding.available_resources.time_budget.trim().length > 0;
-  const hasTimeHorizon = typeof understanding.available_resources?.time_horizon === 'string'
-    && understanding.available_resources.time_horizon.trim().length > 0;
+  const hasTimeBudget = isUsableTime(valueAt(understanding, 'available_resources.time_budget'));
+  const hasTimeHorizon = isUsableTime(valueAt(understanding, 'available_resources.time_horizon'));
   const hasSuccessCriteria = typeof understanding.success_criteria?.observable_result === 'string'
     && understanding.success_criteria.observable_result.trim().length > 0;
   const hasProposalDirection = typeof confirmedProposal.learning_direction === 'string'
@@ -459,7 +538,17 @@ function hasThinProposalPayload(payload: {
     hasStructuredOutline
   ].filter(Boolean).length;
 
-  return !(hasRealProblem && (hasTimeBudget || hasTimeHorizon) && hasSuccessCriteria && hasProposalDirection && hasFirstDeliverable && hasKeyStages && hasOutOfScope) || evidenceCount < 6;
+  const thin = !(hasRealProblem && (hasTimeBudget || hasTimeHorizon) && hasSuccessCriteria && hasProposalDirection && hasFirstDeliverable && hasKeyStages && hasOutOfScope) || evidenceCount < 6;
+  if (thin) {
+    if (!hasRealProblem) missing.push('real_problem');
+    if (!hasTimeBudget && !hasTimeHorizon) missing.push('available_resources.time_budget/time_horizon');
+    if (!hasSuccessCriteria) missing.push('success_criteria.observable_result');
+    if (!hasProposalDirection) missing.push('confirmedProposal.learning_direction');
+    if (!hasFirstDeliverable) missing.push('confirmedProposal.first_deliverable');
+    if (!hasKeyStages) missing.push('confirmedProposal.key_stages');
+    if (!hasOutOfScope) missing.push('confirmedProposal.out_of_scope');
+  }
+  return { thin, missing };
 }
 
 // V3 §10 P1.7: 模块级缓存——hard-required 字段清单
@@ -467,13 +556,18 @@ let _hardRequiredCache: string[] | null = null;
 let _hardRequiredLoadingAt = 0;
 const HARD_REQUIRED_CACHE_TTL_MS = 30_000;
 
+// jest 下跳过模块级异步预热：fire-and-forget 的 import() 链会在测试环境拆除后执行，
+// 触发 "import after environment torn down"（--runInBand 全量回归会以非零码退出）。
+// 该缓存为尽力而为（冷缓存回落硬编码校验），跳过不影响任何断言语义。
+const isUnderJest = process.env.JEST_WORKER_ID !== undefined;
+
 function getCachedHardRequiredFields(): string[] | null {
   // 同步访问；过期时间到了启动后台刷新（但不阻塞）
   const now = Date.now();
   if (_hardRequiredCache && now - _hardRequiredLoadingAt < HARD_REQUIRED_CACHE_TTL_MS) {
     return _hardRequiredCache;
   }
-  if (now - _hardRequiredLoadingAt > HARD_REQUIRED_CACHE_TTL_MS) {
+  if (!isUnderJest && now - _hardRequiredLoadingAt > HARD_REQUIRED_CACHE_TTL_MS) {
     _hardRequiredLoadingAt = now;
     void refreshHardRequiredCache();
   }
@@ -487,9 +581,8 @@ async function refreshHardRequiredCache(): Promise<void> {
     const ids = rows
       .filter((r) => r.promptRole === 'hard-required')
       .map((r) => r.fieldId);
-    if (ids.length > 0) {
-      _hardRequiredCache = ids;
-    }
+    // 允许清空：admin 移除全部 hard-required 后缓存必须同步更新（旧守卫会永久保留旧清单）
+    _hardRequiredCache = ids;
   } catch (err) {
     logger.debug('[skill:goal-conversation] refresh hard-required cache failed', {
       error: (err as Error).message,
@@ -497,8 +590,10 @@ async function refreshHardRequiredCache(): Promise<void> {
   }
 }
 
-// 启动时预热一次（不 await）
-void refreshHardRequiredCache();
+// 启动时预热一次（不 await）；jest 下跳过（见 isUnderJest 说明）
+if (!isUnderJest) {
+  void refreshHardRequiredCache();
+}
 
 /**
  * 从 ACTIVE prompt metadata 解析 Delta 开关（§5.4）。
@@ -531,6 +626,16 @@ function parseGoalConversationResponse(
   let nextQuestions: string[] = [];
   let understanding = { ...(previousUnderstanding || {}) };
   let normalizedPayload: Record<string, any> = {};
+  // 动机信号/动机帧跨轮累积（hidden）：模型输出在 state.motivation_signal / state.mi_frames，
+  // normalize 展开到顶层；上一轮值经 previousState 传入，做浅合并保持跨轮
+  const previousMotivationSignal = stageControlOptions?.previousState?.motivationSignal
+    || (stageControlOptions?.previousState as any)?.motivation_signal
+    || null;
+  const previousMiFrames = stageControlOptions?.previousState?.miFrames
+    || (stageControlOptions?.previousState as any)?.mi_frames
+    || null;
+  let motivationSignal = previousMotivationSignal;
+  let miFrames = previousMiFrames;
 
   if (parsedJson) {
     normalizedPayload = normalizeGoalConversationModelPayload(parsedJson);
@@ -553,6 +658,20 @@ function parseGoalConversationResponse(
 
     const payloadNextQuestions = normalizedPayload.nextQuestions;
     nextQuestions = Array.isArray(payloadNextQuestions) ? payloadNextQuestions : [];
+
+    // 本轮模型新输出的动机信号：delta 模式缺席=沿用上一轮；非 delta 覆盖
+    const newMotivationSignal = normalizedPayload.motivation_signal ?? normalizedPayload.motivationSignal;
+    const newMiFrames = normalizedPayload.mi_frames ?? normalizedPayload.miFrames;
+    if (newMotivationSignal !== undefined && newMotivationSignal !== null) {
+      motivationSignal = motivationSignal && typeof motivationSignal === 'object' && typeof newMotivationSignal === 'object'
+        ? { ...motivationSignal, ...newMotivationSignal }
+        : newMotivationSignal;
+    }
+    if (newMiFrames !== undefined && newMiFrames !== null) {
+      miFrames = miFrames && typeof miFrames === 'object' && typeof newMiFrames === 'object' && !Array.isArray(miFrames) && !Array.isArray(newMiFrames)
+        ? { ...miFrames, ...newMiFrames }
+        : newMiFrames;
+    }
 
     const payloadQuickReplies = normalizedPayload.quickReplies || parsedJson.hints?.quickReplies;
     if (Array.isArray(payloadQuickReplies)) {
@@ -607,12 +726,19 @@ function parseGoalConversationResponse(
   stage = stageControl.stage;
   confidence = stageControl.confidence;
 
-  if (stage === 'proposing' && hasThinProposalPayload({ understanding, confirmedProposal, structuredData })) {
+  const thinCheck = hasThinProposalPayload({ understanding, confirmedProposal, structuredData });
+  if (stage === 'proposing' && thinCheck.thin) {
     stage = 'understanding';
     confidence = Math.min(confidence, 0.78);
+    // 压回可观测性：记录缺失的 hard-required 字段（路由表驱动），便于排障
+    logger.warn('[skill:goal-conversation] proposing → understanding 压回（硬必需字段不齐）', {
+      missing: thinCheck.missing,
+    });
   }
 
   understanding = sanitizeUnderstanding(understanding);
+  // 探测题判分确定性比对：correctOption 覆盖 LLM 判分，防"自己出题自己判"的自洽偏差
+  understanding = applyPrerequisiteProbeAnswerKey(understanding, confirmedProposal);
 
   dialogueText = normalizeDialogueText(dialogueText);
   if (parsedJson?.reply) {
@@ -655,7 +781,9 @@ function parseGoalConversationResponse(
           collected: buildCollected(understanding, normalizedPayload),
           structuredData,
           confirmedProposal,
-          confidenceScores
+          confidenceScores,
+          motivationSignal,
+          miFrames
         }
       }
     }
@@ -734,7 +862,7 @@ function buildGoalPromptSpec(
 ): PromptCallSpec<GoalPromptInput, GoalConversationAgentResult> {
   return {
     agentId: 'skill:goal-conversation',
-    defaultSystemPrompt: '',
+    defaultSystemPrompt: GOAL_CONVERSATION_PROMPT,
     requireActivePrompt: true,
     caller: {
       agentId: 'goal-agent',
@@ -746,17 +874,8 @@ function buildGoalPromptSpec(
       previousState: payload.previousState,
       previousUnderstanding: payload.previousUnderstanding,
       previousStage: payload.previousStage,
+      supplementText: payload.supplementText,
     }),
-    prepareSystemPrompt: async (systemPrompt) => {
-      if (!isPromptSupplementEnabled()) return systemPrompt;
-      const { finalPrompt, supplementApplied, fieldsCovered } =
-        await composePromptFromAgentRouting('goal-conversation', systemPrompt);
-      if (supplementApplied) {
-        logger.debug('[skill:goal-conversation] field routing supplement applied', { fieldsCovered });
-        return finalPrompt;
-      }
-      return systemPrompt;
-    },
     parseRawOutput: (rawOutput) => {
       // Delta 模式（§5.4）：state/understanding 缺席合法（缺席=不变）
       const validation = validateGoalConversationStructuredOutput(rawOutput, { deltaMode });
@@ -786,6 +905,7 @@ function buildGoalPromptSpec(
         previousStage: payload.previousStage,
         previousConfidence: payload.previousState?.confidence ?? payload.previousUnderstanding?.confidence ?? 0.2,
         confirmProposal: payload.confirmProposal === true,
+        previousState: payload.previousState as GoalConversationStateSnapshot | undefined,
       },
       { deltaMode }
     ),
@@ -841,6 +961,10 @@ export async function goalConversationAgentHandler(
       previousUnderstanding,
       previousStage: input.metadata?.previousStage,
       confirmProposal: input.metadata?.confirmProposal === true,
+      // KV 前缀缓存友好化：supplement 以 user 前缀注入（system 纯静态）；30s 粒度缓存
+      supplementText: isPromptSupplementEnabled()
+        ? (await getSupplementTextForAgent('skill:goal-conversation')).text
+        : null,
     };
 
     // 旧语义：maxFormatRetries=2 → 最多 3 次尝试（含首次）
@@ -945,8 +1069,9 @@ export async function goalConversationAgentHandler(
         {
           latestUserInput: input.goal,
           previousStage: input.metadata?.previousStage,
-          previousConfidence: previousUnderstanding?.confidence || 0.2,
+          previousConfidence: input.metadata?.previousState?.confidence ?? previousUnderstanding?.confidence ?? 0.2,
           confirmProposal: input.metadata?.confirmProposal === true,
+          previousState: input.metadata?.previousState as GoalConversationStateSnapshot | undefined,
         }
       );
       return {

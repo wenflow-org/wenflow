@@ -8,6 +8,7 @@
  */
 
 import { Router } from 'express';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import aiTeachingCoordinator from '../services/ai-teaching/AITeachingCoordinator';
 import learningStateService from '../services/learning/learning-state.service';
 import aiService from '../services/ai/ai.service';
@@ -20,9 +21,95 @@ import {
   teachingSessionRepository
 } from '../services/ai-teaching/TeachingSessionRepository';
 import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
-import { PromptStreamEvent, setRequestContext } from '../gateway/api-gateway/context';
+import { learnerExitService } from '../services/learner/LearnerExitService';
+import { PromptStreamEvent, setRequestContext, getRequestContext } from '../gateway/api-gateway/context';
+import type { InteractionMetaRecord } from '../services/ai-teaching/TeachingContextBuilder';
 
 const router = Router();
+
+const parseRateLimitEnvValue = (value: string | undefined, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+/**
+ * 授课消息用户级限流（每消息触发 1-2 次 LLM 调用，按 userId 键控，未登录按 IP 兜底）
+ */
+const teachingMessagesUserLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: parseRateLimitEnvValue(process.env.TEACHING_MESSAGES_MAX_PER_HOUR, 60),
+  message: { success: false, error: { message: '消息发送过于频繁，请稍后重试', code: 'RATE_LIMITED', status: 429 } },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.user?.userId || ipKeyGenerator(req.ip, 56),
+});
+
+/**
+ * 到期复习清单（复习闭环 · learn agent 出口）
+ * GET /api/ai-teaching/review/due
+ */
+router.get('/review/due', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return sendUnauthorized(res);
+    }
+    const due = await learnerExitService.getDueReview(userId, 20);
+    res.json({
+      success: true,
+      data: {
+        items: due.map((item) => ({
+          conceptKey: item.conceptKey,
+          label: item.label || item.conceptKey,
+          retention: item.retention,
+          reason: item.reason,
+          masteryScore: item.masteryScore,
+          estimatedMinutes: Math.max(5, Math.round(item.retention * 20)),
+        })),
+      },
+    });
+  } catch (error: any) {
+    logger.error('[review] 到期复习清单获取失败:', error);
+    return sendTeachingError(res, error, '获取复习清单失败');
+  }
+});
+
+/**
+ * 开始复习课（复习闭环 · mode=review 会话，knowledgeState 注入到期复习点）
+ * POST /api/ai-teaching/review/sessions  body: { taskId }
+ */
+router.post('/review/sessions', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return sendUnauthorized(res);
+    }
+    const taskId = req.body?.taskId;
+    if (!taskId || typeof taskId !== 'string') {
+      return sendValidationError(res, '缺少 taskId');
+    }
+    await learningService.assertTaskReadyForLearning(taskId, userId);
+    const session = await aiTeachingCoordinator.startSession({ userId, taskId, mode: 'review' });
+    res.json({
+      success: true,
+      data: {
+        sessionId: session.sessionId,
+        subject: session.subject,
+        topic: session.topic,
+        startTime: session.startTime,
+        welcomeMessage: session.welcomeMessage,
+        opening: session.opening,
+        mode: session.mode,
+        revision: session.revision,
+        knowledgePoints: session.knowledgePoints,
+        scene: session.scene,
+      },
+    });
+  } catch (error: any) {
+    logger.error('[review] 复习课创建失败:', error);
+    return sendTeachingError(res, error, '创建复习课失败');
+  }
+});
 
 const parseExpectedRevision = (value: unknown): number | undefined => {
   return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
@@ -37,6 +124,26 @@ const requireExpectedRevision = (value: unknown): number => {
   }
   return revision;
 };
+
+const META_KEYS = ['draftMs', 'idleMsBefore', 'lastIdleMs', 'editingCount', 'deleteCount', 'charsPerSentence'] as const;
+
+/**
+ * 清洗前端交互特征（认知负荷量测 · 前端情报层）。
+ * 只保留合法数值字段；meta 缺失/非法时返回 undefined（走 absent 降级路径）。
+ */
+function sanitizeInteractionMeta(raw: unknown): InteractionMetaRecord | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const meta: InteractionMetaRecord = {};
+  let valid = false;
+  for (const key of META_KEYS) {
+    const value = (raw as Record<string, unknown>)[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      (meta as Record<string, number>)[key] = value;
+      valid = true;
+    }
+  }
+  return valid ? meta : undefined;
+}
 
 const requireIdempotencyKey = (value: unknown): string => {
   const key = typeof value === 'string' ? value.trim() : '';
@@ -96,6 +203,12 @@ const sendTeachingError = (res: any, error: any, fallbackMessage: string) => {
   });
 };
 
+const sendUnauthorized = (res: any) =>
+  res.status(401).json({ success: false, error: { message: '未登录', code: 'UNAUTHORIZED', status: 401 } });
+
+const sendValidationError = (res: any, message: string) =>
+  res.status(400).json({ success: false, error: { message, code: 'VALIDATION_ERROR', status: 400 } });
+
 /**
  * 写一条 SSE 事件。HTTP 200 已提交后无法再改状态码，
  * 业务失败统一以 event: error 带内下发。
@@ -114,6 +227,8 @@ const buildMessageResultData = (result: any, synthetic: boolean): Record<string,
       endReason: result.endReason || null,
       recovered: result.recovered === true,
       peerMessage: result.peerTriggered ? result.peerMessage || null : null,
+      peerStrategy: result.peerTriggered ? result.peerStrategy || null : null,
+      peerFollowUpQuestions: result.peerTriggered && Array.isArray(result.peerFollowUpQuestions) ? result.peerFollowUpQuestions : [],
       revision: result.revision,
       schemaVersion: 'synthetic-user-v1'
     };
@@ -145,6 +260,8 @@ const buildMessageResultData = (result: any, synthetic: boolean): Record<string,
     advisory: result.advisory || null,
     peerTriggered: result.peerTriggered,
     peerMessage: result.peerMessage,
+    peerStrategy: result.peerStrategy || null,
+    peerFollowUpQuestions: Array.isArray(result.peerFollowUpQuestions) ? result.peerFollowUpQuestions : [],
     checkpoint: result.checkpoint || null,
     promptDebug: result.promptDebug || null,
     peerDebug: result.peerDebug || null,
@@ -158,7 +275,8 @@ const handleStreamingMessage = async (
   res: any,
   sessionId: string,
   message: string,
-  expectedRevision: number
+  expectedRevision: number,
+  interactionMeta?: InteractionMetaRecord
 ) => {
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -179,10 +297,11 @@ const handleStreamingMessage = async (
       }
     },
   };
-  setRequestContext({ streamRequest });
+  // 注入业务会话上下文：执行日志/瀑布按 sessionId 归组，链路可追溯
+  setRequestContext({ streamRequest, sessionId, sourceEntry: 'platform' });
 
   try {
-    const result = await aiTeachingCoordinator.processStudentMessage(sessionId, message, { expectedRevision });
+    const result = await aiTeachingCoordinator.processStudentMessage(sessionId, message, { expectedRevision, interactionMeta });
     const synthetic = req.user?.projection?.grantSource === 'synthetic';
     writeSseEvent(res, 'final', buildMessageResultData(result, synthetic));
     writeSseEvent(res, 'done', {});
@@ -198,7 +317,8 @@ const handleStreamingMessage = async (
 const handleStreamingSession = async (
   req: any,
   res: any,
-  task: () => Promise<Record<string, unknown>>
+  task: () => Promise<Record<string, unknown>>,
+  sessionId?: string
 ) => {
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -218,7 +338,8 @@ const handleStreamingSession = async (
       }
     },
   };
-  setRequestContext({ streamRequest });
+  // 注入业务会话上下文：执行日志/瀑布按 sessionId 归组，链路可追溯
+  setRequestContext({ streamRequest, sessionId, sourceEntry: 'platform' });
 
   try {
     const data = await task();
@@ -243,7 +364,7 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { taskId } = req.params;
@@ -253,6 +374,8 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
     if (String(req.headers?.accept || '').includes('text/event-stream')) {
       return handleStreamingSession(req, res, async () => {
         const session = await aiTeachingCoordinator.startSession({ userId, taskId });
+        // 会话创建后补注入：本次请求后续的 LLM 调用都带上 sessionId，链路可追溯
+        setRequestContext({ ...getRequestContext(), sessionId: session.sessionId });
         return {
           sessionId: session.sessionId,
           subject: session.subject,
@@ -262,6 +385,8 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
           opening: req.user?.projection?.grantSource === 'synthetic' ? undefined : session.opening,
           mode: session.mode,
           revision: session.revision,
+          knowledgePoints: session.knowledgePoints,
+          scene: session.scene,
           ...(req.user?.projection?.grantSource === 'synthetic' ? { schemaVersion: 'synthetic-user-v1' } : {}),
         };
       });
@@ -283,6 +408,8 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
         opening: req.user?.projection?.grantSource === 'synthetic' ? undefined : session.opening,
         mode: session.mode,
         revision: session.revision,
+        knowledgePoints: session.knowledgePoints,
+        scene: session.scene,
         ...(req.user?.projection?.grantSource === 'synthetic' ? { schemaVersion: 'synthetic-user-v1' } : {}),
       },
     });
@@ -300,7 +427,7 @@ router.post('/sessions/:sessionId/pause', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { sessionId } = req.params;
@@ -330,7 +457,7 @@ router.post('/sessions/:sessionId/resume', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { sessionId } = req.params;
@@ -357,7 +484,7 @@ router.post('/sessions/:sessionId/reset', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { sessionId } = req.params;
@@ -384,7 +511,7 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { sessionId } = req.params;
@@ -392,25 +519,23 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
     await teachingSessionRepository.assertOwnership(sessionId, userId);
 
     const { message } = req.body;
+    const interactionMeta = sanitizeInteractionMeta(req.body?.meta);
 
     if (!message) {
-      return res.status(400).json({
-        success: false,
-        error: '缺少消息内容',
-      });
+      return sendValidationError(res, '缺少消息内容');
     }
 
     const expectedRevision = requireExpectedRevision(req.body?.revision);
     const wantsStream = String(req.headers?.accept || '').includes('text/event-stream');
 
     if (wantsStream) {
-      return handleStreamingMessage(req, res, sessionId, message, expectedRevision);
+      return handleStreamingMessage(req, res, sessionId, message, expectedRevision, interactionMeta);
     }
 
     const result = await aiTeachingCoordinator.processStudentMessage(
       sessionId,
       message,
-      { expectedRevision }
+      { expectedRevision, interactionMeta }
     );
 
     const synthetic = req.user?.projection?.grantSource === 'synthetic';
@@ -429,7 +554,7 @@ router.post('/sessions/:sessionId/checkpoints/:checkpointId/submit', async (req:
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { sessionId, checkpointId } = req.params;
@@ -439,7 +564,7 @@ router.post('/sessions/:sessionId/checkpoints/:checkpointId/submit', async (req:
     const answerText = typeof req.body?.answerText === 'string' ? req.body.answerText.trim() : undefined;
 
     if ((!selectedOptionIds || selectedOptionIds.length === 0) && !answerText) {
-      return res.status(400).json({ success: false, error: '缺少作答内容' });
+      return sendValidationError(res, '缺少作答内容');
     }
 
     await teachingSessionRepository.assertOwnership(sessionId, userId);
@@ -464,7 +589,7 @@ router.post('/sessions/:sessionId/end', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { sessionId } = req.params;
@@ -502,7 +627,7 @@ router.post('/sessions/:sessionId/end', async (req: any, res) => {
 router.post('/sessions/:sessionId/finalize', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
-    if (!userId) return res.status(401).json({ success: false, error: { message: '未登录' } });
+    if (!userId) return sendUnauthorized(res);
 
     const action = req.body?.action;
     if (!['end_only', 'complete_task', 'complete_review'].includes(action)) {
@@ -548,7 +673,7 @@ router.post('/sessions/:sessionId/finalize', async (req: any, res) => {
 router.get('/sessions/:sessionId/finalization', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
-    if (!userId) return res.status(401).json({ success: false, error: { message: '未登录' } });
+    if (!userId) return sendUnauthorized(res);
     const result = await sessionFinalizationService.getStatus(req.params.sessionId, userId);
     return res.json({ success: true, data: result });
   } catch (error: any) {
@@ -565,7 +690,7 @@ router.get('/state', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const state = await learningStateService.getCurrentState(userId);
@@ -595,10 +720,7 @@ router.get('/state', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('获取学习状态失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '获取状态失败',
-    });
+    return sendTeachingError(res, error, '获取状态失败');
   }
 });
 
@@ -610,7 +732,7 @@ router.get('/trends', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const days = parseInt(req.query.days as string) || 7;
@@ -628,10 +750,7 @@ router.get('/trends', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('获取趋势失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '获取趋势失败',
-    });
+    return sendTeachingError(res, error, '获取趋势失败');
   }
 });
 
@@ -643,7 +762,7 @@ router.post('/sessions/:sessionId/peer/messages', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { sessionId } = req.params;
@@ -653,17 +772,18 @@ router.post('/sessions/:sessionId/peer/messages', async (req: any, res) => {
     const { message } = req.body;
 
     if (!message) {
-      return res.status(400).json({
-        success: false,
-        error: '缺少消息内容',
-      });
+      return sendValidationError(res, '缺少消息内容');
     }
 
     if (String(req.headers?.accept || '').includes('text/event-stream')) {
       return handleStreamingSession(req, res, async () => {
         const result = await aiTeachingCoordinator.processPeerMessage(sessionId, message);
-        return { peerResponse: result.peerResponse };
-      });
+        return {
+          peerResponse: result.peerResponse,
+          peerStrategy: result.strategy || null,
+          peerFollowUpQuestions: Array.isArray(result.followUpQuestions) ? result.followUpQuestions : [],
+        };
+      }, sessionId);
     }
 
     const result = await aiTeachingCoordinator.processPeerMessage(
@@ -675,14 +795,13 @@ router.post('/sessions/:sessionId/peer/messages', async (req: any, res) => {
       success: true,
       data: {
         peerResponse: result.peerResponse,
+        peerStrategy: result.strategy || null,
+        peerFollowUpQuestions: Array.isArray(result.followUpQuestions) ? result.followUpQuestions : [],
       },
     });
   } catch (error: any) {
     logger.error('处理学习伙伴消息失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '处理消息失败',
-    });
+    return sendTeachingError(res, error, '伴学消息处理失败，请稍后重试');
   }
 });
 
@@ -695,7 +814,7 @@ router.get('/sessions/active', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { taskId } = req.query;
@@ -728,10 +847,7 @@ router.get('/sessions/active', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('获取活跃会话失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '获取会话失败',
-    });
+    return sendTeachingError(res, error, '获取会话失败');
   }
 });
 
@@ -743,7 +859,7 @@ router.get('/sessions/history', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const sessions = await aiTeachingCoordinator.getSessionHistory(userId);
@@ -754,10 +870,7 @@ router.get('/sessions/history', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('获取历史会话失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '获取历史会话失败',
-    });
+    return sendTeachingError(res, error, '获取历史会话失败');
   }
 });
 
@@ -769,7 +882,7 @@ router.get('/sessions/:sessionId/detail', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { sessionId } = req.params;
@@ -779,7 +892,7 @@ router.get('/sessions/:sessionId/detail', async (req: any, res) => {
     const session = await aiTeachingCoordinator.getSessionDetail(sessionId, userId);
 
     if (!session) {
-      return res.status(404).json({ success: false, error: '会话不存在' });
+      return sendTeachingError(res, new Error('会话不存在'), '获取会话详情失败');
     }
 
     res.json({
@@ -788,10 +901,7 @@ router.get('/sessions/:sessionId/detail', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('获取会话详情失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '获取会话详情失败',
-    });
+    return sendTeachingError(res, error, '获取会话详情失败');
   }
 });
 
@@ -803,7 +913,7 @@ router.get('/tasks/:taskId/evaluation/latest', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ success: false, error: '未登录' });
+      return sendUnauthorized(res);
     }
 
     const { taskId } = req.params;
@@ -819,10 +929,7 @@ router.get('/tasks/:taskId/evaluation/latest', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('获取任务评估失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '获取任务评估失败',
-    });
+    return sendTeachingError(res, error, '获取任务评估失败');
   }
 });
 

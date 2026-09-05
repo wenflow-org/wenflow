@@ -1,0 +1,471 @@
+# Path 阶段编排文件（字段路由单源化）
+# 由字段路由 seed TS 机械迁移（1:1）；seed TS 已退役，本文件为唯一声明源。
+
+stage: path
+order: 2
+displayName: Path 阶段
+description: 学习路径生成：Framing → Path Planning → Stage Designer → Path Reviewer → KC Mapper
+
+contracts:
+  - agentId: skill:path-planning
+  - agentId: skill:stage-designer
+  - agentId: skill:path-reviewer
+  - agentId: skill:kc-mapper
+  - agentId: path-agent
+
+fields:
+  # === path-agent 确定性定帧产出 normalizedInput.*（原 skill:path-scene-framing） ===
+  - fieldId: normalizedInput.learnerProfile.backgroundExperience
+    promptRole: soft-info
+    valueType: string
+    description: 学习者背景经验（清洗）
+  - fieldId: normalizedInput.learnerProfile.constraintsAndBoundaries
+    promptRole: soft-info
+    valueType: string
+    description: 学习者约束与边界（清洗）
+  - fieldId: normalizedInput.problemSpace.realProblem
+    promptRole: hard-required
+    valueType: string
+    description: 真实问题（清洗）
+    systemLocked: true
+  - fieldId: normalizedInput.problemSpace.scenario
+    promptRole: soft-info
+    valueType: string
+    description: 学习场景（清洗）
+  - fieldId: normalizedInput.problemSpace.currentPainPoint
+    promptRole: soft-info
+    valueType: string
+    description: 当前痛点（清洗）
+  - fieldId: normalizedInput.resources.timeBudget
+    promptRole: hard-required
+    valueType: string
+    description: 时间预算
+    systemLocked: true
+  - fieldId: normalizedInput.resources.timeBudgetCadence
+    promptRole: soft-info
+    valueType: string
+    description: 时间预算节奏
+  - fieldId: normalizedInput.successCriteria.observableResult
+    promptRole: hard-required
+    valueType: string
+    description: 可观察结果
+    systemLocked: true
+  - fieldId: normalizedInput.confirmedProposal.firstDeliverable
+    promptRole: proposal-output
+    valueType: string
+    description: 确认的第一交付物
+  - fieldId: normalizedInput.confirmedProposal.keyStages
+    promptRole: proposal-output
+    valueType: string
+    description: 确认的关键阶段
+  - fieldId: normalizedInput.planningHints.paceSignal
+    promptRole: hidden-inference
+    valueType: string
+    description: 推断的学习节奏信号
+  - fieldId: normalizedInput.planningHints.milestoneRange
+    promptRole: hidden-inference
+    valueType: string
+    description: 推断的 milestone 数量范围
+  - fieldId: normalizedInput.planningHints.conceptRange
+    promptRole: hidden-inference
+    valueType: string
+    description: 推断的 concept 数量范围
+  - fieldId: normalizedInput.planningHints.subtasksPerStageRange
+    promptRole: hidden-inference
+    valueType: string
+    description: 推断的每阶段 subtask 数量范围
+  - fieldId: normalizedInput.planningHints.subtaskMinutesRange
+    promptRole: hidden-inference
+    valueType: string
+    description: 推断的 subtask 分钟数范围
+  - fieldId: normalizedInput.planningHints.maxWeeks
+    promptRole: hidden-inference
+    valueType: number
+    description: 推断的最大周数
+  # === path-agent 编排注入（loopOver 上下文，非 LLM 产出） ===
+  - fieldId: previousMilestone
+    promptRole: derived-presentation
+    valueType: object
+    pathInRawOutput: previousMilestone
+    description: 前一里程碑上下文（title/coreConcept），consolidate 回捞输入；首阶段不注入
+
+  # === skill:path-planning 产出 ===
+  - fieldId: path.id
+    promptRole: control-signal
+    valueType: string
+    description: 路径 ID
+    systemLocked: true
+  - fieldId: path.name
+    promptRole: public-reply
+    valueType: string
+    description: 路径名称
+  - fieldId: path.summary
+    promptRole: public-reply
+    valueType: string
+    description: 路径摘要
+  - fieldId: path.totalMilestones
+    promptRole: derived-presentation
+    valueType: number
+    description: milestone 总数
+  - fieldId: cognitiveCore.cognitiveDomain
+    promptRole: soft-info
+    valueType: string
+    description: 认知领域归类
+  - fieldId: cognitiveCore.coreConcepts
+    promptRole: soft-info
+    valueType: array<object>
+    description: 核心概念列表
+  - fieldId: milestones.stageNumber
+    promptRole: hard-required
+    valueType: number
+    description: 阶段编号
+    systemLocked: true
+  - fieldId: milestones.title
+    promptRole: hard-required
+    valueType: string
+    description: 阶段标题
+    systemLocked: true
+  - fieldId: milestones.coreConcept
+    promptRole: soft-info
+    valueType: string
+    description: 阶段核心概念
+  - fieldId: milestones.goal
+    promptRole: hard-required
+    valueType: string
+    description: 阶段目标
+  - fieldId: milestones.estimatedHours
+    promptRole: soft-info
+    valueType: number
+    description: 阶段估时（小时）
+
+  # === skill:stage-designer 产出 ===
+  - fieldId: subtasks.title
+    promptRole: hard-required
+    valueType: string
+    description: 子任务标题
+    systemLocked: true
+  - fieldId: subtasks.type
+    promptRole: soft-info
+    valueType: string
+    description: 子任务类型（learn / practice / verify）
+  - fieldId: subtasks.estimatedMinutes
+    promptRole: soft-info
+    valueType: number
+    description: 子任务估时（分钟）
+  - fieldId: subtasks.acceptanceCriteria
+    promptRole: soft-info
+    valueType: string
+    persistKey: acceptanceHint
+    description: 验收标准（skill 实际产出键为 acceptanceHint，落库时映射为 subtasks.acceptanceCriteria）
+  - fieldId: subtasks.linkedConcept
+    promptRole: soft-info
+    valueType: string
+    description: 关联的认知概念
+  - fieldId: subtasks.knowledgeType
+    promptRole: soft-info
+    valueType: string
+    description: 知识类型（factual / conceptual / procedural / metacognitive）
+  - fieldId: subtasks.cognitiveLevel
+    promptRole: soft-info
+    valueType: string
+    description: 认知层次（Bloom 等级）
+  - fieldId: subtasks.transferable
+    promptRole: soft-info
+    valueType: boolean
+    description: 是否可迁移
+
+routings:
+  # path-agent（确定性定帧）→ path-planning + stage-designer
+  - agentId: path-agent
+    fieldId: normalizedInput.learnerProfile.backgroundExperience
+    render: hidden
+    handoff: [skill:path-planning, skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出
+  - agentId: path-agent
+    fieldId: normalizedInput.learnerProfile.constraintsAndBoundaries
+    render: hidden
+    handoff: [skill:path-planning, skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出
+  - agentId: path-agent
+    fieldId: normalizedInput.problemSpace.realProblem
+    render: hidden
+    handoff: [skill:path-planning, skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出
+  - agentId: path-agent
+    fieldId: normalizedInput.problemSpace.scenario
+    render: hidden
+    handoff: [skill:path-planning, skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出
+  - agentId: path-agent
+    fieldId: normalizedInput.problemSpace.currentPainPoint
+    render: hidden
+    handoff: [skill:path-planning, skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出
+  - agentId: path-agent
+    fieldId: normalizedInput.resources.timeBudget
+    render: hidden
+    handoff: [skill:path-planning, skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出
+  - agentId: path-agent
+    fieldId: normalizedInput.resources.timeBudgetCadence
+    render: hidden
+    handoff: [skill:path-planning, skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出
+  - agentId: path-agent
+    fieldId: normalizedInput.successCriteria.observableResult
+    render: hidden
+    handoff: [skill:path-planning, skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出
+  - agentId: path-agent
+    fieldId: normalizedInput.confirmedProposal.firstDeliverable
+    render: hidden
+    handoff: [skill:path-planning, skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出
+  - agentId: path-agent
+    fieldId: normalizedInput.confirmedProposal.keyStages
+    render: hidden
+    handoff: [skill:path-planning, skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出
+  - agentId: path-agent
+    fieldId: normalizedInput.planningHints.paceSignal
+    render: hidden
+    handoff: [skill:path-planning, skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出
+  - agentId: path-agent
+    fieldId: normalizedInput.planningHints.milestoneRange
+    render: hidden
+    handoff: [skill:path-planning, skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出
+  - agentId: path-agent
+    fieldId: normalizedInput.planningHints.conceptRange
+    render: hidden
+    handoff: [skill:path-planning, skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出
+  - agentId: path-agent
+    fieldId: normalizedInput.planningHints.subtasksPerStageRange
+    render: hidden
+    handoff: [skill:path-planning, skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出
+  - agentId: path-agent
+    fieldId: normalizedInput.planningHints.subtaskMinutesRange
+    render: hidden
+    handoff: [skill:path-planning, skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出
+  - agentId: path-agent
+    fieldId: normalizedInput.planningHints.maxWeeks
+    render: hidden
+    handoff: [skill:path-planning, skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 确定性定帧产出（buildFramedNormalizedInput），非 LLM 输出
+  - agentId: path-agent
+    fieldId: previousMilestone
+    render: hidden
+    handoff: [skill:stage-designer]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: loopOver 编排注入（前一 milestone 上下文），非 LLM 输出
+
+  # path-planning → stage-designer + path-agent
+  - agentId: skill:path-planning
+    fieldId: path.id
+    render: visible
+    handoff: [path-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:path-planning
+    fieldId: path.name
+    render: visible
+    handoff: [path-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:path-planning
+    fieldId: path.summary
+    render: visible
+    handoff: [path-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:path-planning
+    fieldId: path.totalMilestones
+    render: visible
+    handoff: [path-agent]
+    internal: false
+    accumulate: false
+  # cognitiveCore 同时供 stage-designer（learning.service stageDesignerBaseInput）
+  - agentId: skill:path-planning
+    fieldId: cognitiveCore.cognitiveDomain
+    render: visible
+    handoff: [path-agent, skill:stage-designer, skill:kc-mapper]
+    internal: false
+    accumulate: true
+  - agentId: skill:path-planning
+    fieldId: cognitiveCore.coreConcepts
+    render: visible
+    handoff: [path-agent, skill:stage-designer, skill:kc-mapper]
+    internal: false
+    accumulate: true
+  - agentId: skill:path-planning
+    fieldId: milestones.stageNumber
+    render: visible
+    handoff: [skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer]
+    internal: false
+    accumulate: false
+  - agentId: skill:path-planning
+    fieldId: milestones.title
+    render: visible
+    handoff: [skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer]
+    internal: false
+    accumulate: false
+  - agentId: skill:path-planning
+    fieldId: milestones.coreConcept
+    render: visible
+    handoff: [skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer]
+    internal: false
+    accumulate: false
+  - agentId: skill:path-planning
+    fieldId: milestones.goal
+    render: visible
+    handoff: [skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer]
+    internal: false
+    accumulate: false
+  - agentId: skill:path-planning
+    fieldId: milestones.estimatedHours
+    render: visible
+    handoff: [skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer]
+    internal: false
+    accumulate: false
+
+  # stage-designer → path-agent
+  - agentId: skill:stage-designer
+    fieldId: subtasks.title
+    render: visible
+    handoff: [path-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:stage-designer
+    fieldId: subtasks.type
+    render: visible
+    handoff: [path-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:stage-designer
+    fieldId: subtasks.estimatedMinutes
+    render: visible
+    handoff: [path-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:stage-designer
+    fieldId: subtasks.acceptanceCriteria
+    render: visible
+    handoff: [path-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:stage-designer
+    fieldId: subtasks.linkedConcept
+    render: visible
+    handoff: [path-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:stage-designer
+    fieldId: subtasks.knowledgeType
+    render: visible
+    handoff: [path-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:stage-designer
+    fieldId: subtasks.cognitiveLevel
+    render: visible
+    handoff: [path-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:stage-designer
+    fieldId: subtasks.transferable
+    render: visible
+    handoff: [path-agent]
+    internal: false
+    accumulate: false
+
+  # path-agent → learning（聚合 handoff）
+  - agentId: path-agent
+    fieldId: path.name
+    render: visible
+    handoff: [teaching]
+    internal: false
+    accumulate: false
+  - agentId: path-agent
+    fieldId: path.summary
+    render: visible
+    handoff: [teaching]
+    internal: false
+    accumulate: false
+  - agentId: path-agent
+    fieldId: milestones.title
+    render: visible
+    handoff: [teaching]
+    internal: false
+    accumulate: false
+  - agentId: path-agent
+    fieldId: milestones.goal
+    render: visible
+    handoff: [teaching]
+    internal: false
+    accumulate: false
+  - agentId: path-agent
+    fieldId: subtasks.title
+    render: visible
+    handoff: [teaching]
+    internal: false
+    accumulate: false
+  - agentId: path-agent
+    fieldId: subtasks.acceptanceCriteria
+    render: visible
+    handoff: [teaching]
+    internal: false
+    accumulate: false

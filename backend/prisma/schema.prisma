@@ -24,6 +24,9 @@ model achievements {
   unlockedAt  DateTime?
   earnedAt    DateTime?
   users       users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type, completed])
 }
 
 model agent_call_logs {
@@ -93,6 +96,7 @@ model prompt_call_logs {
   promptDrift         Boolean  @default(false)
   durationMs          Int      @default(0)
   tokenUsage          String?
+  routingContextHash  String?
   pathId              String?
   userId              String?
   conversationId      String?
@@ -160,6 +164,10 @@ model llm_execution_attempts {
   messageCount        Int?
   requestBytes        Int?
   responseBytes       Int?
+  // KV 前缀缓存可观测（2026-08）：TTFT（流式首 delta）与 DeepSeek 自动前缀缓存命中
+  ttftMs               Int?
+  promptCacheHitTokens Int?
+  promptCacheMissTokens Int?
   expiresAt           DateTime
   metadata            String?
   createdAt           DateTime @default(now())
@@ -173,6 +181,8 @@ model llm_execution_attempts {
   @@index([rootExecutionId, startedAt])
   @@index([userId, startedAt])
   @@index([errorCategory, startedAt])
+  @@index([success, errorCategory, startedAt])
+  @@index([userId, startedAt, success])
 }
 
 
@@ -232,38 +242,51 @@ model goal_conversations {
   collectedData  String?
   completedAt    DateTime?
   learningPathId String?
+  // 乐观锁：messages/collectedData 为整包 JSON 读改写，并发提交（双击/重试）时
+  // 以 revision 条件更新防止互相覆盖丢消息
+  revision       Int       @default(0)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @default(now())
   users          users     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
 
-model learningContents {
-  id          String   @id
-  subtaskId   String
-  contentType String   @default("lesson")
-  content     String
-  summary     String?
-  keyPoints   String?
-  resources   String?
-  exercises   String?
-  generatedBy String?
-  generatedAt DateTime @default(now())
-  version     Int      @default(1)
-  subtasks    subtasks @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
-
-  @@index([subtaskId])
-  @@index([contentType])
+  @@index([userId, status])
+  @@index([status, updatedAt])
+  @@index([learningPathId])
 }
 
 model learning_goals {
-  id          String   @id
-  userId      String
-  title       String
-  description String?
-  status      String   @default("active")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now())
-  users       users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String   @id
+  userId                String
+  title                 String
+  description           String?
+  status                String   @default("active")
+  // 多目标预算台账（阶段 8）：目标级调度元数据
+  pathId                String?
+  priority              Int      @default(0)
+  plannedMinutesPerDay  Int?
+  cognitiveBandwidth    String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @default(now())
+  users                 users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
+
+model goal_scheduling_ledger {
+  id                String   @id
+  userId            String
+  goalId            String?
+  date              String
+  budgetMinutes     Int      @default(30)
+  consumedMinutes   Float    @default(0)
+  plannedTasks      String?
+  loadAvg           Float?
+  status            String   @default("scheduled")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now())
+
+  @@unique([userId, goalId, date])
+  @@index([userId, date])
 }
 
 model learning_metrics {
@@ -291,6 +314,8 @@ model learning_metrics {
   mki          Float?   @default(0)
   ski          Float?   @default(0)
   users        users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, calculatedAt])
 }
 
 model learning_paths {
@@ -323,6 +348,7 @@ model learning_paths {
 
   @@index([userId])
   @@index([status])
+  @@index([userId, status])
 }
 
 model path_generation_runs {
@@ -403,42 +429,6 @@ model milestones {
 }
 
 
-model platform_stats {
-  id             String   @id
-  date           DateTime @default(now())
-  totalUsers     Int      @default(0)
-  activeUsers    Int      @default(0)
-  totalPaths     Int      @default(0)
-  activePaths    Int      @default(0)
-  totalTasks     Int      @default(0)
-  completedTasks Int      @default(0)
-  metadata       String?
-}
-
-model student_baselines {
-  id                       String    @id
-  userId                   String    @unique
-  totalXp                  Int       @default(0)
-  totalTime                Int       @default(0)
-  totalTasks               Int       @default(0)
-  completedTasks           Int       @default(0)
-  avgRating                Float     @default(0)
-  streakDays               Int       @default(0)
-  lastActive               DateTime?
-  responseTimeEma          Float     @default(10.0)
-  responseTimeEmVar        Float     @default(1.0)
-  messageLengthEma         Float     @default(50.0)
-  messageLengthEmVar       Float     @default(100.0)
-  interactionIntervalEma   Float     @default(5.0)
-  interactionIntervalEmVar Float     @default(1.0)
-  aiScoreEma               Float     @default(0.5)
-  aiScoreEmVar             Float     @default(0.01)
-  updateCount              Int       @default(0)
-  createdAt                DateTime  @default(now())
-  updatedAt                DateTime  @default(now())
-  users                    users     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
 model subtasks {
   id                   String             @id
   milestoneId          String
@@ -459,6 +449,7 @@ model subtasks {
   usersId              String?
   annotationConfidence Float?
   cognitiveLevel       String?
+  icapLevel            String?
   coreConcept          String?
   displayLabel         String?
   knowledgeType        String?
@@ -466,7 +457,6 @@ model subtasks {
   transferable         Boolean?           @default(false)
   linkedConceptId      String?
   linkedConceptName    String?
-  learningContents     learningContents[]
   users                users?             @relation(fields: [usersId], references: [id])
   milestones           milestones         @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
 
@@ -475,6 +465,8 @@ model subtasks {
   @@index([milestoneId])
   @@index([knowledgeType])
   @@index([cognitiveLevel])
+  @@index([icapLevel])
+  @@index([status, completedAt])
 }
 
 
@@ -513,6 +505,9 @@ model teaching_sessions {
   @@index([status])
   @@index([taskId])
   @@index([userId])
+  @@index([userId, createdAt])
+  @@index([startTime])
+  @@index([learningPathId])
 }
 
 model session_finalization_operations {
@@ -601,6 +596,31 @@ model learner_evidence {
   @@index([taskId])
 }
 
+// 误解台账（G-R-R Phase 2）：跨会话追踪结构化误解的生命周期
+// suspected（首次观察到）→ confirmed（再次出现，假设得到佐证）→ addressed（学生后续正确表现，误解已消除）
+model misconception_ledger {
+  id              String   @id
+  userId          String
+  conceptKey      String
+  hypothesisHash  String   // hypothesis 文本短哈希（跨会话去重/upsert 锚点）
+  hypothesis      String
+  canonicalLabel  String?
+  confidence      Int      // 0|25|50|75|100 软分级置信度（G-R-R 约定）
+  evidence        String?
+  status          String   @default("suspected") // suspected | confirmed | addressed
+  occurrenceCount Int      @default(1)
+  firstSeenAt     DateTime @default(now())
+  lastSeenAt      DateTime @default(now())
+  lastSessionId   String?
+  resolvedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, conceptKey, hypothesisHash])
+  @@index([userId, status])
+  @@index([userId, lastSeenAt])
+}
+
 model learner_projections {
   id             String   @id
   projectionKey  String   @unique
@@ -620,6 +640,61 @@ model learner_projections {
   @@index([userId, scope])
   @@index([userId, pathId, scope])
   @@index([lastEventAt])
+}
+
+/// 学习表现预测校准记录（learning-predictor 校准闭环）：
+/// 每次任务前预测一行，任务完成后回写实际结果，据此统计「实证命中率」替代 LLM 自报置信度。
+model prediction_records {
+  id            String   @id
+  userId        String
+  pathId        String?
+  taskId        String?
+  milestoneId   String?
+  sessionId     String?
+  stallRisk     Float
+  predictedTone String // smooth | struggle | fatigue
+  suggestedDepth String // shallow | standard | deep
+  focusConcepts String // JSON string[]
+  rationale     String
+  // 实证对照（任务完成后回写）
+  outcome       String? // not_evaluated | smooth | struggled | failed
+  outcomeAt     DateTime?
+  // 预测来源快照（摘要片段），便于追溯
+  summaryEcho   String?
+  createdAt     DateTime @default(now())
+
+  @@index([userId, taskId])
+  @@index([userId, createdAt])
+  @@index([outcome])
+}
+
+/// 知识点记忆痕迹（记忆引擎 M2）：ACT-R 幂律衰减的持久化载体。
+/// 每个（用户 × 概念）一行；masteryScore 为最近一次评估的内化强度，
+/// lastSeenAt 为最近一次提取/复习时间，decayFactor 为幂律衰减参数 d（默认 0.5，预留个性化标定）。
+model memory_traces {
+  id              String    @id
+  userId          String
+  conceptKey      String
+  label           String?
+  masteryScore    Float     @default(0.5)
+  stability       String    @default("developing") // unknown | fragile | developing | stable
+  lastSeenAt      DateTime?
+  extractionCount Int       @default(0)
+  decayFactor     Float     @default(0.5)
+  // SM-2 式间隔递增因子：复习成功 ×2（上限在计算侧 clamp 32），初始 1
+  intervalFactor  Float     @default(1)
+  source          String?   // derived（从 knowledgeState 确定性映射）| model（LLM 评估，预留）| review-event
+  dueAt           DateTime? // 下次到期时间（FSRS/调度物化列；null 走旧惰性 isReviewDue 兜底）
+  fsrsStability   Float?    // FSRS-6 稳定性（天）：回忆率降到 desiredRetention 所需时间；null = 未初始化（走 legacy ACT-R 兜底）
+  fsrsDifficulty  Float?    // FSRS-6 难度（1-10）：null = 未初始化
+  ktMasteryEma    Float?    // θ−d 知识状态 EMA（LLM ktEstimate 的跨会话滑动平均，α=0.2；null = 未初始化）
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, conceptKey])
+  @@index([userId, lastSeenAt])
+  @@index([userId, stability])
+  @@index([userId, dueAt])
 }
 
 model user_agent_configs {
@@ -729,14 +804,25 @@ model users {
   email                     String                     @unique
   name                      String
   password                  String
+  // 数据层审计 S4：role 枚举（'user' | 'admin'）由应用层强制（isAdmin 为实际鉴权依据），
+  // 未加 CHECK 约束——SQLite 需重建整表（users 被 ~20 张子表外键引用，重建风险大于收益）。
   role                      String                     @default("user")
   currentLevel              String                     @default("beginner")
   xp                        Int                        @default(0)
   isAdmin                   Boolean                    @default(false)
   isVirtualLearner          Boolean                    @default(false)
+  // 软删除（Phase 1）：deletedAt 非空即视为已删除，deletedBy 记录操作管理员；历史数据保留
+  deletedAt                 DateTime?
+  deletedBy                 String?
+  // 令牌吊销版本：改密/管理员重置密码时递增，旧 JWT 立即失效
+  tokenVersion              Int                        @default(0)
   createdAt                 DateTime                   @default(now())
   updatedAt                 DateTime
   lastLoginAt               DateTime?
+  streakDays                Int                        @default(0)
+  streakLastDate            DateTime?
+  longestStreak             Int                        @default(0)
+  onboardingCompleted       Boolean                    @default(false)
   dashboardGuidanceSnapshot String?
   learningStateRevision     Int                        @default(0)
   achievements              achievements[]
@@ -746,7 +832,6 @@ model users {
   learning_metrics          learning_metrics[]
   learning_paths            learning_paths[]
   projection_access_grants  projection_access_grants[]
-  student_baselines         student_baselines?
   subtasks                  subtasks[]
   teaching_sessions         teaching_sessions[]
   user_agent_configs        user_agent_configs[]
@@ -756,6 +841,24 @@ model users {
   user_skill_configs        user_skill_configs[]
   virtual_learner_profiles  virtual_learner_profiles?
   virtual_sessions          virtual_sessions[]
+  password_reset_tokens     password_reset_tokens[]
+  notifications             notifications[]
+
+  @@index([deletedAt])
+}
+
+// 忘记密码自助重置令牌：tokenHash 存哈希，一次性使用，带过期时间
+model password_reset_tokens {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  users     users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
 }
 
 model virtual_learner_profiles {
@@ -854,6 +957,10 @@ model virtual_quick_learn_runs {
   maxTurns          Int       @default(25)
   turns             Int       @default(0)
   teachingSessionId String?
+  // 单课上下文：所属故事（JSON，含 visibleOpening/goalSeed/pressurePoints 等），null 表示无故事（V1 兼容）
+  story             String?
+  // 行为摩擦预算档位：none|low|normal|high|stress_test（V1 默认 none 保持兼容）
+  frictionBudget    String    @default("none")
   progress          String?
   transcript        String?
   report            String?
@@ -869,25 +976,6 @@ model virtual_quick_learn_runs {
   @@index([userId])
 }
 
-model virtual_experiment_runs {
-  id               String    @id @default(uuid())
-  mode             String    @default("blackbox-api")
-  status           String    @default("queued")
-  entriesJson      String
-  resultsJson      String    @default("[]")
-  progressJson     String    @default("{}")
-  error            String?
-  abortRequestedAt DateTime?
-  startedAt        DateTime?
-  completedAt      DateTime?
-  createdBy        String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  @@index([status])
-  @@index([createdAt])
-}
-
 model announcements {
   id          String    @id @default(uuid())
   title       String
@@ -900,5 +988,167 @@ model announcements {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  // 数据层审计 S4：status/severity 枚举约束由迁移 SQL 的 CHECK 约束强制
+  // （SQLite ALTER TABLE 不支持 ADD CONSTRAINT，已在迁移中重建表添加）：
+  //   status   IN ('draft','published','archived')
+  //   severity IN ('info','warning','critical')
   @@index([status, publishedAt])
+  @@index([status, expiresAt])
+}
+
+// 站内通知（admin 后台定向/全员推送，P2）
+// 用户端通过 GET /api/notifications 拉取；已读状态由通知行 isRead 标记。
+model notifications {
+  id          String    @id @default(uuid())
+  userId      String
+  title       String
+  body        String?
+  kind        String    @default("system") // system | announcement | achievement
+  link        String?
+  isRead      Boolean   @default(false)
+  readAt      DateTime?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  users       users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@index([kind])
+}
+
+// 操作审计日志（admin 后台敏感操作，P1）
+// 由 admin-audit.middleware 在响应 finish 时 fire-and-forget 写入；
+// before/after/request 快照均为 redactLogValue 脱敏后的 JSON 字符串。
+model admin_audit_logs {
+  id          String   @id @default(uuid())
+  adminId     String?
+  adminName   String?
+  action      String
+  targetType  String?
+  targetId    String?
+  beforeJson  String?
+  afterJson   String?
+  requestJson String?
+  method      String
+  path        String
+  statusCode  Int
+  success     Boolean
+  ip          String?
+  userAgent   String?
+  durationMs  Int?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([adminId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId, createdAt])
+}
+
+// 管理员会话表（P2 方案 B：轻量完整会话表）
+// 由 admin-auth 签发/登出时写入，admin.middleware 鉴权时校验（revokedAt/expiresAt），
+// lastSeenAt 由内存节流（60s）fire-and-forget 更新。
+// 与 admin_audit_logs 同约定：adminId 为纯列（无外键），避免 SQLite 重建表风险。
+model admin_sessions {
+  id         String    @id
+  adminId    String
+  jti        String    @unique
+  ip         String?
+  userAgent  String?
+  remember   Boolean   @default(false)
+  issuedAt   DateTime
+  expiresAt  DateTime
+  lastSeenAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([revokedAt, expiresAt])
+}
+
+// 登录审计（user/admin 双 scope，P1）
+// 由 login-rate-limit.middleware 的 recordLoginAttempt / ACCOUNT_LOCKED 分支
+// fire-and-forget 写入；username 在写入前截断为 64 字符。
+model login_attempts {
+  id        String   @id @default(uuid())
+  scope     String
+  username  String
+  ip        String?
+  success   Boolean
+  reason    String?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  @@index([scope, createdAt])
+  @@index([username, createdAt])
+  @@index([ip, createdAt])
+  @@index([success, createdAt])
+}
+
+// 批量实验（admin 虚拟学习者页 · 系统级队列实验）
+// 由 batch-experiment.service 驱动：创建学习者 → goal → path → 学完任务 → 跨日衰减模拟，
+// 每任务快照 memory_traces/learner_evidence 供画像系统验证。
+model batch_experiments {
+  id             String    @id @default(uuid())
+  name           String
+  description    String?
+  status         String    @default("running") // running | paused | stopped | done
+  createdBy      String
+  learnersConfig String // JSON: [{name, learningGoal, frictionBudget}]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  runs           batch_experiment_runs[]
+
+  @@index([status, createdAt])
+}
+
+model batch_experiment_runs {
+  id              String   @id @default(uuid())
+  experimentId    String
+  profileId       String?
+  sessionId       String?
+  learnerName     String
+  frictionBudget  String   @default("normal")
+  phase           String   @default("setup") // setup|goal|path|learn|learn-done|decay|done|failed
+  status          String   @default("active") // active|stalled|done|failed
+  completedTasks  Int      @default(0)
+  totalTasks      Int?
+  currentTask     String?
+  stallCount      Int      @default(0)
+  lastError       String?
+  advanceCalled   Boolean  @default(false)
+  learningStarted Boolean  @default(false)
+  checkpoints     String? // JSON: [{at, task, milestone, totalMilestones, traceCount, mastered, evidence}]
+  decaySims       String? // JSON: [{days, at, traceCount, retained, snapshot}]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  experiment      batch_experiments @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+
+  @@index([experimentId])
+  @@index([status])
+}
+
+// 批量新建虚拟学习者后台任务（服务端队列：创建人 + 后台逐个生成身份/故事；
+// 前端只提交并轮询进度，刷新/切页不影响任务执行）
+model virtual_batch_jobs {
+  id           String   @id @default(uuid())
+  kind         String   @default("create-learners")
+  status       String   @default("running") // running / done / error
+  total        Int      @default(0) // 总人数
+  created      Int      @default(0) // 已创建人数
+  totalStories Int      @default(0) // 总故事数
+  storiesDone  Int      @default(0) // 已完成故事数
+  personaLeft  Int      @default(0) // 剩余待生成身份人数
+  queue        String? // JSON: [{ profileId, name, storyCount, needsPersona }]
+  failed       String? // JSON: 失败项数组
+  error        String?
+  cohort       String? // 人群描述（可选）
+  note         String? // 批次备注（可选）
+  createdBy    String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
 }

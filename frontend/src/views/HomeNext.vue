@@ -160,7 +160,7 @@
       <section class="hn-end">
         <div class="hn-end__glow" />
         <div class="hn-end__in" v-reveal>
-          <h2>用 2 分钟，聊出一条能执行的路径。</h2>
+          <h2>用 2 分钟，理出一条能执行的路径。</h2>
           <div class="hn-end__acts">
             <router-link :to="primaryPath" class="hn-btn hn-btn--primary hn-btn--lg">{{ primaryLabel }}</router-link>
             <router-link to="/vision" class="hn-btn hn-btn--light hn-btn--lg">为什么这样学</router-link>
@@ -224,19 +224,20 @@ const phase = ref(
 )
 
 const demoTimeline: Array<[number, number]> = [
-  [1, 900],   // 用户气泡出现
-  [2, 1100],  // 输入中
-  [3, 1200],  // AI 回复
-  [4, 1100],  // 选中标签
-  [5, 900],   // 高亮结果
-  [6, 2600],  // 停留
-  [7, 600],   // 整卡淡出
-  [0, 500]    // 回到起点，循环
+  [1, 450],   // 用户气泡出现
+  [2, 550],   // 输入中
+  [3, 600],   // AI 回复
+  [4, 550],   // 选中标签
+  [5, 450],   // 高亮结果
+  [6, 1300],  // 停留
+  [7, 300],   // 整卡淡出
+  [0, 250]    // 回到起点，循环
 ]
 
 const stageEl = ref<HTMLElement | null>(null)
 let demoTimer: ReturnType<typeof setTimeout> | null = null
 let demoIndex = 0
+let demoLoops = 0
 let demoVisible = true
 let demoObserver: IntersectionObserver | null = null
 
@@ -251,6 +252,13 @@ function runDemoStep() {
   if (!demoVisible || phase.value === 99) return
   const [nextPhase, delay] = demoTimeline[demoIndex % demoTimeline.length]
   demoIndex++
+  // 循环上限：播完 2 轮后停在完成态（phase 5 高亮结果），不再重播（4K 高视口下 hero 常驻视口，
+  // 无限循环会造成持续动画干扰）
+  if (nextPhase === 0) demoLoops++
+  if (demoLoops >= 2 && nextPhase > 5) {
+    phase.value = 5
+    return
+  }
   demoTimer = setTimeout(() => {
     if (!demoVisible) return
     phase.value = nextPhase
@@ -299,10 +307,24 @@ onUnmounted(() => {
   --green: #31b16f;
   --accent: #8d6bff;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  /* ???????? token ???????????????????????????? */
+  [data-theme='dark'] & {
+    --ink: #e6edf7;
+    --muted: #9aa8bf;
+    --faint: #7d8ba3;
+    --line: rgba(230, 237, 247, 0.14);
+    --canvas: #0f1620;
+    --surface: #182230;
+    --blue: #4d8bf8;
+    --blue-deep: #6fa3ff;
+    --cyan: #5fc3e6;
+    --green: #3ec984;
+    --accent: #a78bff;
+  }
   min-height: 100vh;
   background: var(--canvas);
   color: var(--ink);
-  font-family: Inter, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", Inter, sans-serif;
   overflow-x: clip;
 }
 
@@ -419,6 +441,49 @@ main {
   margin-top: 6px;
 }
 
+/* 按钮基础样式（此前缺失导致 .hn-btn 全部渲染为裸文字链接；档位参照 vn-btn 体系） */
+.hn-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 800;
+  text-decoration: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  width: fit-content;
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.hn-btn:hover {
+  transform: translateY(-2px);
+}
+.hn-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+.hn-btn--primary {
+  color: #fff;
+  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  box-shadow: 0 16px 34px rgba(52, 120, 246, 0.22);
+}
+.hn-btn--ghost {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.74);
+  border-color: var(--line);
+}
+.hn-btn--light {
+  color: var(--blue-deep);
+  background: #fff;
+  border-color: var(--line);
+}
+.hn-btn--lg {
+  min-height: 60px;
+  padding: 0 32px;
+  font-size: 17px;
+}
+
 /* Hero 入场编排：依次上浮，舞台卡从更大倾角回正 */
 @media (prefers-reduced-motion: no-preference) {
   .hn-hero .hn-pill { animation: hn-rise 0.7s var(--ease) 0.05s both; }
@@ -444,6 +509,13 @@ main {
   .hn-stage__chat,
   .hn-stage__desk {
     animation-name: hn-rise;
+  }
+}
+
+/* 移动端：桌面装饰位移（translateX(18px)+rotate）会把卡片推出窄视口，归零防裁切 */
+@media (max-width: 980px) {
+  .hn-stage__desk {
+    transform: none;
   }
 }
 
@@ -481,9 +553,9 @@ main {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
-  color: var(--muted);
+  color: var(--ink);
 }
 .hn-chip {
   font-size: 11px;

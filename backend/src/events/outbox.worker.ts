@@ -115,7 +115,10 @@ export class DurableOutboxWorker {
         });
       } catch (error) {
         const attemptCount = record.attemptCount + 1;
-        const dead = record.eventType !== 'task:completed' && attemptCount >= MAX_ATTEMPTS;
+        // 所有事件类型统一在 MAX_ATTEMPTS 后入死信（含 task:completed）：
+        // 原豁免会让一条毒事件永久阻塞同用户后续所有 task:completed（队头无限重试）。
+        // 死信不再是终点——可通过 POST /api/admin/devtools/outbox/requeue-dead 重放。
+        const dead = attemptCount >= MAX_ATTEMPTS;
         const backoffMs = Math.min(60_000, 1000 * 2 ** Math.min(attemptCount, 6));
         await prisma.domain_event_outbox.updateMany({
           where: { id: record.id, status: 'processing', lockOwner: this.owner },
@@ -132,4 +135,31 @@ export class DurableOutboxWorker {
       }
     }
   }
+}
+
+/**
+ * 死信重置：dead → pending，清零尝试计数并立即可投递。
+ * 背景：dead 是无出口终态（worker 不会再拾取），此前没有任何管理手段把
+ * 修复后的死信重新入队。运维修复根因后调用本函数重放。
+ * @param eventType 可选按事件类型过滤（如 'lesson:completed'）；缺省重置全部死信
+ * @returns 重置的事件数
+ */
+export async function requeueDeadOutboxEvents(eventType?: string): Promise<number> {
+  const result = await prisma.domain_event_outbox.updateMany({
+    where: {
+      status: 'dead',
+      ...(eventType ? { eventType } : {})
+    },
+    data: {
+      status: 'pending',
+      attemptCount: 0,
+      availableAt: new Date(),
+      lockedAt: null,
+      lockOwner: null
+    }
+  });
+  if (result.count > 0) {
+    logger.info('[outbox] 死信已重新入队', { requeued: result.count, eventType: eventType || 'all' });
+  }
+  return result.count;
 }

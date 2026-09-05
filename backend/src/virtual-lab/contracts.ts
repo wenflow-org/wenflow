@@ -11,7 +11,7 @@ export type LearnerAction =
   | { type: 'abandon'; reason: string }
 
 export type LearnerObservation = {
-  stage: 'goal' | 'path' | 'learning' | 'completed' | 'error'
+  stage: 'goal' | 'path' | 'teaching' | 'completed' | 'error'
   visibleMessages: Array<{
     role: 'platform' | 'learner'
     content: string
@@ -28,6 +28,8 @@ export type LearnerObservation = {
     id: string
     title: string
     description?: string | null
+    /** 任务锚定概念（平台侧真实字段，供模拟器知识看板使用） */
+    linkedConcept?: string
   }
   availableActions: LearnerAction['type'][]
   lastActionResult?: {

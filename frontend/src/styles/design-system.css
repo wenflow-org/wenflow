@@ -173,8 +173,7 @@
      ========================================== */
   
   /* å­—ä½“æ— */
-  --font-sans: 'Inter', 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 
-               'Microsoft YaHei', 'å¾®è½¯é›…é»‘', sans-serif;
+  --font-sans: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Inter', 'Helvetica Neue', 'å¾®è½¯é›…é»‘', sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   
   /* å­—å· */
@@ -1069,8 +1068,10 @@ pre code {
 
 
 /* ==========================================
-   ÏìÓ¦Ê½£ºdashboard ·ç¸ñ header ÔÚ 1024 ÒÔÏÂÈÃ nav ºáÏò¹ö¶¯
-   £¨Dashboard / LearningPaths / LearningState / Achievements / LearningPathDetail / GoalConversation ¹²Ïí .header-nav£©
+   å“åº”å¼ï¼šdashboard å’Œ header åœ¨ 1024 ä»¥ä¸‹ nav æ¨ªå‘æ»šåŠ¨
+
+   ï¼ˆDashboard / LearningPaths / LearningState / Achievements / LearningPathDetail / GoalConversation é¡µé¢çš„ .header-navï¼‰
+
    ========================================== */
 @media (max-width: 1024px) {
   .header-nav {

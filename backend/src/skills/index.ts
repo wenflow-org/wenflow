@@ -8,10 +8,6 @@
 export * from './protocol';
 export * from './context-envelope';
 
-// 路径场景 framing (PathAgent v3.2)
-export { pathSceneFramingDefinition } from './path-scene-framing';
-import { pathSceneFraming as pathSceneFramingFn } from './path-scene-framing';
-
 // 阶段任务设计器
 export { stageDesignerDefinition } from './stage-designer';
 import { stageDesigner as stageDesignerFn } from './stage-designer';
@@ -20,21 +16,11 @@ import { stageDesigner as stageDesignerFn } from './stage-designer';
 export { adaptiveGuidanceCopyDefinition } from './adaptive-guidance-copy';
 import { adaptiveGuidanceCopy as adaptiveGuidanceCopyFn } from './adaptive-guidance-copy';
 
-// goal 阶段画像推断
-export { goalProfileInferenceDefinition } from './goal-profile-inference';
-import { goalProfileInference as goalProfileInferenceFn } from './goal-profile-inference';
-
-// learn 阶段模式蒸馏
-export { learningPatternDistillerDefinition } from './learning-pattern-distiller';
-import { learningPatternDistiller as learningPatternDistillerFn } from './learning-pattern-distiller';
-
 // 课后知识增强（session-knowledge-distiller + dialogue-concept-extractor 于 2026-07 合并）
 export { lessonKnowledgeEnricherDefinition } from './lesson-knowledge-enricher';
 import { lessonKnowledgeEnricher as lessonKnowledgeEnricherFn } from './lesson-knowledge-enricher';
-
-// 结构化输出解析器（新增：通用 JSON 提取）
-export { structuredOutputParserDefinition } from './structured-output-parser';
-import { structuredOutputParser as structuredOutputParserFn } from './structured-output-parser';
+export { learningPredictorDefinition } from './learning-predictor';
+import { learningPredictor as learningPredictorFn } from './learning-predictor';
 
 // 目标理解编排器（新增：understanding 管理）
 export { goalUnderstandingComposerDefinition } from './goal-understanding-composer';
@@ -45,12 +31,8 @@ export { acceptanceEvidenceEvaluatorDefinition } from './acceptance-evidence-eva
 import { acceptanceEvidenceEvaluator as acceptanceEvidenceEvaluatorFn } from './acceptance-evidence-evaluator';
 
 // 教学策略选择器（新增：策略别名映射 + 引导 prompt 构建）
-export { learningStrategySelectorDefinition } from './learning-strategy-selector';
-import { learningStrategySelector as learningStrategySelectorFn } from './learning-strategy-selector';
-
-// Prompt 编译器（新增：简化配置编译为完整 Prompt）
-export { promptCompilerDefinition, promptCompilerRuntimeDefinition } from './prompt-compiler';
-import { promptCompilerHandler as promptCompilerFn } from './prompt-compiler';
+export { teachingStrategySelectorDefinition } from './teaching-strategy-selector';
+import { teachingStrategySelector as teachingStrategySelectorFn } from './teaching-strategy-selector';
 
 // MCP 非 LLM 工具能力
 export { mcpToolDefinition } from './mcp-tool';
@@ -79,17 +61,22 @@ import { virtualLearnerPathEvaluator as virtualLearnerPathEvaluatorFn } from './
 // 虚拟学习者 Learn 回合模拟
 export { virtualLearnerLearnTurnSimulatorDefinition, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE } from './virtual-learner-learn-turn-simulator';
 import { virtualLearnerLearnTurnSimulator as virtualLearnerLearnTurnSimulatorFn } from './virtual-learner-learn-turn-simulator';
+import { virtualLearnerEpistemicGrounding as virtualLearnerEpistemicGroundingFn } from './virtual-learner-epistemic-grounding';
+
+// 虚拟学习者认知判决（物理两阶段第一段）
+export { virtualLearnerEpistemicGroundingDefinition, VIRTUAL_LEARNER_EPISTEMIC_GROUNDING_PROMPT, VIRTUAL_LEARNER_EPISTEMIC_GROUNDING_MAX_TOKENS, VIRTUAL_LEARNER_EPISTEMIC_GROUNDING_TEMPERATURE } from './virtual-learner-epistemic-grounding';
 
 // 虚拟学习者实验旁路裁判
 export { virtualLearnerRefereeDefinition, VIRTUAL_LEARNER_REFEREE_PROMPT, VIRTUAL_LEARNER_REFEREE_MAX_TOKENS, VIRTUAL_LEARNER_REFEREE_TEMPERATURE } from './virtual-learner-referee';
 import { virtualLearnerReferee as virtualLearnerRefereeFn } from './virtual-learner-referee';
 
+// 虚拟学习者课后记忆提炼
+export { virtualLearnerMemoryCuratorDefinition, VIRTUAL_LEARNER_MEMORY_CURATOR_PROMPT, VIRTUAL_LEARNER_MEMORY_CURATOR_MAX_TOKENS, VIRTUAL_LEARNER_MEMORY_CURATOR_TEMPERATURE } from './virtual-learner-memory-curator';
+import { virtualLearnerMemoryCurator as virtualLearnerMemoryCuratorFn } from './virtual-learner-memory-curator';
+
 // 虚拟学习者角色保真审计
 export { virtualLearnerActorAuditorDefinition, VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT, VIRTUAL_LEARNER_ACTOR_AUDITOR_MAX_TOKENS, VIRTUAL_LEARNER_ACTOR_AUDITOR_TEMPERATURE } from './virtual-learner-actor-auditor';
 import { virtualLearnerActorAuditor as virtualLearnerActorAuditorFn } from './virtual-learner-actor-auditor';
-
-// 安德森标注缓存 (PathAgent v3.1)
-export { andersonLabelerCache, AndersonLabelerCache, CachedLabel, CacheHitResult } from './anderson-labeler/cache';
 
 // ============================================================
 // 核心 LLM 能力单元（原 agents/，已迁入 skills/）
@@ -98,9 +85,9 @@ export { goalConversationAgentDefinition } from './goal-conversation';
 import { runGoalConversationAgent } from './goal-conversation';
 export { pathAgentDefinition } from './path-planning';
 import { pathAgentHandler } from './path-planning';
-export { learningTurnAgentDefinition, toLearningTurnSkillOutcome } from './learning-turn';
-export type { LearningTurnArtifact, LearningTurnInput, LearningTurnOutput } from './learning-turn';
-import { learningTurnAgentHandler } from './learning-turn';
+export { teachingTurnAgentDefinition, toTeachingTurnSkillOutcome } from './teaching-turn';
+export type { TeachingTurnArtifact, TeachingTurnInput, TeachingTurnOutput } from './teaching-turn';
+import { teachingTurnAgentHandler } from './teaching-turn';
 export { sessionWrapupAgentDefinition, sessionWrapupAgent, toWrapupArtifact, toWrapupSkillOutcome } from './session-wrapup';
 import { sessionWrapupAgentHandler } from './session-wrapup';
 export { peerAgentDefinition, toPeerCanonicalArtifact, toPeerSkillOutcome } from './peer-reinforcement';
@@ -110,45 +97,39 @@ export type { SkillOutcome, ProposedTransition, SkillOutcomeMeta } from './outco
 
 // 所有 Skill 定义
 import { SkillDefinition } from './protocol';
-import { pathSceneFramingDefinition } from './path-scene-framing';
 import { stageDesignerDefinition } from './stage-designer';
 import { adaptiveGuidanceCopyDefinition } from './adaptive-guidance-copy';
-import { goalProfileInferenceDefinition } from './goal-profile-inference';
-import { learningPatternDistillerDefinition } from './learning-pattern-distiller';
 import { lessonKnowledgeEnricherDefinition } from './lesson-knowledge-enricher';
+import { learningPredictorDefinition } from './learning-predictor';
 import { virtualLearnerScenarioDesignerDefinition } from './virtual-learner-scenario-designer';
 import { virtualLearnerPersonaDesignerDefinition } from './virtual-learner-persona-designer';
 import { virtualLearnerGoalDialogueSimulatorDefinition } from './virtual-learner-goal-dialogue-simulator';
 import { virtualLearnerPathEvaluatorDefinition } from './virtual-learner-path-evaluator';
 import { virtualLearnerLearnTurnSimulatorDefinition } from './virtual-learner-learn-turn-simulator';
+import { virtualLearnerEpistemicGroundingDefinition } from './virtual-learner-epistemic-grounding';
 import { virtualLearnerRefereeDefinition } from './virtual-learner-referee';
+import { virtualLearnerMemoryCuratorDefinition } from './virtual-learner-memory-curator';
 import { virtualLearnerActorAuditorDefinition } from './virtual-learner-actor-auditor';
-import { structuredOutputParserDefinition } from './structured-output-parser';
-import { goalUnderstandingComposerDefinition } from './goal-understanding-composer';
-import { acceptanceEvidenceEvaluatorDefinition } from './acceptance-evidence-evaluator';
-import { learningStrategySelectorDefinition } from './learning-strategy-selector';
-import { promptCompilerDefinition } from './prompt-compiler';
+import { pathReviewerDefinition, pathReviewer as pathReviewerFn } from './path-reviewer';
+import { kcMapperDefinition, kcMapper as kcMapperFn } from './kc-mapper';
 import { mcpToolDefinition } from './mcp-tool';
 
 export const allSkillDefinitions: SkillDefinition[] = [
-  pathSceneFramingDefinition,
   stageDesignerDefinition,
   adaptiveGuidanceCopyDefinition,
-  goalProfileInferenceDefinition,
-  learningPatternDistillerDefinition,
   lessonKnowledgeEnricherDefinition,
+  learningPredictorDefinition,
   virtualLearnerPersonaDesignerDefinition,
   virtualLearnerScenarioDesignerDefinition,
   virtualLearnerGoalDialogueSimulatorDefinition,
   virtualLearnerPathEvaluatorDefinition,
   virtualLearnerLearnTurnSimulatorDefinition,
+  virtualLearnerEpistemicGroundingDefinition,
   virtualLearnerRefereeDefinition,
+  virtualLearnerMemoryCuratorDefinition,
   virtualLearnerActorAuditorDefinition,
-  structuredOutputParserDefinition,
-  goalUnderstandingComposerDefinition,
-  acceptanceEvidenceEvaluatorDefinition,
-  learningStrategySelectorDefinition,
-  promptCompilerDefinition,
+  pathReviewerDefinition,
+  kcMapperDefinition,
   mcpToolDefinition,
   ...auxSkillDefinitions,
   // 核心 LLM 能力单元（注册为 Skill 以确保 agent-registry 可见）
@@ -177,7 +158,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
     stats: { callCount: 0, successRate: 1, avgLatency: 0 }
   },
   {
-    name: 'learning-turn',
+    name: 'teaching-turn',
     displayName: '教学回合 Skill',
     version: '1.0.0',
     status: 'working',
@@ -216,30 +197,27 @@ export const allSkillDefinitions: SkillDefinition[] = [
 
 // Skill 名称映射
 export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
-  'path-scene-framing': pathSceneFramingFn,
   'stage-designer': stageDesignerFn,
   'adaptive-guidance-copy': adaptiveGuidanceCopyFn,
-  'goal-profile-inference': goalProfileInferenceFn,
-  'learning-pattern-distiller': learningPatternDistillerFn,
   'lesson-knowledge-enricher': lessonKnowledgeEnricherFn,
+  'learning-predictor': learningPredictorFn,
   'virtual-learner-persona-designer': virtualLearnerPersonaDesignerFn,
   'virtual-learner-scenario-designer': virtualLearnerScenarioDesignerFn,
   'virtual-learner-goal-dialogue-simulator': virtualLearnerGoalDialogueSimulatorFn,
   'virtual-learner-path-evaluator': virtualLearnerPathEvaluatorFn,
   'virtual-learner-learn-turn-simulator': virtualLearnerLearnTurnSimulatorFn,
+  'virtual-learner-epistemic-grounding': virtualLearnerEpistemicGroundingFn,
   'virtual-learner-referee': virtualLearnerRefereeFn,
+  'virtual-learner-memory-curator': virtualLearnerMemoryCuratorFn,
   'virtual-learner-actor-auditor': virtualLearnerActorAuditorFn,
-  'structured-output-parser': structuredOutputParserFn,
-  'goal-understanding-composer': goalUnderstandingComposerFn,
-  'acceptance-evidence-evaluator': acceptanceEvidenceEvaluatorFn,
-  'learning-strategy-selector': learningStrategySelectorFn,
-  'prompt-compiler': promptCompilerFn,
+  'path-reviewer': pathReviewerFn,
+  'kc-mapper': kcMapperFn,
   'mcp-tool': executeMcpToolFn,
   ...auxSkillHandlers,
   // 核心 LLM 能力单元（原 agents/，已迁入 skills/）
   'goal-conversation': (input: any) => runGoalConversationAgent(input),
   'path-planning': (input: any) => pathAgentHandler(input.input, (input as any).context),
-  'learning-turn': (input: any) => learningTurnAgentHandler(input),
+  'teaching-turn': (input: any) => teachingTurnAgentHandler(input),
   'session-wrapup': (input: any) => sessionWrapupAgentHandler(input.input, (input as any).context),
   'peer-reinforcement': (input: any) => peerAgentHandler(input.input, (input as any).context),
 };

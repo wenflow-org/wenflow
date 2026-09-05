@@ -4,7 +4,7 @@
  * 学习传播报告：回答“这节课到底留下了什么，以及这些东西后来有没有被系统使用”。
  * 全部由确定性代码计算（快照/投影字段级 diff + 生命周期事实），不引入 AI 裁判。
  *
- * 设计文档：doc/VIRTUAL_LEARNER_QUICK_LEARN_DESIGN_2026-07-21_091152.md 第 6.3 节
+ * 设计要点：传播报告由确定性代码计算（快照/投影字段级 diff + 生命周期事实），不引入 AI 裁判。
  */
 
 import type { LearnerSnapshot, TeachingLearnerProjection } from '../../agents/learner-model-agent/types';

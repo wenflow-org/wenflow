@@ -14,7 +14,7 @@ export default defineConfig({
     vue(),
     Components({
       resolvers: [
-        ElementPlusResolver(),
+        ElementPlusResolver({ importStyle: 'css' }),
         // 模板中使用的 EP 图标组件按需自动引入（替代 main.ts 的全量注册）
         (name) => {
           if (iconNames.has(name)) {
@@ -37,6 +37,10 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor-vue': ['vue', 'vue-router', 'pinia'],
+          // 管理台大页此前把 EP 组件与 markdown/highlight 栈一并打进单个路由 chunk（696KB），
+          // 按库域拆分以改善缓存与加载
+          'vendor-element': ['element-plus', '@element-plus/icons-vue'],
+          'vendor-content': ['markdown-it', 'dompurify', 'highlight.js', 'markdown-it-texmath'],
           mermaid: ['mermaid'],
           katex: ['katex']
         }

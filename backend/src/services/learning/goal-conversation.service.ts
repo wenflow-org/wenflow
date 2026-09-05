@@ -6,6 +6,7 @@ import { executeSkill } from '../../skills';
 import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
+import { assembleGoalHandoff } from '../../services/field-dispatcher';
 import learningService from './learning.service';
 import { createDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
@@ -17,6 +18,8 @@ interface GoalConversationOptions {
     goalAgent?: string;
     pathAgent?: string;
   };
+  /** 前端交互特征（认知负荷量测 · 前端情报层）：随用户消息落库，供后续多目标核算等使用 */
+  meta?: Record<string, number> | null;
 }
 
 interface GoalNormalizedStateV1 {
@@ -102,6 +105,22 @@ class GoalConversationService {
       .trim();
   }
 
+  /**
+   * S2 数据质量修复：判断会话是否"开始未完成"（collectedData.messages 中尚无任何 AI 回复）。
+   * start 流程先建行再调 AI，AI 失败/超时后重试会堆出多条同 description 的 active 空会话；
+   * 这类会话可安全复用（没有沉淀任何真实对话），而有 AI 回复的会话代表已完成过一次 start，
+   * 后续 start 属于用户显式"规划新目标"，必须新建，保留前端新对话语义。
+   */
+  private hasAiReplyInCollectedData(conversation: { collectedData: string | null }): boolean {
+    try {
+      const data = JSON.parse(conversation.collectedData || '{}');
+      const messages = Array.isArray(data.messages) ? data.messages : [];
+      return messages.some((m: any) => m?.role === 'ai' || m?.role === 'assistant');
+    } catch {
+      return false;
+    }
+  }
+
   private hasContinueDiscussIntent(text: string) {
     return /(不过|但是|但我|但还是|我担心|还是担心|还有个问题|还有一个问题|我还想问|我还想补充|能先说一下|能不能先说一下|具体怎么|要是|如果到时候|万一)/.test(text || '');
   }
@@ -130,6 +149,8 @@ class GoalConversationService {
     structuredData?: any;
     confirmedProposal?: any;
     confidenceScores?: any;
+    motivationSignal?: any;
+    miFrames?: any;
   } {
     const ext = internal?.ext?.goalConversation || {};
     return {
@@ -139,7 +160,9 @@ class GoalConversationService {
       collected: ext.collected || {},
       structuredData: ext.structuredData,
       confirmedProposal: ext.confirmedProposal,
-      confidenceScores: ext.confidenceScores
+      confidenceScores: ext.confidenceScores,
+      motivationSignal: ext.motivationSignal,
+      miFrames: ext.miFrames
     };
   }
 
@@ -177,7 +200,10 @@ class GoalConversationService {
         collected: next.collected || data?.collected || {},
         structuredData: next.structuredData !== undefined ? next.structuredData : (data?.structuredData ?? null),
         confirmedProposal: next.confirmedProposal !== undefined ? next.confirmedProposal : (data?.confirmedProposal ?? null),
-        confidenceScores: next.confidenceScores !== undefined ? next.confidenceScores : (data?.confidenceScores ?? null)
+        confidenceScores: next.confidenceScores !== undefined ? next.confidenceScores : (data?.confidenceScores ?? null),
+        // 动机信号/动机帧跨轮累积：从 collectedData 回填（首轮为空）
+        motivationSignal: data?.motivationSignal ?? data?.motivation_signal ?? null,
+        miFrames: data?.miFrames ?? data?.mi_frames ?? null,
       };
     }
 
@@ -188,7 +214,9 @@ class GoalConversationService {
       collected: data?.collected || {},
       structuredData: data?.structuredData ?? null,
       confirmedProposal: data?.confirmedProposal ?? null,
-      confidenceScores: data?.confidenceScores ?? null
+      confidenceScores: data?.confidenceScores ?? null,
+      motivationSignal: data?.motivationSignal ?? data?.motivation_signal ?? null,
+      miFrames: data?.miFrames ?? data?.mi_frames ?? null,
     };
   }
 
@@ -288,6 +316,9 @@ class GoalConversationService {
         data: {
           stage,
           collectedData: JSON.stringify(collectedData),
+          // S1 数据质量修复：messages 列与 collectedData.messages 双写，
+          // 避免 messages 列停留在初始 '[]'（schema 必填列，真实历史只写进了 collectedData）
+          ...(options.appendMessage ? { messages: JSON.stringify(collectedData.messages) } : {}),
           status: options.status,
           completedAt: options.completedAt,
           learningPathId: options.learningPathId
@@ -303,27 +334,44 @@ class GoalConversationService {
     try {
       logger.info('开始问题穿透对话会话', { userId, initialGoal });
 
-// 创建对话会话
-      const conversation = await prisma.goal_conversations.create({
-        data: {
-          id: `gc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-          userId,
-          description: initialGoal,
-          stage: 'understanding',
-          messages: '[]', // 初始化为空 JSON 数组
-          collectedData: JSON.stringify({
-            messages: [],       // 对话历史
-            collected: {},      // 已收集的信息
-            understanding: {},  // 问题理解状态
-            stage: 'understanding',
-            confidence: 0,
-            confirmedProposal: null,
-            structuredData: null,
-            confidenceScores: null,
-            learningPath: null
-          })
-        }
+      // S2 数据质量修复（防重复 active 会话堆积）：
+      // 同 userId + 同 description 且仍 active 的会话若"开始未完成"（无 AI 回复，start 失败/超时后的残留），
+      // 直接复用而非新建，避免重试/超时重发把同 description 的空会话越堆越多。
+      // 注意：不覆盖"有真实对话历史"的会话 —— 前端有显式"规划新目标"入口（V2GoalConversation.vue/Profile.vue），
+      // 用户重复输入相同目标属合法新对话，必须新建。
+      let conversation = await prisma.goal_conversations.findFirst({
+        where: { userId, description: initialGoal, status: 'active' },
+        orderBy: { createdAt: 'desc' }
       });
+
+      if (conversation && !this.hasAiReplyInCollectedData(conversation)) {
+        logger.warn('复用未完成的相同目标会话（防止重复 active 会话堆积）', {
+          userId,
+          initialGoal,
+          existingConversationId: conversation.id
+        });
+      } else {
+        conversation = await prisma.goal_conversations.create({
+          data: {
+            id: `gc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+            userId,
+            description: initialGoal,
+            stage: 'understanding',
+            messages: '[]', // 初始化为空 JSON 数组（后续 append 双写同步，见 saveMessage/updateConversationLifecycle）
+            collectedData: JSON.stringify({
+              messages: [],       // 对话历史
+              collected: {},      // 已收集的信息
+              understanding: {},  // 问题理解状态
+              stage: 'understanding',
+              confidence: 0,
+              confirmedProposal: null,
+              structuredData: null,
+              confidenceScores: null,
+              learningPath: null
+            })
+          }
+        });
+      }
 
       // 让AI生成第一个回复
       const aiResponse = await this.callAI(conversation.id, initialGoal, true, userId, options);
@@ -458,7 +506,7 @@ async continueConversation(
 
             pathOrchestrator.runGoalAsync(
               {
-                ...this.buildGoalPathRequest(conversation, seedResult, placeholderPath.id, options?.systemPromptOverrides),
+                ...await this.buildGoalPathRequest(conversation, seedResult, placeholderPath.id, options?.systemPromptOverrides),
                 generationRunId: runId,
                 createdPlaceholder: true
               },
@@ -505,7 +553,7 @@ async continueConversation(
 
       if (!this.getStructuredOutputValid(aiResponse)) {
         // 422 恢复信封前先持久化本轮用户消息，避免刷新恢复后对话上下文丢失（AI 回复不落库）
-        await this.saveMessage(conversation.id, 'user', userReply);
+        await this.saveMessage(conversation.id, 'user', userReply, options?.meta);
         logger.warn('继续对话结构化输出失败，状态未更新', {
           conversationId,
           userId,
@@ -515,7 +563,7 @@ async continueConversation(
         this.throwStructuredOutputInvalid(responseWithConversationId);
       }
 
-      await this.saveMessage(conversation.id, 'user', userReply);
+      await this.saveMessage(conversation.id, 'user', userReply, options?.meta);
       await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible);
 
       // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
@@ -524,80 +572,24 @@ async continueConversation(
       const confidence = this.resolveConfidenceFromResponse(responseWithConversationId);
       const goalExt = this.getGoalExt(responseWithConversationId.internal);
 
-      // 如果对话完成，先生成学习路径
+      // 模型自报 ready/completed 不产生学习路径：路径生成只能由用户通过 UI 按钮显式确认触发
+      // （见上方 confirmProposal 硬规则路径）。模型自报一律回落 proposing，等待用户确认方案。
       if (stage === 'ready' || stage === 'completed') {
-        try {
-            const latestConversation = await prisma.goal_conversations.findUnique({
-              where: { id: conversationId }
-            });
-            const placeholderPath = await this.createGeneratingPlaceholderPath(
-              latestConversation || conversation,
-              responseWithConversationId
-            );
-            const runId = await learningService.claimPathCoreGeneration(placeholderPath.id, null);
-
-            await this.updateConversationLifecycle(conversationId, 'completed', {
-              status: 'completed',
-              completedAt: new Date(),
-              learningPathId: placeholderPath.id,
-              learningPath: { id: placeholderPath.id, status: 'generating' }
-            });
-
-            pathOrchestrator.runGoalAsync(
-            {
-              ...this.buildGoalPathRequest(latestConversation || conversation, responseWithConversationId, placeholderPath.id, options?.systemPromptOverrides),
-              generationRunId: runId,
-              createdPlaceholder: true
-            },
-            {
-              onSuccess: () => {
-                logger.info('异步学习路径生成成功', {
-                  conversationId,
-                  pathId: placeholderPath.id
-                });
-              },
-              onError: async (pathError) => {
-                logger.error('异步学习路径生成失败', {
-                  conversationId,
-                  pathId: placeholderPath.id,
-                  error: (pathError as any)?.message || String(pathError)
-                });
-
-                await learningService.markActiveGenerationFailed(placeholderPath.id, pathError, runId);
-              }
-            }
-          );
-
-          // 新格式返回：completed 状态
-          return this.toServiceResult(responseWithConversationId, conversationId, {
-            stage: 'completed',
-            isCompleted: true,
-            learningPath: { id: placeholderPath.id, status: 'generating' },
-            userVisible: `${responseWithConversationId.userVisible}\n\n⏳ 学习路径已开始生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。`,
-          });
-        } catch (pathError) {
-          // 学习路径生成失败，返回错误但不标记完成
-          logger.error('学习路径生成失败，对话仍保留在 proposing 状态', pathError);
-          await this.updateConversationLifecycle(conversationId, 'proposing', {
-            status: 'active',
-            completedAt: null,
-            mutateCollectedData: (data) => {
-              data.learningPath = null;
-            }
-          });
-          const failed = this.toServiceResult(responseWithConversationId, conversationId, {
-            stage: 'proposing',
-            isCompleted: false,
-            userVisible: '抱歉，生成学习路径时遇到了问题。请稍后重试，或者点击"重试"按钮。',
-          });
-          return {
-            ...failed,
-            internal: {
-              ...failed.internal,
-              error: '学习路径生成失败，请重试'
-            }
-          };
-        }
+        await this.updateConversationLifecycle(conversationId, 'proposing', {
+          status: 'active',
+          completedAt: null,
+          mutateCollectedData: (data) => {
+            data.stage = 'proposing';
+          }
+        });
+        logger.warn('模型自报 ready 已被回落为 proposing，等待用户显式确认', {
+          conversationId,
+          userId
+        });
+        return this.toServiceResult(responseWithConversationId, conversationId, {
+          stage: 'proposing',
+          isCompleted: false,
+        });
       }
 
       // 新格式返回：正常对话状态
@@ -667,6 +659,24 @@ async continueConversation(
       const contextMode = 'full';
       const selectedHistory = history;
 
+      // L2 声明化装配（只读对账）：状态池形状由 sandbox-resolver 的 goal provider 声明，
+      // 本链只提供原始 context（previousState + 可见历史）。缺键打 warn，不阻断。
+      try {
+        const { checkAgentSandboxRefsFromContext } = await import('../sandbox-resolver.service');
+        const historyItems = selectedHistory.map((msg: any) => ({
+          role: msg.role === 'user' ? 'user' : 'assistant',
+          content: String(msg.content || ''),
+        }));
+        await checkAgentSandboxRefsFromContext(
+          'goal-conversation',
+          'goal',
+          { previousState, history: historyItems },
+          { warnContext: { conversationId } }
+        );
+      } catch {
+        // 对账失败不影响主流程
+      }
+
       // 调用专用 GoalConversationAgent
       const aiResponse = await executeSkill(goalConversationAgentDefinition, {
         input: userInput,
@@ -707,27 +717,43 @@ async continueConversation(
     }
   }
 
-/**
+  /**
    * 保存消息到历史
    */
-  private async saveMessage(conversationId: string, role: string, content: string) {
-    const conversation = await prisma.goal_conversations.findUnique({
-      where: { id: conversationId }
-    });
+  private async saveMessage(conversationId: string, role: string, content: string, meta?: Record<string, number> | null) {
+    // 乐观锁：messages/collectedData 是整包 JSON 读改写，同一会话的并发提交
+    // （双击/重试）会互相覆盖丢消息。以 revision 条件更新，冲突时重读重放。
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const conversation = await prisma.goal_conversations.findUnique({
+        where: { id: conversationId }
+      });
+      if (!conversation) {
+        throw new Error(`目标会话不存在: ${conversationId}`);
+      }
 
-    const data = JSON.parse(conversation.collectedData);
-    data.messages = data.messages || [];
-    const sanitizedContent = this.sanitizeVisibleContent(content);
-    data.messages.push({
-      role,
-      content: sanitizedContent,
-      time: new Date().toISOString()
-    });
+      const data = JSON.parse(conversation.collectedData);
+      data.messages = data.messages || [];
+      const sanitizedContent = this.sanitizeVisibleContent(content);
+      data.messages.push({
+        role,
+        content: sanitizedContent,
+        time: new Date().toISOString(),
+        ...(meta && Object.keys(meta).length > 0 ? { meta } : {})
+      });
 
-    await prisma.goal_conversations.update({
-      where: { id: conversationId },
-      data: { collectedData: JSON.stringify(data) }
-    });
+      // S1 数据质量修复：messages 列与 collectedData.messages 双写（追加后整列同步为完整对话数组）。
+      // 消费方（admin 详情兜底解析）按 {role, content, time} 数组读取该列，与 collectedData 语义一致。
+      const updated = await prisma.goal_conversations.updateMany({
+        where: { id: conversationId, revision: conversation.revision },
+        data: {
+          collectedData: JSON.stringify(data),
+          messages: JSON.stringify(data.messages),
+          revision: { increment: 1 }
+        }
+      });
+      if (updated.count === 1) return;
+    }
+    throw new Error('目标会话并发写入冲突（连续 3 次 revision 失配），请重试');
   }
 
   /**
@@ -738,9 +764,14 @@ async continueConversation(
     internal: any;
     runtimeEnvelope?: any;
   }) {
+    // 乐观锁：与 saveMessage 同理，防止并发回合互相覆盖 collectedData
+    for (let attempt = 0; attempt < 3; attempt++) {
     const conversation = await prisma.goal_conversations.findUnique({
       where: { id: conversationId }
     });
+    if (!conversation) {
+      throw new Error(`目标会话不存在: ${conversationId}`);
+    }
 
     const data = JSON.parse(conversation.collectedData);
 
@@ -785,45 +816,68 @@ async continueConversation(
       data.confidenceScores = goalExt.confidenceScores;
     }
 
+    // 动机信号/动机帧跨轮累积（hidden，仅供对话节奏参考）：模型输出经 parse 提取到 goalExt
+    if (goalExt.motivationSignal !== undefined) {
+      data.motivationSignal = goalExt.motivationSignal;
+    }
+    if (goalExt.miFrames !== undefined) {
+      data.miFrames = goalExt.miFrames;
+    }
+
     data.normalizedGoalState = buildGoalNormalizedState(data);
 
     if (core.learningPath !== undefined) {
       data.learningPath = core.learningPath || null;
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.goal_conversations.update({
-        where: { id: conversationId },
-        data: {
-          collectedData: JSON.stringify(data),
-          stage
+    try {
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.goal_conversations.updateMany({
+          where: { id: conversationId, revision: conversation.revision },
+          data: {
+            collectedData: JSON.stringify(data),
+            stage,
+            revision: { increment: 1 }
+          }
+        });
+        if (updated.count !== 1) {
+          // 触发事务回滚（含未发出的领域事件），外层重读重放
+          throw new Error('GOAL_REVISION_CONFLICT');
         }
+        await enqueueDomainEvent(tx, createDomainEvent({
+          type: 'goal:understanding:updated',
+          aggregateType: 'goal',
+          aggregateId: conversationId,
+          userId: conversation.userId,
+          source: 'goal-conversation-service',
+          data: {
+            conversationId,
+            stage,
+            confidence,
+            understanding: data.understanding,
+            normalizedGoalState: data.normalizedGoalState,
+            confirmedProposal: data.confirmedProposal || null,
+            structuredData: data.structuredData || null
+          }
+        }));
       });
-      await enqueueDomainEvent(tx, createDomainEvent({
-        type: 'goal:understanding:updated',
-        aggregateType: 'goal',
-        aggregateId: conversationId,
-        userId: conversation.userId,
-        source: 'goal-conversation-service',
-        data: {
-          conversationId,
-          stage,
-          confidence,
-          understanding: data.understanding,
-          normalizedGoalState: data.normalizedGoalState,
-          confirmedProposal: data.confirmedProposal || null,
-          structuredData: data.structuredData || null
-        }
-      }));
-    });
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes('GOAL_REVISION_CONFLICT') || attempt === 2) {
+        throw error;
+      }
+      // revision 冲突：重读最新状态重放
+    }
+    }
   }
 
-  private buildGoalPathRequest(
+  private async buildGoalPathRequest(
     conversation: any,
     aiResponse: any,
     existingPathId?: string,
     systemPromptOverrides?: GoalConversationOptions['systemPromptOverrides']
-  ): GoalPathRequest {
+  ): Promise<GoalPathRequest> {
     const data = JSON.parse(conversation.collectedData);
     const goalExt = this.getGoalExt(aiResponse.internal);
     const understanding = goalExt.understanding || data.understanding || {};
@@ -837,6 +891,22 @@ async continueConversation(
           .filter((message: { role: string; content: string }) => message.content)
       : [];
 
+    // 配置式值流转（P1 试点）：按 routings 表 goal-agent 交付行 + pathInRawOutput
+    // 从 skill 输出抽取 goal→path 字段，与 visibleSummary 并行产出（golden 验证/后续装配切换）
+    const goalHandoffFields = await assembleGoalHandoff(aiResponse).catch((err) => {
+      logger.warn('[goal-conversation] assembleGoalHandoff failed, falling back to visibleSummary', {
+        conversationId: conversation.id,
+        error: (err as Error).message,
+      });
+      return null;
+    });
+    if (goalHandoffFields && goalHandoffFields.skipped.length > 0) {
+      logger.warn('[goal-conversation] goal→path handoff fields skipped (config-driven extraction)', {
+        conversationId: conversation.id,
+        skipped: goalHandoffFields.skipped,
+      });
+    }
+
     return {
       userId: conversation.userId,
       sourceConversationId: conversation.id,
@@ -849,6 +919,7 @@ async continueConversation(
         confirmedProposal,
         collected: data.collected || {},
       }),
+      ...(goalHandoffFields ? { goalHandoffFields: goalHandoffFields.fields } : {}),
       // goal skill 产出的结构化画像透传（learner.identity/learning_context 等），供 path-planning scenario 判定
       structuredData: (data as any)?.structuredData || null,
       conversationHistory,
@@ -859,8 +930,8 @@ async continueConversation(
     };
   }
 
-  private buildPlaceholderPromptTemplatePayload(conversation: any, aiResponse: any, existingPathId: string) {
-    const goalPathRequest = this.buildGoalPathRequest(conversation, aiResponse, existingPathId);
+  private async buildPlaceholderPromptTemplatePayload(conversation: any, aiResponse: any, existingPathId: string) {
+    const goalPathRequest = await this.buildGoalPathRequest(conversation, aiResponse, existingPathId);
 
     return {
       source: 'goal',
@@ -890,7 +961,7 @@ async continueConversation(
     systemPromptOverrides?: GoalConversationOptions['systemPromptOverrides']
   ) {
     try {
-      const request = this.buildGoalPathRequest(
+      const request = await this.buildGoalPathRequest(
         conversation,
         aiResponse,
         conversation.learningPathId || undefined,

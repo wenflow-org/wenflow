@@ -1,7 +1,7 @@
 <template>
   <div class="completion-card">
     <div class="completion-header">
-      <el-icon :size="24" color="#2e7d32"><CircleCheckFilled /></el-icon>
+      <el-icon :size="24" color="var(--green, #2e7d32)"><CircleCheckFilled /></el-icon>
       <h3 class="completion-title">本次学习已结束</h3>
     </div>
 
@@ -27,9 +27,9 @@
 
       <div class="completion-summary">
         <div class="summary-item"><span class="summary-label">主题</span><span class="summary-value">{{ topic }}</span></div>
-        <div class="summary-item"><span class="summary-label">知识点</span><span class="summary-value">{{ masteredCount }}/{{ totalCount }} 已学会</span></div>
+        <div class="summary-item"><span class="summary-label">知识点</span><span class="summary-value">{{ summaryCounters.display.mastered ?? masteredCount }}/{{ totalCount }} 已学会</span></div>
         <div class="summary-item"><span class="summary-label">用时</span><span class="summary-value">{{ duration }}</span></div>
-        <div class="summary-item"><span class="summary-label">学习消息</span><span class="summary-value">{{ messageCount }} 条</span></div>
+        <div class="summary-item"><span class="summary-label">学习消息</span><span class="summary-value">{{ summaryCounters.display.messages ?? messageCount }} 条</span></div>
       </div>
 
       <div class="completion-section">
@@ -44,6 +44,11 @@
             <div class="knowledge-head">
               <span class="knowledge-name">{{ item.title }}</span>
               <el-tag size="small" :type="item.type">{{ item.label }}</el-tag>
+              <router-link
+                v-if="item.type === 'danger' && taskId"
+                :to="`/learn/${taskId}?mode=review`"
+                class="review-link"
+              >去复习 →</router-link>
             </div>
             <p class="knowledge-evidence">{{ item.text }}</p>
           </li>
@@ -56,7 +61,7 @@
         <div class="metrics-grid metrics-grid--three">
           <div v-for="item in sessionMetricCards" :key="item.key" class="metric-card" :class="`metric-card--${item.tone}`">
             <div class="metric-head"><span class="metric-label">{{ item.label }}</span><span class="metric-badge">{{ item.level }}</span></div>
-            <div class="metric-value">{{ item.value }}</div>
+            <div class="metric-value">{{ sessionCounters.display[item.key] ?? item.value }}</div>
             <p class="metric-desc">{{ item.desc }}</p>
           </div>
         </div>
@@ -68,7 +73,7 @@
         <div class="metrics-grid">
           <div v-for="item in longTermMetricCards" :key="item.key" class="metric-card" :class="`metric-card--${item.tone}`">
             <div class="metric-head"><span class="metric-label">{{ item.label }}</span><span class="metric-badge">{{ item.level }}</span></div>
-            <div class="metric-value">{{ item.value }}</div>
+            <div class="metric-value">{{ longTermCounters.display[item.key] ?? item.value }}</div>
             <p class="metric-desc">{{ item.desc }}</p>
           </div>
         </div>
@@ -118,7 +123,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, watch } from 'vue';
 import { CircleCheckFilled, VideoPause, Compass, Document, Collection, TrendCharts, DataAnalysis, MagicStick, Opportunity } from '@element-plus/icons-vue';
 import MarkdownRenderer from './MarkdownRenderer.vue';
 import type { ReplanAdvisory, WrapupArtifact } from '@/api/aiTeaching';
@@ -132,6 +137,7 @@ const props = defineProps<{
   wrapup: WrapupArtifact;
   advisory?: ReplanAdvisory | null;
   busy?: boolean;
+  taskId?: string;
 }>();
 
 const emit = defineEmits<{ action: [action: 'end' | 'continue-task' | 'complete-task']; 'advisory-action': [action: string] }>();
@@ -148,6 +154,62 @@ const getSimpleLevel = (v: number, h: number, m: number) => (v >= h ? { level: '
 const getStress = (v: number) => (v >= 70 ? { level: '高', tone: 'warn' } : v >= 40 ? { level: '中', tone: 'normal' } : { level: '低', tone: 'good' });
 const getBalance = (v: number) => (v >= 1 ? { level: '平衡', tone: 'good' } : v >= -2 ? { level: '轻微失衡', tone: 'normal' } : { level: '失衡', tone: 'warn' });
 
+/* 数字计数动画：0 → 终值（rAF，reduced-motion 直接终值） */
+const prefersReducedMotion = typeof window !== 'undefined'
+  && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function useCountUpMap(source: () => Record<string, number>, durationMs = 800): { display: Record<string, string> } {
+  const display = reactive<Record<string, string>>({});
+  let raf = 0;
+  const render = () => {
+    const targets = source();
+    if (prefersReducedMotion) {
+      Object.assign(display, Object.fromEntries(Object.entries(targets).map(([k, v]) => [k, String(v)])));
+      return;
+    }
+    const start = performance.now();
+    const fromMap = { ...display };
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const next: Record<string, string> = {};
+      for (const [k, v] of Object.entries(targets)) {
+        const from = Number(fromMap[k]) || 0;
+        next[k] = String(Math.round(from + (v - from) * eased));
+      }
+      Object.assign(display, next);
+      if (t < 1) raf = requestAnimationFrame(step);
+    };
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(step);
+  };
+  onMounted(() => {
+    render();
+    if (!prefersReducedMotion) {
+      watch(source, () => {
+        if (document.visibilityState === 'visible') render();
+      });
+    }
+  });
+  onUnmounted(() => cancelAnimationFrame(raf));
+  return { display };
+}
+
+const summaryCounters = useCountUpMap(() => ({
+  mastered: props.masteredCount,
+  messages: props.messageCount,
+}));
+const sessionCounters = useCountUpMap(() => {
+  const out: Record<string, number> = {};
+  for (const card of sessionMetricCards.value) out[card.key] = Number(card.raw);
+  return out;
+});
+const longTermCounters = useCountUpMap(() => {
+  const out: Record<string, number> = {};
+  for (const card of longTermMetricCards.value) out[card.key] = Number(card.raw);
+  return out;
+});
+
 const sessionMetricCards = computed(() => {
   if (!evaluation.value) return [];
   const k = Number(evaluation.value.sessionKtl ?? evaluation.value.ktl);
@@ -157,9 +219,9 @@ const sessionMetricCards = computed(() => {
   const sl = getStress(s * 10);
   const fl = getStress(f * 10);
   return [
-    { key: 'k', label: '本节掌握增量', value: toFixed(k), level: kl.level, tone: kl.tone, desc: '即时学习产出，越高说明本节吸收越充分。' },
-    { key: 's', label: '本节学习压力', value: toFixed(s), level: sl.level, tone: sl.tone, desc: '当前课程负荷强度，偏高时建议先复盘。' },
-    { key: 'f', label: '本节疲劳累积', value: toFixed(f), level: fl.level, tone: fl.tone, desc: '即时疲劳变化，偏高时适合切换轻任务。' },
+    { key: 'k', label: '本节掌握增量', value: toFixed(k), raw: k, level: kl.level, tone: kl.tone, desc: '即时学习产出，越高说明本节吸收越充分。' },
+    { key: 's', label: '本节学习压力', value: toFixed(s), raw: s, level: sl.level, tone: sl.tone, desc: '当前课程负荷强度，偏高时建议先复盘。' },
+    { key: 'f', label: '本节疲劳累积', value: toFixed(f), raw: f, level: fl.level, tone: fl.tone, desc: '即时疲劳变化，偏高时适合切换轻任务。' },
   ];
 });
 
@@ -171,10 +233,10 @@ const longTermMetricCards = computed(() => {
   const fl = getStress(Number(lf || 0) * 10);
   const sl = getStress(Number(lss || 0) * 10);
   return [
-    { key: 'ktl', label: 'KTL 知识掌握', value: toFixed(ktl), level: kl.level, tone: kl.tone, desc: '长期累计学习收益，反映稳定掌握趋势。' },
-    { key: 'lsb', label: 'LSB 状态平衡', value: toFixed(lsb), level: bl.level, tone: bl.tone, desc: '掌握与疲劳差值，越接近正值越理想。' },
-    { key: 'lf', label: 'LF 学习疲劳', value: toFixed(lf), level: fl.level, tone: fl.tone, desc: '短期疲劳累计，偏高时建议降强度。' },
-    { key: 'lss', label: 'LSS 学习压力', value: toFixed(lss), level: sl.level, tone: sl.tone, desc: '整体学习压力水平，持续偏高需节奏调整。' },
+    { key: 'ktl', label: 'KTL 知识掌握', value: toFixed(ktl), raw: Number(ktl || 0), level: kl.level, tone: kl.tone, desc: '长期累计学习收益，反映稳定掌握趋势。' },
+    { key: 'lsb', label: 'LSB 状态平衡', value: toFixed(lsb), raw: Number(lsb || 0), level: bl.level, tone: bl.tone, desc: '掌握与疲劳差值，越接近正值越理想。' },
+    { key: 'lf', label: 'LF 学习疲劳', value: toFixed(lf), raw: Number(lf || 0), level: fl.level, tone: fl.tone, desc: '短期疲劳累计，偏高时建议降强度。' },
+    { key: 'lss', label: 'LSS 学习压力', value: toFixed(lss), raw: Number(lss || 0), level: sl.level, tone: sl.tone, desc: '整体学习压力水平，持续偏高需节奏调整。' },
   ];
 });
 
@@ -237,43 +299,45 @@ const getKnowledgeStatusLabel = (s: string) => (s === 'mastered' ? '已学会' :
 </script>
 
 <style scoped>
-.completion-card { margin-top: 16px; padding: 20px; background: linear-gradient(135deg, #f0f9eb 0%, #e8f5e9 100%); border: 1px solid #c5e1a5; border-radius: 12px; }
+.completion-card { margin-top: 16px; padding: 20px; background: linear-gradient(135deg, color-mix(in srgb, var(--green, #1e9e58) 10%, var(--surface)) 0%, color-mix(in srgb, var(--green, #1e9e58) 6%, var(--surface)) 100%); border: 1px solid color-mix(in srgb, var(--green, #1e9e58) 30%, var(--line)); border-radius: 12px; }
 .completion-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-.completion-title { margin: 0; font-size: 16px; font-weight: 600; color: #2e7d32; }
-.completion-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; padding: 12px; background-color: rgba(255, 255, 255, 0.75); border-radius: 8px; }
+.completion-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--green, #2e7d32); }
+.completion-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; padding: 12px; background-color: color-mix(in srgb, var(--surface) 82%, transparent); border-radius: 8px; }
 .summary-item { display: flex; flex-direction: column; gap: 2px; }
-.summary-label { font-size: 11px; color: #78909c; }
-.summary-value { font-size: 13px; font-weight: 600; color: #2e7d32; }
-.completion-section { margin-bottom: 16px; padding: 12px; background-color: rgba(255, 255, 255, 0.75); border-radius: 8px; }
-.advisory-section { border: 1px solid #dfe7d6; }
-.advisory-section--high { border-color: #efc9b2; background: rgba(255, 247, 245, 0.92); }
-.advisory-section--medium { border-color: #ecd9a6; background: rgba(255, 251, 240, 0.92); }
-.advisory-section--low { border-color: #b7ddb6; background: rgba(244, 252, 244, 0.92); }
-.section-title { margin: 0 0 10px; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: #1b5e20; }
-.section-hint { margin: 0 0 10px; font-size: 12px; color: #607d8b; }
-.section-content { margin: 0; font-size: 13px; line-height: 1.7; color: #37474f; }
+.summary-label { font-size: 11px; color: var(--muted, #78909c); }
+.summary-value { font-size: 13px; font-weight: 600; color: var(--green, #2e7d32); }
+.completion-section { margin-bottom: 16px; padding: 12px; background-color: color-mix(in srgb, var(--surface) 82%, transparent); border-radius: 8px; }
+.advisory-section { border: 1px solid var(--line, #dfe7d6); }
+.advisory-section--high { border-color: #efc9b2; background: color-mix(in srgb, var(--red, #ef7578) 8%, var(--surface)); }
+.advisory-section--medium { border-color: #ecd9a6; background: color-mix(in srgb, var(--amber, #f4aa46) 10%, var(--surface)); }
+.advisory-section--low { border-color: #b7ddb6; background: color-mix(in srgb, var(--green, #1e9e58) 8%, var(--surface)); }
+.section-title { margin: 0 0 10px; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--green, #1b5e20); }
+.section-hint { margin: 0 0 10px; font-size: 12px; color: var(--muted, #607d8b); }
+.review-link { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--red, #b3261e); text-decoration: none; }
+.review-link:hover { text-decoration: underline; }
+.section-content { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink, #37474f); }
 .advisory-options { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
 .metrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .metrics-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.metric-card { padding: 10px; border-radius: 8px; border: 1px solid #d8e6d4; background: #fff; }
+.metric-card { padding: 10px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--green, #1e9e58) 20%, var(--line)); background: var(--surface); }
 .metric-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-.metric-label { font-size: 12px; color: #546e7a; }
-.metric-badge { font-size: 11px; padding: 2px 6px; border-radius: 999px; background: #eef5ea; color: #33691e; }
-.metric-value { margin-top: 6px; font-size: 22px; font-weight: 700; color: #2e7d32; }
-.metric-desc { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: #607d8b; }
-.metric-card--good { border-color: #b7ddb6; }
+.metric-label { font-size: 12px; color: var(--muted, #546e7a); }
+.metric-badge { font-size: 11px; padding: 2px 6px; border-radius: 999px; background: color-mix(in srgb, var(--green, #1e9e58) 10%, var(--surface)); color: var(--green, #33691e); }
+.metric-value { margin-top: 6px; font-size: 22px; font-weight: 700; color: var(--green, #2e7d32); }
+.metric-desc { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted, #607d8b); }
+.metric-card--good { border-color: color-mix(in srgb, var(--green, #1e9e58) 30%, var(--line)); }
 .metric-card--normal { border-color: #d3dcb0; }
 .metric-card--warn { border-color: #efc9b2; }
 .knowledge-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
-.knowledge-item { padding: 10px; border: 1px solid #dfe8dc; border-radius: 8px; background: #fff; }
+.knowledge-item { padding: 10px; border: 1px solid color-mix(in srgb, var(--green, #1e9e58) 18%, var(--line)); border-radius: 8px; background: var(--surface); }
 .knowledge-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.knowledge-name { font-size: 13px; font-weight: 600; color: #2f4f4f; }
-.knowledge-evidence { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: #546e7a; }
-.ordered-list { margin: 0; padding-left: 0; list-style-position: inside; list-style-type: decimal; font-size: 13px; line-height: 1.6; color: #37474f; }
+.knowledge-name { font-size: 13px; font-weight: 600; color: var(--ink, #2f4f4f); }
+.knowledge-evidence { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted, #546e7a); }
+.ordered-list { margin: 0; padding-left: 0; list-style-position: inside; list-style-type: decimal; font-size: 13px; line-height: 1.6; color: var(--ink, #37474f); }
 .ordered-list li { margin: 0 0 6px; overflow-wrap: anywhere; }
 .ordered-list li:last-child { margin-bottom: 0; }
 .evaluation-block { display: grid; gap: 8px; }
-.evaluation-line { margin: 0; font-size: 13px; line-height: 1.7; color: #37474f; }
+.evaluation-line { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink, #37474f); }
 .completion-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 @media (max-width: 900px) { .metrics-grid--three { grid-template-columns: 1fr; } }
 @media (max-width: 640px) {

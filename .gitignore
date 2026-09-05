@@ -33,6 +33,8 @@ dist-ssr
 # Database
 *.db
 *.db.*
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite.*
 *.sqlite3
@@ -107,7 +109,12 @@ backend/test-*.js
 backend/test-*.ts
 backend/*-test.ts
 backend/mcp-agent*.test.ts
+backend/mcp-agent*.json
 backend/user*.test.ts
+
+# 用户数据分析产物：含真实教学会话逐字记录（SECURITY.md 第 5 条禁止入库），
+# 已从索引移除；如需保留分析结论请脱敏聚合后另存
+backend/analysis_output/
 backend/scripts/query-*.ts
 backend/scripts/test-*.ts
 backend/scripts/test-*.js
@@ -211,10 +218,37 @@ test_dialogue.py
 
 nul
 
-# Local architecture docs (do not track)
-doc/
+# Local architecture docs (track only current spec/result docs; archive, history, design drafts, survey snapshots & changelogs stay untracked locally)
+doc/*
+!doc/SKILL_PROTOCOL_V4.md
+!doc/README.md
+!doc/README.en.md
+!doc/NON_FUNCTIONAL_GOVERNANCE_PLAN.md
+!doc/EDUCATIONAL_THEORY_MAP.md
+!doc/PATH_ANDERSON_ITERATION_NOTE.md
+!doc/PATH_ANDERSON_ITERATION_NOTE.en.md
+!doc/PATH_PRODUCTION_REPLAN_CONTRACT.md
+!doc/PATH_PRODUCTION_REPLAN_CONTRACT.en.md
+!doc/VIRTUAL_LEARNER_CHAIN.md
+!doc/LEARNER_MODEL_ARCHITECTURE.md
+!doc/LEARNER_MODEL_ARCHITECTURE.en.md
+!doc/AGENT_IO_DESIGN_V3.md
+!doc/SKILL_DEVELOPMENT_GUIDE.md
 doc/archive/
+doc/history/
 
-# Playwright MCP �Ự��ʱ�ļ�
+# Playwright MCP 会话临时文件
 .playwright-mcp/
 page-*.md
+
+*.db-journal
+
+# UI 审计截图临时目录
+.ui-audit/
+
+# 实验残留（一次性调试/探测脚本与产物，不入库）
+work/
+_pi-ai-test/
+_dsh-index-test.mjs
+_probe.mjs
+_verify-dsh.mjs

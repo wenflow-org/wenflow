@@ -128,3 +128,9 @@ if (coreScan.files.length === 0 && coreScan.diagnostics.length === 0) {
 if (coreBad > 0) {
   errorFiles += coreBad
 }
+
+// lint 必须能阻断 CI：存在 error 级问题时以非零退出码结束
+if (errorFiles > 0) {
+  console.log(`\n[prompts:lint] ${errorFiles} 个文件存在 error 级问题，判定失败`)
+  process.exitCode = 1
+}

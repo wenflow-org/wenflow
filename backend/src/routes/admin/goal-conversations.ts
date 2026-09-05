@@ -1,10 +1,20 @@
 // 目标对话管理路由（后台管理）
 import express from 'express';
 import prisma from '../../config/database';
+import { Prisma } from '@prisma/client';
 import { generateLearningPathFromConversation } from '../../services/learning/goal-conversation.service';
+import { REAL_USER_WHERE, isTestAccountUser } from '../../utils/test-account';
 import { logger } from '../../utils/logger';
 
 const router = express.Router();
+
+/**
+ * 统计口径与漏斗/KPI 一致：排除虚拟/测试账号（单点 utils/test-account.ts）+ 软删。
+ */
+const STATS_USER_WHERE: Prisma.usersWhereInput = {
+  ...REAL_USER_WHERE,
+  deletedAt: null,
+};
 
 /**
  * 获取所有目标对话列表（分页）
@@ -16,6 +26,9 @@ router.get('/', async (req: any, res) => {
     const limit = parseInt(req.query.limit as string) || 20;
     const status = req.query.status as string;
     const userId = req.query.userId as string;
+    // 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，单点 STATS_USER_WHERE）；
+    // includeTest=true 时显式包含（切换后前端对虚拟/测试行做灰标标记）
+    const includeTest = String(req.query.includeTest || '') === 'true';
 
     const skip = (page - 1) * limit;
 
@@ -29,6 +42,10 @@ router.get('/', async (req: any, res) => {
       where.userId = userId;
     }
 
+    if (!includeTest) {
+      where.users = STATS_USER_WHERE;
+    }
+
     const [conversations, total] = await Promise.all([
       prisma.goal_conversations.findMany({
         where,
@@ -39,7 +56,8 @@ router.get('/', async (req: any, res) => {
             select: {
               id: true,
               name: true,
-              email: true
+              email: true,
+              isVirtualLearner: true
             }
           }
         },
@@ -53,7 +71,12 @@ router.get('/', async (req: any, res) => {
     res.json({
       success: true,
       data: {
-        conversations: conversations,
+        conversations: conversations.map((c) => ({
+          ...c,
+          /** 数据隔离标记（includeTest=true 时供前端灰标：虚拟学习者 / 测试账号） */
+          isVirtualLearner: !!c.users?.isVirtualLearner,
+          isTestAccount: isTestAccountUser(c.users),
+        })),
         pagination: {
           page,
           limit,
@@ -120,6 +143,14 @@ router.patch('/:id', async (req: any, res) => {
   try {
     const { id } = req.params;
     const { status, collectedData } = req.body;
+
+    const ALLOWED_STATUSES = ['active', 'completed', 'cancelled', 'discarded'];
+    if (status !== undefined && (typeof status !== 'string' || !ALLOWED_STATUSES.includes(status))) {
+      return res.status(400).json({
+        success: false,
+        error: { message: `status 仅支持 ${ALLOWED_STATUSES.join(' / ')}` }
+      });
+    }
 
     const updateData: any = {};
     if (status) {
@@ -230,29 +261,35 @@ router.post('/:id/regenerate-path', async (req: any, res) => {
 router.get('/stats/overview', async (req: any, res) => {
   try {
     const [total, active, completed, cancelled] = await Promise.all([
-      prisma.goal_conversations.count(),
-      prisma.goal_conversations.count({ where: { status: 'active' } }),
-      prisma.goal_conversations.count({ where: { status: 'completed' } }),
-      prisma.goal_conversations.count({ where: { status: 'cancelled' } })
+      prisma.goal_conversations.count({ where: { users: STATS_USER_WHERE } }),
+      prisma.goal_conversations.count({ where: { users: STATS_USER_WHERE, status: 'active' } }),
+      prisma.goal_conversations.count({ where: { users: STATS_USER_WHERE, status: 'completed' } }),
+      prisma.goal_conversations.count({ where: { users: STATS_USER_WHERE, status: 'cancelled' } })
     ]);
 
-    // 获取最近 7 天的对话趋势
+    // 获取最近 7 天的对话趋势（含 7 天内完成但更早创建的对话，保证「当日完成」完整）
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const recentConversations = await prisma.goal_conversations.findMany({
       where: {
-        createdAt: {
-          gte: sevenDaysAgo
-        }
+        users: STATS_USER_WHERE,
+        OR: [
+          { createdAt: { gte: sevenDaysAgo } },
+          { completedAt: { gte: sevenDaysAgo } },
+        ],
       },
       select: {
         createdAt: true,
-        status: true
+        status: true,
+        completedAt: true,
+        updatedAt: true
       }
     });
 
-    // 按日期分组统计
+    // 按日期分组统计（口径修复：新增按创建日归集；「完成」按完成时间（completedAt）
+    // 归集 = 当日实际完成数，而非「当日创建、查询时点已完成」；
+    // 老数据兼容：completed 状态但 completedAt 为空时用 updatedAt 兜底）
     const dailyStats: Record<string, any> = {};
     recentConversations.forEach(conv => {
       const date = conv.createdAt.toISOString().split('T')[0];
@@ -261,8 +298,15 @@ router.get('/stats/overview', async (req: any, res) => {
       }
       dailyStats[date].total++;
       if (conv.status === 'active') dailyStats[date].active++;
-      if (conv.status === 'completed') dailyStats[date].completed++;
       if (conv.status === 'cancelled') dailyStats[date].cancelled++;
+      if (conv.status === 'completed') {
+        const doneAt = conv.completedAt || conv.updatedAt;
+        const doneDate = doneAt ? doneAt.toISOString().split('T')[0] : date;
+        if (!dailyStats[doneDate]) {
+          dailyStats[doneDate] = { total: 0, active: 0, completed: 0, cancelled: 0 };
+        }
+        dailyStats[doneDate].completed++;
+      }
     });
 
     res.json({

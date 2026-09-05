@@ -126,44 +126,6 @@ router.get('/', async (req: any, res) => {
   }
 });
 
-router.get('/:grantId', async (req: any, res) => {
-  try {
-    const allowed = await ensureAdmin(req.user?.userId);
-    if (!allowed) {
-      return res.status(403).json({
-        success: false,
-        error: { message: '需要管理员权限' }
-      });
-    }
-
-    const grant = await prisma.projection_access_grants.findUnique({
-      where: { id: req.params.grantId },
-      include: {
-        users: {
-          select: { id: true, name: true, email: true }
-        }
-      }
-    });
-
-    if (!grant) {
-      return res.status(404).json({
-        success: false,
-        error: { message: 'access grant 不存在' }
-      });
-    }
-
-    res.json({
-      success: true,
-      data: formatGrant(grant)
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      error: { message: error.message || '查询 access grant 失败' }
-    });
-  }
-});
-
 router.post('/:grantId/projection-token', async (req: any, res) => {
   try {
     const operatorId = req.user?.userId;

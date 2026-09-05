@@ -61,9 +61,18 @@
         <span v-if="errors.confirm" class="field__error">{{ errors.confirm }}</span>
       </label>
 
+      <label class="remember-row">
+        <input type="checkbox" v-model="remember" class="remember-cb" />
+        <span>记住我</span>
+      </label>
+
       <button type="submit" class="btn-primary btn-primary--block" :disabled="loading">
         {{ loading ? '正在创建账号…' : '创建账号' }}
       </button>
+
+      <p v-if="dailyQuota > 0" class="quota-hint">
+        同一 IP 每天最多注册 {{ dailyQuota }} 个账号（防批量注册）
+      </p>
 
       <div class="switch">
         <span>已有账号？</span>
@@ -87,10 +96,12 @@ const userStore = useUserStore();
 const loading = ref(false);
 
 const status = ref<'checking' | 'enabled' | 'disabled' | 'temporaryUnavailable' | 'failed'>('checking');
+const dailyQuota = ref(0);
 
 const form = reactive({ name: '', password: '', confirm: '' });
 const errors = reactive({ name: '', password: '', confirm: '' });
 const showPwd = ref(false);
+const remember = ref(true);
 
 const checks = computed(() => ({
   length: form.password.length >= 8,
@@ -134,6 +145,7 @@ async function loadStatus() {
   status.value = 'checking';
   try {
     const s = await authAPI.getRegistrationStatus();
+    dailyQuota.value = Number(s.maxAccountsPerIpPerDay) || 0;
     if (s.registrationEnabled) status.value = 'enabled';
     else status.value = s.temporaryUnavailable ? 'temporaryUnavailable' : 'disabled';
   } catch {
@@ -149,9 +161,9 @@ async function handleRegister() {
 
   loading.value = true;
   try {
-    await userStore.register(form.name, form.password);
+    await userStore.register(form.name, form.password, remember.value);
     toast.success('注册成功');
-    await router.replace(safeRedirect.value || '/dashboard');
+    await router.replace('/onboarding');
   } catch (error: unknown) {
     const message = error && typeof error === 'object' && 'message' in error
       ? String(error.message)
@@ -210,6 +222,7 @@ onMounted(loadStatus);
 .field__error { font-size: 11.5px; color: #c0454a; font-weight: 600; }
 
 .hint { margin: 0; font-size: 11.5px; color: var(--faint); }
+.quota-hint { margin: -4px 0 0; font-size: 11.5px; color: var(--faint); text-align: center; }
 .rules { list-style: none; margin: 0; padding: 0; display: flex; gap: 12px; flex-wrap: wrap; }
 .rules li { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--faint); }
 .rules li.is-ok { color: var(--green); font-weight: 700; }
@@ -226,6 +239,19 @@ onMounted(loadStatus);
   cursor: pointer; padding: 0;
 }
 .switch button:hover { text-decoration: underline; }
+
+.remember-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+.remember-cb {
+  accent-color: var(--blue);
+}
 </style>
 
 <style scoped>

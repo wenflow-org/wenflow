@@ -9,6 +9,30 @@
   </head>
   <body>
     <div id="app"></div>
+    <script>
+      /* 最早执行：在CSS加载前就设好背景色，防止白闪。
+         key 与 utils/theme.ts 保持一致：主 key v2_theme + 兼容 key wenflow-theme，
+         双 key 解析后显式归一化，避免「刷新时仅暗色生效、亮色被回退系统偏好」。 */
+      (function(){
+        var t = null;
+        try {
+          t = localStorage.getItem('v2_theme') || localStorage.getItem('wenflow-theme');
+        } catch (e) {}
+        var dark = t === 'dark' || (!t && matchMedia('(prefers-color-scheme:dark)').matches);
+        var mode = dark ? 'dark' : 'light';
+        if (dark) {
+          document.documentElement.dataset.theme = 'dark';
+          document.documentElement.classList.add('dark');
+        }
+        try {
+          localStorage.setItem('v2_theme', mode);
+          localStorage.setItem('wenflow-theme', mode);
+        } catch (e) {}
+        var c = dark ? '#0f1620' : '#f3f6fb';
+        document.body.style.background = c;
+        document.body.style.color = dark ? '#e6edf7' : '#172033';
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

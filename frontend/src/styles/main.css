@@ -1,22 +1,190 @@
-﻿/* 现代化增强包 */
+﻿/* ========================================
+   mk- 设计 token（admin-redesign 唯一 token 源）
+   --mk-* 全局定义（不限于 admin 页）：admin-surface 兼容映射 /
+   admin-theme EP 覆写 / FieldAddWizard 等 Teleport 组件均依赖全局可用
+   ======================================== */
+
+/* ---- @import 集中置于文件顶部（CSS 规范要求先于其他规则） ---- */
+/* 现代化增强包 */
 @import './modern-enhancements.css';
+
+/* 核心设计系统 */
+@import './design-system.css';
+
+/* Admin 体系 B 兼容映射（admin-surface.css 收敛为 :root 映射，见该文件） */
+@import './admin-surface.css';
+
+/* 学习平台组件样式 */
+@import './learning-components.css';
+
+:root {
+  /* 层级 token：抽屉/弹窗/菜单统一 z-index，避免散落硬编码 */
+  --mk-z-menu: 60;
+  --mk-z-drawer: 200;
+  --mk-z-sidebar: 220;
+  --mk-z-modal: 300;
+  --mk-z-toast: 400;
+
+  /* 抽屉宽度档 token：供各详情抽屉 4K 镜像断点复用（base 560 → lg 700 → xl 880 → xxl 1040）。
+     例外：SkillDrawer 有意更窄（520/600/760/890，需容纳两侧并排的版本对比等密集区），保持自身档位 */
+  --mk-drawer-w: 560px;
+  --mk-drawer-w-lg: 700px;
+  --mk-drawer-w-xl: 880px;
+  --mk-drawer-w-xxl: 1040px;
+
+  /* 颜色/字体 token：唯一品牌蓝 --mk-blue（全站禁用其它品牌蓝硬编码） */
+  --mk-ink: #1a2a44;
+  --mk-muted: #5b6577;
+  --mk-faint: #5f6f8c;
+  --mk-faint-soft: #71809a;      /* 弱化文字更浅档（详情页元信息/表格说明等零星硬编码收敛） */
+  --mk-line: #e6ebf4;
+  --mk-bg: #f7f8fa;
+  --mk-surface: #ffffff;
+  --mk-blue: #2c63d0;
+  --mk-green: #15803d;
+  --mk-green-bg: #ecfdf5;
+  --mk-amber: #b45309;
+  --mk-amber-bg: #fffbeb;
+  --mk-red: #dc2626;
+  --mk-red-bg: #fef2f2;
+  --mk-blue-bg: #eff6ff;
+  --mk-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  --mk-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+
+  /* 设计 token：字体栈 / 强调色 / 代码块 / 圆角 / 阴影 */
+  --mk-sans: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", Inter, sans-serif;
+  --mk-accent-deep: #1f57cc;
+  --mk-purple: #8d6bff;
+  --mk-teal: #0d9488;
+  --mk-red-strong: #b91c1c;
+  --mk-code-bg: #0d1420;
+  --mk-code-fg: #8ba3c7;
+  --mk-code-border: #1c2a40;
+  --mk-pre-fg: #c6d4ea;           /* 代码井前景（prompt/JSON/预 文本块硬编码收敛） */
+  --mk-radius-xs: 4px;
+  --mk-radius-sm: 6px;
+  --mk-radius-md: 8px;
+  --mk-radius-lg: 10px;
+  --mk-radius-xl: 12px;
+  --mk-radius-modal: 16px;
+  --mk-radius-pill: 999px;
+  --mk-shadow-pop: 0 12px 32px rgba(15, 23, 42, 0.16);
+  --mk-shadow-drawer: -16px 0 48px rgba(15, 23, 42, 0.18);
+  --mk-shadow-modal: 0 24px 64px rgba(15, 23, 42, 0.22);
+
+  /* 业务徽章档位色（完成度五档 / 角色 / 流转 / 锁定 / core），供 mk-badge--* 扩展档引用 */
+  --mk-rec-draft: #6b7280;
+  --mk-rec-handler: #b45309;
+  --mk-rec-core: #1f57cc;
+  --mk-rec-synced: #0f766e;
+  --mk-rec-live: #15803d;
+
+  /* 字号阶梯 token（A 组设计改进）：全站字号单一来源，替代散落 9~20px 硬编码。
+     基础正文 14px（原 13px），微字下限 11px。4K 档仍由 shared.css 媒体查询放大。 */
+  --mk-fs-11: 11px;
+  --mk-fs-12: 12px;
+  --mk-fs-12_5: 12.5px;
+  --mk-fs-13: 13px;
+  --mk-fs-14: 14px;
+  --mk-fs-15: 15px;
+  --mk-fs-16: 16px;
+  --mk-fs-18: 18px;
+  --mk-fs-20: 20px;
+
+  /* 间距阶梯 token（A 组设计改进）：替代散落 10/12/14/16/18px 硬编码 */
+  --mk-space-1: 4px;
+  --mk-space-2: 8px;
+  --mk-space-3: 12px;
+  --mk-space-4: 16px;
+  --mk-space-5: 20px;
+  --mk-space-6: 24px;
+  --mk-space-7: 32px;
+  --mk-space-8: 48px;
+
+  /* 列宽 token（ADMIN_COLUMN_WIDTH_SPEC §2/§3 落地）：全站表格列宽单一来源。
+     工具类 mk-col--*（shared.css）与三张 grid 行式表（ExecLogs/AuditLogs/SessionSecurity）
+     共同引用；4K 三档覆盖值集中在 shared.css 4K 段（一处变量、全站同步）。 */
+  --mk-col-id: 128px;            /* ID/短码：展示 8-12 字符 + …，长 ID 入库前 shortId() 截段 */
+  --mk-col-time: 72px;           /* 纯时刻 HH:mm:ss */
+  --mk-col-time-full: 110px;     /* 相对时间 / 含日期时间戳 */
+  --mk-col-badge: 64px;          /* 状态徽章（最长词 3 字 ≈ 64px 预算） */
+  --mk-col-num: 56px;            /* 纯数字右对齐 */
+  --mk-col-num-wide: 108px;      /* 组合数字（12,345 · 6,789） */
+  --mk-col-model: 116px;         /* 模型名/技能名 */
+  --mk-col-model-wide: 140px;    /* 长模型名（含别名标注） */
+  --mk-col-actions: 72px;        /* 操作列：1 按钮 */
+  --mk-col-actions-wide: 120px;  /* 操作列：2-3 按钮 / 含 ⋯ 菜单 */
+  --mk-col-flex-min: 180px;      /* 弹性列 min（≈12-16 个中文字符） */
+  --mk-col-flex-max: 720px;      /* 弹性列 max（宽屏防白区，超出即 ellipsis） */
+  --mk-cell-main-max: 260px;     /* mk-cell-main 主行截断上限（原散落 260px 上移为 token） */
+  --mk-close-bg: #f0f2f5;        /* 抽屉/弹窗关闭按钮背景（原散落在 3 个文件硬编码） */
+  --mk-back-color: var(--mk-blue); /* 返回按钮文字色 */
+}
+
+/* ========================================
+   暗色模式（D1 设计改进）
+   机制：html[data-theme='dark'] 覆写 --mk-* 语义 token；组件尽量引用 token，
+   少量硬编码色由 shared.css 暗色段兜底覆写。切换开关见 Shell.vue。
+   ======================================== */
+html[data-theme='dark'] {
+  --mk-ink: #e6edf7;            /* 主文字：深底浅字 */
+  --mk-muted: #9fb0c8;          /* 次级文字 */
+  --mk-faint: #6b7c96;          /* 弱化文字 */
+  --mk-faint-soft: #8fa3bd;     /* 弱化文字亮档（暗色下可读性补足） */
+  --mk-line: #2a3850;           /* 边框/分隔线 */
+  --mk-bg: #0f1624;             /* 页面背景 */
+  --mk-surface: #17202f;        /* 卡片/面板表面 */
+  --mk-blue: #5b8def;           /* 品牌蓝提亮（深底可读性） */
+  --mk-accent-deep: #7aa2ff;
+  --mk-green: #4ade80;
+  --mk-green-bg: rgba(74, 222, 128, 0.14);
+  --mk-amber: #fbbf24;
+  --mk-amber-bg: rgba(251, 191, 36, 0.14);
+  --mk-red: #f87171;
+  --mk-red-bg: rgba(248, 113, 113, 0.14);
+  --mk-blue-bg: rgba(91, 141, 239, 0.16);
+  --mk-purple: #a78bfa;
+  --mk-teal: #2dd4bf;
+  --mk-red-strong: #ef4444;
+  --mk-code-bg: #0b101c;
+  --mk-code-fg: #9db4d8;
+  --mk-code-border: #233250;
+  --mk-pre-fg: #c6d4ea;         /* 暗色代码井前景：维持原值 */
+  --mk-close-bg: #26324a;
+  --mk-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.5);
+  --mk-shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --mk-shadow-drawer: -16px 0 48px rgba(0, 0, 0, 0.6);
+  --mk-shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.7);
+  --mk-rec-draft: #4b5563;
+  --mk-rec-handler: #b45309;
+  --mk-rec-core: #5b8def;
+  --mk-rec-synced: #0f766e;
+  --mk-rec-live: #16a34a;
+}
+
+/* 现代化增强包 */
+/*（@import 已统一上移至文件顶部）*/
+
+/* 无障碍工具类：视觉隐藏但保留给读屏器（sr-only 标准实现）。
+   注意：此前 .visually-hidden 在全库无定义导致 label 泄漏渲染成可见文字 */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
 
 /* ========================================
    AI学习平台 - 主样式入口
    引入设计系统和组件样式
    ======================================== */
 
-/* 核心设计系统 */
-@import './design-system.css';
-
-/* Admin 统一 surface 系统 */
-@import './admin-surface.css';
-
-/* Admin 列表壳子 */
-@import './admin-list.css';
-
-/* 学习平台组件样式 */
-@import './learning-components.css';
+/*（@import 已统一上移至文件顶部）*/
 
 /* ==========================================
    全局重置与基础样式

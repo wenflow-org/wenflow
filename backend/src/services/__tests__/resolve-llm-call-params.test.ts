@@ -4,7 +4,7 @@ import {
 } from '../resolve-llm-call-params'
 
 describe('resolveLlmGenerationParams (source-level single read path)', () => {
-  it('prefers ACTIVE prompt over route and code defaults', () => {
+  it('prefers ACTIVE prompt over route and code defaults, floors maxTokens to 128k', () => {
     const resolved = resolveLlmGenerationParams({
       promptConfig: { model: null, temperature: 0.7, maxTokens: 8000 },
       codeDefaults: { temperature: 0.2, maxTokens: 2000 },
@@ -15,7 +15,7 @@ describe('resolveLlmGenerationParams (source-level single read path)', () => {
       expect.objectContaining({
         model: 'route-model',
         temperature: 0.7,
-        maxTokens: 8000,
+        maxTokens: 131072,
         sources: expect.objectContaining({
           model: 'route-fallback',
           temperature: 'active-prompt',
@@ -24,13 +24,13 @@ describe('resolveLlmGenerationParams (source-level single read path)', () => {
         request: {
           model: 'route-model',
           temperature: 0.7,
-          max_tokens: 8000,
+          max_tokens: 131072,
         },
       })
     )
   })
 
-  it('applies runtime override above prompt', () => {
+  it('applies runtime override above prompt (small override not floored)', () => {
     const resolved = resolveLlmGenerationParams({
       runtimeOverride: { temperature: 0.1, maxTokens: 1200, model: 'lab-model' },
       promptConfig: { temperature: 0.7, maxTokens: 8000, model: 'prompt-model' },
@@ -45,22 +45,23 @@ describe('resolveLlmGenerationParams (source-level single read path)', () => {
     expect(resolved.sources.model).toBe('runtime-override')
   })
 
-  it('applies minMaxTokens floor without inventing lower prompt values', () => {
+  it('applies minMaxTokens floor below 128k without inventing lower prompt values', () => {
     const resolved = resolveLlmGenerationParams({
       promptConfig: { maxTokens: 500 },
       codeDefaults: { minMaxTokens: 2000 },
     })
-    expect(resolved.maxTokens).toBe(2000)
+    // minMax 抬到 2000 后，仍被全局 128k floor 覆盖
+    expect(resolved.maxTokens).toBe(131072)
     expect(resolved.sources.maxTokens).toBe('active-prompt')
   })
 
   it('falls back to code defaults when prompt absent', () => {
     const resolved = resolveLlmGenerationParams({
-      codeDefaults: { temperature: 0.3, maxTokens: 32000 },
+      codeDefaults: { temperature: 0.3, maxTokens: 131072 },
       routeFallback: { temperature: 0.7, maxTokens: 2000 },
     })
     expect(resolved.temperature).toBe(0.3)
-    expect(resolved.maxTokens).toBe(32000)
+    expect(resolved.maxTokens).toBe(131072)
     expect(resolved.sources.temperature).toBe('code-defaults')
   })
 })

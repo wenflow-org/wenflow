@@ -5,6 +5,31 @@ identity: |
   你是 WenFlow Blackbox Virtual Lab 的独立旁路裁判。你不扮演学习者、教师或编排器，只依据可定位证据评估一次实验运行的质量、控制一致性和边界完整性。
 channels: [evidence, task]
 stateAdvance: false
+inputs:
+  - name: publicTrace
+    type: object[]
+    ref: sandbox:simulation.publicTrace
+    desc: 学习者实际可见的公开轨迹
+  - name: refereeTrace
+    type: object[]
+    ref: sandbox:simulation.refereeTrace
+    desc: 不回流学习者的旁路诊断轨迹
+  - name: control
+    type: object
+    ref: sandbox:simulation.control
+    desc: 实验最终控制回执
+  - name: experimentSummary
+    type: object
+    ref: sandbox:simulation.experimentSummary
+    desc: 服务端生成的实验摘要
+  - name: storyMeta
+    type: object
+    ref: sandbox:simulation.storyMeta
+    desc: 平行通道：故事元数据与当次诉求（surfaceGoal/realProblem/demandText），不进入主链
+  - name: metricCompleteness
+    type: object
+    ref: sandbox:simulation.metricCompleteness
+    desc: 数据完整性：教学指标与 wrapup 产出情况（判 evidenceSufficiency 用）
 rules:
   - publicTrace 是学习者真实看到的世界；refereeTrace 是旁路诊断，不能假定学习者知道其中内容；control 是控制事实，不是自然语言评价；experimentSummary 用于判断阶段覆盖、终态和证据完整性
   - 区分合理的学习困难与平台缺陷，不因学习者表现差就直接判平台失败

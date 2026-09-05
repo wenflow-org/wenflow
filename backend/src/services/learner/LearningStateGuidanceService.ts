@@ -7,13 +7,11 @@
  * LLM/网关失败时 skill 内部会自动产出 learning-state 版 fallback 文案（source='fallback'）。
  */
 
-import prisma from '../../config/database';
 import { executeSkill } from '../../skills';
 import { adaptiveGuidanceCopyDefinition, type AdaptiveGuidanceCopyOutput } from '../../skills/adaptive-guidance-copy';
-import { learnerSnapshotRefreshService } from './LearnerSnapshotRefreshService';
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
 import { learningDecisionFeedService, type LearningDecisionCard } from './LearningDecisionFeedService';
-import stateTrackingService from '../learning/state-tracking.service';
+import { assembleLearningState } from './assemble-learning-state';
 import { logger } from '../../utils/logger';
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
@@ -74,95 +72,11 @@ class LearningStateGuidanceService {
 
   private async perform(userId: string): Promise<LearningStateGuidancePayload | null> {
     try {
-      const [user, paths, subtasks, sessions] = await Promise.all([
-        prisma.users.findUnique({
-          where: { id: userId },
-          select: { id: true, name: true, xp: true },
-        }),
-        prisma.learning_paths.findMany({
-          where: { userId, status: 'active' },
-          include: {
-            milestones: {
-              orderBy: { stageNumber: 'asc' },
-              include: {
-                subtasks: {
-                  orderBy: { order: 'asc' },
-                  select: { id: true, title: true, status: true, estimatedMinutes: true },
-                },
-              },
-            },
-          },
-          orderBy: { updatedAt: 'desc' },
-          take: 3,
-        }),
-        prisma.subtasks.findMany({
-          where: { userId },
-          select: { status: true, estimatedMinutes: true },
-        }),
-        prisma.teaching_sessions.findMany({
-          where: { userId },
-          orderBy: { updatedAt: 'desc' },
-          select: { duration: true, startTime: true, endTime: true, wrapup: true, advisory: true, updatedAt: true, status: true },
-          take: 10,
-        }),
-      ]);
+      // 共享聚合（去冗余）：四表查询/统计/learningState 构造统一走 assembleLearningState
+      const assembled = await assembleLearningState(userId, { snapshotScope: 'global', pathsTake: 3 });
+      if (!assembled) return null;
 
-      if (!user) return null;
-
-      const primaryPath = paths.find((path) =>
-        path.milestones.some((stage) => (stage.subtasks || []).some((task) => task.status !== 'completed'))
-      ) || paths[0] || null;
-
-      const learnerSnapshot = await learnerSnapshotRefreshService.refresh({ userId, scope: 'global' });
-
-      const warnings = await stateTrackingService.checkWarnings(userId).catch(() => []);
-      const currentState = await stateTrackingService.getCurrentState(userId).catch(() => null);
-      const suggestion = currentState ? stateTrackingService.generateSuggestion(currentState) : null;
-
-      const completedCount = subtasks.filter((t) => t.status === 'completed').length;
-      const inProgressCount = subtasks.filter((t) => t.status === 'in_progress').length;
-      const todoCount = subtasks.filter((t) => t.status === 'todo').length;
-      const totalEstimated = subtasks.reduce((s, t) => s + (t.estimatedMinutes || 0), 0);
-      const totalMinutes = sessions.reduce((sum, session) => {
-        if (session.endTime) {
-          return sum + Math.max(1, Math.round((session.endTime.getTime() - session.startTime.getTime()) / 60000));
-        }
-        if ((session.duration || 0) > 24 * 60) return sum + Math.round((session.duration || 0) / 60);
-        return sum + Math.max(0, session.duration || 0);
-      }, 0);
-      const activeDays = new Set(sessions.map((s) => s.startTime.toISOString().split('T')[0])).size;
-
-      let sessionWrapup: unknown = null;
-      if (sessions[0]?.wrapup) {
-        try {
-          sessionWrapup = JSON.parse(sessions[0].wrapup);
-        } catch {
-          sessionWrapup = null;
-        }
-      }
-
-      const learningState = {
-        user: { id: user.id, name: user.name, xp: user.xp, level: Math.floor(Math.sqrt(user.xp / 100)) + 1 },
-        tasks: {
-          total: subtasks.length,
-          completed: completedCount,
-          inProgress: inProgressCount,
-          todo: todoCount,
-          completionRate: subtasks.length ? Number(((completedCount / subtasks.length) * 100).toFixed(1)) : 0,
-        },
-        paths: { total: paths.length },
-        time: {
-          totalMinutes,
-          totalEstimated,
-          totalCompleted: totalMinutes,
-          activeLearningDays: activeDays,
-          avgDailyMinutes: activeDays ? Number((totalMinutes / activeDays).toFixed(1)) : 0,
-          progress: subtasks.length ? Number(((completedCount / subtasks.length) * 100).toFixed(1)) : 0,
-          completionRate: subtasks.length ? ((completedCount / subtasks.length) * 100).toFixed(1) : '0',
-        },
-        state: currentState,
-        suggestion,
-      };
+      const { paths, sessions, primaryPath, learnerSnapshot, learningState, warnings, sessionWrapup } = assembled;
 
       const summary = learnerStateSummaryService.build({
         learnerSnapshot,

@@ -52,7 +52,7 @@ describe('AICapabilityHealthService', () => {
     expect(mockResolveRoute).toHaveBeenCalledTimes(5)
     expect(mockExecute).toHaveBeenCalledTimes(1)
     expect(mockExecute).toHaveBeenCalledWith(
-      expect.objectContaining({ endpoint: route.endpoint, model: route.model, timeoutMs: 10_000 }),
+      expect.objectContaining({ endpoint: route.endpoint, model: route.model, timeoutMs: 25_000 }),
       expect.objectContaining({ max_tokens: 64, temperature: 0 }),
       expect.objectContaining({ sourceEntry: 'system-canary', callerAgent: 'system-canary' })
     )
@@ -64,7 +64,7 @@ describe('AICapabilityHealthService', () => {
     const service = new AICapabilityHealthService()
     await service.refresh()
 
-    mockExecute.mockRejectedValue(new Error('API request timed out after 10000ms'))
+    mockExecute.mockRejectedValue(new Error('API request failed with status 502: bad gateway'))
     const firstFailure = await service.refresh()
     const secondFailure = await service.refresh()
 
@@ -115,7 +115,7 @@ describe('AICapabilityHealthService', () => {
     }))
   })
 
-  it('单次探测总时长到十秒时主动取消并归类为超时', async () => {
+  it('单次探测总时长到二十五秒时主动取消并归类为探测超时', async () => {
     jest.useFakeTimers()
     try {
       const service = new AICapabilityHealthService()
@@ -124,14 +124,41 @@ describe('AICapabilityHealthService', () => {
       }))
 
       const refresh = service.refresh()
-      await jest.advanceTimersByTimeAsync(10_000)
+      await jest.advanceTimersByTimeAsync(25_000)
       const snapshot = await refresh
 
       expect(snapshot.capabilities[0]).toEqual(expect.objectContaining({
         status: 'unknown',
-        failureCode: 'UPSTREAM_TIMEOUT',
+        failureCode: 'PROBE_TIMEOUT',
         retryable: true
       }))
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('探测超时不累计失败 streak，连续超时不会置为不可用', async () => {
+    jest.useFakeTimers()
+    try {
+      const service = new AICapabilityHealthService()
+      mockExecute.mockImplementation((_route, _request, context) => new Promise((_resolve, reject) => {
+        context.abortSignal.addEventListener('abort', () => reject(new Error('API request canceled')))
+      }))
+
+      // 连续两次探测超时：不置 unavailable（PROBE_TIMEOUT 不计入 streak）
+      const first = service.refresh()
+      await jest.advanceTimersByTimeAsync(25_000)
+      await first
+      const second = service.refresh()
+      await jest.advanceTimersByTimeAsync(25_000)
+      const snapshot = await second
+
+      expect(snapshot.capabilities[0]).toEqual(expect.objectContaining({
+        failureCode: 'PROBE_TIMEOUT',
+        retryable: true
+      }))
+      expect(snapshot.overall).not.toBe('unavailable')
+      expect(service.isCapabilityBlocked('goal-conversation')).toBe(false)
     } finally {
       jest.useRealTimers()
     }

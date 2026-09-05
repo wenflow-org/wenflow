@@ -1,0 +1,26 @@
+version: prompt-lab-manifest/v1
+skillId: lesson-knowledge-enricher
+agentId: skill:lesson-knowledge-enricher
+name: default-skill-lesson-knowledge-enricher
+archetype: distiller
+description: 课后知识增强（知识台账 + 隐性概念线索，单次调用）
+acceptableAgentIds: [skill:lesson-knowledge-enricher]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: distillation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: blocking
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: learner-model, phases: [knowledge-enriched], defaultPhase: knowledge-enriched, terminalPhases: [knowledge-enriched], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, distiller, v4]
+notes: v4 核心文件的契约与运行参数家园

@@ -86,6 +86,7 @@ async function fetchActive() {
         })).filter((a) => a.id && a.title)
       : []
   } catch {
+    // 公告为辅助信息：加载失败静默（不显示横幅 > 错误条打扰），区别于面板类（如通知）需可见错误
     items.value = []
   } finally {
     loading.value = false
@@ -156,7 +157,8 @@ watch(
   font-size: 16px;
   cursor: pointer;
   padding: 0 4px;
-  opacity: 0.7;
+  /* 对比度修复：opacity 0.7 时 warning 色在浅黄底上约 2.8:1，低于 3:1 控件阈值；提到 0.9 约 4.5:1 */
+  opacity: 0.9;
   line-height: 1;
 }
 .anb__close:hover { opacity: 1; }

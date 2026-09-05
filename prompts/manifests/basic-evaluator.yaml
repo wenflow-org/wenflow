@@ -1,0 +1,26 @@
+version: prompt-lab-manifest/v1
+skillId: basic-evaluator
+agentId: skill:basic-evaluator
+name: default-skill-basic-evaluator
+archetype: extractor
+description: 学习质量评估器
+acceptableAgentIds: [skill:basic-evaluator]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: extraction
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: blocking
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: teaching, phases: [evaluation-completed], defaultPhase: evaluation-completed, terminalPhases: [evaluation-completed], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, evaluator, v4]
+notes: v4 核心文件的契约与运行参数家园。

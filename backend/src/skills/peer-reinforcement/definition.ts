@@ -48,7 +48,7 @@ export const peerRuntimeDefinition: RuntimeDefinitionRecord = {
     'analogy-migration',
     'error-analysis',
   ],
-  defaultMaxTokens: 4000,
+  defaultMaxTokens: 8000,
   defaultTemperature: 0.7,
   source: 'code',
   managedByCode: true,

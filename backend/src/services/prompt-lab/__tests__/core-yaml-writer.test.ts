@@ -1,4 +1,4 @@
-import {
+﻿import {
   CORE_FILES_DIR,
   parseCoreFile,
   scanCoreFiles,
@@ -22,8 +22,10 @@ describe('core-yaml-writer', () => {
       channels: ['dialogue', 'state'],
       stateAdvance: true,
       inputs: [
-        { ref: 'skill:path-scene-framing.normalizedInput', skill: 'path-scene-framing', fieldPath: 'normalizedInput', note: '主真相源' },
-        { ref: 'skill:path-planning.milestones.stageNumber', skill: 'path-planning', fieldPath: 'milestones.stageNumber' },
+        { ref: 'skill:path-planning.milestones', kind: 'skill', skill: 'path-planning', fieldPath: 'milestones', sandboxPath: '', userPath: '', note: '主真相源' },
+        { ref: 'skill:path-planning.milestones.stageNumber', kind: 'skill', skill: 'path-planning', fieldPath: 'milestones.stageNumber', sandboxPath: '', userPath: '' },
+        { ref: 'sandbox:path.normalizedInput', kind: 'sandbox', skill: '', fieldPath: '', sandboxPath: 'path.normalizedInput', userPath: '', name: 'normalizedInput', type: 'object' },
+        { ref: 'user:latestMessage', kind: 'user', skill: '', fieldPath: '', sandboxPath: '', userPath: 'latestMessage', name: 'userInput', type: 'string' },
       ],
       rules: ['规则一', '规则二：包含：冒号 与 "引号"'],
       fields: [
@@ -46,7 +48,7 @@ describe('core-yaml-writer', () => {
     expect(stripLoaded(parsed.core!)).toEqual(stripLoaded(core));
   });
 
-  it('loader 解析 inputs 声明；非法 ref 报 schema-error', () => {
+  it('loader 解析 inputs 声明（三前缀）；非法 ref 报 schema-error', () => {
     const valid = parseCoreFile('virtual', [
       'skillId: demo',
       'baseVersion: 1',
@@ -54,8 +56,12 @@ describe('core-yaml-writer', () => {
       'channels: [dialogue]',
       'stateAdvance: false',
       'inputs:',
-      '  - ref: skill:path-scene-framing.normalizedInput.problemSpace.realProblem',
+      '  - ref: skill:path-planning.milestones.stageNumber',
       '    note: 真实问题',
+      '  - ref: sandbox:path.normalizedInput',
+      '    name: normalizedInput',
+      '    type: object',
+      '  - ref: user:latestMessage',
       'rules: [r]',
       'fields: [{ name: f, type: string, desc: d }]',
       'constraints: []',
@@ -64,10 +70,31 @@ describe('core-yaml-writer', () => {
     expect(valid.diagnostics).toEqual([]);
     expect(valid.core?.inputs).toEqual([
       {
-        ref: 'skill:path-scene-framing.normalizedInput.problemSpace.realProblem',
-        skill: 'path-scene-framing',
-        fieldPath: 'normalizedInput.problemSpace.realProblem',
+        ref: 'skill:path-planning.milestones.stageNumber',
+        kind: 'skill',
+        skill: 'path-planning',
+        fieldPath: 'milestones.stageNumber',
+        sandboxPath: '',
+        userPath: '',
         note: '真实问题',
+      },
+      {
+        ref: 'sandbox:path.normalizedInput',
+        kind: 'sandbox',
+        skill: '',
+        fieldPath: '',
+        sandboxPath: 'path.normalizedInput',
+        userPath: '',
+        name: 'normalizedInput',
+        type: 'object',
+      },
+      {
+        ref: 'user:latestMessage',
+        kind: 'user',
+        skill: '',
+        fieldPath: '',
+        sandboxPath: '',
+        userPath: 'latestMessage',
       },
     ]);
 
@@ -129,7 +156,8 @@ describe('core-yaml-writer', () => {
       channels: ['dialogue'],
       stateAdvance: false,
       inputs: [
-        { ref: 'skill:path-scene-framing.normalizedInput', skill: 'path-scene-framing', fieldPath: 'normalizedInput', note: '主真相源' },
+        { ref: 'skill:path-planning.milestones', kind: 'skill', skill: 'path-planning', fieldPath: 'normalizedInput', sandboxPath: '', userPath: '', note: '主真相源' },
+        { ref: 'sandbox:path.previousMilestone', kind: 'sandbox', skill: '', fieldPath: '', sandboxPath: 'path.previousMilestone', userPath: '', name: 'previousMilestone', type: 'object' },
       ],
       rules: ['r'],
       fields: [{ name: 'f', type: 'string', optional: false, desc: 'd', turn: false }],
@@ -139,11 +167,13 @@ describe('core-yaml-writer', () => {
       outputMedia: 'json',
     };
     const { body } = compileCoreFile(core);
-    expect(body).toContain('上游字段输入');
-    expect(body).toContain('「skill:path-scene-framing.normalizedInput」 — 主真相源');
+    expect(body).toContain('输入契约声明');
+    expect(body).toContain('skill:path-planning.milestones');
+    expect(body).toContain('（编排注入）');
+    expect(body).toContain('previousMilestone（object）');
     // 无 inputs 时不渲染该小节
     const { body: bodyNoInputs } = compileCoreFile({ ...core, inputs: undefined });
-    expect(bodyNoInputs).not.toContain('上游字段输入');
+    expect(bodyNoInputs).not.toContain('输入契约声明');
   });
 
   it('extractHeaderComment 提取头部注释块并在序列化时保留', () => {
@@ -186,3 +216,4 @@ describe('core-yaml-writer', () => {
     }
   });
 });
+

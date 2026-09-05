@@ -440,7 +440,9 @@ router.get('/status', async (req, res, next) => {
     }
 
     const servers = normalizeStoredUserMcpServers(parseSecretJson(config.servers, SERVERS_CONTEXT, []));
-    const statusPromises = servers.map(async (server: any) => {
+    // 安全加固：并发探测上限（分片串行），防止 /status 被用作并发出站请求放大面
+    const MAX_CONCURRENT_STATUS_CHECKS = 5;
+    const probeServer = async (server: any) => {
       try {
         const headers: any = { 'Content-Type': 'application/json' };
         if (server.apiKey) {
@@ -472,9 +474,13 @@ router.get('/status', async (req, res, next) => {
           responseTime: null
         };
       }
-    });
+    };
 
-    const statuses = await Promise.all(statusPromises);
+    const statuses: any[] = [];
+    for (let i = 0; i < servers.length; i += MAX_CONCURRENT_STATUS_CHECKS) {
+      const chunk = servers.slice(i, i + MAX_CONCURRENT_STATUS_CHECKS);
+      statuses.push(...(await Promise.all(chunk.map(probeServer))));
+    }
 
     res.json({
       success: true,

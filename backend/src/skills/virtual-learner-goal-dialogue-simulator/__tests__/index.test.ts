@@ -1,4 +1,8 @@
-import { normalizeOutput, GOAL_STATE_FIELDS } from '../index'
+const mockCallPrompt = jest.fn();
+
+jest.mock('../../../composers/prompt-composer', () => ({ callPrompt: mockCallPrompt }));
+
+import { normalizeOutput, GOAL_STATE_FIELDS, virtualLearnerGoalDialogueSimulator, VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATION_FAILED } from '../index'
 import type { GoalLearnerSimulationInput } from '../index'
 
 const input: GoalLearnerSimulationInput = {
@@ -60,5 +64,30 @@ describe('virtual-learner-goal-dialogue-simulator normalize', () => {
     expect(output.reply.length).toBeGreaterThan(0)
     expect(output.debug?.normalizedFallback?.fieldCount).toBe(GOAL_STATE_FIELDS.length)
     expect(output.learnerState.remainingUnknowns.length).toBeGreaterThan(0)
+  })
+})
+
+describe('virtual-learner-goal-dialogue-simulator 失败显式传播', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('callPrompt 抛错 → success:false（不再产出伪 learnerState）', async () => {
+    mockCallPrompt.mockRejectedValue(new Error('boom'))
+    const result = await virtualLearnerGoalDialogueSimulator(input)
+    expect(result.success).toBe(false)
+    expect(result.error).toEqual({ code: VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATION_FAILED, message: 'boom' })
+    expect(result.output).toBeUndefined()
+  })
+
+  it('callPrompt success:false → success:false（错误信息透传，无 fallback 输出）', async () => {
+    mockCallPrompt.mockResolvedValue({
+      success: false,
+      error: { code: 'SKILL_X_FAILED', message: 'validation failed' },
+      debug: { durationMs: 7 },
+    })
+    const result = await virtualLearnerGoalDialogueSimulator(input)
+    expect(result.success).toBe(false)
+    expect(result.error?.code).toBe(VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATION_FAILED)
+    expect(result.error?.message).toBe('validation failed')
+    expect(result.output).toBeUndefined()
   })
 })

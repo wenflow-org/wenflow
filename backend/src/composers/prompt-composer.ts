@@ -22,8 +22,10 @@ import {
 import { resolveEffectiveRuntimeContract } from '../services/prompt-lab/resolve-runtime-contract';
 import { resolveEffectivePromptContract } from '../services/prompt-lab/resolve-prompt-contract';
 import { adaptToRuntimeEnvelope } from '../services/prompt-lab/envelope-adapter';
+import { validateSkillOutputFields } from '../services/skill-output-validator';
 import type { RuntimeContract } from '../services/prompt-lab/runtime-contract';
 import { resolveLlmCallParams } from '../services/resolve-llm-call-params';
+import { getRoutingSnapshotHash } from '../services/prompt-composer';
 import type { SkillPromptOutputMedia } from '../services/skill-prompt-contract';
 import {
   mergeContextEnvelopes,
@@ -269,6 +271,12 @@ export async function callPrompt<TInput, TOutput>(
   }
   const promptDrift = detectPromptDrift(spec.defaultSystemPrompt, promptConfig?.systemPrompt || null);
   const systemPromptHash = hashPrompt(systemPrompt);
+  // 路由表快照指纹：admin 改 routings 后 hash 变化（≤30s），让按 version/coreHash 归因的分析
+  // 能识别"prompt 变了但版本没变"的场景（版本追踪盲区补强）
+  let routingContextHash: string | null = null;
+  if (spec.caller?.skillId && typeof getRoutingSnapshotHash === 'function') {
+    routingContextHash = await getRoutingSnapshotHash(spec.caller.skillId).catch(() => null);
+  }
   const attempts: PromptAttemptTrace[] = [];
   const gateway = getAPIGateway();
   // 请求形态层（默认全流）：所有 LLM 调用一律以流式请求发出（上游 SSE，更早收到首字节），
@@ -311,7 +319,8 @@ export async function callPrompt<TInput, TOutput>(
     },
   });
   let currentMaxTokens = generationResolution.maxTokens;
-  const tokenCeiling = Math.max(currentMaxTokens || 8000, 16000);
+  // max_tokens 已由 resolve-llm-call-params 统一抬到 128k 全局下限（2026-09-03 定案）；
+  // 重试时不再将 maxTokens ×2 放大（见 validation_failed 分支注释），故无需 tokenCeiling 上界。
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {
@@ -465,13 +474,8 @@ export async function callPrompt<TInput, TOutput>(
         llmRequestId: lastLlmRequestId || undefined,
         transportAttemptCount: gatewayMetadata?.attemptCount
       });
-      // 长度截断时抬高后续 attempt 的 maxTokens（goal 原行为）
-      const finishReason = response.choices?.[0]?.finish_reason || response.finishReason;
-      const wasTruncated = finishReason === 'length'
-        || /[",:][^"]*$/.test(rawModelOutput.trim().slice(-50));
-      if (wasTruncated && typeof currentMaxTokens === 'number') {
-        currentMaxTokens = Math.min(tokenCeiling, currentMaxTokens * 2);
-      }
+      // 长度截断（reasoning 白烧会占满 max_tokens）时**不再**翻倍 maxTokens 整包重跑：
+      // 保持原上限重试一次即可——翻倍只会让重试时思考烧更多 token、首字更慢（2026-09 审计定案）
       continue;
     }
 
@@ -483,6 +487,27 @@ export async function callPrompt<TInput, TOutput>(
       lastViolations = Array.isArray(validation.violations)
         ? [...validation.violations]
         : [lastFailureReason];
+      attempts.push({
+        attempt, rawOutput: rawModelOutput, failureReason: lastFailureReason,
+        violations: lastViolations,
+        status: 'validation_failed', durationMs: Date.now() - attemptStartedAt,
+        llmRequestId: lastLlmRequestId || undefined,
+        transportAttemptCount: gatewayMetadata?.attemptCount
+      });
+      continue;
+    }
+
+    // P3 试点：core fields 声明契约校验（skill 领域校验通过后追加；
+    // delta 语义按 core 文件 deltaOutput 判定，File-as-Truth，不受 ACTIVE metadata 影响）
+    const fieldsValidation = await validateSkillOutputFields(
+      spec.agentId,
+      extracted.parsed
+    );
+    if (fieldsValidation && !fieldsValidation.valid) {
+      lastFailureReason = `fields contract violation: ${fieldsValidation.issues
+        .map((issue) => `${issue.field}(${issue.code}:${issue.expected})`)
+        .join('; ')}`;
+      lastViolations = [lastFailureReason];
       attempts.push({
         attempt, rawOutput: rawModelOutput, failureReason: lastFailureReason,
         violations: lastViolations,
@@ -514,6 +539,7 @@ export async function callPrompt<TInput, TOutput>(
       normalizedOutput: JSON.stringify(normalizedOutput),
       success: true,
       promptDrift: !!promptDrift?.driftDetected,
+      routingContextHash,
       durationMs,
       tokenUsage: JSON.stringify(tokenUsage),
        pathId,
@@ -561,6 +587,7 @@ export async function callPrompt<TInput, TOutput>(
     errorCode,
     errorMessage: lastFailureReason,
     promptDrift: !!promptDrift?.driftDetected,
+    routingContextHash,
     durationMs,
      pathId,
     userId: context.userId || requestContext.userId || null,

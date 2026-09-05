@@ -13,6 +13,10 @@ import {
 } from './TeachingSessionRepository';
 import { logger } from '../../utils/logger';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
+import { memoryTraceService } from '../memory/memory-trace.service';
+import { createDomainEvent } from '../../events/contracts';
+import { enqueueDomainEvent } from '../../events/outbox.repository';
+import prisma from '../../config/database';
 
 export interface FinalizeSessionInput {
   sessionId: string;
@@ -64,10 +68,40 @@ export class SessionFinalizationService {
     const requestIdentity = finalizationRequestIdentity(input);
 
     if (input.action === 'complete_review') {
-      const error = new Error('当前版本尚未开放复习完成操作');
-      (error as any).code = 'FINALIZATION_ACTION_UNSUPPORTED';
-      (error as any).status = 409;
-      throw error;
+      // 复习课完成：走标准收束（wrapup + lesson:completed），随后把看板中已推进
+      // （非 review/pending）的复习点回写记忆引擎（复习即提取，extractionCount+1、lastSeenAt 刷新）
+      const result = await aiTeachingCoordinator.endSession(
+        input.sessionId,
+        input.endReason || 'review-completed',
+        input.revision,
+        operationId,
+        requestIdentity.requestHash,
+        requestIdentity.requestJson
+      );
+      if (result.status === 'processing') {
+        return {
+          operationId: result.operationId,
+          status: 'processing' as const,
+          pollAfterMs: 1500,
+          revision: result.revision
+        };
+      }
+      const completedSession = await teachingSessionRepository.assertOwnership(input.sessionId, input.userId);
+      // 复习课完成标记：前端以 reviewCompletion==='completed' 判定收束完成（否则永远走兜底文案）
+      if (completedSession.status === 'completed' && completedSession.wrapup) {
+        await teachingSessionRepository.markReviewCompleted(input.sessionId).catch((error) => {
+          logger.warn('[finalize] 复习课完成标记写入失败（不影响收束）:', error);
+        });
+      }
+      // 断链修复 P0-1/2：复习结果回写记忆引擎（fire-and-forget 保留）+ 事件化（走 outbox 事件链）
+      const reviewItems = await this.applyReviewExtraction(completedSession);
+      if (reviewItems.length > 0) {
+        await this.enqueueReviewCompletedEvent(completedSession, reviewItems);
+      }
+      return this.completedResponse(completedSession, result.operationId, {
+        status: 'skipped',
+        alreadyCompleted: false
+      });
     }
 
     if (input.action === 'end_only') {
@@ -105,10 +139,32 @@ export class SessionFinalizationService {
       && session.operationLeaseExpiresAt
       && session.operationLeaseExpiresAt > new Date();
     if ((session.status !== 'completed' || !session.wrapup) && !activeFinalization) {
-      const error = new Error('请先结束课堂并生成学习反馈');
-      (error as any).code = 'FINALIZATION_SESSION_NOT_CLOSED';
-      (error as any).status = 409;
-      throw error;
+      // complete_task 前置要求会话已结束（completed + wrapup），但前端 finish('complete_task')
+      // 不会先调 end——这里与 end_only/complete_review 一致，自动先结束课堂生成 wrapup，
+      // 否则教学完成后的自动收束必然 409 FINALIZATION_SESSION_NOT_CLOSED（真实用户高频场景）
+      const endResult = await aiTeachingCoordinator.endSession(
+        input.sessionId,
+        input.endReason || 'task-completed',
+        input.revision,
+        operationId,
+        requestIdentity.requestHash,
+        requestIdentity.requestJson
+      );
+      if (endResult.status === 'processing') {
+        return {
+          operationId: endResult.operationId,
+          status: 'processing' as const,
+          pollAfterMs: 1500,
+          revision: endResult.revision
+        };
+      }
+      const ended = await teachingSessionRepository.assertOwnership(input.sessionId, input.userId);
+      if (ended.status !== 'completed' || !ended.wrapup) {
+        const error = new Error('请先结束课堂并生成学习反馈');
+        (error as any).code = 'FINALIZATION_SESSION_NOT_CLOSED';
+        (error as any).status = 409;
+        throw error;
+      }
     }
 
     const claim = await teachingSessionRepository.claimFinalization(
@@ -243,6 +299,126 @@ export class SessionFinalizationService {
       projectionStatus: 'pending' as const,
       finalization: finalizationState(session)
     };
+  }
+
+  /**
+   * 复习课完成回写：看板中已推进（非 review/pending）的复习点 → 记忆引擎 recordExtraction
+   * （复习即提取：extractionCount+1、lastSeenAt 刷新；best-effort，失败不阻断收束）
+   * 返回已推进的复习点列表（供 review:completed 事件发出）。
+   */
+  private async applyReviewExtraction(session: TeachingSessionRecord): Promise<Array<{
+    conceptKey: string;
+    label: string | null;
+    status: string;
+    progress: number;
+    masteryScore: number;
+    rating: 'again' | 'hard' | 'good' | 'easy';
+  }>> {
+    try {
+      const points = Array.isArray(session.knowledgeState)
+        ? session.knowledgeState
+        : (() => {
+            try {
+              const parsed = typeof session.knowledgeState === 'string' ? JSON.parse(session.knowledgeState) : session.knowledgeState;
+              return Array.isArray(parsed) ? parsed : [];
+            } catch {
+              return [];
+            }
+          })();
+      const progressed = points.filter(
+        (p: any) => p && typeof p.name === 'string' && p.status && p.status !== 'review' && p.status !== 'pending'
+      );
+      if (progressed.length === 0) return [];
+      const items: Array<{
+        conceptKey: string;
+        label: string | null;
+        status: string;
+        progress: number;
+        masteryScore: number;
+        rating: 'again' | 'hard' | 'good' | 'easy';
+      }> = [];
+      for (const p of progressed) {
+        const mastery = p.status === 'mastered' ? (Number(p.progress) >= 100 ? 0.9 : 0.85) : 0.5;
+        const rating = p.status === 'mastered' ? (Number(p.progress) >= 100 ? 'easy' : 'good') : 'hard';
+        const fsrsGrade = rating === 'easy' ? 4 : rating === 'good' ? 3 : rating === 'hard' ? 2 : 1;
+        items.push({
+          conceptKey: p.name,
+          label: p.name,
+          status: p.status,
+          progress: Number(p.progress) || 0,
+          masteryScore: mastery,
+          rating: rating as 'again' | 'hard' | 'good' | 'easy',
+        });
+        await memoryTraceService.recordExtraction({
+          userId: session.userId,
+          conceptKey: p.name,
+          label: p.name,
+          masteryScore: mastery,
+          stability: p.status === 'mastered' ? 'stable' : 'fragile',
+          source: 'derived',
+          fsrsGrade: fsrsGrade as 1 | 2 | 3 | 4,
+        });
+        // FSRS-6 DSR 调度：复习成功按成绩更新 stability/difficulty
+        await memoryTraceService.bumpReviewInterval(session.userId, p.name, fsrsGrade as 1 | 2 | 3 | 4);
+      }
+      logger.info('[SessionFinalization] 复习完成回写记忆引擎', {
+        sessionId: session.id,
+        userId: session.userId,
+        extractionCount: progressed.length,
+      });
+      return items;
+    } catch (error) {
+      logger.warn('[SessionFinalization] 复习回写失败（不影响收束）', {
+        sessionId: session.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
+  }
+
+  /**
+   * 复习结果事件化（断链修复 P0-1）：复习课收束后发出 review:completed 事件，
+   * 让复习结果走 outbox 事件链（可追溯、可重放、可幂等），替代纯旁路直写。
+   */
+  private async enqueueReviewCompletedEvent(
+    session: TeachingSessionRecord,
+    items: Array<{
+      conceptKey: string;
+      label: string | null;
+      status: string;
+      progress: number;
+      masteryScore: number;
+      rating: 'again' | 'hard' | 'good' | 'easy';
+    }>,
+  ): Promise<void> {
+    if (items.length === 0) return;
+    try {
+      const event = createDomainEvent({
+        type: 'review:completed',
+        aggregateType: 'review',
+        aggregateId: session.id,
+        userId: session.userId,
+        source: 'session-finalization',
+        data: {
+          sessionId: session.id,
+          mode: session.mode || 'review',
+          reviewItems: items,
+        },
+      });
+      await prisma.$transaction(async (tx) => {
+        await enqueueDomainEvent(tx, event);
+      });
+      logger.info('[SessionFinalization] review:completed 事件已入队', {
+        sessionId: session.id,
+        userId: session.userId,
+        itemCount: items.length,
+      });
+    } catch (error) {
+      logger.warn('[SessionFinalization] review:completed 事件入队失败（不影响收束）', {
+        sessionId: session.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }
 

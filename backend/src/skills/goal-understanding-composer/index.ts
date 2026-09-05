@@ -76,13 +76,22 @@ export function sanitizeUnderstanding(understanding: any): any {
     cognitive_profile: { ...(understanding.cognitive_profile || {}) },
     emotional_profile: { ...(understanding.emotional_profile || {}) }
   }
-  const topLevelKeys = ['surface_goal', 'real_problem', 'motivation', 'urgency', 'pain_points', 'background_experience', 'learning_signal']
+  const topLevelKeys = ['surface_goal', 'real_problem', 'motivation', 'urgency', 'pain_points', 'background_experience', 'learning_signal', 'goal_orientation', 'cognitive_bandwidth']
   topLevelKeys.forEach((key) => {
     if (isPlaceholderValue(sanitized[key])) { delete sanitized[key] }
   })
   Object.keys(sanitized.background).forEach((key) => {
     if (isPlaceholderValue(sanitized.background[key])) { delete sanitized.background[key] }
   })
+  // 嵌套容器子字段同样清理空串/占位（模型会输出 "" 或"未明确"：time_horizon=""/sdt_needs.autonomy=""）
+  const cleanContainer = (container: any) => {
+    if (!container || typeof container !== 'object') return
+    Object.keys(container).forEach((key) => {
+      if (isPlaceholderValue(container[key])) { delete container[key] }
+    })
+  }
+  cleanContainer(sanitized.available_resources)
+  cleanContainer(sanitized.sdt_needs)
   return sanitized
 }
 
@@ -106,6 +115,8 @@ export function mergeUnderstanding(previousUnderstanding: any, parsedJson: any):
 }
 
 export function buildCollected(understanding: any, parsedJson: any): any {
+  // level/timePerDay/expected_time 优先读主契约路径（current_baseline / available_resources），
+  // legacy background.* 仅作旧数据兜底
   return {
     surface_goal: understanding.surface_goal || null,
     real_problem: understanding.real_problem || null,
@@ -117,9 +128,9 @@ export function buildCollected(understanding: any, parsedJson: any): any {
     background: understanding.background || {},
     learning_style: understanding.learning_style || {},
     goal: understanding.real_problem || understanding.surface_goal || null,
-    level: understanding.background?.current_level || null,
-    timePerDay: understanding.background?.available_time || understanding.background?.expected_time || null,
-    expected_time: understanding.background?.expected_time || null,
+    level: understanding.current_baseline?.level || understanding.background?.current_level || null,
+    timePerDay: understanding.available_resources?.time_budget || understanding.background?.available_time || understanding.background?.expected_time || null,
+    expected_time: understanding.available_resources?.time_horizon || understanding.background?.expected_time || null,
     questions_to_ask: parsedJson?.nextQuestions || parsedJson?.next_questions || []
   }
 }

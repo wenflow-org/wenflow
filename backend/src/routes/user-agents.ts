@@ -7,8 +7,55 @@ import {
   getAgentLifecycleStatus,
   isOfficialAgent
 } from '../services/agent-catalog.service';
+import { decryptSecret, encryptSecret } from '../utils/secret-crypto';
+import { logger } from '../utils/logger';
 
 const router = express.Router();
+
+// systemPrompt 可能内嵌凭据，落库一律加密（信封 AES-256-GCM）
+const SYSTEM_PROMPT_SECRET_CONTEXT = 'main.user_agent_configs.systemPrompt';
+const encryptSystemPrompt = (value?: string | null): string | null | undefined =>
+  value ? encryptSecret(value, SYSTEM_PROMPT_SECRET_CONTEXT) : value;
+const decryptSystemPrompt = (value?: string | null): string | null | undefined => {
+  if (!value) return value;
+  try {
+    return decryptSecret(value, SYSTEM_PROMPT_SECRET_CONTEXT);
+  } catch {
+    // 存量明文兼容：非信封格式视为历史明文直接返回
+    logger.warn('[user-agents] systemPrompt 非加密信封，按存量明文处理');
+    return value;
+  }
+};
+
+// 参数校验：model/temperature/maxTokens/systemPrompt 类型与范围（L5 修复）
+const MAX_SYSTEM_PROMPT_CHARS = 8000;
+function validateAgentConfigInput(body: any): string | null {
+  if (body === null || typeof body !== 'object') {
+    return '请求体格式无效';
+  }
+  if (body.model !== undefined && body.model !== null && typeof body.model !== 'string') {
+    return 'model 必须是字符串';
+  }
+  if (body.temperature !== undefined && body.temperature !== null) {
+    const t = Number(body.temperature);
+    if (!Number.isFinite(t) || t < 0 || t > 2) {
+      return 'temperature 必须是 0-2 之间的数值';
+    }
+  }
+  if (body.maxTokens !== undefined && body.maxTokens !== null) {
+    const m = Number(body.maxTokens);
+    if (!Number.isInteger(m) || m < 1 || m > 131072) {
+      return 'maxTokens 必须是 1-131072 之间的整数';
+    }
+  }
+  if (body.systemPrompt !== undefined && body.systemPrompt !== null && typeof body.systemPrompt !== 'string') {
+    return 'systemPrompt 必须是字符串';
+  }
+  if (typeof body.systemPrompt === 'string' && body.systemPrompt.length > MAX_SYSTEM_PROMPT_CHARS) {
+    return `systemPrompt 过长（最多 ${MAX_SYSTEM_PROMPT_CHARS} 字符）`;
+  }
+  return null;
+}
 
 // 获取 Agent 列表（平台托管）
 router.get('/', async (req, res, next) => {
@@ -51,7 +98,7 @@ router.get('/', async (req, res, next) => {
           model: userConfig?.model || process.env.AI_MODEL || '',
           temperature: userConfig?.temperature || 0.7,
           maxTokens: userConfig?.maxTokens || 4096,
-          systemPrompt: userConfig?.systemPrompt || '',
+          systemPrompt: decryptSystemPrompt(userConfig?.systemPrompt) || '',
           version: userConfig?.version || '1.0.0'
         };
       });
@@ -78,7 +125,7 @@ router.get('/', async (req, res, next) => {
           model: userConfig?.model || process.env.AI_MODEL || '',
           temperature: userConfig?.temperature || 0.7,
           maxTokens: userConfig?.maxTokens || 4096,
-          systemPrompt: userConfig?.systemPrompt || '',
+          systemPrompt: decryptSystemPrompt(userConfig?.systemPrompt) || '',
           version: userConfig?.version || '1.0.0'
         };
       });
@@ -175,6 +222,14 @@ router.post('/', async (req, res, next) => {
       });
     }
 
+    const validationError = validateAgentConfigInput(req.body);
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        error: { message: validationError }
+      });
+    }
+
     const existing = await prisma.user_agent_configs.findFirst({
       where: {
         userId,
@@ -194,7 +249,7 @@ router.post('/', async (req, res, next) => {
           model,
           temperature,
           maxTokens,
-          systemPrompt,
+          systemPrompt: encryptSystemPrompt(systemPrompt),
           customCode: null,
           ...(enabled !== undefined && { enabled }),
           version: incrementVersion(existing.version),
@@ -211,7 +266,7 @@ router.post('/', async (req, res, next) => {
         model,
         temperature,
         maxTokens,
-        systemPrompt,
+        systemPrompt: encryptSystemPrompt(systemPrompt),
         customCode: null,
         enabled: enabled !== undefined ? enabled : true,
         version: '1.0.0',
@@ -225,7 +280,10 @@ router.post('/', async (req, res, next) => {
 
     res.json({
       success: true,
-      data: agent
+      data: {
+        ...agent,
+        systemPrompt: decryptSystemPrompt(agent.systemPrompt) || ''
+      }
     });
   } catch (error) {
     next(error);
@@ -260,6 +318,14 @@ router.put('/:name', async (req, res, next) => {
       });
     }
 
+    const validationError = validateAgentConfigInput(req.body);
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        error: { message: validationError }
+      });
+    }
+
     const agent = await prisma.user_agent_configs.findFirst({
       where: {
         userId,
@@ -280,7 +346,7 @@ router.put('/:name', async (req, res, next) => {
         ...(model !== undefined && { model }),
         ...(temperature !== undefined && { temperature }),
         ...(maxTokens !== undefined && { maxTokens }),
-        ...(systemPrompt !== undefined && { systemPrompt }),
+        ...(systemPrompt !== undefined && { systemPrompt: encryptSystemPrompt(systemPrompt) }),
         version: incrementVersion(agent.version),
         updatedAt: new Date()
       }
@@ -288,7 +354,10 @@ router.put('/:name', async (req, res, next) => {
 
     res.json({
       success: true,
-      data: updated
+      data: {
+        ...updated,
+        systemPrompt: decryptSystemPrompt(updated.systemPrompt) || ''
+      }
     });
   } catch (error) {
     next(error);
@@ -406,7 +475,8 @@ router.get('/:name/logs', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const { name } = req.params;
-    const limit = parseInt(req.query.limit as string) || 50;
+    // limit 钳制：防止 limit 无上限导致全表扫描（1-100）
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 100);
 
     if (!isOfficialAgent(name)) {
       return res.status(400).json({

@@ -17,8 +17,9 @@ interface Config {
   endpoint: string;
   apiKey: string;
   model: string;
+  reasoningModel?: string;
   thinkingMode?: 'default' | 'enabled' | 'disabled';
-  reasoningEffort?: 'default' | 'high' | 'max';
+  reasoningEffort?: 'default' | 'low' | 'high' | 'max';
   temperature: number;
   maxTokens: number;
   privateNetworkPolicy: ResolvedRoute['privateNetworkPolicy'];
@@ -170,7 +171,7 @@ export class APIRouter {
         maxTokens: inheritedRoute.maxTokens,
         timeoutMs: config.requestTimeoutMs == null
           ? inheritedRoute.timeoutMs
-          : Math.min(300_000, Math.max(10_000, config.requestTimeoutMs)),
+          : Math.min(600_000, Math.max(10_000, config.requestTimeoutMs)),
         timeoutSource: config.requestTimeoutMs != null ? 'skill-override' : inheritedRoute.timeoutSource,
         privateNetworkPolicy,
         source,
@@ -238,6 +239,7 @@ export class APIRouter {
           endpoint: true,
           apiKey: true,
           chatModel: true,
+          reasoningModel: true,
           enabled: true
         }
       });
@@ -251,6 +253,7 @@ export class APIRouter {
         endpoint: config.endpoint,
         apiKey: decryptSecret(config.apiKey, USER_KEY_CONTEXT) || '',
         model: this.resolveModel(config.chatModel),
+        reasoningModel: config.reasoningModel ? this.resolveModel(config.reasoningModel) : undefined,
         thinkingMode: 'default',
         reasoningEffort: 'default',
         temperature: 0.7,
@@ -382,11 +385,12 @@ export class APIRouter {
     return 'default';
   }
 
-  private normalizeReasoningEffort(value?: string | null): 'default' | 'high' | 'max' {
+  private normalizeReasoningEffort(value?: string | null): 'default' | 'low' | 'high' | 'max' {
     const normalized = (value || '').trim().toLowerCase();
-    if (normalized === 'high' || normalized === 'max') {
+    if (normalized === 'low' || normalized === 'high' || normalized === 'max') {
       return normalized;
     }
+    // medium/xhigh 等由上游映射处理，不在此归一；平台只显式表达 default/low/high/max
     return 'default';
   }
 
@@ -407,8 +411,8 @@ export class APIRouter {
         endpoint: config.apiUrl || this.resolveBaseEndpoint(),
         apiKey: this.resolvePlatformApiKey(config, config.apiUrl || this.resolveBaseEndpoint()),
         model: this.resolveModel(config.defaultModel),
-        thinkingMode: 'default',
-        reasoningEffort: 'default',
+        thinkingMode: this.normalizeThinkingMode(config.defaultThinkingMode || 'default'),
+        reasoningEffort: this.normalizeReasoningEffort(config.defaultReasoningEffort || 'default'),
         temperature: config.defaultTemperature ?? 0.7,
         maxTokens: config.defaultMaxTokens ?? 2000,
         privateNetworkPolicy: 'runtime',

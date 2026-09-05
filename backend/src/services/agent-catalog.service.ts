@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { getOfficialAgentDefinitionsForUsers } from './agent-manifest.service';
+import { getCanonicalAgentId, getOfficialAgentDefinitionsForUsers } from './agent-manifest.service';
 
 export type AgentLifecycleStatus = 'draft' | 'staging' | 'published';
 
@@ -50,7 +50,8 @@ async function writeRawCatalog(catalog: AgentCatalog): Promise<void> {
 }
 
 export function isOfficialAgent(agentId: string): boolean {
-  return OFFICIAL_AGENT_DEFINITIONS.some(agent => agent.id === agentId);
+  const canonicalId = getCanonicalAgentId(agentId);
+  return OFFICIAL_AGENT_DEFINITIONS.some(agent => agent.id === canonicalId);
 }
 
 export async function getAgentCatalog(): Promise<AgentCatalog> {

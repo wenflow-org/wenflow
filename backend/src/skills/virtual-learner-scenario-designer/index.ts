@@ -79,6 +79,52 @@ function isAllowedEnum<T extends string>(value: any, allowed: T[]): value is T {
   return allowed.includes(value);
 }
 
+/**
+ * 清洗传入的 existingPersonaSeed 中 enum 字段到白名单内。
+ *
+ * 背景：历史脏链路曾把非法 enum（如 motivationType="internal"）写进 existingPersonaSeed；
+ * prompt 规则要求"必须遵守 existingPersonaSeed"，模型会照抄非法值 → validator 失败 → 脏数据自我延续。
+ * 此处只对已知 enum 字段做白名单校正（非法值纠正到 persona normalize 同款默认），不改动其他字段。
+ */
+const EXISTING_PERSONA_ENUM_WHITELISTS: Record<string, { allowed: string[]; fallback: string }> = {
+  learningStyle: { allowed: ['reading', 'watching', 'doing', 'listening'], fallback: 'doing' },
+  motivationType: { allowed: ['career', 'interest', 'necessity', 'social'], fallback: 'career' },
+  availableTime: { allowed: ['minimal', 'moderate', 'abundant'], fallback: 'moderate' },
+  techComfort: { allowed: ['low', 'medium', 'high'], fallback: 'medium' },
+  sourceType: { allowed: ['work', 'life', 'study', 'self_management'], fallback: 'work' },
+};
+
+function sanitizeExistingPersonaSeed(seed: any): any {
+  if (!seed || typeof seed !== 'object') return seed;
+  const next = Array.isArray(seed) ? [...seed] : { ...seed };
+  for (const [field, { allowed, fallback }] of Object.entries(EXISTING_PERSONA_ENUM_WHITELISTS)) {
+    const value = next[field];
+    if (value !== undefined && value !== null && !isAllowedEnum(value, allowed)) {
+      next[field] = fallback;
+    }
+  }
+  // personalityTraits 子枚举
+  if (next.personalityTraits && typeof next.personalityTraits === 'object') {
+    const traits = { ...next.personalityTraits };
+    const traitWhitelists: Record<string, { allowed: string[]; fallback: string }> = {
+      verbosity: { allowed: ['terse', 'normal', 'verbose'], fallback: 'normal' },
+      enthusiasm: { allowed: ['low', 'normal', 'high'], fallback: 'normal' },
+      confusionStyle: { allowed: ['direct', 'hinting'], fallback: 'direct' },
+      patience: { allowed: ['low', 'normal', 'high'], fallback: 'normal' },
+      questionStyle: { allowed: ['none', 'clarifying', 'challenging'], fallback: 'clarifying' },
+      emotionalRange: { allowed: ['flat', 'moderate', 'expressive'], fallback: 'moderate' },
+    };
+    for (const [field, { allowed, fallback }] of Object.entries(traitWhitelists)) {
+      const value = traits[field];
+      if (value !== undefined && value !== null && !isAllowedEnum(value, allowed)) {
+        traits[field] = fallback;
+      }
+    }
+    next.personalityTraits = traits;
+  }
+  return next;
+}
+
 function normalizeDisclosurePlan(raw: any) {
   const data = raw && typeof raw === 'object' ? raw : {};
   return {
@@ -407,10 +453,10 @@ export async function virtualLearnerScenarioDesigner(input: any): Promise<SkillE
         preferredLevels: normalizeStringArray(payload?.preferredLevels),
         preferredMotivations: normalizeStringArray(payload?.preferredMotivations),
         avoidDomains: normalizeStringArray(payload?.avoidDomains),
-        candidateDomains: normalizeStringArray(payload?.candidateDomains, DEFAULT_CANDIDATE_DOMAINS),
-        candidatePersonas: normalizeStringArray(payload?.candidatePersonas, DEFAULT_CANDIDATE_PERSONAS),
+        candidateDomains: normalizeStringArray(payload?.candidateDomains),
+        candidatePersonas: normalizeStringArray(payload?.candidatePersonas),
         recentScenarioHints: normalizeStringArray(payload?.recentScenarioHints, DEFAULT_RECENT_SCENARIO_HINTS),
-        existingPersonaSeed: payload?.existingPersonaSeed && typeof payload.existingPersonaSeed === 'object' ? payload.existingPersonaSeed : undefined,
+        existingPersonaSeed: payload?.existingPersonaSeed && typeof payload.existingPersonaSeed === 'object' ? sanitizeExistingPersonaSeed(payload.existingPersonaSeed) : undefined,
         existingStoryPool: Array.isArray(payload?.existingStoryPool) ? payload.existingStoryPool.slice(0, 6) : undefined,
       }),
       validateParsedOutput: (parsed) => validateScenarioOutput(parsed),

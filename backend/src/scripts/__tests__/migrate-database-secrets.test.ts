@@ -17,6 +17,7 @@ jest.mock('../../config/database', () => ({
   default: {
     user_api_configs: userApis,
     user_agent_model_configs: userAgents,
+    user_agent_configs: userAgents,
     user_mcp_configs: { findMany: mainMcpFindMany, update: mainMcpUpdate },
     $disconnect: jest.fn()
   }

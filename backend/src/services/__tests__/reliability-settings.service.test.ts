@@ -35,10 +35,10 @@ describe('reliability settings service', () => {
 
   it('缺少持久化设置时返回安全默认值', async () => {
     await expect(getPlatformReliabilitySettings()).resolves.toEqual({
-      maxUpstreamAttempts: 3,
-      maxTransportRetries: 1,
-      maxLogicalRetries: 1,
-      defaultRequestTimeoutMs: 300000,
+      maxUpstreamAttempts: 5,
+      maxTransportRetries: 3,
+      maxLogicalRetries: 3,
+      defaultRequestTimeoutMs: 600000,
       retryBaseDelayMs: 1000,
       maxRetryAfterMs: 10000,
       jitterEnabled: true
@@ -57,10 +57,10 @@ describe('reliability settings service', () => {
     })
 
     expect(normalized).toEqual({
-      maxUpstreamAttempts: 5,
-      maxTransportRetries: 2,
-      maxLogicalRetries: 2,
-      defaultRequestTimeoutMs: 300000,
+      maxUpstreamAttempts: 10,
+      maxTransportRetries: 5,
+      maxLogicalRetries: 5,
+      defaultRequestTimeoutMs: 600000,
       retryBaseDelayMs: 5000,
       maxRetryAfterMs: 10000,
       jitterEnabled: false
@@ -89,7 +89,7 @@ describe('reliability settings service', () => {
 
     const budget = await createRuntimeRetryBudget()
     const skillLimit = await getEffectiveLogicalRetryLimit(
-      'learning-turn',
+      'teaching-turn',
       budget.limits.maxLogicalRetries
     )
 
@@ -110,7 +110,7 @@ describe('reliability settings service', () => {
   it('Skill 不能提高平台逻辑重试上限', async () => {
     skillFindUnique.mockResolvedValue({ maxLogicalRetries: 2 })
 
-    await expect(getEffectiveLogicalRetryLimit('learning-turn', 0)).resolves.toBe(0)
-    await expect(getEffectiveLogicalRetryLimit('learning-turn', 1)).resolves.toBe(1)
+    await expect(getEffectiveLogicalRetryLimit('teaching-turn', 0)).resolves.toBe(0)
+    await expect(getEffectiveLogicalRetryLimit('teaching-turn', 1)).resolves.toBe(1)
   })
 })

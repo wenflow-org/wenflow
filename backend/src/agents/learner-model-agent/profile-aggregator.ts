@@ -6,6 +6,7 @@
 
 import prisma from '../../config/database';
 import learningStateService from '../../services/learning/learning-state.service';
+import { computeCalibrationBias } from '../../services/learner/calibration.service';
 import {
   LearnerModelProfile,
   CognitiveProfile,
@@ -24,10 +25,6 @@ import {
   TheoryVsPractice,
   SessionLength
 } from './types';
-import { studentBaselineService } from '../../services/student-baseline.service';
-import { executeSkill } from '../../skills';
-import { goalProfileInferenceDefinition } from '../../skills/goal-profile-inference';
-import { learningPatternDistillerDefinition } from '../../skills/learning-pattern-distiller';
 import { logger } from '../../utils/logger';
 
 function mergeStringArrays(...values: Array<Array<string> | undefined>): string[] {
@@ -111,21 +108,28 @@ export class ProfileAggregator {
   async aggregateProfile(userId: string): Promise<ProfileAggregationResult> {
     const changes: string[] = [];
     
-    const [goalConversation, baseline, metrics, sessions] = await Promise.all([
+    const [goalConversation, baseline, metrics, sessions, calibrationBias] = await Promise.all([
       this.fetchGoalConversationData(userId),
       this.fetchBaselineData(userId),
       this.fetchMetricsData(userId),
-      this.fetchSessionData(userId)
+      this.fetchSessionData(userId),
+      computeCalibrationBias(userId),
     ]);
     
     const cognitive = this.mergeCognitive(goalConversation?.cognitive, changes);
+    // 元认知校准闭环：数据驱动校准（来自 memory_traces FSRS 实际表现）覆盖 LLM 理解的自评
+    if (calibrationBias !== 'accurate') {
+      cognitive.selfAssessmentAccuracy = calibrationBias;
+      changes.push(`认知校准：LLM 自评 → 数据驱动 ${calibrationBias}`);
+    }
     const behavioral = this.mergeBehavioral(baseline, changes);
     const learning = this.mergeLearning(metrics, goalConversation?.background, changes);
     const preferences = this.mergePreferences(goalConversation?.preferences, changes);
     const emotional = this.mergeEmotional(goalConversation?.emotional, changes);
     const history = this.mergeHistory(sessions, changes);
+    // 画像叙述由 buildNarrativeInsights 确定性产出；原 goal-profile-inference / learning-pattern-distiller
+    // LLM 增强已移除（输入与输出同字段、换措辞零增量，2026-08 去 LLM 化）
     const narrativeInsights = this.buildNarrativeInsights({ goalConversation, cognitive, preferences, emotional, learning, history });
-    await this.enhanceNarrativeInsights({ userId, goalConversation, narrativeInsights, history });
     const curriculumControls = this.buildCurriculumControls({ preferences, emotional, learning, narrativeInsights });
     
     const derivedInsights = this.calculateDerivedInsights({
@@ -221,7 +225,11 @@ export class ProfileAggregator {
         preferences: {
           preferredStyle: understanding.learning_style?.preferred_format as PreferredStyle,
           theoryVsPractice: understanding.learning_style?.theory_vs_practice as TheoryVsPractice,
-          sessionLength: this.inferSessionLength(understanding.background?.available_time)
+          sessionLength: this.inferSessionLength(
+            understanding.available_resources?.time_budget
+              || understanding.available_resources?.time_horizon
+              || understanding.background?.available_time
+          )
         },
         emotional: {
           motivationTrigger: understanding.emotional_profile?.motivation_trigger,
@@ -229,8 +237,10 @@ export class ProfileAggregator {
           confidenceLevel: understanding.emotional_profile?.confidence_level
         },
         background: {
-          currentLevel: understanding.background?.current_level,
-          availableTime: understanding.background?.available_time
+          currentLevel: understanding.current_baseline?.level || understanding.background?.current_level,
+          availableTime: understanding.available_resources?.time_budget
+            || understanding.available_resources?.time_horizon
+            || understanding.background?.available_time
         },
         narratives: {
           realProblem: understanding.real_problem,
@@ -241,8 +251,10 @@ export class ProfileAggregator {
             : understanding.background_experience,
           painPoints: Array.isArray(understanding.pain_points) ? understanding.pain_points : [],
           learningSignal: understanding.learning_signal,
-          currentLevel: understanding.background?.current_level,
-          availableTime: understanding.background?.available_time
+          currentLevel: understanding.current_baseline?.level || understanding.background?.current_level,
+          availableTime: understanding.available_resources?.time_budget
+            || understanding.available_resources?.time_horizon
+            || understanding.background?.available_time
         },
         learnerBackground,
       };
@@ -253,19 +265,10 @@ export class ProfileAggregator {
   }
   
   private async fetchBaselineData(userId: string): Promise<BehavioralBaseline | null> {
-    try {
-      const baseline = await studentBaselineService.getOrCreateBaseline(userId);
-      return {
-        avgResponseTime: baseline.responseTime.ema,
-        avgMessageLength: baseline.messageLength.ema,
-        avgInteractionInterval: baseline.interactionInterval.ema,
-        engagementLevel: this.calculateEngagement(baseline),
-        consistencyScore: this.calculateConsistency(baseline)
-      };
-    } catch (error) {
-      logger.error('[profile-aggregator] failed to fetch baseline data', { userId, error });
-      return null;
-    }
+    // EMA 统计基线已退役（2026-08 M1 认知负荷改造：交互特征 + LLM 语义判断承担）；
+    // behavioral 画像回落到 DEFAULT_BEHAVIORAL，student_baselines 表随迁移删除。
+    void userId;
+    return null;
   }
   
   private async fetchMetricsData(userId: string): Promise<LearningState | null> {
@@ -573,90 +576,6 @@ export class ProfileAggregator {
     };
   }
 
-  private async enhanceNarrativeInsights(input: {
-    userId: string;
-    goalConversation?: {
-      narratives?: {
-        realProblem?: string;
-        surfaceGoal?: string;
-        motivation?: string;
-        backgroundExperience?: string;
-        painPoints?: string[];
-        learningSignal?: any;
-        currentLevel?: string;
-        availableTime?: string;
-      };
-    } | null;
-    narrativeInsights: LearnerNarrativeInsights;
-    history: InteractionHistory;
-  }): Promise<void> {
-    try {
-      const goalUnderstanding = input.goalConversation?.narratives
-        ? {
-            real_problem: input.goalConversation.narratives.realProblem,
-            surface_goal: input.goalConversation.narratives.surfaceGoal,
-            motivation: input.goalConversation.narratives.motivation,
-            background_experience: input.goalConversation.narratives.backgroundExperience,
-            pain_points: input.goalConversation.narratives.painPoints,
-            learning_signal: input.goalConversation.narratives.learningSignal,
-            background: {
-              current_level: input.goalConversation.narratives.currentLevel,
-              available_time: input.goalConversation.narratives.availableTime,
-            }
-          }
-        : null;
-
-      if (goalUnderstanding) {
-        const goalResult = await executeSkill(goalProfileInferenceDefinition, {
-          understanding: goalUnderstanding,
-        }).catch(() => null);
-        if (goalResult) {
-          Object.assign(input.narrativeInsights, {
-            goalNarrative: goalResult.goalNarrative || input.narrativeInsights.goalNarrative,
-            backgroundContextNote: goalResult.backgroundContextNote || input.narrativeInsights.backgroundContextNote,
-            motivationNarrative: goalResult.motivationNarrative || input.narrativeInsights.motivationNarrative,
-            timeConstraintNote: goalResult.timeConstraintNote || input.narrativeInsights.timeConstraintNote,
-            selfAssessmentNote: goalResult.selfAssessmentNote || input.narrativeInsights.selfAssessmentNote,
-          });
-        }
-      }
-
-      if (input.history.totalSessions <= 0) return;
-
-      const learnerSnapshotLike = {
-        profile: {
-          preferences: {
-            preferredStyle: input.narrativeInsights.contentReceptionPattern,
-            theoryVsPractice: input.narrativeInsights.practicePreferenceNote,
-          },
-          emotional: {
-            confidenceLevel: input.narrativeInsights.supportStyleNote,
-          }
-        },
-        dynamicState: {
-          recommendedPacing: input.narrativeInsights.taskGranularityNote,
-        }
-      };
-
-      const learningPatternResult = await executeSkill(learningPatternDistillerDefinition, {
-        learnerSnapshot: learnerSnapshotLike,
-      }).catch(() => null);
-
-      if (learningPatternResult) {
-        Object.assign(input.narrativeInsights, {
-          contentReceptionPattern: learningPatternResult.contentReceptionPattern || input.narrativeInsights.contentReceptionPattern,
-          practicePreferenceNote: learningPatternResult.practicePreferenceNote || input.narrativeInsights.practicePreferenceNote,
-          frictionPatternNote: learningPatternResult.frictionPatternNote || input.narrativeInsights.frictionPatternNote,
-          effectiveTeachingPattern: learningPatternResult.effectiveTeachingPattern || input.narrativeInsights.effectiveTeachingPattern,
-          supportStyleNote: learningPatternResult.supportStyleNote || input.narrativeInsights.supportStyleNote,
-          taskGranularityNote: learningPatternResult.taskGranularityNote || input.narrativeInsights.taskGranularityNote,
-        });
-      }
-    } catch {
-      // Narrative enhancement is best-effort only.
-    }
-  }
-  
   private identifyRiskFactors(profile: Partial<LearnerModelProfile>): string[] {
     const risks: string[] = [];
     
@@ -693,22 +612,6 @@ export class ProfileAggregator {
     }
     
     return strengths;
-  }
-  
-  private calculateEngagement(baseline: any): number {
-    if (!baseline) return 0.5;
-    const responseRate = 1 / (1 + Math.exp(-(baseline.responseTime.ema - 10) / 5));
-    const lengthScore = Math.min(1, baseline.messageLength.ema / 100);
-    return (responseRate + lengthScore) / 2;
-  }
-  
-  private calculateConsistency(baseline: any): number {
-    if (!baseline) return 0.5;
-    const variance = (
-      (baseline.responseTime.emVar || 1) +
-      (baseline.messageLength.emVar || 100) / 100
-    ) / 2;
-    return Math.max(0, 1 - variance);
   }
   
   private inferProgress(metricsOrTrends: any): 'improving' | 'stable' | 'declining' {

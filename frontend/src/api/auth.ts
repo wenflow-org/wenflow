@@ -4,11 +4,13 @@ import api from '../utils/api';
 export interface LoginData {
   name: string;
   password: string;
+  remember?: boolean;
 }
 
 export interface RegisterData {
   name: string;
   password: string;
+  remember?: boolean;
 }
 
 export interface AuthResponse {
@@ -16,7 +18,6 @@ export interface AuthResponse {
     id: string;
     name: string;
   };
-  token: string;
 }
 
 interface AuthPayloadEnvelope {
@@ -34,53 +35,49 @@ const unwrapAuthPayload = <T>(response: unknown): T => {
 };
 
 export const authAPI = {
-
-  // 鐧诲綍
-
+  // 登录
   async login(data: LoginData): Promise<AuthResponse> {
-
     const response = await api.post('/auth/login', data);
-
     return unwrapAuthPayload<AuthResponse>(response);
-
   },
 
-
-
-  // 娉ㄥ唽
-
+  // 注册
   async register(data: RegisterData): Promise<AuthResponse> {
-
     const response = await api.post('/auth/register', data);
-
     return unwrapAuthPayload<AuthResponse>(response);
-
   },
 
-  // 娉ㄥ唽鐘舵€?
+  // 注册状态
   async getRegistrationStatus(): Promise<{
     registrationEnabled: boolean;
     configuredRegistrationEnabled?: boolean;
     temporaryUnavailable?: boolean;
+    maxAccountsPerIpPerDay?: number;
   }> {
     const response = await api.get('/auth/registration-status');
     return unwrapAuthPayload<{
       registrationEnabled: boolean;
       configuredRegistrationEnabled?: boolean;
       temporaryUnavailable?: boolean;
+      maxAccountsPerIpPerDay?: number;
     }>(response) || { registrationEnabled: false, temporaryUnavailable: true };
   },
 
-
-
-  // 楠岃瘉 token
-
-  async verifyToken(token: string): Promise<unknown> {
-
-    const response = await api.post('/auth/verify', { token });
-
+  // 认证API
+  // 忘记密码 / 重置密码
+  async forgotPassword(name: string): Promise<unknown> {
+    const response = await api.post('/auth/forgot-password', { name });
     return unwrapAuthPayload<unknown>(response);
+  },
 
+  async resetPassword(token: string, newPassword: string): Promise<unknown> {
+    const response = await api.post('/auth/reset-password', { token, newPassword });
+    return unwrapAuthPayload<unknown>(response);
+  },
+
+  // 验证 token
+  async verifyToken(token: string): Promise<unknown> {
+    const response = await api.post('/auth/verify', { token });
+    return unwrapAuthPayload<unknown>(response);
   }
-
 };

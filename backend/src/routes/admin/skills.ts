@@ -8,19 +8,17 @@ import { Router, Request, Response } from 'express';
 import prisma from '../../config/database';
 import systemPrisma from '../../config/system-database';
 import { getGateway } from '../../gateway';
+import { APIRouter } from '../../gateway/api-gateway/router';
 import { AgentConfigService } from '../../services/agentConfig.service';
-import { getAgentManifest, getCanonicalAgentId } from '../../services/agent-manifest.service';
+import { getAgentManifest, getAgentOfSkill, getCanonicalAgentId } from '../../services/agent-manifest.service';
 import {
   getUnifiedSkillStats,
   resolveEffectiveSkillRuntimeConfig,
   toLegacySkillRuntimeStats,
   type SkillStatsRange,
 } from '../../services/skill-runtime-contract.service';
-import { PATH_SCENE_FRAMING_PROMPT } from '../../skills/path-scene-framing';
 import { STAGE_DESIGNER_PROMPT } from '../../skills/stage-designer';
 import { ADAPTIVE_GUIDANCE_COPY_PROMPT } from '../../skills/adaptive-guidance-copy';
-import { GOAL_PROFILE_INFERENCE_PROMPT } from '../../skills/goal-profile-inference';
-import { LEARNING_PATTERN_DISTILLER_PROMPT } from '../../skills/learning-pattern-distiller';
 import { VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT } from '../../skills/virtual-learner-persona-designer';
 import { VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT } from '../../skills/virtual-learner-scenario-designer';
 import { VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT } from '../../skills/virtual-learner-goal-dialogue-simulator';
@@ -30,16 +28,25 @@ import { VIRTUAL_LEARNER_REFEREE_PROMPT } from '../../skills/virtual-learner-ref
 import { VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT } from '../../skills/virtual-learner-actor-auditor';
 import { GOAL_UNDERSTANDING_COMPOSER_PROMPT } from '../../skills/goal-understanding-composer';
 import { ACCEPTANCE_EVIDENCE_EVALUATOR_PROMPT } from '../../skills/acceptance-evidence-evaluator';
-import { STRUCTURED_OUTPUT_PARSER_PROMPT } from '../../skills/structured-output-parser';
+import { checkSkillsReadiness } from '../../services/skills-readiness.service';
+import { analyzeW2 } from '../../services/skills-readiness.service';
+import { loadSkillsBookRaw } from '../../services/skill-registry/skills-file';
+import { getSkillCompletion } from '../../services/skill-registry/skill-completion.service';
+import {
+  scaffoldSkill,
+  getScaffoldMeta,
+  ScaffoldInputError,
+  ScaffoldConflictError,
+} from '../../services/skill-registry/skill-scaffold.service';
+import { listRawManifestEntries } from '../../services/agent-manifest.service';
+import { loadOrchestrationFiles } from '../../services/field-routing/orchestration-file';
+import { writeNodeConfigChange } from '../../services/node-config-change-audit';
 
 const router = Router();
 
 const SKILL_FALLBACK_PROMPTS: Record<string, string> = {
-  'path-scene-framing': PATH_SCENE_FRAMING_PROMPT,
   'stage-designer': STAGE_DESIGNER_PROMPT,
   'adaptive-guidance-copy': ADAPTIVE_GUIDANCE_COPY_PROMPT,
-  'goal-profile-inference': GOAL_PROFILE_INFERENCE_PROMPT,
-  'learning-pattern-distiller': LEARNING_PATTERN_DISTILLER_PROMPT,
   'virtual-learner-persona-designer': VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT,
   'virtual-learner-scenario-designer': VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT,
   'virtual-learner-goal-dialogue-simulator': VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT,
@@ -49,7 +56,6 @@ const SKILL_FALLBACK_PROMPTS: Record<string, string> = {
   'virtual-learner-actor-auditor': VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT,
   'goal-understanding-composer': GOAL_UNDERSTANDING_COMPOSER_PROMPT,
   'acceptance-evidence-evaluator': ACCEPTANCE_EVIDENCE_EVALUATOR_PROMPT,
-  'structured-output-parser': STRUCTURED_OUTPUT_PARSER_PROMPT,
 };
 
 type SkillRuntimeStats = {
@@ -125,6 +131,7 @@ router.get('/', async (req: Request, res: Response) => {
     
     const skillList = skills.map(s => {
       const stats = runtimeStats.get(s.definition.name) || s.definition.stats;
+      const agentOf = getAgentOfSkill(s.definition.name);
       return {
         name: s.definition.name,
         version: s.definition.version,
@@ -134,7 +141,10 @@ router.get('/', async (req: Request, res: Response) => {
         dependencies: s.definition.dependencies,
         stats,
         lastCalledAt: runtimeStats.get(s.definition.name)?.lastCalledAt || s.lastCalledAt,
-        registeredAt: s.registeredAt
+        registeredAt: s.registeredAt,
+        displayName: s.definition.displayName || s.definition.name,
+        agentId: agentOf?.id ?? null,
+        agentName: agentOf?.name ?? null
       };
     });
     
@@ -151,48 +161,89 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 /**
- * 按分类统计
+ * GET /api/admin/skills/scaffold/meta
+ * scaffold 表单元数据：kind/stage 枚举 + manifest kind=agent 条目（parentAgent 下拉数据源）。
  */
-router.get('/categories', async (req: Request, res: Response) => {
+router.get('/scaffold/meta', async (_req: Request, res: Response) => {
   try {
-    const gateway = getGateway();
-    const skills = gateway.matchSkills({});
-    
-    const categoryMap: Record<string, { count: number; totalCalls: number; avgSuccessRate: number }> = {};
-    
-    skills.forEach(s => {
-      const cat = s.definition.category;
-      if (!categoryMap[cat]) {
-        categoryMap[cat] = { count: 0, totalCalls: 0, avgSuccessRate: 0 };
-      }
-      categoryMap[cat].count++;
-      categoryMap[cat].totalCalls += s.definition.stats.callCount;
-    });
-    
-    Object.keys(categoryMap).forEach(cat => {
-      const catSkills = skills.filter(s => s.definition.category === cat);
-      categoryMap[cat].avgSuccessRate = catSkills.length > 0
-        ? catSkills.reduce((sum, s) => sum + s.definition.stats.successRate, 0) / catSkills.length
-        : 0;
-    });
-    
-    const categories = Object.entries(categoryMap).map(([name, data]) => ({
-      name,
-      label: getCategoryLabel(name),
-      ...data
-    }));
-    
-    res.json({
-      success: true,
-      data: categories
-    });
+    const meta = getScaffoldMeta();
+    res.json({ success: true, data: meta });
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: { message: error instanceof Error ? error.message : 'scaffold meta 加载失败' },
     });
   }
 });
+
+/**
+ * POST /api/admin/skills/scaffold
+ * 新建 Skill 一条龙（SCAFFOLD_P5_SURVEY §5 / SKILL_READINESS_SPEC §5 步骤 1）：
+ * 确定性生成 core.yaml 骨架 + skills.yaml 条目 + 编排 contracts 追加（mainline）+ handler 占位，
+ * 每个生成物写盘前后过对应校验器；注册/接线片段仅返回文本不落盘。
+ *
+ * 幂等（以 skills.yaml 为唯一状态事实）：
+ *   条目与生成物齐备 → 409 already-exists；条目在但缺生成物 → 200 completed（补齐缺失）。
+ * 响应：{ success, data: { skillId, kind, status, generated, completion, snippets, note } }
+ */
+router.post('/scaffold', async (req: Request, res: Response) => {
+  try {
+    if (process.env.SKILLS_FILE_DISABLED === '1') {
+      return res.status(503).json({
+        success: false,
+        error: { message: 'SKILLS_FILE_DISABLED=1 过渡开关打开，户口簿未加载，拒绝写盘（无人校验）' },
+      });
+    }
+    const outcome = await scaffoldSkill(req.body || {});
+    if (outcome.status === 'already-exists') {
+      return res.status(409).json({
+        success: false,
+        error: { message: `skillId "${outcome.skillId}" 已存在（skills.yaml 有条目且生成物齐备）；如需补齐缺失生成物请直接重放本请求` },
+        data: { skillId: outcome.skillId, completion: outcome.completion },
+      });
+    }
+    // P2 审计补强：scaffold 写 node_config_changes（changeType='skill-scaffold'，targetId=skillId，
+    // before=null，after=生成物清单摘要）——审计失败不阻断写盘结果
+    try {
+      const actorId = (req as Request & { user?: { userId?: string } }).user?.userId || 'admin';
+      const body = (req.body || {}) as { stage?: string; parentAgent?: string };
+      await writeNodeConfigChange(systemPrisma, {
+        changeType: 'skill-scaffold',
+        targetTable: 'skills',
+        targetId: outcome.skillId,
+        before: null,
+        after: {
+          status: outcome.status,
+          kind: outcome.kind,
+          stage: body.stage ?? null,
+          parentAgent: body.parentAgent ?? null,
+          generated: outcome.generated,
+          snippetCount: outcome.snippets?.length ?? 0,
+        },
+        actorId,
+        reason: `skill scaffold 生成（status=${outcome.status}）`,
+      });
+    } catch (auditError) {
+      console.error(`[skills:scaffold] 审计写入失败（不阻断响应）:`, auditError);
+    }
+    res.json({ success: true, data: outcome });
+  } catch (error) {
+    if (error instanceof ScaffoldInputError) {
+      return res.status(400).json({ success: false, error: { message: error.message } });
+    }
+    if (error instanceof ScaffoldConflictError) {
+      return res.status(409).json({ success: false, error: { message: error.message } });
+    }
+    res.status(500).json({
+      success: false,
+      error: { message: error instanceof Error ? error.message : 'scaffold 执行失败' },
+    });
+  }
+});
+
+/**
+ * 按分类统计
+ */
 
 
 /**
@@ -203,74 +254,6 @@ router.get('/categories', async (req: Request, res: Response) => {
  * 
  * 注意：此函数路由必须在 /:name 通配路由之前注册，避免 Express 把 "agent-relations" 当作 skill name 匹配。
  */
-router.get('/agent-relations', async (_req: Request, res: Response) => {
-  try {
-    const gateway = getGateway();
-    const skills = gateway.matchSkills({});
-    const allSkillNames = skills.map(s => s.definition.name);
-
-    const relations: Record<string, { agents: string[]; orchestrators: string[]; totalReferences: number }> = {};
-    for (const name of allSkillNames) {
-      relations[name] = { agents: [], orchestrators: [], totalReferences: 0 };
-    }
-
-    const fs = await import('fs');
-    const path = await import('path');
-
-    const agentDir = path.resolve(__dirname, '../../agents');
-    const orchDir = path.resolve(__dirname, '../../orchestrators');
-
-    function scanDir(dir: string, kind: 'agents' | 'orchestrators') {
-      if (!fs.existsSync(dir)) return;
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          scanDir(fullPath, kind);
-        } else if (entry.isFile() && entry.name.endsWith('.ts')) {
-          try {
-            const content = fs.readFileSync(fullPath, 'utf-8');
-            const dirName = entry.name === 'index.ts'
-              ? path.basename(path.dirname(fullPath))
-              : entry.name.replace('.ts', '');
-            for (const skillName of allSkillNames) {
-              if (
-                content.includes(`'${skillName}'`) ||
-                content.includes(`"${skillName}"`) ||
-                content.includes(`skill:${skillName}`) ||
-                content.includes(`skills/${skillName}`)
-              ) {
-                if (kind === 'agents') {
-                  relations[skillName].agents.push(dirName);
-                } else {
-                  relations[skillName].orchestrators.push(dirName);
-                }
-                relations[skillName].totalReferences++;
-              }
-            }
-          } catch {
-            // skip unreadable files
-          }
-        }
-      }
-    }
-
-    scanDir(agentDir, 'agents');
-    scanDir(orchDir, 'orchestrators');
-
-    for (const [skillName, rel] of Object.entries(relations)) {
-      rel.agents = [...new Set(rel.agents)];
-      rel.orchestrators = [...new Set(rel.orchestrators)];
-    }
-
-    res.json({ success: true, data: relations });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
 
 /**
  * 批量获取 Skill Prompt 摘要
@@ -282,181 +265,14 @@ router.get('/agent-relations', async (_req: Request, res: Response) => {
  *
  * 注意：此路由必须在 /:name 通配路由之前注册，避免 Express 把 "prompt-summaries" 当作 skill name 匹配。
  */
-router.get('/prompt-summaries', async (req: Request, res: Response) => {
-  try {
-    const rawSkillIds = String(req.query.skillIds || '');
-    const skillIds = Array.from(new Set(
-      rawSkillIds
-        .split(',')
-        .map((item) => item.trim().replace(/^skill:/, ''))
-        .filter((item) => !!item)
-    )).slice(0, 100);
-
-    if (!skillIds.length) {
-      return res.json({ success: true, data: { summaries: {} } });
-    }
-
-    // 汇总所有候选 agentId（skill: 前缀 id + 规范 id + manifest 别名），一次查询代替逐 Skill 查询
-    const candidateIdsBySkill = new Map<string, string[]>();
-    const allCandidateIds = new Set<string>();
-    for (const skillId of skillIds) {
-      const lookupId = `skill:${skillId}`;
-      const manifest = getAgentManifest(lookupId);
-      const candidates = new Set<string>([lookupId, getCanonicalAgentId(lookupId)]);
-      for (const alias of manifest?.aliases || []) {
-        candidates.add(alias);
-      }
-      const ids = Array.from(candidates);
-      candidateIdsBySkill.set(skillId, ids);
-      ids.forEach((id) => allCandidateIds.add(id));
-    }
-
-    const prompts = await systemPrisma.agent_prompts.findMany({
-      where: { agentId: { in: Array.from(allCandidateIds) } },
-      orderBy: [
-        { agentId: 'asc' },
-        { version: 'desc' },
-      ],
-      select: {
-        id: true,
-        agentId: true,
-        version: true,
-        name: true,
-        description: true,
-        status: true,
-        model: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-
-    const promptsByAgentId = new Map<string, typeof prompts>();
-    for (const prompt of prompts) {
-      const list = promptsByAgentId.get(prompt.agentId) || [];
-      list.push(prompt);
-      promptsByAgentId.set(prompt.agentId, list);
-    }
-
-    const gateway = getGateway();
-    const summaries: Record<string, {
-      skillId: string;
-      agentId: string;
-      source: 'db' | 'code-fallback' | 'generated-default' | 'missing';
-      prompt: unknown;
-    }> = {};
-
-    for (const skillId of skillIds) {
-      const agentId = `skill:${skillId}`;
-      const candidateIds = candidateIdsBySkill.get(skillId) || [agentId];
-      const versions = candidateIds.flatMap((id) => promptsByAgentId.get(id) || []);
-      const selected = versions.find((item) => (item.status || '').toUpperCase() === 'ACTIVE') || versions[0] || null;
-
-      if (selected) {
-        summaries[skillId] = { skillId, agentId, source: 'db', prompt: selected };
-        continue;
-      }
-
-      if (SKILL_FALLBACK_PROMPTS[skillId]) {
-        summaries[skillId] = { skillId, agentId, source: 'code-fallback', prompt: null };
-        continue;
-      }
-
-      if (gateway.getSkill(skillId)) {
-        summaries[skillId] = { skillId, agentId, source: 'generated-default', prompt: null };
-        continue;
-      }
-
-      summaries[skillId] = { skillId, agentId, source: 'missing', prompt: null };
-    }
-
-    res.json({ success: true, data: { summaries } });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
 
 /**
  * 获取 Skill 详情
  */
-router.get('/:name', async (req: Request, res: Response) => {
-  try {
-    const { name } = req.params;
-    const gateway = getGateway();
-    const skill = gateway.getSkill(name);
-    const runtimeStats = await getSkillRuntimeStats([name]);
-    
-    if (!skill) {
-      return res.status(404).json({
-        success: false,
-        error: 'Skill not found'
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: {
-        name: skill.definition.name,
-        version: skill.definition.version,
-        category: skill.definition.category,
-        description: skill.definition.description,
-        inputSchema: skill.definition.inputSchema,
-        outputSchema: skill.definition.outputSchema,
-        capabilities: skill.definition.capabilities,
-        dependencies: skill.definition.dependencies,
-        stats: runtimeStats.get(name) || skill.definition.stats,
-        lastCalledAt: runtimeStats.get(name)?.lastCalledAt || skill.lastCalledAt,
-        registeredAt: skill.registeredAt
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
 
 /**
  * 获取 Skill 数据库统计
  */
-router.get('/:name/db-stats', async (req: Request, res: Response) => {
-  try {
-    const { name } = req.params;
-    
-    const record = await systemPrisma.skill_registrations.findUnique({
-      where: { name }
-    });
-    
-    if (!record) {
-      return res.status(404).json({
-        success: false,
-        error: 'Skill not found in database'
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: {
-        name: record.name,
-        version: record.version,
-        category: record.category,
-        description: record.description,
-        callCount: record.callCount,
-        successRate: record.successRate,
-        createdAt: record.createdAt,
-        updatedAt: record.updatedAt
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
 
 /**
  * 测试执行 Skill
@@ -494,6 +310,225 @@ router.post('/:name/test', async (req: Request, res: Response) => {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : undefined) : undefined
+    });
+  }
+});
+
+/**
+ * POST /:name/model-probe — 模型延迟探测（不执行 handler，直发上游）
+ *
+ * 用该 skill 的 resolve 路由（model/thinking/effort/endpoint）+ ACTIVE prompt，按
+ * 指定思考档发一次流式请求，返回延迟与质量指标。admin 改为表单里的思考档后，
+ * 点「试测」即可看新档位真实表现，不落库、不改配置。
+ *
+ * body（均可覆盖 resolve 后的生效值）:
+ * - thinkingMode: 'default' | 'enabled' | 'disabled'（不传=跟随 resolve）
+ * - reasoningEffort: 'default' | 'low' | 'high' | 'max'
+ * - testInput: 附加的 user 消息（默认给个最小探测指令）
+ * - timeoutMs: 覆盖超时（默认 180s）
+ */
+router.post('/:name/model-probe', async (req: Request, res: Response) => {
+  const startedAt = Date.now();
+  try {
+    const { name } = req.params;
+    const body = (req.body || {}) as {
+      thinkingMode?: string;
+      reasoningEffort?: string;
+      testInput?: string;
+      timeoutMs?: number;
+    };
+
+    // 1) resolve 真实路由（继承 skill_model_configs / agent / platform）
+    const routerInstance = new APIRouter();
+    const route = await routerInstance.resolve({ skillId: name }, (req as any).user?.userId);
+
+    // 2) 加载 ACTIVE prompt（与 gateway 同源，编译产物优先）
+    const agentId = `skill:${name}`;
+    const agentConfig = new AgentConfigService();
+    const active = await agentConfig.getActivePrompt(agentId);
+    const systemPrompt = active?.systemPrompt || '';
+    if (!systemPrompt) {
+      return res.status(400).json({ success: false, error: `Skill「${name}」无 ACTIVE prompt` });
+    }
+
+    // 3) 档位覆盖（低层已支持 low 透传；提 max 收敛 high）
+    const thinkingMode = body.thinkingMode || route.thinkingMode || 'default';
+    const reasoningEffort = body.reasoningEffort || route.reasoningEffort || 'default';
+    const effectiveEffort = thinkingMode === 'disabled' ? 'default' : reasoningEffort;
+
+    // 4) 发流式请求（与 executor 同协议：stream + include_usage）
+    const endpointBase = route.endpoint.replace(/\/$/, '');
+    const endpoint = endpointBase.endsWith('/v1')
+      ? `${endpointBase}/chat/completions`
+      : `${endpointBase}/v1/chat/completions`;
+
+    const userMsg = body.testInput?.trim() || '请用一句简短的中文说明你接到的指令并输出一个最小 JSON 示例。';
+    const timeoutMs = Math.min(180_000, Math.max(10_000, Number(body.timeoutMs) || 180_000));
+
+    const requestBody: Record<string, any> = {
+      model: route.model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMsg },
+      ],
+      max_tokens: 131072,
+      stream: true,
+      stream_options: { include_usage: true },
+      ...(thinkingMode === 'disabled'
+        ? { thinking: { type: 'disabled' } }
+        : thinkingMode === 'enabled'
+          ? { thinking: { type: 'enabled' }, ...(effectiveEffort !== 'default' ? { reasoning_effort: effectiveEffort } : {}) }
+          : {}),
+    };
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    let upstreamFetch: Awaited<ReturnType<typeof fetch>>;
+    try {
+      upstreamFetch = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${route.apiKey}`,
+        },
+        body: JSON.stringify(requestBody),
+        signal: ctrl.signal,
+      });
+    } catch (error: any) {
+      clearTimeout(timer);
+      const aborted = error?.name === 'AbortError';
+      return res.status(aborted ? 504 : 502).json({
+        success: false,
+        data: {
+          durationMs: Date.now() - startedAt,
+          resolved: {
+            model: route.model,
+            thinkingMode,
+            reasoningEffort: effectiveEffort,
+            source: route.source,
+            endpoint,
+          },
+          aborted,
+        },
+        error: aborted ? `上游 ${timeoutMs}ms 内未响应（超时）` : error?.message || '上游请求失败',
+      });
+    }
+    clearTimeout(timer);
+
+    const upstream = upstreamFetch;
+    if (upstream.status !== 200) {
+      const errText = (await upstream.text()).slice(0, 300);
+      return res.status(502).json({
+        success: false,
+        data: {
+          durationMs: Date.now() - startedAt,
+          upstreamStatus: upstream.status,
+          resolved: {
+            model: route.model,
+            thinkingMode,
+            reasoningEffort: effectiveEffort,
+            source: route.source,
+            endpoint,
+          },
+          errText,
+        },
+        error: `上游返回 ${upstream.status}`,
+      });
+    }
+
+    // 5) 流式解析：区分 content / reasoning，统计 TTFT 与 usage
+    const reader = upstream.body?.getReader();
+    if (!reader) return res.status(502).json({ success: false, error: '上游流式响应不可读' });
+
+    const decoder = new TextDecoder();
+    let buf = '';
+    let content = '';
+    let reasoning = '';
+    let finish = '';
+    let usage: any = null;
+    let firstContentAt: number | null = null;
+    let firstReasonAt: number | null = null;
+    let done = false;
+
+    const readTimer = setTimeout(() => ctrl.abort(), timeoutMs);
+    while (!done) {
+      let value: Uint8Array | undefined;
+      let streamDone = false;
+      try {
+        ({ value, done: streamDone } = await reader.read());
+      } catch {
+        break;
+      }
+      done = streamDone;
+      if (!value) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx: number;
+      while ((idx = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 1);
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (data === '[DONE]') { done = true; break; }
+        try {
+          const evt = JSON.parse(data);
+          const delta = evt.choices?.[0]?.delta;
+          if (delta) {
+            if (typeof delta.content === 'string' && delta.content) {
+              if (firstContentAt === null) firstContentAt = Date.now() - startedAt;
+              content += delta.content;
+            }
+            if (typeof delta.reasoning_content === 'string' && delta.reasoning_content) {
+              if (firstReasonAt === null) firstReasonAt = Date.now() - startedAt;
+              reasoning += delta.reasoning_content;
+            }
+          }
+          if (typeof evt.choices?.[0]?.finish_reason === 'string' && evt.choices[0].finish_reason) {
+            finish = evt.choices[0].finish_reason;
+          }
+          if (evt?.usage) usage = evt.usage;
+        } catch { /* partial chunk */ }
+      }
+    }
+    clearTimeout(readTimer);
+
+    const durationMs = Date.now() - startedAt;
+    const opens = (content.match(/\{/g) || []).length;
+    const closes = (content.match(/\}/g) || []).length;
+    let jsonOk = 'bad';
+    try {
+      const parsed = JSON.parse(content.replace(/^```(?:json)?\s*|```$/g, '').trim());
+      jsonOk = parsed && typeof parsed === 'object' ? 'ok' : 'bad';
+    } catch { jsonOk = 'bad'; }
+
+    return res.json({
+      success: true,
+      data: {
+        durationMs,
+        ttftContentMs: firstContentAt,
+        ttftReasoningMs: firstReasonAt,
+        contentChars: content.length,
+        reasoningChars: reasoning.length,
+        completionTokens: usage?.completion_tokens ?? null,
+        reasoningTokens: usage?.completion_tokens_details?.reasoning_tokens ?? null,
+        promptTokens: usage?.prompt_tokens ?? null,
+        finish,
+        jsonOk,
+        bracesBalanced: opens === closes,
+        resolved: {
+          model: route.model,
+          thinkingMode,
+          reasoningEffort: effectiveEffort,
+          source: route.source,
+          endpoint,
+        },
+        contentPreview: content.slice(0, 400),
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      data: { durationMs: Date.now() - startedAt },
+      error: error?.message || '模型延迟探测失败',
     });
   }
 });
@@ -673,48 +708,6 @@ router.get('/:name/effective-prompt', async (req: Request, res: Response) => {
 /**
  * 获取使用趋势（最近7天调用统计）
  */
-router.get('/usage/trends', async (req: Request, res: Response) => {
-  try {
-    const skills = await systemPrisma.skill_registrations.findMany({
-      select: {
-        name: true,
-        callCount: true,
-        successRate: true,
-        updatedAt: true
-      },
-      orderBy: {
-        callCount: 'desc'
-      }
-    });
-    
-    const totalCalls = skills.reduce((sum, s) => sum + s.callCount, 0);
-    const avgSuccessRate = skills.length > 0
-      ? skills.reduce((sum, s) => sum + s.successRate, 0) / skills.length
-      : 0;
-    
-    res.json({
-      success: true,
-      data: {
-        skills: skills.map(s => ({
-          name: s.name,
-          callCount: s.callCount,
-          successRate: s.successRate,
-          lastUpdated: s.updatedAt
-        })),
-        summary: {
-          totalCalls,
-          avgSuccessRate,
-          totalSkills: skills.length
-        }
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
 
 /**
  * 获取分类中文标签
@@ -742,7 +735,7 @@ function getCategoryLabel(category: string): string {
  *   - 字段契约（agent_contracts 表，按 stage）
  *   - 调用统计（agent_call_logs 聚合）
  *
- * 同时接受老 id（如 'learning-turn-agent'）通过 alias 解析。
+ * 同时接受老 id（如 'teaching-turn-agent'）通过 alias 解析。
  */
 router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
   try {
@@ -753,6 +746,22 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
     const manifest = getAgentManifest(canonicalId);
 
     if (!manifest) {
+      // 404 降级（SKILL_READINESS_SPEC §1.2/§1.3）：不在 manifest 但户口簿有登记的 skill
+      // （scaffold 后、manifest 代码未合并前）→ 200 + draft 态 completion，否则才 404。
+      const shortSkillId = canonicalId.replace(/^skill:/, '');
+      const bookEntry = loadSkillsBookRaw().skills.find((entry) => entry.skillId === shortSkillId);
+      if (bookEntry) {
+        const completion = await getSkillCompletion(bookEntry.skillId);
+        return res.json({
+          success: true,
+          data: {
+            draft: true,
+            completion,
+            displayName: bookEntry.displayName || shortSkillId,
+            description: bookEntry.description || null,
+          },
+        });
+      }
       return res.status(404).json({
         success: false,
         error: { message: `Skill "${rawSkillId}" 不在 manifest 中` }
@@ -800,6 +809,14 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
     const stats = unifiedStats.get(shortSkillId);
     const activePrompt = promptVersions.find(p => p.status === 'ACTIVE' || p.status === 'published') || null;
 
+    // 完成度状态机（SKILL_READINESS_SPEC §1）：派生投影，复用本次查询的 promptVersions/stats
+    const completion = await getSkillCompletion(shortSkillId, {
+      activePromptIds: new Set(
+        promptVersions.some((p) => p.status === 'ACTIVE') ? [canonicalId] : [],
+      ),
+      lastCalledAt: stats?.lastCalledAt ? new Date(stats.lastCalledAt).toISOString() : null,
+    });
+
     res.json({
       success: true,
       data: {
@@ -812,6 +829,7 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
           ioContractVersion: manifest.ioContractVersion,
           noPromptFile: !!manifest.noPromptFile
         },
+        completion,
         parentAgent: parentAgent ? {
           id: parentAgent.id,
           name: parentAgent.name,
@@ -886,6 +904,127 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: { message: error?.message || 'workbench meta load failed' }
+    });
+  }
+});
+
+/**
+ * GET /api/admin/skills/reconciliation
+ *
+ * 技能四向对账（SKILL_READINESS_SPEC §4.2）：户口簿 / manifest / gateway 注册 / ACTIVE prompt
+ * 全量逐 skill 状态 + 完成度状态机投影 + 差集标记（unregistered / active-missing），
+ * 另附注册表幽灵残留（户口簿无登记）清单。前端 Skills.vue 对账面板唯一数据源。
+ */
+router.get('/reconciliation', async (req: Request, res: Response) => {
+  try {
+    const book = loadSkillsBookRaw();
+    const manifestSkillIds = new Set(
+      listRawManifestEntries()
+        .filter((item) => item.kind === 'skill' && item.id.startsWith('skill:'))
+        .map((item) => item.id.slice('skill:'.length)),
+    );
+    const [activeRows, registrations] = await Promise.all([
+      systemPrisma.agent_prompts.findMany({
+        where: { status: 'ACTIVE' },
+        select: { agentId: true },
+      }),
+      systemPrisma.skill_registrations.findMany({
+        select: { name: true },
+      }),
+    ]);
+    const activeIds = new Set(activeRows.map((row) => row.agentId));
+    const registeredNames = new Set(registrations.map((row) => row.name));
+
+    // 注册豁免点（agents/platform-direct 不落 skill_registrations 是预期，W2 语义）
+    const w2 = analyzeW2(book, registrations);
+    const exemptRegistrationPoints = new Set(['agents', 'platform-direct']);
+    const unregisteredSet = new Set(w2.missingRegistration);
+    const orphanRegistrations = registrations
+      .map((row) => row.name)
+      .filter((name) => !book.skills.some((entry) => entry.skillId === name))
+      .sort();
+
+    const orchestrationStages = loadOrchestrationFiles();
+    const items: Array<Record<string, unknown>> = [];
+    const byStatus: Record<string, number> = {};
+    let activeCount = 0;
+    let registeredCount = 0;
+
+    for (const entry of book.skills) {
+      const completion = await getSkillCompletion(entry.skillId, {
+        book,
+        orchestrationStages,
+        activePromptIds: activeIds,
+      });
+      const registered = registeredNames.has(entry.skillId);
+      const registrationExempt = exemptRegistrationPoints.has(entry.registrationPoint || 'skillHandlers');
+      const active = entry.noPromptFile === true ? true : activeIds.has(`skill:${entry.skillId}`);
+      if (registered) registeredCount += 1;
+      if (active) activeCount += 1;
+      byStatus[completion.status] = (byStatus[completion.status] || 0) + 1;
+
+      let diff: 'unregistered' | 'active-missing' | null = null;
+      if (!registered && !registrationExempt) diff = 'unregistered';
+      else if (!active && entry.noPromptFile !== true) diff = 'active-missing';
+
+      items.push({
+        skillId: entry.skillId,
+        kind: entry.kind,
+        displayName: entry.displayName || null,
+        stage: entry.stage || null,
+        parentAgent: entry.parentAgent || null,
+        book: true,
+        manifest: manifestSkillIds.has(entry.skillId),
+        registered,
+        active,
+        noPromptFile: entry.noPromptFile === true,
+        registrationExempt,
+        diff,
+        completion,
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        generatedAt: new Date().toISOString(),
+        summary: {
+          total: book.skills.length,
+          registered: registeredCount,
+          active: activeCount,
+          byStatus,
+          unregistered: unregisteredSet.size,
+          activeMissing: items.filter((item) => item.diff === 'active-missing').length,
+          orphanRegistrations: orphanRegistrations.length,
+        },
+        items,
+        orphanRegistrations: orphanRegistrations.map((name) => ({ name })),
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: { message: error?.message || 'skills reconciliation failed' },
+    });
+  }
+});
+
+/**
+ * GET /api/admin/skills/readiness
+ *
+ * W1-W5 技能完成度诊断（SKILL_READINESS_SPEC §3，全 warn 不阻断 ready）：
+ * 默认返回 60s 缓存；?refresh=1 时总是重算（按需正确性优先）。
+ * 结构：{ checks: { W1..W5 }, generatedAt }，与 readiness.service 启动异步通道同一份报告。
+ */
+router.get('/readiness', async (req: Request, res: Response) => {
+  try {
+    const refresh = req.query.refresh === '1' || req.query.refresh === 'true';
+    const report = await checkSkillsReadiness(systemPrisma as any, { skipCache: refresh });
+    res.json({ success: true, data: report });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: { message: error?.message || 'skills readiness check failed' }
     });
   }
 });

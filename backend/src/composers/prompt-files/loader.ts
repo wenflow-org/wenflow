@@ -15,6 +15,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import yaml from 'js-yaml';
+import { logger } from '../../utils/logger';
 
 export interface PromptFileMeta {
   /** 权威标识，对应 agent_prompts.agentId */
@@ -146,7 +147,9 @@ function getPromptFilePaths(promptsDir: string): string[] {
   return fs.readdirSync(promptsDir, { withFileTypes: true })
     .filter((entry) => entry.isFile()
       && /\.md$/i.test(entry.name)
-      && !entry.name.startsWith('_'))
+      && !entry.name.startsWith('_')
+      // agent-snapshots.md 是自动生成的沙盘说明书（非 prompt 源），排除防止误入 agent_prompts
+      && entry.name !== 'agent-snapshots.md')
     .map((entry) => path.join(promptsDir, entry.name));
 }
 
@@ -193,31 +196,75 @@ export function scanPromptFiles(promptsDir = PROMPTS_DIR): PromptFileScanResult 
   };
 }
 
-/** 加载所有 prompt 文件 */
-export function loadAllPromptFiles(): PromptFile[] {
+/**
+ * 容错加载所有 prompt 文件。单个文件的读取或 YAML frontmatter 错误会记入 diagnostics
+ * 并跳过该文件（与 scanPromptFiles 同一容错语义），不阻断其余文件。
+ */
+export function loadAllPromptFilesWithDiagnostics(): PromptFileScanResult {
   const files: PromptFile[] = [];
+  const diagnostics: PromptFileScanDiagnostic[] = [];
 
   for (const filePath of getPromptFilePaths(PROMPTS_DIR)) {
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    const parsed = parsePromptFile(filePath, raw);
-
-    if (!parsed.systemPrompt) {
-      // 空 prompt 视为无效，跳过以免覆盖 DB 现有内容
+    let raw: string;
+    try {
+      raw = fs.readFileSync(filePath, 'utf-8');
+    } catch (error) {
+      diagnostics.push({
+        filePath,
+        code: 'read-error',
+        message: error instanceof Error ? error.message : String(error),
+      });
       continue;
     }
-    files.push(parsed);
+
+    try {
+      const parsed = parsePromptFile(filePath, raw);
+      if (!parsed.systemPrompt) {
+        // 空 prompt 视为无效，跳过以免覆盖 DB 现有内容
+        continue;
+      }
+      files.push(parsed);
+    } catch (error) {
+      diagnostics.push({
+        filePath,
+        code: 'frontmatter-parse-error',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
-  return sortPromptFiles(files);
+  return {
+    files: sortPromptFiles(files),
+    diagnostics: diagnostics.sort((a, b) => a.filePath.localeCompare(b.filePath)),
+  };
 }
 
-/** 按 agentId 加载单个 prompt 文件（找不到返回 null） */
+/** 加载所有 prompt 文件（坏文件跳过；需要诊断明细时使用 loadAllPromptFilesWithDiagnostics） */
+export function loadAllPromptFiles(): PromptFile[] {
+  return loadAllPromptFilesWithDiagnostics().files;
+}
+
+/**
+ * 按 agentId 加载单个 prompt 文件（找不到返回 null）。
+ * 容错：本函数被 20+ 个 skill 在模块顶层同步调用，文件存在但 IO 失败/frontmatter YAML
+ * 损坏时若抛异常会导致整个后端启动崩溃；此处与扫描路径（loadAllPromptFilesWithDiagnostics）
+ * 语义对齐——记日志并返回 null，由调用方的 `?.systemPrompt || ''` 兜底。
+ */
 export function loadPromptFile(agentId: string): PromptFile | null {
   const fileBase = agentIdToFileBase(agentId);
   const filePath = path.join(PROMPTS_DIR, `${fileBase}.md`);
   if (!fs.existsSync(filePath)) return null;
-  const raw = fs.readFileSync(filePath, 'utf-8');
-  return parsePromptFile(filePath, raw);
+  try {
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    return parsePromptFile(filePath, raw);
+  } catch (error) {
+    logger.warn('[prompt-files] 加载 prompt 文件失败，返回 null（DB ACTIVE prompt 仍可用）', {
+      agentId,
+      filePath,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return null;
+  }
 }
 
 /** 将 PromptFile 元数据 + 正文序列化回 .md 文本（供导出/回写脚本使用） */

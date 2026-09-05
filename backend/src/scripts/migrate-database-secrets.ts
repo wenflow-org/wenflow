@@ -95,13 +95,14 @@ export async function migrateDatabaseSecrets(apply: boolean): Promise<MigrationS
   const stats: MigrationStats = { scanned: 0, pending: 0, migrated: 0, failed: 0 };
   validateSecretEncryptionConfig(true);
 
-  const [platform, agents, skills, lab, userApis, userAgents, userMcp] = await Promise.all([
+  const [platform, agents, skills, lab, userApis, userAgents, userAgentConfigs, userMcp] = await Promise.all([
     systemPrisma.platform_api_configs.findMany({ select: { id: true, apiKey: true } }),
     systemPrisma.agent_model_configs.findMany({ select: { id: true, apiKey: true } }),
     systemPrisma.skill_model_configs.findMany({ select: { id: true, apiKey: true } }),
     systemPrisma.agent_lab_configs.findMany({ select: { id: true, apiKey: true } }),
     prisma.user_api_configs.findMany({ select: { id: true, apiKey: true } }),
     prisma.user_agent_model_configs.findMany({ select: { id: true, apiKey: true } }),
+    prisma.user_agent_configs.findMany({ select: { id: true, systemPrompt: true } }),
     prisma.user_mcp_configs.findMany({ select: { id: true, servers: true, tools: true, healthCheck: true } })
   ]);
 
@@ -117,6 +118,15 @@ export async function migrateDatabaseSecrets(apply: boolean): Promise<MigrationS
     (id, apiKey) => prisma.user_api_configs.update({ where: { id }, data: { apiKey } }), apply, stats);
   await migrateScalarRows('user_agent_model_configs.apiKey', 'main.user_agent_model_configs.apiKey', userAgents,
     (id, apiKey) => prisma.user_agent_model_configs.update({ where: { id }, data: { apiKey } }), apply, stats);
+  // user_agent_configs.systemPrompt：可能内嵌凭据，存量明文需加密（增量迁移支持重加密）
+  await migrateScalarRows(
+    'user_agent_configs.systemPrompt',
+    'main.user_agent_configs.systemPrompt',
+    userAgentConfigs.map(row => ({ id: row.id, apiKey: row.systemPrompt })),
+    (id, value) => prisma.user_agent_configs.update({ where: { id }, data: { systemPrompt: value } }),
+    apply,
+    stats
+  );
 
   for (const column of ['servers', 'tools', 'healthCheck'] as const) {
     await migrateJsonColumn(

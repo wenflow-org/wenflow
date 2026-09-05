@@ -74,40 +74,6 @@ model agent_prompts {
   @@index([status])
 }
 
-model agent_definitions {
-  id                 String   @id
-  displayName        String
-  description        String?
-  category           String
-  inputSchema        String?
-  outputSchema       String?
-  variableBindings   String?
-  capabilities       String?
-  defaultMaxTokens   Int?
-  defaultTemperature Float?
-  schemaVersion      Int      @default(1)
-  source             String   @default("code")
-  managedByCode      Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
-  @@index([category])
-  @@index([managedByCode])
-}
-
-model orchestrator_definitions {
-  id            String   @id
-  displayName   String
-  description   String?
-  category      String   @default("agent")
-  steps         String
-  variableGraph String?
-  source        String   @default("code")
-  managedByCode Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
-
 model agent_registrations {
   id           String   @id
   name         String   @unique
@@ -142,6 +108,8 @@ model platform_api_configs {
   updatedAt              DateTime  @default(now())
   defaultTemperature     Float     @default(0.7)
   defaultMaxTokens       Int       @default(2000)
+  defaultThinkingMode    String?   @default("default")
+  defaultReasoningEffort String?   @default("default")
   reasoningEndpoint      String?
   lightEndpoint          String?
   chatModels             String?
@@ -203,12 +171,18 @@ model skill_registrations {
 
 model field_definitions {
   id              String   @id
-  fieldId         String   @unique
+  fieldId         String
   stage           String
   promptRole      String
   valueType       String   @default("string")
   snakeName       String?
   camelName       String?
+  // 值抽取路径：字段值在产出方原始输出中的物理位置（如 internal.ext.goalConversation.understanding.real_problem）。
+  // 配置式字段值流转（V3 Dispatcher 接线）的抽取依据；空 = 尚未登记。
+  pathInRawOutput String?
+  // 落库键/消费键别名：字段值写入主库（或 skill 产出信封）时的键路径，与 fieldId 不一致时单独标注（AUDIT_FIELD_FLOW §3.2）。
+  // 空 = 落库键与 fieldId 一致。仅供展示与对账，不参与装配。
+  persistKey      String?
   description     String?
   enumValues      String?
   schemaVersion   String   @default("v3")
@@ -221,6 +195,8 @@ model field_definitions {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @default(now())
 
+  // fieldId 唯一约束为 stage 内唯一（跨 stage 允许同名，如 teaching/simulation 的 reply）
+  @@unique([stage, fieldId])
   @@index([stage])
   @@index([promptRole])
 }

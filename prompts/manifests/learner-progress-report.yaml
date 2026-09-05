@@ -1,0 +1,26 @@
+version: prompt-lab-manifest/v1
+skillId: learner-progress-report
+agentId: skill:learner-progress-report
+name: default-skill-learner-progress-report
+archetype: copywriter
+description: 学习进展报告生成器
+acceptableAgentIds: [skill:learner-progress-report]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: copy
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: blocking
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: learner-model, phases: [progress-report-generated], defaultPhase: progress-report-generated, terminalPhases: [progress-report-generated], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, learner, report, v4]
+notes: v4 核心文件的契约与运行参数家园。

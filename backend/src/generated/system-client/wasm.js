@@ -179,37 +179,6 @@ exports.Prisma.Agent_promptsScalarFieldEnum = {
   publishedAt: 'publishedAt'
 };
 
-exports.Prisma.Agent_definitionsScalarFieldEnum = {
-  id: 'id',
-  displayName: 'displayName',
-  description: 'description',
-  category: 'category',
-  inputSchema: 'inputSchema',
-  outputSchema: 'outputSchema',
-  variableBindings: 'variableBindings',
-  capabilities: 'capabilities',
-  defaultMaxTokens: 'defaultMaxTokens',
-  defaultTemperature: 'defaultTemperature',
-  schemaVersion: 'schemaVersion',
-  source: 'source',
-  managedByCode: 'managedByCode',
-  createdAt: 'createdAt',
-  updatedAt: 'updatedAt'
-};
-
-exports.Prisma.Orchestrator_definitionsScalarFieldEnum = {
-  id: 'id',
-  displayName: 'displayName',
-  description: 'description',
-  category: 'category',
-  steps: 'steps',
-  variableGraph: 'variableGraph',
-  source: 'source',
-  managedByCode: 'managedByCode',
-  createdAt: 'createdAt',
-  updatedAt: 'updatedAt'
-};
-
 exports.Prisma.Agent_registrationsScalarFieldEnum = {
   id: 'id',
   name: 'name',
@@ -244,6 +213,8 @@ exports.Prisma.Platform_api_configsScalarFieldEnum = {
   updatedAt: 'updatedAt',
   defaultTemperature: 'defaultTemperature',
   defaultMaxTokens: 'defaultMaxTokens',
+  defaultThinkingMode: 'defaultThinkingMode',
+  defaultReasoningEffort: 'defaultReasoningEffort',
   reasoningEndpoint: 'reasoningEndpoint',
   lightEndpoint: 'lightEndpoint',
   chatModels: 'chatModels',
@@ -303,6 +274,8 @@ exports.Prisma.Field_definitionsScalarFieldEnum = {
   valueType: 'valueType',
   snakeName: 'snakeName',
   camelName: 'camelName',
+  pathInRawOutput: 'pathInRawOutput',
+  persistKey: 'persistKey',
   description: 'description',
   enumValues: 'enumValues',
   schemaVersion: 'schemaVersion',
@@ -410,8 +383,6 @@ exports.Prisma.ModelName = {
   agent_lab_configs: 'agent_lab_configs',
   agent_model_configs: 'agent_model_configs',
   agent_prompts: 'agent_prompts',
-  agent_definitions: 'agent_definitions',
-  orchestrator_definitions: 'orchestrator_definitions',
   agent_registrations: 'agent_registrations',
   platform_api_configs: 'platform_api_configs',
   platform_settings: 'platform_settings',

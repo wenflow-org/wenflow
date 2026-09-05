@@ -15,6 +15,7 @@ jest.mock('../../../services/agentConfig.service', () => ({
 jest.mock('../../../services/prompt-composer', () => ({
   composePromptFromAgentRouting: jest.fn(),
   isPromptSupplementEnabled: () => false,
+  getRoutingSnapshotHash: jest.fn(async () => 'test-routing-hash'),
 }))
 
 jest.mock('../../../services/telemetry-writer.service', () => ({

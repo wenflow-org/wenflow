@@ -4,7 +4,6 @@ import {
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
 import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter';
-import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 import {
   type VirtualLearnerPersona,
@@ -16,9 +15,7 @@ import {
 
 export const VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_MAX_TOKENS = 1200;
 export const VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_TEMPERATURE = 0.8;
-const GOAL_DIALOGUE_FALLBACK_RUNTIME_CONTRACT = buildDefaultRuntimeContract(
-  'virtual-learner-goal-dialogue-simulator'
-);
+export const VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATION_FAILED = 'VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATION_FAILED';
 
 // File-as-Truth：运行时生效的 ACTIVE prompt 由 prompts/core/*.yaml 编译而来，
 // 这里只从编译产物加载，不内嵌第二份 prompt，避免双源漂移。
@@ -41,6 +38,13 @@ export interface GoalLearnerSimulationInput {
   };
   currentPhase: GoalLearnerPhase;
   previousLearnerState?: Record<string, any> | null;
+  /** 学习者长期记忆（已掌握/到期复习/最近完成），供自然引用 */
+  learnerMemory?: {
+    mastered?: string[];
+    dueReview?: string[];
+    struggling?: string[];
+    recentCompleted?: string[];
+  } | null;
   /** 控制学习者对抗度. 默认 'normal' */
   frictionBudget?: FrictionBudget;
   task?: Record<string, any>;
@@ -250,6 +254,16 @@ function buildUserPayload(input: GoalLearnerSimulationInput) {
     },
     currentPhase: normalizePhase(input.currentPhase),
     previousLearnerState: input.previousLearnerState || null,
+    learnerMemory: input.learnerMemory && typeof input.learnerMemory === 'object'
+      ? {
+          mastered: Array.isArray(input.learnerMemory.mastered) ? input.learnerMemory.mastered.slice(0, 8) : [],
+          dueReview: Array.isArray(input.learnerMemory.dueReview) ? input.learnerMemory.dueReview.slice(0, 8) : [],
+          struggling: Array.isArray(input.learnerMemory.struggling) ? input.learnerMemory.struggling.slice(0, 8) : [],
+          recentCompleted: Array.isArray(input.learnerMemory.recentCompleted)
+            ? input.learnerMemory.recentCompleted.slice(0, 5)
+            : [],
+        }
+      : null,
     friction: {
       budget: friction.budget,
       triggerProbability: friction.triggered ? 1 : 0,
@@ -297,20 +311,14 @@ export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimu
     }, input || {} as GoalLearnerSimulationInput);
 
     if (!result.success || !result.output) {
-      const fallback = { ...buildFallback(input || {} as GoalLearnerSimulationInput), degraded: true };
+      // 失败显式传播：不产出伪 learnerState/伪 reply（与 learn-turn 统一 success:false 语义）
       return {
-        success: true,
-        output: {
-          ...fallback,
-          runtimeEnvelope: mapSkillOutputEnvelope(GOAL_DIALOGUE_FALLBACK_RUNTIME_CONTRACT, fallback, {
-            phase: 'simulation-step-completed',
-            status: 'partial',
-            nextState: (fallback as any)?.learnerState ?? null,
-          }),
+        success: false,
+        error: {
+          code: VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATION_FAILED,
+          message: result.error?.message || 'goal-dialogue-simulator-failed',
         },
-        duration: Date.now() - startTime,
-        cached: true,
-        quality: 'fallback',
+        duration: result.debug.durationMs || Date.now() - startTime,
       };
     }
 
@@ -330,21 +338,13 @@ export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimu
       quality: 'model',
     };
   } catch (error: any) {
-    const fallback = { ...buildFallback(input || {} as GoalLearnerSimulationInput), degraded: true };
     return {
-      success: true,
-      output: {
-        ...fallback,
-        runtimeEnvelope: mapSkillOutputEnvelope(GOAL_DIALOGUE_FALLBACK_RUNTIME_CONTRACT, fallback, {
-          phase: 'simulation-step-completed',
-          status: 'partial',
-          reason: error?.message || 'goal-dialogue-simulator-failed',
-          nextState: (fallback as any)?.learnerState ?? null,
-        }),
+      success: false,
+      error: {
+        code: VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATION_FAILED,
+        message: error?.message || 'Unknown error',
       },
-      duration: Date.now() - startTime,
-      cached: true,
-      quality: 'fallback',
+      duration: 0,
     };
   }
 }

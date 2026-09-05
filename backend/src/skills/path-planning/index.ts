@@ -18,12 +18,16 @@ import {
 } from '../../agents/protocol';
 import { CallerInfo } from '../../gateway/api-gateway';
 import { callPrompt } from '../../composers/prompt-composer';
+import { loadPromptFile } from '../../composers/prompt-files/loader';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 
-import { getEventBus } from '../../gateway/event-bus';
 import { logger } from '../../utils/logger';
 
+const AGENT_ID = 'skill:path-planning';
 const PATH_AGENT_MAX_TOKENS = 32000;
+
+// File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
+const PATH_PLANNING_PROMPT = loadPromptFile(AGENT_ID)?.systemPrompt || '';
 
 function normalizePromptString(value: any): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -36,12 +40,9 @@ function normalizePromptStringArray(value: any): string[] {
     .filter((item): item is string => !!item);
 }
 
-function buildPathSceneFramingPromptInput(pathSceneFraming: any) {
-  if (!pathSceneFraming || typeof pathSceneFraming !== 'object') return null;
+function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
+  if (!normalizedInput || typeof normalizedInput !== 'object') return null;
 
-  const normalizedInput = pathSceneFraming.normalizedInput && typeof pathSceneFraming.normalizedInput === 'object'
-    ? pathSceneFraming.normalizedInput
-    : {};
   const learnerProfile = normalizedInput.learnerProfile && typeof normalizedInput.learnerProfile === 'object'
     ? normalizedInput.learnerProfile
     : {};
@@ -70,6 +71,7 @@ function buildPathSceneFramingPromptInput(pathSceneFraming: any) {
         backgroundExperience: normalizePromptString(learnerProfile.backgroundExperience),
         painPoints: normalizePromptStringArray(learnerProfile.painPoints),
         learningSignal: normalizePromptString(learnerProfile.learningSignal),
+        goalOrientation: normalizePromptString(learnerProfile.goalOrientation),
         constraintsAndBoundaries: normalizePromptStringArray(learnerProfile.constraintsAndBoundaries),
         currentBaseline: {
           level: normalizePromptString(learnerProfile.currentBaseline?.level),
@@ -108,7 +110,25 @@ function buildPathSceneFramingPromptInput(pathSceneFraming: any) {
         subtasksPerStageRange: Array.isArray(planningHints.subtasksPerStageRange) ? planningHints.subtasksPerStageRange : null,
         subtaskMinutesRange: Array.isArray(planningHints.subtaskMinutesRange) ? planningHints.subtaskMinutesRange : null,
         maxWeeks: typeof planningHints.maxWeeks === 'number' ? planningHints.maxWeeks : null,
+        targetMilestones: typeof planningHints.targetMilestones === 'number' ? planningHints.targetMilestones : null,
+        targetSubtasksPerStage: typeof planningHints.targetSubtasksPerStage === 'number' ? planningHints.targetSubtasksPerStage : null,
       } : null,
+      prerequisiteCheckResults: Array.isArray(normalizedInput.prerequisiteCheckResults)
+        ? normalizedInput.prerequisiteCheckResults.map((item: any) => ({
+            probeId: normalizePromptString(item?.probeId),
+            targetConcept: normalizePromptString(item?.targetConcept),
+            userAnswer: normalizePromptString(item?.userAnswer),
+            isCorrect: typeof item?.isCorrect === 'boolean' ? item.isCorrect : undefined,
+          }))
+        : null,
+      timeDimensions: normalizedInput.timeDimensions && typeof normalizedInput.timeDimensions === 'object'
+        ? {
+            totalWeeks: Number.isFinite(normalizedInput.timeDimensions.totalWeeks) ? normalizedInput.timeDimensions.totalWeeks : null,
+            estimatedHours: Number.isFinite(normalizedInput.timeDimensions.estimatedHours) ? normalizedInput.timeDimensions.estimatedHours : null,
+            sessionsPerWeek: Number.isFinite(normalizedInput.timeDimensions.sessionsPerWeek) ? normalizedInput.timeDimensions.sessionsPerWeek : null,
+            sessionsLengthMin: Number.isFinite(normalizedInput.timeDimensions.sessionsLengthMin) ? normalizedInput.timeDimensions.sessionsLengthMin : null,
+          }
+        : null,
     },
   };
 }
@@ -147,7 +167,7 @@ interface PathOutput {
   milestones: MilestoneOutput[];
 }
 
-export function validatePathPlanningOutput(parsed: any) {
+export function validatePathPlanningOutput(parsed: any, expectedMilestones?: number | null) {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return { valid: false as const, failureReason: 'PATH_PLANNING_OUTPUT_NOT_OBJECT' };
   }
@@ -164,7 +184,92 @@ export function validatePathPlanningOutput(parsed: any) {
     return { valid: false as const, failureReason: 'PATH_PLANNING_COGNITIVE_CORE_MISSING' };
   }
 
-  return { valid: true as const };
+  const coreConcepts = Array.isArray(parsed.cognitiveCore.coreConcepts)
+    ? parsed.cognitiveCore.coreConcepts.filter((c: any) => c && typeof c === 'object')
+    : [];
+  if (coreConcepts.length > 0) {
+    const hubCount = coreConcepts.filter((c: any) => c.role === 'hub').length;
+    if (hubCount === 0) {
+      return { valid: false as const, failureReason: 'PATH_PLANNING_HUB_CONCEPT_MISSING' };
+    }
+    if (hubCount > 1) {
+      return { valid: false as const, failureReason: 'PATH_PLANNING_HUB_CONCEPT_MULTIPLE' };
+    }
+  }
+
+  const conceptIds = new Set<string>();
+  const conceptNames = new Set<string>();
+  let hubConceptId: string | null = null;
+  for (const concept of coreConcepts) {
+    if (typeof concept.id === 'string' && concept.id) conceptIds.add(concept.id);
+    if (typeof concept.name === 'string' && concept.name) conceptNames.add(concept.name);
+    if (concept.role === 'hub') hubConceptId = concept.id;
+  }
+  let hubReuseCount = 0;
+  const milestonesArray = parsed.milestones;
+  for (const milestone of milestonesArray) {
+    if (!milestone || typeof milestone !== 'object') {
+      return { valid: false as const, failureReason: 'PATH_PLANNING_MILESTONE_INVALID' };
+    }
+    if (milestone.subtasks !== undefined || milestone.acceptanceCriteria !== undefined) {
+      return { valid: false as const, failureReason: 'PATH_PLANNING_LEGACY_TASK_FIELDS' };
+    }
+    if (conceptIds.size > 0 && typeof milestone.coreConcept === 'string' && milestone.coreConcept
+      && !conceptIds.has(milestone.coreConcept) && !conceptNames.has(milestone.coreConcept)) {
+      return { valid: false as const, failureReason: 'PATH_PLANNING_MILESTONE_CONCEPT_UNBOUND' };
+    }
+    // hub 复用统计（rule 66：hub 必须被"非首阶段"milestone 显式复用，不含首阶段）
+    const isFirstStage = milestone.stageNumber === 1;
+    if (!isFirstStage && hubConceptId && typeof milestone.coreConcept === 'string') {
+      const hubConcept = coreConcepts.find((c: any) => c.role === 'hub');
+      if (hubConcept && (milestone.coreConcept === hubConceptId
+        || (hubConcept.name && milestone.coreConcept === hubConcept.name))) {
+        hubReuseCount += 1;
+      }
+    }
+  }
+  // hub 复用下限（CLT 回捞约束代码化）：milestone ≥3 时至少被 2 个非首阶段 milestone 复用，
+  // milestone=2 时至少 1 个。实测历史合规率仅 ~13%（LLM 倾向每阶段挂新概念而非回捞 hub），
+  // 直接阻断会打回 86% 路径破坏生产 → 当前为"警告级"审计：记录 warning 不阻断，积累数据后再决定收紧。
+  const warnings: string[] = [];
+  const hubRequired = milestonesArray.length >= 3 ? 2 : milestonesArray.length === 2 ? 1 : 0;
+  if (hubConceptId && hubRequired > 0 && hubReuseCount < hubRequired) {
+    warnings.push(`PATH_PLANNING_HUB_REUSE_INSUFFICIENT(reused=${hubReuseCount}, required=${hubRequired})`);
+  }
+
+  // CLT 概念密度审计（rule 52 代码化，警告级）：
+  // 每个 milestone 挂 1 个 coreConcept，因此"单阶段新概念 ≤3""相邻增量 ≤2"在单挂载
+  // 结构下天然满足（每阶段只引入 1 个新概念）。真实风险在概念总量失控——整条路径的
+  // 唯一概念数应落在 planningHints.conceptRange 附近，现在以 8 为外的硬上限做警告。
+  const conceptRefs = milestonesArray
+    .map((m: any) => (typeof m?.coreConcept === 'string' ? m.coreConcept : ''))
+    .filter(Boolean);
+  const uniqueConcepts = new Set(conceptRefs).size;
+  if (uniqueConcepts > 8) {
+    warnings.push(`PATH_PLANNING_CONCEPT_COUNT_HIGH(totalConcepts=${uniqueConcepts}, cap=8)`);
+  }
+  const stageNumbers = parsed.milestones.map((m: any) => m && m.stageNumber).filter((n: any) => typeof n === 'number');
+  if (stageNumbers.length === parsed.milestones.length && stageNumbers.length > 0) {
+    const contiguous = stageNumbers.every((n: number, i: number) => n === i + 1);
+    if (!contiguous) {
+      return { valid: false as const, failureReason: 'PATH_PLANNING_STAGE_NUMBER_GAP' };
+    }
+  }
+
+  // 强制里程碑数量：targetMilestones 由上游 keyStages 直接得出，path 必须精确匹配（阻断级）
+  if (typeof expectedMilestones === 'number' && Number.isInteger(expectedMilestones) && expectedMilestones >= 1) {
+    const count = parsed.milestones.length;
+    if (count !== expectedMilestones) {
+      return {
+        valid: false as const,
+        failureReason: `PATH_PLANNING_MILESTONE_COUNT_MISMATCH(expected=${expectedMilestones}, got=${count})`,
+      };
+    }
+  }
+
+  const result: { valid: true; warnings?: string[] } = { valid: true as const };
+  if (warnings.length > 0) result.warnings = warnings;
+  return result;
 }
 
 /**
@@ -179,7 +284,6 @@ export const pathAgentDefinition: AgentDefinition = {
   description: '根据用户目标生成里程碑式学习路径，支持动态调整',
   
   capabilities: [
-    'goal-analysis',
     'path-generation',
     'milestone-planning',
     'dynamic-replanning',
@@ -269,7 +373,6 @@ export async function pathAgentHandler(
   context: AgentContext
 ): Promise<AgentOutput> {
   const startTime = Date.now();
-  const eventBus = getEventBus();
   
   try {
     // 1. 分析用户目标
@@ -278,17 +381,7 @@ export async function pathAgentHandler(
     // 2. 生成学习路径（包含里程碑）
     const path = await generatePath(input, context, goalAnalysis);
     
-    // 3. 发布路径创建事件
-    await eventBus.emit({
-      type: 'path:created',
-      source: 'skill:path-planning',
-      userId: context.userId,
-      data: {
-        pathId: path.id,
-        pathName: path.name,
-        totalMilestones: path.milestones?.length || 0
-      }
-    });
+    // 注：path:created 事件由 durable outbox 承担（learning.service persistGeneratedPath），内存总线已退役
 
     return {
       success: true,
@@ -356,7 +449,7 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
   conversationHistory?: any[];
   scenario?: string;
   replan?: any;
-  pathSceneFraming?: any;
+  normalizedInput?: any;
 }> {
   const caller: CallerInfo = { agentId: 'path-agent', skillId: 'path-planning' };
    
@@ -364,9 +457,8 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
   const confirmedProposal = input.confirmedProposal as any;
   const conversationHistory = input.conversationHistory as any[] || [];
   const replan = input.metadata?.replan as any;
-  const pathSceneFraming = input.metadata?.pathSceneFraming as any;
-  const framingNormalizedInput = pathSceneFraming?.normalizedInput && typeof pathSceneFraming.normalizedInput === 'object'
-    ? pathSceneFraming.normalizedInput
+  const framingNormalizedInput = input.metadata?.normalizedInput && typeof input.metadata.normalizedInput === 'object'
+    ? input.metadata.normalizedInput
     : null;
   const framingPainPoints = Array.isArray(framingNormalizedInput?.learnerProfile?.painPoints)
     ? framingNormalizedInput.learnerProfile.painPoints.filter(Boolean)
@@ -407,25 +499,22 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
       confirmedProposal,
       conversationHistory,
       replan,
-      pathSceneFraming,
+      normalizedInput: framingNormalizedInput,
     };
   }
   
   const userId = context?.userId || input?.metadata?.userId;
-  // 懒加载避免 skills/index -> path-planning -> skills/index 循环依赖
-  const { executeSkill, auxSkillDefinitionMap } = await import('..');
-  const parsed = await executeSkill(auxSkillDefinitionMap['goal-analysis'], {
-    goal: input.goal,
-    currentLevel: input.currentLevel,
-    timePerDay: input.timePerDay,
-    __onFailure: 'throw',
-    __prompt: { userId, requestPath: '/skills/path-planning/analyze-goal', callerAgentId: caller.agentId, callerAction: caller.action },
-  }) as {
-    subject: string;
-    level: string;
-    focus?: string[];
-    context?: string;
-    confidence?: number;
+  // 无结构化数据时的确定性兜底分析（原 goal-analysis aux skill 已移除：
+  // 主流程有 normalizedInput/structuredData 时不调用，fallback 输出也被 framing 覆盖，2026-08 去 LLM 化）
+  void userId;
+  const parsed = {
+    subject: String(input.goal || '学习目标'),
+    level: ['beginner', 'intermediate', 'advanced'].includes(input.currentLevel as string)
+      ? input.currentLevel as string
+      : 'beginner',
+    focus: [] as string[],
+    context: '',
+    confidence: 0.5,
   };
 
   return {
@@ -435,7 +524,7 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
     context: framingContext || parsed.context || '',
     confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
     replan,
-    pathSceneFraming,
+    normalizedInput: framingNormalizedInput,
   };
 }
 
@@ -456,16 +545,15 @@ async function generatePath(
     confirmedProposal?: any;
     conversationHistory?: any[];
     replan?: any;
-    pathSceneFraming?: any;
+    normalizedInput?: any;
   }
 ): Promise<PathOutput> {
   
   const confirmedProposal = analysis.confirmedProposal;
   const conversationHistory = analysis.conversationHistory;
   const replan = analysis.replan;
-  const pathSceneFraming = analysis.pathSceneFraming;
-  const framingNormalizedInput = pathSceneFraming?.normalizedInput && typeof pathSceneFraming.normalizedInput === 'object'
-    ? pathSceneFraming.normalizedInput
+  const framingNormalizedInput = analysis.normalizedInput && typeof analysis.normalizedInput === 'object'
+    ? analysis.normalizedInput
     : null;
   const framingConfirmedProposal = framingNormalizedInput?.confirmedProposal && typeof framingNormalizedInput.confirmedProposal === 'object'
     ? framingNormalizedInput.confirmedProposal
@@ -494,7 +582,16 @@ async function generatePath(
         : [];
   const observableResult = framingNormalizedInput?.successCriteria?.observableResult || null;
   const acceptanceCheck = framingNormalizedInput?.successCriteria?.acceptanceCheck || null;
-  const promptFriendlySceneFraming = buildPathSceneFramingPromptInput(pathSceneFraming);
+  // 强制里程碑数量：优先取 framing planningHints.targetMilestones（由 keyStages 直接得出），
+  // 其次用已确认 keyStages 数量推导；均缺失时为 null（validator 跳过数量校验）
+  const expectedMilestones: number | null = Number.isInteger(
+    (framingNormalizedInput?.planningHints as any)?.targetMilestones
+  )
+    ? (framingNormalizedInput?.planningHints as any).targetMilestones
+    : confirmedStages.length > 0
+      ? Math.min(8, Math.max(2, confirmedStages.length))
+      : null;
+  const promptFriendlySceneFraming = buildPromptFriendlyNormalizedInput(framingNormalizedInput);
 
   const userPayload = `原始学习目标：${input.goal}
 学习主题：${analysis.subject}
@@ -529,7 +626,7 @@ ${conversationHistory.map((m: any) => `${m.role}: ${m.content}`).join('\n')}
 
 ${replan ? `
 【路径重调模式】
-- 重调模式：${replan.mode || 'new_version'}
+- 重调模式：${replan.mode || 'overwrite'}
 - 触发来源：${replan.triggerSource || 'unknown'}
 - 源路径 ID：${replan.sourcePathId || 'unknown'}
 - 冻结已完成任务：${Array.isArray(replan.freezeCompletedTaskIds) && replan.freezeCompletedTaskIds.length > 0 ? replan.freezeCompletedTaskIds.join('、') : '无'}
@@ -538,11 +635,11 @@ ${replan ? `
 ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
 
 【重调要求】
-1. 这是对现有学习路径的新版本重调，不是从零忽略已有学习历史重新规划。
+1. 这是对现有学习路径的调整重调，不是从零忽略已有学习历史重新规划。
 2. 必须显式参考学习者已稳定掌握、掌握不稳、持续吃力和前置缺口信息。
 3. 不要围绕已稳定掌握内容重复铺设大量基础阶段。
 4. 对掌握不稳和前置缺口内容，应通过补桥接阶段、补充任务、降低阶段跳跃度来处理。
-5. 如果已完成任务被冻结，请把它们视为既有学习历史，不要在新版本里简单复制同名任务来伪装重调。` : ''}
+5. 如果已完成任务被冻结，请把它们视为既有学习历史，不要简单复制同名任务来伪装重调。` : ''}
 
 【强制要求】以下所有生成内容必须紧密围绕"${analysis.context || input.goal}"展开：
 - 路径名称必须包含"${analysis.context || input.goal}"的核心主题关键词（提取 2-6 字即可），不得使用通用模板名称
@@ -566,26 +663,42 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
   const systemPromptOverride = (context as any)?.metadata?.pathAgentSystemPromptOverride as string | undefined;
   const result = await callPrompt<any, PathOutput>({
     agentId: 'skill:path-planning',
-    defaultSystemPrompt: '',
+    defaultSystemPrompt: PATH_PLANNING_PROMPT,
     requireActivePrompt: true,
     caller: { agentId: 'path-agent', skillId: 'path-planning' },
         buildUserPayload: () => userPayload,
-    normalizeOutput: (pathData) => ({
-      id: `path_${Date.now()}`,
-      name: pathData.name,
-      summary: typeof pathData.summary === 'string' ? pathData.summary : undefined,
-      subject: analysis.subject,
-      totalMilestones: pathData.totalMilestones,
-      estimatedHours: pathData.estimatedHours,
-      cognitiveCore: pathData.cognitiveCore,
-      cognitiveDesign: pathData.cognitiveDesign || pathData.cognitiveCore,
-      milestones: pathData.milestones,
-      _debug: {
-        rawModelOutput: '',
-        extractedJson: '',
-      }
-    }),
-    validateParsedOutput: (parsed) => validatePathPlanningOutput(parsed),
+    normalizeOutput: (pathData) => {
+      // estimatedHours/estimatedWeeks 合法性钳制：非有限/负值/超合理上限 → 置 null（让下游 0 兜底）
+      const clampHours = (v: any): number | null => {
+        const n = Number(v);
+        if (!Number.isFinite(n) || n <= 0 || n > 10000) return null;
+        return Math.round(n);
+      };
+      const clampWeeks = (v: any): number | null => {
+        const n = Number(v);
+        if (!Number.isFinite(n) || n <= 0 || n > 104) return null;
+        return n;
+      };
+      const estimatedHours = clampHours(pathData.estimatedHours);
+      const estimatedWeeks = clampWeeks(pathData.estimatedWeeks);
+      return {
+        id: `path_${Date.now()}`,
+        name: pathData.name,
+        summary: typeof pathData.summary === 'string' ? pathData.summary : undefined,
+        subject: analysis.subject,
+        totalMilestones: pathData.totalMilestones,
+        estimatedHours,
+        estimatedWeeks,
+        cognitiveCore: pathData.cognitiveCore || pathData.cognitiveDesign,
+        cognitiveDesign: pathData.cognitiveDesign || pathData.cognitiveCore,
+        milestones: pathData.milestones,
+        _debug: {
+          rawModelOutput: '',
+          extractedJson: '',
+        }
+      };
+    },
+    validateParsedOutput: (parsed) => validatePathPlanningOutput(parsed, expectedMilestones),
     mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
       contract: runtimeContract,
       artifact: output,

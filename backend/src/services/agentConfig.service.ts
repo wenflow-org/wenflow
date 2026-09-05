@@ -1,4 +1,5 @@
 import systemPrisma from '../config/system-database';
+import { logger } from '../utils/logger';
 
 export interface PathAgentInputConfig {
   version: string;
@@ -197,6 +198,11 @@ export async function saveSimulationAgentConfig(config: SimulationAgentConfig): 
 }
 
 export class AgentConfigService {
+  // 运行时 ACTIVE prompt 短 TTL 缓存：每轮 goal 调用会读 2 次 agent_prompts（handler + callPrompt），
+  // 该缓存将 DB 读降到每 30s 一次；admin 发布/回滚时经 clearCachedPrompt 立即失效，热更换语义不变。
+  private readonly ACTIVE_PROMPT_CACHE_TTL_MS = 30_000;
+  private activePromptCache = new Map<string, { loadedAt: number; value: any }>();
+
   /**
    * 获取一个 agent 的 ACTIVE prompt.
    *
@@ -208,6 +214,11 @@ export class AgentConfigService {
    * 让消费方在需要时区分.
    */
   async getActivePrompt(agentId: string) {
+    const now = Date.now();
+    const cached = this.activePromptCache.get(agentId);
+    if (cached && now - cached.loadedAt < this.ACTIVE_PROMPT_CACHE_TTL_MS) {
+      return cached.value;
+    }
     const prompt = await systemPrisma.agent_prompts.findFirst({
       where: { agentId, status: 'ACTIVE' },
       orderBy: { version: 'desc' }
@@ -220,29 +231,36 @@ export class AgentConfigService {
       typeof prompt.compiledSystemPrompt === 'string' &&
       prompt.compiledSystemPrompt.length > 0;
 
-    if (useCompiled) {
-      return {
-        ...prompt,
-        systemPrompt: prompt.compiledSystemPrompt!,
-        _source: prompt.systemPrompt,
-        _compiled: prompt.compiledSystemPrompt!,
-        _compileStatus: prompt.compileStatus,
-        _sourceHash: prompt.sourceHash,
-        _compileContextHash: prompt.compileContextHash,
-        _usedCompiled: true,
-      };
-    }
+    const result = useCompiled
+      ? {
+          ...prompt,
+          systemPrompt: prompt.compiledSystemPrompt!,
+          _source: prompt.systemPrompt,
+          _compiled: prompt.compiledSystemPrompt!,
+          _compileStatus: prompt.compileStatus,
+          _sourceHash: prompt.sourceHash,
+          _compileContextHash: prompt.compileContextHash,
+          _usedCompiled: true,
+        }
+      : {
+          ...prompt,
+          _source: prompt.systemPrompt,
+          _compiled: null,
+          _compileStatus: prompt.compileStatus,
+          _sourceHash: prompt.sourceHash,
+          _compileContextHash: prompt.compileContextHash,
+          _usedCompiled: false,
+        };
 
-    // 降级: 用源
-    return {
-      ...prompt,
-      _source: prompt.systemPrompt,
-      _compiled: null,
-      _compileStatus: prompt.compileStatus,
-      _sourceHash: prompt.sourceHash,
-      _compileContextHash: prompt.compileContextHash,
-      _usedCompiled: false,
-    };
+    this.activePromptCache.set(agentId, { loadedAt: now, value: result });
+    return result;
+  }
+
+  /** 清除单个 agent 的 ACTIVE prompt 缓存（admin 发布/回滚/删除时调用） */
+  clearCachedPrompt(agentId: string): void {
+    if (this.activePromptCache.delete(agentId)) {
+      logger.debug(`[AgentConfigService] cleared cached prompt for ${agentId}`);
+    }
   }
 }
 

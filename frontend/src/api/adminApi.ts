@@ -1,12 +1,13 @@
 // Admin 管理 API
 import axios from 'axios';
 import { setAuthFlashMessage } from '@/utils/authFlash';
+import { clearUserLocalState } from '@/utils/sessionCleanup';
+import { AI_REQUEST_TIMEOUT } from '@/utils/api';
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const ADMIN_SESSION_REQUEST_TIMEOUT_MS = 10000;
 
 /**
  * 管理员会话标记：token 已通过 HttpOnly Cookie 下发，JS 侧只记录"已登录"标记（非敏感）
- * 旧的 admin_token 为历史遗留，读取处保留兼容
  */
 export const ADMIN_SESSION_KEY = 'wenflow_admin_session';
 export const ADMIN_SESSION_CLEAR_EVENT_KEY = 'wenflow_admin_session_cleared';
@@ -17,9 +18,7 @@ function isProtectedAdminPathname(pathname: string): boolean {
   const normalizedPath = pathname.toLowerCase().replace(/\/+$/, '') || '/';
   if (normalizedPath !== '/admin' && !normalizedPath.startsWith('/admin/')) return false;
 
-  return normalizedPath !== '/admin/login'
-    && normalizedPath !== '/admin/test'
-    && !normalizedPath.startsWith('/admin/test/');
+  return normalizedPath !== '/admin/login';
 }
 
 let adminProtectedLocationResolver = () => isProtectedAdminPathname(window.location.pathname);
@@ -40,28 +39,76 @@ export function isAdminSessionClearBroadcast(value: string | null): boolean {
 
 export const hasAdminSession = (): boolean =>
   localStorage.getItem(ADMIN_SESSION_KEY) === '1'
-  || sessionStorage.getItem(ADMIN_SESSION_KEY) === '1'
-  || !!getAuthToken();
-
-/**
- * 获取认证 Token（仅兼容历史遗留的 localStorage 存储；新登录走 HttpOnly Cookie）
- */
-function getAuthToken(): string | null {
-  return localStorage.getItem('admin_token') || sessionStorage.getItem('admin_token');
-}
+  || sessionStorage.getItem(ADMIN_SESSION_KEY) === '1';
 
 function createCommandId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
   return `cmd_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
-function blackboxCommandConfig(expectedTraceCount: number) {
-  return {
-    headers: {
-      'Idempotency-Key': createCommandId(),
-      'X-Expected-Trace-Count': String(expectedTraceCount)
-    }
-  };
+/**
+ * 黑盒命令 Idempotency-Key 会话级缓存（P0-1 死锁修复）：
+ * 同一 (sessionId, commandKey) 的命令在终态（成功或不可重试失败）前复用同一 key，
+ * 使后端 barrier 允许的「同 key 重试对账」路径可用；终态后清除，下一次操作使用新 key
+ * （step/observe 类每次操作都是新命令，不会误复用上一次的 key）。
+ * 仅内存缓存：页面刷新后丢失 key 时，由后端自动对账 barrier（tryResolveOrderingBarrier）兜底。
+ */
+const BLACKBOX_COMMAND_KEY_CACHE_LIMIT = 200;
+const blackboxCommandKeyCache = new Map<string, string>();
+
+export function getOrCreateBlackboxCommandKey(sessionId: string, commandKey: string): string {
+  const cacheKey = `${sessionId}::${commandKey}`;
+  let value = blackboxCommandKeyCache.get(cacheKey);
+  if (!value) {
+    if (blackboxCommandKeyCache.size >= BLACKBOX_COMMAND_KEY_CACHE_LIMIT) blackboxCommandKeyCache.clear();
+    value = createCommandId();
+    blackboxCommandKeyCache.set(cacheKey, value);
+  }
+  return value;
+}
+
+export function clearBlackboxCommandKey(sessionId: string, commandKey: string): void {
+  blackboxCommandKeyCache.delete(`${sessionId}::${commandKey}`);
+}
+
+/** 测试辅助：清空缓存，避免用例间 key 泄漏 */
+export function resetBlackboxCommandKeyCache(): void {
+  blackboxCommandKeyCache.clear();
+}
+
+/** 命令是否已达成终态判定：可重试失败（503 / retryable=true）保留 key，成功与不可重试失败清除 key */
+export function isRetryableBlackboxCommandError(error: unknown): boolean {
+  const response = (error as { response?: { status?: number; data?: { retryable?: unknown } } })?.response;
+  return response?.data?.retryable === true || response?.status === 503;
+}
+
+/** 黑盒写命令统一发送：同一逻辑命令复用同一 Idempotency-Key，直到命令终态 */
+async function sendBlackboxCommand(
+  path: string,
+  sessionId: string,
+  commandKey: string,
+  body: unknown,
+  expectedTraceCount: number
+) {
+  const idempotencyKey = getOrCreateBlackboxCommandKey(sessionId, commandKey);
+  try {
+    const response = await adminAxios.post(path, body, {
+      headers: {
+        'Idempotency-Key': idempotencyKey,
+        'X-Expected-Trace-Count': String(expectedTraceCount)
+      }
+    });
+    clearBlackboxCommandKey(sessionId, commandKey);
+    return response;
+  } catch (error) {
+    if (!isRetryableBlackboxCommandError(error)) clearBlackboxCommandKey(sessionId, commandKey);
+    throw error;
+  }
+}
+
+/** 黑盒命令标识：action 按动作内容（含会话绑定），step/observe 按类型（后端 barrier 按 key 去重） */
+function blackboxActionCommandKey(action: Record<string, unknown>): string {
+  return `action:${JSON.stringify(action)}`;
 }
 
 /**
@@ -69,26 +116,14 @@ function blackboxCommandConfig(expectedTraceCount: number) {
  */
 const adminAxios = axios.create({
   baseURL: API_BASE,
-  timeout: 240000, // 4分钟超时
+  timeout: 30000, // 30秒超时
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// 请求拦截器 - 添加 Token
-adminAxios.interceptors.request.use(
-  (config) => {
-    const token = getAuthToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+// 会话认证依赖 HttpOnly Cookie（withCredentials），无需在请求头注入 Token
 
 let unauthorizedRedirect: Promise<void> | null = null;
 
@@ -134,12 +169,12 @@ export { adminAxios };
 
 /** 清除管理员会话的所有本地标记，并默认通知其他标签页 */
 export function clearAdminSession(notifyOtherTabs = true): void {
-  localStorage.removeItem('admin_token');
-  sessionStorage.removeItem('admin_token');
   localStorage.removeItem('admin_user');
   sessionStorage.removeItem('admin_user');
   localStorage.removeItem(ADMIN_SESSION_KEY);
   sessionStorage.removeItem(ADMIN_SESSION_KEY);
+  // 管理员登出同步清除投影令牌（真实凭据，防止残留放行受保护路由）
+  clearUserLocalState();
 
   if (notifyOtherTabs) {
     try {
@@ -155,9 +190,6 @@ export function clearAdminSession(notifyOtherTabs = true): void {
 
 /** 记录管理员会话标记（remember 决定存 localStorage 还是 sessionStorage） */
 export function markAdminSession(remember: boolean): void {
-  // 新登录必须清除旧 Bearer Token，否则请求拦截器会优先发送失效 Token 并遮蔽新 Cookie。
-  localStorage.removeItem('admin_token');
-  sessionStorage.removeItem('admin_token');
   localStorage.removeItem(ADMIN_SESSION_KEY);
   sessionStorage.removeItem(ADMIN_SESSION_KEY);
   const storage = remember ? localStorage : sessionStorage;
@@ -215,25 +247,24 @@ export const adminDashboardApi = {
   getActivity: async (limit?: number, excludeTest?: boolean) => {
     return adminAxios.get('/admin/activity', { params: { limit, excludeTest: excludeTest ? '1' : undefined } });
   },
-
-  /**
-   * 获取用户列表（兼容旧版）
-   */
-  users: async (params?: Record<string, unknown>) => {
-    return adminAxios.get('/admin/users', { params });
-  },
 };
 
 /**
  * 平台开关设置 API
  */
+export interface RegistrationSettings {
+  registrationEnabled: boolean;
+  registerIpQuotaEnabled?: boolean;
+  registerIpDailyQuota?: number;
+}
+
 export const adminPlatformSettingsApi = {
-  getRegistrationSetting: async () => {
+  getRegistrationSetting: async (): Promise<{ data: { data: RegistrationSettings } }> => {
     return adminAxios.get('/admin/settings/registration');
   },
 
-  updateRegistrationSetting: async (registrationEnabled: boolean) => {
-    return adminAxios.put('/admin/settings/registration', { registrationEnabled });
+  updateRegistrationSetting: async (data: Partial<RegistrationSettings>): Promise<{ data: { data: RegistrationSettings } }> => {
+    return adminAxios.put('/admin/settings/registration', data);
   },
 
   getReliabilitySettings: async () => {
@@ -253,29 +284,6 @@ export const adminPlatformSettingsApi = {
   }
 };
 
-export interface AdvanceTimePreviewResponse {
-  dayDiff: number;
-  simulatedAsOf: string;
-  hasMetricRecord: boolean;
-  latestMetricAt?: string;
-  before: Record<string, unknown>;
-  after: Record<string, unknown> | null;
-}
-
-export const adminDevtoolsApi = {
-  advanceTimePreview: async (data: { days: number; userId?: string; pathId?: string }) => {
-    const response = await adminAxios.post('/admin/devtools/advance-time', data);
-    return response.data?.data as AdvanceTimePreviewResponse;
-  },
-  getDebugEvents: async (params?: { limit?: number; userId?: string; types?: string[]; from?: string; to?: string }) => {
-    const response = await adminAxios.get('/admin/debug/events', { params });
-    return response.data?.data;
-  }
-};
-
-/**
- * 测试工具 API
- */
 /**
  * 用户管理 API
  */
@@ -283,14 +291,7 @@ export const adminUsersApi = {
   /**
    * 获取用户列表
    */
-  getUsers: async (params?: { page?: number; limit?: number; search?: string; role?: string }) => {
-    return adminAxios.get('/admin/users', { params });
-  },
-
-  /**
-   * 获取用户列表（兼容旧版）
-   */
-  users: async (params?: { page?: number; limit?: number; search?: string }) => {
+  getUsers: async (params?: { page?: number; limit?: number; search?: string; role?: string; status?: string; includeTest?: boolean }) => {
     return adminAxios.get('/admin/users', { params });
   },
 
@@ -365,6 +366,8 @@ export const adminLearnerModelsApi = {
     pathId?: string;
     staleOnly?: boolean;
     riskOnly?: boolean;
+    excludeTest?: boolean;
+    includeTest?: boolean;
     page?: number;
     limit?: number;
   }) => {
@@ -374,6 +377,7 @@ export const adminLearnerModelsApi = {
   getDetail: async (userId: string, params?: {
     pathId?: string;
     mode?: 'global' | 'path' | 'teaching';
+    includeTest?: boolean;
   }) => {
     return adminAxios.get(`/admin/learner-models/${userId}`, { params });
   },
@@ -388,8 +392,25 @@ export const adminLearnerModelsApi = {
   getEvidence: async (userId: string, params?: {
     pathId?: string;
     limit?: number;
+    includeTest?: boolean;
   }) => {
     return adminAxios.get(`/admin/learner-models/${userId}/evidence`, { params });
+  },
+
+  getPredictions: async (userId: string, params?: {
+    includeTest?: boolean;
+  }) => {
+    return adminAxios.get(`/admin/learner-models/${userId}/predictions`, { params });
+  }
+};
+
+export const adminMemoryTracesApi = {
+  list: async (params?: {
+    userId?: string;
+    limit?: number;
+    includeVirtual?: boolean;
+  }) => {
+    return adminAxios.get('/admin/memory-traces', { params });
   }
 };
 
@@ -401,219 +422,13 @@ export const adminTeachingSessionsApi = {
     status?: string;
     onlyWithAdvisory?: boolean;
     onlyMissingWrapup?: boolean;
+    includeTest?: boolean;
   }) => {
     return adminAxios.get('/admin/teaching-sessions', { params });
   }
 };
 
-/**
- * Agent 管理 API
- */
-export interface AdminRegistryAgent {
-  agentId: string;
-  name: string;
-  type: string;
-  role?: string;
-   kind?: 'agent' | 'skill' | 'orchestrator' | 'alias';
-  aliases?: string[];
-  runtimeEnabled?: boolean;
-  lifecycleStatus: 'draft' | 'staging' | 'published';
-  status: 'healthy' | 'warning' | 'error' | 'idle';
-  callCount: number;
-  successRate: number;
-  avgDuration: number;
-  lastActivity: string | null;
-  version: string;
-}
-
-export interface AdminRegistryResponse {
-  data: {
-    summary: {
-      total: number;
-      active24h: number;
-      neverCalled: number;
-      unhealthy: number;
-    };
-    agents: AdminRegistryAgent[];
-  };
-}
-
-export interface AgentDesignDetail {
-  agentId: string;
-  requestedAgentId: string;
-  basic: {
-    name: string;
-    version: string;
-    type: string;
-    category: string;
-    description: string;
-  };
-  runtime: {
-    role: 'agent' | 'orchestrator';
-    kind: 'agent' | 'orchestrator' | 'alias';
-    runtimeEnabled: boolean;
-    userVisible: boolean;
-    monitoringGroup: string | null;
-    ioContractVersion: 'legacy' | 'agent-output-v1';
-    aliases: string[];
-    agentFlow?: {
-      description?: string;
-      steps?: Array<{ agentId: string; action?: string; condition?: string }>;
-    };
-    promptManagement?: {
-      mode: 'agent-prompt' | 'agent-no-direct-prompt' | 'legacy-service';
-      note: string | null;
-    };
-  };
-  definition: {
-    capabilities: string[];
-    subscribes: string[];
-    publishes: string[];
-    inputSchema: Record<string, unknown>;
-    outputSchema: Record<string, unknown>;
-  };
-  samples: {
-    agentCallLogs: Array<{
-      id: string;
-      calledAt: string;
-      success: boolean;
-      durationMs: number;
-      error: string | null;
-      input: unknown;
-      output: unknown;
-    }>;
-  };
-}
-
-export interface AgentRelationItem {
-  agentId: string;
-  group: string;
-  members: Array<{
-    agentId: string;
-    name: string;
-    role: 'agent' | 'orchestrator';
-  }>;
-}
-
-export interface OrchestratorRelationItem {
-  orchestratorId: string;
-  group: string;
-  members: Array<{
-    agentId: string;
-    name: string;
-    role: 'agent' | 'orchestrator';
-  }>;
-}
-
-export interface PathAgentInputConfig {
-  version: string;
-  normalizedInput: {
-    descriptionSources: string[];
-    subjectSources: string[];
-    skillLevelSources: string[];
-    timePerDaySources: string[];
-    deadlineTextSources: string[];
-    includeStructuredData: boolean;
-    includeConfirmedProposal: boolean;
-    includeConfidenceScores: boolean;
-    includeConversationHistory: boolean;
-  };
-}
-
-export interface AgentDataContractSection {
-  name: string;
-  description: string;
-  fields: Array<{
-    key: string;
-    description: string;
-  }>;
-}
-
-export interface PathAgentNormalizedInputPreview {
-  description: string | null;
-  subject: string | null;
-  deadlineText: string | null;
-  sourceConversationId: string | null;
-  existingPathId: string | null;
-  skillLevel: string | null;
-  timePerDay: string | null;
-  structuredData: Record<string, unknown> | null;
-  confirmedProposal: Record<string, unknown> | null;
-  confidenceScores: Record<string, unknown> | null;
-  conversationHistory: Array<{ role: string; content: string }>;
-}
-
-export interface PathAgentSupportingEvidencePreview {
-  usagePolicy: 'reference_only';
-  conversationHistory: Array<{ role: string; content: string }>;
-  learnerQA: Array<Record<string, unknown>>;
-  behaviorLog: Array<Record<string, unknown>>;
-  notes: string[];
-}
-
-export interface ManifestDiagnosticsData {
-  summary: {
-    manifestTotal: number;
-    registrationTotal: number;
-    modelConfigTotal: number;
-    calledAgentTotal: number;
-    catalogTotal: number;
-    driftCount: number;
-    outputContractSampleSize?: number;
-  };
-  outputContracts?: {
-    agentCallLogs: {
-      sampleSize: number;
-      v1: number;
-      legacy: number;
-      mixed: number;
-      unknown: number;
-    };
-  };
-  drift: {
-    missingRegistrations: string[];
-    unknownRegistrations: string[];
-    aliasRegistrations: Array<{ id: string; canonicalId: string }>;
-    unknownModelConfigs: string[];
-    aliasModelConfigs: Array<{ id: string; canonicalId: string }>;
-    unknownLogAgents: string[];
-    aliasLogAgents: Array<{ id: string; canonicalId: string; calls: number }>;
-    catalogOnly: string[];
-  };
-  samples: {
-    registrations: Array<{
-      id: string;
-      name: string;
-      type: string;
-      updatedAt: string;
-    }>;
-    modelConfigs: Array<{
-      agentId: string;
-      enabled: boolean;
-      updatedAt: string;
-    }>;
-    calledAgents: Array<{
-      agentId: string;
-      _count: { _all: number };
-    }>;
-  };
-}
-
 export const adminAgentsApi = {
-  /**
-   * 获取 Agent 列表
-   */
-  getAgents: async () => {
-    return adminAxios.get('/admin/agents');
-  },
-
-  /**
-   * 获取 Agent 状态
-   */
-  status: async () => {
-    return adminAxios.get('/admin/agents/status');
-  },
-
   /**
    * 获取 Agent 日志
    */
@@ -626,106 +441,17 @@ export const adminAgentsApi = {
     sessionId?: string;
     status?: 'success' | 'error' | 'timeout';
     keyword?: string;
-    timeRange?: 'today' | 'yesterday' | 'last7days' | 'last30days' | 'week' | 'month' | 'all';
+    timeRange?: 'today' | 'yesterday' | 'week' | 'month' | 'all';
     sourceEntry?: string;
     startTime?: string;
     endTime?: string;
+    errorCategory?: string;
   }) => {
     return adminAxios.get('/admin/agents/logs', { params });
   },
 
   getLogDetail: async (id: string) => {
     return adminAxios.get(`/admin/agents/logs/${encodeURIComponent(id)}`);
-  },
-
-  getRegistry: async () => {
-    return adminAxios.get<AdminRegistryResponse>('/admin/agents/registry');
-  },
-
-  getAgentDesign: async (agentId: string) => {
-    return adminAxios.get<{ data: AgentDesignDetail }>(`/admin/agents/design/${encodeURIComponent(agentId)}`);
-  },
-
-  getAgentRelations: async () => {
-    return adminAxios.get<{ data: { agents: AgentRelationItem[] } }>('/admin/agents/relations');
-  },
-
-  getOrchestratorRelations: async () => {
-    return adminAxios.get<{ data: { agents: OrchestratorRelationItem[]; orchestrators: OrchestratorRelationItem[] } }>(
-      '/admin/agents/relations'
-    );
-  },
-
-  getAgentConfig: async (agentId: string) => {
-    return adminAxios.get<{ data: {
-      agentId: string;
-      config: PathAgentInputConfig;
-      defaults: PathAgentInputConfig;
-      availableSourcePaths: Record<string, string[]>;
-    } }>(`/admin/agents/${encodeURIComponent(agentId)}/config`);
-  },
-
-  getAgentDataContract: async (agentId: string) => {
-    return adminAxios.get<{ data: {
-      agentId: string;
-      entryPayload: AgentDataContractSection;
-      derivedInput: AgentDataContractSection;
-      outputContract: AgentDataContractSection;
-    } }>(`/admin/agents/${encodeURIComponent(agentId)}/data-contract`);
-  },
-
-  previewAgentConfig: async (agentId: string, sampleGoalFinalPayload: Record<string, unknown>) => {
-    return adminAxios.post<{ data: {
-      agentId: string;
-      normalizedInput: PathAgentNormalizedInputPreview;
-    } }>(`/admin/agents/${encodeURIComponent(agentId)}/config-preview`, {
-      sampleGoalFinalPayload
-    });
-  },
-
-  updateAgentConfig: async (agentId: string, config: PathAgentInputConfig) => {
-    return adminAxios.put<{ data: { agentId: string; config: PathAgentInputConfig } }>(
-      `/admin/agents/${encodeURIComponent(agentId)}/config`,
-      config
-    );
-  },
-
-  getOrchestratorConfig: async (agentId: string) => {
-    return adminAxios.get<{ data: {
-      agentId: string;
-      config: PathAgentInputConfig;
-      defaults: PathAgentInputConfig;
-      availableSourcePaths: Record<string, string[]>;
-    } }>(`/admin/agents/${encodeURIComponent(agentId)}/config`);
-  },
-
-  getOrchestratorDataContract: async (agentId: string) => {
-    return adminAxios.get<{ data: {
-      agentId: string;
-      entryPayload: AgentDataContractSection;
-      derivedInput: AgentDataContractSection;
-      outputContract: AgentDataContractSection;
-    } }>(`/admin/agents/${encodeURIComponent(agentId)}/data-contract`);
-  },
-
-  previewOrchestratorConfig: async (agentId: string, sampleGoalFinalPayload: Record<string, unknown>) => {
-    return adminAxios.post<{ data: {
-      agentId: string;
-      normalizedInput: PathAgentNormalizedInputPreview;
-    } }>(`/admin/agents/${encodeURIComponent(agentId)}/config-preview`, {
-      sampleGoalFinalPayload
-    });
-  },
-
-  updateOrchestratorConfig: async (agentId: string, config: PathAgentInputConfig) => {
-    return adminAxios.put<{ data: { agentId: string; config: PathAgentInputConfig } }>(
-      `/admin/agents/${encodeURIComponent(agentId)}/config`,
-      config
-    );
-  },
-
-  getManifestDiagnostics: async () => {
-    return adminAxios.get<{ data: ManifestDiagnosticsData }>('/admin/manifest/diagnostics');
   },
 };
 
@@ -734,17 +460,11 @@ export const adminRuntimeDefinitionsApi = {
     return adminAxios.get('/admin/runtime-definitions/agents');
   },
 
-  getAgentDefinitionDetail: async (id: string) => {
-    return adminAxios.get(`/admin/runtime-definitions/agents/${encodeURIComponent(id)}`);
-  },
 
   getOrchestratorDefinitions: async () => {
     return adminAxios.get('/admin/runtime-definitions/orchestrators');
   },
 
-  getOrchestratorDefinitionDetail: async (id: string) => {
-    return adminAxios.get(`/admin/runtime-definitions/orchestrators/${encodeURIComponent(id)}`);
-  },
 
   getPromptCallLogs: async (params?: {
     limit?: number;
@@ -758,66 +478,126 @@ export const adminRuntimeDefinitionsApi = {
     return adminAxios.get('/admin/runtime-definitions/prompt-call-logs', { params });
   },
 
-  getPathGenerationEvents: async (params?: {
-    limit?: number;
-    pathId?: string;
-    traceId?: string;
-    status?: string;
-    phase?: string;
-  }) => {
-    return adminAxios.get('/admin/flow-events/path-generation', { params });
-  },
 };
 
 // ============================================================
 // V3 字段路由（AGENT_IO_DESIGN_V3 §3）
 // ============================================================
-export interface FieldRoutingPatch {
-  render?: 'visible' | 'hidden';
-  handoff?: string[];
-  internal?: boolean;
-  accumulate?: boolean;
-  notes?: string;
-  reason?: string;
-}
-
-export interface CreateFieldPayload {
-  fieldId: string;
-  stage: string;
-  promptRole: 'soft-info' | 'hidden-inference' | 'derived-presentation';
-  valueType?: string;
-  snakeName?: string;
-  camelName?: string;
-  description?: string;
-  enumValues?: string[];
-  bindings?: Record<string, unknown>;
-  reason?: string;
-}
-
-export const adminFieldRoutingsApi = {
-  getStages: async () => adminAxios.get('/admin/field-routings/stages'),
-  getStageDetail: async (stage: string) =>
-    adminAxios.get(`/admin/field-routings/stages/${encodeURIComponent(stage)}`),
-  createField: async (payload: CreateFieldPayload) =>
-    adminAxios.post('/admin/field-routings/fields', payload),
-  patchRouting: async (agentId: string, fieldId: string, patch: FieldRoutingPatch) =>
-    adminAxios.patch(
-      `/admin/field-routings/routings/${encodeURIComponent(agentId)}/${encodeURIComponent(fieldId)}`,
-      patch
-    ),
-  getChanges: async (params?: { fieldId?: string; agentId?: string; limit?: number }) =>
-    adminAxios.get('/admin/field-routings/changes', { params }),
-};
 
 /**
  * Skill 工作台综合元数据 API
  * 一次拉回：skill manifest + 隶属 Agent + 模型配置 + prompt 版本 + 字段契约 + 调用统计
+ * 完成度扩展（SKILL_READINESS_SPEC §1.3）：completion 字段；不在 manifest 但户口簿有登记的
+ * skill 降级返回 draft 态（data.draft=true + completion + displayName/description），不再 404。
  */
+export interface SkillCompletionGateDetail {
+  ok: boolean;
+  detail: string;
+}
+
+export interface SkillCompletionItem {
+  id: string;
+  label: string;
+  ok: boolean | null;
+  hint?: string;
+}
+
+export interface SkillCompletion {
+  status: 'draft' | 'handler-ready' | 'core-ready' | 'fields-synced' | 'live';
+  gates: {
+    draft: SkillCompletionGateDetail;
+    handlerReady: SkillCompletionGateDetail;
+    coreReady: SkillCompletionGateDetail;
+    fieldsSynced: SkillCompletionGateDetail;
+    live: SkillCompletionGateDetail;
+  };
+  items: SkillCompletionItem[];
+  warnings: string[];
+}
+
+export interface SkillWorkbenchMeta {
+  skill?: {
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+    aliases: string[];
+    ioContractVersion?: string;
+    noPromptFile: boolean;
+  };
+  parentAgent?: { id: string; name: string; monitoringGroup?: string } | null;
+  completion?: SkillCompletion;
+  /** 404 降级分支：不在 manifest 但户口簿有登记的 skill */
+  draft?: boolean;
+  displayName?: string;
+  description?: string | null;
+  activePromptId?: string | null;
+  [key: string]: unknown;
+}
+
 export const adminSkillWorkbenchApi = {
   getMeta: async (skillId: string) => {
     const canonicalSkillId = skillId.startsWith('skill:') ? skillId : `skill:${skillId}`;
+    // 返回体结构：{ success, data: SkillWorkbenchMeta }；data.completion 为可选新增字段，
+    // 404 降级分支 data.draft=true。既有调用方（SkillDrawer/SkillDesignPage）用
+    // `res?.data?.data ?? res?.data` 取值，保持返回类型宽松不破坏。
     return adminAxios.get(`/admin/skills/${encodeURIComponent(canonicalSkillId)}/workbench-meta`);
   },
+};
+
+/**
+ * 字段路由中心 API（agent 管辖 skill 的字段归属/流向/编辑）
+ */
+export const adminFieldRoutingsApi = {
+  getStages: async () => adminAxios.get('/admin/field-routings/stages'),
+
+  getStageDetail: async (stage: string) =>
+    adminAxios.get(`/admin/field-routings/stages/${encodeURIComponent(stage)}`),
+
+  /** skill 维度字段路由读取（M1 统一编辑）：产出行 + fields + core 状态投影（analyzeCoreFieldsSync 单 skill） */
+  getSkillRoutings: async (skillId: string) =>
+    adminAxios.get(`/admin/field-routings/skill/${encodeURIComponent(skillId)}`),
+
+  getChanges: async (params?: { stage?: string; fieldId?: string; limit?: number }) =>
+    adminAxios.get('/admin/field-routings/changes', { params }),
+
+  getDrift: async (params?: { kind?: 'contract' | 'field' | 'routing'; stage?: string }) =>
+    adminAxios.get('/admin/field-routings/drift', { params }),
+
+  getOrchestrationFile: async (stage: string) =>
+    adminAxios.get(`/admin/field-routings/orchestration/${encodeURIComponent(stage)}`),
+
+  saveOrchestrationFile: async (stage: string, content: string) =>
+    adminAxios.put(`/admin/field-routings/orchestration/${encodeURIComponent(stage)}`, { content }),
+
+  syncOrchestrationFile: async (stage: string) =>
+    adminAxios.post(`/admin/field-routings/orchestration/${encodeURIComponent(stage)}/sync`),
+
+  /**
+   * 清理孤儿行（P2 补全）：编排文件声明删除 → DB 孤儿行清理。
+   * dryRun 默认 true（只报告不删）；dryRun=false 才执行删除（删除前写
+   * node_config_changes 审计，changeType='orchestration-prune'）。
+   */
+  pruneOrchestrationFile: async (stage: string, dryRun = true) =>
+    adminAxios.post(`/admin/field-routings/orchestration/${encodeURIComponent(stage)}/prune`, { dryRun }),
+
+  /**
+   * 行级编辑路由行（2026-08 编排结构页重构恢复）：仅允许编辑路由行属性
+   * （render/handoff/internal/accumulate/visibilityPreset/notes），
+   * 后端会同步回写编排文件（File-as-Truth 单源化保持）并写审计。
+   */
+  patchRouting: async (agentId: string, fieldId: string, data: {
+    render?: 'visible' | 'hidden';
+    handoff?: string[];
+    internal?: boolean;
+    accumulate?: boolean;
+    visibilityPreset?: string | null;
+    notes?: string | null;
+  }) =>
+    adminAxios.patch(
+      `/admin/field-routings/routings/${encodeURIComponent(agentId)}/${encodeURIComponent(fieldId)}`,
+      data
+    ),
 };
 
 /**
@@ -844,6 +624,8 @@ export const adminApiConfigApi = {
     defaultModel: string;
     defaultReasoningModel: string;
     defaultEvaluationModel: string;
+    defaultThinkingMode?: string;
+    defaultReasoningEffort?: string;
   }) => {
     return adminAxios.put('/admin/api-config', data);
   },
@@ -897,6 +679,205 @@ export const adminSystemApi = {
   }
 };
 
+// ============================================================
+// 健康中心（漂移/健康提醒聚合，编排结构页顶部健康区数据源）
+// 契约：GET /api/admin/health-center（60s 缓存，refresh=1 强制）、
+//       POST /api/admin/health-center/fix（body: { id }，仅 fixable 类）
+// ============================================================
+
+export type HealthCenterItemId =
+  | 'w4-corehash'
+  | 'field-routing-contract'
+  | 'field-routing'
+  | 'contract-parity'
+  | 'snapshots'
+  | 'yaml-crosscheck'
+  | 'params-consistency'
+  | 'fields-sync'
+  | 'w1-active'
+  | 'w2-registration'
+  | 'w3-wiring'
+  | 'override-record'
+  | 'runtime-prompt';
+
+/** 基准元数据：谁是真源（DRIFT_BASELINE_SURVEY §4.1） */
+export type HealthCenterBase =
+  | 'file:core.yaml'
+  | 'file:manifest'
+  | 'file:orchestration'
+  | 'file:skills.yaml'
+  | 'bidirectional'
+  | 'db:managed'
+  | 'runtime';
+
+/** 语义分级：决定修复语义 */
+export type HealthCenterSemantics = 'baseline-drift' | 'consistency' | 'override-record' | 'runtime-info';
+
+export type HealthSeverity = 'ok' | 'warn' | 'error' | 'info';
+
+export interface HealthCenterItem {
+  id: HealthCenterItemId;
+  label: string;
+  base: HealthCenterBase;
+  semantics: HealthCenterSemantics;
+  severity: HealthSeverity;
+  status: string;
+  count: number;
+  detail: string[];
+  cause: string;
+  action: 'fixable' | 'manual' | 'none';
+  fixHint: string;
+  source: string;
+}
+
+export interface HealthCenterSummary {
+  total: number;
+  baselineDrift: number;
+  consistency: number;
+  overrideRecord: number;
+  fixable: number;
+}
+
+export interface HealthCenterReport {
+  generatedAt: string;
+  summary: HealthCenterSummary;
+  items: HealthCenterItem[];
+}
+
+export interface HealthCenterFixResult {
+  id: HealthCenterItemId;
+  fixed: boolean;
+  backupDir: string | null;
+  gitCommitHint: string;
+  before: HealthCenterItem;
+  after: HealthCenterItem;
+  auditId?: string;
+}
+
+// ============================================================
+// 巡检工作台聚合（G1：GET /api/admin/health-center/summary）
+// 一次请求返回五分组：健康 13 项 / 漂移三义 / 对账 W1-W5 / 完成度五档 / 全局统计
+// ============================================================
+
+export type HealthCompletionState = 'draft' | 'handler-ready' | 'core-ready' | 'fields-synced' | 'live';
+
+/** 漂移摘要：三种漂移语义各自独立计数（术语统一，ADMIN_IA_AUDIT §3.2） */
+export interface HealthDriftSummary {
+  /** 契约漂移（编排契约声明 vs DB，health item field-routing-contract） */
+  contract: number;
+  /** W4 哈希漂移（core → 产物 → DB 哈希，health item w4-corehash） */
+  hash: number;
+  /** 运行时漂移（遥测 promptDrift 观测，health item runtime-prompt） */
+  runtime: number;
+}
+
+/** 对账摘要：W1-W5 简版计数（与 skills-readiness 同一报告派生） */
+export interface HealthReconciliationSummary {
+  /** 户口簿活跃 skill 总数（对账对象） */
+  total: number;
+  /** W2 缺注册：户口簿登记但 skill_registrations 无行 */
+  missingRegistration: number;
+  /** W2 幽灵注册：注册表行不在户口簿活跃集 */
+  zombieRegistration: number;
+  /** W1 缺 ACTIVE：户口簿登记（有 prompt 文件）但无 ACTIVE prompt */
+  missingActive: number;
+  /** W1 幽灵 ACTIVE：agent_prompts ACTIVE 的 skill 不在户口簿活跃集 */
+  zombieActive: number;
+  /** W1 僵尸技能 ACTIVE 残留（保留注册零调用） */
+  zombieSkillActive: number;
+  /** W3 接线差集：steps 引用缺户口簿登记 + 户口簿登记缺 steps 引用 */
+  unwired: number;
+}
+
+/** 完成度摘要：五档分布计数（明细仍走 /skills/reconciliation） */
+export interface HealthCompletionSummary {
+  distribution: Record<HealthCompletionState, number>;
+  /** 已达 live 档的 skill 数 */
+  live: number;
+}
+
+/** 全局统计 */
+export interface HealthGlobalSummary {
+  /** skill 总数（户口簿活跃集） */
+  total: number;
+  aux: number;
+  mainline: number;
+  handlerOnly: number;
+  /** 异常 skill 数：任一已评估的完成度检查项不过 */
+  abnormalSkills: number;
+}
+
+export interface HealthCenterSummaryReport {
+  generatedAt: string;
+  health: {
+    summary: HealthCenterSummary;
+    items: HealthCenterItem[];
+    /** 异常检查项数（severity=error/warn，不含 info 观测项） */
+    abnormal: number;
+  };
+  drift: HealthDriftSummary;
+  reconciliation: HealthReconciliationSummary;
+  completion: HealthCompletionSummary;
+  global: HealthGlobalSummary;
+}
+
+export const adminHealthCenterApi = {
+  /**
+   * 统一健康清单；refresh=true 时绕过 60s 缓存强制重算。
+   */
+  get: async (refresh = false) => {
+    return adminAxios.get<{ success: boolean; data: HealthCenterReport }>('/admin/health-center', {
+      params: refresh ? { refresh: 1 } : {},
+    });
+  },
+
+  /**
+   * 巡检聚合（G1 一页式巡检工作台）：健康 13 项 + 漂移 + 对账 + 完成度 + 全局统计；
+   * refresh=true 时绕过 60s 缓存强制重算（?refresh=1）。
+   */
+  getSummary: async (refresh = false) => {
+    return adminAxios.get<{ success: boolean; data: HealthCenterSummaryReport }>(
+      '/admin/health-center/summary',
+      { params: refresh ? { refresh: 1 } : {} },
+    );
+  },
+
+  /**
+   * 一键修复（仅 fixable：w4-corehash / field-routing / snapshots）；
+   * manual 类后端返回 409 + 指引。
+   */
+  fix: async (id: HealthCenterItemId) => {
+    return adminAxios.post<{ success: boolean; data: HealthCenterFixResult }>('/admin/health-center/fix', { id });
+  },
+};
+
+/**
+ * 运营术语表（全局「这是什么」抽屉数据源）
+ * 后端从 yaml-vocabulary（promptRole 人话）+ glossary-content（概念/完成度/文档）派生
+ */
+export interface GlossaryTerm {
+  term: string;
+  def: string;
+  category: 'concept' | 'flow' | 'status' | 'health';
+  where?: string;
+}
+
+export interface GlossaryPayload {
+  promptRoles: Array<{ id: string; label: string; hint: string }>;
+  completionStates: Array<{ status: string; label: string; short: string; hint: string }>;
+  semantics: Array<{ id: string; label: string; hint: string }>;
+  stages: Array<{ id: string; label: string; hint: string }>;
+  terms: GlossaryTerm[];
+  docs: Array<{ title: string; path: string; desc: string }>;
+  vocabularyVersion: string;
+}
+
+export const adminGlossaryApi = {
+  get: async () => {
+    return adminAxios.get<{ success: boolean; data: GlossaryPayload }>('/admin/glossary');
+  },
+};
+
 /**
  * 用户反馈中心（前台教学反馈的收集与处理）
  */
@@ -930,23 +911,51 @@ export const adminFeedbackApi = {
 };
 
 /**
+ * Token 成本统计（LLM 用量与成本透视）
+ */
+export const adminTokenCostApi = {
+  /** 总览：总量 / 调用数 / 失败数 / prompt·completion 拆分 / 按天趋势 */
+  getSummary: async (params?: { days?: number; includeTest?: boolean }) => {
+    return adminAxios.get('/admin/token-cost/summary', {
+      params: { ...params, includeTest: params?.includeTest ? '1' : undefined },
+    });
+  },
+  /** per-agent（skill）token 排行 */
+  getBySkill: async (params?: { days?: number; includeTest?: boolean }) => {
+    return adminAxios.get('/admin/token-cost/by-skill', {
+      params: { ...params, includeTest: params?.includeTest ? '1' : undefined },
+    });
+  },
+  /** per-user token 排行 */
+  getByUser: async (params?: { days?: number; includeTest?: boolean; limit?: number }) => {
+    return adminAxios.get('/admin/token-cost/by-user', {
+      params: { ...params, includeTest: params?.includeTest ? '1' : undefined },
+    });
+  },
+  /** per-model token 排行 */
+  getByModel: async (params?: { days?: number; includeTest?: boolean }) => {
+    return adminAxios.get('/admin/token-cost/by-model', {
+      params: { ...params, includeTest: params?.includeTest ? '1' : undefined },
+    });
+  },
+};
+
+/**
  * Goal 会话管理（目标对话 → 路径生成源头）
  */
 export const adminGoalConversationsApi = {
-  list: async (params?: { page?: number; limit?: number; status?: string; userId?: string }) => {
+  list: async (params?: { page?: number; limit?: number; status?: string; userId?: string; includeTest?: boolean }) => {
     return adminAxios.get('/admin/goal-conversations', { params });
   },
   getDetail: async (id: string) => {
     return adminAxios.get(`/admin/goal-conversations/${encodeURIComponent(id)}`);
   },
-  update: async (id: string, payload: { status?: string; collectedData?: string }) => {
-    return adminAxios.patch(`/admin/goal-conversations/${encodeURIComponent(id)}`, payload);
-  },
   remove: async (id: string) => {
     return adminAxios.delete(`/admin/goal-conversations/${encodeURIComponent(id)}`);
   },
   regeneratePath: async (id: string) => {
-    return adminAxios.post(`/admin/goal-conversations/${encodeURIComponent(id)}/regenerate-path`);
+    // LLM 上游调用（Path 重生成）：放宽到 AI 请求超时
+    return adminAxios.post(`/admin/goal-conversations/${encodeURIComponent(id)}/regenerate-path`, undefined, { timeout: AI_REQUEST_TIMEOUT });
   },
   getStats: async () => {
     return adminAxios.get('/admin/goal-conversations/stats/overview');
@@ -963,6 +972,9 @@ export const adminAnnouncementsApi = {
   create: async (data: Record<string, unknown>) => {
     return adminAxios.post('/admin/announcements', data);
   },
+  update: async (id: string, data: Record<string, unknown>) => {
+    return adminAxios.put(`/admin/announcements/${encodeURIComponent(id)}`, data);
+  },
   publish: async (id: string) => {
     return adminAxios.put(`/admin/announcements/${encodeURIComponent(id)}/publish`);
   },
@@ -975,6 +987,27 @@ export const adminAnnouncementsApi = {
 };
 
 /**
+ * 平台 MCP 工具管理（外挂能力页）
+ */
+export const adminMcpApi = {
+  list: async () => {
+    return adminAxios.get('/admin/mcp');
+  },
+  createTool: async (data: Record<string, unknown>) => {
+    return adminAxios.post('/admin/mcp/tools', data);
+  },
+  updateTool: async (id: string, data: Record<string, unknown>) => {
+    return adminAxios.put(`/admin/mcp/tools/${encodeURIComponent(id)}`, data);
+  },
+  removeTool: async (id: string) => {
+    return adminAxios.delete(`/admin/mcp/tools/${encodeURIComponent(id)}`);
+  },
+  testTool: async (id: string) => {
+    return adminAxios.post(`/admin/mcp/tools/${encodeURIComponent(id)}/test`);
+  }
+};
+
+/**
  * Agent Prompt 管理 API - 版本管理
  */
 export const adminAgentPromptsApi = {
@@ -983,65 +1016,6 @@ export const adminAgentPromptsApi = {
    */
   getPromptVersions: async (params?: { agentId?: string; status?: string }) => {
     return adminAxios.get('/admin/agent-prompts', { params });
-  },
-
-  /**
-   * 获取 Agent 活跃 Prompt
-   */
-  getActivePrompt: async (agentId: string) => {
-    return adminAxios.get(`/admin/agent-prompts/${agentId}/active`);
-  },
-
-  /**
-   * 获取 Prompt 详情
-   */
-  getPromptDetail: async (id: string) => {
-    return adminAxios.get(`/admin/agent-prompts/detail/${id}`);
-  },
-
-  /**
-   * 创建新 Prompt 版本
-   */
-  createPrompt: async (data: {
-    agentId: string;
-    name: string;
-    description?: string;
-    systemPrompt: string;
-    temperature?: number;
-    maxTokens?: number;
-  }) => {
-    return adminAxios.post('/admin/agent-prompts', data);
-  },
-
-  /**
-   * 发布 Prompt 版本
-   */
-  publishPrompt: async (id: string) => {
-    return adminAxios.put(`/admin/agent-prompts/${id}/publish`);
-  },
-
-  seedCorePrompts: async () => {
-    return adminAxios.post('/admin/agent-prompts/seed-core');
-  },
-
-  /**
-   * 更新 Prompt 草稿
-   */
-  updatePrompt: async (id: string, data: {
-    name?: string;
-    description?: string;
-    systemPrompt?: string;
-    temperature?: number;
-    maxTokens?: number;
-  }) => {
-    return adminAxios.put(`/admin/agent-prompts/${id}`, data);
-  },
-
-  /**
-   * 删除 Prompt 草稿
-   */
-  deletePrompt: async (id: string) => {
-    return adminAxios.delete(`/admin/agent-prompts/${id}`);
   },
 
   /**
@@ -1073,21 +1047,11 @@ export const adminSkillsApi = {
     model?: string | null;
     thinkingMode?: string;
     reasoningEffort?: string;
-    /** @deprecated 生成参数已收敛到 ACTIVE Prompt，后端会忽略 */
-    temperature?: number;
-    /** @deprecated 生成参数已收敛到 ACTIVE Prompt，后端会忽略 */
-    maxTokens?: number;
     requestTimeoutMs?: number | null;
     maxLogicalRetries?: number | null;
     enabled?: boolean;
   }) => {
-    // Phase 2：不提交 temperature/maxTokens，避免旧调用方误写
-    const {
-      temperature: _t,
-      maxTokens: _m,
-      ...routingOnly
-    } = data;
-    return adminAxios.put(`/admin/skill-model-configs/${skillId}`, routingOnly);
+    return adminAxios.put(`/admin/skill-model-configs/${skillId}`, data);
   },
 
   deleteSkillModelConfig: async (skillId: string) => {
@@ -1098,45 +1062,124 @@ export const adminSkillsApi = {
     return adminAxios.post(`/admin/skills/${encodeURIComponent(skillId)}/test`, input);
   },
 
+  /** 模型延迟探测：不对 handler 全量试跑，直发上游看指定思考档的真实延迟/JSON/token */
+  modelProbe: async (skillId: string, data: {
+    thinkingMode?: string;
+    reasoningEffort?: string;
+    testInput?: string;
+    timeoutMs?: number;
+  }) => {
+    return adminAxios.post(`/admin/skills/${encodeURIComponent(skillId)}/model-probe`, data);
+  },
+
   getEffectiveSkillPrompt: async (skillId: string) => {
     return adminAxios.get(`/admin/skills/${encodeURIComponent(skillId)}/effective-prompt`);
   },
 
-  getAgentRelations: async () => {
-    return adminAxios.get('/admin/skills/agent-relations');
+  /**
+   * 技能四向对账（SKILL_READINESS_SPEC §4.2）：户口簿 / manifest / gateway 注册 / ACTIVE prompt
+   * 全量逐 skill 状态 + 完成度投影 + 差集标记（Skills.vue 对账面板数据源）。
+   */
+  getReconciliation: async () => {
+    return adminAxios.get<{ success: boolean; data: SkillReconciliationReport }>('/admin/skills/reconciliation');
+  },
+
+  /**
+   * W1-W5 readiness 诊断（全 warn 不阻断 ready）；refresh=true 时总是重算。
+   */
+  getReadiness: async (refresh = false) => {
+    return adminAxios.get('/admin/skills/readiness', { params: refresh ? { refresh: 1 } : {} });
+  },
+
+  /**
+   * 新建 Skill 一条龙（P5 scaffold，SKILL_READINESS_SPEC §5 步骤 1）：
+   * 确定性生成 core.yaml 骨架 + skills.yaml 条目 + 编排 contracts 追加（mainline）+ handler 占位，
+   * 注册/接线片段仅返回文本。幂等：条目与生成物齐备 → 409；条目在但缺生成物 → completed 补齐。
+   */
+  scaffold: async (payload: SkillScaffoldPayload) => {
+    return adminAxios.post<{ success: boolean; data: SkillScaffoldResult }>('/admin/skills/scaffold', payload);
+  },
+
+  /** scaffold 表单元数据：kind/stage 枚举 + manifest 顶层 agent（parentAgent 下拉数据源） */
+  getScaffoldMeta: async () => {
+    return adminAxios.get<{ success: boolean; data: SkillScaffoldMeta }>('/admin/skills/scaffold/meta');
   },
 };
+
+export interface SkillScaffoldPayload {
+  skillId: string;
+  kind: 'mainline' | 'aux' | 'handler-only';
+  /** mainline 必填 */
+  stage?: string;
+  /** mainline 必填 */
+  parentAgent?: string;
+  displayName?: string;
+  description?: string;
+  aliases?: string[];
+}
+
+export interface SkillScaffoldSnippet {
+  title: string;
+  content: string;
+}
+
+export interface SkillScaffoldResult {
+  skillId: string;
+  kind: 'mainline' | 'aux' | 'handler-only';
+  status: 'created' | 'completed';
+  generated: string[];
+  completion: SkillCompletion;
+  snippets: SkillScaffoldSnippet[];
+  note: string;
+}
+
+export interface SkillScaffoldMeta {
+  kinds: Array<'mainline' | 'aux' | 'handler-only'>;
+  stages: string[];
+  agents: Array<{ id: string; name: string }>;
+}
+
+export interface SkillReconciliationRow {
+  skillId: string;
+  kind: 'mainline' | 'aux' | 'handler-only';
+  displayName: string | null;
+  stage: string | null;
+  parentAgent: string | null;
+  book: boolean;
+  manifest: boolean;
+  registered: boolean;
+  active: boolean;
+  noPromptFile: boolean;
+  registrationExempt: boolean;
+  diff: 'unregistered' | 'active-missing' | null;
+  completion: SkillCompletion;
+}
+
+export interface SkillReconciliationReport {
+  generatedAt: string;
+  summary: {
+    total: number;
+    registered: number;
+    active: number;
+    byStatus: Record<string, number>;
+    unregistered: number;
+    activeMissing: number;
+    orphanRegistrations: number;
+  };
+  items: SkillReconciliationRow[];
+  orphanRegistrations: Array<{ name: string }>;
+}
 
 export const adminVirtualLearnersApi = {
   generatePersona: async (data?: {
     preferredLevels?: string[];
     candidatePersonas?: string[];
     existingPersonaSeed?: Record<string, unknown>;
+    /** 样本类型：'student' 生成传统学生样本（课纲/考试节点/学期节奏/家长同伴环境） */
+    sampleType?: string;
   }) => {
-    return adminAxios.post('/admin/virtual-learners/generate-persona', data || {});
-  },
-
-  generateScenario: async (data?: {
-    preferredDomains?: string[];
-    preferredGoalTypes?: string[];
-    preferredLevels?: string[];
-    preferredMotivations?: string[];
-    avoidDomains?: string[];
-  }) => {
-    return adminAxios.post('/admin/virtual-learners/generate-scenario', data || {});
-  },
-
-  generateProfile: async (data: {
-    learningGoal: string;
-    knowledgeLevel: string;
-    simulationMode?: string;
-    personalityTraits?: {
-      verbosity?: string;
-      enthusiasm?: string;
-      confusionStyle?: string;
-    };
-  }) => {
-    return adminAxios.post('/admin/virtual-learners/generate-profile', data);
+    // LLM 上游调用（persona-designer skill）：上游慢/限流时 30s 默认超时不够，放宽到 AI 请求超时
+    return adminAxios.post('/admin/virtual-learners/generate-persona', data || {}, { timeout: AI_REQUEST_TIMEOUT });
   },
 
   getVirtualLearners: async (params?: { page?: number; limit?: number }) => {
@@ -1151,43 +1194,47 @@ export const adminVirtualLearnersApi = {
     return adminAxios.get(`/admin/virtual-learners/${id}/stories`);
   },
 
-  getVirtualLearnerTestProjection: async (id: string) => {
-    return adminAxios.get(`/admin/virtual-learners/${id}/test-projection`);
+  getVirtualLearnerMemory: async (id: string) => {
+    return adminAxios.get(`/admin/virtual-learners/${id}/memory`);
   },
 
   createProjectionToken: async (id: string, data?: { storyId?: string; virtualSessionId?: string; scope?: 'dashboard' | 'full' }) => {
     return adminAxios.post(`/admin/virtual-learners/${id}/projection-token`, data || {});
   },
 
-  resolveProjectionToken: async (token: string) => {
-    return adminAxios.post('/admin/virtual-learners/projection/resolve', { token });
-  },
-
-  draftVirtualLearnerProfile: async (id: string) => {
-    return adminAxios.post(`/admin/virtual-learners/${id}/draft-profile`);
-  },
-
-  draftVirtualLearnerStories: async (id: string) => {
-    return adminAxios.post(`/admin/virtual-learners/${id}/draft-stories`);
-  },
-
-  updateStoryStatus: async (
-    profileId: string,
-    storyIndex: number,
-    payload: {
-      status?: string;
-      title?: string;
-      storyOutline?: string;
-      storyTriggerEvent?: string;
-      visibleOpening?: string;
-      pressurePoints?: string[];
-    }
-  ) => {
-    return adminAxios.put(`/admin/virtual-learners/${profileId}/stories/${storyIndex}`, payload);
+  draftVirtualLearnerStories: async (id: string, data?: { /** 样本类型：'student' 生成传统学生故事 */ sampleType?: string }) => {
+    // LLM 上游调用（scenario-designer skill）：放宽到 AI 请求超时
+    return adminAxios.post(`/admin/virtual-learners/${id}/draft-stories`, data || {}, { timeout: AI_REQUEST_TIMEOUT });
   },
 
   deleteStory: async (profileId: string, storyIndex: number) => {
     return adminAxios.delete(`/admin/virtual-learners/${profileId}/stories/${storyIndex}`);
+  },
+
+  updateStory: async (profileId: string, storyIndex: number, data: {
+    title?: string;
+    storyOutline?: string;
+    storyTriggerEvent?: string;
+    visibleOpening?: string;
+    pressurePoints?: string[];
+    problemKnowledge?: {
+      domainFamiliarity?: 'low' | 'medium' | 'high';
+      knownConcepts?: string[];
+      struggleConcepts?: string[];
+      hiddenGaps?: string[];
+      selfAssessment?: string;
+    };
+    /** 故事级预算覆盖（可选，缺省继承角色级） */
+    budget?: {
+      maxRetriesPerStep?: number;
+      maxRetriesTotal?: number;
+    };
+  }) => {
+    return adminAxios.put(`/admin/virtual-learners/${profileId}/stories/${storyIndex}`, data);
+  },
+
+  getVirtualLearnerStats: async () => {
+    return adminAxios.get('/admin/virtual-learners/stats');
   },
 
   createVirtualLearner: async (data: {
@@ -1247,20 +1294,9 @@ export const adminVirtualLearnersApi = {
     return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}`);
   },
 
-  getVirtualSessionContext: async (sessionId: string) => {
-    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/context`);
-  },
-
-  getVirtualSessionGoalConversation: async (sessionId: string) => {
-    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/goal-conversation`);
-  },
-
-  getVirtualSessionLearningPath: async (sessionId: string) => {
-    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/learning-path`);
-  },
-
-  getVirtualSessionLearningTask: async (sessionId: string) => {
-    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/learning-task`);
+  /** 真实会话控制台同构端点（teaching_sessions / goal_conversations）：只读，结构对齐 stageResults 契约 */
+  getRealSessionConsole: async (sessionId: string) => {
+    return adminAxios.get(`/admin/session-console/${sessionId}`);
   },
 
   getVirtualSessionTeachingDetail: async (sessionId: string, teachingSessionId?: string) => {
@@ -1273,24 +1309,14 @@ export const adminVirtualLearnersApi = {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/step`);
   },
 
-  blackboxVirtualSessionStep: async (sessionId: string, expectedTraceCount: number) => {
-    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-step`, {}, blackboxCommandConfig(expectedTraceCount));
-  },
-
   executeBlackboxVirtualAction: async (sessionId: string, action: Record<string, unknown>, expectedTraceCount: number) => {
-    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-action`, action, blackboxCommandConfig(expectedTraceCount));
-  },
-
-  observeBlackboxVirtualSession: async (sessionId: string, expectedTraceCount: number) => {
-    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-observe`, {}, blackboxCommandConfig(expectedTraceCount));
-  },
-
-  getBlackboxVirtualSnapshot: async (sessionId: string) => {
-    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/blackbox-snapshot`);
-  },
-
-  generateBlackboxRefereeReport: async (sessionId: string) => {
-    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-referee`);
+    return sendBlackboxCommand(
+      `/admin/virtual-learners/sessions/${sessionId}/blackbox-action`,
+      sessionId,
+      blackboxActionCommandKey(action),
+      action,
+      expectedTraceCount
+    );
   },
 
   generateBlackboxEvaluations: async (sessionId: string) => {
@@ -1309,7 +1335,7 @@ export const adminVirtualLearnersApi = {
     return adminAxios.get(`/admin/virtual-learners/${profileId}/quick-learn/tasks`);
   },
 
-  startQuickLearnRun: async (profileId: string, data: { taskId: string; maxTurns?: number }) => {
+  startQuickLearnRun: async (profileId: string, data: { taskId: string; maxTurns?: number; storyId?: string; frictionBudget?: string }) => {
     return adminAxios.post(`/admin/virtual-learners/${profileId}/quick-learn/runs`, data);
   },
 
@@ -1354,10 +1380,10 @@ export const adminVirtualLearnersApi = {
   },
 
   virtualSessionLearningStep: async (sessionId: string) => {
-    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/learning-step`);
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/teaching-step`);
   },
 
-  virtualSessionAutoLearning: async (sessionId: string, data?: { maxMilestones?: number }) => {
+  virtualSessionAutoLearning: async (sessionId: string, data?: { maxMilestones?: number; maxTurns?: number }) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/auto-learning`, data);
   },
 
@@ -1374,13 +1400,35 @@ export const adminVirtualLearnersApi = {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/run-full`, data);
   },
 
+  /** 全自动模式：target='stage' 阶段级（推进完当前阶段即停）/ 'final' 全局级（直达 Path 全部完成，默认） */
+  autopilotStart: async (sessionId: string, data?: { target?: 'stage' | 'final'; maxTurns?: number }) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/autopilot/start`, data || {});
+  },
+  autopilotStop: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/autopilot/stop`);
+  },
+  autopilotStatus: async (sessionId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/autopilot`);
+  },
+
   virtualSessionWrapup: async (sessionId: string) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/wrapup`);
   },
 
+  /* ===== 批量新建（服务端队列） ===== */
+  batchCreateLearners: async (data: { rows: Array<{ name: string; storyCount: number }>; cohort?: string; note?: string }) => {
+    return adminAxios.post('/admin/virtual-learners/batch-create', data);
+  },
+  batchCreateJob: async (batchId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/batch-create/${batchId}`);
+  },
+  batchCreateRetry: async (batchId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/batch-create/${batchId}/retry`);
+  },
+
   updateSessionSimulationConfig: async (
     sessionId: string,
-    data: { frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test' }
+    data: { frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test'; model?: string | null }
   ) => {
     return adminAxios.put(`/admin/virtual-learners/sessions/${sessionId}/simulation-config`, data);
   },
@@ -1397,6 +1445,16 @@ export const adminVirtualLearnersApi = {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/stop-learning`);
   },
 
+  /** 暂停会话（温和暂停，非紧急停止） */
+  pauseVirtualSession: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/pause`);
+  },
+
+  /** 恢复暂停的会话 */
+  resumeVirtualSession: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/resume`);
+  },
+
   getVirtualSessionLogs: async (sessionId: string) => {
     return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/logs`);
   },
@@ -1405,19 +1463,22 @@ export const adminVirtualLearnersApi = {
     return adminAxios.delete(`/admin/virtual-learners/sessions/${sessionId}`);
   },
 
-  regressionRun: async (profileId: string, data?: {
-    storyId?: string;
-    storyIndex?: number;
-    systemPromptOverrides?: { goalAgent?: string; pathAgent?: string };
-    maxGoalRounds?: number;
-  }) => {
-    return adminAxios.post(`/admin/virtual-learners/${profileId}/regression-run`, data);
+  /**
+   * A1 批量终止：非终态会话统一标记 abandoned（dryRun 默认 true 只报告）。
+   * sessionIds 与 profileIds 至少其一（profileIds = 该虚拟人全部非终态会话）。
+   */
+  terminateVirtualSessions: async (data: { sessionIds?: string[]; profileIds?: string[]; dryRun?: boolean }) => {
+    return adminAxios.post('/admin/virtual-learners/sessions/terminate', data);
   },
 
-  compareSessions: async (sessionA: string, sessionB: string) => {
-    return adminAxios.get('/admin/virtual-learners/regression/compare-sessions', {
-      params: { sessionA, sessionB }
-    });
+  /** P0-2/A2 僵尸会话回收：dryRun 默认 true（干跑确认清单）；profileIds 提供时只回收选中虚拟人 */
+  reclaimStaleVirtualSessions: async (data: { dryRun?: boolean; profileIds?: string[] }) => {
+    return adminAxios.post('/admin/virtual-learners/sessions/reclaim-stale', data);
+  },
+
+  /** A3 批量删除虚拟学习者：级联删除 profile + 全部虚拟数据 */
+  batchDeleteVirtualLearners: async (profileIds: string[]) => {
+    return adminAxios.post('/admin/virtual-learners/batch-delete', { profileIds });
   },
 };
 
@@ -1426,8 +1487,27 @@ export const adminVirtualLearnersApi = {
 // ============================================================
 export interface EvalCaseExpectations {
   mustIncludeFields?: string[];
+  /** 人话校验：回复中必须出现的文字（一个都不能少） */
+  mustContainText?: string[];
   mustNotInclude?: string[];
   expectedStage?: string;
+  /** path-planning：期望里程碑数（同时作为 prompt 注入约束） */
+  expectedMilestones?: number;
+  /** stage-designer：期望子任务数（同时作为 prompt 注入约束） */
+  expectedSubtaskCount?: number;
+  /** ===== 虚拟学习者模拟输入（mode:simulated） ===== */
+  /** 输入来源模式：manual（默认，手写对话）/ simulated（虚拟学习者扮演学生输入） */
+  mode?: 'manual' | 'simulated';
+  /** 新建场景：一句话描述当次学习需求，如"考英语，时间不多，每周两次一小时" */
+  scenario?: string;
+  /** 复用已有虚拟人（virtual_learner_profiles id）；缺省由场景即时生成人设 */
+  personaId?: string;
+  /** goal 多轮模拟轮数（>1 开启多轮对话；默认 1=仅首句） */
+  dialogueRounds?: number;
+  /** 学生对抗度 none|low|normal|high|stress_test */
+  frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test';
+  /** 收敛门禁：对话推进过程中必须产出的字段 */
+  convergeRequires?: string[];
   notes?: string;
 }
 
@@ -1438,6 +1518,8 @@ export interface CreateEvalCasePayload {
   description?: string;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
   previousState?: Record<string, unknown>;
+  /** path/stage 的结构化输入（milestone/cognitiveCore/expectedMilestones 等） */
+  inputPayload?: Record<string, unknown>;
   expectations?: EvalCaseExpectations;
   enabled?: boolean;
 }
@@ -1451,59 +1533,9 @@ export const adminPromptOpsApi = {
     return adminAxios.get('/admin/prompt-ops/protocol-view');
   },
 
-  listEvalCases: async (agentId?: string) => {
-    return adminAxios.get('/admin/prompt-ops/eval-cases', {
-      params: agentId ? { agentId } : {}
-    });
-  },
-
-  createEvalCase: async (payload: CreateEvalCasePayload) => {
-    return adminAxios.post('/admin/prompt-ops/eval-cases', payload);
-  },
-
-  updateEvalCase: async (id: string, payload: Partial<CreateEvalCasePayload>) => {
-    return adminAxios.put(`/admin/prompt-ops/eval-cases/${id}`, payload);
-  },
-
-  deleteEvalCase: async (id: string) => {
-    return adminAxios.delete(`/admin/prompt-ops/eval-cases/${id}`);
-  },
-
-  runEval: async (payload: {
-    agentId: string;
-    promptVersionId?: string | null;
-    promptVersion?: number | null;
-    customPrompt?: string;
-    model?: string;
-    repeatCount?: number;
-    caseIds?: string[];
-    adhocCases?: Array<Record<string, unknown>>;
-  }) => {
-    return adminAxios.post('/admin/prompt-ops/run-eval', payload);
-  },
-
-  listEvalRuns: async (agentId?: string, limit = 20) => {
-    return adminAxios.get('/admin/prompt-ops/eval-runs', {
-      params: { ...(agentId ? { agentId } : {}), limit }
-    });
-  },
-
-  getEvalRun: async (id: string) => {
-    return adminAxios.get(`/admin/prompt-ops/eval-runs/${id}`);
-  },
-
-  getAgentFields: async (agentId: string) => {
-    return adminAxios.get(`/admin/prompt-ops/agent-fields/${encodeURIComponent(agentId)}`);
-  },
-
-  getRecentCallSamples: async (agentId: string, limit = 20) => {
-    return adminAxios.get('/admin/prompt-ops/recent-call-samples', {
-      params: { agentId, limit }
-    });
-  },
-
-  getPromptSchema: async (agentId: string) => {
-    return adminAxios.get(`/admin/prompt-ops/prompt-schema/${encodeURIComponent(agentId)}`);
+  // 沙盘契约视图（只读）：5 个顶层 agent 的输入通道 / 输出字段 / 合法沙盘键
+  getSandboxView: async () => {
+    return adminAxios.get('/admin/prompt-ops/sandbox-view');
   },
 
   getSkillRulesOverview: async () => {
@@ -1515,35 +1547,59 @@ export const adminPromptOpsApi = {
     return adminAxios.get(`/admin/prompt-ops/${encodeURIComponent(agentId)}/compile-info`);
   },
 
-  recompilePrompt: async (agentId: string) => {
-    return adminAxios.post(`/admin/prompt-ops/${encodeURIComponent(agentId)}/recompile`);
-  },
-
   // P-PROMPT-COMPILE: 保存源 + 自动编译 + 失效缓存 (一键 编辑→编译)
-  savePromptSource: async (agentId: string, payload: { systemPrompt: string; autoCompile?: boolean }) => {
-    return adminAxios.put(`/admin/prompt-ops/${encodeURIComponent(agentId)}/source`, payload);
-  },
 
   // P-PROMPT-COMPILE: skill 目录 (agent.skill.字段 三级树, 用于可视化字段选择器)
   getSkillCatalog: async () => {
     return adminAxios.get('/admin/prompt-ops/skill-catalog');
   },
 
-  // P-PROMPT-COMPILE: GUI 字段表 (input + output) 读写
-  getPromptFields: async (agentId: string) => {
-    return adminAxios.get(`/admin/prompt-ops/${encodeURIComponent(agentId)}/fields`);
+  // ===== 评估用例（eval-cases） =====
+  getEvalCases: async (agentId?: string) => {
+    return adminAxios.get('/admin/prompt-ops/eval-cases', { params: agentId ? { agentId } : {} });
   },
 
-  updatePromptFields: async (
-    agentId: string,
-    payload: {
-      inputFields?: Array<Record<string, unknown>>;
-      outputFields?: Array<Record<string, unknown>>;
-      autoCompile?: boolean;
-    }
-  ) => {
-    return adminAxios.put(`/admin/prompt-ops/${encodeURIComponent(agentId)}/fields`, payload);
-  }
+  createEvalCase: async (payload: CreateEvalCasePayload) => {
+    return adminAxios.post('/admin/prompt-ops/eval-cases', payload);
+  },
+
+  updateEvalCase: async (id: string, payload: Partial<CreateEvalCasePayload>) => {
+    return adminAxios.put(`/admin/prompt-ops/eval-cases/${encodeURIComponent(id)}`, payload);
+  },
+
+  deleteEvalCase: async (id: string) => {
+    return adminAxios.delete(`/admin/prompt-ops/eval-cases/${encodeURIComponent(id)}`);
+  },
+
+  // ===== 评估运行（run-eval / eval-runs） =====
+  runEval: async (payload: {
+    agentId: string;
+    promptVersionId?: string | null;
+    promptVersion?: number | null;
+    customPrompt?: string;
+    model?: string;
+    repeatCount?: number;
+    caseIds?: string[];
+    adhocCases?: Array<{
+      id?: string;
+      name?: string;
+      messages: Array<{ role: string; content: string }>;
+      previousState?: unknown;
+      inputPayload?: unknown;
+      expectations?: unknown;
+    }>;
+  }) => {
+    return adminAxios.post('/admin/prompt-ops/run-eval', payload);
+  },
+
+  getEvalRuns: async (agentId?: string, limit?: number) => {
+    return adminAxios.get('/admin/prompt-ops/eval-runs', { params: { agentId: agentId || undefined, limit: limit || undefined } });
+  },
+
+  getEvalRun: async (id: string) => {
+    return adminAxios.get(`/admin/prompt-ops/eval-runs/${encodeURIComponent(id)}`);
+  },
+
 };
 
 // ============================================================
@@ -1591,9 +1647,63 @@ export const adminPromptWorkbenchApi = {
 
   getCoreLineage: async (skillId: string) => {
     return adminAxios.get(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}/lineage`);
+  },
+
+  /**
+   * 加字段向导原子追加（M1 统一编辑，UNIFIED_EDITING_DESIGN §4.3）：
+   * core.yaml fields + 编排 fields/routings 双写 + 落库 + fields-sync 复检 + 审计。
+   * 409 = 重名（去既有编辑面）；422 = 校验/复检违规（后端中文 message 直接展示）。
+   */
+  addSkillField: async (skillId: string, payload: {
+    name: string;
+    type: string;
+    role?: string;
+    render?: string;
+    handoff?: string[];
+    internal?: boolean;
+    accumulate?: boolean;
+    turn?: boolean;
+    visibilityPreset?: string;
+    locked?: 'system' | 'structure';
+    desc: string;
+    persistKey?: string;
+    pathInRawOutput?: string;
+  }) => {
+    return adminAxios.post(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}/field`, payload);
+  },
+
+  /**
+   * 改字段原子 API（M3）：PATCH /core/:skillId/field/:name。
+   * 双文件联动修改 + sync 全量对账落库（managedByCode=false 行跳过报告）+ 审计 + 复检。
+   * 幂等：无变化 → changed=false。404 = 字段不存在；409 = systemLocked / 消费中。
+   */
+  updateSkillField: async (skillId: string, name: string, payload: {
+    type?: string;
+    role?: string;
+    render?: string;
+    handoff?: string[];
+    internal?: boolean;
+    accumulate?: boolean;
+    turn?: boolean;
+    visibilityPreset?: string;
+    locked?: 'system' | 'structure' | '';
+    desc?: string;
+    persistKey?: string;
+    pathInRawOutput?: string;
+  }) => {
+    return adminAxios.patch(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}/field/${encodeURIComponent(name)}`, payload);
+  },
+
+  /**
+   * 删字段原子 API（M3）：DELETE /core/:skillId/field/:name。
+   * 双文件联动删除 + DB 行清理 + 审计 + 复检。409 = systemLocked / 仍被下游消费。
+   */
+  deleteSkillField: async (skillId: string, name: string) => {
+    return adminAxios.delete(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}/field/${encodeURIComponent(name)}`);
   }
 };
 
+// ============================================================
 // ========== 统一导出 ==========
 
 /**
@@ -1620,6 +1730,9 @@ export const adminApi = {
   // Learner Models
   ...adminLearnerModelsApi,
 
+  // Memory Traces
+  ...adminMemoryTracesApi,
+
   // Agents
   ...adminAgentsApi,
 
@@ -1635,17 +1748,332 @@ export const adminApi = {
   // PromptOps
   ...adminPromptOpsApi,
 
-  // Devtools
-  ...adminDevtoolsApi,
-
   // ---- 同名冲突显式解决（与展开顺序的最终生效结果一致）----
-  // users: adminDashboardApi.users（宽松签名）被 adminUsersApi.users 覆盖；两者同端点
-  // GET /admin/users，保留类型更精确的 adminUsersApi 版本
-  users: adminUsersApi.users,
-  // getAgentRelations: adminAgentsApi 版本请求 GET /admin/agents/relations，
-  // adminSkillsApi 版本请求 GET /admin/skills/agent-relations（不同端点）；
-  // 此处保留后展开的 skills 版本，agents 版本请用 adminAgentsApi.getAgentRelations()
-  getAgentRelations: adminSkillsApi.getAgentRelations,
   // getPromptVersions: 绑定语义更通用的 prompts 版本
   getPromptVersions: adminAgentPromptsApi.getPromptVersions,
+};
+
+// ============================================================
+// V5 · 审计日志与会话安全（P3）
+// 契约：GET /api/admin/audit-logs（scope=operation|login）、GET /api/admin/audit-logs/stats、
+// GET /api/admin/sessions、DELETE /api/admin/sessions/:id、POST /api/admin/sessions/revoke-all
+// ============================================================
+
+export interface AuditLogQuery {
+  page?: number;
+  limit?: number;
+  /** operation=操作审计（admin_audit_logs，默认）；login=登录审计（login_attempts） */
+  scope?: 'operation' | 'login';
+  /** 登录审计的维度（scope=login 时生效）：admin=管理端 / user=用户端 */
+  loginScope?: 'admin' | 'user';
+  adminId?: string;
+  adminName?: string;
+  action?: string;
+  targetType?: string;
+  keyword?: string;
+  success?: boolean;
+  timeRange?: 'today' | 'yesterday' | 'week' | 'month' | 'all';
+  startTime?: string;
+  endTime?: string;
+}
+
+export const adminAuditApi = {
+  /**
+   * 审计日志分页查询：scope=operation 返回 data.logs（admin_audit_logs 行）；
+   * scope=login 返回 data.attempts（login_attempts 行）；两者均带 data.pagination。
+   */
+  getAuditLogs: async (params: AuditLogQuery = {}) => {
+    return adminAxios.get('/admin/audit-logs', { params });
+  },
+
+  /**
+   * 审计统计（状态条「N 条 · 失败 M 条」），筛选参数与 getAuditLogs 一致；
+   * 返回 data.stats = { total, failed }
+   */
+  getAuditStats: async (params: AuditLogQuery = {}) => {
+    return adminAxios.get('/admin/audit-logs/stats', { params });
+  },
+};
+
+export interface AdminSessionQuery {
+  adminId?: string;
+  status?: 'active' | 'revoked' | 'expired';
+}
+
+export const adminSessionsApi = {
+  /**
+   * 管理员会话列表（含 adminName/adminEmail 联查）；status 枚举与后端一致。
+   */
+  getAdminSessions: async (params?: AdminSessionQuery) => {
+    return adminAxios.get('/admin/sessions', { params });
+  },
+
+  /** 强制下线指定会话（禁止下线自己的当前会话，后端返回 409） */
+  revokeAdminSession: async (sessionId: string) => {
+    return adminAxios.delete(`/admin/sessions/${encodeURIComponent(sessionId)}`);
+  },
+
+  /** 批量吊销：指定 adminId（缺省为全部）的未吊销会话；excludeCurrent=true 保留请求者当前会话 */
+  revokeAllAdminSessions: async (payload: { adminId?: string; excludeCurrent?: boolean }) => {
+    return adminAxios.post('/admin/sessions/revoke-all', payload);
+  },
+};
+
+// ============================================================
+// V6 · 用户软删除 Phase 2：恢复 / 已删列表 / 含已删详情
+// 说明：现有 adminUsersApi.getUsers/getUser 未扩展参数，这里以独立函数末尾追加，
+//       不触碰既有代码；后端 GET /admin/users 支持 status=deleted，
+//       GET /admin/users/:id 支持 includeDeleted=1（见 backend/src/routes/admin/users.ts）
+// ============================================================
+
+/** 恢复已软删用户（POST /admin/users/:id/restore；目标不存在 404、未软删 409） */
+export const restoreUser = async (userId: string) => {
+  return adminAxios.post(`/admin/users/${encodeURIComponent(userId)}/restore`);
+};
+
+// ============================================================
+// 批量实验（admin 虚拟学习者页 · 系统级队列实验）
+// 后端：backend/src/routes/admin/batch-experiments.ts
+// ============================================================
+
+export interface BatchLearnerInput {
+  name: string;
+  learningGoal?: string;
+  frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test';
+}
+
+export interface BatchExperimentRun {
+  id: string;
+  experimentId: string;
+  profileId?: string | null;
+  sessionId?: string | null;
+  learnerName: string;
+  frictionBudget: string;
+  phase: string;
+  status: string;
+  completedTasks: number;
+  totalTasks?: number | null;
+  currentTask?: string | null;
+  stallCount: number;
+  lastError?: string | null;
+  checkpoints?: string | null;
+  decaySims?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BatchExperiment {
+  id: string;
+  name: string;
+  description?: string | null;
+  status: string;
+  createdBy: string;
+  learnersConfig: string;
+  createdAt: string;
+  updatedAt: string;
+  runs?: BatchExperimentRun[];
+}
+
+export const adminBatchExperimentsApi = {
+  list: async () => {
+    return adminAxios.get('/admin/batch-experiments');
+  },
+  create: async (payload: { name: string; description?: string; learners: BatchLearnerInput[] }) => {
+    return adminAxios.post('/admin/batch-experiments', payload);
+  },
+  detail: async (id: string) => {
+    return adminAxios.get(`/admin/batch-experiments/${encodeURIComponent(id)}`);
+  },
+  stop: async (id: string) => {
+    return adminAxios.post(`/admin/batch-experiments/${encodeURIComponent(id)}/stop`);
+  },
+  advanceRun: async (experimentId: string, runId: string) => {
+    return adminAxios.post(`/admin/batch-experiments/${encodeURIComponent(experimentId)}/runs/${encodeURIComponent(runId)}/advance`);
+  },
+  decayRun: async (experimentId: string, runId: string) => {
+    return adminAxios.post(`/admin/batch-experiments/${encodeURIComponent(experimentId)}/runs/${encodeURIComponent(runId)}/decay`);
+  },
+  snapshotRun: async (experimentId: string, runId: string) => {
+    return adminAxios.post(`/admin/batch-experiments/${encodeURIComponent(experimentId)}/runs/${encodeURIComponent(runId)}/snapshot`);
+  },
+};
+
+/** 已删用户列表（status=deleted 反转软删筛选，供「已删除」筛选 pill 使用） */
+export const getDeletedUsers = async (params?: { page?: number; limit?: number; search?: string }) => {
+  return adminAxios.get('/admin/users', { params: { ...params, status: 'deleted' } });
+};
+
+/** 含已软删用户在内的详情（includeDeleted=1；详情页恢复入口的数据源） */
+export const getUserIncludingDeleted = async (userId: string) => {
+  return adminAxios.get(`/admin/users/${encodeURIComponent(userId)}`, { params: { includeDeleted: '1' } });
+};
+
+// ============================================================
+// 成就管理（admin 后台：成就定义 / 解锁记录 / 发放与撤回 / 重检）
+// 后端：backend/src/routes/admin/achievements.ts
+// ============================================================
+
+export interface AchievementDef {
+  id: string;
+  type: string;
+  name: string;
+  description: string;
+  icon: string;
+  xpReward: number;
+  requirement: { type: string; value: number | string };
+  unlockCount: number;
+}
+
+export interface AchievementRecord {
+  id: string;
+  userId: string;
+  type: string;
+  title: string;
+  description: string | null;
+  iconUrl: string | null;
+  xpReward: number;
+  completed: boolean;
+  earnedAt: string | null;
+  createdAt: string;
+  user: { id: string; name: string; email: string; isVirtualLearner: boolean } | null;
+}
+
+export const adminAchievementsApi = {
+  getDefinitions: async () => {
+    return adminAxios.get<{ success: boolean; data: AchievementDef[] }>('/admin/achievements/definitions');
+  },
+  getRecords: async (params?: { page?: number; limit?: number; userId?: string; includeTest?: boolean }) => {
+    return adminAxios.get<{ success: boolean; data: { records: AchievementRecord[]; pagination: { total: number; page: number; limit: number } } }>(
+      '/admin/achievements/records',
+      { params }
+    );
+  },
+  grant: async (userId: string, achievementId: string) => {
+    return adminAxios.post('/admin/achievements/grant', { userId, achievementId });
+  },
+  revoke: async (recordId: string) => {
+    return adminAxios.post('/admin/achievements/revoke', { recordId });
+  },
+  recheck: async (userId: string) => {
+    return adminAxios.post('/admin/achievements/recheck', { userId });
+  },
+};
+
+// ============================================================
+// 内容管理（admin 后台：学习路径治理）
+// 后端：backend/src/routes/admin/learning-content.ts
+// ============================================================
+
+export interface LearningPathRow {
+  id: string;
+  title: string;
+  subject: string;
+  status: string;
+  difficulty: string;
+  estimatedHours: number | null;
+  totalMilestones: number;
+  completedMilestones: number;
+  aiGenerated: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deadline: string | null;
+  user: { id: string; name: string; email: string; isVirtualLearner: boolean } | null;
+  milestoneStatuses: string[];
+  milestoneCount: number;
+}
+
+export interface LearningContentStats {
+  total: number;
+  byStatus: Record<string, number>;
+  bySubject: Array<{ subject: string; count: number }>;
+  totalMilestones: number;
+  totalTasks: number;
+}
+
+export const adminLearningContentApi = {
+  listPaths: async (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    subject?: string;
+    keyword?: string;
+    includeTest?: boolean;
+  }) => {
+    return adminAxios.get<{ success: boolean; data: { paths: LearningPathRow[]; pagination: { total: number; page: number; limit: number } } }>(
+      '/admin/learning-content/paths',
+      { params }
+    );
+  },
+  getPathDetail: async (id: string) => {
+    return adminAxios.get(`/admin/learning-content/paths/${encodeURIComponent(id)}`);
+  },
+  archivePath: async (id: string) => {
+    return adminAxios.post(`/admin/learning-content/paths/${encodeURIComponent(id)}/archive`);
+  },
+  restorePath: async (id: string) => {
+    return adminAxios.post(`/admin/learning-content/paths/${encodeURIComponent(id)}/restore`);
+  },
+  deletePath: async (id: string) => {
+    return adminAxios.delete(`/admin/learning-content/paths/${encodeURIComponent(id)}`);
+  },
+  getStats: async () => {
+    return adminAxios.get<{ success: boolean; data: LearningContentStats }>('/admin/learning-content/stats');
+  },
+};
+
+// ============================================================
+// 运维工具（admin 后台：时间推进模拟 / outbox 死信重放）
+// 后端：backend/src/routes/admin/devtools.ts
+// ============================================================
+
+export const adminDevtoolsApi = {
+  /** 模拟自然天推进（不写库，仅按衰减模型预览画像变化） */
+  advanceTime: async (data: { userId?: string; days?: number; pathId?: string }) => {
+    return adminAxios.post('/admin/devtools/advance-time', data);
+  },
+
+  /** outbox 死信清单（终态死信：worker 不再拾取，需人工确认后重放） */
+  getOutboxDead: async () => {
+    return adminAxios.get<{ success: boolean; data: { deadCount: number; items: Array<{ id: string; eventType: string; userId: string | null; aggregateId: string | null; attemptCount: number; lastError: string | null; occurredAt: string }> } }>(
+      '/admin/devtools/outbox/dead'
+    );
+  },
+
+  /** 死信重放（eventType 可选；缺省全部） */
+  requeueOutboxDead: async (eventType?: string) => {
+    return adminAxios.post('/admin/devtools/outbox/requeue-dead', { eventType });
+  },
+};
+
+// ============================================================
+// 站内通知管理（admin 后台：全员/定向推送）
+// 后端：backend/src/routes/admin/notifications.ts
+// ============================================================
+
+export interface NotificationItem {
+  id: string;
+  userId: string;
+  title: string;
+  body: string | null;
+  kind: string;
+  link: string | null;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+  user: { id: string; name: string; email: string } | null;
+}
+
+export const adminNotificationsApi = {
+  list: async (params?: { page?: number; limit?: number; userId?: string; kind?: string; unreadOnly?: boolean }) => {
+    return adminAxios.get<{ success: boolean; data: { items: NotificationItem[]; pagination: { total: number; page: number; limit: number }; unreadTotal: number } }>(
+      '/admin/notifications',
+      { params }
+    );
+  },
+  send: async (payload: { title: string; body?: string; kind?: string; scope: 'all' | 'user'; userId?: string; link?: string }) => {
+    return adminAxios.post('/admin/notifications', payload);
+  },
+  remove: async (id: string) => {
+    return adminAxios.delete(`/admin/notifications/${encodeURIComponent(id)}`);
+  },
 };

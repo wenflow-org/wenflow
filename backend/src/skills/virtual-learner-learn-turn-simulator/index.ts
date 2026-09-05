@@ -4,7 +4,6 @@ import {
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
 import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter';
-import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 import {
   type VirtualLearnerPersona,
@@ -13,12 +12,11 @@ import {
   decideFrictionTrigger,
   PERSONA_FIELD_ANCHORS_HINT,
 } from '../virtual-learner-shared';
+import type { EpistemicGrounding } from '../virtual-learner-epistemic-grounding';
 
 export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS = 800;
 export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE = 0.7;
-const LEARN_TURN_FALLBACK_RUNTIME_CONTRACT = buildDefaultRuntimeContract(
-  'virtual-learner-learn-turn-simulator'
-);
+export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED = 'VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED';
 
 // File-as-Truth: the ACTIVE prompt at runtime is compiled from prompts/core/*.yaml.
 // Load it from the compiled artifact here; do not embed a second copy (dual-source drift).
@@ -53,6 +51,15 @@ export interface LearnLearnerSimulationInput {
     status?: string;
     progress?: number;
   }>;
+  /** 学习者记忆（已掌握/到期复习/最近完成事项），供模拟器自然引用“我记得/我之前做过” */
+  learnerMemory?: {
+    mastered?: string[];
+    dueReview?: string[];
+    struggling?: string[];
+    recentCompleted?: string[];
+  } | null;
+  /** 本轮认知判决（物理两阶段第一段产出，硬约束） */
+  epistemicGrounding?: EpistemicGrounding | null;
   /** 控制学习者对抗度. 默认 'normal' */
   frictionBudget?: FrictionBudget;
 }
@@ -280,6 +287,17 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
     previousLearnerState: input.previousLearnerState || null,
     currentTask: input.currentTask || null,
     knowledgeSnapshot: Array.isArray(input.knowledgeSnapshot) ? input.knowledgeSnapshot.slice(0, 5) : [],
+    learnerMemory: input.learnerMemory && typeof input.learnerMemory === 'object'
+      ? {
+          mastered: Array.isArray(input.learnerMemory.mastered) ? input.learnerMemory.mastered.slice(0, 8) : [],
+          dueReview: Array.isArray(input.learnerMemory.dueReview) ? input.learnerMemory.dueReview.slice(0, 8) : [],
+          struggling: Array.isArray(input.learnerMemory.struggling) ? input.learnerMemory.struggling.slice(0, 8) : [],
+          recentCompleted: Array.isArray(input.learnerMemory.recentCompleted)
+            ? input.learnerMemory.recentCompleted.slice(0, 5)
+            : [],
+        }
+      : null,
+    epistemicGrounding: input.epistemicGrounding || null,
     friction: {
       budget: friction.budget,
       triggerProbability: friction.triggered ? 1 : 0,
@@ -291,7 +309,8 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
       requirements: [
         'reply only as the learner, in 1-2 short sentences',
         'apply friction.guidance to calibrate adversarial/failure/emotional patterns this turn',
-        'let personaAnchorHint fields implicitly steer reply style (especially verbosity, confusionStyle, helpSeekingPattern)'
+        'let personaAnchorHint fields implicitly steer reply style (especially verbosity, confusionStyle, helpSeekingPattern)',
+        'you may naturally reference your learnerMemory (things you previously learned or completed) when relevant, but never name the field'
       ]
     }
   };
@@ -325,7 +344,7 @@ export const virtualLearnerLearnTurnSimulatorDefinition: SkillDefinition = {
       debug: { type: 'object', description: '调试信息' },
     },
   },
-  capabilities: ['learn-stage-learner-simulation', 'visible-context-roleplay', 'short-learning-reply'],
+  capabilities: ['learn-stage-learner-simulation', 'visible-context-roleplay', 'short-teaching-reply'],
   stats: {
     callCount: 0,
     successRate: 0,
@@ -361,26 +380,14 @@ export async function virtualLearnerLearnTurnSimulator(input: any): Promise<Skil
     }, input || {});
 
     if (!result.success || !result.output) {
-      const fallback = buildFallback(input || {});
+      // 失败显式传播：不产出伪 learnerState/伪 selfReportedTaskDone（与 catch 路径统一 success:false 语义）
       return {
-        success: true,
-        output: {
-          ...fallback,
-          degraded: true,
-          runtimeEnvelope: mapSkillOutputEnvelope(LEARN_TURN_FALLBACK_RUNTIME_CONTRACT, fallback, {
-            phase: 'simulation-step-completed',
-            status: 'partial',
-            nextState: fallback?.learnerState ?? null,
-          }),
-          _debug: {
-            rawModelOutput: result.debug.rawModelOutput,
-            extractedJson: result.debug.extractedJson,
-            userPayload: result.debug.userPayload,
-            systemPromptVersion: result.debug.systemPromptVersion,
-            fallbackReason: result.error?.message || 'VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED',
-          },
+        success: false,
+        error: {
+          code: VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED,
+          message: result.error?.message || 'learn-turn-simulator-failed',
         },
-        duration: result.debug.durationMs,
+        duration: result.debug.durationMs || 0,
       };
     }
 
@@ -402,7 +409,7 @@ export async function virtualLearnerLearnTurnSimulator(input: any): Promise<Skil
     return {
       success: false,
       error: {
-        code: 'VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED',
+        code: VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED,
         message: error?.message || 'Unknown error',
       },
       duration: 0,

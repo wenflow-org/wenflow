@@ -17,6 +17,7 @@ import {
   type CoreChannel,
   type CoreFailurePolicy,
   type CoreFile,
+  type CoreInputRef,
   type CoreFileIssue,
   type CoreOutputMedia,
 } from './core-file-loader';
@@ -101,17 +102,27 @@ export function normalizeCoreFormInput(
       const entry = item as Record<string, unknown>;
       const ref = String(entry.ref ?? '').trim();
       const note = String(entry.note ?? '').trim();
-      return { ref, note };
+      const name = String(entry.name ?? '').trim();
+      const type = String(entry.type ?? '').trim();
+      const desc = String(entry.desc ?? '').trim();
+      return { ref, note, name, type, desc };
     })
     .filter((entry) => entry.ref)
     .map((entry) => {
       const parts = parseInputRef(entry.ref);
-      return {
+      const base: CoreInputRef = {
         ref: entry.ref,
-        skill: parts?.skill || '',
-        fieldPath: parts?.fieldPath || '',
-        ...(entry.note ? { note: entry.note } : {}),
+        kind: parts?.kind || 'skill',
+        skill: parts?.kind === 'skill' ? parts.skill : '',
+        fieldPath: parts?.kind === 'skill' ? parts.fieldPath : '',
+        sandboxPath: parts?.kind === 'sandbox' ? parts.path : '',
+        userPath: parts?.kind === 'user' ? parts.path : '',
       };
+      if (entry.name) base.name = entry.name;
+      if (entry.type) base.type = entry.type;
+      if (entry.desc) base.desc = entry.desc;
+      if (entry.note) base.note = entry.note;
+      return base;
     });
 
   const examples = asTrimmedStringList(raw.examples);
@@ -154,7 +165,15 @@ export function serializeCoreFile(core: CoreFile, headerComment?: string): strin
     channels: core.channels,
     stateAdvance: core.stateAdvance,
     ...(core.inputs?.length
-      ? { inputs: core.inputs.map((input) => ({ ref: input.ref, ...(input.note ? { note: input.note } : {}) })) }
+      ? {
+          inputs: core.inputs.map((input) => ({
+            ...(input.name ? { name: input.name } : {}),
+            ...(input.type ? { type: input.type } : {}),
+            ...(input.desc ? { desc: input.desc } : {}),
+            ref: input.ref,
+            ...(input.note ? { note: input.note } : {}),
+          })),
+        }
       : {}),
     rules: core.rules,
     fields: core.fields.map((field) => ({

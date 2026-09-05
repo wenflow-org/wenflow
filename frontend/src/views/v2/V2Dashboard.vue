@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="dash v2-page">
     <V2Nav />
 
@@ -23,13 +23,17 @@
           <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9v1zm3-19a7 7 0 0 0-4 12.74c.6.52 1 1.31 1 2.26v1h6v-1c0-.95.4-1.74 1-2.26A7 7 0 0 0 12 2z"/></svg>
         </span>
         <p>{{ tipText }}</p>
-        <span class="tip__ai" title="内容由 AI 生成，仅供参考">AI</span>
-        <span class="tip__close" title="知道了" @click="tipDismissed = true">×</span>
+        <button type="button" class="tip__close" title="知道了" @click="tipDismissed = true">×</button>
       </div>
 
       <!-- 加载 -->
       <div v-if="loading" class="dash__loading">
-        <span class="spinner"></span>
+        <SkeletonLoader variant="dashboard" />
+      </div>
+
+      <!-- 整页加载失败 -->
+      <div v-else-if="loadError" class="errorbar">
+        首页数据加载失败。<button type="button" class="errorbar__retry" @click="loadAll">重试</button>
       </div>
 
       <template v-else>
@@ -42,7 +46,7 @@
               <h1 class="action__title">给自己放个小假</h1>
               <p class="action__desc">想回来的时候，任务还在这里等你。</p>
               <div class="action__footer">
-                <span class="btn-primary" @click="resting = false">恢复学习</span>
+                <button type="button" class="btn-primary" @click="setResting(false)">恢复学习</button>
               </div>
             </template>
             <template v-else>
@@ -71,13 +75,13 @@
                   <router-link v-for="a in skillActions.slice(1)" :key="a.label" :to="a.to" class="btn-ghost">{{ a.label }}</router-link>
                 </template>
                 <template v-else>
-                  <span v-if="todayTask" class="btn-primary" @click="goLearn">
+                  <button type="button" v-if="todayTask" class="btn-primary" @click="goLearn">
                     <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
                     开始学习
-                  </span>
+                  </button>
                   <router-link to="/learning-paths" class="link-muted">查看全部路径</router-link>
                 </template>
-                <span class="link-muted" @click="resting = true">今天休息</span>
+                <button type="button" class="link-muted" @click="setResting(true)">今天休息</button>
               </div>
               <div class="action__today">
                 <div class="action__today-bar"><i :style="{ width: todayBarPct + '%' }"></i></div>
@@ -86,7 +90,6 @@
             </template>
           </section>
 
-          <!-- 需要处理：修复卡 -->
           <section v-else-if="pageState === 'attention'" class="card action action--alert">
             <div class="action__eyebrow action__eyebrow--alert">
               <span>需要先处理</span>
@@ -99,19 +102,41 @@
               <span class="tag">信息已保留</span>
             </div>
             <div class="action__footer">
-              <span class="btn-primary" :class="{ 'btn-primary--off': retrying }" @click="doRetry">
+              <button type="button" class="btn-primary" :class="{ 'btn-primary--off': retrying }" @click="doRetry">
                 <span v-if="retrying" class="spinner spinner--sm"></span>
                 {{ retrying ? '正在重新生成…' : '重新生成路径' }}
-              </span>
+              </button>
               <router-link :to="`/learning-path/${primaryPath?.id}`" class="btn-ghost">查看详情</router-link>
               <router-link to="/goal-conversation" class="link-muted">先修改目标</router-link>
+            </div>
+          </section>
+
+          <!-- 生成中：等待态（区别于失败红卡，禁用重试） -->
+          <section v-else-if="pageState === 'generating'" class="card action action--gen">
+            <div class="action__eyebrow">
+              <span>路径生成中</span>
+              <span class="action__from">来自路径「{{ primaryPath?.title }}」</span>
+            </div>
+            <h1 class="action__title">路径正在生成，稍等一下</h1>
+            <p class="action__desc">生成一般需要 1-2 分钟，完成后页面会自动刷新，这里会出现今日行动。你也可以先去别的页面看看。</p>
+            <div class="action__meta">
+              <span class="tag tag--cyan">正在生成</span>
+              <span class="tag">信息已保留</span>
+            </div>
+            <div class="action__footer">
+              <span class="btn-primary btn-primary--off" title="路径生成中，暂不可重试">
+                <span class="spinner spinner--sm"></span>
+                正在生成…
+              </span>
+              <router-link :to="`/learning-path/${primaryPath?.id}`" class="btn-ghost">查看详情</router-link>
+              <router-link to="/learning-paths" class="link-muted">查看全部路径</router-link>
             </div>
           </section>
 
           <!-- 新手态：引导卡 -->
           <section v-else class="card action action--empty">
             <div class="action__eyebrow"><span>开始你的第一个学习计划</span></div>
-            <h1 class="action__title">用 2 分钟，聊出一条能执行的路径</h1>
+            <h1 class="action__title">用 2 分钟，理出一条能执行的路径</h1>
             <p class="action__desc">{{ guidanceEmptyText }}</p>
             <div class="action__examples">
               <router-link v-for="e in examples" :key="e" to="/goal-conversation" class="example">{{ e }}</router-link>
@@ -161,19 +186,115 @@
             </div>
             <div class="path__empty-body">
               <div class="path__empty-illus"><span></span><span></span><span></span><span></span></div>
-              <p>规划第一个目标后，这里会出现你的阶段地图。</p>
+              <p>规划第一个目标后，这里会出现你的学习路径。</p>
             </div>
           </aside>
         </div>
+
+        <!-- 展开/收起按钮 -->
+        <!-- 快捷入口（始终显示，不随折叠区隐藏） -->
+        <div class="quick">
+          <router-link to="/learning-state" class="quick__item">
+            <span class="quick__icon quick__icon--pulse">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 13h4l2-7 4 12 2-7h6v2h-4.6l-2.4 8.4L9.6 7.6 7.6 15H3v-2z"/></svg>
+            </span>
+            <span class="quick__body"><strong>学习状态</strong><small>节奏 · 负荷 · AI 建议</small></span>
+            <span class="quick__go">›</span>
+          </router-link>
+          <router-link to="/learning-paths" class="quick__item">
+            <span class="quick__icon quick__icon--layers">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="m12 2 10 5-10 5L2 7l10-5zm0 7.6L18.9 7 12 4.4 5.1 7 12 9.6zM2 12l10 5 10-5v2l-10 5L2 14v-2zm0 5 10 5 10-5v2l-10 5L2 19v-2z" opacity=".9"/></svg>
+            </span>
+            <span class="quick__body"><strong>全部路径</strong><small>{{ pathsCountText }}</small></span>
+            <span class="quick__go">›</span>
+          </router-link>
+          <router-link to="/achievements" class="quick__item">
+            <span class="quick__icon quick__icon--medal">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V22l4-2 4 2v-7.26A7 7 0 0 0 12 2z"/></svg>
+            </span>
+            <span class="quick__body"><strong>成就</strong><small>{{ achievementsText }}</small></span>
+            <span class="quick__go">›</span>
+          </router-link>
+        </div>
+
+        <div class="more-toggle" v-if="hasFoldedContent">
+          <button type="button" class="more-toggle__btn" @click="showMore = !showMore">
+            <svg :class="{ 'more-toggle__arrow--open': showMore }" viewBox="0 0 24 24" width="16" height="16">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>
+            </svg>
+            {{ showMore ? '收起' : '展开更多' }}
+          </button>
+        </div>
+
+        <Transition name="fold">
+          <div v-show="showMore" class="folded-sections">
+        <!-- 今日预算（多目标调度台账） -->
+        <section v-if="sourceFailed.budget" class="card dash__budget">
+          <div class="budget__head">
+            <span class="budget__title">今日预算</span>
+          </div>
+          <p class="dash__source-fail">预算数据加载失败，稍后重试。</p>
+        </section>
+        <section v-else-if="todaySchedule?.activeGoals?.length" class="card budget dash__budget">
+          <div class="budget__head">
+            <span class="budget__title">今日预算 · {{ todaySchedule.activeGoals.length }} 个目标</span>
+            <span class="budget__total">共 {{ todaySchedule.totalPlanned }} 分钟</span>
+          </div>
+          <ul class="budget__list">
+            <li v-for="g in todaySchedule.activeGoals" :key="g.goalId" class="budget__item">
+              <router-link v-if="g.pathId" :to="'/learning-paths/' + g.pathId" class="budget__link" :title="'查看「' + g.title + '」的路径详情'">
+                <span class="budget__name">{{ g.title }}</span>
+                <span class="budget__bar"><i :style="{ width: Math.min((g.consumedMinutes / Math.max(g.plannedMinutes, 1)) * 100, 100) + '%' }"></i></span>
+                <span class="budget__num">{{ g.consumedMinutes }} / {{ g.plannedMinutes }} 分钟</span>
+                <span v-if="g.cognitiveBandwidth" class="budget__bw">{{ bandwidthLabel(g.cognitiveBandwidth) }}</span>
+              </router-link>
+              <template v-else>
+                <span class="budget__name">{{ g.title }}</span>
+                <span class="budget__bar"><i :style="{ width: Math.min((g.consumedMinutes / Math.max(g.plannedMinutes, 1)) * 100, 100) + '%' }"></i></span>
+                <span class="budget__num">{{ g.consumedMinutes }} / {{ g.plannedMinutes }} 分钟</span>
+                <span v-if="g.cognitiveBandwidth" class="budget__bw">{{ bandwidthLabel(g.cognitiveBandwidth) }}</span>
+              </template>
+            </li>
+          </ul>
+        </section>
+
+        <!-- 今日复习（到期旧知唤醒，复习闭环） -->
+        <section v-if="sourceFailed.review" class="card dash__review">
+          <div class="review__head">
+            <span class="review__eyebrow">今日复习</span>
+          </div>
+          <p class="dash__source-fail">复习数据加载失败，稍后重试。</p>
+        </section>
+        <section v-else-if="reviewDue.length" class="card review dash__review">
+          <div class="review__head">
+            <span class="review__eyebrow">今日复习 · {{ reviewDue.length }} 个知识点到期</span>
+            <span class="review__sub">间隔复习对抗遗忘（ACT-R）</span>
+          </div>
+          <ul class="review__list">
+            <li v-for="item in reviewDue.slice(0, 5)" :key="item.conceptKey" class="review__item">
+              <router-link to="/achievements" class="review__link" :title="'查看「' + item.label + '」的复习进度'">
+                <span class="review__name">{{ item.label }}</span>
+                <span class="review__bar"><i :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
+                <span class="review__pct">{{ Math.round(item.retention * 100) }}%</span>
+                <span class="review__minutes">约 {{ item.estimatedMinutes }} 分钟</span>
+              </router-link>
+            </li>
+          </ul>
+          <div class="review__footer">
+            <router-link v-if="todayTask?.id" :to="`/learn/${todayTask.id}?mode=review`" class="btn-primary review__go">开始复习</router-link>
+            <span class="review__hint">复习课会优先回捞这些到期知识点</span>
+          </div>
+        </section>
 
         <!-- 本周节奏 + 激励区 -->
         <div class="dash__grid-week">
           <section class="card week">
             <div class="card-head">
               <strong>本周节奏</strong>
-              <span v-if="hasAnyMinutes" class="link-muted" @click="monthOpen = !monthOpen">{{ monthOpen ? '收起整月' : '展开整月 ›' }}</span>
+              <button type="button" v-if="hasAnyMinutes" class="link-muted" @click="monthOpen = !monthOpen">{{ monthOpen ? '收起整月' : '展开整月 ›' }}</button>
             </div>
-            <div v-if="hasAnyMinutes" class="week__grid">
+            <div v-if="sourceFailed.week" class="dash__source-fail">学习记录加载失败，节奏与日历暂不可用。</div>
+            <div v-else-if="hasAnyMinutes" class="week__grid">
               <button
                 v-for="d in weekDays"
                 :key="d.date"
@@ -205,7 +326,10 @@
               </div>
             </section>
             <section class="card mini" v-if="nearestAchievement">
-              <div class="mini__icon mini__icon--medal">{{ nearestAchievement.icon }}</div>
+              <div class="mini__icon mini__icon--medal">
+                <img v-if="nearestAchievement.iconUrl" :src="nearestAchievement.iconUrl" alt="" class="mini__icon-img" />
+                <svg v-else viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V22l4-2 4 2v-7.26A7 7 0 0 0 12 2zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/></svg>
+              </div>
               <div>
                 <strong>成就「{{ nearestAchievement.name }}」<span v-if="nearestAchievement.achieved" class="mini__badge">待解锁</span></strong>
                 <p>{{ nearestAchievement.hint }}</p>
@@ -219,11 +343,11 @@
           <div class="card-head">
             <strong>整月节奏</strong>
             <div class="month__nav">
-              <span class="month__arrow" @click="shiftMonth(-1)">‹</span>
+              <button type="button" class="month__arrow" @click="shiftMonth(-1)">‹</button>
               <span>{{ monthLabel }}</span>
-              <span class="month__arrow" :class="{ 'month__arrow--off': isCurrentMonth }" @click="shiftMonth(1)">›</span>
+              <button type="button" class="month__arrow" :class="{ 'month__arrow--off': isCurrentMonth }" @click="shiftMonth(1)">›</button>
             </div>
-            <span class="link-muted" @click="monthOpen = false">收起</span>
+            <button type="button" class="link-muted" @click="monthOpen = false">收起</button>
           </div>
           <div class="month__meta">
             <span>本月 <b>{{ monthTotals.minutes }}</b> 分钟</span>
@@ -271,35 +395,16 @@
                 <p class="day-detail__note">{{ selectedInfo.note }}</p>
               </template>
               <p v-else class="day-detail__empty">{{ selectedInfo.note }}</p>
-              <button type="button" class="day-detail__more" @click="daySheetOpen = true">查看当天明细 ›</button>
+              <div class="day-detail__actions">
+                <button type="button" class="day-detail__more" @click="daySheetOpen = true">查看当天明细 ›</button>
+                <router-link to="/learning-history" class="day-detail__more">全部历史 ›</router-link>
+              </div>
             </aside>
           </div>
         </section>
 
-        <!-- 快捷入口 -->
-        <div class="quick">
-          <router-link to="/learning-state" class="quick__item">
-            <span class="quick__icon quick__icon--pulse">
-              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 13h4l2-7 4 12 2-7h6v2h-4.6l-2.4 8.4L9.6 7.6 7.6 15H3v-2z"/></svg>
-            </span>
-            <span class="quick__body"><strong>学习状态</strong><small>节奏 · 负荷 · AI 建议</small></span>
-            <span class="quick__go">›</span>
-          </router-link>
-          <router-link to="/learning-paths" class="quick__item">
-            <span class="quick__icon quick__icon--layers">
-              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="m12 2 10 5-10 5L2 7l10-5zm0 7.6L18.9 7 12 4.4 5.1 7 12 9.6zM2 12l10 5 10-5v2l-10 5L2 14v-2zm0 5 10 5 10-5v2l-10 5L2 19v-2z" opacity=".9"/></svg>
-            </span>
-            <span class="quick__body"><strong>全部路径</strong><small>{{ pathsCountText }}</small></span>
-            <span class="quick__go">›</span>
-          </router-link>
-          <router-link to="/achievements" class="quick__item">
-            <span class="quick__icon quick__icon--medal">
-              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V22l4-2 4 2v-7.26A7 7 0 0 0 12 2z"/></svg>
-            </span>
-            <span class="quick__body"><strong>成就</strong><small>{{ achievementsText }}</small></span>
-            <span class="quick__go">›</span>
-          </router-link>
-        </div>
+          </div>
+        </Transition>
       </template>
     </main>
 
@@ -314,7 +419,7 @@
             </div>
             <div class="sheet__head-right">
               <span class="sheet__zone" :class="`sheet__zone--${daySheet.zoneCls}`">{{ daySheet.zone }}</span>
-              <span class="sheet__close" title="关闭" @click="daySheetOpen = false">×</span>
+              <button type="button" class="sheet__close" title="关闭" @click="daySheetOpen = false">×</button>
             </div>
           </header>
 
@@ -378,12 +483,19 @@
       </div>
     </transition>
 
-    <V2Footer />
+    <!-- AI 生成提示：置于页面底部、靠近页脚 -->
+    <!-- AI 生成提示：位于页脚上方，紧贴页脚（两者作为整体沉底） -->
+    <div class="dash__foot">
+      <div class="dash__ai-note">
+        <AiContentNote />
+      </div>
+      <V2Footer />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import request from '@/utils/api';
 import { learningAPI } from '@/api/learning';
@@ -391,7 +503,8 @@ import { toast } from '@/utils/toast';
 import { useUserStore } from '@/stores/user';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
-import './v2.css';
+import AiContentNote from '@/components/AiContentNote.vue';
+import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import { unwrapArray } from './unwrap';
 
 const router = useRouter();
@@ -400,9 +513,22 @@ const userStore = useUserStore();
 /* ================= 基础状态 ================= */
 const loading = ref(true);
 const tipDismissed = ref(false);
+/** 「今天休息」：持久化到 localStorage（按日期），当天刷新保留，次日自动复位 */
+const REST_KEY = 'wf_dash_resting_date';
 const resting = ref(false);
+try {
+  resting.value = localStorage.getItem(REST_KEY) === localDateKey(new Date());
+} catch { /* 隐私模式忽略 */ }
+function setResting(v: boolean) {
+  resting.value = v;
+  try {
+    if (v) localStorage.setItem(REST_KEY, localDateKey(new Date()));
+    else localStorage.removeItem(REST_KEY);
+  } catch { /* 忽略 */ }
+}
 const retrying = ref(false);
 const monthOpen = ref(false);
+const showMore = ref(false);
 
 const stats = ref<Record<string, any> | null>(null);
 const paths = ref<Array<Record<string, any>>>([]);
@@ -410,7 +536,7 @@ const guidance = ref<Record<string, any> | null>(null);
 const sessions = ref<Array<Record<string, any>>>([]);
 const achievements = ref<Array<Record<string, any>>>([]);
 
-const userName = computed(() => userStore.user?.name || stats.value?.user?.name || '同学');
+const userName = computed(() => userStore.user?.name || stats.value?.user?.name || '学习者');
 const greeting = computed(() => {
   const h = new Date().getHours();
   if (h < 6) return '夜深了';
@@ -426,21 +552,56 @@ const dateText = computed(() => {
 const examples = ['用 Python 自动化处理 Excel 报表', '提升职场沟通和表达能力', '用 AI 工具做自媒体副业'];
 
 /* ================= 数据加载 ================= */
+const reviewDue = ref<Array<{ conceptKey: string; label: string; retention: number; reason: string; estimatedMinutes: number }>>([]);
+const todaySchedule = ref<Record<string, any> | null>(null);
+const loadError = ref(false);
+/** 各数据源失败标记：区块级降级提示（不整页失败，也不伪装成空态） */
+const sourceFailed = ref<Record<string, boolean>>({
+  budget: false,
+  review: false,
+  week: false
+});
 async function loadAll() {
   loading.value = true;
-  const [statsR, pathsR, guidanceR, sessionsR, achR] = await Promise.allSettled([
+  loadError.value = false;
+  sourceFailed.value = { budget: false, review: false, week: false };
+  const fastGroup = await Promise.allSettled([
     learningAPI.getStats(),
     learningAPI.getPaths(),
-    learningAPI.getAdaptiveGuidance(),
     fetchSessions(monthCursor.value),
-    request.get('/achievements/all')
+    request.get('/achievements/all'),
+    request.get('/ai-teaching/review/due'),
+    request.get('/learning/schedule/today')
   ]);
+  // 所有数据源全部失败 → 整页加载失败态（避免误渲染成新手空态）
+  if (fastGroup.every((r) => r.status === 'rejected')) {
+    loading.value = false;
+    loadError.value = true;
+    return;
+  }
+  const [statsR, pathsR, sessionsR, achR, dueR, scheduleR] = fastGroup;
   if (statsR.status === 'fulfilled') stats.value = statsR.value as Record<string, any>;
   if (pathsR.status === 'fulfilled') paths.value = pathsR.value as unknown as Array<Record<string, any>>;
-  if (guidanceR.status === 'fulfilled') guidance.value = guidanceR.value as Record<string, any> | null;
   if (sessionsR.status === 'fulfilled') sessions.value = sessionsR.value;
+  else sourceFailed.value.week = true; // 本周节奏/整月日历依赖 sessions
   if (achR.status === 'fulfilled') achievements.value = unwrapArray(achR.value);
+  if (dueR.status === 'fulfilled') {
+    const body = dueR.value?.data ?? dueR.value ?? {};
+    reviewDue.value = Array.isArray(body.items) ? body.items : [];
+  } else {
+    sourceFailed.value.review = true;
+  }
+  if (scheduleR.status === 'fulfilled') {
+    const body = scheduleR.value?.data ?? scheduleR.value ?? {};
+    todaySchedule.value = body;
+  } else {
+    sourceFailed.value.budget = true;
+  }
   loading.value = false;
+  // AI 引导文案独立异步：慢（模型生成可达数秒）也不阻塞首屏，失败静默降级
+  learningAPI.getAdaptiveGuidance()
+    .then((body) => { guidance.value = body as Record<string, any> | null; })
+    .catch(() => { /* 引导缺失不影响首屏 */ });
 }
 
 async function fetchSessions(cursor: { year: number; month: number }) {
@@ -503,9 +664,10 @@ function toPathView(p: Record<string, any>): PathView {
   };
 }
 
-const pageState = computed<'active' | 'attention' | 'empty'>(() => {
+const pageState = computed<'active' | 'attention' | 'generating' | 'empty'>(() => {
   if (!primaryPath.value) return 'empty';
-  if (primaryPath.value.failed || primaryPath.value.generating) return 'attention';
+  if (primaryPath.value.failed) return 'attention';
+  if (primaryPath.value.generating) return 'generating';
   return 'active';
 });
 
@@ -621,6 +783,7 @@ const greetSub = computed(() => guidanceCopy.value?.subtitle || '');
 
 const tipTone = computed(() => {
   if (pageState.value === 'attention') return 'attention';
+  if (pageState.value === 'generating') return 'normal';
   const level = guidanceSummary.value?.global?.stateLevel;
   if (level === 'recover') return 'recover';
   if (guidanceSummary.value?.global?.hasWarnings || guidanceSummary.value?.global?.warningLevel === 'critical') return 'warn';
@@ -628,7 +791,8 @@ const tipTone = computed(() => {
 });
 
 const tipText = computed(() => {
-  if (pageState.value === 'attention') return '路径生成失败通常是暂时的。重新生成约 30 秒，已确认的信息都会保留。';
+  if (pageState.value === 'attention') return '路径生成失败通常是暂时的。重新生成一般需要 1-2 分钟，已确认的信息都会保留。';
+  if (pageState.value === 'generating') return '路径正在生成中，一般需要 1-2 分钟。页面会自动刷新，你也可以先去别的页面看看。';
   const copy = guidanceCopy.value;
   const warning = copy?.warningCopy;
   if (warning && warning !== '当前没有明显风险。') return warning;
@@ -639,7 +803,7 @@ const tipText = computed(() => {
 
 /* ================= 重试 ================= */
 async function doRetry() {
-  if (retrying.value || !primaryPath.value) return;
+  if (retrying.value || !primaryPath.value || primaryPath.value.generating) return;
   retrying.value = true;
   try {
     if (primaryPath.value.retryType === 'stage_design') {
@@ -682,19 +846,49 @@ const nearestAchievement = computed(() => {
   const nearest = locked.sort((a, b) => (b.progress?.percentage ?? 0) - (a.progress?.percentage ?? 0))[0];
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : (Math.round(n * 10) / 10).toString());
   return {
-    icon: nearest.icon || '🏅',
+    iconUrl: typeof nearest.icon === 'string' && nearest.icon.startsWith('http') ? nearest.icon : '',
     name: nearest.name,
     achieved: (nearest.progress?.current ?? 0) >= (nearest.progress?.total ?? 1),
     hint: `${nearest.description}（${fmt(nearest.progress?.current ?? 0)}/${fmt(nearest.progress?.total ?? 1)}）`
   };
 });
 
-const todayStr = new Date().toISOString().slice(0, 10);
+// 本地时区日期键（拍板 2026-08-21）：此前 toISOString() 按 UTC 切日，
+// UTC+8 用户凌晨 0-8 点的学习被记进「昨天」，与预算卡的服务端本地口径互相矛盾
+function localDateKey(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+const todayStr = localDateKey(new Date());
+
+/** 认知带宽枚举 → 中文（light/medium/heavy 等） */
+function bandwidthLabel(v: string): string {
+  const map: Record<string, string> = {
+    light: '轻度',
+    medium: '中度',
+    heavy: '重度',
+    stress_test: '压力测试'
+  };
+  return map[v] ?? v;
+}
+
+/** 折叠区是否有实际动态内容（新手无数据时隐藏「展开更多」，避免点开看到空卡）；
+    快捷入口已移出折叠区（始终显示），不受此控制。
+    数据源失败也计入：失败提示行需要可见（区别于空态）。 */
+const hasFoldedContent = computed(
+  () =>
+    Boolean(todaySchedule.value?.activeGoals?.length) ||
+    reviewDue.value.length > 0 ||
+    hasAnyMinutes.value ||
+    Boolean(nearestAchievement.value) ||
+    Object.values(sourceFailed.value).some(Boolean)
+);
+
 const minutesByDate = computed(() => {
   const map = new Map<string, number>();
   for (const s of sessions.value) {
-    const date = String(s.startTime || '').slice(0, 10);
-    if (!date) continue;
+    if (!s.startTime) continue;
+    const date = localDateKey(new Date(s.startTime));
     map.set(date, (map.get(date) ?? 0) + (s.durationMinutes ?? 0));
   }
   return map;
@@ -702,12 +896,16 @@ const minutesByDate = computed(() => {
 
 const todayMinutes = computed(() => minutesByDate.value.get(todayStr) ?? 0);
 
+/* 优先使用服务端 streak，回退到客户端计算 */
 const streakDays = computed(() => {
+  const serverStreak = userStore.user?.streakDays;
+  if (serverStreak != null && serverStreak > 0) return serverStreak;
+  /* 客户端回退（兼容旧数据） */
   let streak = 0;
   const d = new Date();
   if ((minutesByDate.value.get(todayStr) ?? 0) === 0) d.setDate(d.getDate() - 1);
   for (;;) {
-    const key = d.toISOString().slice(0, 10);
+    const key = localDateKey(d);
     if ((minutesByDate.value.get(key) ?? 0) > 0) {
       streak += 1;
       d.setDate(d.getDate() - 1);
@@ -831,6 +1029,15 @@ const selectedInfo = computed(() => {
 /* ================= 当天学习复盘抽屉 ================= */
 const daySheetOpen = ref(false);
 const openSessionEvents = ref<Set<string>>(new Set());
+
+function onSheetKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') daySheetOpen.value = false;
+}
+watch(daySheetOpen, (open) => {
+  if (open) window.addEventListener('keydown', onSheetKey);
+  else window.removeEventListener('keydown', onSheetKey);
+});
+onBeforeUnmount(() => window.removeEventListener('keydown', onSheetKey));
 
 function toggleSessionEvents(id: string) {
   const next = new Set(openSessionEvents.value);
@@ -1019,7 +1226,7 @@ onMounted(loadAll);
 .greet__dot { width: 4px; height: 4px; border-radius: 50%; background: var(--faint); }
 .streak {
   display: inline-flex; align-items: center; gap: 6px;
-  font-size: 12px; font-weight: 700; color: #b3540a;
+  font-size: 12px; font-weight: 700; color: var(--amber, #b3540a);
   background: rgba(244, 170, 70, 0.16);
   border: 1px solid rgba(244, 170, 70, 0.35);
   padding: 5px 11px; border-radius: 999px;
@@ -1037,7 +1244,7 @@ onMounted(loadAll);
 .tip--empty { border-color: rgba(141, 107, 255, 0.22); background: linear-gradient(135deg, rgba(141, 107, 255, 0.07), rgba(52, 120, 246, 0.04)); }
 .tip__icon {
   width: 26px; height: 26px; border-radius: 8px;
-  background: #fff; color: var(--blue-deep);
+  background: var(--surface, #fff); color: var(--blue-deep);
   display: grid; place-items: center; flex: 0 0 auto;
   box-shadow: 0 1px 3px rgba(23, 32, 51, 0.1);
 }
@@ -1045,13 +1252,17 @@ onMounted(loadAll);
 .tip--empty .tip__icon { color: var(--accent); }
 .tip p { margin: 0; flex: 1; font-size: 13px; line-height: 1.6; color: var(--ink); }
 .tip__close { color: var(--faint); font-size: 16px; cursor: pointer; padding: 2px 6px; }
-.tip__ai {
-  flex: 0 0 auto;
-  font-size: 10px; font-weight: 900; letter-spacing: 0.04em;
-  color: var(--faint);
-  border: 1px solid var(--line); border-radius: 6px;
-  padding: 2px 5px;
+
+/* ---------- AI 提示（页脚上方） ---------- */
+/* wrapper 用 margin-top:auto 沉底；内部是普通 block 流，footer 的 margin-top:auto 不生效 */
+.dash__foot {
+  margin-top: auto;
 }
+.dash__ai-note {
+  display: flex; justify-content: center;
+  padding: 10px 28px 4px;
+}
+.dash__ai-note :deep(.ai-note) { font-size: 11px; opacity: 0.75; }
 
 /* ---------- 卡片基座 ---------- */
 .card {
@@ -1061,20 +1272,61 @@ onMounted(loadAll);
   box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
 }
 .card-head { display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
-.link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; }
+.link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; transition: color 0.15s ease; }
 .link-muted:hover { color: var(--blue-deep); }
 
+/* ---------- 今日预算（多目标调度台账） ---------- */
+.dash__budget { margin-bottom: 16px; }
+.budget { padding: 16px 18px; }
+.budget__head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.budget__title { font-size: 14px; font-weight: 700; }
+.budget__total { font-size: 12px; color: var(--faint); }
+.budget__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.budget__item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.budget__link { display: flex; align-items: center; gap: 10px; flex: 1; text-decoration: none; color: inherit; }
+.budget__link:hover { opacity: 0.8; }
+.budget__link:hover .budget__name { color: var(--blue, #2c63d0); }
+.budget__name { min-width: 140px; font-weight: 600; }
+.budget__bar { flex: 1; height: 6px; border-radius: 3px; background: #eef0f4; overflow: hidden; }
+.budget__bar i { display: block; height: 100%; border-radius: 3px; background: #10b981; }
+.budget__num { width: 110px; text-align: right; color: var(--faint); font-size: 12px; }
+.budget__bw { padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, var(--green, #1e9e58) 8%, var(--surface)); color: var(--green, #047857); font-size: 11px; }
+
+/* ---------- 今日复习（复习闭环） ---------- */
+.dash__review { margin-bottom: 16px; }
+.review { padding: 16px 18px; }
+.review__head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.review__eyebrow { font-size: 14px; font-weight: 700; }
+.review__sub { font-size: 12px; color: var(--faint); }
+.review__list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
+.review__item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.review__link { display: flex; align-items: center; gap: 10px; flex: 1; text-decoration: none; color: inherit; }
+.review__link:hover { opacity: 0.8; }
+.review__link:hover .review__name { color: var(--blue, #2c63d0); }
+.review__name { min-width: 140px; font-weight: 600; }
+.review__bar { flex: 1; height: 6px; border-radius: 3px; background: #eef0f4; overflow: hidden; }
+.review__bar i { display: block; height: 100%; border-radius: 3px; background: var(--blue, #3b82f6); }
+.review__pct { width: 42px; text-align: right; color: var(--faint); font-size: 12px; }
+.review__minutes { width: 90px; text-align: right; color: var(--faint); font-size: 12px; }
+.review__footer { display: flex; align-items: center; gap: 12px; }
+.review__go { padding: 6px 16px; border-radius: 8px; }
+.review__hint { font-size: 12px; color: var(--faint); }
+
 /* ---------- 主区 ---------- */
-.dash__grid-main {
-  display: grid;
+.dash__grid-main {  display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
 }
 .action {
-  padding: 26px 28px;
-  display: flex; flex-direction: column; gap: 12px;
+  padding: 22px 26px;
+  display: flex; flex-direction: column; gap: 10px;
   position: relative; overflow: hidden;
+}
+/* 新手空态卡：紧凑化，避免空态内容把页脚挤出首屏 */
+.action--empty {
+  padding: 18px 24px;
+  gap: 9px;
 }
 .action::before {
   content: ''; position: absolute; inset: 0 auto 0 0; width: 4px;
@@ -1100,10 +1352,11 @@ onMounted(loadAll);
 .action__meta { display: flex; gap: 8px; flex-wrap: wrap; }
 .tag {
   padding: 5px 11px; border-radius: 999px;
-  background: #f1f5fb; border: 1px solid var(--line);
+  background: var(--line, #f1f5fb); border: 1px solid var(--line);
   font-size: 12px; font-weight: 600; color: var(--muted);
 }
 .tag--blue { background: rgba(52, 120, 246, 0.09); border-color: rgba(52, 120, 246, 0.3); color: var(--blue-deep); }
+.tag--cyan { background: rgba(67, 176, 216, 0.12); border-color: rgba(67, 176, 216, 0.35); color: #2b7a99; }
 .tag--red { background: rgba(239, 117, 120, 0.1); border-color: rgba(239, 117, 120, 0.35); color: #c0454a; }
 .action__footer { display: flex; align-items: center; gap: 12px; margin-top: auto; flex-wrap: wrap; }
 .btn-primary {
@@ -1115,11 +1368,11 @@ onMounted(loadAll);
 }
 .btn-ghost {
   padding: 10px 18px; border-radius: 12px;
-  border: 1px solid var(--line); background: #fff;
+  border: 1px solid var(--line); background: var(--surface, #fff);
   font-size: 14px; font-weight: 700; color: var(--muted); cursor: pointer;
 }
 .action__today { display: flex; align-items: center; gap: 10px; margin-top: 0; font-size: 12px; color: var(--faint); }
-.action__today-bar { width: 120px; height: 6px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
+.action__today-bar { width: 120px; height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
 .action__today-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 .action__examples { display: flex; gap: 8px; flex-wrap: wrap; }
 .example {
@@ -1142,12 +1395,12 @@ onMounted(loadAll);
 .step:last-child { padding-bottom: 0; }
 .step::before {
   content: ''; position: absolute; left: 8px; top: 18px; bottom: 0;
-  width: 2px; background: #e7edf7;
+  width: 2px; background: color-mix(in srgb, var(--line) 60%, transparent);
 }
 .step:last-child::before { display: none; }
 .step__dot {
   width: 18px; height: 18px; border-radius: 50%;
-  border: 2px solid #d4deee; background: #fff;
+  border: 2px solid var(--line); background: var(--surface);
   margin-top: 1px; position: relative; z-index: 1;
 }
 .step--done .step__dot { border-color: var(--green); background: var(--green); box-shadow: inset 0 0 0 3px #fff; }
@@ -1158,7 +1411,7 @@ onMounted(loadAll);
 .step__body small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
 .step--current .step__body small { color: var(--blue-deep); font-weight: 600; }
 .path__foot { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 8px; }
-.path__progress { height: 8px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
+.path__progress { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
 .path__progress i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 .path__nums { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
 .path--empty { justify-content: flex-start; }
@@ -1167,7 +1420,7 @@ onMounted(loadAll);
   text-align: center; color: var(--faint); font-size: 13px; padding: 24px 0;
 }
 .path__empty-illus { display: flex; gap: 6px; justify-content: center; }
-.path__empty-illus span { width: 26px; height: 8px; border-radius: 99px; background: #e7edf7; }
+.path__empty-illus span { width: 26px; height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--line) 60%, transparent); }
 .path__empty-illus span:nth-child(1) { background: rgba(49, 177, 111, 0.4); }
 .path__empty-illus span:nth-child(2) { background: rgba(52, 120, 246, 0.4); }
 </style>
@@ -1175,7 +1428,7 @@ onMounted(loadAll);
 <style scoped>
 /* ---------- 本周节奏 ---------- */
 .dash__grid-week { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 16px; }
-.week { padding: 20px 22px; display: grid; gap: 14px; align-content: start; }
+.week { padding: 16px 20px; display: grid; gap: 12px; align-content: start; }
 .week__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
 .day {
   display: grid; gap: 6px; justify-items: center;
@@ -1184,7 +1437,7 @@ onMounted(loadAll);
   background: transparent; font: inherit; cursor: pointer;
   transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
 }
-.day:hover { background: #f6f9ff; }
+.day:hover { background: color-mix(in srgb, var(--blue, #3478f6) 6%, var(--surface)); }
 .day--today { border-color: rgba(52, 120, 246, 0.45); background: rgba(52, 120, 246, 0.05); }
 .day--selected { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12); }
 .day__label { font-size: 11px; color: var(--faint); font-weight: 700; }
@@ -1196,7 +1449,16 @@ onMounted(loadAll);
 .day__min { font-size: 11px; color: var(--faint); }
 .week__empty {
   padding: 26px 0; text-align: center; color: var(--faint); font-size: 13px;
-  border: 1px dashed var(--line); border-radius: 12px; background: #fafcff;
+  border: 1px dashed var(--line); border-radius: 12px; background: color-mix(in srgb, var(--surface) 70%, var(--canvas));
+}
+/* 区块级数据源失败提示（区别于空态：失败可见，不伪装成无数据） */
+.dash__source-fail {
+  padding: 14px 16px;
+  font-size: 12.5px; line-height: 1.6;
+  color: var(--muted);
+  background: rgba(244, 170, 70, 0.08);
+  border: 1px dashed rgba(244, 170, 70, 0.35);
+  border-radius: 10px;
 }
 .week__stats { display: flex; gap: 18px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
 .week__stats b { color: var(--ink); }
@@ -1207,6 +1469,7 @@ onMounted(loadAll);
 .mini__icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: 0 0 auto; }
 .mini__icon--flame { color: #d9741a; background: rgba(244, 170, 70, 0.16); }
 .mini__icon--medal { color: var(--accent); background: rgba(141, 107, 255, 0.13); }
+.mini__icon-img { width: 18px; height: 18px; object-fit: contain; display: block; }
 .mini strong { font-size: 14px; }
 .mini p { margin: 3px 0 0; font-size: 12px; color: var(--muted); }
 .mini__badge {
@@ -1220,7 +1483,7 @@ onMounted(loadAll);
 .month__nav { display: flex; align-items: center; gap: 12px; font-size: 13px; font-weight: 700; color: var(--muted); }
 .month__arrow {
   width: 26px; height: 26px; border-radius: 8px;
-  border: 1px solid var(--line); background: #fff;
+  border: 1px solid var(--line); background: var(--surface, #fff);
   display: grid; place-items: center; cursor: pointer; color: var(--muted);
 }
 .month__arrow--off { opacity: 0.35; cursor: default; }
@@ -1252,7 +1515,7 @@ onMounted(loadAll);
 .day-detail {
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: #fafcff;
+  background: color-mix(in srgb, var(--surface) 70%, var(--canvas));
   padding: 14px 16px;
   display: grid; gap: 12px; align-content: start;
 }
@@ -1317,20 +1580,6 @@ a.btn-primary { text-decoration: none; }
 .action__eyebrow--rest { color: var(--faint); }
 .action__eyebrow--ok { color: var(--green); }
 
-.task-fade-enter-active, .task-fade-leave-active { transition: opacity .18s ease, transform .18s ease; }
-.task-fade-enter-from { opacity: 0; transform: translateY(6px); }
-.task-fade-leave-to { opacity: 0; transform: translateY(-6px); }
-.action__task { display: grid; gap: 12px; }
-
-.mini-spinner {
-  width: 14px; height: 14px; border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
-  animation: dash-spin .8s linear infinite;
-  display: inline-block;
-}
-.btn-primary--busy { opacity: .85; cursor: default; }
-@keyframes dash-spin { to { transform: rotate(360deg); } }
 </style>
 
 <style scoped>
@@ -1362,13 +1611,13 @@ a.btn-primary { text-decoration: none; }
 .tip--recover { border-color: rgba(141, 107, 255, 0.28); background: linear-gradient(135deg, rgba(141, 107, 255, 0.08), rgba(67, 176, 216, 0.05)); }
 .tip--recover .tip__icon { color: var(--accent); }
 .tip--warn { border-color: rgba(244, 170, 70, 0.3); background: linear-gradient(135deg, rgba(244, 170, 70, 0.09), rgba(244, 170, 70, 0.04)); }
-.tip--warn .tip__icon { color: #b3540a; }
+.tip--warn .tip__icon { color: var(--amber, #b3540a); }
 .tip--attention { border-color: rgba(239, 117, 120, 0.25); background: linear-gradient(135deg, rgba(239, 117, 120, 0.07), rgba(244, 170, 70, 0.05)); }
 .tip--attention .tip__icon { color: #c0454a; }
 .tip--normal { border-color: rgba(52, 120, 246, 0.18); background: linear-gradient(135deg, rgba(52, 120, 246, 0.07), rgba(67, 176, 216, 0.05)); }
 .path__note {
   display: flex; align-items: center; gap: 7px;
-  font-size: 12px; font-weight: 600; color: #b3540a;
+  font-size: 12px; font-weight: 600; color: var(--amber, #b3540a);
   background: rgba(244, 170, 70, 0.1);
   border: 1px solid rgba(244, 170, 70, 0.3);
   border-radius: 10px;
@@ -1388,12 +1637,18 @@ a.btn-primary { text-decoration: none; }
 
 <style scoped>
 /* ---------- 当天明细入口 ---------- */
+.day-detail__actions {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
 .day-detail__more {
   border: 0; background: transparent;
   color: var(--blue-deep);
   font: inherit; font-size: 12.5px; font-weight: 800;
   cursor: pointer; text-align: left;
   padding: 8px 0 0;
+  text-decoration: none;
 }
 .day-detail__more:hover { text-decoration: underline; }
 
@@ -1423,14 +1678,14 @@ a.btn-primary { text-decoration: none; }
 .sheet__head-right { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 .sheet__zone { font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
 .sheet__zone--low { color: #2b7a99; background: rgba(67, 176, 216, 0.14); }
-.sheet__zone--mid { color: #b3540a; background: rgba(244, 170, 70, 0.15); }
+.sheet__zone--mid { color: var(--amber, #b3540a); background: rgba(244, 170, 70, 0.15); }
 .sheet__zone--high { color: #6b4ae0; background: rgba(141, 107, 255, 0.14); }
 .sheet__zone--none { color: var(--faint); background: #eef2f8; }
 .sheet__close {
   width: 30px; height: 30px; border-radius: 9px;
   display: grid; place-items: center;
   color: var(--faint); font-size: 16px; cursor: pointer;
-  border: 1px solid var(--line); background: #fff;
+  border: 1px solid var(--line); background: var(--surface, #fff);
 }
 .sheet__close:hover { color: var(--ink); }
 
@@ -1466,7 +1721,7 @@ a.btn-primary { text-decoration: none; }
   font-size: 13px; color: var(--faint);
   border: 1px dashed var(--line); border-radius: 12px;
   padding: 18px 14px; text-align: center;
-  background: #fafcff;
+  background: color-mix(in srgb, var(--surface) 70%, var(--canvas));
 }
 
 /* ---------- 会话卡 ---------- */
@@ -1475,7 +1730,7 @@ a.btn-primary { text-decoration: none; }
   border-radius: 13px;
   padding: 13px 14px;
   display: grid; gap: 9px;
-  background: #fbfcff;
+  background: color-mix(in srgb, var(--surface) 80%, var(--canvas));
 }
 .scard + .scard { margin-top: 4px; }
 .scard__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
@@ -1499,7 +1754,7 @@ a.btn-primary { text-decoration: none; }
 .chip--cyan { color: #2b7a99; background: rgba(67, 176, 216, 0.14); }
 .chip--purple { color: var(--accent); background: rgba(141, 107, 255, 0.12); }
 .scard__confuse {
-  font-size: 12px; color: #b3540a; font-weight: 600;
+  font-size: 12px; color: var(--amber, #b3540a); font-weight: 600;
   background: rgba(244, 170, 70, 0.1);
   border: 1px solid rgba(244, 170, 70, 0.28);
   border-radius: 9px;
@@ -1572,5 +1827,60 @@ a.btn-primary { text-decoration: none; }
   .day__cell { width: 28px; height: 28px; border-radius: 8px; font-size: 11px; }
   .month { padding: 16px 14px; }
   .month__meta { gap: 10px; }
+}
+</style>
+
+<style scoped>
+/* ---------- 展开/收起 ---------- */
+.fold-enter-active,
+.fold-leave-active {
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+.fold-enter-from,
+.fold-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+.fold-enter-to,
+.fold-leave-from {
+  opacity: 1;
+  max-height: 2000px;
+}
+
+.folded-sections {
+  display: grid;
+  gap: 16px;
+}
+
+.more-toggle {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+.more-toggle__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 18px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.more-toggle__btn:hover {
+  color: var(--blue-deep);
+  border-color: rgba(52, 120, 246, 0.3);
+  background: rgba(52, 120, 246, 0.04);
+}
+.more-toggle__arrow--open {
+  transform: rotate(180deg);
+}
+.more-toggle__btn svg {
+  transition: transform 0.2s ease;
 }
 </style>

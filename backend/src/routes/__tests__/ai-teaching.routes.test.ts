@@ -34,6 +34,7 @@ jest.mock('../../config/database', () => ({ __esModule: true, default: {} }));
 jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn() } }));
 
 import router from '../ai-teaching.routes';
+import { requestContextStorage, runWithContext } from '../../gateway/api-gateway/context';
 
 function getRouteHandler(path: string, method: 'get' | 'post' = 'post') {
   const layer = (router as any).stack.find((item: any) => item.route?.path === path && item.route?.methods?.[method]);
@@ -121,6 +122,8 @@ describe('ai-teaching routes', () => {
       advisory: { nextStep: '复习 infer' },
       peerTriggered: true,
       peerMessage: { content: '我也刚理解这一点。' },
+      peerStrategy: 'feynman',
+      peerFollowUpQuestions: ['你能用自己的话讲一遍吗？'],
       checkpoint: { id: 'checkpoint-1', question: '何时使用 infer？' },
       promptDebug: { promptId: 'prompt-1' },
       peerDebug: { traceId: 'peer-1' },
@@ -165,6 +168,8 @@ describe('ai-teaching routes', () => {
         advisory: { nextStep: '复习 infer' },
         peerTriggered: true,
         peerMessage: { content: '我也刚理解这一点。' },
+        peerStrategy: 'feynman',
+        peerFollowUpQuestions: ['你能用自己的话讲一遍吗？'],
         checkpoint: { id: 'checkpoint-1', question: '何时使用 infer？' },
         promptDebug: { promptId: 'prompt-1' },
         peerDebug: { traceId: 'peer-1' },
@@ -318,6 +323,61 @@ describe('ai-teaching routes', () => {
     expect(res.end).toHaveBeenCalled();
   });
 
+  it('SSE 流式：注入业务 sessionId 到请求上下文（执行日志/瀑布归组链路）', async () => {
+    mockCoordinator.processStudentMessage.mockResolvedValue({
+      aiResponse: '继续',
+      analysis: {
+        cognitiveLevel: 'understand',
+        levelScore: 3,
+        understanding: 0.8,
+        confusionPoints: [],
+        engagement: 0.9,
+        emotionalState: 'positive',
+      },
+      currentState: { lss: 1, ktl: 2, lf: 3, lsb: 4 },
+      strategies: [],
+      knowledgePoint: null,
+      knowledgePoints: [],
+      isCompletion: false,
+      shouldConfirmEnd: false,
+      endReason: null,
+      recovered: false,
+      autoEnded: false,
+      peerTriggered: false,
+      checkpoint: null,
+      revision: 4,
+    });
+
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    const res: any = {
+      status: jest.fn(),
+      json: jest.fn(),
+      setHeader: jest.fn(),
+      flushHeaders: jest.fn(),
+      write: jest.fn(() => true),
+      end: jest.fn(),
+      destroyed: false,
+      writableEnded: false,
+    };
+    res.status.mockReturnValue(res);
+    res.json.mockReturnValue(res);
+
+    let observed: any = null;
+    await runWithContext({ userId: 'user-1' }, async () => {
+      await handler({
+        user: { userId: 'user-1' },
+        params: { sessionId: 'sess-ctx-1' },
+        headers: { accept: 'text/event-stream' },
+        body: { message: '继续', revision: 1 },
+      }, res);
+      observed = requestContextStorage.getStore();
+    });
+
+    expect(observed?.sessionId).toBe('sess-ctx-1');
+    expect(observed?.sourceEntry).toBe('platform');
+    expect(observed?.streamRequest?.enabled).toBe(true);
+  });
+
   it('Finalization 正在执行时返回 202 和轮询信息', async () => {
     mockSessionFinalizationService.finalize.mockResolvedValue({
       operationId: 'finalize-1',
@@ -403,9 +463,11 @@ describe('ai-teaching routes', () => {
     expect(mockSessionFinalizationService.finalize).not.toHaveBeenCalled();
   });
 
-  it('将学习伙伴消息映射为仅含 peerResponse 的公开 DTO', async () => {
+  it('将学习伙伴消息映射为含 peerResponse/peerStrategy/followUpQuestions 的公开 DTO', async () => {
     mockCoordinator.processPeerMessage.mockResolvedValue({
       peerResponse: '我会先把类型参数写出来。',
+      strategy: 'feynman',
+      followUpQuestions: ['如果类型参数不写，会发生什么？'],
       debug: { traceId: 'internal-peer-trace' },
     });
     const handler = getRouteHandler('/sessions/:sessionId/peer/messages');
@@ -421,7 +483,11 @@ describe('ai-teaching routes', () => {
     expect(mockCoordinator.processPeerMessage).toHaveBeenCalledWith('session-1', '条件类型该怎么开始？');
     expect(res.json).toHaveBeenCalledWith({
       success: true,
-      data: { peerResponse: '我会先把类型参数写出来。' },
+      data: {
+        peerResponse: '我会先把类型参数写出来。',
+        peerStrategy: 'feynman',
+        peerFollowUpQuestions: ['如果类型参数不写，会发生什么？'],
+      },
     });
   });
 

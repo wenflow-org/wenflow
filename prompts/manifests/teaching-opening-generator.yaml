@@ -1,0 +1,26 @@
+version: prompt-lab-manifest/v1
+skillId: teaching-opening-generator
+agentId: skill:teaching-opening-generator
+name: default-skill-teaching-opening-generator
+archetype: generator
+description: 课堂开场交互生成器
+acceptableAgentIds: [skill:teaching-opening-generator]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: generation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: blocking
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: teaching, phases: [opening-generated], defaultPhase: opening-generated, terminalPhases: [opening-generated], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, teaching, v4]
+notes: v4 核心文件的契约与运行参数家园。

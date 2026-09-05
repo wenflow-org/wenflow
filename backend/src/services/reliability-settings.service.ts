@@ -20,10 +20,11 @@ export interface PlatformReliabilitySettings {
 }
 
 export const DEFAULT_PLATFORM_RELIABILITY_SETTINGS: PlatformReliabilitySettings = {
-  maxUpstreamAttempts: 3,
-  maxTransportRetries: 1,
-  maxLogicalRetries: 1,
-  defaultRequestTimeoutMs: 300_000,
+  maxUpstreamAttempts: 5,
+  maxTransportRetries: 3,
+  maxLogicalRetries: 3,
+  // 上游（deepseek-v4-flash）响应慢：单次调用 5 分钟常超时，放宽到 10 分钟（2026-08-30）
+  defaultRequestTimeoutMs: 600_000,
   retryBaseDelayMs: 1_000,
   maxRetryAfterMs: 10_000,
   jitterEnabled: true

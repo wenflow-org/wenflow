@@ -1,4 +1,4 @@
-﻿{
+{
   "$schema": "./mcp-schema.json",
   "version": "1.0.0",
   "description": "AI学习平台 MCP 配置",
@@ -9,7 +9,11 @@
       "type": "openai",
       "endpoint": "${OPENAI_API_URL:-https://api.openai.com/v1}",
       "apiKey": "${OPENAI_API_KEY}",
-      "models": ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
+      "models": [
+        "gpt-4",
+        "gpt-4-turbo",
+        "gpt-3.5-turbo"
+      ],
       "defaultModel": "gpt-4",
       "priority": 1,
       "enabled": true,
@@ -25,7 +29,11 @@
       "type": "openai-compatible",
       "endpoint": "${AI_API_URL:-http://localhost:3000/v1}",
       "apiKey": "${AI_API_KEY}",
-      "models": ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-r1"],
+      "models": [
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+        "deepseek-r1"
+      ],
       "defaultModel": "deepseek-v4-flash",
       "priority": 2,
       "enabled": true,
@@ -41,7 +49,11 @@
       "type": "anthropic",
       "endpoint": "${ANTHROPIC_API_URL:-https://api.anthropic.com}",
       "apiKey": "${ANTHROPIC_API_KEY}",
-      "models": ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku"],
+      "models": [
+        "claude-3-opus",
+        "claude-3-sonnet",
+        "claude-3-haiku"
+      ],
       "defaultModel": "claude-3-sonnet",
       "priority": 3,
       "enabled": false,
@@ -53,15 +65,6 @@
     }
   ],
   "tools": [
-    {
-      "id": "code-interpreter",
-      "name": "代码解释器",
-      "description": "执行 Python 代码",
-      "type": "code",
-      "endpoint": "local",
-      "userAccessible": false,
-      "enabled": true
-    },
     {
       "id": "web-search",
       "name": "网页搜索",
@@ -80,38 +83,21 @@
       "endpoint": "local",
       "userAccessible": false,
       "config": {
-        "allowedPaths": ["./uploads", "./data"],
+        "allowedPaths": [
+          "./uploads",
+          "./data"
+        ],
         "maxFileSize": 10485760
       },
       "enabled": true
     }
   ],
-  "agents": {
-    "skill:path-planning": {
-      "mcpServer": "newapi",
-      "model": "deepseek-v4-flash",
-      "maxTokens": 4000,
-      "temperature": 0.5
-    },
-    "ai-teaching-agent": {
-      "mcpServer": "newapi",
-      "model": "deepseek-v4-flash",
-      "maxTokens": 2000,
-      "temperature": 0.7
-    },
-    "planner-agent": {
-      "mcpServer": "newapi",
-      "model": "deepseek-v4-pro",
-      "maxTokens": 6000,
-      "temperature": 0.3
-    }
-  },
   "routing": {
     "strategy": "priority",
     "fallback": true,
     "healthCheck": {
       "enabled": true,
-      "interval": 30000
+      "interval": 300000
     }
   }
 }

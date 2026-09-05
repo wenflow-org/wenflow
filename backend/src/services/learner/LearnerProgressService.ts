@@ -1,10 +1,6 @@
 import { executeSkill, auxSkillDefinitionMap } from '../../skills';
-import { getEventBus } from '../../gateway/event-bus';
 import { calculateCognitiveEngagement, CognitiveEngagementInput } from '../learning/cognitive-engagement.service';
 import type { LearningSignal, ProgressMetrics } from '../../agents/protocol';
-
-const KTL_DECAY = 0.95;
-const LF_DECAY = 0.7;
 
 const THRESHOLDS = {
   fatigueHigh: 70,
@@ -62,50 +58,6 @@ class LearnerProgressService {
     return this.buildResult(updatedMetrics, signals, recommendations, report);
   }
 
-  async evaluateLessonCompletion(
-    userId: string,
-    data: LearnerProgressSessionData & {
-      performance?: {
-        understanding?: number;
-        frustrationLevel?: number;
-      };
-    }
-  ): Promise<LearnerProgressResult> {
-    const currentMetrics = this.getCurrentMetrics();
-    const updatedMetrics = this.recordSessionEnd(data, currentMetrics);
-    const signalInput = {
-      ...data,
-      score: data.score ?? ((data.performance?.understanding || 0) * 100),
-      attempts: data.attempts ?? Math.max(0, Math.round((data.performance?.frustrationLevel || 0) / 2))
-    };
-    const signals = this.detectSignals(updatedMetrics, signalInput);
-    const recommendations = this.generateRecommendations(updatedMetrics, signals);
-
-    return this.buildResult(updatedMetrics, signals, recommendations);
-  }
-
-  async emitSignals(userId: string, signals: LearningSignal[]): Promise<void> {
-    const eventBus = getEventBus();
-    for (const signal of signals) {
-      const eventType = `learning:${signal.type}` as const;
-      if (!['learning:mastery', 'learning:struggle'].includes(eventType)
-        && !eventType.startsWith('learning:fatigue')
-        && !eventType.startsWith('learning:speed')) {
-        continue;
-      }
-
-      await eventBus.emit({
-        type: eventType as any,
-        source: 'skill:learner-model',
-        userId,
-        data: {
-          intensity: signal.intensity,
-          context: signal.context
-        }
-      });
-    }
-  }
-
   private buildResult(
     metrics: ProgressMetrics,
     signals: LearningSignal[],
@@ -127,6 +79,7 @@ class LearnerProgressService {
   }
 
   private getCurrentMetrics(): ProgressMetrics {
+    // 单任务快照（不持久化）：权威的学习状态指标（KTL/LF/LSS）在 learning-state.service
     return {
       completionRate: 0,
       timeSpent: 0,
@@ -141,8 +94,6 @@ class LearnerProgressService {
     const timeSpent = data.timeSpent || 30;
     const subjectiveDifficulty = data.subjectiveDifficulty || 5;
     const lss = this.calculateLSS(difficulty, timeSpent, subjectiveDifficulty);
-    const ktl = (currentMetrics.ktl || 0) * KTL_DECAY + lss;
-    const lf = (currentMetrics.lf || 0) * LF_DECAY + (lss * 0.5);
     const completionRate = Math.min((currentMetrics.completionRate || 0) + 0.1, 1);
 
     const cognitiveEngagementInput: CognitiveEngagementInput = {
@@ -158,22 +109,12 @@ class LearnerProgressService {
     return {
       completionRate,
       timeSpent: (currentMetrics.timeSpent || 0) + timeSpent,
-      ktl,
-      lf,
+      ktl: currentMetrics.ktl ?? 0,
+      lf: currentMetrics.lf ?? 0,
       lss,
       ski: cognitiveEngagement.ski,
       mki: cognitiveEngagement.mki,
       dki: cognitiveEngagement.dki
-    };
-  }
-
-  private recordSessionEnd(data: LearnerProgressSessionData, currentMetrics: ProgressMetrics): ProgressMetrics {
-    const sessionDuration = data.duration || 0;
-    const lf = (currentMetrics.lf || 0) * LF_DECAY + (sessionDuration * 0.1);
-    return {
-      ...currentMetrics,
-      timeSpent: (currentMetrics.timeSpent || 0) + sessionDuration,
-      lf: Math.min(lf, 100)
     };
   }
 

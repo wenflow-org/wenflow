@@ -45,6 +45,16 @@ function parseJson<T>(raw: string | null | undefined, fallback: T): T {
   }
 }
 
+/** 稳定字符串哈希（FNV-1a 32bit → hex）：用于消息内容去重 key，不依赖消息 id（会话内同内容幂等） */
+function simpleHash(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16);
+}
+
 function normalizeOptionalText(value: string | undefined): string | null {
   const normalized = typeof value === 'string' ? value.trim() : '';
   return normalized || null;
@@ -114,7 +124,7 @@ export class FeedbackCollectionService {
       where: { feedbackKey },
       update: {
         subtaskId: session.taskId,
-        agentId: 'learning-agent',
+        agentId: 'teaching-agent',
         rating: params.rating,
         helpfulness: params.helpfulness ?? null,
         clarity: params.clarity ?? null,
@@ -136,7 +146,7 @@ export class FeedbackCollectionService {
         userId: params.userId,
         sessionId: params.sessionId,
         subtaskId: session.taskId,
-        agentId: 'learning-agent',
+        agentId: 'teaching-agent',
         rating: params.rating,
         helpfulness: params.helpfulness ?? null,
         clarity: params.clarity ?? null,
@@ -159,6 +169,85 @@ export class FeedbackCollectionService {
       sessionId: params.sessionId,
       taskId: session.taskId,
       rating: params.rating
+    });
+
+    return mapFeedback(record);
+  }
+
+  /**
+   * 消息级点赞/点踩（message-thumbs）。
+   * 与会话级反馈（feedbackKey=userId:sessionId）不同：以「消息内容哈希」为 key，
+   * 同一句 AI 回复去重，不同内容各自独立；管理端反馈中心零改动即可看到（uiType 区分来源）。
+   */
+  async submitMessageFeedback(params: {
+    userId: string;
+    sessionId: string;
+    messageText: string;
+    thumbsUp: boolean;
+    comment?: string;
+  }) {
+    const session = await prisma.teaching_sessions.findUnique({
+      where: { id: params.sessionId },
+      select: { id: true, userId: true, taskId: true, messages: true }
+    });
+    if (!session) {
+      throw new FeedbackCollectionError('学习会话不存在', 404, 'FEEDBACK_SESSION_NOT_FOUND');
+    }
+    if (session.userId !== params.userId) {
+      throw new FeedbackCollectionError('无权评价此学习会话', 403, 'FEEDBACK_FORBIDDEN');
+    }
+
+    const text = String(params.messageText || '').trim();
+    if (!text) {
+      throw new FeedbackCollectionError('消息内容为空', 400, 'FEEDBACK_MESSAGE_EMPTY');
+    }
+
+    const messages = parseJson<FeedbackMessage[]>(session.messages, []);
+    const latestStrategy = [...messages]
+      .reverse()
+      .find(message => Array.isArray(message.strategies) && message.strategies.length > 0)
+      ?.strategies?.[0] || null;
+    const roundNumber = messages.filter(message => message.role === 'user').length || null;
+
+    // 消息内容哈希做去重 key（会话内唯一；同一句回复重复点踩只保留最新值）
+    const hash = simpleHash(text);
+    const feedbackKey = `${params.userId}:${params.sessionId}:thumbs:${hash}`;
+
+    const record = await prisma.content_feedback.upsert({
+      where: { feedbackKey },
+      update: {
+        subtaskId: session.taskId,
+        agentId: 'teaching-agent',
+        rating: params.thumbsUp ? 1 : 0,
+        comment: normalizeOptionalText(params.comment),
+        strategy: latestStrategy,
+        uiType: 'message-thumbs-v1',
+        roundNumber,
+        status: 'new',
+        resolvedAt: null
+      },
+      create: {
+        id: `cf_${randomUUID()}`,
+        feedbackKey,
+        userId: params.userId,
+        sessionId: params.sessionId,
+        subtaskId: session.taskId,
+        agentId: 'teaching-agent',
+        rating: params.thumbsUp ? 1 : 0,
+        comment: normalizeOptionalText(params.comment),
+        strategy: latestStrategy,
+        uiType: 'message-thumbs-v1',
+        roundNumber,
+        status: 'new'
+      }
+    });
+
+    logger.info('[Feedback] 收到消息级点赞/点踩', {
+      feedbackId: record.id,
+      userId: params.userId,
+      sessionId: params.sessionId,
+      rating: record.rating,
+      hash
     });
 
     return mapFeedback(record);

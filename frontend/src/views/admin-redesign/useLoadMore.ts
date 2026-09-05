@@ -4,7 +4,7 @@ import { computed, ref, watch, type ComputedRef } from 'vue'
  * 「加载更多」分页：长列表只渲染前 N 条，滚动/点击加载下一批。
  * source 变化（筛选/刷新）时自动重置回首屏条数。
  */
-export function useLoadMore<T>(source: ComputedRef<T[]>, batchSize = 20) {
+export function useLoadMore<T>(source: ComputedRef<T[]>, batchSize = 15) {
   const visible = ref(batchSize)
   watch(source, () => {
     visible.value = batchSize

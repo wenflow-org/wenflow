@@ -61,4 +61,37 @@ describe('session token domain isolation', () => {
 
     expect(() => verifySessionToken(malformed, 'admin')).toThrow()
   })
+
+  it('签发 Token 携带 jti 会话声明，验证后原样返回', () => {
+    const jti = 'session-uuid-1'
+    const token = signSessionToken({
+      userId: 'admin-1',
+      isAdmin: true,
+      jti
+    }, 'admin', '1h')
+
+    expect(jwt.decode(token)).toEqual(expect.objectContaining({ jti }))
+    expect(verifySessionToken(token, 'admin').jti).toBe(jti)
+  })
+
+  it('jti 为可选声明：不传 jti 的 Token 验证后无 jti（兼容既有调用）', () => {
+    const token = signSessionToken({ userId: 'admin-1', isAdmin: true }, 'admin', '1h')
+    expect(verifySessionToken(token, 'admin').jti).toBeUndefined()
+  })
+
+  it('旧格式兼容路径保留：无 jti 的 legacy Admin Token 仍可验证', () => {
+    const legacy = jwt.sign({ userId: 'admin-1', isAdmin: true }, process.env.JWT_SECRET as string, { algorithm: 'HS256' })
+    expect(verifySessionToken(legacy, 'admin').userId).toBe('admin-1')
+    expect(verifySessionToken(legacy, 'admin').jti).toBeUndefined()
+  })
+
+  it('jti 不是域声明：仅带 jti 的 legacy 格式 Token 仍走旧格式兼容路径放行', () => {
+    const legacyWithJti = jwt.sign(
+      { userId: 'admin-1', isAdmin: true, jti: 'session-uuid-2' },
+      process.env.JWT_SECRET as string,
+      { algorithm: 'HS256' }
+    )
+
+    expect(verifySessionToken(legacyWithJti, 'admin').jti).toBe('session-uuid-2')
+  })
 })

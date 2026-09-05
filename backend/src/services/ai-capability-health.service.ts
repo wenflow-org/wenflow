@@ -28,12 +28,18 @@ const CAPABILITIES: Array<{ id: string; caller: CallerInfo }> = [
   { id: 'goal-conversation', caller: { agentId: 'goal-agent', skillId: 'goal-conversation' } },
   { id: 'path-planning', caller: { agentId: 'path-agent', skillId: 'path-planning' } },
   { id: 'stage-designer', caller: { agentId: 'path-agent', skillId: 'stage-designer' } },
-  { id: 'learning-turn', caller: { agentId: 'learning-agent', skillId: 'learning-turn' } },
-  { id: 'session-wrapup', caller: { agentId: 'learning-agent', skillId: 'session-wrapup' } }
+  { id: 'teaching-turn', caller: { agentId: 'teaching-agent', skillId: 'teaching-turn' } },
+  { id: 'session-wrapup', caller: { agentId: 'teaching-agent', skillId: 'session-wrapup' } }
 ];
 
 const STALE_AFTER_MS = 5 * 60_000;
 const DEGRADED_LATENCY_MS = 8_000;
+/**
+ * 金丝雀探测超时预算。2026-08-30 从 10s 放宽到 25s：
+ * 实测上游 deepseek-v4-flash 正常响应 5-9s（并发时更慢），10s 预算频繁击穿，
+ * 导致启动金丝雀 14 次超时被误判为 UPSTREAM_UNAVAILABLE 并写坏 connectionStatus。
+ */
+const CANARY_TIMEOUT_MS = 25_000;
 
 function initialHealth(id: string): AICapabilityHealth {
   return {
@@ -80,7 +86,14 @@ function classifyFailure(error: unknown): { code: string; retryable: boolean; me
     return { code: 'RATE_LIMITED', retryable: true, message: '模型服务请求受限' };
   }
   if (normalized.includes('timeout') || normalized.includes('超时')) {
-    return { code: 'UPSTREAM_TIMEOUT', retryable: true, message: '模型服务响应超时' };
+    // 探测超时（performRefresh 在 timedOut 时包装为 "AI capability probe timeout"，
+    // 或 AbortController 取消产生 "API request canceled"）：归为探测超时而非上游不可用，
+    // 避免连续超时被误判为 unavailable 阻断登录。
+    return { code: 'PROBE_TIMEOUT', retryable: true, message: '能力探测超时' };
+  }
+  // 兜底：取消类错误同样视为探测超时
+  if (normalized.includes('cancel') || normalized.includes('aborted') || normalized.includes('abort')) {
+    return { code: 'PROBE_TIMEOUT', retryable: true, message: '能力探测超时' };
   }
   return { code: 'UPSTREAM_UNAVAILABLE', retryable: true, message: '模型服务暂时不可用' };
 }
@@ -236,18 +249,18 @@ export class AICapabilityHealthService {
       const timer = setTimeout(() => {
         timedOut = true;
         controller.abort();
-      }, 10_000);
+      }, CANARY_TIMEOUT_MS);
       timer.unref?.();
       try {
         await executor.execute({
           ...group.route,
-          timeoutMs: Math.min(group.route.timeoutMs || 10_000, 10_000)
+          timeoutMs: Math.min(group.route.timeoutMs || CANARY_TIMEOUT_MS, CANARY_TIMEOUT_MS),
+          thinkingMode: 'disabled',
         }, {
           messages: [
             { role: 'system', content: '这是连通性检查。请只回复 OK。' },
             { role: 'user', content: 'OK' }
           ],
-          // 推理模型会先消耗 reasoning tokens，4 个 token 必然截断导致空正文（INVALID_RESPONSE_SCHEMA）
           max_tokens: 64,
           temperature: 0
         }, {
@@ -310,11 +323,16 @@ export class AICapabilityHealthService {
   private setFailure(id: string, checkedAt: Date, error: unknown): void {
     const previous = this.health.get(id) || initialHealth(id);
     const streak = this.streaks.get(id) || { successes: 0, failures: 0 };
-    streak.failures += 1;
-    streak.successes = 0;
-    this.streaks.set(id, streak);
-
     const classified = classifyFailure(error);
+    // 探测超时（PROBE_TIMEOUT）只代表"慢"，不代表"不可用"：
+    // 计入 streak 会让连续 2 次超时就置 unavailable 并阻断登录（auth.ts isCapabilityBlocked）。
+    // 仅累计真实失败（不可重试类与上游 4xx/5xx），超时不计入。
+    if (classified.code !== 'PROBE_TIMEOUT') {
+      streak.failures += 1;
+      streak.successes = 0;
+      this.streaks.set(id, streak);
+    }
+
     const unavailable = previous.status === 'unavailable' || streak.failures >= 2;
     const status: AICapabilityStatus = unavailable
       ? 'unavailable'

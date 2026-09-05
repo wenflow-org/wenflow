@@ -10,7 +10,6 @@ import {
   AgentOutput,
   AgentContext
 } from '../protocol';
-import { getEventBus } from '../../gateway/event-bus';
 import { profileAggregator } from './profile-aggregator';
 import { personalizationEngine } from './personalization';
 import {
@@ -20,6 +19,7 @@ import {
   ProfileUpdateSource
 } from './types';
 import { learnerSnapshotService } from '../../services/learner/LearnerSnapshotService';
+import { learnerExitService } from '../../services/learner/LearnerExitService';
 import { learnerProfileService } from '../../services/learner/LearnerProfileService';
 import { logger } from '../../utils/logger';
 
@@ -53,7 +53,7 @@ export const learnerModelAgentDefinition: AgentDefinition = {
   inputSchema: {
     type: 'object',
       properties: {
-        action: { type: 'string', enum: ['get', 'update', 'get-personalization', 'get-snapshot'] },
+        action: { type: 'string', enum: ['get', 'update', 'get-personalization', 'get-snapshot', 'get-exit'] },
         userId: { type: 'string' },
         dataType: { type: 'string' },
         data: { type: 'object' }
@@ -77,7 +77,6 @@ export const learnerModelAgentDefinition: AgentDefinition = {
 class LearnerModelAgent {
   async handler(input: AgentInput, context: AgentContext): Promise<AgentOutput> {
     const startTime = Date.now();
-    const eventBus = getEventBus();
     const action = input.metadata?.action || 'get';
     
     try {
@@ -104,6 +103,17 @@ class LearnerModelAgent {
           
         case 'get-personalization':
           result = await this.getPersonalization(context.userId);
+          break;
+
+        case 'get-exit':
+          // learn agent 统一出口（LearnerExitService）：snapshot + dueReview + accountView
+          result = await learnerExitService.getLearnerContext({
+            userId: context.userId,
+            learningPathId: input.metadata?.learningPathId,
+            milestoneId: input.metadata?.milestoneId,
+            taskId: input.metadata?.taskId,
+            mode: input.metadata?.mode,
+          });
           break;
           
         default:
@@ -178,17 +188,6 @@ class LearnerModelAgent {
     if (!updateResult.success) throw new Error('LEARNER_PROFILE_UPDATE_FAILED');
     learnerProfileService.clear(userId);
     const result = await learnerProfileService.getProfile(userId);
-    
-    const eventBus = getEventBus();
-    await eventBus.emit({
-      type: 'profile:updated',
-      source: 'learner-model-agent',
-      userId,
-      data: {
-        changes: updateResult.changes,
-        confidence: result.confidence
-      }
-    });
     
     return { profile: result.profile, changes: updateResult.changes };
   }

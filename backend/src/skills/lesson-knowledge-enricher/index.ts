@@ -7,6 +7,10 @@
  */
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
+import { loadPromptFile } from '../../composers/prompt-files/loader';
+
+// File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
+const LESSON_KNOWLEDGE_ENRICHER_PROMPT = loadPromptFile('skill:lesson-knowledge-enricher')?.systemPrompt || '';
 
 export const lessonKnowledgeEnricherDefinition: SkillDefinition = {
   name: 'lesson-knowledge-enricher',
@@ -18,6 +22,7 @@ export const lessonKnowledgeEnricherDefinition: SkillDefinition = {
   inputSchema: {
     type: 'object',
     properties: {
+      transferGoal: { type: 'string', description: '任务的可迁移目标（task.transferable 派生，可空）：本课迁移意图的锚点，用于判断迁移信号是否与该意图相关' },
       knowledgeState: { type: 'array', description: '当前课堂知识状态', required: true },
       knowledgeDelta: { type: 'object', description: '课堂知识变化量' },
       wrapup: { type: 'object', description: '课堂总结与评估' },
@@ -42,6 +47,8 @@ export const lessonKnowledgeEnricherDefinition: SkillDefinition = {
 };
 
 export interface LessonKnowledgeEnricherInput {
+  /** 任务的可迁移目标（task.transferable 派生）：迁移信号的意图锚点，可为 null */
+  transferGoal?: string | null;
   knowledgeState: Array<{ name: string; status: 'pending' | 'learning' | 'mastered' | 'review'; progress: number }>;
   knowledgeDelta?: {
     newlyMastered?: string[];
@@ -85,6 +92,8 @@ export interface LessonKnowledgeEnricherOutput {
     confidence: number;
     count: number;
   }>;
+  /** 知识状态自然语言摘要（LBM 式：供预测器与教学决策直接读取） */
+  knowledgeStateSummary: string;
 }
 
 function normalizeText(value: unknown): string {
@@ -122,7 +131,8 @@ function normalizeLedgerItem(item: any) {
     misconceptionRisk,
     sourcePaths: safeArray(item?.sourcePaths).map((value) => normalizeText(value)).filter(Boolean),
     sourceTasks: safeArray(item?.sourceTasks).map((value) => normalizeText(value)).filter(Boolean),
-    evidenceCount: Math.max(1, Number.isFinite(Number(item?.evidenceCount)) ? Number(item.evidenceCount) : 1),
+    // 证据计数真实化：模型未给出时按 0（0 就是 0，不虚报）；仅接受有限非负数
+    evidenceCount: Number.isFinite(Number(item?.evidenceCount)) ? Math.max(0, Number(item.evidenceCount)) : 0,
   };
 }
 
@@ -150,131 +160,52 @@ function normalizeConfusionItem(item: any): LessonKnowledgeEnricherOutput['recur
   };
 }
 
-function buildFallback(input: LessonKnowledgeEnricherInput): LessonKnowledgeEnricherOutput {
-  const knowledgeState = Array.isArray(input.knowledgeState) ? input.knowledgeState : [];
-  const taskId = normalizeText(input.taskContext?.taskId);
-  const pathId = normalizeText(input.taskContext?.learningPathId);
-
-  const conceptLedger = knowledgeState.map((point) => {
-    const familiarity: LessonKnowledgeEnricherOutput['conceptLedger'][number]['familiarity'] = point.status === 'mastered'
-      ? 'stable'
-      : point.status === 'review'
-        ? 'understood'
-        : point.status === 'learning'
-          ? 'practiced'
-          : 'seen';
-    const transferReadiness: LessonKnowledgeEnricherOutput['conceptLedger'][number]['transferReadiness'] = point.status === 'mastered'
-      ? 'high'
-      : point.progress >= 60
-        ? 'medium'
-        : 'low';
-    const misconceptionRisk: LessonKnowledgeEnricherOutput['conceptLedger'][number]['misconceptionRisk'] = point.status === 'review'
-      ? 'high'
-      : point.status === 'learning'
-        ? 'medium'
-        : 'low';
-    return {
-      conceptKey: point.name,
-      label: point.name,
-      familiarity,
-      transferReadiness,
-      misconceptionRisk,
-      sourcePaths: pathId ? [pathId] : [],
-      sourceTasks: taskId ? [taskId] : [],
-      evidenceCount: Math.max(1, Math.round(Math.max(0, Math.min(100, point.progress)) / 25)),
-    };
-  });
-
-  return {
-    conceptLedger,
-    reusableFoundations: uniqueStrings([
-      ...(input.knowledgeDelta?.newlyMastered || []),
-      ...conceptLedger.filter((item) => item.transferReadiness === 'high').map((item) => item.label),
-    ]).slice(0, 16),
-    blockedFoundations: uniqueStrings([
-      ...(input.knowledgeDelta?.movedToReview || []),
-      ...conceptLedger.filter((item) => item.misconceptionRisk === 'high').map((item) => item.label),
-    ]).slice(0, 16),
-    transferSignals: conceptLedger
-      .filter((item) => item.transferReadiness !== 'low')
-      .map((item) => ({
-        conceptKey: item.conceptKey,
-        label: item.label,
-        readiness: item.transferReadiness,
-        confidence: item.transferReadiness === 'high' ? 0.8 : 0.6,
-      }))
-      .slice(0, 16),
-    recurringConfusions: knowledgeState
-      .filter((item) => item.status === 'review')
-      .slice(0, 8)
-      .map((item) => ({
-        conceptKey: item.name,
-        label: item.name,
-        pattern: '课堂中该概念仍表现为回看或不稳定，需要后续继续作为重点复习项。',
-        confidence: 0.65,
-        count: 1,
-      })),
-  };
-}
-
 export async function lessonKnowledgeEnricher(input: LessonKnowledgeEnricherInput): Promise<SkillExecutionResult<LessonKnowledgeEnricherOutput>> {
   const startTime = Date.now();
-  try {
-    const result = await callPrompt<LessonKnowledgeEnricherInput, LessonKnowledgeEnricherOutput>({
-      agentId: 'skill:lesson-knowledge-enricher',
-      defaultSystemPrompt: '',
-      requireActivePrompt: true,
-      caller: { skillId: 'lesson-knowledge-enricher' },
-            buildUserPayload: (payload) => payload,
-      normalizeOutput: (parsed, payload) => {
-        const base = buildFallback(payload);
-        const obj = parsed && typeof parsed === 'object' ? parsed : {};
-        const ledger = safeArray(obj.conceptLedger)
-          .map(normalizeLedgerItem)
-          .filter((item) => item.conceptKey && item.label);
-        const signals = safeArray(obj.transferSignals)
-          .map(normalizeTransferSignal)
-          .filter((item) => item.conceptKey && item.label);
-        const confusions = safeArray(obj.recurringConfusions)
-          .map(normalizeConfusionItem)
-          .filter((item): item is NonNullable<typeof item> => item !== null);
-        return {
-          conceptLedger: ledger.length > 0 ? ledger : base.conceptLedger,
-          reusableFoundations: uniqueStrings(safeArray(obj.reusableFoundations)).length > 0
-            ? uniqueStrings(safeArray(obj.reusableFoundations)).slice(0, 16)
-            : base.reusableFoundations,
-          blockedFoundations: uniqueStrings(safeArray(obj.blockedFoundations)).length > 0
-            ? uniqueStrings(safeArray(obj.blockedFoundations)).slice(0, 16)
-            : base.blockedFoundations,
-          transferSignals: signals.length > 0 ? signals : base.transferSignals,
-          recurringConfusions: confusions.length > 0 ? confusions : base.recurringConfusions,
-        };
-      },
-      validateParsedOutput: (parsed) =>
-        parsed && typeof parsed === 'object'
-          ? { valid: true }
-          : { valid: false, failureReason: 'LESSON_KNOWLEDGE_ENRICHER_OUTPUT_NOT_OBJECT' },
-    }, input);
+  const result = await callPrompt<LessonKnowledgeEnricherInput, LessonKnowledgeEnricherOutput>({
+    agentId: 'skill:lesson-knowledge-enricher',
+    defaultSystemPrompt: LESSON_KNOWLEDGE_ENRICHER_PROMPT,
+    requireActivePrompt: true,
+    caller: { skillId: 'lesson-knowledge-enricher' },
+          buildUserPayload: (payload) => payload,
+    normalizeOutput: (parsed, _payload) => {
+      const obj = parsed && typeof parsed === 'object' ? parsed : {};
+      const ledger = safeArray(obj.conceptLedger)
+        .map(normalizeLedgerItem)
+        .filter((item) => item.conceptKey && item.label);
+      const signals = safeArray(obj.transferSignals)
+        .map(normalizeTransferSignal)
+        .filter((item) => item.conceptKey && item.label);
+      const confusions = safeArray(obj.recurringConfusions)
+        .map(normalizeConfusionItem)
+        .filter((item): item is NonNullable<typeof item> => item !== null);
+      return {
+        // 模型漏输出/输出空数组 → 保持空数组（空即空，不注入伪置信度/伪台账）
+        conceptLedger: ledger,
+        reusableFoundations: uniqueStrings(safeArray(obj.reusableFoundations)).slice(0, 16),
+        blockedFoundations: uniqueStrings(safeArray(obj.blockedFoundations)).slice(0, 16),
+        transferSignals: signals,
+        recurringConfusions: confusions,
+        // 知识状态摘要：LLM 用自然语言浓缩本节课学习状态（LBM 式）；缺省时给空字符串，前端/预测器按空值处理
+        knowledgeStateSummary: typeof obj.knowledgeStateSummary === 'string' ? obj.knowledgeStateSummary.trim() : '',
+      };
+    },
+    validateParsedOutput: (parsed) =>
+      parsed && typeof parsed === 'object'
+        ? { valid: true }
+        : { valid: false, failureReason: 'LESSON_KNOWLEDGE_ENRICHER_OUTPUT_NOT_OBJECT' },
+  }, input);
 
-    if (!result.success || !result.output) {
-      throw new Error(result.error?.message || 'LESSON_KNOWLEDGE_ENRICHER_FAILED');
-    }
-
-    return {
-      success: true,
-      output: result.output,
-      duration: Date.now() - startTime,
-      quality: 'model',
-    };
-  } catch {
-    return {
-      success: true,
-      output: buildFallback(input),
-      duration: Date.now() - startTime,
-      cached: true,
-      quality: 'fallback',
-    };
+  if (!result.success || !result.output) {
+    throw new Error(result.error?.message || 'LESSON_KNOWLEDGE_ENRICHER_FAILED');
   }
+
+  return {
+    success: true,
+    output: result.output,
+    duration: Date.now() - startTime,
+    quality: 'model',
+  };
 }
 
 export default lessonKnowledgeEnricher;

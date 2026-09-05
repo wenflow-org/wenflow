@@ -6,7 +6,7 @@
 
 **An AI learning-path prototype that starts from real problems**
 
-> WenFlow: don't start by finding courses; start by clarifying the real problem.
+> Core idea: learning begins with clarifying the real problem, not with choosing a course.
 
 English Version | [中文版](README.md)
 
@@ -19,26 +19,25 @@ English Version | [中文版](README.md)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.17.0-green.svg)](https://nodejs.org)
 [![Vue](https://img.shields.io/badge/vue-3.x-brightgreen.svg)](https://vuejs.org)
 
+📋 **[Changelog](CHANGELOG.md)** · Monthly feature updates
+
 ---
 
 ## Why WenFlow?
 
-Learning often gets stuck not because you are not trying hard enough, but because the goal is too broad, the resources are overwhelming, and the first step is unclear.
+Many learning difficulties stem not from a lack of effort, but from goals that are too broad, an overload of materials, and an unclear first step.
 
-Many learning products start by giving you content: courses, materials, exercises, and predefined paths.  
-WenFlow starts somewhere else: helping you clarify what you are really trying to solve.
+Most learning products start by supplying content: courses, materials, exercises, and predefined paths. WenFlow takes a different approach — it first helps learners clarify the problem they actually need to solve, then generates an actionable learning path from it, refined continuously through dialogue, output, and feedback.
 
-It turns a vague goal into an actionable learning path: clarify the problem, generate a route, then keep adjusting through dialogue, output, and feedback.
-
-As AI gets better at producing answers, the more valuable capabilities are no longer just remembering content, but:
+As AI becomes increasingly capable of producing answers, the skills worth cultivating are no longer limited to memorizing content, but:
 
 - **problem definition**: turning a vague goal into an explorable question
-- **systems thinking**: seeing the structure between knowledge, context, and action
-- **judgment**: deciding what is worth believing amid information overload
+- **systems thinking**: understanding the structural relationships between knowledge, context, and action
+- **judgment**: discerning what is worth trusting amid information overload
 - **AI collaboration**: treating AI as a partner for questioning, feedback, and reasoning
-- **creativity**: making new connections between what you already know
+- **creativity**: making new connections between existing knowledge
 
-**Answers will keep getting cheaper. Problems will matter more.**
+**Answers will become increasingly abundant; the quality of the questions will matter more.**
 
 ---
 
@@ -51,27 +50,27 @@ These six screenshots show WenFlow's core experience, from a real problem to a c
 | ① Start from a Real Problem |
 |:---:|
 | ![Start from a Real Problem](docs/images/home-start-from-problem.png) |
-| Say what you're trying to solve first, instead of hunting for courses |
+| Learners state their problem first, rather than choosing a course |
 
 | ② Clarify the Real Goal | ③ Generate a Learning Path |
 |:---:|:---:|
 | ![Clarify the Real Goal](docs/images/goal-clarification.png) | ![Generate a Learning Path](docs/images/learning-path.png) |
-| The AI keeps asking until the goal is clear | A vague goal becomes phases, tasks, and a first step you can do today |
+| The AI clarifies the real goal through multi-round questioning | A vague goal becomes phases, tasks, and an actionable first step |
 
 | ④ Enter Round-based Learning | ⑤ Learning Loop Overview |
 |:---:|:---:|
 | ![Enter Round-based Learning](docs/images/round-based-learning.png) | ![Learning Loop Overview](docs/images/learning-loop-overview.png) |
-| The AI teaches, you answer, feedback is instant | A post-session summary and evaluation show you what to learn next |
+| The AI teaches, the learner answers, and feedback is immediate; teaching adapts dynamically | A post-session summary and evaluation provide guidance on what to learn next |
 
 | ⑥ Learning State Tracking |
 |:---:|
 | ![Learning State Tracking](docs/images/learning-state.png) |
-| LSS / KTL / LF / LSB tracked continuously, and it tells you when to rest |
+| LSS / KTL / LF / LSB tracked continuously, with rest prompts when fatigue is detected |
 
 ### From Problem to Path
-- **Problem Clarification**: multi-round dialogue until the goal is clear
-- **Path Generation**: a vague goal becomes phases, tasks, and a first step you can start today
-- **Round-based Learning**: the AI teaches, you answer, feedback is instant, and the path keeps adjusting to your understanding
+- **Problem Clarification**: multi-round natural dialogue to clarify the learning goal
+- **Path Generation**: a vague goal becomes phases, tasks, and an actionable first step
+- **Round-based Learning**: the AI teaches, the learner answers, feedback is immediate, and teaching adapts to the learner's understanding
 
 ### Learning State Tracking
 Inspired by load-and-recovery ideas from sports science, WenFlow tracks learning state rather than only whether a task was completed:
@@ -79,8 +78,8 @@ Inspired by load-and-recovery ideas from sports science, WenFlow tracks learning
 | Metric | Meaning | Usage |
 |------|------|------|
 | LSS | Learning Stress Score | Based on task difficulty, duration, cognitive load, EWMA-smoothed |
-| KTL | Knowledge Training Load | Long-term accumulation, 42-day decay factor 0.95 |
-| LF | Learning Fatigue | Short-term accumulation, 7-day decay factor 0.70 |
+| KTL | Knowledge Training Load | Long-term accumulation, daily decay factor 0.95 (half-life ≈ 13.5 days) |
+| LF | Learning Fatigue | Short-term accumulation, daily decay factor 0.70 (half-life ≈ 1.9 days) |
 | LSB | Learning State Balance | KTL - LF, warns against over-learning |
 
 ### Platform Agent Architecture (Simplified)
@@ -110,29 +109,32 @@ flowchart TD
     R1 -. after confirm .-> P1
 ```
 
-- Top-level agents are orchestration-oriented; the Skills actually hold the prompts and call the LLM.
-- Clarify the goal first, then break it into a path. Generation starts only after you confirm (an AI-reported "ready" doesn't count).
-- Teaching progresses opening → teaching ⇄ intervention → ready_to_close → wrapup; checkpoints only appear inside rounds; session mode is always tutor.
-- When the student gets stuck (help keywords, several low-understanding rounds), peer reinforcement kicks in — the current task is never abandoned.
-- Each session ends with a summary, evaluation, and replan suggestions. Paths are never changed automatically; a new version is created only after you confirm.
+- Top-level agents are orchestration-oriented; the Skills hold the prompts and call the LLM.
+- The goal is clarified first, then broken into a path. Path generation starts only after explicit user confirmation.
+- Teaching progresses opening → teaching ⇄ intervention → (checkpoint) → ready_to_close → wrapup; checkpoints appear only inside rounds; session mode is always tutor.
+- When a learner shows signs of getting stuck (help keywords, several consecutive low-understanding rounds), peer reinforcement is triggered — the current task is never abandoned.
+- Each session ends with a summary, evaluation, and replan suggestions. Paths are never changed automatically; a new version is created only after user confirmation.
 - After a lesson, events are persisted and the learner profile is updated; the next lesson starts with that context.
 
 ### Virtual Learner Lab
 
 Virtual learner accounts exercise the product the way a real user would, to validate the platform:
 
-- **Black-box simulation**: walks through goal → path → learning like a normal user, with a referee and actor-fidelity audit checking the results
-- **Quick Learn**: picks a virtual account's task, auto-completes a lesson, and produces a propagation report
+- **Black-box simulation**: walks through goal → path → learning from a normal user's perspective, with a referee and actor-fidelity audit checking the results
+- **Quick Learn**: selects a task from a virtual account, auto-completes a lesson, and produces a propagation report
 
 ### Admin Console
 
-The admin panel lives at `/admin` with 16+ pages, all backed by real APIs (demo data only when nothing is available):
+The admin panel lives at `/admin` with 18 scene pages (grouped by the sidebar), all backed by real APIs (demo data only when nothing is available):
 
-- **Overview & Users**: platform overview — is today healthy, which model fails the most, what needs investigation; users / learner center — learning state, risk and fatigue, with manual snapshot recompute; teaching sessions, goal conversations, feedback center
-- **Prompt Engineering**: a full workflow for editing prompts — compile, gate checks, publish, rollback, version diff, plus rerunning a recent real call to verify
-- **Observability & Debugging**: topology canvas shows which nodes are failing or idle; orchestrator shows how data flows between stages; execution logs include retry timelines with auto-refresh and export; trace waterfall breaks a slow request down to each step
-- **Models & Access**: how models are routed (chat / reasoning / evaluation), connectivity checks, network boundary policy, retry and timeout settings
-- **Virtual Experiments**: AI-generated personas, story-pool driven experiments, Quick Learn auto-teaching, and a session cockpit for black-box simulation — see the "Virtual Learner Lab" section below
+- **Overview**: platform overview — current system health, the model with the highest failure rate, and items requiring investigation
+- **Learners**: people & learners (accounts / learning state tabs) — learning state, risk and fatigue, with manual snapshot recompute; learning sessions (teaching sessions / goal conversations / learning paths tabs); virtual learners
+- **Skill Management**: orchestration structure (stage lanes + topology stats), Skill runtime (success rate, failing nodes, idle and average-latency monitoring), Skill design page (secondary page: protocol editing, compile, gate checks, publish, rollback, version diff, trial runs — including one-click rerun of the last real call), Prompt evaluation, health center
+- **Operations**: ops hub (todo workbench), achievements, feedback center, notifications & announcements (announce / in-app tabs)
+- **Configuration**: models & access (routing / connectivity / network boundary / retry & timeout), add-ons, session security, system tools (ops tools + data export)
+- **Observability**: execution logs (logs / trace waterfall / cost analysis tabs, with retry timelines, auto-refresh, export), audit logs
+
+> Note: the topology view has been merged into the "Orchestration Structure" page; the trace waterfall and token cost analysis are now tabs inside "Execution Logs"; batch experiments have been merged into "Virtual Learners". The authoritative scene list is `frontend/src/views/admin-redesign/manifest.ts`.
 
 ### Prompt Engineering (Prompt Lab v4, File-as-Truth)
 
@@ -149,9 +151,9 @@ The admin panel lives at `/admin` with 16+ pages, all backed by real APIs (demo 
 |------|------|
 | **Frontend** | Vue 3 + TypeScript + Vite 6 + Element Plus + Pinia |
 | **Backend** | Node.js + Express + TypeScript + Prisma |
-| **Database** | SQLite (main DB with 36 tables + system DB with 16 tables, dual-database architecture) |
+| **Database** | SQLite (main DB with 44 tables + system DB with 14 tables, dual-database architecture) |
 | **AI Integration** | OpenAI-compatible model gateway (default: DeepSeek deepseek-v4-flash / v4-pro / r1), SSE streaming, retry budget, thinking-mode control |
-| **Agent Coordination** | EduClaw Gateway + 7 official Agents / Skill orchestration + Coordinators + Event Bus (outbox durable events) |
+| **Agent Coordination** | EduClaw Gateway + 5 top-level Agents (goal/path/teaching/profile/simulation) / Skill orchestration (prompts/core source → compiled artifacts → DB mirror) + Coordinators + Durable Outbox event chain |
 | **Model Config Layers** | Env vars → platform defaults → Agent/Skill level → user-defined API / model overrides |
 | **Virtual Experiment** | Virtual Learner Lab (black-box simulation + Quick Learn) |
 | **Observability** | Agent/Skill call logs, trace waterfall, LLM execution details |
@@ -164,9 +166,9 @@ The admin panel lives at `/admin` with 16+ pages, all backed by real APIs (demo 
 
 WenFlow is still in an **early development stage**, serving as an experimental prototype for validating a different learning approach.
 
-Instead of simply accelerating old learning workflows, it explores another path: what if learning starts from a real problem, and AI helps clarify goals, shape the path, and organize feedback along the way?
+The project is not a simple acceleration of existing learning workflows; it explores an alternative path — starting from real problems, with AI helping to clarify goals, shape the path, and organize feedback — to determine whether this approach is better suited to the AI era.
 
-The project is meant to keep exploring how to cultivate five capabilities that matter in the AI era: **problem definition, systems thinking, judgment, AI collaboration, and creativity**.
+The project will continue to explore how to cultivate five capabilities that matter in the AI era: **problem definition, systems thinking, judgment, AI collaboration, and creativity**.
 
 ---
 
@@ -174,6 +176,7 @@ The project is meant to keep exploring how to cultivate five capabilities that m
 
 ### Requirements
 - Node.js >= 20.17.0
+- Recommended: Windows + PowerShell 5.1+; the root startup scripts are Windows-only. On Linux/macOS, use the Docker deployment.
 
 ### Recommended Order (First Run)
 
@@ -190,7 +193,7 @@ npm run env:setup
 ```
 
 Note: For first-time use, it is recommended to finish environment setup before choosing a startup script. If `backend/.env` is missing or `JWT_SECRET` is invalid, the startup scripts will also launch the setup flow automatically.
-When the backend starts, core prompts are synced from the repo into the database automatically; a fresh GitHub checkout just works, no manual import needed.
+When the backend starts, core prompts are synced from the repo into the database automatically; a fresh clone runs directly, with no manual prompt import required.
 
 ### Local Development
 
@@ -242,7 +245,7 @@ Note: `-UseNginx` mode runs `npm run build` (frontend) and generates runtime con
 # One-shot start (interactively fills backend/.env; env vars can also be passed non-interactively)
 ./docker-start.sh
 
-# Database backup (one-off operations service, read-only volume mount)
+# Database backup (one-off operations service, read-only volume mount; requires WENFLOW_BACKUP_HOST_DIR to be set to the backup output directory)
 docker compose -f docker-compose.operations.yml run --rm backup
 ```
 
@@ -251,11 +254,11 @@ Note: `docker-compose.yml` provides three services (migrate / backend / nginx) a
 ### Quality Check (same as CI)
 
 ```bash
-# Runs: secret scan → Prisma schema validation → clean-replay migrations → backend typecheck → backend tests → backend + frontend builds
+# Runs: secret scan → Prisma schema validation → clean-replay migrations → backend typecheck → LLM call contract check → migrate deploy → prompts gates → lint → backend/frontend tests → backend + frontend builds
 npm run check
 ```
 
-Note: GitHub Actions (`.github/workflows/quality-check.yml`) runs the same checks on push to main/master and on PRs (plus a git-history secret scan).
+Note: GitHub Actions (`.github/workflows/quality-check.yml`) runs the same checks on push to main/master/develop and on PRs (plus a git-history secret scan).
 
 ### First-time Environment Setup (Recommended)
 
@@ -302,7 +305,7 @@ Note: `prompts:sync-core` aligns the database ACTIVE versions with the compiled 
 
 - By default, the frontend calls the backend through the relative `/api` path, forwarded by Vite proxy or Nginx.
 - The admin panel primarily reads `VITE_API_BASE_URL` from `frontend/.env`.
-- The main user-facing app also supports `VITE_API_URL` outside development mode; if you do not have a custom deployment need, keeping `/api` is the safest default.
+- The main user-facing app always uses `/api` in dev mode; outside dev mode `VITE_API_BASE_URL` takes priority, with `VITE_API_URL` kept only as a legacy fallback. Unless a custom deployment is required, the default `/api` is recommended.
 
 For more fine-grained deployment steps or non-script startup, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
@@ -327,20 +330,18 @@ On first startup, the system reads these fields from `backend/.env` to auto-crea
 
 ```env
 INIT_ADMIN_NAME=admin
-INIT_ADMIN_PASSWORD=YourStrongPassword123
+INIT_ADMIN_PASSWORD=Admin@2026Strong
 ```
 
 If admin already exists in database, creation is skipped.
 
 Recommendation: Change password immediately after first login. Use strong passwords for externally accessible deployments.
 
-Important: Admin login defaults to `ADMIN_ACCESS_MODE=private`, allowing only localhost and LAN (RFC1918) sources. Set `loopback` for localhost-only or `any` to remove the source restriction, and use `ADMIN_ALLOWED_IPS` to allowlist specific client IPs. The policy can be applied at runtime from the admin "Models & Access" page; the env var is only the default. For public remote administration, use a VPN or precise IP allowlist, and take responsibility for the added security risk. See [ADMIN_LOGIN_GUIDE.md](ADMIN_LOGIN_GUIDE.md) for details.
-
-See [ADMIN_SETUP.md](ADMIN_SETUP.md) for details.
+Important: Admin login defaults to `ADMIN_ACCESS_MODE=private`, allowing only localhost and LAN (RFC1918) sources. Set `loopback` for localhost-only or `any` to remove the source restriction, and use `ADMIN_ALLOWED_IPS` to allowlist specific client IPs. The policy can be applied at runtime from the admin "Models & Access" page; the env var is only the default. For public remote administration, use a VPN or precise IP allowlist, and take responsibility for the added security risk. See [admin-guide.md](admin-guide.md) for details.
 
 ### Reverse Proxy Common Issues
 
-- Don't add trailing `/` to `CORS_ORIGIN` (use `https://demo.example.com`, not `https://demo.example.com/`)
+- Do not add a trailing `/` to `CORS_ORIGIN` (use `https://demo.example.com`, not `https://demo.example.com/`)
 - Set `TRUST_PROXY` to the IP/CIDR of the proxy that directly connects to the backend; production rejects `true`
 - Do not publish a backend port that bypasses the trusted proxy. Docker Compose exposes only Nginx to the host
 - If "origin not allowed" error occurs, check browser `Origin` matches `CORS_ORIGIN`
@@ -349,15 +350,19 @@ See [ADMIN_SETUP.md](ADMIN_SETUP.md) for details.
 
 ## Educational Theory Foundation
 
-The design is grounded in these theories, each backed by concrete implementation:
+The design is grounded in these theories, each backed by concrete implementation (the full 16-theory map with literature DOI/arXiv links and implementation index is in [doc/EDUCATIONAL_THEORY_MAP.md](doc/EDUCATIONAL_THEORY_MAP.md)):
 
 1. **Cognitive Load Theory** - per-round knowledge-point caps, response-format budgets, automatic context compression
-2. **Self-directed Learning** - you state the goal and confirm the plan; pacing is yours
+2. **Self-directed Learning** - the goal is stated and the plan confirmed by the learner; the pace is learner-controlled
 3. **Zone of Proximal Development + Scaffolding** - difficulty adjusts to understanding; prerequisite gaps are backfilled first
-4. **Formative Assessment** - per-round understanding diagnosis plus checkpoint quizzes; instant feedback, retry on failure
-5. **Deliberate + Retrieval Practice** - mastery means explaining it yourself; post-session retrieval self-tests carry into the next lesson
-6. **Feynman Technique (Self-explanation)** - explain it in your own words to someone else; if you can't, learn it again
-7. **Anderson's Taxonomy** - six cognitive levels from remember to create, applied across labeling, teaching, and completion checks
+4. **Formative Assessment** - per-round understanding diagnosis plus checkpoint quizzes; immediate feedback, retry on failure
+5. **Deliberate + Retrieval Practice** - mastery is demonstrated by explaining a point independently; post-session retrieval self-tests carry into the next lesson
+6. **Spacing Effect + Review Loop** - multi-day increasing intervals (SM-2 style) with an automatic review-lesson loop for long-term retention
+7. **Feynman Technique (Self-explanation)** - explaining in one's own words to verify understanding; relearn when unable to articulate clearly
+8. **ICAP Framework** - learning activities classified by cognitive engagement (Interactive > Constructive > Active > Passive); stage tasks follow a non-decreasing ICAP level
+9. **Productive Failure** - a two-phase approach of independent trial first, then comparison and integration, using failure as a learning signal
+10. **Predictive Calibration Methodology** - teaching confidence is falsifiable: predictions logged, outcomes written back, hit-rate statistics drive tuning
+11. **Anderson's Taxonomy** - six cognitive levels from remember to create, applied across labeling, teaching, and completion checks
 
 ---
 
@@ -371,7 +376,7 @@ Copyright (c) 2026 wenflow-org
 
 ## Acknowledgments
 
-Thanks to all [Linux.do](https://linux.do/) members for their sharing.
+Gratitude to the [Linux.do](https://linux.do/) community for their ongoing support and sharing.
 
 ---
 

@@ -3,32 +3,43 @@
  *
  * 统一约定：
  * - 所有 handler 只经 callPrompt 调用 ACTIVE prompt（requireActivePrompt）。
- * - 失败策略遵循 core 声明：propagate 技能失败时抛错；fallback 技能返回确定性降级结果（quality='fallback'）。
- * - 调用方通过输入对象中的保留字段注入调用上下文与降级值：
+ * - 失败策略遵循 core 声明：propagate 技能失败时抛错；fallback 已退役（2026-08-11），
+ *   存量 fallback 值防御性按 propagate 处理（见 resolveDefaultFailureMode）。
+ * - 调用方通过输入对象中的保留字段注入调用上下文与显式兜底：
  *     __prompt:    PromptCallContext 透传（requestPath/userId/retryBudget/assistantMessages/...），
  *                  另支持 callerAgentId / callerAction（写入 gateway caller）。
- *     __fallback:  LLM 失败时返回的降级输出（仅 fallback 策略技能生效；未提供时使用内置确定性降级）。
+ *     __fallback:  调用方显式注入的确定性兜底值（属调用方决策，不是系统降级；未提供时无降级）。
  *     __onFailure: 'throw' | 'fallback'，覆盖 core 声明的默认策略（用于必须保持既有抛出契约的调用点）。
  */
 import { callPrompt } from '../../composers/prompt-composer';
+import { loadPromptFile } from '../../composers/prompt-files/loader';
 import type { PromptCallContext } from '../../composers/types';
 import type { SkillDefinition, SkillExecutionResult } from '../protocol';
 import { agentConfigService } from '../../services/agentConfig.service';
 import { resolveEffectivePromptContract } from '../../services/prompt-lab/resolve-prompt-contract';
+import { logger } from '../../utils/logger';
 
 export type AuxSkillId =
-  | 'learning-opening-generator'
-  | 'session-evaluation-fallback'
+  | 'teaching-opening-generator'
   | 'learner-progress-report'
-  | 'path-adjustment-generator'
-  | 'goal-analysis'
   | 'generic-chat'
   | 'course-design'
   | 'skill-author'
   | 'skill-compiler'
   | 'basic-evaluator'
-  | 'goal-alignment-checker'
-  | 'concept-priority';
+  | 'goal-alignment-checker';
+
+// File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
+const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
+  'teaching-opening-generator': loadPromptFile('skill:teaching-opening-generator')?.systemPrompt || '',
+  'learner-progress-report': loadPromptFile('skill:learner-progress-report')?.systemPrompt || '',
+  'generic-chat': loadPromptFile('skill:generic-chat')?.systemPrompt || '',
+  'course-design': loadPromptFile('skill:course-design')?.systemPrompt || '',
+  'skill-author': loadPromptFile('skill:skill-author')?.systemPrompt || '',
+  'skill-compiler': loadPromptFile('skill:skill-compiler')?.systemPrompt || '',
+  'basic-evaluator': loadPromptFile('skill:basic-evaluator')?.systemPrompt || '',
+  'goal-alignment-checker': loadPromptFile('skill:goal-alignment-checker')?.systemPrompt || '',
+};
 
 interface AuxPlumbing extends PromptCallContext {
   callerAgentId?: string;
@@ -100,7 +111,7 @@ async function runAux<TOutput>(opts: RunAuxOptions<TOutput>): Promise<SkillExecu
   try {
     const result = await callPrompt<any, TOutput>({
       agentId: `skill:${opts.meta.skillId}`,
-      defaultSystemPrompt: '',
+      defaultSystemPrompt: AUX_SKILL_PROMPTS[opts.meta.skillId] || '',
       requireActivePrompt: true,
       caller: { skillId: opts.meta.skillId, agentId: callerAgentId, action: callerAction },
       ...(opts.prepareSystemPrompt
@@ -142,7 +153,9 @@ async function runAux<TOutput>(opts: RunAuxOptions<TOutput>): Promise<SkillExecu
 
 /**
  * 解析 skill 默认失败策略：读取 ACTIVE prompt 的 promptContract.failurePolicy。
- * 映射：deterministic（core fallback）→ 降级；blocking/retry（core propagate/retry）→ 抛错。
+ * 映射：retry / blocking（core retry / propagate）→ 抛错；deterministic-fallback / best-effort
+ * 为已退役词表（2026-08-11 纯重试+明确失败改造后 core 无 fallback 值）——防御性兜底：
+ * 若存量数据仍带这些值，按 propagate（抛错）处理并 warn，不再产出降级产物。
  * 读取失败时保守抛错（fail loud）。
  */
 async function resolveDefaultFailureMode(skillId: AuxSkillId): Promise<'throw' | 'fallback'> {
@@ -150,7 +163,11 @@ async function resolveDefaultFailureMode(skillId: AuxSkillId): Promise<'throw' |
     const agentId = `skill:${skillId}`;
     const promptConfig = await agentConfigService.getActivePrompt(agentId);
     const { contract } = await resolveEffectivePromptContract(agentId, promptConfig);
-    return ['deterministic-fallback', 'best-effort'].includes(contract.failurePolicy) ? 'fallback' : 'throw';
+    if (['deterministic-fallback', 'best-effort'].includes(contract.failurePolicy)) {
+      logger.warn(`[runAux] ${skillId} 的 failurePolicy=${contract.failurePolicy} 已退役（fallback 语义下线），按 propagate 抛错处理`);
+      return 'throw';
+    }
+    return 'throw';
   } catch {
     return 'throw';
   }
@@ -161,27 +178,23 @@ async function resolveDefaultFailureMode(skillId: AuxSkillId): Promise<'throw' |
 // ============================================================
 
 const META: Record<AuxSkillId, AuxSkillMeta> = {
-  'learning-opening-generator': { skillId: 'learning-opening-generator', displayName: '课堂开场交互生成器', description: '生成教学 Session 的开场 message、question 与 quickReplies', category: 'generation' },
-  'session-evaluation-fallback': { skillId: 'session-evaluation-fallback', displayName: '课程评估补全器', description: '在主课后总结缺少 evaluation 时补齐结构化评估', category: 'analysis' },
+  'teaching-opening-generator': { skillId: 'teaching-opening-generator', displayName: '课堂开场交互生成器', description: '生成教学 Session 的开场 message、question 与 quickReplies', category: 'generation' },
   'learner-progress-report': { skillId: 'learner-progress-report', displayName: '学习进展报告生成器', description: '基于学习指标和信号生成简短进展反馈', category: 'analysis' },
-  'path-adjustment-generator': { skillId: 'path-adjustment-generator', displayName: '路径动态调整生成器', description: '生成可插入路径的 milestone 或 subtask', category: 'generation' },
-  'goal-analysis': { skillId: 'goal-analysis', displayName: '学习目标分析器', description: '从用户目标中提取主题、水平、重点与场景', category: 'analysis' },
   'generic-chat': { skillId: 'generic-chat', displayName: '平台通用文本能力', description: '无更专用 Skill 时的通用文本调用能力', category: 'generation' },
   'course-design': { skillId: 'course-design', displayName: '课程设计器', description: '为周次主题生成结构化课程任务', category: 'generation' },
   'skill-author': { skillId: 'skill-author', displayName: 'Prompt 起草助手', description: '为新 Skill 起草 system prompt', category: 'generation' },
   'skill-compiler': { skillId: 'skill-compiler', displayName: 'Skill Prompt 验收器', description: '执行 system prompt 并检查必填字段覆盖情况', category: 'analysis' },
   'basic-evaluator': { skillId: 'basic-evaluator', displayName: '学习质量评估器', description: '评估学习内容、答案或任务完成情况', category: 'analysis' },
   'goal-alignment-checker': { skillId: 'goal-alignment-checker', displayName: '路径目标对齐检查器', description: '检查学习路径与目标的对齐程度', category: 'analysis' },
-  'concept-priority': { skillId: 'concept-priority', displayName: '概念优先级调整器', description: '将实践任务升级为概念理解任务', category: 'generation' },
 };
 
 // ============================================================
 // Handlers
 // ============================================================
 
-async function learningOpeningGeneratorHandler(input: any) {
+async function teachingOpeningGeneratorHandler(input: any) {
   return runAux({
-    meta: META['learning-opening-generator'],
+    meta: META['teaching-opening-generator'],
     input,
         buildUserPayload: (d) => ({
       subject: d.subject,
@@ -216,27 +229,6 @@ async function learningOpeningGeneratorHandler(input: any) {
   });
 }
 
-async function sessionEvaluationFallbackHandler(input: any) {
-  return runAux({
-    meta: META['session-evaluation-fallback'],
-    input,
-        buildUserPayload: (d) => ({
-      transcript: d.messages,
-      sessionInfo: d.sessionInfo,
-      knowledgePoints: d.knowledgePoints,
-      knowledgeContext: d.knowledgeContext,
-      learningState: d.learningState,
-      sessionEvidence: d.sessionEvidence,
-      sessionStructure: d.sessionStructure,
-    }),
-    normalize: (parsed) => parsed,
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'SESSION_EVALUATION_OUTPUT_NOT_OBJECT' },
-    builtinFallback: () => null,
-  });
-}
-
 async function learnerProgressReportHandler(input: any) {
   return runAux({
     meta: META['learner-progress-report'],
@@ -249,45 +241,6 @@ async function learnerProgressReportHandler(input: any) {
     validate: (parsed) => parsed && typeof parsed === 'object'
       ? { valid: true }
       : { valid: false, failureReason: 'LEARNER_PROGRESS_REPORT_OUTPUT_NOT_OBJECT' },
-  });
-}
-
-async function pathAdjustmentGeneratorHandler(input: any) {
-  return runAux({
-    meta: META['path-adjustment-generator'],
-    input,
-        buildUserPayload: (d) => {
-      const { temperature: _t, maxTokens: _m, ...payload } = d;
-      return payload;
-    },
-    normalize: (parsed) => parsed?.milestone || parsed?.subtask || parsed,
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'PATH_ADJUSTMENT_OUTPUT_NOT_OBJECT' },
-    builtinFallback: () => null,
-  });
-}
-
-async function goalAnalysisHandler(input: any) {
-  return runAux({
-    meta: META['goal-analysis'],
-    input,
-        buildUserPayload: (d) => ({
-      goal: d.goal,
-      currentLevel: d.currentLevel ?? null,
-      timePerDay: d.timePerDay ?? null,
-    }),
-    normalize: (parsed) => parsed,
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'GOAL_ANALYSIS_OUTPUT_NOT_OBJECT' },
-    builtinFallback: (d) => ({
-      subject: String(d.goal || '学习目标'),
-      level: ['beginner', 'intermediate', 'advanced'].includes(d.currentLevel) ? d.currentLevel : 'beginner',
-      focus: [],
-      context: '',
-      confidence: 0.5,
-    }),
   });
 }
 
@@ -369,22 +322,6 @@ async function goalAlignmentCheckerHandler(input: any) {
   });
 }
 
-async function conceptPriorityHandler(input: any) {
-  return runAux({
-    meta: META['concept-priority'],
-    input,
-        buildUserPayload: (d) => ({ tasks: d.tasks, priorityContext: d.priorityContext, signal: d.signal }),
-    normalize: (parsed) => ({
-      upgradedTasks: Array.isArray(parsed?.upgradedTasks) ? parsed.upgradedTasks : [],
-      upgradeReasons: Array.isArray(parsed?.upgradeReasons) ? parsed.upgradeReasons : [],
-      confidence: Number.isFinite(Number(parsed?.confidence)) ? Number(parsed.confidence) : 0.7,
-    }),
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'CONCEPT_PRIORITY_OUTPUT_NOT_OBJECT' },
-  });
-}
-
 // ============================================================
 // 注册表
 // ============================================================
@@ -396,16 +333,12 @@ export const auxSkillDefinitionMap: Record<AuxSkillId, SkillDefinition> = Object
 ) as Record<AuxSkillId, SkillDefinition>;
 
 export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillExecutionResult<any>>> = {
-  'learning-opening-generator': learningOpeningGeneratorHandler,
-  'session-evaluation-fallback': sessionEvaluationFallbackHandler,
+  'teaching-opening-generator': teachingOpeningGeneratorHandler,
   'learner-progress-report': learnerProgressReportHandler,
-  'path-adjustment-generator': pathAdjustmentGeneratorHandler,
-  'goal-analysis': goalAnalysisHandler,
   'generic-chat': genericChatHandler,
   'course-design': courseDesignHandler,
   'skill-author': skillAuthorHandler,
   'skill-compiler': skillCompilerHandler,
   'basic-evaluator': basicEvaluatorHandler,
   'goal-alignment-checker': goalAlignmentCheckerHandler,
-  'concept-priority': conceptPriorityHandler,
 };

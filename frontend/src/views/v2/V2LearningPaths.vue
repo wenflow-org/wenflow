@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="paths v2-page">
     <V2Nav />
 
@@ -8,7 +8,7 @@
         <div v-if="goalBanner" class="goal-banner">
           <span class="goal-banner__dot"></span>
           这版路径正在生成，一般 1-3 分钟。页面会自动刷新状态。
-          <span class="goal-banner__close" @click="goalBanner = false">×</span>
+          <button type="button" class="goal-banner__close" @click="goalBanner = false">×</button>
         </div>
       </transition>
 
@@ -22,13 +22,12 @@
 
       <!-- 加载 -->
       <div v-if="loading" class="paths__loading">
-        <span class="spinner"></span>
-        <p>正在加载学习路径…</p>
+        <SkeletonLoader variant="list" :count="4" />
       </div>
 
       <!-- 失败 -->
       <div v-else-if="loadError" class="errorbar">
-        路径加载失败。<span class="errorbar__retry" @click="load">重试</span>
+        路径加载失败。<button type="button" class="errorbar__retry" @click="load">重试</button>
       </div>
 
       <template v-else>
@@ -53,16 +52,16 @@
               <span class="pcard__thumb" aria-hidden="true">{{ thumbLetter(card) }}</span>
               <div class="pcard__body">
                 <h3 class="pcard__title">{{ card.title }}</h3>
-                <p v-if="card.desc" class="pcard__desc">{{ card.desc }}</p>
+                <p class="pcard__desc">{{ card.desc }}</p>
               </div>
               <div class="pcard__head-right">
                 <span v-if="card.kind === 'generating' || card.kind === 'failed'" class="pcard__badge" :class="badgeCls(card)">{{ statusLabel(card) }}</span>
                 <span class="pcard__more-wrap">
-                  <span class="pcard__more" title="更多操作" @click.stop="menuFor = menuFor === card.id ? '' : card.id">⋯</span>
-                  <span v-if="menuFor === card.id" class="pcard__menu" @click.stop>
-                    <span v-if="card.kind === 'failed'" class="pcard__menu-item" @click="doRetry(card)">重新生成</span>
-                    <span class="pcard__menu-item pcard__menu-item--danger" @click="askDelete(card)">删除路径</span>
-                  </span>
+                  <button type="button" class="pcard__more" title="更多操作" @click.stop="menuFor = menuFor === card.id ? '' : card.id">⋯</button>
+                  <div v-if="menuFor === card.id" class="pcard__menu" @click.stop>
+                    <button type="button" v-if="card.kind === 'failed'" class="pcard__menu-item" @click="doRetry(card)">重新生成</button>
+                    <button type="button" class="pcard__menu-item pcard__menu-item--danger" @click="askDelete(card)">删除路径</button>
+                  </div>
                 </span>
               </div>
             </div>
@@ -85,8 +84,8 @@
               </div>
               <div v-if="deleting === card.id" class="pcard__confirm" @click.stop>
                 确认删除这条路径？
-                <span class="pcard__confirm-yes" @click="doDelete(card)">删除</span>
-                <span class="pcard__confirm-no" @click="deleting = ''">取消</span>
+                <button type="button" class="pcard__confirm-yes" @click="doDelete(card)">删除</button>
+                <button type="button" class="pcard__confirm-no" @click="deleting = ''">取消</button>
               </div>
             </template>
 
@@ -98,7 +97,7 @@
               </div>
               <div class="pcard__skeleton"><i style="width: 76%"></i><i style="width: 52%"></i><i style="width: 64%"></i></div>
               <div class="pcard__actions">
-                <span class="btn-ghost" @click.stop="refreshStatus(card)">刷新状态</span>
+                <button type="button" class="btn-ghost" @click.stop="refreshStatus(card)">刷新状态</button>
               </div>
             </template>
 
@@ -107,14 +106,14 @@
               <div class="pcard__fail-reason">{{ card.errorText || '生成失败，目标和已确认信息已保留。' }}</div>
               <div v-if="deleting === card.id" class="pcard__confirm" @click.stop>
                 确认删除这条路径？
-                <span class="pcard__confirm-yes" @click="doDelete(card)">删除</span>
-                <span class="pcard__confirm-no" @click="deleting = ''">取消</span>
+                <button type="button" class="pcard__confirm-yes" @click="doDelete(card)">删除</button>
+                <button type="button" class="pcard__confirm-no" @click="deleting = ''">取消</button>
               </div>
               <div class="pcard__actions">
-                <span class="btn-primary" :class="{ 'btn-primary--off': retrying === card.id }" @click.stop="doRetry(card)">
+                <button type="button" class="btn-primary" :class="{ 'btn-primary--off': retrying === card.id }" @click.stop="doRetry(card)">
                   <span v-if="retrying === card.id" class="spinner spinner--sm"></span>
                   {{ retrying === card.id ? '正在重新生成…' : card.retryLabel }}
-                </span>
+                </button>
               </div>
             </template>
           </article>
@@ -125,27 +124,18 @@
           <div class="empty__illus"><span></span><span></span><span></span></div>
           <p>{{ filter === 'all' ? '还没有学习路径，从规划一个目标开始' : '这个分类下还没有路径' }}</p>
           <router-link v-if="filter === 'all'" to="/goal-conversation" class="btn-primary">规划第一个目标</router-link>
-          <span v-else class="btn-ghost" @click="filter = 'all'">查看全部</span>
+          <button type="button" v-else class="btn-ghost" @click="filter = 'all'">查看全部</button>
         </div>
       </template>
     </main>
 
-    <!-- AI 生成提示：独立于页脚，贴近页面底部 -->
-    <div class="paths__ai-note">
-      <AiContentNote />
-    </div>
-
-    <V2Footer />
-
-    <!-- toast -->
-    <transition name="toast">
-      <div v-if="toast" class="toast">
-        <span class="toast__icon">
-          <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
-        </span>
-        {{ toast }}
+    <!-- AI 生成提示 + 页脚：一起沉底 -->
+    <div class="paths__foot">
+      <div class="paths__ai-note">
+        <AiContentNote />
       </div>
-    </transition>
+      <V2Footer />
+    </div>
   </div>
 </template>
 
@@ -153,11 +143,12 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import request, { AI_REQUEST_TIMEOUT } from '@/utils/api';
+import { toast } from '@/utils/toast';
 import { learningAPI } from '@/api/learning';
 import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import V2Footer from './V2Footer.vue';
-import './v2.css';
+import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 
 type CardKind = 'ready' | 'generating' | 'failed' | 'completed';
 interface PathCard {
@@ -185,17 +176,11 @@ const filter = ref<'all' | 'ready' | 'completed' | 'generating' | 'failed'>('all
 const retrying = ref('');
 const menuFor = ref('');
 const deleting = ref('');
-const toast = ref('');
 const goalBanner = ref(route.query.from === 'goal');
 /** 生成状态轮询连续失败计数（超过阈值停止空转） */
 const pollFailCount = ref(0);
 
-let toastTimer = 0;
-function showToast(text: string) {
-  toast.value = text;
-  window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => (toast.value = ''), 3600);
-}
+const deleteBusy = ref(false);
 
 function normalize(p: Record<string, any>): PathCard {
   const lc = p.generationLifecycle;
@@ -215,7 +200,7 @@ function normalize(p: Record<string, any>): PathCard {
       };
     }
     const phaseText = lc.phase === 'core'
-      ? '主结构生成中，一般 1 分钟内完成…'
+      ? '主结构生成中，一般 1-2 分钟内完成…'
       : `阶段任务准备中（${lc.completedStages ?? 0}/${lc.totalStages ?? '?'}）…`;
     return {
       id: p.id, title, desc, kind: 'generating', stages, stageDone: lc.completedStages ?? 0,
@@ -275,12 +260,12 @@ async function pollOnce() {
     try {
       const lc = await learningAPI.getPathGenerationStatus(c.id);
       if (lc.phase === 'ready') {
-        showToast(`「${c.title}」已生成，可以开始了`);
+        toast.success(`「${c.title}」已生成，可以开始了`);
         await load();
         return;
       }
       if (lc.status === 'failed' || lc.status === 'stale') {
-        showToast(`「${c.title}」生成失败，可重试`);
+        toast.error(`「${c.title}」生成失败，可重试`);
         await load();
         return;
       }
@@ -291,7 +276,7 @@ async function pollOnce() {
     }
   }
   if (failCount > 0 && failCount >= generating.length && pollFailCount.value >= 6) {
-    showToast('生成状态查询失败，请手动刷新');
+    toast.warning('生成状态查询失败，请手动刷新');
     return;
   }
   if (failCount >= generating.length) {
@@ -303,24 +288,28 @@ async function pollOnce() {
 }
 
 async function refreshStatus(card: PathCard) {
+  // 手动刷新：重置断路器计数（用户主动重试应重新计数）
+  pollFailCount.value = 0;
   try {
     const lc = await learningAPI.getPathGenerationStatus(card.id);
     if (lc.phase === 'ready') {
-      showToast(`「${card.title}」已生成，可以开始了`);
+      toast.success(`「${card.title}」已生成，可以开始了`);
       await load();
     } else if (lc.status === 'failed' || lc.status === 'stale') {
-      showToast(`「${card.title}」生成失败，可重试`);
+      toast.error(`「${card.title}」生成失败，可重试`);
       await load();
     } else {
-      showToast('仍在生成中…');
+      toast.info('仍在生成中…');
     }
   } catch {
-    showToast('刷新失败，稍后再试');
+    toast.error('刷新失败，稍后再试');
   }
 }
 
 async function doRetry(card: PathCard) {
   if (retrying.value) return;
+  // 手动重试：重置断路器计数（用户主动重试应重新计数）
+  pollFailCount.value = 0;
   retrying.value = card.id;
   menuFor.value = '';
   try {
@@ -329,12 +318,12 @@ async function doRetry(card: PathCard) {
     } else {
       await learningAPI.retryPathGeneration(card.id);
     }
-    showToast('已提交重新生成，正在处理…');
+    toast.info('已提交重新生成，正在处理…');
     const idx = cards.value.findIndex((c) => c.id === card.id);
     if (idx >= 0) cards.value[idx] = { ...cards.value[idx], kind: 'generating', phaseText: '已提交，正在重新生成…' };
     schedulePolling();
   } catch {
-    showToast('重试失败，请稍后再试');
+    toast.error('重试失败，请稍后再试');
   } finally {
     retrying.value = '';
   }
@@ -346,13 +335,16 @@ function askDelete(card: PathCard) {
 }
 
 async function doDelete(card: PathCard) {
+  if (deleteBusy.value) return;
+  deleteBusy.value = true;
   try {
     await request.delete(`/learning/paths/${card.id}`, { timeout: AI_REQUEST_TIMEOUT });
     cards.value = cards.value.filter((c) => c.id !== card.id);
-    showToast(`已删除「${card.title}」`);
+    toast.success(`已删除「${card.title}」`);
   } catch {
-    showToast('删除失败，请稍后再试');
+    toast.error('删除失败，请稍后再试');
   } finally {
+    deleteBusy.value = false;
     deleting.value = '';
   }
 }
@@ -394,16 +386,26 @@ function badgeCls(card: PathCard) {
   return 'pcard__badge--red';
 }
 
+function onMenuKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') menuFor.value = '';
+}
+function onWindowClick() {
+  menuFor.value = '';
+}
+
 onMounted(() => {
   load();
   if (goalBanner.value) {
     window.setTimeout(() => (goalBanner.value = false), 9000);
   }
+  window.addEventListener('keydown', onMenuKey);
+  window.addEventListener('click', onWindowClick);
 });
 
 onBeforeUnmount(() => {
   window.clearTimeout(pollTimer);
-  window.clearTimeout(toastTimer);
+  window.removeEventListener('keydown', onMenuKey);
+  window.removeEventListener('click', onWindowClick);
 });
 </script>
 
@@ -414,10 +416,11 @@ onBeforeUnmount(() => {
   display: grid; gap: 18px;
 }
 .paths__hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+/* wrapper 沉底：AI 提示与页脚一起贴近底部 */
+.paths__foot { margin-top: auto; }
 .paths__ai-note {
   display: flex; justify-content: center;
-  max-width: 1080px; margin: 0 auto;
-  padding: 4px 28px 16px;
+  padding: 10px 28px 4px;
 }
 .paths__ai-note :deep(.ai-note) { font-size: 11px; opacity: 0.75; }
 .kicker {
@@ -435,17 +438,16 @@ onBeforeUnmount(() => {
   box-shadow: 0 10px 22px rgba(52, 120, 246, 0.3);
   cursor: pointer; text-decoration: none;
 }
-.btn-primary--busy { opacity: .85; cursor: default; }
 .btn-ghost {
   padding: 10px 18px; border-radius: 12px;
-  border: 1px solid var(--line); background: #fff;
+  border: 1px solid var(--line); background: var(--surface, #fff);
   font-size: 14px; font-weight: 700; color: var(--muted);
   cursor: pointer;
 }
 
 .filters { display: flex; gap: 8px; flex-wrap: wrap; }
 .filter {
-  border: 1px solid var(--line); background: #fff;
+  border: 1px solid var(--line); background: var(--surface, #fff);
   border-radius: 999px; padding: 8px 15px;
   font: inherit; font-size: 13px; font-weight: 600; color: var(--muted);
   cursor: pointer; transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
@@ -478,7 +480,7 @@ onBeforeUnmount(() => {
 .pcard--failed::before { background: linear-gradient(180deg, var(--red), var(--amber)); }
 .pcard--generating { background: linear-gradient(180deg, rgba(67, 176, 216, 0.04), var(--surface) 55%); }
 .pcard--failed { border-color: rgba(239, 117, 120, 0.3); }
-.pcard__head { display: flex; align-items: flex-start; gap: 12px; }
+.pcard__head { display: flex; align-items: center; gap: 12px; }
 .pcard__thumb {
   width: 36px; height: 36px; border-radius: 11px;
   display: grid; place-items: center;
@@ -494,27 +496,31 @@ onBeforeUnmount(() => {
 .pcard__badge { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; flex: 0 0 auto; }
 .pcard__badge--green { color: #218a56; background: rgba(49, 177, 111, 0.12); }
 .pcard__badge--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
-.pcard__badge--cyan { color: #2b7a99; background: rgba(67, 176, 216, 0.14); }
-.pcard__badge--red { color: #c0454a; background: rgba(239, 117, 120, 0.12); }
+.pcard__badge--cyan { color: var(--blue-deep, #2b7a99); background: rgba(67, 176, 216, 0.14); }
+.pcard__badge--red { color: var(--red, #c0454a); background: rgba(239, 117, 120, 0.12); }
 .pcard__more { color: var(--faint); font-size: 18px; cursor: pointer; padding: 0 6px; }
 .pcard__title {
   margin: 0; font-size: 15.5px; line-height: 1.4;
   min-width: 0;
+  /* 固定 2 行展示高度：1 行标题与 2 行标题的卡 head 高度一致，内部元素水平对齐 */
+  min-height: calc(1.4em * 2);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .pcard__desc {
   margin: 4px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6;
+  /* 固定 2 行展示高度（与 title 同理） */
+  min-height: calc(1.6em * 2);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 
-.pcard__progress-row { display: flex; align-items: center; gap: 10px; }
+.pcard__progress-row { display: flex; align-items: center; gap: 10px; flex: 1; }
 .pcard__progress { flex: 1; height: 6px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
 .pcard__progress i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
 .pcard__percent {
   font-size: 12px; font-weight: 800; color: var(--blue-deep);
   font-variant-numeric: tabular-nums; flex: 0 0 auto;
 }
-.pcard__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 2px; }
+.pcard__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; }
 .pcard__meta { font-size: 12px; color: var(--faint); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pcard__cta {
   display: inline-flex; align-items: center; gap: 4px;
@@ -524,39 +530,35 @@ onBeforeUnmount(() => {
 }
 .pcard__cta svg { transition: transform 0.15s ease; }
 .pcard:hover .pcard__cta { transform: translateX(2px); }
-.pcard__actions { display: flex; justify-content: flex-end; margin-top: 2px; }
+.pcard__actions { display: flex; justify-content: flex-end; margin-top: auto; }
 
 .pcard__generating {
   display: flex; align-items: center; gap: 9px;
-  font-size: 13px; color: #2b7a99; font-weight: 600;
+  font-size: 13px; color: var(--blue-deep, #2b7a99); font-weight: 600;
 }
+/* 生成中：中间内容区弹性拉伸，底部操作行压底（与 ready 卡内容高度对齐） */
+.pcard--generating .pcard__skeleton { flex: 1; align-content: center; }
 .pcard__skeleton { display: grid; gap: 8px; }
 .pcard__skeleton i {
   height: 11px; border-radius: 6px;
-  background: linear-gradient(90deg, #e8f4f8 25%, #f4fbfd 50%, #e8f4f8 75%);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--surface) 55%, var(--canvas)) 25%, var(--surface) 50%, color-mix(in srgb, var(--surface) 55%, var(--canvas)) 75%);
   background-size: 200% 100%;
   animation: paths-shimmer 1.5s ease infinite;
 }
 @keyframes paths-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 .pcard__fail-reason {
-  font-size: 12.5px; line-height: 1.6; color: #c0454a;
+  font-size: 12.5px; line-height: 1.6; color: var(--red, #c0454a);
   background: rgba(239, 117, 120, 0.07);
   border: 1px dashed rgba(239, 117, 120, 0.35);
   border-radius: 10px; padding: 9px 12px;
 }
-
-.mini-spinner {
-  width: 14px; height: 14px; border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
-  animation: paths-spin .8s linear infinite;
-  display: inline-block; flex: 0 0 auto;
-}
-.mini-spinner--blue { border-color: rgba(67, 176, 216, 0.3); border-top-color: var(--cyan); }
-@keyframes paths-spin { to { transform: rotate(360deg); } }
+/* 失败：原因区弹性拉伸，重试按钮压底（与 ready 卡内容高度对齐） */
+.pcard--failed .pcard__fail-reason { flex: 1; display: grid; align-content: center; }
 
 .empty {
-  display: grid; justify-items: center; gap: 12px;
+  display: grid; justify-items: center; align-content: center; gap: 12px;
+  /* 空态留白优化：占用剩余视口空间并垂直居中，避免内容缩在顶部、下方大段空白 */
+  min-height: 52vh;
   padding: 56px 0; color: var(--faint); font-size: 14px;
 }
 .empty__illus { display: flex; gap: 6px; }
@@ -591,7 +593,7 @@ onBeforeUnmount(() => {
 .pcard__more-wrap { position: relative; }
 .pcard__menu {
   position: absolute; top: 26px; right: 0; z-index: 10;
-  background: #fff; border: 1px solid var(--line);
+  background: var(--surface, #fff); border: 1px solid var(--line);
   border-radius: 12px; padding: 5px;
   box-shadow: 0 12px 30px rgba(23, 32, 51, 0.14);
   display: grid; min-width: 120px;
@@ -600,17 +602,19 @@ onBeforeUnmount(() => {
   padding: 8px 11px; border-radius: 8px;
   font-size: 12.5px; font-weight: 600; color: var(--muted);
   cursor: pointer; white-space: nowrap;
+  text-align: left;
+  transition: background 0.15s ease, color 0.15s ease;
 }
-.pcard__menu-item:hover { background: #f1f5fb; color: var(--ink); }
-.pcard__menu-item--danger { color: #c0454a; }
-.pcard__menu-item--danger:hover { background: rgba(239, 117, 120, 0.08); color: #c0454a; }
+.pcard__menu-item:hover { background: color-mix(in srgb, var(--surface) 96%, var(--ink)); color: var(--ink); }
+.pcard__menu-item--danger { color: var(--red, #c0454a); }
+.pcard__menu-item--danger:hover { background: rgba(239, 117, 120, 0.08); color: var(--red, #c0454a); }
 .pcard__confirm {
   display: flex; align-items: center; gap: 9px;
   font-size: 12.5px; color: var(--muted);
-  background: #fafcff; border: 1px dashed var(--line);
+  background: var(--canvas, #fafcff); border: 1px dashed var(--line);
   border-radius: 10px; padding: 8px 11px;
 }
-.pcard__confirm-yes { color: #c0454a; font-weight: 800; cursor: pointer; }
+.pcard__confirm-yes { color: var(--red, #c0454a); font-weight: 800; cursor: pointer; }
 .pcard__confirm-no { color: var(--faint); font-weight: 600; cursor: pointer; }
 .paths__loading { display: grid; justify-items: center; gap: 12px; padding: 64px 0; color: var(--faint); font-size: 13px; }
 .goal-banner {
@@ -643,3 +647,4 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 </style>
+

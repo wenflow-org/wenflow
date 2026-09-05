@@ -124,6 +124,8 @@ export interface LearnerDynamicState {
     encouragement: 'low' | 'medium' | 'high';
     challenge: 'low' | 'medium' | 'high';
   };
+  /** SRL 三阶段追踪（Zimmerman 2000）：forethought=规划期，performance=执行期，self-reflection=反思期 */
+  srlPhase: 'forethought' | 'performance' | 'self-reflection';
 }
 
 export interface LearnerRecentEvidence {
@@ -139,7 +141,7 @@ export interface LearnerRecentEvidence {
 export interface LearnerConceptState {
   conceptKey: string;
   label: string;
-  sourceType: 'task-label' | 'session-knowledge' | 'derived';
+  sourceType: 'task-label' | 'session-knowledge' | 'derived' | 'memory-trace';
   masteryScore: number;
   stability: 'unknown' | 'fragile' | 'developing' | 'stable';
   status: 'pending' | 'learning' | 'mastered' | 'review';

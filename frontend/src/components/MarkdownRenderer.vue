@@ -7,7 +7,8 @@ import { computed, ref, watch, onMounted, nextTick } from 'vue';
 import MarkdownIt from 'markdown-it';
 import 'highlight.js/styles/github-dark.css';
 import 'katex/dist/katex.min.css';
-import markdownItKatex from 'markdown-it-katex';
+import katex from 'katex';
+import texmath from 'markdown-it-texmath';
 // 按需注册常用语言，避免 highlight.js 全量语言包（约 1MB）
 import hljs from 'highlight.js/lib/core';
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -56,9 +57,12 @@ hljs.registerAliases(['md'], { languageName: 'markdown' });
 hljs.registerAliases(['c#', 'cs'], { languageName: 'csharp' });
 hljs.registerAliases(['c++'], { languageName: 'cpp' });
 hljs.registerAliases(['txt', 'text'], { languageName: 'plaintext' });
-import DOMPurify, { type Config as DOMPurifyConfig } from 'dompurify';
+import DOMPurify from 'dompurify';
+import { buildAiContentSanitizeConfig } from '@/utils/sanitize-config';
 
-// mermaid 体积大且仅在出现图表时才需要，按需动态加载（模块级单例，initialize 只执行一次）
+// mermaid 体积大且仅在出现图表时才需要，按需动态加载（模块级单例，initialize 只执行一次）。
+// 加载失败时重置 promise 允许下次重试，否则 rejected promise 会永久缓存，
+// 后续所有图表渲染全部跳过（弱网首屏失败 = 整场会话图表报废）。
 let mermaidPromise: Promise<typeof import('mermaid').default> | null = null;
 function loadMermaid() {
   if (!mermaidPromise) {
@@ -70,6 +74,9 @@ function loadMermaid() {
         securityLevel: 'strict',
       });
       return mermaid;
+    }).catch((error) => {
+      mermaidPromise = null;
+      throw error;
     });
   }
   return mermaidPromise;
@@ -82,11 +89,8 @@ const props = defineProps<{
 const rendererRef = ref<HTMLElement | null>(null);
 
 // 原始 HTML 已禁用；这里仅清洗 Markdown/KaTeX 生成的结构和 Mermaid 文本占位。
-const SANITIZE_CONFIG: DOMPurifyConfig = {
-  USE_PROFILES: { html: true, mathMl: true },
-  FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'link', 'meta', 'base', 'svg', 'foreignObject'],
-  ALLOW_DATA_ATTR: false,
-};
+// 配置与 utils/sanitize.ts 共享单一来源；allowStyleAttr: true 是 KaTeX 内联样式的合法豁免。
+const SANITIZE_CONFIG = buildAiContentSanitizeConfig({ allowStyleAttr: true });
 
 function sanitizeHtml(html: string): string {
   return DOMPurify.sanitize(html, SANITIZE_CONFIG) as unknown as string;
@@ -108,7 +112,7 @@ const md: MarkdownIt = new MarkdownIt({
   },
 });
 
-md.use(markdownItKatex);
+md.use(texmath, { engine: katex, delimiters: ['dollars', 'brackets'] });
 
 function postProcessMermaid(html: string): string {
   return html

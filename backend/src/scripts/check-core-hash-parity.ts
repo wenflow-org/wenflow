@@ -12,12 +12,13 @@
 
 import 'dotenv/config';
 import systemPrisma from '../config/system-database';
-import { scanPromptFiles, type PromptFileScanDiagnostic } from '../composers/prompt-files/loader';
+import { scanPromptFiles, loadAllPromptFiles, type PromptFileScanDiagnostic } from '../composers/prompt-files/loader';
 import {
   computeCoreHash,
   loadCoreFile,
   type CoreFile,
 } from '../services/prompt-lab/core-file-loader';
+import { ensureCoreAgentPrompts } from './seed-core-agent-prompts';
 
 export type CoreHashParityStatus =
   | 'not-declared'
@@ -200,9 +201,60 @@ export async function checkCoreHashParity(
 }
 
 async function main(): Promise<void> {
+  // 检查前同步核心 prompt 到 DB（消除 CI 种子步骤脱节风险）
+  const seedResult = await ensureCoreAgentPrompts(systemPrisma, 'sync');
+  console.error('[core-hash-check] seed result:', JSON.stringify(seedResult));
+
+  if (seedResult.created.length === 0 && seedResult.updated.length === 0) {
+    console.error('[core-hash-check] seed created 0 records, falling back to direct seed');
+    await directSeedFromPromptFiles(systemPrisma);
+  }
+
   const report = await checkCoreHashParity(systemPrisma);
   console.log(JSON.stringify(report, null, 2));
   if (report.hasErrors) process.exitCode = 1;
+}
+
+async function directSeedFromPromptFiles(prisma: typeof systemPrisma): Promise<void> {
+  const files = loadAllPromptFiles().filter((f) => f.archetype !== 'code-only');
+  const config = await prisma.platform_api_configs.findUnique({
+    where: { id: 'platform' },
+    select: { defaultModel: true },
+  });
+  const defaultModel = String(config?.defaultModel || process.env.AI_MODEL || '').trim() || null;
+
+  for (const file of files) {
+    const existingActive = await prisma.agent_prompts.findFirst({
+      where: { agentId: file.agentId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (existingActive) continue;
+
+    const latest = await prisma.agent_prompts.findFirst({
+      where: { agentId: file.agentId },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    });
+    const nextVersion = (latest?.version ?? 0) + 1;
+
+    await prisma.agent_prompts.create({
+      data: {
+        id: `ap_seed_${file.agentId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        agentId: file.agentId,
+        version: nextVersion,
+        name: `v${nextVersion}-${file.name}`,
+        description: file.description || `从文件 ${file.agentId}.md 加载`,
+        systemPrompt: file.systemPrompt,
+        temperature: file.temperature ?? 0.7,
+        maxTokens: file.maxTokens ?? 4000,
+        model: defaultModel,
+        status: 'ACTIVE',
+        createdBy: 'core-hash-check',
+        publishedAt: new Date(),
+      },
+    });
+  }
+  console.error(`[core-hash-check] direct seed checked ${files.length} files`);
 }
 
 if (require.main === module) {

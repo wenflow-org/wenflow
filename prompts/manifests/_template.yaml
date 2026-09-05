@@ -1,0 +1,53 @@
+version: prompt-lab-manifest/v1
+
+skillId: example-skill
+agentId: skill:example-skill
+
+name: default-skill-example-skill
+archetype: conversational
+description: 请替换为该 Skill 的简短说明
+
+acceptableAgentIds:
+  - skill:example-skill
+
+publish:
+  enabled: true
+  exportTargets:
+    - platform-prompts
+
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: conversation
+  interactionMode: turn
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: retry
+
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState:
+    domain: example-skill
+    phases:
+      - completed
+    defaultPhase: completed
+    terminalPhases:
+      - completed
+    statusValues:
+      - succeeded
+      - partial
+      - blocked
+      - failed
+  contextUpdate:
+    mode: none
+    stateOwner: none
+  outputEnvelope: adapter
+
+ownership:
+  tier: production
+  visibility: internal
+
+tags: []
+notes: ''

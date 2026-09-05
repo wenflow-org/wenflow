@@ -4,7 +4,7 @@
 
 | 软件 | 版本 | 说明 |
 |------|------|------|
-| Node.js | 18+ | 运行环境 |
+| Node.js | 20.17.0+ | 运行环境（engines 要求 `>=20.17.0`） |
 | npm | 9+ | 包管理器 |
 | Git | 2.x | 版本控制 |
 | Nginx | 最新稳定版 | 可选，仅 `-UseNginx` 模式需要 |
@@ -25,7 +25,7 @@
 - 自动安装依赖（缺少 `node_modules` 时）
 - 生成双 Prisma Client，并对主库和 System DB 分别执行 `prisma migrate deploy`
 - 自动将核心 agent / skill prompts 从当前代码同步到数据库 ACTIVE 版本
-- 清理开发端口占用（3001、5173）
+- 检查开发端口（3001、5173）可用（被占用时报错退出，需要先手动停掉占用进程）
 - 启动后端与前端开发服务
 - 自动打开浏览器
 
@@ -53,7 +53,7 @@
 `-UseNginx` 模式会自动：
 - 构建前端（`npm run build`）
 - 生成运行时配置 `runtime/nginx/wenflow.nginx.conf`
-- 停止系统 nginx 进程并启动/重载脚本管理的 Nginx
+- 启动/重载脚本管理的 Nginx（若系统 nginx 或其他进程已占用 80 端口，脚本会报错退出，需先手动停止）
 - 写入反向代理相关环境变量（`FRONTEND_URL`、`CORS_ORIGIN`、`TRUST_PROXY=127.0.0.1`）
 
 ### 方式三：手动启动
@@ -156,7 +156,7 @@ AI_MODEL=deepseek-v4-flash
 AI_MODEL_REASONING=deepseek-v4-pro
 
 INIT_ADMIN_NAME=admin
-INIT_ADMIN_PASSWORD=YourStrongPassword123
+INIT_ADMIN_PASSWORD=Admin@2026Strong
 ```
 
 数据库 Secret 升级或轮换顺序：
@@ -176,9 +176,11 @@ icacls 'D:\WenFlowBackups' /inheritance:r
 icacls 'D:\WenFlowBackups' /grant:r "$env:USERNAME:(OI)(CI)F"
 ```
 
-Linux 目录和文件权限不得宽于：
+Linux 备份目录需预先创建，并确保容器内备份进程（镜像内固定 `uid=10001` 的 wenflow 用户）可写。目录和文件权限不得宽于：
 
 ```bash
+mkdir -p /var/backups/wenflow
+chown -R 10001:10001 /var/backups/wenflow
 chmod 700 /var/backups/wenflow
 chmod 600 /var/backups/wenflow/*
 ```
@@ -207,6 +209,7 @@ Docker 部署先停止后端写流量，再运行一次性 operations profile。
 ```bash
 export COMPOSE_PROJECT_NAME=wenflow
 export WENFLOW_BACKUP_HOST_DIR=/var/backups/wenflow
+mkdir -p /var/backups/wenflow && chown -R 10001:10001 /var/backups/wenflow && chmod 700 /var/backups/wenflow
 docker compose stop backend
 docker compose -f docker-compose.operations.yml run --rm backup
 docker compose start backend
@@ -287,14 +290,14 @@ Copy-Item frontend/.env.example frontend/.env
 
 ```env
 INIT_ADMIN_NAME=admin
-INIT_ADMIN_PASSWORD=YourStrongPassword123
+INIT_ADMIN_PASSWORD=Admin@2026Strong
 ```
 
 说明：
 - 如果数据库里已存在管理员，会自动跳过
 - 建议首次登录后立即修改密码
 
-详见 `ADMIN_SETUP.md`。
+详见 [`admin-guide.md`](admin-guide.md)。
 
 ---
 
@@ -385,9 +388,9 @@ wenflow/
 ## 相关文档
 
 - `README.md`
-- `ADMIN_SETUP.md`
+- `admin-guide.md`（管理员账户与登录安全）
 
 ---
 
-*文档版本：v3.1*
-*最后更新：2026-04-26*
+*文档版本：v3.2*
+*最后更新：2026-08-05*

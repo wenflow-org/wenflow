@@ -3,7 +3,10 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../../config/database';
 import { authMiddleware } from '../../middleware/auth.middleware';
+import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { randomUUID as uuidv4 } from 'crypto';
+import { logger } from '../../utils/logger';
+import { isTestAccountUser, REAL_USER_WHERE } from '../../utils/test-account';
 
 const router = express.Router();
 
@@ -45,11 +48,21 @@ const requireAdmin = async (operatorId?: string) => {
 // 获取用户列表
 router.get('/', async (req, res, next) => {
   try {
-    const { page = 1, limit = 20, search, role } = req.query;
+    const { page = 1, limit = 20, search, role, status } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
-    const where: any = {};
-    
+    // Phase 2：status=deleted 反转为「仅已删账号」（恢复入口/已删列表）；其余维持默认隐藏
+    const where: any = status === 'deleted' ? { deletedAt: { not: null } } : { deletedAt: null };
+
+    // 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，单点 utils/test-account.ts）；
+    // includeTest=true 时显式包含（切换后前端对虚拟/测试行做灰标标记）。
+    // 已删除视图不适用（回收站需展示全量账号以恢复）
+    const includeTest = String(req.query.includeTest || '') === 'true';
+    if (!includeTest && status !== 'deleted') {
+      where.isVirtualLearner = false;
+      where.NOT = REAL_USER_WHERE.NOT;
+    }
+
     // 搜索条件
     if (search) {
       where.OR = [
@@ -75,10 +88,12 @@ router.get('/', async (req, res, next) => {
           name: true,
           email: true,
           isAdmin: true,
+          isVirtualLearner: true,
           xp: true,
           currentLevel: true,
           lastLoginAt: true,
           createdAt: true,
+          deletedAt: true,
           _count: {
             select: {
               learning_paths: true,
@@ -94,7 +109,12 @@ router.get('/', async (req, res, next) => {
     res.json({
       success: true,
       data: {
-        users,
+        users: users.map((u) => ({
+          ...u,
+          /** 数据隔离标记（includeTest=true 时供前端灰标：虚拟学习者 / 测试账号） */
+          isVirtualLearner: u.isVirtualLearner,
+          isTestAccount: isTestAccountUser(u),
+        })),
         pagination: {
           total,
           page: Number(page),
@@ -112,8 +132,11 @@ router.get('/:id', async (req, res, next) => {
   try {
     const userId = req.params.id;
 
-    const user = await prisma.users.findUnique({
-      where: { id: userId },
+    // 默认隐藏已软删用户（详情 404 语义）；includeDeleted=1 时放行（已删列表的详情/恢复入口）
+    const includeDeleted = (req.query as { includeDeleted?: string } | undefined)?.includeDeleted === '1';
+
+    const user = await prisma.users.findFirst({
+      where: includeDeleted ? { id: userId } : { id: userId, deletedAt: null },
       select: {
         id: true,
         name: true,
@@ -123,6 +146,7 @@ router.get('/:id', async (req, res, next) => {
         isAdmin: true,
         role: true,
         createdAt: true,
+        deletedAt: true,
         _count: {
           select: {
             learning_paths: true,
@@ -164,7 +188,7 @@ router.post('/', async (req, res, next) => {
       role = 'user',
       currentLevel = 'beginner',
       xp = 0,
-      isAdmin = false
+      isAdmin
     } = req.body;
 
     if (!email || !password || !name) {
@@ -182,6 +206,22 @@ router.post('/', async (req, res, next) => {
       });
     }
 
+    // isAdmin 严格布尔解析：仅接受 true（兼容字符串 'true'），
+    // 避免 Boolean('false') 之类的字符串陷阱把用户误判为管理员
+    const adminFlag = isAdmin === true || isAdmin === 'true';
+
+    const allowedRoles = ['user', 'admin'];
+    if (typeof role !== 'string' || !allowedRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: `role 仅支持 ${allowedRoles.join(' / ')}` }
+      });
+    }
+
+    // isAdmin 与 role 强绑定：管理员时强制 'admin'；
+    // 非管理员时不允许 role 为 'admin'（忽略并降级为 'user'）
+    const finalRole = adminFlag ? 'admin' : (role === 'admin' ? 'user' : role);
+
     const existing = await prisma.users.findUnique({ where: { email } });
     if (existing) {
       return res.status(409).json({
@@ -198,10 +238,10 @@ router.post('/', async (req, res, next) => {
         email: String(email),
         name: String(name),
         password: hashedPassword,
-        role: isAdmin ? 'admin' : String(role),
+        role: finalRole,
         currentLevel: String(currentLevel),
         xp: Number(xp) || 0,
-        isAdmin: Boolean(isAdmin),
+        isAdmin: adminFlag,
         updatedAt: new Date()
       },
       select: {
@@ -256,6 +296,20 @@ router.patch('/:id', async (req, res, next) => {
       });
     }
 
+    // 最后管理员保护：把管理员降为普通用户前，确认剩余管理员 ≥ 2
+    if (typeof isAdmin === 'boolean' && isAdmin === false && existing.isAdmin) {
+      const remainingAdmins = await prisma.users.count({ where: { isAdmin: true, deletedAt: null } }) - 1;
+      if (remainingAdmins <= 1) {
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: 'LAST_ADMIN_PROTECTED',
+            message: '系统至少需要保留 2 名管理员，无法降级最后的管理员'
+          }
+        });
+      }
+    }
+
     if (email && email !== existing.email) {
       const duplicated = await prisma.users.findUnique({ where: { email: String(email) } });
       if (duplicated) {
@@ -284,6 +338,8 @@ router.patch('/:id', async (req, res, next) => {
         });
       }
       data.password = await bcrypt.hash(String(password), SALT_ROUNDS);
+      // 管理员重置密码：递增 tokenVersion，该用户所有旧 JWT 立即失效
+      data.tokenVersion = { increment: 1 };
     }
 
     const updated = await prisma.users.update({
@@ -320,11 +376,11 @@ router.post('/batch-delete', async (req, res, next) => {
       return res.status(403).json(permission.response);
     }
 
-    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(Boolean) : [];
-    if (ids.length === 0) {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    if (!(Array.isArray(ids) && ids.length > 0 && ids.length <= 100 && ids.every((item: any) => typeof item === 'string'))) {
       return res.status(400).json({
         success: false,
-        error: { message: '请提供要删除的用户 ID 列表' }
+        error: { message: 'ids 必须是 1-100 个用户 ID 字符串的数组' }
       });
     }
 
@@ -335,11 +391,62 @@ router.post('/batch-delete', async (req, res, next) => {
       });
     }
 
-    const result = await prisma.users.deleteMany({
+    // 虚拟学习者保护：虚拟用户由虚拟学习者管理模块维护，不允许在此直接删除
+    const virtualProfiles = await prisma.virtual_learner_profiles.findMany({
+      where: { userId: { in: ids } },
+      select: { userId: true }
+    });
+    if (virtualProfiles.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'VIRTUAL_LEARNER_PROTECTED',
+          message: `以下用户是虚拟学习者底层账号，请在「虚拟学习者管理」中处理：${virtualProfiles.map((p) => p.userId).join(', ')}`
+        }
+      });
+    }
+
+    // 最后管理员保护：删除管理员前统计删除后的剩余管理员数量（软删管理员不计入）
+    const adminsInBatch = await prisma.users.findMany({
+      where: { id: { in: ids }, isAdmin: true, deletedAt: null },
+      select: { id: true }
+    });
+    if (adminsInBatch.length > 0) {
+      const remainingAdmins = await prisma.users.count({ where: { isAdmin: true, deletedAt: null } }) - adminsInBatch.length;
+      if (remainingAdmins <= 1) {
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: 'LAST_ADMIN_PROTECTED',
+            message: '系统至少需要保留 2 名管理员，批量删除中不能包含最后的管理员'
+          }
+        });
+      }
+    }
+
+    // 操作审计：批量删除前快照目标账号
+    const targets = await prisma.users.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, email: true, name: true, isAdmin: true, deletedAt: true }
+    });
+    setAuditAction(res, 'user-batch-delete', { targetType: 'user' });
+    setAuditBefore(res, targets);
+
+    // 软删除：仅标记未删除的账号（deletedAt: null 兜底幂等），历史数据保留
+    const deletedAt = new Date();
+    const result = await prisma.users.updateMany({
       where: {
-        id: { in: ids }
+        id: { in: ids },
+        deletedAt: null
+      },
+      data: {
+        deletedAt,
+        deletedBy: operatorId,
+        updatedAt: deletedAt
       }
     });
+
+    logger.info('用户已批量软删除', { count: result.count, deletedBy: operatorId });
 
     res.json({
       success: true,
@@ -377,6 +484,14 @@ router.patch('/:id/role', async (req, res, next) => {
         error: { message: '不能取消当前登录管理员的管理员权限' }
       });
     }
+
+    // 操作审计：角色变更前快照旧实体
+    const existing = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true, role: true, isAdmin: true, deletedAt: true }
+    });
+    setAuditAction(res, 'user-role-change', { targetType: 'user', targetId: userId });
+    setAuditBefore(res, existing);
 
     const updated = await prisma.users.update({
       where: { id: userId },
@@ -425,7 +540,7 @@ router.delete('/:id', async (req, res, next) => {
 
     const target = await prisma.users.findUnique({
       where: { id: userId },
-      select: { id: true }
+      select: { id: true, isAdmin: true, deletedAt: true }
     });
 
     if (!target) {
@@ -435,11 +550,105 @@ router.delete('/:id', async (req, res, next) => {
       });
     }
 
-    await prisma.users.delete({ where: { id: userId } });
+    // 已软删账号重复删除：409 幂等语义，与 404 区分
+    if (target.deletedAt) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'ALREADY_DELETED',
+          message: '用户已被删除'
+        }
+      });
+    }
+
+    // 最后管理员保护：删除管理员前统计剩余管理员数量（软删管理员不计入）
+    if (target.isAdmin) {
+      const remainingAdmins = await prisma.users.count({ where: { isAdmin: true, deletedAt: null } }) - 1;
+      if (remainingAdmins <= 1) {
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: 'LAST_ADMIN_PROTECTED',
+            message: '系统至少需要保留 2 名管理员，无法删除最后的管理员'
+          }
+        });
+      }
+    }
+
+    // 操作审计：删除前快照旧实体（软删幂等分支已在上面提前返回）
+    setAuditAction(res, 'user-delete', { targetType: 'user', targetId: userId });
+    setAuditBefore(res, target);
+
+    // 软删除：仅标记，历史数据（学习路径/会话/成就等）全部保留
+    const deletedAt = new Date();
+    await prisma.users.update({
+      where: { id: userId },
+      data: { deletedAt, deletedBy: operatorId, updatedAt: deletedAt }
+    });
+
+    logger.info('用户已软删除', { userId, deletedBy: operatorId });
 
     res.json({
       success: true,
       message: '删除成功'
+    });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+// 恢复已软删用户（Phase 2）
+router.post('/:id/restore', async (req, res, next) => {
+  try {
+    const operatorId = req.user?.userId;
+    const permission = await requireAdmin(operatorId);
+    if (!permission.ok) {
+      return res.status(403).json(permission.response);
+    }
+
+    const userId = req.params.id;
+
+    const target = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { id: true, deletedAt: true }
+    });
+
+    if (!target) {
+      return res.status(404).json({
+        success: false,
+        error: { message: '用户不存在' }
+      });
+    }
+
+    // 未软删账号重复恢复：409 幂等语义（与 DELETE 的 ALREADY_DELETED 对称）
+    if (!target.deletedAt) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'NOT_DELETED',
+          message: '用户未被删除'
+        }
+      });
+    }
+
+    // 身份保留策略（Phase 1 决策）：软删不释放 email/name，恢复无需查重
+    const restored = await prisma.users.update({
+      where: { id: userId },
+      data: { deletedAt: null, deletedBy: null, updatedAt: new Date() },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        isAdmin: true,
+        deletedAt: true
+      }
+    });
+
+    logger.info('用户已恢复', { userId, restoredBy: operatorId });
+
+    res.json({
+      success: true,
+      data: restored
     });
   } catch (error: any) {
     next(error);

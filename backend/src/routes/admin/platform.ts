@@ -12,6 +12,7 @@ import {
   isManifestAgent,
   listAgentManifest
 } from '../../services/agent-manifest.service';
+import { REAL_USER_WHERE as REAL_USER_WHERE_UTILS, isTestAccountUser } from '../../utils/test-account';
 import { getGateway } from '../../gateway';
 import {
   DEFAULT_PATH_AGENT_INPUT_CONFIG,
@@ -36,6 +37,9 @@ import {
   updatePlatformCapabilityProbeInterval
 } from '../../services/capability-probe-settings.service';
 import { aiCapabilityHealthService } from '../../services/ai-capability-health.service';
+import { loadSkillsBookRaw, getActiveSkillIds } from '../../services/skill-registry/skills-file';
+import { analyzeW2 } from '../../services/skills-readiness.service';
+import { deriveTeachingSessionProgress } from './teaching-sessions.progress';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -46,7 +50,7 @@ const MONITORED_AGENT_ORDER = [
   'RequirementCollection',
   'PathPlanning',
   'LearnerOrchestration',
-  'Learning',
+  'Teaching',
   'TeachingOrchestration',
   'LearningCompanion',
   'SessionWrapup'
@@ -63,19 +67,107 @@ const AGENT_RELATIONS = getAgentRelations();
 
 /**
  * 生产统计用户过滤：排除虚拟学习者与测试/审计账号（合成流量），避免污染真实指标。
- * 测试账号按命名模式识别（e2e_/audit_probe_/ui_check/motion_review/@test.local/virtual_）。
+ * 单点定义见 utils/test-account.ts（前缀清单随 dev.db 实测账号分布扩展），此处仅补 deletedAt。
  */
 const REAL_USER_WHERE = {
-  isVirtualLearner: false,
-  NOT: [
-    { email: { startsWith: 'virtual_' } },
-    { email: { endsWith: '@test.local' } },
-    { email: { startsWith: 'e2e_' } },
-    { email: { startsWith: 'audit_probe_' } },
-    { email: { startsWith: 'ui_check' } },
-    { email: { startsWith: 'motion_review' } },
+  ...REAL_USER_WHERE_UTILS,
+  deletedAt: null,
+};
+
+const timeoutErrorSignals = [
+  'timeout',
+  'timed out',
+  'etimedout',
+  'deadline exceeded',
+  'request timeout',
+  'socket hang up'
+];
+
+// 超时识别：优先 errorCode/errorCategory（现代 gateway 行写 errorCode=ATTEMPT_TIMEOUT、errorCategory=provider_timeout），
+// 兼容旧行 errorCode 中直接含 timeout 字样（ETIMEDOUT 等）。
+const isTimeoutLog = (log: { errorCode: string | null; errorCategory?: string | null }) => {
+  const errorCode = String(log.errorCode || '').toLowerCase();
+  const errorCategory = String(log.errorCategory || '').toLowerCase();
+  return errorCategory.includes('timeout')
+    || timeoutErrorSignals.some(signal => errorCode.includes(signal));
+};
+
+/**
+ * 失败归因分类（调用级，agent_call_logs）：
+ * - 现代 gateway 行带 errorCategory 列 → 直接采用；
+ * - 老平台/skill 行 errorCategory 为空 → 由 errorCode/error 文本启发式归并
+ *   （CALLER_ABORTED/取消 → caller_abort；超时信号 → provider_timeout；限流信号 → rate_limit；其余 → internal）。
+ * 与 buildErrorCategoryWhere（/agents/logs 筛选）同源，保证「归因计数 ↔ 日志列表」闭环一致。
+ */
+export function classifyFailureCategory(row: {
+  errorCategory: string | null;
+  errorCode: string | null;
+  error: string | null;
+}): string {
+  const category = String(row.errorCategory || '').toLowerCase();
+  if (category) return category;
+  const code = String(row.errorCode || '').toUpperCase();
+  const text = String(row.error || '').toLowerCase();
+  if (code.includes('CALLER_ABORTED') || text.includes('cancel')) return 'caller_abort';
+  if (isTimeoutLog(row) || timeoutErrorSignals.some(signal => text.includes(signal))) return 'provider_timeout';
+  if (code.includes('RATE') || code.includes('429') || text.includes('rate limit') || text.includes('throttl')) {
+    return 'rate_limit';
+  }
+  return 'internal';
+}
+
+/** 限流信号条件（classifyFailureCategory 的 rate_limit 分支镜像） */
+const RATE_LIMIT_CONDITION = {
+  OR: [
+    { errorCode: { contains: 'RATE' } },
+    { errorCode: { contains: '429' } },
+    { error: { contains: 'rate limit' } },
   ],
 };
+
+/** 取消信号条件（classifyFailureCategory 的 caller_abort 分支镜像） */
+const CALLER_ABORT_CONDITION = {
+  OR: [
+    { errorCode: { contains: 'CALLER_ABORTED' } },
+    { error: { contains: 'cancel' } },
+  ],
+};
+
+/** 超时信号条件（与 /agents/logs 状态筛选同构；provider_timeout 分支镜像） */
+const TIMEOUT_CONDITION = {
+  OR: [
+    { errorCode: { contains: 'TIMEOUT' } },
+    ...timeoutErrorSignals.map(signal => ({ error: { contains: signal } })),
+  ],
+};
+
+/**
+ * /agents/logs 的 errorCategory 筛选条件：列值精确匹配 + errorCategory 为空行的
+ * 启发式归并（与 classifyFailureCategory 同口径，纯函数便于单测）。
+ * 未知类别 → 仅精确匹配。
+ */
+export function buildErrorCategoryWhere(category: string): { OR: Record<string, unknown>[] } | null {
+  const cat = String(category || '').toLowerCase();
+  if (!cat) return null;
+  const extra: Record<string, unknown>[] = [];
+  if (cat === 'caller_abort') {
+    extra.push({ errorCategory: null, ...CALLER_ABORT_CONDITION });
+  } else if (cat === 'provider_timeout') {
+    extra.push({ errorCategory: null, ...TIMEOUT_CONDITION });
+  } else if (cat === 'rate_limit') {
+    extra.push({ errorCategory: null, ...RATE_LIMIT_CONDITION });
+  } else if (cat === 'internal') {
+    extra.push({
+      errorCategory: null,
+      AND: [
+        { NOT: CALLER_ABORT_CONDITION },
+        { NOT: TIMEOUT_CONDITION },
+        { NOT: RATE_LIMIT_CONDITION },
+      ],
+    });
+  }
+  return { OR: [{ errorCategory: cat }, ...extra] };
+}
 
 const inferRuntimeRole = (agentId: string, type?: string | null) => {
   const typeText = String(type || '').toLowerCase();
@@ -134,6 +226,18 @@ const parseLogMetadata = (metadata: string | null): Record<string, any> => {
   }
 };
 
+/**
+ * 服务端截断日志详情大字段（input/output）。
+ * 前端 live.ts fetchLogDetail 已按 4000 字符二次兜底截断；后端先截断避免全量传输。
+ * 截断后含标记总长 ≤ 4000，不会触发前端二次截断标记。
+ */
+const truncateLogPayload = (value: string | null, limit = 4000): { value: string | null; truncated: boolean } => {
+  if (!value || value.length <= limit) return { value, truncated: false };
+  const marker = `\n…（已截断，共 ${value.length} 字符）`;
+  const keep = Math.max(1, limit - marker.length);
+  return { value: value.slice(0, keep) + marker, truncated: true };
+};
+
 const isPathGenerationFlowEventMetadata = (metadata: string | null): boolean => {
   const parsed = parseLogMetadata(metadata);
   return parsed.eventType === 'path-generation-stage';
@@ -189,15 +293,34 @@ router.put('/settings/registration', async (req: Request, res: Response) => {
       });
     }
 
-    const { registrationEnabled } = req.body;
-    if (typeof registrationEnabled !== 'boolean') {
+    const { registrationEnabled, registerIpQuotaEnabled, registerIpDailyQuota } = req.body;
+    if (registrationEnabled !== undefined && typeof registrationEnabled !== 'boolean') {
       return res.status(400).json({
         success: false,
         error: { message: 'registrationEnabled 必须是布尔值', status: 400 }
       });
     }
+    if (registerIpQuotaEnabled !== undefined && typeof registerIpQuotaEnabled !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'registerIpQuotaEnabled 必须是布尔值', status: 400 }
+      });
+    }
+    if (registerIpDailyQuota !== undefined) {
+      const quota = Number(registerIpDailyQuota);
+      if (!Number.isInteger(quota) || quota < 0 || quota > 100) {
+        return res.status(400).json({
+          success: false,
+          error: { message: 'registerIpDailyQuota 必须是 0-100 的整数', status: 400 }
+        });
+      }
+    }
 
-    const settings = await updatePlatformSettings({ registrationEnabled });
+    const settings = await updatePlatformSettings({
+      registrationEnabled,
+      registerIpQuotaEnabled,
+      registerIpDailyQuota
+    });
     res.json({
       success: true,
       data: settings
@@ -237,7 +360,7 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
       'ai-service'
     ]);
 
-    const [registrations, modelConfigs, logGroups, catalog, agentCallOutputSamples] = await Promise.all([
+    const [registrations, modelConfigs, logGroups, catalog, agentCallOutputSamples, skillRegistrations] = await Promise.all([
       systemPrisma.agent_registrations.findMany({
         orderBy: { id: 'asc' },
         select: {
@@ -265,6 +388,13 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
         orderBy: { calledAt: 'desc' },
         take: 500,
         select: { output: true }
+      }),
+      systemPrisma.skill_registrations.findMany({
+        orderBy: { name: 'asc' },
+        select: {
+          name: true,
+          updatedAt: true
+        }
       })
     ]);
 
@@ -315,6 +445,40 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
 
     const catalogOnly = catalogIds.filter(id => !canonicalManifestIds.has(id));
 
+    // ---- skill_registrations 维度（SKILL_READINESS_SPEC §4.1）----
+    // 数据源：户口簿活跃集 vs skill_registrations（name 无 skill: 前缀）双向差集，
+    // 复用 skills-readiness W2 分析纯函数（analyzeW2，同一对账口径，不复制逻辑）。
+    const book = loadSkillsBookRaw();
+    const bookActiveIds = getActiveSkillIds(book);
+    const w2 = analyzeW2(book, skillRegistrations.map((item) => ({ name: item.name })));
+    const missingSkillRegistrations = w2.missingRegistration; // 户口簿有、注册表无（agents/platform-direct 豁免）
+    const unknownSkillRegistrations = w2.zombieRegistration;  // 注册表有、户口簿无（幽灵残留）
+
+    // 别名行：注册 name（无前缀）经 getCanonicalAgentId 归一判定（对齐 :287-289 模式）
+    const aliasSkillRegistrations = skillRegistrations
+      .map(item => ({
+        name: item.name,
+        canonicalId: getCanonicalAgentId(item.name)
+      }))
+      .filter(item => item.name !== item.canonicalId && canonicalManifestIds.has(item.canonicalId));
+
+    // 逐项明细：户口簿活跃集 ∪ 注册表 并集，每项 status = unregistered | orphan-registration | ok
+    const registeredNames = new Set(skillRegistrations.map((item) => item.name));
+    const exemptRegistrationPoints = new Set(['agents', 'platform-direct']);
+    const skillRegistrationItems = [
+      ...missingSkillRegistrations.map(skillId => ({ skillId, status: 'unregistered' as const })),
+      ...unknownSkillRegistrations.map(skillId => ({ skillId, status: 'orphan-registration' as const })),
+      ...[...bookActiveIds]
+        .filter(id => registeredNames.has(id) || exemptRegistrationPoints.has(book.skills.find(e => e.skillId === id)?.registrationPoint || ''))
+        .map(skillId => ({
+          skillId,
+          status: 'ok' as const,
+          detail: registeredNames.has(skillId)
+            ? 'skill_registrations 有行'
+            : 'agents/platform-direct 豁免（不落 skill_registrations 是预期）'
+        })),
+    ].sort((a, b) => a.skillId.localeCompare(b.skillId));
+
     res.json({
       success: true,
       data: {
@@ -325,12 +489,15 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
           calledAgentTotal: calledAgentIds.length,
           catalogTotal: catalogIds.length,
           outputContractSampleSize: agentCallContractCounts.sampleSize,
+          skillRegistrationTotal: skillRegistrations.length,
           driftCount:
             missingRegistrations.length +
             unknownRegistrations.length +
             unknownModelConfigs.length +
             unknownLogAgents.length +
-            catalogOnly.length
+            catalogOnly.length +
+            missingSkillRegistrations.length +
+            unknownSkillRegistrations.length
         },
         outputContracts: {
           agentCallLogs: agentCallContractCounts
@@ -343,7 +510,13 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
           aliasModelConfigs,
           unknownLogAgents,
           aliasLogAgents,
-          catalogOnly
+          catalogOnly,
+          skillRegistrations: {
+            missingSkillRegistrations,
+            unknownSkillRegistrations,
+            aliasSkillRegistrations,
+            items: skillRegistrationItems
+          }
         },
         samples: {
           registrations,
@@ -368,8 +541,116 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
  * 获取平台概览数据
  * GET /api/admin/overview/stats
  */
-router.get('/overview/stats', async (req: Request, res: Response) => {
-  try {
+
+/**
+ * 获取 Agent 注册列表
+ * GET /api/admin/agents/registry
+ */
+
+/**
+ * 获取 Agent 设计详情（输入/输出 Schema + 运行契约）
+ * GET /api/admin/agents/design/:agentId
+ */
+
+/**
+ * 获取编排器与成员 Agent 关系
+ * GET /api/admin/agents/relations
+ */
+
+/**
+ * Agent 拓扑可视化 API
+ * GET /api/admin/agents/topology
+ *
+ * 返回 5 顶层 Agent + 下辖 Skill 的节点图数据：
+ *   - nodes: 5 Agent + N Skill（带统计）
+ *   - edges: Agent -> Skill 隶属关系
+ *
+ * 时间窗口：?range=24h | 7d | 30d (默认 7d)
+ */
+
+/**
+ * 获取平台概览数据
+ * GET /api/admin/overview/stats
+ *
+ * 服务端缓存：45s TTL，避免每次进入概览页重复执行 20+ 条统计查询。
+ * /overview/stats 无请求参数，使用固定 key；/activity 的 key 含 excludeTest 与 limit。
+ */
+const OVERVIEW_CACHE_TTL_MS = 45 * 1000;
+const overviewStatsCache = new Map<string, { payload: unknown; cachedAt: number }>();
+
+/** 测试辅助：清空概览/动态缓存（45s TTL 会跨用例复用，污染路由级断言） */
+export function clearOverviewStatsCache(): void {
+  overviewStatsCache.clear();
+}
+
+export interface HourlyTrendBucket {
+  time: string;
+  label: string;
+  total: number;
+  error: number;
+  timeout: number;
+}
+
+/**
+ * 24h 脉搏全量聚合（P0-1：替代 take:50 抽样）。
+ * 桶窗口与查询窗口同源：windowStart = 当前整点 - 23h，覆盖 [windowStart, now] 恰好 24 个整点桶，
+ * 「总数 = 各小时之和」恒成立；窗口外（含未来时间戳）的日志一律不计入。
+ * 所有键用本地时间生成，与查询 where（gte windowStart）对齐，避免抽样/错位导致的静默失真。
+ */
+export function buildHourlyTrend(
+  logs: Array<{
+    calledAt: Date | string;
+    success: boolean;
+    errorCode: string | null;
+    errorCategory?: string | null;
+  }>,
+  windowStart: Date,
+  now: Date = new Date()
+): HourlyTrendBucket[] {
+  const hourKeys: string[] = [];
+  const hourlyTrendMap: Record<string, { total: number; error: number; timeout: number }> = {};
+
+  for (let i = 23; i >= 0; i -= 1) {
+    const d = new Date(now);
+    d.setMinutes(0, 0, 0);
+    d.setHours(d.getHours() - i);
+    const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}-${d.getHours()}`;
+    hourKeys.push(key);
+    hourlyTrendMap[key] = { total: 0, error: 0, timeout: 0 };
+  }
+
+  for (const log of logs) {
+    const d = new Date(log.calledAt);
+    if (d.getTime() < windowStart.getTime() || d.getTime() > now.getTime()) continue;
+
+    const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}-${d.getHours()}`;
+    if (!hourlyTrendMap[key]) continue;
+
+    hourlyTrendMap[key].total += 1;
+    if (!log.success) {
+      if (isTimeoutLog(log)) {
+        hourlyTrendMap[key].timeout += 1;
+      } else {
+        hourlyTrendMap[key].error += 1;
+      }
+    }
+  }
+
+  return hourKeys.map(key => {
+    const [year, month, day, hour] = key.split('-').map(Number);
+    const d = new Date(year, month - 1, day, hour);
+    const point = hourlyTrendMap[key];
+    return {
+      time: d.toISOString(),
+      label: `${String(hour).padStart(2, '0')}:00`,
+      total: point.total,
+      error: point.error,
+      timeout: point.timeout
+    };
+  });
+}
+
+async function computeOverviewStats(): Promise<unknown> {
     // 获取今日统计
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -382,14 +663,12 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
     yesterday.setDate(yesterday.getDate() - 1);
     const last24HoursStart = new Date(Date.now() - 24 * 3600000);
 
-    const timeoutErrorSignals = [
-      'timeout',
-      'timed out',
-      'etimedout',
-      'deadline exceeded',
-      'request timeout',
-      'socket hang up'
-    ];
+    // 脉搏窗口与桶窗口同源：当前整点 - 23h（[start, now] 恰好 24 个整点桶），
+    // 保证「24h 总数 = 各小时之和」恒成立；活跃 Agent 统计仍用严格 24h 滚动窗口。
+    const trendWindowStart = new Date();
+    trendWindowStart.setMinutes(0, 0, 0);
+    trendWindowStart.setHours(trendWindowStart.getHours() - 23);
+
     const businessExecutionWhere = {
       OR: [
         { executionLayer: null },
@@ -397,13 +676,17 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       ]
     };
     // 生产统计排除虚拟学习者与测试/审计账号：见模块级 REAL_USER_WHERE
-    const isTimeoutLog = (log: { errorCode: string | null; error: string | null }) => {
-      const errorCode = String(log.errorCode || '').toLowerCase();
-      const errorMessage = String(log.error || '').toLowerCase();
-      return timeoutErrorSignals.some(signal =>
-        errorCode.includes(signal) || errorMessage.includes(signal)
-      );
-    };
+
+    // 调用/token 口径（R5）：agent_call_logs / llm_execution_attempts 按 userId 归属过滤，
+    // 只统计真实用户（虚拟/测试账号 userId 不在集合内 → 自动剔除；空 userId 孤儿行同样剔除）。
+    // 全量口径保留为 *All 副指标，前端标注「含虚拟/测试」，保证诚实展示且可对比。
+    const realUserIds = (
+      await prisma.users.findMany({ where: REAL_USER_WHERE, select: { id: true } })
+    ).map((u) => u.id);
+    const realUserScope = { userId: { in: realUserIds } };
+    // 虚拟/测试账号 = 全部用户 − 真实用户（差集互补，口径严格无遗漏），供「虚拟调用」独立指标
+    const allUserIds = (await prisma.users.findMany({ select: { id: true } })).map((u) => u.id);
+    const virtualUserIds = allUserIds.filter((id) => !realUserIds.includes(id));
 
     // 并行查询所有统计数据
     const [
@@ -419,17 +702,25 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       completedConversations,
       activeConversations,
       totalAgentLogs,
-      platformStats,
+      totalAgentLogsAll,
       agentCallsToday,
+      agentCallsTodayAll,
+      agentCallsTodayVirtual,
       agentSuccessToday,
       agentTimeoutToday,
       activeAgents24h,
       recentAgentLogs24h,
       wrapupLogs,
       usageTokens7d,
+      usageTokens7dAll,
       usageCalls7d,
+      usageCalls7dAll,
       usageModels7d,
-      usageFailures7d
+      usageFailuresRows,
+      agentLogs7dRows,
+      newUsers7dRows,
+      activeUsers7dRows,
+      agentSkillAgg7d
     ] = await Promise.all([
       // 总用户数（不含虚拟学习者）
       prisma.users.count({
@@ -520,20 +811,33 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         },
       }),
       
-      // Agent 调用统计 (使用 agentCallLog 表)
+      // Agent 调用统计（真实用户口径：按 userId 归属过滤；全量见 totalAgentLogsAll）
+      prisma.agent_call_logs.groupBy({
+        by: ['success'],
+        where: { ...businessExecutionWhere, ...realUserScope },
+        _count: true,
+      }),
+
+      // Agent 调用统计全量（含虚拟/测试账号与孤儿行，前端副口径标注）
       prisma.agent_call_logs.groupBy({
         by: ['success'],
         where: businessExecutionWhere,
         _count: true,
       }),
-      
-      // 最近的 platform stats
-      prisma.platform_stats.findMany({
-        take: 7,
-        orderBy: { date: 'desc' },
+
+      // 今日 Agent 调用数（真实用户口径；全量见 agentCallsTodayAll）
+      prisma.agent_call_logs.count({
+        where: {
+          ...businessExecutionWhere,
+          ...realUserScope,
+          calledAt: {
+            gte: today,
+            lt: tomorrow,
+          },
+        },
       }),
 
-      // 今日 Agent 调用数
+      // 今日 Agent 调用数全量（含虚拟/测试）
       prisma.agent_call_logs.count({
         where: {
           ...businessExecutionWhere,
@@ -544,10 +848,23 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         },
       }),
 
+      // 今日虚拟/测试账号调用数（真实口径之外的分母，前端单独成卡与真实调用并列区分）
+      prisma.agent_call_logs.count({
+        where: {
+          ...businessExecutionWhere,
+          calledAt: {
+            gte: today,
+            lt: tomorrow,
+          },
+          userId: { in: virtualUserIds },
+        },
+      }),
+
       // 今日 Agent 成功调用
       prisma.agent_call_logs.count({
         where: {
           ...businessExecutionWhere,
+          ...realUserScope,
           calledAt: {
             gte: today,
             lt: tomorrow,
@@ -556,11 +873,15 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         },
       }),
 
-      // 今日超时调用（按 error/errorCode 关键字识别）
+      // 今日超时调用（按 errorCode/errorCategory 识别）。
+      // 保守保留 LIKE 查询：现代 gateway 行带 errorCategory=provider_timeout / errorCode=ATTEMPT_TIMEOUT，
+      // 但旧平台与 skill 行只有 error/errorCode 文本信号（无 errorCategory 列值），
+      // 且 error 字段可能包含 'timed out' 等 errorCode 不含的信号，故不做枚举化改造。
       prisma.agent_call_logs.count({
         where: {
           AND: [
             businessExecutionWhere,
+            realUserScope,
             {
               calledAt: { gte: today, lt: tomorrow },
               success: false,
@@ -582,39 +903,62 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         by: ['agentId'],
         where: {
           ...businessExecutionWhere,
+          ...realUserScope,
           calledAt: { gte: new Date(Date.now() - 24 * 3600000) }
         }
       }),
 
-      // 最近 24h 调用趋势
+      // 最近 24h 调用趋势（P0-1：全量聚合，无 take 截断；时间窗 where 限定 [trendWindowStart, now]，
+      // calledAt 已有索引 @@index([calledAt])；窄 select 避免拉取 error 全文，orderBy 保证聚合顺序稳定）
       prisma.agent_call_logs.findMany({
         where: {
           ...businessExecutionWhere,
-          calledAt: { gte: last24HoursStart }
+          ...realUserScope,
+          calledAt: { gte: trendWindowStart }
         },
+        orderBy: { calledAt: 'asc' },
         select: {
           calledAt: true,
           success: true,
           errorCode: true,
-          error: true
+          errorCategory: true
         }
       }),
 
+      // wrapup 来源分布抽样（200 → 50：仅用于 wrapupSourceStats 比例估算；真实用户口径）
       prisma.agent_call_logs.findMany({
-        where: { agentId: 'skill:session-wrapup' },
+        where: { agentId: 'skill:session-wrapup', ...realUserScope },
         orderBy: { calledAt: 'desc' },
-        take: 200,
+        take: 50,
         select: { output: true }
       }),
 
-      // 近 7 天 LLM 用量聚合（token 总量，来自执行尝试表）
+      // 近 7 天 LLM 用量聚合（真实用户口径，token 总量；全量见 usageTokens7dAll）
+      prisma.llm_execution_attempts.aggregate({
+        where: { ...realUserScope, startedAt: { gte: new Date(Date.now() - 7 * 86400000) } },
+        _sum: { totalTokens: true },
+        _count: true,
+      }),
+
+      // 近 7 天 LLM 用量全量（含虚拟/测试账号，前端副口径标注）
       prisma.llm_execution_attempts.aggregate({
         where: { startedAt: { gte: new Date(Date.now() - 7 * 86400000) } },
         _sum: { totalTokens: true },
         _count: true,
       }),
 
-      // 近 7 天调用与失败数
+      // 近 7 天调用与失败数（真实用户口径；全量见 usageCalls7dAll）
+      prisma.agent_call_logs.groupBy({
+        by: ['success'],
+        where: {
+          ...businessExecutionWhere,
+          ...realUserScope,
+          calledAt: { gte: new Date(Date.now() - 7 * 86400000) }
+        },
+        _count: true,
+      }),
+
+      // 近 7 天调用与失败数全量（含虚拟/测试）
       prisma.agent_call_logs.groupBy({
         by: ['success'],
         where: {
@@ -624,21 +968,58 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         _count: true,
       }),
 
-      // 近 7 天模型用量分布（按解析后的模型名）
+      // 近 7 天模型用量分布（按解析后的模型名，真实用户口径）
       prisma.llm_execution_attempts.groupBy({
         by: ['resolvedModel'],
-        where: { startedAt: { gte: new Date(Date.now() - 7 * 86400000) } },
+        where: { ...realUserScope, startedAt: { gte: new Date(Date.now() - 7 * 86400000) } },
         _sum: { totalTokens: true },
         _count: true,
       }),
 
-      // 近 7 天失败归因（errorCategory 分布）
-      prisma.llm_execution_attempts.groupBy({
-        by: ['errorCategory'],
+      // 近 7 天失败归因（调用级：与「失败 N」同表同口径，分类见 classifyFailureCategory，
+      // 老行 errorCategory 为空时按 errorCode/error 启发式归并，保证归因之和恒等于失败总数）
+      prisma.agent_call_logs.findMany({
         where: {
-          startedAt: { gte: new Date(Date.now() - 7 * 86400000) },
-          errorCategory: { not: null },
+          ...businessExecutionWhere,
+          ...realUserScope,
+          calledAt: { gte: new Date(Date.now() - 7 * 86400000) },
           success: false,
+        },
+        orderBy: { calledAt: 'desc' },
+        select: { errorCategory: true, errorCode: true, error: true },
+      }),
+
+      // G1 总览「近 7 天调用趋势」：行级拉取在端内按本地自然日聚合
+      // （SQLite date() 按 UTC 分组会与本地日错位，端内聚合保证「今日=00:00 起」口径一致）
+      prisma.agent_call_logs.findMany({
+        where: {
+          ...businessExecutionWhere,
+          ...realUserScope,
+          calledAt: { gte: new Date(Date.now() - 7 * 86400000) },
+        },
+        orderBy: { calledAt: 'asc' },
+        select: { calledAt: true, success: true },
+      }),
+
+      // G2 总览「用户增长」：近 7 天新增注册（真实用户）
+      prisma.users.findMany({
+        where: { ...REAL_USER_WHERE, createdAt: { gte: new Date(Date.now() - 7 * 86400000) } },
+        select: { createdAt: true },
+      }),
+
+      // G3 总览「用户增长」：近 7 天活跃用户（教学会话 startTime 按天去重）
+      prisma.teaching_sessions.findMany({
+        where: { users: REAL_USER_WHERE, startTime: { gte: new Date(Date.now() - 7 * 86400000) } },
+        select: { startTime: true, userId: true },
+      }),
+
+      // G4 总览「Top Skill」：近 7 天按 agentId×success 聚合
+      prisma.agent_call_logs.groupBy({
+        by: ['agentId', 'success'],
+        where: {
+          ...businessExecutionWhere,
+          ...realUserScope,
+          calledAt: { gte: new Date(Date.now() - 7 * 86400000) },
         },
         _count: true,
       })
@@ -657,14 +1038,18 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       if (!log.output) continue;
       try {
         const parsed = JSON.parse(log.output);
-        const summarySource = parsed?.sources?.summary || parsed?.summarySource;
-        const evaluationSource = parsed?.sources?.evaluation || parsed?.evaluationSource;
+        // 仅接受 agent-output-v1（当前唯一 schema；历史上不存在旧格式输出，
+        // sources/summarySource 等顶层字段从未被序列化过，见 git 7b2d58e）
+        if (parsed?.schemaVersion !== 'agent-output-v1') continue;
+        const ok = parsed?.success !== false;
         wrapupSourceStats.sampleSize += 1;
-        if (summarySource === 'model') wrapupSourceStats.summaryModel += 1;
-        if (summarySource === 'fallback') wrapupSourceStats.summaryFallback += 1;
-        if (evaluationSource === 'model') wrapupSourceStats.evaluationModel += 1;
-        if (evaluationSource === 'ai-fallback') wrapupSourceStats.evaluationAiFallback += 1;
-        if (evaluationSource === 'failed') wrapupSourceStats.evaluationFailed += 1;
+        // 总结来源：success=true（handler 在 model 路径置 true，否则 false）= 模型产出
+        if (ok) wrapupSourceStats.summaryModel += 1;
+        else wrapupSourceStats.summaryFallback += 1;
+        // 评估来源：success=true = model；失败/不可用 = failed。
+        // ai-fallback 已退役（8fe993d），不再产出，evaluationAiFallback 恒 0
+        if (ok) wrapupSourceStats.evaluationModel += 1;
+        else wrapupSourceStats.evaluationFailed += 1;
       } catch {
         continue;
       }
@@ -672,6 +1057,57 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
 
     // 计算活跃用户数
     const activeUsersCount = activeUsersToday.length;
+
+    /* ===== G1-G4：总览新增模块（近 7 天趋势 / 用户增长 / Top Skill） ===== */
+    const dayKey = (d: Date | string) => {
+      const dt = new Date(d);
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const dd = String(dt.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    };
+    const trendMap = new Map<string, { calls: number; failed: number }>();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      trendMap.set(dayKey(d), { calls: 0, failed: 0 });
+    }
+    for (const row of agentLogs7dRows) {
+      const bucket = trendMap.get(dayKey(row.calledAt));
+      if (!bucket) continue;
+      bucket.calls += 1;
+      if (!row.success) bucket.failed += 1;
+    }
+    const trend7d = [...trendMap.entries()].map(([date, v]) => ({ date, ...v }));
+
+    const newUsersMap = new Map<string, number>();
+    for (const u of newUsers7dRows) {
+      const k = dayKey(u.createdAt);
+      newUsersMap.set(k, (newUsersMap.get(k) || 0) + 1);
+    }
+    const activeMap = new Map<string, Set<string>>();
+    for (const s of activeUsers7dRows) {
+      const k = dayKey(s.startTime);
+      if (!activeMap.has(k)) activeMap.set(k, new Set());
+      activeMap.get(k)!.add(s.userId);
+    }
+    const growth7d = [...trendMap.keys()].map((date) => ({
+      date,
+      newUsers: newUsersMap.get(date) || 0,
+      activeUsers: activeMap.get(date)?.size || 0,
+    }));
+
+    const skillMap = new Map<string, { calls: number; failed: number }>();
+    for (const row of agentSkillAgg7d) {
+      const cur = skillMap.get(row.agentId) || { calls: 0, failed: 0 };
+      cur.calls += row._count;
+      if (!row.success) cur.failed += row._count;
+      skillMap.set(row.agentId, cur);
+    }
+    const topSkills = [...skillMap.entries()]
+      .map(([agentId, v]) => ({ agentId, ...v }))
+      .sort((a, b) => b.calls - a.calls)
+      .slice(0, 5);
     
     // 计算活跃路径数
     const activePathsCount = activePaths.length;
@@ -682,59 +1118,35 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       success: totalAgentLogs.find(s => s.success === true)?._count || 0,
       error: totalAgentLogs.find(s => s.success === false)?._count || 0,
     };
+    // 全量口径（含虚拟/测试账号）：仅作副指标，前端标注「含虚拟/测试」
+    const agentStatsAll = {
+      total: totalAgentLogsAll.reduce((sum, s) => sum + s._count, 0),
+    };
     
     const agentSuccessRate = agentStats.total > 0 
       ? agentStats.success / agentStats.total 
       : 1.0;
 
     const agentTodaySuccessRate = agentCallsToday > 0
-      ? (agentSuccessToday / agentCallsToday)
-      : 1.0;
+      ? ((agentSuccessToday / agentCallsToday) * 100).toFixed(1)
+      : null;
 
-    const hourKeys: string[] = [];
-    const hourlyTrendMap: Record<string, { total: number; error: number; timeout: number }> = {};
-
-    for (let i = 23; i >= 0; i -= 1) {
-      const d = new Date();
-      d.setMinutes(0, 0, 0);
-      d.setHours(d.getHours() - i);
-      const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}-${d.getHours()}`;
-      hourKeys.push(key);
-      hourlyTrendMap[key] = { total: 0, error: 0, timeout: 0 };
-    }
-
-    for (const log of recentAgentLogs24h) {
-      const d = new Date(log.calledAt);
-      const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}-${d.getHours()}`;
-      if (!hourlyTrendMap[key]) continue;
-
-      hourlyTrendMap[key].total += 1;
-      if (!log.success) {
-        if (isTimeoutLog(log)) {
-          hourlyTrendMap[key].timeout += 1;
-        } else {
-          hourlyTrendMap[key].error += 1;
-        }
-      }
-    }
-
-    const hourlyTrend = hourKeys.map(key => {
-      const [year, month, day, hour] = key.split('-').map(Number);
-      const d = new Date(year, month - 1, day, hour);
-      const point = hourlyTrendMap[key];
-      return {
-        time: d.toISOString(),
-        label: `${String(hour).padStart(2, '0')}:00`,
-        total: point.total,
-        error: point.error,
-        timeout: point.timeout
-      };
-    });
+    // 全量聚合：每行必落 24 桶之一，总数=各小时和；高峰小时在聚合内直接给出（不再前端从抽样推断）
+    const hourlyTrend = buildHourlyTrend(recentAgentLogs24h, trendWindowStart);
+    const last24hTotal = hourlyTrend.reduce((sum, b) => sum + b.total, 0);
+    const peakBucket = hourlyTrend.reduce(
+      (best, b) => (b.total > (best?.total || 0) ? b : best),
+      undefined as HourlyTrendBucket | undefined
+    );
+    const last24hPeak = last24hTotal > 0 && peakBucket ? peakBucket.label : '—';
 
     /* 近 7 天 LLM 用量与失败归因 */
     const sum7d = (usageTokens7d as { _sum?: { totalTokens?: number | null } })._sum || {};
+    const sum7dAll = (usageTokens7dAll as { _sum?: { totalTokens?: number | null } })._sum || {};
     const calls7dTotal = usageCalls7d.reduce((acc, g) => acc + g._count, 0);
-    const calls7dFailed = usageCalls7d.find(g => g.success === false)?._count || 0;
+    const calls7dTotalAll = usageCalls7dAll.reduce((acc, g) => acc + g._count, 0);
+    // 失败数 = 失败归因行数（同一查询源，二者恒等，消除「失败 234 vs 归因 168」双口径）
+    const calls7dFailed = usageFailuresRows.length;
     const models7d = (usageModels7d || [])
       .filter(g => g.resolvedModel && g.resolvedModel !== 'null')
       .map(g => ({
@@ -744,9 +1156,13 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       }))
       .sort((a, b) => b.tokens - a.tokens)
       .slice(0, 5);
-    const failures7d = (usageFailures7d || [])
-      .filter(g => g.errorCategory)
-      .map(g => ({ category: String(g.errorCategory), count: g._count }))
+    const failureCategoryCounts = new Map<string, number>();
+    for (const row of usageFailuresRows) {
+      const cat = classifyFailureCategory(row);
+      failureCategoryCounts.set(cat, (failureCategoryCounts.get(cat) || 0) + 1);
+    }
+    const failures7d = [...failureCategoryCounts.entries()]
+      .map(([category, count]) => ({ category, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
     const usage = {
@@ -755,16 +1171,19 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       totalTokens7d: Number(sum7d.totalTokens || 0),
       models7d,
       failures7d,
+      // 全量副口径（含虚拟/测试账号）：totalTokens7dAll / calls7dAll 供前端标注「含虚拟/测试」
+      totalTokens7dAll: Number(sum7dAll.totalTokens || 0),
+      calls7dAll: calls7dTotalAll,
     };
 
-    res.json({
-      success: true,
-      data: {
+    return {
         users: {
           total: totalUsers,
           newToday: newUsersToday,
           activeToday: activeUsersCount,
-          activeRate: totalUsers > 0 ? (activeUsersCount / totalUsers * 100).toFixed(1) : 0,
+          activeRate: totalUsers > 0 ? (activeUsersCount / totalUsers * 100).toFixed(1) : '0.0',
+          // G2/G3：近 7 天每日新增注册 / 活跃用户（总览「用户增长」卡）
+          growth7d,
         },
         learning: {
           totalPaths,
@@ -772,7 +1191,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
           activePaths: activePathsCount,
           totalTasks,
           completedTasks,
-          completionRate: totalTasks > 0 ? (completedTasks / totalTasks * 100).toFixed(1) : 0,
+          completionRate: totalTasks > 0 ? (completedTasks / totalTasks * 100).toFixed(1) : '0.0',
         },
         conversations: {
           total: totalConversations,
@@ -785,15 +1204,35 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
           failedCalls: agentStats.error,
           activeAgents24h: activeAgents24h.length,
           todayCalls: agentCallsToday,
-          todaySuccessRate: (agentTodaySuccessRate * 100).toFixed(1),
+          todaySuccessRate: agentTodaySuccessRate,
           todayTimeouts: agentTimeoutToday,
           last24h: hourlyTrend,
+          last24hTotal,
+          last24hPeak,
           wrapup: wrapupSourceStats,
+          // 全量副口径（含虚拟/测试账号）：前端标注「含虚拟/测试」
+          totalCallsAll: agentStatsAll.total,
+          todayCallsAll: agentCallsTodayAll,
+          // 虚拟/测试账号独立口径（前端「虚拟调用」卡，与真实调用并列区分）
+          todayCallsVirtual: agentCallsTodayVirtual,
+          // G1/G4：近 7 天每日调用趋势 / Top Skill 活跃榜（总览新增卡）
+          trend7d,
+          topSkills,
         },
         usage,
-        platformStats,
-      },
-    });
+    };
+}
+
+router.get('/overview/stats', async (req: Request, res: Response) => {
+  try {
+    const cacheKey = 'overview-stats';
+    const cached = overviewStatsCache.get(cacheKey);
+    if (cached && Date.now() - cached.cachedAt < OVERVIEW_CACHE_TTL_MS) {
+      return res.json({ success: true, data: cached.payload });
+    }
+    const data = await computeOverviewStats();
+    overviewStatsCache.set(cacheKey, { payload: data, cachedAt: Date.now() });
+    res.json({ success: true, data });
   } catch (error: any) {
     logger.error('[admin-platform] 获取平台概览失败', { error });
     res.status(500).json({
@@ -805,344 +1244,6 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
     });
   }
 });
-
-/**
- * 获取 Agent 注册列表
- * GET /api/admin/agents/registry
- */
-router.get('/agents/registry', async (req: Request, res: Response) => {
-  try {
-    const allowed = await ensureAdmin(req.user?.userId);
-    if (!allowed) {
-      return res.status(403).json({
-        success: false,
-        error: { message: '需要管理员权限' }
-      });
-    }
-
-    const [catalog, registrations, callGroups, successGroups] = await Promise.all([
-      getAgentCatalog(),
-      systemPrisma.agent_registrations.findMany({
-        orderBy: { updatedAt: 'desc' }
-      }),
-      prisma.agent_call_logs.groupBy({
-        by: ['agentId'],
-        _count: { _all: true },
-        _avg: { durationMs: true },
-        _max: { calledAt: true }
-      }),
-      prisma.agent_call_logs.groupBy({
-        by: ['agentId', 'success'],
-        _count: { _all: true }
-      })
-    ]);
-
-    const callMap = new Map<string, { total: number; avgDuration: number; lastActivity: Date | null }>();
-    for (const group of callGroups) {
-      callMap.set(group.agentId, {
-        total: group._count._all,
-        avgDuration: Math.round(group._avg.durationMs || 0),
-        lastActivity: group._max.calledAt || null
-      });
-    }
-
-    const successMap = new Map<string, { success: number; failed: number }>();
-    for (const group of successGroups) {
-      const current = successMap.get(group.agentId) || { success: 0, failed: 0 };
-      if (group.success) {
-        current.success += group._count._all;
-      } else {
-        current.failed += group._count._all;
-      }
-      successMap.set(group.agentId, current);
-    }
-
-    const manifestEntries = listAgentManifest().filter(item => item.kind !== 'alias');
-    const registrationMap = new Map(registrations.map(item => [item.id, item]));
-    const allAgentIds = manifestEntries.map(item => item.id);
-
-    const agents = allAgentIds.map(agentId => {
-      const registration = registrationMap.get(agentId);
-      const manifest = manifestEntries.find(item => item.id === agentId);
-      const callStats = callMap.get(agentId);
-      const successStats = successMap.get(agentId) || { success: 0, failed: 0 };
-      const totalCalls = callStats?.total ?? registration?.callCount ?? 0;
-      const successRate = totalCalls > 0
-        ? Number(((successStats.success / totalCalls) * 100).toFixed(1))
-        : Number((((registration?.successRate ?? 1)) * 100).toFixed(1));
-
-      const lifecycleStatus = catalog[agentId]?.status || (manifest ? 'published' : 'draft');
-
-      return {
-        agentId,
-        name: manifest?.name || registration?.name || agentId,
-        type: manifest?.category || registration?.type || 'custom',
-        role: inferRuntimeRole(agentId, registration?.type),
-        kind: manifest?.kind || 'agent',
-        aliases: manifest?.aliases || [],
-        category: manifest?.category || registration?.category,
-        description: manifest?.description || registration?.description,
-        version: registration?.version || '1.0.0',
-        endpoint: registration?.endpoint,
-        lifecycleStatus,
-        isOfficial: !!manifest,
-        runtimeEnabled: manifest?.runtimeEnabled ?? true,
-        callCount: totalCalls,
-        successRate,
-        avgDuration: callStats?.avgDuration || 0,
-        lastActivity: callStats?.lastActivity || null,
-        status: totalCalls === 0 ? 'idle' : (successRate >= 90 ? 'healthy' : (successRate >= 75 ? 'warning' : 'error')),
-        updatedAt: registration?.updatedAt
-      };
-    }).sort((a, b) => a.agentId.localeCompare(b.agentId));
-
-    const summary = {
-      total: agents.length,
-      active24h: agents.filter(item => item.lastActivity && (Date.now() - new Date(item.lastActivity).getTime()) <= 24 * 3600000).length,
-      neverCalled: agents.filter(item => item.callCount === 0).length,
-      unhealthy: agents.filter(item => item.callCount > 0 && item.successRate < 75).length
-    };
-
-    res.json({
-      success: true,
-      data: {
-        summary,
-        agents
-      }
-    });
-  } catch (error: any) {
-    logger.error('[admin-platform] 获取 Agent 注册列表失败', { error });
-    res.status(500).json({
-      success: false,
-      error: {
-        message: '获取 Agent 注册列表失败',
-        status: 500
-      }
-    });
-  }
-});
-
-/**
- * 获取 Agent 设计详情（输入/输出 Schema + 运行契约）
- * GET /api/admin/agents/design/:agentId
- */
-router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
-  try {
-    const allowed = await ensureAdmin(req.user?.userId);
-    if (!allowed) {
-      return res.status(403).json({
-        success: false,
-        error: { message: '需要管理员权限' }
-      });
-    }
-
-    const requestedAgentId = String(req.params.agentId || '').trim();
-    const canonicalAgentId = getCanonicalAgentId(requestedAgentId);
-
-    const gateway = getGateway();
-    const registration = gateway.getAgent(canonicalAgentId);
-    const manifest = getAgentManifest(canonicalAgentId);
-
-    if (!registration && !manifest) {
-      return res.status(404).json({
-        success: false,
-        error: { message: `Agent ${requestedAgentId} 不存在`, status: 404 }
-      });
-    }
-
-    const [callSamples] = await Promise.all([
-      prisma.agent_call_logs.findMany({
-        where: { agentId: canonicalAgentId },
-        orderBy: { calledAt: 'desc' },
-        take: 3,
-        select: {
-          id: true,
-          input: true,
-          output: true,
-          success: true,
-          calledAt: true,
-          durationMs: true,
-          error: true
-        }
-      })
-    ]);
-
-    res.json({
-      success: true,
-      data: {
-        agentId: canonicalAgentId,
-        requestedAgentId,
-        basic: {
-          name: registration?.definition.name || manifest?.name || canonicalAgentId,
-          version: registration?.definition.version || '1.0.0',
-          type: registration?.definition.type || manifest?.category || 'custom',
-          category: registration?.definition.category || manifest?.category || 'custom',
-          description: registration?.definition.description || manifest?.description || ''
-        },
-        runtime: {
-          role: inferRuntimeRole(canonicalAgentId, registration?.definition.type),
-          kind: manifest?.kind || 'agent',
-          runtimeEnabled: manifest?.runtimeEnabled ?? true,
-          userVisible: manifest?.userVisible ?? false,
-          monitoringGroup: manifest?.monitoringGroup || null,
-          ioContractVersion: manifest?.ioContractVersion || 'legacy',
-          aliases: manifest?.aliases || [],
-          orchestratorFlow: canonicalAgentId === 'simulation-agent'
-            ? {
-                description: '虚拟学习者生命周期总编排：故事触发 -> Goal learner turn -> Goal agent -> Path 生成 -> Path 接受评估 -> Learn learner turn -> Teaching orchestrator -> runtime projection。',
-                steps: [
-                  { agentId: 'skill:virtual-learner-goal-dialogue-simulator', action: 'goal learner turn', condition: 'goal rounds' },
-                  { agentId: 'skill:goal-conversation', action: 'goal agent turn', condition: 'goal rounds' },
-                  { agentId: 'path-agent', action: 'generate path', condition: 'when goal converges' },
-                  { agentId: 'skill:virtual-learner-path-evaluator', action: 'accept/modify/reject path', condition: 'when path is available' },
-                  { agentId: 'skill:virtual-learner-learn-turn-simulator', action: 'learn learner turn', condition: 'learning turns' },
-                  { agentId: 'learning-agent', action: 'teaching orchestration', condition: 'learning turns' },
-                ]
-              }
-            : canonicalAgentId === 'profile-agent'
-              ? {
-                  description: '学习者状态主编排：接收 Goal/lesson 相关事件，串联 learner profile 更新、知识背景沉淀与 snapshot refresh。',
-                  steps: [
-                    { agentId: 'skill:learner-model', action: 'apply learner profile update', condition: 'when learning or goal understanding changes' },
-                    { agentId: 'skill:goal-profile-inference', action: 'enrich goal narrative/profile', condition: 'when goal understanding changes' },
-                    { agentId: 'skill:learning-pattern-distiller', action: 'distill learning patterns', condition: 'when learning traces are aggregated' },
-                    { agentId: 'skill:lesson-knowledge-enricher', action: 'enrich lesson knowledge and concepts', condition: 'when lesson ends' },
-                  ]
-                }
-            : undefined,
-          promptManagement: {
-            mode: canonicalAgentId === 'learning-agent'
-              ? 'agent-no-direct-prompt'
-              : canonicalAgentId === 'profile-agent'
-              ? 'agent-no-direct-prompt'
-              : canonicalAgentId === 'goal-agent'
-                ? 'agent-no-direct-prompt'
-                : canonicalAgentId === 'path-agent'
-                  ? 'agent-no-direct-prompt'
-                  : canonicalAgentId === 'simulation-agent'
-                    ? 'agent-no-direct-prompt'
-                    : 'agent-prompt',
-            note: canonicalAgentId === 'learning-agent'
-              ? '该 Agent 是编排器，不直接持有 System Prompt，教学主输出由 skill:learning-turn / skill:peer-reinforcement / skill:session-wrapup 等下辖 Skill 提供。'
-              : canonicalAgentId === 'profile-agent'
-                ? '该 Agent 是编排器，不直接持有 System Prompt，学习者画像增强与知识沉淀由 skill:learner-model 与下辖 Skill 链共同提供。'
-                : canonicalAgentId === 'goal-agent'
-                  ? '该 Agent 是编排器，不直接持有 System Prompt，目标对话由 skill:goal-conversation 等下辖 Skill 提供。'
-                  : canonicalAgentId === 'path-agent'
-                    ? '该 Agent 是编排器，不直接持有 System Prompt，路径规划由 skill:path-planning 等下辖 Skill 提供。'
-                    : canonicalAgentId === 'simulation-agent'
-                      ? '该 Agent 是编排器，不直接持有 System Prompt，虚拟学习者实验链路由 skill:virtual-learner-* 系列下辖 Skill 提供。'
-                      : null
-          }
-        },
-        definition: {
-          capabilities: registration?.definition.capabilities || [],
-          subscribes: registration?.definition.subscribes || [],
-          publishes: registration?.definition.publishes || [],
-          inputSchema: registration?.definition.inputSchema || null,
-          outputSchema: registration?.definition.outputSchema || null
-        },
-        samples: {
-          agentCallLogs: callSamples.map((item) => ({
-            id: item.id,
-            calledAt: item.calledAt,
-            success: item.success,
-            durationMs: item.durationMs,
-            error: item.error,
-            input: parseOutputPayload(item.input),
-            output: parseOutputPayload(item.output)
-          }))
-        }
-      }
-    });
-  } catch (error: any) {
-    logger.error('[admin-platform] 获取 Agent 设计详情失败', { error });
-    res.status(500).json({
-      success: false,
-      error: {
-        message: '获取 Agent 设计详情失败',
-        status: 500
-      }
-    });
-  }
-});
-
-/**
- * 获取编排器与成员 Agent 关系
- * GET /api/admin/agents/relations
- */
-router.get('/agents/relations', async (req: Request, res: Response) => {
-  try {
-    const allowed = await ensureAdmin(req.user?.userId);
-    if (!allowed) {
-      return res.status(403).json({
-        success: false,
-        error: { message: '需要管理员权限' }
-      });
-    }
-
-    const allMemberIds = Array.from(new Set(Object.values(AGENT_NAME_TO_IDS).flat().map(getCanonicalAgentId)));
-    const registrations = await systemPrisma.agent_registrations.findMany({
-      where: { id: { in: allMemberIds } },
-      select: { id: true, name: true, type: true }
-    });
-
-    const registrationMap = new Map(registrations.map(item => [item.id, item]));
-
-    const manifestMap = new Map(listAgentManifest().map(item => [item.id, item]));
-
-    const orchestrators = AGENT_RELATIONS.map((relation) => {
-      const agentId = relation.agentId;
-      const group = relation.group;
-      const memberAgentIds = relation.members || [];
-      const members = memberAgentIds.map((agentId) => {
-        const canonicalId = getCanonicalAgentId(agentId);
-        const registration = registrationMap.get(canonicalId);
-        const manifestEntry = manifestMap.get(canonicalId);
-        return {
-          agentId: canonicalId,
-          name: manifestEntry?.name || registration?.name || canonicalId,
-          role: inferRuntimeRole(agentId, registration?.type)
-        };
-      });
-
-      return {
-        agentId,
-        group,
-        members
-      };
-    });
-
-    res.json({
-      success: true,
-      data: {
-        // 'agents' 是新字段（5 Agent 拓扑后），'orchestrators' 保留向后兼容
-        agents: orchestrators,
-        orchestrators
-      }
-    });
-  } catch (error: any) {
-    logger.error('[admin-platform] 获取编排器关系失败', { error });
-    res.status(500).json({
-      success: false,
-      error: {
-        message: '获取编排器关系失败',
-        status: 500
-      }
-    });
-  }
-});
-
-/**
- * Agent 拓扑可视化 API
- * GET /api/admin/agents/topology
- *
- * 返回 5 顶层 Agent + 下辖 Skill 的节点图数据：
- *   - nodes: 5 Agent + N Skill（带统计）
- *   - edges: Agent -> Skill 隶属关系
- *
- * 时间窗口：?range=24h | 7d | 30d (默认 7d)
- */
 router.get('/agents/topology', async (req: Request, res: Response) => {
   try {
     const allowed = await ensureAdmin(req.user?.userId);
@@ -1316,99 +1417,7 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/agent-members/:agentId', async (req: Request, res: Response) => {
-  try {
-    const allowed = await ensureAdmin(req.user?.userId);
-    if (!allowed) {
-      return res.status(403).json({
-        success: false,
-        error: { message: '需要管理员权限' }
-      });
-    }
 
-    const { agentId } = req.params;
-    const relation = AGENT_RELATIONS.find((item) => item.agentId === agentId);
-
-    if (!relation) {
-      return res.status(404).json({
-        success: false,
-        error: { message: '编排器不存在' }
-      });
-    }
-
-    const manifestMap = new Map(listAgentManifest().map(item => [item.id, item]));
-    const memberIds = Array.from(new Set((relation.members || []).map(getCanonicalAgentId)));
-    const registrations = await systemPrisma.agent_registrations.findMany({
-      where: { id: { in: memberIds } },
-      select: { id: true, name: true, type: true }
-    });
-    const registrationMap = new Map(registrations.map(item => [item.id, item]));
-
-    const members = memberIds.map((memberId, index) => {
-      const registration = registrationMap.get(memberId);
-      const manifest = manifestMap.get(memberId);
-      return {
-        agentId: memberId,
-        name: registration?.name || manifest?.name || memberId,
-        role: inferRuntimeRole(memberId, registration?.type),
-        enabled: true,
-        order: index,
-        callCount: 0
-      };
-    });
-
-    res.json({
-      success: true,
-      data: {
-        agentId,
-        members
-      }
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      error: {
-        message: error.message || '获取编排器成员失败',
-        status: 500
-      }
-    });
-  }
-});
-
-router.get('/agents/:agentId/config', async (req: Request, res: Response) => {
-  try {
-    const allowed = await ensureAdmin(req.user?.userId);
-    if (!allowed) {
-      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
-    }
-
-    const { agentId } = req.params;
-    if (agentId !== 'path-agent') {
-      return res.status(404).json({ success: false, error: { message: '当前仅支持路径编排器配置' } });
-    }
-
-    const config = await getPathAgentInputConfig();
-
-    res.json({
-      success: true,
-      data: {
-        agentId,
-        config,
-        defaults: DEFAULT_PATH_AGENT_INPUT_CONFIG,
-        availableSourcePaths: {
-          descriptionSources: ['visibleSummary.realProblem', 'understanding.real_problem', 'rawGoal'],
-          subjectSources: ['structuredData.subject', 'collected.subject'],
-          skillLevelSources: ['visibleSummary.currentBaseline.level', 'understanding.background.current_level', 'collected.level'],
-          timePerDaySources: ['visibleSummary.resources.timeBudget', 'understanding.background.available_time', 'collected.timePerDay', 'understanding.available_resources.time_budget'],
-          deadlineTextSources: ['visibleSummary.resources.deadlineText', 'visibleSummary.resources.timeHorizon', 'understanding.available_resources.time_horizon', 'understanding.deadline_text'],
-          flags: ['includeStructuredData', 'includeConfirmedProposal', 'includeConfidenceScores', 'includeConversationHistory']
-        }
-      }
-    });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: { message: error.message || '获取编排器配置失败', status: 500 } });
-  }
-});
 
 router.put('/agents/:agentId/config', async (req: Request, res: Response) => {
   try {
@@ -1426,307 +1435,6 @@ router.put('/agents/:agentId/config', async (req: Request, res: Response) => {
     res.json({ success: true, data: { agentId, config } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: { message: error.message || '保存编排器配置失败', status: 500 } });
-  }
-});
-
-router.get('/agents/:agentId/data-contract', async (req: Request, res: Response) => {
-  try {
-    const allowed = await ensureAdmin(req.user?.userId);
-    if (!allowed) {
-      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
-    }
-
-    const { agentId } = req.params;
-    if (agentId !== 'path-agent') {
-      return res.status(404).json({ success: false, error: { message: '当前仅支持路径编排器数据契约' } });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        agentId,
-        entryPayload: {
-          name: 'goalFinalPayload',
-          description: 'Goal 阶段最终产出并正式交给 Path 的入口对象。',
-          fields: [
-            { key: 'sourceConversationId', description: 'Goal 会话关联 ID。' },
-            { key: 'rawGoal', description: '用户原始目标表述。' },
-            { key: 'finalUserVisible', description: 'Goal 最后一次面向用户的确认文本。' },
-            { key: 'visibleSummary', description: '只包含 Goal 对话中已显式暴露、可进入平台主链路的结构化摘要。' },
-            { key: 'visibleSummary.backgroundExperience', description: '与当前目标直接相关的显式背景经验。' },
-            { key: 'visibleSummary.painPoints', description: 'Goal 中显式暴露的痛点列表。' },
-            { key: 'visibleSummary.constraintsAndBoundaries', description: '显式表达的约束、禁区与边界。' },
-            { key: 'visibleSummary.scenario', description: '显式可见的失败/卡住场景摘要。' },
-            { key: 'visibleSummary.resources.timeBudget', description: '平时可投入的学习预算文本。' },
-            { key: 'visibleSummary.resources.timeBudgetCadence', description: '学习预算的节奏归一化。' },
-            { key: 'visibleSummary.resources.timeHorizon', description: '整体时间窗口，不等于投入预算。' },
-            { key: 'conversationHistory', description: '全部可见消息，上下文辅助证据。' }
-          ]
-        },
-        derivedInput: {
-          name: 'normalizedInput',
-          description: 'Path orchestrator 基于字段接入配置生成的运行输入。',
-          fields: [
-            { key: 'description', description: '供 Path 规划使用的主问题描述。' },
-            { key: 'subject', description: '如能识别则接入的主题字段。' },
-            { key: 'deadlineText', description: '时间窗口的文本表达。' },
-            { key: 'sourceConversationId', description: '保留 Goal 会话关联。' },
-            { key: 'existingPathId', description: '重试或覆盖时沿用的路径 ID。' },
-            { key: 'skillLevel', description: '当前水平信号。' },
-            { key: 'timePerDay', description: '兼容旧链路保留的可投入时间信号。' },
-            { key: 'structuredData', description: '按开关决定是否透传。' },
-            { key: 'confirmedProposal', description: '按开关决定是否透传。' },
-            { key: 'confidenceScores', description: '按开关决定是否透传。' },
-            { key: 'conversationHistory', description: '全部可见消息，上下文运行证据。' },
-            { key: 'normalizedInput', description: '归一化后的结构化主输入，供下游直接消费。' }
-          ]
-        },
-        framingContract: {
-          name: 'pathSceneFraming',
-          description: 'Path 清洗层输出的标准结构，供下游直接以 normalizedInput 作为主输入消费。',
-          fields: [
-            { key: 'normalizedInput', description: '清洗后的主输入结构，不含编排控制字段。' },
-            { key: 'normalizedInput.resources.timeBudget', description: '平时可投入的学习预算。' },
-            { key: 'normalizedInput.resources.timeBudgetCadence', description: '学习预算的节奏归一化。' },
-            { key: 'normalizedInput.problemSpace.scenario', description: 'Goal 中已显式暴露的具体应用/失败场景。' },
-            { key: 'normalizedInput.planningHints', description: '基于时间窗口与预算推算的路径节奏建议。' }
-          ]
-        },
-        outputContract: {
-          name: 'Path Output',
-          description: 'Path 主流程最终持久化输出的核心结构。',
-          fields: [
-            { key: 'pathName', description: '最终路径名称。' },
-            { key: 'subject', description: '最终路径主题。' },
-            { key: 'taskChain', description: '用户可见的阶段与任务主体结构。' },
-            { key: 'cognitiveCore', description: '隐藏认知结构与核心概念。' },
-            { key: 'suggestedMilestones', description: '兼容现有系统的阶段与任务结构快照。' },
-            { key: 'cognitiveDesign', description: '兼容现有系统的认知设计镜像。' },
-            { key: 'adjustmentPolicy', description: '后续 expand/compress/replan 策略。' },
-            { key: 'adjustmentEvidence', description: '支持后续调整的证据字段。' }
-          ]
-        }
-      }
-    });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: { message: error.message || '获取编排器数据契约失败', status: 500 } });
-  }
-});
-
-router.post('/agents/:agentId/config-preview', async (req: Request, res: Response) => {
-  try {
-    const allowed = await ensureAdmin(req.user?.userId);
-    if (!allowed) {
-      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
-    }
-
-    const { agentId } = req.params;
-    if (agentId !== 'path-agent') {
-      return res.status(404).json({ success: false, error: { message: '当前仅支持路径编排器预览' } });
-    }
-
-    const sample = req.body?.sampleGoalFinalPayload;
-    if (!sample || typeof sample !== 'object') {
-      return res.status(400).json({ success: false, error: { message: '缺少 sampleGoalFinalPayload' } });
-    }
-
-    const normalized = await pathCoordinator.previewNormalizedGoalInput({
-      userId: req.user?.userId || 'admin-preview',
-      source: 'goal',
-      mode: 'generate',
-      sourceConversationId: sample.sourceConversationId,
-      existingPathId: sample.existingPathId,
-      rawGoal: sample.rawGoal || '',
-      visibleSummary: sample.visibleSummary || null,
-      conversationHistory: Array.isArray(sample.conversationHistory) ? sample.conversationHistory : [],
-      finalUserVisible: sample.finalUserVisible || null,
-    });
-
-    res.json({
-      success: true,
-      data: {
-        agentId,
-        normalizedInput: {
-          description: normalized.description,
-          subject: normalized.subject || null,
-          deadlineText: normalized.deadlineText || null,
-          sourceConversationId: normalized.sourceConversationId || null,
-          existingPathId: normalized.existingPathId || null,
-          skillLevel: normalized.userProfile?.skillLevel || null,
-          timePerDay: normalized.userProfile?.timePerDay || null,
-          confirmedProposal: normalized.userProfile?.confirmedProposal || null,
-          conversationHistory: normalized.userProfile?.conversationHistory || [],
-          normalizedInput: normalized.userProfile?.normalizedInput || null
-        }
-      }
-    });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: { message: error.message || '生成配置预览失败', status: 500 } });
-  }
-});
-
-/**
- * 获取 Agent 运行状态
- * GET /api/admin/agents/status
- */
-router.get('/agents/status', async (req: Request, res: Response) => {
-  try {
-    // 获取所有有记录的 Agent ID
-    const agentIdsWithLogs = await prisma.agent_call_logs.groupBy({
-      by: ['agentId'],
-      _count: true,
-    });
-
-    // 如果没有日志数据，返回默认的 Agent 列表
-    if (agentIdsWithLogs.length === 0) {
-      const defaultAgents = [
-        { name: 'RequirementCollection', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
-        { name: 'PathPlanning', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
-        { name: 'LearnerOrchestration', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
-        { name: 'Learning', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
-        { name: 'TeachingOrchestration', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
-        { name: 'LearningCompanion', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
-        { name: 'SessionWrapup', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
-      ];
-      return res.json({
-        success: true,
-        data: { agents: defaultAgents },
-      });
-    }
-
-    const rawStatuses = await Promise.all(
-      agentIdsWithLogs.map(async ({ agentId }) => {
-        const agentName = AGENT_ID_TO_NAME[agentId];
-        if (!agentName || !MONITORED_AGENT_ORDER.includes(agentName)) {
-          return null;
-        }
-        
-        // 获取最近的执行日志
-        const recentLogs = await prisma.agent_call_logs.findMany({
-          where: { agentId },
-          orderBy: { calledAt: 'desc' },
-          take: 20,
-        });
-
-        // 计算统计数据
-        const totalCalls = recentLogs.length;
-        const successCalls = recentLogs.filter(log => log.success === true).length;
-        const errorCalls = recentLogs.filter(log => log.success === false).length;
-        const avgDuration = totalCalls > 0
-          ? recentLogs.reduce((sum, log) => sum + (log.durationMs || 0), 0) / totalCalls
-          : 0;
-
-        // 最后活跃时间
-        const lastActivity = recentLogs.length > 0 ? recentLogs[0].calledAt : null;
-        
-        // 最后状态
-        const lastStatus = recentLogs.length > 0 
-          ? (recentLogs[0].success ? 'success' : 'error')
-          : 'idle';
-
-        return {
-          name: agentName,
-          agentId,
-          status: lastStatus,
-          totalCalls,
-          successCalls,
-          errorCalls,
-          successRate: totalCalls > 0 ? (successCalls / totalCalls * 100).toFixed(1) : 100,
-          avgDuration: Math.round(avgDuration),
-          lastActivity,
-        };
-      })
-    );
-
-    const merged = new Map<string, {
-      name: string;
-      status: string;
-      totalCalls: number;
-      successCalls: number;
-      errorCalls: number;
-      avgDurationWeighted: number;
-      lastActivity: Date | null;
-    }>();
-
-    for (const item of rawStatuses) {
-      if (!item) continue;
-
-      const existing = merged.get(item.name);
-      if (!existing) {
-        merged.set(item.name, {
-          name: item.name,
-          status: item.status,
-          totalCalls: item.totalCalls,
-          successCalls: item.successCalls,
-          errorCalls: item.errorCalls,
-          avgDurationWeighted: item.avgDuration * item.totalCalls,
-          lastActivity: item.lastActivity
-        });
-        continue;
-      }
-
-      const latestStatus = !existing.lastActivity || (item.lastActivity && item.lastActivity > existing.lastActivity)
-        ? item.status
-        : existing.status;
-
-      merged.set(item.name, {
-        name: item.name,
-        status: latestStatus,
-        totalCalls: existing.totalCalls + item.totalCalls,
-        successCalls: existing.successCalls + item.successCalls,
-        errorCalls: existing.errorCalls + item.errorCalls,
-        avgDurationWeighted: existing.avgDurationWeighted + (item.avgDuration * item.totalCalls),
-        lastActivity: !existing.lastActivity || (item.lastActivity && item.lastActivity > existing.lastActivity)
-          ? item.lastActivity
-          : existing.lastActivity
-      });
-    }
-
-    const agentStatuses = MONITORED_AGENT_ORDER.map(name => {
-      const data = merged.get(name);
-      if (!data) {
-        return {
-          name,
-          status: 'idle',
-          totalCalls: 0,
-          successCalls: 0,
-          errorCalls: 0,
-          successRate: '100.0',
-          avgDuration: 0,
-          lastActivity: null
-        };
-      }
-
-      const avgDuration = data.totalCalls > 0 ? Math.round(data.avgDurationWeighted / data.totalCalls) : 0;
-      const successRate = data.totalCalls > 0 ? (data.successCalls / data.totalCalls * 100).toFixed(1) : '100.0';
-
-      return {
-        name: data.name,
-        status: data.status,
-        totalCalls: data.totalCalls,
-        successCalls: data.successCalls,
-        errorCalls: data.errorCalls,
-        successRate,
-        avgDuration,
-        lastActivity: data.lastActivity
-      };
-    });
-
-    res.json({
-      success: true,
-      data: {
-        agents: agentStatuses,
-      },
-    });
-  } catch (error: any) {
-    logger.error('[admin-platform] 获取 Agent 状态失败', { error });
-    res.status(500).json({
-      success: false,
-      error: {
-        message: '获取 Agent 状态失败',
-        status: 500,
-      },
-    });
   }
 });
 
@@ -1748,7 +1456,8 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       keyword,
       timeRange,
       startTime,
-      endTime
+      endTime,
+      errorCategory
     } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
@@ -1826,6 +1535,13 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       }
     }
 
+    // 失败归因/异常流跳转：错误类别筛选（列值精确匹配 + 空类别行的启发式归并，
+    // 与总览失败归因 classifyFailureCategory 同口径，保证计数 ↔ 列表一致）
+    if (errorCategory) {
+      const categoryWhere = buildErrorCategoryWhere(String(errorCategory));
+      if (categoryWhere) where.AND.push(categoryWhere);
+    }
+
     // 时间范围筛选。精确时间优先，快捷范围作为默认筛选。
     if (startTime || endTime) {
       const calledAt: any = {};
@@ -1833,10 +1549,21 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       if (endTime) calledAt.lte = new Date(String(endTime));
       where.calledAt = calledAt;
     } else if (timeRange && timeRange !== 'all') {
+      const rangeValue = String(timeRange);
+      const validTimeRanges = ['today', 'yesterday', 'week', 'month'];
+      if (!validTimeRanges.includes(rangeValue)) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: `非法 timeRange 参数: ${rangeValue}（可选值: ${validTimeRanges.join('/')}/all）`,
+            status: 400,
+          },
+        });
+      }
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
-      switch (timeRange) {
+      switch (rangeValue) {
         case 'today':
           where.calledAt = { gte: today };
           break;
@@ -2008,11 +1735,36 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
     };
 
     const [logs, total, successCount, timeoutCount, errorCount, bySourceRows] = await Promise.all([
+      // select 裁剪：列表仅消费下列字段（input/output 由详情接口按需拉取，不在列表传输）
       prisma.agent_call_logs.findMany({
         where,
         skip,
         take: Number(limit),
         orderBy: { calledAt: 'desc' },
+        select: {
+          id: true,
+          agentId: true,
+          callerAgent: true,
+          sourceEntry: true,
+          success: true,
+          error: true,
+          errorCode: true,
+          traceId: true,
+          durationMs: true,
+          calledAt: true,
+          metadata: true,
+          executionLayer: true,
+          providerId: true,
+          providerType: true,
+          routeSource: true,
+          model: true,
+          statusCode: true,
+          attemptCount: true,
+          maxAttempts: true,
+          finishReason: true,
+          promptTokens: true,
+          completionTokens: true,
+        },
       }),
       prisma.agent_call_logs.count({ where }),
       prisma.agent_call_logs.count({
@@ -2067,8 +1819,7 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         callerAgent: log.callerAgent,
         action: 'invoke',
         status: buildStatusLabel(log),
-        input: log.input,
-        output: log.output,
+        // input/output 不再随列表传输（详情接口 /agents/logs/:id 按需拉取）
         error: log.error,
         errorCode: log.errorCode,
         traceId: log.traceId,
@@ -2091,6 +1842,8 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         recoveredByRetry: Boolean(log.success && (identity.attempts || 0) > 1),
         messageCount: identity.messageCount,
         finishReason: identity.finishReason,
+        promptTokens: log.promptTokens,
+        completionTokens: log.completionTokens,
         phase: phaseInfo.phase,
         phaseStatus: phaseInfo.phaseStatus,
         pathId: phaseInfo.pathId,
@@ -2302,12 +2055,19 @@ router.get('/agents/logs/:id', async (req: Request, res: Response) => {
     });
     const logMetadata = parseLogMetadata(log.metadata);
     const attemptTelemetryComplete = logMetadata.attemptTelemetryComplete !== false;
+    // 服务端截断 input/output（各 ≤4KB + truncated 标记），避免全量传输；前端 live.ts 已有 4000 字符兜底截断
+    const inputInfo = truncateLogPayload(log.input);
+    const outputInfo = truncateLogPayload(log.output);
 
     res.json({
       success: true,
       data: {
         log: {
           ...log,
+          input: inputInfo.value,
+          output: outputInfo.value,
+          inputTruncated: inputInfo.truncated,
+          outputTruncated: outputInfo.truncated,
           dataCompleteness: attempts.length > 0
             ? 'full'
             : log.executionLayer === 'api-gateway' && log.attemptCount === 0
@@ -2351,7 +2111,11 @@ router.get('/agents/logs/:id', async (req: Request, res: Response) => {
           totalTokens: attempt.totalTokens,
           finishReason: attempt.finishReason,
           completionId: attempt.completionId,
-          providerRequestId: attempt.providerRequestId
+          providerRequestId: attempt.providerRequestId,
+          // KV 前缀缓存可观测（2026-08）：TTFT 与缓存命中透出
+          ttftMs: attempt.ttftMs ?? null,
+          promptCacheHitTokens: attempt.promptCacheHitTokens ?? null,
+          promptCacheMissTokens: attempt.promptCacheMissTokens ?? null
         }))
       }
     });
@@ -2361,239 +2125,36 @@ router.get('/agents/logs/:id', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/flow-events/path-generation', async (req: Request, res: Response) => {
-  try {
-    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
-    const pathId = typeof req.query.pathId === 'string' && req.query.pathId.trim() ? req.query.pathId.trim() : null;
-    const traceId = typeof req.query.traceId === 'string' && req.query.traceId.trim() ? req.query.traceId.trim() : null;
-    const status = typeof req.query.status === 'string' && req.query.status.trim() ? req.query.status.trim() : null;
-    const phase = typeof req.query.phase === 'string' && req.query.phase.trim() ? req.query.phase.trim() : null;
-
-    const where: any = {
-      AND: [
-        {
-          metadata: { contains: '"eventType":"path-generation-stage"' }
-        }
-      ]
-    };
-
-    if (pathId) {
-      where.AND.push({ metadata: { contains: `"pathId":"${pathId}"` } });
-    }
-
-    if (traceId) {
-      where.traceId = traceId;
-    }
-
-    if (status) {
-      where.AND.push({ metadata: { contains: `"status":"${status}"` } });
-    }
-
-    if (phase) {
-      where.AND.push({ metadata: { contains: `"phase":"${phase}"` } });
-    }
-
-    const rows = await prisma.agent_call_logs.findMany({
-      where,
-      orderBy: { calledAt: 'desc' },
-      take: limit,
-    });
-
-    const events = rows
-      .map((row) => {
-        const metadata = parseLogMetadata(row.metadata);
-        if (!isPathGenerationFlowEventMetadata(row.metadata)) return null;
-
-        return {
-          id: row.id,
-          traceId: row.traceId,
-          userId: row.userId,
-          agentId: row.agentId,
-          sourceEntry: row.sourceEntry || 'platform',
-          phase: metadata.phase || null,
-          status: metadata.status || null,
-          pathId: metadata.pathId || null,
-          sourceConversationId: metadata.sourceConversationId || null,
-          triggerSource: metadata.triggerSource || null,
-          durationMs: row.durationMs,
-          success: row.success,
-          error: row.error,
-          errorCode: row.errorCode,
-          input: row.input,
-          output: row.output,
-          createdAt: row.calledAt,
-          metadata,
-        };
-      })
-      .filter(Boolean);
-
-    const summary = {
-      total: events.length,
-      success: events.filter((event: any) => event.status === 'succeeded').length,
-      failed: events.filter((event: any) => event.status === 'failed').length,
-      running: events.filter((event: any) => event.status === 'started').length,
-    };
-
-    res.json({
-      success: true,
-      data: {
-        summary,
-        events,
-      },
-    });
-  } catch (error: any) {
-    logger.error('[admin-platform] 获取路径流程事件失败', { error });
-    res.status(500).json({
-      success: false,
-      error: {
-        message: '获取路径流程事件失败',
-        status: 500,
-      },
-    });
-  }
-});
-
-/**
- * 获取目标对话列表
- * GET /api/admin/conversations
- */
-router.get('/conversations', async (req: Request, res: Response) => {
-  try {
-    const { page = 1, limit = 20, status, userId } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
-
-    const where: any = {};
-    if (status) where.status = status;
-    if (userId) where.userId = userId;
-
-    const [conversations, total] = await Promise.all([
-      prisma.goal_conversations.findMany({
-        where,
-        skip,
-        take: Number(limit),
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          userId: true,
-          status: true,
-          stage: true,
-          description: true,
-          messages: true,
-          collectedData: true,
-          completedAt: true,
-          learningPathId: true,
-          createdAt: true,
-          updatedAt: true,
-          users: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-        },
-      }),
-      prisma.goal_conversations.count({ where }),
-    ]);
-
-    res.json({
-      success: true,
-      data: {
-        conversations,
-        pagination: {
-          total,
-          page: Number(page),
-          limit: Number(limit),
-        },
-      },
-    });
-  } catch (error: any) {
-    logger.error('[admin-platform] 获取对话列表失败', { error });
-    res.status(500).json({
-      success: false,
-      error: {
-        message: '获取对话列表失败',
-        status: 500,
-      },
-    });
-  }
-});
-
-/**
- * 获取对话详情
- * GET /api/admin/conversations/:id
- */
-router.get('/conversations/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-
-    const conversation = await prisma.goal_conversations.findUnique({
-      where: { id },
-      include: {
-        users: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
-    });
-
-    if (!conversation) {
-      res.status(404).json({
-        success: false,
-        error: {
-          message: '对话不存在',
-          status: 404,
-        },
-      });
-      return;
-    }
-
-    res.json({
-      success: true,
-      data: conversation,
-    });
-  } catch (error: any) {
-    logger.error('[admin-platform] 获取对话详情失败', { error });
-    res.status(500).json({
-      success: false,
-      error: {
-        message: '获取对话详情失败',
-        status: 500,
-      },
-    });
-  }
-});
-
-/**
- * GET /api/admin/stats
- * 平台统计数据的别名端点（兼容旧版）
- */
-router.get('/stats', async (req: Request, res: Response) => {
-  // 重定向到 /overview/stats - 直接调用逻辑
-  res.redirect('/api/admin/overview/stats');
-});
 
 /**
  * GET /api/admin/activity
  * 获取最近活动日志
+ * 服务端缓存：45s TTL；key 含 excludeTest 与 limit（同概览统计，见 OVERVIEW_CACHE_TTL_MS）。
  */
 router.get('/activity', async (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 50;
     // excludeTest=1 时过滤虚拟学习者与测试/审计账号（合成流量）
     const excludeTest = String(req.query.excludeTest || '') === '1';
+    const cacheKey = `activity:${excludeTest ? 1 : 0}:${limit}`;
+    const cached = overviewStatsCache.get(cacheKey);
+    if (cached && Date.now() - cached.cachedAt < OVERVIEW_CACHE_TTL_MS) {
+      return res.json({ success: true, data: cached.payload });
+    }
     const ACTIVITY_USER_WHERE = excludeTest
       ? REAL_USER_WHERE
       : { isVirtualLearner: false };
+    // 动态时间窗：仅近 24h（前端卡片标注「近 24h」；7 天前旧条目不再混入）
+    const activityWindowStart = new Date(Date.now() - 24 * 3600000);
 
     // 最近的学习会话
     const recentSessions = await prisma.teaching_sessions.findMany({
       take: limit,
       orderBy: { startTime: 'desc' },
-      where: { users: ACTIVITY_USER_WHERE },
+      where: {
+        users: ACTIVITY_USER_WHERE,
+        startTime: { gte: activityWindowStart },
+      },
       include: {
         users: {
           select: { id: true, email: true, name: true }
@@ -2610,11 +2171,14 @@ router.get('/activity', async (req: Request, res: Response) => {
       : [];
     const sessionTaskMap = new Map(sessionTasks.map((task) => [task.id, task]));
 
-    // 最近注册的用户（excludeTest 时排除虚拟学习者/测试账号）
+    // 最近注册的用户（excludeTest 时排除虚拟学习者/测试账号；软删账号一律隐藏）
     const recentUsers = await prisma.users.findMany({
       take: 20,
       orderBy: { createdAt: 'desc' },
-      where: excludeTest ? REAL_USER_WHERE : undefined,
+      where: {
+        ...(excludeTest ? REAL_USER_WHERE : { deletedAt: null }),
+        createdAt: { gte: activityWindowStart },
+      },
       select: {
         id: true,
         email: true,
@@ -2629,6 +2193,7 @@ router.get('/activity', async (req: Request, res: Response) => {
       where: {
         status: 'completed',
         users: ACTIVITY_USER_WHERE,
+        completedAt: { gte: activityWindowStart },
       },
       orderBy: { completedAt: 'desc' },
       include: {
@@ -2636,6 +2201,23 @@ router.get('/activity', async (req: Request, res: Response) => {
           select: { id: true, email: true, name: true }
         }
       }
+    });
+
+    // 近 24h 失败事件（异常流：动态 feed 的 bad/warn 事件源，含类别/错误码供跳转筛选）
+    const recentFailures = await prisma.agent_call_logs.findMany({
+      take: 10,
+      where: { calledAt: { gte: activityWindowStart }, success: false },
+      orderBy: { calledAt: 'desc' },
+      select: {
+        id: true,
+        agentId: true,
+        executionLayer: true,
+        errorCode: true,
+        errorCategory: true,
+        error: true,
+        calledAt: true,
+        statusCode: true,
+      },
     });
 
     const [recentProjectionGrantUses, activeProjectionGrantCount] = await Promise.all([
@@ -2673,9 +2255,7 @@ router.get('/activity', async (req: Request, res: Response) => {
       : [];
     const adminUserMap = new Map(adminUsers.map((user) => [user.id, user]));
 
-    res.json({
-      success: true,
-      data: {
+    const data = {
         recentSessions: recentSessions.map((session) => ({
           ...session,
           user: session.users
@@ -2694,6 +2274,21 @@ router.get('/activity', async (req: Request, res: Response) => {
         })),
         recentUsers,
         completedTasks,
+        recentFailures: recentFailures.map((log) => ({
+          id: log.id,
+          agentId: log.agentId,
+          executionLayer: log.executionLayer,
+          errorCode: log.errorCode,
+          // 归一到归因同款类别（空类别行启发式归并），保证跳转筛选计数一致
+          errorCategory: classifyFailureCategory({
+            errorCategory: log.errorCategory,
+            errorCode: log.errorCode,
+            error: log.error,
+          }),
+          error: log.error,
+          calledAt: log.calledAt,
+          statusCode: log.statusCode,
+        })),
         activeProjectionGrantCount,
         recentProjectionGrantUses: recentProjectionGrantUses.map((grant) => ({
           id: grant.id,
@@ -2727,8 +2322,9 @@ router.get('/activity', async (req: Request, res: Response) => {
               })()
             : null,
         }))
-      }
-    });
+    };
+    overviewStatsCache.set(cacheKey, { payload: data, cachedAt: Date.now() });
+    res.json({ success: true, data });
   } catch (error: any) {
     logger.error('[admin-platform] 获取活动日志失败', { error });
     res.status(500).json({
@@ -2744,7 +2340,17 @@ router.get('/activity', async (req: Request, res: Response) => {
 /**
  * GET /api/admin/teaching-sessions
  * 教学会话调试视图：聚焦 wrapup / advisory
+ * 列表进度（遗留项「教学会话进度列」）：progress = 任务 x/y + 里程碑 n/m（milestones/subtasks 现表推导）
  */
+function parseJsonSafe<T>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 router.get('/teaching-sessions', async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
@@ -2753,6 +2359,9 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
     const status = (req.query.status as string) || undefined;
     const onlyWithAdvisory = String(req.query.onlyWithAdvisory || '') === 'true';
     const onlyMissingWrapup = String(req.query.onlyMissingWrapup || '') === 'true';
+    // 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，单点 REAL_USER_WHERE）；
+    // includeTest=true 时显式包含（切换后前端对虚拟/测试行做灰标标记）
+    const includeTest = String(req.query.includeTest || '') === 'true';
 
     const where: any = {
       ...(userId ? { userId } : {}),
@@ -2762,6 +2371,7 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
       ...(onlyMissingWrapup
         ? { OR: [{ wrapup: null }, { NOT: { wrapup: { contains: 'topicSummary' } } }] }
         : {}),
+      ...(includeTest ? {} : { users: REAL_USER_WHERE }),
     };
 
     const [total, sessions] = await Promise.all([
@@ -2773,23 +2383,28 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
         take: limit,
         include: {
           users: {
-            select: { id: true, name: true, email: true }
+            select: { id: true, name: true, email: true, isVirtualLearner: true }
           }
         }
       })
     ]);
 
+    const progressById = await deriveTeachingSessionProgress(sessions);
+
     const items = sessions.map((session) => {
-      const wrapup = session.wrapup ? JSON.parse(session.wrapup) : null;
-      const advisory = session.advisory ? JSON.parse(session.advisory) : null;
-      const messages = session.messages ? JSON.parse(session.messages) : [];
-      const knowledgePoints = session.knowledgeState ? JSON.parse(session.knowledgeState) : [];
+      const wrapup = parseJsonSafe<any>(session.wrapup, null);
+      const advisory = parseJsonSafe<any>(session.advisory, null);
+      const messages = parseJsonSafe<any[]>(session.messages, []);
+      const knowledgePoints = parseJsonSafe<any[]>(session.knowledgeState, []);
 
       return {
         id: session.id,
         userId: session.userId,
         userName: session.users?.name || null,
         email: session.users?.email || null,
+        /** 数据隔离标记（includeTest=true 时供前端灰标：虚拟学习者 / 测试账号） */
+        isVirtualLearner: !!session.users?.isVirtualLearner,
+        isTestAccount: isTestAccountUser(session.users),
         taskId: session.taskId,
         learningPathId: session.learningPathId,
         milestoneId: session.milestoneId,
@@ -2802,6 +2417,7 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
         duration: session.duration,
         messageCount: Array.isArray(messages) ? messages.filter((m: any) => m?.role === 'user').length : 0,
         knowledgePointCount: Array.isArray(knowledgePoints) ? knowledgePoints.length : 0,
+        progress: progressById.get(session.id) || null,
         wrapup,
         advisory,
       };
@@ -2832,31 +2448,5 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
  * 获取学生状态基线
  * GET /platform/student-state
  */
-router.get('/student-state', async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).query.userId as string;
-    
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        error: { message: '缺少 userId 参数' }
-      });
-    }
-    
-    const { studentBaselineService } = await import('../../services/student-baseline.service');
-    const baselineStats = await studentBaselineService.getBaselineStats(userId);
-    
-    res.json({
-      success: true,
-      data: baselineStats
-    });
-  } catch (error: any) {
-    logger.error('[admin-platform] 获取学生状态基线失败', { error });
-    res.status(500).json({
-      success: false,
-      error: { message: '获取学生状态基线失败' }
-    });
-  }
-});
 
 export default router;

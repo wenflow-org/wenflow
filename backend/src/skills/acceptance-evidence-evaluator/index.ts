@@ -84,8 +84,40 @@ function splitAcceptanceCriteriaIntoAnchors(criteria: string): string[] {
     }
     if (matches.length >= 2) return [...new Set(matches)]
   }
-  const words = trimmed.split(/[,.，。\s;；、]+/).map(w => w.trim()).filter(w => w.length >= 3 && /[\u4e00-\u9fa5\w]/.test(w))
-  return [...new Set(words)].slice(0, 12)
+  const lowInfoWords = ['学会', '掌握', '能够', '需要', '可以', '使用', '理解', '知道', '了解', '一个', '自己', '正确', '完成', '总结', '说明', '解释', '描述', '写出', '列出', '列举', '给出', '介绍', '阐述', '复述', '展示', '分析', '比较']
+  const phrases = trimmed.split(/[、，,；;。：:]+/).map(w => w.trim()).filter(w => w.length >= 2 && w.length <= 14 && /[\u4e00-\u9fa5\w]/.test(w))
+  const anchors = phrases.map((phrase) => {
+    let candidate = phrase
+    let round = 0
+    while (round < 3) {
+      let changed = false
+      for (const word of lowInfoWords) {
+        const next = candidate.replace(new RegExp(`^${word}|${word}$`, 'g'), '')
+        if (next !== candidate) changed = true
+        candidate = next.trim()
+      }
+      if (!changed || candidate.length < 2) break
+      round += 1
+    }
+    return candidate.length >= 2 ? candidate : phrase
+  })
+  return [...new Set(anchors)].slice(0, 8)
+}
+
+function collectStudentEvidence(messages: Array<{ role: string; content: string }>): string[] {
+  return messages.filter(m => m.role === 'user').map(m => m.content).filter(c => c && c.trim())
+}
+
+function matchAnchorsInEvidence(anchors: string[], evidenceLines: string[]): string[] {
+  return anchors.filter((anchor) => {
+    const lower = anchor.toLowerCase()
+    return evidenceLines.some((line) => {
+      if (!line.includes(lower)) return false
+      const matchIndex = line.indexOf(lower)
+      const after = line.slice(matchIndex + lower.length, matchIndex + lower.length + 4)
+      return !(after.startsWith('吗') || after.startsWith('？') || after.startsWith('?'))
+    })
+  })
 }
 
 export async function acceptanceEvidenceEvaluator(
@@ -112,16 +144,16 @@ export function evaluateByCriteria(input: AcceptanceEvidenceEvaluatorInput): Acc
   if (!criteria) {
     return { hasCriteria: false, matched: false, acceptanceCriteria: null, anchorTokens: [], matchedTokens: [], matchedRatio: 0, learnerEvidenceExcerpt: '', decision: 'no-criteria', reason: '当前任务没有提供 acceptanceCriteria' }
   }
-  const learnerEvidence = [...input.messages].reverse().find(m => m.role === 'user')?.content || ''
-  const recentMessages = input.messages.slice(-4).map(m => m.content).join('\n')
-  const evidencePool = [learnerEvidence, recentMessages].join('\n').toLowerCase()
+  const studentEvidence = collectStudentEvidence(input.messages)
+  const learnerEvidence = studentEvidence[studentEvidence.length - 1] || ''
+  const evidencePool = studentEvidence.slice(-4).join('\n').toLowerCase()
   const anchorTokens = splitAcceptanceCriteriaIntoAnchors(criteria)
   if (!anchorTokens.length) {
     return { hasCriteria: true, matched: false, acceptanceCriteria: criteria, anchorTokens: [], matchedTokens: [], matchedRatio: 0, learnerEvidenceExcerpt: learnerEvidence.slice(0, 240), decision: 'rejected', reason: '未能提取出稳定的验收锚点' }
   }
-  const matchedTokens = anchorTokens.filter(t => evidencePool.includes(t.toLowerCase()))
+  const matchedTokens = matchAnchorsInEvidence(anchorTokens, evidencePool.split('\n'))
   const matchedRatio = matchedTokens.length / anchorTokens.length
-  const matched = matchedTokens.length > 0 && matchedRatio >= 0.4
+  const matched = matchedTokens.length >= 2 && matchedRatio >= 0.4
   return {
     hasCriteria: true, matched, acceptanceCriteria: criteria, anchorTokens, matchedTokens, matchedRatio,
     learnerEvidenceExcerpt: learnerEvidence.slice(0, 240),
@@ -135,15 +167,15 @@ export function evaluateByProfile(input: AcceptanceEvidenceEvaluatorInput): Acce
   const cognitiveLevel = input.cognitiveLevel || input.taskProfile?.cognitiveLevel || ''
   const taskType = input.taskType || ''
   const currentPoint = input.knowledgePoints?.find(p => p.status === 'learning')?.name || input.knowledgePoints?.[0]?.name || input.taskProfile?.coreConcept || ''
-  const learnerMessage = [...input.messages].reverse().find(m => m.role === 'user')?.content || ''
-  const recentTeacherMessage = [...input.messages].reverse().find(m => m.role === 'assistant')?.content || ''
-  const evidencePool = [learnerMessage, recentTeacherMessage, currentPoint].join('\n').toLowerCase()
+  const studentEvidence = collectStudentEvidence(input.messages)
+  const learnerMessage = studentEvidence[studentEvidence.length - 1] || ''
+  const evidencePool = studentEvidence.slice(-4).join('\n').toLowerCase()
 
   let matched = false
   let reason = '未满足任务型收束条件。'
 
   if (knowledgeType === 'factual') {
-    matched = evidencePool.includes((currentPoint || '').toLowerCase()) || evidencePool.includes('知道') || evidencePool.includes('记住')
+    matched = (currentPoint && evidencePool.includes(currentPoint.toLowerCase())) || evidencePool.includes('知道') || evidencePool.includes('记住')
     reason = matched ? '事实性任务已出现准确识别/复述证据。' : '事实性任务尚未出现足够准确识别/复述证据。'
   } else if (knowledgeType === 'conceptual') {
     matched = evidencePool.includes('因为') || evidencePool.includes('关系') || evidencePool.includes('区别') || evidencePool.includes('联系') || evidencePool.includes('类比')

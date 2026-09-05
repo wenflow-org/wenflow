@@ -1,0 +1,276 @@
+# Profile 阶段编排文件（字段路由单源化）
+# 由字段路由 seed TS 机械迁移（1:1）；seed TS 已退役，本文件为唯一声明源。
+#
+# profile 阶段字段全部为编排器内部沉淀（写入 learnerModel），
+# 所以 render 默认 hidden, accumulate=true, internal 多为 false
+# （因为 snapshot/projection 会读，不是 skill 私有）。
+
+stage: profile
+order: 4
+displayName: 画像阶段
+description: 学习者画像增强与背景知识沉淀（编排器内部）
+
+contracts:
+  - agentId: skill:lesson-knowledge-enricher
+  - agentId: skill:learner-model
+  - agentId: skill:learning-predictor
+  - agentId: profile-agent
+
+fields:
+  # === skill:lesson-knowledge-enricher 产出（承接已退役 distiller） ===
+  - fieldId: conceptLedger
+    promptRole: derived-presentation
+    valueType: array<object>
+    persistKey: knowledgeMemory.globalBackground.conceptLedger
+    description: 概念账本（key/label/familiarity/transferReadiness/...，落库于画像 3 层 JSON 之下）
+  - fieldId: reusableFoundations
+    promptRole: derived-presentation
+    valueType: array<string>
+    description: 可复用的基础知识 key 列表
+  - fieldId: blockedFoundations
+    promptRole: derived-presentation
+    valueType: array<string>
+    description: 阻碍后续学习的基础知识 key 列表
+  - fieldId: transferSignals
+    promptRole: derived-presentation
+    valueType: array<object>
+    description: 可迁移信号（conceptKey/label/readiness/confidence）
+  - fieldId: recurringConfusions
+    promptRole: hidden-inference
+    valueType: array<object>
+    description: 反复出现的困惑点（concept/evidence/confidence）
+  - fieldId: knowledgeStateSummary
+    promptRole: derived-presentation
+    valueType: string
+    description: 本节课后知识状态自然语言摘要（LBM 式，供学习表现预测器与教学决策读取）
+
+  # === skill:learner-model 聚合产出（确定性 snapshot 结构） ===
+  - fieldId: snapshot.dynamicState
+    promptRole: derived-presentation
+    valueType: object
+    description: 动态学习状态（metrics/趋势/推荐节奏）
+  - fieldId: snapshot.learningControlState
+    promptRole: derived-presentation
+    valueType: object
+    description: 学习控制态（paceMode/conceptLoad/reviewPriority/...）
+  - fieldId: snapshot.replanSignal
+    promptRole: derived-presentation
+    valueType: object
+    description: 重调信号（shouldSuggest/priority/recommendation）
+  - fieldId: snapshot.teachingHints
+    promptRole: derived-presentation
+    valueType: object
+    description: 教学提示（teaching 直接消费）
+  - fieldId: snapshot.knowledgeMemory.currentPath
+    promptRole: derived-presentation
+    valueType: object
+    description: 路径级知识记忆（progress/taskMastery/conceptStates）
+  - fieldId: snapshot.knowledgeMemory.globalSignals
+    promptRole: derived-presentation
+    valueType: object
+    description: 全局知识信号（mastered/fragile/struggling 概念）
+  - fieldId: profile.curriculumControls
+    promptRole: derived-presentation
+    valueType: object
+    description: 课程控制（taskGranularity/conceptDensity/reviewFrequency）
+
+routings:
+  # lesson-knowledge-enricher → profile-agent（knowledgeBackground 聚合）
+  - agentId: skill:lesson-knowledge-enricher
+    fieldId: conceptLedger
+    render: hidden
+    handoff: [profile-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:lesson-knowledge-enricher
+    fieldId: reusableFoundations
+    render: hidden
+    handoff: [profile-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:lesson-knowledge-enricher
+    fieldId: blockedFoundations
+    render: hidden
+    handoff: [profile-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:lesson-knowledge-enricher
+    fieldId: transferSignals
+    render: hidden
+    handoff: [profile-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:lesson-knowledge-enricher
+    fieldId: recurringConfusions
+    render: hidden
+    handoff: [profile-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:lesson-knowledge-enricher
+    fieldId: knowledgeStateSummary
+    render: hidden
+    handoff: [profile-agent]
+    internal: false
+    accumulate: false
+    visibilityPreset: agent-internal
+
+  # learner-model → profile-agent（聚合产出，终点消费）
+  - agentId: skill:learner-model
+    fieldId: snapshot.dynamicState
+    render: hidden
+    handoff: [profile-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: 确定性聚合产出（ProfileAggregator/snapshot 装配），非 LLM 输出
+  - agentId: skill:learner-model
+    fieldId: snapshot.learningControlState
+    render: hidden
+    handoff: [profile-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: 确定性聚合产出（ProfileAggregator/snapshot 装配），非 LLM 输出
+  - agentId: skill:learner-model
+    fieldId: snapshot.replanSignal
+    render: hidden
+    handoff: [profile-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: 确定性聚合产出（ProfileAggregator/snapshot 装配），非 LLM 输出
+  - agentId: skill:learner-model
+    fieldId: snapshot.teachingHints
+    render: hidden
+    handoff: [profile-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: 确定性聚合产出（ProfileAggregator/snapshot 装配），非 LLM 输出
+  - agentId: skill:learner-model
+    fieldId: snapshot.knowledgeMemory.currentPath
+    render: hidden
+    handoff: [profile-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: 确定性聚合产出（ProfileAggregator/snapshot 装配），非 LLM 输出
+  - agentId: skill:learner-model
+    fieldId: snapshot.knowledgeMemory.globalSignals
+    render: hidden
+    handoff: [profile-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: 确定性聚合产出（ProfileAggregator/snapshot 装配），非 LLM 输出
+  - agentId: skill:learner-model
+    fieldId: profile.curriculumControls
+    render: hidden
+    handoff: [profile-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: 确定性聚合产出（ProfileAggregator/snapshot 装配），非 LLM 输出
+
+  # profile-agent 聚合（不再 handoff，是终点；触发 snapshot/projection 刷新）
+  - agentId: profile-agent
+    fieldId: conceptLedger
+    render: hidden
+    handoff: []
+    internal: true
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: learner 画像终点，写入 snapshot 与 projection
+  - agentId: profile-agent
+    fieldId: reusableFoundations
+    render: hidden
+    handoff: []
+    internal: true
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: learner 画像终点，写入 snapshot 与 projection
+  - agentId: profile-agent
+    fieldId: blockedFoundations
+    render: hidden
+    handoff: []
+    internal: true
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: learner 画像终点，写入 snapshot 与 projection
+  - agentId: profile-agent
+    fieldId: transferSignals
+    render: hidden
+    handoff: []
+    internal: true
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: learner 画像终点，写入 snapshot 与 projection
+  - agentId: profile-agent
+    fieldId: recurringConfusions
+    render: hidden
+    handoff: []
+    internal: true
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: learner 画像终点，写入 snapshot 与 projection
+  - agentId: profile-agent
+    fieldId: snapshot.dynamicState
+    render: hidden
+    handoff: []
+    internal: true
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: learner 画像终点，写入 snapshot 与 projection
+  - agentId: profile-agent
+    fieldId: snapshot.learningControlState
+    render: hidden
+    handoff: []
+    internal: true
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: learner 画像终点，写入 snapshot 与 projection
+  - agentId: profile-agent
+    fieldId: snapshot.replanSignal
+    render: hidden
+    handoff: []
+    internal: true
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: learner 画像终点，写入 snapshot 与 projection
+  - agentId: profile-agent
+    fieldId: snapshot.teachingHints
+    render: hidden
+    handoff: []
+    internal: true
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: learner 画像终点，写入 snapshot 与 projection
+  - agentId: profile-agent
+    fieldId: snapshot.knowledgeMemory.currentPath
+    render: hidden
+    handoff: []
+    internal: true
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: learner 画像终点，写入 snapshot 与 projection
+  - agentId: profile-agent
+    fieldId: snapshot.knowledgeMemory.globalSignals
+    render: hidden
+    handoff: []
+    internal: true
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: learner 画像终点，写入 snapshot 与 projection
+  - agentId: profile-agent
+    fieldId: profile.curriculumControls
+    render: hidden
+    handoff: []
+    internal: true
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: learner 画像终点，写入 snapshot 与 projection

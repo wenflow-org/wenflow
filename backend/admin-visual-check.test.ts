@@ -5,18 +5,30 @@ import { test, expect, Page } from '@playwright/test';
  * 检查暗黑模式、输入框高度、卡片样式一致性
  */
 
-// 测试的管理页面列表
+// 测试的管理页面列表（页面 id 与 manifest.ts 一致；旧页面名 /admin/dashboard、/admin/agents/editor 等
+// 已随真路由化废弃——会回退 Overview，此前造成假绿灯）
 const ADMIN_PAGES = [
-  { name: 'Dashboard', path: '/admin/dashboard' },
-  { name: 'SessionCockpit', path: '/admin/session-cockpit' },
+  { name: 'Overview', path: '/admin/overview' },
+  { name: 'Users', path: '/admin/users' },
+  { name: 'LearnerCenter', path: '/admin/learner-center' },
   { name: 'Skills', path: '/admin/skills' },
-  { name: 'AgentEditor', path: '/admin/agents/editor' },
-  { name: 'AgentTopology', path: '/admin/agents/topology' },
+  { name: 'Topology', path: '/admin/topology' },
+  { name: 'Orchestrator', path: '/admin/orchestrator' },
   { name: 'ExecutionLogs', path: '/admin/execution-logs' },
-  { name: 'OrchestratorDefinitions', path: '/admin/orchestrator-definitions' },
   { name: 'VirtualLearners', path: '/admin/virtual-learners' },
-  { name: 'RegressionLab', path: '/admin/regression-lab' },
+  { name: 'ApiConfig', path: '/admin/api-config' },
 ];
+
+// 辅助函数：注入管理员会话标记（真实登录走 HttpOnly Cookie，测试仅需 JS 侧标记让路由放行渲染）
+async function seedAdminSession(page: Page) {
+  await page.evaluate(() => localStorage.setItem('wenflow_admin_session', '1'));
+}
+
+// 辅助函数：断言当前 URL 仍是目标页面（非法 page 会被路由回退 Overview，URL 不再匹配即失败）
+async function expectOnPage(page: Page, adminPage: { name: string; path: string }) {
+  await page.waitForTimeout(1500);
+  expect(page.url()).toContain(adminPage.path);
+}
 
 // 辅助函数：切换到暗黑模式
 async function switchToDarkMode(page: Page) {
@@ -70,6 +82,8 @@ test.describe('Admin 页面视觉检查', () => {
   });
 
   test('所有页面能正常加载', async ({ page }) => {
+    await seedAdminSession(page);
+
     for (const adminPage of ADMIN_PAGES) {
       console.log(`检查页面：${adminPage.name} (${adminPage.path})`);
       
@@ -80,8 +94,8 @@ test.describe('Admin 页面视觉检查', () => {
       
       expect(response?.status()).toBeLessThan(400);
       
-      // 等待页面渲染
-      await page.waitForTimeout(2000);
+      // 页面必须真实渲染（而非回退 Overview）：非法 page 会被 AdminConsole 重定向回退
+      await expectOnPage(page, adminPage);
     }
   });
 
@@ -89,8 +103,12 @@ test.describe('Admin 页面视觉检查', () => {
     const results: any[] = [];
 
     for (const adminPage of ADMIN_PAGES) {
+      await seedAdminSession(page);
       await page.goto(adminPage.path, { waitUntil: 'domcontentloaded' });
       await switchToDarkMode(page);
+
+      // 页面必须真实渲染（而非回退 Overview）
+      await expectOnPage(page, adminPage);
 
       // 检查页面背景色
       const bgColor = await getComputedStyle(page, 'body', 'background-color');
@@ -125,6 +143,7 @@ test.describe('Admin 页面视觉检查', () => {
     const results: any[] = [];
 
     for (const adminPage of ADMIN_PAGES) {
+      await seedAdminSession(page);
       await page.goto(adminPage.path, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(2000);
 
@@ -184,6 +203,7 @@ test.describe('Admin 页面视觉检查', () => {
     const results: any[] = [];
 
     for (const adminPage of ADMIN_PAGES) {
+      await seedAdminSession(page);
       await page.goto(adminPage.path, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(2000);
 
@@ -235,6 +255,7 @@ test.describe('Admin 页面视觉检查', () => {
     const results: any[] = [];
 
     for (const adminPage of ADMIN_PAGES) {
+      await seedAdminSession(page);
       await page.goto(adminPage.path, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(2000);
 
@@ -274,6 +295,7 @@ test.describe('Admin 页面视觉检查', () => {
     const results: any[] = [];
 
     for (const adminPage of ADMIN_PAGES) {
+      await seedAdminSession(page);
       await page.goto(adminPage.path, { waitUntil: 'domcontentloaded' });
       await switchToDarkMode(page);
 
@@ -335,6 +357,7 @@ test.describe('Admin 页面视觉检查', () => {
     const keyPages = ADMIN_PAGES.slice(0, 4);
 
     for (const adminPage of keyPages) {
+      await seedAdminSession(page);
       await page.goto(adminPage.path, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(2000);
 

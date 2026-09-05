@@ -53,6 +53,8 @@ export interface TeachingSessionMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: string;
+  /** 前端交互特征（认知负荷量测 · 前端情报层）：随消息落库，供后续轮次对比 */
+  meta?: Record<string, number> | null;
   analysis?: Record<string, any>;
   strategies?: string[];
   knowledgePoint?: string | null;
@@ -60,6 +62,8 @@ export interface TeachingSessionMessage {
   promptDebug?: Record<string, any> | null;
   peerTriggered?: boolean;
   peerMessage?: string | null;
+  peerStrategy?: string | null;
+  peerFollowUpQuestions?: string[];
   peerDebug?: Record<string, any> | null;
   /** 检查点合成消息标记：不参与学生行为证据统计 */
   checkpoint?: boolean;
@@ -242,8 +246,11 @@ export class TeachingSessionRepository {
           // finalization_failed：最终化失败且无活跃 lease 时允许回收重开，避免 openKey 被永久锁死
           const finalizationFailedRecoverable = existing.status === 'finalization_failed'
             && (!existing.operationLeaseExpiresAt || existing.operationLeaseExpiresAt <= now);
+          // failed：开课失败的行保留 openKey，允许直接回收重开（复用行而非累积脏数据）
+          const failedRecoverable = existing.status === 'failed'
+            && (!existing.operationLeaseExpiresAt || existing.operationLeaseExpiresAt <= now);
           const canSupersede = existing.status !== 'finalizing'
-            && (recoveryExpired || initializingLeaseExpired || finalizationFailedRecoverable);
+            && (recoveryExpired || initializingLeaseExpired || finalizationFailedRecoverable || failedRecoverable);
 
           if (!canSupersede) {
             return { session: mapRecord(existing), created: false, operationId: null };
@@ -342,11 +349,11 @@ export class TeachingSessionRepository {
   }
 
   async failInitialization(sessionId: string, operationId: string): Promise<void> {
+    // 保留 openKey：failed 行可被下次 reserve 回收复用（supersede），避免每次失败累积新行
     await prisma.teaching_sessions.updateMany({
       where: { id: sessionId, status: 'initializing', operationId },
       data: {
         status: 'failed',
-        openKey: null,
         operationId: null,
         operationKind: null,
         operationLeaseExpiresAt: null,
@@ -465,6 +472,8 @@ export class TeachingSessionRepository {
   }
 
   async listByUser(userId: string, limit: number = 50): Promise<TeachingSessionRecord[]> {
+    // 已知限制（L5）：固定 take 50，无分页；历史消息较多的用户只返回最近 50 条。
+    // 完整历史需引入游标/offset 分页，且需同步调整调用方（getSessionHistory / getLatestTaskEvaluation）。
     const records = await prisma.teaching_sessions.findMany({
       where: { userId },
       orderBy: { startTime: 'desc' },
@@ -536,13 +545,18 @@ export class TeachingSessionRepository {
   async appendPeerMessages(sessionId: string, messages: TeachingSessionMessage[]): Promise<void> {
     const session = await prisma.teaching_sessions.findUnique({
       where: { id: sessionId },
-      select: { messages: true, revision: true, status: true }
+      select: { messages: true, revision: true, status: true, operationId: true }
     });
     if (!session) {
       throw new Error('会话不存在或已结束');
     }
     if (session.status !== 'active' && session.status !== 'timeout') {
       throw new TeachingSessionConflictError('课堂已结束，无法继续伴学对话', 'TEACHING_SESSION_STATE_CHANGED');
+    }
+    // 教学回合在途（operationId 非空）：commitTurnState 会用回合开始时快照整包覆写 messages，
+    // 此时写入会被静默覆盖丢失——拒绝并让客户端重试（回合提交后 revision 变更，重试自然通过）。
+    if (session.operationId) {
+      throw new TeachingSessionConflictError('教学回合进行中，伴学消息稍后重试', 'TEACHING_TURN_IN_PROGRESS');
     }
     const current: TeachingSessionMessage[] = JSON.parse(session.messages || '[]');
     const updated = await prisma.teaching_sessions.updateMany({
@@ -902,6 +916,27 @@ export class TeachingSessionRepository {
     });
   }
 
+  /**
+   * 复习课收束标记：complete_review 走 end_only 收束（wrapup 已落库）后，
+   * 幂等补记 reviewCompletion=completed，供前端 finalizationStepCompleted 判定收束完成。
+   */
+  async markReviewCompleted(sessionId: string): Promise<void> {
+    const session = await this.getById(sessionId);
+    if (!session) return;
+    const teachingState = updateSessionFinalizationState(
+      session.teachingState,
+      'complete_review',
+      `review-${sessionId}`,
+      'reviewCompletion',
+      'completed',
+      { completedAt: new Date().toISOString() }
+    );
+    await prisma.teaching_sessions.updateMany({
+      where: { id: sessionId },
+      data: { teachingState: JSON.stringify(teachingState) }
+    });
+  }
+
   async completeFinalizationStep(
     sessionId: string,
     idempotencyKey: string,
@@ -1048,7 +1083,9 @@ export class TeachingSessionRepository {
             { completedAt: new Date().toISOString() }
           )),
           wrapup: payload.wrapup ? JSON.stringify(payload.wrapup) : null,
-          advisory: payload.advisory ? JSON.stringify(payload.advisory) : null,
+          // M2：仅落库「建议生效」的 advisory（shouldSuggest=true）；无建议时写 null，
+          // 避免 NO_ADVISORY 空对象占据 advisory 列（admin onlyWithAdvisory 过滤也依赖此语义）。
+          advisory: payload.advisory?.shouldSuggest ? JSON.stringify(payload.advisory) : null,
           openKey: null,
           operationId: null,
           operationKind: null,
@@ -1165,6 +1202,34 @@ export class TeachingSessionRepository {
         id: sessionId,
         revision: expectedRevision,
         status: 'active',
+        updatedAt: { lte: cutoff },
+        OR: [
+          { operationId: null },
+          { operationLeaseExpiresAt: { lte: new Date() } }
+        ]
+      },
+      data: {
+        status: 'timeout',
+        endTime: new Date(),
+        operationId: null,
+        operationKind: null,
+        operationLeaseExpiresAt: null,
+        updatedAt: new Date()
+      }
+    });
+    return result.count === 1;
+  }
+
+  /**
+   * M4：长时间未恢复的 paused 会话（pausedAt 超过阈值）降级为 timeout，
+   * 复用与 active 超时相同的兜底路径；会话仍可通过下一轮教学回合恢复为 active。
+   */
+  async timeoutIfPaused(sessionId: string, expectedRevision: number, cutoff: Date): Promise<boolean> {
+    const result = await prisma.teaching_sessions.updateMany({
+      where: {
+        id: sessionId,
+        revision: expectedRevision,
+        status: 'paused',
         updatedAt: { lte: cutoff },
         OR: [
           { operationId: null },

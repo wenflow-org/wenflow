@@ -115,8 +115,7 @@ export async function backupSqliteOnline(
   let backupFinished = false;
   try {
     backup = await new Promise<BackupLike>((resolveBackup, reject) => {
-      let instance: BackupLike;
-      instance = (database as any).backup(destinationPath, (error: Error | null) => {
+      const instance: BackupLike = (database as any).backup(destinationPath, (error: Error | null) => {
         if (error) reject(error);
         else resolveBackup(instance);
       });

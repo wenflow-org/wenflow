@@ -1,7 +1,8 @@
 ﻿// Axios API 客户端
-import axios, { type AxiosRequestConfig } from 'axios';
-import { clearProjectionToken, getProjectionToken, isProjectionMode } from './projection';
+import axios from 'axios';
+import { getProjectionToken } from './projection';
 import { setAuthFlashMessage } from './authFlash';
+import { clearUserLocalState } from './sessionCleanup';
 
 const isDev = import.meta.env.DEV;
 // 统一使用 VITE_API_BASE_URL（VITE_API_URL 为历史遗留别名，保留兼容）
@@ -15,9 +16,25 @@ export const API_BASE_URL = isDev
  */
 export const AI_REQUEST_TIMEOUT = 300000;
 
-const pendingRequests = new Map<string, AbortController>();
-let nextRequestId = 0;
 let unauthorizedRedirect: Promise<void> | null = null;
+
+// ---- Token-refresh mutex ----
+let refreshPromise: Promise<boolean> | null = null;
+
+async function tryRefresh(): Promise<boolean> {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    try {
+      const resp = await axios.post('/api/auth/refresh', null, { withCredentials: true });
+      return resp.data?.success === true;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
 
 /**
  * 用户会话标记：token 已通过 HttpOnly Cookie 下发，JS 侧只记录"已登录"标记（非敏感）
@@ -31,12 +48,7 @@ export const hasUserSession = (): boolean =>
 const redirectToLoginOnce = () => {
   if (!unauthorizedRedirect) {
     unauthorizedRedirect = Promise.resolve().then(() => {
-      if (isProjectionMode()) {
-        clearProjectionToken();
-      }
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      localStorage.removeItem(USER_SESSION_KEY);
+      clearUserLocalState();
       setAuthFlashMessage('登录状态已失效，请重新登录');
       // 保留回跳地址，重新登录后可返回原页面
       const redirect = encodeURIComponent(window.location.pathname + window.location.search);
@@ -47,14 +59,8 @@ const redirectToLoginOnce = () => {
   return unauthorizedRedirect;
 };
 
-interface RequestKeyCarrier {
-  __wenflowRequestKey?: string;
-}
-
-const generateRequestKey = (config: AxiosRequestConfig): string => {
-  const { method, url, params, data } = config;
-  return `${method?.toUpperCase() || 'GET'}_${url}_${JSON.stringify(params || {})}_${JSON.stringify(data || {})}`;
-};
+// 认证类端点自身返回 401 表示"凭证错误"，不应被误判为会话失效
+const AUTH_ENDPOINT_PATTERN = /^\/auth\/(login|register|verify)(\?|$)/;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -78,15 +84,6 @@ api.interceptors.request.use(
       config.headers['X-Projection-Token'] = projectionToken;
     }
 
-    if (!config.signal) {
-      const controller = new AbortController();
-      config.signal = controller.signal;
-
-      const requestKey = `${generateRequestKey(config)}#${++nextRequestId}`;
-      (config as RequestKeyCarrier).__wenflowRequestKey = requestKey;
-      pendingRequests.set(requestKey, controller);
-    }
-
     return config;
   },
   (error) => {
@@ -97,19 +94,9 @@ api.interceptors.request.use(
 // 响应拦截器 - 统一错误处理和清理
 api.interceptors.response.use(
   (response) => {
-    // 清理已完成的请求
-    const requestKey = (response.config as RequestKeyCarrier).__wenflowRequestKey;
-    if (requestKey) pendingRequests.delete(requestKey);
-
     return response.data;
   },
-  (error) => {
-    // 清理失败的请求
-    if (error.config) {
-      const requestKey = error.config.__wenflowRequestKey;
-      if (requestKey) pendingRequests.delete(requestKey);
-    }
-
+  async (error) => {
     // 如果是取消错误，直接返回
     if (axios.isCancel(error) || error.name === 'CanceledError' || error.name === 'AbortError') {
       return Promise.reject({ message: '请求已取消', cancelled: true });
@@ -117,17 +104,35 @@ api.interceptors.response.use(
 
     if (error.response) {
       const { status, data } = error.response;
+      const url = typeof error.config?.url === 'string' ? error.config.url : '';
 
-      // 401 未授权 - 跳转登录
-      if (status === 401 && (hasUserSession() || getProjectionToken())) {
-        void redirectToLoginOnce();
+      // 401 未授权 - 先尝试静默刷新 access token，失败再跳登录
+      if (status === 401
+        && !error.config?._retry
+        && !AUTH_ENDPOINT_PATTERN.test(url)
+        && (hasUserSession() || getProjectionToken())) {
+        // 保存原始请求配置用于重试
+        const originalConfig = { ...error.config };
+        originalConfig._retry = true;
+        const refreshed = await tryRefresh();
+        if (refreshed) {
+          // 刷新成功，重试原始请求
+          return api.request(originalConfig);
+        }
+        // 刷新失败，跳转登录
+        redirectToLoginOnce();
       }
 
-      // 返回错误信息，保留完整 response 以便上层读取 422 恢复信封等结构化数据
+      // 返回错误信息，保留完整 response 以便上层读取 422 恢复信封等结构化数据。
+      // 兼容后端两种错误形态：{ error: { message } } 与 { error: "字符串" }（约 209 处历史端点）
+      const errBody = data?.error;
+      const errMessage = typeof errBody === 'string'
+        ? errBody
+        : errBody?.message || data?.message || '请求失败';
       return Promise.reject({
-        message: data?.error?.message || '请求失败',
+        message: errMessage,
         status,
-        details: data?.error?.details,
+        details: typeof errBody === 'object' ? errBody?.details : undefined,
         response: error.response
       });
     }
@@ -140,52 +145,6 @@ api.interceptors.response.use(
     return Promise.reject({ message: '网络错误，请检查连接' });
   }
 );
-
-/**
- * 取消指定请求
- * @param requestKey 请求标识（method_url_params_data）
- */
-export const cancelRequest = (requestKey: string): boolean => {
-  let cancelled = false;
-  pendingRequests.forEach((controller, key) => {
-    if (key === requestKey || key.startsWith(`${requestKey}#`)) {
-      controller.abort();
-      pendingRequests.delete(key);
-      cancelled = true;
-    }
-  });
-  return cancelled;
-};
-
-/**
- * 取消所有 pending 的请求
- * @param filter 可选的过滤函数，返回 true 的请求会被取消
- */
-export const cancelAllRequests = (filter?: (key: string) => boolean): number => {
-  let cancelledCount = 0;
-  pendingRequests.forEach((controller, key) => {
-    if (!filter || filter(key)) {
-      controller.abort();
-      pendingRequests.delete(key);
-      cancelledCount++;
-    }
-  });
-  return cancelledCount;
-};
-
-/**
- * 取消 Agent 相关的请求
- */
-export const cancelAgentRequests = (): number => {
-  return cancelAllRequests((key) => key.includes('/agents/'));
-};
-
-/**
- * 获取当前 pending 请求数量
- */
-export const getPendingRequestCount = (): number => {
-  return pendingRequests.size;
-};
 
 export default api;
 

@@ -20,6 +20,7 @@
           </div>
 
           <form class="form" :aria-busy="loading" @submit.prevent="handleLogin">
+            <div v-if="loginError" class="errorbar" role="alert">{{ loginError }}</div>
             <label class="field" :class="{ 'field--error': errors.name }">
               <span class="field__label">管理员账号</span>
               <input
@@ -28,9 +29,13 @@
                 class="field__input"
                 placeholder="请输入管理员账号"
                 autocomplete="username"
+                autofocus
+                :aria-invalid="!!errors.name"
+                :aria-describedby="errors.name ? 'login-err-name' : undefined"
                 @blur="touch('name')"
+                @input="loginError = ''"
               />
-              <span v-if="errors.name" class="field__error">{{ errors.name }}</span>
+              <span v-if="errors.name" id="login-err-name" class="field__error">{{ errors.name }}</span>
             </label>
 
             <label class="field" :class="{ 'field--error': errors.password }">
@@ -42,6 +47,8 @@
                   class="field__input"
                   placeholder="请输入密码"
                   autocomplete="current-password"
+                  :aria-invalid="!!errors.password"
+                  :aria-describedby="errors.password ? 'login-err-password' : undefined"
                   @blur="touch('password')"
                 />
                 <button
@@ -64,7 +71,7 @@
                   </svg>
                 </button>
               </span>
-              <span v-if="errors.password" class="field__error">{{ errors.password }}</span>
+              <span v-if="errors.password" id="login-err-password" class="field__error">{{ errors.password }}</span>
             </label>
 
             <label class="remember">
@@ -86,6 +93,9 @@
         <aside class="auth__demo-side">
           <div class="demo">
             <p class="demo__tagline">WenFlow 管理后台</p>
+            <div class="demo__intro">
+              <p>AI 教学模拟 · 学习路径编排 · 实时观测</p>
+            </div>
 
             <div class="demo__status">
               <span class="demo__dot"></span>
@@ -109,7 +119,8 @@
             <div class="demo__panel">
               <div class="demo__panel-head">
                 <strong>动态</strong>
-                <span>实时</span>
+                <!-- 硬编码示意数据：明确标注，避免被误读为真实实时指标 -->
+                <span>示例数据</span>
               </div>
               <ul class="demo__feed">
                 <li v-for="item in feed" :key="item.text">
@@ -136,7 +147,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { adminAuthApi, markAdminSession } from '@/api/adminApi'
 import { toast } from '../../utils/toast'
 import { consumeAuthFlashMessage } from '../../utils/authFlash'
-import '@/views/v2/v2.css'
 
 const router = useRouter()
 const route = useRoute()
@@ -153,6 +163,7 @@ const errors = reactive({
   name: '',
   password: ''
 })
+const loginError = ref('')
 
 const funnel = [
   { label: '用户', value: '128' },
@@ -174,24 +185,23 @@ function touch(key: 'name' | 'password') {
 
 const safeRedirect = () => {
   const value = Array.isArray(route.query.redirect) ? route.query.redirect[0] : route.query.redirect
-  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return '/admin/console'
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return '/admin/overview'
   try {
     const target = new URL(value, window.location.origin)
     if (target.origin !== window.location.origin || !target.pathname.startsWith('/admin/')) {
-      return '/admin/console'
+      return '/admin/overview'
     }
-    // 旧运营后台书签 → 新控制台；测试台路径保留
+    // 旧运营后台书签 /admin/console → 新总览（router 亦有 /admin/console 兼容重定向）
     if (
-      target.pathname.startsWith('/admin/test/') ||
-      target.pathname === '/admin/test' ||
       target.pathname === '/admin/console' ||
       target.pathname === '/admin/login'
     ) {
-      return `${target.pathname}${target.search}${target.hash}`
+      return '/admin/overview'
     }
-    return '/admin/console'
+    // 深链恢复：校验通过后回到管理员原本要去的页面（含 query/hash）
+    return `${target.pathname}${target.search}${target.hash}`
   } catch {
-    return '/admin/console'
+    return '/admin/overview'
   }
 }
 
@@ -214,11 +224,18 @@ const handleLogin = async () => {
       toast.success('登录成功')
       await router.replace(safeRedirect())
     } else {
-      toast.error(response.data.message || '登录失败，请检查账号密码')
+      const msg = response.data.message || '登录失败，请检查账号密码'
+      // 服务端失败统一进顶部横幅：凭证错误不属于「用户名格式」字段级问题，不挂到 errors.name
+      loginError.value = msg
+      toast.error(msg)
     }
   } catch (error: any) {
-    console.debug('管理员登录请求失败:', error?.response?.status ?? error?.code ?? 'network-error')
-    toast.error(error.response?.data?.error?.message || '登录失败，请检查账号密码')
+    const status = error?.response?.status
+    const msg = status === 429 ? '登录尝试过于频繁，请稍后再试'
+      : !status || status >= 500 ? '服务暂时不可用，请稍后重试'
+      : error.response?.data?.error?.message || '登录失败，请检查账号密码'
+    loginError.value = msg
+    toast.error(msg)
   } finally {
     loading.value = false
   }
@@ -488,6 +505,17 @@ onMounted(() => {
   max-width: 32ch;
 }
 
+.demo__intro {
+  margin: 0;
+}
+
+.demo__intro p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
 .demo__status {
   display: flex;
   align-items: center;
@@ -551,8 +579,8 @@ onMounted(() => {
   gap: 2px;
   padding: 8px 6px;
   border-radius: 10px;
-  background: #f7faff;
-  border: 1px solid #e8eefb;
+  background: var(--bubble-ai-bg);
+  border: 1px solid var(--line);
   text-align: center;
 }
 
@@ -601,7 +629,7 @@ onMounted(() => {
   border-top: 1px solid var(--line);
   color: var(--faint);
   font-size: 11.5px;
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--v2nav-bg);
 }
 
 .auth__footer-logo {
@@ -613,6 +641,21 @@ onMounted(() => {
 
 .auth__footer-sep {
   opacity: 0.5;
+}
+
+/* ===== 深色模式（data-theme=dark）：压制硬编码浅色光晕与渐变，统计卡/页脚随变量反转 ===== */
+[data-theme='dark'] .auth__demo-side {
+  background:
+    radial-gradient(320px 220px at 90% 0%, rgba(141, 107, 255, 0.14), transparent 65%),
+    linear-gradient(160deg, rgba(77, 139, 248, 0.1), rgba(24, 34, 48, 0.2));
+}
+[data-theme='dark'] .auth__bg {
+  background:
+    radial-gradient(560px 300px at 12% -4%, rgba(77, 139, 248, 0.08), transparent 60%),
+    radial-gradient(480px 260px at 88% 104%, rgba(167, 139, 255, 0.07), transparent 60%);
+}
+[data-theme='dark'] .auth__card {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 24px 60px rgba(0, 0, 0, 0.45);
 }
 
 @media (max-width: 760px) {

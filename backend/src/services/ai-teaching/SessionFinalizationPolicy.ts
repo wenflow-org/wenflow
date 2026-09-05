@@ -1,4 +1,4 @@
-export type SessionEvaluationSource = 'model' | 'ai-fallback' | 'failed';
+export type SessionEvaluationSource = 'model' | 'ai-fallback' | 'failed' | 'unavailable';
 export type FinalizeAction = 'end_only' | 'complete_task' | 'complete_review';
 export type FinalizationStepStatus = 'not_started' | 'processing' | 'completed' | 'failed' | 'skipped';
 
@@ -53,7 +53,7 @@ export function hasReliableSessionEvaluation(
   evaluation: unknown,
   source: SessionEvaluationSource
 ): boolean {
-  return source !== 'failed' && evaluation !== null && evaluation !== undefined;
+  return source !== 'failed' && source !== 'unavailable' && evaluation !== null && evaluation !== undefined;
 }
 
 export function mergeFinalTeachingState(
@@ -61,9 +61,16 @@ export function mergeFinalTeachingState(
   finalMetrics: Record<string, any> | null,
   sessionArtifacts: Record<string, any>
 ): Record<string, any> {
-  return {
+  const next: Record<string, any> = {
     ...(currentState || {}),
     ...(finalMetrics || {}),
     sessionArtifacts
   };
+  // 结束态清理：不再需要待处理检查点（避免详情接口残留 + 阻断后续新会话状态回读）
+  delete next.pendingCheckpoint;
+  delete next.lastCheckpointTurn;
+  if (next.sessionArtifacts && typeof next.sessionArtifacts === 'object') {
+    delete next.sessionArtifacts.pendingCheckpoint;
+  }
+  return next;
 }

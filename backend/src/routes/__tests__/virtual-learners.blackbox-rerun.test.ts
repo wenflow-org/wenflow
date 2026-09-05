@@ -54,7 +54,7 @@ describe('POST blackbox-rerun', () => {
     actorProfile,
     story: null,
     frictionBudget: 'high',
-    simulatorPrompts: { goal: 'goal prompt', learning: 'learn prompt' },
+    simulatorPrompts: { goal: 'goal prompt', teaching: 'learn prompt' },
     simulators: {
       goal: {
         temperature: 0.2,
@@ -63,7 +63,7 @@ describe('POST blackbox-rerun', () => {
           providerId: 'provider-1', credentialFingerprint: 'hash-1', endpoint: 'https://example.test/v1', model: 'model-1'
         }
       },
-      learning: {
+      teaching: {
         temperature: 0.3,
         maxTokens: 800,
         route: {

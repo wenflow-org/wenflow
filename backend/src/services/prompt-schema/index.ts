@@ -10,7 +10,7 @@
  *
  * 真相源仍是 prompts/*.md；本工具只在内存里拆/拼，便于运营按块编辑与可视化。
  *
- * 详见 doc/PROMPT_AUTHORING_PROTOCOL.md。
+ * 详见 doc/archive/PROMPT_AUTHORING_PROTOCOL_v2.md（v2 已归档 2026-08-09，现行协议为 SKILL_PROTOCOL_V4）。
  *
  * ⚠️ 向后兼容：保留 v1 的 PromptSchema 字段（title/identity/rulesRaw/rules/output/
  *    extras/conformant/warnings）+ parsePromptSchema/composePromptSchema/parseRuleItems/
@@ -971,15 +971,12 @@ export const BLOCK_RULE_PREFIX: Partial<Record<PromptSection, string>> = {
  */
 export function suggestRulePrefix(agentId: string): string {
   const customMap: Record<string, string> = {
-    'skill:goal-profile-inference': 'GI',
-    'skill:learning-pattern-distiller': 'LP',
     'skill:adaptive-guidance-copy': 'AG',
-    'skill:path-scene-framing': 'PSF',
     'skill:peer-reinforcement': 'PR',
     'skill:stage-designer': 'SD',
     'skill:goal-conversation': 'GC',
     'skill:path-planning': 'PA',
-    'skill:learning-turn': 'TT',
+    'skill:teaching-turn': 'TT',
     'skill:session-wrapup': 'SW',
   };
   if (customMap[agentId]) return customMap[agentId];

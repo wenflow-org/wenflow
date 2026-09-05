@@ -4,7 +4,8 @@
  * 账号自动学习：开发者选定虚拟学习者账号名下的任务，系统沿真实生产链
  * 驱动该账号学完一节课，并生成学习传播报告（前后快照对比 + 下游影响）。
  *
- * 设计文档：doc/VIRTUAL_LEARNER_QUICK_LEARN_DESIGN_2026-07-21_091152.md 第 6.5 节
+ * 设计要点：沿生产链驱动账号学完一节课（含传播报告），详见本文件实现与
+ * 虚拟学习者链路（doc/VIRTUAL_LEARNER_CHAIN.md）。
  */
 
 import express from 'express';
@@ -118,17 +119,23 @@ router.get('/:id/quick-learn/tasks', async (req: any, res) => {
  */
 router.post('/:id/quick-learn/runs', async (req: any, res) => {
   try {
-    const { taskId, maxTurns } = req.body || {};
+    const { taskId, maxTurns, storyId, frictionBudget } = req.body || {};
     if (typeof taskId !== 'string' || !taskId.trim()) {
       return res.status(400).json({ success: false, error: '缺少 taskId' });
     }
     if (maxTurns !== undefined && (!Number.isInteger(maxTurns) || maxTurns < 1 || maxTurns > 40)) {
       return res.status(400).json({ success: false, error: 'maxTurns 必须是 1-40 的整数' });
     }
+    if (frictionBudget !== undefined
+      && !['none', 'low', 'normal', 'high', 'stress_test'].includes(frictionBudget)) {
+      return res.status(400).json({ success: false, error: 'frictionBudget 必须是 none|low|normal|high|stress_test' });
+    }
     const result = await quickLearnService.startRun({
       profileId: req.params.id,
       taskId: taskId.trim(),
       ...(maxTurns !== undefined ? { maxTurns } : {}),
+      ...(typeof storyId === 'string' && storyId.trim() ? { storyId: storyId.trim() } : {}),
+      ...(typeof frictionBudget === 'string' && frictionBudget ? { frictionBudget } : {}),
     });
     res.json({ success: true, data: result });
   } catch (error: any) {

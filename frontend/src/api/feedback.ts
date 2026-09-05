@@ -45,6 +45,18 @@ export async function submitFeedback(params: SubmitFeedbackParams): Promise<Feed
   return response.data || response
 }
 
+/** 消息级点赞/点踩：同一句 AI 回复内容去重（后端按内容哈希 key） */
+export async function submitMessageFeedback(params: {
+  sessionId: string
+  messageText: string
+  thumbsUp: boolean
+  comment?: string
+}): Promise<FeedbackItem> {
+  const { sessionId, ...data } = params
+  const response = await api.put(`/feedback/sessions/${sessionId}/message-thumbs`, data)
+  return response.data || response
+}
+
 export async function getSessionFeedback(sessionId: string): Promise<FeedbackItem | null> {
   const response = await api.get(`/feedback/sessions/${sessionId}`)
   return response.data ?? null
@@ -56,6 +68,7 @@ export async function getMyFeedback(limit = 50, page = 1) {
 
 export const feedbackApi = {
   submit: submitFeedback,
+  submitMessage: submitMessageFeedback,
   getSession: getSessionFeedback,
   getMyFeedback
 }

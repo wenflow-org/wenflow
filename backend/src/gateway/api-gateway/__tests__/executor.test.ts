@@ -455,7 +455,8 @@ describe('APIExecutor retry attempts', () => {
   it('识别 safe-http 的 ETIMEDOUT 并按超时重试', async () => {
     safeHttpRequestMock.mockRejectedValue(Object.assign(new Error('HTTP 请求超时'), { code: 'ETIMEDOUT' }))
     jest.spyOn(APIExecutor.prototype as any, 'delay').mockResolvedValue(undefined)
-    const budget = createRetryBudget()
+    // 显式收紧 transport 预算，使断言不随平台默认值漂移（默认值由 reliability-settings 测试钉死）
+    const budget = createRetryBudget({ maxTransportRetries: 1 })
 
     await expect(new APIExecutor().execute(
       route,

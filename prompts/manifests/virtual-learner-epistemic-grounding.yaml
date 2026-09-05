@@ -1,0 +1,41 @@
+version: prompt-lab-manifest/v1
+skillId: virtual-learner-epistemic-grounding
+agentId: skill:virtual-learner-epistemic-grounding
+name: default-virtual-learner-epistemic-grounding
+archetype: extractor
+description: 基于学习者画像掌握度，对本轮能否做对当前步骤做离散认知判决（BEAGLE 物理两阶段第一段）
+acceptableAgentIds:
+  - skill:virtual-learner-epistemic-grounding
+publish:
+  enabled: true
+  exportTargets:
+    - platform-prompts
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: extraction
+  interactionMode: batch
+  input:
+    transport: json
+    schemaSource: skill-definition
+  output:
+    media: json
+    schemaSource: runtime-validator
+    envelope: adapter
+  context:
+    envelope: context-envelope/v1
+    delivery: sidecar
+    modelExposure: projected
+  failurePolicy: blocking
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: virtual-learner, phases: [simulation-step-completed], defaultPhase: simulation-step-completed, terminalPhases: [simulation-step-completed], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership:
+  tier: production
+  visibility: internal
+tags:
+  - virtual-learner
+  - extractor

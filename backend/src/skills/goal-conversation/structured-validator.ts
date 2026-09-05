@@ -13,6 +13,8 @@ export interface StructuredParseResult {
   parsedJson: any | null;
   dialogueText: string;
   parseMode: GoalStructuredParseMode;
+  /** 检测到 JSON 片段但解析失败（失败归因：json_parse_error vs missing_json_block） */
+  parseError: boolean;
 }
 
 export interface StructuredValidationResult {
@@ -24,121 +26,24 @@ export interface StructuredValidationResult {
   violations: string[];
 }
 
-function fixIncompleteJson(jsonStr: string): string {
-  let fixed = jsonStr.trim();
-  const openBraces = (fixed.match(/\{/g) || []).length;
-  const closeBraces = (fixed.match(/\}/g) || []).length;
-  const openBrackets = (fixed.match(/\[/g) || []).length;
-  const closeBrackets = (fixed.match(/\]/g) || []).length;
+// JSON 提取核心（3 级策略 + 不完整 JSON 修复 + 对话文本拆分）已提升至 composers/json-extractor.ts（2026-08 去重合并）
+import { extractStructuredPayloadWithDialogue } from '../../composers/json-extractor';
+import type { StructuredPayloadParseResult } from '../../composers/json-extractor';
 
-  if (openBraces > closeBraces) fixed += '}'.repeat(openBraces - closeBraces);
-  if (openBrackets > closeBrackets) fixed += ']'.repeat(openBrackets - closeBrackets);
+export type { StructuredPayloadParseResult };
 
-  const quoteCount = (fixed.match(/(?<!\\)"/g) || []).length;
-  if (quoteCount % 2 !== 0) fixed += '"';
-
-  fixed = fixed.replace(/,\s*([}\]])/g, '$1');
-  fixed = fixed.replace(/:\s*$/, ': null');
-  return fixed;
-}
-
-function safeJsonParse(jsonStr: string): any {
-  try {
-    return JSON.parse(jsonStr);
-  } catch {
-    return JSON.parse(fixIncompleteJson(jsonStr));
-  }
-}
-
-function extractJsonFromJsonMarker(content: string): { parsedJson: any | null; dialogueText: string; parseError: boolean } {
-  const jsonIndex = content.lastIndexOf('JSON:');
-  if (jsonIndex === -1) return { parsedJson: null, dialogueText: content, parseError: false };
-
-  const afterJson = content.substring(jsonIndex + 5).trim();
-  let braceCount = 0;
-  let jsonStart = -1;
-  let jsonEnd = -1;
-
-  for (let i = 0; i < afterJson.length; i += 1) {
-    if (afterJson[i] === '{') {
-      if (jsonStart === -1) jsonStart = i;
-      braceCount += 1;
-    } else if (afterJson[i] === '}') {
-      braceCount -= 1;
-      if (braceCount === 0) {
-        jsonEnd = i + 1;
-        break;
-      }
-    }
-  }
-
-  if (jsonStart === -1 || jsonEnd === -1) {
-    return { parsedJson: null, dialogueText: content, parseError: false };
-  }
-
-  try {
-    const parsedJson = safeJsonParse(afterJson.substring(jsonStart, jsonEnd));
-    return { parsedJson, dialogueText: content.substring(0, jsonIndex).trim(), parseError: false };
-  } catch {
-    return { parsedJson: null, dialogueText: content, parseError: true };
-  }
-}
-
-function extractJsonFromCodeFence(content: string): { parsedJson: any | null; dialogueText: string; parseError: boolean } {
-  const patterns = [/```json\s*([\s\S]*?)\s*```/, /```\s*([\s\S]*?\})\s*```/];
-  let sawFence = false;
-
-  for (const pattern of patterns) {
-    const match = content.match(pattern);
-    if (!match) continue;
-    sawFence = true;
-    try {
-      const parsedJson = safeJsonParse(match[1]);
-      return { parsedJson, dialogueText: content.split(match[0])[0].trim(), parseError: false };
-    } catch {
-      continue;
-    }
-  }
-
-  return { parsedJson: null, dialogueText: content, parseError: sawFence };
-}
-
-function extractRawTrailingJson(content: string): { parsedJson: any | null; dialogueText: string; parseError: boolean } {
-  const rawJsonMatch = content.match(/\{[\s\S]*\}$/);
-  if (!rawJsonMatch) return { parsedJson: null, dialogueText: content, parseError: false };
-
-  try {
-    const parsedJson = safeJsonParse(rawJsonMatch[0]);
-    return {
-      parsedJson,
-      dialogueText: content.substring(0, content.length - rawJsonMatch[0].length).trim(),
-      parseError: false
-    };
-  } catch {
-    return { parsedJson: null, dialogueText: content, parseError: true };
-  }
-}
-
+/**
+ * 从 LLM 原始响应中提取结构化 JSON 与对话正文。
+ * 复用共享核心（raw-trailing → code-fence → JSON: marker），行为与原实现一致。
+ */
 export function extractStructuredPayload(content: string): StructuredParseResult {
-  let parsedJson: any | null = null;
-  let dialogueText = content;
-
-  ({ parsedJson, dialogueText } = extractRawTrailingJson(content));
-  if (parsedJson) {
-    return { parsedJson, dialogueText, parseMode: 'raw-json' };
-  }
-
-  ({ parsedJson, dialogueText } = extractJsonFromCodeFence(content));
-  if (parsedJson) {
-    return { parsedJson, dialogueText, parseMode: 'code-fence' };
-  }
-
-  ({ parsedJson, dialogueText } = extractJsonFromJsonMarker(content));
-  if (parsedJson) {
-    return { parsedJson, dialogueText, parseMode: 'json-marker' };
-  }
-
-  return { parsedJson: null, dialogueText: content, parseMode: 'none' };
+  const result = extractStructuredPayloadWithDialogue(content);
+  return {
+    parsedJson: result.parsedJson,
+    dialogueText: result.dialogueText,
+    parseMode: result.parseMode as GoalStructuredParseMode,
+    parseError: result.parseError,
+  };
 }
 
 export function validateGoalConversationStructuredOutput(
@@ -148,15 +53,12 @@ export function validateGoalConversationStructuredOutput(
   // 允许新版扁平结构（understanding/nextQuestions/...直接在顶层）和旧版包装结构（goalConversation 包装层）
   const allowedTopLevelKeys = new Set([
     'reply', 'state', 'goalConversation', 'hints',
-    'understanding', 'nextQuestions', 'quickReplies', 'confirmedProposal', 'confidenceScores', 'structuredData'
+    'understanding', 'nextQuestions', 'quickReplies', 'confirmedProposal', 'confidenceScores', 'structuredData',
+    'proposalQuality'
   ]);
-  const jsonMarkerResult = extractJsonFromJsonMarker(content);
-  const codeFenceResult = extractJsonFromCodeFence(content);
-  const rawJsonResult = extractRawTrailingJson(content);
-  const { parsedJson, dialogueText, parseMode } = extractStructuredPayload(content);
+  const { parsedJson, dialogueText, parseMode, parseError } = extractStructuredPayload(content);
 
   if (!parsedJson || typeof parsedJson !== 'object') {
-    const parseError = jsonMarkerResult.parseError || codeFenceResult.parseError || rawJsonResult.parseError;
     return {
       valid: false,
       parseMode,

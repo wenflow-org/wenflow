@@ -57,7 +57,6 @@ const adminPages = [
   { path: '/admin/skill-manager', name: 'Skill 管理中心' },
   // devDebug / test 组
   { path: '/admin/skill-prompt-preview', name: 'Skill Prompt 预览' },
-  { path: '/admin/test/dashboard', name: '测试学习台' },
   { path: '/admin/virtual-learners', name: '虚拟用户模拟' },
   // monitor 组
   { path: '/admin/execution-logs', name: 'Agent 执行日志' },

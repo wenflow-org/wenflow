@@ -4,12 +4,25 @@ import { logger } from '../utils/logger';
 import prisma from '../config/database';
 import { ProjectionGrantSource, SyntheticCapability, verifyProjectionToken } from '../utils/projection-token';
 import { enforceSyntheticProjectionAccess } from './synthetic-projection.middleware';
-import { SessionTokenType, verifySessionToken } from '../utils/session-token';
-import { resolveAuthToken } from '../utils/auth-cookie';
+import {
+  SessionTokenType,
+  verifySessionToken,
+  verifyAccessToken,
+  verifyRefreshToken,
+  signAccessToken,
+  signRefreshToken,
+} from '../utils/session-token';
+import {
+  resolveAuthToken,
+  resolveRefreshToken,
+  setAuthCookie,
+  setRefreshCookie,
+} from '../utils/auth-cookie';
 
 interface JwtPayload {
   userId: string;
   email: string;
+  tokenVersion?: number;
 }
 
 // 扩展Request类型
@@ -40,6 +53,47 @@ declare global {
     }
   }
 }
+
+/**
+ * Validate user record (exists, not deleted, tokenVersion match).
+ * Returns the user record or null if invalid (res already sent).
+ */
+const validateUserRecord = async (
+  userId: string,
+  tokenVersion?: number
+): Promise<{ deletedAt: Date | null; tokenVersion: number | null } | null> => {
+  const userRecord = await prisma.users.findUnique({
+    where: { id: userId },
+    select: { deletedAt: true, tokenVersion: true }
+  });
+
+  if (!userRecord || userRecord.deletedAt) {
+    return null;
+  }
+
+  // 兼容存量旧 token（payload 无 tokenVersion 时不做版本校验，随过期自然失效）
+  if (typeof tokenVersion === 'number'
+    && (userRecord.tokenVersion ?? 0) !== tokenVersion) {
+    return null;
+  }
+
+  return userRecord;
+};
+
+/**
+ * Issue a new token pair and set cookies for a user during silent refresh.
+ */
+const issueAndSetTokens = (
+  res: Response,
+  userId: string,
+  name: string,
+  tokenVersion: number
+): void => {
+  const accessToken = signAccessToken(userId, name, tokenVersion);
+  const refreshToken = signRefreshToken(userId, tokenVersion);
+  setAuthCookie(res, accessToken, 'user');
+  setRefreshCookie(res, refreshToken);
+};
 
 const authenticate = async (
   req: Request,
@@ -117,28 +171,112 @@ const authenticate = async (
       return;
     }
 
-    // 解析 token：优先 Authorization Header，回退 HttpOnly Cookie
-    const token = resolveAuthToken(req, expectedType);
+    // ──── Admin path: single-token, no refresh needed ────
+    if (expectedType === 'admin') {
+      const token = resolveAuthToken(req, expectedType);
+      if (!token) {
+        return res.status(401).json({
+          success: false,
+          error: { message: '未提供认证Token' }
+        });
+      }
 
-    if (!token) {
+      const decoded = verifySessionToken(token, expectedType) as JwtPayload;
+      req.user = {
+        userId: decoded.userId,
+        email: decoded.email || '',
+        isAdmin: true,
+        sessionType: 'admin'
+      };
+      next();
+      return;
+    }
+
+    // ──── User path: dual-token with silent refresh ────
+
+    // 1. Try access token first
+    const accessToken = resolveAuthToken(req, 'user');
+    if (accessToken) {
+      try {
+        const decoded = verifyAccessToken(accessToken) as JwtPayload;
+        const userRecord = await validateUserRecord(decoded.userId, decoded.tokenVersion);
+        if (!userRecord) {
+          return res.status(401).json({
+            success: false,
+            error: { message: '会话已失效，请重新登录' }
+          });
+        }
+
+        req.user = {
+          userId: decoded.userId,
+          email: decoded.email || '',
+          isAdmin: false,
+          sessionType: 'user'
+        };
+        next();
+        return;
+      } catch (atError: any) {
+        // Access token invalid/expired — fall through to try refresh token
+        if (atError.name !== 'TokenExpiredError' && atError.name !== 'JsonWebTokenError') {
+          throw atError;
+        }
+        // If access token expired, try silent refresh
+        if (atError.name !== 'TokenExpiredError') {
+          return res.status(401).json({
+            success: false,
+            error: { message: '无效的Token' }
+          });
+        }
+      }
+    }
+
+    // 2. Access token missing/expired — try refresh token from cookie
+    const refreshTokenCookie = resolveRefreshToken(req);
+    if (!refreshTokenCookie) {
       return res.status(401).json({
         success: false,
         error: { message: '未提供认证Token' }
       });
     }
 
-    // 验证token（显式指定允许的算法）
-    const decoded = verifySessionToken(token, expectedType) as JwtPayload;
+    try {
+      const refreshPayload = verifyRefreshToken(refreshTokenCookie);
+      const userRecord = await validateUserRecord(
+        refreshPayload.userId,
+        refreshPayload.tokenVersion
+      );
 
-    // 将用户信息附加到request
-    req.user = {
-      userId: decoded.userId,
-      email: decoded.email || '',
-      isAdmin: expectedType === 'admin',
-      sessionType: expectedType
-    };
+      if (!userRecord) {
+        return res.status(401).json({
+          success: false,
+          error: { message: '会话已失效，请重新登录' }
+        });
+      }
 
-    next();
+      // Silent refresh: issue new access + refresh token pair, set cookies
+      issueAndSetTokens(
+        res,
+        refreshPayload.userId,
+        refreshPayload.name || '',
+        refreshPayload.tokenVersion ?? 0
+      );
+
+      // Attach user to request
+      req.user = {
+        userId: refreshPayload.userId,
+        email: refreshPayload.email || '',
+        isAdmin: false,
+        sessionType: 'user'
+      };
+
+      next();
+      return;
+    } catch (rtError: any) {
+      return res.status(401).json({
+        success: false,
+        error: { message: '会话已过期，请重新登录' }
+      });
+    }
   } catch (error: any) {
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({
@@ -181,16 +319,53 @@ export const optionalAuthMiddleware = async (
   next: NextFunction
 ) => {
   try {
-    const token = resolveAuthToken(req, 'user');
+    // Try access token first
+    const accessToken = resolveAuthToken(req, 'user');
 
-    if (token) {
-      const decoded = verifySessionToken(token, 'user') as JwtPayload;
-      req.user = {
-        userId: decoded.userId,
-        email: decoded.email || '',
-        isAdmin: false,
-        sessionType: 'user'
-      };
+    if (accessToken) {
+      try {
+        const decoded = verifyAccessToken(accessToken) as JwtPayload;
+        req.user = {
+          userId: decoded.userId,
+          email: decoded.email || '',
+          isAdmin: false,
+          sessionType: 'user'
+        };
+        next();
+        return;
+      } catch {
+        // Token invalid/expired — try refresh silently
+      }
+    }
+
+    // Try refresh token for silent recovery
+    const refreshTokenCookie = resolveRefreshToken(req);
+    if (refreshTokenCookie) {
+      try {
+        const refreshPayload = verifyRefreshToken(refreshTokenCookie);
+        const userRecord = await validateUserRecord(
+          refreshPayload.userId,
+          refreshPayload.tokenVersion
+        );
+
+        if (userRecord) {
+          issueAndSetTokens(
+            res,
+            refreshPayload.userId,
+            refreshPayload.name || '',
+            refreshPayload.tokenVersion ?? 0
+          );
+
+          req.user = {
+            userId: refreshPayload.userId,
+            email: refreshPayload.email || '',
+            isAdmin: false,
+            sessionType: 'user'
+          };
+        }
+      } catch {
+        // Refresh invalid — ignore
+      }
     }
 
     next();

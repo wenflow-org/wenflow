@@ -2,15 +2,21 @@
  * Agent Manifest - 真理源
  *
  * 架构：
- *   - 5 个顶层 Agent（kind=agent）：goal / path / teaching / learner / simulation
+ *   - 5 个顶层 Agent（kind=agent）：goal / path / teaching / profile / simulation
  *     - Agent 是"编排器"，不持有 system prompt，不直接调用 LLM
- *     - Agent 下辖一组 Skill（agentMembers）
+ *     - Agent 下辖一组 Skill（agentMembers，由 prompts/skills.yaml parentAgent 派生，P1）
  *   - N 个 Skill（kind=skill）：实际持有 prompt、调用 LLM 的执行单元
  *
  * 铁律（由 validateManifest 启动时强制）：
  *   - kind=agent: 不允许有 defaultModelConfig，agentMembers 必须非空
  *   - kind=skill: id 必须以 'skill:' 开头
  *   - alias: 仅用于旧 id 向新 id 的兼容映射
+ *
+ * agentMembers 派生（SKILLS_YAML_SPEC §2.3①）：
+ *   - 数据源 = prompts/skills.yaml 条目 parentAgent 字段（唯一来源），本模块惰性加载
+ *     （首次调用 getAgentMembersOfAgent 时 require skills-file，避免模块顶部静态 import
+ *     造成循环依赖与启动顺序问题）。
+ *   - 过渡回滚：SKILLS_FILE_DISABLED=1 时回退 LEGACY_AGENT_MEMBERS（旧手写值，见 §5.3）。
  */
 
 export type AgentRuntimeKind = 'agent' | 'skill' | 'alias';
@@ -18,7 +24,7 @@ export type AgentRuntimeKind = 'agent' | 'skill' | 'alias';
 export type MonitoringGroupName =
   | 'Goal'
   | 'Path'
-  | 'Learning'
+  | 'Teaching'
   | 'Profile'
   | 'Simulation'
   | 'Tool'
@@ -63,12 +69,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: true,
     monitoringGroup: 'Goal',
     // Phase 3：裸名 goal-conversation 归 skill，不再作为 goal-agent 别名（避免与 skill 冲突）
-    aliases: ['requirement-agent'],
-    agentMembers: [
-      'skill:goal-conversation',
-      'skill:goal-profile-inference',
-      'skill:goal-understanding-composer'
-    ]
+    aliases: ['requirement-agent']
+    // agentMembers 由 prompts/skills.yaml parentAgent 派生（P1，见 getAgentMembersOfAgent）
   },
   {
     id: 'path-agent',
@@ -78,31 +80,20 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     kind: 'agent',
     runtimeEnabled: true,
     userVisible: true,
-    monitoringGroup: 'Path',
-    agentMembers: [
-      'skill:path-planning',
-      'skill:path-scene-framing',
-      'skill:stage-designer'
-    ]
+    monitoringGroup: 'Path'
+    // agentMembers 由 prompts/skills.yaml parentAgent 派生（P1）
   },
   {
-    id: 'learning-agent',
-    name: '学习 Agent',
+    id: 'teaching-agent',
+    name: '教学 Agent',
     description: 'AI 教学会话编排：单轮教学、伴学补强、课后产出',
     category: 'agent',
     kind: 'agent',
     runtimeEnabled: true,
     userVisible: true,
-    monitoringGroup: 'Learning',
-    aliases: ['ai-teaching-agent', 'ai-teaching'],
-    agentMembers: [
-      'skill:learning-turn',
-      'skill:peer-reinforcement',
-      'skill:session-wrapup',
-      'skill:learning-strategy-selector',
-      'skill:adaptive-guidance-copy',
-      'skill:acceptance-evidence-evaluator'
-    ]
+    monitoringGroup: 'Teaching',
+    aliases: ['ai-teaching-agent', 'ai-teaching']
+    // agentMembers 由 prompts/skills.yaml parentAgent 派生（P1）
   },
   {
     id: 'profile-agent',
@@ -112,12 +103,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     kind: 'agent',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Profile',
-    agentMembers: [
-      'skill:learner-model',
-      'skill:learning-pattern-distiller',
-      'skill:lesson-knowledge-enricher'
-    ]
+    monitoringGroup: 'Profile'
+    // agentMembers 由 prompts/skills.yaml parentAgent 派生（P1）
   },
   {
     id: 'simulation-agent',
@@ -127,16 +114,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     kind: 'agent',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Simulation',
-    agentMembers: [
-      'skill:virtual-learner-persona-designer',
-      'skill:virtual-learner-scenario-designer',
-      'skill:virtual-learner-goal-dialogue-simulator',
-      'skill:virtual-learner-path-evaluator',
-      'skill:virtual-learner-learn-turn-simulator',
-      'skill:virtual-learner-referee',
-      'skill:virtual-learner-actor-auditor'
-    ]
+    monitoringGroup: 'Simulation'
+    // agentMembers 由 prompts/skills.yaml parentAgent 派生（P1）
   },
 
   // ============ Goal 下辖 Skills ============
@@ -152,31 +131,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     aliases: ['goal-conversation-agent', 'goal-conversation'],
     ioContractVersion: 'agent-output-v1',
     // 与 prompts/skill.goal-conversation.md 及 handler codeDefaults 对齐（仅展示/兜底，权威在 ACTIVE prompt）
-    defaultModelConfig: { temperature: 0.7, maxTokens: 8000 }
-  },
-  {
-    id: 'skill:goal-profile-inference',
-    name: '目标画像推断 Skill',
-    description: '从目标对话推断学习者背景与画像信号',
-    category: 'goal',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Goal',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.3, maxTokens: 1200 }
-  },
-  {
-    id: 'skill:goal-understanding-composer',
-    name: '目标理解合成 Skill',
-    description: '将对话与推断结果合成结构化 Goal Understanding',
-    category: 'goal',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Goal',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.3, maxTokens: 2000 }
+    defaultModelConfig: { temperature: 0.7, maxTokens: 32000 }
   },
 
   // ============ Path 下辖 Skills ============
@@ -190,19 +145,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Path',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.4, maxTokens: 32000 }
-  },
-  {
-    id: 'skill:path-scene-framing',
-    name: '路径场景定帧 Skill',
-    description: '为路径阶段设计具体学习场景与情境',
-    category: 'path',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Path',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.6, maxTokens: 2000 }
+    defaultModelConfig: { temperature: 0.2, maxTokens: 32000 }
   },
   {
     id: 'skill:stage-designer',
@@ -214,84 +157,84 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Path',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.4, maxTokens: 4000 }
+    defaultModelConfig: { temperature: 0.3, maxTokens: 32000 }
+  },
+  {
+    id: 'skill:path-reviewer',
+    name: '路径评审 Skill',
+    description: '对 path-planning 生成的路径做 CIDDP 五维度评审，低于阈值触发重规划',
+    category: 'path',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Path',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.3, maxTokens: 4000 }
+  },
+  {
+    id: 'skill:kc-mapper',
+    name: '知识组件映射 Skill',
+    description: '将认知概念和子任务分解为细粒度 KC，标注前置依赖关系',
+    category: 'path',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Path',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.3, maxTokens: 8000 }
   },
 
   // ============ Learning 下辖 Skills ============
   {
-    id: 'skill:learning-turn',
-    name: '学习回合 Skill',
+    id: 'skill:teaching-turn',
+    name: '教学回合 Skill',
     description: '生成单轮教学回复与结构化教学状态',
-    category: 'learning',
+    category: 'teaching',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Learning',
-    aliases: ['learning-turn-agent', 'teaching-turn-agent'],
+    monitoringGroup: 'Teaching',
+    aliases: ['teaching-turn-agent'],
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.5, maxTokens: 2200 }
+    defaultModelConfig: { temperature: 0.7, maxTokens: 4000 }
   },
   {
     id: 'skill:peer-reinforcement',
     name: '伴学补强 Skill',
     description: '同伴式引导讨论与理解补强',
-    category: 'learning',
+    category: 'teaching',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Learning',
+    monitoringGroup: 'Teaching',
     aliases: ['peer-agent'],
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.8, maxTokens: 1000 }
+    defaultModelConfig: { temperature: 0.7, maxTokens: 4000 }
   },
   {
     id: 'skill:session-wrapup',
     name: '课后产出 Skill',
     description: '生成课后总结与评估',
-    category: 'learning',
+    category: 'teaching',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Learning',
+    monitoringGroup: 'Teaching',
     aliases: ['session-wrapup-agent'],
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.2, maxTokens: 2200 }
-  },
-  {
-    id: 'skill:learning-strategy-selector',
-    name: '学习策略选择 Skill',
-    description: '基于学习者状态选择教学策略',
-    category: 'learning',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Learning',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.3, maxTokens: 800 }
+    defaultModelConfig: { temperature: 0.7, maxTokens: 4000 }
   },
   {
     id: 'skill:adaptive-guidance-copy',
     name: '自适应引导文案 Skill',
     description: '根据情境生成自适应引导话术',
-    category: 'learning',
+    category: 'teaching',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Learning',
+    monitoringGroup: 'Teaching',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.7, maxTokens: 800 }
-  },
-  {
-    id: 'skill:acceptance-evidence-evaluator',
-    name: '验收证据评估 Skill',
-    description: '评估学习者输出是否满足验收点',
-    category: 'learning',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Learning',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.2, maxTokens: 1200 }
   },
 
   // ============ Profile 下辖 Skills ============
@@ -310,18 +253,6 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.3, maxTokens: 1000 }
   },
   {
-    id: 'skill:learning-pattern-distiller',
-    name: '学习模式蒸馏 Skill',
-    description: '从历史学习行为蒸馏稳定模式',
-    category: 'profile',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Profile',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.3, maxTokens: 1500 }
-  },
-  {
     id: 'skill:lesson-knowledge-enricher',
     name: '课后知识增强 Skill',
     description: '课后单次调用：蒸馏知识台账增量并抽取隐性概念线索',
@@ -332,6 +263,18 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     monitoringGroup: 'Profile',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.4, maxTokens: 4000 }
+  },
+  {
+    id: 'skill:learning-predictor',
+    name: '学习表现预测 Skill',
+    description: '任务开始前预测卡壳风险与建议深度，校准闭环验证',
+    category: 'profile',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Profile',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.2, maxTokens: 1200 }
   },
 
   // ============ Simulation 下辖 Skills ============
@@ -345,7 +288,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.8, maxTokens: 1500 }
+    defaultModelConfig: { temperature: 0.8, maxTokens: 32000 }
   },
   {
     id: 'skill:virtual-learner-scenario-designer',
@@ -357,7 +300,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.7, maxTokens: 1500 }
+    defaultModelConfig: { temperature: 0.9, maxTokens: 32000 }
   },
   {
     id: 'skill:virtual-learner-goal-dialogue-simulator',
@@ -369,7 +312,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.8, maxTokens: 1200 }
+    defaultModelConfig: { temperature: 0.8, maxTokens: 32000 }
   },
   {
     id: 'skill:virtual-learner-path-evaluator',
@@ -381,7 +324,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.6, maxTokens: 1500 }
+    defaultModelConfig: { temperature: 0.8, maxTokens: 32000 }
   },
   {
     id: 'skill:virtual-learner-learn-turn-simulator',
@@ -393,7 +336,19 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.8, maxTokens: 1200 }
+    defaultModelConfig: { temperature: 0.8, maxTokens: 32000 }
+  },
+  {
+    id: 'skill:virtual-learner-epistemic-grounding',
+    name: '虚拟学习者认知判决 Skill',
+    description: '基于学习者画像掌握度，对本轮能否做对当前步骤做离散认知判决（BEAGLE 物理两阶段第一段）',
+    category: 'simulation',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Simulation',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.3, maxTokens: 800 }
   },
   {
     id: 'skill:virtual-learner-referee',
@@ -408,6 +363,18 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.2, maxTokens: 2400 }
   },
   {
+    id: 'skill:virtual-learner-memory-curator',
+    name: '虚拟学习者课后记忆提炼 Skill',
+    description: '以虚拟学习者本人视角，从课堂回合中提炼"自己觉得学会了什么、卡在哪"，产出可沉淀的记忆增量',
+    category: 'simulation',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Simulation',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.3, maxTokens: 2400 }
+  },
+  {
     id: 'skill:virtual-learner-actor-auditor',
     name: '角色保真审计 Skill',
     description: '基于画像、故事、摩擦预算、私有状态和公开行为评估合成学习者可信度',
@@ -417,86 +384,9 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.2, maxTokens: 5000 }
+    defaultModelConfig: { temperature: 0.2, maxTokens: 2400 }
   },
   // ============ Tool Skills（工具类，无 LLM prompt） ============
-  {
-    id: 'skill:text-structure-analyzer',
-    name: '文本结构分析器 Skill',
-    description: '分析文本结构，提取大纲、章节、关键词等',
-    category: 'tool',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Tool',
-    noPromptFile: true
-  },
-  {
-    id: 'skill:retrieval',
-    name: '内容检索器 Skill',
-    description: '从提供的资料中检索相关内容',
-    category: 'tool',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Tool',
-    noPromptFile: true
-  },
-  {
-    id: 'skill:web-extractor',
-    name: '网页内容提取器 Skill',
-    description: '从网页URL提取结构化学习内容，包括标题、大纲、代码块、表格等',
-    category: 'tool',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Tool',
-    noPromptFile: true
-  },
-  {
-    id: 'skill:image-analyzer',
-    name: '图片分析器 Skill',
-    description: '分析图片内容，支持代码截图识别、报错分析、架构图解析、OCR文字提取等',
-    category: 'tool',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Tool',
-    noPromptFile: true
-  },
-  {
-    id: 'skill:memory-search',
-    name: '学习记忆搜索器 Skill',
-    description: '检索用户学习历史、对话记录、成就、进度等记忆数据，支持智能分析和洞察生成',
-    category: 'tool',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Tool',
-    noPromptFile: true
-  },
-  {
-    id: 'skill:smart-search',
-    name: '智能搜索器 Skill',
-    description: '智能搜索技能，支持语义搜索、关键词匹配、多源聚合和智能排序',
-    category: 'tool',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Tool',
-    noPromptFile: true
-  },
-  {
-    id: 'skill:structured-output-parser',
-    name: '结构化输出解析器 Skill',
-    description: '从 LLM 原始响应中提取 JSON 对象，处理 markdown 代码块、裸 JSON、多段落等场景',
-    category: 'tool',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Tool',
-    noPromptFile: true
-  },
   {
     id: 'skill:mcp-tool',
     name: 'MCP 工具调用 Skill',
@@ -519,14 +409,86 @@ for (const item of AGENT_MANIFEST) {
   }
 }
 
-export function listAgentManifest(): AgentManifestEntry[] {
+// ============================================================
+// agentMembers 派生（P1，SKILLS_YAML_SPEC §2.3①）
+// ============================================================
+
+/**
+ * 旧手写 agentMembers 过渡镜像（deprecated）：
+ * - 用途 1：SKILLS_FILE_DISABLED=1 过渡回滚点（规格 §5.3，仅限一版发布窗口）；
+ * - 用途 2：P1 验收"派生结果与手写逐项相等"的 diff 基准（check-skills-file.ts / 单测断言）。
+ * 正常路径不读取本表；agentMembers 唯一来源 = prompts/skills.yaml parentAgent。
+ */
+export const LEGACY_AGENT_MEMBERS: Record<string, string[]> = {
+  'goal-agent': ['skill:goal-conversation'],
+  'path-agent': ['skill:path-planning', 'skill:stage-designer', 'skill:path-reviewer', 'skill:kc-mapper'],
+  'teaching-agent': ['skill:teaching-turn', 'skill:peer-reinforcement', 'skill:session-wrapup', 'skill:adaptive-guidance-copy'],
+  'profile-agent': ['skill:learner-model', 'skill:lesson-knowledge-enricher', 'skill:learning-predictor'],
+  'simulation-agent': [
+    'skill:virtual-learner-persona-designer',
+    'skill:virtual-learner-scenario-designer',
+    'skill:virtual-learner-goal-dialogue-simulator',
+    'skill:virtual-learner-path-evaluator',
+    'skill:virtual-learner-learn-turn-simulator',
+    'skill:virtual-learner-epistemic-grounding',
+    'skill:virtual-learner-referee',
+    'skill:virtual-learner-memory-curator',
+    'skill:virtual-learner-actor-auditor'
+  ]
+};
+
+let derivedParentAgentMembers: Map<string, string[]> | null = null;
+
+/**
+ * 读取某顶层 Agent 下辖的成员 skill id 列表（含 skill: 前缀，顺序 = skills.yaml 文件顺序）。
+ * 惰性加载：首次调用时 require skills-file（绝不在模块顶部静态 import，避免循环依赖），
+ * 结果进程级缓存。SKILLS_FILE_DISABLED=1 时回退 LEGACY_AGENT_MEMBERS。
+ */
+export function getAgentMembersOfAgent(agentId: string): string[] {
+  if (process.env.SKILLS_FILE_DISABLED === '1') {
+    return [...(LEGACY_AGENT_MEMBERS[agentId] || [])];
+  }
+  if (!derivedParentAgentMembers) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const skillsFile = require('./skill-registry/skills-file');
+    const book = skillsFile.loadSkillsBookRaw();
+    const map = new Map<string, string[]>();
+    for (const entry of book.skills) {
+      if (!entry.parentAgent) continue;
+      const members = map.get(entry.parentAgent) || [];
+      members.push(`skill:${entry.skillId}`);
+      map.set(entry.parentAgent, members);
+    }
+    derivedParentAgentMembers = map;
+  }
+  return [...(derivedParentAgentMembers.get(agentId) || [])];
+}
+
+/** 返回带派生 agentMembers 的条目副本（对外 API 形状不变，内容与手写时代一致） */
+function withDerivedMembers(entry: AgentManifestEntry): AgentManifestEntry {
+  const copy = { ...entry };
+  if (copy.kind === 'agent') {
+    copy.agentMembers = getAgentMembersOfAgent(copy.id);
+  }
+  return copy;
+}
+
+/**
+ * 原始条目（不附加派生 agentMembers），供 skills-file 校验器（F12）与脚本对账使用。
+ * 注意：不要在此处调用任何会触发 agentMembers 派生的函数（否则与 loadSkillsFile 互为递归）。
+ */
+export function listRawManifestEntries(): AgentManifestEntry[] {
   return AGENT_MANIFEST.map(item => ({ ...item }));
+}
+
+export function listAgentManifest(): AgentManifestEntry[] {
+  return AGENT_MANIFEST.map(withDerivedMembers);
 }
 
 export function getAgentManifest(agentId: string): AgentManifestEntry | undefined {
   const canonical = getCanonicalAgentId(agentId);
   const entry = manifestMap.get(canonical);
-  return entry ? { ...entry } : undefined;
+  return entry ? withDerivedMembers(entry) : undefined;
 }
 
 export function getCanonicalAgentId(agentId: string): string {
@@ -557,7 +519,7 @@ export function isManifestSkill(agentId: string): boolean {
  * 列出顶层 Agent（kind=agent），用于 Agent 拓扑视图
  */
 export function listTopLevelAgents(): AgentManifestEntry[] {
-  return AGENT_MANIFEST.filter(item => item.kind === 'agent').map(item => ({ ...item }));
+  return AGENT_MANIFEST.filter(item => item.kind === 'agent').map(withDerivedMembers);
 }
 
 /**
@@ -566,8 +528,8 @@ export function listTopLevelAgents(): AgentManifestEntry[] {
 export function listSkillsOfAgent(agentId: string): AgentManifestEntry[] {
   const canonical = getCanonicalAgentId(agentId);
   const agent = manifestMap.get(canonical);
-  if (!agent || agent.kind !== 'agent' || !agent.agentMembers) return [];
-  return agent.agentMembers
+  if (!agent || agent.kind !== 'agent') return [];
+  return getAgentMembersOfAgent(canonical)
     .map(memberId => manifestMap.get(getCanonicalAgentId(memberId)))
     .filter((x): x is AgentManifestEntry => !!x);
 }
@@ -578,8 +540,8 @@ export function listSkillsOfAgent(agentId: string): AgentManifestEntry[] {
 export function getAgentOfSkill(skillId: string): AgentManifestEntry | undefined {
   const canonical = getCanonicalAgentId(skillId);
   for (const item of AGENT_MANIFEST) {
-    if (item.kind !== 'agent' || !item.agentMembers) continue;
-    if (item.agentMembers.some(m => getCanonicalAgentId(m) === canonical)) {
+    if (item.kind !== 'agent') continue;
+    if (getAgentMembersOfAgent(item.id).some(m => getCanonicalAgentId(m) === canonical)) {
       return { ...item };
     }
   }
@@ -620,11 +582,12 @@ export function getMonitoringGroupMappings() {
 
 export function getAgentRelations() {
   return AGENT_MANIFEST
-    .filter(item => item.kind === 'agent' && item.agentMembers)
+    .filter(item => item.kind === 'agent')
+    .filter(item => getAgentMembersOfAgent(item.id).length > 0)
     .map(item => ({
       agentId: item.id,
       group: item.monitoringGroup,
-      members: item.agentMembers || [item.id]
+      members: getAgentMembersOfAgent(item.id)
     }));
 }
 
@@ -644,7 +607,7 @@ export function getDefaultAgentModelConfigs() {
  *
  * 规则：
  *   - kind=agent 不允许有 defaultModelConfig
- *   - kind=agent 必须有非空 agentMembers
+ *   - kind=agent 必须有非空 agentMembers（派生自 skills.yaml parentAgent）
  *   - kind=skill id 必须以 'skill:' 开头
  *   - kind=skill 必须有 defaultModelConfig（否则无法运行）
  *   - kind=skill 引用的 Agent.agentMembers 必须能在 manifest 中找到
@@ -659,10 +622,11 @@ export function validateManifest(): { ok: true } | { ok: false; errors: string[]
       if (item.defaultModelConfig) {
         errors.push(`[manifest] Agent "${item.id}" 不应有 defaultModelConfig（Agent 是编排器，无 prompt 无 LLM 调用）`);
       }
-      if (!item.agentMembers || item.agentMembers.length === 0) {
-        errors.push(`[manifest] Agent "${item.id}" 必须有非空 agentMembers`);
+      const members = getAgentMembersOfAgent(item.id);
+      if (members.length === 0) {
+        errors.push(`[manifest] Agent "${item.id}" 必须有非空 agentMembers（派生自 skills.yaml parentAgent）`);
       } else {
-        for (const memberId of item.agentMembers) {
+        for (const memberId of members) {
           const canonical = aliasToCanonical.get(memberId) || memberId;
           if (!ids.has(canonical)) {
             errors.push(`[manifest] Agent "${item.id}" 引用的成员 "${memberId}" 在 manifest 中找不到`);

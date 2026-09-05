@@ -1,7 +1,10 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import { ElLoading } from 'element-plus';
-import 'element-plus/dist/index.css';
+// 组件样式由 unplugin-vue-components 按需注入；仅函数式服务需显式引入
+import 'element-plus/es/components/loading/style/css';
+import 'element-plus/es/components/message/style/css';
+import 'element-plus/es/components/message-box/style/css';
 
 import App from './App.vue';
 import router from './router';
@@ -17,6 +20,7 @@ import {
 import './styles/main.css';
 import './styles/tremor-theme.css';  // Tremor 风格主题
 import './styles/admin-theme.css';
+import './views/v2/v2.css';          // V2 设计系统（全局加载，防止路由切换闪烁）
 
 function currentRouteRequiresAdminAuth(): boolean {
   const currentRoute = router.currentRoute.value;

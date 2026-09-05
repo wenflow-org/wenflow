@@ -156,76 +156,6 @@ export const revokeUserProjectionGrant = async (grantId?: string) => {
   return await api.post(`${USER_PROJECTION_GRANT_BASE}/${grantId}/revoke`);
 };
 
-// ==================== Agent 自定义 ====================
-
-export const getUserAgents = async (params?: {
-  enabled?: boolean;
-  filter?: 'all' | 'system' | 'custom';
-}) => {
-  return await api.get(`${API_BASE}/agents`, { params });
-};
-
-export const getUserAgent = async (name: string) => {
-  return await api.get(`${API_BASE}/agents/${name}`);
-};
-
-export const saveUserAgent = async (data: {
-  agentName: string;
-  sourceType?: 'PLATFORM' | 'CUSTOM';
-  enabled?: boolean;
-  model?: string;
-  temperature?: number;
-  maxTokens?: number;
-  systemPrompt?: string;
-}) => {
-  return await api.post(`${API_BASE}/agents`, data);
-};
-
-export const updateUserAgent = async (name: string, data: {
-  model?: string;
-  temperature?: number;
-  maxTokens?: number;
-  systemPrompt?: string;
-}) => {
-  return await api.put(`${API_BASE}/agents/${name}`, data);
-};
-
-export const deleteUserAgent = async (name: string) => {
-  return await api.delete(`${API_BASE}/agents/${name}`);
-};
-
-export const enableUserAgent = async (name: string) => {
-  return await api.post(`${API_BASE}/agents/${name}/enable`);
-};
-
-export const disableUserAgent = async (name: string) => {
-  return await api.post(`${API_BASE}/agents/${name}/disable`);
-};
-
-export const testUserAgent = async (name: string, input: unknown) => {
-  return await api.post(`${API_BASE}/agents/${name}/test`, { input }, { timeout: AI_REQUEST_TIMEOUT });
-};
-
-export const getUserAgentLogs = async (name: string, limit?: number) => {
-  return await api.get(`${API_BASE}/agents/${name}/logs`, { params: { limit } });
-};
-
-// ==================== Skill 配置（只读 + 启停） ====================
-
-export const getUserSkills = async (params?: {
-  enabled?: boolean;
-}) => {
-  return await api.get(`${API_BASE}/skills`, { params });
-};
-
-export const getUserSkill = async (name: string) => {
-  return await api.get(`${API_BASE}/skills/${name}`);
-};
-
-export const toggleUserSkill = async (name: string, enabled: boolean) => {
-  return await api.post(`${API_BASE}/skills/${name}/enable`, { enabled });
-};
-
 // ==================== API 配置 ====================
 
 // 获取平台默认配置
@@ -261,6 +191,14 @@ export const testApiConnection = async (data: {
   model: string;
 }) => {
   return await api.post(`${API_BASE}/api-config/test`, data, { timeout: AI_REQUEST_TIMEOUT });
+};
+
+// 获取第三方端点可用模型列表
+export const fetchApiModels = async (data: {
+  endpoint: string;
+  apiKey?: string;
+}) => {
+  return await api.post(`${API_BASE}/api-config/models`, data, { timeout: AI_REQUEST_TIMEOUT });
 };
 
 // ==================== MCP 配置 ====================
@@ -359,12 +297,3 @@ export const getMcpStatus = async () => {
   return await api.get(`${API_BASE}/mcp/status`);
 };
 
-// ==================== 开发者接入 ====================
-
-export const getDeveloperOverview = async () => {
-  return await api.get(`${API_BASE}/developer/overview`);
-};
-
-export const getDeveloperQuickstart = async () => {
-  return await api.get(`${API_BASE}/developer/quickstart`);
-};

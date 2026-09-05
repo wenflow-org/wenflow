@@ -139,6 +139,19 @@ export function resolveLlmGenerationParams(
     }
   }
 
+  // 全局默认 maxTokens = 128k（2026-09-03 定案：v4-flash 思考模式从同一输出预算扣 token，
+  // max 档实测 reasoning 可烧 12k+，32k 不够长输出；128k 在上游 384K 输出上限内）：
+  // 除「运行时显式覆盖（runtime-override，调试/低耗可调小）」外，prompt/code/route
+  // 任何来源解析出的 maxTokens 若低于 128k 一律抬到 131072——给足输出上限，避免长输出被截断漏字段。
+  if (maxTokens.source !== 'runtime-override') {
+    const floor = 131072;
+    if (maxTokens.value === undefined) {
+      maxTokens = { value: floor, source: 'code-defaults' };
+    } else if (maxTokens.value < floor) {
+      maxTokens = { value: floor, source: maxTokens.source };
+    }
+  }
+
   return {
     model: model.value,
     temperature: temperature.value,

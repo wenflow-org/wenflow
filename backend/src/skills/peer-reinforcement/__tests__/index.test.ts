@@ -122,6 +122,38 @@ describe('peer-reinforcement model artifact', () => {
     }))
   })
 
+  it('prompt 失败时抛错冒泡，不再产出模板话术降级', async () => {
+    mockCallPrompt.mockResolvedValue({
+      success: false,
+      error: { message: 'PEER_PROMPT_FAILED' },
+    })
+
+    await expect(executePeerDiscussion(input)).rejects.toThrow('PEER_PROMPT_FAILED')
+  })
+
+  it('模型消息为空时抛错冒泡，不再产出策略模板话术', async () => {
+    mockCallPrompt.mockResolvedValue({
+      success: true,
+      output: { message: '', followUpQuestions: [] },
+      runtimeEnvelope: null,
+      debug: {},
+    })
+
+    await expect(executePeerDiscussion(input)).rejects.toThrow('PEER_RESPONSE_EMPTY')
+  })
+
+  it('handler 层失败返回 success:false，调用方 try/catch 可见', async () => {
+    mockCallPrompt.mockResolvedValue({
+      success: false,
+      error: { message: 'PEER_PROMPT_FAILED' },
+    })
+
+    const output = await peerAgentHandler(input, {})
+    expect(output.success).toBe(false)
+    expect(output.error.code).toBe('PEER_AGENT_FAILED')
+    expect(output.userVisible).toBe('同伴回复生成失败，请稍后重试。')
+  })
+
   it('仅在 legacy internal sidecar 附加 canonical outcome，不改变 agent-output-v1 展示字段', async () => {
     mockCallPrompt.mockResolvedValue({
       success: true,

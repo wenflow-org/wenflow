@@ -7,20 +7,20 @@ import { logger } from './utils/logger';
 import prisma from './config/database';
 import systemPrisma from './config/system-database';
 import { initializeAdmin } from './services/auth/init-admin.service';
-import { globalApiLimiter } from './middleware/api-rate-limit.middleware';
+import { adminApiLimiter, globalApiLimiter } from './middleware/api-rate-limit.middleware';
 
 // EduClaw Gateway
 import { createGateway, EduClawGateway } from './gateway';
 import { registerOfficialAgents } from './agents';
-import { registerPluginSkills } from './agents/plugins';
 import { allSkillDefinitions, skillHandlers } from './skills';
+import { PURGED_SKILLS } from './skills/retired-skills';
 import { validateManifest, listTopLevelAgents } from './services/agent-manifest.service';
+import { loadSkillsFile } from './services/skill-registry/skills-file';
 
-import { AgentCollaborationService, createAgentCollaborationService } from './services/agent-collaboration.service';
-import { getEventBus } from './gateway/event-bus';
 import learningService from './services/learning/learning.service';
 import { ensureCoreAgentPrompts } from './scripts/seed-core-agent-prompts';
 import { bootstrapFieldRoutings } from './services/field-routing-bootstrap.service';
+import { seedSkillModelConfigsIfEmpty } from './services/seed-skill-model-configs';
 import { dashboardGuidanceSnapshotService } from './services/learner/DashboardGuidanceSnapshotService';
 import { DurableEventConsumerRegistry } from './events/consumer-registry';
 import { DurableOutboxWorker } from './events/outbox.worker';
@@ -28,6 +28,7 @@ import { learnerEvidenceProjector } from './services/learner/LearnerEvidenceProj
 import { learnerSnapshotRefreshService } from './services/learner/LearnerSnapshotRefreshService';
 import { learnerProfileService } from './services/learner/LearnerProfileService';
 import { lessonKnowledgeEnrichmentConsumer } from './services/learner/LessonKnowledgeEnrichmentConsumer';
+import { reviewCompletedConsumer } from './services/learner/ReviewCompletedConsumer';
 import { quickLearnService } from './virtual-lab/quick-learn/quick-learn.service';
 import { reconcileTaskCompletionMetric } from './services/metrics/LearningMetricService';
 import { refreshRuntimeNetworkPolicy } from './services/runtime-network-policy.service';
@@ -41,53 +42,21 @@ import { backgroundTaskTracker, runBackgroundTask } from './services/background-
 import { aiTeachingOrchestrator } from './services/ai-teaching/AITeachingCoordinator';
 import { aiCapabilityHealthService } from './services/ai-capability-health.service';
 import { getRuntimeCapabilityProbeEnabled } from './services/capability-probe-settings.service';
+import { logRetentionService } from './services/log-retention.service';
+import { startBatchExperimentScheduler } from './services/virtual-lab/batch-experiment.service';
+import { auditCleanupService } from './services/audit-cleanup.service';
+import { virtualSessionReclaimService } from './virtual-lab/session-reclaim.service';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
 
 const ENRICHMENT_RETRY_POLL_INTERVAL_MS = 60 * 1000;
-const RETIRED_SKILLS = [
-  'pdf-parser',
-  'time-estimator',
-  'quiz-generation',
-  'exercise-generator',
-  'content-generation',
-  'error-pattern',
-  'code-explainer',
-  'answer-generation',
-  'batch-anderson-labeler',
-  'goal-type-identifier',
-  'task-profile-builder',
-  // 2026-07 调用调查后退役：生产零调用或事件无发射者
-  'state-assessment',
-  'confidence-handler',
-  'label-generator',
-  'text-structure-analyzer',
-  'retrieval',
-  'web-extractor',
-  'image-analyzer',
-  'memory-search',
-  'smart-search',
-  // 2026-07 合并入 lesson-knowledge-enricher
-  'session-knowledge-distiller',
-  'dialogue-concept-extractor',
-  // 2026-07 阶段词统一后改名（learning-*）；旧 id 仅保留在 agent-manifest 别名，
-  // 注册表/DB 不应残留，启动时 purge 防止幽灵注册出现在 Skill 目录
-  'teaching-turn',
-  'teaching-opening-generator',
-  'teaching-strategy-selector',
-  // 2026-08 legacy 插件适配链退役：generic-planner/basic-generator/basic-extractor/data-mapping
-  // 仅被 agentPluginConfig（零消费者）与插件自身互相转发引用，业务主链不走，零调用
-  'generic-planner',
-  'basic-generator',
-  'basic-extractor',
-  'data-mapping'
-] as const;
 
 // ACP 中间件
 import { acpContextMiddleware } from './middleware/acp-context.middleware';
 import { adminAuthMiddleware, authMiddleware } from './middleware/auth.middleware';
 import { adminMiddleware } from './middleware/admin.middleware';
 import { adminAccessRestrictMiddleware } from './middleware/admin-access-restrict.middleware';
+import { adminAuditMiddleware } from './middleware/admin-audit.middleware';
 import { csrfMiddleware } from './middleware/csrf.middleware';
 import { validateSecretEncryptionConfig } from './utils/secret-crypto';
 import { validateSafeHttpConfig } from './utils/safe-http';
@@ -128,7 +97,6 @@ let enrichmentRetryTimer: NodeJS.Timeout | null = null;
 let enrichmentRetryInFlight: Promise<void> | null = null;
 let httpServer: Server | null = null;
 let gateway: EduClawGateway | null = null;
-let collaborationService: AgentCollaborationService | null = null;
 const lifecycle = new ApplicationLifecycle();
 const readinessService = new ReadinessService(prisma, systemPrisma, 2000, () => lifecycle.isDraining());
 const shutdownDeadlineMs = resolveShutdownDeadlineMs(process.env.SHUTDOWN_DEADLINE_MS);
@@ -191,8 +159,9 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// 应用全局限流到 API 路由
+// 应用全局限流到 API 路由（admin 路径由 globalApiLimiter 跳过，走 adminApiLimiter 专属额度）
 app.use('/api/', globalApiLimiter);
+app.use('/api/admin/', adminApiLimiter);
 
 // 应用 CSRF 保护
 app.use('/api/', csrfMiddleware);
@@ -242,28 +211,38 @@ import adaptiveGuidanceRoutes from './routes/adaptive-guidance.routes';
 import adminAuthRoutes from './routes/admin-auth';
 import adminApiConfigRoutes from './routes/admin/api-config';
 import adminSkillsRoutes from './routes/admin/skills';
-import adminAgentModelConfigsRoutes from './routes/admin/agent-model-configs';
-import adminAgentPromptsRoutes from './routes/admin/agent-prompts';
-import adminPromptStabilityRoutes from './routes/admin/prompt-stability';
-import adminRuntimeDefinitionsRoutes from './routes/admin/runtime-definitions';
 import adminFieldRoutingsRoutes from './routes/admin/field-routings';
+import adminAgentPromptsRoutes from './routes/admin/agent-prompts';
+import adminRuntimeDefinitionsRoutes from './routes/admin/runtime-definitions';
 import promptLabRoutes from './routes/prompt-lab';
 import adminPromptOpsRoutes from './routes/admin/prompt-ops';
-import adminSkillAuthorRoutes from './routes/admin/skill-author';
 import adminSkillModelConfigsRoutes from './routes/admin/skill-model-configs';
 import adminPlatformRoutes from './routes/admin/platform';
 import adminGoalConversationsRoutes from './routes/admin/goal-conversations';
 import adminUsersRoutes from './routes/admin/users';
+import adminSessionsRoutes from './routes/admin/sessions';
+import adminAuditLogsRoutes from './routes/admin/audit-logs';
 import adminLearnerModelsRoutes from './routes/admin/learner-models';
+import adminMemoryTracesRoutes from './routes/admin/memory-traces';
 import adminAnnouncementsRoutes from './routes/admin/announcements';
 import announcementsRoutes from './routes/announcements';
 import adminVirtualLearnersRoutes from './routes/admin/virtual-learners';
+import adminSessionConsoleRoutes from './routes/admin/session-console';
 import adminVirtualQuickLearnRoutes from './routes/admin/virtual-quick-learn';
+import adminBatchExperimentsRoutes from './routes/admin/batch-experiments';
 import adminProjectionAccessGrantsRoutes from './routes/admin/projection-access-grants';
-import adminDevtoolsRoutes from './routes/admin/devtools';
-import adminDebugRoutes from './routes/admin/debug';
 import adminFeedbackRoutes from './routes/admin/feedback';
 import adminSystemStatusRoutes from './routes/admin/system-status';
+import adminMcpRoutes from './routes/admin/mcp';
+import adminHealthCenterRoutes from './routes/admin/health-center';
+import adminGlossaryRoutes from './routes/admin/glossary';
+import adminDevtoolsRoutes from './routes/admin/devtools';
+import adminAchievementsRoutes from './routes/admin/achievements';
+import adminLearningContentRoutes from './routes/admin/learning-content';
+import adminExportRoutes from './routes/admin/export';
+import adminTokenCostRoutes from './routes/admin/token-cost';
+import adminNotificationsRoutes from './routes/admin/notifications';
+import notificationsRoutes from './routes/notifications';
 import aiTeachingRoutes from './routes/ai-teaching.routes';
 import feedbackRoutes from './routes/feedback';
 import configRoutes from './routes/config';
@@ -308,15 +287,12 @@ app.get('/api', (req, res) => {
     },
 agents: {
       'skill:path-planning': '学习路径规划',
-      'learning-agent': 'AI授课编排',
+      'teaching-agent': 'AI授课编排',
       'skill:learner-model': '学习者画像与状态中心'
     },
     skills: [
-      'path-scene-framing',
       'stage-designer',
       'adaptive-guidance-copy',
-      'goal-profile-inference',
-      'learning-pattern-distiller',
       'lesson-knowledge-enricher'
     ]
   });
@@ -359,34 +335,52 @@ app.use('/api/auth', authRoutes);
 app.use('/api/config', configRoutes);
 // 管理员登录路由（应用本地访问限制中间件）
 app.use('/api/admin-auth', adminAccessRestrictMiddleware, adminAuthRoutes);
-const adminRouteMiddleware = [adminAccessRestrictMiddleware, adminAuthMiddleware, adminMiddleware, acpContextMiddleware('admin')];
+const adminRouteMiddleware = [adminAccessRestrictMiddleware, adminAuthMiddleware, adminMiddleware, adminAuditMiddleware, acpContextMiddleware('admin')];
 app.use('/api/admin/api-config', ...adminRouteMiddleware, adminApiConfigRoutes);
 app.use('/api/admin/skills', ...adminRouteMiddleware, adminSkillsRoutes);
-app.use('/api/admin/agent-model-configs', ...adminRouteMiddleware, adminAgentModelConfigsRoutes);
-app.use('/api/admin/agent-prompts', ...adminRouteMiddleware, adminAgentPromptsRoutes);
-app.use('/api/admin/prompt-stability', ...adminRouteMiddleware, adminPromptStabilityRoutes);
-app.use('/api/admin/runtime-definitions', ...adminRouteMiddleware, adminRuntimeDefinitionsRoutes);
 app.use('/api/admin/field-routings', ...adminRouteMiddleware, adminFieldRoutingsRoutes);
+app.use('/api/admin/agent-prompts', ...adminRouteMiddleware, adminAgentPromptsRoutes);
+app.use('/api/admin/runtime-definitions', ...adminRouteMiddleware, adminRuntimeDefinitionsRoutes);
 app.use('/api/admin/prompt-ops', ...adminRouteMiddleware, adminPromptOpsRoutes);
-app.use('/api/admin/skill-author', ...adminRouteMiddleware, adminSkillAuthorRoutes);
 app.use('/api/admin/skill-model-configs', ...adminRouteMiddleware, adminSkillModelConfigsRoutes);
 app.use('/api/admin/users', ...adminRouteMiddleware, adminUsersRoutes);
+app.use('/api/admin/sessions', ...adminRouteMiddleware, adminSessionsRoutes);
+// 真实会话控制台同构端点：只读 GET，解析 teaching_sessions / goal_conversations（挂独立路径避免与 admin_sessions 冲突）
+app.use('/api/admin/session-console', ...adminRouteMiddleware, adminSessionConsoleRoutes);
+// 审计日志查询：仅 GET 只读端点，挂载时不经过 adminAuditMiddleware（审计查询本身不入审计，
+// 中间件对 GET 同样落库），其余鉴权中间件照常
+app.use('/api/admin/audit-logs', adminAccessRestrictMiddleware, adminAuthMiddleware, adminMiddleware, acpContextMiddleware('admin'), adminAuditLogsRoutes);
 app.use('/api/admin/announcements', ...adminRouteMiddleware, adminAnnouncementsRoutes);
+app.use('/api/admin/mcp', ...adminRouteMiddleware, adminMcpRoutes);
 app.use('/api/admin/learner-models', ...adminRouteMiddleware, adminLearnerModelsRoutes);
+app.use('/api/admin/memory-traces', ...adminRouteMiddleware, adminMemoryTracesRoutes);
 app.use('/api/admin/goal-conversations', ...adminRouteMiddleware, adminGoalConversationsRoutes);
 app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualLearnersRoutes);
 app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualQuickLearnRoutes);
+app.use('/api/admin/batch-experiments', ...adminRouteMiddleware, adminBatchExperimentsRoutes);
 app.use('/api/admin/projection-access-grants', ...adminRouteMiddleware, adminProjectionAccessGrantsRoutes);
 app.use('/api/admin/feedback', ...adminRouteMiddleware, adminFeedbackRoutes);
 app.use('/api/admin/system', ...adminRouteMiddleware, adminSystemStatusRoutes);
-app.use('/api/admin/prompt-lab', ...adminRouteMiddleware, promptLabRoutes);
-app.use('/api/admin', ...adminRouteMiddleware, adminDebugRoutes);
+app.use('/api/admin/health-center', ...adminRouteMiddleware, adminHealthCenterRoutes);
+app.use('/api/admin/glossary', ...adminRouteMiddleware, adminGlossaryRoutes);
+// 运维工具（时间推进模拟 / outbox 死信重放）：路由内部自带 /devtools 前缀，直接挂载到 /api/admin
 app.use('/api/admin', ...adminRouteMiddleware, adminDevtoolsRoutes);
+// 成就管理（成就定义 / 解锁记录 / 发放与撤回）：管理权限 + 审计中间件挂载
+app.use('/api/admin/achievements', ...adminRouteMiddleware, adminAchievementsRoutes);
+// 内容管理（学习路径治理）：管理权限 + 审计中间件挂载
+app.use('/api/admin/learning-content', ...adminRouteMiddleware, adminLearningContentRoutes);
+// 数据导出（CSV 下载）：管理权限 + 审计中间件挂载
+app.use('/api/admin/export', ...adminRouteMiddleware, adminExportRoutes);
+// 站内通知管理（全员/定向推送）：管理权限 + 审计中间件挂载
+app.use('/api/admin/notifications', ...adminRouteMiddleware, adminNotificationsRoutes);
+app.use('/api/admin/token-cost', ...adminRouteMiddleware, adminTokenCostRoutes);
+app.use('/api/admin/prompt-lab', ...adminRouteMiddleware, promptLabRoutes);
 app.use('/api/admin', ...adminRouteMiddleware, adminPlatformRoutes);
 app.use('/api/users', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), userRoutes);
 app.use('/api/agents', authMiddleware, acpContextMiddleware('user'), agentsRoutes);
 app.use('/api/adaptive-guidance', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), adaptiveGuidanceRoutes);
 app.use('/api/ai-teaching', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), aiTeachingRoutes);
+app.use('/api/notifications', authMiddleware, acpContextMiddleware('user'), notificationsRoutes);
 app.use('/api/feedback', authMiddleware, directUserSessionOnly, acpContextMiddleware('user'), feedbackRoutes);
 
 
@@ -458,9 +452,6 @@ async function initializeGateway() {
       apiKey: process.env.AI_API_KEY || '',
       defaultModel: process.env.AI_MODEL || '',
       defaultReasoningModel: process.env.AI_MODEL_REASONING || '',
-    },
-    eventBus: {
-      persistEvents: true,
     }
   });
   gateway = instance;
@@ -478,6 +469,20 @@ async function initializeGateway() {
   const topAgents = listTopLevelAgents();
   logger.info(`[startup] Agent manifest OK · ${topAgents.length} 个顶层 Agent: ${topAgents.map(a => a.id).join(', ')}`);
 
+  // skills.yaml 户口簿校验（P0，SKILLS_YAML_SPEC §2.4 表 A）：F1~F10/F12 任一失败即终止启动
+  // （fail-fast，与 field-routing import 期 fail-fast 同风格）。过渡开关 SKILLS_FILE_DISABLED=1
+  // 跳过（规格 §5.3 回滚点，仅限一版发布窗口）。
+  if (process.env.SKILLS_FILE_DISABLED === '1') {
+    logger.info('[startup] skills.yaml 户口簿校验已跳过（SKILLS_FILE_DISABLED=1，过渡回滚点）');
+  } else {
+    const skillsBook = loadSkillsFile();
+    const kindCounts = skillsBook.skills.reduce((acc, entry) => {
+      acc[entry.kind] = (acc[entry.kind] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    logger.info(`[startup] skills.yaml 户口簿校验 OK · ${skillsBook.skills.length} 条活跃登记（kind 分布: ${Object.entries(kindCounts).map(([kind, count]) => `${kind}=${count}`).join(' ')})`);
+  }
+
   await registerOfficialAgents({
     registerAgent: async (definition, handler) => {
       return instance.registerAgent(definition, handler);
@@ -492,8 +497,6 @@ async function initializeGateway() {
     }
   }
 
-  // 外挂 Plugin 通过 Adapter 注册为 Skill，统一执行、上下文、日志和统计边界。
-  await registerPluginSkills(instance);
   
   // 加载已有的注册
   await instance.loadRegistrations();
@@ -504,42 +507,24 @@ async function initializeGateway() {
 }
 
 async function purgeRetiredSkills() {
-  const retiredSkillNames = [...RETIRED_SKILLS];
+  const retiredSkillNames = [...PURGED_SKILLS];
   const retiredAgentIds = retiredSkillNames.map((name) => `skill:${name}`);
 
   await Promise.all([
     systemPrisma.skill_registrations.deleteMany({ where: { name: { in: retiredSkillNames } } }),
     systemPrisma.skill_model_configs.deleteMany({ where: { skillId: { in: retiredSkillNames } } }),
     prisma.user_skill_configs.deleteMany({ where: { skillName: { in: retiredSkillNames } } }),
-    systemPrisma.agent_prompts.deleteMany({ where: { agentId: { in: retiredAgentIds } } })
+    systemPrisma.agent_prompts.deleteMany({ where: { agentId: { in: retiredAgentIds } } }),
+    // 2026-08 统一化：退役 skill 的管道/契约残留一并清理（bootstrap 只建不更新，残留行不可达）
+    systemPrisma.agent_field_routings.deleteMany({ where: { agentId: { in: retiredAgentIds } } }),
+    systemPrisma.agent_contracts.deleteMany({ where: { agentId: { in: retiredAgentIds } } }),
+    // agent-snapshots.md 是自动生成的沙盘说明书（非 prompt 源），误入 agent_prompts 的行一并清理
+    systemPrisma.agent_prompts.deleteMany({ where: { agentId: 'agent-snapshots' } })
   ]);
 
   logger.info('已清理退役 Skill 配置残留', {
     retiredSkillCount: retiredSkillNames.length
   });
-}
-
-/**
- * 初始化 Agent 协作服务
- */
-async function initializeAgentCollaboration() {
-  logger.info('Initializing Agent Collaboration Service...');
-  
-  const eventBus = getEventBus();
-  
-  const service = createAgentCollaborationService({
-    enableAutoAdjustment: false,
-    adjustmentCooldown: 300000,
-    minSignalsForAdjustment: 2,
-    profileUpdateInterval: 60000
-  });
-  collaborationService = service;
-  
-  service.start();
-  
-  logger.info('✅ Agent Collaboration Service started');
-  
-  return service;
 }
 
 function assertStartupActive() {
@@ -554,6 +539,11 @@ export async function startServer() {
     await Promise.all([prisma.$connect(), systemPrisma.$connect()]);
     assertStartupActive();
     logger.info('✅ Main and System databases connected successfully');
+    logRetentionService.start(lifecycle);
+    auditCleanupService.start(lifecycle);
+    virtualSessionReclaimService.start(lifecycle);
+    startBatchExperimentScheduler();
+    assertStartupActive();
 
     const backendRoot = resolve(__dirname, '..');
     const repoRoot = resolve(backendRoot, '..');
@@ -629,12 +619,24 @@ export async function startServer() {
 
       // 初始化 EduClaw Gateway
      await purgeRetiredSkills();
+      // Seed-if-empty：新库自动写入 flash/pro 分工 + thinking=disabled（代码 truth；已有行跳过，admin 可改）
+      await seedSkillModelConfigsIfEmpty(systemPrisma).catch((err) => {
+        logger.warn('[startup] skill model config seed 失败（不阻断启动）', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
       await initializeGateway();
       assertStartupActive();
       if (process.env.STARTUP_CANARY === '0') {
         logger.debug('[ai-capability] 启动金丝雀探测已跳过（STARTUP_CANARY=0）');
       } else {
-        await aiCapabilityHealthService.refresh();
+        // 启动金丝雀：失败不阻断启动（能力状态由定时探测/首次真实请求校准）。
+        // 2026-08-30：此前 await 超时会把 connectionStatus 写为 failed 并拖慢启动。
+        await aiCapabilityHealthService.refresh().catch(error => {
+          logger.warn('[ai-capability] 启动金丝雀探测失败（不阻断启动）', {
+            error: error instanceof Error ? error.message : String(error)
+          });
+        });
       }
       {
         const probeEnabled = await getRuntimeCapabilityProbeEnabled();
@@ -645,12 +647,12 @@ export async function startServer() {
       }
       assertStartupActive();
     
-     // 初始化 Agent 协作服务
-     await initializeAgentCollaboration();
-     assertStartupActive();
-
       const durableConsumers = new DurableEventConsumerRegistry();
       durableConsumers.register(['task:completed'], reconcileTaskCompletionMetric);
+      // 断链修复 P0-1：复习结果事件消费者（写 learner_evidence + memory_traces，幂等）
+      durableConsumers.register(['review:completed'], async (event) => {
+        await reviewCompletedConsumer.handle(event);
+      });
       durableConsumers.register([
         'goal:understanding:updated',
         'task:completed',
@@ -740,10 +742,12 @@ export async function shutdown(signal: string) {
     stopSchedulers: async () => {
       if (enrichmentRetryTimer) clearInterval(enrichmentRetryTimer);
       enrichmentRetryTimer = null;
+      await logRetentionService.stop();
+      await auditCleanupService.stop();
+      await virtualSessionReclaimService.stop();
       await aiCapabilityHealthService.stop();
     },
     teaching: aiTeachingOrchestrator,
-    collaboration: collaborationService,
     backgroundTaskTracker,
     outbox: outboxWorker,
     gateway,

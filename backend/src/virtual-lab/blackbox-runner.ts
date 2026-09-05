@@ -2,6 +2,7 @@ import { randomUUID as uuidv4 } from 'crypto'
 import { createHash } from 'crypto'
 import prisma from '../config/database'
 import { signProjectionToken, SYNTHETIC_CAPABILITIES } from '../utils/projection-token'
+import type { ResolvedRoute } from '../gateway/api-gateway'
 import type {
   BlackboxExperimentSummary,
   BlackboxPublicTraceEntry,
@@ -14,7 +15,9 @@ import type {
   RefereeStoryMeta,
   TaskCompletionCheckpoint,
   VirtualLearnerActorAuditInput,
-  VirtualLearnerRefereeInput
+  VirtualLearnerActorAuditOutput,
+  VirtualLearnerRefereeInput,
+  VirtualLearnerRefereeOutput
 } from './contracts'
 import { PlatformUserAdapter } from './platform-user-adapter'
 import { assertBlackboxSessionMode, VirtualSessionModeError } from './session-mode'
@@ -35,35 +38,86 @@ import {
   VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE,
   virtualLearnerGoalDialogueSimulatorDefinition,
   virtualLearnerLearnTurnSimulatorDefinition,
+  virtualLearnerEpistemicGroundingDefinition,
   virtualLearnerActorAuditorDefinition,
-  virtualLearnerRefereeDefinition
+  virtualLearnerRefereeDefinition,
+  virtualLearnerMemoryCuratorDefinition,
 } from '../skills'
 import { getRequestContext, runWithContext } from '../gateway/api-gateway/context'
 import { getAPIGateway } from '../gateway/api-gateway'
 import { agentConfigService } from '../services/agentConfig.service'
 import { learningStateService } from '../services/learning/learning-state.service'
 import { logger } from '../utils/logger'
+import {
+  buildLearnerMemorySnapshot,
+  extractSelfStateFromTrace,
+  recordCompletedArtifact,
+  writeProfileConceptsAfterLesson,
+  type LessonKnowledgePoint,
+  type SelfReportedLearnerState,
+} from './learner-memory'
 
-function parseJson(value: string | null | undefined, fallback: any = {}) {
-  try {
-    return JSON.parse(value || '') || fallback
-  } catch {
-    return fallback
+import { safeJsonParse } from '../utils/safe-json'
+import type { SkillDefinition } from '../skills/protocol'
+import { asErrorLike } from './vlab-types'
+import type {
+  ActorProfileSnapshot,
+  BlackboxRunState,
+  ErrorLike,
+  LearnerPrivateStateTraceEntry,
+  ExperimentSnapshot,
+  SimulatorConfig,
+  SimulatorRoute,
+  SimulatorSkillOutput,
+  Simulators,
+  StageResults,
+  VirtualExperimentCommandRow,
+  VirtualLearnerProfileRow,
+  VirtualSessionRow,
+  VirtualSessionWithProfile
+} from './vlab-types'
+
+/** stageResults JSON 解析（带类型参数的 safeJsonParse，fallback 缺省空对象） */
+function parseStageResults(value: string | null | undefined, fallback: StageResults = {}): StageResults {
+  return safeJsonParse<StageResults>(value, fallback)
+}
+
+/** 安全读取深层字段（unknown 中间层不报错，返回 undefined 表示路径缺失） */
+function deepValue(value: Record<string, unknown>, path: string[]): unknown {
+  let cursor: unknown = value
+  for (const key of path) {
+    if (typeof cursor !== 'object' || cursor === null) return undefined
+    cursor = (cursor as Record<string, unknown>)[key]
   }
+  return cursor
 }
 
 const TERMINAL_SESSION_STATUSES = new Set(['completed', 'failed', 'abandoned'])
 const COMMAND_LEASE_MS = 10 * 60 * 1000
 const COMMAND_LEASE_RENEW_MS = 2 * 60 * 1000
 const LEASE_RETRY_DELAYS_MS = [25, 50, 100]
+/** 模拟器 LLM 调用重试次数（对齐 quick-learn 3-strike 语义：瞬态失败/空回复可重试） */
+const BLACKBOX_SIMULATOR_RETRY_ATTEMPTS = 3
+const BLACKBOX_SIMULATOR_RETRY_DELAY_MS = 750
 
 function isPrismaErrorCode(error: unknown, code: string) {
-  return typeof error === 'object' && error !== null && (error as any).code === code
+  return typeof error === 'object' && error !== null && asErrorLike(error).code === code
+}
+
+/**
+ * LLM/Provider 瞬时失败识别（黑盒可恢复失败判定）：
+ * 超时、网络、上游 5xx、限流、空回复、JSON 结构非法等——这类失败发生时
+ * 平台副作用尚未发生，命令可用相同 Idempotency-Key 安全重试。
+ */
+function isTransientLlMFailure(error: unknown): boolean {
+  const message = String(asErrorLike(error).message || error || '').toLowerCase()
+  if (!message.trim()) return true
+  return /structured_output_invalid|invalid chat completion|finish_reason|empty content|api request canceled|fetch failed|timeout|timed out|econnreset|socket|network|rate.?limit|\b429\b|\b5\d\d\b|does not contain valid json|invalid json response|response does not contain|response is empty|missing reply|missing learnerstate/i.test(message)
 }
 
 function isLeaseDatabaseBusyError(error: unknown) {
   if (isPrismaErrorCode(error, 'P1008')) return true
-  const code = typeof error === 'object' && error !== null ? String((error as any).code || '') : ''
+  const code = typeof error === 'object' && error !== null ? String(asErrorLike(error).code || '') : ''
   const message = error instanceof Error ? error.message : String(error || '')
   return code === 'SQLITE_BUSY'
     || /SQLITE_BUSY|database (?:is|table is) locked|timed out|timeout/i.test(message)
@@ -188,17 +242,22 @@ export class BlackboxVirtualLearnerRunner {
 
     return this.runExclusive(options.sessionId, async () => {
       const session = await this.getSession(options.sessionId)
-      const state = parseJson(session.stageResults)
+      const state = parseStageResults(session.stageResults)
       assertBlackboxSessionMode(state)
       const runId = state.experiment.runId
       const experimentId = state.experiment.experimentId
       const existing = await prisma.virtual_experiment_commands.findUnique({
         where: { runId_commandId: { runId, commandId } }
       })
-      if (existing && existing.status !== 'processing' && !this.isReconciliationPendingCommand(existing)) {
+      if (existing && existing.status !== 'processing'
+        && !this.isReconciliationPendingCommand(existing)
+        && !this.isRetryableFailedCommand(existing)) {
         return this.reuseCommand<T>(existing, options.kind, options.request)
       }
       if (existing) this.assertCommandMatches(existing, options.kind, options.request)
+      if (TERMINAL_SESSION_STATUSES.has(session.status)) {
+        throw new BlackboxRunStateError('当前黑盒实验已经结束，不能继续执行命令', 'BLACKBOX_RUN_TERMINAL')
+      }
 
       const leaseOwner = `cmd_${uuidv4()}`
       const leaseExpiresAt = await this.acquireCommandLease(options.sessionId, leaseOwner)
@@ -208,7 +267,9 @@ export class BlackboxVirtualLearnerRunner {
         const afterLease = await prisma.virtual_experiment_commands.findUnique({
           where: { runId_commandId: { runId, commandId } }
         })
-        if (afterLease && afterLease.status !== 'processing' && !this.isReconciliationPendingCommand(afterLease)) {
+        if (afterLease && afterLease.status !== 'processing'
+          && !this.isReconciliationPendingCommand(afterLease)
+          && !this.isRetryableFailedCommand(afterLease)) {
           await this.assertCurrentLease(options.sessionId)
           return this.reuseCommand<T>(afterLease, options.kind, options.request)
         }
@@ -225,66 +286,110 @@ export class BlackboxVirtualLearnerRunner {
         barriers.sort((left, right) => (left.sequence || 0) - (right.sequence || 0))
         const earliestPending = barriers[0] || null
         if (earliestPending && earliestPending.commandId !== commandId) {
-          throw new BlackboxReconciliationPendingError(
-            `较早的黑盒命令 ${earliestPending.commandId} 仍待对账，请先使用其 Idempotency-Key 重试`
-          )
+          // 死锁修复：barrier 命令已具备完整平台回执（finalProjection=true 的 result 回执）时，
+          // 自动落盘其投影并完成该命令再放行当前命令；仅重放已发生的平台副作用，不重新执行平台操作，
+          // 幂等语义不变。无完整回执（checkpoint/未终局 step）的 barrier 保持原语义要求同 key 重试。
+          if (!(await this.tryResolveOrderingBarrier(options.sessionId, earliestPending))) {
+            throw new BlackboxReconciliationPendingError(
+              `较早的黑盒命令 ${earliestPending.commandId} 仍待对账，请先使用其 Idempotency-Key 重试`
+            )
+          }
+          const remaining = await prisma.virtual_experiment_commands.findMany({
+            where: { runId, status: { in: ['processing', 'failed'] } },
+            orderBy: { sequence: 'asc' }
+          })
+          const stillBlocked = remaining.find(command => this.isCommandOrderingBarrier(command)
+            && (!afterLease || command.commandId === commandId || command.sequence < afterLease.sequence))
+          if (stillBlocked) {
+            throw new BlackboxReconciliationPendingError(
+              `较早的黑盒命令 ${stillBlocked.commandId} 仍待对账，请先使用其 Idempotency-Key 重试`
+            )
+          }
         }
 
         const freshSession = await this.getSession(options.sessionId)
-        const freshState = parseJson(freshSession.stageResults)
+        const freshState = parseStageResults(freshSession.stageResults)
         let command = afterLease
         let projectionSequence = 0
+        let retryRebuilt = false
         if (command) {
           const receipt = this.pendingProjectionReceipt(command)
           if (!receipt) {
-            throw new BlackboxRunStateError(
-              '待对账命令缺少平台投影回执，不能安全重试',
-              'BLACKBOX_RECONCILIATION_RECEIPT_MISSING'
-            )
+            if (this.isRetryableFailedCommand(command)) {
+              // 可恢复失败续跑：命令失败时平台副作用尚未发生（LLM/Provider 瞬时失败），
+              // 用相同 Idempotency-Key 重置命令后重新执行，幂等语义不变。
+              await this.assertCurrentLease(options.sessionId)
+              await prisma.virtual_experiment_commands.update({
+                where: { id: command.id },
+                data: {
+                  status: 'processing',
+                  errorJson: null,
+                  resultJson: null,
+                  completedAt: null,
+                  triggeredBy: options.operatorId
+                }
+              })
+              command = {
+                ...command,
+                status: 'processing',
+                errorJson: null,
+                resultJson: null,
+                completedAt: null,
+                triggeredBy: options.operatorId
+              }
+              retryRebuilt = true
+            } else {
+              throw new BlackboxRunStateError(
+                '待对账命令缺少平台投影回执，不能安全重试',
+                'BLACKBOX_RECONCILIATION_RECEIPT_MISSING'
+              )
+            }
           }
-          await this.assertCurrentLease(options.sessionId)
-          await prisma.virtual_experiment_commands.update({
-            where: { id: command.id },
-            data: {
+          if (!retryRebuilt) {
+            await this.assertCurrentLease(options.sessionId)
+            await prisma.virtual_experiment_commands.update({
+              where: { id: command.id },
+              data: {
+                status: 'processing',
+                errorJson: null,
+                completedAt: null,
+                triggeredBy: options.operatorId
+              }
+            })
+            command = {
+              ...command,
               status: 'processing',
               errorJson: null,
               completedAt: null,
               triggeredBy: options.operatorId
             }
-          })
-          command = {
-            ...command,
-            status: 'processing',
-            errorJson: null,
-            completedAt: null,
-            triggeredBy: options.operatorId
-          }
-          try {
-            if (receipt.receiptKind === 'checkpoint') {
-              await this.persistTaskCompletionCheckpoint(
-                options.sessionId,
-                freshState,
-                receipt.checkpoint,
-                receipt.projectionKey
-              )
-              projectionSequence = this.projectionSequence(receipt.projectionKey)
-            } else {
-              await this.persist(freshSession, freshState, receipt.platformResult, receipt.projectionKey)
-              if (receipt.finalProjection) {
-                await this.completeCommand(options.sessionId, command.id, receipt.commandResult)
-                return { result: receipt.commandResult as T, reused: false }
+            try {
+              if (receipt!.receiptKind === 'checkpoint') {
+                await this.persistTaskCompletionCheckpoint(
+                  options.sessionId,
+                  freshState,
+                  receipt!.checkpoint,
+                  receipt!.projectionKey
+                )
+                projectionSequence = this.projectionSequence(receipt!.projectionKey)
+              } else {
+                await this.persist(freshSession, freshState, receipt!.platformResult, receipt!.projectionKey)
+                if (receipt!.finalProjection) {
+                  await this.completeCommand(options.sessionId, command.id, receipt!.commandResult)
+                  return { result: receipt!.commandResult as T, reused: false }
+                }
+                projectionSequence = this.projectionSequence(receipt!.projectionKey)
               }
-              projectionSequence = this.projectionSequence(receipt.projectionKey)
+            } catch (error: unknown) {
+              if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) {
+                throw error
+              }
+              const reconciliationError = error instanceof BlackboxReconciliationPendingError
+                ? error
+                : this.reconciliationPendingError(error)
+              await this.recordCommandFailure(options.sessionId, command.id, reconciliationError)
+              throw reconciliationError
             }
-          } catch (error: any) {
-            if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) {
-              throw error
-            }
-            const reconciliationError = error instanceof BlackboxReconciliationPendingError
-              ? error
-              : this.reconciliationPendingError(error)
-            await this.recordCommandFailure(options.sessionId, command.id, reconciliationError)
-            throw reconciliationError
           }
         } else {
           const currentTraceCount = Array.isArray(freshState.blackbox?.publicTrace)
@@ -323,7 +428,7 @@ export class BlackboxVirtualLearnerRunner {
           const result = await work()
           await this.completeCommand(options.sessionId, command.id, result)
           return { result, reused: false }
-        } catch (error: any) {
+        } catch (error: unknown) {
           await this.recordCommandFailure(options.sessionId, command.id, error)
           throw error
         } finally {
@@ -359,7 +464,7 @@ export class BlackboxVirtualLearnerRunner {
 
   async initialize(sessionId: string, operatorId: string) {
     const session = await this.getSession(sessionId)
-    const stageResults = parseJson(session.stageResults)
+    const stageResults = parseStageResults(session.stageResults)
     if (stageResults.experiment?.mode && stageResults.experiment.mode !== 'blackbox-api') {
       throw new BlackboxRunStateError('当前会话已绑定其他实验模式', 'BLACKBOX_MODE_CONFLICT')
     }
@@ -400,7 +505,7 @@ export class BlackboxVirtualLearnerRunner {
     frictionBudget: string
     experimentId?: string | null
     parentRunId?: string | null
-    experimentSnapshotOverride?: Record<string, any> | null
+    experimentSnapshotOverride?: Record<string, unknown> | null
   }) {
     const experimentId = input.experimentId || `exp_${uuidv4()}`
     const runId = `run_${uuidv4()}`
@@ -445,7 +550,7 @@ export class BlackboxVirtualLearnerRunner {
 
   async getSnapshot(sessionId: string) {
     const session = await this.getSession(sessionId)
-    const state = parseJson(session.stageResults)
+    const state = parseStageResults(session.stageResults)
     assertBlackboxSessionMode(state)
     await this.assertSyntheticUserBinding(session)
     const teachingSessionIds = this.teachingSessionIds(state)
@@ -466,7 +571,7 @@ export class BlackboxVirtualLearnerRunner {
       observation: state.blackbox?.publicTrace?.slice(-1)[0]?.observation || null,
       control: state.blackbox?.control || {},
       publicTrace: state.blackbox?.publicTrace || [],
-      refereeTrace: this.compactTrace(state.blackbox?.refereeTrace, 120).map((entry: any) => ({
+      refereeTrace: this.compactTrace(state.blackbox?.refereeTrace, 120).map((entry: BlackboxRefereeTraceEntry) => ({
         timestamp: String(entry?.timestamp || ''),
         traceId: typeof entry?.traceId === 'string' ? entry.traceId : null,
         diagnostic: this.sanitizeDiagnostic(entry?.diagnostic)
@@ -510,7 +615,7 @@ export class BlackboxVirtualLearnerRunner {
 
   async referee(sessionId: string, operatorId: string) {
     const session = await this.getSession(sessionId)
-    const state = parseJson(session.stageResults)
+    const state = parseStageResults(session.stageResults)
     if (state.experiment?.mode !== 'blackbox-api') throw new Error('当前会话不是 blackbox-api 实验')
     if (!['completed', 'abandoned', 'failed'].includes(session.status)) {
       throw new Error('黑盒实验尚未结束，不能生成终局裁判报告')
@@ -524,7 +629,7 @@ export class BlackboxVirtualLearnerRunner {
       temperature: VIRTUAL_LEARNER_REFEREE_TEMPERATURE,
       maxTokens: VIRTUAL_LEARNER_REFEREE_MAX_TOKENS
     })
-    const existing = (state.blackbox?.refereeReports || []).find((item: any) =>
+    const existing = (state.blackbox?.refereeReports || []).find((item) =>
       item.runId === input.experimentSummary.runId && item.inputFingerprint === inputFingerprint && item.status === 'completed'
     )
     if (existing) return { ...existing, reused: true }
@@ -540,7 +645,7 @@ export class BlackboxVirtualLearnerRunner {
     }, () => executeSkill(virtualLearnerRefereeDefinition, input))
 
     const fresh = await this.getSession(sessionId)
-    const latestState = parseJson(fresh.stageResults, state)
+    const latestState = parseStageResults(fresh.stageResults, state)
     const refereeRecord = {
       id: `vref_${uuidv4()}`,
       runId: input.experimentSummary.runId,
@@ -575,7 +680,7 @@ export class BlackboxVirtualLearnerRunner {
 
   async actorAudit(sessionId: string, operatorId: string) {
     const session = await this.getSession(sessionId)
-    const state = parseJson(session.stageResults)
+    const state = parseStageResults(session.stageResults)
     if (state.experiment?.mode !== 'blackbox-api') throw new Error('当前会话不是 blackbox-api 实验')
     if (!['completed', 'abandoned', 'failed'].includes(session.status)) {
       throw new Error('黑盒实验尚未结束，不能生成角色保真报告')
@@ -589,7 +694,7 @@ export class BlackboxVirtualLearnerRunner {
       temperature: VIRTUAL_LEARNER_ACTOR_AUDITOR_TEMPERATURE,
       maxTokens: VIRTUAL_LEARNER_ACTOR_AUDITOR_MAX_TOKENS
     })
-    const existing = (state.blackbox?.actorAuditReports || []).find((item: any) =>
+    const existing = (state.blackbox?.actorAuditReports || []).find((item) =>
       item.runId === input.experimentSummary.runId && item.inputFingerprint === inputFingerprint && item.status === 'completed'
     )
     if (existing) return { ...existing, reused: true }
@@ -605,7 +710,7 @@ export class BlackboxVirtualLearnerRunner {
     }, () => executeSkill(virtualLearnerActorAuditorDefinition, input))
 
     const fresh = await this.getSession(sessionId)
-    const latestState = parseJson(fresh.stageResults, state)
+    const latestState = parseStageResults(fresh.stageResults, state)
     const auditRecord = {
       id: `vaudit_${uuidv4()}`,
       runId: input.experimentSummary.runId,
@@ -632,6 +737,32 @@ export class BlackboxVirtualLearnerRunner {
       where: { id: sessionId },
       data: { stageResults: JSON.stringify(nextState), updatedAt: new Date() }
     })
+
+    // TIR 反馈闭环：auditor frictionCalibration < 60 → 自动调整 persona frictionBudget
+    if (report?.success && report?.output?.scores?.frictionCalibration < 60) {
+      try {
+        const profile = await prisma.virtual_learner_profiles.findUnique({ where: { userId: session.userId } });
+        if (profile) {
+          const profileData = safeJsonParse<Record<string, any>>(profile.profile, {});
+          const currentFriction = typeof profileData.frictionBudget === 'number' ? profileData.frictionBudget : 5;
+          // 摩擦校准偏低 → 增加摩擦预算（让学习者更多挣扎/求助，更真实）
+          const adjusted = Math.min(10, Math.max(1, currentFriction + 1));
+          await prisma.virtual_learner_profiles.update({
+            where: { userId: session.userId },
+            data: { profile: JSON.stringify({ ...profileData, frictionBudget: adjusted }), updatedAt: new Date() },
+          });
+          logger.info('[vlab-auditor] TIR 反馈：frictionBudget 已调整', {
+            userId: session.userId,
+            previous: currentFriction,
+            adjusted,
+            frictionCalibration: report.output.scores.frictionCalibration,
+          });
+        }
+      } catch (tirError) {
+        logger.warn('[vlab-auditor] TIR 反馈写入失败', { error: tirError instanceof Error ? tirError.message : String(tirError) });
+      }
+    }
+
     return { ...auditRecord, reused: false }
   }
 
@@ -705,32 +836,33 @@ export class BlackboxVirtualLearnerRunner {
         // 故事当次需求经 Goal 开场传入正式链路；不在此改 Path
         const demand = resolveStorySessionDemand({
           story,
-          profileLearningGoal: (learner as any)?.learningGoal,
+          profileLearningGoal: learner?.learningGoal,
         })
         if (!demand.text) throw new Error('虚拟学习者缺少 Goal 开场信息：请绑定故事诉求或画像长期倾向')
         action = { type: 'chat', text: demand.text }
       } else if (latest.stage === 'goal') {
-        const history = this.visibleHistory(state).map((item: any) => ({
+        const history = this.visibleHistory(state).map((item) => ({
           role: item.role === 'platform' ? 'goal_agent' : 'learner',
           content: item.content
         }))
-        const output = await this.executeSimulatorSkill(
+        const output = await this.executeSimulatorSkillWithRetry(
+          sessionId,
           virtualLearnerGoalDialogueSimulatorDefinition,
           {
             learner,
             story,
             visibleContext: {
               history,
-              lastGoalAgentMessage: [...history].reverse().find((item: any) => item.role === 'goal_agent')?.content || ''
+              lastGoalAgentMessage: [...history].reverse().find((item) => item.role === 'goal_agent')?.content || ''
             },
             currentPhase: latest.availableActions.includes('confirm_proposal') ? 'proposal_evaluation' : 'understanding',
             previousLearnerState: state.blackbox?.learnerPrivateState?.goal || null,
+            learnerMemory: await this.buildLearnerMemoryForSimulator(session.userId),
             frictionBudget: snapshot.frictionBudget
           },
           snapshot,
           'goal'
         )
-        if (!output?.reply) throw new Error('虚拟学习者 Goal 动作生成失败')
         const shouldConfirm = latest.availableActions.includes('confirm_proposal') && output?.learnerState?.readyToAdvance === true
         action = { type: shouldConfirm ? 'confirm_proposal' : 'chat', text: output.reply }
         await this.persistPrivateState(session, state, 'goal', output.learnerState, {
@@ -750,30 +882,53 @@ export class BlackboxVirtualLearnerRunner {
           return { action, result: await this.act(sessionId, operatorId, action) }
         }
         action = { type: 'start_learning', taskId: latest.visibleTask?.id }
-      } else if (latest.stage === 'learning') {
-        const history = this.visibleHistory(state).map((item: any) => ({
+      } else if (latest.stage === 'teaching') {
+        const history = this.visibleHistory(state).map((item) => ({
           role: item.role === 'platform' ? 'teacher' : 'learner',
           content: item.content
         }))
-        const output = await this.executeSimulatorSkill(
+        // 阶段1：认知判决（BEAGLE Strategist 段，物理两阶段第一段；失败降级 null，不阻断叙事）
+        let epistemicGrounding: any = null
+        try {
+          const groundingOutput = await this.executeSimulatorSkill(
+            virtualLearnerEpistemicGroundingDefinition,
+            {
+              learner,
+              currentTask: latest.visibleTask || null,
+              knowledgeSnapshot: await this.buildLearnerKnowledgeSnapshot(session.userId, latest.visibleTask),
+              previousLearnerState: state.blackbox?.learnerPrivateState?.teaching || null,
+            },
+            snapshot,
+            'teaching'
+          )
+          epistemicGrounding = (groundingOutput as any)?.epistemicGrounding || null
+        } catch (groundingError) {
+          logger.warn('[Blackbox] 认知判决失败（降级为无硬约束叙事）', {
+            sessionId,
+            error: groundingError instanceof Error ? groundingError.message : String(groundingError),
+          })
+        }
+        const output = await this.executeSimulatorSkillWithRetry(
+          sessionId,
           virtualLearnerLearnTurnSimulatorDefinition,
           {
             learner,
             story,
             visibleContext: {
               history,
-              lastTeacherMessage: [...history].reverse().find((item: any) => item.role === 'teacher')?.content || ''
+              lastTeacherMessage: [...history].reverse().find((item) => item.role === 'teacher')?.content || ''
             },
-            currentPhase: state.blackbox?.learnerPrivateState?.learning?.phaseFocus || 'trying',
-            previousLearnerState: state.blackbox?.learnerPrivateState?.learning || null,
+            currentPhase: (state.blackbox?.learnerPrivateState?.teaching as Record<string, unknown> | undefined)?.phaseFocus || 'trying',
+            previousLearnerState: state.blackbox?.learnerPrivateState?.teaching || null,
             currentTask: latest.visibleTask || null,
-            knowledgeSnapshot: [],
+            knowledgeSnapshot: await this.buildLearnerKnowledgeSnapshot(session.userId, latest.visibleTask),
+            learnerMemory: await this.buildLearnerMemoryForSimulator(session.userId),
+            epistemicGrounding,
             frictionBudget: snapshot.frictionBudget
           },
           snapshot,
-          'learning'
+          'teaching'
         )
-        if (!output?.reply) throw new Error('虚拟学习者 Learn 动作生成失败')
         action = latest.availableActions.includes('confirm_complete')
           && output.learnerFeedback?.selfReportedTaskDone === true
           && output.learnerFeedback?.stopAsking === true
@@ -783,9 +938,10 @@ export class BlackboxVirtualLearnerRunner {
           : output.learnerState?.wantsWorkedExample
             ? { type: 'request_example', text: output.reply }
             : { type: 'chat', text: output.reply }
-        await this.persistPrivateState(session, state, 'learning', {
+        await this.persistPrivateState(session, state, 'teaching', {
           ...output.learnerState,
-          learnerFeedback: output.learnerFeedback
+          learnerFeedback: output.learnerFeedback,
+          epistemicGrounding
         }, {
           emotion: output.emotion,
           degraded: output.degraded,
@@ -802,7 +958,7 @@ export class BlackboxVirtualLearnerRunner {
 
   private async context(sessionId: string, operatorId: string) {
     const session = await this.getSession(sessionId)
-    const state = parseJson(session.stageResults)
+    const state = parseStageResults(session.stageResults)
     assertBlackboxSessionMode(state)
     const token = signProjectionToken({
       targetUserId: session.userId,
@@ -824,13 +980,13 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   private async persist(
-    session: any,
-    state: any,
+    session: VirtualSessionRow,
+    state: StageResults,
     result: PlatformInteractionResult,
     projectionCommandId?: string
   ) {
     const fresh = await this.getSession(session.id)
-    const latestState = parseJson(fresh.stageResults, state)
+    const latestState = parseStageResults(fresh.stageResults, state)
     const projectedCommandIds = Array.isArray(latestState.blackbox?.projectedCommandIds)
       ? latestState.blackbox.projectedCommandIds : []
     if (projectionCommandId && projectedCommandIds.includes(projectionCommandId)) return result
@@ -838,7 +994,7 @@ export class BlackboxVirtualLearnerRunner {
     const previousControl = latestState.blackbox?.control || {}
     const control = Object.fromEntries(
       Object.entries({ ...previousControl, ...result.control }).filter(([, value]) => value !== undefined)
-    )
+    ) as PlatformControlReceipt
     if (control.terminalReason === 'completed' && control.runCompleted !== true) delete control.terminalReason
     const publicTrace = [...(latestState.blackbox?.publicTrace || []), {
       timestamp: new Date().toISOString(),
@@ -871,20 +1027,20 @@ export class BlackboxVirtualLearnerRunner {
       control.terminalDetail = control.terminalDetail || result.observation.lastActionResult?.visibleMessage || '平台返回错误观察'
       nextState.blackbox.control = control
     }
-    if (result.diagnostic?.resetLearningPrivateState === true && nextState.blackbox?.learnerPrivateState?.learning) {
-      const completedTaskState = nextState.blackbox.learnerPrivateState.learning
+    if (result.diagnostic?.resetLearningPrivateState === true && nextState.blackbox?.learnerPrivateState?.teaching) {
+      const completedTaskState = nextState.blackbox.learnerPrivateState.teaching as Record<string, unknown>
       const privateStateTrace = Array.isArray(nextState.blackbox.learnerPrivateStateTrace)
         ? nextState.blackbox.learnerPrivateStateTrace : []
-      const completedTaskTrace = [...privateStateTrace].reverse().find((entry: any) =>
-        entry?.stage === 'learning' && (!entry?.taskId || entry.taskId === previousControl.taskId)
+      const completedTaskTrace = [...privateStateTrace].reverse().find((entry) =>
+        entry?.stage === 'teaching' && (!entry?.taskId || entry.taskId === previousControl.taskId)
       )
       const completedTaskId = previousControl.taskId || fresh.currentTaskId || null
-      const alreadyArchived = privateStateTrace.some((entry: any) =>
-        entry?.stage === 'learning' && entry?.taskId === completedTaskId && entry?.transition === 'task_completed'
+      const alreadyArchived = privateStateTrace.some((entry) =>
+        entry?.stage === 'teaching' && entry?.taskId === completedTaskId && entry?.transition === 'task_completed'
       )
       nextState.blackbox.learnerPrivateStateTrace = (alreadyArchived ? privateStateTrace : [...privateStateTrace, {
         sequence: publicTrace.length,
-        stage: 'learning',
+        stage: 'teaching',
         taskId: completedTaskId,
         state: completedTaskState,
         emotion: completedTaskTrace?.emotion || null,
@@ -894,7 +1050,7 @@ export class BlackboxVirtualLearnerRunner {
         transition: 'task_completed',
         generatedAt: new Date().toISOString()
       }]).slice(-120)
-      const { learning: _completedTaskState, ...remainingPrivateState } = nextState.blackbox.learnerPrivateState
+      const { teaching: _completedTaskState, ...remainingPrivateState } = nextState.blackbox.learnerPrivateState
       nextState.blackbox.learnerPrivateState = remainingPrivateState
     }
     const completedTaskIncrement = result.control.taskCompleted === true && previousControl.taskId !== result.control.taskId ? 1 : 0
@@ -922,15 +1078,15 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   private async projectPlatformResult(
-    session: any,
-    state: any,
+    session: VirtualSessionRow,
+    state: StageResults,
     result: PlatformInteractionResult,
     action?: LearnerAction
   ) {
     try {
       const projection = await this.journalProjectionReceipt(session.id, result, action)
       return await this.persist(session, state, result, projection?.projectionKey)
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof BlackboxReconciliationPendingError) throw error
       if (error instanceof BlackboxLeaseLostError) throw error
       if (error instanceof BlackboxDatabaseBusyError) throw error
@@ -968,7 +1124,7 @@ export class BlackboxVirtualLearnerRunner {
         finalProjection: receipt.finalProjection,
         commandRowId: context.commandRowId
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) throw error
       throw this.reconciliationPendingError(error)
     }
@@ -992,7 +1148,7 @@ export class BlackboxVirtualLearnerRunner {
         data: { resultJson: JSON.stringify(receipt) }
       })
       return { commandRowId: context.commandRowId, projectionKey }
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) throw error
       throw this.reconciliationPendingError(error)
     }
@@ -1003,12 +1159,51 @@ export class BlackboxVirtualLearnerRunner {
     return Number.isInteger(suffix) && suffix > 0 ? suffix : 0
   }
 
-  private reconciliationPendingError(error: any) {
-    const detail = String(error?.message || '虚拟会话持久化失败').slice(0, 500)
+  private reconciliationPendingError(error: unknown) {
+    const detail = String(asErrorLike(error).message || '虚拟会话持久化失败').slice(0, 500)
     return new BlackboxReconciliationPendingError(
       `平台操作已完成，但黑盒会话持久化失败，请使用相同 Idempotency-Key 重试对账：${detail}`,
       error
     )
+  }
+
+  /**
+   * 自动对账阻塞 barrier（不同 key 的新命令请求到达时触发）：
+   * barrier 命令已持有完整平台回执（finalProjection=true 的 result 回执）时，先落盘该投影
+   * 并完成命令，再放行新命令。仅重放已发生的平台副作用（journal 回执），绝不重新执行平台
+   * 操作——与同 key 重试的对账路径完全一致，幂等语义不变。
+   * 无完整回执（checkpoint / 未终局 step）返回 false，保持「请使用原 Idempotency-Key 重试」语义。
+   */
+  private async tryResolveOrderingBarrier(sessionId: string, command: VirtualExperimentCommandRow): Promise<boolean> {
+    const receipt = this.pendingProjectionReceipt(command)
+    if (!receipt || receipt.receiptKind !== 'result' || receipt.finalProjection !== true) return false
+    try {
+      const session = await this.getSession(sessionId)
+      const state = parseStageResults(session.stageResults)
+      await this.persist(session, state, receipt.platformResult, receipt.projectionKey)
+      await prisma.virtual_experiment_commands.update({
+        where: { id: command.id },
+        data: {
+          status: 'completed',
+          resultJson: JSON.stringify(receipt.commandResult),
+          errorJson: null,
+          completedAt: new Date()
+        }
+      })
+      logger.warn('[Blackbox] 自动对账较早命令并放行后续命令', {
+        sessionId,
+        commandId: command.commandId,
+        projectionKey: receipt.projectionKey
+      })
+      return true
+    } catch (error: unknown) {
+      if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) throw error
+      const reconciliationError = error instanceof BlackboxReconciliationPendingError
+        ? error
+        : this.reconciliationPendingError(error)
+      await this.recordCommandFailure(sessionId, command.id, reconciliationError)
+      throw reconciliationError
+    }
   }
 
   private async completeCommand(sessionId: string, commandId: string, result: unknown) {
@@ -1032,9 +1227,9 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private async recordCommandFailure(sessionId: string, commandId: string, error: any) {
+  private async recordCommandFailure(sessionId: string, commandId: string, error: unknown) {
     if (error instanceof BlackboxLeaseLostError) return
-    let current: any = null
+    let current: VirtualExperimentCommandRow | null = null
     try {
       current = await prisma.virtual_experiment_commands.findUnique({ where: { id: commandId } })
     } catch {
@@ -1051,10 +1246,14 @@ export class BlackboxVirtualLearnerRunner {
         data: {
           status: 'failed',
           errorJson: JSON.stringify({
-            name: error?.name || 'Error',
-            message: error?.message || '黑盒命令执行失败',
-            code: error?.code || null,
-            statusCode: error?.statusCode || null
+            name: asErrorLike(error).name || 'Error',
+            message: asErrorLike(error).message || '黑盒命令执行失败',
+            code: asErrorLike(error).code || null,
+            statusCode: asErrorLike(error).statusCode || null,
+            // 可恢复标志：LLM/Provider 瞬时失败（平台副作用未发生）→ 同 key 可续跑
+            retryable: typeof asErrorLike(error).retryable === 'boolean'
+              ? asErrorLike(error).retryable
+              : isTransientLlMFailure(error)
           }),
           completedAt: new Date()
         }
@@ -1064,19 +1263,19 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private assertMutableSession(session: any) {
+  private assertMutableSession(session: VirtualSessionRow) {
     if (TERMINAL_SESSION_STATUSES.has(session.status)) {
       throw new BlackboxRunStateError('当前黑盒实验已经结束，不能继续修改', 'BLACKBOX_RUN_TERMINAL')
     }
   }
 
-  private reuseCommand<T>(command: any, kind: string, request: unknown): { result: T; reused: boolean } {
+  private reuseCommand<T>(command: VirtualExperimentCommandRow, kind: string, request: unknown): { result: T; reused: boolean } {
     this.assertCommandMatches(command, kind, request)
     if (command.status === 'completed' && command.resultJson) {
-      return { result: parseJson(command.resultJson, null) as T, reused: true }
+      return { result: safeJsonParse(command.resultJson, null) as T, reused: true }
     }
     if (command.status === 'failed') {
-      const error = parseJson(command.errorJson, {})
+      const error = safeJsonParse<{ message?: string }>(command.errorJson, {})
       throw new BlackboxRunStateError(
         `相同命令此前执行失败：${error.message || '未知错误'}`,
         'BLACKBOX_COMMAND_PREVIOUSLY_FAILED'
@@ -1085,24 +1284,30 @@ export class BlackboxVirtualLearnerRunner {
     throw new BlackboxRunStateError('相同黑盒命令正在执行或结果待对账', 'BLACKBOX_COMMAND_IN_PROGRESS')
   }
 
-  private assertCommandMatches(command: any, kind: string, request: unknown) {
+  private assertCommandMatches(command: VirtualExperimentCommandRow, kind: string, request: unknown) {
     if (command.kind !== kind || command.requestJson !== JSON.stringify(request ?? null)) {
       throw new BlackboxRunStateError('Idempotency-Key 已用于其他黑盒命令', 'BLACKBOX_COMMAND_ID_REUSED')
     }
   }
 
-  private isReconciliationPendingCommand(command: any): boolean {
+  private isReconciliationPendingCommand(command: VirtualExperimentCommandRow): boolean {
     if (this.pendingProjectionReceipt(command)) return true
     return command?.status === 'failed'
-      && parseJson(command.errorJson, {}).code === 'BLACKBOX_RECONCILIATION_PENDING'
+      && safeJsonParse<{ code?: string }>(command.errorJson, {}).code === 'BLACKBOX_RECONCILIATION_PENDING'
   }
 
-  private isCommandOrderingBarrier(command: any): boolean {
+  /** 可恢复失败命令：errorJson 带 retryable=true（LLM/Provider 瞬时失败，平台副作用未发生），同 key 可续跑 */
+  private isRetryableFailedCommand(command: VirtualExperimentCommandRow): boolean {
+    if (command?.status !== 'failed') return false
+    return safeJsonParse<{ retryable?: unknown }>(command.errorJson, {}).retryable === true
+  }
+
+  private isCommandOrderingBarrier(command: VirtualExperimentCommandRow): boolean {
     return command?.status === 'processing' || this.isReconciliationPendingCommand(command)
   }
 
-  private pendingProjectionReceipt(command: any): PendingProjectionReceipt | null {
-    const receipt = parseJson(command?.resultJson, null)
+  private pendingProjectionReceipt(command: VirtualExperimentCommandRow): PendingProjectionReceipt | null {
+    const receipt = safeJsonParse(command?.resultJson, null)
     if (receipt?.projectionPending !== true || typeof receipt.projectionKey !== 'string'
       || !receipt.projectionKey || typeof receipt.finalProjection !== 'boolean') return null
     if (receipt.receiptKind === 'result' && receipt.platformResult && 'commandResult' in receipt) {
@@ -1265,7 +1470,7 @@ export class BlackboxVirtualLearnerRunner {
     }
 
     if (action.type === 'confirm_complete') {
-      if (latestObservation.stage !== 'learning' || !control.taskId || !control.teachingSessionId) {
+      if (latestObservation.stage !== 'teaching' || !control.taskId || !control.teachingSessionId) {
         throw new BlackboxRunStateError('当前教学任务尚未满足完成条件', 'BLACKBOX_COMPLETION_NOT_READY')
       }
       if (latestObservation.visibleTask?.id && latestObservation.visibleTask.id !== control.taskId) {
@@ -1275,8 +1480,8 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   private async completeCurrentTask(
-    session: any,
-    state: any,
+    session: VirtualSessionRow,
+    state: StageResults,
     adapter: PlatformUserAdapter,
     control: PlatformControlReceipt,
     latestObservation?: LearnerObservation,
@@ -1308,8 +1513,10 @@ export class BlackboxVirtualLearnerRunner {
     if (checkpoint.status !== 'task_completed') {
       try {
         taskResult = await adapter.completeTask(taskId)
-      } catch (error: any) {
-        const lastError = String(error?.message || '任务完成同步失败').slice(0, 1000)
+        // 任务真正结算后：虚拟学习者记忆回写（画像概念 + 成果物登记），best-effort
+        await this.persistLearnerMemoryAfterTask(session, taskId, teachingSessionId, state)
+      } catch (error: unknown) {
+        const lastError = String(asErrorLike(error).message || '任务完成同步失败').slice(0, 1000)
         checkpoint = {
           ...checkpoint,
           status: 'teaching_finalized',
@@ -1332,7 +1539,7 @@ export class BlackboxVirtualLearnerRunner {
     let pathResult: PlatformInteractionResult
     try {
       pathResult = await adapter.getPath(learningPathId)
-    } catch (error: any) {
+    } catch (error: unknown) {
       return this.taskCompletionRetryResult(
         control,
         checkpoint,
@@ -1359,15 +1566,237 @@ export class BlackboxVirtualLearnerRunner {
     return null
   }
 
+  /**
+   * 黑盒任务结算后的记忆回写：
+   * - 从 teaching session 的 knowledgeState（课堂知识看板）回写画像概念
+   * - 登记「做完的事」（成果物，含验收标准 / 课堂掌握概念）
+   * best-effort：失败不阻断任务完成主流程。
+   */
+  private async persistLearnerMemoryAfterTask(
+    session: VirtualSessionRow,
+    taskId: string,
+    teachingSessionId: string,
+    state: StageResults
+  ): Promise<void> {
+    try {
+      const [teaching, task] = await Promise.all([
+        prisma.teaching_sessions.findUnique({ where: { id: teachingSessionId } }).catch(() => null),
+        prisma.subtasks.findUnique({ where: { id: taskId } }).catch(() => null),
+      ]);
+      const knowledgePoints: LessonKnowledgePoint[] = Array.isArray(teaching?.knowledgeState)
+        ? (teaching.knowledgeState as LessonKnowledgePoint[]).filter(
+            (kp) => kp && typeof kp.name === 'string' && kp.name.trim()
+          )
+        : [];
+      // 内部提炼：从私有状态轨迹（模拟器自己的收束轮自述）提取，而非抄老师侧看板
+      const trace = Array.isArray(state.blackbox?.learnerPrivateStateTrace)
+        ? state.blackbox.learnerPrivateStateTrace
+        : null;
+      const selfState = extractSelfStateFromTrace(trace, taskId);
+      // 记忆提炼 skill（LLM 主路径，失败走确定性 fallback）
+      const curated = await this.runMemoryCurator(session, state, teachingSessionId, task, trace);
+      const curatedMastered = curated?.masteredConcepts?.map((m) => m.name) || [];
+      const curatedStruggle = curated?.struggleConcepts?.map((s) => s.name) || [];
+      const effectiveSelfState: SelfReportedLearnerState | null = curated
+        ? {
+            ...(selfState || {}),
+            conceptName: curatedMastered[0] || curatedStruggle[0] || selfState?.conceptName || task?.title || null,
+            conceptualMastery: curatedMastered.length > 0 ? 0.85 : selfState?.conceptualMastery ?? null,
+            selfReportedTaskDone: curatedMastered.length > 0 ? true : selfState?.selfReportedTaskDone ?? null,
+            remainingBlockers: curatedStruggle.length > 0
+              ? curated.struggleConcepts.map((s) => s.blocker).filter(Boolean)
+              : selfState?.remainingBlockers || null,
+          }
+        : selfState;
+      await writeProfileConceptsAfterLesson(session.userId, knowledgePoints, {
+        source: 'blackbox',
+        selfState: effectiveSelfState,
+      });
+      await recordCompletedArtifact({
+        userId: session.userId,
+        taskId,
+        taskTitle: task?.title || '当前任务',
+        artifactType: task?.taskType || null,
+        deliverable: task?.acceptanceCriteria || null,
+        knowledgePoints,
+        selfState: effectiveSelfState,
+        milestoneTitle: (task as any)?.milestones?.title || null,
+        memoryDelta: curated?.memoryDelta || null,
+        memoryCurated: curated ? {
+          mastered: curatedMastered,
+          struggling: curatedStruggle,
+          selfCalibration: curated.selfCalibration,
+        } : undefined,
+      });
+    } catch (error) {
+      logger.warn('[Blackbox] 虚拟学习者记忆回写失败（不影响任务完成）', {
+        sessionId: session.id,
+        taskId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * 调用记忆提炼 skill（LLM 主路径；失败返回 null，由确定性 fallback 兜底）。
+   * 输入：画像 + 本课回合压缩序列 + 当前任务 + 旧记忆。
+   */
+  private async runMemoryCurator(
+    session: VirtualSessionRow,
+    state: StageResults,
+    teachingSessionId: string,
+    task: { title: string; linkedConcept?: string | null; acceptanceCriteria?: string | null } | null,
+    trace: Array<Record<string, any>> | null
+  ): Promise<{
+    masteredConcepts: Array<{ name: string; evidence: string; confidence: number }>;
+    struggleConcepts: Array<{ name: string; blocker: string; severity: string }>;
+    selfCalibration: string;
+    memoryDelta: string;
+  } | null> {
+    try {
+      const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id: session.virtualProfileId } });
+      if (!profile) return null;
+      const persona = {
+        ...safeJsonParse<Record<string, unknown>>(profile.profile, {}),
+        learningGoal: profile.learningGoal,
+      };
+      // 从私有轨迹构建回合压缩序列（只取 teaching 阶段）
+      const turnSequence = (trace || [])
+        .filter((entry) => entry?.stage === 'teaching')
+        .slice(-24)
+        .map((entry, index) => {
+          const s = (entry?.state && typeof entry.state === 'object' ? entry.state : {}) as Record<string, any>;
+          const f = (s.learnerFeedback && typeof s.learnerFeedback === 'object' ? s.learnerFeedback : {}) as Record<string, any>;
+          return {
+            turn: index + 1,
+            reply: typeof s.reply === 'string' ? s.reply : '',
+            emotion: typeof s.emotion === 'string' ? s.emotion : null,
+            learnerState: {
+              phaseFocus: typeof s.phaseFocus === 'string' ? s.phaseFocus : undefined,
+              conceptualMastery: typeof s.conceptualMastery === 'number' ? s.conceptualMastery : undefined,
+              taskUnderstanding: typeof s.taskUnderstanding === 'number' ? s.taskUnderstanding : undefined,
+              wantsHint: typeof s.wantsHint === 'boolean' ? s.wantsHint : undefined,
+            },
+            learnerFeedback: {
+              selfReportedTaskDone: typeof f.selfReportedTaskDone === 'boolean' ? f.selfReportedTaskDone : undefined,
+              confidence: typeof f.confidence === 'number' ? f.confidence : undefined,
+              wantsMoreHelp: typeof f.wantsMoreHelp === 'boolean' ? f.wantsMoreHelp : undefined,
+              remainingBlockers: Array.isArray(f.remainingBlockers) ? f.remainingBlockers : undefined,
+            },
+          };
+        });
+      // 若轨迹无 teaching 回合（异常），回退 teaching session 消息
+      const effectiveTurns = turnSequence.length > 0 ? turnSequence : this.buildFallbackTurnSequence(teachingSessionId);
+      const existing = await buildLearnerMemorySnapshot(session.userId, { limit: 30 }).catch(() => null);
+      const result = await executeSkill(virtualLearnerMemoryCuratorDefinition, {
+        persona,
+        turnSequence: effectiveTurns,
+        currentTask: {
+          title: task?.title || null,
+          linkedConcept: task?.linkedConcept || null,
+          acceptanceCriteria: task?.acceptanceCriteria || null,
+        },
+        existingKnown: existing?.mastered.map((m) => m.name) || [],
+        existingStruggle: existing?.struggling.map((m) => m.name) || [],
+      });
+      if (!result.success || !result.output) return null;
+      const output = result.output as any;
+      return {
+        masteredConcepts: Array.isArray(output.masteredConcepts) ? output.masteredConcepts : [],
+        struggleConcepts: Array.isArray(output.struggleConcepts) ? output.struggleConcepts : [],
+        selfCalibration: typeof output.selfCalibration === 'string' ? output.selfCalibration : '',
+        memoryDelta: typeof output.memoryDelta === 'string' ? output.memoryDelta : '',
+      };
+    } catch (error) {
+      logger.warn('[Blackbox] 记忆提炼 skill 调用失败，走确定性 fallback', {
+        sessionId: session.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
+  /** 回退：从 teaching session 消息构建回合序列（轨迹缺失时） */
+  private async buildFallbackTurnSequence(teachingSessionId: string): Promise<Array<Record<string, any>>> {
+    try {
+      const teaching = await prisma.teaching_sessions.findUnique({ where: { id: teachingSessionId } });
+      const raw = teaching?.messages ?? null;
+      const messages = typeof raw === 'string'
+        ? safeJsonParse<any[]>(raw, [])
+        : Array.isArray(raw)
+          ? raw
+          : [];
+      return messages.slice(-24).map((m: any, index: number) => ({
+        turn: index + 1,
+        reply: typeof m.content === 'string' ? m.content : '',
+        emotion: null,
+        learnerState: undefined,
+        learnerFeedback: undefined,
+        role: m.role || 'learner',
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * 组装学习者记忆快照（knowledgeSnapshot 用）：
+   * - 画像 knownConcepts（历次课后沉淀的已掌握概念）
+   * - memory_traces 到期复习点（旧知唤醒：记得学过、但快忘了）
+   * - 画像 struggleConcepts（仍在学/易混淆）
+   * - 最近完成事项（成果物标题）
+   * 当前任务概念固定附加在首位（保持「当前在看什么」）。
+   */
+  private async buildLearnerKnowledgeSnapshot(
+    userId: string,
+    visibleTask: LearnerObservation['visibleTask'] | undefined
+  ): Promise<Array<{ name: string; status: string; progress: number }>> {
+    const memory = await buildLearnerMemorySnapshot(userId, { limit: 6 }).catch(() => null);
+    const currentName = visibleTask?.linkedConcept || visibleTask?.title || null;
+    const result: Array<{ name: string; status: string; progress: number }> = [];
+    if (currentName) result.push({ name: String(currentName), status: 'learning', progress: 40 });
+    for (const item of memory?.mastered || []) {
+      result.push({ name: item.name, status: 'mastered', progress: 100 });
+    }
+    for (const item of memory?.dueReview || []) {
+      result.push({ name: item.name, status: 'review', progress: item.progress });
+    }
+    for (const item of memory?.struggling || []) {
+      result.push({ name: item.name, status: 'learning', progress: 30 });
+    }
+    return result.slice(0, 8);
+  }
+
+  /**
+   * 组装学习者记忆（learnerMemory 用，供模拟器自然引用）：
+   * 已掌握 / 到期复习 / 易混淆 + 最近完成事项（成果物标题）。
+   */
+  private async buildLearnerMemoryForSimulator(
+    userId: string
+  ): Promise<{
+    mastered: string[];
+    dueReview: string[];
+    struggling: string[];
+    recentCompleted: string[];
+  } | null> {
+    const memory = await buildLearnerMemorySnapshot(userId, { limit: 8 }).catch(() => null);
+    if (!memory) return null;
+    return {
+      mastered: memory.mastered.map((item) => item.name),
+      dueReview: memory.dueReview.map((item) => item.name),
+      struggling: memory.struggling.map((item) => item.name),
+      recentCompleted: memory.recentTaskTitles,
+    };
+  }
+
   private async persistTaskCompletionCheckpoint(
     sessionId: string,
-    state: any,
+    state: StageResults,
     checkpoint: TaskCompletionCheckpoint,
     projectionKey?: string
-  ) {
-    const fresh = await this.getSession(sessionId)
+  ) {    const fresh = await this.getSession(sessionId)
     this.assertMutableSession(fresh)
-    const latestState = parseJson(fresh.stageResults, state)
+    const latestState = parseStageResults(fresh.stageResults, state)
     const projectedCommandIds = Array.isArray(latestState.blackbox?.projectedCommandIds)
       ? latestState.blackbox.projectedCommandIds : []
     if (projectionKey && projectedCommandIds.includes(projectionKey)) return
@@ -1395,13 +1824,13 @@ export class BlackboxVirtualLearnerRunner {
 
   private async persistTaskCompletionCheckpointAfterExternal(
     sessionId: string,
-    state: any,
+    state: StageResults,
     checkpoint: TaskCompletionCheckpoint
   ) {
     try {
       const receipt = await this.journalCheckpointReceipt(sessionId, checkpoint)
       await this.persistTaskCompletionCheckpoint(sessionId, state, checkpoint, receipt?.projectionKey)
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof BlackboxReconciliationPendingError) throw error
       if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) throw error
       throw this.reconciliationPendingError(error)
@@ -1413,16 +1842,16 @@ export class BlackboxVirtualLearnerRunner {
     checkpoint: TaskCompletionCheckpoint,
     latestObservation: LearnerObservation | undefined,
     teachingEndResult: PlatformInteractionResult | null,
-    error: any,
+    error: unknown,
     taskCompleted = false
   ): PlatformInteractionResult {
-    const errorMessage = String(error?.message || '任务完成同步失败').slice(0, 300)
+    const errorMessage = String(asErrorLike(error).message || '任务完成同步失败').slice(0, 300)
     const visibleMessage = taskCompleted
       ? `任务已完成，但学习路径刷新失败：${errorMessage}。请重试刷新学习路径。`
       : `课堂已结束，但任务完成同步失败：${errorMessage}。请重试完成任务。`
     return {
       observation: {
-        stage: 'learning',
+        stage: 'teaching',
         visibleMessages: [
           ...(teachingEndResult?.observation?.visibleMessages || []),
           { role: 'platform', content: visibleMessage }
@@ -1445,9 +1874,9 @@ export class BlackboxVirtualLearnerRunner {
         completedTask: {
           status: taskCompleted ? 'completed_path_refresh_pending' : 'pending_retry',
           error: {
-            name: String(error?.name || 'Error'),
+            name: String(asErrorLike(error).name || 'Error'),
             message: errorMessage,
-            status: typeof error?.status === 'number' ? error.status : null
+            status: typeof asErrorLike(error).status === 'number' ? asErrorLike(error).status : null
           }
         }
       }
@@ -1475,26 +1904,37 @@ export class BlackboxVirtualLearnerRunner {
   private async executeWithFailurePersistence<T>(sessionId: string, code: string, work: () => Promise<T>): Promise<T> {
     try {
       return await work()
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (!(error instanceof BlackboxRunStateError)
         && !(error instanceof VirtualSessionModeError)
         && !(error instanceof BlackboxReconciliationPendingError)
         && !(error instanceof BlackboxLeaseLostError)
         && !(error instanceof BlackboxDatabaseBusyError)
         && !(error instanceof BlackboxSessionBusyError)) {
-        await this.persistUnexpectedFailure(sessionId, code, error)
+        if (this.isRecoverableExecutionFailure(error)) {
+          // 可恢复瞬时失败（LLM 超时/上游 5xx/结构非法等）：不终局化整场实验，
+          // 命令已由 runCommand 标记 failed + retryable，前端可用相同 Idempotency-Key 续跑。
+          // 平台副作用未发生（这类错误发生在平台调用或模拟器生成阶段），重放是安全的。
+          logger.warn('[Blackbox] 可恢复瞬时失败，实验保持 running，可用相同 Idempotency-Key 重试', {
+            sessionId,
+            code,
+            error: error instanceof Error ? error.message : String(error)
+          })
+        } else {
+          await this.persistUnexpectedFailure(sessionId, code, error)
+        }
       }
       throw error
     }
   }
 
-  private async persistUnexpectedFailure(sessionId: string, code: string, error: any) {
+  private async persistUnexpectedFailure(sessionId: string, code: string, error: unknown) {
     try {
       const session = await this.getSession(sessionId)
       if (TERMINAL_SESSION_STATUSES.has(session.status)) return
-      const state = parseJson(session.stageResults)
+      const state = parseStageResults(session.stageResults)
       assertBlackboxSessionMode(state)
-      const message = String(error?.message || '黑盒实验执行失败').slice(0, 1000)
+      const message = String(asErrorLike(error).message || '黑盒实验执行失败').slice(0, 1000)
       await this.persist(session, state, {
         observation: {
           stage: 'error',
@@ -1510,9 +1950,9 @@ export class BlackboxVirtualLearnerRunner {
         },
         diagnostic: {
           error: {
-            name: String(error?.name || 'Error'),
+            name: String(asErrorLike(error).name || 'Error'),
             message,
-            status: typeof error?.status === 'number' ? error.status : null
+            status: typeof asErrorLike(error).status === 'number' ? asErrorLike(error).status : null
           }
         }
       })
@@ -1521,23 +1961,23 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private visibleHistory(state: any) {
-    return (state.blackbox?.publicTrace || []).flatMap((entry: any) => entry?.observation?.visibleMessages || [])
+  private visibleHistory(state: StageResults): Array<{ role: string; content: string }> {
+    return (state.blackbox?.publicTrace || []).flatMap((entry) => entry?.observation?.visibleMessages || [])
   }
 
-  private latestRefereeReport(state: any) {
+  private latestRefereeReport(state: StageResults) {
     const reports = Array.isArray(state.blackbox?.refereeReports) ? state.blackbox.refereeReports : []
     const latestId = state.blackbox?.latestRefereeReportId
-    return reports.find((item: any) => item.id === latestId) || reports[reports.length - 1] || null
+    return reports.find((item) => item.id === latestId) || reports[reports.length - 1] || null
   }
 
-  private latestActorAuditReport(state: any) {
+  private latestActorAuditReport(state: StageResults) {
     const reports = Array.isArray(state.blackbox?.actorAuditReports) ? state.blackbox.actorAuditReports : []
     const latestId = state.blackbox?.latestActorAuditReportId
-    return reports.find((item: any) => item.id === latestId) || reports[reports.length - 1] || null
+    return reports.find((item) => item.id === latestId) || reports[reports.length - 1] || null
   }
 
-  private teachingSessionIds(state: any): string[] {
+  private teachingSessionIds(state: StageResults): string[] {
     const ids = new Set<string>()
     const trace = Array.isArray(state.blackbox?.publicTrace) ? state.blackbox.publicTrace : []
     for (const entry of trace) {
@@ -1549,7 +1989,7 @@ export class BlackboxVirtualLearnerRunner {
     return [...ids]
   }
 
-  private async assertSyntheticUserBinding(session: any) {
+  private async assertSyntheticUserBinding(session: VirtualSessionRow) {
     const profile = await prisma.virtual_learner_profiles.findUnique({
       where: { id: session.virtualProfileId },
       select: { userId: true }
@@ -1571,18 +2011,18 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private actorStateTimeline(state: any) {
+  private actorStateTimeline(state: StageResults) {
     const trace = Array.isArray(state.blackbox?.learnerPrivateStateTrace)
       ? state.blackbox.learnerPrivateStateTrace.slice(-120) : []
-    return trace.map((entry: any, index: number) => {
-      const stage = entry?.stage === 'learning' ? 'learning' : 'goal'
-      const actorState = entry?.state && typeof entry.state === 'object' ? entry.state : {}
-      const feedback = actorState.learnerFeedback && typeof actorState.learnerFeedback === 'object'
-        ? actorState.learnerFeedback : {}
+    return trace.map((entry: LearnerPrivateStateTraceEntry, index: number) => {
+      const stage = entry?.stage === 'teaching' ? 'teaching' : 'goal'
+      const actorState = (entry?.state && typeof entry.state === 'object' ? entry.state : {}) as Record<string, unknown>
+      const feedback = (actorState.learnerFeedback && typeof actorState.learnerFeedback === 'object'
+        ? actorState.learnerFeedback : {}) as Record<string, unknown>
       const metricKeys = stage === 'goal'
         ? ['feltUnderstood', 'problemClarity', 'proposalFit', 'taskRelevance', 'executionConcern', 'goalReadiness']
         : ['taskUnderstanding', 'conceptualMastery', 'proceduralMastery', 'misconceptionRisk', 'helpSeekingReadiness', 'cognitiveLoad']
-      const feedbackKeys = stage === 'learning' ? ['satisfaction', 'confidence'] : []
+      const feedbackKeys = stage === 'teaching' ? ['satisfaction', 'confidence'] : []
       const metrics = Object.fromEntries([
         ...metricKeys.map((key) => [key, this.displayActorMetric(actorState[key])]),
         ...feedbackKeys.map((key) => [key, this.displayActorMetric(feedback[key])])
@@ -1590,7 +2030,7 @@ export class BlackboxVirtualLearnerRunner {
       const flagKeys = stage === 'goal'
         ? ['willingToTry', 'readyToProceed', 'wantsClarification', 'readyToAdvance']
         : ['wantsHint', 'wantsWorkedExample', 'readyForNextTask']
-      const feedbackFlagKeys = stage === 'learning'
+      const feedbackFlagKeys = stage === 'teaching'
         ? ['selfReportedTaskDone', 'wantsMoreHelp', 'stopAsking'] : []
       const flags = Object.fromEntries([
         ...flagKeys.map((key) => [key, actorState[key]]),
@@ -1600,7 +2040,7 @@ export class BlackboxVirtualLearnerRunner {
         ? actorState.remainingUnknowns
         : Array.isArray(feedback.remainingBlockers) && feedback.remainingBlockers.length
           ? feedback.remainingBlockers : actorState.remainingBlockers
-      const visibleSignal = this.timelineText(entry?.visibleSignal || actorState?.debug?.visibleSignal, 240)
+      const visibleSignal = this.timelineText(entry?.visibleSignal || deepValue(actorState, ['debug', 'visibleSignal']), 240)
 
       return {
         sequence: Number.isInteger(entry?.sequence) ? entry.sequence : index,
@@ -1610,12 +2050,12 @@ export class BlackboxVirtualLearnerRunner {
         emotion: this.timelineText(entry?.emotion || actorState.emotion, 64),
         degraded: entry?.degraded === true || actorState.degraded === true || visibleSignal === 'fallback',
         transition: this.timelineText(entry?.transition, 64),
-        stateChangeReason: this.timelineText(entry?.stateChangeReason || actorState?.debug?.stateChangeReason, 320),
+        stateChangeReason: this.timelineText(entry?.stateChangeReason || deepValue(actorState, ['debug', 'stateChangeReason']), 320),
         visibleSignal,
         metrics,
         flags,
         blockers: Array.isArray(blockers)
-          ? blockers.map((item: any) => this.timelineText(item, 240)).filter(Boolean).slice(0, 5) : [],
+          ? blockers.map((item: unknown) => this.timelineText(item, 240)).filter(Boolean).slice(0, 5) : [],
         generatedAt: this.timelineText(entry?.generatedAt, 64)
       }
     })
@@ -1634,10 +2074,10 @@ export class BlackboxVirtualLearnerRunner {
     return normalized ? normalized.slice(0, limit) : null
   }
 
-  private async buildRefereeInput(session: any, state: any): Promise<VirtualLearnerRefereeInput> {
+  private async buildRefereeInput(session: VirtualSessionRow, state: StageResults): Promise<VirtualLearnerRefereeInput> {
     const { rawPublic, publicTrace, summary } = this.buildSharedAuditTrace(session, state)
     const rawReferee = Array.isArray(state.blackbox?.refereeTrace) ? state.blackbox.refereeTrace : []
-    const refereeTrace = this.compactTrace(rawReferee, 120).map((entry: any) => ({
+    const refereeTrace = this.compactTrace(rawReferee, 120).map((entry: BlackboxRefereeTraceEntry) => ({
       timestamp: String(entry?.timestamp || ''),
       traceId: typeof entry?.traceId === 'string' ? entry.traceId : null,
       diagnostic: this.sanitizeDiagnostic(entry?.diagnostic)
@@ -1658,20 +2098,20 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   /** 平行通道：故事元数据 + 当次诉求（不进入 Goal/Path 主链，只给裁判评估「目标理解」） */
-  private async buildRefereeStoryMeta(session: any, state: any): Promise<RefereeStoryMeta | null> {
+  private async buildRefereeStoryMeta(session: VirtualSessionRow, state: StageResults): Promise<RefereeStoryMeta | null> {
     const snapshot = await this.getExperimentSnapshot(session, state)
     const story = snapshot.story && typeof snapshot.story === 'object' ? snapshot.story : null
     const learner = snapshot.actorProfile && typeof snapshot.actorProfile === 'object' ? snapshot.actorProfile : {}
     const demand = resolveStorySessionDemand({
       story,
-      profileLearningGoal: (learner as any)?.learningGoal,
+      profileLearningGoal: learner?.learningGoal,
     })
     if (!story && !demand.text) return null
-    const goalSeed = story?.goalSeed && typeof story.goalSeed === 'object' ? story.goalSeed : {}
+    const goalSeed = (story?.goalSeed && typeof story.goalSeed === 'object' ? story.goalSeed : {}) as Record<string, unknown>
     return {
-      personaSummary: (learner as any)?.profile?.occupation
-        ? `${(learner as any)?.learningGoal || ''}｜${(learner as any).profile.occupation}`
-        : (learner as any)?.learningGoal || null,
+      personaSummary: typeof learner?.profile?.occupation === 'string'
+        ? `${learner?.learningGoal || ''}｜${learner.profile.occupation}`
+        : learner?.learningGoal || null,
       storyId: demand.storyId,
       storyTitle: this.timelineText(story?.title, 200),
       surfaceGoal: this.timelineText(goalSeed.surfaceGoal, 500),
@@ -1683,7 +2123,7 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   /** 数据完整性：平台侧教学指标 / wrapup 产出情况（供裁判 evidenceSufficiency 判断） */
-  private async buildRefereeMetricCompleteness(session: any, state: any): Promise<RefereeMetricCompleteness> {
+  private async buildRefereeMetricCompleteness(session: VirtualSessionRow, state: StageResults): Promise<RefereeMetricCompleteness> {
     const base = { available: true, teachingSessions: 0, wrapupPresent: 0, metricsPresent: 0, lssPresent: 0, degraded: false, error: null as string | null }
     try {
       const teachingSessionIds = this.teachingSessionIds(state)
@@ -1708,25 +2148,25 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private async buildActorAuditInput(session: any, state: any): Promise<VirtualLearnerActorAuditInput> {
+  private async buildActorAuditInput(session: VirtualSessionRow, state: StageResults): Promise<VirtualLearnerActorAuditInput> {
     const snapshot = await this.getExperimentSnapshot(session, state)
     const { publicTrace, summary } = this.buildSharedAuditTrace(session, state)
     return {
-      actorProfile: this.sanitizeAuditValue(snapshot.actorProfile, 0),
-      story: snapshot.story && typeof snapshot.story === 'object' ? this.sanitizeAuditValue(snapshot.story, 0) : null,
+      actorProfile: this.sanitizeAuditValue(snapshot.actorProfile, 0) as VirtualLearnerActorAuditInput['actorProfile'],
+      story: (snapshot.story && typeof snapshot.story === 'object' ? this.sanitizeAuditValue(snapshot.story, 0) : null) as Record<string, unknown> | null,
       frictionBudget: snapshot.frictionBudget as VirtualLearnerActorAuditInput['frictionBudget'],
       learnerPrivateState: this.sanitizeAuditValue({
         latest: state.blackbox?.learnerPrivateState || {},
         trace: state.blackbox?.learnerPrivateStateTrace || []
-      }, 0),
+      }, 0) as Record<string, unknown>,
       publicTrace: publicTrace.map(entry => ({ timestamp: entry.timestamp, observation: entry.observation })),
       experimentSummary: summary
     }
   }
 
-  private buildSharedAuditTrace(session: any, state: any) {
+  private buildSharedAuditTrace(session: VirtualSessionRow, state: StageResults) {
     const rawPublic = Array.isArray(state.blackbox?.publicTrace) ? state.blackbox.publicTrace : []
-    const publicTrace = this.compactTrace(rawPublic, 120).map((entry: any) => ({
+    const publicTrace = this.compactTrace(rawPublic, 120).map((entry: BlackboxPublicTraceEntry) => ({
       timestamp: String(entry?.timestamp || ''),
       observation: this.sanitizeObservation(entry?.observation),
       control: entry?.control && typeof entry.control === 'object' ? entry.control : {}
@@ -1735,7 +2175,7 @@ export class BlackboxVirtualLearnerRunner {
     const stageCoverage = {
       goal: false,
       path: false,
-      learning: false,
+      teaching: false,
       completed: false,
       error: false
     } as Record<LearnerObservation['stage'], boolean>
@@ -1781,17 +2221,17 @@ export class BlackboxVirtualLearnerRunner {
 
   // 私有状态轨迹（learnerPrivateStateTrace）的展示序列化：去掉 state 内部的大对象重影，
   // 只保留前端"私有状态时间线"需要的索引字段与精简 metrics/flags。
-  private compactLearnerPrivateStateTrace(raw: any): Array<Record<string, unknown>> {
-    const trace = Array.isArray(raw) ? raw.slice(-120) : []
-    return trace.map((entry: any, index: number) => {
-      const stage = entry?.stage === 'learning' ? 'learning' : 'goal'
-      const actorState = entry?.state && typeof entry.state === 'object' ? entry.state : {}
-      const feedback = actorState.learnerFeedback && typeof actorState.learnerFeedback === 'object'
-        ? actorState.learnerFeedback : {}
+  private compactLearnerPrivateStateTrace(raw: unknown): Array<Record<string, unknown>> {
+    const trace = Array.isArray(raw) ? (raw as LearnerPrivateStateTraceEntry[]).slice(-120) : []
+    return trace.map((entry: LearnerPrivateStateTraceEntry, index: number) => {
+      const stage = entry?.stage === 'teaching' ? 'teaching' : 'goal'
+      const actorState = (entry?.state && typeof entry.state === 'object' ? entry.state : {}) as Record<string, unknown>
+      const feedback = (actorState.learnerFeedback && typeof actorState.learnerFeedback === 'object'
+        ? actorState.learnerFeedback : {}) as Record<string, unknown>
       const metricKeys = stage === 'goal'
         ? ['feltUnderstood', 'problemClarity', 'proposalFit', 'taskRelevance', 'executionConcern', 'goalReadiness']
         : ['taskUnderstanding', 'conceptualMastery', 'proceduralMastery', 'misconceptionRisk', 'helpSeekingReadiness', 'cognitiveLoad']
-      const feedbackKeys = stage === 'learning' ? ['satisfaction', 'confidence'] : []
+      const feedbackKeys = stage === 'teaching' ? ['satisfaction', 'confidence'] : []
       const metrics = Object.fromEntries([
         ...metricKeys.map((key) => [key, this.displayActorMetric(actorState[key])]),
         ...feedbackKeys.map((key) => [key, this.displayActorMetric(feedback[key])])
@@ -1799,7 +2239,7 @@ export class BlackboxVirtualLearnerRunner {
       const flagKeys = stage === 'goal'
         ? ['willingToTry', 'readyToProceed', 'wantsClarification', 'readyToAdvance']
         : ['wantsHint', 'wantsWorkedExample', 'readyForNextTask']
-      const feedbackFlagKeys = stage === 'learning' ? ['selfReportedTaskDone', 'wantsMoreHelp', 'stopAsking'] : []
+      const feedbackFlagKeys = stage === 'teaching' ? ['selfReportedTaskDone', 'wantsMoreHelp', 'stopAsking'] : []
       const flags = Object.fromEntries([
         ...flagKeys.map((key) => [key, actorState[key]]),
         ...feedbackFlagKeys.map((key) => [key, feedback[key]])
@@ -1820,7 +2260,7 @@ export class BlackboxVirtualLearnerRunner {
         stateChangeReason: this.timelineText(entry?.stateChangeReason, 320),
         metrics,
         flags,
-        blockers: Array.isArray(blockers) ? blockers.map((item: any) => this.timelineText(item, 240)).filter(Boolean).slice(0, 5) : [],
+        blockers: Array.isArray(blockers) ? blockers.map((item: unknown) => this.timelineText(item, 240)).filter(Boolean).slice(0, 5) : [],
         generatedAt: this.timelineText(entry?.generatedAt, 64)
       }
     })
@@ -1834,29 +2274,38 @@ export class BlackboxVirtualLearnerRunner {
     return createHash('sha256').update(JSON.stringify(value) ?? String(value)).digest('hex')
   }
 
-  private sanitizeObservation(value: any): LearnerObservation {
-    const stage = ['goal', 'path', 'learning', 'completed', 'error'].includes(value?.stage) ? value.stage : 'error'
+  private sanitizeObservation(value: unknown): LearnerObservation {
+    const v = (value ?? {}) as {
+      stage?: string
+      visibleMessages?: Array<{ role?: string; content?: unknown }>
+      visibleChoices?: unknown[]
+      visiblePath?: LearnerObservation['visiblePath']
+      visibleTask?: LearnerObservation['visibleTask']
+      availableActions?: string[]
+      lastActionResult?: LearnerObservation['lastActionResult']
+    }
+    const stage = ['goal', 'path', 'teaching', 'completed', 'error'].includes(v?.stage || '') ? v.stage : 'error'
     return {
-      stage,
-      visibleMessages: (Array.isArray(value?.visibleMessages) ? value.visibleMessages : []).slice(0, 30).map((item: any) => ({
+      stage: stage as LearnerObservation['stage'],
+      visibleMessages: (Array.isArray(v?.visibleMessages) ? v.visibleMessages : []).slice(0, 30).map((item) => ({
         role: item?.role === 'learner' ? 'learner' : 'platform',
         content: String(item?.content || '').slice(0, 1200)
       })),
-      visibleChoices: Array.isArray(value?.visibleChoices) ? value.visibleChoices.map((item: any) => String(item).slice(0, 160)).slice(0, 12) : undefined,
-      visiblePath: value?.visiblePath || undefined,
-      visibleTask: value?.visibleTask || undefined,
-      availableActions: Array.isArray(value?.availableActions) ? value.availableActions : [],
-      lastActionResult: value?.lastActionResult || undefined
+      visibleChoices: Array.isArray(v?.visibleChoices) ? v.visibleChoices.map((item) => String(item).slice(0, 160)).slice(0, 12) : undefined,
+      visiblePath: v?.visiblePath || undefined,
+      visibleTask: v?.visibleTask || undefined,
+      availableActions: (Array.isArray(v?.availableActions) ? v.availableActions : []) as LearnerAction['type'][],
+      lastActionResult: v?.lastActionResult || undefined
     }
   }
 
-  private sanitizeDiagnostic(value: any): Record<string, unknown> | null {
+  private sanitizeDiagnostic(value: unknown): Record<string, unknown> | null {
     if (!value || typeof value !== 'object') return null
     const allowedKeys = [
       'schemaVersion', 'renderHints', 'generationStatus', 'canStartLearning', 'replan',
       'analysis', 'state', 'strategies', 'completionCandidate', 'endResult', 'completedTask', 'task'
     ]
-    const sanitize = (item: any, depth = 0): any => {
+    const sanitize = (item: unknown, depth = 0): unknown => {
       if (depth > 3) return '[truncated]'
       if (item === null || typeof item === 'number' || typeof item === 'boolean') return item
       if (typeof item === 'string') return item.slice(0, 1000)
@@ -1866,10 +2315,11 @@ export class BlackboxVirtualLearnerRunner {
       }
       return String(item)
     }
-    return Object.fromEntries(allowedKeys.filter(key => key in value).map(key => [key, sanitize(value[key])]))
+    const v = (value ?? {}) as Record<string, unknown>
+    return Object.fromEntries(allowedKeys.filter(key => key in v).map(key => [key, sanitize(v[key])]))
   }
 
-  private sanitizeAuditValue(value: any, depth: number): any {
+  private sanitizeAuditValue(value: unknown, depth: number): unknown {
     if (depth > 4) return '[truncated]'
     if (value === null || typeof value === 'number' || typeof value === 'boolean') return value
     if (typeof value === 'string') return value.slice(0, 1200)
@@ -1881,10 +2331,10 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   private async persistPrivateState(
-    session: any,
-    state: any,
+    session: VirtualSessionRow,
+    state: StageResults,
     stage: string,
-    privateState: any,
+    privateState: Record<string, unknown>,
     metadata: {
       emotion?: unknown
       degraded?: unknown
@@ -1893,7 +2343,7 @@ export class BlackboxVirtualLearnerRunner {
     } = {}
   ) {
     const fresh = await this.getSession(session.id)
-    const latestState = parseJson(fresh.stageResults, state)
+    const latestState = parseStageResults(fresh.stageResults, state)
     const trace = Array.isArray(latestState.blackbox?.learnerPrivateStateTrace)
       ? latestState.blackbox.learnerPrivateStateTrace : []
     latestState.blackbox = {
@@ -1905,7 +2355,7 @@ export class BlackboxVirtualLearnerRunner {
       learnerPrivateStateTrace: [...trace, {
         sequence: (latestState.blackbox?.publicTrace || []).length,
         stage,
-        taskId: stage === 'learning' ? latestState.blackbox?.control?.taskId || fresh.currentTaskId || null : null,
+        taskId: stage === 'teaching' ? latestState.blackbox?.control?.taskId || fresh.currentTaskId || null : null,
         state: privateState,
         emotion: this.timelineText(metadata.emotion, 64),
         degraded: metadata.degraded === true,
@@ -1921,7 +2371,7 @@ export class BlackboxVirtualLearnerRunner {
     })
   }
 
-  private async getExperimentSnapshot(session: any, state: any) {
+  private async getExperimentSnapshot(session: VirtualSessionRow, state: StageResults): Promise<ExperimentSnapshot> {
     const snapshot = state.experimentSnapshot
     if (snapshot?.actorProfile && snapshot?.frictionBudget) {
       return {
@@ -1945,16 +2395,16 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private async captureCurrentExperimentSnapshot(session: any, state: any) {
+  private async captureCurrentExperimentSnapshot(session: VirtualSessionRow, state: StageResults): Promise<ExperimentSnapshot> {
     const profileRecord = await prisma.virtual_learner_profiles.findUnique({ where: { id: session.virtualProfileId } })
     if (!profileRecord) throw new Error('虚拟学习者画像不存在')
     const capturedAt = new Date().toISOString()
-    const actorProfile = {
-      profile: parseJson(profileRecord.profile),
+    const actorProfile: ActorProfileSnapshot = {
+      profile: safeJsonParse<Record<string, unknown>>(profileRecord.profile, {}),
       learningGoal: profileRecord.learningGoal,
-      knownConcepts: parseJson(profileRecord.knownConcepts, []),
-      struggleConcepts: parseJson(profileRecord.struggleConcepts, []),
-      personalityTraits: parseJson(profileRecord.personalityTraits, {})
+      knownConcepts: safeJsonParse<unknown[]>(profileRecord.knownConcepts, []),
+      struggleConcepts: safeJsonParse<unknown[]>(profileRecord.struggleConcepts, []),
+      personalityTraits: safeJsonParse<Record<string, unknown>>(profileRecord.personalityTraits, {})
     }
     return this.captureSimulatorExperimentSnapshot(
       state.experiment?.operatorId || getRequestContext().userId,
@@ -1963,7 +2413,9 @@ export class BlackboxVirtualLearnerRunner {
         actorProfile,
         story: state.story || null,
         frictionBudget: ['none', 'low', 'normal', 'high', 'stress_test'].includes(state.simulationConfig?.frictionBudget)
-          ? state.simulationConfig.frictionBudget : 'normal'
+          ? state.simulationConfig.frictionBudget : 'normal',
+        modelOverride: typeof state.simulationConfig?.model === 'string' && state.simulationConfig.model.trim()
+          ? state.simulationConfig.model.trim() : null
       }
     )
   }
@@ -1971,11 +2423,11 @@ export class BlackboxVirtualLearnerRunner {
   private async captureSimulatorExperimentSnapshot(
     routingUserId: string | undefined,
     capturedAt: string,
-    input: { actorProfile: Record<string, unknown>; story: Record<string, unknown> | null; frictionBudget: string }
-  ) {
+    input: { actorProfile: Record<string, unknown>; story: Record<string, unknown> | null; frictionBudget: string; modelOverride?: string | null }
+  ): Promise<ExperimentSnapshot> {
     const prompts = await this.resolveSimulatorPrompts()
     const gateway = getAPIGateway()
-    const [goalRoute, learningRoute] = await Promise.all([
+    const [goalRoute, teachingRoute] = await Promise.all([
       gateway.resolveRoute({ skillId: virtualLearnerGoalDialogueSimulatorDefinition.name }, routingUserId),
       gateway.resolveRoute({ skillId: virtualLearnerLearnTurnSimulatorDefinition.name }, routingUserId)
     ])
@@ -1996,29 +2448,29 @@ export class BlackboxVirtualLearnerRunner {
           promptFingerprint: this.valueFingerprint(prompts.values.goal),
           temperature: prompts.goal.temperature,
           maxTokens: prompts.goal.maxTokens,
-          route: this.sanitizeSimulatorRoute(goalRoute)
+          route: this.sanitizeSimulatorRoute(goalRoute, input.modelOverride)
         },
-        learning: {
+        teaching: {
           skillId: virtualLearnerLearnTurnSimulatorDefinition.name,
           version: virtualLearnerLearnTurnSimulatorDefinition.version,
-          promptVersion: prompts.learning.version,
-          promptFingerprint: this.valueFingerprint(prompts.values.learning),
-          temperature: prompts.learning.temperature,
-          maxTokens: prompts.learning.maxTokens,
-          route: this.sanitizeSimulatorRoute(learningRoute)
+          promptVersion: prompts.teaching.version,
+          promptFingerprint: this.valueFingerprint(prompts.values.teaching),
+          temperature: prompts.teaching.temperature,
+          maxTokens: prompts.teaching.maxTokens,
+          route: this.sanitizeSimulatorRoute(teachingRoute, input.modelOverride)
         }
       }
     }
   }
 
   private async resolveSimulatorPrompts() {
-    const [goal, learning] = await Promise.all([
+    const [goal, teaching] = await Promise.all([
       agentConfigService.getActivePrompt('skill:virtual-learner-goal-dialogue-simulator'),
       agentConfigService.getActivePrompt('skill:virtual-learner-learn-turn-simulator')
     ])
     const goalPrompt = goal?.systemPrompt?.trim()
-    const learningPrompt = learning?.systemPrompt?.trim()
-    if (!goalPrompt || !learningPrompt) {
+    const teachingPrompt = teaching?.systemPrompt?.trim()
+    if (!goalPrompt || !teachingPrompt) {
       throw new BlackboxRunStateError('虚拟学习者 Simulator 缺少 ACTIVE Prompt，不能创建可复现实验', 'BLACKBOX_SIMULATOR_PROMPT_MISSING', 503)
     }
     return {
@@ -2028,25 +2480,25 @@ export class BlackboxVirtualLearnerRunner {
         maxTokens: Number(goal?.maxTokens) > 0
           ? Number(goal.maxTokens) : VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_MAX_TOKENS
       },
-      learning: {
-        version: learning?.version || null,
-        temperature: learning?.temperature ?? VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE,
+      teaching: {
+        version: teaching?.version || null,
+        temperature: teaching?.temperature ?? VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE,
         maxTokens: Math.max(
-          Number(learning?.maxTokens) > 0 ? Number(learning.maxTokens) : VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS,
+          Number(teaching?.maxTokens) > 0 ? Number(teaching.maxTokens) : VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS,
           VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS
         )
       },
-      values: { goal: goalPrompt, learning: learningPrompt }
+      values: { goal: goalPrompt, teaching: teachingPrompt }
     }
   }
 
-  private sanitizeSimulatorRoute(route: any) {
+  private sanitizeSimulatorRoute(route: ResolvedRoute, modelOverride?: string | null) {
     return {
       providerType: route.providerType,
       providerId: route.providerId,
       source: route.source,
       endpoint: this.replaySafeEndpoint(route.endpoint),
-      model: route.model,
+      model: typeof modelOverride === 'string' && modelOverride.trim() ? modelOverride.trim() : route.model,
       privateNetworkPolicy: route.privateNetworkPolicy || 'runtime',
       thinkingMode: route.thinkingMode || 'default',
       reasoningEffort: route.reasoningEffort || 'default',
@@ -2065,7 +2517,7 @@ export class BlackboxVirtualLearnerRunner {
     return endpoint.toString()
   }
 
-  private cloneExperimentSnapshot(snapshot: Record<string, any>, capturedAt: string, input: {
+  private cloneExperimentSnapshot(snapshot: ExperimentSnapshot, capturedAt: string, input: {
     actorProfile: Record<string, unknown>
     story: Record<string, unknown> | null
     frictionBudget: string
@@ -2080,13 +2532,13 @@ export class BlackboxVirtualLearnerRunner {
     }))
   }
 
-  private assertReplayableExperimentSnapshot(snapshot: Record<string, any>) {
-    const simulators = [snapshot?.simulators?.goal, snapshot?.simulators?.learning]
+  private assertReplayableExperimentSnapshot(snapshot: ExperimentSnapshot) {
+    const simulators = [snapshot?.simulators?.goal, snapshot?.simulators?.teaching]
     const complete = snapshot?.actorProfile
       && snapshot?.frictionBudget
       && typeof snapshot?.simulatorPrompts?.goal === 'string'
-      && typeof snapshot?.simulatorPrompts?.learning === 'string'
-      && simulators.every((item: any) => item?.route?.providerId
+      && typeof snapshot?.simulatorPrompts?.teaching === 'string'
+      && simulators.every((item: SimulatorConfig | undefined) => item?.route?.providerId
         && item?.route?.credentialFingerprint
         && item?.route?.endpoint
         && item?.route?.model
@@ -2097,7 +2549,7 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private simulatorRuntime(snapshot: any, stage: 'goal' | 'learning') {
+  private simulatorRuntime(snapshot: ExperimentSnapshot, stage: 'goal' | 'teaching') {
     const simulator = snapshot.simulators?.[stage] || null
     const route = simulator?.route || null
     return {
@@ -2119,12 +2571,111 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private async executeSimulatorSkill(definition: any, input: any, snapshot: any, stage: 'goal' | 'learning') {
+  private async executeSimulatorSkill(definition: SkillDefinition, input: Record<string, unknown>, snapshot: ExperimentSnapshot, stage: 'goal' | 'teaching'): Promise<SimulatorSkillOutput> {
     const parentContext = getRequestContext()
+    // L2 声明化装配（只读对账）：仿真 skill 的输入字段即 simulation 状态池，
+    // 校验对应 core yaml 声明的 sandbox refs（实验链，仅运行时可见性，不阻断）
+    void (async () => {
+      try {
+        const { checkAgentSandboxRefsFromContext } = await import('../services/sandbox-resolver.service');
+        const skillId = String(definition?.id || '').replace(/^skill:/, '');
+        if (!skillId) return;
+        await checkAgentSandboxRefsFromContext(skillId, 'simulation', { input });
+      } catch {
+        // 对账失败不影响主流程
+      }
+    })();
     return runWithContext({
       ...parentContext,
       promptRuntimeOverride: this.simulatorRuntime(snapshot, stage)
     }, () => executeSkill(definition, input))
+  }
+
+  /**
+   * 模拟器 LLM 调用重试（S1，对齐 quick-learn 3-strike 语义）：
+   * 瞬态 provider 失败（网络/超时/限流/5xx）与「输出缺 reply」的语义失败最多重试
+   * BLACKBOX_SIMULATOR_RETRY_ATTEMPTS 次（指数退避）；耗尽后落 degraded 标记并明确失败
+   * （不再单次失败即报废整场实验）。
+   */
+  private async executeSimulatorSkillWithRetry(
+    sessionId: string,
+    definition: SkillDefinition,
+    input: Record<string, unknown>,
+    snapshot: ExperimentSnapshot,
+    stage: 'goal' | 'teaching'
+  ): Promise<SimulatorSkillOutput> {
+    let lastError: unknown = new Error(`虚拟学习者${stage === 'goal' ? 'Goal' : 'Learn'}动作生成失败`)
+    for (let attempt = 1; attempt <= BLACKBOX_SIMULATOR_RETRY_ATTEMPTS; attempt += 1) {
+      try {
+        const output = await this.executeSimulatorSkill(definition, input, snapshot, stage)
+        if (output?.reply) return output
+        lastError = new Error(`虚拟学习者${stage === 'goal' ? 'Goal' : 'Learn'}动作生成失败`)
+      } catch (error: unknown) {
+        lastError = error
+        if (!this.isRetryableSimulatorError(error)) break
+      }
+      if (attempt < BLACKBOX_SIMULATOR_RETRY_ATTEMPTS) {
+        logger.warn('[Blackbox] 模拟器调用失败，准备重试', {
+          sessionId,
+          stage,
+          attempt,
+          error: lastError instanceof Error ? lastError.message : String(lastError)
+        })
+        await new Promise(resolve => setTimeout(resolve, BLACKBOX_SIMULATOR_RETRY_DELAY_MS * attempt))
+      }
+    }
+    await this.markSimulatorDegraded(sessionId, stage, lastError)
+    // 标记可恢复：模拟器生成失败时平台副作用尚未发生，黑盒命令可用相同 key 重试续跑（不终局化实验）
+    const retryableError = lastError instanceof Error
+      ? Object.assign(lastError, { retryable: true } as { retryable: boolean })
+      : Object.assign(new Error(String(lastError || '虚拟学习者模拟失败')), { retryable: true })
+    throw retryableError
+  }
+
+  private isRetryableSimulatorError(error: unknown): boolean {
+    // 空消息按瞬态处理（超时/连接重置等在上层已归一化）
+    const raw = error instanceof Error ? error.message : error ?? ''
+    if (typeof raw === 'string' && !raw.trim()) return true
+    return isTransientLlMFailure(error)
+  }
+
+  /**
+   * 会话级可恢复瞬时失败：LLM/Provider 瞬态错误（超时、网络、5xx、限流、
+   * 响应结构非法等）。此类失败发生时平台副作用尚未发生，命令可安全地用
+   * 相同 Idempotency-Key 重试；实验保持 running，不终局化整场实验。
+   */
+  private isRecoverableExecutionFailure(error: unknown): boolean {
+    const err = asErrorLike(error)
+    if (typeof err.retryable === 'boolean') return err.retryable
+    return isTransientLlMFailure(error)
+  }
+
+  /** 重试耗尽时的降级标记：写入 stageResults.blackbox.simulatorDegraded（供裁判/审计降权评估），不删除任何数据 */
+  private async markSimulatorDegraded(sessionId: string, stage: 'goal' | 'teaching', error: unknown) {
+    try {
+      const session = await this.getSession(sessionId)
+      if (TERMINAL_SESSION_STATUSES.has(session.status)) return
+      const state = parseStageResults(session.stageResults)
+      const record = {
+        stage,
+        retryAttempts: BLACKBOX_SIMULATOR_RETRY_ATTEMPTS,
+        degradedAt: new Date().toISOString(),
+        error: String(error instanceof Error ? error.message : error).slice(0, 500)
+      }
+      const history = Array.isArray(state.blackbox?.simulatorDegradedHistory)
+        ? state.blackbox.simulatorDegradedHistory : []
+      state.blackbox = {
+        ...(state.blackbox || {}),
+        simulatorDegraded: record,
+        simulatorDegradedHistory: [...history, record].slice(-20)
+      }
+      await prisma.virtual_sessions.update({
+        where: { id: sessionId },
+        data: { stageResults: JSON.stringify(state), updatedAt: new Date() }
+      })
+    } catch {
+      // 降级标记失败不影响主流程（原始异常继续上抛）
+    }
   }
 
   private async getSession(sessionId: string) {

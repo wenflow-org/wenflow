@@ -11,6 +11,7 @@ import {
 } from '../../services/runtime-network-policy.service';
 import { aiCapabilityHealthService } from '../../services/ai-capability-health.service';
 import { endpointsMatch, resolveEndpointBoundSecret } from '../../utils/endpoint-identity';
+import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 
 const router = Router();
 
@@ -31,6 +32,8 @@ router.get('/', async (req, res) => {
         defaultEvaluationModel: config.defaultEvaluationModel,
         defaultTemperature: config.defaultTemperature ?? 0.7,
         defaultMaxTokens: config.defaultMaxTokens ?? 2048,
+        defaultThinkingMode: config.defaultThinkingMode || 'default',
+        defaultReasoningEffort: config.defaultReasoningEffort || 'default',
         reasoningEndpoint: config.reasoningEndpoint,
         lightEndpoint: config.lightEndpoint,
         chatModels: config.chatModels || [],
@@ -105,6 +108,8 @@ router.put('/', async (req, res) => {
       defaultEvaluationModel,
       defaultTemperature,
       defaultMaxTokens,
+      defaultThinkingMode,
+      defaultReasoningEffort,
       reasoningEndpoint,
       lightEndpoint,
       chatModels,
@@ -113,6 +118,9 @@ router.put('/', async (req, res) => {
     } = req.body;
 
     const currentConfig = await apiConfigService.getConfig();
+    // 操作审计：保存前快照旧配置（apiKey 等敏感字段由审计中间件统一脱敏）
+    setAuditAction(res, 'api-config-update', { targetType: 'api-config' });
+    setAuditBefore(res, currentConfig);
     const hasReasoningEndpoint = Object.prototype.hasOwnProperty.call(req.body || {}, 'reasoningEndpoint');
     const hasLightEndpoint = Object.prototype.hasOwnProperty.call(req.body || {}, 'lightEndpoint');
     const finalApiUrl = typeof apiUrl === 'string' ? apiUrl.trim() : currentConfig.apiUrl;
@@ -153,11 +161,14 @@ router.put('/', async (req, res) => {
       });
     }
 
-    const modelsArray = Array.isArray(availableModels)
+    const parsedModelsArray = Array.isArray(availableModels)
       ? availableModels
       : typeof availableModels === 'string'
         ? availableModels.split(',').map((m: string) => m.trim()).filter(Boolean)
         : currentConfig.availableModels;
+    const modelsArray = Array.isArray(parsedModelsArray) && parsedModelsArray.length > 0
+      ? parsedModelsArray
+      : currentConfig.availableModels;
 
     const updatedConfig = await apiConfigService.updateConfig({
       apiUrl: finalApiUrl,
@@ -168,12 +179,16 @@ router.put('/', async (req, res) => {
       defaultEvaluationModel,
       defaultTemperature: defaultTemperature ?? currentConfig.defaultTemperature,
       defaultMaxTokens: defaultMaxTokens ?? currentConfig.defaultMaxTokens,
+      defaultThinkingMode: defaultThinkingMode || currentConfig.defaultThinkingMode || 'default',
+      defaultReasoningEffort: defaultReasoningEffort || currentConfig.defaultReasoningEffort || 'default',
       reasoningEndpoint: finalReasoningEndpoint,
       lightEndpoint: finalLightEndpoint,
       chatModels: chatModels || currentConfig.chatModels,
       reasoningModels: reasoningModels || currentConfig.reasoningModels,
       lightModels: lightModels || currentConfig.lightModels
     });
+    // 操作审计：保存后快照新配置（脱敏由审计中间件完成）
+    setAuditAfter(res, updatedConfig);
 
     getAPIGateway().invalidateCache();
     void aiCapabilityHealthService.refresh().catch(() => undefined);
@@ -190,6 +205,8 @@ router.put('/', async (req, res) => {
         defaultEvaluationModel: updatedConfig.defaultEvaluationModel,
         defaultTemperature: updatedConfig.defaultTemperature,
         defaultMaxTokens: updatedConfig.defaultMaxTokens,
+        defaultThinkingMode: updatedConfig.defaultThinkingMode || 'default',
+        defaultReasoningEffort: updatedConfig.defaultReasoningEffort || 'default',
         reasoningEndpoint: updatedConfig.reasoningEndpoint,
         lightEndpoint: updatedConfig.lightEndpoint,
         chatModels: updatedConfig.chatModels,

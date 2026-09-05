@@ -2,24 +2,10 @@
 import { hasUserSession } from '../utils/api';
 import { hasAdminSession } from '../api/adminApi';
 import { getProjectionToken } from '../utils/projection';
-
-const THEME_STORAGE_KEY = 'wenflow-theme';
-
-function applyDocumentTheme(theme: 'light' | 'dark') {
-  const html = document.documentElement;
-  html.setAttribute('data-theme', theme);
-  html.classList.toggle('dark', theme === 'dark');
-}
-
-function resolveUserTheme(): 'light' | 'dark' {
-  const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(THEME_STORAGE_KEY) : null;
-  if (stored === 'light' || stored === 'dark') return stored;
-  const prefersDark = typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  return prefersDark ? 'dark' : 'light';
-}
+import { applyDocumentTheme, readTheme } from '../utils/theme';
 
 function syncThemeForRoute(_path: string) {
-  applyDocumentTheme(resolveUserTheme());
+  applyDocumentTheme(readTheme());
 }
 
 const routes: RouteRecordRaw[] = [
@@ -57,6 +43,18 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '注册' }
   },
   {
+    path: '/reset-password',
+    name: 'ResetPassword',
+    component: () => import('@/views/v2/V2ResetPassword.vue'),
+    meta: { title: '找回密码' }
+  },
+  {
+    path: '/onboarding',
+    name: 'V2Onboarding',
+    component: () => import('@/views/v2/V2Onboarding.vue'),
+    meta: { title: '开始使用', requiresAuth: true }
+  },
+  {
     path: '/dashboard',
     name: 'V2Dashboard',
     component: () => import('@/views/v2/V2Dashboard.vue'),
@@ -67,6 +65,12 @@ const routes: RouteRecordRaw[] = [
     name: 'V2LearningPaths',
     component: () => import('@/views/v2/V2LearningPaths.vue'),
     meta: { title: '学习路径', requiresAuth: true }
+  },
+  {
+    path: '/learning-history',
+    name: 'V2LearningHistory',
+    component: () => import('@/views/v2/V2LearningHistory.vue'),
+    meta: { title: '学习历史', requiresAuth: true }
   },
   {
     path: '/learning-state',
@@ -110,45 +114,16 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '账户', requiresAuth: true }
   },
   {
-    path: '/user/skills',
-    name: 'UserSkills',
-    component: () => import('@/views/user/Skills.vue'),
-    meta: { title: 'Skill', requiresAuth: true }
-  },
-  {
     path: '/user/agent-logs',
     name: 'UserAgentLogs',
     component: () => import('@/views/user/AgentLogs.vue'),
     meta: { title: '调用日志', requiresAuth: true }
   },
   {
-    path: '/user/code-repo',
-    redirect: '/user/developer',
-    meta: { title: '开发者接入', requiresAuth: true }
-  },
-  {
-    path: '/user/agents',
-    name: 'UserAgents',
-    component: () => import('@/views/user/AgentCustomization.vue'),
-    meta: { title: 'AI 助手', requiresAuth: true }
-  },
-  {
     path: '/user/settings',
     name: 'UserSettings',
     component: () => import('@/views/user/Settings.vue'),
     meta: { title: 'API 接入', requiresAuth: true }
-  },
-  {
-    path: '/user/developer',
-    name: 'UserDeveloperAccess',
-    component: () => import('@/views/user/DeveloperAccess.vue'),
-    meta: { title: '开发者接入', requiresAuth: true }
-  },
-  {
-    path: '/user/agent-model-settings',
-    name: 'UserAgentModelSettings',
-    component: () => import('@/views/user/AgentModelSettings.vue'),
-    meta: { title: '高级模型', requiresAuth: true }
   },
   {
     path: '/goal-conversation/:conversationId?',
@@ -161,10 +136,6 @@ const routes: RouteRecordRaw[] = [
     name: 'DeveloperDocs',
     component: () => import('@/views/DeveloperDocs.vue'),
     meta: { title: '开发者文档' }
-  },
-  {
-    path: '/redesign-lab',
-    redirect: '/dashboard'
   },
   // ===== /v2 已上线：旧地址全部重定向到正式路径 =====
   {
@@ -200,13 +171,6 @@ const routes: RouteRecordRaw[] = [
     redirect: '/achievements'
   },
   {
-    // 管理控制台（唯一正式入口）
-    path: '/admin/console',
-    name: 'AdminConsole',
-    component: () => import('@/views/admin-redesign/AdminConsole.vue'),
-    meta: { title: '管理控制台', requiresAdminAuth: true }
-  },
-  {
     path: '/admin/login',
     name: 'AdminLogin',
     component: () => import('@/views/admin/Login.vue'),
@@ -214,99 +178,155 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/admin',
-    redirect: '/admin/console'
+    redirect: '/admin/overview'
   },
-  // 旧版运营后台 URL → 新控制台（书签/外链兼容）
+  // 旧版 /admin/console/:page → 新平级 URL（书签/外链兼容）
   {
-    path: '/admin/dashboard',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/users',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/learner-center',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/learner-models/:userId?',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/teaching-sessions',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/api-config',
-    redirect: '/admin/console'
+    path: '/admin/console/:page?',
+    redirect: (to) => ({ path: `/admin/${(to.params.page as string) || 'overview'}` })
   },
   {
     // Prompt 二级设计页（Skill 级编辑台：检视/试运行/运行时/工程，重设计版）
-    path: '/admin/skills/:agentId?',
+    // agentId 必填：避免 /admin/skills（Skill 目录）被可选参数吞入设计页
+    path: '/admin/skills/:agentId+',
     name: 'AdminSkillEditor',
     component: () => import('@/views/admin-redesign/SkillDesignPage.vue'),
-    meta: { title: 'Prompt 设计', requiresAdminAuth: true }
+    meta: { title: 'Skill 设计', requiresAdminAuth: true }
+  },
+  // 旧版带参数路由 → 新平级页面（参数型无法被 /admin/:page 吸收，保留重定向）
+  {
+    path: '/admin/learner-models/:userId?',
+    redirect: '/admin/people?tab=state'
   },
   {
-    path: '/admin/agents/topology',
-    redirect: '/admin/console'
+    // 导航收敛 2026-09-04：用户+学习者中心合并为「用户与学习者」（同域双子视图 tab 化）
+    path: '/admin/users',
+    redirect: () => ({ path: '/admin/people', query: { tab: 'account' } })
   },
   {
-    path: '/admin/orchestrator-definitions',
-    redirect: '/admin/console'
+    path: '/admin/learner-center',
+    redirect: () => ({ path: '/admin/people', query: { tab: 'state' } })
   },
   {
-    path: '/admin/agent-definitions',
-    redirect: '/admin/console'
+    // 导航收敛 2026-09-04：教学会话+目标对话（含学习路径）合并为「学习会话」
+    path: '/admin/teaching-sessions',
+    redirect: () => ({ path: '/admin/sessions', query: { tab: 'teaching' } })
   },
   {
+    path: '/admin/goal-conversations',
+    redirect: '/admin/sessions'
+  },
+  {
+    // 兼容：Agent 拓扑视图已并入编排结构页（拓扑数据并入运行时统计），旧 URL 落在默认阶段视图（?tab=topology 仅作兼容 query，编排页按阶段泳道渲染）
     path: '/admin/agent-registry/:agentId?',
-    redirect: '/admin/console'
+    redirect: () => ({ path: '/admin/orchestrator', query: { tab: 'topology' } })
   },
   {
-    path: '/admin/skill-workbench/:agentId?',
-    redirect: '/admin/console'
+    path: '/admin/skill-workbench/:agentId',
+    redirect: (to) => ({ path: `/admin/skills/${to.params.agentId as string}` })
   },
   {
-    path: '/admin/skill-manager',
-    redirect: '/admin/console'
+    // 兼容：旧拓扑独立页 → 编排结构页（拓扑统计已并入阶段泳道；query 仅保 URL 兼容，无独立 tab）
+    path: '/admin/topology',
+    redirect: () => ({ path: '/admin/orchestrator', query: { tab: 'topology' } })
   },
   {
-    path: '/admin/virtual-learners/:pathMatch(.*)*',
-    redirect: '/admin/console'
+    // 阶段 2B N1：prompt-workbench 改名「Skill 工作台」（场景 id skill-workbench），旧 URL 重定向兼容（深链/书签）
+    path: '/admin/prompt-workbench',
+    redirect: '/admin/skill-workbench'
   },
   {
     path: '/admin/virtual-session/:sessionId',
-    redirect: '/admin/console'
+    redirect: '/admin/virtual-learners'
   },
   {
-    path: '/admin/regression-lab',
-    redirect: '/admin/console'
+    // 旧深链兜底：虚拟学习者子页（原 :pathMatch 捕获，至少一段避免空匹配自循环）→ 列表页
+    path: '/admin/virtual-learners/:pathMatch(.*)+',
+    redirect: '/admin/virtual-learners'
   },
   {
-    path: '/admin/execution-logs',
-    redirect: '/admin/console'
-  },
-  {
-    path: '/admin/path-generation-events',
-    redirect: '/admin/console'
-  },
-  {
+    // Prompt 调用已并入执行日志（同 traceId 关联契约维度）
     path: '/admin/prompt-call-logs',
-    redirect: '/admin/console'
+    redirect: '/admin/execution-logs'
   },
   {
-    path: '/admin/skill-model-configs',
-    redirect: '/admin/console'
+    // 事件中心下线：路径生成事件无业务消费价值，统一入口走执行日志
+    path: '/admin/event-center',
+    redirect: '/admin/execution-logs'
   },
   {
-    path: '/admin/prompt-lab',
-    redirect: '/admin/console'
+    // 直链兼容：用户直觉 URL → 实际 scene ID（manifest 命名与直觉 URL 不一致时兜底）
+    path: '/admin/health',
+    redirect: '/admin/health-center'
   },
   {
+    path: '/admin/traces',
+    redirect: '/admin/execution-logs'
+  },
+  {
+    // Trace 已并入执行日志（下钻 tab），旧 URL 兼容
+    path: '/admin/trace-waterfall',
+    redirect: '/admin/execution-logs'
+  },
+  {
+    // 批量实验已并入虚拟学习者（tab），旧 URL 兼容
+    path: '/admin/batch-experiments',
+    redirect: '/admin/virtual-learners'
+  },
+  {
+    path: '/admin/models',
+    redirect: '/admin/api-config'
+  },
+  {
+    path: '/admin/external-capabilities',
+    redirect: '/admin/addons'
+  },
+  {
+    path: '/admin/orchestration',
+    redirect: '/admin/orchestrator'
+  },
+  {
+    // 合并后旧路径兼容：运维工具/数据导出 → 运维中心；内容管理/成就管理 → 运营中心
+    path: '/admin/devtools',
+    redirect: '/admin/ops-center'
+  },
+  {
+    path: '/admin/export-data',
+    redirect: '/admin/ops-center'
+  },
+  {
+    // 内容管理（学习路径）已并入「学习会话」页（同域治理视图），旧 URL / ops-content 兼容直达路径 tab
+    path: '/admin/content',
+    redirect: () => ({ path: '/admin/sessions', query: { tab: 'paths' } })
+  },
+  {
+    path: '/admin/ops-content',
+    redirect: () => ({ path: '/admin/sessions', query: { tab: 'paths' } })
+  },
+  {
+    // 导航收敛 2026-09-04：公告+站内通知合并为「通知与公告」（数据层独立，页面级 tab 收敛双入口）
     path: '/admin/announcements',
-    redirect: '/admin/console'
+    redirect: () => ({ path: '/admin/messages', query: { tab: 'announce' } })
+  },
+  {
+    path: '/admin/notifications',
+    redirect: () => ({ path: '/admin/messages', query: { tab: 'inapp' } })
+  },
+  {
+    path: '/admin/achievements',
+    redirect: '/admin/ops-achievements'
+  },
+  {
+    // Token 成本已并入执行日志第三 tab（成本分析），旧 URL 兼容
+    path: '/admin/token-cost',
+    redirect: () => ({ path: '/admin/execution-logs', query: { tab: 'cost' } })
+  },
+  {
+    // 管理控制台：/admin/:page 反映当前页面（深链/前进后退），动态段置于静态路由之后
+    path: '/admin/:page?',
+    name: 'AdminConsole',
+    component: () => import('@/views/admin-redesign/AdminConsole.vue'),
+    meta: { title: '管理控制台', requiresAdminAuth: true }
   },
   {
     path: '/:pathMatch(.*)*',
@@ -315,7 +335,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '页面不存在' }
   }
 ];
-
 const router = createRouter({
   history: createWebHistory(),
   routes,
@@ -327,7 +346,7 @@ const router = createRouter({
   }
 });
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   document.title = `${to.meta.title || '问流 WenFlow'} - 问流 WenFlow`;
   syncThemeForRoute(to.path);
   const usesAdminSurface = to.path.startsWith('/admin/') && to.path !== '/admin/login';
@@ -353,6 +372,20 @@ router.beforeEach((to, _from, next) => {
     return;
   }
 
+  // 新用户引导：已登录但未完成 onboarding → 强制跳转到引导页（自身除外）
+  if (to.meta.requiresAuth && hasSession && to.path !== '/onboarding') {
+    try {
+      const { userAPI } = await import('@/api/user');
+      const profile = await userAPI.getProfile();
+      if (profile.onboardingCompleted === false) {
+        next({ path: '/onboarding', query: { redirect: to.fullPath } });
+        return;
+      }
+    } catch {
+      /* 获取 profile 失败不阻塞正常导航 */
+    }
+  }
+
   // 已登录用户访问登录/注册页
   if ((to.name === 'Login' || to.name === 'Register') && (hasSession || projectionToken)) {
     next('/dashboard');
@@ -361,7 +394,7 @@ router.beforeEach((to, _from, next) => {
 
   // 已登录管理员访问管理登录页
   if (to.name === 'AdminLogin' && adminSession) {
-    next('/admin/console');
+    next('/admin/overview');
     return;
   }
   

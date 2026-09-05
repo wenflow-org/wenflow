@@ -42,6 +42,7 @@ runIntegration('LessonKnowledgeEnrichmentConsumer 集成测试（真实数据库
   })
 
   it('消费 lesson:completed 事件后会写入 learner_evidence 和 domain_event_inbox', async () => {
+    // eslint-disable-next-line no-extra-semi -- 行首分号是 ASI 保护
     ;(executeSkill as jest.Mock).mockResolvedValue({
       conceptLedger: [{ conceptKey: 'a', label: 'A' }],
       reusableFoundations: ['a'],
@@ -98,14 +99,15 @@ runIntegration('LessonKnowledgeEnrichmentConsumer 集成测试（真实数据库
     expect(evidenceA!.userId).toBe(ids.user)
     expect(evidenceA!.pathId).toBe('path-integration')
     expect(evidenceA!.sessionId).toBe('session-integration')
-    expect(evidenceA!.confidence).toBe(0.8)
+    // 伪置信度已砍：consumer 不再写 evidence 级置信度，落库为 schema 默认值 1
+    expect(evidenceA!.confidence).toBe(1)
 
     const payloadA = JSON.parse(evidenceA!.payload)
     expect(payloadA.conceptLedger).toHaveLength(1)
 
     expect(evidenceB).not.toBeNull()
     expect(evidenceB!.userId).toBe(ids.user)
-    expect(evidenceB!.confidence).toBe(0.72)
+    expect(evidenceB!.confidence).toBe(1)
 
     const payloadB = JSON.parse(evidenceB!.payload)
     expect(payloadB.recurringConfusions).toHaveLength(1)
@@ -115,6 +117,7 @@ runIntegration('LessonKnowledgeEnrichmentConsumer 集成测试（真实数据库
   })
 
   it('重复消费同一事件会被 inbox 幂等拦截', async () => {
+    // eslint-disable-next-line no-extra-semi -- 行首分号是 ASI 保护
     ;(executeSkill as jest.Mock).mockResolvedValue({ conceptLedger: [], recurringConfusions: [] })
 
     const { LessonKnowledgeEnrichmentConsumer } = await import('../LessonKnowledgeEnrichmentConsumer')

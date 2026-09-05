@@ -11,6 +11,12 @@ const mockStartSession = jest.fn()
 jest.mock('../../config/database', () => ({
   __esModule: true,
   default: {
+    $transaction: async (callback: (tx: any) => Promise<any>) => callback({
+      virtual_sessions: {
+        findUnique: mockVirtualSessionFindUnique,
+        update: mockVirtualSessionUpdate
+      }
+    }),
     virtual_sessions: {
       findUnique: mockVirtualSessionFindUnique,
       update: mockVirtualSessionUpdate
@@ -110,10 +116,10 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
   })
 
   const setLearningState = (learning: any) => {
-    sessionRecord.stageResults = JSON.stringify({ learning })
+    sessionRecord.stageResults = JSON.stringify({ teaching: learning })
   }
 
-  const getLearningState = () => JSON.parse(sessionRecord.stageResults).learning
+  const getLearningState = () => JSON.parse(sessionRecord.stageResults).teaching
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -123,10 +129,10 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
       id: 'simulation-1',
       userId: 'user-1',
       status: 'running',
-      currentStage: 'learning',
+      currentStage: 'teaching',
       learningPathId: 'path-1',
       currentTaskId: 'task-1',
-      stageResults: JSON.stringify({ learning: buildLearningState() }),
+      stageResults: JSON.stringify({ teaching: buildLearningState() }),
       logs: '[]',
       virtual_learner_profiles: {
         id: 'profile-1',
@@ -173,6 +179,27 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
       revision: 1,
       welcomeMessage: '任务二课堂已启动'
     })
+  })
+
+  it('learn-turn 模拟器失败 → 单步 success:false、会话标 failed、teaching 状态保留可恢复', async () => {
+    mockExecuteSkill.mockRejectedValue(new Error('VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED'))
+
+    const result = await coordinator.executeLearningStep('simulation-1')
+    const learning = getLearningState()
+
+    expect(result).toEqual(expect.objectContaining({
+      success: false
+    }))
+    expect(result.error).toContain('VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED')
+    // 会话显式 failed（可重启 Learn 恢复），不再用伪 selfReportedTaskDone 驱动教师收束
+    expect(sessionRecord.status).toBe('failed')
+    expect(learning.taskRuntime).toEqual(expect.objectContaining({
+      status: 'error'
+    }))
+    expect(learning.taskRuntime.error).toContain('VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED')
+    expect(learning.currentTaskId).toBe('task-1')
+    expect(mockProcessStudentMessage).not.toHaveBeenCalled()
+    expect(mockEndSession).not.toHaveBeenCalled()
   })
 
   it('endSession 成功后 completeTask 失败会留下 pending checkpoint，且虚拟会话不终态化', async () => {
@@ -352,31 +379,38 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
 
   it('教学上游重试耗尽后将 Learn 标为失败并保留当前 task 供重启', async () => {
     mockProcessStudentMessage.mockRejectedValue(new Error('API request canceled'))
+    // 重试退避是真实 sleep（8 次尝试共 2+4+6+8+10+12+14=56s），用假时钟快进避免测试超时
+    jest.useFakeTimers()
+    try {
+      const pending = coordinator.executeLearningStep('simulation-1')
+      await jest.advanceTimersByTimeAsync(80_000)
+      const result = await pending
+      const learning = getLearningState()
 
-    const result = await coordinator.executeLearningStep('simulation-1')
-    const learning = getLearningState()
-
-    expect(result).toEqual(expect.objectContaining({
-      success: false,
-      error: 'API request canceled'
-    }))
-    expect(mockProcessStudentMessage).toHaveBeenCalledTimes(3)
-    expect(sessionRecord.status).toBe('failed')
-    expect(sessionRecord.currentStage).toBe('learning')
-    expect(learning.taskRuntime).toEqual(expect.objectContaining({
-      status: 'error',
-      taskId: 'task-1',
-      error: 'API request canceled'
-    }))
+      expect(result).toEqual(expect.objectContaining({
+        success: false,
+        error: 'API request canceled'
+      }))
+      expect(mockProcessStudentMessage).toHaveBeenCalledTimes(8)
+      expect(sessionRecord.status).toBe('failed')
+      expect(sessionRecord.currentStage).toBe('teaching')
+      expect(learning.taskRuntime).toEqual(expect.objectContaining({
+        status: 'error',
+        taskId: 'task-1',
+        error: 'API request canceled'
+      }))
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
-  it('同一 task 达到课时预算后显式失败，不再调用 LLM，也不误标完成', async () => {
+  it('同一 task 达到课时上限后自动跳过本课（timebox-skip）推进下一课，不再卡住', async () => {
     setLearningState(buildLearningState({
       status: 'active',
       taskId: 'task-1',
       taskTitle: '任务一',
       teachingSessionId: 'teaching-1',
-      turns: 30
+      turns: 40
     }))
     // 课堂仍在进行：不触发“已完成课堂”的 legacy 恢复分支，让预算检查生效
     mockGetSessionDetail.mockResolvedValue({
@@ -389,19 +423,101 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     const result = await coordinator.executeLearningStep('simulation-1')
     const learning = getLearningState()
 
+    // 用户诉求（2026-08-30）：回合上限超了还没结束 → 标记本课完成，自动跳下一课，不让进度卡死
     expect(result).toEqual(expect.objectContaining({
-      success: false,
-      currentTaskStopped: true
+      success: true,
+      taskCompleted: true
     }))
-    expect(result.error).toContain('turn_budget_exhausted')
+    expect(result.error).toBeUndefined()
+    // 跳课走完成链路：completeTask 结算当前课（不再调用教学 LLM 推进本课）
     expect(mockExecuteSkill).not.toHaveBeenCalled()
     expect(mockProcessStudentMessage).not.toHaveBeenCalled()
-    expect(mockCompleteTask).not.toHaveBeenCalled()
-    expect(sessionRecord.status).toBe('failed')
-    expect(sessionRecord.currentStage).toBe('learning')
+    expect(mockCompleteTask).toHaveBeenCalled()
+    // 单 task 的 mock 路径：跳课后整条 Path 完成 → 会话 completed（真实多课场景推进下一课保持 running）
+    expect(sessionRecord.status).toBe('completed')
     expect(learning.taskRuntime).toEqual(expect.objectContaining({
-      status: 'error',
       taskId: 'task-1'
     }))
+    expect(learning.taskRuntime.status).not.toBe('error')
+  })
+
+  it('驾驶舱调高回合上限（simulationConfig.turnCapPerLesson=60）后课时闸门同步放宽，turns=41 不误标失败', async () => {
+    sessionRecord.stageResults = JSON.stringify({
+      simulationConfig: { turnCapPerLesson: 60 },
+      teaching: buildLearningState({
+        status: 'active',
+        taskId: 'task-1',
+        taskTitle: '任务一',
+        teachingSessionId: 'teaching-1',
+        turns: 41
+      })
+    })
+    // 课堂仍在进行：不触发“已完成课堂”的 legacy 恢复分支
+    mockGetSessionDetail.mockResolvedValue({
+      id: 'teaching-1',
+      taskId: 'task-1',
+      status: 'active',
+      revision: 1
+    })
+
+    const result = await coordinator.executeLearningStep('simulation-1')
+    const learning = getLearningState()
+
+    // 旧硬编码闸门 40 会在 turns=41 触发 turn_budget_exhausted 并把会话标 failed；
+    // 修正后闸门 = max(默认 40, 生效回合上限 60)，41 < 60 正常推进
+    expect(result.success).toBe(true)
+    expect(result.error).toBeUndefined()
+    // mock 的教学回合直接收束（isCompletion + 单 task）→ 正常完成；关键是不落入 failed 终态
+    expect(sessionRecord.status).not.toBe('failed')
+    expect(learning.taskRuntime.status).not.toBe('error')
+  })
+
+  it('回合上限调高后（turnBudget=60）闸门放宽：turns=40 可继续自动推进', async () => {
+    sessionRecord.stageResults = JSON.stringify({
+      teaching: buildLearningState({
+        status: 'active',
+        taskId: 'task-1',
+        taskTitle: '任务一',
+        teachingSessionId: 'teaching-1',
+        turns: 40
+      })
+    })
+    mockGetSessionDetail.mockResolvedValue({
+      id: 'teaching-1',
+      taskId: 'task-1',
+      status: 'active',
+      revision: 1
+    })
+
+    // 旧行为：默认闸门 40 → 第一步就 turn_budget_exhausted；新行为：授权 60 → 闸门 60，正常推进
+    const result = await coordinator.executeLearningStep('simulation-1', { turnBudget: 60 })
+
+    expect(result.success).toBe(true)
+    expect(sessionRecord.status).not.toBe('failed')
+  })
+
+  it('课时已达闸门时 executeAutoLearning 入口预检温和返回，不触发 failed', async () => {
+    sessionRecord.stageResults = JSON.stringify({
+      teaching: buildLearningState({
+        status: 'active',
+        taskId: 'task-1',
+        taskTitle: '任务一',
+        teachingSessionId: 'teaching-1',
+        turns: 40
+      })
+    })
+
+    // 未调高上限（默认 40）：入口预检直接温和返回，不执行任何教学回合
+    const result = await coordinator.executeAutoLearning('simulation-1', { maxTurns: 40 })
+
+    expect(result).toEqual(expect.objectContaining({
+      success: false
+    }))
+    expect(result.error).toContain('auto_turn_cap_exhausted')
+    expect(result.error).toContain('调高')
+    expect(mockExecuteSkill).not.toHaveBeenCalled()
+    expect(mockProcessStudentMessage).not.toHaveBeenCalled()
+    // 会话不终态化：进度与对话保留，调高上限后可继续
+    expect(sessionRecord.status).toBe('running')
   })
 })

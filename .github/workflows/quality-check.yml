@@ -2,8 +2,9 @@ name: Quality Check
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, develop]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   required-checks:
@@ -40,3 +41,19 @@ jobs:
         run: npm run security:scan:history
       - name: Run required quality checks
         run: npm run check
+      - name: Run frontend unit tests
+        run: npm test
+        working-directory: frontend
+      - name: Lint backend and frontend
+        run: npm run lint
+      - name: Run prompt contract gates (File-as-Truth)
+        working-directory: backend
+        run: |
+          npm run prompts:lint
+          npm run prisma:migrate:deploy:all
+          npm run prompts:seed-routings
+          npm run prompts:drift-check
+          npm run prompts:check-handoff:strict
+          npm run prompts:snapshots:check
+          npm run prompts:core:check
+          npm run prompts:runtime-contract:check

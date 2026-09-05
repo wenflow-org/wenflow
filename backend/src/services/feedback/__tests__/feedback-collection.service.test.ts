@@ -60,7 +60,7 @@ describe('FeedbackCollectionService', () => {
         userId: 'user-1',
         sessionId: 'session-1',
         subtaskId: 'task-1',
-        agentId: 'learning-agent',
+        agentId: 'teaching-agent',
         strategy: 'scaffold',
         uiType: 'session-report-v1'
       }),
@@ -119,5 +119,83 @@ describe('FeedbackCollectionService', () => {
       take: 20
     }))
     expect(result).toEqual({ items: [], total: 121 })
+  })
+
+  it('消息级点赞：按内容哈希去重 key，rating=1，uiType=message-thumbs-v1', async () => {
+    const result = await service.submitMessageFeedback({
+      userId: 'user-1',
+      sessionId: 'session-1',
+      messageText: '回答文本',
+      thumbsUp: true
+    })
+
+    expect(mockPrisma.content_feedback.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      // 同一会话内同一内容 → 稳定哈希 key（不依赖消息 id）
+      where: { feedbackKey: expect.stringMatching(/^user-1:session-1:thumbs:[0-9a-f]+$/) },
+      create: expect.objectContaining({
+        userId: 'user-1',
+        sessionId: 'session-1',
+        rating: 1,
+        strategy: 'scaffold',
+        uiType: 'message-thumbs-v1',
+        status: 'new'
+      })
+    }))
+    expect(result.rating).toBe(1)
+    expect(result.uiType).toBe('message-thumbs-v1')
+  })
+
+  it('消息级点踩：rating=0；内容不同 → 哈希 key 不同', async () => {
+    await service.submitMessageFeedback({
+      userId: 'user-1',
+      sessionId: 'session-1',
+      messageText: '回答A',
+      thumbsUp: false
+    })
+    const keyA = mockPrisma.content_feedback.upsert.mock.calls[0][0].where.feedbackKey
+
+    mockPrisma.content_feedback.upsert.mockClear()
+    await service.submitMessageFeedback({
+      userId: 'user-1',
+      sessionId: 'session-1',
+      messageText: '回答B',
+      thumbsUp: false
+    })
+    const keyB = mockPrisma.content_feedback.upsert.mock.calls[0][0].where.feedbackKey
+
+    expect(mockPrisma.content_feedback.upsert.mock.calls[0][0].create.rating).toBe(0)
+    expect(keyA).not.toBe(keyB)
+  })
+
+  it('消息级反馈：拒绝非本人会话（403）', async () => {
+    mockPrisma.teaching_sessions.findUnique.mockResolvedValue({
+      id: 'session-1',
+      userId: 'user-2',
+      taskId: 'task-1',
+      messages: '[]'
+    })
+
+    await expect(service.submitMessageFeedback({
+      userId: 'user-1',
+      sessionId: 'session-1',
+      messageText: '回答',
+      thumbsUp: true
+    })).rejects.toEqual(expect.objectContaining<Partial<FeedbackCollectionError>>({
+      status: 403,
+      code: 'FEEDBACK_FORBIDDEN'
+    }))
+    expect(mockPrisma.content_feedback.upsert).not.toHaveBeenCalled()
+  })
+
+  it('消息级反馈：空内容拒绝（400）', async () => {
+    await expect(service.submitMessageFeedback({
+      userId: 'user-1',
+      sessionId: 'session-1',
+      messageText: '   ',
+      thumbsUp: true
+    })).rejects.toEqual(expect.objectContaining<Partial<FeedbackCollectionError>>({
+      status: 400,
+      code: 'FEEDBACK_MESSAGE_EMPTY'
+    }))
   })
 })

@@ -125,13 +125,22 @@ export function compileCoreFile(core: CoreFile, options: CompileCoreOptions = {}
     const advance = channel === 'state' && core.stateAdvance ? '（可推进）' : '';
     return `- ${channel}${advance}：${CORE_CHANNEL_DESCRIPTIONS[channel]}`;
   });
-  // §2.5 上游字段输入声明：渲染进同一块，注明出处与用途
+  // §2.5 输入契约声明：渲染进同一块，按来源分类标注（skill 上游产物 / sandbox 编排注入 / user 用户平台）
   if (core.inputs?.length) {
     channelLines.push('');
-    channelLines.push('上游字段输入（同一学习链条上，上游 Skill 的输出字段作为本 Skill 输入）：');
+    channelLines.push('输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：');
     for (const input of core.inputs) {
-      const note = input.note ? ` — ${input.note}` : '';
-      channelLines.push(`- 「${input.ref}」${note}`);
+      const kindLabel = input.kind === 'sandbox'
+        ? '（编排注入）'
+        : input.kind === 'user'
+          ? '（用户/平台）'
+          : '';
+      const nameType = input.name
+        ? `「${input.name}${input.type ? `（${input.type}）` : ''}」`
+        : '';
+      const desc = input.desc || input.note;
+      const suffix = desc ? ` — ${desc}` : '';
+      channelLines.push(`- ${nameType}\`${input.ref}\`${kindLabel}${suffix}`);
     }
   }
   sections.push(`## 使用通道\n\n${channelLines.join('\n')}`);
@@ -203,7 +212,7 @@ export function checkFiveBlockBody(systemPrompt: string): GateIssue[] {
  */
 export function checkFiveBlockStructure(prompt: string): GateIssue[] {
   const issues: GateIssue[] = [];
-  const normalized = prompt.replace(/^﻿/, '').replace(/\r\n/g, '\n');
+  const normalized = prompt.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
 
   if (!/^---\n[\s\S]*?\n---\n?/.test(normalized)) {
     issues.push({ code: 'frontmatter-missing', message: '缺少 YAML frontmatter' });
