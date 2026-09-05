@@ -118,7 +118,7 @@
               <span class="action__from">来自路径「{{ primaryPath?.title }}」</span>
             </div>
             <h1 class="action__title">路径正在生成，稍等一下</h1>
-            <p class="action__desc">生成一般需要几十秒，完成后页面会自动刷新，这里会出现今日行动。你也可以先去别的页面看看。</p>
+            <p class="action__desc">生成一般需要 1-2 分钟，完成后页面会自动刷新，这里会出现今日行动。你也可以先去别的页面看看。</p>
             <div class="action__meta">
               <span class="tag tag--cyan">正在生成</span>
               <span class="tag">信息已保留</span>
@@ -791,8 +791,8 @@ const tipTone = computed(() => {
 });
 
 const tipText = computed(() => {
-  if (pageState.value === 'attention') return '路径生成失败通常是暂时的。重新生成约 30 秒，已确认的信息都会保留。';
-  if (pageState.value === 'generating') return '路径正在生成中，页面会自动刷新，你也可以先去别的页面看看。';
+  if (pageState.value === 'attention') return '路径生成失败通常是暂时的。重新生成一般需要 1-2 分钟，已确认的信息都会保留。';
+  if (pageState.value === 'generating') return '路径正在生成中，一般需要 1-2 分钟。页面会自动刷新，你也可以先去别的页面看看。';
   const copy = guidanceCopy.value;
   const warning = copy?.warningCopy;
   if (warning && warning !== '当前没有明显风险。') return warning;

@@ -122,6 +122,8 @@ describe('ai-teaching routes', () => {
       advisory: { nextStep: '复习 infer' },
       peerTriggered: true,
       peerMessage: { content: '我也刚理解这一点。' },
+      peerStrategy: 'feynman',
+      peerFollowUpQuestions: ['你能用自己的话讲一遍吗？'],
       checkpoint: { id: 'checkpoint-1', question: '何时使用 infer？' },
       promptDebug: { promptId: 'prompt-1' },
       peerDebug: { traceId: 'peer-1' },
@@ -166,6 +168,8 @@ describe('ai-teaching routes', () => {
         advisory: { nextStep: '复习 infer' },
         peerTriggered: true,
         peerMessage: { content: '我也刚理解这一点。' },
+        peerStrategy: 'feynman',
+        peerFollowUpQuestions: ['你能用自己的话讲一遍吗？'],
         checkpoint: { id: 'checkpoint-1', question: '何时使用 infer？' },
         promptDebug: { promptId: 'prompt-1' },
         peerDebug: { traceId: 'peer-1' },
@@ -459,9 +463,11 @@ describe('ai-teaching routes', () => {
     expect(mockSessionFinalizationService.finalize).not.toHaveBeenCalled();
   });
 
-  it('将学习伙伴消息映射为仅含 peerResponse 的公开 DTO', async () => {
+  it('将学习伙伴消息映射为含 peerResponse/peerStrategy/followUpQuestions 的公开 DTO', async () => {
     mockCoordinator.processPeerMessage.mockResolvedValue({
       peerResponse: '我会先把类型参数写出来。',
+      strategy: 'feynman',
+      followUpQuestions: ['如果类型参数不写，会发生什么？'],
       debug: { traceId: 'internal-peer-trace' },
     });
     const handler = getRouteHandler('/sessions/:sessionId/peer/messages');
@@ -477,7 +483,11 @@ describe('ai-teaching routes', () => {
     expect(mockCoordinator.processPeerMessage).toHaveBeenCalledWith('session-1', '条件类型该怎么开始？');
     expect(res.json).toHaveBeenCalledWith({
       success: true,
-      data: { peerResponse: '我会先把类型参数写出来。' },
+      data: {
+        peerResponse: '我会先把类型参数写出来。',
+        peerStrategy: 'feynman',
+        peerFollowUpQuestions: ['如果类型参数不写，会发生什么？'],
+      },
     });
   });
 

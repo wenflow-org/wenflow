@@ -28,13 +28,15 @@
         <span class="mk-badge" :class="connBadge.cls">{{ connBadge.text }}</span>
       </div>
       <div class="ac-body">
+        <!-- 连接凭证：地址与密钥并排，密钥附显示切换 -->
+        <div class="ac-sec__title">连接</div>
         <div class="ac-row ac-row--2-1">
           <label class="mk-field mk-field--row">
-            <span>服务地址</span>
+            <span class="mk-field__label">服务地址</span>
             <input class="mk-filter__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
           </label>
           <label class="mk-field mk-field--row">
-            <span>API Key</span>
+            <span class="mk-field__label">API Key</span>
             <span class="ac-key-wrap">
               <span class="ac-key-input-row">
                 <input
@@ -58,7 +60,7 @@
           </label>
         </div>
         <label class="mk-field">
-          <span>可用模型</span>
+          <span class="mk-field__label">可用模型</span>
           <div class="ac-models">
             <template v-if="models.length">
               <span v-for="m in models" :key="m" class="ac-model">{{ m }}</span>
@@ -69,23 +71,24 @@
             </div>
           </div>
         </label>
+        <div class="ac-sec__title">路由默认</div>
         <div class="ac-row ac-row--3">
           <label class="mk-field">
-            <span>对话默认</span>
+            <span class="mk-field__label">对话默认</span>
             <select class="mk-filter__select" :disabled="!models.length" :value="form.defaultModel" @change="form.defaultModel = ($event.target as HTMLSelectElement).value; markDirty('route')">
               <option v-if="!models.length" value="">未设置（等待拉取）</option>
               <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
             </select>
           </label>
           <label class="mk-field">
-            <span>推理默认</span>
+            <span class="mk-field__label">推理默认</span>
             <select class="mk-filter__select" :disabled="!models.length" :value="form.defaultReasoningModel" @change="form.defaultReasoningModel = ($event.target as HTMLSelectElement).value; markDirty('route')">
               <option v-if="!models.length" value="">未设置（等待拉取）</option>
               <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
             </select>
           </label>
           <label class="mk-field">
-            <span>评估默认</span>
+            <span class="mk-field__label">评估默认</span>
             <select class="mk-filter__select" :disabled="!models.length" :value="form.defaultEvaluationModel" @change="form.defaultEvaluationModel = ($event.target as HTMLSelectElement).value; markDirty('route')">
               <option v-if="!models.length" value="">未设置（等待拉取）</option>
               <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
@@ -94,155 +97,183 @@
         </div>
 
         <!-- 默认思考：平台级开关 + 强度（未单独配置的 Skill 继承此默认；skill 级可在设计页运行时 tab 覆盖） -->
-        <div class="ac-think">
-          <div class="ac-think__title">
-            <strong>默认思考</strong>
-            <em>未单独配置的 Skill 继承此默认；可在 Skill 设计页「运行时」单独覆盖</em>
-          </div>
-          <div class="ac-think__fields">
-            <label class="mk-field mk-field--switch">
-              <span>启用思考</span>
-              <span class="ac-switch">
-                <input
-                  type="checkbox"
-                  :checked="thinkingOn"
-                  @change="setThinkingOn(($event.target as HTMLInputElement).checked)"
-                />
-                <i aria-hidden="true"></i>
-              </span>
-            </label>
-            <label class="mk-field">
-              <span>思考强度</span>
-              <select
-                class="mk-filter__select"
-                :disabled="!thinkingOn"
-                :value="form.defaultReasoningEffort"
-                @change="setEffort(($event.target as HTMLSelectElement).value)"
-              >
-                <option value="default">跟随模型默认</option>
-                <option value="low">low</option>
-                <option value="high">high</option>
-                <option value="max">max</option>
-              </select>
-            </label>
-            <label class="mk-field">
-              <span>思考模式</span>
-              <select
-                class="mk-filter__select"
-                :value="form.defaultThinkingMode"
-                @change="setThinkingMode(($event.target as HTMLSelectElement).value)"
-              >
-                <option value="default">跟随模型默认</option>
-                <option value="enabled">强制开启</option>
-                <option value="disabled">关闭</option>
-              </select>
-            </label>
-          </div>
+        <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认；可在 Skill 设计页「运行时」单独覆盖</span></div>
+        <div class="ac-row ac-row--3 ac-think">
+          <label class="mk-field mk-field--switch">
+            <input
+              type="checkbox"
+              :checked="thinkingOn"
+              @change="setThinkingOn(($event.target as HTMLInputElement).checked)"
+            />
+            <span class="mk-field__label" style="margin:0">启用思考</span>
+          </label>
+          <label class="mk-field">
+            <span class="mk-field__label">思考强度</span>
+            <select
+              class="mk-filter__select"
+              :disabled="!thinkingOn"
+              :value="form.defaultReasoningEffort"
+              @change="setEffort(($event.target as HTMLSelectElement).value)"
+            >
+              <option value="default">跟随模型默认</option>
+              <option value="low">low</option>
+              <option value="high">high</option>
+              <option value="max">max</option>
+            </select>
+          </label>
+          <label class="mk-field">
+            <span class="mk-field__label">思考模式</span>
+            <select
+              class="mk-filter__select"
+              :value="form.defaultThinkingMode"
+              @change="setThinkingMode(($event.target as HTMLSelectElement).value)"
+            >
+              <option value="default">跟随模型默认</option>
+              <option value="enabled">强制开启</option>
+              <option value="disabled">关闭</option>
+            </select>
+          </label>
         </div>
-      </div>
 
-      <!-- 连通性验证（并入本卡，横向操作） -->
-      <div class="ac-test">
-        <label class="mk-field mk-field--row ac-test__model">
-          <span>测试模型</span>
-          <select class="mk-filter__select" :disabled="!models.length" :value="testModel" @change="testModel = ($event.target as HTMLSelectElement).value">
-            <option v-if="!models.length" value="">无可用模型（等待拉取）</option>
-            <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
-          </select>
-        </label>
-        <button type="button" class="mk-btn mk-btn--primary" :disabled="!models.length || testing" @click="runTest">
-          <span v-if="testing"><span class="mk-spinner"></span> 测试中…</span>
-          <span v-else>运行测试</span>
-        </button>
-        <span
-          v-if="testResult"
-          class="mk-badge"
-          :class="testResult.ok ? 'mk-badge--ok' : 'mk-badge--bad'"
-        >{{ testResult.ok ? '测试通过' : '测试失败' }}</span>
-        <span v-if="testResult" class="ac-test__meta mono">{{ testResult.latency || '—' }}{{ testResult.usage ? ` · ${testResult.usage}` : '' }}</span>
-        <span v-if="testResult" class="ac-test__text" :class="{ 'ac-test__text--bad': !testResult.ok }">「{{ testResult.text }}」</span>
+        <!-- 连通性验证（并入卡体末段） -->
+        <div class="ac-sec__title">连通性验证</div>
+        <div class="ac-test">
+          <label class="mk-field ac-test__model">
+            <span class="mk-field__label">测试模型</span>
+            <select class="mk-filter__select" :disabled="!models.length" :value="testModel" @change="testModel = ($event.target as HTMLSelectElement).value">
+              <option v-if="!models.length" value="">无可用模型（等待拉取）</option>
+              <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
+            </select>
+          </label>
+          <button type="button" class="mk-btn mk-btn--primary ac-test__btn" :disabled="!models.length || testing" @click="runTest">
+            <span v-if="testing"><span class="mk-spinner"></span> 测试中…</span>
+            <span v-else>运行测试</span>
+          </button>
+          <span v-if="testResult" class="ac-test__result">
+            <span class="mk-badge" :class="testResult.ok ? 'mk-badge--ok' : 'mk-badge--bad'">{{ testResult.ok ? '测试通过' : '测试失败' }}</span>
+            <span class="ac-test__meta mono">{{ testResult.latency || '—' }}{{ testResult.usage ? ` · ${testResult.usage}` : '' }}</span>
+            <span class="ac-test__text" :class="{ 'ac-test__text--bad': !testResult.ok }">「{{ testResult.text }}」</span>
+          </span>
+        </div>
       </div>
     </section>
 
-      <!-- 安全与访问（左列内） -->
+      <!-- 安全与访问（左列第二张卡：2×2 宫格，填满左列下方） -->
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">安全与访问</h3>
           <span class="mk-badge mk-badge--info">平台策略 · 热生效</span>
         </div>
-        <div class="ac-policy ac-policy--3">
-        <div class="ac-policy__item">
-          <span class="ac-policy__label">Admin 访问范围</span>
-          <div class="ac-seg">
+        <div class="ac-policy ac-policy--2x2">
+          <div class="ac-policy__item">
+            <span class="ac-policy__label">Admin 访问范围</span>
+            <div class="ac-seg">
+              <button
+                v-for="opt in accessOptions"
+                :key="opt.id"
+                type="button"
+                class="ac-seg__item"
+                :class="{ 'ac-seg__item--active': policy.adminAccessMode === opt.id }"
+                @click="policy.adminAccessMode = opt.id; markDirty('policy')"
+              >
+                {{ opt.label }}
+              </button>
+            </div>
+            <span v-if="policy.adminAccessMode === 'any'" class="ac-policy__warn">⚠ 公网开放 · 入口无访问限制</span>
+            <label v-if="policy.adminAccessMode === 'private'" class="mk-field">
+              <span class="mk-field__label">额外允许的客户端 IP（每行一个，可留空）</span>
+              <textarea
+                class="mk-filter__input ac-textarea"
+                rows="2"
+                :value="policy.adminAllowedIps.join('\n')"
+                @input="policy.adminAllowedIps = splitLines(($event.target as HTMLTextAreaElement).value); markDirty('policy')"
+                placeholder="203.0.113.10"
+              ></textarea>
+            </label>
+          </div>
+          <div class="ac-policy__item">
+            <span class="ac-policy__label">私有网络服务</span>
+            <div class="ac-seg">
+              <button
+                type="button"
+                class="ac-seg__item"
+                :class="{ 'ac-seg__item--active': policy.allowPrivateNetwork }"
+                @click="policy.allowPrivateNetwork = true; markDirty('policy')"
+              >
+                允许
+              </button>
+              <button
+                type="button"
+                class="ac-seg__item"
+                :class="{ 'ac-seg__item--active': !policy.allowPrivateNetwork }"
+                @click="policy.allowPrivateNetwork = false; markDirty('policy')"
+              >
+                仅白名单
+              </button>
+            </div>
+            <label v-if="!policy.allowPrivateNetwork" class="mk-field">
+              <span class="mk-field__label">允许的 Host / IP（每行一个）</span>
+              <textarea
+                class="mk-filter__input ac-textarea"
+                rows="2"
+                :value="policy.privateNetworkHosts.join('\n')"
+                @input="policy.privateNetworkHosts = splitLines(($event.target as HTMLTextAreaElement).value); markDirty('policy')"
+                placeholder="192.168.1.20"
+              ></textarea>
+            </label>
+          </div>
+          <!-- 新用户注册（live） -->
+          <div v-if="isLive && registrationEnabled !== null" class="ac-policy__item">
+            <span class="ac-policy__label">新用户注册</span>
+            <span class="ac-policy__desc">{{ registrationEnabled ? '任何人可注册' : '仅管理员创建' }}</span>
             <button
-              v-for="opt in accessOptions"
-              :key="opt.id"
               type="button"
-              class="ac-seg__item"
-              :class="{ 'ac-seg__item--active': policy.adminAccessMode === opt.id }"
-              @click="policy.adminAccessMode = opt.id; markDirty('policy')"
+              class="ac-seg__item ac-policy__toggle"
+              :class="{ 'ac-seg__item--active': true }"
+              :disabled="registrationBusy"
+              @click="toggleRegistration"
             >
-              {{ opt.label }}
+              {{ registrationBusy ? '切换中…' : registrationEnabled ? '关闭注册' : '开放注册' }}
             </button>
           </div>
-          <span v-if="policy.adminAccessMode === 'any'" class="ac-policy__warn">⚠ 公网开放 · 入口无访问限制</span>
-          <label v-if="policy.adminAccessMode === 'private'" class="mk-field">
-            <span>额外允许的客户端 IP（每行一个，可留空）</span>
-            <textarea
-              class="mk-filter__input ac-textarea"
-              rows="2"
-              :value="policy.adminAllowedIps.join('\n')"
-              @input="policy.adminAllowedIps = splitLines(($event.target as HTMLTextAreaElement).value); markDirty('policy')"
-              placeholder="203.0.113.10"
-            ></textarea>
-          </label>
-        </div>
-        <div class="ac-policy__item">
-          <span class="ac-policy__label">私有网络服务</span>
-          <div class="ac-seg">
-            <button
-              type="button"
-              class="ac-seg__item"
-              :class="{ 'ac-seg__item--active': policy.allowPrivateNetwork }"
-              @click="policy.allowPrivateNetwork = true; markDirty('policy')"
-            >
-              允许
-            </button>
-            <button
-              type="button"
-              class="ac-seg__item"
-              :class="{ 'ac-seg__item--active': !policy.allowPrivateNetwork }"
-              @click="policy.allowPrivateNetwork = false; markDirty('policy')"
-            >
-              仅白名单
-            </button>
+          <!-- 单 IP 每日注册配额（live；默认关，避免误伤同一内网/出口的正常注册） -->
+          <div v-if="isLive && registerIpQuotaEnabled !== null" class="ac-policy__item">
+            <span class="ac-policy__label">单 IP 每日注册配额</span>
+            <span class="ac-policy__desc">{{ quotaEnabledText }}，超过后该 IP 当天无法再创建账号</span>
+            <div class="ac-quota-row">
+              <div class="ac-seg ac-quota-seg" role="group" aria-label="单 IP 每日注册配额开关">
+                <button
+                  type="button"
+                  class="ac-seg__item"
+                  :class="{ 'ac-seg__item--active': registerIpQuotaEnabled }"
+                  :disabled="quotaBusy"
+                  @click="setQuotaEnabled(true)"
+                >启用</button>
+                <button
+                  type="button"
+                  class="ac-seg__item"
+                  :class="{ 'ac-seg__item--active': !registerIpQuotaEnabled }"
+                  :disabled="quotaBusy"
+                  @click="setQuotaEnabled(false)"
+                >关闭</button>
+              </div>
+              <label v-if="registerIpQuotaEnabled" class="ac-quota-field">
+                <span class="mk-field__label">每日上限</span>
+                <input
+                  type="number"
+                  class="mk-filter__input"
+                  min="1"
+                  max="100"
+                  :value="quotaInput"
+                  :disabled="quotaBusy"
+                  @change="onQuotaInput"
+                />
+                <em>个 / IP</em>
+              </label>
+            </div>
+            <span class="ac-policy__hint">默认关闭。启用后，同一公网出口 IP 24 小时内最多注册 {{ quotaInput || 5 }} 个账号，适合在批量注册风险显现时开启。</span>
           </div>
-          <label v-if="!policy.allowPrivateNetwork" class="mk-field">
-            <span>允许的 Host / IP（每行一个）</span>
-            <textarea
-              class="mk-filter__input ac-textarea"
-              rows="2"
-              :value="policy.privateNetworkHosts.join('\n')"
-              @input="policy.privateNetworkHosts = splitLines(($event.target as HTMLTextAreaElement).value); markDirty('policy')"
-              placeholder="192.168.1.20"
-            ></textarea>
-          </label>
         </div>
-        <!-- 新用户注册（live） -->
-        <div v-if="isLive && registrationEnabled !== null" class="ac-policy__item">
-          <span class="ac-policy__label">新用户注册</span>
-          <span class="ac-policy__desc">{{ registrationEnabled ? '任何人可注册' : '仅管理员创建' }}</span>
-          <button
-            type="button"
-            class="ac-seg__item ac-policy__toggle"
-            :class="{ 'ac-seg__item--active': true }"
-            :disabled="registrationBusy"
-            @click="toggleRegistration"
-          >
-            {{ registrationBusy ? '切换中…' : registrationEnabled ? '关闭注册' : '开放注册' }}
-          </button>
-        </div>
-      </div>
       </section>
       </div><!-- /ac-layout__main -->
 
@@ -259,6 +290,48 @@
         <button type="button" class="mk-link" @click="retryConfigLoad">重试</button>
       </div>
 
+      <div class="ac-body">
+      <!-- 探针（定期探测能力健康）：全站 mk-field 行式配置（与其他开关一致），开启后显示间隔 -->
+      <div v-if="probe.loaded" class="ac-probe">
+        <div class="ac-probe__main">
+          <label class="mk-field mk-field--switch ac-probe__switch">
+            <input
+              type="checkbox"
+              :checked="probe.enabled"
+              :disabled="probeBusy"
+              @change="setProbeEnabled(($event.target as HTMLInputElement).checked)"
+            />
+            <span class="mk-field__label" style="margin:0">能力探针</span>
+          </label>
+          <em class="ac-probe__desc">{{ probe.enabled ? `每 ${probe.intervalSec}s 自动探测 5 项核心能力，保持健康快照不过期` : '关闭时快照不自动刷新，可手动「立即探测」' }}</em>
+        </div>
+        <div class="ac-probe__ctrl">
+          <label v-if="probe.enabled" class="mk-field ac-probe__interval">
+            <span class="mk-field__label">间隔</span>
+            <input
+              v-model.number="probe.intervalSec"
+              type="number"
+              :min="Math.ceil(probe.minIntervalMs / 1000)"
+              :max="Math.floor(probe.maxIntervalMs / 1000)"
+              step="30"
+              class="mk-filter__input"
+              :disabled="probeBusy"
+              @change="saveProbeInterval"
+            />
+            <em class="ac-probe__unit">秒</em>
+          </label>
+          <button
+            type="button"
+            class="mk-status__action"
+            :class="{ 'ac-probe--alert': health?.stale && !probe.enabled }"
+            :disabled="healthProbing"
+            @click="probeHealth"
+          >
+            {{ healthProbing ? '探测中…' : '立即探测' }}
+          </button>
+        </div>
+      </div>
+
       <!-- 两列：左 = 调用参数，右 = 能力健康 -->
       <div class="ac-cols">
         <!-- 左列：调用参数（重试 / 超时 / 探测 分组） -->
@@ -266,68 +339,35 @@
           <div class="ac-sec__title">调用参数</div>
           <div class="ac-groups">
             <div v-if="reliability" class="ac-group">
-              <div class="ac-group__title">重试</div>
+              <div class="ac-group__title">重试与超时</div>
               <div class="ac-group__fields">
                 <label class="mk-field">
-                  <span>上游最大尝试</span>
+                  <span class="mk-field__label">上游最大尝试</span>
                   <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" max="10" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
-                  <span>传输重试</span>
+                  <span class="mk-field__label">传输重试</span>
                   <input v-model.number="reliability.maxTransportRetries" type="number" min="0" max="5" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
-                  <span>逻辑重试</span>
+                  <span class="mk-field__label">逻辑重试</span>
                   <input v-model.number="reliability.maxLogicalRetries" type="number" min="0" max="5" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
-                  <span>退避基数（毫秒）</span>
+                  <span class="mk-field__label">退避基数（毫秒）</span>
                   <input v-model.number="reliability.retryBaseDelayMs" type="number" min="100" step="100" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
-                  <span>Retry-After 上限（毫秒）</span>
+                  <span class="mk-field__label">Retry-After 上限（毫秒）</span>
                   <input v-model.number="reliability.maxRetryAfterMs" type="number" min="1000" step="1000" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
-                <label class="mk-field mk-field--switch">
-                  <span>随机抖动</span>
-                  <span class="ac-switch">
-                    <input type="checkbox" v-model="reliability.jitterEnabled" @change="markDirty('reliability')" />
-                    <i aria-hidden="true"></i>
-                  </span>
-                </label>
-              </div>
-            </div>
-            <div v-if="reliability" class="ac-group">
-              <div class="ac-group__title">超时</div>
-              <div class="ac-group__fields">
                 <label class="mk-field">
-                  <span>单次超时（毫秒）</span>
+                  <span class="mk-field__label">单次超时（毫秒）</span>
                   <input v-model.number="reliability.defaultRequestTimeoutMs" type="number" min="1000" step="1000" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
-              </div>
-            </div>
-            <div v-if="probe.loaded" class="ac-group">
-              <div class="ac-group__title">探测</div>
-              <div class="ac-group__fields">
                 <label class="mk-field mk-field--switch">
-                  <span>定期探活</span>
-                  <span class="ac-switch">
-                    <input type="checkbox" v-model="probe.enabled" @change="markDirty('probe')" />
-                    <i aria-hidden="true"></i>
-                  </span>
-                </label>
-                <label class="mk-field">
-                  <span>探测间隔（秒）</span>
-                  <input
-                    v-model.number="probe.intervalSec"
-                    type="number"
-                    :min="Math.ceil(probe.minIntervalMs / 1000)"
-                    :max="Math.floor(probe.maxIntervalMs / 1000)"
-                    step="30"
-                    class="mk-filter__input"
-                    :disabled="!probe.enabled"
-                    @input="markDirty('probe')"
-                  />
+                  <input type="checkbox" v-model="reliability.jitterEnabled" @change="markDirty('reliability')" />
+                  <span class="mk-field__label" style="margin:0">随机抖动</span>
                 </label>
               </div>
             </div>
@@ -367,13 +407,12 @@
           </div>
           <p v-else class="ac-rel__note">健康快照加载中…</p>
           <div class="ac-health__foot">
-            <button type="button" class="mk-status__action" :class="{ 'ac-probe--alert': health?.stale && !probe.enabled }" :disabled="healthProbing" @click="probeHealth">
-              {{ healthProbing ? '探测中…' : '立即探测' }}
-            </button>
-            <span v-if="health?.stale && probe.loaded && !probe.enabled" class="ac-health__stale">定期探活未开启 · 探测后 5 分钟将再次过期</span>
+            <span v-if="health?.stale" class="ac-health__stale">快照已过期 · 使用上方「立即探测」或开启能力探针自动刷新</span>
+            <span v-else-if="health?.checkedAt" class="ac-health__stale">快照有效 · 最近 {{ timeAgo(health.checkedAt) }} 更新</span>
           </div>
         </div>
       </div>
+      </div><!-- /ac-body -->
       </section>
       </div><!-- /ac-layout__side -->
     </div><!-- /ac-layout -->
@@ -403,7 +442,13 @@ import {
   errMsg
 } from './live'
 import { adminPlatformSettingsApi, adminCapabilityProbeApi, adminSystemApi } from '@/api/adminApi'
-import { registrationEnabled, updateRegistrationSetting } from './live'
+import {
+  registrationEnabled,
+  registerIpQuotaEnabled,
+  registerIpDailyQuota,
+  updateRegistrationSetting,
+  updateRegisterIpQuotaSetting
+} from './live'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 
@@ -567,6 +612,47 @@ const probe = reactive({
   lastEnabled: false,
   lastIntervalSec: 120
 })
+/** 探针开关/间隔独立保存中状态（不走底部统一保存条，热生效） */
+const probeBusy = ref(false)
+
+async function persistProbe(payload: { enabled?: boolean; intervalMs?: number }) {
+  if (probeBusy.value || !probe.loaded) return
+  probeBusy.value = true
+  try {
+    const res = await adminCapabilityProbeApi.updateSettings(payload)
+    const d = res.data?.data ?? {}
+    if (typeof d.enabled === 'boolean') {
+      probe.enabled = d.enabled
+      probe.lastEnabled = d.enabled
+    }
+    if (typeof d.intervalMs === 'number') {
+      probe.intervalSec = Math.round(d.intervalMs / 1000)
+      probe.lastIntervalSec = probe.intervalSec
+    }
+    toast.success(payload.enabled === false ? '能力探针已关闭，健康快照不再自动刷新' : '探针设置已保存并生效')
+  } catch (e) {
+    toast.error(`探针设置保存失败：${errMsg(e)}`)
+  } finally {
+    probeBusy.value = false
+  }
+}
+
+async function setProbeEnabled(on: boolean) {
+  await persistProbe({ enabled: on })
+}
+
+async function saveProbeInterval(e?: Event) {
+  // 从 DOM 取值（change 触发时 v-model 可能尚未刷新，直接读 input 最可靠）
+  let raw: string | undefined
+  if (e && e.target instanceof HTMLInputElement) raw = e.target.value
+  const sec = raw !== undefined ? Number(raw) : probe.intervalSec
+  const minSec = Math.ceil(probe.minIntervalMs / 1000)
+  const maxSec = Math.floor(probe.maxIntervalMs / 1000)
+  if (!Number.isFinite(sec)) { probe.intervalSec = probe.lastIntervalSec; return }
+  probe.intervalSec = Math.min(maxSec, Math.max(minSec, Math.round(sec)))
+  if (probe.intervalSec === probe.lastIntervalSec) return
+  await persistProbe({ intervalMs: probe.intervalSec * 1000 })
+}
 
 async function loadReliability() {
   try {
@@ -788,26 +874,8 @@ async function saveAll() {
     if (dirty.value.has('reliability') && reliability.value) {
       await adminPlatformSettingsApi.updateReliabilitySettings({ ...reliability.value })
     }
-    if (dirty.value.has('probe') && probe.loaded) {
-      const payload: { enabled?: boolean; intervalMs?: number } = {}
-      if (probe.enabled !== probe.lastEnabled) payload.enabled = probe.enabled
-      if (probe.intervalSec !== probe.lastIntervalSec) {
-        payload.intervalMs = Math.round(probe.intervalSec * 1000)
-      }
-      if (Object.keys(payload).length) {
-        const res = await adminCapabilityProbeApi.updateSettings(payload)
-        const d = res.data?.data ?? {}
-        if (typeof d.enabled === 'boolean') {
-          probe.enabled = d.enabled
-          probe.lastEnabled = d.enabled
-        }
-        if (typeof d.intervalMs === 'number') {
-          probe.intervalSec = Math.round(d.intervalMs / 1000)
-          probe.lastIntervalSec = probe.intervalSec
-        }
-      }
-    }
-    // L5：probe 未加载成功时保留其脏标记，避免静默丢弃用户改动
+    // 探针（enabled/interval）为独立热生效开关，改动即时保存，不走统一保存条
+    // L5：probe 未加载成功时保留其脏标记，避免静默丢弃用户改动（保留兼容）
     dirty.value = new Set(dirty.value.has('probe') && !probe.loaded ? ['probe'] : [])
     toast.success('配置已保存并生效')
   } catch (e) {
@@ -850,17 +918,63 @@ async function toggleRegistration() {
     registrationBusy.value = false
   }
 }
+
+/* 单 IP 每日注册配额开关：默认关；启用时引导填写上限 */
+const quotaBusy = ref(false)
+const quotaInput = ref(5)
+watch(
+  () => registerIpDailyQuota.value,
+  (v) => { if (typeof v === 'number' && v >= 1 && v <= 100) quotaInput.value = v },
+  { immediate: true }
+)
+const quotaEnabledText = computed(() => registerIpQuotaEnabled.value ? `已启用 · 每 IP 每日 ${quotaInput.value} 个` : '未启用（不限制注册数量）')
+
+function onQuotaInput(e: Event) {
+  const v = Number((e.target as HTMLInputElement).value)
+  if (!Number.isInteger(v)) return
+  quotaInput.value = Math.min(100, Math.max(1, v))
+  void saveQuota(true, quotaInput.value)
+}
+
+async function setQuotaEnabled(enabled: boolean) {
+  if (quotaBusy.value) return
+  if (enabled && !registerIpQuotaEnabled.value) {
+    const ok = await askConfirm({
+      title: '启用单 IP 每日注册配额',
+      message: `开启后，同一 IP 24 小时内最多注册 ${quotaInput.value} 个账号。\n若您所在网络有多个真实用户共享出口 IP，可能误伤正常注册。`,
+      confirmText: '启用配额',
+      danger: false
+    })
+    if (!ok) return
+  }
+  await saveQuota(enabled, quotaInput.value)
+}
+
+async function saveQuota(enabled: boolean, quota: number) {
+  if (quotaBusy.value) return
+  quotaBusy.value = true
+  try {
+    await updateRegisterIpQuotaSetting(enabled, quota)
+    toast.success(enabled ? `配额已启用：每 IP 每日 ${quota} 个` : '配额已关闭，注册不再限制数量')
+  } catch (e) {
+    toast.error(`保存失败：${errMsg(e)}`)
+  } finally {
+    quotaBusy.value = false
+  }
+}
 </script>
 
 <style scoped>
-/* 内容区容器（对齐其他页面：mk-card__head + 内容区结构，不覆盖全局 .mk-card 盒模型） */
-.ac-body { display: grid; gap: 12px; padding: 12px 16px; }
-.ac-row { display: grid; gap: 12px; }
+/* 卡内内容容器：统一内边距与间距（mk-card__head 之下），全页各卡同一语言 */
+.ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }
+.ac-row { display: grid; gap: 14px; align-items: end; }
 .ac-row--2-1 { grid-template-columns: 1.6fr 1fr; }
-.ac-row--3 { grid-template-columns: repeat(3, 1fr); }
+.ac-row--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 /* mk-field 已在 shared.css 定义；此处只补 mk-field 下 .mk-filter__input 的 100% 宽 */
 .mk-field .mk-filter__input,
 .mk-field .mk-filter__select { width: 100%; }
+.ac-body .mk-field { margin: 0; min-width: 0; }
+.ac-body .mk-filter__select[disabled] { opacity: 0.6; cursor: not-allowed; }
 .ac-key-wrap { display: grid; gap: 4px; min-width: 0; }
 .ac-key-input-row { display: flex; align-items: center; gap: 6px; }
 .ac-key-input-row .mk-filter__input { flex: 1; min-width: 0; }
@@ -888,26 +1002,26 @@ async function toggleRegistration() {
   white-space: normal;
 }
 
-/* 连通性验证行：测试模型 + 运行测试 + 结果内联（底边对齐，按钮与输入控件同水平线） */
+/* 连通性验证（卡内末段，横向内联：模型 + 按钮 + 结果） */
 .ac-test {
   display: flex;
   align-items: flex-end;
   gap: 12px;
   flex-wrap: wrap;
-  padding: 12px 16px 14px;
-  border-top: 1px solid #f0f2f5;
 }
-.ac-test__model { min-width: 260px; }
-.ac-test__meta { font-size: var(--mk-fs-12); color: var(--mk-faint); }
+.ac-test__model { min-width: 240px; max-width: 320px; margin: 0; }
+.ac-test__result { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-bottom: 6px; min-width: 0; }
+.ac-test__meta { font-size: var(--mk-fs-12); color: var(--mk-faint); white-space: nowrap; }
 .ac-test__text {
   font-size: var(--mk-fs-12_5);
   color: var(--mk-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 40%;
+  max-width: 320px;
 }
 .ac-test__text--bad { color: var(--mk-red); }
+.ac-test__btn { align-self: flex-end; }
 
 .ac-models { display: flex; gap: 6px; flex-wrap: wrap; }
 .ac-model {
@@ -945,53 +1059,38 @@ async function toggleRegistration() {
   flex-shrink: 0;
 }
 
-/* 默认思考：平台级开关 + 强度（继承链顶端，skill 级可覆盖） */
-.ac-think {
-  display: grid;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid #edf0f5;
-  border-radius: 10px;
-  background: #fafbfc;
-}
-.ac-think__title {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.ac-think__title strong { font-size: var(--mk-fs-12_5); color: var(--mk-ink); }
-.ac-think__title em {
-  font-style: normal;
-  font-size: var(--mk-fs-11);
-  color: var(--mk-faint);
-}
-.ac-think__fields {
-  display: grid;
-  grid-template-columns: minmax(120px, 0.6fr) minmax(150px, 1fr) minmax(150px, 1fr);
-  gap: 12px;
-  align-items: end;
-}
-.ac-think__fields .mk-field { margin: 0; }
-html[data-theme='dark'] .ac-models__empty { background: #141c2b; }
-/* 模型选择下拉：无模型时禁用态不拉满（原 select width:100% 占满整行显空） */
-.ac-body .mk-filter__select { min-width: 0; }
-.ac-body .mk-filter__select[disabled] { opacity: 0.6; cursor: not-allowed; }
-.ac-body .ac-row--3 .mk-filter__select { max-width: 280px; }
+/* 默认思考：开关 + 强度 + 模式，与「路由默认」同一三列网格语言 */
+.ac-think .mk-field--switch { align-self: center; }
 
-.ac-policy {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  padding: 16px;
+/* 安全与访问卡：2×2 宫格（左列 ~700px 宽），虚线分隔按行划分——
+   第 1、2 项无上分隔；第 3、4 项加顶部虚线换行分隔 */
+.ac-policy { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 0; padding: 6px 16px 16px; }
+.ac-policy__item { display: grid; gap: 10px; align-content: start; min-width: 0; padding-left: 18px; border-left: 1px dashed #e6eaf0; }
+.ac-policy__item:nth-child(odd) { padding-left: 0; border-left: none; }
+.ac-policy__item:nth-child(n + 3) { padding-top: 14px; border-top: 1px dashed #e6eaf0; }
+html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
+.ac-policy__label { font-size: var(--mk-fs-12_5); font-weight: 700; color: var(--mk-muted); }
+.ac-policy__desc { font-size: var(--mk-fs-12_5); color: var(--mk-muted); line-height: 1.6; }
+.ac-policy__hint { font-size: var(--mk-fs-11); color: var(--mk-faint); line-height: 1.55; display: block; }
+.ac-policy__toggle { width: fit-content; }
+.ac-policy__warn { font-size: var(--mk-fs-12_5); color: var(--mk-red); font-weight: 600; }
+.ac-quota-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ac-quota-seg { width: fit-content; }
+.ac-quota-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--mk-fs-12_5);
+  color: var(--mk-muted);
 }
-/* 主布局：左列(接入与模型 + 安全与访问 纵向) / 右列(AI 调用与健康)。
-   比「两卡并排一高一矮」更平衡：左列两卡填充,右列监控卡独立。
-   1100px 以下回落单列(右列卡移到左列下方)。 */
+.ac-quota-field .mk-filter__input { width: 76px; text-align: center; }
+.ac-quota-field em { font-style: normal; color: var(--mk-faint); }
+/* 主布局：左列(接入与模型 + 安全与访问 纵向叠放) / 右列(AI 调用与健康)。
+   安全卡放左列下方填满空档；两栏 1.1:1 接近等宽，右列监控表亦不受挤 */
 .ac-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 14px;
   align-items: start;
 }
 .ac-layout__main {
@@ -1007,12 +1106,19 @@ html[data-theme='dark'] .ac-models__empty { background: #141c2b; }
   align-content: start;
 }
 .ac-layout > .mk-card, .ac-layout__main > .mk-card, .ac-layout__side > .mk-card { min-width: 0; }
-.ac-policy__item { display: grid; gap: 8px; align-content: start; }
-.ac-policy--3 { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
-.ac-policy__label { font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-muted); }
-.ac-policy__desc { font-size: var(--mk-fs-12); color: var(--mk-muted); line-height: 1.6; }
-.ac-policy__toggle { width: fit-content; }
-.ac-policy__warn { font-size: var(--mk-fs-12); color: var(--mk-red); font-weight: 600; }
+/* 分段小标题（连接 / 路由默认 / 默认思考 / 连通性验证 / 调用参数 / 能力健康）：
+   统一简洁粗体灰字——不放大写、不加横线后缀，用留白分区（与全站表单一致） */
+.ac-sec__title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: var(--mk-fs-12_5);
+  font-weight: 700;
+  color: var(--mk-muted);
+}
+.ac-sec__hint { font-size: var(--mk-fs-11); font-weight: 500; color: var(--mk-faint); }
+.ac-sec__sub { margin-left: auto; font-size: var(--mk-fs-11); font-weight: 500; color: var(--mk-faint); }
 .ac-seg { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: #eef2fa; border-radius: 10px; width: fit-content; }
 .ac-seg__item {
   border: 0;
@@ -1085,90 +1191,59 @@ html[data-theme='dark'] .ac-models__empty { background: #141c2b; }
   50% { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.18); }
 }
 
-/* AI 调用与健康：分区标题 */
-.ac-sec { border-top: 1px solid #f0f2f5; }
-.mk-card__head + .ac-sec { border-top: none; }
-.ac-sec__title {
+/* 探针行：AI 能力定期探测总开关（右卡第一段，开启后显示间隔；由 ac-body 统一间距，无独立边框） */
+.ac-probe {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 14px 0 0;
-  font-size: var(--mk-fs-11);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--mk-faint);
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 2px 0 0;
 }
-.ac-sec__sub { margin-left: auto; font-size: var(--mk-fs-11); letter-spacing: 0; text-transform: none; font-weight: 500; }
+.ac-probe__main { display: flex; align-items: center; gap: 12px; min-width: 200px; flex: 1; }
+.ac-probe__switch { flex: none; margin: 0; }
+.ac-probe__desc {
+  font-style: normal;
+  font-size: var(--mk-fs-11);
+  color: var(--mk-faint);
+  line-height: 1.5;
+}
+.ac-probe__ctrl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ac-probe__interval {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.ac-probe__interval .mk-filter__input { width: 72px; text-align: center; }
+.ac-probe__unit { font-style: normal; color: var(--mk-faint); font-size: var(--mk-fs-11); }
+
 .ac-health__stale { font-size: var(--mk-fs-11); color: var(--mk-faint); }
 
-/* 调用参数分组 */
-.ac-cols {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0;
-  align-items: start;
-}
-/* 右列窄宽（~490px）：调用参数/能力健康 纵向堆叠,健康表压缩到 4 列(隐藏"信息"列),
-   能力列压缩、响应/时间列保宽——原能力 345px 挤压了"最近探测"列导致折行 */
-.ac-layout__side .ac-cols { grid-template-columns: 1fr; }
-.ac-layout__side .ac-cols__main { padding: 0 16px; }
-.ac-layout__side .ac-cols__side { border-left: none; padding: 0 16px; margin-top: 6px; }
-.ac-layout__side .ac-health__row,
-.ac-layout__side .ac-health__head { grid-template-columns: 10px minmax(0, 1fr) auto 74px; }
-.ac-layout__side .ac-health__msg { display: none; }
-.ac-layout__side .ac-health__head span:nth-child(3) { display: none; }
-.ac-layout__side .ac-health__id { font-size: var(--mk-fs-12); }
-.ac-layout__side .ac-health__lat { white-space: nowrap; }
-.ac-layout__side .ac-health__time { white-space: nowrap; text-align: right; }
-.ac-cols__main { min-width: 0; padding: 0 18px 0 16px; }
-.ac-cols__side {
-  min-width: 0;
-  border-left: 1px solid #f0f2f5;
-  padding: 0 16px 0 18px;
-}
-.ac-groups { display: grid; gap: 18px; padding: 12px 0 8px; }
-.ac-group { display: grid; gap: 8px; }
-.ac-group__title {
-  font-size: var(--mk-fs-11);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--mk-faint);
-}
+/* 调用参数 + 能力健康：右卡内纵向分区（ac-body 统一间距，无内嵌双栏/竖线） */
+.ac-cols { display: grid; gap: 14px; align-items: start; }
+.ac-cols__main, .ac-cols__side { min-width: 0; padding: 0; }
+.ac-groups { display: grid; gap: 12px; }
+.ac-group { display: grid; gap: 10px; }
 .ac-group__fields {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
-/* 开关控件 */
+.ac-group__fields .mk-field { margin: 0; }
+/* 单字段分组（超时仅一项）：不拉全宽，保持与多字段组同网格节奏 */
+.ac-group__fields--single { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* 分组副标题：与 ac-sec__title 同族更轻（重试/超时） */
+.ac-group__title {
+  font-size: var(--mk-fs-11);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--mk-faint);
+}
+/* 开关控件：统一走全站 mk-field--switch（原生 checkbox + label + accent-color 蓝），
+   不再使用自定义 iOS 滑块（2026-09 与全站 admin 视觉对齐） */
 .mk-field--switch { align-content: start; }
-.ac-switch { position: relative; width: 36px; height: 20px; justify-self: start; margin-top: 2px; }
-.ac-switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
-.ac-switch i {
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-  background: #d3dbe9;
-  transition: background 0.18s ease;
-  pointer-events: none;
-}
-.ac-switch i::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
-  transition: left 0.18s ease;
-}
-.ac-switch input:checked + i { background: var(--mk-blue); }
-.ac-switch input:checked + i::after { left: 18px; }
-.ac-switch input:disabled + i { opacity: 0.5; }
-.ac-switch input:focus-visible + i { box-shadow: 0 0 0 3px rgba(44, 99, 208, 0.25); }
+.mk-field--switch input[type='checkbox'] { accent-color: var(--mk-blue, #2c63d0); cursor: pointer; }
 
 .ac-rel__note {
   margin: 0;
@@ -1230,8 +1305,7 @@ html[data-theme='dark'] .ac-models__empty { background: #141c2b; }
 /* 侧栏占 208px，断点需按视口 1100px 触发（内容区 ≈ 892px），安全策略单列 */
 @media (max-width: 1100px) {
   .ac-layout { grid-template-columns: 1fr; }
-  .ac-policy--3 { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-  .ac-policy { grid-template-columns: 1fr; }
+  .ac-policy { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ac-cols { grid-template-columns: 1fr; }
   .ac-cols__main { padding: 0 16px; }
   .ac-cols__side { border-left: none; padding: 0 16px; margin-top: 6px; }
@@ -1243,31 +1317,32 @@ html[data-theme='dark'] .ac-models__empty { background: #141c2b; }
   .ac-health__msg { display: none; }
   .ac-health__head span:nth-child(3) { display: none; }
   .ac-think__fields { grid-template-columns: 1fr; }
+  .ac-policy { grid-template-columns: 1fr; }
+  .ac-policy__item { padding-left: 0; border-left: none; padding-top: 12px; border-top: 1px dashed #e6eaf0; }
+  .ac-policy__item:first-child { padding-top: 0; border-top: none; }
+  html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .ac-body { gap: 16px; padding: 16px 18px; }
+  .ac-body { gap: 16px; padding: 6px 18px 18px; }
   .mk-field__label { font-size: 13.5px; }
   .ac-model { font-size: 13px; padding: 5px 12px; }
   .ac-run { padding: 10px 14px; }
-  .ac-policy { gap: 16px; padding: 18px; }
-  .ac-think { gap: 12px; padding: 12px 14px; }
-  .ac-think__title strong { font-size: 13.5px; }
-  .ac-think__title em { font-size: 12px; }
-  .ac-think__fields { gap: 14px; }
+  .ac-policy { gap: 16px 0; padding: 6px 18px 18px; }
   .ac-policy__label { font-size: 13.5px; }
   .ac-policy__desc { font-size: 13px; }
   .ac-policy__warn { font-size: 13px; }
   .ac-seg { border-radius: 12px; }
   .ac-seg__item { font-size: 13.5px; padding: 8px 14px; }
   .ac-textarea { font-size: 13.5px; }
-  .ac-sec__title { font-size: 12.5px; padding: 16px 0 0; }
-  .ac-cols__main { padding: 0 20px 0 18px; }
-  .ac-cols__side { padding: 0 18px 0 20px; }
+  .ac-sec__title { font-size: 13px; }
+  .ac-sec__hint { font-size: 12px; }
+  .ac-cols__main { padding: 0; }
+  .ac-cols__side { padding: 0; }
   .ac-sec__sub { font-size: 12.5px; }
   .ac-group__title { font-size: 12.5px; }
-  .ac-groups { gap: 20px; padding: 14px 0 8px; }
+  .ac-groups { gap: 20px; padding: 4px 0 8px; }
   .ac-rel__note { font-size: 13px; }
   .ac-health__row { grid-template-columns: 12px 210px 1fr auto auto; gap: 12px; padding: 9px 0; font-size: 13.5px; }
   .ac-health__head { grid-template-columns: 12px 210px 1fr auto auto; gap: 12px; padding: 5px 0 3px; font-size: 12.5px; }
@@ -1279,22 +1354,23 @@ html[data-theme='dark'] .ac-models__empty { background: #141c2b; }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号继续放大 */
-  .ac-body { gap: 18px; padding: 20px 22px; }
+  .ac-body { gap: 18px; padding: 8px 22px 22px; }
   .mk-field__label { font-size: 15.5px; }
   .ac-model { font-size: 15px; padding: 6px 14px; border-radius: 9px; }
   .ac-run { padding: 12px 16px; }
-  .ac-policy { gap: 18px; padding: 22px; }
+  .ac-policy { gap: 18px 0; padding: 8px 22px 22px; }
   .ac-policy__label { font-size: 15.5px; }
   .ac-policy__desc { font-size: 15px; }
   .ac-policy__warn { font-size: 15px; }
   .ac-seg__item { font-size: 15.5px; padding: 9px 16px; }
   .ac-textarea { font-size: 15.5px; }
-  .ac-sec__title { font-size: 14.5px; padding: 18px 0 0; }
-  .ac-cols__main { padding: 0 24px 0 22px; }
-  .ac-cols__side { padding: 0 22px 0 24px; }
+  .ac-sec__title { font-size: 15px; }
+  .ac-sec__hint { font-size: 14px; }
+  .ac-cols__main { padding: 0; }
+  .ac-cols__side { padding: 0; }
   .ac-sec__sub { font-size: 14.5px; }
   .ac-group__title { font-size: 14.5px; }
-  .ac-groups { gap: 22px; padding: 16px 0 8px; }
+  .ac-groups { gap: 22px; padding: 6px 0 8px; }
   .ac-rel__note { font-size: 15px; }
   .ac-health__row { grid-template-columns: 14px 260px 1fr auto auto; gap: 14px; padding: 11px 0; font-size: 15.5px; }
   .ac-health__head { grid-template-columns: 14px 260px 1fr auto auto; gap: 14px; padding: 6px 0 3px; font-size: 14.5px; }
@@ -1306,22 +1382,23 @@ html[data-theme='dark'] .ac-models__empty { background: #141c2b; }
 }
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：字号继续放大，与页面基线对齐 */
-  .ac-body { gap: 20px; padding: 24px 26px; }
+  .ac-body { gap: 20px; padding: 10px 26px 26px; }
   .mk-field__label { font-size: 18px; }
   .ac-model { font-size: 17.5px; padding: 7px 16px; }
   .ac-run { padding: 14px 18px; }
-  .ac-policy { gap: 20px; padding: 26px; }
+  .ac-policy { gap: 20px 0; padding: 10px 26px 26px; }
   .ac-policy__label { font-size: 18px; }
   .ac-policy__desc { font-size: 17.5px; }
   .ac-policy__warn { font-size: 17.5px; }
   .ac-seg__item { font-size: 18px; padding: 11px 19px; }
   .ac-textarea { font-size: 18px; }
-  .ac-sec__title { font-size: 17px; padding: 20px 0 0; }
-  .ac-cols__main { padding: 0 28px 0 26px; }
-  .ac-cols__side { padding: 0 26px 0 28px; }
+  .ac-sec__title { font-size: 17.5px; }
+  .ac-sec__hint { font-size: 16px; }
+  .ac-cols__main { padding: 0; }
+  .ac-cols__side { padding: 0; }
   .ac-sec__sub { font-size: 17px; }
   .ac-group__title { font-size: 17px; }
-  .ac-groups { gap: 26px; padding: 18px 0 10px; }
+  .ac-groups { gap: 26px; padding: 8px 0 10px; }
   .ac-rel__note { font-size: 17.5px; }
   .ac-health__row { grid-template-columns: 16px 310px 1fr auto auto; gap: 16px; padding: 13px 0; font-size: 18px; }
   .ac-health__head { grid-template-columns: 16px 310px 1fr auto auto; gap: 16px; padding: 7px 0 4px; font-size: 17px; }
@@ -1341,10 +1418,10 @@ html[data-theme='dark'] {
   /* 补漏：密钥切换钮/模型胶囊浅底 */
   .ac-key-toggle,
   .ac-model { background: #1d2739; color: #9fb0c8; }
-  /* 开关轨道：浅灰轨道暗色化（滑块保持白色——深色开关的标准做法） */
-  .ac-switch i { background: #3a4a63; }
-  .ac-think { background: #141c2b; border-color: #232f45; }
-  .ac-think__title strong { color: #c7d2e2; }
-  .ac-think__title em { color: #7c8aa3; }
+  /* 硬编码浅色分隔线（卡内分区/健康表行）暗色适配 */
+  .ac-health__head,
+  .ac-health__row,
+  .ac-health__foot { border-color: #232f45; }
+  .ac-models__empty { background: #141c2b; border-color: #2a3850; }
 }
 </style>

@@ -1,6 +1,6 @@
 /**
  * 合并宿主页冒烟（2026-09-04 导航收敛）：
- * - People（用户与学习者：账号/学习状态 tab + ?tab= 深链 + 命令面板新建用户直达）
+ * - People（用户与学习者：账号/学习状态 tab + ?tab= 深链 + intent quickAction 新建用户直达）
  * - Sessions（学习会话：教学会话/目标对话/学习路径 tab + ?tab= 深链）
  * - Messages（通知与公告：公告/站内通知 tab + ?tab= 深链）
  * - ExecLogs（执行日志：成本分析 tab 嵌入 TokenCost）
@@ -99,7 +99,7 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     w.unmount();
   });
 
-  it('People：深链 /admin/people?tab=state 直达学习状态；命令面板 quickAction 强制账号 tab + 弹新建', async () => {
+  it('People：深链 /admin/people?tab=state 直达学习状态；intent quickAction 强制账号 tab + 弹新建', async () => {
     const { router, ready } = mockRouter('/admin/people?tab=state');
     await ready;
     const w = mount(People, { global: { plugins: [router] } });

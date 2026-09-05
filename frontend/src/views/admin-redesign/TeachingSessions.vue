@@ -1,11 +1,19 @@
 <template>
   <div :class="embedded ? 'mk-page--fill ts-embedded' : 'mk-page mk-page--fill'">
-    <!-- 教学会话页头（单行状态条：页面名 + 短计数 + 可点击筛选 + 刷新；与其他列表页统一形态） -->
-    <div class="mk-status" :class="tsDashTone === 'bad' ? 'mk-status--bad' : tsDashTone === 'warn' ? 'mk-status--warn' : tsDashTone === 'muted' ? 'mk-status--muted' : 'mk-status--ok'">
+    <!-- 教学会话页头（单行状态条：页面名 + 短计数 + 可点击筛选 + 刷新；与其他列表页统一形态。
+         embedded（学习会话合并宿主）时由宿主状态条承载域计数，本组件不再渲染状态条） -->
+    <div v-if="!embedded" class="mk-status" :class="tsDashTone === 'bad' ? 'mk-status--bad' : tsDashTone === 'warn' ? 'mk-status--warn' : tsDashTone === 'muted' ? 'mk-status--muted' : 'mk-status--ok'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">教学会话</strong>
-      <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">进行中 {{ inProgressCount }}</span>
+      <!-- 视图切换 pills 已承载页名（合并宿主形态）：embedded 不再重复标题，独立场景保留 -->
+      <strong v-if="!embedded" class="mk-status__title">教学会话</strong>
+      <span v-if="!embedded" class="mk-status__sep"></span>
+      <button
+        type="button"
+        class="ts-count-link"
+        :class="{ 'ts-count-link--on': pill === 'active' }"
+        title="点击筛选「进行中」会话"
+        @click="pill = pill === 'active' ? 'all' : 'active'"
+      >进行中 {{ inProgressCount }}</button>
       <button
         type="button"
         class="ts-count-link"
@@ -21,7 +29,7 @@
         @click="pill = pill === 'attention' ? 'all' : 'attention'"
       >高关注 {{ highAttentionCount }}</button>
       <span v-if="advisoryCount" class="mk-status__meta" title="含建议的会话数">有建议 {{ advisoryCount }}</span>
-      <span class="mk-status__meta">共 {{ rows.length }} 条</span>
+      <span class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ rows.length }} 条 · 仅显示最近 100 条</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshNow">
           {{ refreshing ? '刷新中…' : '刷新' }}
@@ -49,6 +57,7 @@
               {{ p.label }}
             </button>
           </div>
+          <input class="mk-filter__input" v-model="keyword" placeholder="搜索主题 / 用户 / ID" />
           <select v-model="statusFilter" class="mk-filter__select" aria-label="按状态筛选">
             <option value="">全部状态</option>
             <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
@@ -58,7 +67,6 @@
             <option value="7d">近 7 天</option>
             <option value="30d">近 30 天</option>
           </select>
-          <input class="mk-filter__input" v-model="keyword" placeholder="搜索主题 / 用户 / ID" />
         </div>
         <div class="mk-card__head-right">
           <DataScopeToggle v-model="includeTest" />
@@ -67,7 +75,7 @@
             storage-key="wf_teaching_hidden_cols"
             v-model:hidden="tsHiddenCols"
           />
-          <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}<template> · {{ includeTest ? '含模拟' : '仅真实' }} · 仅显示最近 100 条</template></span>
+          <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含模拟' : '仅真实' }}）</span>
         </div>
       </div>
 
@@ -310,8 +318,10 @@ import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
 import MkCols from './MkCols.vue'
 
-/** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（仅去掉外层壳，状态条/列表/抽屉轮询保留） */
+/** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
+    count 事件：列表加载完成后上报总条数（宿主「教学 N」徽章） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const emit = defineEmits<{ (e: 'count', total: number): void }>()
 
 interface WrapupSummary {
   topicSummary?: string
@@ -367,6 +377,8 @@ async function fetchRows(force = false): Promise<boolean> {
     rows.value = items.map((s: Record<string, unknown>) => mapRow(s))
     loadFailed.value = false
     markPageFetched('teaching-sessions')
+    /* 宿主域计数徽章（embedded 才消费；独立场景 emit 无监听者无副作用） */
+    emit('count', rows.value.length)
     return true
   } catch {
     loadFailed.value = true
@@ -473,7 +485,7 @@ function mapRow(s: Record<string, unknown>): Row {
 }
 
 /* 筛选 */
-const pill = ref<'all' | 'attention' | 'missing'>('all')
+const pill = ref<'all' | 'active' | 'attention' | 'missing'>('all')
 const keyword = ref('')
 const statusFilter = ref('')
 const dateFilter = ref('')
@@ -490,6 +502,7 @@ const tsColDefs = [
 const tsHiddenCols = ref<Set<string>>(new Set())
 const pills = [
   { id: 'all' as const, label: '全部' },
+  { id: 'active' as const, label: '进行中' },
   { id: 'attention' as const, label: '待关注' },
   { id: 'missing' as const, label: '缺总结' }
 ]
@@ -509,6 +522,7 @@ const statusOptions = [
 
 const filtered = computed(() => {
   let list = rows.value
+  if (pill.value === 'active') list = list.filter((r) => r.status === 'active')
   if (pill.value === 'attention') list = list.filter((r) => r.attention !== 'low')
   if (pill.value === 'missing') list = list.filter((r) => r.wrapupStatus === 'missing')
   if (statusFilter.value) {
@@ -669,6 +683,9 @@ function progressTitle(r: Row): string {
   if (p.totalMilestones > 0 && p.milestoneIndex > 0) return `阶段 ${p.milestoneIndex}/${p.totalMilestones} · 任务 ${p.taskIndex}/${p.totalTasks}`
   return `任务 ${p.taskIndex}/${p.totalTasks}`
 }
+
+/* 宿主刷新联动（学习会话合并宿主「刷新」按钮 → refreshNow） */
+defineExpose({ refreshNow })
 </script>
 
 <style scoped>

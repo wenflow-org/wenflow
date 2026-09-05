@@ -200,7 +200,7 @@ function normalize(p: Record<string, any>): PathCard {
       };
     }
     const phaseText = lc.phase === 'core'
-      ? '主结构生成中，一般 1 分钟内完成…'
+      ? '主结构生成中，一般 1-2 分钟内完成…'
       : `阶段任务准备中（${lc.completedStages ?? 0}/${lc.totalStages ?? '?'}）…`;
     return {
       id: p.id, title, desc, kind: 'generating', stages, stageDone: lc.completedStages ?? 0,

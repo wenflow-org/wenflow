@@ -7,6 +7,7 @@ export interface GoalUnderstanding {
   real_problem?: string;
   motivation?: string;
   urgency?: string;
+  background_experience?: string;
   background?: {
     current_level?: string;
     expected_time?: string;

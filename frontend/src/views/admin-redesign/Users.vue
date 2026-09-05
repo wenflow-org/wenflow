@@ -1,6 +1,6 @@
 <template>
   <div :class="embedded ? 'mk-page--fill u-embedded' : 'mk-page mk-page--fill'">
-    <div class="mk-status" :class="users.length ? 'mk-status--ok' : 'mk-status--muted'">
+    <div v-if="!embedded" class="mk-status" :class="users.length ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">用户</strong>
       <span class="mk-status__sep"></span>
@@ -43,6 +43,12 @@
           </select>
         </div>
         <div class="mk-card__head-right">
+          <button
+            v-if="embedded"
+            type="button"
+            class="mk-btn mk-btn--primary mk-btn--sm"
+            @click="openCreate"
+          >新建用户</button>
           <DataScopeToggle v-if="isLive && pill !== 'deleted'" v-model="includeTest" />
           <MkCols
             :col-defs="ulColDefs"
@@ -223,8 +229,10 @@ import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
 import { isTestAccountUser, levelFromXp, levelLabel } from './learner-profile'
 
-/** 嵌入模式：作为「用户与学习者」页「账号管理」tab 渲染（仅去掉外层壳，状态条/列表/弹窗保留） */
+/** 嵌入模式：作为「用户与学习者」页「账号管理」tab 渲染（仅去掉外层壳，状态条/列表/弹窗保留）。
+    count 事件：用户总量就绪后上报（宿主「用户 N」徽章；embedded 才消费） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const emit = defineEmits<{ (e: 'count', total: number): void }>()
 
 /** 与后端 validatePasswordRule 一致：≥8 位且同时包含字母和数字 */
 const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
@@ -355,6 +363,12 @@ const loadFailed = computed(
 function retryLoad() {
   void loadLiveData()
 }
+/* 宿主域计数徽章（embedded 才消费）：用户总量变化即上报（live 全局单源） */
+watch(liveUsersTotal, (n) => {
+  emit('count', Number(n || 0))
+}, { immediate: true })
+/* 宿主刷新联动（用户与学习者合并宿主「刷新」按钮 → 重拉 live 用户域） */
+defineExpose({ refresh: () => { void loadLiveData() } })
 const pills = [
   { id: 'all', label: '全部' },
   { id: 'admin', label: '管理员' },
@@ -394,7 +408,7 @@ const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => createOpen.value), panelRef)
 useMaskClose(maskRef, () => { createOpen.value = false })
 
-/* 命令面板快捷动作：直达并打开新建弹窗 */
+/* intent 快捷动作：直达并打开新建弹窗 */
 watch(
   () => intent.quickAction,
   (a) => {

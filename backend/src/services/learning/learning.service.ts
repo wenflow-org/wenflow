@@ -50,6 +50,7 @@ import { stageDesignerDefinition } from '../../skills/stage-designer';
 import { pathAgentDefinition } from '../../skills/path-planning';
 import { pathReviewerDefinition } from '../../skills/path-reviewer';
 import { kcMapperDefinition } from '../../skills/kc-mapper';
+import { sessionFinalizationService } from '../ai-teaching/SessionFinalizationService';
 
 interface CreateGoalData {
   userId: string;
@@ -106,6 +107,8 @@ interface GeneratePathData {
       sourcePathId?: string;
       learnerReplanProjection?: any;
       freezeCompletedTaskIds?: string[];
+      /** 显式整条重建（用户主动选择「重新来一遍」）：放行 replace-path 的已完成任务保护 */
+      forceReplace?: boolean;
       /** path-reviewer 评审失败后的重规划指令（自动重规划闭环注入，非用户侧） */
       reviewerFeedback?: string;
     };
@@ -122,8 +125,13 @@ interface PathReplanRequest {
   reason?: string;
   mode?: 'new_version' | 'overwrite';
   stageNumber?: number;
+  /** 后续阶段重排：从该未学阶段（含）起连续重排到末尾。缺省 = 当前活动阶段（单阶段，原行为）。 */
+  fromStageNumber?: number;
   evidence?: Record<string, any>;
   requireConfirmation?: boolean;
+  /** 预览模式：只产出诊断建议（signal/projection）并返回 awaiting-confirmation，
+   *  无论 shouldSuggest 与否都不执行；供「AI 诊断 → 用户确认后再调整」的两段式交互使用。 */
+  previewOnly?: boolean;
 }
 
 const STALE_GENERATING_PATH_MINUTES = 15;
@@ -335,6 +343,50 @@ interface PathStageTraceItem {
   input: Record<string, any> | null;
   output: Record<string, any> | null;
   calledAt: string;
+}
+
+/**
+ * 以任务分钟汇总归一「预计投入」展示时长（唯一用户可逐条核对的真实来源）：
+ * - path.estimatedHours / milestone.estimatedHours 在骨架期由 path-planning LLM 粗估，
+ *   与 stage-designer 逐任务产出的 estimatedMinutes 系统性脱节（无生成后校准），
+ *   长期出现「路径 40h 但任务合计 12h」之类的偏差。
+ * - 展示一律改由任务分钟汇总推导：阶段小时 = Σ任务分钟/60 向上取整；路径小时 = Σ阶段小时。
+ * - 无任务或生成中（骨架期）时保留 LLM 原值（此时任务分钟尚不存在，原估是唯一参考）。
+ * 原始 LLM 估算保留在 estimatedHoursRaw 供内部评估/诊断使用。
+ */
+export function normalizePathHoursFromTasks(
+  path: { estimatedHours?: number | null; milestones?: Array<Record<string, any>> }
+): { estimatedHours: number | null; estimatedHoursRaw: number | null; milestones: Array<Record<string, any>> } {
+  const milestones = Array.isArray(path.milestones) ? path.milestones : [];
+  const hasAnyTask = milestones.some((m: any) => Array.isArray(m?.subtasks) && m.subtasks.length > 0);
+
+  // 阶段级归一：任务分钟 → 整小时（ceil）。无任务的阶段保留 LLM 原值。
+  const normalizedMilestones = milestones.map((m: any) => {
+    const tasks = Array.isArray(m?.subtasks) ? m.subtasks : [];
+    const rawHours = typeof m?.estimatedHours === 'number' && m.estimatedHours > 0 ? m.estimatedHours : null;
+    if (tasks.length === 0) {
+      return { ...m, estimatedHours: rawHours, estimatedHoursRaw: rawHours };
+    }
+    const totalMinutes = tasks.reduce((sum: number, t: any) => sum + (Number(t?.estimatedMinutes) || 0), 0);
+    const normalized = Math.max(1, Math.ceil(totalMinutes / 60));
+    return { ...m, estimatedHours: normalized, estimatedHoursRaw: rawHours };
+  });
+
+  // 路径级归一：Σ阶段归一小时（全任务阶段）或回退原值
+  const allTasks = normalizedMilestones.flatMap((m: any) => m?.subtasks || []);
+  const rawPathHours = typeof path.estimatedHours === 'number' && path.estimatedHours > 0 ? path.estimatedHours : null;
+  if (allTasks.length === 0) {
+    return { estimatedHours: rawPathHours, estimatedHoursRaw: rawPathHours, milestones: normalizedMilestones };
+  }
+  const normalizedPathHours = normalizedMilestones.reduce(
+    (sum: number, m: any) => sum + (typeof m.estimatedHours === 'number' ? m.estimatedHours : 0),
+    0
+  );
+  return {
+    estimatedHours: Math.max(1, normalizedPathHours),
+    estimatedHoursRaw: rawPathHours,
+    milestones: normalizedMilestones,
+  };
 }
 
 function parsePathSummary(raw: string | null): string | null {
@@ -2688,7 +2740,9 @@ class LearningService {
           data: { updatedAt: new Date() }
         });
         if (lockedPath.count !== 1) throw new Error('GENERATION_RUN_FENCED');
-        await assertPathMutationSafe(tx, data.existingPathId, 'replace-path');
+        await assertPathMutationSafe(tx, data.existingPathId, 'replace-path', {
+          allowCompleted: (data.userProfile as any)?.replan?.forceReplace === true,
+        });
         const pathTitle = cleanPathTitle(analysis.pathName || `${analysis.subject || '个性化'}学习路径`);
         path = await tx.learning_paths.update({
           where: { id: data.existingPathId },
@@ -3134,6 +3188,10 @@ class LearningService {
           await tx.subtasks.deleteMany({ where: { milestoneId: milestone.id } });
           const stageOutput = stageDesignOutputs.find((item) => item.milestoneId === milestone.id);
           const stageTasks = stageOutput?.subtasks || [];
+          // 阶段估时回写：以本阶段任务分钟汇总为准（ceil 到整小时），供各处展示与路径汇总使用
+          const stageTotalMinutes = (stageTasks as Array<{ estimatedMinutes?: number }>)
+            .reduce((sum, t) => sum + (Number(t?.estimatedMinutes) || 0), 0);
+          const stageNormalizedHours = stageTasks.length > 0 ? Math.max(1, Math.ceil(stageTotalMinutes / 60)) : null;
 
           for (let j = 0; j < stageTasks.length; j++) {
             const taskData = stageTasks[j];
@@ -3174,9 +3232,28 @@ class LearningService {
           }
         }
 
+        // 阶段/路径估时回写：任务分钟汇总（ceil 整小时）覆盖骨架期 LLM 粗估
+        let pathNormalizedHours = 0;
+        for (const milestone of learningPath.milestones) {
+          const stageOutput = stageDesignOutputs.find((item) => item.milestoneId === milestone.id);
+          const stageTasks = stageOutput?.subtasks || [];
+          const stageTotalMinutes = (stageTasks as Array<{ estimatedMinutes?: number }>)
+            .reduce((sum, t) => sum + (Number(t?.estimatedMinutes) || 0), 0);
+          const stageHours = stageTasks.length > 0 ? Math.max(1, Math.ceil(stageTotalMinutes / 60)) : null;
+          if (stageHours !== null) {
+            pathNormalizedHours += stageHours;
+            await tx.milestones.update({
+              where: { id: milestone.id },
+              data: { estimatedHours: stageHours, updatedAt: new Date() }
+            });
+          }
+        }
+        const pathHoursToWrite = pathNormalizedHours > 0 ? pathNormalizedHours : undefined;
+
         await tx.learning_paths.update({
           where: { id: learningPath.id },
           data: {
+            ...(pathHoursToWrite !== undefined ? { estimatedHours: pathHoursToWrite } : {}),
             aiPromptTemplate: JSON.stringify({
               ...parsedTemplate,
               stageDesigns: stageDesignRawOutputs,
@@ -3763,12 +3840,17 @@ const learningPath = await prisma.learning_paths.findUnique({
       const processDetail = this.buildPathProcessDetail(pathWithActualMinutes);
       const stageTraces = await this.getPathStageTraces(path.id, processDetail.sourceConversationId || null);
 
+      // 「预计投入」以任务分钟汇总为准（LLM 骨架期粗估仅作内部参考，见 normalizePathHoursFromTasks 说明）
+      const normalized = normalizePathHoursFromTasks(pathWithActualMinutes);
+
       return {
         ...pathWithActualMinutes,
+        estimatedHours: normalized.estimatedHours,
+        estimatedHoursRaw: normalized.estimatedHoursRaw,
         summary: parsePathSummary(path.aiPromptTemplate),
         generationStatus: accessState.generationStatus,
         generationRun: buildGenerationRunStatus(activeRun),
-        sceneSummary: this.getPathSceneSummary(path.aiPromptTemplate, pathWithActualMinutes.milestones),
+        sceneSummary: this.getPathSceneSummary(path.aiPromptTemplate, normalized.milestones),
         cognitiveDesign: parsePathCognitiveDesign(path.aiPromptTemplate),
         adjustmentPolicy: parsePathAdjustmentPolicy(path.aiPromptTemplate),
         adjustmentEvidence: parsePathAdjustmentEvidence(path.aiPromptTemplate),
@@ -3784,8 +3866,8 @@ const learningPath = await prisma.learning_paths.findUnique({
           triggerSource: path.replanTriggerSource || null,
           reason: path.replanReason || null,
         },
-        milestones: pathWithActualMinutes.milestones,
-        stages: pathWithActualMinutes.milestones,
+        milestones: normalized.milestones,
+        stages: normalized.milestones,
         totalStages: path.totalMilestones
       };
     } catch (error) {
@@ -3822,7 +3904,13 @@ const learningPath = await prisma.learning_paths.findUnique({
 
     const run = path.activeGenerationRun;
     const legacy = parsePathGenerationStatus(path.aiPromptTemplate);
-    const totalStages = Math.max(path.totalMilestones || 0, path.milestones.length, run?.totalItems || 0);
+    // 活动 stageDesign run 的工作量以 run.totalItems 为准（整路径生成 = 全部阶段；
+    // 后续阶段重排 = 被重排的子集，仅展示该部分进度）；
+    // 无活动 run（core 完成等待/历史状态）时退回路径阶段数。
+    const runTotal = (run?.phase === 'stageDesign' || !run) ? (run?.totalItems || 0) : 0;
+    const totalStages = runTotal > 0
+      ? runTotal
+      : Math.max(path.totalMilestones || 0, path.milestones.length, 0);
     const taskCount = path.milestones.reduce((sum, milestone) => sum + milestone.subtasks.length, 0);
     const accessState = this.getPathLearningAccessState(
       path.status,
@@ -3929,13 +4017,18 @@ const learningPath = await prisma.learning_paths.findUnique({
           totalTaskCount
         );
 
+        // 「预计投入」以任务分钟汇总为准（与详情页口径一致）
+        const normalized = normalizePathHoursFromTasks(path);
+
         return {
           ...path,
           name: path.title,
+          estimatedHours: normalized.estimatedHours,
+          estimatedHoursRaw: normalized.estimatedHoursRaw,
           summary: parsePathSummary(path.aiPromptTemplate),
           generationStatus: accessState.generationStatus,
           generationRun: buildGenerationRunStatus(path.activeGenerationRun),
-          sceneSummary: this.getPathSceneSummary(path.aiPromptTemplate, path.milestones),
+          sceneSummary: this.getPathSceneSummary(path.aiPromptTemplate, normalized.milestones),
           cognitiveDesign: parsePathCognitiveDesign(path.aiPromptTemplate),
           adjustmentPolicy: parsePathAdjustmentPolicy(path.aiPromptTemplate),
           adjustmentEvidence: parsePathAdjustmentEvidence(path.aiPromptTemplate),
@@ -4109,7 +4202,8 @@ const learningPath = await prisma.learning_paths.findUnique({
 
   async claimPathCoreGeneration(
     pathId: string,
-    expectedActiveGenerationRunId?: string | null
+    expectedActiveGenerationRunId?: string | null,
+    options: { allowCompleted?: boolean } = {}
   ): Promise<string> {
     const run = await this.createAndClaimGenerationRun(
       pathId,
@@ -4117,7 +4211,8 @@ const learningPath = await prisma.learning_paths.findUnique({
       'core',
       0,
       'replace-path',
-      expectedActiveGenerationRunId
+      expectedActiveGenerationRunId,
+      options.allowCompleted ? { allowCompleted: true } : {}
     );
     return run.id;
   }
@@ -4262,9 +4357,13 @@ const learningPath = await prisma.learning_paths.findUnique({
     data: PathReplanRequest,
     learnerReplanProjection: any,
     runId: string,
-    snapshot: PathReplanSnapshot
+    snapshot: PathReplanSnapshot,
+    options: {
+      skipFinalizeRun?: boolean;
+      eventRunTotal?: number;
+    } = {}
   ) {
-    const parsedTemplate = this.parsePathPromptTemplate(path.aiPromptTemplate || null);
+    const { skipFinalizeRun = false, eventRunTotal = 1 } = options;    const parsedTemplate = this.parsePathPromptTemplate(path.aiPromptTemplate || null);
     const pathCognitiveDesign = parsePathCognitiveDesign(path.aiPromptTemplate || null);
     const normalizedInput = getSceneFramingNormalizedInput(parsedTemplate?.sceneFraming)
       || resolvePersistedNormalizedInput(parsedTemplate)
@@ -4311,7 +4410,12 @@ const learningPath = await prisma.learning_paths.findUnique({
     await prisma.$transaction(async (tx) => {
       await assertGenerationRunFence(tx, path.id, runId);
       await claimPathReplanSnapshot(tx, snapshot);
-      await assertPathMutationSafe(tx, path.id, 'replan-stage', { milestoneId: milestone.id });
+      await assertPathMutationSafe(tx, path.id, 'replan-stage', {
+        milestoneId: milestone.id,
+        ...(Array.isArray((data.evidence as any)?.clearedSessionIds) && (data.evidence as any).clearedSessionIds.length
+          ? { ignoreCompletedSessionIds: (data.evidence as any).clearedSessionIds as string[] }
+          : {})
+      });
       await tx.subtasks.deleteMany({
         where: {
           milestoneId: milestone.id,
@@ -4356,11 +4460,32 @@ const learningPath = await prisma.learning_paths.findUnique({
         });
       }
 
+      // 阶段/路径估时回写：本阶段任务分钟汇总（ceil 整小时）；路径=Σ各阶段（含未重设计阶段既有任务）
+      const redesignTotalMinutes = (newTasks as Array<{ estimatedMinutes?: number }>)
+        .reduce((sum, t) => sum + (Number(t?.estimatedMinutes) || 0), 0);
+      // 保留的已完成任务也计入本阶段时长
+      const completedMinutes = completedTasks.reduce((sum: number, t: any) => sum + (Number(t?.estimatedMinutes) || 0), 0);
+      const stageNewHours = newTasks.length > 0 ? Math.max(1, Math.ceil((redesignTotalMinutes + completedMinutes) / 60)) : null;
+      if (stageNewHours !== null) {
+        await tx.milestones.update({
+          where: { id: milestone.id },
+          data: { estimatedHours: stageNewHours, updatedAt: new Date() }
+        });
+      }
+      // 路径汇总：以全部阶段任务分钟真实汇总（含重设计阶段新任务 + 其它阶段既有任务）
+      const allPathTasks = await tx.subtasks.findMany({
+        where: { milestones: { learningPathId: path.id } },
+        select: { estimatedMinutes: true },
+      });
+      const pathTotalMinutes = allPathTasks.reduce((sum: number, t: any) => sum + (Number(t?.estimatedMinutes) || 0), 0);
+      const pathHours = allPathTasks.length > 0 ? Math.max(1, Math.ceil(pathTotalMinutes / 60)) : 0;
+
       await tx.learning_paths.update({
         where: { id: path.id },
         data: {
           // 断链修复 P0-4：真实 replan 流补写 replan 元数据（此前 LearningDecisionFeedService
           // 依赖 replanReason 非空，而真实 replan 从不写 → 决策卡不出现）
+          ...(pathHours > 0 ? { estimatedHours: pathHours } : {}),
           replanMode: data.mode || 'overwrite',
           replanTriggerSource: data.triggerSource || 'api',
           replanReason: data.reason || null,
@@ -4377,6 +4502,7 @@ const learningPath = await prisma.learning_paths.findUnique({
                 },
                 redesignedAt: new Date().toISOString(),
                 redesignReason: data.reason || null,
+                ...(eventRunTotal > 1 ? { rangeDesign: true } : {}),
               }
             },
             _generation: {
@@ -4390,21 +4516,23 @@ const learningPath = await prisma.learning_paths.findUnique({
           updatedAt: new Date(),
         }
       });
-      await tx.path_generation_runs.update({
-        where: { id: runId },
-        data: {
-          status: 'succeeded',
-          retryAllowed: false,
-          totalItems: 1,
-          completedItems: 1,
-          progress: 100,
-          heartbeatAt: new Date(),
-          leaseExpiresAt: new Date(),
-          finishedAt: new Date(),
-          errorCode: null,
-          errorMessage: null
-        }
-      });
+      if (!skipFinalizeRun) {
+        await tx.path_generation_runs.update({
+          where: { id: runId },
+          data: {
+            status: 'succeeded',
+            retryAllowed: false,
+            totalItems: eventRunTotal,
+            completedItems: eventRunTotal,
+            progress: 100,
+            heartbeatAt: new Date(),
+            leaseExpiresAt: new Date(),
+            finishedAt: new Date(),
+            errorCode: null,
+            errorMessage: null
+          }
+        });
+      }
       await enqueueDomainEvent(tx, createDomainEvent({
         type: 'path:adjusted',
         aggregateType: 'path',
@@ -4429,6 +4557,175 @@ const learningPath = await prisma.learning_paths.findUnique({
       redesignedTaskCount: newTasks.length,
       preservedCompletedTaskCount: completedTasks.length,
     };
+  }
+
+  /** 多阶段重排：解析目标阶段（含起始阶段的已学冻结与进行中拦截） */
+  private resolveDownstreamReplanTargets(
+    path: any,
+    requestedFromStage?: number | null
+  ): any[] {
+    const sorted = [...(path.milestones || [])]
+      .sort((a: any, b: any) => a.stageNumber - b.stageNumber);
+    const active = sorted.find((m: any) => m.status !== 'completed');
+    if (!active) return [];
+    if (requestedFromStage !== undefined && requestedFromStage !== null) {
+      const from = sorted.find((m: any) => m.stageNumber === requestedFromStage);
+      if (!from) throw new Error('指定调整的起始阶段不存在');
+      if (from.status === 'completed') throw new Error('指定调整的起始阶段已学完，请选择未开始学习的阶段');
+      return sorted.filter((m: any) => m.stageNumber >= from.stageNumber && m.status !== 'completed');
+    }
+    // 缺省 = 当前活动阶段（含）
+    return sorted.filter((m: any) => m.stageNumber >= active.stageNumber && m.status !== 'completed');
+  }
+
+  /** 多阶段重排驱动：串行逐阶段重设计任务，进度回写 heartbeat（前台轮询可见） */
+  private async redesignMilestoneRange(
+    path: any,
+    milestones: any[],
+    data: PathReplanRequest,
+    learnerReplanProjection: any,
+    runId: string
+  ) {
+    let redesignedStages = 0;
+    let redesignedTaskCount = 0;
+    let preservedCompletedTaskCount = 0;
+
+    for (let index = 0; index < milestones.length; index += 1) {
+      const milestone = milestones[index];
+      // 每个阶段执行前重读该阶段最新状态（前一阶段的写入会更新其 updatedAt；自身仅受外部写影响）
+      const freshMilestone = await prisma.milestones.findUnique({
+        where: { id: milestone.id },
+        include: { subtasks: { orderBy: { order: 'asc' } } }
+      });
+      if (!freshMilestone) throw new Error('调整目标阶段不存在');
+      const result = await this.redesignMilestoneTasks(
+        path,
+        freshMilestone,
+        { ...data, evidence: {
+            ...(data.evidence || {}),
+            downstreamRange: {
+              fromStageNumber: milestones[0].stageNumber,
+              total: milestones.length,
+              index: index + 1,
+            },
+          } },
+        learnerReplanProjection,
+        runId,
+        buildPathReplanSnapshot(freshMilestone),
+        {
+          skipFinalizeRun: true,
+          eventRunTotal: milestones.length,
+        }
+      );
+      redesignedStages += 1;
+      redesignedTaskCount += result.redesignedTaskCount;
+      preservedCompletedTaskCount += result.preservedCompletedTaskCount;
+      await this.heartbeatGenerationRun(
+        path.id,
+        runId,
+        {
+          totalItems: milestones.length,
+          completedItems: redesignedStages,
+          progress: Math.round((redesignedStages / milestones.length) * 100),
+        }
+      );
+    }
+    return { redesignedStages, redesignedTaskCount, preservedCompletedTaskCount };
+  }
+
+  /** 多阶段重排后台执行体：预检 → 逐阶段重设计 → 收尾 run（heartbeat 由 interval 维持） */
+  private async executeDownstreamReplan(context: {
+    pathId: string;
+    userId: string;
+    fromStageNumber: number;
+    stageCount: number;
+    data: PathReplanRequest;
+    learnerReplanProjection: any;
+    runId: string;
+  }): Promise<void> {
+    const { pathId, userId, fromStageNumber, stageCount, data, learnerReplanProjection, runId } = context;
+    const stopHeartbeat = this.startGenerationHeartbeat(pathId, runId);
+    try {
+      // 执行期重读路径（请求期快照可能已被其它后台写触碰；以执行期一致状态为准）
+      const freshPath = await prisma.learning_paths.findUnique({
+        where: { id: pathId },
+        include: { milestones: { include: { subtasks: true } } }
+      });
+      if (!freshPath) throw new Error('学习路径不存在');
+      const milestones = this.resolveDownstreamReplanTargets(freshPath, fromStageNumber);
+      if (milestones.length !== stageCount) {
+        throw new PathMutationConflictError(
+          '调整范围内阶段状态已变化，请刷新后重新调整',
+          'PATH_REPLAN_RANGE_CHANGED'
+        );
+      }
+
+      // 预检：无进行中任务/未结束课堂（提交期逐阶段各自乐观锁 claim + 安全检查）
+      await prisma.$transaction(async (tx) => {
+        await assertGenerationRunFence(tx, pathId, runId);
+        await assertPathMutationSafe(tx, pathId, 'replan-stage', {
+          milestoneIds: milestones.map((m: any) => m.id),
+          ...(Array.isArray((data.evidence as any)?.clearedSessionIds) && (data.evidence as any).clearedSessionIds.length
+            ? { ignoreCompletedSessionIds: (data.evidence as any).clearedSessionIds as string[] }
+            : {})
+        });
+      });
+
+      await this.redesignMilestoneRange(
+        freshPath,
+        milestones,
+        data,
+        learnerReplanProjection,
+        runId
+      );
+
+      // 收尾：run 成功落库（阶段任务已逐阶段写入）
+      await prisma.$transaction(async (tx) => {
+        await assertGenerationRunFence(tx, pathId, runId);
+        await tx.path_generation_runs.update({
+          where: { id: runId },
+          data: {
+            status: 'succeeded',
+            retryAllowed: false,
+            totalItems: milestones.length,
+            completedItems: milestones.length,
+            progress: 100,
+            heartbeatAt: new Date(),
+            leaseExpiresAt: new Date(),
+            finishedAt: new Date(),
+            errorCode: null,
+            errorMessage: null
+          }
+        });
+      });
+    } catch (error) {
+      if (isPathMutationConflictError(error)) {
+        await this.restorePathAfterMutationConflict(pathId, runId, error);
+        throw error;
+      }
+      try {
+        await this.updatePathGenerationStatus(pathId, {
+          stageDesign: 'failed',
+          lastError: error instanceof Error ? error.message : String(error),
+          triggerSource: data.triggerSource || 'api',
+          updatedAt: new Date().toISOString()
+        }, runId);
+        await this.failGenerationRun(
+          pathId,
+          runId,
+          error,
+          error instanceof Error && error.message.includes('EMPTY_TASKS')
+            ? 'PATH_STAGE_DESIGN_ZERO_TASKS'
+            : 'PATH_ENRICHMENT_FAILED',
+          'stageDesign'
+        );
+      } catch (fenceError) {
+        if (!(fenceError instanceof Error) || fenceError.message !== 'GENERATION_RUN_FENCED') throw fenceError;
+      }
+      throw error;
+    } finally {
+      stopHeartbeat();
+    }
   }
 
   async requestPathReplan(data: PathReplanRequest) {
@@ -4471,17 +4768,46 @@ const learningPath = await prisma.learning_paths.findUnique({
     });
     const learnerReplanProjection = learnerProjectionService.toReplanProjection(learnerSnapshot);
     const replanSignal = learnerSnapshot.replanSignal;
-    const targetMilestone = this.resolveStageReplanTarget(path, data.stageNumber || null);
+
+    // 后续阶段重排（多阶段）：显式指定 fromStageNumber 时触发
+    const downstreamTargets = data.fromStageNumber !== undefined && data.fromStageNumber !== null
+      ? this.resolveDownstreamReplanTargets(path, data.fromStageNumber)
+      : null;
+
+    const targetMilestone = downstreamTargets && downstreamTargets.length > 0
+      ? downstreamTargets[0]
+      : this.resolveStageReplanTarget(path, data.stageNumber || null);
     const replanSnapshot = targetMilestone ? buildPathReplanSnapshot(targetMilestone) : null;
 
     if (!targetMilestone || !replanSnapshot) {
+      if (data.previewOnly) {
+        return {
+          enabled: false,
+          status: 'no-signal',
+          signal: { shouldSuggest: false, recommendation: 'keep', rationale: '当前路径没有可重设计的阶段。' },
+          request: {
+            pathId: data.pathId,
+            userId: data.userId,
+            triggerSource,
+            mode,
+            requestedMode,
+            stageNumber: null,
+            fromStageNumber: data.fromStageNumber ?? null,
+            reason: data.reason || '',
+          },
+        };
+      }
       throw new Error('当前路径没有可重设计的阶段');
     }
 
-    if (replanSignal?.shouldSuggest && data.requireConfirmation !== false) {
+    if (data.previewOnly || (replanSignal?.shouldSuggest && data.requireConfirmation !== false)) {
+      // 预览模式：无论是否建议调整都返回诊断（keep 也展示「无需调整」），不执行
+      // 常规模式：有建议且需确认时先返回 awaiting-confirmation
       return {
         enabled: false,
-        status: 'awaiting-confirmation',
+        status: replanSignal?.shouldSuggest || data.previewOnly
+          ? 'awaiting-confirmation'
+          : 'no-signal',
         signal: replanSignal,
         request: {
           pathId: data.pathId,
@@ -4490,7 +4816,8 @@ const learningPath = await prisma.learning_paths.findUnique({
           mode,
           requestedMode,
           stageNumber: targetMilestone?.stageNumber || null,
-          reason: data.reason || replanSignal.rationale || '',
+          fromStageNumber: data.fromStageNumber ?? null,
+          reason: data.reason || replanSignal?.rationale || '',
           evidence: {
             ...(data.evidence || {}),
             learnerReplanProjection,
@@ -4506,6 +4833,102 @@ const learningPath = await prisma.learning_paths.findUnique({
     const strugglingConcepts = learnerReplanProjection?.mastery.strugglingConcepts || [];
     const prerequisiteGaps = learnerReplanProjection?.risk.prerequisiteGaps?.map((item) => item.label) || [];
 
+    // ---- 多阶段重排（后续阶段，保留已学）：后台执行，前台轮询 lifecycle ----
+    if (downstreamTargets && downstreamTargets.length > 0) {
+      const rangeMilestones = downstreamTargets;
+      const rangeRun = await this.createAndClaimGenerationRun(
+        data.pathId,
+        'stageDesign',
+        'stageDesign',
+        rangeMilestones.length,
+        'replan-stage',
+        path.activeGenerationRunId,
+        {
+          milestoneIds: rangeMilestones.map((m: any) => m.id),
+          ...(Array.isArray((data.evidence as any)?.clearedSessionIds) && (data.evidence as any).clearedSessionIds.length
+            ? { ignoreCompletedSessionIds: (data.evidence as any).clearedSessionIds as string[] }
+            : {})
+        }
+      );
+
+      await this.updatePathGenerationStatus(data.pathId, {
+        stageDesign: 'processing',
+        lastError: null,
+        triggerSource,
+        updatedAt: new Date().toISOString()
+      }, rangeRun.id);
+
+      const rangeContext = {
+        pathId: data.pathId,
+        userId: data.userId,
+        fromStageNumber: rangeMilestones[0].stageNumber,
+        stageCount: rangeMilestones.length,
+        data,
+        learnerReplanProjection: {
+          ...learnerReplanProjection,
+          summary: {
+            currentMilestoneTitle,
+            stableConcepts,
+            fragileConcepts,
+            strugglingConcepts,
+            prerequisiteGaps,
+            freezeCompletedTaskIds: completedTaskIds,
+            downstreamRange: true,
+          },
+        },
+        runId: rangeRun.id,
+      };
+      runBackgroundTask(
+        'learning.path.downstream-replan',
+        () => this.executeDownstreamReplan(rangeContext as any),
+        { pathId: data.pathId, runId: rangeRun.id, userId: data.userId }
+      );
+
+      dashboardGuidanceSnapshotService.refreshInBackground(data.userId, 'path-replanned');
+
+      return {
+        enabled: true,
+        status: 'accepted',
+        policy: {
+          immutableLearned: true,
+          freezeCompletedTaskIds: completedTaskIds,
+          defaultMode: 'overwrite',
+          downstream: {
+            fromStageNumber: rangeMilestones[0].stageNumber,
+            stageCount: rangeMilestones.length,
+          }
+        },
+        request: {
+          pathId: data.pathId,
+          userId: data.userId,
+          triggerSource,
+          mode,
+          requestedMode,
+          stageNumber: rangeMilestones[0].stageNumber,
+          fromStageNumber: rangeMilestones[0].stageNumber,
+          reason: data.reason || '',
+          evidence: {
+            ...(data.evidence || {}),
+            learnerReplanProjection,
+            replanSignal,
+            downstreamRange: {
+              fromStageNumber: rangeMilestones[0].stageNumber,
+              stageCount: rangeMilestones.length,
+            },
+          }
+        },
+        result: {
+          pathId: data.pathId,
+          runId: rangeRun.id,
+          fromStageNumber: rangeMilestones[0].stageNumber,
+          stageCount: rangeMilestones.length,
+          mode,
+          requestedMode,
+        }
+      };
+    }
+
+    // ---- 单阶段重排（当前活动阶段，原行为）----
     const run = await this.createAndClaimGenerationRun(
       data.pathId,
       'stageDesign',
@@ -4513,7 +4936,12 @@ const learningPath = await prisma.learning_paths.findUnique({
       1,
       'replan-stage',
       path.activeGenerationRunId,
-      { milestoneId: targetMilestone.id }
+      {
+        milestoneId: targetMilestone.id,
+        ...(Array.isArray((data.evidence as any)?.clearedSessionIds) && (data.evidence as any).clearedSessionIds.length
+          ? { ignoreCompletedSessionIds: (data.evidence as any).clearedSessionIds as string[] }
+          : {})
+      }
     );
     const stopHeartbeat = this.startGenerationHeartbeat(data.pathId, run.id);
     let redesignResult;

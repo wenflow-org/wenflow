@@ -16,12 +16,6 @@
           <span aria-hidden="true">{{ collapsed ? '»' : '«' }}</span>
         </button>
       </div>
-      <!-- 命令面板入口（原顶栏「命令面板 Ctrl+K」迁入侧栏，C5 顶部搜索条形态；折叠态仅放大镜） -->
-      <button type="button" class="mshell__search" @click="$emit('palette')">
-        <span class="mshell__search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
-        <span class="mshell__search-hint">命令面板</span>
-        <span class="mshell__kbd">{{ kbdMod }}K</span>
-      </button>
       <nav class="mshell__nav">
         <!-- 置顶独立入口（D5）：驾驶舱类页面渲染在分组上方，无组标题 -->
         <div v-if="pinnedScenes.length" class="mshell__pinned">
@@ -91,10 +85,10 @@
             :aria-label="liveLoading ? '刷新中…' : '刷新真实数据'"
             @click="refreshData"
           >
-            <span class="mshell__refresh-icon" :class="{ 'is-spinning': liveLoading }"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></span>
+            <span class="mshell__refresh-icon" :class="{ 'is-spinning': liveLoading }"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></span>
           </button>
           <button type="button" class="mshell__tool" title="运营术语表 / 这是什么" aria-label="运营术语表 / 这是什么" @click="$emit('glossary')">
-            <span class="mshell__tool-icon mshell__tool-icon--q">?</span>
+            <span class="mshell__tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M9.6 9.2a2.5 2.5 0 0 1 4.9.7c0 1.6-2.4 2.2-2.4 3.6"/><path d="M12 17h.01"/></svg></span>
           </button>
           <template v-if="release">
             <button
@@ -104,7 +98,11 @@
               :aria-label="density === 'compact' ? '切换到标准密度' : '切换到紧凑密度'"
               @click="toggleDensity"
             >
-              <span class="mshell__tool-icon" aria-hidden="true">{{ density === 'compact' ? '⊟' : '⊞' }}</span>
+              <span class="mshell__tool-icon" aria-hidden="true">
+                <!-- 标准密度：四条均匀行线；紧凑密度：上两行收紧、下两行疏（形似压缩） -->
+                <svg v-if="density !== 'compact'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6.5h16"/><path d="M4 11h16"/><path d="M4 15.5h16"/><path d="M4 20h16"/></svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5.5h16"/><path d="M4 9.5h16"/><path d="M4 16h16"/><path d="M4 20h16"/></svg>
+              </span>
             </button>
             <button
               type="button"
@@ -113,7 +111,11 @@
               :aria-label="theme === 'dark' ? '切换到浅色模式' : '切换到暗色模式'"
               @click="toggleTheme"
             >
-              <span class="mshell__tool-icon" aria-hidden="true">{{ theme === 'dark' ? '☀' : '☾' }}</span>
+              <span class="mshell__tool-icon" aria-hidden="true">
+                <!-- 当前暗色 → 点按切浅色（显示太阳）；当前浅色 → 点按切暗色（显示月亮） -->
+                <svg v-if="theme === 'dark'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.8v2.4"/><path d="M12 18.8v2.4"/><path d="M4.9 4.9l1.7 1.7"/><path d="M17.4 17.4l1.7 1.7"/><path d="M2.8 12h2.4"/><path d="M18.8 12h2.4"/><path d="M4.9 19.1l1.7-1.7"/><path d="M17.4 6.6l1.7-1.7"/></svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/></svg>
+              </span>
             </button>
           </template>
         </div>
@@ -160,7 +162,7 @@ import { readTheme, writeTheme, applyDocumentTheme } from '@/utils/theme'
 import { version as appVersion } from '../../../package.json'
 
 const props = defineProps<{ current: string; crumb?: string; crumbTitle?: string; release?: boolean }>()
-const emit = defineEmits<{ (e: 'navigate', id: string): void; (e: 'palette'): void; (e: 'glossary'): void }>()
+const emit = defineEmits<{ (e: 'navigate', id: string): void; (e: 'glossary'): void }>()
 
 /* 滚动修复 #9：回到顶部按钮（内容区滚动 >2 屏时出现）；
    滚动容器已从 window 收敛到 .mshell__content（应用式布局：侧栏固定，右侧独立滚动） */
@@ -180,8 +182,6 @@ onMounted(() => {
 onBeforeUnmount(() => contentEl.value?.removeEventListener('scroll', onScroll))
 
 const version = appVersion
-/** 按平台显示快捷键修饰符：Mac 显示 ⌘，Windows/Linux 显示 Ctrl */
-const kbdMod = computed(() => /Mac|iPhone|iPod|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl + ')
 
 /* D1 暗色模式：统一走 utils/theme.ts SSOT（readTheme/writeTheme）。
    背景：主题 key 已收敛到 v2_theme（用户侧 ThemeToggle 原 key）+ wenflow-theme 兼容 key，
@@ -379,7 +379,7 @@ watch(
   },
   { immediate: true }
 )
-/* 告警平息口径：进入告警场景即视为已读（侧栏 go() 之外，TabBar/命令面板/深链直达也应平息；
+/* 告警平息口径：进入告警场景即视为已读（侧栏 go() 之外，TabBar/深链直达也应平息；
    用 props.current watch 而非仅 Shell 点击，保证各导航路径一致） */
 watch(
   () => props.current,
@@ -425,7 +425,7 @@ function groupBadgeTitle(title: string): string {
   border-right: 1px solid #e1e8f2;
   padding: 14px 10px 10px;
   gap: 14px;
-  /* 高于抽屉遮罩(200)、低于命令面板(300)：抽屉打开时侧栏仍可点击，
+  /* 高于抽屉遮罩(200)：抽屉打开时侧栏仍可点击，
      点击导航由 AdminConsole watch(scene) 联动关闭抽屉 */
   position: relative;
   z-index: var(--mk-z-sidebar);
@@ -458,7 +458,7 @@ function groupBadgeTitle(title: string): string {
   margin-bottom: 2px;
 }
 /* 置顶入口比组内子项略收高度：驾驶舱入口不再显高（用户反馈 2026-09-05） */
-  .mshell__pinned .mshell__item { font-weight: 800; padding-top: 6px; padding-bottom: 6px; }
+.mshell__pinned .mshell__item { font-weight: 800; padding-top: 6px; padding-bottom: 6px; }
 .mshell__group { display: grid; gap: 1px; }
 /* 组头（可点击折叠）：组图标 + 组名 + 聚合徽章 + 箭头 */
 .mshell__group-head {
@@ -608,19 +608,10 @@ function groupBadgeTitle(title: string): string {
 }
 .mshell__tool:hover { background: #eef2fa; color: var(--mk-blue, #2c63d0); }
 .mshell__tool:disabled { opacity: 0.45; cursor: default; }
-.mshell__tool-icon { font-size: var(--mk-fs-13); line-height: 1; }
-.mshell__tool-icon--q {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--mk-blue, #2c63d0);
-  color: #fff;
-  font-size: var(--mk-fs-10);
-  font-weight: 800;
-}
+.mshell__tool-icon { font-size: var(--mk-fs-13); line-height: 1; display: inline-flex; }
+.mshell__tool-icon svg { width: 15px; height: 15px; display: block; }
+.mshell__refresh-icon { display: inline-flex; }
+.mshell__refresh-icon svg { width: 15px; height: 15px; display: block; }
 .mshell__refresh-icon.is-spinning { animation: mshell-spin 0.8s linear infinite; }
 @keyframes mshell-spin { to { transform: rotate(360deg); } }
 
@@ -686,34 +677,6 @@ function groupBadgeTitle(title: string): string {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.mshell__kbd {
-  padding: 1px 6px;
-  border: 1px solid #e1e8f2;
-  border-radius: 5px;
-  background: #fafbfc;
-  font-size: var(--mk-fs-11);
-  font-weight: 700;
-}
-
-/* 侧栏搜索条（原顶栏「命令面板 Ctrl+K」迁入）：全宽搜索框形态，折叠态仅放大镜 */
-.mshell__search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 2px 10px 8px;
-  padding: 7px 10px;
-  border: 1px solid #e1e8f2;
-  border-radius: 8px;
-  background: #fafbfc;
-  color: var(--mk-faint);
-  font: inherit;
-  font-size: var(--mk-fs-12);
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
-  flex-shrink: 0;
-}
-.mshell__search:hover { border-color: rgba(44, 99, 208, 0.45); background: #f3f7ff; }
-.mshell__search-hint { white-space: nowrap; }
 
 /* 主区：高度锁定在壳层（shell 100dvh）内，content 行 1fr 承接剩余高度 */
 .mshell__main { display: grid; grid-template-rows: 1fr; min-width: 0; height: 100%; min-height: 0; }
@@ -741,7 +704,6 @@ function groupBadgeTitle(title: string): string {
   .mshell__item { font-size: 13.5px; padding: 9px 11px; }
   .mshell__group-title { font-size: 11.5px; }
   .mshell__item-badge { font-size: 11.5px; }
-  .mshell__search { font-size: 13px; }
   .mshell__logo-full { height: 58px; }
 }
 
@@ -751,7 +713,6 @@ function groupBadgeTitle(title: string): string {
   .mshell__item { font-size: 14px; padding: 10px 12px; }
   .mshell__group-title { font-size: 12px; }
   .mshell__item-badge { font-size: 12px; }
-  .mshell__search { font-size: 13.5px; }
   .mshell__logo-full { height: 64px; }
 }
 @media (min-width: 2000px) {
@@ -764,7 +725,6 @@ function groupBadgeTitle(title: string): string {
   .mshell__item { font-size: 14.5px; padding: 11px 12px; gap: 8px; }
   .mshell__item-badge { font-size: 12.5px; padding: 2px 9px; }
   .mshell__foot { font-size: 13px; padding: 10px 12px; }
-  .mshell__search { padding: 8px 12px; font-size: 13.5px; }
   .mshell__tool { width: 30px; height: 30px; }
   .mshell__user-avatar { width: 28px; height: 28px; }
 }
@@ -778,9 +738,10 @@ function groupBadgeTitle(title: string): string {
   .mshell__item { font-size: 17px; padding: 14px 14px; gap: 10px; border-radius: 10px; }
   .mshell__item-badge { font-size: 14px; padding: 3px 10px; }
   .mshell__foot { font-size: 15px; padding: 12px 14px; }
-  .mshell__search { padding: 10px 14px; font-size: 16px; }
   .mshell__tool { width: 36px; height: 36px; }
   .mshell__tool-icon { font-size: 16px; }
+  .mshell__tool-icon svg,
+  .mshell__refresh-icon svg { width: 18px; height: 18px; }
   .mshell__user-avatar { width: 32px; height: 32px; }
   .mshell__user-name { font-size: 14px; }
 }
@@ -795,9 +756,10 @@ function groupBadgeTitle(title: string): string {
   .mshell__item { font-size: 20px; padding: 16px 16px; gap: 12px; }
   .mshell__item-badge { font-size: 16.5px; padding: 4px 12px; }
   .mshell__foot { font-size: 17.5px; padding: 14px 16px; }
-  .mshell__search { padding: 12px 16px; font-size: 18.5px; }
   .mshell__tool { width: 42px; height: 42px; }
   .mshell__tool-icon { font-size: 19px; }
+  .mshell__tool-icon svg,
+  .mshell__refresh-icon svg { width: 21px; height: 21px; }
   .mshell__user-avatar { width: 38px; height: 38px; }
   .mshell__user-name { font-size: 17px; }
 }
@@ -808,16 +770,6 @@ function groupBadgeTitle(title: string): string {
 .mshell[data-collapsed='true'] .mshell__item-label,
 .mshell[data-collapsed='true'] .mshell__item-badge,
 .mshell[data-collapsed='true'] .mshell__group-head { display: none; }
-/* 折叠态：搜索条收为仅放大镜 icon 方块；工具/用户区收为 icon 列 */
-.mshell[data-collapsed='true'] .mshell__search {
-  margin: 2px 8px 8px;
-  padding: 0;
-  width: 34px;
-  height: 30px;
-  justify-content: center;
-}
-.mshell[data-collapsed='true'] .mshell__search-hint,
-.mshell[data-collapsed='true'] .mshell__search .mshell__kbd { display: none; }
 .mshell[data-collapsed='true'] .mshell__foot {
   display: grid;
   justify-items: center;
@@ -865,16 +817,6 @@ function groupBadgeTitle(title: string): string {
   .mshell__item-label,
   .mshell__item-badge,
   .mshell__group-head { display: none; }
-  /* 窄屏图标栏：搜索/工具/用户区收为 icon（命令面板入口在侧栏搜索条，不能整体隐藏） */
-  .mshell__search {
-    margin: 2px 8px 8px;
-    padding: 0;
-    width: 34px;
-    height: 30px;
-    justify-content: center;
-  }
-  .mshell__search-hint,
-  .mshell__search .mshell__kbd { display: none; }
   .mshell__foot {
     display: grid;
     justify-items: center;
@@ -924,12 +866,8 @@ html[data-theme='dark'] {
   .mshell__foot-ver { color: #3d4c66; }
   .mshell__collapse { background: #131b2a; border-color: #232f45; color: #9fb0c8; }
   .mshell__collapse:hover { color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
-  .mshell__search { background: #131b2a; border-color: #232f45; color: #6b7c96; }
-  .mshell__search:hover { background: #1b2740; border-color: rgba(91, 141, 239, 0.4); }
-  .mshell__kbd { background: #1d2739; border-color: #2a3850; }
   .mshell__tool { color: #6b7c96; }
   .mshell__tool:hover { background: #1b2740; color: #7aa2ff; }
-  .mshell__tool-icon--q { background: var(--mk-blue); }
   .mshell__user { border-top-color: #1f2a3d; }
   .mshell__user-avatar { background: #1d2739; color: #7aa2ff; }
   .mshell__user-name { color: #e6edf7; }

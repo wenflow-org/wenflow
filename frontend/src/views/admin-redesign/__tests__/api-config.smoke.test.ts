@@ -171,9 +171,9 @@ describe('ApiConfig P1 修复批', () => {
     const wrapper = await mountApiConfig();
     expect(getCapabilitiesMock).toHaveBeenCalled();
     expect(probeCapabilitiesMock).toHaveBeenCalledTimes(1);
-    // stale 语义：上次探测时间 + 已过期提示 + 探活未开启副文案 + 探测中
+    // stale 语义：上次探测时间 + 已过期提示 + 探针关闭副文案 + 探测中
     expect(wrapper.text()).toContain('快照已过期');
-    expect(wrapper.text()).toContain('定期探活未开启');
+    expect(wrapper.text()).toContain('关闭时快照不自动刷新');
     expect(wrapper.text()).toContain('探测中…');
     // 探测完成 → 快照刷新、角标更新、过期提示消失
     resolveProbe({ data: { data: makeSnapshot() } });

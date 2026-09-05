@@ -11,6 +11,7 @@ import { logger } from '../utils/logger';
 import pathOrchestrator from '../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
 import { isPathMutationConflictError } from '../services/learning/path-mutation-safety';
+import { openSessionClearanceService } from '../services/learning/open-session-clearance.service';
 import { setRequestContext, getRequestContext } from '../gateway/api-gateway/context';
 
 const router = express.Router();
@@ -46,12 +47,14 @@ const withPathContext = (req: express.Request, pathId?: string | null, conversat
 const sendPathMutationConflict = (res: express.Response, error: unknown) => {
   if (!isPathMutationConflictError(error)) return false;
 
+  const conflict = error as { message: string; code: string; details?: unknown };
   res.status(409).json({
     success: false,
     error: {
-      message: error.message,
-      code: error.code,
-      status: 409
+      message: conflict.message,
+      code: conflict.code,
+      status: 409,
+      ...(conflict.details ? { details: conflict.details } : {})
     }
   });
   return true;
@@ -299,8 +302,11 @@ const replanPathSchema = z.object({
   reason: z.string().optional(),
   mode: z.enum(['new_version', 'overwrite']).optional(),
   stageNumber: z.number().int().positive().optional(),
+  fromStageNumber: z.number().int().positive().optional(),
   evidence: z.record(z.any()).optional(),
-  requireConfirmation: z.boolean().optional()
+  requireConfirmation: z.boolean().optional(),
+  previewOnly: z.boolean().optional(),
+  clearedSessionIds: z.array(z.string()).optional()
 });
 
 // 创建学习目标
@@ -744,10 +750,75 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
     const tasks = (path.milestones || []).flatMap((milestone: any) => milestone.subtasks || []);
     const hasInProgress = tasks.some((task: any) => task.status === 'in_progress');
     const hasCompleted = tasks.some((task: any) => task.status === 'completed');
+    const isRebuildAll = req.body?.mode === 'rebuild-all';
+
+    // 显式整条重建（用户选「学得不好想重来」）：即使有已完成任务也走 replace-path 整建。
+    // 已完成任务的历史课堂/记录仍保留在库中（孤儿化），新路径从头规划；
+    // 进行中任务与未结束课堂依旧拦截（需先结束/放弃当前任务）。
+    if (isRebuildAll) {
+      // 前置校验：有进行中任务 → 直接 409（整建不能丢未完成的进行中进度，用户需先结束或放弃）
+      if (hasInProgress) {
+        return sendPathMutationConflict(res, Object.assign(
+          new Error('当前任务尚未结束，请先完成、暂停或放弃当前任务后再整条重建'),
+          { status: 409, code: 'PATH_MUTATION_HAS_IN_PROGRESS' }
+        ));
+      }
+      const runId = await learningService.claimPathCoreGeneration(pathId, path.activeGenerationRunId, { allowCompleted: true });
+
+      // 整建统一走 runAsync（forceReplace 经 userProfile.replan 透传；runGoalAsync 无此通道）
+      const sourceConversationId = extractStoredSourceConversationId(path.aiPromptTemplate);
+      // 基底用原始用户目标（goalFinalPayload.rawGoal / 会话 description），
+      // 避免用已被历次重建污染的 path.description 造成「（整条重建）（整条重建）…」嵌套累积
+      const parsedPromptTemplate = parsePromptTemplate(path.aiPromptTemplate);
+      const rawGoal = typeof parsedPromptTemplate?.goalFinalPayload?.rawGoal === 'string'
+        && parsedPromptTemplate.goalFinalPayload.rawGoal.trim()
+        ? parsedPromptTemplate.goalFinalPayload.rawGoal.trim()
+        : null;
+      let baseGoal = rawGoal || path.description || path.title || path.name || '个性化学习路径';
+      pathOrchestrator.runAsync({
+        userId,
+        description: adjustments
+          ? `（整条重建）${baseGoal}。用户补充说明：${adjustments}`
+          : `（整条重建）${baseGoal}`,
+        subject: path.subject || undefined,
+        deadline: path.deadline || undefined,
+        deadlineText: path.deadlineText || undefined,
+        sourceConversationId,
+        existingPathId: pathId,
+        generationRunId: runId,
+        userProfile: {
+          replan: {
+            mode: 'overwrite',
+            forceReplace: true,
+            triggerSource: 'api',
+            sourcePathId: pathId,
+            reason: adjustments || '用户选择整条重建'
+          }
+        }
+      }, {
+        onError: async (error) => {
+          logger.error(`整条重建学习路径失败：${pathId}`, error);
+          await learningService.markActiveGenerationFailed(pathId, error, runId);
+        }
+      });
+
+      return res.json({
+        success: true,
+        data: { runId, adjustments, mode: 'rebuild-all' },
+        message: adjustments
+          ? '正在按你的说明整条重建学习路径'
+          : '正在整条重建学习路径'
+      });
+    }
 
     // 有进行中任务或已完成任务（有学习进度）→ 走 replan-stage 语义（保留已完成，重设计当前活动阶段）
     if (hasInProgress || hasCompleted) {
+      const fromStageNumber = Number.isInteger(req.body?.fromStageNumber) ? req.body.fromStageNumber : undefined;
+      const clearedSessionIds = Array.isArray(req.body?.clearedSessionIds) && req.body.clearedSessionIds.length > 0
+        ? req.body.clearedSessionIds.filter((x: unknown) => typeof x === 'string')
+        : undefined;
       // 复用 requestPathReplan 的 overwrite 分支：补充说明作为 reason，重设计当前活动阶段
+      // （显式传 fromStageNumber 时转为后续阶段多阶段重排）
       const result = await learningService.requestPathReplan({
         pathId,
         userId,
@@ -755,17 +826,21 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
         mode: 'overwrite',
         reason: adjustments || '用户主动调整路径',
         requireConfirmation: false,
+        ...(fromStageNumber ? { fromStageNumber } : {}),
         evidence: {
           adjustments,
-          source: 'path-regenerate'
+          source: 'path-regenerate',
+          ...(clearedSessionIds ? { clearedSessionIds } : {})
         }
       });
       return res.json({
         success: true,
         data: result,
-        message: adjustments
-          ? '已按你的补充说明调整后续阶段'
-          : '已调整后续阶段'
+        message: fromStageNumber
+          ? '已按你的说明从该阶段起调整剩余部分'
+          : (adjustments
+            ? '已按你的补充说明调整后续阶段'
+            : '已调整后续阶段')
       });
     }
 
@@ -832,8 +907,13 @@ router.post('/paths/:pathId/replan', async (req, res, next) => {
       reason: payload.reason,
       mode: payload.mode,
       stageNumber: payload.stageNumber,
-      evidence: payload.evidence,
-      requireConfirmation: payload.requireConfirmation
+      fromStageNumber: payload.fromStageNumber,
+      evidence: {
+        ...(payload.evidence || {}),
+        ...(payload.clearedSessionIds?.length ? { clearedSessionIds: payload.clearedSessionIds } : {})
+      },
+      requireConfirmation: payload.requireConfirmation,
+      previewOnly: payload.previewOnly
     });
 
     res.json({
@@ -871,6 +951,82 @@ router.post('/paths/:pathId/replan', async (req, res, next) => {
 
     if (sendPathMutationConflict(res, error)) return;
 
+    next(error);
+  }
+});
+
+// 一键清场：把路径调整范围内未结束的 AI 课堂按放弃（learner-abandoned）收尾
+// body: { fromStageNumber?, stageNumber?, sessionIds? }
+// 返回 cleared/failed/remaining，前端可据此提示并自动重试调整请求
+router.post('/paths/:pathId/abandon-open-sessions', async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+    const { pathId } = req.params;
+    const fromStageNumber = Number.isInteger(req.body?.fromStageNumber) ? req.body.fromStageNumber : undefined;
+    const stageNumber = Number.isInteger(req.body?.stageNumber) ? req.body.stageNumber : undefined;
+    const sessionIds = Array.isArray(req.body?.sessionIds) && req.body.sessionIds.length > 0
+      ? req.body.sessionIds.filter((x: unknown) => typeof x === 'string')
+      : undefined;
+
+    const path = await prisma.learning_paths.findUnique({
+      where: { id: pathId },
+      select: { userId: true }
+    });
+    if (!path) {
+      return res.status(404).json({ success: false, error: { message: '学习路径不存在' } });
+    }
+    if (path.userId !== userId) {
+      return res.status(403).json({ success: false, error: { message: '无权访问此学习路径' } });
+    }
+
+    // 解析调整范围对应的任务集（与 replan 的 fromStage/stage 语义对齐）
+    const milestones = await prisma.milestones.findMany({
+      where: { learningPathId: pathId },
+      include: { subtasks: { select: { id: true } } },
+      orderBy: { stageNumber: 'asc' }
+    });
+    const firstOpen = milestones.find((m: any) => m.status !== 'completed');
+    let scopeTaskIds: string[] = [];
+    let scopeMilestoneIds: string[] = [];
+    if (fromStageNumber) {
+      const from = milestones.find((m: any) => m.stageNumber === fromStageNumber);
+      if (from) {
+        const scoped = milestones.filter((m: any) => m.stageNumber >= from.stageNumber && m.status !== 'completed');
+        scopeMilestoneIds = scoped.map((m: any) => m.id);
+        scopeTaskIds = scoped.flatMap((m: any) => (m.subtasks || []).map((t: any) => t.id));
+      }
+    } else if (stageNumber) {
+      const scoped = milestones.filter((m: any) => m.stageNumber === stageNumber);
+      scopeMilestoneIds = scoped.map((m: any) => m.id);
+      scopeTaskIds = scoped.flatMap((m: any) => (m.subtasks || []).map((t: any) => t.id));
+    } else if (firstOpen) {
+      const scoped = milestones.filter((m: any) => m.stageNumber >= firstOpen.stageNumber && m.status !== 'completed');
+      scopeMilestoneIds = scoped.map((m: any) => m.id);
+      scopeTaskIds = scoped.flatMap((m: any) => (m.subtasks || []).map((t: any) => t.id));
+    }
+
+    const result = await openSessionClearanceService.abandonBlocking({
+      pathId,
+      userId,
+      taskIds: scopeTaskIds.length > 0 ? scopeTaskIds : undefined,
+      milestoneIds: scopeMilestoneIds.length > 0 ? scopeMilestoneIds : undefined,
+      ...(sessionIds ? { taskIds: undefined, milestoneIds: undefined } : {})
+    });
+
+    res.json({
+      success: true,
+      data: {
+        cleared: result.cleared,
+        failed: result.failed,
+        remaining: result.remaining,
+        allCleared: result.remaining.length === 0,
+      },
+      message: result.cleared.length > 0
+        ? `已按放弃结束 ${result.cleared.length} 个未完成课堂`
+        : '没有需要结束的课堂'
+    });
+  } catch (error: any) {
+    logger.error('放弃课堂失败:', error);
     next(error);
   }
 });

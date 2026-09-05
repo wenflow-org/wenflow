@@ -25,8 +25,8 @@ import {
 
 const router = express.Router();
 
-// ---- 注册治理（R6）：每日注册数量上限（DB 持久化，默认 5 个/天/IP） ----
-const IP_DAILY_QUOTA = resolveIpDailyQuota(process.env.REGISTER_IP_DAILY_QUOTA);
+// ---- 注册治理（R6）：每日注册数量上限（Admin 后台热控开关，默认关；旧 env 仅作启动默认） ----
+const IP_DAILY_QUOTA_FROM_ENV = resolveIpDailyQuota(process.env.REGISTER_IP_DAILY_QUOTA);
 
 // ---- 注册限速（G1）：注册为公开端点，按 IP 维度限速，缓解用户名枚举扫描与批量注册 ----
 const REGISTER_WINDOW_MS = 60 * 60 * 1000;
@@ -102,13 +102,18 @@ router.get('/registration-status', async (req, res, next) => {
   try {
     const settings = await getPlatformSettings();
     const coreLearningBlocked = aiCapabilityHealthService.isCapabilityBlocked('goal-conversation');
+    // 配额仅平台开关启用时生效（默认关 → 0 = 不限制）；注册页仅在 >0 时展示提示
+    const quotaEnabled = settings.registerIpQuotaEnabled === true;
+    const effectiveQuota = quotaEnabled
+      ? (settings.registerIpDailyQuota ?? DEFAULT_IP_DAILY_QUOTA)
+      : (IP_DAILY_QUOTA_FROM_ENV > 0 ? IP_DAILY_QUOTA_FROM_ENV : 0);
     res.status(200).json({
       success: true,
       data: {
         registrationEnabled: settings.registrationEnabled && !coreLearningBlocked,
         configuredRegistrationEnabled: settings.registrationEnabled,
         temporaryUnavailable: settings.registrationEnabled && coreLearningBlocked,
-        maxAccountsPerIpPerDay: IP_DAILY_QUOTA
+        maxAccountsPerIpPerDay: effectiveQuota
       }
     });
   } catch (error: any) {
@@ -173,9 +178,13 @@ router.post('/register', async (req, res, next) => {
       });
     }
 
-    // 注册治理（R6）：单 IP 每日注册数量上限（DB 持久化累计，防慢批量注册）
+    // 注册治理（R6）：单 IP 每日注册数量上限（Admin 后台开关，默认关=不限制；
+    // 旧 env REGISTER_IP_DAILY_QUOTA 仅作启动默认，显式设置过且后台未配置时生效）
+    const registerQuotaEnabled = settings.registerIpQuotaEnabled !== false;
+    const dailyQuota = settings.registerIpDailyQuota ?? DEFAULT_IP_DAILY_QUOTA;
+    const effectiveQuota = registerQuotaEnabled ? dailyQuota : (IP_DAILY_QUOTA_FROM_ENV > 0 ? IP_DAILY_QUOTA_FROM_ENV : 0);
     try {
-      await registerQuotaService.assertWithinDailyQuota(clientIP, IP_DAILY_QUOTA);
+      await registerQuotaService.assertWithinDailyQuota(clientIP, effectiveQuota);
     } catch (error) {
       if (error instanceof IpRegisterQuotaExceededError) {
         return res.status(429).json({

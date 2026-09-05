@@ -35,7 +35,7 @@
             <div class="demo__panel">
               <div class="demo__panel-head">
                 <strong>目标信息</strong>
-                <span>已收集 2 / 4</span>
+                <span>已收集 3 / 6</span>
               </div>
               <div class="demo__panel-bar"><i></i></div>
               <ul>
@@ -47,13 +47,17 @@
                   <i class="mark mark--done">✓</i>
                   <div><small>学习动机</small><strong>项目汇报与晋升准备</strong></div>
                 </li>
-                <li class="demo__field demo__field--asking anim-field" style="--d: 2400ms">
-                  <i class="mark mark--asking"></i>
-                  <div><small>当前水平</small><strong class="dim">正在聊…</strong></div>
+                <li class="demo__field demo__field--done anim-field" style="--d: 2200ms">
+                  <i class="mark mark--done">✓</i>
+                  <div><small>背景经验</small><strong>写过周报，也试着整理过英文会议要点</strong></div>
                 </li>
-                <li class="demo__field anim-field" style="--d: 2500ms">
+                <li class="demo__field demo__field--asking anim-field" style="--d: 2500ms">
+                  <i class="mark mark--asking"></i>
+                  <div><small>期望周期</small><strong class="dim">正在聊…</strong></div>
+                </li>
+                <li class="demo__field anim-field" style="--d: 2600ms">
                   <i class="mark"></i>
-                  <div><small>期望周期</small><strong class="dim">待补充</strong></div>
+                  <div><small>可用时间</small><strong class="dim">待补充</strong></div>
                 </li>
               </ul>
             </div>

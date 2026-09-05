@@ -1,6 +1,6 @@
 <template>
   <div :class="embedded ? 'mk-page--fill an-embedded' : 'mk-page'">
-    <div class="mk-status" :class="activeCount ? 'mk-status--ok' : 'mk-status--muted'">
+    <div v-if="!embedded" class="mk-status" :class="activeCount ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">公告中心</strong>
       <span class="mk-status__sep"></span>
@@ -32,7 +32,15 @@
           </select>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
-        <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 条</span>
+        <span class="mk-card__head-right">
+          <button
+            v-if="embedded"
+            type="button"
+            class="mk-btn mk-btn--primary mk-btn--sm"
+            @click="openCreate"
+          >新建公告</button>
+          <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 条</span>
+        </span>
       </div>
 
       <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="6" />
@@ -176,8 +184,10 @@ import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 
-/** 嵌入模式：作为「通知与公告」页「公告」tab 渲染（仅去掉外层壳，状态条/新建/编辑弹窗保留） */
+/** 嵌入模式：作为「通知与公告」页「公告」tab 渲染（仅去掉外层壳，状态条/新建/编辑弹窗保留）。
+    count 事件：公告总数上报（宿主「公告 N」徽章；embedded 才消费） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const emit = defineEmits<{ (e: 'count', total: number): void }>()
 
 interface Row {
   id: string
@@ -192,6 +202,10 @@ interface Row {
 
 
 const rows = computed<Row[]>(() => liveAnnouncements.value)
+/* 宿主域计数徽章（embedded 才消费）：公告数就绪/变化即上报 */
+watch(liveAnnouncements, (list) => {
+  emit('count', list.length)
+}, { immediate: true })
 
 /* live 拉取失败态：liveFailures 由 store 的 loadLiveData 填充（announcements 域失败时置位） */
 const liveFailed = ref(false)
@@ -327,7 +341,7 @@ const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => createOpen.value), panelRef)
 useMaskClose(maskRef, () => { createOpen.value = false })
 
-/* 命令面板快捷动作：直达并打开新建弹窗 */
+/* intent 快捷动作：直达并打开新建弹窗 */
 watch(
   () => intent.quickAction,
   (a) => {
@@ -356,8 +370,8 @@ function openCreate() {
   createOpen.value = true
 }
 
-/** 嵌入模式（运营中心公告 tab）：暴露新建入口与计数给宿主 */
-defineExpose({ openCreate, activeCount, draftCount, archivedCount })
+/** 嵌入模式（合并宿主）：暴露新建入口与计数给宿主；refresh 供宿主「刷新」按钮联动 */
+defineExpose({ openCreate, activeCount, draftCount, archivedCount, refresh: retryLive })
 
 /** 编辑：预填表单（publishedAt 与发布状态保持不动） */
 function openEdit(r: Row) {

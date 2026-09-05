@@ -282,8 +282,14 @@ export interface PathReplanRequest {
   reason?: string;
   mode?: 'new_version' | 'overwrite';
   stageNumber?: number;
+  /** 后续阶段重排：从该未学阶段（含）起连续重排到路径末尾；缺省 = 当前活动阶段（单阶段） */
+  fromStageNumber?: number;
   evidence?: Record<string, unknown>;
   requireConfirmation?: boolean;
+  /** 预览模式：只产出诊断建议（awaiting-confirmation），不执行；确认后去掉再调一次才真正调整 */
+  previewOnly?: boolean;
+  /** 调整前刚「一键清场」放弃的课堂 id（放行其已完成记录被覆盖，用于放弃→重排闭环） */
+  clearedSessionIds?: string[];
 }
 
 export interface PathReplanResponse {
@@ -555,10 +561,24 @@ export const learningAPI = {
   },
 
   // 重新生成学习路径（支持用户侧补充说明 adjustments）
-  async regeneratePath(pathId: string, adjustments?: string): Promise<{ message?: string; data?: any }> {
+  // mode: 'rebuild-all' = 整条重建（显式声明覆盖当前规划，有学习进度时后端放行）
+  // fromStageNumber: 从该未学阶段起重排剩余阶段（保留已学内容）
+  // clearedSessionIds: 本次调整前刚「一键清场」放弃的课堂 id（放行其已完成记录被覆盖）
+  async regeneratePath(
+    pathId: string,
+    adjustments?: string,
+    options?: { mode?: 'rebuild-all'; fromStageNumber?: number; clearedSessionIds?: string[] }
+  ): Promise<{ message?: string; data?: any }> {
     const response = await api.post(
       `/learning/paths/${pathId}/regenerate`,
-      adjustments ? { adjustments } : undefined,
+      adjustments || options
+        ? {
+            adjustments: adjustments ?? undefined,
+            ...(options?.mode ? { mode: options.mode } : {}),
+            ...(options?.fromStageNumber ? { fromStageNumber: options.fromStageNumber } : {}),
+            ...(options?.clearedSessionIds?.length ? { clearedSessionIds: options.clearedSessionIds } : {}),
+          }
+        : undefined,
       { timeout: AI_REQUEST_TIMEOUT }
     );
     return response.data;
@@ -566,6 +586,19 @@ export const learningAPI = {
 
   async retryPathEnrichment(pathId: string): Promise<{ message?: string }> {
     const response = await api.post(`/learning/paths/${pathId}/retry-stage-design`, undefined, { timeout: AI_REQUEST_TIMEOUT });
+    return response.data;
+  },
+
+  /** 一键清场：把路径调整范围内未结束课堂按放弃收尾；返回 cleared/failed/remaining */
+  async abandonOpenSessions(
+    pathId: string,
+    options?: { fromStageNumber?: number; stageNumber?: number; sessionIds?: string[] }
+  ): Promise<{ success: boolean; data?: any; message?: string; error?: any }> {
+    const response = await api.post(
+      `/learning/paths/${pathId}/abandon-open-sessions`,
+      options || {},
+      { timeout: AI_REQUEST_TIMEOUT }
+    );
     return response.data;
   },
 

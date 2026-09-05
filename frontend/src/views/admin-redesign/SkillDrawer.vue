@@ -63,8 +63,7 @@
 
         <div class="msk__body">
           <!-- ========== 概览（只读） ========== -->
-          <template v-if="activeTab === 'overview'">
-          <!-- 指标条 -->
+          <template v-if="activeTab === 'overview'">          <!-- 指标条 -->
           <div class="msk__stats">
             <div class="msk__stat">
               <span>调用</span>
@@ -135,6 +134,131 @@
             <button type="button" class="msk__primary-link" @click="goFullEditor">打开 Prompt 设计页 →</button>
             <p class="msk__none">设计页统一承接：协议（core 编辑/发布）、版本、试跑、运行时与工程视图；抽屉仅保留只读速览。</p>
           </section>
+          </template>
+
+          <!-- ========== 模型配置（抽屉内联表单，与 msk 风格统一；保存落库） ========== -->
+          <template v-if="activeTab === 'runtime'">
+          <section v-if="skillProfile" class="msk__section">
+            <header class="msk__sec-head">
+              <h4>模型配置</h4>
+              <span class="msk__sec-meta">{{ rtForm.enabled ? '独立路由' : '继承上层 / 平台默认' }}</span>
+            </header>
+
+            <!-- 独立配置开关 -->
+            <label class="mt-row mt-row--check">
+              <input v-model="rtForm.enabled" type="checkbox" />
+              <span>独立配置<em>关闭 = 继承 Agent / 平台默认</em></span>
+            </label>
+
+            <!-- 模型与思考档 -->
+            <div class="mt-fields">
+              <label class="mt-field">
+                <span>模型层级</span>
+                <select v-model="rtForm.tier" class="mk-input" :disabled="!rtForm.enabled">
+                  <option value="chat">chat</option>
+                  <option value="reasoning">reasoning</option>
+                </select>
+              </label>
+              <label class="mt-field">
+                <span>模型</span>
+                <input v-model="rtForm.model" class="mk-input mono" :disabled="!rtForm.enabled" placeholder="留空继承默认" spellcheck="false" />
+              </label>
+              <label class="mt-field">
+                <span>思考模式</span>
+                <select v-model="rtForm.thinkingMode" class="mk-input" :disabled="!rtForm.enabled">
+                  <option value="default">跟随继承值 / 模型默认</option>
+                  <option value="enabled">开启</option>
+                  <option value="disabled">关闭</option>
+                </select>
+              </label>
+              <label class="mt-field">
+                <span>思考强度</span>
+                <select v-model="rtForm.reasoningEffort" class="mk-input" :disabled="!rtForm.enabled || rtForm.thinkingMode === 'disabled'">
+                  <option value="default">跟随继承值 / 模型默认</option>
+                  <option value="low">low</option>
+                  <option value="high">high</option>
+                  <option value="max">max</option>
+                </select>
+              </label>
+            </div>
+
+            <!-- 超时 -->
+            <div class="mt-fields">
+              <label class="mt-field">
+                <span>请求超时（ms）</span>
+                <input v-model.number="rtForm.requestTimeoutMs" type="number" min="10000" max="300000" step="10000" class="mk-input" :disabled="!rtForm.enabled" placeholder="继承" />
+              </label>
+            </div>
+
+            <!-- 状态与操作 -->
+            <p v-if="rtMsg" class="mt-rt-msg" :class="{ 'is-err': rtErr }">{{ rtMsg }}</p>
+            <div class="mt-actions">
+              <button type="button" class="mk-btn mt-btn--danger" :disabled="rtSaving" @click="resetRuntimeConfig">恢复默认</button>
+              <button type="button" class="mk-btn" :disabled="rtSaving" @click="loadRuntimeConfig">刷新</button>
+              <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="rtSaving" @click="saveRuntimeConfig">
+                {{ rtSaving ? '保存中…' : '保存配置' }}
+              </button>
+            </div>
+          </section>
+
+          <p class="msk__none">说明：改的是模型路由（skill_model_configs），不影响 prompt 内容；改完立即生效，可在「模型测试」tab 验证延迟。</p>
+          </template>
+
+          <!-- ========== 模型测试（只读探测：指定思考档直发上游，不落库不改配置） ========== -->
+          <template v-if="activeTab === 'model-test'">
+          <section v-if="skillProfile" class="msk__section">
+            <header class="msk__sec-head">
+              <h4>模型测试</h4>
+              <span class="msk__sec-meta">直发上游 · 不落库</span>
+            </header>
+
+            <!-- 档位选择：初始跟随当前生效配置，可临时覆盖 -->
+            <div class="mt-fields">
+              <label class="mt-field">
+                <span>思考模式</span>
+                <select v-model="probeForm.thinkingMode" class="mk-input">
+                  <option value="default">跟随配置（{{ cfgThinkingLabel }}）</option>
+                  <option value="enabled">开启</option>
+                  <option value="disabled">关闭</option>
+                </select>
+              </label>
+              <label class="mt-field">
+                <span>思考强度</span>
+                <select v-model="probeForm.reasoningEffort" class="mk-input" :disabled="probeForm.thinkingMode === 'disabled'">
+                  <option value="default">跟随配置（{{ cfgEffortLabel }}）</option>
+                  <option value="low">low</option>
+                  <option value="high">high</option>
+                  <option value="max">max</option>
+                </select>
+              </label>
+            </div>
+
+            <p v-if="probeResolved" class="mt-resolved mono">生效：{{ probeResolved.model }} · {{ probeResolved.thinkingMode }} / {{ probeResolved.reasoningEffort }}</p>
+
+            <div class="mt-actions">
+              <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="probeRunning" @click="runModelProbe">
+                {{ probeRunning ? '探测中…（最长 180s）' : '开始探测' }}
+              </button>
+              <span v-if="probeError" class="mt-err">{{ probeError }}</span>
+            </div>
+
+            <!-- 结果卡 -->
+            <div v-if="probeResult" class="mt-result" :class="probeResult.jsonOk === 'ok' ? 'is-ok' : 'is-bad'">
+              <div class="mt-result__grid">
+                <div class="mt-cell"><span>总耗时</span><strong class="mono">{{ fmtMs(probeResult.durationMs) }}</strong></div>
+                <div class="mt-cell"><span>首字 TTFT</span><strong class="mono">{{ probeResult.ttftContentMs != null ? fmtMs(probeResult.ttftContentMs) : '—' }}</strong></div>
+                <div class="mt-cell"><span>JSON</span><strong :class="probeResult.jsonOk === 'ok' ? 'is-ok' : 'is-bad'">{{ probeResult.jsonOk }}</strong></div>
+                <div class="mt-cell"><span>输出字符</span><strong class="mono">{{ probeResult.contentChars }}</strong></div>
+                <div class="mt-cell"><span>推理字符</span><strong class="mono">{{ probeResult.reasoningChars ?? 0 }}</strong></div>
+                <div class="mt-cell"><span>completion</span><strong class="mono">{{ probeResult.completionTokens ?? '—' }}</strong></div>
+                <div class="mt-cell"><span>reasoning tok</span><strong class="mono">{{ probeResult.reasoningTokens ?? 0 }}</strong></div>
+                <div class="mt-cell"><span>finish</span><strong class="mono">{{ probeResult.finish || '—' }}</strong></div>
+              </div>
+              <pre v-if="probeResult.contentPreview" class="mt-preview mono">{{ probeResult.contentPreview }}</pre>
+            </div>
+          </section>
+
+          <p class="msk__none">说明：探测用该 skill 的 ACTIVE prompt + 当前路由（含 skill_model_configs 覆盖）直发上游，测的是「改档位后真实延迟/JSON/token」，可先在此验证再保存配置。</p>
           </template>
         </div>
       </aside>
@@ -207,8 +331,8 @@ const rateTone = computed(() => {
   return r >= 95 ? 'warn' : 'bad'
 })
 
-/* 页签：概览（只读）/ Prompt（只读 + 设计页跳转）；编辑能力已收敛到设计页 */
-type DrawerTab = 'overview' | 'prompt'
+/* 页签：概览（只读）/ Prompt（只读 + 设计页跳转）/ 模型配置（抽屉内联表单）/ 模型测试 */
+type DrawerTab = 'overview' | 'prompt' | 'runtime' | 'model-test'
 const activeTab = ref<DrawerTab>('overview')
 const visibleTabs = computed<Array<{ key: DrawerTab; label: string; badge?: string; badgeCls?: string }>>(() => {
   const tabs: Array<{ key: DrawerTab; label: string; badge?: string; badgeCls?: string }> = [
@@ -221,6 +345,8 @@ const visibleTabs = computed<Array<{ key: DrawerTab; label: string; badge?: stri
     }
   ]
   if (skillProfile.value) tabs.push({ key: 'prompt', label: 'Prompt' })
+  if (skillProfile.value) tabs.push({ key: 'runtime', label: '模型配置' })
+  if (skillProfile.value) tabs.push({ key: 'model-test', label: '模型测试' })
   return tabs
 })
 
@@ -312,7 +438,95 @@ const successRate = computed(() => {
   return `${r.toFixed(1)}%`
 })
 
-const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
+const fmtMs = (ms: number | null | undefined) => (ms == null ? '—' : ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
+
+/* ========== 模型配置（抽屉内联表单，skill_model_configs CRUD） ========== */
+interface RtForm {
+  enabled: boolean
+  tier: 'chat' | 'reasoning'
+  model: string
+  thinkingMode: 'default' | 'enabled' | 'disabled'
+  reasoningEffort: 'default' | 'low' | 'high' | 'max'
+  requestTimeoutMs: number | null
+}
+const defaultRtForm = (): RtForm => ({
+  enabled: false,
+  tier: 'chat',
+  model: '',
+  thinkingMode: 'default',
+  reasoningEffort: 'default',
+  requestTimeoutMs: null,
+})
+const rtForm = ref<RtForm>(defaultRtForm())
+const rtSaving = ref(false)
+const rtMsg = ref('')
+const rtErr = ref(false)
+
+async function loadRuntimeConfig() {
+  const id = intent.skillDrawerId
+  if (!id) return
+  rtMsg.value = ''
+  rtErr.value = false
+  try {
+    const res = await adminSkillsApi.getSkillModelConfig(id)
+    const raw = res.data?.data ?? res.data ?? {}
+    rtForm.value = {
+      enabled: raw?.enabled === true,
+      tier: raw?.tier === 'reasoning' ? 'reasoning' : 'chat',
+      model: raw?.model || '',
+      thinkingMode: raw?.thinkingMode || 'default',
+      reasoningEffort: raw?.reasoningEffort || 'default',
+      requestTimeoutMs: raw?.requestTimeoutMs ?? null,
+    }
+  } catch {
+    rtForm.value = defaultRtForm()
+  }
+}
+
+async function saveRuntimeConfig() {
+  const id = intent.skillDrawerId
+  if (!id || rtSaving.value) return
+  rtSaving.value = true
+  rtMsg.value = ''
+  rtErr.value = false
+  try {
+    await adminSkillsApi.updateSkillModelConfig(id, {
+      tier: rtForm.value.tier,
+      model: rtForm.value.model || undefined,
+      thinkingMode: rtForm.value.thinkingMode,
+      reasoningEffort: rtForm.value.thinkingMode === 'disabled' ? 'default' : rtForm.value.reasoningEffort,
+      requestTimeoutMs: rtForm.value.enabled ? (rtForm.value.requestTimeoutMs ?? null) : null,
+      enabled: rtForm.value.enabled,
+    })
+    rtErr.value = false
+    rtMsg.value = '已保存，立即生效'
+    await loadRuntimeConfig()
+  } catch (e) {
+    rtErr.value = true
+    rtMsg.value = `保存失败：${errMsg(e)}`
+  } finally {
+    rtSaving.value = false
+  }
+}
+
+async function resetRuntimeConfig() {
+  const id = intent.skillDrawerId
+  if (!id || rtSaving.value) return
+  rtSaving.value = true
+  rtMsg.value = ''
+  rtErr.value = false
+  try {
+    await adminSkillsApi.deleteSkillModelConfig(id)
+    rtErr.value = false
+    rtMsg.value = '已恢复默认（继承上层 / 平台）'
+    await loadRuntimeConfig()
+  } catch (e) {
+    rtErr.value = true
+    rtMsg.value = `恢复失败：${errMsg(e)}`
+  } finally {
+    rtSaving.value = false
+  }
+}
 
 // 抽屉是覆盖层：跳瀑布前先收起，保证动线连贯
 function goTrace(traceId: string) {
@@ -332,6 +546,92 @@ function goFullEditor() {
   closeSkillDrawer()
   void router.push(`/admin/skills/${encodeURIComponent(id)}`)
 }
+
+/* ========== 模型测试（model-probe） ========== */
+interface ProbeForm {
+  thinkingMode: 'default' | 'enabled' | 'disabled'
+  reasoningEffort: 'default' | 'low' | 'high' | 'max'
+}
+interface ProbeResult {
+  durationMs?: number
+  ttftContentMs?: number | null
+  ttftReasoningMs?: number | null
+  contentChars?: number
+  reasoningChars?: number
+  completionTokens?: number | null
+  reasoningTokens?: number | null
+  promptTokens?: number | null
+  finish?: string
+  jsonOk?: string
+  bracesBalanced?: boolean
+  contentPreview?: string
+}
+const probeForm = ref<ProbeForm>({ thinkingMode: 'default', reasoningEffort: 'default' })
+const cfgThinking = ref<'default' | 'enabled' | 'disabled'>('default')
+const cfgEffort = ref<'default' | 'low' | 'high' | 'max'>('default')
+const probeRunning = ref(false)
+const probeError = ref('')
+const probeResult = ref<(ProbeResult & { resolved?: { model?: string; thinkingMode?: string; reasoningEffort?: string } }) | null>(null)
+
+const cfgThinkingLabel = computed(() =>
+  cfgThinking.value === 'enabled' ? '开启' : cfgThinking.value === 'disabled' ? '关闭' : '继承/默认'
+)
+const cfgEffortLabel = computed(() => (cfgEffort.value === 'default' ? '继承/默认' : cfgEffort.value))
+const probeResolved = computed(() => probeResult.value?.resolved || null)
+
+/** 打开抽屉时同步当前生效思考档 + 配置表单（同一数据源，保证探测与配置一致） */
+async function syncProbeConfig() {
+  await loadRuntimeConfig()
+  cfgThinking.value = rtForm.value.thinkingMode
+  cfgEffort.value = rtForm.value.reasoningEffort
+  // 探测表单默认「跟随配置」：显式重置为 inherit
+  probeForm.value = { thinkingMode: 'default', reasoningEffort: 'default' }
+}
+
+async function runModelProbe() {
+  const id = intent.skillDrawerId
+  if (!id || !skillProfile.value || probeRunning.value) return
+  probeRunning.value = true
+  probeError.value = ''
+  probeResult.value = null
+  try {
+    const res = await adminSkillsApi.modelProbe(id, {
+      thinkingMode: probeForm.value.thinkingMode,
+      reasoningEffort: probeForm.value.reasoningEffort,
+    })
+    const body = res.data?.data ?? res.data ?? {}
+    if (body.thinkingMode !== 'default' && (body.thinkingMode as string) !== cfgThinking.value) {
+      body.thinkingMode = probeForm.value.thinkingMode
+    }
+    probeResult.value = body
+  } catch (e) {
+    probeError.value = `探测失败：${errMsg(e)}`
+  } finally {
+    if (id === intent.skillDrawerId) probeRunning.value = false
+  }
+}
+
+function errMsg(e: unknown): string {
+  const a = e as { response?: { data?: { error?: { message?: string } | string } }; message?: string }
+  if (a?.response?.data?.error) {
+    const er = a.response.data.error
+    return typeof er === 'string' ? er : er.message || '未知错误'
+  }
+  return a?.message || String(e)
+}
+
+/* 切换 skill 时重置/同步探测表单 */
+watch(
+  () => intent.skillDrawerId,
+  (id) => {
+    probeResult.value = null
+    probeError.value = ''
+    probeRunning.value = false
+    rtMsg.value = ''
+    if (id) void syncProbeConfig()
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>
@@ -629,6 +929,26 @@ function goFullEditor() {
   white-space: nowrap;
 }
 
+/* 模型配置抽屉内联表单（与 msk 风格统一） */
+.mt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid #e6ecf6;
+  border-radius: 9px;
+  background: #fbfcfe;
+  font-size: 11.5px;
+  color: #41516e;
+}
+.mt-row--check input { width: 15px; height: 15px; accent-color: var(--mk-blue); }
+.mt-row--check em { font-style: normal; font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
+.mt-rt-msg { margin: 0; font-size: 11.5px; color: var(--mk-green); font-weight: 600; }
+.mt-rt-msg.is-err { color: var(--mk-red); }
+.mt-btn--danger { color: var(--mk-red); border-color: rgba(220, 38, 38, 0.35); background: transparent; }
+.mt-btn--danger:hover { background: var(--mk-red-bg); }
+.mt-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
 /* 底部主操作 */
 .msk__section--actions { padding-top: 2px; }
 .msk__primary-link {
@@ -645,6 +965,66 @@ function goFullEditor() {
   text-align: left;
 }
 .msk__primary-link:hover { background: #e0edff; }
+
+/* ========== 模型测试（model-probe） ========== */
+.mt-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.mt-field { display: grid; gap: 4px; }
+.mt-field > span { font-size: 11px; color: var(--mk-faint); font-weight: 600; }
+.mt-resolved {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #f2f6fd;
+  border: 1px dashed #d3e0f5;
+  font-size: 10.5px;
+  color: #41516e;
+}
+.mt-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mt-err { font-size: 11.5px; color: var(--mk-red); font-weight: 600; }
+.mt-result {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--mk-line);
+  background: #fff;
+}
+.mt-result.is-ok { border-color: rgba(34, 197, 94, 0.35); }
+.mt-result.is-bad { border-color: rgba(220, 38, 38, 0.35); }
+.mt-result__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.mt-cell { display: grid; gap: 2px; }
+.mt-cell span { font-size: 10px; color: var(--mk-faint); font-weight: 600; }
+.mt-cell strong {
+  font-family: var(--mk-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: #1a2a44;
+  font-variant-numeric: tabular-nums;
+}
+.mt-cell strong.is-ok { color: var(--mk-green); }
+.mt-cell strong.is-bad { color: var(--mk-red); }
+.mt-preview {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--mk-code-bg, #101826);
+  border: 1px solid var(--mk-code-border, #1c2a40);
+  color: var(--mk-code-fg, #9db8dc);
+  font-size: 10.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow-y: auto;
+}
 
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大（原 460px + 10px 是全站最小） */
@@ -722,7 +1102,13 @@ html[data-theme='dark'] {
   .msk__row:hover { background: #1b2740; }
   .msk__primary-link:hover { background: rgba(91, 141, 239, 0.14); }
   .msk__section { background: #141c2b; }
-  /* 文字色补漏：统计数字/kv 值硬编码 #1a2a44，暗色下不可见 */
+  .mt-result { background: #17202f; border-color: #232f45; }
+  .mt-cell strong { color: var(--mk-ink, #e6edf7); }
+  .mt-resolved { background: rgba(91, 141, 239, 0.1); border-color: rgba(91, 141, 239, 0.3); color: var(--mk-ink, #e6edf7); }
+  .mt-row { background: #141c2b; border-color: #232f45; color: var(--mk-ink, #e6edf7); }
+  .mt-row--check em { color: var(--mk-faint); }
+  .mt-rt-msg { color: var(--mk-green); }
+  /* 文字色补漏 */
   .msk__stat strong,
   .msk__kv strong { color: var(--mk-ink, #e6edf7); }
 }

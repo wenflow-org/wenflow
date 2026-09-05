@@ -23,17 +23,19 @@ import {
 const service = new RegisterQuotaService()
 
 describe('resolveIpDailyQuota', () => {
-  it('默认 5 个/天/IP', () => {
+  it('默认关（0 = 不限制），未配置 env 不再隐式开启 5 个限制', () => {
     expect(DEFAULT_IP_DAILY_QUOTA).toBe(5)
-    expect(resolveIpDailyQuota(undefined)).toBe(5)
-    expect(resolveIpDailyQuota('')).toBe(5)
+    expect(resolveIpDailyQuota(undefined)).toBe(0)
+    expect(resolveIpDailyQuota('')).toBe(0)
   })
 
-  it('合法正整数生效，非法值回退默认', () => {
+  it('合法 1-100 生效，0/非法值视为关闭（不限制）', () => {
     expect(resolveIpDailyQuota('3')).toBe(3)
-    expect(resolveIpDailyQuota('0')).toBe(5)
-    expect(resolveIpDailyQuota('-1')).toBe(5)
-    expect(resolveIpDailyQuota('abc')).toBe(5)
+    expect(resolveIpDailyQuota('100')).toBe(100)
+    expect(resolveIpDailyQuota('0')).toBe(0)
+    expect(resolveIpDailyQuota('-1')).toBe(0)
+    expect(resolveIpDailyQuota('101')).toBe(0)
+    expect(resolveIpDailyQuota('abc')).toBe(0)
   })
 })
 
@@ -69,6 +71,12 @@ describe('RegisterQuotaService', () => {
       code: 'REGISTER_IP_QUOTA_EXCEEDED',
       status: 429
     })
+  })
+
+  it('配额为 0（后台关闭）时不查询 DB、直接放行', async () => {
+    mockCount.mockResolvedValue(999)
+    await expect(service.assertWithinDailyQuota('1.2.3.4', 0)).resolves.toBe(Number.POSITIVE_INFINITY)
+    expect(mockCount).not.toHaveBeenCalled()
   })
 
   it('注册成功后落库配额记录（用户名截断 64 字符）', async () => {

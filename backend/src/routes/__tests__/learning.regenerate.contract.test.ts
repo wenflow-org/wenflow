@@ -201,6 +201,54 @@ describe('POST /paths/:pathId/regenerate（补充说明重新生成）', () => {
     }));
   });
 
+  it('有已完成任务 + fromStageNumber → 转调 requestPathReplan 多阶段重排', async () => {
+    mockFindUnique.mockResolvedValue(basePath({
+      milestones: [
+        {
+          id: 'm-1',
+          stageNumber: 1,
+          status: 'completed',
+          subtasks: [{ id: 't-1', status: 'completed' }],
+        },
+        {
+          id: 'm-2',
+          stageNumber: 2,
+          status: 'active',
+          subtasks: [{ id: 't-2', status: 'todo' }],
+        },
+        {
+          id: 'm-3',
+          stageNumber: 3,
+          status: 'active',
+          subtasks: [{ id: 't-3', status: 'todo' }],
+        },
+      ],
+    }));
+    mockRequestPathReplan.mockResolvedValue({
+      enabled: true,
+      status: 'redesigned-stages',
+      result: { redesignedStageNumbers: [2, 3] },
+    });
+
+    const handler = getPostHandler('/paths/:pathId/regenerate');
+    const req = createRequest({ body: { adjustments: '从阶段 2 起，后面都侧重实操', fromStageNumber: 2 } });
+    const res = createResponse();
+
+    await handler(req, res, jest.fn());
+
+    expect(mockClaimPathCoreGeneration).not.toHaveBeenCalled();
+    expect(mockRequestPathReplan).toHaveBeenCalledWith(expect.objectContaining({
+      mode: 'overwrite',
+      reason: '从阶段 2 起，后面都侧重实操',
+      fromStageNumber: 2,
+      requireConfirmation: false,
+    }));
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      message: '已按你的说明从该阶段起调整剩余部分',
+    }));
+  });
+
   it('无进度且无 adjustments → 整路径重建（不传 adjustments）', async () => {
     mockFindUnique.mockResolvedValue(basePath());
     mockClaimPathCoreGeneration.mockResolvedValue('run-2');
@@ -216,6 +264,108 @@ describe('POST /paths/:pathId/regenerate（补充说明重新生成）', () => {
     const goalRequest = mockRunGoalAsync.mock.calls[0][0];
     expect(goalRequest.adjustments).toBeNull();
     expect(mockRequestPathReplan).not.toHaveBeenCalled();
+  });
+
+  it('有已完成任务 + mode=rebuild-all → 显式整条重建（runAsync + forceReplace，不转 replan）', async () => {
+    mockFindUnique.mockResolvedValue(basePath({
+      milestones: [
+        {
+          id: 'm-1',
+          stageNumber: 1,
+          status: 'active',
+          subtasks: [
+            { id: 't-1', status: 'completed' },
+            { id: 't-2', status: 'todo' },
+          ],
+        },
+      ],
+    }));
+    mockClaimPathCoreGeneration.mockResolvedValue('run-3');
+    mockRunAsync.mockImplementation(() => {});
+
+    const handler = getPostHandler('/paths/:pathId/regenerate');
+    const req = createRequest({ body: { adjustments: '之前选错了方向，想整条重来', mode: 'rebuild-all' } });
+    const res = createResponse();
+
+    await handler(req, res, jest.fn());
+
+    // 有进度 + rebuild-all → 整建优先，不转 replan
+    expect(mockRequestPathReplan).not.toHaveBeenCalled();
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+    expect(mockClaimPathCoreGeneration).toHaveBeenCalledWith('path-1', null, { allowCompleted: true });
+    expect(mockRunAsync).toHaveBeenCalledTimes(1);
+    const runInput = mockRunAsync.mock.calls[0][0];
+    // forceReplace 放行标记透传（learning.service 侧据此允许 replace-path 覆盖已完成任务）
+    expect(runInput.userProfile.replan).toEqual(expect.objectContaining({
+      mode: 'overwrite',
+      forceReplace: true,
+      triggerSource: 'api',
+      sourcePathId: 'path-1',
+    }));
+    // 补充说明拼入描述
+    expect(runInput.description).toContain('整条重建');
+    expect(runInput.description).toContain('之前选错了方向，想整条重来');
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      data: expect.objectContaining({ runId: 'run-3', mode: 'rebuild-all' }),
+    }));
+  });
+
+  it('rebuild-all 基底用原始 rawGoal，不随 path.description 累积污染', async () => {
+    // path.description 已被历次重建污染（含前次「（整条重建）…」嵌套）
+    mockFindUnique.mockResolvedValue(basePath({
+      description: '（整条重建）（整条重建）原始目标。用户补充说明：旧说明。用户补充说明：更旧说明',
+    }));
+    mockClaimPathCoreGeneration.mockResolvedValue('run-4');
+    mockRunAsync.mockImplementation(() => {});
+
+    const handler = getPostHandler('/paths/:pathId/regenerate');
+    const req = createRequest({ body: { adjustments: '新说明', mode: 'rebuild-all' } });
+    const res = createResponse();
+
+    await handler(req, res, jest.fn());
+
+    expect(mockRunAsync).toHaveBeenCalledTimes(1);
+    const runInput = mockRunAsync.mock.calls[0][0];
+    // 基底是 aiPromptTemplate 里的原始 rawGoal（学会 TypeScript），不含污染
+    expect(runInput.description).toContain('学会 TypeScript');
+    expect(runInput.description).not.toContain('旧说明');
+    expect(runInput.description).toContain('新说明');
+    // 整条重建前缀只出现一次
+    expect(runInput.description.match(/整条重建/g)?.length ?? 0).toBe(1);
+  });
+
+  it('有 in_progress 任务 + mode=rebuild-all → 仍拦截（进行中任务需先结束）', async () => {
+    mockFindUnique.mockResolvedValue(basePath({
+      milestones: [
+        {
+          id: 'm-1',
+          stageNumber: 1,
+          status: 'active',
+          subtasks: [
+            { id: 't-1', status: 'in_progress' },
+          ],
+        },
+      ],
+    }));
+    mockClaimPathCoreGeneration.mockImplementation(() => {
+      const err: any = new Error('学习路径已有学习进度，不能覆盖重新生成');
+      err.status = 409;
+      err.code = 'PATH_MUTATION_HAS_LEARNING_PROGRESS';
+      return Promise.reject(err);
+    });
+    // sendPathMutationConflict 依赖 isPathMutationConflictError mock 返回 true 以转发 409
+    (jest.requireMock('../../services/learning/path-mutation-safety') as any).isPathMutationConflictError
+      .mockReturnValueOnce(true);
+
+    const handler = getPostHandler('/paths/:pathId/regenerate');
+    const req = createRequest({ body: { mode: 'rebuild-all' } });
+    const res = createResponse();
+
+    await handler(req, res, jest.fn());
+
+    // 整建遇到进行中任务：不静默放行 —— 前端应提示先结束当前任务
+    expect(res.status).toHaveBeenCalledWith(409);
   });
 
   it('路径不存在 → 404', async () => {

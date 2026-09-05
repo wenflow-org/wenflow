@@ -127,11 +127,30 @@ const AGENT_LABEL: Record<string, string> = {
   'skill:peer-reinforcement': '伴学回应',
   'skill:session-wrapup': '生成课后总结',
   'skill:learner-model': '更新学习画像',
+  'skill:stage-designer': '设计阶段任务',
+  'skill:path-reviewer': '评审路径',
+  'skill:kc-mapper': '整理知识组件',
+  'path-agent': '路径生成',
   'ai-teaching-agent': '课堂处理',
   'ai-tutor': '伴学回应',
   'system-canary': '系统自检',
   'learner-model-agent': '更新学习画像'
 };
+/** path-agent 阶段流水 phase → 用户可读的阶段名 */
+const PATH_PHASE_LABEL: Record<string, string> = {
+  core: '主结构生成',
+  stageDesign: '阶段任务设计',
+  started: '启动',
+  succeeded: '完成',
+  failed: '失败',
+};
+function agentLabelOf(agentId: string, phase?: string | null): string {
+  if (agentId === 'path-agent') {
+    if (phase) return PATH_PHASE_LABEL[phase] ? `路径生成 · ${PATH_PHASE_LABEL[phase]}` : `路径生成 · ${phase}`;
+    return '路径生成';
+  }
+  return AGENT_LABEL[agentId] ?? fallbackLabel(agentId);
+}
 const fallbackLabel = (agentId: string) => {
   const plain = agentId.replace(/^skill:/, '');
   const short = plain.split('-').pop() || plain;
@@ -155,7 +174,7 @@ function toFeed(logs: AgentLog[]): FeedEvent[] {
       try { return log.metadata ? JSON.parse(log.metadata) : {}; }
       catch { return {}; }
     })() as Record<string, unknown>;
-    const label = AGENT_LABEL[log.agentId] ?? fallbackLabel(log.agentId);
+    const label = agentLabelOf(log.agentId, (log as unknown as { phase?: string | null }).phase);
     const subject = (meta.subject || meta.taskTitle || meta.title) as string | undefined;
     return {
       key: log.id || `${log.calledAt}-${log.agentId}`,

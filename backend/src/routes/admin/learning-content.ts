@@ -223,8 +223,8 @@ router.get('/stats', async (req: Request, res: Response) => {
 
     const [total, byStatus, bySubject, totalMilestones, totalTasks] = await Promise.all([
       prisma.learning_paths.count({ where: { users: REAL_USER_WHERE } }),
-      prisma.learning_paths.groupBy({ by: ['status'], _count: { _all: true } }),
-      prisma.learning_paths.groupBy({ by: ['subject'], _count: { _all: true } }),
+      prisma.learning_paths.groupBy({ by: ['status'], _count: { _all: true }, where: { users: REAL_USER_WHERE } }),
+      prisma.learning_paths.groupBy({ by: ['subject'], _count: { _all: true }, where: { users: REAL_USER_WHERE } }),
       prisma.milestones.count({ where: { learning_paths: { users: REAL_USER_WHERE } } }),
       prisma.subtasks.count({ where: { users: REAL_USER_WHERE } }),
     ]);

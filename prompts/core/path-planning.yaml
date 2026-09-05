@@ -89,7 +89,7 @@ fields:
     desc: 里程碑总数，与 milestones 数组一致
   - name: estimatedHours
     type: number?
-    desc: 预估总小时数（可缺省，缺省时按 0 处理）
+    desc: 内部容量参考值：按用户时间预算粗估的总投入小时，仅用于约束阶段划分与任务规模（粗估发生在任务设计前，任务分钟由 stage-designer 逐任务产出后系统会以真实汇总回写，此值不直接对外展示）
   - name: estimatedWeeks
     type: number?
     desc: 预估总周数，不超过输入约束（见执行规则；可缺省）

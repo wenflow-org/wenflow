@@ -63,6 +63,8 @@
   align-items: center;
   gap: 10px;
   padding: 7px 12px;
+  min-height: 44px;
+  box-sizing: border-box;
   border-radius: 10px;
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
@@ -79,7 +81,8 @@
 .mk-status__meta { color: var(--mk-muted); font-size: var(--mk-fs-12_5); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .mk-status__action {
   margin-left: auto;
-  padding: 4px 10px;
+  height: 30px;
+  padding: 0 11px;
   border-radius: 7px;
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
@@ -89,6 +92,9 @@
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
 }
 .mk-status__action:hover { border-color: rgba(44, 99, 208, 0.4); }
 .mk-status__action--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
@@ -751,7 +757,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 }
 @keyframes mk-spin { to { transform: rotate(360deg); } }
 
-/* ----- 抽屉（mk-drawer：覆盖层通用骨架，AdminGlossaryDrawer / CommandPalette 迁入目标；
+/* ----- 抽屉（mk-drawer：覆盖层通用骨架，AdminGlossaryDrawer 迁入目标；
    SkillDrawer 因密集内容保持自身 msk- 档位，属登记在案的例外） ----- */
 .mk-drawer {
   position: fixed;

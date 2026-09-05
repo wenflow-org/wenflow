@@ -105,7 +105,7 @@ export interface InvestigationIntent {
   skillDrawerId: string
   /** 业务会话 ID（跳瀑布时优先进入会话分组视图） */
   sessionId: string
-  /** 页面级快捷动作（命令面板「新建用户」等直达并触发页面动作） */
+  /** 页面级快捷动作（intent 直达并触发页面动作，如新建用户/公告） */
   quickAction: string
   /** 失败归因/异常流跳转：执行日志错误类别筛选（'' = 不过滤） */
   errorCategory: string
@@ -130,12 +130,6 @@ export const intent = reactive<InvestigationIntent>({
   traceFocus: false,
   tab: ''
 })
-
-/** 命令面板 → 页面快捷动作（如打开新建弹窗），页面消费后需清空 */
-export function queueQuickAction(sceneId: string, action: string) {
-  intent.quickAction = action
-  intent.scene = sceneId
-}
 
 /** 总览事故卡 → 执行日志（已过滤该节点 + 失败） */
 export function investigateAgent(agentId: string) {

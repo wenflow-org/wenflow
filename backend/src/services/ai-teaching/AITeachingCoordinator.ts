@@ -82,6 +82,108 @@ export interface TeachingOpening {
 
 type SessionResumeMode = 'new' | 'resumed';
 
+/** 开场景卡片元数据（供前端开场 UI 结构化渲染，区分首课/续课/重学/恢复/复习） */
+export interface SessionOpeningScene {
+  kind: 'first' | 'continuation' | 'relearn' | 'resume' | 'review';
+  /** 卡片主标题（面向学习者的人话，如「这节课是 X 的延续」） */
+  title: string;
+  /** 衔接素材：上一课的摘要 / 卡点（有则展示在卡片上） */
+  recap?: {
+    topic: string | null;
+    summary: string | null;
+    retrievalCue: string | null;
+    unresolved: string[];
+    /** 位置关系：same-milestone-prev-task / prev-milestone / same-task / last-any */
+    relation?: string | null;
+    sourceStage?: number | null;
+    sourceTitle?: string | null;
+  } | null;
+  /** 同任务重学次数（≥2 表示这是重学） */
+  attempt?: number;
+  /** 前序阶段掌握度（供"基础稳不稳"提示） */
+  mastery?: Array<{ stage: number; title: string; state: 'unknown' | 'partial' | 'stable' | 'at-risk' }>;
+}
+
+/** 依据会话场景与上下文推导开场卡（纯函数，便于测试） */
+export function buildSessionOpeningScene(opts: {
+  mode: SessionResumeMode;
+  review?: boolean;
+  context: TeachingScenarioContext;
+  sameTaskAttempt?: number;
+}): SessionOpeningScene {
+  const { mode, review, context, sameTaskAttempt } = opts;
+  const prior = context.priorLearningContext;
+  const recap = context.lastLessonRecap;
+  if (review) {
+    return {
+      kind: 'review',
+      title: '今日复习 · 回捞快忘的知识点',
+      recap: recap ? {
+        topic: recap.sourceTopic,
+        summary: recap.topicSummary,
+        retrievalCue: recap.retrievalCue,
+        unresolved: recap.unresolvedPoints,
+        relation: recap.relation,
+        sourceStage: recap.sourceStageNumber ?? null,
+        sourceTitle: recap.sourceTaskTitle ?? recap.sourceMilestoneTitle ?? null,
+      } : null,
+      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState })) || [],
+    };
+  }
+  if (mode === 'resumed') {
+    return {
+      kind: 'resume',
+      title: '继续这节课 · 从上次离开的地方接着学',
+      recap: recap ? {
+        topic: recap.sourceTopic,
+        summary: recap.topicSummary,
+        retrievalCue: recap.retrievalCue,
+        unresolved: recap.unresolvedPoints,
+        relation: recap.relation,
+        sourceStage: recap.sourceStageNumber ?? null,
+        sourceTitle: recap.sourceTaskTitle ?? recap.sourceMilestoneTitle ?? null,
+      } : null,
+      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState })) || [],
+    };
+  }
+  // mode === 'new'：区分首课 / 同任务重学 / 第二课接续
+  if (sameTaskAttempt && sameTaskAttempt >= 2) {
+    return {
+      kind: 'relearn',
+      title: '重新学这一课 · 上次没完全掌握的这次补上',
+      recap: recap && recap.relation === 'same-task' ? {
+        topic: recap.sourceTopic,
+        summary: recap.sameTaskHistory?.lastSummary || recap.topicSummary,
+        retrievalCue: recap.retrievalCue,
+        unresolved: recap.unresolvedPoints,
+        relation: recap.relation,
+        sourceStage: recap.sourceStageNumber ?? null,
+        sourceTitle: context.taskTitle,
+      } : null,
+      attempt: sameTaskAttempt,
+      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState })) || [],
+    };
+  }
+  const hasAdjacent = recap && (recap.relation === 'same-milestone-prev-task' || recap.relation === 'prev-milestone');
+  if (hasAdjacent) {
+    return {
+      kind: 'continuation',
+      title: '接着上一课往下学',
+      recap: {
+        topic: recap.sourceTopic,
+        summary: recap.topicSummary,
+        retrievalCue: recap.retrievalCue,
+        unresolved: recap.unresolvedPoints,
+        relation: recap.relation,
+        sourceStage: recap.sourceStageNumber ?? null,
+        sourceTitle: recap.sourceTaskTitle ?? recap.sourceMilestoneTitle ?? null,
+      },
+      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState })) || [],
+    };
+  }
+  return { kind: 'first', title: '开始这节课', mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState })) || [] };
+}
+
 interface ProcessStudentMessageOptions {
   operationClaim?: TeachingSessionOperationClaim;
   checkpointId?: string;
@@ -918,6 +1020,7 @@ async function buildTeachingTurnInput(
     pathBackgroundContext: buildPathBackgroundContext(context),
     learningSignal: context.learningSignal,
     lastLessonRecap: context.lastLessonRecap,
+    priorLearningContext: context.priorLearningContext,
     learnerPrediction: context.learnerPrediction
       ? {
           stallRisk: context.learnerPrediction.stallRisk,
@@ -1137,8 +1240,20 @@ export class AITeachingOrchestrator {
     knowledgePoints: KnowledgePointStatus[];
     mode: SessionResumeMode;
     revision: number;
+    scene?: SessionOpeningScene;
   }> {
     const context = await buildTeachingScenarioContext(input.userId, input.taskId, null);
+    // 当前任务的历史完结次数（判断「同任务重学」，供开场卡 scene.kind = relearn）
+    let sameTaskAttempt = 0;
+    try {
+      sameTaskAttempt = await prisma.teaching_sessions.count({
+        where: {
+          userId: input.userId,
+          taskId: input.taskId,
+          status: { in: ['completed', 'discarded'] },
+        },
+      });
+    } catch { /* 统计失败不阻断 */ }
     const seededKnowledgeState = cloneKnowledgePoints(context.taskKnowledgeSeeds);
     // 复习课模式：knowledgeState 种子 = 任务种子 + 到期复习点（全部注入，非 limit 2）
     if (input.mode === 'review') {
@@ -1262,6 +1377,7 @@ export class AITeachingOrchestrator {
           knowledgePoints: normalizeKnowledgePoints(resumedKnowledgeState),
           mode: 'resumed',
           revision: previousSession.revision + 1,
+          scene: buildSessionOpeningScene({ mode: 'resumed', context: resumedContext, sameTaskAttempt }),
         };
       } finally {
         if (!committed) {
@@ -1369,6 +1485,12 @@ export class AITeachingOrchestrator {
         knowledgePoints: normalizeKnowledgePoints(seededKnowledgeState),
         mode: 'new',
         revision: session.revision,
+        scene: buildSessionOpeningScene({
+          mode: 'new',
+          context,
+          sameTaskAttempt,
+          ...(input.mode === 'review' ? { review: true } : {}),
+        }),
       };
     } catch (error) {
       await teachingSessionRepository.failInitialization(sessionId, operationId);
@@ -1405,6 +1527,7 @@ export class AITeachingOrchestrator {
           openingMode,
           ...(context.learningSignal ? { learningSignal: context.learningSignal } : {}),
           ...(context.lastLessonRecap ? { lastLessonRecap: context.lastLessonRecap } : {}),
+          ...(context.priorLearningContext ? { priorLearningContext: context.priorLearningContext } : {}),
           __prompt: {
             userId: context.userId,
             taskId: context.taskId,
@@ -1594,6 +1717,8 @@ export class AITeachingOrchestrator {
     const previousClassroomStage = (previousTeachingState.classroomContext?.stage?.current as LearnStage) || 'opening';
     const peerTriggered = peerTriggerService.shouldTrigger(session, teachingOutput, message);
     let peerMessage: string | undefined;
+    let peerStrategy: string | null = null;
+    let peerFollowUpQuestions: string[] = [];
     let peerDebug: any = null;
     let peerRuntimeEnvelope: any = null;
 
@@ -1624,6 +1749,12 @@ export class AITeachingOrchestrator {
           },
         });
         peerMessage = peerResult.internal?.ext?.peer?.message || peerResult.userVisible || '';
+        // 伴学策略与后续追问一并透传（供前端展示「正在用什么学法」与快选追问）
+        const peerExt = peerResult.internal?.ext?.peer || null;
+        peerStrategy = peerExt?.strategy || null;
+        peerFollowUpQuestions = Array.isArray(peerExt?.followUpQuestions)
+          ? peerExt.followUpQuestions.filter((q: unknown) => typeof q === 'string' && q.trim())
+          : [];
         peerDebug = extractPeerDebug(peerResult);
         peerRuntimeEnvelope = peerResult?.runtimeEnvelope
           || peerResult?.internal?.ext?.peer?.runtimeEnvelope
@@ -1760,6 +1891,8 @@ export class AITeachingOrchestrator {
       promptDebug,
       peerTriggered,
       peerMessage: peerMessage || null,
+      peerStrategy,
+      peerFollowUpQuestions,
       peerDebug,
     };
 
@@ -1911,11 +2044,16 @@ export class AITeachingOrchestrator {
       aiResponse: teachingOutput.reply,
       strategies: effectiveTeachingOutput.pedagogy.strategies,
       knowledgePoint: effectiveTeachingOutput.knowledge.currentPoint,
+      ...(effectiveTeachingOutput.knowledge.confirmCheck
+        ? { confirmCheck: effectiveTeachingOutput.knowledge.confirmCheck }
+        : {}),
       knowledgePoints: normalizeKnowledgePoints(mergedKnowledge),
       isCompletion: completionReady,
       currentState,
       peerTriggered,
       peerMessage,
+      peerStrategy,
+      peerFollowUpQuestions,
       promptDebug,
       peerDebug,
       // 统一运行契约观测（不改变 isCompletion 硬门禁）
@@ -2914,6 +3052,8 @@ export class AITeachingOrchestrator {
     message: string
   ): Promise<{
     peerResponse: string;
+    strategy: string | null;
+    followUpQuestions: string[];
   }> {
     const session = await teachingSessionRepository.getById(sessionId);
     if (!session) {
@@ -2954,13 +3094,18 @@ export class AITeachingOrchestrator {
     });
 
     const peerResponse = peerResult.internal?.ext?.peer?.message || peerResult.userVisible || '';
+    const peerExt = peerResult.internal?.ext?.peer || null;
+    const strategy = peerExt?.strategy || null;
+    const followUpQuestions = Array.isArray(peerExt?.followUpQuestions)
+      ? peerExt.followUpQuestions.filter((q: unknown) => typeof q === 'string' && q.trim())
+      : [];
     // 伴学对话落库（带 peer 标记），页面刷新后不丢失
     const now = new Date().toISOString();
     await teachingSessionRepository.appendPeerMessages(sessionId, [
       { role: 'user', content: message, timestamp: now, peer: true },
       { role: 'assistant', content: peerResponse, timestamp: now, peer: true },
     ]);
-    return { peerResponse };
+    return { peerResponse, strategy, followUpQuestions };
   }
 }
 

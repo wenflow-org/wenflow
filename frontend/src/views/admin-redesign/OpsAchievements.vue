@@ -1,6 +1,6 @@
 <template>
   <div class="mk-page">
-    <div class="mk-status">
+    <div class="mk-status mk-status--ok">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">成就管理</strong>
       <span class="mk-status__sep"></span>

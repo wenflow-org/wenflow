@@ -183,7 +183,9 @@ onUnmounted(() => {
 .v2nav__links a:hover { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.08); }
 .v2nav__links a.active { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.1); }
 .v2nav__right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
-/* 规划新目标 CTA：36px 高（次级动作，弱于主导航链接） */
+/* 规划新目标 CTA：36px 高（次级动作，弱于主导航链接）。
+   flex-shrink: 0 + nowrap：防止窄屏 flex 行把按钮压缩到文字宽度以下，
+   导致文字竖排换行、按钮纵向膨胀超出导航栏并裁出视口顶部（ISSUE-001）。 */
 .v2nav__cta {
   display: inline-flex; align-items: center; justify-content: center;
   min-height: 36px; padding: 0 14px; border-radius: 999px;
@@ -191,6 +193,7 @@ onUnmounted(() => {
   color: #fff; font-size: 13px; font-weight: 800;
   box-shadow: 0 6px 14px rgba(52, 120, 246, 0.26);
   cursor: pointer; text-decoration: none;
+  white-space: nowrap; flex-shrink: 0;
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 .v2nav__cta:hover {
@@ -298,6 +301,25 @@ onUnmounted(() => {
 @media (max-width: 1100px) {
   .v2nav__links { display: none; }
   .v2nav__name { display: none; }
+}
+
+/* 移动端压缩顶部导航：高度 72→56，logo 48→34，CTA 36→32，间距收窄 */
+@media (max-width: 900px) {
+  .v2nav__in {
+    height: 56px;
+    gap: 12px;
+    width: calc(100% - 28px);
+  }
+  .v2nav__logo { height: 34px; }
+  .v2nav__cta {
+    min-height: 32px;
+    padding: 0 12px;
+    font-size: 12px;
+    box-shadow: 0 4px 10px rgba(52, 120, 246, 0.22);
+  }
+  .v2nav__right { gap: 8px; }
+  .v2nav__avatar { padding: 4px 8px 4px 4px; font-size: 12.5px; }
+  .v2nav__avatar i { width: 28px; height: 28px; font-size: 13px; }
 }
 
 /* 大屏（1680+）：导航内容与页面容器同宽（1360）居中，避免 4K 下内容贴左 */

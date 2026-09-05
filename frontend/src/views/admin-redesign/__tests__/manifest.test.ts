@@ -1,6 +1,6 @@
 /**
  * Admin 页面注册表完整性（J P0 核心）：
- * manifest.ts（侧栏/命令面板单一数据源）每项都必须有 AdminConsole 注册组件，
+ * manifest.ts（侧栏场景清单）每项都必须有 AdminConsole 注册组件，
  * 且注册表不得残留 manifest 之外的孤儿组件——防止「加菜单忘注册 / 删页面留死组件」。
  */
 import { describe, expect, it } from 'vitest';
@@ -19,7 +19,7 @@ describe('AdminConsole 页面注册表', () => {
 
   it('注册表不残留 manifest 之外的孤儿组件', () => {
     const manifestIds = new Set(MOCK_SCENES.map((s) => s.id));
-    // HIDDEN_SCENE_IDS：有意不在侧栏展示的隐藏场景（深链/命令面板直达），豁免孤儿检查。
+    // HIDDEN_SCENE_IDS：有意不在侧栏展示的隐藏场景（深链直达），豁免孤儿检查。
     // skill-workbench = Skill 工作台（PromptWorkbench），历史设计为深链访问的二级页面。
     const HIDDEN_SCENE_IDS = new Set(['skill-workbench']);
     for (const id of Object.keys(SCENE_COMPONENTS)) {

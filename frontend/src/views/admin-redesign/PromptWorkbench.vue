@@ -1,7 +1,7 @@
 <template>
   <div :class="{ 'mk-page': !embedded }">
     <!-- 状态条（嵌入编排结构时隐藏，编排页已有自己的状态栏） -->
-    <div v-if="!embedded" class="mk-status">
+    <div v-if="!embedded" class="mk-status" :class="cores.some((c) => c.status === 'pending-compile') ? 'mk-status--warn' : cores.length ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">Skill 工作台</strong>
       <span class="mk-status__sep"></span>
@@ -252,7 +252,7 @@ useEscape(() => scaffoldOpen.value, () => { closeScaffold(); });
 useOverlay(scaffoldOpen, scaffoldPanelRef);
 useMaskClose(scaffoldMaskRef, () => { closeScaffold(); });
 
-/* 命令面板快捷动作「新建 Skill」：直达并打开 scaffold 弹窗 */
+/* intent 快捷动作「新建 Skill」：直达并打开 scaffold 弹窗 */
 watch(
   () => intent.quickAction,
   (a) => {

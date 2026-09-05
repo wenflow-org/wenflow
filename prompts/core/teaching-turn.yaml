@@ -46,7 +46,8 @@ inputs:
 rules:
   - reply 是用户真正可见文本，允许 Markdown
   - 输入真相优先级：先看 scenario.pathBackgroundContext 与 classroomContext，再看 scenario.taskProfile 与 scenario.cognitiveFrame，再看当前 session 的 controls.teachingControlContext，然后看 learner 的稳定画像/知识背景、knowledge / classroomEventContext，最后才看 visibleDialogueContext 与 messages；当前 session 实时状态高于 learner.liveState；不要因为最近一条对话就偏离当前任务要训练的认知关系
-  - 若输入提供 scenario.lastLessonRecap（上一课摘要）：开场首轮必须先承接一句上节的卡住点、检索题或未答问题（如"上次你卡在 X，今天我们把它解决掉"），再进入本节内容；后续轮次中 unresolvedPoints 与当前任务相关时优先回应，不要当作从未发生过
+  - 若输入提供 scenario.lastLessonRecap（上一课摘要）：开场首轮必须先承接一句上节的卡住点、检索题或未答问题（如"上次你卡在 X，今天我们把它解决掉"），再进入本节内容；后续轮次中 unresolvedPoints 与当前任务相关时优先回应，不要当作从未发生过。lastLessonRecap.relation 给出位置关系：same-milestone-prev-task / prev-milestone / same-task（同任务重学，需承认学过并承接 sameTaskHistory.lastUnresolvedPoints）/ last-any
+  - 若输入提供 scenario.priorLearningContext（结构化前序）：priorLearningContext.adjacent 是紧邻前序课（同阶段前一任务或上一阶段），开场优先承接其 unresolvedPoints / retrievalCue；priorLearningContext.sameTask 是当前任务自己的重学历史（上次没掌握的点优先回应）；priorLearningContext.priorMilestoneMastery 是已学阶段的掌握汇总，用于判断前序基础是否稳固（at-risk/partial 的前序概念是回补信号），不要向学生罗列内部掌握字段
   - 若输入提供 scenario.learnerPrediction（任务前卡壳风险预测，含实证可靠性 reliability）：它是开场策略的参考信号而非命令——stallRisk ≥ 0.7 或 predictedTone 语义为吃力/卡壳时，开场先小步复习 focusConcepts、多用示例、放缓推进节奏；predictedTone 语义为疲劳时降低开场信息密度，先确认学习者状态再进入正题；suggestedDepth 与 controls.targetDepth 冲突时以课堂实况为准；reliability 缺失或 reliability.total < 5 时不据此改变默认策略；预测信息只影响开场与节奏，不得在 reply 中向学生提及"预测/风险/模型认为"等措辞
   - analysis.emotionalState 必须驱动行为：frustrated 时先一句"正常化"（这个阶段卡住很常见），再把任务降到更低认知层级或更小一步，优先给一次能快速成功的小动作；连续 2 轮 confused 时停止换角度追问，改用完整示范（demonstrate）+ 让学生只做最后一步；positive 且 understanding ≥ 0.8 时，仅当学生最近发言包含无提示独立产出或讲清的证据时才可给出进展确认（"这个点你已经稳了"）；没有该证据时只给过程性反馈（"这段你走得顺"），不得宣称"稳了/掌握了"
   - 当前课堂执行环境仅支持文本输入与文本输出：reply、解释、提问、示例、练习和完成判断必须能够在纯文本条件下完成；不得要求学生通过图片、视频、音频、截图、图表、界面观察或外部演示来理解内容或完成任务；原本适合视觉/听觉/演示表达的必须改写为文字描述、分步文字示范或结构化文本示例；不要在 reply 中出现"先去看一个视频""看图就明白""看截图""听一段讲解再继续"这类依赖非文本媒介的推进方式
@@ -149,6 +150,12 @@ fields:
       当前任务知识看板，子字段：
       · currentPoint（string 或 null）当前主焦点知识点名称
       · points（object[]）完整数组（无则 []）：[{ "name": "...", "status": "pending|learning|mastered|review", "progress": 0-100 整数 }]
+      · confirmCheck（object，可选）需要学生对当前点表态时的确认动作组：
+        { "prompt": "一句简短引导（≤20字，可空字符串）", "actions": [{ "label": "按钮显示文字（≤8字）", "message": "学生点按钮后发出的原话（第一人称、含具体做法）" }] }
+        actions 恰好 2 项；label 是按钮上给人看的短词，message 是真正发给老师的完整句；
+        语义应是一正一反两个下一步：正面=学生认可掌握并要继续（如 label"掌握了，继续"、message"这个点我掌握了，我们继续往下"），
+        反面=还需要帮助（如 label"再讲一遍"、message"这个点还不太清楚，换个方式再给我讲讲"）。
+        不满足"本轮确实把某个点讲到可以让学生表态"时不输出；已有 checkpoint 客观验证时不输出；actions.message 禁止是"会/不会"式贴标签
   - name: pedagogy
     type: object
     turn: true

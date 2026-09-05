@@ -1,6 +1,6 @@
 ---
 agentId: skill:path-planning
-coreHash: c6e98e7657f5c7056cb848e327dc2279605e5c1ec9dec5e52701abe548bfc3f0
+coreHash: 891634593a8caafbb0e7ce4c5bdd5dd11580d0905ff2056b549864b87905475b
 coreVersion: 1
 temperature: 0.5
 maxTokens: 12000
@@ -75,7 +75,7 @@ failurePolicy: retry
 - name · string — 路径名称，简洁主题名（核心主题/技能 + 水平词），控制在 8-20 个字
 - summary · string? — 用 1-2 句话概括这条路径适合谁、解决什么问题（可缺省，缺省时列表页用 sceneSummary 兜底）
 - totalMilestones · number — 里程碑总数，与 milestones 数组一致
-- estimatedHours · number? — 预估总小时数（可缺省，缺省时按 0 处理）
+- estimatedHours · number? — 内部容量参考值：按用户时间预算粗估的总投入小时，仅用于约束阶段划分与任务规模（粗估发生在任务设计前，任务分钟由 stage-designer 逐任务产出后系统会以真实汇总回写，此值不直接对外展示）
 - estimatedWeeks · number? — 预估总周数，不超过输入约束（见执行规则；可缺省）
 - cognitiveCore · object — 正式认知结构，结构：
 {

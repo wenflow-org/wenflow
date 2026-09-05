@@ -1,6 +1,6 @@
 <template>
   <div :class="embedded ? 'mk-page--fill nt-embedded' : 'mk-page'">
-    <div class="mk-status" :class="statusTone">
+    <div v-if="!embedded" class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">站内通知</strong>
       <span class="mk-status__sep"></span>
@@ -26,6 +26,14 @@
           </label>
           <span class="nt-boundary" title="全站横幅公告请到「公告」页管理">横幅公告 → 公告页</span>
         </div>
+        <span class="mk-card__head-right">
+          <button
+            v-if="embedded"
+            type="button"
+            class="mk-btn mk-btn--primary mk-btn--sm"
+            @click="openSend"
+          >发送通知</button>
+        </span>
       </div>
 
       <MockSkeletonTable v-if="loading && !items.length" :cols="5" />
@@ -184,8 +192,10 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 
-/** 嵌入模式：作为「通知与公告」页「站内通知」tab 渲染（仅去掉外层壳，状态条/发送弹窗保留） */
+/** 嵌入模式：作为「通知与公告」页「站内通知」tab 渲染（仅去掉外层壳，状态条/发送弹窗保留）。
+    count 事件：通知总数上报（宿主「通知 N」徽章；embedded 才消费） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const emit = defineEmits<{ (e: 'count', total: number): void }>()
 
 interface NotifRow {
   id: string
@@ -244,6 +254,7 @@ async function reload() {
     items.value = (body.items || []).map((n: NotifRow) => ({ ...n, busy: false }))
     total.value = body.pagination?.total ?? items.value.length
     unreadTotal.value = body.unreadTotal ?? 0
+    emit('count', total.value)
   } catch (e) {
     failed.value = true
     toast.error(`加载失败：${errMsg(e)}`)
@@ -251,6 +262,8 @@ async function reload() {
     loading.value = false
   }
 }
+/* 宿主刷新联动（通知与公告合并宿主「刷新」按钮 → reload） */
+defineExpose({ reload })
 
 async function remove(n: NotifRow) {
   const ok = await askConfirm({

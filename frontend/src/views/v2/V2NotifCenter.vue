@@ -123,10 +123,29 @@
                   <div class="nc__task-content">
                     <div class="nc__task-row">
                       <span class="nc__task-label">{{ ev.label }}</span>
+                      <span v-if="ev.groupCount" class="nc__task-times" title="同一会话内的多次 AI 调用已合并">共 {{ ev.groupCount }} 次</span>
                       <span v-if="ev.subject" class="nc__task-subject">{{ ev.subject }}</span>
                       <span class="nc__task-time">{{ ev.time }}</span>
                     </div>
+                    <!-- 折叠组可展开：查看组内每次 AI 调用明细 -->
+                    <div v-if="ev.groupItems && expanded.has(ev.key)" class="nc__task-detail">
+                      <div v-for="it in ev.groupItems" :key="it.id" class="nc__task-detail-row">
+                        <span class="nc__task-detail-dot" :class="it.success ? 'nc__task-detail-dot--ok' : 'nc__task-detail-dot--err'"></span>
+                        <span class="nc__task-detail-name">{{ agentLabelOf(it.agentId, it.phase) }}</span>
+                        <span class="nc__task-detail-time">{{ timeAgo(it.calledAt) }}</span>
+                        <span class="nc__task-detail-state">{{ it.success ? '成功' : '失败' }}</span>
+                      </div>
+                    </div>
                   </div>
+                  <button
+                    v-if="ev.groupItems && ev.groupItems.length"
+                    type="button"
+                    class="nc__task-expand"
+                    :title="expanded.has(ev.key) ? '收起' : '展开查看每次调用'"
+                    @click="toggleExpand(ev.key)"
+                  >
+                    <svg viewBox="0 0 24 24" width="11" height="11" :style="{ transform: expanded.has(ev.key) ? 'rotate(180deg)' : 'none' }"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>
+                  </button>
                   <button
                     type="button"
                     class="nc__task-dismiss"
@@ -161,7 +180,7 @@
  * - 铃铛：无边框圆形（初始风格），通知未读红点数字、AI 任务运行中脉冲环
  * - 面板：Tab 切换「通知」/「AI 任务」，默认落在有内容的一栏
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import api from '@/utils/api';
 import { timeAgo } from '@/views/admin-redesign/live';
 import { learningAPI } from '@/api/learning';
@@ -176,6 +195,9 @@ interface BusyItem { key: string; title: string; detail?: string }
 interface FeedEvent {
   key: string; label: string; subject?: string; text: string;
   time: string; tone: 'ok' | 'err' | 'muted'; rawTime: number;
+  groupCount?: number;
+  groupItems?: Array<{ id: string; agentId: string; calledAt: string; success: boolean; durationMs?: number; errorCode?: string | null; phase?: string | null }>;
+  phase?: string | null;
 }
 
 /* ---------- 面板状态 ---------- */
@@ -234,6 +256,20 @@ let pollTimer = 0;
 let manualCursor = 0;
 let feedAll: FeedEvent[] = [];
 const dismissed = new Set<string>();
+// 展开态必须是响应式容器（Vue 模板依赖它触发重渲染）；reactive(new Set) 的 add/delete 均触发更新
+const expanded = reactive(new Set<string>());
+function toggleExpand(key: string) {
+  if (expanded.has(key)) expanded.delete(key);
+  else expanded.add(key);
+}
+function agentLabelOf(agentId: string, phase?: string | null): string {
+  if (agentId === 'path-agent') {
+    // path-agent 阶段流水：优先显示阶段名（主结构生成/阶段任务设计）
+    if (phase) return PATH_PHASE_LABEL[phase] ? `路径生成 · ${PATH_PHASE_LABEL[phase]}` : `路径生成 · ${phase}`;
+    return '路径生成';
+  }
+  return AGENT_LABEL[agentId] ?? fallbackLabel(agentId);
+}
 const PAGE_SIZE = 8;
 const SLOW_MS = 60_000;
 const FAST_MS = 12_000;
@@ -247,10 +283,22 @@ const AGENT_LABEL: Record<string, string> = {
   'skill:peer-reinforcement': '伴学回应',
   'skill:session-wrapup': '生成课后总结',
   'skill:learner-model': '更新学习画像',
+  'skill:stage-designer': '设计阶段任务',
+  'skill:path-reviewer': '评审路径',
+  'skill:kc-mapper': '整理知识组件',
+  'path-agent': '路径生成',
   'ai-teaching-agent': '课堂处理',
   'ai-tutor': '伴学回应',
   'system-canary': '系统自检',
   'learner-model-agent': '更新学习画像'
+};
+/** path-agent 阶段流水 phase → 用户可读的阶段名 */
+const PATH_PHASE_LABEL: Record<string, string> = {
+  core: '主结构生成',
+  stageDesign: '阶段任务设计',
+  started: '启动',
+  succeeded: '完成',
+  failed: '失败',
 };
 const fallbackLabel = (agentId: string) => {
   const plain = agentId.replace(/^skill:/, '');
@@ -274,15 +322,20 @@ function toFeed(logs: AgentLog[]): FeedEvent[] {
         try { return log.metadata ? JSON.parse(log.metadata) : {}; }
         catch { return {}; }
       })() as Record<string, unknown>;
-      const label = AGENT_LABEL[log.agentId] ?? fallbackLabel(log.agentId);
+      const label = agentLabelOf(log.agentId, (log as unknown as { phase?: string | null }).phase);
       const subject = (meta.subject || meta.taskTitle || meta.title) as string | undefined;
+      const groupCount = (log as unknown as { groupCount?: number }).groupCount;
+      const groupItems = (log as unknown as { groupItems?: FeedEvent['groupItems'] }).groupItems;
       return {
         key: log.id || `${log.calledAt}-${log.agentId}`,
         label, subject,
         text: subject ? `${label} · ${subject}` : label,
+        // 折叠组：label 后附「共 N 次」，展示组内最近一次时间（groupCount 由后端归并附带）
         time: timeAgo(log.calledAt),
         tone: log.success ? 'ok' : 'err',
-        rawTime: new Date(log.calledAt).getTime() || 0
+        rawTime: new Date(log.calledAt).getTime() || 0,
+        ...(groupCount && groupCount > 1 ? { groupCount } : {}),
+        ...(Array.isArray(groupItems) && groupItems.length ? { groupItems } : {})
       };
     });
 }
@@ -342,6 +395,7 @@ function feedLoadMore() {
 }
 function feedDismiss(key: string) {
   dismissed.add(key);
+  expanded.delete(key);
   feedAll = feedAll.filter((f) => f.key !== key);
   feedApplyWindow();
 }
@@ -486,6 +540,21 @@ onBeforeUnmount(() => {
 
 .nc__body { max-height: min(420px, 60vh); overflow-y: auto; }
 
+/* 移动端：面板改为全宽 fixed（铃铛不在屏幕右缘，absolute 右对齐铃铛会向左溢出屏幕） */
+@media (max-width: 900px) {
+  .nc__panel {
+    position: fixed;
+    top: 64px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: calc(100dvh - 140px);
+    display: flex;
+    flex-direction: column;
+  }
+  .nc__body { flex: 1; min-height: 0; max-height: none; }
+}
+
 /* 通知列表 */
 .nc__item {
   display: flex;
@@ -575,6 +644,53 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--muted, #5b6577);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.nc__task-times {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--blue-deep, #1f57cc);
+  background: color-mix(in srgb, var(--blue, #3478f6) 12%, transparent);
+  border-radius: 999px;
+  padding: 1px 7px;
+  flex-shrink: 0;
+}
+/* 折叠组展开明细 */
+.nc__task-expand {
+  border: 0;
+  background: transparent;
+  color: var(--faint, #8492ab);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.nc__task-expand:hover { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.08); }
+.nc__task-detail {
+  margin-top: 8px;
+  padding: 6px 4px 2px 8px;
+  border-left: 2px solid color-mix(in srgb, var(--line, #e3e9f4) 80%, transparent);
+  display: grid;
+  gap: 3px;
+}
+.nc__task-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  line-height: 1.7;
+}
+.nc__task-detail-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.nc__task-detail-dot--ok { background: #2ea36b; }
+.nc__task-detail-dot--err { background: #e5484d; }
+.nc__task-detail-name { color: var(--ink, #172033); font-weight: 600; }
+.nc__task-detail-time { color: var(--faint, #8492ab); }
+.nc__task-detail-state {
+  margin-left: auto;
+  color: var(--muted, #5b6577);
+  font-size: 11px;
 }
 .nc__task-time { margin-left: auto; font-size: 11px; color: var(--faint, #8492ab); flex-shrink: 0; }
 .nc__task-status {

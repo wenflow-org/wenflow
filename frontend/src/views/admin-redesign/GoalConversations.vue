@@ -1,52 +1,49 @@
 <template>
-  <div class="mk-page mk-page--fill">
-    <!-- 目标对话页头（单行状态条：页面名 + 堆叠条 + 可点击计数 + 刷新；与其他列表页统一形态） -->
-    <!-- 目标对话专项状态条：仅目标对话/学习路径 tab 显示（教学会话 tab 由该视图自身状态条承载） -->
-    <div v-if="gcTab !== 'teaching'" class="mk-status" :class="gcDashTone === 'bad' ? 'mk-status--bad' : gcDashTone === 'warn' ? 'mk-status--warn' : gcDashTone === 'muted' ? 'mk-status--muted' : 'mk-status--ok'">
+  <div class="mk-page mk-page--fill gc-host">
+    <!-- 页面级状态条：场景名 + 同域三视图计数徽章（点击直达对应视图）+ 刷新。
+         徽章=当前视图聚合概览，计数由激活子视图上报（域计数徽章方案） -->
+    <div class="mk-status" :class="`mk-status--${dashTone}`">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ gcTab === 'paths' ? '学习路径' : '目标对话' }}</strong>
+      <strong class="mk-status__title">学习会话</strong>
       <span class="mk-status__sep"></span>
-      <div v-if="isLive && stats && stats.total > 0" class="gc-stack gc-stack--inline" :title="`进行中 ${stats.active} · 已完成 ${stats.completed} · 其他 ${stackOther}`">
-        <span class="gc-stack__bar">
-          <i class="gc-stack__seg gc-stack__seg--active" :style="{ width: stackPct('active') }"></i>
-          <i class="gc-stack__seg gc-stack__seg--completed" :style="{ width: stackPct('completed') }"></i>
-          <i class="gc-stack__seg gc-stack__seg--cancelled" :style="{ width: stackPct('other') }"></i>
-        </span>
-      </div>
       <button
         type="button"
         class="gc-count-link"
-        :class="{ 'gc-count-link--on': statusFilter === 'active' }"
-        title="点击筛选「进行中」对话"
-        @click="statusFilter = statusFilter === 'active' ? '' : 'active'"
-      >进行中 {{ stats?.active ?? 0 }}</button>
+        :class="{ 'gc-count-link--on': gcTab === 'teaching' }"
+        title="点击切换到「教学会话」视图"
+        @click="switchGcTab('teaching')"
+      >教学 {{ domainCount.teaching }}</button>
       <button
         type="button"
         class="gc-count-link"
-        :class="{ 'gc-count-link--on': statusFilter === 'completed' }"
-        title="点击筛选「已完成」对话"
-        @click="statusFilter = statusFilter === 'completed' ? '' : 'completed'"
-      >已完成 {{ stats?.completed ?? 0 }}</button>
-      <span v-if="stackOther" class="mk-status__meta">待澄清 {{ stackOther }}</span>
-      <span v-if="isLive && stats" class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ stats.total }} 条 · 近 30 天</span>
+        :class="{ 'gc-count-link--on': gcTab === 'conversations' }"
+        title="点击切换到「目标对话」视图"
+        @click="switchGcTab('conversations')"
+      >对话 {{ domainCount.conversations }}</button>
+      <button
+        type="button"
+        class="gc-count-link"
+        :class="{ 'gc-count-link--on': gcTab === 'paths' }"
+        title="点击切换到「学习路径」视图"
+        @click="switchGcTab('paths')"
+      >路径 {{ domainCount.paths }}</button>
+      <span class="mk-status__meta" title="学习会话三视图合计（教学会话 + 目标对话 + 学习路径，均为仅真实口径）">共 {{ domainTotal }} 项</span>
       <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="loading" @click="load(true)">
-          {{ loading ? '刷新中…' : '刷新' }}
-        </button>
+        <button type="button" class="mk-status__action" @click="refreshActive">刷新</button>
       </span>
     </div>
 
-    <!-- 二级切换：教学会话 / 目标对话 / 学习路径（同域三视图——教学会话=上课记录；学习路径=目标对话产出物） -->
+    <!-- 视图切换 pills（次级切换，紧随状态条；对齐观测组执行日志 tab 形态） -->
     <div class="mk-pills gc-tabs">
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'teaching' }" @click="switchGcTab('teaching')">教学会话</button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'conversations' }" @click="switchGcTab('conversations')">目标对话</button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'paths' }" @click="switchGcTab('paths')">学习路径</button>
     </div>
 
-    <!-- ===== Tab0: 教学会话（嵌入 TeachingSessions 组件，同域合并） ===== -->
-    <TeachingSessions v-if="gcTab === 'teaching'" embedded />
+    <!-- ===== Tab0: 教学会话（嵌入 TeachingSessions 组件；embedded 不含状态条，计数上报宿主） ===== -->
+    <TeachingSessions v-if="gcTab === 'teaching'" ref="teachingRef" embedded @count="onDomainCount('teaching', $event)" />
 
-    <!-- ===== Tab1: 目标对话 ===== -->
+    <!-- ===== Tab1: 目标对话（列表内联于宿主；宿主状态条承载统计） ===== -->
     <template v-if="gcTab === 'conversations'">
 
     <!-- 空态：无数据时显示（live 列表为空） -->
@@ -171,7 +168,7 @@
     </template>
 
     <!-- ===== Tab2: 学习路径（原「内容管理」合并：路径是目标对话的产出物，同域治理视图） ===== -->
-    <OpsContent v-if="gcTab === 'paths'" embedded :initial-status="pathInitialStatus" />
+    <OpsContent v-if="gcTab === 'paths'" ref="pathsRef" embedded :initial-status="pathInitialStatus" @count="onDomainCount('paths', $event)" />
 
     <!-- 详情面板 -->
     <Teleport to="body">
@@ -460,22 +457,30 @@ function confToneCls(pct: number): string {
   return confTone(pct) === 'bad' ? 'gc-conf--low' : confTone(pct) === 'warn' ? 'gc-conf--warn' : ''
 }
 
-/* 状态条完成率堆叠条（G3）：进行中/已完成/其他 三色比例条 */
-const stackOther = computed(() => {
-  const t = stats.value?.total || 0
-  return Math.max(0, t - (stats.value?.active || 0) - (stats.value?.completed || 0))
-})
-/* ===== Goal 概览（gc-dash：结论，状态条承载） ===== */
-const gcDashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
-  if (!stats.value || stats.value.total === 0) return 'muted'
-  if ((stats.value.active ?? 0) > 0) return 'ok'
+/* ===== 宿主状态条（学习会话：三域计数徽章 + 切视图） ===== */
+/** 三域计数（由激活子视图上报；conversations 域用 stats.total 兜底） */
+const domainCount = ref<{ teaching: number; conversations: number; paths: number }>({ teaching: 0, conversations: 0, paths: 0 })
+const domainTotal = computed(() => domainCount.value.teaching + domainCount.value.conversations + domainCount.value.paths)
+/** 基调：无任何数据 muted；任一域有数即 ok（观测页统一语义） */
+const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
+  const d = domainCount.value
+  if (!stats.value && d.teaching === 0 && d.paths === 0) return 'muted'
   return 'ok'
 })
-function stackPct(seg: 'active' | 'completed' | 'other'): string {
-  const t = stats.value?.total || 0
-  if (t <= 0) return '0%'
-  const n = seg === 'active' ? (stats.value?.active || 0) : seg === 'completed' ? (stats.value?.completed || 0) : stackOther.value
-  return `${Math.max(0, Math.min(100, Math.round((n / t) * 100)))}%`
+function onDomainCount(domain: 'teaching' | 'conversations' | 'paths', n: number) {
+  domainCount.value[domain] = n
+}
+/* conversations 加载后同步域计数 */
+watch(stats, (s) => {
+  if (s) onDomainCount('conversations', Number(s.total || 0))
+})
+/** 刷新：转交当前激活子视图（teaching/paths 暴露 refresh；conversations 走 load） */
+const teachingRef = ref<{ refreshNow: () => void } | null>(null)
+const pathsRef = ref<{ reload: () => void } | null>(null)
+function refreshActive() {
+  if (gcTab.value === 'teaching') teachingRef.value?.refreshNow()
+  else if (gcTab.value === 'paths') pathsRef.value?.reload()
+  else void load(true)
 }
 
 useEscape(() => !!detail.value, closeDetail)
@@ -786,6 +791,18 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 合并宿主（对齐观测组执行日志形态）：应用式 fill 容器 + 顶部视图切换 pills + 子组件占满 */
+.gc-host {
+  padding: var(--mk-space-3) var(--mk-space-4) var(--mk-space-4);
+}
+.gc-tabs { width: fit-content; }
+/* 子组件根节点（.mk-page--fill）：占满剩余高度，表格区内滚（对齐 pp-host > .mk-page--fill 先例） */
+.gc-host > .mk-page--fill {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* 目标对话内联内容（状态条 + 卡片）：同为 fill 列的直接子级，卡片弹性填满 */
+.gc-host > .mk-status { flex: none; }
 /* 概览卡样式由共享 mk-overview/mk-kpi 体系承载；此处仅保留堆叠条（pre slot 内）与行样式 */
 .gc-dash__stack { padding: 0; }
 .gc-row { cursor: pointer; }

@@ -9,7 +9,7 @@
       </div>
     </div>
 
-    <Shell :current="scene" :crumb="crumbLabel" :crumb-title="crumbTitle" release @navigate="navigate" @palette="paletteOpen = true" @glossary="glossaryOpen = true">
+    <Shell :current="scene" :crumb="crumbLabel" :crumb-title="crumbTitle" release @navigate="navigate" @glossary="glossaryOpen = true">
       <TabBar v-if="!booting" :tabs="tabItems" :current="scene" @select="navigate" @close="closeTab" @close-others="closeOthers" @close-right="closeRight" @toggle-pin="togglePin" />
       <div v-if="booting" class="ac-boot">
         <span class="mk-spinner mk-spinner--lg"></span>
@@ -18,11 +18,6 @@
       <component v-else :is="detailComponent || currentComponent" />
     </Shell>
 
-    <CommandPalette
-      :open="paletteOpen"
-      @close="paletteOpen = false"
-      @navigate="navigate"
-    />
     <AdminGlossaryDrawer :open="glossaryOpen" @close="glossaryOpen = false" />
     <SkillDrawer />
   </section>
@@ -103,7 +98,7 @@ const components: Record<string, unknown> = {
   'addons': Addons,
   'session-security': SessionSecurity,
   // 隐藏场景（不在 manifest 侧栏）：PromptWorkbench 是「新建 Skill」骨架生成的唯一入口，
-  // 命令面板「新建 Skill」与健康中心 hash/yaml 跳转深链至此，勿删注册
+  // 健康中心 hash/yaml 跳转深链至此，勿删注册
   'skill-workbench': PromptWorkbench,
   'health-center': HealthCenter,
   'ops-hub': OpsHub,
@@ -130,20 +125,18 @@ export const DETAIL_COMPONENTS: Readonly<Record<string, unknown>> = detailCompon
  * 原实验稿 /admin-redesign-lab 已废除，本组件为唯一管理后台入口。
  * 特点：
  */
-import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, h, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Shell from './Shell.vue';
 import TabBar, { type AdminTab } from './TabBar.vue';
 import { MOCK_SCENES } from './manifest';
 import SkillDrawer from './SkillDrawer.vue';
 import AdminGlossaryDrawer from './AdminGlossaryDrawer.vue';
-import CommandPalette from './CommandPalette.vue';
 import { intent, subPage, closeSkillDrawer, type SubPageView } from './store';
 import { loadLiveData } from './live';
 import './shared.css';
 
 const scene = ref('overview');
-const paletteOpen = ref(false);
 const glossaryOpen = ref(false);
 const booting = ref(true);
 const bootError = ref('');
@@ -229,7 +222,7 @@ watch(
   },
   { immediate: true }
 )
-// scene → URL（侧栏/命令面板/意图跳转）；push 保留历史，浏览器后退可回到上一页面
+// scene → URL（侧栏/意图跳转）；push 保留历史，浏览器后退可回到上一页面
 watch(scene, (s) => {
   const cur = typeof route.params.page === 'string' ? route.params.page : ''
   if (cur !== s) void router.push(`/admin/${s}`)
@@ -369,21 +362,7 @@ onMounted(() => {
     scene.value = intent.scene
   }
   void boot();
-  window.addEventListener('keydown', onGlobalKey);
 });
-onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey));
-
-function onGlobalKey(e: KeyboardEvent) {
-  const target = e.target as HTMLElement | null
-  const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-    if (isTyping) return
-    e.preventDefault()
-    paletteOpen.value = !paletteOpen.value
-  } else if (e.key === 'Escape' && paletteOpen.value) {
-    paletteOpen.value = false
-  }
-}
 </script>
 
 <style scoped>

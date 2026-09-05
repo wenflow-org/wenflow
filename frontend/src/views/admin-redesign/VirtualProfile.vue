@@ -2454,7 +2454,7 @@ async function quietReload(id: string) {
   max-height: 180px;
   overflow-y: auto;
 }
-
+
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
   .vp-back { font-size: 15px; }

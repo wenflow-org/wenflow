@@ -293,15 +293,34 @@ router.put('/settings/registration', async (req: Request, res: Response) => {
       });
     }
 
-    const { registrationEnabled } = req.body;
-    if (typeof registrationEnabled !== 'boolean') {
+    const { registrationEnabled, registerIpQuotaEnabled, registerIpDailyQuota } = req.body;
+    if (registrationEnabled !== undefined && typeof registrationEnabled !== 'boolean') {
       return res.status(400).json({
         success: false,
         error: { message: 'registrationEnabled 必须是布尔值', status: 400 }
       });
     }
+    if (registerIpQuotaEnabled !== undefined && typeof registerIpQuotaEnabled !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'registerIpQuotaEnabled 必须是布尔值', status: 400 }
+      });
+    }
+    if (registerIpDailyQuota !== undefined) {
+      const quota = Number(registerIpDailyQuota);
+      if (!Number.isInteger(quota) || quota < 0 || quota > 100) {
+        return res.status(400).json({
+          success: false,
+          error: { message: 'registerIpDailyQuota 必须是 0-100 的整数', status: 400 }
+        });
+      }
+    }
 
-    const settings = await updatePlatformSettings({ registrationEnabled });
+    const settings = await updatePlatformSettings({
+      registrationEnabled,
+      registerIpQuotaEnabled,
+      registerIpDailyQuota
+    });
     res.json({
       success: true,
       data: settings

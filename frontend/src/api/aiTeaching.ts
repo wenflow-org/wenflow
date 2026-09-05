@@ -85,6 +85,8 @@ export interface MessageResult {
   wrapup?: WrapupArtifact | null;
   advisory?: ReplanAdvisory | null;
   peerMessage?: string | null;
+  peerStrategy?: string | null;
+  peerFollowUpQuestions?: string[];
   peerDebug?: Record<string, unknown> | null;
   checkpoint?: Checkpoint | null;
   promptDebug?: Record<string, unknown> | null;
@@ -114,6 +116,8 @@ export interface MessageResult {
 
 export interface PeerMessageResult {
   peerResponse: string;
+  peerStrategy?: string | null;
+  peerFollowUpQuestions?: string[];
 }
 
 export interface LearningState {
@@ -152,7 +156,7 @@ export interface SessionDetail {
   endTime: string | null;
   duration: number | null;
   status: string;
-  messages: Array<{ role: string; content: string; timestamp: string; analysis?: Record<string, unknown>; strategies?: string[]; knowledgePoint?: string | null; knowledgePoints?: KnowledgePointStatus[]; promptDebug?: Record<string, unknown> | null; peerTriggered?: boolean; peerMessage?: string | null; peerDebug?: Record<string, unknown> | null }>;
+  messages: Array<{ role: string; content: string; timestamp: string; analysis?: Record<string, unknown>; strategies?: string[]; knowledgePoint?: string | null; knowledgePoints?: KnowledgePointStatus[]; promptDebug?: Record<string, unknown> | null; peerTriggered?: boolean; peerMessage?: string | null; peerStrategy?: string | null; peerFollowUpQuestions?: string[]; peerDebug?: Record<string, unknown> | null; peer?: boolean }>;
   state: Record<string, unknown> | null;
   knowledgePoints?: KnowledgePointStatus[];
   wrapup?: WrapupArtifact | null;

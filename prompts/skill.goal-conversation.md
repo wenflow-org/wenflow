@@ -1,6 +1,6 @@
 ---
 agentId: skill:goal-conversation
-coreHash: 86e61350c55da10472cb4ab9cb3d46fe3ea1f3a0029b699fbd5a321419cd6d1e
+coreHash: 03a468a3bc97a6b58d22c8d7f44253551f2fd074deca60efdf4ca13fc1ac721e
 coreVersion: 1
 temperature: 0.7
 maxTokens: 8000
@@ -105,7 +105,7 @@ deltaOutput: true
 · first_deliverable（string）用户最先要拿到的最小结果；
   零基础用户（仅知模糊概念、从未系统学过）优先建立基础认知框架（最小可用 mental model），不做跳过
 · key_stages（string[]）大致阶段，通常 2-5 个
-· out_of_scope（string[]）先不展开的内容，允许空数组
+· out_of_scope（string[]）内部占位（hidden，供路径细化参考，如"投资理财等下阶段"）——用户界面不展示该内容，不允许要求用户"确认不学什么"，只在回复里自然说明"这一版先聚焦……，后续阶段再展开"
 · prerequisiteDiagnostics（object[]，可选）前置知识探测题（最多 2 个，见规则"前置知识探测"）：
   [{ "probeId": "probe-1", "targetConcept": 被探测的前置概念, "question": 极简二元探测题（单一概念点，一次判断）,
      "options": [{ "id": "A", "text": "..." }, { "id": "B", "text": "..." }], "correctOption": "A" }]

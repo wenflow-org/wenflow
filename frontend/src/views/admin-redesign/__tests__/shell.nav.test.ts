@@ -69,13 +69,6 @@ describe('Shell 导航', () => {
     expect(wrapper.emitted('navigate')?.[0]).toEqual(['skills']);
   });
 
-  it('侧栏搜索条展示（命令面板入口原顶栏迁入 + Ctrl+K 提示）', () => {
-    const wrapper = mountShell({ current: 'execution-logs' });
-    expect(wrapper.find('.mshell__search').exists()).toBe(true);
-    expect(wrapper.find('.mshell__search-hint').text()).toContain('命令面板');
-    expect(wrapper.find('.mshell__kbd').exists()).toBe(true);
-  });
-
   it('release 模式下展示管理员区（退出按钮）', () => {
     const wrapper = mountShell({ current: 'overview', release: true });
     expect(wrapper.find('.mshell__logout').exists()).toBe(true);

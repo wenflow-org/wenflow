@@ -9,11 +9,11 @@
         <small>{{ pathName }}</small>
       </div>
       <div class="learn__head-right">
-        <router-link to="/learning-state" class="learn__state-link" title="查看学习状态与节奏">学习状态</router-link>
         <span class="learn__live">{{ session ? '学习中' : '连接中' }}</span>
-        <span class="learn__menu" title="更多" @click="menuOpen = !menuOpen">⋯</span>
-        <Transition name="pop">
-          <div v-if="menuOpen" class="learn__menu-pop">
+        <span class="learn__menu-wrap">
+          <span class="learn__menu" title="更多" @click="menuOpen = !menuOpen" :aria-expanded="menuOpen">⋯</span>
+          <Transition name="pop">
+            <div v-if="menuOpen" class="learn__menu-pop">
             <div class="learn__menu-group">
               <span class="learn__menu-label">结束本节课</span>
               <button type="button" class="learn__menu-item learn__menu-item--primary" @click="completeAndSettle">
@@ -35,6 +35,7 @@
             </div>
           </div>
         </Transition>
+        </span>
       </div>
     </header>
 
@@ -64,29 +65,71 @@
     </div>
 
     <div v-else key="body" class="learn__body" :class="{ 'learn__body--no-kp': !knowledgePoints.length }">
-      <!-- 左：知识点面板 -->
-      <aside v-if="knowledgePoints.length" class="kp">
-        <div class="kp__head">
+      <!-- 左：知识点面板（移动端默认折叠为头部横条，点击展开；桌面恒展开） -->
+      <aside v-if="knowledgePoints.length" class="kp" :class="{ 'kp--collapsed': !kpExpanded }">
+        <button type="button" class="kp__head" :aria-expanded="kpExpanded" @click="toggleKp">
           <strong>本节知识点</strong>
           <span>{{ masteredCount }} / {{ knowledgePoints.length }} 已掌握</span>
+          <span class="kp__caret" aria-hidden="true">{{ kpExpanded ? '▾' : '▸' }}</span>
+        </button>
+        <div class="kp__body">
+          <div class="kp__bar"><i :style="{ width: (masteredCount / knowledgePoints.length) * 100 + '%' }"></i></div>
+          <ol class="kp__list">
+            <li v-for="(kp, i) in knowledgePoints" :key="kp.id || i" class="kp__item" :class="kpCls(kp)">
+              <span class="kp__mark">
+                <svg v-if="isMastered(kp)" viewBox="0 0 24 24" width="10" height="10"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
+                <i v-else></i>
+              </span>
+              <div class="kp__name">
+                <strong>{{ kp.name || kp.title }}</strong>
+                <small>{{ kpStatusText(kp) }}</small>
+              </div>
+            </li>
+          </ol>
         </div>
-        <div class="kp__bar"><i :style="{ width: (masteredCount / knowledgePoints.length) * 100 + '%' }"></i></div>
-        <ol class="kp__list">
-          <li v-for="(kp, i) in knowledgePoints" :key="kp.id || i" class="kp__item" :class="kpCls(kp)">
-            <span class="kp__mark">
-              <svg v-if="isMastered(kp)" viewBox="0 0 24 24" width="10" height="10"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
-              <i v-else></i>
-            </span>
-            <div class="kp__name">
-              <strong>{{ kp.name || kp.title }}</strong>
-              <small>{{ kpStatusText(kp) }}</small>
-            </div>
-          </li>
-        </ol>
       </aside>
 
       <!-- 中：导师对话 -->
       <section class="tutor">
+        <!-- 恢复进度横幅：续上历史时可见，明确「已恢复到上次进度」并提供重新开始出口 -->
+        <div v-if="resumedNotice" class="tutor__resume">
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M13 2 4.5 13.5H11L9.5 22 19 9.5h-6.5L13 2z"/></svg>
+          <span class="tutor__resume-text">已恢复上次学习进度，接着继续</span>
+          <button type="button" class="tutor__resume-restart" @click="restart">重新开始</button>
+          <button type="button" class="tutor__resume-close" aria-label="关闭提示" @click="resumedNotice = false">
+            <svg viewBox="0 0 24 24" width="10" height="10"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+
+        <!-- 开场景卡片：resumed / 接续 / 重学 / 复习 的结构化开场（取代模板双气泡的空转重复） -->
+        <div v-if="openingScene && !openingSceneDone" class="oscene" :class="`oscene--${openingScene.kind || 'first'}`">
+          <div class="oscene__tag">{{ sceneTag }}</div>
+          <h3 class="oscene__title">{{ openingScene.title || sceneDefaultTitle }}</h3>
+          <p v-if="sceneLead" class="oscene__lead">{{ sceneLead }}</p>
+          <div v-if="openingScene.recap?.summary" class="oscene__summary">{{ openingScene.recap.summary }}</div>
+          <div v-if="sceneUnresolved.length" class="oscene__chips">
+            <span class="oscene__chip-label">上次还没完全掌握</span>
+            <span v-for="(u, ui) in sceneUnresolved" :key="ui" class="oscene__chip">{{ u }}</span>
+          </div>
+          <div v-if="sceneMasteryWarn.length" class="oscene__warn">
+            <span>前序基础提醒：</span>{{ sceneMasteryWarn }}
+          </div>
+          <div class="oscene__actions">
+            <button type="button" class="btn-primary" :disabled="typing || actionBusy" @click="startFromScene">
+              <span v-if="typing" class="spinner spinner--sm"></span>
+              {{ scenePrimaryText }}
+            </button>
+            <button
+              v-if="openingScene.kind === 'resume'"
+              type="button"
+              class="btn-ghost"
+              :disabled="typing || actionBusy"
+              @click="restart"
+            >重新开始</button>
+            <button type="button" class="btn-ghost" :disabled="typing || actionBusy" @click="openingSceneDone = true">先看看</button>
+          </div>
+        </div>
+
         <div ref="scrollEl" class="tutor__scroll" @scroll="updateNearBottom">
           <template v-for="m in msgs" :key="m.id">
             <div v-if="m.role === 'user'" class="msg msg--user" :class="{ 'msg--editing': editingMsgId === m.id }">
@@ -155,21 +198,45 @@
           @click="jumpToBottom"
         >↓ 回到底部</button>
 
-        <!-- 开场快捷回复 -->
+        <!-- 开场行动台：AI 给的「下一步动作」选项，点一下直接执行（即点即达） -->
         <div v-if="quickReplies.length && !typing && !checkpoint" class="replies">
+          <div class="replies__head">
+            <span class="replies__kicker">{{ quickReplyKicker }}</span>
+            <span class="replies__hint">选一个，直接开始</span>
+          </div>
           <div class="replies__row">
-            <button v-for="q in quickReplies" :key="q" type="button" class="reply" @click="sendDirect(q)">{{ q }}</button>
+            <button
+              v-for="(q, qi) in quickReplies"
+              :key="q"
+              type="button"
+              class="reply"
+              :class="`reply--${(qi % 3) + 1}`"
+              @click="sendDirect(q)"
+            >
+              <span class="reply__mark" aria-hidden="true">{{ qi + 1 }}</span>
+              <span class="reply__text">{{ q }}</span>
+              <span class="reply__go" aria-hidden="true">→</span>
+            </button>
           </div>
         </div>
 
-        <!-- 知识点操作：自我评估二选一（掌握 ✓ 绿 / 未理解 ✗ 琥珀）；有上下文快选时隐藏避免双条拥挤 -->
-        <div v-if="!checkpoint && !completed && showKpActions && !typing && !quickReplies.length" class="kp-actions">
-          <div class="kp-actions__row">
-            <button type="button" class="kp-btn kp-btn--mastered" @click="sendDirect('我掌握了，继续')">
-              <span class="kp-btn__icon" aria-hidden="true">✓</span>我掌握了，继续
-            </button>
-            <button type="button" class="kp-btn kp-btn--retry" @click="sendDirect('没完全理解，换种方式再讲')">
-              <span class="kp-btn__icon" aria-hidden="true">✗</span>没完全理解，换种方式再讲
+        <!-- 知识点确认（动态行动台）：AI 讲完一个点、给出 confirmCheck 时出现 -->
+        <div v-if="shouldAskSelfAssess && confirmCheck" class="kp-actions kp-actions--dynamic">
+          <div class="kp-actions__head">
+            <span class="kp-actions__kicker">{{ confirmCheck.prompt || '这个点感觉怎么样？' }}</span>
+          </div>
+          <div class="kp-actions__row kp-actions__row--stack">
+            <button
+              v-for="(a, ai) in confirmCheck.actions"
+              :key="ai"
+              type="button"
+              class="kp-act"
+              :class="`kp-act--${ai === 0 ? 'ok' : 'retry'}`"
+              @click="sendDirect(a.message)"
+            >
+              <span class="kp-act__mark" aria-hidden="true">{{ ai === 0 ? '✓' : '↻' }}</span>
+              <span class="kp-act__text">{{ a.label }}</span>
+              <span class="kp-act__go" aria-hidden="true">→</span>
             </button>
           </div>
         </div>
@@ -270,32 +337,58 @@
     </div>
     </Transition>
 
-    <!-- 伴学浮动窗：不占主对话区，可回复、可收起成悬浮球 -->
+    <!-- 伴学浮窗：小启（独立角色，暖橙系）；不占主对话区，可回复、可收起成悬浮球 -->
     <Transition name="peer-pop">
-      <div v-if="peerOpen && peerItems.length" class="peerdock" role="dialog" aria-label="伴学伙伴">
+      <div v-if="peerOpen && peerItems.length" class="peerdock" role="dialog" aria-label="小启伴学" aria-live="polite">
         <div class="peerdock__head">
-          <span class="peerdock__avatar"><img src="/favicon.png" alt="" /></span>
+          <span class="peerdock__avatar" aria-hidden="true">
+            <span class="peerdock__avatar-q">Q</span>
+          </span>
           <div class="peerdock__title">
-            <strong>伴学伙伴</strong>
-            <small>看到你在当前知识点卡了一下，来帮一把 · <AiContentNote /></small>
+            <span class="peerdock__name">
+              <strong>小启</strong>
+              <span class="peerdock__tag">伴学伙伴</span>
+            </span>
+            <span class="peerdock__status">
+              <i class="peerdock__status-dot"></i>{{ peerHeadline }}
+            </span>
           </div>
-          <span class="peerdock__min" title="收起" @click="minimizePeer">−</span>
+          <span class="peerdock__min" title="收起" @click="minimizePeer" aria-label="收起伴学窗">
+            <svg viewBox="0 0 24 24" width="12" height="12"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M5 12h14"/></svg>
+          </span>
         </div>
         <div ref="peerScrollEl" class="peerdock__scroll">
           <div v-for="(p, i) in peerItems" :key="i" class="peerdock__msg" :class="`peerdock__msg--${p.role}`">
             <div class="peerdock__bubble" v-html="formatMessage(p.text)"></div>
-            <small>{{ p.role === 'peer' ? '伴学伙伴' : '你' }} · {{ p.time }}</small>
+            <template v-if="p.role === 'peer'">
+              <div v-if="p.followUps?.length" class="peerdock__follows">
+                <button
+                  v-for="(q, qi) in p.followUps"
+                  :key="qi"
+                  type="button"
+                  class="peerdock__follow"
+                  :disabled="peerSending"
+                  @click="sendPeerDirect(q)"
+                >{{ q }}</button>
+              </div>
+              <div class="peerdock__meta">
+                <span v-if="strategyLabelOf(p)" class="peerdock__strategy">{{ strategyLabelOf(p) }}</span>
+                <small>小启 · {{ p.time }}</small>
+              </div>
+            </template>
+            <small v-else>你 · {{ p.time }}</small>
           </div>
           <div v-if="peerSending" class="peerdock__msg peerdock__msg--peer">
             <div class="peerdock__bubble peerdock__bubble--typing"><i></i><i></i><i></i></div>
           </div>
+          <div class="peerdock__ai-note"><AiContentNote /></div>
         </div>
         <div class="peerdock__input">
           <input
             v-model="peerInput"
             type="text"
             maxlength="500"
-            placeholder="回复伴学…"
+            placeholder="和小启聊聊你的卡点…"
             @keydown.enter.exact.prevent="sendPeer"
           />
           <button type="button" :disabled="!peerInput.trim() || peerSending" @click="sendPeer">发送</button>
@@ -306,10 +399,10 @@
       v-if="!peerOpen && peerItems.length"
       type="button"
       class="peerfab"
-      aria-label="打开伴学伙伴"
-      @click="openPeer"
+      aria-label="打开小启伴学"
+      @click="openPeerByUser"
     >
-      <img src="/favicon.png" alt="" />
+      <span class="peerfab__q" aria-hidden="true">Q</span>
       <i v-if="peerUnread" class="peerfab__dot"></i>
     </button>
   </div>
@@ -335,6 +428,19 @@ const router = useRouter();
 const taskId = String(route.params.taskId || '');
 const isReviewMode = computed(() => route.query.mode === 'review');
 const interactionMeta = useInteractionMeta();
+
+/* 移动端知识点面板折叠：桌面（>900px）恒展开，窄屏默认折叠，点击面板头部展开/收起 */
+const narrowMq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 900px)') : null;
+const isNarrow = ref(narrowMq?.matches ?? false);
+const kpOpen = ref(false);
+const kpExpanded = computed(() => !isNarrow.value || kpOpen.value);
+function toggleKp() {
+  if (!isNarrow.value) return;
+  kpOpen.value = !kpOpen.value;
+}
+function onNarrowChange(e: MediaQueryListEvent) {
+  isNarrow.value = e.matches;
+}
 
 /* ---------- 键盘快捷键 ---------- */
 useKeyboardShortcuts([
@@ -390,8 +496,27 @@ function pushMsg(m: ChatMsg): ChatMsg {
   return withId;
 }
 const quickReplies = ref<string[]>([]);
+/** 开场景卡片（后端 session.scene）：resumed/new 的恢复·接续·重学·复习信息，取代模板双气泡 */
+const openingScene = ref<Record<string, any> | null>(null);
+/** 卡片已被用户处理（点主按钮/关闭）后不再展示 */
+const openingSceneDone = ref(false);
 const knowledgePoints = ref<Array<Record<string, any>>>([]);
-const showKpActions = ref(false);
+/**
+ * 「快选确认」出现条件：AI 本轮抛出了需要学习者表态的确认点（当前知识点的掌握边界）
+ * - 有 checkpoint 客观验证时不出（避免与验证题重复）
+ * - 当前点已 mastered 或没有 learning/pending 的点时不出（无需表态）
+ * - 开场建议 / 输入中 / 完成态 / 检查点态都不出
+ */
+const assessTarget = ref<{ name: string } | null>(null); // 待确认知识点名（本轮 AI 讲完的点）
+/** teaching-turn 输出的动态确认动作组（讲完一个点让学生表态）；未输出则回退固定双按钮 */
+const confirmCheck = ref<{ prompt: string; actions: Array<{ label: string; message: string }> } | null>(null);
+const shouldAskSelfAssess = computed(() => {
+  // 动态确认动作组（teaching-turn 明确输出 confirmCheck）→ 显示；
+  // 模型未输出则视为本轮不需要表态（新版 prompt 已由 AI 自主决定），不再弹固定按钮，
+  // 避免"问环境/给操作指令"这类轮次也弹"掌握了/再讲一遍"的过触发。
+  if (typing.value || completed.value || checkpoint.value || quickReplies.value.length) return false;
+  return !!confirmCheck.value;
+});
 
 const checkpoint = ref<Record<string, any> | null>(null);
 const selectedOptions = ref<string[]>([]);
@@ -404,6 +529,63 @@ const checkpointPending = ref(false);
 const checkpointSubmitting = ref(false);
 
 const completed = ref(false);
+/** 恢复会话提示条：mode=resumed 且回填到历史时显示「已恢复上次进度」，附重新开始出口 */
+const resumedNotice = ref(false);
+
+/* ---------- 开场景卡片（resumed / continuation / relearn / review） ---------- */
+const SCENE_META: Record<string, { tag: string; primary: string }> = {
+  resume: { tag: '继续上课', primary: '从这继续' },
+  continuation: { tag: '接着学', primary: '开始本节' },
+  relearn: { tag: '重新学', primary: '重新开始本节' },
+  review: { tag: '今日复习', primary: '开始复习' },
+  first: { tag: '开始上课', primary: '开始' },
+};
+const sceneTag = computed(() => SCENE_META[openingScene.value?.kind]?.tag || '开始上课');
+const scenePrimaryText = computed(() => SCENE_META[openingScene.value?.kind]?.primary || '开始');
+const sceneDefaultTitle = computed(() => {
+  const k = openingScene.value?.kind;
+  if (k === 'resume') return '继续这节课，从上次离开的地方接着学';
+  if (k === 'continuation') return '接着上一课往下学';
+  if (k === 'relearn') return '重新学这一课，把上次没掌握的补上';
+  if (k === 'review') return '今日复习：回捞快忘的知识点';
+  return '开始这节课';
+});
+/** 副文案：依据 kind 给一句人话引导 */
+const sceneLead = computed(() => {
+  const sc = openingScene.value;
+  if (!sc) return '';
+  const k = sc.kind;
+  if (k === 'resume') return '你的进度还在，接着上次的内容继续，不用从头开始。';
+  if (k === 'continuation') {
+    const rel = sc.recap?.relation;
+    if (rel === 'prev-milestone') return `上节课在「${sc.recap?.sourceTitle || '上一阶段'}」结束，这节课是它的下一步。`;
+    return '上一课刚结束，这节课接着往下推进。';
+  }
+  if (k === 'relearn') return sc.attempt && sc.attempt > 1 ? `这是你第 ${sc.attempt} 次学这节课，重点补上次没掌握的。` : '从头再学一遍这节课。';
+  if (k === 'review') return '把快到遗忘点的知识先捞回来，再继续新内容。';
+  return '';
+});
+const sceneUnresolved = computed<string[]>(() => {
+  const r = openingScene.value?.recap;
+  return Array.isArray(r?.unresolved) ? (r.unresolved as string[]).slice(0, 3) : [];
+});
+/** 前序掌握较弱的阶段提醒（at-risk / partial） */
+const sceneMasteryWarn = computed(() => {
+  const list: Array<{ stage: number; title: string; state: string }> = openingScene.value?.mastery || [];
+  const weak = list.filter((m) => m.state === 'at-risk' || m.state === 'partial').slice(0, 2);
+  if (!weak.length) return '';
+  return weak.map((m) => `第 ${m.stage} 阶段「${m.title}」还不太稳`).join('；');
+});
+
+/** 卡片主按钮：把用户"从这继续/开始"作为一条消息发给导师，触发教学回合 */
+function startFromScene() {
+  if (typing.value || actionBusy.value || !session.value) return;
+  const quick = quickReplies.value[0];
+  const sendText = quick || (openingScene.value?.kind === 'review' ? '开始复习' : '继续上次进度');
+  openingSceneDone.value = true;
+  resumedNotice.value = false;
+  void sendDirect(sendText);
+}
 const wrapupText = ref('');
 const finishStats = ref<Array<{ label: string; value: string | number }>>([]);
 const evaluationUrl = ref('');
@@ -411,10 +593,21 @@ const evaluationUrl = ref('');
 const input = ref('');
 const scrollEl = ref<HTMLElement | null>(null);
 
-/* ---------- 伴学浮动窗（不占主对话区，dock 式小窗） ---------- */
-interface PeerChatItem { role: 'peer' | 'me'; text: string; time: string }
+/* ---------- 伴学浮窗（角色「小启」，dock 式不占主对话区） ---------- */
+interface PeerChatItem {
+  role: 'peer' | 'me';
+  text: string;
+  time: string;
+  /** 伴学策略（英文枚举），展示为学法标签；主动消息/失败兜底为 null */
+  strategy?: string | null;
+  /** 小启消息自带的后续追问快选（skill followUpQuestions） */
+  followUps?: string[];
+}
 const peerOpen = ref(false);
 const peerUnread = ref(false);
+/** 伴学窗打开来源：'trigger'（AI 侦测卡点自动推）| 'user'（用户点 FAB 主动开聊）
+    驱动头部状态行文案（不再固定死「看到你卡了一下」） */
+const peerEntry = ref<'trigger' | 'user'>('user');
 /** 触发频控：相邻触发的冷却窗口（ms），防止每轮对话都强制弹窗打扰 */
 const PEER_TRIGGER_COOLDOWN = 60_000;
 /** 距上次自动展开的时间戳：冷却期内仅累计未读红点，不强制展开 */
@@ -425,6 +618,30 @@ const peerItems = ref<PeerChatItem[]>([]);
 const peerInput = ref('');
 const peerSending = ref(false);
 const peerScrollEl = ref<HTMLElement | null>(null);
+
+/** 伴学策略 → 学法标签（与 peer-reinforcement skill 枚举对齐） */
+const PEER_STRATEGY_LABEL: Record<string, string> = {
+  feynman: '费曼讲解',
+  debate: '观点辩论',
+  counterexample: '反例挑战',
+  analogy: '类比迁移',
+  'error-analysis': '错因复盘',
+};
+/** 最近一条小启消息的策略：头部状态行展示「正在用 XX 陪你练」 */
+const peerLastStrategy = ref<string | null>(null);
+
+/** 头部状态行文案：随打开来源 + 最近策略动态变化 */
+const peerHeadline = computed(() => {
+  const base = peerEntry.value === 'trigger'
+    ? '看到你在这里卡了一下，来搭把手'
+    : '随时找我聊卡点，陪你理一理';
+  const s = peerLastStrategy.value ? PEER_STRATEGY_LABEL[peerLastStrategy.value] : null;
+  return s ? `${base} · ${s}` : base;
+});
+
+function strategyLabelOf(p: PeerChatItem) {
+  return p.strategy ? PEER_STRATEGY_LABEL[p.strategy] || null : null;
+}
 
 async function scrollPeerDown() {
   await nextTick();
@@ -437,6 +654,25 @@ function openPeer() {
   scrollPeerDown();
 }
 
+/** 用户主动点 FAB 开聊：来源标记为 user，清掉旧的「自动触发」状态文案 */
+function openPeerByUser() {
+  peerEntry.value = 'user';
+  openPeer();
+}
+
+/** AI 侦测卡点自动推消息并展开（受频控与「手动收起过」约束） */
+function openPeerByTrigger() {
+  peerEntry.value = 'trigger';
+  peerUnread.value = true;
+  const now = Date.now();
+  const inCooldown = now - lastPeerAutoOpen < PEER_TRIGGER_COOLDOWN;
+  if (!inCooldown && !peerManuallyMinimized) {
+    peerOpen.value = true;
+    lastPeerAutoOpen = now;
+    scrollPeerDown();
+  }
+}
+
 /** 用户手动收起：本轮会话内不再自动展开（仅红点），避免「收起又被弹开」的打扰循环；
     收起视为已读（红点清除，用户已看到内容） */
 function minimizePeer() {
@@ -445,14 +681,22 @@ function minimizePeer() {
   peerManuallyMinimized = true;
 }
 
-async function sendPeer(e?: unknown) {
-  // IME 组合期守卫：拼音选词回车不发送
-  const ke = e as KeyboardEvent | undefined;
-  if (ke && (ke.isComposing || ke.keyCode === 229)) return;
-  const t = peerInput.value.trim();
-  if (!t || peerSending.value || !session.value) return;
+/** 记录伴学消息并更新「最近策略」（驱动头部状态行）；新回合消息则清除入口标记 */
+function pushPeerItem(item: PeerChatItem) {
+  peerItems.value.push(item);
+  if (item.role === 'peer') {
+    if (item.strategy) peerLastStrategy.value = item.strategy;
+  } else {
+    // 用户发言后，下一条小启回复前保持「正在陪你聊」
+    peerLastStrategy.value = null;
+    peerEntry.value = 'user';
+  }
+}
+
+async function sendPeerCore(text: string) {
+  if (peerSending.value || !session.value) return;
   peerInput.value = '';
-  peerItems.value.push({ role: 'me', text: t, time: nowTime() });
+  pushPeerItem({ role: 'me', text, time: nowTime() });
   scrollPeerDown();
   peerSending.value = true;
   // peer skill 为 JSON 输出（无 delta）：等待期间仅显示 typing 指示器，final 后一次性上屏
@@ -460,28 +704,52 @@ async function sendPeer(e?: unknown) {
     let r: Record<string, any>;
     try {
       peerStreamAbort = new AbortController();
-      r = await aiTeachingAPI.streamSendPeerMessage(session.value.sessionId, t, { signal: peerStreamAbort.signal }) as unknown as Record<string, any>;
+      r = await aiTeachingAPI.streamSendPeerMessage(session.value.sessionId, text, { signal: peerStreamAbort.signal }) as unknown as Record<string, any>;
     } catch (peerError) {
       // 传输层失败且未收到任何内容：回退非流式重发；业务失败交给外层报错；
       // 用户离页触发的 abort 不重发
       const pe = peerError as { cancelled?: boolean; transport?: boolean };
       if (pe.cancelled) throw peerError;
       if (!pe.transport) throw peerError;
-      r = await aiTeachingAPI.sendPeerMessage(session.value.sessionId, t) as unknown as Record<string, any>;
+      r = await aiTeachingAPI.sendPeerMessage(session.value.sessionId, text) as unknown as Record<string, any>;
     } finally {
       peerStreamAbort = null;
     }
     if (r?.peerResponse) {
-      peerItems.value.push({ role: 'peer', text: String(r.peerResponse), time: nowTime() });
+      pushPeerItem({
+        role: 'peer',
+        text: String(r.peerResponse),
+        time: nowTime(),
+        strategy: r.peerStrategy || null,
+        followUps: Array.isArray(r.peerFollowUpQuestions)
+          ? r.peerFollowUpQuestions.filter((q: unknown) => typeof q === 'string' && q.trim()).slice(0, 3)
+          : [],
+      });
     }
   } catch (e) {
     // 离页中止：静默丢弃
     if ((e as { cancelled?: boolean })?.cancelled) return;
-    peerItems.value.push({ role: 'peer', text: '这次没接上，等下再跟我说一句试试。', time: nowTime() });
+    pushPeerItem({ role: 'peer', text: '这次没接上，等下再跟我说一句试试。', time: nowTime() });
   } finally {
     peerSending.value = false;
     scrollPeerDown();
   }
+}
+
+async function sendPeer(e?: unknown) {
+  // IME 组合期守卫：拼音选词回车不发送
+  const ke = e as KeyboardEvent | undefined;
+  if (ke && (ke.isComposing || ke.keyCode === 229)) return;
+  const t = peerInput.value.trim();
+  if (!t) return;
+  await sendPeerCore(t);
+}
+
+/** 点击小启给的追问快选：直接发送该追问 */
+async function sendPeerDirect(text: string) {
+  const t = String(text || '').trim();
+  if (!t || peerSending.value || !session.value) return;
+  await sendPeerCore(t);
 }
 
 const formatMessage = (text: string) => plainMessageHtml(text);
@@ -521,6 +789,9 @@ function jumpToBottom() {
 async function boot() {
   initing.value = true;
   initError.value = '';
+  resumedNotice.value = false;
+  assessTarget.value = null;
+  confirmCheck.value = null;
   try {
     try {
       const task = unwrap<Record<string, any>>(await request.get(`/learning/tasks/${taskId}`));
@@ -533,31 +804,77 @@ async function boot() {
       ? await aiTeachingAPI.startReviewSession(taskId)
       : await aiTeachingAPI.startSession(taskId)) as unknown as Record<string, any>;
     session.value = { sessionId: s.sessionId, revision: s.revision ?? 0 };
+    // 开场景卡片数据（scene 驱动；resume/复习/重学/接续的结构化开场）
+    const sceneRaw = s?.scene && typeof s.scene === 'object' ? s.scene : null;
+    // 首课（first）不需要卡片：AI 真实开场白已足够，避免双重介绍
+    openingScene.value = sceneRaw && sceneRaw.kind !== 'first' ? sceneRaw : null;
+    openingSceneDone.value = !openingScene.value;
     const openingText = s.opening?.message || s.welcomeMessage;
-    if (openingText) pushMsg({ role: 'ai', text: openingText, time: nowTime() });
-    if (s.opening?.question) pushMsg({ role: 'ai', text: s.opening.question, time: nowTime() });
-    quickReplies.value = (s.opening?.quickReplies || []).map((q: Record<string, any>) => q.text || q).filter(Boolean);
+    if (s.mode === 'resumed') {
+      // 恢复：不再 push 模板双气泡（"已恢复…我们继续"），由场景卡片承接；
+      // 快选也由卡片主按钮承担，避免「卡片按钮 + 底部开场建议」两处重复
+      quickReplies.value = [];
+    } else {
+      // 新开课（含接续/重学/首课）：保留 AI 的真实教学开场白（承接上节/切入本节）
+      if (openingText) pushMsg({ role: 'ai', text: openingText, time: nowTime() });
+      if (s.opening?.question) pushMsg({ role: 'ai', text: s.opening.question, time: nowTime() });
+      quickReplies.value = (s.opening?.quickReplies || []).map((q: Record<string, any>) => q.text || q).filter(Boolean);
+    }
     if (Array.isArray(s.knowledgePoints) && s.knowledgePoints.length) {
       knowledgePoints.value = s.knowledgePoints;
-      showKpActions.value = true;
     }
     // 会话来源提示：恢复上次课堂 / 已学完重开（避免「从头开始」困惑）
     if (s.mode === 'resumed') {
-      toast.info('已恢复上次课堂');
       // 恢复上下文：回填历史对话与待处理检查点，避免刷新后课堂记忆断裂
       try {
         const detail = await aiTeachingAPI.getSessionDetail(s.sessionId);
         if (detail) {
+          let restoredCount = 0;
           if (Array.isArray(detail.messages)) {
+            // 主对话历史（user/assistant 非 peer 标记）
             const restored = detail.messages
-              .filter((m) => m.role === 'user' || m.role === 'assistant')
+              .filter((m) => (m.role === 'user' || m.role === 'assistant') && !m.peer)
               .map((m) => pushMsg({
                 role: m.role === 'user' ? 'user' : 'ai',
                 text: String(m.content || ''),
                 time: nowTime(),
               }));
+            restoredCount = restored.length;
             if (restored.length) scrollDown();
+            // 伴学历史回填进小启浮窗（刷新后不丢失）：
+            // ① 主动伴学 = peer 标记消息；② 自动触发伴学 = assistant 消息内嵌的 peerMessage
+            const peerRestored: Array<{ role: 'me' | 'peer'; text: string; strategy: string | null }> = [];
+            for (const m of detail.messages) {
+              if (m.peer) {
+                peerRestored.push({
+                  role: m.role === 'user' ? 'me' : 'peer',
+                  text: String(m.content || ''),
+                  strategy: m.role === 'assistant' ? m.peerStrategy || null : null,
+                });
+              } else if (m.role === 'assistant' && m.peerTriggered && m.peerMessage) {
+                peerRestored.push({
+                  role: 'peer',
+                  text: String(m.peerMessage),
+                  strategy: m.peerStrategy || null,
+                });
+              }
+            }
+            if (peerRestored.length) {
+              peerItems.value = peerRestored.map((m) => ({
+                ...m,
+                time: nowTime(),
+                followUps: [],
+              }));
+              // 恢复入口标记为 trigger（历史里可能含自动伴学）
+              peerEntry.value = 'trigger';
+              // 回填最近策略（驱动头部「正在用 XX 陪你练」）
+              const lastPeerStrategy = [...peerRestored].reverse().find((m) => m.role === 'peer' && m.strategy)?.strategy;
+              peerLastStrategy.value = lastPeerStrategy || null;
+            }
           }
+          // 有可续历史才显示恢复横幅（附「重新开始」出口）；全新无历史则不必打扰。
+          // 有开场景卡片时横幅让位给卡片（卡片已含恢复信息与重新开始出口），避免重复提示
+          resumedNotice.value = restoredCount > 0 && !openingScene.value;
           if (detail.pendingCheckpoint) {
             checkpoint.value = detail.pendingCheckpoint;
             checkpointFeedback.value = '';
@@ -567,7 +884,6 @@ async function boot() {
           }
           if (Array.isArray(detail.knowledgePoints) && detail.knowledgePoints.length) {
             knowledgePoints.value = detail.knowledgePoints;
-            showKpActions.value = true;
           }
           session.value.revision = typeof detail.revision === 'number' ? detail.revision : session.value.revision;
         }
@@ -692,19 +1008,34 @@ async function send(e?: unknown) {
   const t = input.value.trim();
   if (!t || typing.value || checkpointPending.value || !session.value) return;
   input.value = '';
+  assessTarget.value = null; // 用户已表态/新回合开始，快选确认清除
+  confirmCheck.value = null;
   await doSend(t);
 }
 
 async function sendDirect(text: string) {
   if (typing.value || !session.value) return;
+  assessTarget.value = null; // 点击快选确认/开场建议即表态，清除待确认
   await doSend(text);
 }
+
+/** 开场行动台标题：跟随进入方式，避免每次都是冷冰冰的「开场建议」 */
+const quickReplyKicker = computed(() => {
+  const k = openingScene.value?.kind;
+  if (k === 'review') return '复习方式';
+  if (k === 'relearn') return '这次怎么学';
+  if (k === 'continuation') return '接着怎么学';
+  if (k === 'resume') return '从哪继续';
+  return '怎么开始';
+});
 
 async function doSend(text: string, allowStaleRetry = true, skipUserPush = false) {
   if (!session.value) return;
   lastUserText = text;
   if (!skipUserPush) pushMsg({ role: 'user', text, time: nowTime() });
   quickReplies.value = [];
+  confirmCheck.value = null;
+  assessTarget.value = null;
   typing.value = true;
   scrollDown();
   const meta = interactionMeta.collect(text);
@@ -765,22 +1096,39 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
         pushMsg({ role: 'ai', text: '（本轮没有收到回复，你可以换个说法再试一次。）', time: nowTime() });
       }
     }
-    // 伴学触发：进独立浮动窗，不占主对话区。
+    // 伴学触发：进独立浮动窗，不占主对话区（角色小启，暖橙系）。
     // 频控：冷却期（60s）内或用户手动收起过 → 仅累计未读红点，不强制展开，避免打扰循环
     if (r.peerTriggered && r.peerMessage) {
-      peerItems.value.push({ role: 'peer', text: String(r.peerMessage), time: nowTime() });
-      peerUnread.value = true;
-      const now = Date.now();
-      const inCooldown = now - lastPeerAutoOpen < PEER_TRIGGER_COOLDOWN;
-      if (!inCooldown && !peerManuallyMinimized) {
-        peerOpen.value = true;
-        lastPeerAutoOpen = now;
-        scrollPeerDown();
-      }
+      pushPeerItem({
+        role: 'peer',
+        text: String(r.peerMessage),
+        time: nowTime(),
+        strategy: r.peerStrategy || null,
+        followUps: Array.isArray(r.peerFollowUpQuestions)
+          ? r.peerFollowUpQuestions.filter((q: unknown) => typeof q === 'string' && q.trim()).slice(0, 3)
+          : [],
+      });
+      openPeerByTrigger();
     }
     if (Array.isArray(r.knowledgePoints) && r.knowledgePoints.length) {
       knowledgePoints.value = r.knowledgePoints;
-      showKpActions.value = true;
+      // AI 本轮讲完后：若指向某个当前点且没有客观 checkpoint，则在该点形成待确认边界
+      assessTarget.value = !r.checkpoint && r.knowledgePoint
+        ? { name: String(r.knowledgePoint) }
+        : null;
+      // 动态确认动作组（teaching-turn 输出）优先；未输出则回退固定文案
+      const cc = r.confirmCheck;
+      confirmCheck.value = (cc && Array.isArray(cc.actions) && cc.actions.length === 2)
+        ? {
+            prompt: String(cc.prompt || '').trim(),
+            actions: cc.actions
+              .filter((a: any) => a && typeof a.label === 'string' && typeof a.message === 'string')
+              .map((a: any) => ({ label: a.label, message: a.message })),
+          }
+        : null;
+    } else {
+      assessTarget.value = null;
+      confirmCheck.value = null;
     }
     if (r.checkpoint) {
       checkpoint.value = r.checkpoint;
@@ -788,6 +1136,8 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
       selectedOptions.value = [];
       answerText.value = '';
       checkpointSubmitting.value = false;
+      assessTarget.value = null; // 有客观验证题，不再弹快选确认
+      confirmCheck.value = null;
     }
     if (r.isCompletion) {
       await finish(isReviewMode.value ? 'complete_review' : 'complete_task');
@@ -1002,6 +1352,10 @@ async function pauseAndLeave() {
 
 async function restart() {
   menuOpen.value = false;
+  resumedNotice.value = false;
+  openingSceneDone.value = true;
+  assessTarget.value = null;
+  confirmCheck.value = null;
   if (actionBusy.value) return;
   if (!session.value) return;
   const ok = await askConfirm({
@@ -1106,7 +1460,6 @@ async function recoverSession(sid: string) {
       quickReplies.value = (s.opening?.quickReplies || []).map((q: Record<string, any>) => q.text || q).filter(Boolean);
       if (Array.isArray(s.knowledgePoints) && s.knowledgePoints.length) {
         knowledgePoints.value = s.knowledgePoints;
-        showKpActions.value = true;
       }
       const openingText = s.opening?.message || s.welcomeMessage;
       if (openingText) msgs.value.push({ role: 'ai', text: openingText, time: nowTime() });
@@ -1145,10 +1498,12 @@ function onVisibilityChange() {
 
 onMounted(() => {
   boot();
+  narrowMq?.addEventListener('change', onNarrowChange);
   window.addEventListener('pagehide', onPageHide);
   document.addEventListener('visibilitychange', onVisibilityChange);
 });
 onBeforeUnmount(() => {
+  narrowMq?.removeEventListener('change', onNarrowChange);
   streamAbort?.abort();
   peerStreamAbort?.abort();
   window.clearTimeout(checkpointCloseTimer);
@@ -1170,6 +1525,9 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--line);
+  /* backdrop-filter 创建堆叠上下文：若不设 z-index 会按文档顺序排，位于其后的 .tutor 将盖住「⋯」弹层。显式提升，让头部与菜单弹层始终在对话框之上。 */
+  position: relative;
+  z-index: 50;
 }
 .learn__back { font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .learn__back:hover { color: var(--blue-deep); }
@@ -1221,8 +1579,15 @@ onBeforeUnmount(() => {
   align-self: start;
   position: sticky; top: 16px;
 }
-.kp__head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+.kp__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: 13px;
+  border: 0; background: transparent; padding: 0; margin: 0;
+  font: inherit; color: inherit; text-align: left; cursor: default;
+}
 .kp__head span { font-size: 11.5px; font-weight: 800; color: var(--blue-deep); }
+.kp__caret { display: none; font-size: 11px; color: var(--faint); flex-shrink: 0; }
+.kp__body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .kp__bar { height: 6px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
 .kp__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
 .kp__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
@@ -1262,6 +1627,86 @@ onBeforeUnmount(() => {
   padding: 20px;
   display: flex; flex-direction: column; gap: 18px;
 }
+/* 恢复进度横幅：续上历史时的可见确认（替代一次性 toast） */
+.tutor__resume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 14px 0;
+  padding: 8px 10px 8px 14px;
+  border: 1px solid rgba(52, 120, 246, 0.3);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(52, 120, 246, 0.08), rgba(141, 107, 255, 0.05));
+  color: var(--blue-deep);
+  font-size: 12.5px;
+  flex: 0 0 auto;
+}
+.tutor__resume-text { flex: 1; font-weight: 600; }
+.tutor__resume-restart {
+  border: 1px solid rgba(44, 99, 208, 0.35);
+  background: var(--surface);
+  color: var(--blue-deep);
+  font: inherit; font-size: 12px; font-weight: 700;
+  padding: 4px 12px; border-radius: 999px; cursor: pointer;
+}
+.tutor__resume-restart:hover { background: rgba(52, 120, 246, 0.1); }
+.tutor__resume-close {
+  display: grid; place-items: center;
+  width: 22px; height: 22px;
+  border: 0; border-radius: 6px;
+  background: transparent; color: var(--faint);
+  cursor: pointer; flex: 0 0 auto;
+}
+.tutor__resume-close:hover { background: rgba(23, 32, 51, 0.06); color: var(--muted); }
+/* 开场景卡片：resumed / 接续 / 重学 / 复习 的结构化开场 */
+.oscene {
+  margin: 10px 14px 0;
+  padding: 16px 18px;
+  border: 1px solid rgba(141, 107, 255, 0.28);
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 160% at 0% 0%, rgba(141, 107, 255, 0.10), transparent 46%),
+    var(--surface);
+  box-shadow: 0 6px 22px rgba(23, 32, 51, 0.06);
+  display: grid; gap: 8px;
+  flex: 0 0 auto;
+}
+.oscene--review { border-color: rgba(52, 120, 246, 0.3); }
+.oscene__tag {
+  justify-self: start;
+  font-size: 10.5px; font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #6b4ae0;
+  background: rgba(141, 107, 255, 0.12);
+  border: 1px solid rgba(141, 107, 255, 0.3);
+  padding: 2px 9px; border-radius: 999px;
+}
+.oscene--review .oscene__tag { color: #1f57cc; background: rgba(52, 120, 246, 0.12); border-color: rgba(52, 120, 246, 0.32); }
+.oscene__title { margin: 0; font-size: 15.5px; font-weight: 800; color: var(--ink, #1c2b45); }
+.oscene__lead { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
+.oscene__summary {
+  margin: 0;
+  font-size: 12.5px; line-height: 1.7;
+  color: var(--muted);
+  background: rgba(23, 32, 51, 0.035);
+  border-radius: 10px; padding: 8px 11px;
+}
+.oscene__chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.oscene__chip-label { font-size: 11px; font-weight: 700; color: var(--faint); }
+.oscene__chip {
+  font-size: 11px; font-weight: 700;
+  color: #b3540a;
+  background: rgba(244, 170, 70, 0.15);
+  border: 1px solid rgba(244, 170, 70, 0.32);
+  padding: 2px 9px; border-radius: 999px;
+}
+.oscene__warn { font-size: 11.5px; line-height: 1.6; color: #b3540a; }
+.oscene__warn span { font-weight: 700; }
+.oscene__actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+.oscene__actions .btn-ghost { font-size: 12.5px; }
+[data-theme='dark'] .oscene { border-color: rgba(141, 107, 255, 0.35); background: radial-gradient(120% 160% at 0% 0%, rgba(141, 107, 255, 0.12), transparent 46%), #141c2b; }
+[data-theme='dark'] .oscene__summary { background: rgba(15, 22, 32, 0.5); }
+[data-theme='dark'] .oscene__title { color: #e6edf7; }
 .tutor__jump-bottom {
   position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
   z-index: 5;
@@ -1415,7 +1860,7 @@ onBeforeUnmount(() => {
 }
 .msg__chip--confuse { color: #b3540a; background: rgba(244, 170, 70, 0.12); border: 1px solid rgba(244, 170, 70, 0.2); margin-top: 6px; }
 
-/* ---------- 伴学浮动窗（dock 式，不占主对话区） ---------- */
+/* ---------- 伴学浮窗（角色「小启」· 暖橙系，dock 式不占主对话区） ---------- */
 .peerdock {
   position: fixed; right: 22px; bottom: 132px; z-index: 60;
   /* bottom 抬升避开底部输入区（composer ≈104px + 间距 28px），
@@ -1423,8 +1868,10 @@ onBeforeUnmount(() => {
   width: min(340px, calc(100vw - 32px));
   display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
   max-height: 440px;
-  background: var(--surface); border: 1px solid rgba(141, 107, 255, 0.22);
-  border-radius: 18px; box-shadow: 0 24px 60px rgba(76, 58, 158, 0.18);
+  background: var(--surface);
+  border: 1px solid rgba(244, 149, 66, 0.28);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(190, 92, 26, 0.16);
   overflow: hidden;
 }
 .peer-pop-enter-active { transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1); }
@@ -1433,38 +1880,63 @@ onBeforeUnmount(() => {
 .peer-pop-leave-to { opacity: 0; transform: translateY(16px) scale(0.96); }
 .peerdock__head {
   display: flex; align-items: center; gap: 10px;
-  padding: 12px 14px;
-  background: linear-gradient(135deg, rgba(141, 107, 255, 0.1), rgba(52, 120, 246, 0.06));
-  border-bottom: 1px solid rgba(141, 107, 255, 0.14);
+  padding: 11px 14px;
+  background: linear-gradient(135deg, rgba(255, 152, 67, 0.12), rgba(244, 170, 70, 0.05));
+  border-bottom: 1px solid rgba(244, 149, 66, 0.18);
 }
+/* 小启 Q 头像：暖橙渐变 + 白字 Q，与导师问流（蓝紫 favicon）明确区分 */
 .peerdock__avatar {
-  width: 30px; height: 30px; border-radius: 10px; flex: 0 0 auto;
-  background: linear-gradient(135deg, var(--accent, #8d6bff), var(--blue, #3478f6));
+  width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto;
+  background: linear-gradient(135deg, #ff9d4d, #f4791f);
+  box-shadow: 0 6px 14px rgba(244, 121, 31, 0.35);
   display: grid; place-items: center;
 }
-.peerdock__avatar img { width: 20px; height: 20px; border-radius: 6px; }
-.peerdock__title { flex: 1; min-width: 0; display: grid; gap: 1px; }
-.peerdock__title strong { font-size: 13px; color: var(--ink); }
-.peerdock__title small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.peerdock__avatar-q {
+  color: #fff; font-size: 17px; font-weight: 800; font-style: italic;
+  font-family: Georgia, 'Times New Roman', serif;
+  line-height: 1;
+  transform: translateX(-0.5px);
+}
+.peerdock__title { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.peerdock__name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.peerdock__name strong { font-size: 13.5px; color: var(--ink); }
+.peerdock__tag {
+  flex: 0 0 auto;
+  font-size: 10px; font-weight: 700; color: #c05e14;
+  background: rgba(244, 170, 70, 0.16);
+  border: 1px solid rgba(244, 170, 70, 0.35);
+  padding: 1px 7px; border-radius: 999px;
+  line-height: 1.6;
+}
+.peerdock__status {
+  display: flex; align-items: center; gap: 5px; min-width: 0;
+  font-size: 11px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.peerdock__status-dot {
+  flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%;
+  background: #2fbe6e;
+  box-shadow: 0 0 0 2px rgba(47, 190, 110, 0.18);
+}
 .peerdock__min {
   width: 24px; height: 24px; border-radius: 8px;
   display: grid; place-items: center;
-  font-size: 16px; color: var(--muted); cursor: pointer;
+  color: var(--muted); cursor: pointer;
 }
-.peerdock__min:hover { background: rgba(141, 107, 255, 0.12); color: var(--ink); }
+.peerdock__min:hover { background: rgba(244, 149, 66, 0.12); color: var(--ink); }
 .peerdock__scroll {
   overflow-y: auto; padding: 12px;
   display: grid; gap: 10px; align-content: start;
   background: var(--canvas, #fafbff);
 }
-.peerdock__msg { display: grid; gap: 3px; justify-items: start; }
+.peerdock__msg { display: grid; gap: 3px; justify-items: start; max-width: 100%; }
 .peerdock__msg--me { justify-items: end; }
 .peerdock__bubble {
-  max-width: 88%; padding: 9px 12px;
+  max-width: 100%; padding: 9px 12px;
   font-size: 13px; line-height: 1.6;
   border-radius: 4px 14px 14px 14px;
-  background: rgba(141, 107, 255, 0.08); color: var(--ink);
-  border: 1px solid rgba(141, 107, 255, 0.14);
+  background: rgba(255, 152, 67, 0.09); color: var(--ink);
+  border: 1px solid rgba(244, 149, 66, 0.18);
 }
 .peerdock__msg--me .peerdock__bubble {
   border-radius: 14px 14px 4px 14px;
@@ -1473,7 +1945,6 @@ onBeforeUnmount(() => {
 }
 .peerdock__bubble :deep(p) { margin: 0 0 6px; }
 .peerdock__bubble :deep(p:last-child) { margin-bottom: 0; }
-.peerdock__msg small { font-size: 10.5px; color: var(--faint); padding: 0 2px; }
 .peerdock__bubble--typing { display: inline-flex; gap: 4px; align-items: center; }
 .peerdock__bubble--typing i {
   width: 6px; height: 6px; border-radius: 50%; background: var(--faint);
@@ -1481,6 +1952,46 @@ onBeforeUnmount(() => {
 }
 .peerdock__bubble--typing i:nth-child(2) { animation-delay: 0.15s; }
 .peerdock__bubble--typing i:nth-child(3) { animation-delay: 0.3s; }
+.peerdock__msg > small { font-size: 10.5px; color: var(--faint); padding: 0 2px; }
+/* 小启消息元信息行：学法徽章 + 时间戳 */
+.peerdock__meta {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  padding: 0 2px;
+}
+.peerdock__meta small { font-size: 10.5px; color: var(--faint); }
+.peerdock__strategy {
+  font-size: 10px; font-weight: 700; color: #c05e14;
+  background: rgba(244, 170, 70, 0.12);
+  border: 1px solid rgba(244, 170, 70, 0.25);
+  padding: 1px 7px; border-radius: 999px;
+  line-height: 1.6;
+}
+/* 小启追问快选：轻量 chips，点一下直接发（与输入框发送等价） */
+.peerdock__follows {
+  display: flex; flex-direction: column; align-items: flex-start;
+  gap: 6px; margin-top: 2px; padding: 0 2px; width: 100%;
+}
+.peerdock__follow {
+  text-align: left;
+  max-width: 92%; padding: 6px 11px;
+  font: inherit; font-size: 12px; line-height: 1.5; color: #b3540a;
+  background: color-mix(in srgb, #fff 82%, rgba(244, 170, 70, 0.35));
+  border: 1px solid rgba(244, 149, 66, 0.35); border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+[data-theme='dark'] .peerdock__follow {
+  background: rgba(244, 170, 70, 0.08);
+  color: #f0b063;
+}
+.peerdock__follow:hover { background: rgba(244, 170, 70, 0.16); border-color: rgba(244, 149, 66, 0.55); }
+.peerdock__follow:disabled { opacity: 0.5; cursor: default; }
+/* AI 生成合规提示：常驻滚动区底部，不打扰对话 */
+.peerdock__ai-note {
+  display: flex; justify-content: center;
+  padding: 2px 0 0;
+}
+.peerdock__ai-note :deep(.ai-note) { font-size: 10px; color: var(--faint); opacity: 0.75; }
 .peerdock__input {
   display: flex; gap: 8px; padding: 10px 12px;
   border-top: 1px solid var(--line, rgba(23, 32, 51, 0.08));
@@ -1491,33 +2002,43 @@ onBeforeUnmount(() => {
   font: inherit; font-size: 13px;
   border: 1px solid var(--line, rgba(23, 32, 51, 0.08)); border-radius: 999px;
   outline: none;
+  background: var(--surface);
+  color: var(--ink);
 }
-.peerdock__input input:focus { border-color: rgba(141, 107, 255, 0.45); }
+.peerdock__input input:focus { border-color: rgba(244, 149, 66, 0.55); box-shadow: 0 0 0 3px rgba(244, 170, 70, 0.14); }
 .peerdock__input button {
   padding: 8px 14px; border: 0; border-radius: 999px;
   font: inherit; font-size: 12.5px; font-weight: 700;
-  color: #fff; background: linear-gradient(135deg, var(--accent, #8d6bff), #6b4ae0);
+  color: #fff; background: linear-gradient(135deg, #ff9d4d, #ef7d1f);
   cursor: pointer;
+  transition: filter 0.15s ease;
 }
+.peerdock__input button:hover:not(:disabled) { filter: brightness(1.05); }
 .peerdock__input button:disabled { opacity: 0.45; cursor: default; }
+/* 小启悬浮球：暖橙 Q（区别于导师品牌蓝紫） */
 .peerfab {
   position: fixed; right: 22px; bottom: 22px; z-index: 59;
   width: 52px; height: 52px; border: 0; border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent, #8d6bff), #6b4ae0);
-  box-shadow: 0 14px 32px rgba(107, 74, 224, 0.35);
+  background: linear-gradient(135deg, #ff9d4d, #ef7d1f);
+  box-shadow: 0 14px 32px rgba(239, 125, 31, 0.4);
   display: grid; place-items: center; cursor: pointer;
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
-.peerfab:hover { transform: translateY(-2px); box-shadow: 0 18px 38px rgba(107, 74, 224, 0.42); }
-.peerfab img { width: 28px; height: 28px; border-radius: 8px; }
+.peerfab:hover { transform: translateY(-2px); box-shadow: 0 18px 38px rgba(239, 125, 31, 0.48); }
+.peerfab__q {
+  color: #fff; font-size: 26px; font-weight: 800; font-style: italic;
+  font-family: Georgia, 'Times New Roman', serif;
+  line-height: 1;
+}
 .peerfab__dot {
-  position: absolute; top: 2px; right: 2px;
-  width: 12px; height: 12px; border-radius: 50%;
+  position: absolute; top: 1px; right: 1px;
+  width: 13px; height: 13px; border-radius: 50%;
   background: #ef7578; border: 2px solid #fff;
 }
 @media (max-width: 640px) {
   .peerdock { right: 12px; left: 12px; bottom: 12px; width: auto; max-height: 60dvh; }
   .peerfab { right: 14px; bottom: 14px; width: 46px; height: 46px; }
+  .peerfab__q { font-size: 23px; }
 }
 /* 窄屏（平板/小窗）：dock 收窄并抬高，避免与底部输入区重叠（长消息上探场景） */
 @media (min-width: 641px) and (max-width: 1100px) {
@@ -1576,6 +2097,54 @@ onBeforeUnmount(() => {
 }
 .kp-btn--retry:hover { background: color-mix(in srgb, var(--amber, #f4aa46) 18%, transparent); }
 
+/* 动态确认（teaching-turn 输出 confirmCheck）：行动台式纵向卡片按钮，与开场行动台呼应 */
+.kp-actions--dynamic {
+  border-top: 1px solid rgba(141, 107, 255, 0.18);
+  background: linear-gradient(180deg, rgba(141, 107, 255, 0.045), rgba(52, 120, 246, 0.02));
+}
+.kp-actions__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 2px 9px; }
+.kp-actions__kicker { font-size: 12px; font-weight: 800; letter-spacing: 0.04em; color: #6b4ae0; }
+.kp-actions__row--stack { display: grid; grid-template-columns: 1fr; gap: 7px; }
+.kp-act {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(141, 107, 255, 0.22);
+  background: var(--surface);
+  color: var(--ink, #1c2b45);
+  font: inherit; font-size: 13px; font-weight: 600; line-height: 1.4;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+}
+.kp-act__mark {
+  flex: 0 0 auto;
+  display: grid; place-items: center;
+  width: 22px; height: 22px;
+  border-radius: 7px;
+  font-size: 12px; font-weight: 800;
+  color: #fff;
+}
+.kp-act--ok .kp-act__mark { background: linear-gradient(135deg, #1e9e58, #15803d); }
+.kp-act--retry .kp-act__mark { background: linear-gradient(135deg, #f4aa46, #d97706); }
+.kp-act__text { flex: 1; min-width: 0; }
+.kp-act__go {
+  flex: 0 0 auto;
+  color: #9aa4b8;
+  font-weight: 800;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+.kp-act:hover {
+  border-color: rgba(141, 107, 255, 0.5);
+  box-shadow: 0 4px 14px rgba(23, 32, 51, 0.08);
+  transform: translateY(-1px);
+}
+.kp-act:hover .kp-act__go { color: #6b4ae0; transform: translateX(2px); }
+.kp-act:active { transform: translateY(0); }
+[data-theme='dark'] .kp-actions--dynamic { border-top-color: rgba(141, 107, 255, 0.3); background: rgba(141, 107, 255, 0.07); }
+[data-theme='dark'] .kp-act { background: #141c2b; border-color: rgba(141, 107, 255, 0.28); color: #e6edf7; }
+
 /* ---------- 检查点 ---------- */
 .checkpoint {
   margin: 0 16px;
@@ -1617,7 +2186,11 @@ onBeforeUnmount(() => {
   padding: 6px 6px 6px 14px;
   min-height: 50px;
 }
-.composer__box--active { border-color: rgba(52, 120, 246, 0.4); }
+/* 有内容/聚焦：柔和提示 —— 细蓝边 + 淡外发光（替代原整圈硬蓝边） */
+.composer__box--active {
+  border-color: rgba(52, 120, 246, 0.55);
+  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12), 0 6px 20px rgba(23, 32, 51, 0.06);
+}
 .composer__textarea {
   flex: 1; border: 0; outline: none; resize: none;
   font: inherit; font-size: 14px; line-height: 1.5;
@@ -1703,10 +2276,50 @@ onBeforeUnmount(() => {
 .finish__actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 
 @media (max-width: 900px) {
-  .learn__body { grid-template-columns: 1fr; }
+  /* 锁定视口高度：整页不滚动，tutor 内部滚动、composer 吸底，消除底部空白。
+     flex-grow:0 必须显式置零——.v2-page 全局 flex:1 会把 height:100dvh 拉伸到内容高度。
+     padding-bottom:0 覆盖 v2.css 的移动端全局 .v2-page { padding-bottom:72px }（沉浸学习页无底部导航，72px 是纯空白）。 */
+  .learn { height: 100dvh; min-height: 0; flex: 0 0 auto; padding-bottom: 0; }
+  .learn__body {
+    flex: 1;
+    min-height: 0;
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr);
+    padding: 8px 10px;
+    gap: 0;
+  }
   .kp { position: static; }
   .learn__back { display: none; }
-  .tutor { max-height: none; }
+  /* 移动端 tutor 撑满可用高度：聊天区内部滚动、composer 吸底，消除滚动到底的底部空白 */
+  .tutor { max-height: none; height: 100%; min-height: 0; }
+  .learn__body--no-kp .tutor { max-height: none !important; height: 100% !important; }
+  .tutor__scroll { flex: 1; min-height: 0; overflow-y: auto; }
+  /* 移动端头部：单行紧凑 —— 返回隐藏、标题占主列可截断，右侧「学习中」+「⋯」同行，不再换行占第二行 */
+  .learn__head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto;
+    gap: 0 10px;
+    padding: 8px 14px;
+  }
+  .learn__title { grid-column: 1; grid-row: 1; min-width: 0; }
+  .learn__title strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .learn__title small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .learn__head-right { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .learn__live, .learn__state-link { white-space: nowrap; flex-shrink: 0; }
+  .learn__live { padding: 3px 9px; font-size: 10.5px; }
+  .learn__menu-wrap { position: relative; display: inline-flex; }
+  .learn__menu { padding: 0 4px; font-size: 20px; line-height: 1; display: inline-flex; align-items: center; height: 28px; }
+  /* 弹窗锚定在 ⋯ 按钮正下方、右对齐按钮 */
+  .learn__menu-pop {
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 0;
+    width: min(250px, calc(100vw - 28px));
+  }
+  /* 移动端知识点面板默认折叠：头部横条可点，收起时隐藏进度条/清单 */
+  .kp__head { cursor: pointer; }
+  .kp__caret { display: inline; }
+  .kp--collapsed .kp__body { display: none; }
 }
 </style>
 
@@ -1731,7 +2344,7 @@ onBeforeUnmount(() => {
 }
 .learn__init-error { color: #c0454a; font-size: 14px; font-weight: 600; }
 .learn__menu-pop {
-  position: absolute; top: 46px; right: 24px; z-index: 40;
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 40;
   background: var(--surface); border: 1px solid var(--line);
   border-radius: 12px; padding: 5px;
   box-shadow: 0 12px 30px rgba(23, 32, 51, 0.14);
@@ -1789,8 +2402,6 @@ onBeforeUnmount(() => {
   font-size: 12.5px; line-height: 1.6; overflow-x: auto;
 }
 .msg__bubble--html :deep(pre code) { background: transparent; color: inherit; padding: 0; }
-.replies { padding: 10px 16px 0; }
-
 /* MessageActions 定位容器 */
 .msg__content--actions { position: relative; }
 .msg__bubble--relative { position: relative; }
@@ -1799,18 +2410,63 @@ onBeforeUnmount(() => {
 .typing-fade-leave-active { transition: opacity 0.12s ease; }
 .typing-fade-enter-from,
 .typing-fade-leave-to { opacity: 0; }
-.replies__row { display: flex; flex-wrap: wrap; gap: 8px; }
-.reply {
-  display: inline-flex; align-items: center;
-  padding: 9px 13px;
-  border-radius: 999px;
-  border: 1px solid rgba(52, 120, 246, 0.3);
-  background: rgba(52, 120, 246, 0.06);
-  color: var(--blue-deep);
-  font: inherit; font-size: 13px; font-weight: 600;
-  cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+
+.replies {
+  margin: 4px 16px 0;
+  padding: 12px 14px 14px;
+  border: 1px solid rgba(141, 107, 255, 0.18);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(141, 107, 255, 0.045), rgba(52, 120, 246, 0.02));
 }
-.reply:hover { background: rgba(52, 120, 246, 0.12); }
+.replies__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 2px 9px; }
+.replies__kicker {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #6b4ae0;
+}
+.replies__hint { font-size: 11px; color: var(--faint); }
+.replies__row { display: grid; grid-template-columns: 1fr; gap: 7px; }
+.reply {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(141, 107, 255, 0.22);
+  background: var(--surface);
+  color: var(--ink, #1c2b45);
+  font: inherit; font-size: 13px; font-weight: 600; line-height: 1.4;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+}
+.reply__mark {
+  flex: 0 0 auto;
+  display: grid; place-items: center;
+  width: 20px; height: 20px;
+  border-radius: 7px;
+  font-size: 11px; font-weight: 800;
+  color: #fff;
+  background: #6b4ae0;
+}
+.reply--2 .reply__mark { background: #2c63d0; }
+.reply--3 .reply__mark { background: #0f9d6a; }
+.reply__text { flex: 1; min-width: 0; }
+.reply__go {
+  flex: 0 0 auto;
+  color: #9aa4b8;
+  font-weight: 800;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+.reply:hover {
+  border-color: rgba(141, 107, 255, 0.5);
+  box-shadow: 0 4px 14px rgba(23, 32, 51, 0.08);
+  transform: translateY(-1px);
+}
+.reply:hover .reply__go { color: #6b4ae0; transform: translateX(2px); }
+.reply:active { transform: translateY(0); }
+[data-theme='dark'] .replies { border-color: rgba(141, 107, 255, 0.3); background: rgba(141, 107, 255, 0.07); }
+[data-theme='dark'] .reply { background: #141c2b; border-color: rgba(141, 107, 255, 0.28); color: #e6edf7; }
 </style>
 
 <style scoped>

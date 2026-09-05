@@ -102,6 +102,7 @@ router.post('/review/sessions', async (req: any, res) => {
         mode: session.mode,
         revision: session.revision,
         knowledgePoints: session.knowledgePoints,
+        scene: session.scene,
       },
     });
   } catch (error: any) {
@@ -226,6 +227,8 @@ const buildMessageResultData = (result: any, synthetic: boolean): Record<string,
       endReason: result.endReason || null,
       recovered: result.recovered === true,
       peerMessage: result.peerTriggered ? result.peerMessage || null : null,
+      peerStrategy: result.peerTriggered ? result.peerStrategy || null : null,
+      peerFollowUpQuestions: result.peerTriggered && Array.isArray(result.peerFollowUpQuestions) ? result.peerFollowUpQuestions : [],
       revision: result.revision,
       schemaVersion: 'synthetic-user-v1'
     };
@@ -257,6 +260,8 @@ const buildMessageResultData = (result: any, synthetic: boolean): Record<string,
     advisory: result.advisory || null,
     peerTriggered: result.peerTriggered,
     peerMessage: result.peerMessage,
+    peerStrategy: result.peerStrategy || null,
+    peerFollowUpQuestions: Array.isArray(result.peerFollowUpQuestions) ? result.peerFollowUpQuestions : [],
     checkpoint: result.checkpoint || null,
     promptDebug: result.promptDebug || null,
     peerDebug: result.peerDebug || null,
@@ -381,6 +386,7 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
           mode: session.mode,
           revision: session.revision,
           knowledgePoints: session.knowledgePoints,
+          scene: session.scene,
           ...(req.user?.projection?.grantSource === 'synthetic' ? { schemaVersion: 'synthetic-user-v1' } : {}),
         };
       });
@@ -403,6 +409,7 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
         mode: session.mode,
         revision: session.revision,
         knowledgePoints: session.knowledgePoints,
+        scene: session.scene,
         ...(req.user?.projection?.grantSource === 'synthetic' ? { schemaVersion: 'synthetic-user-v1' } : {}),
       },
     });
@@ -771,7 +778,11 @@ router.post('/sessions/:sessionId/peer/messages', async (req: any, res) => {
     if (String(req.headers?.accept || '').includes('text/event-stream')) {
       return handleStreamingSession(req, res, async () => {
         const result = await aiTeachingCoordinator.processPeerMessage(sessionId, message);
-        return { peerResponse: result.peerResponse };
+        return {
+          peerResponse: result.peerResponse,
+          peerStrategy: result.strategy || null,
+          peerFollowUpQuestions: Array.isArray(result.followUpQuestions) ? result.followUpQuestions : [],
+        };
       }, sessionId);
     }
 
@@ -784,6 +795,8 @@ router.post('/sessions/:sessionId/peer/messages', async (req: any, res) => {
       success: true,
       data: {
         peerResponse: result.peerResponse,
+        peerStrategy: result.strategy || null,
+        peerFollowUpQuestions: Array.isArray(result.followUpQuestions) ? result.followUpQuestions : [],
       },
     });
   } catch (error: any) {

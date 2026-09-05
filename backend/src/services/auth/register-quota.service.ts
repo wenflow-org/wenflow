@@ -4,8 +4,13 @@
  * 现状（VLAB_DATA_SURVEY P0-1）：公开注册仅 10 次/小时/IP 的内存尝试限速，
  * shotsnap 14 账号 2 小时批量注册——尝试限速拦不住"每 5 分钟注册一个"的慢批量。
  * 本服务把成功注册持久化进 login_attempts（scope='register', success=true），
- * 以 DB 累计计数实现 24h 窗口内的数量上限（默认 5 个/天/IP，env REGISTER_IP_DAILY_QUOTA 可调），
- * 超过即 429 REGISTER_IP_QUOTA_EXCEEDED。重启不丢失、跨实例生效。
+ * 以 DB 累计计数实现 24h 窗口内的数量上限，超过即 429 REGISTER_IP_QUOTA_EXCEEDED。
+ * 重启不丢失、跨实例生效。
+ *
+ * 配置（2026-09 起由 Admin 后台热控）：
+ *  - 开关默认【关】：未在后台启用时不做数量限制（QUOTA_DISABLED=0），兼容未配置的新部署；
+ *    旧 env REGISTER_IP_DAILY_QUOTA 仅在已显式设置时作为启动默认回填，不再隐式开启限制。
+ *  - 启用后限额默认 5 个/天/IP（平台设置 registerIpDailyQuota 可调，0-100）。
  *
  * 权衡（不自动打测试标记）：用户名命中 TEST_ACCOUNT_PREFIXES 不自动标记——
  * isVirtualLearner 语义是"无凭据虚拟学习者"，错位；新增 isTestAccount 列需 SQLite
@@ -17,16 +22,22 @@ import prisma from '../../config/database';
 import type { PrismaClient } from '@prisma/client';
 import { logger } from '../../utils/logger';
 
+/** 默认限额（后台启用后未另设时的取值） */
 export const DEFAULT_IP_DAILY_QUOTA = 5;
+/** 0 = 未启用配额限制 */
+export const QUOTA_DISABLED = 0;
 export const REGISTER_QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** 后台可设范围 */
+export const MIN_IP_DAILY_QUOTA = 1;
+export const MAX_IP_DAILY_QUOTA = 100;
 
-/** 解析环境变量配置：正整数才生效，否则回退默认 5 */
+/** 解析配置值：0 = 关闭（默认），1-100 = 启用限额 */
 export function resolveIpDailyQuota(value: string | undefined): number {
-  if (!value || value.trim() === '') return DEFAULT_IP_DAILY_QUOTA;
+  if (!value || value.trim() === '') return QUOTA_DISABLED;
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    logger.warn(`[register-quota] REGISTER_IP_DAILY_QUOTA 无效（${value}），使用默认 ${DEFAULT_IP_DAILY_QUOTA}`);
-    return DEFAULT_IP_DAILY_QUOTA;
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 100) {
+    logger.warn(`[register-quota] REGISTER_IP_DAILY_QUOTA 无效（${value}），视为关闭`);
+    return QUOTA_DISABLED;
   }
   return parsed;
 }
@@ -43,7 +54,6 @@ export class IpRegisterQuotaExceededError extends Error {
     this.quota = quota;
   }
 }
-
 type QuotaDatabase = Pick<PrismaClient, 'login_attempts'>;
 
 export class RegisterQuotaService {
@@ -66,14 +76,15 @@ export class RegisterQuotaService {
   }
 
   /**
-   * 注册前置校验：超过配额抛 IpRegisterQuotaExceededError（429）。
-   * 返回当前剩余配额（供日志），0 表示恰好已满。
+   * 注册前置校验：配额关闭（0）或未超限放行；
+   * 超过配额抛 IpRegisterQuotaExceededError（429）。返回剩余配额（供日志），0 表示恰好已满。
    */
   async assertWithinDailyQuota(
     ip: string,
     quota: number,
     now: Date = new Date()
   ): Promise<number> {
+    if (!quota || quota < 1) return Number.POSITIVE_INFINITY;
     const used = await this.countRecentRegistrations(ip, now);
     if (used >= quota) {
       throw new IpRegisterQuotaExceededError(quota);

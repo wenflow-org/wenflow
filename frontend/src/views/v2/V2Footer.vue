@@ -86,7 +86,11 @@ const version = appVersion;
 }
 .v2footer__divider { opacity: 0.5; }
 @media (max-width: 720px) {
-  .v2footer__inner { flex-direction: column; align-items: flex-start; gap: 10px; padding: 10px 16px 12px; }
+  .v2footer__inner { flex-direction: row; justify-content: center; gap: 0; padding: 8px 16px 10px; }
+  .v2footer__brand { display: none; }
+  .v2footer__links { display: none; }
   .v2footer__tag { display: none; }
+  /* 移动端页脚：无图，保留版权 + 版本号 */
+  .v2footer__meta { font-size: 10.5px; }
 }
 </style>

@@ -100,7 +100,7 @@ function createResponse() {
 describe('普通登录路由安全边界', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    getPlatformSettings.mockResolvedValue({ registrationEnabled: true })
+    getPlatformSettings.mockResolvedValue({ registrationEnabled: true, registerIpQuotaEnabled: true, registerIpDailyQuota: 5 })
     isCapabilityBlocked.mockReturnValue(false)
     assertWithinDailyQuota.mockResolvedValue(5)
     recordSuccessfulRegistration.mockResolvedValue(undefined)

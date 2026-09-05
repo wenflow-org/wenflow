@@ -1,5 +1,5 @@
 /**
- * Admin 控制台：场景清单（侧栏/命令面板单一数据源）
+ * Admin 控制台：场景清单（侧栏单一数据源）
  */
 
 export interface MockSceneDef {

@@ -92,12 +92,62 @@ export interface TeachingScenarioContext {
   } | null;
   /** 学习者在 goal 阶段自然流露的交付形式偏好（learning_signal），供开场/教学兑现承诺 */
   learningSignal: string | null;
-  /** 同一路径上最近一节已完结课程的摘要，供跨节承接（"老师记得我"） */
+  /** 同一路径上前序课程的摘要，供跨节承接（"老师记得我"）。
+   *  源选择按路径位置：同阶段前一任务 → 上一阶段 → 同任务历史 → 最近任意完成课 */
   lastLessonRecap: {
     sourceTopic: string | null;
     topicSummary: string | null;
     retrievalCue: string | null;
     unresolvedPoints: string[];
+    /** 与当前课的位置关系，供 LLM/UI 判断怎么承接 */
+    relation: 'same-milestone-prev-task' | 'prev-milestone' | 'same-task' | 'last-any';
+    /** 来源课所在阶段号/标题（null = 不可得） */
+    sourceStageNumber?: number | null;
+    sourceMilestoneTitle?: string | null;
+    sourceTaskTitle?: string | null;
+    /** 同任务历史：当前任务自己学过的上一轮（用于"同任务重学接续自己的历史"） */
+    sameTaskHistory?: {
+      attemptCount: number;
+      lastStatus: string;
+      lastEndTime: string | null;
+      lastSummary: string | null;
+      lastUnresolvedPoints: string[];
+      lastActionPlan: string[];
+    } | null;
+  } | null;
+  /** 结构化前序学习上下文（供开场 UI/承接叙事消费，lastLessonRecap 的富化版） */
+  priorLearningContext: {
+    hasPriorLearning: boolean;
+    /** 紧邻前序（位置接续） */
+    adjacent?: {
+      relation: 'same-milestone-prev-task' | 'prev-milestone';
+      stageNumber: number;
+      milestoneTitle: string;
+      taskTitle: string;
+      topicSummary: string | null;
+      retrievalCue: string | null;
+      unresolvedPoints: string[];
+      actionPlan: string[];
+      newlyMastered: string[];
+      stillLearning: string[];
+    } | null;
+    /** 当前任务自己的历史 */
+    sameTask?: {
+      attemptCount: number;
+      lastStatus: string;
+      lastSummary: string | null;
+      lastUnresolved: string[];
+      lastActionPlan: string[];
+      lastEndTime: string | null;
+    } | null;
+    /** 前序阶段总体掌握（milestoneProgress 汇总） */
+    priorMilestoneMastery: Array<{
+      stageNumber: number;
+      title: string;
+      masteryState: 'unknown' | 'partial' | 'stable' | 'at-risk';
+      completedTasks: number;
+      totalTasks: number;
+    }>;
   } | null;
   /**
    * 交互特征情报（认知负荷量测 · 前端情报层）：
@@ -386,15 +436,188 @@ function determineTaskMode(
 }
 
 /**
- * 拉取同一路径上最近一节已完结课程的摘要（跨节承接数据源）。
+ * 拉取前序课程摘要（跨节承接数据源），按路径位置选择：
+ * 1) 同 milestone 前一任务（同阶段内顺序接续）
+ * 2) 上一 milestone 最近完成课（跨阶段接续）
+ * 3) 当前任务自己的历史（同任务重学，attemptCount ≥ 2 才有）
+ * 4) 回退：同路径最近完成课（原行为，但带 relation='last-any'）
  * 只取轻量字段，任何异常都静默降级为 null，不影响开课主流程。
  */
-async function fetchLastLessonRecap(
-  userId: string,
-  learningPathId: string,
-  currentTaskId: string
-): Promise<TeachingScenarioContext['lastLessonRecap']> {
+export async function fetchPriorLearningRecap(params: {  userId: string;
+  learningPathId: string;
+  currentMilestoneId: string;
+  currentTaskId: string;
+  currentStageNumber: number;
+  milestoneTitle: string;
+}): Promise<{ recap: TeachingScenarioContext['lastLessonRecap']; sameTaskSessions: number }> {
+  const {
+    userId,
+    learningPathId,
+    currentMilestoneId,
+    currentTaskId,
+    currentStageNumber,
+    milestoneTitle,
+  } = params;
+  const empty = (): { recap: null; sameTaskSessions: 0 } => ({ recap: null, sameTaskSessions: 0 });
+
   try {
+    // 同路径阶段顺序
+    const pathMilestones = await prisma.milestones.findMany({
+      where: { learningPathId },
+      orderBy: { stageNumber: 'asc' },
+      select: { id: true, stageNumber: true, title: true },
+    });
+    if (!pathMilestones.length) return empty();
+    const currentIdx = pathMilestones.findIndex((m) => m.id === currentMilestoneId);
+    const prevMilestone = currentIdx > 0 ? pathMilestones[currentIdx - 1] : null;
+
+    // 当前 milestone 内前一任务（不含当前）
+    const tasksInMilestone = await prisma.subtasks.findMany({
+      where: { milestoneId: currentMilestoneId, userId },
+      orderBy: { order: 'asc' },
+      select: { id: true, title: true },
+    });
+    const currentTaskPos = tasksInMilestone.findIndex((t) => t.id === currentTaskId);
+    const prevTaskInMilestone = currentTaskPos > 0 ? tasksInMilestone[currentTaskPos - 1] : null;
+
+    // 同任务历史（当前任务自己学过的所有终态会话）
+    const sameTaskSessions = await prisma.teaching_sessions.findMany({
+      where: {
+        userId,
+        taskId: currentTaskId,
+        status: 'completed',
+        wrapup: { not: null },
+      },
+      orderBy: { endTime: 'desc' },
+      select: { topic: true, wrapup: true, endTime: true, status: true },
+    });
+    const sameTaskLatest = sameTaskSessions[0] || null;
+    const sameTaskWrapup = sameTaskLatest ? parseJsonSafe(sameTaskLatest.wrapup as any) : null;
+    const sameTaskUnresolved = sameTaskWrapup
+      ? (Array.isArray(sameTaskWrapup.knowledgeItems)
+          ? (sameTaskWrapup.knowledgeItems as any[])
+              .filter((item: any) => item && typeof item.name === 'string' && item.name.trim() && item.status !== 'mastered')
+              .map((item: any) => String(item.name).trim())
+              .slice(0, 3)
+          : [])
+      : [];
+    const sameTaskActionPlan = sameTaskWrapup && Array.isArray(sameTaskWrapup.actionPlan)
+      ? sameTaskWrapup.actionPlan.filter((item: any) => typeof item === 'string' && item.trim()).slice(0, 3)
+      : [];
+
+    // 从教学会话里提取 recap 数据
+    const toRecap = (session: any, relation: TeachingScenarioContext['lastLessonRecap']['relation']) => {
+      const wrapup = session.wrapup ? parseJsonSafe(session.wrapup) : null;
+      if (!wrapup) return null;
+      const actionPlan = Array.isArray(wrapup.actionPlan)
+        ? wrapup.actionPlan.filter((item: any) => typeof item === 'string' && item.trim())
+        : [];
+      const knowledgeItems = Array.isArray(wrapup.knowledgeItems) ? wrapup.knowledgeItems : [];
+      const unresolvedPoints = knowledgeItems
+        .filter((item: any) => item && typeof item.name === 'string' && item.name.trim() && item.status !== 'mastered')
+        .map((item: any) => String(item.name).trim())
+        .slice(0, 3);
+      return {
+        sourceTopic: typeof session.topic === 'string' && session.topic.trim() ? session.topic.trim() : null,
+        topicSummary: typeof wrapup.topicSummary === 'string' && wrapup.topicSummary.trim() ? wrapup.topicSummary.trim() : null,
+        retrievalCue: actionPlan[0] || null,
+        unresolvedPoints,
+        relation,
+        sameTaskHistory: relation === 'same-task'
+          ? {
+              attemptCount: sameTaskSessions.length,
+              lastStatus: sameTaskLatest?.status || '',
+              lastEndTime: sameTaskLatest?.endTime?.toISOString?.() || null,
+              lastSummary: (typeof wrapup.topicSummary === 'string' && wrapup.topicSummary.trim()) ? wrapup.topicSummary.trim() : null,
+              lastUnresolvedPoints: unresolvedPoints,
+              lastActionPlan: actionPlan.slice(0, 3),
+            }
+          : undefined,
+      };
+    };
+
+    // 候选源：同 milestone 前一任务（同路径最近完成课，且属于前一任务）
+    // → 上一 milestone 最近完成课 → 同任务历史 → 全路径最近完成课
+    const prevTaskSessions = prevTaskInMilestone
+      ? await prisma.teaching_sessions.findFirst({
+          where: {
+            userId,
+            learningPathId,
+            taskId: prevTaskInMilestone.id,
+            status: 'completed',
+            wrapup: { not: null },
+          },
+          orderBy: { endTime: 'desc' },
+          select: { topic: true, wrapup: true },
+        })
+      : null;
+    if (prevTaskSessions) {
+      const recap = toRecap(prevTaskSessions, 'same-milestone-prev-task');
+      if (recap) {
+        return {
+          recap: {
+            ...recap,
+            sourceStageNumber: currentStageNumber,
+            sourceMilestoneTitle: milestoneTitle,
+            sourceTaskTitle: prevTaskInMilestone?.title || null,
+          },
+          sameTaskSessions: sameTaskSessions.length,
+        };
+      }
+    }
+
+    // 上一 milestone：取该 milestone 下最近完成课
+    if (prevMilestone) {
+      const prevMsRecentTaskIds = await prisma.subtasks.findMany({
+        where: { milestoneId: prevMilestone.id, userId },
+        select: { id: true },
+      });
+      const prevMsSessions = prevMsRecentTaskIds.length
+        ? await prisma.teaching_sessions.findFirst({
+            where: {
+              userId,
+              learningPathId,
+              taskId: { in: prevMsRecentTaskIds.map((t: any) => t.id) },
+              status: 'completed',
+              wrapup: { not: null },
+            },
+            orderBy: { endTime: 'desc' },
+            select: { topic: true, wrapup: true },
+          })
+        : null;
+      if (prevMsSessions) {
+        const recap = toRecap(prevMsSessions, 'prev-milestone');
+        if (recap) {
+          return {
+            recap: {
+              ...recap,
+              sourceStageNumber: prevMilestone.stageNumber,
+              sourceMilestoneTitle: prevMilestone.title,
+              sourceTaskTitle: null,
+            },
+            sameTaskSessions: sameTaskSessions.length,
+          };
+        }
+      }
+    }
+
+    // 同任务历史（第二/多次学同一任务）
+    if (sameTaskSessions.length > 0 && sameTaskWrapup) {
+      const recap = toRecap(sameTaskLatest, 'same-task');
+      if (recap) {
+        return {
+          recap: {
+            ...recap,
+            sourceStageNumber: currentStageNumber,
+            sourceMilestoneTitle: milestoneTitle,
+            sourceTaskTitle: null,
+          },
+          sameTaskSessions: sameTaskSessions.length,
+        };
+      }
+    }
+
+    // 回退：同路径最近完成课（排除当前任务，原行为）
     const lastEnded = await prisma.teaching_sessions.findFirst({
       where: {
         userId,
@@ -406,27 +629,34 @@ async function fetchLastLessonRecap(
       orderBy: { endTime: 'desc' },
       select: { topic: true, wrapup: true },
     });
-    const wrapup = lastEnded ? parseJsonSafe(lastEnded.wrapup as any) : null;
-    if (!wrapup) return null;
-
-    const actionPlan = Array.isArray(wrapup.actionPlan)
-      ? wrapup.actionPlan.filter((item: any) => typeof item === 'string' && item.trim())
-      : [];
-    const knowledgeItems = Array.isArray(wrapup.knowledgeItems) ? wrapup.knowledgeItems : [];
-    const unresolvedPoints = knowledgeItems
-      .filter((item: any) => item && typeof item.name === 'string' && item.name.trim() && item.status !== 'mastered')
-      .map((item: any) => String(item.name).trim())
-      .slice(0, 3);
-
-    return {
-      sourceTopic: typeof lastEnded?.topic === 'string' && lastEnded.topic.trim() ? lastEnded.topic.trim() : null,
-      topicSummary: typeof wrapup.topicSummary === 'string' && wrapup.topicSummary.trim() ? wrapup.topicSummary.trim() : null,
-      retrievalCue: actionPlan[0] || null,
-      unresolvedPoints,
-    };
-  } catch {
-    return null;
+    if (lastEnded) {
+      const recap = toRecap(lastEnded, 'last-any');
+      if (recap) return { recap, sameTaskSessions: sameTaskSessions.length };
+    }
+    return { recap: null, sameTaskSessions: sameTaskSessions.length };
+  } catch (error) {
+    logger.warn('[TeachingContext] 拉取前序课程摘要失败（静默降级）', {
+      error: error instanceof Error ? error.message : String(error),
+      userId,
+      learningPathId,
+    });
+    return empty();
   }
+}
+
+/** 汇总前序阶段掌握（供 priorLearningContext.priorMilestoneMastery） */
+function buildPriorMilestoneMastery(learnerSnapshot: any): TeachingScenarioContext['priorLearningContext'] extends infer _ ? NonNullable<TeachingScenarioContext['priorLearningContext']>['priorMilestoneMastery'] : never {
+  const progress = learnerSnapshot?.knowledgeMemory?.currentPath?.milestoneProgress;
+  if (!Array.isArray(progress)) return [];
+  return progress
+    .filter((item: any) => item && typeof item.stageNumber === 'number' && typeof item.masteryState === 'string')
+    .map((item: any) => ({
+      stageNumber: item.stageNumber,
+      title: typeof item.title === 'string' ? item.title : '',
+      masteryState: item.masteryState,
+      completedTasks: typeof item.completedTasks === 'number' ? item.completedTasks : 0,
+      totalTasks: typeof item.totalTasks === 'number' ? item.totalTasks : 0,
+    }));
 }
 
 function buildTeachingStrategyGuidance(taskProfile: TeachingScenarioContext['taskProfile']) {  const knowledgeType = taskProfile.knowledgeType;
@@ -525,7 +755,6 @@ export async function buildTeachingScenarioContext(
   const learningSignal = typeof learningSignalRaw === 'string' && learningSignalRaw.trim()
     ? learningSignalRaw.trim()
     : null;
-  const lastLessonRecap = await fetchLastLessonRecap(userId, path.id, task.id);
   const behavioralProfile = await fetchBehavioralProfile(userId);
   const milestone = task.milestones;
   const taskProfile = {
@@ -567,6 +796,47 @@ export async function buildTeachingScenarioContext(
   const currentTaskOrder = typeof (task as any).order === 'number'
     ? (task as any).order
     : Math.max(1, orderedTasks.findIndex((item: any) => item.id === task.id) + 1);
+
+  // 前序学习上下文：按路径位置接续（同阶段前一任务 → 上一阶段 → 同任务历史 → 最近任意）
+  const { recap: lastLessonRecap, sameTaskSessions } = await fetchPriorLearningRecap({
+    userId,
+    learningPathId: path.id,
+    currentMilestoneId: task.milestoneId,
+    currentTaskId: task.id,
+    currentStageNumber: Number.isFinite(Number(milestone.stageNumber)) ? Number(milestone.stageNumber) : 1,
+    milestoneTitle: milestone.title || milestone.goal || '当前阶段',
+  });
+  const priorMilestoneMastery = buildPriorMilestoneMastery(learnerSnapshot);
+  const priorLearningContext: TeachingScenarioContext['priorLearningContext'] = (lastLessonRecap || sameTaskSessions > 0 || priorMilestoneMastery.length > 0)
+    ? {
+        hasPriorLearning: true,
+        adjacent: lastLessonRecap && (lastLessonRecap.relation === 'same-milestone-prev-task' || lastLessonRecap.relation === 'prev-milestone')
+          ? {
+              relation: lastLessonRecap.relation,
+              stageNumber: lastLessonRecap.sourceStageNumber ?? 0,
+              milestoneTitle: lastLessonRecap.sourceMilestoneTitle || '',
+              taskTitle: lastLessonRecap.sourceTaskTitle || '',
+              topicSummary: lastLessonRecap.topicSummary,
+              retrievalCue: lastLessonRecap.retrievalCue,
+              unresolvedPoints: lastLessonRecap.unresolvedPoints,
+              actionPlan: lastLessonRecap.sameTaskHistory?.lastActionPlan || [],
+              newlyMastered: [],
+              stillLearning: lastLessonRecap.unresolvedPoints,
+            }
+          : null,
+        sameTask: sameTaskSessions > 0 && lastLessonRecap?.relation === 'same-task'
+          ? {
+              attemptCount: sameTaskSessions,
+              lastStatus: lastLessonRecap.sameTaskHistory?.lastStatus || 'completed',
+              lastSummary: lastLessonRecap.sameTaskHistory?.lastSummary || null,
+              lastUnresolved: lastLessonRecap.sameTaskHistory?.lastUnresolvedPoints || [],
+              lastActionPlan: lastLessonRecap.sameTaskHistory?.lastActionPlan || [],
+              lastEndTime: lastLessonRecap.sameTaskHistory?.lastEndTime || null,
+            }
+          : null,
+        priorMilestoneMastery,
+      }
+    : null;
 
   const context = {
     userId,
@@ -621,6 +891,7 @@ export async function buildTeachingScenarioContext(
       } : null,
     learningSignal,
     lastLessonRecap,
+    priorLearningContext,
     interactionProfile: buildInteractionProfile(interactionMeta, previousSession?.messages ?? []),
     learnerPrediction: null,
     priorMisconceptions,

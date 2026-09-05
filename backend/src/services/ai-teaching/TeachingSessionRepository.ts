@@ -62,6 +62,8 @@ export interface TeachingSessionMessage {
   promptDebug?: Record<string, any> | null;
   peerTriggered?: boolean;
   peerMessage?: string | null;
+  peerStrategy?: string | null;
+  peerFollowUpQuestions?: string[];
   peerDebug?: Record<string, any> | null;
   /** 检查点合成消息标记：不参与学生行为证据统计 */
   checkpoint?: boolean;

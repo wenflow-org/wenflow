@@ -243,6 +243,16 @@ html, body {
   border-color: var(--line);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
 }
+[data-theme='dark'] .tutor__resume {
+  background: linear-gradient(135deg, rgba(77, 139, 248, 0.14), rgba(141, 107, 255, 0.08));
+  border-color: rgba(77, 139, 248, 0.35);
+}
+[data-theme='dark'] .tutor__resume-restart {
+  background: var(--surface);
+}
+[data-theme='dark'] .tutor__resume-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
 [data-theme='dark'] .finish {
   background: rgba(15, 22, 32, 0.75);
 }

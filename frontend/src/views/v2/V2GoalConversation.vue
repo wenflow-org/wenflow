@@ -59,7 +59,7 @@
             class="composer__textarea"
             rows="1"
             maxlength="500"
-            placeholder="先说说你最近想解决什么，或现在卡在哪里…"
+            :placeholder="entryPlaceholder"
             @input="live.meta.onInput(input.length)"
             @keydown.enter.exact.prevent="doSend"
           ></textarea>
@@ -89,31 +89,34 @@
 
     <!-- 会话态 -->
     <main v-else class="work">
-      <!-- 左：信息清单 -->
-      <aside class="panel">
-        <div class="panel__head">
+      <!-- 左：信息清单（移动端默认折叠为顶栏，点击展开；桌面端恒展开） -->
+      <aside class="panel" :class="{ 'panel--collapsed': !panelExpanded }">
+        <button type="button" class="panel__head" :aria-expanded="panelExpanded" @click="togglePanel">
           <strong>目标信息</strong>
           <span class="panel__count">已收集 {{ live.filledCount }} / {{ live.totalFields }}</span>
+          <span class="panel__caret" aria-hidden="true">{{ panelExpanded ? '▾' : '▸' }}</span>
+        </button>
+        <div class="panel__body">
+          <div class="panel__bar"><i :style="{ width: (live.filledCount / live.totalFields) * 100 + '%' }"></i></div>
+          <div class="panel__confidence">{{ stageLabel }}</div>
+
+          <ul class="checklist">
+            <li v-for="f in live.fields" :key="f.key" class="field" :class="[`field--${f.status}`, { 'field--fresh': f.fresh }]">
+              <span class="field__mark">
+                <svg v-if="f.status === 'done'" viewBox="0 0 24 24" width="11" height="11"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
+                <i v-else></i>
+              </span>
+              <div class="field__body">
+                <div class="field__label">{{ f.label }}</div>
+                <div v-if="f.value" class="field__value">{{ f.value }}</div>
+                <div v-else class="field__value field__value--todo">待补充</div>
+              </div>
+              <span v-if="f.fresh" class="field__fresh">刚收录</span>
+            </li>
+          </ul>
+
+          <div class="panel__tip">信息由问流从对话中自动整理，会随对话逐步完善。够用时就会收敛方案，不用凑满。</div>
         </div>
-        <div class="panel__bar"><i :style="{ width: (live.filledCount / live.totalFields) * 100 + '%' }"></i></div>
-        <div class="panel__confidence">{{ stageLabel }}</div>
-
-        <ul class="checklist">
-          <li v-for="f in live.fields" :key="f.key" class="field" :class="[`field--${f.status}`, { 'field--fresh': f.fresh }]">
-            <span class="field__mark">
-              <svg v-if="f.status === 'done'" viewBox="0 0 24 24" width="11" height="11"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
-              <i v-else></i>
-            </span>
-            <div class="field__body">
-              <div class="field__label">{{ f.label }}</div>
-              <div v-if="f.value" class="field__value">{{ f.value }}</div>
-              <div v-else class="field__value field__value--todo">待补充</div>
-            </div>
-            <span v-if="f.fresh" class="field__fresh">刚收录</span>
-          </li>
-        </ul>
-
-        <div class="panel__tip">信息由问流从对话中自动整理，会随对话逐步完善。</div>
       </aside>
 
       <!-- 右：聊天区 -->
@@ -207,22 +210,25 @@
             </div>
           </div>
 
-          <!-- 快捷补充选项面板（skill 每轮返回） -->
+          <!-- 快捷补充选项面板（skill 每轮返回）：勾选式，点选打勾进输入框，再点取消 -->
           <div v-if="!live.sending && live.quickReplies.length && live.stageIndex < 3" class="replies-panel">
             <div class="replies-panel__head">
               <span class="replies-panel__kicker">快捷补充</span>
-              <span v-if="!live.quickReplyHintShown" class="replies-panel__hint">点选项先填入，修改后回车发送</span>
+              <span class="replies-panel__hint">点选填入输入框，可多选</span>
             </div>
             <div class="replies-panel__options">
               <button
-                v-for="q in live.quickReplies"
+                v-for="q in availableReplies"
                 :key="q.text"
                 type="button"
                 class="replies-panel__option"
-                :class="{ 'replies-panel__option--active': input === q.text }"
-                @click="appendToInput(q.text)"
+                :class="{ 'replies-panel__option--active': pickedReplySet.has(q.text.trim()) }"
+                @click="toggleReply(q.text)"
               >
-                <span class="replies-panel__dot" aria-hidden="true"></span>
+                <span v-if="pickedReplySet.has(q.text.trim())" class="replies-panel__check" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="11" height="11"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
+                </span>
+                <span v-else class="replies-panel__dot" aria-hidden="true"></span>
                 <span class="replies-panel__text">{{ q.text }}</span>
               </button>
             </div>
@@ -239,10 +245,9 @@
               class="composer__textarea"
               rows="1"
               maxlength="500"
-              placeholder="回答上面的问题，或补充你的基础、时间和限制…"
+              :placeholder="chatPlaceholder"
               @keydown.enter.exact.prevent="doSend"
             ></textarea>
-            <span class="composer__count">{{ input.length }} / 500</span>
             <!-- 发送/停止 同位置切换：生成中变停止（主流聊天交互，位置固定不占额外空间） -->
             <button
               v-if="!live.sending"
@@ -266,8 +271,11 @@
             </button>
           </div>
           <div class="composer__hint">
-            <span>Enter 发送 · Shift+Enter 换行</span>
-            <AiContentNote />
+            <span class="composer__hint-shortcut">Enter 发送 · Shift+Enter 换行</span>
+            <span class="composer__hint-right">
+              <span class="composer__count">{{ input.length }} / 500</span>
+              <AiContentNote />
+            </span>
           </div>
         </div>
 
@@ -295,8 +303,6 @@
                 <li v-for="(s, i) in live.proposal.stages" :key="i" class="pstep"><i>{{ i + 1 }}</i><div><strong>{{ s }}</strong></div></li>
               </ol>
             </div>
-
-            <div v-if="live.proposal.skip.length" class="proposal__skip">先不学：{{ live.proposal.skip.join('、') }}</div>
 
             <!-- 前置自测：帮路径更贴合基础（可选作答，作答后自动收录） -->
             <div v-if="live.proposal.probes && live.proposal.probes.length" class="proposal__probes">
@@ -341,7 +347,7 @@
               </div>
             </div>
             <div class="proposal__note">
-              <span>确认后在本页生成，约 30 秒。失败可原地重试，信息不会丢。</span>
+              <span>确认后在本页生成，一般需要 1-2 分钟。失败可原地重试，信息不会丢。</span>
               <AiContentNote />
             </div>
           </div>
@@ -350,7 +356,7 @@
           <div v-else-if="phase === 'generating'" class="proposal proposal--center">
             <span class="spinner"></span>
             <h2 class="proposal__title">正在生成你的路径…</h2>
-            <p class="proposal__generating-note">根据 {{ live.filledCount }} 条已确认信息拆解阶段，一般 30 秒内完成。</p>
+            <p class="proposal__generating-note">根据 {{ live.filledCount }} 条已确认信息拆解阶段，一般需要 1-2 分钟。</p>
             <div class="skeleton"><i style="width: 82%"></i><i style="width: 64%"></i><i style="width: 74%"></i></div>
             <!-- 流式进度：模型输出实时可见（原始思考文本），生成不再是无反馈等待 -->
             <div v-if="live.streamingText" class="proposal__stream">
@@ -409,6 +415,22 @@ const router = useRouter();
 const live = useGoalLive();
 const loggedIn = hasUserSession();
 
+/* 移动端信息清单折叠：桌面（>900px）恒展开，窄屏默认折叠，点击顶栏展开/收起 */
+const narrowMq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 900px)') : null;
+const isNarrow = ref(narrowMq?.matches ?? false);
+const panelOpen = ref(false);
+const panelExpanded = computed(() => !isNarrow.value || panelOpen.value);
+/* 移动端输入框 placeholder 缩短（长文案换行后被裁，占两行以上无法完整显示） */
+const entryPlaceholder = computed(() => isNarrow.value ? '先说说你想解决什么…' : '先说说你最近想解决什么，或现在卡在哪里…');
+const chatPlaceholder = computed(() => isNarrow.value ? '回答问题，或补充基础、时间…' : '回答上面的问题，或补充你的基础、时间和限制…');
+function togglePanel() {
+  if (!isNarrow.value) return;
+  panelOpen.value = !panelOpen.value;
+}
+function onNarrowChange(e: MediaQueryListEvent) {
+  isNarrow.value = e.matches;
+}
+
 /* ---------- 键盘快捷键 ---------- */
 /* Escape 已在 onProposalKey 中处理方案浮层关闭；
    此处预留扩展位：后续 live 支持 cancel() 时可加 Escape 中止生成 */
@@ -421,6 +443,7 @@ const keyedMessages = computed(() =>
 onMounted(() => {
   window.addEventListener('v2:new-goal', onNewGoalEvent);
   window.addEventListener('keydown', onProposalKey);
+  narrowMq?.addEventListener('change', onNarrowChange);
   // 每次进入页面随机展示一批场景
   shuffleScenes();
   const cid = typeof route.params.conversationId === 'string' ? route.params.conversationId : '';
@@ -436,6 +459,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('v2:new-goal', onNewGoalEvent);
   window.removeEventListener('keydown', onProposalKey);
+  narrowMq?.removeEventListener('change', onNarrowChange);
 });
 
 /** 清回初始态（内存 + 组件局部状态；live.resetView 保留 localStorage 恢复入口） */
@@ -487,6 +511,23 @@ function goPaths() {
 }
 
 const input = ref('');
+/** 当前展示轮的快捷补充入口（快选为勾选语义：全部常驻，点选打勾，再点取消） */
+const currentQuickReplies = ref<Array<{ text: string; icon?: string }>>([]);
+/** 从 input 中把某行追加/取消；为保持展示层薄，纯组件内实现 */
+function toggleReply(text: string) {
+  const t = text.trim();
+  const cur = input.value.split('\n').map((s) => s.trim()).filter(Boolean);
+  if (cur.includes(t)) {
+    input.value = cur.filter((x) => x !== t).join('\n');
+  } else {
+    cur.push(t);
+    input.value = cur.join('\n');
+  }
+}
+/** 面板选项 = 当前轮全部快选，常驻展示（不随选中隐藏，保证再点可取消） */
+const availableReplies = computed(() => currentQuickReplies.value);
+/** 已选中的快选文本集合（驱动勾选态样式） */
+const pickedReplySet = computed(() => new Set(input.value.split('\n').map((s) => s.trim()).filter(Boolean)));
 const scrollEl = ref<HTMLElement | null>(null);
 const phase = ref<'preview' | 'generating' | 'done'>('preview');
 const supplementMode = ref(false);
@@ -611,12 +652,13 @@ watch(() => live.streamingText, () => {
   if (nearBottom) void scrollToBottom();
 });
 
-// 快捷回复提示只展示一次：首次出现快捷回复时置位
+// 快捷补充：新快选到达时刷新（数组换新视为新一轮）
 watch(
-  () => live.quickReplies.length,
-  (count) => {
-    if (count > 0 && !live.quickReplyHintShown) live.quickReplyHintShown = true;
-  }
+  () => live.quickReplies,
+  (replies) => {
+    currentQuickReplies.value = [...replies];
+  },
+  { deep: true }
 );
 
 async function doSend(e?: unknown) {
@@ -641,10 +683,6 @@ async function startWith(seed: string) {
   } catch {
     /* ignore */
   }
-}
-
-function appendToInput(text: string) {
-  input.value = input.value ? `${input.value}\n${text}` : text;
 }
 
 async function doConfirm() {
@@ -978,7 +1016,11 @@ function shuffleScenes() {
   min-height: 54px;
   box-shadow: 0 6px 20px rgba(23, 32, 51, 0.06);
 }
-.composer__box--active { border-color: rgba(52, 120, 246, 0.4); }
+/* 有内容/聚焦：柔和提示 —— 细蓝边 + 淡外发光（替代原整圈硬蓝边） */
+.composer__box--active {
+  border-color: rgba(52, 120, 246, 0.55);
+  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12), 0 6px 20px rgba(23, 32, 51, 0.06);
+}
 .composer__textarea {
   flex: 1;
   border: 0; outline: none; resize: none;
@@ -989,7 +1031,6 @@ function shuffleScenes() {
   max-height: 120px;
   align-self: center;
 }
-.composer__count { font-size: 11px; color: var(--faint); align-self: center; }
 .composer__send {
   width: 40px; height: 40px; border-radius: 12px;
   display: grid; place-items: center;
@@ -1017,6 +1058,8 @@ function shuffleScenes() {
   gap: 12px; flex-wrap: wrap;
   font-size: 11.5px; color: var(--faint); padding-left: 6px;
 }
+.composer__hint-right { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.composer__count { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ---------- 工作台布局 ---------- */
 .work {
@@ -1036,7 +1079,7 @@ function shuffleScenes() {
   box-sizing: border-box;
 }
 
-/* ---------- 左：信息清单 ---------- */
+/* ---------- 左：信息清单（移动端默认折叠为头部横条，点击展开；桌面恒展开） ---------- */
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1046,9 +1089,17 @@ function shuffleScenes() {
   min-height: 0;
   overflow: auto;
 }
-.panel__head { display: flex; align-items: center; justify-content: space-between; }
+.panel__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  border: 0; background: transparent; padding: 0; margin: 0;
+  font: inherit; color: inherit; text-align: left;
+  cursor: default;
+}
 .panel__head strong { font-size: 14px; }
 .panel__count { font-size: 12px; font-weight: 800; color: var(--blue-deep); }
+/* 折叠指示箭头：仅移动端显示 */
+.panel__caret { display: none; font-size: 12px; color: var(--faint); flex-shrink: 0; }
+.panel__body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .panel__bar { height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
 .panel__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
 .panel__confidence { font-size: 11px; color: var(--faint); }
@@ -1338,6 +1389,9 @@ function shuffleScenes() {
   background: rgba(52, 120, 246, 0.1);
   color: var(--blue-deep);
 }
+.replies-panel__option--active:hover {
+  background: rgba(52, 120, 246, 0.16);
+}
 .replies-panel__dot {
   width: 7px;
   height: 7px;
@@ -1345,6 +1399,14 @@ function shuffleScenes() {
   background: var(--blue);
   flex: none;
   box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.15);
+}
+.replies-panel__check {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  color: #fff;
+  flex: none;
 }
 .replies-panel__text { flex: 1; line-height: 1.5; }
 @media (prefers-reduced-motion: no-preference) {
@@ -1546,18 +1608,44 @@ function shuffleScenes() {
 /* ---------- 响应式 ---------- */
 @media (max-width: 900px) {
   .nav__links { display: none; }
+  /* 移动端隐藏顶部导航（沉浸式对话页，底部导航已有入口；header 隐藏、底部 tabs 保留） */
+  .goal :deep(.v2nav) { display: none; }
+  /* 锁定视口高度：会话态整页不滚动，chat 内部滚动、composer 吸底在底部导航之上。
+     flex-grow:0 显式置零（.v2-page 全局 flex:1 会把 height:100dvh 拉伸到内容高度）。
+     v2.css 全局 .v2-page { padding-bottom:72px } 为底部导航让位，此处保留。 */
+  .goal { height: 100dvh; min-height: 0; flex: 0 0 auto; }
   .work {
     grid-template-columns: 1fr;
-    padding: 12px 14px 88px;
-    overflow: auto;
+    /* 第一行 = 信息清单（折叠时仅头部横条），第二行 = chat 撑满剩余 */
+    grid-template-rows: auto minmax(0, 1fr);
+    padding: 8px 10px;
+    gap: 8px;
+    overflow: hidden;
+    min-height: 0;
   }
   .panel {
     max-height: none;
     overflow: visible;
+    padding: 12px 14px;
+    gap: 10px;
   }
-  .chat { min-height: min(70vh, 560px); height: auto; }
+  /* 展开态：面板限高内部滚动，避免挤压 chat（composer 最小高度约 132px） */
+  .panel:not(.panel--collapsed) {
+    max-height: 45dvh;
+    overflow: auto;
+  }
+  /* 移动端信息清单默认折叠：头部横条可点，收起时隐藏进度条/清单/提示 */
+  .panel__head { cursor: pointer; }
+  .panel__caret { display: inline; }
+  .panel--collapsed .panel__body { display: none; }
+  /* chat 撑满第二行：内部滚动、composer 吸底 */
+  .chat { min-height: 0; height: 100%; }
+  .chat__scroll { min-height: 0; }
   .msg { max-width: 96%; }
   .replies { margin-left: 0; }
+  /* 移动端 hint 行：触屏无键盘快捷键提示，隐藏之；0/500 计数与 AI 标注一行右对齐 */
+  .composer__hint-shortcut { display: none; }
+  .composer__hint { justify-content: flex-end; flex-wrap: nowrap; }
   .proposal__stages ol { grid-template-columns: repeat(2, 1fr); }
   .entry__hero { align-items: stretch; flex-direction: column; }
   .entry__hero h1 { font-size: 22px; }

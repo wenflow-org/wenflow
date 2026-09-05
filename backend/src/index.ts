@@ -20,6 +20,7 @@ import { loadSkillsFile } from './services/skill-registry/skills-file';
 import learningService from './services/learning/learning.service';
 import { ensureCoreAgentPrompts } from './scripts/seed-core-agent-prompts';
 import { bootstrapFieldRoutings } from './services/field-routing-bootstrap.service';
+import { seedSkillModelConfigsIfEmpty } from './services/seed-skill-model-configs';
 import { dashboardGuidanceSnapshotService } from './services/learner/DashboardGuidanceSnapshotService';
 import { DurableEventConsumerRegistry } from './events/consumer-registry';
 import { DurableOutboxWorker } from './events/outbox.worker';
@@ -618,6 +619,12 @@ export async function startServer() {
 
       // 初始化 EduClaw Gateway
      await purgeRetiredSkills();
+      // Seed-if-empty：新库自动写入 flash/pro 分工 + thinking=disabled（代码 truth；已有行跳过，admin 可改）
+      await seedSkillModelConfigsIfEmpty(systemPrisma).catch((err) => {
+        logger.warn('[startup] skill model config seed 失败（不阻断启动）', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
       await initializeGateway();
       assertStartupActive();
       if (process.env.STARTUP_CANARY === '0') {

@@ -1,6 +1,6 @@
 <template>
   <div :class="embedded ? 'mk-page--fill lc-embedded' : 'mk-page mk-page--fill'">
-    <div class="mk-status" :class="statusTone">
+    <div v-if="!embedded" class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">学习者中心</strong>
       <span class="mk-status__sep"></span>
@@ -50,6 +50,13 @@
           />
         </div>
         <div class="mk-card__head-right">
+          <button
+            v-if="embedded"
+            type="button"
+            class="mk-btn mk-btn--sm"
+            :disabled="recomputingAll || !rows.length"
+            @click="recomputeAll"
+          >{{ recomputingAll ? `重算中 ${recomputeProgress}/${rows.length}…` : '全部重算' }}</button>
           <DataScopeToggle v-if="isLive" v-model="includeTest" />
           <MkCols
             :col-defs="lcColDefs"
@@ -209,8 +216,10 @@ import Pagination from './Pagination.vue'
 import MkCols from './MkCols.vue'
 import { adminNotificationsApi } from '@/api/adminApi'
 
-/** 嵌入模式：作为「用户与学习者」页「学习状态」tab 渲染（仅去掉外层壳，状态条/列表/干预弹窗保留） */
+/** 嵌入模式：作为「用户与学习者」页「学习状态」tab 渲染（仅去掉外层壳，状态条/列表/干预弹窗保留）。
+    count 事件：学习者快照就绪后上报（宿主「学习者 N」徽章；embedded 才消费） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const emit = defineEmits<{ (e: 'count', total: number): void }>()
 
 interface Row {
   id: string
@@ -365,6 +374,12 @@ const loadFailed = computed(
 function retryLoad() {
   void loadLiveData()
 }
+/* 宿主域计数徽章（embedded 才消费）：快照列表就绪即上报 */
+watch(liveLearners, (list) => {
+  emit('count', list.length)
+}, { immediate: true })
+/* 宿主刷新联动（用户与学习者合并宿主「刷新」按钮 → 重拉 live 学习者域） */
+defineExpose({ refresh: () => { void loadLiveData() } })
 
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
    数据全量在客户端（live 拉取），筛选后按页切片；

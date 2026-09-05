@@ -90,6 +90,49 @@ export interface TeachingTurnInput {
       topicSummary?: string | null;
       retrievalCue?: string | null;
       unresolvedPoints?: string[];
+      relation?: string;
+      sourceStageNumber?: number | null;
+      sourceMilestoneTitle?: string | null;
+      sourceTaskTitle?: string | null;
+      sameTaskHistory?: {
+        attemptCount?: number;
+        lastStatus?: string;
+        lastEndTime?: string | null;
+        lastSummary?: string | null;
+        lastUnresolvedPoints?: string[];
+        lastActionPlan?: string[];
+      } | null;
+    } | null;
+    /** 结构化前序学习上下文（跨节承接富化版） */
+    priorLearningContext?: {
+      hasPriorLearning?: boolean;
+      adjacent?: {
+        relation?: string;
+        stageNumber?: number;
+        milestoneTitle?: string;
+        taskTitle?: string;
+        topicSummary?: string | null;
+        retrievalCue?: string | null;
+        unresolvedPoints?: string[];
+        actionPlan?: string[];
+        newlyMastered?: string[];
+        stillLearning?: string[];
+      } | null;
+      sameTask?: {
+        attemptCount?: number;
+        lastStatus?: string;
+        lastSummary?: string | null;
+        lastUnresolved?: string[];
+        lastActionPlan?: string[];
+        lastEndTime?: string | null;
+      } | null;
+      priorMilestoneMastery?: Array<{
+        stageNumber?: number;
+        title?: string;
+        masteryState?: string;
+        completedTasks?: number;
+        totalTasks?: number;
+      }>;
     } | null;
     /** 前端交互特征情报（认知负荷量测）：本轮统计 + 近轮对比，仅供判断 loadIndex */
     interactionProfile?: {
@@ -195,6 +238,11 @@ export interface TeachingTurnOutput {
       status: 'pending' | 'learning' | 'mastered' | 'review';
       progress: number;
     }>;
+    /** 可选：需要学生对当前点表态时的确认动作组（前端渲染为行动按钮；不输出则前端回退固定按钮） */
+    confirmCheck?: {
+      prompt: string;
+      actions: Array<{ label: string; message: string }>;
+    };
   };
   pedagogy: {
     strategies: string[];
@@ -439,6 +487,7 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
         ? normalizedKnowledgePoints[0]?.name || null
         : normalizedCurrentPoint,
       points: normalizedKnowledgePoints.slice(0, 5),
+      ...(normalizeConfirmCheck(knowledge.confirmCheck)),
     },
     pedagogy: {
       strategies: normalizedStrategies.length > 0 ? normalizedStrategies : fallbackStrategies,
@@ -515,6 +564,26 @@ function resolveConfusionPoints(rawConfusionPoints: any, rawMisconceptions: any)
     .map((m) => m.canonicalLabel || m.conceptKey)
     .filter(Boolean) as string[];
   return Array.from(new Set(derived)).slice(0, 5);
+}
+
+/** 归一化确认动作组（knowledge.confirmCheck）：恰好 2 个动作、字段限长；不合法返回空 */
+function normalizeConfirmCheck(value: any): { confirmCheck?: NonNullable<TeachingTurnOutput['knowledge']['confirmCheck']> } {
+  if (!value || typeof value !== 'object') return {};
+  const rawActions = Array.isArray(value.actions) ? value.actions : [];
+  const actions = rawActions
+    .filter((a: any) => a && typeof a?.label === 'string' && a.label.trim() && typeof a?.message === 'string' && a.message.trim())
+    .slice(0, 2)
+    .map((a: any) => ({
+      label: String(a.label).trim().slice(0, 12),
+      message: String(a.message).trim().slice(0, 120),
+    }));
+  if (actions.length !== 2) return {};
+  return {
+    confirmCheck: {
+      prompt: typeof value.prompt === 'string' ? value.prompt.trim().slice(0, 40) : '',
+      actions,
+    },
+  };
 }
 
 /** 归一化回合级知识状态估计（θ−d 路由信号）：数值钳制、推荐值白名单 */

@@ -8,6 +8,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../../config/database';
 import systemPrisma from '../../config/system-database';
 import { getGateway } from '../../gateway';
+import { APIRouter } from '../../gateway/api-gateway/router';
 import { AgentConfigService } from '../../services/agentConfig.service';
 import { getAgentManifest, getAgentOfSkill, getCanonicalAgentId } from '../../services/agent-manifest.service';
 import {
@@ -309,6 +310,225 @@ router.post('/:name/test', async (req: Request, res: Response) => {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : undefined) : undefined
+    });
+  }
+});
+
+/**
+ * POST /:name/model-probe — 模型延迟探测（不执行 handler，直发上游）
+ *
+ * 用该 skill 的 resolve 路由（model/thinking/effort/endpoint）+ ACTIVE prompt，按
+ * 指定思考档发一次流式请求，返回延迟与质量指标。admin 改为表单里的思考档后，
+ * 点「试测」即可看新档位真实表现，不落库、不改配置。
+ *
+ * body（均可覆盖 resolve 后的生效值）:
+ * - thinkingMode: 'default' | 'enabled' | 'disabled'（不传=跟随 resolve）
+ * - reasoningEffort: 'default' | 'low' | 'high' | 'max'
+ * - testInput: 附加的 user 消息（默认给个最小探测指令）
+ * - timeoutMs: 覆盖超时（默认 180s）
+ */
+router.post('/:name/model-probe', async (req: Request, res: Response) => {
+  const startedAt = Date.now();
+  try {
+    const { name } = req.params;
+    const body = (req.body || {}) as {
+      thinkingMode?: string;
+      reasoningEffort?: string;
+      testInput?: string;
+      timeoutMs?: number;
+    };
+
+    // 1) resolve 真实路由（继承 skill_model_configs / agent / platform）
+    const routerInstance = new APIRouter();
+    const route = await routerInstance.resolve({ skillId: name }, (req as any).user?.userId);
+
+    // 2) 加载 ACTIVE prompt（与 gateway 同源，编译产物优先）
+    const agentId = `skill:${name}`;
+    const agentConfig = new AgentConfigService();
+    const active = await agentConfig.getActivePrompt(agentId);
+    const systemPrompt = active?.systemPrompt || '';
+    if (!systemPrompt) {
+      return res.status(400).json({ success: false, error: `Skill「${name}」无 ACTIVE prompt` });
+    }
+
+    // 3) 档位覆盖（低层已支持 low 透传；提 max 收敛 high）
+    const thinkingMode = body.thinkingMode || route.thinkingMode || 'default';
+    const reasoningEffort = body.reasoningEffort || route.reasoningEffort || 'default';
+    const effectiveEffort = thinkingMode === 'disabled' ? 'default' : reasoningEffort;
+
+    // 4) 发流式请求（与 executor 同协议：stream + include_usage）
+    const endpointBase = route.endpoint.replace(/\/$/, '');
+    const endpoint = endpointBase.endsWith('/v1')
+      ? `${endpointBase}/chat/completions`
+      : `${endpointBase}/v1/chat/completions`;
+
+    const userMsg = body.testInput?.trim() || '请用一句简短的中文说明你接到的指令并输出一个最小 JSON 示例。';
+    const timeoutMs = Math.min(180_000, Math.max(10_000, Number(body.timeoutMs) || 180_000));
+
+    const requestBody: Record<string, any> = {
+      model: route.model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMsg },
+      ],
+      max_tokens: 131072,
+      stream: true,
+      stream_options: { include_usage: true },
+      ...(thinkingMode === 'disabled'
+        ? { thinking: { type: 'disabled' } }
+        : thinkingMode === 'enabled'
+          ? { thinking: { type: 'enabled' }, ...(effectiveEffort !== 'default' ? { reasoning_effort: effectiveEffort } : {}) }
+          : {}),
+    };
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    let upstreamFetch: Awaited<ReturnType<typeof fetch>>;
+    try {
+      upstreamFetch = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${route.apiKey}`,
+        },
+        body: JSON.stringify(requestBody),
+        signal: ctrl.signal,
+      });
+    } catch (error: any) {
+      clearTimeout(timer);
+      const aborted = error?.name === 'AbortError';
+      return res.status(aborted ? 504 : 502).json({
+        success: false,
+        data: {
+          durationMs: Date.now() - startedAt,
+          resolved: {
+            model: route.model,
+            thinkingMode,
+            reasoningEffort: effectiveEffort,
+            source: route.source,
+            endpoint,
+          },
+          aborted,
+        },
+        error: aborted ? `上游 ${timeoutMs}ms 内未响应（超时）` : error?.message || '上游请求失败',
+      });
+    }
+    clearTimeout(timer);
+
+    const upstream = upstreamFetch;
+    if (upstream.status !== 200) {
+      const errText = (await upstream.text()).slice(0, 300);
+      return res.status(502).json({
+        success: false,
+        data: {
+          durationMs: Date.now() - startedAt,
+          upstreamStatus: upstream.status,
+          resolved: {
+            model: route.model,
+            thinkingMode,
+            reasoningEffort: effectiveEffort,
+            source: route.source,
+            endpoint,
+          },
+          errText,
+        },
+        error: `上游返回 ${upstream.status}`,
+      });
+    }
+
+    // 5) 流式解析：区分 content / reasoning，统计 TTFT 与 usage
+    const reader = upstream.body?.getReader();
+    if (!reader) return res.status(502).json({ success: false, error: '上游流式响应不可读' });
+
+    const decoder = new TextDecoder();
+    let buf = '';
+    let content = '';
+    let reasoning = '';
+    let finish = '';
+    let usage: any = null;
+    let firstContentAt: number | null = null;
+    let firstReasonAt: number | null = null;
+    let done = false;
+
+    const readTimer = setTimeout(() => ctrl.abort(), timeoutMs);
+    while (!done) {
+      let value: Uint8Array | undefined;
+      let streamDone = false;
+      try {
+        ({ value, done: streamDone } = await reader.read());
+      } catch {
+        break;
+      }
+      done = streamDone;
+      if (!value) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx: number;
+      while ((idx = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 1);
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (data === '[DONE]') { done = true; break; }
+        try {
+          const evt = JSON.parse(data);
+          const delta = evt.choices?.[0]?.delta;
+          if (delta) {
+            if (typeof delta.content === 'string' && delta.content) {
+              if (firstContentAt === null) firstContentAt = Date.now() - startedAt;
+              content += delta.content;
+            }
+            if (typeof delta.reasoning_content === 'string' && delta.reasoning_content) {
+              if (firstReasonAt === null) firstReasonAt = Date.now() - startedAt;
+              reasoning += delta.reasoning_content;
+            }
+          }
+          if (typeof evt.choices?.[0]?.finish_reason === 'string' && evt.choices[0].finish_reason) {
+            finish = evt.choices[0].finish_reason;
+          }
+          if (evt?.usage) usage = evt.usage;
+        } catch { /* partial chunk */ }
+      }
+    }
+    clearTimeout(readTimer);
+
+    const durationMs = Date.now() - startedAt;
+    const opens = (content.match(/\{/g) || []).length;
+    const closes = (content.match(/\}/g) || []).length;
+    let jsonOk = 'bad';
+    try {
+      const parsed = JSON.parse(content.replace(/^```(?:json)?\s*|```$/g, '').trim());
+      jsonOk = parsed && typeof parsed === 'object' ? 'ok' : 'bad';
+    } catch { jsonOk = 'bad'; }
+
+    return res.json({
+      success: true,
+      data: {
+        durationMs,
+        ttftContentMs: firstContentAt,
+        ttftReasoningMs: firstReasonAt,
+        contentChars: content.length,
+        reasoningChars: reasoning.length,
+        completionTokens: usage?.completion_tokens ?? null,
+        reasoningTokens: usage?.completion_tokens_details?.reasoning_tokens ?? null,
+        promptTokens: usage?.prompt_tokens ?? null,
+        finish,
+        jsonOk,
+        bracesBalanced: opens === closes,
+        resolved: {
+          model: route.model,
+          thinkingMode,
+          reasoningEffort: effectiveEffort,
+          source: route.source,
+          endpoint,
+        },
+        contentPreview: content.slice(0, 400),
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      data: { durationMs: Date.now() - startedAt },
+      error: error?.message || '模型延迟探测失败',
     });
   }
 });

@@ -120,17 +120,15 @@ const failed = ref<'start' | 'reply' | 'confirm' | 'supplement' | 'resume' | ''>
 const lastPayload = ref('');
 const freshKeys = ref<string[]>([]);
 const started = ref(false);
-/** 快捷回复操作提示：每个会话只展示一次（首次出现快捷回复时） */
-const quickReplyHintShown = ref(false);
 
 const FIELD_DEFS: Array<{ key: string; label: string; read: (u: GoalUnderstanding, c: Record<string, unknown>) => string }> = [
   { key: 'real_problem', label: '想解决的问题', read: (u, c) => pickText(u.real_problem, u.pain_points, u.surface_goal, c.real_problem, c.problem) },
   { key: 'motivation', label: '学习动机', read: (u, c) => pickText(u.motivation, c.motivation) },
-  { key: 'current_level', label: '当前水平', read: (u, c) => pickText(u.background?.current_level, u.current_baseline?.level, c.level) },
-  { key: 'pain_points', label: '过往卡点', read: (u, c) => pickText(u.current_baseline?.evidence, c.obstacle) },
+  // 背景经验优先展示具体做过什么/证据；水平自评信息量低，仅在无证据时作为兜底
+  { key: 'background_experience', label: '背景经验', read: (u, c) => pickText(u.background_experience, u.current_baseline?.evidence, u.background?.current_level, u.current_baseline?.level, c.level) },
+  { key: 'pain_points', label: '过往卡点', read: (u, c) => pickText(Array.isArray(u.pain_points) ? u.pain_points.join('、') : u.pain_points, c.obstacle) },
   { key: 'time_horizon', label: '期望周期', read: (u, c) => pickText(u.success_criteria?.time_window, u.background?.expected_time, u.available_resources?.time_horizon, c.expected_time) },
   { key: 'time_per_session', label: '可用时间', read: (u, c) => pickText(u.background?.available_time, u.available_resources?.time_per_session, u.available_resources?.time_budget, c.timePerDay) },
-  { key: 'urgency', label: '紧迫程度', read: (u, c) => pickText(u.urgency, c.urgency) },
   { key: 'success_criteria', label: '成功标准', read: (u) => pickText(u.success_criteria?.observable_result, u.success_criteria?.acceptance_check) }
 ];
 
@@ -454,7 +452,6 @@ function reset(clearStorage = true) {
   freshKeys.value = [];
   failed.value = '';
   started.value = false;
-  quickReplyHintShown.value = false;
   if (clearStorage) {
     localStorage.removeItem(CID_KEY);
     localStorage.removeItem(MSG_KEY);
@@ -489,7 +486,6 @@ export function useGoalLive() {
     streamingText,
     failed,
     started,
-    quickReplyHintShown,
     meta: metaTracker,
     send,
     confirm,

@@ -785,26 +785,37 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
    - 调用：width auto 吸收剩余空间（≈650px），主行标题 ellipsis
    - 模型 / Tokens：--excl-model 176px（模型名 116 + 用量 P/C 60），两行堆叠
    - 耗时：--excl-dur 84px（"123.4ms" 7ch 右对齐）
-   - Trace：--excl-trace 116px（"gw:…8y4tm4" 11ch 右对齐） */
+   - Trace：--excl-trace 116px（"gw:…8y4tm4" 11ch 右对齐）
+   视觉基调与审计日志对齐（2026-09）：主体统一 12.5px、行 padding 6px 13px、
+   失败行不再整行红底（错误语义交给红标题 + 状态 pill），整体更清爽易扫。 */
 .exec-table { }
 .exec-table th.right,
 .exec-table td.right { text-align: right; }
 .exec-table thead th { white-space: nowrap; }
-/* 行高压缩：表头/单元格收窄，双行消息列整体更紧凑 */
-.exec-table th { padding: 8px 12px; }
-.exec-table td { padding: 5px 12px; }
+/* 行高对齐审计日志节奏（2026-09 统一：td 8px 13px ≈ 43px 行高）：
+   双行消息列因副行略高，但主行 12.5px 后整体与审计页同密度 */
+.exec-table th { padding: 8px 13px; }
+.exec-table td { padding: 8px 13px; }
 
-.exec-row--err { background: rgba(220, 38, 38, 0.05); }
 .exec-row--open { background: #f6f9ff; }
 /* 连通性/探活测试行：弱化（降饱和降透明度），保留可读但不再与业务日志抢眼 */
 .exec-row--test { opacity: 0.62; }
 .exec-row--test:hover { opacity: 0.85; }
 .exec-row--test.exec-row--open { opacity: 0.9; }
 .exec-kind-group { display: inline-flex; align-items: center; gap: 5px; }
+/* 类型徽章（流程/Skill/网关/调用）：中性浅灰 pill，与审计动作 chip 同风格——低调可读不抢色 */
+.exec-kind-group .mk-badge {
+  background: #f0f2f5;
+  color: var(--mk-muted, #5b6577);
+  font-size: var(--mk-fs-12);
+  font-weight: 600;
+  padding: 1px 7px;
+}
+html[data-theme='dark'] .exec-kind-group .mk-badge { background: #253049; color: #8fa3bd; }
 /* 测试标签：灰底小徽章（与类型徽章并排，业务日志不出现） */
 .exec-test-tag {
-  font-size: 10px;
-  font-weight: 800;
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.03em;
   padding: 1px 6px;
   border-radius: 5px;
@@ -816,11 +827,12 @@ html[data-theme='dark'] .exec-test-tag { background: #2a3850; color: #8fa3bd; }
 .exec-cell { min-width: 0; }
 .exec-cell__line { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .exec-cell__line + .exec-cell__line { margin-top: 1px; }
-/* 消息主行：标题截断不换行（title 全值）；14px/650 让"执行完成"这类 4 字短标题
-   在消息列内具有足够视觉权重，抵消列内余白 */
+/* 消息主行：标题截断不换行（title 全值）；12.5px 与审计日志主体同字号，
+   用字重/颜色表达语义差异（红=错误摘要，灰蓝=内容预览，弱化=成功），
+   不再用更大字号抢视觉——整表更清爽、可扫性更强 */
 .exec-title {
-  font-size: var(--mk-fs-14);
-  font-weight: 650;
+  font-size: var(--mk-fs-12_5);
+  font-weight: 600;
   min-width: 0;
   flex: 1 1 auto;
   white-space: nowrap;
@@ -828,9 +840,9 @@ html[data-theme='dark'] .exec-test-tag { background: #2a3850; color: #8fa3bd; }
   text-overflow: ellipsis;
 }
 /* 消息列语义变体：错误摘要(红) / 内容预览(灰蓝) / 成功弱化——告别恒显「执行完成」与状态列重复 */
-.exec-title--err { color: var(--mk-red, #dc2626); font-weight: 700; }
+.exec-title--err { color: var(--mk-red, #dc2626); font-weight: 650; }
 .exec-title--err:hover { text-decoration: underline; }
-.exec-title--preview { color: var(--mk-muted, #5b6577); font-weight: 600; }
+.exec-title--preview { color: var(--mk-muted, #5b6577); font-weight: 550; }
 .exec-title--ok { color: var(--mk-faint, #5f6f8c); font-weight: 500; }
 /* 链路入口图标按钮：主行右侧,常显弱化/hover 高亮,点击直达 Trace(替代隐藏的 Trace 列) */
 .exec-trace-btn {
@@ -941,6 +953,14 @@ html[data-theme='dark'] .exec-detail td { background: #101826; }
   color: var(--mk-muted);
   font-size: var(--mk-fs-12);
 }
+.exec-detail__meta .mk-badge {
+  background: #f0f2f5;
+  color: var(--mk-muted, #5b6577);
+  font-size: var(--mk-fs-12);
+  font-weight: 600;
+  padding: 1px 7px;
+}
+html[data-theme='dark'] .exec-detail__meta .mk-badge { background: #253049; color: #8fa3bd; }
 .exec-detail__meta > span { white-space: nowrap; }
 
 /* 窄屏自适应：min-width 只保证默认 5 列(时间/节点/调用/耗时/状态)在窄容器内不塌陷 ≈620px;
@@ -948,42 +968,37 @@ html[data-theme='dark'] .exec-detail td { background: #101826; }
    原 min-width:962px 在 5 列默认下也硬撑导致 1080px 视口多余滚动。 */
 .mk-table-scroll .exec-table { min-width: 620px; }
 
-/* ---------- 行内 chip（沿用） ---------- */
+/* ---------- 行内 chip（沿用；2026-09 降噪：与主行字号差从 3px 收窄到 ~1px，
+   错误码红底 chip 改为轻红文字——错误语义由红标题与状态 pill 承担，副行只作元数据） ---------- */
 .tline__errcode {
   flex-shrink: 0;
-  font-size: var(--mk-fs-11);
-  font-weight: 700;
-  color: #dc2626;
-  background: rgba(220, 38, 38, 0.08);
-  border-radius: 5px;
-  padding: 1px 6px;
+  font-size: var(--mk-fs-12);
+  font-weight: 600;
+  color: var(--mk-red, #dc2626);
   white-space: nowrap;
 }
 .tline__http {
   flex-shrink: 0;
-  font-size: var(--mk-fs-11);
-  font-weight: 700;
-  color: #dc2626;
+  font-size: var(--mk-fs-12);
+  font-weight: 600;
+  color: var(--mk-red, #dc2626);
   white-space: nowrap;
 }
 .tline__recovered {
   flex-shrink: 0;
-  font-size: var(--mk-fs-11);
-  font-weight: 700;
+  font-size: var(--mk-fs-12);
+  font-weight: 600;
   color: var(--mk-amber);
   white-space: nowrap;
 }
 .tline__drift {
   flex-shrink: 0;
-  font-size: var(--mk-fs-11);
-  font-weight: 700;
+  font-size: var(--mk-fs-12);
+  font-weight: 600;
   color: var(--mk-amber);
-  background: rgba(217, 119, 6, 0.1);
-  border-radius: 5px;
-  padding: 1px 6px;
   white-space: nowrap;
 }
-.tline__session { font-size: var(--mk-fs-12_5); color: var(--mk-blue, #2c63d0); cursor: pointer; }
+.tline__session { font-size: var(--mk-fs-12); color: var(--mk-blue, #2c63d0); cursor: pointer; }
 .tline__session:hover { text-decoration: underline; }
 /* Prompt 契约展开区 */
 .tline__prompt { border-left: 3px solid rgba(217, 119, 6, 0.4); padding-left: 10px; }

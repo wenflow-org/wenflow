@@ -1783,16 +1783,33 @@ export async function reloadLiveTopology(range: '24h' | '7d' | '30d' | 'all'): P
 
 /* ================= 平台注册开关 ================= */
 export const registrationEnabled = ref<boolean | null>(null)
+/** 单 IP 每日注册配额开关（Admin 后台热控；null=未加载） */
+export const registerIpQuotaEnabled = ref<boolean | null>(null)
+/** 开启后的每日限额（1-100；null=未加载） */
+export const registerIpDailyQuota = ref<number | null>(null)
 
 export async function fetchRegistrationSetting(): Promise<void> {
   const res = await adminPlatformSettingsApi.getRegistrationSetting()
-  const d = res.data?.data ?? res.data ?? {}
+  const d = res.data?.data ?? {}
   registrationEnabled.value = d.registrationEnabled !== false
+  registerIpQuotaEnabled.value = d.registerIpQuotaEnabled !== undefined ? d.registerIpQuotaEnabled === true : null
+  registerIpDailyQuota.value = d.registerIpDailyQuota ?? null
 }
 
 export async function updateRegistrationSetting(enabled: boolean): Promise<void> {
-  await adminPlatformSettingsApi.updateRegistrationSetting(enabled)
+  await adminPlatformSettingsApi.updateRegistrationSetting({ registrationEnabled: enabled })
   registrationEnabled.value = enabled
+}
+
+/** 更新单 IP 每日注册配额设置（开关 + 限额） */
+export async function updateRegisterIpQuotaSetting(enabled: boolean, quota: number): Promise<void> {
+  const res = await adminPlatformSettingsApi.updateRegistrationSetting({
+    registerIpQuotaEnabled: enabled,
+    registerIpDailyQuota: quota
+  })
+  const d = res.data?.data ?? {}
+  registerIpQuotaEnabled.value = d.registerIpQuotaEnabled === true
+  registerIpDailyQuota.value = d.registerIpDailyQuota ?? null
 }
 
 /* ================= 平台公告 ================= */
@@ -1906,7 +1923,7 @@ export async function refreshLiveSkills() {
  * 一次导航 ≈ 11+ HTTP 请求、背后 30+ SQL。这里为每个域记录成功拉取时间戳，
  * TTL 内且已有数据的域直接跳过重拉（页面间跳转 / 导航返回命中缓存）；
  * 失败或空数据的域不满足 ready 条件，下次调用自动重拉。
- * loadLiveData(true)（Shell 刷新按钮 / 命令面板 reload）强制绕过缓存全量重拉。
+ * loadLiveData(true)（Shell 刷新按钮）强制绕过缓存全量重拉。
  */
 const LIVE_DATA_TTL = 45_000
 const liveFetchAt: Record<string, number> = {}
@@ -1955,7 +1972,7 @@ const liveDomainSkippable = (key: string, force: boolean): boolean =>
 /**
  * 渐进式加载：首屏只等 spans + overview（落地页所需），
  * 其余 10 个域后台并行，页面响应式填充；liveLoading 到全部结束才复位。
- * @param force 显式刷新（Shell 刷新按钮 / 命令面板 reload）：true 时绕过域级 TTL 缓存全量重拉
+ * @param force 显式刷新（Shell 刷新按钮）：true 时绕过域级 TTL 缓存全量重拉
  */
 export async function loadLiveData(force = false) {
   if (liveLoading.value) return
@@ -1997,7 +2014,7 @@ export async function loadLiveData(force = false) {
 
   // 核心域（日志）失败才算整体失败；其余局部降级。
   // 阶段 0 R1：后端不可用不再自动降级 demo（杜绝假数据静默展示），
-  // 由 AdminConsole 全屏错误页承接（可重试）；dev 离线预览走命令面板手动切换。
+  // 由 AdminConsole 全屏错误页承接（可重试）。
   if (liveFailures.value.spans && !liveSpans.value?.length) {
     liveLoading.value = false
     return

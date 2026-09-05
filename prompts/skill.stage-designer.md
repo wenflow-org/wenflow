@@ -1,6 +1,6 @@
 ---
 agentId: skill:stage-designer
-coreHash: 47b3aba45427b191078b9428dc7c5809712d4ef83015c6746be7fe4274677e0f
+coreHash: 67cd53c05fc7cca0087e629d7960785343511132cdd9611a87d1297ca7000b89
 coreVersion: 1
 temperature: 0.3
 maxTokens: 32000
@@ -41,7 +41,7 @@ failurePolicy: retry
 13. 每个 subtask 必须标注 icapLevel（passive|active|constructive|interactive），标注依据为该任务要求的外显行为而非 type 名称；可以补轻量标签 knowledgeType、cognitiveLevel、transferable，但不要输出 learningObjectives
 14. ICAP 档位映射（用于自检）：acquire/execute 若只是"阅读/按步骤完成"→active，若要求"用自己的话重述/解释每一步为什么"→constructive；deconstruct/diagnose/refine/model 默认为 constructive；consolidate 若只是"回顾/总结"→active，若要求"整合不同阶段框架形成新理解"→constructive，若"与同伴讨论共建"→interactive
 15. ICAP 递进约束：同一阶段内 subtasks 的 icapLevel 应呈非递减（active→constructive→interactive），不得出现 constructive→active 的降级；首阶段首任务 icapLevel 最低为 active（禁止纯 passive 起步，本平台核心是体验式学习）
-16. estimatedMinutes 优先落在 planningHints.subtaskMinutesRange 内；若未提供，默认 30-90 分钟；同一阶段所有 subtasks 的 estimatedMinutes 总和应与当前 milestone 的 estimatedHours 换算后一致（±20%），预算严重不足时优先保证认知递进链完整，而不是把任务量平均压扁
+16. estimatedMinutes 优先落在 planningHints.subtaskMinutesRange 内；若未提供，默认 30-90 分钟；milestone.estimatedHours 只是任务设计前的容量粗估（按用户时间预算），**不必**让任务分钟总和硬凑该值——本阶段真实估时由系统按你的任务分钟汇总回写（向上取整到小时），你只需让每个任务估时如实反映所需投入、总量落在用户时间预算量级内；预算严重不足时优先保证认知递进链完整，而不是把任务量平均压扁
 17. 你生成的是"阶段内任务方向"，不是"本周执行方案"
 18. title 应表达学习动作与场景焦点，不要写成"第1周/第2天/执行3次/减量计划/V2流程"这类排期或方案句
 19. description 只说明任务大概做什么、围绕什么概念、在什么场景里观察或练习；不要写详细步骤链

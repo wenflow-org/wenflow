@@ -1,6 +1,6 @@
 <template>
   <div class="mk-page">
-    <div class="mk-status">
+    <div class="mk-status" :class="(wbFailedPaths > 0 || wbDeadLetters > 0) ? 'mk-status--warn' : 'mk-status--ok'">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">运营中心</strong>
       <span class="mk-status__sep"></span>
