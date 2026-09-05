@@ -49,6 +49,8 @@ export function inferMaxWeeksFromTimeHorizon(timeHorizon: string | null): number
   if (!timeHorizon) return null;
   const text = timeHorizon.trim();
   if (!text) return null;
+  // 字面 "null"/"undefined"（模型偶尔把空值写成字符串）视为缺失
+  if (/^(null|undefined)$/i.test(text)) return null;
 
   const cnNum: Record<string, number> = { '半': 0.5, '一': 1, '两': 2, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10 };
 

@@ -61,6 +61,10 @@ export interface GoalConversationInternal {
       structuredData?: any;
       confirmedProposal?: any;
       confidenceScores?: any;
+      /** 动机信号（跨轮累积，hidden，仅供对话节奏参考） */
+      motivationSignal?: any;
+      /** 动机 Schema 帧（跨轮累积，hidden，仅供对话节奏参考） */
+      miFrames?: any;
     };
   };
 }
@@ -126,6 +130,8 @@ interface StageControlOptions {
   previousStage?: 'understanding' | 'proposing' | 'ready' | 'completed' | string;
   previousConfidence?: number;
   confirmProposal?: boolean;
+  /** 上一轮完整状态快照（含跨轮累积字段 motivationSignal/miFrames） */
+  previousState?: GoalConversationStateSnapshot;
 }
 
 interface GoalConversationStateSnapshot {
@@ -136,6 +142,9 @@ interface GoalConversationStateSnapshot {
   structuredData?: any;
   confirmedProposal?: any;
   confidenceScores?: any;
+  /** 动机信号与动机帧（跨轮累积，hidden） */
+  motivationSignal?: any;
+  miFrames?: any;
 }
 
 interface RetryAttemptInfo {
@@ -617,6 +626,16 @@ function parseGoalConversationResponse(
   let nextQuestions: string[] = [];
   let understanding = { ...(previousUnderstanding || {}) };
   let normalizedPayload: Record<string, any> = {};
+  // 动机信号/动机帧跨轮累积（hidden）：模型输出在 state.motivation_signal / state.mi_frames，
+  // normalize 展开到顶层；上一轮值经 previousState 传入，做浅合并保持跨轮
+  const previousMotivationSignal = stageControlOptions?.previousState?.motivationSignal
+    || (stageControlOptions?.previousState as any)?.motivation_signal
+    || null;
+  const previousMiFrames = stageControlOptions?.previousState?.miFrames
+    || (stageControlOptions?.previousState as any)?.mi_frames
+    || null;
+  let motivationSignal = previousMotivationSignal;
+  let miFrames = previousMiFrames;
 
   if (parsedJson) {
     normalizedPayload = normalizeGoalConversationModelPayload(parsedJson);
@@ -639,6 +658,20 @@ function parseGoalConversationResponse(
 
     const payloadNextQuestions = normalizedPayload.nextQuestions;
     nextQuestions = Array.isArray(payloadNextQuestions) ? payloadNextQuestions : [];
+
+    // 本轮模型新输出的动机信号：delta 模式缺席=沿用上一轮；非 delta 覆盖
+    const newMotivationSignal = normalizedPayload.motivation_signal ?? normalizedPayload.motivationSignal;
+    const newMiFrames = normalizedPayload.mi_frames ?? normalizedPayload.miFrames;
+    if (newMotivationSignal !== undefined && newMotivationSignal !== null) {
+      motivationSignal = motivationSignal && typeof motivationSignal === 'object' && typeof newMotivationSignal === 'object'
+        ? { ...motivationSignal, ...newMotivationSignal }
+        : newMotivationSignal;
+    }
+    if (newMiFrames !== undefined && newMiFrames !== null) {
+      miFrames = miFrames && typeof miFrames === 'object' && typeof newMiFrames === 'object' && !Array.isArray(miFrames) && !Array.isArray(newMiFrames)
+        ? { ...miFrames, ...newMiFrames }
+        : newMiFrames;
+    }
 
     const payloadQuickReplies = normalizedPayload.quickReplies || parsedJson.hints?.quickReplies;
     if (Array.isArray(payloadQuickReplies)) {
@@ -748,7 +781,9 @@ function parseGoalConversationResponse(
           collected: buildCollected(understanding, normalizedPayload),
           structuredData,
           confirmedProposal,
-          confidenceScores
+          confidenceScores,
+          motivationSignal,
+          miFrames
         }
       }
     }
@@ -870,6 +905,7 @@ function buildGoalPromptSpec(
         previousStage: payload.previousStage,
         previousConfidence: payload.previousState?.confidence ?? payload.previousUnderstanding?.confidence ?? 0.2,
         confirmProposal: payload.confirmProposal === true,
+        previousState: payload.previousState as GoalConversationStateSnapshot | undefined,
       },
       { deltaMode }
     ),
@@ -1033,8 +1069,9 @@ export async function goalConversationAgentHandler(
         {
           latestUserInput: input.goal,
           previousStage: input.metadata?.previousStage,
-          previousConfidence: previousUnderstanding?.confidence || 0.2,
+          previousConfidence: input.metadata?.previousState?.confidence ?? previousUnderstanding?.confidence ?? 0.2,
           confirmProposal: input.metadata?.confirmProposal === true,
+          previousState: input.metadata?.previousState as GoalConversationStateSnapshot | undefined,
         }
       );
       return {

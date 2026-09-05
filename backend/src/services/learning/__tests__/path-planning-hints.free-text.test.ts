@@ -5,6 +5,8 @@ describe('inferMaxWeeksFromTimeHorizon（自由文本周数兜底）', () => {
   const cases: Array<{ input: string | null; expected: number | null; label: string }> = [
     { input: null, expected: null, label: 'null' },
     { input: '   ', expected: null, label: '空白' },
+    { input: 'null', expected: null, label: '字面null字符串→null' },
+    { input: 'undefined', expected: null, label: '字面undefined字符串→null' },
     { input: '三个月', expected: 12.9, label: '三个月→12.9周' },
     { input: '半年', expected: 26, label: '半年→26周' },
     { input: '一年', expected: 52, label: '一年→52周' },

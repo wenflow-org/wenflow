@@ -149,6 +149,8 @@ class GoalConversationService {
     structuredData?: any;
     confirmedProposal?: any;
     confidenceScores?: any;
+    motivationSignal?: any;
+    miFrames?: any;
   } {
     const ext = internal?.ext?.goalConversation || {};
     return {
@@ -158,7 +160,9 @@ class GoalConversationService {
       collected: ext.collected || {},
       structuredData: ext.structuredData,
       confirmedProposal: ext.confirmedProposal,
-      confidenceScores: ext.confidenceScores
+      confidenceScores: ext.confidenceScores,
+      motivationSignal: ext.motivationSignal,
+      miFrames: ext.miFrames
     };
   }
 
@@ -196,7 +200,10 @@ class GoalConversationService {
         collected: next.collected || data?.collected || {},
         structuredData: next.structuredData !== undefined ? next.structuredData : (data?.structuredData ?? null),
         confirmedProposal: next.confirmedProposal !== undefined ? next.confirmedProposal : (data?.confirmedProposal ?? null),
-        confidenceScores: next.confidenceScores !== undefined ? next.confidenceScores : (data?.confidenceScores ?? null)
+        confidenceScores: next.confidenceScores !== undefined ? next.confidenceScores : (data?.confidenceScores ?? null),
+        // 动机信号/动机帧跨轮累积：从 collectedData 回填（首轮为空）
+        motivationSignal: data?.motivationSignal ?? data?.motivation_signal ?? null,
+        miFrames: data?.miFrames ?? data?.mi_frames ?? null,
       };
     }
 
@@ -207,7 +214,9 @@ class GoalConversationService {
       collected: data?.collected || {},
       structuredData: data?.structuredData ?? null,
       confirmedProposal: data?.confirmedProposal ?? null,
-      confidenceScores: data?.confidenceScores ?? null
+      confidenceScores: data?.confidenceScores ?? null,
+      motivationSignal: data?.motivationSignal ?? data?.motivation_signal ?? null,
+      miFrames: data?.miFrames ?? data?.mi_frames ?? null,
     };
   }
 
@@ -805,6 +814,14 @@ async continueConversation(
 
     if (goalExt.confidenceScores !== undefined) {
       data.confidenceScores = goalExt.confidenceScores;
+    }
+
+    // 动机信号/动机帧跨轮累积（hidden，仅供对话节奏参考）：模型输出经 parse 提取到 goalExt
+    if (goalExt.motivationSignal !== undefined) {
+      data.motivationSignal = goalExt.motivationSignal;
+    }
+    if (goalExt.miFrames !== undefined) {
+      data.miFrames = goalExt.miFrames;
     }
 
     data.normalizedGoalState = buildGoalNormalizedState(data);
