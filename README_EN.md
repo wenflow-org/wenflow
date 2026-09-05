@@ -337,9 +337,7 @@ If admin already exists in database, creation is skipped.
 
 Recommendation: Change password immediately after first login. Use strong passwords for externally accessible deployments.
 
-Important: Admin login defaults to `ADMIN_ACCESS_MODE=private`, allowing only localhost and LAN (RFC1918) sources. Set `loopback` for localhost-only or `any` to remove the source restriction, and use `ADMIN_ALLOWED_IPS` to allowlist specific client IPs. The policy can be applied at runtime from the admin "Models & Access" page; the env var is only the default. For public remote administration, use a VPN or precise IP allowlist, and take responsibility for the added security risk. See [ADMIN_LOGIN_GUIDE.md](ADMIN_LOGIN_GUIDE.md) for details.
-
-See [ADMIN_SETUP.md](ADMIN_SETUP.md) for details.
+Important: Admin login defaults to `ADMIN_ACCESS_MODE=private`, allowing only localhost and LAN (RFC1918) sources. Set `loopback` for localhost-only or `any` to remove the source restriction, and use `ADMIN_ALLOWED_IPS` to allowlist specific client IPs. The policy can be applied at runtime from the admin "Models & Access" page; the env var is only the default. For public remote administration, use a VPN or precise IP allowlist, and take responsibility for the added security risk. See [admin-guide.md](admin-guide.md) for details.
 
 ### Reverse Proxy Common Issues
 

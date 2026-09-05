@@ -297,7 +297,7 @@ INIT_ADMIN_PASSWORD=YourStrongPassword123
 - 如果数据库里已存在管理员，会自动跳过
 - 建议首次登录后立即修改密码
 
-详见 `ADMIN_SETUP.md`。
+详见 [`admin-guide.md`](admin-guide.md)。
 
 ---
 
@@ -388,7 +388,7 @@ wenflow/
 ## 相关文档
 
 - `README.md`
-- `ADMIN_SETUP.md`
+- `admin-guide.md`（管理员账户与登录安全）
 
 ---
 
