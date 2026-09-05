@@ -192,14 +192,30 @@ export function derivePlanningHints(
     : milestoneRange;
 
   // 强制每阶段子任务数量：总学时 ÷ 里程碑数 ÷ 每任务约 1 小时 → 每阶段任务目标。
-  // 无总学时信息时用 pace 档位区间，不推导目标（让 stage-designer 按区间自行设计）。
-  const estimatedHoursTotal = Number.isFinite(timeDimensions?.estimatedHours) && (timeDimensions!.estimatedHours as number) > 0
-    ? (timeDimensions!.estimatedHours as number)
-    : null;
-  const targetSubtasksPerStage: number | null =
+  // 总学时 fallback 链（goal 数值推断产出率极低，必须有多级信号兜底，保证总能算出确定值）：
+  //   ① timeDimensions.estimatedHours（goal 直接推断）
+  //   ② totalWeeks × sessionsPerWeek × sessionsLengthMin/60（频率×时长×周期推算总小时）
+  //   ③ pace 档位中位数（compact→3, standard→4, extended→5）
+  const estimatedHoursTotal =
+    Number.isFinite(timeDimensions?.estimatedHours) && (timeDimensions!.estimatedHours as number) > 0
+      ? (timeDimensions!.estimatedHours as number)
+      : Number.isFinite(timeDimensions?.totalWeeks)
+          && (timeDimensions!.totalWeeks as number) > 0
+          && Number.isFinite(timeDimensions?.sessionsPerWeek)
+          && (timeDimensions!.sessionsPerWeek as number) > 0
+          && Number.isFinite(timeDimensions?.sessionsLengthMin)
+          && (timeDimensions!.sessionsLengthMin as number) > 0
+        ? (timeDimensions!.totalWeeks as number) * (timeDimensions!.sessionsPerWeek as number)
+          * (timeDimensions!.sessionsLengthMin as number) / 60
+        : null;
+  const perStageFromHours: number | null =
     targetMilestones !== null && estimatedHoursTotal !== null
       ? Math.min(6, Math.max(2, Math.round(estimatedHoursTotal / targetMilestones / 1.0)))
       : null;
+  // 无总学时信息时用 pace 档位中位数（subtasksPerStageRange 中点，取整），保证始终有目标
+  const paceMidpoint = Math.round((subtasksPerStageRange[0] + subtasksPerStageRange[1]) / 2);
+  const targetSubtasksPerStage: number | null =
+    perStageFromHours ?? (targetMilestones !== null ? paceMidpoint : null);
   // 有目标时 subtasksPerStageRange 同步精确化
   const effectiveSubtasksPerStageRange: [number, number] = targetSubtasksPerStage !== null
     ? [targetSubtasksPerStage, targetSubtasksPerStage]

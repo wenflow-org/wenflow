@@ -78,7 +78,7 @@ describe('targetMilestones（强制里程碑数量，keyStages 直接透传）',
   });
 });
 
-describe('targetSubtasksPerStage（每阶段任务数，总学时/里程碑数推导）', () => {
+describe('targetSubtasksPerStage（每阶段任务数，总学时/里程碑数推导 + 兜底）', () => {
   it('有 estimatedHours 与 keyStages 时推导每阶段任务数，range 同步精确化', () => {
     // 12h 总学时 / 3 里程碑 / 每任务 1h → 4 个/阶段
     const hints = derivePlanningHints(
@@ -89,10 +89,21 @@ describe('targetSubtasksPerStage（每阶段任务数，总学时/里程碑数�
     expect(hints.subtasksPerStageRange).toEqual([4, 4]);
   });
 
-  it('estimatedHours 缺失时 targetSubtasksPerStage 为 null，沿用 pace 区间', () => {
+  it('estimatedHours 缺失但频率信息完整时由 totalWeeks×sessionsPerWeek×分钟/60 推算总学时', () => {
+    // 4周 × 2次/周 × 60分钟 = 8h 总学时 / 4里程碑 = 2 个/阶段
+    const hints = derivePlanningHints(
+      null, null, null, null, ['S1', 'S2', 'S3', 'S4'],
+      { totalWeeks: 4, estimatedHours: null, sessionsPerWeek: 2, sessionsLengthMin: 60 }
+    );
+    expect(hints.targetSubtasksPerStage).toBe(2);
+    expect(hints.subtasksPerStageRange).toEqual([2, 2]);
+  });
+
+  it('estimatedHours 与频率都缺失时用 pace 档位中位数兜底（不再 null）', () => {
     const hints = derivePlanningHints('三个月', null, null, null, ['S1', 'S2', 'S3'], null);
-    expect(hints.targetSubtasksPerStage).toBeNull();
-    expect(hints.subtasksPerStageRange).toEqual(paceSignalRangeConfig.extended.subtasksPerStageRange);
+    // extended subtasksPerStageRange=[4,6]，中位数 5
+    expect(hints.targetSubtasksPerStage).toBe(5);
+    expect(hints.subtasksPerStageRange).toEqual([5, 5]);
   });
 
   it('每阶段任务数超出范围时夹取 2-6', () => {
@@ -108,5 +119,11 @@ describe('targetSubtasksPerStage（每阶段任务数，总学时/里程碑数�
       { totalWeeks: null, estimatedHours: 1.4, sessionsPerWeek: null, sessionsLengthMin: null }
     );
     expect(low.targetSubtasksPerStage).toBe(2);
+  });
+
+  it('keyStages 缺失时 targetSubtasksPerStage 为 null，沿用 pace 区间', () => {
+    const hints = derivePlanningHints('三个月', null, null, null, [], null);
+    expect(hints.targetSubtasksPerStage).toBeNull();
+    expect(hints.subtasksPerStageRange).toEqual(paceSignalRangeConfig.extended.subtasksPerStageRange);
   });
 });
