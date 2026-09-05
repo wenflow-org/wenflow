@@ -1,2 +1,6 @@
 # Shell scripts must use LF line endings for Linux/Docker compatibility
 *.sh text eol=lf
+
+# 自动生成的沙盘说明书：健康中心按字节比对（LF），Windows autocrlf 检出为 CRLF
+# 会导致 snapshots 检查误报 drifted；强制 LF 保持与生成器输出一致
+/prompts/agent-snapshots.md text eol=lf
