@@ -191,22 +191,74 @@
 
             <!-- 第 2 步：学生说什么 -->
             <div class="pe-sec">
-              <div class="pe-sec__title"><span class="pe-sec__num">2</span> 写学生说的话</div>
-              <div class="mk-field">
-                <div class="pe-msgs">
-                  <div v-for="(m, i) in form.messages" :key="i" class="pe-msg">
-                    <select v-model="m.role" class="mk-input pe-msg__role">
-                      <option value="user">学生</option>
-                      <option value="assistant">助手</option>
-                    </select>
-                    <input v-model="m.content" class="mk-input pe-msg__content"
-                      :placeholder="m.role === 'user' ? '例如：我想考英语，帮帮我' : '助手的历史回复（模拟多轮对话，可选）'" />
-                    <button type="button" class="mk-link mk-link--danger" :disabled="form.messages.length <= 1" @click="form.messages.splice(i, 1)">✕</button>
-                  </div>
-                </div>
-                <button type="button" class="mk-link" @click="form.messages.push({ role: 'user', content: '' })">+ 再加一轮对话</button>
-                <span class="mk-field__hint">第一条通常是学生说话；想模拟多轮对话再点"加一轮"，把角色改成助手填历史回复。</span>
+              <div class="pe-sec__title"><span class="pe-sec__num">2</span> 学生怎么说
+                <span class="pe-input-src">
+                  <button type="button" class="pe-src-btn" :class="{ 'pe-src-btn--on': form.inputSource === 'manual' }" @click="form.inputSource = 'manual'">手写对话</button>
+                  <button type="button" class="pe-src-btn" :class="{ 'pe-src-btn--on': form.inputSource === 'simulated' }" @click="form.inputSource = 'simulated'">🎭 模拟学生（虚拟学习者扮演）</button>
+                </span>
               </div>
+
+              <!-- 手写对话：现有人工输入消息序列 -->
+              <template v-if="form.inputSource === 'manual'">
+                <div class="mk-field">
+                  <div class="pe-msgs">
+                    <div v-for="(m, i) in form.messages" :key="i" class="pe-msg">
+                      <select v-model="m.role" class="mk-input pe-msg__role">
+                        <option value="user">学生</option>
+                        <option value="assistant">助手</option>
+                      </select>
+                      <input v-model="m.content" class="mk-input pe-msg__content"
+                        :placeholder="m.role === 'user' ? '例如：我想考英语，帮帮我' : '助手的历史回复（模拟多轮对话，可选）'" />
+                      <button type="button" class="mk-link mk-link--danger" :disabled="form.messages.length <= 1" @click="form.messages.splice(i, 1)">✕</button>
+                    </div>
+                  </div>
+                  <button type="button" class="mk-link" @click="form.messages.push({ role: 'user', content: '' })">+ 再加一轮对话</button>
+                  <span class="mk-field__hint">手写学生的台词。想要更真实、更省事，切到"模拟学生"让虚拟学习者来扮演。</span>
+                </div>
+              </template>
+
+              <!-- 模拟学生：场景 → 虚拟学习者生成真实学生输入 -->
+              <template v-else>
+                <div class="mk-field" :class="{ 'mk-field--error': errors.scenario }">
+                  <span class="mk-field__label">学生场景 <em class="mk-field__req">*</em></span>
+                  <textarea v-model="form.scenario" class="mk-field__textarea" rows="2"
+                    placeholder="例如：我想考英语，时间不多，每周只能挤两次一小时" />
+                  <span v-if="errors.scenario" class="mk-field__err">{{ errors.scenario }}</span>
+                  <span class="mk-field__hint">一句话描述"这个学生是谁、想干什么"。跑评估时，虚拟学习者会按人设把这个场景说得更自然真实。</span>
+                </div>
+                <div class="mk-field">
+                  <span class="mk-field__label">学生人设 <span class="mk-field__opt">（可选）</span></span>
+                  <select v-model="form.personaId" class="mk-field__select">
+                    <option value="">为这个场景新建（自动生成学生人设）</option>
+                    <option v-for="v in virtualLearners" :key="v.id" :value="v.id">{{ v.label }}</option>
+                  </select>
+                  <span class="mk-field__hint">选已有虚拟学习者，学生就按它的人设和故事说话；不选就用场景即时生成。可去「虚拟学习者」页面管理。</span>
+                </div>
+                <div class="pe-form-grid">
+                  <label class="mk-field">
+                    <span class="mk-field__label">对话轮数 <span class="mk-field__opt">（goal 专属）</span></span>
+                    <input v-model.number="form.dialogueRounds" type="number" min="1" max="5" class="mk-field__input mono" />
+                    <span class="mk-field__hint">>1 开启多轮对话：助手与虚拟学生来回聊，逐轮校验字段。</span>
+                  </label>
+                  <label class="mk-field">
+                    <span class="mk-field__label">学生对抗度</span>
+                    <select v-model="form.frictionBudget" class="mk-field__select">
+                      <option value="none">none · 全程配合</option>
+                      <option value="low">low · 轻微犹豫</option>
+                      <option value="normal">normal · 正常学生</option>
+                      <option value="high">high · 难缠（质疑/拖延）</option>
+                      <option value="stress_test">stress_test · 极端对抗</option>
+                    </select>
+                    <span class="mk-field__hint">对抗度越高，学生越容易打断、质疑、拖延——专测字段在"难缠学生"下是否仍稳定产出。</span>
+                  </label>
+                </div>
+                <label class="mk-field">
+                  <span class="mk-field__label">收敛门禁字段 <span class="mk-field__opt">（可选）</span></span>
+                  <input v-model="form.convergeRequires" class="mk-field__input mono" placeholder="例如：real_problem,confirmedProposal" />
+                  <span class="mk-field__hint">对话推进中必须产出的助手字段（逗号分隔），缺了就判不通过。</span>
+                </label>
+              </template>
+
               <label class="mk-field">
                 <span class="mk-field__label">备注（可选）</span>
                 <textarea v-model="form.description" class="mk-field__textarea" rows="2" placeholder="这个用例想验证什么，比如：学生只说一句话时，助手也要能引导出学习目标" />
@@ -307,6 +359,21 @@
                   <div v-if="!res.passed" class="pe-result-row__checks">
                     <span v-for="(v, k) in res.checks" :key="k" class="pe-check" :class="v ? 'pe-check--ok' : 'pe-check--fail'">{{ v ? '✓' : '✗' }} {{ checkLabel(String(k)) }}</span>
                   </div>
+                  <div v-if="res.transcript?.length" class="pe-transcript">
+                    <div v-for="(t, ti) in res.transcript" :key="ti" class="pe-transcript__row">
+                      <span class="pe-transcript__role" :class="t.role === 'goal_agent' ? 'pe-transcript__role--goal' : 'pe-transcript__role--learner'">
+                        {{ t.role === 'goal_agent' ? '助手' : '学生' }}·{{ t.round }}
+                      </span>
+                      <div>
+                        <div class="pe-transcript__content">{{ t.content }}</div>
+                        <div v-if="t.error" class="pe-transcript__meta">⚠️ {{ t.error }}</div>
+                        <div v-if="t.learnerState" class="pe-transcript__meta">
+                          学生状态：被理解 {{ Math.round((t.learnerState.feltUnderstood ?? 0) * 100) }}% · 目标清晰 {{ Math.round((t.learnerState.problemClarity ?? 0) * 100) }}% ·
+                          readyToProceed={{ t.learnerState.readyToProceed === true ? '是' : '否' }}{{ t.emotion ? ` · 情绪 ${t.emotion}` : '' }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                   <p v-if="res.output?.userVisible" class="pe-result-row__out">{{ res.output.userVisible }}</p>
                 </div>
               </div>
@@ -322,7 +389,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { timeAgo, errMsg, shortId } from './live'
-import { adminPromptOpsApi, type CreateEvalCasePayload } from '@/api/adminApi'
+import { adminPromptOpsApi, adminVirtualLearnersApi, type CreateEvalCasePayload } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
@@ -337,7 +404,20 @@ interface EvalCase {
   name: string
   description: string | null
   messages: Array<{ role: string; content: string }>
-  expectations: { mustIncludeFields?: string[]; mustContainText?: string[]; mustNotInclude?: string[]; expectedStage?: string; expectedMilestones?: number; expectedSubtaskCount?: number } | null
+  expectations: {
+    mustIncludeFields?: string[]
+    mustContainText?: string[]
+    mustNotInclude?: string[]
+    expectedStage?: string
+    expectedMilestones?: number
+    expectedSubtaskCount?: number
+    mode?: 'manual' | 'simulated'
+    scenario?: string
+    personaId?: string
+    dialogueRounds?: number
+    frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test'
+    convergeRequires?: string[]
+  } | null
   previousState?: Record<string, unknown> | null
   inputPayload?: Record<string, unknown> | null
   enabled: boolean
@@ -536,8 +616,39 @@ const form = ref({
   mustNotInclude: '',
   expectedStage: '',
   enabled: true,
+  // 虚拟学习者模拟输入
+  inputSource: 'manual' as 'manual' | 'simulated',
+  scenario: '',
+  personaId: '',
+  dialogueRounds: 1,
+  frictionBudget: 'normal' as 'none' | 'low' | 'normal' | 'high' | 'stress_test',
+  convergeRequires: '',
 })
-const errors = ref<{ name?: string; agentId?: string }>({})
+const errors = ref<{ name?: string; agentId?: string; scenario?: string }>({})
+
+/** 已有虚拟学习者列表（复用其 persona + 故事池） */
+const virtualLearners = ref<Array<{ id: string; label: string }>>([])
+const virtualLearnersLoading = ref(false)
+async function loadVirtualLearners() {
+  if (virtualLearners.value.length || virtualLearnersLoading.value) return
+  virtualLearnersLoading.value = true
+  try {
+    const res = await adminVirtualLearnersApi.getVirtualLearners({ limit: 100 })
+    const list: any[] = res?.data?.data || res?.data || []
+    const vs = (Array.isArray(list) ? list : (Array.isArray((list as any).list) ? (list as any).list : []))
+    virtualLearners.value = vs.map((v: any) => ({
+      id: v.id,
+      label: [v.userName, v.name, v.profileData?.nameHint || v.displayName].find(Boolean)
+        ? `${[v.userName, v.name, v.profileData?.nameHint || v.displayName].filter(Boolean).join(' · ')}`
+        : v.id.slice(0, 8),
+    })).filter((v: any) => v.id)
+  } catch (e) {
+    // 虚拟学习者列表加载失败不阻断表单（模拟模式为可选能力）
+    console.warn('加载虚拟学习者失败', e)
+  } finally {
+    virtualLearnersLoading.value = false
+  }
+}
 
 function isStructuredSkill(agentId: string): boolean {
   return agentId === 'skill:path-planning' || agentId === 'skill:stage-designer'
@@ -578,10 +689,17 @@ function openCreate() {
     mustNotInclude: '',
     expectedStage: '',
     enabled: true,
+    inputSource: 'manual',
+    scenario: '',
+    personaId: '',
+    dialogueRounds: 1,
+    frictionBudget: 'normal',
+    convergeRequires: '',
   }
   errors.value = {}
   formError.value = ''
   formOpen.value = true
+  void loadVirtualLearners()
 }
 
 function openEdit(c: EvalCase) {
@@ -609,10 +727,19 @@ function openEdit(c: EvalCase) {
     mustNotInclude: (e.mustNotInclude || []).join(','),
     expectedStage: e.expectedStage || '',
     enabled: c.enabled,
+    inputSource: e.mode === 'simulated' ? 'simulated' : 'manual',
+    scenario: e.scenario || '',
+    personaId: e.personaId || '',
+    dialogueRounds: typeof e.dialogueRounds === 'number' && e.dialogueRounds >= 1 ? e.dialogueRounds : 1,
+    frictionBudget: (['none', 'low', 'normal', 'high', 'stress_test'] as const).includes((e as any).frictionBudget)
+      ? (e.frictionBudget as typeof form.value.frictionBudget)
+      : 'normal',
+    convergeRequires: (e.convergeRequires || []).join(','),
   }
   errors.value = {}
   formError.value = ''
   formOpen.value = true
+  void loadVirtualLearners()
 }
 
 function buildInputPayload(): Record<string, unknown> | null {
@@ -637,6 +764,18 @@ function buildPayload(): CreateEvalCasePayload {
   if (form.value.expectedStage.trim()) expectations.expectedStage = form.value.expectedStage.trim()
   if (form.value.expectedMilestones != null) expectations.expectedMilestones = form.value.expectedMilestones
   if (form.value.expectedSubtaskCount != null) expectations.expectedSubtaskCount = form.value.expectedSubtaskCount
+
+  // 虚拟学习者模拟输入：透传 simulated 配置（后端 run-eval 据此展开学生输入）
+  if (form.value.inputSource === 'simulated') {
+    expectations.mode = 'simulated'
+    if (form.value.scenario.trim()) expectations.scenario = form.value.scenario.trim()
+    if (form.value.personaId) expectations.personaId = form.value.personaId
+    expectations.dialogueRounds = Math.max(1, Math.min(5, form.value.dialogueRounds || 1))
+    expectations.frictionBudget = form.value.frictionBudget
+    const converge = form.value.convergeRequires.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
+    if (converge.length) expectations.convergeRequires = converge
+  }
+
   const inputPayload = buildInputPayload()
   return {
     agentId: form.value.agentId,
@@ -656,7 +795,15 @@ async function save(): Promise<boolean> {
   formError.value = ''
   if (!form.value.agentId) { errors.value.agentId = '请选择助手能力'; return false }
   if (!form.value.name.trim()) { errors.value.name = '请输入用例名称'; return false }
-  if (!form.value.messages.some((m) => m.content.trim())) { formError.value = '至少需要一条学生说的话'; return false }
+  if (form.value.inputSource === 'simulated') {
+    if (!form.value.scenario.trim() && !form.value.personaId) {
+      errors.value.scenario = '模拟模式需要学生场景（或选已有虚拟人）'
+      return false
+    }
+  } else if (!form.value.messages.some((m) => m.content.trim())) {
+    formError.value = '至少需要一条学生说的话'
+    return false
+  }
   saving.value = true
   try {
     const payload = buildPayload()
@@ -855,6 +1002,23 @@ void reloadCases()
 }
 .pe-sec__opt { font-size: var(--mk-fs-11); font-weight: 500; color: var(--mk-faint); }
 .mk-field__opt { font-size: var(--mk-fs-11); color: var(--mk-faint); font-weight: 500; }
+/* 输入来源切换（手写 / 模拟学生） */
+.pe-input-src { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle; }
+.pe-src-btn {
+  border: 1px solid var(--mk-line); background: transparent; color: var(--mk-muted);
+  font-size: var(--mk-fs-11_5); font-weight: 600; border-radius: 99px; padding: 2px 10px; cursor: pointer;
+  transition: all .15s ease;
+}
+.pe-src-btn:hover { border-color: var(--mk-indigo, #6366f1); color: var(--mk-indigo, #6366f1); }
+.pe-src-btn--on { background: var(--mk-indigo, #4f46e5); border-color: var(--mk-indigo, #4f46e5); color: #fff; }
+/* 模拟对话轨迹 */
+.pe-transcript { display: grid; gap: 6px; margin-top: 6px; }
+.pe-transcript__row { display: grid; grid-template-columns: 56px 1fr; gap: 8px; font-size: var(--mk-fs-12); }
+.pe-transcript__role { font-weight: 700; padding-top: 2px; }
+.pe-transcript__role--goal { color: var(--mk-indigo, #6366f1); }
+.pe-transcript__role--learner { color: var(--mk-green); }
+.pe-transcript__content { color: var(--mk-muted); line-height: 1.6; word-break: break-all; }
+.pe-transcript__meta { grid-column: 2; font-size: var(--mk-fs-11); color: var(--mk-faint); }
 .pe-adv {
   border: 1px dashed var(--mk-line);
   border-radius: 10px;

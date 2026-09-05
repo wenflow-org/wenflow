@@ -1495,6 +1495,19 @@ export interface EvalCaseExpectations {
   expectedMilestones?: number;
   /** stage-designer：期望子任务数（同时作为 prompt 注入约束） */
   expectedSubtaskCount?: number;
+  /** ===== 虚拟学习者模拟输入（mode:simulated） ===== */
+  /** 输入来源模式：manual（默认，手写对话）/ simulated（虚拟学习者扮演学生输入） */
+  mode?: 'manual' | 'simulated';
+  /** 新建场景：一句话描述当次学习需求，如"考英语，时间不多，每周两次一小时" */
+  scenario?: string;
+  /** 复用已有虚拟人（virtual_learner_profiles id）；缺省由场景即时生成人设 */
+  personaId?: string;
+  /** goal 多轮模拟轮数（>1 开启多轮对话；默认 1=仅首句） */
+  dialogueRounds?: number;
+  /** 学生对抗度 none|low|normal|high|stress_test */
+  frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test';
+  /** 收敛门禁：对话推进过程中必须产出的字段 */
+  convergeRequires?: string[];
   notes?: string;
 }
 

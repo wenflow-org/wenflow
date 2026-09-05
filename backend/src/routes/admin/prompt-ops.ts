@@ -31,6 +31,9 @@ import { validatePathPlanningOutput } from '../../skills/path-planning';
 import { stageDesignerDefinition } from '../../skills/stage-designer';
 import { validateStageDesignerOutput } from '../../skills/stage-designer';
 import { executeSkill } from '../../skills';
+import { virtualLearnerGoalDialogueSimulatorDefinition, type GoalLearnerSimulationOutput } from '../../skills/virtual-learner-goal-dialogue-simulator';
+import { virtualLearnerPersonaDesignerDefinition } from '../../skills/virtual-learner-persona-designer';
+import { resolveStorySessionDemand } from '../../virtual-lab/story-demand';
 import { callPrompt } from '../../composers/prompt-composer';
 import {
   parsePromptSchema,
@@ -595,7 +598,9 @@ router.post('/eval-cases', async (req: Request, res: Response) => {
         .status(400)
         .json({ success: false, error: { message: 'agentId / name 必填' } });
     }
-    if (messages.length === 0) {
+    // 虚拟学习者模拟输入（mode:simulated）的学生话由模拟器生成，messages 可为空
+    const isSimulated = extractSimConfig(body.expectations) !== null;
+    if (messages.length === 0 && !isSimulated) {
       return res
         .status(400)
         .json({ success: false, error: { message: '至少 1 条 message' } });
@@ -780,13 +785,35 @@ router.post('/run-eval', async (req: Request, res: Response) => {
         inputPayload: c.inputPayload || c.previousState || null,
         input: c.input || null,
       })),
-    ].filter((c) => c.messages.length > 0);
+    // simulated 用例由虚拟学习者生成输入，messages 可为空；其余要求至少一条消息
+    ].filter((c) => c.messages.length > 0 || extractSimConfig(c.expectations) !== null);
 
     if (!evalCases.length) {
       return res.status(400).json({
         success: false,
         error: { message: '没有可用的评估用例（DB 用例或 ad-hoc）' },
       });
+    }
+
+    // ---- 虚拟学习者模拟输入展开（expectations.mode === 'simulated'）----
+    const simConfigs: Array<SimEvalConfig | null> = evalCases.map((c) => extractSimConfig(c.expectations));
+    const simInputs: Array<{ learner: any; story: any } | null> = [];
+    for (let ci = 0; ci < evalCases.length; ci += 1) {
+      const sim = simConfigs[ci];
+      if (!sim) {
+        simInputs.push(null);
+        continue;
+      }
+      const input = await resolveSimulatedEvalInput({
+        personaId: sim.personaId,
+        scenario: sim.scenario,
+      });
+      // 用模拟出的学生诉求替换首条 user 消息
+      const firstUser = evalCases[ci].messages.find((m: any) => m.role === 'user');
+      if (firstUser) firstUser.content = input.demandText;
+      else evalCases[ci].messages.unshift({ role: 'user', content: input.demandText });
+      evalCases[ci].expectations = { ...(evalCases[ci].expectations || {}), ...sim };
+      simInputs.push({ learner: input.learner, story: input.story });
     }
 
     const repeatCount = Math.max(1, Math.min(5, Number(body.repeatCount || 1)));
@@ -798,9 +825,46 @@ router.post('/run-eval', async (req: Request, res: Response) => {
     }
 
     try {
-      for (const item of evalCases) {
+      for (let ci = 0; ci < evalCases.length; ci += 1) {
+        const item = evalCases[ci];
+        const sim = simConfigs[ci];
         for (let runIdx = 0; runIdx < repeatCount; runIdx += 1) {
           const callStart = Date.now();
+
+          // ---- 多轮 goal 模拟评估（mode:simulated + dialogueRounds>1）----
+          if (sim && sim.dialogueRounds > 1 && canonicalAgentId === 'skill:goal-conversation') {
+            const loop = await runSimulatedGoalLoop({
+              systemPrompt: promptConfig.systemPrompt,
+              caseItem: item,
+              simConfig: sim,
+              simInput: simInputs[ci] as { learner: any; story: any },
+            });
+            results.push({
+              caseId: item.id,
+              caseName: item.name,
+              runIndex: runIdx + 1,
+              durationMs: Date.now() - callStart,
+              input: {
+                userInput: loop.transcript[0]?.content || '',
+                conversationContextCount: 0,
+                previousState: item.previousState || {},
+              },
+              output: { userVisible: '', stage: 'simulated', confidence: 0 },
+              debug: {
+                promptVersion: promptConfig.promptVersion,
+                attemptCount: 0,
+                parseMode: 'rounds',
+                failureType: 'none',
+                structuredOutputValid: true,
+              },
+              checks: loop.checks,
+              passed: loop.passed,
+              transcript: loop.transcript,
+              studentTurns: loop.studentTurns,
+              converged: loop.converged,
+            });
+            continue;
+          }
 
           // 用 adapter 分发调用（goal 走 executeSkill；path/stage 走 callPrompt + validator）
           const adapterResult = await runSkillEvalCase({
@@ -815,42 +879,7 @@ router.post('/run-eval', async (req: Request, res: Response) => {
           const expectations = item.expectations || {};
           let checks: Record<string, boolean> = {};
           if (canonicalAgentId === 'skill:goal-conversation') {
-            const result = adapterResult.result;
-            const userVisible = String(result?.userVisible || '');
-            checks = {
-              structuredOutputValid:
-                result?.debug?.structuredOutputValid === true,
-              stageValid: !!result?.internal?.core?.stage,
-            };
-            if (Array.isArray(expectations.mustIncludeFields)) {
-              for (const field of expectations.mustIncludeFields) {
-                checks[`mustInclude:${field}`] = JSON.stringify(result).includes(
-                  String(field)
-                );
-              }
-            }
-            // 人话检查：回复中必须出现的文字（一个都不能少）
-            if (Array.isArray(expectations.mustContainText)) {
-              for (const phrase of expectations.mustContainText) {
-                checks[`mustContain:${phrase}`] = userVisible.includes(
-                  String(phrase)
-                );
-              }
-            }
-            if (Array.isArray(expectations.mustNotInclude)) {
-              for (const phrase of expectations.mustNotInclude) {
-                checks[`mustNotInclude:${phrase}`] = !userVisible.includes(
-                  String(phrase)
-                );
-              }
-            }
-            if (
-              typeof expectations.expectedStage === 'string' &&
-              expectations.expectedStage
-            ) {
-              checks.expectedStage =
-                result?.internal?.core?.stage === expectations.expectedStage;
-            }
+            checks = computeGoalChecks(adapterResult.result, expectations);
           } else {
             const { checks: contractChecks } = await runSkillChecks({
               skillId: canonicalAgentId,
@@ -1070,6 +1099,272 @@ function extractJson(text: string): any {
  * - path-planning / stage-designer：直接 callPrompt（systemPromptOverride=被评估版本）+ 契约字段校验
  * 返回 { result, parsed }，parsed 为模型原始输出 JSON（供 validator 检查）
  */
+// ============================================================
+// 虚拟学习者模拟输入（mode:simulated）
+// ============================================================
+
+const SIM_EVAL_FRICTION_OPTIONS = ['none', 'low', 'normal', 'high', 'stress_test'] as const;
+
+interface SimEvalConfig {
+  mode: 'simulated';
+  scenario?: string;
+  personaId?: string;
+  dialogueRounds: number;
+  frictionBudget: (typeof SIM_EVAL_FRICTION_OPTIONS)[number];
+  convergeRequires: string[];
+}
+
+function extractSimConfig(expectations: any): SimEvalConfig | null {
+  if (!expectations || expectations.mode !== 'simulated') return null;
+  return {
+    mode: 'simulated',
+    scenario: typeof expectations.scenario === 'string' ? expectations.scenario : undefined,
+    personaId: typeof expectations.personaId === 'string' ? expectations.personaId : undefined,
+    dialogueRounds: Math.max(0, Math.min(5, Number(expectations.dialogueRounds) || 1)),
+    frictionBudget: SIM_EVAL_FRICTION_OPTIONS.includes(expectations.frictionBudget)
+      ? (expectations.frictionBudget as SimEvalConfig['frictionBudget'])
+      : 'normal',
+    convergeRequires: Array.isArray(expectations.convergeRequires)
+      ? expectations.convergeRequires.map((s: any) => String(s).trim()).filter(Boolean)
+      : [],
+  };
+}
+
+/**
+ * 构造模拟学习者（learner）与当次学生诉求（demandText）。
+ * 来源①：已有虚拟人（virtual_learner_profiles）；②：场景描述即时生成（persona-designer）。
+ */
+async function resolveSimulatedEvalInput(sim: {
+  personaId?: string;
+  scenario?: string;
+}): Promise<{ learner: any; story: any; demandText: string; source: string }> {
+  let personaSeed: any = null;
+  let story: any = null;
+
+  if (sim.personaId) {
+    const profile = await prisma.virtual_learner_profiles.findUnique({
+      where: { id: sim.personaId },
+    });
+    if (!profile) throw new Error(`模拟学习者 ${sim.personaId} 不存在`);
+    const profileData = safeParse<any>(profile.profile, {});
+    personaSeed =
+      profileData?.personaSeed && typeof profileData.personaSeed === 'object'
+        ? profileData.personaSeed
+        : (profileData || null);
+    const storyPool = Array.isArray(profileData?.storyPool) ? profileData.storyPool : [];
+    story = storyPool[0] || null;
+  }
+
+  if (!personaSeed && sim.scenario?.trim()) {
+    try {
+      // executeSkill 返回 output 本身（personaSeed 顶层）
+      const personaOut: any = await executeSkill(virtualLearnerPersonaDesignerDefinition, {
+        recentPersonaHints: [sim.scenario.trim()],
+      });
+      personaSeed = personaOut?.personaSeed || null;
+    } catch (e: any) {
+      logger.warn('[prompt-ops] persona-designer 生成失败，使用最小人设兜底', {
+        error: e?.message,
+      });
+      personaSeed = {
+        nameHint: '模拟学生',
+        background: sim.scenario.trim(),
+        motivationType: 'necessity',
+        learningStyle: 'doing',
+        availableTime: 'moderate',
+        communicationStyle: '日常口语',
+      };
+    }
+  }
+
+  if (!story && sim.scenario?.trim()) {
+    story = {
+      id: `eval_story_${randomUUID().slice(0, 8)}`,
+      visibleOpening: sim.scenario.trim(),
+      goalSeed: { surfaceGoal: sim.scenario.trim(), realProblem: sim.scenario.trim() },
+    };
+  }
+
+  const demand = resolveStorySessionDemand({ story, profileLearningGoal: null });
+  if (!demand.text) {
+    throw new Error('模拟输入无法生成学生诉求（需要 scenario，或该虚拟学习者的故事池非空）');
+  }
+  return {
+    learner: personaSeed || {},
+    story,
+    demandText: demand.text,
+    source: demand.source || 'scenario',
+  };
+}
+
+/** goal-conversation 的字段检查（既有逻辑提取，供单轮/多轮共用） */
+function computeGoalChecks(result: any, expectations: any): Record<string, boolean> {
+  const userVisible = String(result?.userVisible || '');
+  const checks: Record<string, boolean> = {
+    structuredOutputValid: result?.debug?.structuredOutputValid === true,
+    stageValid: !!result?.internal?.core?.stage,
+  };
+  if (Array.isArray(expectations.mustIncludeFields)) {
+    for (const field of expectations.mustIncludeFields) {
+      checks[`mustInclude:${field}`] = JSON.stringify(result).includes(String(field));
+    }
+  }
+  if (Array.isArray(expectations.mustContainText)) {
+    for (const phrase of expectations.mustContainText) {
+      checks[`mustContain:${phrase}`] = userVisible.includes(String(phrase));
+    }
+  }
+  if (Array.isArray(expectations.mustNotInclude)) {
+    for (const phrase of expectations.mustNotInclude) {
+      checks[`mustNotInclude:${phrase}`] = !userVisible.includes(String(phrase));
+    }
+  }
+  if (typeof expectations.expectedStage === 'string' && expectations.expectedStage) {
+    checks.expectedStage = result?.internal?.core?.stage === expectations.expectedStage;
+  }
+  return checks;
+}
+
+function deriveGoalSimPhase(
+  round: number,
+  totalRounds: number
+): 'opening' | 'understanding' | 'proposal_evaluation' {
+  if (round <= 1) return 'opening';
+  if (round < totalRounds) return 'understanding';
+  return 'proposal_evaluation';
+}
+
+/**
+ * goal-conversation 多轮模拟评估。
+ * 被测 skill 与虚拟学生交替：逐轮记录字段检查（round 前缀）+ 全局文字期望（allTurns，任一轮命中即过）+ 收敛门禁。
+ */
+async function runSimulatedGoalLoop(params: {
+  systemPrompt: string;
+  caseItem: any;
+  simConfig: SimEvalConfig;
+  simInput: { learner: any; story: any };
+}): Promise<{
+  transcript: any[];
+  result: any;
+  parsed: any;
+  checks: Record<string, boolean>;
+  passed: boolean;
+  studentTurns: number;
+  converged: boolean;
+}> {
+  const { systemPrompt, caseItem, simConfig, simInput } = params;
+  const expectations = caseItem.expectations || {};
+  const { dialogueRounds, frictionBudget, convergeRequires } = simConfig;
+
+  const transcript: any[] = [];
+  const allAgentReplies: string[] = [];
+  const checks: Record<string, boolean> = {};
+  let previousLearnerState: any = null;
+  let finalResult: any = null;
+  let finalParsed: any = null;
+  let studentTurns = 0;
+
+  let currentMessages: any[] = (caseItem.messages || []).map((m: any) => ({
+    role: m.role === 'assistant' ? ('assistant' as const) : ('user' as const),
+    content: String(m.content || ''),
+  }));
+
+  for (let round = 1; round <= dialogueRounds; round += 1) {
+    const adapter = await runSkillEvalCase({
+      skillId: 'skill:goal-conversation',
+      systemPrompt,
+      caseItem: { ...caseItem, messages: currentMessages },
+    });
+    finalResult = adapter.result;
+    finalParsed = adapter.parsed;
+    const userVisible = String(finalResult?.userVisible || '');
+    allAgentReplies.push(userVisible);
+    transcript.push({
+      round,
+      role: 'goal_agent',
+      content: userVisible,
+      checks: computeGoalChecks(finalResult, expectations),
+      stage: finalResult?.internal?.core?.stage || null,
+    });
+
+    if (round > 1 && previousLearnerState?.readyToProceed === true) break;
+    if (round >= dialogueRounds) break;
+
+    // executeSkill 返回 output 本身（reply/emotion/learnerState），失败 throw
+    let simOut: any = null;
+    try {
+      simOut = await executeSkill(virtualLearnerGoalDialogueSimulatorDefinition, {
+        learner: simInput.learner,
+        story: simInput.story,
+        visibleContext: {
+          history: currentMessages
+            .filter((m) => m.content)
+            .map((m) => ({
+              role: m.role === 'assistant' ? ('goal_agent' as const) : ('learner' as const),
+              content: m.content,
+            })),
+          lastGoalAgentMessage: userVisible,
+        },
+        currentPhase: deriveGoalSimPhase(round, dialogueRounds),
+        previousLearnerState,
+        frictionBudget,
+      });
+    } catch (e: any) {
+      const err = String(e?.message || e || 'simulator-failed');
+      logger.warn('[prompt-ops] goal-dialogue-simulator 调用失败', { error: err });
+      transcript.push({ round, role: 'learner', content: '[模拟器失败，提前结束]', degraded: true, error: err });
+      break;
+    }
+    const learnerReply = String(simOut?.reply || '').trim();
+    if (!learnerReply) {
+      transcript.push({ round, role: 'learner', content: '[模拟器失败，提前结束]', degraded: true, error: 'empty learner reply' });
+      break;
+    }
+    previousLearnerState = simOut?.learnerState || null;
+    studentTurns += 1;
+    transcript.push({
+      round,
+      role: 'learner',
+      content: learnerReply,
+      emotion: simOut?.emotion || null,
+      learnerState: previousLearnerState,
+    });
+    currentMessages = [...currentMessages, { role: 'user' as const, content: learnerReply }];
+  }
+
+  // 逐轮结构检查（round 前缀，可定位第几轮失败）
+  for (const t of transcript) {
+    if (t.role !== 'goal_agent') continue;
+    for (const [k, v] of Object.entries<boolean>(t.checks || {})) {
+      checks[`round${t.round}:${k}`] = v;
+    }
+  }
+  // 全局文字期望：任意助手回复命中即过（多轮对话语义）
+  const joined = allAgentReplies.join('\n');
+  if (Array.isArray(expectations.mustContainText)) {
+    for (const phrase of expectations.mustContainText) {
+      checks[`allTurns:mustContain:${phrase}`] = joined.includes(String(phrase));
+    }
+  }
+  if (Array.isArray(expectations.mustNotInclude)) {
+    for (const phrase of expectations.mustNotInclude) {
+      checks[`allTurns:mustNotInclude:${phrase}`] = !joined.includes(String(phrase));
+    }
+  }
+  // 收敛门禁（仅配置时参与）
+  const converged =
+    previousLearnerState?.readyToProceed === true ||
+    (finalResult?.internal?.core?.stage === 'confirmed' && dialogueRounds > 1);
+  if (convergeRequires.length) {
+    for (const field of convergeRequires) {
+      checks[`converge:${field}`] = joined.includes(String(field));
+    }
+  }
+
+  const passed = Object.values(checks).every(Boolean);
+  return { transcript, result: finalResult, parsed: finalParsed, checks, passed, studentTurns, converged };
+}
+
 async function runSkillEvalCase(params: {
   skillId: string;
   systemPrompt: string;
