@@ -189,7 +189,7 @@
             <td class="mk-na">{{ s.created }}</td>
             <td>
               <div class="mk-actions mk-actions--left">
-                <!-- live：整行点击即进入画像详情，此处只留真正的行内操作（运行 / 更多） -->
+                <!-- live：整行点击即进入画像详情，此处只留真正的行内操作（运行 / 测试 / 更多） -->
                 <button
                   v-if="isLive"
                   type="button"
@@ -198,6 +198,13 @@
                   :title="s.storyCount === 0 ? '需先生成故事才能运行' : '运行：启动一次新的实验会话（不影响已有会话）'"
                   @click.stop="openLaunch(s)"
                 ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8V4z"/></svg><span>{{ s.storyCount === 0 ? '需故事' : '运行' }}</span></button>
+                <button
+                  v-if="isLive"
+                  type="button"
+                  class="mk-icon-btn mk-icon-btn--text"
+                  :title="`单步测试：用「${s.name}」的人设和故事直接跑一次 Prompt 对话，看字段产出是否符合预期（不创建用例、不影响正式会话）`"
+                  @click.stop="openPromptTest(s)"
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg><span>测试</span></button>
                 <div v-if="isLive" class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作（删除）" aria-haspopup="menu" :aria-expanded="menuOpen" :title="'更多操作：删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
                   <div v-if="openMenu === s.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -454,6 +461,79 @@
       </div>
     </div>
     </Teleport>
+
+    <!-- 单步 Prompt 测试：用虚拟学习者的人设+故事直接跑一次对话，看字段产出 -->
+    <Teleport to="body">
+    <div v-if="testTarget" ref="testMaskRef" class="mk-modal" @click.self="closePromptTest">
+      <div ref="testPanelRef" class="mk-modal__panel" style="width: min(720px, 100%)" role="dialog" aria-label="单步 Prompt 测试">
+        <div class="mk-modal__head">
+          <h3 class="mk-modal__title">单步测试 · {{ testTarget.name }}</h3>
+          <button type="button" class="mk-modal__close" aria-label="关闭" @click="closePromptTest">✕</button>
+        </div>
+        <div class="mk-modal__body">
+          <p class="mk-alert mk-alert--info vl-steps">
+            用「{{ testTarget.name }}」的人设和故事直接跑一次对话，检查助手字段产出。不创建用例、不影响正式会话。
+          </p>
+          <!-- 配置行 -->
+          <div class="pt-config">
+            <label class="mk-field">
+              <span class="mk-field__label">助手能力</span>
+              <select v-model="testForm.agentId" class="mk-field__select">
+                <option value="skill:goal-conversation">goal-conversation · 聊目标</option>
+                <option value="skill:path-planning">path-planning · 拆路径</option>
+                <option value="skill:stage-designer">stage-designer · 拆子任务</option>
+              </select>
+            </label>
+            <label class="mk-field">
+              <span class="mk-field__label">对话轮数</span>
+              <input v-model.number="testForm.dialogueRounds" type="number" min="1" max="5" class="mk-field__input mono" />
+            </label>
+            <label class="mk-field">
+              <span class="mk-field__label">学生对抗度</span>
+              <select v-model="testForm.friction" class="mk-field__select">
+                <option value="none">none · 配合</option>
+                <option value="low">low · 犹豫</option>
+                <option value="normal">normal · 正常</option>
+                <option value="high">high · 难缠</option>
+                <option value="stress_test">stress · 极端</option>
+              </select>
+            </label>
+          </div>
+
+          <!-- 结果 -->
+          <div v-if="testResult" class="pt-result">
+            <div class="pt-verdict">
+              <span class="mk-badge" :class="testResult.passed ? 'mk-badge--ok' : 'mk-badge--bad'">{{ testResult.passed ? '通过' : '未通过' }}</span>
+              <span v-if="testResult.checks" class="pt-meta mono">{{ Object.values(testResult.checks).filter(Boolean).length }}/{{ Object.keys(testResult.checks).length }} 项检查通过</span>
+              <span v-if="testResult.transcript?.length" class="pt-meta">对话 {{ testResult.transcript.length }} 轮{{ testResult.converged === true ? ' · 已收敛' : '' }}</span>
+            </div>
+            <div v-if="testResult.checks" class="pt-checks">
+              <span v-for="(v, k) in testResult.checks" :key="k" class="pt-check" :class="v ? 'pt-check--ok' : 'pt-check--bad'">{{ v ? '✓' : '✗' }} {{ testCheckLabel(String(k)) }}</span>
+            </div>
+            <div v-if="testResult.transcript?.length" class="pt-transcript">
+              <div v-for="(t, i) in testResult.transcript" :key="i" class="pt-row">
+                <span class="pt-role" :class="t.role === 'goal_agent' ? 'pt-role--agent' : 'pt-role--learner'">{{ t.role === 'goal_agent' ? '助手' : '学生' }} · 第{{ t.round }}轮</span>
+                <div class="pt-bubble">
+                  <div class="pt-content">{{ t.content }}</div>
+                  <div v-if="t.error" class="pt-state">⚠️ {{ t.error }}</div>
+                  <div v-if="t.learnerState" class="pt-state">
+                    被理解 {{ Math.round((t.learnerState.feltUnderstood ?? 0) * 100) }}% · 目标清晰 {{ Math.round((t.learnerState.problemClarity ?? 0) * 100) }}% · readyToProceed={{ t.learnerState.readyToProceed === true ? '是' : '否' }}{{ t.emotion ? ` · ${t.emotion}` : '' }}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p v-else-if="testResult.output?.userVisible" class="pt-out">{{ testResult.output.userVisible }}</p>
+          </div>
+        </div>
+        <div class="mk-modal__foot">
+          <button type="button" class="mk-btn" @click="closePromptTest">关闭</button>
+          <button type="button" class="mk-btn mk-btn--primary" :disabled="testRunning" @click="runPromptTest">
+            {{ testRunning ? '测试中（约 30s-2min）…' : testResult ? '再测一次' : '开始测试' }}
+          </button>
+        </div>
+      </div>
+    </div>
+    </Teleport>
     </template>
   </div>
 </template>
@@ -462,7 +542,7 @@
 import { computed, ref, watch } from 'vue'
 import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, liveCreateVirtual, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency } from './live'
-import { adminVirtualLearnersApi } from '@/api/adminApi'
+import { adminVirtualLearnersApi, adminPromptOpsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
@@ -696,6 +776,97 @@ useEscape(() => createOpen.value, () => { createOpen.value = false })
 useEscape(() => !!launchTarget.value, () => { launchTarget.value = null })
 useEscape(() => reclaimOpen.value, () => { if (!reclaimBusy.value) reclaimOpen.value = false })
 
+/* ===== 单步 Prompt 测试：复用虚拟学习者 persona+story 直接跑一次对话 ===== */
+const testTarget = ref<Sample | null>(null)
+const testRunning = ref(false)
+const testResult = ref<any>(null)
+const testForm = ref({
+  agentId: 'skill:goal-conversation',
+  dialogueRounds: 2,
+  friction: 'normal' as 'none' | 'low' | 'normal' | 'high' | 'stress_test',
+})
+const testPanelRef = ref<HTMLElement | null>(null)
+const testMaskRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => !!testTarget.value), testPanelRef)
+useMaskClose(testMaskRef, () => { if (!testRunning.value) testTarget.value = null })
+useEscape(() => !!testTarget.value, () => { if (!testRunning.value) testTarget.value = null })
+
+function openPromptTest(s: Sample) {
+  closeMenu()
+  testTarget.value = s
+  testResult.value = null
+  testForm.value = { agentId: 'skill:goal-conversation', dialogueRounds: 2, friction: 'normal' }
+}
+function closePromptTest() {
+  if (testRunning.value) return
+  testTarget.value = null
+}
+
+/** 把校验 key 翻译成人话 */
+function testCheckLabel(rawKey: string): string {
+  const [kind, ...rest] = rawKey.split(':')
+  const val = rest.join(':')
+  if (kind === 'mustContain') return `必须出现「${val}」`
+  if (kind === 'mustNotInclude') return `不能出现「${val}」`
+  if (kind === 'mustInclude') return `含字段 ${val}`
+  if (kind === 'converge') return `收敛产出 ${val}`
+  const map: Record<string, string> = {
+    parsed: '输出可解析',
+    contractValid: '结构契约合法',
+    structuredOutputValid: '结构化输出合法',
+    stageValid: '阶段识别正确',
+    expectedStage: '阶段符合预期',
+    milestoneCount: '里程碑数',
+    milestoneCountMatchesExpected: '里程碑数符合预期',
+    namePresent: '含名称',
+    milestonesPresent: '含里程碑',
+    cognitiveCorePresent: '含核心理念',
+    subtaskCount: '子任务数',
+    subtaskCountMatchesExpected: '子任务数符合预期',
+    subtasksPresent: '含子任务',
+  }
+  // 多轮前缀：round1:xxx / allTurns:xxx
+  const roundMatch = rawKey.match(/^round(\d+):(.+)$/)
+  if (roundMatch) return `第${roundMatch[1]}轮 ${map[roundMatch[2]] || roundMatch[2]}`
+  if (rawKey.startsWith('allTurns:')) return `全程${map[rawKey.slice(9)] || rawKey.slice(9)}`
+  return map[rawKey] || rawKey
+}
+
+async function runPromptTest() {
+  const s = testTarget.value
+  if (!s || testRunning.value) return
+  testRunning.value = true
+  testResult.value = null
+  const busy = toast.info(`正在测试「${s.name}」…`, 0)
+  try {
+    const res = await adminPromptOpsApi.runEval({
+      agentId: testForm.value.agentId,
+      adhocCases: [{
+        id: `pt-${s.id.slice(0, 8)}`,
+        name: s.name,
+        messages: [],
+        expectations: {
+          mode: 'simulated',
+          personaId: s.id,
+          dialogueRounds: Math.max(1, Math.min(5, testForm.value.dialogueRounds || 1)),
+          frictionBudget: testForm.value.friction,
+        },
+      }],
+      repeatCount: 1,
+    })
+    const data = res.data?.data ?? res.data
+    testResult.value = data?.results?.[0] || null
+    toast.close(busy)
+    if (testResult.value?.passed) toast.success(`「${s.name}」测试通过`)
+    else toast.warning(`「${s.name}」测试未通过，看字段检查明细`)
+  } catch (e) {
+    toast.close(busy)
+    toast.error(`测试失败：${errMsg(e)}`)
+  } finally {
+    testRunning.value = false
+  }
+}
+
 /* ===== A2 一键回收 / 批量清理卡死：dryRun 清单 → 确认 → dryRun=false 落地 ===== */
 const reclaimOpen = ref(false)
 const reclaimBusy = ref(false)
@@ -724,7 +895,7 @@ useMaskClose(launchMaskRef, () => { launchTarget.value = null })
 useOverlay(computed(() => reclaimOpen.value), reclaimPanelRef)
 useMaskClose(reclaimMaskRef, () => { if (!reclaimBusy.value) reclaimOpen.value = false })
 
-/* 命令面板快捷动作：直达并打开新建弹窗 */
+/* intent 快捷动作：直达并打开新建弹窗 */
 watch(
   () => intent.quickAction,
   (a) => {
@@ -1456,6 +1627,33 @@ function startBatchPolling() { batchPolling.start() }
 .vl-batch-config__stories { width: 120px; }
 .vl-batch-config__prefix { flex: 1; min-width: 200px; }
 .vl-req-less { font-style: normal; font-weight: 400; color: var(--mk-faint, #94a3b8); font-size: var(--mk-fs-11); }
+
+/* ===== 单步 Prompt 测试面板 ===== */
+.pt-config { display: grid; grid-template-columns: 1fr 100px 170px; gap: 10px; align-items: end; margin-bottom: 14px; }
+.pt-config .mk-field { margin-bottom: 0; }
+.pt-result { display: grid; gap: 10px; }
+.pt-verdict { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pt-meta { font-size: var(--mk-fs-12); color: var(--mk-muted); }
+.pt-checks { display: flex; gap: 6px; flex-wrap: wrap; }
+.pt-check { font-size: var(--mk-fs-11); padding: 1px 8px; border-radius: 99px; font-weight: 600; }
+.pt-check--ok { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #16a34a); }
+.pt-check--bad { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
+.pt-transcript { display: grid; gap: 8px; border-top: 1px dashed var(--mk-line, #e1e8f2); padding-top: 10px; }
+.pt-row { display: grid; grid-template-columns: 92px 1fr; gap: 8px; align-items: start; }
+.pt-role { font-size: var(--mk-fs-11_5); font-weight: 700; padding-top: 3px; }
+.pt-role--agent { color: var(--mk-indigo, #4f46e5); }
+.pt-role--learner { color: var(--mk-green, #16a34a); }
+.pt-bubble { display: grid; gap: 4px; }
+.pt-content { font-size: var(--mk-fs-12_5); color: var(--mk-text); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.pt-state { font-size: var(--mk-fs-11); color: var(--mk-faint, #94a3b8); }
+.pt-out {
+  margin: 0; font-size: var(--mk-fs-12); color: var(--mk-muted);
+  max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+  border-top: 1px dashed var(--mk-line, #e1e8f2); padding-top: 8px;
+}
+html[data-theme='dark'] .pt-check--ok { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
+html[data-theme='dark'] .pt-check--bad { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
+html[data-theme='dark'] .pt-content { color: var(--mk-ink, #e2e8f0); }
 /* 批量生成 chip（并入「正在运行」区） */
 .vl-running__chip--batch { border-color: rgba(59, 130, 246, 0.4); color: #1d4ed8; }
 .vl-running__chip--batch .vl-running__dot { background: #3b82f6; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); animation: vl-pulse 1.6s infinite; }
