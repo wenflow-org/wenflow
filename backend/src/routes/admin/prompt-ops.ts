@@ -26,7 +26,12 @@ import {
   getAgentManifest,
 } from '../../services/agent-manifest.service';
 import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
+import { pathAgentDefinition } from '../../skills/path-planning';
+import { validatePathPlanningOutput } from '../../skills/path-planning';
+import { stageDesignerDefinition } from '../../skills/stage-designer';
+import { validateStageDesignerOutput } from '../../skills/stage-designer';
 import { executeSkill } from '../../skills';
+import { callPrompt } from '../../composers/prompt-composer';
 import {
   parsePromptSchema,
 } from '../../services/prompt-schema';
@@ -718,12 +723,18 @@ router.post('/run-eval', async (req: Request, res: Response) => {
       .json({ success: false, error: { message: 'agentId 必填' } });
   }
 
-  if (canonicalAgentId !== 'skill:goal-conversation') {
+  const SUPPORTED_EVAL_SKILLS = new Set([
+    'skill:goal-conversation',
+    'skill:path-planning',
+    'skill:stage-designer',
+  ]);
+
+  if (!SUPPORTED_EVAL_SKILLS.has(canonicalAgentId)) {
     return res.status(400).json({
       success: false,
       error: {
         message:
-          '当前评测器仅内置 skill:goal-conversation 的 handler 路由；' +
+          `当前评测器支持：${[...SUPPORTED_EVAL_SKILLS].join(', ')}；` +
           '其他 agent 请使用单条试跑（runtime-definitions/test），或实现对应的 evalAdapter',
       },
     });
@@ -783,56 +794,57 @@ router.post('/run-eval', async (req: Request, res: Response) => {
     try {
       for (const item of evalCases) {
         for (let runIdx = 0; runIdx < repeatCount; runIdx += 1) {
-          const lastUser = [...item.messages]
-            .reverse()
-            .find((m: any) => m.role === 'user');
-          const userInput = String(lastUser?.content || '');
-          const history = item.messages
-            .slice(0, -1)
-            .map((m: any) => ({ role: m.role, content: m.content }));
-          const previousState = item.previousState || {};
-
           const callStart = Date.now();
-          const result = await executeSkill(goalConversationAgentDefinition, {
-            input: userInput,
-            userId: 'admin-prompt-ops',
-            conversationHistory: history,
-            previousUnderstanding: previousState?.understanding || {},
-            previousStage: previousState?.stage || 'understanding',
-            previousState,
-            maxFormatRetries: 2,
-            systemPromptOverride: promptConfig.systemPrompt,
+
+          // 用 adapter 分发调用（goal 走 executeSkill；path/stage 走 callPrompt + validator）
+          const adapterResult = await runSkillEvalCase({
+            skillId: canonicalAgentId,
+            systemPrompt: promptConfig.systemPrompt,
+            caseItem: item,
           });
           const durationMs = Date.now() - callStart;
+          const { parsed } = adapterResult;
 
-          // 期望检查
+          // 期望检查：goal 走结构化输出检查；path/stage 走 validator 契约检查
           const expectations = item.expectations || {};
-          const userVisible = String(result?.userVisible || '');
-          const checks: Record<string, boolean> = {
-            structuredOutputValid:
-              result?.debug?.structuredOutputValid === true,
-            stageValid: !!result?.internal?.core?.stage,
-          };
-          if (Array.isArray(expectations.mustIncludeFields)) {
-            for (const field of expectations.mustIncludeFields) {
-              checks[`mustInclude:${field}`] = JSON.stringify(result).includes(
-                String(field)
-              );
+          let checks: Record<string, boolean> = {};
+          if (canonicalAgentId === 'skill:goal-conversation') {
+            const result = adapterResult.result;
+            const userVisible = String(result?.userVisible || '');
+            checks = {
+              structuredOutputValid:
+                result?.debug?.structuredOutputValid === true,
+              stageValid: !!result?.internal?.core?.stage,
+            };
+            if (Array.isArray(expectations.mustIncludeFields)) {
+              for (const field of expectations.mustIncludeFields) {
+                checks[`mustInclude:${field}`] = JSON.stringify(result).includes(
+                  String(field)
+                );
+              }
             }
-          }
-          if (Array.isArray(expectations.mustNotInclude)) {
-            for (const phrase of expectations.mustNotInclude) {
-              checks[`mustNotInclude:${phrase}`] = !userVisible.includes(
-                String(phrase)
-              );
+            if (Array.isArray(expectations.mustNotInclude)) {
+              for (const phrase of expectations.mustNotInclude) {
+                checks[`mustNotInclude:${phrase}`] = !userVisible.includes(
+                  String(phrase)
+                );
+              }
             }
-          }
-          if (
-            typeof expectations.expectedStage === 'string' &&
-            expectations.expectedStage
-          ) {
-            checks.expectedStage =
-              result?.internal?.core?.stage === expectations.expectedStage;
+            if (
+              typeof expectations.expectedStage === 'string' &&
+              expectations.expectedStage
+            ) {
+              checks.expectedStage =
+                result?.internal?.core?.stage === expectations.expectedStage;
+            }
+          } else {
+            const { checks: contractChecks } = await runSkillChecks({
+              skillId: canonicalAgentId,
+              parsed,
+              expectations,
+              caseItem: item,
+            });
+            checks = contractChecks;
           }
 
           const passed = Object.values(checks).every(Boolean);
@@ -842,19 +854,24 @@ router.post('/run-eval', async (req: Request, res: Response) => {
             caseName: item.name,
             runIndex: runIdx + 1,
             durationMs,
-            input: { userInput, conversationContextCount: history.length, previousState },
+            input: {
+              userInput: String(
+                [...item.messages].reverse().find((m: any) => m.role === 'user')?.content || ''
+              ),
+              conversationContextCount: item.messages.length - 1,
+              previousState: item.previousState || {},
+            },
             output: {
-              userVisible,
-              stage: result?.internal?.core?.stage || 'understanding',
-              confidence: result?.internal?.core?.confidence || 0,
+              userVisible: parsed ? JSON.stringify(parsed).slice(0, 300) : '',
+              stage: parsed ? 'n/a' : adapterResult.result?.internal?.core?.stage || 'understanding',
+              confidence: adapterResult.result?.internal?.core?.confidence || 0,
             },
             debug: {
-              promptVersion: result?.debug?.promptVersion || promptConfig.promptVersion,
-              attemptCount: result?.debug?.attemptCount || 0,
-              parseMode: result?.debug?.parseMode || 'none',
-              failureType: result?.debug?.failureType || 'none',
-              structuredOutputValid:
-                result?.debug?.structuredOutputValid === true,
+              promptVersion: promptConfig.promptVersion,
+              attemptCount: 0,
+              parseMode: 'none',
+              failureType: parsed ? 'none' : 'raw-output',
+              structuredOutputValid: parsed ? true : adapterResult.result?.debug?.structuredOutputValid === true,
             },
             checks,
             passed,
@@ -1015,6 +1032,181 @@ router.get('/eval-runs/:id', async (req: Request, res: Response) => {
 // ============================================================
 // 工具：解析 prompt 配置（来自 prompt-stability 的同名逻辑简化）
 // ============================================================
+
+/**
+ * 从模型输出提取 JSON（code-fence / raw / marker）
+ */
+function extractJson(text: string): any {
+  if (!text) return null;
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const candidate = fenced ? fenced[1] : text;
+  const start = candidate.indexOf('{');
+  const end = candidate.lastIndexOf('}');
+  if (start < 0 || end < 0 || end <= start) return null;
+  try {
+    return JSON.parse(candidate.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Skill 评估调用器（adapter 分发）：
+ * - goal-conversation：走 executeSkill（多轮对话，校验结构化输出 + 期望字段）
+ * - path-planning / stage-designer：直接 callPrompt（systemPromptOverride=被评估版本）+ 契约字段校验
+ * 返回 { result, parsed }，parsed 为模型原始输出 JSON（供 validator 检查）
+ */
+async function runSkillEvalCase(params: {
+  skillId: string;
+  systemPrompt: string;
+  caseItem: { messages: any[]; previousState?: any; inputPayload?: any };
+  input?: any;
+}): Promise<{ result: any; parsed: any }> {
+  const { skillId, systemPrompt, caseItem, input } = params;
+  const lastUser = [...caseItem.messages].reverse().find((m: any) => m.role === 'user');
+  const userInput = String(lastUser?.content || '');
+  const history = caseItem.messages.slice(0, -1).map((m: any) => ({ role: m.role, content: m.content }));
+  const previousState = caseItem.previousState || {};
+
+  if (skillId === 'skill:goal-conversation') {
+    const result = await executeSkill(goalConversationAgentDefinition, {
+      input: userInput,
+      userId: 'admin-prompt-ops',
+      conversationHistory: history,
+      previousUnderstanding: previousState?.understanding || {},
+      previousStage: previousState?.stage || 'understanding',
+      previousState,
+      maxFormatRetries: 2,
+      systemPromptOverride: systemPrompt,
+    });
+    return { result, parsed: null };
+  }
+
+  // path / stage：用 callPrompt 直接评估被指定版本的 prompt（不依赖 ACTIVE）
+  if (skillId === 'skill:path-planning') {
+    const promptInput = input || caseItem.inputPayload || {
+      type: 'path',
+      goal: userInput,
+      currentLevel: previousState?.currentBaseline?.level || 'beginner',
+      metadata: { availableTime: previousState?.resources?.timeBudget || null },
+      confirmedProposal: previousState?.confirmedProposal || null,
+      conversationHistory: history,
+    };
+    const promptResult = await callPrompt<any, any>({
+      agentId: 'skill:path-planning',
+      defaultSystemPrompt: systemPrompt,
+      requireActivePrompt: false,
+      caller: { agentId: 'path-agent', skillId: 'path-planning' },
+      buildUserPayload: () => ({
+        ...promptInput,
+        __promptOverridden: true,
+      }),
+      parseRawOutput: (raw) => {
+        const parsed = extractJson(raw);
+        return { parsed, extractedJson: parsed ? JSON.stringify(parsed) : null };
+      },
+      normalizeOutput: (parsed) => ({ parsed }),
+      validateParsedOutput: () => ({ valid: true }),
+      retryStrategy: { maxAttempts: 2 },
+    }, { ...promptInput, systemPromptOverride: systemPrompt });
+    return { result: promptResult, parsed: promptResult?.output?.parsed || null };
+  }
+
+  if (skillId === 'skill:stage-designer') {
+    const promptInput = input || caseItem.inputPayload || {
+      milestone: { stageNumber: 1, title: '示例阶段' },
+      previousMilestone: null,
+      cognitiveCore: { cognitiveDomain: '示例', coreConcepts: [] },
+      normalizedInput: null,
+      repairHints: null,
+    };
+    const promptResult = await callPrompt<any, any>({
+      agentId: 'skill:stage-designer',
+      defaultSystemPrompt: systemPrompt,
+      requireActivePrompt: false,
+      caller: { skillId: 'stage-designer' },
+      buildUserPayload: () => ({
+        milestone: promptInput.milestone,
+        previousMilestone: promptInput.previousMilestone || null,
+        cognitiveCore: promptInput.cognitiveCore,
+        normalizedInput: promptInput.normalizedInput || null,
+        repairHints: promptInput.repairHints || null,
+        __promptOverridden: true,
+      }),
+      parseRawOutput: (raw) => {
+        const parsed = extractJson(raw);
+        return { parsed, extractedJson: parsed ? JSON.stringify(parsed) : null };
+      },
+      normalizeOutput: (parsed) => ({ parsed }),
+      validateParsedOutput: () => ({ valid: true }),
+      retryStrategy: { maxAttempts: 2 },
+    }, { ...promptInput, systemPromptOverride: systemPrompt });
+    return { result: promptResult, parsed: promptResult?.output?.parsed || null };
+  }
+
+  throw new Error(`不支持的评估 skill: ${skillId}`);
+}
+
+/**
+ * Skill 契约校验（path/stage 复用 validator；goal 结构化校验）
+ * 返回 checks 供前端逐项展示；goal 返回空 checks（由调用方基于 executeSkill result 计算）
+ */
+async function runSkillChecks(params: {
+  skillId: string;
+  parsed: any;
+  expectations: any;
+  caseItem: { messages: any[]; previousState?: any; inputPayload?: any };
+}): Promise<{ checks: Record<string, boolean>; parsed: any }> {
+  const { skillId, parsed, expectations, caseItem } = params;
+  const checks: Record<string, boolean> = {};
+
+  if (skillId === 'skill:goal-conversation') {
+    return { checks, parsed };
+  }
+
+  const expect = expectations || {};
+  if (!parsed) {
+    checks.parsed = false;
+    return { checks, parsed };
+  }
+  checks.parsed = true;
+
+  if (skillId === 'skill:path-planning') {
+    const expectedMilestones = typeof expect.expectedMilestones === 'number' ? expect.expectedMilestones : null;
+    const validation = validatePathPlanningOutput(parsed, expectedMilestones);
+    checks.contractValid = validation.valid;
+    checks.milestoneCount = Array.isArray(parsed.milestones) ? parsed.milestones.length : 0;
+    if (expectedMilestones !== null) {
+      checks.milestoneCountMatchesExpected = checks.milestoneCount === expectedMilestones;
+    }
+    checks.namePresent = typeof parsed.name === 'string' && parsed.name.trim().length > 0;
+    checks.milestonesPresent = Array.isArray(parsed.milestones) && parsed.milestones.length > 0;
+    checks.cognitiveCorePresent = !!parsed.cognitiveCore;
+    if (Array.isArray(expect.mustIncludeFields)) {
+      for (const field of expect.mustIncludeFields) {
+        checks[`mustInclude:${field}`] = JSON.stringify(parsed).includes(String(field));
+      }
+    }
+  }
+
+  if (skillId === 'skill:stage-designer') {
+    const validation = validateStageDesignerOutput(parsed);
+    checks.contractValid = validation.valid;
+    checks.subtaskCount = Array.isArray(parsed.subtasks) ? parsed.subtasks.length : 0;
+    if (typeof expect.expectedSubtaskCount === 'number') {
+      checks.subtaskCountMatchesExpected = checks.subtaskCount === expect.expectedSubtaskCount;
+    }
+    checks.subtasksPresent = Array.isArray(parsed.subtasks) && parsed.subtasks.length > 0;
+    if (Array.isArray(expect.mustIncludeFields)) {
+      for (const field of expect.mustIncludeFields) {
+        checks[`mustInclude:${field}`] = JSON.stringify(parsed).includes(String(field));
+      }
+    }
+  }
+
+  return { checks, parsed };
+}
+
 async function resolvePrompt(
   canonicalAgentId: string,
   payload: any
