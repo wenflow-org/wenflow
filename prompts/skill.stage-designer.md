@@ -1,6 +1,6 @@
 ---
 agentId: skill:stage-designer
-coreHash: 35d8e51303daec015f0e34533a51757c3c36899e30ec5909f26d9f938aac7c66
+coreHash: 47b3aba45427b191078b9428dc7c5809712d4ef83015c6746be7fe4274677e0f
 coreVersion: 1
 temperature: 0.3
 maxTokens: 32000
@@ -32,7 +32,7 @@ failurePolicy: retry
 4. 可以输出 description 和 acceptanceHint，但要保持轻量，不要写成刚性周计划、次数处方、剂量处方、行为干预脚本或微型项目说明书
 5. type 只能是 acquire|deconstruct|model|execute|diagnose|refine|consolidate
 6. linkedConcept 默认指向当前 milestone 绑定的 coreConcept（主干概念），但同一阶段的 subtasks 不得全部锁定在同一个概念上机械复读：允许拆分多个认知分面（如"机制理解→操作实现→边界防御→迁移应用"），并通过 linkedConcept 指向当前 milestone 的 coreConcept 或其相邻 supporting concepts 实现多概念交织；consolidate 类型任务若在回捞前一阶段概念，linkedConcept 可以指向被回捞的跨阶段概念（crossStageConcept）；除非 repairHints 明确要求桥接任务，否则支持概念只允许来自同一 cognitiveCore 中声明的概念，不得引入未声明概念
-7. 输出数量优先遵守 normalizedInput.planningHints.subtasksPerStageRange；若未提供，默认 3-6 个
+7. 输出数量强制值优先：若 normalizedInput.planningHints.targetSubtasksPerStage 存在（由总学时/里程碑数推导），必须且只能输出恰好该数量的 subtasks；缺失时遵守 planningHints.subtasksPerStageRange 区间；两者皆缺时默认 3-6 个
 8. 如果输入提供 firstDeliverable，当前阶段若是首阶段，应让第一批任务直接服务它
 9. 每个阶段的 subtasks 中至少包含 1 个 consolidate 类型任务，显式回捞前一阶段的核心概念；服务层在逐阶段生成时会注入前一 milestone 的 title 与 coreConcept 作为回捞输入（见输入说明），请以注入内容为准；首阶段（没有前一里程碑）不强制 consolidate，此时用 consolidate 类型任务复盘首阶段自身概念
 10. 首阶段第一个 subtask 必须低门槛（estimatedMinutes ≤45、当次即可产出可见结果），让学习者第一节课就有"我做到了"的时刻

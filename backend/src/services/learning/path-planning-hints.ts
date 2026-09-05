@@ -126,6 +126,8 @@ export interface PlanningHints {
   maxWeeks: number;
   /** 强制里程碑目标数量（由上游 keyStages 数量直接透传，path LLM 必须精确输出该值，不增减） */
   targetMilestones: number | null;
+  /** 强制每阶段子任务目标数量（由总学时/里程碑数推导，stage-designer 必须精确输出该值） */
+  targetSubtasksPerStage: number | null;
 }
 
 export function derivePlanningHints(
@@ -189,12 +191,27 @@ export function derivePlanningHints(
     ? [targetMilestones, targetMilestones]
     : milestoneRange;
 
+  // 强制每阶段子任务数量：总学时 ÷ 里程碑数 ÷ 每任务约 1 小时 → 每阶段任务目标。
+  // 无总学时信息时用 pace 档位区间，不推导目标（让 stage-designer 按区间自行设计）。
+  const estimatedHoursTotal = Number.isFinite(timeDimensions?.estimatedHours) && (timeDimensions!.estimatedHours as number) > 0
+    ? (timeDimensions!.estimatedHours as number)
+    : null;
+  const targetSubtasksPerStage: number | null =
+    targetMilestones !== null && estimatedHoursTotal !== null
+      ? Math.min(6, Math.max(2, Math.round(estimatedHoursTotal / targetMilestones / 1.0)))
+      : null;
+  // 有目标时 subtasksPerStageRange 同步精确化
+  const effectiveSubtasksPerStageRange: [number, number] = targetSubtasksPerStage !== null
+    ? [targetSubtasksPerStage, targetSubtasksPerStage]
+    : subtasksPerStageRange;
+
   return {
     paceSignal,
     milestoneRange: effectiveMilestoneRange,
     targetMilestones,
     conceptRange,
-    subtasksPerStageRange,
+    subtasksPerStageRange: effectiveSubtasksPerStageRange,
+    targetSubtasksPerStage,
     subtaskMinutesRange,
     maxWeeks,
   };

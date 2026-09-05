@@ -77,3 +77,36 @@ describe('targetMilestones（强制里程碑数量，keyStages 直接透传）',
     expect(high.targetMilestones).toBe(8);
   });
 });
+
+describe('targetSubtasksPerStage（每阶段任务数，总学时/里程碑数推导）', () => {
+  it('有 estimatedHours 与 keyStages 时推导每阶段任务数，range 同步精确化', () => {
+    // 12h 总学时 / 3 里程碑 / 每任务 1h → 4 个/阶段
+    const hints = derivePlanningHints(
+      '三个月', null, null, null, ['S1', 'S2', 'S3'],
+      { totalWeeks: 12, estimatedHours: 12, sessionsPerWeek: null, sessionsLengthMin: null }
+    );
+    expect(hints.targetSubtasksPerStage).toBe(4);
+    expect(hints.subtasksPerStageRange).toEqual([4, 4]);
+  });
+
+  it('estimatedHours 缺失时 targetSubtasksPerStage 为 null，沿用 pace 区间', () => {
+    const hints = derivePlanningHints('三个月', null, null, null, ['S1', 'S2', 'S3'], null);
+    expect(hints.targetSubtasksPerStage).toBeNull();
+    expect(hints.subtasksPerStageRange).toEqual(paceSignalRangeConfig.extended.subtasksPerStageRange);
+  });
+
+  it('每阶段任务数超出范围时夹取 2-6', () => {
+    // 30h / 3 里程碑 / 1h → 10，夹取到 6
+    const high = derivePlanningHints(
+      null, null, null, null, ['S1', 'S2', 'S3'],
+      { totalWeeks: null, estimatedHours: 30, sessionsPerWeek: null, sessionsLengthMin: null }
+    );
+    expect(high.targetSubtasksPerStage).toBe(6);
+    // 1.4h / 4 里程碑 → ~0.35，夹取到 2
+    const low = derivePlanningHints(
+      null, null, null, null, ['S1', 'S2', 'S3', 'S4'],
+      { totalWeeks: null, estimatedHours: 1.4, sessionsPerWeek: null, sessionsLengthMin: null }
+    );
+    expect(low.targetSubtasksPerStage).toBe(2);
+  });
+});

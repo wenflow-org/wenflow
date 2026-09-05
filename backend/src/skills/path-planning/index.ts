@@ -111,6 +111,7 @@ function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
         subtaskMinutesRange: Array.isArray(planningHints.subtaskMinutesRange) ? planningHints.subtaskMinutesRange : null,
         maxWeeks: typeof planningHints.maxWeeks === 'number' ? planningHints.maxWeeks : null,
         targetMilestones: typeof planningHints.targetMilestones === 'number' ? planningHints.targetMilestones : null,
+        targetSubtasksPerStage: typeof planningHints.targetSubtasksPerStage === 'number' ? planningHints.targetSubtasksPerStage : null,
       } : null,
       prerequisiteCheckResults: Array.isArray(normalizedInput.prerequisiteCheckResults)
         ? normalizedInput.prerequisiteCheckResults.map((item: any) => ({
@@ -234,6 +235,18 @@ export function validatePathPlanningOutput(parsed: any, expectedMilestones?: num
   const hubRequired = milestonesArray.length >= 3 ? 2 : milestonesArray.length === 2 ? 1 : 0;
   if (hubConceptId && hubRequired > 0 && hubReuseCount < hubRequired) {
     warnings.push(`PATH_PLANNING_HUB_REUSE_INSUFFICIENT(reused=${hubReuseCount}, required=${hubRequired})`);
+  }
+
+  // CLT 概念密度审计（rule 52 代码化，警告级）：
+  // 每个 milestone 挂 1 个 coreConcept，因此"单阶段新概念 ≤3""相邻增量 ≤2"在单挂载
+  // 结构下天然满足（每阶段只引入 1 个新概念）。真实风险在概念总量失控——整条路径的
+  // 唯一概念数应落在 planningHints.conceptRange 附近，现在以 8 为外的硬上限做警告。
+  const conceptRefs = milestonesArray
+    .map((m: any) => (typeof m?.coreConcept === 'string' ? m.coreConcept : ''))
+    .filter(Boolean);
+  const uniqueConcepts = new Set(conceptRefs).size;
+  if (uniqueConcepts > 8) {
+    warnings.push(`PATH_PLANNING_CONCEPT_COUNT_HIGH(totalConcepts=${uniqueConcepts}, cap=8)`);
   }
   const stageNumbers = parsed.milestones.map((m: any) => m && m.stageNumber).filter((n: any) => typeof n === 'number');
   if (stageNumbers.length === parsed.milestones.length && stageNumbers.length > 0) {

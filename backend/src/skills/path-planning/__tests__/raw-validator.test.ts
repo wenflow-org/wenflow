@@ -128,4 +128,27 @@ describe('path-planning raw validator', () => {
     }
     expect(validatePathPlanningOutput(goodHub)).toEqual({ valid: true })
   })
+
+  it('reports excessive concept count as warning (CLT audit)', () => {
+    // 9 个 milestone 各挂不同概念 → 唯一概念数 9 > 8 → 产生 warning 但 valid 仍为 true
+    const manyConcepts = {
+      ...validOutput,
+      milestones: Array.from({ length: 9 }, (_, i) => ({
+        stageNumber: i + 1,
+        title: `t${i + 1}`,
+        coreConcept: `concept-${i + 1}`,
+      })),
+      cognitiveCore: {
+        cognitiveDomain: 'understand',
+        coreConcepts: Array.from({ length: 9 }, (_, i) => ({
+          id: `concept-${i + 1}`,
+          name: `关系${i + 1}`,
+          role: i === 0 ? 'hub' as const : 'supporting' as const,
+        })),
+      },
+    }
+    const result = validatePathPlanningOutput(manyConcepts)
+    expect(result.valid).toBe(true)
+    expect((result as any).warnings).toContain('PATH_PLANNING_CONCEPT_COUNT_HIGH(totalConcepts=9, cap=8)')
+  })
 })
