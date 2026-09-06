@@ -222,10 +222,10 @@ async function teachingOpeningGeneratorHandler(input: any) {
     }),
     validate: (parsed) => parsed
       && asTrimmedString(parsed.message)
-      && asTrimmedString(parsed.question)
-      && Array.isArray(parsed.quickReplies) && parsed.quickReplies.length > 0
+      // quickReplies/question/mode 可缺省（重学/收束等场景模型可合理省略动作与引导，
+      // 由 message 完成开场定位）；normalize 已对缺省值做兜底
       ? { valid: true }
-      : { valid: false, failureReason: 'TEACHING_OPENING_OUTPUT_INCOMPLETE' },
+      : { valid: false, failureReason: 'TEACHING_OPENING_MESSAGE_MISSING' },
   });
 }
 

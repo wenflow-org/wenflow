@@ -252,3 +252,6 @@ _pi-ai-test/
 _dsh-index-test.mjs
 _probe.mjs
 _verify-dsh.mjs
+
+# QA 过程报告与截图（外部 QA 产物，按需留存本地，不入库）
+qa-reports/

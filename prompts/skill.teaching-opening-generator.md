@@ -1,7 +1,7 @@
 ---
 agentId: skill:teaching-opening-generator
-coreHash: 5a1dec7dc88cf8a946b7dfe9c0eefb6eb2bd71b62b6cfe1f45805d9cc62599b8
-coreVersion: 2
+coreHash: a88faa63ba3ace964e4178cfa004c3093caee162da45f51ab4224af49862c4c3
+coreVersion: 3
 temperature: 0.4
 maxTokens: 3000
 failurePolicy: propagate
@@ -24,7 +24,7 @@ failurePolicy: propagate
 2. question 是开场的一句可选引导（低门槛、可答可不答），不是必须回答的待办问题： · 语气是"你可以想想/也可以直接动手"，不是"请先回答我" · 学生可以直接用一句话回答，也可以跳过它直接选 quickReplies 的动作开始——两种都自然
 3. quickReplies 是「学生下一步可以做的动作」，不是对 question 的自评选项，也不是判断题选项： · 每个选项都必须是一个可执行的下一步动作（动词开头），点下去学生就能开始产出/推进，而不是贴一个"会不会"的标签 · 禁止"能认出X / 认不出X / 都认不出""掌握了/没掌握/会一点""装过/没装过/装过且熟"这类自评标签式选项 · 动作应包含该课真实内容（示例：讲主谓宾时用"拿 I study English 拆给我看"，不要泛泛的"开始吧"） · 输出前自检：把每个选项读一遍，若它是"在回答 question"，删掉重写；它必须是一个"我接下来去做某事"的句子
 4. 反例（绝对禁止的输出形态）：question 问"你装过 Python 吗？"时，选项不得是"装过/没装过/装过但不太熟"；应改为"直接带我装一遍""先看看我的电脑环境""装过，帮我把环境配好"
-5. quickReplies 只能输出 2 到 3 个动作选项，每项只保留 text，动词开头、不超过 12 字
+5. quickReplies 输出 0 到 3 个动作选项，每项只保留 text，动词开头、不超过 12 字；没有可执行的下一步动作时不要硬凑，输出空数组或省略均可——此时 message 负责完成开场定位
 6. question 若用于摸底/自评，则 quickReplies 必须与摸底无关——quickReplies 永远指向"从哪开始动手"
 7. quickReplies 必须与 mode 匹配： · example-first：如"带我看一个例子""我先试一小步""先讲要点，再拿例子练" · predict：如"让我先判断一下""给个提示再判断""我先猜一个，你验证" · self-assess：把自评转化为动作，如"我自己写一句试试""先听你讲一遍""跳过自评，直接练"
 8. quickReplies 必须与 mode 匹配： · example-first：如"带我看一个例子""我先试一小步""先讲要点，再拿例子练" · predict：如"让我先判断一下""给个提示再判断""我先猜一个，你验证" · self-assess：把自评转化为动作，如"我自己写一句试试""先听你讲一遍""跳过自评，直接练"
@@ -38,9 +38,9 @@ failurePolicy: propagate
 ## 输出字段
 
 - message · string — 1 到 2 句开场定位语，结合主题与当前阶段，不能输出系统通知或命令式说明
-- question · string — 一句可选的低门槛引导（可答可不答，语气是"可以想想/也可以直接开始"），必须与本节课主题和开场模式直接相关；不要让它成为"必须先回答才能上课"的关卡
-- quickReplies · object[] — 2 到 3 个「下一步动作」选项（动词开头，≤12字，含本课真实内容），每个元素只含 text 字段；禁止自评标签式选项
-- mode · enum — example-first|predict|self-assess，必须保持与输入给出的开场模式一致
+- question · string? — 一句可选的低门槛引导（可答可不答，语气是"可以想想/也可以直接开始"），必须与本节课主题和开场模式直接相关；不要让它成为"必须先回答才能上课"的关卡；没有合适的引导时可省略
+- quickReplies · object[]? — 0 到 3 个「下一步动作」选项（动词开头，≤12字，含本课真实内容），每个元素只含 text 字段；禁止自评标签式选项；仅在确实存在值得让学生直接执行的动作路径时输出，无可执行动作时可省略（输出空数组或省略该字段均可）
+- mode · enum? — example-first|predict|self-assess，必须保持与输入给出的开场模式一致；quickReplies 省略时此字段可省略
 
 ## 边界约束
 
