@@ -170,9 +170,38 @@ onUnmounted(() => {
   --faint: #8492ab;
   --line: rgba(23, 32, 51, 0.08);
   --canvas: #f3f6fb;
+  --surface: #fff;
+  --surface-soft: rgba(255, 255, 255, 0.88);   /* 玻璃卡片默认底 */
+  --surface-tint: rgba(255, 255, 255, 0.92);   /* 高亮面板底色 */
+  --surface-strong: #fff;                      /* 纯色面板（按钮等） */
+  --float: rgba(255, 255, 255, 0.75);          /* 页脚全宽半透条 */
+  --shade: rgba(15, 23, 42, 0.08);             /* 悬浮阴影（浅色） */
+  --card-blend: rgba(255, 255, 255, 0.92);     /* 渐变卡片白色终端 */
+  --tint-blend: rgba(52, 120, 246, 0.1);       /* 渐变卡片蓝色起点 */
+  --hover-wash: rgba(255, 255, 255, 0.7);      /* 列表行 hover 底色 */
+  --accent: #8d6bff;
   --blue: #3478f6;
   --blue-deep: #1f57cc;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  [data-theme='dark'] & {
+    --ink: #e6edf7;
+    --muted: #9aa8bf;
+    --faint: #7d8ba3;
+    --line: rgba(230, 237, 247, 0.14);
+    --canvas: #0f1620;
+    --surface: #182230;
+    --surface-soft: rgba(24, 34, 48, 0.72);
+    --surface-tint: rgba(26, 37, 53, 0.85);
+    --surface-strong: #1a2535;
+    --float: rgba(10, 15, 23, 0.5);
+    --shade: rgba(0, 0, 0, 0.38);
+    --card-blend: rgba(24, 34, 48, 0.85);
+    --tint-blend: rgba(77, 139, 248, 0.14);
+    --hover-wash: rgba(230, 237, 247, 0.045);
+    --accent: #a78bff;
+    --blue: #4d8bf8;
+    --blue-deep: #6fa3ff;
+  }
   min-height: 100vh;
   background: var(--canvas);
   color: var(--ink);
@@ -213,7 +242,7 @@ onUnmounted(() => {
 }
 .vn-btn--ghost {
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.74);
+  background: var(--surface-soft);
   border-color: var(--line);
 }
 .vn-btn--lg {
@@ -326,11 +355,15 @@ main {
   gap: 12px;
   padding: 32px;
   border-radius: 28px;
-  background: linear-gradient(180deg, rgba(52, 120, 246, 0.08), rgba(255, 255, 255, 0.92));
+  background: linear-gradient(180deg, var(--tint-blend), var(--card-blend));
   border: 1px solid rgba(52, 120, 246, 0.16);
   box-shadow: 0 28px 80px rgba(58, 101, 197, 0.12);
   backdrop-filter: blur(14px);
   overflow: hidden;
+}
+[data-theme='dark'] .vn-hero__aside {
+  border-color: rgba(111, 163, 255, 0.25);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
 }
 .vn-hero__quote {
   position: absolute;
@@ -419,13 +452,13 @@ main {
 .vn-stand__grid article {
   padding: 28px;
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--surface-soft);
   border: 1px solid var(--line);
   transition: transform 0.28s var(--ease), box-shadow 0.28s var(--ease);
 }
 .vn-stand__grid article:hover {
   transform: translateY(-3px);
-  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 18px 42px var(--shade);
 }
 .vn-stand__grid h3 {
   margin: 0 0 14px;
@@ -479,7 +512,7 @@ main {
   transition: background 0.25s var(--ease), padding 0.25s var(--ease);
 }
 .vn-cap__list li:hover {
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--hover-wash);
   padding-left: 18px;
 }
 .vn-cap__list li:last-child {
@@ -520,9 +553,9 @@ main {
 .vn-bridge__box {
   padding: 36px 40px;
   border-radius: 28px;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--surface-soft);
   border: 1px solid var(--line);
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 16px 40px var(--shade);
   display: grid;
   gap: 12px;
   width: 100%;
@@ -578,7 +611,7 @@ main {
 .vn-end {
   position: relative;
   padding: 88px 24px 100px;
-  background: linear-gradient(180deg, rgba(52, 120, 246, 0.1), rgba(255, 255, 255, 0.92));
+  background: linear-gradient(180deg, var(--tint-blend), var(--card-blend));
   border-top: 1px solid var(--line);
   text-align: center;
   overflow: hidden;
@@ -593,6 +626,9 @@ main {
   background: radial-gradient(circle, rgba(52, 120, 246, 0.18), transparent 68%);
   filter: blur(40px);
   pointer-events: none;
+}
+[data-theme='dark'] .vn-end__glow {
+  background: radial-gradient(circle, rgba(77, 139, 248, 0.22), transparent 68%);
 }
 .vn-end__in {
   position: relative;
@@ -626,7 +662,7 @@ main {
 
 .vn-foot {
   border-top: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.75);
+  background: var(--float);
 }
 .vn-foot__in {
   display: flex;

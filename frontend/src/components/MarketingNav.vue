@@ -108,7 +108,25 @@ onUnmounted(() => {
   --line: rgba(23, 32, 51, 0.08);
   --blue: #3478f6;
   --blue-deep: #1f57cc;
+  --nav-bg: rgba(255, 255, 255, 0.88);
+  --nav-shadow: rgba(15, 23, 42, 0.1);
+  --btn-ghost-bg: rgba(255, 255, 255, 0.74);
+  --burger-bg: rgba(255, 255, 255, 0.8);
+  --drawer-bg: rgba(255, 255, 255, 0.96);
+  --link-row-bg: #f7faff;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  [data-theme='dark'] & {
+    --ink: #e6edf7;
+    --line: rgba(230, 237, 247, 0.14);
+    --blue: #4d8bf8;
+    --blue-deep: #6fa3ff;
+    --nav-bg: rgba(15, 22, 32, 0.88);
+    --nav-shadow: rgba(0, 0, 0, 0.45);
+    --btn-ghost-bg: rgba(24, 34, 48, 0.66);
+    --burger-bg: rgba(24, 34, 48, 0.72);
+    --drawer-bg: rgba(17, 25, 36, 0.97);
+    --link-row-bg: rgba(230, 237, 247, 0.05);
+  }
   position: fixed;
   inset: 0 0 auto;
   z-index: 40;
@@ -116,10 +134,13 @@ onUnmounted(() => {
   transition: 0.24s ease;
 }
 .mknav--on {
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--nav-bg);
   border-color: var(--line);
   box-shadow: 0 14px 40px rgba(15, 23, 42, 0.06);
   backdrop-filter: blur(18px);
+}
+[data-theme='dark'] .mknav--on {
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.38);
 }
 .mknav__shell {
   width: min(1180px, calc(100% - 48px));
@@ -190,7 +211,7 @@ onUnmounted(() => {
 }
 .mknav__btn--ghost {
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.74);
+  background: var(--btn-ghost-bg);
   border-color: var(--line);
 }
 .mknav__burger {
@@ -199,7 +220,7 @@ onUnmounted(() => {
   height: 42px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--burger-bg);
   cursor: pointer;
 }
 .mknav__burger span {
@@ -248,9 +269,9 @@ onUnmounted(() => {
     margin: 0 auto 14px;
     padding: 16px;
     border-radius: 20px;
-    background: rgba(255, 255, 255, 0.96);
+    background: var(--drawer-bg);
     border: 1px solid var(--line);
-    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.1);
+    box-shadow: 0 18px 48px var(--nav-shadow, rgba(15, 23, 42, 0.1));
   }
   .mknav__drawer a:not(.mknav__btn) {
     padding: 12px;
@@ -258,11 +279,14 @@ onUnmounted(() => {
     text-decoration: none;
     color: var(--ink);
     font-weight: 700;
-    background: #f7faff;
+    background: var(--link-row-bg);
   }
   .mknav__drawer .mknav__link.is-on {
     color: var(--blue-deep);
     background: rgba(52, 120, 246, 0.1);
+  }
+  [data-theme='dark'] .mknav__drawer .mknav__link.is-on {
+    background: rgba(77, 139, 248, 0.18);
   }
 }
 
