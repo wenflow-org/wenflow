@@ -547,6 +547,73 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
 });
 
 /**
+ * 恢复续讲（resume-continue）：断线恢复后由前端「继续上课」触发，
+ * 无学生新输入，后端直接跑一个纯续讲回合并返回 AI 接续开场白（SSE 流式）。
+ * POST /api/ai-teaching/sessions/:sessionId/continue  body: { revision }
+ */
+router.post('/sessions/:sessionId/continue', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return sendUnauthorized(res);
+    }
+
+    const { sessionId } = req.params;
+    await teachingSessionRepository.assertOwnership(sessionId, userId);
+
+    const expectedRevision = requireExpectedRevision(req.body?.revision);
+    const wantsStream = String(req.headers?.accept || '').includes('text/event-stream');
+
+    if (wantsStream) {
+      // 复用流式通道，但走 resume-continue 无输入模式
+      const resumeStreamRequest = {
+        enabled: true,
+        onStream: (event: PromptStreamEvent) => {
+          if (event.type === 'delta') {
+            writeSseEvent(res, 'delta', { text: event.text });
+          } else if (event.type === 'restart') {
+            writeSseEvent(res, 'restart', { attempt: event.attempt });
+          } else if (event.type === 'error') {
+            writeSseEvent(res, 'error', { code: event.code, message: event.message });
+          }
+        },
+      };
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
+      setRequestContext({ streamRequest: resumeStreamRequest, sessionId, sourceEntry: 'platform' });
+      try {
+        const result = await aiTeachingCoordinator.processStudentMessage(sessionId, '', {
+          expectedRevision,
+          kind: 'resume-continue',
+        });
+        const synthetic = req.user?.projection?.grantSource === 'synthetic';
+        writeSseEvent(res, 'final', buildMessageResultData(result, synthetic));
+        writeSseEvent(res, 'done', {});
+      } catch (error: any) {
+        const { status, code, message: errorMessage } = resolveTeachingError(error, '恢复续讲失败');
+        writeSseEvent(res, 'error', { status, code, message: errorMessage });
+      } finally {
+        if (!res.destroyed && !res.writableEnded) res.end();
+      }
+      return;
+    }
+
+    const result = await aiTeachingCoordinator.processStudentMessage(sessionId, '', {
+      expectedRevision,
+      kind: 'resume-continue',
+    });
+    const synthetic = req.user?.projection?.grantSource === 'synthetic';
+    return res.json({ success: true, data: buildMessageResultData(result, synthetic) });
+  } catch (error: any) {
+    logger.error('恢复续讲失败:', error);
+    return sendTeachingError(res, error, '恢复续讲失败');
+  }
+});
+
+/**
  * 提交理解检查
  * POST /api/ai-teaching/sessions/:sessionId/checkpoints/:checkpointId/submit
  */

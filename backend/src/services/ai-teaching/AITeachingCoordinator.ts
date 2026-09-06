@@ -190,6 +190,11 @@ interface ProcessStudentMessageOptions {
   expectedRevision?: number;
   /** 前端交互特征（认知负荷量测 · 前端情报层）：随学生消息落库并注入教学上下文 */
   interactionMeta?: InteractionMetaRecord | null;
+  /**
+   * 回合类型：默认 message（学生真实输入）；'resume-continue' = 断线恢复后的纯续讲回合——
+   * 无学生新输入，不落库伪 user 消息，teaching-turn 仅凭历史 + session-resumed 事件自然接续。
+   */
+  kind?: 'message' | 'resume-continue';
 }
 
 const RECOVERY_WINDOW_MS = 48 * 60 * 60 * 1000;
@@ -1621,20 +1626,25 @@ export class AITeachingOrchestrator {
       const context = await buildTeachingScenarioContext(session.userId, session.taskId, session, options.interactionMeta);
       const endIntent = detectEndIntent(message);
 
-    const updatedMessages = appendTimestamp([
-      ...session.messages,
-      {
-        role: 'user',
-        content: message,
-        timestamp: new Date().toISOString(),
-        // 检查点合成消息打标记：进入教学上下文供模型分析答案，但不参与学生行为证据统计
-        ...(options.checkpointId ? { checkpoint: true } : {}),
-        // 前端交互特征（认知负荷量测 · 前端情报层）：随消息落库，供后续轮次对比
-        ...(options.interactionMeta && Object.keys(options.interactionMeta).length > 0
-          ? { meta: options.interactionMeta as Record<string, number> }
-          : {}),
-      }
-    ]);
+    // 恢复续讲回合（resume-continue）：无学生新输入——不落库伪 user 消息，
+    // 对话历史/LLM 可见输入保持纯历史，仅靠下方注入的 session-resumed 课堂事件驱动自然接续
+    const isResumeContinue = options.kind === 'resume-continue';
+    const updatedMessages = isResumeContinue
+      ? appendTimestamp([...session.messages])
+      : appendTimestamp([
+          ...session.messages,
+          {
+            role: 'user',
+            content: message,
+            timestamp: new Date().toISOString(),
+            // 检查点合成消息打标记：进入教学上下文供模型分析答案，但不参与学生行为证据统计
+            ...(options.checkpointId ? { checkpoint: true } : {}),
+            // 前端交互特征（认知负荷量测 · 前端情报层）：随消息落库，供后续轮次对比
+            ...(options.interactionMeta && Object.keys(options.interactionMeta).length > 0
+              ? { meta: options.interactionMeta as Record<string, number> }
+              : {}),
+          }
+        ]);
 
     const previousTeachingState = session.teachingState || {};
     const sessionArtifacts = parseSessionArtifacts(previousTeachingState);
@@ -1715,7 +1725,10 @@ export class AITeachingOrchestrator {
       },
     };
     const previousClassroomStage = (previousTeachingState.classroomContext?.stage?.current as LearnStage) || 'opening';
-    const peerTriggered = peerTriggerService.shouldTrigger(session, teachingOutput, message);
+    // 恢复续讲首回合不触发伴学（无学生新输入，伴学模拟"同学插话"无意义）
+    const peerTriggered = !isResumeContinue && peerTriggerService.shouldTrigger(session, teachingOutput, message);
+    // 恢复续讲无学生输入：后续所有 learnerMessage 语义统一为空，避免 teaching-turn 把伪输入当本轮反馈
+    const effectiveLearnerMessage = isResumeContinue ? '' : message;
     let peerMessage: string | undefined;
     let peerStrategy: string | null = null;
     let peerFollowUpQuestions: string[] = [];
@@ -1768,7 +1781,7 @@ export class AITeachingOrchestrator {
       currentStage: previousClassroomStage,
       teachingOutput: effectiveTeachingOutput,
       peerTriggered,
-      learnerMessage: message,
+      learnerMessage: effectiveLearnerMessage,
       taskMode: context.taskMode,
       frustratedStreak: previousTeachingState?.learnerStateContext?.frustratedStreak ?? 0,
     });
@@ -1783,7 +1796,7 @@ export class AITeachingOrchestrator {
       stage: nextStageDecision.stage,
       stageReason: nextStageDecision.reason,
       teachingOutput: effectiveTeachingOutput,
-      learnerMessage: message,
+      learnerMessage: effectiveLearnerMessage,
       context,
       knowledgeState: mergedKnowledge,
       learnerStateContext,
@@ -1798,7 +1811,7 @@ export class AITeachingOrchestrator {
     classroomEvents.push(buildClassroomEvent('teaching-turn', nextStageDecision.reason, {
       stage: nextStageDecision.stage,
       focusKnowledgePoint: classroomContext.focus.currentKnowledgePoint,
-      learnerMessage: message,
+      learnerMessage: effectiveLearnerMessage,
       confusionPoints: learnerStateContext.currentConfusionPoints || [],
       peerTriggered,
       endIntent: endIntent.isEndIntent,
@@ -1806,7 +1819,7 @@ export class AITeachingOrchestrator {
 
     if (endIntent.isEndIntent) {
       classroomEvents.push(buildClassroomEvent('end-intent', endIntent.reason, {
-        learnerMessage: message,
+        learnerMessage: effectiveLearnerMessage,
       }));
     }
 
@@ -1819,6 +1832,13 @@ export class AITeachingOrchestrator {
     if (completionReady) {
       classroomEvents.push(buildClassroomEvent('completion-candidate', '本轮出现课堂完成候选信号', {
         focusKnowledgePoint: classroomContext.focus.currentKnowledgePoint,
+      }));
+    }
+
+    // 恢复续讲信号：teaching-turn 看到该事件即知本轮无学生新输入，需自然接续上一轮推进
+    if (isResumeContinue) {
+      classroomEvents.push(buildClassroomEvent('session-resumed', '学生刚刚恢复本课堂会话，无新输入', {
+        instruction: '自然地接续上一轮的教学推进：先一句话承接上次进度，再继续当前焦点知识点。不要询问"你想做什么/从哪继续"，不要重新自我介绍或重复开场。',
       }));
     }
 
@@ -1859,7 +1879,7 @@ export class AITeachingOrchestrator {
         visibleDialogueContext: session.messages.map((item) => ({
           role: item.role,
           content: item.content,
-        })).concat([{ role: 'user', content: message }]),
+        })).concat(isResumeContinue ? [] : [{ role: 'user', content: message }]),
         teachingControlContext,
       },
       output: {

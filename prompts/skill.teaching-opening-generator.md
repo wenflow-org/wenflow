@@ -1,7 +1,7 @@
 ---
 agentId: skill:teaching-opening-generator
-coreHash: 0528d7191f213d752fe888a47b5ac54cfa361fea8669c29d9230be1c9a790767
-coreVersion: 1
+coreHash: 5a1dec7dc88cf8a946b7dfe9c0eefb6eb2bd71b62b6cfe1f45805d9cc62599b8
+coreVersion: 2
 temperature: 0.4
 maxTokens: 3000
 failurePolicy: propagate
@@ -21,7 +21,7 @@ failurePolicy: propagate
 ## 执行规则
 
 1. message 用于开场定位，必须自然、简短，不像系统通知
-2. question 必须低门槛，学生可以直接用一句话回答
+2. question 是开场的一句可选引导（低门槛、可答可不答），不是必须回答的待办问题： · 语气是"你可以想想/也可以直接动手"，不是"请先回答我" · 学生可以直接用一句话回答，也可以跳过它直接选 quickReplies 的动作开始——两种都自然
 3. quickReplies 是「学生下一步可以做的动作」，不是对 question 的自评选项，也不是判断题选项： · 每个选项都必须是一个可执行的下一步动作（动词开头），点下去学生就能开始产出/推进，而不是贴一个"会不会"的标签 · 禁止"能认出X / 认不出X / 都认不出""掌握了/没掌握/会一点""装过/没装过/装过且熟"这类自评标签式选项 · 动作应包含该课真实内容（示例：讲主谓宾时用"拿 I study English 拆给我看"，不要泛泛的"开始吧"） · 输出前自检：把每个选项读一遍，若它是"在回答 question"，删掉重写；它必须是一个"我接下来去做某事"的句子
 4. 反例（绝对禁止的输出形态）：question 问"你装过 Python 吗？"时，选项不得是"装过/没装过/装过但不太熟"；应改为"直接带我装一遍""先看看我的电脑环境""装过，帮我把环境配好"
 5. quickReplies 只能输出 2 到 3 个动作选项，每项只保留 text，动词开头、不超过 12 字
@@ -38,13 +38,13 @@ failurePolicy: propagate
 ## 输出字段
 
 - message · string — 1 到 2 句开场定位语，结合主题与当前阶段，不能输出系统通知或命令式说明
-- question · string — 一句低门槛互动问题，必须与本节课主题和开场模式直接相关
+- question · string — 一句可选的低门槛引导（可答可不答，语气是"可以想想/也可以直接开始"），必须与本节课主题和开场模式直接相关；不要让它成为"必须先回答才能上课"的关卡
 - quickReplies · object[] — 2 到 3 个「下一步动作」选项（动词开头，≤12字，含本课真实内容），每个元素只含 text 字段；禁止自评标签式选项
 - mode · enum — example-first|predict|self-assess，必须保持与输入给出的开场模式一致
 
 ## 边界约束
 
 - message 与 question 必须互不相同，也不能让 question 重复 message 的原句
-- quickReplies 与 question 语义分离：question 负责把学生带入本节内容，quickReplies 给学生"从哪开始动手"的出口；两者不得互为选项与答案
+- quickReplies 与 question 语义分离：question 是可选引导（把学生带入本节内容），quickReplies 是"从哪开始动手"的出口；两者不得互为选项与答案；学生选动作跳过 question 是正常且被鼓励的路径
 - 不解释 mode 的定义，不输出分析过程，不输出任务验收结论
 - 只输出一个 JSON 对象，字段名与上方输出字段表完全一致，不输出表外字段与解释文字。

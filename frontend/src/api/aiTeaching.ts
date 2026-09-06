@@ -431,6 +431,71 @@ export const aiTeachingAPI = {
     });
   },
 
+  /**
+   * 恢复续讲（resume-continue）：无学生新输入，后端直接跑一个纯续讲回合，
+   * 返回 AI 自然接续的开场白。不落库伪用户消息、不污染对话历史。
+   */
+  async streamContinueSession(
+    sessionId: string,
+    revision: number,
+    handlers: { onDelta: (text: string) => void; onRestart?: () => void; signal?: AbortSignal }
+  ): Promise<MessageResult> {
+    return new Promise<MessageResult>((resolve, reject) => {
+      let result: MessageResult | null = null;
+      let receivedAnything = false;
+      let serverError: { code?: string; status?: number; message: string } | null = null;
+      let settled = false;
+      const settleReject = (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      };
+      streamSsePost(`/ai-teaching/sessions/${sessionId}/continue`, { revision }, {
+        signal: handlers.signal,
+        onEvent: (event, data) => {
+          if (event === 'delta' && typeof data?.text === 'string') {
+            receivedAnything = true;
+            handlers.onDelta(data.text);
+          } else if (event === 'restart') {
+            receivedAnything = true;
+            handlers.onRestart?.();
+          } else if (event === 'final') {
+            receivedAnything = true;
+            result = data?.data || data || null;
+          } else if (event === 'error') {
+            receivedAnything = true;
+            serverError = {
+              code: data?.code,
+              status: data?.status,
+              message: data?.message || '恢复续讲失败'
+            };
+          }
+        }
+      }).then(
+        () => {
+          if (settled) return;
+          settled = true;
+          if (result) resolve(result);
+          else if (serverError) {
+            reject(Object.assign(new Error(serverError.message), {
+              code: serverError.code,
+              status: serverError.status,
+              serverError: true
+            }));
+          } else {
+            reject(new Error('未收到最终结果'));
+          }
+        },
+        (error) => {
+          const e = error as { partialStream?: boolean; transport?: boolean };
+          if (receivedAnything) e.partialStream = true;
+          else e.transport = true;
+          settleReject(error);
+        }
+      );
+    });
+  },
+
   async sendPeerMessage(sessionId: string, message: string): Promise<PeerMessageResult> {
     const result = await api.post(`/ai-teaching/sessions/${sessionId}/peer/messages`, { message }, { timeout: AI_REQUEST_TIMEOUT });
     return result.data || result;

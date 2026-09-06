@@ -199,18 +199,19 @@
         >↓ 回到底部</button>
 
         <!-- 开场行动台：AI 给的「下一步动作」选项，点一下直接执行（即点即达） -->
-        <div v-if="quickReplies.length && !typing && !checkpoint" class="replies">
+        <!-- 摸底 question 不再单独成待答气泡，收进面板作一行可选引导；想回答就打字，不想答就选动作直接开始 -->
+        <div v-if="(quickReplies.length || openingQuestion) && !typing && !checkpoint" class="replies">
           <div class="replies__head">
             <span class="replies__kicker">{{ quickReplyKicker }}</span>
-            <span class="replies__hint">选一个，直接开始</span>
+            <span class="replies__hint">{{ quickReplies.length ? '选一个，直接开始' : '也可以直接输入回答' }}</span>
           </div>
-          <div class="replies__row">
+          <p v-if="openingQuestion" class="replies__question">{{ openingQuestion }}</p>
+          <div v-if="quickReplies.length" class="replies__row">
             <button
               v-for="(q, qi) in quickReplies"
               :key="q"
               type="button"
               class="reply"
-              :class="`reply--${(qi % 3) + 1}`"
               @click="sendDirect(q)"
             >
               <span class="reply__mark" aria-hidden="true">{{ qi + 1 }}</span>
@@ -496,6 +497,8 @@ function pushMsg(m: ChatMsg): ChatMsg {
   return withId;
 }
 const quickReplies = ref<string[]>([]);
+/** 开场摸底引导（opening.question 收敛进行动台面板的一行小字，不再单独成待答气泡）；仅在有动作选项时收进面板 */
+const openingQuestion = ref('');
 /** 开场景卡片（后端 session.scene）：resumed/new 的恢复·接续·重学·复习信息，取代模板双气泡 */
 const openingScene = ref<Record<string, any> | null>(null);
 /** 卡片已被用户处理（点主按钮/关闭）后不再展示 */
@@ -577,14 +580,83 @@ const sceneMasteryWarn = computed(() => {
   return weak.map((m) => `第 ${m.stage} 阶段「${m.title}」还不太稳`).join('；');
 });
 
-/** 卡片主按钮：把用户"从这继续/开始"作为一条消息发给导师，触发教学回合 */
+/** 卡片主按钮：resume（断线续课）= 走无输入续讲回合（不发伪消息）；其余场景 = 把用户"从这继续/开始"作为消息发给导师 */
 function startFromScene() {
   if (typing.value || actionBusy.value || !session.value) return;
-  const quick = quickReplies.value[0];
-  const sendText = quick || (openingScene.value?.kind === 'review' ? '开始复习' : '继续上次进度');
+  const kind = openingScene.value?.kind;
   openingSceneDone.value = true;
   resumedNotice.value = false;
+  if (kind === 'resume') {
+    // 恢复续课：不发"继续上次进度"伪消息，直接触发后端纯续讲回合并流式渲染 AI 接续开场白
+    void continueFromScene();
+    return;
+  }
+  const quick = quickReplies.value[0];
+  const sendText = quick || (kind === 'review' ? '开始复习' : '继续上次进度');
   void sendDirect(sendText);
+}
+
+/**
+ * 恢复续讲（resume-continue）：无学生输入的教学回合。
+ * 不 push 用户气泡、不收集交互 meta；流式渲染 AI 接续开场白，响应应用与 doSend 共用。
+ */
+async function continueFromScene() {
+  if (typing.value || actionBusy.value || !session.value) return;
+  quickReplies.value = [];
+  openingQuestion.value = '';
+  confirmCheck.value = null;
+  assessTarget.value = null;
+  typing.value = true;
+  scrollDown();
+  const s = session.value;
+  try {
+    let r: Record<string, any>;
+    try {
+      streamAbort = new AbortController();
+      r = await aiTeachingAPI.streamContinueSession(s.sessionId, s.revision, {
+        signal: streamAbort.signal,
+        onDelta: (delta) => {
+          // 首个 delta 到达时才建 AI 气泡
+          let m = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
+          if (!m || m.role !== 'ai') {
+            pushMsg({ role: 'ai', text: '', time: nowTime() });
+            streamingBubbleIndex.value = msgs.value.length - 1;
+            m = msgs.value[streamingBubbleIndex.value];
+          }
+          if (m) {
+            m.text += delta;
+            if (nearBottom.value) void scrollDown();
+          }
+        },
+        onRestart: () => {
+          const m = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
+          if (m?.role === 'ai') m.text = '';
+        },
+      }) as unknown as Record<string, any>;
+    } catch (streamError) {
+      // 用户离页中止：静默丢弃
+      if ((streamError as { cancelled?: boolean })?.cancelled) throw streamError;
+      // 传输层失败且未收到任何内容：安全回退非流式 continue
+      if (!(streamError as { transport?: boolean })?.transport) throw streamError;
+      if (streamingBubbleIndex.value >= 0) msgs.value.splice(streamingBubbleIndex.value, 1);
+      streamingBubbleIndex.value = -1;
+      const streamRes = await request.post(`/ai-teaching/sessions/${s.sessionId}/continue`, { revision: s.revision }, { timeout: 120000 });
+      r = (streamRes.data?.data || streamRes.data) as unknown as Record<string, any>;
+    } finally {
+      streamAbort = null;
+    }
+    session.value.revision = r.revision ?? s.revision + 1;
+    const aiMsg = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
+    await applyTurnResult(r, aiMsg);
+  } catch (e) {
+    if ((e as { cancelled?: boolean })?.cancelled) return;
+    if (streamingBubbleIndex.value >= 0) msgs.value.splice(streamingBubbleIndex.value, 1);
+    pushMsg({ role: 'ai', text: '恢复续讲失败了，你可以直接输入消息继续，或点下方「重试」。', time: nowTime(), failed: true });
+  } finally {
+    streamingBubbleIndex.value = -1;
+    typing.value = false;
+    scrollDown();
+  }
 }
 const wrapupText = ref('');
 const finishStats = ref<Array<{ label: string; value: string | number }>>([]);
@@ -792,6 +864,7 @@ async function boot() {
   resumedNotice.value = false;
   assessTarget.value = null;
   confirmCheck.value = null;
+  openingQuestion.value = '';
   try {
     try {
       const task = unwrap<Record<string, any>>(await request.get(`/learning/tasks/${taskId}`));
@@ -814,11 +887,18 @@ async function boot() {
       // 恢复：不再 push 模板双气泡（"已恢复…我们继续"），由场景卡片承接；
       // 快选也由卡片主按钮承担，避免「卡片按钮 + 底部开场建议」两处重复
       quickReplies.value = [];
+      openingQuestion.value = '';
     } else {
       // 新开课（含接续/重学/首课）：保留 AI 的真实教学开场白（承接上节/切入本节）
       if (openingText) pushMsg({ role: 'ai', text: openingText, time: nowTime() });
-      if (s.opening?.question) pushMsg({ role: 'ai', text: s.opening.question, time: nowTime() });
-      quickReplies.value = (s.opening?.quickReplies || []).map((q: Record<string, any>) => q.text || q).filter(Boolean);
+      // 摸底 question 不再单独成待答气泡：有动作选项时收进面板作一行可选引导（想答打字、不答选动作直接开始）；
+      // 无动作选项（纯 question 开场）时仍作为气泡，避免问题无处安放
+      const qActions = (s.opening?.quickReplies || []).map((q: Record<string, any>) => q.text || q).filter(Boolean);
+      if (s.opening?.question) {
+        if (qActions.length) openingQuestion.value = String(s.opening.question);
+        else pushMsg({ role: 'ai', text: String(s.opening.question), time: nowTime() });
+      }
+      quickReplies.value = qActions;
     }
     if (Array.isArray(s.knowledgePoints) && s.knowledgePoints.length) {
       knowledgePoints.value = s.knowledgePoints;
@@ -1034,6 +1114,7 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
   lastUserText = text;
   if (!skipUserPush) pushMsg({ role: 'user', text, time: nowTime() });
   quickReplies.value = [];
+  openingQuestion.value = '';
   confirmCheck.value = null;
   assessTarget.value = null;
   typing.value = true;
@@ -1077,71 +1158,8 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
     }
     session.value.revision = r.revision ?? session.value.revision + 1;
     interactionMeta.markAssistantLanded();
-    // 导师回复（附带本轮捕获到的卡点，作为气泡下方的依据 chip）
-    const confusion = Array.isArray(r.analysis?.confusionPoints)
-      ? r.analysis.confusionPoints.map((p: unknown) => String(p || '').trim()).filter(Boolean).slice(0, 2)
-      : [];
     const aiMsg = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
-    if (aiMsg?.role === 'ai') {
-      aiMsg.text = r.aiResponse || aiMsg.text;
-      aiMsg.confusion = confusion;
-    } else if (r.aiResponse) {
-      pushMsg({ role: 'ai', text: r.aiResponse, time: nowTime(), confusion });
-    }
-    // 兜底：AI 全程未返回任何内容（空响应）时给占位气泡，避免本轮「无声消失」
-    if (!r.aiResponse && (!aiMsg || !aiMsg.text.trim())) {
-      if (aiMsg?.role === 'ai') {
-        aiMsg.text = '（本轮没有收到回复，你可以换个说法再试一次。）';
-      } else {
-        pushMsg({ role: 'ai', text: '（本轮没有收到回复，你可以换个说法再试一次。）', time: nowTime() });
-      }
-    }
-    // 伴学触发：进独立浮动窗，不占主对话区（角色小启，暖橙系）。
-    // 频控：冷却期（60s）内或用户手动收起过 → 仅累计未读红点，不强制展开，避免打扰循环
-    if (r.peerTriggered && r.peerMessage) {
-      pushPeerItem({
-        role: 'peer',
-        text: String(r.peerMessage),
-        time: nowTime(),
-        strategy: r.peerStrategy || null,
-        followUps: Array.isArray(r.peerFollowUpQuestions)
-          ? r.peerFollowUpQuestions.filter((q: unknown) => typeof q === 'string' && q.trim()).slice(0, 3)
-          : [],
-      });
-      openPeerByTrigger();
-    }
-    if (Array.isArray(r.knowledgePoints) && r.knowledgePoints.length) {
-      knowledgePoints.value = r.knowledgePoints;
-      // AI 本轮讲完后：若指向某个当前点且没有客观 checkpoint，则在该点形成待确认边界
-      assessTarget.value = !r.checkpoint && r.knowledgePoint
-        ? { name: String(r.knowledgePoint) }
-        : null;
-      // 动态确认动作组（teaching-turn 输出）优先；未输出则回退固定文案
-      const cc = r.confirmCheck;
-      confirmCheck.value = (cc && Array.isArray(cc.actions) && cc.actions.length === 2)
-        ? {
-            prompt: String(cc.prompt || '').trim(),
-            actions: cc.actions
-              .filter((a: any) => a && typeof a.label === 'string' && typeof a.message === 'string')
-              .map((a: any) => ({ label: a.label, message: a.message })),
-          }
-        : null;
-    } else {
-      assessTarget.value = null;
-      confirmCheck.value = null;
-    }
-    if (r.checkpoint) {
-      checkpoint.value = r.checkpoint;
-      checkpointFeedback.value = '';
-      selectedOptions.value = [];
-      answerText.value = '';
-      checkpointSubmitting.value = false;
-      assessTarget.value = null; // 有客观验证题，不再弹快选确认
-      confirmCheck.value = null;
-    }
-    if (r.isCompletion) {
-      await finish(isReviewMode.value ? 'complete_review' : 'complete_task');
-    }
+    await applyTurnResult(r, aiMsg);
   } catch (e) {
     // 离页中止：静默丢弃，不重发也不展示失败气泡
     if ((e as { cancelled?: boolean })?.cancelled) return;
@@ -1165,6 +1183,77 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
     streamingBubbleIndex.value = -1;
     typing.value = false;
     scrollDown();
+  }
+}
+
+/**
+ * 应用一轮教学回合的完整返回（AI 气泡定型 + 卡点 chip + 伴学 + 知识看板 + 确认动作组 + 检查点 + 收束）。
+ * doSend 与 continueFromScene（恢复续讲）共用，保证两条通道行为一致。
+ */
+async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; text: string; confusion?: unknown[] } | undefined) {
+  // 导师回复（附带本轮捕获到的卡点，作为气泡下方的依据 chip）
+  const confusion = Array.isArray(r.analysis?.confusionPoints)
+    ? r.analysis.confusionPoints.map((p: unknown) => String(p || '').trim()).filter(Boolean).slice(0, 2)
+    : [];
+  if (aiMsg?.role === 'ai') {
+    aiMsg.text = r.aiResponse || aiMsg.text;
+    aiMsg.confusion = confusion;
+  } else if (r.aiResponse) {
+    pushMsg({ role: 'ai', text: r.aiResponse, time: nowTime(), confusion });
+  }
+  // 兜底：AI 全程未返回任何内容（空响应）时给占位气泡，避免本轮「无声消失」
+  if (!r.aiResponse && (!aiMsg || !aiMsg.text.trim())) {
+    if (aiMsg?.role === 'ai') {
+      aiMsg.text = '（本轮没有收到回复，你可以换个说法再试一次。）';
+    } else {
+      pushMsg({ role: 'ai', text: '（本轮没有收到回复，你可以换个说法再试一次。）', time: nowTime() });
+    }
+  }
+  // 伴学触发：进独立浮动窗，不占主对话区（角色小启，暖橙系）。
+  // 频控：冷却期（60s）内或用户手动收起过 → 仅累计未读红点，不强制展开，避免打扰循环
+  if (r.peerTriggered && r.peerMessage) {
+    pushPeerItem({
+      role: 'peer',
+      text: String(r.peerMessage),
+      time: nowTime(),
+      strategy: r.peerStrategy || null,
+      followUps: Array.isArray(r.peerFollowUpQuestions)
+        ? r.peerFollowUpQuestions.filter((q: unknown) => typeof q === 'string' && q.trim()).slice(0, 3)
+        : [],
+    });
+    openPeerByTrigger();
+  }
+  if (Array.isArray(r.knowledgePoints) && r.knowledgePoints.length) {
+    knowledgePoints.value = r.knowledgePoints;
+    // AI 本轮讲完后：若指向某个当前点且没有客观 checkpoint，则在该点形成待确认边界
+    assessTarget.value = !r.checkpoint && r.knowledgePoint
+      ? { name: String(r.knowledgePoint) }
+      : null;
+    // 动态确认动作组（teaching-turn 输出）优先；未输出则回退固定文案
+    const cc = r.confirmCheck;
+    confirmCheck.value = (cc && Array.isArray(cc.actions) && cc.actions.length === 2)
+      ? {
+          prompt: String(cc.prompt || '').trim(),
+          actions: cc.actions
+            .filter((a: any) => a && typeof a.label === 'string' && typeof a.message === 'string')
+            .map((a: any) => ({ label: a.label, message: a.message })),
+        }
+      : null;
+  } else {
+    assessTarget.value = null;
+    confirmCheck.value = null;
+  }
+  if (r.checkpoint) {
+    checkpoint.value = r.checkpoint;
+    checkpointFeedback.value = '';
+    selectedOptions.value = [];
+    answerText.value = '';
+    checkpointSubmitting.value = false;
+    assessTarget.value = null; // 有客观验证题，不再弹快选确认
+    confirmCheck.value = null;
+  }
+  if (r.isCompletion) {
+    await finish(isReviewMode.value ? 'complete_review' : 'complete_task');
   }
 }
 
@@ -1463,7 +1552,11 @@ async function recoverSession(sid: string) {
       }
       const openingText = s.opening?.message || s.welcomeMessage;
       if (openingText) msgs.value.push({ role: 'ai', text: openingText, time: nowTime() });
-      if (s.opening?.question) msgs.value.push({ role: 'ai', text: s.opening.question, time: nowTime() });
+      // 摸底 question 收进面板作一行可选引导（与 boot 一致）；无动作时仍 push 气泡
+      if (s.opening?.question) {
+        if (quickReplies.value.length) openingQuestion.value = String(s.opening.question);
+        else msgs.value.push({ role: 'ai', text: String(s.opening.question), time: nowTime() });
+      }
       toast.info('已重新开课');
     }
   } catch {
@@ -1636,7 +1729,7 @@ onBeforeUnmount(() => {
   padding: 8px 10px 8px 14px;
   border: 1px solid rgba(52, 120, 246, 0.3);
   border-radius: 12px;
-  background: linear-gradient(135deg, rgba(52, 120, 246, 0.08), rgba(141, 107, 255, 0.05));
+  background: rgba(52, 120, 246, 0.06);
   color: var(--blue-deep);
   font-size: 12.5px;
   flex: 0 0 auto;
@@ -1662,12 +1755,10 @@ onBeforeUnmount(() => {
 .oscene {
   margin: 10px 14px 0;
   padding: 16px 18px;
-  border: 1px solid rgba(141, 107, 255, 0.28);
-  border-radius: 14px;
-  background:
-    radial-gradient(120% 160% at 0% 0%, rgba(141, 107, 255, 0.10), transparent 46%),
-    var(--surface);
-  box-shadow: 0 6px 22px rgba(23, 32, 51, 0.06);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
   display: grid; gap: 8px;
   flex: 0 0 auto;
 }
@@ -1676,12 +1767,12 @@ onBeforeUnmount(() => {
   justify-self: start;
   font-size: 10.5px; font-weight: 800;
   letter-spacing: 0.04em;
-  color: #6b4ae0;
-  background: rgba(141, 107, 255, 0.12);
-  border: 1px solid rgba(141, 107, 255, 0.3);
+  color: var(--blue-deep, #1f57cc);
+  background: color-mix(in srgb, var(--blue, #3478f6) 10%, transparent);
+  border: 1px solid rgba(52, 120, 246, 0.3);
   padding: 2px 9px; border-radius: 999px;
 }
-.oscene--review .oscene__tag { color: #1f57cc; background: rgba(52, 120, 246, 0.12); border-color: rgba(52, 120, 246, 0.32); }
+.oscene--review .oscene__tag { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.12); border-color: rgba(52, 120, 246, 0.32); }
 .oscene__title { margin: 0; font-size: 15.5px; font-weight: 800; color: var(--ink, #1c2b45); }
 .oscene__lead { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
 .oscene__summary {
@@ -1695,18 +1786,19 @@ onBeforeUnmount(() => {
 .oscene__chip-label { font-size: 11px; font-weight: 700; color: var(--faint); }
 .oscene__chip {
   font-size: 11px; font-weight: 700;
-  color: #b3540a;
-  background: rgba(244, 170, 70, 0.15);
+  color: var(--amber, #b45309);
+  background: color-mix(in srgb, var(--amber, #f4aa46) 12%, transparent);
   border: 1px solid rgba(244, 170, 70, 0.32);
   padding: 2px 9px; border-radius: 999px;
 }
-.oscene__warn { font-size: 11.5px; line-height: 1.6; color: #b3540a; }
+.oscene__warn { font-size: 11.5px; line-height: 1.6; color: var(--amber, #b45309); }
 .oscene__warn span { font-weight: 700; }
 .oscene__actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
 .oscene__actions .btn-ghost { font-size: 12.5px; }
-[data-theme='dark'] .oscene { border-color: rgba(141, 107, 255, 0.35); background: radial-gradient(120% 160% at 0% 0%, rgba(141, 107, 255, 0.12), transparent 46%), #141c2b; }
+[data-theme='dark'] .oscene { border-color: var(--line); background: var(--surface); }
 [data-theme='dark'] .oscene__summary { background: rgba(15, 22, 32, 0.5); }
 [data-theme='dark'] .oscene__title { color: #e6edf7; }
+[data-theme='dark'] .oscene__tag { color: #6fa3ff; background: rgba(77, 139, 248, 0.14); border-color: rgba(77, 139, 248, 0.32); }
 .tutor__jump-bottom {
   position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
   z-index: 5;
@@ -2097,13 +2189,13 @@ onBeforeUnmount(() => {
 }
 .kp-btn--retry:hover { background: color-mix(in srgb, var(--amber, #f4aa46) 18%, transparent); }
 
-/* 动态确认（teaching-turn 输出 confirmCheck）：行动台式纵向卡片按钮，与开场行动台呼应 */
+/* 动态确认（teaching-turn 输出 confirmCheck）：行动台式卡片按钮，与开场行动台同语言（白卡/蓝主色） */
 .kp-actions--dynamic {
-  border-top: 1px solid rgba(141, 107, 255, 0.18);
-  background: linear-gradient(180deg, rgba(141, 107, 255, 0.045), rgba(52, 120, 246, 0.02));
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
 }
 .kp-actions__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 2px 9px; }
-.kp-actions__kicker { font-size: 12px; font-weight: 800; letter-spacing: 0.04em; color: #6b4ae0; }
+.kp-actions__kicker { font-size: 12px; font-weight: 800; letter-spacing: 0.04em; color: var(--blue-deep, #1f57cc); }
 .kp-actions__row--stack { display: grid; grid-template-columns: 1fr; gap: 7px; }
 .kp-act {
   display: flex; align-items: center; gap: 10px;
@@ -2111,12 +2203,12 @@ onBeforeUnmount(() => {
   text-align: left;
   padding: 9px 12px;
   border-radius: 11px;
-  border: 1px solid rgba(141, 107, 255, 0.22);
+  border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink, #1c2b45);
   font: inherit; font-size: 13px; font-weight: 600; line-height: 1.4;
   cursor: pointer;
-  transition: border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+  transition: border-color 0.16s ease, transform 0.12s ease, box-shadow 0.16s ease;
 }
 .kp-act__mark {
   flex: 0 0 auto;
@@ -2127,7 +2219,7 @@ onBeforeUnmount(() => {
   color: #fff;
 }
 .kp-act--ok .kp-act__mark { background: linear-gradient(135deg, #1e9e58, #15803d); }
-.kp-act--retry .kp-act__mark { background: linear-gradient(135deg, #f4aa46, #d97706); }
+.kp-act--retry .kp-act__mark { background: linear-gradient(135deg, var(--amber, #f4aa46), #d97706); }
 .kp-act__text { flex: 1; min-width: 0; }
 .kp-act__go {
   flex: 0 0 auto;
@@ -2136,14 +2228,15 @@ onBeforeUnmount(() => {
   transition: transform 0.15s ease, color 0.15s ease;
 }
 .kp-act:hover {
-  border-color: rgba(141, 107, 255, 0.5);
+  border-color: rgba(52, 120, 246, 0.4);
   box-shadow: 0 4px 14px rgba(23, 32, 51, 0.08);
   transform: translateY(-1px);
 }
-.kp-act:hover .kp-act__go { color: #6b4ae0; transform: translateX(2px); }
+.kp-act:hover .kp-act__go { color: var(--blue, #3478f6); transform: translateX(2px); }
 .kp-act:active { transform: translateY(0); }
-[data-theme='dark'] .kp-actions--dynamic { border-top-color: rgba(141, 107, 255, 0.3); background: rgba(141, 107, 255, 0.07); }
-[data-theme='dark'] .kp-act { background: #141c2b; border-color: rgba(141, 107, 255, 0.28); color: #e6edf7; }
+[data-theme='dark'] .kp-actions--dynamic { border-top-color: var(--line); background: rgba(15, 22, 32, 0.35); }
+[data-theme='dark'] .kp-act { background: #141c2b; border-color: #2a3648; color: #e6edf7; }
+[data-theme='dark'] .kp-act:hover { border-color: rgba(77, 139, 248, 0.55); }
 
 /* ---------- 检查点 ---------- */
 .checkpoint {
@@ -2413,19 +2506,32 @@ onBeforeUnmount(() => {
 
 .replies {
   margin: 4px 16px 0;
-  padding: 12px 14px 14px;
-  border: 1px solid rgba(141, 107, 255, 0.18);
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(141, 107, 255, 0.045), rgba(52, 120, 246, 0.02));
+  padding: 13px 14px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
 }
 .replies__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 2px 9px; }
 .replies__kicker {
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
-  color: #6b4ae0;
+  color: var(--blue-deep, #1f57cc);
 }
 .replies__hint { font-size: 11px; color: var(--faint); }
+/* 开场引导（opening.question 收进面板）：一行可选的小字，想回答就打字，不答可直接选动作 */
+.replies__question {
+  margin: 0 2px 9px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted, #5a6a85);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  border: 1px dashed rgba(52, 120, 246, 0.3);
+  border-radius: 9px;
+}
+[data-theme='dark'] .replies__question { color: #9fb0c8; background: rgba(15, 22, 32, 0.35); }
 .replies__row { display: grid; grid-template-columns: 1fr; gap: 7px; }
 .reply {
   display: flex; align-items: center; gap: 10px;
@@ -2433,12 +2539,12 @@ onBeforeUnmount(() => {
   text-align: left;
   padding: 9px 12px;
   border-radius: 11px;
-  border: 1px solid rgba(141, 107, 255, 0.22);
+  border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink, #1c2b45);
   font: inherit; font-size: 13px; font-weight: 600; line-height: 1.4;
   cursor: pointer;
-  transition: border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+  transition: border-color 0.16s ease, transform 0.12s ease, box-shadow 0.16s ease;
 }
 .reply__mark {
   flex: 0 0 auto;
@@ -2446,11 +2552,9 @@ onBeforeUnmount(() => {
   width: 20px; height: 20px;
   border-radius: 7px;
   font-size: 11px; font-weight: 800;
-  color: #fff;
-  background: #6b4ae0;
+  color: var(--blue-deep, #1f57cc);
+  background: color-mix(in srgb, var(--blue, #3478f6) 10%, transparent);
 }
-.reply--2 .reply__mark { background: #2c63d0; }
-.reply--3 .reply__mark { background: #0f9d6a; }
 .reply__text { flex: 1; min-width: 0; }
 .reply__go {
   flex: 0 0 auto;
@@ -2459,14 +2563,16 @@ onBeforeUnmount(() => {
   transition: transform 0.15s ease, color 0.15s ease;
 }
 .reply:hover {
-  border-color: rgba(141, 107, 255, 0.5);
+  border-color: rgba(52, 120, 246, 0.4);
   box-shadow: 0 4px 14px rgba(23, 32, 51, 0.08);
   transform: translateY(-1px);
 }
-.reply:hover .reply__go { color: #6b4ae0; transform: translateX(2px); }
+.reply:hover .reply__go { color: var(--blue, #3478f6); transform: translateX(2px); }
 .reply:active { transform: translateY(0); }
-[data-theme='dark'] .replies { border-color: rgba(141, 107, 255, 0.3); background: rgba(141, 107, 255, 0.07); }
-[data-theme='dark'] .reply { background: #141c2b; border-color: rgba(141, 107, 255, 0.28); color: #e6edf7; }
+[data-theme='dark'] .replies { border-color: var(--line); background: var(--surface); }
+[data-theme='dark'] .reply { background: #141c2b; border-color: #2a3648; color: #e6edf7; }
+[data-theme='dark'] .reply__mark { color: #6fa3ff; background: rgba(77, 139, 248, 0.14); }
+[data-theme='dark'] .reply:hover { border-color: rgba(77, 139, 248, 0.55); }
 </style>
 
 <style scoped>
