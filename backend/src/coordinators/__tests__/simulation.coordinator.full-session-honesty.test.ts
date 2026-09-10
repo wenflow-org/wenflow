@@ -10,6 +10,7 @@ const mockVirtualSessionUpdate = jest.fn()
 const mockLearningPathFindUnique = jest.fn()
 const mockMilestonesCount = jest.fn()
 const mockMilestonesFindMany = jest.fn()
+const mockSubtasksFindFirst = jest.fn()
 const mockExecuteSkill = jest.fn()
 
 jest.mock('../../config/database', () => ({
@@ -25,6 +26,10 @@ jest.mock('../../config/database', () => ({
     milestones: {
       count: mockMilestonesCount,
       findMany: mockMilestonesFindMany
+    },
+    // waitForPathReady 的「里程碑下需有可启动任务」检查（2026-08-30）：默认返回一个可跑任务
+    subtasks: {
+      findFirst: mockSubtasksFindFirst
     },
     goal_conversations: {
       findFirst: jest.fn()
@@ -109,6 +114,8 @@ describe('SimulationOrchestrator.executeFullSession 诚实返回', () => {
       }
       return sessionRecord
     })
+    // waitForPathReady 的「里程碑下需有可启动任务」检查：默认给一个可跑任务
+    mockSubtasksFindFirst.mockResolvedValue({ id: 'subtask-1' })
   })
 
   it('Goal 未在 maxRounds 内收敛 → error，不再静默 success', async () => {

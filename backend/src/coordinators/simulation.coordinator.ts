@@ -3957,28 +3957,17 @@ class SimulationOrchestrator {
       let steps = 0;
       const maxSteps = options.maxTurns || LEARN_AUTO_TURN_CAP;
 
-      // 入口预检：当前课课时计数已达课时闸门时，第一步 executeLearningStep 就会触发
-      // turn_budget_exhausted。直接温和返回（不终态化、本课对话保留）——恢复动作：
-      // 调高「回合上限」后再次自动推进（继续同一对话），或手动单步推进。
-      {
-        const preStageResults = this.parseStageResultsPayload(session.stageResults);
-        const preTeaching = (preStageResults.teaching || {}) as Record<string, unknown>;
-        const preRuntime = (preTeaching.taskRuntime || {}) as Record<string, unknown>;
-        if (preRuntime.taskId) {
-          const preTurns = Number(preRuntime.turns || 0);
-          const turnBudget = this.resolveLearnTurnBudget(preStageResults, maxSteps);
-          if (preTurns >= turnBudget) {
-            return {
-              success: false,
-              totalSteps: 0,
-              completedMilestones: 0,
-              error: `auto_turn_cap_exhausted：当前课已推进 ${preTurns} 回合达到课时上限（${turnBudget}）。请调高「回合上限」后再次自动推进（对话已保留），或改用手动单步推进`
-            };
-          }
-        }
-      }
+      // 外层循环上限 = 课时闸门 + 1（2026-08-30 timebox 语义修复）：
+      // 旧实现外层上限与闸门同为 40，导致「回合数达到闸门」的那一轮永远进不来，
+      // executeLearningStep 内部的 timebox-skip（endSession + completeTask + 推进下一课）
+      // 没有机会触发，外层先耗尽并返回 auto_turn_cap_exhausted 失败。
+      // 多给 1 轮，保证闸门那一轮能进入循环并完成跳课。
+      const loopLimit = this.resolveLearnTurnBudget(
+        this.parseStageResultsPayload(session.stageResults),
+        maxSteps
+      ) + 1;
 
-      for (let i = 0; i < maxSteps; i++) {
+      for (let i = 0; i < loopLimit; i++) {
         const latestSession = await this.getVirtualSession(sessionId)
         const latestStageResults = this.parseStageResultsPayload(latestSession.stageResults)
         if (latestStageResults.teaching?.manualStop || latestSession.status === 'failed' || latestSession.status === 'abandoned') {

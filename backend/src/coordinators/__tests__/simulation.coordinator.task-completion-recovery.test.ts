@@ -496,7 +496,7 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(sessionRecord.status).not.toBe('failed')
   })
 
-  it('课时已达闸门时 executeAutoLearning 入口预检温和返回，不触发 failed', async () => {
+  it('课时已达闸门时 executeAutoLearning 放行并由 timebox-skip 跳课，不再返回失败', async () => {
     sessionRecord.stageResults = JSON.stringify({
       teaching: buildLearningState({
         status: 'active',
@@ -506,18 +506,28 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
         turns: 40
       })
     })
+    // 课堂仍在进行：不触发「已完成课堂」的 legacy 恢复分支，让预算检查生效
+    mockGetSessionDetail.mockResolvedValue({
+      id: 'teaching-1',
+      taskId: 'task-1',
+      status: 'active',
+      revision: 1
+    })
 
-    // 未调高上限（默认 40）：入口预检直接温和返回，不执行任何教学回合
+    // 新语义（2026-08-30）：外层不再预检失败，放行首次步骤让 executeLearningStep 触发
+    // timebox-skip（endSession + completeTask + 推进下一课），避免与外层循环上限互锁
+    // 导致「到了闸门却永远跳不了课」。
     const result = await coordinator.executeAutoLearning('simulation-1', { maxTurns: 40 })
 
     expect(result).toEqual(expect.objectContaining({
-      success: false
+      success: true,
+      completedMilestones: 1
     }))
-    expect(result.error).toContain('auto_turn_cap_exhausted')
-    expect(result.error).toContain('调高')
-    expect(mockExecuteSkill).not.toHaveBeenCalled()
+    expect(result.error).toBeUndefined()
+    // 跳课走完成链路：completeTask 结算当前课，不再调用教学 LLM 推进本课
+    expect(mockCompleteTask).toHaveBeenCalled()
     expect(mockProcessStudentMessage).not.toHaveBeenCalled()
-    // 会话不终态化：进度与对话保留，调高上限后可继续
-    expect(sessionRecord.status).toBe('running')
+    // 会话不标失败：进度保留（真实多课场景推进下一课保持 running）
+    expect(sessionRecord.status).not.toBe('failed')
   })
 })
