@@ -142,9 +142,19 @@
         <section class="mk-card tc-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">用户用量排行</h3>
-            <span class="mk-card__meta">Top {{ byUser.length }}</span>
+            <div class="mk-card__head-right">
+              <span class="mk-card__meta">Top {{ byUser.length }}<template v-if="!userAll && byUser.length > userLimit"> · 显示前 {{ userLimit }}</template></span>
+              <button
+                v-if="byUser.length > userLimit"
+                type="button"
+                class="tc-more"
+                @click="userAll = !userAll"
+              >
+                {{ userAll ? '收起' : `查看全部 ${byUser.length}` }}
+              </button>
+            </div>
           </div>
-          <TcRankTable v-if="byUser.length" :items="byUser" variant="user" :total-tokens="totalTokens" />
+          <TcRankTable v-if="byUser.length" :items="userRows" variant="user" :total-tokens="totalTokens" />
           <p v-else class="mk-card__note">暂无数据。</p>
         </section>
 
@@ -195,6 +205,10 @@ const byModel = ref<RankRow[]>([])
 const skillLimit = 6
 const skillAll = ref(false)
 
+/** 用户排行默认展示行数（与模型卡等高，避免右列过长失衡）；超出可一键展开全部 */
+const userLimit = 5
+const userAll = ref(false)
+
 const rangePills = [
   { days: 7, label: '近 7 天' },
   { days: 30, label: '近 30 天' },
@@ -204,6 +218,7 @@ const rangePills = [
 const trend = computed(() => summary.value?.trend || [])
 const totalTokens = computed(() => summary.value?.totals.tokens || 0)
 const skillRows = computed(() => bySkill.value.slice(0, skillAll.value ? bySkill.value.length : skillLimit))
+const userRows = computed(() => byUser.value.slice(0, userAll.value ? byUser.value.length : userLimit))
 const statusTone = computed(() =>
   !summary.value ? 'mk-status--muted'
     : summary.value.totals.failed > 0 ? 'mk-status--warn'
