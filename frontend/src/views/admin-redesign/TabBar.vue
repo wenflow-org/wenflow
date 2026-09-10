@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 export interface AdminTab {
   id: string
   label: string
@@ -71,7 +71,30 @@ function act(kind: 'close' | 'closeOthers' | 'closeRight' | 'togglePin') {
   else if (kind === 'closeOthers') emit('closeOthers', t.id)
   else emit('closeRight', t.id)
 }
-/* 点击空白/滚动关闭菜单 */
+/* 点击空白/滚动/Esc 关闭菜单：
+   scroll 事件不冒泡，用 window 捕获阶段监听任意滚动容器；mousedown 命中菜单外即关闭。 */
+function onDocMousedown(e: MouseEvent) {
+  if (!ctx.value) return
+  const el = e.target as HTMLElement | null
+  if (el && el.closest && el.closest('.mk-tabbar__ctx')) return
+  ctx.value = null
+}
+function onDocKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') ctx.value = null
+}
+function onDocScroll() {
+  if (ctx.value) ctx.value = null
+}
+onMounted(() => {
+  document.addEventListener('mousedown', onDocMousedown)
+  document.addEventListener('keydown', onDocKeydown)
+  window.addEventListener('scroll', onDocScroll, true)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onDocMousedown)
+  document.removeEventListener('keydown', onDocKeydown)
+  window.removeEventListener('scroll', onDocScroll, true)
+})
 </script>
 
 <style scoped>
