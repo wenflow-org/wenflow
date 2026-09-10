@@ -164,22 +164,34 @@ import { version as appVersion } from '../../../package.json'
 const props = defineProps<{ current: string; crumb?: string; crumbTitle?: string; release?: boolean }>()
 const emit = defineEmits<{ (e: 'navigate', id: string): void; (e: 'glossary'): void }>()
 
-/* 滚动修复 #9：回到顶部按钮（内容区滚动 >2 屏时出现）；
-   滚动容器已从 window 收敛到 .mshell__content（应用式布局：侧栏固定，右侧独立滚动） */
+/* 滚动修复 #9：回到顶部按钮（内容区滚动时出现）；
+   应用式布局下真正滚动的是页面级容器（admin 为 .mk-page），
+   而非 .mshell__content —— 故运行时解析实际滚动宿主，并以捕获阶段监听其滚动。 */
 const contentEl = ref<HTMLElement | null>(null)
 const backtopVisible = ref(false)
-function onScroll() {
+
+/** 解析当前真正可滚动的内容容器：优先 .mshell__content，其次页面级 .mk-page。 */
+function scrollHost(): HTMLElement | null {
   const el = contentEl.value
-  backtopVisible.value = el ? el.scrollTop > el.clientHeight : false
+  if (!el) return null
+  if (el.scrollHeight - el.clientHeight > 4) return el
+  const inner = el.querySelector<HTMLElement>('.mk-page')
+  if (inner && inner.scrollHeight - inner.clientHeight > 4) return inner
+  return el
+}
+function onScroll() {
+  const host = scrollHost()
+  backtopVisible.value = !!host && host.scrollTop > 200
 }
 function backToTop() {
-  contentEl.value?.scrollTo({ top: 0, behavior: 'smooth' })
+  scrollHost()?.scrollTo({ top: 0, behavior: 'smooth' })
 }
 onMounted(() => {
-  contentEl.value?.addEventListener('scroll', onScroll, { passive: true })
+  // 滚动事件不冒泡，但捕获阶段可命中后代滚动容器（.mk-page）
+  contentEl.value?.addEventListener('scroll', onScroll, { passive: true, capture: true })
   onScroll()
 })
-onBeforeUnmount(() => contentEl.value?.removeEventListener('scroll', onScroll))
+onBeforeUnmount(() => contentEl.value?.removeEventListener('scroll', onScroll, true))
 
 const version = appVersion
 
