@@ -1110,6 +1110,11 @@ html[data-theme='dark'] {
   .mt-rt-msg { color: var(--mk-green); }
   /* 文字色补漏 */
   .msk__stat strong,
-  .msk__kv strong { color: var(--mk-ink, #e6edf7); }
+  .msk__kv strong,
+  .msk__name,
+  .msk__row-title { color: var(--mk-ink, #e6edf7); }
+  .msk__desc,
+  .msk__prompt,
+  .msk__row-num { color: var(--mk-muted, #9fb0c8); }
 }
 </style>
