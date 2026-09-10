@@ -915,7 +915,8 @@ const streakDays = computed(() => {
 });
 
 const heat = (m: number) => {
-  if (m <= 0) return { color: '#eef2f8', ink: 'transparent' };
+  // 空值底色走 CSS 变量 --heat-empty（.dash 上按主题定义），随主题即时切换，浅色回退 #eef2f8
+  if (m <= 0) return { color: 'var(--heat-empty, #eef2f8)', ink: 'transparent' };
   if (m < 30) return { color: 'rgba(52,120,246,.20)', ink: '#1f57cc' };
   if (m <= 60) return { color: 'rgba(52,120,246,.45)', ink: '#10337e' };
   return { color: 'rgba(52,120,246,.85)', ink: '#fff' };
@@ -1491,7 +1492,7 @@ onMounted(loadAll);
 .month__meta b { color: var(--ink); }
 .month__legend { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--faint); }
 .lg { width: 12px; height: 12px; border-radius: 4px; display: inline-block; margin-left: 6px; }
-.lg--0 { background: #eef2f8; }
+.lg--0 { background: var(--heat-empty, #eef2f8); }
 .lg--1 { background: rgba(52, 120, 246, 0.2); }
 .lg--2 { background: rgba(52, 120, 246, 0.45); }
 .lg--3 { background: rgba(52, 120, 246, 0.85); }
@@ -1883,4 +1884,17 @@ a.btn-primary { text-decoration: none; }
 .more-toggle__btn svg {
   transition: transform 0.2s ease;
 }
+
+/* ---------- 暗色模式覆写 ---------- */
+[data-theme='dark'] .dash {
+  --heat-empty: rgba(230, 237, 247, 0.08);
+}
+[data-theme='dark'] .nav { background: var(--v2nav-bg); }
+[data-theme='dark'] .budget__bar,
+[data-theme='dark'] .review__bar { background: rgba(230, 237, 247, 0.12); }
+[data-theme='dark'] .step--done .step__dot { box-shadow: inset 0 0 0 3px var(--surface); }
+[data-theme='dark'] .mday--prev,
+[data-theme='dark'] .mday--future { color: var(--faint); }
+[data-theme='dark'] .sheet__zone--none { background: rgba(230, 237, 247, 0.1); }
+[data-theme='dark'] .chip { background: rgba(230, 237, 247, 0.1); }
 </style>

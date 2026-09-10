@@ -23,7 +23,7 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: var(--bg-secondary, #f5f7fa);
+  background: var(--canvas, var(--bg-body, #f5f7fa));
 }
 
 .not-found-card {
@@ -84,5 +84,22 @@
   border: 1px solid var(--border-color, #dcdfe6);
   color: var(--text-primary, #303133);
   background: transparent;
+}
+
+/* 暗色模式：容器/文字/幽灵按钮随主题翻转（--canvas 亮色在 .v2-page 或 v2.css :root 定义；
+   html[data-theme='dark'] 时由 v2.css 覆写为 #0f1620，此处仅兜底无 v2 上下文时的直设） */
+[data-theme='dark'] .not-found-page {
+  background: #0f1620;
+}
+[data-theme='dark'] .not-found-title {
+  color: #e6edf7;
+}
+[data-theme='dark'] .not-found-desc {
+  color: #9aa8bf;
+}
+[data-theme='dark'] .nf-btn--ghost {
+  border-color: rgba(230, 237, 247, 0.16);
+  color: #c9d6ea;
+  background: rgba(24, 34, 48, 0.7);
 }
 </style>

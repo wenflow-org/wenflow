@@ -323,4 +323,59 @@ onMounted(async () => {
   max-width: 100%;
   height: auto;
 }
+
+/* ===== 暗色模式（data-theme=dark）：Markdown 正文原为固定浅色 GitHub 风格，覆写为深色 ===== */
+[data-theme='dark'] .markdown-renderer {
+  color: #e6edf7;
+}
+
+[data-theme='dark'] .markdown-renderer :deep(h1),
+[data-theme='dark'] .markdown-renderer :deep(h2),
+[data-theme='dark'] .markdown-renderer :deep(h3),
+[data-theme='dark'] .markdown-renderer :deep(h4),
+[data-theme='dark'] .markdown-renderer :deep(h5),
+[data-theme='dark'] .markdown-renderer :deep(h6) {
+  color: #e6edf7;
+}
+
+[data-theme='dark'] .markdown-renderer :deep(h1),
+[data-theme='dark'] .markdown-renderer :deep(h2) {
+  border-bottom-color: #2a3850;
+}
+
+[data-theme='dark'] .markdown-renderer :deep(strong) {
+  color: #e6edf7;
+}
+
+[data-theme='dark'] .markdown-renderer :deep(a) {
+  color: #6fa3ff;
+}
+
+[data-theme='dark'] .markdown-renderer :deep(code):not(pre code) {
+  background-color: rgba(230, 237, 247, 0.1);
+  color: #e6edf7;
+}
+
+[data-theme='dark'] .markdown-renderer :deep(blockquote) {
+  color: #9aa8bf;
+  border-left-color: #2a3850;
+}
+
+[data-theme='dark'] .markdown-renderer :deep(hr) {
+  background-color: #2a3850;
+}
+
+[data-theme='dark'] .markdown-renderer :deep(table th),
+[data-theme='dark'] .markdown-renderer :deep(table td) {
+  border-color: #2a3850;
+}
+
+[data-theme='dark'] .markdown-renderer :deep(table tr) {
+  background-color: #182230;
+  border-top-color: #2a3850;
+}
+
+[data-theme='dark'] .markdown-renderer :deep(table tr:nth-child(2n)) {
+  background-color: #141c2b;
+}
 </style>

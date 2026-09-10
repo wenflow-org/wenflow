@@ -1852,6 +1852,11 @@ html[data-theme='dark'] {
   .ld-bar__fill.is-bad,
   .ld-trend__bar--down { background: linear-gradient(90deg, #b91c1c, #7f1d1d); }
   .ld-bar__fill.is-muted { background: linear-gradient(90deg, #4a5874, #33415c); }
+  .ld-bar__ev { background: #232f45; }
+  .ld-bar__fill.is-ok { background: linear-gradient(90deg, #16a34a, #15803d); }
+  .ld-kv__row,
+  .ld-mt th,
+  .ld-mt td { border-bottom-color: #232f45; }
   /* 滚动条 */
   .ld-ev-main .ld-evidence::-webkit-scrollbar-thumb { background: #33415c; }
   /* 补漏：操作提示标签/概念 chip/置信条/加载分段 */

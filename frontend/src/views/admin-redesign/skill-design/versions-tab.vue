@@ -372,4 +372,10 @@ watch(
   .sdp-pw__table { font-size: 18px; }
   .sdp-pw__audit { font-size: 17.5px; }
 }
+
+/* 暗色模式 */
+[data-theme='dark'] .mk-table-wrap { background: #17202f; }
+[data-theme='dark'] .sdp-diff { background: #17202f; }
+[data-theme='dark'] .sdp-diff__head { background: #1b2638; }
+
 </style>

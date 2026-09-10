@@ -132,6 +132,22 @@ watch(
   border-color: rgba(220, 38, 38, 0.28);
   color: #b91c1c;
 }
+/* 暗色模式：公告语义条（在用户端学习应用顶部展示，随主题翻转） */
+[data-theme='dark'] .anb--info {
+  background: rgba(91, 141, 239, 0.16);
+  border-color: rgba(91, 141, 239, 0.3);
+  color: #9db8f5;
+}
+[data-theme='dark'] .anb--warning {
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #f6bb63;
+}
+[data-theme='dark'] .anb--critical {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #fca5a5;
+}
 .anb__dot {
   width: 8px;
   height: 8px;

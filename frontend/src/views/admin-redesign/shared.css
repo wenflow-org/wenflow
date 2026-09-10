@@ -831,6 +831,7 @@ html[data-theme='dark'] {
   .mk-badge--role-proposal-output { background: rgba(45, 212, 191, 0.14); }
   .mk-badge--role-control-signal { background: #253049; }
   .mk-badge--render-visible { background: rgba(74, 222, 128, 0.16); }
+  .mk-toast--info { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
   .mk-badge--render-hidden { background: #253049; }
   .mk-badge--flow-handoff { background: rgba(91, 141, 239, 0.18); }
   .mk-badge--flow-internal { background: rgba(244, 114, 182, 0.16); color: #f9a8d4; }

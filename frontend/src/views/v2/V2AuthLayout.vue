@@ -332,4 +332,15 @@ import V2Footer from './V2Footer.vue';
   .demo__field strong { font-size: 14px; }
   .auth__back { font-size: 14px; }
 }
+
+/* ---------- 暗色模式：演示面板覆写 ---------- */
+[data-theme='dark'] .demo__avatar { background: var(--surface); }
+[data-theme='dark'] .demo__chip { background: var(--surface); }
+[data-theme='dark'] .demo__panel-bar { background: rgba(230, 237, 247, 0.12); }
+[data-theme='dark'] .mark { border-color: var(--line); }
+[data-theme='dark'] .auth__demo-side {
+  background:
+    radial-gradient(320px 220px at 90% 0%, rgba(141, 107, 255, 0.12), transparent 65%),
+    linear-gradient(160deg, rgba(52, 120, 246, 0.08), rgba(67, 176, 216, 0.05));
+}
 </style>

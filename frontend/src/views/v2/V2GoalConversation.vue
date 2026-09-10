@@ -1753,4 +1753,10 @@ function shuffleScenes() {
   background: var(--surface);
   border-color: var(--line);
 }
+:global([data-theme='dark']) .nav { background: var(--v2nav-bg); }
+:global([data-theme='dark']) .field--todo .field__mark { border-color: var(--line); }
+:global([data-theme='dark']) .skeleton i {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06) 25%, rgba(255, 255, 255, 0.12) 50%, rgba(255, 255, 255, 0.06) 75%);
+  background-size: 200% 100%;
+}
 </style>

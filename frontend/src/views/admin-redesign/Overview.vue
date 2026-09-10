@@ -1432,5 +1432,8 @@ html[data-theme='dark'] {
   .ov-growth__bar--new, .trend__bar, .usage__bar { background: linear-gradient(180deg, #6aa0ff, #3d7cff); }
 
   .ov-skill__rank { background: #1d2739; }
+  .feed__dot { background: #4a5874; box-shadow: 0 0 0 3px #141c2b; }
+  .ov-skill:nth-child(1) .ov-skill__rank { background: rgba(91, 141, 239, 0.22); color: #9db8f5; }
+  .feed__toggle:hover { background: #1b2740; }
 }
 </style>

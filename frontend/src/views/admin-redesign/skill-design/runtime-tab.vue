@@ -362,4 +362,8 @@ watch(
   .sdp-divider span { font-size: 18px; }
   .sdp-form__msg { font-size: 18px; }
 }
+
+/* 暗色模式 */
+[data-theme='dark'] .sdp-chiprow { background: #17202f; }
+
 </style>

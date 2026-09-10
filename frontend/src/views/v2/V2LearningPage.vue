@@ -2669,4 +2669,9 @@ onBeforeUnmount(() => {
   background: var(--surface);
   border-color: var(--line);
 }
+:global([data-theme='dark']) .kp__bar { background: rgba(230, 237, 247, 0.12); }
+:global([data-theme='dark']) .kp__mark { border-color: var(--line); }
+:global([data-theme='dark']) .composer__send--off { background: rgba(230, 237, 247, 0.08); }
+:global([data-theme='dark']) .learn__menu-item--primary:hover { background: rgba(77, 139, 248, 0.18); }
+:global([data-theme='dark']) .finish { background: rgba(15, 22, 32, 0.78); }
 </style>

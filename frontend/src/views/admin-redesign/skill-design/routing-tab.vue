@@ -102,4 +102,8 @@ watch(
 .sdp-routing__table th { font-size: 11px; color: var(--mk-faint); font-weight: 700; }
 .sdp-routing__consumer { font-size: 11px; color: var(--mk-muted); padding: 1px 0; }
 .sdp-none { margin: 0; font-size: 12px; color: var(--mk-faint); }
+
+/* 暗色模式 */
+[data-theme='dark'] .sdp-routing__lineage { background: #17202f; }
+
 </style>

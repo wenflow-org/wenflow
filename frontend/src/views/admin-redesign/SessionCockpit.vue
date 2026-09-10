@@ -3754,5 +3754,31 @@ html[data-theme='dark'] {
   .cp-lesson-head { background: #141c2b; }
   .cp-wrapup-ms__head { background: #141c2b; }
   .cp-wrapup-card__icon { background: #1b2440; }
+  /* 补漏 2：课时总结渐变底/stats/骨架屏/eval/trace 徽章/预算条文字 */
+  .cp-lesson-wrapup { background: linear-gradient(135deg, rgba(74, 222, 128, 0.1), #141c2b); }
+  .cp-wrapup-stats { background: linear-gradient(135deg, rgba(91, 141, 239, 0.1), #141c2b); }
+  .cp-trace-list > li { background: #141c2b; }
+  .cp-log-skel,
+  .cp-path-skel > div { background: linear-gradient(90deg, #1d2739, #2a3a55 55%, #1d2739); }
+  .cp-eval__score { background: #1d2739; }
+  .cp-finding__sev { background: #253049; }
+  .cp-finding__sev[data-sev='minor'] { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
+  .cp-finding__sev[data-sev='info'] { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
+  .cp-rec__codes code { background: #253049; }
+  .cp-timeline__kind { background: #253049; }
+  .cp-timeline__stage { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
+  .cp-timeline__stage[data-stage='learning'],
+  .cp-timeline__stage[data-stage='teaching'] { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
+  .cp-trace-list__stage { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
+  .cp-trace-list__stage[data-stage='learning'] { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
+  .cp-trace-list__emotion,
+  .cp-trace-list__transition { background: #253049; color: #9db8f5; }
+  .cp-trace-list__metrics > span,
+  .cp-trace-list__kv > span { background: #1d2739; }
+  .cp-trace-list__flags > span { background: #253049; }
+  .cp-trace-list__flags > span.active { background: rgba(91, 141, 239, 0.16); color: #9db8f5; border-color: rgba(91, 141, 239, 0.45); }
+  .cp-budget { border-color: #2a3850; }
+  .cp-budget__label { color: #9fb0c8; }
+  .cp-budget__num { color: #e6edf7; }
 }
 </style>

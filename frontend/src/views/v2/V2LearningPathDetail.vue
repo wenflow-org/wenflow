@@ -99,7 +99,7 @@
           </div>
           <div class="hero__ring">
             <svg viewBox="0 0 120 120" width="120" height="120">
-              <circle cx="60" cy="60" r="52" fill="none" stroke="#edf1f8" stroke-width="10" />
+              <circle cx="60" cy="60" r="52" fill="none" class="progress-track" stroke-width="10" />
               <circle
                 cx="60" cy="60" r="52" fill="none"
                 stroke="url(#v2ringGrad)" stroke-width="10" stroke-linecap="round"
@@ -1252,6 +1252,7 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
   cursor: pointer;
 }
 .hero__ring { position: relative; width: 120px; height: 120px; }
+.progress-track { stroke: #edf1f8; }
 .hero__ring circle[stroke="url(#v2ringGrad)"] { transition: stroke-dashoffset .6s ease; }
 .hero__ring-text {
   position: absolute; inset: 0;
@@ -2083,4 +2084,9 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
   color: #e6edf7;
 }
 [data-theme='dark'] .adjust-dialog__close:hover { background: rgba(230, 237, 247, 0.08); color: #e6edf7; }
+[data-theme='dark'] .progress-track { stroke: var(--line); }
+[data-theme='dark'] .stage__no { background: rgba(230, 237, 247, 0.1); }
+[data-theme='dark'] .task--locked .task__icon { background: rgba(230, 237, 247, 0.1); }
+[data-theme='dark'] .task--todo .task__icon { border-color: var(--line); }
+[data-theme='dark'] .tl__task-dot--todo { border-color: var(--line); }
 </style>

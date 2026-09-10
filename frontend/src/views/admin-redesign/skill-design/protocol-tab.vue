@@ -1051,4 +1051,13 @@ watch(
   .sdp-pwform__fieldrow--head { font-size: 17.5px; }
   .sdp-pwform__idx { font-size: 17px; }
 }
+
+/* 暗色模式 */
+[data-theme='dark'] .sdp-pw__viewswitch { background: #1b2638; }
+[data-theme='dark'] .sdp-block { background: #17202f; }
+[data-theme='dark'] .sdp-pwform__card { background: #17202f; }
+[data-theme='dark'] .sdp-pw__textarea { background: #141c2b; color: #e6edf7; }
+[data-theme='dark'] .sdp-pw__textarea:disabled { background: #1b2638; }
+[data-theme='dark'] .sdp-pw__viewbtn--active { background: #1d2a42; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+
 </style>

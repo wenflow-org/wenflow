@@ -1961,7 +1961,12 @@ html[data-theme='dark'] .pt-field { background: rgba(129, 140, 248, 0.14); color
 html[data-theme='dark'] {
   .vl-faillink:hover { background: rgba(91, 141, 239, 0.14); box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.08); }
   /* 并发条 / 批量详情：已改用 var(--mk-*) token，暗色由全局 token 覆盖，不再需要页面补丁 */
-  .vl-running__chip { background: #141c2b; border-color: #232f45; }
+  .vl-running__chip { background: #141c2b; border-color: #232f45; color: #4ade80; }
+  .vl-running__chip--paused { color: #8fa3bd; }
+  .vl-running__chip--batch { color: #7aa2ff; }
+  .vl-running__chip--batch.is-done { color: #4ade80; }
+  .vl-running__chip--batch.is-error { color: #f87171; }
+  .vl-running__label { color: #4ade80; }
   .vl-steps--ok { background: rgba(74, 222, 128, 0.12); color: #6ee7a0; }
   /* 补漏：折叠展开按钮/回收清单/高级区/人设成功提示（硬编码浅底） */
   .vl-running__more { background: #141c2b; border-color: #2a3850; color: #8fa3bd; }
