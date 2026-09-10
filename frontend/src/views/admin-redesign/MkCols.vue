@@ -1,5 +1,5 @@
 <template>
-  <div class="mk-cols">
+  <div ref="rootEl" class="mk-cols">
     <button type="button" class="mk-link" :class="{ 'mk-link--active': open }" @click="open = !open" :aria-expanded="open">列</button>
     <div v-if="open" class="mk-cols__menu" @click.stop>
       <label v-for="c in colDefs" :key="c.key" class="mk-cols__item" :title="c.title">
@@ -12,7 +12,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 
 /**
  * 列显隐公共组件（P1-3）：卡片头「列」按钮 + 勾选菜单 + localStorage 持久化。
@@ -25,12 +25,29 @@ const props = defineProps<{
 }>()
 const hidden = defineModel<Set<string>>('hidden', { default: () => new Set<string>() })
 const open = ref(false)
+const rootEl = ref<HTMLElement | null>(null)
+
+/* 点击组件外部 / Esc 关闭菜单（此前只能再次点击「列」关闭，菜单可长时间悬浮遮挡表格） */
+function onDocMousedown(e: MouseEvent) {
+  if (!open.value) return
+  const root = rootEl.value
+  if (root && e.target instanceof Node && !root.contains(e.target)) open.value = false
+}
+function onDocKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && open.value) open.value = false
+}
 
 onMounted(() => {
   try {
     const saved = JSON.parse(localStorage.getItem(props.storageKey) || '[]') as unknown
     if (Array.isArray(saved)) hidden.value = new Set(saved.filter((x): x is string => typeof x === 'string'))
   } catch { /* 隐私模式忽略 */ }
+  document.addEventListener('mousedown', onDocMousedown, true)
+  document.addEventListener('keydown', onDocKeydown)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onDocMousedown, true)
+  document.removeEventListener('keydown', onDocKeydown)
 })
 
 watch(hidden, (s) => {

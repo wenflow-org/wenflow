@@ -47,7 +47,7 @@
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': view === 'list' }" @click="view = 'list'">列表</button>
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': view === 'grid' }" @click="view = 'grid'">网格</button>
           </div>
-          <div v-if="view === 'list'" class="sk-cols">
+          <div v-if="view === 'list'" ref="skColsEl" class="sk-cols">
             <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen">列</button>
             <div v-if="colsOpen" class="sk-cols__menu" @click.stop>
               <label v-for="c in skColDefs" :key="c.key" class="sk-cols__item" :title="c.title">
@@ -172,7 +172,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { skillStatOf, openSkillDrawer, isLive } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
@@ -212,6 +212,17 @@ function toggleSkCol(key: string) {
   if (next.has(key)) next.delete(key)
   else next.add(key)
   hiddenCols.value = next
+}
+
+/* 列菜单：点击外部 / Esc 关闭（此前只能再次点击「列」关闭） */
+const skColsEl = ref<HTMLElement | null>(null)
+function onDocMousedown(e: MouseEvent) {
+  if (!colsOpen.value) return
+  const root = skColsEl.value
+  if (root && e.target instanceof Node && !root.contains(e.target)) colsOpen.value = false
+}
+function onDocKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && colsOpen.value) colsOpen.value = false
 }
 const sortKey = ref<SortKey>('errors')
 const sortDir = ref<'asc' | 'desc'>('desc')
@@ -361,6 +372,12 @@ watch(isLive, () => {
 
 onMounted(() => {
   refreshReconciliation()
+  document.addEventListener('mousedown', onDocMousedown, true)
+  document.addEventListener('keydown', onDocKeydown)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onDocMousedown, true)
+  document.removeEventListener('keydown', onDocKeydown)
 })
 
 /** 完成度五档色标（draft → live）；文案单源：glossaryMeta.ts（与后端 glossary-content 对齐） */
