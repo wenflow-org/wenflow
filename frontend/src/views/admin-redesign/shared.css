@@ -860,6 +860,8 @@ html[data-theme='dark'] {
   .mk-icon-btn svg { color: var(--mk-faint); }
   .mk-modal__close, .mk-drawer__close { background: #232f45; color: var(--mk-muted); }
   .mk-modal__close:hover, .mk-drawer__close:hover { background: #2c3a55; }
+  /* 暗色遮罩加深：浅色遮罩 rgba(15,23,42,.36) 在深底上分离度不足 */
+  .mk-modal, .mk-drawer__mask { background: rgba(3, 7, 14, 0.62); }
   .mk-input:disabled, .mk-field__input:disabled { background: #131b29; }
 }
 
@@ -1071,7 +1073,9 @@ html[data-theme='dark'] {
   position: fixed;
   right: 22px;
   bottom: 26px;
-  z-index: 90;
+  /* 悬浮控件应低于菜单/抽屉/弹窗：菜单为 --mk-z-menu(60)，
+     回顶按钮若更高会在展开的行/列菜单之上盖住菜单，故降到 40 */
+  z-index: 40;
   display: inline-flex;
   align-items: center;
   gap: 6px;
