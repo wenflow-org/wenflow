@@ -189,7 +189,7 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     await nextTick();
     await findBtn(w, '下一页').trigger('click');
     await flushPromises();
-    const input = w.find<HTMLInputElement>('input[placeholder="traceId"]');
+    const input = w.find<HTMLInputElement>('input[placeholder="Trace ID（链路 ID）"]');
     await input.setValue('tr:abc');
     await input.trigger('keydown.enter');
     await flushPromises();
