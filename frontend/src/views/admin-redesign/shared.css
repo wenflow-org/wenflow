@@ -402,7 +402,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-filter__input:focus,
 .mk-filter__select:focus { border-color: var(--mk-blue); }
 .mk-filter__input { min-width: 180px; }
-.mk-pills { display: inline-flex; gap: 4px; padding: 3px; background: #eef2fa; border-radius: 10px; }
+.mk-pills { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: #eef2fa; border-radius: 10px; }
 .mk-pill {
   border: 0;
   background: transparent;
@@ -413,6 +413,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   font-weight: 600;
   color: var(--mk-muted);
   cursor: pointer;
+  white-space: nowrap;
 }
 /* 激活 = 筛选生效：蓝色文字 + 蓝色描边，与"按钮激活"的白底灰边区分 */
 .mk-pill--active {
